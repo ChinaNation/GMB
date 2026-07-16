@@ -7,29 +7,33 @@
 
 pub use pallet::*;
 
+/// 地址变更发起注册局的机构唯一 CID。
+pub type ActorCidNumber =
+    frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<32>>;
+
 /// 地址更新权限抽象。
 ///
 /// FRG/CREG 的省市授权规则由 runtime 统一实现,本 pallet 不直接依赖
 /// public-admins/public-manage 的 storage,避免地址模块复制注册局权限细节。
 pub trait AddressUpdateAuthority<AccountId> {
-    fn can_update_catalog(who: &AccountId, registrar_account: &AccountId) -> bool;
+    fn can_update_catalog(who: &AccountId, actor_cid_number: &[u8]) -> bool;
 
     fn can_update_address(
         who: &AccountId,
-        registrar_account: &AccountId,
+        actor_cid_number: &[u8],
         province_code: &[u8],
         city_code: &[u8],
     ) -> bool;
 }
 
 impl<AccountId> AddressUpdateAuthority<AccountId> for () {
-    fn can_update_catalog(_who: &AccountId, _registrar_account: &AccountId) -> bool {
+    fn can_update_catalog(_who: &AccountId, _actor_cid_number: &[u8]) -> bool {
         false
     }
 
     fn can_update_address(
         _who: &AccountId,
-        _registrar_account: &AccountId,
+        _actor_cid_number: &[u8],
         _province_code: &[u8],
         _city_code: &[u8],
     ) -> bool {
@@ -39,7 +43,7 @@ impl<AccountId> AddressUpdateAuthority<AccountId> for () {
 
 #[frame_support::pallet]
 pub mod pallet {
-    use super::AddressUpdateAuthority;
+    use super::{ActorCidNumber, AddressUpdateAuthority};
     use frame_support::{ensure, pallet_prelude::*};
     use frame_system::pallet_prelude::*;
     use sp_runtime::traits::Hash;
@@ -127,12 +131,12 @@ pub mod pallet {
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
         CatalogVersionSet {
-            registrar_account: T::AccountId,
+            actor_cid_number: ActorCidNumber,
             catalog_version: VersionOf<T>,
             catalog_hash: T::Hash,
         },
         AddressNameSet {
-            registrar_account: T::AccountId,
+            actor_cid_number: ActorCidNumber,
             province_code: CodeOf<T>,
             city_code: CodeOf<T>,
             town_code: CodeOf<T>,
@@ -143,7 +147,7 @@ pub mod pallet {
             address_hash: T::Hash,
         },
         AddressNameRemoved {
-            registrar_account: T::AccountId,
+            actor_cid_number: ActorCidNumber,
             province_code: CodeOf<T>,
             city_code: CodeOf<T>,
             town_code: CodeOf<T>,
@@ -152,7 +156,7 @@ pub mod pallet {
             address_version: u32,
         },
         AddressSet {
-            registrar_account: T::AccountId,
+            actor_cid_number: ActorCidNumber,
             province_code: CodeOf<T>,
             city_code: CodeOf<T>,
             town_code: CodeOf<T>,
@@ -164,7 +168,7 @@ pub mod pallet {
             address_hash: T::Hash,
         },
         AddressRemoved {
-            registrar_account: T::AccountId,
+            actor_cid_number: ActorCidNumber,
             province_code: CodeOf<T>,
             city_code: CodeOf<T>,
             town_code: CodeOf<T>,
@@ -194,21 +198,21 @@ pub mod pallet {
         #[pallet::weight(T::DbWeight::get().reads_writes(0, 2))]
         pub fn set_catalog_version(
             origin: OriginFor<T>,
-            registrar_account: T::AccountId,
+            actor_cid_number: ActorCidNumber,
             catalog_version: Vec<u8>,
             catalog_hash: T::Hash,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             let catalog_version = Self::bounded_version(catalog_version)?;
             ensure!(
-                T::AddressAuthority::can_update_catalog(&who, &registrar_account),
+                T::AddressAuthority::can_update_catalog(&who, actor_cid_number.as_slice()),
                 Error::<T>::Unauthorized
             );
 
             CatalogVersion::<T>::put(&catalog_version);
             CatalogHash::<T>::put(catalog_hash);
             Self::deposit_event(Event::CatalogVersionSet {
-                registrar_account,
+                actor_cid_number,
                 catalog_version,
                 catalog_hash,
             });
@@ -220,7 +224,7 @@ pub mod pallet {
         #[pallet::weight(T::DbWeight::get().reads_writes(2, 2))]
         pub fn set_address_name(
             origin: OriginFor<T>,
-            registrar_account: T::AccountId,
+            actor_cid_number: ActorCidNumber,
             province_code: Vec<u8>,
             city_code: Vec<u8>,
             town_code: Vec<u8>,
@@ -231,7 +235,7 @@ pub mod pallet {
             let (province_code, city_code, town_code, address_name_code) =
                 Self::name_key_parts(province_code, city_code, town_code, address_name_code)?;
             let address_name = Self::bounded_address_name(address_name)?;
-            Self::ensure_authority(&who, &registrar_account, &province_code, &city_code)?;
+            Self::ensure_authority(&who, actor_cid_number.as_slice(), &province_code, &city_code)?;
 
             let key = (
                 province_code.clone(),
@@ -249,7 +253,7 @@ pub mod pallet {
             AddressNameVersions::<T>::insert(&key, address_version);
             AddressNameHashes::<T>::insert(&key, address_hash);
             Self::deposit_event(Event::AddressNameSet {
-                registrar_account,
+                actor_cid_number,
                 province_code,
                 city_code,
                 town_code,
@@ -267,7 +271,7 @@ pub mod pallet {
         #[pallet::weight(T::DbWeight::get().reads_writes(2, 2))]
         pub fn remove_address_name(
             origin: OriginFor<T>,
-            registrar_account: T::AccountId,
+            actor_cid_number: ActorCidNumber,
             province_code: Vec<u8>,
             city_code: Vec<u8>,
             town_code: Vec<u8>,
@@ -276,7 +280,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
             let (province_code, city_code, town_code, address_name_code) =
                 Self::name_key_parts(province_code, city_code, town_code, address_name_code)?;
-            Self::ensure_authority(&who, &registrar_account, &province_code, &city_code)?;
+            Self::ensure_authority(&who, actor_cid_number.as_slice(), &province_code, &city_code)?;
 
             let key = (
                 province_code.clone(),
@@ -288,7 +292,7 @@ pub mod pallet {
             AddressNameVersions::<T>::insert(&key, address_version);
             AddressNameHashes::<T>::remove(&key);
             Self::deposit_event(Event::AddressNameRemoved {
-                registrar_account,
+                actor_cid_number,
                 province_code,
                 city_code,
                 town_code,
@@ -304,7 +308,7 @@ pub mod pallet {
         #[pallet::weight(T::DbWeight::get().reads_writes(2, 2))]
         pub fn set_address(
             origin: OriginFor<T>,
-            registrar_account: T::AccountId,
+            actor_cid_number: ActorCidNumber,
             province_code: Vec<u8>,
             city_code: Vec<u8>,
             town_code: Vec<u8>,
@@ -321,14 +325,14 @@ pub mod pallet {
                 address_local_no,
                 address_detail,
             )?;
-            Self::ensure_authority(&who, &registrar_account, &key.0, &key.1)?;
+            Self::ensure_authority(&who, actor_cid_number.as_slice(), &key.0, &key.1)?;
 
             let address_version = AddressVersions::<T>::get(&key).saturating_add(1);
             let address_hash = T::Hashing::hash_of(&(b"address".as_slice(), &key, address_version));
             AddressVersions::<T>::insert(&key, address_version);
             AddressHashes::<T>::insert(&key, address_hash);
             Self::deposit_event(Event::AddressSet {
-                registrar_account,
+                actor_cid_number,
                 province_code: key.0,
                 city_code: key.1,
                 town_code: key.2,
@@ -347,7 +351,7 @@ pub mod pallet {
         #[pallet::weight(T::DbWeight::get().reads_writes(2, 2))]
         pub fn remove_address(
             origin: OriginFor<T>,
-            registrar_account: T::AccountId,
+            actor_cid_number: ActorCidNumber,
             province_code: Vec<u8>,
             city_code: Vec<u8>,
             town_code: Vec<u8>,
@@ -364,13 +368,13 @@ pub mod pallet {
                 address_local_no,
                 address_detail,
             )?;
-            Self::ensure_authority(&who, &registrar_account, &key.0, &key.1)?;
+            Self::ensure_authority(&who, actor_cid_number.as_slice(), &key.0, &key.1)?;
 
             let address_version = AddressVersions::<T>::get(&key).saturating_add(1);
             AddressVersions::<T>::insert(&key, address_version);
             AddressHashes::<T>::remove(&key);
             Self::deposit_event(Event::AddressRemoved {
-                registrar_account,
+                actor_cid_number,
                 province_code: key.0,
                 city_code: key.1,
                 town_code: key.2,
@@ -387,14 +391,14 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         fn ensure_authority(
             who: &T::AccountId,
-            registrar_account: &T::AccountId,
+            actor_cid_number: &[u8],
             province_code: &[u8],
             city_code: &[u8],
         ) -> DispatchResult {
             ensure!(
                 T::AddressAuthority::can_update_address(
                     who,
-                    registrar_account,
+                    actor_cid_number,
                     province_code,
                     city_code
                 ),

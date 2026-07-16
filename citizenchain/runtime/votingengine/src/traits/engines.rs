@@ -6,16 +6,21 @@ use sp_runtime::DispatchError;
 use crate::types::InstitutionCode;
 
 pub trait JointVoteEngine<AccountId> {
-    fn create_joint_proposal(who: AccountId) -> Result<u64, DispatchError>;
+    fn create_joint_proposal(
+        who: AccountId,
+        actor_cid_number: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError>;
 
     fn create_joint_proposal_with_data(
         who: AccountId,
+        actor_cid_number: sp_std::vec::Vec<u8>,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError>;
 
     fn create_joint_proposal_with_data_and_object(
         who: AccountId,
+        actor_cid_number: sp_std::vec::Vec<u8>,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
         object_kind: u8,
@@ -24,12 +29,16 @@ pub trait JointVoteEngine<AccountId> {
 }
 
 impl<AccountId> JointVoteEngine<AccountId> for () {
-    fn create_joint_proposal(_who: AccountId) -> Result<u64, DispatchError> {
+    fn create_joint_proposal(
+        _who: AccountId,
+        _actor_cid_number: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
         Err(DispatchError::Other("JointVoteEngineNotConfigured"))
     }
 
     fn create_joint_proposal_with_data(
         _who: AccountId,
+        _actor_cid_number: sp_std::vec::Vec<u8>,
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
@@ -38,6 +47,7 @@ impl<AccountId> JointVoteEngine<AccountId> for () {
 
     fn create_joint_proposal_with_data_and_object(
         _who: AccountId,
+        _actor_cid_number: sp_std::vec::Vec<u8>,
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
         _object_kind: u8,
@@ -56,39 +66,44 @@ impl<AccountId> JointVoteEngine<AccountId> for () {
 /// 业务模块只能选择“提案语义”，不能传入“本次投票通过阈值”。
 /// 阈值读取、快照、计票、自动赞成票与通过/否决判定全部归属投票引擎。
 pub trait InternalVoteEngine<AccountId> {
-    /// 创建一般内部投票提案。用于转账、销毁、GRANDPA key 更换等普通业务。
-    fn create_general_internal_proposal_with_data(
+    /// 创建机构内部提案。机构唯一主体是 CID；具体资产账户仅作为执行上下文。
+    fn create_institution_proposal_with_data(
         who: AccountId,
         institution_code: InstitutionCode,
-        institution: AccountId,
+        actor_cid_number: sp_std::vec::Vec<u8>,
+        execution_account: Option<AccountId>,
         subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError>;
 
-    /// 创建注册/注销生命周期内部投票提案。用于注销个人多签和机构多签。
-    ///
-    /// 生命周期投票由投票引擎按 active 管理员快照写入全员通过阈值。
-    fn create_lifecycle_internal_proposal_with_data(
+    /// 创建个人多签普通内部提案。个人多签没有机构 CID。
+    fn create_personal_proposal_with_data(
         _who: AccountId,
-        _institution_code: InstitutionCode,
-        _institution: AccountId,
-        _subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
+        _personal_account: AccountId,
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        Err(DispatchError::Other("LifecycleVoteEngineNotConfigured"))
+        Err(DispatchError::Other("PersonalVoteEngineNotConfigured"))
     }
 
-    /// 创建注册个人多签/机构多签的特别内部投票提案。
+    /// 创建个人多签注销提案，按当前管理员快照要求全员通过。
+    fn create_personal_lifecycle_proposal_with_data(
+        _who: AccountId,
+        _personal_account: AccountId,
+        _module_tag: &[u8],
+        _data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        Err(DispatchError::Other("PersonalLifecycleVoteEngineNotConfigured"))
+    }
+
+    /// 创建注册个人多签的特别内部投票提案。
     ///
     /// `dynamic_threshold` 是注册后普通业务使用的动态阈值配置，不是本次注册投票阈值。
     /// 本次注册投票阈值由投票引擎按 `admins.len()` 写全员通过快照。
-    fn create_registered_account_create_proposal_with_data(
+    fn create_personal_account_create_proposal_with_data(
         _who: AccountId,
-        _institution_code: InstitutionCode,
-        _institution: AccountId,
-        _subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
+        _personal_account: AccountId,
         _admins: sp_std::vec::Vec<AccountId>,
         _dynamic_threshold: u32,
         _module_tag: &[u8],
@@ -103,11 +118,9 @@ pub trait InternalVoteEngine<AccountId> {
     ///
     /// 本次投票仍使用当前 active 阈值；`new_threshold` 只表示变更执行成功后
     /// 写入投票引擎的下一阶段动态阈值。
-    fn create_admin_change_internal_proposal_with_data(
+    fn create_personal_admin_change_proposal_with_data(
         _who: AccountId,
-        _institution_code: InstitutionCode,
-        _institution: AccountId,
-        _subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
+        _personal_account: AccountId,
         _new_admins_len: u32,
         _new_threshold: u32,
         _module_tag: &[u8],
@@ -123,41 +136,55 @@ pub trait InternalVoteEngine<AccountId> {
     /// 仅供 admins 模块在"联邦注册局直设市注册局管理员"(Step3 去中心化鉴权)时
     /// 同步阈值用。实现方必须按严格过半规则校验 `(admins_len, threshold)` 后写入,
     /// 失败回滚由调用方事务统一处理。默认未配置。
-    fn register_active_dynamic_threshold_direct(
+    fn register_active_institution_threshold_direct(
         _institution_code: InstitutionCode,
-        _institution: AccountId,
+        _cid_number: sp_std::vec::Vec<u8>,
         _admins_len: u32,
         _threshold: u32,
     ) -> DispatchResult {
         Err(DispatchError::Other(
-            "RegisterActiveDynamicThresholdDirectNotConfigured",
+            "RegisterActiveInstitutionThresholdDirectNotConfigured",
         ))
     }
 
-    /// 读取已激活动态阈值。只用于展示和业务事件，不参与业务模块计票。
-    fn active_dynamic_threshold(
+    /// 读取机构已激活动态阈值。只用于展示和业务事件，不参与业务模块计票。
+    fn active_institution_threshold(
         _institution_code: InstitutionCode,
-        _institution: AccountId,
+        _cid_number: &[u8],
     ) -> Option<u32> {
+        None
+    }
+
+    /// 个人多签已激活动态阈值。
+    fn active_personal_threshold(_personal_account: AccountId) -> Option<u32> {
         None
     }
 
     /// 读取指定提案的 pending 阈值；不存在时再读取主体 active 阈值。
     /// 注册业务回调在核心提交执行成功副作用前发事件时使用。
-    fn configured_dynamic_threshold(
+    fn configured_institution_threshold(
         _proposal_id: u64,
         _institution_code: InstitutionCode,
-        _institution: AccountId,
+        _cid_number: &[u8],
+    ) -> Option<u32> {
+        None
+    }
+
+    /// 读取指定个人多签提案的 pending 阈值；不存在时读取个人账户 active 阈值。
+    fn configured_personal_threshold(
+        _proposal_id: u64,
+        _personal_account: AccountId,
     ) -> Option<u32> {
         None
     }
 }
 
 impl<AccountId> InternalVoteEngine<AccountId> for () {
-    fn create_general_internal_proposal_with_data(
+    fn create_institution_proposal_with_data(
         _who: AccountId,
         _institution_code: InstitutionCode,
-        _institution: AccountId,
+        _actor_cid_number: sp_std::vec::Vec<u8>,
+        _execution_account: Option<AccountId>,
         _subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,

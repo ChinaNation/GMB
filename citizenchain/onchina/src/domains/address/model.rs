@@ -53,7 +53,6 @@ pub(crate) enum AddressChainAction {
 #[derive(Debug, Deserialize)]
 pub(crate) struct AddressChainCallInput {
     pub(crate) action: AddressChainAction,
-    pub(crate) registrar_account: String,
     #[serde(default)]
     pub(crate) catalog_version: Option<String>,
     #[serde(default)]

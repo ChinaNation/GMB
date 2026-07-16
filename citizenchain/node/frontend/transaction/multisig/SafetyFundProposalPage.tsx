@@ -8,6 +8,8 @@ import { multisigTransferApi as api } from './api';
 import type { AdminWalletMatch, VoteSignRequestResult } from './types';
 
 type Props = {
+  actorCidNumber: string;
+  institutionAccount: string;
   adminWallets: AdminWalletMatch[];
   onBack: () => void;
   onSuccess: () => void;
@@ -15,7 +17,7 @@ type Props = {
 
 type Step = 'form' | 'qr' | 'submit' | 'done' | 'error';
 
-export function SafetyFundProposalPage({ adminWallets, onBack, onSuccess }: Props) {
+export function SafetyFundProposalPage({ actorCidNumber, institutionAccount, adminWallets, onBack, onSuccess }: Props) {
   const [step, setStep] = useState<Step>('form');
 
   const [selectedWallet, setSelectedWallet] = useState<AdminWalletMatch | null>(
@@ -72,7 +74,8 @@ export function SafetyFundProposalPage({ adminWallets, onBack, onSuccess }: Prop
       formValuesRef.current = { beneficiary: beneficiary.trim(), amountYuan: amount, remark };
 
       const result = await api.buildProposeSafetyFundRequest(
-        selectedWallet!.pubkeyHex, beneficiary.trim(), amount, remark,
+        selectedWallet!.pubkeyHex, actorCidNumber, institutionAccount,
+        beneficiary.trim(), amount, remark,
       );
 
       setSignRequest(result);
@@ -99,6 +102,7 @@ export function SafetyFundProposalPage({ adminWallets, onBack, onSuccess }: Prop
       const { beneficiary: ben, amountYuan: amt, remark: rmk } = formValuesRef.current;
       const result = await api.submitProposeSafetyFund(
         req.requestId, wallet.pubkeyHex, req.expectedPayloadHash,
+        actorCidNumber, institutionAccount,
         ben, amt, rmk,
         req.signNonce, req.signBlockNumber, responseText,
       );
@@ -108,7 +112,7 @@ export function SafetyFundProposalPage({ adminWallets, onBack, onSuccess }: Prop
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, []);
+  }, [actorCidNumber, institutionAccount]);
 
   return (
     <div className="governance-section">
@@ -142,6 +146,11 @@ export function SafetyFundProposalPage({ adminWallets, onBack, onSuccess }: Prop
                 </>
               )}
             </select>
+          </div>
+
+          <div className="wallet-form-field">
+            <label>转出地址（安全基金账户）</label>
+            <input type="text" value={hexToSs58(institutionAccount)} disabled />
           </div>
 
           <div className="wallet-form-field">

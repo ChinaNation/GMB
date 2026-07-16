@@ -147,40 +147,7 @@ async fn run_indexer_loop(ws_url: &str, db_pool: &Db) -> Result<(), String> {
             .map_err(|e| format!("fetch events #{block_num}: {e}"))?;
         let block_ts = extract_block_timestamp_from_block(&block).await;
         let records = event_parser::parse_block_events(&events, block_num, block_ts);
-        let inst_updates = event_parser::parse_institution_created_events(&events, block_num);
-        let block_hash_hex = format!("0x{}", hex::encode(block.hash().0));
         db_pool.with_client(|conn| db::insert_block_records(conn, block_num, &records))?;
-        apply_institution_updates(db_pool, &inst_updates, block_hash_hex.as_str());
-    }
-}
-
-/// 把 InstitutionCreated 回写项落库(置机构/账户链投影 ACTIVE_ON_CHAIN)。
-/// 单条失败只告警不中断索引主链路(余额索引进度已提交)。
-fn apply_institution_updates(
-    db_pool: &Db,
-    updates: &[event_parser::InstitutionChainStatusUpdate],
-    block_hash_hex: &str,
-) {
-    for update in updates {
-        let cid_number = update.cid_number.clone();
-        let block_number = update.block_number;
-        let block_hash_hex = block_hash_hex.to_string();
-        let result = db_pool.with_client(move |conn| {
-            db::apply_institution_created(
-                conn,
-                cid_number.as_str(),
-                block_number,
-                block_hash_hex.as_str(),
-            )
-        });
-        if let Err(err) = result {
-            warn!(
-                cid_number = %update.cid_number,
-                block = update.block_number,
-                error = %err,
-                "InstitutionCreated 链投影回写失败"
-            );
-        }
     }
 }
 
@@ -204,11 +171,7 @@ async fn process_block_at_hash(
 
     let block_ts = extract_block_timestamp_from_block(&block).await;
     let records = event_parser::parse_block_events(&events, block_number, block_ts);
-    let inst_updates = event_parser::parse_institution_created_events(&events, block_number);
-    let block_hash_hex = format!("0x{}", hex::encode(block_hash.0));
-
     db_pool.with_client(|conn| db::insert_block_records(conn, block_number, &records))?;
-    apply_institution_updates(db_pool, &inst_updates, block_hash_hex.as_str());
 
     Ok(())
 }

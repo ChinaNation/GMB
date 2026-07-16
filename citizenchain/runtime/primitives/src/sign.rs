@@ -5,6 +5,7 @@
 //! 只使用 `GMB || op_tag` 前缀。Dart/TS 镜像必须与本文件和金标向量保持一致。
 
 use crate::core_const::GMB; // 域分隔符(地址派生 + 签名共用),单源在 core_const
+use codec::Encode;
 use sp_core::hashing::blake2_256;
 use sp_std::vec::Vec;
 
@@ -77,6 +78,11 @@ pub const OP_SIGN_SQUARE_ACTION: u8 = 0x1D;
 
 /// 二进制前缀域(0x18/0x19)统一前缀长度:`GMB`(3B) + op_tag(1B) = 4 字节。
 pub const BINARY_PREFIX_LEN: usize = 4;
+/// 管理员激活载荷中的 CID 固定槽长度，与链上 CID 上限一致。
+pub const ACTIVATE_ADMIN_CID_LEN: usize = crate::core_const::CID_NUMBER_MAX_BYTES as usize;
+/// 管理员激活原始签名载荷固定长度。
+pub const ACTIVATE_ADMIN_PAYLOAD_LEN: usize =
+    BINARY_PREFIX_LEN + ACTIVATE_ADMIN_CID_LEN + 4 + 1 + 32 + 8 + 16;
 
 /// 构造二进制前缀域的 4 字节前缀 `GMB || op_tag`(0x18/0x19 用)。
 pub fn binary_domain_prefix(op_tag: u8) -> [u8; BINARY_PREFIX_LEN] {
@@ -84,6 +90,34 @@ pub fn binary_domain_prefix(op_tag: u8) -> [u8; BINARY_PREFIX_LEN] {
     prefix[..GMB.len()].copy_from_slice(GMB);
     prefix[GMB.len()] = op_tag;
     prefix
+}
+
+/// 构造机构管理员本地激活原始签名载荷。
+///
+/// 布局固定为 `GMB || 0x18 || cid_number(32B,右补零) || institution_code(4B)
+/// || kind(1B) || admin_pubkey(32B) || timestamp_le(8B) || nonce(16B)`。
+/// CID 是机构唯一主键，协议账户不参与本地管理员身份绑定。
+pub fn activate_admin_payload(
+    cid_number: &[u8],
+    institution_code: &[u8; 4],
+    kind: u8,
+    admin_pubkey: &[u8; 32],
+    timestamp: u64,
+    nonce: &[u8; 16],
+) -> Option<Vec<u8>> {
+    if cid_number.is_empty() || cid_number.len() > ACTIVATE_ADMIN_CID_LEN {
+        return None;
+    }
+    let mut payload = Vec::with_capacity(ACTIVATE_ADMIN_PAYLOAD_LEN);
+    payload.extend_from_slice(&binary_domain_prefix(OP_SIGN_ACTIVATE_ADMIN));
+    payload.extend_from_slice(cid_number);
+    payload.resize(BINARY_PREFIX_LEN + ACTIVATE_ADMIN_CID_LEN, 0);
+    payload.extend_from_slice(institution_code);
+    payload.push(kind);
+    payload.extend_from_slice(admin_pubkey);
+    payload.extend_from_slice(&timestamp.to_le_bytes());
+    payload.extend_from_slice(nonce);
+    Some(payload)
 }
 
 /// 全部哈希域签名 op_tag。新增哈希域 op_tag 必须同步追加并刷新金标。
@@ -107,4 +141,98 @@ pub fn signing_message(op_tag: u8, scale_payload: &[u8]) -> [u8; 32] {
     data.push(op_tag);
     data.extend_from_slice(scale_payload);
     blake2_256(&data)
+}
+
+/// CID 机构登记凭证消息唯一构造入口。
+#[allow(clippy::too_many_arguments)]
+pub fn institution_registration_message<Hash: Encode, Nonce: AsRef<[u8]>>(
+    genesis_hash: &Hash,
+    cid_number: &[u8],
+    cid_full_name: &[u8],
+    cid_short_name: &[u8],
+    account_names: &[Vec<u8>],
+    nonce: &Nonce,
+    actor_cid_number: &[u8],
+    credential_signer_pubkey: &[u8; 32],
+    scope_province_name: &[u8],
+    scope_city_name: &[u8],
+    town_code: &[u8],
+) -> [u8; 32] {
+    let payload = (
+        genesis_hash,
+        cid_number,
+        cid_full_name,
+        cid_short_name,
+        account_names,
+        nonce.as_ref(),
+        actor_cid_number,
+        credential_signer_pubkey,
+        scope_province_name,
+        scope_city_name,
+        town_code,
+    );
+    signing_message(OP_SIGN_INST, &payload.encode())
+}
+
+/// CID 机构创建凭证消息唯一构造入口。
+#[allow(clippy::too_many_arguments)]
+pub fn institution_creation_message<Hash: Encode, AccountId: Encode, Nonce: AsRef<[u8]>>(
+    genesis_hash: &Hash,
+    cid_number: &[u8],
+    cid_full_name: &[u8],
+    cid_short_name: &[u8],
+    legal_representative_name: &[u8],
+    legal_representative_cid_number: &[u8],
+    legal_representative_account: &AccountId,
+    account_names: &[Vec<u8>],
+    roles_payload: &[u8],
+    assignments_payload: &[u8],
+    nonce: &Nonce,
+    actor_cid_number: &[u8],
+    credential_signer_pubkey: &[u8; 32],
+    scope_province_name: &[u8],
+    scope_city_name: &[u8],
+    town_code: &[u8],
+) -> [u8; 32] {
+    let payload = (
+        genesis_hash,
+        cid_number,
+        cid_full_name,
+        cid_short_name,
+        legal_representative_name,
+        legal_representative_cid_number,
+        legal_representative_account,
+        account_names,
+        roles_payload,
+        assignments_payload,
+        nonce.as_ref(),
+        actor_cid_number,
+        credential_signer_pubkey,
+        scope_province_name,
+        scope_city_name,
+        town_code,
+    );
+    signing_message(OP_SIGN_INST, &payload.encode())
+}
+
+/// CID 机构自定义账户关闭凭证消息唯一构造入口。
+pub fn institution_account_close_message<Hash: Encode, AccountId: Encode, Nonce: AsRef<[u8]>>(
+    genesis_hash: &Hash,
+    cid_number: &[u8],
+    account_name: &[u8],
+    institution_account: &AccountId,
+    nonce: &Nonce,
+    credential_issuer_cid_number: &[u8],
+    credential_signer_pubkey: &[u8; 32],
+) -> [u8; 32] {
+    let payload = (
+        genesis_hash,
+        cid_number,
+        account_name,
+        institution_account,
+        nonce.as_ref(),
+        credential_issuer_cid_number,
+        credential_signer_pubkey,
+    );
+    signing_message(OP_SIGN_DEREGISTER, &payload.encode())
 }

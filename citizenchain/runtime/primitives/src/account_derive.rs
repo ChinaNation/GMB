@@ -36,6 +36,19 @@ pub const RESERVED_ACCOUNT_NAMES: [&[u8]; 5] = [
     RESERVED_NAME_HE,
 ];
 
+/// 机构协议账户类别。
+///
+/// 这里只表达协议账户的业务角色，不携带 CID，也不作为独立机构身份。
+/// 每个机构需要哪些协议账户由 `institution_constraints` 唯一决定。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum InstitutionProtocolAccountKind {
+    Main,
+    Fee,
+    Stake,
+    SafetyFund,
+    He,
+}
+
 /// 是否为禁止注册的制度专属保留名。
 pub fn is_forbidden_account_name(name: &[u8]) -> bool {
     name == RESERVED_NAME_STAKE || name == RESERVED_NAME_SAFETYFUND || name == RESERVED_NAME_HE
@@ -83,6 +96,25 @@ impl<'a> AccountKind<'a> {
         }
     }
 
+    /// 返回机构协议账户类别；自定义机构账户和个人多签账户返回 `None`。
+    pub const fn institution_protocol_kind(&self) -> Option<InstitutionProtocolAccountKind> {
+        match self {
+            AccountKind::InstitutionMain { .. } => Some(InstitutionProtocolAccountKind::Main),
+            AccountKind::InstitutionFee { .. } => Some(InstitutionProtocolAccountKind::Fee),
+            AccountKind::InstitutionStake { .. } => Some(InstitutionProtocolAccountKind::Stake),
+            AccountKind::InstitutionSafetyFund { .. } => {
+                Some(InstitutionProtocolAccountKind::SafetyFund)
+            }
+            AccountKind::InstitutionHe { .. } => Some(InstitutionProtocolAccountKind::He),
+            AccountKind::InstitutionNamed { .. } | AccountKind::Personal { .. } => None,
+        }
+    }
+
+    /// 只有机构自定义命名账户允许进入机构账户关闭流程。
+    pub const fn is_closable_institution_account(&self) -> bool {
+        matches!(self, AccountKind::InstitutionNamed { .. })
+    }
+
     /// payload 字段拼装。
     fn payload(&self) -> Vec<u8> {
         match self {
@@ -123,6 +155,41 @@ impl<'a> AccountKind<'a> {
         preimage.extend_from_slice(&payload);
         blake2_256(&preimage)
     }
+}
+
+/// 协议账户类别对应的唯一保留名。
+pub const fn institution_protocol_account_name(
+    kind: InstitutionProtocolAccountKind,
+) -> &'static [u8] {
+    match kind {
+        InstitutionProtocolAccountKind::Main => RESERVED_NAME_MAIN,
+        InstitutionProtocolAccountKind::Fee => RESERVED_NAME_FEE,
+        InstitutionProtocolAccountKind::Stake => RESERVED_NAME_STAKE,
+        InstitutionProtocolAccountKind::SafetyFund => RESERVED_NAME_SAFETYFUND,
+        InstitutionProtocolAccountKind::He => RESERVED_NAME_HE,
+    }
+}
+
+/// 按账户名识别协议账户类别；普通自定义账户返回 `None`。
+pub fn institution_protocol_kind_by_name(
+    name: &[u8],
+) -> Option<InstitutionProtocolAccountKind> {
+    if name == RESERVED_NAME_MAIN {
+        return Some(InstitutionProtocolAccountKind::Main);
+    }
+    if name == RESERVED_NAME_FEE {
+        return Some(InstitutionProtocolAccountKind::Fee);
+    }
+    if name == RESERVED_NAME_STAKE {
+        return Some(InstitutionProtocolAccountKind::Stake);
+    }
+    if name == RESERVED_NAME_SAFETYFUND {
+        return Some(InstitutionProtocolAccountKind::SafetyFund);
+    }
+    if name == RESERVED_NAME_HE {
+        return Some(InstitutionProtocolAccountKind::He);
+    }
+    None
 }
 
 /// 机构账户名到派生种类的路由。

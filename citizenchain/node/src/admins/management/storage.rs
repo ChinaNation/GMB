@@ -10,10 +10,9 @@ use primitives::cid::code::{
     InstitutionCode, NRC, PRB, PRC,
 };
 
-use super::account_id;
 use super::codec;
 use super::types::{
-    institution_code_label, kind_label, status_label, AdminAccountState, InstitutionAdminInfo,
+    institution_code_label, kind_label, AdminAccountState, InstitutionAdminInfo,
     InstitutionRoleAssignmentInfo,
 };
 use crate::governance::registry;
@@ -68,36 +67,37 @@ fn builtin_governance_code(cid_number: &str) -> Result<InstitutionCode, String> 
     })
 }
 
-/// 构造机构管理员 pallet 的 `AdminAccounts` StorageMap key。
-pub fn admin_accounts_key_for_pallet(pallet_name: &str, account_id: &[u8; 32]) -> String {
+/// 构造机构管理员 pallet 的 `AdminAccounts[cid_number]` StorageMap key。
+pub fn admin_accounts_key_for_pallet(pallet_name: &str, cid_number: &[u8]) -> String {
     let pallet_hash = storage_keys::twox_128(pallet_name.as_bytes());
     let storage_hash = storage_keys::twox_128(b"AdminAccounts");
-    let blake2_hash = storage_keys::blake2_128(account_id);
-    let mut key = Vec::with_capacity(80);
+    let encoded_cid = cid_number.to_vec().encode();
+    let blake2_hash = storage_keys::blake2_128(&encoded_cid);
+    let mut key = Vec::with_capacity(48 + encoded_cid.len());
     key.extend_from_slice(&pallet_hash);
     key.extend_from_slice(&storage_hash);
     key.extend_from_slice(&blake2_hash);
-    key.extend_from_slice(account_id);
+    key.extend_from_slice(&encoded_cid);
     format!("0x{}", hex::encode(key))
 }
 
 pub fn fetch_admin_account_by_cid_number(
     cid_number: &str,
 ) -> Result<Option<AdminAccountState>, String> {
-    let account_id = account_id::account_id_from_builtin_cid(cid_number)?;
-    let institution_code = builtin_governance_code(cid_number)?;
-    fetch_admin_account_for_code(&account_id, institution_code, Some(cid_number.to_string()))
+    if let Ok(institution_code) = builtin_governance_code(cid_number) {
+        return fetch_admin_account_for_code(cid_number, institution_code);
+    }
+    fetch_admin_account(cid_number)
 }
 
-/// 按账户在公权/私权管理员模块双探测，非法人也以实际命中的 pallet 决定 entity 路由。
+/// 按 CID 在公权/私权管理员模块双探测，非法人也以实际命中的 pallet 决定 entity 路由。
 pub fn fetch_admin_account(
-    account_id: &[u8; 32],
-    expected_cid_number: Option<String>,
+    cid_number: &str,
 ) -> Result<Option<AdminAccountState>, String> {
     let finalized_hash = chain_query::fetch_finalized_head()?;
     let mut found = None;
     for spec in [PUBLIC_ADMINS, PRIVATE_ADMINS] {
-        let storage_key = admin_accounts_key_for_pallet(spec.pallet_name, account_id);
+        let storage_key = admin_accounts_key_for_pallet(spec.pallet_name, cid_number.as_bytes());
         let Some(hex_data) = chain_query::fetch_storage_at(&storage_key, &finalized_hash)? else {
             continue;
         };
@@ -105,8 +105,7 @@ pub fn fetch_admin_account(
             return Err("同一账户在多个机构管理员模块中存在，链上状态不一致".to_string());
         }
         found = Some(decode_admin_account_state(
-            account_id,
-            expected_cid_number.clone(),
+            cid_number,
             spec,
             &hex_data,
             &finalized_hash,
@@ -116,33 +115,29 @@ pub fn fetch_admin_account(
 }
 
 pub fn fetch_admin_account_for_code(
-    account_id: &[u8; 32],
+    cid_number: &str,
     institution_code: InstitutionCode,
-    expected_cid_number: Option<String>,
 ) -> Result<Option<AdminAccountState>, String> {
     let finalized_hash = chain_query::fetch_finalized_head()?;
     fetch_admin_account_for_code_at(
-        account_id,
+        cid_number,
         institution_code,
-        expected_cid_number,
         &finalized_hash,
     )
 }
 
 pub fn fetch_admin_account_for_code_at(
-    account_id: &[u8; 32],
+    cid_number: &str,
     institution_code: InstitutionCode,
-    expected_cid_number: Option<String>,
     finalized_hash: &str,
 ) -> Result<Option<AdminAccountState>, String> {
     let spec = admin_pallet_for_code(&institution_code)?;
-    let storage_key = admin_accounts_key_for_pallet(spec.pallet_name, account_id);
+    let storage_key = admin_accounts_key_for_pallet(spec.pallet_name, cid_number.as_bytes());
     let Some(hex_data) = chain_query::fetch_storage_at(&storage_key, finalized_hash)? else {
         return Ok(None);
     };
     let state = decode_admin_account_state(
-        account_id,
-        expected_cid_number,
+        cid_number,
         spec,
         &hex_data,
         finalized_hash,
@@ -158,38 +153,26 @@ pub fn fetch_admin_account_for_code_at(
 }
 
 fn decode_admin_account_state(
-    account_id: &[u8; 32],
-    expected_cid_number: Option<String>,
+    cid_number: &str,
     spec: AdminPalletSpec,
     hex_data: &str,
     finalized_hash: &str,
 ) -> Result<AdminAccountState, String> {
     let data = decode_hex_storage(hex_data)?;
     let decoded = codec::decode_admin_account(&data)?;
-    if let Some(expected) = expected_cid_number.as_deref() {
-        if expected != decoded.cid_number {
-            return Err(format!(
-                "管理员账户 CID 不匹配：请求 {expected}，链上 {}",
-                decoded.cid_number
-            ));
-        }
-    }
     let admins = fetch_role_assignments(
         spec,
-        decoded.cid_number.as_bytes(),
+        cid_number.as_bytes(),
         decoded.admins.as_slice(),
         finalized_hash,
     )?;
     Ok(AdminAccountState {
-        account_hex: hex::encode(account_id),
-        cid_number: Some(decoded.cid_number),
+        cid_number: cid_number.to_string(),
         institution_code: decoded.institution_code,
         institution_code_label: institution_code_label(&decoded.institution_code),
         kind: spec.kind,
         kind_label: kind_label(spec.kind).to_string(),
         admins,
-        status: decoded.status,
-        status_label: status_label(decoded.status).to_string(),
     })
 }
 

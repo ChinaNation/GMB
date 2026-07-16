@@ -30,7 +30,7 @@ pub mod pallet {
         traits::{Hash, SaturatedConversion},
         DispatchError,
     };
-    use votingengine::JointVoteEngine;
+    use votingengine::{InternalAdminProvider, JointVoteEngine};
 
     pub type ReasonOf<T> = BoundedVec<u8, <T as Config>::MaxReasonLen>;
     pub type CodeOf<T> = BoundedVec<u8, <T as Config>::MaxRuntimeCodeSize>;
@@ -91,6 +91,7 @@ pub mod pallet {
     )]
     #[scale_info(skip_type_params(T))]
     pub struct Proposal<T: Config> {
+        pub actor_cid_number: votingengine::types::CidNumber,
         /// 提案发起人（国家储委会或省储委会管理员）
         pub proposer: T::AccountId,
         /// 升级理由
@@ -144,6 +145,7 @@ pub mod pallet {
     pub enum Event<T: Config> {
         RuntimeUpgradeProposed {
             proposal_id: u64,
+            actor_cid_number: votingengine::types::CidNumber,
             proposer: T::AccountId,
             code_hash: T::Hash,
             pow_params_hash: T::Hash,
@@ -171,6 +173,8 @@ pub mod pallet {
     pub enum Error<T> {
         EmptyReason,
         EmptyRuntimeCode,
+        InvalidActorCid,
+        UnauthorizedActorAdmin,
         ProposalNotFound,
         ProposalNotVoting,
         JointVoteCreateFailed,
@@ -188,11 +192,29 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::propose_runtime_upgrade())]
         pub fn propose_runtime_upgrade(
             origin: OriginFor<T>,
+            actor_cid_number: votingengine::types::CidNumber,
             reason: ReasonOf<T>,
             code: CodeOf<T>,
             new_pow_params: pow_difficulty::PowDifficultyParams,
         ) -> DispatchResult {
             let proposer = T::ProposeOrigin::ensure_origin(origin)?;
+
+            let actor_text = core::str::from_utf8(actor_cid_number.as_slice())
+                .map_err(|_| Error::<T>::InvalidActorCid)?;
+            let actor_code = votingengine::types::institution_code_from_cid_number(actor_text)
+                .ok_or(Error::<T>::InvalidActorCid)?;
+            ensure!(
+                matches!(actor_code, votingengine::types::NRC | votingengine::types::PRC),
+                Error::<T>::InvalidActorCid
+            );
+            ensure!(
+                <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
+                    actor_code,
+                    actor_cid_number.as_slice(),
+                    &proposer,
+                ),
+                Error::<T>::UnauthorizedActorAdmin
+            );
 
             ensure!(!reason.is_empty(), Error::<T>::EmptyReason);
             ensure!(!code.is_empty(), Error::<T>::EmptyRuntimeCode);
@@ -206,6 +228,7 @@ pub mod pallet {
                 T::Hashing::hash_of(&pow_difficulty::ActiveParams::<T>::get());
             let pow_params_hash = T::Hashing::hash_of(&new_pow_params);
             let proposal = Proposal::<T> {
+                actor_cid_number: actor_cid_number.clone(),
                 proposer: proposer.clone(),
                 reason,
                 code_hash,
@@ -216,6 +239,7 @@ pub mod pallet {
             encoded.extend_from_slice(&proposal.encode());
             let proposal_id = T::JointVoteEngine::create_joint_proposal_with_data_and_object(
                 proposer.clone(),
+                actor_cid_number.to_vec(),
                 crate::MODULE_TAG,
                 encoded,
                 PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
@@ -225,6 +249,7 @@ pub mod pallet {
 
             Self::deposit_event(Event::<T>::RuntimeUpgradeProposed {
                 proposal_id,
+                actor_cid_number,
                 proposer,
                 code_hash,
                 pow_params_hash,

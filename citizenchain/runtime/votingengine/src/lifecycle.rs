@@ -203,11 +203,13 @@ impl<T: Config> Pallet<T> {
 
     pub(crate) fn ensure_retry_admin(who: &T::AccountId, proposal_id: u64) -> DispatchResult {
         let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
-        let institution = proposal
-            .account_context
+        let subject = proposal
+            .subject_keys()
+            .into_iter()
+            .next()
             .ok_or(Error::<T>::InvalidInstitution)?;
         ensure!(
-            Self::is_admin_in_snapshot(proposal_id, institution, who),
+            Self::is_admin_in_snapshot(proposal_id, subject, who),
             Error::<T>::NoPermission
         );
         Ok(())

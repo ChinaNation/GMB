@@ -182,7 +182,7 @@ impl entity_primitives::InstitutionMultisigQuery<AccountId32> for TestInstitutio
         None
     }
 
-    fn is_active(addr: &AccountId32) -> bool {
+    fn account_exists(addr: &AccountId32) -> bool {
         Self::code(addr).is_some()
     }
 }

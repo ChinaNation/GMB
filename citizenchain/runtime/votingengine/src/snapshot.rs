@@ -11,24 +11,27 @@
 use frame_support::pallet_prelude::{BoundedVec, DispatchResult};
 
 use crate::pallet::{self, AdminSnapshot, Error};
-use crate::types::InstitutionCode;
+use crate::types::{CidNumber, InstitutionCode, ProposalSubject};
 use crate::InternalAdminProvider;
 
 impl<T: pallet::Config> pallet::Pallet<T> {
     /// 查询快照中某管理员是否在指定机构的管理员名单中。
     pub fn is_admin_in_snapshot(
         proposal_id: u64,
-        institution: T::AccountId,
+        subject: ProposalSubject<T::AccountId>,
         who: &T::AccountId,
     ) -> bool {
-        AdminSnapshot::<T>::get(proposal_id, institution)
+        AdminSnapshot::<T>::get(proposal_id, subject)
             .map(|admins| admins.iter().any(|a| a == who))
             .unwrap_or(false)
     }
 
-    /// 查询快照中某机构的管理员数量。
-    pub fn snapshot_admins_len(proposal_id: u64, institution: T::AccountId) -> Option<u32> {
-        AdminSnapshot::<T>::get(proposal_id, institution).map(|admins| admins.len() as u32)
+    /// 查询快照中某机构 CID 或个人多签账户的管理员数量。
+    pub fn snapshot_admins_len(
+        proposal_id: u64,
+        subject: ProposalSubject<T::AccountId>,
+    ) -> Option<u32> {
+        AdminSnapshot::<T>::get(proposal_id, subject).map(|admins| admins.len() as u32)
     }
 
     fn ensure_valid_admin_snapshot(admins: &[T::AccountId]) -> DispatchResult {
@@ -48,21 +51,51 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     pub fn snapshot_institution_admins(
         proposal_id: u64,
         institution_code: InstitutionCode,
-        institution: T::AccountId,
+        cid_number: CidNumber,
+    ) -> DispatchResult {
+        let admins = T::InternalAdminProvider::get_institution_admins(
+            institution_code,
+            cid_number.as_slice(),
+        )
+        .ok_or(Error::<T>::InvalidInstitution)?;
+
+        Self::write_admin_snapshot(
+            proposal_id,
+            ProposalSubject::InstitutionCid(cid_number),
+            admins,
+        )
+    }
+
+    /// 将个人多签当前或待注册管理员列表写入快照。
+    pub fn snapshot_personal_admins(
+        proposal_id: u64,
+        personal_account: T::AccountId,
         pending_account: bool,
     ) -> DispatchResult {
         let admins = if pending_account {
-            T::InternalAdminProvider::get_pending_admin_list(institution_code, institution.clone())
+            T::InternalAdminProvider::get_pending_personal_admins(personal_account.clone())
         } else {
-            T::InternalAdminProvider::get_admin_list(institution_code, institution.clone())
+            T::InternalAdminProvider::get_personal_admins(personal_account.clone())
         }
         .ok_or(Error::<T>::InvalidInstitution)?;
 
+        Self::write_admin_snapshot(
+            proposal_id,
+            ProposalSubject::PersonalAccount(personal_account),
+            admins,
+        )
+    }
+
+    fn write_admin_snapshot(
+        proposal_id: u64,
+        subject: ProposalSubject<T::AccountId>,
+        admins: sp_std::vec::Vec<T::AccountId>,
+    ) -> DispatchResult {
         Self::ensure_valid_admin_snapshot(admins.as_slice())?;
 
         match BoundedVec::<T::AccountId, T::MaxAdminsPerInstitution>::try_from(admins) {
             Ok(bounded) => {
-                AdminSnapshot::<T>::insert(proposal_id, institution, bounded);
+                AdminSnapshot::<T>::insert(proposal_id, subject, bounded);
                 Ok(())
             }
             Err(_) => {

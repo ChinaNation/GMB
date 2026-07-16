@@ -24,14 +24,12 @@ pub struct InstitutionAdminInfo {
     pub assignments: Vec<InstitutionRoleAssignmentInfo>,
 }
 
-/// 公权或私权机构 `AdminAccounts` 的桌面端联合展示状态。
+/// 公权或私权机构 `AdminAccounts[cid_number]` 的桌面端联合展示状态。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AdminAccountState {
-    /// 32 字节机构多签 AccountId，hex 不含 0x。
-    pub account_hex: String,
-    /// 内置机构入口使用的 cidNumber；动态账户可为空。
-    pub cid_number: Option<String>,
+    /// 机构唯一主键。
+    pub cid_number: String,
     /// 链上机构码（CID institution_code，[u8;4]，治理分类唯一真源）。
     pub institution_code: InstitutionCode,
     pub institution_code_label: String,
@@ -40,18 +38,13 @@ pub struct AdminAccountState {
     pub kind_label: String,
     /// 当前管理员钱包及其有效岗位任职；钱包在本集合内唯一。
     pub admins: Vec<InstitutionAdminInfo>,
-    /// 链上 AdminAccountStatus 枚举值。
-    pub status: u8,
-    pub status_label: String,
 }
 
 /// 解码后的链上管理员账户原始值。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AdminAccountDecoded {
-    pub cid_number: String,
     pub institution_code: InstitutionCode,
     pub admins: Vec<String>,
-    pub status: u8,
 }
 
 /// 机构码 4 字符展示串（末尾 `\0` 填充字节去掉）。
@@ -70,13 +63,4 @@ pub fn kind_label(kind: u8) -> &'static str {
 
 pub fn is_valid_institution_code(code: &InstitutionCode) -> bool {
     is_valid_governance_code(code)
-}
-
-pub fn status_label(status: u8) -> &'static str {
-    match status {
-        0 => "待激活",
-        1 => "已激活",
-        2 => "已关闭",
-        _ => "未知状态",
-    }
 }

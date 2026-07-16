@@ -15,19 +15,15 @@ export type {
 };
 
 export type AdminAccountState = {
-  accountHex: string;
-  cidNumber: string | null;
+  cidNumber: string;
   institutionCode: number[];
   institutionCodeLabel: string;
   kind: number;
   kindLabel: string;
   admins: InstitutionAdminInfo[];
-  status: number;
-  statusLabel: string;
 };
 
 export type AdminAccountRef = {
-  cidNumber?: string | null;
-  accountHex?: string | null;
+  cidNumber: string;
   institutionCode?: string | null;
 };

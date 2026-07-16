@@ -14,8 +14,8 @@ type PrbView =
   | { page: 'detail'; cidNumber: string }
   | { page: 'admin-list'; cidNumber: string; orgType: number }
   | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; cidNumber?: string; originCidNumber: string }
-  | { page: 'create-proposal'; cidNumber: string; orgType: number; cidFullName: string; mainAccount: string; adminWallets: AdminWalletMatch[] }
-  | { page: 'propose-sweep'; cidNumber: string; cidFullName: string; adminWallets: AdminWalletMatch[] };
+  | { page: 'create-proposal'; cidNumber: string; orgType: number; cidFullName: string; institutionAccount: string; adminWallets: AdminWalletMatch[] }
+  | { page: 'propose-sweep'; cidNumber: string; institutionAccount: string; cidFullName: string; adminWallets: AdminWalletMatch[] };
 
 export function PrbSection() {
   const [view, setView] = useState<PrbView>({ page: 'list' });
@@ -48,9 +48,8 @@ export function PrbSection() {
     return (
       <CreateMultisigTransferPage
         cidNumber={view.cidNumber}
-        institutionCode="PRB"
         cidFullName={view.cidFullName}
-        mainAccount={view.mainAccount}
+        institutionAccount={view.institutionAccount}
         adminWallets={view.adminWallets}
         onBack={() => backToDetail(view.cidNumber)}
         onSuccess={() => backToDetail(view.cidNumber)}
@@ -61,7 +60,8 @@ export function PrbSection() {
   if (view.page === 'propose-sweep') {
     return (
       <SweepProposalPage
-        cidNumber={view.cidNumber}
+        actorCidNumber={view.cidNumber}
+        institutionAccount={view.institutionAccount}
         cidFullName={view.cidFullName}
         adminWallets={view.adminWallets}
         onBack={() => backToDetail(view.cidNumber)}
@@ -80,11 +80,11 @@ export function PrbSection() {
         onSelectProposal={(proposalId, adminWallets, sid) =>
           setView({ page: 'proposal-detail', proposalId, adminWallets, cidNumber: sid, originCidNumber: cidNumber })
         }
-        onCreateProposal={(sid, orgType, cidFullName, mainAccount, aw) =>
-          setView({ page: 'create-proposal', cidNumber: sid, orgType, cidFullName, mainAccount, adminWallets: aw })
+        onCreateProposal={(sid, orgType, cidFullName, institutionAccount, aw) =>
+          setView({ page: 'create-proposal', cidNumber: sid, orgType, cidFullName, institutionAccount, adminWallets: aw })
         }
-        onCreateSweep={(sid, cidFullName, aw) =>
-          setView({ page: 'propose-sweep', cidNumber: sid, cidFullName, adminWallets: aw })
+        onCreateSweep={(sid, institutionAccount, cidFullName, aw) =>
+          setView({ page: 'propose-sweep', cidNumber: sid, institutionAccount, cidFullName, adminWallets: aw })
         }
       />
     );

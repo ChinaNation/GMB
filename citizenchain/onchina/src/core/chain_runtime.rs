@@ -1,9 +1,4 @@
-use blake2::{
-    digest::{Update, VariableOutput},
-    Blake2bVar,
-};
-use codec::{Decode, Encode};
-use primitives::core_const::{GMB, OP_SIGN_DEREGISTER, OP_SIGN_INST};
+use codec::Decode;
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
 use std::{
@@ -17,8 +12,7 @@ use twox_hash::XxHash64;
 use crate::auth::login::parse_sr25519_pubkey_bytes;
 use crate::*;
 
-// 本文件所有 GMB + OP_SIGN_* 均直接来自
-// `primitives::core_const`。SCALE 编码下：
+// 机构凭证消息统一调用 `primitives::sign`。SCALE 编码下：
 //   [u8; N] / &[u8; N]  →  N 字节，无长度前缀
 //   u8                   →  1 字节
 //   &[u8] / Vec<u8>     →  Compact(N) ++ N 字节，多 1~4 字节长度前缀
@@ -56,9 +50,8 @@ pub(crate) struct RuntimeSignatureMeta {
 pub(crate) struct RuntimeInstitutionRegistrationCredential {
     pub(crate) genesis_hash: String,
     pub(crate) register_nonce: String,
-    pub(crate) issuer_cid_number: String,
-    pub(crate) issuer_main_account: String,
-    pub(crate) signer_pubkey: String,
+    pub(crate) actor_cid_number: String,
+    pub(crate) credential_signer_pubkey: String,
     pub(crate) scope_province_name: String,
     pub(crate) scope_city_name: String,
     pub(crate) signature: String,
@@ -70,25 +63,21 @@ pub(crate) struct RuntimeInstitutionRegistrationCredential {
 #[allow(dead_code)]
 pub(crate) struct RuntimeInstitutionDeregistrationCredential {
     pub(crate) genesis_hash: String,
-    pub(crate) scope: u8,
     pub(crate) cid_number: String,
     pub(crate) account_name: String,
     pub(crate) target_account: String,
     pub(crate) deregister_nonce: String,
-    pub(crate) issuer_cid_number: String,
-    pub(crate) issuer_main_account: String,
-    pub(crate) signer_pubkey: String,
+    pub(crate) credential_issuer_cid_number: String,
+    pub(crate) credential_signer_pubkey: String,
     pub(crate) signature: String,
     pub(crate) payload_digest: String,
     pub(crate) meta: RuntimeSignatureMeta,
 }
 
 struct RuntimeSigningContext {
-    issuer_cid_number: String,
-    issuer_main_account: [u8; 32],
-    issuer_main_account_hex: String,
-    signer_pubkey: [u8; 32],
-    signer_pubkey_hex: String,
+    actor_cid_number: String,
+    credential_signer_pubkey: [u8; 32],
+    credential_signer_pubkey_hex: String,
     scope_province_name: String,
     scope_city_name: String,
 }
@@ -104,9 +93,8 @@ fn finish_institution_credential(
     Ok(RuntimeInstitutionRegistrationCredential {
         genesis_hash: hex::encode(genesis_hash),
         register_nonce,
-        issuer_cid_number: signing_ctx.issuer_cid_number,
-        issuer_main_account: signing_ctx.issuer_main_account_hex,
-        signer_pubkey: signing_ctx.signer_pubkey_hex,
+        actor_cid_number: signing_ctx.actor_cid_number,
+        credential_signer_pubkey: signing_ctx.credential_signer_pubkey_hex,
         scope_province_name: signing_ctx.scope_province_name,
         scope_city_name: signing_ctx.scope_city_name,
         signature,
@@ -115,65 +103,10 @@ fn finish_institution_credential(
     })
 }
 
-/// 签发 call_index=2 的机构账户登记凭证，不包含尚未写入 Institutions 的公开资料。
-pub(crate) fn build_institution_registration_credential(
-    state: &AppState,
-    cid_number: &str,
-    cid_full_name: &str,
-    cid_short_name: &str,
-    account_names: &[String],
-    register_nonce: String,
-    scope_province_name: &str,
-    scope_city_name: &str,
-    town_code: &str,
-) -> Result<RuntimeInstitutionRegistrationCredential, String> {
-    if cid_number.trim().is_empty()
-        || cid_full_name.trim().is_empty()
-        || cid_short_name.trim().is_empty()
-    {
-        return Err("institution identity fields are required".to_string());
-    }
-    if account_names.is_empty() || account_names.iter().any(|name| name.trim().is_empty()) {
-        return Err("account_names are required".to_string());
-    }
-    if register_nonce.trim().is_empty() {
-        return Err("register_nonce is required".to_string());
-    }
-    let genesis_hash = resolve_chain_genesis_hash()?;
-    let signing_ctx = runtime_signing_context(Some(scope_province_name), Some(scope_city_name))?;
-    let account_name_payload = account_names
-        .iter()
-        .map(|name| name.trim().as_bytes().to_vec())
-        .collect::<Vec<_>>();
-    let payload = (
-        GMB,
-        OP_SIGN_INST,
-        genesis_hash,
-        cid_number.trim().as_bytes(),
-        cid_full_name.trim().as_bytes(),
-        cid_short_name.trim().as_bytes(),
-        &account_name_payload,
-        register_nonce.trim().as_bytes(),
-        signing_ctx.issuer_cid_number.as_bytes(),
-        &signing_ctx.issuer_main_account,
-        &signing_ctx.signer_pubkey,
-        signing_ctx.scope_province_name.as_bytes(),
-        signing_ctx.scope_city_name.as_bytes(),
-        town_code.trim().as_bytes(),
-    );
-    let payload_digest = blake2_256(&payload.encode());
-    finish_institution_credential(
-        state,
-        genesis_hash,
-        register_nonce,
-        signing_ctx,
-        payload_digest,
-    )
-}
-
 /// 签发 call_index=5 的机构创建凭证，法定代表人三字段必须进入签名域。
 pub(crate) fn build_institution_creation_credential(
     state: &AppState,
+    actor_cid_number: &str,
     cid_number: &str,
     cid_full_name: &str,
     cid_short_name: &str,
@@ -181,6 +114,8 @@ pub(crate) fn build_institution_creation_credential(
     legal_representative_cid_number: &str,
     legal_representative_account: &[u8; 32],
     account_names: &[String],
+    roles_payload: &[u8],
+    assignments_payload: &[u8],
     register_nonce: String,
     scope_province_name: &str,
     scope_city_name: &str,
@@ -208,7 +143,11 @@ pub(crate) fn build_institution_creation_credential(
         return Err("register_nonce is required".to_string());
     }
     let genesis_hash = resolve_chain_genesis_hash()?;
-    let signing_ctx = runtime_signing_context(Some(scope_province_name), Some(scope_city_name))?;
+    let signing_ctx = runtime_signing_context(
+        actor_cid_number,
+        Some(scope_province_name),
+        Some(scope_city_name),
+    )?;
     let account_name_payload = account_names
         .iter()
         .map(|name| name.trim().as_bytes().to_vec())
@@ -216,10 +155,8 @@ pub(crate) fn build_institution_creation_credential(
     // 字段顺序必须与 RuntimeCidInstitutionVerifier 完全一致:
     // genesis_hash + cid_number + cid_full_name + cid_short_name + 法定代表人三字段 + account_names[]
     // + nonce + 签发机构 + 作用域 + town_code。
-    let payload = (
-        GMB,
-        OP_SIGN_INST,
-        genesis_hash,
+    let payload_digest = primitives::sign::institution_creation_message(
+        &genesis_hash,
         cid_number.trim().as_bytes(),
         cid_full_name.trim().as_bytes(),
         cid_short_name.trim().as_bytes(),
@@ -227,15 +164,15 @@ pub(crate) fn build_institution_creation_credential(
         legal_representative_cid_number.trim().as_bytes(),
         legal_representative_account,
         &account_name_payload,
-        register_nonce.trim().as_bytes(),
-        signing_ctx.issuer_cid_number.as_bytes(),
-        &signing_ctx.issuer_main_account,
-        &signing_ctx.signer_pubkey,
+        roles_payload,
+        assignments_payload,
+        &register_nonce.trim().as_bytes().to_vec(),
+        signing_ctx.actor_cid_number.as_bytes(),
+        &signing_ctx.credential_signer_pubkey,
         signing_ctx.scope_province_name.as_bytes(),
         signing_ctx.scope_city_name.as_bytes(),
         town_code.trim().as_bytes(),
     );
-    let payload_digest = blake2_256(&payload.encode());
     finish_institution_credential(
         state,
         genesis_hash,
@@ -253,37 +190,29 @@ pub(crate) fn build_institution_creation_credential(
 /// target_account 与 scope 入签名,杜绝换账户/换范围/换机构重放。
 fn deregistration_payload_digest(
     genesis_hash: &[u8; 32],
-    scope: u8,
     cid_number: &[u8],
     account_name: &[u8],
     target_account: &[u8; 32],
     deregister_nonce: &[u8],
-    issuer_cid_number: &[u8],
-    issuer_main_account: &[u8; 32],
-    signer_pubkey: &[u8; 32],
+    credential_issuer_cid_number: &[u8],
+    credential_signer_pubkey: &[u8; 32],
 ) -> [u8; 32] {
-    let payload = (
-        GMB,
-        OP_SIGN_DEREGISTER,
+    primitives::sign::institution_account_close_message(
         genesis_hash,
-        scope,
         cid_number,
         account_name,
         target_account,
-        deregister_nonce,
-        issuer_cid_number,
-        issuer_main_account,
-        signer_pubkey,
-    );
-    blake2_256(&payload.encode())
+        &deregister_nonce.to_vec(),
+        credential_issuer_cid_number,
+        credential_signer_pubkey,
+    )
 }
 
-/// 签发机构/账户注销凭证(对称 `build_institution_registration_credential`)。
-/// scope=`SCOPE_INSTITUTION`(0,关主账户=注销整机构)/ `SCOPE_ACCOUNT`(1,只关该非主账户)。
-/// 由注册局管理员动作(冷签特殊档)校验通过后调用;机构管理员持此凭证冷签 propose_close。
+/// 签发机构自定义命名账户关闭凭证。
+/// 由注册局管理员动作校验通过后调用；机构管理员持此凭证冷签 propose_close。
 pub(crate) fn build_institution_deregistration_credential(
     state: &AppState,
-    scope: u8,
+    actor_cid_number: &str,
     cid_number: &str,
     account_name: &str,
     target_account: &[u8; 32],
@@ -299,29 +228,25 @@ pub(crate) fn build_institution_deregistration_credential(
         return Err("deregister_nonce is required".to_string());
     }
     let genesis_hash = resolve_chain_genesis_hash()?;
-    let signing_ctx = runtime_signing_context(None, None)?;
+    let signing_ctx = runtime_signing_context(actor_cid_number, None, None)?;
     let payload_digest = deregistration_payload_digest(
         &genesis_hash,
-        scope,
         cid_number.trim().as_bytes(),
         account_name.trim().as_bytes(),
         target_account,
         deregister_nonce.trim().as_bytes(),
-        signing_ctx.issuer_cid_number.as_bytes(),
-        &signing_ctx.issuer_main_account,
-        &signing_ctx.signer_pubkey,
+        signing_ctx.actor_cid_number.as_bytes(),
+        &signing_ctx.credential_signer_pubkey,
     );
     let signature = sign_runtime_digest(state, &payload_digest)?;
     Ok(RuntimeInstitutionDeregistrationCredential {
         genesis_hash: hex::encode(genesis_hash),
-        scope,
         cid_number: cid_number.trim().to_string(),
         account_name: account_name.trim().to_string(),
         target_account: format!("0x{}", hex::encode(target_account)),
         deregister_nonce,
-        issuer_cid_number: signing_ctx.issuer_cid_number,
-        issuer_main_account: signing_ctx.issuer_main_account_hex,
-        signer_pubkey: signing_ctx.signer_pubkey_hex,
+        credential_issuer_cid_number: signing_ctx.actor_cid_number,
+        credential_signer_pubkey: signing_ctx.credential_signer_pubkey_hex,
         signature,
         payload_digest: hex::encode(payload_digest),
         meta: runtime_signature_meta(state),
@@ -330,7 +255,7 @@ pub(crate) fn build_institution_deregistration_credential(
 
 fn runtime_signature_meta(_state: &AppState) -> RuntimeSignatureMeta {
     // metadata 只用于排查签发来源;链上只信任 payload 中的
-    // issuer_cid_number / issuer_main_account / signer_pubkey。
+    // actor_cid_number / credential_signer_pubkey。
     RuntimeSignatureMeta {
         key_id: "onchina-admins-v1".to_string(),
         key_version: "v1".to_string(),
@@ -339,25 +264,19 @@ fn runtime_signature_meta(_state: &AppState) -> RuntimeSignatureMeta {
 }
 
 fn runtime_signing_context(
+    actor_cid_number: &str,
     scope_province_override: Option<&str>,
     scope_city_override: Option<&str>,
 ) -> Result<RuntimeSigningContext, String> {
-    let issuer_cid_number = std::env::var("ONCHAIN_CREDENTIAL_ISSUER_CID_NUMBER")
-        .map_err(|_| "ONCHAIN_CREDENTIAL_ISSUER_CID_NUMBER not set".to_string())?
-        .trim()
-        .to_string();
-    if issuer_cid_number.is_empty() {
-        return Err("ONCHAIN_CREDENTIAL_ISSUER_CID_NUMBER is empty".to_string());
+    let actor_cid_number = actor_cid_number.trim().to_string();
+    if actor_cid_number.is_empty()
+        || actor_cid_number.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
+    {
+        return Err("actor_cid_number is invalid".to_string());
     }
-    let issuer_main_account_raw = std::env::var("ONCHAIN_CREDENTIAL_ISSUER_MAIN_ACCOUNT")
-        .map_err(|_| "ONCHAIN_CREDENTIAL_ISSUER_MAIN_ACCOUNT not set".to_string())?;
-    let issuer_main_account = parse_sr25519_pubkey_bytes(issuer_main_account_raw.as_str())
-        .ok_or_else(|| {
-            "ONCHAIN_CREDENTIAL_ISSUER_MAIN_ACCOUNT must be a 32-byte account hex".to_string()
-        })?;
     let signer_pubkey_raw = std::env::var("ONCHAIN_CREDENTIAL_SIGNER_PUBKEY")
         .map_err(|_| "ONCHAIN_CREDENTIAL_SIGNER_PUBKEY not set".to_string())?;
-    let signer_pubkey =
+    let credential_signer_pubkey =
         parse_sr25519_pubkey_bytes(signer_pubkey_raw.as_str()).ok_or_else(|| {
             "ONCHAIN_CREDENTIAL_SIGNER_PUBKEY must be a 32-byte sr25519 pubkey hex".to_string()
         })?;
@@ -379,11 +298,9 @@ fn runtime_signing_context(
         .map(str::to_string)
         .unwrap_or_else(|| default_scope_city.trim().to_string());
     Ok(RuntimeSigningContext {
-        issuer_cid_number,
-        issuer_main_account,
-        issuer_main_account_hex: format!("0x{}", hex::encode(issuer_main_account)),
-        signer_pubkey,
-        signer_pubkey_hex: format!("0x{}", hex::encode(signer_pubkey)),
+        actor_cid_number,
+        credential_signer_pubkey,
+        credential_signer_pubkey_hex: format!("0x{}", hex::encode(credential_signer_pubkey)),
         scope_province_name,
         scope_city_name,
     })
@@ -402,15 +319,6 @@ pub(crate) fn normalize_account_pubkey(account_pubkey: &str) -> Option<String> {
     }
     let bytes = parse_sr25519_pubkey_bytes(account_pubkey)?;
     Some(format!("0x{}", hex::encode(bytes)))
-}
-
-pub(crate) fn is_chain_runtime_config_error(message: &str) -> bool {
-    let lower = message.to_ascii_lowercase();
-    message.contains("ONCHAIN_CREDENTIAL_")
-        || message.contains("ONCHAIN_GENESIS_HASH")
-        || message.contains("ONCHINA_SIGNING_SEED_HEX")
-        || lower.contains("genesis hash")
-        || lower.contains("trusted chain")
 }
 
 fn resolve_chain_genesis_hash() -> Result<[u8; 32], String> {
@@ -644,20 +552,10 @@ fn twox_128(input: &[u8]) -> [u8; 16] {
     out
 }
 
-fn blake2b_128(input: &[u8]) -> [u8; 16] {
-    let mut output = [0_u8; 16];
-    let mut hasher = Blake2bVar::new(16).expect("invalid blake2 output length");
-    hasher.update(input);
-    hasher
-        .finalize_variable(&mut output)
-        .expect("finalize blake2b_128 failed");
-    output
-}
-
 fn system_account_storage_key(account_id: &[u8; 32]) -> String {
     let pallet_hash = twox_128(b"System");
     let storage_hash = twox_128(b"Account");
-    let account_hash = blake2b_128(account_id);
+    let account_hash = sp_core::hashing::blake2_128(account_id);
     let mut key = Vec::with_capacity(16 + 16 + 16 + 32);
     key.extend_from_slice(&pallet_hash);
     key.extend_from_slice(&storage_hash);
@@ -881,15 +779,6 @@ fn resolve_signing_keypair(seed_text: &str) -> Result<Arc<Sr25519Pair>, String> 
     Ok(loaded)
 }
 
-fn blake2_256(input: &[u8]) -> [u8; 32] {
-    let mut output = [0_u8; 32];
-    let mut hasher = Blake2bVar::new(32).expect("invalid blake2 output length");
-    hasher.update(input);
-    hasher
-        .finalize_variable(&mut output)
-        .expect("finalize blake2_256 failed");
-    output
-}
 // 链上管理员集合读取(去中心化鉴权)
 //
 // 真源:机构 Active 管理员集合落链端两个机构 pallet 的 `AdminAccounts` storage——
@@ -908,18 +797,13 @@ pub(crate) const DESKTOP_GOVERNANCE_LOGIN_UNSUPPORTED: &str =
 pub(crate) const PERSONAL_MULTISIG_LOGIN_UNSUPPORTED: &str =
     "personal multisig is not supported by OnChina";
 
-/// `AdminAccountStatus::Active` 的 SCALE 判别式(Pending=0 / Active=1 / Closed=2)。
-const ADMIN_STATUS_ACTIVE: u8 = 1;
-
 /// 链上机构 `InstitutionAdminAccount` 解码镜像。
 ///
-/// 字段固定为 CID、机构码、去重钱包集合、生命周期；岗位资料只在 entity storage。
+/// CID 只存在于 storage key；value 固定为机构码和去重管理员钱包集合。
 #[derive(Debug, Decode)]
 struct OnChainAdminAccount {
-    cid_number: Vec<u8>,
     institution_code: [u8; 4],
     admins: Vec<[u8; 32]>,
-    status: u8,
 }
 
 /// 机构 Active 管理员集合所属链上 pallet。
@@ -946,9 +830,7 @@ pub(crate) struct NodeInstitutionIdentity {
     /// 本机构 Active 管理员集合的候选 pallet;非法人为 [Public, Private] 按序探测。
     pub(crate) admin_pallets: Vec<AdminPallet>,
     /// 本机构 CID 号。提案归属/订阅统一按 CID,机构码只用于分类。
-    pub(crate) cid_number: Option<String>,
-    /// 机构主账户(AdminAccounts 键)。
-    pub(crate) main_account: [u8; 32],
+    pub(crate) cid_number: String,
     /// 联邦注册局专用:本节点所辖省的链上省码([u8;2]);其它机构为 `None`。
     ///
     /// 联邦注册局节点辖省。管理员集合仍是唯一 FRG `AdminAccounts`，省界由 entity 岗位表达。
@@ -958,7 +840,7 @@ pub(crate) struct NodeInstitutionIdentity {
 #[derive(Debug, Clone)]
 pub(crate) struct ActiveAdminMembership {
     pub(crate) institution_code: [u8; 4],
-    pub(crate) main_account: Option<[u8; 32]>,
+    pub(crate) cid_number: String,
     pub(crate) frg_province_code: Option<[u8; 2]>,
 }
 
@@ -968,16 +850,7 @@ impl ActiveAdminMembership {
         if let Some(province_code) = self.frg_province_code {
             return format!("FRG:{}:{}", code, hex::encode(province_code));
         }
-        let main_account = self
-            .main_account
-            .map(hex::encode)
-            .unwrap_or_else(|| "missing".to_string());
-        format!("ADM:{}:{}", code, main_account)
-    }
-
-    pub(crate) fn main_account_hex(&self) -> Option<String> {
-        self.main_account
-            .map(|account| format!("0x{}", hex::encode(account)))
+        format!("ADM:{}:{}", code, self.cid_number)
     }
 
     pub(crate) fn frg_province_code_hex(&self) -> Option<String> {
@@ -1035,7 +908,6 @@ fn console_login_block_reason(code: &[u8; 4]) -> Option<&'static str> {
 pub(crate) fn identity_from_binding_parts(
     institution_code: &str,
     institution_cid_number: Option<&str>,
-    institution_main_account: Option<&str>,
     frg_province_code: Option<&str>,
 ) -> Result<NodeInstitutionIdentity, String> {
     let code = primitives::cid::code::institution_code_from_str(institution_code)
@@ -1045,21 +917,17 @@ pub(crate) fn identity_from_binding_parts(
         .map(parse_hex_2)
         .transpose()
         .map_err(|_| "binding frg_province_code must be 2-byte hex".to_string())?;
-    let raw = institution_main_account
-        .ok_or_else(|| "binding institution_main_account is required".to_string())?;
-    let main_account = parse_sr25519_pubkey_bytes(raw)
-        .ok_or_else(|| "binding institution_main_account must be 32-byte hex".to_string())?;
     let cid_number = institution_cid_number
         .map(str::trim)
         .filter(|v| !v.is_empty())
-        .map(str::to_string);
-    if cid_number.is_none() {
-        return Err("binding institution_cid_number is required".to_string());
+        .map(str::to_string)
+        .ok_or_else(|| "binding institution_cid_number is required".to_string())?;
+    if primitives::cid::code::institution_code_from_cid_number(&cid_number) != Some(code) {
+        return Err("binding institution_cid_number does not match institution_code".to_string());
     }
     Ok(NodeInstitutionIdentity {
         admin_pallets,
         cid_number,
-        main_account,
         frg_province_code: frg_code,
     })
 }
@@ -1147,11 +1015,28 @@ fn contains_admin(decoded: &OnChainAdminAccount, target: &[u8; 32]) -> bool {
     decoded.admins.iter().any(|account| account == target)
 }
 
+/// 解出 `Blake2_128Concat<CidNumber>` storage key 中的 CID。
+fn admin_accounts_cid_from_key(key_bytes: &[u8]) -> Result<Vec<u8>, String> {
+    const PREFIX_AND_HASH_LEN: usize = 32 + 16;
+    let encoded = key_bytes
+        .get(PREFIX_AND_HASH_LEN..)
+        .ok_or_else(|| "AdminAccounts storage key is too short".to_string())?;
+    let mut input = encoded;
+    let cid_number = Vec::<u8>::decode(&mut input)
+        .map_err(|e| format!("decode AdminAccounts cid_number failed: {e}"))?;
+    if !input.is_empty() {
+        return Err("AdminAccounts storage key has trailing bytes".to_string());
+    }
+    if cid_number.is_empty() || cid_number.len() > 32 {
+        return Err("AdminAccounts cid_number length is invalid".to_string());
+    }
+    Ok(cid_number)
+}
+
 /// 用冷钱包签名账户反查其所属的链上 active admin 机构集合。
 ///
 /// 这是链上中国通用平台的登录真源。平台启动时不再预设机构;
 /// 已验签账户在链上哪些机构的 Active 管理员集合内,就得到哪些可绑定候选。
-/// 当前不改 runtime,先扫描现有 storage;后续若要性能优化,再单独给链端加反向索引。
 /// 链上公权机构登记查询结果(创世目录抽样/全量对账用,字段最小化)。
 pub(crate) struct OnChainInstitution {
     pub(crate) cid_full_name: Vec<u8>,
@@ -1161,9 +1046,6 @@ pub(crate) struct OnChainInstitution {
     pub(crate) legal_representative_cid_number: Option<Vec<u8>>,
     pub(crate) legal_representative_account: Option<[u8; 32]>,
     pub(crate) institution_code: [u8; 4],
-    pub(crate) created_at: u32,
-    /// InstitutionLifecycleStatus 判别值:0=Pending 1=Active 2=Closed。
-    pub(crate) status: u8,
 }
 
 /// 链上公权机构账户投影。真源为 `PublicManage::InstitutionAccounts`。
@@ -1171,9 +1053,6 @@ pub(crate) struct OnChainInstitutionAccount {
     pub(crate) cid_number: Vec<u8>,
     pub(crate) account_name: Vec<u8>,
     pub(crate) account: [u8; 32],
-    /// InstitutionLifecycleStatus 判别值:0=Pending 1=Active 2=Closed。
-    pub(crate) status: u8,
-    pub(crate) created_at: u32,
 }
 
 /// 与 public-manage `InstitutionInfo` 字段序一致的最小解码结构。
@@ -1186,8 +1065,7 @@ struct RawInstitutionInfo {
     legal_representative_cid_number: Option<Vec<u8>>,
     legal_representative_account: Option<[u8; 32]>,
     institution_code: [u8; 4],
-    created_at: u32,
-    status: u8,
+    _created_at: u32,
 }
 
 /// 与 public-manage `InstitutionAccountInfo<AccountId, Balance, BlockNumber>` 字段序一致。
@@ -1195,9 +1073,7 @@ struct RawInstitutionInfo {
 struct RawInstitutionAccountInfo {
     address: [u8; 32],
     _initial_balance: u128,
-    status: u8,
-    _is_default: bool,
-    created_at: u32,
+    _created_at: u32,
 }
 
 /// 读链上 `PublicManage::Institutions[cid]`;None = 未登记。
@@ -1236,8 +1112,6 @@ pub(crate) async fn institution_lookup(
         legal_representative_cid_number: info.legal_representative_cid_number,
         legal_representative_account: info.legal_representative_account,
         institution_code: info.institution_code,
-        created_at: info.created_at,
-        status: info.status,
     }))
 }
 
@@ -1281,8 +1155,6 @@ pub(crate) async fn for_each_chain_institution(
                 legal_representative_cid_number: info.legal_representative_cid_number,
                 legal_representative_account: info.legal_representative_account,
                 institution_code: info.institution_code,
-                created_at: info.created_at,
-                status: info.status,
             },
         );
         count += 1;
@@ -1334,8 +1206,6 @@ pub(crate) async fn for_each_chain_institution_account(
             cid_number,
             account_name,
             account: info.address,
-            status: info.status,
-            created_at: info.created_at,
         });
         count += 1;
     }
@@ -1355,7 +1225,7 @@ pub(crate) async fn cid_registry_lookup(
     /// 与 pallet `CidRecord` 字段序一致的最小解码结构。
     #[derive(codec::Decode)]
     struct RawRecord {
-        _registrar: [u8; 32],
+        _registrar_cid_number: Vec<u8>,
         commitment: [u8; 32],
         _province: alloc_vec_u8::Bytes,
         _city: alloc_vec_u8::Bytes,
@@ -1430,7 +1300,7 @@ pub(crate) async fn find_active_admin_memberships(
             let decoded = OnChainAdminAccount::decode(&mut raw).map_err(|e| {
                 format!("decode {} AdminAccounts failed: {e}", pallet.pallet_name())
             })?;
-            if decoded.status != ADMIN_STATUS_ACTIVE || !contains_admin(&decoded, &target) {
+            if !contains_admin(&decoded, &target) {
                 continue;
             }
             if let Some(reason) = console_login_block_reason(&decoded.institution_code) {
@@ -1441,18 +1311,25 @@ pub(crate) async fn find_active_admin_memberships(
             if !allowed.contains(&pallet) {
                 continue;
             }
-            let main_account = storage_key_suffix::<32>(&kv.key_bytes)?;
+            let cid_number = admin_accounts_cid_from_key(&kv.key_bytes)?;
+            let cid_number_text = String::from_utf8(cid_number.clone())
+                .map_err(|_| "AdminAccounts cid_number is not UTF-8".to_string())?;
+            if primitives::cid::code::institution_code_from_cid_number(&cid_number_text)
+                != Some(decoded.institution_code)
+            {
+                return Err("AdminAccounts cid_number does not match institution_code".to_string());
+            }
             if decoded.institution_code == FRG_CODE {
                 let province_codes =
                     crate::institution::admins::chain_roles::fetch_frg_province_codes_for_admin(
-                        &decoded.cid_number,
+                        &cid_number,
                         target,
                     )
                     .await?;
                 for province_code in province_codes {
                     memberships.push(ActiveAdminMembership {
                         institution_code: FRG_CODE,
-                        main_account: Some(main_account),
+                        cid_number: cid_number_text.clone(),
                         frg_province_code: Some(province_code),
                     });
                 }
@@ -1460,7 +1337,7 @@ pub(crate) async fn find_active_admin_memberships(
             }
             memberships.push(ActiveAdminMembership {
                 institution_code: decoded.institution_code,
-                main_account: Some(main_account),
+                cid_number: cid_number_text,
                 frg_province_code: None,
             });
         }
@@ -1478,8 +1355,7 @@ pub(crate) async fn find_active_admin_memberships(
 
 /// 读取本节点机构的链上 Active 管理员公钥集合(0x 小写 hex 列表)。
 ///
-/// 按候选 pallet 顺序探测 `<Pallet>::AdminAccounts`(键=机构主账户,全局唯一),
-///   命中首个存在且 Active 的集合即返回。
+/// 按候选 pallet 顺序探测 `<Pallet>::AdminAccounts[cid_number]`，命中首个集合即返回。
 ///
 /// 返回:`Ok(Some(set))`=命中 Active 集合;`Ok(None)`=不存在或非 Active;`Err`=链不可达或解码失败。
 /// 读 latest 块(membership 变更治理级稀有,后台扫描持续复查)。
@@ -1503,7 +1379,7 @@ pub(crate) async fn fetch_active_admins_onchain(
             dynamic::storage(
                 pallet.pallet_name(),
                 "AdminAccounts",
-                vec![dynamic::Value::from_bytes(identity.main_account)],
+                vec![dynamic::Value::from_bytes(identity.cid_number.as_bytes())],
             )
         })
         .collect::<Vec<_>>();
@@ -1519,15 +1395,11 @@ pub(crate) async fn fetch_active_admins_onchain(
         let mut raw = thunk.encoded();
         let decoded = OnChainAdminAccount::decode(&mut raw)
             .map_err(|e| format!("decode on-chain admin account failed: {e}"))?;
-        if decoded.status != ADMIN_STATUS_ACTIVE {
-            continue;
-        }
-        let cid_number = decoded.cid_number;
         let mut admin_accounts = decoded.admins;
         if let Some(province_code) = identity.frg_province_code {
             let province_admins =
                 crate::institution::admins::chain_roles::fetch_frg_admins_for_province(
-                    &cid_number,
+                    identity.cid_number.as_bytes(),
                     province_code,
                 )
                 .await?;
@@ -1549,22 +1421,15 @@ mod tests {
         trusted_production_chain_by_hash,
     };
 
-    /// 锁定机构管理员账户的四字段 SCALE 布局；岗位字段不得重新塞回管理员集合。
+    /// 锁定机构管理员 value 的双字段 SCALE 布局；CID 只存在于 storage key。
     #[test]
     fn onchain_institution_admin_account_decodes_wallets_only() {
         use codec::{Decode, Encode};
 
-        let bytes = (
-            b"CREG-AAAAA-000000001-2026".to_vec(),
-            *b"CREG",
-            vec![[0x42u8; 32]],
-            super::ADMIN_STATUS_ACTIVE,
-        )
-            .encode();
+        let bytes = (*b"CREG", vec![[0x42u8; 32]]).encode();
         let decoded = super::OnChainAdminAccount::decode(&mut &bytes[..])
             .expect("institution admin account mirror must decode wallet-only layout");
         assert_eq!(decoded.institution_code, *b"CREG");
-        assert_eq!(decoded.status, super::ADMIN_STATUS_ACTIVE);
         assert_eq!(decoded.admins.len(), 1);
         assert_eq!(decoded.admins[0], [0x42; 32]);
     }
@@ -1606,17 +1471,14 @@ mod tests {
         // 任何字段类型/顺序漂移都会改变摘要,此断言立即红。
         let genesis_hash = [0x11u8; 32];
         let target = [0x22u8; 32];
-        let issuer_main = [0x33u8; 32];
         let signer = [0x44u8; 32];
         let digest = deregistration_payload_digest(
             &genesis_hash,
-            0u8, // SCOPE_INSTITUTION
             b"AH001-ZF001-123456789-2026",
             "主账户".as_bytes(),
             &target,
             b"dereg-nonce-1",
             b"ZS001-GZF0P-249474503-2026",
-            &issuer_main,
             &signer,
         );
         // golden 值:GMB/OP_SIGN_DEREGISTER + 上述固定输入的 SCALE 编码 blake2_256。
@@ -1624,7 +1486,7 @@ mod tests {
         // (AccountId32=[u8;32]、H256=[u8;32] 均 32 字节无前缀;cid/account_name/nonce/issuer &[u8] 均 Compact 前缀)。
         assert_eq!(
             hex::encode(digest),
-            "137304f0e5207c3ddd6116eef9e1f42660bec15831b3f4c6b30a2c99bee814a1",
+            "c7401472664e9555ccfad95ef5088d0927e141c504b93d03dae07a29462334fb",
             "注销凭证 payload 字节编码漂移(与链端口径不一致)"
         );
     }

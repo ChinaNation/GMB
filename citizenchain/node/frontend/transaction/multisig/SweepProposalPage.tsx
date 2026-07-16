@@ -7,7 +7,8 @@ import { multisigTransferApi as api } from './api';
 import type { AdminWalletMatch, VoteSignRequestResult } from './types';
 
 type Props = {
-  cidNumber: string;
+  actorCidNumber: string;
+  institutionAccount: string;
   cidFullName: string;
   adminWallets: AdminWalletMatch[];
   onBack: () => void;
@@ -17,7 +18,7 @@ type Props = {
 type Step = 'form' | 'qr' | 'submit' | 'done' | 'error';
 
 export function SweepProposalPage({
-  cidNumber, cidFullName, adminWallets, onBack, onSuccess,
+  actorCidNumber, institutionAccount, cidFullName, adminWallets, onBack, onSuccess,
 }: Props) {
   const [step, setStep] = useState<Step>('form');
   const [selectedWallet, setSelectedWallet] = useState<AdminWalletMatch | null>(
@@ -56,7 +57,7 @@ export function SweepProposalPage({
     try {
       formValuesRef.current = { amountYuan: amount };
       const result = await api.buildProposeSweepRequest(
-        selectedWallet.pubkeyHex, cidNumber, amount,
+        selectedWallet.pubkeyHex, actorCidNumber, institutionAccount, amount,
       );
       setSignRequest(result);
       setRequestJson(result.requestJson);
@@ -77,7 +78,7 @@ export function SweepProposalPage({
     try {
       const result = await api.submitProposeSweep(
         req.requestId, wallet.pubkeyHex, req.expectedPayloadHash,
-        cidNumber, formValuesRef.current.amountYuan,
+        actorCidNumber, institutionAccount, formValuesRef.current.amountYuan,
         req.signNonce, req.signBlockNumber, responseText,
       );
       setTxHash(result.txHash);
@@ -86,7 +87,7 @@ export function SweepProposalPage({
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [cidNumber]);
+  }, [actorCidNumber, institutionAccount]);
 
   return (
     <div className="governance-section">
@@ -116,6 +117,10 @@ export function SweepProposalPage({
                 </>
               )}
             </select>
+          </div>
+          <div className="wallet-form-field">
+            <label>转出地址（费用账户）</label>
+            <input type="text" value={hexToSs58(institutionAccount)} disabled />
           </div>
           <div className="wallet-form-field">
             <label>划转金额（元）</label>

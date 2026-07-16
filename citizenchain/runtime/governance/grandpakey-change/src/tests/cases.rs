@@ -8,7 +8,7 @@ fn weak_small_order_new_key_is_rejected() {
         assert_noop!(
             GrandpaKeyChange::propose_replace_grandpa_key(
                 RuntimeOrigin::signed(prc_admin(0)),
-                prc_pallet_id(),
+                prc_cid(),
                 identity_public_key()
             ),
             Error::<Test>::InvalidEd25519Key
@@ -19,14 +19,14 @@ fn weak_small_order_new_key_is_rejected() {
 #[test]
 fn passed_proposal_executes_and_cleans_up_state() {
     new_test_ext().execute_with(|| {
-        let institution = prc_pallet_id();
-        let old_key = CurrentGrandpaKeys::<Test>::get(institution.clone())
-            .expect("institution should have an initial key");
+        let actor_cid_number = prc_cid();
+        let old_key = CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone())
+            .expect("actor_cid_number should have an initial key");
         let new_key = valid_public_key(31);
 
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(prc_admin(0)),
-            institution.clone(),
+            actor_cid_number.clone(),
             new_key,
         ));
         let pid = last_proposal_id();
@@ -42,24 +42,24 @@ fn passed_proposal_executes_and_cleans_up_state() {
             .any(|(authority, _)| *authority == authority_id_from_key(new_key)));
 
         assert_eq!(
-            CurrentGrandpaKeys::<Test>::get(institution.clone()),
+            CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone()),
             Some(new_key)
         );
         assert!(GrandpaKeyOwnerByKey::<Test>::get(old_key).is_none());
         assert_eq!(
             GrandpaKeyOwnerByKey::<Test>::get(new_key),
-            Some(institution.clone())
+            Some(actor_cid_number.clone())
         );
         assert!(System::events().iter().any(|record| {
             matches!(
                 &record.event,
                 RuntimeEvent::GrandpaKeyChange(Event::<Test>::GrandpaKeyReplaced {
                     proposal_id,
-                    institution: inst,
+                    actor_cid_number: inst,
                     old_key: replaced_old_key,
                     new_key: replaced_new_key,
                 }) if *proposal_id == pid
-                    && *inst == institution
+                    && *inst == actor_cid_number
                     && *replaced_old_key == old_key
                     && *replaced_new_key == new_key
             )
@@ -70,14 +70,14 @@ fn passed_proposal_executes_and_cleans_up_state() {
 #[test]
 fn passed_proposal_can_be_manually_executed_after_pending_change_clears() {
     new_test_ext().execute_with(|| {
-        let institution = prc_pallet_id();
-        let old_key = CurrentGrandpaKeys::<Test>::get(institution.clone())
-            .expect("institution should have an initial key");
+        let actor_cid_number = prc_cid();
+        let old_key = CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone())
+            .expect("actor_cid_number should have an initial key");
         let new_key = valid_public_key(41);
 
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(prc_admin(0)),
-            institution.clone(),
+            actor_cid_number.clone(),
             new_key,
         ));
         let pid = last_proposal_id();
@@ -96,7 +96,7 @@ fn passed_proposal_can_be_manually_executed_after_pending_change_clears() {
             STATUS_PASSED
         );
         assert_eq!(
-            CurrentGrandpaKeys::<Test>::get(institution.clone()),
+            CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone()),
             Some(old_key)
         );
         assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
@@ -118,13 +118,13 @@ fn passed_proposal_can_be_manually_executed_after_pending_change_clears() {
         ));
 
         assert_eq!(
-            CurrentGrandpaKeys::<Test>::get(institution.clone()),
+            CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone()),
             Some(new_key)
         );
         assert!(GrandpaKeyOwnerByKey::<Test>::get(old_key).is_none());
         assert_eq!(
             GrandpaKeyOwnerByKey::<Test>::get(new_key),
-            Some(institution.clone())
+            Some(actor_cid_number.clone())
         );
         assert!(Grandpa::pending_change().is_some());
     });
@@ -133,15 +133,15 @@ fn passed_proposal_can_be_manually_executed_after_pending_change_clears() {
 #[test]
 fn votingengine_cancel_passed_proposal_cleans_up_passed_but_invalid_proposal() {
     new_test_ext().execute_with(|| {
-        let institution = prc_pallet_id();
-        let old_key = CurrentGrandpaKeys::<Test>::get(institution.clone())
-            .expect("institution should have an initial key");
+        let actor_cid_number = prc_cid();
+        let old_key = CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone())
+            .expect("actor_cid_number should have an initial key");
         let new_key = valid_public_key(51);
         let replacement_authority = valid_public_key(52);
 
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(prc_admin(0)),
-            institution.clone(),
+            actor_cid_number.clone(),
             new_key,
         ));
         let pid = last_proposal_id();
@@ -165,7 +165,7 @@ fn votingengine_cancel_passed_proposal_cleans_up_passed_but_invalid_proposal() {
         finalize_grandpa_at(1 + GrandpaChangeDelay::get());
 
         assert_eq!(
-            CurrentGrandpaKeys::<Test>::get(institution.clone()),
+            CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone()),
             Some(old_key)
         );
         assert_eq!(
@@ -193,8 +193,8 @@ fn votingengine_cancel_passed_proposal_cleans_up_passed_but_invalid_proposal() {
                 &record.event,
                 RuntimeEvent::GrandpaKeyChange(Event::<Test>::FailedProposalCancelled {
                     proposal_id,
-                    institution: inst,
-                }) if *proposal_id == pid && *inst == institution
+                    actor_cid_number: inst,
+                }) if *proposal_id == pid && *inst == actor_cid_number
             )
         }));
     });
@@ -203,14 +203,14 @@ fn votingengine_cancel_passed_proposal_cleans_up_passed_but_invalid_proposal() {
 #[test]
 fn votingengine_cancel_passed_proposal_rejects_temporarily_blocked_proposal() {
     new_test_ext().execute_with(|| {
-        let institution = prc_pallet_id();
-        let old_key = CurrentGrandpaKeys::<Test>::get(institution.clone())
-            .expect("institution should have an initial key");
+        let actor_cid_number = prc_cid();
+        let old_key = CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone())
+            .expect("actor_cid_number should have an initial key");
         let new_key = valid_public_key(71);
 
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(prc_admin(0)),
-            institution.clone(),
+            actor_cid_number.clone(),
             new_key,
         ));
         let pid = last_proposal_id();
@@ -232,7 +232,7 @@ fn votingengine_cancel_passed_proposal_rejects_temporarily_blocked_proposal() {
         );
 
         assert_eq!(
-            CurrentGrandpaKeys::<Test>::get(institution.clone()),
+            CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone()),
             Some(old_key)
         );
         assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
@@ -248,15 +248,15 @@ fn votingengine_cancel_passed_proposal_rejects_temporarily_blocked_proposal() {
 #[test]
 fn finalized_vote_fatal_fails_when_old_authority_disappeared() {
     new_test_ext().execute_with(|| {
-        let institution = prc_pallet_id();
-        let old_key = CurrentGrandpaKeys::<Test>::get(institution.clone())
-            .expect("institution should have an initial key");
+        let actor_cid_number = prc_cid();
+        let old_key = CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone())
+            .expect("actor_cid_number should have an initial key");
         let new_key = valid_public_key(72);
         let replacement_authority = valid_public_key(73);
 
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(prc_admin(0)),
-            institution.clone(),
+            actor_cid_number.clone(),
             new_key,
         ));
         let pid = last_proposal_id();
@@ -283,7 +283,7 @@ fn finalized_vote_fatal_fails_when_old_authority_disappeared() {
             STATUS_EXECUTION_FAILED
         );
         assert_eq!(
-            CurrentGrandpaKeys::<Test>::get(institution.clone()),
+            CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone()),
             Some(old_key)
         );
         assert!(GrandpaKeyOwnerByKey::<Test>::get(new_key).is_none());
@@ -301,35 +301,35 @@ fn finalized_vote_fatal_fails_when_old_authority_disappeared() {
 #[test]
 fn finalized_vote_fatal_fails_when_new_key_collides_after_first_execution() {
     new_test_ext().execute_with(|| {
-        let first_institution = cb_pallet_id(1);
-        let second_institution = cb_pallet_id(2);
-        let first_old_key = CurrentGrandpaKeys::<Test>::get(first_institution.clone())
-            .expect("first institution should have an initial key");
-        let second_old_key = CurrentGrandpaKeys::<Test>::get(second_institution.clone())
-            .expect("second institution should have an initial key");
+        let first_actor_cid_number = cb_cid(1);
+        let second_actor_cid_number = cb_cid(2);
+        let first_old_key = CurrentGrandpaKeys::<Test>::get(first_actor_cid_number.clone())
+            .expect("first actor_cid_number should have an initial key");
+        let second_old_key = CurrentGrandpaKeys::<Test>::get(second_actor_cid_number.clone())
+            .expect("second actor_cid_number should have an initial key");
         let shared_new_key = valid_public_key(74);
 
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(cb_admin(1, 0)),
-            first_institution.clone(),
+            first_actor_cid_number.clone(),
             shared_new_key,
         ));
         let first_pid = last_proposal_id();
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(cb_admin(2, 0)),
-            second_institution.clone(),
+            second_actor_cid_number.clone(),
             shared_new_key,
         ));
         let second_pid = last_proposal_id();
 
         pass_prc_proposal(1, first_pid);
         assert_eq!(
-            CurrentGrandpaKeys::<Test>::get(first_institution.clone()),
+            CurrentGrandpaKeys::<Test>::get(first_actor_cid_number.clone()),
             Some(shared_new_key)
         );
         assert_eq!(
             GrandpaKeyOwnerByKey::<Test>::get(shared_new_key),
-            Some(first_institution.clone())
+            Some(first_actor_cid_number.clone())
         );
         finalize_grandpa_at(1 + GrandpaChangeDelay::get());
         assert!(Grandpa::pending_change().is_none());
@@ -343,12 +343,12 @@ fn finalized_vote_fatal_fails_when_new_key_collides_after_first_execution() {
             STATUS_EXECUTION_FAILED
         );
         assert_eq!(
-            CurrentGrandpaKeys::<Test>::get(second_institution.clone()),
+            CurrentGrandpaKeys::<Test>::get(second_actor_cid_number.clone()),
             Some(second_old_key)
         );
         assert_eq!(
             GrandpaKeyOwnerByKey::<Test>::get(shared_new_key),
-            Some(first_institution.clone())
+            Some(first_actor_cid_number.clone())
         );
         assert!(GrandpaKeyOwnerByKey::<Test>::get(first_old_key).is_none());
         assert!(System::events().iter().any(|record| {
@@ -368,7 +368,7 @@ fn propose_rejects_zero_key() {
         assert_noop!(
             GrandpaKeyChange::propose_replace_grandpa_key(
                 RuntimeOrigin::signed(prc_admin(0)),
-                prc_pallet_id(),
+                prc_cid(),
                 [0u8; 32],
             ),
             Error::<Test>::NewKeyIsZero
@@ -379,13 +379,13 @@ fn propose_rejects_zero_key() {
 #[test]
 fn propose_rejects_unchanged_key() {
     new_test_ext().execute_with(|| {
-        let institution = prc_pallet_id();
-        let current_key = CurrentGrandpaKeys::<Test>::get(institution.clone())
-            .expect("institution should have key");
+        let actor_cid_number = prc_cid();
+        let current_key = CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone())
+            .expect("actor_cid_number should have key");
         assert_noop!(
             GrandpaKeyChange::propose_replace_grandpa_key(
                 RuntimeOrigin::signed(prc_admin(0)),
-                institution.clone(),
+                actor_cid_number.clone(),
                 current_key,
             ),
             Error::<Test>::NewKeyUnchanged
@@ -401,7 +401,7 @@ fn propose_rejects_key_owned_by_other_institution() {
         assert_noop!(
             GrandpaKeyChange::propose_replace_grandpa_key(
                 RuntimeOrigin::signed(prc_admin(0)),
-                prc_pallet_id(),
+                prc_cid(),
                 nrc_key,
             ),
             Error::<Test>::NewKeyAlreadyUsed
@@ -417,7 +417,7 @@ fn propose_rejects_unauthorized_admin() {
         assert_noop!(
             GrandpaKeyChange::propose_replace_grandpa_key(
                 RuntimeOrigin::signed(outsider),
-                prc_pallet_id(),
+                prc_cid(),
                 valid_public_key(80),
             ),
             Error::<Test>::UnauthorizedAdmin
@@ -428,11 +428,11 @@ fn propose_rejects_unauthorized_admin() {
 #[test]
 fn propose_rejects_invalid_institution() {
     new_test_ext().execute_with(|| {
-        let fake_institution = AccountId32::new([99u8; 32]);
+        let invalid_actor_cid_number: CidNumber = b"invalid-cid".to_vec().try_into().unwrap();
         assert_noop!(
             GrandpaKeyChange::propose_replace_grandpa_key(
                 RuntimeOrigin::signed(prc_admin(0)),
-                fake_institution,
+                invalid_actor_cid_number,
                 valid_public_key(81),
             ),
             Error::<Test>::InvalidInstitution
@@ -443,11 +443,11 @@ fn propose_rejects_invalid_institution() {
 #[test]
 fn execute_rejects_non_passed_proposal() {
     new_test_ext().execute_with(|| {
-        let institution = prc_pallet_id();
+        let actor_cid_number = prc_cid();
         let new_key = valid_public_key(82);
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(prc_admin(0)),
-            institution.clone(),
+            actor_cid_number.clone(),
             new_key,
         ));
         let pid = last_proposal_id();
@@ -462,7 +462,7 @@ fn execute_rejects_non_passed_proposal() {
 #[test]
 fn cancel_rejects_still_executable_proposal() {
     new_test_ext().execute_with(|| {
-        let institution = prc_pallet_id();
+        let actor_cid_number = prc_cid();
         let new_key = valid_public_key(83);
 
         // 先制造 pending change 阻塞
@@ -474,7 +474,7 @@ fn cancel_rejects_still_executable_proposal() {
 
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(prc_admin(0)),
-            institution.clone(),
+            actor_cid_number.clone(),
             new_key,
         ));
         let pid = last_proposal_id();
@@ -505,11 +505,11 @@ fn cancel_rejects_still_executable_proposal() {
 #[test]
 fn vote_rejects_unauthorized_admin() {
     new_test_ext().execute_with(|| {
-        let institution = prc_pallet_id();
+        let actor_cid_number = prc_cid();
         let new_key = valid_public_key(85);
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(prc_admin(0)),
-            institution.clone(),
+            actor_cid_number.clone(),
             new_key,
         ));
         let pid = last_proposal_id();

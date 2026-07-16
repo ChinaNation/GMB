@@ -532,7 +532,6 @@ pub(crate) async fn search_parent_institutions(
                     s.p1, s.province_code, s.city_code, COALESCE(s.town_code, '')
              FROM subjects s
              WHERE s.kind IN ('PUBLIC', 'PRIVATE')
-               AND s.status = 'ACTIVE'
                AND COALESCE(s.cid_full_name, '') <> ''
                AND {candidate_clause}
                AND (lower(s.cid_number) LIKE '%' || $1 || '%'

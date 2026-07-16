@@ -19,6 +19,13 @@ const Map<String, String> actionLabels = {
   'citizen_candidate_identity': '公民参选身份上链确认',
   'register_voting_identity': '注册公民链上身份',
   'upgrade_to_candidate_identity': '注册公民参选身份',
+  'update_voting_identity': '更新公民链上身份',
+  'update_candidate_identity': '更新公民参选身份',
+  'revoke_identity': '吊销公民链上身份',
+  'occupy_cid': '注册局占用CID',
+  'occupy_cids_batch': '注册局批量占用CID',
+  'revoke_cid': '注册局吊销CID',
+  'prepare_citizen_population_snapshot': '准备公民人口快照',
 
   // 业务提案创建（propose_X）
   'propose_transfer': '发起转账提案',
@@ -27,10 +34,14 @@ const Map<String, String> actionLabels = {
   // 个人多签为独立 pallet PersonalManage(7),
   // 'propose_create_personal' 是 decoder 输出 action 字符串,显式区分个人/机构提示文案。
   'propose_create_personal': '创建个人多签',
-  'propose_create_public_institution': '创建公权机构多签账户',
-  'propose_close_public_institution': '注销公权机构多签提案',
-  'propose_create_private_institution': '创建私权机构多签账户',
-  'propose_close_private_institution': '注销私权机构多签提案',
+  'propose_create_public_institution': '创建公权机构',
+  'propose_close_public_institution': '关闭公权机构账户提案',
+  'update_public_institution_info': '更新公权机构信息',
+  'add_public_institution_account': '新增公权机构账户',
+  'propose_create_private_institution': '创建私权机构',
+  'propose_close_private_institution': '关闭私权机构账户提案',
+  'update_private_institution_info': '更新私权机构信息',
+  'add_private_institution_account': '新增私权机构账户',
   'propose_close_personal': '关闭个人多签提案',
   'cleanup_rejected_personal_proposal': '清理被拒个人多签提案',
   'propose_destroy': '销毁决议提案',
@@ -43,9 +54,6 @@ const Map<String, String> actionLabels = {
   // cancel_passed_proposal(在 votingengine 段已声明)。
   'cleanup_rejected_public_proposal': '清理被否决公权机构提案',
   'cleanup_rejected_private_proposal': '清理被否决私权机构提案',
-  'register_cid_public_institution': '登记公权机构 CID 信息',
-  'register_cid_private_institution': '登记私权机构 CID 信息',
-
   // 立法院（pallet=25）· 立法/修法/废法发起
   'propose_enact_law': '发起立法',
   'propose_amend_law': '发起修法',
@@ -73,5 +81,11 @@ const Map<String, String> actionLabels = {
   'register_clearing_bank': '声明清算行节点',
   'update_clearing_bank_endpoint': '更新清算行端点',
   'unregister_clearing_bank': '注销清算行节点',
+  'propose_l2_fee_rate': '提案调整链下费率',
+  'set_address_catalog_version': '设置地址库版本',
+  'set_address_name': '设置地址名称',
+  'remove_address_name': '删除地址名称',
+  'set_address': '设置完整地址',
+  'remove_address': '删除完整地址',
   'onchina_admin_action': '链上中国平台管理员治理',
 };

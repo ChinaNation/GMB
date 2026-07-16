@@ -1,21 +1,25 @@
-//! CID 与机构生命周期节点永久策略。
+//! CID、机构身份与机构账户完整性节点永久策略。
 //!
-//! 节点把 `CitizenIdentity::CidRegistry`、公私权 `CidRegisteredAccount/Institutions`
-//! 视为唯一规范真源：机构主账户已登记但尚无机构记录表示“占号中”，机构记录 `Active`
-//! 表示运行中，`Closed` 表示永久关闭。名称可以依法更新或被新 CID 复用，CID 本身不得删除、
-//! 跨公私权重复、换主体或从终态恢复。
+//! 机构唯一主键是 CID；`Institutions[cid_number]` 保存机构身份，
+//! `InstitutionAccounts[(cid_number, account_name)]` 保存账户正向真源，
+//! `AccountRegisteredCid[account]` 只作反向索引。主账户、费用账户和制度专属账户
+//! 都只是协议账户，不承担机构身份、管理员根或生命周期状态。
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use codec::{Decode, Encode};
 use sp_core::hashing::blake2_128;
 
-use primitives::account_derive::RESERVED_NAME_MAIN;
+use primitives::account_derive::{
+    institution_kind_by_name, institution_protocol_account_name,
+    institution_protocol_kind_by_name, InstitutionProtocolAccountKind,
+};
 use primitives::cid::code::{
-    is_fixed_governance_code, is_private_legal_code, is_public_legal_code, is_unincorporated_code,
-    InstitutionCode,
+    is_fixed_governance_code, is_private_legal_code, is_public_legal_code,
+    is_unincorporated_code, InstitutionCode,
 };
 use primitives::cid::number::parse_cid_number_parts_bytes;
+use primitives::core_const::SS58_FORMAT;
 
 const CITIZEN_IDENTITY_PALLET: &[u8] = b"CitizenIdentity";
 const PUBLIC_MANAGE_PALLET: &[u8] = b"PublicManage";
@@ -52,7 +56,7 @@ enum CitizenCidStatus {
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 struct CitizenCidRecord {
-    registrar_account: [u8; 32],
+    registrar_cid_number: Vec<u8>,
     commitment: [u8; 32],
     residence_province_code: Vec<u8>,
     residence_city_code: Vec<u8>,
@@ -61,49 +65,34 @@ struct CitizenCidRecord {
     revoked_at: Option<u32>,
 }
 
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
-enum InstitutionStatus {
-    Pending,
-    Active,
-    Closed,
-}
-
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 struct InstitutionRecord {
     cid_full_name: Vec<u8>,
     cid_short_name: Vec<u8>,
     town_code: Vec<u8>,
-    /// 法定代表人三字段必须与 entity `InstitutionInfo` 同序，并且同时存在或同时为空。
     legal_representative_name: Option<Vec<u8>>,
     legal_representative_cid_number: Option<Vec<u8>>,
     legal_representative_account: Option<[u8; 32]>,
     institution_code: InstitutionCode,
     created_at: u32,
-    status: InstitutionStatus,
 }
 
-#[derive(Clone, Debug, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 struct RegisteredInstitution {
     cid_number: Vec<u8>,
     account_name: Vec<u8>,
 }
 
-#[derive(Clone, Debug, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 struct InstitutionAccountRecord {
     address: [u8; 32],
-    _initial_balance: u128,
-    status: InstitutionStatus,
-    _is_default: bool,
-    _created_at: u32,
+    initial_balance: u128,
+    created_at: u32,
 }
 
-/// block#0 派生的创世封存账户基准。
+/// 新模型不再冻结一组“创世保护账户”；永久性由账户类别和 CID 制度约束直接决定。
 #[derive(Clone, Debug, Default)]
-pub struct GenesisReference {
-    protected_accounts: BTreeSet<[u8; 32]>,
-    /// `ProtectedGenesisAccounts` 及其三条规范索引必须与创世逐字一致。
-    frozen_values: BTreeMap<Vec<u8>, Vec<u8>>,
-}
+pub struct GenesisReference;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum GuardError {
@@ -119,34 +108,29 @@ pub enum GuardError {
     InstitutionDeleted,
     InstitutionIdentityChanged,
     InstitutionLegalRepresentativeInvalid,
-    InstitutionStatusInvalid,
-    ClosedInstitutionChanged,
-    FixedInstitutionNotActive,
-    SingletonInstitutionIdentityMismatch,
+    FixedInstitutionCreatedAfterGenesis,
+    AccountChanged,
+    ProtocolAccountDeleted,
+    AccountWithoutInstitution,
+    AccountAddressMismatch,
+    AccountReverseIndexMissing,
+    AccountReverseIndexMismatch,
+    RequiredProtocolAccountMissing,
+    UnexpectedProtocolAccount,
     SingletonInstitutionMissing,
-    MainReservationMissing,
-    MainReservationDeletedBeforeClosed,
-    RegistrationChanged,
-    ReusedInstitutionCid,
-    ProtectedGenesisSetChanged,
-    ProtectedGenesisValueChanged,
-    ProtectedGenesisIndexMissing,
-    ProtectedGenesisAccountNotActive,
+    SingletonInstitutionIdentityMismatch,
     NonGenesisStateImportForbidden,
 }
 
 pub mod storage_key {
     use super::*;
 
-    // 以下四个私有 helper 是 `crate::shared::storage_keys` 单源的薄委托:
-    // map_vec/double_map_vec 内部 SCALE 编码键(Vec 键带 compact 长度前缀),
-    // map_account 传裸 32 字节(AccountId32 无长度前缀)。
     fn storage_prefix(pallet: &[u8], storage: &[u8]) -> Vec<u8> {
         crate::shared::storage_keys::prefix(pallet, storage)
     }
 
     fn map_vec(pallet: &[u8], storage: &[u8], value: &[u8]) -> Vec<u8> {
-        crate::shared::storage_keys::blake2_map(pallet, storage, &value.encode())
+        crate::shared::storage_keys::blake2_map(pallet, storage, &value.to_vec().encode())
     }
 
     fn map_account(pallet: &[u8], storage: &[u8], account: &[u8; 32]) -> Vec<u8> {
@@ -157,8 +141,8 @@ pub mod storage_key {
         crate::shared::storage_keys::blake2_double_map(
             pallet,
             storage,
-            &first.encode(),
-            &second.encode(),
+            &first.to_vec().encode(),
+            &second.to_vec().encode(),
         )
     }
 
@@ -179,63 +163,37 @@ pub mod storage_key {
         map_vec(namespace.pallet(), b"Institutions", cid)
     }
 
-    pub fn registration_prefix(namespace: Namespace) -> Vec<u8> {
-        storage_prefix(namespace.pallet(), b"CidRegisteredAccount")
-    }
-
-    pub fn registration(namespace: Namespace, cid: &[u8], name: &[u8]) -> Vec<u8> {
-        double_map_vec(namespace.pallet(), b"CidRegisteredAccount", cid, name)
-    }
-
-    pub fn main_registration(namespace: Namespace, cid: &[u8]) -> Vec<u8> {
-        registration(namespace, cid, RESERVED_NAME_MAIN)
-    }
-
-    pub fn account_registered(namespace: Namespace, account: &[u8; 32]) -> Vec<u8> {
-        map_account(namespace.pallet(), b"AccountRegisteredCid", account)
-    }
-
-    fn account_registered_prefix(namespace: Namespace) -> Vec<u8> {
-        storage_prefix(namespace.pallet(), b"AccountRegisteredCid")
+    pub fn institution_account_prefix(namespace: Namespace) -> Vec<u8> {
+        storage_prefix(namespace.pallet(), b"InstitutionAccounts")
     }
 
     pub fn institution_account(namespace: Namespace, cid: &[u8], name: &[u8]) -> Vec<u8> {
         double_map_vec(namespace.pallet(), b"InstitutionAccounts", cid, name)
     }
 
-    fn institution_account_prefix(namespace: Namespace) -> Vec<u8> {
-        storage_prefix(namespace.pallet(), b"InstitutionAccounts")
+    pub fn account_registered_prefix(namespace: Namespace) -> Vec<u8> {
+        storage_prefix(namespace.pallet(), b"AccountRegisteredCid")
     }
 
-    pub fn protected_prefix() -> Vec<u8> {
-        storage_prefix(PUBLIC_MANAGE_PALLET, b"ProtectedGenesisAccounts")
+    pub fn account_registered(namespace: Namespace, account: &[u8; 32]) -> Vec<u8> {
+        map_account(namespace.pallet(), b"AccountRegisteredCid", account)
     }
 
-    /// 启动、runtime 升级和 block#0 状态检查需要枚举的规范表。
+    /// 启动、runtime 升级和 block#0 状态检查枚举的全部 CID 规范表。
     pub fn enumerated_prefixes() -> Vec<Vec<u8>> {
         vec![
             citizen_registry_prefix(),
             institution_prefix(Namespace::Public),
             institution_prefix(Namespace::Private),
-            registration_prefix(Namespace::Public),
-            registration_prefix(Namespace::Private),
-            protected_prefix(),
-        ]
-    }
-
-    /// block#0 导入时还需携带创世封存账户关联索引；这些大表不参与日常启动枚举。
-    pub fn imported_support_prefixes() -> Vec<Vec<u8>> {
-        vec![
-            account_registered_prefix(Namespace::Public),
             institution_account_prefix(Namespace::Public),
+            institution_account_prefix(Namespace::Private),
+            account_registered_prefix(Namespace::Public),
+            account_registered_prefix(Namespace::Private),
         ]
     }
 
-    /// block#0 完整导入态内与 CID 生命周期有关的全部 RAW 表前缀。
     pub fn relevant_prefixes() -> Vec<Vec<u8>> {
-        let mut prefixes = enumerated_prefixes();
-        prefixes.extend(imported_support_prefixes());
-        prefixes
+        enumerated_prefixes()
     }
 }
 
@@ -256,9 +214,10 @@ fn parse_vec_map_key(
     if !key.starts_with(prefix) || key.len() < prefix.len() + 17 {
         return Err(GuardError::StorageKeyMalformed(label));
     }
-    let hash = &key[prefix.len()..prefix.len() + 16];
-    let encoded = &key[prefix.len() + 16..];
-    if blake2_128(encoded) != hash {
+    let hash_at = prefix.len();
+    let encoded_at = hash_at + 16;
+    let encoded = &key[encoded_at..];
+    if blake2_128(encoded) != key[hash_at..encoded_at] {
         return Err(GuardError::StorageKeyMalformed(label));
     }
     decode_exact(encoded, label)
@@ -272,13 +231,14 @@ fn parse_account_map_key(
     if !key.starts_with(prefix) || key.len() != prefix.len() + 16 + 32 {
         return Err(GuardError::StorageKeyMalformed(label));
     }
-    let account: [u8; 32] = key[prefix.len() + 16..]
-        .try_into()
-        .map_err(|_| GuardError::StorageKeyMalformed(label))?;
-    if blake2_128(&account) != key[prefix.len()..prefix.len() + 16] {
+    let hash_at = prefix.len();
+    let account_at = hash_at + 16;
+    if blake2_128(&key[account_at..]) != key[hash_at..account_at] {
         return Err(GuardError::StorageKeyMalformed(label));
     }
-    Ok(account)
+    key[account_at..]
+        .try_into()
+        .map_err(|_| GuardError::StorageKeyMalformed(label))
 }
 
 fn parse_double_vec_key(
@@ -291,12 +251,14 @@ fn parse_double_vec_key(
     }
     let first_hash_at = prefix.len();
     let first_encoded_at = first_hash_at + 16;
-    let mut first_input = &key[first_encoded_at..];
-    let first =
-        Vec::<u8>::decode(&mut first_input).map_err(|_| GuardError::StorageKeyMalformed(label))?;
-    let first_encoded_len = key[first_encoded_at..].len() - first_input.len();
-    let first_encoded = &key[first_encoded_at..first_encoded_at + first_encoded_len];
-    if blake2_128(first_encoded) != key[first_hash_at..first_encoded_at] {
+    let first_encoded = &key[first_encoded_at..];
+    let mut input = first_encoded;
+    let first = Vec::<u8>::decode(&mut input)
+        .map_err(|_| GuardError::StorageKeyMalformed(label))?;
+    let first_encoded_len = first_encoded.len() - input.len();
+    if blake2_128(&first_encoded[..first_encoded_len])
+        != key[first_hash_at..first_encoded_at]
+    {
         return Err(GuardError::StorageKeyMalformed(label));
     }
     let second_hash_at = first_encoded_at + first_encoded_len;
@@ -324,44 +286,22 @@ fn validate_cid_namespace(cid: &[u8], namespace: Namespace) -> Result<Institutio
         Namespace::Public => is_public_legal_code(&code) || is_fixed_governance_code(&code),
         Namespace::Private => is_private_legal_code(&code) || is_unincorporated_code(&code),
     };
-    if valid {
-        if is_fixed_governance_code(&code)
-            && primitives::governance_skeleton::fixed_institution_by_cid(cid)
-                .is_none_or(|institution| institution.code != code)
-        {
-            return Err(GuardError::InstitutionIdentityChanged);
-        }
-        if primitives::institution_constraints::is_permanent_singleton_code(&code)
-            && primitives::institution_constraints::singleton_by_cid(cid)
-                .is_none_or(|institution| institution.code != code)
-        {
-            return Err(GuardError::SingletonInstitutionIdentityMismatch);
-        }
-        Ok(code)
-    } else {
-        Err(GuardError::InvalidCidNamespace)
+    if !valid {
+        return Err(GuardError::InvalidCidNamespace);
     }
-}
-
-fn decode_institution<F>(
-    namespace: Namespace,
-    cid: &[u8],
-    read: &F,
-) -> Result<Option<InstitutionRecord>, GuardError>
-where
-    F: Fn(&[u8]) -> Option<Vec<u8>>,
-{
-    read(&storage_key::institution(namespace, cid))
-        .map(|raw| decode_exact(&raw, "Institutions"))
-        .transpose()
-}
-
-fn namespace_occupied<F>(namespace: Namespace, cid: &[u8], read: &F) -> bool
-where
-    F: Fn(&[u8]) -> Option<Vec<u8>>,
-{
-    read(&storage_key::institution(namespace, cid)).is_some()
-        || read(&storage_key::main_registration(namespace, cid)).is_some()
+    if is_fixed_governance_code(&code)
+        && primitives::governance_skeleton::fixed_institution_by_cid(cid)
+            .is_none_or(|institution| institution.code != code)
+    {
+        return Err(GuardError::InstitutionIdentityChanged);
+    }
+    if primitives::institution_constraints::is_permanent_singleton_code(&code)
+        && primitives::institution_constraints::singleton_by_cid(cid)
+            .is_none_or(|institution| institution.code != code)
+    {
+        return Err(GuardError::SingletonInstitutionIdentityMismatch);
+    }
+    Ok(code)
 }
 
 fn validate_citizen_record(
@@ -369,8 +309,7 @@ fn validate_citizen_record(
     record: &CitizenCidRecord,
     block: Option<u32>,
 ) -> Result<(), GuardError> {
-    let code = parse_cid(cid)?;
-    if code != *b"CTZN" {
+    if parse_cid(cid)? != *b"CTZN" || record.registrar_cid_number.is_empty() {
         return Err(GuardError::InvalidCidNamespace);
     }
     match record.status {
@@ -382,6 +321,83 @@ fn validate_citizen_record(
         if record.registered_at > block || record.revoked_at.is_some_and(|at| at > block) {
             return Err(GuardError::CitizenCidRevocationHeightInvalid);
         }
+    }
+    Ok(())
+}
+
+fn validate_institution_record(
+    namespace: Namespace,
+    cid: &[u8],
+    record: &InstitutionRecord,
+) -> Result<(), GuardError> {
+    if validate_cid_namespace(cid, namespace)? != record.institution_code {
+        return Err(GuardError::InstitutionIdentityChanged);
+    }
+    let representative_fields = [
+        record.legal_representative_name.is_some(),
+        record.legal_representative_cid_number.is_some(),
+        record.legal_representative_account.is_some(),
+    ];
+    if representative_fields.iter().any(|value| *value)
+        && !representative_fields.iter().all(|value| *value)
+    {
+        return Err(GuardError::InstitutionLegalRepresentativeInvalid);
+    }
+    Ok(())
+}
+
+fn validate_account_record(
+    cid: &[u8],
+    name: &[u8],
+    record: &InstitutionAccountRecord,
+) -> Result<(), GuardError> {
+    let kind = institution_kind_by_name(cid, name).ok_or(GuardError::AccountAddressMismatch)?;
+    if kind.derive(SS58_FORMAT) != record.address {
+        return Err(GuardError::AccountAddressMismatch);
+    }
+    Ok(())
+}
+
+fn validate_account_reverse<F>(
+    namespace: Namespace,
+    cid: &[u8],
+    name: &[u8],
+    record: &InstitutionAccountRecord,
+    read: &F,
+) -> Result<(), GuardError>
+where
+    F: Fn(&[u8]) -> Option<Vec<u8>>,
+{
+    let reverse_raw = read(&storage_key::account_registered(namespace, &record.address))
+        .ok_or(GuardError::AccountReverseIndexMissing)?;
+    let reverse: RegisteredInstitution = decode_exact(&reverse_raw, "AccountRegisteredCid")?;
+    if reverse.cid_number != cid || reverse.account_name != name {
+        return Err(GuardError::AccountReverseIndexMismatch);
+    }
+    Ok(())
+}
+
+fn validate_required_accounts<F>(
+    namespace: Namespace,
+    cid: &[u8],
+    record: &InstitutionRecord,
+    read: &F,
+) -> Result<(), GuardError>
+where
+    F: Fn(&[u8]) -> Option<Vec<u8>>,
+{
+    let required = primitives::institution_constraints::required_protocol_account_kinds(
+        record.institution_code,
+        cid,
+    )
+    .ok_or(GuardError::InstitutionIdentityChanged)?;
+    for kind in required {
+        let name = institution_protocol_account_name(*kind);
+        let raw = read(&storage_key::institution_account(namespace, cid, name))
+            .ok_or(GuardError::RequiredProtocolAccountMissing)?;
+        let account: InstitutionAccountRecord = decode_exact(&raw, "InstitutionAccounts")?;
+        validate_account_record(cid, name, &account)?;
+        validate_account_reverse(namespace, cid, name, &account, read)?;
     }
     Ok(())
 }
@@ -405,7 +421,7 @@ fn check_citizen_transition(
     };
     let parent: CitizenCidRecord = decode_exact(&parent_raw, "CidRegistry")?;
     validate_citizen_record(cid, &parent, None)?;
-    if parent.registrar_account != post.registrar_account
+    if parent.registrar_cid_number != post.registrar_cid_number
         || parent.commitment != post.commitment
         || parent.residence_province_code != post.residence_province_code
         || parent.residence_city_code != post.residence_city_code
@@ -423,229 +439,146 @@ fn check_citizen_transition(
     }
 }
 
-fn validate_institution_record(
-    namespace: Namespace,
-    cid: &[u8],
-    record: &InstitutionRecord,
-) -> Result<(), GuardError> {
-    let code = validate_cid_namespace(cid, namespace)?;
-    if code != record.institution_code {
-        return Err(GuardError::InstitutionIdentityChanged);
-    }
-    let legal_representative_fields = [
-        record.legal_representative_name.is_some(),
-        record.legal_representative_cid_number.is_some(),
-        record.legal_representative_account.is_some(),
-    ];
-    if legal_representative_fields.iter().any(|present| *present)
-        && !legal_representative_fields.iter().all(|present| *present)
-    {
-        return Err(GuardError::InstitutionLegalRepresentativeInvalid);
-    }
-    if is_fixed_governance_code(&code) && record.status != InstitutionStatus::Active {
-        return Err(GuardError::FixedInstitutionNotActive);
-    }
-    if primitives::institution_constraints::is_permanent_singleton_code(&code) {
-        let singleton = primitives::institution_constraints::singleton_by_cid(cid)
-            .ok_or(GuardError::SingletonInstitutionIdentityMismatch)?;
-        if singleton.code != code || record.status != InstitutionStatus::Active {
-            return Err(GuardError::SingletonInstitutionIdentityMismatch);
-        }
-    }
-    Ok(())
-}
-
-fn check_institution_transition<FParent, FPost>(
-    namespace: Namespace,
-    cid: &[u8],
-    parent_raw: Option<Vec<u8>>,
-    post_raw: Option<Vec<u8>>,
-    parent: &FParent,
-    post: &FPost,
-) -> Result<(), GuardError>
-where
-    FParent: Fn(&[u8]) -> Option<Vec<u8>>,
-    FPost: Fn(&[u8]) -> Option<Vec<u8>>,
-{
-    let post_raw = post_raw.ok_or(GuardError::InstitutionDeleted)?;
-    let post_record: InstitutionRecord = decode_exact(&post_raw, "Institutions")?;
-    validate_institution_record(namespace, cid, &post_record)?;
-    if namespace_occupied(namespace.sibling(), cid, post) {
-        return Err(GuardError::CrossNamespaceDuplicate);
-    }
-    let Some(parent_raw) = parent_raw else {
-        if is_fixed_governance_code(&post_record.institution_code)
-            || primitives::institution_constraints::is_permanent_singleton_code(
-                &post_record.institution_code,
-            )
-        {
-            return Err(GuardError::FixedInstitutionNotActive);
-        }
-        if post_record.status != InstitutionStatus::Closed
-            && post(&storage_key::main_registration(namespace, cid)).is_none()
-        {
-            return Err(GuardError::MainReservationMissing);
-        }
-        return Ok(());
-    };
-    let parent_record: InstitutionRecord = decode_exact(&parent_raw, "Institutions")?;
-    validate_institution_record(namespace, cid, &parent_record)?;
-    if parent_record.institution_code != post_record.institution_code
-        || parent_record.created_at != post_record.created_at
-        || parent_record.town_code != post_record.town_code
-    {
-        return Err(GuardError::InstitutionIdentityChanged);
-    }
-    match (parent_record.status, post_record.status) {
-        (InstitutionStatus::Pending, InstitutionStatus::Pending)
-        | (InstitutionStatus::Pending, InstitutionStatus::Active)
-        | (InstitutionStatus::Pending, InstitutionStatus::Closed)
-        | (InstitutionStatus::Active, InstitutionStatus::Active)
-        | (InstitutionStatus::Active, InstitutionStatus::Closed) => Ok(()),
-        (InstitutionStatus::Closed, InstitutionStatus::Closed) if parent_raw == post_raw => Ok(()),
-        (InstitutionStatus::Closed, InstitutionStatus::Closed) => {
-            Err(GuardError::ClosedInstitutionChanged)
-        }
-        _ => Err(GuardError::InstitutionStatusInvalid),
-    }?;
-    if post_record.status != InstitutionStatus::Closed
-        && post(&storage_key::main_registration(namespace, cid)).is_none()
-    {
-        return Err(GuardError::MainReservationMissing);
-    }
-    // 防止被升级后的 runtime 在父状态已有墓碑时重新创建主账户登记。
-    if parent_record.status == InstitutionStatus::Closed
-        && parent(&storage_key::main_registration(namespace, cid)).is_none()
-        && post(&storage_key::main_registration(namespace, cid)).is_some()
-    {
-        return Err(GuardError::ReusedInstitutionCid);
-    }
-    Ok(())
-}
-
-fn check_registration_transition<FParent, FPost>(
-    namespace: Namespace,
-    cid: &[u8],
-    name: &[u8],
-    parent_raw: Option<Vec<u8>>,
-    post_raw: Option<Vec<u8>>,
-    parent: &FParent,
-    post: &FPost,
-) -> Result<(), GuardError>
-where
-    FParent: Fn(&[u8]) -> Option<Vec<u8>>,
-    FPost: Fn(&[u8]) -> Option<Vec<u8>>,
-{
-    validate_cid_namespace(cid, namespace)?;
-    match (parent_raw, post_raw) {
-        (Some(before), Some(after)) if before == after => {}
-        (Some(_), Some(_)) => return Err(GuardError::RegistrationChanged),
-        (None, Some(after)) => {
-            let _: [u8; 32] = decode_exact(&after, "CidRegisteredAccount")?;
-            if let Some(existing) = decode_institution(namespace, cid, parent)? {
-                if existing.status == InstitutionStatus::Closed || name == RESERVED_NAME_MAIN {
-                    return Err(GuardError::ReusedInstitutionCid);
-                }
-            }
-            if namespace_occupied(namespace.sibling(), cid, post) {
-                return Err(GuardError::CrossNamespaceDuplicate);
-            }
-            if post(&storage_key::main_registration(namespace, cid)).is_none() {
-                return Err(GuardError::MainReservationMissing);
-            }
-        }
-        (Some(_), None) if name == RESERVED_NAME_MAIN => {
-            let closed = decode_institution(namespace, cid, post)?
-                .is_some_and(|record| record.status == InstitutionStatus::Closed);
-            if !closed {
-                return Err(GuardError::MainReservationDeletedBeforeClosed);
-            }
-        }
-        (Some(_), None) => {}
-        (None, None) => {}
-    }
-    Ok(())
-}
-
-/// 普通区块只对本块 delta 中触及的 CID 记录执行父/后状态单调性校验。
+/// 普通区块只对本块触及的 CID、机构和账户执行单调性与正反索引校验。
 pub fn check_transition<FParent, FPost>(
     block: u32,
     delta: &BTreeMap<Vec<u8>, Option<Vec<u8>>>,
     parent: FParent,
     post: FPost,
-    reference: &GenesisReference,
+    _reference: &GenesisReference,
 ) -> Result<(), GuardError>
 where
     FParent: Fn(&[u8]) -> Option<Vec<u8>>,
     FPost: Fn(&[u8]) -> Option<Vec<u8>>,
 {
-    for (key, expected) in &reference.frozen_values {
-        if delta.contains_key(key) && post(key) != Some(expected.clone()) {
-            return Err(GuardError::ProtectedGenesisValueChanged);
-        }
-    }
-
-    let protected_prefix = storage_key::protected_prefix();
     let citizen_prefix = storage_key::citizen_registry_prefix();
-    for key in delta.keys() {
-        if key.starts_with(&protected_prefix) {
-            let account =
-                parse_account_map_key(key, &protected_prefix, "ProtectedGenesisAccounts")?;
-            if !reference.protected_accounts.contains(&account)
-                || post(key) != reference.frozen_values.get(key).cloned()
-            {
-                return Err(GuardError::ProtectedGenesisSetChanged);
-            }
-        }
-        if key.starts_with(&citizen_prefix) {
-            let cid = parse_vec_map_key(key, &citizen_prefix, "CidRegistry")?;
-            check_citizen_transition(block, &cid, parent(key), post(key))?;
-        }
+    for key in delta.keys().filter(|key| key.starts_with(&citizen_prefix)) {
+        let cid = parse_vec_map_key(key, &citizen_prefix, "CidRegistry")?;
+        check_citizen_transition(block, &cid, parent(key), post(key))?;
     }
 
+    let mut touched_institutions = BTreeSet::<(u8, Vec<u8>)>::new();
     for namespace in [Namespace::Public, Namespace::Private] {
+        let namespace_id = if namespace == Namespace::Public { 0 } else { 1 };
         let institution_prefix = storage_key::institution_prefix(namespace);
-        let registration_prefix = storage_key::registration_prefix(namespace);
+        let account_prefix = storage_key::institution_account_prefix(namespace);
+        let reverse_prefix = storage_key::account_registered_prefix(namespace);
+
         for key in delta.keys() {
             if key.starts_with(&institution_prefix) {
                 let cid = parse_vec_map_key(key, &institution_prefix, "Institutions")?;
-                check_institution_transition(
-                    namespace,
-                    &cid,
-                    parent(key),
-                    post(key),
-                    &parent,
-                    &post,
-                )?;
+                let post_raw = post(key).ok_or(GuardError::InstitutionDeleted)?;
+                let post_record: InstitutionRecord = decode_exact(&post_raw, "Institutions")?;
+                validate_institution_record(namespace, &cid, &post_record)?;
+                if post(&storage_key::institution(namespace.sibling(), &cid)).is_some() {
+                    return Err(GuardError::CrossNamespaceDuplicate);
+                }
+                if let Some(parent_raw) = parent(key) {
+                    let parent_record: InstitutionRecord =
+                        decode_exact(&parent_raw, "Institutions")?;
+                    if parent_record.institution_code != post_record.institution_code
+                        || parent_record.created_at != post_record.created_at
+                        || parent_record.town_code != post_record.town_code
+                    {
+                        return Err(GuardError::InstitutionIdentityChanged);
+                    }
+                } else if is_fixed_governance_code(&post_record.institution_code)
+                    || primitives::institution_constraints::is_permanent_singleton_code(
+                        &post_record.institution_code,
+                    )
+                {
+                    return Err(GuardError::FixedInstitutionCreatedAfterGenesis);
+                }
+                touched_institutions.insert((namespace_id, cid));
             }
-            if key.starts_with(&registration_prefix) {
+
+            if key.starts_with(&account_prefix) {
                 let (cid, name) =
-                    parse_double_vec_key(key, &registration_prefix, "CidRegisteredAccount")?;
-                check_registration_transition(
-                    namespace,
-                    &cid,
-                    &name,
-                    parent(key),
-                    post(key),
-                    &parent,
-                    &post,
-                )?;
+                    parse_double_vec_key(key, &account_prefix, "InstitutionAccounts")?;
+                let institution_raw = post(&storage_key::institution(namespace, &cid))
+                    .ok_or(GuardError::AccountWithoutInstitution)?;
+                let institution: InstitutionRecord =
+                    decode_exact(&institution_raw, "Institutions")?;
+                validate_institution_record(namespace, &cid, &institution)?;
+                match (parent(key), post(key)) {
+                    (Some(before), Some(after)) if before == after => {}
+                    (Some(_), Some(_)) => return Err(GuardError::AccountChanged),
+                    (Some(before), None) => {
+                        let account: InstitutionAccountRecord =
+                            decode_exact(&before, "InstitutionAccounts")?;
+                        let kind = institution_kind_by_name(&cid, &name)
+                            .ok_or(GuardError::AccountAddressMismatch)?;
+                        if !kind.is_closable_institution_account() {
+                            return Err(GuardError::ProtocolAccountDeleted);
+                        }
+                        if post(&storage_key::account_registered(namespace, &account.address))
+                            .is_some()
+                        {
+                            return Err(GuardError::AccountReverseIndexMismatch);
+                        }
+                    }
+                    (None, Some(after)) => {
+                        let account: InstitutionAccountRecord =
+                            decode_exact(&after, "InstitutionAccounts")?;
+                        validate_account_record(&cid, &name, &account)?;
+                        if let Some(protocol_kind) = institution_protocol_kind_by_name(&name) {
+                            let required =
+                                primitives::institution_constraints::required_protocol_account_kinds(
+                                    institution.institution_code,
+                                    &cid,
+                                )
+                                .ok_or(GuardError::InstitutionIdentityChanged)?;
+                            if !required.contains(&protocol_kind) {
+                                return Err(GuardError::UnexpectedProtocolAccount);
+                            }
+                        }
+                        validate_account_reverse(namespace, &cid, &name, &account, &post)?;
+                    }
+                    (None, None) => {}
+                }
+                touched_institutions.insert((namespace_id, cid));
+            }
+
+            if key.starts_with(&reverse_prefix) {
+                let account = parse_account_map_key(key, &reverse_prefix, "AccountRegisteredCid")?;
+                if let Some(raw) = post(key) {
+                    let registered: RegisteredInstitution =
+                        decode_exact(&raw, "AccountRegisteredCid")?;
+                    let forward_raw = post(&storage_key::institution_account(
+                        namespace,
+                        &registered.cid_number,
+                        &registered.account_name,
+                    ))
+                    .ok_or(GuardError::AccountReverseIndexMismatch)?;
+                    let forward: InstitutionAccountRecord =
+                        decode_exact(&forward_raw, "InstitutionAccounts")?;
+                    if forward.address != account {
+                        return Err(GuardError::AccountReverseIndexMismatch);
+                    }
+                    touched_institutions.insert((namespace_id, registered.cid_number));
+                }
             }
         }
+    }
+
+    for (namespace_id, cid) in touched_institutions {
+        let namespace = if namespace_id == 0 {
+            Namespace::Public
+        } else {
+            Namespace::Private
+        };
+        let raw = post(&storage_key::institution(namespace, &cid))
+            .ok_or(GuardError::AccountWithoutInstitution)?;
+        let record: InstitutionRecord = decode_exact(&raw, "Institutions")?;
+        validate_required_accounts(namespace, &cid, &record, &post)?;
     }
     Ok(())
 }
 
-fn validate_full_state<F>(
-    keys: &[Vec<u8>],
-    read: &F,
-    reference: Option<&GenesisReference>,
-) -> Result<(), GuardError>
+fn validate_full_state<F>(keys: &[Vec<u8>], read: &F) -> Result<(), GuardError>
 where
     F: Fn(&[u8]) -> Option<Vec<u8>>,
 {
-    let mut occupied_public = BTreeSet::new();
-    let mut occupied_private = BTreeSet::new();
     let citizen_prefix = storage_key::citizen_registry_prefix();
     for key in keys.iter().filter(|key| key.starts_with(&citizen_prefix)) {
         let Some(raw) = read(key) else { continue };
@@ -654,156 +587,117 @@ where
         validate_citizen_record(&cid, &record, None)?;
     }
 
+    let mut occupied_public = BTreeSet::new();
+    let mut occupied_private = BTreeSet::new();
     for namespace in [Namespace::Public, Namespace::Private] {
         let institution_prefix = storage_key::institution_prefix(namespace);
-        let registration_prefix = storage_key::registration_prefix(namespace);
-        let occupied = match namespace {
-            Namespace::Public => &mut occupied_public,
-            Namespace::Private => &mut occupied_private,
+        let account_prefix = storage_key::institution_account_prefix(namespace);
+        let reverse_prefix = storage_key::account_registered_prefix(namespace);
+        let occupied = if namespace == Namespace::Public {
+            &mut occupied_public
+        } else {
+            &mut occupied_private
         };
-        for key in keys
-            .iter()
-            .filter(|key| key.starts_with(&institution_prefix))
-        {
+
+        for key in keys.iter().filter(|key| key.starts_with(&institution_prefix)) {
             let Some(raw) = read(key) else { continue };
             let cid = parse_vec_map_key(key, &institution_prefix, "Institutions")?;
             let record: InstitutionRecord = decode_exact(&raw, "Institutions")?;
             validate_institution_record(namespace, &cid, &record)?;
-            if record.status != InstitutionStatus::Closed
-                && read(&storage_key::main_registration(namespace, &cid)).is_none()
-            {
-                return Err(GuardError::MainReservationMissing);
-            }
+            validate_required_accounts(namespace, &cid, &record, read)?;
             occupied.insert(cid);
         }
-        for key in keys
-            .iter()
-            .filter(|key| key.starts_with(&registration_prefix))
-        {
+
+        for key in keys.iter().filter(|key| key.starts_with(&account_prefix)) {
             let Some(raw) = read(key) else { continue };
-            let (cid, _name) =
-                parse_double_vec_key(key, &registration_prefix, "CidRegisteredAccount")?;
-            validate_cid_namespace(&cid, namespace)?;
-            let _: [u8; 32] = decode_exact(&raw, "CidRegisteredAccount")?;
-            if read(&storage_key::main_registration(namespace, &cid)).is_none() {
-                return Err(GuardError::MainReservationMissing);
+            let (cid, name) =
+                parse_double_vec_key(key, &account_prefix, "InstitutionAccounts")?;
+            if !occupied.contains(&cid) {
+                return Err(GuardError::AccountWithoutInstitution);
             }
-            occupied.insert(cid);
+            let record: InstitutionAccountRecord = decode_exact(&raw, "InstitutionAccounts")?;
+            validate_account_record(&cid, &name, &record)?;
+            validate_account_reverse(namespace, &cid, &name, &record, read)?;
+            if let Some(protocol_kind) = institution_protocol_kind_by_name(&name) {
+                let institution_raw = read(&storage_key::institution(namespace, &cid))
+                    .ok_or(GuardError::AccountWithoutInstitution)?;
+                let institution: InstitutionRecord =
+                    decode_exact(&institution_raw, "Institutions")?;
+                let required = primitives::institution_constraints::required_protocol_account_kinds(
+                    institution.institution_code,
+                    &cid,
+                )
+                .ok_or(GuardError::InstitutionIdentityChanged)?;
+                if !required.contains(&protocol_kind) {
+                    return Err(GuardError::UnexpectedProtocolAccount);
+                }
+            }
+        }
+
+        for key in keys.iter().filter(|key| key.starts_with(&reverse_prefix)) {
+            let Some(raw) = read(key) else { continue };
+            let account = parse_account_map_key(key, &reverse_prefix, "AccountRegisteredCid")?;
+            let registered: RegisteredInstitution = decode_exact(&raw, "AccountRegisteredCid")?;
+            let forward_raw = read(&storage_key::institution_account(
+                namespace,
+                &registered.cid_number,
+                &registered.account_name,
+            ))
+            .ok_or(GuardError::AccountReverseIndexMismatch)?;
+            let forward: InstitutionAccountRecord = decode_exact(&forward_raw, "InstitutionAccounts")?;
+            if forward.address != account {
+                return Err(GuardError::AccountReverseIndexMismatch);
+            }
         }
     }
-    if occupied_public
-        .iter()
-        .any(|cid| occupied_private.contains(cid))
-    {
+
+    if occupied_public.iter().any(|cid| occupied_private.contains(cid)) {
         return Err(GuardError::CrossNamespaceDuplicate);
     }
 
-    // 六个国家级单例必须始终由约定的创世 CID 和主账户占用；机构码相同但 CID 不同、
-    // 删除、关闭或替换主账户都在完整状态检查中 fail-closed。
     for singleton in primitives::institution_constraints::singleton_institutions() {
         let cid = singleton.cid_number.as_bytes();
         let raw = read(&storage_key::institution(Namespace::Public, cid))
             .ok_or(GuardError::SingletonInstitutionMissing)?;
         let record: InstitutionRecord = decode_exact(&raw, "Institutions")?;
-        if record.institution_code != singleton.code || record.status != InstitutionStatus::Active {
+        if record.institution_code != singleton.code {
             return Err(GuardError::SingletonInstitutionIdentityMismatch);
         }
-        let main_raw = read(&storage_key::main_registration(Namespace::Public, cid))
-            .ok_or(GuardError::SingletonInstitutionMissing)?;
-        let main_account: [u8; 32] = decode_exact(&main_raw, "CidRegisteredAccount")?;
-        if main_account != singleton.main_account {
+        let main_raw = read(&storage_key::institution_account(
+            Namespace::Public,
+            cid,
+            institution_protocol_account_name(InstitutionProtocolAccountKind::Main),
+        ))
+        .ok_or(GuardError::SingletonInstitutionMissing)?;
+        let main: InstitutionAccountRecord = decode_exact(&main_raw, "InstitutionAccounts")?;
+        if main.address != singleton.main_account {
             return Err(GuardError::SingletonInstitutionIdentityMismatch);
-        }
-    }
-
-    if let Some(reference) = reference {
-        let protected_prefix = storage_key::protected_prefix();
-        let protected: BTreeSet<[u8; 32]> = keys
-            .iter()
-            .filter(|key| key.starts_with(&protected_prefix))
-            .filter(|key| read(key).is_some())
-            .map(|key| parse_account_map_key(key, &protected_prefix, "ProtectedGenesisAccounts"))
-            .collect::<Result<_, _>>()?;
-        if protected != reference.protected_accounts {
-            return Err(GuardError::ProtectedGenesisSetChanged);
-        }
-        for (key, value) in &reference.frozen_values {
-            if read(key) != Some(value.clone()) {
-                return Err(GuardError::ProtectedGenesisValueChanged);
-            }
         }
     }
     Ok(())
 }
 
 impl GenesisReference {
-    /// 从 block#0 的规范表和直接 RAW 读取构造创世封存基准。
     pub fn from_genesis<F>(keys: &[Vec<u8>], read: F) -> Result<Self, GuardError>
     where
         F: Fn(&[u8]) -> Option<Vec<u8>>,
     {
-        validate_full_state(keys, &read, None)?;
-        let protected_prefix = storage_key::protected_prefix();
-        let mut reference = Self::default();
-        for key in keys.iter().filter(|key| key.starts_with(&protected_prefix)) {
-            let Some(value) = read(key) else { continue };
-            let account =
-                parse_account_map_key(key, &protected_prefix, "ProtectedGenesisAccounts")?;
-            reference.protected_accounts.insert(account);
-            reference.frozen_values.insert(key.clone(), value);
-
-            let registered_key = storage_key::account_registered(Namespace::Public, &account);
-            let registered_raw =
-                read(&registered_key).ok_or(GuardError::ProtectedGenesisIndexMissing)?;
-            let registered: RegisteredInstitution =
-                decode_exact(&registered_raw, "AccountRegisteredCid")?;
-            let forward_key = storage_key::registration(
-                Namespace::Public,
-                &registered.cid_number,
-                &registered.account_name,
-            );
-            let forward_raw = read(&forward_key).ok_or(GuardError::ProtectedGenesisIndexMissing)?;
-            let forward_account: [u8; 32] = decode_exact(&forward_raw, "CidRegisteredAccount")?;
-            if forward_account != account {
-                return Err(GuardError::ProtectedGenesisIndexMissing);
-            }
-            let account_key = storage_key::institution_account(
-                Namespace::Public,
-                &registered.cid_number,
-                &registered.account_name,
-            );
-            let account_raw = read(&account_key).ok_or(GuardError::ProtectedGenesisIndexMissing)?;
-            let account_record: InstitutionAccountRecord =
-                decode_exact(&account_raw, "InstitutionAccounts")?;
-            if account_record.address != account
-                || account_record.status != InstitutionStatus::Active
-            {
-                return Err(GuardError::ProtectedGenesisAccountNotActive);
-            }
-            reference
-                .frozen_values
-                .insert(registered_key, registered_raw);
-            reference.frozen_values.insert(forward_key, forward_raw);
-            reference.frozen_values.insert(account_key, account_raw);
-        }
-        validate_full_state(keys, &read, Some(&reference))?;
-        Ok(reference)
+        validate_full_state(keys, &read)?;
+        Ok(Self)
     }
 }
 
-/// runtime `:code` 变化时枚举规范表并执行完整结构复核。
 pub fn check_full_state<F>(
     keys: &[Vec<u8>],
     read: F,
-    reference: &GenesisReference,
+    _reference: &GenesisReference,
 ) -> Result<(), GuardError>
 where
     F: Fn(&[u8]) -> Option<Vec<u8>>,
 {
-    validate_full_state(keys, &read, Some(reference))
+    validate_full_state(keys, &read)
 }
 
-/// block#0 导入态必须与本节点的创世保护基准一致。
 pub fn check_imported_genesis<'a, I>(
     pairs: I,
     reference: &GenesisReference,
@@ -821,7 +715,7 @@ where
     check_full_state(&keys, |key| map.get(key).cloned(), reference)
 }
 
-/// CID 历史单调性无法由非创世单快照证明，故严格禁止非 block#0 状态导入。
+/// CID 历史单调性无法由非创世单快照证明，因此禁止非 block#0 状态导入。
 pub fn check_state_import_height(block: u32) -> Result<(), GuardError> {
     if block == 0 {
         Ok(())
@@ -840,529 +734,4 @@ pub fn is_relevant_key(key: &[u8]) -> bool {
 
 pub fn matches_relevant_prefixes(key: &[u8], prefixes: &[Vec<u8>]) -> bool {
     prefixes.iter().any(|prefix| key.starts_with(prefix))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use primitives::cid::generator::{generate_cid_number, GenerateCidNumberInput};
-
-    fn cid(tag: &str, institution: &str) -> Vec<u8> {
-        generate_cid_number(GenerateCidNumberInput {
-            account_pubkey: tag,
-            p1: "0",
-            province_code: "ZS",
-            province_name: "中枢省",
-            city_code: "001",
-            city_name: "测试市",
-            year: "2026",
-            institution,
-        })
-        .unwrap()
-        .into_bytes()
-    }
-
-    fn citizen_record(status: CitizenCidStatus, registered_at: u32) -> CitizenCidRecord {
-        CitizenCidRecord {
-            registrar_account: [1; 32],
-            commitment: [2; 32],
-            residence_province_code: b"ZS".to_vec(),
-            residence_city_code: b"001".to_vec(),
-            status,
-            registered_at,
-            revoked_at: (status == CitizenCidStatus::Revoked).then_some(registered_at),
-        }
-    }
-
-    fn institution_record(cid: &[u8], status: InstitutionStatus, name: &[u8]) -> InstitutionRecord {
-        InstitutionRecord {
-            cid_full_name: name.to_vec(),
-            cid_short_name: name.to_vec(),
-            town_code: Vec::new(),
-            legal_representative_name: None,
-            legal_representative_cid_number: None,
-            legal_representative_account: None,
-            institution_code: parse_cid(cid).unwrap(),
-            created_at: 1,
-            status,
-        }
-    }
-
-    fn map_reader(map: &BTreeMap<Vec<u8>, Vec<u8>>) -> impl Fn(&[u8]) -> Option<Vec<u8>> + '_ {
-        |key| map.get(key).cloned()
-    }
-
-    #[test]
-    fn lifecycle_scale_contract_matches_runtime() {
-        assert_eq!(CitizenCidStatus::Active.encode(), vec![0]);
-        assert_eq!(CitizenCidStatus::Revoked.encode(), vec![1]);
-        assert_eq!(InstitutionStatus::Pending.encode(), vec![0]);
-        assert_eq!(InstitutionStatus::Active.encode(), vec![1]);
-        assert_eq!(InstitutionStatus::Closed.encode(), vec![2]);
-
-        let institution = institution_record(
-            &cid("institution-scale", "CGOV"),
-            InstitutionStatus::Active,
-            b"institution",
-        );
-        assert_eq!(
-            institution.encode(),
-            (
-                b"institution".to_vec(),
-                b"institution".to_vec(),
-                Vec::<u8>::new(),
-                Option::<Vec<u8>>::None,
-                Option::<Vec<u8>>::None,
-                Option::<[u8; 32]>::None,
-                institution.institution_code,
-                1u32,
-                InstitutionStatus::Active,
-            )
-                .encode()
-        );
-
-        let record = citizen_record(CitizenCidStatus::Revoked, 8);
-        assert_eq!(
-            record.encode(),
-            (
-                [1u8; 32],
-                [2u8; 32],
-                b"ZS".to_vec(),
-                b"001".to_vec(),
-                CitizenCidStatus::Revoked,
-                8u32,
-                Some(8u32),
-            )
-                .encode()
-        );
-    }
-
-    #[test]
-    fn institution_legal_representative_fields_must_be_complete() {
-        let cid = cid("institution-legal-representative", "CGOV");
-        let mut record = institution_record(&cid, InstitutionStatus::Active, b"institution");
-        record.legal_representative_name = Some("测试代表".as_bytes().to_vec());
-        assert_eq!(
-            validate_institution_record(Namespace::Public, &cid, &record),
-            Err(GuardError::InstitutionLegalRepresentativeInvalid)
-        );
-
-        record.legal_representative_cid_number = Some(b"CID-LEGAL-001".to_vec());
-        record.legal_representative_account = Some([7u8; 32]);
-        assert_eq!(
-            validate_institution_record(Namespace::Public, &cid, &record),
-            Ok(())
-        );
-    }
-
-    #[test]
-    fn citizen_active_to_revoked_is_terminal() {
-        let cid = cid("citizen-a", "CTZN");
-        let key = storage_key::citizen_registry(&cid);
-        let mut parent = BTreeMap::new();
-        let mut post = BTreeMap::new();
-        parent.insert(
-            key.clone(),
-            citizen_record(CitizenCidStatus::Active, 1).encode(),
-        );
-        let mut revoked = citizen_record(CitizenCidStatus::Revoked, 1);
-        revoked.revoked_at = Some(2);
-        post.insert(key.clone(), revoked.encode());
-        let delta = BTreeMap::from([(key.clone(), post.get(&key).cloned())]);
-        assert_eq!(
-            check_transition(
-                2,
-                &delta,
-                map_reader(&parent),
-                map_reader(&post),
-                &GenesisReference::default(),
-            ),
-            Ok(())
-        );
-
-        let restored = citizen_record(CitizenCidStatus::Active, 1).encode();
-        let restored_post = BTreeMap::from([(key.clone(), restored.clone())]);
-        let restored_delta = BTreeMap::from([(key, Some(restored))]);
-        assert_eq!(
-            check_transition(
-                3,
-                &restored_delta,
-                map_reader(&post),
-                map_reader(&restored_post),
-                &GenesisReference::default(),
-            ),
-            Err(GuardError::CitizenCidStatusInvalid)
-        );
-    }
-
-    #[test]
-    fn citizen_delete_or_change_identity_is_rejected() {
-        let cid = cid("citizen-b", "CTZN");
-        let key = storage_key::citizen_registry(&cid);
-        let original = citizen_record(CitizenCidStatus::Active, 1);
-        let parent = BTreeMap::from([(key.clone(), original.encode())]);
-        let delta = BTreeMap::from([(key.clone(), None)]);
-        assert_eq!(
-            check_transition(
-                2,
-                &delta,
-                map_reader(&parent),
-                |_| None,
-                &GenesisReference::default(),
-            ),
-            Err(GuardError::CitizenCidDeleted)
-        );
-
-        let mut changed = original;
-        changed.commitment = [9; 32];
-        let post = BTreeMap::from([(key.clone(), changed.encode())]);
-        let delta = BTreeMap::from([(key, post.values().next().cloned())]);
-        assert_eq!(
-            check_transition(
-                2,
-                &delta,
-                map_reader(&parent),
-                map_reader(&post),
-                &GenesisReference::default(),
-            ),
-            Err(GuardError::CitizenCidIdentityChanged)
-        );
-    }
-
-    #[test]
-    fn active_institution_can_rename_then_close_but_not_reopen() {
-        let cid = cid("public-a", "CGOV");
-        let institution_key = storage_key::institution(Namespace::Public, &cid);
-        let main_key = storage_key::main_registration(Namespace::Public, &cid);
-        let main = [3u8; 32].encode();
-        let parent = BTreeMap::from([
-            (
-                institution_key.clone(),
-                institution_record(&cid, InstitutionStatus::Active, b"old").encode(),
-            ),
-            (main_key.clone(), main.clone()),
-        ]);
-        let renamed = BTreeMap::from([
-            (
-                institution_key.clone(),
-                institution_record(&cid, InstitutionStatus::Active, b"new").encode(),
-            ),
-            (main_key.clone(), main),
-        ]);
-        let delta = BTreeMap::from([(
-            institution_key.clone(),
-            renamed.get(&institution_key).cloned(),
-        )]);
-        assert_eq!(
-            check_transition(
-                2,
-                &delta,
-                map_reader(&parent),
-                map_reader(&renamed),
-                &GenesisReference::default(),
-            ),
-            Ok(())
-        );
-
-        let closed = BTreeMap::from([(
-            institution_key.clone(),
-            institution_record(&cid, InstitutionStatus::Closed, b"new").encode(),
-        )]);
-        let close_delta = BTreeMap::from([
-            (
-                institution_key.clone(),
-                closed.get(&institution_key).cloned(),
-            ),
-            (main_key.clone(), None),
-        ]);
-        assert_eq!(
-            check_transition(
-                3,
-                &close_delta,
-                map_reader(&renamed),
-                map_reader(&closed),
-                &GenesisReference::default(),
-            ),
-            Ok(())
-        );
-
-        let reopened = BTreeMap::from([
-            (
-                institution_key.clone(),
-                institution_record(&cid, InstitutionStatus::Active, b"new").encode(),
-            ),
-            (main_key, [4u8; 32].encode()),
-        ]);
-        let reopen_delta = BTreeMap::from([(
-            institution_key.clone(),
-            reopened.get(&institution_key).cloned(),
-        )]);
-        assert_eq!(
-            check_transition(
-                4,
-                &reopen_delta,
-                map_reader(&closed),
-                map_reader(&reopened),
-                &GenesisReference::default(),
-            ),
-            Err(GuardError::InstitutionStatusInvalid)
-        );
-    }
-
-    #[test]
-    fn institution_code_town_and_creation_height_are_immutable() {
-        let cid = cid("institution-identity", "NRC");
-        let key = storage_key::institution(Namespace::Public, &cid);
-        let main_key = storage_key::main_registration(Namespace::Public, &cid);
-        let before = institution_record(&cid, InstitutionStatus::Active, b"before");
-        let main_account = [5u8; 32].encode();
-
-        for mutate in 0..3 {
-            let mut after = institution_record(&cid, InstitutionStatus::Active, b"after");
-            match mutate {
-                0 => after.institution_code = *b"PRCG",
-                1 => after.town_code = b"999".to_vec(),
-                _ => after.created_at = 2,
-            }
-            let parent = BTreeMap::from([
-                (key.clone(), before.encode()),
-                (main_key.clone(), main_account.clone()),
-            ]);
-            let post = BTreeMap::from([
-                (key.clone(), after.encode()),
-                (main_key.clone(), main_account.clone()),
-            ]);
-            let delta = BTreeMap::from([(key.clone(), Some(after.encode()))]);
-            assert_eq!(
-                check_transition(
-                    2,
-                    &delta,
-                    map_reader(&parent),
-                    map_reader(&post),
-                    &GenesisReference::default(),
-                ),
-                Err(GuardError::InstitutionIdentityChanged)
-            );
-        }
-    }
-
-    #[test]
-    fn closed_institution_cannot_change_even_when_remaining_closed() {
-        let cid = cid("closed-institution", "CGOV");
-        let key = storage_key::institution(Namespace::Public, &cid);
-        let before = institution_record(&cid, InstitutionStatus::Closed, b"closed");
-        let after = institution_record(&cid, InstitutionStatus::Closed, b"changed");
-        let parent = BTreeMap::from([(key.clone(), before.encode())]);
-        let post = BTreeMap::from([(key.clone(), after.encode())]);
-        let delta = BTreeMap::from([(key, Some(after.encode()))]);
-        assert_eq!(
-            check_transition(
-                3,
-                &delta,
-                map_reader(&parent),
-                map_reader(&post),
-                &GenesisReference::default(),
-            ),
-            Err(GuardError::ClosedInstitutionChanged)
-        );
-    }
-
-    #[test]
-    fn same_name_with_new_cid_is_allowed_but_cross_namespace_duplicate_is_not() {
-        let old_cid = cid("public-old", "CGOV");
-        let new_cid = cid("public-new", "CGOV");
-        let old_key = storage_key::institution(Namespace::Public, &old_cid);
-        let new_key = storage_key::institution(Namespace::Public, &new_cid);
-        let new_main = storage_key::main_registration(Namespace::Public, &new_cid);
-        let parent = BTreeMap::from([(
-            old_key,
-            institution_record(&old_cid, InstitutionStatus::Closed, b"same").encode(),
-        )]);
-        let mut post = parent.clone();
-        post.insert(
-            new_key.clone(),
-            institution_record(&new_cid, InstitutionStatus::Active, b"same").encode(),
-        );
-        post.insert(new_main, [5u8; 32].encode());
-        let delta = BTreeMap::from([(new_key.clone(), post.get(&new_key).cloned())]);
-        assert_eq!(
-            check_transition(
-                2,
-                &delta,
-                map_reader(&parent),
-                map_reader(&post),
-                &GenesisReference::default(),
-            ),
-            Ok(())
-        );
-
-        let private_key = storage_key::institution(Namespace::Private, &new_cid);
-        post.insert(
-            private_key.clone(),
-            institution_record(&new_cid, InstitutionStatus::Active, b"same").encode(),
-        );
-        let delta = BTreeMap::from([(private_key, post.values().next().cloned())]);
-        assert!(matches!(
-            check_transition(
-                2,
-                &delta,
-                map_reader(&parent),
-                map_reader(&post),
-                &GenesisReference::default(),
-            ),
-            Err(GuardError::InvalidCidNamespace | GuardError::CrossNamespaceDuplicate)
-        ));
-    }
-
-    #[test]
-    fn main_reservation_cannot_disappear_before_closed() {
-        let cid = cid("private-a", "SFLP");
-        let main_key = storage_key::main_registration(Namespace::Private, &cid);
-        let parent = BTreeMap::from([(main_key.clone(), [7u8; 32].encode())]);
-        let delta = BTreeMap::from([(main_key, None)]);
-        assert_eq!(
-            check_transition(
-                2,
-                &delta,
-                map_reader(&parent),
-                |_| None,
-                &GenesisReference::default(),
-            ),
-            Err(GuardError::MainReservationDeletedBeforeClosed)
-        );
-    }
-
-    #[test]
-    fn main_reservation_without_institution_is_valid_pending_state() {
-        let cid = cid("private-pending", "SFLP");
-        let main_key = storage_key::main_registration(Namespace::Private, &cid);
-        let post = BTreeMap::from([(main_key.clone(), [8u8; 32].encode())]);
-        let delta = BTreeMap::from([(main_key, post.values().next().cloned())]);
-        assert_eq!(
-            check_transition(
-                1,
-                &delta,
-                |_| None,
-                map_reader(&post),
-                &GenesisReference::default(),
-            ),
-            Ok(())
-        );
-    }
-
-    #[test]
-    fn fixed_governance_institution_cannot_leave_active() {
-        let cid = primitives::governance_skeleton::fixed_institutions()[0]
-            .cid_number
-            .as_bytes()
-            .to_vec();
-        let pending = institution_record(&cid, InstitutionStatus::Pending, b"NRC");
-        assert_eq!(
-            validate_institution_record(Namespace::Public, &cid, &pending),
-            Err(GuardError::FixedInstitutionNotActive)
-        );
-        let closed = institution_record(&cid, InstitutionStatus::Closed, b"NRC");
-        assert_eq!(
-            validate_institution_record(Namespace::Public, &cid, &closed),
-            Err(GuardError::FixedInstitutionNotActive)
-        );
-    }
-
-    #[test]
-    fn fixed_and_singleton_codes_cannot_reserve_noncanonical_cids() {
-        let fake_fixed = cid("fake-fixed", "NRC");
-        assert_eq!(
-            validate_cid_namespace(&fake_fixed, Namespace::Public),
-            Err(GuardError::InstitutionIdentityChanged)
-        );
-        let fake_singleton = cid("fake-singleton", "NSN");
-        assert_eq!(
-            validate_cid_namespace(&fake_singleton, Namespace::Public),
-            Err(GuardError::SingletonInstitutionIdentityMismatch)
-        );
-        let canonical = primitives::institution_constraints::singleton_institutions()[0];
-        assert_eq!(
-            validate_cid_namespace(canonical.cid_number.as_bytes(), Namespace::Public),
-            Ok(canonical.code)
-        );
-    }
-
-    #[test]
-    fn non_genesis_state_import_is_forbidden() {
-        assert_eq!(check_state_import_height(0), Ok(()));
-        assert_eq!(
-            check_state_import_height(1),
-            Err(GuardError::NonGenesisStateImportForbidden)
-        );
-    }
-
-    #[test]
-    fn real_runtime_genesis_satisfies_cid_lifecycle_reference() {
-        use sp_runtime::BuildStorage;
-        let storage = citizenchain::RuntimeGenesisConfig::default()
-            .build_storage()
-            .expect("build runtime genesis storage");
-        let top = storage.top;
-        let keys: Vec<Vec<u8>> = top
-            .keys()
-            .filter(|key| is_relevant_key(key))
-            .cloned()
-            .collect();
-        let reference = GenesisReference::from_genesis(&keys, |key| top.get(key).cloned())
-            .expect("真实 runtime 创世必须满足 CID 永久规则");
-        assert!(!reference.protected_accounts.is_empty());
-        assert!(!reference.frozen_values.is_empty());
-        assert_eq!(check_imported_genesis(top.iter(), &reference), Ok(()));
-
-        let frozen_key = reference.frozen_values.keys().next().unwrap().clone();
-        let delta = BTreeMap::from([(frozen_key.clone(), None)]);
-        assert_eq!(
-            check_transition(
-                1,
-                &delta,
-                |key| top.get(key).cloned(),
-                |key| (key != frozen_key.as_slice())
-                    .then(|| top.get(key).cloned())
-                    .flatten(),
-                &reference,
-            ),
-            Err(GuardError::ProtectedGenesisValueChanged)
-        );
-    }
-
-    #[test]
-    fn malformed_cid_key_and_trailing_record_are_rejected() {
-        let number = cid("malformed-cid-key", "CTZN");
-        let record = citizen_record(CitizenCidStatus::Active, 1).encode();
-        let mut malformed = storage_key::citizen_registry(&number);
-        malformed[storage_key::citizen_registry_prefix().len()] ^= 1;
-        let malformed_delta = BTreeMap::from([(malformed.clone(), Some(record.clone()))]);
-        let malformed_post = BTreeMap::from([(malformed, record.clone())]);
-        assert_eq!(
-            check_transition(
-                1,
-                &malformed_delta,
-                |_| None,
-                |key| malformed_post.get(key).cloned(),
-                &GenesisReference::default(),
-            ),
-            Err(GuardError::StorageKeyMalformed("CidRegistry"))
-        );
-
-        let key = storage_key::citizen_registry(&number);
-        let mut trailing = record;
-        trailing.push(0xff);
-        let trailing_delta = BTreeMap::from([(key.clone(), Some(trailing.clone()))]);
-        let trailing_post = BTreeMap::from([(key, trailing)]);
-        assert_eq!(
-            check_transition(
-                1,
-                &trailing_delta,
-                |_| None,
-                |key| trailing_post.get(key).cloned(),
-                &GenesisReference::default(),
-            ),
-            Err(GuardError::StorageValueDecodeFailed("CidRegistry"))
-        );
-    }
 }

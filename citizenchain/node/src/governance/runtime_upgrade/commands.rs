@@ -49,7 +49,7 @@ async fn ensure_nrc_activated_admin(app: &AppHandle, pubkey_hex: &str) -> Result
         .map(|item| item.cid_number.clone())
         .ok_or_else(|| "国家储委会机构常量缺失，无法发起开发升级".to_string())?;
     let pubkey_clean = normalize_pubkey_hex(pubkey_hex);
-    let admins = activation::get_activated_admins(app.clone(), nrc_cid_number, None, None).await?;
+    let admins = activation::get_activated_admins(app.clone(), nrc_cid_number, None).await?;
     if admins
         .iter()
         .any(|admin| normalize_pubkey_hex(&admin.pubkey_hex) == pubkey_clean)

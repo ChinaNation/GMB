@@ -27,7 +27,7 @@ use crate::domains::citizens::admin_entry::{
     AdminCreateCitizenOutput, ValidatedCitizenInput,
 };
 use crate::domains::citizens::chain_identity::{
-    active_registry_main_account, ensure_registry_admin, same_pubkey_hex,
+    active_registry_cid_number, ensure_registry_admin, same_pubkey_hex,
 };
 use crate::*;
 
@@ -188,9 +188,9 @@ fn append_bounded(out: &mut Vec<u8>, bytes: &[u8]) {
     out.extend_from_slice(bytes);
 }
 
-/// occupy_cid(registrar_account, cid_number, commitment, province_code, city_code)
+/// occupy_cid(actor_cid_number, cid_number, commitment, province_code, city_code)
 fn encode_occupy_cid_call(
-    registrar_account: &[u8; 32],
+    actor_cid_number: &str,
     cid_number: &str,
     commitment: &[u8; 32],
     province_code: &str,
@@ -199,7 +199,7 @@ fn encode_occupy_cid_call(
     let mut out = Vec::new();
     out.push(CITIZEN_IDENTITY_PALLET_INDEX);
     out.push(OCCUPY_CID_CALL_INDEX);
-    out.extend_from_slice(registrar_account);
+    append_bounded(&mut out, actor_cid_number.as_bytes());
     append_bounded(&mut out, cid_number.as_bytes());
     out.extend_from_slice(commitment);
     append_bounded(&mut out, province_code.as_bytes());
@@ -207,12 +207,12 @@ fn encode_occupy_cid_call(
     out
 }
 
-/// revoke_cid(registrar_account, cid_number)
-fn encode_revoke_cid_call(registrar_account: &[u8; 32], cid_number: &str) -> Vec<u8> {
+/// revoke_cid(actor_cid_number, cid_number)
+fn encode_revoke_cid_call(actor_cid_number: &str, cid_number: &str) -> Vec<u8> {
     let mut out = Vec::new();
     out.push(CITIZEN_IDENTITY_PALLET_INDEX);
     out.push(REVOKE_CID_CALL_INDEX);
-    out.extend_from_slice(registrar_account);
+    append_bounded(&mut out, actor_cid_number.as_bytes());
     append_bounded(&mut out, cid_number.as_bytes());
     out
 }
@@ -310,12 +310,12 @@ pub(crate) async fn prepare_citizen_occupy(
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "发号重试耗尽");
     };
 
-    let registrar_account = match active_registry_main_account(&state) {
+    let actor_cid_number = match active_registry_cid_number(&state) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
     let call = encode_occupy_cid_call(
-        &registrar_account,
+        &actor_cid_number,
         cid_number.as_str(),
         &commitment,
         validated.province_code.as_str(),
@@ -428,11 +428,11 @@ pub(crate) async fn prepare_citizen_revoke(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "公民档案查询失败");
         }
     }
-    let registrar_account = match active_registry_main_account(&state) {
+    let actor_cid_number = match active_registry_cid_number(&state) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let call = encode_revoke_cid_call(&registrar_account, cid_number.as_str());
+    let call = encode_revoke_cid_call(&actor_cid_number, cid_number.as_str());
     let prepared = match chain_submit::prepare_signing(&call, ctx.admin_account.as_str()).await {
         Ok(v) => v,
         Err(err) => {

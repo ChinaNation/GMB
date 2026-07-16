@@ -37,7 +37,6 @@ pub use types::{
     RepresentativeVoteRule, VoteProcedure, MAX_REPRESENTATIVE_BODIES,
 };
 
-use entity_primitives::InstitutionMultisigQuery;
 use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
@@ -85,17 +84,16 @@ pub mod pallet {
         Encode,
         Decode,
         DecodeWithMemTracking,
-        CloneNoBound,
-        PartialEqNoBound,
-        EqNoBound,
-        RuntimeDebugNoBound,
+        Clone,
+        PartialEq,
+        Eq,
+        RuntimeDebug,
         TypeInfo,
         MaxEncodedLen,
     )]
-    #[scale_info(skip_type_params(T))]
-    pub struct RepresentativeMeta<T: Config> {
+    pub struct RepresentativeMeta {
         /// 单机构或多机构顺序表决路线。
-        pub route: RepresentativeRoute<T::AccountId>,
+        pub route: RepresentativeRoute,
         /// 当前正在表决的机构索引。
         pub current_body: u32,
         /// 常规、重要或特别三种数学门槛。
@@ -109,19 +107,18 @@ pub mod pallet {
         Encode,
         Decode,
         DecodeWithMemTracking,
-        CloneNoBound,
-        PartialEqNoBound,
-        EqNoBound,
-        RuntimeDebugNoBound,
+        Clone,
+        PartialEq,
+        Eq,
+        RuntimeDebug,
         TypeInfo,
         MaxEncodedLen,
     )]
-    #[scale_info(skip_type_params(T))]
-    pub struct LegislationMeta<T: Config> {
+    pub struct LegislationMeta {
         /// 行政签署机构(总统府/省联邦政府/市政府);其法定代表人=总统/省长/市长。非特别案末段签署。
-        pub executive: (InstitutionCode, T::AccountId),
+        pub executive: votingengine::types::CidNumber,
         /// 两院级的立法院机构(国家/省立法院);其法定代表人=院长,供三人会签。单院(市)=None。
-        pub legislature: Option<(InstitutionCode, T::AccountId)>,
+        pub legislature: Option<votingengine::types::CidNumber>,
         /// 是否修宪(tier=宪法):为真时,现有流程通过后最后进护宪大法官终审(宪法第21条)。
         pub needs_guard: bool,
     }
@@ -148,8 +145,6 @@ pub mod pallet {
     pub trait Config: frame_system::Config + votingengine::Config {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-        /// 机构账户 → CID 查询入口。立法提案用 CID 记录所有关联机构主体。
-        type InstitutionQuery: InstitutionMultisigQuery<Self::AccountId>;
         type WeightInfo: crate::weights::WeightInfo;
     }
 
@@ -160,12 +155,12 @@ pub mod pallet {
     /// 代表机构表决元数据：proposal_id → RepresentativeMeta。
     #[pallet::storage]
     pub type RepresentativeMetas<T: Config> =
-        StorageMap<_, Blake2_128Concat, u64, RepresentativeMeta<T>, OptionQuery>;
+        StorageMap<_, Blake2_128Concat, u64, RepresentativeMeta, OptionQuery>;
 
     /// 法律专属元数据：只有 `VoteProcedure::Legislation` 提案存在。
     #[pallet::storage]
     pub type LegislationMetas<T: Config> =
-        StorageMap<_, Blake2_128Concat, u64, LegislationMeta<T>, OptionQuery>;
+        StorageMap<_, Blake2_128Concat, u64, LegislationMeta, OptionQuery>;
 
     /// 每个代表机构阶段独立计票：(proposal_id, body_index) → yes/no。
     #[pallet::storage]
@@ -431,16 +426,18 @@ pub mod pallet {
 impl<T: Config> crate::LegislationVoteEngine<T::AccountId> for Pallet<T> {
     fn create_representative_vote(
         who: T::AccountId,
-        route: RepresentativeRoute<T::AccountId>,
+        actor_cid_number: votingengine::types::CidNumber,
+        route: RepresentativeRoute,
         rule: RepresentativeVoteRule,
         subject_cid_numbers: ProposalSubjectCidNumbers,
         module_tag: &[u8],
         data: sp_runtime::sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        let first_account = Self::validate_representative_route(&route)?.1;
+        let first_cid_number = Self::validate_representative_route(&route)?.1;
         with_transaction(|| {
             let id = match Self::do_create_representative_proposal(
                 who.clone(),
+                actor_cid_number,
                 route,
                 rule,
                 VoteProcedure::RepresentativeOnly,
@@ -456,7 +453,11 @@ impl<T: Config> crate::LegislationVoteEngine<T::AccountId> for Pallet<T> {
             {
                 return TransactionOutcome::Rollback(Err(err));
             }
-            if <votingengine::Pallet<T>>::is_admin_in_snapshot(id, first_account, &who) {
+            if <votingengine::Pallet<T>>::is_admin_in_snapshot(
+                id,
+                votingengine::ProposalSubject::InstitutionCid(first_cid_number),
+                &who,
+            ) {
                 match Self::do_cast_representative_vote(who, id, true) {
                     Ok(()) => TransactionOutcome::Commit(Ok(id)),
                     Err(err) => TransactionOutcome::Rollback(Err(err)),
@@ -469,17 +470,19 @@ impl<T: Config> crate::LegislationVoteEngine<T::AccountId> for Pallet<T> {
 
     fn create_legislation_vote(
         who: T::AccountId,
-        route: RepresentativeRoute<T::AccountId>,
+        actor_cid_number: votingengine::types::CidNumber,
+        route: RepresentativeRoute,
         rule: RepresentativeVoteRule,
-        procedure: LegislationProcedureConfig<T::AccountId>,
+        procedure: LegislationProcedureConfig,
         module_tag: &[u8],
         data: sp_runtime::sp_std::vec::Vec<u8>,
         object_data: sp_runtime::sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        let first_account = Self::validate_representative_route(&route)?.1;
+        let first_cid_number = Self::validate_representative_route(&route)?.1;
         with_transaction(|| {
             let id = match Self::do_create_representative_proposal(
                 who.clone(),
+                actor_cid_number,
                 route,
                 rule,
                 VoteProcedure::Legislation,
@@ -508,7 +511,11 @@ impl<T: Config> crate::LegislationVoteEngine<T::AccountId> for Pallet<T> {
             }
             // 发起人若属表决院(国家/省两院:发起院=众议会/教委会)则自动赞成一票;
             // 市行政区 市自治会/市教委会 委员提案时发起人不在表决院(市立法会),不自动投票。
-            if <votingengine::Pallet<T>>::is_admin_in_snapshot(id, first_account, &who) {
+            if <votingengine::Pallet<T>>::is_admin_in_snapshot(
+                id,
+                votingengine::ProposalSubject::InstitutionCid(first_cid_number),
+                &who,
+            ) {
                 match Self::do_cast_representative_vote(who, id, true) {
                     Ok(()) => TransactionOutcome::Commit(Ok(id)),
                     Err(err) => TransactionOutcome::Rollback(Err(err)),

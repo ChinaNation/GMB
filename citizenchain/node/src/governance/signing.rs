@@ -95,16 +95,6 @@ where
     b64_to_prefixed_hex(&value, 64, "b.s").map_err(serde::de::Error::custom)
 }
 
-fn institution_account_from_cid(cid_number: &str) -> Result<[u8; 32], String> {
-    let entry = super::registry::find_institution(cid_number)
-        .ok_or_else(|| format!("未知的治理机构 cidNumber: {cid_number}"))?;
-    let clean = entry.main_account_hex();
-    let bytes = hex::decode(&clean).map_err(|e| format!("机构 AccountId 解码失败: {e}"))?;
-    bytes
-        .try_into()
-        .map_err(|_| "机构 AccountId 必须为 32 字节".to_string())
-}
-
 fn remember_chain_sign_session(
     request_id: String,
     session: ChainSignSession,
@@ -371,11 +361,11 @@ pub fn build_vote_sign_request(
 /// JointVote pallet:`cast_admin` 在 21.0,
 /// `cast_referendum` 在 21.1(联合公投阶段需双层凭证,本函数不覆盖)。
 ///
-/// cid_number 用于查找机构多签 AccountId32 参数。
+/// `actor_cid_number` 是联合投票机构身份的唯一主键，不派生或附带主账户。
 pub fn build_joint_vote_sign_request(
     proposal_id: u64,
     pubkey_hex: &str,
-    cid_number: &str,
+    actor_cid_number: &str,
     approve: bool,
 ) -> Result<VoteSignRequestResult, String> {
     let pubkey_clean = pubkey_hex
@@ -387,18 +377,23 @@ pub fn build_joint_vote_sign_request(
     }
     let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
 
-    let institution_account = institution_account_from_cid(cid_number)?;
+    if actor_cid_number.is_empty()
+        || actor_cid_number.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
+    {
+        return Err("actor_cid_number 长度需在 1..=32".to_string());
+    }
 
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
     let nonce = fetch_nonce(&pubkey_clean)?;
 
-    // call data: [pallet=21][call=0][proposal_id:u64_le][institution_account:AccountId32][approve:bool]
-    let mut call_data = Vec::with_capacity(1 + 1 + 8 + 32 + 1);
+    // call data: [pallet=21][call=0][proposal_id:u64_le][actor_cid_number:BoundedVec][approve:bool]
+    let mut call_data = Vec::with_capacity(1 + 1 + 8 + 1 + actor_cid_number.len() + 1);
     call_data.push(21u8); // JointVote sub-pallet index
     call_data.push(0u8); // cast_admin call index
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
-    call_data.extend_from_slice(&institution_account);
+    call_data.extend_from_slice(&encode_compact_u32(actor_cid_number.len() as u32));
+    call_data.extend_from_slice(actor_cid_number.as_bytes());
     call_data.push(if approve { 1u8 } else { 0u8 });
 
     let (payload, signing_bytes) =

@@ -37,34 +37,20 @@ fn binding_from_row(row: &postgres::Row) -> Result<NodeInstitutionBinding, Strin
         institution_code: institution_code.clone(),
         admin_level: crate::core::chain_runtime::admin_level_label_for(&institution_code),
         institution_cid_number: row.get(4),
-        institution_main_account: row.get(5),
-        frg_province_code: row.get(6),
-        cid_full_name: row.get(7),
-        cid_short_name: row.get(8),
-        scope_province_name: row.get(9),
-        scope_city_name: row.get(10),
-        scope_town_name: row.get(11),
+        frg_province_code: row.get(5),
+        cid_full_name: row.get(6),
+        cid_short_name: row.get(7),
+        scope_province_name: row.get(8),
+        scope_city_name: row.get(9),
+        scope_town_name: row.get(10),
     };
     Ok(NodeInstitutionBinding {
         binding_id,
         candidate,
-        bound_admin_pubkey: row.get(12),
-        bound_at: row.get(13),
-        status: row.get(14),
+        bound_admin_pubkey: row.get(11),
+        bound_at: row.get(12),
+        status: row.get(13),
     })
-}
-
-fn strip_hex_prefix_text(value: &str) -> &str {
-    value
-        .trim()
-        .strip_prefix("0x")
-        .or_else(|| value.trim().strip_prefix("0X"))
-        .unwrap_or(value.trim())
-}
-
-fn prefixed_account_text(value: &str) -> Option<String> {
-    let raw = strip_hex_prefix_text(value);
-    (!raw.is_empty()).then(|| format!("0x{}", raw.to_ascii_lowercase()))
 }
 
 fn hydrate_binding_candidate_metadata_conn(
@@ -81,17 +67,15 @@ fn persist_binding_candidate_metadata_conn(
     conn.execute(
         "UPDATE node_institution_bindings
          SET institution_cid_number = $2,
-             institution_main_account = $3,
-             cid_full_name = $4,
-             cid_short_name = $5,
-             scope_province_name = $6,
-             scope_city_name = $7,
-             scope_town_name = $8
+             cid_full_name = $3,
+             cid_short_name = $4,
+             scope_province_name = $5,
+             scope_city_name = $6,
+             scope_town_name = $7
          WHERE binding_id = $1 AND status = 'ACTIVE'",
         &[
             &binding.binding_id,
             &binding.candidate.institution_cid_number,
-            &binding.candidate.institution_main_account,
             &binding.candidate.cid_full_name,
             &binding.candidate.cid_short_name,
             &binding.candidate.scope_province_name,
@@ -388,7 +372,7 @@ pub(crate) fn resolve_home_cid_short_name(
 
 pub(crate) fn resolve_binding_candidate_metadata_conn(
     conn: &mut Client,
-    institution_main_account: &str,
+    cid_number: &str,
 ) -> Result<
     Option<(
         String,
@@ -400,21 +384,15 @@ pub(crate) fn resolve_binding_candidate_metadata_conn(
     )>,
     String,
 > {
-    let normalized_main_account =
-        strip_hex_prefix_text(institution_main_account).to_ascii_lowercase();
     let row = conn
         .query_opt(
             "SELECT s.cid_number, s.cid_full_name, s.cid_short_name,
                     s.province_code, COALESCE(s.city_code, ''), COALESCE(s.town_code, '')
-             FROM accounts a
-             JOIN subjects s
-               ON s.province_code = a.province_code
-              AND s.cid_number = a.cid_number
-             WHERE lower(regexp_replace(a.account, '^0x', '', 'i')) = $1
-               AND s.status = 'ACTIVE'
+             FROM subjects s
+             WHERE s.cid_number = $1
              ORDER BY s.updated_at DESC
              LIMIT 1",
-            &[&normalized_main_account],
+            &[&cid_number],
         )
         .map_err(|e| {
             format!(
@@ -425,68 +403,21 @@ pub(crate) fn resolve_binding_candidate_metadata_conn(
     Ok(row.map(|r| (r.get(0), r.get(1), r.get(2), r.get(3), r.get(4), r.get(5))))
 }
 
-fn resolve_frg_registry_metadata_conn(
-    conn: &mut Client,
-) -> Result<Option<(String, Option<String>, Option<String>, String)>, String> {
-    let row = conn
-        .query_opt(
-            "SELECT s.cid_number, s.cid_full_name, s.cid_short_name, a.account
-             FROM subjects s
-             JOIN accounts a
-               ON s.province_code = a.province_code
-              AND s.cid_number = a.cid_number
-             WHERE s.institution_code = $1
-               AND s.status = 'ACTIVE'
-               AND s.chain_status = 'ACTIVE_ON_CHAIN'
-               AND a.account_name = '主账户'
-               AND a.chain_status = 'ACTIVE_ON_CHAIN'
-               AND COALESCE(a.account, '') <> ''
-             ORDER BY s.updated_at DESC, a.created_at DESC
-             LIMIT 1",
-            &[&crate::core::chain_runtime::TIER1_REGISTRY_CODE],
-        )
-        .map_err(|e| {
-            format!(
-                "query FRG registry metadata failed: {}",
-                postgres_error_text(&e)
-            )
-        })?;
-    Ok(row.and_then(|r| {
-        let account: String = r.get(3);
-        prefixed_account_text(account.as_str()).map(|main_account| {
-            (
-                r.get::<_, String>(0),
-                r.get::<_, Option<String>>(1),
-                r.get::<_, Option<String>>(2),
-                main_account,
-            )
-        })
-    }))
-}
-
 pub(crate) fn hydrate_candidate_metadata_conn(
     conn: &mut Client,
     candidate: &mut AdminInstitutionCandidate,
 ) -> Result<bool, String> {
-    if candidate.institution_code == crate::core::chain_runtime::TIER1_REGISTRY_CODE
-        && candidate.frg_province_code.is_some()
-    {
-        return hydrate_frg_candidate_metadata_conn(conn, candidate);
-    }
-    if candidate
+    let Some(cid_number) = candidate
         .institution_cid_number
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty())
-        .is_some()
-    {
-        return Ok(false);
-    }
-    let Some(main_account) = candidate.institution_main_account.clone() else {
-        return Ok(false);
+        .map(str::to_string)
+    else {
+        return Err("binding candidate institution_cid_number is required".to_string());
     };
     let Some((cid_number, cid_full_name, cid_short_name, province_code, city_code, town_code)) =
-        resolve_binding_candidate_metadata_conn(conn, main_account.as_str())?
+        resolve_binding_candidate_metadata_conn(conn, cid_number.as_str())?
     else {
         return Ok(false);
     };
@@ -513,34 +444,13 @@ pub(crate) fn hydrate_candidate_metadata_conn(
     Ok(changed)
 }
 
-fn hydrate_frg_candidate_metadata_conn(
-    conn: &mut Client,
-    candidate: &mut AdminInstitutionCandidate,
-) -> Result<bool, String> {
-    let Some((cid_number, cid_full_name, cid_short_name, main_account)) =
-        resolve_frg_registry_metadata_conn(conn)?
-    else {
-        return Ok(false);
-    };
-    // FRG 省组绑定的业务范围来自链上省组 key;机构 CID 与主账户来自 FRG 主体投影。
-    let changed = candidate.institution_cid_number.as_deref() != Some(cid_number.as_str())
-        || candidate.institution_main_account.as_deref() != Some(main_account.as_str())
-        || candidate.cid_full_name != cid_full_name
-        || candidate.cid_short_name != cid_short_name;
-    candidate.institution_cid_number = Some(cid_number);
-    candidate.institution_main_account = Some(main_account);
-    candidate.cid_full_name = cid_full_name;
-    candidate.cid_short_name = cid_short_name;
-    Ok(changed)
-}
-
 pub(crate) fn get_active_node_binding_conn(
     conn: &mut Client,
 ) -> Result<Option<NodeInstitutionBinding>, String> {
     let row = conn
         .query_opt(
             "SELECT binding_id, candidate_id, institution_code, NULL::TEXT AS admin_level,
-                    institution_cid_number, institution_main_account, frg_province_code,
+                    institution_cid_number, frg_province_code,
                     cid_full_name, cid_short_name, scope_province_name, scope_city_name,
                     scope_town_name, bound_admin_pubkey, bound_at, status
              FROM node_institution_bindings
@@ -559,7 +469,7 @@ pub(crate) fn get_active_node_binding_conn(
         return Ok(None);
     };
     let mut binding = binding_from_row(&row)?;
-    // 旧绑定可能只保存 FRG 省组 scope 或账号未带 0x 前缀;读取时按链投影自愈并回写,避免后续链写拿不到 registrar。
+    // 展示元数据来自本地机构投影，绑定身份始终以链上 CID 为准。
     if hydrate_binding_candidate_metadata_conn(conn, &mut binding)? {
         persist_binding_candidate_metadata_conn(conn, &binding)?;
     }
@@ -589,17 +499,16 @@ pub(crate) fn upsert_active_node_binding_conn(
     conn.execute(
         "INSERT INTO node_institution_bindings (
             binding_id, candidate_id, institution_code, institution_cid_number,
-            institution_main_account, frg_province_code, cid_full_name, cid_short_name,
+            frg_province_code, cid_full_name, cid_short_name,
             scope_province_name, scope_city_name, scope_town_name, bound_admin_pubkey,
             bound_at, status
          )
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
         &[
             &binding.binding_id,
             &binding.candidate.candidate_id,
             &binding.candidate.institution_code,
             &binding.candidate.institution_cid_number,
-            &binding.candidate.institution_main_account,
             &binding.candidate.frg_province_code,
             &binding.candidate.cid_full_name,
             &binding.candidate.cid_short_name,
@@ -1176,14 +1085,12 @@ pub(crate) fn get_qr_login_result_conn(
 /// 已签发注销凭证行(下发 /deregistration-info 用)。
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct DeregistrationCredentialRow {
-    pub(crate) scope: i16,
     pub(crate) account_name: String,
     pub(crate) target_account: String,
     pub(crate) deregister_nonce: String,
     pub(crate) signature: Option<String>,
-    pub(crate) issuer_cid_number: String,
-    pub(crate) issuer_main_account: String,
-    pub(crate) signer_pubkey: String,
+    pub(crate) credential_issuer_cid_number: String,
+    pub(crate) credential_signer_pubkey: String,
 }
 
 /// 写入注册局域注销态(ISSUED,signature 待 commit 层回填)。
@@ -1193,28 +1100,24 @@ pub(crate) fn insert_deregistration_issued_conn(
     conn: &mut Client,
     cid_number: &str,
     account_name: &str,
-    scope: u8,
     target_account: &str,
     deregister_nonce: &str,
-    issuer_cid_number: &str,
-    issuer_main_account: &str,
-    signer_pubkey: &str,
+    credential_issuer_cid_number: &str,
+    credential_signer_pubkey: &str,
     issued_by: &str,
 ) -> Result<(), String> {
     conn.execute(
         "INSERT INTO institution_deregistrations
-            (cid_number, account_name, scope, target_account, deregister_nonce,
-             issuer_cid_number, issuer_main_account, signer_pubkey, issued_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            (cid_number, account_name, target_account, deregister_nonce,
+             credential_issuer_cid_number, credential_signer_pubkey, issued_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
         &[
             &cid_number,
             &account_name,
-            &(scope as i16),
             &target_account,
             &deregister_nonce,
-            &issuer_cid_number,
-            &issuer_main_account,
-            &signer_pubkey,
+            &credential_issuer_cid_number,
+            &credential_signer_pubkey,
             &issued_by,
         ],
     )
@@ -1234,21 +1137,19 @@ pub(crate) fn set_deregistration_credential_conn(
     conn: &mut Client,
     deregister_nonce: &str,
     signature: &str,
-    issuer_cid_number: &str,
-    issuer_main_account: &str,
-    signer_pubkey: &str,
+    credential_issuer_cid_number: &str,
+    credential_signer_pubkey: &str,
 ) -> Result<(), String> {
     conn.execute(
         "UPDATE institution_deregistrations
-            SET signature = $2, issuer_cid_number = $3,
-                issuer_main_account = $4, signer_pubkey = $5
+            SET signature = $2, credential_issuer_cid_number = $3,
+                credential_signer_pubkey = $4
          WHERE deregister_nonce = $1 AND status = 'ISSUED'",
         &[
             &deregister_nonce,
             &signature,
-            &issuer_cid_number,
-            &issuer_main_account,
-            &signer_pubkey,
+            &credential_issuer_cid_number,
+            &credential_signer_pubkey,
         ],
     )
     .map_err(|e| {
@@ -1280,8 +1181,8 @@ pub(crate) fn get_active_deregistration_by_cid_conn(
 ) -> Result<Option<DeregistrationCredentialRow>, String> {
     let row = conn
         .query_opt(
-            "SELECT scope, account_name, target_account, deregister_nonce, signature,
-                    issuer_cid_number, issuer_main_account, signer_pubkey
+            "SELECT account_name, target_account, deregister_nonce, signature,
+                    credential_issuer_cid_number, credential_signer_pubkey
              FROM institution_deregistrations
              WHERE cid_number = $1 AND status = 'ISSUED' AND signature IS NOT NULL
              ORDER BY issued_at DESC
@@ -1290,13 +1191,11 @@ pub(crate) fn get_active_deregistration_by_cid_conn(
         )
         .map_err(|e| format!("query deregistration failed: {}", postgres_error_text(&e)))?;
     Ok(row.map(|r| DeregistrationCredentialRow {
-        scope: r.get(0),
-        account_name: r.get(1),
-        target_account: r.get(2),
-        deregister_nonce: r.get(3),
-        signature: r.get(4),
-        issuer_cid_number: r.get(5),
-        issuer_main_account: r.get(6),
-        signer_pubkey: r.get(7),
+        account_name: r.get(0),
+        target_account: r.get(1),
+        deregister_nonce: r.get(2),
+        signature: r.get(3),
+        credential_issuer_cid_number: r.get(4),
+        credential_signer_pubkey: r.get(5),
     }))
 }

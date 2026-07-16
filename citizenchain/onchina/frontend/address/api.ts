@@ -37,7 +37,6 @@ export type AddressChainAction =
 
 export type AddressChainCallInput = {
   action: AddressChainAction;
-  registrar_account: string;
   catalog_version?: string;
   catalog_hash?: string;
   province_code?: string;
@@ -111,4 +110,3 @@ export async function prepareAddressChainCall(
     body: JSON.stringify(input),
   });
 }
-

@@ -1,7 +1,7 @@
 //! 机构/账户两层数据模型
 //!
-//! 链端 `CidRegisteredAccount::<T>(cid_number, name) → account`
-//! 是 DoubleMap,一个 cid_number 下可挂多个 name,每个 name 派生独立多签账户。
+//! 链端 `InstitutionAccounts::<T>(cid_number, account_name) → account_info`
+//! 是 DoubleMap，一个 cid_number 下可挂多个机构账户。
 //! cid 系统这里对应拆两层:
 //!
 //! - `Institution`:每个 cid_number 唯一,存机构展示信息(cid_full_name 等),
@@ -42,10 +42,6 @@ pub fn is_education_school_type(value: &str) -> bool {
     EDUCATION_SCHOOL_TYPES.contains(&value)
 }
 
-fn default_subject_status() -> String {
-    "ACTIVE".to_string()
-}
-
 // ── 账户链上状态 ───────────────────────────────────────
 
 /// 机构账户链上状态。
@@ -53,21 +49,6 @@ fn default_subject_status() -> String {
 /// 账户是否激活只以链上事实为准。CID 创建账户时只是登记
 /// `(cid_number, account_name)`,默认 `NotOnChain`;链上机构注册或新增账户成功后,
 /// 由同步接口写成 `ActiveOnChain`;链上注销后写成 `RevokedOnChain`。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum MultisigChainStatus {
-    NotOnChain,
-    PendingOnChain,
-    ActiveOnChain,
-    RevokedOnChain,
-}
-
-impl Default for MultisigChainStatus {
-    fn default() -> Self {
-        Self::NotOnChain
-    }
-}
-
 /// 机构(每个 cid_number 唯一)。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Institution {
@@ -79,9 +60,6 @@ pub struct Institution {
     /// 机构简称。确定性公权机构必须写入规范简称,不得重复写全称。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cid_short_name: Option<String>,
-    /// 主体业务状态。机构列表和详情只展示 ACTIVE / REVOKED,不把链上状态混成业务状态。
-    #[serde(default = "default_subject_status")]
-    pub status: String,
     /// 机构展示分类(公权机构/私权机构)。法律主体类型由机构码和父级属性单独判定。
     pub category: InstitutionCategory,
     /// 盈利属性("0"/"1")。
@@ -156,7 +134,7 @@ impl HasProvinceCity for Institution {
 }
 
 /// 机构下的多签账户(复合 key = (cid_number, account_name))。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct InstitutionAccount {
     /// 所属机构的 cid_number。
     pub cid_number: String,
@@ -164,16 +142,44 @@ pub struct InstitutionAccount {
     pub account_name: String,
     /// 链上派生的多签账户(hex, 不含 0x 前缀)。上链成功后填入。
     pub account: Option<String>,
-    /// 链上状态。
-    #[serde(default)]
-    pub chain_status: MultisigChainStatus,
-    /// 最近一次链上状态同步时间。CID 后台不直接激活账户,只记录同步事实。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub chain_synced_at: Option<DateTime<Utc>>,
-    pub chain_tx_hash: Option<String>,
-    pub chain_block_number: Option<u64>,
     pub created_by: String,
     pub created_at: DateTime<Utc>,
+}
+
+impl Serialize for InstitutionAccount {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        let kind = primitives::account_derive::institution_kind_by_name(
+            self.cid_number.as_bytes(),
+            self.account_name.as_bytes(),
+        )
+        .ok_or_else(|| serde::ser::Error::custom("institution account_name is empty"))?;
+        let account_kind = match kind.institution_protocol_kind() {
+            Some(primitives::account_derive::InstitutionProtocolAccountKind::Main) => "main",
+            Some(primitives::account_derive::InstitutionProtocolAccountKind::Fee) => "fee",
+            Some(primitives::account_derive::InstitutionProtocolAccountKind::Stake) => "stake",
+            Some(primitives::account_derive::InstitutionProtocolAccountKind::SafetyFund) => {
+                "safety_fund"
+            }
+            Some(primitives::account_derive::InstitutionProtocolAccountKind::He) => "he",
+            None => "named",
+        };
+        let can_close = kind.is_closable_institution_account();
+        let mut state = serializer.serialize_struct("InstitutionAccount", 8)?;
+        state.serialize_field("cid_number", &self.cid_number)?;
+        state.serialize_field("account_name", &self.account_name)?;
+        state.serialize_field("account", &self.account)?;
+        state.serialize_field("account_kind", account_kind)?;
+        state.serialize_field("can_close", &can_close)?;
+        state.serialize_field("can_delete", &can_close)?;
+        state.serialize_field("created_by", &self.created_by)?;
+        state.serialize_field("created_at", &self.created_at)?;
+        state.end()
+    }
 }
 
 /// 复合 key:`(cid_number, account_name)`。
@@ -336,10 +342,6 @@ pub struct CreateAccountInput {
 pub struct CreateAccountOutput {
     pub cid_number: String,
     pub account_name: String,
-    pub chain_status: MultisigChainStatus,
-    pub chain_synced_at: Option<DateTime<Utc>>,
-    pub chain_tx_hash: Option<String>,
-    pub chain_block_number: Option<u64>,
     pub account: Option<String>,
 }
 
@@ -385,7 +387,6 @@ pub struct InstitutionListRow {
     pub cid_full_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cid_short_name: Option<String>,
-    pub status: String,
     pub category: InstitutionCategory,
     pub p1: String,
     pub province_name: String,
@@ -444,16 +445,4 @@ pub struct InstitutionDetailOutput {
     /// 创建者角色:"FEDERAL_REGISTRY" / "CITY_REGISTRY"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_role: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ChainSyncAccountInput {
-    pub account_name: String,
-    pub chain_status: MultisigChainStatus,
-    #[serde(default)]
-    pub account: Option<String>,
-    #[serde(default)]
-    pub chain_tx_hash: Option<String>,
-    #[serde(default)]
-    pub chain_block_number: Option<u64>,
 }

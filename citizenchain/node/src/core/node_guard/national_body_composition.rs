@@ -7,7 +7,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use admin_primitives::{AdminAccountStatus, InstitutionAdminAccount};
+use admin_primitives::InstitutionAdmins;
 use codec::{Decode, Encode};
 use entity_primitives::{
     InstitutionAdminAssignment, InstitutionAssignmentStatus, InstitutionRole, InstitutionRoleStatus,
@@ -21,7 +21,7 @@ use super::governance_skeleton;
 const INTERNAL_VOTE_PALLET: &[u8] = b"InternalVote";
 const VOTING_ENGINE_PALLET: &[u8] = b"VotingEngine";
 
-type DecodedAdminAccount = InstitutionAdminAccount<Vec<[u8; 32]>>;
+type DecodedAdminAccount = InstitutionAdmins<Vec<[u8; 32]>>;
 type DecodedRole = InstitutionRole<Vec<u8>, Vec<u8>, Vec<u8>>;
 type DecodedAssignment = InstitutionAdminAssignment<Vec<u8>, [u8; 32], Vec<u8>, Vec<u8>>;
 
@@ -36,7 +36,6 @@ pub enum GuardError {
     PartialUnconstitutedState([u8; 4]),
     AdminAccountDecodeFailed([u8; 4]),
     AdminIdentityChanged([u8; 4]),
-    AdminAccountNotActive([u8; 4]),
     MemberRoleDecodeFailed([u8; 4]),
     MemberRoleChanged([u8; 4]),
     AssignmentsDecodeFailed([u8; 4]),
@@ -94,7 +93,7 @@ pub mod storage_key {
     pub fn composition_keys(spec: &MemberCompositionSpec) -> [Vec<u8>; 3] {
         let institution = spec.institution;
         [
-            governance_skeleton::storage_key::admin_account(&institution.main_account),
+            governance_skeleton::storage_key::admin_account(institution.cid_number.as_bytes()),
             governance_skeleton::storage_key::institution_role(
                 institution.cid_number.as_bytes(),
                 spec.role_code,
@@ -174,13 +173,8 @@ where
 
     let account: DecodedAdminAccount = decode_exact(raw[0].as_deref().unwrap_or_default())
         .map_err(|_| GuardError::AdminAccountDecodeFailed(spec.institution.code))?;
-    if account.cid_number.as_slice() != spec.institution.cid_number.as_bytes()
-        || account.institution_code != spec.institution.code
-    {
+    if account.institution_code != spec.institution.code {
         return Err(GuardError::AdminIdentityChanged(spec.institution.code));
-    }
-    if account.status != AdminAccountStatus::Active {
-        return Err(GuardError::AdminAccountNotActive(spec.institution.code));
     }
 
     let role: DecodedRole = decode_exact(raw[1].as_deref().unwrap_or_default())

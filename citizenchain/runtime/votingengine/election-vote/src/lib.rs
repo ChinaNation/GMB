@@ -34,7 +34,6 @@ use frame_system::pallet_prelude::BlockNumberFor;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use entity_primitives::InstitutionMultisigQuery;
     use frame_support::ensure;
     use frame_support::{
         pallet_prelude::*,
@@ -61,8 +60,7 @@ pub mod pallet {
     pub type MaxElectionCandidatesOf<T> = <T as Config>::MaxElectionCandidates;
     pub type MaxMutualVotersOf<T> = <T as Config>::MaxMutualVoters;
     pub type ElectionOfficeCodeOf<T> = BoundedVec<u8, MaxElectionOfficeCodeOf<T>>;
-    pub type ElectionMetaOf<T> =
-        ElectionMeta<<T as frame_system::Config>::AccountId, ElectionOfficeCodeOf<T>>;
+    pub type ElectionMetaOf<T> = ElectionMeta<ElectionOfficeCodeOf<T>>;
     pub type ElectionWinnerOf<T> = ElectionWinner<<T as frame_system::Config>::AccountId>;
 
     #[pallet::config]
@@ -81,9 +79,6 @@ pub mod pallet {
         /// 单场互选可固化的最大机构管理员人数；Popular 不保存完整选民列表。
         #[pallet::constant]
         type MaxMutualVoters: Get<u32>;
-
-        /// 机构账户 → CID 查询入口。选举提案用 CID 记录组织机构和目标机构。
-        type InstitutionQuery: InstitutionMultisigQuery<Self::AccountId>;
 
         /// 选举写票和候选人计票路径的实测权重。
         type WeightInfo: crate::weights::WeightInfo;
@@ -155,7 +150,7 @@ pub mod pallet {
         ElectionCreated {
             proposal_id: u64,
             mode: ElectionMode,
-            target: T::AccountId,
+            target_cid_number: votingengine::types::CidNumber,
             seat_count: u16,
         },
         /// 选民已投票。候选人明文保留,便于链上审计当前最小框架。
@@ -250,25 +245,14 @@ pub mod pallet {
             (VOTING_DURATION_BLOCKS as u64).saturated_into()
         }
 
-        fn push_subject_cid(
-            raw: &mut Vec<Vec<u8>>,
-            account: &T::AccountId,
-        ) -> Result<(), DispatchError> {
-            let cid = T::InstitutionQuery::lookup_cid(account)
-                .ok_or(Error::<T>::InvalidInstitutionCid)?;
-            if !raw.iter().any(|existing| existing == &cid) {
-                raw.push(cid);
-            }
-            Ok(())
-        }
-
         fn resolve_subject_cid_numbers(
-            organizer: &T::AccountId,
-            target: &T::AccountId,
+            actor_cid_number: &votingengine::types::CidNumber,
+            target_cid_number: &votingengine::types::CidNumber,
         ) -> Result<votingengine::types::ProposalSubjectCidNumbers, DispatchError> {
-            let mut raw = Vec::new();
-            Self::push_subject_cid(&mut raw, organizer)?;
-            Self::push_subject_cid(&mut raw, target)?;
+            let mut raw = Vec::from([actor_cid_number.to_vec()]);
+            if actor_cid_number != target_cid_number {
+                raw.push(target_cid_number.to_vec());
+            }
             votingengine::Pallet::<T>::bound_subject_cid_numbers(raw)
         }
 
@@ -276,10 +260,8 @@ pub mod pallet {
         pub(crate) fn do_create_election(
             who: T::AccountId,
             mode: ElectionMode,
-            organizer_code: votingengine::InstitutionCode,
-            organizer: T::AccountId,
-            target_code: votingengine::InstitutionCode,
-            target: T::AccountId,
+            actor_cid_number: votingengine::types::CidNumber,
+            target_cid_number: votingengine::types::CidNumber,
             office_code: ElectionOfficeCodeOf<T>,
             rule_id: u32,
             seat_count: u16,
@@ -292,10 +274,20 @@ pub mod pallet {
             ensure!(!office_code.is_empty(), Error::<T>::EmptyOfficeCode);
             ensure!(seat_count > 0, Error::<T>::InvalidSeatCount);
             ensure!(term_start <= term_end, Error::<T>::InvalidTerm);
+            let actor_code = votingengine::types::institution_code_from_cid_number(
+                core::str::from_utf8(actor_cid_number.as_slice())
+                    .map_err(|_| Error::<T>::InvalidInstitutionCid)?,
+            )
+            .ok_or(Error::<T>::InvalidInstitutionCid)?;
+            let target_code = votingengine::types::institution_code_from_cid_number(
+                core::str::from_utf8(target_cid_number.as_slice())
+                    .map_err(|_| Error::<T>::InvalidInstitutionCid)?,
+            )
+            .ok_or(Error::<T>::InvalidInstitutionCid)?;
             ensure!(
-                <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
-                    organizer_code,
-                    organizer.clone(),
+                <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
+                    actor_code,
+                    actor_cid_number.as_slice(),
                     &who,
                 ),
                 Error::<T>::NotOrganizerAdmin
@@ -329,9 +321,9 @@ pub mod pallet {
                 (ElectionMode::Mutual, None) => {
                     let bounded_voters = Self::bounded_mutual_voters(voters)?;
                     let admins =
-                        <T as votingengine::Config>::InternalAdminProvider::get_admin_list(
+                        <T as votingengine::Config>::InternalAdminProvider::get_institution_admins(
                             target_code,
-                            target.clone(),
+                            target_cid_number.as_slice(),
                         )
                         .ok_or(Error::<T>::AdminSnapshotMissing)?;
                     ensure!(
@@ -358,13 +350,15 @@ pub mod pallet {
             let now = frame_system::Pallet::<T>::block_number();
             let end = now.saturating_add(Self::stage_duration());
             let stage = mode.stage();
-            let subject_cid_numbers = Self::resolve_subject_cid_numbers(&organizer, &target)?;
+            let subject_cid_numbers =
+                Self::resolve_subject_cid_numbers(&actor_cid_number, &target_cid_number)?;
             let proposal = votingengine::Proposal {
                 kind: votingengine::PROPOSAL_KIND_ELECTION,
                 stage,
                 status: votingengine::STATUS_VOTING,
                 internal_code: Some(target_code),
-                account_context: Some(target.clone()),
+                actor_cid_number: Some(actor_cid_number.clone()),
+                execution_account: None,
                 subject_cid_numbers,
                 start: now,
                 end,
@@ -373,10 +367,8 @@ pub mod pallet {
             let meta = ElectionMeta {
                 mode,
                 population_scope,
-                organizer_code,
-                organizer,
-                target_code,
-                target: target.clone(),
+                actor_cid_number,
+                target_cid_number: target_cid_number.clone(),
                 office_code,
                 rule_id,
                 seat_count,
@@ -428,7 +420,7 @@ pub mod pallet {
                 Self::deposit_event(Event::<T>::ElectionCreated {
                     proposal_id: id,
                     mode,
-                    target,
+                    target_cid_number,
                     seat_count,
                 });
                 TransactionOutcome::Commit(Ok(id))

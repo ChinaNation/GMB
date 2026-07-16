@@ -193,16 +193,14 @@ pub mod pallet {
 
             with_transaction(|| {
                 let action = AdminSetChangeAction {
-                    admin_root_account_id: account.clone(),
+                    personal_account: account.clone(),
                     admins: admins.clone(),
                     new_threshold,
                 };
                 let proposal_id =
-                    match T::InternalVoteEngine::create_admin_change_internal_proposal_with_data(
+                    match T::InternalVoteEngine::create_personal_admin_change_proposal_with_data(
                         who.clone(),
-                        PMUL,
                         account.clone(),
-                        Vec::new(),
                         admins.len() as u32,
                         new_threshold,
                         crate::MODULE_TAG,
@@ -284,7 +282,8 @@ pub mod pallet {
                 Error::<T>::InvalidLifecycleScope
             );
             ensure!(
-                proposal.account_context == Some(account),
+                proposal.execution_account == Some(account)
+                    && proposal.actor_cid_number.is_none(),
                 Error::<T>::InvalidLifecycleScope
             );
             ensure!(
@@ -524,7 +523,8 @@ pub mod pallet {
                 Error::<T>::ProposalActionNotFound
             );
             ensure!(
-                proposal.account_context == Some(action.admin_root_account_id.clone()),
+                proposal.execution_account == Some(action.personal_account.clone())
+                    && proposal.actor_cid_number.is_none(),
                 Error::<T>::ProposalActionNotFound
             );
             ensure!(
@@ -532,11 +532,11 @@ pub mod pallet {
                 Error::<T>::ProposalActionNotFound
             );
             votingengine::Pallet::<T>::ensure_admin_set_mutation_lock_owner(
-                ProposalSubject::PersonalAccount(action.admin_root_account_id.clone()),
+                ProposalSubject::PersonalAccount(action.personal_account.clone()),
                 proposal_id,
             )?;
 
-            let current = AdminAccounts::<T>::get(action.admin_root_account_id.clone())
+            let current = AdminAccounts::<T>::get(action.personal_account.clone())
                 .ok_or(Error::<T>::PersonalNotFound)?;
             ensure!(
                 current.status == AdminAccountStatus::Active
@@ -551,7 +551,7 @@ pub mod pallet {
                 Error::<T>::AdminSetUnchanged
             );
 
-            AdminAccounts::<T>::mutate(action.admin_root_account_id.clone(), |maybe| {
+            AdminAccounts::<T>::mutate(action.personal_account.clone(), |maybe| {
                 if let Some(account) = maybe {
                     account.admins = action.admins.clone();
                     account.updated_at = frame_system::Pallet::<T>::block_number();
@@ -559,7 +559,7 @@ pub mod pallet {
             });
             Self::deposit_event(Event::<T>::AdminSetChanged {
                 proposal_id,
-                account: action.admin_root_account_id,
+                account: action.personal_account,
                 admins_len: action.admins.len() as u32,
                 threshold: action.new_threshold,
             });

@@ -32,16 +32,6 @@ const TAG_RESOLUTION_DESTROY: &[u8] = b"res-dst";
 const TAG_PUBLIC_MANAGE: &[u8] = b"pub-mgmt";
 const TAG_PRIVATE_MANAGE: &[u8] = b"pri-mgmt";
 
-fn institution_account_from_cid(cid_number: &str) -> Result<[u8; 32], String> {
-    let entry = super::registry::find_institution(cid_number)
-        .ok_or_else(|| format!("未知的治理机构 cidNumber: {cid_number}"))?;
-    let clean = entry.main_account_hex();
-    let bytes = hex::decode(&clean).map_err(|e| format!("机构 AccountId 解码失败: {e}"))?;
-    bytes
-        .try_into()
-        .map_err(|_| "机构 AccountId 必须为 32 字节".to_string())
-}
-
 /// 提案展示号(双层 ID v1):`ProposalDisplayId[id]` 反查值。
 ///
 /// 主键 `proposal_id` 是全局单调 u64;展示号通过本结构持有
@@ -67,8 +57,10 @@ pub struct ProposalMeta {
     /// 仅内部投票:机构码(CID institution_code),序列化为 4 字符展示串。
     #[serde(serialize_with = "serialize_internal_code")]
     pub internal_code: Option<InstitutionCode>,
-    /// 投票/执行账户上下文 AccountId32 hex（不含 0x）,机构身份真源见 `subject_cid_numbers`。
-    pub institution_hex: Option<String>,
+    /// 发起机构唯一 CID；个人多签、公民个人或系统提案为空。
+    pub actor_cid_number: Option<String>,
+    /// 仅在具体资产账户或个人多签参与执行时存在。
+    pub execution_account_hex: Option<String>,
     /// 机构类提案关联的机构 CID 列表；个人多签提案为空。
     pub subject_cid_numbers: Vec<String>,
 }
@@ -160,7 +152,8 @@ pub struct IssuanceAllocationItem {
 #[serde(rename_all = "camelCase")]
 pub struct ResolutionDestroyDetail {
     pub proposal_id: u64,
-    pub institution_hex: String,
+    pub actor_cid_number: String,
+    pub institution_account_hex: String,
     pub amount_fen: String,
 }
 
@@ -722,18 +715,26 @@ fn decode_proposal_meta(proposal_id: u64, data: &[u8]) -> Option<ProposalMeta> {
         None
     };
 
-    // account_context: Option<AccountId32>
-    let institution_hex = if offset < data.len() && data[offset] == 1 {
+    // actor_cid_number: Option<CidNumber>
+    let actor_cid_number = if offset < data.len() && data[offset] == 1 {
         offset += 1;
-        if offset + 32 <= data.len() {
-            let value = Some(hex::encode(&data[offset..offset + 32]));
-            offset += 32;
-            value
-        } else {
-            None
-        }
+        Some(decode_cid_number(data, &mut offset)?)
     } else {
         offset += 1; // skip 0x00 (None)
+        None
+    };
+    // execution_account: Option<AccountId32>
+    let execution_account_hex = if offset < data.len() && data[offset] == 1 {
+        offset += 1;
+        let end = offset.checked_add(32)?;
+        if end > data.len() {
+            return None;
+        }
+        let value = Some(hex::encode(&data[offset..end]));
+        offset = end;
+        value
+    } else {
+        offset += 1;
         None
     };
     let (subject_cid_numbers, _offset) = decode_subject_cid_numbers(data, offset)?;
@@ -744,7 +745,8 @@ fn decode_proposal_meta(proposal_id: u64, data: &[u8]) -> Option<ProposalMeta> {
         stage,
         status,
         internal_code,
-        institution_hex,
+        actor_cid_number,
+        execution_account_hex,
         subject_cid_numbers,
     })
 }
@@ -756,6 +758,9 @@ fn decode_runtime_upgrade_action(proposal_id: u64, data: &[u8]) -> Option<Runtim
         return None;
     }
     let mut offset = tag.len();
+
+    // actor_cid_number: CidNumber
+    let _actor_cid_number = decode_cid_number(data, &mut offset)?;
 
     // proposer: [u8;32]
     if offset + 32 > data.len() {
@@ -820,6 +825,9 @@ fn decode_resolution_issuance_action(
     }
     let mut offset = tag.len();
 
+    // actor_cid_number: CidNumber
+    let _actor_cid_number = decode_cid_number(data, &mut offset)?;
+
     // proposer: [u8;32]
     if offset + 32 > data.len() {
         return None;
@@ -875,21 +883,26 @@ fn decode_resolution_destroy_action(
     proposal_id: u64,
     data: &[u8],
 ) -> Option<ResolutionDestroyDetail> {
-    // SCALE 布局：MODULE_TAG("res-dst":7) + institution(AccountId32) + amount(u128:16)
+    // SCALE 布局：MODULE_TAG + actor_cid_number + institution_account + amount。
     let tag = TAG_RESOLUTION_DESTROY;
-    if data.len() < tag.len() + 32 + 16 || &data[..tag.len()] != tag {
+    if data.len() < tag.len() + 1 + 32 + 16 || &data[..tag.len()] != tag {
         return None;
     }
     let mut offset = tag.len();
 
-    let institution_hex = hex::encode(&data[offset..offset + 32]);
+    let actor_cid_number = decode_cid_number(data, &mut offset)?;
+    if offset + 32 + 16 > data.len() {
+        return None;
+    }
+    let institution_account_hex = hex::encode(&data[offset..offset + 32]);
     offset += 32;
 
     let amount = u128::from_le_bytes(data[offset..offset + 16].try_into().ok()?);
 
     Some(ResolutionDestroyDetail {
         proposal_id,
-        institution_hex,
+        actor_cid_number,
+        institution_account_hex,
         amount_fen: amount.to_string(),
     })
 }
@@ -973,6 +986,19 @@ fn proposal_subject_institution_cid_key(cid_number: &str) -> Result<Vec<u8>, Str
     let mut out = vec![0u8]; // ProposalSubject::InstitutionCid(CidNumber)
     out.extend(cid_number_key(cid_number)?);
     Ok(out)
+}
+
+/// 从当前位置解码 SCALE `CidNumber`，并推进 offset。
+fn decode_cid_number(data: &[u8], offset: &mut usize) -> Option<String> {
+    let (len, len_len) = read_compact_u32(data, *offset).ok()?;
+    *offset = offset.checked_add(len_len)?;
+    let end = offset.checked_add(len as usize)?;
+    if end > data.len() {
+        return None;
+    }
+    let cid = core::str::from_utf8(&data[*offset..end]).ok()?.to_string();
+    *offset = end;
+    Some(cid)
 }
 
 fn decode_subject_cid_numbers(data: &[u8], offset: usize) -> Option<(Vec<String>, usize)> {
@@ -1199,8 +1225,9 @@ fn format_issuance_summary(d: &ResolutionIssuanceDetail) -> String {
 
 fn format_destroy_summary(d: &ResolutionDestroyDetail) -> String {
     let amount: u128 = d.amount_fen.parse().unwrap_or(0);
-    let inst_name = resolve_cid_full_name_by_account(Some(&d.institution_hex))
-        .unwrap_or_else(|| "未知机构".to_string());
+    let inst_name = super::registry::find_institution(&d.actor_cid_number)
+        .map(|item| item.cid_full_name().to_string())
+        .unwrap_or_else(|| d.actor_cid_number.clone());
     format!(
         "决议销毁 {} 元：{inst_name}",
         signing::format_amount(amount as f64 / 100.0)
@@ -1254,13 +1281,10 @@ pub fn fetch_user_vote_status(
         fetch_option_bool(&key)?
     };
 
-    // 查询联合投票状态（JointVotesByAdmin: DoubleMap<u64, (InstitutionAccount32 ++ AccountId32)> → bool）
+    // 查询联合投票状态（JointVotesByAdmin: DoubleMap<u64, (CidNumber, AccountId32)> → bool）。
     let joint_vote = if meta.kind == 1 && cid_number.is_some() {
-        // cid_number.is_some() 已在上方 if 条件中守卫，此处 expect 不会 panic。
-        let institution_account =
-            institution_account_from_cid(cid_number.expect("guarded by is_some()"))?;
-        let mut composite_key = Vec::with_capacity(32 + 32);
-        composite_key.extend_from_slice(&institution_account);
+        let cid_number = cid_number.expect("guarded by is_some()");
+        let mut composite_key = cid_number_key(cid_number)?;
         composite_key.extend_from_slice(&pubkey_bytes);
         let key = storage_keys::double_map_key(
             "JointVote",

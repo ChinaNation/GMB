@@ -8,34 +8,14 @@
 use crate::cid::code;
 use crate::cid::{classify, validate_cid_number_format, AdminLevel, InstitutionCategory};
 use crate::institution::subjects::model::{Institution, InstitutionAccount};
-use crate::institution::subjects::MultisigChainStatus;
 use primitives::account_derive::is_forbidden_account_name;
 
-// 保留名字面单源 = primitives::account_derive::RESERVED_NAME_*_STR(链端唯一字面)。
-// 本处仅以业务别名 re-export,禁止再写 "主账户" 等字面。
+// 保留名字面单源 = primitives::account_derive::RESERVED_NAME_*_STR。
 pub const ACCOUNT_NAME_MAIN: &str = primitives::account_derive::RESERVED_NAME_MAIN_STR;
 pub const ACCOUNT_NAME_FEE: &str = primitives::account_derive::RESERVED_NAME_FEE_STR;
 pub const ACCOUNT_NAME_STAKE: &str = primitives::account_derive::RESERVED_NAME_STAKE_STR;
 pub const ACCOUNT_NAME_SAFETYFUND: &str = primitives::account_derive::RESERVED_NAME_SAFETYFUND_STR;
 pub const ACCOUNT_NAME_HE: &str = primitives::account_derive::RESERVED_NAME_HE_STR;
-
-pub const COMMON_DEFAULT_ACCOUNT_NAMES: &[&str] = &[ACCOUNT_NAME_MAIN, ACCOUNT_NAME_FEE];
-pub const PROVINCE_RESERVE_BANK_DEFAULT_ACCOUNT_NAMES: &[&str] =
-    &[ACCOUNT_NAME_MAIN, ACCOUNT_NAME_FEE, ACCOUNT_NAME_STAKE];
-pub const NATIONAL_RESERVE_DEFAULT_ACCOUNT_NAMES: &[&str] = &[
-    ACCOUNT_NAME_MAIN,
-    ACCOUNT_NAME_FEE,
-    ACCOUNT_NAME_SAFETYFUND,
-    ACCOUNT_NAME_HE,
-];
-
-pub const DEFAULT_ACCOUNT_NAMES: &[&str] = &[
-    ACCOUNT_NAME_MAIN,
-    ACCOUNT_NAME_FEE,
-    ACCOUNT_NAME_STAKE,
-    ACCOUNT_NAME_SAFETYFUND,
-    ACCOUNT_NAME_HE,
-];
 
 pub const MAX_ACCOUNT_NAME_CHARS: usize = 30;
 pub const MAX_ACCOUNT_NAME_BYTES: usize = 128;
@@ -164,30 +144,60 @@ pub fn resolve_legal_representative_scope_for_institution(
     )
 }
 
-pub fn is_default_account_name(account_name: &str) -> bool {
-    DEFAULT_ACCOUNT_NAMES
-        .iter()
-        .any(|name| *name == account_name)
+pub fn is_protocol_account_name(account_name: &str) -> bool {
+    primitives::account_derive::institution_protocol_kind_by_name(account_name.as_bytes()).is_some()
+}
+
+/// 机构账户分类标签，与 Node/CitizenApp/CitizenWallet 的展示协议一致。
+pub fn institution_account_kind_label(cid_number: &str, account_name: &str) -> Option<&'static str> {
+    let kind = primitives::account_derive::institution_kind_by_name(
+        cid_number.as_bytes(),
+        account_name.as_bytes(),
+    )?;
+    Some(match kind.institution_protocol_kind() {
+        Some(primitives::account_derive::InstitutionProtocolAccountKind::Main) => "main",
+        Some(primitives::account_derive::InstitutionProtocolAccountKind::Fee) => "fee",
+        Some(primitives::account_derive::InstitutionProtocolAccountKind::Stake) => "stake",
+        Some(primitives::account_derive::InstitutionProtocolAccountKind::SafetyFund) => {
+            "safety_fund"
+        }
+        Some(primitives::account_derive::InstitutionProtocolAccountKind::He) => "he",
+        None => "named",
+    })
 }
 
 pub fn can_delete_account(account: &InstitutionAccount) -> bool {
-    !is_default_account_name(&account.account_name)
-        && matches!(
-            account.chain_status,
-            MultisigChainStatus::NotOnChain | MultisigChainStatus::RevokedOnChain
-        )
+    !is_protocol_account_name(&account.account_name)
 }
 
-pub fn default_account_names_for_codes(institution_code: &str) -> &'static [&'static str] {
-    match institution_code {
-        "NRC" => NATIONAL_RESERVE_DEFAULT_ACCOUNT_NAMES,
-        "PRB" => PROVINCE_RESERVE_BANK_DEFAULT_ACCOUNT_NAMES,
-        _ => COMMON_DEFAULT_ACCOUNT_NAMES,
-    }
+pub fn required_protocol_account_names(
+    institution_code: &str,
+    cid_number: &str,
+) -> Result<Vec<&'static str>, ServiceError> {
+    let code = code::institution_code_from_str(institution_code)
+        .ok_or(ServiceError::BadInput("institution_code is invalid"))?;
+    let kinds = primitives::institution_constraints::required_protocol_account_kinds(
+        code,
+        cid_number.as_bytes(),
+    )
+    .ok_or(ServiceError::BadInput(
+        "institution_code and cid_number do not match",
+    ))?;
+    Ok(kinds
+        .iter()
+        .map(|kind| {
+            core::str::from_utf8(
+                primitives::account_derive::institution_protocol_account_name(*kind),
+            )
+            .expect("protocol account name constants are UTF-8")
+        })
+        .collect())
 }
 
-pub fn default_account_names_for_institution(inst: &Institution) -> &'static [&'static str] {
-    default_account_names_for_codes(inst.institution_code.as_str())
+pub fn required_protocol_account_names_for_institution(
+    inst: &Institution,
+) -> Result<Vec<&'static str>, ServiceError> {
+    required_protocol_account_names(inst.institution_code.as_str(), inst.cid_number.as_str())
 }
 
 /// 机构 / 账户 service 层错误。
@@ -353,37 +363,22 @@ pub fn build_default_accounts_for_names(
             cid_number: cid_number.to_string(),
             account_name: (*name).to_string(),
             account: derive_account(cid_number, name),
-            chain_status: MultisigChainStatus::NotOnChain,
-            chain_synced_at: None,
-            chain_tx_hash: None,
-            chain_block_number: None,
             created_by: actor.to_string(),
             created_at: now,
         })
         .collect()
 }
 
-pub fn build_default_accounts_for_codes(
-    cid_number: &str,
-    actor: &str,
-    institution_code: &str,
-) -> Vec<InstitutionAccount> {
-    build_default_accounts_for_names(
-        cid_number,
-        actor,
-        default_account_names_for_codes(institution_code),
-    )
-}
-
-pub fn build_default_accounts_for_institution(
+pub fn build_required_protocol_accounts_for_institution(
     inst: &Institution,
     actor: &str,
-) -> Vec<InstitutionAccount> {
-    build_default_accounts_for_names(
+) -> Result<Vec<InstitutionAccount>, ServiceError> {
+    let names = required_protocol_account_names_for_institution(inst)?;
+    Ok(build_default_accounts_for_names(
         inst.cid_number.as_str(),
         actor,
-        default_account_names_for_institution(inst),
-    )
+        names.as_slice(),
+    ))
 }
 
 #[cfg(test)]

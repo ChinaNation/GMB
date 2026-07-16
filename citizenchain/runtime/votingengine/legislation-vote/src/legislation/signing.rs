@@ -16,11 +16,10 @@ use crate::*;
 impl<T: Config> Pallet<T> {
     /// 实时查机构法定代表人(机构首脑;ADR-027 签署人)。
     pub(crate) fn legal_representative_of(
-        body: &(InstitutionCode, T::AccountId),
+        cid_number: &votingengine::types::CidNumber,
     ) -> Option<T::AccountId> {
         <T as votingengine::Config>::InternalAdminProvider::legal_representative(
-            body.0,
-            body.1.clone(),
+            cid_number.as_slice(),
         )
     }
 
@@ -60,7 +59,7 @@ impl<T: Config> Pallet<T> {
     /// 三人会签合法身份(院长 + 众议长 + 参议长 = 立法院/众议会/参议会三机构法定代表人)。
     pub(crate) fn override_signers_for_proposal(
         proposal_id: u64,
-        meta: &pallet::LegislationMeta<T>,
+        meta: &pallet::LegislationMeta,
     ) -> sp_runtime::sp_std::vec::Vec<T::AccountId> {
         let mut out = sp_runtime::sp_std::vec::Vec::new();
         if let Some(leg) = meta.legislature.as_ref() {

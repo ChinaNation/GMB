@@ -19,11 +19,11 @@ type Props = {
   onBack: () => void;
   onOpenAdminList?: (cidNumber: string, orgType: number) => void;
   onSelectProposal?: (proposalId: number, adminWallets: AdminWalletMatch[], cidNumber: string) => void;
-  onCreateProposal?: (cidNumber: string, orgType: number, cidFullName: string, mainAccount: string, adminWallets: AdminWalletMatch[]) => void;
+  onCreateProposal?: (cidNumber: string, orgType: number, cidFullName: string, institutionAccount: string, adminWallets: AdminWalletMatch[]) => void;
   onCreateProtocolUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
   onCreateDeveloperUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
-  onCreateSafetyFund?: (adminWallets: AdminWalletMatch[]) => void;
-  onCreateSweep?: (cidNumber: string, cidFullName: string, adminWallets: AdminWalletMatch[]) => void;
+  onCreateSafetyFund?: (cidNumber: string, institutionAccount: string, adminWallets: AdminWalletMatch[]) => void;
+  onCreateSweep?: (cidNumber: string, institutionAccount: string, cidFullName: string, adminWallets: AdminWalletMatch[]) => void;
   /** 隐藏返回按钮（用于直接作为 Tab 内容显示时）。 */
   hideBackButton?: boolean;
 };
@@ -143,6 +143,7 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
   if (!detail) return null;
 
   const activatedCount = activatedAdmins.length;
+  const feeAccount = detail.feeAccount ?? detail.cbFeeAccount ?? detail.nrcFeeAccount;
 
   return (
     <div className="governance-section">
@@ -267,15 +268,15 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
           {(detail.orgType === 0 || detail.orgType === 2) && (
             <button
               className="proposal-type-button"
-              disabled={!isAdmin}
-              onClick={() => isAdmin && onCreateSweep?.(cidNumber, detail.cidFullName, adminWallets)}
+              disabled={!isAdmin || !feeAccount}
+              onClick={() => isAdmin && feeAccount && onCreateSweep?.(cidNumber, feeAccount, detail.cidFullName, adminWallets)}
             >手续费划转</button>
           )}
           {detail.orgType === 0 && (
             <button
               className="proposal-type-button"
-              disabled={!isAdmin}
-              onClick={() => isAdmin && onCreateSafetyFund?.(adminWallets)}
+              disabled={!isAdmin || !detail.safetyFundAccount}
+              onClick={() => isAdmin && detail.safetyFundAccount && onCreateSafetyFund?.(cidNumber, detail.safetyFundAccount, adminWallets)}
             >安全基金转账</button>
           )}
           {(detail.orgType === 0 || detail.orgType === 1) && (

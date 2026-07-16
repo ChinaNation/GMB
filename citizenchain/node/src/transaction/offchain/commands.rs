@@ -80,7 +80,7 @@ pub async fn test_clearing_bank_endpoint_connectivity(
 pub async fn build_register_clearing_bank_request(
     app: AppHandle,
     pubkey_hex: String,
-    cid_number: String,
+    actor_cid_number: String,
     peer_id: String,
     rpc_domain: String,
     rpc_port: u16,
@@ -92,7 +92,7 @@ pub async fn build_register_clearing_bank_request(
     tauri::async_runtime::spawn_blocking(move || {
         super::signing::build_register_sign_request(
             &pubkey_hex,
-            &cid_number,
+            &actor_cid_number,
             &peer_id,
             &rpc_domain,
             rpc_port,
@@ -109,7 +109,7 @@ pub async fn submit_register_clearing_bank(
     request_id: String,
     expected_pubkey_hex: String,
     expected_payload_hash: String,
-    cid_number: String,
+    actor_cid_number: String,
     peer_id: String,
     rpc_domain: String,
     rpc_port: u16,
@@ -123,7 +123,12 @@ pub async fn submit_register_clearing_bank(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let call_data =
-            super::signing::build_register_call_data(&cid_number, &peer_id, &rpc_domain, rpc_port)?;
+            super::signing::build_register_call_data(
+                &actor_cid_number,
+                &peer_id,
+                &rpc_domain,
+                rpc_port,
+            )?;
         gov_signing::verify_and_submit(
             &request_id,
             &expected_pubkey_hex,
@@ -142,7 +147,7 @@ pub async fn submit_register_clearing_bank(
 pub async fn build_update_clearing_bank_endpoint_request(
     app: AppHandle,
     pubkey_hex: String,
-    cid_number: String,
+    actor_cid_number: String,
     new_domain: String,
     new_port: u16,
 ) -> Result<gov_signing::VoteSignRequestResult, String> {
@@ -153,7 +158,7 @@ pub async fn build_update_clearing_bank_endpoint_request(
     tauri::async_runtime::spawn_blocking(move || {
         super::signing::build_update_endpoint_sign_request(
             &pubkey_hex,
-            &cid_number,
+            &actor_cid_number,
             &new_domain,
             new_port,
         )
@@ -169,7 +174,7 @@ pub async fn submit_update_clearing_bank_endpoint(
     request_id: String,
     expected_pubkey_hex: String,
     expected_payload_hash: String,
-    cid_number: String,
+    actor_cid_number: String,
     new_domain: String,
     new_port: u16,
     sign_nonce: u32,
@@ -182,7 +187,11 @@ pub async fn submit_update_clearing_bank_endpoint(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let call_data =
-            super::signing::build_update_endpoint_call_data(&cid_number, &new_domain, new_port)?;
+            super::signing::build_update_endpoint_call_data(
+                &actor_cid_number,
+                &new_domain,
+                new_port,
+            )?;
         gov_signing::verify_and_submit(
             &request_id,
             &expected_pubkey_hex,
@@ -201,14 +210,14 @@ pub async fn submit_update_clearing_bank_endpoint(
 pub async fn build_unregister_clearing_bank_request(
     app: AppHandle,
     pubkey_hex: String,
-    cid_number: String,
+    actor_cid_number: String,
 ) -> Result<gov_signing::VoteSignRequestResult, String> {
     let status = home::current_status(&app)?;
     if !status.running {
         return Err("节点未运行".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        super::signing::build_unregister_sign_request(&pubkey_hex, &cid_number)
+        super::signing::build_unregister_sign_request(&pubkey_hex, &actor_cid_number)
     })
     .await
     .map_err(|e| format!("build_unregister_clearing_bank task failed:{e}"))?
@@ -221,7 +230,7 @@ pub async fn submit_unregister_clearing_bank(
     request_id: String,
     expected_pubkey_hex: String,
     expected_payload_hash: String,
-    cid_number: String,
+    actor_cid_number: String,
     sign_nonce: u32,
     sign_block_number: u64,
     response_json: String,
@@ -231,7 +240,7 @@ pub async fn submit_unregister_clearing_bank(
         return Err("节点未运行".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let call_data = super::signing::build_unregister_call_data(&cid_number)?;
+        let call_data = super::signing::build_unregister_call_data(&actor_cid_number)?;
         gov_signing::verify_and_submit(
             &request_id,
             &expected_pubkey_hex,

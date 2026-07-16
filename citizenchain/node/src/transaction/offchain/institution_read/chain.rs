@@ -2,15 +2,16 @@
 //
 //
 // - 本文件只读链上机构身份事实,供清算行流程展示:机构最小集、各账户余额、管理员集合、动态阈值。
-// - 机构最小集真源 `PublicManage/PrivateManage::Institutions[cid_number]` 只存身份字段(名称/机构码/创建块/状态);
-//   主账户/费用账户由 `(cid_number, 保留名)` 经 GMB 协议确定性派生,不在链上重复存。
-// - 管理员集合真源在各管理员 pallet 的 `AdminAccounts[main_account]`,动态阈值真源在
-//   `InternalVote::ActiveDynamicThresholds[(institution_code, main_account)]`。
+// - 机构最小集真源 `PublicManage/PrivateManage::Institutions[cid_number]` 只存身份字段;
+// - 账户真源为 `InstitutionAccounts[(cid_number, account_name)]`;
+// - 管理员与阈值分别按 CID 读取 `AdminAccounts`、`ActiveInstitutionThresholds`。
 // - 清算行节点声明 `OffchainTransaction::ClearingBankNodes` 走 `offchain::endpoint`,
 //   与机构身份只读解耦。
 
 use codec::{Decode, Encode};
-use primitives::account_derive::AccountKind;
+use primitives::account_derive::{
+    institution_kind_by_name, AccountKind, InstitutionProtocolAccountKind,
+};
 use primitives::cid::code::InstitutionCode;
 use primitives::core_const::SS58_FORMAT;
 use serde_json::Value;
@@ -39,21 +40,21 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     )
 }
 
-/// SCALE 编码 cid_number 的 `BoundedVec<u8, ConstU32<96>>` 形式(用作 storage key data)。
+/// SCALE 编码 cid_number 的 `BoundedVec<u8, ConstU32<32>>` 形式(用作 storage key data)。
 ///
 /// 字段编码:`Compact<u32>(len)` + `bytes`。
 fn encode_cid_key_data(cid_number: &str) -> Result<Vec<u8>, String> {
     let raw = cid_number.as_bytes();
-    if raw.is_empty() || raw.len() > 96 {
+    if raw.is_empty() || raw.len() > 32 {
         return Err(format!(
-            "cid_number 长度需在 1..=96 字节,实际:{}",
+            "cid_number 长度需在 1..=32 字节,实际:{}",
             raw.len()
         ));
     }
-    let bv: BoundedVec<u8, ConstU32<96>> = raw
+    let bv: BoundedVec<u8, ConstU32<32>> = raw
         .to_vec()
         .try_into()
-        .map_err(|_| "cid_number 超出链上 BoundedVec<u8, 96>".to_string())?;
+        .map_err(|_| "cid_number 超出链上 BoundedVec<u8, 32>".to_string())?;
     Ok(bv.encode())
 }
 
@@ -66,7 +67,7 @@ fn encode_cid_key_data(cid_number: &str) -> Result<Vec<u8>, String> {
 /// runtime 实例化的具体类型:
 /// - `BlockNumber = u32`(citizenchain runtime)
 /// - `AccountName = BoundedVec<u8, ConstU32<128>>`
-/// - `CidNumber = BoundedVec<u8, ConstU32<96>>`
+/// - `CidNumber = BoundedVec<u8, ConstU32<32>>`
 /// - `AccountId = AccountId32`
 #[derive(Decode)]
 struct OnChainInstitution {
@@ -78,30 +79,11 @@ struct OnChainInstitution {
     #[allow(dead_code)]
     legal_representative_name: Option<BoundedVec<u8, ConstU32<128>>>,
     #[allow(dead_code)]
-    legal_representative_cid_number: Option<BoundedVec<u8, ConstU32<96>>>,
+    legal_representative_cid_number: Option<BoundedVec<u8, ConstU32<32>>>,
     #[allow(dead_code)]
     legal_representative_account: Option<AccountId32>,
     institution_code: InstitutionCode,
     created_at: u32,
-    status: OnChainInstitutionStatus,
-}
-
-/// 与 `InstitutionLifecycleStatus` 对齐。
-#[derive(Decode, Clone, Copy, PartialEq, Eq, Debug)]
-enum OnChainInstitutionStatus {
-    Pending,
-    Active,
-    Closed,
-}
-
-impl OnChainInstitutionStatus {
-    fn label(self) -> &'static str {
-        match self {
-            Self::Pending => "Pending",
-            Self::Active => "Active",
-            Self::Closed => "Closed",
-        }
-    }
 }
 
 /// 链端 `InstitutionAccountInfo<AccountId, Balance, BlockNumber>` 镜像。
@@ -110,9 +92,6 @@ struct OnChainInstitutionAccount {
     address: AccountId32,
     #[allow(dead_code)]
     initial_balance: u128,
-    #[allow(dead_code)]
-    status: OnChainInstitutionStatus,
-    is_default: bool,
     #[allow(dead_code)]
     created_at: u32,
 }
@@ -195,19 +174,16 @@ fn fetch_account_free_balance(account: &AccountId32, finalized_hash: &str) -> Re
 
 /// 读取机构管理员钱包集合(岗位/任职需另查 entity)及人数。
 ///
-/// 真源 = 机构码对应管理员 pallet 的 `AdminAccounts[main_account]`,值为钱包账户列表;
+/// 真源 = 机构码对应管理员 pallet 的 `AdminAccounts[cid_number]`,值为钱包账户列表;
 /// 机构码不匹配视为数据不一致,降级为空集合。
 fn fetch_admin_set(
-    main_account: &AccountId32,
     institution_code: &InstitutionCode,
     cid_number: &str,
     finalized_hash: &str,
 ) -> Result<(Vec<InstitutionAdminDisplay>, u32), String> {
-    let main_bytes: [u8; 32] = (*main_account).clone().into();
     let Some(state) = admins_storage::fetch_admin_account_for_code_at(
-        &main_bytes,
+        cid_number,
         *institution_code,
-        Some(cid_number.to_string()),
         finalized_hash,
     )?
     else {
@@ -225,14 +201,11 @@ fn fetch_admin_set(
 /// 真源 = `InternalVote::ActiveDynamicThresholds[(institution_code, main_account)]`(DoubleMap,
 /// 两层均 Blake2_128Concat);未注册返回 0。
 fn fetch_active_threshold(
-    main_account: &AccountId32,
-    institution_code: &InstitutionCode,
+    cid_number: &str,
     finalized_hash: &str,
 ) -> Result<u32, String> {
-    let main_bytes: [u8; 32] = (*main_account).clone().into();
-    let key1 = institution_code.encode();
-    let key2 = main_bytes.encode();
-    let key = storage_keys::double_map_key("InternalVote", "ActiveDynamicThresholds", &key1, &key2);
+    let cid_key = encode_cid_key_data(cid_number)?;
+    let key = storage_keys::map_key("InternalVote", "ActiveInstitutionThresholds", &cid_key);
     let result = rpc_post(
         "state_getStorage",
         Value::Array(vec![
@@ -245,9 +218,9 @@ fn fetch_active_threshold(
         Value::String(hex_data) => {
             let clean = hex_data.strip_prefix("0x").unwrap_or(&hex_data);
             let bytes = hex::decode(clean)
-                .map_err(|e| format!("ActiveDynamicThresholds hex 解码失败:{e}"))?;
+                .map_err(|e| format!("ActiveInstitutionThresholds hex 解码失败:{e}"))?;
             u32::decode(&mut &bytes[..])
-                .map_err(|e| format!("ActiveDynamicThresholds SCALE 解码失败:{e}"))
+                .map_err(|e| format!("ActiveInstitutionThresholds SCALE 解码失败:{e}"))
         }
         _ => Err("state_getStorage 返回格式无效".to_string()),
     }
@@ -309,7 +282,7 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
     let accounts = fetch_institution_accounts(cid_number, manage_pallet, &finalized_hash)?;
     let account_count = accounts.len() as u32;
 
-    // 主账户 / 费用账户 / 其它账户 分类(用 ss58 字符串比对,避免原始字节做 Eq)。
+    // 主账户 / 费用账户 / 其它账户分类；协议账户缺失属于链状态错误，不做派生回落。
     let mut main_account: Option<AccountWithBalance> = None;
     let mut fee_account: Option<AccountWithBalance> = None;
     let mut other_accounts: Vec<AccountWithBalance> = Vec::new();
@@ -322,37 +295,15 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
             other_accounts.push(acc);
         }
     }
-    let main_account = main_account.unwrap_or_else(|| {
-        // 容错:如果 InstitutionAccounts 没显式列主账户(理论上不应该),
-        // 就用派生地址拉余额拼一条最小记录。
-        let bal = fetch_account_free_balance(&main_account_id, &finalized_hash).unwrap_or(0);
-        AccountWithBalance {
-            account_name: "主账户".to_string(),
-            address_ss58: main_addr_ss58.clone(),
-            balance_min_units: bal.to_string(),
-            balance_text: format_yuan(bal),
-            is_default: true,
-        }
-    });
-    let fee_account = fee_account.unwrap_or_else(|| {
-        let bal = fetch_account_free_balance(&fee_account_id, &finalized_hash).unwrap_or(0);
-        AccountWithBalance {
-            account_name: "费用账户".to_string(),
-            address_ss58: fee_addr_ss58.clone(),
-            balance_min_units: bal.to_string(),
-            balance_text: format_yuan(bal),
-            is_default: true,
-        }
-    });
+    let main_account = main_account.ok_or_else(|| "机构缺少唯一主账户".to_string())?;
+    let fee_account = fee_account.ok_or_else(|| "机构缺少唯一费用账户".to_string())?;
 
     let (admins, admins_len) = fetch_admin_set(
-        &main_account_id,
         &inst.institution_code,
         cid_number,
         &finalized_hash,
     )?;
-    let threshold =
-        fetch_active_threshold(&main_account_id, &inst.institution_code, &finalized_hash)?;
+    let threshold = fetch_active_threshold(cid_number, &finalized_hash)?;
 
     let cid_full_name = String::from_utf8(inst.cid_full_name.into_inner())
         .map_err(|_| "cid_full_name 非 UTF-8".to_string())?;
@@ -366,7 +317,6 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
     Ok(Some(InstitutionDetail {
         cid_number: cid_number.to_string(),
         cid_full_name,
-        admin_account_hex: hex::encode(main_account_hex),
         institution_code: inst.institution_code,
         main_account,
         fee_account,
@@ -374,7 +324,6 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
         admins_len,
         threshold,
         admins,
-        status: inst.status.label().to_string(),
         created_at: inst.created_at as u64,
         account_count,
     }))
@@ -471,12 +420,24 @@ fn fetch_institution_accounts(
         let acc_name = decode_account_name_from_key(&key, &prefix_hex).unwrap_or_default();
         let acc_addr_bytes: [u8; 32] = acc.address.clone().into();
         let bal = fetch_account_free_balance(&acc.address, finalized_hash).unwrap_or(0);
+        let account_kind = institution_kind_by_name(cid_number.as_bytes(), acc_name.as_bytes())
+            .ok_or_else(|| "机构账户名为空".to_string())?;
+        let account_kind_label = match account_kind.institution_protocol_kind() {
+            Some(InstitutionProtocolAccountKind::Main) => "main",
+            Some(InstitutionProtocolAccountKind::Fee) => "fee",
+            Some(InstitutionProtocolAccountKind::Stake) => "stake",
+            Some(InstitutionProtocolAccountKind::SafetyFund) => "safety_fund",
+            Some(InstitutionProtocolAccountKind::He) => "he",
+            None => "named",
+        };
+        let can_close = account_kind.is_closable_institution_account();
         out.push(AccountWithBalance {
             account_name: acc_name,
             address_ss58: pubkey_to_ss58(&acc_addr_bytes).unwrap_or_default(),
             balance_min_units: bal.to_string(),
             balance_text: format_yuan(bal),
-            is_default: acc.is_default,
+            account_kind: account_kind_label.to_string(),
+            can_close,
         });
     }
 

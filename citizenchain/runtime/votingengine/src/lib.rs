@@ -194,7 +194,7 @@ pub mod pallet {
     ///
     /// 布局:提案主键纯单调 u64 + ProposalDisplayId 展示号 +
     /// ProposalsByCode/Institution/Owner/Year 4 张反向索引,创世直写,无历史回填。
-    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
@@ -259,8 +259,9 @@ pub mod pallet {
     pub type PendingProposalCleanups<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, PendingCleanupStage, OptionQuery>;
 
-    /// 提案管理员快照：提案创建时锁定各机构管理员名单，投票期间不随链上名单变化。
-    /// 内部提案只存一条（提案所属机构），联合提案存所有参与机构（约105条）。
+    /// 提案管理员快照：提案创建时锁定各主体管理员名单，投票期间不随链上名单变化。
+    /// 机构主体以 CID 为 key；个人多签主体才以个人多签账户为 key。
+    /// 内部提案只存一条，联合提案存所有参与机构（约105条）。
     /// 投票时查快照判定资格，保证管理员更换不影响已有提案的投票过程。
     #[pallet::storage]
     pub type AdminSnapshot<T: Config> = StorageDoubleMap<
@@ -268,7 +269,7 @@ pub mod pallet {
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        T::AccountId,
+        ProposalSubject<T::AccountId>,
         BoundedVec<T::AccountId, T::MaxAdminsPerInstitution>,
         OptionQuery,
     >;

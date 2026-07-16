@@ -440,7 +440,8 @@ pub mod pallet {
                 Error::<T>::ProposalActionNotFound
             );
             ensure!(
-                proposal.account_context == Some(account),
+                proposal.execution_account == Some(account)
+                    && proposal.actor_cid_number.is_none(),
                 Error::<T>::ProposalActionNotFound
             );
             ensure!(
@@ -644,10 +645,8 @@ impl<T: pallet::Config> traits::PersonalMultisigQuery<T::AccountId> for pallet::
         let admins = pallet::Pallet::<T>::active_account_admins(institution_code, account.clone())?;
         let admins_len =
             pallet::Pallet::<T>::active_account_admins_len(institution_code, account.clone())?;
-        let threshold = <T as Config>::InternalVoteEngine::active_dynamic_threshold(
-            institution_code,
-            account.clone(),
-        )?;
+        let threshold =
+            <T as Config>::InternalVoteEngine::active_personal_threshold(account.clone())?;
         Some(primitives::multisig::MultisigConfigSnapshot {
             admins,
             admins_len,

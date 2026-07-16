@@ -10986,6 +10986,7 @@ dependencies = [
 name = "resolution-destroy"
 version = "1.0.0"
 dependencies = [
+ "entity-primitives",
  "frame-benchmarking",
  "frame-support",
  "frame-system",

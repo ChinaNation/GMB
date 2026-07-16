@@ -2,7 +2,7 @@
 //!
 //! 管理员链上身份只有钱包账户；岗位、任期和来源归 entity 任职真源。
 //! 本模型只承接链下私密档案(部门/联系方式/证件照/passkey 绑定等)
-//! 与链投影字段,落库到 `institution_admins` 省级分区表。
+//! 落库到 `institution_admins` 省级分区表。管理员资格只从链上 CID-key `admins` 读取。
 //!
 //! 复合 key = (province_code, cid_number, admin_account):
 //! - cid_number:管理员所属机构身份 ID;
@@ -66,15 +66,6 @@ pub struct InstitutionAdmin {
     /// 创建人 pubkey。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_by: Option<String>,
-    /// 链投影状态。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub chain_status: Option<String>,
-    /// 链上交易哈希。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub chain_tx_hash: Option<String>,
-    /// 链上区块号。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub chain_block_number: Option<u64>,
     /// 操作日志 ID(链下操作审计追溯)。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub operation_log_id: Option<String>,

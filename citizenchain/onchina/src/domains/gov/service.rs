@@ -17,11 +17,6 @@ use crate::Db;
 
 const PROJECTION_KEY_PUBLIC_GOV: &str = "public-gov";
 const GOV_SOURCE_CHAIN: &str = "CHAIN";
-const CHAIN_STATUS_ACTIVE: &str = "ACTIVE_ON_CHAIN";
-const CHAIN_STATUS_REVOKED: &str = "REVOKED_ON_CHAIN";
-const SUBJECT_STATUS_ACTIVE: &str = "ACTIVE";
-const SUBJECT_STATUS_REVOKED: &str = "REVOKED";
-const INSTITUTION_STATUS_ACTIVE: u8 = 1;
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub(crate) struct GovChainProjectionReport {
@@ -51,8 +46,6 @@ struct ChainInstitutionProjection {
     cid_number: String,
     cid_full_name: String,
     cid_short_name: String,
-    subject_status: &'static str,
-    chain_status: &'static str,
     category: &'static str,
     p1: String,
     province_code: String,
@@ -63,7 +56,6 @@ struct ChainInstitutionProjection {
     legal_representative_name: Option<String>,
     legal_representative_cid_number: Option<String>,
     legal_representative_account: Option<String>,
-    chain_block_number: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -73,8 +65,6 @@ struct ChainAccountProjection {
     city_code: Option<String>,
     account_name: String,
     account: String,
-    chain_status: &'static str,
-    _chain_block_number: i64,
 }
 
 /// 当前链上投影版本。HTTP 列表接口只把它作为缓存游标回传,不再表达本地生成目录版本。
@@ -293,7 +283,6 @@ fn parse_chain_institution(
         .get(2..5)
         .ok_or_else(|| format!("chain institution {cid_number} missing city code"))?
         .to_string();
-    let status_active = info.status == INSTITUTION_STATUS_ACTIVE;
     let town_code = String::from_utf8(info.town_code)
         .map_err(|_| format!("chain institution {cid_number} town_code must be utf-8"))?;
     let is_town_institution = matches!(
@@ -338,16 +327,6 @@ fn parse_chain_institution(
             .map_err(|_| format!("chain institution {cid_number} cid_full_name must be utf-8"))?,
         cid_short_name: String::from_utf8(info.cid_short_name)
             .map_err(|_| format!("chain institution {cid_number} cid_short_name must be utf-8"))?,
-        subject_status: if status_active {
-            SUBJECT_STATUS_ACTIVE
-        } else {
-            SUBJECT_STATUS_REVOKED
-        },
-        chain_status: if status_active {
-            CHAIN_STATUS_ACTIVE
-        } else {
-            CHAIN_STATUS_REVOKED
-        },
         category: "GOV_INSTITUTION",
         p1: if parts.profit { "1" } else { "0" }.to_string(),
         province_code,
@@ -358,7 +337,6 @@ fn parse_chain_institution(
         legal_representative_name,
         legal_representative_cid_number,
         legal_representative_account,
-        chain_block_number: i64::from(info.created_at),
         cid_number,
     })
 }
@@ -382,12 +360,6 @@ fn parse_chain_account(
         city_code: city_code.clone(),
         account_name,
         account: hex::encode(item.account),
-        chain_status: if item.status == INSTITUTION_STATUS_ACTIVE {
-            CHAIN_STATUS_ACTIVE
-        } else {
-            CHAIN_STATUS_REVOKED
-        },
-        _chain_block_number: i64::from(item.created_at),
     })
 }
 
@@ -623,10 +595,6 @@ fn upsert_institution_chunk(
         .iter()
         .map(|item| item.cid_short_name.clone())
         .collect::<Vec<_>>();
-    let subject_statuses = chunk
-        .iter()
-        .map(|item| item.subject_status.to_string())
-        .collect::<Vec<_>>();
     let categories = chunk
         .iter()
         .map(|item| item.category.to_string())
@@ -652,15 +620,6 @@ fn upsert_institution_chunk(
         .iter()
         .map(|item| item.legal_representative_account.clone())
         .collect::<Vec<_>>();
-    let chain_statuses = chunk
-        .iter()
-        .map(|item| item.chain_status.to_string())
-        .collect::<Vec<_>>();
-    let chain_blocks = chunk
-        .iter()
-        .map(|item| item.chain_block_number)
-        .collect::<Vec<_>>();
-
     tx.execute(
         "INSERT INTO ids (cid_number, kind, province_code, city_code)
          SELECT cid_number, 'PUBLIC', province_code, city_code
@@ -679,40 +638,37 @@ fn upsert_institution_chunk(
         .execute(
             "INSERT INTO subjects (
                 cid_number, kind, cid_full_name, cid_short_name,
-                status, category, p1,
+                category, p1,
                 province_code, city_code, town_code, institution_code,
                 education_type, private_type, partnership_kind, has_legal_personality,
                 parent_cid_number, legal_representative_name,
                 legal_representative_cid_number, legal_representative_account,
                 created_by, updated_by, created_at, updated_at,
-                institution_source_type, chain_status, chain_block_number
+                institution_source_type
              )
              SELECT
                 cid_number, 'PUBLIC', cid_full_name, cid_short_name,
-                subject_status, category, p1,
+                category, p1,
                 province_code, COALESCE(city_code, ''), COALESCE(town_code, ''), institution_code,
                 education_type, NULL::text, NULL::text, NULL::boolean,
                 NULL::text, legal_representative_name,
                 legal_representative_cid_number, legal_representative_account,
                 'CHAIN', 'CHAIN', now(), now(),
-                'CHAIN', chain_status, chain_block_number
+                'CHAIN'
              FROM unnest(
                 $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
                 $6::text[], $7::text[], $8::text[], $9::text[], $10::text[],
-                $11::text[], $12::text[], $13::text[], $14::text[],
-                $15::text[], $16::bigint[]
+                $11::text[], $12::text[], $13::text[]
              ) AS u(
-                cid_number, cid_full_name, cid_short_name, subject_status,
-                category, p1, institution_code, province_code, city_code, town_code,
+                cid_number, cid_full_name, cid_short_name, category, p1,
+                institution_code, province_code, city_code, town_code,
                 education_type, legal_representative_name,
-                legal_representative_cid_number, legal_representative_account,
-                chain_status, chain_block_number
+                legal_representative_cid_number, legal_representative_account
              )
              ON CONFLICT (province_code, cid_number) DO UPDATE SET
                 kind = EXCLUDED.kind,
                 cid_full_name = EXCLUDED.cid_full_name,
                 cid_short_name = EXCLUDED.cid_short_name,
-                status = EXCLUDED.status,
                 category = EXCLUDED.category,
                 p1 = EXCLUDED.p1,
                 city_code = EXCLUDED.city_code,
@@ -728,13 +684,10 @@ fn upsert_institution_chunk(
                 legal_representative_account = EXCLUDED.legal_representative_account,
                 updated_by = 'CHAIN',
                 updated_at = now(),
-                institution_source_type = EXCLUDED.institution_source_type,
-                chain_status = EXCLUDED.chain_status,
-                chain_block_number = EXCLUDED.chain_block_number
+                institution_source_type = EXCLUDED.institution_source_type
              WHERE subjects.kind IS DISTINCT FROM EXCLUDED.kind
                 OR subjects.cid_full_name IS DISTINCT FROM EXCLUDED.cid_full_name
                 OR subjects.cid_short_name IS DISTINCT FROM EXCLUDED.cid_short_name
-                OR subjects.status IS DISTINCT FROM EXCLUDED.status
                 OR subjects.category IS DISTINCT FROM EXCLUDED.category
                 OR subjects.p1 IS DISTINCT FROM EXCLUDED.p1
                 OR subjects.city_code IS DISTINCT FROM EXCLUDED.city_code
@@ -744,14 +697,11 @@ fn upsert_institution_chunk(
                 OR subjects.legal_representative_name IS DISTINCT FROM EXCLUDED.legal_representative_name
                 OR subjects.legal_representative_cid_number IS DISTINCT FROM EXCLUDED.legal_representative_cid_number
                 OR subjects.legal_representative_account IS DISTINCT FROM EXCLUDED.legal_representative_account
-                OR subjects.institution_source_type IS DISTINCT FROM EXCLUDED.institution_source_type
-                OR subjects.chain_status IS DISTINCT FROM EXCLUDED.chain_status
-                OR subjects.chain_block_number IS DISTINCT FROM EXCLUDED.chain_block_number",
+                OR subjects.institution_source_type IS DISTINCT FROM EXCLUDED.institution_source_type",
             &[
                 &cids,
                 &full_names,
                 &short_names,
-                &subject_statuses,
                 &categories,
                 &p1_values,
                 &institution_codes,
@@ -762,8 +712,6 @@ fn upsert_institution_chunk(
                 &legal_representative_names,
                 &legal_representative_cid_numbers,
                 &legal_representative_accounts,
-                &chain_statuses,
-                &chain_blocks,
             ],
         )
         .map_err(|e| format!("upsert chain gov subjects failed: {}", postgres_error_text(&e)))?;
@@ -834,32 +782,19 @@ fn upsert_account_chunk(
         .iter()
         .map(|item| Some(item.account.clone()))
         .collect::<Vec<Option<String>>>();
-    let chain_statuses = chunk
-        .iter()
-        .map(|item| item.chain_status.to_string())
-        .collect::<Vec<_>>();
     tx.execute(
         "INSERT INTO accounts (
-            cid_number, province_code, city_code, account_name, account, chain_status, created_at
+            cid_number, province_code, city_code, account_name, account, created_at
          )
-         SELECT cid_number, province_code, city_code, account_name, account, chain_status, now()
-         FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[])
-              AS u(cid_number, province_code, city_code, account_name, account, chain_status)
+         SELECT cid_number, province_code, city_code, account_name, account, now()
+         FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[])
+              AS u(cid_number, province_code, city_code, account_name, account)
          ON CONFLICT (province_code, cid_number, account_name) DO UPDATE SET
             city_code = EXCLUDED.city_code,
-            account = EXCLUDED.account,
-            chain_status = EXCLUDED.chain_status
+            account = EXCLUDED.account
          WHERE accounts.city_code IS DISTINCT FROM EXCLUDED.city_code
-            OR accounts.account IS DISTINCT FROM EXCLUDED.account
-            OR accounts.chain_status IS DISTINCT FROM EXCLUDED.chain_status",
-        &[
-            &cids,
-            &province_codes,
-            &city_codes,
-            &account_names,
-            &accounts,
-            &chain_statuses,
-        ],
+            OR accounts.account IS DISTINCT FROM EXCLUDED.account",
+        &[&cids, &province_codes, &city_codes, &account_names, &accounts],
     )
     .map_err(|e| {
         format!(

@@ -114,7 +114,6 @@ export const AddressManageView: React.FC<Props> = ({ auth }) => {
     try {
       const output = await prepareAddressChainCall(auth, {
         action: values.action as AddressChainAction,
-        registrar_account: values.registrar_account,
         catalog_version: values.catalog_version,
         catalog_hash: values.catalog_hash,
         province_code: values.province_code,
@@ -206,9 +205,6 @@ export const AddressManageView: React.FC<Props> = ({ auth }) => {
                 ]}
               />
             </Form.Item>
-            <Form.Item name="registrar_account" label="注册局主账户" rules={[{ required: true }]}>
-              <Input placeholder="0x..." />
-            </Form.Item>
             <Form.Item name="province_code" label="省码">
               <Input placeholder={scope.province_code || '省码'} disabled={!scopeReady} />
             </Form.Item>
@@ -265,4 +261,3 @@ export const AddressManageView: React.FC<Props> = ({ auth }) => {
     </Card>
   );
 };
-

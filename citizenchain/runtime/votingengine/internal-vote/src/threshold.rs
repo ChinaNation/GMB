@@ -40,67 +40,48 @@ impl<T: Config> Pallet<T> {
         Ok(())
     }
 
-    pub(crate) fn bound_and_validate_subject_cids(
-        institution_code: InstitutionCode,
-        subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
-    ) -> Result<ProposalSubjectCidNumbers, DispatchError> {
-        let bounded = <votingengine::Pallet<T>>::bound_subject_cid_numbers(subject_cid_numbers)?;
-        if is_personal_code(&institution_code) {
-            ensure!(
-                bounded.is_empty(),
-                votingengine::Error::<T>::InvalidInstitution
-            );
-        } else {
-            ensure!(
-                !bounded.is_empty(),
-                votingengine::Error::<T>::InvalidInstitution
-            );
-        }
-        Ok(bounded)
-    }
-
     pub(crate) fn snapshot_admins_len_or_missing(
         proposal_id: u64,
-        institution: T::AccountId,
+        subject: ProposalSubject<T::AccountId>,
     ) -> Result<u32, DispatchError> {
-        <votingengine::Pallet<T>>::snapshot_admins_len(proposal_id, institution)
+        <votingengine::Pallet<T>>::snapshot_admins_len(proposal_id, subject)
             .ok_or(votingengine::Error::<T>::MissingAdminSnapshot.into())
     }
 }
 
 impl<T: Config> Pallet<T> {
-    pub(crate) fn proposal_code_account(
+    pub(crate) fn proposal_personal_account(
         proposal_id: u64,
-    ) -> Result<(InstitutionCode, T::AccountId), DispatchError> {
+    ) -> Result<T::AccountId, DispatchError> {
         let proposal =
             Proposals::<T>::get(proposal_id).ok_or(votingengine::Error::<T>::ProposalNotFound)?;
-        let institution_code = proposal
-            .internal_code
-            .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
-        let account = proposal
-            .account_context
-            .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
-        Ok((institution_code, account))
+        ensure!(
+            proposal.internal_code == Some(votingengine::types::PMUL)
+                && proposal.actor_cid_number.is_none(),
+            votingengine::Error::<T>::InvalidInstitution
+        );
+        proposal
+            .execution_account
+            .ok_or(votingengine::Error::<T>::InvalidInstitution.into())
     }
 
     pub(crate) fn apply_executed_threshold_side_effect(proposal_id: u64) -> DispatchResult {
         match InternalProposalRoles::<T>::get(proposal_id) {
-            Some(InternalProposalRole::LifecycleCreate) => {
-                let (institution_code, account) = Self::proposal_code_account(proposal_id)?;
-                let threshold = PendingDynamicThresholds::<T>::take(proposal_id)
+            Some(InternalProposalRole::PersonalCreate) => {
+                let personal_account = Self::proposal_personal_account(proposal_id)?;
+                let threshold = PendingPersonalThresholds::<T>::take(proposal_id)
                     .ok_or(Error::<T>::MissingDynamicThreshold)?;
-                ActiveDynamicThresholds::<T>::insert(institution_code, account, threshold);
+                ActivePersonalThresholds::<T>::insert(personal_account, threshold);
             }
-            Some(InternalProposalRole::LifecycleClose) => {
-                let (institution_code, account) = Self::proposal_code_account(proposal_id)?;
-                ActiveDynamicThresholds::<T>::remove(institution_code, account);
+            Some(InternalProposalRole::PersonalClose) => {
+                let personal_account = Self::proposal_personal_account(proposal_id)?;
+                ActivePersonalThresholds::<T>::remove(personal_account);
             }
-            Some(InternalProposalRole::AdminChange) => {
-                if let Some(pending) = PendingAdminChangeThresholds::<T>::take(proposal_id) {
+            Some(InternalProposalRole::PersonalAdminChange) => {
+                if let Some(pending) = PendingPersonalAdminChangeThresholds::<T>::take(proposal_id) {
                     Self::ensure_dynamic_threshold(pending.new_admins_len, pending.new_threshold)?;
-                    ActiveDynamicThresholds::<T>::insert(
-                        pending.institution_code,
-                        pending.account,
+                    ActivePersonalThresholds::<T>::insert(
+                        pending.personal_account,
                         pending.new_threshold,
                     );
                 }
@@ -113,16 +94,16 @@ impl<T: Config> Pallet<T> {
     pub(crate) fn apply_terminal_threshold_cleanup(proposal_id: u64, status: u8) -> DispatchResult {
         match (InternalProposalRoles::<T>::get(proposal_id), status) {
             (
-                Some(InternalProposalRole::LifecycleCreate),
+                Some(InternalProposalRole::PersonalCreate),
                 STATUS_REJECTED | STATUS_EXECUTION_FAILED,
             ) => {
-                PendingDynamicThresholds::<T>::remove(proposal_id);
+                PendingPersonalThresholds::<T>::remove(proposal_id);
             }
             (
-                Some(InternalProposalRole::AdminChange),
+                Some(InternalProposalRole::PersonalAdminChange),
                 STATUS_REJECTED | STATUS_EXECUTION_FAILED,
             ) => {
-                PendingAdminChangeThresholds::<T>::remove(proposal_id);
+                PendingPersonalAdminChangeThresholds::<T>::remove(proposal_id);
             }
             (Some(_), STATUS_EXECUTED) | (None, _) => {}
             _ => {}

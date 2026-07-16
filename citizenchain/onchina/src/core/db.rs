@@ -97,9 +97,7 @@ impl Db {
 
     fn init_current_schema(conn: &mut postgres::Client) -> Result<(), String> {
         conn.batch_execute(
-            "-- 机构/账户「注册局域注销态」+ 已签发注销凭证(区别于链投影 chain_status）。
-             -- 注册局管理员发起注销(冷签特殊档）后写 ISSUED;机构管理员持凭证上链 propose_close,
-             -- indexer 收到链上关闭后置 ONCHAIN_CLOSED(投影子项）。见 ADR-023 §6.3。
+            "-- 机构自定义命名账户的关闭凭证；协议账户永久不可关闭。
              -- 链交易冷签会话(ADR-031 D6/D7):prepare 落库,submit 单次消费;
              -- 占号先行 = 链上进块后才建档,会话携带校验哈希防 runtime 漂移。
              CREATE TABLE IF NOT EXISTS chain_sign_sessions (
@@ -121,19 +119,25 @@ impl Db {
                 id               BIGSERIAL PRIMARY KEY,
                 cid_number       TEXT NOT NULL,
                 account_name     TEXT NOT NULL,
-                scope            SMALLINT NOT NULL,
                 target_account   TEXT NOT NULL,
                 deregister_nonce TEXT NOT NULL UNIQUE,
                 signature        TEXT,
-                issuer_cid_number   TEXT NOT NULL DEFAULT '',
-                issuer_main_account TEXT NOT NULL DEFAULT '',
-                signer_pubkey       TEXT NOT NULL DEFAULT '',
+                credential_issuer_cid_number TEXT NOT NULL DEFAULT '',
+                credential_signer_pubkey     TEXT NOT NULL DEFAULT '',
                 status           TEXT NOT NULL DEFAULT 'ISSUED'
                     CHECK (status IN ('ISSUED', 'ONCHAIN_CLOSED')),
                 issued_by        TEXT NOT NULL,
                 issued_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
                 closed_at        TIMESTAMPTZ
              );
+             ALTER TABLE institution_deregistrations
+                DROP COLUMN IF EXISTS scope,
+                DROP COLUMN IF EXISTS issuer_cid_number,
+                DROP COLUMN IF EXISTS issuer_main_account,
+                DROP COLUMN IF EXISTS signer_pubkey;
+             ALTER TABLE institution_deregistrations
+                ADD COLUMN IF NOT EXISTS credential_issuer_cid_number TEXT NOT NULL DEFAULT '',
+                ADD COLUMN IF NOT EXISTS credential_signer_pubkey TEXT NOT NULL DEFAULT '';
              CREATE INDEX IF NOT EXISTS idx_inst_dereg_cid
                 ON institution_deregistrations(cid_number, status);
              CREATE UNIQUE INDEX IF NOT EXISTS idx_inst_dereg_target_active
@@ -225,8 +229,7 @@ impl Db {
                 binding_id TEXT PRIMARY KEY,
                 candidate_id TEXT NOT NULL,
                 institution_code TEXT NOT NULL,
-                institution_cid_number TEXT,
-                institution_main_account TEXT,
+                institution_cid_number TEXT NOT NULL,
                 frg_province_code TEXT,
                 cid_full_name TEXT,
                 cid_short_name TEXT,
@@ -237,6 +240,10 @@ impl Db {
                 bound_at TIMESTAMPTZ NOT NULL,
                 status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'INACTIVE'))
              );
+             DELETE FROM node_institution_bindings WHERE institution_cid_number IS NULL;
+             ALTER TABLE node_institution_bindings
+                ALTER COLUMN institution_cid_number SET NOT NULL,
+                DROP COLUMN IF EXISTS institution_main_account;
              CREATE UNIQUE INDEX IF NOT EXISTS idx_node_binding_one_active
                 ON node_institution_bindings ((status)) WHERE status = 'ACTIVE';
 
@@ -401,7 +408,7 @@ impl Db {
                 kind TEXT NOT NULL CHECK (kind IN ('CITIZEN', 'PUBLIC', 'PRIVATE')),
                 cid_full_name TEXT,
                 cid_short_name TEXT,
-                status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'REVOKED')),
+                status TEXT CHECK (status IN ('ACTIVE', 'REVOKED')),
                 category TEXT,
                 p1 TEXT,
                 province_code TEXT NOT NULL,
@@ -423,9 +430,6 @@ impl Db {
                 issuer_cid_number TEXT,
                 institution_source_type TEXT,
                 register_proposal_id TEXT,
-                chain_status TEXT,
-                chain_tx_hash TEXT,
-                chain_block_number BIGINT,
                 created_by TEXT,
                 updated_by TEXT,
                 created_at TIMESTAMPTZ NOT NULL,
@@ -454,9 +458,6 @@ impl Db {
                 admin_status TEXT,
                 admin_updated_at TIMESTAMPTZ,
                 created_by TEXT,
-                chain_status TEXT,
-                chain_tx_hash TEXT,
-                chain_block_number BIGINT,
                 operation_log_id TEXT,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 PRIMARY KEY (province_code, cid_number, admin_account)
@@ -567,7 +568,6 @@ impl Db {
                 city_code TEXT,
                 account_name TEXT NOT NULL,
                 account TEXT,
-                chain_status TEXT NOT NULL CHECK (chain_status IN ('NOT_ON_CHAIN', 'PENDING_ON_CHAIN', 'ACTIVE_ON_CHAIN', 'REVOKED_ON_CHAIN')),
                 created_at TIMESTAMPTZ NOT NULL,
                 PRIMARY KEY (province_code, cid_number, account_name)
              ) PARTITION BY LIST (province_code);
@@ -801,7 +801,7 @@ impl Db {
             )
         })?;
 
-        // subjects 机构级链投影 + 溯源补列(幂等增列,可重复执行)。
+        // 机构存在性由链上 storage 是否有记录表达，删除历史 lifecycle 投影列。
         conn.batch_execute(
             "ALTER TABLE subjects
                 ADD COLUMN IF NOT EXISTS updated_by TEXT,
@@ -809,13 +809,19 @@ impl Db {
                 ADD COLUMN IF NOT EXISTS institution_source_type TEXT,
                 ADD COLUMN IF NOT EXISTS register_proposal_id TEXT,
                 ADD COLUMN IF NOT EXISTS legal_representative_account TEXT,
-                ADD COLUMN IF NOT EXISTS chain_status TEXT,
-                ADD COLUMN IF NOT EXISTS chain_tx_hash TEXT,
-                ADD COLUMN IF NOT EXISTS chain_block_number BIGINT;",
+                ALTER COLUMN status DROP NOT NULL,
+                DROP COLUMN IF EXISTS chain_status,
+                DROP COLUMN IF EXISTS chain_tx_hash,
+                DROP COLUMN IF EXISTS chain_block_number;
+             ALTER TABLE accounts DROP COLUMN IF EXISTS chain_status;
+             ALTER TABLE institution_admins
+                DROP COLUMN IF EXISTS chain_status,
+                DROP COLUMN IF EXISTS chain_tx_hash,
+                DROP COLUMN IF EXISTS chain_block_number;",
         )
         .map_err(|e| {
             format!(
-                "add subjects chain/provenance columns failed: {}",
+                "replace institution lifecycle columns failed: {}",
                 postgres_error_text(&e)
             )
         })?;
@@ -861,18 +867,21 @@ impl Db {
         })?;
 
         conn.batch_execute(
-            "CREATE INDEX IF NOT EXISTS idx_subjects_city
-                ON subjects (province_code, city_code, kind, status, cid_number);
-             CREATE INDEX IF NOT EXISTS idx_subjects_town
-                ON subjects (province_code, city_code, town_code, kind, status, cid_number);
+            "DROP INDEX IF EXISTS idx_subjects_city;
+             DROP INDEX IF EXISTS idx_subjects_town;
+             DROP INDEX IF EXISTS idx_subjects_education;
+             CREATE INDEX idx_subjects_city
+                ON subjects (province_code, city_code, kind, cid_number);
+             CREATE INDEX idx_subjects_town
+                ON subjects (province_code, city_code, town_code, kind, cid_number);
              CREATE INDEX IF NOT EXISTS idx_subjects_scope_created
                 ON subjects (category, province_code, city_code, created_at DESC, cid_number DESC);
              CREATE INDEX IF NOT EXISTS idx_subjects_exact_lookup
                 ON subjects (category, province_code, city_code, cid_number, cid_full_name, cid_short_name);
              CREATE INDEX IF NOT EXISTS idx_subjects_legal_rep
                 ON subjects (province_code, legal_representative_cid_number);
-             CREATE INDEX IF NOT EXISTS idx_subjects_education
-                ON subjects (province_code, city_code, institution_code, education_type, status);
+             CREATE INDEX idx_subjects_education
+                ON subjects (province_code, city_code, institution_code, education_type);
              CREATE INDEX IF NOT EXISTS idx_citizens_scope_created
                 ON citizens (province_code, city_code, created_at DESC, id DESC);
              CREATE INDEX IF NOT EXISTS idx_citizens_province_created
@@ -991,16 +1000,22 @@ impl Db {
         for column in ["province_name", "city_name", "town_name"] {
             Self::ensure_column_state(conn, "subjects", column, false)?;
         }
-        // 机构级链投影 + 溯源补列必须就位。
+        // 溯源列必须就位，机构 lifecycle 投影列必须彻底消失。
         for column in [
             "issuer_cid_number",
             "institution_source_type",
             "register_proposal_id",
             "legal_representative_account",
-            "chain_status",
             "updated_by",
         ] {
             Self::ensure_column_state(conn, "subjects", column, true)?;
+        }
+        for column in ["chain_status", "chain_tx_hash", "chain_block_number"] {
+            Self::ensure_column_state(conn, "subjects", column, false)?;
+        }
+        Self::ensure_column_state(conn, "accounts", "chain_status", false)?;
+        for column in ["chain_status", "chain_tx_hash", "chain_block_number"] {
+            Self::ensure_column_state(conn, "institution_admins", column, false)?;
         }
         for column in ["private_type", "partnership_kind", "has_legal_personality"] {
             Self::ensure_column_state(conn, "private", column, true)?;

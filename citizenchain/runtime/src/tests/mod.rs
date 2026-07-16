@@ -47,10 +47,9 @@ fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32
         AccountId::new(backup_admin_pubkey),
     ];
     public_admins::pallet::AdminAccounts::<Runtime>::insert(
-        issuer_main_account.clone(),
-        admin_primitives::InstitutionAdminAccount {
+        issuer_cid_number.clone(),
+        admin_primitives::InstitutionAdmins {
             institution_code: votingengine::types::PRC,
-            cid_number: issuer_cid_number.clone(),
             // admins 只保存钱包账户；岗位、来源、任期归 entity。
             admins: admin_accounts
                 .iter()
@@ -58,10 +57,9 @@ fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32
                 .collect::<Vec<_>>()
                 .try_into()
                 .expect("test admins should fit"),
-            status: admin_primitives::AdminAccountStatus::Active,
         },
     );
-    // runtime 管理员查询必须先由 entity 解析机构和主账户，再读取 admins 钱包集合。
+    // runtime 管理员查询先由账户反向索引解析 CID，再按 CID 读取 admins 钱包集合。
     let main_name: public_manage::pallet::AccountNameOf<Runtime> =
         primitives::account_derive::RESERVED_NAME_MAIN
             .to_vec()
@@ -74,10 +72,14 @@ fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32
             account_name: main_name.clone(),
         },
     );
-    public_manage::CidRegisteredAccount::<Runtime>::insert(
+    public_manage::InstitutionAccounts::<Runtime>::insert(
         &issuer_cid_number,
         main_name,
-        issuer_main_account.clone(),
+        entity_primitives::InstitutionAccountInfo {
+            address: issuer_main_account.clone(),
+            initial_balance: 0,
+            created_at: 0,
+        },
     );
     public_manage::Institutions::<Runtime>::insert(
         &issuer_cid_number,
@@ -93,7 +95,6 @@ fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32
             legal_representative_account: None,
             institution_code: votingengine::types::PRC,
             created_at: 0,
-            status: entity_primitives::InstitutionLifecycleStatus::Active,
         },
     );
 
@@ -107,7 +108,7 @@ fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32
 }
 
 fn test_issuer_cid_number() -> Vec<u8> {
-    b"CB-TEST-ISSUER".to_vec()
+    CHINA_CB[1].cid_number.as_bytes().to_vec()
 }
 
 fn test_issuer_main_account() -> AccountId {
@@ -180,33 +181,48 @@ fn sign_citizen_identity_payload(
         .expect("citizen identity signature fits")
 }
 
-fn setup_frg_citizen_identity_admin(province_code: &[u8]) -> (sr25519::Pair, AccountId, AccountId) {
+fn setup_frg_citizen_identity_admin(
+    province_code: &[u8],
+) -> (
+    sr25519::Pair,
+    AccountId,
+    public_manage::pallet::CidNumberOf<Runtime>,
+) {
     let registrar_pair =
         sr25519::Pair::from_string("//frg-citizen-identity-admin", None).expect("registrar pair");
     let registrar = AccountId::new(registrar_pair.public().0);
     let registrar_account = AccountId::new([88u8; 32]);
-    public_admins::pallet::AdminAccounts::<Runtime>::insert(
-        registrar_account.clone(),
-        admin_primitives::InstitutionAdminAccount {
-            institution_code: admin_primitives::FRG,
-            cid_number: Default::default(),
-            admins: vec![registrar.clone()]
-                .try_into()
-                .expect("single registrar admin fits"),
-            status: admin_primitives::AdminAccountStatus::Active,
-        },
-    );
-
     // 注册局省级授权由 entity 的“省专员岗位 + 有效任职”表达，不再建立虚拟管理员组。
     let cid_number: public_manage::pallet::CidNumberOf<Runtime> =
         b"FRG-TEST".to_vec().try_into().expect("test cid fits");
     let account_name: public_manage::pallet::AccountNameOf<Runtime> =
-        b"main".to_vec().try_into().expect("account name fits");
+        primitives::account_derive::RESERVED_NAME_MAIN
+            .to_vec()
+            .try_into()
+            .expect("account name fits");
+    public_admins::pallet::AdminAccounts::<Runtime>::insert(
+        cid_number.clone(),
+        admin_primitives::InstitutionAdmins {
+            institution_code: admin_primitives::FRG,
+            admins: vec![registrar.clone()]
+                .try_into()
+                .expect("single registrar admin fits"),
+        },
+    );
     public_manage::AccountRegisteredCid::<Runtime>::insert(
         registrar_account.clone(),
         entity_primitives::RegisteredInstitution {
             cid_number: cid_number.clone(),
-            account_name,
+            account_name: account_name.clone(),
+        },
+    );
+    public_manage::InstitutionAccounts::<Runtime>::insert(
+        &cid_number,
+        account_name,
+        entity_primitives::InstitutionAccountInfo {
+            address: registrar_account,
+            initial_balance: 0,
+            created_at: 0,
         },
     );
     public_manage::Institutions::<Runtime>::insert(
@@ -228,7 +244,6 @@ fn setup_frg_citizen_identity_admin(province_code: &[u8]) -> (sr25519::Pair, Acc
             legal_representative_account: None,
             institution_code: admin_primitives::FRG,
             created_at: 0,
-            status: entity_primitives::InstitutionLifecycleStatus::Active,
         },
     );
     let province_code: primitives::cid::code::ProvinceCode =
@@ -266,11 +281,11 @@ fn setup_frg_citizen_identity_admin(province_code: &[u8]) -> (sr25519::Pair, Acc
         .try_into()
         .expect("assignment fits");
     public_manage::InstitutionRoleAssignments::<Runtime>::insert(
-        cid_number,
+        cid_number.clone(),
         role_code,
         assignments,
     );
-    (registrar_pair, registrar, registrar_account)
+    (registrar_pair, registrar, cid_number)
 }
 
 fn stake_account() -> AccountId {

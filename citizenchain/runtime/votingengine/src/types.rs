@@ -179,9 +179,11 @@ pub struct Proposal<BlockNumber, AccountId> {
     pub status: u8,
     /// 仅内部投票使用:机构码。该字段只用于分类、路由和规则判断,不是主体身份真源。
     pub internal_code: Option<InstitutionCode>,
-    /// 投票/执行账户上下文。机构身份真源见 `subject_cid_numbers`。
-    pub account_context: Option<AccountId>,
-    /// 机构类提案关联的机构 CID 集合。个人多签没有 CID,该集合为空。
+    /// 发起机构唯一 CID。个人多签、公民个人或系统提案为空。
+    pub actor_cid_number: Option<CidNumber>,
+    /// 只有具体资产账户或个人多签确实参与执行时才存在；不得用作机构身份。
+    pub execution_account: Option<AccountId>,
+    /// 提案影响的机构 CID 集合，不得替代发起机构 `actor_cid_number`。
     pub subject_cid_numbers: ProposalSubjectCidNumbers,
     /// 本阶段起始区块
     pub start: BlockNumber,
@@ -194,16 +196,11 @@ pub struct Proposal<BlockNumber, AccountId> {
 impl<BlockNumber, AccountId: Clone> Proposal<BlockNumber, AccountId> {
     /// 返回用于活跃上限和互斥锁的提案主体键。
     pub fn subject_keys(&self) -> sp_std::vec::Vec<ProposalSubject<AccountId>> {
-        if !self.subject_cid_numbers.is_empty() {
-            return self
-                .subject_cid_numbers
-                .iter()
-                .cloned()
-                .map(ProposalSubject::InstitutionCid)
-                .collect();
+        if let Some(cid_number) = self.actor_cid_number.clone() {
+            return sp_std::vec![ProposalSubject::InstitutionCid(cid_number)];
         }
         if self.internal_code == Some(PMUL) {
-            if let Some(account) = self.account_context.clone() {
+            if let Some(account) = self.execution_account.clone() {
                 return sp_std::vec![ProposalSubject::PersonalAccount(account)];
             }
         }

@@ -57,8 +57,9 @@ pub enum CidRecordStatus {
     TypeInfo,
     MaxEncodedLen,
 )]
-pub struct CidRecord<AccountId, BlockNumber> {
-    pub registrar_account: AccountId,
+pub struct CidRecord<BlockNumber> {
+    /// 执行登记的注册局机构 CID；管理员钱包只存在于外层签名 origin。
+    pub registrar_cid_number: CidNumberBound,
     pub commitment: [u8; 32],
     pub residence_province_code: AreaCodeBound,
     pub residence_city_code: AreaCodeBound,
@@ -318,7 +319,7 @@ pub struct VotingEligibilityVersion<BlockNumber> {
 pub trait CitizenIdentityAuthority<AccountId, Signature> {
     fn can_manage_voting_identity(
         registrar: &AccountId,
-        registrar_account: &AccountId,
+        actor_cid_number: &[u8],
         residence_province_code: &[u8],
         residence_city_code: &[u8],
         level: CitizenIdentityLevel,
@@ -334,7 +335,7 @@ pub trait CitizenIdentityAuthority<AccountId, Signature> {
 impl<AccountId, Signature> CitizenIdentityAuthority<AccountId, Signature> for () {
     fn can_manage_voting_identity(
         _registrar: &AccountId,
-        _registrar_account: &AccountId,
+        _actor_cid_number: &[u8],
         _residence_province_code: &[u8],
         _residence_city_code: &[u8],
         _level: CitizenIdentityLevel,
@@ -467,7 +468,7 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         CidNumberBound,
-        CidRecord<T::AccountId, BlockNumberFor<T>>,
+        CidRecord<BlockNumberFor<T>>,
         OptionQuery,
     >;
 
@@ -553,7 +554,7 @@ pub mod pallet {
         },
         CidOccupied {
             cid_number: CidNumberBound,
-            registrar_account: T::AccountId,
+            registrar_cid_number: CidNumberBound,
         },
         CidRevoked {
             cid_number: CidNumberBound,
@@ -598,7 +599,7 @@ pub mod pallet {
         )]
         pub fn register_voting_identity(
             origin: OriginFor<T>,
-            registrar_account: T::AccountId,
+            actor_cid_number: CidNumberBound,
             payload: VotingIdentityPayload<T::AccountId>,
             citizen_signature: SignatureOf<T>,
         ) -> DispatchResult {
@@ -606,7 +607,7 @@ pub mod pallet {
             Self::ensure_valid_voting_payload(&payload)?;
             Self::ensure_authorized(
                 &registrar,
-                &registrar_account,
+                actor_cid_number.as_slice(),
                 &payload,
                 CitizenIdentityLevel::Voting,
             )?;
@@ -646,7 +647,7 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::upgrade_to_candidate_identity())]
         pub fn upgrade_to_candidate_identity(
             origin: OriginFor<T>,
-            registrar_account: T::AccountId,
+            actor_cid_number: CidNumberBound,
             payload: CandidateIdentityPayload<T::AccountId>,
             citizen_signature: SignatureOf<T>,
         ) -> DispatchResult {
@@ -654,7 +655,7 @@ pub mod pallet {
             Self::ensure_valid_candidate_payload(&payload)?;
             Self::ensure_authorized(
                 &registrar,
-                &registrar_account,
+                actor_cid_number.as_slice(),
                 &payload.voting,
                 CitizenIdentityLevel::Candidate,
             )?;
@@ -695,7 +696,7 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::update_voting_identity())]
         pub fn update_voting_identity(
             origin: OriginFor<T>,
-            registrar_account: T::AccountId,
+            actor_cid_number: CidNumberBound,
             payload: VotingIdentityPayload<T::AccountId>,
             citizen_signature: SignatureOf<T>,
         ) -> DispatchResult {
@@ -703,7 +704,7 @@ pub mod pallet {
             Self::ensure_valid_voting_payload(&payload)?;
             Self::ensure_authorized(
                 &registrar,
-                &registrar_account,
+                actor_cid_number.as_slice(),
                 &payload,
                 CitizenIdentityLevel::Voting,
             )?;
@@ -731,7 +732,7 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::update_candidate_identity())]
         pub fn update_candidate_identity(
             origin: OriginFor<T>,
-            registrar_account: T::AccountId,
+            actor_cid_number: CidNumberBound,
             payload: CandidateIdentityPayload<T::AccountId>,
             citizen_signature: SignatureOf<T>,
         ) -> DispatchResult {
@@ -739,7 +740,7 @@ pub mod pallet {
             Self::ensure_valid_candidate_payload(&payload)?;
             Self::ensure_authorized(
                 &registrar,
-                &registrar_account,
+                actor_cid_number.as_slice(),
                 &payload.voting,
                 CitizenIdentityLevel::Candidate,
             )?;
@@ -785,7 +786,7 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::revoke_identity())]
         pub fn revoke_identity(
             origin: OriginFor<T>,
-            registrar_account: T::AccountId,
+            actor_cid_number: CidNumberBound,
             cid_number: CidNumberBound,
         ) -> DispatchResult {
             let registrar = ensure_signed(origin)?;
@@ -795,7 +796,7 @@ pub mod pallet {
                 .ok_or(Error::<T>::VotingIdentityNotFound)?;
             Self::ensure_authorized(
                 &registrar,
-                &registrar_account,
+                actor_cid_number.as_slice(),
                 &VotingIdentityPayload {
                     cid_number: old.cid_number.clone(),
                     wallet_account: account.clone(),
@@ -841,7 +842,7 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::occupy_cid())]
         pub fn occupy_cid(
             origin: OriginFor<T>,
-            registrar_account: T::AccountId,
+            actor_cid_number: CidNumberBound,
             cid_number: CidNumberBound,
             commitment: [u8; 32],
             residence_province_code: AreaCodeBound,
@@ -855,7 +856,7 @@ pub mod pallet {
             ensure!(
                 T::CitizenIdentityAuthority::can_manage_voting_identity(
                     &registrar,
-                    &registrar_account,
+                    actor_cid_number.as_slice(),
                     residence_province_code.as_slice(),
                     residence_city_code.as_slice(),
                     CitizenIdentityLevel::Voting,
@@ -863,7 +864,7 @@ pub mod pallet {
                 Error::<T>::UnauthorizedRegistrar
             );
             Self::do_occupy_cid(
-                &registrar_account,
+                &actor_cid_number,
                 &cid_number,
                 &commitment,
                 &residence_province_code,
@@ -877,7 +878,7 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::occupy_cids_batch(items.len() as u32))]
         pub fn occupy_cids_batch(
             origin: OriginFor<T>,
-            registrar_account: T::AccountId,
+            actor_cid_number: CidNumberBound,
             items: CidOccupyItemsBound,
             residence_province_code: AreaCodeBound,
             residence_city_code: AreaCodeBound,
@@ -891,7 +892,7 @@ pub mod pallet {
             ensure!(
                 T::CitizenIdentityAuthority::can_manage_voting_identity(
                     &registrar,
-                    &registrar_account,
+                    actor_cid_number.as_slice(),
                     residence_province_code.as_slice(),
                     residence_city_code.as_slice(),
                     CitizenIdentityLevel::Voting,
@@ -900,7 +901,7 @@ pub mod pallet {
             );
             for item in items.iter() {
                 Self::do_occupy_cid(
-                    &registrar_account,
+                    &actor_cid_number,
                     &item.cid_number,
                     &item.commitment,
                     &residence_province_code,
@@ -916,7 +917,7 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::revoke_cid())]
         pub fn revoke_cid(
             origin: OriginFor<T>,
-            registrar_account: T::AccountId,
+            actor_cid_number: CidNumberBound,
             cid_number: CidNumberBound,
         ) -> DispatchResult {
             let registrar = ensure_signed(origin)?;
@@ -928,7 +929,7 @@ pub mod pallet {
             ensure!(
                 T::CitizenIdentityAuthority::can_manage_voting_identity(
                     &registrar,
-                    &registrar_account,
+                    actor_cid_number.as_slice(),
                     rec.residence_province_code.as_slice(),
                     rec.residence_city_code.as_slice(),
                     CitizenIdentityLevel::Voting,
@@ -983,7 +984,7 @@ pub mod pallet {
         /// 占号核心:链上原子「验格式+查重+登记」。
         /// 同注册局+同承诺哈希的重复提交幂等放行(建档落库失败恢复路径)。
         fn do_occupy_cid(
-            registrar_account: &T::AccountId,
+            registrar_cid_number: &CidNumberBound,
             cid_number: &CidNumberBound,
             commitment: &[u8; 32],
             residence_province_code: &AreaCodeBound,
@@ -995,7 +996,7 @@ pub mod pallet {
                     CidRegistry::<T>::insert(
                         cid_number,
                         CidRecord {
-                            registrar_account: registrar_account.clone(),
+                            registrar_cid_number: registrar_cid_number.clone(),
                             commitment: *commitment,
                             residence_province_code: residence_province_code.clone(),
                             residence_city_code: residence_city_code.clone(),
@@ -1006,13 +1007,13 @@ pub mod pallet {
                     );
                     Self::deposit_event(Event::<T>::CidOccupied {
                         cid_number: cid_number.clone(),
-                        registrar_account: registrar_account.clone(),
+                        registrar_cid_number: registrar_cid_number.clone(),
                     });
                     Ok(())
                 }
                 Some(rec)
                     if rec.status == CidRecordStatus::Active
-                        && rec.registrar_account == *registrar_account
+                        && rec.registrar_cid_number == *registrar_cid_number
                         && rec.commitment == *commitment =>
                 {
                     Ok(())
@@ -1086,14 +1087,14 @@ pub mod pallet {
 
         fn ensure_authorized(
             registrar: &T::AccountId,
-            registrar_account: &T::AccountId,
+            actor_cid_number: &[u8],
             payload: &VotingIdentityPayload<T::AccountId>,
             level: CitizenIdentityLevel,
         ) -> DispatchResult {
             ensure!(
                 T::CitizenIdentityAuthority::can_manage_voting_identity(
                     registrar,
-                    registrar_account,
+                    actor_cid_number,
                     payload.residence_province_code.as_slice(),
                     payload.residence_city_code.as_slice(),
                     level,

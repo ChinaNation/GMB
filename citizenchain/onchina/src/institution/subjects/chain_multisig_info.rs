@@ -8,18 +8,11 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-
-use crate::core::chain_runtime::{
-    build_institution_registration_credential, is_chain_runtime_config_error,
-};
 use crate::core::response::ApiResponse;
 use crate::institution::subjects::service::{
-    can_delete_account, default_account_names_for_institution, is_default_account_name,
+    institution_account_kind_label,
 };
-use crate::institution::subjects::MultisigChainStatus;
 use crate::*;
 
 #[derive(Serialize)]
@@ -72,10 +65,8 @@ pub(crate) struct AppInstitutionSearchRow {
 pub(crate) struct AppAccountEntry {
     pub(crate) account_name: String,
     pub(crate) account: Option<String>,
-    pub(crate) chain_status: MultisigChainStatus,
-    pub(crate) chain_synced_at: Option<DateTime<Utc>>,
-    pub(crate) is_default: bool,
-    pub(crate) can_delete: bool,
+    pub(crate) account_kind: &'static str,
+    pub(crate) can_close: bool,
 }
 
 #[derive(Serialize)]
@@ -84,28 +75,6 @@ pub(crate) struct AppInstitutionAccounts {
     pub(crate) cid_full_name: String,
     pub(crate) cid_short_name: String,
     pub(crate) accounts: Vec<AppAccountEntry>,
-}
-
-#[derive(Serialize)]
-pub(crate) struct AppInstitutionRegistrationCredential {
-    pub(crate) genesis_hash: String,
-    pub(crate) register_nonce: String,
-    pub(crate) issuer_cid_number: String,
-    pub(crate) issuer_main_account: String,
-    pub(crate) signer_pubkey: String,
-    pub(crate) scope_province_name: String,
-    pub(crate) scope_city_name: String,
-    pub(crate) signature: String,
-    pub(crate) meta: crate::core::chain_runtime::RuntimeSignatureMeta,
-}
-
-#[derive(Serialize)]
-pub(crate) struct AppInstitutionRegistrationInfo {
-    pub(crate) cid_number: String,
-    pub(crate) cid_full_name: String,
-    pub(crate) cid_short_name: String,
-    pub(crate) account_names: Vec<String>,
-    pub(crate) credential: AppInstitutionRegistrationCredential,
 }
 
 fn parse_category(value: &str) -> crate::cid::InstitutionCategory {
@@ -230,116 +199,6 @@ pub(crate) async fn app_get_institution(
     .into_response()
 }
 
-pub(crate) async fn app_get_institution_registration_info(
-    State(state): State<AppState>,
-    Path(cid_number): Path<String>,
-) -> impl IntoResponse {
-    let cid_number = cid_number.trim().to_string();
-    if cid_number.is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "cid_number is required");
-    }
-    let Some((inst, accounts)) = (match state.db.get_institution_with_accounts(&cid_number) {
-        Ok(v) => v,
-        Err(err) => {
-            tracing::error!(error = %err, "query registration info failed");
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "institution query failed",
-            );
-        }
-    }) else {
-        return api_error(StatusCode::NOT_FOUND, 1004, "institution not found");
-    };
-    if inst
-        .cid_full_name
-        .as_deref()
-        .map(str::trim)
-        .unwrap_or("")
-        .is_empty()
-    {
-        return api_error(
-            StatusCode::CONFLICT,
-            1005,
-            "cid_full_name is required before chain registration",
-        );
-    }
-    let required_default_names = default_account_names_for_institution(&inst);
-    let mut account_names: Vec<String> = accounts
-        .iter()
-        .map(|account| account.account_name.clone())
-        .filter(|name| !name.trim().is_empty())
-        .collect();
-    account_names.sort_by(|left, right| {
-        let rank = |name: &String| {
-            required_default_names
-                .iter()
-                .position(|default_name| *default_name == name.as_str())
-                .unwrap_or(required_default_names.len())
-        };
-        rank(left).cmp(&rank(right)).then(left.cmp(right))
-    });
-    account_names.dedup();
-    for default_name in required_default_names {
-        if !account_names
-            .iter()
-            .any(|account_name| account_name == default_name)
-        {
-            return api_error(
-                StatusCode::CONFLICT,
-                1005,
-                "default account_names are required before chain registration",
-            );
-        }
-    }
-    let cid_full_name = inst.cid_full_name.unwrap_or_default();
-    let cid_short_name = inst.cid_short_name.unwrap_or_default();
-    let credential = match build_institution_registration_credential(
-        &state,
-        &cid_number,
-        &cid_full_name,
-        &cid_short_name,
-        &account_names,
-        Uuid::new_v4().to_string(),
-        &inst.province_name,
-        &inst.city_name,
-        "",
-    ) {
-        Ok(v) => v,
-        Err(message) => {
-            if is_chain_runtime_config_error(message.as_str()) {
-                let detail = format!("链端签发配置未完成: {message}");
-                return api_error(StatusCode::SERVICE_UNAVAILABLE, 1006, detail.as_str());
-            }
-            let detail = format!("institution registration credential sign failed: {message}");
-            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, detail.as_str());
-        }
-    };
-
-    Json(ApiResponse {
-        code: 0,
-        message: "ok".to_string(),
-        data: AppInstitutionRegistrationInfo {
-            cid_number,
-            cid_full_name,
-            cid_short_name,
-            account_names,
-            credential: AppInstitutionRegistrationCredential {
-                genesis_hash: credential.genesis_hash,
-                register_nonce: credential.register_nonce,
-                issuer_cid_number: credential.issuer_cid_number,
-                issuer_main_account: credential.issuer_main_account,
-                signer_pubkey: credential.signer_pubkey,
-                scope_province_name: credential.scope_province_name,
-                scope_city_name: credential.scope_city_name,
-                signature: credential.signature,
-                meta: credential.meta,
-            },
-        },
-    })
-    .into_response()
-}
-
 /// 机构管理员拉取已签发的注销凭证(注册局在 CID 注销动作中签好),
 /// 用于构造 propose_close 上链冷签。签名不在此处生成,只读 institution_deregistrations 的 ISSUED 行。
 pub(crate) async fn app_get_institution_deregistration_info(
@@ -405,10 +264,10 @@ pub(crate) async fn app_list_accounts(
         .map(|account| AppAccountEntry {
             account_name: account.account_name.clone(),
             account: account.account.clone(),
-            chain_status: account.chain_status.clone(),
-            chain_synced_at: account.chain_synced_at,
-            is_default: is_default_account_name(&account.account_name),
-            can_delete: can_delete_account(account),
+            account_kind: institution_account_kind_label(&cid_number, &account.account_name)
+                .expect("persisted institution account name is non-empty"),
+            can_close: institution_account_kind_label(&cid_number, &account.account_name)
+                == Some("named"),
         })
         .collect::<Vec<_>>();
     Json(ApiResponse {

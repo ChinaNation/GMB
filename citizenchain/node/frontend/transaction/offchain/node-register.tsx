@@ -12,7 +12,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { sanitizeError } from '../../tauri';
 import { adminsChangeApi } from '../../admins/api';
-import { institutionReadApi } from './institution/api';
 import { hexToSs58 } from '../../shared/ss58';
 import { CitizenSignatureModal } from '../../shared/qr/CitizenSignatureModal';
 import type { ActivatedAdmin, AdminWalletMatch, VoteSignRequestResult } from '../../governance/types';
@@ -50,18 +49,12 @@ export function ClearingBankDeclareNodePage({ cidNumber, cidFullName, onBack, on
   const signRequestRef = useRef(signRequest);
   signRequestRef.current = signRequest;
 
-  // 初始化:拉本机 PeerId + 拉本机构 AccountId 级已激活管理员
+  // 初始化：拉本机 PeerId + 按机构 CID 拉已激活管理员。
   useEffect(() => {
     let cancelled = false;
     Promise.all([
       offchainApi.queryLocalPeerId().catch(() => ''),
-      institutionReadApi.fetchInstitutionDetail(cidNumber)
-        .then((detail) => detail
-          ? adminsChangeApi.getActivatedAdmins(cidNumber, {
-              cidNumber,
-              accountHex: detail.adminAccountHex,
-            })
-          : [] as ActivatedAdmin[])
+      adminsChangeApi.getActivatedAdmins(cidNumber, { cidNumber })
         .catch(() => [] as ActivatedAdmin[]),
     ]).then(([pid, aa]) => {
       if (cancelled) return;

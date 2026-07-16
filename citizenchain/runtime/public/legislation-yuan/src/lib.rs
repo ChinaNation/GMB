@@ -36,7 +36,7 @@ pub const MAX_IMMUTABLE_ARTICLES: u32 = 32;
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
-    use entity_primitives::InstitutionMultisigQuery;
+    use entity_primitives::InstitutionCidQuery;
     use frame_support::pallet_prelude::*;
     use frame_support::traits::Time;
     use frame_system::pallet_prelude::*;
@@ -57,10 +57,10 @@ pub mod pallet {
     pub type TitleOf<T> = BoundedVec<u8, <T as Config>::MaxTitleLen>;
     pub type TextOf<T> = BoundedVec<u8, <T as Config>::MaxTextLen>;
 
-    /// 院序列别名:`[(机构码, 机构账户), ...]`,发起院在前、终审院在后(ADR-027,提案携带)。
+    /// 院序列只保存机构 CID；机构码由 CID 解析，账户不得充当立法机构身份。
     /// 单院(市立法会)= 1 项;两院(国家/省立法院)= `[众议会, 参议会]`;教委会模式 = `[教委会, 参议会]`。
-    pub type HousesOf<T> = BoundedVec<
-        (InstitutionCode, <T as frame_system::Config>::AccountId),
+    pub type Houses = BoundedVec<
+        votingengine::types::CidNumber,
         ConstU32<{ legislation_vote::MAX_REPRESENTATIVE_BODIES }>,
     >;
 
@@ -174,22 +174,21 @@ pub mod pallet {
         Encode,
         Decode,
         DecodeWithMemTracking,
-        CloneNoBound,
-        PartialEqNoBound,
-        EqNoBound,
-        RuntimeDebugNoBound,
+        Clone,
+        PartialEq,
+        Eq,
+        RuntimeDebug,
         TypeInfo,
         MaxEncodedLen,
     )]
-    #[scale_info(skip_type_params(T))]
-    pub struct Law<T: Config> {
+    pub struct Law {
         pub law_id: u64,
         pub tier: Tier,
         /// 行政区 code(0 = 全国;省/市用 china.sqlite code,遵守 ADR-021)
         pub scope_code: u32,
         /// 归属立法机构院序列(houses[0] = 发起院,其 admins = 现任议员/委员)。
         /// 单院(市立法会)= 1 项;两院(国家/省立法院)= [众议会, 参议会]。
-        pub houses: HousesOf<T>,
+        pub houses: Houses,
         /// 当前真正生效的版本。新法通过但未到生效时间时为 None。
         pub effective_version: Option<u32>,
         /// 已写入链上的最新版本。
@@ -268,13 +267,13 @@ pub mod pallet {
         pub tier: Tier,
         pub scope_code: u32,
         /// 归属立法机构院序列(houses[0] = 发起院)。
-        pub houses: HousesOf<T>,
+        pub houses: Houses,
         /// 实际发起机构。与表决院分离，市教育案等场景不一定等于 houses[0]。
-        pub proposer_body: (InstitutionCode, T::AccountId),
+        pub actor_cid_number: votingengine::types::CidNumber,
         /// 行政签署机构。
-        pub executive: (InstitutionCode, T::AccountId),
+        pub executive_cid_number: votingengine::types::CidNumber,
         /// 两院级三人会签归口立法机构；市级单院必须为空。
-        pub legislature: Option<(InstitutionCode, T::AccountId)>,
+        pub legislature_cid_number: Option<votingengine::types::CidNumber>,
         pub vote_type: VoteType,
         pub title: TitleOf<T>,
         pub title_en: Option<TitleOf<T>>,
@@ -292,8 +291,10 @@ pub mod pallet {
         /// 立法投票引擎(runtime 装配为 `LegislationVote`),业务壳通过它创建立法投票提案。
         type LegislationVoteEngine: LegislationVoteEngine<Self::AccountId>;
 
-        /// 机构码、账户、CID 和生命周期查询。所有立法路由都必须以 entity 真源复核。
-        type InstitutionQuery: InstitutionMultisigQuery<Self::AccountId>;
+        /// 机构存在性只按 CID 查询，不允许通过某个账户反推机构身份。
+        type InstitutionCidQuery: entity_primitives::InstitutionCidQuery<
+            votingengine::types::CidNumber,
+        >;
 
         #[pallet::constant]
         type MaxTitleLen: Get<u32>;
@@ -334,7 +335,7 @@ pub mod pallet {
 
     /// 法律主表:law_id → Law。
     #[pallet::storage]
-    pub type Laws<T: Config> = StorageMap<_, Blake2_128Concat, u64, Law<T>, OptionQuery>;
+    pub type Laws<T: Config> = StorageMap<_, Blake2_128Concat, u64, Law, OptionQuery>;
 
     /// 法律全版本历史:(law_id, version) → LawVersion。
     #[pallet::storage]
@@ -402,20 +403,25 @@ pub mod pallet {
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
         /// 宪法归属立法机构院序列(默认 [国家立法院]);为空则不注入宪法。
-        pub constitution_houses: HousesOf<T>,
+        pub constitution_houses: Houses,
+        pub _phantom: core::marker::PhantomData<T>,
     }
 
     impl<T: Config> Default for GenesisConfig<T> {
         fn default() -> Self {
-            let nlg_account = T::AccountId::decode(&mut &CHINA_LF[0].main_account[..])
-                .expect("国家立法院 main_account 必须解码为 AccountId");
-            let constitution_houses = BoundedVec::try_from(sp_runtime::sp_std::vec![(
-                NATIONAL_LEGISLATURE_CODE,
-                nlg_account
-            )])
+            let nlg_cid_number = CHINA_LF[0]
+                .cid_number
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("国家立法院 CID 必须满足协议长度");
+            let constitution_houses = BoundedVec::try_from(sp_runtime::sp_std::vec![
+                nlg_cid_number,
+            ])
             .expect("constitution houses within bound");
             Self {
                 constitution_houses,
+                _phantom: Default::default(),
             }
         }
     }
@@ -497,7 +503,7 @@ pub mod pallet {
                     },
                 );
             }
-            let law = Law::<T> {
+            let law = Law {
                 law_id,
                 tier: Tier::Constitution,
                 scope_code: 0,
@@ -626,10 +632,10 @@ pub mod pallet {
             origin: OriginFor<T>,
             tier: Tier,
             scope_code: u32,
-            houses: HousesOf<T>,
-            proposer_body: (InstitutionCode, T::AccountId),
-            executive: (InstitutionCode, T::AccountId),
-            legislature: Option<(InstitutionCode, T::AccountId)>,
+            houses: Houses,
+            actor_cid_number: votingengine::types::CidNumber,
+            executive_cid_number: votingengine::types::CidNumber,
+            legislature_cid_number: Option<votingengine::types::CidNumber>,
             vote_type: VoteType,
             title: TitleOf<T>,
             title_en: Option<TitleOf<T>>,
@@ -644,16 +650,16 @@ pub mod pallet {
             );
             ensure!(!title.is_empty(), Error::<T>::EmptyTitle);
             ensure!(!chapters.is_empty(), Error::<T>::EmptyChapters);
-            Self::ensure_legislator(&proposer_body, &who)?;
+            Self::ensure_legislator(&actor_cid_number, &who)?;
             Self::ensure_tier_vote_type(tier, vote_type)?;
             Self::ensure_routing(
                 tier,
                 scope_code,
-                &proposer_body,
+                &actor_cid_number,
                 &houses,
-                &executive,
+                &executive_cid_number,
                 vote_type,
-                &legislature,
+                &legislature_cid_number,
             )?;
 
             let summary = LawProposalSummary::<T> {
@@ -662,9 +668,9 @@ pub mod pallet {
                 tier,
                 scope_code,
                 houses: houses.clone(),
-                proposer_body,
-                executive,
-                legislature,
+                actor_cid_number,
+                executive_cid_number,
+                legislature_cid_number,
                 vote_type,
                 title,
                 title_en,
@@ -689,9 +695,9 @@ pub mod pallet {
         pub fn propose_amend_law(
             origin: OriginFor<T>,
             law_id: u64,
-            proposer_body: (InstitutionCode, T::AccountId),
-            executive: (InstitutionCode, T::AccountId),
-            legislature: Option<(InstitutionCode, T::AccountId)>,
+            actor_cid_number: votingengine::types::CidNumber,
+            executive_cid_number: votingengine::types::CidNumber,
+            legislature_cid_number: Option<votingengine::types::CidNumber>,
             vote_type: VoteType,
             title: TitleOf<T>,
             title_en: Option<TitleOf<T>>,
@@ -711,16 +717,16 @@ pub mod pallet {
                 law.pending_version.is_none(),
                 Error::<T>::AmendmentAlreadyPending
             );
-            Self::ensure_legislator(&proposer_body, &who)?;
+            Self::ensure_legislator(&actor_cid_number, &who)?;
             Self::ensure_tier_vote_type(law.tier, vote_type)?;
             Self::ensure_routing(
                 law.tier,
                 law.scope_code,
-                &proposer_body,
+                &actor_cid_number,
                 &law.houses,
-                &executive,
+                &executive_cid_number,
                 vote_type,
-                &legislature,
+                &legislature_cid_number,
             )?;
             if law.tier == Tier::Constitution {
                 let effective_version = law
@@ -741,9 +747,9 @@ pub mod pallet {
                 tier: law.tier,
                 scope_code: law.scope_code,
                 houses: law.houses.clone(),
-                proposer_body,
-                executive,
-                legislature,
+                actor_cid_number,
+                executive_cid_number,
+                legislature_cid_number,
                 vote_type,
                 title,
                 title_en,
@@ -767,9 +773,9 @@ pub mod pallet {
         pub fn propose_repeal_law(
             origin: OriginFor<T>,
             law_id: u64,
-            proposer_body: (InstitutionCode, T::AccountId),
-            executive: (InstitutionCode, T::AccountId),
-            legislature: Option<(InstitutionCode, T::AccountId)>,
+            actor_cid_number: votingengine::types::CidNumber,
+            executive_cid_number: votingengine::types::CidNumber,
+            legislature_cid_number: Option<votingengine::types::CidNumber>,
             vote_type: VoteType,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -782,16 +788,16 @@ pub mod pallet {
                 law.tier != Tier::Constitution,
                 Error::<T>::CannotRepealConstitution
             );
-            Self::ensure_legislator(&proposer_body, &who)?;
+            Self::ensure_legislator(&actor_cid_number, &who)?;
             Self::ensure_tier_vote_type(law.tier, vote_type)?;
             Self::ensure_routing(
                 law.tier,
                 law.scope_code,
-                &proposer_body,
+                &actor_cid_number,
                 &law.houses,
-                &executive,
+                &executive_cid_number,
                 vote_type,
-                &legislature,
+                &legislature_cid_number,
             )?;
 
             let summary = LawProposalSummary::<T> {
@@ -800,9 +806,9 @@ pub mod pallet {
                 tier: law.tier,
                 scope_code: law.scope_code,
                 houses: law.houses.clone(),
-                proposer_body,
-                executive,
-                legislature,
+                actor_cid_number,
+                executive_cid_number,
+                legislature_cid_number,
                 vote_type,
                 title: Default::default(),
                 title_en: None,
@@ -828,14 +834,14 @@ pub mod pallet {
         /// ADR-027 修订:提案方与表决院解耦——市行政区 市自治会/市教委会 委员可提案,
         /// 但表决院恒为 houses[0]=市立法会,故 auth 校验对 proposer_body 而非 houses[0]。
         fn ensure_legislator(
-            proposer_body: &(InstitutionCode, T::AccountId),
+            actor_cid_number: &votingengine::types::CidNumber,
             who: &T::AccountId,
         ) -> DispatchResult {
-            let (code, body) = proposer_body;
+            let code = Self::institution_code_for_cid(actor_cid_number)?;
             ensure!(
-                <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
-                    *code,
-                    body.clone(),
+                <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
+                    code,
+                    actor_cid_number.as_slice(),
                     who
                 ),
                 Error::<T>::NotLegislator
@@ -843,24 +849,30 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 校验一项路由机构确为 active entity，且账户、机构码、CID 三者一致。
+        fn institution_code_for_cid(
+            cid_number: &votingengine::types::CidNumber,
+        ) -> Result<InstitutionCode, DispatchError> {
+            let text = core::str::from_utf8(cid_number.as_slice())
+                .map_err(|_| Error::<T>::RoutingMismatch)?;
+            votingengine::types::institution_code_from_cid_number(text)
+                .ok_or_else(|| Error::<T>::RoutingMismatch.into())
+        }
+
+        /// 校验一项路由机构 CID 确实存在，且 CID 中的机构码符合该法律路线。
         /// 返回 CID 的 R5 行政区段，供省/市级整条路由做同域绑定。
         fn ensure_route_institution(
-            pair: &(InstitutionCode, T::AccountId),
+            cid_number: &votingengine::types::CidNumber,
             expected_code: InstitutionCode,
         ) -> Result<Vec<u8>, DispatchError> {
-            ensure!(pair.0 == expected_code, Error::<T>::RoutingMismatch);
             ensure!(
-                T::InstitutionQuery::is_active(&pair.1),
+                T::InstitutionCidQuery::cid_exists(cid_number),
                 Error::<T>::RoutingMismatch
             );
             ensure!(
-                T::InstitutionQuery::lookup_org(&pair.1) == Some(expected_code),
+                Self::institution_code_for_cid(cid_number)? == expected_code,
                 Error::<T>::RoutingMismatch
             );
-            let cid =
-                T::InstitutionQuery::lookup_cid(&pair.1).ok_or(Error::<T>::RoutingMismatch)?;
-            let parts = primitives::cid::number::parse_cid_number_parts_bytes(&cid)
+            let parts = primitives::cid::number::parse_cid_number_parts_bytes(cid_number.as_slice())
                 .map_err(|_| Error::<T>::RoutingMismatch)?;
             ensure!(
                 parts.institution == expected_code,
@@ -877,11 +889,11 @@ pub mod pallet {
         fn ensure_routing(
             tier: Tier,
             scope_code: u32,
-            proposer_body: &(InstitutionCode, T::AccountId),
-            houses: &HousesOf<T>,
-            executive: &(InstitutionCode, T::AccountId),
+            actor_cid_number: &votingengine::types::CidNumber,
+            houses: &Houses,
+            executive_cid_number: &votingengine::types::CidNumber,
             vote_type: VoteType,
-            legislature: &Option<(InstitutionCode, T::AccountId)>,
+            legislature_cid_number: &Option<votingengine::types::CidNumber>,
         ) -> DispatchResult {
             let education = vote_type.is_education();
             let (expected_proposer, expected_houses, expected_executive, expected_legislature): (
@@ -925,7 +937,8 @@ pub mod pallet {
                 ensure!(scope_code == 0, Error::<T>::RoutingMismatch);
             }
 
-            let route_scope = Self::ensure_route_institution(proposer_body, expected_proposer)?;
+            let route_scope =
+                Self::ensure_route_institution(actor_cid_number, expected_proposer)?;
             for (house, expected_code) in houses.iter().zip(expected_houses.iter()) {
                 let scope = Self::ensure_route_institution(house, *expected_code)?;
                 ensure!(
@@ -933,12 +946,13 @@ pub mod pallet {
                     Error::<T>::RoutingMismatch
                 );
             }
-            let executive_scope = Self::ensure_route_institution(executive, expected_executive)?;
+            let executive_scope =
+                Self::ensure_route_institution(executive_cid_number, expected_executive)?;
             ensure!(
                 !regional || executive_scope == route_scope,
                 Error::<T>::RoutingMismatch
             );
-            match (legislature.as_ref(), expected_legislature) {
+            match (legislature_cid_number.as_ref(), expected_legislature) {
                 (Some(actual), Some(expected_code)) => {
                     let scope = Self::ensure_route_institution(actual, expected_code)?;
                     ensure!(
@@ -1133,7 +1147,7 @@ pub mod pallet {
         /// 代表机构序列由提案携带；单机构与顺序多机构路由均由立法投票引擎执行。
         fn dispatch_to_engine(
             who: &T::AccountId,
-            houses: &HousesOf<T>,
+            houses: &Houses,
             vote_type: VoteType,
             summary: &LawProposalSummary<T>,
             chapters: &ChaptersOf<T>,
@@ -1143,7 +1157,7 @@ pub mod pallet {
             let object = chapters.encode();
             // 修宪(tier=宪法)走护宪大法官终审(宪法第21条)。
             let needs_guard = summary.tier == Tier::Constitution;
-            let bodies: RepresentativeBodies<T::AccountId> = houses
+            let bodies: RepresentativeBodies = houses
                 .clone()
                 .into_inner()
                 .try_into()
@@ -1159,12 +1173,13 @@ pub mod pallet {
                 RepresentativeRoute::Sequential(bodies)
             };
             let procedure = LegislationProcedureConfig {
-                executive: summary.executive.clone(),
-                legislature: summary.legislature.clone(),
+                executive: summary.executive_cid_number.clone(),
+                legislature: summary.legislature_cid_number.clone(),
                 needs_guard,
             };
             let proposal_id = T::LegislationVoteEngine::create_legislation_vote(
                 who.clone(),
+                summary.actor_cid_number.clone(),
                 route,
                 vote_type.representative_rule(),
                 procedure,
@@ -1225,11 +1240,11 @@ pub mod pallet {
                     Self::ensure_routing(
                         summary.tier,
                         summary.scope_code,
-                        &summary.proposer_body,
+                        &summary.actor_cid_number,
                         &summary.houses,
-                        &summary.executive,
+                        &summary.executive_cid_number,
                         summary.vote_type,
-                        &summary.legislature,
+                        &summary.legislature_cid_number,
                     )?;
                 }
                 LawAction::Amend => {
@@ -1254,11 +1269,11 @@ pub mod pallet {
                     Self::ensure_routing(
                         summary.tier,
                         summary.scope_code,
-                        &summary.proposer_body,
+                        &summary.actor_cid_number,
                         &summary.houses,
-                        &summary.executive,
+                        &summary.executive_cid_number,
                         summary.vote_type,
-                        &summary.legislature,
+                        &summary.legislature_cid_number,
                     )?;
                     if law.tier == Tier::Constitution {
                         let effective_version = law
@@ -1293,11 +1308,11 @@ pub mod pallet {
                     Self::ensure_routing(
                         summary.tier,
                         summary.scope_code,
-                        &summary.proposer_body,
+                        &summary.actor_cid_number,
                         &summary.houses,
-                        &summary.executive,
+                        &summary.executive_cid_number,
                         summary.vote_type,
-                        &summary.legislature,
+                        &summary.legislature_cid_number,
                     )?;
                 }
             }
@@ -1372,7 +1387,7 @@ pub mod pallet {
                         effective_at: summary.effective_at,
                     };
                     LawVersions::<T>::insert(law_id, version, lv);
-                    let law = Law::<T> {
+                    let law = Law {
                         law_id,
                         tier: summary.tier,
                         scope_code: summary.scope_code,
@@ -1443,7 +1458,7 @@ pub mod pallet {
 
         // ───────── 查询(供 runtime API 调用)─────────
         /// 读取法律主体。
-        pub fn law(law_id: u64) -> Option<Law<T>> {
+        pub fn law(law_id: u64) -> Option<Law> {
             Laws::<T>::get(law_id)
         }
 

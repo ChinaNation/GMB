@@ -27,12 +27,16 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     pub fn register_proposal_indexes(
         proposal_id: u64,
         institution_code: Option<InstitutionCode>,
+        actor_cid_number: Option<crate::types::CidNumber>,
         subject_cid_numbers: ProposalSubjectCidNumbers,
         module_tag: BoundedVec<u8, T::MaxModuleTagLen>,
         year: u16,
     ) {
         if let Some(institution_code) = institution_code {
             ProposalsByCode::<T>::insert(institution_code, proposal_id, ());
+        }
+        if let Some(cid_number) = actor_cid_number {
+            ProposalsByCid::<T>::insert(cid_number, proposal_id, ());
         }
         for cid_number in subject_cid_numbers {
             ProposalsByCid::<T>::insert(cid_number, proposal_id, ());
@@ -53,6 +57,9 @@ impl<T: pallet::Config> pallet::Pallet<T> {
         if let Some(proposal) = Proposals::<T>::get(proposal_id) {
             if let Some(institution_code) = proposal.internal_code {
                 ProposalsByCode::<T>::remove(institution_code, proposal_id);
+            }
+            if let Some(cid_number) = proposal.actor_cid_number {
+                ProposalsByCid::<T>::remove(cid_number, proposal_id);
             }
             for cid_number in proposal.subject_cid_numbers {
                 ProposalsByCid::<T>::remove(cid_number, proposal_id);

@@ -14,7 +14,7 @@ extern crate alloc;
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 use frame_support::ensure;
-use frame_support::traits::Get;
+use frame_support::traits::Currency;
 use sp_runtime::{
     traits::{CheckedAdd, Zero},
     DispatchError,
@@ -22,8 +22,8 @@ use sp_runtime::{
 
 use crate::institution::types::CreateInstitutionAccount;
 use crate::pallet::{
-    AccountRegisteredCid, CidNumberOf, CidRegisteredAccount, Config, CreateInstitutionAccountsOf,
-    Error, InstitutionInitialAccountsOf, Pallet,
+    AccountRegisteredCid, CidNumberOf, Config, CreateInstitutionAccountsOf, Error,
+    InstitutionAccounts, InstitutionInitialAccountsOf, Pallet,
 };
 use crate::traits::{AccountValidator, ProtectedSourceChecker, ReservedAccountGuard};
 use crate::BalanceOf;
@@ -65,8 +65,15 @@ pub(crate) fn validate_initial_accounts<T: Config>(
     ensure!(!accounts.is_empty(), Error::<T>::EmptyInstitutionAccounts);
 
     let mut seen = BTreeSet::new();
-    let mut has_main = false;
-    let mut has_fee = false;
+    let required_protocol_kinds = primitives::institution_constraints::required_protocol_account_kinds(
+        primitives::cid::code::institution_code_from_cid_number(
+            core::str::from_utf8(cid_number.as_slice()).map_err(|_| Error::<T>::InvalidCidNumber)?,
+        )
+        .ok_or(Error::<T>::InvalidCidNumber)?,
+        cid_number.as_slice(),
+    )
+    .ok_or(Error::<T>::InvalidCidNumber)?;
+    let mut protocol_kinds = BTreeSet::new();
     let mut main_account: Option<T::AccountId> = None;
     let mut fee_account: Option<T::AccountId> = None;
     let mut initial_total = BalanceOf::<T>::zero();
@@ -76,7 +83,7 @@ pub(crate) fn validate_initial_accounts<T: Config>(
     for item in accounts.iter() {
         ensure!(!item.account_name.is_empty(), Error::<T>::EmptyAccountName);
         ensure!(
-            item.amount >= <T as Config>::MinCreateAmount::get(),
+            item.amount.is_zero() || item.amount >= T::Currency::minimum_balance(),
             Error::<T>::AccountInitialAmountBelowMinimum
         );
         ensure!(
@@ -88,10 +95,8 @@ pub(crate) fn validate_initial_accounts<T: Config>(
             cid_number.as_slice(),
             item.account_name.as_slice(),
         )?;
-        let is_default = Pallet::<T>::is_default_account(&kind);
-
         ensure!(
-            !CidRegisteredAccount::<T>::contains_key(cid_number, &item.account_name),
+            !InstitutionAccounts::<T>::contains_key(cid_number, &item.account_name),
             Error::<T>::CidAlreadyRegistered
         );
         ensure!(
@@ -111,16 +116,18 @@ pub(crate) fn validate_initial_accounts<T: Config>(
             Error::<T>::ProtectedSource
         );
 
-        match kind {
-            primitives::account_derive::AccountKind::InstitutionMain { .. } => {
-                has_main = true;
+        if let Some(protocol_kind) = kind.institution_protocol_kind() {
+            ensure!(
+                required_protocol_kinds.contains(&protocol_kind),
+                Error::<T>::ReservedAccountName
+            );
+            protocol_kinds.insert(protocol_kind);
+            if protocol_kind == primitives::account_derive::InstitutionProtocolAccountKind::Main {
                 main_account = Some(address.clone());
             }
-            primitives::account_derive::AccountKind::InstitutionFee { .. } => {
-                has_fee = true;
+            if protocol_kind == primitives::account_derive::InstitutionProtocolAccountKind::Fee {
                 fee_account = Some(address.clone());
             }
-            _ => {}
         }
 
         initial_total = initial_total
@@ -130,12 +137,15 @@ pub(crate) fn validate_initial_accounts<T: Config>(
             account_name: item.account_name.clone(),
             address,
             amount: item.amount,
-            is_default,
         });
     }
 
-    ensure!(has_main, Error::<T>::MissingMainAccount);
-    ensure!(has_fee, Error::<T>::MissingFeeAccount);
+    ensure!(
+        required_protocol_kinds
+            .iter()
+            .all(|required| protocol_kinds.contains(required)),
+        Error::<T>::MissingMainAccount
+    );
     let bounded: CreateInstitutionAccountsOf<T> = built
         .try_into()
         .map_err(|_| Error::<T>::TooManyInstitutionAccounts)?;

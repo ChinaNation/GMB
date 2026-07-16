@@ -58,24 +58,35 @@ impl<AccountId> CitizenIdentityReader<AccountId> for () {
 /// 投票引擎会在写入管理员快照后再次校验发起人属于快照；provider 实现若出现
 /// drift，会被视为权限错误并回滚提案创建。
 pub trait InternalAdminProvider<AccountId> {
-    fn is_internal_admin(
+    fn is_institution_admin(
         institution_code: InstitutionCode,
-        institution: AccountId,
+        cid_number: &[u8],
         who: &AccountId,
     ) -> bool;
 
     /// 获取机构当前管理员列表（用于提案创建时锁定快照）。
-    fn get_admin_list(
+    fn get_institution_admins(
         _institution_code: InstitutionCode,
-        _institution: AccountId,
+        _cid_number: &[u8],
     ) -> Option<sp_std::vec::Vec<AccountId>> {
         None
     }
 
-    /// 查询 Pending 账户管理员权限。仅供创建/激活该账户的投票入口使用。
-    fn is_pending_internal_admin(
-        _institution_code: InstitutionCode,
-        _institution: AccountId,
+    /// 查询个人多签管理员权限。
+    fn is_personal_admin(_personal_account: AccountId, _who: &AccountId) -> bool {
+        false
+    }
+
+    /// 获取个人多签当前管理员列表。
+    fn get_personal_admins(
+        _personal_account: AccountId,
+    ) -> Option<sp_std::vec::Vec<AccountId>> {
+        None
+    }
+
+    /// 查询 Pending 个人多签管理员权限。仅供创建个人多签提案使用。
+    fn is_pending_personal_admin(
+        _personal_account: AccountId,
         _who: &AccountId,
     ) -> bool {
         false
@@ -84,8 +95,7 @@ pub trait InternalAdminProvider<AccountId> {
     /// 获取机构法定代表人(ADR-027 立法签署人)。
     /// 默认 None(个人账户/尚未任命);机构公开事实由 entity 的 `InstitutionInfo` 提供。
     fn legal_representative(
-        _institution_code: InstitutionCode,
-        _institution: AccountId,
+        _cid_number: &[u8],
     ) -> Option<AccountId> {
         None
     }
@@ -97,19 +107,18 @@ pub trait InternalAdminProvider<AccountId> {
         sp_std::vec::Vec::new()
     }
 
-    /// 获取 Pending 账户管理员列表。仅供创建/激活该账户时锁定快照。
-    fn get_pending_admin_list(
-        _institution_code: InstitutionCode,
-        _institution: AccountId,
+    /// 获取 Pending 个人多签管理员列表。
+    fn get_pending_personal_admins(
+        _personal_account: AccountId,
     ) -> Option<sp_std::vec::Vec<AccountId>> {
         None
     }
 }
 
 impl<AccountId> InternalAdminProvider<AccountId> for () {
-    fn is_internal_admin(
+    fn is_institution_admin(
         _institution_code: InstitutionCode,
-        _institution: AccountId,
+        _cid_number: &[u8],
         _who: &AccountId,
     ) -> bool {
         false
@@ -119,11 +128,23 @@ impl<AccountId> InternalAdminProvider<AccountId> for () {
 /// 内部管理员总人数提供器。
 /// 联合投票会根据“剩余管理员数是否还能让赞成票达到阈值”来自动判定机构反对。
 pub trait InternalAdminsLenProvider<AccountId> {
-    fn admins_len(institution_code: InstitutionCode, institution: AccountId) -> Option<u32>;
+    fn institution_admins_len(
+        institution_code: InstitutionCode,
+        cid_number: &[u8],
+    ) -> Option<u32>;
+
+    fn personal_admins_len(personal_account: AccountId) -> Option<u32>;
 }
 
 impl<AccountId> InternalAdminsLenProvider<AccountId> for () {
-    fn admins_len(_institution_code: InstitutionCode, _institution: AccountId) -> Option<u32> {
+    fn institution_admins_len(
+        _institution_code: InstitutionCode,
+        _cid_number: &[u8],
+    ) -> Option<u32> {
+        None
+    }
+
+    fn personal_admins_len(_personal_account: AccountId) -> Option<u32> {
         None
     }
 }

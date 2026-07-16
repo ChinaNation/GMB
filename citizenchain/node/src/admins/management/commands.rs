@@ -1,6 +1,4 @@
-use primitives::cid::code::{
-    code_bytes, is_fixed_governance_code, is_personal_code, InstitutionCode,
-};
+use primitives::cid::code::{code_bytes, is_personal_code, InstitutionCode};
 use std::collections::BTreeMap;
 use tauri::AppHandle;
 
@@ -9,10 +7,7 @@ use crate::{
     home,
 };
 
-use super::{
-    account_id, storage,
-    types::{institution_code_label, is_valid_institution_code, AdminAccountState},
-};
+use super::{account_id, storage, types::{institution_code_label, is_valid_institution_code, AdminAccountState}};
 
 /// 把前端传入的机构码字符串(如 "NRC"/"CGOV")转成链上 [u8;4]。空串/缺省 → None。
 fn parse_expected_code(expected: Option<&str>) -> Option<InstitutionCode> {
@@ -22,14 +17,10 @@ fn parse_expected_code(expected: Option<&str>) -> Option<InstitutionCode> {
         .map(code_bytes)
 }
 
-fn validate_account_lookup(
+fn validate_cid_lookup(
     expected_code: Option<InstitutionCode>,
-    account_hex: Option<&str>,
     cid_number: Option<&str>,
 ) -> Result<(), String> {
-    let has_account_id = account_hex
-        .map(|item| !item.trim().is_empty())
-        .unwrap_or(false);
     let has_cid = cid_number
         .map(|item| !item.trim().is_empty())
         .unwrap_or(false);
@@ -40,12 +31,9 @@ fn validate_account_lookup(
         if is_personal_code(&code) {
             return Err("Node 桌面端不管理个人多签管理员".to_string());
         }
-        if !is_fixed_governance_code(&code) && !has_account_id {
-            return Err("动态机构管理员查询必须提供 accountHex".to_string());
-        }
     }
-    if !has_account_id && !has_cid {
-        return Err("必须提供 cidNumber 或 accountHex".to_string());
+    if !has_cid {
+        return Err("必须提供 cidNumber".to_string());
     }
     Ok(())
 }
@@ -70,8 +58,7 @@ fn ensure_expected_code(
 #[tauri::command]
 pub async fn get_admin_account_state(
     app: AppHandle,
-    cid_number: Option<String>,
-    account_hex: Option<String>,
+    cid_number: String,
     expected_institution_code: Option<String>,
 ) -> Result<Option<AdminAccountState>, String> {
     let status = home::current_status(&app)?;
@@ -80,22 +67,11 @@ pub async fn get_admin_account_state(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let expected_code = parse_expected_code(expected_institution_code.as_deref());
-        validate_account_lookup(expected_code, account_hex.as_deref(), cid_number.as_deref())?;
-        if let Some(account_hex) = account_hex.filter(|item| !item.trim().is_empty()) {
-            let account_id = account_id::account_id_from_hex(&account_hex)?;
-            let state = storage::fetch_admin_account(&account_id, cid_number)?;
-            match state {
-                Some(state) => ensure_expected_code(state, expected_code).map(Some),
-                None => Ok(None),
-            }
-        } else if let Some(cid_number) = cid_number.filter(|item| !item.trim().is_empty()) {
-            let state = storage::fetch_admin_account_by_cid_number(&cid_number)?;
-            match state {
-                Some(state) => ensure_expected_code(state, expected_code).map(Some),
-                None => Ok(None),
-            }
-        } else {
-            Err("必须提供 cidNumber 或 accountHex".to_string())
+        validate_cid_lookup(expected_code, Some(&cid_number))?;
+        let state = storage::fetch_admin_account_by_cid_number(&cid_number)?;
+        match state {
+            Some(state) => ensure_expected_code(state, expected_code).map(Some),
+            None => Ok(None),
         }
     })
     .await

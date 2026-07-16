@@ -3,9 +3,10 @@
 //! 实体生命周期共用类型与 trait。
 //!
 //! 本 crate 是 `runtime/entity` 下唯一共享模块，集中机构生命周期共用类型
-//! (`RegisteredInstitution`/`InstitutionInfo`/`InstitutionLifecycleStatus` 等,
+//! (`RegisteredInstitution`/`InstitutionInfo` 等,
 //! 由 public-manage / private-manage re-export)与统一查询 trait,本 crate 不持有 storage。
-//! 公权机构、私权机构、个人多签分别在各自 pallet 保存生命周期状态；
+//! 公权机构、私权机构分别以 CID 和账户记录是否存在表达当前事实；
+//! 个人多签继续在自己的 pallet 保存个人账户生命周期状态；
 //! 下游模块通过这里的 trait 做统一查询，不直接读取某个实体 pallet 的 storage。
 
 extern crate alloc;
@@ -40,8 +41,7 @@ pub use institution_role::{
 
 /// CID 机构登记反向索引项：account → (cid_number, account_name)。
 ///
-/// 由 `register_cid_public_institution` / `register_cid_private_institution` extrinsic 写入,
-/// 后续创建/查询机构多签时用作反向校验。
+/// 由机构创建或机构新增账户流程与正向账户记录原子写入，用作反向校验。
 #[derive(
     Encode,
     Decode,
@@ -56,28 +56,6 @@ pub use institution_role::{
 pub struct RegisteredInstitution<CidNumber, AccountName> {
     pub cid_number: CidNumber,
     pub account_name: AccountName,
-}
-
-/// 机构及机构账户生命周期。
-#[derive(
-    Encode,
-    Decode,
-    DecodeWithMemTracking,
-    Clone,
-    Copy,
-    RuntimeDebug,
-    TypeInfo,
-    MaxEncodedLen,
-    PartialEq,
-    Eq,
-)]
-pub enum InstitutionLifecycleStatus {
-    /// 投票型生命周期处理中。机构注册创建不使用该状态。
-    Pending,
-    /// 机构已上链激活，初始资金已划入机构账户。
-    Active,
-    /// 机构已注销。当前第1步暂不开放机构整体注销，只预留状态语义。
-    Closed,
 }
 
 /// 机构信息(链上最小集)。
@@ -115,8 +93,6 @@ pub struct InstitutionInfo<BlockNumber, AccountName, CidNumber, AccountId> {
     pub institution_code: InstitutionCode,
     /// 机构注册创建区块号。
     pub created_at: BlockNumber,
-    /// 机构生命周期状态。
-    pub status: InstitutionLifecycleStatus,
 }
 
 /// 机构下某个账户名对应的链上账户信息。
@@ -133,20 +109,18 @@ pub struct InstitutionInfo<BlockNumber, AccountName, CidNumber, AccountId> {
 )]
 pub struct InstitutionAccountInfo<AccountId, Balance, BlockNumber> {
     pub address: AccountId,
+    /// 创建该逻辑账户时指定的初始余额，只是历史事实，不是当前余额真源。
     pub initial_balance: Balance,
-    pub status: InstitutionLifecycleStatus,
-    pub is_default: bool,
     pub created_at: BlockNumber,
 }
 
 /// 关闭机构多签账户提案的业务数据(公权/私权通用,存入投票引擎 ProposalData)。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-pub struct CloseInstitutionAction<AccountId> {
-    pub account: AccountId,
+pub struct CloseInstitutionAction<AccountId, CidNumber> {
+    pub actor_cid_number: CidNumber,
+    pub institution_account: AccountId,
     pub beneficiary: AccountId,
     pub proposer: AccountId,
-    /// 注销作用域:`SCOPE_INSTITUTION`(关主账户=级联关整个机构)/ `SCOPE_ACCOUNT`(只关该非主账户)。
-    pub scope: u8,
 }
 
 /// 创建机构时用户填写的账户初始余额项。
@@ -182,7 +156,6 @@ pub struct CreateInstitutionAccount<AccountName, AccountId, Balance> {
     pub account_name: AccountName,
     pub address: AccountId,
     pub amount: Balance,
-    pub is_default: bool,
 }
 
 /// runtime 内实体生命周期分类。
@@ -212,8 +185,8 @@ pub trait InstitutionMultisigQuery<AccountId> {
         addr: &AccountId,
     ) -> Option<primitives::multisig::MultisigConfigSnapshot<AccountId>>;
 
-    /// 返回机构账户生命周期是否为 Active。
-    fn is_active(addr: &AccountId) -> bool;
+    /// 返回该机构账户是否存在于当前机构账户集合。
+    fn account_exists(addr: &AccountId) -> bool;
 }
 
 /// 机构 CID 是否已在某个实体生命周期 pallet 中登记。
@@ -230,11 +203,8 @@ pub trait InstitutionCidQuery<CidNumber> {
 /// 法定代表人是机构公开信息，唯一真源位于 entity 的 `InstitutionInfo`；
 /// admins 模块不得保存副本，也不得以首位管理员作为回退值。
 pub trait InstitutionLegalRepresentativeQuery<AccountId> {
-    /// 按机构码和任一机构账户读取当前已任命的法定代表人钱包账户。
-    fn legal_representative(
-        institution_code: InstitutionCode,
-        institution: AccountId,
-    ) -> Option<AccountId>;
+    /// 按机构唯一 CID 读取当前已任命的法定代表人钱包账户。
+    fn legal_representative(cid_number: &[u8]) -> Option<AccountId>;
 }
 
 impl<CidNumber> InstitutionCidQuery<CidNumber> for () {
@@ -244,10 +214,7 @@ impl<CidNumber> InstitutionCidQuery<CidNumber> for () {
 }
 
 impl<AccountId> InstitutionLegalRepresentativeQuery<AccountId> for () {
-    fn legal_representative(
-        _institution_code: InstitutionCode,
-        _institution: AccountId,
-    ) -> Option<AccountId> {
+    fn legal_representative(_cid_number: &[u8]) -> Option<AccountId> {
         None
     }
 }
@@ -267,15 +234,15 @@ impl<AccountId> InstitutionMultisigQuery<AccountId> for () {
         None
     }
 
-    fn is_active(_addr: &AccountId) -> bool {
+    fn account_exists(_addr: &AccountId) -> bool {
         false
     }
 }
 
 /// CID 机构登记与注销验签抽象。
 ///
-/// runtime 必须用 `issuer_main_account` 读取 admins 模块的 `admins` 真源，
-/// 确认 `signer_pubkey` 属于该机构管理员，再验业务 payload 签名。
+/// runtime 必须用 `actor_cid_number` 读取 admins 模块的 `admins` 真源，
+/// 确认凭证签名者属于该机构管理员，再验业务 payload 签名。
 pub trait CidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> {
     /// 校验 CID 机构登记凭证。
     fn verify_institution_registration(
@@ -285,9 +252,8 @@ pub trait CidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> {
         account_names: &[Vec<u8>],
         nonce: &Nonce,
         signature: &Signature,
-        issuer_cid_number: &[u8],
-        issuer_main_account: &AccountId,
-        signer_pubkey: &[u8; 32],
+        actor_cid_number: &[u8],
+        credential_signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
         scope_city_name: &[u8],
         town_code: &[u8],
@@ -306,9 +272,8 @@ pub trait CidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> {
         assignments_payload: &[u8],
         nonce: &Nonce,
         signature: &Signature,
-        issuer_cid_number: &[u8],
-        issuer_main_account: &AccountId,
-        signer_pubkey: &[u8; 32],
+        actor_cid_number: &[u8],
+        credential_signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
         scope_city_name: &[u8],
         town_code: &[u8],
@@ -328,26 +293,23 @@ pub trait CidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> {
             account_names,
             nonce,
             signature,
-            issuer_cid_number,
-            issuer_main_account,
-            signer_pubkey,
+            actor_cid_number,
+            credential_signer_pubkey,
             scope_province_name,
             scope_city_name,
             town_code,
         )
     }
 
-    /// 校验 CID 机构注销凭证。
-    fn verify_institution_deregistration(
-        scope: u8,
+    /// 校验 CID 机构自定义账户关闭凭证。
+    fn verify_institution_account_close(
         cid_number: &[u8],
         account_name: &[u8],
         target_account: &AccountId,
         nonce: &Nonce,
         signature: &Signature,
-        issuer_cid_number: &[u8],
-        issuer_main_account: &AccountId,
-        signer_pubkey: &[u8; 32],
+        credential_issuer_cid_number: &[u8],
+        credential_signer_pubkey: &[u8; 32],
     ) -> bool;
 }
 
@@ -361,9 +323,8 @@ impl<AccountId, AccountName, Nonce, Signature>
         _account_names: &[Vec<u8>],
         _nonce: &Nonce,
         _signature: &Signature,
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId,
-        _signer_pubkey: &[u8; 32],
+        _actor_cid_number: &[u8],
+        _credential_signer_pubkey: &[u8; 32],
         _scope_province_name: &[u8],
         _scope_city_name: &[u8],
         _town_code: &[u8],
@@ -371,16 +332,14 @@ impl<AccountId, AccountName, Nonce, Signature>
         false
     }
 
-    fn verify_institution_deregistration(
-        _scope: u8,
+    fn verify_institution_account_close(
         _cid_number: &[u8],
         _account_name: &[u8],
         _target_account: &AccountId,
         _nonce: &Nonce,
         _signature: &Signature,
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId,
-        _signer_pubkey: &[u8; 32],
+        _credential_issuer_cid_number: &[u8],
+        _credential_signer_pubkey: &[u8; 32],
     ) -> bool {
         false
     }
@@ -395,9 +354,8 @@ pub trait RegistryAuthority<AccountId> {
     /// 当前 origin 是否可按签发凭证登记目标机构。
     fn can_register_institution(
         registrar: &AccountId,
-        issuer_cid_number: &[u8],
-        issuer_main_account: &AccountId,
-        signer_pubkey: &[u8; 32],
+        actor_cid_number: &[u8],
+        credential_signer_pubkey: &[u8; 32],
         target_cid_number: &[u8],
         target_institution_code: InstitutionCode,
         scope_province_name: &[u8],
@@ -408,9 +366,8 @@ pub trait RegistryAuthority<AccountId> {
 impl<AccountId> RegistryAuthority<AccountId> for () {
     fn can_register_institution(
         _registrar: &AccountId,
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId,
-        _signer_pubkey: &[u8; 32],
+        _actor_cid_number: &[u8],
+        _credential_signer_pubkey: &[u8; 32],
         _target_cid_number: &[u8],
         _target_institution_code: InstitutionCode,
         _scope_province_name: &[u8],
@@ -425,14 +382,6 @@ mod scale_contract_tests {
     use super::*;
     use codec::Encode;
 
-    /// NodeGuard 以单字节判别值镜像机构生命周期；枚举重排会改变链上存储编码，必须立即测试失败。
-    #[test]
-    fn institution_lifecycle_discriminants_match_node_guard() {
-        assert_eq!(InstitutionLifecycleStatus::Pending.encode(), vec![0]);
-        assert_eq!(InstitutionLifecycleStatus::Active.encode(), vec![1]);
-        assert_eq!(InstitutionLifecycleStatus::Closed.encode(), vec![2]);
-    }
-
     /// 机构记录的声明序就是 SCALE 存储契约，NodeGuard 按同一顺序完整解码。
     #[test]
     fn institution_info_field_order_matches_node_guard() {
@@ -445,7 +394,6 @@ mod scale_contract_tests {
             legal_representative_account: Some([9u8; 32]),
             institution_code: *b"NRCG",
             created_at: 7u32,
-            status: InstitutionLifecycleStatus::Active,
         };
         assert_eq!(
             value.encode(),
@@ -458,7 +406,6 @@ mod scale_contract_tests {
                 Some([9u8; 32]),
                 *b"NRCG",
                 7u32,
-                InstitutionLifecycleStatus::Active,
             )
                 .encode()
         );

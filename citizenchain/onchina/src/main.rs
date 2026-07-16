@@ -110,28 +110,6 @@ fn institution_category_from_text(category: &str) -> Option<crate::cid::Institut
     }
 }
 
-fn multisig_chain_status_text(
-    status: &crate::institution::subjects::MultisigChainStatus,
-) -> &'static str {
-    match status {
-        crate::institution::subjects::MultisigChainStatus::NotOnChain => "NOT_ON_CHAIN",
-        crate::institution::subjects::MultisigChainStatus::PendingOnChain => "PENDING_ON_CHAIN",
-        crate::institution::subjects::MultisigChainStatus::ActiveOnChain => "ACTIVE_ON_CHAIN",
-        crate::institution::subjects::MultisigChainStatus::RevokedOnChain => "REVOKED_ON_CHAIN",
-    }
-}
-
-fn multisig_chain_status_from_text(
-    status: &str,
-) -> crate::institution::subjects::MultisigChainStatus {
-    match status {
-        "PENDING_ON_CHAIN" => crate::institution::subjects::MultisigChainStatus::PendingOnChain,
-        "ACTIVE_ON_CHAIN" => crate::institution::subjects::MultisigChainStatus::ActiveOnChain,
-        "REVOKED_ON_CHAIN" => crate::institution::subjects::MultisigChainStatus::RevokedOnChain,
-        _ => crate::institution::subjects::MultisigChainStatus::NotOnChain,
-    }
-}
-
 fn page_from_rows<T: Serialize>(
     mut rows: Vec<(T, DateTime<Utc>, i64)>,
     page_size: usize,
@@ -241,7 +219,6 @@ fn institution_row_from_record(
         cid_number: inst.cid_number.clone(),
         cid_full_name: inst.cid_full_name.clone(),
         cid_short_name: inst.cid_short_name.clone(),
-        status: inst.status.clone(),
         category: inst.category,
         p1: inst.p1.clone(),
         province_name: inst.province_name.clone(),
@@ -273,7 +250,6 @@ fn institution_row_from_pg_row(
     let cid_short_name: Option<String> = row.get(19);
     let town_code: Option<String> = row.get(21);
     let education_type: Option<String> = row.get(22);
-    let status: String = row.get(23);
     // 省/市/镇名字按 code 现场从 china.sqlite 派生,库里不存名字副本(ADR-021)。
     let province_code: String = row.get(6);
     let city_code: Option<String> = row.get(7);
@@ -287,7 +263,6 @@ fn institution_row_from_pg_row(
         cid_number: row.get(0),
         cid_full_name,
         cid_short_name,
-        status,
         category,
         p1: row.get(3),
         province_name,
@@ -331,10 +306,9 @@ fn institution_from_subject_row(
     let cid_short_name: Option<String> = row.get(16);
     let town_code: Option<String> = row.get(18);
     let education_type: Option<String> = row.get(19);
-    let status: String = row.get(20);
     // 字段顺序必须与 get_institution_with_accounts 的 SELECT 保持一致;
-    // legal_representative_photo_size 是第 27 列,下标为 26,越界会在持有数据库锁时 panic。
-    let legal_representative_photo_size_i64: Option<i64> = row.get(26);
+    // legal_representative_photo_size 是第 26 列,下标为 25,越界会在持有数据库锁时 panic。
+    let legal_representative_photo_size_i64: Option<i64> = row.get(25);
     // 省/市/镇名字按 code 现场从 china.sqlite 派生,DTO 仍带名字,库里不存名字副本(ADR-021)。
     let province_code: String = row.get(6);
     let city_code: Option<String> = row.get(7);
@@ -348,7 +322,6 @@ fn institution_from_subject_row(
         cid_number: row.get(0),
         cid_full_name,
         cid_short_name,
-        status,
         category,
         p1: row.get(3),
         province_name,
@@ -363,12 +336,12 @@ fn institution_from_subject_row(
         partnership_kind: row.get(10),
         has_legal_personality: row.get(11),
         parent_cid_number: row.get(12),
-        legal_representative_name: row.get(21),
-        legal_representative_cid_number: row.get(22),
-        legal_representative_account: row.get(27),
-        legal_representative_photo_path: row.get(23),
-        legal_representative_photo_name: row.get(24),
-        legal_representative_photo_mime: row.get(25),
+        legal_representative_name: row.get(20),
+        legal_representative_cid_number: row.get(21),
+        legal_representative_account: row.get(26),
+        legal_representative_photo_path: row.get(22),
+        legal_representative_photo_name: row.get(23),
+        legal_representative_photo_mime: row.get(24),
         legal_representative_photo_size: legal_representative_photo_size_i64
             .and_then(|v| u64::try_from(v).ok()),
         created_by: row.get(13),
@@ -499,7 +472,7 @@ impl Db {
                             s.parent_cid_number, s.created_by, s.created_at,
                             s.cid_full_name, s.cid_short_name,
                             ''::text AS town_name, COALESCE(s.town_code, ''),
-                            s.education_type, s.status, s.legal_representative_name, s.legal_representative_cid_number,
+                            s.education_type, s.legal_representative_name, s.legal_representative_cid_number,
 	                            s.legal_representative_photo_path, s.legal_representative_photo_name,
 	                            s.legal_representative_photo_mime, s.legal_representative_photo_size,
 	                            s.legal_representative_account
@@ -516,7 +489,7 @@ impl Db {
             let inst = institution_from_subject_row(&row)?;
             let account_rows = conn
                 .query(
-                    "SELECT cid_number, account_name, account, chain_status, created_at
+                    "SELECT cid_number, account_name, account, created_at
                      FROM accounts
                      WHERE cid_number = $1
                      ORDER BY account_name ASC",
@@ -525,17 +498,12 @@ impl Db {
                 .map_err(|e| format!("query institution accounts failed: {e}"))?;
             let mut accounts = Vec::with_capacity(account_rows.len());
             for row in account_rows {
-                let status_text: String = row.get(3);
                 accounts.push(crate::institution::subjects::InstitutionAccount {
                     cid_number: row.get(0),
                     account_name: row.get(1),
                     account: row.get(2),
-                    chain_status: multisig_chain_status_from_text(status_text.as_str()),
-                    chain_synced_at: None,
-                    chain_tx_hash: None,
-                    chain_block_number: None,
                     created_by: String::new(),
-                    created_at: row.get(4),
+                    created_at: row.get(3),
                 });
             }
             Ok(Some((inst, accounts)))
@@ -909,7 +877,6 @@ impl Db {
         } else {
             Some(inst.town_code.clone())
         };
-        let status = inst.status.trim().to_string();
         Self::upsert_target_id_row(
             conn,
             inst.cid_number.as_str(),
@@ -931,7 +898,7 @@ impl Db {
         conn.execute(
             "INSERT INTO subjects (
                 cid_number, kind, cid_full_name, cid_short_name,
-                status, category, p1,
+                category, p1,
                 province_code, city_code, town_code, institution_code,
                 education_type, private_type, partnership_kind, has_legal_personality,
                 parent_cid_number, legal_representative_name, legal_representative_cid_number,
@@ -940,14 +907,13 @@ impl Db {
                 legal_representative_photo_size, created_by, created_at, updated_at
              ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-                $11, $12, $13, $14, $15, $16, $17, $18, $19,
-                $20, $21, $22, $23, $24, $25, now()
+                $11, $12, $13, $14, $15, $16, $17, $18,
+                $19, $20, $21, $22, $23, $24, now()
              )
              ON CONFLICT (province_code, cid_number) DO UPDATE SET
                 kind = EXCLUDED.kind,
                 cid_full_name = EXCLUDED.cid_full_name,
                 cid_short_name = EXCLUDED.cid_short_name,
-                status = EXCLUDED.status,
                 category = EXCLUDED.category,
                 p1 = EXCLUDED.p1,
                 province_code = EXCLUDED.province_code,
@@ -973,7 +939,6 @@ impl Db {
                 &kind,
                 &inst.cid_full_name,
                 &inst.cid_short_name,
-                &status,
                 &category,
                 &inst.p1,
                 &inst.province_code,
@@ -1111,7 +1076,6 @@ impl Db {
             Some(row) => (row.get(0), row.get(1)),
             None => (fallback_p, fallback_c),
         };
-        let chain_status = multisig_chain_status_text(&account.chain_status);
         Self::delete_target_rows_outside_scope(
             conn,
             "accounts",
@@ -1120,12 +1084,11 @@ impl Db {
         )?;
         conn.execute(
             "INSERT INTO accounts (
-                cid_number, province_code, city_code, account_name, account, chain_status, created_at
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                cid_number, province_code, city_code, account_name, account, created_at
+             ) VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT (province_code, cid_number, account_name) DO UPDATE SET
                 city_code = EXCLUDED.city_code,
                 account = EXCLUDED.account,
-                chain_status = EXCLUDED.chain_status,
                 created_at = EXCLUDED.created_at",
             &[
                 &account.cid_number,
@@ -1133,7 +1096,6 @@ impl Db {
                 &city_code,
                 &account.account_name,
                 &account.account,
-                &chain_status,
                 &account.created_at,
             ],
         )
@@ -1504,8 +1466,7 @@ impl Db {
 				                                    COALESCE(ac.account_count, 0),
 				                                    a.admin_name, a.institution_code, s.cid_full_name, s.cid_short_name,
 				                                    ''::text AS town_name, COALESCE(s.town_code, ''),
-				                                    s.education_type,
-				                                    s.status
+				                                    s.education_type
 		                             FROM subjects s
 		                             LEFT JOIN gov g ON g.province_code = s.province_code AND g.cid_number = s.cid_number
 		                             LEFT JOIN subjects par ON par.cid_number = s.parent_cid_number
@@ -1585,7 +1546,7 @@ impl Db {
                                     COALESCE(ac.account_count, 0),
                                     a.admin_name, a.institution_code, s.cid_full_name, s.cid_short_name,
                                     ''::text AS town_name, COALESCE(s.town_code, ''),
-                                    s.education_type, s.status
+                                    s.education_type
 	                     FROM subjects s
 	                     JOIN gov g ON g.province_code = s.province_code AND g.cid_number = s.cid_number
 	                     LEFT JOIN (
@@ -1595,7 +1556,6 @@ impl Db {
                      ) ac ON ac.cid_number = s.cid_number
                      LEFT JOIN admins a ON lower(a.admin_account) = lower(s.created_by)
                      WHERE s.kind = 'PUBLIC'
-		                       AND s.status = 'ACTIVE'
 		                       AND g.source = 'CHAIN'
 		                       AND s.institution_code IN ('NED', 'CEDU', 'GUN', 'GSCH')
 	                       AND s.education_type = $3
@@ -1650,8 +1610,7 @@ impl Db {
 			                                    COALESCE(ac.account_count, 0),
 			                                    a.admin_name, a.institution_code, s.cid_full_name, s.cid_short_name,
 			                                    ''::text AS town_name, COALESCE(s.town_code, ''),
-			                                    s.education_type,
-			                                    s.status
+			                                    s.education_type
 	                             FROM subjects s
 	                             LEFT JOIN gov g ON g.province_code = s.province_code AND g.cid_number = s.cid_number
 	                             LEFT JOIN subjects par ON par.cid_number = s.parent_cid_number
@@ -1664,7 +1623,6 @@ impl Db {
 	                             ) ac ON ac.province_code = s.province_code AND ac.cid_number = s.cid_number
 	                             LEFT JOIN admins a ON lower(a.admin_account) = lower(s.created_by)
 	                             WHERE s.kind IN ('PUBLIC', 'PRIVATE')
-	                               AND s.status = 'ACTIVE'
 			                               AND (
 			                                    (s.category = 'GOV_INSTITUTION'
 			                                     AND g.cid_number IS NOT NULL
@@ -2470,14 +2428,10 @@ fn main() {
                 "/api/v1/app/wallet/:address/transactions",
                 get(indexer::api::wallet_transactions),
             )
-            // ── 机构信息查询(链端/钱包 pull):机构搜索 / 详情 / 注册信息凭证 / 账户列表 ──
+            // ── 机构信息查询(链端/钱包 pull):机构搜索 / 详情 / 账户列表 ──
             .route(
                 "/api/v1/app/institutions/search",
                 get(institution::subjects::chain_multisig_info::app_search_institutions),
-            )
-            .route(
-                "/api/v1/app/institutions/:cid_number/registration-info",
-                get(institution::subjects::chain_multisig_info::app_get_institution_registration_info),
             )
             .route(
                 "/api/v1/app/institutions/:cid_number/deregistration-info",

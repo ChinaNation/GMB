@@ -24,7 +24,8 @@ use primitives::count_const::{
 use votingengine::{
     pallet::{Proposals, ProposalsByExpiry},
     types::{
-        fixed_governance_pass_threshold, InstitutionCode, ProposalSubjectCidNumbers, NRC, PRB, PRC,
+        fixed_governance_pass_threshold, CidNumber, InstitutionCode, ProposalSubject,
+        ProposalSubjectCidNumbers, NRC, PRB, PRC,
     },
     InternalAdminProvider, InternalProposalMutexKind, PopulationScope, Proposal,
     PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
@@ -34,100 +35,48 @@ use super::pallet::{
     Config, Error, Event, JointInstitutionTallies, JointTallies, JointVotesByAdmin,
     JointVotesByInstitution, Pallet, PendingPopulationSnapshots, PreparedPopulationSnapshot,
 };
-use super::{decode_account, institution_info, is_joint_unanimous, nrc_account};
+use super::{institution_info, is_joint_unanimous};
 
-#[cfg(test)]
-use codec::Encode;
 // 私有 helper:发起人机构解析 + (institution_code, weight) profile
-pub(super) fn institution_profile<T: Config>(id: &T::AccountId) -> Option<(InstitutionCode, u32)> {
+pub(super) fn institution_profile(cid_number: &[u8]) -> Option<(InstitutionCode, u32)> {
     if CHINA_CB
         .first()
-        .and_then(|n| decode_account::<T>(&n.main_account))
-        .as_ref()
-        == Some(id)
+        .map(|n| n.cid_number.as_bytes() == cid_number)
+        .unwrap_or(false)
     {
         return Some((NRC, NRC_JOINT_VOTE_WEIGHT));
     }
     if CHINA_CB
         .iter()
         .skip(1)
-        .filter_map(|n| decode_account::<T>(&n.main_account))
-        .any(|account| &account == id)
+        .any(|n| n.cid_number.as_bytes() == cid_number)
     {
         return Some((PRC, PRC_JOINT_VOTE_WEIGHT));
     }
     if CHINA_CH
         .iter()
-        .filter_map(|n| decode_account::<T>(&n.main_account))
-        .any(|account| &account == id)
+        .any(|n| n.cid_number.as_bytes() == cid_number)
     {
         return Some((PRB, PRB_JOINT_VOTE_WEIGHT));
     }
     None
 }
 
-fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<T::AccountId> {
-    #[cfg(not(test))]
-    {
-        if let Some(nrc) = nrc_account::<T>() {
-            if <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
-                NRC,
-                nrc.clone(),
-                who,
-            ) {
-                return Some(nrc);
-            }
-        }
-        for entry in CHINA_CB.iter().skip(1) {
-            if let Some(prc) = decode_account::<T>(&entry.main_account) {
-                if <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
-                    PRC,
-                    prc.clone(),
-                    who,
-                ) {
-                    return Some(prc);
-                }
-            }
-        }
-        None
-    }
-    #[cfg(test)]
-    {
-        if let Some(nrc) = nrc_account::<T>() {
-            if <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
-                NRC,
-                nrc.clone(),
-                who,
-            ) {
-                return Some(nrc);
-            }
-        }
-        for entry in CHINA_CB.iter().skip(1) {
-            if let Some(prc) = decode_account::<T>(&entry.main_account) {
-                if <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
-                    PRC,
-                    prc.clone(),
-                    who,
-                ) {
-                    return Some(prc);
-                }
-            }
-        }
-        let who_bytes = who.encode();
-        if who_bytes.len() != 32 {
-            return None;
-        }
-        let mut who_arr = [0u8; 32];
-        who_arr.copy_from_slice(&who_bytes);
-        for entry in CHINA_CB.iter() {
-            if let Some(institution) = decode_account::<T>(&entry.main_account) {
-                if entry.admins.iter().any(|admin| *admin == who_arr) {
-                    return Some(institution);
-                }
-            }
-        }
-        None
-    }
+fn ensure_proposer_institution<T: Config>(
+    actor_cid_number: &CidNumber,
+    who: &T::AccountId,
+) -> Result<InstitutionCode, DispatchError> {
+    let (institution_code, _) = institution_profile(actor_cid_number.as_slice())
+        .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
+    ensure!(
+        <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
+            institution_code,
+            actor_cid_number.as_slice(),
+            who,
+        ),
+        votingengine::Error::<T>::NoPermission
+    );
+    Ok(institution_code)
 }
 
 fn joint_subject_cid_numbers<T: Config>() -> Result<ProposalSubjectCidNumbers, DispatchError> {
@@ -155,10 +104,10 @@ impl<T: Config> Pallet<T> {
     /// 这是投票引擎内部能力。业务模块不传快照材料，只能在发起联合提案前由管理员调用本入口，让 joint-vote 从链上身份模块读取总人数。
     pub fn do_prepare_joint_population_snapshot(
         who: T::AccountId,
+        actor_cid_number: CidNumber,
         scope: PopulationScope,
     ) -> DispatchResult {
-        let _proposer_institution = resolve_proposer_institution::<T>(&who)
-            .ok_or(votingengine::Error::<T>::NoPermission)?;
+        ensure_proposer_institution::<T>(&actor_cid_number, &who)?;
         let (snapshot_id, eligible_total) =
             <votingengine::Pallet<T>>::create_population_snapshot(&scope)?;
         if eligible_total == 0 {
@@ -173,6 +122,7 @@ impl<T: Config> Pallet<T> {
         PendingPopulationSnapshots::<T>::insert(
             &who,
             PreparedPopulationSnapshot {
+                actor_cid_number,
                 snapshot_id,
                 eligible_total,
                 prepared_at: now,
@@ -188,11 +138,17 @@ impl<T: Config> Pallet<T> {
 
     /// 创建联合投票提案。锁定全部参与机构(NRC + 43 PRC + 43 PRB)管理员快照,
     /// 并消费已准备的人口快照总分母，后续阶段切换不再改写。
-    pub fn do_create_joint_proposal(who: T::AccountId) -> Result<u64, DispatchError> {
-        let proposer_institution = resolve_proposer_institution::<T>(&who)
-            .ok_or(votingengine::Error::<T>::NoPermission)?;
+    pub fn do_create_joint_proposal(
+        who: T::AccountId,
+        actor_cid_number: CidNumber,
+    ) -> Result<u64, DispatchError> {
+        ensure_proposer_institution::<T>(&actor_cid_number, &who)?;
         let prepared = PendingPopulationSnapshots::<T>::get(&who)
             .ok_or(Error::<T>::PopulationSnapshotNotPrepared)?;
+        ensure!(
+            prepared.actor_cid_number == actor_cid_number,
+            votingengine::Error::<T>::InvalidInstitution
+        );
         let now = <frame_system::Pallet<T>>::block_number();
         if prepared.prepared_at != now {
             PendingPopulationSnapshots::<T>::remove(&who);
@@ -209,7 +165,8 @@ impl<T: Config> Pallet<T> {
             stage: STAGE_JOINT,
             status: votingengine::STATUS_VOTING,
             internal_code: None,
-            account_context: Some(proposer_institution.clone()),
+            actor_cid_number: Some(actor_cid_number.clone()),
+            execution_account: None,
             subject_cid_numbers,
             start: now,
             end,
@@ -240,32 +197,44 @@ impl<T: Config> Pallet<T> {
             }
 
             // 锁定所有参与机构(NRC + 43 PRC + 43 PRB)的管理员快照。
-            if let Some(nrc) = nrc_account::<T>() {
-                if let Err(err) =
-                    <votingengine::Pallet<T>>::snapshot_institution_admins(id, NRC, nrc, false)
-                {
+            if let Some(entry) = CHINA_CB.first() {
+                let cid_number = match CidNumber::try_from(entry.cid_number.as_bytes().to_vec()) {
+                    Ok(value) => value,
+                    Err(_) => return TransactionOutcome::Rollback(Err(votingengine::Error::<T>::InvalidInstitution.into())),
+                };
+                if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
+                    id, NRC, cid_number,
+                ) {
                     return TransactionOutcome::Rollback(Err(err));
                 }
             }
             for entry in CHINA_CB.iter().skip(1) {
-                if let Some(prc) = decode_account::<T>(&entry.main_account) {
-                    if let Err(err) =
-                        <votingengine::Pallet<T>>::snapshot_institution_admins(id, PRC, prc, false)
-                    {
-                        return TransactionOutcome::Rollback(Err(err));
-                    }
+                let cid_number = match CidNumber::try_from(entry.cid_number.as_bytes().to_vec()) {
+                    Ok(value) => value,
+                    Err(_) => return TransactionOutcome::Rollback(Err(votingengine::Error::<T>::InvalidInstitution.into())),
+                };
+                if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
+                    id, PRC, cid_number,
+                ) {
+                    return TransactionOutcome::Rollback(Err(err));
                 }
             }
             for entry in CHINA_CH.iter() {
-                if let Some(prb) = decode_account::<T>(&entry.main_account) {
-                    if let Err(err) =
-                        <votingengine::Pallet<T>>::snapshot_institution_admins(id, PRB, prb, false)
-                    {
-                        return TransactionOutcome::Rollback(Err(err));
-                    }
+                let cid_number = match CidNumber::try_from(entry.cid_number.as_bytes().to_vec()) {
+                    Ok(value) => value,
+                    Err(_) => return TransactionOutcome::Rollback(Err(votingengine::Error::<T>::InvalidInstitution.into())),
+                };
+                if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
+                    id, PRB, cid_number,
+                ) {
+                    return TransactionOutcome::Rollback(Err(err));
                 }
             }
-            if !<votingengine::Pallet<T>>::is_admin_in_snapshot(id, proposer_institution, &who) {
+            if !<votingengine::Pallet<T>>::is_admin_in_snapshot(
+                id,
+                ProposalSubject::InstitutionCid(actor_cid_number.clone()),
+                &who,
+            ) {
                 frame_support::defensive!(
                     "do_create_joint_proposal: proposer is missing from admin snapshot"
                 );
@@ -297,7 +266,7 @@ impl<T: Config> Pallet<T> {
     pub fn do_joint_vote(
         who: T::AccountId,
         proposal_id: u64,
-        institution: T::AccountId,
+        cid_number: CidNumber,
         approve: bool,
     ) -> DispatchResult {
         let proposal = <votingengine::Pallet<T>>::ensure_open_proposal(proposal_id)?;
@@ -311,23 +280,27 @@ impl<T: Config> Pallet<T> {
             votingengine::Error::<T>::InvalidProposalStage
         );
         ensure!(
-            !JointVotesByInstitution::<T>::contains_key(proposal_id, institution.clone()),
+            !JointVotesByInstitution::<T>::contains_key(proposal_id, cid_number.clone()),
             votingengine::Error::<T>::AlreadyVoted
         );
-        let (institution_code, _) = institution_profile::<T>(&institution)
+        let (institution_code, _) = institution_profile(cid_number.as_slice())
             .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
         ensure!(
-            <votingengine::Pallet<T>>::is_admin_in_snapshot(proposal_id, institution.clone(), &who,),
+            <votingengine::Pallet<T>>::is_admin_in_snapshot(
+                proposal_id,
+                ProposalSubject::InstitutionCid(cid_number.clone()),
+                &who,
+            ),
             votingengine::Error::<T>::NoPermission
         );
         ensure!(
-            !JointVotesByAdmin::<T>::contains_key(proposal_id, (institution.clone(), who.clone()),),
+            !JointVotesByAdmin::<T>::contains_key(proposal_id, (cid_number.clone(), who.clone()),),
             votingengine::Error::<T>::AlreadyVoted
         );
 
-        JointVotesByAdmin::<T>::insert(proposal_id, (institution.clone(), who.clone()), approve);
+        JointVotesByAdmin::<T>::insert(proposal_id, (cid_number.clone(), who.clone()), approve);
         let tally =
-            JointInstitutionTallies::<T>::mutate(proposal_id, institution.clone(), |tally| {
+            JointInstitutionTallies::<T>::mutate(proposal_id, cid_number.clone(), |tally| {
                 if approve {
                     tally.yes = tally.yes.saturating_add(1);
                 } else {
@@ -338,7 +311,7 @@ impl<T: Config> Pallet<T> {
 
         Self::deposit_event(Event::<T>::JointAdminVoteCast {
             proposal_id,
-            institution: institution.clone(),
+            cid_number: cid_number.clone(),
             who,
             approve,
         });
@@ -346,16 +319,19 @@ impl<T: Config> Pallet<T> {
         let threshold = fixed_governance_pass_threshold(&institution_code)
             .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
         let admins_len =
-            <votingengine::Pallet<T>>::snapshot_admins_len(proposal_id, institution.clone())
+            <votingengine::Pallet<T>>::snapshot_admins_len(
+                proposal_id,
+                ProposalSubject::InstitutionCid(cid_number.clone()),
+            )
                 .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
 
         if tally.yes >= threshold {
-            return Self::finalize_joint_institution_vote(proposal_id, institution, true);
+            return Self::finalize_joint_institution_vote(proposal_id, cid_number, true);
         }
         let casted_votes = tally.yes.saturating_add(tally.no);
         let remaining_admins = admins_len.saturating_sub(casted_votes);
         if tally.yes.saturating_add(remaining_admins) < threshold {
-            return Self::finalize_joint_institution_vote(proposal_id, institution, false);
+            return Self::finalize_joint_institution_vote(proposal_id, cid_number, false);
         }
 
         Ok(())
@@ -363,17 +339,17 @@ impl<T: Config> Pallet<T> {
 
     fn finalize_joint_institution_vote(
         proposal_id: u64,
-        institution: T::AccountId,
+        cid_number: CidNumber,
         approved: bool,
     ) -> DispatchResult {
         ensure!(
-            !JointVotesByInstitution::<T>::contains_key(proposal_id, institution.clone()),
+            !JointVotesByInstitution::<T>::contains_key(proposal_id, cid_number.clone()),
             votingengine::Error::<T>::AlreadyVoted
         );
-        let weight = institution_info::<T>(&institution)
+        let weight = institution_info(cid_number.as_slice())
             .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
 
-        JointVotesByInstitution::<T>::insert(proposal_id, institution.clone(), approved);
+        JointVotesByInstitution::<T>::insert(proposal_id, cid_number.clone(), approved);
 
         let tally = JointTallies::<T>::mutate(proposal_id, |tally| {
             if approved {
@@ -386,7 +362,7 @@ impl<T: Config> Pallet<T> {
 
         Self::deposit_event(Event::<T>::JointInstitutionVoteFinalized {
             proposal_id,
-            institution,
+            cid_number,
             approved,
         });
 

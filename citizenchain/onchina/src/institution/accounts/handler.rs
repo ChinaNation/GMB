@@ -19,9 +19,8 @@ use crate::institution::subjects::model::{
     CreateAccountInput, CreateAccountOutput, InstitutionAccount,
 };
 use crate::institution::subjects::service::{
-    can_delete_account, is_default_account_name, validate_account_name,
+    can_delete_account, is_protocol_account_name, validate_account_name,
 };
-use crate::institution::subjects::MultisigChainStatus;
 use crate::scope::get_visible_scope;
 use crate::*;
 
@@ -89,10 +88,6 @@ pub(crate) async fn create_account(
         cid_number: cid_number.clone(),
         account_name: account_name.clone(),
         account: crate::institution::accounts::derive::derive_account(&cid_number, &account_name),
-        chain_status: MultisigChainStatus::NotOnChain,
-        chain_synced_at: None,
-        chain_tx_hash: None,
-        chain_block_number: None,
         created_by: ctx.admin_account.clone(),
         created_at: now,
     };
@@ -117,10 +112,6 @@ pub(crate) async fn create_account(
         data: CreateAccountOutput {
             cid_number,
             account_name,
-            chain_status: MultisigChainStatus::NotOnChain,
-            chain_synced_at: None,
-            chain_tx_hash: None,
-            chain_block_number: None,
             account,
         },
     })
@@ -169,8 +160,8 @@ pub(crate) async fn delete_account(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    if is_default_account_name(&account_name) {
-        return api_error(StatusCode::CONFLICT, 1007, "默认账户不可删除");
+    if is_protocol_account_name(&account_name) {
+        return api_error(StatusCode::CONFLICT, 1007, "协议账户不可删除");
     }
     let Some((inst, accounts)) = (match state.db.get_institution_with_accounts(&cid_number) {
         Ok(v) => v,
@@ -199,7 +190,7 @@ pub(crate) async fn delete_account(
         return api_error(
             StatusCode::CONFLICT,
             1007,
-            "账户仍在链上或处于上链中,不能在身份注册局删除",
+            "协议机构账户不可删除",
         );
     }
     let grant_payload = serde_json::json!({

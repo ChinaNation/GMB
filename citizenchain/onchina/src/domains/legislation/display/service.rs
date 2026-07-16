@@ -30,16 +30,11 @@ pub(crate) async fn build_display_board(
     let roster = fetch_active_assignments_onchain(identity)
         .await?
         .unwrap_or_default();
-    // FRG 等非立法机构:`main_account` 为 `[0u8;32]` 哨兵(身份走 frg_province_code 分流),
-    // 无立法提案。跳过对省组键的无意义 `ActiveProposalsBySubject` 点查,活跃提案恒空。
+    // FRG 等非立法机构按 frg_province_code 分流，无立法提案。
     let active_ids = if identity.frg_province_code.is_some() {
         Vec::new()
     } else {
-        let cid_number = identity
-            .cid_number
-            .as_deref()
-            .ok_or_else(|| "node binding institution_cid_number is required".to_string())?;
-        fetch_active_proposal_ids(cid_number).await?
+        fetch_active_proposal_ids(&identity.cid_number).await?
     };
 
     let mut active_proposals = Vec::new();

@@ -15,8 +15,8 @@ use sp_runtime::traits::Zero;
 use sp_runtime::DispatchError;
 use sp_std::vec::Vec;
 use votingengine::{
-    JointVoteEngine, PROPOSAL_KIND_JOINT, STAGE_JOINT, STAGE_REFERENDUM, STATUS_PASSED,
-    STATUS_REJECTED,
+    InternalAdminProvider, JointVoteEngine, PROPOSAL_KIND_JOINT, STAGE_JOINT, STAGE_REFERENDUM,
+    STATUS_PASSED, STATUS_REJECTED,
 };
 
 #[derive(
@@ -39,6 +39,7 @@ pub struct RecipientAmount<AccountId, Balance> {
 /// 存入 votingengine ProposalData 的业务数据结构。
 #[derive(Encode, Decode, Clone, RuntimeDebug, PartialEq, Eq)]
 pub struct IssuanceProposalData<AccountId, Balance> {
+    pub actor_cid_number: votingengine::types::CidNumber,
     pub proposer: AccountId,
     pub reason: Vec<u8>,
     pub total_amount: Balance,
@@ -48,17 +49,35 @@ pub struct IssuanceProposalData<AccountId, Balance> {
 impl<T: Config> Pallet<T> {
     pub(crate) fn create_resolution_issuance_proposal(
         proposer: T::AccountId,
+        actor_cid_number: votingengine::types::CidNumber,
         reason: ReasonOf<T>,
         total_amount: BalanceOf<T>,
         allocations: AllocationOf<T>,
     ) -> DispatchResult {
         ensure!(!reason.is_empty(), Error::<T>::EmptyReason);
+        let actor_text = core::str::from_utf8(actor_cid_number.as_slice())
+            .map_err(|_| Error::<T>::InvalidActorCid)?;
+        let actor_code = votingengine::types::institution_code_from_cid_number(actor_text)
+            .ok_or(Error::<T>::InvalidActorCid)?;
+        ensure!(
+            matches!(actor_code, votingengine::types::NRC | votingengine::types::PRC),
+            Error::<T>::InvalidActorCid
+        );
+        ensure!(
+            <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
+                actor_code,
+                actor_cid_number.as_slice(),
+                &proposer,
+            ),
+            Error::<T>::UnauthorizedActorAdmin
+        );
         Self::validate_proposal_allocations(&total_amount, allocations.as_slice())?;
 
         // 联合投票提案创建、业务数据写入和计数递增必须原子提交；
         // 任一步失败都不能留下孤儿提案或错误的 VotingProposalCount。
         with_transaction(|| {
             let data = IssuanceProposalData {
+                actor_cid_number: actor_cid_number.clone(),
                 proposer: proposer.clone(),
                 reason: reason.to_vec(),
                 total_amount: total_amount.clone(),
@@ -68,6 +87,7 @@ impl<T: Config> Pallet<T> {
             encoded.extend_from_slice(&data.encode());
             let proposal_id = match T::JointVoteEngine::create_joint_proposal_with_data(
                 proposer.clone(),
+                actor_cid_number.to_vec(),
                 crate::MODULE_TAG,
                 encoded,
             ) {
@@ -85,6 +105,7 @@ impl<T: Config> Pallet<T> {
 
             Self::deposit_event(Event::<T>::ResolutionIssuanceProposed {
                 proposal_id,
+                actor_cid_number,
                 proposer,
                 total_amount,
                 allocation_count: allocations.len() as u32,

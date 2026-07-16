@@ -15,10 +15,10 @@
 //! - 手续费**全部归收款方清算行的费用账户**,无省储行分成。
 //!
 //! **收款方主导清算**模型。
-//! - `submit_offchain_batch` 的 `institution_main` = 收款方清算行主账户
-//! - 同一批次所有 item 的 `recipient_bank` 必须 == `institution_main`
+//! - `submit_offchain_batch` 的 `institution_account` = 收款方清算行主账户
+//! - 同一批次所有 item 的 `recipient_bank` 必须 == `institution_account`
 //! - 提交者 = 收款方清算行的某个激活管理员
-//! - 链上 gas 由 `RuntimeFeePayerExtractor` 从 `fee_account_of(institution_main)` 扣
+//! - 链上 gas 由费用路由按 `actor_cid_number` 定位费用账户扣取
 //!
 //! 节点 packer 收齐多笔 → 提交 `submit_offchain_batch` 走到这里。
 
@@ -64,20 +64,27 @@ fn calc_fee(transfer_amount: u128, rate_bp: u32) -> Result<u128, &'static str> {
 ///
 /// **收款方主导清算**。
 ///
-/// [`submitter`] 提交该批次的清算行多签管理员(必须是 institution_main 即收款方机构的激活管理员)
-/// [`institution_main`] 批次归属的清算行主账户(= **收款方**清算行)
+/// [`submitter`] 提交该批次的清算行管理员
+/// [`actor_cid_number`] 本次交易的机构唯一主键
+/// [`institution_account`] 批次归属的清算行主账户(= **收款方**清算行)
 /// [`batch`] SCALE 编码过的 V2 批次数据(已在 extrinsic 入口完成 BoundedVec 长度校验)
 ///
 /// 偿付预检按 **付款方清算行** 做(每个 payer_bank 各自统计扣减总额),因为
 /// 跨行支付的链上 Currency 流出来自付款方主账户。同一批次内可能有多个 payer_bank。
 pub fn execute_clearing_bank_batch<T: Config>(
     submitter: &T::AccountId,
-    institution_main: &T::AccountId,
+    actor_cid_number: &[u8],
+    institution_account: &T::AccountId,
     batch: &[OffchainBatchItem<T::AccountId, BlockNumberFor<T>>],
 ) -> DispatchResult {
-    // 批次级校验:提交方必须是 institution_main(收款方清算行)的激活管理员
+    // 批次级校验：CID、具体账户和管理员必须同时匹配，不允许从账户回落反推授权主体。
+    bank_check::ensure_institution_account::<T>(
+        actor_cid_number,
+        institution_account,
+        bank_check::ACCOUNT_NAME_MAIN,
+    )?;
     ensure!(
-        T::CidAccountQuery::is_admin_of(institution_main, submitter),
+        T::CidAccountQuery::is_institution_admin(actor_cid_number, submitter),
         Error::<T>::UnauthorizedAdmin
     );
 
@@ -89,9 +96,9 @@ pub fn execute_clearing_bank_batch<T: Config>(
         Default::default();
 
     for item in batch.iter() {
-        // recipient_bank 必须是本批次的 institution_main(收款方主导)
+        // recipient_bank 必须是本批次的 institution_account(收款方主导)
         ensure!(
-            &item.recipient_bank == institution_main,
+            &item.recipient_bank == institution_account,
             Error::<T>::InstitutionMismatch
         );
         ensure!(item.transfer_amount > 0, Error::<T>::InvalidTransferAmount);
@@ -109,12 +116,12 @@ pub fn execute_clearing_bank_batch<T: Config>(
             Error::<T>::UserBankMismatch
         );
 
-        // 付款方清算行必须合法(跨行时必要;同行时即 institution_main 自身,已知合法)
+        // 付款方清算行必须合法(跨行时必要;同行时即 institution_account 自身,已知合法)
         if item.payer_bank != item.recipient_bank {
             bank_check::ensure_can_be_bound::<T>(&item.payer_bank)?;
         }
 
-        // 费率校验(按收款方清算行 = institution_main)
+        // 费率校验(按收款方清算行 = institution_account)
         let rate_bp = fee_config::current_rate_bp::<T>(&item.recipient_bank);
         ensure!(rate_bp > 0, Error::<T>::L2FeeRateNotConfigured);
         let expected_fee = calc_fee(item.transfer_amount, rate_bp)
@@ -149,7 +156,7 @@ pub fn execute_clearing_bank_batch<T: Config>(
     }
 
     Pallet::<T>::deposit_event(Event::<T>::ClearingBankBatchSettled {
-        bank: institution_main.clone(),
+        bank: institution_account.clone(),
         submitter: submitter.clone(),
         item_count: batch.len() as u32,
         total_debit: total_batch_debit,

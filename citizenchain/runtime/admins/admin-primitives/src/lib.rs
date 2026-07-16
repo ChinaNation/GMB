@@ -71,7 +71,7 @@ pub enum AdminAccountStatus {
     Closed,
 }
 
-/// 机构管理员账户集合。
+/// 机构管理员集合。
 ///
 /// 本结构只保存机构管理员钱包账户及必要路由状态；姓名、CID、岗位、任期和来源
 /// 全部归 `entity` 的岗位任职存储。机构管理员没有“创建人、创建时间、更新时间”字段。
@@ -87,15 +87,11 @@ pub enum AdminAccountStatus {
     Eq,
 )]
 #[scale_info(skip_type_params(AdminList))]
-pub struct InstitutionAdminAccount<AdminList> {
-    /// 管理员集合所属机构 CID。
-    pub cid_number: AdminCidNumber,
+pub struct InstitutionAdmins<AdminList> {
     /// 机构码，用于把查询路由到对应公权或私权业务。
     pub institution_code: InstitutionCode,
     /// 去重后的管理员钱包账户集合。
     pub admins: AdminList,
-    /// 管理员集合生命周期。
-    pub status: AdminAccountStatus,
 }
 
 /// 管理员集合记录。
@@ -129,8 +125,8 @@ pub struct AdminAccount<AdminList, AccountId, BlockNumber> {
 )]
 #[scale_info(skip_type_params(AccountId, AdminList))]
 pub struct AdminSetChangeAction<AccountId, AdminList> {
-    /// 管理员集合所属根账户。机构为主账户，个人多签为个人多签账户本身。
-    pub admin_root_account_id: AccountId,
+    /// 个人多签账户。机构管理员变更统一按 CID，不使用本类型。
+    pub personal_account: AccountId,
     /// 提案通过后写入的完整管理员集合。
     pub admins: AdminList,
     /// 提案通过后写入投票引擎的动态阈值；固定治理机构必须等于制度固定阈值。
@@ -194,15 +190,14 @@ pub trait AdminAccountLifecycle<AccountId, AdminItem = AccountId> {
     }
 }
 
-/// 机构管理员账户生命周期写入口。
+/// 机构管理员集合写入口。
 ///
 /// 机构的来源、岗位和任职全部由 entity 表达，因此该接口不接收 `creator`，也不承担
 /// 个人多签的创建语义。公权与私权 entity 只通过本接口原子写入纯钱包账户集合。
-pub trait InstitutionAdminAccountLifecycle<AccountId> {
+pub trait InstitutionAdminLifecycle<AccountId> {
     /// 注册局直设机构的有效管理员账户，并同步登记动态投票阈值。
-    fn set_active_institution_admin_account(
+    fn set_institution_admins(
         module_tag: &[u8],
-        admin_root_account_id: AccountId,
         cid_number: Vec<u8>,
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
@@ -214,32 +209,76 @@ pub trait InstitutionAdminAccountLifecycle<AccountId> {
     ///
     /// 调用方不传阈值：固定机构继续使用编译期固定阈值，动态机构继续使用当前 Active
     /// 动态阈值，避免岗位任职结果越权修改投票制度。
-    fn sync_active_institution_admins_from_assignments(
+    fn sync_institution_admins_from_assignments(
         module_tag: &[u8],
-        admin_root_account_id: AccountId,
         cid_number: Vec<u8>,
         institution_code: InstitutionCode,
         admins: Vec<AccountId>,
     ) -> DispatchResult;
-
-    /// 机构注销提案通过后关闭管理员账户。
-    fn close_institution_admin_account_for_proposal(
-        proposal_id: u64,
-        module_tag: &[u8],
-        admin_root_account_id: AccountId,
-    ) -> DispatchResult;
 }
 
-/// 管理员集合统一查询口。
+/// 机构管理员集合统一查询口。
+///
+/// 机构身份只使用 CID；账户地址不能作为本 trait 的查询 key。
+pub trait InstitutionAdminQuery<AccountId> {
+    fn institution_admins_exist(
+        institution_code: InstitutionCode,
+        cid_number: &[u8],
+    ) -> bool;
+
+    fn is_institution_admin(
+        institution_code: InstitutionCode,
+        cid_number: &[u8],
+        who: &AccountId,
+    ) -> bool;
+
+    fn institution_admins(
+        institution_code: InstitutionCode,
+        cid_number: &[u8],
+    ) -> Option<Vec<AccountId>>;
+
+    fn institution_admins_len(
+        institution_code: InstitutionCode,
+        cid_number: &[u8],
+    ) -> Option<u32>;
+}
+
+impl<AccountId> InstitutionAdminQuery<AccountId> for () {
+    fn institution_admins_exist(
+        _institution_code: InstitutionCode,
+        _cid_number: &[u8],
+    ) -> bool {
+        false
+    }
+
+    fn is_institution_admin(
+        _institution_code: InstitutionCode,
+        _cid_number: &[u8],
+        _who: &AccountId,
+    ) -> bool {
+        false
+    }
+
+    fn institution_admins(
+        _institution_code: InstitutionCode,
+        _cid_number: &[u8],
+    ) -> Option<Vec<AccountId>> {
+        None
+    }
+
+    fn institution_admins_len(
+        _institution_code: InstitutionCode,
+        _cid_number: &[u8],
+    ) -> Option<u32> {
+        None
+    }
+}
+
+/// 个人多签管理员集合查询口。
 ///
 /// runtime 用一个路由实现把读请求分发到 public/private/personal
 /// 各自 pallet；业务模块只依赖本 trait，不直接依赖某个具体管理员 storage。
 pub trait AdminAccountQuery<AccountId> {
-    /// 是否为创世封存机构账户。非创世模块默认返回 false。
-    fn is_genesis_protected(_account: &AccountId) -> bool {
-        false
-    }
-
     fn active_admin_account_exists(
         institution_code: InstitutionCode,
         admin_root_account_id: AccountId,
@@ -383,16 +422,15 @@ pub fn is_personal_admin_code(code: &InstitutionCode) -> bool {
     *code == PMUL
 }
 
-/// 受保护创世治理机构的固定管理员人数；必须完整匹配机构码、CID 和主账户。
+/// 固定治理机构管理员人数；必须完整匹配机构码和 CID。
 ///
 /// FRG 在 `admins` 中保存联邦注册局全部 215 名管理员；43 个省级 5 人岗位组
 /// 由 `entity` 任职关系表达，不再维护第二套管理员分组 storage。
 pub fn expected_fixed_governance_admins_len(
     code: InstitutionCode,
     cid_number: &[u8],
-    main_account: &[u8],
 ) -> Option<u32> {
-    primitives::governance_skeleton::fixed_institution_by_identity(code, cid_number, main_account)
+    primitives::governance_skeleton::fixed_institution_by_identity(code, cid_number)
         .map(|institution| institution.expected_len)
 }
 

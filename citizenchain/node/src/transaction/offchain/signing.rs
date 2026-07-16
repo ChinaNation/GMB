@@ -4,9 +4,9 @@
 //
 // pallet_index = 19(OffchainTransaction,见 runtime/src/lib.rs:366)
 // call_index:
-//   50 = register_clearing_bank(cid_number, peer_id, rpc_domain, rpc_port)
-//   51 = update_clearing_bank_endpoint(cid_number, new_domain, new_port)
-//   52 = unregister_clearing_bank(cid_number)
+//   50 = register_clearing_bank(actor_cid_number, peer_id, rpc_domain, rpc_port)
+//   51 = update_clearing_bank_endpoint(actor_cid_number, new_domain, new_port)
+//   52 = unregister_clearing_bank(actor_cid_number)
 //
 // 入参 SCALE 编码:
 //   BoundedVec<u8, ConstU32<N>> 等价 Vec<u8> = Compact<u32>(len) || bytes
@@ -46,13 +46,15 @@ fn encode_bytes_with_len(raw: &[u8]) -> Vec<u8> {
 
 /// 构造 register_clearing_bank 的 call_data。
 pub fn build_register_call_data(
-    cid_number: &str,
+    actor_cid_number: &str,
     peer_id: &str,
     rpc_domain: &str,
     rpc_port: u16,
 ) -> Result<Vec<u8>, String> {
-    if cid_number.is_empty() || cid_number.len() > 64 {
-        return Err("cid_number 长度需在 1..=64".to_string());
+    if actor_cid_number.is_empty()
+        || actor_cid_number.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
+    {
+        return Err("actor_cid_number 长度需在 1..=32".to_string());
     }
     if peer_id.is_empty() || peer_id.len() > 64 {
         return Err("peer_id 长度需在 1..=64".to_string());
@@ -65,10 +67,12 @@ pub fn build_register_call_data(
     }
 
     let mut call =
-        Vec::with_capacity(2 + 1 + cid_number.len() + 1 + peer_id.len() + 1 + rpc_domain.len() + 2);
+        Vec::with_capacity(
+            2 + 1 + actor_cid_number.len() + 1 + peer_id.len() + 1 + rpc_domain.len() + 2,
+        );
     call.push(PALLET_INDEX);
     call.push(CALL_REGISTER);
-    call.extend_from_slice(&encode_bytes_with_len(cid_number.as_bytes()));
+    call.extend_from_slice(&encode_bytes_with_len(actor_cid_number.as_bytes()));
     call.extend_from_slice(&encode_bytes_with_len(peer_id.as_bytes()));
     call.extend_from_slice(&encode_bytes_with_len(rpc_domain.as_bytes()));
     call.extend_from_slice(&rpc_port.to_le_bytes());
@@ -77,12 +81,14 @@ pub fn build_register_call_data(
 
 /// 构造 update_clearing_bank_endpoint 的 call_data。
 pub fn build_update_endpoint_call_data(
-    cid_number: &str,
+    actor_cid_number: &str,
     new_domain: &str,
     new_port: u16,
 ) -> Result<Vec<u8>, String> {
-    if cid_number.is_empty() || cid_number.len() > 64 {
-        return Err("cid_number 长度需在 1..=64".to_string());
+    if actor_cid_number.is_empty()
+        || actor_cid_number.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
+    {
+        return Err("actor_cid_number 长度需在 1..=32".to_string());
     }
     if new_domain.is_empty() || new_domain.len() > 128 {
         return Err("rpc_domain 长度需在 1..=128".to_string());
@@ -90,59 +96,64 @@ pub fn build_update_endpoint_call_data(
     if new_port < 1024 {
         return Err("rpc_port 必须 >= 1024".to_string());
     }
-    let mut call = Vec::with_capacity(2 + 1 + cid_number.len() + 1 + new_domain.len() + 2);
+    let mut call =
+        Vec::with_capacity(2 + 1 + actor_cid_number.len() + 1 + new_domain.len() + 2);
     call.push(PALLET_INDEX);
     call.push(CALL_UPDATE_ENDPOINT);
-    call.extend_from_slice(&encode_bytes_with_len(cid_number.as_bytes()));
+    call.extend_from_slice(&encode_bytes_with_len(actor_cid_number.as_bytes()));
     call.extend_from_slice(&encode_bytes_with_len(new_domain.as_bytes()));
     call.extend_from_slice(&new_port.to_le_bytes());
     Ok(call)
 }
 
 /// 构造 unregister_clearing_bank 的 call_data。
-pub fn build_unregister_call_data(cid_number: &str) -> Result<Vec<u8>, String> {
-    if cid_number.is_empty() || cid_number.len() > 64 {
-        return Err("cid_number 长度需在 1..=64".to_string());
+pub fn build_unregister_call_data(actor_cid_number: &str) -> Result<Vec<u8>, String> {
+    if actor_cid_number.is_empty()
+        || actor_cid_number.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
+    {
+        return Err("actor_cid_number 长度需在 1..=32".to_string());
     }
-    let mut call = Vec::with_capacity(2 + 1 + cid_number.len());
+    let mut call = Vec::with_capacity(2 + 1 + actor_cid_number.len());
     call.push(PALLET_INDEX);
     call.push(CALL_UNREGISTER);
-    call.extend_from_slice(&encode_bytes_with_len(cid_number.as_bytes()));
+    call.extend_from_slice(&encode_bytes_with_len(actor_cid_number.as_bytes()));
     Ok(call)
 }
 
 /// register_clearing_bank QR 签名请求。
 pub fn build_register_sign_request(
     pubkey_hex: &str,
-    cid_number: &str,
+    actor_cid_number: &str,
     peer_id: &str,
     rpc_domain: &str,
     rpc_port: u16,
 ) -> Result<VoteSignRequestResult, String> {
     let (clean, bytes) = parse_pubkey(pubkey_hex)?;
-    let call_data = build_register_call_data(cid_number, peer_id, rpc_domain, rpc_port)?;
+    let call_data =
+        build_register_call_data(actor_cid_number, peer_id, rpc_domain, rpc_port)?;
     build_sign_request_from_call_data(&clean, &bytes, &call_data)
 }
 
 /// update_clearing_bank_endpoint QR 签名请求。
 pub fn build_update_endpoint_sign_request(
     pubkey_hex: &str,
-    cid_number: &str,
+    actor_cid_number: &str,
     new_domain: &str,
     new_port: u16,
 ) -> Result<VoteSignRequestResult, String> {
     let (clean, bytes) = parse_pubkey(pubkey_hex)?;
-    let call_data = build_update_endpoint_call_data(cid_number, new_domain, new_port)?;
+    let call_data =
+        build_update_endpoint_call_data(actor_cid_number, new_domain, new_port)?;
     build_sign_request_from_call_data(&clean, &bytes, &call_data)
 }
 
 /// unregister_clearing_bank QR 签名请求。
 pub fn build_unregister_sign_request(
     pubkey_hex: &str,
-    cid_number: &str,
+    actor_cid_number: &str,
 ) -> Result<VoteSignRequestResult, String> {
     let (clean, bytes) = parse_pubkey(pubkey_hex)?;
-    let call_data = build_unregister_call_data(cid_number)?;
+    let call_data = build_unregister_call_data(actor_cid_number)?;
     build_sign_request_from_call_data(&clean, &bytes, &call_data)
 }
 
@@ -175,7 +186,7 @@ mod tests {
             9944,
         )
         .unwrap_err();
-        assert!(err.contains("cid_number"));
+        assert!(err.contains("actor_cid_number"));
     }
 
     #[test]

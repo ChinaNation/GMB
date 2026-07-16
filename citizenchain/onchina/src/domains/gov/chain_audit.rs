@@ -13,9 +13,6 @@ pub(crate) const SAMPLE_SIZE: usize = 32;
 const STARTUP_RETRIES: usize = 6;
 const RETRY_INTERVAL_SECS: u64 = 10;
 
-/// InstitutionLifecycleStatus::Active 判别值。
-const STATUS_ACTIVE: u8 = 1;
-
 /// 抽样不一致(数据错,不重试);其余为链暂不可达类错误(可重试)。
 enum AuditError {
     Mismatch(String),
@@ -64,12 +61,6 @@ async fn audit_one(cid: &str, full: &str, short: &str) -> Result<(), AuditError>
     if on.cid_full_name != full.as_bytes() || on.cid_short_name != short.as_bytes() {
         return Err(AuditError::Mismatch(format!(
             "机构 {cid} 名称与链上不一致(本地 {full}/{short})"
-        )));
-    }
-    if on.status != STATUS_ACTIVE {
-        return Err(AuditError::Mismatch(format!(
-            "机构 {cid} 链上状态非 Active(判别值 {})",
-            on.status
         )));
     }
     Ok(())
@@ -151,7 +142,6 @@ pub(crate) fn full_audit_blocking() -> Result<(), String> {
                 Some((full, short)) => {
                     if info.cid_full_name != full
                         || info.cid_short_name != short
-                        || info.status != STATUS_ACTIVE
                     {
                         mismatched += 1;
                         tracing::error!(

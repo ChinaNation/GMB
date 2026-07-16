@@ -16,8 +16,13 @@ fn decode_account<T: pallet::Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
 }
 
-fn prc_institution<T: pallet::Config>() -> T::AccountId {
-    decode_account::<T>(CHINA_CB[1].main_account)
+fn prc_cid() -> votingengine::types::CidNumber {
+    CHINA_CB[1]
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("PRC CID fits")
 }
 
 fn prc_admin<T: pallet::Config>(index: usize) -> T::AccountId {
@@ -36,12 +41,12 @@ mod benchmarks {
 
     #[benchmark]
     fn propose_replace_grandpa_key() {
-        let institution = prc_institution::<T>();
+        let actor_cid_number = prc_cid();
         let proposer = prc_admin::<T>(0);
         let new_key = seeded_public_key(11);
 
         #[extrinsic_call]
-        propose_replace_grandpa_key(RawOrigin::Signed(proposer), institution, new_key);
+        propose_replace_grandpa_key(RawOrigin::Signed(proposer), actor_cid_number, new_key);
 
         assert!(votingengine::Pallet::<T>::get_proposal_data(0).is_some());
     }

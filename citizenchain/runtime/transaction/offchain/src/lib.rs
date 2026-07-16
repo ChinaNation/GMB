@@ -73,6 +73,12 @@ pub struct ClearingBankNodeInfo<AccountId, BlockNumber> {
     pub registered_by: AccountId,
 }
 
+/// 全仓统一的机构 CID 上限；机构身份字段不得复用 PeerId 的 64 字节上限。
+pub type InstitutionCidNumber =
+    BoundedVec<u8, sp_core::ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>>;
+/// libp2p PeerId 字段上限。
+pub type ClearingPeerId = BoundedVec<u8, sp_core::ConstU32<64>>;
+
 /// 清算行清算 pallet 的存储版本。全新创世口径:创世即终态布局,恒为 v1。
 const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
@@ -216,7 +222,7 @@ pub mod pallet {
     pub type ClearingBankNodes<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
-        BoundedVec<u8, sp_core::ConstU32<64>>,
+        crate::InstitutionCidNumber,
         crate::ClearingBankNodeInfo<T::AccountId, BlockNumberFor<T>>,
         OptionQuery,
     >;
@@ -228,8 +234,8 @@ pub mod pallet {
     pub type NodePeerToInstitution<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
-        BoundedVec<u8, sp_core::ConstU32<64>>,
-        BoundedVec<u8, sp_core::ConstU32<64>>,
+        crate::ClearingPeerId,
+        crate::InstitutionCidNumber,
         OptionQuery,
     >;
 
@@ -290,22 +296,22 @@ pub mod pallet {
         },
         /// 清算行节点声明完成,机构对外提供清算服务。
         ClearingBankRegistered {
-            cid_number: BoundedVec<u8, sp_core::ConstU32<64>>,
-            peer_id: BoundedVec<u8, sp_core::ConstU32<64>>,
+            cid_number: crate::InstitutionCidNumber,
+            peer_id: crate::ClearingPeerId,
             rpc_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
             rpc_port: u16,
             registered_by: T::AccountId,
         },
         /// 清算行节点 RPC 端点更新(域名 / 端口变更,PeerId 不变)。
         ClearingBankEndpointUpdated {
-            cid_number: BoundedVec<u8, sp_core::ConstU32<64>>,
+            cid_number: crate::InstitutionCidNumber,
             new_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
             new_port: u16,
             updated_by: T::AccountId,
         },
         /// 清算行节点声明注销,机构退出清算网络。
         ClearingBankUnregistered {
-            cid_number: BoundedVec<u8, sp_core::ConstU32<64>>,
+            cid_number: crate::InstitutionCidNumber,
             unregistered_by: T::AccountId,
         },
     }
@@ -323,7 +329,7 @@ pub mod pallet {
         TransferAmountTooLarge,
         /// 批次为空。
         EmptyBatch,
-        /// 批次中 `payer_bank` 与提交批次的 `institution_main` 不一致(单清算行批次假定)。
+        /// 批次收款行与 `institution_account` 不一致。
         InstitutionMismatch,
         /// 清算行管理员身份校验未通过。
         UnauthorizedAdmin,
@@ -353,8 +359,8 @@ pub mod pallet {
         NotMainAccount,
         /// 目标地址的 CID K1 不是 S(私法人)或 F(非法人),不属于私权机构。
         NotPrivateInstitution,
-        /// 对应的多签账户状态非 Active(可能还在 Pending,或已关闭)。
-        ClearingBankNotActive,
+        /// 清算行账户未完整登记在机构账户正反索引中。
+        ClearingBankAccountNotFound,
         /// 反查费用账户名称过长(CID name BoundedVec 溢出)。
         FeeAccountNameTooLong,
         /// 清算行未创建配套的 "费用账户",无法清算手续费。
@@ -385,8 +391,8 @@ pub mod pallet {
         InvalidL3Nonce,
 
         // ========== 清算行节点声明相关 ==========
-        /// 清算行节点 cid_number 字段不能为空。
-        EmptyCidNumber,
+        /// 清算行节点动作的 actor_cid_number 字段不能为空。
+        EmptyActorCidNumber,
         /// PeerId 字段不能为空。
         EmptyPeerId,
         /// PeerId 格式非法(必须 "12D3KooW" 开头 + 长度 ≥ 46 + 纯 ASCII alphanumeric)。
@@ -455,18 +461,20 @@ pub mod pallet {
         /// 清算行批次上链(清算行 L2 体系唯一上链路径)。
         ///
         /// **收款方主导清算**模型。
-        /// - `institution_main` = **收款方清算行主账户**
-        /// - 提交者 = 收款方清算行的某个激活管理员(已解密私钥,自动签)
-        /// - 批次内所有 item 的 `recipient_bank` 必须等于 `institution_main`
+        /// - `actor_cid_number` = 收款方清算行的唯一机构主键
+        /// - `institution_account` = **收款方清算行主账户**
+        /// - 提交者 = `actor_cid_number` 的管理员(已解密私钥,自动签)
+        /// - 批次内所有 item 的 `recipient_bank` 必须等于 `institution_account`
         ///   (`payer_bank` 可不同,即同一收款方清算行可一次代收来自不同付款方清算行的多笔)
-        /// - 链上 gas 由 `RuntimeFeePayerExtractor` 自动从 `fee_account_of(institution_main)` 扣
+        /// - 链上 gas 由费用路由按 `actor_cid_number` 定位费用账户扣取
         ///   (即 fee 收入和 gas 支出都由同一收款方清算行的费用账户承担,自给自足)
         ///
         /// 安全模型:链上验签的核心是 L3 用户对 PaymentIntent 的 sr25519 签名,
         /// PaymentIntent 内含 payer_bank 字段;链上凭 L3 签名授权 mutate
         /// payer_bank 主账户 Currency,与谁提交批次无关。
         ///
-        /// [`institution_main`] 批次归属的清算行主账户(= **收款方**清算行)
+        /// [`actor_cid_number`] 批次归属的机构 CID
+        /// [`institution_account`] 批次归属的清算行主账户(= **收款方**清算行)
         /// [`batch_seq`] 清算行内单调递增的批次序号(冗余审计字段)
         /// [`batch`] `OffchainBatchItem` 列表(每条带 L3 sr25519 签名 / nonce / 费率)
         /// [`batch_signature`] 清算行多签批次级签名
@@ -474,7 +482,8 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::submit_offchain_batch(batch.len() as u32))]
         pub fn submit_offchain_batch(
             origin: OriginFor<T>,
-            institution_main: T::AccountId,
+            actor_cid_number: crate::InstitutionCidNumber,
+            institution_account: T::AccountId,
             batch_seq: u64,
             batch: BoundedVec<
                 crate::batch_item::OffchainBatchItem<T::AccountId, BlockNumberFor<T>>,
@@ -484,30 +493,40 @@ pub mod pallet {
         ) -> DispatchResult {
             let submitter = ensure_signed(origin)?;
             ensure!(!batch.is_empty(), Error::<T>::EmptyBatch);
+            crate::bank_check::ensure_institution_account::<T>(
+                actor_cid_number.as_slice(),
+                &institution_account,
+                crate::bank_check::ACCOUNT_NAME_MAIN,
+            )?;
             ensure!(
-                T::CidAccountQuery::is_admin_of(&institution_main, &submitter),
+                T::CidAccountQuery::is_institution_admin(
+                    actor_cid_number.as_slice(),
+                    &submitter,
+                ),
                 Error::<T>::UnauthorizedAdmin
             );
             Self::verify_batch_signature(
                 &submitter,
-                &institution_main,
+                actor_cid_number.as_slice(),
+                &institution_account,
                 batch_seq,
                 batch.as_slice(),
                 &batch_signature,
             )?;
             ensure!(
-                batch_seq == LastClearingBatchSeq::<T>::get(&institution_main).saturating_add(1),
+                batch_seq == LastClearingBatchSeq::<T>::get(&institution_account).saturating_add(1),
                 Error::<T>::InvalidBatchSeq
             );
 
             with_transaction(|| {
                 match crate::settlement::execute_clearing_bank_batch::<T>(
                     &submitter,
-                    &institution_main,
+                    actor_cid_number.as_slice(),
+                    &institution_account,
                     batch.as_slice(),
                 ) {
                     Ok(()) => {
-                        LastClearingBatchSeq::<T>::insert(&institution_main, batch_seq);
+                        LastClearingBatchSeq::<T>::insert(&institution_account, batch_seq);
                         TransactionOutcome::Commit(Ok(()))
                     }
                     Err(e) => TransactionOutcome::Rollback(Err(e)),
@@ -521,11 +540,17 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::propose_l2_fee_rate())]
         pub fn propose_l2_fee_rate(
             origin: OriginFor<T>,
-            bank: T::AccountId,
+            actor_cid_number: crate::InstitutionCidNumber,
+            institution_account: T::AccountId,
             new_rate_bp: u32,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            crate::fee_config::do_propose_l2_fee_rate::<T>(who, bank, new_rate_bp)
+            crate::fee_config::do_propose_l2_fee_rate::<T>(
+                who,
+                actor_cid_number.as_slice(),
+                institution_account,
+                new_rate_bp,
+            )
         }
 
         /// 设置全局费率上限(Root Origin,联合投票回调)。
@@ -540,13 +565,13 @@ pub mod pallet {
         ///
         /// 校验链(任一失败立即拒绝):
         /// 1. origin 是签名账户
-        /// 2. cid_number / peer_id / rpc_domain 非空,rpc_port ∈ [1024, 65535]
+        /// 2. actor_cid_number / peer_id / rpc_domain 非空,rpc_port ∈ [1024, 65535]
         /// 3. peer_id 格式合法("12D3KooW" 开头 + 长度 ≥ 46 + 纯 ASCII alphanumeric)
         /// 4. rpc_domain 字符集合法(仅小写字母/数字/点/横杠)
-        /// 5. cid_number 反查得到主账户 + 该地址已 Active
+        /// 5. actor_cid_number 反查得到已登记的主账户
         /// 6. 调用方(origin)是该机构的激活管理员之一
         /// 7. 资格白名单:机构必须 (K1=S ∧ JOINT_STOCK) ∨ (K1=F ∧ parent.K1=S.JOINT_STOCK)
-        /// 8. cid_number 未已注册节点(切换走 unregister + register)
+        /// 8. actor_cid_number 未已注册节点(切换走 unregister + register)
         /// 9. peer_id 未被另一机构占用
         ///
         /// 单签即可,不走内部投票(节点声明影响小,损失可逆)。
@@ -554,20 +579,26 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::register_clearing_bank())]
         pub fn register_clearing_bank(
             origin: OriginFor<T>,
-            cid_number: BoundedVec<u8, sp_core::ConstU32<64>>,
-            peer_id: BoundedVec<u8, sp_core::ConstU32<64>>,
+            actor_cid_number: crate::InstitutionCidNumber,
+            peer_id: crate::ClearingPeerId,
             rpc_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
             rpc_port: u16,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_register_clearing_bank(who, cid_number, peer_id, rpc_domain, rpc_port)
+            Self::do_register_clearing_bank(
+                who,
+                actor_cid_number,
+                peer_id,
+                rpc_domain,
+                rpc_port,
+            )
         }
 
         /// 更新清算行节点的 RPC 端点(域名 / 端口),PeerId 不变。
         ///
         /// 校验:
         /// 1. origin 是签名账户
-        /// 2. cid_number 已注册清算行节点
+        /// 2. actor_cid_number 已注册清算行节点
         /// 3. 调用方是该机构的激活管理员
         /// 4. new_domain / new_port 字段合法
         ///
@@ -576,19 +607,24 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::update_clearing_bank_endpoint())]
         pub fn update_clearing_bank_endpoint(
             origin: OriginFor<T>,
-            cid_number: BoundedVec<u8, sp_core::ConstU32<64>>,
+            actor_cid_number: crate::InstitutionCidNumber,
             new_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
             new_port: u16,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_update_clearing_bank_endpoint(who, cid_number, new_domain, new_port)
+            Self::do_update_clearing_bank_endpoint(
+                who,
+                actor_cid_number,
+                new_domain,
+                new_port,
+            )
         }
 
         /// 注销清算行节点声明,机构退出清算网络。
         ///
         /// 校验:
         /// 1. origin 是签名账户
-        /// 2. cid_number 已注册清算行节点
+        /// 2. actor_cid_number 已注册清算行节点
         /// 3. 调用方是该机构的激活管理员
         ///
         /// 注销后该机构 cid_number 不再被 citizenapp 显示为可绑定清算行(CID 后端
@@ -598,10 +634,10 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::unregister_clearing_bank())]
         pub fn unregister_clearing_bank(
             origin: OriginFor<T>,
-            cid_number: BoundedVec<u8, sp_core::ConstU32<64>>,
+            actor_cid_number: crate::InstitutionCidNumber,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_unregister_clearing_bank(who, cid_number)
+            Self::do_unregister_clearing_bank(who, actor_cid_number)
         }
     }
 
@@ -630,7 +666,8 @@ pub mod pallet {
         /// 一起防止节点重启后的批次级重放。
         fn verify_batch_signature(
             submitter: &T::AccountId,
-            institution_main: &T::AccountId,
+            actor_cid_number: &[u8],
+            institution_account: &T::AccountId,
             batch_seq: u64,
             batch: &[crate::batch_item::OffchainBatchItem<T::AccountId, BlockNumberFor<T>>],
             batch_signature: &BatchSignatureOf<T>,
@@ -639,8 +676,12 @@ pub mod pallet {
                 .map_err(|_| Error::<T>::InvalidBatchSignature)?;
             let public = Self::sr25519_pubkey_from_account(submitter)?;
             let batch_bytes = batch.encode();
-            let message =
-                crate::batch_item::batch_signing_hash(institution_main, batch_seq, &batch_bytes);
+            let message = crate::batch_item::batch_signing_hash(
+                actor_cid_number,
+                institution_account,
+                batch_seq,
+                &batch_bytes,
+            );
             ensure!(
                 sr25519_verify(&sig, &message, &public),
                 Error::<T>::InvalidBatchSignature
@@ -709,15 +750,18 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     /// `register_clearing_bank` 完整业务逻辑(供 extrinsic 调用)。
     pub(crate) fn do_register_clearing_bank(
         who: T::AccountId,
-        cid_number: BoundedVec<u8, sp_core::ConstU32<64>>,
-        peer_id: BoundedVec<u8, sp_core::ConstU32<64>>,
+        actor_cid_number: crate::InstitutionCidNumber,
+        peer_id: crate::ClearingPeerId,
         rpc_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
         rpc_port: u16,
     ) -> DispatchResult {
         use crate::bank_check::CidAccountQuery;
 
         // 1-2. 非空 + 端口范围
-        ensure!(!cid_number.is_empty(), pallet::Error::<T>::EmptyCidNumber);
+        ensure!(
+            !actor_cid_number.is_empty(),
+            pallet::Error::<T>::EmptyActorCidNumber
+        );
         ensure!(!peer_id.is_empty(), pallet::Error::<T>::EmptyPeerId);
         ensure!(rpc_port >= 1024, pallet::Error::<T>::InvalidRpcPort);
 
@@ -727,20 +771,20 @@ impl<T: pallet::Config> pallet::Pallet<T> {
         // 4. 域名字符集
         Self::validate_rpc_domain_bytes(rpc_domain.as_slice())?;
 
-        // 5. cid_number → 主账户 + Active
-        let bank_main = Self::lookup_main_account_by_cid(cid_number.as_slice())?;
+        // 5. actor_cid_number → 已登记主账户
+        let bank_main = Self::lookup_main_account_by_cid(actor_cid_number.as_slice())?;
         ensure!(
-            T::CidAccountQuery::is_active(&bank_main),
-            pallet::Error::<T>::ClearingBankNotActive
+            T::CidAccountQuery::account_exists(&bank_main),
+            pallet::Error::<T>::ClearingBankAccountNotFound
         );
 
-        // 6. 调用方是该机构的激活管理员
+        // 6. 调用方是该 CID 的管理员
         ensure!(
-            T::CidAccountQuery::is_admin_of(&bank_main, &who),
+            T::CidAccountQuery::is_institution_admin(actor_cid_number.as_slice(), &who),
             pallet::Error::<T>::UnauthorizedAdmin
         );
 
-        // 7. 资格白名单:CID 负责候选资格,链上实现层只确认该机构账户已注册且 Active。
+        // 7. 资格白名单:CID 负责候选资格,链上实现层确认该机构主账户已登记。
         ensure!(
             T::CidAccountQuery::is_clearing_bank_eligible(&bank_main),
             pallet::Error::<T>::NotEligibleForClearingBank
@@ -748,7 +792,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
 
         // 8. cid_number 未已注册
         ensure!(
-            !pallet::ClearingBankNodes::<T>::contains_key(&cid_number),
+            !pallet::ClearingBankNodes::<T>::contains_key(&actor_cid_number),
             pallet::Error::<T>::ClearingBankAlreadyRegistered
         );
 
@@ -767,11 +811,11 @@ impl<T: pallet::Config> pallet::Pallet<T> {
             registered_by: who.clone(),
         };
 
-        pallet::ClearingBankNodes::<T>::insert(&cid_number, &info);
-        pallet::NodePeerToInstitution::<T>::insert(&peer_id, &cid_number);
+        pallet::ClearingBankNodes::<T>::insert(&actor_cid_number, &info);
+        pallet::NodePeerToInstitution::<T>::insert(&peer_id, &actor_cid_number);
 
         Self::deposit_event(pallet::Event::ClearingBankRegistered {
-            cid_number,
+            cid_number: actor_cid_number,
             peer_id,
             rpc_domain,
             rpc_port,
@@ -783,31 +827,33 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     /// `update_clearing_bank_endpoint` 完整业务逻辑。
     pub(crate) fn do_update_clearing_bank_endpoint(
         who: T::AccountId,
-        cid_number: BoundedVec<u8, sp_core::ConstU32<64>>,
+        actor_cid_number: crate::InstitutionCidNumber,
         new_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
         new_port: u16,
     ) -> DispatchResult {
         use crate::bank_check::CidAccountQuery;
 
-        ensure!(!cid_number.is_empty(), pallet::Error::<T>::EmptyCidNumber);
+        ensure!(
+            !actor_cid_number.is_empty(),
+            pallet::Error::<T>::EmptyActorCidNumber
+        );
         ensure!(new_port >= 1024, pallet::Error::<T>::InvalidRpcPort);
         Self::validate_rpc_domain_bytes(new_domain.as_slice())?;
 
-        let mut info = pallet::ClearingBankNodes::<T>::get(&cid_number)
+        let mut info = pallet::ClearingBankNodes::<T>::get(&actor_cid_number)
             .ok_or(pallet::Error::<T>::ClearingBankNodeNotFound)?;
 
-        let bank_main = Self::lookup_main_account_by_cid(cid_number.as_slice())?;
         ensure!(
-            T::CidAccountQuery::is_admin_of(&bank_main, &who),
+            T::CidAccountQuery::is_institution_admin(actor_cid_number.as_slice(), &who),
             pallet::Error::<T>::UnauthorizedAdmin
         );
 
         info.rpc_domain = new_domain.clone();
         info.rpc_port = new_port;
-        pallet::ClearingBankNodes::<T>::insert(&cid_number, &info);
+        pallet::ClearingBankNodes::<T>::insert(&actor_cid_number, &info);
 
         Self::deposit_event(pallet::Event::ClearingBankEndpointUpdated {
-            cid_number,
+            cid_number: actor_cid_number,
             new_domain,
             new_port,
             updated_by: who,
@@ -818,27 +864,29 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     /// `unregister_clearing_bank` 完整业务逻辑。
     pub(crate) fn do_unregister_clearing_bank(
         who: T::AccountId,
-        cid_number: BoundedVec<u8, sp_core::ConstU32<64>>,
+        actor_cid_number: crate::InstitutionCidNumber,
     ) -> DispatchResult {
         use crate::bank_check::CidAccountQuery;
 
-        ensure!(!cid_number.is_empty(), pallet::Error::<T>::EmptyCidNumber);
+        ensure!(
+            !actor_cid_number.is_empty(),
+            pallet::Error::<T>::EmptyActorCidNumber
+        );
 
-        let info = pallet::ClearingBankNodes::<T>::get(&cid_number)
+        let info = pallet::ClearingBankNodes::<T>::get(&actor_cid_number)
             .ok_or(pallet::Error::<T>::ClearingBankNodeNotFound)?;
 
-        let bank_main = Self::lookup_main_account_by_cid(cid_number.as_slice())?;
         ensure!(
-            T::CidAccountQuery::is_admin_of(&bank_main, &who),
+            T::CidAccountQuery::is_institution_admin(actor_cid_number.as_slice(), &who),
             pallet::Error::<T>::UnauthorizedAdmin
         );
 
         // 删除主索引 + 反向索引
-        pallet::ClearingBankNodes::<T>::remove(&cid_number);
+        pallet::ClearingBankNodes::<T>::remove(&actor_cid_number);
         pallet::NodePeerToInstitution::<T>::remove(&info.peer_id);
 
         Self::deposit_event(pallet::Event::ClearingBankUnregistered {
-            cid_number,
+            cid_number: actor_cid_number,
             unregistered_by: who,
         });
         Ok(())

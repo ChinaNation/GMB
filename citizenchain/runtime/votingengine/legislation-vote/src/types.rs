@@ -9,17 +9,17 @@ use scale_info::TypeInfo;
 use sp_runtime::sp_std::vec::Vec;
 use sp_runtime::DispatchError;
 use sp_runtime::RuntimeDebug;
-use votingengine::types::{InstitutionCode, ProposalSubjectCidNumbers};
+use votingengine::types::{CidNumber, ProposalSubjectCidNumbers};
 
 /// 单个立法机关表决提案最多串联的代表机构数量。
 pub const MAX_REPRESENTATIVE_BODIES: u32 = votingengine::types::MAX_REPRESENTATIVE_BODIES;
 
 /// 参加表决的机构引用。
-pub type RepresentativeBody<AccountId> = (InstitutionCode, AccountId);
+pub type RepresentativeBody = CidNumber;
 
 /// 顺序表决机构列表。
-pub type RepresentativeBodies<AccountId> =
-    BoundedVec<RepresentativeBody<AccountId>, ConstU32<MAX_REPRESENTATIVE_BODIES>>;
+pub type RepresentativeBodies =
+    BoundedVec<RepresentativeBody, ConstU32<MAX_REPRESENTATIVE_BODIES>>;
 
 /// 代表机构表决路线。
 ///
@@ -36,16 +36,16 @@ pub type RepresentativeBodies<AccountId> =
     TypeInfo,
     MaxEncodedLen,
 )]
-pub enum RepresentativeRoute<AccountId> {
+pub enum RepresentativeRoute {
     /// 单个代表机构完成表决。
-    Single(RepresentativeBody<AccountId>),
+    Single(RepresentativeBody),
     /// 两个或更多代表机构按声明顺序逐个表决。
-    Sequential(RepresentativeBodies<AccountId>),
+    Sequential(RepresentativeBodies),
 }
 
-impl<AccountId: Clone> RepresentativeRoute<AccountId> {
+impl RepresentativeRoute {
     /// 返回路线中的全部表决机构，顺序就是状态机推进顺序。
-    pub fn bodies(&self) -> Vec<RepresentativeBody<AccountId>> {
+    pub fn bodies(&self) -> Vec<RepresentativeBody> {
         match self {
             Self::Single(body) => Vec::from([body.clone()]),
             Self::Sequential(bodies) => bodies.to_vec(),
@@ -66,7 +66,7 @@ impl<AccountId: Clone> RepresentativeRoute<AccountId> {
     }
 
     /// 读取指定阶段的表决机构。
-    pub fn body(&self, index: u32) -> Option<RepresentativeBody<AccountId>> {
+    pub fn body(&self, index: u32) -> Option<RepresentativeBody> {
         match self {
             Self::Single(body) if index == 0 => Some(body.clone()),
             Self::Single(_) => None,
@@ -129,11 +129,11 @@ pub enum VoteProcedure {
     TypeInfo,
     MaxEncodedLen,
 )]
-pub struct LegislationProcedureConfig<AccountId> {
+pub struct LegislationProcedureConfig {
     /// 行政签署机构。
-    pub executive: RepresentativeBody<AccountId>,
+    pub executive: RepresentativeBody,
     /// 省级、国家级三人共同签署所需的上级立法院；市级为 None。
-    pub legislature: Option<RepresentativeBody<AccountId>>,
+    pub legislature: Option<RepresentativeBody>,
     /// 是否在法律程序通过后进入护宪大法官终审。
     pub needs_guard: bool,
 }
@@ -143,7 +143,8 @@ pub trait LegislationVoteEngine<AccountId> {
     /// 创建代表表决完成即终局的提案，供后续任免和预算业务使用。
     fn create_representative_vote(
         who: AccountId,
-        route: RepresentativeRoute<AccountId>,
+        actor_cid_number: CidNumber,
+        route: RepresentativeRoute,
         rule: RepresentativeVoteRule,
         subject_cid_numbers: ProposalSubjectCidNumbers,
         module_tag: &[u8],
@@ -154,9 +155,10 @@ pub trait LegislationVoteEngine<AccountId> {
     #[allow(clippy::too_many_arguments)]
     fn create_legislation_vote(
         who: AccountId,
-        route: RepresentativeRoute<AccountId>,
+        actor_cid_number: CidNumber,
+        route: RepresentativeRoute,
         rule: RepresentativeVoteRule,
-        procedure: LegislationProcedureConfig<AccountId>,
+        procedure: LegislationProcedureConfig,
         module_tag: &[u8],
         data: Vec<u8>,
         object_data: Vec<u8>,
@@ -172,7 +174,8 @@ pub trait LegislationVoteEngine<AccountId> {
 impl<AccountId> LegislationVoteEngine<AccountId> for () {
     fn create_representative_vote(
         _who: AccountId,
-        _route: RepresentativeRoute<AccountId>,
+        _actor_cid_number: CidNumber,
+        _route: RepresentativeRoute,
         _rule: RepresentativeVoteRule,
         _subject_cid_numbers: ProposalSubjectCidNumbers,
         _module_tag: &[u8],
@@ -183,9 +186,10 @@ impl<AccountId> LegislationVoteEngine<AccountId> for () {
 
     fn create_legislation_vote(
         _who: AccountId,
-        _route: RepresentativeRoute<AccountId>,
+        _actor_cid_number: CidNumber,
+        _route: RepresentativeRoute,
         _rule: RepresentativeVoteRule,
-        _procedure: LegislationProcedureConfig<AccountId>,
+        _procedure: LegislationProcedureConfig,
         _module_tag: &[u8],
         _data: Vec<u8>,
         _object_data: Vec<u8>,

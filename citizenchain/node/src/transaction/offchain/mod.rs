@@ -67,7 +67,8 @@ pub struct OffchainComponents {
 /// 启动清算行节点所需的 offchain 组件套件。
 ///
 /// [`base_path`]  节点数据根目录(下挂 `offchain_step1/ledger.enc`)。
-/// [`bank_main`]  本清算行**主账户**,用于 `EventListener` 过滤与本行相关
+/// [`actor_cid_number`] 本清算行机构唯一主键。
+/// [`institution_account`] 本清算行**主账户**,用于 `EventListener` 过滤与本行相关
 ///                的链上事件,以及 packer 批次 signing message 拼接。
 /// [`password`]   节点启动时用于 AES-256-GCM 风格加密 ledger 的对称密钥字符串
 ///                (目前实现为 blake2b_256(password) XOR 流 + HMAC,见 `ledger.rs`)。
@@ -80,7 +81,8 @@ pub struct OffchainComponents {
 /// 返回值:`Arc` 包裹的组件集合,调用方持有 ownership 决定生命周期。
 pub fn start_clearing_bank_components(
     base_path: &Path,
-    bank_main: AccountId32,
+    actor_cid_number: Vec<u8>,
+    institution_account: AccountId32,
     password: &str,
     signer: Arc<dyn BatchSigner>,
     submitter: Arc<dyn BatchSubmitter>,
@@ -89,23 +91,24 @@ pub fn start_clearing_bank_components(
     let ledger = Arc::new(OffchainLedger::new(base_path));
     // 若磁盘有上次加密持久化的 ledger,尝试恢复;首次启动(文件不存在)返回 Ok(0)。
     ledger.load_from_disk(password)?;
-    let initial_batch_seq = read_last_clearing_batch_seq(client.as_ref(), &bank_main)
+    let initial_batch_seq = read_last_clearing_batch_seq(client.as_ref(), &institution_account)
         .map_err(|e| format!("读取 LastClearingBatchSeq 失败:{e}"))?;
 
     let packer = Arc::new(OffchainPacker::new_with_initial_seq(
         ledger.clone(),
-        bank_main.clone(),
+        actor_cid_number,
+        institution_account.clone(),
         signer.clone(),
         submitter,
         initial_batch_seq,
     ));
-    let event_listener = Arc::new(EventListener::new(ledger.clone(), bank_main.clone()));
-    let reserve_monitor = Arc::new(ReserveMonitor::new(ledger.clone(), bank_main.clone()));
+    let event_listener = Arc::new(EventListener::new(ledger.clone(), institution_account.clone()));
+    let reserve_monitor = Arc::new(ReserveMonitor::new(ledger.clone(), institution_account.clone()));
     // RPC 层需要 client 读取 UserBank / L2FeeRateBp,也复用 signer 生成真实 L2 ACK。
     let rpc_impl = Arc::new(OffchainClearingRpcImpl::new(
         ledger.clone(),
         client,
-        bank_main,
+        institution_account,
         signer,
     ));
 
@@ -177,13 +180,15 @@ mod tests {
 #[allow(dead_code)]
 pub fn start_clearing_bank_components_with_noop(
     base_path: &Path,
-    bank_main: AccountId32,
+    actor_cid_number: Vec<u8>,
+    institution_account: AccountId32,
     password: &str,
     client: Arc<crate::core::service::FullClient>,
 ) -> Result<OffchainComponents, String> {
     start_clearing_bank_components(
         base_path,
-        bank_main,
+        actor_cid_number,
+        institution_account,
         password,
         Arc::new(NoopBatchSigner),
         Arc::new(NoopBatchSubmitter),

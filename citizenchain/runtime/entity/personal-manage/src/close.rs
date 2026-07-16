@@ -113,11 +113,9 @@ pub(crate) fn do_propose_close<T: Config>(
     data.push(ACTION_CLOSE);
     data.extend_from_slice(&action.encode());
     let proposal_id =
-        <T as Config>::InternalVoteEngine::create_lifecycle_internal_proposal_with_data(
+        <T as Config>::InternalVoteEngine::create_personal_lifecycle_proposal_with_data(
             who.clone(),
-            institution_code,
             institution,
-            alloc::vec::Vec::new(),
             crate::MODULE_TAG,
             data,
         )?;

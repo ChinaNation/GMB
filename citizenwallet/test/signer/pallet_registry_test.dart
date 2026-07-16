@@ -20,8 +20,10 @@ void main() {
         PalletRegistry.grandpaKeyChangePallet,
         PalletRegistry.resolutionIssuancePallet,
         PalletRegistry.offchainTransactionPallet,
+        PalletRegistry.citizenIdentityPallet,
+        PalletRegistry.addressRegistryPallet,
       };
-      expect(pallets.length, 12);
+      expect(pallets.length, 14);
     });
 
     test('投票引擎 sub-pallet call_index', () {
@@ -55,13 +57,14 @@ void main() {
       expect(PalletRegistry.isPersonalAdminSetChangeCall(29, 0), isTrue);
       expect(PalletRegistry.isPersonalAdminSetChangeCall(7, 3), isFalse);
 
-      // PublicManage(30) / PrivateManage(31):机构生命周期拆分。
+      // PublicManage(30) / PrivateManage(31):机构登记管理。
       expect(PalletRegistry.publicManagePallet, 30);
       expect(PalletRegistry.privateManagePallet, 31);
       expect(PalletRegistry.proposeCloseInstitutionCall, 1);
-      expect(PalletRegistry.registerCidInstitutionCall, 2);
       expect(PalletRegistry.cleanupRejectedInstitutionProposalCall, 4);
       expect(PalletRegistry.proposeCreateInstitutionCall, 5);
+      expect(PalletRegistry.updateInstitutionInfoCall, 6);
+      expect(PalletRegistry.addInstitutionAccountCall, 7);
 
       // PersonalManage(7):个人多签生命周期;PersonalAdmins(29):管理员集合变更。
       expect(PalletRegistry.personalManagePallet, 7);
@@ -73,12 +76,16 @@ void main() {
     });
 
     test('CitizenIdentity(10) 身份注册 + 注册局占号/吊销 call_index', () {
-      // register_voting_identity=0 / upgrade_to_candidate_identity=1 /
-      // occupy_cid=6 / revoke_cid=8,与 runtime citizen-identity pallet 对齐。
+      // 0..4 为身份登记管理，5 为第 4 步才删除的快照，6..8 为 CID 占号管理。
       expect(PalletRegistry.citizenIdentityPallet, 10);
       expect(PalletRegistry.registerVotingIdentityCall, 0);
       expect(PalletRegistry.upgradeToCandidateIdentityCall, 1);
+      expect(PalletRegistry.updateVotingIdentityCall, 2);
+      expect(PalletRegistry.updateCandidateIdentityCall, 3);
+      expect(PalletRegistry.revokeIdentityCall, 4);
+      expect(PalletRegistry.prepareCitizenPopulationSnapshotCall, 5);
       expect(PalletRegistry.occupyCidCall, 6);
+      expect(PalletRegistry.occupyCidsBatchCall, 7);
       expect(PalletRegistry.revokeCidCall, 8);
     });
 
@@ -100,6 +107,15 @@ void main() {
       expect(PalletRegistry.registerClearingBankCall, 50);
       expect(PalletRegistry.updateClearingBankEndpointCall, 51);
       expect(PalletRegistry.unregisterClearingBankCall, 52);
+    });
+
+    test('AddressRegistry call_index 与 runtime 对齐', () {
+      expect(PalletRegistry.addressRegistryPallet, 33);
+      expect(PalletRegistry.setAddressCatalogVersionCall, 0);
+      expect(PalletRegistry.setAddressNameCall, 1);
+      expect(PalletRegistry.removeAddressNameCall, 2);
+      expect(PalletRegistry.setAddressCall, 3);
+      expect(PalletRegistry.removeAddressCall, 4);
     });
   });
 }

@@ -5,6 +5,8 @@
 //! - 这里统一处理 CLI 参数、密钥解锁、packer/listener/reserve worker spawn。
 
 use sc_service::TaskManager;
+use primitives::account_derive::AccountKind;
+use primitives::core_const::SS58_FORMAT;
 use sp_core::crypto::Ss58Codec;
 use sp_runtime::AccountId32;
 use std::{
@@ -25,7 +27,7 @@ use super::submitter::{PoolBatchSubmitter, TxPool};
 /// 返回值为可注入 JSON-RPC 的 `OffchainClearingRpcImpl`。如果未指定清算行、
 /// 地址无效或组件启动失败,返回 `None`,普通 PoW + GRANDPA 节点继续运行。
 pub(crate) fn start_from_cli(
-    clearing_bank: Option<&str>,
+    clearing_bank_cid_number: Option<&str>,
     clearing_bank_password: Option<&str>,
     reserve_monitor_interval_secs: Option<u64>,
     base_path: &Path,
@@ -33,17 +35,26 @@ pub(crate) fn start_from_cli(
     transaction_pool: Arc<TxPool>,
     task_manager: &TaskManager,
 ) -> Option<Arc<OffchainClearingRpcImpl>> {
-    let Some(bank_ss58) = clearing_bank else {
+    let Some(raw_cid_number) = clearing_bank_cid_number else {
         return None;
     };
 
-    let bank_main = match AccountId32::from_ss58check(bank_ss58) {
-        Ok(account) => account,
+    let actor_cid_number = match primitives::cid::number::validate_cid_number_format(raw_cid_number)
+    {
+        Ok(cid_number) => cid_number,
         Err(e) => {
-            log::warn!("[ClearingBank] --clearing-bank SS58 解析失败:{e:?},清算行组件不启动");
+            log::warn!(
+                "[ClearingBank] --clearing-bank-cid-number 格式无效:{e},清算行组件不启动"
+            );
             return None;
         }
     };
+    let institution_account = AccountId32::new(
+        AccountKind::InstitutionMain {
+            cid_number: actor_cid_number.as_bytes(),
+        }
+        .derive(SS58_FORMAT),
+    );
 
     let password = clearing_bank_password.unwrap_or("");
     let signing_key_slot: Arc<RwLock<Option<SigningKey>>> = Arc::new(RwLock::new(None));
@@ -74,7 +85,8 @@ pub(crate) fn start_from_cli(
 
     let components = match start_clearing_bank_components(
         base_path,
-        bank_main.clone(),
+        actor_cid_number.as_bytes().to_vec(),
+        institution_account.clone(),
         password,
         signer,
         submitter,
@@ -101,8 +113,9 @@ pub(crate) fn start_from_cli(
     );
 
     log::info!(
-        "[ClearingBank] 清算行组件已启动,bank_main={}",
-        bank_main.to_ss58check()
+        "[ClearingBank] 清算行组件已启动,actor_cid_number={},institution_account={}",
+        actor_cid_number,
+        institution_account.to_ss58check()
     );
     Some(components.rpc_impl.clone())
 }

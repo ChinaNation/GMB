@@ -1,87 +1,149 @@
-# 任务卡：费用模型统一五类 + 机构操作从费用账户扣 + 公民快照收归投票引擎
+# 任务卡：机构 CID 主键统一、五类费用、投票快照与五端同步
 
-## 任务需求
+## 状态
 
-来源:注册局占号报 `InvalidTransaction::Payment` 诊断([[project_chain_fee_model_and_payment_diagnosis]])延伸出的收费模型重构。用户拍板三件事合为一卡:
+- 当前阶段：第 1 步实施中
+- 第 1 步方案确认：2026-07-15
+- runtime 二次确认：已获得
+- 开发方式：breaking runtime，重新创世，不做旧存储、旧 call、旧 payload 或旧命名兼容
 
-1. **费用模型统一严格 5 类 + 默认拒绝**:除框架自带系统交易免费外,所有投票=投票费、所有链上交易=链上交易费、所有链下交易=链下交易费,不在这 4 类的一律拒绝(`Unknown→InvalidTransaction::Call`)。
-2. **机构操作签名与扣费分离**:注册局(及任一机构)对公民/机构数据的上链操作,由管理员签名,但**手续费从该机构的费用账户扣**,每笔收最低链上费(0.1 元);单源模型=机构唯一 CID→唯一费用账户(OP_FEE)→唯一管理员集。防伪造用 `is_admin_of` 卫语 + 入池期 SignedExtension。
-3. **公民人口快照收归投票引擎内部生成**:删掉 3 个 public `prepare_*_population_snapshot` extrinsic,由发起公投的提案流程内联生成(仿 election-vote),快照退出交易层。
+## 最终目标
 
-拨付不管(NRC 转账给各机构费用账户,机构自管余额)。runtime breaking,链开发期直接改 + 重新创世,不做迁移([[feedback_chain_dev_never_ask_migration]])。
+全仓库、全平台以 `cid_number` 作为机构唯一主键。机构下面可以有多个机构账户、多个 `admins`、多个岗位和多条岗位任职；机构账户无私钥，只有 `admins` 中的管理员钱包持有私钥并代表机构签署交易。
 
-## 所属模块
+机构交易统一分为：
 
-citizenchain runtime(收费层 + citizen-identity/joint-vote/legislation-vote)+ onchina(报错文案)+ CitizenWallet(删快照残桩)。
+1. 账户型机构交易：`actor_cid_number + institution_account + origin 管理员签名`。
+2. 非账户型机构交易：`actor_cid_number + origin 管理员签名`。
+3. 实际投票 `cast_*`：管理员个人签名并由签名者支付 `VoteFlat`。
 
-## 输入文档
+主账户只是一种协议账户，不得作为机构 ID、管理员根、投票阈值 key、提案发起机构或费用路由 key。
 
-- 收费单源 `runtime/primitives/src/fee_policy.rs`;适配器 `runtime/transaction/onchain/src/lib.rs`;分类器/付费方 `runtime/src/configs.rs`
-- 账户派生 `runtime/primitives/src/account_derive.rs`(OP_FEE);`fee_account_of` `runtime/transaction/offchain/src/bank_check.rs:141`;`is_active_admin_of_account` `runtime/src/configs.rs:1476`
-- 机构操作 call:`runtime/entity/public-manage/src/lib.rs`、`.../private-manage`;公民操作 `runtime/misc/citizen-identity/src/lib.rs`
-- 快照:`runtime/votingengine/joint-vote/src/jointinternal.rs`、`.../legislation-vote/src/legislation/referendum.rs`、election-vote 内联范式 `election-vote/src/lib.rs:321`
-- [[project_fee_policy_unified]] [[project_citizenwallet_call_registration_three_points]] [[project_cid_occupy_registry_2026_07_02]]
+## 强制业务规则
 
-## 目标分类(五类终态)
+### 机构账户
 
-**免费 Free(仅框架系统 + 全链维护)**:System / Timestamp / Grandpa / Assets(CallFilter 已拦);`cleanup_rejected_public_proposal` / `cleanup_rejected_private_proposal`(幂等 GC);Root/回调专用内部 call(不走签名费路径,分类防御性)。
+- 普通机构必须有：主账户、费用账户。
+- 国储会必须有：主账户、费用账户、安全基金账户、两和基金账户。
+- 省储行必须有：主账户、费用账户、永久质押账户。
+- 其他特殊机构按 `primitives::institution_constraints` 的唯一制度规格确定。
+- 每一种强制协议账户必须存在且只能存在一个。
+- 一个机构可以有多个自定义命名账户，同一 CID 下 `account_name` 唯一。
+- 所有协议账户永远不可关闭；只有 `InstitutionNamed` 可以关闭。
+- 逻辑账户允许零余额；非零初始金额必须大于等于 ED。
 
-**链上交易费 OnchainAmount = `max(金额×0.1%, ONCHAIN_MIN_FEE=0.1元)`**:
-- 付费方=签名者本人:`transfer_with_remark`(按金额)、`SquarePost`(0金额=0.1元)、清算 deposit/withdraw(当前 CallFilter 禁用)。
-- **付费方=机构费用账户(机构操作,`OnchainAmount(0)`=0.1元)**:
-  - CitizenIdentity:`occupy_cid`/`occupy_cids_batch`/`revoke_cid`/`register_voting_identity`/`upgrade_to_candidate_identity`/`update_voting_identity`/`update_candidate_identity`/`revoke_identity`(acting=`registrar_account`)
-  - public/private-manage:`register_cid_*`/`propose_create_*`/`propose_close_*`/`update_institution_info`/`add_institution_account`(acting=`issuer_main_account`)
+### 管理员、岗位和阈值
 
-**投票费 VoteFlat = 1元(付费方=签名者)**:InternalVote/JointVote/LegislationVote/ElectionVote 的 cast_*;VotingEngine 的 `finalize_proposal`(手动,自动结算有 on_initialize 兜底免费)/`retry_passed_proposal`/`cancel_passed_proposal`;MultisigTransfer/OnchainIssuance/LegislationYuan/RuntimeUpgrade/GrandpaKeyChange/PersonalManage/PersonalAdmins 的 propose_X;AddressRegistry。
+- `PublicAdmins/PrivateAdmins::AdminAccounts[cid_number]` 是机构执行授权真源。
+- 管理员唯一字段为 `admins`。
+- 岗位和任职统一以 `(cid_number, role_code)` 组织；有效任职变化原子刷新同一 CID 的 `admins`。
+- 机构动态阈值使用 `ActiveInstitutionThresholds[cid_number]`。
+- 个人多签继续使用 `ActivePersonalThresholds[personal_account]`，不得伪造机构 CID。
 
-**链下交易费 OffchainFee**:submit_offchain_batch(当前 CallFilter 禁用,保留分类)。
+### 签名与凭证
 
-**拒绝 Unknown**:OnchainTransaction 非 transfer_with_remark、Balances 原生,及一切未归类(穷尽 match,新 pallet 漏分类编译报错)。
+- 外层标准 extrinsic `origin` 是唯一交易授权；必须属于 `AdminAccounts[actor_cid_number].admins`。
+- 不新增 SignedExtension 或第二套授权真源。
+- 注册局业务凭证只表达跨机构业务背书，不能替代外层授权。
+- runtime 与 OnChina 共同调用 `runtime/primitives/src/sign.rs` 的唯一消息构造函数。
 
-## 落地方案(文件级)
+### 费用最终规则
 
-### 单源「机构操作」路由(不新建文件,因 RuntimeCall 只在 runtime crate)
-`runtime/src/configs.rs` 新增共享函数 `acting_institution_of(call) -> Option<AccountId>`:逐一 match 机构操作 call、取出 acting 机构账户(registrar_account / issuer_main_account),其余返回 None。**一函数三处消费**(分类器/付费方/SignedExtension),杜绝漂移。协议常量仍在 `primitives::fee_policy`(复用 `ONCHAIN_MIN_FEE`,补策略注释),因依赖方向(runtime→primitives)禁止 primitives 反向 match RuntimeCall。
+- 全链费用严格落入既定五类；没有 `WeightToFee` 费用。
+- 机构操作由 `actor_cid_number` 对应费用账户支付，失败即失败，不回落签名者。
+- `VoteFlat` 只用于实际投票等个人签名投票交易，由签名者支付。
+- Fullnode 不是机构，不进入机构费用路由。
+- 未分类 call 一律拒绝。
 
-### 1. `runtime/src/configs.rs`
-- `RuntimeFeeKindClassifier::fee_kind`:先 `if acting_institution_of(call).is_some() → OnchainAmount(0)`;`finalize_proposal→VoteFlat`;`cleanup_rejected_*→Free`;Free 收紧到框架自带;删占号=Free 特例。**每条中文注释重写为五类原则**。
-- `RuntimeFeePayerExtractor::fee_payer`:`if let Some(acc)=acting_institution_of(call){ if is_active_admin_of_account(&acc,who){ return fee_account_of(&acc).ok() } }`;否则 None(回落签名者)。保留 submit_offchain_batch 分支。
+### 投票职责
 
-### 2. `runtime/src/lib.rs`
-- 新增 `CheckInstitutionOpAuth` SignedExtension,插入 `TxExtension`(`ChargeTransactionPayment` 之前):`validate` 阶段对 `acting_institution_of(call)=Some(acc)` 的交易校验 `is_active_admin_of_account(acc, signer)`,不符 → `InvalidTransaction::BadSigner`(冒用别家 registrar 交易进不了池、不打包、不扣费)。
+- 机构提案发起方使用 `actor_cid_number`，不得使用主账户或通用账户上下文表示机构身份。
+- 具体账户只允许作为 `execution_account`，并强制验证属于 `actor_cid_number`。
+- 人口快照、投票资格、状态推进、计票、终态与提案清理统一归 votingengine。
 
-### 3. 公民快照收归引擎(删 3 extrinsic)
-- `runtime/misc/citizen-identity/src/lib.rs`:删 `prepare_population_snapshot` extrinsic(保留 trait `create_population_snapshot`)。
-- `runtime/votingengine/joint-vote/src/lib.rs` + `jointinternal.rs`:删 `prepare_joint_population_snapshot` extrinsic + `PendingPopulationSnapshots` storage;`do_create_joint_proposal` 增 `scope` 入参、内部调 `create_population_snapshot(scope)`(仿 election-vote)。
-- `runtime/votingengine/legislation-vote/src/lib.rs` + `legislation/referendum.rs`:同样删 `prepare_population_snapshot` extrinsic,提案内联生成。
-- 快照从此不进费用分类器。
+## 分步实施
 
-### 4. `runtime/transaction/onchain/src/lib.rs` / `primitives/src/fee_policy.rs`
-- 逻辑不改;头注措辞更新(免费=框架系统+维护;机构操作=最低链上费从费用账户扣)。
+### 第 1 步：机构 CID、账户、admins、岗位和交易身份唯一真源
 
-### 5. `citizenchain/onchina/src/domains/citizens/occupy.rs`·`chain_identity.rs`·机构创建关闭 handler
-- 签名不变;`InvalidTransaction::Payment` 映射「注册局费用账户余额不足」文案;可加提交前费用账户余额预检。占号/机构操作注释:免费→0.1元费用账户扣。
+- 建立机构类型到强制协议账户集合的唯一函数。
+- 删除 `CidRegisteredAccount`、机构/账户生命周期状态、`is_default`、`ProtectedGenesisAccounts`。
+- `InstitutionAccounts[(cid_number, account_name)]` 为正向账户真源，`AccountRegisteredCid` 为反向索引。
+- public/private admins 改为 CID key，删除主账户管理员根和机构管理员关闭流程。
+- 机构阈值按 CID，个人阈值按个人账户。
+- 机构提案增加 `actor_cid_number`；具体账户只作 `execution_account`。
+- 立法、决议发行、互选、普选、机构治理和注册局管理统一使用 CID + 管理员。
+- 机构转账和具体账户操作统一使用 CID + 账户 + 管理员。
+- 删除重复 `register_cid_*` call；创建、批量新增、关闭账户统一命名。
+- 允许零初始余额；非零初始余额校验 ED。
+- 五端同步 runtime、node、OnChina、CitizenApp、CitizenWallet。
+- 重新创世并做真实运行态验收。
 
-### 6. CitizenWallet 残桩清理(快照删除连带)
-- `citizenwallet/lib/signer/payload_decoder.dart` + `pallet_registry.dart` + `qr/qr_protocols.dart`:删 `prepare_joint_population_snapshot`(0x1502)、`prepare_legislation_snapshot`(0x1a00)解码/常量/`fromDecodedAction`;删对应测试用例。([[project_citizenwallet_call_registration_three_points]] 反向:删 call 同样三处清)
+### 第 2 步：费用分类与机构费用路由唯一真源
 
-### 7. 测试
-- runtime:分类穷尽性、机构操作→OnchainAmount(0)、付费方=机构费用账户、SignedExtension 拒冒用(is_admin_of 假→BadSigner)、框架 Free 不变、finalize→VoteFlat、cleanup→Free、费用账户不足→Payment。
-- 快照:提案内联生成快照、删 extrinsic 后编译与公投流程 GREEN。
-- onchina:费用账户不足报错路径。
+- RuntimeCall 穷尽分类到五类费用。
+- 机构操作解析唯一 `actor_cid_number`。
+- 机构费用账户由 CID + `InstitutionFee` 唯一解析。
+- 不允许任何付费方回落。
+- `cast_*` 等真实投票保持签名者 `VoteFlat`。
+- Fullnode 保持非机构分类。
 
-### 8. `docs/decisions/` 新 ADR
-- 记「五类费用统一 + 机构操作从费用账户扣(签名/扣费分离,is_admin_of + SignedExtension 双层防伪)+ 快照收归引擎」。
+### 第 3 步：执行期直接扣费与 ED 规则统一
 
-## 铁律
-- 单源:`acting_institution_of` 一处匹配;机构唯一 CID→费用账户(OP_FEE)/管理员集。
-- 穷尽分类 + 默认拒绝(已在),两层安全正交:①无 call 绕过收费 ②无签名者盗刷别家费用账户。
-- 只在主检出 `/Users/rhett/GMB` 操作,不碰 worktree([[feedback_user_evaluates_in_main_checkout]]);改动留工作区不提交供 review。无残留([[feedback_no_remnants]])。
+- 所有收费统一进入对应五类的执行器。
+- 机构费用直接从费用账户扣除，余额不足交易失败。
+- 普通支出统一校验 ED；显式账户关闭允许账户死亡。
+- 不使用 `WeightToFee`、最坏路径权重费用或隐式 Substrate 交易费。
 
-## 验收
-- `cargo test`(分类穷尽 + 机构操作扣费用账户 + SignedExtension 拒冒用 + 快照内联)GREEN;`cargo clippy` 零新增。
-- CitizenWallet `flutter test`/`analyze` GREEN(快照残桩清零)。
-- 重新创世后:注册局费用账户注资后占号/机构操作 0.1 元成功;空账户扣不到别家;冒用交易入池即拒。
+### 第 4 步：快照与提案清理收归投票引擎
 
-## 待确认边界
-- MultisigTransfer/OnchainIssuance 等**其它机构的业务 propose_X 保持 VoteFlat**(不并入机构操作 0.1 元);机构操作仅限 CitizenIdentity + public/private-manage(=注册局对公民/机构数据的登记管理)。
+- 删除业务 pallet 的 public `prepare_*_snapshot` extrinsic 和 pending snapshot 中转。
+- 提案创建时由 votingengine 内部生成并锁定快照。
+- 删除 public/private/personal 业务模块的 `cleanup_rejected_*` 和 pending 残留。
+- votingengine 统一在终态、超时和执行失败路径清理。
+
+### 第 5 步：全仓最终验收
+
+- runtime、node、OnChina、CitizenApp、CitizenWallet 全量测试。
+- 重新创世，启动真实 node、真实 OnChina 数据库/API/页面并执行真实扫码签名交易。
+- 全仓搜索旧 key、旧 call、旧 payload、旧命名、旧文案、旧流程为零残留。
+
+## 第 1 步预计修改范围
+
+- `citizenchain/runtime/primitives/`：协议账户集合、CID 制度约束、地址派生和签名消息单源。
+- `citizenchain/runtime/entity/`：机构、账户、岗位、任职、正反索引和生命周期清理。
+- `citizenchain/runtime/admins/`：机构 admins 改 CID key。
+- `citizenchain/runtime/votingengine/`：机构 actor CID、管理员快照和阈值路由。
+- `citizenchain/runtime/governance/resolution-destroy/`、`grandpakey-change/`：机构治理发起方改 CID。
+- `citizenchain/runtime/issuance/resolution-issuance/`、`onchain-issuance/`：机构身份与具体资产账户分离。
+- `citizenchain/runtime/transaction/multisig/`：机构账户交易改 CID + 账户 + 管理员。
+- `citizenchain/runtime/genesis/`：按机构制度校验完整协议账户集合。
+- `citizenchain/runtime/src/`：runtime 聚合查询和授权；本步不改费用分类、付款方或 TxExtension。
+- `citizenchain/node/src/`：RAW storage、node guard 和机构读取同步。
+- `citizenchain/onchina/src/`、`frontend/`：CID 请求、凭证、账户页面和真实权限同步。
+- `citizenapp/lib/`、`test/`：CID admins、阈值、提案和 storage 解码。
+- `citizenwallet/lib/`、`test/`：call、QR、payload 解码和旧协议清理。
+- `memory/05-modules/`：更新现有技术文档。
+
+不新增文件或目录；如发现必须新增，先列明完整路径、用途、原因和 Git 跟踪状态并重新请求确认。
+
+## 第 1 步验收
+
+### 自动验收
+
+- runtime 相关 crates 全量测试、clippy、benchmark/weights 更新。
+- node 测试与构建。
+- OnChina Rust 测试、前端测试和 build。
+- CitizenApp/CitizenWallet `flutter test`、`flutter analyze`。
+- 五端 SCALE call、storage key/value 和签名金标一致。
+
+### 真实运行态验收
+
+- 重新创世启动真实本地链和 node guard。
+- 普通机构、国储会、省储行的协议账户集合逐项正确。
+- 注册局管理员以 CID 发起真实机构创建，零初始余额成功，低于 ED 的非零金额失败。
+- 非管理员失败；CID 与机构账户不匹配失败。
+- 立法、决议发行、互选、普选等机构发起方按 CID。
+- 所有协议账户关闭失败；自定义账户关闭后机构、协议账户、admins、岗位和阈值保持不变。
+- OnChina 真实页面、CitizenApp 展示和 CitizenWallet 扫码解码全部与链上状态一致。
+
+第 1 步全部通过后停止，等待用户确认再进入第 2 步。

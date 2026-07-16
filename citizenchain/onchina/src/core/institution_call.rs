@@ -96,9 +96,8 @@ pub struct ProposeCreateInstitutionArgs {
     pub threshold: u32,
     pub register_nonce: Vec<u8>,
     pub signature: Vec<u8>,
-    pub issuer_cid_number: Vec<u8>,
-    pub issuer_main_account: [u8; 32],
-    pub signer_pubkey: [u8; 32],
+    pub actor_cid_number: Vec<u8>,
+    pub credential_signer_pubkey: [u8; 32],
     pub scope_province_name: Vec<u8>,
     pub scope_city_name: Vec<u8>,
 }
@@ -125,6 +124,24 @@ fn encode_assignment(out: &mut Vec<u8>, assignment: &InstitutionAssignmentArg) {
     out.push(assignment.assignment_source as u8);
     encode_bytes(out, &assignment.assignment_source_ref);
     out.push(assignment.assignment_status as u8);
+}
+
+/// 构造与 runtime `roles.encode()` 完全一致的签名载荷。
+pub fn encode_roles_payload(roles: &[InstitutionRoleArg]) -> Vec<u8> {
+    let mut out = Compact(roles.len() as u32).encode();
+    for role in roles {
+        encode_role(&mut out, role);
+    }
+    out
+}
+
+/// 构造与 runtime `assignments.encode()` 完全一致的签名载荷。
+pub fn encode_assignments_payload(assignments: &[InstitutionAssignmentArg]) -> Vec<u8> {
+    let mut out = Compact(assignments.len() as u32).encode();
+    for assignment in assignments {
+        encode_assignment(&mut out, assignment);
+    }
+    out
 }
 
 /// QR 链动作码：`(pallet_index << 8) | call_index`。
@@ -158,21 +175,14 @@ pub fn encode_propose_create_institution(args: &ProposeCreateInstitutionArgs) ->
     }
 
     out.extend_from_slice(&args.institution_code);
-    out.extend(Compact(args.roles.len() as u32).encode());
-    for role in &args.roles {
-        encode_role(&mut out, role);
-    }
-    out.extend(Compact(args.assignments.len() as u32).encode());
-    for assignment in &args.assignments {
-        encode_assignment(&mut out, assignment);
-    }
+    out.extend(encode_roles_payload(&args.roles));
+    out.extend(encode_assignments_payload(&args.assignments));
 
     out.extend(args.threshold.to_le_bytes());
     encode_bytes(&mut out, &args.register_nonce);
     encode_bytes(&mut out, &args.signature);
-    encode_bytes(&mut out, &args.issuer_cid_number);
-    out.extend_from_slice(&args.issuer_main_account);
-    out.extend_from_slice(&args.signer_pubkey);
+    encode_bytes(&mut out, &args.actor_cid_number);
+    out.extend_from_slice(&args.credential_signer_pubkey);
     encode_bytes(&mut out, &args.scope_province_name);
     encode_bytes(&mut out, &args.scope_city_name);
 
@@ -308,9 +318,8 @@ mod tests {
             threshold: 2,
             register_nonce: b"nonce".to_vec(),
             signature: vec![3; 64],
-            issuer_cid_number: b"issuer".to_vec(),
-            issuer_main_account: [4; 32],
-            signer_pubkey: [5; 32],
+            actor_cid_number: b"issuer".to_vec(),
+            credential_signer_pubkey: [5; 32],
             scope_province_name: "广东省".as_bytes().to_vec(),
             scope_city_name: "广州市".as_bytes().to_vec(),
         };
@@ -356,9 +365,8 @@ mod tests {
         expected.extend(args.threshold.encode());
         expected.extend(args.register_nonce.encode());
         expected.extend(args.signature.encode());
-        expected.extend(args.issuer_cid_number.encode());
-        expected.extend(args.issuer_main_account.encode());
-        expected.extend(args.signer_pubkey.encode());
+        expected.extend(args.actor_cid_number.encode());
+        expected.extend(args.credential_signer_pubkey.encode());
         expected.extend(args.scope_province_name.encode());
         expected.extend(args.scope_city_name.encode());
         assert_eq!(encoded.call_data, expected);

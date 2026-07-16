@@ -18,11 +18,11 @@ use sp_runtime::{
     DispatchResult,
 };
 
-use crate::institution::types::{InstitutionAccountInfo, InstitutionLifecycleStatus};
+use crate::institution::types::InstitutionAccountInfo;
 use crate::pallet::{
-    self, AccountNameOf, AccountRegisteredCid, CidNumberOf, CidRegisteredAccount, Error, Event,
-    InstitutionAccountNamesOf, InstitutionAccounts, Institutions, Pallet, RegisterNonceOf,
-    RegisterSignatureOf, UsedRegisterNonce,
+    self, AccountNameOf, AccountRegisteredCid, CidNumberOf, Error, Event, InstitutionAccountNamesOf,
+    InstitutionAccounts, Institutions, Pallet, RegisterNonceOf, RegisterSignatureOf,
+    UsedRegisterNonce,
 };
 use crate::traits::{
     AccountValidator, CidInstitutionVerifier, ProtectedSourceChecker, RegistryAuthority,
@@ -39,9 +39,8 @@ pub(crate) fn do_update_institution_info<T: pallet::Config>(
     cid_short_name: AccountNameOf<T>,
     register_nonce: RegisterNonceOf<T>,
     signature: RegisterSignatureOf<T>,
-    issuer_cid_number: Vec<u8>,
-    issuer_main_account: T::AccountId,
-    signer_pubkey: [u8; 32],
+    actor_cid_number: Vec<u8>,
+    credential_signer_pubkey: [u8; 32],
     scope_province_name: Vec<u8>,
     scope_city_name: Vec<u8>,
 ) -> DispatchResult {
@@ -50,11 +49,6 @@ pub(crate) fn do_update_institution_info<T: pallet::Config>(
     ensure!(!cid_short_name.is_empty(), Error::<T>::EmptyAccountName);
 
     let info = Institutions::<T>::get(&cid_number).ok_or(Error::<T>::InstitutionNotFound)?;
-    ensure!(
-        info.status != InstitutionLifecycleStatus::Closed,
-        Error::<T>::InstitutionAlreadyClosed
-    );
-
     let nonce_hash = <T as frame_system::Config>::Hashing::hash(register_nonce.as_slice());
     ensure!(
         !UsedRegisterNonce::<T>::get(nonce_hash),
@@ -69,9 +63,8 @@ pub(crate) fn do_update_institution_info<T: pallet::Config>(
             &[],
             &register_nonce,
             &signature,
-            issuer_cid_number.as_slice(),
-            &issuer_main_account,
-            &signer_pubkey,
+            actor_cid_number.as_slice(),
+            &credential_signer_pubkey,
             scope_province_name.as_slice(),
             scope_city_name.as_slice(),
             &[],
@@ -81,9 +74,8 @@ pub(crate) fn do_update_institution_info<T: pallet::Config>(
     ensure!(
         T::RegistryAuthority::can_register_institution(
             &submitter,
-            issuer_cid_number.as_slice(),
-            &issuer_main_account,
-            &signer_pubkey,
+            actor_cid_number.as_slice(),
+            &credential_signer_pubkey,
             cid_number.as_slice(),
             info.institution_code,
             scope_province_name.as_slice(),
@@ -117,9 +109,8 @@ pub(crate) fn do_add_institution_account<T: pallet::Config>(
     account_names: InstitutionAccountNamesOf<T>,
     register_nonce: RegisterNonceOf<T>,
     signature: RegisterSignatureOf<T>,
-    issuer_cid_number: Vec<u8>,
-    issuer_main_account: T::AccountId,
-    signer_pubkey: [u8; 32],
+    actor_cid_number: Vec<u8>,
+    credential_signer_pubkey: [u8; 32],
     scope_province_name: Vec<u8>,
     scope_city_name: Vec<u8>,
 ) -> DispatchResult {
@@ -127,11 +118,6 @@ pub(crate) fn do_add_institution_account<T: pallet::Config>(
     ensure!(!account_names.is_empty(), Error::<T>::MissingMainAccount);
 
     let info = Institutions::<T>::get(&cid_number).ok_or(Error::<T>::InstitutionNotFound)?;
-    ensure!(
-        info.status == InstitutionLifecycleStatus::Active,
-        Error::<T>::InstitutionAlreadyClosed
-    );
-
     let nonce_hash = <T as frame_system::Config>::Hashing::hash(register_nonce.as_slice());
     ensure!(
         !UsedRegisterNonce::<T>::get(nonce_hash),
@@ -147,9 +133,8 @@ pub(crate) fn do_add_institution_account<T: pallet::Config>(
             &account_name_payload,
             &register_nonce,
             &signature,
-            issuer_cid_number.as_slice(),
-            &issuer_main_account,
-            &signer_pubkey,
+            actor_cid_number.as_slice(),
+            &credential_signer_pubkey,
             scope_province_name.as_slice(),
             scope_city_name.as_slice(),
             &[],
@@ -159,9 +144,8 @@ pub(crate) fn do_add_institution_account<T: pallet::Config>(
     ensure!(
         T::RegistryAuthority::can_register_institution(
             &submitter,
-            issuer_cid_number.as_slice(),
-            &issuer_main_account,
-            &signer_pubkey,
+            actor_cid_number.as_slice(),
+            &credential_signer_pubkey,
             cid_number.as_slice(),
             info.institution_code,
             scope_province_name.as_slice(),
@@ -177,11 +161,15 @@ pub(crate) fn do_add_institution_account<T: pallet::Config>(
     for account_name in account_names.iter() {
         ensure!(!account_name.is_empty(), Error::<T>::EmptyAccountName);
         ensure!(
+            primitives::account_derive::is_registrable_custom_name(account_name.as_slice()),
+            Error::<T>::ReservedAccountName
+        );
+        ensure!(
             seen.insert(account_name.as_slice().to_vec()),
             Error::<T>::DuplicateAccountName
         );
         ensure!(
-            !CidRegisteredAccount::<T>::contains_key(&cid_number, account_name),
+            !InstitutionAccounts::<T>::contains_key(&cid_number, account_name),
             Error::<T>::CidAlreadyRegistered
         );
         let (account, _kind) =
@@ -214,12 +202,9 @@ pub(crate) fn do_add_institution_account<T: pallet::Config>(
             InstitutionAccountInfo {
                 address: account.clone(),
                 initial_balance: BalanceOf::<T>::zero(),
-                status: InstitutionLifecycleStatus::Active,
-                is_default: false,
                 created_at: now,
             },
         );
-        CidRegisteredAccount::<T>::insert(&cid_number, &account_name, &account);
         AccountRegisteredCid::<T>::insert(
             &account,
             RegisteredInstitution {

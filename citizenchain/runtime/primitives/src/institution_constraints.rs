@@ -13,8 +13,47 @@ use crate::cid::china::{
     china_jc::CHINA_JC, china_jy::CHINA_JY, china_lf::CHINA_LF, china_zf::CHINA_ZF,
 };
 use crate::cid::code::{
-    institution_code_from_cid_number, InstitutionCode, NED, NLG, NRP, NSN, NSP, PRS,
+    institution_code_from_cid_number, InstitutionCode, NED, NLG, NRC, NRP, NSN, NSP, PRB, PRS,
 };
+use crate::account_derive::InstitutionProtocolAccountKind;
+
+/// 所有机构共同强制的协议账户。
+pub const COMMON_PROTOCOL_ACCOUNT_KINDS: &[InstitutionProtocolAccountKind] = &[
+    InstitutionProtocolAccountKind::Main,
+    InstitutionProtocolAccountKind::Fee,
+];
+
+/// 国储会强制协议账户。
+pub const NRC_PROTOCOL_ACCOUNT_KINDS: &[InstitutionProtocolAccountKind] = &[
+    InstitutionProtocolAccountKind::Main,
+    InstitutionProtocolAccountKind::Fee,
+    InstitutionProtocolAccountKind::SafetyFund,
+    InstitutionProtocolAccountKind::He,
+];
+
+/// 省储行强制协议账户。
+pub const PRB_PROTOCOL_ACCOUNT_KINDS: &[InstitutionProtocolAccountKind] = &[
+    InstitutionProtocolAccountKind::Main,
+    InstitutionProtocolAccountKind::Fee,
+    InstitutionProtocolAccountKind::Stake,
+];
+
+/// 返回机构必须完整拥有的协议账户集合。
+///
+/// CID 与机构码必须互相匹配；不匹配时返回 `None`，调用方不得自行回落到普通机构规则。
+pub fn required_protocol_account_kinds(
+    code: InstitutionCode,
+    cid_number: &[u8],
+) -> Option<&'static [InstitutionProtocolAccountKind]> {
+    if institution_code_from_cid_number(core::str::from_utf8(cid_number).ok()?) != Some(code) {
+        return None;
+    }
+    Some(match code {
+        NRC => NRC_PROTOCOL_ACCOUNT_KINDS,
+        PRB => PRB_PROTOCOL_ACCOUNT_KINDS,
+        _ => COMMON_PROTOCOL_ACCOUNT_KINDS,
+    })
+}
 
 /// 国家参议会法定成员岗位代码。
 pub const ROLE_CODE_SENATOR: &[u8] = b"SENATOR";
@@ -94,12 +133,9 @@ pub fn is_permanent_singleton_code(code: &InstitutionCode) -> bool {
 pub fn singleton_by_identity(
     code: InstitutionCode,
     cid_number: &[u8],
-    main_account: &[u8],
 ) -> Option<SingletonInstitution> {
     singleton_institutions().into_iter().find(|institution| {
-        institution.code == code
-            && institution.cid_number.as_bytes() == cid_number
-            && institution.main_account.as_slice() == main_account
+        institution.code == code && institution.cid_number.as_bytes() == cid_number
     })
 }
 
@@ -151,12 +187,9 @@ pub fn member_composition_specs() -> Vec<MemberCompositionSpec> {
 pub fn member_composition_by_identity(
     code: InstitutionCode,
     cid_number: &[u8],
-    main_account: &[u8],
 ) -> Option<MemberCompositionSpec> {
     member_composition_specs().into_iter().find(|spec| {
-        spec.institution.code == code
-            && spec.institution.cid_number.as_bytes() == cid_number
-            && spec.institution.main_account.as_slice() == main_account
+        spec.institution.code == code && spec.institution.cid_number.as_bytes() == cid_number
     })
 }
 
@@ -190,5 +223,31 @@ mod tests {
         assert_eq!((specs[2].min_members, specs[2].max_members), (105, 155));
         assert_eq!(national_legislature_components()[0].code, NSN);
         assert_eq!(national_legislature_components()[1].code, NRP);
+    }
+
+    #[test]
+    fn required_protocol_accounts_follow_institution_design() {
+        let nrc = crate::cid::china::china_cb::CHINA_CB
+            .iter()
+            .find(|item| institution_code_from_cid_number(item.cid_number) == Some(NRC))
+            .expect("NRC genesis institution");
+        assert_eq!(
+            required_protocol_account_kinds(NRC, nrc.cid_number.as_bytes()),
+            Some(NRC_PROTOCOL_ACCOUNT_KINDS)
+        );
+
+        let prb = crate::cid::china::china_ch::CHINA_CH
+            .iter()
+            .find(|item| institution_code_from_cid_number(item.cid_number) == Some(PRB))
+            .expect("PRB genesis institution");
+        assert_eq!(
+            required_protocol_account_kinds(PRB, prb.cid_number.as_bytes()),
+            Some(PRB_PROTOCOL_ACCOUNT_KINDS)
+        );
+
+        assert_eq!(
+            required_protocol_account_kinds(NRC, prb.cid_number.as_bytes()),
+            None
+        );
     }
 }

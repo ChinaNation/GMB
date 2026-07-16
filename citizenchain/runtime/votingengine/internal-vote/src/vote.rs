@@ -18,11 +18,13 @@ impl<T: Config> Pallet<T> {
             !InternalVotesByAccount::<T>::contains_key(proposal_id, &who),
             votingengine::Error::<T>::AlreadyVoted
         );
-        let institution = proposal
-            .account_context
+        let subject = proposal
+            .subject_keys()
+            .into_iter()
+            .next()
             .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
         ensure!(
-            <votingengine::Pallet<T>>::is_admin_in_snapshot(proposal_id, institution.clone(), &who),
+            <votingengine::Pallet<T>>::is_admin_in_snapshot(proposal_id, subject.clone(), &who),
             votingengine::Error::<T>::NoPermission
         );
 
@@ -48,7 +50,7 @@ impl<T: Config> Pallet<T> {
             <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_PASSED)?;
         } else {
             let admins_len =
-                <votingengine::Pallet<T>>::snapshot_admins_len(proposal_id, institution)
+                <votingengine::Pallet<T>>::snapshot_admins_len(proposal_id, subject)
                     .ok_or(votingengine::Error::<T>::MissingAdminSnapshot)?;
             let casted = tally.yes.saturating_add(tally.no);
             let remaining = admins_len.saturating_sub(casted);

@@ -19,7 +19,7 @@ void main() {
 
     test('公民身份上链交易(register_voting_identity)全部 reviewFields key 有中文标签', () {
       const keys = [
-        'registrar_account',
+        'actor_cid_number',
         'cid_number',
         'wallet_account',
         'citizen_age_years',
@@ -34,7 +34,7 @@ void main() {
 
     test('公民参选身份上链交易全部 reviewFields key 有中文标签', () {
       const keys = [
-        'registrar_account',
+        'actor_cid_number',
         'identity_level',
         'cid_number',
         'wallet_account',
@@ -52,7 +52,7 @@ void main() {
     });
 
     test('公民身份字段翻译正确', () {
-      expect(fieldLabelText('registrar_account'), '注册机构账户');
+      expect(fieldLabelText('actor_cid_number'), '操作机构CID');
       expect(fieldLabelText('wallet_account'), '公民钱包账户');
       expect(fieldLabelText('citizen_age_years'), '周岁年龄');
       expect(fieldLabelText('valid_range'), '护照有效期');
@@ -61,6 +61,14 @@ void main() {
       expect(fieldLabelText('birth_place'), '出生地');
       expect(fieldLabelText('citizen_full_name'), '公民姓名');
       expect(fieldLabelText('citizen_sex'), '公民性别');
+    });
+
+    test('机构协议新增字段翻译正确', () {
+      expect(fieldLabelText('institution_account'), '机构账户');
+      expect(fieldLabelText('credential_issuer_cid_number'), '凭证签发机构CID');
+      expect(fieldLabelText('credential_signer_pubkey'), '凭证签发管理员');
+      expect(fieldLabelText('account_names'), '机构账户名称');
+      expect(fieldLabelText('effective_at'), '生效时间戳');
     });
 
     test('amount_ 前缀按账户名展开', () {

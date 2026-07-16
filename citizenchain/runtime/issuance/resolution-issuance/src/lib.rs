@@ -178,6 +178,7 @@ pub mod pallet {
         /// 决议发行提案已创建，联合投票已发起。
         ResolutionIssuanceProposed {
             proposal_id: u64,
+            actor_cid_number: votingengine::types::CidNumber,
             proposer: T::AccountId,
             total_amount: BalanceOf<T>,
             allocation_count: u32,
@@ -238,6 +239,8 @@ pub mod pallet {
         NotExecuted,
         PalletPaused,
         ProposalNotFinalizable,
+        InvalidActorCid,
+        UnauthorizedActorAdmin,
     }
 
     #[pallet::call]
@@ -249,12 +252,19 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::propose_issuance())]
         pub fn propose_issuance(
             origin: OriginFor<T>,
+            actor_cid_number: votingengine::types::CidNumber,
             reason: ReasonOf<T>,
             total_amount: BalanceOf<T>,
             allocations: AllocationOf<T>,
         ) -> DispatchResult {
             let proposer = T::ProposeOrigin::ensure_origin(origin)?;
-            Self::create_resolution_issuance_proposal(proposer, reason, total_amount, allocations)
+            Self::create_resolution_issuance_proposal(
+                proposer,
+                actor_cid_number,
+                reason,
+                total_amount,
+                allocations,
+            )
         }
 
         /// 更新链上合法收款账户集合（只允许新增，不允许删除）。

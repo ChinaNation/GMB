@@ -6,9 +6,8 @@
 
 extern crate alloc;
 
-use admin_primitives::{AdminAccountQuery as _, InstitutionAdminAccountLifecycle as _};
+use admin_primitives::{InstitutionAdminLifecycle as _, InstitutionAdminQuery as _};
 use alloc::{collections::BTreeMap, vec::Vec};
-use codec::Encode as _;
 use entity_primitives::{
     InstitutionAdminAssignment, InstitutionAssignmentSource, InstitutionAssignmentStatus,
     InstitutionGovernanceResult, InstitutionRole, InstitutionRoleStatus,
@@ -25,8 +24,8 @@ use crate::institution::role::{
     AssignmentSourceRefOf, InstitutionRoleOf, RoleAssignmentsOf, RoleCodeOf,
 };
 use crate::pallet::{
-    AccountNameOf, AccountRegisteredCid, CidNumberOf, Config, Error, InstitutionRoleAssignments,
-    InstitutionRoles, Institutions, Pallet,
+    AccountNameOf, CidNumberOf, Config, Error, InstitutionRoleAssignments, InstitutionRoles,
+    Institutions, Pallet,
 };
 
 impl<T: Config> Pallet<T> {
@@ -58,39 +57,30 @@ impl<T: Config> Pallet<T> {
             .try_into()
             .map_err(|_| Error::<T>::AssignmentSourceRefEmpty)?;
 
-        let registered = AccountRegisteredCid::<T>::get(&result.institution_account)
-            .ok_or(Error::<T>::InvalidAssignmentResultInstitution)?;
-        let cid_number = registered.cid_number;
-        let main_account = Self::resolve_admin_account_for_account(&result.institution_account)
-            .ok_or(Error::<T>::InvalidAssignmentResultInstitution)?;
-        ensure!(
-            main_account == result.institution_account,
-            Error::<T>::InvalidAssignmentResultInstitution
-        );
+        let cid_number: CidNumberOf<T> = result
+            .cid_number
+            .clone()
+            .try_into()
+            .map_err(|_| Error::<T>::InvalidAssignmentResultInstitution)?;
         let institution = Institutions::<T>::get(&cid_number)
             .ok_or(Error::<T>::InvalidAssignmentResultInstitution)?;
         ensure!(
-            institution.institution_code == result.institution_code
-                && institution.status == entity_primitives::InstitutionLifecycleStatus::Active,
+            institution.institution_code == result.institution_code,
             Error::<T>::InvalidAssignmentResultInstitution
         );
-        let main_account_bytes = main_account.encode();
         let protected_institution = primitives::governance_skeleton::fixed_institution_by_identity(
             result.institution_code,
             cid_number.as_slice(),
-            &main_account_bytes,
         )
         .is_some();
         let member_composition =
             primitives::institution_constraints::member_composition_by_identity(
                 result.institution_code,
                 cid_number.as_slice(),
-                &main_account_bytes,
             );
         let permanent_singleton = primitives::institution_constraints::singleton_by_identity(
             result.institution_code,
             cid_number.as_slice(),
-            &main_account_bytes,
         );
 
         let mut final_roles = InstitutionRoles::<T>::iter_prefix(&cid_number)
@@ -228,7 +218,6 @@ impl<T: Config> Pallet<T> {
                 let seats = primitives::governance_skeleton::fixed_role_seats_by_identity(
                     result.institution_code,
                     cid_number.as_slice(),
-                    &main_account_bytes,
                     role_code.as_slice(),
                 )
                 .ok_or(Error::<T>::InvalidRoleCode)?;
@@ -286,9 +275,9 @@ impl<T: Config> Pallet<T> {
         }
 
         // 尽量保留既有 admins 顺序，只在尾部追加新账户；管理员真源仍是最终任职集合。
-        let current_admins = T::AdminAccountQuery::active_account_admins(
+        let current_admins = T::InstitutionAdminQuery::institution_admins(
             result.institution_code,
-            main_account.clone(),
+            cid_number.as_slice(),
         )
         // 六个国家单例在创世时保持“尚未组成”；首次有效治理结果允许从空 admins
         // 原子写入岗位、任职和管理员。只有三个法定成员机构额外受岗位与人数区间约束。
@@ -357,9 +346,8 @@ impl<T: Config> Pallet<T> {
                     }
                 });
             }
-            if let Err(err) = T::AdminLifecycle::sync_active_institution_admins_from_assignments(
+            if let Err(err) = T::AdminLifecycle::sync_institution_admins_from_assignments(
                 crate::MODULE_TAG,
-                main_account.clone(),
                 cid_number.to_vec(),
                 result.institution_code,
                 derived_admins.clone(),
@@ -368,7 +356,6 @@ impl<T: Config> Pallet<T> {
             }
             Self::deposit_event(crate::pallet::Event::<T>::InstitutionGovernanceApplied {
                 cid_number,
-                institution_account: main_account,
                 role_changes: role_changes_len,
                 assignment_changes: assignment_changes_len,
                 admins_len,

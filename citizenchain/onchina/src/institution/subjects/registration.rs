@@ -24,7 +24,7 @@ use crate::domains::private::common::resolve_private_type_rule;
 use crate::institution::admins::model::InstitutionAdmin;
 use crate::institution::admins::repo::upsert_institution_admin;
 use crate::institution::subjects::http::{
-    extract_city_code, extract_province_code, insert_default_accounts_best_effort,
+    extract_city_code, extract_province_code, insert_required_protocol_accounts,
     service_error_to_response, MAX_CITY_CHARS, MAX_PROVINCE_CHARS,
 };
 use crate::institution::subjects::model::{
@@ -79,6 +79,12 @@ async fn create_institution_inner(
             "私权机构必须使用 /api/v1/private/<type> 创建",
         );
     }
+    // 机构发起身份只从本节点当前绑定的注册局 CID 读取，不再从环境变量建第二真源。
+    let actor_cid_number =
+        match crate::domains::citizens::chain_identity::active_registry_cid_number(&state) {
+            Ok(value) => value,
+            Err(resp) => return resp,
+        };
     let grant_payload = serde_json::json!({
         "p1": input.p1.clone(),
         "province_name": input.province_name.clone(),
@@ -487,7 +493,6 @@ async fn create_institution_inner(
             cid_number: cid.clone(),
             cid_full_name: cid_full_name.clone(),
             cid_short_name: Some(cid_short_name.clone()),
-            status: "ACTIVE".to_string(),
             category,
             p1: p1.clone(),
             province_name: province.clone(),
@@ -518,7 +523,12 @@ async fn create_institution_inner(
             let message = format!("write institution failed: {err}");
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
-        insert_default_accounts_best_effort(&state, &inst, &ctx.admin_account).await;
+        if let Err(err) =
+            insert_required_protocol_accounts(&state, &inst, &ctx.admin_account).await
+        {
+            let message = format!("write required protocol accounts failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+        }
         if let Err(err) = insert_initial_admins(
             &state,
             &inst,
@@ -530,6 +540,7 @@ async fn create_institution_inner(
         }
         let institution_create_sign_request = match build_institution_create_sign_request(
             &state,
+            actor_cid_number,
             cid.as_str(),
             input.threshold,
             normalized_admins.as_slice(),
@@ -703,9 +714,6 @@ fn insert_initial_admins(
                 admin_status: Some("ACTIVE".to_string()),
                 admin_updated_at: Some(now),
                 created_by: Some(created_by.to_string()),
-                chain_status: Some("PENDING_ON_CHAIN".to_string()),
-                chain_tx_hash: None,
-                chain_block_number: None,
                 operation_log_id: None,
                 created_at: now,
                 province_name: inst.province_name.clone(),
@@ -718,6 +726,7 @@ fn insert_initial_admins(
 
 fn build_institution_create_sign_request(
     state: &AppState,
+    actor_cid_number: String,
     cid_number: &str,
     threshold: u32,
     admins: &[CreateInstitutionAdminInput],
@@ -730,6 +739,7 @@ fn build_institution_create_sign_request(
         .db
         .with_client({
             let state = state.clone();
+            let actor_cid_number = actor_cid_number.clone();
             let cid_number = cid_number.to_string();
             let admins = admins.to_vec();
             move |conn| {
@@ -737,11 +747,11 @@ fn build_institution_create_sign_request(
                     crate::institution::subjects::registration_call::build_create_institution_call_data(
                         &state,
                         conn,
+                        actor_cid_number.as_str(),
                         cid_number.as_str(),
                         threshold,
                         &admins,
                     )?;
-                set_institution_chain_status_conn(conn, cid_number.as_str(), "PENDING_ON_CHAIN")?;
                 Ok(data)
             }
         })
@@ -757,29 +767,6 @@ fn build_institution_create_sign_request(
         &chain.call_data,
         chain.action,
     )
-}
-
-fn set_institution_chain_status_conn(
-    conn: &mut postgres::Client,
-    cid_number: &str,
-    status: &str,
-) -> Result<(), String> {
-    conn.execute(
-        "UPDATE subjects SET chain_status = $2, updated_at = now() WHERE cid_number = $1",
-        &[&cid_number, &status],
-    )
-    .map_err(|e| format!("update subjects chain_status failed: {e}"))?;
-    conn.execute(
-        "UPDATE accounts SET chain_status = $2 WHERE cid_number = $1",
-        &[&cid_number, &status],
-    )
-    .map_err(|e| format!("update accounts chain_status failed: {e}"))?;
-    conn.execute(
-        "UPDATE institution_admins SET chain_status = $2 WHERE cid_number = $1",
-        &[&cid_number, &status],
-    )
-    .map_err(|e| format!("update institution_admins chain_status failed: {e}"))?;
-    Ok(())
 }
 
 fn category_text_for_audit(category: InstitutionCategory) -> &'static str {

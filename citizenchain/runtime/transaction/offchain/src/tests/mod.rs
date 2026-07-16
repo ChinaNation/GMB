@@ -83,10 +83,13 @@ fn bank_admin_pair() -> sr25519::Pair {
 fn bank_admin() -> AccountId32 {
     AccountId32::new(bank_admin_pair().public().0)
 }
+fn bank_cid() -> crate::InstitutionCidNumber {
+    BANK_CID.to_vec().try_into().expect("测试 CID 长度合法")
+}
 
-/// Mock `CidAccountQuery`:把 `BANK_MAIN_BYTES` 注册为 K1=S 的主账户 Active,
-/// `BANK_FEE_BYTES` 注册为 K1=S 的费用账户 Active;`bank_admin()` 是主账户唯一
-/// 管理员。`OTHER_BANK_BYTES` 故意不注册,用于负路径。
+/// Mock `CidAccountQuery`:把 `BANK_MAIN_BYTES` 注册为 K1=S 的主账户，
+/// `BANK_FEE_BYTES` 注册为 K1=S 的费用账户；`bank_admin()` 是 `BANK_CID` 的管理员。
+/// `OTHER_BANK_BYTES` 故意不注册,用于负路径。
 pub struct MockCid;
 
 impl crate::bank_check::CidAccountQuery<AccountId32> for MockCid {
@@ -114,14 +117,13 @@ impl crate::bank_check::CidAccountQuery<AccountId32> for MockCid {
         }
     }
 
-    fn is_active(addr: &AccountId32) -> bool {
+    fn account_exists(addr: &AccountId32) -> bool {
         let bytes: &[u8; 32] = addr.as_ref();
         *bytes == BANK_MAIN_BYTES || *bytes == BANK_FEE_BYTES
     }
 
-    fn is_admin_of(bank: &AccountId32, who: &AccountId32) -> bool {
-        let bank_bytes: &[u8; 32] = bank.as_ref();
-        *bank_bytes == BANK_MAIN_BYTES && who == &bank_admin()
+    fn is_institution_admin(cid_number: &[u8], who: &AccountId32) -> bool {
+        cid_number == BANK_CID && who == &bank_admin()
     }
 
     /// 测试 mock:测试场景默认 BANK_MAIN 满足资格白名单,负路径单测自行覆盖。

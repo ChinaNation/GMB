@@ -29,21 +29,21 @@ struct OnChainNodeInfo {
     registered_by: AccountId32,
 }
 
-/// SCALE 编码 cid_number 的 `BoundedVec<u8, ConstU32<64>>` 形式(用作 storage key data)。
+/// SCALE 编码 cid_number 的全仓统一 `BoundedVec<u8, ConstU32<32>>` 形式。
 ///
 /// 字段编码:`Compact<u32>(len)` + `bytes`。
 fn encode_cid_key_data(cid_number: &str) -> Result<Vec<u8>, String> {
     let raw = cid_number.as_bytes();
-    if raw.is_empty() || raw.len() > 64 {
+    if raw.is_empty() || raw.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize {
         return Err(format!(
-            "cid_number 长度需在 1..=64 字节,实际:{}",
+            "cid_number 长度需在 1..=32 字节,实际:{}",
             raw.len()
         ));
     }
-    let bv: BoundedVec<u8, ConstU32<64>> = raw
+    let bv: BoundedVec<u8, ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>> = raw
         .to_vec()
         .try_into()
-        .map_err(|_| "cid_number 超出链上 BoundedVec<u8, 64>".to_string())?;
+        .map_err(|_| "cid_number 超出链上 CID_NUMBER_MAX_BYTES".to_string())?;
     Ok(bv.encode())
 }
 
@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn over_long_cid_rejected() {
-        let s = "a".repeat(65);
+        let s = "A".repeat(33);
         let err = encode_cid_key_data(&s).unwrap_err();
         assert!(err.contains("长度"));
     }

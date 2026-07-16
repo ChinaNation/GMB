@@ -11,7 +11,10 @@ use codec::Decode;
 use frame_support::{pallet_prelude::BoundedVec, traits::Currency};
 use frame_system::pallet_prelude::BlockNumberFor;
 use primitives::{
-    account_derive::{AccountKind, RESERVED_NAME_FEE, RESERVED_NAME_MAIN},
+    account_derive::{
+        institution_kind_by_name, institution_protocol_account_name, AccountKind,
+        InstitutionProtocolAccountKind, RESERVED_NAME_FEE, RESERVED_NAME_MAIN,
+    },
     cid::{
         china::{
             china_cb::CHINA_CB,
@@ -27,11 +30,11 @@ use primitives::{
 };
 use sp_runtime::traits::Zero;
 
-use admin_primitives::{AdminAccountStatus, InstitutionAdminAccount};
+use admin_primitives::{AdminCidNumber, InstitutionAdmins};
 use public_manage::{
     InstitutionAccountInfo, InstitutionAdminAssignment, InstitutionAssignmentSource,
-    InstitutionAssignmentStatus, InstitutionInfo, InstitutionLifecycleStatus, InstitutionRole,
-    InstitutionRoleStatus, RegisteredInstitution, RESERVED_NAME_FEE as PUBLIC_RESERVED_NAME_FEE,
+    InstitutionAssignmentStatus, InstitutionInfo, InstitutionRole, InstitutionRoleStatus,
+    RegisteredInstitution, RESERVED_NAME_FEE as PUBLIC_RESERVED_NAME_FEE,
     RESERVED_NAME_MAIN as PUBLIC_RESERVED_NAME_MAIN,
 };
 
@@ -59,7 +62,7 @@ type PublicAdminsOf<T> = BoundedVec<
     <T as frame_system::Config>::AccountId,
     <T as public_admins::Config>::MaxAdminsPerInstitution,
 >;
-type PublicAdminAccountOf<T> = InstitutionAdminAccount<PublicAdminsOf<T>>;
+type PublicInstitutionAdminsOf<T> = InstitutionAdmins<PublicAdminsOf<T>>;
 
 fn decode_account<T: frame_system::Config>(raw: &[u8; 32], label: &str) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..])
@@ -101,11 +104,9 @@ fn bounded_static_name<T: public_manage::Config>(
 }
 
 fn insert_public_account<T: public_manage::Config>(
-    cid_number: &'static str,
     cid: &PublicCidNumberOf<T>,
     account_name: PublicAccountNameOf<T>,
     address: T::AccountId,
-    is_default: bool,
 ) {
     public_manage::InstitutionAccounts::<T>::insert(
         cid,
@@ -113,21 +114,16 @@ fn insert_public_account<T: public_manage::Config>(
         PublicInstitutionAccountInfoOf::<T> {
             address: address.clone(),
             initial_balance: PublicBalanceOf::<T>::zero(),
-            status: InstitutionLifecycleStatus::Active,
-            is_default,
             created_at: BlockNumberFor::<T>::default(),
         },
     );
-    public_manage::CidRegisteredAccount::<T>::insert(cid, &account_name, address.clone());
     public_manage::AccountRegisteredCid::<T>::insert(
-        address.clone(),
+        address,
         PublicRegisteredInstitutionOf::<T> {
             cid_number: cid.clone(),
             account_name,
         },
     );
-    public_manage::ProtectedGenesisAccounts::<T>::insert(address, ());
-    let _ = cid_number;
 }
 
 /// 模板派生机构落地(ADR-031 卡3 全量创世直铸):账户由 CID 号确定性派生、
@@ -168,7 +164,6 @@ fn insert_derived_public_institution<T: public_manage::Config>(
             legal_representative_account: None,
             institution_code: parts.institution,
             created_at: BlockNumberFor::<T>::default(),
-            status: InstitutionLifecycleStatus::Active,
         },
     );
     let bounded_reserved = |value: &[u8]| -> PublicAccountNameOf<T> {
@@ -186,18 +181,27 @@ fn insert_derived_public_institution<T: public_manage::Config>(
         cid_number: cid_bytes,
     }
     .derive(primitives::core_const::SS58_FORMAT);
-    insert_derived_account::<T>(
-        &cid,
-        bounded_reserved(RESERVED_NAME_MAIN),
-        decode_account::<T>(&main, "派生主账户"),
-        true,
-    );
-    insert_derived_account::<T>(
-        &cid,
-        bounded_reserved(RESERVED_NAME_FEE),
-        decode_account::<T>(&fee, "派生费用账户"),
-        false,
-    );
+    let institution_code = parts.institution;
+    let required = primitives::institution_constraints::required_protocol_account_kinds(
+        institution_code,
+        cid_bytes,
+    )
+    .expect("创世派生机构 CID 与机构码必须一致");
+    for kind in required {
+        let name = institution_protocol_account_name(*kind);
+        let account_kind = institution_kind_by_name(cid_bytes, name)
+            .expect("协议账户名必须映射到唯一派生类型");
+        let address = match kind {
+            InstitutionProtocolAccountKind::Main => main,
+            InstitutionProtocolAccountKind::Fee => fee,
+            _ => account_kind.derive(primitives::core_const::SS58_FORMAT),
+        };
+        insert_derived_account::<T>(
+            &cid,
+            bounded_reserved(name),
+            decode_account::<T>(&address, "派生协议账户"),
+        );
+    }
 }
 
 /// 派生机构账户落地(不标记 ProtectedGenesisAccounts)。
@@ -205,7 +209,6 @@ fn insert_derived_account<T: public_manage::Config>(
     cid: &PublicCidNumberOf<T>,
     account_name: PublicAccountNameOf<T>,
     address: T::AccountId,
-    is_default: bool,
 ) {
     public_manage::InstitutionAccounts::<T>::insert(
         cid,
@@ -213,12 +216,9 @@ fn insert_derived_account<T: public_manage::Config>(
         PublicInstitutionAccountInfoOf::<T> {
             address: address.clone(),
             initial_balance: PublicBalanceOf::<T>::zero(),
-            status: InstitutionLifecycleStatus::Active,
-            is_default,
             created_at: BlockNumberFor::<T>::default(),
         },
     );
-    public_manage::CidRegisteredAccount::<T>::insert(cid, &account_name, address.clone());
     public_manage::AccountRegisteredCid::<T>::insert(
         address,
         PublicRegisteredInstitutionOf::<T> {
@@ -254,29 +254,46 @@ fn insert_public_institution<T: public_manage::Config>(
             legal_representative_account: None,
             institution_code,
             created_at: BlockNumberFor::<T>::default(),
-            status: InstitutionLifecycleStatus::Active,
         },
     );
     insert_public_account::<T>(
-        cid_number,
         &cid,
         bounded_account_name::<T>(RESERVED_NAME_MAIN, "主账户名", cid_number),
         decode_account::<T>(&main_account, "主账户"),
-        true,
     );
     insert_public_account::<T>(
-        cid_number,
         &cid,
         bounded_account_name::<T>(RESERVED_NAME_FEE, "费用账户名", cid_number),
         decode_account::<T>(&fee_account, "费用账户"),
-        false,
     );
+    let required = primitives::institution_constraints::required_protocol_account_kinds(
+        institution_code,
+        cid_number.as_bytes(),
+    )
+    .expect("固定机构 CID 与机构码必须一致");
+    for kind in required {
+        if matches!(kind, InstitutionProtocolAccountKind::Main | InstitutionProtocolAccountKind::Fee)
+        {
+            continue;
+        }
+        let account_name = institution_protocol_account_name(*kind);
+        let account_kind = institution_kind_by_name(cid_number.as_bytes(), account_name)
+            .expect("协议账户名必须映射到唯一派生类型");
+        insert_public_account::<T>(
+            &cid,
+            bounded_account_name::<T>(account_name, "协议账户名", cid_number),
+            decode_account::<T>(
+                &account_kind.derive(primitives::core_const::SS58_FORMAT),
+                "协议账户",
+            ),
+        );
+    }
     assert_eq!(RESERVED_NAME_MAIN, PUBLIC_RESERVED_NAME_MAIN);
     assert_eq!(RESERVED_NAME_FEE, PUBLIC_RESERVED_NAME_FEE);
 }
 
 fn insert_fixed_admins<T>(
-    main_account: [u8; 32],
+    _main_account: [u8; 32],
     cid_number: &'static str,
     institution_code: InstitutionCode,
     raw_admins: &[[u8; 32]],
@@ -344,18 +361,16 @@ fn insert_fixed_admins<T>(
             cid_number
         )
     });
-    let account = decode_account::<T>(&main_account, "固定治理机构主账户");
-    let admin_account = PublicAdminAccountOf::<T> {
-        cid_number: cid_number
-            .as_bytes()
-            .to_vec()
-            .try_into()
-            .unwrap_or_else(|_| panic!("genesis institution: {} 管理员CID过长", cid_number)),
+    let admin_cid: AdminCidNumber = cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .unwrap_or_else(|_| panic!("genesis institution: {} 管理员CID过长", cid_number));
+    let institution_admins = PublicInstitutionAdminsOf::<T> {
         institution_code,
         admins,
-        status: AdminAccountStatus::Active,
     };
-    public_admins::AdminAccounts::<T>::insert(account, admin_account);
+    public_admins::AdminAccounts::<T>::insert(admin_cid, institution_admins);
 }
 
 /// 创世写入内置公权机构和创世公职人员。

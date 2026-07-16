@@ -99,7 +99,7 @@ pub struct FixedRoleSpec {
 pub struct FixedInstitution {
     /// 机构码(NRC/PRC/PRB/NJD/FRG)。
     pub code: InstitutionCode,
-    /// 机构主账户 = `AdminAccounts` 键(来自 `CHINA_*` 创世常量,编译进二进制)。
+    /// 机构主账户是协议账户完整性事实，不是 `AdminAccounts` 键或机构身份。
     pub main_account: [u8; 32],
     /// 机构 CID = entity 岗位与任职双映射的第一层键。
     pub cid_number: &'static str,
@@ -161,17 +161,13 @@ pub fn fixed_institutions() -> Vec<FixedInstitution> {
 
 /// 按创世完整身份查询受保护治理机构。
 ///
-/// 机构码只表示业务类别，不能单独把运行期机构升级为原生保护对象；必须同时匹配
-/// 创世 CID 和主账户，才能应用固定管理员人数与岗位骨架。
+/// 机构码只表示业务类别；固定治理身份必须同时匹配创世 CID。
 pub fn fixed_institution_by_identity(
     code: InstitutionCode,
     cid_number: &[u8],
-    main_account: &[u8],
 ) -> Option<FixedInstitution> {
     fixed_institutions().into_iter().find(|institution| {
-        institution.code == code
-            && institution.cid_number.as_bytes() == cid_number
-            && institution.main_account.as_slice() == main_account
+        institution.code == code && institution.cid_number.as_bytes() == cid_number
     })
 }
 
@@ -253,10 +249,9 @@ pub fn fixed_role_seats(code: InstitutionCode, role_code: &[u8]) -> Option<u32> 
 pub fn fixed_role_seats_by_identity(
     code: InstitutionCode,
     cid_number: &[u8],
-    main_account: &[u8],
     role_code: &[u8],
 ) -> Option<u32> {
-    fixed_institution_by_identity(code, cid_number, main_account)?;
+    fixed_institution_by_identity(code, cid_number)?;
     fixed_role_seats(code, role_code)
 }
 

@@ -60,7 +60,13 @@ class QrActions {
   static const int retryPassedProposal = 0x0904;
   static const int cancelPassedProposal = 0x0905;
   static const int registerVotingIdentity = 0x0a00;
+  static const int upgradeToCandidateIdentity = 0x0a01;
+  static const int updateVotingIdentity = 0x0a02;
+  static const int updateCandidateIdentity = 0x0a03;
+  static const int revokeIdentity = 0x0a04;
+  static const int prepareCitizenPopulationSnapshot = 0x0a05;
   static const int occupyCid = 0x0a06;
+  static const int occupyCidsBatch = 0x0a07;
   static const int revokeCid = 0x0a08;
   static const int proposeRuntimeUpgrade = 0x0c00;
   static const int developerDirectUpgrade = 0x0c02;
@@ -69,9 +75,13 @@ class QrActions {
   static const int publicInstitutionClose = 0x1e01;
   static const int publicInstitutionCleanupRejected = 0x1e04;
   static const int publicInstitutionCreate = 0x1e05;
+  static const int publicInstitutionUpdateInfo = 0x1e06;
+  static const int publicInstitutionAddAccount = 0x1e07;
   static const int privateInstitutionClose = 0x1f01;
   static const int privateInstitutionCleanupRejected = 0x1f04;
   static const int privateInstitutionCreate = 0x1f05;
+  static const int privateInstitutionUpdateInfo = 0x1f06;
+  static const int privateInstitutionAddAccount = 0x1f07;
   static const int multisigTransfer = 0x1100;
   static const int safetyFundTransfer = 0x1101;
   static const int sweepToMain = 0x1102;
@@ -79,6 +89,7 @@ class QrActions {
   static const int depositClearingBank = 0x131f;
   static const int withdrawClearingBank = 0x1320;
   static const int switchClearingBank = 0x1321;
+  static const int proposeL2FeeRate = 0x1328;
   static const int registerClearingBank = 0x1332;
   static const int updateClearingBankEndpoint = 0x1333;
   static const int unregisterClearingBank = 0x1334;
@@ -86,6 +97,13 @@ class QrActions {
   static const int jointVote = 0x1500;
   static const int castReferendum = 0x1501;
   static const int preparePopulationSnapshot = 0x1502;
+
+  // 注册局地址目录 AddressRegistry(33 = 0x21)
+  static const int setAddressCatalogVersion = 0x2100;
+  static const int setAddressName = 0x2101;
+  static const int removeAddressName = 0x2102;
+  static const int setAddress = 0x2103;
+  static const int removeAddress = 0x2104;
 
   // 立法院 LegislationYuan(25 = 0x19)
   static const int proposeEnactLaw = 0x1900;
@@ -124,6 +142,12 @@ class QrActions {
         'retry_passed_proposal' => retryPassedProposal,
         'cancel_passed_proposal' => cancelPassedProposal,
         'register_voting_identity' => registerVotingIdentity,
+        'upgrade_to_candidate_identity' => upgradeToCandidateIdentity,
+        'update_voting_identity' => updateVotingIdentity,
+        'update_candidate_identity' => updateCandidateIdentity,
+        'revoke_identity' => revokeIdentity,
+        'prepare_citizen_population_snapshot' =>
+          prepareCitizenPopulationSnapshot,
         'propose_personal_admin_set_change' => personalAdminSetChange,
         'propose_runtime_upgrade' => proposeRuntimeUpgrade,
         'developer_direct_upgrade' => developerDirectUpgrade,
@@ -132,10 +156,14 @@ class QrActions {
         'propose_close_public_institution' => publicInstitutionClose,
         'cleanup_rejected_public_proposal' => publicInstitutionCleanupRejected,
         'propose_create_public_institution' => publicInstitutionCreate,
+        'update_public_institution_info' => publicInstitutionUpdateInfo,
+        'add_public_institution_account' => publicInstitutionAddAccount,
         'propose_close_private_institution' => privateInstitutionClose,
         'cleanup_rejected_private_proposal' =>
           privateInstitutionCleanupRejected,
         'propose_create_private_institution' => privateInstitutionCreate,
+        'update_private_institution_info' => privateInstitutionUpdateInfo,
+        'add_private_institution_account' => privateInstitutionAddAccount,
         'propose_transfer' => multisigTransfer,
         'propose_safety_fund_transfer' => safetyFundTransfer,
         'propose_sweep_to_main' => sweepToMain,
@@ -143,6 +171,7 @@ class QrActions {
         'deposit_clearing_bank' => depositClearingBank,
         'withdraw_clearing_bank' => withdrawClearingBank,
         'switch_clearing_bank' => switchClearingBank,
+        'propose_l2_fee_rate' => proposeL2FeeRate,
         'register_clearing_bank' => registerClearingBank,
         'update_clearing_bank_endpoint' => updateClearingBankEndpoint,
         'unregister_clearing_bank' => unregisterClearingBank,
@@ -150,6 +179,11 @@ class QrActions {
         'joint_vote' => jointVote,
         'cast_referendum' => castReferendum,
         'prepare_joint_population_snapshot' => preparePopulationSnapshot,
+        'set_address_catalog_version' => setAddressCatalogVersion,
+        'set_address_name' => setAddressName,
+        'remove_address_name' => removeAddressName,
+        'set_address' => setAddress,
+        'remove_address' => removeAddress,
         'propose_enact_law' => proposeEnactLaw,
         'propose_amend_law' => proposeAmendLaw,
         'propose_repeal_law' => proposeRepealLaw,
@@ -163,6 +197,7 @@ class QrActions {
         'decrypt_admin' => decryptAdmin,
         'citizen_identity' => citizenIdentity,
         'occupy_cid' => occupyCid,
+        'occupy_cids_batch' => occupyCidsBatch,
         'revoke_cid' => revokeCid,
         'onchina_admin_action' => onchinaAdmin,
         _ => 0,

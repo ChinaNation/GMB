@@ -20,10 +20,12 @@ extern crate alloc;
 
 use alloc::{vec, vec::Vec};
 
+use primitives::account_derive::AccountKind;
 use primitives::cid::china::china_cb::{CHINA_CB, SAFETY_FUND_ACCOUNT};
-use primitives::cid::china::china_ch::CHINA_CH;
 use votingengine::{
-    types::{is_personal_code, is_valid_governance_code, InstitutionCode, NRC, PMUL, PRB},
+    types::{
+        institution_code_from_cid_number, CidNumber, InstitutionCode, NRC, PMUL, PRB,
+    },
     InternalVoteResultCallback, ProposalExecutionOutcome, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL,
     STATUS_PASSED,
 };
@@ -45,8 +47,10 @@ type BalanceOf<T> =
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 #[scale_info(skip_type_params(MaxRemarkLen))]
 pub struct TransferAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
-    /// 转出多签资金账户(治理机构主账户、注册机构账户或个人多签账户)。
-    pub institution: AccountId,
+    /// 机构转账必须存在 CID；个人多签没有 CID，严格使用 None。
+    pub actor_cid_number: Option<CidNumber>,
+    /// 实际转出资金的机构账户或个人多签账户。
+    pub funding_account: AccountId,
     /// 收款地址
     pub beneficiary: AccountId,
     /// 转账金额
@@ -61,6 +65,10 @@ pub struct TransferAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 #[scale_info(skip_type_params(MaxRemarkLen))]
 pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
+    /// 国家储委会唯一 CID。
+    pub actor_cid_number: CidNumber,
+    /// 国家储委会安全基金账户。
+    pub institution_account: AccountId,
     /// 收款地址
     pub beneficiary: AccountId,
     /// 转账金额
@@ -77,18 +85,15 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
 /// 投票通过 / 否决回调时统一识别提案发起人。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct SweepAction<AccountId, Balance> {
-    /// 机构资金账户。
-    ///
-    /// 费用账户划转只服务治理机构费用账户，不接入个人多签。
-    pub institution: AccountId,
+    /// 发起机构唯一 CID。
+    pub actor_cid_number: CidNumber,
+    /// 实际转出的机构费用账户。
+    pub institution_account: AccountId,
     /// 划转金额
     pub amount: Balance,
     /// 发起管理员(Tx 1 中锁定)
     pub proposer: AccountId,
 }
-
-/// 手续费账户最低保留余额：1111.11 元（111111 分）。
-const FEE_ADDRESS_MIN_RESERVE_FEN: u128 = 111_111;
 
 /// 单次划转上限：可用余额的 80%。
 const FEE_SWEEP_MAX_PERCENT: u128 = 80;
@@ -97,25 +102,13 @@ fn decode_raw_account<T: frame_system::Config>(raw: &[u8; 32]) -> Option<T::Acco
     T::AccountId::decode(&mut &raw[..]).ok()
 }
 
-fn raw_account_matches<T: frame_system::Config>(raw: &[u8; 32], account: &T::AccountId) -> bool {
-    decode_raw_account::<T>(raw).as_ref() == Some(account)
-}
-
-fn builtin_cid<T: frame_system::Config>(institution: &T::AccountId) -> Option<Vec<u8>> {
-    if let Some(node) = CHINA_CB
-        .iter()
-        .find(|n| raw_account_matches::<T>(&n.main_account, institution))
-    {
-        return Some(node.cid_number.as_bytes().to_vec());
-    }
-    CHINA_CH
-        .iter()
-        .find(|n| raw_account_matches::<T>(&n.main_account, institution))
-        .map(|node| node.cid_number.as_bytes().to_vec())
-}
-
-fn nrc_cid() -> Vec<u8> {
-    CHINA_CB[0].cid_number.as_bytes().to_vec()
+fn nrc_cid() -> CidNumber {
+    CHINA_CB[0]
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("NRC CID must fit protocol bound")
 }
 
 #[frame_support::pallet]
@@ -193,10 +186,9 @@ pub mod pallet {
         TransferProposed {
             proposal_id: u64,
             institution_code: InstitutionCode,
-            institution: T::AccountId,
+            actor_cid_number: Option<CidNumber>,
             proposer: T::AccountId,
-            /// 资金源(= 机构主账户)。
-            from: T::AccountId,
+            funding_account: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
             /// 原文 remark,供管理员投票前核对。
@@ -207,12 +199,12 @@ pub mod pallet {
         /// 投票通过但执行失败（投票已记录，提案数据保留，可通过 VotingEngine 统一入口手动重试）
         TransferExecutionFailed {
             proposal_id: u64,
-            institution: T::AccountId,
+            funding_account: T::AccountId,
         },
         /// 转账已执行（投票通过后自动触发，含手续费分账）
         TransferExecuted {
             proposal_id: u64,
-            institution: T::AccountId,
+            funding_account: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
@@ -220,9 +212,9 @@ pub mod pallet {
         /// 安全基金转账提案已创建。
         SafetyFundTransferProposed {
             proposal_id: u64,
+            actor_cid_number: CidNumber,
             proposer: T::AccountId,
-            /// 资金源(= SAFETY_FUND_ACCOUNT 常量)
-            from: T::AccountId,
+            institution_account: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
             /// 原文 remark,供管理员投票前核对。
@@ -241,19 +233,18 @@ pub mod pallet {
         /// 手续费划转提案已创建。
         SweepToMainProposed {
             proposal_id: u64,
-            institution: T::AccountId,
+            actor_cid_number: CidNumber,
             proposer: T::AccountId,
-            /// 资金源(= 机构费用账户)
-            from: T::AccountId,
-            /// 资金目标(= 机构主账户)
-            to: T::AccountId,
+            institution_account: T::AccountId,
+            main_account: T::AccountId,
             amount: BalanceOf<T>,
             expires_at: BlockNumberFor<T>,
         },
         /// 手续费划转已执行
         SweepToMainExecuted {
             proposal_id: u64,
-            institution: T::AccountId,
+            actor_cid_number: CidNumber,
+            institution_account: T::AccountId,
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
             reserve_left: BalanceOf<T>,
@@ -315,8 +306,8 @@ pub mod pallet {
         #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_transfer())]
         pub fn propose_transfer(
             origin: OriginFor<T>,
-            institution_code: InstitutionCode,
-            institution: T::AccountId,
+            actor_cid_number: Option<CidNumber>,
+            funding_account: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
             remark: BoundedVec<u8, T::MaxRemarkLen>,
@@ -324,19 +315,22 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
-            let (actual_org, institution_account, subject_cid_numbers) =
-                Self::resolve_institution_account(institution.clone())?;
+            let (institution_code, subject_cid_numbers) = Self::resolve_funding_authority(
+                actor_cid_number.as_ref(),
+                &funding_account,
+            )?;
             ensure!(
-                actual_org == institution_code,
-                Error::<T>::InstitutionCodeMismatch
-            );
-            ensure!(
-                Self::is_internal_admin(institution_code, institution.clone(), &who),
+                Self::is_funding_admin(
+                    institution_code,
+                    actor_cid_number.as_ref(),
+                    &funding_account,
+                    &who,
+                ),
                 Error::<T>::UnauthorizedAdmin
             );
             ensure!(
                 <T as Config>::InstitutionAsset::can_spend(
-                    &institution_account,
+                    &funding_account,
                     InstitutionAssetAction::MultisigTransferExecute,
                 ),
                 Error::<T>::InstitutionSpendNotAllowed
@@ -348,7 +342,7 @@ pub mod pallet {
 
             // 不允许自转账
             ensure!(
-                beneficiary != institution_account,
+                beneficiary != funding_account,
                 Error::<T>::SelfTransferNotAllowed
             );
 
@@ -367,14 +361,15 @@ pub mod pallet {
             let total = amount
                 .checked_add(&fee)
                 .ok_or(Error::<T>::InsufficientBalance)?;
-            let free = <T as Config>::Currency::free_balance(&institution_account);
+            let free = <T as Config>::Currency::free_balance(&funding_account);
             let required = total
                 .checked_add(&ed)
                 .ok_or(Error::<T>::InsufficientBalance)?;
             ensure!(free >= required, Error::<T>::InsufficientBalance);
 
             let action = TransferAction {
-                institution: institution.clone(),
+                actor_cid_number: actor_cid_number.clone(),
+                funding_account: funding_account.clone(),
                 beneficiary: beneficiary.clone(),
                 amount,
                 remark: remark.clone(),
@@ -383,15 +378,24 @@ pub mod pallet {
             let mut encoded = sp_runtime::Vec::from(crate::MODULE_TAG);
             encoded.extend_from_slice(&action.encode());
             // 创建提案时同步写入 owner/data/meta，禁止后续跨模块覆写业务数据。
-            let proposal_id =
-                <T as Config>::InternalVoteEngine::create_general_internal_proposal_with_data(
+            let proposal_id = if let Some(cid_number) = actor_cid_number.as_ref() {
+                <T as Config>::InternalVoteEngine::create_institution_proposal_with_data(
                     who.clone(),
                     institution_code,
-                    institution.clone(),
+                    cid_number.to_vec(),
+                    Some(funding_account.clone()),
                     subject_cid_numbers,
                     crate::MODULE_TAG,
                     encoded,
-                )?;
+                )?
+            } else {
+                <T as Config>::InternalVoteEngine::create_personal_proposal_with_data(
+                    who.clone(),
+                    funding_account.clone(),
+                    crate::MODULE_TAG,
+                    encoded,
+                )?
+            };
 
             // 从投票引擎回读 proposal.end 作为 expires_at,供 citizenapp 倒计时。
             let expires_at = votingengine::Pallet::<T>::proposals(proposal_id)
@@ -401,9 +405,9 @@ pub mod pallet {
             Self::deposit_event(Event::<T>::TransferProposed {
                 proposal_id,
                 institution_code,
-                institution,
+                actor_cid_number,
                 proposer: who,
-                from: institution_account,
+                funding_account,
                 beneficiary,
                 amount,
                 remark,
@@ -420,6 +424,8 @@ pub mod pallet {
         #[pallet::weight(T::DbWeight::get().reads_writes(4, 2))]
         pub fn propose_safety_fund_transfer(
             origin: OriginFor<T>,
+            actor_cid_number: CidNumber,
+            institution_account: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
             remark: BoundedVec<u8, T::MaxRemarkLen>,
@@ -428,22 +434,25 @@ pub mod pallet {
             ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
 
             // 验证国家储委会管理员
-            let nrc_institution = Self::decode_institution_account(&CHINA_CB[0].main_account)?;
+            ensure!(actor_cid_number == nrc_cid(), Error::<T>::InvalidInstitution);
+            let expected_safety_fund = Self::decode_institution_account(&SAFETY_FUND_ACCOUNT)?;
             ensure!(
-                <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
+                institution_account == expected_safety_fund,
+                Error::<T>::InvalidInstitution
+            );
+            ensure!(
+                <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
                     NRC,
-                    nrc_institution.clone(),
+                    actor_cid_number.as_slice(),
                     &who,
                 ),
                 Error::<T>::UnauthorizedAdmin
             );
 
             // 验证安全基金账户余额
-            let safety_fund_account = T::AccountId::decode(&mut &SAFETY_FUND_ACCOUNT[..])
-                .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
             ensure!(
                 <T as Config>::InstitutionAsset::can_spend(
-                    &safety_fund_account,
+                    &institution_account,
                     InstitutionAssetAction::NrcSafetyFundTransfer,
                 ),
                 Error::<T>::InstitutionSpendNotAllowed
@@ -457,18 +466,19 @@ pub mod pallet {
                 .checked_add(&fee)
                 .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
             let ed: BalanceOf<T> = <T as Config>::Currency::minimum_balance();
-            let free = <T as Config>::Currency::free_balance(&safety_fund_account);
+            let free = <T as Config>::Currency::free_balance(&institution_account);
             let required = total
                 .checked_add(&ed)
                 .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
             ensure!(free >= required, Error::<T>::SafetyFundInsufficientBalance);
 
             let proposal_id =
-                <T as Config>::InternalVoteEngine::create_general_internal_proposal_with_data(
+                <T as Config>::InternalVoteEngine::create_institution_proposal_with_data(
                     who.clone(),
                     NRC,
-                    nrc_institution,
-                    vec![nrc_cid()],
+                    actor_cid_number.to_vec(),
+                    Some(institution_account.clone()),
+                    vec![actor_cid_number.to_vec()],
                     crate::MODULE_TAG,
                     sp_runtime::Vec::from(SAFETY_FUND_OWNER_DATA),
                 )?;
@@ -476,6 +486,8 @@ pub mod pallet {
             SafetyFundProposalActions::<T>::insert(
                 proposal_id,
                 SafetyFundAction {
+                    actor_cid_number: actor_cid_number.clone(),
+                    institution_account: institution_account.clone(),
                     beneficiary: beneficiary.clone(),
                     amount,
                     remark: remark.clone(),
@@ -490,8 +502,9 @@ pub mod pallet {
 
             Self::deposit_event(Event::SafetyFundTransferProposed {
                 proposal_id,
+                actor_cid_number,
                 proposer: who,
-                from: safety_fund_account,
+                institution_account,
                 beneficiary,
                 amount,
                 remark,
@@ -504,7 +517,8 @@ pub mod pallet {
         #[pallet::weight(T::DbWeight::get().reads_writes(4, 2))]
         pub fn propose_sweep_to_main(
             origin: OriginFor<T>,
-            institution: T::AccountId,
+            actor_cid_number: CidNumber,
+            institution_account: T::AccountId,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -512,22 +526,28 @@ pub mod pallet {
             ensure!(amount_u128 > 0, Error::<T>::InvalidSweepAmount);
 
             // 动态判断治理机构码类型。
-            let institution_code = Self::resolve_sweep_org(&institution)?;
+            let institution_code = Self::resolve_sweep_org(&actor_cid_number)?;
+            let fee_account = Self::resolve_fee_account(&actor_cid_number)?;
             ensure!(
-                <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
+                institution_account == fee_account,
+                Error::<T>::InvalidInstitution
+            );
+            ensure!(
+                <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
                     institution_code,
-                    institution.clone(),
+                    actor_cid_number.as_slice(),
                     &who,
                 ),
                 Error::<T>::UnauthorizedAdmin
             );
 
             let proposal_id =
-                <T as Config>::InternalVoteEngine::create_general_internal_proposal_with_data(
+                <T as Config>::InternalVoteEngine::create_institution_proposal_with_data(
                     who.clone(),
                     institution_code,
-                    institution.clone(),
-                    vec![Self::resolve_sweep_cid(&institution)?],
+                    actor_cid_number.to_vec(),
+                    Some(institution_account.clone()),
+                    vec![actor_cid_number.to_vec()],
                     crate::MODULE_TAG,
                     sp_runtime::Vec::from(SWEEP_OWNER_DATA),
                 )?;
@@ -535,24 +555,24 @@ pub mod pallet {
             SweepProposalActions::<T>::insert(
                 proposal_id,
                 SweepAction {
-                    institution: institution.clone(),
+                    actor_cid_number: actor_cid_number.clone(),
+                    institution_account: institution_account.clone(),
                     amount,
                     proposer: who.clone(),
                 },
             );
 
-            let fee_account = Self::resolve_fee_account(&institution)?;
-            let main_account = Self::resolve_main_account(institution.clone())?;
+            let main_account = Self::resolve_main_account(&actor_cid_number)?;
             let expires_at = votingengine::Pallet::<T>::proposals(proposal_id)
                 .map(|p| p.end)
                 .ok_or(Error::<T>::SweepProposalNotFound)?;
 
             Self::deposit_event(Event::SweepToMainProposed {
                 proposal_id,
-                institution,
+                actor_cid_number,
                 proposer: who,
-                from: fee_account,
-                to: main_account,
+                institution_account,
+                main_account,
                 amount,
                 expires_at,
             });
@@ -567,41 +587,59 @@ pub mod pallet {
             decode_raw_account::<T>(raw).ok_or(Error::<T>::InstitutionAccountDecodeFailed)
         }
 
-        fn resolve_institution_account(
-            institution: T::AccountId,
-        ) -> Result<(InstitutionCode, T::AccountId, Vec<Vec<u8>>), Error<T>> {
+        fn resolve_funding_authority(
+            actor_cid_number: Option<&CidNumber>,
+            funding_account: &T::AccountId,
+        ) -> Result<(InstitutionCode, Vec<Vec<u8>>), Error<T>> {
             use entity_primitives::InstitutionMultisigQuery;
             use personal_manage::traits::PersonalMultisigQuery;
 
-            if <T as Config>::PersonalQuery::is_active(&institution) {
-                return Ok((PMUL, institution, Vec::new()));
-            }
+            let Some(cid_number) = actor_cid_number else {
+                ensure!(
+                    <T as Config>::PersonalQuery::is_active(funding_account),
+                    Error::<T>::InvalidInstitution
+                );
+                return Ok((PMUL, Vec::new()));
+            };
 
-            // 多签转账是所有机构共有的账户业务。机构身份统一从 entity 生命周期
-            // 真源解析，不再另外维护并列的内置机构白名单。
             ensure!(
-                <T as Config>::InstitutionQuery::is_active(&institution),
+                <T as Config>::InstitutionQuery::account_exists(funding_account),
                 Error::<T>::InvalidInstitution
             );
-            let institution_code = <T as Config>::InstitutionQuery::lookup_org(&institution)
+            let stored_cid = <T as Config>::InstitutionQuery::lookup_cid(funding_account)
                 .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
-                is_valid_governance_code(&institution_code) && !is_personal_code(&institution_code),
+                stored_cid.as_slice() == cid_number.as_slice(),
                 Error::<T>::InvalidInstitution
             );
-            let cid = <T as Config>::InstitutionQuery::lookup_cid(&institution)
+            let cid_text = core::str::from_utf8(cid_number.as_slice())
+                .map_err(|_| Error::<T>::InvalidInstitution)?;
+            let institution_code = institution_code_from_cid_number(cid_text)
                 .ok_or(Error::<T>::InvalidInstitution)?;
-            Ok((institution_code, institution, vec![cid]))
+            let stored_code = <T as Config>::InstitutionQuery::lookup_org(funding_account)
+                .ok_or(Error::<T>::InvalidInstitution)?;
+            ensure!(
+                stored_code == institution_code,
+                Error::<T>::InstitutionCodeMismatch
+            );
+            Ok((institution_code, vec![cid_number.to_vec()]))
         }
 
-        fn is_internal_admin(
+        fn is_funding_admin(
             institution_code: InstitutionCode,
-            institution: T::AccountId,
+            actor_cid_number: Option<&CidNumber>,
+            funding_account: &T::AccountId,
             who: &T::AccountId,
         ) -> bool {
-            <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
-                institution_code,
-                institution,
+            if let Some(cid_number) = actor_cid_number {
+                return <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
+                    institution_code,
+                    cid_number.as_slice(),
+                    who,
+                );
+            }
+            <T as votingengine::Config>::InternalAdminProvider::is_personal_admin(
+                funding_account.clone(),
                 who,
             )
         }
@@ -613,7 +651,8 @@ pub mod pallet {
         fn ensure_internal_business_proposal(
             proposal_id: u64,
             institution_code: InstitutionCode,
-            institution: &T::AccountId,
+            actor_cid_number: Option<&CidNumber>,
+            funding_account: &T::AccountId,
             subject_cid_numbers: &[Vec<u8>],
         ) -> DispatchResult {
             let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
@@ -625,7 +664,8 @@ pub mod pallet {
                     && proposal.stage == STAGE_INTERNAL
                     && proposal.status == STATUS_PASSED
                     && proposal.internal_code == Some(institution_code)
-                    && proposal.account_context.as_ref() == Some(institution)
+                    && proposal.actor_cid_number.as_ref() == actor_cid_number
+                    && proposal.execution_account.as_ref() == Some(funding_account)
                     && proposal.subject_cid_numbers.len() == subject_cid_numbers.len()
                     && subject_cid_numbers.iter().all(|expected| {
                         proposal
@@ -641,67 +681,53 @@ pub mod pallet {
         /// 判断治理机构码类型用于 sweep 提案。
         ///
         /// sweep 只服务治理机构费用账户，不接入个人多签或注册机构账户。
-        fn resolve_sweep_org(institution: &T::AccountId) -> Result<InstitutionCode, Error<T>> {
-            if CHINA_CB
-                .first()
-                .map(|n| raw_account_matches::<T>(&n.main_account, institution))
-                .unwrap_or(false)
-            {
-                return Ok(NRC);
-            }
-            if CHINA_CH
-                .iter()
-                .any(|n| raw_account_matches::<T>(&n.main_account, institution))
-            {
-                return Ok(PRB);
-            }
-            Err(Error::<T>::InvalidInstitution)
-        }
-
-        /// 解析治理机构 CID。手续费划转属于机构主体,不是费用账户主体。
-        fn resolve_sweep_cid(institution: &T::AccountId) -> Result<Vec<u8>, Error<T>> {
-            builtin_cid::<T>(institution).ok_or(Error::<T>::InvalidInstitution)
+        fn resolve_sweep_org(cid_number: &CidNumber) -> Result<InstitutionCode, Error<T>> {
+            let text = core::str::from_utf8(cid_number.as_slice())
+                .map_err(|_| Error::<T>::InvalidInstitution)?;
+            let code = institution_code_from_cid_number(text)
+                .ok_or(Error::<T>::InvalidInstitution)?;
+            ensure!(matches!(code, NRC | PRB), Error::<T>::InvalidInstitution);
+            Ok(code)
         }
 
         /// 解析治理机构手续费账户。
-        fn resolve_fee_account(institution: &T::AccountId) -> Result<T::AccountId, DispatchError> {
-            if CHINA_CB
-                .first()
-                .map(|n| raw_account_matches::<T>(&n.main_account, institution))
-                .unwrap_or(false)
-            {
-                return T::AccountId::decode(&mut &CHINA_CB[0].fee_account[..])
-                    .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed.into());
+        fn resolve_fee_account(cid_number: &CidNumber) -> Result<T::AccountId, DispatchError> {
+            let raw = AccountKind::InstitutionFee {
+                cid_number: cid_number.as_slice(),
             }
-            let node = CHINA_CH
-                .iter()
-                .find(|n| raw_account_matches::<T>(&n.main_account, institution))
-                .ok_or(Error::<T>::InvalidInstitution)?;
-            T::AccountId::decode(&mut &node.fee_account[..])
-                .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed.into())
+            .derive(primitives::core_const::SS58_FORMAT);
+            Self::decode_institution_account(&raw).map_err(Into::into)
         }
 
         /// 解析治理机构主账户。
-        fn resolve_main_account(institution: T::AccountId) -> Result<T::AccountId, DispatchError> {
-            Ok(institution)
+        fn resolve_main_account(cid_number: &CidNumber) -> Result<T::AccountId, DispatchError> {
+            let raw = AccountKind::InstitutionMain {
+                cid_number: cid_number.as_slice(),
+            }
+            .derive(primitives::core_const::SS58_FORMAT);
+            Self::decode_institution_account(&raw).map_err(Into::into)
         }
 
         pub(crate) fn try_execute_sweep_from_callback(proposal_id: u64) -> DispatchResult {
             let action = SweepProposalActions::<T>::get(proposal_id)
                 .ok_or(Error::<T>::SweepProposalNotFound)?;
 
-            let institution_code = Self::resolve_sweep_org(&action.institution)?;
-            let cid = Self::resolve_sweep_cid(&action.institution)?;
+            let institution_code = Self::resolve_sweep_org(&action.actor_cid_number)?;
             Self::ensure_internal_business_proposal(
                 proposal_id,
                 institution_code,
-                &action.institution,
-                &[cid],
+                Some(&action.actor_cid_number),
+                &action.institution_account,
+                &[action.actor_cid_number.to_vec()],
             )
             .map_err(|_| Error::<T>::SweepProposalNotPassed)?;
 
-            let fee_account = Self::resolve_fee_account(&action.institution)?;
-            let main_account = Self::resolve_main_account(action.institution.clone())?;
+            let fee_account = Self::resolve_fee_account(&action.actor_cid_number)?;
+            ensure!(
+                fee_account == action.institution_account,
+                Error::<T>::InvalidInstitution
+            );
+            let main_account = Self::resolve_main_account(&action.actor_cid_number)?;
 
             ensure!(
                 <T as Config>::InstitutionAsset::can_spend(
@@ -718,7 +744,8 @@ pub mod pallet {
 
             let fee_balance_u128: u128 =
                 <T as Config>::Currency::free_balance(&fee_account).saturated_into();
-            let reserve_u128 = FEE_ADDRESS_MIN_RESERVE_FEN;
+            // 费用账户只需在支出后保留链上 ED，不设置账户级预存金额。
+            let reserve_u128: u128 = <T as Config>::Currency::minimum_balance().saturated_into();
 
             // ── 余额检查：amount + tx_fee + reserve ──
             let total_deduct_u128 = amount_u128.saturating_add(tx_fee_u128);
@@ -756,7 +783,8 @@ pub mod pallet {
 
             Self::deposit_event(Event::SweepToMainExecuted {
                 proposal_id,
-                institution: action.institution,
+                actor_cid_number: action.actor_cid_number,
+                institution_account: action.institution_account,
                 amount: action.amount,
                 fee: tx_fee,
                 reserve_left,
@@ -768,17 +796,22 @@ pub mod pallet {
             let action = SafetyFundProposalActions::<T>::get(proposal_id)
                 .ok_or(Error::<T>::SafetyFundProposalNotFound)?;
 
-            let nrc_institution = Self::decode_institution_account(&CHINA_CB[0].main_account)?;
             Self::ensure_internal_business_proposal(
                 proposal_id,
                 NRC,
-                &nrc_institution,
-                &[nrc_cid()],
+                Some(&action.actor_cid_number),
+                &action.institution_account,
+                &[action.actor_cid_number.to_vec()],
             )
             .map_err(|_| Error::<T>::SafetyFundProposalNotPassed)?;
 
             let safety_fund_account = T::AccountId::decode(&mut &SAFETY_FUND_ACCOUNT[..])
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
+            ensure!(
+                action.actor_cid_number == nrc_cid()
+                    && action.institution_account == safety_fund_account,
+                Error::<T>::InvalidInstitution
+            );
 
             ensure!(
                 <T as Config>::InstitutionAsset::can_spend(
@@ -846,17 +879,20 @@ pub mod pallet {
                 &mut &raw[tag.len()..],
             )
             .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-            let (institution_code, institution_account, subject_cid_numbers) =
-                Self::resolve_institution_account(action.institution.clone())?;
+            let (institution_code, subject_cid_numbers) = Self::resolve_funding_authority(
+                action.actor_cid_number.as_ref(),
+                &action.funding_account,
+            )?;
             Self::ensure_internal_business_proposal(
                 proposal_id,
                 institution_code,
-                &action.institution,
+                action.actor_cid_number.as_ref(),
+                &action.funding_account,
                 &subject_cid_numbers,
             )?;
             ensure!(
                 <T as Config>::InstitutionAsset::can_spend(
-                    &institution_account,
+                    &action.funding_account,
                     InstitutionAssetAction::MultisigTransferExecute,
                 ),
                 Error::<T>::InstitutionSpendNotAllowed
@@ -868,7 +904,7 @@ pub mod pallet {
                 Error::<T>::AmountBelowExistentialDeposit
             );
             ensure!(
-                action.beneficiary != institution_account,
+                action.beneficiary != action.funding_account,
                 Error::<T>::SelfTransferNotAllowed
             );
             ensure!(
@@ -886,7 +922,7 @@ pub mod pallet {
                 .ok_or(Error::<T>::InsufficientBalance)?;
 
             // ── 余额检查：需要 total + ED ──
-            let free = <T as Config>::Currency::free_balance(&institution_account);
+            let free = <T as Config>::Currency::free_balance(&action.funding_account);
             let required = total
                 .checked_add(&ed)
                 .ok_or(Error::<T>::InsufficientBalance)?;
@@ -896,7 +932,7 @@ pub mod pallet {
             let exec_result = frame_support::storage::with_transaction(|| {
                 // 先扣手续费
                 let fee_imbalance = match <T as Config>::Currency::withdraw(
-                    &institution_account,
+                    &action.funding_account,
                     fee,
                     frame_support::traits::WithdrawReasons::FEE,
                     ExistenceRequirement::KeepAlive,
@@ -912,7 +948,7 @@ pub mod pallet {
 
                 // 再转账
                 match <T as Config>::Currency::transfer(
-                    &institution_account,
+                    &action.funding_account,
                     &action.beneficiary,
                     action.amount,
                     ExistenceRequirement::KeepAlive,
@@ -925,7 +961,7 @@ pub mod pallet {
 
             Self::deposit_event(Event::<T>::TransferExecuted {
                 proposal_id,
-                institution: action.institution,
+                funding_account: action.funding_account,
                 beneficiary: action.beneficiary,
                 amount: action.amount,
                 fee,
@@ -990,7 +1026,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                                 pallet::Pallet::<T>::deposit_event(
                                     pallet::Event::<T>::TransferExecutionFailed {
                                         proposal_id,
-                                        institution: action.institution,
+                                        funding_account: action.funding_account,
                                     },
                                 );
                             }

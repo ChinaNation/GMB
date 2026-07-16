@@ -11,41 +11,41 @@ impl<T: Config> Pallet<T> {
         (VOTING_DURATION_BLOCKS as u64).saturated_into()
     }
 
-    pub(crate) fn push_subject_cid(
-        raw: &mut sp_runtime::sp_std::vec::Vec<sp_runtime::sp_std::vec::Vec<u8>>,
-        account: &T::AccountId,
-    ) -> DispatchResult {
-        let cid =
-            T::InstitutionQuery::lookup_cid(account).ok_or(Error::<T>::InvalidInstitutionCid)?;
-        if !raw.iter().any(|existing| existing == &cid) {
-            raw.push(cid);
-        }
-        Ok(())
+    /// 机构码只允许由 CID 解析，调用载荷不得另带一份可冲突的身份字段。
+    pub(crate) fn institution_code_for_cid(
+        cid_number: &votingengine::types::CidNumber,
+    ) -> Result<InstitutionCode, DispatchError> {
+        let text = core::str::from_utf8(cid_number.as_slice())
+            .map_err(|_| Error::<T>::InvalidInstitutionCid)?;
+        votingengine::types::institution_code_from_cid_number(text)
+            .ok_or_else(|| Error::<T>::InvalidInstitutionCid.into())
     }
 
     pub(crate) fn resolve_subject_cid_numbers(
-        route: &RepresentativeRoute<T::AccountId>,
+        actor_cid_number: &votingengine::types::CidNumber,
+        route: &RepresentativeRoute,
         additional_subjects: ProposalSubjectCidNumbers,
-        additional_institutions: &[(InstitutionCode, T::AccountId)],
+        additional_institutions: &[votingengine::types::CidNumber],
     ) -> Result<ProposalSubjectCidNumbers, DispatchError> {
         let mut raw: sp_runtime::sp_std::vec::Vec<sp_runtime::sp_std::vec::Vec<u8>> =
             additional_subjects
                 .into_iter()
                 .map(|cid| cid.into_inner())
                 .collect();
-        for (_, account) in route.bodies() {
-            Self::push_subject_cid(&mut raw, &account)?;
+        raw.push(actor_cid_number.to_vec());
+        for cid_number in route.bodies() {
+            raw.push(cid_number.to_vec());
         }
-        for (_, account) in additional_institutions {
-            Self::push_subject_cid(&mut raw, account)?;
+        for cid_number in additional_institutions {
+            raw.push(cid_number.to_vec());
         }
         <votingengine::Pallet<T>>::bound_subject_cid_numbers(raw)
     }
 
     /// 校验路线并返回首个表决机构。路线中的机构不得重复。
     pub(crate) fn validate_representative_route(
-        route: &RepresentativeRoute<T::AccountId>,
-    ) -> Result<(InstitutionCode, T::AccountId), DispatchError> {
+        route: &RepresentativeRoute,
+    ) -> Result<(InstitutionCode, votingengine::types::CidNumber), DispatchError> {
         let bodies = route.bodies();
         ensure!(!bodies.is_empty(), Error::<T>::InvalidRepresentativeRoute);
         match route {
@@ -61,7 +61,14 @@ impl<T: Config> Pallet<T> {
                 Error::<T>::InvalidRepresentativeRoute
             );
         }
-        Ok(bodies[0].clone())
+        for body in &bodies {
+            Self::institution_code_for_cid(body)?;
+        }
+        let first_cid_number = bodies[0].clone();
+        Ok((
+            Self::institution_code_for_cid(&first_cid_number)?,
+            first_cid_number,
+        ))
     }
 }
 
@@ -70,13 +77,23 @@ impl<T: Config> Pallet<T> {
     #[allow(clippy::too_many_arguments)]
     pub fn do_create_representative_proposal(
         who: T::AccountId,
-        route: RepresentativeRoute<T::AccountId>,
+        actor_cid_number: votingengine::types::CidNumber,
+        route: RepresentativeRoute,
         rule: RepresentativeVoteRule,
         procedure: VoteProcedure,
         additional_subjects: ProposalSubjectCidNumbers,
-        legislation_meta: Option<pallet::LegislationMeta<T>>,
+        legislation_meta: Option<pallet::LegislationMeta>,
     ) -> Result<u64, DispatchError> {
-        let (first_code, first_account) = Self::validate_representative_route(&route)?;
+        let (first_code, first_cid_number) = Self::validate_representative_route(&route)?;
+        let actor_code = Self::institution_code_for_cid(&actor_cid_number)?;
+        ensure!(
+            <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
+                actor_code,
+                actor_cid_number.as_slice(),
+                &who,
+            ),
+            votingengine::Error::<T>::NoPermission
+        );
         ensure!(
             !(procedure == VoteProcedure::RepresentativeOnly
                 && rule == RepresentativeVoteRule::Special),
@@ -95,6 +112,7 @@ impl<T: Config> Pallet<T> {
             }
         }
         let subject_cid_numbers = Self::resolve_subject_cid_numbers(
+            &actor_cid_number,
             &route,
             additional_subjects,
             &additional_institutions,
@@ -121,7 +139,8 @@ impl<T: Config> Pallet<T> {
             stage: STAGE_LEG_REPRESENTATIVE,
             status: STATUS_VOTING,
             internal_code: Some(first_code),
-            account_context: Some(first_account.clone()),
+            actor_cid_number: Some(actor_cid_number),
+            execution_account: None,
             subject_cid_numbers,
             start: now,
             end,
@@ -151,8 +170,7 @@ impl<T: Config> Pallet<T> {
             if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
                 id,
                 first_code,
-                first_account.clone(),
-                false,
+                first_cid_number,
             ) {
                 return TransactionOutcome::Rollback(Err(err));
             }
@@ -217,7 +235,7 @@ impl<T: Config> Pallet<T> {
         );
         let meta = pallet::RepresentativeMetas::<T>::get(proposal_id)
             .ok_or(Error::<T>::ProposalMetaMissing)?;
-        let (_code, institution) = meta
+        let institution_cid_number = meta
             .route
             .body(meta.current_body)
             .ok_or(Error::<T>::InvalidRepresentativeRoute)?;
@@ -227,7 +245,11 @@ impl<T: Config> Pallet<T> {
             votingengine::Error::<T>::AlreadyVoted
         );
         ensure!(
-            <votingengine::Pallet<T>>::is_admin_in_snapshot(proposal_id, institution.clone(), &who),
+            <votingengine::Pallet<T>>::is_admin_in_snapshot(
+                proposal_id,
+                votingengine::ProposalSubject::InstitutionCid(institution_cid_number.clone()),
+                &who,
+            ),
             votingengine::Error::<T>::NoPermission
         );
 
@@ -248,8 +270,11 @@ impl<T: Config> Pallet<T> {
             approve,
         });
 
-        let admins_len = <votingengine::Pallet<T>>::snapshot_admins_len(proposal_id, institution)
-            .ok_or(votingengine::Error::<T>::MissingAdminSnapshot)?;
+        let admins_len = <votingengine::Pallet<T>>::snapshot_admins_len(
+            proposal_id,
+            votingengine::ProposalSubject::InstitutionCid(institution_cid_number),
+        )
+        .ok_or(votingengine::Error::<T>::MissingAdminSnapshot)?;
         match representative_decided(meta.rule, admins_len, tally.yes, tally.no) {
             Some(true) => match meta.route {
                 RepresentativeRoute::Single(_) => {
@@ -272,10 +297,11 @@ impl<T: Config> Pallet<T> {
             .ok_or(Error::<T>::ProposalMetaMissing)?;
         let next = meta.current_body.saturating_add(1);
         if (next as usize) < meta.route.len() {
-            let (next_code, next_account) = meta
+            let next_cid_number = meta
                 .route
                 .body(next)
                 .ok_or(Error::<T>::InvalidRepresentativeRoute)?;
+            let next_code = Self::institution_code_for_cid(&next_cid_number)?;
             let now = <frame_system::Pallet<T>>::block_number();
             let end = now.saturating_add(Self::stage_duration());
             with_transaction(|| {
@@ -288,8 +314,7 @@ impl<T: Config> Pallet<T> {
                 if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
                     proposal_id,
                     next_code,
-                    next_account.clone(),
-                    false,
+                    next_cid_number,
                 ) {
                     return TransactionOutcome::Rollback(Err(err));
                 }
@@ -305,7 +330,6 @@ impl<T: Config> Pallet<T> {
                                 .ok_or(votingengine::Error::<T>::ProposalNotFound)?;
                             let old = p.end;
                             p.internal_code = Some(next_code);
-                            p.account_context = Some(next_account.clone());
                             p.start = now;
                             p.end = end;
                             Ok(old)
@@ -368,12 +392,15 @@ impl<T: Config> Pallet<T> {
         );
         let meta = pallet::RepresentativeMetas::<T>::get(proposal_id)
             .ok_or(Error::<T>::ProposalMetaMissing)?;
-        let (_code, institution) = meta
+        let institution_cid_number = meta
             .route
             .body(meta.current_body)
             .ok_or(Error::<T>::InvalidRepresentativeRoute)?;
-        let admins_len = <votingengine::Pallet<T>>::snapshot_admins_len(proposal_id, institution)
-            .ok_or(votingengine::Error::<T>::MissingAdminSnapshot)?;
+        let admins_len = <votingengine::Pallet<T>>::snapshot_admins_len(
+            proposal_id,
+            votingengine::ProposalSubject::InstitutionCid(institution_cid_number),
+        )
+        .ok_or(votingengine::Error::<T>::MissingAdminSnapshot)?;
         let tally = pallet::RepresentativeTallies::<T>::get(proposal_id, meta.current_body);
         if representative_final_passed(meta.rule, admins_len, tally.yes, tally.no) {
             match meta.route {

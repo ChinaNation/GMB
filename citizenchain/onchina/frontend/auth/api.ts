@@ -65,7 +65,6 @@ export type AdminInstitutionCandidate = {
   institution_code: string;
   admin_level?: string | null;
   institution_cid_number?: string | null;
-  institution_main_account?: string | null;
   frg_province_code?: string | null;
   cid_full_name?: string | null;
   cid_short_name?: string | null;

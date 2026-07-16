@@ -15,8 +15,7 @@ const SELECT_COLUMNS: &str = "cid_number, province_code, city_code, admin_accoun
     admin_department, admin_job, admin_contact_phone, admin_contact_email,
     admin_photo_path, admin_photo_name, admin_photo_mime, admin_photo_size,
     admin_passkey_credential_id, admin_source_id, admin_status,
-    admin_updated_at, created_by, chain_status, chain_tx_hash,
-    chain_block_number, operation_log_id, created_at";
+    admin_updated_at, created_by, operation_log_id, created_at";
 
 fn row_to_admin(row: &postgres::Row) -> InstitutionAdmin {
     let province_code: String = row.get(1);
@@ -25,7 +24,6 @@ fn row_to_admin(row: &postgres::Row) -> InstitutionAdmin {
     let (province_name, city_name, _town_name) =
         area_display_names(province_code.as_str(), city_code.as_deref(), None);
     let photo_size: Option<i64> = row.get(11);
-    let block_number: Option<i64> = row.get(19);
     InstitutionAdmin {
         cid_number: row.get(0),
         province_code,
@@ -44,11 +42,8 @@ fn row_to_admin(row: &postgres::Row) -> InstitutionAdmin {
         admin_status: row.get(14),
         admin_updated_at: row.get(15),
         created_by: row.get(16),
-        chain_status: row.get(17),
-        chain_tx_hash: row.get(18),
-        chain_block_number: block_number.and_then(|v| u64::try_from(v).ok()),
-        operation_log_id: row.get(20),
-        created_at: row.get(21),
+        operation_log_id: row.get(17),
+        created_at: row.get(18),
         province_name,
         city_name,
     }
@@ -59,18 +54,16 @@ pub(crate) fn upsert_institution_admin(db: &Db, admin: &InstitutionAdmin) -> Res
     let admin = admin.clone();
     db.with_client(move |conn| {
         let photo_size = admin.admin_photo_size.and_then(|v| i64::try_from(v).ok());
-        let block_number = admin.chain_block_number.and_then(|v| i64::try_from(v).ok());
         conn.execute(
             "INSERT INTO institution_admins (
                 cid_number, province_code, city_code, admin_account,
                 admin_department, admin_job, admin_contact_phone, admin_contact_email,
                 admin_photo_path, admin_photo_name, admin_photo_mime, admin_photo_size,
                 admin_passkey_credential_id, admin_source_id, admin_status,
-                admin_updated_at, created_by, chain_status, chain_tx_hash,
-                chain_block_number, operation_log_id
+                admin_updated_at, created_by, operation_log_id
              ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                $16, $17, $18, $19, $20, $21
+                $16, $17, $18
              )
              ON CONFLICT (province_code, cid_number, admin_account) DO UPDATE SET
                 city_code = EXCLUDED.city_code,
@@ -87,9 +80,6 @@ pub(crate) fn upsert_institution_admin(db: &Db, admin: &InstitutionAdmin) -> Res
                 admin_status = EXCLUDED.admin_status,
                 admin_updated_at = EXCLUDED.admin_updated_at,
                 created_by = EXCLUDED.created_by,
-                chain_status = EXCLUDED.chain_status,
-                chain_tx_hash = EXCLUDED.chain_tx_hash,
-                chain_block_number = EXCLUDED.chain_block_number,
                 operation_log_id = EXCLUDED.operation_log_id",
             &[
                 &admin.cid_number,
@@ -109,9 +99,6 @@ pub(crate) fn upsert_institution_admin(db: &Db, admin: &InstitutionAdmin) -> Res
                 &admin.admin_status,
                 &admin.admin_updated_at,
                 &admin.created_by,
-                &admin.chain_status,
-                &admin.chain_tx_hash,
-                &block_number,
                 &admin.operation_log_id,
             ],
         )

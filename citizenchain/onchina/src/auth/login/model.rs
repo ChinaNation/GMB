@@ -39,7 +39,6 @@ pub(crate) struct AdminInstitutionCandidate {
     pub(crate) institution_code: String,
     pub(crate) admin_level: Option<String>,
     pub(crate) institution_cid_number: Option<String>,
-    pub(crate) institution_main_account: Option<String>,
     pub(crate) frg_province_code: Option<String>,
     pub(crate) cid_full_name: Option<String>,
     pub(crate) cid_short_name: Option<String>,

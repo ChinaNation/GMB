@@ -48,18 +48,21 @@ impl<AccountId: Encode, BlockNumber: Encode> PaymentIntent<AccountId, BlockNumbe
 
 /// 生成清算行批次签名哈希(唯一原语 `signing_message`)。
 ///
-/// `message = blake2_256(GMB || OP_SIGN_OFFCHAIN_BATCH || SCALE(institution_main)
-/// || batch_seq_le || SCALE(batch))`。scale_payload 内字段拼接顺序必须与 node 打包器逐字节一致。
+/// `message = blake2_256(GMB || OP_SIGN_OFFCHAIN_BATCH || SCALE(actor_cid_number)
+/// || SCALE(institution_account) || batch_seq_le || SCALE(batch))`。
+/// scale_payload 内字段拼接顺序必须与 node 打包器逐字节一致。
 ///
 /// node 侧 `AccountId32.as_ref()` 与 SCALE 编码同为 32 字节,这里使用 `Encode`
 /// 是为了让 runtime 维持泛型边界。
 pub fn batch_signing_hash<AccountId: Encode>(
-    institution_main: &AccountId,
+    actor_cid_number: &[u8],
+    institution_account: &AccountId,
     batch_seq: u64,
     batch_bytes: &[u8],
 ) -> [u8; 32] {
     let mut scale_payload = Vec::new();
-    scale_payload.extend_from_slice(&institution_main.encode());
+    scale_payload.extend_from_slice(&actor_cid_number.encode());
+    scale_payload.extend_from_slice(&institution_account.encode());
     scale_payload.extend_from_slice(&batch_seq.to_le_bytes());
     scale_payload.extend_from_slice(batch_bytes);
     signing_message(OP_SIGN_OFFCHAIN_BATCH, &scale_payload)

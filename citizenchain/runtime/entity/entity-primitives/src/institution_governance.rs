@@ -67,7 +67,8 @@ pub struct InstitutionLegalRepresentativeChange<AccountId> {
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo, PartialEq, Eq)]
 pub struct InstitutionGovernanceResult<AccountId> {
     pub institution_code: InstitutionCode,
-    pub institution_account: AccountId,
+    /// 被治理机构的唯一身份 CID；不得使用主账户或任意账户代替。
+    pub cid_number: Vec<u8>,
     pub role_changes: Vec<InstitutionRoleChange>,
     pub assignment_changes: Vec<InstitutionRoleAssignmentChange<AccountId>>,
     pub legal_representative_change: Option<InstitutionLegalRepresentativeChange<AccountId>>,

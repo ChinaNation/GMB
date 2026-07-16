@@ -38,8 +38,8 @@ export type AdminWalletMatch = {
 
 export type ActivatedAdmin = {
   pubkeyHex: string;
-  accountHex: string;
-  org: number;
+  cidNumber: string;
+  institutionCode: number[];
   kind: number;
   activatedAtMs: number;
 };
@@ -166,7 +166,8 @@ export type ProposalMeta = {
   stage: number;
   status: number;
   internalCode: string | null;
-  institutionHex: string | null;
+  actorCidNumber: string | null;
+  executionAccountHex: string | null;
   subjectCidNumbers: string[];
 };
 

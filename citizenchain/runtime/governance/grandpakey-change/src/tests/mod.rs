@@ -88,9 +88,9 @@ impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityRea
 pub struct TestInternalAdminProvider;
 
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(
+    fn is_institution_admin(
         institution_code: InstitutionCode,
-        institution: AccountId32,
+        cid_number: &[u8],
         who: &AccountId32,
     ) -> bool {
         let mut who_raw = [0u8; 32];
@@ -98,21 +98,21 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         match institution_code {
             NRC | PRC => CHINA_CB
                 .iter()
-                .find(|node| AccountId32::new(node.main_account) == institution)
+                .find(|node| node.cid_number.as_bytes() == cid_number)
                 .map(|node| node.admins.iter().any(|admin| *admin == who_raw))
                 .unwrap_or(false),
             _ => false,
         }
     }
 
-    fn get_admin_list(
+    fn get_institution_admins(
         institution_code: InstitutionCode,
-        institution: AccountId32,
+        cid_number: &[u8],
     ) -> Option<sp_std::vec::Vec<AccountId32>> {
         match institution_code {
             NRC | PRC => CHINA_CB
                 .iter()
-                .find(|node| AccountId32::new(node.main_account) == institution)
+                .find(|node| node.cid_number.as_bytes() == cid_number)
                 .map(|node| {
                     node.admins
                         .iter()
@@ -220,16 +220,21 @@ fn cb_admin(node_index: usize, admin_index: usize) -> AccountId32 {
     AccountId32::new(CHINA_CB[node_index].admins[admin_index])
 }
 
-fn cb_pallet_id(node_index: usize) -> AccountId32 {
-    AccountId32::new(CHINA_CB[node_index].main_account)
+fn cb_cid(node_index: usize) -> CidNumber {
+    CHINA_CB[node_index]
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("CHINA_CB CID fits")
 }
 
 fn prc_admin(index: usize) -> AccountId32 {
     cb_admin(1, index)
 }
 
-fn prc_pallet_id() -> AccountId32 {
-    cb_pallet_id(1)
+fn prc_cid() -> CidNumber {
+    cb_cid(1)
 }
 
 fn valid_public_key(seed: u8) -> [u8; 32] {

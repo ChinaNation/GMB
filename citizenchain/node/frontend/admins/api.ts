@@ -9,8 +9,7 @@ import type {
 
 // 管理员只读与本机激活 API；岗位任职变更由对应业务模块提交，不在 Node 直接改集合。
 const accountRefParams = (accountRef: AdminAccountRef) => ({
-  cidNumber: accountRef.cidNumber ?? null,
-  accountHex: accountRef.accountHex ?? null,
+  cidNumber: accountRef.cidNumber,
   expectedInstitutionCode: accountRef.institutionCode ?? null,
 });
 
@@ -21,7 +20,6 @@ export const adminsChangeApi = {
     invoke<ActivateRequestResult>('build_activate_admin_request', {
       pubkeyHex,
       cidNumber,
-      accountHex: accountRef?.accountHex ?? null,
       expectedInstitutionCode: accountRef?.institutionCode ?? null,
     }),
   verifyActivateAdmin: (
@@ -41,14 +39,12 @@ export const adminsChangeApi = {
   getActivatedAdmins: (cidNumber: string, accountRef?: AdminAccountRef) =>
     invoke<ActivatedAdmin[]>('get_activated_admins', {
       cidNumber,
-      accountHex: accountRef?.accountHex ?? null,
       expectedInstitutionCode: accountRef?.institutionCode ?? null,
     }),
   deactivateAdmin: (pubkeyHex: string, cidNumber: string, accountRef: AdminAccountRef, unlockPassword: string) =>
     invoke<void>('deactivate_admin', {
       pubkeyHex,
       cidNumber,
-      accountHex: accountRef.accountHex ?? null,
       expectedInstitutionCode: accountRef.institutionCode ?? null,
       unlockPassword,
     }),

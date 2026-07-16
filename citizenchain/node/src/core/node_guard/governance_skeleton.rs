@@ -8,7 +8,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use admin_primitives::{AdminAccountStatus, InstitutionAdminAccount};
+use admin_primitives::InstitutionAdmins;
 use codec::Decode;
 #[cfg(test)]
 use codec::Encode;
@@ -62,9 +62,9 @@ fn expected_roles(code: InstitutionCode) -> Vec<ExpectedRole> {
 /// 三张受保护 storage 的完整 RAW key 和精确前缀。
 pub mod storage_key {
     use super::{fixed_institutions, FixedInstitution, PUBLIC_ADMINS_PALLET, PUBLIC_MANAGE_PALLET};
-    use codec::Encode;
+    use codec::{Decode, Encode};
     use primitives::governance_skeleton::{
-        fixed_institution_by_cid, fixed_institution_by_main_account,
+        fixed_institution_by_cid,
     };
     use sp_core::hashing::blake2_128;
 
@@ -88,19 +88,24 @@ pub mod storage_key {
         storage_prefix(PUBLIC_MANAGE_PALLET, b"InstitutionRoleAssignments")
     }
 
-    pub fn admin_account(account: &[u8; 32]) -> Vec<u8> {
+    pub fn admin_account(cid_number: &[u8]) -> Vec<u8> {
         let mut key = admin_accounts_prefix();
-        key.extend_from_slice(&blake2_128_concat(account));
+        key.extend_from_slice(&blake2_128_concat(&cid_number.to_vec().encode()));
         key
     }
 
-    fn admin_account_from_key(key: &[u8]) -> Option<[u8; 32]> {
+    fn admin_cid_from_key(key: &[u8]) -> Option<Vec<u8>> {
         let prefix = admin_accounts_prefix();
         let encoded = key.strip_prefix(prefix.as_slice())?;
-        if encoded.len() != 48 || blake2_128(&encoded[16..]) != encoded[..16] {
+        if encoded.len() < 17 || blake2_128(&encoded[16..]) != encoded[..16] {
             return None;
         }
-        encoded[16..].try_into().ok()
+        let mut input = &encoded[16..];
+        let cid_number = Vec::<u8>::decode(&mut input).ok()?;
+        if !input.is_empty() {
+            return None;
+        }
+        Some(cid_number)
     }
 
     fn double_map_key(storage_prefix: Vec<u8>, cid_number: &[u8], role_code: &[u8]) -> Vec<u8> {
@@ -137,8 +142,8 @@ pub mod storage_key {
 
     /// 返回 RAW key 对应的受保护创世机构；普通机构治理 key 明确返回 `None`。
     pub fn protected_institution_for_key(key: &[u8]) -> Option<FixedInstitution> {
-        if let Some(account) = admin_account_from_key(key) {
-            return fixed_institution_by_main_account(&account);
+        if let Some(cid_number) = admin_cid_from_key(key) {
+            return fixed_institution_by_cid(&cid_number);
         }
         let parsed = if key.starts_with(&institution_roles_prefix()) {
             super::parse_double_map_key(key, &institution_roles_prefix())
@@ -158,7 +163,7 @@ pub mod storage_key {
 }
 
 /// 节点直接使用共享协议类型解码，避免维护第二份字段顺序和枚举判别值。
-type DecodedInstitutionAdminAccount = InstitutionAdminAccount<Vec<[u8; 32]>>;
+type DecodedInstitutionAdminAccount = InstitutionAdmins<Vec<[u8; 32]>>;
 type DecodedInstitutionRole = SharedInstitutionRole<Vec<u8>, Vec<u8>, Vec<u8>>;
 type DecodedInstitutionAdminAssignment =
     SharedInstitutionAdminAssignment<Vec<u8>, [u8; 32], Vec<u8>, Vec<u8>>;
@@ -168,9 +173,7 @@ type DecodedInstitutionAdminAssignment =
 pub enum GuardError {
     FixedInstitutionMissing([u8; 4]),
     AdminAccountDecodeFailed([u8; 4]),
-    AdminCidChanged([u8; 4]),
     InstitutionCodeChanged([u8; 4]),
-    NotActive([u8; 4]),
     AdminsLenChanged {
         code: [u8; 4],
         expected: u32,
@@ -346,18 +349,12 @@ where
     F: Fn(&[u8]) -> Option<Vec<u8>>,
 {
     let expected_cid = institution.cid_number.as_bytes();
-    let raw = read_raw(&storage_key::admin_account(&institution.main_account))
+    let raw = read_raw(&storage_key::admin_account(expected_cid))
         .ok_or(GuardError::FixedInstitutionMissing(institution.code))?;
     let account: DecodedInstitutionAdminAccount =
         decode_exact(&raw).map_err(|_| GuardError::AdminAccountDecodeFailed(institution.code))?;
-    if account.cid_number.as_slice() != expected_cid {
-        return Err(GuardError::AdminCidChanged(institution.code));
-    }
     if account.institution_code != institution.code {
         return Err(GuardError::InstitutionCodeChanged(institution.code));
-    }
-    if account.status != AdminAccountStatus::Active {
-        return Err(GuardError::NotActive(institution.code));
     }
     let found = account.admins.len() as u32;
     if found != institution.expected_len {

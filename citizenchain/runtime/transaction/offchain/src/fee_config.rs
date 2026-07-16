@@ -40,15 +40,21 @@ pub const RATE_CHANGE_DELAY_BLOCKS: u64 = 7 * primitives::pow_const::BLOCKS_PER_
 /// - 同一清算行不允许并行提案(新提案覆盖旧提案)
 pub fn do_propose_l2_fee_rate<T: Config>(
     who: T::AccountId,
-    bank_main_account: T::AccountId,
+    actor_cid_number: &[u8],
+    institution_account: T::AccountId,
     new_rate_bp: u32,
 ) -> DispatchResult {
-    // 1. 清算行合法性
-    bank_check::ensure_can_be_bound::<T>(&bank_main_account)?;
+    // 1. CID 与本次操作的清算行主账户必须严格对应。
+    bank_check::ensure_institution_account::<T>(
+        actor_cid_number,
+        &institution_account,
+        bank_check::ACCOUNT_NAME_MAIN,
+    )?;
+    bank_check::ensure_can_be_bound::<T>(&institution_account)?;
 
-    // 2. 调用者必须是该清算行多签管理员(通过 CidAccountQuery 解耦到 runtime 层)
+    // 2. 授权唯一真源是 `AdminAccounts[actor_cid_number].admins`。
     ensure!(
-        T::CidAccountQuery::is_admin_of(&bank_main_account, &who),
+        T::CidAccountQuery::is_institution_admin(actor_cid_number, &who),
         Error::<T>::UnauthorizedAdmin
     );
 
@@ -64,9 +70,9 @@ pub fn do_propose_l2_fee_rate<T: Config>(
     let delay: BlockNumberFor<T> = RATE_CHANGE_DELAY_BLOCKS.saturated_into();
     let effective_at = now.saturating_add(delay);
 
-    L2FeeRateProposed::<T>::insert(&bank_main_account, (new_rate_bp, effective_at));
+    L2FeeRateProposed::<T>::insert(&institution_account, (new_rate_bp, effective_at));
     Pallet::<T>::deposit_event(Event::<T>::L2FeeRateProposed {
-        bank: bank_main_account,
+        bank: institution_account,
         new_rate_bp,
         effective_at,
     });

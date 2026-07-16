@@ -16,15 +16,16 @@ use uuid::Uuid;
 
 use crate::auth::login::parse_sr25519_pubkey_bytes;
 use crate::core::institution_call::{
-    encode_propose_create_institution, ChainCall, InitialAccountArg, InstitutionAssignmentArg,
-    InstitutionAssignmentSourceTag, InstitutionAssignmentStatusTag, InstitutionRoleArg,
-    InstitutionRoleStatusTag, ProposeCreateInstitutionArgs,
+    encode_assignments_payload, encode_propose_create_institution, encode_roles_payload, ChainCall,
+    InitialAccountArg, InstitutionAssignmentArg, InstitutionAssignmentSourceTag,
+    InstitutionAssignmentStatusTag, InstitutionRoleArg, InstitutionRoleStatusTag,
+    ProposeCreateInstitutionArgs,
 };
 use crate::institution::subjects::model::CreateInstitutionAdminInput;
 use crate::AppState;
 
-/// 默认初始余额(分)。链端 MinCreateAmount=111,这里按最小值构造注册交易。
-const DEFAULT_INITIAL_ACCOUNT_AMOUNT_FEN: u128 = 111;
+/// 机构逻辑账户允许零初始余额；非零金额才受 ED 约束。
+const DEFAULT_INITIAL_ACCOUNT_AMOUNT_FEN: u128 = 0;
 
 /// 组装并编码 `propose_create_institution` 裸 call data(进 QR `b.d`)。
 ///
@@ -33,6 +34,7 @@ const DEFAULT_INITIAL_ACCOUNT_AMOUNT_FEN: u128 = 111;
 pub(crate) fn build_create_institution_call_data(
     state: &AppState,
     conn: &mut Client,
+    actor_cid_number: &str,
     cid_number: &str,
     threshold: u32,
     admin_forms: &[CreateInstitutionAdminInput],
@@ -145,27 +147,6 @@ pub(crate) fn build_create_institution_call_data(
         .map(|a| a.account_name.clone())
         .collect();
     let register_nonce = Uuid::new_v4().to_string();
-    let credential = crate::core::chain_runtime::build_institution_creation_credential(
-        state,
-        cid_number,
-        cid_full_name.as_str(),
-        cid_short_name.as_str(),
-        legal_representative_name.as_str(),
-        legal_representative_cid_number.as_str(),
-        &legal_representative_account,
-        &account_names,
-        register_nonce.clone(),
-        inst.province_name.as_str(),
-        inst.city_name.as_str(),
-        inst.town_code.as_str(),
-    )?;
-
-    let issuer_main_account = hex_to_bytes32(credential.issuer_main_account.as_str())
-        .ok_or_else(|| "http:internal:issuer_main_account parse failed".to_string())?;
-    let signer_pubkey = hex_to_bytes32(credential.signer_pubkey.as_str())
-        .ok_or_else(|| "http:internal:signer_pubkey parse failed".to_string())?;
-    let signature = hex_to_vec(credential.signature.as_str())
-        .ok_or_else(|| "http:internal:signature parse failed".to_string())?;
 
     // 岗位按 role_code 去重，任职逐条保留；注册 nonce 是本次注册局任职来源引用。
     let mut role_codes = std::collections::HashSet::new();
@@ -189,10 +170,35 @@ pub(crate) fn build_create_institution_call_data(
             term_start: form.term_start.unwrap_or(0),
             term_end: form.term_end.unwrap_or(0),
             assignment_source: InstitutionAssignmentSourceTag::Registry,
-            assignment_source_ref: credential.register_nonce.as_bytes().to_vec(),
+            assignment_source_ref: register_nonce.as_bytes().to_vec(),
             assignment_status: InstitutionAssignmentStatusTag::Active,
         });
     }
+    let roles_payload = encode_roles_payload(&roles);
+    let assignments_payload = encode_assignments_payload(&assignments);
+    let credential = crate::core::chain_runtime::build_institution_creation_credential(
+        state,
+        actor_cid_number,
+        cid_number,
+        cid_full_name.as_str(),
+        cid_short_name.as_str(),
+        legal_representative_name.as_str(),
+        legal_representative_cid_number.as_str(),
+        &legal_representative_account,
+        &account_names,
+        &roles_payload,
+        &assignments_payload,
+        register_nonce.clone(),
+        inst.province_name.as_str(),
+        inst.city_name.as_str(),
+        inst.town_code.as_str(),
+    )?;
+
+    let credential_signer_pubkey =
+        hex_to_bytes32(credential.credential_signer_pubkey.as_str())
+            .ok_or_else(|| "http:internal:credential_signer_pubkey parse failed".to_string())?;
+    let signature = hex_to_vec(credential.signature.as_str())
+        .ok_or_else(|| "http:internal:signature parse failed".to_string())?;
 
     let args = ProposeCreateInstitutionArgs {
         cid_number: cid_number.as_bytes().to_vec(),
@@ -209,9 +215,8 @@ pub(crate) fn build_create_institution_call_data(
         threshold,
         register_nonce: credential.register_nonce.into_bytes(),
         signature,
-        issuer_cid_number: credential.issuer_cid_number.into_bytes(),
-        issuer_main_account,
-        signer_pubkey,
+        actor_cid_number: credential.actor_cid_number.into_bytes(),
+        credential_signer_pubkey,
         scope_province_name: credential.scope_province_name.into_bytes(),
         scope_city_name: credential.scope_city_name.into_bytes(),
     };

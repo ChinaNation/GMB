@@ -2,7 +2,7 @@
 // 私权机构仍由 PrivateDetailLayout 承接本模块独有编辑逻辑。
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Card, Col, Descriptions, Popconfirm, Row, Space, Tag, Typography } from 'antd';
+import { Button, Card, Col, Descriptions, Row, Tag, Typography } from 'antd';
 import { EDUCATION_TYPE_LABEL } from '../subjects/labels';
 import { useInstitutionCodeLabels } from '../subjects/institutionLabels';
 import { getInstitution, type InstitutionDetail } from './api';
@@ -165,22 +165,6 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
     }
   };
 
-  // 注册局注销整个机构——走 PASSKEY_COLD_SIGN 最严档,后端校验通过后签发注销凭证
-  // (整机构 scope);机构管理员再拉 /deregistration-info 构造 propose_close 上链(见 ADR-023 §6.3)。
-  // 创世/治理机构由后端 is_genesis_protected/org 闸权威拒,前端按 created_by 隐藏入口。
-  const onDeregisterInstitution = async () => {
-    try {
-      await runScanSignGrant('INSTITUTION_DEREGISTER', {
-        target: cidNumber,
-        cid_number: cidNumber,
-      });
-      notice.success('已签发机构注销凭证,由机构管理员上链注销(将关闭其全部账户)');
-      load();
-    } catch (err) {
-      notice.error(err, '');
-    }
-  };
-
   const renderOfficialDetail = () => {
     if (!inst || !detail || inst.category === 'PRIVATE_INSTITUTION') return null;
 
@@ -190,22 +174,6 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
           <span style={{ fontSize: 18, fontWeight: 600 }}>
             机构信息
           </span>
-        }
-        extra={
-          <Space>
-            {canWrite && inst.status === 'ACTIVE' && inst.created_by !== 'SYSTEM' && (
-              <Popconfirm
-                title="注销整个机构"
-                description="将关闭该机构的全部账户(余额转入指定 beneficiary),需机构管理员上链确认。"
-                okText="确认注销"
-                okButtonProps={{ danger: true }}
-                cancelText="取消"
-                onConfirm={onDeregisterInstitution}
-              >
-                <Button danger>注销机构</Button>
-              </Popconfirm>
-            )}
-          </Space>
         }
       >
         <Row gutter={24}>

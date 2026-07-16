@@ -14,13 +14,11 @@ use codec::Encode;
 use crate::institution::accounts::{
     account_names_payload_from_initial_accounts, validate_initial_accounts,
 };
-use crate::institution::types::{
-    InstitutionAccountInfo, InstitutionInfo, InstitutionLifecycleStatus,
-};
+use crate::institution::types::{InstitutionAccountInfo, InstitutionInfo};
 use crate::pallet::{
-    AccountNameOf, AccountRegisteredCid, CidNumberOf, CidRegisteredAccount, Config, Error, Event,
-    InstitutionAccounts, InstitutionInitialAccountsOf, Institutions, Pallet, RegisterNonceOf,
-    RegisterSignatureOf, UsedRegisterNonce,
+    AccountNameOf, AccountRegisteredCid, CidNumberOf, Config, Error, Event, InstitutionAccounts,
+    InstitutionInitialAccountsOf, Institutions, Pallet, RegisterNonceOf, RegisterSignatureOf,
+    UsedRegisterNonce,
 };
 use crate::traits::{
     CidInstitutionVerifier, InstitutionCidQuery, ProtectedSourceChecker, RegistryAuthority,
@@ -75,9 +73,8 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
     threshold: u32,
     register_nonce: RegisterNonceOf<T>,
     signature: RegisterSignatureOf<T>,
-    issuer_cid_number: alloc::vec::Vec<u8>,
-    issuer_main_account: T::AccountId,
-    signer_pubkey: [u8; 32],
+    actor_cid_number: alloc::vec::Vec<u8>,
+    credential_signer_pubkey: [u8; 32],
     scope_province_name: alloc::vec::Vec<u8>,
     scope_city_name: alloc::vec::Vec<u8>,
 ) -> DispatchResult {
@@ -115,7 +112,7 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
         town_code.clone(),
     );
     ensure!(
-        !issuer_cid_number.is_empty(),
+        !actor_cid_number.is_empty(),
         Error::<T>::EmptyIssuerCidNumber
     );
     ensure!(
@@ -151,9 +148,8 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
             &assignments.encode(),
             &register_nonce,
             &signature,
-            issuer_cid_number.as_slice(),
-            &issuer_main_account,
-            &signer_pubkey,
+            actor_cid_number.as_slice(),
+            &credential_signer_pubkey,
             scope_province_name.as_slice(),
             scope_city_name.as_slice(),
             town_code.as_slice(),
@@ -163,9 +159,8 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
     ensure!(
         T::RegistryAuthority::can_register_institution(
             &who,
-            issuer_cid_number.as_slice(),
-            &issuer_main_account,
-            &signer_pubkey,
+            actor_cid_number.as_slice(),
+            &credential_signer_pubkey,
             cid_number.as_slice(),
             institution_code,
             scope_province_name.as_slice(),
@@ -181,9 +176,6 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
         crate::common::ensure_proposer_can_afford::<T>(&who, initial_total)?;
 
     let now = <frame_system::Pallet<T>>::block_number();
-    // 管理员更换与内部投票直接使用机构主账户。
-    let institution = main_account.clone();
-
     with_transaction(|| {
         let admins = match Pallet::<T>::store_initial_roles_and_assignments(
             &cid_number,
@@ -213,7 +205,8 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
         }
 
         for account in created_accounts.iter() {
-            if T::Currency::transfer(
+            if !account.amount.is_zero()
+                && T::Currency::transfer(
                 &who,
                 &account.address,
                 account.amount,
@@ -236,7 +229,6 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
                 legal_representative_account: Some(legal_representative_account.clone()),
                 institution_code,
                 created_at: now,
-                status: InstitutionLifecycleStatus::Active,
             },
         );
 
@@ -247,12 +239,9 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
                 InstitutionAccountInfo {
                     address: account.address.clone(),
                     initial_balance: account.amount,
-                    status: InstitutionLifecycleStatus::Active,
-                    is_default: account.is_default,
                     created_at: now,
                 },
             );
-            CidRegisteredAccount::<T>::insert(&cid_number, &account.account_name, &account.address);
             AccountRegisteredCid::<T>::insert(
                 &account.address,
                 RegisteredInstitution {
@@ -266,7 +255,6 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
         if let Err(err) = Pallet::<T>::set_active_admin_account_direct(
             &cid_number,
             institution_code,
-            institution.clone(),
             &admins,
             threshold,
         ) {

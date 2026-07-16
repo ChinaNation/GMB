@@ -31,10 +31,6 @@ use scale_info::TypeInfo;
 use sp_runtime::traits::{SaturatedConversion, Saturating};
 use sp_runtime::{DispatchError, RuntimeDebug};
 
-use primitives::cid::china::china_cb::CHINA_CB;
-use primitives::cid::china::china_ch::CHINA_CH;
-use primitives::cid::china::china_sf::CHINA_SF;
-use primitives::cid::china::china_zf::CHINA_ZF;
 use primitives::count_const::VOTING_DURATION_BLOCKS;
 
 use votingengine::{
@@ -42,7 +38,7 @@ use votingengine::{
     types::{
         fixed_governance_pass_threshold, institution_code_from_cid_number, is_personal_code,
         is_registered_multisig_code, is_valid_governance_code, InstitutionCode,
-        ProposalSubjectCidNumbers, FRG, NJD, NRC, PRB, PRC,
+        CidNumber, ProposalSubject, ProposalSubjectCidNumbers, FRG, NJD, NRC, PRB, PRC,
     },
     InternalAdminProvider, InternalProposalMutexKind, Proposal, PROPOSAL_KIND_INTERNAL,
     STAGE_INTERNAL, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED,
@@ -70,15 +66,14 @@ mod tests;
 #[derive(Encode, Decode, Clone, Copy, RuntimeDebug, TypeInfo, MaxEncodedLen, PartialEq, Eq)]
 pub enum InternalProposalRole {
     General,
-    LifecycleCreate,
-    LifecycleClose,
-    AdminChange,
+    PersonalCreate,
+    PersonalClose,
+    PersonalAdminChange,
 }
 
 #[derive(Encode, Decode, Clone, Copy, RuntimeDebug, TypeInfo, MaxEncodedLen, PartialEq, Eq)]
-pub struct PendingAdminChangeThreshold<AccountId> {
-    pub institution_code: InstitutionCode,
-    pub account: AccountId,
+pub struct PendingPersonalAdminChangeThreshold<AccountId> {
+    pub personal_account: AccountId,
     pub new_admins_len: u32,
     pub new_threshold: u32,
 }
@@ -90,7 +85,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
 
     /// 重新创世直接使用最终 proposal_id 键控布局，不保留开发期旧存储迁移。
-    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {
@@ -125,21 +120,27 @@ pub mod pallet {
     pub type InternalThresholdSnapshot<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, u32, OptionQuery>;
 
-    /// 注册多签待激活动态阈值:proposal_id -> threshold。
+    /// 注册个人多签待激活动态阈值:proposal_id -> threshold。
     ///
-    /// 注册提案发起时写入，提案执行成功后移动到 ActiveDynamicThresholds。
+    /// 注册提案发起时写入，提案执行成功后移动到 `ActivePersonalThresholds`。
     #[pallet::storage]
-    pub type PendingDynamicThresholds<T: Config> =
+    pub type PendingPersonalThresholds<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, u32, OptionQuery>;
 
-    /// 注册多签已激活动态阈值:(institution_code, account) -> threshold。
-    ///
-    /// 一般内部投票只从这里读取动态阈值，不再读取 admins 模块。
+    /// 机构已激活动态阈值：CID -> threshold。机构码只做规则分类，不参与身份 key。
     #[pallet::storage]
-    pub type ActiveDynamicThresholds<T: Config> = StorageDoubleMap<
+    pub type ActiveInstitutionThresholds<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
-        InstitutionCode,
+        CidNumber,
+        u32,
+        OptionQuery,
+    >;
+
+    /// 个人多签已激活动态阈值：个人多签账户 -> threshold。
+    #[pallet::storage]
+    pub type ActivePersonalThresholds<T: Config> = StorageMap<
+        _,
         Blake2_128Concat,
         T::AccountId,
         u32,
@@ -148,11 +149,11 @@ pub mod pallet {
 
     /// 管理员变更提案待应用的新动态阈值。
     #[pallet::storage]
-    pub type PendingAdminChangeThresholds<T: Config> = StorageMap<
+    pub type PendingPersonalAdminChangeThresholds<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         u64,
-        PendingAdminChangeThreshold<T::AccountId>,
+        PendingPersonalAdminChangeThreshold<T::AccountId>,
         OptionQuery,
     >;
 
@@ -200,90 +201,63 @@ pub mod pallet {
     }
 }
 // 内部判定 helper
-fn decode_account<T: Config>(raw: &[u8; 32]) -> Option<T::AccountId> {
-    T::AccountId::decode(&mut &raw[..]).ok()
-}
-
-fn is_valid_account_context<T: Config>(
+fn is_valid_institution_context(
     institution_code: InstitutionCode,
-    account_context: T::AccountId,
+    cid_number: &[u8],
 ) -> bool {
-    match institution_code {
-        NRC => CHINA_CB
-            .first()
-            .and_then(|n| decode_account::<T>(&n.main_account))
-            .map(|nrc| account_context == nrc)
-            .unwrap_or(false),
-        PRC => CHINA_CB
-            .iter()
-            .skip(1)
-            .filter_map(|n| decode_account::<T>(&n.main_account))
-            .any(|pid| pid == account_context),
-        PRB => CHINA_CH
-            .iter()
-            .filter_map(|n| decode_account::<T>(&n.main_account))
-            .any(|pid| pid == account_context),
-        // FRG 是一个机构、一个主账户、215 名管理员。省域 5 人岗位组属于具体
-        // 注册业务权限，不得在通用内部投票引擎中把 FRG 误判成“管理员恰好 5 人”。
-        FRG => CHINA_ZF
-            .iter()
-            .find(|n| institution_code_from_cid_number(n.cid_number) == Some(FRG))
-            .and_then(|n| decode_account::<T>(&n.main_account))
-            .map(|frg| account_context == frg)
-            .unwrap_or(false),
-        NJD => CHINA_SF
-            .iter()
-            .find(|n| institution_code_from_cid_number(n.cid_number) == Some(NJD))
-            .and_then(|n| decode_account::<T>(&n.main_account))
-            .map(|njd| account_context == njd)
-            .unwrap_or(false),
-        c if is_registered_multisig_code(&c) => {
-            <T as votingengine::Config>::InternalAdminProvider::get_admin_list(c, account_context)
-                .is_some()
-        }
-        _ => false,
-    }
+    !is_personal_code(&institution_code)
+        && is_valid_governance_code(&institution_code)
+        && institution_code_from_cid_number(core::str::from_utf8(cid_number).unwrap_or_default())
+            == Some(institution_code)
 }
 
-fn is_internal_admin<T: Config>(
+fn is_institution_admin<T: Config>(
     institution_code: InstitutionCode,
-    institution: T::AccountId,
+    cid_number: &[u8],
     who: &T::AccountId,
 ) -> bool {
-    <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
+    <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
         institution_code,
-        institution,
+        cid_number,
         who,
     )
 }
 
-fn active_internal_threshold<T: Config>(
+fn is_personal_admin<T: Config>(personal_account: T::AccountId, who: &T::AccountId) -> bool {
+    <T as votingengine::Config>::InternalAdminProvider::is_personal_admin(personal_account, who)
+}
+
+fn active_institution_threshold<T: Config>(
     institution_code: InstitutionCode,
-    institution: T::AccountId,
+    cid_number: &CidNumber,
 ) -> Option<u32> {
     match institution_code {
         NRC | PRC | PRB | FRG | NJD => fixed_governance_pass_threshold(&institution_code),
         c if primitives::institution_constraints::is_permanent_singleton_code(&c) => None,
-        c if is_registered_multisig_code(&c) => ActiveDynamicThresholds::<T>::get(c, institution),
+        c if is_registered_multisig_code(&c) => {
+            ActiveInstitutionThresholds::<T>::get(cid_number)
+        }
         _ => None,
     }
 }
 // 业务方法
 // trait 实现
 impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
-    fn create_general_internal_proposal_with_data(
+    fn create_institution_proposal_with_data(
         who: T::AccountId,
         institution_code: InstitutionCode,
-        institution: T::AccountId,
+        actor_cid_number: sp_std::vec::Vec<u8>,
+        execution_account: Option<T::AccountId>,
         subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         with_transaction(|| {
-            let proposal_id = match Self::do_create_general_internal_proposal(
+            let proposal_id = match Self::do_create_institution_proposal(
                 who.clone(),
                 institution_code,
-                institution,
+                actor_cid_number,
+                execution_account,
                 subject_cid_numbers,
             ) {
                 Ok(id) => id,
@@ -296,20 +270,16 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         })
     }
 
-    fn create_lifecycle_internal_proposal_with_data(
+    fn create_personal_proposal_with_data(
         who: T::AccountId,
-        institution_code: InstitutionCode,
-        institution: T::AccountId,
-        subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
+        personal_account: T::AccountId,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         with_transaction(|| {
-            let proposal_id = match Self::do_create_lifecycle_internal_proposal(
+            let proposal_id = match Self::do_create_personal_proposal(
                 who.clone(),
-                institution_code,
-                institution,
-                subject_cid_numbers,
+                personal_account,
             ) {
                 Ok(id) => id,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
@@ -321,22 +291,39 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         })
     }
 
-    fn create_registered_account_create_proposal_with_data(
+    fn create_personal_lifecycle_proposal_with_data(
         who: T::AccountId,
-        institution_code: InstitutionCode,
-        institution: T::AccountId,
-        subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
+        personal_account: T::AccountId,
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        with_transaction(|| {
+            let proposal_id = match Self::do_create_personal_lifecycle_proposal(
+                who.clone(),
+                personal_account,
+            ) {
+                Ok(id) => id,
+                Err(err) => return TransactionOutcome::Rollback(Err(err)),
+            };
+            match Self::register_data_and_auto_approve(who, proposal_id, module_tag, data) {
+                Ok(id) => TransactionOutcome::Commit(Ok(id)),
+                Err(err) => TransactionOutcome::Rollback(Err(err)),
+            }
+        })
+    }
+
+    fn create_personal_account_create_proposal_with_data(
+        who: T::AccountId,
+        personal_account: T::AccountId,
         admins: sp_std::vec::Vec<T::AccountId>,
         dynamic_threshold: u32,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         with_transaction(|| {
-            let proposal_id = match Self::do_create_registered_account_create_proposal(
+            let proposal_id = match Self::do_create_personal_account_create_proposal(
                 who.clone(),
-                institution_code,
-                institution,
-                subject_cid_numbers,
+                personal_account,
                 admins,
                 dynamic_threshold,
             ) {
@@ -350,22 +337,18 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         })
     }
 
-    fn create_admin_change_internal_proposal_with_data(
+    fn create_personal_admin_change_proposal_with_data(
         who: T::AccountId,
-        institution_code: InstitutionCode,
-        institution: T::AccountId,
-        subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
+        personal_account: T::AccountId,
         new_admins_len: u32,
         new_threshold: u32,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         with_transaction(|| {
-            let proposal_id = match Self::do_create_admin_change_internal_proposal(
+            let proposal_id = match Self::do_create_personal_admin_change_proposal(
                 who.clone(),
-                institution_code,
-                institution,
-                subject_cid_numbers,
+                personal_account,
                 new_admins_len,
                 new_threshold,
             ) {
@@ -379,9 +362,9 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         })
     }
 
-    fn register_active_dynamic_threshold_direct(
+    fn register_active_institution_threshold_direct(
         institution_code: InstitutionCode,
-        institution: T::AccountId,
+        cid_number: sp_std::vec::Vec<u8>,
         admins_len: u32,
         threshold: u32,
     ) -> DispatchResult {
@@ -394,31 +377,46 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
                 ),
             Error::<T>::InvalidInternalCode
         );
+        let cid_number = CidNumber::try_from(cid_number)
+            .map_err(|_| votingengine::Error::<T>::InvalidInstitution)?;
+        ensure!(
+            is_valid_institution_context(institution_code, cid_number.as_slice()),
+            votingengine::Error::<T>::InvalidInstitution
+        );
         Self::ensure_dynamic_threshold(admins_len, threshold)?;
-        ActiveDynamicThresholds::<T>::insert(institution_code, institution, threshold);
+        ActiveInstitutionThresholds::<T>::insert(cid_number, threshold);
         Ok(())
     }
 
-    fn active_dynamic_threshold(
+    fn active_institution_threshold(
         institution_code: InstitutionCode,
-        institution: T::AccountId,
+        cid_number: &[u8],
     ) -> Option<u32> {
         if primitives::institution_constraints::is_permanent_singleton_code(&institution_code) {
             return None;
         }
-        ActiveDynamicThresholds::<T>::get(institution_code, institution)
+        let cid_number = CidNumber::try_from(cid_number.to_vec()).ok()?;
+        ActiveInstitutionThresholds::<T>::get(cid_number)
     }
 
-    fn configured_dynamic_threshold(
-        proposal_id: u64,
+    fn active_personal_threshold(personal_account: T::AccountId) -> Option<u32> {
+        ActivePersonalThresholds::<T>::get(personal_account)
+    }
+
+    fn configured_institution_threshold(
+        _proposal_id: u64,
         institution_code: InstitutionCode,
-        institution: T::AccountId,
+        cid_number: &[u8],
     ) -> Option<u32> {
-        if primitives::institution_constraints::is_permanent_singleton_code(&institution_code) {
-            return None;
-        }
-        PendingDynamicThresholds::<T>::get(proposal_id)
-            .or_else(|| ActiveDynamicThresholds::<T>::get(institution_code, institution))
+        Self::active_institution_threshold(institution_code, cid_number)
+    }
+
+    fn configured_personal_threshold(
+        proposal_id: u64,
+        personal_account: T::AccountId,
+    ) -> Option<u32> {
+        PendingPersonalThresholds::<T>::get(proposal_id)
+            .or_else(|| ActivePersonalThresholds::<T>::get(personal_account))
     }
 }
 

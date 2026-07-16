@@ -38,9 +38,7 @@ pub(crate) enum AdminActionType {
     InstitutionUpdate,
     InstitutionCreateAccount,
     InstitutionDeleteAccount,
-    /// 注销整个机构(关主账户=级联关全部账户);签发整机构 scope 注销凭证。
-    InstitutionDeregister,
-    /// 注销机构单个非主账户;签发单账户 scope 注销凭证。
+    /// 注销机构自定义命名账户；所有协议账户永久存在。
     InstitutionAccountDeregister,
     InstitutionUploadDocument,
     InstitutionDeleteDocument,
@@ -82,7 +80,6 @@ impl AdminActionType {
             Self::InstitutionUpdate => "INSTITUTION_UPDATE",
             Self::InstitutionCreateAccount => "INSTITUTION_CREATE_ACCOUNT",
             Self::InstitutionDeleteAccount => "INSTITUTION_DELETE_ACCOUNT",
-            Self::InstitutionDeregister => "INSTITUTION_DEREGISTER",
             Self::InstitutionAccountDeregister => "INSTITUTION_ACCOUNT_DEREGISTER",
             Self::InstitutionUploadDocument => "INSTITUTION_UPLOAD_DOCUMENT",
             Self::InstitutionDeleteDocument => "INSTITUTION_DELETE_DOCUMENT",
@@ -114,7 +111,6 @@ impl AdminActionType {
             | Self::CreateCityRegistry
             | Self::DeleteCityRegistry
             | Self::InstitutionDeleteAccount
-            | Self::InstitutionDeregister
             | Self::InstitutionAccountDeregister
             | Self::InstitutionDeleteDocument
             | Self::NodeBindingUnbind
@@ -143,14 +139,13 @@ impl AdminActionType {
             self,
             Self::CreateCityRegistry
                 | Self::DeleteCityRegistry
-                | Self::InstitutionDeregister
                 | Self::InstitutionAccountDeregister
                 | Self::NodeBindingUnbind
         )
     }
 
     /// 是否要求 Tier1 创世注册局治理能力。注册局自身管理(增删下级注册局、更新/换届本档)
-    /// 与机构注销治理(整机构/单账户)归此边界;机构元数据更新与文档上传不在其中——
+    /// 与自定义账户注销治理归此边界；机构元数据更新与文档上传不在其中——
     /// 任一辖区管理员可对本辖区机构执行,由 `scope` 限定可见域。与鉴权档正交:不依赖
     /// auth_type,故动作在档间迁移不改变此权限边界。
     pub(crate) fn requires_governing_capability(&self) -> bool {
@@ -158,7 +153,6 @@ impl AdminActionType {
             self,
             Self::CreateCityRegistry
                 | Self::DeleteCityRegistry
-                | Self::InstitutionDeregister
                 | Self::InstitutionAccountDeregister
         )
     }
@@ -174,7 +168,6 @@ pub(crate) fn parse_action_type(
         "INSTITUTION_UPDATE" => Ok(AdminActionType::InstitutionUpdate),
         "INSTITUTION_CREATE_ACCOUNT" => Ok(AdminActionType::InstitutionCreateAccount),
         "INSTITUTION_DELETE_ACCOUNT" => Ok(AdminActionType::InstitutionDeleteAccount),
-        "INSTITUTION_DEREGISTER" => Ok(AdminActionType::InstitutionDeregister),
         "INSTITUTION_ACCOUNT_DEREGISTER" => Ok(AdminActionType::InstitutionAccountDeregister),
         "INSTITUTION_UPLOAD_DOCUMENT" => Ok(AdminActionType::InstitutionUploadDocument),
         "INSTITUTION_DELETE_DOCUMENT" => Ok(AdminActionType::InstitutionDeleteDocument),
@@ -250,10 +243,9 @@ mod tests {
         // 机构元数据更新与文档上传由发起管理员的 scope 限定本辖区,不要求 Tier1 创世注册局治理能力。
         assert!(!AdminActionType::InstitutionUpdate.requires_governing_capability());
         assert!(!AdminActionType::InstitutionUploadDocument.requires_governing_capability());
-        // 注册局新增/删除下级、换届本档与机构注销治理仍要求 Tier1 创世注册局治理能力。
+        // 注册局新增/删除下级与自定义账户注销治理仍要求 Tier1 创世注册局治理能力。
         assert!(AdminActionType::CreateCityRegistry.requires_governing_capability());
         assert!(AdminActionType::DeleteCityRegistry.requires_governing_capability());
-        assert!(AdminActionType::InstitutionDeregister.requires_governing_capability());
         assert!(AdminActionType::InstitutionAccountDeregister.requires_governing_capability());
         // 普通机构特殊操作(建机构/建账户/删账户/删文档)由 scope 收口,不要求治理能力。
         assert!(!AdminActionType::InstitutionCreate.requires_governing_capability());

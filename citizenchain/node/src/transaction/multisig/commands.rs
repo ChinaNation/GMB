@@ -8,8 +8,8 @@ use tauri::AppHandle;
 pub async fn build_multisig_transfer_request(
     app: AppHandle,
     pubkey_hex: String,
-    cid_number: String,
-    institution_code: String,
+    actor_cid_number: String,
+    institution_account: String,
     beneficiary_address: String,
     amount_yuan: f64,
     remark: String,
@@ -18,12 +18,11 @@ pub async fn build_multisig_transfer_request(
     if !status.running {
         return Err("节点未运行，无法构建签名请求".to_string());
     }
-    let code = primitives::cid::code::code_bytes(&institution_code);
     tauri::async_runtime::spawn_blocking(move || {
         super::signing::build_propose_transfer_sign_request(
             &pubkey_hex,
-            &cid_number,
-            code,
+            &actor_cid_number,
+            &institution_account,
             &beneficiary_address,
             amount_yuan,
             &remark,
@@ -40,8 +39,8 @@ pub async fn submit_multisig_transfer(
     request_id: String,
     expected_pubkey_hex: String,
     expected_payload_hash: String,
-    cid_number: String,
-    institution_code: String,
+    actor_cid_number: String,
+    institution_account: String,
     beneficiary_address: String,
     amount_yuan: f64,
     remark: String,
@@ -53,14 +52,15 @@ pub async fn submit_multisig_transfer(
     if !status.running {
         return Err("节点未运行，无法提交提案".to_string());
     }
-    let code = primitives::cid::code::code_bytes(&institution_code);
     tauri::async_runtime::spawn_blocking(move || {
         let amount_fen = (amount_yuan * 100.0).round() as u128;
         let beneficiary_bytes = governance::signing::decode_ss58_to_pubkey(&beneficiary_address)?;
         let remark_bytes = remark.as_bytes();
+        let institution_account =
+            super::account_id::institution_account_from_hex(&institution_account)?;
         let call_data = super::signing::build_transfer_call_data(
-            &cid_number,
-            &code,
+            &actor_cid_number,
+            &institution_account,
             &beneficiary_bytes,
             amount_fen,
             remark_bytes,
@@ -85,6 +85,8 @@ pub async fn submit_multisig_transfer(
 pub async fn build_multisig_safety_fund_request(
     app: AppHandle,
     pubkey_hex: String,
+    actor_cid_number: String,
+    institution_account: String,
     beneficiary_address: String,
     amount_yuan: f64,
     remark: String,
@@ -96,6 +98,8 @@ pub async fn build_multisig_safety_fund_request(
     tauri::async_runtime::spawn_blocking(move || {
         super::signing::build_propose_safety_fund_sign_request(
             &pubkey_hex,
+            &actor_cid_number,
+            &institution_account,
             &beneficiary_address,
             amount_yuan,
             &remark,
@@ -112,6 +116,8 @@ pub async fn submit_multisig_safety_fund(
     request_id: String,
     expected_pubkey_hex: String,
     expected_payload_hash: String,
+    actor_cid_number: String,
+    institution_account: String,
     beneficiary_address: String,
     amount_yuan: f64,
     remark: String,
@@ -125,6 +131,8 @@ pub async fn submit_multisig_safety_fund(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let call_data = super::signing::build_safety_fund_call_data(
+            &actor_cid_number,
+            &institution_account,
             &beneficiary_address,
             amount_yuan,
             &remark,
@@ -148,7 +156,8 @@ pub async fn submit_multisig_safety_fund(
 pub async fn build_multisig_sweep_request(
     app: AppHandle,
     pubkey_hex: String,
-    cid_number: String,
+    actor_cid_number: String,
+    institution_account: String,
     amount_yuan: f64,
 ) -> Result<governance::signing::VoteSignRequestResult, String> {
     let status = home::current_status(&app)?;
@@ -156,7 +165,12 @@ pub async fn build_multisig_sweep_request(
         return Err("节点未运行".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        super::signing::build_propose_sweep_sign_request(&pubkey_hex, &cid_number, amount_yuan)
+        super::signing::build_propose_sweep_sign_request(
+            &pubkey_hex,
+            &actor_cid_number,
+            &institution_account,
+            amount_yuan,
+        )
     })
     .await
     .map_err(|e| format!("build multisig sweep failed: {e}"))?
@@ -169,7 +183,8 @@ pub async fn submit_multisig_sweep(
     request_id: String,
     expected_pubkey_hex: String,
     expected_payload_hash: String,
-    cid_number: String,
+    actor_cid_number: String,
+    institution_account: String,
     amount_yuan: f64,
     sign_nonce: u32,
     sign_block_number: u64,
@@ -180,7 +195,11 @@ pub async fn submit_multisig_sweep(
         return Err("节点未运行".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let call_data = super::signing::build_sweep_call_data(&cid_number, amount_yuan)?;
+        let call_data = super::signing::build_sweep_call_data(
+            &actor_cid_number,
+            &institution_account,
+            amount_yuan,
+        )?;
         governance::signing::verify_and_submit(
             &request_id,
             &expected_pubkey_hex,

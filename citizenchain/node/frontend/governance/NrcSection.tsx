@@ -17,11 +17,11 @@ type NrcView =
   | { page: 'detail' }
   | { page: 'admin-list' }
   | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; cidNumber?: string }
-  | { page: 'create-proposal'; orgType: number; cidFullName: string; mainAccount: string; adminWallets: AdminWalletMatch[] }
+  | { page: 'create-proposal'; orgType: number; cidFullName: string; institutionAccount: string; adminWallets: AdminWalletMatch[] }
   | { page: 'protocol-upgrade'; adminWallets: AdminWalletMatch[] }
   | { page: 'developer-upgrade'; adminWallets: AdminWalletMatch[] }
-  | { page: 'propose-safety-fund'; adminWallets: AdminWalletMatch[] }
-  | { page: 'propose-sweep'; cidFullName: string; adminWallets: AdminWalletMatch[] };
+  | { page: 'propose-safety-fund'; actorCidNumber: string; institutionAccount: string; adminWallets: AdminWalletMatch[] }
+  | { page: 'propose-sweep'; actorCidNumber: string; institutionAccount: string; cidFullName: string; adminWallets: AdminWalletMatch[] };
 
 export function NrcSection() {
   const [view, setView] = useState<NrcView>({ page: 'detail' });
@@ -53,9 +53,8 @@ export function NrcSection() {
     return (
       <CreateMultisigTransferPage
         cidNumber={NRC_CID_NUMBER}
-        institutionCode="NRC"
         cidFullName={view.cidFullName}
-        mainAccount={view.mainAccount}
+        institutionAccount={view.institutionAccount}
         adminWallets={view.adminWallets}
         onBack={backToDetail}
         onSuccess={backToDetail}
@@ -86,6 +85,8 @@ export function NrcSection() {
   if (view.page === 'propose-safety-fund') {
     return (
       <SafetyFundProposalPage
+        actorCidNumber={view.actorCidNumber}
+        institutionAccount={view.institutionAccount}
         adminWallets={view.adminWallets}
         onBack={backToDetail}
         onSuccess={backToDetail}
@@ -96,7 +97,8 @@ export function NrcSection() {
   if (view.page === 'propose-sweep') {
     return (
       <SweepProposalPage
-        cidNumber={NRC_CID_NUMBER}
+        actorCidNumber={view.actorCidNumber}
+        institutionAccount={view.institutionAccount}
         cidFullName={view.cidFullName}
         adminWallets={view.adminWallets}
         onBack={backToDetail}
@@ -115,8 +117,8 @@ export function NrcSection() {
       onSelectProposal={(proposalId, adminWallets, sid) =>
         setView({ page: 'proposal-detail', proposalId, adminWallets, cidNumber: sid })
       }
-      onCreateProposal={(_sid, orgType, cidFullName, mainAccount, aw) =>
-        setView({ page: 'create-proposal', orgType, cidFullName, mainAccount, adminWallets: aw })
+      onCreateProposal={(_sid, orgType, cidFullName, institutionAccount, aw) =>
+        setView({ page: 'create-proposal', orgType, cidFullName, institutionAccount, adminWallets: aw })
       }
       onCreateProtocolUpgrade={(aw) =>
         setView({ page: 'protocol-upgrade', adminWallets: aw })
@@ -124,11 +126,11 @@ export function NrcSection() {
       onCreateDeveloperUpgrade={(aw) =>
         setView({ page: 'developer-upgrade', adminWallets: aw })
       }
-      onCreateSafetyFund={(aw) =>
-        setView({ page: 'propose-safety-fund', adminWallets: aw })
+      onCreateSafetyFund={(actorCidNumber, institutionAccount, aw) =>
+        setView({ page: 'propose-safety-fund', actorCidNumber, institutionAccount, adminWallets: aw })
       }
-      onCreateSweep={(_sid, cidFullName, aw) =>
-        setView({ page: 'propose-sweep', cidFullName, adminWallets: aw })
+      onCreateSweep={(actorCidNumber, institutionAccount, cidFullName, aw) =>
+        setView({ page: 'propose-sweep', actorCidNumber, institutionAccount, cidFullName, adminWallets: aw })
       }
     />
   );

@@ -5,7 +5,7 @@
 
 extern crate alloc;
 
-use admin_primitives::{AdminAccountQuery as _, InstitutionAdminAccountLifecycle as _};
+use admin_primitives::{InstitutionAdminLifecycle as _, InstitutionAdminQuery as _};
 use alloc::{collections::BTreeMap, vec::Vec};
 use entity_primitives::{
     InstitutionAdminAssignment, InstitutionAssignmentSource, InstitutionAssignmentStatus,
@@ -23,8 +23,8 @@ use crate::institution::role::{
     AssignmentSourceRefOf, InstitutionRoleOf, RoleAssignmentsOf, RoleCodeOf,
 };
 use crate::pallet::{
-    AccountNameOf, AccountRegisteredCid, CidNumberOf, Config, Error, InstitutionRoleAssignments,
-    InstitutionRoles, Institutions, Pallet,
+    AccountNameOf, CidNumberOf, Config, Error, InstitutionRoleAssignments, InstitutionRoles,
+    Institutions, Pallet,
 };
 
 impl<T: Config> Pallet<T> {
@@ -56,20 +56,15 @@ impl<T: Config> Pallet<T> {
             .try_into()
             .map_err(|_| Error::<T>::AssignmentSourceRefEmpty)?;
 
-        let registered = AccountRegisteredCid::<T>::get(&result.institution_account)
-            .ok_or(Error::<T>::InvalidAssignmentResultInstitution)?;
-        let cid_number = registered.cid_number;
-        let main_account = Self::resolve_admin_account_for_account(&result.institution_account)
-            .ok_or(Error::<T>::InvalidAssignmentResultInstitution)?;
-        ensure!(
-            main_account == result.institution_account,
-            Error::<T>::InvalidAssignmentResultInstitution
-        );
+        let cid_number: CidNumberOf<T> = result
+            .cid_number
+            .clone()
+            .try_into()
+            .map_err(|_| Error::<T>::InvalidAssignmentResultInstitution)?;
         let institution = Institutions::<T>::get(&cid_number)
             .ok_or(Error::<T>::InvalidAssignmentResultInstitution)?;
         ensure!(
-            institution.institution_code == result.institution_code
-                && institution.status == entity_primitives::InstitutionLifecycleStatus::Active,
+            institution.institution_code == result.institution_code,
             Error::<T>::InvalidAssignmentResultInstitution
         );
 
@@ -208,9 +203,9 @@ impl<T: Config> Pallet<T> {
             Error::<T>::TooManyInstitutionAdmins
         );
 
-        let current_admins = T::AdminAccountQuery::active_account_admins(
+        let current_admins = T::InstitutionAdminQuery::institution_admins(
             result.institution_code,
-            main_account.clone(),
+            cid_number.as_slice(),
         )
         .ok_or(Error::<T>::InvalidAssignmentResultInstitution)?;
         let mut remaining = desired_admins;
@@ -276,9 +271,8 @@ impl<T: Config> Pallet<T> {
                     }
                 });
             }
-            if let Err(err) = T::AdminLifecycle::sync_active_institution_admins_from_assignments(
+            if let Err(err) = T::AdminLifecycle::sync_institution_admins_from_assignments(
                 crate::MODULE_TAG,
-                main_account.clone(),
                 cid_number.to_vec(),
                 result.institution_code,
                 derived_admins.clone(),
@@ -287,7 +281,6 @@ impl<T: Config> Pallet<T> {
             }
             Self::deposit_event(crate::pallet::Event::<T>::InstitutionGovernanceApplied {
                 cid_number,
-                institution_account: main_account,
                 role_changes: role_changes_len,
                 assignment_changes: assignment_changes_len,
                 admins_len,

@@ -28,7 +28,7 @@
 
 - **步骤1 地基**:消息载荷 schema + 模型 + 渲染分发。新增 `chat_payload.dart` 单源编解码(显式 `kind`,替代 `_messageKindFromPlaintext` 启发式,顺带修掉"文本像 JSON 被误判"隐患);`ChatMessageKind` 扩 `text/image/video/file/sticker`;媒体元数据(尺寸/时长/blurhash/mime/byte_size)全部塞进**已持久化的 `plaintext` 控制 JSON**,故 **Isar schema 零改动**;adapter 按 kind 分发渲染。传输沿用现有 WebRTC 语义。用现有 file_picker 验证往返。
 - **步骤2 采集与传输硬化**:`media/`(相册/相机/视频采集、压缩门控、抽帧封面、blurhash 生成、缓存、存相册)+ `viewer/`(全屏/播放)+ WebRTC 背压/进度 + **离线字节重试**(今天 `retryOutgoing` 只重发控制 envelope、不重发 WebRTC 字节,需补)+ pending 态 + iOS/Android 权限。
-- **步骤3 表情贴纸**:`emoji_picker_flutter` + `compose/emoji_panel`;`assets/stickers/pack_fluent3d/` + `stickers/` 注册 + `sticker_panel`;sticker 消息闭环。
+- **步骤3 表情贴纸**:分 3a 贴纸 + 3b 表情。3a=`assets/stickers/fluent3d/`(内置 Fluent 3D)+ `stickers/sticker_pack.dart` 单源 + `compose/sticker_panel.dart` + 自绘 composer 渲染闭环;3b=`emoji_picker_flutter` + `compose/emoji_panel`(表情插入文本)。
 - 权限声明:iOS `Info.plist`(`NSPhotoLibraryUsageDescription`/`NSCameraUsageDescription`/`NSMicrophoneUsageDescription`)、Android(`READ_MEDIA_IMAGES`/`READ_MEDIA_VIDEO`/`CAMERA`)。
 - 中文注释、测试、文档更新、残留清理。
 
@@ -61,7 +61,7 @@
 - **验证**：`flutter analyze lib`（全仓）无本任务新增问题（仅 2 处历史 info，非本改动文件）；`flutter test test/chat --concurrency=1` = 48 通过 / 4 跳过（smoldot native 门控）；旧 schema 残留全仓清零（仅剩 `chat_payload_test` 中 1 处刻意的反例夹具）。
 - **文档**：`memory/05-modules/citizenapp/chat/CHAT_TECHNICAL.md` §4 协议、§10 状态已更新。
 - **对抗式审查**：4 维度 × 逐条 refute 复核,0 处代码正确性缺陷,确认 5 处测试覆盖缺口(2 中 3 低)并全部补齐:视频 kind 的 adapter 分发用例、`sendMedia` 加密失败绝不先发字节的零泄漏顺序、`downloadAttachment` 拒非媒体控制、字节未到达/截断守卫、以及 WebRTC 字节↔控制消息同 attachmentId 关联 + 发送方自存副本断言。测试 48→52 通过。
-- **未做（步骤2/3）**：相册/相机采集 UI、压缩门控、抽帧封面、blurhash 生成、全屏查看/播放页、离线字节重试、emoji 面板、Fluent 3D 贴纸资源与发送、iOS/Android 权限声明。
+- **未做（步骤2/3，步骤1 收尾时的快照）**：相册/相机采集 UI、压缩门控、抽帧封面、blurhash 生成、全屏查看/播放页、离线字节重试、emoji 面板、Fluent 3D 贴纸资源与发送、iOS/Android 权限声明。（截至 3a 完工:除 **3b emoji 面板**外均已落地。）
 
 ## 执行结果 · 步骤2a 大小门控 + 流式字节管道（2026-07-15，完成）
 
@@ -110,6 +110,25 @@
 - **验证**:`flutter analyze lib/chat test/chat` = No issues found;`dart format lib/chat lib/isar/app_isar.dart test/chat` 全过;`flutter test test/chat --concurrency=1` = 98 通过/4 跳过。
 - **踩坑**:一度误用 `dart format lib`(全 lib)重排了 18 个无关文件(8964/citizen/qr 等,纯格式)→ 已 `git checkout` 全部还原,改动严格限定 chat+isar;此后只 `dart format lib/chat lib/isar/app_isar.dart`。
 - **未做(2d-2)**:分片断点续传(接收端 partial 按 attachmentId、`resume_offset` 握手、`openRead(offset)` 续发 + 完整性),让接近 5GB 传输断网可续。
+
+## 执行结果 · 步骤3a 贴纸（Fluent 3D，2026-07-15，完成）
+
+- **内置资产**:从 `microsoft/fluentui-emoji`(MIT)精选 **48 张 3D PNG**(256×256,共 1.7MB)入 `assets/stickers/fluent3d/`,分四类(表情16/手势12/爱心10/庆祝10);pubspec 声明整目录。
+- **清单单源**:`lib/chat/stickers/sticker_pack.dart` = 唯一 id 清单(`packId='fluent3d'`)+ `assetPath/isKnown/grouped`;**不落 manifest.json**(避免双源漂移),由 `sticker_pack_test` 反核对"清单 ⇔ 磁盘 png 一一对应、零死引用零孤儿"。
+- **零字节传输**:贴纸只把 `(packId, stickerId)` 塞进 MLS 明文信封(传输层步骤1已备好 `chat_flow/runtime.sendSticker`),**零字节、零 WebRTC、零云存储**;接收端按 id 查本地内置 PNG 渲染,未知 id(对端资产旧/缺)白名单门拦截后降级占位 `[贴纸]`,绝不崩(亦挡 `sticker_id` 路径穿越)。
+- **渲染与面板**:`chat_ui_adapter` sticker 分支 `Message.text` 占位 → `Message.custom`(metadata 带 id);`chat_page` 经 `composerBuilder` 自绘 `Composer`(发送/附件仍走 Chat 注入回调)+ `topWidget` 挂贴纸开关与 `StickerPanel`(分类 Tab 网格,`Image.asset` 带 errorBuilder);`_buildStickerMessage` 白名单门渲染无气泡大图 + 降级。两处入口 `chat_tab`/`open_direct_chat` 接 `runtime.sendSticker`。
+- **对抗式审查(5 维度 × 逐条 refute)**:0 处代码正确性缺陷,确认 7 项并全部处理——**[中·行为回归]** `_reloadMessages` 无条件置 `_loading=true` 使整块 Chat(含面板)unmount、连发时分类 Tab 归零 → 改为只首屏骨架、重载保持 Chat 常驻(加 panel-survives-send 断言守回归);**[低]** `StickerPanel` 固定 264 横屏/小屏挤压列表 → 按视口 40% 夹取;**[高×2 测试]** `_buildStickerMessage` 渲染/降级 + 自绘 composer 接线(开关切换/点选路由 onSendSticker)零测 → 补 `chat_sticker_ui_test`;**[中·测试]** `onSendSticker→runtime.sendSticker` 接线未测 → chat_tab 导航测 + `_FakeRuntime.sendSticker` 记录四参;**[低×2 一致性]** 任务卡 `pack_fluent3d`/文档测试 `1f600` → 订正为 `fluent3d`/`grinning_face`。1 项(开关常驻显示)驳回。
+- **测试(98→110,+12)**:`sticker_pack_test`(reconcile/isKnown/assetPath/grouped)、`sticker_panel_test`(点选/分类 Tab)、`chat_sticker_ui_test`(未知 id 降级/已知不崩/开关弹面板点选路由+面板存活/再点收起)、`chat_tab_test`(进会话点贴纸→runtime.sendSticker 四参)、`chat_ui_adapter_test`(sticker→CustomMessage);payload/envelope 夹具 id 对齐真实命名。
+- **验证**:`flutter analyze lib/chat test/chat` = No issues found;`dart format lib/chat test/chat` 全过;`flutter test test/chat --concurrency=1` = 110 通过/4 跳过。
+
+## 执行结果 · 步骤3b 表情面板（emoji，2026-07-15，完成）
+
+- **成熟包接入**:新增 `emoji_picker_flutter ^4.4.0`(离线 emoji 数据,**无网络/无遥测**依赖;仅 shared_preferences 存"最近使用")。`EmojiPicker(textEditingController: _composerController)` 把选中的 Unicode emoji **直接插到 composer 光标处**,随文本走现有 `sendText`——**零协议变更、零新增数据面**(emoji 就是文本)。
+- **互斥面板重构**:`chat_page` 的 `bool _stickerPanelOpen` 收敛为 `enum _ComposerPanel {none,emoji,sticker}` + `_togglePanel(panel)`(同则关/异则切,打开任一收键盘);`_composerToolbar` 两键(`chat-emoji-toggle`/`chat-sticker-toggle`);`_buildEmojiPanel` 高度按视口 40% 夹取、主题化配色、关搜索栏。表情/贴纸二选一挂 topWidget。
+- **对抗式审查(3 镜头 × 逐条 refute)**:0 处正确性缺陷,确认 1 项修复、驳回 4 项(EmojiPicker 库 dispose 漏移 textEditingController 监听=无 scrollController 时纯 no-op、有界、随页 dispose 自清,不值 workaround;最近使用 emoji 落 SharedPreferences=非 PII 的全局标准 UX,删聊天记录不该清;反向互斥/tooltip=对称逻辑低价值)。确认项:**文本经共享 controller 走 onSendText 无端到端测**(且文本发送全仓此前零测)→ 补 `chat_emoji_panel_test` 一条:断言 `EmojiPicker` 与 `Composer` 的 controller 为同一实例(防接错 controller 静默丢字)+ `enterText('你好🙂')`→点发送→`onSendText` 收到全文。
+- **测试(110→113,+3)**:`chat_emoji_panel_test`(点表情弹/收 EmojiPicker;共享 controller + 文本经 onSendText 发出;表情↔贴纸互斥)。
+- **验证**:`flutter analyze lib/chat test/chat` = No issues found;`dart format` 全过;`flutter test test/chat --concurrency=1` = **113 通过/4 跳过**。
+- **收官**:本卡三步(1 载荷地基 / 2 媒体采集传输 / 3 表情贴纸)全部完成;媒体升级唯一遗留 = 2d-2 分片断点续传(可选打磨,非阻断)。
 
 ## 待后续（非本卡）
 

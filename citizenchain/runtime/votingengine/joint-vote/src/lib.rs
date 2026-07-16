@@ -11,7 +11,6 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use codec::Decode;
 use frame_support::pallet_prelude::DispatchResult;
 use sp_runtime::DispatchError;
 
@@ -21,7 +20,7 @@ use primitives::count_const::{
     JOINT_VOTE_PASS_THRESHOLD, NRC_JOINT_VOTE_WEIGHT, PRB_JOINT_VOTE_WEIGHT, PRC_JOINT_VOTE_WEIGHT,
 };
 
-use votingengine::{PopulationScope, Proposal};
+use votingengine::{types::CidNumber, PopulationScope, Proposal};
 
 pub mod jointinternal;
 pub mod jointreferendum;
@@ -31,26 +30,11 @@ pub mod weights;
 mod benchmarks;
 
 pub use pallet::*;
-// 跨阶段共用纯函数(jointinternal 与 jointreferendum 都引用)
-pub(crate) fn decode_account<T: frame_system::Config>(raw: &[u8; 32]) -> Option<T::AccountId> {
-    T::AccountId::decode(&mut &raw[..]).ok()
-}
-
-pub(crate) fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
-    CHINA_CB
-        .first()
-        .and_then(|n| decode_account::<T>(&n.main_account))
-}
-
-fn raw_account_matches<T: frame_system::Config>(raw: &[u8; 32], id: &T::AccountId) -> bool {
-    decode_account::<T>(raw).as_ref() == Some(id)
-}
-
-/// 机构多签账户 → 联合投票票权(NRC=19 / PRC=1×43 / PRB=1×43，总票权=105)。
-pub fn institution_info<T: frame_system::Config>(id: &T::AccountId) -> Option<u32> {
+/// 机构 CID → 联合投票票权（NRC=19 / PRC=1×43 / PRB=1×43，总票权=105）。
+pub fn institution_info(cid_number: &[u8]) -> Option<u32> {
     if CHINA_CB
         .first()
-        .map(|n| raw_account_matches::<T>(&n.main_account, id))
+        .map(|n| n.cid_number.as_bytes() == cid_number)
         .unwrap_or(false)
     {
         return Some(NRC_JOINT_VOTE_WEIGHT);
@@ -58,13 +42,13 @@ pub fn institution_info<T: frame_system::Config>(id: &T::AccountId) -> Option<u3
     if CHINA_CB
         .iter()
         .skip(1)
-        .any(|n| raw_account_matches::<T>(&n.main_account, id))
+        .any(|n| n.cid_number.as_bytes() == cid_number)
     {
         return Some(PRC_JOINT_VOTE_WEIGHT);
     }
     if CHINA_CH
         .iter()
-        .any(|n| raw_account_matches::<T>(&n.main_account, id))
+        .any(|n| n.cid_number.as_bytes() == cid_number)
     {
         return Some(PRB_JOINT_VOTE_WEIGHT);
     }
@@ -123,7 +107,7 @@ pub mod pallet {
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        (T::AccountId, T::AccountId),
+        (CidNumber, T::AccountId),
         bool,
         OptionQuery,
     >;
@@ -135,7 +119,7 @@ pub mod pallet {
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        T::AccountId,
+        CidNumber,
         votingengine::VoteCountU32,
         ValueQuery,
     >;
@@ -147,7 +131,7 @@ pub mod pallet {
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        T::AccountId,
+        CidNumber,
         bool,
         OptionQuery,
     >;
@@ -186,6 +170,8 @@ pub mod pallet {
         Eq,
     )]
     pub struct PreparedPopulationSnapshot<BlockNumber> {
+        /// 发起机构唯一 CID，创建提案时必须与调用参数一致。
+        pub actor_cid_number: CidNumber,
         /// citizen-identity 创建的不可变资格快照 ID。
         pub snapshot_id: u64,
         /// 联合公投阶段可投票总人数，由投票引擎从链上公民身份模块读取后缓存。
@@ -217,14 +203,14 @@ pub mod pallet {
         /// 联合投票中某机构管理员已投出一票。
         JointAdminVoteCast {
             proposal_id: u64,
-            institution: T::AccountId,
+            cid_number: CidNumber,
             who: T::AccountId,
             approve: bool,
         },
         /// 联合投票中某机构已形成最终结果(赞成/反对)。
         JointInstitutionVoteFinalized {
             proposal_id: u64,
-            institution: T::AccountId,
+            cid_number: CidNumber,
             approved: bool,
         },
         /// 联合公投已投出一票。
@@ -262,11 +248,11 @@ pub mod pallet {
         pub fn cast_admin(
             origin: OriginFor<T>,
             proposal_id: u64,
-            institution: T::AccountId,
+            cid_number: CidNumber,
             approve: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_joint_vote(who, proposal_id, institution, approve)
+            Self::do_joint_vote(who, proposal_id, cid_number, approve)
         }
 
         /// 联合公投阶段:链上公民身份持有者按 >50% 严格多数投票。
@@ -297,26 +283,37 @@ pub mod pallet {
         )]
         pub fn prepare_joint_population_snapshot(
             origin: OriginFor<T>,
+            actor_cid_number: CidNumber,
             scope: PopulationScope,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_prepare_joint_population_snapshot(who, scope)
+            Self::do_prepare_joint_population_snapshot(who, actor_cid_number, scope)
         }
     }
 }
 // trait 实现 — 业务方法住在 jointinternal / jointreferendum 子模块
 impl<T: Config> votingengine::JointVoteEngine<T::AccountId> for Pallet<T> {
-    fn create_joint_proposal(who: T::AccountId) -> Result<u64, DispatchError> {
-        Self::do_create_joint_proposal(who)
+    fn create_joint_proposal(
+        who: T::AccountId,
+        actor_cid_number: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        let actor_cid_number = CidNumber::try_from(actor_cid_number)
+            .map_err(|_| votingengine::Error::<T>::InvalidInstitution)?;
+        Self::do_create_joint_proposal(who, actor_cid_number)
     }
 
     fn create_joint_proposal_with_data(
         who: T::AccountId,
+        actor_cid_number: sp_std::vec::Vec<u8>,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         frame_support::storage::with_transaction(|| {
-            let proposal_id = match Self::do_create_joint_proposal(who) {
+            let actor_cid_number = match CidNumber::try_from(actor_cid_number) {
+                Ok(value) => value,
+                Err(_) => return frame_support::storage::TransactionOutcome::Rollback(Err(votingengine::Error::<T>::InvalidInstitution.into())),
+            };
+            let proposal_id = match Self::do_create_joint_proposal(who, actor_cid_number) {
                 Ok(id) => id,
                 Err(err) => return frame_support::storage::TransactionOutcome::Rollback(Err(err)),
             };
@@ -335,13 +332,18 @@ impl<T: Config> votingengine::JointVoteEngine<T::AccountId> for Pallet<T> {
 
     fn create_joint_proposal_with_data_and_object(
         who: T::AccountId,
+        actor_cid_number: sp_std::vec::Vec<u8>,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
         object_kind: u8,
         object_data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         frame_support::storage::with_transaction(|| {
-            let proposal_id = match Self::do_create_joint_proposal(who) {
+            let actor_cid_number = match CidNumber::try_from(actor_cid_number) {
+                Ok(value) => value,
+                Err(_) => return frame_support::storage::TransactionOutcome::Rollback(Err(votingengine::Error::<T>::InvalidInstitution.into())),
+            };
+            let proposal_id = match Self::do_create_joint_proposal(who, actor_cid_number) {
                 Ok(id) => id,
                 Err(err) => return frame_support::storage::TransactionOutcome::Rollback(Err(err)),
             };

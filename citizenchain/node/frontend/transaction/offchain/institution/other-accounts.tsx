@@ -28,9 +28,9 @@ export function OtherAccountsListPage({ cidNumber, otherAccounts, onBack }: Prop
             <div key={acc.addressSs58} className="metric-card admin-card">
               <div>
                 <strong>{acc.accountName}</strong>
-                {acc.isDefault && (
+                {acc.accountKind !== 'named' && (
                   <span className="status-badge status-registered" style={{ marginLeft: 8 }}>
-                    默认账户
+                    协议账户
                   </span>
                 )}
               </div>

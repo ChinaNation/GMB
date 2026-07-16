@@ -28,32 +28,6 @@ export interface InstitutionInfoDetail {
   legal_representative_account?: string | null;
 }
 
-export interface InstitutionRegistrationCredential {
-  genesis_hash: string;
-  register_nonce: string;
-  province_name: string;
-  signer_pubkey: string;
-  signature: string;
-  meta: {
-    key_id: string;
-    key_version: string;
-    alg: 'sr25519' | string;
-  };
-}
-
-export interface InstitutionRegistrationInfo {
-  /** 链端注册业务字段 1/3。 */
-  cid_number: string;
-  /** 链端注册业务字段 2/3。 */
-  cid_full_name: string;
-  /** 链端注册展示字段,不参与链端验签。 */
-  cid_short_name: string;
-  /** 链端注册业务字段 3/3,顺序必须原样交给链端验签。 */
-  account_names: string[];
-  /** 只用于链端验签与防重放,不属于业务注册字段。 */
-  credential: InstitutionRegistrationCredential;
-}
-
 async function publicAppRequest<T>(path: string): Promise<T> {
   let resp: Response;
   try {
@@ -80,13 +54,4 @@ async function publicAppRequest<T>(path: string): Promise<T> {
 export async function getInstitutionInfo(cidNumber: string): Promise<InstitutionInfoDetail> {
   const encoded = encodeURIComponent(cidNumber);
   return publicAppRequest<InstitutionInfoDetail>(`/api/v1/app/institutions/${encoded}`);
-}
-
-export async function getInstitutionRegistrationInfo(
-  cidNumber: string,
-): Promise<InstitutionRegistrationInfo> {
-  const encoded = encodeURIComponent(cidNumber);
-  return publicAppRequest<InstitutionRegistrationInfo>(
-    `/api/v1/app/institutions/${encoded}/registration-info`,
-  );
 }

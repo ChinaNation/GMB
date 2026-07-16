@@ -11,9 +11,6 @@ import {
 } from './api';
 import { tryEncodeSs58 } from '../utils/ss58';
 
-/** 默认账户名称(与后端 `service::DEFAULT_ACCOUNT_NAMES` 对齐) */
-const DEFAULT_ACCOUNT_NAMES = ['主账户', '费用账户', '永久质押', '安全基金', '两和基金'] as const;
-
 interface Props {
   accounts: InstitutionAccount[];
   loading: boolean;
@@ -99,12 +96,8 @@ export const AccountList: React.FC<Props> = ({
           width: 160,
           align: 'center',
           render: (_v, row) => {
-            const isDefault = (DEFAULT_ACCOUNT_NAMES as readonly string[]).includes(row.account_name);
-            const canDeleteRow =
-              canDelete &&
-              !isDefault &&
-              (row.chain_status === 'NOT_ON_CHAIN' || row.chain_status === 'REVOKED_ON_CHAIN');
-            // 删除按钮:默认账户永不显示;上链中/已上链账户不能删除。
+            const canDeleteRow = canDelete && row.can_delete;
+            // 删除按钮：仅后端判定可删除的自定义命名账户显示。
             const deleteCell =
               canDeleteRow ? (
                 <Popconfirm
@@ -121,7 +114,7 @@ export const AccountList: React.FC<Props> = ({
                 </Popconfirm>
               ) : null;
             if (deleteCell) return <Space size={4}>{deleteCell}</Space>;
-            if (!isDefault && row.chain_status === 'ACTIVE_ON_CHAIN') {
+            if (row.can_close && row.chain_status === 'ACTIVE_ON_CHAIN') {
               return <span style={{ color: '#999', fontSize: 12 }}>链上账户不可删</span>;
             }
             return <span style={{ color: '#999', fontSize: 12 }}>-</span>;

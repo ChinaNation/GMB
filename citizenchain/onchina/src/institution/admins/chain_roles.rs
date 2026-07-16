@@ -183,9 +183,7 @@ fn merge_active_assignments(
 pub(crate) async fn fetch_active_assignments_onchain(
     identity: &NodeInstitutionIdentity,
 ) -> Result<Option<Vec<InstitutionAssignmentView>>, String> {
-    let Some(cid_number) = identity.cid_number.as_deref() else {
-        return Err("institution cid_number is required for role lookup".to_string());
-    };
+    let cid_number = identity.cid_number.as_str();
     let Some(admins) = fetch_active_admins_onchain(identity).await? else {
         return Ok(None);
     };

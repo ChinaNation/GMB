@@ -11,7 +11,7 @@
 //!   "code": 0,
 //!   "message": "ok",
 //!   "data": [
-//!     { "cid_number": "...", "ref_property": "...", "main_chain_status": "NOT_ON_CHAIN", ... }
+//!     { "cid_number": "...", "ref_property": "...", ... }
 //!   ]
 //! }
 //! ```
@@ -20,8 +20,6 @@
 //! - 顶层 `data` 是数组,**不是** `{ "items": [...] }` 信封
 //! - 字段是 snake_case,**不是** camelCase(OnChina 后端不挂 `rename_all`)
 //! - `cid_full_name` 在两步式未命名时可能整个字段缺失(OnChina 端 `skip_serializing_if = is_none`)
-//! - `main_chain_status` 是 SCREAMING_SNAKE_CASE 枚举(`NOT_ON_CHAIN` / `PENDING_ON_CHAIN` /
-//!   `ACTIVE_ON_CHAIN` / `REVOKED_ON_CHAIN`),不是友好字符串
 //!
 //! 因此本文件采用"双 DTO"模式:
 //! - `CidEligibleRow`:用于反序列化 OnChina 响应(snake_case + Option),内部用
@@ -73,33 +71,6 @@ struct CidEligibleRow {
     main_account: Option<String>,
     #[serde(default)]
     fee_account: Option<String>,
-    main_chain_status: CidMultisigChainStatus,
-}
-
-/// 与 OnChina 端 `MultisigChainStatus` 一一对应。
-///
-/// OnChina 端 enum 用 `#[serde(rename_all = "SCREAMING_SNAKE_CASE")]`,
-/// 因此线上字符串是 `"NOT_ON_CHAIN"` / `"PENDING_ON_CHAIN"` /
-/// `"ACTIVE_ON_CHAIN"` / `"REVOKED_ON_CHAIN"`。
-#[derive(Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-enum CidMultisigChainStatus {
-    NotOnChain,
-    PendingOnChain,
-    ActiveOnChain,
-    RevokedOnChain,
-}
-
-/// 把 OnChina 端枚举映射成节点 UI 友好的字符串。
-///
-/// 节点桌面 TS 端期望:`'Pending' | 'Active' | 'Closed' | 'Failed'`。
-fn map_chain_status(status: CidMultisigChainStatus) -> &'static str {
-    match status {
-        CidMultisigChainStatus::NotOnChain => "Pending",
-        CidMultisigChainStatus::PendingOnChain => "Pending",
-        CidMultisigChainStatus::ActiveOnChain => "Active",
-        CidMultisigChainStatus::RevokedOnChain => "Closed",
-    }
 }
 
 fn into_candidate(row: CidEligibleRow) -> EligibleClearingBankCandidate {
@@ -113,7 +84,6 @@ fn into_candidate(row: CidEligibleRow) -> EligibleClearingBankCandidate {
         parent_ref_property: row.parent_ref_property,
         province_name: row.province_name,
         city_name: row.city_name,
-        main_chain_status: map_chain_status(row.main_chain_status).to_string(),
         main_account: row.main_account,
         fee_account: row.fee_account,
     }
@@ -223,9 +193,8 @@ pub fn fetch_institution_registration_info(
     }
     if data.credential.register_nonce.is_empty()
         || data.credential.signature.is_empty()
-        || data.credential.issuer_cid_number.is_empty()
-        || data.credential.issuer_main_account.is_empty()
-        || data.credential.signer_pubkey.is_empty()
+        || data.credential.actor_cid_number.is_empty()
+        || data.credential.credential_signer_pubkey.is_empty()
         || data.credential.scope_province_name.is_empty()
     {
         return Err("OnChina 未返回完整机构注册凭证,请确认签发机构管理员已激活".to_string());

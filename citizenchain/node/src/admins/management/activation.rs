@@ -1,8 +1,8 @@
-// 管理员激活模块：为 admin-management 账户生成 AccountId 级本地激活凭证。
+// 管理员激活模块：为机构 CID 生成管理员钱包级本地激活凭证。
 //
 // 激活流程：
 // 1. 用户点击管理员行的"激活"按钮；
-// 2. 后端按机构码读取对应管理员 pallet 的 AdminAccounts，确认目标 pubkey 是当前 Active 管理员；
+// 2. 后端按 CID 读取对应管理员 pallet 的 AdminAccounts，确认目标 pubkey 是当前管理员；
 // 3. 后端生成 activate_admin_account 签名请求 QR JSON；
 // 4. 用户用 citizenwallet 冷钱包扫码确认并签名；
 // 5. 后端验证签名、payload、链上账户仍一致后，写入本地激活记录；
@@ -10,7 +10,7 @@
 //
 // 激活 payload 格式（非链上交易，二进制前缀域）：
 //   GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(1B = 0x18)  ← 4B 二进制前缀
-//   + account_id(32B) + institution_code(4B) + kind(1B) + pubkey(32B)
+//   + cid_number(32B,右补零) + institution_code(4B) + kind(1B) + pubkey(32B)
 //   + timestamp(8B) + nonce(16B) = 4 + 93 = 97 bytes
 // 冷钱包对整段 payload 直接 sr25519 签名，node 按上述偏移解析。
 
@@ -33,7 +33,10 @@ use tauri::AppHandle;
 
 use crate::admins::management::storage;
 use crate::governance::signing;
-use primitives::sign::{binary_domain_prefix, BINARY_PREFIX_LEN, OP_SIGN_ACTIVATE_ADMIN};
+use primitives::sign::{
+    activate_admin_payload, binary_domain_prefix, ACTIVATE_ADMIN_CID_LEN,
+    ACTIVATE_ADMIN_PAYLOAD_LEN, BINARY_PREFIX_LEN, OP_SIGN_ACTIVATE_ADMIN,
+};
 
 use super::account_id;
 use super::types::{institution_code_label, AdminAccountState};
@@ -46,13 +49,12 @@ fn parse_expected_code(expected: Option<&str>) -> Option<InstitutionCode> {
         .map(code_bytes)
 }
 
-/// AccountId 级激活管理员存储文件名。旧文件不读取、不迁移。
-const ACTIVATED_ADMINS_FILE: &str = "activated-admin-accounts.json";
+/// CID 级激活管理员存储文件名；旧账户绑定文件不读取、不迁移。
+const ACTIVATED_ADMINS_FILE: &str = "activated-institution-admins.json";
 
 // 管理员本地激活签名 payload 前缀 = GMB || OP_SIGN_ACTIVATE_ADMIN(4B 二进制前缀，
 // 单一真源 primitives::sign)。
-// account_id(32) + institution_code(4) + kind(1) + pubkey(32) + timestamp(8) + nonce(16)。
-const ACTIVATE_ADMIN_PAYLOAD_LEN: usize = BINARY_PREFIX_LEN + 32 + 4 + 1 + 32 + 8 + 16;
+// cid_number(32) + institution_code(4) + kind(1) + pubkey(32) + timestamp(8) + nonce(16)。
 
 #[derive(Debug, Clone)]
 struct ActivationSignSession {
@@ -77,8 +79,8 @@ fn activation_sign_sessions() -> &'static Mutex<HashMap<String, ActivationSignSe
 pub struct ActivatedAdmin {
     /// 管理员公钥 hex（不含 0x，小写）。
     pub pubkey_hex: String,
-    /// admin-management 链上账户 AccountId hex（不含 0x，小写）。
-    pub account_hex: String,
+    /// 机构唯一 CID。
+    pub cid_number: String,
     /// 链上机构码（CID institution_code，[u8;4]）。
     pub institution_code: InstitutionCode,
     /// Node 按实际命中的机构管理员 pallet 派生的机构类型编码。
@@ -93,8 +95,8 @@ pub struct ActivatedAdmin {
 struct StoredActivation {
     /// 管理员公钥 hex（不含 0x，小写）。
     pubkey_hex: String,
-    /// admin-management 链上账户 AccountId hex（不含 0x，小写）。
-    account_hex: String,
+    /// 机构唯一 CID。
+    cid_number: String,
     /// 链上机构码（CID institution_code，[u8;4]）。
     institution_code: InstitutionCode,
     /// Node 按实际命中的机构管理员 pallet 派生的机构类型编码。
@@ -107,9 +109,9 @@ struct StoredActivation {
     payload_hash_hex: String,
 }
 
-/// 解码后的 AccountId 级激活 payload。
+/// 解码后的 CID 级激活 payload。
 struct ActivationPayload {
-    account_id: [u8; 32],
+    cid_number: String,
     institution_code: InstitutionCode,
     kind: u8,
     pubkey_hex: String,
@@ -150,33 +152,9 @@ fn load_activations(app: &AppHandle) -> Result<Vec<StoredActivation>, String> {
         Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
         Err(e) => return Err(format!("读取激活记录文件失败: {e}")),
     };
-    match serde_json::from_str::<StoredActivations>(&raw) {
-        Ok(stored) => Ok(stored.activations),
-        Err(e) if is_stale_activation_schema(&raw, &e.to_string()) => {
-            // 旧版本地文件使用 org:u8。该字段已废弃，不能在本地做
-            // 兼容映射；直接清空文件，要求用户按当前 institution_code 重新激活。
-            if let Err(log_err) = security::append_audit_log(
-                app,
-                "activated_admins_schema_reset",
-                &format!("reset stale file: {e}"),
-            ) {
-                eprintln!("[审计] activated_admins_schema_reset 日志写入失败: {log_err}");
-            }
-            eprintln!(
-                "[管理员激活] 检测到旧激活记录格式，已清空并要求重新激活: {} ({e})",
-                security::sanitize_path(&path)
-            );
-            save_activations(app, &[]).map_err(|write_err| {
-                format!("解析激活记录文件失败: {e}; 清理旧激活记录失败: {write_err}")
-            })?;
-            Ok(Vec::new())
-        }
-        Err(e) => Err(format!("解析激活记录文件失败: {e}")),
-    }
-}
-
-fn is_stale_activation_schema(raw: &str, parse_error: &str) -> bool {
-    raw.contains("\"org\"") || parse_error.contains("missing field `institution_code`")
+    serde_json::from_str::<StoredActivations>(&raw)
+        .map(|stored| stored.activations)
+        .map_err(|e| format!("解析 CID 管理员激活记录文件失败: {e}"))
 }
 
 fn normalize_hash_hex(value: &str, field: &str) -> Result<String, String> {
@@ -254,9 +232,6 @@ fn validate_activation_account(
             ));
         }
     }
-    if state.status != 1 {
-        return Err("管理员账户不是已激活状态，不能激活本地管理员身份".to_string());
-    }
     match state.kind {
         0 if is_fixed_governance_code(&state.institution_code)
             || is_public_legal_code(&state.institution_code)
@@ -273,66 +248,34 @@ fn validate_activation_account(
     }
 }
 
-/// 动态机构账户激活必须提供 accountHex，内置 cidNumber 只能定位固定治理机构。
-fn requires_account_hex(expected_code: Option<InstitutionCode>) -> bool {
-    matches!(expected_code, Some(code) if !is_fixed_governance_code(&code))
-}
-
 fn fetch_chain_account(
     cid_number: &str,
-    account_hex: Option<String>,
     expected_code: Option<InstitutionCode>,
 ) -> Result<AdminAccountState, String> {
-    let state = if let Some(account_hex) = account_hex.filter(|item| !item.trim().is_empty()) {
-        let account_id = account_id::account_id_from_hex(&account_hex)?;
-        storage::fetch_admin_account(&account_id, Some(cid_number.to_string()))?
-            .ok_or_else(|| "链上不存在该管理员账户".to_string())?
-    } else {
-        if requires_account_hex(expected_code) {
-            return Err("动态机构管理员激活必须提供 accountHex".to_string());
-        }
-        storage::fetch_admin_account_by_cid_number(cid_number)?
-            .ok_or_else(|| "链上不存在该管理员账户".to_string())?
-    };
+    let state = storage::fetch_admin_account_by_cid_number(cid_number)?
+        .ok_or_else(|| "链上不存在该 CID 的管理员集合".to_string())?;
     validate_activation_account(&state, expected_code)?;
     Ok(state)
 }
 
-fn resolve_activation_account_hex(
-    cid_number: &str,
-    account_hex: Option<String>,
-    expected_code: Option<InstitutionCode>,
-) -> Result<String, String> {
-    if let Some(account_hex) = account_hex.filter(|item| !item.trim().is_empty()) {
-        let account_id = account_id::account_id_from_hex(&account_hex)?;
-        return Ok(hex::encode(account_id));
-    }
-    if requires_account_hex(expected_code) {
-        return Err("动态机构管理员激活必须提供 accountHex".to_string());
-    }
-    let account_id = account_id::account_id_from_builtin_cid(cid_number)?;
-    Ok(hex::encode(account_id))
-}
-
-/// 构建 AccountId 级激活 payload。
+/// 构建 CID 级激活 payload；字节布局唯一真源在 `primitives::sign`。
 fn build_activate_payload(
-    account_id: &[u8; 32],
+    cid_number: &str,
     institution_code: &InstitutionCode,
     kind: u8,
     pubkey: &[u8; 32],
     timestamp: u64,
 ) -> Vec<u8> {
-    let mut payload = Vec::with_capacity(ACTIVATE_ADMIN_PAYLOAD_LEN);
-    payload.extend_from_slice(&binary_domain_prefix(OP_SIGN_ACTIVATE_ADMIN));
-    payload.extend_from_slice(account_id);
-    // institution_code: [u8;4] 定长，4 个裸字节。
-    payload.extend_from_slice(institution_code);
-    payload.push(kind);
-    payload.extend_from_slice(pubkey);
-    payload.extend_from_slice(&timestamp.to_le_bytes());
     let nonce: [u8; 16] = rand::random();
-    payload.extend_from_slice(&nonce);
-    payload
+    activate_admin_payload(
+        cid_number.as_bytes(),
+        institution_code,
+        kind,
+        pubkey,
+        timestamp,
+        &nonce,
+    )
+    .expect("已通过链上 CID 校验的 cid_number 必须适配签名协议")
 }
 
 fn decode_activate_payload(payload_bytes: &[u8]) -> Result<ActivationPayload, String> {
@@ -348,9 +291,14 @@ fn decode_activate_payload(payload_bytes: &[u8]) -> Result<ActivationPayload, St
         return Err("激活 payload 前缀无效".to_string());
     }
     let mut offset = BINARY_PREFIX_LEN;
-    let mut account_id = [0u8; 32];
-    account_id.copy_from_slice(&payload_bytes[offset..offset + 32]);
-    offset += 32;
+    let cid_bytes = &payload_bytes[offset..offset + ACTIVATE_ADMIN_CID_LEN];
+    offset += ACTIVATE_ADMIN_CID_LEN;
+    let cid_end = cid_bytes.iter().position(|byte| *byte == 0).unwrap_or(cid_bytes.len());
+    if cid_end == 0 || cid_bytes[cid_end..].iter().any(|byte| *byte != 0) {
+        return Err("激活 payload CID 固定槽无效".to_string());
+    }
+    let cid_number = String::from_utf8(cid_bytes[..cid_end].to_vec())
+        .map_err(|_| "激活 payload CID 不是 UTF-8".to_string())?;
     let institution_code: InstitutionCode = payload_bytes[offset..offset + 4]
         .try_into()
         .map_err(|_| "激活 payload 机构码长度无效".to_string())?;
@@ -359,7 +307,7 @@ fn decode_activate_payload(payload_bytes: &[u8]) -> Result<ActivationPayload, St
     offset += 1;
     let pubkey_hex = hex::encode(&payload_bytes[offset..offset + 32]);
     Ok(ActivationPayload {
-        account_id,
+        cid_number,
         institution_code,
         kind,
         pubkey_hex,
@@ -369,7 +317,7 @@ fn decode_activate_payload(payload_bytes: &[u8]) -> Result<ActivationPayload, St
 fn activated_admin_from_stored(item: &StoredActivation) -> ActivatedAdmin {
     ActivatedAdmin {
         pubkey_hex: item.pubkey_hex.clone(),
-        account_hex: item.account_hex.clone(),
+        cid_number: item.cid_number.clone(),
         institution_code: item.institution_code,
         kind: item.kind,
         activated_at_ms: item.activated_at_ms,
@@ -380,14 +328,13 @@ fn activated_admin_from_stored(item: &StoredActivation) -> ActivatedAdmin {
 
 /// 构建管理员激活签名请求 QR JSON（需要节点运行）。
 ///
-/// 验证公钥确实在该 admin-management 账户的链上管理员列表中，
-/// 然后生成 QR_V1/k=1 格式的 AccountId 级签名请求。
+/// 验证公钥确实在该 CID 的链上管理员列表中，
+/// 然后生成 QR_V1/k=1 格式的 CID 级签名请求。
 #[tauri::command]
 pub async fn build_activate_admin_request(
     app: AppHandle,
     pubkey_hex: String,
     cid_number: String,
-    account_hex: Option<String>,
     expected_institution_code: Option<String>,
 ) -> Result<ActivateRequestResult, String> {
     let status = home::current_status(&app)?;
@@ -404,10 +351,7 @@ pub async fn build_activate_admin_request(
 
     let expected_code = parse_expected_code(expected_institution_code.as_deref());
     let sid = cid_number.clone();
-    let account = account_hex.clone();
-    let state = tauri::async_runtime::spawn_blocking(move || {
-        fetch_chain_account(&sid, account, expected_code)
-    })
+    let state = tauri::async_runtime::spawn_blocking(move || fetch_chain_account(&sid, expected_code))
     .await
     .map_err(|e| format!("查询管理员账户失败: {e}"))??;
 
@@ -418,17 +362,16 @@ pub async fn build_activate_admin_request(
     let activations = load_activations(&app)?;
     if activations.iter().any(|a| {
         a.pubkey_hex == pubkey_clean
-            && a.account_hex == state.account_hex
+            && a.cid_number == state.cid_number
             && a.institution_code == state.institution_code
             && a.kind == state.kind
     }) {
         return Err("该管理员已激活，无需重复操作".to_string());
     }
 
-    let account_id = account_id::account_id_from_hex(&state.account_hex)?;
     let timestamp = now_secs();
     let payload = build_activate_payload(
-        &account_id,
+        &state.cid_number,
         &state.institution_code,
         state.kind,
         &pubkey_array,
@@ -566,12 +509,12 @@ pub async fn verify_activate_admin(
         return Err("激活 payload 中的管理员公钥与签名公钥不一致".to_string());
     }
 
-    let account_hex = hex::encode(decoded.account_id);
+    let decoded_cid_number = decoded.cid_number.clone();
     let state = tauri::async_runtime::spawn_blocking({
-        let account_id = decoded.account_id;
+        let cid_number = decoded.cid_number.clone();
         move || {
-            storage::fetch_admin_account(&account_id, None)?
-                .ok_or_else(|| "链上不存在该管理员账户".to_string())
+            storage::fetch_admin_account(&cid_number)?
+                .ok_or_else(|| "链上不存在该 CID 的管理员集合".to_string())
         }
     })
     .await
@@ -621,11 +564,13 @@ pub async fn verify_activate_admin(
     }
 
     let mut activations = load_activations(&app)?;
-    activations.retain(|a| !(a.pubkey_hex == pubkey_clean && a.account_hex == account_hex));
+    activations.retain(|a| {
+        !(a.pubkey_hex == pubkey_clean && a.cid_number == decoded_cid_number)
+    });
     let activated_at = now_ms();
     activations.push(StoredActivation {
         pubkey_hex: pubkey_clean.clone(),
-        account_hex: account_hex.clone(),
+        cid_number: decoded_cid_number.clone(),
         institution_code: decoded.institution_code,
         kind: decoded.kind,
         activated_at_ms: activated_at,
@@ -638,9 +583,9 @@ pub async fn verify_activate_admin(
         &app,
         "activate_admin_account",
         &format!(
-            "success pubkey={} account={}",
+            "success pubkey={} cid_number={}",
             &pubkey_clean[..8],
-            &account_hex
+            &decoded_cid_number
         ),
     ) {
         eprintln!("[审计] activate_admin_account success 日志写入失败: {e}");
@@ -648,7 +593,7 @@ pub async fn verify_activate_admin(
 
     Ok(ActivatedAdmin {
         pubkey_hex: pubkey_clean,
-        account_hex,
+        cid_number: decoded_cid_number,
         institution_code: decoded.institution_code,
         kind: decoded.kind,
         activated_at_ms: activated_at,
@@ -665,17 +610,14 @@ pub async fn verify_activate_admin(
 pub async fn get_activated_admins(
     app: AppHandle,
     cid_number: String,
-    account_hex: Option<String>,
     expected_institution_code: Option<String>,
 ) -> Result<Vec<ActivatedAdmin>, String> {
     let expected_code = parse_expected_code(expected_institution_code.as_deref());
-    let lookup_account_hex =
-        resolve_activation_account_hex(&cid_number, account_hex.clone(), expected_code)?;
     let mut activations = load_activations(&app)?;
 
     let account_activations: Vec<&StoredActivation> = activations
         .iter()
-        .filter(|a| a.account_hex == lookup_account_hex)
+        .filter(|a| a.cid_number == cid_number)
         .collect();
 
     if account_activations.is_empty() {
@@ -685,10 +627,7 @@ pub async fn get_activated_admins(
     let status = home::current_status(&app)?;
     if status.running {
         let sid = cid_number.clone();
-        let account = account_hex.clone();
-        let state = tauri::async_runtime::spawn_blocking(move || {
-            fetch_chain_account(&sid, account, expected_code)
-        })
+        let state = tauri::async_runtime::spawn_blocking(move || fetch_chain_account(&sid, expected_code))
         .await
         .map_err(|e| format!("查询管理员账户失败: {e}"));
 
@@ -696,7 +635,7 @@ pub async fn get_activated_admins(
             Ok(Ok(state)) => {
                 let before_len = activations.len();
                 activations.retain(|a| {
-                    if a.account_hex != lookup_account_hex {
+                    if a.cid_number != cid_number {
                         return true;
                     }
                     a.institution_code == state.institution_code
@@ -712,10 +651,9 @@ pub async fn get_activated_admins(
             }
             Ok(Err(e))
                 if e.contains("链上不存在")
-                    || e.contains("不是已激活")
                     || e.contains("类型与机构码不匹配") =>
             {
-                activations.retain(|a| a.account_hex != lookup_account_hex);
+                activations.retain(|a| a.cid_number != cid_number);
                 let _ = save_activations(&app, &activations);
                 return Ok(Vec::new());
             }
@@ -725,7 +663,7 @@ pub async fn get_activated_admins(
 
     Ok(activations
         .iter()
-        .filter(|a| a.account_hex == lookup_account_hex)
+        .filter(|a| a.cid_number == cid_number)
         .map(activated_admin_from_stored)
         .collect())
 }
@@ -736,7 +674,6 @@ pub fn deactivate_admin(
     app: AppHandle,
     pubkey_hex: String,
     cid_number: String,
-    account_hex: Option<String>,
     expected_institution_code: Option<String>,
     unlock_password: String,
 ) -> Result<(), String> {
@@ -749,12 +686,15 @@ pub fn deactivate_admin(
 
     let pubkey_clean = account_id::normalize_pubkey_hex(&pubkey_hex)?;
     let expected_code = parse_expected_code(expected_institution_code.as_deref());
-    let lookup_account_hex =
-        resolve_activation_account_hex(&cid_number, account_hex, expected_code)?;
+    if let Some(code) = expected_code {
+        let state = storage::fetch_admin_account_by_cid_number(&cid_number)?
+            .ok_or_else(|| "链上不存在该 CID 的管理员集合".to_string())?;
+        validate_activation_account(&state, Some(code))?;
+    }
 
     let mut activations = load_activations(&app)?;
     let before_len = activations.len();
-    activations.retain(|a| !(a.pubkey_hex == pubkey_clean && a.account_hex == lookup_account_hex));
+    activations.retain(|a| !(a.pubkey_hex == pubkey_clean && a.cid_number == cid_number));
 
     if activations.len() == before_len {
         return Err("未找到该管理员的激活记录".to_string());
@@ -766,9 +706,9 @@ pub fn deactivate_admin(
         &app,
         "deactivate_admin",
         &format!(
-            "success pubkey={} account={}",
+            "success pubkey={} cid_number={}",
             &pubkey_clean[..pubkey_clean.len().min(8)],
-            &lookup_account_hex
+            &cid_number
         ),
     ) {
         eprintln!("[审计] deactivate_admin success 日志写入失败: {e}");

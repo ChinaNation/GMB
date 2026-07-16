@@ -136,15 +136,19 @@ fn sign_intent(
     bytes
 }
 
-/// 用清算行管理员密钥对 `(institution_main, batch_seq, batch.encode())` 签名。
+/// 用清算行管理员密钥对 `(actor_cid_number, institution_account, batch_seq, batch)` 签名。
 fn sign_batch(
-    institution_main: &AccountId32,
+    institution_account: &AccountId32,
     batch_seq: u64,
     batch: &BoundedVec<OffchainBatchItem<AccountId32, u64>, <Test as Config>::MaxBatchSize>,
 ) -> BatchSignatureOf<Test> {
     use sp_core::crypto::Pair as _;
-    let message =
-        crate::batch_item::batch_signing_hash(institution_main, batch_seq, &batch.encode());
+    let message = crate::batch_item::batch_signing_hash(
+        BANK_CID,
+        institution_account,
+        batch_seq,
+        &batch.encode(),
+    );
     bank_admin_pair()
         .sign(&message)
         .0
@@ -203,6 +207,7 @@ fn submit_batch_rejects_non_admin() {
         assert_noop!(
             OffchainTx::submit_offchain_batch(
                 RuntimeOrigin::signed(alice.clone()),
+                bank_cid(),
                 bank_main(),
                 1,
                 batch.clone(),
@@ -261,6 +266,7 @@ fn submit_batch_rejects_invalid_batch_signature() {
         assert_noop!(
             OffchainTx::submit_offchain_batch(
                 RuntimeOrigin::signed(bank_admin()),
+                bank_cid(),
                 bank_main(),
                 1,
                 batch,
@@ -318,6 +324,7 @@ fn submit_batch_rejects_wrong_batch_seq() {
         assert_noop!(
             OffchainTx::submit_offchain_batch(
                 RuntimeOrigin::signed(bank_admin()),
+                bank_cid(),
                 bank_main(),
                 2,
                 batch.clone(),
@@ -386,6 +393,7 @@ fn submit_batch_same_bank_end_to_end() {
 
         assert_ok!(OffchainTx::submit_offchain_batch(
             RuntimeOrigin::signed(bank_admin()),
+            bank_cid(),
             bank_main(),
             1,
             batch.clone(),
@@ -462,6 +470,7 @@ fn submit_batch_same_bank_end_to_end() {
         assert_noop!(
             OffchainTx::submit_offchain_batch(
                 RuntimeOrigin::signed(bank_admin()),
+                bank_cid(),
                 bank_main(),
                 2,
                 replay_batch.clone(),
@@ -521,6 +530,7 @@ fn submit_batch_rejects_user_bank_mismatch() {
         assert_noop!(
             OffchainTx::submit_offchain_batch(
                 RuntimeOrigin::signed(bank_admin()),
+                bank_cid(),
                 bank_main(),
                 1,
                 batch.clone(),
@@ -582,6 +592,7 @@ fn submit_batch_expired_intent_rejected() {
         assert_noop!(
             OffchainTx::submit_offchain_batch(
                 RuntimeOrigin::signed(bank_admin()),
+                bank_cid(),
                 bank_main(),
                 1,
                 batch.clone(),

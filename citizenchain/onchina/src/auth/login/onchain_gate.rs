@@ -99,8 +99,7 @@ fn candidate_from_membership_conn(
         candidate_id: membership.candidate_id(),
         institution_code: institution_code.clone(),
         admin_level: chain_runtime::admin_level_label_for(&institution_code),
-        institution_cid_number: None,
-        institution_main_account: membership.main_account_hex(),
+        institution_cid_number: Some(membership.cid_number.clone()),
         frg_province_code: membership.frg_province_code_hex(),
         cid_full_name: None,
         cid_short_name: None,
@@ -396,7 +395,6 @@ async fn revoke_stale_admin_sessions_once(db: &Db) -> Result<(), String> {
     let identity = chain_runtime::identity_from_binding_parts(
         &binding.candidate.institution_code,
         binding.candidate.institution_cid_number.as_deref(),
-        binding.candidate.institution_main_account.as_deref(),
         binding.candidate.frg_province_code.as_deref(),
     )?;
     let Some(onchain_admins) = chain_runtime::fetch_active_admins_onchain(&identity).await? else {

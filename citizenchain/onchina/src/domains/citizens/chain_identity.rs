@@ -247,7 +247,7 @@ pub(crate) async fn complete_citizen_onchain_signature(
         );
     }
 
-    let registrar_account = match active_registry_main_account(&state) {
+    let actor_cid_number = match active_registry_cid_number(&state) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -257,7 +257,7 @@ pub(crate) async fn complete_citizen_onchain_signature(
     };
     let call = encode_citizen_identity_call(
         payload.identity_level,
-        &registrar_account,
+        &actor_cid_number,
         &payload.payload_bytes,
         &signature_bytes,
     );
@@ -661,9 +661,9 @@ fn normalize_prefixed_hex(value: &str) -> &str {
         .unwrap_or(value)
 }
 
-pub(crate) fn active_registry_main_account(
+pub(crate) fn active_registry_cid_number(
     state: &AppState,
-) -> Result<[u8; 32], axum::response::Response> {
+) -> Result<String, axum::response::Response> {
     let binding = crate::auth::repo::active_node_binding(&state.db).map_err(|err| {
         tracing::error!(error = %err, "query active registry binding failed");
         api_error(
@@ -672,29 +672,36 @@ pub(crate) fn active_registry_main_account(
             "注册局绑定查询失败",
         )
     })?;
-    let main_account = binding
-        .and_then(|b| b.candidate.institution_main_account)
+    let cid_number = binding
+        .and_then(|binding| binding.candidate.institution_cid_number)
         .ok_or_else(|| {
             api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "当前注册局缺少机构主账户绑定",
+                "当前注册局缺少机构 CID 绑定",
             )
         })?;
-    parse_sr25519_pubkey_bytes(main_account.as_str())
-        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, 1001, "注册局机构主账户格式错误"))
+    if cid_number.is_empty() || cid_number.len() > 32 {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "注册局机构 CID 格式错误",
+        ));
+    }
+    Ok(cid_number)
 }
 
 fn encode_citizen_identity_call(
     identity_level: CitizenOnchainIdentityLevel,
-    registrar_account: &[u8; 32],
+    actor_cid_number: &str,
     payload_bytes: &[u8],
     citizen_signature: &[u8; 64],
 ) -> Vec<u8> {
     let mut out = Vec::new();
     out.push(CITIZEN_IDENTITY_PALLET_INDEX);
     out.push(identity_level.call_index());
-    out.extend_from_slice(registrar_account);
+    out.extend(Compact(actor_cid_number.len() as u32).encode());
+    out.extend_from_slice(actor_cid_number.as_bytes());
     out.extend_from_slice(payload_bytes);
     out.extend(Compact(citizen_signature.len() as u32).encode());
     out.extend_from_slice(citizen_signature);

@@ -93,6 +93,9 @@ export interface InstitutionAccount {
   cid_number: string;
   account_name: string;
   account: string | null;
+  account_kind: 'main' | 'fee' | 'stake' | 'safety_fund' | 'he' | 'named';
+  can_close: boolean;
+  can_delete: boolean;
   chain_status: MultisigChainStatus;
   chain_synced_at?: string | null;
   chain_tx_hash: string | null;

@@ -4,7 +4,7 @@
 
 use codec::{Compact, Encode};
 
-use crate::{cid::china::china_sqlite_hash, parse_sr25519_pubkey_bytes};
+use crate::cid::china::china_sqlite_hash;
 
 use super::{
     model::{AddressChainAction, AddressChainCallInput, AddressChainCallOutput},
@@ -44,11 +44,6 @@ fn parse_h256(raw: &str) -> Result<[u8; 32], String> {
     Ok(out)
 }
 
-fn registrar_account_bytes(input: &AddressChainCallInput) -> Result<[u8; 32], String> {
-    parse_sr25519_pubkey_bytes(input.registrar_account.trim())
-        .ok_or_else(|| "registrar_account is invalid".to_string())
-}
-
 fn action_code(call_index: u8) -> u16 {
     crate::core::institution_call::chain_action_code(ADDRESS_REGISTRY_PALLET_INDEX, call_index)
 }
@@ -68,9 +63,12 @@ fn output(
 }
 
 pub(crate) fn build_address_chain_call(
+    actor_cid_number: &str,
     input: &AddressChainCallInput,
 ) -> Result<AddressChainCallOutput, String> {
-    let registrar_account = registrar_account_bytes(input)?;
+    if actor_cid_number.is_empty() || actor_cid_number.len() > 32 {
+        return Err("actor_cid_number is invalid".to_string());
+    }
     let mut out = Vec::new();
     out.push(ADDRESS_REGISTRY_PALLET_INDEX);
     let call_index = match input.action {
@@ -81,7 +79,7 @@ pub(crate) fn build_address_chain_call(
         AddressChainAction::RemoveAddress => CALL_REMOVE_ADDRESS,
     };
     out.push(call_index);
-    out.extend_from_slice(&registrar_account);
+    push_vec(&mut out, actor_cid_number.as_bytes());
 
     match input.action {
         AddressChainAction::SetCatalogVersion => {

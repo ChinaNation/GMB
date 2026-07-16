@@ -11,10 +11,8 @@ impl<T: Config> Pallet<T> {
     #[allow(clippy::too_many_arguments)]
     pub fn do_create_popular_election(
         who: T::AccountId,
-        organizer_code: votingengine::InstitutionCode,
-        organizer: T::AccountId,
-        target_code: votingengine::InstitutionCode,
-        target: T::AccountId,
+        actor_cid_number: votingengine::types::CidNumber,
+        target_cid_number: votingengine::types::CidNumber,
         office_code: frame_support::pallet_prelude::BoundedVec<u8, MaxElectionOfficeCodeOf<T>>,
         rule_id: u32,
         seat_count: u16,
@@ -26,10 +24,8 @@ impl<T: Config> Pallet<T> {
         Self::do_create_election(
             who,
             crate::types::ElectionMode::Popular,
-            organizer_code,
-            organizer,
-            target_code,
-            target,
+            actor_cid_number,
+            target_cid_number,
             office_code,
             rule_id,
             seat_count,

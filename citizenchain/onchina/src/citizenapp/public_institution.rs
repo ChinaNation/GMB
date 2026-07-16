@@ -44,7 +44,6 @@ const GOV_FROM_WHERE: &str = "
     LEFT JOIN subjects par ON par.cid_number = s.parent_cid_number
     LEFT JOIN gov pg ON pg.province_code = par.province_code AND pg.cid_number = par.cid_number
     WHERE s.kind IN ('PUBLIC', 'PRIVATE')
-      AND s.status = 'ACTIVE'
       AND (
             (s.kind = 'PUBLIC'
              AND g.source = 'CHAIN'
@@ -77,7 +76,6 @@ pub(crate) struct PublicInstitutionRow {
     pub cid_full_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cid_short_name: Option<String>,
-    pub status: String,
     pub category: InstitutionCategory,
     pub p1: String,
     /// 行政区**唯一真源键**:省/市/镇 code(= subjects province_code/city_code/town_code)。
@@ -114,7 +112,6 @@ impl PublicInstitutionRow {
             cid_number: row.get("cid_number"),
             cid_full_name: row.get("cid_full_name"),
             cid_short_name: row.get("cid_short_name"),
-            status: row.get("status"),
             category: parse_category(row.get::<_, String>("category").as_str()),
             p1: row.get("p1"),
             province_code: row.get("province_code"),
@@ -341,7 +338,7 @@ fn query_public_institutions(
     // 全列显式 AS 别名,from_pg_row 按列名取;行政区只下发 code(province_code/city_code/town_code),不吐名字。
     let sql = format!(
         "SELECT s.cid_number,
-                s.cid_full_name, s.cid_short_name, s.status, s.category,
+                s.cid_full_name, s.cid_short_name, s.category,
                 s.p1,
                 s.province_code AS province_code, s.city_code AS city_code,
                 COALESCE(s.town_code, '') AS town_code,
@@ -447,7 +444,6 @@ mod tests {
             cid_number: "AH001-PGV0C-123456789-2026".to_string(),
             cid_full_name: Some("安徽省人民政府".to_string()),
             cid_short_name: Some("皖府".to_string()),
-            status: "ACTIVE".to_string(),
             category: InstitutionCategory::GovInstitution,
             p1: "0".to_string(),
             province_code: "AH".to_string(),

@@ -12,8 +12,6 @@ export type EligibleClearingBankCandidate = {
   parentRefProperty?: string | null;
   provinceName: string;
   cityName: string;
-  /** 主账户当前链上状态:Pending / Active / Closed / Failed。 */
-  mainChainStatus: 'Pending' | 'Active' | 'Closed' | 'Failed';
   mainAccount?: string | null;
   feeAccount?: string | null;
 };
@@ -26,14 +24,13 @@ export type AccountWithBalance = {
   balanceMinUnits: string;
   /** 友好元字符串 `xxx.xx`。 */
   balanceText: string;
-  isDefault: boolean;
+  accountKind: 'main' | 'fee' | 'stake' | 'safety_fund' | 'he' | 'named';
+  canClose: boolean;
 };
 
 export type InstitutionDetail = {
   cidNumber: string;
   cidFullName: string;
-  /** 机构管理员读取使用的机构多签 AccountId，清算行指向主账户。 */
-  adminAccountHex: string;
   /** 机构码（CID institution_code，[u8;4] 序列化为数字数组）。 */
   institutionCode: number[];
 
@@ -47,8 +44,6 @@ export type InstitutionDetail = {
   /** 管理员钱包及其全部有效岗位任职。 */
   admins: InstitutionAdminInfo[];
 
-  /** 机构生命周期:Pending(投票中)/ Active(已生效)/ Closed(已注销)。 */
-  status: 'Pending' | 'Active' | 'Closed';
   createdAt: number;
   accountCount: number;
 };
@@ -78,12 +73,10 @@ export type InstitutionRegistrationCredentialResp = {
   genesis_hash: string;
   /** 防重放 nonce(本次响应生成的随机字符串)。 */
   register_nonce: string;
-  /** 签发机构 CID 号。 */
-  issuer_cid_number: string;
-  /** 签发机构主账户(32 字节 hex)。 */
-  issuer_main_account: string;
-  /** 本次签名所用机构管理员公钥(32 字节 hex)。 */
-  signer_pubkey: string;
+  /** 代表签发机构的唯一 CID。 */
+  actor_cid_number: string;
+  /** 本次凭证签名所用管理员公钥(32 字节 hex)。 */
+  credential_signer_pubkey: string;
   /** 业务作用域省名。 */
   scope_province_name: string;
   /** 业务作用域市名。 */

@@ -9,9 +9,8 @@ import type { AdminWalletMatch, VoteSignRequestResult } from './types';
 
 type Props = {
   cidNumber: string;
-  institutionCode: string;
   cidFullName: string;
-  mainAccount: string;
+  institutionAccount: string;
   adminWallets: AdminWalletMatch[];
   onBack: () => void;
   onSuccess: () => void;
@@ -20,7 +19,7 @@ type Props = {
 type Step = 'form' | 'qr' | 'submit' | 'done' | 'error';
 
 export function CreateMultisigTransferPage({
-  cidNumber, institutionCode, cidFullName, mainAccount, adminWallets, onBack, onSuccess,
+  cidNumber, cidFullName, institutionAccount, adminWallets, onBack, onSuccess,
 }: Props) {
   const [step, setStep] = useState<Step>('form');
 
@@ -82,7 +81,7 @@ export function CreateMultisigTransferPage({
       formValuesRef.current = { beneficiary: beneficiary.trim(), amountYuan: amount, remark };
 
       const result = await api.buildMultisigTransferRequest(
-        selectedWallet!.pubkeyHex, cidNumber, institutionCode,
+        selectedWallet!.pubkeyHex, cidNumber, institutionAccount,
         beneficiary.trim(), amount, remark,
       );
 
@@ -111,7 +110,7 @@ export function CreateMultisigTransferPage({
       const { beneficiary: ben, amountYuan: amt, remark: rmk } = formValuesRef.current;
       const result = await api.submitMultisigTransfer(
         req.requestId, wallet.pubkeyHex, req.expectedPayloadHash,
-        cidNumber, institutionCode, ben, amt, rmk,
+        cidNumber, institutionAccount, ben, amt, rmk,
         req.signNonce, req.signBlockNumber, responseText,
       );
       setTxHash(result.txHash);
@@ -120,7 +119,7 @@ export function CreateMultisigTransferPage({
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [cidNumber, institutionCode]);
+  }, [cidNumber, institutionAccount]);
 
   return (
     <div className="governance-section">
@@ -158,7 +157,7 @@ export function CreateMultisigTransferPage({
 
           <div className="wallet-form-field">
             <label>转出地址（机构多签）</label>
-            <input type="text" value={hexToSs58(mainAccount)} disabled />
+            <input type="text" value={hexToSs58(institutionAccount)} disabled />
           </div>
 
           <div className="wallet-form-field">

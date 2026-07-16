@@ -40,17 +40,32 @@ class PalletRegistry {
   // ---- CitizenIdentity (10) · 公民链上身份 ----
   static const int citizenIdentityPallet = 10;
 
-  /// `register_voting_identity(registrar_account, payload, citizen_signature)`。
+  /// `register_voting_identity(actor_cid_number, payload, citizen_signature)`。
   static const int registerVotingIdentityCall = 0;
 
-  /// `upgrade_to_candidate_identity(registrar_account, payload, citizen_signature)`。
+  /// `upgrade_to_candidate_identity(actor_cid_number, payload, citizen_signature)`。
   static const int upgradeToCandidateIdentityCall = 1;
 
-  /// `occupy_cid(registrar_account, cid_number, commitment, province_code, city_code)`
+  /// `update_voting_identity(actor_cid_number, payload, citizen_signature)`。
+  static const int updateVotingIdentityCall = 2;
+
+  /// `update_candidate_identity(actor_cid_number, payload, citizen_signature)`。
+  static const int updateCandidateIdentityCall = 3;
+
+  /// `revoke_identity(actor_cid_number, cid_number)`。
+  static const int revokeIdentityCall = 4;
+
+  /// `prepare_population_snapshot(scope)`；第 4 步才会删除。
+  static const int prepareCitizenPopulationSnapshotCall = 5;
+
+  /// `occupy_cid(actor_cid_number, cid_number, commitment, province_code, city_code)`
   /// — 注册局建档「占号」:链上原子验格式+查重+登记 CID 号(注册局签名)。
   static const int occupyCidCall = 6;
 
-  /// `revoke_cid(registrar_account, cid_number)`
+  /// `occupy_cids_batch(actor_cid_number, items, province_code, city_code)`。
+  static const int occupyCidsBatchCall = 7;
+
+  /// `revoke_cid(actor_cid_number, cid_number)`
   /// — 注册局吊销 CID 号(墓碑,永不复用;注册局签名)。
   static const int revokeCidCall = 8;
 
@@ -63,13 +78,13 @@ class PalletRegistry {
   // ---- JointVote sub-pallet (21) · 联合投票(内部投票阶段 + 联合公投)----
   static const int jointVotePallet = 21;
 
-  /// `cast_admin(proposal_id, institution_account, approve)` — 联合投票内部投票阶段。
+  /// `cast_admin(proposal_id, cid_number, approve)` — 联合投票内部投票阶段。
   static const int jointVoteCall = 0;
 
   /// `cast_referendum(proposal_id, approve)` — 联合公投阶段,链上按账户读取公民身份。
   static const int castReferendumCall = 1;
 
-  /// `prepare_joint_population_snapshot(scope)` — 联合公投提案发起前准备链上人口分母。
+  /// `prepare_joint_population_snapshot(actor_cid_number, scope)` — 联合公投提案发起前准备链上人口分母。
   static const int preparePopulationSnapshotCall = 2;
 
   // ---- 业务 pallet:仅承载提案创建与幂等兜底入口 ----
@@ -90,16 +105,17 @@ class PalletRegistry {
   static const int developerDirectUpgradeCall = 2;
 
   // ---- PublicManage (30) / PrivateManage (31) ----
-  // 公权机构与私权机构生命周期分别由两个 pallet 承载。
+  // 公权机构与私权机构登记管理分别由两个 pallet 承载。
   static const int publicManagePallet = 30;
   static const int privateManagePallet = 31;
   static const int proposeCloseInstitutionCall = 1;
-  static const int registerCidInstitutionCall = 2;
   static const int cleanupRejectedInstitutionProposalCall = 4;
 
   /// `propose_create_*_institution` 携带机构公开信息、初始账户、岗位定义、
   /// 岗位任职、阈值和注册局凭证；管理员钱包集合由 entity 从有效任职派生。
   static const int proposeCreateInstitutionCall = 5;
+  static const int updateInstitutionInfoCall = 6;
+  static const int addInstitutionAccountCall = 7;
 
   // ---- PersonalManage (7) · 个人多签生命周期 ----
   // 个人多签独立 pallet,MODULE_TAG = b"per-mgmt",
@@ -183,4 +199,12 @@ class PalletRegistry {
   static const int registerClearingBankCall = 50;
   static const int updateClearingBankEndpointCall = 51;
   static const int unregisterClearingBankCall = 52;
+
+  // ---- AddressRegistry (33) · 注册局地址目录 ----
+  static const int addressRegistryPallet = 33;
+  static const int setAddressCatalogVersionCall = 0;
+  static const int setAddressNameCall = 1;
+  static const int removeAddressNameCall = 2;
+  static const int setAddressCall = 3;
+  static const int removeAddressCall = 4;
 }

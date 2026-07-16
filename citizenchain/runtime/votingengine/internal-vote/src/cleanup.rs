@@ -25,7 +25,8 @@ impl<T: Config> votingengine::traits::InternalCleanupHandler for Pallet<T> {
     fn cleanup_internal_terminal(proposal_id: u64) {
         InternalTallies::<T>::remove(proposal_id);
         InternalThresholdSnapshot::<T>::remove(proposal_id);
-        PendingAdminChangeThresholds::<T>::remove(proposal_id);
+        PendingPersonalThresholds::<T>::remove(proposal_id);
+        PendingPersonalAdminChangeThresholds::<T>::remove(proposal_id);
         InternalProposalRoles::<T>::remove(proposal_id);
     }
 }

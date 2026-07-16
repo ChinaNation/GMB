@@ -67,7 +67,8 @@ impl PoolBatchSubmitter {
 impl BatchSubmitter for PoolBatchSubmitter {
     fn submit(
         &self,
-        institution_main: AccountId32,
+        actor_cid_number: Vec<u8>,
+        institution_account: AccountId32,
         batch_seq: u64,
         batch_bytes: Vec<u8>,
         batch_signature: [u8; 64],
@@ -75,7 +76,10 @@ impl BatchSubmitter for PoolBatchSubmitter {
         // 1. 解回 Vec<OffchainBatchItem>
         let batch = decode_batch_items(&batch_bytes)?;
 
-        // 2. 构造 batch_signature 的 BoundedVec(runtime 端 BatchSignatureOf<T>)
+        // 2. 构造 CID 与 batch_signature 的 runtime 有界类型。
+        let actor_cid_number: offchain::InstitutionCidNumber = actor_cid_number
+            .try_into()
+            .map_err(|_| "actor_cid_number 超出 CID_NUMBER_MAX_BYTES".to_string())?;
         let sig_bounded = encode_bounded_sig::<runtime::Runtime>(&batch_signature)?;
 
         // 3. 构造 BoundedVec<OffchainBatchItem, MaxBatchSize>
@@ -84,7 +88,8 @@ impl BatchSubmitter for PoolBatchSubmitter {
         // 4. 拼 RuntimeCall
         let call = runtime::RuntimeCall::OffchainTransaction(
             offchain::pallet::Call::submit_offchain_batch {
-                institution_main: institution_main.clone(),
+                actor_cid_number: actor_cid_number.clone(),
+                institution_account: institution_account.clone(),
                 batch_seq,
                 batch: batch_bounded,
                 batch_signature: sig_bounded,
@@ -122,8 +127,9 @@ impl BatchSubmitter for PoolBatchSubmitter {
             futures::executor::block_on(fut).map_err(|e| format!("pool.submit_one 失败:{e:?}"))?;
 
         log::info!(
-            "[PoolBatchSubmitter] extrinsic submitted, institution={institution_main:?} \
+            "[PoolBatchSubmitter] extrinsic submitted, actor_cid_number={}, institution_account={institution_account:?} \
              batch_seq={batch_seq} nonce={nonce}"
+            , String::from_utf8_lossy(actor_cid_number.as_slice())
         );
 
         // `TxPool::Hash` 实际是 `H256`。用 SCALE 编解码做稳妥的跨类型转换。

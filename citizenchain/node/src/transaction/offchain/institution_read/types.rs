@@ -21,13 +21,11 @@ pub struct EligibleClearingBankCandidate {
     pub parent_ref_property: Option<String>,
     pub province_name: String,
     pub city_name: String,
-    /// 主账户当前链上状态:`Pending` / `Active` / `Closed` / `Failed`。
-    pub main_chain_status: String,
     pub main_account: Option<String>,
     pub fee_account: Option<String>,
 }
 
-/// 单账户的链上展示形态(地址 SS58 + 余额"分"+ is_default 标识)。
+/// 单账户的链上展示形态。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountWithBalance {
@@ -38,7 +36,10 @@ pub struct AccountWithBalance {
     pub balance_min_units: String,
     /// 友好元字符串 `xxx.xx`。
     pub balance_text: String,
-    pub is_default: bool,
+    /// 协议账户类别：main/fee/stake/safety_fund/he/named。
+    pub account_kind: String,
+    /// 只有 named 自定义账户允许关闭。
+    pub can_close: bool,
 }
 
 /// 机构管理员钱包及其全部有效岗位任职，与管理员管理模块共用同一 DTO。
@@ -51,8 +52,6 @@ pub type InstitutionAdminDisplay = crate::admins::management::types::Institution
 pub struct InstitutionDetail {
     pub cid_number: String,
     pub cid_full_name: String,
-    /// 机构管理员账户主键。清算行以主账户作为机构管理员账户。
-    pub admin_account_hex: String,
     /// 机构码（CID institution_code，[u8;4]）。清算行属于私权法人机构码。
     pub institution_code: InstitutionCode,
     pub main_account: AccountWithBalance,
@@ -63,8 +62,6 @@ pub struct InstitutionDetail {
     pub threshold: u32,
     /// 管理员钱包及其有效岗位任职。
     pub admins: Vec<InstitutionAdminDisplay>,
-    /// 机构生命周期:Pending(投票中)/ Active(已生效)/ Closed(已注销)。
-    pub status: String,
     pub created_at: u64,
     pub account_count: u32,
 }
@@ -105,12 +102,10 @@ pub struct InstitutionRegistrationCredentialResp {
     pub genesis_hash: String,
     /// 防重放 nonce(本次响应生成的随机字符串)。
     pub register_nonce: String,
-    /// 签发机构 CID 号。
-    pub issuer_cid_number: String,
-    /// 签发机构主账户(SS58 或 32 字节 hex)。
-    pub issuer_main_account: String,
-    /// 本次签名所用机构管理员公钥(32 字节 hex)。
-    pub signer_pubkey: String,
+    /// 代表签发机构的唯一 CID。
+    pub actor_cid_number: String,
+    /// 本次凭证签名所用管理员公钥(32 字节 hex)。
+    pub credential_signer_pubkey: String,
     /// 业务作用域省名,只参与 payload 防串用。
     pub scope_province_name: String,
     /// 业务作用域市名,可为空。

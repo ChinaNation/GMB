@@ -6,7 +6,7 @@
 
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
-use votingengine::InstitutionCode;
+use votingengine::types::CidNumber;
 
 /// 选举模式：普选或机构内部互选。
 #[derive(
@@ -42,14 +42,14 @@ impl ElectionMode {
 /// `office_code` 是业务模块给出的职位编码，例如总统、参议员、
 /// 院长等；本 pallet 只保存快照，不解释职位规则。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-pub struct ElectionMeta<AccountId, OfficeCode> {
+pub struct ElectionMeta<OfficeCode> {
     pub mode: ElectionMode,
     /// 普选固定人口作用域；互选为 None，资格来自机构 admins 快照。
     pub population_scope: Option<votingengine::PopulationScope>,
-    pub organizer_code: InstitutionCode,
-    pub organizer: AccountId,
-    pub target_code: InstitutionCode,
-    pub target: AccountId,
+    /// 发起机构 CID；机构码只允许从该 CID 解析，不在载荷或存储中保留第二身份真源。
+    pub actor_cid_number: CidNumber,
+    /// 任职目标机构 CID。
+    pub target_cid_number: CidNumber,
     pub office_code: OfficeCode,
     pub rule_id: u32,
     pub seat_count: u16,

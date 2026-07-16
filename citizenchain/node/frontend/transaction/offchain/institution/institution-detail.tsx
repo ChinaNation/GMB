@@ -100,12 +100,7 @@ export function ClearingBankInstitutionDetailPage({
 
       <div className="institution-title-row">
         <h2>{detail.cidFullName}</h2>
-        {detail.status === 'Pending' && (
-          <span className="status-badge status-pending" style={{ marginLeft: 8 }}>
-            创建提案投票中
-          </span>
-        )}
-        {!nodeInfo && detail.status === 'Active' && (
+        {!nodeInfo && (
           <button
             className="primary-button"
             style={{ marginLeft: 'auto' }}

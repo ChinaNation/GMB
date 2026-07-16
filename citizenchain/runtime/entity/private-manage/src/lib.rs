@@ -17,7 +17,7 @@ pub mod weights;
 mod tests;
 
 use admin_primitives::{
-    is_private_admin_code, AdminAccountKind, AdminAccountQuery, InstitutionAdminAccountLifecycle,
+    is_private_admin_code, AdminAccountKind, InstitutionAdminLifecycle, InstitutionAdminQuery,
 };
 use codec::{Decode, Encode};
 use frame_support::{
@@ -48,7 +48,7 @@ pub use institution::role::{
 };
 pub use institution::types::{
     CloseInstitutionAction, CreateInstitutionAccount, InstitutionAccountInfo, InstitutionInfo,
-    InstitutionInitialAccount, InstitutionLifecycleStatus, RegisteredInstitution,
+    InstitutionInitialAccount, RegisteredInstitution,
 };
 pub use primitives::account_derive::{AccountKind, RESERVED_NAME_FEE, RESERVED_NAME_MAIN};
 
@@ -73,13 +73,13 @@ pub mod pallet {
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
         /// 私权机构管理员生命周期写入口。
-        type AdminLifecycle: InstitutionAdminAccountLifecycle<Self::AccountId>;
+        type AdminLifecycle: InstitutionAdminLifecycle<Self::AccountId>;
 
         /// 兄弟机构生命周期查询入口，用于禁止同一 CID 在公权模块重复登记。
         type SiblingInstitutionQuery: InstitutionCidQuery<CidNumberOf<Self>>;
 
         /// 管理员统一查询入口，由 runtime 路由到公权/私权/创世管理员模块。
-        type AdminAccountQuery: AdminAccountQuery<Self::AccountId>;
+        type InstitutionAdminQuery: InstitutionAdminQuery<Self::AccountId>;
 
         type AccountValidator: AccountValidator<Self::AccountId>;
         type ReservedAccountChecker: ReservedAccountGuard<Self::AccountId>;
@@ -178,19 +178,6 @@ pub mod pallet {
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
-
-    /// CID 机构登记：(cid_number, account_name) -> account（由 blake2b_256 派生）。
-    /// 同一 cid_number 可通过不同 account_name 注册多个多签账户。
-    #[pallet::storage]
-    pub type CidRegisteredAccount<T: Config> = StorageDoubleMap<
-        _,
-        Blake2_128Concat,
-        CidNumberOf<T>,
-        Blake2_128Concat,
-        AccountNameOf<T>,
-        T::AccountId,
-        OptionQuery,
-    >;
 
     /// CID 机构登记反向索引：account -> { cid_number, nonce }
     #[pallet::storage]
@@ -343,7 +330,6 @@ pub mod pallet {
         /// 已完成的业务结果原子更新机构岗位、任职、法定代表人和 admins。
         InstitutionGovernanceApplied {
             cid_number: CidNumberOf<T>,
-            institution_account: T::AccountId,
             role_changes: u32,
             assignment_changes: u32,
             admins_len: u32,
@@ -547,51 +533,11 @@ pub mod pallet {
     /// ACTION = 1 永久保留空位,不复用。
     pub const ACTION_CLOSE: u8 = 2;
 
-    /// 注销凭证作用域:整机构(关主账户=级联关全部账户)/ 单账户(只关该非主账户)。
-    pub const SCOPE_INSTITUTION: u8 = 0;
-    pub const SCOPE_ACCOUNT: u8 = 1;
-
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         // NOTE: `call_index` values are the on-chain ABI and must remain stable.
 
         // call_index = 0 永久保留空位,不复用
-
-        /// CID 注册信息凭证批量登记机构账户地址。
-        ///
-        /// 本入口与身份注册局 `/registration-info` 对齐,业务字段只接收
-        /// `cid_number / cid_full_name / account_names[]`。机构类型、企业类型、
-        /// 所属法人关系只由身份注册局用于候选资格判断,不再进入链上注册 payload。
-        #[pallet::call_index(2)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::register_cid_private_institution())]
-        pub fn register_cid_private_institution(
-            origin: OriginFor<T>,
-            cid_number: CidNumberOf<T>,
-            cid_full_name: AccountNameOf<T>,
-            account_names: InstitutionAccountNamesOf<T>,
-            register_nonce: RegisterNonceOf<T>,
-            signature: RegisterSignatureOf<T>,
-            issuer_cid_number: Vec<u8>,
-            issuer_main_account: T::AccountId,
-            signer_pubkey: [u8; 32],
-            scope_province_name: Vec<u8>,
-            scope_city_name: Vec<u8>,
-        ) -> DispatchResult {
-            let submitter = ensure_signed(origin)?;
-            crate::institution::register::do_register_cid_private_institution::<T>(
-                submitter,
-                cid_number,
-                cid_full_name,
-                account_names,
-                register_nonce,
-                signature,
-                issuer_cid_number,
-                issuer_main_account,
-                signer_pubkey,
-                scope_province_name,
-                scope_city_name,
-            )
-        }
 
         /// 注册创建私权机构。
         ///
@@ -616,9 +562,8 @@ pub mod pallet {
             threshold: u32,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
-            issuer_cid_number: Vec<u8>,
-            issuer_main_account: T::AccountId,
-            signer_pubkey: [u8; 32],
+            actor_cid_number: Vec<u8>,
+            credential_signer_pubkey: [u8; 32],
             scope_province_name: Vec<u8>,
             scope_city_name: Vec<u8>,
         ) -> DispatchResult {
@@ -639,9 +584,8 @@ pub mod pallet {
                 threshold,
                 register_nonce,
                 signature,
-                issuer_cid_number,
-                issuer_main_account,
-                signer_pubkey,
+                actor_cid_number,
+                credential_signer_pubkey,
                 scope_province_name,
                 scope_city_name,
             )
@@ -659,9 +603,8 @@ pub mod pallet {
             cid_short_name: AccountNameOf<T>,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
-            issuer_cid_number: Vec<u8>,
-            issuer_main_account: T::AccountId,
-            signer_pubkey: [u8; 32],
+            actor_cid_number: Vec<u8>,
+            credential_signer_pubkey: [u8; 32],
             scope_province_name: Vec<u8>,
             scope_city_name: Vec<u8>,
         ) -> DispatchResult {
@@ -673,9 +616,8 @@ pub mod pallet {
                 cid_short_name,
                 register_nonce,
                 signature,
-                issuer_cid_number,
-                issuer_main_account,
-                signer_pubkey,
+                actor_cid_number,
+                credential_signer_pubkey,
                 scope_province_name,
                 scope_city_name,
             )
@@ -691,9 +633,8 @@ pub mod pallet {
             account_names: InstitutionAccountNamesOf<T>,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
-            issuer_cid_number: Vec<u8>,
-            issuer_main_account: T::AccountId,
-            signer_pubkey: [u8; 32],
+            actor_cid_number: Vec<u8>,
+            credential_signer_pubkey: [u8; 32],
             scope_province_name: Vec<u8>,
             scope_city_name: Vec<u8>,
         ) -> DispatchResult {
@@ -704,9 +645,8 @@ pub mod pallet {
                 account_names,
                 register_nonce,
                 signature,
-                issuer_cid_number,
-                issuer_main_account,
-                signer_pubkey,
+                actor_cid_number,
+                credential_signer_pubkey,
                 scope_province_name,
                 scope_city_name,
             )
@@ -722,24 +662,24 @@ pub mod pallet {
         #[allow(clippy::too_many_arguments)]
         pub fn propose_close_private_institution(
             origin: OriginFor<T>,
-            account: T::AccountId,
+            actor_cid_number: CidNumberOf<T>,
+            institution_account: T::AccountId,
             beneficiary: T::AccountId,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
-            issuer_cid_number: Vec<u8>,
-            issuer_main_account: T::AccountId,
-            signer_pubkey: [u8; 32],
+            credential_issuer_cid_number: Vec<u8>,
+            credential_signer_pubkey: [u8; 32],
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             crate::close::do_propose_institution_close::<T>(
                 who,
-                account,
+                actor_cid_number,
+                institution_account,
                 beneficiary,
                 register_nonce,
                 signature,
-                issuer_cid_number,
-                issuer_main_account,
-                signer_pubkey,
+                credential_issuer_cid_number,
+                credential_signer_pubkey,
             )
         }
 
@@ -780,10 +720,11 @@ pub mod pallet {
 
             match action_tag {
                 ACTION_CLOSE => {
-                    let action =
-                        CloseInstitutionAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
-                            .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-                    InstitutionPendingClose::<T>::remove(&action.account);
+                    let action = CloseInstitutionAction::<T::AccountId, CidNumberOf<T>>::decode(
+                        &mut &raw[tag.len() + 1..],
+                    )
+                    .map_err(|_| Error::<T>::ProposalActionNotFound)?;
+                    InstitutionPendingClose::<T>::remove(&action.institution_account);
                 }
                 _ => return Err(Error::<T>::ProposalActionNotFound.into()),
             }
@@ -805,17 +746,13 @@ pub mod pallet {
         ///
         /// 这是 `register_cid_private_institution` / 机构创建 / 关闭等入口的唯一派生入口。
         ///
-        /// 返回的 `AccountKind` 借用入参 `cid_number`/`account_name`,供调用方分支判断
-        /// 主账户/费用账户/自定义账户(`is_default_account` / `is_main_account`)。
+        /// 返回的 `AccountKind` 借用入参 `cid_number`/`account_name`，供调用方判断
+        /// 协议账户或自定义命名账户。
         pub fn derive_registered_account<'a>(
             cid_number: &'a [u8],
             account_name: &'a [u8],
         ) -> Result<(T::AccountId, AccountKind<'a>), DispatchError> {
             ensure!(!account_name.is_empty(), Error::<T>::EmptyAccountName);
-            ensure!(
-                !primitives::account_derive::is_forbidden_account_name(account_name),
-                Error::<T>::ReservedAccountName
-            );
             // institution_kind_by_name 对非空名必返回 Some(空名已在上面拦截)。
             // 命中保留名 → Main/Fee;否则 → Named。质押/安全/两和已被 forbidden 拦下,
             // 故此处只可能得到 Main/Fee/Named 三种机构种类。
@@ -826,19 +763,6 @@ pub mod pallet {
             let account = T::AccountId::decode(&mut &digest[..])
                 .map_err(|_| Error::<T>::DerivedAccountDecodeFailed)?;
             Ok((account, kind))
-        }
-
-        /// 该 `AccountKind` 是否为机构强制默认账户(主账户 / 费用账户)。
-        pub fn is_default_account(kind: &AccountKind<'_>) -> bool {
-            matches!(
-                kind,
-                AccountKind::InstitutionMain { .. } | AccountKind::InstitutionFee { .. }
-            )
-        }
-
-        /// 该 `AccountKind` 是否为机构主账户。
-        pub fn is_main_account(kind: &AccountKind<'_>) -> bool {
-            matches!(kind, AccountKind::InstitutionMain { .. })
         }
 
         // derive_personal_account 在 personal-manage::Pallet;
@@ -895,32 +819,17 @@ pub mod pallet {
         pub(crate) fn set_active_admin_account_direct(
             cid_number: &CidNumberOf<T>,
             institution_code: InstitutionCode,
-            institution_id: T::AccountId,
             admins: &AdminsOf<T>,
             threshold: u32,
         ) -> DispatchResult {
             Self::ensure_lifecycle_institution_code(&institution_code)?;
-            T::AdminLifecycle::set_active_institution_admin_account(
+            T::AdminLifecycle::set_institution_admins(
                 crate::MODULE_TAG,
-                institution_id,
                 cid_number.to_vec(),
                 institution_code,
                 AdminAccountKind::PrivateInstitution,
                 admins.iter().cloned().collect(),
                 threshold,
-            )
-        }
-
-        pub(crate) fn close_admin_account(
-            proposal_id: u64,
-            institution_code: InstitutionCode,
-            institution_id: T::AccountId,
-        ) -> DispatchResult {
-            Self::ensure_lifecycle_institution_code(&institution_code)?;
-            T::AdminLifecycle::close_institution_admin_account_for_proposal(
-                proposal_id,
-                crate::MODULE_TAG,
-                institution_id,
             )
         }
 
@@ -933,24 +842,6 @@ pub mod pallet {
                 Error::<T>::InvalidInstitutionCode
             );
             Ok(())
-        }
-
-        /// 从任意私权机构多签账户反查其管理员账户账户地址。
-        ///
-        /// 个人多签由 personal-manage 自持；本函数仅服务机构账户。
-        /// 管理员属于机构(不属于账户)。任意机构账户(主/费用/自定义)都解析到
-        /// 本机构【主账户】——即 admins 模块 里承载该机构唯一管理员集的键。这样私权机构生命周期员
-        /// 统一管理机构及其全部账户(创建/注销账户都由这套管理员授权)。
-        pub fn resolve_admin_account_for_account(account: &T::AccountId) -> Option<T::AccountId> {
-            let registered = AccountRegisteredCid::<T>::get(account)?;
-            // 主账户地址由 (cid_number, 主账户保留名) 确定性派生,与 InstitutionAccounts 中存储的一致;
-            // 机构本身不再重复保存 main_account。
-            let (main_account, _) = Self::derive_registered_account(
-                registered.cid_number.as_slice(),
-                RESERVED_NAME_MAIN,
-            )
-            .ok()?;
-            Some(main_account)
         }
 
         /// 从任意机构账户反查管理员更换机构码。
@@ -1003,12 +894,14 @@ impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for palle
         addr: &T::AccountId,
     ) -> Option<primitives::multisig::MultisigConfigSnapshot<T::AccountId>> {
         let institution_code = Self::lookup_org(addr)?;
-        let account = pallet::Pallet::<T>::resolve_admin_account_for_account(addr)?;
-        let admins =
-            T::AdminAccountQuery::active_account_admins(institution_code, account.clone())?;
-        let threshold = <T as Config>::InternalVoteEngine::active_dynamic_threshold(
+        let cid_number = Self::lookup_cid(addr)?;
+        let admins = T::InstitutionAdminQuery::institution_admins(
             institution_code,
-            account.clone(),
+            cid_number.as_slice(),
+        )?;
+        let threshold = <T as Config>::InternalVoteEngine::active_institution_threshold(
+            institution_code,
+            cid_number.as_slice(),
         )?;
         let admins_len = admins.len() as u32;
         Some(primitives::multisig::MultisigConfigSnapshot {
@@ -1018,42 +911,28 @@ impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for palle
         })
     }
 
-    fn is_active(addr: &T::AccountId) -> bool {
+    fn account_exists(addr: &T::AccountId) -> bool {
         let Some(registered) = pallet::AccountRegisteredCid::<T>::get(addr) else {
             return false;
         };
-        matches!(
-            pallet::InstitutionAccounts::<T>::get(&registered.cid_number, &registered.account_name)
-                .map(|a| a.status),
-            Some(institution::types::InstitutionLifecycleStatus::Active)
-        )
+        pallet::InstitutionAccounts::<T>::get(&registered.cid_number, &registered.account_name)
+            .map(|account| account.address == *addr)
+            .unwrap_or(false)
     }
 }
 
 impl<T: pallet::Config> traits::InstitutionCidQuery<pallet::CidNumberOf<T>> for pallet::Pallet<T> {
     fn cid_exists(cid_number: &pallet::CidNumberOf<T>) -> bool {
         pallet::Institutions::<T>::contains_key(cid_number)
-            || pallet::CidRegisteredAccount::<T>::iter_prefix(cid_number)
-                .next()
-                .is_some()
     }
 }
 
 impl<T: pallet::Config> traits::InstitutionLegalRepresentativeQuery<T::AccountId>
     for pallet::Pallet<T>
 {
-    fn legal_representative(
-        institution_code: InstitutionCode,
-        institution: T::AccountId,
-    ) -> Option<T::AccountId> {
-        let registered = pallet::AccountRegisteredCid::<T>::get(&institution)?;
-        let info = pallet::Institutions::<T>::get(&registered.cid_number)?;
-        if info.institution_code != institution_code
-            || info.status != institution::types::InstitutionLifecycleStatus::Active
-        {
-            return None;
-        }
-        info.legal_representative_account
+    fn legal_representative(cid_number: &[u8]) -> Option<T::AccountId> {
+        let cid_number = pallet::CidNumberOf::<T>::try_from(cid_number.to_vec()).ok()?;
+        pallet::Institutions::<T>::get(cid_number)?.legal_representative_account
     }
 }
 
@@ -1087,9 +966,10 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         if approved {
             match action_byte {
                 ACTION_CLOSE => {
-                    let action =
-                        CloseInstitutionAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
-                            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+                    let action = CloseInstitutionAction::<T::AccountId, CidNumberOf<T>>::decode(
+                        &mut &raw[tag.len() + 1..],
+                    )
+                    .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
                     let exec_result = with_transaction(|| {
                         match crate::close::execute_institution_close_with_finalizer::<T>(
                             proposal_id,
@@ -1103,7 +983,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                         pallet::Pallet::<T>::deposit_event(
                             pallet::Event::<T>::InstitutionCloseExecutionFailed {
                                 proposal_id,
-                                account: action.account,
+                                account: action.institution_account,
                             },
                         );
                         return Ok(ProposalExecutionOutcome::RetryableFailed);
@@ -1116,10 +996,11 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
             // 否决:清理关闭 Pending 记录释放地址锁定。
             match action_byte {
                 ACTION_CLOSE => {
-                    if let Ok(action) =
-                        CloseInstitutionAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
+                    if let Ok(action) = CloseInstitutionAction::<T::AccountId, CidNumberOf<T>>::decode(
+                        &mut &raw[tag.len() + 1..],
+                    )
                     {
-                        InstitutionPendingClose::<T>::remove(&action.account);
+                        InstitutionPendingClose::<T>::remove(&action.institution_account);
                     }
                 }
                 _ => {}
@@ -1140,10 +1021,11 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         );
         match raw[tag.len()] {
             ACTION_CLOSE => {
-                let action =
-                    CloseInstitutionAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
-                        .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
-                InstitutionPendingClose::<T>::remove(&action.account);
+                let action = CloseInstitutionAction::<T::AccountId, CidNumberOf<T>>::decode(
+                    &mut &raw[tag.len() + 1..],
+                )
+                .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+                InstitutionPendingClose::<T>::remove(&action.institution_account);
             }
             _ => {}
         }

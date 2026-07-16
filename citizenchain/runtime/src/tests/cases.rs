@@ -21,8 +21,15 @@ fn fee_payer_returns_none_for_transfer() {
     let institution = AccountId::new(CHINA_CB[0].main_account);
     let beneficiary = AccountId::new([99u8; 32]);
     let call = RuntimeCall::MultisigTransfer(multisig::pallet::Call::propose_transfer {
-        institution_code: votingengine::types::NRC,
-        institution,
+        actor_cid_number: Some(
+            CHINA_CB[0]
+                .cid_number
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("NRC CID fits"),
+        ),
+        funding_account: institution,
         beneficiary,
         amount: 10000,
         remark: BoundedVec::default(),
@@ -111,6 +118,12 @@ fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
 
         // 测试中直接写入 ProposalData/Owner，生产路径必须走 create_*_with_data 原子入口。
         let data = resolution_issuance::proposal::IssuanceProposalData {
+            actor_cid_number: CHINA_CB[0]
+                .cid_number
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("NRC CID fits"),
             proposer: recipient.clone(),
             reason: b"runtime-integration".to_vec(),
             total_amount,
@@ -138,7 +151,15 @@ fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
                 stage: votingengine::STAGE_JOINT,
                 status: votingengine::STATUS_PASSED,
                 internal_code: None,
-                account_context: None,
+                actor_cid_number: Some(
+                    CHINA_CB[0]
+                        .cid_number
+                        .as_bytes()
+                        .to_vec()
+                        .try_into()
+                        .expect("NRC CID fits"),
+                ),
+                execution_account: None,
                 subject_cid_numbers: Default::default(),
                 start: 0u32,
                 end: 100u32,
@@ -185,7 +206,12 @@ fn resolution_destro_internal_vote_flow_executes_destroy_and_reduces_issuance() 
 
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].admins[0])),
-            votingengine::types::NRC,
+            CHINA_CB[0]
+                .cid_number
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("NRC CID fits"),
             nrc_institution,
             destroy_amount,
         ));
@@ -278,8 +304,13 @@ fn runtime_fee_kind_classifier_covers_free_onchain_vote_and_unknown_paths() {
         let nrc_institution = AccountId::new(CHINA_CB[0].main_account);
         let resolution_destro_call =
             RuntimeCall::ResolutionDestroy(resolution_destroy::pallet::Call::propose_destroy {
-                institution_code: votingengine::types::NRC,
-                institution: nrc_institution,
+                actor_cid_number: CHINA_CB[0]
+                    .cid_number
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .expect("NRC CID fits"),
+                institution_account: nrc_institution,
                 amount: 456,
             });
         let resolution_kind = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
@@ -338,17 +369,17 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
         assert_eq!(create_kind, onchain::FeeChargeKind::VoteFlat);
 
         let _ = Balances::deposit_creating(&account, 777);
-        // propose_close 已加注销凭证字段(register_nonce/signature/issuer_*/signer_pubkey);
+        // propose_close 已加注销凭证字段；本测试只锁费用分类。
         // 本测试只验证该 Call 走投票统一价分类,凭证值无关,填默认值即可。
         let close_call = RuntimeCall::PublicManage(
             public_manage::pallet::Call::propose_close_public_institution {
-                account,
+                actor_cid_number: Default::default(),
+                institution_account: account,
                 beneficiary,
                 register_nonce: Default::default(),
                 signature: Default::default(),
-                issuer_cid_number: Vec::new(),
-                issuer_main_account: AccountId::new([0u8; 32]),
-                signer_pubkey: [0u8; 32],
+                credential_issuer_cid_number: Vec::new(),
+                credential_signer_pubkey: [0u8; 32],
             },
         );
         let close_kind = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
@@ -362,8 +393,15 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
             AccountId::new(primitives::cid::china::china_cb::CHINA_CB[0].main_account);
         let transfer_call =
             RuntimeCall::MultisigTransfer(multisig::pallet::Call::propose_transfer {
-                institution_code: votingengine::types::NRC,
-                institution,
+                actor_cid_number: Some(
+                    CHINA_CB[0]
+                        .cid_number
+                        .as_bytes()
+                        .to_vec()
+                        .try_into()
+                        .expect("NRC CID fits"),
+                ),
+                funding_account: institution,
                 beneficiary: AccountId::new([79u8; 32]),
                 amount: 88_888,
                 remark: frame_support::BoundedVec::default(),
@@ -507,6 +545,12 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
         let code_hash = <Runtime as frame_system::Config>::Hashing::hash(code.as_slice());
 
         let proposal = runtime_upgrade::pallet::Proposal::<Runtime> {
+            actor_cid_number: CHINA_CB[0]
+                .cid_number
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("NRC CID fits"),
             proposer,
             reason,
             code_hash,
@@ -551,7 +595,15 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
                 stage: votingengine::STAGE_JOINT,
                 status: votingengine::STATUS_REJECTED,
                 internal_code: None,
-                account_context: None,
+                actor_cid_number: Some(
+                    CHINA_CB[0]
+                        .cid_number
+                        .as_bytes()
+                        .to_vec()
+                        .try_into()
+                        .expect("NRC CID fits"),
+                ),
+                execution_account: None,
                 subject_cid_numbers: Default::default(),
                 start: 0u32,
                 end: 100u32,
@@ -858,7 +910,12 @@ fn runtime_square_post_fee_kind_uses_onchain_minimum_fee() {
 #[test]
 fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
     new_test_ext().execute_with(|| {
-        let nrc_id = AccountId::new(CHINA_CB[0].main_account);
+        let nrc_cid: public_manage::pallet::CidNumberOf<Runtime> = CHINA_CB[0]
+            .cid_number
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("NRC CID fits");
         let nrc_admin = AccountId::new(CHINA_CB[0].admins[0]);
         let outsider = AccountId::new([99u8; 32]);
 
@@ -867,12 +924,12 @@ fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
         let bad_origin = RuntimeOrigin::signed(outsider.clone());
         assert!(<EnsureNrcAdmin as EnsureOrigin<RuntimeOrigin>>::try_origin(bad_origin).is_err());
 
-        public_admins::pallet::AdminAccounts::<Runtime>::remove(&nrc_id);
+        public_admins::pallet::AdminAccounts::<Runtime>::remove(&nrc_cid);
         assert!(!is_nrc_admin(&nrc_admin));
         assert!(!is_nrc_admin(&outsider));
-        assert!(!RuntimeInternalAdminProvider::is_internal_admin(
+        assert!(!RuntimeInternalAdminProvider::is_institution_admin(
             votingengine::types::NRC,
-            nrc_id,
+            nrc_cid.as_slice(),
             &nrc_admin
         ));
     });
@@ -884,7 +941,6 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
         let (main_pair, main_admin_pubkey, backup_pair, backup_admin_pubkey, province_bytes) =
             setup_step3_test_admins();
         let issuer_cid_number = test_issuer_cid_number();
-        let issuer_main_account = test_issuer_main_account();
         let scope_city_name = test_scope_city_name();
         let cid_number_owned = real_cid_number("verifier-lookup", "CGOV", "0");
         let cid_number: &[u8] = cid_number_owned.as_slice();
@@ -905,24 +961,18 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
         let legal_representative_account = AccountId::new([77u8; 32]);
 
         let make_signature = |signing_pair: &sr25519::Pair, admin_pubkey: &[u8; 32]| {
-            let payload = (
-                frame_system::Pallet::<Runtime>::block_hash(0),
+            let msg = primitives::sign::institution_registration_message(
+                &frame_system::Pallet::<Runtime>::block_hash(0),
                 cid_number,
                 cid_full_name.as_slice(),
                 cid_short_name,
                 &account_names,
-                register_nonce.as_slice(),
+                &register_nonce,
                 issuer_cid_number.as_slice(),
-                &issuer_main_account,
                 admin_pubkey,
                 province_bytes.as_slice(),
                 scope_city_name.as_slice(),
                 town_code,
-            );
-            // 注册凭证与生产 verifier 共用 signing_message 域，禁止测试保留旧双域头。
-            let msg = primitives::sign::signing_message(
-                primitives::sign::OP_SIGN_INST,
-                &payload.encode(),
             );
             let sig = signing_pair.sign(&msg);
             let bounded: public_manage::pallet::RegisterSignatureOf<Runtime> =
@@ -945,7 +995,6 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 &register_nonce,
                 &main_signature,
                 issuer_cid_number.as_slice(),
-                &issuer_main_account,
                 &main_admin_pubkey,
                 province_bytes.as_slice(),
                 scope_city_name.as_slice(),
@@ -954,8 +1003,8 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
             "main admin signature should pass"
         );
 
-        let creation_payload = (
-            frame_system::Pallet::<Runtime>::block_hash(0),
+        let creation_message = primitives::sign::institution_creation_message(
+            &frame_system::Pallet::<Runtime>::block_hash(0),
             cid_number,
             cid_full_name.as_slice(),
             cid_short_name,
@@ -965,19 +1014,15 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
             &account_names,
             b"test-roles".as_slice(),
             b"test-assignments".as_slice(),
-            register_nonce.as_slice(),
+            &register_nonce,
             issuer_cid_number.as_slice(),
-            &issuer_main_account,
             &main_admin_pubkey,
             province_bytes.as_slice(),
             scope_city_name.as_slice(),
             town_code,
         );
         let creation_signature: public_manage::pallet::RegisterSignatureOf<Runtime> = main_pair
-            .sign(&primitives::sign::signing_message(
-                primitives::sign::OP_SIGN_INST,
-                &creation_payload.encode(),
-            ))
+            .sign(&creation_message)
             .0
             .to_vec()
             .try_into()
@@ -1001,7 +1046,6 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 &register_nonce,
                 &creation_signature,
                 issuer_cid_number.as_slice(),
-                &issuer_main_account,
                 &main_admin_pubkey,
                 province_bytes.as_slice(),
                 scope_city_name.as_slice(),
@@ -1028,7 +1072,6 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 &register_nonce,
                 &creation_signature,
                 issuer_cid_number.as_slice(),
-                &issuer_main_account,
                 &main_admin_pubkey,
                 province_bytes.as_slice(),
                 scope_city_name.as_slice(),
@@ -1052,7 +1095,6 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 &register_nonce,
                 &backup_signature,
                 issuer_cid_number.as_slice(),
-                &issuer_main_account,
                 &backup_admin_pubkey,
                 province_bytes.as_slice(),
                 scope_city_name.as_slice(),
@@ -1078,7 +1120,6 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 &register_nonce,
                 &outsider_signature,
                 issuer_cid_number.as_slice(),
-                &issuer_main_account,
                 &outsider_pubkey,
                 province_bytes.as_slice(),
                 scope_city_name.as_slice(),
@@ -1103,7 +1144,6 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 &register_nonce,
                 &bad_signature,
                 issuer_cid_number.as_slice(),
-                &issuer_main_account,
                 &main_admin_pubkey,
                 province_bytes.as_slice(),
                 scope_city_name.as_slice(),
@@ -1288,9 +1328,13 @@ fn genesis_public_institutions_full_mint_counts() {
                     == Some(primitives::cid::code::NJD)
             })
             .expect("NJD in china_sf");
-        let njd_main: AccountId =
-            codec::Decode::decode(&mut njd.main_account.as_slice()).expect("decode");
-        assert!(public_admins::AdminAccounts::<Runtime>::get(njd_main).is_some());
+        let njd_cid: public_manage::pallet::CidNumberOf<Runtime> = njd
+            .cid_number
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("NJD CID fits");
+        assert!(public_admins::AdminAccounts::<Runtime>::get(njd_cid).is_some());
     });
 }
 
@@ -1309,25 +1353,18 @@ fn genesis_national_singletons_exist_and_member_bodies_are_unconstituted() {
             let info = public_manage::Institutions::<Runtime>::get(&cid)
                 .expect("national singleton exists at block zero");
             assert_eq!(info.institution_code, singleton.code);
-            assert_eq!(
-                info.status,
-                entity_primitives::InstitutionLifecycleStatus::Active
-            );
             let main_name: public_manage::pallet::AccountNameOf<Runtime> =
                 primitives::account_derive::RESERVED_NAME_MAIN
                     .to_vec()
                     .try_into()
                     .expect("main name fits");
             assert_eq!(
-                public_manage::CidRegisteredAccount::<Runtime>::get(&cid, main_name),
+                public_manage::InstitutionAccounts::<Runtime>::get(&cid, main_name)
+                    .map(|info| info.address),
                 Some(AccountId::new(singleton.main_account))
             );
-            let main = AccountId::new(singleton.main_account);
-            assert!(public_admins::AdminAccounts::<Runtime>::get(main.clone()).is_none());
-            assert!(
-                internal_vote::ActiveDynamicThresholds::<Runtime>::get(singleton.code, main)
-                    .is_none()
-            );
+            assert!(public_admins::AdminAccounts::<Runtime>::get(&cid).is_none());
+            assert!(internal_vote::ActiveInstitutionThresholds::<Runtime>::get(&cid).is_none());
         }
 
         for spec in primitives::institution_constraints::member_composition_specs() {
@@ -1348,10 +1385,7 @@ fn genesis_national_singletons_exist_and_member_bodies_are_unconstituted() {
                 public_manage::InstitutionRoleAssignments::<Runtime>::get(&cid, &role_code)
                     .is_empty()
             );
-            assert!(public_admins::AdminAccounts::<Runtime>::get(AccountId::new(
-                spec.institution.main_account
-            ))
-            .is_none());
+            assert!(public_admins::AdminAccounts::<Runtime>::get(cid).is_none());
         }
     });
 }
@@ -1363,6 +1397,13 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
         genesis_pallet::institution::build::<Runtime>();
         let spec = primitives::institution_constraints::member_composition_specs()[0];
         let main = AccountId::new(spec.institution.main_account);
+        let cid_number: public_manage::pallet::CidNumberOf<Runtime> = spec
+            .institution
+            .cid_number
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("member body CID fits");
         let members = |count: u32| {
             (0..count)
                 .map(|index| {
@@ -1375,7 +1416,7 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
         let result = |accounts: Vec<AccountId>, include_role: bool| {
             entity_primitives::InstitutionGovernanceResult {
                 institution_code: spec.institution.code,
-                institution_account: main.clone(),
+                cid_number: spec.institution.cid_number.as_bytes().to_vec(),
                 role_changes: include_role
                     .then(|| {
                         vec![entity_primitives::InstitutionRoleChange {
@@ -1422,20 +1463,18 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
                 true,
             ))
         );
-        let account = public_admins::AdminAccounts::<Runtime>::get(main.clone())
+        let account = public_admins::AdminAccounts::<Runtime>::get(&cid_number)
             .expect("first composition creates admins");
         assert_eq!(account.admins.len() as u32, spec.min_members);
         assert_eq!(
-            internal_vote::ActiveDynamicThresholds::<Runtime>::get(
-                spec.institution.code,
-                main.clone()
-            ),
+            internal_vote::ActiveInstitutionThresholds::<Runtime>::get(&cid_number),
             None
         );
-        let proposal_id = internal_vote::Pallet::<Runtime>::do_create_general_internal_proposal(
+        let proposal_id = internal_vote::Pallet::<Runtime>::do_create_institution_proposal(
             members(1)[0].clone(),
             spec.institution.code,
-            main.clone(),
+            spec.institution.cid_number.as_bytes().to_vec(),
+            None,
             vec![spec.institution.cid_number.as_bytes().to_vec()],
         )
         .expect("composed singleton can create internal proposal");
@@ -1459,7 +1498,7 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
             public_manage::Error::<Runtime>::RequiredMemberCountOutOfRange
         );
         assert_eq!(
-            public_admins::AdminAccounts::<Runtime>::get(main)
+            public_admins::AdminAccounts::<Runtime>::get(cid_number)
                 .expect("failed change rolls back")
                 .admins
                 .len() as u32,
@@ -1484,12 +1523,17 @@ fn national_singletons_without_member_ranges_can_be_composed_once() {
                 )
             })
         {
-            let main = AccountId::new(singleton.main_account);
+            let cid_number: public_manage::pallet::CidNumberOf<Runtime> = singleton
+                .cid_number
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("singleton CID fits");
             let role_code_raw = b"RUNTIME_MEMBER".to_vec();
             let admins = vec![AccountId::new([91u8; 32]), AccountId::new([92u8; 32])];
             let result = entity_primitives::InstitutionGovernanceResult {
                 institution_code: singleton.code,
-                institution_account: main.clone(),
+                cid_number: singleton.cid_number.as_bytes().to_vec(),
                 role_changes: vec![entity_primitives::InstitutionRoleChange {
                     role_code: role_code_raw.clone(),
                     role_name: "运行期成员".as_bytes().to_vec(),
@@ -1520,11 +1564,11 @@ fn national_singletons_without_member_ranges_can_be_composed_once() {
             assert_ok!(
                 public_manage::Pallet::<Runtime>::apply_institution_governance_result(result)
             );
-            let account = public_admins::AdminAccounts::<Runtime>::get(main.clone())
+            let account = public_admins::AdminAccounts::<Runtime>::get(&cid_number)
                 .expect("first composition creates admins");
             assert_eq!(account.admins.to_vec(), admins);
             assert_eq!(
-                internal_vote::ActiveDynamicThresholds::<Runtime>::get(singleton.code, main),
+                internal_vote::ActiveInstitutionThresholds::<Runtime>::get(cid_number),
                 None
             );
         }
@@ -1591,21 +1635,12 @@ fn genesis_fixed_institution_roles_and_assignments_are_complete() {
                     && assignment.role_code == code
             }));
 
-            let admin_account =
-                public_admins::AdminAccounts::<Runtime>::get(AccountId::new(node.main_account))
-                    .expect("committee admin account exists");
-            assert_eq!(
-                admin_account.cid_number.as_slice(),
-                node.cid_number.as_bytes()
-            );
+            let admin_account = public_admins::AdminAccounts::<Runtime>::get(&cid_number)
+                .expect("committee admin account exists");
             assert_eq!(
                 admin_account.institution_code,
                 primitives::cid::code::institution_code_from_cid_number(node.cid_number)
                     .expect("committee code")
-            );
-            assert_eq!(
-                admin_account.status,
-                admin_primitives::AdminAccountStatus::Active
             );
             assert_eq!(
                 admin_account.admins.into_inner(),
@@ -1654,9 +1689,8 @@ fn genesis_fixed_institution_roles_and_assignments_are_complete() {
                     && assignment.cid_number == cid_number
                     && assignment.role_code == code
             }));
-            let admin_account =
-                public_admins::AdminAccounts::<Runtime>::get(AccountId::new(node.main_account))
-                    .expect("director admin account exists");
+            let admin_account = public_admins::AdminAccounts::<Runtime>::get(&cid_number)
+                .expect("director admin account exists");
             assert_eq!(
                 admin_account.admins.into_inner(),
                 node.admins
@@ -1809,9 +1843,8 @@ fn genesis_fixed_institution_roles_and_assignments_are_complete() {
             frg_assignments,
             primitives::cid::china::china_zf::FEDERAL_REGISTRY_ADMINS.len()
         );
-        let frg_admin_account =
-            public_admins::AdminAccounts::<Runtime>::get(AccountId::new(frg.main_account))
-                .expect("FRG admin account exists");
+        let frg_admin_account = public_admins::AdminAccounts::<Runtime>::get(&frg_cid)
+            .expect("FRG admin account exists");
         assert_eq!(frg_admin_account.admins.len(), frg_assignments);
     });
 }
@@ -1827,7 +1860,6 @@ fn runtime_governance_result_router_enforces_fixed_role_seats() {
                     == Some(primitives::cid::code::NJD)
             })
             .expect("NJD genesis node exists");
-        let main = AccountId::new(njd.main_account);
         let result_source_ref = 700u64.encode();
         let result = |accounts: Vec<AccountId>| {
             let assignments = accounts
@@ -1844,7 +1876,7 @@ fn runtime_governance_result_router_enforces_fixed_role_seats() {
                 .collect();
             entity_primitives::InstitutionGovernanceResult {
                 institution_code: primitives::cid::code::NJD,
-                institution_account: main.clone(),
+                cid_number: njd.cid_number.as_bytes().to_vec(),
                 role_changes: vec![],
                 assignment_changes: vec![
                     entity_primitives::InstitutionRoleAssignmentChange {
@@ -1900,7 +1932,7 @@ fn runtime_governance_result_router_enforces_fixed_role_seats() {
             .try_into()
             .expect("NJD role code fits");
         let stored = public_manage::InstitutionRoleAssignments::<Runtime>::get(
-            cid_number,
+            cid_number.clone(),
             role_code,
         );
         assert_eq!(
@@ -1911,10 +1943,7 @@ fn runtime_governance_result_router_enforces_fixed_role_seats() {
             replacement
         );
         assert_eq!(
-            internal_vote::ActiveDynamicThresholds::<Runtime>::get(
-                primitives::cid::code::NJD,
-                main,
-            ),
+            internal_vote::ActiveInstitutionThresholds::<Runtime>::get(cid_number),
             None
         );
     });

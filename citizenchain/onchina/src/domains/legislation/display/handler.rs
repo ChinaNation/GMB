@@ -110,7 +110,6 @@ async fn build_board_uncached(state: &AppState) -> Result<DisplayBoard, Response
     let identity = match identity_from_binding_parts(
         &candidate.institution_code,
         candidate.institution_cid_number.as_deref(),
-        candidate.institution_main_account.as_deref(),
         candidate.frg_province_code.as_deref(),
     ) {
         Ok(identity) => identity,

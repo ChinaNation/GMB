@@ -23,14 +23,14 @@ export const offchainApi = {
 
   buildRegisterClearingBankRequest: (
     pubkeyHex: string,
-    cidNumber: string,
+    actorCidNumber: string,
     peerId: string,
     rpcDomain: string,
     rpcPort: number,
   ) =>
     invoke<VoteSignRequestResult>('build_register_clearing_bank_request', {
       pubkeyHex,
-      cidNumber,
+      actorCidNumber,
       peerId,
       rpcDomain,
       rpcPort,
@@ -40,7 +40,7 @@ export const offchainApi = {
     requestId: string,
     expectedPubkeyHex: string,
     expectedPayloadHash: string,
-    cidNumber: string,
+    actorCidNumber: string,
     peerId: string,
     rpcDomain: string,
     rpcPort: number,
@@ -52,7 +52,7 @@ export const offchainApi = {
       requestId,
       expectedPubkeyHex,
       expectedPayloadHash,
-      cidNumber,
+      actorCidNumber,
       peerId,
       rpcDomain,
       rpcPort,
@@ -63,13 +63,13 @@ export const offchainApi = {
 
   buildUpdateClearingBankEndpointRequest: (
     pubkeyHex: string,
-    cidNumber: string,
+    actorCidNumber: string,
     newDomain: string,
     newPort: number,
   ) =>
     invoke<VoteSignRequestResult>('build_update_clearing_bank_endpoint_request', {
       pubkeyHex,
-      cidNumber,
+      actorCidNumber,
       newDomain,
       newPort,
     }),
@@ -78,7 +78,7 @@ export const offchainApi = {
     requestId: string,
     expectedPubkeyHex: string,
     expectedPayloadHash: string,
-    cidNumber: string,
+    actorCidNumber: string,
     newDomain: string,
     newPort: number,
     signNonce: number,
@@ -89,7 +89,7 @@ export const offchainApi = {
       requestId,
       expectedPubkeyHex,
       expectedPayloadHash,
-      cidNumber,
+      actorCidNumber,
       newDomain,
       newPort,
       signNonce,
@@ -97,14 +97,17 @@ export const offchainApi = {
       responseJson,
     }),
 
-  buildUnregisterClearingBankRequest: (pubkeyHex: string, cidNumber: string) =>
-    invoke<VoteSignRequestResult>('build_unregister_clearing_bank_request', { pubkeyHex, cidNumber }),
+  buildUnregisterClearingBankRequest: (pubkeyHex: string, actorCidNumber: string) =>
+    invoke<VoteSignRequestResult>('build_unregister_clearing_bank_request', {
+      pubkeyHex,
+      actorCidNumber,
+    }),
 
   submitUnregisterClearingBank: (
     requestId: string,
     expectedPubkeyHex: string,
     expectedPayloadHash: string,
-    cidNumber: string,
+    actorCidNumber: string,
     signNonce: number,
     signBlockNumber: number,
     responseJson: string,
@@ -113,7 +116,7 @@ export const offchainApi = {
       requestId,
       expectedPubkeyHex,
       expectedPayloadHash,
-      cidNumber,
+      actorCidNumber,
       signNonce,
       signBlockNumber,
       responseJson,

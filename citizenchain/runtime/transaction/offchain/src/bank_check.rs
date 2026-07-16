@@ -2,8 +2,7 @@
 //!
 //!
 //! - 清算行(L2)= subject_property 为 S(私法人)或 F(非法人)的私权机构。
-//! - 清算行在身份注册局注册时生成 cid_number,并在链上实体生命周期模块注册
-//!   主账户 + 费用账户两个多签账户。
+//! - 清算行在身份注册局注册时生成 cid_number,并登记主账户、费用账户等机构账户。
 //! - 本模块判定:某个地址能否作为"可被 L3 绑定的清算行主账户"。
 //!
 //! **解耦设计**:bank_check 不直接依赖具体实体生命周期 pallet,而是通过
@@ -22,9 +21,9 @@ pub const CID_K1_INDEX: usize = 6;
 pub const CID_R5_SEPARATOR_INDEX: usize = 5;
 
 /// 清算行"主账户"名称(字节形式,与身份注册局生成时逐字节一致)。
-pub const ACCOUNT_NAME_MAIN: &[u8] = "主账户".as_bytes();
+pub const ACCOUNT_NAME_MAIN: &[u8] = primitives::account_derive::RESERVED_NAME_MAIN;
 /// 清算行"费用账户"名称。
-pub const ACCOUNT_NAME_FEE: &[u8] = "费用账户".as_bytes();
+pub const ACCOUNT_NAME_FEE: &[u8] = primitives::account_derive::RESERVED_NAME_FEE;
 // 机构登记表查询抽象
 /// 机构登记表查询抽象。
 ///
@@ -35,17 +34,16 @@ pub trait CidAccountQuery<AccountId> {
     fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)>;
     /// (cid_number, account_name) → 地址。未登记返回 None。
     fn find_account(cid_number: &[u8], account_name: &[u8]) -> Option<AccountId>;
-    /// 该地址对应的多签账户是否处于 Active 状态。
-    fn is_active(addr: &AccountId) -> bool;
-    /// `who` 是否是 `bank` 对应机构多签的管理员之一(经 InstitutionMultisigQuery 反查)。
-    /// 清算行费率提案 / 关闭等治理动作需校验管理员身份。
-    fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool;
+    /// 该地址是否存在于机构账户正反索引中。
+    fn account_exists(addr: &AccountId) -> bool;
+    /// `who` 是否属于 `AdminAccounts[cid_number].admins`。
+    fn is_institution_admin(cid_number: &[u8], who: &AccountId) -> bool;
     /// 清算行资格白名单判定。
     ///
     /// 身份注册局在 eligible-search / registration-info 入口负责判断"私法人股份公司
     /// 或其下属非法人"资格;链上不再保存机构类型和所属法人元数据。
     ///
-    /// 实现层只确认地址属于已注册且 Active 的 CID 机构账户,保持 bank_check 解耦。
+    /// 实现层只确认地址属于已登记的 CID 机构账户,保持 bank_check 解耦。
     fn is_clearing_bank_eligible(addr: &AccountId) -> bool;
     /// 节点是否已声明为清算行节点。
     ///
@@ -62,10 +60,10 @@ impl<AccountId> CidAccountQuery<AccountId> for () {
     fn find_account(_cid_number: &[u8], _account_name: &[u8]) -> Option<AccountId> {
         None
     }
-    fn is_active(_addr: &AccountId) -> bool {
+    fn account_exists(_addr: &AccountId) -> bool {
         false
     }
-    fn is_admin_of(_bank: &AccountId, _who: &AccountId) -> bool {
+    fn is_institution_admin(_cid_number: &[u8], _who: &AccountId) -> bool {
         false
     }
     fn is_clearing_bank_eligible(_addr: &AccountId) -> bool {
@@ -112,8 +110,8 @@ pub fn ensure_can_be_bound<T: Config>(addr: &T::AccountId) -> Result<(), Error<T
     );
 
     ensure!(
-        T::CidAccountQuery::is_active(addr),
-        Error::<T>::ClearingBankNotActive
+        T::CidAccountQuery::account_exists(addr),
+        Error::<T>::ClearingBankAccountNotFound
     );
 
     // 第 5 重:资格白名单(S-JOINT_STOCK / F-parent.S.JOINT_STOCK)
@@ -128,6 +126,34 @@ pub fn ensure_can_be_bound<T: Config>(addr: &T::AccountId) -> Result<(), Error<T
         Error::<T>::ClearingBankNotRegisteredAsNode
     );
 
+    Ok(())
+}
+
+/// 严格校验机构账户交易中的 `(actor_cid_number, institution_account)` 绑定关系。
+///
+/// 授权主体只能是 CID；账户只是该 CID 下被本次交易操作的具体账户。这里不接受
+/// “由账户反推 CID 后继续执行”的回落路径，调用方传入的 CID、账户正向登记和
+/// 账户反向登记必须完全一致。
+pub fn ensure_institution_account<T: Config>(
+    actor_cid_number: &[u8],
+    institution_account: &T::AccountId,
+    required_account_name: &[u8],
+) -> Result<(), Error<T>> {
+    let (registered_cid_number, registered_account_name) =
+        T::CidAccountQuery::account_info(institution_account)
+            .ok_or(Error::<T>::NotRegisteredClearingBank)?;
+    ensure!(
+        registered_cid_number.as_slice() == actor_cid_number,
+        Error::<T>::InstitutionMismatch
+    );
+    ensure!(
+        registered_account_name.as_slice() == required_account_name,
+        Error::<T>::NotMainAccount
+    );
+    ensure!(
+        T::CidAccountQuery::account_exists(institution_account),
+        Error::<T>::ClearingBankAccountNotFound
+    );
     Ok(())
 }
 
@@ -146,14 +172,14 @@ pub fn fee_account_of<T: Config>(main_addr: &T::AccountId) -> Result<T::AccountI
         .ok_or(Error::<T>::FeeAccountNotFound)
 }
 
-/// 判定某地址是"清算行的任一账户"(主账户或费用账户,私权机构 + Active)。
+/// 判定某地址是"清算行的任一已登记账户"。
 ///
 /// 供 `institution-asset` 的 `can_spend` / `is_protected` 实现时使用。
 pub fn is_clearing_bank_account<T: Config>(addr: &T::AccountId) -> bool {
     match T::CidAccountQuery::account_info(addr) {
         Some((cid, _)) => {
             subject_property_is_private_institution(cid.as_slice())
-                && T::CidAccountQuery::is_active(addr)
+                && T::CidAccountQuery::account_exists(addr)
         }
         None => false,
     }
@@ -198,6 +224,6 @@ mod tests {
             b"main"
         )
         .is_none());
-        assert!(!<() as CidAccountQuery<[u8; 32]>>::is_active(&addr));
+        assert!(!<() as CidAccountQuery<[u8; 32]>>::account_exists(&addr));
     }
 }

@@ -5,5 +5,5 @@
 
 pub use entity_primitives::{
     CloseInstitutionAction, CreateInstitutionAccount, InstitutionAccountInfo, InstitutionInfo,
-    InstitutionInitialAccount, InstitutionLifecycleStatus, RegisteredInstitution,
+    InstitutionInitialAccount, RegisteredInstitution,
 };

@@ -185,7 +185,11 @@ pub(crate) async fn prepare_chain_call(
             return resp;
         }
     }
-    match build_address_chain_call(&input) {
+    let actor_cid_number = match crate::domains::citizens::chain_identity::active_registry_cid_number(&state) {
+        Ok(cid_number) => cid_number,
+        Err(resp) => return resp,
+    };
+    match build_address_chain_call(&actor_cid_number, &input) {
         Ok(output) => ok(output),
         Err(err) => api_error(StatusCode::BAD_REQUEST, 1001, err.as_str()),
     }

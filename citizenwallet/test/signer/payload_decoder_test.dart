@@ -8,6 +8,8 @@ import 'package:citizenwallet/signer/institution_code.dart';
 import 'package:citizenwallet/signer/payload_decoder.dart';
 
 void main() {
+  const registryActorCid = 'ZS001-FRG07-249474503-2026';
+  const nrcActorCid = 'LN001-NRC0G-944805165-2026';
   String hexOf(List<int> payload) =>
       '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
 
@@ -188,7 +190,7 @@ void main() {
     });
 
     test('decodes joint_vote (pallet=21 call=0)', () {
-      // JointVote.cast_admin = pallet 21 / call 0，机构参数为 AccountId32。
+      // JointVote.cast_admin = pallet 21 / call 0，投票席位只用机构 CID 标识。
       final payload = Uint8List.fromList([
         0x15,
         0x00,
@@ -200,7 +202,7 @@ void main() {
         0,
         0,
         0,
-        ...List.filled(32, 0),
+        ...compactVec(nrcActorCid),
         0,
       ]);
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
@@ -208,6 +210,7 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.action, 'joint_vote');
       expect(decoded.fields['proposal_id'], '7');
+      expect(decoded.fields['cid_number'], nrcActorCid);
       expect(decoded.fields['approve'], 'false');
       expect(decoded.summary, contains('反对'));
     });
@@ -230,6 +233,7 @@ void main() {
     test('decodes prepare_joint_population_snapshot (pallet=21 call=2)', () {
       final payload = Uint8List.fromList([
         0x15, 0x02,
+        ...compactVec(nrcActorCid),
         2, // PopulationScope::City
         ...compactVec('GZ'),
         ...compactVec('001'),
@@ -238,6 +242,7 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'prepare_joint_population_snapshot');
+      expect(decoded.fields['actor_cid_number'], nrcActorCid);
       expect(decoded.fields['scope_level'], 'CITY');
       expect(decoded.fields['scope_province_code'], 'GZ');
       expect(decoded.fields['scope_city_code'], '001');
@@ -274,13 +279,12 @@ void main() {
     });
 
     test('decodes register_voting_identity raw call data', () {
-      final registrar = List<int>.filled(32, 7);
       final wallet = List<int>.generate(32, (i) => i + 1);
       final payload = citizenIdentityPayloadForTest(wallet);
       final callData = [
         0x0a,
         0x00,
-        ...registrar,
+        ...compactVec(registryActorCid),
         ...payload,
         ...compactU32(64),
         ...List<int>.filled(64, 0xaa),
@@ -290,19 +294,18 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'register_voting_identity');
-      expect(decoded.fields['registrar_account'], ss58FromBytes(registrar));
+      expect(decoded.fields['actor_cid_number'], registryActorCid);
       expect(decoded.fields['wallet_account'], ss58FromBytes(wallet));
       expect(decoded.summary, contains('CTZN-430100-0001'));
     });
 
     test('decodes register_voting_identity with signing tail', () {
-      final registrar = List<int>.filled(32, 7);
       final wallet = List<int>.generate(32, (i) => i + 1);
       final payload = citizenIdentityPayloadForTest(wallet);
       final callData = [
         0x0a,
         0x00,
-        ...registrar,
+        ...compactVec(registryActorCid),
         ...payload,
         ...compactU32(64),
         ...List<int>.filled(64, 0xaa),
@@ -312,18 +315,16 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'register_voting_identity');
-      expect(
-          decoded.reviewFields['registrar_account'], ss58FromBytes(registrar));
+      expect(decoded.reviewFields['actor_cid_number'], registryActorCid);
     });
 
     test('decodes upgrade_to_candidate_identity raw call data', () {
-      final registrar = List<int>.filled(32, 7);
       final wallet = List<int>.generate(32, (i) => i + 1);
       final payload = candidateIdentityPayloadForTest(wallet);
       final callData = [
         0x0a,
         0x01,
-        ...registrar,
+        ...compactVec(registryActorCid),
         ...payload,
         ...compactU32(64),
         ...List<int>.filled(64, 0xaa),
@@ -333,7 +334,7 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'upgrade_to_candidate_identity');
-      expect(decoded.fields['registrar_account'], ss58FromBytes(registrar));
+      expect(decoded.fields['actor_cid_number'], registryActorCid);
       expect(decoded.fields['wallet_account'], ss58FromBytes(wallet));
       expect(decoded.reviewFields['identity_level'], '参选身份');
       expect(decoded.reviewFields['citizen_full_name'], '测试公民');
@@ -341,15 +342,52 @@ void main() {
       expect(decoded.reviewFields['birth_date'], '2026-06-30');
     });
 
+    test('decodes update identity calls and revoke_identity with actor CID',
+        () {
+      final wallet = List<int>.generate(32, (i) => i + 1);
+      final votingCall = [
+        0x0a,
+        0x02,
+        ...compactVec(registryActorCid),
+        ...citizenIdentityPayloadForTest(wallet),
+        ...compactU32(64),
+        ...List<int>.filled(64, 0xaa),
+      ];
+      final candidateCall = [
+        0x0a,
+        0x03,
+        ...compactVec(registryActorCid),
+        ...candidateIdentityPayloadForTest(wallet),
+        ...compactU32(64),
+        ...List<int>.filled(64, 0xbb),
+      ];
+      final revokeCall = [
+        0x0a,
+        0x04,
+        ...compactVec(registryActorCid),
+        ...compactVec('CTZN-430100-0001'),
+      ];
+      expect(
+        PayloadDecoder.decode(hexOf(withSigningTail(votingCall)))?.action,
+        'update_voting_identity',
+      );
+      expect(
+        PayloadDecoder.decode(hexOf(withSigningTail(candidateCall)))?.action,
+        'update_candidate_identity',
+      );
+      final revoke = PayloadDecoder.decode(hexOf(withSigningTail(revokeCall)));
+      expect(revoke?.action, 'revoke_identity');
+      expect(revoke?.fields['actor_cid_number'], registryActorCid);
+    });
+
     test('decodes occupy_cid raw call data (pallet=10 call=6)', () {
       // 注册局建档占号,逐字节对齐 onchina encode_occupy_cid_call:
-      // [10][6] registrar[32] cid:Vec commitment[32] province:Vec city:Vec。
-      final registrar = List<int>.filled(32, 7);
+      // [10][6] actor_cid_number cid_number commitment province city。
       final commitment = List<int>.filled(32, 0xbb);
       final callData = [
         0x0a,
         0x06,
-        ...registrar,
+        ...compactVec(registryActorCid),
         ...compactVec('CTZN-430100-0001'),
         ...commitment,
         ...compactVec('43'),
@@ -360,7 +398,7 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'occupy_cid');
-      expect(decoded.fields['registrar_account'], ss58FromBytes(registrar));
+      expect(decoded.fields['actor_cid_number'], registryActorCid);
       expect(decoded.fields['cid_number'], 'CTZN-430100-0001');
       expect(decoded.fields['commitment'], '0x${hexLower(commitment)}');
       expect(decoded.reviewFields['residence'], '43 / 001');
@@ -368,12 +406,11 @@ void main() {
     });
 
     test('decodes occupy_cid with signing tail (pallet=10 call=6)', () {
-      final registrar = List<int>.filled(32, 7);
       final commitment = List<int>.filled(32, 0xbb);
       final callData = [
         0x0a,
         0x06,
-        ...registrar,
+        ...compactVec(registryActorCid),
         ...compactVec('CTZN-430100-0001'),
         ...commitment,
         ...compactVec('43'),
@@ -384,19 +421,17 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'occupy_cid');
-      expect(decoded.reviewFields['registrar_account'],
-          ss58FromBytes(registrar));
+      expect(decoded.reviewFields['actor_cid_number'], registryActorCid);
       expect(decoded.reviewFields['cid_number'], 'CTZN-430100-0001');
     });
 
     test('decodes revoke_cid raw call data (pallet=10 call=8)', () {
       // 注册局吊销,逐字节对齐 onchina encode_revoke_cid_call:
-      // [10][8] registrar[32] cid:Vec。
-      final registrar = List<int>.filled(32, 9);
+      // [10][8] actor_cid_number + cid_number。
       final callData = [
         0x0a,
         0x08,
-        ...registrar,
+        ...compactVec(registryActorCid),
         ...compactVec('CTZN-430100-0001'),
       ];
 
@@ -404,17 +439,16 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'revoke_cid');
-      expect(decoded.fields['registrar_account'], ss58FromBytes(registrar));
+      expect(decoded.fields['actor_cid_number'], registryActorCid);
       expect(decoded.fields['cid_number'], 'CTZN-430100-0001');
       expect(decoded.summary, contains('CTZN-430100-0001'));
     });
 
     test('decodes revoke_cid with signing tail (pallet=10 call=8)', () {
-      final registrar = List<int>.filled(32, 9);
       final callData = [
         0x0a,
         0x08,
-        ...registrar,
+        ...compactVec(registryActorCid),
         ...compactVec('CTZN-430100-0001'),
       ];
 
@@ -425,8 +459,38 @@ void main() {
       expect(decoded.reviewFields['cid_number'], 'CTZN-430100-0001');
     });
 
-    test('cast_referendum 缺少 issuer/admins 字段时拒绝解码', () {
-      // 当前 SCALE 必须含签发机构、签发管理员和作用域。缺字段字节流长度不足 → null。
+    test('decodes occupy_cids_batch and retained citizen snapshot calls', () {
+      final batchCall = [
+        0x0a,
+        0x07,
+        ...compactVec(registryActorCid),
+        ...compactU32(2),
+        ...compactVec('CTZN-430100-0001'),
+        ...List<int>.filled(32, 0x11),
+        ...compactVec('CTZN-430100-0002'),
+        ...List<int>.filled(32, 0x22),
+        ...compactVec('43'),
+        ...compactVec('001'),
+      ];
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(batchCall)));
+      expect(decoded?.action, 'occupy_cids_batch');
+      expect(decoded?.fields['actor_cid_number'], registryActorCid);
+      expect(decoded?.fields['cid_count'], '2');
+
+      final snapshotCall = [
+        0x0a,
+        0x05,
+        1, // Province
+        ...compactVec('GZ'),
+      ];
+      expect(
+        PayloadDecoder.decode(hexOf(withSigningTail(snapshotCall)))?.action,
+        'prepare_citizen_population_snapshot',
+      );
+    });
+
+    test('cast_referendum 夹带旧凭证字段时拒绝解码', () {
+      // 当前投票只携带 proposal_id + approve，旧凭证尾必须拒绝。
       final payload = Uint8List.fromList([
         0x15, 0x01,
         99, 0, 0, 0, 0, 0, 0, 0,
@@ -436,7 +500,7 @@ void main() {
         1, // 只到 approve,长度 = 45。
       ]);
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
-      expect(decoded, isNull, reason: '缺 issuer/admins/scope 的旧凭证必须被拒绝');
+      expect(decoded, isNull, reason: '投票不得夹带旧凭证字段');
     });
 
     test('decodes finalize_proposal (pallet=9 call=3)', () {
@@ -541,7 +605,7 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'register_clearing_bank');
-      expect(decoded.fields['cid_number'], cidNumber);
+      expect(decoded.fields['actor_cid_number'], cidNumber);
       expect(decoded.fields['peer_id'], peerId);
       expect(decoded.fields['rpc_domain'], domain);
       expect(decoded.fields['rpc_port'], '9944');
@@ -562,7 +626,7 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'update_clearing_bank_endpoint');
-      expect(decoded.fields['cid_number'], cidNumber);
+      expect(decoded.fields['actor_cid_number'], cidNumber);
       expect(decoded.fields['new_domain'], domain);
       expect(decoded.fields['new_port'], '443');
     });
@@ -579,7 +643,58 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'unregister_clearing_bank');
-      expect(decoded.fields['cid_number'], cidNumber);
+      expect(decoded.fields['actor_cid_number'], cidNumber);
+    });
+
+    test('decodes clearing bank fee proposal with CID and institution account',
+        () {
+      final institutionAccount = List<int>.filled(32, 0x55);
+      final payload = [
+        19,
+        40,
+        ...compactVec(nrcActorCid),
+        ...institutionAccount,
+        ...u32Le(35),
+      ];
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
+      expect(decoded?.action, 'propose_l2_fee_rate');
+      expect(decoded?.fields['actor_cid_number'], nrcActorCid);
+      expect(
+        decoded?.fields['institution_account'],
+        ss58FromBytes(institutionAccount),
+      );
+      expect(decoded?.fields['new_rate_bp'], '35');
+    });
+
+    test('decodes AddressRegistry calls with actor CID', () {
+      final catalogHash = List<int>.filled(32, 0x77);
+      final catalog = [
+        33,
+        0,
+        ...compactVec(registryActorCid),
+        ...compactVec('2026.07'),
+        ...catalogHash,
+      ];
+      final address = [
+        33,
+        3,
+        ...compactVec(registryActorCid),
+        ...compactVec('GD'),
+        ...compactVec('001'),
+        ...compactVec('001001'),
+        ...compactVec('ROAD'),
+        ...compactVec('88'),
+        ...compactVec('一号楼'),
+      ];
+      final catalogDecoded =
+          PayloadDecoder.decode(hexOf(withSigningTail(catalog)));
+      expect(catalogDecoded?.action, 'set_address_catalog_version');
+      expect(catalogDecoded?.fields['actor_cid_number'], registryActorCid);
+      final addressDecoded =
+          PayloadDecoder.decode(hexOf(withSigningTail(address)));
+      expect(addressDecoded?.action, 'set_address');
+      expect(addressDecoded?.fields['address_local_no'], '88');
+      expect(addressDecoded?.fields['address_detail'], '一号楼');
     });
 
     test('decodes clearing bank decrypt challenge', () {
@@ -613,7 +728,7 @@ void main() {
       expect(decoded.summary, contains('解密清算行管理员'));
     });
 
-    test('decodes propose_sweep_to_main AccountId32 (pallet=17 call=2)', () {
+    test('decodes propose_sweep_to_main CID + institution account', () {
       final institutionAccount = List<int>.filled(32, 0x66);
       const amount = 10000;
       final amountBytes = List<int>.filled(16, 0);
@@ -623,6 +738,7 @@ void main() {
       final payload = Uint8List.fromList([
         0x11,
         0x02,
+        ...compactVec(nrcActorCid),
         ...institutionAccount,
         ...amountBytes,
       ]);
@@ -631,10 +747,9 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_sweep_to_main');
-      expect(
-        decoded.fields['institution'],
-        '机构账户 ${ss58FromBytes(institutionAccount)}',
-      );
+      expect(decoded.fields['actor_cid_number'], nrcActorCid);
+      expect(decoded.fields['institution_account'],
+          ss58FromBytes(institutionAccount));
       expect(decoded.fields['amount_yuan'], '100.00 GMB');
     });
 
@@ -654,13 +769,14 @@ void main() {
           reason: '目标态只接受机构多签 AccountId32,不兼容旧 48B 主体');
     });
 
-    test('decodes propose_transfer for institution AccountId32', () {
+    test('decodes propose_transfer for institution CID + account', () {
       final institutionAccount = List<int>.filled(32, 0x66);
       final beneficiary = List<int>.filled(32, 0x44);
       final payload = Uint8List.fromList([
         0x11,
         0x00,
-        ...InstitutionCode.codeBytes('CGOV'), // 机构账户码(取代旧 org=5)
+        0x01, // Option::Some(actor_cid_number)
+        ...compactVec(nrcActorCid),
         ...institutionAccount,
         ...beneficiary,
         ...u128LeForTest(BigInt.from(12345)),
@@ -672,17 +788,15 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_transfer');
-      expect(
-        decoded.fields['institution'],
-        '机构账户 ${ss58FromBytes(institutionAccount)}',
-      );
+      expect(decoded.fields['actor_cid_number'], nrcActorCid);
+      expect(decoded.fields['institution_account'],
+          ss58FromBytes(institutionAccount));
       expect(decoded.fields['amount_yuan'], '123.45 GMB');
       expect(decoded.fields['remark'], 'test');
     });
 
     test('rejects legacy 48-byte transfer account payload', () {
-      // 旧布局 [org:u8][subject:48B]。新布局是 [institution_code:4B][account:32B],
-      // 48B 主体读出的"机构码"是垃圾且非法人机构码 → null。
+      // 旧布局 [org:u8][subject:48B]，目标态 Option<CID> + AccountId32 不兼容。
       final payload = Uint8List.fromList([
         0x11,
         0x00,
@@ -1006,35 +1120,37 @@ void main() {
 
     test('decodes public institution close action', () {
       // 机构注销 propose_close(30.1) 携带注册局签发的注销凭证:
-      // account + beneficiary + register_nonce(Vec) + signature(Vec)
-      // + issuer_cid_number(Vec) + issuer_main_account(32) + signer_pubkey(32)。
+      // actor_cid_number + institution_account + beneficiary + register_nonce
+      // + signature + credential_issuer_cid_number + credential_signer_pubkey。
       final registerNonce = utf8.encode('reg-nonce-001');
       final signature = List<int>.filled(64, 0xDD);
-      final issuerCid = utf8.encode('CN000-GZF0A-000000001-2026');
-      final issuerMain = List<int>.generate(32, (i) => 0xB0 + (i & 0x0F));
-      final signerPubkey = List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
+      const credentialIssuerCid = 'CN000-GZF0A-000000001-2026';
+      final credentialSigner = List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
+      final institutionAccount = List<int>.filled(32, 0x11);
+      final beneficiary = List<int>.filled(32, 0x22);
       final payload = <int>[
         0x1e, 0x01, // PublicManage.propose_close_public_institution
-        ...List<int>.filled(32, 0x11), // account
-        ...List<int>.filled(32, 0x22), // beneficiary
-        // register_nonce: Vec<u8>
+        ...compactVec(registryActorCid),
+        ...institutionAccount,
+        ...beneficiary,
         (registerNonce.length << 2) & 0xff,
         ...registerNonce,
-        // signature: Vec<u8> 64B (Compact mode 1)
         0x01, 0x01,
         ...signature,
-        // issuer_cid_number: Vec<u8>
-        (issuerCid.length << 2) & 0xff,
-        ...issuerCid,
-        // issuer_main_account: AccountId32
-        ...issuerMain,
-        // signer_pubkey: [u8;32]
-        ...signerPubkey,
+        ...compactVec(credentialIssuerCid),
+        ...credentialSigner,
       ];
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_close_public_institution');
-      expect(decoded.fields.keys.toList(), ['account', 'beneficiary']);
+      expect(decoded.fields['actor_cid_number'], registryActorCid);
+      expect(decoded.fields['institution_account'],
+          ss58FromBytes(institutionAccount));
+      expect(decoded.fields['beneficiary'], ss58FromBytes(beneficiary));
+      expect(
+          decoded.fields['credential_issuer_cid_number'], credentialIssuerCid);
+      expect(decoded.fields['credential_signer_pubkey'],
+          ss58FromBytes(credentialSigner));
     });
 
     test('rejects unknown out-of-range pallet index', () {
@@ -1068,8 +1184,7 @@ void main() {
     // 机构/决议创建 decoder:
     // - propose_create_public_institution(30.5):公权机构多签账户创建提案
     //   (走 CID 后端签发机构 admins 凭证)
-    // - propose_issuance(8.0):决议发行联合提案
-    //   (人口快照由 JointVote 单独准备)
+    // - propose_issuance(8.0):决议发行联合提案。
     List<int> buildProposeCreateInstitutionPayload({
       bool extraTail = false,
       String secondAccountName = '费用账户',
@@ -1130,9 +1245,7 @@ void main() {
       ];
       final registerNonce = utf8.encode('reg-nonce-001');
       final signature = List<int>.filled(64, 0xDD);
-      final issuerCid = utf8.encode('CN000-GZF0A-000000001-2026');
-      final issuerMain = List<int>.generate(32, (i) => 0xB0 + (i & 0x0F));
-      final signerPubkey = List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
+      final credentialSigner = List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
       final scopeProvince = utf8.encode('安徽省');
       final scopeCity = utf8.encode('合肥市');
       final payload = <int>[
@@ -1180,13 +1293,9 @@ void main() {
         // signature: Vec<u8> 64B (Compact mode 1)
         0x01, 0x01,
         ...signature,
-        // issuer_cid_number: Vec<u8>
-        (issuerCid.length << 2) & 0xff,
-        ...issuerCid,
-        // issuer_main_account: AccountId32
-        ...issuerMain,
-        // signer_pubkey: [u8;32]
-        ...signerPubkey,
+        // actor_cid_number + credential_signer_pubkey。
+        ...compactVec(registryActorCid),
+        ...credentialSigner,
         // scope_province_name / scope_city_name
         (scopeProvince.length << 2) & 0xff,
         ...scopeProvince,
@@ -1209,10 +1318,9 @@ void main() {
     }
 
     test(
-        'decodes propose_create_public_institution (pallet=30 call=5) 含 issuer/scope',
+        'decodes propose_create_public_institution (pallet=30 call=5) 含 actor/scope',
         () {
-      final issuerMain = List<int>.generate(32, (i) => 0xB0 + (i & 0x0F));
-      final signerPubkey = List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
+      final credentialSigner = List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
 
       final payload =
           Uint8List.fromList(buildProposeCreateInstitutionPayload());
@@ -1239,13 +1347,12 @@ void main() {
       expect(decoded.fields['amount_主账户'], '10,000.00 GMB');
       expect(decoded.fields['amount_费用账户'], '2.22 GMB');
       expect(decoded.fields.containsKey('subject_property'), isFalse);
-      expect(decoded.fields['issuer_cid_number'], 'CN000-GZF0A-000000001-2026');
-      expect(decoded.fields['issuer_main_account'], ss58FromBytes(issuerMain));
+      expect(decoded.fields['actor_cid_number'], registryActorCid);
       expect(decoded.fields['scope_province_name'], '安徽省');
       expect(decoded.fields['scope_city_name'], '合肥市');
       expect(
-        decoded.fields['signer_pubkey'],
-        ss58FromBytes(signerPubkey),
+        decoded.fields['credential_signer_pubkey'],
+        ss58FromBytes(credentialSigner),
       );
     });
 
@@ -1258,15 +1365,17 @@ void main() {
               'P-TX-001 禁止 subject_property/sub_type/parent_cid_number 多余尾字段');
     });
 
-    // CANON 决策2：制度专属保留名（永久质押/安全基金/两和基金）禁止作为机构
-    // 自定义账户名，命中即 decodeFailed（红色拒签）。取值逐字对齐链端 primitives。
-    for (final forbidden in const ['永久质押', '安全基金', '两和基金']) {
-      test('propose_create_public_institution 账户名命中保留名「$forbidden」时拒绝解码', () {
+    // 机构类型允许的协议账户集合由 runtime primitives 唯一裁决；钱包只做结构解码，
+    // 不复制一份账户名到机构类型的业务授权表。
+    for (final protocolAccount in const ['永久质押', '安全基金', '两和基金']) {
+      test('propose_create_public_institution 完整展示协议账户「$protocolAccount」', () {
         final payload = Uint8List.fromList(
-          buildProposeCreateInstitutionPayload(secondAccountName: forbidden),
+          buildProposeCreateInstitutionPayload(
+              secondAccountName: protocolAccount),
         );
         final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
-        expect(decoded, isNull, reason: '制度专属保留名不可作为机构自定义账户注册，必须红色拒签');
+        expect(decoded, isNotNull);
+        expect(decoded!.fields['amount_$protocolAccount'], '2.22 GMB');
       });
     }
 
@@ -1426,20 +1535,6 @@ void main() {
     // 协议升级 fixture step2d propose_runtime_upgrade decoder 用例已删:同上,SCALE decoder
     // 整体下线,fixture 走 OfflineSignService.verifyPayload 的哈希直签例外。
 
-    test('fixture step2d propose_issuance: decoder 解出新字段', () {
-      final fixture = readFixture();
-      final caseEntry = (fixture['cases'] as List)
-          .firstWhere((e) => e['name'] == 'propose_issuance');
-      final hex = caseEntry['expected_call_data_hex'] as String;
-      // fixture 固化的是纯 call_data,真实 QR 还带签名扩展尾。
-      final decoded =
-          PayloadDecoder.decode(hexOf(withSigningTail(bytesFromHex(hex))));
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'propose_issuance');
-      expect(decoded.fields['allocation_count'], '2');
-      expect(decoded.fields.containsKey('eligible_total'), isFalse);
-    });
-
     test('decodes propose_issuance (pallet=8 call=0) 当前字段', () {
       final reason = utf8.encode('紧急救灾');
       final totalFen = BigInt.from(50000000); // 500_000.00 GMB
@@ -1460,6 +1555,7 @@ void main() {
       ];
       final payload = Uint8List.fromList([
         0x08, 0x00, // pallet=8 call=0
+        ...compactVec(nrcActorCid),
         (reason.length << 2) & 0xff,
         ...reason,
         ...totalLe,
@@ -1471,6 +1567,7 @@ void main() {
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_issuance');
+      expect(decoded.fields['actor_cid_number'], nrcActorCid);
       expect(decoded.fields['reason'], '紧急救灾');
       expect(decoded.fields['allocation_count'], '2');
       expect(decoded.fields.containsKey('eligible_total'), isFalse);
@@ -1481,8 +1578,9 @@ void main() {
     // 带合法尾 → 解码成功;裸 call_data / 篡改尾 → null(红色拒签)。
     List<int> buildNrcTransferCallData() => [
           0x11, 0x00,
-          ...InstitutionCode.codeBytes('NRC'), // institution_code = 国家储委会
-          ...List<int>.filled(32, 0x66), // institution AccountId32
+          0x01, // institution Some
+          ...compactVec(nrcActorCid),
+          ...List<int>.filled(32, 0x66), // funding_account
           ...List<int>.filled(32, 0x44), // beneficiary
           ...u128LeForTest(BigInt.from(12345)),
           0x00, // remark 空 Vec
@@ -1493,7 +1591,11 @@ void main() {
           hexOf(withSigningTail(buildNrcTransferCallData())));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_transfer');
-      expect(decoded.fields['institution'], '国家储委会');
+      expect(decoded.fields['actor_cid_number'], nrcActorCid);
+      expect(
+        decoded.fields['institution_account'],
+        ss58FromBytes(List<int>.filled(32, 0x66)),
+      );
       expect(decoded.fields['amount_yuan'], '123.45 GMB');
       expect(decoded.fields['remark'], '');
     });
@@ -1537,20 +1639,10 @@ void main() {
   // 立法院 LegislationYuan(25) + 立法投票 LegislationVote(26),布局逐字段对齐
   // citizenchain runtime + citizenapp legislation_codec。夹具必须带签名扩展尾。
   group('立法 pallet 解码(LegislationYuan 25 / LegislationVote 26)', () {
-    // 机构码 [u8;4] 右补 0。
-    List<int> code4(String code) {
-      final raw = utf8.encode(code);
-      final out = List<int>.filled(4, 0);
-      for (var i = 0; i < 4 && i < raw.length; i++) {
-        out[i] = raw[i];
-      }
-      return out;
-    }
-
-    final acct = List<int>.generate(32, (i) => (i + 1) & 0xff);
-
-    // (InstitutionCode, AccountId32) 平铺 36 字节。
-    List<int> body(String code) => [...code4(code), ...acct];
+    const firstHouseCid = 'ZS001-NLG0H-100000001-2026';
+    const secondHouseCid = 'ZS001-NLG0H-100000002-2026';
+    const executiveCid = 'ZS001-PRS0G-100000003-2026';
+    const legislatureCid = 'ZS001-PLG0H-100000004-2026';
 
     // 一章一节一条无款的最小章节树。
     List<int> minimalChapters() => [
@@ -1577,16 +1669,16 @@ void main() {
         1, // tier = National(1)
         ...u32Le(110000), // scope_code
         ...compactU32(2), // houses 2 项
-        ...body('NLG'),
-        ...body('NLG'),
-        ...body('PRS'), // proposer_body
-        ...body('PRS'), // executive
+        ...compactVec(firstHouseCid),
+        ...compactVec(secondHouseCid),
+        ...compactVec(nrcActorCid),
+        ...compactVec(executiveCid),
         0x00, // legislature None
         2, // vote_type = Major(2)
         ...compactVec('教育法'), // title
         0x00, // title_en None
         ...minimalChapters(),
-        ...u32Le(5000), // effective_at
+        ...u64Le(5000), // effective_at: unix 毫秒
       ];
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(callData)));
       expect(decoded, isNotNull);
@@ -1597,6 +1689,9 @@ void main() {
       expect(decoded.fields['chapter_count'], '1');
       expect(decoded.fields['article_count'], '1');
       expect(decoded.fields['effective_at'], '5000');
+      expect(decoded.fields['houses'], '$firstHouseCid、$secondHouseCid');
+      expect(decoded.fields['actor_cid_number'], nrcActorCid);
+      expect(decoded.fields['executive_cid_number'], executiveCid);
     });
 
     test('rejects propose_enact_law with tier=Constitution(0)', () {
@@ -1605,15 +1700,15 @@ void main() {
         0, // tier = Constitution(0) → 立法入口禁止新立宪法
         ...u32Le(0),
         ...compactU32(1),
-        ...body('NLG'),
-        ...body('PRS'),
-        ...body('PRS'),
+        ...compactVec(firstHouseCid),
+        ...compactVec(nrcActorCid),
+        ...compactVec(executiveCid),
         0x00,
         0,
         ...compactVec('宪法'),
         0x00,
         ...minimalChapters(),
-        ...u32Le(1),
+        ...u64Le(1),
       ];
       expect(PayloadDecoder.decode(hexOf(withSigningTail(callData))), isNull);
     });
@@ -1624,15 +1719,15 @@ void main() {
         1,
         ...u32Le(0),
         ...compactU32(1),
-        ...body('NLG'),
-        ...body('PRS'),
-        ...body('PRS'),
+        ...compactVec(firstHouseCid),
+        ...compactVec(nrcActorCid),
+        ...compactVec(executiveCid),
         0x00,
         9, // 非法 vote_type
         ...compactVec('法'),
         0x00,
         ...minimalChapters(),
-        ...u32Le(1),
+        ...u64Le(1),
       ];
       expect(PayloadDecoder.decode(hexOf(withSigningTail(callData))), isNull);
     });
@@ -1641,14 +1736,14 @@ void main() {
       final callData = [
         25, 1,
         ...u64Le(42), // law_id
-        ...body('PLG'),
-        ...body('PGV'),
-        0x01, ...body('PLG'), // legislature Some
+        ...compactVec(nrcActorCid),
+        ...compactVec(executiveCid),
+        0x01, ...compactVec(legislatureCid), // legislature Some
         4, // vote_type = Special(4)
         ...compactVec('修订版'),
         0x00,
         ...minimalChapters(),
-        ...u32Le(7777),
+        ...u64Le(7777),
       ];
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(callData)));
       expect(decoded, isNotNull);
@@ -1657,14 +1752,17 @@ void main() {
       expect(decoded.fields['title'], '修订版');
       expect(decoded.fields['vote_type'], '特别案（强制公投）');
       expect(decoded.fields['effective_at'], '7777');
+      expect(decoded.fields['actor_cid_number'], nrcActorCid);
+      expect(decoded.fields['executive_cid_number'], executiveCid);
+      expect(decoded.fields['legislature_cid_number'], legislatureCid);
     });
 
     test('decodes propose_repeal_law (25.2)', () {
       final callData = [
         25, 2,
         ...u64Le(7), // law_id
-        ...body('CLEG'),
-        ...body('CGOV'),
+        ...compactVec(nrcActorCid),
+        ...compactVec(executiveCid),
         0x00, // legislature None
         0, // vote_type = Regular(0)
       ];
@@ -1673,6 +1771,8 @@ void main() {
       expect(decoded!.action, 'propose_repeal_law');
       expect(decoded.fields['law_id'], '7');
       expect(decoded.fields['vote_type'], '常规案');
+      expect(decoded.fields['actor_cid_number'], nrcActorCid);
+      expect(decoded.fields['executive_cid_number'], executiveCid);
     });
 
     test('decodes prepare_population_snapshot (26.0)', () {
