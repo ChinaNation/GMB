@@ -56,7 +56,6 @@ class QrActions {
   static const int transferWithRemark = 0x0400;
   static const int personalCreate = 0x0700;
   static const int personalClose = 0x0701;
-  static const int personalCleanupRejected = 0x0702;
   static const int personalAdminsChange = 0x1d00;
   static const int resolutionIssuance = 0x0800;
   static const int finalizeProposal = 0x0903;
@@ -67,7 +66,7 @@ class QrActions {
   static const int resolutionDestroy = 0x0d00;
   static const int grandpaKeyChange = 0x0f00;
   // 机构创建/关闭已收归 onchina 控制台 + 冷钱包,citizenapp 不再生成机构创建/关闭签名请求,
-  // 故删除旧 OrganizationManage(17) 动作码 organizationCreate/Close/CleanupRejected(0x1105/0x1101/0x1104)。
+  // 因此不保留旧机构生命周期动作码。
   static const int multisigTransfer = 0x1100;
   static const int safetyFundTransfer = 0x1101;
   static const int sweepToMain = 0x1102;
@@ -81,12 +80,10 @@ class QrActions {
   static const int internalVote = 0x1400;
   static const int jointVote = 0x1500;
   static const int castReferendum = 0x1501;
-  static const int preparePopulationSnapshot = 0x1502;
   // 立法(LegislationYuan=25=0x19 发起类节点端;LegislationVote=26=0x1a 投票/签署类)。
   static const int legislationEnact = 0x1900;
   static const int legislationAmend = 0x1901;
   static const int legislationRepeal = 0x1902;
-  static const int legislationPrepareSnapshot = 0x1a00;
   static const int legislationRepresentativeVote = 0x1a01;
   static const int legislationReferendum = 0x1a02;
   static const int legislationExecutiveSign = 0x1a03;
@@ -111,7 +108,6 @@ class QrActions {
         'transfer' => transferWithRemark,
         'propose_create_personal' => personalCreate,
         'propose_close_personal' => personalClose,
-        'cleanup_rejected_personal_proposal' => personalCleanupRejected,
         'propose_issuance' => resolutionIssuance,
         'finalize_proposal' => finalizeProposal,
         'retry_passed_proposal' => retryPassedProposal,
@@ -134,11 +130,9 @@ class QrActions {
         'internal_vote' => internalVote,
         'joint_vote' => jointVote,
         'cast_referendum' => castReferendum,
-        'prepare_population_snapshot' => preparePopulationSnapshot,
         'propose_enact_law' => legislationEnact,
         'propose_amend_law' => legislationAmend,
         'propose_repeal_law' => legislationRepeal,
-        'prepare_joint_population_snapshot' => legislationPrepareSnapshot,
         'cast_representative_vote' => legislationRepresentativeVote,
         'cast_referendum_vote' => legislationReferendum,
         'executive_sign' => legislationExecutiveSign,

@@ -46,7 +46,7 @@ Worker 瞬时转发 SDP/ICE
 
 WebRTC 只使用公共 STUN 发现候选地址，不配置中继服务。NAT 环境无法建立设备直连时，附件保持在发送设备并等待后续重试；Cloudflare 不接收、转发或保存附件字节。
 
-**媒体大小与门控(单源 `chat_media_limits.dart`:图片 100MB、视频/文件 5GB)。** 因字节走 WebRTC、服务端不在字节路径,大小只考验用户网络与设备,不占 Cloudflare 资源;门控必须由收发两端各自强制,构成四门:①发送端发前硬拦(超限抛 `ChatMediaTooLargeException`)②接收端字节层按 `content_type` 定额,声明超限拒收、累积超限中止删临时(防谎报小 `byte_size` 狂发)③落盘前二次校验④渲染层对声明超限者显"已拒收"、不解析路径。被篡改的发送方无法把超限媒体塞给诚实接收方;收发两端都被改则是纯 P2P 私下传输,任何零存储设计都无法阻止(固有边界)。字节全程流式落盘,5GB 也不 OOM。
+**媒体大小与门控(单源 `chat_media_limits.dart`,单个文件上限按会员档,ADR-036:无订阅/自由 10MB、民主 100MB、薪火 5GB;与会员套餐 `chat_file_max_bytes` 同源,由 `ChatMediaLimits.applyMembershipLevel` 在 `SquareApiClient.fetchMembership` 时设置当前档,未知/失效 fail-closed 自由档)。** 因字节走 WebRTC、服务端不在字节路径,大小只考验用户网络与设备,不占 Cloudflare 资源;门控必须由收发两端各自强制,构成四门:①发送端发前硬拦(超限抛 `ChatMediaTooLargeException`)②接收端字节层按当前档定额,声明超限拒收、累积超限中止删临时(防谎报小 `byte_size` 狂发)③落盘前二次校验④渲染层对声明超限者显"已拒收"、不解析路径。被篡改的发送方无法把超限媒体塞给诚实接收方;收发两端都被改则是纯 P2P 私下传输,任何零存储设计都无法阻止(固有边界)。字节全程流式落盘,5GB 也不 OOM。**分界固定 100MB(`ChatMediaLimits.needsRelay`):≤100MB 走 WebRTC(永不触 Cloudflare 字节路径);>100MB(仅薪火)走 Cloudflare R2 瞬时中转**——客户端一次性内容密钥流式分块 AES-256-GCM 加密(`media/media_relay_crypto.dart`),K 只随 E2E 信封传、Cloudflare 只经手密文;`media/chat_relay_media.dart` 编排上传/下载,Worker `chat/relay.ts` 薪火+尺寸门 + R2 代理(拉完 ack 删 / 24h TTL 兜底)。>100MB 未配置中转即拒发,绝不降级 WebRTC。详见 `CHAT_GROUP_TECHNICAL.md §11`。
 
 ## 3. 身份与密钥
 
@@ -212,7 +212,7 @@ Chat 与广场权限分离：
 
 - Chat：所有钱包用户可用。
 - 广场浏览：必须有钱包 session；无订阅账户每日最多返回 100 条内容，有效会员不限产品浏览量。
-- 广场发布：无订阅账户禁止；有效会员按四档套餐和身份权限发布。
+- 广场发布：无订阅账户禁止；有效会员按三档套餐发布（ADR-036，会员与身份解耦）。发帖分类权限按身份档（竞选内容须竞选身份 `candidate`）、用量额度按会员档，二者互不影响（用户 2026-07-16）。
 - 防机器人、盗链和异常用量属于第 2 步，本步骤不提前加入双轨逻辑。
 
 ## 10. 当前状态

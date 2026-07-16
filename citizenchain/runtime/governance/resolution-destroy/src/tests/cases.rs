@@ -19,6 +19,51 @@ fn nrc_destroy_executes_when_yes_votes_reach_threshold() {
         }
 
         assert_eq!(Balances::free_balance(&account), 900);
+        assert_eq!(
+            Balances::free_balance(AccountId32::new(CHINA_CB[0].fee_account)),
+            990
+        );
+    });
+}
+
+#[test]
+fn destroy_fee_shortage_never_falls_back_to_admin() {
+    new_test_ext().execute_with(|| {
+        let institution = nrc_pallet_id();
+        let account = institution_account(&institution);
+        let fee_account = AccountId32::new(CHINA_CB[0].fee_account);
+        let admin = nrc_admin(0);
+        assert_ok!(Balances::force_set_balance(
+            RuntimeOrigin::root(),
+            fee_account.clone(),
+            1,
+        ));
+        assert_ok!(Balances::force_set_balance(
+            RuntimeOrigin::root(),
+            admin.clone(),
+            10_000,
+        ));
+
+        assert_ok!(ResolutionDestroy::propose_destroy(
+            RuntimeOrigin::signed(admin.clone()),
+            nrc_cid(),
+            institution,
+            100,
+        ));
+        let pid = last_proposal_id();
+        for i in 1..13 {
+            assert_ok!(cast_vote(nrc_admin(i), pid, true));
+        }
+
+        assert_eq!(Balances::free_balance(&account), 1_000);
+        assert_eq!(Balances::free_balance(&fee_account), 1);
+        assert_eq!(Balances::free_balance(&admin), 10_000);
+        assert_eq!(
+            votingengine::Pallet::<Test>::proposals(pid)
+                .expect("proposal should exist")
+                .status,
+            STATUS_PASSED
+        );
     });
 }
 

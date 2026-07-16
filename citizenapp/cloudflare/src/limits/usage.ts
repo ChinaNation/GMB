@@ -178,7 +178,7 @@ function releaseTotalStatement(env: Env, key: string, assets: MediaAssetRow[]): 
 async function assertProfitBudget(env: Env, hasVideo: boolean): Promise<void> {
   const revenue = await env.DB.prepare(
     `SELECT COALESCE(SUM(CASE membership_level
-        WHEN 'freedom' THEN 299 WHEN 'candidate' THEN 9999 ELSE 999 END), 0) AS cents
+        WHEN 'freedom' THEN 299 WHEN 'spark' THEN 9999 ELSE 999 END), 0) AS cents
       FROM square_memberships
       WHERE subscription_status IN ('active', 'trialing') AND expires_at > ?`
   ).bind(nowMs()).first<{ cents: number }>();

@@ -20,6 +20,8 @@ export type MediaArchiveState = 'live' | 'archived' | 'restoring';
 export interface Env {
   DB: D1Database;
   SQUARE_MEDIA: R2Bucket;
+  // 大媒体(>100MB)瞬时中转专用桶(桶级 24h 生命周期 TTL);只存薪火 + >100MB 的 E2E 密文。
+  CHAT_RELAY?: R2Bucket;
   SQUARE_CACHE: KVNamespace;
   CHAT_REALTIME?: DurableObjectNamespace;
   STREAM?: StreamBinding;
@@ -61,11 +63,10 @@ export interface Env {
   STRIPE_DEV_PROXY?: string;
   // Stripe secret key 只允许放 Worker Secret，用于官网创建 Checkout Session。
   STRIPE_API_KEY?: string;
+  // 会员三档 Stripe price ID（ADR-036，与身份解耦）：自由 $2.99 / 民主 $9.99 / 薪火 $99.99。
   FREEDOM_PRICE_ID?: string;
-  // 民主会员价格 ID：访客身份的 $9.99 高权益档。
   DEMOCRACY_PRICE_ID?: string;
-  VOTING_PRICE_ID?: string;
-  CANDIDATE_PRICE_ID?: string;
+  SPARK_PRICE_ID?: string;
   CHECKOUT_SUCCESS_URL?: string;
   CHECKOUT_CANCEL_URL?: string;
   // Cloudflare Images / Stream API token 只放 Worker Secret；App 只拿一次性上传 URL。
@@ -130,14 +131,8 @@ export interface MembershipRow {
   current_period_start: number | null;
   current_period_end: number | null;
   cancel_at_period_end: number;
-  identity_level: string;
-  identity_checked_at: number | null;
   // 会员权益失效时刻（退订满 N 月冷归档的时钟起点；重订置 NULL）。
   entitlement_lapsed_at: number | null;
-  // 身份≠档位时的冻结时点（NULL=未冻结；审计用，冻结态本身由身份不符派生）。
-  frozen_at: number | null;
-  // 是否已因冻结暂停 Stripe 收款（防止懒判定重复调用 Stripe pause）。
-  collection_paused: number;
   // USDC 预付路线的支付凭证（Stripe payment_intent id）；卡订阅为 NULL（ADR-034）。
   prepaid_payment_ref: string | null;
 }
@@ -231,10 +226,10 @@ export interface SquareFeedMediaItem {
 
 export interface SquarePostFeedItem extends SquarePostRow {
   media_items?: SquareFeedMediaItem[];
-  // 作者徽章信号（公开）：身份档=颜色、会员匹配身份档=勾。由本页去重作者统一读链上身份+批量读会员填充。
-  // identity_level 是链上身份档；membership_level 是已购买会员档（含 democracy 民主）。
+  // 作者徽章信号（公开）：身份档=颜色、会员有效=勾。由本页去重作者统一读链上身份+批量读会员填充。
+  // identity_level 是链上身份档；membership_level 是已购买会员档；二者已解耦（ADR-036）。
   identity_level?: 'visitor' | 'voting' | 'candidate';
-  membership_level?: 'freedom' | 'democracy' | 'voting' | 'candidate' | null;
+  membership_level?: 'freedom' | 'democracy' | 'spark' | null;
   membership_active?: boolean;
   // 作者展示名与头像对象键（取自作者 profile.json），供 feed 直出真名和真头像。
   display_name?: string;
@@ -281,8 +276,8 @@ export interface UserProfileResponse {
   is_certified: boolean;
   /// 链上身份档位：visitor 未认证 / voting 认证投票公民 / candidate 认证竞选公民。
   identity_level: 'visitor' | 'voting' | 'candidate';
-  /// 已购买的会员档位（公开）；未购买为 null。含 democracy（民主）。徽章「勾」= 会员有效。
-  membership_level: 'freedom' | 'democracy' | 'voting' | 'candidate' | null;
+  /// 已购买的会员档位（公开，与身份解耦）；未购买为 null。徽章「勾」= 会员有效。
+  membership_level: 'freedom' | 'democracy' | 'spark' | null;
   /// 会员是否当前有效（订阅生效且未过期）。
   membership_active: boolean;
   counts: UserProfileCounts;

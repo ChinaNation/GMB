@@ -8,6 +8,9 @@ import '../wallet/core/wallet_manager.dart';
 import 'chat_page.dart';
 import 'chat_runtime.dart';
 import 'chat_models.dart';
+import 'group/ui/group_create_page.dart';
+import 'group/ui/group_manage_page.dart';
+import 'group/ui/open_group_chat.dart';
 import 'storage/chat_store.dart';
 
 typedef ChatSendTextFactory = ChatSendTextCallback? Function(
@@ -412,6 +415,40 @@ class _ChatTabState extends State<ChatTab> {
       });
       return;
     }
+    if (preview.isGroup) {
+      openGroupChat(
+        context,
+        groupId: preview.conversationId,
+        title: preview.title,
+      ).then((_) => _reload());
+      return;
+    }
+    _openDirectConversation(preview);
+  }
+
+  void _openCreateGroup() {
+    if (_ownerAccount.isEmpty) {
+      setState(() => _error = '请先在「我的 → 我的钱包」创建热钱包');
+      return;
+    }
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute<void>(builder: (_) => const GroupCreatePage()),
+        )
+        .then((_) => _reload());
+  }
+
+  void _openGroupManage(ChatConversationPreview preview) {
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute<void>(
+            builder: (_) => GroupManagePage(groupId: preview.conversationId),
+          ),
+        )
+        .then((_) => _reload());
+  }
+
+  void _openDirectConversation(ChatConversationPreview preview) {
     Navigator.of(context)
         .push(
           MaterialPageRoute<void>(
@@ -506,6 +543,10 @@ class _ChatTabState extends State<ChatTab> {
               const SliverToBoxAdapter(child: _ChatHeader()),
               if (_error != null)
                 SliverToBoxAdapter(child: _ErrorBanner(message: _error!)),
+              if (!_loading && _ownerAccount.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: _NewGroupEntry(onTap: _openCreateGroup),
+                ),
               if (_loading)
                 const SliverFillRemaining(
                   hasScrollBody: false,
@@ -525,6 +566,9 @@ class _ChatTabState extends State<ChatTab> {
                       preview: preview,
                       onTap: () => _openConversation(preview),
                       onDelete: () => _confirmAndDeleteConversation(preview),
+                      onManage: preview.isGroup
+                          ? () => _openGroupManage(preview)
+                          : null,
                     );
                   },
                 )
@@ -591,11 +635,13 @@ class _ConversationTile extends StatelessWidget {
     required this.preview,
     required this.onTap,
     required this.onDelete,
+    this.onManage,
   });
 
   final ChatConversationPreview preview;
   final VoidCallback onTap;
   final Future<void> Function() onDelete;
+  final VoidCallback? onManage;
 
   @override
   Widget build(BuildContext context) {
@@ -611,11 +657,44 @@ class _ConversationTile extends StatelessWidget {
         return false;
       },
       child: _ListTileShell(
-        title: preview.title,
+        title: preview.isGroup ? '👥 ${preview.title}' : preview.title,
         subtitle: subtitle,
         trailing: _statusText(preview.deliveryState),
         unreadCount: preview.unreadCount,
         onTap: onTap,
+        onLongPress: onManage,
+        isGroup: preview.isGroup,
+      ),
+    );
+  }
+}
+
+class _NewGroupEntry extends StatelessWidget {
+  const _NewGroupEntry({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Material(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: onTap,
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Icon(Icons.group_add_outlined),
+                SizedBox(width: 12),
+                Text('新建群聊'),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -652,6 +731,8 @@ class _ListTileShell extends StatelessWidget {
     required this.trailing,
     required this.unreadCount,
     required this.onTap,
+    this.onLongPress,
+    this.isGroup = false,
   });
 
   final String title;
@@ -659,6 +740,8 @@ class _ListTileShell extends StatelessWidget {
   final String trailing;
   final int unreadCount;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  final bool isGroup;
 
   @override
   Widget build(BuildContext context) {
@@ -670,14 +753,15 @@ class _ListTileShell extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
           onTap: onTap,
+          onLongPress: onLongPress,
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Row(
               children: [
                 CircleAvatar(
                   backgroundColor: AppTheme.primary.withAlpha(24),
-                  child: const Icon(
-                    Icons.person_outline,
+                  child: Icon(
+                    isGroup ? Icons.groups_outlined : Icons.person_outline,
                     color: AppTheme.primary,
                   ),
                 ),

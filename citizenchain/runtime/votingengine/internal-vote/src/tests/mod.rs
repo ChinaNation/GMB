@@ -636,17 +636,8 @@ fn submit_joint_vote(
     <joint_vote::Pallet<Test>>::do_joint_vote(who, proposal_id, cid_number, approve)
 }
 
-fn prepare_population_snapshot_for(
-    who: AccountId32,
-    actor_cid_number: CidNumber,
-    eligible_total: u64,
-) {
+fn set_population_count(eligible_total: u64) {
     TEST_POPULATION_COUNT.with(|count| *count.borrow_mut() = eligible_total);
-    assert_ok!(JointVote::prepare_joint_population_snapshot(
-        RuntimeOrigin::signed(who),
-        actor_cid_number,
-        votingengine::PopulationScope::Country,
-    ));
 }
 
 fn create_joint_proposal_for(
@@ -654,7 +645,7 @@ fn create_joint_proposal_for(
     actor_cid_number: CidNumber,
     eligible_total: u64,
 ) -> u64 {
-    prepare_population_snapshot_for(who.clone(), actor_cid_number.clone(), eligible_total);
+    set_population_count(eligible_total);
     <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
         who,
         actor_cid_number.to_vec(),

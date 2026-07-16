@@ -7,6 +7,8 @@ const bootnodeA =
   '/dns4/nrcgch.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWHepcMGD3h9VC1XNWmrac3pXo63RimV5jhTU2nC2TLAyS';
 const bootnodeB =
   '/dns4/prczss.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWPjWNXvCzPv6PPuiGnF3J5uToW3ySfaB7rKkwUrN2CALv';
+const testGenesisHash = `0x${'11'.repeat(32)}`;
+const testStateRoot = `0x${'22'.repeat(32)}`;
 
 describe('chain bootstrap manifest', () => {
   it('returns a light-node bootstrap manifest without exposing RPC', () => {
@@ -105,6 +107,18 @@ describe('chain bootstrap manifest', () => {
       schema: 'citizenapp.chain.bootstrap.v2'
     });
   });
+
+  it('fails closed when the public chain identity is missing or invalid', () => {
+    const request = new Request('https://worker.test/v1/chain/bootstrap');
+    expect(() => buildChainBootstrapResponse(
+      request,
+      env({ CHAIN_GENESIS_HASH: '' }),
+    )).toThrow('CHAIN_GENESIS_HASH');
+    expect(() => buildChainBootstrapResponse(
+      request,
+      env({ CHAIN_STATE_ROOT: '0x1234' }),
+    )).toThrow('CHAIN_STATE_ROOT');
+  });
 });
 
 function env(overrides: Partial<Env> = {}): Env {
@@ -112,6 +126,8 @@ function env(overrides: Partial<Env> = {}): Env {
     DB: {} as D1Database,
     SQUARE_MEDIA: {} as R2Bucket,
     SQUARE_CACHE: {} as KVNamespace,
+    CHAIN_GENESIS_HASH: testGenesisHash,
+    CHAIN_STATE_ROOT: testStateRoot,
     ...overrides
   };
 }

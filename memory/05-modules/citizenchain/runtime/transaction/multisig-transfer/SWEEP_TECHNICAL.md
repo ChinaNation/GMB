@@ -33,9 +33,9 @@ pub struct SweepAction<AccountId, Balance> {
 
 ## 账户解析
 
-- `resolve_fee_account(actor_cid_number)`：用 `AccountKind::InstitutionFee` 从 CID 确定性派生费用账户
-- `resolve_main_account(actor_cid_number)`：用 `AccountKind::InstitutionMain` 从同一 CID 确定性派生主账户
-- 外部参数 `institution_account` 必须等于派生费用账户；主账户只是划转目标，二者都不能替代 CID 作为机构身份
+- `resolve_fee_account(actor_cid_number)`：从机构账户真源精确读取 `(actor_cid_number, InstitutionFee)`，并由正反索引聚合查询保证归属一致
+- `resolve_main_account(actor_cid_number)`：从同一机构账户真源精确读取 `(actor_cid_number, InstitutionMain)`
+- 外部参数 `institution_account` 必须等于查询到的费用账户；主账户只是划转目标，二者都不能替代 CID 作为机构身份
 
 ## 提案/投票/执行流程
 
@@ -57,15 +57,15 @@ pub struct SweepAction<AccountId, Balance> {
 3. 计算手续费：`calculate_onchain_fee(amount)` — 费率 0.1%，有最低值
 4. **余额检查**：划转和手续费支出后，费用账户余额必须 `>= ED`
 5. **Cap 检查**：`amount <= (fee_balance - ED) * 80 / 100`
-6. 执行 `Currency::transfer` 从 fee_account 到 main_account（KeepAlive）
-7. 执行 `Currency::withdraw` 扣取手续费
-8. 手续费通过 `FeeRouter`（即 `TransferFeeRouter` -> `OnchainFeeRouter`）按 80/10/10 分账
+6. 在同一 storage transaction 中先由 `OnchainFeeCharger::charge(fee_account, amount)` 收取执行手续费，再执行 `Currency::transfer` 从 fee_account 到 main_account（KeepAlive）
+7. 任一失败时手续费、分账和本金划转全部回滚
+8. 成功手续费经 `OnchainExecutionFeeDistributor` -> `OnchainFeeRouter` 按 80/10/10 分账
 9. 触发 `SweepToMainExecuted` 事件（含 `reserve_left` 余额）
 10. 返回 `ProposalExecutionOutcome::Executed`，由投票引擎设置提案状态为 `STATUS_EXECUTED`
 
 ## 手续费分账路径
 
-`TransferFeeRouter` 将旧 `NegativeImbalance` 转换为新 `Credit`，传递给 `OnchainFeeRouter`：
+`OnchainExecutionFeeDistributor` 将执行期 `NegativeImbalance` 等额转换为 `Credit`，传递给 `OnchainFeeRouter`：
 - 80% -> 当前区块矿工（PoW 全节点）
 - 10% -> 国家储委会费用账户
 - 10% -> 国家储委会安全基金账户

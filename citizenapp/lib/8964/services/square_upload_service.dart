@@ -135,7 +135,6 @@ class SquareUploadService implements SquareContentUploader {
     }
     _validateMembershipQuota(
       membership: membership,
-      postCategory: postCategory,
       contentFormat: contentFormat,
       titleLength: contentFormat == SquarePostContentFormat.article
           ? trimmedTitle.length
@@ -237,9 +236,10 @@ class SquareUploadService implements SquareContentUploader {
     return Uint8List.fromList(utf8.encode(jsonEncode(value)));
   }
 
+  // 只按会员档校验用量额度（发帖分类权限须竞选身份，按身份档在 compose 层校验；
+  // 会员与身份解耦，用户 2026-07-16）。
   void _validateMembershipQuota({
     required SquareMembershipState membership,
-    required SquarePostCategory postCategory,
     required SquarePostContentFormat contentFormat,
     required int titleLength,
     required int textLength,
@@ -248,10 +248,6 @@ class SquareUploadService implements SquareContentUploader {
     final plan = membership.activePlan;
     if (plan == null) {
       throw const SquareApiException('会员套餐信息不完整，请刷新会员状态后重试');
-    }
-    if (postCategory == SquarePostCategory.campaign &&
-        !membership.isCandidateMembership) {
-      throw const SquareApiException('只有竞选公民会员可以发布竞选内容');
     }
     if (contentFormat == SquarePostContentFormat.article) {
       _validateArticleQuota(

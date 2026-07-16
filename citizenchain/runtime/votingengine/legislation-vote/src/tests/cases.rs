@@ -89,6 +89,50 @@ fn referendum_threshold() {
     assert!(!primitives::constitution::referendum_passed(100, 48, 22)); // 参与70,赞成48/70≈68%<70%
 }
 
+fn regional_actor_cid(institution: &str) -> votingengine::CidNumber {
+    primitives::cid::generator::generate_cid_number(
+        primitives::cid::generator::GenerateCidNumberInput {
+            account_pubkey: "legislation-scope-test",
+            p1: "0",
+            province_code: "GD",
+            province_name: "广东省",
+            city_code: "002",
+            city_name: "测试市",
+            year: "2026",
+            institution,
+        },
+    )
+    .expect("regional actor CID should generate")
+    .into_bytes()
+    .try_into()
+    .expect("regional actor CID should fit")
+}
+
+#[test]
+fn special_population_scope_is_derived_only_from_actor_cid() {
+    assert_eq!(
+        Lib::population_scope_for_actor(*b"NRP\0", &actor_cid_number()).expect("NRP is national"),
+        votingengine::PopulationScope::Country
+    );
+
+    let province_actor = regional_actor_cid("PRP");
+    match Lib::population_scope_for_actor(*b"PRP\0", &province_actor).expect("PRP is provincial") {
+        votingengine::PopulationScope::Province(province_code) => {
+            assert_eq!(province_code.as_slice(), b"GD")
+        }
+        _ => panic!("PRP must derive province scope"),
+    }
+
+    let city_actor = regional_actor_cid("CSLF");
+    match Lib::population_scope_for_actor(*b"CSLF", &city_actor).expect("CSLF is municipal") {
+        votingengine::PopulationScope::City(province_code, city_code) => {
+            assert_eq!(province_code.as_slice(), b"GD");
+            assert_eq!(city_code.as_slice(), b"002");
+        }
+        _ => panic!("CSLF must derive city scope"),
+    }
+}
+
 // ───────────────── 单院投票 ─────────────────
 
 #[test]
@@ -104,6 +148,7 @@ fn representative_only_finishes_without_law_procedure() {
             vec![1],
         )
         .expect("representative-only proposal");
+        assert!(votingengine::ProposalPopulationSnapshotIds::<Test>::get(pid).is_none());
         // 发起人属于当前机构，创建时已经自动投下第一张赞成票。
         for i in 2u8..=7 {
             assert_ok!(cast(member(i), pid, true));
@@ -236,12 +281,24 @@ fn non_member_cannot_vote() {
 }
 
 #[test]
-fn create_no_longer_authorizes_proposer_at_vote_layer() {
+fn create_requires_actor_cid_admin_even_when_vote_route_is_valid() {
     new_test_ext().execute_with(|| {
-        // ADR-027 修订:发起人资格由 legislation-yuan 对 proposer_body 校验,提案方与表决院解耦;
-        // legislation-vote 层不再卡 who(市行政区 市自治会/市教委会 委员可提案,不属表决院 houses[0])。
-        let pid = create(member(50), single_house(), RepresentativeVoteRule::Regular);
-        assert_eq!(stage(pid), STAGE_LEG_REPRESENTATIVE);
+        assert_eq!(
+            Lib::do_create_representative_proposal(
+                member(50),
+                actor_cid_number(),
+                crate::RepresentativeRoute::Single(house1()),
+                RepresentativeVoteRule::Regular,
+                crate::VoteProcedure::Legislation,
+                votingengine::types::ProposalSubjectCidNumbers::new(),
+                Some(crate::pallet::LegislationMeta {
+                    executive: exec_body(),
+                    legislature: None,
+                    needs_guard: false,
+                }),
+            ),
+            Err(votingengine::Error::<Test>::NoPermission.into())
+        );
     });
 }
 
@@ -374,20 +431,15 @@ fn override_sign_rejected_for_non_signer() {
 
 // ───────────────── 特别案 → 强制公投 ─────────────────
 
-fn prepare_snapshot(who: AccountId32, eligible_total: u64) {
-    assert_eq!(eligible_total, 100);
-    assert_ok!(Lib::do_prepare_population_snapshot(
-        who,
-        votingengine::PopulationScope::Country,
-    ));
-}
-
 #[test]
 fn special_case_advances_to_referendum_then_passes() {
     new_test_ext().execute_with(|| {
-        // 特别案:发起前准备人口快照(同一区块),分母 100。
-        prepare_snapshot(member(1), 100);
+        // 特别案创建时由投票引擎内联生成全国人口快照，分母 100。
         let pid = create(member(1), single_house(), RepresentativeVoteRule::Special);
+        assert_eq!(
+            votingengine::ProposalPopulationSnapshotIds::<Test>::get(pid),
+            Some(0)
+        );
         // 全员 10:8 赞成 2 反对 → 内部段通过(≥70%)→ 推进至公投阶段。
         for i in 1u8..=8 {
             assert_ok!(cast(member(i), pid, true));
@@ -416,7 +468,6 @@ fn special_case_advances_to_referendum_then_passes() {
 #[test]
 fn legislation_referendum_rejects_votes_beyond_population_snapshot_denominator() {
     new_test_ext().execute_with(|| {
-        prepare_snapshot(member(1), 100);
         let pid = create(member(1), single_house(), RepresentativeVoteRule::Special);
         for i in 1u8..=8 {
             assert_ok!(cast(member(i), pid, true));

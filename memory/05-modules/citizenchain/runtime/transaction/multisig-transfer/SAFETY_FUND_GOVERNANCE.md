@@ -42,7 +42,7 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
   1. 金额大于零
   2. `actor_cid_number` 必须是国家储委会 CID，`institution_account` 必须是该 CID 下的安全基金账户，调用者通过 `InternalAdminProvider::is_institution_admin(NRC, actor_cid_number, origin)` 验证
   3. InstitutionAsset::can_spend 检查安全基金账户支出权限（NrcSafetyFundTransfer）
-  4. **余额预检**：`free_balance >= amount + fee + ED`，避免创建必定无法执行的提案
+  4. **分账户余额预检**：安全基金账户必须覆盖 `amount + ED`，国家储委会费用账户必须覆盖 `fee + ED`
 - **手续费预算**：使用 `calculate_onchain_fee(amount)` 计算，即 `max(amount * 0.1%, 0.1 元)`
 - **操作**：
   1. 通过 `InternalVoteEngine::create_institution_proposal_with_data` 创建内部提案，并绑定 CID、执行账户、owner/data/meta
@@ -63,14 +63,14 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
 2. 解码 SAFETY_FUND_ACCOUNT 为 AccountId
 3. InstitutionAsset::can_spend 再次检查支出权限
 4. **计算手续费**：`fee = max(amount * 0.1%, 0.1 元)`
-5. **余额检查**：`free >= amount + fee + ED`
-6. **执行转账**：Currency::transfer（KeepAlive）
-7. **扣取手续费**：Currency::withdraw 后通过 FeeRouter::on_unbalanced 按 80/10/10 分账
+5. **分账户余额检查**：安全基金账户覆盖 `amount + ED`，actor CID 的费用账户覆盖 `fee + ED`
+6. 在同一 storage transaction 中从费用账户调用 `OnchainFeeCharger::charge`，并从安全基金账户执行 `Currency::transfer`（KeepAlive）
+7. 任一失败全部回滚；成功手续费按 80/10/10 分账，`SafetyFundTransferExecuted.fee_payer` 记录国家储委会费用账户
 8. 返回 `ProposalExecutionOutcome::Executed`，由投票引擎设置提案状态为 EXECUTED
 
-## 手续费分账（FeeRouter 80/10/10）
+## 手续费分账（统一执行期收费器 80/10/10）
 
-安全基金转账产生的手续费通过 FeeRouter 分配：
+安全基金转账本金由安全基金账户支出，执行手续费只由国家储委会费用账户支出，随后进入统一分账：
 
 | 比例 | 接收方 | 说明 |
 |------|--------|------|
@@ -91,7 +91,7 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
 
 ## 源码位置
 
-- `citizenchain/runtime/transaction/multisig-transfer/src/lib.rs`
+- `citizenchain/runtime/transaction/multisig/src/lib.rs`
   - `propose_safety_fund_transfer`(call_index=1)
   - `try_execute_safety_fund_from_callback`(内部方法,投票通过后由 InternalVoteExecutor 回调触发)
 - `citizenchain/runtime/primitives/cid/china/china_cb.rs` - SAFETY_FUND_ACCOUNT 定义

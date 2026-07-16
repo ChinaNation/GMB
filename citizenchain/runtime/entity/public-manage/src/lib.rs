@@ -8,7 +8,6 @@ pub use pallet::*;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
 pub mod close;
-pub mod common;
 pub mod institution;
 pub mod traits;
 pub mod weights;
@@ -35,7 +34,7 @@ pub use traits::{
 };
 use votingengine::{
     types::{fixed_governance_pass_threshold, InstitutionCode},
-    InternalVoteEngine, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_REJECTED,
+    InternalVoteEngine, InternalVoteResultCallback, ProposalExecutionOutcome,
 };
 
 pub use entity_primitives::{
@@ -85,6 +84,13 @@ pub mod pallet {
         type ReservedAccountChecker: ReservedAccountGuard<Self::AccountId>;
         type ProtectedSourceChecker: ProtectedSourceChecker<Self::AccountId>;
         type InstitutionAsset: primitives::institution_asset::InstitutionAsset<Self::AccountId>;
+        /// 操作机构账户关系查询；非零初始余额只能由同一 actor CID 的明确账户出资。
+        type InstitutionQuery: entity_primitives::InstitutionMultisigQuery<Self::AccountId>;
+        /// 投票回调中的链上交易费统一执行器。
+        type OnchainFeeCharger: primitives::fee_policy::OnchainFeeCharger<
+            Self::AccountId,
+            BalanceOf<Self>,
+        >;
         type CidInstitutionVerifier: CidInstitutionVerifier<
             Self::AccountId,
             AccountNameOf<Self>,
@@ -97,11 +103,6 @@ pub mod pallet {
         /// 是新机构自己的管理员;二者不能再强制相同。本 trait 负责校验 FRG/CREG
         /// 对目标 CID 与机构码是否有登记权。
         type RegistryAuthority: RegistryAuthority<Self::AccountId>;
-
-        /// 手续费分账路由（创建入金和注销转出的手续费）
-        type FeeRouter: frame_support::traits::OnUnbalanced<
-            <Self::Currency as Currency<Self::AccountId>>::NegativeImbalance,
-        >;
 
         #[pallet::constant]
         type MaxAdmins: Get<u32>;
@@ -303,6 +304,7 @@ pub mod pallet {
         InstitutionClosed {
             proposal_id: u64,
             account: T::AccountId,
+            fee_payer: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
@@ -361,6 +363,12 @@ pub mod pallet {
         InvalidThreshold,
         /// 金额不足
         InsufficientAmount,
+        /// 初始余额非零时缺少明确资金账户。
+        FundingAccountRequired,
+        /// 初始余额为零时不得携带无实际用途的资金账户。
+        UnexpectedFundingAccount,
+        /// 资金账户不属于操作机构或不允许执行机构创建入金。
+        InvalidFundingAccount,
         /// 创建金额低于最小门槛
         CreateAmountBelowMinimum,
         /// 机构账户初始余额低于最小门槛
@@ -444,8 +452,6 @@ pub mod pallet {
         CloseTransferBelowED,
         /// 该多签账户已有进行中的关闭提案，不允许重复发起
         CloseAlreadyPending,
-        /// 提案未被拒绝，不可清理
-        ProposalNotRejected,
         /// 账户名占用保留角色名（"主账户"/"费用账户" 必须走 Role::Main/Fee，
         /// 禁止作为 Role::Named 的自定义命名参数）
         ReservedAccountName,
@@ -548,6 +554,7 @@ pub mod pallet {
             legal_representative_cid_number: CidNumberOf<T>,
             legal_representative_account: T::AccountId,
             accounts: InstitutionInitialAccountsOf<T>,
+            funding_account: Option<T::AccountId>,
             institution_code: InstitutionCode,
             roles: crate::institution::role::InstitutionRolesOf<T>,
             assignments: crate::institution::role::InstitutionAdminAssignmentsOf<T>,
@@ -570,6 +577,7 @@ pub mod pallet {
                 legal_representative_cid_number,
                 legal_representative_account,
                 accounts,
+                funding_account,
                 institution_code,
                 roles,
                 assignments,
@@ -675,54 +683,7 @@ pub mod pallet {
             )
         }
 
-        /// 发起"创建个人多签账户"提案（无需 CID 注册）。
-        ///
-        /// 地址由 `creator + account_name` 派生：
-        /// 清理已被拒绝或超时的关闭提案残留状态(机构侧)。
-        /// 任意签名账户可调用。用于解决投票引擎 on_initialize 超时 reject 后
-        /// 本模块无法自动收到通知导致的 InstitutionPendingClose 残留。
-        ///
-        /// 仅处理 ACTION_CLOSE 机构关闭提案;
-        /// 个人多签的清理由 personal-manage::cleanup_rejected_public_proposal 自持。
-        #[pallet::call_index(4)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::cleanup_rejected_public_proposal())]
-        pub fn cleanup_rejected_public_proposal(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-        ) -> DispatchResult {
-            let _ = ensure_signed(origin)?;
-
-            // 读取提案数据，校验 MODULE_TAG 后判断操作类型
-            let raw = votingengine::Pallet::<T>::get_proposal_data(proposal_id)
-                .ok_or(Error::<T>::ProposalActionNotFound)?;
-            let tag = crate::MODULE_TAG;
-            ensure!(
-                raw.len() > tag.len() && &raw[..tag.len()] == tag,
-                Error::<T>::ProposalActionNotFound
-            );
-            let action_tag = raw[tag.len()];
-
-            // 校验投票引擎状态必须为 REJECTED
-            let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
-                .ok_or(Error::<T>::ProposalActionNotFound)?;
-            ensure!(
-                proposal.status == STATUS_REJECTED,
-                Error::<T>::ProposalNotRejected
-            );
-
-            match action_tag {
-                ACTION_CLOSE => {
-                    let action = CloseInstitutionAction::<T::AccountId, CidNumberOf<T>>::decode(
-                        &mut &raw[tag.len() + 1..],
-                    )
-                    .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-                    InstitutionPendingClose::<T>::remove(&action.institution_account);
-                }
-                _ => return Err(Error::<T>::ProposalActionNotFound.into()),
-            }
-
-            Ok(())
-        }
+        // call_index(4) 已永久废弃：拒绝和执行失败清理由 votingengine 终态回调完成。
     }
 
     impl<T: Config> Pallet<T> {
@@ -871,6 +832,27 @@ pub mod pallet {
 // 机构账户只使用公权/私权法人机构码,不再把机构账户错误塞到 PMUL。
 
 impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for pallet::Pallet<T> {
+    fn lookup_institution_account(cid_number: &[u8], account_name: &[u8]) -> Option<T::AccountId> {
+        let cid_number = pallet::CidNumberOf::<T>::try_from(cid_number.to_vec()).ok()?;
+        let account_name = pallet::AccountNameOf::<T>::try_from(account_name.to_vec()).ok()?;
+        let stored = pallet::InstitutionAccounts::<T>::get(&cid_number, &account_name)?;
+        let reverse = pallet::AccountRegisteredCid::<T>::get(&stored.address)?;
+        (reverse.cid_number == cid_number && reverse.account_name == account_name)
+            .then_some(stored.address)
+    }
+
+    fn account_belongs_to(cid_number: &[u8], addr: &T::AccountId) -> bool {
+        let Some(registered) = pallet::AccountRegisteredCid::<T>::get(addr) else {
+            return false;
+        };
+        registered.cid_number.as_slice() == cid_number
+            && pallet::InstitutionAccounts::<T>::get(
+                &registered.cid_number,
+                &registered.account_name,
+            )
+            .is_some_and(|stored| stored.address == *addr)
+    }
+
     fn lookup_cid(addr: &T::AccountId) -> Option<Vec<u8>> {
         pallet::AccountRegisteredCid::<T>::get(addr)
             .map(|registered| registered.cid_number.to_vec())
@@ -993,17 +975,12 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
             }
         } else {
             // 否决:清理关闭 Pending 记录释放地址锁定。
-            match action_byte {
-                ACTION_CLOSE => {
-                    if let Ok(action) =
-                        CloseInstitutionAction::<T::AccountId, CidNumberOf<T>>::decode(
-                            &mut &raw[tag.len() + 1..],
-                        )
-                    {
-                        InstitutionPendingClose::<T>::remove(&action.institution_account);
-                    }
+            if action_byte == ACTION_CLOSE {
+                if let Ok(action) = CloseInstitutionAction::<T::AccountId, CidNumberOf<T>>::decode(
+                    &mut &raw[tag.len() + 1..],
+                ) {
+                    InstitutionPendingClose::<T>::remove(&action.institution_account);
                 }
-                _ => {}
             }
         }
         Ok(ProposalExecutionOutcome::Executed)
@@ -1019,15 +996,12 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
             raw.len() > tag.len(),
             pallet::Error::<T>::ProposalActionNotFound
         );
-        match raw[tag.len()] {
-            ACTION_CLOSE => {
-                let action = CloseInstitutionAction::<T::AccountId, CidNumberOf<T>>::decode(
-                    &mut &raw[tag.len() + 1..],
-                )
-                .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
-                InstitutionPendingClose::<T>::remove(&action.institution_account);
-            }
-            _ => {}
+        if raw[tag.len()] == ACTION_CLOSE {
+            let action = CloseInstitutionAction::<T::AccountId, CidNumberOf<T>>::decode(
+                &mut &raw[tag.len() + 1..],
+            )
+            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+            InstitutionPendingClose::<T>::remove(&action.institution_account);
         }
         Ok(())
     }

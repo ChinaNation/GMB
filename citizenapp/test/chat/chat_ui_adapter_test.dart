@@ -207,7 +207,7 @@ void main() {
         attachmentId: 'att-big',
         fileName: 'big.jpg',
         mime: 'image/jpeg',
-        byteSize: ChatMediaLimits.imageMaxBytes + 1,
+        byteSize: ChatMediaLimits.maxBytesForLevel('freedom') + 1,
       ),
     );
     var resolverCalled = false;

@@ -20,7 +20,8 @@ import { sanitizeOwnerAccount } from '../storage/r2_keys';
 import { loadMediaAssets } from '../uploads/service';
 import { requireActiveMembership } from '../membership/service';
 import { assertMembershipLevel, membershipPlan } from '../membership/plans';
-import { assertManifestQuota } from '../uploads/quota';
+import { assertIdentityCanPublishCategory, assertManifestQuota } from '../uploads/quota';
+import { fetchChainIdentityState } from '../chain/identity';
 
 interface ConfirmRequest {
   post_id?: unknown;
@@ -166,7 +167,12 @@ export async function confirmPublishedPost(
   validateManifest(manifest, upload);
   const mediaAssets = await loadMediaAssets(env, upload.upload_id);
   const membershipLevel = assertMembershipLevel(membership.membership_level);
-  // 发布确认再次按当前会员档校验完整内容，套餐在上传后变化也不能绕过权益。
+  // 发布确认再次按身份档校验分类权限（竞选内容须竞选身份，防上传后身份变化绕过）；
+  // 只有竞选帖才读链身份。用量额度另按会员档由 assertManifestQuota 校验。
+  if (upload.post_category === 'campaign') {
+    const identity = await fetchChainIdentityState(env, session.owner_account);
+    assertIdentityCanPublishCategory(identity.identity_level, 'campaign');
+  }
   await assertManifestQuota({
     membershipLevel,
     plan: membershipPlan(membershipLevel),

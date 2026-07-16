@@ -174,6 +174,17 @@ pub enum EntityKind {
 /// 输入任意机构账户地址，返回该账户所属机构 CID、机构码和管理员快照。
 /// 公权/私权 pallet 各自实现本 trait，runtime 再提供聚合查询适配器。
 pub trait InstitutionMultisigQuery<AccountId> {
+    /// 按机构 CID 与账户名读取唯一账户，并同时核验正向记录和反向索引。
+    fn lookup_institution_account(cid_number: &[u8], account_name: &[u8]) -> Option<AccountId> {
+        let _ = (cid_number, account_name);
+        None
+    }
+
+    /// 精确确认账户属于指定机构 CID；实现不得只信任单向索引。
+    fn account_belongs_to(cid_number: &[u8], addr: &AccountId) -> bool {
+        Self::account_exists(addr) && Self::lookup_cid(addr).as_deref() == Some(cid_number)
+    }
+
     /// 返回机构账户所属唯一 CID。个人多签没有 CID,不得返回伪 CID。
     fn lookup_cid(addr: &AccountId) -> Option<Vec<u8>>;
 
@@ -268,6 +279,7 @@ pub trait CidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> {
         legal_representative_cid_number: &[u8],
         legal_representative_account: &AccountId,
         account_names: &[Vec<u8>],
+        funding_account: Option<&AccountId>,
         roles_payload: &[u8],
         assignments_payload: &[u8],
         nonce: &Nonce,
@@ -283,6 +295,7 @@ pub trait CidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> {
         }
         let _ = (
             legal_representative_account,
+            funding_account,
             roles_payload,
             assignments_payload,
         );

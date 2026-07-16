@@ -19,6 +19,12 @@ import {
   submitChatEnvelope,
   submitChatSignal,
 } from "./chat/service";
+import {
+  ackChatRelay,
+  getChatRelayBlob,
+  initChatRelay,
+  putChatRelayBlob,
+} from "./chat/relay";
 import { feedRoute } from "./feeds/service";
 import { followRoute, unfollowRoute } from "./feeds/follows";
 import { mediaRoute } from "./media/service";
@@ -212,6 +218,27 @@ export async function routeRequest(
   }
   if (request.method === "GET" && path === "/v1/chat/ws") {
     return openChatWebSocket(request, env);
+  }
+  // 大媒体(>100MB)瞬时中转:init 申请 → blob 流式 PUT/GET → ack 删。仅薪火 + 仅 >100MB。
+  if (request.method === "POST" && path === "/v1/chat/relay/init") {
+    return initChatRelay(request, env);
+  }
+  if (path.startsWith("/v1/chat/relay/") && path.endsWith("/blob")) {
+    const relayKey = path.slice("/v1/chat/relay/".length, -"/blob".length);
+    if (request.method === "PUT") {
+      return putChatRelayBlob(request, env, relayKey);
+    }
+    if (request.method === "GET") {
+      return getChatRelayBlob(request, env, relayKey);
+    }
+  }
+  if (
+    request.method === "POST" &&
+    path.startsWith("/v1/chat/relay/") &&
+    path.endsWith("/ack")
+  ) {
+    const relayKey = path.slice("/v1/chat/relay/".length, -"/ack".length);
+    return ackChatRelay(request, env, relayKey);
   }
 
   throw new HttpError(404, "route_not_found", "广场接口不存在");

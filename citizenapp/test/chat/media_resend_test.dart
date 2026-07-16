@@ -22,7 +22,7 @@ void main() {
       resolveCachePath: (m) => '/cache/${m.attachmentId}',
       cacheFileExists: (_) async => true,
       sendBytes: (m, path) async => sent.add(m.attachmentId),
-      deletePending: (id) async => deleted.add(id),
+      deletePending: (media) async => deleted.add(media.attachmentId),
     );
     expect(sent, ['att-1']);
     expect(deleted, ['att-1']);
@@ -38,7 +38,7 @@ void main() {
       resolveCachePath: (m) => '/cache/${m.attachmentId}',
       cacheFileExists: (_) async => false,
       sendBytes: (m, path) async => sent.add(m.attachmentId),
-      deletePending: (id) async => deleted.add(id),
+      deletePending: (media) async => deleted.add(media.attachmentId),
     );
     expect(sent, isEmpty);
     expect(deleted, ['att-1']);
@@ -53,14 +53,15 @@ void main() {
       resolveCachePath: (m) => '/cache/${m.attachmentId}',
       cacheFileExists: (_) async => true,
       sendBytes: (m, path) async => throw Exception('offline'),
-      deletePending: (id) async => deleted.add(id),
+      deletePending: (media) async => deleted.add(media.attachmentId),
     );
     expect(deleted, isEmpty); // 保留待下次 peer_ready
     expect(inFlight, isEmpty);
   });
 
   test('在途中的媒体被跳过(去重):不重发、不删、不动在途集合', () async {
-    final inFlight = {'att-1'};
+    // 在途去重按 (attachmentId, recipient) 复合键。
+    final inFlight = {MediaResend.inFlightKey('att-1', 'bob')};
     final sent = <String>[];
     final deleted = <String>[];
     await MediaResend.run(
@@ -69,10 +70,10 @@ void main() {
       resolveCachePath: (m) => '/cache/${m.attachmentId}',
       cacheFileExists: (_) async => true,
       sendBytes: (m, path) async => sent.add(m.attachmentId),
-      deletePending: (id) async => deleted.add(id),
+      deletePending: (media) async => deleted.add(media.attachmentId),
     );
     expect(sent, isEmpty);
     expect(deleted, isEmpty);
-    expect(inFlight, {'att-1'});
+    expect(inFlight, {MediaResend.inFlightKey('att-1', 'bob')});
   });
 }

@@ -33,19 +33,6 @@ use frame_support::{
 
 /// Weight functions for `legislation_vote`.
 pub trait WeightInfo {
-	/// Storage: `CitizenIdentity::NextSnapshotId` (r:1 w:1)
-	/// Proof: `CitizenIdentity::NextSnapshotId` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
-	/// Storage: `CitizenIdentity::CountryVotingCount` (r:1 w:0)
-	/// Proof: `CitizenIdentity::CountryVotingCount` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
-	/// Storage: `CitizenIdentity::NextEligibilityRevision` (r:1 w:0)
-	/// Proof: `CitizenIdentity::NextEligibilityRevision` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
-	/// Storage: `Timestamp::Now` (r:1 w:0)
-	/// Proof: `Timestamp::Now` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
-	/// Storage: `LegislationVote::PendingPopulationSnapshots` (r:1 w:1)
-	/// Proof: `LegislationVote::PendingPopulationSnapshots` (`max_values`: None, `max_size`: Some(68), added: 2543, mode: `MaxEncodedLen`)
-	/// Storage: `CitizenIdentity::PopulationSnapshots` (r:0 w:1)
-	/// Proof: `CitizenIdentity::PopulationSnapshots` (`max_values`: None, `max_size`: Some(100), added: 2575, mode: `MaxEncodedLen`)
-	fn prepare_population_snapshot() -> Weight;
 	/// Storage: `VotingEngine::Proposals` (r:1 w:1)
 	/// Proof: `VotingEngine::Proposals` (`max_values`: None, `max_size`: Some(8531), added: 11006, mode: `MaxEncodedLen`)
 	/// Storage: `LegislationVote::RepresentativeMetas` (r:1 w:0)
@@ -101,28 +88,6 @@ pub trait WeightInfo {
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
-	/// Storage: `CitizenIdentity::NextSnapshotId` (r:1 w:1)
-	/// Proof: `CitizenIdentity::NextSnapshotId` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
-	/// Storage: `CitizenIdentity::CountryVotingCount` (r:1 w:0)
-	/// Proof: `CitizenIdentity::CountryVotingCount` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
-	/// Storage: `CitizenIdentity::NextEligibilityRevision` (r:1 w:0)
-	/// Proof: `CitizenIdentity::NextEligibilityRevision` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
-	/// Storage: `Timestamp::Now` (r:1 w:0)
-	/// Proof: `Timestamp::Now` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
-	/// Storage: `LegislationVote::PendingPopulationSnapshots` (r:1 w:1)
-	/// Proof: `LegislationVote::PendingPopulationSnapshots` (`max_values`: None, `max_size`: Some(68), added: 2543, mode: `MaxEncodedLen`)
-	/// Storage: `CitizenIdentity::PopulationSnapshots` (r:0 w:1)
-	/// Proof: `CitizenIdentity::PopulationSnapshots` (`max_values`: None, `max_size`: Some(100), added: 2575, mode: `MaxEncodedLen`)
-	fn prepare_population_snapshot() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `372`
-		//  Estimated: `3533`
-		// Minimum execution time: 15_000_000 picoseconds.
-		Weight::from_parts(16_000_000, 0)
-			.saturating_add(Weight::from_parts(0, 3533))
-			.saturating_add(T::DbWeight::get().reads(5))
-			.saturating_add(T::DbWeight::get().writes(3))
-	}
 	/// Storage: `VotingEngine::Proposals` (r:1 w:1)
 	/// Proof: `VotingEngine::Proposals` (`max_values`: None, `max_size`: Some(8531), added: 11006, mode: `MaxEncodedLen`)
 	/// Storage: `LegislationVote::RepresentativeMetas` (r:1 w:0)
@@ -222,28 +187,6 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 }
 
 impl WeightInfo for () {
-	/// Storage: `CitizenIdentity::NextSnapshotId` (r:1 w:1)
-	/// Proof: `CitizenIdentity::NextSnapshotId` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
-	/// Storage: `CitizenIdentity::CountryVotingCount` (r:1 w:0)
-	/// Proof: `CitizenIdentity::CountryVotingCount` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
-	/// Storage: `CitizenIdentity::NextEligibilityRevision` (r:1 w:0)
-	/// Proof: `CitizenIdentity::NextEligibilityRevision` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
-	/// Storage: `Timestamp::Now` (r:1 w:0)
-	/// Proof: `Timestamp::Now` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
-	/// Storage: `LegislationVote::PendingPopulationSnapshots` (r:1 w:1)
-	/// Proof: `LegislationVote::PendingPopulationSnapshots` (`max_values`: None, `max_size`: Some(68), added: 2543, mode: `MaxEncodedLen`)
-	/// Storage: `CitizenIdentity::PopulationSnapshots` (r:0 w:1)
-	/// Proof: `CitizenIdentity::PopulationSnapshots` (`max_values`: None, `max_size`: Some(100), added: 2575, mode: `MaxEncodedLen`)
-	fn prepare_population_snapshot() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `372`
-		//  Estimated: `3533`
-		// Minimum execution time: 15_000_000 picoseconds.
-		Weight::from_parts(16_000_000, 0)
-			.saturating_add(Weight::from_parts(0, 3533))
-			.saturating_add(RocksDbWeight::get().reads(5))
-			.saturating_add(RocksDbWeight::get().writes(3))
-	}
 	/// Storage: `VotingEngine::Proposals` (r:1 w:1)
 	/// Proof: `VotingEngine::Proposals` (`max_values`: None, `max_size`: Some(8531), added: 11006, mode: `MaxEncodedLen`)
 	/// Storage: `LegislationVote::RepresentativeMetas` (r:1 w:0)

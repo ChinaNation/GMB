@@ -10,11 +10,13 @@ export type ResourceKey =
   | 'square_cover'
   | 'square_video_sd'
   | 'square_video_hd'
-  | 'square_video_candidate'
+  | 'square_video_spark'
   | 'chat_device'
   | 'chat_keypackage'
   | 'chat_envelope'
   | 'chat_signal'
+  | 'chat_relay'
+  | 'chat_relay_blob'
   | 'push_wake'
   | 'stripe_webhook'
   | 'stream_webhook'
@@ -105,7 +107,7 @@ export const resourceLimits: Readonly<Record<ResourceKey, ResourceLimit>> = {
     max_height: 1920,
     max_count: 1,
   },
-  square_video_candidate: {
+  square_video_spark: {
     max_bytes: 8 * gib,
     content_types: ['video/mp4', 'video/webm'],
     max_seconds: 3 * 60 * 60,
@@ -117,6 +119,9 @@ export const resourceLimits: Readonly<Record<ResourceKey, ResourceLimit>> = {
   chat_keypackage: { max_bytes: 128 * kib, max_count: 20, ttl_seconds: 7 * 24 * 60 * 60 },
   chat_envelope: { max_bytes: 256 * kib },
   chat_signal: { max_bytes: 64 * kib },
+  chat_relay: { max_bytes: 1 * kib },
+  // 大媒体中转密文块:5GB 明文 + 分块 tag/帧头余量。
+  chat_relay_blob: { max_bytes: 5200 * mib },
   push_wake: { max_bytes: 1 * kib },
   stripe_webhook: { max_bytes: 256 * kib },
   stream_webhook: { max_bytes: 64 * kib },
@@ -141,8 +146,7 @@ export interface UsageLimit {
 export const usageLimits: Readonly<Record<MembershipLevel, UsageLimit>> = {
   freedom: { monthly_images: 300, monthly_video_seconds: 30 * 60, active_uploads: 1 },
   democracy: { monthly_images: 1500, monthly_video_seconds: 180 * 60, active_uploads: 2 },
-  voting: { monthly_images: 1500, monthly_video_seconds: 180 * 60, active_uploads: 2 },
-  candidate: { monthly_images: 5000, monthly_video_seconds: 1800 * 60, active_uploads: 3 },
+  spark: { monthly_images: 5000, monthly_video_seconds: 1800 * 60, active_uploads: 3 },
 };
 
 export function resourceLimit(key: ResourceKey): ResourceLimit {
@@ -155,7 +159,7 @@ export function imageResource(level: MembershipLevel, cover: boolean): ResourceK
 }
 
 export function videoResource(level: MembershipLevel): ResourceKey {
-  if (level === 'candidate') return 'square_video_candidate';
+  if (level === 'spark') return 'square_video_spark';
   return level === 'freedom' ? 'square_video_sd' : 'square_video_hd';
 }
 
@@ -212,6 +216,10 @@ const routeLimits: readonly RouteLimit[] = [
   route('POST', /^\/v1\/chat\/envelopes$/, 'chat_envelope'),
   route('POST', /^\/v1\/chat\/signals$/, 'chat_signal'),
   route('GET', /^\/v1\/chat\/ws$/),
+  route('POST', /^\/v1\/chat\/relay\/init$/, 'chat_relay'),
+  route('PUT', /^\/v1\/chat\/relay\/[^/]+\/blob$/, 'chat_relay_blob'),
+  route('GET', /^\/v1\/chat\/relay\/[^/]+\/blob$/),
+  route('POST', /^\/v1\/chat\/relay\/[^/]+\/ack$/),
 ];
 
 export function routeResource(method: string, path: string): ResourceKey | null {

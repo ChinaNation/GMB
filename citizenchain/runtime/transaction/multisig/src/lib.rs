@@ -20,8 +20,9 @@ extern crate alloc;
 
 use alloc::{vec, vec::Vec};
 
-use primitives::account_derive::AccountKind;
+use primitives::account_derive::{RESERVED_NAME_FEE, RESERVED_NAME_MAIN};
 use primitives::cid::china::china_cb::{CHINA_CB, SAFETY_FUND_ACCOUNT};
+use primitives::fee_policy::OnchainFeeCharger;
 use votingengine::{
     types::{institution_code_from_cid_number, CidNumber, InstitutionCode, NRC, PMUL, PRB},
     InternalVoteResultCallback, ProposalExecutionOutcome, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL,
@@ -115,7 +116,6 @@ pub mod pallet {
     use crate::weights::WeightInfo;
     use entity_primitives::ProtectedSourceChecker;
     use frame_support::traits::ExistenceRequirement;
-    use frame_support::traits::OnUnbalanced;
     use primitives::institution_asset::{InstitutionAsset, InstitutionAssetAction};
     use votingengine::InternalAdminProvider;
     use votingengine::InternalVoteEngine;
@@ -141,9 +141,10 @@ pub mod pallet {
         #[pallet::constant]
         type MaxRemarkLen: Get<u32>;
 
-        /// 手续费分账路由（复用 OnchainFeeRouter）
-        type FeeRouter: frame_support::traits::OnUnbalanced<
-            <<Self as Config>::Currency as Currency<Self::AccountId>>::NegativeImbalance,
+        /// 投票通过后的链上交易费统一执行器。
+        type OnchainFeeCharger: primitives::fee_policy::OnchainFeeCharger<
+            Self::AccountId,
+            BalanceOf<Self>,
         >;
 
         /// 个人多签账户状态与管理员配置查询,由 personal-manage 聚合 personal-admins 提供。
@@ -203,6 +204,7 @@ pub mod pallet {
         TransferExecuted {
             proposal_id: u64,
             funding_account: T::AccountId,
+            fee_payer: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
@@ -222,6 +224,7 @@ pub mod pallet {
         /// 安全基金转账已执行
         SafetyFundTransferExecuted {
             proposal_id: u64,
+            fee_payer: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
@@ -295,6 +298,10 @@ pub mod pallet {
         SweepAmountExceedsCap,
         /// 手续费划转提案未通过。
         SweepProposalNotPassed,
+        /// 无法从 actor CID 唯一解析费用账户。
+        FeeAccountMissing,
+        /// 费用账户无法支付金额手续费并保留 ED。
+        InsufficientFeeBalance,
     }
 
     #[pallet::call]
@@ -350,18 +357,31 @@ pub mod pallet {
 
             // 活跃提案数由 votingengine 在 create_internal_proposal 中统一检查
 
-            // 预检余额（含手续费，与执行时检查一致，避免创建必定无法执行的提案）
+            // 预检与执行一致：机构本金账户只承担本金，金额手续费由同 CID 费用账户承担；
+            // 个人多签没有机构费用账户，继续由个人资金账户承担本金和执行手续费。
             let amount_u128: u128 = amount.saturated_into();
             let fee_u128 = primitives::fee_policy::calculate_onchain_fee(amount_u128);
             let fee: BalanceOf<T> = fee_u128.saturated_into();
-            let total = amount
-                .checked_add(&fee)
-                .ok_or(Error::<T>::InsufficientBalance)?;
             let free = <T as Config>::Currency::free_balance(&funding_account);
-            let required = total
+            let principal_required = amount
                 .checked_add(&ed)
                 .ok_or(Error::<T>::InsufficientBalance)?;
-            ensure!(free >= required, Error::<T>::InsufficientBalance);
+            if let Some(cid_number) = actor_cid_number.as_ref() {
+                ensure!(free >= principal_required, Error::<T>::InsufficientBalance);
+                let fee_account = Self::resolve_fee_account(cid_number)?;
+                let fee_required = fee
+                    .checked_add(&ed)
+                    .ok_or(Error::<T>::InsufficientFeeBalance)?;
+                ensure!(
+                    <T as Config>::Currency::free_balance(&fee_account) >= fee_required,
+                    Error::<T>::InsufficientFeeBalance
+                );
+            } else {
+                let required = principal_required
+                    .checked_add(&fee)
+                    .ok_or(Error::<T>::InsufficientBalance)?;
+                ensure!(free >= required, Error::<T>::InsufficientBalance);
+            }
 
             let action = TransferAction {
                 actor_cid_number: actor_cid_number.clone(),
@@ -457,19 +477,24 @@ pub mod pallet {
                 Error::<T>::InstitutionSpendNotAllowed
             );
 
-            // 预检余额（含手续费，避免创建必定无法执行的提案）
+            // 安全基金只承担本金，NRC 费用账户单独承担金额手续费。
             let amount_u128: u128 = amount.saturated_into();
             let fee_u128 = primitives::fee_policy::calculate_onchain_fee(amount_u128);
             let fee: BalanceOf<T> = fee_u128.saturated_into();
-            let total = amount
-                .checked_add(&fee)
-                .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
             let ed: BalanceOf<T> = <T as Config>::Currency::minimum_balance();
             let free = <T as Config>::Currency::free_balance(&institution_account);
-            let required = total
+            let required = amount
                 .checked_add(&ed)
                 .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
             ensure!(free >= required, Error::<T>::SafetyFundInsufficientBalance);
+            let fee_account = Self::resolve_fee_account(&actor_cid_number)?;
+            let fee_required = fee
+                .checked_add(&ed)
+                .ok_or(Error::<T>::InsufficientFeeBalance)?;
+            ensure!(
+                <T as Config>::Currency::free_balance(&fee_account) >= fee_required,
+                Error::<T>::InsufficientFeeBalance
+            );
 
             let proposal_id =
                 <T as Config>::InternalVoteEngine::create_institution_proposal_with_data(
@@ -691,20 +716,22 @@ pub mod pallet {
 
         /// 解析治理机构手续费账户。
         fn resolve_fee_account(cid_number: &CidNumber) -> Result<T::AccountId, DispatchError> {
-            let raw = AccountKind::InstitutionFee {
-                cid_number: cid_number.as_slice(),
-            }
-            .derive(primitives::core_const::SS58_FORMAT);
-            Self::decode_institution_account(&raw).map_err(Into::into)
+            use entity_primitives::InstitutionMultisigQuery;
+            T::InstitutionQuery::lookup_institution_account(
+                cid_number.as_slice(),
+                RESERVED_NAME_FEE,
+            )
+            .ok_or(Error::<T>::FeeAccountMissing.into())
         }
 
         /// 解析治理机构主账户。
         fn resolve_main_account(cid_number: &CidNumber) -> Result<T::AccountId, DispatchError> {
-            let raw = AccountKind::InstitutionMain {
-                cid_number: cid_number.as_slice(),
-            }
-            .derive(primitives::core_const::SS58_FORMAT);
-            Self::decode_institution_account(&raw).map_err(Into::into)
+            use entity_primitives::InstitutionMultisigQuery;
+            T::InstitutionQuery::lookup_institution_account(
+                cid_number.as_slice(),
+                RESERVED_NAME_MAIN,
+            )
+            .ok_or(Error::<T>::InvalidInstitution.into())
         }
 
         pub(crate) fn try_execute_sweep_from_callback(proposal_id: u64) -> DispatchResult {
@@ -760,23 +787,29 @@ pub mod pallet {
                 .saturating_div(100);
             ensure!(amount_u128 <= cap_u128, Error::<T>::SweepAmountExceedsCap);
 
-            // ── 执行划转 ──
-            <T as Config>::Currency::transfer(
-                &fee_account,
-                &main_account,
-                action.amount,
-                frame_support::traits::ExistenceRequirement::KeepAlive,
-            )?;
-
-            // ── 手续费：从费用账户扣取，通过 FeeRouter 按 80/10/10 分账 ──
-            let fee_imbalance = <T as Config>::Currency::withdraw(
-                &fee_account,
-                tx_fee,
-                frame_support::traits::WithdrawReasons::FEE,
-                frame_support::traits::ExistenceRequirement::KeepAlive,
-            )
-            .map_err(|_| Error::<T>::InsufficientFeeReserve)?;
-            <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
+            // 费用账户同时承担归集本金和金额手续费，两项必须在同一事务中完成。
+            let execution: Result<(), DispatchError> =
+                frame_support::storage::with_transaction(|| {
+                    if <T as Config>::OnchainFeeCharger::charge(&fee_account, action.amount)
+                        .is_err()
+                    {
+                        return frame_support::storage::TransactionOutcome::Rollback(Err(
+                            Error::<T>::InsufficientFeeReserve.into(),
+                        ));
+                    }
+                    match <T as Config>::Currency::transfer(
+                        &fee_account,
+                        &main_account,
+                        action.amount,
+                        frame_support::traits::ExistenceRequirement::KeepAlive,
+                    ) {
+                        Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
+                        Err(error) => {
+                            frame_support::storage::TransactionOutcome::Rollback(Err(error))
+                        }
+                    }
+                });
+            execution?;
 
             let reserve_left = <T as Config>::Currency::free_balance(&fee_account);
 
@@ -824,40 +857,49 @@ pub mod pallet {
             let amount_u128: u128 = action.amount.saturated_into();
             let fee_u128 = primitives::fee_policy::calculate_onchain_fee(amount_u128);
             let fee: BalanceOf<T> = fee_u128.saturated_into();
-            let total = action
-                .amount
-                .checked_add(&fee)
-                .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
-
-            // ── 余额检查：amount + fee + ED ──
+            // ── 分账户余额检查：安全基金 amount + ED，费用账户 fee + ED ──
             let free = <T as Config>::Currency::free_balance(&safety_fund_account);
             let ed = <T as Config>::Currency::minimum_balance();
-            let required = total
+            let required = action
+                .amount
                 .checked_add(&ed)
                 .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
             ensure!(free >= required, Error::<T>::SafetyFundInsufficientBalance);
+            let fee_account = Self::resolve_fee_account(&action.actor_cid_number)?;
+            let fee_required = fee
+                .checked_add(&ed)
+                .ok_or(Error::<T>::InsufficientFeeBalance)?;
+            ensure!(
+                <T as Config>::Currency::free_balance(&fee_account) >= fee_required,
+                Error::<T>::InsufficientFeeBalance
+            );
 
-            // ── 执行转账 ──
-            <T as Config>::Currency::transfer(
-                &safety_fund_account,
-                &action.beneficiary,
-                action.amount,
-                frame_support::traits::ExistenceRequirement::KeepAlive,
-            )
-            .map_err(|_| Error::<T>::SafetyFundInsufficientBalance)?;
-
-            // ── 手续费：从安全基金扣取，通过 FeeRouter 按 80/10/10 分账 ──
-            let fee_imbalance = <T as Config>::Currency::withdraw(
-                &safety_fund_account,
-                fee,
-                frame_support::traits::WithdrawReasons::FEE,
-                frame_support::traits::ExistenceRequirement::KeepAlive,
-            )
-            .map_err(|_| Error::<T>::SafetyFundInsufficientBalance)?;
-            <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
+            let execution: Result<(), DispatchError> =
+                frame_support::storage::with_transaction(|| {
+                    if <T as Config>::OnchainFeeCharger::charge(&fee_account, action.amount)
+                        .is_err()
+                    {
+                        return frame_support::storage::TransactionOutcome::Rollback(Err(
+                            Error::<T>::InsufficientFeeBalance.into(),
+                        ));
+                    }
+                    match <T as Config>::Currency::transfer(
+                        &safety_fund_account,
+                        &action.beneficiary,
+                        action.amount,
+                        frame_support::traits::ExistenceRequirement::KeepAlive,
+                    ) {
+                        Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
+                        Err(_) => frame_support::storage::TransactionOutcome::Rollback(Err(
+                            Error::<T>::SafetyFundInsufficientBalance.into(),
+                        )),
+                    }
+                });
+            execution?;
 
             Self::deposit_event(Event::SafetyFundTransferExecuted {
                 proposal_id,
+                fee_payer: fee_account,
                 beneficiary: action.beneficiary,
                 amount: action.amount,
                 fee,
@@ -915,37 +957,38 @@ pub mod pallet {
             let amount_u128: u128 = action.amount.saturated_into();
             let fee_u128 = primitives::fee_policy::calculate_onchain_fee(amount_u128);
             let fee: BalanceOf<T> = fee_u128.saturated_into();
-            let total = action
-                .amount
-                .checked_add(&fee)
-                .ok_or(Error::<T>::InsufficientBalance)?;
-
-            // ── 余额检查：需要 total + ED ──
             let free = <T as Config>::Currency::free_balance(&action.funding_account);
-            let required = total
+            let principal_required = action
+                .amount
                 .checked_add(&ed)
                 .ok_or(Error::<T>::InsufficientBalance)?;
-            ensure!(free >= required, Error::<T>::InsufficientBalance);
+            let fee_payer = if let Some(cid_number) = action.actor_cid_number.as_ref() {
+                ensure!(free >= principal_required, Error::<T>::InsufficientBalance);
+                let fee_account = Self::resolve_fee_account(cid_number)?;
+                let fee_required = fee
+                    .checked_add(&ed)
+                    .ok_or(Error::<T>::InsufficientFeeBalance)?;
+                ensure!(
+                    <T as Config>::Currency::free_balance(&fee_account) >= fee_required,
+                    Error::<T>::InsufficientFeeBalance
+                );
+                fee_account
+            } else {
+                let required = principal_required
+                    .checked_add(&fee)
+                    .ok_or(Error::<T>::InsufficientBalance)?;
+                ensure!(free >= required, Error::<T>::InsufficientBalance);
+                action.funding_account.clone()
+            };
 
-            // ── 原子执行：手续费扣取 + 转账，任一失败整体回滚 ──
+            // 机构路径从费用账户扣费、从 funding_account 转本金；个人路径两者相同。
+            // 任一失败时手续费事件、分账和本金转账全部回滚。
             let exec_result = frame_support::storage::with_transaction(|| {
-                // 先扣手续费
-                let fee_imbalance = match <T as Config>::Currency::withdraw(
-                    &action.funding_account,
-                    fee,
-                    frame_support::traits::WithdrawReasons::FEE,
-                    ExistenceRequirement::KeepAlive,
-                ) {
-                    Ok(imbalance) => imbalance,
-                    Err(_) => {
-                        return frame_support::storage::TransactionOutcome::Rollback(Err(
-                            Error::<T>::InsufficientBalance.into(),
-                        ))
-                    }
-                };
-                <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
-
-                // 再转账
+                if <T as Config>::OnchainFeeCharger::charge(&fee_payer, action.amount).is_err() {
+                    return frame_support::storage::TransactionOutcome::Rollback(Err(
+                        Error::<T>::InsufficientFeeBalance.into(),
+                    ));
+                }
                 match <T as Config>::Currency::transfer(
                     &action.funding_account,
                     &action.beneficiary,
@@ -961,6 +1004,7 @@ pub mod pallet {
             Self::deposit_event(Event::<T>::TransferExecuted {
                 proposal_id,
                 funding_account: action.funding_account,
+                fee_payer,
                 beneficiary: action.beneficiary,
                 amount: action.amount,
                 fee,

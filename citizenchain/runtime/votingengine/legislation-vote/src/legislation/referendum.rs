@@ -6,39 +6,6 @@ pub(crate) fn passed(eligible: u64, yes: u64, no: u64) -> bool {
 use crate::*;
 
 impl<T: Config> Pallet<T> {
-    /// 准备特别案公投人口快照:从链上公民身份模块读取并缓存分母。
-    pub fn do_prepare_population_snapshot(
-        who: T::AccountId,
-        scope: PopulationScope,
-    ) -> DispatchResult {
-        let (snapshot_id, eligible_total) =
-            <votingengine::Pallet<T>>::create_population_snapshot(&scope)?;
-        if eligible_total == 0 {
-            <votingengine::Pallet<T>>::release_population_snapshot(snapshot_id);
-            return Err(Error::<T>::CitizenEligibleTotalNotSet.into());
-        }
-        let now = <frame_system::Pallet<T>>::block_number();
-        if let Some(previous) = pallet::PendingPopulationSnapshots::<T>::take(&who) {
-            <votingengine::Pallet<T>>::release_population_snapshot(previous.snapshot_id);
-        }
-        pallet::PendingPopulationSnapshots::<T>::insert(
-            &who,
-            pallet::PreparedSnapshot {
-                snapshot_id,
-                eligible_total,
-                prepared_at: now,
-            },
-        );
-        Self::deposit_event(pallet::Event::<T>::PopulationSnapshotPrepared {
-            who,
-            eligible_total,
-            scope,
-        });
-        Ok(())
-    }
-}
-
-impl<T: Config> Pallet<T> {
     /// 内部全过 → 推进至强制公投阶段(对标 joint advance_to_referendum)。
     pub(crate) fn advance_to_referendum(proposal_id: u64) -> DispatchResult {
         let now = <frame_system::Pallet<T>>::block_number();

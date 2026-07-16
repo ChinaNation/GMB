@@ -43,6 +43,32 @@ typedef ChatMediaPendingRecorder = Future<void> Function(String attachmentId);
 /// 字节已送达对方设备(收到 WebRTC ack)后清除待投递登记。
 typedef ChatMediaDeliveredMarker = Future<void> Function(String attachmentId);
 
+/// 大媒体(>100MB)经 Cloudflare R2 瞬时中转的上传结果。
+///
+/// 客户端流式加密后上传密文到 R2,把 R2 对象键 + 一次性内容密钥 + 分块参数
+/// 放进 E2E 控制消息;Cloudflare 只经手密文,拿不到内容密钥。
+class ChatRelayDescriptor {
+  const ChatRelayDescriptor({
+    required this.relayObjectKey,
+    required this.contentKeyB64,
+    required this.chunkSize,
+    required this.encSize,
+  });
+
+  final String relayObjectKey;
+  final String contentKeyB64;
+  final int chunkSize;
+  final int encSize;
+}
+
+/// 把源文件流式加密上传到 Cloudflare R2 瞬时中转,返回描述子。仅 >100MB 走此路。
+typedef ChatRelayUploader = Future<ChatRelayDescriptor> Function({
+  required String conversationId,
+  required String attachmentId,
+  required ChatMediaDraft media,
+  int recipientCount,
+});
+
 /// 待发送的本机明文媒体(图片 / 视频 / 文件)。
 ///
 /// 承载**源文件路径**而非整块字节:发送走流式读盘,支持最大 5GB 且不 OOM。
@@ -225,6 +251,7 @@ class ChatFlow {
     ChatLocalAttachmentSaver? saveLocalAttachment,
     ChatMediaPendingRecorder? recordPendingMedia,
     ChatMediaDeliveredMarker? onDeviceDelivered,
+    ChatRelayUploader? uploadRelayMedia,
   }) async {
     // 门①:发送端大小硬门控。即使 UI 被绕过也在此拦下,此刻字节尚未进入任何
     // 通道。与接收端字节层门控(门②)配合,构成收发双端强制。
@@ -237,6 +264,21 @@ class ChatFlow {
     }
     final now = DateTime.now().millisecondsSinceEpoch;
     final attachmentId = _newAttachmentId(now);
+
+    // 路由:>100MB **必须**经 Cloudflare R2 瞬时中转,绝不走 WebRTC(硬约束:
+    // 只有 >100MB 走 Cloudflare、其余一律不走)。未配置中转即拒,而非降级 WebRTC。
+    ChatRelayDescriptor? relay;
+    if (ChatMediaLimits.needsRelay(media.byteSize)) {
+      if (uploadRelayMedia == null) {
+        throw StateError('>100MB 媒体必须经 Cloudflare 中转,但中转未配置');
+      }
+      relay = await uploadRelayMedia(
+        conversationId: conversationId,
+        attachmentId: attachmentId,
+        media: media,
+      );
+    }
+
     final payload = ChatPayloadCodec.encode(
       ChatContent.media(
         kind: media.kind,
@@ -248,6 +290,10 @@ class ChatFlow {
         height: media.height,
         durationMs: media.durationMs,
         blurhash: media.blurhash,
+        relayObjectKey: relay?.relayObjectKey,
+        contentKeyB64: relay?.contentKeyB64,
+        chunkSize: relay?.chunkSize,
+        encSize: relay?.encSize,
       ),
     );
     final outbound = await _crypto.encrypt(
@@ -267,7 +313,7 @@ class ChatFlow {
       messageKind: media.kind,
       payload: payload,
     );
-    // 自存一份到缓存 + 登记待设备投递(离线补发依赖缓存副本)。
+    // 自存一份到缓存(会话里可见;WebRTC 路径还依赖它做离线补发)。
     await saveLocalAttachment?.call(
       conversationId: conversationId,
       attachmentId: attachmentId,
@@ -276,6 +322,10 @@ class ChatFlow {
       sourcePath: media.sourcePath,
       byteSize: media.byteSize,
     );
+    // 中转路径:密文已在 R2,收方按需拉取解密;不走 WebRTC、不登记待设备投递。
+    if (relay != null) {
+      return results;
+    }
     await recordPendingMedia?.call(attachmentId);
     // 尝试 WebRTC 字节;对方离线/直连失败**不抛错**,留 pending 待上线补发。
     // 媒体字节由 WebRTC DTLS 端到端传输;Cloudflare 只转发 SDP/ICE,不收字节。

@@ -2,7 +2,10 @@
 
 ## 状态
 
-- 当前阶段：第 2 步费用路由与全仓自动验收已完成；等待用户确认第 3 步，第 1 步真实管理员签名交易仍待专用测试签名环境
+- 当前阶段：第 5 步创世准备、五端自动验收、preview 候选链和真实 OnChina
+  运行态验收已完成；按用户要求未执行 CI、正式冻结、`--finalize` 或正式创世。
+  Rust workspace 已不排除任何 crate 全量通过；真实管理员扫码签名仍待专用测试
+  签名环境。
 - 第 1 步方案确认：2026-07-15
 - runtime 二次确认：已获得
 - 开发方式：breaking runtime，重新创世，不做旧存储、旧 call、旧 payload 或旧命名兼容
@@ -98,13 +101,16 @@
 
 - 删除业务 pallet 的 public `prepare_*_snapshot` extrinsic 和 pending snapshot 中转。
 - 提案创建时由 votingengine 内部生成并锁定快照。
-- 删除 public/private/personal 业务模块的 `cleanup_rejected_*` 和 pending 残留。
+- 删除 public/private/personal 业务模块的手工清理入口和 pending 残留。
 - votingengine 统一在终态、超时和执行失败路径清理。
 
 ### 第 5 步：全仓最终验收
 
 - runtime、node、OnChina、CitizenApp、CitizenWallet 全量测试。
-- 重新创世，启动真实 node、真实 OnChina 数据库/API/页面并执行真实扫码签名交易。
+- 在 `target/` 生成不覆盖正式资产的 preview 创世候选，启动隔离 node、真实 OnChina
+  数据库/API/页面；正式 CI、release 冻结和正式创世按用户要求留到后续阶段。
+- 有专用管理员私钥时执行真实扫码签名交易；没有时必须保持阻塞，不得伪造私钥、
+  临时管理员或费用回落路径。
 - 全仓搜索旧 key、旧 call、旧 payload、旧命名、旧文案、旧流程为零残留。
 
 ## 第 1 步预计修改范围
@@ -157,7 +163,7 @@
 - 普通机构、国家储委会、省储行的协议账户集合由 `institution_constraints` 单源确定；协议账户不可关闭，自定义账户可关闭；零初始余额允许，非零低于 ED 拒绝。
 - 删除旧单账户映射、机构主账户身份/授权字段、机构生命周期与重复默认标记；数据库启动代码不保留旧列迁移兼容。
 - 机构账户派生统一命名为 `derive_institution_account`；runtime `MODULE_TAG` 和 owner data 统一为 `multisig`，旧标签只在拒绝测试中作为非法输入出现。
-- 本记录生成时第 2 步尚未实施；其后已按下方第 2 步记录完成。第 4 步人口快照与提案清理仍未实施。
+- 本记录生成时第 2 步尚未实施；其后第 2 至第 4 步均已按下方执行记录完成。
 
 ### 自动验收
 
@@ -188,7 +194,7 @@
 
 ### 已完成
 
-- 在 `primitives::fee_policy` 建立唯一 `FeeRoute<AccountId, Balance>`，把五类费用与确切付款账户合并为同一协议类型；删除 `FeeChargeKind`、`CallFeeKind`、`CallFeePayer` 和 runtime 分类器/付款提取器双真源。
+- 在 `primitives::fee_policy` 建立唯一 `FeeRoute<AccountId, Balance>`，把五类费用与确切付款账户合并为同一协议类型；删除历史费种、付款方并行类型和 runtime 分类/付款提取双真源。
 - `RuntimeFeeRouter` 对 `RuntimeCall` 穷尽映射；各 pallet 隐藏 `__Ignore` 分支只允许显式 `Reject`，新增 runtime pallet 仍需在外层 match 中显式分类。
 - 机构操作严格使用 `actor_cid_number + admins 外层签名 + InstitutionFee`。费用账户、公私权归属、正反索引、具体机构账户任一不一致即 `Reject`，不允许改扣管理员。
 - 机构发起提案统一为最低链上交易费 0.1 元；只有实际 `cast_*` / 表决动作由签名者支付固定 1 元投票费。
@@ -215,3 +221,158 @@
 
 - runtime 测试状态机已直接验证：机构操作只扣费用账户、管理员余额不变；删除费用账户映射后返回 `InvalidTransaction::Call`，即使管理员有余额也不回落。
 - 真实管理员扫码交易仍受第 1 步所述私钥环境限制；不得以伪造管理员或临时兼容路径替代。
+
+## 第 3 步执行与验收记录（2026-07-16）
+
+### 已完成
+
+- `primitives::fee_policy` 增加唯一链上执行期收费接口；`onchain` 实现通用执行收费器，与外层 `FeeRoute` 共用同一费率常量、80/10/10 分账和 `FeePaid` 事件，不存在第二套费种分类。
+- 公权/私权机构创建 ABI 增加显式 `funding_account`：非零初始本金只能从 actor CID 下符合用途的确切机构账户支出，零初始本金必须不传资金账户；签名原文、OnChina 构建、CitizenWallet 解码已同步。
+- 公权/私权机构创建、关闭，机构多签转账、安全基金转账、费用账户归集和决议销毁的执行费，全部只从 actor CID 的确切费用账户收取；本金仍只从载荷指定的所属机构账户支出，任一账户缺失、归属不一致或余额不足均原子失败，管理员钱包无代付路径。
+- 个人多签创建的本金和执行费由创建者支付；关闭执行费从个人多签账户收取。关闭的重复固定余额门槛已删除，提案和执行均按统一费率公式 + 链上 ED 动态校验。
+- 协议账户仍不允许关闭，只有 `InstitutionNamed` 可关闭；普通支出和收费统一 `KeepAlive`，显式账户关闭转出才使用 `AllowDeath`。
+- 删除 `onchain-issuance` 已废弃的 1000 GMB 资产创建押金、单独扣费/退费存储和本地分账实现；未实装的公开占位 call 继续 `Reject`，禁止扣费后无业务结果。
+- CitizenApp 已分开检查机构本金账户、机构费用账户、外层操作费、后续执行费和 ED；个人多签关闭页不再错误写死 1.11 元。CitizenWallet 已显示本金账户与费用付款账户。
+- 清理 public/private 重复收费 helper、onchain-issuance 废弃收费文件、历史费用类型/金额提取命名、过期文档和错误费用文案。
+
+### 自动验收
+
+- Rust 核心回归：`citizenchain` 43、`onchain` 21、`multisig` 25、`personal-manage` 23、`public-manage` 15、`private-manage` 10、`resolution-destroy` 16、`onchain-issuance` 8，均 0 失败。
+- `cargo test -p node -p onchina --no-fail-fast`：退出码 0；node 270 项通过，OnChina 回归通过。OnChina 前端 production build 通过。
+- CitizenApp：683 项通过、5 项环境性跳过；`flutter analyze` 0 问题。CitizenWallet：166 项通过；`flutter analyze` 0 问题。
+- `cargo check -p citizenchain --features runtime-benchmarks`、当前源码 `cargo build -p node`、相关 crates 全目标 Clippy 和 `git diff --check` 均通过。Clippy 仍报告仓库既有的 `expect/unwrap`、大枚举和大错误类型等警告，无新增编译失败。
+- 生产 runtime 和收费 mock 的 `WeightToFee` / `LengthToFee` 均为零；生产直接 `withdraw(FEE)` 只剩统一 `OnchainExecutionFeeCharger`，没有 pallet 各自的分账真源。
+
+### 真实节点验收
+
+- 使用当前源码重新编译 node/runtime WASM，导出 `citizenchain-fresh` 临时 chainspec，清空 bootnodes 后在独立 `--tmp` 目录启动真实节点。
+- NodeGuard 通过；RPC 返回 `isSyncing=false`、`peers=0`、`shouldHavePeers=false`，链为 `CitizenChain`。最终源码重建复验的创世哈希为 `0x432f39f3b969f3ecf7c97062a2242f18b116020410fd9faba5c07ccbfab2ee4e`，状态根为 `0x06a8ced41198f9087b2054bdd6b1080c326de64bce6448d90707c0c70b7db05f`。
+- 直接用当前冻结 chainspec 启动时，NodeGuard 按设计 fail-closed，报告 `FixedInstitutionMissing(NRC)`；说明正式冻结创世仍是旧状态。本步没有放宽守卫、没有覆盖冻结 SSOT；正式发布必须用同次成功 CI WASM 统一重烤 chainspec、创世状态包和 CitizenApp 轻客户端锚点。
+- 验收节点已正常退出，临时 chainspec 已删除，没有连接现有网络、提交交易或使用任何用户私钥。
+
+### 尚待专用签名环境的最终端到端项
+
+- 注册局管理员真实扫码签名、机构费用账户真实扣款/余额不足失败、本金账户支出和五端 UI 联动，仍需用户在本机授权专用测试管理员钱包。
+- 该环境限制不能通过伪造私钥、临时管理员、管理员代付或兼容路径绕过。
+
+## 第 4 步执行与验收记录（2026-07-16）
+
+### 已完成
+
+- `citizen-identity` 删除公开人口快照 call，保留唯一内部
+  `CitizenIdentityReader::create_population_snapshot`；call index 5 永久留洞。
+- `joint-vote` 删除公开快照 call 和待消费快照存储；联合提案在同一事务中创建全国
+  人口快照、写入提案并绑定 `snapshot_id`，人口为零或任一步失败时整体回滚；call
+  index 2 永久留洞。
+- `legislation-vote` 删除公开快照 call 和待消费快照存储；特别案只从已验证的
+  `actor_cid_number` 唯一推导国家/省/市作用域并在建案事务内创建快照，普通案和
+  重大案不创建；call index 0 永久留洞。
+- CID 的 R5 省市作用域解析收敛到 `primitives::cid::number::cid_scope_codes`，runtime
+  费用路由与立法引擎共同调用，不保留第二份字节切片规则。
+- `personal-manage`、`public-manage`、`private-manage` 删除公开拒绝清理 call 和旧
+  权重/benchmark/钱包 action；否决、超时、执行失败统一由 votingengine 终态回调
+  清除业务 pending，再由引擎维护管线按保留期清理提案、投票和人口快照。
+- CitizenApp、CitizenWallet、OnChina 已删除独立快照与人工清理的 call 常量、QR
+  映射、payload 解码、调用构造和旧文案；永久留洞不解码、不兼容。
+- 更新投票引擎、公民身份、公私权机构、个人多签、CitizenApp、QR 和统一协议文档，
+  并清理生产代码与当前协议文档中的旧流程残留。
+
+### 权重与自动验收
+
+- 使用当前源码构建 release benchmark runtime，以 50 steps / 20 repeat 真实重跑
+  `runtime_upgrade` 与 `resolution_issuance`。联合提案权重已包含人口快照存储：分别
+  测得 101 reads / 193 writes 与 102 reads / 192 writes，不使用自定义最坏路径费用。
+- `cargo check -p citizenchain --features runtime-benchmarks` 通过。
+- 核心回归通过：`citizen-identity` 27、`internal-vote` 95、`joint-vote` 10、
+  `legislation-vote` 34、`personal-manage` 22、`public-manage` 16、`private-manage` 11、
+  `runtime-upgrade` 19、`resolution-issuance` 18、`legislation-yuan` 32，均 0 失败。
+- runtime 最终回归 `citizenchain` 43、`primitives` 72 加两组跨端金标，均 0 失败；
+  相关全目标 Clippy 退出码 0，输出仅含仓库既有 lint 告警。
+- Node 270、OnChina 131 项全量 Rust 测试通过。CitizenApp 689 项通过、5 项环境性
+  跳过；CitizenWallet 166 项通过；两端 `flutter analyze` 均 0 问题。
+
+### 真实节点验收
+
+- 使用当前最终源码重建普通 debug node/runtime WASM，导出 fresh chainspec，清空
+  bootnodes 和 telemetry 后在独立 `--tmp` 数据目录启动无挖矿节点。
+- 首次临时启动时发现 fresh chainspec 仍携带默认 bootnode；对端创世不匹配，节点按
+  设计立即断开并封禁该 peer。随即停止该实例、清空 bootnodes 后重新执行隔离验收；
+  期间未同步区块、未广播或提交交易。
+- RPC 返回 `peers=0`、`isSyncing=false`、`shouldHavePeers=false`；创世哈希为
+  `0x07cf6b8c9592f8ec79b32b04be65311aa174bad6e5ebdf72765a1da950a2732b`，状态根为
+  `0xf7489e817ea96b58578edf86f15b1eacd3f31402f2653fcb63f1502016121a5b`。
+- 节点已正常关闭，临时 chainspec 已删除；未挖矿、未提交交易、未使用用户私钥。
+
+### 保留边界
+
+- 不迁移旧 pending storage、不保留旧 payload、不复用已删除 call index；开发期按
+  当前 runtime 重新创世。
+- 第 1 步真实管理员扫码签名的环境限制仍存在，不得用伪造私钥、管理员代付或兼容
+  路径替代。
+
+## 第 5 步创世准备与五端验收记录（2026-07-16）
+
+### 创世准备工具链
+
+- `bake-chainspec.sh` 删除外部公权机构 root 输入，统一从同一临时节点的块 0 生成
+  plain spec、App 轻节点 chainspec、light sync checkpoint、43 个公权机构分片、
+  Cloudflare 链身份配置和 genesis-state manifest，避免第二真源。
+- 状态包清单新增 `artifact_stage=preview/release`：本地不带 `--finalize` 只能生成
+  preview 且 CI provenance 留空；正式 `--finalize` 必须绑定 CI WASM、run id 和 commit。
+- `prepack.sh` / `prepack.ps1` 在构建前拒绝 preview、缺失 release provenance 或
+  chainspec hash 不一致的状态包；本次已真实验证 preview 被失败关闭。
+- `check-chainspec-frozen.sh` 支持显式 staged 路径验收，同时继续默认校验仓库当前正式
+  资产；node/App/checkpoint/43 分片/Cloudflare 锚点必须全部一致。
+- Cloudflare bootstrap 删除默认 genesis/state root，缺失、非 32 字节或非 hex 时直接
+  失败，不允许回落到旧冻结值。
+- 公权机构 bundle 和宪法检查脚本补精确 SCALE 解码、自测与尾随字节拒绝；机构存在即
+  active，不再读取已删除的机构 lifecycle/status 尾字段。
+
+### Preview 候选（非冻结值）
+
+- `artifact_stage=preview`，只保存在忽略目录 `citizenchain/target/chainspec/`；没有运行
+  `--finalize`，没有覆盖正式 node chainspec、CitizenApp 资产、公权机构分片或
+  Cloudflare `wrangler.toml`。
+- `genesis_hash=0x8347f61bd28c93c4ce6d6b98f4b5a70f185841e0ac87b0bab9eb8c6caf8375ed`。
+- `state_root=0x467996c0094900833e30ff0a11e668aaf234abc35acdb4917f858702642ee707`。
+- `runtime_wasm_hash=c5333afdf66c5d60f58d9101c2dc49a50885773c7708dace7d64fd5f7a1079b5`。
+- `chainspec_hash=0cfe7fa42d4afc34987c69357f593748ee6f4fc9d388378744ad2fa32c67ea8b`，
+  `light_sync_state_hash=7caa134d4af22be0d214b383c0d0c6b8df995f5da0fcf2e2e63a8c8284034c92`。
+- 43 个省级分片共 49,593 个机构，公权目录根为
+  `ecff487ce7d2bac6cb89d064a456187b453acd27f4bee2b140f474a48d072682`；
+  49,549 个普通机构各 2 个协议账户，43 个省储行各 3 个，国家储委会 4 个。
+- 宪法 `law_id=0`、v1 生效版、不可变条款和 runtime `:code` 校验通过；物化耗时 50 秒。
+
+### 真实运行态验收
+
+- preview 状态包复制到仓库外临时目录后启动真实 node；RPC 返回同一块 0/state root、
+  `CitizenChain`、`isSyncing=false`、`peers=0`，NodeGuard 未拒绝。
+- 使用全新临时内嵌 PostgreSQL 启动当前源码重新构建的 OnChina；链上投影写入
+  49,593 个机构和 99,231 个机构账户，33 项创世机构抽样对账通过。
+- OnChina `/api/v1/health` 返回 `UP`；中枢省目录版本绑定候选 genesis/block#0，计数
+  648；真实生产前端首页 HTTP 200 并显示“链上中国平台”。
+- node、OnChina、PostgreSQL 均已停止，临时端口与仓库外目录已清理；未挖矿、未提交
+  交易、未读取或伪造任何用户私钥。
+
+### 自动验收结果
+
+- Rust 格式检查通过；`cargo check -p citizenchain --features runtime-benchmarks` 通过；
+  `cargo clippy --workspace --lib --bins` 退出码 0，仅有仓库既有 lint 告警。
+- `citizen-issuance` 集成测试已删除旧 `u64` 注册局账户标识夹具，统一使用注册局机构
+  CID 作为 `actor_cid_number`、管理员账户 100 作为外层签名 origin；定向 5 项测试通过。
+- `cargo test --workspace --all-targets` 不再排除任何 crate，完整退出码 0；包括 runtime
+  43、node 270、OnChina 131、投票引擎 95，以及全部费用、机构账户和跨模块集成测试。
+- CitizenWallet 166 项测试和 analyze 全绿。CitizenApp Cloudflare 23 个文件共 168 项
+  测试、typecheck 全绿；CitizenApp 除工作区另一个未提交且持续挂起的群聊页面测试外，
+  其余 692 项通过、5 项环境性跳过，analyze 无问题。
+- node 与 OnChina 前端 production build 通过；OnChina 后端已按当前源码重新构建并完成
+  上述真实运行态验收。
+- 已删除业务模块手工清理入口、公开预备快照 call、中转 storage 和钱包残留动作的精确
+  旧名称；定向残留扫描为 0。
+
+### 明确延后与阻塞项
+
+- 按用户要求，本步不运行 GitHub CI、不执行 `--finalize`、不冻结新锚点、不打正式包、
+  不发布或启动正式新创世；后续顺序固定为 CI WASM → release freeze → 软件 CI → 正式创世。
+- 真实管理员扫码签名、机构费用账户真实扣 0.1 元、余额不足失败和真实投票扣 1 元仍需
+  用户在本机解锁专用测试管理员/公民钱包；不得用临时管理员、假签名或回落付款替代。

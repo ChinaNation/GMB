@@ -5,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import 'package:citizenapp/citizen/shared/institution_info.dart';
+import 'package:citizenapp/citizen/shared/multisig_create_amount_rules.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_query_service.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart'
@@ -137,11 +138,24 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
     final beneficiary = _beneficiaryController.text.trim();
     if (!_validateAddress(beneficiary)) return;
 
-    if (_availableBalance != null && (_availableBalance! * 100).round() < 111) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('账户余额不足（最低 1.11 元）')),
-      );
-      return;
+    if (_availableBalance != null) {
+      final balanceFen =
+          MultisigCreateAmountRules.yuanToFen(_availableBalance!);
+      final executionFeeFen =
+          MultisigCreateAmountRules.calculateOnchainFeeFen(balanceFen);
+      final requiredFen =
+          executionFeeFen + MultisigCreateAmountRules.existentialDepositFen;
+      if (balanceFen < requiredFen) {
+        final requiredYuan = MultisigCreateAmountRules.fenToYuan(requiredFen);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '账户余额不足（需要覆盖链上执行费，且扣费后转出金额不低于 ED；当前至少需要 ${AmountFormat.format(requiredYuan, symbol: '')} 元）',
+            ),
+          ),
+        );
+        return;
+      }
     }
 
     setState(() => _submitting = true);

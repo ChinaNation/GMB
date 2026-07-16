@@ -32,9 +32,12 @@ function Assert-GenesisStatePackage([string]$PackageRoot) {
     }
   }
   $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
-  $required = @("genesis_hash", "state_root", "chainspec_hash", "runtime_wasm_hash", "runtime_wasm_ci_run_id", "runtime_wasm_ci_head_sha", "light_sync_state_hash", "public_institution_root")
+  $required = @("artifact_stage", "genesis_hash", "state_root", "chainspec_hash", "runtime_wasm_hash", "runtime_wasm_ci_run_id", "runtime_wasm_ci_head_sha", "light_sync_state_hash", "public_institution_root")
   if ($manifest.package_format -ne "citizenchain-genesis-state-v1" -or $manifest.chain_id -ne "citizenchain") {
     throw "创世状态包 manifest 身份无效"
+  }
+  if ($manifest.artifact_stage -ne "release") {
+    throw "安装包禁止使用 preview 创世状态包"
   }
   foreach ($field in $required) {
     if (-not $manifest.$field) { throw "创世状态包 manifest 缺少字段:$field" }
@@ -42,6 +45,20 @@ function Assert-GenesisStatePackage([string]$PackageRoot) {
   if (@($manifest.included_paths).Count -ne 1 -or $manifest.included_paths[0] -ne "chains/citizenchain/db") {
     throw "创世状态包 manifest.included_paths 无效"
   }
+  $nodeSpecPath = Join-Path $Root "node\chainspecs\citizenchain.plain.json"
+  $nodeSpecHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $nodeSpecPath).Hash.ToLowerInvariant()
+  if ($manifest.chainspec_hash -ne $nodeSpecHash) {
+    throw "创世状态包与当前冻结 node plain chainspec 不一致"
+  }
+}
+
+$GenesisStateSource = if ($env:CITIZENCHAIN_GENESIS_STATE_DIR) { $env:CITIZENCHAIN_GENESIS_STATE_DIR } else { "$Root\target\chainspec\genesis-state" }
+try {
+  # 先失败关闭，再开始耗时构建；preview 包和不匹配的 node spec 都不得进入安装资源。
+  Assert-GenesisStatePackage $GenesisStateSource
+} catch {
+  Write-Error "创世状态包缺失、不是 release、与冻结 spec 不一致或包含白名单外残留:$GenesisStateSource。$($_.Exception.Message)"
+  exit 1
 }
 
 Write-Host "[prepack] build onchina (release)"
@@ -69,18 +86,11 @@ if ($env:CITIZENCHAIN_PG_DIST -and (Test-Path "$($env:CITIZENCHAIN_PG_DIST)\bin"
   Write-Host "                取官方二进制(含 bin\lib\share),解压后设 CITIZENCHAIN_PG_DIST 再重跑;否则安装包不含内嵌 PG。"
 }
 
-$GenesisStateSource = if ($env:CITIZENCHAIN_GENESIS_STATE_DIR) { $env:CITIZENCHAIN_GENESIS_STATE_DIR } else { "$Root\target\chainspec\genesis-state" }
-try {
-  Assert-GenesisStatePackage $GenesisStateSource
-  $dst = "$Here\resources\genesis-state"
-  if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
-  New-Item -ItemType Directory -Force -Path "$dst\chains\citizenchain" | Out-Null
-  Copy-Item -LiteralPath "$GenesisStateSource\manifest.json" -Destination "$dst\manifest.json"
-  Copy-Item -Recurse -LiteralPath "$GenesisStateSource\chains\citizenchain\db" -Destination "$dst\chains\citizenchain\db"
-  Write-Host "[prepack] 创世链状态包已组装:$GenesisStateSource"
-} catch {
-  Write-Error "创世链状态包缺失、字段无效或包含白名单外残留:$GenesisStateSource。$($_.Exception.Message)"
-  exit 1
-}
+$dst = "$Here\resources\genesis-state"
+if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
+New-Item -ItemType Directory -Force -Path "$dst\chains\citizenchain" | Out-Null
+Copy-Item -LiteralPath "$GenesisStateSource\manifest.json" -Destination "$dst\manifest.json"
+Copy-Item -Recurse -LiteralPath "$GenesisStateSource\chains\citizenchain\db" -Destination "$dst\chains\citizenchain\db"
+Write-Host "[prepack] 创世链状态包已组装:$GenesisStateSource"
 
 Write-Host "[prepack] done. 接着在 node\ 执行: npm run tauri build"

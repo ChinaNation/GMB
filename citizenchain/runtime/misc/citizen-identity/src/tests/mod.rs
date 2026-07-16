@@ -1,8 +1,6 @@
 #![cfg(test)]
 
 use super::*;
-use sp_runtime::AccountId32;
-
 /// NodeGuard 镜像 `CidRecord` 的完整字段序和状态判别值；任一变化都属于 storage 契约变化。
 #[test]
 fn cid_record_scale_contract_matches_node_guard() {
@@ -12,7 +10,7 @@ fn cid_record_scale_contract_matches_node_guard() {
     assert_eq!(CidRecordStatus::Revoked.encode(), vec![1]);
 
     let record = CidRecord {
-        registrar_account: AccountId32::new([1u8; 32]),
+        registrar_cid_number: registrar_cid_number(),
         commitment: [2u8; 32],
         residence_province_code: b"GD".to_vec().try_into().expect("province"),
         residence_city_code: b"001".to_vec().try_into().expect("city"),
@@ -23,7 +21,7 @@ fn cid_record_scale_contract_matches_node_guard() {
     assert_eq!(
         record.encode(),
         (
-            AccountId32::new([1u8; 32]),
+            registrar_cid_number().to_vec(),
             [2u8; 32],
             b"GD".to_vec(),
             b"001".to_vec(),
@@ -87,13 +85,13 @@ pub struct TestCitizenIdentityAuthority;
 impl CitizenIdentityAuthority<u64, pallet::SignatureOf<Test>> for TestCitizenIdentityAuthority {
     fn can_manage_voting_identity(
         registrar: &u64,
-        registrar_account: &u64,
+        actor_cid_number: &[u8],
         residence_province_code: &[u8],
         residence_city_code: &[u8],
         _level: CitizenIdentityLevel,
     ) -> bool {
         *registrar == 100
-            && *registrar_account == 200
+            && actor_cid_number == registrar_cid_number().as_slice()
             && residence_province_code == b"43"
             && residence_city_code == b"4301"
     }
@@ -133,6 +131,13 @@ fn cid(bytes: &[u8]) -> CidNumberBound {
     bytes.to_vec().try_into().expect("cid number should fit")
 }
 
+/// 测试注册局机构 CID；管理员账户 100 只作为外层 origin。
+fn registrar_cid_number() -> CidNumberBound {
+    cid(primitives::cid::china::china_zf::CHINA_ZF[5]
+        .cid_number
+        .as_bytes())
+}
+
 /// 按 tag 生成真实规则公民 CID 号(格式/校验和/机构码全合规)。
 fn citizen_cid_number(tag: &str) -> alloc::vec::Vec<u8> {
     primitives::cid::generator::generate_cid_number(
@@ -164,11 +169,11 @@ fn commitment_for(tag: &str) -> [u8; 32] {
     c
 }
 
-/// 占号先行:身份写入前必须先占号(注册局夹具 100/200,作用域 43/4301)。
+/// 占号先行:身份写入前必须先占号(注册局 CID + 管理员 100,作用域 43/4301)。
 fn occupy_tag(tag: &str) {
     assert_ok!(CitizenIdentity::occupy_cid(
         RuntimeOrigin::signed(100),
-        200,
+        registrar_cid_number(),
         cid(&citizen_cid_number(tag)),
         commitment_for(tag),
         code(b"43"),
@@ -237,7 +242,7 @@ fn register_voting_identity_stores_identity_and_counts_scope() {
 
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             voting_payload(1, &citizen_cid_number("0001")),
             valid_signature(),
         ));
@@ -261,7 +266,7 @@ fn duplicate_cid_cannot_move_to_another_wallet_account() {
 
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             voting_payload(1, &citizen_cid_number("0001")),
             valid_signature(),
         ));
@@ -269,7 +274,7 @@ fn duplicate_cid_cannot_move_to_another_wallet_account() {
         assert_noop!(
             CitizenIdentity::register_voting_identity(
                 RuntimeOrigin::signed(100),
-                200,
+                registrar_cid_number(),
                 voting_payload(2, &citizen_cid_number("0001")),
                 valid_signature(),
             ),
@@ -287,13 +292,13 @@ fn updating_same_account_replaces_cid_without_double_counting() {
 
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             voting_payload(1, &citizen_cid_number("0001")),
             valid_signature(),
         ));
         assert_ok!(CitizenIdentity::update_voting_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             voting_payload(1, &citizen_cid_number("0002")),
             valid_signature(),
         ));
@@ -322,7 +327,7 @@ fn candidate_identity_requires_full_profile_and_enables_candidate_reader() {
 
         assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             candidate_payload(1, &citizen_cid_number("CANDIDATE")),
             valid_signature(),
         ));
@@ -341,13 +346,13 @@ fn revoke_identity_marks_status_and_removes_population_count() {
 
         assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             candidate_payload(1, &citizen_cid_number("REVOKE")),
             valid_signature(),
         ));
         assert_ok!(CitizenIdentity::revoke_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             cid(&citizen_cid_number("REVOKE")),
         ));
 
@@ -367,15 +372,13 @@ fn population_snapshot_reads_current_scope_count() {
 
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             voting_payload(1, &citizen_cid_number("0001")),
             valid_signature(),
         ));
 
-        assert_ok!(CitizenIdentity::prepare_population_snapshot(
-            RuntimeOrigin::signed(1),
-            town_scope(),
-        ));
+        CitizenIdentity::create_governance_population_snapshot(&town_scope())
+            .expect("votingengine provider can create snapshot");
 
         let snapshot = PopulationSnapshots::<Test>::get(0).expect("snapshot should exist");
         assert_eq!(snapshot.eligible_total, 1);
@@ -393,7 +396,7 @@ fn population_snapshot_freezes_membership_before_identity_update() {
         occupy_tag("SNAPSHOT-NEW");
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             voting_payload(1, &citizen_cid_number("SNAPSHOT-OLD")),
             valid_signature(),
         ));
@@ -409,7 +412,7 @@ fn population_snapshot_freezes_membership_before_identity_update() {
         moved.residence_town_code = code(b"4301002");
         assert_ok!(CitizenIdentity::update_voting_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             moved,
             valid_signature(),
         ));
@@ -433,7 +436,7 @@ fn invalid_citizen_code_is_rejected() {
         assert_noop!(
             CitizenIdentity::register_voting_identity(
                 RuntimeOrigin::signed(100),
-                200,
+                registrar_cid_number(),
                 voting_payload(1, b"OLD-0001"),
                 valid_signature(),
             ),
@@ -454,7 +457,7 @@ fn expired_passport_cannot_vote_but_still_counts_in_population() {
 
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             payload,
             valid_signature(),
         ));
@@ -479,7 +482,7 @@ fn not_yet_valid_passport_cannot_vote() {
 
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             payload,
             valid_signature(),
         ));
@@ -496,7 +499,7 @@ fn candidate_identity_stores_sex_and_public_profile() {
 
         assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             candidate_payload(1, &citizen_cid_number("SEX")),
             valid_signature(),
         ));
@@ -537,7 +540,7 @@ fn candidate_birth_date_is_immutable_on_update() {
         let cid = citizen_cid_number("IMMUT");
         assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             candidate_payload(1, &cid),
             valid_signature(),
         ));
@@ -548,7 +551,7 @@ fn candidate_birth_date_is_immutable_on_update() {
         assert_noop!(
             CitizenIdentity::update_candidate_identity(
                 RuntimeOrigin::signed(100),
-                200,
+                registrar_cid_number(),
                 tampered,
                 valid_signature(),
             ),
@@ -566,7 +569,7 @@ fn candidate_illegal_birth_date_rejected() {
         assert_noop!(
             CitizenIdentity::upgrade_to_candidate_identity(
                 RuntimeOrigin::signed(100),
-                200,
+                registrar_cid_number(),
                 payload,
                 valid_signature(),
             ),
@@ -584,7 +587,7 @@ fn candidate_future_birth_date_rejected() {
         assert_noop!(
             CitizenIdentity::upgrade_to_candidate_identity(
                 RuntimeOrigin::signed(100),
-                200,
+                registrar_cid_number(),
                 payload,
                 valid_signature(),
             ),
@@ -605,7 +608,7 @@ fn under_sixteen_cannot_register_onchain_identity() {
         assert_noop!(
             CitizenIdentity::register_voting_identity(
                 RuntimeOrigin::signed(100),
-                200,
+                registrar_cid_number(),
                 payload,
                 valid_signature(),
             ),
@@ -636,7 +639,7 @@ fn non_citizen_family_code_is_rejected() {
         assert_noop!(
             CitizenIdentity::register_voting_identity(
                 RuntimeOrigin::signed(100),
-                200,
+                registrar_cid_number(),
                 voting_payload(1, &institution_number),
                 valid_signature(),
             ),
@@ -655,7 +658,7 @@ fn occupy_cid_is_idempotent_for_same_registrar_and_commitment() {
         assert_noop!(
             CitizenIdentity::occupy_cid(
                 RuntimeOrigin::signed(100),
-                200,
+                registrar_cid_number(),
                 cid(&citizen_cid_number("OCC-1")),
                 commitment_for("OTHER"),
                 code(b"43"),
@@ -672,7 +675,7 @@ fn occupy_cid_rejects_unauthorized_registrar_and_bad_number() {
         assert_noop!(
             CitizenIdentity::occupy_cid(
                 RuntimeOrigin::signed(999),
-                200,
+                registrar_cid_number(),
                 cid(&citizen_cid_number("OCC-2")),
                 commitment_for("OCC-2"),
                 code(b"43"),
@@ -684,7 +687,7 @@ fn occupy_cid_rejects_unauthorized_registrar_and_bad_number() {
         assert_noop!(
             CitizenIdentity::occupy_cid(
                 RuntimeOrigin::signed(100),
-                200,
+                registrar_cid_number(),
                 cid(&public_cid_number("OCC-2")),
                 commitment_for("OCC-2"),
                 code(b"43"),
@@ -714,7 +717,7 @@ fn occupy_cids_batch_rolls_back_entirely_on_any_conflict() {
         assert_noop!(
             CitizenIdentity::occupy_cids_batch(
                 RuntimeOrigin::signed(100),
-                200,
+                registrar_cid_number(),
                 items,
                 code(b"43"),
                 code(b"4301"),
@@ -739,7 +742,7 @@ fn occupy_cids_batch_rolls_back_entirely_on_any_conflict() {
         .expect("batch fits");
         assert_ok!(CitizenIdentity::occupy_cids_batch(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             ok_items,
             code(b"43"),
             code(b"4301"),
@@ -755,7 +758,7 @@ fn register_without_occupation_is_rejected() {
         assert_noop!(
             CitizenIdentity::register_voting_identity(
                 RuntimeOrigin::signed(100),
-                200,
+                registrar_cid_number(),
                 voting_payload(1, &citizen_cid_number("NO-OCC")),
                 valid_signature(),
             ),
@@ -770,7 +773,7 @@ fn revoke_cid_tombstones_and_revokes_bound_identity() {
         occupy_tag("RV-1");
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             voting_payload(1, &citizen_cid_number("RV-1")),
             valid_signature(),
         ));
@@ -778,7 +781,7 @@ fn revoke_cid_tombstones_and_revokes_bound_identity() {
 
         assert_ok!(CitizenIdentity::revoke_cid(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             cid(&citizen_cid_number("RV-1")),
         ));
         // 登记表墓碑 + 身份联动吊销 + 退出人口分母。
@@ -796,7 +799,7 @@ fn revoke_cid_tombstones_and_revokes_bound_identity() {
         assert_noop!(
             CitizenIdentity::revoke_cid(
                 RuntimeOrigin::signed(100),
-                200,
+                registrar_cid_number(),
                 cid(&citizen_cid_number("RV-1")),
             ),
             Error::<Test>::CidAlreadyRevoked
@@ -805,7 +808,7 @@ fn revoke_cid_tombstones_and_revokes_bound_identity() {
         assert_noop!(
             CitizenIdentity::occupy_cid(
                 RuntimeOrigin::signed(100),
-                200,
+                registrar_cid_number(),
                 cid(&citizen_cid_number("RV-1")),
                 commitment_for("RV-1"),
                 code(b"43"),
@@ -818,7 +821,7 @@ fn revoke_cid_tombstones_and_revokes_bound_identity() {
         assert_noop!(
             CitizenIdentity::register_voting_identity(
                 RuntimeOrigin::signed(100),
-                200,
+                registrar_cid_number(),
                 voting_payload(2, &citizen_cid_number("RV-1")),
                 valid_signature(),
             ),
@@ -834,13 +837,13 @@ fn changing_cid_tombstones_old_registry_record() {
         occupy_tag("CHG-B");
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             voting_payload(1, &citizen_cid_number("CHG-A")),
             valid_signature(),
         ));
         assert_ok!(CitizenIdentity::update_voting_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             voting_payload(1, &citizen_cid_number("CHG-B")),
             valid_signature(),
         ));

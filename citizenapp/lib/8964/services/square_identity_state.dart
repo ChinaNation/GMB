@@ -30,6 +30,9 @@ class SquareIdentityState {
   bool get hasWallet => ownerAccount.isNotEmpty;
   bool get isCertified => cidNumber != null && cidNumber!.isNotEmpty;
 
+  /// 竞选身份（candidate）：发布竞选内容的资格（用户 2026-07-16：发帖分类按身份档）。
+  bool get isCandidate => identityLevel == 'candidate';
+
   String get accountLabel {
     if (!hasWallet) return '未选择钱包';
     if (ownerAccount.length <= 14) return ownerAccount;

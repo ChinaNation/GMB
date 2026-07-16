@@ -47,7 +47,7 @@
 - pallet_assets 仅作内核,对外只能通过 OnchainIssuance pallet 包装入口暴露
 - decimals 区间强制 `0..=18`,链端硬校验(用户已确认)
 - monitor 主体强制 NRC(国家级清算行 / 国家储委会),链端在 GenesisConfig 写入,extrinsic 入参不接受
-- 创建费固定 1000 GMB(= 100_000 FEN),写入 primitives::fee_policy 权威源
+- 不设资产创建押金或专属创建费；公开发行 call 在业务落地前保持 `FeeRoute::Reject`，落地后必须进入全链五类费用协议
 - 不写 storage migration(用户单独处理重新创世)
 - 不动 chainspec.json(用户单独处理)
 - 不清楚逻辑时先沟通(本会话已在第 1~7 轮完成需求对齐)
@@ -60,9 +60,9 @@
 | 资产种类 | 第一期 FT only,Plain only |
 | GMB 唯一性 | 计费 / 治理 / gas 统一 GMB,用户代币禁用 |
 | decimals | 用户自定义,范围 0..=18 |
-| 创建费 | 1000 GMB(一次性) |
-| mint/transfer 计费 | OnchainTx 标准价(同 GMB 转账) |
-| burn / monitor 监管动作 | Free |
+| 创建费 | 无专属费用或押金；机构发起业务操作按五类协议由 actor CID 费用账户支付链上操作费 |
+| mint/transfer 计费 | 机构发起操作由 actor CID 费用账户支付，实际 `cast` 由投票签名者支付 1 元 |
+| burn / monitor 监管动作 | 外层机构操作收费；仅 Root/投票引擎内部回调免费 |
 | 业务审批 | 多签内部执行(InternalVote 收 admin 签名),无外部审批层 |
 | 监管动作 | JointVote(管理员多签 + 全民兜底),NRC 主体调用 |
 | monitor 主体 | NRC |
@@ -78,12 +78,12 @@
 
 - `citizenchain/runtime/issuance/onchain-issuance/` 新建 crate(Cargo.toml + 11 个 src 文件骨架)
 - `citizenchain/runtime/primitives/src/derive.rs` 加 `asset_id 资产编号 = 0x04` + parse 分支 + helper
-- `citizenchain/runtime/primitives/src/fee_policy.rs` 加 `ONCHAIN_ASSET_CREATE_FEE: u128 = 100_000` (= 1000 GMB)
+- `citizenchain/runtime/primitives/src/fee_policy.rs` 只复用全链 `FeeRoute`、`ONCHAIN_MIN_FEE` 与统一收费执行器，不增加资产专属费用常量
 - `citizenchain/Cargo.toml` workspace.members 加 `runtime/issuance/onchain-issuance`
 - `citizenchain/Cargo.toml` workspace.dependencies 加 `pallet-assets`
 - `citizenchain/runtime/Cargo.toml` 加 `onchain-issuance` + `pallet-assets` 依赖与 features 传播
 - `citizenchain/runtime/src/lib.rs` `construct_runtime` 加 `Assets`(pallet_index=26)+ `OnchainIssuance`(pallet_index=25)
-- `citizenchain/runtime/src/configs/mod.rs` 配 pallet_assets::Config + onchain_issuance::Config + 扩 OnchainTxAmountExtractor 兼顾新分支 + RuntimeCallFilter 屏蔽 pallet_assets 原生 extrinsic
+- `citizenchain/runtime/src/configs.rs` 配 `pallet_assets::Config` + `onchain_issuance::Config`；公开占位 call 在真正创建投票和执行资产业务前由 `RuntimeFeeRouter` 显式 `Reject`，`RuntimeCallFilter` 屏蔽 `pallet-assets` 原生 extrinsic。
 - `citizenchain/runtime/src/genesis_config_presets.rs` 注入 OnchainIssuance GenesisConfig(黑名单初始词表 + decimals 边界 + NRC subject)
 
 ### 客户端
@@ -134,8 +134,8 @@
 |---|---|---|---|
 | 1 | ✅ | 发行机构身份改为 `actor_cid_number`，具体资产执行账户改为 `execution_account`；费用账户由后续统一费用路由按 CID 解析 | lib.rs / configs.rs |
 | 2 | 🔴 | propose origin 校验铁律写入 ADR-011 5.4 / 5.6 节 + proposal.rs doc + Error::ProposeOriginNotAllowed | ADR-011 / lib.rs / proposal.rs |
-| 3 | 🔴 | 1000 GMB 押金机制三态:reserve / release_to_nrc / refund + 三个 Event + IssueDeposit storage | ADR-011 6 节 / fee.rs / lib.rs |
-| 4 | 🔴 | 计费表订正:mint/burn/transfer/close 全部 VOTE_FLAT_FEE = 1 元(走 InternalVote) | ADR-011 6 节 |
+| 3 | ✅ | 删除资产创建押金、专属收费存储、文件和事件；不得恢复专属收费真源 | fee_policy.rs / lib.rs |
+| 4 | ✅ | 计费表订正：机构发起操作由 actor CID 费用账户支付链上操作费，只有管理员实际 `cast` 才由签名者支付 1 元 | fee_policy.rs / configs.rs |
 | 5 | 🔴 | ForceCloseSchedule storage(BlockNumber → Vec<asset_id>) + on_finalize O(1) take + MaxScheduledPerBlock | ADR-011 5.6 / 8 节 / lib.rs / monitor.rs |
 | 6 | 🔴 | onchain-issuance/Cargo.toml `try-runtime` feature 传播给 frame/balances/assets/votingengine | onchain-issuance/Cargo.toml |
 | 7 | 🟡 | AccountId 0x04 payload 简化:8B+4B+35B → 4B+43B(去 issuer_subject_short) | ADR-010 / ADR-011 2 节 / derive.rs / citizenapp codec |
@@ -143,7 +143,7 @@
 | 9 | 🟡 | OnchainAssetMeta 去 `monitor_account_id` 字段(NRC 全局,非每条) | types.rs / citizenapp query |
 | 10 | 🟡 | OnchainAssetMeta 去 `asset_id` 字段(AccountId byte[1..5] 即可反推),保留 AssetIdIndex | types.rs |
 | 11 | 🟡 | metadata 永久不可改铁律写入 ADR-011 5.7 节 + Error::MetadataImmutable | ADR-011 / lib.rs |
-| 12 | 🟢 | fee.rs `let _ = (...)` 死代码清理 | fee.rs |
+| 12 | ✅ | 删除未实现的资产专属收费实现，收费统一进入全链执行器 | lib.rs / fee_policy.rs |
 | 13 | 🟢 | onchain-issuance vs onchain-transaction 命名说明加在 ADR-011 顶部 | ADR-011 |
 | 14 | 🟢 | pallet_assets Freezer/Holder=() 注解 | ADR-011 8 节 |
 | 15 | 🟢 | OnchainIssuance::Assets ↔ pallet_assets::Asset 双轨同步铁律 | ADR-011 8.1 节 |
@@ -176,7 +176,7 @@
 | # | v3 修订 | 文件 |
 |---|---|---|
 | 1 | onchain-issuance lib.rs `#[pallet::call]` 实装 10 个 propose_X extrinsic 框架(call_index 0..=4 业务 / 10..=14 监管),不再为空 | [lib.rs](citizenchain/runtime/issuance/onchain-issuance/src/lib.rs) |
-| 2 | configs/mod.rs `OnchainTxAmountExtractor::RuntimeCall::OnchainIssuance(_)` 改为 VOTE_FLAT_FEE = 1 元(每个 propose_X 都 1 元,与 GMB 其他业务 pallet 一致) | [configs/mod.rs](citizenchain/runtime/src/configs/mod.rs) |
+| 2 | `configs.rs` 保持 `OnchainIssuance` 占位 call 为 `Reject`；实装后必须按 actor CID 费用账户支付链上操作费，实际 `cast` 才由投票签名者支付投票费 | [configs.rs](citizenchain/runtime/src/configs.rs) |
 | 3 | RuntimeCallFilter:OnchainIssuance 走默认 true(propose_X 是合法入口),Assets 仍全 reject | [configs/mod.rs](citizenchain/runtime/src/configs/mod.rs) |
 | 4 | citizenwallet `pallet_registry.dart` 加 `onchainIssuancePallet = 25` + 10 个 call_index 常量 | [citizenwallet/lib/signer/pallet_registry.dart](citizenwallet/lib/signer/pallet_registry.dart) |
 | 5 | citizenwallet `payload_decoder.dart` 加 OnchainIssuance(25) 路由分支 + 10 个 `_decodeOnchainAssetPlaceholder` 占位(框架阶段返回 action/summary,业务字段解码任务卡 D 实装) | [citizenwallet/lib/signer/payload_decoder.dart](citizenwallet/lib/signer/payload_decoder.dart) |
@@ -199,7 +199,7 @@
 |---|---|---|
 | 链端 construct_runtime | OnchainIssuance idx=25 / Assets idx=26 | ✅ |
 | 链端 RuntimeCall | OnchainIssuance 10 个 propose_X(0..=4 / 10..=14)| ✅ |
-| 链端 OnchainTxAmountExtractor | OnchainIssuance(_) → VOTE_FLAT_FEE | ✅ |
+| 链端费用路由 | `OnchainIssuance(_)` 占位 call → `Reject`，禁止扣费后无业务结果 | ✅ |
 | 链端 RuntimeCallFilter | Assets 全 reject / OnchainIssuance 默认通过 | ✅ |
 | citizenwallet PalletRegistry | onchainIssuancePallet=25 + 10 call_index | ✅ |
 | citizenwallet payload_decoder | OnchainIssuance(25) 路由 + 10 占位解码器 | ✅ |

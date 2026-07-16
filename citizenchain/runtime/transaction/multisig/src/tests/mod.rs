@@ -3,7 +3,7 @@
 use super::*;
 use frame_support::{
     assert_noop, assert_ok, derive_impl,
-    traits::{ConstU128, ConstU32, Hooks},
+    traits::{ConstU128, ConstU32, Currency, ExistenceRequirement, Hooks, WithdrawReasons},
 };
 use frame_system as system;
 use primitives::cid::china::china_ch::CHINA_CH;
@@ -175,6 +175,9 @@ thread_local! {
     static INSTITUTION_ACCOUNTS: core::cell::RefCell<
         std::collections::BTreeMap<AccountId32, (Vec<u8>, InstitutionCode)>,
     > = core::cell::RefCell::new(std::collections::BTreeMap::new());
+    static INSTITUTION_NAMED_ACCOUNTS: core::cell::RefCell<
+        std::collections::BTreeMap<(Vec<u8>, Vec<u8>), AccountId32>,
+    > = core::cell::RefCell::new(std::collections::BTreeMap::new());
 }
 
 /// 测试注入：机构管理员只按 `(institution_code, cid_number)` 寻址。
@@ -200,8 +203,31 @@ fn register_institution_account(
     });
 }
 
+fn register_named_institution_account(
+    account: AccountId32,
+    cid_number: &[u8],
+    institution_code: InstitutionCode,
+    account_name: &[u8],
+) {
+    register_institution_account(account.clone(), cid_number, institution_code);
+    INSTITUTION_NAMED_ACCOUNTS.with(|accounts| {
+        accounts
+            .borrow_mut()
+            .insert((cid_number.to_vec(), account_name.to_vec()), account);
+    });
+}
+
 pub struct TestInstitutionQuery;
 impl entity_primitives::InstitutionMultisigQuery<AccountId32> for TestInstitutionQuery {
+    fn lookup_institution_account(cid_number: &[u8], account_name: &[u8]) -> Option<AccountId32> {
+        INSTITUTION_NAMED_ACCOUNTS.with(|accounts| {
+            accounts
+                .borrow()
+                .get(&(cid_number.to_vec(), account_name.to_vec()))
+                .cloned()
+        })
+    }
+
     fn lookup_cid(addr: &AccountId32) -> Option<Vec<u8>> {
         INSTITUTION_ACCOUNTS.with(|accounts| {
             accounts
@@ -231,6 +257,25 @@ impl entity_primitives::InstitutionMultisigQuery<AccountId32> for TestInstitutio
 
     fn account_exists(addr: &AccountId32) -> bool {
         INSTITUTION_ACCOUNTS.with(|accounts| accounts.borrow().contains_key(addr))
+    }
+}
+
+/// 测试回调与生产逻辑使用同一链上费公式，并真实从明确付款账户扣费。
+pub struct TestOnchainFeeCharger;
+impl primitives::fee_policy::OnchainFeeCharger<AccountId32, Balance> for TestOnchainFeeCharger {
+    fn charge(
+        payer: &AccountId32,
+        transaction_amount: Balance,
+    ) -> Result<Balance, sp_runtime::DispatchError> {
+        let fee = primitives::fee_policy::calculate_onchain_fee(transaction_amount);
+        let imbalance = Balances::withdraw(
+            payer,
+            fee,
+            WithdrawReasons::FEE,
+            ExistenceRequirement::KeepAlive,
+        )?;
+        drop(imbalance);
+        Ok(fee)
     }
 }
 
@@ -309,11 +354,10 @@ impl personal_manage::pallet::Config for Test {
     type InstitutionAsset = TestInstitutionAsset;
     type PersonalAdminLifecycle = personal_admins::Pallet<Test>;
     type PersonalAdminQuery = personal_admins::Pallet<Test>;
-    type FeeRouter = ();
+    type OnchainFeeCharger = TestOnchainFeeCharger;
     type MaxAccountNameLength = ConstU32<128>;
     type MaxPersonalAccountAdmins = ConstU32<64>;
     type MinCreateAmount = ConstU128<111>;
-    type MinCloseBalance = ConstU128<111>;
     type WeightInfo = ();
 }
 
@@ -331,7 +375,7 @@ impl pallet::Config for Test {
     type InstitutionAsset = TestInstitutionAsset;
     type ProtectedSourceChecker = TestProtectedSourceChecker;
     type MaxRemarkLen = ConstU32<256>;
-    type FeeRouter = ();
+    type OnchainFeeCharger = TestOnchainFeeCharger;
     // 测试 mock 把个人多签生命周期灌进 personal-manage，
     // 个人多签管理员灌进 personal-admins，动态阈值灌进 internal-vote。
     // InstitutionQuery 使用 CID 唯一主键的测试聚合查询。
@@ -387,12 +431,24 @@ fn nrc_main_account() -> AccountId32 {
     AccountId32::new(CHINA_CB[0].main_account)
 }
 
+fn nrc_fee_account() -> AccountId32 {
+    AccountId32::new(CHINA_CB[0].fee_account)
+}
+
 fn prc_main_account() -> AccountId32 {
     AccountId32::new(CHINA_CB[1].main_account)
 }
 
+fn prc_fee_account() -> AccountId32 {
+    AccountId32::new(CHINA_CB[1].fee_account)
+}
+
 fn prb_main_account() -> AccountId32 {
     AccountId32::new(CHINA_CH[0].main_account)
+}
+
+fn prb_fee_account() -> AccountId32 {
+    AccountId32::new(CHINA_CH[0].fee_account)
 }
 
 fn frg_node() -> &'static primitives::cid::china::china_zf::ChinaZf {
@@ -406,6 +462,10 @@ fn frg_main_account() -> AccountId32 {
     AccountId32::new(frg_node().main_account)
 }
 
+fn frg_fee_account() -> AccountId32 {
+    AccountId32::new(frg_node().fee_account)
+}
+
 fn njd_node() -> &'static primitives::cid::china::china_sf::ChinaSf {
     CHINA_SF
         .iter()
@@ -415,6 +475,10 @@ fn njd_node() -> &'static primitives::cid::china::china_sf::ChinaSf {
 
 fn njd_main_account() -> AccountId32 {
     AccountId32::new(njd_node().main_account)
+}
+
+fn njd_fee_account() -> AccountId32 {
+    AccountId32::new(njd_node().fee_account)
 }
 
 fn nrc_actor_cid() -> CidNumber {
@@ -461,6 +525,10 @@ fn institution_account() -> AccountId32 {
     AccountId32::new([0x66; 32])
 }
 
+fn institution_fee_account() -> AccountId32 {
+    AccountId32::new([0x67; 32])
+}
+
 fn institution_admin(index: usize) -> AccountId32 {
     institution_pair(index).0
 }
@@ -502,7 +570,20 @@ fn insert_active_institution_account(
     admins: BoundedVec<AccountId32, ConstU32<1989>>,
 ) {
     let cid_number = test_cid_number();
-    register_institution_account(account.clone(), cid_number.as_slice(), PRIVATE_CODE);
+    register_named_institution_account(
+        account.clone(),
+        cid_number.as_slice(),
+        PRIVATE_CODE,
+        primitives::account_derive::RESERVED_NAME_MAIN,
+    );
+    let fee_account = institution_fee_account();
+    register_named_institution_account(
+        fee_account.clone(),
+        cid_number.as_slice(),
+        PRIVATE_CODE,
+        primitives::account_derive::RESERVED_NAME_FEE,
+    );
+    let _ = Balances::deposit_creating(&fee_account, 10_000);
     set_institution_admins(PRIVATE_CODE, cid_number.as_slice(), admins.to_vec());
     internal_vote::ActiveInstitutionThresholds::<Test>::insert(cid_number, 2);
 }
@@ -513,7 +594,26 @@ fn insert_active_fixed_institution_account(
     account: &AccountId32,
     cid_number_raw: &[u8],
 ) {
-    register_institution_account(account.clone(), cid_number_raw, institution_code);
+    register_named_institution_account(
+        account.clone(),
+        cid_number_raw,
+        institution_code,
+        primitives::account_derive::RESERVED_NAME_MAIN,
+    );
+    let fee_account = match institution_code {
+        NRC => nrc_fee_account(),
+        PRC => prc_fee_account(),
+        PRB => prb_fee_account(),
+        FRG => frg_fee_account(),
+        NJD => njd_fee_account(),
+        _ => return,
+    };
+    register_named_institution_account(
+        fee_account,
+        cid_number_raw,
+        institution_code,
+        primitives::account_derive::RESERVED_NAME_FEE,
+    );
 }
 
 /// 收款人：使用一个不是管理员也不是机构的普通地址
@@ -612,6 +712,11 @@ fn new_test_ext() -> sp_io::TestExternalities {
         (prb_main_account(), 10_000),
         (frg_main_account(), 10_000),
         (njd_main_account(), 10_000),
+        (nrc_fee_account(), 10_000),
+        (prc_fee_account(), 10_000),
+        (prb_fee_account(), 10_000),
+        (frg_fee_account(), 10_000),
+        (njd_fee_account(), 10_000),
     ];
     pallet_balances::GenesisConfig::<Test> {
         balances,
@@ -623,6 +728,7 @@ fn new_test_ext() -> sp_io::TestExternalities {
     ext.execute_with(|| {
         EXTRA_ADMINS.with(|admins| admins.borrow_mut().clear());
         INSTITUTION_ACCOUNTS.with(|accounts| accounts.borrow_mut().clear());
+        INSTITUTION_NAMED_ACCOUNTS.with(|accounts| accounts.borrow_mut().clear());
         // 为储备治理三档注入 sr25519 派生 admin。
         // 注入数量必须覆盖 votingengine 的固定制度阈值,保证投票测试走真实状态机。
         // 管理员提供器只按 `(institution_code, actor_cid_number)` 读取本测试注入值。

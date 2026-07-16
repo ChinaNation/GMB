@@ -175,7 +175,7 @@ fn create_executes_when_internal_vote_reaches_threshold() {
     });
 }
 
-// ─── 3. 投票拒绝 → cleanup_rejected → 释放 reserve + 发拒绝事件 ────────
+// ─── 3. 投票拒绝 → 引擎回调释放 reserve + 发拒绝事件 ─────────────────
 
 #[test]
 fn create_rejected_cleanup_releases_reserve_and_emits_event() {
@@ -466,8 +466,8 @@ fn propose_close_rejects_when_balance_below_minimum() {
         let c = setup_creator_balance();
         let dq = proposed_account(&c, b"low-balance");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
-        // MinCloseBalance = 111,这里灌 50 → 应拒
-        seed_active_multisig(&dq, &c, &admins_acc, 50);
+        // 余额 10 分只够最低执行费，扣费后无法向受益人转出 ED，应拒绝。
+        seed_active_multisig(&dq, &c, &admins_acc, 10);
 
         assert_noop!(
             PersonalManage::propose_close(RuntimeOrigin::signed(admin(0)), dq, beneficiary(),),
@@ -502,45 +502,7 @@ fn propose_close_rejects_reserved_and_protected_beneficiary() {
     });
 }
 
-// ─── 11. cleanup_rejected_proposal 仅在 REJECTED 后生效 ────────────────
-
-#[test]
-fn cleanup_rejected_proposal_only_works_after_engine_rejected() {
-    new_test_ext().execute_with(|| {
-        let c = setup_creator_balance();
-        let admins = admins_vec(3);
-        let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
-
-        assert_ok!(PersonalManage::propose_create(
-            RuntimeOrigin::signed(c.clone()),
-            account_name(b"cleanup-test"),
-            admins,
-            2,
-            CREATE_AMOUNT,
-        ));
-        let pid = last_proposal_id();
-
-        // STATUS_VOTING 期间禁止 cleanup
-        assert_noop!(
-            PersonalManage::cleanup_rejected_proposal(RuntimeOrigin::signed(admin(0)), pid,),
-            pallet::Error::<Test>::ProposalNotRejected
-        );
-
-        // 一票否决进入 REJECTED + Executor 自己已经 cleanup 过
-        assert_ok!(cast_no_votes(&admin_accounts[1..], 1, pid));
-        assert_eq!(create_rejected_event_count(pid), 1);
-
-        // Executor 已经在 callback 里清掉 Pending,这里 cleanup 进来时应继续返回 Ok,
-        // 但不能重复发 PersonalCreateRejected。
-        assert_ok!(PersonalManage::cleanup_rejected_proposal(
-            RuntimeOrigin::signed(admin(0)),
-            pid,
-        ));
-        assert_eq!(create_rejected_event_count(pid), 1);
-    });
-}
-
-// ─── 12. 创建执行失败 → 终态清理 reserve + pending + 失败事件 ───────────
+// ─── 11. 创建执行失败 → 终态清理 reserve + pending + 失败事件 ───────────
 
 #[test]
 fn create_execution_failed_terminal_cleans_pending_and_emits_once() {

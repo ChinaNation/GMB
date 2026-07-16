@@ -3,7 +3,7 @@
 //! 个人多签账户生命周期 pallet（MODULE_TAG = `b"per-mgmt"`）。
 //!
 //! 业务边界:用户自定义的多签账户(无 CID 归属),由 `creator + account_name`
-//! 派生地址 `derive_personal_account`。本模块只承载创建、关闭和否决/超时清理。
+//! 派生地址 `derive_personal_account`。本模块只承载创建、关闭及投票引擎终态回调。
 //!
 //! 与机构多签 (`public-manage/private-manage`) 完全独立的 storage / event / error / extrinsic 命名空间;
 //! 共用基础设施仅限于 `primitives::core_const` 派生函数、
@@ -20,7 +20,6 @@ pub const ACTION_CLOSE: u8 = 1;
 
 pub use pallet::*;
 
-pub mod cleanup;
 pub mod close;
 pub mod create;
 pub mod execute;
@@ -88,9 +87,10 @@ pub mod pallet {
         /// 个人多签账户状态由本模块保存；管理员集合与人数从 personal-admins 读取。
         type PersonalAdminQuery: AdminAccountQuery<Self::AccountId>;
 
-        /// 手续费分账路由(创建入金和注销转出的手续费)
-        type FeeRouter: frame_support::traits::OnUnbalanced<
-            <Self::Currency as Currency<Self::AccountId>>::NegativeImbalance,
+        /// 个人多签创建入金和注销转出的链上费统一执行器。
+        type OnchainFeeCharger: primitives::fee_policy::OnchainFeeCharger<
+            Self::AccountId,
+            BalanceOf<Self>,
         >;
 
         /// 个人多签账户名称最大字节数
@@ -104,10 +104,6 @@ pub mod pallet {
         /// 创建时最低入金(默认 111 分 = 1.11 元)
         #[pallet::constant]
         type MinCreateAmount: Get<BalanceOf<Self>>;
-
-        /// 注销时账户最低余额门槛(默认 111 分 = 1.11 元)
-        #[pallet::constant]
-        type MinCloseBalance: Get<BalanceOf<Self>>;
 
         type WeightInfo: crate::weights::WeightInfo;
     }
@@ -275,7 +271,6 @@ pub mod pallet {
         EmptyPersonalName,
         PersonalAlreadyExists,
         CloseAlreadyPending,
-        ProposalNotRejected,
         ReserveFailed,
         ReserveReleaseFailed,
         FeeWithdrawFailed,
@@ -325,15 +320,7 @@ pub mod pallet {
             crate::close::do_propose_close::<T>(who, account, beneficiary)
         }
 
-        /// 清理已被拒绝或超时的创建/关闭提案残留状态。
-        /// 任意签名账户可调用。用于解决投票引擎 on_initialize 超时 reject 后
-        /// 本模块无法自动收到通知导致的 Pending / PendingCloseProposal 残留。
-        #[pallet::call_index(2)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::cleanup_rejected_proposal())]
-        pub fn cleanup_rejected_proposal(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
-            let _ = ensure_signed(origin)?;
-            crate::cleanup::do_cleanup_rejected_proposal::<T>(proposal_id)
-        }
+        // call_index(2) 已永久废弃：拒绝和执行失败清理由 votingengine 终态回调完成。
     }
 
     impl<T: Config> Pallet<T> {
@@ -527,7 +514,7 @@ pub mod pallet {
 
         pub(crate) fn create_pending_admin_account_for_proposal(
             proposal_id: u64,
-            institution_id: T::AccountId,
+            account: T::AccountId,
             kind: AdminAccountKind,
             admins: &AdminsOf<T>,
             creator: &T::AccountId,
@@ -535,14 +522,14 @@ pub mod pallet {
             Self::ensure_lifecycle_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
-                institution_id.clone(),
+                account.clone(),
                 STATUS_VOTING,
                 false,
             )?;
             T::PersonalAdminLifecycle::create_pending_admin_account_for_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
-                institution_id,
+                account,
                 Vec::new(),
                 votingengine::types::PMUL,
                 kind,
@@ -553,25 +540,25 @@ pub mod pallet {
 
         pub(crate) fn activate_admin_account(
             proposal_id: u64,
-            institution_id: T::AccountId,
+            account: T::AccountId,
         ) -> DispatchResult {
             Self::ensure_lifecycle_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
-                institution_id.clone(),
+                account.clone(),
                 STATUS_PASSED,
                 true,
             )?;
             T::PersonalAdminLifecycle::activate_admin_account_for_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
-                institution_id,
+                account,
             )
         }
 
         pub(crate) fn remove_pending_admin_account(
             proposal_id: u64,
-            institution_id: T::AccountId,
+            account: T::AccountId,
         ) -> DispatchResult {
             let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
@@ -582,32 +569,32 @@ pub mod pallet {
             Self::ensure_lifecycle_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
-                institution_id.clone(),
+                account.clone(),
                 proposal.status,
                 false,
             )?;
             T::PersonalAdminLifecycle::remove_pending_admin_account_for_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
-                institution_id,
+                account,
             )
         }
 
         pub(crate) fn close_admin_account(
             proposal_id: u64,
-            institution_id: T::AccountId,
+            account: T::AccountId,
         ) -> DispatchResult {
             Self::ensure_lifecycle_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
-                institution_id.clone(),
+                account.clone(),
                 STATUS_PASSED,
                 true,
             )?;
             T::PersonalAdminLifecycle::close_admin_account_for_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
-                institution_id,
+                account,
             )
         }
 

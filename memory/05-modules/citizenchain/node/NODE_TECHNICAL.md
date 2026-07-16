@@ -106,13 +106,17 @@
 `genesis + 后续交易状态`;节点本地数据库只是链状态副本。
 
 - 冻结 chainspec：[citizenchain/node/chainspecs/citizenchain.plain.json](../../../../citizenchain/node/chainspecs/citizenchain.plain.json),plain 形态只保存 runtime WASM、genesis patch、当前 6 个已部署 bootnode、token 属性和协议 ID；44 个权威节点是规划身份目录，不得把未部署节点写入当前联网基线。
-- 创世配置：正式安装包只内置冻结 plain chainspec，不内置物化 RocksDB 创世数据库。首次启动由节点按同一 chainspec 本地初始化空数据库，再通过 bootNodes 同步网络；烘焙脚本生成的临时状态只用于本地验收，不进入 CI artifact 或安装包。
+- 创世配置：正式安装包同时内置冻结 plain chainspec 和经 release 清单验证的
+  `genesis-state/chains/citizenchain/db`。首启复制状态包到独立节点数据目录；开发/排障
+  缺少状态包时才允许按同一 plain chainspec 本地物化。preview 状态包永远不得进入安装包。
 - 当前唯一冻结锚点（2026-07-14，Git commit `40646f360f01fe362d38ada6085357c586848210`，GitHub `CitizenChain WASM` run `29388014765`）：`genesis_hash=0xbb993e8fb7aa6c06e44b96f4ba35179ef8644ade17c37529c1742e1fb261b095`、`state_root=0xd285f98522ca3bce15decd52e61a6d9e444a069a4544a8141eec0017d6e324ac`、`runtime_wasm_hash=e7c239c78e337fde6a5e107669f77a517de199dfced1f9b96c9ae49a297b1f79`、`chainspec_hash=471effd6403fcce6bee84ab9bde7ed9aa6e2b3dbb54248a923d4d0d0688c4651`、`light_sync_state_hash=16b722fb297a358efb61b56c70883e0ff0fc1b9cb4af5c508f5d38d624a35c42`、`public_institution_root=b6f3927a831d940cf7037d68fcbc5fc62f9ebb4d2c2a8ce0ef4da15d59fa3855`。
 - 同一次正式 bake 已通过公民宪法创世校验并在 50 秒完成物化；正式包的仓库外隔离副本使用默认内嵌链规范真实启动后，RPC 返回上述 block#0/state root、`isSyncing=false`，进程正常退出。正式包目录禁止直接作为 `--base-path`，避免写入节点密钥和网络运行状态。旧管理员 storage 布局及旧创世锚点不再作为当前发布基线。
-- 加载方式：[chain_spec.rs](../../../../citizenchain/node/src/core/chain_spec.rs) 用 `include_bytes!` 加载冻结 plain JSON；首次启动由 runtime `GenesisBuilder` 在本机物化链状态。
+- 加载方式：[chain_spec.rs](../../../../citizenchain/node/src/core/chain_spec.rs) 用 `include_bytes!` 加载冻结 plain JSON；启动流程优先安装 release 创世状态包，随后仍由 `GenesisBlockBuilder` 对同一块 0 规格进行一致性校验。
 - 当前限制：即使已复制 `genesis-state` RocksDB,Substrate 启动仍会根据 plain spec 调 `GenesisBlockBuilder` 校验链初始块;这不是重新生成并写入链数据库,但会产生分钟级 CPU 成本。首次本地数据准备显示“初始化中”，已有数据库显示“启动中”，均需等待 `chain_getBlockHash(0)` 成功后才进入“运行中”。
 - 全网一致性保证：plain JSON、CI WASM、创世链状态包 manifest 中的 `genesis_hash/state_root/runtime_wasm_hash/chainspec_hash/public_institution_root` 必须一致，manifest 还必须绑定 `runtime_wasm_ci_run_id/runtime_wasm_ci_head_sha`;后续 runtime 升级一律走链上 `setCode`,不重写创世包。
-- 发布与服务器安装：`citizenchain-ci.yml` 只生成四个平台节点软件；服务器部署下载 Linux amd 软件后，节点按冻结 chainspec 初始化并通过网络同步，不上传或安装创世数据库。
+- 发布与服务器安装：`citizenchain-ci.yml` 构建四个平台节点软件时只能消费
+  `artifact_stage=release` 且 hash/provenance 全部匹配的状态包；服务器部署保留节点身份
+  密钥与 GRANDPA keystore，并只在新链数据目录安装冻结块 0 数据库。
 - 部署控制台批量操作：CitizenChain“部署服务器”会并发启动所有配置齐全节点；成功节点不回显过程日志，失败节点实时回显脱敏失败日志，结束后输出成功/失败/跳过汇总；节点卡片“部署该节点”仍只执行并显示单节点日志。
 - 运行态可用标准：进程内节点线程存活不等于节点可用。首页状态和链上中国启动前置检查都必须等待 `chain_getBlockHash(0)` 成功；RPC ready 前按本地数据是否首次准备分别显示“初始化中”或“启动中”，不得标记“运行中”。桌面启动路径固定使用 `SingleState` 交易池；必要后台任务退出时必须立即保存并展示真实原因，禁止继续等待 RPC 超时。
 
@@ -120,10 +124,12 @@
 
 1. GitHub `CitizenChain WASM` CI 成功后,下载同一提交的 `citizenchain-wasm` artifact。
 2. 取 `citizenchain.compact.compressed.wasm` 作为创世 `:code` 字节源。
-3. 执行 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM> --wasm-ci-run-id <RUN_ID> --wasm-ci-head-sha <HEAD_SHA> --public-institution-root <CitizenApp 公权快照根>`。
+3. 执行 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM> --wasm-ci-run-id <RUN_ID> --wasm-ci-head-sha <HEAD_SHA>`；公权机构分片及根必须由脚本从同一块 0 直接生成，不接受外部参数。
 4. 脚本必须通过 `check-constitution-genesis.py --expect-code-file <CI_WASM>` 校验,确认 `:code` 字节等于 CI WASM,公民宪法 `law_id=0`、v1 直接生效且无待生效版。
-5. 脚本生成三份发布输入:`citizenchain/node/chainspecs/citizenchain.plain.json`、`citizenapp/assets/chainspec.json`、`citizenapp/assets/light_sync_state.json`。
-6. 正式打包不复制 `target/chainspec/genesis-state/`;验收可使用仓库外临时目录，但不得把物化数据库写入安装包。
+5. 脚本原子准备全节点 plain、release 状态包、CitizenApp chainspec/checkpoint、43 个
+   公权机构分片以及 Cloudflare 各环境链身份锚点，并在覆盖正式文件前完成交叉校验。
+6. `prepack.sh` / `prepack.ps1` 只复制 `artifact_stage=release` 的状态包；preview、缺失 CI
+   provenance、chainspec hash 不一致或包含清单外路径一律失败关闭。
 
 后续 runtime 升级一律走链上 `setCode`(governance/runtime-upgrade),**绝不**重新烘焙或覆盖这份 JSON。
 
@@ -135,6 +141,14 @@
 - `bake-chainspec.sh` 用 `citizenchain-fresh` 入口生成新的 plain chainspec,并保留当前 SSOT 中的 6 个已部署 bootNodes。
 - fresh plain chainspec 的 genesis `:code` 必须与下载的 CI WASM 字节一致。
 - 脚本同时写回 `citizenchain/node/chainspecs/citizenchain.plain.json` 与 `citizenapp/assets/chainspec.json`,并导出 `target/chainspec/genesis-state/`,保证全节点和轻节点使用同一创世锚点。
+- 不带 `--finalize` 时只在 `target/chainspec/` 生成 `artifact_stage=preview` 候选；不得覆盖
+  正式 node/App/Cloudflare 资产，也不得被 prepack 接受。
+
+2026-07-16 第 5 步仅完成创世准备：preview 候选块 0 为
+`0x8347f61bd28c93c4ce6d6b98f4b5a70f185841e0ac87b0bab9eb8c6caf8375ed`，state root 为
+`0x467996c0094900833e30ff0a11e668aaf234abc35acdb4917f858702642ee707`。该值已经过隔离
+node、NodeGuard、OnChina 真实投影/API/页面验证，但不是冻结值；2026-07-14 正式锚点保持不变，
+后续必须等 CI WASM、release freeze 与正式创世阶段再执行 `--finalize`。
 
 2026-07-01 正式创世冻结收口:
 

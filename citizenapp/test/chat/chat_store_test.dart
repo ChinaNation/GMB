@@ -155,12 +155,32 @@ void main() {
     expect(forBob.single.conversationId, 'conv-a');
     expect(forBob.single.byteSize, 100);
 
-    await store.deleteOutgoingMedia('att-1'); // 收到 ack 后删除
+    await store.deleteOutgoingMedia('att-1', 'bob-wallet'); // 收到 ack 后删除
     expect(await store.outgoingMediaCount(), 1);
 
     // 删会话 conv-b 连带清理其待投递媒体,不留孤儿。
     await store.deleteConversation('conv-b');
     expect(await store.outgoingMediaCount(), 0);
+  });
+
+  test('群媒体:同一 attachmentId 发多成员各占一行,按成员删', () async {
+    final store = ChatStore();
+    for (final member in ['b-wallet', 'c-wallet', 'd-wallet']) {
+      await store.recordOutgoingMedia(
+        attachmentId: 'att-grp',
+        recipientAccount: member,
+        conversationId: 'grp:a:n',
+        fileName: 'g.jpg',
+        contentType: 'image/jpeg',
+        byteSize: 100,
+      );
+    }
+    expect(await store.outgoingMediaCount(), 3);
+    // 仅 c 收到 ack → 删 c 的行,b/d 待投递保留。
+    await store.deleteOutgoingMedia('att-grp', 'c-wallet');
+    expect(await store.outgoingMediaCount(), 2);
+    final forB = await store.readPendingOutgoingMedia(recipientAccount: 'b-wallet');
+    expect(forB.single.attachmentId, 'att-grp');
   });
 
   test('clearAllForOwner 连带清理该 owner 会话的待投递媒体', () async {

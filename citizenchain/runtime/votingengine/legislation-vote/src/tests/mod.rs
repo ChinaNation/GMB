@@ -69,7 +69,7 @@ fn bounded_cid(cid_number: &str) -> votingengine::types::CidNumber {
 
 /// 业务发起机构与代表表决机构分离，权限统一按 actor CID 下的 admins 校验。
 pub fn actor_cid_number() -> votingengine::types::CidNumber {
-    bounded_cid(CHINA_ZF[5].cid_number)
+    bounded_cid(CHINA_LF[2].cid_number)
 }
 
 pub fn house1() -> votingengine::types::CidNumber {
@@ -162,8 +162,6 @@ impl TestInternalAdminProvider {
             return None;
         }
         if cid_number == actor_cid_number().as_slice() {
-            Some(sp_runtime::sp_std::vec![member(1), member(50)])
-        } else if cid_number == house1().as_slice() {
             Some((1u8..=10).map(member).collect())
         } else if cid_number == house2().as_slice() {
             Some((11u8..=20).map(member).collect())

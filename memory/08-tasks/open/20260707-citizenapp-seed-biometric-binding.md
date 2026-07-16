@@ -164,7 +164,7 @@ abstract interface class SecureSeedStore {
 
 ### 广场发布费率（citizenchain runtime）
 
-- 目标态：`RuntimeCall::SquarePost(_) => FeeChargeKind::OnchainAmount(0)` → `max(0×rate, ONCHAIN_MIN_FEE=10 FEN)` = **0.1元**。
+- 目标态：`RuntimeCall::SquarePost(_) => FeeRoute::Onchain { transaction_amount: 0, payer: Signer }` → `max(0×rate, ONCHAIN_MIN_FEE=10 FEN)` = **0.1元**。
 - runtime 测试 `runtime_square_post_fee_kind_uses_onchain_minimum_fee` 覆盖分类、10 分最低费用，并确保 `VOTE_FLAT_FEE=100 FEN` 不变。
 - 该改动登记在现有广场任务卡阶段 14，不新增第二套收费或分账逻辑。
 

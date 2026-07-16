@@ -72,8 +72,8 @@ describe('GET /v1/square/users/:account', () => {
       ],
       // 认证真源=链上身份：投票公民携带 cid，主页据此判认证。
       identity: { identity_level: 'voting', cid_number: 'CN001-CTZN-000000001-2026' },
-      // 且购买了投票会员且有效 → 主页会员匹配（徽章带勾）。
-      membership: { membership_level: 'voting' },
+      // 购买了民主会员且有效 → 徽章带勾（会员与身份解耦，勾只看会员是否有效）。
+      membership: { membership_level: 'democracy' },
       follows: [
         { owner_account: owner, followed_account: 'a______________1' },
         { owner_account: owner, followed_account: 'a______________2' },
@@ -93,7 +93,7 @@ describe('GET /v1/square/users/:account', () => {
       owner_account: owner,
       is_certified: true,
       identity_level: 'voting',
-      membership_level: 'voting',
+      membership_level: 'democracy',
       membership_active: true,
       cid_number: 'CN001-CTZN-000000001-2026',
       is_following: true
@@ -101,11 +101,11 @@ describe('GET /v1/square/users/:account', () => {
     expect(body.profile.counts).toEqual({ following: 2, followers: 1, posts: 2 });
   });
 
-  it('reports membership level even when it is below the chain identity', async () => {
-    // 竞选身份但只买了投票会员 → 会员档=voting、生效，但与身份档 candidate 不匹配（客户端据此不给勾）。
+  it('reports identity and membership independently (decoupled)', async () => {
+    // 会员与身份解耦（ADR-036）：竞选身份可只买自由会员，两轴各自上报、互不影响。
     const env = fakeEnv({
       identity: { identity_level: 'candidate', cid_number: 'CN001-CTZN-000000009-2026' },
-      membership: { membership_level: 'voting' }
+      membership: { membership_level: 'freedom' }
     });
     const response = await getUserProfileRoute(
       request(`https://w/v1/square/users/${owner}`, { authToken: 'tok' }),
@@ -115,7 +115,7 @@ describe('GET /v1/square/users/:account', () => {
     const body = (await response.json()) as { profile: Record<string, unknown> };
     expect(body.profile).toMatchObject({
       identity_level: 'candidate',
-      membership_level: 'voting',
+      membership_level: 'freedom',
       membership_active: true
     });
   });
@@ -124,7 +124,7 @@ describe('GET /v1/square/users/:account', () => {
     // 会员过期（expires_at 已过）→ membership_active=false（客户端据此不给勾）。
     const env = fakeEnv({
       identity: { identity_level: 'voting', cid_number: 'CN001-CTZN-000000001-2026' },
-      membership: { membership_level: 'voting', expires_at: 1 }
+      membership: { membership_level: 'democracy', expires_at: 1 }
     });
     const response = await getUserProfileRoute(
       request(`https://w/v1/square/users/${owner}`, { authToken: 'tok' }),
@@ -134,7 +134,7 @@ describe('GET /v1/square/users/:account', () => {
     const body = (await response.json()) as { profile: Record<string, unknown> };
     expect(body.profile).toMatchObject({
       identity_level: 'voting',
-      membership_level: 'voting',
+      membership_level: 'democracy',
       membership_active: false
     });
   });
@@ -350,7 +350,7 @@ interface FakeEnvOptions {
   identity?: { identity_level: 'visitor' | 'voting' | 'candidate'; cid_number?: string | null };
   /// 预置 owner 的会员购买（对应 D1 square_memberships 一行）；缺省=未购买（无行）。
   membership?: {
-    membership_level: 'freedom' | 'democracy' | 'voting' | 'candidate';
+    membership_level: 'freedom' | 'democracy' | 'spark';
     subscription_status?: string;
     expires_at?: number;
   };

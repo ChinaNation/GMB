@@ -93,8 +93,9 @@ class SquarePublishService {
     if (!identity.hasWallet || identity.pubkeyHex == null) {
       throw const SquarePublishException('请先创建或选择钱包');
     }
-    if (postCategory == SquarePostCategory.campaign && !identity.isCertified) {
-      throw const SquarePublishException('只有链上认证公民才能发布竞选内容');
+    // 发帖分类权限按身份档（用户 2026-07-16）：竞选内容只有竞选身份（candidate）可发。
+    if (postCategory == SquarePostCategory.campaign && !identity.isCandidate) {
+      throw const SquarePublishException('只有竞选身份的公民才能发布竞选内容');
     }
     if (trimmedText.isEmpty && mediaDrafts.isEmpty) {
       throw const SquarePublishException('动态内容不能为空');

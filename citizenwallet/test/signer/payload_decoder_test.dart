@@ -234,7 +234,7 @@ void main() {
       expect(decoded.fields['approve'], 'true');
     });
 
-    test('decodes prepare_joint_population_snapshot (pallet=21 call=2)', () {
+    test('JointVote 保留 call 2 空洞并拒绝旧载荷', () {
       final payload = Uint8List.fromList([
         0x15, 0x02,
         ...compactVec(nrcActorCid),
@@ -243,13 +243,7 @@ void main() {
         ...compactVec('001'),
       ]);
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
-
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'prepare_joint_population_snapshot');
-      expect(decoded.fields['actor_cid_number'], nrcActorCid);
-      expect(decoded.fields['scope_level'], 'CITY');
-      expect(decoded.fields['scope_province_code'], 'GZ');
-      expect(decoded.fields['scope_city_code'], '001');
+      expect(decoded, isNull);
     });
 
     group('OnchainIssuance(23) strict SCALE decode', () {
@@ -731,7 +725,8 @@ void main() {
       expect(decoded.reviewFields['cid_number'], 'CTZN-430100-0001');
     });
 
-    test('decodes occupy_cids_batch and retained citizen snapshot calls', () {
+    test('decodes occupy_cids_batch and rejects CitizenIdentity call 5 hole',
+        () {
       final batchCall = [
         0x0a,
         0x07,
@@ -756,9 +751,7 @@ void main() {
         ...compactVec('GZ'),
       ];
       expect(
-        PayloadDecoder.decode(hexOf(withSigningTail(snapshotCall)))?.action,
-        'prepare_citizen_population_snapshot',
-      );
+          PayloadDecoder.decode(hexOf(withSigningTail(snapshotCall))), isNull);
     });
 
     test('cast_referendum 夹带旧凭证字段时拒绝解码', () {
@@ -1064,6 +1057,8 @@ void main() {
       expect(decoded.fields['actor_cid_number'], nrcActorCid);
       expect(decoded.fields['institution_account'],
           ss58FromBytes(institutionAccount));
+      expect(decoded.fields['operation_fee_payer'], '$nrcActorCid 的链上费用账户');
+      expect(decoded.fields['execution_fee_payer'], '$nrcActorCid 的链上费用账户');
       expect(decoded.fields['amount_yuan'], '100.00 GMB');
     });
 
@@ -1105,6 +1100,8 @@ void main() {
       expect(decoded.fields['actor_cid_number'], nrcActorCid);
       expect(decoded.fields['institution_account'],
           ss58FromBytes(institutionAccount));
+      expect(decoded.fields['operation_fee_payer'], '$nrcActorCid 的链上费用账户');
+      expect(decoded.fields['execution_fee_payer'], '$nrcActorCid 的链上费用账户');
       expect(decoded.fields['amount_yuan'], '123.45 GMB');
       expect(decoded.fields['remark'], 'test');
     });
@@ -1539,12 +1536,10 @@ void main() {
       expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
 
-    test('decodes cleanup_rejected_public_proposal (pallet=30 call=4)', () {
+    test('PublicManage 保留 call 4 空洞并拒绝旧载荷', () {
       final payload = buildProposalIdPayload(0x1e, 0x04, 500);
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'cleanup_rejected_public_proposal');
-      expect(decoded.fields['proposal_id'], '500');
+      expect(decoded, isNull);
     });
 
     test('decodes public institution close action', () {
@@ -1668,6 +1663,7 @@ void main() {
       final feeAccount = utf8.encode(secondAccountName);
       final mainAmount = u128Le(BigInt.from(1000000)); // 10,000.00 GMB
       final feeAmount = u128Le(BigInt.from(222)); // 2.22 GMB
+      final fundingAccount = List<int>.filled(32, 0x44);
       final admins = [
         List<int>.filled(32, 0x11),
         List<int>.filled(32, 0x22),
@@ -1705,6 +1701,9 @@ void main() {
         (feeAccount.length << 2) & 0xff,
         ...feeAccount,
         ...feeAmount,
+        // funding_account: Some(AccountId32)，因为初始入金合计非零。
+        0x01,
+        ...fundingAccount,
         // institution_code: [u8;4] 机构账户码(取代旧 org=ORG_OTH=5)
         ...InstitutionCode.codeBytes('CGOV'),
         // roles: Vec<InstitutionRole> count=1
@@ -1775,6 +1774,14 @@ void main() {
       expect(decoded.fields['total_amount_yuan'], '10,002.22 GMB');
       expect(decoded.fields['amount_主账户'], '10,000.00 GMB');
       expect(decoded.fields['amount_费用账户'], '2.22 GMB');
+      expect(
+        decoded.fields['funding_account'],
+        ss58FromBytes(List<int>.filled(32, 0x44)),
+      );
+      expect(
+        decoded.fields['fee_payer'],
+        '$registryActorCid 的链上费用账户',
+      );
       expect(decoded.fields.containsKey('subject_property'), isFalse);
       expect(decoded.fields['actor_cid_number'], registryActorCid);
       expect(decoded.fields['scope_province_name'], '安徽省');
@@ -2210,7 +2217,7 @@ void main() {
       expect(decoded.fields['executive_cid_number'], executiveCid);
     });
 
-    test('decodes prepare_population_snapshot (26.0)', () {
+    test('LegislationVote 保留 call 0 空洞并拒绝旧载荷', () {
       final callData = [
         26, 0,
         3, // PopulationScope::Town
@@ -2219,12 +2226,7 @@ void main() {
         ...compactVec('001001'),
       ];
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(callData)));
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'prepare_legislation_snapshot');
-      expect(decoded.fields['scope_level'], 'TOWN');
-      expect(decoded.fields['scope_province_code'], 'GZ');
-      expect(decoded.fields['scope_city_code'], '001');
-      expect(decoded.fields['scope_town_code'], '001001');
+      expect(decoded, isNull);
     });
 
     test('decodes cast_representative_vote (26.1)', () {

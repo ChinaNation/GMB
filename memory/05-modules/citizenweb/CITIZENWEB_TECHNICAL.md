@@ -34,12 +34,12 @@ npm run build
 
 ## 3.2. 会员订阅页
 
-- `/membership` 是 CitizenApp 官网会员订阅入口，共四档会员、三张身份卡：访客卡内含**自由会员 `freedom`($2.99) / 民主会员 `democracy`($9.99) 左右切换**（默认自由，点击切换价格与权益）、投票公民会员 `voting`($9.99)、竞选公民会员 `candidate`($99.99)。订阅资格由 Worker 精确匹配身份档强校验（禁止降档/越级），官网 UI 跟随。
+- `/membership` 是 CitizenApp 官网会员订阅入口，共三档会员并列卡（ADR-036，与身份彻底解耦）：**自由会员 `freedom`($2.99) / 民主会员 `democracy`($9.99) / 薪火会员 `spark`($99.99)**。任意身份可订阅任意档，官网无身份门槛、卡内不含身份字段（身份改由 CitizenApp 电子护照展示）。每卡展示会员权益（聊天单文件上限 10MB/100MB/5GB、动态、文章）+ 价格 + 订阅按钮。
 - 官网订阅先调用 `POST /v1/square/membership/subscribe/challenge`（响应含 `current` 当前订阅态，供官网判定 新订阅/升档/降档/续订），CitizenApp 钱包扫码签名后调用 `POST /v1/square/membership/subscribe`。**一钱包一订阅（ADR-033）**：无活跃订阅→创建 Stripe Checkout Session（返回 `checkout_url`）；已有活跃订阅→在同一订阅上按 `action` 分派——升档 `upgraded`/`upgrade_pending`(返回 `payment_url` 付差价)、降档 `downgraded`(剩余价值进 Stripe 信用余额)、续订 `resumed`、无操作 `already_subscribed`，绝不新建第二个订阅。官网不保存会员状态、不保存本地法币金额、不接触 Stripe secret。
 - 支付方式与 USDC（ADR-034 段4，官网订阅面板）：**卡 / USDC** 二选一。卡走上面的 subscribe 分派；USDC 分「购买/续费」（选季/年，`SigningKind=usdc-purchase` → `/prepaid/challenge`+`/prepaid`，金额=月数×月费无折扣，付成功跳 `checkout_url`）与「换档」（`usdc-change` → `/prepaid/change/challenge`+`/prepaid/change`，challenge 响应 `preview{kind,amount_cents?,new_days?}` 在签名弹窗展示；降/平档即时切档出文案、升档跳 `checkout_url`）。官网只是操作入口、不展示当前会员态（会员态展示在 CitizenApp）。
 - 取消入口（ADR-034 段4，一个入口按支付方式识别）：`/cancel/challenge`+`/cancel` 签名后，Worker 按 `subscription_source` 分派并回 `cancel_kind`——卡=`stripe`（`cancel_at_period_end` 到期取消）、USDC=`usdc_prepaid`（无自动续、到期自然失效，不动订阅）；官网据 `cancel_kind` 出对应文案。无活跃订阅→`no_active_subscription`。
 - 换档金额预览：challenge 响应带 `preview`（Worker 按当期剩余周期比例本地估算的 `{kind, amount_cents}`），官网在签名弹窗展示「升档需补 $X / 降档 $Y 转权益」（估算，实际以 Stripe proration 为准）。
-- 身份绑定冻结（ADR-033 规则5）：链上身份与会员档位不精确匹配（升/降任一方向）→ Worker 读取侧冻结权益（`frozen`+`membership_frozen_identity_mismatch`）并暂停 Stripe 收款；解冻需签名换档到与身份匹配的档。冻结拦截在 Worker/App 侧，官网只作为换档入口。
+- 身份绑定冻结已废止（ADR-036 取代 ADR-033 规则5）：会员与身份解耦后不再有「身份≠档位」冻结或暂停收款；权益态即订阅态（`active`=`subscription_active`）。官网/App 不再展示冻结横幅。
 - USDC 预付路线（ADR-034，后端 + 官网 UI 段4 已落地）：加密钱包无法自动扣款，故 USDC 走**预付固定时长**（季=3 月 / 年=12 月，无折扣=月数×月费）——`POST /membership/prepaid/challenge` + `/prepaid` 签名(`context=level|duration`)后建一次性 Checkout(`mode=payment`)，付成功由 webhook `checkout.session.completed`(`metadata.route=usdc_prepaid`)授时长(`expires_at` 从当前到期日往后叠)。无自动续、无取消，`expires_at` 单独定生死。USDC **换挡**走 `/prepaid/change`(升档补差价一次性 Checkout、降档补时长本地折算)。`/prepaid` 购买对**已有活跃 USDC 且异档**拒(`prepaid_tier_change_required`)，强制走换档，防旧时长被贴成新档漏收。
 - 切换支付（一钱包一路线，零权益损失）：USDC→卡=订卡时 `subscription_data[trial_end]` 到 USDC 到期日(试用满首扣)；卡→USDC=预付付成功的 webhook 里先把卡订阅设到期取消再从卡到期日往后叠。均"从当前到期日起算"，旧的照用到到期。
 - 会员权益真源在 CitizenApp Cloudflare Worker / D1：Stripe subscription webhook 写入 `square_memberships` 后，iOS / Android / GitHub Android 版 CitizenApp 均通过同一钱包账户读取会员状态。

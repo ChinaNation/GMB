@@ -15,7 +15,7 @@ describe('Cloudflare 统一资源限制', () => {
     expect(resourceLimit('square_image_sd').max_bytes).toBe(1024 * 1024);
     expect(resourceLimit('square_image_hd').max_bytes).toBe(3 * 1024 * 1024);
     expect(resourceLimit(videoResource('freedom')).max_bytes).toBe(40 * 1024 * 1024);
-    expect(resourceLimit(videoResource('candidate')).max_seconds).toBe(3 * 60 * 60);
+    expect(resourceLimit(videoResource('spark')).max_seconds).toBe(3 * 60 * 60);
     expect(resourceLimit('chat_keypackage').max_count).toBe(20);
     expect(resourceLimit('contact_ciphertext').max_bytes).toBe(16 * 1024);
   });
@@ -72,8 +72,8 @@ describe('Cloudflare 统一资源限制', () => {
 
   it('环境外声明不能突破最高档视频硬上限', () => {
     expect(() => assertDeclaredResource({
-      resource_key: 'square_video_candidate',
-      byte_size: resourceLimit('square_video_candidate').max_bytes + 1,
+      resource_key: 'square_video_spark',
+      byte_size: resourceLimit('square_video_spark').max_bytes + 1,
       content_type: 'video/mp4',
       duration_seconds: 1,
     })).toThrow(expect.objectContaining({ code: 'resource_size_invalid' }));

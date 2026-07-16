@@ -13,9 +13,10 @@ use frame_support::{
     traits::{Currency, ReservableCurrency},
 };
 use primitives::institution_asset::{InstitutionAsset, InstitutionAssetAction};
+use primitives::{account_derive::RESERVED_NAME_FEE, fee_policy::OnchainFeeCharger};
 use sp_runtime::{
-    traits::{CheckedSub, Hash, Zero},
-    DispatchResult, SaturatedConversion,
+    traits::{Hash, Zero},
+    DispatchResult,
 };
 use votingengine::InternalVoteEngine;
 
@@ -151,7 +152,8 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
     proposal_id: u64,
     action: &CloseInstitutionAction<T::AccountId, CidNumberOf<T>>,
 ) -> DispatchResult {
-    use frame_support::traits::{ExistenceRequirement, OnUnbalanced, WithdrawReasons};
+    use entity_primitives::InstitutionMultisigQuery;
+    use frame_support::traits::ExistenceRequirement;
 
     let registered = AccountRegisteredCid::<T>::get(&action.institution_account)
         .ok_or(Error::<T>::AccountNotFound)?;
@@ -215,30 +217,22 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
     let balance = T::Currency::free_balance(&action.institution_account);
     let mut transferred = BalanceOf::<T>::zero();
     let mut fee = BalanceOf::<T>::zero();
+    let fee_account = T::InstitutionQuery::lookup_institution_account(
+        action.actor_cid_number.as_slice(),
+        RESERVED_NAME_FEE,
+    )
+    .ok_or(Error::<T>::FeeWithdrawFailed)?;
     if !balance.is_zero() {
-        fee = primitives::fee_policy::calculate_onchain_fee(balance.saturated_into())
-            .saturated_into();
-        let transfer_amount = balance.checked_sub(&fee).unwrap_or_else(Zero::zero);
-        if !fee.is_zero() {
-            let fee_imbalance = T::Currency::withdraw(
-                &action.institution_account,
-                fee,
-                WithdrawReasons::FEE,
-                ExistenceRequirement::AllowDeath,
-            )
+        fee = T::OnchainFeeCharger::charge(&fee_account, balance)
             .map_err(|_| Error::<T>::FeeWithdrawFailed)?;
-            T::FeeRouter::on_unbalanced(fee_imbalance);
-        }
-        if !transfer_amount.is_zero() {
-            T::Currency::transfer(
-                &action.institution_account,
-                &action.beneficiary,
-                transfer_amount,
-                ExistenceRequirement::AllowDeath,
-            )
-            .map_err(|_| Error::<T>::TransferFailed)?;
-            transferred = transfer_amount;
-        }
+        T::Currency::transfer(
+            &action.institution_account,
+            &action.beneficiary,
+            balance,
+            ExistenceRequirement::AllowDeath,
+        )
+        .map_err(|_| Error::<T>::TransferFailed)?;
+        transferred = balance;
     }
 
     InstitutionAccounts::<T>::remove(&action.actor_cid_number, &registered.account_name);
@@ -247,6 +241,7 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
     Pallet::<T>::deposit_event(Event::<T>::InstitutionClosed {
         proposal_id,
         account: action.institution_account.clone(),
+        fee_payer: fee_account,
         beneficiary: action.beneficiary.clone(),
         amount: transferred,
         fee,

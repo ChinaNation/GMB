@@ -113,10 +113,11 @@ pub struct DestroyAction<AccountId, Balance> {
 1. 校验投票引擎提案状态为 `STATUS_PASSED`。
 2. 重新读取 `institution_account` 的 CID/机构码正反索引，并与动作和投票提案绑定的 `actor_cid_number`、`execution_account` 复核。
 3. 校验具体 `institution_account` 的 `free_balance >= amount + minimum_balance`（ED 保护）。
-4. 调用 `Currency::slash` 执行销毁。
-5. 校验 `remaining.is_zero()` 确认全额销毁成功。
-6. 发 `DestroyExecuted` 事件。
-7. 返回 `ProposalExecutionOutcome::Executed`，由投票引擎统一标记 `STATUS_EXECUTED`。
+4. 从机构账户真源精确读取 `(actor_cid_number, InstitutionFee)` 费用账户；执行手续费只由该账户支付并保留 ED。
+5. 在同一 storage transaction 中调用 `OnchainFeeCharger::charge(fee_account, amount)`，再调用 `Currency::slash` 执行本金销毁。
+6. 校验 `remaining.is_zero()` 确认全额销毁成功；任一步失败时收费、分账、事件和销毁全部回滚。
+7. 发 `DestroyExecuted { fee_payer, fee, ... }` 事件。
+8. 返回 `ProposalExecutionOutcome::Executed`，由投票引擎统一标记 `STATUS_EXECUTED`。
 
 重复执行防护：
 - `STATUS_EXECUTED` 后提案不再是 `STATUS_PASSED`，后续重试被投票引擎 `ProposalNotRetryable` 拒绝。
@@ -141,6 +142,9 @@ pub struct DestroyAction<AccountId, Balance> {
 5. 身份闭环：
    - 创建、自动执行和统一重试都复核 CID、机构码、执行账户、提案 owner/kind/stage/callback scope，不从任一机构账户反推或替代机构身份。
 
+6. 费用账户隔离：
+   - `institution_account` 只销毁本金，执行费只从同一 actor CID 的费用账户收取；管理员钱包没有付款回落路径。
+
 ---
 
 ## 7. 事件与错误
@@ -148,7 +152,7 @@ pub struct DestroyAction<AccountId, Balance> {
 - `DestroyProposed { proposal_id, institution_code, institution, proposer, amount }`
 - `DestroyVoteSubmitted { proposal_id, who, approve }`
 - `DestroyExecutionFailed { proposal_id }`
-- `DestroyExecuted { proposal_id, institution, amount }`
+- `DestroyExecuted { proposal_id, institution, fee_payer, amount, fee }`
 
 错误：
 - `InvalidInstitution`：无效机构
@@ -159,6 +163,8 @@ pub struct DestroyAction<AccountId, Balance> {
 - `ProposalNotPassed`：投票尚未通过
 - `InstitutionAccountDecodeFailed`：机构账户解码失败
 - `InsufficientBalance`：余额不足（含 ED 保护）
+- `FeeAccountMissing`：actor CID 的费用账户无法从机构账户真源精确读取
+- `FeeWithdrawFailed`：费用账户无法完整支付执行费并保留 ED
 
 ---
 

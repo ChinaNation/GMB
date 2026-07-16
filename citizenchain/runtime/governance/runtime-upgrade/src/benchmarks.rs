@@ -4,10 +4,7 @@
 
 use frame_benchmarking::v2::*;
 use frame_support::traits::{EnsureOrigin, Get};
-use sp_runtime::{
-    sp_std::vec,
-    traits::{SaturatedConversion, Saturating},
-};
+use sp_runtime::sp_std::vec;
 use votingengine::CitizenIdentityReader;
 
 use crate::pallet::{CodeOf, Config, ReasonOf};
@@ -47,27 +44,13 @@ fn nrc_cid_number() -> votingengine::CidNumber {
         .expect("NRC CID fits runtime bound")
 }
 
-fn prepare_population_snapshot<T>(who: &T::AccountId)
+fn seed_population<T>()
 where
     T: Config + joint_vote::Config,
 {
     let scope = votingengine::PopulationScope::Country;
     let citizen: T::AccountId = account("runtime-upgrade-citizen", 0, 0);
     <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(&citizen, &scope);
-    let (snapshot_id, eligible_total) =
-        <T as votingengine::Config>::CitizenIdentityReader::create_population_snapshot(&scope)
-            .expect("benchmark population snapshot should be created");
-    let now = frame_system::Pallet::<T>::block_number();
-    let prepared_at = now.saturating_add(1u32.saturated_into());
-    joint_vote::PendingPopulationSnapshots::<T>::insert(
-        who,
-        joint_vote::PreparedPopulationSnapshot {
-            actor_cid_number: nrc_cid_number(),
-            snapshot_id,
-            eligible_total,
-            prepared_at,
-        },
-    );
 }
 
 #[benchmarks(where T: Config + joint_vote::Config)]
@@ -78,11 +61,9 @@ mod benchmarks {
     fn propose_runtime_upgrade() {
         let origin = T::ProposeOrigin::try_successful_origin()
             .expect("benchmark proposer origin must be available");
-        let proposer = frame_system::EnsureSigned::<T::AccountId>::try_origin(origin.clone())
-            .unwrap_or_else(|_| panic!("benchmark proposer origin must be signed"));
         let reason = reason_max::<T>();
         let code = code_max::<T>();
-        prepare_population_snapshot::<T>(&proposer);
+        seed_population::<T>();
 
         #[block]
         {

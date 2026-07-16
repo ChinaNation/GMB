@@ -29,8 +29,8 @@
 - 已成功生成 8 个 `weights.rs`：`shengbank_interest`、`fullnode_issuance`、`citizen_issuance`、`cid_system`、`pow_difficulty`、`admins_change`、`resolution_destro`、`grandpakey_change`。
 - 已修复剩余 3 个 benchmark fixture：
   - `duoqian_transfer`：benchmark 转账金额从 `100` 改为全链统一 ED `111`。
-  - `resolution_issuance`：为联合投票提案 benchmark 准备 `joint_vote::PendingPopulationSnapshots`，并将 `prepared_at` 对齐 benchmark 测量块实际区块。
-  - `runtime_upgrade`：同样准备 typed `PendingPopulationSnapshots`，覆盖 5MB runtime object 提案路径。
+  - `resolution_issuance`：当时为联合投票 benchmark 准备预备快照夹具；该中转存储现已删除，benchmark 改为提案内联快照。
+  - `runtime_upgrade`：当时同样使用预备快照夹具覆盖 5MB runtime object；现已改为提案内联快照。
 - 已完整重跑第一阶段 11 个 pallet：`shengbank_interest`、`fullnode_issuance`、`citizen_issuance`、`resolution_issuance`、`cid_system`、`pow_difficulty`、`admins_change`、`resolution_destro`、`grandpakey_change`、`duoqian_transfer`、`runtime_upgrade` 全部通过并写入 `weights.rs`。
 
 ## 盘点结论
@@ -53,7 +53,7 @@
 
 ### 不能直接重跑覆盖的模块
 
-- `organization_manage`：已挂 benchmark，但当前只实现 `register_cid_institution`；`weights.rs` 还包含 `propose_create_institution`、`propose_close`、`cleanup_rejected_proposal`。直接覆盖会丢失方法。
+- `organization_manage`：该记录形成时只实现 `register_cid_institution`，权重文件还包含创建、关闭及业务模块手工清理入口；现行实现已删除手工清理入口并由投票引擎统一清理，重新生成前须按当前 ABI 复核 benchmark 覆盖。
 - `personal_manage`：`benchmarks.rs` 是空骨架，且未挂入 `runtime/src/benchmarks.rs`。
 - `offchain_transaction`：`benchmarks.rs` 明确无可执行 benchmark，且未挂入 `runtime/src/benchmarks.rs`。
 - `votingengine` / `internal_vote` / `joint_vote`：benchmark 文件为空或仅占位，且当前未挂入 `runtime/src/benchmarks.rs`。
@@ -152,14 +152,14 @@ this function takes 3 arguments but 8 arguments were supplied
 
 只读定位结论：
 
-- `resolution_issuance` / `runtime_upgrade` 的 benchmark 直接调用联合投票创建接口，但当前 `joint-vote` 要求同一区块内预先存在 `PendingPopulationSnapshots`。
+- `resolution_issuance` / `runtime_upgrade` 的 benchmark 当时受联合投票预备快照中转约束；该约束现已删除，创建接口直接内联快照。
 - `duoqian_transfer` 的 benchmark 把转账金额写死为 `100`，而 runtime `ExistentialDeposit` 为 `111`，因此触发 `AmountBelowExistentialDeposit`。
 
 最终修复结论：
 
 - `citizenchain/scripts/benchmark.sh` 改为显式传入 `--template="$CHAIN_ROOT/scripts/benchmark-weight-template.hbs"`，避免 Substrate 默认模板覆盖出不可编译的 `pub struct WeightInfo<T>` 外部 impl。
 - `citizenchain/.gitignore` 改为继续忽略 `citizenchain/scripts/*` 下本地脚本，但单独放行 `benchmark-weight-template.hbs`。
-- `resolution-issuance` / `runtime-upgrade` benchmark fixture 使用 `joint_vote` typed storage 写入 `PendingPopulationSnapshots`。benchmark 框架 setup 区块为 `0`、测量块为 `1`，因此 `prepared_at` 必须写为 `setup_block + 1`，否则触发 `PopulationSnapshotNotCurrent`。
+- `resolution-issuance` / `runtime-upgrade` benchmark fixture 曾写入预备快照中转存储并对齐测量块；现已删除该中转与时效错误分支，benchmark 直接测量提案内联快照。
 - `resolution_issuance` 与 `runtime_upgrade` 的测量点改为 `#[block]` 直接调用 pallet extrinsic 函数，覆盖完整 origin 校验、业务校验、联合提案创建、数据/对象写入路径。
 
 ## 预计后续修改目录
@@ -174,8 +174,8 @@ this function takes 3 arguments but 8 arguments were supplied
 - `citizenchain/node/src/core/command.rs`：已补齐 `dev/local/staging` chain spec 别名，避免 benchmark CLI 默认 `dev` 被误当文件路径。
 - `citizenchain/runtime/private/organization-manage/src/lib.rs`：后续需修正注销关闭 extrinsic 参数类型和 no_std Vec 路径。
 - `citizenchain/runtime/private/organization-manage/src/close.rs`：后续需同步注销凭证校验、nonce 防重放、scope 写入 `CloseInstitutionAction`。
-- `citizenchain/runtime/issuance/resolution-issuance/src/benchmarks.rs`：已为联合投票 benchmark fixture 写入测量块区块号对应的 typed `PendingPopulationSnapshots`。
-- `citizenchain/runtime/governance/runtime-upgrade/src/benchmarks.rs`：已为联合投票 benchmark fixture 写入测量块区块号对应的 typed `PendingPopulationSnapshots`。
+- `citizenchain/runtime/issuance/resolution-issuance/src/benchmarks.rs`：已改为由联合提案创建路径内联生成快照，不写预备中转存储。
+- `citizenchain/runtime/governance/runtime-upgrade/src/benchmarks.rs`：已改为由联合提案创建路径内联生成快照，不写预备中转存储。
 - `citizenchain/runtime/transaction/duoqian-transfer/src/benchmarks.rs`：已把 benchmark 转账金额改为全链统一 ED `111`。
 - `citizenchain/runtime/**/weights.rs`：已由真实 benchmark 跑通后写入第一阶段 11 个正式权重。
 - `citizenchain/runtime/**/benchmarks.rs`：后续补齐不能代表真实路径的 benchmark，尤其是 `organization_manage` 剩余 3 个权重方法。
@@ -213,7 +213,7 @@ this function takes 3 arguments but 8 arguments were supplied
 - `./target/release/citizenchain benchmark pallet --runtime=<本地 WASM> --genesis-builder=spec-genesis --pallet=pow_difficulty --steps=2 --repeat=1 --output=/tmp/citizenchain-pow-difficulty-test.rs`：通过，确认 CLI 参数组合可进入真实 benchmark。
 - `./scripts/benchmark.sh`：真实运行后 8 个 pallet 成功写入 `weights.rs`，3 个 fixture 失败待修。
 - `cargo check -p resolution-issuance -p runtime-upgrade --features runtime-benchmarks`：通过，确认 `joint-vote` benchmark fixture 依赖和 where 约束可编译。
-- `./scripts/benchmark.sh resolution_issuance`：通过，确认 `PendingPopulationSnapshots.prepared_at = setup_block + 1` 后联合提案 benchmark 可生成权重。
+- `./scripts/benchmark.sh resolution_issuance`：历史基线通过；当前实现已删除预备快照时效字段，联合提案 benchmark 直接覆盖内联快照。
 - `./scripts/benchmark.sh runtime_upgrade`：通过，确认 runtime upgrade 联合提案和 `ProposalObject` 5MB 路径可生成权重。
 - `./scripts/benchmark.sh`：通过，第一阶段 11 个 pallet 全部完成正式 benchmark 并写入 `weights.rs`。
 - `rg -n "pub struct WeightInfo<T>|impl<T: frame_system::Config> [a-z_]+::WeightInfo|\\+/-" citizenchain/runtime -g 'weights.rs'`：无输出，确认没有默认模板残留或非 ASCII 误差符号残留。

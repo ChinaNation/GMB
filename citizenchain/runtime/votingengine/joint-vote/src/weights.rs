@@ -33,9 +33,6 @@ use frame_support::{
 
 /// Weight functions for `joint_vote`.
 pub trait WeightInfo {
-	/// Storage: `JointVote::PendingPopulationSnapshots` (r:0 w:1)
-	/// Proof: `JointVote::PendingPopulationSnapshots` (`max_values`: None, `max_size`: Some(68), added: 2543, mode: `MaxEncodedLen`)
-	fn prepare_joint_population_snapshot() -> Weight;
 	/// Storage: `VotingEngine::Proposals` (r:1 w:0)
 	/// Proof: `VotingEngine::Proposals` (`max_values`: None, `max_size`: Some(8531), added: 11006, mode: `MaxEncodedLen`)
 	/// Storage: `JointVote::JointVotesByInstitution` (r:1 w:1)
@@ -100,17 +97,6 @@ pub trait WeightInfo {
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
-	/// Storage: `JointVote::PendingPopulationSnapshots` (r:0 w:1)
-	/// Proof: `JointVote::PendingPopulationSnapshots` (`max_values`: None, `max_size`: Some(68), added: 2543, mode: `MaxEncodedLen`)
-	fn prepare_joint_population_snapshot() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `0`
-		//  Estimated: `0`
-		// Minimum execution time: 1_000_000 picoseconds.
-		Weight::from_parts(1_000_000, 0)
-			.saturating_add(Weight::from_parts(0, 0))
-			.saturating_add(T::DbWeight::get().writes(1))
-	}
 	/// Storage: `VotingEngine::Proposals` (r:1 w:0)
 	/// Proof: `VotingEngine::Proposals` (`max_values`: None, `max_size`: Some(8531), added: 11006, mode: `MaxEncodedLen`)
 	/// Storage: `JointVote::JointVotesByInstitution` (r:1 w:1)
@@ -210,17 +196,6 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 }
 
 impl WeightInfo for () {
-	/// Storage: `JointVote::PendingPopulationSnapshots` (r:0 w:1)
-	/// Proof: `JointVote::PendingPopulationSnapshots` (`max_values`: None, `max_size`: Some(68), added: 2543, mode: `MaxEncodedLen`)
-	fn prepare_joint_population_snapshot() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `0`
-		//  Estimated: `0`
-		// Minimum execution time: 1_000_000 picoseconds.
-		Weight::from_parts(1_000_000, 0)
-			.saturating_add(Weight::from_parts(0, 0))
-			.saturating_add(RocksDbWeight::get().writes(1))
-	}
 	/// Storage: `VotingEngine::Proposals` (r:1 w:0)
 	/// Proof: `VotingEngine::Proposals` (`max_values`: None, `max_size`: Some(8531), added: 11006, mode: `MaxEncodedLen`)
 	/// Storage: `JointVote::JointVotesByInstitution` (r:1 w:1)

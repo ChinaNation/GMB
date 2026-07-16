@@ -1,10 +1,8 @@
 import type { Env } from '../types';
 import { HttpError, jsonResponse, parsePositiveInt } from '../shared/http';
 import { nowMs } from '../shared/time';
-import { fetchChainIdentityState, type ChainIdentityState } from '../chain/identity';
 import {
   assertMembershipLevel,
-  identityEligibleForPlan,
   membershipPlan,
   type MembershipPlan,
   type MembershipLevel
@@ -45,7 +43,6 @@ interface StripeSubscriptionShape {
   price_unit_amount: number | null;
 }
 
-const activeStripeStatuses = new Set(['active', 'trialing']);
 const STRIPE_EVENT_CLAIM_STALE_MS = 5 * 60 * 1000;
 
 export async function stripeWebhookRoute(request: Request, env: Env): Promise<Response> {
@@ -131,14 +128,8 @@ async function processSubscription(
   const membershipLevel = resolveMembershipLevel(env, subscription);
   const plan = membershipPlan(membershipLevel);
   assertSubscriptionUsesPlanPrice(subscription, plan);
-  const identity = plan.required_identity_level === 'visitor'
-    ? visitorIdentity(ownerAccount)
-    : await fetchChainIdentityState(env, ownerAccount);
-  // 精确匹配（ADR-033 规则5）：身份≠会员档位即视为待换档（identity_required）。
-  const status = activeStripeStatuses.has(subscription.status) &&
-    !identityEligibleForPlan(identity.identity_level, plan)
-    ? 'identity_required'
-    : subscription.status;
+  // 会员与身份解耦（ADR-036）：不再读链身份、不再有 identity_required；status 直取 Stripe 状态。
+  const status = subscription.status;
 
   const applied = await upsertStripeMembership(env, {
     ownerAccount,
@@ -152,7 +143,6 @@ async function processSubscription(
       : null,
     currentPeriodEnd: subscription.current_period_end * 1000,
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
-    identity,
     allowPrepaidSwitch: subscription.metadata.payment_switch === 'usdc_to_stripe'
   });
 
@@ -177,7 +167,7 @@ async function processSubscription(
   }
 
   return {
-    action: status === 'identity_required' ? 'identity_rejected' : 'subscription_upserted',
+    action: 'subscription_upserted',
     owner_account: ownerAccount,
     membership_level: membershipLevel
   };
@@ -217,11 +207,6 @@ async function processPrepaidCheckout(
   } catch {
     throw new HttpError(400, 'invalid_membership_level', '会员等级 metadata 不合法');
   }
-  const plan = membershipPlan(membershipLevel);
-  const identity =
-    plan.required_identity_level === 'visitor'
-      ? visitorIdentity(ownerAccount)
-      : await fetchChainIdentityState(env, ownerAccount);
   const paymentIntentId = stripeId(raw.payment_intent);
   const checkoutSessionId = stringValue(raw.id);
   if (!paymentIntentId || !checkoutSessionId) {
@@ -238,7 +223,6 @@ async function processPrepaidCheckout(
       ownerAccount,
       membershipLevel,
       expiresAt: existing.expires_at,
-      identity,
       stripePayment: {
         paymentIntentId,
         checkoutSessionId,
@@ -270,8 +254,7 @@ async function processPrepaidCheckout(
       paymentIntentId,
       checkoutSessionId,
       paymentRoute: 'usdc_prepaid'
-    },
-    identity
+    }
   });
   if (!granted) {
     return { action: 'prepaid_payment_duplicate', owner_account: ownerAccount, membership_level: membershipLevel };
@@ -335,17 +318,6 @@ function prepaidMonthsFromMeta(value: string | undefined): number {
   if (value === 'year') return 12;
   if (value === 'quarter') return 3;
   throw new HttpError(400, 'invalid_prepaid_duration', '预付时长 metadata 不合法');
-}
-
-function visitorIdentity(ownerAccount: string): ChainIdentityState {
-  return {
-    owner_account: ownerAccount,
-    identity_level: 'visitor',
-    has_voting_identity: false,
-    has_candidate_identity: false,
-    cid_number: null,
-    checked_at: nowMs()
-  };
 }
 
 /// 取订阅第一个 item。新版 Stripe API 把计费周期(current_period_start/end)与价都放在
@@ -415,11 +387,8 @@ function resolveMembershipLevel(env: Env, subscription: StripeSubscriptionShape)
   if (subscription.price_id && subscription.price_id === env.DEMOCRACY_PRICE_ID) {
     return 'democracy';
   }
-  if (subscription.price_id && subscription.price_id === env.VOTING_PRICE_ID) {
-    return 'voting';
-  }
-  if (subscription.price_id && subscription.price_id === env.CANDIDATE_PRICE_ID) {
-    return 'candidate';
+  if (subscription.price_id && subscription.price_id === env.SPARK_PRICE_ID) {
+    return 'spark';
   }
 
   throw new HttpError(400, 'membership_level_missing', '无法从 Stripe 事件识别会员等级');

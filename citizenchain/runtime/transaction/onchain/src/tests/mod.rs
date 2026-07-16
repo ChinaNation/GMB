@@ -2,11 +2,8 @@
 
 use super::*;
 use frame_support::{
-    assert_noop, assert_ok, derive_impl,
-    dispatch::GetDispatchInfo,
-    parameter_types,
-    traits::{Currency as _, VariantCountOf},
-    weights::ConstantMultiplier,
+    assert_noop, assert_ok, derive_impl, dispatch::GetDispatchInfo, parameter_types,
+    traits::VariantCountOf, weights::ConstantMultiplier,
 };
 use frame_system as system;
 use pallet_transaction_payment::OnChargeTransaction;

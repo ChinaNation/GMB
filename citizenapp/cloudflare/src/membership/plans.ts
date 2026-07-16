@@ -1,21 +1,17 @@
-// 会员套餐真源。会员档 `membership_level` 与身份档 `required_identity_level` 解耦：
-// 访客身份含自由(freedom $2.99)/民主(democracy $9.99，权益=投票、身份匿名)两档，
-// 投票/竞选各一档。订阅资格精确匹配身份档（identityEligibleForPlan，禁止降档/越级）；
-// 发帖额度按所购套餐（membershipPlan(level).quota）。四档一改，须同步 App 卡片、官网
-// Membership.tsx、Stripe price 映射与 webhook 反查。
+// 会员套餐真源（ADR-036：会员与身份彻底解耦）。会员档 `membership_level` 是纯付费订阅轴，
+// **不再绑定任何身份档**——任意身份（访客/投票/竞选）可订阅任意会员档，全组合放行。
+// 三档：freedom 自由 $2.99 / democracy 民主 $9.99 / spark 薪火 $99.99。发帖额度、媒体质量、
+// 聊天文件上限均按所购套餐（membershipPlan(level)）。一改此表须同步 App 卡片、官网
+// Membership.tsx、Stripe price 映射（FREEDOM/DEMOCRACY/SPARK_PRICE_ID）与 webhook 反查。
 import { resourceLimit } from '../limits/catalog';
 
-export type MembershipLevel = 'freedom' | 'democracy' | 'voting' | 'candidate';
-
-/// 链上身份档位（与会员档位解耦）：访客 / 投票公民 / 竞选公民。
-/// 会员档 `democracy`（民主）不是身份档，其 required_identity_level 仍为 'visitor'。
-export type IdentityLevel = 'visitor' | 'voting' | 'candidate';
-
-export type RequiredIdentityLevel = IdentityLevel;
+export type MembershipLevel = 'freedom' | 'democracy' | 'spark';
 
 export type MediaQuality = 'sd' | 'hd';
 
 export type MembershipPriceCurrency = 'usd';
+
+const mib = 1024 * 1024;
 
 export interface DynamicQuota {
   text_max_chars: number;
@@ -44,7 +40,9 @@ export interface MembershipPlan {
   price_currency: MembershipPriceCurrency;
   price_usd_cents: number;
   price_usd_monthly: string;
-  required_identity_level: RequiredIdentityLevel;
+  /// 聊天文件大小上限（字节，会员权益之一，ADR-036）。媒体走 WebRTC P2P，客户端按此档强制；
+  /// >100MB（仅 spark）的 Cloudflare 瞬时中转 transport 归卡2 阶段3，本表只定档位上限值。
+  chat_file_max_bytes: number;
   dynamic: DynamicQuota;
   article: ArticleQuota;
 }
@@ -56,7 +54,7 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
     price_currency: 'usd',
     price_usd_cents: 299,
     price_usd_monthly: '2.99',
-    required_identity_level: 'visitor',
+    chat_file_max_bytes: 10 * mib,
     dynamic: {
       text_max_chars: 300,
       image_quality: 'sd',
@@ -76,15 +74,13 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
       max_images: 50
     }
   },
-  // 民主会员：媒体权益与投票公民会员完全一致（仅身份不同——民主匿名、投票为
-  // 公民认证）。required_identity_level 仍为 'visitor'，访客身份即可订阅。
   democracy: {
     membership_level: 'democracy',
     display_name: '民主会员',
     price_currency: 'usd',
     price_usd_cents: 999,
     price_usd_monthly: '9.99',
-    required_identity_level: 'visitor',
+    chat_file_max_bytes: 100 * mib,
     dynamic: {
       text_max_chars: 300,
       image_quality: 'hd',
@@ -104,39 +100,13 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
       max_images: 100
     }
   },
-  voting: {
-    membership_level: 'voting',
-    display_name: '投票公民会员',
-    price_currency: 'usd',
-    price_usd_cents: 999,
-    price_usd_monthly: '9.99',
-    required_identity_level: 'voting',
-    dynamic: {
-      text_max_chars: 300,
-      image_quality: 'hd',
-      max_images: 9,
-      video_quality: 'hd',
-      max_videos: 1,
-      max_video_seconds: 30 * 60,
-      max_video_bytes: resourceLimit('square_video_hd').max_bytes
-    },
-    article: {
-      title_min_chars: 10,
-      title_max_chars: 50,
-      body_max_chars: 30_000,
-      cover_quality: 'hd',
-      cover_required: true,
-      image_quality: 'hd',
-      max_images: 100
-    }
-  },
-  candidate: {
-    membership_level: 'candidate',
-    display_name: '竞选公民会员',
+  spark: {
+    membership_level: 'spark',
+    display_name: '薪火会员',
     price_currency: 'usd',
     price_usd_cents: 9999,
     price_usd_monthly: '99.99',
-    required_identity_level: 'candidate',
+    chat_file_max_bytes: 5120 * mib,
     dynamic: {
       text_max_chars: 300,
       image_quality: 'hd',
@@ -144,7 +114,7 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
       video_quality: 'hd',
       max_videos: 1,
       max_video_seconds: 3 * 60 * 60,
-      max_video_bytes: resourceLimit('square_video_candidate').max_bytes
+      max_video_bytes: resourceLimit('square_video_spark').max_bytes
     },
     article: {
       title_min_chars: 10,
@@ -159,39 +129,19 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
 };
 
 export function assertMembershipLevel(value: unknown): MembershipLevel {
-  if (
-    value === 'freedom' ||
-    value === 'democracy' ||
-    value === 'voting' ||
-    value === 'candidate'
-  ) {
+  if (value === 'freedom' || value === 'democracy' || value === 'spark') {
     return value;
   }
   throw new Error('invalid membership level');
 }
 
 export function membershipPlan(level: string): MembershipPlan {
-  if (level === 'voting' || level === 'candidate' || level === 'democracy') {
+  if (level === 'democracy' || level === 'spark') {
     return membershipPlans[level];
   }
   return membershipPlans.freedom;
 }
 
-/// 订阅资格：精确匹配——只能订阅"本身份档对应"的会员，禁止降档/越级。
-/// 例：voting 身份只能订 voting；candidate 只能订 candidate；visitor 身份可订
-/// freedom 与 democracy（二者 required_identity_level 均为 'visitor'）。
-export function identityEligibleForPlan(
-  identity: RequiredIdentityLevel,
-  plan: MembershipPlan
-): boolean {
-  return plan.required_identity_level === identity;
-}
-
 export function membershipPlanList(): MembershipPlan[] {
-  return [
-    membershipPlans.freedom,
-    membershipPlans.democracy,
-    membershipPlans.voting,
-    membershipPlans.candidate
-  ];
+  return [membershipPlans.freedom, membershipPlans.democracy, membershipPlans.spark];
 }

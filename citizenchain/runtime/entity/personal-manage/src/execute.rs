@@ -10,8 +10,9 @@ extern crate alloc;
 
 use frame_support::{
     ensure,
-    traits::{Currency, ExistenceRequirement, OnUnbalanced, ReservableCurrency},
+    traits::{Currency, ExistenceRequirement, ReservableCurrency},
 };
+use primitives::fee_policy::OnchainFeeCharger;
 use primitives::institution_asset::{InstitutionAsset, InstitutionAssetAction};
 use sp_runtime::{
     traits::{CheckedSub, Saturating, Zero},
@@ -47,16 +48,9 @@ pub(crate) fn execute_create_with_finalizer<T: Config>(
     let leftover = T::Currency::unreserve(&action.proposer, reserve_total);
     ensure!(leftover.is_zero(), Error::<T>::ReserveReleaseFailed);
 
-    if !fee.is_zero() {
-        let fee_imbalance = T::Currency::withdraw(
-            &action.proposer,
-            fee,
-            frame_support::traits::WithdrawReasons::FEE,
-            ExistenceRequirement::KeepAlive,
-        )
+    let charged_fee = T::OnchainFeeCharger::charge(&action.proposer, action.amount)
         .map_err(|_| Error::<T>::FeeWithdrawFailed)?;
-        T::FeeRouter::on_unbalanced(fee_imbalance);
-    }
+    ensure!(charged_fee == fee, Error::<T>::FeeWithdrawFailed);
 
     T::Currency::transfer(
         &action.proposer,
@@ -142,16 +136,9 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
     let ed = T::Currency::minimum_balance();
     ensure!(transfer_amount >= ed, Error::<T>::CloseTransferBelowED);
 
-    if !fee.is_zero() {
-        let fee_imbalance = T::Currency::withdraw(
-            &action.account,
-            fee,
-            frame_support::traits::WithdrawReasons::FEE,
-            ExistenceRequirement::AllowDeath,
-        )
+    let charged_fee = T::OnchainFeeCharger::charge(&action.account, all_balance)
         .map_err(|_| Error::<T>::FeeWithdrawFailed)?;
-        T::FeeRouter::on_unbalanced(fee_imbalance);
-    }
+    ensure!(charged_fee == fee, Error::<T>::FeeWithdrawFailed);
 
     T::Currency::transfer(
         &action.account,

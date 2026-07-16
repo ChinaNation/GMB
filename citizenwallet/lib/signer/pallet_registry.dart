@@ -55,8 +55,7 @@ class PalletRegistry {
   /// `revoke_identity(actor_cid_number, cid_number)`。
   static const int revokeIdentityCall = 4;
 
-  /// `prepare_population_snapshot(scope)`；第 4 步才会删除。
-  static const int prepareCitizenPopulationSnapshotCall = 5;
+  // call_index 5 永久留洞：人口快照仅由 votingengine 内联生成。
 
   /// `occupy_cid(actor_cid_number, cid_number, commitment, province_code, city_code)`
   /// — 注册局建档「占号」:链上原子验格式+查重+登记 CID 号(注册局签名)。
@@ -84,10 +83,9 @@ class PalletRegistry {
   /// `cast_referendum(proposal_id, approve)` — 联合公投阶段,链上按账户读取公民身份。
   static const int castReferendumCall = 1;
 
-  /// `prepare_joint_population_snapshot(actor_cid_number, scope)` — 联合公投提案发起前准备链上人口分母。
-  static const int preparePopulationSnapshotCall = 2;
+  // call_index 2 永久留洞：联合提案创建时由引擎内联生成全国人口快照。
 
-  // ---- 业务 pallet:仅承载提案创建与幂等兜底入口 ----
+  // ---- 业务 pallet:仅承载提案创建入口 ----
   //
   // 投票统一走 `InternalVote(20).cast(0)`,手动重试/取消统一走
   // `VotingEngine(9).retry_passed_proposal(4)` / `cancel_passed_proposal(5)`。
@@ -109,7 +107,7 @@ class PalletRegistry {
   static const int publicManagePallet = 30;
   static const int privateManagePallet = 31;
   static const int proposeCloseInstitutionCall = 1;
-  static const int cleanupRejectedInstitutionProposalCall = 4;
+  // call_index 4 永久留洞：机构 pending 状态由投票引擎终态回调清理。
 
   /// `propose_create_*_institution` 携带机构公开信息、初始账户、岗位定义、
   /// 岗位任职、阈值和注册局凭证；管理员钱包集合由 entity 从有效任职派生。
@@ -125,7 +123,7 @@ class PalletRegistry {
   static const int personalManagePallet = 7;
   static const int proposeCreatePersonalCall = 0;
   static const int proposeClosePersonalCall = 1;
-  static const int cleanupRejectedPersonalProposalCall = 2;
+  // call_index 2 永久留洞：个人多签 pending 状态由投票引擎终态回调清理。
 
   // ---- PersonalAdmins (29) · 个人多签管理员集合变更 ----
   // 独立 pallet,承载 propose_admin_set_change(call_index=0)。
@@ -180,9 +178,9 @@ class PalletRegistry {
   static const int proposeRepealLawCall = 2;
 
   // ---- LegislationVote (26) · 立法专属投票引擎 ----
-  // 立法投票阶段：代表机构表决 / 特别案公投 / 行政签署 / 三人会签 / 护宪终审 / 人口快照。
+  // 立法投票阶段：代表机构表决 / 特别案公投 / 行政签署 / 三人会签 / 护宪终审。
   static const int legislationVotePallet = 26;
-  static const int prepareLegislationSnapshotCall = 0;
+  // call_index 0 永久留洞：特别案提案创建时由引擎按 actor CID 内联生成快照。
   static const int castRepresentativeVoteCall = 1;
   static const int castLegislationReferendumCall = 2;
   static const int executiveSignCall = 3;

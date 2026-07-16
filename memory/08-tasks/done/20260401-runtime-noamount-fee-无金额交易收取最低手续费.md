@@ -8,11 +8,11 @@
 
 ## 实现方案
 
-在 `citizenchain/runtime/src/configs/mod.rs` 的 `OnchainTxAmountExtractor` 中，把付费调用的虚拟金额设为 `Amount(100000)`（虚拟金额 1000 元 = 100000 分，100000 × 0.1% = 1 元）。
+当时在 runtime 的历史金额提取器中，把付费调用的虚拟金额设为 `Amount(100000)`（虚拟金额 1000 元 = 100000 分，100000 × 0.1% = 1 元）。该方案已被现行五类 `FeeRoute` 协议彻底取代。
 
 ## 付费调用交易（1 元/次，共 37 笔）
 
-- DuoqianManage：vote_create、vote_close、propose_create_personal、cleanup_rejected_proposal、兜底
+- DuoqianManage：当时包含创建/关闭投票、个人账户创建提案及业务模块手工清理入口；现行实现已删除手工清理入口，投票终态清理由投票引擎负责。
 - DuoqianTransfer：propose_transfer、vote_transfer、propose_safety_fund_transfer、vote_safety_fund_transfer、propose_sweep_to_main、vote_sweep_to_main
 - VotingEngine：joint_vote、citizen_vote
 - CidSystem：bind_cid、unbind_cid、rotate_cid_keys
@@ -41,7 +41,7 @@
 
 ## 涉及文件
 
-- `citizenchain/runtime/src/configs/mod.rs` — OnchainTxAmountExtractor 分类逻辑
+- `citizenchain/runtime/src/configs.rs` — 现行唯一 `RuntimeFeeRouter` 路由逻辑
 
 ## 验收标准
 

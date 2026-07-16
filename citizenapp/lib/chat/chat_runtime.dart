@@ -13,12 +13,19 @@ import '../wallet/core/device_subkey.dart';
 import '../wallet/core/wallet_manager.dart';
 import 'crypto/chat_device_binding.dart';
 import 'crypto/mls_boundary.dart';
+import 'crypto/mls_group_boundary.dart';
 import 'crypto/mls_native.dart';
 import 'crypto/mls_state_store.dart';
 import 'chat_flow.dart';
+import 'chat_media_limits.dart';
 import 'chat_models.dart';
+import 'chat_payload.dart';
 import 'chat_push_service.dart';
+import 'group/group_flow.dart';
+import 'group/group_model.dart';
+import 'media/chat_relay_media.dart';
 import 'media/media_resend.dart';
+import 'proto/chat_envelope.pb.dart';
 import 'storage/chat_store.dart';
 import 'transport/chat_cloud_transport.dart';
 import 'transport/chat_transport.dart';
@@ -306,7 +313,7 @@ class ChatRuntime {
           byteSize: media.byteSize,
         );
     Future<void> markDelivered(String attachmentId) =>
-        _store.deleteOutgoingMedia(attachmentId);
+        _store.deleteOutgoingMedia(attachmentId, peerAccount);
     try {
       return await flow.sendMedia(
         conversationId: conversationId,
@@ -318,6 +325,7 @@ class ChatRuntime {
         saveLocalAttachment: _copySentAttachmentToCache,
         recordPendingMedia: recordPending,
         onDeviceDelivered: markDelivered,
+        uploadRelayMedia: _relayUploader(context),
       );
     } catch (error) {
       if (!_needsFirstKeyPackage(error)) {
@@ -346,6 +354,7 @@ class ChatRuntime {
         saveLocalAttachment: _copySentAttachmentToCache,
         recordPendingMedia: recordPending,
         onDeviceDelivered: markDelivered,
+        uploadRelayMedia: _relayUploader(context),
       );
     }
   }
@@ -361,7 +370,9 @@ class ChatRuntime {
       required sourcePath,
       required byteSize,
     }) async {
-      _mediaBytesInFlight.add(attachmentId);
+      final inFlightKey =
+          MediaResend.inFlightKey(attachmentId, recipientAccount);
+      _mediaBytesInFlight.add(inFlightKey);
       try {
         await context.webrtc.sendAttachment(
           recipientAccount: recipientAccount,
@@ -373,8 +384,27 @@ class ChatRuntime {
           byteSize: byteSize,
         );
       } finally {
-        _mediaBytesInFlight.remove(attachmentId);
+        _mediaBytesInFlight.remove(inFlightKey);
       }
+    };
+  }
+
+  /// 大媒体(>100MB)中转上传 seam:加密源文件 → 上传密文到 R2 → 返回描述子。
+  ChatRelayUploader _relayUploader(_ChatOwnerContext context) {
+    return ({
+      required conversationId,
+      required attachmentId,
+      required media,
+      int recipientCount = 1,
+    }) async {
+      final dir = await getApplicationDocumentsDirectory();
+      return ChatRelayMedia.upload(
+        transport: context.transport,
+        sourcePath: media.sourcePath,
+        byteSize: media.byteSize,
+        recipientCount: recipientCount,
+        tempDirectory: Directory('${dir.path}/chat/attachments/.tmp'),
+      );
     };
   }
 
@@ -425,6 +455,181 @@ class ChatRuntime {
     }
   }
 
+  // ==== 私密小群 ====
+
+  /// 建群:选联系人账户,领其 KeyPackage 批量加入,创建者为 admin。
+  Future<ChatGroup> createGroup({
+    required String name,
+    List<String> inviteeAccounts = const [],
+  }) async {
+    final context = await _readyContext(await _readOwner());
+    final invitees = await _fetchInviteeKeyPackages(context, inviteeAccounts);
+    final groupId = newGroupId(context.account.address);
+    return _groupFlow(context).createGroup(
+      groupId: groupId,
+      name: name,
+      ownerAccount: context.account.address,
+      ownerDeviceId: context.deviceId,
+      invitees: invitees,
+    );
+  }
+
+  /// 加人(仅 admin)。
+  Future<void> addGroupMembers({
+    required String groupId,
+    required List<String> inviteeAccounts,
+  }) async {
+    final context = await _readyContext(await _readOwner());
+    final invitees = await _fetchInviteeKeyPackages(context, inviteeAccounts);
+    await _groupFlow(context).addMembers(
+      groupId: groupId,
+      actorAccount: context.account.address,
+      actorDeviceId: context.deviceId,
+      invitees: invitees,
+    );
+  }
+
+  /// 删人(仅 admin,按账户)。
+  Future<void> removeGroupMembers({
+    required String groupId,
+    required List<String> targetAccounts,
+  }) async {
+    final context = await _readyContext(await _readOwner());
+    await _groupFlow(context).removeMembers(
+      groupId: groupId,
+      actorAccount: context.account.address,
+      actorDeviceId: context.deviceId,
+      targetAccounts: targetAccounts,
+    );
+  }
+
+  /// 退群(本机标记已退,并发退群请求让 admin 重钥)。
+  Future<void> leaveGroup(String groupId) async {
+    final context = await _readyContext(await _readOwner());
+    await _groupFlow(context).leaveGroup(groupId);
+  }
+
+  /// 改群名(仅 admin)。
+  Future<void> renameGroup({
+    required String groupId,
+    required String name,
+  }) async {
+    final context = await _readyContext(await _readOwner());
+    await _groupFlow(context).renameGroup(groupId, name);
+  }
+
+  /// 群发文本。
+  Future<List<ChatDeliveryResult>> sendGroupText({
+    required String groupId,
+    required String text,
+  }) async {
+    final context = await _readyContext(await _readOwner());
+    return _groupFlow(context).sendGroupText(
+      groupId: groupId,
+      senderAccount: context.account.address,
+      senderDeviceId: context.deviceId,
+      text: text,
+    );
+  }
+
+  /// 群发内置贴纸(零字节,收端本地渲染)。
+  Future<List<ChatDeliveryResult>> sendGroupSticker({
+    required String groupId,
+    required String packId,
+    required String stickerId,
+  }) async {
+    final context = await _readyContext(await _readOwner());
+    return _groupFlow(context).sendGroupSticker(
+      groupId: groupId,
+      senderAccount: context.account.address,
+      senderDeviceId: context.deviceId,
+      packId: packId,
+      stickerId: stickerId,
+    );
+  }
+
+  /// 群发媒体:≤100MB 对每个成员 WebRTC 直传(离线按成员补发);>100MB 走已部署中转
+  /// (一次上传 + K 扇 N,仅薪火可发/可收)。四门按己档强制。
+  Future<List<ChatDeliveryResult>> sendGroupMedia({
+    required String groupId,
+    required ChatMediaDraft media,
+  }) async {
+    final context = await _readyContext(await _readOwner());
+    return _groupFlow(context).sendGroupMedia(
+      groupId: groupId,
+      senderAccount: context.account.address,
+      senderDeviceId: context.deviceId,
+      media: media,
+      sendMemberAttachment: _guardedDeviceSender(context),
+      uploadRelayMedia: _relayUploader(context),
+      saveLocalAttachment: _copySentAttachmentToCache,
+      recordPendingMember: (attachmentId, member) =>
+          _store.recordOutgoingMedia(
+        attachmentId: attachmentId,
+        recipientAccount: member,
+        conversationId: groupId,
+        fileName: media.fileName,
+        contentType: media.contentType,
+        byteSize: media.byteSize,
+      ),
+      markMemberDelivered: (attachmentId, member) =>
+          _store.deleteOutgoingMedia(attachmentId, member),
+    );
+  }
+
+  /// 逐个被邀请账户领取一枚 KeyPackage(复用 1:1 fetch/consume),
+  /// 兜底补齐 ownerAccount 供群扇出定位新人。
+  Future<List<MlsKeyPackage>> _fetchInviteeKeyPackages(
+    _ChatOwnerContext context,
+    List<String> inviteeAccounts,
+  ) async {
+    final packages = <MlsKeyPackage>[];
+    for (final account in inviteeAccounts) {
+      final available = await context.transport.fetchKeyPackages(
+        ownerAccount: account,
+        requesterAccount: context.account.address,
+      );
+      if (available.isEmpty) {
+        throw StateError('对方 $account 没有可用 Chat KeyPackage');
+      }
+      final consumed = await context.transport.consumeKeyPackage(
+        ownerAccount: account,
+        keyPackageId: available.first.keyPackageId,
+        requesterAccount: context.account.address,
+      );
+      packages.add(
+        consumed.ownerAccount.isNotEmpty
+            ? consumed
+            : MlsKeyPackage(
+                ownerAccount: account,
+                deviceId: consumed.deviceId,
+                keyPackageId: consumed.keyPackageId,
+                keyPackageBytes: consumed.keyPackageBytes,
+                cipherSuite: consumed.cipherSuite,
+                createdAtMillis: consumed.createdAtMillis,
+                expiresAtMillis: consumed.expiresAtMillis,
+                devicePublicKeyHex: consumed.devicePublicKeyHex,
+              ),
+      );
+    }
+    return packages;
+  }
+
+  ChatGroupFlow _groupFlow(_ChatOwnerContext context) {
+    return ChatGroupFlow(
+      crypto: context.crypto as MlsGroupCrypto,
+      store: _store,
+      ownerAccount: context.account.address,
+      ownerDeviceId: context.deviceId,
+      deliverer: (envelope, _) {
+        return ChatFlow.deliverWithTransport(
+          transport: context.transport,
+          envelope: envelope,
+        );
+      },
+    );
+  }
+
   /// 解析媒体在本机缓存中的绝对路径,供聊天页内联渲染。字节未到达(对方离线
   /// 或仍在 WebRTC 传输中)时返回 null,由 UI 显示占位。永不抛错。
   Future<String?> resolveCachedMediaPath({
@@ -455,10 +660,67 @@ class ChatRuntime {
     required String controlPlaintext,
   }) async {
     final dir = await getApplicationDocumentsDirectory();
+    final cacheDirectory = Directory('${dir.path}/chat/attachments');
+    final content = ChatPayloadCodec.decode(controlPlaintext);
+    if (content.isRelayMedia) {
+      return _downloadRelayAttachment(conversationId, content, cacheDirectory);
+    }
     return ChatFlow.downloadAttachment(
       conversationId: conversationId,
       controlPlaintext: controlPlaintext,
-      cacheDirectory: Directory('${dir.path}/chat/attachments'),
+      cacheDirectory: cacheDirectory,
+    );
+  }
+
+  /// >100MB 中转媒体的接收:门②(超本机会员档则拒收,非薪火收 >100MB 一律拒)→
+  /// 命中缓存直接返回 → 否则换 URL 流式下载密文、解密落缓存。
+  Future<ChatDownloadedAttachment> _downloadRelayAttachment(
+    String conversationId,
+    ChatContent content,
+    Directory cacheDirectory,
+  ) async {
+    final byteSize = content.byteSize ?? 0;
+    if (ChatMediaLimits.exceedsForKind(content.kind, byteSize)) {
+      throw ChatMediaTooLargeException(
+        byteSize: byteSize,
+        limitBytes: ChatMediaLimits.forKind(content.kind),
+        kind: content.kind,
+      );
+    }
+    final attachmentId = content.attachmentId ?? '';
+    final fileName = content.fileName ?? '';
+    final contentType = content.mime ?? 'application/octet-stream';
+    final cached = await ChatFlow.readCachedAttachment(
+      conversationId: conversationId,
+      attachmentId: attachmentId,
+      fileName: fileName,
+      contentType: contentType,
+      clearByteSize: byteSize,
+      cacheDirectory: cacheDirectory,
+    );
+    if (cached != null) return cached;
+
+    final context = await _readyContext(await _readOwner());
+    final destPath = ChatFlow.attachmentCachePath(
+      cacheDirectory: cacheDirectory,
+      conversationId: conversationId,
+      attachmentId: attachmentId,
+      fileName: fileName,
+    );
+    await File(destPath).parent.create(recursive: true);
+    await ChatRelayMedia.download(
+      transport: context.transport,
+      relayObjectKey: content.relayObjectKey ?? '',
+      contentKeyB64: content.contentKeyB64 ?? '',
+      destPath: destPath,
+      tempDirectory: Directory('${cacheDirectory.path}/.tmp'),
+    );
+    return ChatDownloadedAttachment(
+      attachmentId: attachmentId,
+      fileName: fileName,
+      contentType: contentType,
+      clearByteSize: byteSize,
+      filePath: destPath,
     );
   }
 
@@ -535,7 +797,8 @@ class ChatRuntime {
         sourcePath: path,
         byteSize: media.byteSize,
       ),
-      deletePending: (attachmentId) => _store.deleteOutgoingMedia(attachmentId),
+      deletePending: (media) =>
+          _store.deleteOutgoingMedia(media.attachmentId, media.recipientAccount),
     );
   }
 
@@ -596,9 +859,13 @@ class ChatRuntime {
         if (type == 'gmb_chat_envelope_v2') {
           final encoded = message['envelope'];
           if (encoded is! String || encoded.isEmpty) return;
-          await _messageFlow(context).processIncomingEnvelopeBytes(
-            _base64UrlDecode(encoded),
-          );
+          final bytes = _base64UrlDecode(encoded);
+          final conversationId = _peekConversationId(bytes);
+          if (conversationId != null && conversationId.startsWith('grp:')) {
+            await _groupFlow(context).processIncomingGroupEnvelope(bytes);
+          } else {
+            await _messageFlow(context).processIncomingEnvelopeBytes(bytes);
+          }
           await onNotice();
           return;
         }
@@ -1023,4 +1290,14 @@ String _pushTokenCacheKey(ChatDevice identity) {
 List<int> _base64UrlDecode(String value) {
   final normalized = value.padRight((value.length + 3) ~/ 4 * 4, '=');
   return base64Url.decode(normalized);
+}
+
+/// 只读取 envelope 的 conversation_id 以决定路由(群 `grp:` vs 私聊 `dm:`);
+/// 解析失败返回 null,交由原私聊路径兜底。
+String? _peekConversationId(List<int> envelopeBytes) {
+  try {
+    return ChatEnvelope.fromBuffer(envelopeBytes).conversationId;
+  } catch (_) {
+    return null;
+  }
 }

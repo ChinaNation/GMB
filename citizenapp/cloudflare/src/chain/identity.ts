@@ -4,11 +4,14 @@ import { decodeOwnerAccount, storageMapKey } from './storage_key';
 import { nowMs } from '../shared/time';
 import { putKvJson } from '../limits/storage';
 import { fetchChainStorage } from './rpc';
-import type { RequiredIdentityLevel } from '../membership/plans';
+
+/// 链上身份档位（电子护照真源，与会员档位彻底解耦，ADR-036）：
+/// visitor 未认证 / voting 认证投票公民 / candidate 认证竞选公民。
+export type IdentityLevel = 'visitor' | 'voting' | 'candidate';
 
 export interface ChainIdentityState {
   owner_account: string;
-  identity_level: RequiredIdentityLevel;
+  identity_level: IdentityLevel;
   has_voting_identity: boolean;
   has_candidate_identity: boolean;
   cid_number: string | null;
@@ -84,7 +87,7 @@ export async function fetchChainIdentityState(
   const votingIdentity = votingHex ? decodeVotingIdentity(hexToBytes(votingHex)) : null;
   const hasVotingIdentity = votingIdentity ? votingIdentityIsActive(votingIdentity) : false;
   const hasCandidateIdentity = hasVotingIdentity && Boolean(candidateHex);
-  const identityLevel: RequiredIdentityLevel = hasCandidateIdentity
+  const identityLevel: IdentityLevel = hasCandidateIdentity
     ? 'candidate'
     : hasVotingIdentity
       ? 'voting'

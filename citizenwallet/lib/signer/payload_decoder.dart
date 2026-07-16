@@ -167,9 +167,6 @@ class PayloadDecoder {
         if (callIndex == PalletRegistry.castReferendumCall) {
           return _decodeCastReferendum(bytes);
         }
-        if (callIndex == PalletRegistry.preparePopulationSnapshotCall) {
-          return _decodeJointPopulationSnapshot(bytes);
-        }
       }
 
       // ── VotingEngine(9) · 引擎核心生命周期 extrinsic ──
@@ -206,9 +203,6 @@ class PayloadDecoder {
         }
         if (callIndex == PalletRegistry.revokeIdentityCall) {
           return _decodeRevokeIdentity(bytes);
-        }
-        if (callIndex == PalletRegistry.prepareCitizenPopulationSnapshotCall) {
-          return _decodeCitizenPopulationSnapshot(bytes);
         }
         if (callIndex == PalletRegistry.occupyCidCall) {
           return _decodeOccupyCid(bytes);
@@ -256,9 +250,6 @@ class PayloadDecoder {
         final closeAction = isPublic
             ? 'propose_close_public_institution'
             : 'propose_close_private_institution';
-        final cleanupAction = isPublic
-            ? 'cleanup_rejected_public_proposal'
-            : 'cleanup_rejected_private_proposal';
         if (callIndex == PalletRegistry.proposeCloseInstitutionCall) {
           // 机构 propose_close 携带注销凭证(nonce/签名/签发机构/签发管理员公钥),
           // 比个人多签多 3 个 Vec + 2×32,需专用解码;个人多签仍走 66 字节 _decodeProposeClose。
@@ -293,14 +284,6 @@ class PayloadDecoder {
             entityLabel: entityLabel,
           );
         }
-        if (callIndex ==
-            PalletRegistry.cleanupRejectedInstitutionProposalCall) {
-          return _decodeProposalIdOnly(
-            bytes,
-            action: cleanupAction,
-            summaryTemplate: '清理被拒$entityLabel提案 #{id} 残留',
-          );
-        }
       }
 
       // ── PersonalManage(7) ──
@@ -317,13 +300,6 @@ class PayloadDecoder {
             summaryLabel: '个人多签',
           );
         }
-        if (callIndex == PalletRegistry.cleanupRejectedPersonalProposalCall) {
-          return _decodeProposalIdOnly(
-            bytes,
-            action: 'cleanup_rejected_personal_proposal',
-            summaryTemplate: '清理被拒个人多签提案 #{id} 残留',
-          );
-        }
       }
 
       // ── PersonalAdmins(29) ──
@@ -333,7 +309,7 @@ class PayloadDecoder {
       }
 
       // ── ResolutionIssuance(8) · 决议发行联合提案 ──
-      // 人口快照由 JointVote.prepare_joint_population_snapshot 单独准备。
+      // 全国人口快照随联合提案创建由投票引擎内联生成。
       if (palletIndex == PalletRegistry.resolutionIssuancePallet) {
         if (callIndex == PalletRegistry.proposeIssuanceCall) {
           return _decodeProposeResolutionIssuance(bytes);
@@ -448,11 +424,8 @@ class PayloadDecoder {
 
       // ── LegislationVote(26) · 立法专属投票引擎 ──
       // 代表机构表决/公投/行政签署/三人会签/护宪终审走 proposal_id+approve；
-      // 人口快照只携带作用域,链端直接读取 citizen-identity。
+      // 特别案人口作用域由投票引擎按 actor CID 推导。
       if (palletIndex == PalletRegistry.legislationVotePallet) {
-        if (callIndex == PalletRegistry.prepareLegislationSnapshotCall) {
-          return _decodePrepareLegislationSnapshot(bytes);
-        }
         if (callIndex == PalletRegistry.castRepresentativeVoteCall) {
           return _decodeProposalApprove(
             bytes,
@@ -665,6 +638,10 @@ class PayloadDecoder {
         if (actorCidNumber != null) 'actor_cid_number': actorCidNumber,
         if (actorCidNumber != null) 'institution_account': fundingAccount,
         if (actorCidNumber == null) 'personal_account': fundingAccount,
+        'operation_fee_payer':
+            actorCidNumber == null ? '签名管理员钱包' : '$actorCidNumber 的链上费用账户',
+        'execution_fee_payer':
+            actorCidNumber == null ? fundingAccount : '$actorCidNumber 的链上费用账户',
         'beneficiary': beneficiary,
         'amount_yuan': '$amountYuan GMB',
         'remark': remark,
@@ -795,26 +772,6 @@ class PayloadDecoder {
     );
   }
 
-  // JointVote(21) / prepare_joint_population_snapshot(2)
-  // 格式：[0x15][0x02][actor_cid_number:CidNumber][scope:PopulationScope]
-  static DecodedPayload? _decodeJointPopulationSnapshot(Uint8List bytes) {
-    final actorRead = _readCidNumber(bytes, 2);
-    if (actorRead == null) return null;
-    final (scopeFields, offset) = _decodePopulationScope(bytes, actorRead.$2);
-    if (scopeFields == null || !_hasValidSigningTail(bytes, offset)) {
-      return null;
-    }
-
-    return DecodedPayload(
-      action: 'prepare_joint_population_snapshot',
-      summary: '准备联合公投人口快照（${scopeFields['scope_text']}）',
-      fields: {
-        'actor_cid_number': actorRead.$1,
-        ...scopeFields,
-      },
-    );
-  }
-
   // 协议升级 RuntimeUpgrade(12) / propose_runtime_upgrade(0) / developer_direct_upgrade(2)
   //
   // 无 SCALE decoder:
@@ -936,6 +893,7 @@ class PayloadDecoder {
   //     legal_representative_account: AccountId32,
   //     accounts: InstitutionInitialAccountsOf<T>,
   //         // BoundedVec<{ account_name: BoundedVec<u8>, amount: u128 }>
+  //     funding_account: Option<AccountId32>,
   //     institution_code: [u8; 4],      // 注册多签机构码(公权/私权/非法人法人)
   //     roles: InstitutionRolesOf<T>,
   //     assignments: InstitutionAssignmentsOf<T>,
@@ -1043,6 +1001,23 @@ class PayloadDecoder {
       accountAmounts[accountName] = amount;
       accountsTotal += amount;
       offset += 16;
+    }
+
+    // 零初始余额没有本金账户；非零初始余额必须展示明确 funding_account。
+    if (offset >= bytes.length) return null;
+    String? fundingAccount;
+    final fundingTag = bytes[offset++];
+    if (fundingTag == 1) {
+      if (offset + 32 > bytes.length) return null;
+      fundingAccount = _bytesToSs58(
+        Uint8List.fromList(bytes.sublist(offset, offset + 32)),
+      );
+      offset += 32;
+    } else if (fundingTag != 0) {
+      return null;
+    }
+    if ((accountsTotal == BigInt.zero) != (fundingAccount == null)) {
+      return null;
     }
 
     // institution_code: [u8;4]。机构账户只能使用注册多签机构码(公权/私权/非法人法人)。
@@ -1193,7 +1168,11 @@ class PayloadDecoder {
       'assignments': roleAssignments.join('、'),
       'threshold': '$threshold/$adminsLen',
       'total_amount_yuan': '$amountYuan GMB',
+      'fee_payer': '$actorCidNumber 的链上费用账户',
     };
+    if (fundingAccount != null) {
+      fields['funding_account'] = fundingAccount;
+    }
     for (final entry in accountAmounts.entries) {
       fields['amount_${entry.key}'] = '${_fenToYuan(entry.value)} GMB';
     }
@@ -1337,7 +1316,7 @@ class PayloadDecoder {
   //         // BoundedVec<{ recipient: AccountId32, amount: u128 }>
   //   )
   //
-  // 人口快照由 JointVote.prepare_joint_population_snapshot 先行准备,本交易只携带发行内容。
+  // 全国人口快照随联合提案创建由投票引擎内联生成，本交易只携带发行内容。
   static DecodedPayload? _decodeProposeResolutionIssuance(Uint8List bytes) {
     if (bytes.length < 3) return null;
     var offset = 2; // 跳过 pallet_index + call_index
@@ -1843,6 +1822,8 @@ class PayloadDecoder {
       fields: {
         'actor_cid_number': actorRead.$1,
         'institution_account': _bytesToSs58(institutionAccount),
+        'operation_fee_payer': '${actorRead.$1} 的链上费用账户',
+        'execution_fee_payer': '${actorRead.$1} 的链上费用账户',
         'beneficiary': beneficiary,
         'amount_yuan': '$amountYuan GMB',
         'remark': remark,
@@ -1871,6 +1852,8 @@ class PayloadDecoder {
       fields: {
         'actor_cid_number': actorRead.$1,
         'institution_account': institutionAccount,
+        'operation_fee_payer': '${actorRead.$1} 的链上费用账户',
+        'execution_fee_payer': '${actorRead.$1} 的链上费用账户',
         'amount_yuan': '$amountYuan GMB',
       },
     );
@@ -1897,6 +1880,8 @@ class PayloadDecoder {
       fields: {
         'actor_cid_number': actorRead.$1,
         'institution_account': institutionAccount,
+        'operation_fee_payer': '${actorRead.$1} 的链上费用账户',
+        'execution_fee_payer': '${actorRead.$1} 的链上费用账户',
         'amount_yuan': '$amountYuan GMB',
       },
     );
@@ -2016,56 +2001,6 @@ class PayloadDecoder {
     final end = start + len;
     if (end > bytes.length) return null;
     return (utf8.decode(bytes.sublist(start, end), allowMalformed: true), end);
-  }
-
-  /// 解码 runtime `citizen_identity::PopulationScope`。
-  static (Map<String, String>?, int) _decodePopulationScope(
-    Uint8List bytes,
-    int offset,
-  ) {
-    if (offset >= bytes.length) return (null, -1);
-    final tag = bytes[offset];
-    offset += 1;
-
-    final fields = <String, String>{};
-    switch (tag) {
-      case 0:
-        fields['scope_level'] = 'COUNTRY';
-        fields['scope_text'] = '全国';
-        return (fields, offset);
-      case 1:
-        final (province, next) = _readUtf8Vec(bytes, offset);
-        if (province == null) return (null, -1);
-        fields['scope_level'] = 'PROVINCE';
-        fields['scope_province_code'] = province;
-        fields['scope_text'] = '省 $province';
-        return (fields, next);
-      case 2:
-        final (province, afterProvince) = _readUtf8Vec(bytes, offset);
-        if (province == null) return (null, -1);
-        final (city, next) = _readUtf8Vec(bytes, afterProvince);
-        if (city == null) return (null, -1);
-        fields['scope_level'] = 'CITY';
-        fields['scope_province_code'] = province;
-        fields['scope_city_code'] = city;
-        fields['scope_text'] = '市 $province/$city';
-        return (fields, next);
-      case 3:
-        final (province, afterProvince) = _readUtf8Vec(bytes, offset);
-        if (province == null) return (null, -1);
-        final (city, afterCity) = _readUtf8Vec(bytes, afterProvince);
-        if (city == null) return (null, -1);
-        final (town, next) = _readUtf8Vec(bytes, afterCity);
-        if (town == null) return (null, -1);
-        fields['scope_level'] = 'TOWN';
-        fields['scope_province_code'] = province;
-        fields['scope_city_code'] = city;
-        fields['scope_town_code'] = town;
-        fields['scope_text'] = '镇 $province/$city/$town';
-        return (fields, next);
-      default:
-        return (null, -1);
-    }
   }
 
   /// 跳过 Option<BoundedVec<u8>>(1 tag 字节 + Some 时载荷),返回新 offset;失败返回 -1。
@@ -2417,21 +2352,6 @@ class PayloadDecoder {
     );
   }
 
-  // LegislationVote(26) / prepare_population_snapshot(0)
-  // SCALE: [26][0][scope:PopulationScope]
-  static DecodedPayload? _decodePrepareLegislationSnapshot(Uint8List bytes) {
-    final (scopeFields, offset) = _decodePopulationScope(bytes, 2);
-    if (scopeFields == null || !_hasValidSigningTail(bytes, offset)) {
-      return null;
-    }
-
-    return DecodedPayload(
-      action: 'prepare_legislation_snapshot',
-      summary: '准备立法人口快照（${scopeFields['scope_text']}）',
-      fields: scopeFields,
-    );
-  }
-
   // LegislationVote(26) / cast_referendum_vote(2)
   // SCALE: [26][2][proposal_id:u64_le][approve:bool]
   static DecodedPayload? _decodeCastLegislationReferendum(Uint8List bytes) {
@@ -2596,17 +2516,6 @@ class PayloadDecoder {
         'actor_cid_number': actorRead.$1,
         'cid_number': cidRead.$1,
       },
-    );
-  }
-
-  // CitizenIdentity(10) / prepare_population_snapshot(5)。第 4 步才会删除。
-  static DecodedPayload? _decodeCitizenPopulationSnapshot(Uint8List bytes) {
-    final (scopeFields, offset) = _decodePopulationScope(bytes, 2);
-    if (scopeFields == null || !_hasCallDataEnd(bytes, offset)) return null;
-    return DecodedPayload(
-      action: 'prepare_citizen_population_snapshot',
-      summary: '准备公民人口快照（${scopeFields['scope_text']}）',
-      fields: scopeFields,
     );
   }
 
@@ -2907,10 +2816,9 @@ class PayloadDecoder {
     );
   }
 
-  // 通用:只取 proposal_id: u64_le 的兜底执行/取消/清理类 call。
+  // 通用:只取 proposal_id: u64_le 的引擎重试/取消类 call。
   //
-  // 链端若干 `execute_X` / `cancel_failed_X` /
-  // `cleanup_rejected_X` 签名完全一致:
+  // 链端若干引擎重试/取消调用签名完全一致:
   //     pub fn <name>(origin, proposal_id: u64) -> DispatchResult
   // SCALE 编码恒为 `[pallet_idx][call_idx][proposal_id:u64_le]` = 10 bytes。
   //

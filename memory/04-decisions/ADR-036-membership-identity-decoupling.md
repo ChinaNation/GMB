@@ -20,14 +20,14 @@
 ## 决策
 
 1. **两轴解耦**：`MembershipLevel = freedom | democracy | spark`（去掉 `required_identity_level`）；`IdentityLevel = visitor | voting | candidate` 归电子护照。任意身份 × 任意档全组合可订。
-2. **三档月费**：`freedom` $2.99、`democracy` $9.99、`spark`（星火）$99.99。`spark` 为新内部键（`candidate` 是身份名，解耦后不再作会员键）。
+2. **三档月费**：`freedom` $2.99、`democracy` $9.99、`spark`（薪火）$99.99。`spark` 为新内部键（`candidate` 是身份名，解耦后不再作会员键）。
 3. **四档→三档映射**（零用户直接重建，无迁移）：freedom/democracy 保留去绑；`voting` 删除（与 democracy 权益重复）；`candidate` $99.99 改名 `spark` 并复用其 Stripe price 值改挂 `SPARK_PRICE_ID`。
 4. **权益按套餐不按身份**：发帖/文章/媒体质量额度随 `membership_level`；**新增聊天文件上限权益** `chat_file_max_bytes`（freedom 10MB、democracy 100MB、spark 5GB），单源置于 `MembershipPlan` quota，无会员行按 freedom 10MB。客户端强制（媒体走 WebRTC P2P，服务端不在字节路径）。
 5. **取代 ADR-033 规则5**：删除身份绑定 + 冻结 + 暂停收款整套机制（`resolveMembershipEntitlement` 冻结分支、`syncCollectionState`、`identityLevelForFreeze`、`identity_required` 状态、D1 `frozen_at`/`collection_paused`/`identity_level` 列）。ADR-033 规则1–4（一钱包一订阅、换档 proration、动钱动权签名）保留。
 
 ## 边界
 
-- **本决策不实现** >100MB（仅星火）R2 瞬时群密钥密文中转 transport——归卡2 私密小群 `20260715-citizenapp-chat-group-private-e2e` 阶段3（见 `project_chat_media_tiered_relay_2026_07_15`）。本决策只定「星火可发 ≤5GB」的档位与限额值。
+- **本决策不实现** >100MB（仅薪火）R2 瞬时群密钥密文中转 transport——归卡2 私密小群 `20260715-citizenapp-chat-group-private-e2e` 阶段3（见 `project_chat_media_tiered_relay_2026_07_15`）。本决策只定「薪火可发 ≤5GB」的档位与限额值。
 - **会员页纯订阅**：`membership_page` 由三身份卡改三档订阅卡，移除卡内「链上公开身份字段」，身份字段并入电子护照 `myid`；入口/标题「身份 ｜ 会员」→「会员」。身份与会员完全解耦。
 - 不改 `citizenchain`（链端）。会员侧不再读链身份。
 

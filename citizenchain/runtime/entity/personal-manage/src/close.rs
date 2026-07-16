@@ -7,7 +7,7 @@
 //! 1. 校验地址、受益人、地址非保留
 //! 2. 校验地址 PersonalAccounts 已 Active
 //! 3. 校验发起人是该个人多签账户的活跃管理员
-//! 4. 校验余额≥关闭门槛 + 转出金额≥ED + 无 reserved 余额
+//! 4. 按统一链上费公式计算执行费，校验扣费后转出金额≥ED，且无 reserved 余额
 //! 5. 注销生命周期投票的全员阈值由投票引擎按管理员快照生成
 //! 6. 写入 PendingCloseProposal[address] = proposal_id 防并发
 //! 7. 发射 PersonalCloseProposed 事件
@@ -17,7 +17,7 @@ extern crate alloc;
 use codec::Encode;
 use frame_support::{
     ensure,
-    traits::{Currency, Get, ReservableCurrency},
+    traits::{Currency, ReservableCurrency},
 };
 use primitives::institution_asset::{InstitutionAsset, InstitutionAssetAction};
 use sp_runtime::{
@@ -85,19 +85,15 @@ pub(crate) fn do_propose_close<T: Config>(
     );
 
     let all_balance = T::Currency::free_balance(&account);
-    ensure!(
-        all_balance >= T::MinCloseBalance::get(),
-        Error::<T>::CloseBalanceBelowMinimum
-    );
     {
         let balance_u128: u128 = all_balance.saturated_into();
         let fee_u128 = primitives::fee_policy::calculate_onchain_fee(balance_u128);
         let fee: BalanceOf<T> = fee_u128.saturated_into();
         let transfer_amount = all_balance
             .checked_sub(&fee)
-            .ok_or(Error::<T>::FeeWithdrawFailed)?;
+            .ok_or(Error::<T>::CloseBalanceBelowMinimum)?;
         let ed = T::Currency::minimum_balance();
-        ensure!(transfer_amount >= ed, Error::<T>::CloseTransferBelowED);
+        ensure!(transfer_amount >= ed, Error::<T>::CloseBalanceBelowMinimum);
     }
     ensure!(
         T::Currency::reserved_balance(&account).is_zero(),

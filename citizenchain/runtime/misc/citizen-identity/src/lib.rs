@@ -820,16 +820,7 @@ pub mod pallet {
             Ok(())
         }
 
-        #[pallet::call_index(5)]
-        #[pallet::weight(<T as Config>::WeightInfo::prepare_population_snapshot())]
-        pub fn prepare_population_snapshot(
-            origin: OriginFor<T>,
-            scope: PopulationScope,
-        ) -> DispatchResult {
-            let _who = ensure_signed(origin)?;
-            Self::create_governance_population_snapshot(&scope)?;
-            Ok(())
-        }
+        // call_index(5) 已永久废弃：人口快照只能由 votingengine 的内部 provider 调用生成。
 
         /// 占号:公民建档先行登记 CID 号,链上原子「验格式+查重+登记」是
         /// 全局唯一的唯一仲裁;成功后注册局才落本地档案。

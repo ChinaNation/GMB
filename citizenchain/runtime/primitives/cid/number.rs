@@ -77,6 +77,23 @@ pub fn parse_cid_number_parts_bytes(raw: &[u8]) -> Result<CidNumberParts, &'stat
     parse_cid_number_parts(text)
 }
 
+/// 从已校验的机构 CID 唯一解析省、市作用域码。
+///
+/// CID 的 R5 固定为“省码 2 字节 + 市码 3 字节”。所有需要按机构 CID
+/// 推导治理或登记作用域的模块必须复用本函数，不得自行切割字符串形成第二真源。
+pub fn cid_scope_codes(raw: &[u8]) -> Result<([u8; 2], [u8; 3]), &'static str> {
+    let parts = parse_cid_number_parts_bytes(raw)?;
+    let bytes = parts.r5.as_bytes();
+    if bytes.len() != CID_NUMBER_SEGMENT_R5_LEN {
+        return Err("cid_number r5 segment invalid");
+    }
+    let mut province_code = [0_u8; 2];
+    let mut city_code = [0_u8; 3];
+    province_code.copy_from_slice(&bytes[..2]);
+    city_code.copy_from_slice(&bytes[2..]);
+    Ok((province_code, city_code))
+}
+
 /// 解析并校验 cid_number。
 pub fn parse_cid_number_parts(raw: &str) -> Result<CidNumberParts, &'static str> {
     let normalized = raw.trim();
@@ -236,6 +253,16 @@ mod tests {
         assert_eq!(parts.institution_code_text, "NRC");
         assert!(!parts.profit);
         assert!(validate_cid_number_format(&code).is_ok());
+    }
+
+    #[test]
+    fn scope_codes_are_derived_from_validated_r5() {
+        let number = gen("CGOV", "0", "广东省", "荔湾市");
+        assert_eq!(
+            cid_scope_codes(number.as_bytes()).expect("valid cid has scope"),
+            (*b"GD", *b"001")
+        );
+        assert!(cid_scope_codes(b"GD001-CGOVX-944805165").is_err());
     }
 
     #[test]

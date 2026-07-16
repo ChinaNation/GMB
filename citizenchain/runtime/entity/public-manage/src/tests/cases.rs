@@ -4,14 +4,14 @@ use frame_support::{assert_noop, assert_ok};
 use crate::{AccountKind, Error, RESERVED_NAME_FEE, RESERVED_NAME_MAIN};
 
 const ACCOUNT_AMOUNT: Balance = 1_000;
-const CREATOR_BALANCE: Balance = 100_000;
+const REGISTRY_FUNDING_BALANCE: Balance = 100_000;
 const CUSTOM_ACCOUNT_NAME: &[u8] = "专项账户".as_bytes();
 
-fn fund_creator() {
+fn fund_registry_account() {
     assert_ok!(Balances::force_set_balance(
         RuntimeOrigin::root(),
-        creator(),
-        CREATOR_BALANCE,
+        registry_funding_account(),
+        REGISTRY_FUNDING_BALANCE,
     ));
 }
 
@@ -22,6 +22,10 @@ fn create_cgov(
     signature: pallet::RegisterSignatureOf<Test>,
 ) -> pallet::CidNumberOf<Test> {
     let cid = generated_cid(tag, "CGOV");
+    let funding_account = accounts
+        .iter()
+        .any(|account| account.amount > 0)
+        .then(registry_funding_account);
     assert_ok!(PublicManage::propose_create_public_institution(
         RuntimeOrigin::signed(creator()),
         cid.clone(),
@@ -32,6 +36,7 @@ fn create_cgov(
         legal_representative_cid_number(),
         legal_representative_account(),
         accounts,
+        funding_account,
         code_bytes("CGOV"),
         institution_roles_vec(),
         institution_assignments_vec(3),
@@ -47,7 +52,7 @@ fn create_cgov(
 }
 
 fn create_cgov_with_custom(tag: &str) -> pallet::CidNumberOf<Test> {
-    fund_creator();
+    fund_registry_account();
     create_cgov(
         tag,
         tag.as_bytes(),
@@ -115,7 +120,7 @@ fn creation_uses_cid_as_identity_and_writes_all_account_indexes() {
 #[test]
 fn creation_accepts_zero_protocol_account_balances() {
     new_test_ext().execute_with(|| {
-        fund_creator();
+        fund_registry_account();
         let cid = create_cgov(
             "zero-balances",
             b"zero-balances",
@@ -136,7 +141,7 @@ fn creation_accepts_zero_protocol_account_balances() {
 #[test]
 fn creation_rejects_nonzero_account_balance_below_ed() {
     new_test_ext().execute_with(|| {
-        fund_creator();
+        fund_registry_account();
         let cid = generated_cid("below-ed", "CGOV");
         assert_noop!(
             PublicManage::propose_create_public_institution(
@@ -149,6 +154,7 @@ fn creation_rejects_nonzero_account_balance_below_ed() {
                 legal_representative_cid_number(),
                 legal_representative_account(),
                 initial_accounts(&[(RESERVED_NAME_MAIN, 1), (RESERVED_NAME_FEE, ACCOUNT_AMOUNT)]),
+                Some(registry_funding_account()),
                 code_bytes("CGOV"),
                 institution_roles_vec(),
                 institution_assignments_vec(3),
@@ -168,7 +174,7 @@ fn creation_rejects_nonzero_account_balance_below_ed() {
 #[test]
 fn creation_requires_complete_protocol_account_set() {
     new_test_ext().execute_with(|| {
-        fund_creator();
+        fund_registry_account();
         let cid = generated_cid("missing-fee", "CGOV");
         assert_noop!(
             PublicManage::propose_create_public_institution(
@@ -181,6 +187,7 @@ fn creation_requires_complete_protocol_account_set() {
                 legal_representative_cid_number(),
                 legal_representative_account(),
                 initial_accounts(&[(RESERVED_NAME_MAIN, ACCOUNT_AMOUNT)]),
+                Some(registry_funding_account()),
                 code_bytes("CGOV"),
                 institution_roles_vec(),
                 institution_assignments_vec(3),
@@ -200,7 +207,7 @@ fn creation_requires_complete_protocol_account_set() {
 #[test]
 fn creation_rejects_invalid_signature_without_partial_state() {
     new_test_ext().execute_with(|| {
-        fund_creator();
+        fund_registry_account();
         let cid = generated_cid("invalid-signature", "CGOV");
         assert_noop!(
             PublicManage::propose_create_public_institution(
@@ -216,6 +223,7 @@ fn creation_rejects_invalid_signature_without_partial_state() {
                     (RESERVED_NAME_MAIN, ACCOUNT_AMOUNT),
                     (RESERVED_NAME_FEE, ACCOUNT_AMOUNT),
                 ]),
+                Some(registry_funding_account()),
                 code_bytes("CGOV"),
                 institution_roles_vec(),
                 institution_assignments_vec(3),
@@ -252,6 +260,7 @@ fn creation_rejects_duplicate_cid_and_replayed_nonce() {
                     (RESERVED_NAME_MAIN, ACCOUNT_AMOUNT),
                     (RESERVED_NAME_FEE, ACCOUNT_AMOUNT),
                 ]),
+                Some(registry_funding_account()),
                 code_bytes("CGOV"),
                 institution_roles_vec(),
                 institution_assignments_vec(3),
@@ -423,6 +432,7 @@ fn approved_close_removes_only_custom_account() {
         let fee = account_of(&cid, RESERVED_NAME_FEE);
         let custom = account_of(&cid, CUSTOM_ACCOUNT_NAME);
         let beneficiary_account = beneficiary();
+        let admin_balance_before = Balances::free_balance(admin(0));
 
         assert_ok!(close_with_cred(
             RuntimeOrigin::signed(admin(0)),
@@ -443,7 +453,45 @@ fn approved_close_removes_only_custom_account() {
         assert!(pallet::AccountRegisteredCid::<Test>::contains_key(&fee));
         assert!(pallet::Institutions::<Test>::contains_key(&cid));
         assert!(public_admins::AdminAccounts::<Test>::contains_key(&cid));
-        assert!(Balances::free_balance(beneficiary_account) > 0);
+        assert_eq!(Balances::free_balance(&fee), 990);
+        assert_eq!(Balances::free_balance(beneficiary_account), ACCOUNT_AMOUNT);
+        assert_eq!(Balances::free_balance(admin(0)), admin_balance_before);
+    });
+}
+
+#[test]
+fn rejected_close_is_cleaned_only_by_votingengine_callback() {
+    new_test_ext().execute_with(|| {
+        let cid = create_cgov_with_custom("close-rejected");
+        let custom = account_of(&cid, CUSTOM_ACCOUNT_NAME);
+
+        assert_ok!(close_with_cred(
+            RuntimeOrigin::signed(admin(0)),
+            cid.clone(),
+            custom.clone(),
+            beneficiary(),
+            5,
+        ));
+        let proposal_id = last_proposal_id();
+        assert_eq!(
+            pallet::InstitutionPendingClose::<Test>::get(&custom),
+            Some(proposal_id)
+        );
+
+        assert_eq!(
+            <crate::InternalVoteExecutor<Test> as votingengine::InternalVoteResultCallback>::on_internal_vote_finalized(
+                proposal_id,
+                false,
+            ),
+            Ok(votingengine::ProposalExecutionOutcome::Executed)
+        );
+        assert!(!pallet::InstitutionPendingClose::<Test>::contains_key(
+            &custom
+        ));
+        assert!(pallet::InstitutionAccounts::<Test>::contains_key(
+            &cid,
+            account_name(CUSTOM_ACCOUNT_NAME),
+        ));
     });
 }
 

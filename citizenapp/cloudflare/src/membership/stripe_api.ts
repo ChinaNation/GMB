@@ -87,61 +87,6 @@ export async function resumeStripeSubscription(
   }
 }
 
-/// 冻结时暂停收款：pause_collection[behavior]=void，权益不可用期间不再向用户扣费。
-export async function pauseStripeCollection(
-  env: Env,
-  subscriptionId: string
-): Promise<void> {
-  if (env.STRIPE_DEV_PROXY === '1') {
-    return;
-  }
-  const key = requireStripeKey(env);
-  const response = await fetch(
-    `${STRIPE_API_BASE}/subscriptions/${encodeURIComponent(subscriptionId)}`,
-    {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${key}`,
-        'content-type': 'application/x-www-form-urlencoded'
-      },
-      body: 'pause_collection[behavior]=void'
-    }
-  );
-  if (!response.ok) {
-    throw new HttpError(502, 'stripe_pause_failed', `Stripe 暂停收款失败：${response.status}`);
-  }
-}
-
-/// 解冻时恢复收款：清空 pause_collection（换档到匹配档后调用）。
-export async function resumeStripeCollection(
-  env: Env,
-  subscriptionId: string
-): Promise<void> {
-  if (env.STRIPE_DEV_PROXY === '1') {
-    return;
-  }
-  const key = requireStripeKey(env);
-  const response = await fetch(
-    `${STRIPE_API_BASE}/subscriptions/${encodeURIComponent(subscriptionId)}`,
-    {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${key}`,
-        'content-type': 'application/x-www-form-urlencoded'
-      },
-      // 空值清空 pause_collection，恢复自动收款。
-      body: 'pause_collection='
-    }
-  );
-  if (!response.ok) {
-    throw new HttpError(
-      502,
-      'stripe_resume_collection_failed',
-      `Stripe 恢复收款失败：${response.status}`
-    );
-  }
-}
-
 interface StripeInvoiceApi {
   status?: string;
   hosted_invoice_url?: string | null;

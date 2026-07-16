@@ -206,6 +206,37 @@ class ChatCloudTransport implements ChatTransport {
     }
   }
 
+  // ==== 大媒体(>100MB)Cloudflare R2 瞬时中转 ====
+  // 服务端按会员(仅薪火)+ 尺寸(>100MB,≤5GB)门控;拒 ≤100MB / 非薪火。
+  // 只有 >100MB 走此路,其余一切不经 R2。
+
+  /// 申请上传槽:声明**明文**字节数(供 >100MB 门),返回 {object_key, ttl_millis}。
+  /// 服务端此处按会员(仅薪火)+ 尺寸门控。
+  Future<Map<String, dynamic>> initRelayUpload({
+    required int byteSize,
+    int recipientCount = 1,
+  }) {
+    return _postJson('/v1/chat/relay/init', {
+      'byte_size': byteSize,
+      'recipient_count': recipientCount,
+    });
+  }
+
+  /// 收件人已拉取确认:1:1 一人 ack 即删;否则等 TTL 兜底删。
+  Future<void> relayAck(String objectKey) async {
+    await _postJson(
+      '/v1/chat/relay/${Uri.encodeComponent(objectKey)}/ack',
+      const {},
+    );
+  }
+
+  /// blob 代理端点绝对地址(Worker 转发到 R2,会话 bearer 鉴权)。
+  Uri relayBlobUri(String objectKey) =>
+      _uri('/v1/chat/relay/${Uri.encodeComponent(objectKey)}/blob');
+
+  /// 供大媒体流式 PUT/GET 使用的会话 bearer(blob 只用 bearer 鉴权,内容为 E2E 密文)。
+  String? get sessionBearer => sessionToken;
+
   Future<Map<String, dynamic>> _getJson(String path,
       {Map<String, String>? queryParameters}) async {
     final uri = _uri(path, queryParameters: queryParameters);

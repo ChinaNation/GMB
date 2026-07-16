@@ -674,16 +674,15 @@ fn joint_proposal_must_be_created_by_nrc_or_prc_admin() {
         // 外部人员不能创建联合提案
         let outsider = AccountId32::new([9u8; 32]);
         assert_noop!(
-            JointVote::prepare_joint_population_snapshot(
-                RuntimeOrigin::signed(outsider),
-                nrc_cid(),
-                votingengine::PopulationScope::Country,
+            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                outsider,
+                nrc_cid().to_vec(),
             ),
             votingengine::Error::<Test>::NoPermission
         );
 
         // 省储委会管理员可以创建联合提案
-        prepare_population_snapshot_for(prc_admin(0), prc_cid(), 10);
+        set_population_count(10);
         assert_ok!(
             <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
                 prc_admin(0),
@@ -692,7 +691,10 @@ fn joint_proposal_must_be_created_by_nrc_or_prc_admin() {
         );
 
         // 国家储委会管理员可以创建联合提案
-        prepare_population_snapshot_for(nrc_admin(0), nrc_cid(), 10);
+        // 使用独立外部状态验证另一类合法发起人，避免两个联合提案争用同一组治理锁。
+    });
+    new_test_ext().execute_with(|| {
+        set_population_count(10);
         assert_ok!(
             <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
                 nrc_admin(0),
@@ -703,36 +705,40 @@ fn joint_proposal_must_be_created_by_nrc_or_prc_admin() {
 }
 
 #[test]
-fn joint_proposal_requires_prepared_population_snapshot() {
+fn joint_proposal_creates_and_binds_population_snapshot_inline() {
     new_test_ext().execute_with(|| {
-        assert_noop!(
-            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-                nrc_admin(0),
-                nrc_cid().to_vec(),
-            ),
-            joint_vote::Error::<Test>::PopulationSnapshotNotPrepared
+        set_population_count(10);
+        let proposal_id = <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
+            nrc_admin(0),
+            nrc_cid().to_vec(),
+        )
+        .expect("joint proposal should create its own snapshot");
+        assert_eq!(
+            VotingEngine::proposals(proposal_id)
+                .expect("proposal exists")
+                .citizen_eligible_total,
+            10
+        );
+        assert_eq!(
+            votingengine::ProposalPopulationSnapshotIds::<Test>::get(proposal_id),
+            Some(0)
         );
     });
 }
 
 #[test]
-fn joint_proposal_rejects_stale_population_snapshot() {
+fn joint_proposal_with_empty_population_rolls_back() {
     new_test_ext().execute_with(|| {
-        prepare_population_snapshot_for(nrc_admin(0), nrc_cid(), 10);
-
-        // 人口快照只代表准备快照所在区块的公民分母；
-        // 隔块创建提案必须拒绝并删除过期缓存。
-        System::set_block_number(2);
-        assert_eq!(
+        set_population_count(0);
+        assert_noop!(
             <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
                 nrc_admin(0),
                 nrc_cid().to_vec(),
             ),
-            Err(joint_vote::Error::<Test>::PopulationSnapshotNotCurrent.into())
+            joint_vote::Error::<Test>::CitizenEligibleTotalNotSet
         );
-        assert!(
-            !joint_vote::pallet::PendingPopulationSnapshots::<Test>::contains_key(nrc_admin(0))
-        );
+        assert_eq!(votingengine::pallet::NextProposalId::<Test>::get(), 0);
+        assert!(!votingengine::pallet::Proposals::<Test>::contains_key(0));
     });
 }
 
@@ -859,26 +865,6 @@ fn joint_stage_mutex_is_keyed_by_cid_and_released_at_referendum_stage() {
             STAGE_REFERENDUM
         );
         assert!(internal_mutex_for(nrc_cid()).is_none());
-    });
-}
-
-#[test]
-fn population_snapshot_can_be_prepared_for_each_joint_proposal() {
-    new_test_ext().execute_with(|| {
-        prepare_population_snapshot_for(nrc_admin(0), nrc_cid(), 10);
-        assert_ok!(
-            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-                nrc_admin(0),
-                nrc_cid().to_vec(),
-            )
-        );
-
-        TEST_POPULATION_COUNT.with(|count| *count.borrow_mut() = 11);
-        assert_ok!(JointVote::prepare_joint_population_snapshot(
-            RuntimeOrigin::signed(nrc_admin(0)),
-            nrc_cid(),
-            votingengine::PopulationScope::Country,
-        ));
     });
 }
 

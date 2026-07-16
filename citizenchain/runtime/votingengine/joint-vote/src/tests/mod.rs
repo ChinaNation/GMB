@@ -1,4 +1,5 @@
 use super::*;
+use votingengine::PopulationScope;
 
 use frame_support::{assert_ok, derive_impl, traits::ConstU32, traits::Hooks};
 use frame_system as system;
@@ -217,11 +218,6 @@ fn admins_for(
 }
 
 fn create_joint_proposal() -> u64 {
-    assert_ok!(JointVote::prepare_joint_population_snapshot(
-        RuntimeOrigin::signed(nrc_admin()),
-        nrc_cid_number().try_into().expect("NRC CID should fit"),
-        PopulationScope::Country,
-    ));
     <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
         nrc_admin(),
         nrc_cid_number(),

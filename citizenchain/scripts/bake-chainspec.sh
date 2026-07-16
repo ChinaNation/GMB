@@ -15,9 +15,12 @@
 #   1. citizenchain/node/chainspecs/citizenchain.plain.json   (节点冻结 SSOT)
 #   2. citizenapp/assets/chainspec.json                        (smoldot 轻形态:stateRootHash)
 #   3. citizenapp/assets/light_sync_state.json                 (smoldot checkpoint)
+#   4. citizenapp/assets/public_institutions/*.json            (块 0 公权机构缓存)
+#   5. citizenapp/cloudflare/wrangler.toml                     (公开链身份派生配置)
 #
 # 流程:导出 plain spec → 临时节点物化创世(记录耗时)→ RPC 宪法创世检查
-#       → 读块 0 头生成轻形态 → 生成 lightSyncState → 导出 genesis-state → finalize 同步。
+#       → 读块 0 头生成轻形态与 lightSyncState → 从同一块生成公权机构缓存
+#       → 导出 genesis-state → 全部校验后 finalize 同步。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -26,17 +29,18 @@ REPO_ROOT="$(dirname "$CHAIN_ROOT")"
 OUT="$CHAIN_ROOT/target/chainspec/citizenchain.plain.json"
 APP_OUT="$CHAIN_ROOT/target/chainspec/chainspec.app.json"
 APP_LIGHT_SYNC_STATE_OUT="$CHAIN_ROOT/target/chainspec/light_sync_state.json"
+APP_PUBLIC_INSTITUTION_OUT="$CHAIN_ROOT/target/chainspec/public_institutions"
+CLOUDFLARE_WRANGLER_OUT="$CHAIN_ROOT/target/chainspec/wrangler.toml"
 GENESIS_STATE_OUT="$CHAIN_ROOT/target/chainspec/genesis-state"
 FINALIZE=0
 SKIP_CHECK=0
 WASM_FILE_ARG=""
 WASM_CI_RUN_ID=""
 WASM_CI_HEAD_SHA=""
-PUBLIC_INSTITUTION_ROOT=""
 RPC_PORT=19944
 
 validate_genesis_state_package() {
-    local package_root="$1" path relative
+    local package_root="$1" require_release="$2" path relative
     [[ -f "$package_root/manifest.json" ]] || { echo "错误:创世状态包缺少 manifest.json:$package_root" >&2; return 1; }
     [[ -d "$package_root/chains/citizenchain/db" ]] || { echo "错误:创世状态包缺少链数据库:$package_root" >&2; return 1; }
 
@@ -65,8 +69,8 @@ with open(manifest_path, encoding="utf-8") as f:
     manifest = json.load(f)
 required = (
     "package_format", "chain_id", "genesis_hash", "state_root", "chainspec_hash",
-    "runtime_wasm_hash", "runtime_wasm_ci_run_id", "runtime_wasm_ci_head_sha",
-    "light_sync_state_hash", "public_institution_root",
+    "runtime_wasm_hash", "light_sync_state_hash", "public_institution_root",
+    "artifact_stage",
 )
 missing = [key for key in required if not manifest.get(key)]
 if missing:
@@ -77,12 +81,26 @@ if manifest["chain_id"] != "citizenchain":
     raise SystemExit("创世状态包 manifest.chain_id 无效")
 if manifest.get("included_paths") != ["chains/citizenchain/db"]:
     raise SystemExit("创世状态包 manifest.included_paths 必须精确等于 chains/citizenchain/db")
-if not str(manifest["runtime_wasm_ci_run_id"]).isdigit():
-    raise SystemExit("创世状态包 manifest.runtime_wasm_ci_run_id 无效")
-head_sha = manifest["runtime_wasm_ci_head_sha"]
-if not isinstance(head_sha, str) or len(head_sha) != 40 or any(c not in "0123456789abcdef" for c in head_sha):
-    raise SystemExit("创世状态包 manifest.runtime_wasm_ci_head_sha 无效")
+if manifest["artifact_stage"] not in ("preview", "release"):
+    raise SystemExit("创世状态包 manifest.artifact_stage 无效")
 PYEOF
+
+    if [[ "$require_release" == "1" ]]; then
+        python3 - "$package_root/manifest.json" <<'PYEOF'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    manifest = json.load(f)
+if manifest.get("artifact_stage") != "release":
+    raise SystemExit("正式创世状态包 artifact_stage 必须为 release")
+if not str(manifest.get("runtime_wasm_ci_run_id", "")).isdigit():
+    raise SystemExit("正式创世状态包 runtime_wasm_ci_run_id 无效")
+head_sha = manifest.get("runtime_wasm_ci_head_sha")
+if not isinstance(head_sha, str) or len(head_sha) != 40 or any(c not in "0123456789abcdef" for c in head_sha):
+    raise SystemExit("正式创世状态包 runtime_wasm_ci_head_sha 无效")
+PYEOF
+    fi
 }
 
 usage() {
@@ -100,9 +118,7 @@ Options:
                    该 WASM artifact 所属 GitHub Actions run id
   --wasm-ci-head-sha SHA
                    该 WASM artifact 所属提交 SHA
-  --public-institution-root HASH
-                   CitizenApp 公权机构快照包根哈希,写入创世链状态包 manifest
-  --finalize       覆盖冻结 SSOT: node/chainspecs/citizenchain.plain.json 与 citizenapp/assets/chainspec.json
+  --finalize       同步节点/App/公权机构缓存/Cloudflare 的全部冻结派生产物
   --skip-check     跳过宪法创世检查。只用于排障,正式创世不得使用
   -h, --help       显示帮助
 EOF
@@ -128,10 +144,6 @@ while (($#)); do
             ;;
         --wasm-ci-head-sha)
             WASM_CI_HEAD_SHA="${2:?--wasm-ci-head-sha 需要提交 SHA}"
-            shift 2
-            ;;
-        --public-institution-root)
-            PUBLIC_INSTITUTION_ROOT="${2:?--public-institution-root 需要 HASH}"
             shift 2
             ;;
         --finalize)
@@ -160,6 +172,10 @@ if [[ "$FINALIZE" == "1" && -z "$WASM_FILE_ARG" ]]; then
 fi
 if [[ "$FINALIZE" == "1" && ( -z "$WASM_CI_RUN_ID" || -z "$WASM_CI_HEAD_SHA" ) ]]; then
     echo "错误: --finalize 必须提供 --wasm-ci-run-id 与 --wasm-ci-head-sha,记录 CI artifact 来源。" >&2
+    exit 2
+fi
+if [[ "$FINALIZE" == "1" && "$SKIP_CHECK" == "1" ]]; then
+    echo "错误: 正式 --finalize 禁止 --skip-check。" >&2
     exit 2
 fi
 if [[ -n "$WASM_CI_RUN_ID" && ! "$WASM_CI_RUN_ID" =~ ^[0-9]+$ ]]; then
@@ -302,6 +318,94 @@ with open(out_path, "w", encoding="utf-8") as f:
 print(f"    {out_path}")
 PYEOF
 
+echo "==> 从同一块 0 生成 CitizenApp 公权机构缓存..."
+rm -rf "$APP_PUBLIC_INSTITUTION_OUT"
+node "$REPO_ROOT/citizenapp/tools/generate_public_institution_bundle.mjs" \
+    --rpc-url "http://127.0.0.1:$RPC_PORT" \
+    --at "$GENESIS_HASH_STR" \
+    --chainspec "$APP_OUT" \
+    --out-dir "$APP_PUBLIC_INSTITUTION_OUT" \
+    --chain-id citizenchain
+
+PUBLIC_INSTITUTION_ROOT="$(python3 - "$APP_PUBLIC_INSTITUTION_OUT" "$APP_OUT" "$GENESIS_HASH_STR" "$STATE_ROOT" <<'PYEOF'
+import hashlib
+import json
+import os
+import sys
+
+bundle_dir, app_spec_path, genesis_hash, state_root = sys.argv[1:]
+manifest_path = os.path.join(bundle_dir, "manifest.json")
+with open(manifest_path, encoding="utf-8") as f:
+    manifest = json.load(f)
+
+def sha256_file(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+if manifest.get("schema_version") != 2 or manifest.get("chain_id") != "citizenchain":
+    raise SystemExit("公权机构 manifest 身份无效")
+if manifest.get("snapshot_block_number") != 0:
+    raise SystemExit("创世公权机构缓存必须钉死块 0")
+if str(manifest.get("snapshot_block_hash", "")).lower() != genesis_hash.lower():
+    raise SystemExit("公权机构 snapshot_block_hash 与创世哈希不一致")
+if str(manifest.get("genesis_hash", "")).lower() != genesis_hash.lower():
+    raise SystemExit("公权机构 genesis_hash 与创世哈希不一致")
+if str(manifest.get("state_root", "")).lower() != state_root.lower():
+    raise SystemExit("块 0 公权机构 state_root 与创世状态根不一致")
+if manifest.get("chainspec_hash") != sha256_file(app_spec_path):
+    raise SystemExit("公权机构 chainspec_hash 与本次轻形态 chainspec 不一致")
+
+provinces = manifest.get("provinces")
+if not isinstance(provinces, list) or len(provinces) != 43:
+    raise SystemExit("创世公权机构缓存必须精确包含 43 个省级分片")
+for item in provinces:
+    province_name = item.get("province_name")
+    shard_path = os.path.join(bundle_dir, f"{province_name}.json")
+    if not os.path.isfile(shard_path):
+        raise SystemExit(f"公权机构分片缺失:{province_name}")
+    if item.get("shard_hash") != sha256_file(shard_path):
+        raise SystemExit(f"公权机构分片哈希不一致:{province_name}")
+root_json = json.dumps(provinces, ensure_ascii=False, separators=(",", ":"))
+computed_root = hashlib.sha256(root_json.encode()).hexdigest()
+if manifest.get("public_institution_root") != computed_root:
+    raise SystemExit("公权机构 public_institution_root 校验失败")
+print(computed_root)
+PYEOF
+)"
+echo "==> 公权机构缓存根: $PUBLIC_INSTITUTION_ROOT"
+
+echo "==> 暂存 Cloudflare 公开链身份配置..."
+python3 - "$REPO_ROOT/citizenapp/cloudflare/wrangler.toml" "$CLOUDFLARE_WRANGLER_OUT" "$GENESIS_HASH_STR" "$STATE_ROOT" <<'PYEOF'
+import os
+import re
+import sys
+
+source_path, out_path, genesis_hash, state_root = sys.argv[1:]
+with open(source_path, encoding="utf-8") as f:
+    text = f.read()
+text, genesis_count = re.subn(
+    r'^(\s*CHAIN_GENESIS_HASH\s*=\s*)"[^"]*"\s*$',
+    lambda match: f'{match.group(1)}"{genesis_hash}"',
+    text,
+    flags=re.MULTILINE,
+)
+text, state_count = re.subn(
+    r'^(\s*CHAIN_STATE_ROOT\s*=\s*)"[^"]*"\s*$',
+    lambda match: f'{match.group(1)}"{state_root}"',
+    text,
+    flags=re.MULTILINE,
+)
+if genesis_count == 0 or state_count == 0 or genesis_count != state_count:
+    raise SystemExit("Cloudflare wrangler.toml 链身份配置数量异常")
+os.makedirs(os.path.dirname(out_path), exist_ok=True)
+with open(out_path, "w", encoding="utf-8") as f:
+    f.write(text)
+print(f"    {out_path} ({genesis_count} 个环境)")
+PYEOF
+
 kill "$NODE_PID" 2>/dev/null || true
 wait "$NODE_PID" 2>/dev/null || true
 NODE_PID=""
@@ -315,14 +419,16 @@ if [[ ! -d "$NODE_TMP_DIR/chains/citizenchain/db" ]]; then
     exit 1
 fi
 cp -a "$NODE_TMP_DIR/chains/citizenchain/db" "$GENESIS_STATE_OUT/chains/citizenchain/db"
-python3 - "$GENESIS_STATE_OUT/manifest.json" "$GENESIS_HASH_STR" "$STATE_ROOT" "$TMP" "${WASM_FILE:-}" "$APP_LIGHT_SYNC_STATE_OUT" "$PUBLIC_INSTITUTION_ROOT" "$GENESIS_SECS" "$WASM_CI_RUN_ID" "$WASM_CI_HEAD_SHA" <<'PYEOF'
+ARTIFACT_STAGE="preview"
+[[ "$FINALIZE" == "1" ]] && ARTIFACT_STAGE="release"
+python3 - "$GENESIS_STATE_OUT/manifest.json" "$GENESIS_HASH_STR" "$STATE_ROOT" "$TMP" "${WASM_FILE:-}" "$APP_LIGHT_SYNC_STATE_OUT" "$PUBLIC_INSTITUTION_ROOT" "$GENESIS_SECS" "$WASM_CI_RUN_ID" "$WASM_CI_HEAD_SHA" "$ARTIFACT_STAGE" <<'PYEOF'
 import datetime
 import hashlib
 import json
 import os
 import sys
 
-manifest_path, genesis_hash, state_root, chainspec_path, wasm_path, light_sync_state_path, public_institution_root, secs, wasm_ci_run_id, wasm_ci_head_sha = sys.argv[1:]
+manifest_path, genesis_hash, state_root, chainspec_path, wasm_path, light_sync_state_path, public_institution_root, secs, wasm_ci_run_id, wasm_ci_head_sha, artifact_stage = sys.argv[1:]
 
 def sha256_file(path):
     if not path or not os.path.isfile(path):
@@ -333,15 +439,24 @@ def sha256_file(path):
             h.update(chunk)
     return h.hexdigest()
 
+def sha256_runtime_code(path):
+    with open(path, encoding="utf-8") as f:
+        spec = json.load(f)
+    code = spec.get("genesis", {}).get("runtimeGenesis", {}).get("code", "")
+    if not isinstance(code, str) or not code.startswith("0x"):
+        return ""
+    return hashlib.sha256(bytes.fromhex(code[2:])).hexdigest()
+
 manifest = {
     "package_format": "citizenchain-genesis-state-v1",
     "chain_id": "citizenchain",
+    "artifact_stage": artifact_stage,
     "snapshot_block_number": 0,
     "snapshot_block_hash": genesis_hash,
     "genesis_hash": genesis_hash,
     "state_root": state_root,
     "chainspec_hash": sha256_file(chainspec_path),
-    "runtime_wasm_hash": sha256_file(wasm_path),
+    "runtime_wasm_hash": sha256_file(wasm_path) or sha256_runtime_code(chainspec_path),
     "runtime_wasm_ci_run_id": wasm_ci_run_id,
     "runtime_wasm_ci_head_sha": wasm_ci_head_sha,
     "light_sync_state_hash": sha256_file(light_sync_state_path),
@@ -356,7 +471,7 @@ with open(manifest_path, "w", encoding="utf-8") as f:
 print(f"    {manifest_path}")
 PYEOF
 
-validate_genesis_state_package "$GENESIS_STATE_OUT"
+validate_genesis_state_package "$GENESIS_STATE_OUT" "$FINALIZE"
 echo "==> 创世链状态包白名单校验通过:仅包含 manifest.json 与 chains/citizenchain/db"
 
 mv "$TMP" "$OUT"
@@ -366,16 +481,34 @@ echo "==> 已生成: $OUT"
 echo "==> 首启物化耗时 ${GENESIS_SECS}s(验收记录);创世哈希 $GENESIS_HASH_STR"
 
 if [[ "$FINALIZE" == "1" ]]; then
+    echo "==> 正式覆盖前校验全部暂存发布物..."
+    CITIZENAPP_CHAINSPEC="$APP_OUT" \
+    CITIZENAPP_LIGHT_SYNC_STATE="$APP_LIGHT_SYNC_STATE_OUT" \
+    CITIZENCHAIN_PLAIN_SPEC="$OUT" \
+    CITIZENCHAIN_GENESIS_STATE_MANIFEST="$GENESIS_STATE_OUT/manifest.json" \
+    CITIZENAPP_PUBLIC_INSTITUTION_MANIFEST="$APP_PUBLIC_INSTITUTION_OUT/manifest.json" \
+    CITIZENAPP_CLOUDFLARE_WRANGLER="$CLOUDFLARE_WRANGLER_OUT" \
+    CITIZENAPP_REQUIRE_STATE_ROOT=1 \
+        "$REPO_ROOT/citizenapp/scripts/check-chainspec-frozen.sh"
+
     NODE_SPEC="$CHAIN_ROOT/node/chainspecs/citizenchain.plain.json"
     APP_SPEC="$REPO_ROOT/citizenapp/assets/chainspec.json"
     APP_LIGHT_SYNC_STATE="$REPO_ROOT/citizenapp/assets/light_sync_state.json"
+    APP_PUBLIC_INSTITUTION="$REPO_ROOT/citizenapp/assets/public_institutions"
+    CLOUDFLARE_WRANGLER="$REPO_ROOT/citizenapp/cloudflare/wrangler.toml"
     install -m 0644 "$OUT" "$NODE_SPEC"
     install -m 0644 "$APP_OUT" "$APP_SPEC"
     install -m 0644 "$APP_LIGHT_SYNC_STATE_OUT" "$APP_LIGHT_SYNC_STATE"
+    rm -rf "$APP_PUBLIC_INSTITUTION"
+    mkdir -p "$APP_PUBLIC_INSTITUTION"
+    cp -a "$APP_PUBLIC_INSTITUTION_OUT/." "$APP_PUBLIC_INSTITUTION/"
+    install -m 0644 "$CLOUDFLARE_WRANGLER_OUT" "$CLOUDFLARE_WRANGLER"
     echo "==> 已同步冻结 SSOT:"
     echo "    $NODE_SPEC"
     echo "    $APP_SPEC (轻形态 stateRootHash)"
     echo "    $APP_LIGHT_SYNC_STATE (lightSyncState checkpoint)"
+    echo "    $APP_PUBLIC_INSTITUTION (块 0 公权机构缓存)"
+    echo "    $CLOUDFLARE_WRANGLER (公开链身份派生配置)"
     echo "==> 创世链状态包已生成,打包安装包前需作为资源放入 genesis-state/:"
     echo "    $GENESIS_STATE_OUT"
 else

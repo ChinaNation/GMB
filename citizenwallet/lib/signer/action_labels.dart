@@ -25,7 +25,6 @@ const Map<String, String> actionLabels = {
   'occupy_cid': '注册局占用CID',
   'occupy_cids_batch': '注册局批量占用CID',
   'revoke_cid': '注册局吊销CID',
-  'prepare_citizen_population_snapshot': '准备公民人口快照',
 
   // 业务提案创建（propose_X）
   'propose_transfer': '发起转账提案',
@@ -43,7 +42,6 @@ const Map<String, String> actionLabels = {
   'update_private_institution_info': '更新私权机构信息',
   'add_private_institution_account': '新增私权机构账户',
   'propose_close_personal': '关闭个人多签提案',
-  'cleanup_rejected_personal_proposal': '清理被拒个人多签提案',
   'propose_destroy': '销毁决议提案',
   'propose_personal_admin_set_change': '管理员集合变更提案',
   'propose_replace_grandpa_key': 'GRANDPA 密钥提案',
@@ -62,15 +60,12 @@ const Map<String, String> actionLabels = {
   // 业务提案幂等入口
   // 手动重试/取消统一显示为 retry_passed_proposal /
   // cancel_passed_proposal(在 votingengine 段已声明)。
-  'cleanup_rejected_public_proposal': '清理被否决公权机构提案',
-  'cleanup_rejected_private_proposal': '清理被否决私权机构提案',
   // 立法院（pallet=25）· 立法/修法/废法发起
   'propose_enact_law': '发起立法',
   'propose_amend_law': '发起修法',
   'propose_repeal_law': '发起废法',
 
   // 立法投票（pallet=26）· 立法专属投票引擎
-  'prepare_legislation_snapshot': '准备人口快照',
   'cast_representative_vote': '代表机构表决',
   'cast_referendum_vote': '特别案公投',
   'executive_sign': '行政签署',

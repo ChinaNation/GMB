@@ -18,7 +18,6 @@ pub trait WeightInfo {
 	fn propose_create_public_institution() -> Weight;
 	/// `n` = 聚合的签名数量(= 管理员投票数)。
 	fn propose_close_public_institution() -> Weight;
-	fn cleanup_rejected_public_proposal() -> Weight;
 }
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
@@ -47,12 +46,6 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(7))
 			.saturating_add(T::DbWeight::get().writes(7))
 	}
-	fn cleanup_rejected_public_proposal() -> Weight {
-		Weight::from_parts(30_000_000, 0)
-			.saturating_add(Weight::from_parts(0, 3619))
-			.saturating_add(T::DbWeight::get().reads(2))
-			.saturating_add(T::DbWeight::get().writes(2))
-	}
 }
 
 impl WeightInfo for () {
@@ -79,11 +72,5 @@ impl WeightInfo for () {
 			.saturating_add(Weight::from_parts(0, 19871))
 			.saturating_add(RocksDbWeight::get().reads(7))
 			.saturating_add(RocksDbWeight::get().writes(7))
-	}
-	fn cleanup_rejected_public_proposal() -> Weight {
-		Weight::from_parts(30_000_000, 0)
-			.saturating_add(Weight::from_parts(0, 3619))
-			.saturating_add(RocksDbWeight::get().reads(2))
-			.saturating_add(RocksDbWeight::get().writes(2))
 	}
 }

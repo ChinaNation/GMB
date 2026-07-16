@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/rpc/transfer_rpc.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_balance_guard.dart';
 
 void main() {
   group('TransferRpc.estimateTransferFeeYuan', () {
@@ -58,6 +59,29 @@ void main() {
       //        = (12_345_000_000 + 500_000_000) ~/ 1_000_000_000
       //        = 12_845_000_000 ~/ 1_000_000_000 = 12 fen = 0.12 元
       expect(TransferRpc.estimateTransferFeeYuan(123.45), 0.12);
+    });
+  });
+
+  group('机构费用账户分离扣款', () {
+    test('机构转账要求操作费、执行费和费用账户自身 ED', () {
+      final executionFee = TransferRpc.estimateTransferFeeYuan(500);
+      expect(executionFee, 0.50);
+      expect(
+        MultisigTransferBalanceGuard.institutionFeeAccountRequiredYuan(
+          additionalDebitYuan: executionFee,
+        ),
+        1.71,
+      );
+    });
+
+    test('费用账户归集还必须把划转本金计入同一账户总支出', () {
+      final executionFee = TransferRpc.estimateTransferFeeYuan(500);
+      expect(
+        MultisigTransferBalanceGuard.institutionFeeAccountRequiredYuan(
+          additionalDebitYuan: 500 + executionFee,
+        ),
+        501.71,
+      );
     });
   });
 }

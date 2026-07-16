@@ -66,7 +66,7 @@
 ## 审查结论
 
 1. `transfer_all` 的收费口径偏大
-   - `OnchainTxAmountExtractor` 对 `Balances::transfer_all` 直接按“当前可转全部余额”提取金额
+   - 当时的 runtime 金额提取器对 `Balances::transfer_all` 直接按“当前可转全部余额”提取金额
    - 但交易手续费会先在 `withdraw_fee` 阶段扣掉，`transfer_all` 真正执行时只会转出扣费后的剩余可转余额
    - 结果是手续费按“不会真正转出的金额”计费，不符合“按交易金额收费”的口径
    - 位置：

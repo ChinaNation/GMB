@@ -6,7 +6,7 @@ use super::*;
 use admin_primitives::InstitutionAdminQuery;
 use frame_support::{
     derive_impl,
-    traits::{ConstU128, ConstU32, Hooks},
+    traits::{ConstU128, ConstU32, Currency, ExistenceRequirement, Hooks, WithdrawReasons},
     BoundedVec,
 };
 use frame_system as system;
@@ -118,6 +118,68 @@ impl primitives::institution_asset::InstitutionAsset<AccountId32> for TestInstit
         _action: primitives::institution_asset::InstitutionAssetAction,
     ) -> bool {
         true
+    }
+}
+
+/// 测试查询仍以 public-manage 的 CID/账户双索引为机构账户真源；仅额外注入
+/// 尚未进入本 pallet 存储的注册局出资账户，模拟创世注册局已有账户关系。
+pub struct TestInstitutionQuery;
+impl entity_primitives::InstitutionMultisigQuery<AccountId32> for TestInstitutionQuery {
+    fn lookup_institution_account(cid_number: &[u8], account_name: &[u8]) -> Option<AccountId32> {
+        <PublicManage as entity_primitives::InstitutionMultisigQuery<AccountId32>>::lookup_institution_account(
+            cid_number,
+            account_name,
+        )
+    }
+
+    fn account_belongs_to(cid_number: &[u8], addr: &AccountId32) -> bool {
+        (cid_number == b"REGISTRY-CID" && addr == &registry_funding_account())
+            || <PublicManage as entity_primitives::InstitutionMultisigQuery<AccountId32>>::account_belongs_to(
+                cid_number,
+                addr,
+            )
+    }
+
+    fn lookup_cid(addr: &AccountId32) -> Option<alloc::vec::Vec<u8>> {
+        (addr == &registry_funding_account())
+            .then(|| b"REGISTRY-CID".to_vec())
+            .or_else(|| {
+                <PublicManage as entity_primitives::InstitutionMultisigQuery<AccountId32>>::lookup_cid(addr)
+            })
+    }
+
+    fn lookup_org(addr: &AccountId32) -> Option<InstitutionCode> {
+        <PublicManage as entity_primitives::InstitutionMultisigQuery<AccountId32>>::lookup_org(addr)
+    }
+
+    fn lookup_admin_config(
+        addr: &AccountId32,
+    ) -> Option<primitives::multisig::MultisigConfigSnapshot<AccountId32>> {
+        <PublicManage as entity_primitives::InstitutionMultisigQuery<AccountId32>>::lookup_admin_config(addr)
+    }
+
+    fn account_exists(addr: &AccountId32) -> bool {
+        addr == &registry_funding_account()
+            || <PublicManage as entity_primitives::InstitutionMultisigQuery<AccountId32>>::account_exists(addr)
+    }
+}
+
+/// 回调执行测试使用与生产一致的链上费公式，并从明确的机构费用账户扣款。
+pub struct TestOnchainFeeCharger;
+impl primitives::fee_policy::OnchainFeeCharger<AccountId32, Balance> for TestOnchainFeeCharger {
+    fn charge(
+        payer: &AccountId32,
+        transaction_amount: Balance,
+    ) -> Result<Balance, sp_runtime::DispatchError> {
+        let fee = primitives::fee_policy::calculate_onchain_fee(transaction_amount);
+        let imbalance = Balances::withdraw(
+            payer,
+            fee,
+            WithdrawReasons::FEE,
+            ExistenceRequirement::KeepAlive,
+        )?;
+        drop(imbalance);
+        Ok(fee)
     }
 }
 
@@ -303,12 +365,13 @@ impl pallet::Config for Test {
     type ReservedAccountChecker = TestReservedAccountChecker;
     type ProtectedSourceChecker = TestProtectedSourceChecker;
     type InstitutionAsset = TestInstitutionAsset;
+    type InstitutionQuery = TestInstitutionQuery;
+    type OnchainFeeCharger = TestOnchainFeeCharger;
     type CidInstitutionVerifier = TestCidInstitutionVerifier;
     type RegistryAuthority = TestRegistryAuthority;
     type AdminLifecycle = PublicAdmins;
     type SiblingInstitutionQuery = ();
     type InstitutionAdminQuery = PublicAdmins;
-    type FeeRouter = ();
     type MaxAdmins = ConstU32<10>;
     type MaxCidNumberLength = ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>;
     type MaxAccountNameLength = ConstU32<128>;
@@ -336,6 +399,11 @@ pub fn admin(index: u8) -> AccountId32 {
 
 pub fn creator() -> AccountId32 {
     admin(0)
+}
+
+/// 注册局无私钥机构账户；创建机构时只由管理员签名，本金从此账户支出。
+pub fn registry_funding_account() -> AccountId32 {
+    AccountId32::new([0x31; 32])
 }
 
 pub fn beneficiary() -> AccountId32 {

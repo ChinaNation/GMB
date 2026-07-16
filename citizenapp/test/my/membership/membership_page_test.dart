@@ -28,16 +28,15 @@ class _FakeApiClient extends SquareApiClient {
       _state;
 }
 
+/// 会员与身份彻底解耦（ADR-036）：会员卡只描述订阅，不含任何身份字段。
+/// plans 留空 → 页面用三档兜底套餐（自由 / 民主 / 薪火）渲染。
 SquareMembershipState _state({
-  required String identityLevel,
   bool active = false,
   bool subscriptionActive = false,
   bool cancelAtPeriodEnd = false,
-  bool frozen = false,
   String? membershipLevel,
   int currentPeriodStart = 0,
   String? subscriptionSource,
-  String? identityError,
 }) {
   return SquareMembershipState(
     active: active,
@@ -45,11 +44,8 @@ SquareMembershipState _state({
     membershipLevel: membershipLevel,
     subscriptionActive: subscriptionActive,
     cancelAtPeriodEnd: cancelAtPeriodEnd,
-    frozen: frozen,
     currentPeriodStart: currentPeriodStart,
     subscriptionSource: subscriptionSource,
-    identityError: identityError,
-    identityLevel: identityLevel,
     plans: const [],
   );
 }
@@ -66,79 +62,43 @@ Future<void> _pump(WidgetTester tester, SquareMembershipState state) async {
   await tester.pumpAndSettle();
 }
 
+Finder _frontCard(String text) => find.descendant(
+      of: find.byKey(const ValueKey('membership-front-card')),
+      matching: find.text(text),
+    );
+
 void main() {
-  testWidgets('renders the three identity tier cards', (tester) async {
-    await _pump(tester, _state(identityLevel: 'voting'));
+  testWidgets('renders the three subscription tier cards', (tester) async {
+    await _pump(tester, _state());
 
-    expect(find.text('访客轻节点'), findsOneWidget);
-    expect(find.text('公民轻节点 · 投票'), findsOneWidget);
-    expect(find.text('公民轻节点 · 竞选'), findsOneWidget);
+    expect(find.text('自由会员'), findsOneWidget);
+    expect(find.text('民主会员'), findsOneWidget);
+    expect(find.text('薪火会员'), findsOneWidget);
   });
 
-  testWidgets('brings the wallet identity tier card to the front',
+  testWidgets('defaults to the freedom card for a fresh account',
       (tester) async {
-    await _pump(tester, _state(identityLevel: 'candidate'));
-
-    // 命中身份档卡在最上层（front-card key），且带「你的身份」。
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('membership-front-card')),
-        matching: find.text('公民轻节点 · 竞选'),
-      ),
-      findsOneWidget,
-    );
-    expect(find.text('你的身份'), findsOneWidget);
+    await _pump(tester, _state());
+    expect(_frontCard('自由会员'), findsOneWidget);
   });
 
-  testWidgets('visitor identity fronts the visitor card', (tester) async {
-    await _pump(tester, _state(identityLevel: 'visitor'));
-
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('membership-front-card')),
-        matching: find.text('访客轻节点'),
-      ),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('enables 订阅 only on the wallet identity card, locks the rest',
+  testWidgets('fronts the current membership tier card + 当前会员 marker',
       (tester) async {
-    await _pump(tester, _state(identityLevel: 'voting'));
-
-    // 精确匹配：仅本人(投票)身份卡可订阅；访客/竞选两卡置灰。
-    expect(find.text('订阅'), findsOneWidget);
-    expect(find.text('仅本档身份可订阅'), findsNWidgets(2));
-  });
-
-  testWidgets('链身份暂不可读时保留卡片、显示降级横幅并禁用资格动作', (tester) async {
     await _pump(
       tester,
-      _state(identityLevel: 'visitor', identityError: 'chain_http_failed'),
+      _state(active: true, subscriptionActive: true, membershipLevel: 'spark'),
     );
 
-    expect(find.text('访客轻节点'), findsOneWidget);
-    expect(find.text('公民轻节点 · 投票'), findsOneWidget);
-    expect(find.text('公民轻节点 · 竞选'), findsOneWidget);
-    expect(find.textContaining('链上身份暂未刷新'), findsOneWidget);
-    expect(find.text('链上身份恢复后可操作'), findsNWidgets(3));
-    expect(find.text('订阅'), findsNothing);
+    expect(_frontCard('薪火会员'), findsOneWidget);
+    expect(find.text('当前会员'), findsOneWidget);
   });
 
-  testWidgets('链身份暂不可读时仍允许取消已有自动续费订阅', (tester) async {
-    await _pump(
-      tester,
-      _state(
-        identityLevel: 'visitor',
-        identityError: 'chain_http_failed',
-        active: true,
-        subscriptionActive: true,
-        membershipLevel: 'voting',
-      ),
-    );
-
-    expect(find.text('取消订阅'), findsOneWidget);
-    expect(find.text('链上身份恢复后可操作'), findsNWidgets(2));
+  testWidgets('any identity can subscribe any tier — all cards show 订阅',
+      (tester) async {
+    await _pump(tester, _state());
+    // 三档解耦、无身份门槛：三张卡都可订阅。
+    expect(find.text('订阅'), findsNWidgets(3));
+    expect(find.text('当前会员'), findsNothing);
   });
 
   testWidgets('shows 取消订阅 on the active tier when auto-renewing',
@@ -146,27 +106,25 @@ void main() {
     await _pump(
       tester,
       _state(
-        identityLevel: 'voting',
         active: true,
         subscriptionActive: true,
-        membershipLevel: 'voting',
+        membershipLevel: 'democracy',
       ),
     );
 
     expect(find.text('取消订阅'), findsOneWidget);
-    // 另外两张非本档卡置灰。
-    expect(find.text('仅本档身份可订阅'), findsNWidgets(2));
+    // 另外两档仍可订阅。
+    expect(find.text('订阅'), findsNWidgets(2));
   });
 
   testWidgets('shows 续订会员 when cancelled but not yet expired', (tester) async {
     await _pump(
       tester,
       _state(
-        identityLevel: 'voting',
         active: true,
         subscriptionActive: true,
         cancelAtPeriodEnd: true,
-        membershipLevel: 'voting',
+        membershipLevel: 'democracy',
       ),
     );
 
@@ -178,10 +136,9 @@ void main() {
     await _pump(
       tester,
       _state(
-        identityLevel: 'voting',
         active: true,
         subscriptionActive: true,
-        membershipLevel: 'voting',
+        membershipLevel: 'democracy',
         currentPeriodStart: DateTime.now().millisecondsSinceEpoch,
         subscriptionSource: 'usdc_prepaid',
       ),
@@ -195,10 +152,9 @@ void main() {
     await _pump(
       tester,
       _state(
-        identityLevel: 'voting',
         active: true,
         subscriptionActive: true,
-        membershipLevel: 'voting',
+        membershipLevel: 'democracy',
         currentPeriodStart: DateTime.now().millisecondsSinceEpoch,
         subscriptionSource: 'stripe',
       ),
@@ -211,11 +167,10 @@ void main() {
     await _pump(
       tester,
       _state(
-        identityLevel: 'voting',
         active: true,
         subscriptionActive: true,
         cancelAtPeriodEnd: true,
-        membershipLevel: 'voting',
+        membershipLevel: 'democracy',
         currentPeriodStart: DateTime.now().millisecondsSinceEpoch,
         subscriptionSource: 'stripe',
       ),
@@ -223,25 +178,6 @@ void main() {
 
     expect(find.textContaining('已取消 · 到期终止'), findsOneWidget);
     expect(find.textContaining('自动续费'), findsNothing);
-  });
-
-  testWidgets('冻结态只显示冻结横幅，不叠加订阅起止横幅', (tester) async {
-    await _pump(
-      tester,
-      _state(
-        identityLevel: 'voting',
-        active: true,
-        subscriptionActive: true,
-        frozen: true,
-        membershipLevel: 'voting',
-        currentPeriodStart: DateTime.now().millisecondsSinceEpoch,
-        subscriptionSource: 'usdc_prepaid',
-      ),
-    );
-
-    // 冻结横幅在（雪花图标），起止横幅（"订阅 "文案）不显示。
-    expect(find.byIcon(Icons.ac_unit), findsOneWidget);
-    expect(find.textContaining('订阅 '), findsNothing);
   });
 
   test('SquareMembershipState 路线 / 订阅窗口 getter', () {
@@ -266,23 +202,4 @@ void main() {
     expect(noWindow.hasSubscriptionWindow, isFalse);
   });
 
-  testWidgets('visitor card toggles between 自由 and 民主 plans', (tester) async {
-    await _pump(tester, _state(identityLevel: 'visitor'));
-
-    Finder frontPrice(String price) => find.descendant(
-          of: find.byKey(const ValueKey('membership-front-card')),
-          matching: find.text(price),
-        );
-
-    // 访客卡有自由/民主分段，默认自由(￥2.99)。
-    expect(find.text('自由会员'), findsOneWidget);
-    expect(find.text('民主会员'), findsOneWidget);
-    expect(frontPrice('\$2.99 / 月'), findsOneWidget);
-
-    await tester.tap(find.text('民主会员'));
-    await tester.pumpAndSettle();
-
-    // 切到民主后价格变 ￥9.99。
-    expect(frontPrice('\$9.99 / 月'), findsOneWidget);
-  });
 }

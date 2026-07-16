@@ -2,10 +2,6 @@ import type { Env } from '../types';
 import { jsonResponse, parsePositiveInt } from '../shared/http';
 import { CHAIN_EXTRINSIC_RELAY_PATH, isChainExtrinsicRelayEnabled } from './extrinsic_relay';
 
-const DEFAULT_GENESIS_HASH =
-  '0xbb993e8fb7aa6c06e44b96f4ba35179ef8644ade17c37529c1742e1fb261b095';
-const DEFAULT_STATE_ROOT =
-  '0xd285f98522ca3bce15decd52e61a6d9e444a069a4544a8141eec0017d6e324ac';
 const DEFAULT_BOOTSTRAP_TTL_SECONDS = 300;
 
 export interface ChainBootstrapResponse {
@@ -87,8 +83,10 @@ export function buildChainBootstrapResponse(
       chain_name: 'CitizenChain',
       chain_type: 'Live',
       protocol_id: 'citizenchain',
-      genesis_hash: normalizeHex32(env.CHAIN_GENESIS_HASH, DEFAULT_GENESIS_HASH),
-      state_root: normalizeHex32(env.CHAIN_STATE_ROOT, DEFAULT_STATE_ROOT),
+      // 中文注释：链身份只能来自随冻结流程同步的环境配置；缺失或非法必须失败，
+      // 禁止静默回落到某次历史创世锚点。
+      genesis_hash: requireHex32(env.CHAIN_GENESIS_HASH, 'CHAIN_GENESIS_HASH'),
+      state_root: requireHex32(env.CHAIN_STATE_ROOT, 'CHAIN_STATE_ROOT'),
       ss58_format: 2027,
       token_symbol: 'GMB',
       token_decimals: 2
@@ -151,9 +149,9 @@ function isBootnode(value: string): boolean {
   return value.startsWith('/') && value.includes('/p2p/') && value.length <= 256;
 }
 
-function normalizeHex32(value: string | undefined, fallback: string): string {
-  if (!value) {
-    return fallback;
+function requireHex32(value: string | undefined, field: string): string {
+  if (!value || !/^0x[0-9a-fA-F]{64}$/.test(value)) {
+    throw new Error(`${field} 缺失或不是 32 字节十六进制链锚点`);
   }
-  return /^0x[0-9a-fA-F]{64}$/.test(value) ? value.toLowerCase() : fallback;
+  return value.toLowerCase();
 }

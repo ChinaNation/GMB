@@ -275,10 +275,13 @@ fn resolution_destro_internal_vote_flow_executes_destroy_and_reduces_issuance() 
     new_test_ext().execute_with(|| {
         let nrc_institution_account = AccountId::new(CHINA_CB[0].main_account);
         let nrc_account = AccountId::new(CHINA_CB[0].main_account);
+        let nrc_fee_account = AccountId::new(CHINA_CB[0].fee_account);
         let initial_balance: Balance = 1_000;
         let destroy_amount: Balance = 100;
 
         let _ = Balances::deposit_creating(&nrc_account, initial_balance);
+        let _ = Balances::deposit_creating(&nrc_fee_account, initial_balance);
+        let fee_before = Balances::free_balance(&nrc_fee_account);
         let issuance_before = Balances::total_issuance();
 
         assert_ok!(ResolutionDestroy::propose_destroy(
@@ -314,7 +317,19 @@ fn resolution_destro_internal_vote_flow_executes_destroy_and_reduces_issuance() 
             Balances::free_balance(&nrc_account),
             initial_balance - destroy_amount
         );
-        assert_eq!(Balances::total_issuance(), issuance_before - destroy_amount);
+        let execution_fee = primitives::fee_policy::calculate_onchain_fee(destroy_amount);
+        let nrc_fee_share =
+            execution_fee * Balance::from(primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT) / 100;
+        // 测试块没有可识别作者，安全基金账户也未在空测试创世中激活；对应份额按
+        // 生产分账规则销毁。NRC 份额回到 NRC 自己的费用账户，不改变总发行量。
+        assert_eq!(
+            Balances::total_issuance(),
+            issuance_before - destroy_amount - (execution_fee - nrc_fee_share),
+        );
+        assert_eq!(
+            Balances::free_balance(&nrc_fee_account),
+            fee_before - execution_fee + nrc_fee_share,
+        );
     });
 }
 
@@ -1195,6 +1210,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
             "main admin signature should pass"
         );
 
+        let funding_account = AccountId::new([79u8; 32]);
         let creation_message = primitives::sign::institution_creation_message(
             &frame_system::Pallet::<Runtime>::block_hash(0),
             cid_number,
@@ -1204,6 +1220,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
             legal_representative_cid_number,
             &legal_representative_account,
             &account_names,
+            Some(&funding_account),
             b"test-roles".as_slice(),
             b"test-assignments".as_slice(),
             &register_nonce,
@@ -1233,6 +1250,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 legal_representative_cid_number,
                 &legal_representative_account,
                 &account_names,
+                Some(&funding_account),
                 b"test-roles".as_slice(),
                 b"test-assignments".as_slice(),
                 &register_nonce,
@@ -1259,6 +1277,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 legal_representative_cid_number,
                 &AccountId::new([78u8; 32]),
                 &account_names,
+                Some(&funding_account),
                 b"test-roles".as_slice(),
                 b"test-assignments".as_slice(),
                 &register_nonce,
@@ -1270,6 +1289,33 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 town_code,
             ),
             "tampered legal representative account must reject"
+        );
+        assert!(
+            !<RuntimeCidInstitutionVerifier as entity_primitives::CidInstitutionVerifier<
+                AccountId,
+                public_manage::pallet::AccountNameOf<Runtime>,
+                public_manage::pallet::RegisterNonceOf<Runtime>,
+                public_manage::pallet::RegisterSignatureOf<Runtime>,
+            >>::verify_institution_creation(
+                cid_number,
+                &cid_full_name,
+                cid_short_name,
+                legal_representative_name,
+                legal_representative_cid_number,
+                &legal_representative_account,
+                &account_names,
+                Some(&AccountId::new([80u8; 32])),
+                b"test-roles".as_slice(),
+                b"test-assignments".as_slice(),
+                &register_nonce,
+                &creation_signature,
+                issuer_cid_number.as_slice(),
+                &main_admin_pubkey,
+                province_bytes.as_slice(),
+                scope_city_name.as_slice(),
+                town_code,
+            ),
+            "tampered funding account must reject"
         );
 
         let backup_signature = make_signature(&backup_pair, &backup_admin_pubkey);

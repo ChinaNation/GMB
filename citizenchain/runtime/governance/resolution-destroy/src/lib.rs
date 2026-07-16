@@ -6,6 +6,7 @@ use alloc::vec::Vec;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{ensure, pallet_prelude::*, traits::Currency};
 use frame_system::pallet_prelude::*;
+use primitives::{account_derive::RESERVED_NAME_FEE, fee_policy::OnchainFeeCharger};
 use scale_info::TypeInfo;
 use sp_runtime::traits::{CheckedAdd, Zero};
 
@@ -62,6 +63,12 @@ pub mod pallet {
         /// 机构账户归属的唯一查询出口；真实数据来自 entity 正反索引。
         type InstitutionQuery: entity_primitives::InstitutionMultisigQuery<Self::AccountId>;
 
+        /// 投票通过后从 actor CID 费用账户收取金额手续费。
+        type OnchainFeeCharger: primitives::fee_policy::OnchainFeeCharger<
+            Self::AccountId,
+            BalanceOf<Self>,
+        >;
+
         /// 该 pallet 的可配置权重实现。
         type WeightInfo: crate::weights::WeightInfo;
     }
@@ -94,7 +101,9 @@ pub mod pallet {
         DestroyExecuted {
             proposal_id: u64,
             institution: T::AccountId,
+            fee_payer: T::AccountId,
             amount: BalanceOf<T>,
+            fee: BalanceOf<T>,
         },
     }
 
@@ -108,6 +117,8 @@ pub mod pallet {
         ProposalNotPassed,
         InstitutionAccountDecodeFailed,
         InsufficientBalance,
+        FeeAccountMissing,
+        FeeWithdrawFailed,
     }
 
     #[pallet::call]
@@ -226,15 +237,41 @@ pub mod pallet {
                 .ok_or(Error::<T>::InsufficientBalance)?;
             ensure!(free >= required, Error::<T>::InsufficientBalance);
 
-            // slash 会同步减少总发行量，实现链上”销毁”。
-            let (_negative_imbalance, remaining) =
-                T::Currency::slash(&action.institution_account, action.amount);
-            ensure!(remaining.is_zero(), Error::<T>::InsufficientBalance);
+            let fee_account = T::InstitutionQuery::lookup_institution_account(
+                action.actor_cid_number.as_slice(),
+                RESERVED_NAME_FEE,
+            )
+            .ok_or(Error::<T>::FeeAccountMissing)?;
+
+            // 金额手续费和本金销毁同属一次执行；任一失败时分账、事件和销毁全部回滚。
+            let fee_result: Result<BalanceOf<T>, sp_runtime::DispatchError> =
+                frame_support::storage::with_transaction(|| {
+                    let fee = match T::OnchainFeeCharger::charge(&fee_account, action.amount) {
+                        Ok(fee) => fee,
+                        Err(_) => {
+                            return frame_support::storage::TransactionOutcome::Rollback(Err(
+                                Error::<T>::FeeWithdrawFailed.into(),
+                            ))
+                        }
+                    };
+                    let (negative_imbalance, remaining) =
+                        T::Currency::slash(&action.institution_account, action.amount);
+                    if !remaining.is_zero() {
+                        return frame_support::storage::TransactionOutcome::Rollback(Err(
+                            Error::<T>::InsufficientBalance.into(),
+                        ));
+                    }
+                    drop(negative_imbalance);
+                    frame_support::storage::TransactionOutcome::Commit(Ok(fee))
+                });
+            let fee = fee_result?;
 
             Self::deposit_event(Event::<T>::DestroyExecuted {
                 proposal_id,
                 institution: action.institution_account,
+                fee_payer: fee_account,
                 amount: action.amount,
+                fee,
             });
             Ok(())
         }

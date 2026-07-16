@@ -21,6 +21,41 @@ impl<T: Config> Pallet<T> {
             .ok_or_else(|| Error::<T>::InvalidInstitutionCid.into())
     }
 
+    /// 特别案人口作用域只由发起机构 CID 推导，调用载荷不得再携带第二份 scope。
+    pub(crate) fn population_scope_for_actor(
+        actor_code: InstitutionCode,
+        actor_cid_number: &votingengine::types::CidNumber,
+    ) -> Result<PopulationScope, DispatchError> {
+        match actor_code {
+            code if code == *b"NRP\0" || code == *b"NED\0" => Ok(PopulationScope::Country),
+            code if code == *b"PRP\0" => {
+                let (province_code, _) =
+                    primitives::cid::number::cid_scope_codes(actor_cid_number.as_slice())
+                        .map_err(|_| Error::<T>::InvalidInstitutionCid)?;
+                let province_code = province_code
+                    .to_vec()
+                    .try_into()
+                    .map_err(|_| Error::<T>::InvalidInstitutionCid)?;
+                Ok(PopulationScope::Province(province_code))
+            }
+            code if code == *b"CSLF" || code == *b"CEDU" => {
+                let (province_code, city_code) =
+                    primitives::cid::number::cid_scope_codes(actor_cid_number.as_slice())
+                        .map_err(|_| Error::<T>::InvalidInstitutionCid)?;
+                let province_code = province_code
+                    .to_vec()
+                    .try_into()
+                    .map_err(|_| Error::<T>::InvalidInstitutionCid)?;
+                let city_code = city_code
+                    .to_vec()
+                    .try_into()
+                    .map_err(|_| Error::<T>::InvalidInstitutionCid)?;
+                Ok(PopulationScope::City(province_code, city_code))
+            }
+            _ => Err(Error::<T>::InvalidInstitutionCid.into()),
+        }
+    }
+
     pub(crate) fn resolve_subject_cid_numbers(
         actor_cid_number: &votingengine::types::CidNumber,
         route: &RepresentativeRoute,
@@ -118,36 +153,48 @@ impl<T: Config> Pallet<T> {
             &additional_institutions,
         )?;
 
-        let now = <frame_system::Pallet<T>>::block_number();
-        // 特别案消费同一区块准备的人口快照；普通和重要案不得残留公投作用域。
-        let (eligible_total, population_snapshot_id) = if rule == RepresentativeVoteRule::Special {
-            let prepared = pallet::PendingPopulationSnapshots::<T>::get(&who)
-                .ok_or(Error::<T>::PopulationSnapshotNotPrepared)?;
-            if prepared.prepared_at != now {
-                pallet::PendingPopulationSnapshots::<T>::remove(&who);
-                <votingengine::Pallet<T>>::release_population_snapshot(prepared.snapshot_id);
-                return Err(Error::<T>::PopulationSnapshotNotCurrent.into());
-            }
-            (prepared.eligible_total, Some(prepared.snapshot_id))
+        let population_scope = if rule == RepresentativeVoteRule::Special {
+            Some(Self::population_scope_for_actor(
+                actor_code,
+                &actor_cid_number,
+            )?)
         } else {
-            (0, None)
+            None
         };
-
+        let now = <frame_system::Pallet<T>>::block_number();
         let end = now.saturating_add(Self::stage_duration());
-        let proposal = Proposal {
-            kind: PROPOSAL_KIND_LEGISLATION,
-            stage: STAGE_LEG_REPRESENTATIVE,
-            status: STATUS_VOTING,
-            internal_code: Some(first_code),
-            actor_cid_number: Some(actor_cid_number),
-            execution_account: None,
-            subject_cid_numbers,
-            start: now,
-            end,
-            citizen_eligible_total: eligible_total,
-        };
 
         with_transaction(|| {
+            // 只有特别案创建人口快照。快照与提案、法律对象及自动投票处于
+            // 同一外层事务，后续任一写入失败都不会留下孤立快照。
+            let (eligible_total, population_snapshot_id) = match population_scope.as_ref() {
+                Some(scope) => {
+                    let (snapshot_id, eligible_total) =
+                        match <votingengine::Pallet<T>>::create_population_snapshot(scope) {
+                            Ok(value) => value,
+                            Err(err) => return TransactionOutcome::Rollback(Err(err)),
+                        };
+                    if eligible_total == 0 {
+                        return TransactionOutcome::Rollback(Err(
+                            Error::<T>::CitizenEligibleTotalNotSet.into(),
+                        ));
+                    }
+                    (eligible_total, Some(snapshot_id))
+                }
+                None => (0, None),
+            };
+            let proposal = Proposal {
+                kind: PROPOSAL_KIND_LEGISLATION,
+                stage: STAGE_LEG_REPRESENTATIVE,
+                status: STATUS_VOTING,
+                internal_code: Some(first_code),
+                actor_cid_number: Some(actor_cid_number),
+                execution_account: None,
+                subject_cid_numbers,
+                start: now,
+                end,
+                citizen_eligible_total: eligible_total,
+            };
             let id = match <votingengine::Pallet<T>>::allocate_proposal_id() {
                 Ok(id) => id,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
@@ -173,9 +220,6 @@ impl<T: Config> Pallet<T> {
                 first_cid_number,
             ) {
                 return TransactionOutcome::Rollback(Err(err));
-            }
-            if rule == RepresentativeVoteRule::Special {
-                pallet::PendingPopulationSnapshots::<T>::remove(&who);
             }
             pallet::RepresentativeMetas::<T>::insert(
                 id,

@@ -3,7 +3,7 @@
 //! GMB 链上"发行 GMB 之外的其他人代币"业务 pallet。第一期承载:
 //!
 //! - **Plain FT(同质化代币,无锚定声明)**:发行人 = CID 注册机构 + personal-admins 个人多签
-//! - **GMB 唯一计费**:创建一次性收 1000 GMB(`primitives::fee_policy::ONCHAIN_ASSET_CREATE_FEE`)
+//! - 当前公开业务调用尚未实现，由 runtime 统一 `Reject`，不得扣费后空成功。
 //! - **NRC 强制 monitor**:交易以 NRC `actor_cid_number` 表达机构身份,不以主账户代替机构
 //! - **业务 InternalVote / 监管 JointVote**:沿用 unified_voting_entry phase 4 铁律,
 //!   业务 pallet 不暴露 wrapper extrinsic,前端直调 VotingEngine
@@ -25,7 +25,6 @@
 //! - `proposal.rs`  — ACTION 常量 + 提案体定义
 //! - `validation.rs` — 入参校验(decimals 范围 / 发行机构资格 / 黑名单 hit)
 //! - `blacklist.rs` — 字符串黑名单 storage + 默认词表
-//! - `fee.rs`       — 创建费 reserve / unreserve / transfer(ADR-011 v2 押金机制)
 //! - `execution.rs` — 业务路径(issue/mint/burn/close/transfer)桥接 pallet_assets
 //! - `monitor.rs`   — NRC 监管 5 动作执行
 //! - `weights.rs`   — WeightInfo 占位
@@ -38,7 +37,6 @@
 mod benchmarks;
 pub mod blacklist;
 pub mod execution;
-pub mod fee;
 pub mod monitor;
 pub mod proposal;
 #[cfg(test)]
@@ -61,10 +59,7 @@ pub const MODULE_TAG: &[u8] = b"onc-iss";
 pub mod pallet {
     use crate::{types::OnchainAssetMeta, weights::WeightInfo};
     use entity_primitives::InstitutionMultisigQuery;
-    use frame_support::{
-        pallet_prelude::*,
-        traits::{Currency, ReservableCurrency},
-    };
+    use frame_support::{pallet_prelude::*, traits::Currency};
     use frame_system::ensure_signed;
     use frame_system::pallet_prelude::{BlockNumberFor, OriginFor};
     use sp_std::vec::Vec;
@@ -83,11 +78,8 @@ pub mod pallet {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        /// GMB 计费货币(创建费 reserve/transfer / 投票统一价等扣款入口)。
-        ///
-        /// 必须实现 ReservableCurrency 以支持 propose_issue 押金 reserve
-        /// (ADR-011 v2 第六节计费机制 — 押金通过/否决时分别 transfer/退还)。
-        type Currency: ReservableCurrency<Self::AccountId>;
+        /// GMB 余额类型绑定；未实现业务不得在本 pallet 内另建付款规则。
+        type Currency: Currency<Self::AccountId>;
 
         /// pallet_assets 内核类型绑定。runtime 接线时把 `pallet_assets::Pallet<Runtime>` 接到此处。
         type Assets: frame_support::traits::tokens::fungibles::Create<
@@ -98,11 +90,6 @@ pub mod pallet {
 
         /// 机构账户归属唯一查询；仅用于校验显式 `actor_cid_number + execution_account`。
         type InstitutionQuery: entity_primitives::InstitutionMultisigQuery<Self::AccountId>;
-
-        /// **NRC 费用账户(收创建费 fee_account)** 提供器:
-        /// - 1000 GMB 创建费 unreserve 后 transfer 的目标
-        /// - 与 onchain::NrcAccountProvider 语义一致(都是收钱账户)
-        type NrcFeeAccountProvider: NrcFeeAccountProvider<Self::AccountId>;
 
         /// 资产元数据字符串字段最大长度(name / symbol / description)。
         #[pallet::constant]
@@ -127,14 +114,6 @@ pub mod pallet {
         type MaxScheduledPerBlock: Get<u32>;
 
         type WeightInfo: WeightInfo;
-    }
-
-    /// **NRC 费用账户(收创建费 fee_account)** trait。
-    ///
-    /// 实装位置:`runtime/src/configs/mod.rs::RuntimeNrcAccountProvider`(复用既有,
-    /// 返回 `china_cb[0].fee_account`,与 onchain::NrcAccountProvider 同源)。
-    pub trait NrcFeeAccountProvider<AccountId> {
-        fn nrc_fee_account() -> Option<AccountId>;
     }
 
     #[pallet::pallet]
@@ -172,15 +151,6 @@ pub mod pallet {
         BoundedVec<BoundedVec<u8, T::MaxBlacklistWordLen>, T::MaxBlacklistEntries>,
         ValueQuery,
     >;
-
-    /// 1000 GMB 创建费押金跟踪:proposal_id → (proposer, reserved_amount)。
-    ///
-    /// ADR-011 v2 第六节铁律:propose_issue 时 reserve 1000 GMB → 通过则 unreserve+transfer 给 NRC fee_account;
-    /// 否决/过期则 unreserve 退还。本 storage 用于 callback 阶段反查 proposer 与押金额度。
-    #[pallet::storage]
-    #[pallet::getter(fn issue_deposit)]
-    pub type IssueDeposit<T: Config> =
-        StorageMap<_, Twox64Concat, u64, (T::AccountId, BalanceOf<T>), OptionQuery>;
 
     /// 强制销毁倒计时调度队列:expire_block → 该块到期的 asset_id 列表。
     ///
@@ -265,24 +235,6 @@ pub mod pallet {
         },
         /// 用户代币关闭(发行方主动)。
         AssetClosed { asset_id: OnchainAssetId },
-        /// 创建费押金已 reserve(propose_issue 阶段)。
-        IssueDepositReserved {
-            proposal_id: u64,
-            who: T::AccountId,
-            amount: BalanceOf<T>,
-        },
-        /// 创建费押金已 transfer 给 NRC fee_account(callback 通过)。
-        IssueDepositCharged {
-            proposal_id: u64,
-            who: T::AccountId,
-            amount: BalanceOf<T>,
-        },
-        /// 创建费押金已退还(callback 否决/过期)。
-        IssueDepositRefunded {
-            proposal_id: u64,
-            who: T::AccountId,
-            amount: BalanceOf<T>,
-        },
         /// NRC 监管:冻结特定持仓。
         MonitorFrozen {
             asset_id: OnchainAssetId,
@@ -334,8 +286,6 @@ pub mod pallet {
         AssetClosed,
         /// 提案体解码失败。
         InvalidProposalData,
-        /// NRC 费用账户未配置。
-        NrcFeeAccountMissing,
         /// AssetId 溢出(u32 自增达到上限)。
         AssetIdOverflow,
         /// pallet_assets 内核错误。
@@ -351,8 +301,6 @@ pub mod pallet {
         ProposeOriginNotAllowed,
         /// metadata 不可修改(ADR-011 v2 第 5.7 节铁律)。
         MetadataImmutable,
-        /// 创建费 reserve 失败(GMB 余额不足)。
-        InsufficientBalanceForDeposit,
         /// 单块强制销毁队列已满。
         ScheduleFull,
     }
@@ -361,14 +309,14 @@ pub mod pallet {
     ///
     /// 不暴露 execute/cancel wrapper(走 VotingEngine::retry_passed_proposal 9.4 / cancel_passed_proposal 9.5)。
     /// 框架阶段先统一执行 CID 管理员授权；创建资产还强制校验 execution_account 属于同一 CID。
-    /// 资产业务执行、押金与投票创建仍由后续发行任务卡实装，但不得绕过本授权入口。
+    /// 资产业务执行、协议费用与投票创建仍由后续发行任务卡实装，但不得绕过本授权入口。
     ///
     /// call_index 5..=9 / 15+ 留洞不复用(永久 ABI)。
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         // ---------- 业务 propose_X(InternalVote)----------
 
-        /// 创建用户代币提案。propose 时 reserve 1000 GMB 押金,callback 通过/否决时 transfer/refund。
+        /// 创建用户代币提案占位；runtime 在完整业务与费用执行落地前统一拒绝本调用。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::issue())]
         pub fn propose_issue(
@@ -404,8 +352,7 @@ pub mod pallet {
             //   1. validation::ensure_institution_context / ensure_decimals_in_range / ensure_class_supported
             //   2. ensure proposer ∈ admins(actor_cid_number)
             //   3. 字段过黑名单
-            //   4. fee::reserve_creation_deposit(&who, proposal_id)
-            //   5. InternalVoteEngine::create_institution_proposal_with_data(
+            //   4. InternalVoteEngine::create_institution_proposal_with_data(
             //      actor_cid_number + execution_account + MODULE_TAG/ACTION_OAIS 业务数据)
             Ok(())
         }

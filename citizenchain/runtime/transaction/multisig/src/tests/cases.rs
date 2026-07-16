@@ -25,8 +25,9 @@ fn nrc_transfer_executes_when_internal_vote_reaches_threshold() {
             pid,
         ));
 
-        // 转账已执行（含手续费 10）
-        assert_eq!(Balances::free_balance(&funding_account), 8_990);
+        // 本金只从主账户支出，链上费只从同一 CID 的费用账户支出。
+        assert_eq!(Balances::free_balance(&funding_account), 9_000);
+        assert_eq!(Balances::free_balance(nrc_fee_account()), 9_990);
         assert_eq!(Balances::free_balance(&dest), 1_000);
         // 提案数据仍保留（由 votingengine 延迟清理）
         assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
@@ -56,7 +57,8 @@ fn prc_transfer_executes_when_internal_vote_reaches_threshold() {
             pid,
         ));
 
-        assert_eq!(Balances::free_balance(&funding_account), 7_990);
+        assert_eq!(Balances::free_balance(&funding_account), 8_000);
+        assert_eq!(Balances::free_balance(prc_fee_account()), 9_990);
         assert_eq!(Balances::free_balance(&dest), 2_000);
         assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
     });
@@ -85,7 +87,8 @@ fn prb_transfer_executes_when_internal_vote_reaches_threshold() {
             pid,
         ));
 
-        assert_eq!(Balances::free_balance(&funding_account), 6_990);
+        assert_eq!(Balances::free_balance(&funding_account), 7_000);
+        assert_eq!(Balances::free_balance(prb_fee_account()), 9_990);
         assert_eq!(Balances::free_balance(&dest), 3_000);
         assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
     });
@@ -206,7 +209,8 @@ fn institution_account_transfer_executes_when_internal_vote_reaches_threshold() 
         let vote_pairs = institution_pairs(2);
         assert_ok!(cast_transfer_votes_n(&vote_pairs[1..], 1, pid,));
 
-        assert_eq!(Balances::free_balance(&funding_account), 7_990);
+        assert_eq!(Balances::free_balance(&funding_account), 8_000);
+        assert_eq!(Balances::free_balance(institution_fee_account()), 9_990);
         assert_eq!(Balances::free_balance(&dest), 2_000);
         assert_eq!(
             votingengine::Pallet::<Test>::proposals(pid)
@@ -309,29 +313,62 @@ fn insufficient_balance_is_rejected_on_propose() {
         let funding_account = nrc_main_account();
         let dest = beneficiary();
 
-        // 余额 10_000，fee=10，ED=1：最多 amount=9_989（9_989+10+1=10_000）
-        // amount=9_990 时 required=9_990+10+1=10_001 > 10_000 → 拒绝
+        // 本金账户只承担本金并保留 ED；费用账户另行承担手续费并保留自己的 ED。
+        // 主账户余额 10_000 时，amount=10_000 会越过主账户 ED，必须拒绝。
         assert_noop!(
             MultisigTransfer::propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 Some(nrc_actor_cid()),
                 funding_account.clone(),
                 dest.clone(),
-                9_990,
+                10_000,
                 BoundedVec::default(),
             ),
             Error::<Test>::InsufficientBalance
         );
 
-        // amount=9_989 时 required=9_989+10+1=10_000 → 刚好通过
+        // amount=9_999 时主账户恰好保留 ED，费用账户余额也足以支付最低费。
         assert_ok!(MultisigTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             Some(nrc_actor_cid()),
             funding_account.clone(),
             dest,
-            9_989,
+            9_999,
             BoundedVec::default(),
         ));
+    });
+}
+
+#[test]
+fn institution_fee_account_shortage_never_falls_back_to_admin() {
+    new_test_ext().execute_with(|| {
+        let admin = nrc_admin(0);
+        let fee_account = nrc_fee_account();
+        // 即使签名管理员余额充足，机构交易也只能从同一 CID 的费用账户付费。
+        assert_ok!(Balances::force_set_balance(
+            RuntimeOrigin::root(),
+            admin.clone(),
+            100_000,
+        ));
+        assert_ok!(Balances::force_set_balance(
+            RuntimeOrigin::root(),
+            fee_account.clone(),
+            1,
+        ));
+
+        assert_noop!(
+            MultisigTransfer::propose_transfer(
+                RuntimeOrigin::signed(admin.clone()),
+                Some(nrc_actor_cid()),
+                nrc_main_account(),
+                beneficiary(),
+                100,
+                BoundedVec::default(),
+            ),
+            Error::<Test>::InsufficientFeeBalance
+        );
+        assert_eq!(Balances::free_balance(admin), 100_000);
+        assert_eq!(Balances::free_balance(fee_account), 1);
     });
 }
 
@@ -446,14 +483,13 @@ fn existential_deposit_is_preserved() {
         let funding_account = nrc_main_account();
         let dest = beneficiary();
 
-        // 余额 10_000，ED=1，手续费=10，提案 9_989 刚好使剩余 = ED
-        // required = 9_989 + 10(fee) + 1(ED) = 10_000
+        // 主账户 10_000 支出 9_999 后保留 ED；手续费由独立费用账户支付。
         assert_ok!(MultisigTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             Some(nrc_actor_cid()),
             funding_account.clone(),
             dest.clone(),
-            9_989,
+            9_999,
             BoundedVec::default(),
         ));
         let pid = last_proposal_id();
@@ -466,7 +502,8 @@ fn existential_deposit_is_preserved() {
         ));
 
         assert_eq!(Balances::free_balance(&funding_account), 1);
-        assert_eq!(Balances::free_balance(&dest), 9_989);
+        assert_eq!(Balances::free_balance(nrc_fee_account()), 9_990);
+        assert_eq!(Balances::free_balance(&dest), 9_999);
     });
 }
 
@@ -523,8 +560,9 @@ fn retry_passed_transfer_succeeds_after_failed_auto_execution() {
             RuntimeOrigin::signed(nrc_admin(0)),
             pid
         ));
-        // 转账成功：9_000 转出 + 10 手续费
-        assert_eq!(Balances::free_balance(&funding_account), 990);
+        // 重试成功：主账户只转出本金，费用账户单独支付手续费。
+        assert_eq!(Balances::free_balance(&funding_account), 1_000);
+        assert_eq!(Balances::free_balance(nrc_fee_account()), 9_990);
         assert_eq!(Balances::free_balance(&dest), 9_000);
     });
 }
@@ -692,8 +730,7 @@ fn fee_respects_minimum_on_small_amount() {
         let funding_account = nrc_main_account();
         let dest = beneficiary();
 
-        // amount=1, 费率计算 1×0.1%=0.001 < 最低 10 分，手续费应为 10
-        // required = 1 + 10 + 1(ED) = 12
+        // amount=1 时链上费命中最低值 10；主账户与费用账户分别保留 ED。
         assert_ok!(MultisigTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             Some(nrc_actor_cid()),
@@ -711,8 +748,8 @@ fn fee_respects_minimum_on_small_amount() {
             pid,
         ));
 
-        // 余额 10_000 - 1(转账) - 10(最低手续费) = 9_989
-        assert_eq!(Balances::free_balance(&funding_account), 9_989);
+        assert_eq!(Balances::free_balance(&funding_account), 9_999);
+        assert_eq!(Balances::free_balance(nrc_fee_account()), 9_990);
         assert_eq!(Balances::free_balance(&dest), 1);
     });
 }

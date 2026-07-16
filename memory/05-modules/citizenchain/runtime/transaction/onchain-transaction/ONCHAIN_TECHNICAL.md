@@ -4,9 +4,10 @@
 
 代码目录：`citizenchain/runtime/transaction/onchain/`。
 
-本模块提供两项能力：
+本模块提供三项能力：
 
 - `OnchainChargeAdapter`：实现 `pallet-transaction-payment::OnChargeTransaction`，消费 runtime 给出的唯一费用路由并执行链上交易费、投票费扣款。
+- `OnchainExecutionFeeCharger`：供投票通过后的业务回调从已经核验的确切账户收取链上资金执行费；计算、ED、事件和分账与外层交易完全一致。
 - `OnchainFeeRouter`：将已扣手续费按 80% / 10% / 10% 分给当前块作者绑定的奖励钱包、国家储委会费用账户和安全基金账户。
 
 本模块不维护费用类别表、不维护机构身份或管理员表，也不使用 weight、length 或动态 multiplier 计算制度费用。
@@ -68,6 +69,12 @@ tip 不属于交易费，不参与 `FeePaid`、RPC 聚合或 80/10/10 分账。
 
 余额扣款使用 `Precision::Exact + Preservation::Preserve + Fortitude::Polite`：必须完整扣除，并保证普通支出后不低于 ED；否则整笔交易失败。适配器不尝试第二付款账户，不做执行后退款。
 
+投票回调没有新的外层 extrinsic。业务模块只能把已核验的 `payer + transaction_amount`
+交给 `OnchainExecutionFeeCharger`；它仍使用 `calculate_onchain_fee`，以 `KeepAlive`
+完整扣款并进入同一分账。机构转账、机构安全基金转账、机构账户关闭和决议销毁的
+执行手续费只允许由 actor CID 的费用账户支付；个人多签由个人账户支付。手续费和
+本金变化处于同一 storage transaction，任一失败全部回滚。
+
 成功扣款发出：
 
 ```text
@@ -110,6 +117,7 @@ FeePaid { who: 实际付款账户, fee: 完整手续费 }
 - 实际投票由签名者扣 1 元。
 - 机构操作只扣精确费用账户，管理员余额不变。
 - 费用账户缺失或映射不一致时直接拒绝，不回落管理员。
+- 投票回调执行期使用确切付款账户，手续费不足时本金、分账和事件全部回滚。
 - Fullnode 绑定由签名者扣 0.1 元。
 - 非零 tip 在 runtime 和 CitizenWallet 两端拒绝。
 - 80/10/10 正常分账与所有安全销毁路径。

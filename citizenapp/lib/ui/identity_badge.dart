@@ -7,7 +7,8 @@ import 'package:citizenapp/ui/app_theme.dart';
 /// 规则（用户定稿）：底色 访客橙 / 投票蓝 / 竞选红；有生效会员→勾，否则→小人。
 /// 全体统一显示徽章（含纯访客=橙+小人）。
 ///
-/// 勾色默认白；会员资格已按身份精确匹配，不再存在降档购买分支。
+/// 勾色默认白。会员与身份已彻底解耦（ADR-036）：底色只取链上身份档，对勾只看会员是否
+/// 有效，二者互不影响（[membershipLevel] 仅保留为调用方签名，不参与着色）。
 class IdentityBadgeStyle {
   const IdentityBadgeStyle({
     required this.color,
@@ -33,6 +34,7 @@ Color _identityTierColor(String? level) => switch (level) {
     };
 
 /// 计算徽章样式。底色只取身份档，有有效会员时显示白色对勾。
+/// [membershipLevel] 与身份解耦后不参与着色，仅保留兼容调用方签名。
 IdentityBadgeStyle? identityBadgeStyle({
   required String? identityLevel,
   required String? membershipLevel,

@@ -3,6 +3,7 @@ import 'package:isar_community/isar.dart';
 import '../../isar/app_isar.dart';
 import '../chat_models.dart';
 import '../chat_payload.dart';
+import '../group/group_model.dart';
 import '../proto/chat_envelope.pb.dart';
 
 /// Chat 本地消息记录。
@@ -523,8 +524,9 @@ class ChatStore {
     required int byteSize,
   }) {
     return _walletIsar.writeTxn((isar) async {
-      await isar.chatOutgoingMediaEntitys.putByAttachmentId(
+      await isar.chatOutgoingMediaEntitys.putByPendingKey(
         ChatOutgoingMediaEntity()
+          ..pendingKey = '$attachmentId|$recipientAccount'
           ..attachmentId = attachmentId
           ..recipientAccount = recipientAccount
           ..conversationId = conversationId
@@ -536,10 +538,11 @@ class ChatStore {
     });
   }
 
-  /// 字节已送达对方设备(收到 WebRTC ack)后删除待投递行。
-  Future<void> deleteOutgoingMedia(String attachmentId) {
+  /// 字节已送达某成员设备(收到 WebRTC ack)后删除该 (媒体, 成员) 待投递行。
+  Future<void> deleteOutgoingMedia(String attachmentId, String recipientAccount) {
     return _walletIsar.writeTxn((isar) async {
-      await isar.chatOutgoingMediaEntitys.deleteByAttachmentId(attachmentId);
+      await isar.chatOutgoingMediaEntitys
+          .deleteByPendingKey('$attachmentId|$recipientAccount');
     });
   }
 
@@ -583,6 +586,331 @@ class ChatStore {
     });
   }
 
+  // ==== 私密小群 ====
+
+  /// 建群/入群时落群会话壳 + 群会话记录(conversationKind=group,title=群名)。
+  Future<void> upsertGroupShell({
+    required String groupId,
+    required String groupName,
+    required String creatorAccount,
+    required String ownerAccount,
+    required int epoch,
+  }) {
+    return _walletIsar.writeTxn((isar) async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final existing =
+          await isar.chatGroupEntitys.getByGroupId(groupId);
+      final entity = existing ?? ChatGroupEntity();
+      entity
+        ..groupId = groupId
+        ..groupName = groupName
+        ..creatorAccount = creatorAccount
+        ..ownerAccount = ownerAccount
+        ..epoch = epoch
+        ..memberCount = existing?.memberCount ?? 1
+        ..leftLocally = existing?.leftLocally ?? false
+        ..createdAtMillis = existing?.createdAtMillis ?? now
+        ..updatedAtMillis = now;
+      await isar.chatGroupEntitys.putByGroupId(entity);
+
+      final conversation =
+          await isar.chatConversationEntitys.getByConversationId(groupId);
+      final shell = conversation ?? ChatConversationEntity();
+      shell
+        ..conversationId = groupId
+        ..ownerAccount = ownerAccount
+        ..peerAccount = creatorAccount
+        ..title = groupName
+        ..conversationKind = 'group'
+        ..lastMessage = conversation?.lastMessage ?? ''
+        ..lastUpdatedAtMillis = conversation?.lastUpdatedAtMillis ?? now
+        ..unreadCount = conversation?.unreadCount ?? 0
+        ..lastDeliveryState = conversation?.lastDeliveryState ??
+            ChatMessageDeliveryState.queued.name;
+      await isar.chatConversationEntitys.putByConversationId(shell);
+    });
+  }
+
+  /// 按 MLS 名册(account→role)覆盖群成员镜像 + 更新 epoch/人数。
+  Future<void> reconcileGroupRoster({
+    required String groupId,
+    required Map<String, GroupMemberRole> members,
+    required int epoch,
+  }) {
+    return _walletIsar.writeTxn((isar) async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final existing = await isar.chatGroupMemberEntitys
+          .filter()
+          .groupIdEqualTo(groupId)
+          .findAll();
+      final joinedAt = <String, int>{
+        for (final row in existing) row.memberAccount: row.joinedAtMillis,
+      };
+      for (final row in existing) {
+        await isar.chatGroupMemberEntitys.delete(row.id);
+      }
+      for (final entry in members.entries) {
+        await isar.chatGroupMemberEntitys.putByMemberKey(
+          ChatGroupMemberEntity()
+            ..memberKey = '$groupId|${entry.key}'
+            ..groupId = groupId
+            ..memberAccount = entry.key
+            ..role = entry.value.wireName
+            ..joinedAtMillis = joinedAt[entry.key] ?? now,
+        );
+      }
+      final group = await isar.chatGroupEntitys.getByGroupId(groupId);
+      if (group != null) {
+        group
+          ..epoch = epoch
+          ..memberCount = members.length
+          ..updatedAtMillis = now;
+        await isar.chatGroupEntitys.putByGroupId(group);
+      }
+    });
+  }
+
+  Future<ChatGroup?> readGroup(String groupId) {
+    return _walletIsar.read((isar) async {
+      final group = await isar.chatGroupEntitys.getByGroupId(groupId);
+      if (group == null) return null;
+      final members = await isar.chatGroupMemberEntitys
+          .filter()
+          .groupIdEqualTo(groupId)
+          .findAll();
+      return _groupFromEntities(group, members);
+    });
+  }
+
+  Future<List<ChatGroup>> readGroups({String? ownerAccount}) {
+    return _walletIsar.read((isar) async {
+      final groups = await isar.chatGroupEntitys
+          .filter()
+          .idGreaterThan(0, include: true)
+          .findAll();
+      final filtered = ownerAccount == null || ownerAccount.isEmpty
+          ? groups
+          : groups
+              .where((row) => row.ownerAccount == ownerAccount)
+              .toList(growable: false);
+      final result = <ChatGroup>[];
+      for (final group in filtered) {
+        final members = await isar.chatGroupMemberEntitys
+            .filter()
+            .groupIdEqualTo(group.groupId)
+            .findAll();
+        result.add(_groupFromEntities(group, members));
+      }
+      return result;
+    });
+  }
+
+  /// 退群/被移除:本机标记已退,停止参与。
+  Future<void> markGroupLeft(String groupId) {
+    return _walletIsar.writeTxn((isar) async {
+      final group = await isar.chatGroupEntitys.getByGroupId(groupId);
+      if (group != null) {
+        group
+          ..leftLocally = true
+          ..updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
+        await isar.chatGroupEntitys.putByGroupId(group);
+      }
+    });
+  }
+
+  /// 改群名(群记录 + 群会话 title 同步)。空名忽略。
+  Future<void> renameGroup(String groupId, String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return Future<void>.value();
+    }
+    return _walletIsar.writeTxn((isar) async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final group = await isar.chatGroupEntitys.getByGroupId(groupId);
+      if (group != null) {
+        group
+          ..groupName = trimmed
+          ..updatedAtMillis = now;
+        await isar.chatGroupEntitys.putByGroupId(group);
+      }
+      final conversation =
+          await isar.chatConversationEntitys.getByConversationId(groupId);
+      if (conversation != null) {
+        conversation.title = trimmed;
+        await isar.chatConversationEntitys.putByConversationId(conversation);
+      }
+    });
+  }
+
+  /// 缓冲一条乱序群 Commit(键 groupId+messageEpoch)。
+  Future<void> bufferGroupCommit({
+    required String groupId,
+    required int messageEpoch,
+    required ChatEnvelope envelope,
+    required List<int> envelopeBytes,
+  }) {
+    return _walletIsar.writeTxn((isar) async {
+      await isar.chatGroupPendingCommitEntitys.putByEnvelopeId(
+        ChatGroupPendingCommitEntity()
+          ..envelopeId = envelope.envelopeId
+          ..groupId = groupId
+          ..messageEpoch = messageEpoch
+          ..envelopeBytesHex = _bytesToHex(envelopeBytes)
+          ..createdAtMillis = DateTime.now().millisecondsSinceEpoch,
+      );
+    });
+  }
+
+  /// 取出并删除某 (groupId, messageEpoch) 下最早的一条缓冲;无则 null。
+  Future<ChatEnvelope?> takeGroupPendingCommit(
+    String groupId,
+    int messageEpoch,
+  ) {
+    return _walletIsar.writeTxn((isar) async {
+      final rows = await isar.chatGroupPendingCommitEntitys
+          .filter()
+          .groupIdEqualTo(groupId)
+          .messageEpochEqualTo(messageEpoch)
+          .findAll();
+      if (rows.isEmpty) return null;
+      rows.sort((a, b) => a.createdAtMillis.compareTo(b.createdAtMillis));
+      final row = rows.first;
+      await isar.chatGroupPendingCommitEntitys.delete(row.id);
+      return ChatEnvelope.fromBuffer(_hexToBytes(row.envelopeBytesHex));
+    });
+  }
+
+  /// 群发出:一条逻辑消息 + N 条按收件人的出站队列(投递/重试复用 1:1 路径)。
+  Future<void> saveOutgoingGroupMessage({
+    required String groupId,
+    required String senderAccount,
+    required String senderDeviceId,
+    required String logicalEnvelopeId,
+    required ChatMessageKind messageKind,
+    required String payload,
+    required int createdAtMillis,
+    required List<ChatEnvelope> envelopes,
+  }) {
+    return _walletIsar.writeTxn((isar) async {
+      await _touchGroupConversationInTxn(
+        isar: isar,
+        groupId: groupId,
+        ownerAccount: senderAccount,
+        lastMessage: _messageSummary(payload),
+        lastUpdatedAtMillis: createdAtMillis,
+        unreadDelta: 0,
+        deliveryState: ChatMessageDeliveryState.queued,
+      );
+      await isar.chatMessageEntitys.putByEnvelopeId(
+        ChatMessageEntity()
+          ..envelopeId = logicalEnvelopeId
+          ..conversationId = groupId
+          ..ownerAccount = senderAccount
+          ..direction = 'outgoing'
+          ..senderAccount = senderAccount
+          ..recipientAccount = groupId
+          ..senderDeviceId = senderDeviceId
+          ..messageKind = messageKind.name
+          ..mlsMessageKind = MlsWireMessageKind.MLS_WIRE_MESSAGE_KIND_APPLICATION.name
+          ..deliveryState = ChatMessageDeliveryState.queued.name
+          ..plaintext = payload
+          ..envelopeBytesHex = ''
+          ..createdAtMillis = createdAtMillis,
+      );
+      for (final envelope in envelopes) {
+        await isar.chatOutboundQueueEntitys.putByEnvelopeId(
+          ChatOutboundQueueEntity()
+            ..envelopeId = envelope.envelopeId
+            ..conversationId = groupId
+            ..recipientAccount = envelope.recipientAccount
+            ..envelopeBytesHex = _bytesToHex(envelope.writeToBuffer())
+            ..deliveryState = ChatMessageDeliveryState.queued.name
+            ..attemptCount = 0
+            ..lastError = null
+            ..updatedAtMillis = DateTime.now().millisecondsSinceEpoch,
+        );
+      }
+    });
+  }
+
+  /// 群收到:一条入站逻辑消息(该成员就收到一封)。会话保持群名,不被发送方覆盖。
+  Future<void> saveIncomingGroupMessage({
+    required ChatEnvelope envelope,
+    required List<int> envelopeBytes,
+    required ChatMessageKind messageKind,
+    required String plaintext,
+  }) {
+    return _walletIsar.writeTxn((isar) async {
+      await _touchGroupConversationInTxn(
+        isar: isar,
+        groupId: envelope.conversationId,
+        ownerAccount: envelope.recipientAccount,
+        lastMessage: _messageSummary(plaintext),
+        lastUpdatedAtMillis: envelope.createdAtMillis.toInt(),
+        unreadDelta: 1,
+        deliveryState: ChatMessageDeliveryState.receivedByDevice,
+      );
+      await isar.chatMessageEntitys.putByEnvelopeId(
+        _messageEntity(
+          envelope: envelope,
+          envelopeBytes: envelopeBytes,
+          ownerAccount: envelope.recipientAccount,
+          direction: 'incoming',
+          messageKind: messageKind,
+          deliveryState: ChatMessageDeliveryState.receivedByDevice,
+          plaintext: plaintext,
+        ),
+      );
+    });
+  }
+
+  /// 更新群会话的 lastMessage/未读/投递态,但保留群名 title 与 conversationKind。
+  Future<void> _touchGroupConversationInTxn({
+    required Isar isar,
+    required String groupId,
+    required String ownerAccount,
+    required String lastMessage,
+    required int lastUpdatedAtMillis,
+    required int unreadDelta,
+    required ChatMessageDeliveryState deliveryState,
+  }) async {
+    final existing =
+        await isar.chatConversationEntitys.getByConversationId(groupId);
+    final group = await isar.chatGroupEntitys.getByGroupId(groupId);
+    final entity = existing ?? ChatConversationEntity();
+    entity
+      ..conversationId = groupId
+      ..ownerAccount =
+          existing?.ownerAccount.isNotEmpty == true ? existing!.ownerAccount : ownerAccount
+      ..peerAccount = existing?.peerAccount ?? (group?.creatorAccount ?? '')
+      ..title = group?.groupName ?? existing?.title ?? groupId
+      ..conversationKind = 'group'
+      ..lastMessage = lastMessage
+      ..lastUpdatedAtMillis = lastUpdatedAtMillis
+      ..unreadCount = (existing?.unreadCount ?? 0) + unreadDelta
+      ..lastDeliveryState = deliveryState.name;
+    await isar.chatConversationEntitys.putByConversationId(entity);
+  }
+
+  ChatGroup _groupFromEntities(
+    ChatGroupEntity group,
+    List<ChatGroupMemberEntity> members,
+  ) {
+    return ChatGroup(
+      groupId: group.groupId,
+      name: group.groupName,
+      creatorAccount: group.creatorAccount,
+      epoch: group.epoch,
+      leftLocally: group.leftLocally,
+      roster: members
+          .map((row) => GroupMember(
+                account: row.memberAccount,
+                role: GroupMemberRole.fromName(row.role),
+              ))
+          .toList(growable: false),
+    );
+  }
+
   Future<void> _putConversationInTxn({
     required Isar isar,
     required String conversationId,
@@ -620,6 +948,7 @@ ChatConversationPreview _conversationPreviewFromEntity(
     lastUpdatedAt: DateTime.fromMillisecondsSinceEpoch(row.lastUpdatedAtMillis),
     unreadCount: row.unreadCount,
     deliveryState: _deliveryStateFromName(row.lastDeliveryState),
+    conversationKind: row.conversationKind ?? 'dm',
   );
 }
 

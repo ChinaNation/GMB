@@ -36,7 +36,9 @@
 - `update_voting_identity`：更新投票身份。
 - `update_candidate_identity`：更新参选身份。
 - `revoke_identity`：注销链上身份。
-- `prepare_population_snapshot`：按作用域生成链上治理人口快照。
+
+人口快照不是公开交易。只有投票引擎可通过下述内部 trait 在提案创建事务中生成、
+绑定和最终释放快照；已删除的 call index 5 永久留洞，不得复用。
 
 ## 投票引擎接入
 

@@ -41,8 +41,8 @@
 - 多签资金账户管理员发起转账提案，指定收款地址、金额和备注。
 - 多签资金账户管理员通过内部投票引擎逐票投票。
 - 投票通过后执行转账：从提案绑定的资金账户向收款地址划转资金。
-- 手续费在投票通过后由 pallet 内部从同一个资金账户扣取，通过 `onchain-transaction::calculate_onchain_fee()` 计算。
-- 管理员个人账户不承担任何费用。
+- 执行手续费通过 `fee_policy::calculate_onchain_fee()` 计算，并由统一 `OnchainFeeCharger` 收取：机构路径只扣 actor CID 费用账户，个人多签路径扣个人账户。
+- 管理员钱包只承担自己发起的个人操作费和实际投票费，绝不承担机构操作费或机构资金执行费。
 - 覆盖两种身份模型：
   - 机构：`actor_cid_number + funding_account + origin(admin)`；资金账户可以是该 CID 下允许支出的主账户、费用账户、安全基金账户或自定义账户，具体业务仍受 `institution-asset` 限制。
   - 个人多签：`personal_account + origin(admin)`，不携带机构 CID。
@@ -131,7 +131,7 @@ pub fn propose_transfer(
 6. `amount >= ED`（转账金额不能低于存在性保证金，防止收款地址创建失败）。
 7. `beneficiary` 不能是转出资金账户自身（不允许自转账）。
 8. `beneficiary` 不能是受保护地址（如 `stake_account`、安全基金账户、费用账户等保留地址）。
-9. 转出资金账户的可用余额 >= `amount + fee + ED`（预检含手续费，防止创建必定无法执行的提案）。
+9. 机构路径分别预检 `funding_account >= amount + ED`、actor CID 费用账户 `>= fee + ED`；个人路径预检 `funding_account >= amount + fee + ED`。
 10. 活跃提案数由 `votingengine` 在 `create_internal_proposal_with_data` 中统一检查（全局限额）。
 
 **执行逻辑：**
@@ -259,7 +259,8 @@ pub enum Error<T> {
     BeneficiaryIsProtectedAddress,   // 收款地址是受保护地址
     ProposalActionNotFound,          // 提案不存在或数据解码失败
     InstitutionAccountDecodeFailed,  // 内置账户地址解码失败
-    InsufficientBalance,             // 资金账户余额不足(amount + fee + ED)
+    InsufficientBalance,             // 本金账户余额不足；个人路径同时覆盖 amount + fee + ED
+    InsufficientFeeBalance,          // 机构费用账户不足 fee + ED
     ProposalNotPassed,               // 提案未通过(retry/cancel 校验由 VotingEngine 承担)
     TransferFailed,                  // 转账执行失败
     // safety_fund / sweep 专有
@@ -286,21 +287,22 @@ pub enum Error<T> {
 - 机构 `propose_transfer / propose_safety_fund_transfer / propose_sweep_to_main` 是链上机构操作，由 actor CID 的费用账户支付 0.1 元；管理员钱包只签名。
 - 个人多签 `propose_transfer` 是普通链上操作，由签名者支付 0.1 元。
 - `InternalVote::cast` 才是实际投票，由投票管理员钱包支付 1 元。
-- 多签资金账户在执行阶段只应承担实际转账本金；实际转账手续费改由机构费用账户支付的执行期改造列入本任务第 3 步。
+- 投票通过后的机构资金执行中，具体 `funding_account` 或安全基金账户只支付本金，actor CID 的费用账户支付执行手续费；sweep 的本金和执行手续费都由其明确的费用账户支付。
+- 个人多签执行中，个人账户同时支付本金和执行手续费。任何路径都不允许改扣提案管理员钱包。
 
-投票通过后，pallet 的 `try_execute_transfer_from_callback` 内部还会处理转出账户侧的执行费用：
+投票通过后，pallet 通过统一 `OnchainFeeCharger` 处理执行费用：
 
 1. 通过 `calculate_onchain_fee(amount)` 计算手续费。
-2. 校验余额 >= `amount + fee + ED`。
-3. 执行 `Currency::transfer()` 转账。
-4. 执行 `Currency::withdraw()` 扣取手续费。
-5. 通过 `FeeRouter` 按规则分账。
+2. 机构普通转账分别校验资金账户 `amount + ED`、费用账户 `fee + ED`；个人转账校验个人账户 `amount + fee + ED`。
+3. 安全基金转账分别校验安全基金账户 `amount + ED`、国家储委会费用账户 `fee + ED`；sweep 校验费用账户 `amount + fee + ED`。
+4. 在同一 storage transaction 中调用 `OnchainFeeCharger::charge()` 并执行本金转账。
+5. 任一扣款或转账失败全部回滚；成功后通过统一分账器按 80/10/10 分账并在执行事件中记录 `fee_payer`（sweep 的 `institution_account` 本身即付款账户）。
 
-因此前端必须区分三类余额：机构提案检查机构费用账户，个人提案和实际投票检查签名者钱包，提案执行检查具体资金账户本金；不得用管理员钱包为机构费用兜底。
+因此前端必须区分四项余额责任：机构提案操作费、机构执行费检查 actor CID 费用账户，机构执行本金检查具体资金账户，个人提案/个人执行检查个人账户，实际投票检查投票签名者；不得用管理员钱包为机构费用兜底。
 
 ### 6.3 手续费分账
 
-按 `TransferFeeRouter`（复用 `OnchainFeeRouter` 规则）：
+按 `OnchainExecutionFeeDistributor`（复用 `OnchainFeeRouter` 规则）：
 - 80% → 全节点出块者
 - 10% → 国家储委会
 - 10% → 安全基金账户
@@ -318,9 +320,9 @@ pub enum Error<T> {
 4. 执行业务转账:
    a. 解析资金源和目标账户
    b. 计算手续费 fee = calculate_onchain_fee(amount)
-   c. 校验余额与 ED
-   d. Currency::transfer(...)
-   e. Currency::withdraw(..., FEE, KeepAlive) → FeeRouter 分账
+   c. 按机构/个人路径分别校验本金账户、确切费用付款账户与 ED
+   d. 在同一 storage transaction 中调用 OnchainFeeCharger::charge(...)
+   e. Currency::transfer(...)；失败时连同手续费、分账和事件一起回滚
    f. deposit_event(*Executed)
 5. 执行成功返回 ProposalExecutionOutcome::Executed
 6. 执行失败发 *ExecutionFailed，返回 ProposalExecutionOutcome::RetryableFailed
@@ -345,7 +347,7 @@ VOTING → PASSED（待执行） → EXECUTED（已执行，终态）
 ### 7.3 余额保护
 
 - 使用 `ExistenceRequirement::KeepAlive` 确保转账后资金账户不被 reap（删除）。
-- 执行时校验 `free_balance >= amount + fee + ED`。
+- 机构执行分别校验具体资金账户 `amount + ED` 和 actor CID 费用账户 `fee + ED`；个人执行校验个人账户 `amount + fee + ED`。
 
 ### 7.4 转账 vs 销毁
 
@@ -414,9 +416,10 @@ pub trait Config:
     #[pallet::constant]
     type MaxRemarkLen: Get<u32>;
 
-    /// 手续费分账路由（复用 OnchainFeeRouter）
-    type FeeRouter: frame_support::traits::OnUnbalanced<
-        <<Self as Config>::Currency as Currency<Self::AccountId>>::NegativeImbalance,
+    /// 执行期链上费统一收取器；付款账户由本模块按 actor CID/个人账户精确确定。
+    type OnchainFeeCharger: primitives::fee_policy::OnchainFeeCharger<
+        Self::AccountId,
+        BalanceOf<Self>,
     >;
 
     /// 个人多签账户状态与管理员配置查询，由 personal-manage 聚合 personal-admins 提供。
@@ -467,7 +470,8 @@ pub type MultisigTransfer = multisig;
 impl multisig::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxRemarkLen = ConstU32<256>;
-    type FeeRouter = TransferFeeRouter;
+    type OnchainFeeCharger =
+        onchain::OnchainExecutionFeeCharger<Runtime, Balances, OnchainExecutionFeeDistributor>;
     type PersonalQuery = PersonalManage;
     type InstitutionQuery = RuntimeInstitutionQuery;
     type WeightInfo = multisig::weights::SubstrateWeight<Runtime>;
@@ -481,7 +485,7 @@ impl multisig::Config for Runtime {
 - 机构提案：显式携带 `actor_cid_number + funding_account/institution_account`，校验账户属于该 CID 后，从该 CID 的唯一费用账户扣 0.1 元。
 - 个人多签提案：由签名者支付 0.1 元链上操作费。
 - 管理员后续执行 `InternalVote::cast` 时，才由投票签名者支付 1 元投票费。
-- 提案通过后的实际资金执行费与本金账户分离规则在统一执行期费用步骤中落实；不得让机构管理员钱包回落垫付。
+- 提案通过后的机构资金执行费只从 actor CID 费用账户支付，本金只从明确的机构账户支付；个人多签由个人账户支付。所有扣款原子执行，不得让机构管理员钱包垫付。
 
 ### 13.3 Benchmark 注册
 

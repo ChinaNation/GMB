@@ -53,7 +53,6 @@ class QrActions {
   static const int transferWithRemark = 0x0400;
   static const int personalCreate = 0x0700;
   static const int personalClose = 0x0701;
-  static const int personalCleanupRejected = 0x0702;
   static const int personalAdminSetChange = 0x1d00;
   static const int resolutionIssuance = 0x0800;
   static const int finalizeProposal = 0x0903;
@@ -64,7 +63,6 @@ class QrActions {
   static const int updateVotingIdentity = 0x0a02;
   static const int updateCandidateIdentity = 0x0a03;
   static const int revokeIdentity = 0x0a04;
-  static const int prepareCitizenPopulationSnapshot = 0x0a05;
   static const int occupyCid = 0x0a06;
   static const int occupyCidsBatch = 0x0a07;
   static const int revokeCid = 0x0a08;
@@ -73,12 +71,10 @@ class QrActions {
   static const int resolutionDestroy = 0x0d00;
   static const int grandpaKeyChange = 0x0f00;
   static const int publicInstitutionClose = 0x1e01;
-  static const int publicInstitutionCleanupRejected = 0x1e04;
   static const int publicInstitutionCreate = 0x1e05;
   static const int publicInstitutionUpdateInfo = 0x1e06;
   static const int publicInstitutionAddAccount = 0x1e07;
   static const int privateInstitutionClose = 0x1f01;
-  static const int privateInstitutionCleanupRejected = 0x1f04;
   static const int privateInstitutionCreate = 0x1f05;
   static const int privateInstitutionUpdateInfo = 0x1f06;
   static const int privateInstitutionAddAccount = 0x1f07;
@@ -96,7 +92,6 @@ class QrActions {
   static const int internalVote = 0x1400;
   static const int jointVote = 0x1500;
   static const int castReferendum = 0x1501;
-  static const int preparePopulationSnapshot = 0x1502;
 
   // 链上资产 OnchainIssuance(23 = 0x17)。动作码与 runtime call_index 一一对应。
   static const int proposeAssetIssue = 0x1700;
@@ -123,7 +118,6 @@ class QrActions {
   static const int proposeRepealLaw = 0x1902;
 
   // 立法投票 LegislationVote(26 = 0x1a)
-  static const int prepareLegislationSnapshot = 0x1a00;
   static const int castRepresentativeVote = 0x1a01;
   static const int castLegislationReferendum = 0x1a02;
   static const int executiveSign = 0x1a03;
@@ -148,7 +142,6 @@ class QrActions {
         'transfer' => transferWithRemark,
         'propose_create_personal' => personalCreate,
         'propose_close_personal' => personalClose,
-        'cleanup_rejected_personal_proposal' => personalCleanupRejected,
         'propose_issuance' => resolutionIssuance,
         'finalize_proposal' => finalizeProposal,
         'retry_passed_proposal' => retryPassedProposal,
@@ -158,21 +151,16 @@ class QrActions {
         'update_voting_identity' => updateVotingIdentity,
         'update_candidate_identity' => updateCandidateIdentity,
         'revoke_identity' => revokeIdentity,
-        'prepare_citizen_population_snapshot' =>
-          prepareCitizenPopulationSnapshot,
         'propose_personal_admin_set_change' => personalAdminSetChange,
         'propose_runtime_upgrade' => proposeRuntimeUpgrade,
         'developer_direct_upgrade' => developerDirectUpgrade,
         'propose_destroy' => resolutionDestroy,
         'propose_replace_grandpa_key' => grandpaKeyChange,
         'propose_close_public_institution' => publicInstitutionClose,
-        'cleanup_rejected_public_proposal' => publicInstitutionCleanupRejected,
         'propose_create_public_institution' => publicInstitutionCreate,
         'update_public_institution_info' => publicInstitutionUpdateInfo,
         'add_public_institution_account' => publicInstitutionAddAccount,
         'propose_close_private_institution' => privateInstitutionClose,
-        'cleanup_rejected_private_proposal' =>
-          privateInstitutionCleanupRejected,
         'propose_create_private_institution' => privateInstitutionCreate,
         'update_private_institution_info' => privateInstitutionUpdateInfo,
         'add_private_institution_account' => privateInstitutionAddAccount,
@@ -190,7 +178,6 @@ class QrActions {
         'internal_vote' => internalVote,
         'joint_vote' => jointVote,
         'cast_referendum' => castReferendum,
-        'prepare_joint_population_snapshot' => preparePopulationSnapshot,
         'propose_asset_issue' => proposeAssetIssue,
         'propose_asset_mint' => proposeAssetMint,
         'propose_asset_burn' => proposeAssetBurn,
@@ -209,7 +196,6 @@ class QrActions {
         'propose_enact_law' => proposeEnactLaw,
         'propose_amend_law' => proposeAmendLaw,
         'propose_repeal_law' => proposeRepealLaw,
-        'prepare_legislation_snapshot' => prepareLegislationSnapshot,
         'cast_representative_vote' => castRepresentativeVote,
         'cast_referendum_vote' => castLegislationReferendum,
         'executive_sign' => executiveSign,

@@ -320,59 +320,15 @@ fn signer_vote_route(who: &AccountId) -> primitives::fee_policy::FeeRoute<Accoun
 
 /// 严格读取 `(cid_number, 费用账户)`；公权/私权重复、正反索引不一致或账户缺失均失败。
 fn exact_institution_fee_account(cid_number: &[u8]) -> Option<AccountId> {
-    let public_cid: public_manage::CidNumberOf<Runtime> = cid_number.to_vec().try_into().ok()?;
-    let public_name: public_manage::AccountNameOf<Runtime> =
-        primitives::account_derive::RESERVED_NAME_FEE
-            .to_vec()
-            .try_into()
-            .ok()?;
-    let public = public_manage::InstitutionAccounts::<Runtime>::get(&public_cid, &public_name);
-
-    let private_cid: private_manage::CidNumberOf<Runtime> = cid_number.to_vec().try_into().ok()?;
-    let private_name: private_manage::AccountNameOf<Runtime> =
-        primitives::account_derive::RESERVED_NAME_FEE
-            .to_vec()
-            .try_into()
-            .ok()?;
-    let private = private_manage::InstitutionAccounts::<Runtime>::get(&private_cid, &private_name);
-
-    let (account, is_public) = match (public, private) {
-        (Some(info), None) => (info.address, true),
-        (None, Some(info)) => (info.address, false),
-        _ => return None,
-    };
-    let reverse_matches = if is_public {
-        public_manage::AccountRegisteredCid::<Runtime>::get(&account).is_some_and(|info| {
-            info.cid_number.as_slice() == cid_number
-                && info.account_name.as_slice() == primitives::account_derive::RESERVED_NAME_FEE
-        })
-    } else {
-        private_manage::AccountRegisteredCid::<Runtime>::get(&account).is_some_and(|info| {
-            info.cid_number.as_slice() == cid_number
-                && info.account_name.as_slice() == primitives::account_derive::RESERVED_NAME_FEE
-        })
-    };
-    reverse_matches.then_some(account)
+    RuntimeInstitutionQuery::lookup_institution_account(
+        cid_number,
+        primitives::account_derive::RESERVED_NAME_FEE,
+    )
 }
 
 /// 账户型机构交易必须显式携带同一 CID 下的具体机构账户，禁止由账户反推或跨 CID 使用。
 fn exact_institution_account_matches(cid_number: &[u8], account: &AccountId) -> bool {
-    let public = public_manage::AccountRegisteredCid::<Runtime>::get(account);
-    let private = private_manage::AccountRegisteredCid::<Runtime>::get(account);
-    match (public, private) {
-        (Some(info), None) if info.cid_number.as_slice() == cid_number => {
-            public_manage::InstitutionAccounts::<Runtime>::get(&info.cid_number, &info.account_name)
-                .is_some_and(|stored| stored.address == *account)
-        }
-        (None, Some(info)) if info.cid_number.as_slice() == cid_number => {
-            private_manage::InstitutionAccounts::<Runtime>::get(
-                &info.cid_number,
-                &info.account_name,
-            )
-            .is_some_and(|stored| stored.address == *account)
-        }
-        _ => false,
-    }
+    RuntimeInstitutionQuery::account_belongs_to(cid_number, account)
 }
 
 fn is_authorized_institution_actor(who: &AccountId, cid_number: &[u8]) -> bool {
@@ -397,13 +353,50 @@ fn institution_onchain_route(
     who: &AccountId,
     cid_number: &[u8],
 ) -> primitives::fee_policy::FeeRoute<AccountId, Balance> {
+    institution_onchain_amount_route(who, cid_number, 0)
+}
+
+fn institution_onchain_amount_route(
+    who: &AccountId,
+    cid_number: &[u8],
+    transaction_amount: Balance,
+) -> primitives::fee_policy::FeeRoute<AccountId, Balance> {
     match institution_fee_payer(who, cid_number) {
         Some(payer) => primitives::fee_policy::FeeRoute::Onchain {
-            transaction_amount: 0,
+            transaction_amount,
             payer,
         },
         None => primitives::fee_policy::FeeRoute::Reject,
     }
+}
+
+/// 机构创建是一次立即落地的资金操作：零初始余额只带 CID，非零初始余额必须
+/// 明确同一 actor CID 下的资金账户，并按初始余额合计只收取一次链上交易费。
+fn institution_creation_route(
+    who: &AccountId,
+    cid_number: &[u8],
+    funding_account: &Option<AccountId>,
+    initial_total: Option<Balance>,
+) -> primitives::fee_policy::FeeRoute<AccountId, Balance> {
+    let Some(initial_total) = initial_total else {
+        return primitives::fee_policy::FeeRoute::Reject;
+    };
+    let funding_matches =
+        match (initial_total == 0, funding_account) {
+            (true, None) => true,
+            (false, Some(account)) => exact_institution_account_matches(cid_number, account)
+                && <RuntimeInstitutionAsset as primitives::institution_asset::InstitutionAsset<
+                    AccountId,
+                >>::can_spend(
+                    account,
+                    primitives::institution_asset::InstitutionAssetAction::InstitutionCreateFunding,
+                ),
+            _ => false,
+        };
+    if !funding_matches {
+        return primitives::fee_policy::FeeRoute::Reject;
+    }
+    institution_onchain_amount_route(who, cid_number, initial_total)
 }
 
 fn institution_account_onchain_route(
@@ -453,17 +446,25 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
             | RuntimeCall::PersonalAdmins(
                 personal_admins::pallet::Call::propose_admin_set_change { .. },
             ) => signer_onchain_route(who, 0),
-            RuntimeCall::PersonalManage(
-                personal_manage::pallet::Call::cleanup_rejected_proposal { .. },
-            ) => FeeRoute::Free,
 
             // 注册局机构操作：管理员只签名，交易费严格从 actor CID 的费用账户扣取。
             RuntimeCall::PublicManage(
                 public_manage::pallet::Call::propose_create_public_institution {
                     actor_cid_number,
+                    accounts,
+                    funding_account,
                     ..
-                }
-                | public_manage::pallet::Call::update_institution_info {
+                },
+            ) => institution_creation_route(
+                who,
+                actor_cid_number.as_slice(),
+                funding_account,
+                accounts
+                    .iter()
+                    .try_fold(0u128, |total, account| total.checked_add(account.amount)),
+            ),
+            RuntimeCall::PublicManage(
+                public_manage::pallet::Call::update_institution_info {
                     actor_cid_number, ..
                 }
                 | public_manage::pallet::Call::add_institution_account {
@@ -481,15 +482,23 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                 actor_cid_number.as_slice(),
                 institution_account,
             ),
-            RuntimeCall::PublicManage(
-                public_manage::pallet::Call::cleanup_rejected_public_proposal { .. },
-            ) => FeeRoute::Free,
             RuntimeCall::PrivateManage(
                 private_manage::pallet::Call::propose_create_private_institution {
                     actor_cid_number,
+                    accounts,
+                    funding_account,
                     ..
-                }
-                | private_manage::pallet::Call::update_institution_info {
+                },
+            ) => institution_creation_route(
+                who,
+                actor_cid_number.as_slice(),
+                funding_account,
+                accounts
+                    .iter()
+                    .try_fold(0u128, |total, account| total.checked_add(account.amount)),
+            ),
+            RuntimeCall::PrivateManage(
+                private_manage::pallet::Call::update_institution_info {
                     actor_cid_number, ..
                 }
                 | private_manage::pallet::Call::add_institution_account {
@@ -507,9 +516,6 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                 actor_cid_number.as_slice(),
                 institution_account,
             ),
-            RuntimeCall::PrivateManage(
-                private_manage::pallet::Call::cleanup_rejected_private_proposal { .. },
-            ) => FeeRoute::Free,
 
             RuntimeCall::AddressRegistry(
                 address_registry::pallet::Call::set_catalog_version {
@@ -589,9 +595,6 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                     actor_cid_number, ..
                 },
             ) => institution_onchain_route(who, actor_cid_number.as_slice()),
-            RuntimeCall::CitizenIdentity(
-                citizen_identity::pallet::Call::prepare_population_snapshot { .. },
-            ) => signer_onchain_route(who, 0),
 
             RuntimeCall::SquarePost(square_post::pallet::Call::publish_post { .. })
             | RuntimeCall::FullnodeIssuance(
@@ -728,16 +731,6 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                 election_vote::pallet::Call::cast_popular_vote { .. }
                 | election_vote::pallet::Call::cast_mutual_vote { .. },
             ) => signer_vote_route(who),
-            RuntimeCall::JointVote(
-                joint_vote::pallet::Call::prepare_joint_population_snapshot {
-                    actor_cid_number,
-                    ..
-                },
-            ) => institution_onchain_route(who, actor_cid_number.as_slice()),
-            RuntimeCall::LegislationVote(
-                legislation_vote::pallet::Call::prepare_population_snapshot { .. },
-            ) => signer_onchain_route(who, 0),
-
             // onchain-issuance 当前 10 个公开 call 都是明确的业务占位，授权后直接
             // `Ok(())`，尚未创建投票或执行资产逻辑。未实装前统一拒绝，禁止形成
             // “扣了机构操作费但没有业务结果”的假交易。
@@ -920,11 +913,12 @@ impl primitives::institution_asset::InstitutionAsset<AccountId> for RuntimeInsti
             );
         }
 
-        // 5. 多签保留账户（范围最宽）：只允许多签转账和关闭
+        // 5. 多签保留主账户：可为机构创建提供本金，也可执行多签转账和关闭。
         if is_reserved_main_account(source) {
             return matches!(
                 action,
-                primitives::institution_asset::InstitutionAssetAction::MultisigTransferExecute
+                primitives::institution_asset::InstitutionAssetAction::InstitutionCreateFunding
+                    | primitives::institution_asset::InstitutionAssetAction::MultisigTransferExecute
                     | primitives::institution_asset::InstitutionAssetAction::MultisigCloseExecute
             );
         }
@@ -974,20 +968,6 @@ impl primitives::multisig::ReservedAccountGuard<AccountId> for RuntimeReservedAc
 fn cid_institution_code(cid_number: &[u8]) -> Option<primitives::cid::code::InstitutionCode> {
     let text = core::str::from_utf8(cid_number).ok()?;
     primitives::cid::code::institution_code_from_cid_number(text.trim())
-}
-
-fn cid_scope_codes(cid_number: &[u8]) -> Option<([u8; 2], [u8; 3])> {
-    let text = core::str::from_utf8(cid_number).ok()?;
-    let r5 = text.trim().split('-').next()?;
-    let bytes = r5.as_bytes();
-    if bytes.len() != primitives::cid::number::CID_NUMBER_SEGMENT_R5_LEN {
-        return None;
-    }
-    let mut province_code = [0_u8; 2];
-    let mut city_code = [0_u8; 3];
-    province_code.copy_from_slice(&bytes[..2]);
-    city_code.copy_from_slice(&bytes[2..5]);
-    Some((province_code, city_code))
 }
 
 /// 联邦注册局省专员权限只认 entity 中的有效岗位任职。
@@ -1050,7 +1030,8 @@ impl entity_primitives::RegistryAuthority<AccountId> for RuntimeRegistryAuthorit
             return false;
         }
 
-        let Some((target_province_code, target_city_code)) = cid_scope_codes(target_cid_number)
+        let Ok((target_province_code, target_city_code)) =
+            primitives::cid::number::cid_scope_codes(target_cid_number)
         else {
             return false;
         };
@@ -1079,7 +1060,8 @@ impl entity_primitives::RegistryAuthority<AccountId> for RuntimeRegistryAuthorit
             if target_institution_code == CITY_REGISTRY_CODE || scope_city_name.is_empty() {
                 return false;
             }
-            let Some((issuer_province_code, issuer_city_code)) = cid_scope_codes(actor_cid_number)
+            let Ok((issuer_province_code, issuer_city_code)) =
+                primitives::cid::number::cid_scope_codes(actor_cid_number)
             else {
                 return false;
             };
@@ -1136,7 +1118,8 @@ impl address_registry::AddressUpdateAuthority<AccountId> for RuntimeAddressAutho
         if actor_code != CITY_REGISTRY_CODE {
             return false;
         }
-        let Some((issuer_province_code, issuer_city_code)) = cid_scope_codes(actor_cid_number)
+        let Ok((issuer_province_code, issuer_city_code)) =
+            primitives::cid::number::cid_scope_codes(actor_cid_number)
         else {
             return false;
         };
@@ -1261,6 +1244,7 @@ where
         legal_representative_cid_number: &[u8],
         legal_representative_account: &AccountId,
         account_names: &[Vec<u8>],
+        funding_account: Option<&AccountId>,
         roles_payload: &[u8],
         assignments_payload: &[u8],
         nonce: &NonceBytes,
@@ -1280,6 +1264,7 @@ where
                 scope_city_name,
                 cid_short_name,
                 legal_representative_account,
+                funding_account,
                 roles_payload,
                 assignments_payload,
                 town_code,
@@ -1315,6 +1300,7 @@ where
                 legal_representative_cid_number,
                 legal_representative_account,
                 account_names,
+                funding_account,
                 roles_payload,
                 assignments_payload,
                 nonce,
@@ -1393,9 +1379,11 @@ impl public_manage::Config for Runtime {
     type ReservedAccountChecker = RuntimeReservedAccountGuard;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type InstitutionAsset = RuntimeInstitutionAsset;
+    type InstitutionQuery = RuntimeInstitutionQuery;
+    type OnchainFeeCharger =
+        onchain::OnchainExecutionFeeCharger<Runtime, Balances, OnchainExecutionFeeDistributor>;
     type CidInstitutionVerifier = RuntimeCidInstitutionVerifier;
     type RegistryAuthority = RuntimeRegistryAuthority;
-    type FeeRouter = TransferFeeRouter;
     type MaxAdmins = MaxAdminsPerInstitution;
     type MaxCidNumberLength = ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>;
     type MaxAccountNameLength = ConstU32<128>;
@@ -1416,9 +1404,11 @@ impl private_manage::Config for Runtime {
     type ReservedAccountChecker = RuntimeReservedAccountGuard;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type InstitutionAsset = RuntimeInstitutionAsset;
+    type InstitutionQuery = RuntimeInstitutionQuery;
+    type OnchainFeeCharger =
+        onchain::OnchainExecutionFeeCharger<Runtime, Balances, OnchainExecutionFeeDistributor>;
     type CidInstitutionVerifier = RuntimeCidInstitutionVerifier;
     type RegistryAuthority = RuntimeRegistryAuthority;
-    type FeeRouter = TransferFeeRouter;
     type MaxAdmins = MaxAdminsPerInstitution;
     type MaxCidNumberLength = ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>;
     type MaxAccountNameLength = ConstU32<128>;
@@ -1438,11 +1428,11 @@ impl personal_manage::Config for Runtime {
     type InstitutionAsset = RuntimeInstitutionAsset;
     type PersonalAdminLifecycle = personal_admins::Pallet<Runtime>;
     type PersonalAdminQuery = personal_admins::Pallet<Runtime>;
-    type FeeRouter = TransferFeeRouter;
+    type OnchainFeeCharger =
+        onchain::OnchainExecutionFeeCharger<Runtime, Balances, OnchainExecutionFeeDistributor>;
     type MaxAccountNameLength = ConstU32<128>;
     type MaxPersonalAccountAdmins = MaxPersonalAccountAdmins;
     type MinCreateAmount = ConstU128<111>;
-    type MinCloseBalance = ConstU128<121>;
     type WeightInfo = personal_manage::weights::SubstrateWeight<Runtime>;
 }
 
@@ -1498,7 +1488,8 @@ impl
         if actor_code != CITY_REGISTRY_CODE {
             return false;
         }
-        let Some((registry_province_code, registry_city_code)) = cid_scope_codes(actor_cid_number)
+        let Ok((registry_province_code, registry_city_code)) =
+            primitives::cid::number::cid_scope_codes(actor_cid_number)
         else {
             return false;
         };
@@ -1617,6 +1608,8 @@ impl resolution_destroy::Config for Runtime {
     type Currency = Balances;
     type InternalVoteEngine = InternalVote;
     type InstitutionQuery = RuntimeInstitutionQuery;
+    type OnchainFeeCharger =
+        onchain::OnchainExecutionFeeCharger<Runtime, Balances, OnchainExecutionFeeDistributor>;
     type WeightInfo = resolution_destroy::weights::SubstrateWeight<Runtime>;
 }
 
@@ -1627,34 +1620,32 @@ impl grandpakey_change::Config for Runtime {
     type WeightInfo = grandpakey_change::weights::SubstrateWeight<Runtime>;
 }
 
-/// 转账提案手续费分账适配器：将旧 Currency NegativeImbalance 转换后
-/// 交给现有 OnchainFeeRouter 处理（80% 全节点 / 10% 国家储委会 / 10% 安全基金）。
-pub struct TransferFeeRouter;
+/// 执行期手续费分账适配器：把 `Currency` 产生的 `NegativeImbalance`
+/// 转成统一分账器接收的 `Credit`（80% 全节点 / 10% 国家储委会 / 10% 安全基金）。
+pub struct OnchainExecutionFeeDistributor;
 
 impl frame_support::traits::OnUnbalanced<pallet_balances::NegativeImbalance<Runtime>>
-    for TransferFeeRouter
+    for OnchainExecutionFeeDistributor
 {
     fn on_nonzero_unbalanced(amount: pallet_balances::NegativeImbalance<Runtime>) {
         use frame_support::traits::fungible::Balanced;
-        // 将旧 NegativeImbalance 转为新 Credit（金额相同，drop 行为兼容）
+        // 将 NegativeImbalance 等额转换为统一分账器使用的 Credit。
         let value = frame_support::traits::Imbalance::peek(&amount);
-        // 消费旧 imbalance（让余额变化生效）
+        // 消费 NegativeImbalance，让付款账户的余额变化正式生效。
         drop(amount);
-        // 用 Balanced trait 从"零"铸造等额 Credit 传给现有 router
+        // 用 Balanced trait 从“零”铸造等额 Credit 并交给统一分账器。
         // 注意：drop(NegativeImbalance) 已将资金从流通中移除，
         // issue() 再铸回等额 Credit 让 router 分配，总量不变。
         let credit = <Balances as Balanced<AccountId>>::issue(value);
 
-        type FeeRouter = onchain::OnchainFeeRouter<
+        type DistributionRouter = onchain::OnchainFeeRouter<
             Runtime,
             Balances,
             PowDigestAuthor,
             RuntimeNrcAccountProvider,
             RuntimeSafetyFundAccountProvider,
         >;
-        <FeeRouter as frame_support::traits::tokens::imbalance::OnUnbalanced<_>>::on_unbalanced(
-            credit,
-        );
+        <DistributionRouter as frame_support::traits::tokens::imbalance::OnUnbalanced<_>>::on_unbalanced(credit);
     }
 }
 
@@ -1665,7 +1656,8 @@ impl multisig::Config for Runtime {
     type InstitutionAsset = RuntimeInstitutionAsset;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type MaxRemarkLen = ConstU32<256>;
-    type FeeRouter = TransferFeeRouter;
+    type OnchainFeeCharger =
+        onchain::OnchainExecutionFeeCharger<Runtime, Balances, OnchainExecutionFeeDistributor>;
     // 多签 admin 配置查询拆给个人生命周期 pallet 与 runtime 机构聚合查询。
     // 转账治理时 multisig-transfer 通过 union 调用,先问个人侧、再问机构侧。
     type PersonalQuery = personal_manage::Pallet<Runtime>;
@@ -1679,26 +1671,58 @@ impl multisig::Config for Runtime {
 pub struct RuntimeInstitutionQuery;
 
 impl entity_primitives::InstitutionMultisigQuery<AccountId> for RuntimeInstitutionQuery {
+    fn lookup_institution_account(cid_number: &[u8], account_name: &[u8]) -> Option<AccountId> {
+        let public =
+            public_manage::Pallet::<Runtime>::lookup_institution_account(cid_number, account_name);
+        let private =
+            private_manage::Pallet::<Runtime>::lookup_institution_account(cid_number, account_name);
+        match (public, private) {
+            (Some(account), None) | (None, Some(account)) => Some(account),
+            _ => None,
+        }
+    }
+
+    fn account_belongs_to(cid_number: &[u8], addr: &AccountId) -> bool {
+        let public = public_manage::Pallet::<Runtime>::account_belongs_to(cid_number, addr);
+        let private = private_manage::Pallet::<Runtime>::account_belongs_to(cid_number, addr);
+        public ^ private
+    }
+
     fn lookup_cid(addr: &AccountId) -> Option<Vec<u8>> {
-        public_manage::Pallet::<Runtime>::lookup_cid(addr)
-            .or_else(|| private_manage::Pallet::<Runtime>::lookup_cid(addr))
+        match (
+            public_manage::Pallet::<Runtime>::lookup_cid(addr),
+            private_manage::Pallet::<Runtime>::lookup_cid(addr),
+        ) {
+            (Some(cid), None) | (None, Some(cid)) => Some(cid),
+            _ => None,
+        }
     }
 
     fn lookup_org(addr: &AccountId) -> Option<votingengine::types::InstitutionCode> {
-        public_manage::Pallet::<Runtime>::lookup_org(addr)
-            .or_else(|| private_manage::Pallet::<Runtime>::lookup_org(addr))
+        match (
+            public_manage::Pallet::<Runtime>::lookup_org(addr),
+            private_manage::Pallet::<Runtime>::lookup_org(addr),
+        ) {
+            (Some(code), None) | (None, Some(code)) => Some(code),
+            _ => None,
+        }
     }
 
     fn lookup_admin_config(
         addr: &AccountId,
     ) -> Option<primitives::multisig::MultisigConfigSnapshot<AccountId>> {
-        public_manage::Pallet::<Runtime>::lookup_admin_config(addr)
-            .or_else(|| private_manage::Pallet::<Runtime>::lookup_admin_config(addr))
+        match (
+            public_manage::Pallet::<Runtime>::lookup_admin_config(addr),
+            private_manage::Pallet::<Runtime>::lookup_admin_config(addr),
+        ) {
+            (Some(config), None) | (None, Some(config)) => Some(config),
+            _ => None,
+        }
     }
 
     fn account_exists(addr: &AccountId) -> bool {
         public_manage::Pallet::<Runtime>::account_exists(addr)
-            || private_manage::Pallet::<Runtime>::account_exists(addr)
+            ^ private_manage::Pallet::<Runtime>::account_exists(addr)
     }
 }
 
@@ -2570,9 +2594,10 @@ impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityRe
 // 业务调用必须经由 OnchainIssuance::propose_* → InternalVote/JointVote callback →
 // onchain_issuance 内部以 Root 调用 pallet_assets 的内核 API。
 //
-// 第一期 deposit 系列常量统一为 0(框架阶段),业务实装时再据 ADR-011 调整。
-// 押金语义与 GMB 1000 元创建费正交,后者通过 onchain_issuance::fee::charge_creation_fee 直接走 GMB 转账,
-// 不复用 pallet_assets 自身的 deposit 机制。
+// pallet_assets 的 deposit 系列常量统一为 0，仅保留底层资产记账能力。
+// 当前 OnchainIssuance 对外调用仍由 RuntimeCallFilter 拒绝；后续业务实装时，
+// 费用类型必须进入统一 FeeRoute，实际链上执行费必须复用统一执行收费接口，
+// 不得恢复专用创建费、押金收费或其它旁路。
 
 parameter_types! {
     /// 资产 metadata 字符串字段长度上限(name / symbol / description),
@@ -2580,7 +2605,7 @@ parameter_types! {
     pub const AssetsStringLimit: u32 = 64;
     /// 单批 destroy 时一次清理的账户/审批上限。
     pub const AssetsRemoveItemsLimit: u32 = 1000;
-    /// pallet_assets 自身 deposit 系列常量(均设 0,真实计费走 onchain_issuance::fee)。
+    /// pallet_assets 自身 deposit 系列常量；均设为 0，不承担业务收费职责。
     pub const AssetsDepositZero: Balance = 0;
 }
 
@@ -2614,16 +2639,6 @@ impl pallet_assets::Config for Runtime {
     type BenchmarkHelper = ();
 }
 
-/// NRC 费用账户(fee_account)— 创建费 1000 GMB 收款用。
-///
-/// 复用既有 `RuntimeNrcAccountProvider`(它实现 onchain::NrcAccountProvider,
-/// 也返回 fee_account),通过为同 struct 再实现 onchain_issuance 自己的 trait 完成桥接,语义一致。
-impl onchain_issuance::pallet::NrcFeeAccountProvider<AccountId> for RuntimeNrcAccountProvider {
-    fn nrc_fee_account() -> Option<AccountId> {
-        <RuntimeNrcAccountProvider as onchain::NrcAccountProvider<AccountId>>::nrc_account()
-    }
-}
-
 parameter_types! {
     pub const OnchainAssetMaxNameLen: u32 = 64;
     pub const OnchainAssetMaxSymbolLen: u32 = 16;
@@ -2636,14 +2651,11 @@ parameter_types! {
 
 impl onchain_issuance::pallet::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    /// Currency 必须实现 ReservableCurrency(ADR-011 v2 第六节押金机制),
-    /// pallet_balances 默认实现该 trait,直接接 Balances 即可。
     type Currency = Balances;
     /// pallet_assets 内核类型绑定。onchain_issuance 通过该类型调内核 create / mint_into 等内部 API,
     /// 不走原生 extrinsic(已被 RuntimeCallFilter 拦截)。
     type Assets = Assets;
     type InstitutionQuery = RuntimeInstitutionQuery;
-    type NrcFeeAccountProvider = RuntimeNrcAccountProvider;
     type MaxAssetNameLen = OnchainAssetMaxNameLen;
     type MaxAssetSymbolLen = OnchainAssetMaxSymbolLen;
     type MaxAssetDescriptionLen = OnchainAssetMaxDescriptionLen;

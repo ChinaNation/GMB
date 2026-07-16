@@ -39,7 +39,8 @@
 - `PersonalManage::propose_create`：pallet `7`，call `0`，字段顺序固定为
   `account_name / admins / regular_threshold / amount`。
 - `PersonalManage::propose_close`：pallet `7`，call `1`。
-- `PersonalManage::cleanup_rejected_proposal`：pallet `7`，call `2`。
+- call `2` 永久留洞；拒绝、超时与执行失败清理由链上投票引擎自动完成，CitizenApp
+  不构造人工清理交易。
 - `PersonalAdmins::propose_admin_set_change`：pallet `29`，call `0`，字段顺序固定为
   `institution_code / account_id / admins / new_threshold`，`institution_code` 必须为 `PMUL`。
 - `regular_threshold` 为用户输入的普通提案阈值，App 侧校验范围为

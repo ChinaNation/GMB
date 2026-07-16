@@ -34,7 +34,7 @@
 | `InstitutionAsset` | `institution-asset` | `RuntimeInstitutionAsset` | `public-manage`, `private-manage`, `personal-manage`, `multisig-transfer`, `offchain-transaction` |
 | `NrcAccountProvider` | `onchain-transaction` | `RuntimeNrcAccountProvider` | `onchain-transaction` (OnchainFeeRouter) |
 | `SafetyFundAccountProvider` | `onchain-transaction` | `RuntimeSafetyFundAccountProvider` | `onchain-transaction` (OnchainFeeRouter) |
-| `FeeRouter` (OnUnbalanced) | `frame_support` trait | `TransferFeeRouter` | `public-manage`, `private-manage`, `personal-manage`, `multisig-transfer` |
+| `OnchainFeeCharger` | `primitives::fee_policy` | `OnchainExecutionFeeCharger<Runtime, Balances, OnchainExecutionFeeDistributor>` | `public-manage`, `private-manage`, `personal-manage`, `multisig-transfer`, `resolution-destroy` |
 | `FeeRoute` | `primitives::fee_policy` | `RuntimeFeeRouter` 生成唯一类型 | `onchain::OnchainChargeAdapter`、链下收费执行器 |
 | `CallFeeRoute` | `onchain` | `RuntimeFeeRouter` | `pallet-transaction-payment` (`OnChargeTransaction`) |
 | `ProtectedSourceChecker` | `entity-primitives` / `offchain-transaction` | `RuntimeProtectedSourceChecker` | `public-manage`, `private-manage`, `personal-manage`, `multisig-transfer`, `offchain-transaction` |
@@ -57,7 +57,7 @@
 | `RuntimeCitizenIdentityReader` | 给投票引擎读取投票资格、参选资格和链上人口分母 |
 | `RuntimeCitizenIdentityAuthority` | 给公民身份模块校验注册局权限和公民钱包签名 |
 | `RuntimeJointVoteResultCallback` | 按模块路由：先查 `resolution-issuance`，再查 `runtime-upgrade` |
-| `TransferFeeRouter` | 旧 NegativeImbalance -> Credit 转换 -> `OnchainFeeRouter` 80/10/10 分账 |
+| `OnchainExecutionFeeDistributor` | 将执行期 `NegativeImbalance` 等额转换为 `Credit`，再交给 `OnchainFeeRouter` 做 80/10/10 分账 |
 | `RuntimeSafetyFundAccountProvider` | 将安全基金制度常量 `SAFETY_FUND_ACCOUNT` 转为 runtime 账户，避免手续费分账热路径重复 decode |
 | `RuntimeInstitutionAsset` | stake 禁止一切; reserved main 仅允许转账/销户; fee_account 仅允许 sweep; 安全基金仅允许安全基金转账; CB 费用账户仅允许 sweep |
 
@@ -82,3 +82,9 @@
 ```
 
 `primitives::fee_policy::TRANSACTION_TIP` 固定为零；`WeightToFee` 和 `LengthToFee` 也固定为零，因此收费只可能来自五类路由对应执行器。
+
+投票通过后的业务回调没有新的外层交易，资金执行统一调用
+`OnchainExecutionFeeCharger`：机构本金从被授权的具体机构账户支出，执行手续费
+只从同一 actor CID 的费用账户支出；个人多签本金与执行手续费均由个人账户支出。
+手续费扣款、80/10/10 分账和本金变化处于同一 storage transaction，任一失败全部回滚，
+不存在管理员钱包代付或付款账户回落。

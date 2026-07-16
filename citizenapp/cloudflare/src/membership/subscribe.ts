@@ -1,6 +1,5 @@
 import { decodeAddress } from '@polkadot/util-crypto';
 import type { Env, MembershipRow } from '../types';
-import { fetchChainIdentityState } from '../chain/identity';
 import { HttpError, jsonResponse, readJson } from '../shared/http';
 import { ownerPubkeyHex } from '../shared/ids';
 import { nowMs } from '../shared/time';
@@ -11,12 +10,7 @@ import {
 } from '../account/action_challenge';
 import { getMembership } from './service';
 import { changeStripeSubscriptionTier, resumeStripeSubscription } from './stripe_api';
-import {
-  assertMembershipLevel,
-  identityEligibleForPlan,
-  membershipPlan,
-  type MembershipLevel
-} from './plans';
+import { assertMembershipLevel, membershipPlan, type MembershipLevel } from './plans';
 
 /// Stripe 侧「仍存活、可换档」的订阅状态集合。已彻底取消 / 未完成过期的不算，
 /// 视同无活跃订阅、走全新订阅。
@@ -61,8 +55,7 @@ export async function subscribeChallengeRoute(request: Request, env: Env): Promi
   const body = await readJson<CheckoutRequestBody>(request);
   const ownerAccount = ownerAccountFromRequest(body);
   const membershipLevel = assertCheckoutMembershipLevel(body.membership_level);
-  // 资格预检：不满足直接拒，避免出无效签名 QR。
-  await assertCheckoutEligibility(env, ownerAccount, membershipLevel);
+  // 会员与身份解耦（ADR-036）：任意身份可订任意档，下单无身份资格预检。
   const challenge = await issueActionChallenge(
     env,
     ownerAccount,
@@ -93,12 +86,13 @@ export async function subscribeChallengeRoute(request: Request, env: Env): Promi
   });
 }
 
-/// 换档金额预览（本地按当期剩余周期比例估算，规则3）：升档=补差价、降档=转权益、
-/// 同价=切换。仅供官网签名前展示；实际结算以 Stripe proration（按秒）为准，故为估算值。
+/// 换档金额预览（本地按当期剩余周期比例估算，规则3）：升档=补差价、降档=转权益。
+/// 三档价互异（$2.99/$9.99/$99.99），换档必为升或降。仅供官网签名前展示；实际结算以
+/// Stripe proration（按秒）为准，故为估算值。
 function tierChangePreview(
   existing: MembershipRow,
   targetLevel: MembershipLevel
-): { kind: 'upgrade' | 'downgrade' | 'switch'; amount_cents: number } | null {
+): { kind: 'upgrade' | 'downgrade'; amount_cents: number } | null {
   if (existing.membership_level === targetLevel) {
     return null;
   }
@@ -112,13 +106,9 @@ function tierChangePreview(
       ? Math.max(0, Math.min(1, (end - now) / (end - start)))
       : 1;
   const prorated = Math.round(fraction * (targetCents - currentCents));
-  if (targetCents > currentCents) {
-    return { kind: 'upgrade', amount_cents: prorated };
-  }
-  if (targetCents < currentCents) {
-    return { kind: 'downgrade', amount_cents: Math.abs(prorated) };
-  }
-  return { kind: 'switch', amount_cents: 0 };
+  return targetCents > currentCents
+    ? { kind: 'upgrade', amount_cents: prorated }
+    : { kind: 'downgrade', amount_cents: Math.abs(prorated) };
 }
 
 /// POST /v1/square/membership/subscribe —— 验签（0x1D，level 一致）后创建 Stripe checkout。
@@ -138,7 +128,6 @@ export async function subscribeConfirmRoute(request: Request, env: Env): Promise
     context: membershipLevel
   });
   try {
-    await assertCheckoutEligibility(env, ownerAccount, membershipLevel);
     // 规则1 一钱包一订阅：已有活跃订阅 → 在同一订阅上换档 / 续订 / 无操作，绝不新建第二个。
     const existing = await getMembership(env, ownerAccount);
     if (existing && hasLiveSubscription(existing)) {
@@ -179,14 +168,13 @@ interface MembershipChangeResult {
     | 'already_subscribed'
     | 'upgraded'
     | 'upgrade_pending'
-    | 'downgraded'
-    | 'switched';
+    | 'downgraded';
   payment_url?: string;
 }
 
 /// 在既有活跃订阅上按目标档换档（规则 2–4）。权益落库以 subscription webhook 为准，
 /// 本函数只驱动 Stripe：同档→续订/无操作；升档→补差价（付成功才生效，否则给付款页）；
-/// 降档/同价→即时生效（差额进信用余额）。
+/// 降档→即时生效（差额进信用余额）。三档价互异，换档非升即降。
 async function applyMembershipChange(
   env: Env,
   existing: MembershipRow,
@@ -223,33 +211,8 @@ async function applyMembershipChange(
       ? { action: 'upgraded' }
       : { action: 'upgrade_pending', payment_url: result.paymentUrl ?? undefined };
   }
-  // 降档（进信用余额）或同价换档（民主↔投票 $9.99）：即时生效。
-  return { action: targetCents < currentCents ? 'downgraded' : 'switched' };
-}
-
-export async function assertCheckoutEligibility(
-  env: Env,
-  ownerAccount: string,
-  membershipLevel: MembershipLevel
-): Promise<void> {
-  const plan = membershipPlan(membershipLevel);
-  // 精确匹配：读链身份，必须恰好等于该会员所属身份档，禁止降档/越级。
-  // 访客身份会员（freedom / democracy）也要确认账户确无 voting/candidate 身份。
-  try {
-    const identity = await fetchChainIdentityState(env, ownerAccount);
-    if (!identityEligibleForPlan(identity.identity_level, plan)) {
-      throw new HttpError(
-        403,
-        'membership_identity_mismatch',
-        '当前身份不能订阅该会员（禁止降档或越级）'
-      );
-    }
-  } catch (error) {
-    if (error instanceof HttpError) {
-      throw error;
-    }
-    throw new HttpError(503, 'membership_identity_check_failed', '链上身份读取失败，暂不能创建订阅');
-  }
+  // 降档（进信用余额）：即时生效。
+  return { action: 'downgraded' };
 }
 
 async function createStripeCheckoutSession(
@@ -345,13 +308,11 @@ async function createStripeCheckoutSession(
 
 function priceIdForMembership(env: Env, membershipLevel: MembershipLevel): string {
   const priceId =
-    membershipLevel === 'candidate'
-      ? env.CANDIDATE_PRICE_ID
-      : membershipLevel === 'voting'
-        ? env.VOTING_PRICE_ID
-        : membershipLevel === 'democracy'
-          ? env.DEMOCRACY_PRICE_ID
-          : env.FREEDOM_PRICE_ID;
+    membershipLevel === 'spark'
+      ? env.SPARK_PRICE_ID
+      : membershipLevel === 'democracy'
+        ? env.DEMOCRACY_PRICE_ID
+        : env.FREEDOM_PRICE_ID;
   if (!priceId) {
     throw new HttpError(503, 'stripe_price_not_configured', 'Stripe 会员价格 ID 未配置');
   }

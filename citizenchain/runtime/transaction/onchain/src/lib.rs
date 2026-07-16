@@ -6,7 +6,7 @@ use frame_support::traits::{
         fungible::{Balanced, Credit},
         Fortitude, Imbalance, Precision, Preservation,
     },
-    FindAuthor, OnUnbalanced,
+    Currency, FindAuthor, OnUnbalanced,
 };
 use frame_support::unsigned::TransactionValidityError;
 use pallet_transaction_payment::{Config as TxPaymentConfig, OnChargeTransaction, TxCreditHold};
@@ -200,6 +200,45 @@ pub trait SafetyFundAccountProvider<AccountId> {
 pub struct OnchainChargeAdapter<Currency, Router, FeeRouteProvider>(
     PhantomData<(Currency, Router, FeeRouteProvider)>,
 );
+
+/// 业务回调执行期链上交易费收取器。
+///
+/// 外层 extrinsic 继续由 `OnchainChargeAdapter` 消费 `FeeRoute`；投票通过后的
+/// 资金执行没有新的外层签名交易，因此由业务模块把已经核验的确切付款账户和
+/// 金额交给本执行器。两条路径共用同一公式、同一分账和同一 `FeePaid` 事件。
+pub struct OnchainExecutionFeeCharger<T, C, Router>(PhantomData<(T, C, Router)>);
+
+impl<T, C, Router>
+    primitives::fee_policy::OnchainFeeCharger<T::AccountId, <C as Currency<T::AccountId>>::Balance>
+    for OnchainExecutionFeeCharger<T, C, Router>
+where
+    T: pallet::Config,
+    C: Currency<T::AccountId>,
+    Router: OnUnbalanced<<C as Currency<T::AccountId>>::NegativeImbalance>,
+    <C as Currency<T::AccountId>>::Balance: SaturatedConversion + Copy + Zero,
+{
+    fn charge(
+        payer: &T::AccountId,
+        transaction_amount: <C as Currency<T::AccountId>>::Balance,
+    ) -> Result<<C as Currency<T::AccountId>>::Balance, sp_runtime::DispatchError> {
+        let fee_u128 = primitives::fee_policy::calculate_onchain_fee(
+            transaction_amount.saturated_into::<u128>(),
+        );
+        let fee = fee_u128.saturated_into();
+        let imbalance = C::withdraw(
+            payer,
+            fee,
+            frame_support::traits::WithdrawReasons::FEE,
+            frame_support::traits::ExistenceRequirement::KeepAlive,
+        )?;
+        Router::on_unbalanced(imbalance);
+        pallet::Pallet::<T>::deposit_event(pallet::Event::FeePaid {
+            who: payer.clone(),
+            fee: fee_u128,
+        });
+        Ok(fee)
+    }
+}
 
 impl<T, Currency, Router, FeeRouteProvider> OnChargeTransaction<T>
     for OnchainChargeAdapter<Currency, Router, FeeRouteProvider>

@@ -47,6 +47,7 @@ class ChatConversationPreview {
     required this.lastUpdatedAt,
     required this.unreadCount,
     required this.deliveryState,
+    this.conversationKind = 'dm',
   });
 
   /// 会话 ID，由 Chat 层生成，不复用链上交易哈希。
@@ -69,6 +70,11 @@ class ChatConversationPreview {
 
   /// 最近一条消息投递状态。
   final ChatMessageDeliveryState deliveryState;
+
+  /// 会话类型:"dm"=私聊,"group"=私密小群。
+  final String conversationKind;
+
+  bool get isGroup => conversationKind == 'group';
 }
 
 /// 聊天 Tab 顶部状态快照。

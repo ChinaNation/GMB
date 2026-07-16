@@ -20,7 +20,7 @@ use primitives::count_const::{
     JOINT_VOTE_PASS_THRESHOLD, NRC_JOINT_VOTE_WEIGHT, PRB_JOINT_VOTE_WEIGHT, PRC_JOINT_VOTE_WEIGHT,
 };
 
-use votingengine::{types::CidNumber, PopulationScope, Proposal};
+use votingengine::{types::CidNumber, Proposal};
 
 pub mod jointinternal;
 pub mod jointreferendum;
@@ -151,48 +151,9 @@ pub mod pallet {
     pub type ReferendumTallies<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, votingengine::VoteCountU64, ValueQuery>;
 
-    #[derive(
-        Encode,
-        Decode,
-        DecodeWithMemTracking,
-        Clone,
-        RuntimeDebug,
-        TypeInfo,
-        MaxEncodedLen,
-        PartialEq,
-        Eq,
-    )]
-    pub struct PreparedPopulationSnapshot<BlockNumber> {
-        /// 发起机构唯一 CID，创建提案时必须与调用参数一致。
-        pub actor_cid_number: CidNumber,
-        /// citizen-identity 创建的不可变资格快照 ID。
-        pub snapshot_id: u64,
-        /// 联合公投阶段可投票总人数，由投票引擎从链上公民身份模块读取后缓存。
-        pub eligible_total: u64,
-        /// 准备快照所在区块。
-        pub prepared_at: BlockNumber,
-    }
-
-    /// 已准备的人口快照缓存：发起联合提案时由投票引擎消费。
-    #[pallet::storage]
-    #[pallet::getter(fn pending_population_snapshot)]
-    pub type PendingPopulationSnapshots<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        T::AccountId,
-        PreparedPopulationSnapshot<BlockNumberFor<T>>,
-        OptionQuery,
-    >;
-
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// 联合投票人口快照已由投票引擎读取并缓存。
-        PopulationSnapshotPrepared {
-            who: T::AccountId,
-            eligible_total: u64,
-            scope: PopulationScope,
-        },
         /// 联合投票中某机构管理员已投出一票。
         JointAdminVoteCast {
             proposal_id: u64,
@@ -218,12 +179,6 @@ pub mod pallet {
     pub enum Error<T> {
         /// 联合公投总分母未设置(eligible_total == 0)。
         CitizenEligibleTotalNotSet,
-        /// 人口快照参数无效或作用域没有可投票公民。
-        InvalidPopulationSnapshot,
-        /// 发起联合提案前尚未准备人口快照。
-        PopulationSnapshotNotPrepared,
-        /// 人口快照不是当前区块准备的快照,不能代表提案发起时刻的公民分母。
-        PopulationSnapshotNotCurrent,
         /// 公民身份投票资格校验未通过。
         CitizenNotEligible,
         /// 已投票人数达到创建时人口快照分母，拒绝分子超过 100%。
@@ -260,28 +215,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
             Self::do_jointreferendum_vote(who, proposal_id, approve)
         }
-
-        /// 准备联合投票人口快照。
-        ///
-        /// 人口快照由投票引擎从 citizen-identity 链上状态直接读取。
-        /// 业务模块只能在随后创建提案时消费已准备快照，不能再透传这些字段。
-        #[pallet::call_index(2)]
-        #[pallet::weight(
-            <T as Config>::WeightInfo::prepare_joint_population_snapshot().max(
-                // benchmark 创世态不能构造生产管理员权限，只实测 pending 写入主体；
-                // 这里永久补足管理员解析、citizen-identity snapshot 和替换释放上界。
-                Weight::from_parts(30_000_000, 105_893)
-                    .saturating_add(T::DbWeight::get().reads_writes(8, 5))
-            )
-        )]
-        pub fn prepare_joint_population_snapshot(
-            origin: OriginFor<T>,
-            actor_cid_number: CidNumber,
-            scope: PopulationScope,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            Self::do_prepare_joint_population_snapshot(who, actor_cid_number, scope)
-        }
+        // call_index(2) 已永久废弃：人口快照只能在创建联合提案的事务内由投票引擎生成。
     }
 }
 // trait 实现 — 业务方法住在 jointinternal / jointreferendum 子模块

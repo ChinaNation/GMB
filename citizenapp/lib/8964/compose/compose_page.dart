@@ -147,9 +147,9 @@ class _SquareComposePageState extends State<SquareComposePage> {
           builder: (context, snapshot) {
             final identity =
                 snapshot.data ?? const SquareIdentityState(ownerAccount: '');
-            final certified = identity.isCertified;
-            // 认证失效时把竞选类降级，避免非认证用户停留在竞选档。
-            final effectiveType = _type.degradedIfNotCertified(certified);
+            final canCampaign = identity.isCandidate;
+            // 无竞选身份时把竞选类降级，避免非竞选身份用户停留在竞选档。
+            final effectiveType = _type.degradedIfNotCampaignEligible(canCampaign);
             if (effectiveType != _type) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted) setState(() => _type = effectiveType);
@@ -169,7 +169,7 @@ class _SquareComposePageState extends State<SquareComposePage> {
                 _TypeBar(
                   identity: identity,
                   type: effectiveType,
-                  certified: certified,
+                  canCampaign: canCampaign,
                   onChanged: (next) => setState(() => _type = next),
                 ),
                 Expanded(
@@ -246,8 +246,8 @@ class _SquareComposePageState extends State<SquareComposePage> {
       _showError(payload.error!);
       return;
     }
-    if (_type.isCampaign && !identity.isCertified) {
-      _showError('当前钱包未认证，不能发布竞选内容');
+    if (_type.isCampaign && !identity.isCandidate) {
+      _showError('只有竞选身份的公民才能发布竞选内容');
       return;
     }
     setState(() {
@@ -343,18 +343,18 @@ class _TypeBar extends StatelessWidget {
   const _TypeBar({
     required this.identity,
     required this.type,
-    required this.certified,
+    required this.canCampaign,
     required this.onChanged,
   });
 
   final SquareIdentityState identity;
   final SquareComposeType type;
-  final bool certified;
+  final bool canCampaign;
   final ValueChanged<SquareComposeType> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final options = SquareComposeType.optionsFor(certified: certified);
+    final options = SquareComposeType.optionsFor(canCampaign: canCampaign);
     final name = identity.walletName ?? '我';
     final initial = name.isEmpty ? '我' : name.substring(0, 1);
     return Padding(

@@ -1,12 +1,12 @@
 import type { Env } from '../types';
-import { fetchChainIdentityStateCached } from '../chain/identity';
+import { fetchChainIdentityStateCached, type IdentityLevel } from '../chain/identity';
 import { batchMemberships, subscriptionIsActive } from '../membership/service';
-import type { IdentityLevel, MembershipLevel } from '../membership/plans';
+import type { MembershipLevel } from '../membership/plans';
 import { readProfileDoc } from '../profiles/repository';
 
 /// 帖子作者展示信号（公开）：徽章身份/会员 + 展示名 + 头像对象键。
 /// identity_level 是链上身份档（visitor/voting/candidate）；membership_level 是
-/// 已购买会员档（freedom/democracy/voting/candidate），二者已解耦。
+/// 已购买会员档（freedom/democracy/spark），二者已彻底解耦（ADR-036）。
 /// display_name / avatar_object_key 取自作者 profile.json（链下公开资料），供 feed 直出真名和真头像。
 export interface AuthorSignals {
   identity_level: IdentityLevel;

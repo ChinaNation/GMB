@@ -2,7 +2,6 @@
 
 ## open
 
-- `memory/08-tasks/open/20260715-citizenapp-chat-media-emoji.md`
 - `memory/08-tasks/open/20260507-173627-账户级内部投票管理员模型第0步设计-所有可操作账户使用内部投票-质押账户永不可操作-治理机构账户共.md`
 - `memory/08-tasks/open/20260507-201558-第4步改造-organization-manage-机构账户级管理员主体.md`
 - `memory/08-tasks/open/20260507-onchain-issuance-plain-ft.md`
@@ -174,8 +173,13 @@
 - `memory/08-tasks/open/20260714-stripe-sandbox-e2e.md`
 - `memory/08-tasks/open/20260714-votingengine-step1-security.md`
 - `memory/08-tasks/open/20260714-votingengine-structure-tracks-benchmark.md`
-- `memory/08-tasks/open/20260715-citizenapp-profile-fallback-unification.md`（已完成，待归档）
-- `memory/08-tasks/open/20260715-citizenapp-contact-actions.md`（已完成，待归档）
+- `memory/08-tasks/open/20260715-citizenapp-channel-broadcast-square.md`
+- `memory/08-tasks/open/20260715-citizenapp-chat-group-private-e2e.md`
+- `memory/08-tasks/open/20260715-citizenapp-chat-media-emoji.md`
+- `memory/08-tasks/open/20260715-citizenapp-contact-actions.md`
+- `memory/08-tasks/open/20260715-citizenapp-profile-fallback-unification.md`
+- `memory/08-tasks/open/20260716-citizen-coin-native-membership.md`
+- `memory/08-tasks/open/20260716-membership-decouple-rollout-alignment.md`
 - `memory/08-tasks/open/runtime-full-audit.md`
 
 ## done
@@ -410,5 +414,10 @@
 - `memory/08-tasks/done/20260714-mining-network-card-layout.md`
 - `memory/08-tasks/done/20260714-votingengine-execution-snapshot-hardening.md`
 - `memory/08-tasks/done/20260715-citizenapp-electronic-passport-three-cards.md`
+- `memory/08-tasks/done/20260715-citizenapp-institution-code-generator-fix.md`
+- `memory/08-tasks/done/20260715-citizenapp-institution-display-fixes.md`
 - `memory/08-tasks/done/20260715-citizenapp-legislation-card-icons.md`
 - `memory/08-tasks/done/20260715-citizenapp-membership-contacts.md`
+- `memory/08-tasks/done/20260715-citizenchain-node-institution-display-fixes.md`
+- `memory/08-tasks/done/20260716-123856-personal-manage-institution-id-account.md`
+- `memory/08-tasks/done/20260716-citizenapp-membership-identity-decouple.md`

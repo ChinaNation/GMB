@@ -2,7 +2,7 @@
 
 - 建卡日期：2026-07-16
 - 归属 Agent：Mobile Agent（App 会员卡）+ CID/后端（Cloudflare Worker + Stripe）+ 官网（citizenweb）
-- 状态：待开发（第一轮需求分析 + 2 项边界决策已定案，2026-07-16）
+- 状态：**已完成编码 + 测试（2026-07-16）**；待用户侧 Stripe/官网部署配置
 - 决策来源：用户 2026-07-15 定稿 + 2026-07-16 边界拍板
 - 关联 ADR：ADR-036（本任务新建，取代 ADR-033 规则5 身份绑定冻结）
 - 关联记忆：[[project_membership_identity_decoupling_2026_07_15]]、[[project_chat_media_tiered_relay_2026_07_15]]、[[project_membership_visitor_two_tier_exact_match]]、[[project_citizenapp_four_gate_entry_failclosed]]、[[project_citizenapp_passport_default_user]]
@@ -11,8 +11,8 @@
 ## 1. 任务需求（用户定稿）
 
 1. 把「会员=付费订阅」与「身份=电子护照（访客/投票/竞选）」**彻底解耦**成两个独立轴，任意身份可选任意会员档（全组合）。
-2. 订阅三档月费：`freedom` 自由会员 $2.99、`democracy` 民主会员 $9.99、`spark` 星火会员 $99.99。
-3. 会员权益之一 = 聊天文件大小上限：无订阅/自由 ≤10MB、民主 ≤100MB、星火 ≤5GB。>100MB（仅星火，100MB–5GB）走 Cloudflare 瞬时群密钥密文中转——**本卡不实现该中转，归卡2 阶段3**；本卡只定「星火可发 ≤5GB」的档位与单源限额值。
+2. 订阅三档月费：`freedom` 自由会员 $2.99、`democracy` 民主会员 $9.99、`spark` 薪火会员 $99.99。
+3. 会员权益之一 = 聊天文件大小上限：无订阅/自由 ≤10MB、民主 ≤100MB、薪火 ≤5GB。>100MB（仅薪火，100MB–5GB）走 Cloudflare 瞬时群密钥密文中转——**本卡不实现该中转，归卡2 阶段3**；本卡只定「薪火可发 ≤5GB」的档位与单源限额值。
 
 ## 2. 目标模型（两轴解耦）
 
@@ -78,7 +78,7 @@
 
 - 门禁2 发布闸 `posts/confirm→requireActiveMembership`：只判订阅有效，删身份精确匹配/冻结。
 - 门禁3 用量：`usageLimits` 三档。
-- 聊天：新增媒体按档限额（客户端强制）；>100MB 星火中转的服务端档位闸 = 卡2 阶段3。
+- 聊天：新增媒体按档限额（客户端强制）；>100MB 薪火中转的服务端档位闸 = 卡2 阶段3。
 
 ## 8. 必须遵守
 
@@ -108,5 +108,17 @@
 
 ## 11. 待用户侧配置
 
-- Stripe：$99.99 price 改挂 `SPARK_PRICE_ID`；停用 voting $9.99 price 的会员映射。
+- Stripe：$99.99 price 改挂 `SPARK_PRICE_ID`；停用 voting $9.99 price 的会员映射（price ID 已在 wrangler.toml staging/production 段就位）。
 - 官网重新构建部署（三档卡）。
+
+## 12. 完成记录（2026-07-16）
+
+- **Worker**：`plans.ts` 三档 + `chat_file_max_bytes`（删 required_identity/identityEligibleForPlan/voting，candidate→spark）；`service.ts` 删身份冻结子系统（resolveMembershipEntitlement 冻结/syncCollectionState/identityLevelForFreeze/eligibleMembershipLevels）+ upsert 去身份列；`subscribe.ts` 删 assertCheckoutEligibility 身份门 + priceId→SPARK + 删同价 switch 死分支；`webhook.ts` 删 identity_required + visitorIdentity + VOTING 反查、加 SPARK；`prepaid.ts` 去身份；`stripe_api.ts` 删 pause/resumeStripeCollection；`types.ts` Env 三档 price + MembershipRow 删 identity/frozen 列；`limits/catalog.ts` usageLimits 三档 + `square_video_spark`；`feeds/browse.ts`/`uploads/{quota,service,validation}.ts`/`limits/usage.ts`/`membership/archive.ts`/`social/author_signals.ts`/`chain/identity.ts`（IdentityLevel 本地化）随改；`wrangler.toml` 三处 env 段；`migrations/0001_square_core.sql` 基线删 4 列。**tsc 干净 + 164 vitest 全过**（membership/membership_subscribe/limits/uploads_quota/profiles 等测试改三档 + 删冻结/身份匹配用例）。
+- **App**：`square_api_client.dart` `SquareMembershipState/Plan` 去身份/冻结 + 加 `chatFileMaxBytes` + fetchMembership 简化解析 + 接 `ChatMediaLimits.applyMembershipLevel`；`membership_page.dart` 三身份卡→三档订阅卡（删身份字段/置灰/切换/冻结横幅，入口/标题→「会员」）；`chat_media_limits.dart` 按档动态（`maxBytesForLevel` + fail-closed 自由档）；`square_upload_service.dart` 竞选闸门→spark；`identity_badge.dart` 注释更新；`user.dart` 入口文案。**flutter analyze 干净**（仅卡2 group 测 2 条既有 info）**+ membership/chat/ui/8964 全测通过**。
+- **官网**：`Membership.tsx` 四档身份聚合→三档并列订阅卡（删身份卡/徽章/字段/切换/冻结）。**tsc/eslint/build 全过**。
+- **文档**：CITIZENAPP_TECHNICAL / CITIZENWEB_TECHNICAL / CHAT_TECHNICAL / unified-protocols / unified-naming 更新三档解耦口径；ADR-036 新建；ADR-033 规则5 标注被取代。全库无 `voting`/`candidate` 会员档、`required_identity_level`、冻结、`VOTING/CANDIDATE_PRICE_ID`、`square_video_candidate` 代码残留。
+## 13. 2026-07-16 用户三点追加（已落地）
+
+1. **Stripe 后台设计（LIVE 账户 `acct_1Trr2fHSzSYWD2rF` 经 MCP 完成）**：产品 `prod_UraY9wtqb2XjcY`「竞选公民会员」→ 改名「薪火会员」（$99.99，`SPARK_PRICE_ID=price_1TrrNCHSzSYWD2rFrZTsmKhl`）；产品 `prod_UraY5SJQSS3i0e`「投票公民会员」归档（active=false）+ 其价 `price_1TrrN8…`（voting $9.99）停用（active=false, nickname `voting_deprecated`）；三档现价 nickname/metadata 统一为 freedom/democracy/spark。最终 LIVE 仅 3 个活跃订阅价：自由 $2.99 / 民主 $9.99 / 薪火 $99.99，与 wrangler.production 对齐。**注**：staging/sandbox 是另一账户 `acct_1Trr2qQlQZ1x0Cw8`，本 MCP 未连，其测试产品名保持旧值（如需同步须单独授权该账户）。
+2. **权限二分（撤回原「顶档会员闸门」，改治本）**：**发帖分类权限按身份档**——竞选内容只有竞选身份（`identity_level==='candidate'`）可发。worker 删 `assertMembershipCanPublishCategory`（会员闸门），新增 `assertIdentityCanPublishCategory`（身份闸门），在 `uploads/service.ts:prepareUpload` 与 `posts/confirm.ts` 仅竞选帖读链身份校验；App 删 `square_upload_service` 会员闸门 + `isSparkMembership` getter，`SquarePublishService`/`compose` 由 `isCertified`(voting+) 收紧为 `isCandidate`(candidate)，`compose_type` `certified`→`canCampaign`。**用量额度仍按会员档**。任意身份可订任意档。测试改：`uploads_quota.test`（identity 闸门用例）、`compose_type_test`、`membership_page_test`（删 isSparkMembership 用例）。**worker 164 vitest + App 149 test + web build 全绿**。
+3. **星火 → 薪火**：显示名全库统一（英文键 `spark` 不变；worker plans/App/web/docs/memory 全改）。**页面职责**：会员介绍 + 订阅/取消 = 「我的-会员」（membership_page）；身份介绍 = 「我的-电子护照」（myid_page，三身份卡已具备，无需改）。

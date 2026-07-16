@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
+import 'package:citizenapp/chat/chat_media_limits.dart';
 import 'package:citizenapp/signer/signing.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart' show hexToBytes;
 import 'package:citizenapp/8964/services/square_request_signer.dart';
@@ -37,6 +38,8 @@ class SquareSession {
   bool get isUsable => expiresAt > DateTime.now().millisecondsSinceEpoch;
 }
 
+/// 会员订阅态（ADR-036：与身份彻底解耦）。只描述付费订阅本身，不含任何链上身份信息；
+/// 身份展示由电子护照（myid）单独负责。
 class SquareMembershipState {
   const SquareMembershipState({
     required this.active,
@@ -45,15 +48,8 @@ class SquareMembershipState {
     this.subscriptionStatus,
     this.subscriptionActive = false,
     this.cancelAtPeriodEnd = false,
-    this.frozen = false,
     this.currentPeriodStart = 0,
     this.subscriptionSource,
-    this.inactiveCode,
-    this.inactiveMessage,
-    this.identityError,
-    this.identityLevel,
-    this.hasVotingIdentity = false,
-    this.hasCandidateIdentity = false,
     this.plans = const <SquareMembershipPlan>[],
   });
 
@@ -62,17 +58,13 @@ class SquareMembershipState {
   final String? membershipLevel;
   final String? subscriptionStatus;
 
-  /// 订阅是否已支付且未过期（worker `subscription_active`）；与 [active]（含链上
-  /// 身份资格的最终权益）区分——按钮三态只看订阅本身，不看身份资格。
+  /// 订阅是否已支付且未过期（worker `subscription_active`）。解耦后权益态即订阅态，
+  /// [active] 与本字段等值；按钮三态与徽章勾均据此判定。
   final bool subscriptionActive;
 
   /// 是否已在官网发起「到期取消」（Stripe `cancel_at_period_end`）：true=已取消
   /// 但当期未到期（按钮显示「续订会员」）；false=自动续费中（按钮显示「取消订阅」）。
   final bool cancelAtPeriodEnd;
-
-  /// 链上身份与会员档位不匹配被冻结（ADR-033 规则5）：权益不可用、已暂停收款，
-  /// 需到官网换档到与身份匹配的会员档才解冻。
-  final bool frozen;
 
   /// 本期订阅开始（毫秒）；与 [expiresAt] 组成会员卡「订阅起止」展示（ADR-034 段4）。
   final int currentPeriodStart;
@@ -80,15 +72,6 @@ class SquareMembershipState {
   /// 支付路线：`usdc_prepaid`=预付、`stripe`=自动续费；null=无订阅。
   final String? subscriptionSource;
 
-  final String? inactiveCode;
-  final String? inactiveMessage;
-
-  /// 链上身份只读查询失败原因。会员与套餐仍可展示，但依赖身份资格的动作必须
-  /// fail-closed；该字段为空表示本次身份查询成功。
-  final String? identityError;
-  final String? identityLevel;
-  final bool hasVotingIdentity;
-  final bool hasCandidateIdentity;
   final List<SquareMembershipPlan> plans;
 
   SquareMembershipPlan? planForLevel(String? level) {
@@ -101,10 +84,6 @@ class SquareMembershipState {
 
   SquareMembershipPlan? get activePlan =>
       active ? planForLevel(membershipLevel) : null;
-
-  bool get isCandidateMembership => active && membershipLevel == 'candidate';
-
-  bool get identityUnavailable => identityError?.trim().isNotEmpty == true;
 
   /// USDC 预付路线（无自动续、到期自然失效）。
   bool get isPrepaid => subscriptionSource == 'usdc_prepaid';
@@ -119,7 +98,7 @@ class SquareMembershipPlan {
     required this.membershipLevel,
     required this.displayName,
     required this.priceUsdMonthly,
-    required this.requiredIdentityLevel,
+    required this.chatFileMaxBytes,
     required this.dynamicTextMaxChars,
     required this.dynamicImageQuality,
     required this.dynamicMaxImages,
@@ -137,7 +116,9 @@ class SquareMembershipPlan {
   final String membershipLevel;
   final String displayName;
   final String priceUsdMonthly;
-  final String requiredIdentityLevel;
+
+  /// 聊天文件大小上限（字节，会员权益之一，ADR-036）：自由 10MB / 民主 100MB / 薪火 5GB。
+  final int chatFileMaxBytes;
   final int dynamicTextMaxChars;
   final String dynamicImageQuality;
   final int dynamicMaxImages;
@@ -153,11 +134,7 @@ class SquareMembershipPlan {
 
   String get priceLabel => '\$$priceUsdMonthly / 月';
 
-  String get identityLabel => switch (requiredIdentityLevel) {
-        'candidate' => '竞选公民身份',
-        'voting' => '投票公民身份',
-        _ => '任意钱包账户',
-      };
+  String get chatFileLabel => '聊天文件：单个 ≤ ${_fileSize(chatFileMaxBytes)}';
 
   String get dynamicLabel =>
       '动态：$dynamicTextMaxChars 字、$dynamicMaxImages 张${_quality(dynamicImageQuality)}图片、$dynamicMaxVideos 个${_duration(dynamicMaxVideoSeconds)}${_quality(dynamicVideoQuality)}视频';
@@ -171,6 +148,12 @@ class SquareMembershipPlan {
     if (seconds >= 3600) return '${seconds ~/ 3600} 小时';
     if (seconds >= 60) return '${seconds ~/ 60} 分钟';
     return '$seconds 秒';
+  }
+
+  static String _fileSize(int bytes) {
+    const mib = 1024 * 1024;
+    if (bytes >= 1024 * mib) return '${(bytes / (1024 * mib)).round()}GB';
+    return '${(bytes / mib).round()}MB';
   }
 }
 
@@ -540,43 +523,29 @@ class SquareApiClient
     final active = data['active'] == true;
     final subscriptionActive = data['subscription_active'] == true;
     final plans = _parseMembershipPlans(data['plans']);
-    final identity = data['identity'] is Map<String, dynamic>
-        ? data['identity'] as Map<String, dynamic>
-        : const <String, dynamic>{};
-    final identityError = data['identity_error']?.toString().trim();
+    // 会员与身份解耦（ADR-036）：响应只含订阅与套餐，无身份/冻结字段。
     if (membership is! Map<String, dynamic>) {
+      // 无订阅 → 聊天文件上限 fail-closed 到自由档（ADR-036 会员权益）。
+      ChatMediaLimits.applyMembershipLevel(null);
       return SquareMembershipState(
         active: false,
         expiresAt: 0,
-        inactiveCode: data['inactive_code']?.toString(),
-        inactiveMessage: data['inactive_message']?.toString(),
-        identityError: identityError == null || identityError.isEmpty
-            ? null
-            : identityError,
-        identityLevel: identity['identity_level']?.toString(),
-        hasVotingIdentity: identity['has_voting_identity'] == true,
-        hasCandidateIdentity: identity['has_candidate_identity'] == true,
         plans: plans,
       );
     }
+    final membershipLevel = membership['membership_level']?.toString();
+    // 会员权益之一 = 聊天文件上限按档；订阅有效才享该档，失效回落自由档。
+    ChatMediaLimits.applyMembershipLevel(active ? membershipLevel : null);
     return SquareMembershipState(
       active: active,
       expiresAt: _asInt(membership['expires_at']),
-      membershipLevel: membership['membership_level']?.toString(),
+      membershipLevel: membershipLevel,
       subscriptionStatus: membership['subscription_status']?.toString(),
       subscriptionActive: subscriptionActive,
       cancelAtPeriodEnd: membership['cancel_at_period_end'] == true ||
           _asInt(membership['cancel_at_period_end']) != 0,
-      frozen: data['frozen'] == true,
       currentPeriodStart: _asInt(membership['current_period_start']),
       subscriptionSource: membership['subscription_source']?.toString(),
-      inactiveCode: data['inactive_code']?.toString(),
-      inactiveMessage: data['inactive_message']?.toString(),
-      identityError:
-          identityError == null || identityError.isEmpty ? null : identityError,
-      identityLevel: identity['identity_level']?.toString(),
-      hasVotingIdentity: identity['has_voting_identity'] == true,
-      hasCandidateIdentity: identity['has_candidate_identity'] == true,
       plans: plans,
     );
   }
@@ -1142,8 +1111,7 @@ class SquareApiClient
       membershipLevel: _requireString(data, 'membership_level'),
       displayName: _requireString(data, 'display_name'),
       priceUsdMonthly: _requireString(data, 'price_usd_monthly'),
-      requiredIdentityLevel:
-          data['required_identity_level']?.toString() ?? 'visitor',
+      chatFileMaxBytes: _asInt(data['chat_file_max_bytes']),
       dynamicTextMaxChars: _asInt(dynamicQuota['text_max_chars']),
       dynamicImageQuality: dynamicQuota['image_quality']?.toString() ?? 'sd',
       dynamicMaxImages: _asInt(dynamicQuota['max_images']),

@@ -224,6 +224,55 @@ char *gmb_chat_mls_encrypt_json(const char *request_json, char **error_out);
  */
 char *gmb_chat_mls_decrypt_json(const char *request_json, char **error_out);
 
+/**
+ * 创建 MLS 群(创建者为唯一成员,epoch 0)。
+ *
+ * # Safety
+ * 见 `gmb_chat_mls_create_key_package_json`。
+ */
+char *gmb_chat_mls_group_create_json(const char *request_json, char **error_out);
+
+/**
+ * 批量加人:产 1 个 Commit(发给现有成员)+ 1 个 Welcome(发给全部新人)。
+ *
+ * # Safety
+ * 见 `gmb_chat_mls_create_key_package_json`。
+ */
+char *gmb_chat_mls_group_add_members_json(const char *request_json, char **error_out);
+
+/**
+ * 删人:产 Commit(发给剩余成员 + 被删者)。
+ *
+ * # Safety
+ * 见 `gmb_chat_mls_create_key_package_json`。
+ */
+char *gmb_chat_mls_group_remove_members_json(const char *request_json, char **error_out);
+
+/**
+ * 群 application message:单次加密,Dart 侧按名册扇 N 信封。
+ *
+ * # Safety
+ * 见 `gmb_chat_mls_create_key_package_json`。
+ */
+char *gmb_chat_mls_group_create_message_json(const char *request_json, char **error_out);
+
+/**
+ * 处理入站群消息(Welcome / Commit / Application)。收端唯一入口,按 epoch 判定
+ * applied / out_of_order / stale,乱序缓冲由 Dart 依此状态负责。
+ *
+ * # Safety
+ * 见 `gmb_chat_mls_create_key_package_json`。
+ */
+char *gmb_chat_mls_group_process_json(const char *request_json, char **error_out);
+
+/**
+ * 只读群状态:当前 epoch + 成员名册(MLS 真源,供 Dart 镜像对账与上限守)。
+ *
+ * # Safety
+ * 见 `gmb_chat_mls_create_key_package_json`。
+ */
+char *gmb_chat_mls_group_state_json(const char *request_json, char **error_out);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

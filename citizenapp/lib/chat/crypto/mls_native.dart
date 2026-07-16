@@ -6,6 +6,7 @@ import 'package:ffi/ffi.dart';
 import 'package:path/path.dart' as path;
 
 import 'mls_boundary.dart';
+import 'mls_group_boundary.dart';
 import 'mls_state_store.dart';
 
 /// OpenMLS native smoke 结果。
@@ -43,7 +44,7 @@ class MlsNativeSmokeResult {
 /// 通过现有 native 库调用 Rust OpenMLS。
 ///
 /// 该类只负责跨 FFI 边界，密码学实现全部在 Rust OpenMLS 中完成。
-class NativeMlsCrypto implements MlsCrypto {
+class NativeMlsCrypto implements MlsCrypto, MlsGroupCrypto {
   NativeMlsCrypto({
     MlsNativeBindings? bindings,
     ChatDevice? identity,
@@ -185,6 +186,189 @@ class NativeMlsCrypto implements MlsCrypto {
     );
   }
 
+  // ==== 私密小群(MlsGroupCrypto)==== 单次加密 + Dart 扇出,密码学全在 Rust。
+
+  @override
+  Future<GroupCreated> createGroup(String groupId) async {
+    final identity = _requireIdentity();
+    final stateStore = _requireStateStore();
+    await stateStore.ensureReady();
+    final response = _bindings.callJson(_bindings.groupCreate, {
+      'state_store_dir': stateStore.path,
+      'owner_account': identity.ownerAccount,
+      'device_id': identity.deviceId,
+      'group_id': groupId,
+    });
+    return GroupCreated(
+      groupId: (response['group_id'] ?? groupId).toString(),
+      epoch: (response['epoch'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  @override
+  Future<GroupCommitBundle> addMembers(
+    String groupId,
+    List<MlsKeyPackage> keyPackages,
+  ) async {
+    final identity = _requireIdentity();
+    final stateStore = _requireStateStore();
+    await stateStore.ensureReady();
+    final response = _bindings.callJson(_bindings.groupAddMembers, {
+      'state_store_dir': stateStore.path,
+      'owner_account': identity.ownerAccount,
+      'device_id': identity.deviceId,
+      'group_id': groupId,
+      'key_packages_hex':
+          keyPackages.map((keyPackage) => keyPackage.keyPackageHex).toList(),
+    });
+    final treeHex = (response['ratchet_tree_hex'] ?? '').toString();
+    final welcomeHex = (response['welcome_wire_hex'] ?? '').toString();
+    return GroupCommitBundle(
+      groupId: (response['group_id'] ?? groupId).toString(),
+      epoch: (response['epoch'] as num?)?.toInt() ?? 0,
+      commit: _groupWire(
+        groupId,
+        (response['commit_wire_hex'] ?? '').toString(),
+        MlsMessageKind.application,
+      ),
+      welcome: welcomeHex.isEmpty
+          ? null
+          : _groupWire(
+              groupId,
+              welcomeHex,
+              MlsMessageKind.welcome,
+              ratchetTreeHex: treeHex.isEmpty ? null : treeHex,
+            ),
+    );
+  }
+
+  @override
+  Future<GroupCommitBundle> removeMembers(
+    String groupId,
+    List<String> memberAccounts,
+  ) async {
+    final identity = _requireIdentity();
+    final stateStore = _requireStateStore();
+    await stateStore.ensureReady();
+    final response = _bindings.callJson(_bindings.groupRemoveMembers, {
+      'state_store_dir': stateStore.path,
+      'owner_account': identity.ownerAccount,
+      'device_id': identity.deviceId,
+      'group_id': groupId,
+      'member_accounts': memberAccounts,
+    });
+    final removed = (response['removed_accounts'] as List?)
+            ?.map((item) => item.toString())
+            .toList() ??
+        const <String>[];
+    return GroupCommitBundle(
+      groupId: (response['group_id'] ?? groupId).toString(),
+      epoch: (response['epoch'] as num?)?.toInt() ?? 0,
+      commit: _groupWire(
+        groupId,
+        (response['commit_wire_hex'] ?? '').toString(),
+        MlsMessageKind.application,
+      ),
+      removedAccounts: removed,
+    );
+  }
+
+  @override
+  Future<MlsWireMessage> groupCreateMessage(
+    String groupId,
+    List<int> plaintext,
+  ) async {
+    final identity = _requireIdentity();
+    final stateStore = _requireStateStore();
+    await stateStore.ensureReady();
+    final response = _bindings.callJson(_bindings.groupCreateMessage, {
+      'state_store_dir': stateStore.path,
+      'owner_account': identity.ownerAccount,
+      'device_id': identity.deviceId,
+      'group_id': groupId,
+      'plaintext_hex': _bytesToHex(plaintext),
+    });
+    return _groupWire(
+      groupId,
+      (response['application_wire_hex'] ?? '').toString(),
+      MlsMessageKind.application,
+    );
+  }
+
+  @override
+  Future<GroupInbound> groupProcess(MlsWireMessage wire) async {
+    final identity = _requireIdentity();
+    final stateStore = _requireStateStore();
+    await stateStore.ensureReady();
+    final response = _bindings.callJson(_bindings.groupProcess, {
+      'state_store_dir': stateStore.path,
+      'owner_account': identity.ownerAccount,
+      'device_id': identity.deviceId,
+      'group_id': wire.conversationId,
+      'wire_message_hex': wire.wireHex,
+      if (wire.ratchetTreeHex != null) 'ratchet_tree_hex': wire.ratchetTreeHex,
+    });
+    final plaintextHex = response['plaintext_hex']?.toString();
+    final members = (response['member_identities'] as List?)
+        ?.map((item) => item.toString())
+        .toList();
+    return GroupInbound(
+      groupId: (response['group_id'] ?? wire.conversationId).toString(),
+      kind: GroupInboundKind.fromWireName(
+        (response['message_kind'] ?? '').toString(),
+      ),
+      status: GroupProcessStatus.fromWireName(
+        (response['status'] ?? '').toString(),
+      ),
+      messageEpoch: (response['message_epoch'] as num?)?.toInt() ?? 0,
+      groupEpoch: (response['group_epoch'] as num?)?.toInt() ?? 0,
+      selfRemoved: response['self_removed'] == true,
+      plaintext: plaintextHex == null || plaintextHex.isEmpty
+          ? null
+          : _hexToBytes(plaintextHex),
+      memberIdentities: members,
+    );
+  }
+
+  @override
+  Future<GroupState> groupState(String groupId) async {
+    final identity = _requireIdentity();
+    final stateStore = _requireStateStore();
+    await stateStore.ensureReady();
+    final response = _bindings.callJson(_bindings.groupState, {
+      'state_store_dir': stateStore.path,
+      'owner_account': identity.ownerAccount,
+      'device_id': identity.deviceId,
+      'group_id': groupId,
+    });
+    final members = (response['member_identities'] as List?)
+            ?.map((item) => item.toString())
+            .toList() ??
+        const <String>[];
+    return GroupState(
+      groupId: (response['group_id'] ?? groupId).toString(),
+      epoch: (response['epoch'] as num?)?.toInt() ?? 0,
+      memberIdentities: members,
+    );
+  }
+
+  MlsWireMessage _groupWire(
+    String groupId,
+    String wireHex,
+    MlsMessageKind kind, {
+    String? ratchetTreeHex,
+  }) {
+    return MlsWireMessage(
+      wireBytes: _hexToBytes(wireHex),
+      cipherSuite: '',
+      conversationId: groupId,
+      messageKind: kind,
+      ratchetTreeBytes: ratchetTreeHex == null || ratchetTreeHex.isEmpty
+          ? null
+          : _hexToBytes(ratchetTreeHex),
+    );
+  }
+
   ChatDevice _requireIdentity() {
     final identity = _identity;
     if (identity == null) {
@@ -224,6 +408,12 @@ class MlsNativeBindings {
     required this.twoPartySmoke,
     required this.encrypt,
     required this.decrypt,
+    required this.groupCreate,
+    required this.groupAddMembers,
+    required this.groupRemoveMembers,
+    required this.groupCreateMessage,
+    required this.groupProcess,
+    required this.groupState,
     required MlsFreeStringDart freeString,
   }) : _freeString = freeString;
 
@@ -231,6 +421,12 @@ class MlsNativeBindings {
   final MlsJsonDart twoPartySmoke;
   final MlsJsonDart encrypt;
   final MlsJsonDart decrypt;
+  final MlsJsonDart groupCreate;
+  final MlsJsonDart groupAddMembers;
+  final MlsJsonDart groupRemoveMembers;
+  final MlsJsonDart groupCreateMessage;
+  final MlsJsonDart groupProcess;
+  final MlsJsonDart groupState;
   final MlsFreeStringDart _freeString;
 
   static MlsNativeBindings load() {
@@ -247,6 +443,24 @@ class MlsNativeBindings {
       ),
       decrypt: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
         'gmb_chat_mls_decrypt_json',
+      ),
+      groupCreate: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
+        'gmb_chat_mls_group_create_json',
+      ),
+      groupAddMembers: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
+        'gmb_chat_mls_group_add_members_json',
+      ),
+      groupRemoveMembers: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
+        'gmb_chat_mls_group_remove_members_json',
+      ),
+      groupCreateMessage: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
+        'gmb_chat_mls_group_create_message_json',
+      ),
+      groupProcess: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
+        'gmb_chat_mls_group_process_json',
+      ),
+      groupState: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
+        'gmb_chat_mls_group_state_json',
       ),
       freeString:
           library.lookupFunction<MlsFreeStringNative, MlsFreeStringDart>(

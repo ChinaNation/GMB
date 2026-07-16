@@ -6,7 +6,7 @@
 //!
 //! 规则要点:
 //! - propose origin 校验：proposer ∈ admins(actor_cid_number)（防 spam）
-//! - 创建费 1000 GMB 三态机制(reserve / release / refund)走 `fee.rs`
+//! - 费用必须进入全链五类协议，并由机构 CID 的费用账户承担
 //! - `asset_id` 只表示资产编号，治理身份只来自 `actor_cid_number`
 //! - OnchainAssetMeta 同时记录机构 CID 与资产执行账户，二者职责分离
 //!
@@ -18,17 +18,16 @@ use frame_support::pallet_prelude::*;
 
 use crate::pallet::BalanceOf;
 
-/// 创建用户代币(扣 1000 GMB 押金 + 写入 storage + 调 pallet_assets::create)。
+/// 创建用户代币（写入 storage + 调 pallet_assets::create）。
 ///
 /// 框架阶段占位,业务实装时步骤(callback 通过分支):
 /// 1. `validation::ensure_institution_context` / `ensure_decimals_in_range` / `ensure_class_supported`
 /// 2. 字段过黑名单(`validation::contains_blacklisted_word`)
-/// 3. `fee::release_creation_deposit_to_nrc(proposal_id)` 把 reserve 的押金 transfer 给 NRC fee_account
+/// 3. 按全链机构费用协议从 actor CID 费用账户执行收费，不得使用管理员钱包押金
 /// 4. 分配 AssetId(NextAssetId)
 /// 5. 调 `T::Assets::create(asset_id, owner, ...)` + `mint_into` 注入 initial_supply
 /// 6. 写 Assets storage,emit AssetIssued 事件
 ///
-/// ADR-011 v2:propose 阶段已 reserve 押金,callback 通过则 release(本函数);否决则 refund(fee::refund_*)。
 pub fn execute_issue<T: Config>(
     _proposal: IssueProposal<T::AccountId, BalanceOf<T>>,
 ) -> DispatchResult
@@ -65,7 +64,6 @@ pub fn execute_transfer<T: Config>(
 
 /// 关闭资产(调 pallet_assets::start_destroy + 销毁余额 + emit AssetClosed)。
 ///
-/// 不退还创建费 1000 GMB(押金已在 issue 通过时 transfer 给 NRC,不属发行方押金性质)。
 /// ADR-011 v2 8.1 节:必须 with_transaction 包裹,保证 OnchainIssuance::Assets.state 与
 /// pallet_assets::Asset.status 原子同步。
 pub fn execute_close<T: Config>(_proposal: CloseProposal) -> DispatchResult {

@@ -1,7 +1,8 @@
 //! 集成测试：验证 citizen-identity 登记公民投票身份后触发 citizen-issuance 一次性奖励。
 
 use citizen_identity::{
-    CitizenIdentityAuthority, CitizenIdentityLevel, CitizenStatus, VotingIdentityPayload,
+    CidNumberBound, CitizenIdentityAuthority, CitizenIdentityLevel, CitizenStatus,
+    VotingIdentityPayload,
 };
 use frame_support::{
     assert_ok, derive_impl, parameter_types,
@@ -80,12 +81,15 @@ impl CitizenIdentityAuthority<u64, citizen_identity::pallet::SignatureOf<Test>>
 {
     fn can_manage_voting_identity(
         registrar: &u64,
-        registrar_account: &u64,
-        _residence_province_code: &[u8],
-        _residence_city_code: &[u8],
+        actor_cid_number: &[u8],
+        residence_province_code: &[u8],
+        residence_city_code: &[u8],
         _level: CitizenIdentityLevel,
     ) -> bool {
-        *registrar == 100 && *registrar_account == 200
+        *registrar == 100
+            && actor_cid_number == registrar_cid_number().as_slice()
+            && residence_province_code == b"43"
+            && residence_city_code == b"4301"
     }
 
     fn verify_citizen_signature(
@@ -149,11 +153,21 @@ fn citizen_cid_number(tag: &str) -> Vec<u8> {
     .into_bytes()
 }
 
-/// 占号先行:身份写入前必须先占号(注册局夹具 100/200,作用域 43/4301)。
+/// 测试注册局机构 CID；管理员账户 100 只作为外层签名 origin。
+fn registrar_cid_number() -> CidNumberBound {
+    primitives::cid::china::china_zf::CHINA_ZF[5]
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("registrar cid number should fit")
+}
+
+/// 占号先行:身份写入前必须先占号(注册局 CID + 管理员 100,作用域 43/4301)。
 fn occupy_tag(tag: &str) {
     assert_ok!(CitizenIdentity::occupy_cid(
         RuntimeOrigin::signed(100),
-        200,
+        registrar_cid_number(),
         citizen_cid_number(tag)
             .try_into()
             .expect("cid number should fit"),
@@ -195,7 +209,7 @@ fn register_voting_identity_triggers_reward_issuance() {
 
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             payload(1, cid_number),
             valid_signature(),
         ));
@@ -220,14 +234,14 @@ fn updating_existing_identity_does_not_issue_second_reward() {
 
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             payload(1, &citizen_cid_number("0001")),
             valid_signature(),
         ));
         CitizenIssuance::on_finalize(System::block_number());
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             payload(1, &citizen_cid_number("0002")),
             valid_signature(),
         ));
@@ -258,7 +272,7 @@ fn max_reward_cap_is_applied_from_identity_callback() {
 
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
-            200,
+            registrar_cid_number(),
             payload(1, &citizen_cid_number("CAP")),
             valid_signature(),
         ));

@@ -100,7 +100,7 @@ cd /Users/rhett/GMB/citizenapp
 - 屏幕 SnackBar:`绑定已提交,tx=0x...,等待链上确认`
 - 清算行节点日志:
   - `[EventListener] ... BankBound { user: <A 的 pubkey>, bank: ... }`
-- A 钱包 `Balance` 减少约 1 元(`OnchainTxAmountExtractor` 对 `bind_clearing_bank` 定为付费调用)
+- A 钱包 `Balance` 减少约 0.1 元（`RuntimeFeeRouter` 将 `bind_clearing_bank` 路由为签名者付款的最低链上费）。
 - 链上查询 `OffchainTransaction::UserBank[A]` = `<bank_main>` 主账户
 - `SharedPreferences` 写入 `clearing_bank_cid_number_<A.walletIndex>` = 机构 `cid_number`
 

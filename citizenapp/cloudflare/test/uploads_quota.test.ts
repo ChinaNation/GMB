@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { membershipPlans } from '../src/membership/plans';
-import { assertDeclaredContentQuota, assertManifestQuota } from '../src/uploads/quota';
+import {
+  assertDeclaredContentQuota,
+  assertIdentityCanPublishCategory,
+  assertManifestQuota
+} from '../src/uploads/quota';
 import type { MediaAssetRow, UploadItemInput } from '../src/types';
 
 describe('membership upload quotas', () => {
@@ -21,8 +25,8 @@ describe('membership upload quotas', () => {
   it('allows a dynamic post with 9 images and 1 video under the member quota', () => {
     expect(() =>
       assertDeclaredContentQuota({
-        membershipLevel: 'candidate',
-        plan: membershipPlans.candidate,
+        membershipLevel: 'spark',
+        plan: membershipPlans.spark,
         postCategory: 'normal',
         contentFormat: 'normal',
         titleLength: 0,
@@ -32,18 +36,28 @@ describe('membership upload quotas', () => {
     ).not.toThrow();
   });
 
-  it('rejects campaign content for non-candidate membership', () => {
+  it('gates campaign category by identity, not membership (ADR-036 + 用户 2026-07-16)', () => {
+    // 用量额度按会员校验，不再把关分类权限：民主会员发竞选帖过额度校验（分类由身份另管）。
     expect(() =>
       assertDeclaredContentQuota({
-        membershipLevel: 'voting',
-        plan: membershipPlans.voting,
+        membershipLevel: 'democracy',
+        plan: membershipPlans.democracy,
         postCategory: 'campaign',
         contentFormat: 'normal',
         titleLength: 0,
         textLength: 120,
         mediaItems: [image()]
       })
-    ).toThrow(expect.objectContaining({ code: 'campaign_membership_required' }));
+    ).not.toThrow();
+    // 分类权限按身份：非竞选身份发竞选帖被拒；竞选身份放行；普通帖任意身份放行。
+    expect(() => assertIdentityCanPublishCategory('visitor', 'campaign')).toThrow(
+      expect.objectContaining({ code: 'campaign_identity_required' })
+    );
+    expect(() => assertIdentityCanPublishCategory('voting', 'campaign')).toThrow(
+      expect.objectContaining({ code: 'campaign_identity_required' })
+    );
+    expect(() => assertIdentityCanPublishCategory('candidate', 'campaign')).not.toThrow();
+    expect(() => assertIdentityCanPublishCategory('visitor', 'normal')).not.toThrow();
   });
 
   it('rejects freedom article body images over its quota', () => {
@@ -60,11 +74,11 @@ describe('membership upload quotas', () => {
     ).toThrow(expect.objectContaining({ code: 'article_image_count_exceeded' }));
   });
 
-  it('allows candidate campaign articles inside the article quota', () => {
+  it('allows a campaign article within the article quota (category not membership-gated)', () => {
     expect(() =>
       assertDeclaredContentQuota({
-        membershipLevel: 'candidate',
-        plan: membershipPlans.candidate,
+        membershipLevel: 'spark',
+        plan: membershipPlans.spark,
         postCategory: 'campaign',
         contentFormat: 'article',
         titleLength: 12,

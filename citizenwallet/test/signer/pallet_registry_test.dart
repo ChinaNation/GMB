@@ -62,7 +62,6 @@ void main() {
       expect(PalletRegistry.publicManagePallet, 30);
       expect(PalletRegistry.privateManagePallet, 31);
       expect(PalletRegistry.proposeCloseInstitutionCall, 1);
-      expect(PalletRegistry.cleanupRejectedInstitutionProposalCall, 4);
       expect(PalletRegistry.proposeCreateInstitutionCall, 5);
       expect(PalletRegistry.updateInstitutionInfoCall, 6);
       expect(PalletRegistry.addInstitutionAccountCall, 7);
@@ -71,20 +70,18 @@ void main() {
       expect(PalletRegistry.personalManagePallet, 7);
       expect(PalletRegistry.proposeCreatePersonalCall, 0);
       expect(PalletRegistry.proposeClosePersonalCall, 1);
-      expect(PalletRegistry.cleanupRejectedPersonalProposalCall, 2);
       expect(PalletRegistry.personalAdminsPallet, 29);
       expect(PalletRegistry.proposePersonalAdminSetChangeCall, 0);
     });
 
     test('CitizenIdentity(10) 身份注册 + 注册局占号/吊销 call_index', () {
-      // 0..4 为身份登记管理，5 为第 4 步才删除的快照，6..8 为 CID 占号管理。
+      // 0..4 为身份登记管理，5 永久留洞，6..8 为 CID 占号管理。
       expect(PalletRegistry.citizenIdentityPallet, 10);
       expect(PalletRegistry.registerVotingIdentityCall, 0);
       expect(PalletRegistry.upgradeToCandidateIdentityCall, 1);
       expect(PalletRegistry.updateVotingIdentityCall, 2);
       expect(PalletRegistry.updateCandidateIdentityCall, 3);
       expect(PalletRegistry.revokeIdentityCall, 4);
-      expect(PalletRegistry.prepareCitizenPopulationSnapshotCall, 5);
       expect(PalletRegistry.occupyCidCall, 6);
       expect(PalletRegistry.occupyCidsBatchCall, 7);
       expect(PalletRegistry.revokeCidCall, 8);

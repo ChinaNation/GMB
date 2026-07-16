@@ -1,6 +1,6 @@
 //! `joint-vote` FRAME benchmark。
 //!
-//! 覆盖人口快照、机构形成最终票、公民公投写票及两个超时阶段。
+//! 覆盖机构形成最终票、公民公投写票及两个超时阶段；人口快照随提案创建内联生成。
 #![cfg(feature = "runtime-benchmarks")]
 
 use codec::Decode;
@@ -53,41 +53,6 @@ fn setup_proposal<T: Config>(
 #[benchmarks]
 mod benchmarks {
     use super::*;
-
-    #[benchmark]
-    fn prepare_joint_population_snapshot() {
-        let who: T::AccountId = account("snapshot-proposer", 0, 0);
-        let citizen: T::AccountId = account("snapshot-citizen", 0, 0);
-        let scope = votingengine::PopulationScope::Country;
-        <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(
-            &citizen, &scope,
-        );
-        let (snapshot_id, eligible_total) =
-            <T as votingengine::Config>::CitizenIdentityReader::create_population_snapshot(&scope)
-                .expect("benchmark population snapshot should be created");
-        let now = frame_system::Pallet::<T>::block_number();
-        let actor_cid_number = primitives::cid::china::china_cb::CHINA_CB[0]
-            .cid_number
-            .as_bytes()
-            .to_vec()
-            .try_into()
-            .expect("NRC CID fits runtime bound");
-
-        #[block]
-        {
-            crate::pallet::PendingPopulationSnapshots::<T>::insert(
-                &who,
-                crate::pallet::PreparedPopulationSnapshot {
-                    actor_cid_number,
-                    snapshot_id,
-                    eligible_total,
-                    prepared_at: now,
-                },
-            );
-        }
-
-        assert!(crate::pallet::PendingPopulationSnapshots::<T>::contains_key(who));
-    }
 
     #[benchmark]
     fn cast_admin() {

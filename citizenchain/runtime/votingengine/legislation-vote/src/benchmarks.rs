@@ -1,7 +1,7 @@
 //! `legislation-vote` FRAME benchmark。
 //!
-//! 六个公开调用分别覆盖人口快照、代表写票、公民公投、行政签署、三人会签和
-//! 护宪终审。资格材料始终来自 Runtime 的 citizen-identity/admins 真源。
+//! 五个公开调用分别覆盖代表写票、公民公投、行政签署、三人会签和护宪终审。
+//! 人口快照随特别案提案创建内联生成，资格材料始终来自 Runtime 真源。
 
 #![cfg(feature = "runtime-benchmarks")]
 
@@ -13,8 +13,8 @@ use votingengine::CitizenIdentityReader;
 use crate::{
     pallet::{
         Config, LegGuardSigns, LegOverrideSigns, LegReferendumVotesByAccount, LegislationMeta,
-        LegislationMetas, Pallet, PendingPopulationSnapshots, RepresentativeMeta,
-        RepresentativeMetas, RepresentativeVotesByAccount,
+        LegislationMetas, Pallet, RepresentativeMeta, RepresentativeMetas,
+        RepresentativeVotesByAccount,
     },
     Call, RepresentativeRoute, RepresentativeVoteRule, VoteProcedure,
 };
@@ -62,18 +62,6 @@ fn national_executive() -> votingengine::CidNumber {
 #[benchmarks]
 mod benchmarks {
     use super::*;
-
-    #[benchmark]
-    fn prepare_population_snapshot() {
-        let who: T::AccountId = account("citizen", 0, 0);
-        let scope = votingengine::PopulationScope::Country;
-        <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(&who, &scope);
-
-        #[extrinsic_call]
-        _(RawOrigin::Signed(who.clone()), scope);
-
-        assert!(PendingPopulationSnapshots::<T>::contains_key(who));
-    }
 
     #[benchmark]
     fn cast_representative_vote() {

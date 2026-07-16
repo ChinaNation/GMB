@@ -123,24 +123,6 @@ pub mod pallet {
         pub needs_guard: bool,
     }
 
-    /// 已准备的人口快照(特别案公投分母),对标 joint-vote。
-    #[derive(
-        Encode,
-        Decode,
-        DecodeWithMemTracking,
-        Clone,
-        PartialEq,
-        Eq,
-        RuntimeDebug,
-        TypeInfo,
-        MaxEncodedLen,
-    )]
-    pub struct PreparedSnapshot<BlockNumber> {
-        pub snapshot_id: u64,
-        pub eligible_total: u64,
-        pub prepared_at: BlockNumber,
-    }
-
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {
         #[allow(deprecated)]
@@ -226,16 +208,6 @@ pub mod pallet {
         ValueQuery,
     >;
 
-    /// 待消费的人口快照:发起人 → 已验签缓存(特别案发起前一区块准备)。
-    #[pallet::storage]
-    pub type PendingPopulationSnapshots<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        T::AccountId,
-        PreparedSnapshot<BlockNumberFor<T>>,
-        OptionQuery,
-    >;
-
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -265,12 +237,6 @@ pub mod pallet {
             proposal_id: u64,
             who: T::AccountId,
             approve: bool,
-        },
-        /// 人口快照已准备(特别案公投分母)。
-        PopulationSnapshotPrepared {
-            who: T::AccountId,
-            eligible_total: u64,
-            scope: PopulationScope,
         },
         /// 内部全过(非特别案),推进至行政签署阶段。
         LegislationAdvancedToSign { proposal_id: u64 },
@@ -306,12 +272,6 @@ pub mod pallet {
         InvalidRepresentativeRule,
         /// 提案元数据缺失
         ProposalMetaMissing,
-        /// 人口快照未准备
-        PopulationSnapshotNotPrepared,
-        /// 人口快照非本区块准备(过期)
-        PopulationSnapshotNotCurrent,
-        /// 人口快照作用域没有可投票公民
-        InvalidPopulationSnapshot,
         /// 公投分母未设置
         CitizenEligibleTotalNotSet,
         /// 公民身份无公投资格
@@ -336,16 +296,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// 准备特别案公投人口快照(发起特别案提案前一区块由发起人调用)。
-        #[pallet::call_index(0)]
-        #[pallet::weight(<T as Config>::WeightInfo::prepare_population_snapshot())]
-        pub fn prepare_population_snapshot(
-            origin: OriginFor<T>,
-            scope: PopulationScope,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            Self::do_prepare_population_snapshot(who, scope)
-        }
+        // call_index(0) 已永久废弃：特别案人口快照随提案创建在投票引擎事务内生成。
 
         /// 管理员按当前代表机构席位投票。
         #[pallet::call_index(1)]

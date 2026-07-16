@@ -19,7 +19,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_LAPSE_DAYS = 90; // 退订满 3 个月
 const MAX_OWNERS_PER_SWEEP = 20; // 单次 Cron 限流，防 Worker 超时
 const MAX_VIDEOS_PER_SWEEP = 100;
-const RESTORE_MAX_DURATION_SECONDS = resourceLimit('square_video_candidate').max_seconds!;
+const RESTORE_MAX_DURATION_SECONDS = resourceLimit('square_video_spark').max_seconds!;
 const ARCHIVE_READ_URL_TTL_SECONDS = 3600;
 
 const MEDIA_COLUMNS = `upload_id, post_id, owner_account, media_index, media_kind, provider,
@@ -121,7 +121,7 @@ async function archiveVideoAsset(env: Env, video: MediaAssetRow): Promise<boolea
       throw new Error('stream download missing content-length');
     }
     const ticket = validateStreamDeclaration({
-      resource_key: 'square_video_candidate',
+      resource_key: 'square_video_spark',
       byte_size: byteSize,
       content_type: 'video/mp4',
     });

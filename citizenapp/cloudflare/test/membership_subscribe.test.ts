@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { scaleCompact as compactU32 } from '../src/shared/signing_message';
 import { encodeAddress } from '@polkadot/util-crypto';
 
 vi.mock('../src/auth/wallet_signature', () => ({
@@ -138,8 +137,7 @@ function fakeEnv(input: {
     STRIPE_API_KEY: 'sk_test_secret',
     FREEDOM_PRICE_ID: 'price_freedom',
     DEMOCRACY_PRICE_ID: 'price_democracy',
-    VOTING_PRICE_ID: 'price_voting',
-    CANDIDATE_PRICE_ID: 'price_candidate',
+    SPARK_PRICE_ID: 'price_spark',
     CHECKOUT_SUCCESS_URL: 'https://example.com/membership?checkout=success',
     CHECKOUT_CANCEL_URL: 'https://example.com/membership?checkout=cancel',
     ...(input.stripeDevProxy ? { STRIPE_DEV_PROXY: '1' } : {})
@@ -179,50 +177,22 @@ describe('subscribe challenge (signed, level-bound)', () => {
     expect(db.challenges.size).toBe(1);
   });
 
-  it('candidate challenge issued only when chain identity is candidate', async () => {
+  it('issues a spark challenge for any identity (ADR-036 解耦，无身份预检)', async () => {
     const db = new ChallengeDb();
-    const env = fakeEnv({ db, storageResponses: [votingIdentityHex(), '0x01'] });
+    const env = fakeEnv({ db });
     const res = await subscribeChallengeRoute(
       req('/v1/square/membership/subscribe/challenge', {
         owner_account: owner,
-        membership_level: 'candidate'
+        membership_level: 'spark'
       }),
       env
     );
-    expect(((await res.json()) as { membership_level: string }).membership_level).toBe('candidate');
+    expect(((await res.json()) as { membership_level: string }).membership_level).toBe('spark');
   });
 
-  it('rejects candidate challenge when owner only has voting identity', async () => {
+  it('issues a democracy challenge for any identity', async () => {
     const db = new ChallengeDb();
-    const env = fakeEnv({ db, storageResponses: [votingIdentityHex(), null] });
-    await expect(
-      subscribeChallengeRoute(
-        req('/v1/square/membership/subscribe/challenge', {
-          owner_account: owner,
-          membership_level: 'candidate'
-        }),
-        env
-      )
-    ).rejects.toMatchObject({ code: 'membership_identity_mismatch' });
-  });
-
-  it('rejects a downgrade: voting identity cannot subscribe freedom', async () => {
-    const db = new ChallengeDb();
-    const env = fakeEnv({ db, storageResponses: [votingIdentityHex(), null] });
-    await expect(
-      subscribeChallengeRoute(
-        req('/v1/square/membership/subscribe/challenge', {
-          owner_account: owner,
-          membership_level: 'freedom'
-        }),
-        env
-      )
-    ).rejects.toMatchObject({ code: 'membership_identity_mismatch' });
-  });
-
-  it('issues a democracy (白金) challenge for a visitor identity', async () => {
-    const db = new ChallengeDb();
-    const env = fakeEnv({ db, storageResponses: [null, null] });
+    const env = fakeEnv({ db });
     const res = await subscribeChallengeRoute(
       req('/v1/square/membership/subscribe/challenge', {
         owner_account: owner,
@@ -288,7 +258,7 @@ describe('subscribe confirm (signed)', () => {
       subscribeConfirmRoute(
         req('/v1/square/membership/subscribe', {
           owner_account: owner,
-          membership_level: 'voting',
+          membership_level: 'democracy',
           challenge_id: challengeId,
           signature: '0xSIG'
         }),
@@ -753,7 +723,7 @@ describe('cancel — 按支付方式识别（ADR-034 段4）', () => {
   it('卡连续订阅取消 → cancel_kind=stripe（到期取消）', async () => {
     const db = new ChallengeDb();
     mockVerify.mockResolvedValue(true);
-    seedMembership(db, 'voting', { subId: 'sub_card' });
+    seedMembership(db, 'democracy', { subId: 'sub_card' });
     const env = fakeEnv({ db, stripeDevProxy: true });
     const challengeId = await cancelChallengeId(env);
     const res = await cancelMembershipRoute(
@@ -784,36 +754,3 @@ describe('cancel — 按支付方式识别（ADR-034 段4）', () => {
     ).rejects.toMatchObject({ code: 'no_active_subscription' });
   });
 });
-
-function votingIdentityHex(): string {
-  const cid = new TextEncoder().encode('CN001-CTZN-000000001-2026');
-  const body = concat([
-    compactU32(cid.length),
-    cid,
-    u32Le(20200101),
-    u32Le(20991231),
-    Uint8Array.of(0)
-  ]);
-  return `0x${hex(body)}`;
-}
-
-function u32Le(value: number): Uint8Array {
-  const out = new Uint8Array(4);
-  new DataView(out.buffer).setUint32(0, value, true);
-  return out;
-}
-
-function concat(chunks: Uint8Array[]): Uint8Array {
-  const length = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-  const out = new Uint8Array(length);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return out;
-}
-
-function hex(bytes: Uint8Array): string {
-  return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}

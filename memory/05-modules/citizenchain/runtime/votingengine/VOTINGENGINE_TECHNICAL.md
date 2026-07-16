@@ -44,7 +44,11 @@ OnChina 本地数据库只能用于注册局录入和界面提示，不能作为
 - `City(province_code, city_code)`
 - `Town(province_code, city_code, town_code)`
 
-联合公投和立法特别案在创建提案前先调用对应的 `prepare_*_population_snapshot(scope)`。runtime 在当前区块要求 `citizen-identity` 创建不可变快照，消费端只缓存 `snapshot_id + eligible_total + prepared_at`，不得复制作用域或选民名单作为第二真源。
+联合公投和立法特别案在创建提案的同一存储事务内调用
+`citizen-identity::create_population_snapshot` 并立即绑定 `snapshot_id`。联合公投固定使用
+全国作用域；立法特别案只从 `actor_cid_number` 的合法 CID 和法定机构码推导国家、
+省或市作用域。任一后续写入失败时快照与提案一起回滚，不存在公开准备入口、待消费
+快照、客户端作用域参数或第二真源。
 
 ## 联合投票
 
@@ -67,7 +71,8 @@ OnChina 本地数据库只能用于注册局录入和界面提示，不能作为
 
 ## 立法投票
 
-- 人口快照：`LegislationVote::prepare_population_snapshot(scope)`。
+- 人口快照：仅特别案在创建事务内按 `actor_cid_number` 内联创建并绑定；普通案和
+  重大案不创建。
 - 代表机构表决：`cast_representative_vote(proposal_id, approve)`。
 - 特别案公投：`cast_referendum_vote(proposal_id, approve)`。
 - 行政签署、三人会签、护宪终审继续按账户和机构管理员快照判定。
@@ -112,7 +117,9 @@ legislation-vote/
 
 ## 清理
 
-提案完成后统一进入投票引擎清理状态机，清理所属 Track 的投票记录、提案对象和反向索引。
+提案否决、超时、执行成功或执行失败终态都统一进入投票引擎维护管线。引擎先调用
+所属业务 Track 的终态回调清除业务 pending 锁，再按保留期调度清理投票记录、人口
+快照、提案对象和反向索引；业务 pallet 不暴露人工拒绝清理交易。
 
 - `ScheduledCleanups + ScheduledCleanupHead/Tail` 是 90 天保留期的延迟 FIFO；固定保留期保证写入顺序就是到期顺序，不再使用有界区块桶或向后扫描候选桶。
 - 到期任务转入 `PendingCleanupQueue + PendingCleanupQueueHead/Tail` 就绪 FIFO；每个提案每轮只执行一个有界步骤，未完成任务排回队尾。

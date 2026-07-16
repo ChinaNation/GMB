@@ -547,6 +547,9 @@ class ChatConversationEntity {
 
   late int unreadCount;
   late String lastDeliveryState;
+
+  /// 会话类型:null/"dm"=私聊,"group"=私密小群。免每次 join 群表判定。
+  String? conversationKind;
 }
 
 /// Chat 消息本地记录。
@@ -615,7 +618,12 @@ class ChatOutboundQueueEntity {
 class ChatOutgoingMediaEntity {
   Id id = Isar.autoIncrement;
 
+  /// 唯一键 = "<attachmentId>|<recipientAccount>"。群里同一媒体发 N 成员需 N 行,
+  /// 故不再以 attachmentId 单键唯一。
   @Index(unique: true, replace: true)
+  late String pendingKey;
+
+  @Index()
   late String attachmentId;
 
   @Index()
@@ -674,6 +682,71 @@ class ChatRouteCacheEntity {
   String? note;
   late int createdAtMillis;
   late int updatedAtMillis;
+}
+
+/// 私密小群会话镜像。名册以 MLS `group_state` 为真源,本表为镜像视图。
+@collection
+class ChatGroupEntity {
+  Id id = Isar.autoIncrement;
+
+  /// 群 ID = conversation_id,形如 `grp:<creator>:<nonce>`。
+  @Index(unique: true, replace: true)
+  late String groupId;
+
+  late String groupName;
+  late String creatorAccount;
+
+  /// 本机钱包聊天账户。
+  @Index()
+  late String ownerAccount;
+
+  /// MLS 当前 epoch 的本地镜像。
+  late int epoch;
+  late int memberCount;
+
+  /// 本机是否已退群/被移除。
+  late bool leftLocally;
+
+  late int createdAtMillis;
+  late int updatedAtMillis;
+}
+
+/// 群成员镜像(一条 = 群内一个账户)。每次 Commit 后按 MLS 名册对账覆盖。
+@collection
+class ChatGroupMemberEntity {
+  Id id = Isar.autoIncrement;
+
+  /// 唯一键 = "<groupId>|<memberAccount>"。
+  @Index(unique: true, replace: true)
+  late String memberKey;
+
+  @Index()
+  late String groupId;
+
+  late String memberAccount;
+
+  /// 角色:admin | member。
+  late String role;
+
+  late int joinedAtMillis;
+}
+
+/// 群乱序 Commit 缓冲(键:groupId + messageEpoch)。epoch 补齐后按序回放。
+@collection
+class ChatGroupPendingCommitEntity {
+  Id id = Isar.autoIncrement;
+
+  @Index(unique: true, replace: true)
+  late String envelopeId;
+
+  @Index()
+  late String groupId;
+
+  @Index()
+  late int messageEpoch;
+
+  late String envelopeBytesHex;
+  late int createdAtMillis;
 }
 
 /// 本地钱包余额变化流水（持久化存储，去中心化设计，不依赖 CID 服务器）。
@@ -934,6 +1007,9 @@ class WalletIsar {
       ChatOutgoingMediaEntitySchema,
       ChatPendingInboundEntitySchema,
       ChatRouteCacheEntitySchema,
+      ChatGroupEntitySchema,
+      ChatGroupMemberEntitySchema,
+      ChatGroupPendingCommitEntitySchema,
       LocalTxEntitySchema,
       WalletTxSyncCursorEntitySchema,
     ];

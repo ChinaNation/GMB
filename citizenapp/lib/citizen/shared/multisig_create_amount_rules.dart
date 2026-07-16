@@ -2,9 +2,9 @@ import 'package:citizenapp/my/util/amount_format.dart';
 
 /// 多签创建金额规则。
 ///
-/// runtime 创建个人/机构多签时会 reserve `amount + fee`，
-/// 同时要求发起账户保留 ED；App 预校验必须用同一口径，不能只看用户填写
-/// 的初始资金。
+/// 本类的创建金额函数只服务个人多签：签名者账户承担初始资金和
+/// 创建手续费并保留 ED。机构交易的本金账户和费用账户必须分开校验，
+/// 不得复用此合并公式。
 class MultisigCreateAmountRules {
   MultisigCreateAmountRules._();
 
@@ -16,7 +16,7 @@ class MultisigCreateAmountRules {
 
   /// 创建多签复用链上 onchain_transaction 手续费公式：
   /// `max(amount_fen * 0.1%, 10 fen)`，half-up 到分。
-  static BigInt estimateCreateFeeFen(BigInt amountFen) {
+  static BigInt calculateOnchainFeeFen(BigInt amountFen) {
     final byRate = (amountFen * BigInt.from(_perbillParts) +
             BigInt.from(_perbillDenominator ~/ 2)) ~/
         BigInt.from(_perbillDenominator);
@@ -25,7 +25,7 @@ class MultisigCreateAmountRules {
 
   static BigInt requiredBalanceFen(BigInt initialAmountFen) {
     return initialAmountFen +
-        estimateCreateFeeFen(initialAmountFen) +
+        calculateOnchainFeeFen(initialAmountFen) +
         existentialDepositFen;
   }
 
@@ -40,7 +40,7 @@ class MultisigCreateAmountRules {
     required double balanceYuan,
     required BigInt initialAmountFen,
   }) {
-    final feeFen = estimateCreateFeeFen(initialAmountFen);
+    final feeFen = calculateOnchainFeeFen(initialAmountFen);
     final requiredFen = initialAmountFen + feeFen + existentialDepositFen;
     return '发起钱包余额不足，不能$actionLabel。当前余额 '
         '${AmountFormat.format(balanceYuan, symbol: '')} 元，至少需要 '

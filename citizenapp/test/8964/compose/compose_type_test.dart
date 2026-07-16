@@ -5,13 +5,13 @@ import 'package:citizenapp/8964/models/square_models.dart';
 
 void main() {
   group('SquareComposeType', () {
-    test('普通用户下拉两项，认证公民四项', () {
+    test('无竞选身份下拉两项，竞选身份四项', () {
       expect(
-        SquareComposeType.optionsFor(certified: false),
+        SquareComposeType.optionsFor(canCampaign: false),
         const [SquareComposeType.post, SquareComposeType.article],
       );
       expect(
-        SquareComposeType.optionsFor(certified: true),
+        SquareComposeType.optionsFor(canCampaign: true),
         const [
           SquareComposeType.post,
           SquareComposeType.article,
@@ -32,23 +32,23 @@ void main() {
       expect(SquareComposeType.post.isCampaign, isFalse);
     });
 
-    test('未认证时竞选类降级到对应普通类，非竞选不变', () {
+    test('无竞选身份时竞选类降级到对应普通类，非竞选不变', () {
       expect(
-        SquareComposeType.campaignPost.degradedIfNotCertified(false),
+        SquareComposeType.campaignPost.degradedIfNotCampaignEligible(false),
         SquareComposeType.post,
       );
       expect(
-        SquareComposeType.campaignArticle.degradedIfNotCertified(false),
+        SquareComposeType.campaignArticle.degradedIfNotCampaignEligible(false),
         SquareComposeType.article,
       );
-      // 认证时保持不变。
+      // 有竞选身份时保持不变。
       expect(
-        SquareComposeType.campaignArticle.degradedIfNotCertified(true),
+        SquareComposeType.campaignArticle.degradedIfNotCampaignEligible(true),
         SquareComposeType.campaignArticle,
       );
       // 非竞选类不受影响。
       expect(
-        SquareComposeType.article.degradedIfNotCertified(false),
+        SquareComposeType.article.degradedIfNotCampaignEligible(false),
         SquareComposeType.article,
       );
     });

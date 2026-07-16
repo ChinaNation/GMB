@@ -223,13 +223,13 @@ void main() {
         recipientAccount: 'bob-wallet',
         senderDeviceId: 'alice-phone',
         recipientKeyPackage: _dummyKeyPackage(),
-        // byteSize 超出图片 100MB 上限;门控看 byteSize 字段,发前即拦,不触碰源文件。
-        media: const ChatMediaDraft(
+        // byteSize 超出自由档 10MB 上限;门控看 byteSize 字段,发前即拦,不触碰源文件。
+        media: ChatMediaDraft(
           kind: ChatMessageKind.image,
           fileName: 'huge.jpg',
           contentType: 'image/jpeg',
           sourcePath: '/nonexistent',
-          byteSize: ChatMediaLimits.imageMaxBytes + 1,
+          byteSize: ChatMediaLimits.maxBytesForLevel('freedom') + 1,
         ),
         sendDeviceAttachment: ({
           required recipientAccount,
@@ -537,7 +537,7 @@ void main() {
       fileName: 'p.jpg',
       contentType: 'image/jpeg',
       tempFilePath: big.path,
-      byteSize: ChatMediaLimits.imageMaxBytes + 1,
+      byteSize: ChatMediaLimits.maxBytesForLevel('freedom') + 1,
       cacheDirectory: root,
     );
     expect(rejected, isNull);

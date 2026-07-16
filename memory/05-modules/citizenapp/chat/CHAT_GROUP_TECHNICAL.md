@@ -154,11 +154,16 @@ ChatConversationEntity 加 : conversationKind = "dm" | "group"
 
 单密文 → `group_fanout` 生成 N 个 `ChatEnvelope`(逐个换 `recipient_account`)→ `ChatFlow.deliverWithTransport` 逐个投递;transport 按 envelope 内 `recipient_account` 路由;离线成员由 `sendChatWake` 唤醒 + 发送端队列重试(复用 1:1 队列)。阶段1 串行发,背压/批量降级留阶段2。
 
-## 11. 群媒体(阶段3,口径见 [[project_chat_media_tiered_relay_2026_07_15]])
+## 11. 大媒体中转(>100MB,已落地 · 口径见 [[project_chat_media_tiered_relay_2026_07_15]])
 
-- 文件上限按会员档(单源来自会员卡 `MembershipPlan.chat_file_max_bytes`):无订阅/自由 ≤10MB、民主 ≤100MB、星火 ≤5GB;`chat_media_limits.dart` 由固定值改按档读。
-- **≤100MB**:WebRTC P2P 端到端,群内=发送端扇出(在线直传 + 缩略图/blurhash 入群占位 + 离线降级)。
-- **>100MB**(仅星火):客户端群 epoch 密钥流式分块 AEAD 加密 → Cloudflare 瞬时中转密文,全员拉取解密(E2E 不破),拉完/短 TTL 后删。**需引入 R2+过期,反转"Chat 禁 R2",阶段3 前显式认**。会员窗口 ADR-036 已确认该 transport 归本卡阶段3。
+**硬约束(用户 2026-07-16 定)**:**只有 >100MB 文件走 Cloudflare(R2 瞬时中转),其余一切**(文本/贴纸/emoji/缩略图 + **所有 ≤100MB 媒体字节**)**绝不经 Cloudflare 字节路径**。只有薪火能发 >100MB,收发两端 + 服务端三重强制。
+
+- 文件上限按会员档(单源 `ChatMediaLimits`,与会员 `chat_file_max_bytes` 同源):无订阅/自由 ≤10MB、民主 ≤100MB、薪火 ≤5GB。收发两端都按**本机档**强制(`forKind`/`forMime` 读当前档)。
+- **分界固定 100MB**(`ChatMediaLimits.relayThresholdBytes`/`needsRelay`):≤100MB → WebRTC P2P;>100MB → R2 中转。>100MB 未配置中转即**拒发,绝不降级 WebRTC**。
+- **>100MB 加密**:一次性随机内容密钥 K,`MediaRelayCrypto` 流式分块 **AES-256-GCM**(GCM tag 即完整性,不加 sha256);**K 只随 E2E 控制信封传**(payload 加 `relayObjectKey/contentKeyB64/chunkSize/encSize`),Cloudflare 只经手密文、拿不到 K。
+- **传输**:`ChatCloudTransport.initRelayUpload`(薪火+尺寸门)→ `relayBlobUri` 流式 PUT 密文(bearer)→ 收端 `downloadAttachment` 门②(超本机档拒)→ 流式 GET 解密落缓存 → `relayAck`(删)。Worker `cloudflare/src/chat/relay.ts`(init/blob PUT·GET/ack)+ R2 桶 `CHAT_RELAY`(24h 生命周期 TTL 兜底)。
+- **1:1 已打通并测试**;**群大媒体待群媒体发送落地**(阶段1/2 群仅文本,群 `sendMedia` 未建;transport 已就绪、复用即可)。群里一次上传、K 随群控制信封扇 N、薪火成员各拉一次、非薪火占位——待群媒体发送时接线。
+- **待部署**:创建 R2 桶 `citizenapp-chat-relay(-staging)` + 设桶级 24h lifecycle;真机上传/下载 E2E 验收。**引入 R2 = 反转"Chat 禁 R2",用户 2026-07-16 已明确授权。**
 
 ## 12. 分阶段
 
@@ -185,7 +190,40 @@ ChatConversationEntity 加 : conversationKind = "dm" | "group"
 
 ## 15. 当前状态(as-built)
 
-**阶段1 已完成并测试通过(2026-07-16):**
+**阶段2 已完成(2026-07-16):协议缺口 + UI。**
+
+- **UI**(`group/ui/`):`open_group_chat.dart`(复用 `chat_page`,`onSendText→sendGroupText`,文本+emoji)、`group_create_page.dart`(通讯录 `UserContactService.getContacts` 多选 + 群名 → `createGroup` → 开群)、`group_manage_page.dart`(名册 + 加/删仅 admin + 改群名 + 退群 + `pickContacts` 弹层)。`chat_tab.dart`:新建群入口 sliver + 群会话行(👥 前缀 + 群头像 + 点开 `openGroupChat` + **长按 `GroupManagePage`**)。`flutter analyze lib/chat` 0、全量 `test/chat` 142 绿。
+- **收尾进展(2026-07-16)**:① **群消息 sender 归属已落地**——`chat_page` 加 `isGroup`,`resolveUser` 群里按 `senderAccount` 经 `ProfilePresentation.forAccount` 出真名,群 text builder 用 flyer `SimpleTextMessage.topWidget` 挂 `Username`(连续同发送者只首条显名);② **群贴纸已落地**——`group_flow.sendGroupSticker`(抽 `_sendGroupUserMessage` 与文本共用)+ `runtime.sendGroupSticker` + `open_group_chat` 接线。`test/chat` 143 绿、analyze 0。
+- **群媒体发送已落地(2026-07-16)**:
+  - **地基**:`ChatOutgoingMediaEntity` 键改 **`pendingKey=attachmentId|recipient`**(群里一份媒体 N 成员 N 行);`MediaResend` 在途去重键 + 删按 (媒体,成员) 复合(`inFlightKey`);`deleteOutgoingMedia(attachmentId, recipient)`。
+  - **`group_flow.sendGroupMedia`**:门①己档 → 控制消息单次加密扇 N → **≤100MB 对每个成员逐个 WebRTC 直传**(离线按成员留 pending,peer_ready 补发)/ **>100MB 走已部署中转**(一次上传 + K 扇 N,`recipientCount` 贯通)。`runtime.sendGroupMedia` + `open_group_chat` 接 `onSendMedia/onResolveMediaPath/onDownloadAttachment`。
+  - **Worker**:`relay.ts` init 收 `recipient_count` 写 KV,ack 递减、**归零删**(1:1 一人即删,群等全员;KV 非原子,24h TTL 兜底);`tsc` 绿。
+  - **收端零改**:relay 下载走 `downloadAttachment` 门②、WebRTC 字节走 `onAttachment`,均与会话无关。
+  - **测试**:`test/chat/group` 群媒体扇出(≤100MB per-member 数=成员数、>100MB 中转一次不走 WebRTC)+ `chat_store` 群媒体复合键 + `media_resend` 复合去重;全量 `test/chat` **146 绿**、analyze 0。
+- **sender 归属已全类型一致(2026-07-16)**:文本 + **图片/视频/文件/贴纸** 群里入站消息均在气泡上方显发送者名(`_mediaAligned` 加 `senderId/groupStatus`,按 `widget.isGroup` 门控,连续同发送者只首条;1:1 不变)。
+- **验收补测已落地(2026-07-16)**:
+  - **权限门控 widget 测**(`group_manage_page_test`):admin 见添加/移除/改群名、非 admin 只见退群;`GroupManagePage.ownerAccount` 注入 seam + fake store 覆写 `readGroup`(避 Isar 真异步在 widget 测不 settle)。
+  - **Worker relay vitest**(`relay.test.ts`):init 薪火+尺寸门 + recipient_count、ack 达数归零删 R2+KV;3 绿。
+  - **顺带修真 bug**:relay 路由(init/blob/ack)此前未在 `limits/catalog` 注册,生产 `assertKnownRoute` 会 404;补 `chat_relay`(1kb)/`chat_relay_blob`(5200MiB,供 blob PUT 大体积)+ 路由表。全量 worker vitest 168 绿、`test/chat` 148 绿。
+- **仍待补(验收)**:`group_create_page`/`chat_tab` 群入口 widget 测(需 fake ChatRuntime/contacts);**真机 E2E**(多设备群文本/媒体、relay 上传下载、recipient_count 删、加删退后向保密)。
+
+**协议缺口(阶段2 第 1 段):**
+
+- **群控制载荷**(`group/group_control.dart`,不改 proto、不进 `ChatMessageKind`):`t=gmb.chat.ctrl`,`op=rename|leave_request`;收端 `group_flow` 先判别——是控制则处理、**绝不当聊天消息显示**,非控制退化为普通消息(`tryDecode` 对坏数据/未知 op 返回 null,不误吞用户文本)。
+- **群名传播**:创建者/admin `renameGroup` → 本机改 + 广播 `rename`;成员收到 `rename` → 更新群名(补 Welcome 不带名的缺口)。
+- **退群自动重钥**:`leaveGroup` = 发 `leave_request` + 本机标 `leftLocally`;群 **admin** 收到 `leave_request` → 自动 `removeMembers([leaver])` 产 Commit 重钥,**补齐阶段1"退群仅本机停发"的密码学后向保密**。
+- **存储**:`ChatConversationPreview.conversationKind` 透出(列表区分群/私聊);`ChatStore.renameGroup`;`ChatGroupFlow` 构造加 `ownerAccount/ownerDeviceId`(入站判自身/代提交移除)。
+- **测试**:`test/chat/group/` 13 绿(含控制载荷编解码退化、admin 收 leave_request 自动移除、rename 同步群名)。`flutter analyze lib/chat` 0。
+- **UI 待做(阶段2 第 2 段)**:建群页 / 成员管理页 / 群聊页(chat_page 群适配 + sender 归属)+ chat_tab 新建群入口与群会话行。
+
+**阶段3 大媒体中转已落地(1:1,2026-07-16):**
+
+- **客户端**:`ChatMediaLimits.needsRelay`(固定 100MB 分界)、`media/media_relay_crypto.dart`(流式分块 AES-256-GCM)、`media/chat_relay_media.dart`(加密→init→流式 PUT;下载→GET→解密→ack)、`chat_payload` 加 relay 字段、`ChatFlow.sendMedia` 路由(>100MB 必走中转,未配置拒发)、`ChatCloudTransport` relay 方法、`ChatRuntime` 发送 seam + `downloadAttachment` 门② relay 下载。
+- **Worker**:`cloudflare/src/chat/relay.ts`(init/blob PUT·GET/ack,薪火+尺寸门,R2 代理转发)+ `routes.ts` 注册 + Env `CHAT_RELAY` + wrangler 3 环境绑定。`npm run typecheck` 绿。
+- **测试**:`test/chat/media/` 10 绿——AES-256-GCM 块/文件 round-trip + 篡改/错钥拒、payload relay 字段、needsRelay 分界、sendMedia 路由(>100MB 走中转不触 WebRTC / ≤100MB 走 WebRTC / >100MB 无中转拒发)。`flutter analyze lib/chat` 0。
+- **待部署**:R2 桶 `citizenapp-chat-relay(-staging)` 创建 + 24h lifecycle;真机 E2E 上传/下载验收。**群大媒体待群 `sendMedia` 落地(transport 已就绪)。**
+
+**阶段1 群原语已完成并测试通过(2026-07-16):**
 
 - **Rust**(`rust/src/chat_mls.rs`):6 个群 FFI `gmb_chat_mls_group_{create,add_members,remove_members,create_message,process,state}_json` + 名册辅助;`MAX_GROUP_MEMBERS=1989` 硬拦。`cargo test chat_mls::` 3 绿,含群多方 round-trip(建群→加 2→发文本双端解密→删 1:被删者 `self_removed=true`、剩余名册对齐,后向保密)。
 - **Dart**:`crypto/mls_group_boundary.dart`(接口+边界类型)、`crypto/mls_native.dart`(6 绑定,`NativeMlsCrypto implements MlsGroupCrypto`)、`group/{group_model,chat_group_limits,group_fanout,group_membership,group_epoch,group_flow}`、3 个 Isar 实体(`ChatGroupEntity/ChatGroupMemberEntity/ChatGroupPendingCommitEntity`)+ `ChatConversationEntity.conversationKind`、`chat_store` 群方法、`chat_runtime` 接线(`createGroup/addGroupMembers/removeGroupMembers/leaveGroup/sendGroupText` + 入站按 `grp:` 前缀路由到群 flow)。

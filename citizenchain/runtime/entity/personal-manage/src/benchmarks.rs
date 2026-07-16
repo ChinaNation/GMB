@@ -1,7 +1,7 @@
 //! 个人多签账户生命周期 pallet benchmark 占位。
 //!
 //! 此处仅保留模块编译入口;实际 benchmark 用例待 follow-up:
-//! - propose_create / propose_close / cleanup_rejected_proposal
+//! - propose_create / propose_close
 //!
 //! weights.rs 当前为保守非零权重,benchmark 补齐后再用实测值覆盖。
 

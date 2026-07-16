@@ -33,7 +33,7 @@ use votingengine::{
 
 use super::pallet::{
     Config, Error, Event, JointInstitutionTallies, JointTallies, JointVotesByAdmin,
-    JointVotesByInstitution, Pallet, PendingPopulationSnapshots, PreparedPopulationSnapshot,
+    JointVotesByInstitution, Pallet,
 };
 use super::{institution_info, is_joint_unanimous};
 
@@ -99,81 +99,44 @@ impl<T: Config> Pallet<T> {
         (VOTING_DURATION_BLOCKS as u64).saturated_into()
     }
 
-    /// 准备联合投票人口快照。
-    ///
-    /// 这是投票引擎内部能力。业务模块不传快照材料，只能在发起联合提案前由管理员调用本入口，让 joint-vote 从链上身份模块读取总人数。
-    pub fn do_prepare_joint_population_snapshot(
-        who: T::AccountId,
-        actor_cid_number: CidNumber,
-        scope: PopulationScope,
-    ) -> DispatchResult {
-        ensure_proposer_institution::<T>(&actor_cid_number, &who)?;
-        let (snapshot_id, eligible_total) =
-            <votingengine::Pallet<T>>::create_population_snapshot(&scope)?;
-        if eligible_total == 0 {
-            <votingengine::Pallet<T>>::release_population_snapshot(snapshot_id);
-            return Err(Error::<T>::CitizenEligibleTotalNotSet.into());
-        }
-
-        let now = <frame_system::Pallet<T>>::block_number();
-        if let Some(previous) = PendingPopulationSnapshots::<T>::take(&who) {
-            <votingengine::Pallet<T>>::release_population_snapshot(previous.snapshot_id);
-        }
-        PendingPopulationSnapshots::<T>::insert(
-            &who,
-            PreparedPopulationSnapshot {
-                actor_cid_number,
-                snapshot_id,
-                eligible_total,
-                prepared_at: now,
-            },
-        );
-        Self::deposit_event(Event::<T>::PopulationSnapshotPrepared {
-            who,
-            eligible_total,
-            scope,
-        });
-        Ok(())
-    }
-
     /// 创建联合投票提案。锁定全部参与机构(NRC + 43 PRC + 43 PRB)管理员快照,
-    /// 并消费已准备的人口快照总分母，后续阶段切换不再改写。
+    /// 同一事务内创建并绑定全国人口快照，后续阶段切换不再改写。
     pub fn do_create_joint_proposal(
         who: T::AccountId,
         actor_cid_number: CidNumber,
     ) -> Result<u64, DispatchError> {
         ensure_proposer_institution::<T>(&actor_cid_number, &who)?;
-        let prepared = PendingPopulationSnapshots::<T>::get(&who)
-            .ok_or(Error::<T>::PopulationSnapshotNotPrepared)?;
-        ensure!(
-            prepared.actor_cid_number == actor_cid_number,
-            votingengine::Error::<T>::InvalidInstitution
-        );
         let now = <frame_system::Pallet<T>>::block_number();
-        if prepared.prepared_at != now {
-            PendingPopulationSnapshots::<T>::remove(&who);
-            <votingengine::Pallet<T>>::release_population_snapshot(prepared.snapshot_id);
-            return Err(Error::<T>::PopulationSnapshotNotCurrent.into());
-        }
-        let snapshot_id = prepared.snapshot_id;
-        let eligible_total = prepared.eligible_total;
         let end = now.saturating_add(Self::joint_stage_duration());
         let subject_cid_numbers = joint_subject_cid_numbers::<T>()?;
 
-        let proposal = Proposal {
-            kind: PROPOSAL_KIND_JOINT,
-            stage: STAGE_JOINT,
-            status: votingengine::STATUS_VOTING,
-            internal_code: None,
-            actor_cid_number: Some(actor_cid_number.clone()),
-            execution_account: None,
-            subject_cid_numbers,
-            start: now,
-            end,
-            citizen_eligible_total: eligible_total,
-        };
-
         with_transaction(|| {
+            // 联合治理协议固定为全国公投。快照创建必须处于提案事务内，
+            // 后续任何管理员快照、数据绑定或排期失败都会连同快照一起回滚。
+            let (snapshot_id, eligible_total) =
+                match <votingengine::Pallet<T>>::create_population_snapshot(
+                    &PopulationScope::Country,
+                ) {
+                    Ok(value) => value,
+                    Err(err) => return TransactionOutcome::Rollback(Err(err)),
+                };
+            if eligible_total == 0 {
+                return TransactionOutcome::Rollback(Err(
+                    Error::<T>::CitizenEligibleTotalNotSet.into()
+                ));
+            }
+            let proposal = Proposal {
+                kind: PROPOSAL_KIND_JOINT,
+                stage: STAGE_JOINT,
+                status: votingengine::STATUS_VOTING,
+                internal_code: None,
+                actor_cid_number: Some(actor_cid_number.clone()),
+                execution_account: None,
+                subject_cid_numbers,
+                start: now,
+                end,
+                citizen_eligible_total: eligible_total,
+            };
             let id = match <votingengine::Pallet<T>>::allocate_proposal_id() {
                 Ok(id) => id,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
@@ -254,8 +217,6 @@ impl<T: Config> Pallet<T> {
                     votingengine::Error::<T>::NoPermission.into()
                 ));
             }
-
-            PendingPopulationSnapshots::<T>::remove(&who);
             Proposals::<T>::insert(id, proposal);
             if let Err(err) = <votingengine::Pallet<T>>::bind_population_snapshot(id, snapshot_id) {
                 return TransactionOutcome::Rollback(Err(err));

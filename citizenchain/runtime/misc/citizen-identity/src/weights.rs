@@ -20,7 +20,6 @@ pub trait WeightInfo {
     fn update_voting_identity() -> Weight;
     fn update_candidate_identity() -> Weight;
     fn revoke_identity() -> Weight;
-    fn prepare_population_snapshot() -> Weight;
     fn occupy_cid() -> Weight;
     fn occupy_cids_batch(n: u32) -> Weight;
     fn revoke_cid() -> Weight;
@@ -56,12 +55,6 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
         Weight::from_parts(170_000_000, 130_000)
             .saturating_add(T::DbWeight::get().reads(22))
             .saturating_add(T::DbWeight::get().writes(24))
-    }
-
-    fn prepare_population_snapshot() -> Weight {
-        Weight::from_parts(30_000_000, 10_000)
-            .saturating_add(T::DbWeight::get().reads(4))
-            .saturating_add(T::DbWeight::get().writes(3))
     }
 
     fn occupy_cid() -> Weight {
@@ -114,12 +107,6 @@ impl WeightInfo for () {
         Weight::from_parts(170_000_000, 130_000)
             .saturating_add(RocksDbWeight::get().reads(22))
             .saturating_add(RocksDbWeight::get().writes(24))
-    }
-
-    fn prepare_population_snapshot() -> Weight {
-        Weight::from_parts(30_000_000, 10_000)
-            .saturating_add(RocksDbWeight::get().reads(4))
-            .saturating_add(RocksDbWeight::get().writes(3))
     }
 
     fn occupy_cid() -> Weight {

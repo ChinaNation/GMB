@@ -4,7 +4,7 @@
 //! `(proposal_id: u64, approve: bool)`(lib.rs:317/329/342/355/367)。
 //! 复用 `core::institution_call` 的「构造裸 call data → 冷签 → CitizenWallet 提交」通道。
 //!
-//! `prepare_population_snapshot`(call 0,参数 `PopulationScope` 枚举)随特别案公投落地时单独增量,本文件不含。
+//! 特别案人口快照由投票引擎按 `actor_cid_number` 推导作用域并随提案原子生成，本文件不承载快照调用。
 //!
 //! `cast_representative_vote` 已接入 handler；`cast_referendum_vote`/`executive_sign`/`override_sign`/
 //! `guard_vote` 及其 call index 为公投/行政签署/护宪终审流预留(本轮读展示 + 另线程),暂无生产消费方。

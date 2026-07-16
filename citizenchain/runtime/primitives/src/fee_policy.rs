@@ -2,6 +2,29 @@
 
 use sp_runtime::{Perbill, RuntimeDebug};
 
+/// 链上交易费执行接口。
+///
+/// 本接口不是第二套费用分类：调用方只能提交已经由业务规则确定的付款账户和
+/// 交易金额；具体实现统一使用本文件费率计算、完整扣款并进入链上分账。
+pub trait OnchainFeeCharger<AccountId, Balance> {
+    /// 从 `payer` 收取 `transaction_amount` 对应的链上交易费并返回实收金额。
+    fn charge(
+        payer: &AccountId,
+        transaction_amount: Balance,
+    ) -> Result<Balance, sp_runtime::DispatchError>;
+}
+
+impl<AccountId, Balance> OnchainFeeCharger<AccountId, Balance> for () {
+    fn charge(
+        _payer: &AccountId,
+        _transaction_amount: Balance,
+    ) -> Result<Balance, sp_runtime::DispatchError> {
+        Err(sp_runtime::DispatchError::Other(
+            "OnchainFeeChargerNotConfigured",
+        ))
+    }
+}
+
 /// 链下清算费付款来源。
 ///
 /// 一个批次可包含多个付款公民和多个付款方清算行，不能伪装成单一机构账户付款。
@@ -47,9 +70,6 @@ pub const ONCHAIN_MIN_FEE: u128 = 10;
 
 /// 实际投票统一费用:100 FEN = 1 元/票。
 pub const VOTE_FLAT_FEE: u128 = 100;
-
-/// 链上发行代币一次性创建费:100_000 FEN = 1000 元/次。
-pub const ONCHAIN_ASSET_CREATE_FEE: u128 = 100_000;
 
 // 链上交易手续费分账。
 /// 铸块全节点分成:80%。

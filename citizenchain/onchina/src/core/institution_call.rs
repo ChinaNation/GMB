@@ -90,6 +90,8 @@ pub struct ProposeCreateInstitutionArgs {
     pub legal_representative_cid_number: Vec<u8>,
     pub legal_representative_account: [u8; 32],
     pub accounts: Vec<InitialAccountArg>,
+    /// 零初始余额必须为 None；非零初始余额必须是操作机构的明确资金账户。
+    pub funding_account: Option<[u8; 32]>,
     pub institution_code: [u8; 4],
     pub roles: Vec<InstitutionRoleArg>,
     pub assignments: Vec<InstitutionAssignmentArg>,
@@ -173,6 +175,7 @@ pub fn encode_propose_create_institution(args: &ProposeCreateInstitutionArgs) ->
         encode_bytes(&mut out, account.account_name.as_bytes());
         out.extend(account.amount.to_le_bytes());
     }
+    out.extend(args.funding_account.encode());
 
     out.extend_from_slice(&args.institution_code);
     out.extend(encode_roles_payload(&args.roles));
@@ -312,6 +315,7 @@ mod tests {
                 account_name: "主账户".to_string(),
                 amount: 111,
             }],
+            funding_account: Some([8; 32]),
             institution_code: *b"SFLP",
             roles: vec![sample_role()],
             assignments: vec![sample_assignment(1), sample_assignment(2)],
@@ -359,6 +363,7 @@ mod tests {
         expected.extend(args.legal_representative_cid_number.encode());
         expected.extend(args.legal_representative_account.encode());
         expected.extend(real_accounts.encode());
+        expected.extend(args.funding_account.encode());
         expected.extend(args.institution_code.encode());
         expected.extend(real_roles.encode());
         expected.extend(real_assignments.encode());

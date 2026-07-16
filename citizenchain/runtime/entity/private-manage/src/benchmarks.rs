@@ -18,7 +18,7 @@ use crate::{
     institution::{accounts::validate_initial_accounts, types::InstitutionAccountInfo},
     pallet::{
         AccountNameOf, AccountRegisteredCid, CidNumberOf, InstitutionAccounts,
-        InstitutionInitialAccountsOf, InstitutionPendingClose,
+        InstitutionInitialAccountsOf,
     },
     AccountValidator, Config, Pallet, ProtectedSourceChecker, RegisteredInstitution,
     ReservedAccountGuard,
@@ -167,19 +167,6 @@ mod benchmarks {
             .expect("benchmark named account must derive");
             black_box(kind.is_closable_institution_account());
         }
-        Ok(())
-    }
-
-    #[benchmark]
-    fn cleanup_rejected_private_proposal() -> Result<(), BenchmarkError> {
-        let account: T::AccountId = frame_benchmarking::account("institution-account", 0, 0);
-        InstitutionPendingClose::<T>::insert(&account, 1u64);
-
-        #[block]
-        {
-            InstitutionPendingClose::<T>::remove(&account);
-        }
-        assert!(!InstitutionPendingClose::<T>::contains_key(account));
         Ok(())
     }
 }

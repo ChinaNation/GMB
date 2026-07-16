@@ -133,16 +133,17 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
 
   bool _validateAmount() {
     final amount = AmountFormat.tryParse(_amountController.text);
-    if (amount == null || amount < 1.11) {
-      setState(() => _amountError = '最低划转金额为 1.11 元（存在性保证金）');
+    if (amount == null || amount <= 0) {
+      setState(() => _amountError = '划转金额必须大于 0');
       return false;
     }
     if (_availableBalance != null) {
       final fee = TransferRpc.estimateTransferFeeYuan(amount);
+      final operationFee = MultisigTransferBalanceGuard.onchainOperationFeeYuan;
       const ed = 1.11;
-      if (amount + fee + ed > _availableBalance!) {
+      if (amount + fee + operationFee + ed > _availableBalance!) {
         setState(() => _amountError =
-            '余额不足（需保留 ${AmountFormat.format(ed, symbol: '')} 元 ED + ${AmountFormat.format(fee, symbol: '')} 元手续费）');
+            '费用账户余额不足（需支付 ${AmountFormat.format(amount, symbol: '')} 元划转本金 + ${AmountFormat.format(fee, symbol: '')} 元执行手续费 + ${AmountFormat.format(operationFee, symbol: '')} 元操作费，并保留 ${AmountFormat.format(ed, symbol: '')} 元 ED）');
         return false;
       }
     }
@@ -163,12 +164,12 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
 
     final wallet = _selectedWallet;
     final amountYuan = AmountFormat.tryParse(_amountController.text) ?? 0;
-    final requiredAdminFee = TransferRpc.estimateTransferFeeYuan(amountYuan);
     final balanceBlockedReason =
-        await MultisigTransferBalanceGuard.checkAdminWalletBalance(
-      wallet: wallet,
-      requiredFeeYuan: requiredAdminFee,
+        await MultisigTransferBalanceGuard.checkInstitutionFeeAccountBalance(
+      feeAccountHex: _feeAccountHex,
       actionLabel: '发起手续费划转提案',
+      additionalDebitYuan:
+          amountYuan + TransferRpc.estimateTransferFeeYuan(amountYuan),
     );
     if (balanceBlockedReason != null) {
       if (!mounted) return;

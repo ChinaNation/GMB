@@ -44,7 +44,7 @@ export function validateUploadItems(value: unknown): UploadItemInput[] {
       if (!['video/mp4', 'video/webm'].includes(item.content_type)) {
         throw new HttpError(400, 'invalid_video_type', '视频只允许 mp4 或 webm');
       }
-      if (byteSize > resourceLimit('square_video_candidate').max_bytes) {
+      if (byteSize > resourceLimit('square_video_spark').max_bytes) {
         throw new HttpError(400, 'video_too_large', '单个视频体积超出上限');
       }
       if (

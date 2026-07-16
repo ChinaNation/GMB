@@ -24,6 +24,10 @@ class ChatContent {
     this.height,
     this.durationMs,
     this.blurhash,
+    this.relayObjectKey,
+    this.contentKeyB64,
+    this.chunkSize,
+    this.encSize,
     this.packId,
     this.stickerId,
   });
@@ -44,6 +48,10 @@ class ChatContent {
     int? height,
     int? durationMs,
     String? blurhash,
+    String? relayObjectKey,
+    String? contentKeyB64,
+    int? chunkSize,
+    int? encSize,
   }) {
     assert(
       kind == ChatMessageKind.image ||
@@ -61,6 +69,10 @@ class ChatContent {
       height: height,
       durationMs: durationMs,
       blurhash: blurhash,
+      relayObjectKey: relayObjectKey,
+      contentKeyB64: contentKeyB64,
+      chunkSize: chunkSize,
+      encSize: encSize,
     );
   }
 
@@ -94,6 +106,14 @@ class ChatContent {
   /// image/video 的低清占位串(blurhash),字节到达前先渲染占位。
   final String? blurhash;
 
+  /// >100MB 大媒体经 Cloudflare R2 瞬时中转时携带(仅此情形):R2 对象键、
+  /// 一次性内容密钥(base64,**只随 E2E 信封传,Cloudflare 拿不到**)、分块大小、
+  /// 密文总字节。字段缺失即非中转媒体(走 WebRTC)。
+  final String? relayObjectKey;
+  final String? contentKeyB64;
+  final int? chunkSize;
+  final int? encSize;
+
   /// kind=sticker:内置贴纸包与贴纸 id。
   final String? packId;
   final String? stickerId;
@@ -103,6 +123,9 @@ class ChatContent {
       kind == ChatMessageKind.image ||
       kind == ChatMessageKind.video ||
       kind == ChatMessageKind.file;
+
+  /// 是否为经 Cloudflare R2 中转的大媒体(>100MB,携 relayObjectKey)。
+  bool get isRelayMedia => isMedia && (relayObjectKey ?? '').isNotEmpty;
 
   /// 会话列表 / 通知用的简短摘要。
   String get summary => switch (kind) {
@@ -143,6 +166,12 @@ class ChatPayloadCodec {
         if (content.height != null) map['height'] = content.height;
         if (content.durationMs != null) map['duration_ms'] = content.durationMs;
         if (content.blurhash != null) map['blurhash'] = content.blurhash;
+        if (content.relayObjectKey != null) {
+          map['relay_object_key'] = content.relayObjectKey;
+          map['content_key'] = content.contentKeyB64;
+          map['chunk_size'] = content.chunkSize;
+          map['enc_size'] = content.encSize;
+        }
       case ChatMessageKind.sticker:
         map['pack_id'] = content.packId;
         map['sticker_id'] = content.stickerId;
@@ -180,6 +209,10 @@ class ChatPayloadCodec {
           height: _asInt(decoded['height']),
           durationMs: _asInt(decoded['duration_ms']),
           blurhash: _asString(decoded['blurhash']),
+          relayObjectKey: _asString(decoded['relay_object_key']),
+          contentKeyB64: _asString(decoded['content_key']),
+          chunkSize: _asInt(decoded['chunk_size']),
+          encSize: _asInt(decoded['enc_size']),
         ),
       ChatMessageKind.sticker => ChatContent.sticker(
           packId: _asString(decoded['pack_id']) ?? '',

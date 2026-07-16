@@ -3,7 +3,7 @@
 use super::*;
 use frame_support::{
     assert_noop, assert_ok, derive_impl,
-    traits::{ConstU128, ConstU32, Hooks},
+    traits::{ConstU128, ConstU32, Currency, ExistenceRequirement, Hooks, WithdrawReasons},
 };
 use frame_system as system;
 use primitives::cid::china::{china_cb::CHINA_CB, china_ch::CHINA_CH};
@@ -169,11 +169,41 @@ impl pallet::Config for Test {
     type Currency = Balances;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
     type InstitutionQuery = TestInstitutionQuery;
+    type OnchainFeeCharger = TestOnchainFeeCharger;
     type WeightInfo = ();
+}
+
+/// 销毁执行测试真实按统一公式从机构费用账户扣除链上交易费。
+pub struct TestOnchainFeeCharger;
+impl primitives::fee_policy::OnchainFeeCharger<AccountId32, Balance> for TestOnchainFeeCharger {
+    fn charge(
+        payer: &AccountId32,
+        transaction_amount: Balance,
+    ) -> Result<Balance, sp_runtime::DispatchError> {
+        let fee = primitives::fee_policy::calculate_onchain_fee(transaction_amount);
+        let imbalance = Balances::withdraw(
+            payer,
+            fee,
+            WithdrawReasons::FEE,
+            ExistenceRequirement::KeepAlive,
+        )?;
+        drop(imbalance);
+        Ok(fee)
+    }
 }
 
 pub struct TestInstitutionQuery;
 impl entity_primitives::InstitutionMultisigQuery<AccountId32> for TestInstitutionQuery {
+    fn lookup_institution_account(cid_number: &[u8], account_name: &[u8]) -> Option<AccountId32> {
+        if account_name == primitives::account_derive::RESERVED_NAME_MAIN {
+            return test_institution_by_cid(cid_number).map(|(_, main_account, _)| main_account);
+        }
+        if account_name == primitives::account_derive::RESERVED_NAME_FEE {
+            return test_institution_by_cid(cid_number).map(|(_, _, fee_account)| fee_account);
+        }
+        None
+    }
+
     fn lookup_cid(addr: &AccountId32) -> Option<Vec<u8>> {
         test_institution(addr).map(|(cid_number, _, _)| cid_number)
     }
@@ -197,6 +227,37 @@ impl entity_primitives::InstitutionMultisigQuery<AccountId32> for TestInstitutio
     fn account_exists(addr: &AccountId32) -> bool {
         test_institution(addr).is_some()
     }
+}
+
+fn test_institution_by_cid(
+    cid_number: &[u8],
+) -> Option<(InstitutionCode, AccountId32, AccountId32)> {
+    CHINA_CB
+        .iter()
+        .find_map(|institution| {
+            (institution.cid_number.as_bytes() == cid_number).then(|| {
+                (
+                    votingengine::types::institution_code_from_cid_number(institution.cid_number)
+                        .expect("储委会 CID 必须包含有效机构码"),
+                    AccountId32::new(institution.main_account),
+                    AccountId32::new(institution.fee_account),
+                )
+            })
+        })
+        .or_else(|| {
+            CHINA_CH.iter().find_map(|institution| {
+                (institution.cid_number.as_bytes() == cid_number).then(|| {
+                    (
+                        votingengine::types::institution_code_from_cid_number(
+                            institution.cid_number,
+                        )
+                        .expect("省储行 CID 必须包含有效机构码"),
+                        AccountId32::new(institution.main_account),
+                        AccountId32::new(institution.fee_account),
+                    )
+                })
+            })
+        })
 }
 
 fn test_institution(addr: &AccountId32) -> Option<(Vec<u8>, InstitutionCode, Vec<AccountId32>)> {
@@ -331,6 +392,9 @@ fn new_test_ext() -> sp_io::TestExternalities {
         (institution_account(&nrc_pallet_id()), 1_000),
         (institution_account(&prc_pallet_id()), 1_000),
         (institution_account(&prb_pallet_id()), 1_000),
+        (AccountId32::new(CHINA_CB[0].fee_account), 1_000),
+        (AccountId32::new(CHINA_CB[1].fee_account), 1_000),
+        (AccountId32::new(CHINA_CH[0].fee_account), 1_000),
     ];
     pallet_balances::GenesisConfig::<Test> {
         balances,

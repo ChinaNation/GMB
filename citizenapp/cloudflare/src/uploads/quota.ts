@@ -2,6 +2,7 @@ import type { MediaAssetRow, PostCategory, PostContentFormat, UploadItemInput } 
 import { HttpError } from '../shared/http';
 import { isSha256Hex } from '../shared/hash';
 import type { MembershipLevel, MembershipPlan } from '../membership/plans';
+import type { IdentityLevel } from '../chain/identity';
 
 interface DeclaredQuotaInput {
   membershipLevel: MembershipLevel;
@@ -60,8 +61,20 @@ export function assertDeclaredLength(value: unknown, fieldName: 'title_length' |
 }
 
 export function assertDeclaredContentQuota(input: DeclaredQuotaInput): void {
-  assertMembershipCanPublishCategory(input.membershipLevel, input.postCategory);
+  // 用量额度按会员档（本函数）；发帖分类权限按身份档，另由 assertIdentityCanPublishCategory
+  // 在发布路径（prepareUpload / confirm）读链身份校验（会员与身份解耦，ADR-036 / 用户 2026-07-16）。
   assertContentQuota(input);
+}
+
+/// 发帖分类权限按身份档（与会员解耦）：竞选内容只有竞选身份（candidate）用户可发；
+/// 普通内容任意身份可发。用量额度另按会员档，二者互不影响。
+export function assertIdentityCanPublishCategory(
+  identityLevel: IdentityLevel,
+  postCategory: PostCategory
+): void {
+  if (postCategory === 'campaign' && identityLevel !== 'candidate') {
+    throw new HttpError(403, 'campaign_identity_required', '只有竞选身份的公民可以发布竞选内容');
+  }
 }
 
 export async function assertManifestQuota(input: ManifestQuotaInput): Promise<void> {
@@ -98,14 +111,6 @@ export async function assertManifestQuota(input: ManifestQuotaInput): Promise<vo
   });
 }
 
-function assertMembershipCanPublishCategory(
-  membershipLevel: MembershipLevel,
-  postCategory: PostCategory
-): void {
-  if (postCategory === 'campaign' && membershipLevel !== 'candidate') {
-    throw new HttpError(403, 'campaign_membership_required', '只有竞选公民会员可以发布竞选内容');
-  }
-}
 
 function assertContentQuota(input: DeclaredQuotaInput): void {
   if (input.contentFormat === 'article') {

@@ -10,7 +10,7 @@
 
 - **A 安全批(不出链)**:POW_AUTHOR_KEY_TYPE 单源 · Native*→M* 守卫镜像 · 删 BuildSpec · SS58_PREFIX 单源 · blake2b_128→blake2_128 · 存储键 helper 单源 · is_education→NED_CODE/CEDU_CODE · build_runtime_signing_payloads→build_signing_payloads · build_signed_extrinsic_local · ElectionCampaign*→Campaign* · crate/dir(offchain-transaction→offchain 等/otherpallet→misc/genesis-pallet→genesis/admin_management→management) · OrgType→InstitutionType · get_law→law · list_proposals_by_org→by_institution。验证 `cargo check`。
 - **A' onchina 前后端锁步**:/api/→/api/v1/、institution→institutions、official→gov、RoleCapabilities→CapabilitySet、*_api.ts→camelCase、workspace_action_*→action/title/enabled、docs 统一、删 GovCategory/INSTITUTION_CODE_LABEL、source→origin、EDUCATION_FORM、Governing/Subordinate→Federal/City。验证 onchina cargo + 前端 tsc。
-- **B 链上名四端锁步(逐项 + 重生夹具)**:MODULE_TAG(ele-camp1→ele-camp、pub-adm1/pri-adm1→pub-admin/pri-admin、全仓统一)· extrinsic(publish_square_post→publish_post[39]、submit_offchain_batch_v2→submit_offchain_batch、propose_resolution_issuance→propose_issuance、start_population_snapshot→prepare_population_snapshot)· storage/pallet(ResolutionDestro→ResolutionDestroy[11]、PendingActivation→PendingActivations、Assets→AssetMetas、OffchainBatchItemV2)· 结构(RegisteredInstitution/InstitutionInfo→entity-primitives 单源)。每项:改 runtime+host+CitizenApp+CitizenWallet+夹具,四端逐字节一致,全端构建验证。
+- **B 链上名四端锁步(逐项 + 重生夹具)**:MODULE_TAG(ele-camp1→ele-camp、pub-adm1/pri-adm1→pub-admin/pri-admin、全仓统一)· extrinsic(publish_square_post→publish_post[39]、submit_offchain_batch_v2→submit_offchain_batch、propose_resolution_issuance→propose_issuance；历史人口快照公开入口现已整体删除)· storage/pallet(ResolutionDestro→ResolutionDestroy[11]、PendingActivation→PendingActivations、Assets→AssetMetas、OffchainBatchItemV2)· 结构(RegisteredInstitution/InstitutionInfo→entity-primitives 单源)。每项:改 runtime+host+CitizenApp+CitizenWallet+夹具,四端逐字节一致,全端构建验证。
 - **C 单子目录清冗余** + 文档/注释/残留清理。
 
 ## 验收
@@ -32,10 +32,10 @@ citizenchain `cargo check` GREEN、onchina 前端 tsc GREEN、CitizenApp/Citizen
 **关键判断纠正:** extrinsic/struct 名是 Substrate metadata,call_index 显式钉死(`#[pallet::call_index]`)、SCALE 位置编码,改名=标识符同步**非**改线格/签名,无需重生夹具。MODULE_TAG 是 pallet 侧给 votingengine ProposalData 加的路由前缀,**客户端零镜像**(不进冷签 payload),改名纯链内部。
 
 已做(chain + node + CitizenApp + CitizenWallet 四端同改 + 四端构建验证):
-- extrinsic:submit_offchain_batch_v2→submit_offchain_batch、OffchainBatchItemV2→OffchainBatchItem、publish_square_post→publish_post、propose_resolution_issuance→propose_issuance、start_population_snapshot→prepare_population_snapshot
+- extrinsic:submit_offchain_batch_v2→submit_offchain_batch、OffchainBatchItemV2→OffchainBatchItem、publish_square_post→publish_post、propose_resolution_issuance→propose_issuance；历史人口快照公开入口已在投票引擎收口任务中整体删除
 - storage/pallet:PendingActivation→PendingActivations、Assets→AssetMetas(仅 onchain-issuance 存储,Config 关联型 Assets 保留)、ResolutionDestro→ResolutionDestroy(目录+crate+pallet)
 - MODULE_TAG:pub-adm1→pub-admin、pri-adm1→pri-admin、ele-camp1→ele-camp、multisig-transfer→multisig(去数字尾/对齐 crate;短缩写 gra-key/res-dst 等按精简保留)
-- **踩坑纠正:** prepare_population_snapshot 合并令 citizen-identity 与 joint-vote 两个不同 extrinsic 撞名 → 客户端按 call 名解码的 map 冲突(unreachable case);已把 joint 的还原为 prepare_joint_population_snapshot 保持可区分。
+- **历史踩坑纠正:** 当时多个模块各自暴露人口快照 extrinsic，客户端按 call 名解码曾发生冲突；这些公开入口现已全部删除，快照只由投票引擎在提案创建时内联生成。
 
 **终检四端全绿:** citizenchain `cargo check` EXIT=0 · onchina 前端 `tsc -b` EXIT=0 · CitizenApp `flutter analyze` 2 既有(零错)· CitizenWallet `flutter analyze` No issues。
 
@@ -90,7 +90,7 @@ citizenchain `cargo check` GREEN、onchina 前端 tsc GREEN、CitizenApp/Citizen
 
 - **[E1 本轮引入·HIGH] admin-unlock.tsx CSS side-effect import 深度漏改。** item6 上提该文件时 `from '../../../`→`'../../` 的 replace_all **没匹配无 `from` 的裸 `import '../../../…styles.css'`**(第7行),路径指向 frontend 外不存在文件、破 `vite build`;`tsc --noEmit` 不解析 CSS import 故漏检。改 → `'../../admins/admin-management/styles.css'`。**验证:** `npm run build`(tsc+vite)EXIT=0。
 - **[E2 阶段B残留·HIGH] onchina indexer 静默漏索引。** pallet 改名 ResolutionDestro→ResolutionDestroy 后,`indexer/event_parser.rs:349` 仍匹配旧串 `"ResolutionDestro"`→ DestroyExecuted 事件永不命中、fund_destroy 记录静默停索引(字符串字面量,cargo 不报)。改串 + 注释 → ResolutionDestroy。cargo EXIT=0。
-- **[E3 阶段B残留·HIGH] CitizenWallet 测试红 + 冷签锁步破。** (a) 解码器 test 仍断言旧名 `propose_resolution_issuance`(解码器已发 propose_issuance)→ 改测试 + 金标夹具 case 名 + lookup(阶段B只跑 analyze 未跑 test)。(b) 更深:JointVote(21) 解码器发 `prepare_population_snapshot` 但 runtime 真名 = `prepare_joint_population_snapshot`(joint-vote/lib.rs:293)、CitizenApp build 侧亦用该名 → 冷签 action 比对 mismatch、pallet-21 联合快照冷签被拒。改 CitizenWallet 解码器 action + qr_protocols decode-map key + 注释 → prepare_joint_population_snapshot(pallet26 legislation 走 prepare_legislation_snapshot 不撞)。**验证:** `flutter test test/signer/` **106 全过**;`flutter analyze` No issues。
+- **[E3 阶段B残留·HIGH] CitizenWallet 测试红 + 冷签锁步破。** (a) 解码器 test 仍断言旧名 `propose_resolution_issuance`(解码器已发 propose_issuance)→ 改测试 + 金标夹具 case 名 + lookup(阶段B只跑 analyze 未跑 test)。(b) 更深：当时联合快照公开入口的客户端 action 与 runtime 名称不一致，导致冷签拒绝；当轮曾四端对齐。该公开入口现已整体删除，快照只由投票引擎内联生成。**验证:** `flutter test test/signer/` **106 全过**;`flutter analyze` No issues。
 - **[E4 阶段C半成品·完成 item2 单源] 3 个 node 文件仍手搓 hasher。** home/rpc.rs / mining/dashboard.rs / settings/fee_account.rs 各有本地 twox_128/blake2_128(与旧 governance 同款)——我新写的 shared 模块 doc 曾误称「唯一实现」。已全部委托 `shared::storage_keys`(byte 逐字节等价,storage_keys 5 test 仍过)+ 清 4 处 unused import + doc 改准确。
 - **[E5 上一轮潜伏 bug] 文档生成器写旧路径。** `generate-local-docs.mjs:10` outputPath 仍指 `generated/local-docs.generated.ts`(旧),而 importer 已读新位置 → 每次 build 重生旧文件、新位置静态不更新。改 outputPath → 新位置,删残留 untracked `generated/` dir;`node generate-local-docs.mjs` 复跑确认写新位置、不再生 generated/。
 - **低残留清理:** 删两个 pre-existing 空目录(communication-node/communication_node);task 卡 D4「残留 source_label 零」措辞收窄为 onchina 范围。
@@ -120,7 +120,7 @@ citizenchain `cargo check` GREEN、onchina 前端 tsc GREEN、CitizenApp/Citizen
 阶段 G 完整 cargo test 发现坏测试 crate 实为 **6 个**(工作区首轮 test 提前中断只报了 3;`cargo test --workspace --no-run` 才列全)。全是历史遗留测试腐烂(prior 只跑 cargo check 不编译测试目标),非本轮命名改动引入。用户拍板全修、分组二走方案二解耦。**5 个已修,onchina 单独立项:**
 
 - **citizenchain**(1 错):cases.rs:1120 `genesis::institution::build`→`genesis_pallet::institution::build`(裸 `genesis` 撞本地 genesis.rs 模块,crate 真名 genesis_pallet;stage-A genesis 改名残留)。
-- **internal-vote**(3 错):测试 3 处 `JointVote::prepare_population_snapshot`→`prepare_joint_population_snapshot`(stage-B 改名未传导测试;本地 helper 不动)。
+- **internal-vote**(3 错):历史联合快照公开入口改名未传导到 3 处测试；当时已对齐，现该公开入口已整体删除。
 - **multisig**(15 错):测试 mock 补 AdminAccount.cid_number、AdminProfile 字段改名(account→admin_account/name→admin_name/admin_role→role_code+role_name/source→admin_source+admin_source_ref)、三 Config 补关联型(RegistryAuthority=()、InstitutionQuery=public_manage::Pallet<Test>)、重建 thread-local get/set_extra_admins helper(2026-06-28 admin 字段定稿漂移)。
 - **pow-difficulty + genesis-pallet**(10+5 错):**方案二解耦 `genesis_pallet::Config` 治理 supertrait**。genesis 加窄 trait `GenesisInstitutionSeeder`(seed 注入)+ `TargetBlockTime`(读块时间);Config 去 public_manage/public_admins supertrait 改 `InstitutionSeeder` 关联型;genesis_build 改 `<T::InstitutionSeeder as GenesisInstitutionSeeder>::seed()`;runtime configs.rs 加 `RuntimeGenesisSeeder`(调 institution::build::<Runtime>)+ pow-difficulty `type BlockTime=GenesisPallet`;pow-difficulty Config 去 genesis_pallet::Config supertrait 改窄 trait BlockTime;两测试 mock 用 dummy seeder/MockBlockTime,不再 mock 治理栈。**institution.rs 零改、seeding 逻辑不变、运行期零影响**(照搬已有 DeveloperUpgradeCheck 先例)。
 - **onchina**(9 错)——**不是测试问题,是生产冷签编码 bug**(encode_admin_profile/AdminProfileArg 用旧 AdminProfile 布局,与链端不一致,影响创建机构/管理员上链交易),**单独立项 task_b6c1a9f8**(新窗口),跨四端 + 重生金标夹具。

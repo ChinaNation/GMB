@@ -1,6 +1,6 @@
 import type { Env } from '../types';
 import { HttpError } from '../shared/http';
-import { getMembership, resolveMembershipEntitlement } from '../membership/service';
+import { getMembership, subscriptionIsActive } from '../membership/service';
 import { nowMs } from '../shared/time';
 
 export const GUEST_DAILY_BROWSE_LIMIT = 100;
@@ -18,7 +18,8 @@ export interface BrowseState {
 export async function getBrowseState(env: Env, ownerAccount: string): Promise<BrowseState> {
   const browseDay = new Date().toISOString().slice(0, 10);
   const membership = await getMembership(env, ownerAccount);
-  if (membership && (await resolveMembershipEntitlement(env, membership)).active) {
+  // 解耦后（ADR-036）浏览额度只看订阅是否有效，不再经身份冻结判定。
+  if (membership && subscriptionIsActive(membership)) {
     return { browse_day: browseDay, browse_count: 0, browse_limit: null, browse_left: null };
   }
   const row = await env.DB.prepare(

@@ -166,12 +166,46 @@ def parse_law(raw: bytes) -> Law:
     tier = s.u8()
     scope_code = s.u32()
     houses_len = s.compact()
-    s.raw(houses_len * 36)
+    # houses = Vec<CidNumber>，每个 CID 自带 SCALE compact 长度；CID 长度不是协议常量，
+    # 禁止按历史固定字节数跳过，否则机构 CID 格式调整后会错位解码后续版本字段。
+    for _ in range(houses_len):
+        s.vec_bytes()
     effective_version = s.opt_u32()
     latest_version = s.u32()
     pending_version = s.opt_u32()
     status = s.u8()
+    if s.i != len(raw):
+        raise ValueError("Law SCALE 存在未识别尾部字段")
     return Law(law_id, tier, scope_code, effective_version, latest_version, pending_version, status)
+
+
+def self_test() -> None:
+    """锁定 houses 的变长 Vec<CidNumber> 解码，防止恢复固定宽度假设。"""
+
+    def compact_small(value: int) -> bytes:
+        if not 0 <= value < 64:
+            raise ValueError("self-test 只编码单字节 compact")
+        return bytes([value << 2])
+
+    houses = (b"CID", b"ZS000-NRC0A-000000001-2026")
+    raw = b"".join(
+        (
+            u64(0),
+            bytes([TIER_CONSTITUTION]),
+            u32(0),
+            compact_small(len(houses)),
+            *(compact_small(len(house)) + house for house in houses),
+            bytes([1]),
+            u32(GENESIS_VERSION),
+            u32(GENESIS_VERSION),
+            bytes([0]),
+            bytes([LAW_STATUS_EFFECTIVE]),
+        )
+    )
+    law = parse_law(raw)
+    if law != Law(0, TIER_CONSTITUTION, 0, 1, 1, None, LAW_STATUS_EFFECTIVE):
+        raise AssertionError(f"Law SCALE self-test 失败:{law}")
+    print("constitution SCALE self-test ok")
 
 
 def skip_clause(s: Scale) -> None:
@@ -346,7 +380,12 @@ def main() -> int:
     parser.add_argument("--expect-code-file", type=Path)
     parser.add_argument("--rpc", help="临时节点 RPC 地址,如 http://127.0.0.1:19944")
     parser.add_argument("--at", help="创世块哈希(--rpc 模式钉块查询)")
+    parser.add_argument("--self-test", action="store_true", help="只运行 SCALE 解码自检")
     args = parser.parse_args()
+
+    if args.self_test:
+        self_test()
+        return 0
 
     if args.rpc is None and args.chainspec is None:
         parser.error("必须提供 chainspec 文件或 --rpc")

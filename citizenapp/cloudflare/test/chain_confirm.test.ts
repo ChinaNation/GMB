@@ -410,8 +410,6 @@ class FakeStmt {
         current_period_start: Date.now(),
         current_period_end: Date.now() + 60_000,
         cancel_at_period_end: 0,
-        identity_level: 'visitor',
-        identity_checked_at: Date.now(),
         entitlement_lapsed_at: null
       } as T;
     }

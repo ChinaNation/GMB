@@ -29,22 +29,37 @@ validate_genesis_state_package() {
       *) echo "[prepack][error] 创世状态包包含白名单外残留:$relative" >&2; return 1 ;;
     esac
   done < <(find "$package_root" -mindepth 1 -print0)
-  python3 - "$package_root/manifest.json" <<'PY'
+  python3 - "$package_root/manifest.json" "$ROOT/node/chainspecs/citizenchain.plain.json" <<'PY'
+import hashlib
 import json
 import sys
 
 with open(sys.argv[1], encoding="utf-8") as f:
     manifest = json.load(f)
-required = ("genesis_hash", "state_root", "chainspec_hash", "runtime_wasm_hash", "runtime_wasm_ci_run_id", "runtime_wasm_ci_head_sha", "light_sync_state_hash", "public_institution_root")
+required = ("artifact_stage", "genesis_hash", "state_root", "chainspec_hash", "runtime_wasm_hash", "runtime_wasm_ci_run_id", "runtime_wasm_ci_head_sha", "light_sync_state_hash", "public_institution_root")
 missing = [key for key in required if not manifest.get(key)]
 if manifest.get("package_format") != "citizenchain-genesis-state-v1" or manifest.get("chain_id") != "citizenchain":
     raise SystemExit("创世状态包 manifest 身份无效")
+if manifest.get("artifact_stage") != "release":
+    raise SystemExit("安装包禁止使用 preview 创世状态包")
 if manifest.get("included_paths") != ["chains/citizenchain/db"]:
     raise SystemExit("创世状态包 manifest.included_paths 无效")
 if missing:
     raise SystemExit(f"创世状态包 manifest 缺少字段:{','.join(missing)}")
+with open(sys.argv[2], "rb") as f:
+    chainspec_hash = hashlib.sha256(f.read()).hexdigest()
+if manifest.get("chainspec_hash") != chainspec_hash:
+    raise SystemExit("创世状态包与当前冻结 node plain chainspec 不一致")
 PY
 }
+
+# 先失败关闭，再开始耗时构建；preview 包和不匹配的 node spec 都不得进入安装资源。
+GENESIS_STATE_SOURCE="${CITIZENCHAIN_GENESIS_STATE_DIR:-$ROOT/target/chainspec/genesis-state}"
+if ! validate_genesis_state_package "$GENESIS_STATE_SOURCE"; then
+  echo "[prepack][error] 创世状态包缺失、不是 release、与冻结 spec 不一致或包含白名单外残留:$GENESIS_STATE_SOURCE" >&2
+  echo "                 正式安装包必须先执行 bake-chainspec.sh --finalize --wasm <CI_WASM> --wasm-ci-run-id <RUN_ID> --wasm-ci-head-sha <HEAD_SHA>。" >&2
+  exit 1
+fi
 
 echo "[prepack] build onchina (release)"
 ( cd "$ROOT" && cargo build -p onchina --release )
@@ -73,18 +88,11 @@ else
   echo "                解压后 export CITIZENCHAIN_PG_DIST=<解压目录> 再重跑;否则安装包不含内嵌 PG。"
 fi
 
-# 创世链状态包来自 bake-chainspec.sh 的输出,是正式安装包首启免全量物化的基础。
-GENESIS_STATE_SOURCE="${CITIZENCHAIN_GENESIS_STATE_DIR:-$ROOT/target/chainspec/genesis-state}"
-if validate_genesis_state_package "$GENESIS_STATE_SOURCE"; then
-  rm -rf "$HERE/resources/genesis-state"
-  mkdir -p "$HERE/resources/genesis-state/chains/citizenchain"
-  install -m 0644 "$GENESIS_STATE_SOURCE/manifest.json" "$HERE/resources/genesis-state/manifest.json"
-  cp -a "$GENESIS_STATE_SOURCE/chains/citizenchain/db" "$HERE/resources/genesis-state/chains/citizenchain/db"
-  echo "[prepack] 创世链状态包已组装:$GENESIS_STATE_SOURCE"
-else
-  echo "[prepack][error] 创世链状态包缺失、字段无效或包含白名单外残留:$GENESIS_STATE_SOURCE" >&2
-  echo "                 正式安装包必须先执行 bake-chainspec.sh --finalize --wasm <CI_WASM> --wasm-ci-run-id <RUN_ID> --wasm-ci-head-sha <HEAD_SHA>。" >&2
-  exit 1
-fi
+# 创世状态包已在构建前完成 release/SSOT/白名单校验，这里只做受控复制。
+rm -rf "$HERE/resources/genesis-state"
+mkdir -p "$HERE/resources/genesis-state/chains/citizenchain"
+install -m 0644 "$GENESIS_STATE_SOURCE/manifest.json" "$HERE/resources/genesis-state/manifest.json"
+cp -a "$GENESIS_STATE_SOURCE/chains/citizenchain/db" "$HERE/resources/genesis-state/chains/citizenchain/db"
+echo "[prepack] 创世状态包已组装:$GENESIS_STATE_SOURCE"
 
 echo "[prepack] done. 接着在 node/ 执行: npm run tauri build"

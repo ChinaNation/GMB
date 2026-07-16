@@ -2,18 +2,13 @@ import type { Env } from '../types';
 import { HttpError, jsonResponse, readJson } from '../shared/http';
 import { ownerPubkeyHex } from '../shared/ids';
 import { nowMs } from '../shared/time';
-import { fetchChainIdentityState, type ChainIdentityState } from '../chain/identity';
 import {
   consumeActionSignature,
   issueActionChallenge,
   releaseActionChallenge
 } from '../account/action_challenge';
 import { applyPrepaidTierChange, getMembership } from './service';
-import {
-  assertCheckoutEligibility,
-  assertCheckoutMembershipLevel,
-  ownerAccountFromRequest
-} from './subscribe';
+import { assertCheckoutMembershipLevel, ownerAccountFromRequest } from './subscribe';
 import { membershipPlan, type MembershipLevel } from './plans';
 
 const DAY_MS = 86_400_000;
@@ -44,30 +39,6 @@ function upgradeDiffCents(remaining: number, oldMonthlyCents: number, newMonthly
 /// 换档签名 context：绑定目标档，防"签一档换另一档"。
 function changeContext(targetLevel: MembershipLevel): string {
   return `change|${targetLevel}`;
-}
-
-function visitorIdentityState(ownerAccount: string): ChainIdentityState {
-  return {
-    owner_account: ownerAccount,
-    identity_level: 'visitor',
-    has_voting_identity: false,
-    has_candidate_identity: false,
-    cid_number: null,
-    checked_at: nowMs()
-  };
-}
-
-/// 落库所需身份：访客档免读链（省一次 RPC），其它读链。资格已由 assertCheckoutEligibility
-/// 精确匹配校验，这里只取 identity_level 入库。
-async function identityForLevel(
-  env: Env,
-  level: MembershipLevel,
-  ownerAccount: string
-): Promise<ChainIdentityState> {
-  const plan = membershipPlan(level);
-  return plan.required_identity_level === 'visitor'
-    ? visitorIdentityState(ownerAccount)
-    : fetchChainIdentityState(env, ownerAccount);
 }
 
 const stripeCheckoutUrl = 'https://api.stripe.com/v1/checkout/sessions';
@@ -133,9 +104,7 @@ export async function prepaidChallengeRoute(request: Request, env: Env): Promise
   const ownerAccount = ownerAccountFromRequest(body);
   const membershipLevel = assertCheckoutMembershipLevel(body.membership_level);
   const duration = assertPrepaidDuration(body.duration);
-  // 资格预检：精确匹配身份档，不满足直接拒。
-  await assertCheckoutEligibility(env, ownerAccount, membershipLevel);
-  // 异档 USDC 拒：换档必须走换档入口，签名前先挡。
+  // 会员与身份解耦（ADR-036）：无身份资格预检。异档 USDC 仍需走换档入口，签名前先挡。
   await assertPrepaidPurchaseTier(env, ownerAccount, membershipLevel);
   const challenge = await issueActionChallenge(
     env,
@@ -175,7 +144,6 @@ export async function prepaidConfirmRoute(request: Request, env: Env): Promise<R
     context: prepaidContext(membershipLevel, duration)
   });
   try {
-    await assertCheckoutEligibility(env, ownerAccount, membershipLevel);
     // 防御性再挡异档（挑战与确认之间状态可能变化）；抛错走 catch 释放挑战。
     await assertPrepaidPurchaseTier(env, ownerAccount, membershipLevel);
     const session = await createPrepaidCheckoutSession(
@@ -208,7 +176,6 @@ export async function prepaidChangeChallengeRoute(request: Request, env: Env): P
   if (existing.membership_level === targetLevel) {
     throw new HttpError(409, 'same_membership_level', '已是该会员档，无需换档');
   }
-  await assertCheckoutEligibility(env, ownerAccount, targetLevel);
   const challenge = await issueActionChallenge(
     env,
     ownerAccount,
@@ -246,7 +213,6 @@ export async function prepaidChangeConfirmRoute(request: Request, env: Env): Pro
   });
   try {
     const existing = await requireActivePrepaid(env, ownerAccount);
-    await assertCheckoutEligibility(env, ownerAccount, targetLevel);
     const now = nowMs();
     const remaining = remainingDays(existing.expires_at, now);
     const oldCents = membershipPlan(existing.membership_level).price_usd_cents;
@@ -259,8 +225,7 @@ export async function prepaidChangeConfirmRoute(request: Request, env: Env): Pro
         await applyPrepaidTierChange(env, {
           ownerAccount,
           membershipLevel: targetLevel,
-          expiresAt: existing.expires_at,
-          identity: await identityForLevel(env, targetLevel, ownerAccount)
+          expiresAt: existing.expires_at
         });
         return jsonResponse({ ok: true, action: 'upgraded', membership_level: targetLevel });
       }
@@ -280,8 +245,7 @@ export async function prepaidChangeConfirmRoute(request: Request, env: Env): Pro
     await applyPrepaidTierChange(env, {
       ownerAccount,
       membershipLevel: targetLevel,
-      expiresAt: newExpires,
-      identity: await identityForLevel(env, targetLevel, ownerAccount)
+      expiresAt: newExpires
     });
     return jsonResponse({
       ok: true,

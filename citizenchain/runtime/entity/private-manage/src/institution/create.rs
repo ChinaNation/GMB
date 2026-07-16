@@ -10,6 +10,7 @@
 extern crate alloc;
 
 use codec::Encode;
+use entity_primitives::InstitutionMultisigQuery;
 
 use crate::institution::accounts::{
     account_names_payload_from_initial_accounts, validate_initial_accounts,
@@ -27,10 +28,11 @@ use crate::RegisteredInstitution;
 use frame_support::{
     ensure,
     storage::{with_transaction, TransactionOutcome},
-    traits::{Currency, ExistenceRequirement, OnUnbalanced, WithdrawReasons},
+    traits::{Currency, ExistenceRequirement},
 };
+use primitives::institution_asset::{InstitutionAsset, InstitutionAssetAction};
 use sp_runtime::{
-    traits::{Hash, Zero},
+    traits::{CheckedAdd, Hash, SaturatedConversion, Zero},
     DispatchResult,
 };
 use votingengine::types::InstitutionCode;
@@ -47,6 +49,7 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
     legal_representative_cid_number: CidNumberOf<T>,
     legal_representative_account: T::AccountId,
     accounts: InstitutionInitialAccountsOf<T>,
+    funding_account: Option<T::AccountId>,
     institution_code: InstitutionCode,
     roles: crate::institution::role::InstitutionRolesOf<T>,
     assignments: crate::institution::role::InstitutionAdminAssignmentsOf<T>,
@@ -126,6 +129,7 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
             legal_representative_cid_number.as_slice(),
             &legal_representative_account,
             &account_name_payload,
+            funding_account.as_ref(),
             &roles.encode(),
             &assignments.encode(),
             &register_nonce,
@@ -153,9 +157,32 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
 
     let (created_accounts, main_account, _fee_account, initial_total) =
         validate_initial_accounts::<T>(&cid_number, &accounts)?;
-    // 共用余额预检查 helper:amount + fee + ED 必须够。
-    let (_total_with_fee, fee) =
-        crate::common::ensure_proposer_can_afford::<T>(&who, initial_total)?;
+    let funding_account = match (initial_total.is_zero(), funding_account) {
+        (true, None) => None,
+        (true, Some(_)) => return Err(Error::<T>::UnexpectedFundingAccount.into()),
+        (false, None) => return Err(Error::<T>::FundingAccountRequired.into()),
+        (false, Some(account)) => {
+            ensure!(
+                T::InstitutionQuery::account_belongs_to(actor_cid_number.as_slice(), &account)
+                    && T::InstitutionAsset::can_spend(
+                        &account,
+                        InstitutionAssetAction::InstitutionCreateFunding,
+                    ),
+                Error::<T>::InvalidFundingAccount
+            );
+            let required = initial_total
+                .checked_add(&T::Currency::minimum_balance())
+                .ok_or(Error::<T>::InsufficientAmount)?;
+            ensure!(
+                T::Currency::free_balance(&account) >= required,
+                Error::<T>::InsufficientAmount
+            );
+            Some(account)
+        }
+    };
+    // 外层 FeeRoute 已按 initial_total 从 actor CID 费用账户收取一次完整链上费。
+    let fee = primitives::fee_policy::calculate_onchain_fee(initial_total.saturated_into())
+        .saturated_into();
 
     let now = <frame_system::Pallet<T>>::block_number();
     // 管理员与内部投票都按机构 CID 寻址，任何机构账户都不充当授权根。
@@ -172,32 +199,19 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
         if let Err(err) = Pallet::<T>::ensure_admin_config(&admins, threshold) {
             return TransactionOutcome::Rollback(Err(err));
         }
-        if !fee.is_zero() {
-            let fee_imbalance = match T::Currency::withdraw(
-                &who,
-                fee,
-                WithdrawReasons::FEE,
-                ExistenceRequirement::KeepAlive,
-            ) {
-                Ok(imbalance) => imbalance,
-                Err(_) => {
-                    return TransactionOutcome::Rollback(Err(Error::<T>::FeeWithdrawFailed.into()))
+        if let Some(source) = funding_account.as_ref() {
+            for account in created_accounts.iter() {
+                if !account.amount.is_zero()
+                    && T::Currency::transfer(
+                        source,
+                        &account.address,
+                        account.amount,
+                        ExistenceRequirement::KeepAlive,
+                    )
+                    .is_err()
+                {
+                    return TransactionOutcome::Rollback(Err(Error::<T>::TransferFailed.into()));
                 }
-            };
-            T::FeeRouter::on_unbalanced(fee_imbalance);
-        }
-
-        for account in created_accounts.iter() {
-            if !account.amount.is_zero()
-                && T::Currency::transfer(
-                    &who,
-                    &account.address,
-                    account.amount,
-                    ExistenceRequirement::KeepAlive,
-                )
-                .is_err()
-            {
-                return TransactionOutcome::Rollback(Err(Error::<T>::TransferFailed.into()));
             }
         }
 

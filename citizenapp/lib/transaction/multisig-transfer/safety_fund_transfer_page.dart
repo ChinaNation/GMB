@@ -176,16 +176,16 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
 
   bool _validateAmount() {
     final amount = AmountFormat.tryParse(_amountController.text);
-    if (amount == null || amount < 1.11) {
-      setState(() => _amountError = '最低转账金额为 1.11 元（存在性保证金）');
+    if (amount == null || amount <= 0) {
+      setState(() => _amountError = '转账金额必须大于 0');
       return false;
     }
     if (_availableBalance != null) {
       final fee = TransferRpc.estimateTransferFeeYuan(amount);
       const ed = 1.11;
-      if (amount + fee + ed > _availableBalance!) {
+      if (amount + ed > _availableBalance!) {
         setState(() => _amountError =
-            '余额不足（需保留 ${AmountFormat.format(ed, symbol: '')} 元 ED + ${AmountFormat.format(fee, symbol: '')} 元手续费）');
+            '安全基金账户余额不足（转账后须保留 ${AmountFormat.format(ed, symbol: '')} 元 ED，${AmountFormat.format(fee, symbol: '')} 元手续费由国家储委会费用账户另付）');
         return false;
       }
     }
@@ -220,12 +220,11 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
 
     final wallet = _selectedWallet;
     final amountYuan = AmountFormat.tryParse(_amountController.text) ?? 0;
-    final requiredAdminFee = TransferRpc.estimateTransferFeeYuan(amountYuan);
     final balanceBlockedReason =
-        await MultisigTransferBalanceGuard.checkAdminWalletBalance(
-      wallet: wallet,
-      requiredFeeYuan: requiredAdminFee,
+        await MultisigTransferBalanceGuard.checkInstitutionFeeAccountBalance(
+      feeAccountHex: widget.institution.accounts!.feeAccount,
       actionLabel: '发起安全基金转账提案',
+      additionalDebitYuan: TransferRpc.estimateTransferFeeYuan(amountYuan),
     );
     if (balanceBlockedReason != null) {
       if (!mounted) return;

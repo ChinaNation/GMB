@@ -179,16 +179,21 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
 
   bool _validateAmount() {
     final amount = AmountFormat.tryParse(_amountController.text);
-    if (amount == null || amount < 1.11) {
-      setState(() => _amountError = '最低转账金额为 1.11 元（存在性保证金）');
+    if (amount == null || amount <= 0) {
+      setState(() => _amountError = '转账金额必须大于 0');
       return false;
     }
     if (_availableBalance != null) {
       final fee = TransferRpc.estimateTransferFeeYuan(amount);
       const ed = 1.11;
-      if (amount + fee + ed > _availableBalance!) {
-        setState(() => _amountError =
-            '余额不足（需保留 ${AmountFormat.format(ed, symbol: '')} 元 ED + ${AmountFormat.format(fee, symbol: '')} 元手续费）');
+      // 机构账户只承担本金；执行手续费由同 CID 费用账户承担。
+      // 个人多签没有机构费用账户，仍由个人多签资金账户承担本金与执行费。
+      final isInstitution = widget.institution.accounts != null;
+      final required = amount + ed + (isInstitution ? 0 : fee);
+      if (required > _availableBalance!) {
+        setState(() => _amountError = isInstitution
+            ? '机构主账户余额不足（转账后须保留 ${AmountFormat.format(ed, symbol: '')} 元 ED，手续费由机构费用账户另付）'
+            : '余额不足（需保留 ${AmountFormat.format(ed, symbol: '')} 元 ED + ${AmountFormat.format(fee, symbol: '')} 元手续费）');
         return false;
       }
     }
@@ -223,13 +228,20 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
 
     final wallet = _selectedWallet;
     final amountYuan = AmountFormat.tryParse(_amountController.text) ?? 0;
-    final requiredAdminFee = TransferRpc.estimateTransferFeeYuan(amountYuan);
-    final balanceBlockedReason =
-        await MultisigTransferBalanceGuard.checkAdminWalletBalance(
-      wallet: wallet,
-      requiredFeeYuan: requiredAdminFee,
-      actionLabel: '发起多签转账提案',
-    );
+    final accounts = widget.institution.accounts;
+    final balanceBlockedReason = accounts == null
+        ? await MultisigTransferBalanceGuard.checkAdminWalletBalance(
+            wallet: wallet,
+            requiredFeeYuan:
+                MultisigTransferBalanceGuard.onchainOperationFeeYuan,
+            actionLabel: '发起个人多签转账提案',
+          )
+        : await MultisigTransferBalanceGuard.checkInstitutionFeeAccountBalance(
+            feeAccountHex: accounts.feeAccount,
+            actionLabel: '发起机构多签转账提案',
+            additionalDebitYuan:
+                TransferRpc.estimateTransferFeeYuan(amountYuan),
+          );
     if (balanceBlockedReason != null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

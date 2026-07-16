@@ -12,6 +12,7 @@ use frame_system::RawOrigin;
 use primitives::cid::china::china_cb::CHINA_CB;
 use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
 use sp_std::{vec, vec::Vec};
+use votingengine::CitizenIdentityReader;
 
 use crate::{pallet, AllowedRecipients, Call, Config, Pallet, VotingProposalCount};
 
@@ -91,6 +92,11 @@ mod benchmarks {
         AllowedRecipients::<T>::put(recipients);
         VotingProposalCount::<T>::put(0u32);
         let actor_cid_number = nrc_cid_number();
+        let scope = votingengine::PopulationScope::Country;
+        let citizen: T::AccountId = frame_benchmarking::account("resolution-citizen", 0, 0);
+        <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(
+            &citizen, &scope,
+        );
 
         let reason = reason_max::<T>();
         let (allocations, total_amount) = full_allocations::<T>();

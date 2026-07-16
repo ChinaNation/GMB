@@ -8,6 +8,11 @@ import '../storage/chat_store.dart';
 class MediaResend {
   MediaResend._();
 
+  /// 在途去重键 = (attachmentId, recipient)。群里同一媒体发多成员,按成员去重,
+  /// 不能只按 attachmentId(否则发给 B 时会误跳过发给 C)。
+  static String inFlightKey(String attachmentId, String recipientAccount) =>
+      '$attachmentId|$recipientAccount';
+
   static Future<void> run({
     required List<ChatPendingMedia> pending,
     required Set<String> inFlight,
@@ -15,25 +20,26 @@ class MediaResend {
     required Future<bool> Function(String path) cacheFileExists,
     required Future<void> Function(ChatPendingMedia media, String path)
         sendBytes,
-    required Future<void> Function(String attachmentId) deletePending,
+    required Future<void> Function(ChatPendingMedia media) deletePending,
   }) async {
     for (final media in pending) {
-      if (inFlight.contains(media.attachmentId)) {
-        continue; // 在途,别重发(防同一 attachmentId 双传)
+      final key = inFlightKey(media.attachmentId, media.recipientAccount);
+      if (inFlight.contains(key)) {
+        continue; // 在途,别重发(按 (媒体,成员) 去重)
       }
       final path = resolveCachePath(media);
       if (!await cacheFileExists(path)) {
-        await deletePending(media.attachmentId); // 缓存副本已丢,清孤儿
+        await deletePending(media); // 缓存副本已丢,清孤儿
         continue;
       }
-      inFlight.add(media.attachmentId);
+      inFlight.add(key);
       try {
         await sendBytes(media, path);
-        await deletePending(media.attachmentId); // 收到 ack,删行
+        await deletePending(media); // 收到 ack,删行
       } on Exception {
         // 仍离线 / 直连失败:保留 pending,等下次 peer_ready 再补发。
       } finally {
-        inFlight.remove(media.attachmentId);
+        inFlight.remove(key);
       }
     }
   }

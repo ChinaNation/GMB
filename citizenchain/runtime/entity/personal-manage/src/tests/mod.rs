@@ -5,7 +5,7 @@ extern crate alloc;
 use super::*;
 use frame_support::{
     derive_impl,
-    traits::{ConstU128, ConstU32, Hooks},
+    traits::{ConstU128, ConstU32, Currency, ExistenceRequirement, Hooks, WithdrawReasons},
     BoundedVec,
 };
 use frame_system as system;
@@ -113,6 +113,25 @@ impl primitives::institution_asset::InstitutionAsset<AccountId32> for TestInstit
         _action: primitives::institution_asset::InstitutionAssetAction,
     ) -> bool {
         INSTITUTION_CAN_SPEND.with(|value| *value.borrow())
+    }
+}
+
+/// 个人多签测试按协议统一公式真实扣除执行期链上费。
+pub struct TestOnchainFeeCharger;
+impl primitives::fee_policy::OnchainFeeCharger<AccountId32, Balance> for TestOnchainFeeCharger {
+    fn charge(
+        payer: &AccountId32,
+        transaction_amount: Balance,
+    ) -> Result<Balance, sp_runtime::DispatchError> {
+        let fee = primitives::fee_policy::calculate_onchain_fee(transaction_amount);
+        let imbalance = Balances::withdraw(
+            payer,
+            fee,
+            WithdrawReasons::FEE,
+            ExistenceRequirement::KeepAlive,
+        )?;
+        drop(imbalance);
+        Ok(fee)
     }
 }
 
@@ -248,11 +267,10 @@ impl pallet::Config for Test {
     type InstitutionAsset = TestInstitutionAsset;
     type PersonalAdminLifecycle = personal_admins::Pallet<Test>;
     type PersonalAdminQuery = personal_admins::Pallet<Test>;
-    type FeeRouter = ();
+    type OnchainFeeCharger = TestOnchainFeeCharger;
     type MaxAccountNameLength = ConstU32<128>;
     type MaxPersonalAccountAdmins = ConstU32<64>;
     type MinCreateAmount = ConstU128<111>;
-    type MinCloseBalance = ConstU128<111>;
     type WeightInfo = ();
 }
 

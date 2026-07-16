@@ -11,7 +11,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 ///
 /// - 清算行(L2)体系唯一绑定页。数据源为 finalized 链上清算行声明;
 ///   链上调用 `bind_clearing_bank(bank_main_account)`(call_index 30)。
-/// - 绑定即开户,**无预存、无业务开户费**;链上仅产生付费调用 1 元/次。
+/// - 绑定即开户,**无预存、无业务开户费**;签名者支付最低链上交易费 0.1 元/次。
 /// - 本步仅支持热钱包;冷钱包必须等绑定 payload 可独立展示和验证后再接入。
 /// - 本页目前无活跃入口,等「设置清算行」真实交互落地时再复用。
 class BindClearingBankPage extends StatefulWidget {
@@ -65,7 +65,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
               child: Text(
                 '说明:\n'
                 '· 绑定即开户,无需预存\n'
-                '· 链上手续费 1 元/次(付费调用)\n'
+                '· 链上手续费 0.1 元/次\n'
                 '· 同一时间只能绑定一家清算行\n'
                 '· 切换前需把当前清算行存款全部提现',
                 style: TextStyle(fontSize: 13, color: Colors.grey),

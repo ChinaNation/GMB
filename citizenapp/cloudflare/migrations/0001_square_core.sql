@@ -64,11 +64,8 @@ CREATE TABLE square_memberships (
   current_period_start INTEGER,
   current_period_end INTEGER,
   cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
-  identity_level TEXT NOT NULL DEFAULT 'visitor',
-  identity_checked_at INTEGER,
+  -- 会员与身份彻底解耦（ADR-036）：不再存 identity_level / frozen_at / collection_paused。
   entitlement_lapsed_at INTEGER,
-  frozen_at INTEGER,
-  collection_paused INTEGER NOT NULL DEFAULT 0,
   prepaid_payment_ref TEXT
 );
 CREATE UNIQUE INDEX idx_square_memberships_stripe_subscription

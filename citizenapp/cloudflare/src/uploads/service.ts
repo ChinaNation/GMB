@@ -18,8 +18,10 @@ import {
   assertContentFormat,
   assertDeclaredContentQuota,
   assertDeclaredLength,
+  assertIdentityCanPublishCategory,
   assertManifestQuota
 } from './quota';
+import { fetchChainIdentityState } from '../chain/identity';
 import { imageResource, resourceLimit, videoResource, type ResourceKey } from '../limits/catalog';
 import { apiRouteUrl, readLimitedBytes, readLimitedText } from '../limits/request';
 import { assertDeclaredResource, validateUploadBytes } from '../limits/upload';
@@ -111,6 +113,11 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
   const mediaItems = validateUploadItems(body.media_items);
   const estimatedBytes = estimateUploadBytes(mediaItems);
 
+  // 发帖分类权限按身份档（竞选内容须竞选身份）；只有竞选帖才读链身份，普通帖免 RPC。
+  if (postCategory === 'campaign') {
+    const identity = await fetchChainIdentityState(env, session.owner_account);
+    assertIdentityCanPublishCategory(identity.identity_level, postCategory);
+  }
   // 会员权益和统一资源表共同约束声明；客户端提供的数据只用于申请，不是最终凭据。
   const membership = await requireActiveMembership(env, session.owner_account);
   const membershipLevel = normalizeMembershipLevel(membership.membership_level);
@@ -529,8 +536,8 @@ export async function streamWebhookRoute(request: Request, env: Env): Promise<Re
 export { validateUploadItems, estimateUploadBytes };
 
 function normalizeMembershipLevel(value: string): MembershipLevel {
-  // 民主会员使用对齐投票会员的高额度；竞选专属发帖仍只认 candidate 会员。
-  if (value === 'candidate' || value === 'voting' || value === 'democracy') {
+  // 会员三档（ADR-036，与身份解耦）：spark/democracy 原样，其余归 freedom。
+  if (value === 'spark' || value === 'democracy') {
     return value;
   }
   return 'freedom';

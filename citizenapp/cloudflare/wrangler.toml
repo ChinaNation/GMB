@@ -15,6 +15,13 @@ binding = "SQUARE_MEDIA"
 bucket_name = "citizenapp-square-media"
 preview_bucket_name = "citizenapp-square-media-dev"
 
+# 大媒体(>100MB)瞬时中转专用桶:仅存薪火 + >100MB 的 E2E 密文,配 24h 生命周期 TTL。
+# 部署前需创建该桶并设桶级 lifecycle(24h 过期删)。
+[[r2_buckets]]
+binding = "CHAT_RELAY"
+bucket_name = "citizenapp-chat-relay"
+preview_bucket_name = "citizenapp-chat-relay-dev"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "citizenapp-square-db"
@@ -47,10 +54,10 @@ ARCHIVE_LAPSE_DAYS = "90"
 APNS_ENV = "production"
 R2_BUCKET = "citizenapp-square-media"
 # Stripe price id 不是密钥，可按官网订阅实际价格填入；webhook secret 必须用 wrangler secret 配置。
+# 会员三档（ADR-036，与身份解耦）：自由 / 民主 / 薪火。
 FREEDOM_PRICE_ID = ""
 DEMOCRACY_PRICE_ID = ""
-VOTING_PRICE_ID = ""
-CANDIDATE_PRICE_ID = ""
+SPARK_PRICE_ID = ""
 CHECKOUT_SUCCESS_URL = ""
 CHECKOUT_CANCEL_URL = ""
 IMAGES_URL = ""
@@ -85,6 +92,11 @@ binding = "SQUARE_MEDIA"
 bucket_name = "citizenapp-square-media-staging"
 preview_bucket_name = "citizenapp-square-media-staging"
 
+[[env.staging.r2_buckets]]
+binding = "CHAT_RELAY"
+bucket_name = "citizenapp-chat-relay-staging"
+preview_bucket_name = "citizenapp-chat-relay-staging"
+
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "citizenapp-square-db-staging"
@@ -113,8 +125,7 @@ APNS_ENV = "sandbox"
 R2_BUCKET = "citizenapp-square-media-staging"
 FREEDOM_PRICE_ID = "price_1TtCrvQlQZ1x0Cw8k9kKmvVR"
 DEMOCRACY_PRICE_ID = "price_1TtCrvQlQZ1x0Cw8xntRj1Lc"
-VOTING_PRICE_ID = "price_1TtCrwQlQZ1x0Cw8kVMOh1lR"
-CANDIDATE_PRICE_ID = "price_1TtCrxQlQZ1x0Cw8ecTyP2X0"
+SPARK_PRICE_ID = "price_1TtCrxQlQZ1x0Cw8ecTyP2X0"
 CHECKOUT_SUCCESS_URL = "https://www.crcfrcn.com/membership?status=success"
 CHECKOUT_CANCEL_URL = "https://www.crcfrcn.com/membership?status=cancel"
 IMAGES_URL = "https://imagedelivery.net/UOEmEDe-GxX_DiS70z3GIg"
@@ -149,6 +160,11 @@ binding = "SQUARE_MEDIA"
 bucket_name = "citizenapp-square-media"
 preview_bucket_name = "citizenapp-square-media"
 
+[[env.production.r2_buckets]]
+binding = "CHAT_RELAY"
+bucket_name = "citizenapp-chat-relay"
+preview_bucket_name = "citizenapp-chat-relay"
+
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "citizenapp-square-db-production"
@@ -178,8 +194,7 @@ APNS_ENV = "production"
 R2_BUCKET = "citizenapp-square-media"
 FREEDOM_PRICE_ID = "price_1TrrMkHSzSYWD2rFsabKgbxa"
 DEMOCRACY_PRICE_ID = "price_1TrrN3HSzSYWD2rFVtf8YsEY"
-VOTING_PRICE_ID = "price_1TrrN8HSzSYWD2rF5A3KZ8ip"
-CANDIDATE_PRICE_ID = "price_1TrrNCHSzSYWD2rFrZTsmKhl"
+SPARK_PRICE_ID = "price_1TrrNCHSzSYWD2rFrZTsmKhl"
 CHECKOUT_SUCCESS_URL = "https://www.crcfrcn.com/membership?status=success"
 CHECKOUT_CANCEL_URL = "https://www.crcfrcn.com/membership?status=cancel"
 IMAGES_URL = "https://imagedelivery.net/UOEmEDe-GxX_DiS70z3GIg"

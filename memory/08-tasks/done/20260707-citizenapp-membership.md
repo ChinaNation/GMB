@@ -212,7 +212,7 @@
 ### 第 0 步（完成，任务卡与现状复查）
 
 - 已创建任务卡。
-- 发布费目标态不是 `square-post` pallet 内部直接扣款，而是 `RuntimeFeeKindClassifier` 将 `RuntimeCall::SquarePost(_)` 归类为 `FeeChargeKind::OnchainAmount(0)`；`OnchainChargeAdapter` 按 `ONCHAIN_MIN_FEE = 10` 分收取 0.1 元。
+- 发布费目标态不是 `square-post` pallet 内部直接扣款，而是 `RuntimeFeeRouter` 返回签名者付款的 `FeeRoute::Onchain`；`OnchainChargeAdapter` 按 `ONCHAIN_MIN_FEE = 10` 分收取 0.1 元。
 - `OnchainChargeAdapter` 会计算、预检查、扣费并交给 `OnchainFeeRouter` 按 8:1:1 分账；runtime 测试覆盖 `SquarePost` 归类和最低链上费用，`VOTE_FLAT_FEE = 100` 分保持不变。
 - 只读复查确认：`square-post` 链上仍只记录 `post_id`、`owner_account`、可空 `cid_number`、`post_category`、`content_hash`、`storage_receipt_id`、`storage_until`、`created_block`。
 - 只读复查确认：当前 runtime 的 `Campaign` 发布只要求有效 `VotingIdentityByAccount`，不要求 `CandidateIdentityByAccount`；本任务先由 Cloudflare 强制竞选公民会员才能发布竞选内容，默认不改 runtime。

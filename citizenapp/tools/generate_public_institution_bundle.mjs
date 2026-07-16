@@ -7,7 +7,13 @@
 //
 // 用法:
 //   CHAIN_RPC_URL=http://127.0.0.1:9944 node tools/generate_public_institution_bundle.mjs
-//   CHAIN_RPC_URL=ws://127.0.0.1:9944 node tools/generate_public_institution_bundle.mjs
+//   node tools/generate_public_institution_bundle.mjs \
+//     --rpc-url http://127.0.0.1:9944 --at 0x... \
+//     --chainspec ../target/chainspec/chainspec.app.json \
+//     --out-dir ../target/chainspec/public_institutions
+//
+// 正式冻结由 bake-chainspec.sh 显式传入块 0、轻形态 chainspec 和暂存目录；
+// 默认路径只服务于人工刷新当前 App 缓存，不构成第二个创世真源。
 // Cloudflare Access HTTP 入口可选从环境读取 `CF_ACCESS_CLIENT_ID` 和
 // `CF_ACCESS_CLIENT_SECRET`，脚本不会把凭据写入产物或日志。
 
@@ -17,9 +23,18 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const OUT_DIR = join(__dirname, '..', 'assets', 'public_institutions');
-const CHAIN_SPEC = join(__dirname, '..', 'assets', 'chainspec.json');
-const CHAIN_RPC_URL = process.env.CHAIN_RPC_URL || 'http://127.0.0.1:9944';
+const OUT_DIR = arg(
+  '--out-dir',
+  join(__dirname, '..', 'assets', 'public_institutions'),
+);
+const CHAIN_SPEC = arg(
+  '--chainspec',
+  join(__dirname, '..', 'assets', 'chainspec.json'),
+);
+const CHAIN_RPC_URL = arg(
+  '--rpc-url',
+  process.env.CHAIN_RPC_URL || 'http://127.0.0.1:9944',
+);
 const PAGE_SIZE = 500;
 const BATCH_SIZE = 200;
 
@@ -130,20 +145,24 @@ function decodeInstitution(cidNumber, valueHex) {
   offset = skipOption(value, offset, (d, o) => readVec(d, o)[1]); // Option<AccountName 姓名>
   offset = skipOption(value, offset, (d, o) => readVec(d, o)[1]); // Option<CidNumber>
   offset = skipOption(value, offset, (d, o) => o + 32); // Option<AccountId 32 字节>
-  if (offset + 9 > value.length) throw new Error(`机构 ${cidNumber} 链值长度不足`);
+  if (offset + 8 > value.length) throw new Error(`机构 ${cidNumber} 链值长度不足`);
   // 机构码不从 value blob 切(易随结构漂移),直接从 cid_number 核心段还原(方案B)。
   const institutionCode = institutionCodeFromCid(cidNumber);
   offset += 4; // 跳过 blob 里的 [u8;4] institution_code
   const createdAt = value.readUInt32LE(offset);
   offset += 4;
-  const statusByte = value[offset];
+  // InstitutionInfo 已删除重复 lifecycle/status；Institutions 中存在即为当前有效机构，
+  // 关闭时整条身份记录被清理。派生缓存不得继续猜测历史状态字节。
+  if (offset !== value.length) {
+    throw new Error(`机构 ${cidNumber} 存在未识别 SCALE 尾部字段`);
+  }
   const match = /^([A-Z]{2})(\d{3})-/u.exec(cidNumber);
   if (!match) throw new Error(`机构号格式无效: ${cidNumber}`);
   return {
     cid_number: cidNumber,
     cid_full_name: fullName.toString('utf8'),
     cid_short_name: shortName.toString('utf8'),
-    status: statusByte === 1 ? 'ACTIVE' : statusByte === 2 ? 'CLOSED' : 'PENDING',
+    status: 'ACTIVE',
     province_code: match[1],
     city_code: match[2],
     town_code: townCode.toString('utf8'),
@@ -245,6 +264,43 @@ async function readValues(rpc, keys, blockHash) {
 }
 
 async function main() {
+  if (process.argv.includes('--self-test')) {
+    const compactSmall = (length) => {
+      if (!Number.isInteger(length) || length < 0 || length >= 64) {
+        throw new Error('self-test 只编码单字节 compact');
+      }
+      return Buffer.from([length << 2]);
+    };
+    const vec = (value) => {
+      const data = Buffer.from(value, 'utf8');
+      return Buffer.concat([compactSmall(data.length), data]);
+    };
+    const raw = Buffer.concat([
+      vec('测试公权机构'),
+      vec('测试机构'),
+      vec(''),
+      Buffer.from([0, 0, 0]), // 三个法定代表人 Option=None
+      Buffer.from('CAGR', 'ascii'),
+      Buffer.from([7, 0, 0, 0]),
+    ]);
+    const decoded = decodeInstitution(
+      'HE036-CAGRA-251174662-2026',
+      `0x${raw.toString('hex')}`,
+    );
+    if (decoded.status !== 'ACTIVE' || decoded.created_at_block !== 7
+        || decoded.institution_code !== 'CAGR') {
+      throw new Error(`InstitutionInfo SCALE self-test 失败:${JSON.stringify(decoded)}`);
+    }
+    console.log('public institution SCALE self-test ok');
+    return;
+  }
+  if (!existsSync(CHAIN_SPEC)) {
+    throw new Error(`chainspec 不存在: ${CHAIN_SPEC}`);
+  }
+  const requestedBlockHash = arg('--at', '').trim().toLowerCase();
+  if (requestedBlockHash && !/^0x[0-9a-f]{64}$/.test(requestedBlockHash)) {
+    throw new Error('--at 必须为 0x + 64 位十六进制块哈希');
+  }
   const selectedNames = new Set(
     arg('--provinces', '').split(',').map((value) => value.trim()).filter(Boolean),
   );
@@ -255,9 +311,14 @@ async function main() {
 
   const rpc = new JsonRpc(CHAIN_RPC_URL);
   try {
-    const snapshotBlockHash = await rpc.request('chain_getFinalizedHead');
+    const snapshotBlockHash = requestedBlockHash
+      || await rpc.request('chain_getFinalizedHead');
     const header = await rpc.request('chain_getHeader', [snapshotBlockHash]);
     const genesisHash = await rpc.request('chain_getBlockHash', [0]);
+    if (!header) throw new Error(`找不到快照块头: ${snapshotBlockHash}`);
+    if (requestedBlockHash && snapshotBlockHash !== requestedBlockHash) {
+      throw new Error(`节点返回了非请求块: ${snapshotBlockHash}`);
+    }
     const snapshotBlockNumber = Number.parseInt(header.number, 16);
 
     const institutionKeys = await readKeys(rpc, INSTITUTIONS_PREFIX, snapshotBlockHash);
@@ -332,7 +393,10 @@ async function main() {
         provinces: provinceVersions,
       }, null, 2)}\n`,
     );
-    console.log(`finalized #${snapshotBlockNumber}: ${provinces.length} 省，共 ${total} 机构`);
+    console.log(
+      `snapshot #${snapshotBlockNumber}: ${provinces.length} 省，共 ${total} 机构；`
+      + `public_institution_root=${publicInstitutionRoot}`,
+    );
   } finally {
     rpc.close();
   }

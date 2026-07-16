@@ -176,6 +176,9 @@ pub(crate) fn build_create_institution_call_data(
     }
     let roles_payload = encode_roles_payload(&roles);
     let assignments_payload = encode_assignments_payload(&assignments);
+    // OnChina 当前创建账户初始余额统一为零，因此不存在本金支出账户。
+    // 未来允许非零初始余额时，必须由 API 明确选择同一 actor CID 的账户，不能从管理员推导。
+    let funding_account: Option<[u8; 32]> = None;
     let credential = crate::core::chain_runtime::build_institution_creation_credential(
         state,
         actor_cid_number,
@@ -186,6 +189,7 @@ pub(crate) fn build_create_institution_call_data(
         legal_representative_cid_number.as_str(),
         &legal_representative_account,
         &account_names,
+        funding_account.as_ref(),
         &roles_payload,
         &assignments_payload,
         register_nonce.clone(),
@@ -208,6 +212,7 @@ pub(crate) fn build_create_institution_call_data(
         legal_representative_cid_number: legal_representative_cid_number.trim().as_bytes().to_vec(),
         legal_representative_account,
         accounts: account_args,
+        funding_account,
         institution_code: code_bytes,
         roles,
         assignments,

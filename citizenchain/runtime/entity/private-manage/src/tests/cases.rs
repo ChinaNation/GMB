@@ -164,11 +164,14 @@ fn only_named_account_can_be_closed_and_institution_stays_alive() {
             code_bytes("SFLP"),
             initial_accounts(&[
                 (crate::RESERVED_NAME_MAIN, 0),
-                (crate::RESERVED_NAME_FEE, 0),
+                // 关闭操作的链上费必须由本机构费用账户支付；余额不足时不得回落管理员。
+                (crate::RESERVED_NAME_FEE, 1_000),
                 ("项目账户".as_bytes(), 1_000),
             ]),
         ));
         let named_account = account_of(&cid_number, "项目账户".as_bytes());
+        let fee_account = account_of(&cid_number, crate::RESERVED_NAME_FEE);
+        let admin_balance_before = Balances::free_balance(admin(1));
 
         assert_ok!(PrivateManage::propose_close_private_institution(
             RuntimeOrigin::signed(admin(1)),
@@ -183,6 +186,9 @@ fn only_named_account_can_be_closed_and_institution_stays_alive() {
         let proposal_id = VotingEngine::next_proposal_id().saturating_sub(1);
         assert_ok!(cast_yes_votes(proposal_id));
 
+        assert_eq!(Balances::free_balance(&fee_account), 990);
+        assert_eq!(Balances::free_balance(beneficiary()), 1_100);
+        assert_eq!(Balances::free_balance(admin(1)), admin_balance_before);
         assert!(!pallet::AccountRegisteredCid::<Test>::contains_key(
             &named_account
         ));
@@ -199,6 +205,54 @@ fn only_named_account_can_be_closed_and_institution_stays_alive() {
             PrivateAdmins::institution_admins(code_bytes("SFLP"), cid_number.as_slice()),
             Some(alloc::vec![admin(1), admin(2)])
         );
+    });
+}
+
+#[test]
+fn rejected_close_is_cleaned_only_by_votingengine_callback() {
+    new_test_ext().execute_with(|| {
+        let cid_number = generated_cid("private-close-rejected", "SFLP");
+        assert_ok!(create_institution(
+            cid_number.clone(),
+            code_bytes("SFLP"),
+            initial_accounts(&[
+                (crate::RESERVED_NAME_MAIN, 0),
+                (crate::RESERVED_NAME_FEE, 1_000),
+                ("项目账户".as_bytes(), 1_000),
+            ]),
+        ));
+        let named_account = account_of(&cid_number, "项目账户".as_bytes());
+
+        assert_ok!(PrivateManage::propose_close_private_institution(
+            RuntimeOrigin::signed(admin(1)),
+            cid_number.clone(),
+            named_account.clone(),
+            beneficiary(),
+            register_nonce(b"close-rejected-nonce"),
+            close_signature(),
+            b"GD001-FRG00-000000001-2026".to_vec(),
+            [7u8; 32],
+        ));
+        let proposal_id = VotingEngine::next_proposal_id().saturating_sub(1);
+        assert_eq!(
+            pallet::InstitutionPendingClose::<Test>::get(&named_account),
+            Some(proposal_id)
+        );
+
+        assert_eq!(
+            <crate::InternalVoteExecutor<Test> as votingengine::InternalVoteResultCallback>::on_internal_vote_finalized(
+                proposal_id,
+                false,
+            ),
+            Ok(votingengine::ProposalExecutionOutcome::Executed)
+        );
+        assert!(!pallet::InstitutionPendingClose::<Test>::contains_key(
+            &named_account
+        ));
+        assert!(pallet::InstitutionAccounts::<Test>::contains_key(
+            &cid_number,
+            account_name("项目账户".as_bytes()),
+        ));
     });
 }
 

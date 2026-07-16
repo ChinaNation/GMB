@@ -67,6 +67,7 @@ class ChatPage extends StatefulWidget {
     required this.ownerAccount,
     required this.peerUserId,
     required this.title,
+    this.isGroup = false,
     ChatStore? store,
     this.onSendText,
     this.onSendMedia,
@@ -83,6 +84,9 @@ class ChatPage extends StatefulWidget {
   final String ownerAccount;
   final String peerUserId;
   final String title;
+
+  /// 群聊模式:入站消息按各自 `senderAccount` 归属并在气泡上方显示发送者名。
+  final bool isGroup;
   final ChatStore store;
   final ChatSendTextCallback? onSendText;
   final ChatSendMediaCallback? onSendMedia;
@@ -634,6 +638,23 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  // 群聊文本:入站消息在气泡上方显示发送者名(连续同发送者只在首条显示)。
+  // 复用 flyer 默认气泡 SimpleTextMessage 的 topWidget 挂 Username(经 resolveUser 解析)。
+  Widget _buildGroupTextMessage(
+    BuildContext context,
+    TextMessage message,
+    int index, {
+    required bool isSentByMe,
+    MessageGroupStatus? groupStatus,
+  }) {
+    final showSender = !isSentByMe && (groupStatus?.isFirst ?? true);
+    return SimpleTextMessage(
+      message: message,
+      index: index,
+      topWidget: showSender ? Username(userId: message.authorId) : null,
+    );
+  }
+
   // 图片消息:blurhash 占位(字节未到)→ 本机图(点开全屏可缩放/存相册)。
   // 内联图按显示宽度 cacheWidth 降采样解码,100MB 图也不整解码。
   Widget _buildImageMessage(
@@ -671,6 +692,8 @@ class _ChatPageState extends State<ChatPage> {
           child: AspectRatio(aspectRatio: ratio, child: content),
         ),
       ),
+      senderId: message.authorId,
+      groupStatus: groupStatus,
     );
   }
 
@@ -726,6 +749,8 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ),
       ),
+      senderId: message.authorId,
+      groupStatus: groupStatus,
     );
   }
 
@@ -844,16 +869,45 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ),
       ),
+      senderId: message.authorId,
+      groupStatus: groupStatus,
     );
   }
 
-  Widget _mediaAligned(bool isSentByMe, Widget child) {
-    return Padding(
+  Widget _mediaAligned(
+    bool isSentByMe,
+    Widget child, {
+    String? senderId,
+    MessageGroupStatus? groupStatus,
+  }) {
+    final aligned = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Align(
         alignment: isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
         child: child,
       ),
+    );
+    // 群聊入站媒体/贴纸在气泡上方显示发送者名(连续同发送者只首条),与文本一致。
+    final showSender = widget.isGroup &&
+        !isSentByMe &&
+        senderId != null &&
+        (groupStatus?.isFirst ?? true);
+    if (!showSender) return aligned;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 16, top: 4),
+          child: Username(
+            userId: senderId,
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+        ),
+        aligned,
+      ],
     );
   }
 
@@ -906,6 +960,8 @@ class _ChatPageState extends State<ChatPage> {
         height: _stickerRenderSize,
         child: content,
       ),
+      senderId: message.authorId,
+      groupStatus: groupStatus,
     );
   }
 
@@ -1102,6 +1158,8 @@ class _ChatPageState extends State<ChatPage> {
                     onAttachmentTap: _handleMediaTap,
                     backgroundColor: AppTheme.scaffoldBg,
                     builders: Builders(
+                      textMessageBuilder:
+                          widget.isGroup ? _buildGroupTextMessage : null,
                       imageMessageBuilder: _buildImageMessage,
                       videoMessageBuilder: _buildVideoMessage,
                       fileMessageBuilder: _buildFileMessage,
@@ -1112,7 +1170,11 @@ class _ChatPageState extends State<ChatPage> {
                       final isMe = id == widget.ownerAccount;
                       return User(
                         id: id,
-                        name: isMe ? '我' : peerName,
+                        name: isMe
+                            ? '我'
+                            : widget.isGroup
+                                ? ProfilePresentation.forAccount(id).fallbackName
+                                : peerName,
                       );
                     },
                   ),

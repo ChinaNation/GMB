@@ -18,6 +18,8 @@ use scale_info::TypeInfo;
 /// 这里只描述“内部动钱”的执行动作,不描述提案、投票、管理员变更等纯治理动作。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub enum InstitutionAssetAction {
+    /// 注册局创建机构时，从本机构明确资金账户划转非零初始余额。
+    InstitutionCreateFunding,
     /// 机构多签转账执行:从 `main_account` 向外部收款地址转账,并扣手续费。
     MultisigTransferExecute,
     /// 多签账户关闭执行:把 `main_account` 的余额整体转出。
@@ -62,6 +64,7 @@ mod tests {
     fn default_asset_allows_all_actions() {
         let account = [7u8; 32];
         for action in [
+            InstitutionAssetAction::InstitutionCreateFunding,
             InstitutionAssetAction::MultisigTransferExecute,
             InstitutionAssetAction::MultisigCloseExecute,
             InstitutionAssetAction::OffchainBatchDebit,

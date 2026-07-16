@@ -99,6 +99,14 @@
 
 收费分支的 `payer` 是必填字段，不存在缺省付款人或回落到签名者。`WeightToFee`、`LengthToFee` 均为零，不产生五类之外的框架费用。
 
+投票回调中的资金执行没有第二笔外层 extrinsic，由
+`fee_policy::OnchainFeeCharger` 接收业务已经核验的确切付款账户和交易金额。
+该 trait 不是第二套分类或付款路由；生产实现
+`onchain::OnchainExecutionFeeCharger` 仍只调用本文件的
+`calculate_onchain_fee`，完整扣款、保留 ED、进入同一 80/10/10 分账并发出
+`FeePaid`。机构资金执行必须显式传入该 CID 的费用账户；个人账户执行传入
+个人账户本身，扣款失败即整笔执行回滚。
+
 ### 2.7 投票治理
 | 常量 | 值 | 说明 |
 |------|-----|------|

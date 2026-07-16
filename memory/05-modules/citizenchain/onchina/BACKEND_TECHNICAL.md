@@ -66,6 +66,12 @@ citizenchain/onchina/src/
 - 普通列表、联邦注册局详情和本机构显示页只能读取 `gov.source='CHAIN'` 的公权投影；本地手工/pending 行不能冒充链上公权机构真源。
 - `audit-chain-catalog` 只做创世链目录验收,不得用本地派生结果灌库。
 - CitizenApp 公权机构接口只读取链上投影并下发 `chain_genesis_hash / chain_block_hash / chain_block_number / synced_at` 作为同步锚点;`manifest_version` 由 genesis hash + finalized block hash/number + 投影数量组成,不得使用本地 `synced_at` 单独推进版本,也不得把 OnChina PostgreSQL 当成公权机构真源。
+- `PublicManage::InstitutionInfo` 按当前 runtime 精确字段序解码；机构存在即表示 active，
+  不得在 OnChina 追加已删除的 lifecycle/status 尾字段，也不得用兼容分支吞掉尾随字节。
+- 2026-07-16 创世准备验收使用 preview 块 0 的真实 node 和全新临时 PostgreSQL：启动投影
+  49,593 个机构、99,231 个账户，33 项创世目录抽样对账通过，`/api/v1/health` 返回
+  `UP`，公权目录版本锚定同一 genesis/block#0，前端首页真实返回“链上中国平台”。该
+  preview 不替代正式冻结锚点，验收结束后节点、OnChina、PostgreSQL 与临时目录均已清理。
 
 ## 5. 公民录入和护照号
 

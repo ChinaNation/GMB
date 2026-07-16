@@ -1,5 +1,11 @@
 # ADR-033 会员订阅生命周期：单订阅 + 换档 proration + 身份绑定冻结
 
+> **规则 5（身份绑定 + 冻结）已被 ADR-036 取代（2026-07-16）**：会员与身份彻底解耦，
+> 任意身份可订任意档，不再有「身份≠档位」冻结或暂停收款。规则 1–4（一钱包一订阅、
+> 换档 proration、动钱动权签名）仍有效。相关代码（`resolveMembershipEntitlement` 冻结分支、
+> `syncCollectionState`、`pause/resumeStripeCollection`、`frozen_at`/`collection_paused`/
+> `identity_level` 列、`identity_required` 状态）已删除。见 ADR-036。
+
 ## 标题
 
 会员订阅生命周期统一：一钱包一订阅、换档在同一订阅上按比例结算、链上身份绑定与权益冻结。

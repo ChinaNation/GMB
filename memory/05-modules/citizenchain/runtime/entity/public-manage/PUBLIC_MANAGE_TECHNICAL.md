@@ -20,13 +20,20 @@
 
 ## 链上入口
 
-- `propose_create_public_institution`（call 5）：注册局管理员以 `actor_cid_number + origin` 创建目标 CID、完整协议账户、岗位、任职与 admins。
+- `propose_create_public_institution`（call 5）：注册局管理员以 `actor_cid_number + origin` 创建目标 CID、完整协议账户、岗位、任职与 admins；零初始入金必须不携带 `funding_account`，非零入金必须由同一 actor CID 下明确且可支出的机构账户承担本金。
 - `update_institution_info`（call 6）：注册局管理员更新目标机构名称。
 - `add_institution_account`（call 7）：注册局管理员给目标 CID 批量新增自定义账户。
 - `propose_close_public_institution`（call 1）：账户型交易，严格使用 `actor_cid_number + institution_account + origin`，只允许关闭该 CID 下自定义账户。
-- `cleanup_rejected_public_proposal`（call 4）：第 1 步暂存；最终由投票引擎在第 4 步统一清理。
 - `apply_institution_governance_result` 是内部回调，不是 extrinsic。
-- call 0 的旧重复注册入口永久留洞，不复用、不兼容。
+- call 0 与 call 4 永久留洞，不复用、不兼容；关闭提案否决、超时或执行失败后的
+  `InstitutionPendingClose` 只由 votingengine 终态回调清除，不存在人工清理交易。
+
+## 费用与 ED
+
+- 机构创建、资料更新、新增账户和关闭提案的外层链上操作费只从 `actor_cid_number` 的费用账户收取，管理员钱包只签名。
+- 创建时的费用按初始入金合计计算；本金只从显式 `funding_account` 转入新机构各账户，收费与本金都不允许回落管理员。
+- 自定义账户关闭通过后，执行手续费按被关闭账户余额计算并从 actor CID 费用账户收取；随后仅被关闭账户以 `AllowDeath` 把余额转给受益人。收费、转账和账户索引删除处于同一事务。
+- 普通支出和费用账户扣款都必须保留 ED；只有显式关闭的 `InstitutionNamed` 账户允许死亡。
 
 ## 模块边界
 
