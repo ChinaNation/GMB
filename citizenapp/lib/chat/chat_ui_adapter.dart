@@ -128,8 +128,9 @@ Message storedMessageToChatMessage(
         },
       );
     case ChatMessageKind.sticker:
-      // 步骤1 占位:贴纸美术与自定义渲染在步骤3;此处只保留 id 供后续渲染。
-      return Message.text(
+      // 贴纸走 Message.custom,由 chat_page 的 customMessageBuilder 按 id 渲染内置
+      // Fluent 3D PNG(无气泡大图);id 未内置(对端资产旧/缺)时降级为占位。
+      return Message.custom(
         id: message.envelopeId,
         authorId: message.senderAccount,
         createdAt: createdAt,
@@ -137,7 +138,6 @@ Message storedMessageToChatMessage(
         deliveredAt: deliveredAt,
         failedAt: failedAt,
         status: status,
-        text: '[贴纸]',
         metadata: {
           ...metadata,
           'pack_id': content.packId,

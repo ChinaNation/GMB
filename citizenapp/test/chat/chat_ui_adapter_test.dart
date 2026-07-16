@@ -182,9 +182,9 @@ void main() {
     expect(msg.source, '/cache/doc.pdf');
   });
 
-  test('sticker maps to a placeholder text carrying pack/sticker ids', () {
+  test('sticker maps to a custom message carrying pack/sticker ids', () {
     final payload = ChatPayloadCodec.encode(
-      ChatContent.sticker(packId: 'fluent3d', stickerId: '1f600'),
+      ChatContent.sticker(packId: 'fluent3d', stickerId: 'grinning_face'),
     );
     final msg = storedMessageToChatMessage(
       _stored(
@@ -193,10 +193,11 @@ void main() {
         plaintext: payload,
       ),
       ownerAccount: 'alice-wallet',
-    ) as TextMessage;
-    expect(msg.text, '[贴纸]');
+    ) as CustomMessage;
+    // 贴纸走 Message.custom,由 chat_page 的 customMessageBuilder 按 id 渲染;
+    // id 只经 metadata 携带,不占正文文本。
     expect(msg.metadata?['pack_id'], 'fluent3d');
-    expect(msg.metadata?['sticker_id'], '1f600');
+    expect(msg.metadata?['sticker_id'], 'grinning_face');
   });
 
   test('门④:声明超限的媒体渲染为拒收占位,且不解析本机路径', () {

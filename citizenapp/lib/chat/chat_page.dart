@@ -16,10 +16,12 @@ import 'chat_flow.dart';
 import 'chat_media_limits.dart';
 import 'chat_payload.dart';
 import 'compose/media_source_sheet.dart';
+import 'compose/sticker_panel.dart';
 import 'media/media_compressor.dart';
 import 'media/media_mime.dart';
 import 'media/media_picker.dart';
 import 'media/media_probe.dart';
+import 'stickers/sticker_pack.dart';
 import 'storage/chat_store.dart';
 import 'viewer/image_viewer_page.dart';
 import 'viewer/video_player_page.dart';
@@ -27,6 +29,10 @@ import 'viewer/video_player_page.dart';
 typedef ChatSendTextCallback = Future<void> Function(String text);
 typedef ChatSendMediaCallback = Future<void> Function(
   ChatMediaDraft media,
+);
+typedef ChatSendStickerCallback = Future<void> Function(
+  String packId,
+  String stickerId,
 );
 typedef ChatSyncCallback = Future<int> Function();
 typedef ChatStartRealtimeCallback = Future<Future<void> Function()?> Function({
@@ -62,6 +68,7 @@ class ChatPage extends StatefulWidget {
     ChatStore? store,
     this.onSendText,
     this.onSendMedia,
+    this.onSendSticker,
     this.onDownloadAttachment,
     this.onResolveMediaPath,
     this.pickMedia,
@@ -77,6 +84,7 @@ class ChatPage extends StatefulWidget {
   final ChatStore store;
   final ChatSendTextCallback? onSendText;
   final ChatSendMediaCallback? onSendMedia;
+  final ChatSendStickerCallback? onSendSticker;
   final ChatDownloadAttachmentCallback? onDownloadAttachment;
   final ChatResolveMediaPathCallback? onResolveMediaPath;
   final ChatPickMediaCallback? pickMedia;
@@ -97,6 +105,9 @@ class _ChatPageState extends State<ChatPage> {
 
   late final InMemoryChatController _chatController;
   late final _ChatLifecycleObserver _lifecycleObserver;
+  // 自绘 composer 的文本控制器:贴纸面板与(步骤3b)表情插入共享,发送后由
+  // Composer 自动清空。
+  final TextEditingController _composerController = TextEditingController();
   bool _loading = true;
   bool _syncing = false;
   bool _attachmentBusy = false;
@@ -104,6 +115,7 @@ class _ChatPageState extends State<ChatPage> {
   bool _polling = false;
   bool _realtimeConnecting = false;
   bool _appResumed = false;
+  bool _stickerPanelOpen = false;
   String? _error;
   Timer? _pollTimer;
   Future<void> Function()? _stopRealtime;
@@ -155,6 +167,7 @@ class _ChatPageState extends State<ChatPage> {
     _pauseSync();
     WidgetsBinding.instance.removeObserver(_lifecycleObserver);
     _chatController.dispose();
+    _composerController.dispose();
     super.dispose();
   }
 
