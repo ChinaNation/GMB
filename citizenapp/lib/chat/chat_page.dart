@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_blurhash/flutter_blurhash.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:file_picker/file_picker.dart';
@@ -12,12 +13,20 @@ import 'package:citizenapp/8964/profile/widgets/profile_avatar.dart';
 import '../ui/app_theme.dart';
 import 'chat_ui_adapter.dart';
 import 'chat_flow.dart';
-import 'chat_models.dart';
+import 'chat_media_limits.dart';
+import 'chat_payload.dart';
+import 'compose/media_source_sheet.dart';
+import 'media/media_compressor.dart';
+import 'media/media_mime.dart';
+import 'media/media_picker.dart';
+import 'media/media_probe.dart';
 import 'storage/chat_store.dart';
+import 'viewer/image_viewer_page.dart';
+import 'viewer/video_player_page.dart';
 
 typedef ChatSendTextCallback = Future<void> Function(String text);
-typedef ChatSendAttachmentCallback = Future<void> Function(
-  ChatAttachmentDraft attachment,
+typedef ChatSendMediaCallback = Future<void> Function(
+  ChatMediaDraft media,
 );
 typedef ChatSyncCallback = Future<int> Function();
 typedef ChatStartRealtimeCallback = Future<Future<void> Function()?> Function({
@@ -29,7 +38,14 @@ typedef ChatDownloadAttachmentCallback = Future<ChatDownloadedAttachment>
   String conversationId,
   String controlPlaintext,
 );
-typedef ChatPickAttachmentCallback = Future<ChatAttachmentDraft?> Function();
+typedef ChatPickMediaCallback = Future<ChatMediaDraft?> Function();
+typedef ChatResolveMediaPathCallback = Future<String?> Function(
+  String conversationId,
+  String attachmentId,
+  String fileName,
+  String contentType,
+  int clearByteSize,
+);
 typedef ChatDeleteConversationCallback = Future<void> Function();
 
 /// 公民 Chat 聊天详情页。
@@ -45,9 +61,10 @@ class ChatPage extends StatefulWidget {
     required this.title,
     ChatStore? store,
     this.onSendText,
-    this.onSendAttachment,
+    this.onSendMedia,
     this.onDownloadAttachment,
-    this.pickAttachment,
+    this.onResolveMediaPath,
+    this.pickMedia,
     this.onSync,
     this.onStartRealtime,
     this.onDeleteConversation,
@@ -59,9 +76,10 @@ class ChatPage extends StatefulWidget {
   final String title;
   final ChatStore store;
   final ChatSendTextCallback? onSendText;
-  final ChatSendAttachmentCallback? onSendAttachment;
+  final ChatSendMediaCallback? onSendMedia;
   final ChatDownloadAttachmentCallback? onDownloadAttachment;
-  final ChatPickAttachmentCallback? pickAttachment;
+  final ChatResolveMediaPathCallback? onResolveMediaPath;
+  final ChatPickMediaCallback? pickMedia;
   final ChatSyncCallback? onSync;
   final ChatStartRealtimeCallback? onStartRealtime;
   final ChatDeleteConversationCallback? onDeleteConversation;
@@ -90,6 +108,10 @@ class _ChatPageState extends State<ChatPage> {
   Timer? _pollTimer;
   Future<void> Function()? _stopRealtime;
   Future<void>? _openCoordinatorInFlight;
+
+  final MediaPicker _mediaPicker = MediaPicker();
+  final MediaCompressor _mediaCompressor = MediaCompressor();
+  final MediaProbe _mediaProbe = MediaProbe();
 
   @override
   void initState() {
@@ -143,10 +165,12 @@ class _ChatPageState extends State<ChatPage> {
     });
     try {
       final messages = await widget.store.readMessages(widget.conversationId);
+      final mediaPaths = await _resolveMediaPaths(messages);
       await _chatController.setMessages(
         storedMessagesToChatMessages(
           messages,
           ownerAccount: widget.ownerAccount,
+          resolveLocalMediaPath: (content) => mediaPaths[content.attachmentId],
         ),
         animated: false,
       );
@@ -159,6 +183,40 @@ class _ChatPageState extends State<ChatPage> {
         });
       }
     }
+  }
+
+  /// 预解析媒体消息在本机缓存中的绝对路径,按 attachment_id 建表。字节未到达
+  /// (对方离线/仍在传输)的媒体不入表,由渲染层显示占位。
+  Future<Map<String, String>> _resolveMediaPaths(
+    List<ChatStoredMessage> messages,
+  ) async {
+    final resolver = widget.onResolveMediaPath;
+    if (resolver == null) {
+      return const {};
+    }
+    final paths = <String, String>{};
+    for (final message in messages) {
+      final content = ChatPayloadCodec.decode(message.plaintext ?? '');
+      final attachmentId = content.attachmentId ?? '';
+      if (!content.isMedia || attachmentId.isEmpty) {
+        continue;
+      }
+      // 门④对应:声明超限的媒体已在字节层拒收、UI 显"已拒收",不解析路径。
+      if (ChatMediaLimits.exceedsForKind(content.kind, content.byteSize ?? 0)) {
+        continue;
+      }
+      final path = await resolver(
+        widget.conversationId,
+        attachmentId,
+        content.fileName ?? '',
+        content.mime ?? 'application/octet-stream',
+        content.byteSize ?? 0,
+      );
+      if (path != null && path.isNotEmpty) {
+        paths[attachmentId] = path;
+      }
+    }
+    return paths;
   }
 
   Future<void> _syncOnOpen() async {
@@ -308,11 +366,11 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  Future<void> _handleAttachmentTap() async {
-    final sender = widget.onSendAttachment;
+  Future<void> _handleMediaTap() async {
+    final sender = widget.onSendMedia;
     if (sender == null) {
       setState(() {
-        _error = '当前会话尚未绑定附件发送链路';
+        _error = '当前会话尚未绑定媒体发送链路';
       });
       return;
     }
@@ -321,12 +379,18 @@ class _ChatPageState extends State<ChatPage> {
       _error = null;
     });
     try {
-      final draft = await (widget.pickAttachment?.call() ?? _pickAttachment());
+      final draft = await (widget.pickMedia?.call() ?? _pickViaSheet());
       if (draft == null) {
         return;
       }
       await sender(draft);
       await _reloadMessages();
+    } on ChatMediaTooLargeException {
+      if (mounted) {
+        setState(() {
+          _error = '文件超出大小上限：图片最大 100MB，视频/文件最大 5GB';
+        });
+      }
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -342,28 +406,81 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  Future<void> _handleMessageTap(
-    BuildContext context,
-    Message message, {
-    required int index,
-    required TapUpDetails details,
-  }) async {
-    final metadata = message.metadata ?? const <String, dynamic>{};
-    if (metadata['message_kind'] != ChatMessageKind.attachment.name) {
-      return;
+  /// 加号 → 弹来源选择 → 采集 → 压缩门控 → 探测 → 组装路径型 [ChatMediaDraft]。
+  Future<ChatMediaDraft?> _pickViaSheet() async {
+    final source = await showChatMediaSourceSheet(context);
+    if (source == null || !mounted) {
+      return null;
     }
-    final controlPlaintext =
-        metadata['attachment_control_plaintext']?.toString() ?? '';
+    final picked = await _pickFromSource(source);
+    if (picked == null) {
+      return null;
+    }
+    // 压缩门控:图超限压一次仍超则抛;视频/文件超限抛(采集侧,门①上游)。
+    final finalPath = await _mediaCompressor.ensureWithinLimit(
+      path: picked.path,
+      kind: picked.kind,
+    );
+    final probe = await _mediaProbe.probe(path: finalPath, kind: picked.kind);
+    final byteSize = await File(finalPath).length();
+    return ChatMediaDraft(
+      kind: picked.kind,
+      fileName: picked.fileName,
+      contentType: picked.mime,
+      sourcePath: finalPath,
+      byteSize: byteSize,
+      width: probe.width,
+      height: probe.height,
+      durationMs: probe.durationMs,
+      blurhash: probe.blurhash,
+    );
+  }
+
+  Future<PickedMediaFile?> _pickFromSource(ChatMediaSource source) {
+    return switch (source) {
+      ChatMediaSource.galleryImage => _mediaPicker.galleryImage(),
+      ChatMediaSource.cameraPhoto => _mediaPicker.cameraPhoto(),
+      ChatMediaSource.galleryVideo => _mediaPicker.galleryVideo(),
+      ChatMediaSource.cameraVideo => _mediaPicker.cameraVideo(),
+      ChatMediaSource.file => _pickFileViaFilePicker(),
+    };
+  }
+
+  /// 通用文件(非图非视频)走 file_picker,取路径不载入字节。
+  Future<PickedMediaFile?> _pickFileViaFilePicker() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: false,
+      withData: false,
+    );
+    if (result == null || result.files.isEmpty) {
+      return null;
+    }
+    final file = result.files.single;
+    final path = file.path;
+    if (path == null) {
+      throw StateError('无法读取所选文件');
+    }
+    final mime = mimeFromFileName(file.name);
+    return PickedMediaFile(
+      path: path,
+      fileName: file.name,
+      mime: mime,
+      kind: mediaKindFromMime(mime),
+    );
+  }
+
+  /// 把已收到的媒体从本机缓存另存并提示。控制载荷来自消息 metadata。
+  Future<void> _downloadMedia(String controlPlaintext) async {
     if (controlPlaintext.isEmpty) {
       setState(() {
-        _error = '附件控制消息为空，无法下载';
+        _error = '媒体控制消息为空，无法保存';
       });
       return;
     }
     final downloader = widget.onDownloadAttachment;
     if (downloader == null) {
       setState(() {
-        _error = '当前会话尚未绑定附件下载链路';
+        _error = '当前会话尚未绑定媒体下载链路';
       });
       return;
     }
@@ -377,8 +494,8 @@ class _ChatPageState extends State<ChatPage> {
         controlPlaintext,
       );
       if (mounted) {
-        ScaffoldMessenger.of(this.context).showSnackBar(
-          SnackBar(content: Text('附件已保存：${downloaded.fileName}')),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已保存：${downloaded.fileName}')),
         );
       }
     } catch (error) {
@@ -461,6 +578,250 @@ class _ChatPageState extends State<ChatPage> {
           ownerAccount: widget.peerUserId,
           isSelf: false,
         ),
+      ),
+    );
+  }
+
+  // 图片消息:blurhash 占位(字节未到)→ 本机图(点开全屏可缩放/存相册)。
+  // 内联图按显示宽度 cacheWidth 降采样解码,100MB 图也不整解码。
+  Widget _buildImageMessage(
+    BuildContext context,
+    ImageMessage message,
+    int index, {
+    required bool isSentByMe,
+    MessageGroupStatus? groupStatus,
+  }) {
+    final maxWidth = MediaQuery.of(context).size.width * 0.62;
+    final hasFile = message.source.isNotEmpty;
+    final ratio = _mediaAspectRatio(message.width, message.height);
+    final cacheWidth =
+        (maxWidth * MediaQuery.of(context).devicePixelRatio).round();
+    final Widget content = hasFile
+        ? GestureDetector(
+            onTap: () => _openImageViewer(message),
+            child: Image.file(
+              File(message.source),
+              fit: BoxFit.cover,
+              cacheWidth: cacheWidth,
+              errorBuilder: (_, __, ___) => _mediaPlaceholder(
+                icon: Icons.broken_image_rounded,
+                label: '图片无法显示',
+              ),
+            ),
+          )
+        : _blurhashOrPlaceholder(message.blurhash, '接收中…');
+    return _mediaAligned(
+      isSentByMe,
+      ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: SizedBox(
+          width: maxWidth,
+          child: AspectRatio(aspectRatio: ratio, child: content),
+        ),
+      ),
+    );
+  }
+
+  // 视频消息:blurhash 封面 + 播放图标;字节就绪点开播放页(可存相册)。
+  Widget _buildVideoMessage(
+    BuildContext context,
+    VideoMessage message,
+    int index, {
+    required bool isSentByMe,
+    MessageGroupStatus? groupStatus,
+  }) {
+    final maxWidth = MediaQuery.of(context).size.width * 0.62;
+    final hasFile = message.source.isNotEmpty;
+    final hash = message.metadata?['blurhash']?.toString();
+    final ratio = _mediaAspectRatio(message.width, message.height);
+    return _mediaAligned(
+      isSentByMe,
+      GestureDetector(
+        onTap: hasFile ? () => _openVideoPlayer(message) : null,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: SizedBox(
+            width: maxWidth,
+            child: AspectRatio(
+              aspectRatio: ratio,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  (hash != null && hash.isNotEmpty)
+                      ? BlurHash(hash: hash, imageFit: BoxFit.cover)
+                      : Container(color: AppTheme.surfaceCard),
+                  const Center(
+                    child: Icon(
+                      Icons.play_circle_fill_rounded,
+                      size: 44,
+                      color: Colors.white70,
+                    ),
+                  ),
+                  if (!hasFile)
+                    const Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 8,
+                      child: Text(
+                        '接收中…',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12, color: Colors.white),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  double _mediaAspectRatio(double? width, double? height) {
+    if (width != null && height != null && width > 0 && height > 0) {
+      return (width / height).clamp(0.6, 1.9);
+    }
+    return 1.0;
+  }
+
+  Widget _blurhashOrPlaceholder(String? hash, String label) {
+    if (hash != null && hash.isNotEmpty) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          BlurHash(hash: hash, imageFit: BoxFit.cover),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 8,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12, color: Colors.white),
+            ),
+          ),
+        ],
+      );
+    }
+    return _mediaPlaceholder(icon: Icons.image_rounded, label: label);
+  }
+
+  void _openImageViewer(ImageMessage message) {
+    final fileName = message.metadata?['file_name']?.toString() ?? '图片';
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ImageViewerPage(
+          filePath: message.source,
+          fileName: fileName,
+        ),
+      ),
+    );
+  }
+
+  void _openVideoPlayer(VideoMessage message) {
+    final fileName =
+        message.metadata?['file_name']?.toString() ?? message.name ?? '视频';
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => VideoPlayerPage(
+          filePath: message.source,
+          fileName: fileName,
+        ),
+      ),
+    );
+  }
+
+  // 文件消息:文件条 + 点按另存。
+  Widget _buildFileMessage(
+    BuildContext context,
+    FileMessage message,
+    int index, {
+    required bool isSentByMe,
+    MessageGroupStatus? groupStatus,
+  }) {
+    final control =
+        message.metadata?['attachment_control_plaintext']?.toString() ?? '';
+    return _mediaAligned(
+      isSentByMe,
+      GestureDetector(
+        onTap: () => unawaited(_downloadMedia(control)),
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.7,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceCard,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.insert_drive_file_rounded,
+                size: 28,
+                color: AppTheme.textSecondary,
+              ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      message.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (message.size != null)
+                      Text(
+                        _formatByteSize(message.size!),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _mediaAligned(bool isSentByMe, Widget child) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Align(
+        alignment: isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: child,
+      ),
+    );
+  }
+
+  Widget _mediaPlaceholder({required IconData icon, required String label}) {
+    return Container(
+      color: AppTheme.surfaceCard,
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: AppTheme.textSecondary, size: 28),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -569,9 +930,13 @@ class _ChatPageState extends State<ChatPage> {
                     currentUserId: widget.ownerAccount,
                     chatController: _chatController,
                     onMessageSend: _handleSend,
-                    onAttachmentTap: _handleAttachmentTap,
-                    onMessageTap: _handleMessageTap,
+                    onAttachmentTap: _handleMediaTap,
                     backgroundColor: AppTheme.scaffoldBg,
+                    builders: Builders(
+                      imageMessageBuilder: _buildImageMessage,
+                      videoMessageBuilder: _buildVideoMessage,
+                      fileMessageBuilder: _buildFileMessage,
+                    ),
                     resolveUser: (id) async {
                       final isMe = id == widget.ownerAccount;
                       return User(
@@ -587,54 +952,10 @@ class _ChatPageState extends State<ChatPage> {
   }
 }
 
-Future<ChatAttachmentDraft?> _pickAttachment() async {
-  final result = await FilePicker.platform.pickFiles(
-    allowMultiple: false,
-    withData: true,
-  );
-  if (result == null || result.files.isEmpty) {
-    return null;
-  }
-  final file = result.files.single;
-  final bytes = file.bytes ??
-      (file.path == null ? null : await File(file.path!).readAsBytes());
-  if (bytes == null) {
-    throw StateError('无法读取所选附件');
-  }
-  return ChatAttachmentDraft(
-    fileName: file.name,
-    contentType: _guessContentType(file.name),
-    bytes: bytes,
-  );
-}
-
-String _guessContentType(String fileName) {
-  final lower = fileName.toLowerCase();
-  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
-    return 'image/jpeg';
-  }
-  if (lower.endsWith('.png')) {
-    return 'image/png';
-  }
-  if (lower.endsWith('.webp')) {
-    return 'image/webp';
-  }
-  if (lower.endsWith('.gif')) {
-    return 'image/gif';
-  }
-  if (lower.endsWith('.mp4')) {
-    return 'video/mp4';
-  }
-  if (lower.endsWith('.mov')) {
-    return 'video/quicktime';
-  }
-  if (lower.endsWith('.pdf')) {
-    return 'application/pdf';
-  }
-  if (lower.endsWith('.txt')) {
-    return 'text/plain';
-  }
-  return 'application/octet-stream';
+String _formatByteSize(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 }
 
 enum _ChatMenuAction { deleteConversation }

@@ -42,10 +42,24 @@ Future<void> openDirectChat(
           conversationId: conversationId,
           text: text,
         ),
-        onSendAttachment: (attachment) => runtime.sendAttachment(
+        onSendMedia: (media) => runtime.sendMedia(
           peerAccount: peerAddress,
           conversationId: conversationId,
-          attachment: attachment,
+          media: media,
+        ),
+        onResolveMediaPath: (
+          conversationId,
+          attachmentId,
+          fileName,
+          contentType,
+          clearByteSize,
+        ) =>
+            runtime.resolveCachedMediaPath(
+          conversationId: conversationId,
+          attachmentId: attachmentId,
+          fileName: fileName,
+          contentType: contentType,
+          clearByteSize: clearByteSize,
         ),
         onDownloadAttachment: (conversationId, controlPlaintext) =>
             runtime.downloadAttachment(

@@ -18,6 +18,7 @@ import 'crypto/mls_state_store.dart';
 import 'chat_flow.dart';
 import 'chat_models.dart';
 import 'chat_push_service.dart';
+import 'media/media_resend.dart';
 import 'storage/chat_store.dart';
 import 'transport/chat_cloud_transport.dart';
 import 'transport/chat_transport.dart';
@@ -183,6 +184,10 @@ class ChatRuntime {
   final ChatPushService _pushService;
   final ChatPushTokenProvider? _pushTokenProvider;
 
+  /// 正在经 WebRTC 传输字节的媒体 attachmentId(初始发送或补发中),用于去重:
+  /// peer_ready 触发的补发不得对在途媒体再整块重传。
+  final Set<String> _mediaBytesInFlight = {};
+
   /// 同一账户/设备只允许一条初始化链。成功上下文复用到 session 临近过期；
   /// 失败只释放命中的 future，不得误删后来创建的新初始化。
   final Map<String, Future<_ChatOwnerContext>> _readyFlights = {};
@@ -282,22 +287,37 @@ class ChatRuntime {
     }
   }
 
-  Future<List<ChatDeliveryResult>> sendAttachment({
+  Future<List<ChatDeliveryResult>> sendMedia({
     required String peerAccount,
     required String conversationId,
-    required ChatAttachmentDraft attachment,
+    required ChatMediaDraft media,
   }) async {
     final context = await _readyContext(await _readOwner());
     final flow = _messageFlow(context);
+    // 登记/清除"待设备投递":对方离线时字节发不出,留 pending 由上线补发。缓存路径
+    // 不持久化(补发时按当前 Documents 重算),只存 conversationId/attachmentId/fileName。
+    Future<void> recordPending(String attachmentId) =>
+        _store.recordOutgoingMedia(
+          attachmentId: attachmentId,
+          recipientAccount: peerAccount,
+          conversationId: conversationId,
+          fileName: media.fileName,
+          contentType: media.contentType,
+          byteSize: media.byteSize,
+        );
+    Future<void> markDelivered(String attachmentId) =>
+        _store.deleteOutgoingMedia(attachmentId);
     try {
-      return await flow.sendAttachment(
+      return await flow.sendMedia(
         conversationId: conversationId,
         senderAccount: context.account.address,
         recipientAccount: peerAccount,
         senderDeviceId: context.deviceId,
-        attachment: attachment,
-        sendDeviceAttachment: context.webrtc.sendAttachment,
-        saveLocalAttachment: _saveAttachmentBytesToCache,
+        media: media,
+        sendDeviceAttachment: _guardedDeviceSender(context),
+        saveLocalAttachment: _copySentAttachmentToCache,
+        recordPendingMedia: recordPending,
+        onDeviceDelivered: markDelivered,
       );
     } catch (error) {
       if (!_needsFirstKeyPackage(error)) {
@@ -315,16 +335,118 @@ class ChatRuntime {
         keyPackageId: packages.first.keyPackageId,
         requesterAccount: context.account.address,
       );
-      return flow.sendAttachment(
+      return flow.sendMedia(
         conversationId: conversationId,
         senderAccount: context.account.address,
         recipientAccount: peerAccount,
         senderDeviceId: context.deviceId,
         recipientKeyPackage: consumed,
-        attachment: attachment,
-        sendDeviceAttachment: context.webrtc.sendAttachment,
-        saveLocalAttachment: _saveAttachmentBytesToCache,
+        media: media,
+        sendDeviceAttachment: _guardedDeviceSender(context),
+        saveLocalAttachment: _copySentAttachmentToCache,
+        recordPendingMedia: recordPending,
+        onDeviceDelivered: markDelivered,
       );
+    }
+  }
+
+  /// 包住 WebRTC 字节发送,把 attachmentId 计入在途集合(去重防双传),结束即移除。
+  ChatAttachmentDeviceSender _guardedDeviceSender(_ChatOwnerContext context) {
+    return ({
+      required recipientAccount,
+      required conversationId,
+      required attachmentId,
+      required fileName,
+      required contentType,
+      required sourcePath,
+      required byteSize,
+    }) async {
+      _mediaBytesInFlight.add(attachmentId);
+      try {
+        await context.webrtc.sendAttachment(
+          recipientAccount: recipientAccount,
+          conversationId: conversationId,
+          attachmentId: attachmentId,
+          fileName: fileName,
+          contentType: contentType,
+          sourcePath: sourcePath,
+          byteSize: byteSize,
+        );
+      } finally {
+        _mediaBytesInFlight.remove(attachmentId);
+      }
+    };
+  }
+
+  /// 发送内置贴纸:只走控制信封,不经 WebRTC。首次会话缺 KeyPackage 时同样
+  /// 领取后重试。
+  Future<List<ChatDeliveryResult>> sendSticker({
+    required String peerAccount,
+    required String conversationId,
+    required String packId,
+    required String stickerId,
+  }) async {
+    final context = await _readyContext(await _readOwner());
+    final flow = _messageFlow(context);
+    try {
+      return await flow.sendSticker(
+        conversationId: conversationId,
+        senderAccount: context.account.address,
+        recipientAccount: peerAccount,
+        senderDeviceId: context.deviceId,
+        packId: packId,
+        stickerId: stickerId,
+      );
+    } catch (error) {
+      if (!_needsFirstKeyPackage(error)) {
+        rethrow;
+      }
+      final packages = await context.transport.fetchKeyPackages(
+        ownerAccount: peerAccount,
+        requesterAccount: context.account.address,
+      );
+      if (packages.isEmpty) {
+        throw StateError('对方没有可用 Chat KeyPackage');
+      }
+      final consumed = await context.transport.consumeKeyPackage(
+        ownerAccount: peerAccount,
+        keyPackageId: packages.first.keyPackageId,
+        requesterAccount: context.account.address,
+      );
+      return flow.sendSticker(
+        conversationId: conversationId,
+        senderAccount: context.account.address,
+        recipientAccount: peerAccount,
+        senderDeviceId: context.deviceId,
+        recipientKeyPackage: consumed,
+        packId: packId,
+        stickerId: stickerId,
+      );
+    }
+  }
+
+  /// 解析媒体在本机缓存中的绝对路径,供聊天页内联渲染。字节未到达(对方离线
+  /// 或仍在 WebRTC 传输中)时返回 null,由 UI 显示占位。永不抛错。
+  Future<String?> resolveCachedMediaPath({
+    required String conversationId,
+    required String attachmentId,
+    required String fileName,
+    required String contentType,
+    required int clearByteSize,
+  }) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final cached = await ChatFlow.readCachedAttachment(
+        conversationId: conversationId,
+        attachmentId: attachmentId,
+        fileName: fileName,
+        contentType: contentType,
+        clearByteSize: clearByteSize,
+        cacheDirectory: Directory('${dir.path}/chat/attachments'),
+      );
+      return cached?.filePath;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -351,7 +473,8 @@ class ChatRuntime {
     }
   }
 
-  /// 重试发送设备本机队列中的密文。成功转交在线接收设备后立即删队列项。
+  /// 重试发送设备本机队列中的密文,并补发待设备投递的媒体字节。
+  /// 密文成功转交在线接收设备后立即删队列项;媒体字节收到 WebRTC ack 后删待投递行。
   Future<int> retryOutgoing({String? recipientAccount}) async {
     final context = await _readyContext(await _readOwner());
     final queued = await _store.readQueuedEnvelopes(
@@ -370,23 +493,94 @@ class ChatRuntime {
       );
       if (result.state == ChatMessageDeliveryState.sent) sent += 1;
     }
+    // 媒体字节补发**只在明确对端时(peer_ready 确知在线)**触发,且**不阻塞**:
+    // 绝不在无差别的轮询/实时启动(recipientAccount==null)路径对离线对端反复整块
+    // 重连重发(每条阻塞 45 秒、无退避),那会拖垮轮询与后台唤醒窗口。
+    if (recipientAccount != null) {
+      unawaited(
+          _resendPendingMedia(context, recipientAccount: recipientAccount));
+    }
     return sent;
   }
 
-  Future<void> _saveAttachmentBytesToCache({
+  /// 上线补发:遍历待设备投递的媒体,从本机缓存副本重发 WebRTC 字节。核心去重/清孤
+  /// 儿/删行逻辑在可测的 [MediaResend.run];缓存路径按**当前 Documents 目录重算**
+  /// (不用持久化的绝对路径,避免容器 UUID 变更后误判丢失)。
+  Future<void> _resendPendingMedia(
+    _ChatOwnerContext context, {
+    required String recipientAccount,
+  }) async {
+    final pending = await _store.readPendingOutgoingMedia(
+      recipientAccount: recipientAccount,
+    );
+    if (pending.isEmpty) return;
+    final dir = await getApplicationDocumentsDirectory();
+    final cacheDir = Directory('${dir.path}/chat/attachments');
+    await MediaResend.run(
+      pending: pending,
+      inFlight: _mediaBytesInFlight,
+      resolveCachePath: (media) => ChatFlow.attachmentCachePath(
+        cacheDirectory: cacheDir,
+        conversationId: media.conversationId,
+        attachmentId: media.attachmentId,
+        fileName: media.fileName,
+      ),
+      cacheFileExists: (path) => File(path).exists(),
+      sendBytes: (media, path) => context.webrtc.sendAttachment(
+        recipientAccount: media.recipientAccount,
+        conversationId: media.conversationId,
+        attachmentId: media.attachmentId,
+        fileName: media.fileName,
+        contentType: media.contentType,
+        sourcePath: path,
+        byteSize: media.byteSize,
+      ),
+      deletePending: (attachmentId) => _store.deleteOutgoingMedia(attachmentId),
+    );
+  }
+
+  /// 门③:接收端落盘二次门控。委托给可单测的 [ChatFlow.acceptReceivedMediaToCache]
+  /// (超限删临时不入缓存;否则移入缓存)。
+  Future<void> _saveReceivedAttachmentToCache({
+    required String senderAccount,
     required String conversationId,
     required String attachmentId,
     required String fileName,
     required String contentType,
-    required List<int> bytes,
+    required String filePath,
+    required int byteSize,
   }) async {
     final dir = await getApplicationDocumentsDirectory();
-    await ChatFlow.saveAttachmentBytesToCache(
+    await ChatFlow.acceptReceivedMediaToCache(
       conversationId: conversationId,
       attachmentId: attachmentId,
       fileName: fileName,
       contentType: contentType,
-      bytes: bytes,
+      tempFilePath: filePath,
+      byteSize: byteSize,
+      cacheDirectory: Directory('${dir.path}/chat/attachments'),
+    );
+  }
+
+  /// 发送端把自己发出的媒体**复制**一份进缓存(保留源),以便在会话里看到并支持
+  /// 上线补发。
+  Future<void> _copySentAttachmentToCache({
+    required String conversationId,
+    required String attachmentId,
+    required String fileName,
+    required String contentType,
+    required String sourcePath,
+    required int byteSize,
+  }) async {
+    final dir = await getApplicationDocumentsDirectory();
+    await ChatFlow.importAttachmentFileToCache(
+      conversationId: conversationId,
+      attachmentId: attachmentId,
+      fileName: fileName,
+      contentType: contentType,
+      sourcePath: sourcePath,
+      byteSize: byteSize,
+      moveSource: false,
       cacheDirectory: Directory('${dir.path}/chat/attachments'),
     );
   }
@@ -556,24 +750,12 @@ class ChatRuntime {
           sessionToken: service.session.sessionToken,
           requestSigner: service.session.signRequest,
         );
+    final docsDir = await getApplicationDocumentsDirectory();
     final webrtc = ChatWebrtcTransport(
       ownerAccount: account.address,
       cloud: transport,
-      onAttachment: ({
-        required senderAccount,
-        required conversationId,
-        required attachmentId,
-        required fileName,
-        required contentType,
-        required bytes,
-      }) =>
-          _saveAttachmentBytesToCache(
-        conversationId: conversationId,
-        attachmentId: attachmentId,
-        fileName: fileName,
-        contentType: contentType,
-        bytes: bytes,
-      ),
+      tempDirectory: '${docsDir.path}/chat/attachments/.tmp',
+      onAttachment: _saveReceivedAttachmentToCache,
     );
     return _ChatOwnerContext(
       account: account,

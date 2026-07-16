@@ -15,7 +15,7 @@ typedef ChatSendTextFactory = ChatSendTextCallback? Function(
   String conversationId,
 );
 typedef ChatSyncFactory = ChatSyncCallback? Function(String peerAccount);
-typedef ChatSendAttachmentFactory = ChatSendAttachmentCallback? Function(
+typedef ChatSendMediaFactory = ChatSendMediaCallback? Function(
   String peerAccount,
   String conversationId,
 );
@@ -35,7 +35,7 @@ class ChatTab extends StatefulWidget {
     WalletManager? walletManager,
     this.ownerAccount,
     this.sendTextFactory,
-    this.sendAttachmentFactory,
+    this.sendMediaFactory,
     this.downloadAttachmentFactory,
     this.syncFactory,
     this.runtime,
@@ -48,7 +48,7 @@ class ChatTab extends StatefulWidget {
   final WalletManager walletManager;
   final String? ownerAccount;
   final ChatSendTextFactory? sendTextFactory;
-  final ChatSendAttachmentFactory? sendAttachmentFactory;
+  final ChatSendMediaFactory? sendMediaFactory;
   final ChatDownloadAttachmentFactory? downloadAttachmentFactory;
   final ChatSyncFactory? syncFactory;
   final ChatRuntime? runtime;
@@ -432,17 +432,33 @@ class _ChatTabState extends State<ChatTab> {
                             conversationId: preview.conversationId,
                             text: text,
                           )),
-              onSendAttachment: widget.sendAttachmentFactory?.call(
+              onSendMedia: widget.sendMediaFactory?.call(
                     preview.peerAccount,
                     preview.conversationId,
                   ) ??
                   (widget.runtime == null
                       ? null
-                      : (attachment) => widget.runtime!.sendAttachment(
+                      : (media) => widget.runtime!.sendMedia(
                             peerAccount: preview.peerAccount,
                             conversationId: preview.conversationId,
-                            attachment: attachment,
+                            media: media,
                           )),
+              onResolveMediaPath: widget.runtime == null
+                  ? null
+                  : (
+                      String conversationId,
+                      String attachmentId,
+                      String fileName,
+                      String contentType,
+                      int clearByteSize,
+                    ) =>
+                      widget.runtime!.resolveCachedMediaPath(
+                        conversationId: conversationId,
+                        attachmentId: attachmentId,
+                        fileName: fileName,
+                        contentType: contentType,
+                        clearByteSize: clearByteSize,
+                      ),
               onDownloadAttachment: widget.downloadAttachmentFactory?.call(
                     preview.peerAccount,
                   ) ??

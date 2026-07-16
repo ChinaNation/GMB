@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_blurhash/flutter_blurhash.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 import 'package:citizenapp/chat/chat_page.dart';
 import 'package:citizenapp/chat/chat_flow.dart';
+import 'package:citizenapp/chat/chat_payload.dart';
 import 'package:citizenapp/chat/chat_runtime.dart';
 import 'package:citizenapp/chat/chat_models.dart';
 import 'package:citizenapp/chat/chat_tab.dart';
@@ -340,9 +342,9 @@ void main() {
     expect(realtimeStopCount, 1);
   });
 
-  testWidgets('聊天页 attachment button sends selected encrypted attachment',
+  testWidgets('聊天页 attachment button sends selected encrypted media',
       (tester) async {
-    ChatAttachmentDraft? sentAttachment;
+    ChatMediaDraft? sentMedia;
     final store = _FakeChatStore();
 
     await tester.pumpWidget(
@@ -353,13 +355,15 @@ void main() {
           peerUserId: 'bob-wallet',
           title: 'Bob',
           store: store,
-          pickAttachment: () async => const ChatAttachmentDraft(
+          pickMedia: () async => const ChatMediaDraft(
+            kind: ChatMessageKind.file,
             fileName: 'note.txt',
             contentType: 'text/plain',
-            bytes: [1, 2, 3],
+            sourcePath: '/tmp/note.txt',
+            byteSize: 3,
           ),
-          onSendAttachment: (attachment) async {
-            sentAttachment = attachment;
+          onSendMedia: (media) async {
+            sentMedia = media;
           },
         ),
       ),
@@ -369,25 +373,34 @@ void main() {
     await tester.tap(find.byIcon(Icons.attachment));
     await tester.pumpAndSettle();
 
-    expect(sentAttachment?.fileName, 'note.txt');
-    expect(sentAttachment?.bytes, [1, 2, 3]);
+    expect(sentMedia?.kind, ChatMessageKind.file);
+    expect(sentMedia?.fileName, 'note.txt');
+    expect(sentMedia?.sourcePath, '/tmp/note.txt');
+    expect(sentMedia?.byteSize, 3);
   });
 
-  testWidgets('聊天页 taps attachment message to download and decrypt',
+  testWidgets('聊天页 taps a file message to save the received media',
       (tester) async {
     final store = _FakeChatStore(
-      messages: const [
+      messages: [
         ChatStoredMessage(
           envelopeId: 'env-attachment',
           conversationId: 'dm:alice-wallet:bob-wallet',
           direction: 'incoming',
           senderAccount: 'bob-wallet',
           recipientAccount: 'alice-wallet',
-          messageKind: ChatMessageKind.attachment,
+          messageKind: ChatMessageKind.file,
           deliveryState: ChatMessageDeliveryState.receivedByDevice,
           createdAtMillis: 3000,
-          plaintext:
-              '{"type":"gmb_chat_attachment_v2","file_name":"photo.txt"}',
+          plaintext: ChatPayloadCodec.encode(
+            ChatContent.media(
+              kind: ChatMessageKind.file,
+              attachmentId: 'att-1',
+              fileName: 'photo.txt',
+              mime: 'text/plain',
+              byteSize: 3,
+            ),
+          ),
         ),
       ],
     );
@@ -409,7 +422,6 @@ void main() {
               contentType: 'text/plain',
               clearByteSize: 3,
               filePath: '/tmp/photo.txt',
-              bytes: [1, 2, 3],
             );
           },
         ),
@@ -417,11 +429,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('[附件] photo.txt'));
+    await tester.tap(find.text('photo.txt'));
     await tester.pumpAndSettle();
 
-    expect(downloadedPlaintext, contains('gmb_chat_attachment_v2'));
-    expect(find.text('附件已保存：photo.txt'), findsOneWidget);
+    expect(downloadedPlaintext, contains('gmb.chat.msg'));
+    expect(find.text('已保存：photo.txt'), findsOneWidget);
   });
 
   testWidgets('聊天页 deletes local conversation from menu and returns',
@@ -489,6 +501,94 @@ void main() {
     expect(store.deletedConversationIds, ['dm:alice-wallet:bob-wallet']);
     expect(find.text('打开聊天'), findsOneWidget);
   });
+
+  testWidgets('聊天页把未到达的图片/视频消息渲染为「接收中」占位', (tester) async {
+    // 无本机路径(未注入 onResolveMediaPath)→ source 为空 → 走 hasFile==false 占位分支。
+    final store = _FakeChatStore(
+      messages: [
+        _mediaStored(
+            id: 'img', kind: ChatMessageKind.image, mime: 'image/jpeg'),
+        _mediaStored(id: 'vid', kind: ChatMessageKind.video, mime: 'video/mp4'),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChatPage(
+          conversationId: 'dm:alice-wallet:bob-wallet',
+          ownerAccount: 'alice-wallet',
+          peerUserId: 'bob-wallet',
+          title: 'Bob',
+          store: store,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // 图片、视频两条都在"接收中"占位;误反转 hasFile 会去解码空路径而非占位。
+    expect(find.text('接收中…'), findsNWidgets(2));
+    // 视频占位带播放图标,与图片占位区分。
+    expect(find.byIcon(Icons.play_circle_fill_rounded), findsOneWidget);
+  });
+
+  testWidgets('聊天页视频占位从 metadata 读取 blurhash 渲染封面', (tester) async {
+    const hash = 'LEHV6nWB2yk8pyo0adR*.7kCMdnj';
+    final store = _FakeChatStore(
+      messages: [
+        _mediaStored(
+          id: 'vid',
+          kind: ChatMessageKind.video,
+          mime: 'video/mp4',
+          blurhash: hash,
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChatPage(
+          conversationId: 'dm:alice-wallet:bob-wallet',
+          ownerAccount: 'alice-wallet',
+          peerUserId: 'bob-wallet',
+          title: 'Bob',
+          store: store,
+        ),
+      ),
+    );
+    // 不用 pumpAndSettle:BlurHash 内部异步解码;只需确认封面 widget 已入树。
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    // 视频封面用 metadata['blurhash'];若误读 message.blurhash(VideoMessage 无此字段)
+    // 则渲染空 Container,BlurHash 不出现。
+    expect(find.byType(BlurHash), findsOneWidget);
+  });
+}
+
+ChatStoredMessage _mediaStored({
+  required String id,
+  required ChatMessageKind kind,
+  required String mime,
+  String? blurhash,
+}) {
+  return ChatStoredMessage(
+    envelopeId: 'env-$id',
+    conversationId: 'dm:alice-wallet:bob-wallet',
+    direction: 'incoming',
+    senderAccount: 'bob-wallet',
+    recipientAccount: 'alice-wallet',
+    messageKind: kind,
+    deliveryState: ChatMessageDeliveryState.receivedByDevice,
+    createdAtMillis: 3000,
+    plaintext: ChatPayloadCodec.encode(
+      ChatContent.media(
+        kind: kind,
+        attachmentId: 'att-$id',
+        fileName: kind == ChatMessageKind.video ? 'v.mp4' : 'p.jpg',
+        mime: mime,
+        byteSize: 100,
+        width: 800,
+        height: 600,
+        blurhash: blurhash,
+      ),
+    ),
+  );
 }
 
 class _FakeChatStore extends ChatStore {

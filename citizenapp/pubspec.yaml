@@ -49,6 +49,12 @@ dependencies:
   flutter_webrtc: ^1.5.2
   webview_flutter: ^4.13.0
   video_player: ^2.10.1
+  image_size_getter: ^2.4.1
+  flutter_image_compress: ^2.4.0
+  video_compress: ^3.1.4
+  blurhash_dart: ^1.2.1
+  image: ^4.9.1
+  flutter_blurhash: ^0.9.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

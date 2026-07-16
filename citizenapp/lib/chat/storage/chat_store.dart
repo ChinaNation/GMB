@@ -2,6 +2,7 @@ import 'package:isar_community/isar.dart';
 
 import '../../isar/app_isar.dart';
 import '../chat_models.dart';
+import '../chat_payload.dart';
 import '../proto/chat_envelope.pb.dart';
 
 /// Chat 本地消息记录。
@@ -40,6 +41,26 @@ class ChatQueuedEnvelope {
   final String envelopeId;
   final String recipientAccount;
   final List<int> envelopeBytes;
+}
+
+/// 待设备投递的媒体(离线补发)。缓存路径在补发时由 conversationId/attachmentId/
+/// fileName 用当前 Documents 目录重算,不持久化绝对路径。
+class ChatPendingMedia {
+  const ChatPendingMedia({
+    required this.attachmentId,
+    required this.recipientAccount,
+    required this.conversationId,
+    required this.fileName,
+    required this.contentType,
+    required this.byteSize,
+  });
+
+  final String attachmentId;
+  final String recipientAccount;
+  final String conversationId;
+  final String fileName;
+  final String contentType;
+  final int byteSize;
 }
 
 /// Chat 路由缓存记录。
@@ -201,6 +222,16 @@ class ChatStore {
       )) {
         await isar.chatPendingInboundEntitys.delete(row.id);
       }
+
+      final outgoingMediaRows = await isar.chatOutgoingMediaEntitys
+          .filter()
+          .idGreaterThan(0, include: true)
+          .findAll();
+      for (final row in outgoingMediaRows.where(
+        (row) => row.conversationId == conversationId,
+      )) {
+        await isar.chatOutgoingMediaEntitys.delete(row.id);
+      }
     });
   }
 
@@ -254,6 +285,16 @@ class ChatStore {
       )) {
         await isar.chatPendingInboundEntitys.delete(p.id);
       }
+
+      final outgoingMedia = await isar.chatOutgoingMediaEntitys
+          .filter()
+          .idGreaterThan(0, include: true)
+          .findAll();
+      for (final row in outgoingMedia.where(
+        (row) => ownedIds.contains(row.conversationId),
+      )) {
+        await isar.chatOutgoingMediaEntitys.delete(row.id);
+      }
     });
   }
 
@@ -271,7 +312,7 @@ class ChatStore {
         ownerAccount: envelope.senderAccount,
         peerAccount: envelope.recipientAccount,
         title: envelope.recipientAccount,
-        lastMessage: _messageSummary(messageKind, plaintext),
+        lastMessage: _messageSummary(plaintext),
         lastUpdatedAtMillis: envelope.createdAtMillis.toInt(),
         unreadDelta: 0,
         deliveryState: deliveryState,
@@ -334,7 +375,7 @@ class ChatStore {
         ownerAccount: envelope.recipientAccount,
         peerAccount: envelope.senderAccount,
         title: envelope.senderAccount,
-        lastMessage: _messageSummary(messageKind, plaintext),
+        lastMessage: _messageSummary(plaintext),
         lastUpdatedAtMillis: envelope.createdAtMillis.toInt(),
         unreadDelta: 1,
         deliveryState: ChatMessageDeliveryState.receivedByDevice,
@@ -472,6 +513,76 @@ class ChatStore {
     });
   }
 
+  /// 登记一条待设备投递的媒体(字节未送达对方设备,留待上线补发)。
+  Future<void> recordOutgoingMedia({
+    required String attachmentId,
+    required String recipientAccount,
+    required String conversationId,
+    required String fileName,
+    required String contentType,
+    required int byteSize,
+  }) {
+    return _walletIsar.writeTxn((isar) async {
+      await isar.chatOutgoingMediaEntitys.putByAttachmentId(
+        ChatOutgoingMediaEntity()
+          ..attachmentId = attachmentId
+          ..recipientAccount = recipientAccount
+          ..conversationId = conversationId
+          ..fileName = fileName
+          ..contentType = contentType
+          ..byteSize = byteSize
+          ..createdAtMillis = DateTime.now().millisecondsSinceEpoch,
+      );
+    });
+  }
+
+  /// 字节已送达对方设备(收到 WebRTC ack)后删除待投递行。
+  Future<void> deleteOutgoingMedia(String attachmentId) {
+    return _walletIsar.writeTxn((isar) async {
+      await isar.chatOutgoingMediaEntitys.deleteByAttachmentId(attachmentId);
+    });
+  }
+
+  /// 读取待设备投递的媒体(可按对端过滤),供上线补发。
+  Future<List<ChatPendingMedia>> readPendingOutgoingMedia({
+    String? recipientAccount,
+  }) {
+    return _walletIsar.read((isar) async {
+      final rows = await isar.chatOutgoingMediaEntitys
+          .filter()
+          .idGreaterThan(0, include: true)
+          .findAll();
+      final matched = recipientAccount == null
+          ? rows
+          : rows
+              .where((row) => row.recipientAccount == recipientAccount)
+              .toList(growable: false);
+      matched.sort((a, b) => a.createdAtMillis.compareTo(b.createdAtMillis));
+      return matched
+          .map(
+            (row) => ChatPendingMedia(
+              attachmentId: row.attachmentId,
+              recipientAccount: row.recipientAccount,
+              conversationId: row.conversationId,
+              fileName: row.fileName,
+              contentType: row.contentType,
+              byteSize: row.byteSize,
+            ),
+          )
+          .toList(growable: false);
+    });
+  }
+
+  Future<int> outgoingMediaCount() {
+    return _walletIsar.read((isar) async {
+      final rows = await isar.chatOutgoingMediaEntitys
+          .filter()
+          .idGreaterThan(0, include: true)
+          .findAll();
+      return rows.length;
+    });
+  }
+
   Future<void> _putConversationInTxn({
     required Isar isar,
     required String conversationId,
@@ -565,11 +676,10 @@ ChatMessageEntity _messageEntity({
     ..createdAtMillis = envelope.createdAtMillis.toInt();
 }
 
-String _messageSummary(ChatMessageKind kind, String? plaintext) {
-  return switch (kind) {
-    ChatMessageKind.text => plaintext ?? '',
-    ChatMessageKind.attachment => '[附件]',
-  };
+String _messageSummary(String? plaintext) {
+  // 摘要一律从载荷解码:文本取正文,媒体/贴纸取类型化占位([图片]/[视频]/
+  // [文件] 名/[贴纸])。解码对裸文本或历史数据都退化为纯文本,故安全。
+  return ChatPayloadCodec.decode(plaintext ?? '').summary;
 }
 
 ChatMessageDeliveryState _deliveryStateFromName(String value) {
