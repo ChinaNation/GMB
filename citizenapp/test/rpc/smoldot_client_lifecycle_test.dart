@@ -153,22 +153,27 @@ void main() {
   });
 
   group('smoldot finalized database 缓存', () {
+    // 缓存行为只需要稳定的链身份夹具，禁止复制任何真实创世哈希形成第二真源。
     const genesisHash =
-        '0xbb993e8fb7aa6c06e44b96f4ba35179ef8644ade17c37529c1742e1fb261b095';
+        '0x1111111111111111111111111111111111111111111111111111111111111111';
 
     setUp(() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    test('从内置 #0 checkpoint 推导固定 genesis hash', () async {
-      final raw = await rootBundle.loadString('assets/light_sync_state.json');
-      final checkpoint = jsonDecode(raw) as Map<String, dynamic>;
+    test('从内置 #0 checkpoint 推导同次公权清单的 genesis hash', () async {
+      final checkpointRaw =
+          await rootBundle.loadString('assets/light_sync_state.json');
+      final checkpoint = jsonDecode(checkpointRaw) as Map<String, dynamic>;
+      final manifestRaw = await rootBundle
+          .loadString('assets/public_institutions/manifest.json');
+      final manifest = jsonDecode(manifestRaw) as Map<String, dynamic>;
 
       expect(
         SmoldotClientManager.genesisHashFromCheckpointForTesting(
           checkpoint['finalizedBlockHeader'] as String,
         ),
-        genesisHash,
+        manifest['genesis_hash'],
       );
       expect(
         () => SmoldotClientManager.genesisHashFromCheckpointForTesting(

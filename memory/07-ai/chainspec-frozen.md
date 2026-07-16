@@ -76,18 +76,18 @@
 7. 无头服务器下载对应平台软件，停服务安装后保留节点身份密钥和 GRANDPA keystore；
    新数据目录由安装包内 release 状态包初始化，既有链数据库不得被覆盖。
 
-## 当前唯一冻结锚点（2026-07-14）
+## 当前唯一冻结锚点（2026-07-16）
 
-- Git commit：`40646f360f01fe362d38ada6085357c586848210`；GitHub `CitizenChain WASM` run：`29388014765`。
-- `genesis_hash`：`0xbb993e8fb7aa6c06e44b96f4ba35179ef8644ade17c37529c1742e1fb261b095`。
-- `state_root`：`0xd285f98522ca3bce15decd52e61a6d9e444a069a4544a8141eec0017d6e324ac`。
-- `runtime_wasm_hash`：`e7c239c78e337fde6a5e107669f77a517de199dfced1f9b96c9ae49a297b1f79`。
-- 全节点 `chainspec_hash`：`471effd6403fcce6bee84ab9bde7ed9aa6e2b3dbb54248a923d4d0d0688c4651`。
-- CitizenApp `chainspec_hash`：`85a4e6276df86bfad1caca83a634ea684f23619df16c09dbfc74bb0e9b05cd3a`。
-- `light_sync_state_hash`：`16b722fb297a358efb61b56c70883e0ff0fc1b9cb4af5c508f5d38d624a35c42`。
-- `public_institution_root`：`b6f3927a831d940cf7037d68fcbc5fc62f9ebb4d2c2a8ce0ef4da15d59fa3855`，43 省共 49,593 个机构。
+- runtime 源提交：`7abac7982a5c5ee25580583d456523ce2132743e`；冻结资产提交：`80f58aa5cfe19713edfba7331ea2896cacf09b62`；GitHub `CitizenChain WASM` run：`29530114067`。
+- `genesis_hash`：`0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`。
+- `state_root`：`0x99b4cb3031baa5e87536a22190dc81bf6bf49d3678c0abae86a312268506fe09`。
+- `runtime_wasm_hash`：`be4585ce369e658e6799be667ed5be692fc050f9c6196ab14c53f7dfa5dc6e70`。
+- 全节点 `chainspec_hash`：`5e609d166e8517d20ec0cd2095b88825146e34e64b3ebaba54152c7bde9d1f60`。
+- CitizenApp `chainspec_hash`：`973beeae264a7d2510c27957f6b2abd6b68e01860b6d976029817da4043d58b9`。
+- `light_sync_state_hash`：`4b05735ed59a8ef3756bf6445f1e4fa744730d2161ad14a62be1e16856bbfb9a`。
+- `public_institution_root`：`ecff487ce7d2bac6cb89d064a456187b453acd27f4bee2b140f474a48d072682`，43 省共 49,593 个机构。
 
-正式 bake 的创世物化耗时 50 秒；公民宪法 `law_id=0`、v1 生效版和不可变条款校验通过。正式包的隔离副本已使用默认内嵌链规范真实启动，RPC 返回同一 block#0/state root，`isSyncing=false`。`bake-chainspec.sh` 的 RPC 轮询必须让内嵌 Python 正常解析响应；不得抑制解析失败后把已就绪节点误判为超时。
+正式 bake 的创世物化耗时 51 秒；公民宪法 `law_id=0`、v1 生效版和不可变条款校验通过。临时节点使用同一 CI WASM 真实启动并经 RPC 返回上述 block#0/state root，`isSyncing=false`。`bake-chainspec.sh` 的 RPC 轮询必须让内嵌 Python 正常解析响应；不得抑制解析失败后把已就绪节点误判为超时。
 
 ## 第 5 步 preview 候选（2026-07-16，非冻结值）
 

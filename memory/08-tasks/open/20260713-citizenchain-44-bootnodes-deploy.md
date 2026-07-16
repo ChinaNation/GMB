@@ -53,6 +53,6 @@
 - 2026-07-14：开始修复创世发布链路。已确认现有 CI 只创建空 `resources/genesis-state/`，远端部署只安装 DEB、不替换旧 genesis 数据库；本机正式包还因被直接作为验收 base path 而混入 TLS、network 与 keystore 运行残留，必须重烘焙并按白名单清理。
 - 2026-07-14：bake/prepack 已改为正式创世包严格白名单，并把 WASM CI run id/head SHA 写入 manifest；CitizenChain CI 新增最新成功 WASM 与冻结 `:code` 逐字节核对、正式创世 artifact 上传与旧 artifact 删除，四个平台只消费本次 run 的同一正式包。
 - 2026-07-15：服务器部署脚本移除创世数据库下载、上传、解包和替换逻辑；部署只安装同次成功 CI 的 Linux amd 软件，保留远端链数据库，由节点按冻结 chainspec 启动并同步。
-- 2026-07-14：用 WASM CI run `29388014765`、提交 `40646f360f01fe362d38ada6085357c586848210` 重新烘焙唯一正式包；已删除旧 PostgreSQL snapshot、旧 `snapshot-node` 及正式包内 TLS/network/keystore 残留。仓库外隔离副本真实启动返回 `genesis_hash=0xbb993e8fb7aa6c06e44b96f4ba35179ef8644ade17c37529c1742e1fb261b095`、`state_root=0xd285f98522ca3bce15decd52e61a6d9e444a069a4544a8141eec0017d6e324ac`、`isSyncing=false`。
-- 2026-07-14：隔离启动同时确认当前远端 bootnode 仍是旧创世 `0xb57c…9971`，会与新正式创世 `0xbb99…b095` 明确发生 `Genesis mismatch`；新旧节点不能混网，必须等新 CitizenChain CI 成功后按节点统一替换，当前未触碰远端。
+- 2026-07-16：用 WASM CI run `29530114067`、runtime 源提交 `7abac7982a5c5ee25580583d456523ce2132743e` 重新烘焙唯一正式包；release 状态包继续严格排除 TLS/network/keystore 残留。临时节点真实启动返回 `genesis_hash=0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`、`state_root=0x99b4cb3031baa5e87536a22190dc81bf6bf49d3678c0abae86a312268506fe09`、`isSyncing=false`。
+- 远端 bootnode 若仍运行此前创世，会与当前正式创世明确发生 `Genesis mismatch`；新旧节点不能混网，必须按节点统一替换，当前任务尚未部署远端正式新创世。
 - 2026-07-15：部署控制台“部署服务器”改为并发启动所有配置齐全节点；成功节点不输出过程日志，失败节点实时输出完整失败日志，任务结束输出成功/失败/跳过汇总；节点卡片“部署该节点”继续保留单节点完整日志。

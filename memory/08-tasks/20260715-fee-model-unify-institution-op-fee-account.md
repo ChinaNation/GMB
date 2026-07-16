@@ -4,8 +4,9 @@
 
 - 当前阶段：第 5 步创世准备和五端自动验收已完成；GitHub WASM CI 已通过，并已用
   同一 CI artifact 执行正式 `--finalize`，冻结 Node/CitizenApp/Cloudflare 创世派生资产。
-  正式创世尚未部署，烘焙资产已创建本地“创世”提交、尚待推送；真实管理员扫码签名仍待
-  专用测试签名环境。
+  烘焙资产提交 `80f58aa5cfe19713edfba7331ea2896cacf09b62` 已推送到 `origin/main`，Node
+  四平台打包 CI 已成功。CitizenApp CI 暴露的旧创世哈希测试夹具已在本地修复并完成全量
+  复验，尚待单独确认后推送；正式创世尚未部署，真实管理员扫码签名仍待专用测试签名环境。
 - 第 1 步方案确认：2026-07-15
 - runtime 二次确认：已获得
 - 开发方式：breaking runtime，重新创世，不做旧存储、旧 call、旧 payload 或旧命名兼容
@@ -395,11 +396,31 @@
   账户。OnChina 机构、账户、管理员资料的主键分别保持 `cid_number`、
   `(cid_number, account_name)`、`(cid_number, admin_account)`（省级分区键不改变机构
   身份语义）。NodeGuard 定向 9 项、Node 全量 270 项测试和 Rust 格式检查均通过。
+- 正式烘焙资产已提交为 `80f58aa5cfe19713edfba7331ea2896cacf09b62`（`创世`）并推送到
+  `origin/main`。CitizenChain 软件 CI run `29531385778` 的 macOS Apple、Linux amd、
+  Linux arm、Windows 四个平台打包全部成功。
+
+### CitizenApp CI 修复（2026-07-16）
+
+- CitizenApp CI run `29531385854` 仅在 Flutter 测试阶段失败：693 项通过、1 项失败、
+  5 项环境性跳过；冻结 chainspec 检查和 `flutter analyze` 均已通过，APK 因前置测试失败
+  被跳过。
+- 根因是 `smoldot_client_lifecycle_test.dart` 把烘焙前真实创世哈希硬编码为第二真源；正式
+  checkpoint 已切换到新创世，测试仍断言旧值。最终烘焙后没有再次执行 CitizenApp 全量
+  Flutter 测试，因此推送前未发现该夹具漂移。
+- 资产一致性测试现从 `light_sync_state.json` 解析块 0 哈希，并与公权机构 `manifest.json`
+  的 `genesis_hash` 交叉校验；其他缓存、启动 API、进度条和 Smoldot 状态根测试均改用显式
+  合成值，测试不再复制任何真实冻结哈希。
+- 旧创世哈希、旧 state root、旧 CI run、旧冻结资产哈希及过期文档引用的精确残留扫描为
+  0；没有修改 runtime、node 业务代码、正式冻结资产或收费逻辑。
+- 修复后 CitizenApp 全量 Flutter 测试 694 项通过、5 项环境性跳过，`flutter analyze` 0
+  问题；Smoldot 280 项单元测试、24 项文档测试通过（另 2 项单测、7 项文档测试按既有配置
+  忽略）；`check-chainspec-frozen.sh` 与 `git diff --check` 通过。
 
 ### 明确延后与阻塞项
 
-- 正式烘焙资产已创建本地“创世”提交、尚未推送；推送后应由 Node chainspec 路径触发
-  CitizenChain 软件 CI。
-  本任务没有打正式包、部署六节点网络或启动正式新创世。
+- CitizenApp CI 修复当前只保留在本地工作区；必须按 GitHub 推送硬规则另行确认远端、
+  分支及 CI 触发范围后才能推送。正式烘焙资产和 Node 四平台 CI 已完成。
+- 本任务没有打正式发布包、部署六节点网络或启动正式新创世。
 - 真实管理员扫码签名、机构费用账户真实扣 0.1 元、余额不足失败和真实投票扣 1 元仍需
   用户在本机解锁专用测试管理员/公民钱包；不得用临时管理员、假签名或回落付款替代。

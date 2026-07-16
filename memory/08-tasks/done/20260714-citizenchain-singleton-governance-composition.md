@@ -63,15 +63,15 @@
 - [x] 六个国家级单例只由 CID 生命周期策略冻结机构码、CID、主账户和 Active 身份；NSN/NRP/NED 额外执行“全空未组成→原子已组成”的单向状态及法定岗位人数/admins 闭环，NLG/NSP/PRS 不进入岗位或人数守卫。
 - [x] 五类固定治理码只冻结每笔内部提案的固定阈值快照；固定治理提案与规范快照双向绑定，六个国家级单例明确不进入固定阈值策略。`:code` runtime 升级会枚举并复核全部存量提案与阈值快照，不能依靠“不改旧 key”或“移走旧快照表”绕过永久阈值。
 - [x] 第 4 步验证：primitives 66/66、国家机构组成专项 8/8、NodeGuard 整组 88/88 通过；当前源码重新构建后 fresh block#0 仍为 `0xb9688b1d8904a75319c6e715544c00678e4a94df7306cfec071a07a93dd03025`，`isSyncing=false`，隔离节点已正常退出。
-- [x] 第 5 步使用 Git commit `40646f360f01fe362d38ada6085357c586848210` 对应的成功 CI WASM 重生唯一冻结 chainspec、轻客户端 checkpoint、创世状态包和 49,593 条公权机构快照；未保留旧 storage 布局或双创世兼容。
+- [x] 最新冻结已使用 Git commit `7abac7982a5c5ee25580583d456523ce2132743e` 对应的成功 CI WASM 重生唯一 chainspec、轻客户端 checkpoint、创世状态包和 49,593 条公权机构快照；未保留旧 storage 布局或双创世兼容。
 
 - 新增 `primitives::institution_constraints` 单一真源，六个国家级单例身份、两院组成关系、三个成员岗位及人数区间不再散落手写。
 - runtime 注册局拒绝新建六类单例码，public-manage 注销入口拒绝关闭；NodeGuard 同时拒绝固定治理码/六类单例码占用非规范 CID。
 - 六个国家单例创世保持岗位、任职、admins 和动态阈值全空；首次治理结果原子写岗位、任职和 admins。旧的账户级最小严格过半动态阈值实现已删除。
 - 新增 `national_body_composition` 原生策略；五类固定治理码的 `InternalThresholdSnapshot` 必须等于编译期阈值，FRG 省岗位组上下文同样覆盖。
 - 当前累计回归：primitives 66/66、public-admins 8/8、public-manage 42/42、runtime 集成 40/40、NodeGuard 整组 88/88；其中 NodeGuard 国家组成专项 8/8、CID 生命周期专项 15/15。
-- 第 5 步正式冻结：GitHub `CitizenChain WASM` run `29388014765` artifact 校验通过；`runtime_wasm_hash=e7c239c78e337fde6a5e107669f77a517de199dfced1f9b96c9ae49a297b1f79`，物化耗时 51 秒。
-- 唯一发布锚点：`genesis_hash=0xbb993e8fb7aa6c06e44b96f4ba35179ef8644ade17c37529c1742e1fb261b095`、`state_root=0xd285f98522ca3bce15decd52e61a6d9e444a069a4544a8141eec0017d6e324ac`、`chainspec_hash=471effd6403fcce6bee84ab9bde7ed9aa6e2b3dbb54248a923d4d0d0688c4651`、`light_sync_state_hash=16b722fb297a358efb61b56c70883e0ff0fc1b9cb4af5c508f5d38d624a35c42`、`public_institution_root=b6f3927a831d940cf7037d68fcbc5fc62f9ebb4d2c2a8ce0ef4da15d59fa3855`。
+- 最新正式冻结：GitHub `CitizenChain WASM` run `29530114067` artifact 校验通过；`runtime_wasm_hash=be4585ce369e658e6799be667ed5be692fc050f9c6196ab14c53f7dfa5dc6e70`，物化耗时 51 秒。
+- 唯一发布锚点：`genesis_hash=0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`、`state_root=0x99b4cb3031baa5e87536a22190dc81bf6bf49d3678c0abae86a312268506fe09`、`chainspec_hash=5e609d166e8517d20ec0cd2095b88825146e34e64b3ebaba54152c7bde9d1f60`、`light_sync_state_hash=4b05735ed59a8ef3756bf6445f1e4fa744730d2161ad14a62be1e16856bbfb9a`、`public_institution_root=ecff487ce7d2bac6cb89d064a456187b453acd27f4bee2b140f474a48d072682`。
 - 冻结一致性脚本、43 省分片及 49,593 总数校验通过；默认内嵌链规范使用正式创世状态包真实启动，RPC 返回同一 block#0/state root、`isSyncing=false`，节点正常退出。
 - CitizenApp 本地 checkpoint、缓存测试夹具、Cloudflare bootstrap 默认值及 development/staging/production 三套环境链身份已同步；Flutter 相关 31/31、smoldot chain-spec 4/4、Cloudflare typecheck、Worker 167/167 测试通过，未执行远端部署。
 - 烘焙脚本 RPC 轮询的内嵌 Python f-string 转义错误已修复；该错误此前会吞掉语法异常并把已经出块的节点误报为 10 分钟超时。

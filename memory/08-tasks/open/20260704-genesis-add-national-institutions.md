@@ -96,7 +96,7 @@
 
 ## 2026-07-04 #99 WASM 冻结记录（历史）
 
-- GitHub `CitizenChain WASM` #99 / run `28716997121` 的锚点仅保留为历史记录；当前唯一冻结基线已由 2026-07-14 Git commit `40646f360f01fe362d38ada6085357c586848210` 的正式 bake 替代，不得继续引用 #99 作为当前发布锚点。
+- GitHub `CitizenChain WASM` #99 / run `28716997121` 的锚点仅保留为历史记录；当前唯一冻结基线已由 2026-07-16 runtime 源提交 `7abac7982a5c5ee25580583d456523ce2132743e`、WASM CI run `29530114067` 的正式 bake 替代，不得继续引用 #99 作为当前发布锚点。
 - CitizenApp 轻形态 `citizenapp/assets/chainspec.json` 已同步到 #99 `stateRootHash=0x6a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff63`;本轮冻结只取最新成功 `CitizenChain WASM` artifact,不等待也不引用 CitizenApp CI。
 
 ## 上一轮 CitizenApp 快照生成记录（历史）

@@ -20,8 +20,9 @@ const _bootnodeSds =
     '/dns4/prcsds.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWFgD8cFDqherjpiuRkHwHfAcCwaqXcBjTS2G3LkwUBTsq';
 const _bootnodeSxs =
     '/dns4/prcsxs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWQY3DEaJy9wEBE2bQ9gG1B8XByfVaz839jf1ov75kRmD9';
+// 启动清单协议夹具使用合成状态根，避免复制真实冻结锚点。
 const _stateRoot =
-    '0xd285f98522ca3bce15decd52e61a6d9e444a069a4544a8141eec0017d6e324ac';
+    '0x4444444444444444444444444444444444444444444444444444444444444444';
 
 void main() {
   test('安装包 chainspec 只登记当前六个已部署 bootnode', () async {
@@ -188,8 +189,9 @@ Map<String, dynamic> _manifest() => {
         'chain_name': 'CitizenChain',
         'chain_type': 'Live',
         'protocol_id': 'citizenchain',
+        // 协议解析夹具使用合成哈希，不复制真实创世锚点。
         'genesis_hash':
-            '0xbb993e8fb7aa6c06e44b96f4ba35179ef8644ade17c37529c1742e1fb261b095',
+            '0x2222222222222222222222222222222222222222222222222222222222222222',
         'state_root': _stateRoot,
         'ss58_format': 2027,
         'token_symbol': 'GMB',

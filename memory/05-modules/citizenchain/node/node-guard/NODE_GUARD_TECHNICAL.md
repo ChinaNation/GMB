@@ -97,7 +97,7 @@ ConstitutionGuard<NodeGuard<PowBlockImport>>
 
 创世状态缺少固定机构、机构码/状态/管理员总数不符，或固定岗位缺失、改名、停用、增加清单外岗位、席位数变化、任职账户与 admins 集合不一致时，节点拒绝启动。NJD 的 7/1/2/5 和 FRG 的 43×5 已由 NodeGuard 独立校验。
 
-2026-07-14 已使用同提交 CI WASM 重生唯一冻结链规范和创世状态包。49,593 个创世公权机构成功物化，NodeGuard 未拒绝；默认内嵌链规范真实启动后，`chain_getBlockHash(0)` 返回 `0xbb993e8fb7aa6c06e44b96f4ba35179ef8644ade17c37529c1742e1fb261b095`，`stateRoot=0xd285f98522ca3bce15decd52e61a6d9e444a069a4544a8141eec0017d6e324ac`，`isSyncing=false`。验收节点正常退出，不保留双轨或旧 SCALE 兼容。
+2026-07-16 已使用 GitHub WASM CI run `29530114067` 重生唯一冻结链规范和创世状态包。49,593 个创世公权机构成功物化，NodeGuard 未拒绝；临时节点真实启动后，`chain_getBlockHash(0)` 返回 `0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`，`stateRoot=0x99b4cb3031baa5e87536a22190dc81bf6bf49d3678c0abae86a312268506fe09`，`isSyncing=false`。验收节点正常退出，不保留双轨或旧 SCALE 兼容。
 
 ## 7. 当前策略：固定治理骨架
 
@@ -457,4 +457,4 @@ pallet、storage、hasher 和 key 编码。字段重排、storage 改名或 hash
 - 第 4 步完成 NodeGuard 职责收口：89 个固定治理机构按完整身份精确保护，普通机构不进入治理骨架分区；六个国家单例只冻结身份，只有 NSN/NRP/NED 进入成员组成策略；NLG/NSP/PRS 的运行期岗位/admins 不触发误拒绝。
 - 新增提案/快照双向复核与 `:code` 存量全检，补齐 runtime 升级不触碰旧 key 或移走旧快照表时的永久阈值缺口；专项同时证明六个国家单例均不进入固定阈值策略。
 - 第 4 步回归为 primitives 66/66、国家组成专项 8/8、NodeGuard 整组 88/88。
-- 第 5 步使用 Git commit `40646f360f01fe362d38ada6085357c586848210` 的 CI WASM 完成正式冻结：block#0 `0xbb993e8fb7aa6c06e44b96f4ba35179ef8644ade17c37529c1742e1fb261b095`、state root `0xd285f98522ca3bce15decd52e61a6d9e444a069a4544a8141eec0017d6e324ac`。冻结一致性脚本、43 个公权分片哈希及默认内嵌链真实 RPC 验收均通过。
+- 最新正式冻结使用 Git commit `7abac7982a5c5ee25580583d456523ce2132743e` 的 CI WASM：block#0 `0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`、state root `0x99b4cb3031baa5e87536a22190dc81bf6bf49d3678c0abae86a312268506fe09`。冻结一致性脚本、43 个公权分片哈希及临时节点真实 RPC 验收均通过。

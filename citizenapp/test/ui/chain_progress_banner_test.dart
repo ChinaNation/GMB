@@ -79,6 +79,9 @@ LightClientStatusSnapshot _snapshot({
 }) {
   const finalizedHash =
       '0xe3985a35f8668d74f1552be80e1e4c5c01fcce7f7c757cc0cf254ec21a1d2d9c';
+  // UI 状态夹具使用合成哈希，不绑定任何真实创世版本。
+  const genesisHash =
+      '0x3333333333333333333333333333333333333333333333333333333333333333';
   return LightClientStatusSnapshot(
     peerCount: 5,
     isSyncing: isSyncing,
@@ -90,14 +93,12 @@ LightClientStatusSnapshot _snapshot({
     finalizedBlockHash: finalizedHash,
     startupFinalizedSource: LightClientStartupFinalizedSource.bundledCheckpoint,
     startupFinalizedBlockNumber: 0,
-    startupFinalizedBlockHash:
-        '0xbb993e8fb7aa6c06e44b96f4ba35179ef8644ade17c37529c1742e1fb261b095',
+    startupFinalizedBlockHash: genesisHash,
     highestPeerFinalizedBlockNumber: 33,
     currentVerifiedFinalizedBlockNumber:
         syncPhase == LightClientSyncPhase.regular ? 33 : 0,
-    currentVerifiedFinalizedBlockHash: syncPhase == LightClientSyncPhase.regular
-        ? finalizedHash
-        : '0xbb993e8fb7aa6c06e44b96f4ba35179ef8644ade17c37529c1742e1fb261b095',
+    currentVerifiedFinalizedBlockHash:
+        syncPhase == LightClientSyncPhase.regular ? finalizedHash : genesisHash,
     warpTargetFinalizedBlockNumber:
         syncPhase == LightClientSyncPhase.regular ? null : 33,
     warpTargetFinalizedBlockHash:
