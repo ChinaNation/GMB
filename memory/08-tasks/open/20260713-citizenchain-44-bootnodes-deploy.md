@@ -15,7 +15,7 @@
 预计修改目录：
 - `.github/workflows/`：让 CitizenChain CI 下载当前分支最新成功 WASM artifact，逐字节核对冻结 `:code` 后重建、校验并上传唯一正式创世状态包；涉及 CI 代码和旧空资源流程清理。
 - `citizenchain/scripts/`：收紧 bake/prepack 创世包白名单，只允许 manifest 与 `chains/citizenchain/db`；涉及脚本代码、中文注释和残留清理。
-- `deploy/actions/`：部署时从同次成功 CI 下载 Linux amd 节点软件，保留远端链数据库并完成节点软件升级与服务验收。
+- `deploy/actions/`：部署时由目标服务器直接下载 GitHub `main` 最新成功 CI 的 Linux amd 节点软件，并按普通升级或明确的新创世模式完成节点软件和真实服务验收。
 - `deploy/`：扩展本地控制台、节点配置、Keychain 桥接和 CitizenChain 部署动作；源码由Git追踪，密钥和运行数据被精确忽略。
 - `memory/08-tasks/open/`：记录任务范围、决策、进度和验收；会被 Git 跟踪。
 - `memory/01-architecture/citizenchain/`：更新多节点部署架构与边界；会被 Git 跟踪。
@@ -56,3 +56,8 @@
 - 2026-07-16：用 WASM CI run `29530114067`、runtime 源提交 `7abac7982a5c5ee25580583d456523ce2132743e` 重新烘焙唯一正式包；release 状态包继续严格排除 TLS/network/keystore 残留。临时节点真实启动返回 `genesis_hash=0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`、`state_root=0x99b4cb3031baa5e87536a22190dc81bf6bf49d3678c0abae86a312268506fe09`、`isSyncing=false`。
 - 远端 bootnode 若仍运行此前创世，会与当前正式创世明确发生 `Genesis mismatch`；新旧节点不能混网，必须按节点统一替换，当前任务尚未部署远端正式新创世。
 - 2026-07-15：部署控制台“部署服务器”改为并发启动所有配置齐全节点；成功节点不输出过程日志，失败节点实时输出完整失败日志，任务结束输出成功/失败/跳过汇总；节点卡片“部署该节点”继续保留单节点完整日志。
+- 2026-07-16：修正部署职责边界。`deploy` 不再检查本地工作区、HEAD 或推送状态，固定选择 GitHub `main` 最新成功 CitizenChain CI；本机只取得短期签名地址和 artifact SHA-256，由目标服务器直接下载、验签和解包，本机不再下载或上传 DEB。
+- 2026-07-16：审计 `.ssh` 的两对历史密钥。五台可访问服务器均真实接受同一部署身份，控制台中误存的公钥经 Touch ID 替换为同一私钥并逐项派生验签；失效的本地 `ed25519`/`ed25519.pub`、旧 `oracle` SSH 配置和 node-01 失效 Keychain 项已删除。部署私钥迁入 Keychain 后，本机明文私钥也已删除，只保留非机密的 `deploy.pub`。
+- 2026-07-16：经 Touch ID 清理中枢、山东、山西、河南、河北五台服务器的部署授权：删除 `ubuntu`、`root`、`opc` 授权文件中的全部旧 `ed25519` 公钥，当前部署公钥在 `ubuntu` 账户逐台去重并统一命名为 `deploy`，服务器端同名旧密钥文件清零。全路径复核五台均为“旧授权 0、旧文件 0、`deploy` 授权 1”。国储会节点不使用此部署身份，本次明确排除且不作远程变更。
+- 2026-07-16：中枢省节点经 Touch ID 执行正式新创世部署。服务器直接下载并校验 CitizenChain CI run `29531385778`、commit `80f58aa5cfe19713edfba7331ea2896cacf09b62` 的 Linux amd artifact，安装 `citizenchain 1.0.21-80f58aa5cfe`，清空旧链数据库并重新物化。首次发现清库后链父目录由 root 持有导致 RocksDB `PermissionDenied`，已改为显式创建并授权链父目录。
+- 2026-07-16：中枢省最终真实验收通过：systemd `active`，`isSyncing=false`，角色 `Authority`，PeerId 与 `institution-catalog.json` 一致，块 0 为 `0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`，验收时已有 2 个 peers。部署脚本现在等待最长 180 秒，并强制核对服务、创世哈希、角色和 PeerId。

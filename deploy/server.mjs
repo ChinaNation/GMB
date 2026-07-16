@@ -160,6 +160,12 @@ function keychainDelete(environment, secretName) {
   if (result.status !== 0) throw new Error(`Keychain 删除失败：${environment}:${secretName}`);
 }
 
+function isCompleteSshPrivateKey(value) {
+  const lines = String(value || '').trim().split(/\r?\n/);
+  const begin = lines[0]?.match(/^-----BEGIN ((?:OPENSSH |RSA |EC )?PRIVATE KEY)-----$/);
+  return Boolean(begin && lines.length >= 3 && lines.at(-1) === `-----END ${begin[1]}-----`);
+}
+
 function authorizeProduction(reason) {
   const auth = spawnSync(join(deployDir, '.runtime', 'touchid-auth'), [], { stdio: 'inherit' });
   if (auth.status !== 0) throw new Error(`Touch ID 验证失败，未执行${reason}`);
@@ -194,7 +200,12 @@ function peerIdFromBootnodeKey(privateHex) {
 }
 
 function nodeStatus(node) {
-  const configured = Object.fromEntries(nodeSecretNames.map((name) => [name, keychainExists(node.id, name)]));
+  const configured = Object.fromEntries(nodeSecretNames.map((name) => {
+    if (!keychainExists(node.id, name)) return [name, false];
+    // 中文注释：SSH 项必须是真正的完整私钥；仅存在公钥或损坏值不能把节点标成可部署。
+    if (name === 'SSH_KEY') return [name, isCompleteSshPrivateKey(keychainGet(node.id, name))];
+    return [name, true];
+  }));
   let serverIp = null;
   if (configured.SERVER_IP) serverIp = keychainGet(node.id, 'SERVER_IP');
   return { ...node, serverIp, configured };
@@ -238,9 +249,7 @@ function validateNodeConfiguration(node, body) {
   }
   if (String(body.sshKey || '').trim()) {
     const sshKey = String(body.sshKey).trim();
-    const lines = sshKey.split(/\r?\n/);
-    const begin = lines[0]?.match(/^-----BEGIN ((?:OPENSSH |RSA |EC )?PRIVATE KEY)-----$/);
-    if (!begin || lines.length < 3 || lines.at(-1) !== `-----END ${begin[1]}-----`) {
+    if (!isCompleteSshPrivateKey(sshKey)) {
       throw new Error('服务器 SSH 私钥不完整，必须包含开始行、密钥正文和匹配的结束行');
     }
     writes.push(['SSH_KEY', `${sshKey}\n`]);

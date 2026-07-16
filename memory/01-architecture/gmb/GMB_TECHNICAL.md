@@ -170,7 +170,7 @@ GMB/
 
 本机统一发布入口固定为 `deploy/` 可视化控制台。不含密钥的控制台源码由 Git 追踪，`.runtime/`、日志、编译产物和私密材料精确忽略。控制台用六个模块图标分别承载 CitizenApp Cloudflare、CitizenWeb、CitizenApp、CitizenWallet、CitizenChain 和 CitizenChain WASM；模块详情显示可执行操作、Keychain/GitHub Secrets 状态和每项密钥的简短中文用途，但绝不读取到浏览器或显示密钥明文。
 
-测试部署和 CI 无需密码；production、Release 和服务器部署每次执行前必须通过 macOS Touch ID，失败时不得启动目标命令。部署 Secret 只保存在 macOS Keychain 或 GitHub Secrets，根目录不得恢复明文 Secret 文件。GitHub `workflow_dispatch` 继续使用显式 `mode=ci/release/deploy` 隔离动作；CI 模式不得读取签名密钥、创建 Release 或部署服务器。
+测试部署和 CI 无需密码；production、Release 和服务器部署每次执行前必须通过 macOS Touch ID，失败时不得启动目标命令。部署 Secret 只保存在 macOS Keychain 或 GitHub Secrets，`.ssh`、仓库及根目录不得保留部署私钥明文。GitHub `workflow_dispatch` 使用显式 `mode=ci/release` 隔离构建与发布；服务器部署由本地控制台独立执行，目标服务器直接下载 GitHub 最新成功 CI 产物，CI 模式不得创建 Release 或部署服务器。
 
 CitizenWeb 的“测试部署”只在本机构建并启动 `http://127.0.0.1:41732`，不创建测试 Pages 项目；“关闭测试部署”停止该本地进程。生产部署只更新已经存在的 `citizenweb` Pages 项目，并继续使用 `https://www.crcfrcn.com` 做真实健康检查。
 
