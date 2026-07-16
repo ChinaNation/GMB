@@ -269,10 +269,27 @@ pub mod pallet {
         )]
         pub fn developer_direct_upgrade(
             origin: OriginFor<T>,
+            actor_cid_number: votingengine::types::CidNumber,
             code: CodeOf<T>,
             new_pow_params: pow_difficulty::PowDifficultyParams,
         ) -> DispatchResult {
             let who = T::DeveloperUpgradeOrigin::ensure_origin(origin)?;
+            let actor_text = core::str::from_utf8(actor_cid_number.as_slice())
+                .map_err(|_| Error::<T>::InvalidActorCid)?;
+            let actor_code = votingengine::types::institution_code_from_cid_number(actor_text)
+                .ok_or(Error::<T>::InvalidActorCid)?;
+            ensure!(
+                actor_code == votingengine::types::NRC,
+                Error::<T>::InvalidActorCid
+            );
+            ensure!(
+                <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
+                    actor_code,
+                    actor_cid_number.as_slice(),
+                    &who,
+                ),
+                Error::<T>::UnauthorizedActorAdmin
+            );
             ensure!(
                 T::DeveloperUpgradeCheck::is_enabled(),
                 Error::<T>::DeveloperUpgradeDisabled

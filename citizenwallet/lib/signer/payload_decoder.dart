@@ -3167,7 +3167,7 @@ class PayloadDecoder {
   ///
   /// QR 的 payload_hex 是完整 SigningPayload,call_data 永远不会顶到末尾;
   /// 尾部布局与节点端 build_signing_payload / CitizenApp polkadart 编码一致:
-  /// era(0x00 immortal,P-SIGN-001) + Compact<nonce> + Compact<tip>
+  /// era(0x00 immortal,P-SIGN-001) + Compact<nonce> + Compact<tip=0>
   /// + mode(0x00) + 固定 73 字节(末字节 Option::None=0x00,immortal 下
   /// birth hash 必等于 genesis hash)。
   /// 所有链上 extrinsic 分支统一以此判定 call_data 边界:既接受真实 payload,
@@ -3184,7 +3184,10 @@ class PayloadDecoder {
     offset += nonceSize;
     // ChargeTransactionPayment: Compact<u128> tip
     final (tipValue, tipSize) = _decodeCompactBigInt(bytes, offset);
-    if (tipValue == null || tipSize == 0) return false;
+    // tip 不属于五类交易费；冷钱包必须在签名前拒绝任何非零 tip。
+    if (tipValue == null || tipSize == 0 || tipValue != BigInt.zero) {
+      return false;
+    }
     offset += tipSize;
     // CheckMetadataHash: mode=Disabled(0x00)
     if (offset >= bytes.length || bytes[offset] != 0x00) return false;

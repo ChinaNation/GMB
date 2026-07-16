@@ -40,7 +40,10 @@ pub fn build_tx_extension(nonce: u32) -> runtime::TxExtension {
         frame_system::CheckEra::<runtime::Runtime>::from(Era::Immortal),
         frame_system::CheckNonce::<runtime::Runtime>::from(nonce),
         frame_system::CheckWeight::<runtime::Runtime>::new(),
-        pallet_transaction_payment::ChargeTransactionPayment::<runtime::Runtime>::from(0),
+        // tip 不属于 CitizenChain 五类费用，唯一协议值固定为零。
+        pallet_transaction_payment::ChargeTransactionPayment::<runtime::Runtime>::from(
+            primitives::fee_policy::TRANSACTION_TIP,
+        ),
         frame_metadata_hash_extension::CheckMetadataHash::<runtime::Runtime>::new(false),
         frame_system::WeightReclaim::<runtime::Runtime>::new(),
     )

@@ -108,12 +108,12 @@ Step 2 起增加偿付自动保护:`主账户链上余额 ≥ BankTotalDeposits[
 
 | call_index | 方法 | 费用归类 | 说明 |
 |---|---|---|---|
-| 30 | `bind_clearing_bank(bank_main)` | 付费调用 1 元 | 绑定即开户无预存 |
+| 30 | `bind_clearing_bank(bank_main)` | 签名者链上操作 0.1 元 | 绑定即开户无预存 |
 | 31 | `deposit(amount)` | 链上资金 0.1% 最低 0.1 元 | 自持 → 清算行主账户 |
 | 32 | `withdraw(amount)` | 链上资金 0.1% 最低 0.1 元 | 清算行主账户 → 自持 |
-| 33 | `switch_bank(new_bank)` | 付费调用 1 元 | 前置:旧清算行余额为 0 |
+| 33 | `switch_bank(new_bank)` | 签名者链上操作 0.1 元 | 前置:旧清算行余额为 0 |
 
-费用归类在 `citizenchain/runtime/src/configs/mod.rs::RuntimeFeeKindClassifier` 的 `OffchainTransaction` 分支显式分类,不走兜底。
+费用与付款方由 `citizenchain/runtime/src/configs.rs::RuntimeFeeRouter` 的 `OffchainTransaction` 分支显式返回统一 `FeeRoute`，不走兜底。
 
 ## 8. 新增 Event(4 个)
 

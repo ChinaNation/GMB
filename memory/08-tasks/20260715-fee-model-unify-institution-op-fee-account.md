@@ -2,7 +2,7 @@
 
 ## 状态
 
-- 当前阶段：第 1 步代码与自动验收完成；真实管理员签名交易验收待专用测试签名环境
+- 当前阶段：第 2 步费用路由与全仓自动验收已完成；等待用户确认第 3 步，第 1 步真实管理员签名交易仍待专用测试签名环境
 - 第 1 步方案确认：2026-07-15
 - runtime 二次确认：已获得
 - 开发方式：breaking runtime，重新创世，不做旧存储、旧 call、旧 payload 或旧命名兼容
@@ -15,7 +15,7 @@
 
 1. 账户型机构交易：`actor_cid_number + institution_account + origin 管理员签名`。
 2. 非账户型机构交易：`actor_cid_number + origin 管理员签名`。
-3. 实际投票 `cast_*`：管理员个人签名并由签名者支付 `VoteFlat`。
+3. 实际投票 `cast_*`：管理员或公民个人签名并由签名者支付固定 1 元投票费。
 
 主账户只是一种协议账户，不得作为机构 ID、管理员根、投票阈值 key、提案发起机构或费用路由 key。
 
@@ -51,7 +51,7 @@
 
 - 全链费用严格落入既定五类；没有 `WeightToFee` 费用。
 - 机构操作由 `actor_cid_number` 对应费用账户支付，失败即失败，不回落签名者。
-- `VoteFlat` 只用于实际投票等个人签名投票交易，由签名者支付。
+- 固定 1 元投票费只用于实际投票等个人签名投票交易，由签名者支付。
 - Fullnode 不是机构，不进入机构费用路由。
 - 未分类 call 一律拒绝。
 
@@ -84,7 +84,7 @@
 - 机构操作解析唯一 `actor_cid_number`。
 - 机构费用账户由 CID + `InstitutionFee` 唯一解析。
 - 不允许任何付费方回落。
-- `cast_*` 等真实投票保持签名者 `VoteFlat`。
+- `cast_*` 等真实投票统一路由为 `FeeRoute::Vote { payer: signer }`。
 - Fullnode 保持非机构分类。
 
 ### 第 3 步：执行期直接扣费与 ED 规则统一
@@ -146,7 +146,7 @@
 - 所有协议账户关闭失败；自定义账户关闭后机构、协议账户、admins、岗位和阈值保持不变。
 - OnChina 真实页面、CitizenApp 展示和 CitizenWallet 扫码解码全部与链上状态一致。
 
-第 1 步全部通过后停止，等待用户确认再进入第 2 步。
+第 1 步自动验收完成后，用户已明确要求继续执行第 2 步；缺少专用管理员私钥导致的真实签名验收不构成恢复旧协议或伪造私钥的授权。
 
 ## 第 1 步执行与验收记录（2026-07-15）
 
@@ -157,7 +157,7 @@
 - 普通机构、国家储委会、省储行的协议账户集合由 `institution_constraints` 单源确定；协议账户不可关闭，自定义账户可关闭；零初始余额允许，非零低于 ED 拒绝。
 - 删除旧单账户映射、机构主账户身份/授权字段、机构生命周期与重复默认标记；数据库启动代码不保留旧列迁移兼容。
 - 机构账户派生统一命名为 `derive_institution_account`；runtime `MODULE_TAG` 和 owner data 统一为 `multisig`，旧标签只在拒绝测试中作为非法输入出现。
-- 第 2 步费用分类和付款方路由未实施；第 4 步人口快照与提案清理未实施。
+- 本记录生成时第 2 步尚未实施；其后已按下方第 2 步记录完成。第 4 步人口快照与提案清理仍未实施。
 
 ### 自动验收
 
@@ -182,4 +182,36 @@
 
 - 尚未执行“注册局管理员真实扫码签名后发起创建/低于 ED/非管理员/CID 与账户不匹配/账户关闭”的端到端交易与真实页面联动。
 - 原因：当前创世管理员只有固定公钥，仓库和自动化环境没有对应私钥；不得伪造管理员、读取用户 Keychain 或要求用户在聊天中提供私钥。
-- 完成方式：由用户在本机解锁并授权一个专用测试管理员钱包参与扫码，或另行明确批准仅用于验收的测试创世管理员方案。该项通过前不进入第 2 步。
+- 完成方式：由用户在本机解锁并授权一个专用测试管理员钱包参与扫码，或另行明确批准仅用于验收的测试创世管理员方案。用户已明确要求在不伪造私钥的前提下继续第 2 步，因此该环境限制保留为最终真实验收项。
+
+## 第 2 步执行记录（2026-07-15）
+
+### 已完成
+
+- 在 `primitives::fee_policy` 建立唯一 `FeeRoute<AccountId, Balance>`，把五类费用与确切付款账户合并为同一协议类型；删除 `FeeChargeKind`、`CallFeeKind`、`CallFeePayer` 和 runtime 分类器/付款提取器双真源。
+- `RuntimeFeeRouter` 对 `RuntimeCall` 穷尽映射；各 pallet 隐藏 `__Ignore` 分支只允许显式 `Reject`，新增 runtime pallet 仍需在外层 match 中显式分类。
+- 机构操作严格使用 `actor_cid_number + admins 外层签名 + InstitutionFee`。费用账户、公私权归属、正反索引、具体机构账户任一不一致即 `Reject`，不允许改扣管理员。
+- 机构发起提案统一为最低链上交易费 0.1 元；只有实际 `cast_*` / 表决动作由签名者支付固定 1 元投票费。
+- Fullnode 绑定/重绑奖励钱包保持非机构操作，由 Fullnode 自己的签名账户支付 0.1 元。
+- 链下清算批次按多付款人模型归为 `OffchainFeePayer::BatchItemPayers`：每个付款公民从其 L2 存款支付 item 费用；收款方清算行费用账户是收款账户，不再错误标成单一付款账户，也不另收链上 gas。
+- `TRANSACTION_TIP` 固定为零；Rust 统一签名构造、CitizenApp 热签和 CitizenWallet 冷签尾一致，runtime 与公民钱包均拒绝非零 tip。
+- `WeightToFee`、`LengthToFee` 固定为零；node `fee_blockFees` 只统计 `FeePaid.fee`，不再把 FRAME tip 事件拼接为第二口径。
+- `developer_direct_upgrade` 显式增加 `actor_cid_number`，runtime 与 node call 编码、构建、提交和测试同步；管理员签名仍是标准 extrinsic origin，不建立第二授权真源。
+- CitizenApp 已把清算行绑定错误的 1 元提示修正为普通链上操作 0.1 元，并修正资产关闭提案/实际投票的费用说明；CitizenWallet 增加非零 tip 拒签回归。
+- `onchain-issuance` 的 10 个公开 `propose_*` 仍是直接返回成功的业务占位，统一路由为 `Reject`；在发行模块真正创建投票并实现资产执行前，禁止扣费后返回无业务结果。
+- 更新 primitives、onchain、跨模块、runtime-upgrade、node、统一协议、统一命名文档，并清理旧费用类型和回落描述。
+
+### 自动验收
+
+- Rust 核心回归：`chain-signing` 4、`citizenchain` 43、`onchain` 20、`offchain` 24、`primitives` 71 加 2 组金标、`runtime-upgrade` 19，均 0 失败。
+- `cargo test -p node -p onchina`：退出码 0；node 270、OnChina 131，均 0 失败。
+- CitizenApp：666 通过、5 项环境性跳过，0 失败；`flutter analyze` 0 问题。
+- CitizenWallet：166 通过、0 失败；`flutter analyze` 0 问题。
+- runtime `runtime-benchmarks` 特性编译、node 前端 production build、OnChina 前端 production build、Rust 格式与 `git diff --check` 均通过。
+- Rust 整体普通 Clippy 通过；`-D warnings` 被未改动的 `runtime/build.rs` 4 处既有 `expect()` 拦截，本步没有把无关构建脚本纳入修改范围。本步新增代码自身发现的常量断言和返回类型复杂度告警已清理。
+- 可执行源码中的旧费用类型、双分类器、付款方回落、治理统一 1 元、免费可收 tip、RPC 叠加 FRAME tip 等残留扫描为 0；生产 runtime 与 onchain 测试 mock 的 `WeightToFee`、`LengthToFee` 均固定为零；白皮书已同步并重新生成节点本地文档产物。
+
+### 真实运行态边界
+
+- runtime 测试状态机已直接验证：机构操作只扣费用账户、管理员余额不变；删除费用账户映射后返回 `InvalidTransaction::Call`，即使管理员有余额也不回落。
+- 真实管理员扫码交易仍受第 1 步所述私钥环境限制；不得以伪造管理员或临时兼容路径替代。

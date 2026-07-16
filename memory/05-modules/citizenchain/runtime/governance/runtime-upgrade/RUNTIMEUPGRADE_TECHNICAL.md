@@ -154,11 +154,14 @@ Runtime 配置位置：
 - 链进入运行期后此调用永久失效，升级必须走 `propose_runtime_upgrade` 联合投票。
 
 流程：
-1. 校验 `DeveloperUpgradeOrigin`（`EnsureNrcAdmin`）。
-2. 校验 `DeveloperUpgradeCheck::is_enabled()`，关闭则拒绝（`DeveloperUpgradeDisabled`）。
-3. 校验 `code` 非空。
-4. 计算 `code_hash`，调用 `RuntimeCodeExecutor::execute_runtime_code`，同样原子暂存 PoW 参数并写审计。
-5. 发出 `DeveloperDirectUpgradeExecuted` 事件。
+1. 交易载荷显式携带 `actor_cid_number`，不得用主账户或本地登录态代替机构身份。
+2. 校验 `DeveloperUpgradeOrigin` 后，要求 actor CID 的机构码为 NRC，且外层签名者属于 `AdminAccounts[actor_cid_number].admins`。
+3. 校验 `DeveloperUpgradeCheck::is_enabled()`，关闭则拒绝（`DeveloperUpgradeDisabled`）。
+4. 校验 `code` 非空。
+5. 计算 `code_hash`，调用 `RuntimeCodeExecutor::execute_runtime_code`，同样原子暂存 PoW 参数并写审计。
+6. 发出 `DeveloperDirectUpgradeExecuted` 事件。
+
+费用：开发直升是国家储委会机构操作，由该 `actor_cid_number` 的唯一费用账户支付 0.1 元；管理员钱包只提供外层签名，不允许作为回落付款人。
 
 权重：使用 `frame_system::set_code()` 的系统权重。
 

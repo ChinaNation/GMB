@@ -18,7 +18,7 @@
 //! - `submit_offchain_batch` 的 `institution_account` = 收款方清算行主账户
 //! - 同一批次所有 item 的 `recipient_bank` 必须 == `institution_account`
 //! - 提交者 = 收款方清算行的某个激活管理员
-//! - 链上 gas 由费用路由按 `actor_cid_number` 定位费用账户扣取
+//! - 本批次不另收链上 gas；每个 item 的付款公民从其 L2 存款支付链下清算费
 //!
 //! 节点 packer 收齐多笔 → 提交 `submit_offchain_batch` 走到这里。
 
@@ -187,7 +187,8 @@ fn execute_single_item<T: Config>(
     //
     //    `item.tx_id` 是 `H256`,链上 Storage 用 `T::Hash`(Substrate 默认等于
     //    H256)。通过 SCALE 编解码跨类型转换,与 frame_system 默认配置兼容。
-    let province_shard = province_shard_from_bank::<T>(&item.payer_bank).unwrap_or([b'L', b'N']);
+    let province_shard =
+        province_shard_from_bank::<T>(&item.payer_bank).ok_or(Error::<T>::InstitutionMismatch)?;
     let tx_hash: T::Hash = T::Hash::decode(&mut &item.tx_id.as_bytes()[..])
         .map_err(|_| Error::<T>::InvalidL3Signature)?;
     ensure!(

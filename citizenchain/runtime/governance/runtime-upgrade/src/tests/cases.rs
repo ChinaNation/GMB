@@ -237,6 +237,7 @@ fn developer_direct_upgrade_allows_nrc_admin_when_enabled() {
     new_test_ext().execute_with(|| {
         assert_ok!(RuntimeUpgrade::developer_direct_upgrade(
             RuntimeOrigin::signed(nrc_admin()),
+            nrc_cid(),
             code_ok(),
             pow_difficulty::PowDifficultyParams::genesis_default(),
         ));
@@ -252,6 +253,7 @@ fn developer_direct_upgrade_fails_when_disabled() {
         assert_noop!(
             RuntimeUpgrade::developer_direct_upgrade(
                 RuntimeOrigin::signed(nrc_admin()),
+                nrc_cid(),
                 code_ok(),
                 pow_difficulty::PowDifficultyParams::genesis_default(),
             ),
@@ -266,6 +268,7 @@ fn developer_direct_upgrade_rejects_prc_admin() {
         assert_noop!(
             RuntimeUpgrade::developer_direct_upgrade(
                 RuntimeOrigin::signed(prc_admin()),
+                nrc_cid(),
                 code_ok(),
                 pow_difficulty::PowDifficultyParams::genesis_default(),
             ),
@@ -280,6 +283,7 @@ fn developer_direct_upgrade_rejects_non_nrc_admin() {
         assert_noop!(
             RuntimeUpgrade::developer_direct_upgrade(
                 RuntimeOrigin::signed(outsider()),
+                nrc_cid(),
                 code_ok(),
                 pow_difficulty::PowDifficultyParams::genesis_default(),
             ),
@@ -295,6 +299,7 @@ fn developer_direct_upgrade_rejects_empty_code() {
         assert_noop!(
             RuntimeUpgrade::developer_direct_upgrade(
                 RuntimeOrigin::signed(nrc_admin()),
+                nrc_cid(),
                 empty_code,
                 pow_difficulty::PowDifficultyParams::genesis_default(),
             ),

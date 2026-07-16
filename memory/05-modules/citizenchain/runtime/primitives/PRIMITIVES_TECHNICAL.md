@@ -79,7 +79,8 @@
 |------|-----|-----------|
 | ONCHAIN_FEE_RATE | 0.1% | 链上交易费率 |
 | ONCHAIN_MIN_FEE | 10 分 | 最低 0.1 元 |
-| VOTE_FLAT_FEE | 100 分 | 投票/治理统一价 1 元/次 |
+| TRANSACTION_TIP | 0 | tip 不属于交易费，任何非零 tip 拒绝 |
+| VOTE_FLAT_FEE | 100 分 | 实际投票统一价 1 元/票 |
 | OFFCHAIN_FEE_RATE_MIN/MAX | 0.01% / 0.1% | 清算行个体费率上下限 |
 | OFFCHAIN_MIN_FEE | 1 分 | 链下最低 0.01 元 |
 | OPERATIONAL_FEE_MULTIPLIER | 1 | 运营类不额外加价 |
@@ -87,12 +88,16 @@
 | ONCHAIN_FEE_NRC_PERCENT | 10% | 国家储委会分成 |
 | ONCHAIN_FEE_SAFETY_FUND_PERCENT | 10% | 安全基金 SAFETY_FUND_ACCOUNT |
 
-**5 类交易费用模型**(由 `runtime/src/configs/mod.rs::RuntimeFeeKindClassifier` 强制):
-- 投票交易费 VoteFlat(`VOTE_FLAT_FEE = 1 元`):VotingEngine 手动重试/取消 + InternalVote/JointVote 投票 + 业务 pallet propose_X / cleanup_X + PublicManage/PrivateManage 注册机构 CID + ResolutionIssuance::propose_resolution_issuance + ResolutionDestro::propose_destroy + CitizenIdentity + FullnodeIssuance bind/rebind + OnchainIssuance propose_X。
-- 链上交易费 OnchainAmount(`max(amount × 0.1%, 0.1 元)`):Balances 明确金额调用 + OffchainTransaction deposit/withdraw。治理提案内的真实执行手续费由业务 pallet 在执行阶段按同一公式另行扣取。
-- 链下交易费 OffchainFee:OffchainTransaction::submit_offchain_batch_v2 标记为链下清算费，实际手续费在清算结算阶段按 `OFFCHAIN_*` 转账，不进入链上 80/10/10 分账。
-- 免费 Free:System / Timestamp / CitizenIssuance / ResolutionIssuance 维护型调用 / VotingEngine::finalize_proposal / OffchainTransaction::set_max_l2_fee_rate / Assets 编译期兜底。ProvincialBankInterest 已无公开 Call，只在年度边界 finalize 自动执行。
-- 未知 Unknown:未归入前 4 类的调用拒绝交易,不入块。
+**全链唯一五类费用路由**由 `fee_policy::FeeRoute<AccountId, Balance>` 定义，
+`runtime/src/configs.rs::RuntimeFeeRouter` 负责把 `RuntimeCall` 穷尽映射到该类型：
+
+- `Free`：框架固有、Root 回调或内部维护调用；外层不扣费。
+- `Onchain { transaction_amount, payer }`：`max(round(amount × 0.1%), 0.1 元)`。机构提案和机构操作的 `payer` 必须是 actor CID 的唯一费用账户；普通用户和 Fullnode 操作由签名者支付。
+- `Offchain { fee_amount, payer: OffchainFeePayer::BatchItemPayers }`：链下清算批次可有多个付款公民；每个 item 的付款公民从其 L2 存款支付对应费用，外层不得重复扣款，也不得把收款方机构费用账户误当付款人。
+- `Vote { payer }`：只允许实际 `cast_*` / 表决动作，固定 1 元，由投票签名者支付；发起提案不是投票。
+- `Reject`：未分类、未开放、管理员授权失败、CID/账户不匹配或费用账户解析失败的调用一律拒绝。
+
+收费分支的 `payer` 是必填字段，不存在缺省付款人或回落到签名者。`WeightToFee`、`LengthToFee` 均为零，不产生五类之外的框架费用。
 
 ### 2.7 投票治理
 | 常量 | 值 | 说明 |

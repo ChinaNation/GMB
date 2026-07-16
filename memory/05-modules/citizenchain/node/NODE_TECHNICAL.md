@@ -187,7 +187,7 @@
   - `node/src/governance/runtime_upgrade/commands.rs`：Tauri 命令入口，保留 `build_propose_upgrade_request`、`submit_propose_upgrade`、`build_developer_upgrade_request`、`submit_developer_upgrade` 命令名。
   - `node/src/governance/runtime_upgrade/call_data.rs`：RuntimeUpgrade pallet call_data 编码，只承载 `propose_runtime_upgrade` 与 `developer_direct_upgrade`。
   - `node/src/governance/runtime_upgrade/signing.rs`：Runtime WASM 大 payload 的 QR 签名请求构建，通用签名校验仍复用 `node/src/governance/signing.rs`。
-  - 开发升级命令会校验签名公钥属于本机已激活国家储委会管理员，避免绕过前端直接调用 Tauri 命令。
+  - 开发升级命令从治理概览读取国家储委会 `cid_number`，构造 `developer_direct_upgrade(actor_cid_number, code, pow_params)`；签名公钥还必须属于该 CID 的已激活 `admins`，避免绕过前端直接调用 Tauri 命令。
 - 前端实现：
   - `node/frontend/governance/runtime-upgrade/ProtocolUpgradeProposalPage.tsx`：国家储委会详情页“协议升级”，提交运行期协议升级提案，进入联合投票。
   - `node/frontend/governance/runtime-upgrade/DeveloperUpgradePage.tsx`：国家储委会详情页“开发升级”，只使用当前国家储委会已激活管理员发起开发期直升。
@@ -198,7 +198,7 @@
   - 设置页不再保留任何开发升级入口或 `settings/developer-upgrade` 代码。
 - 当前边界：
   - 第 1 步只调整 node 前后端入口、目录收口和 node 侧开发升级管理员校验。
-  - node 端协议升级业务调用只提交 `reason + code`，不获取人口快照、不透传联合签名、不保存投票状态。
+  - node 端协议升级业务调用显式携带国家储委会 `actor_cid_number`，并提交 `reason + code`；不获取人口快照、不透传联合签名、不保存投票状态。
 
 ## 8. 桌面端更新边界
 
@@ -366,4 +366,4 @@ proposal。三层规则互不替代。
 1. 固定平均六分钟已进入 `pow-difficulty` 版本化参数和 NodeGuard 复算；参数值只能随 runtime 升级原子变更，`CurrentDifficulty` 只能由算法推进。
 2. 节点层已有 `home::sync_guard` 判定单元测试；Substrate 服务级功能验证仍主要依赖集成测试。
 3. `BuildSpec` 子命令已标注废弃（2026-04-01 后移除），使用 `ExportChainSpec` 替代。
-4. `fee_blockFees` RPC 已修复为同时累加 `FeePaid.fee`（base_fee）和 `TransactionFeePaid.tip`。
+4. `fee_blockFees` RPC 只累计 `FeePaid.fee`；tip 的唯一协议值是 0，不读取 FRAME `TransactionFeePaid.tip` 拼接第二套口径。

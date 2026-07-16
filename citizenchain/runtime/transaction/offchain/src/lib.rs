@@ -466,8 +466,8 @@ pub mod pallet {
         /// - 提交者 = `actor_cid_number` 的管理员(已解密私钥,自动签)
         /// - 批次内所有 item 的 `recipient_bank` 必须等于 `institution_account`
         ///   (`payer_bank` 可不同,即同一收款方清算行可一次代收来自不同付款方清算行的多笔)
-        /// - 链上 gas 由费用路由按 `actor_cid_number` 定位费用账户扣取
-        ///   (即 fee 收入和 gas 支出都由同一收款方清算行的费用账户承担,自给自足)
+        /// - 本调用属于链下清算费类别，不另收链上 gas；每个 item 的付款公民
+        ///   从其 L2 存款支付 `fee_amount`，手续费进入收款方清算行费用账户
         ///
         /// 安全模型:链上验签的核心是 L3 用户对 PaymentIntent 的 sr25519 签名,
         /// PaymentIntent 内含 payer_bank 字段;链上凭 L3 签名授权 mutate

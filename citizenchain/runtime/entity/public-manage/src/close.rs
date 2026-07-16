@@ -216,7 +216,8 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
     let mut transferred = BalanceOf::<T>::zero();
     let mut fee = BalanceOf::<T>::zero();
     if !balance.is_zero() {
-        fee = onchain::calculate_onchain_fee(balance.saturated_into()).saturated_into();
+        fee = primitives::fee_policy::calculate_onchain_fee(balance.saturated_into())
+            .saturated_into();
         let transfer_amount = balance.checked_sub(&fee).unwrap_or_else(Zero::zero);
         if !fee.is_zero() {
             let fee_imbalance = T::Currency::withdraw(

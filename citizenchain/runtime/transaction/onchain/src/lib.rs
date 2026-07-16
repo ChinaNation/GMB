@@ -11,9 +11,8 @@ use frame_support::traits::{
 use frame_support::unsigned::TransactionValidityError;
 use pallet_transaction_payment::{Config as TxPaymentConfig, OnChargeTransaction, TxCreditHold};
 use sp_runtime::{
-    traits::{DispatchInfoOf, PostDispatchInfoOf, SaturatedConversion, Saturating, Zero},
+    traits::{DispatchInfoOf, PostDispatchInfoOf, SaturatedConversion, Zero},
     transaction_validity::InvalidTransaction,
-    RuntimeDebug,
 };
 use sp_std::{marker::PhantomData, prelude::*};
 
@@ -81,8 +80,7 @@ pub mod pallet {
     #[pallet::generate_deposit(pub(crate) fn deposit_event)]
     pub enum Event<T: Config> {
         /// 交易手续费已收取。
-        /// NOTE: `fee` 只包含基础手续费，不包含 tip；调整 tip 机制时必须同步
-        /// `ONCHAIN_TECHNICAL.md` 第 11 节以及下游 RPC / dashboard 统计口径。
+        /// `tip` 在协议层永久为零，因此 `fee` 就是本笔完整链上交易费或投票费。
         FeePaid { who: T::AccountId, fee: u128 },
         /// 手续费分账份额因无法安全入账而被销毁。
         FeeShareBurnt { reason: BurnReason, amount: u128 },
@@ -162,41 +160,15 @@ pub struct OnchainFeeRouter<T, Currency, AuthorFinder, NrcProvider, SafetyFundPr
     PhantomData<(T, Currency, AuthorFinder, NrcProvider, SafetyFundProvider)>,
 );
 
-/// 交易收费分类：
-/// - VoteFlat: 投票 / 治理操作固定 1 元
-/// - OnchainAmount: 链上资金交易，按交易金额 × 0.1%，最低 0.1 元
-/// - OffchainFee: 链下清算手续费，手续费金额由清算模块执行，不进入链上分账
-/// - Free: 系统调用 / 自动化调用免费
-/// - Unknown: 未归入上述四类，直接拒绝，避免隐性漏收费
-#[derive(Clone, Copy, Eq, PartialEq, RuntimeDebug)]
-pub enum FeeChargeKind<Balance> {
-    VoteFlat,
-    OnchainAmount(Balance),
-    OffchainFee(Balance),
-    Free,
-    Unknown,
-}
-
-/// 统一抽象：由 Runtime 提供"交易费用分类器"。
-pub trait CallFeeKind<AccountId, Call, Balance> {
-    /// 将具体交易显式归入五类费用模型。
-    /// 这里故意不和 weight fee/length fee 绑定，避免 runtime 规则被默认手续费模型覆盖。
-    fn fee_kind(who: &AccountId, call: &Call) -> FeeChargeKind<Balance>;
-}
-
-/// 可选扣费来源：
-/// - None：沿用默认交易提交者扣费
-/// - Some(account)：从指定账户扣费
-pub trait CallFeePayer<AccountId, Call> {
-    /// 返回代付账户；若为 None，则仍由交易提交者本人扣费。
-    /// 该扩展点只负责"选择谁付款"，不改变手续费金额计算规则。
-    fn fee_payer(who: &AccountId, call: &Call) -> Option<AccountId>;
-}
-
-impl<AccountId, Call> CallFeePayer<AccountId, Call> for () {
-    fn fee_payer(_who: &AccountId, _call: &Call) -> Option<AccountId> {
-        None
-    }
+/// Runtime 唯一路由入口。
+///
+/// 五类协议及确切付款账户只使用 `primitives::fee_policy::FeeRoute`；本 trait
+/// 只让具体 runtime 把 `RuntimeCall` 映射到该唯一类型，不再拆分分类器和付款提取器。
+pub trait CallFeeRoute<AccountId, Call, Balance> {
+    fn fee_route(
+        who: &AccountId,
+        call: &Call,
+    ) -> primitives::fee_policy::FeeRoute<AccountId, Balance>;
 }
 
 /// 统一抽象：由 Runtime 注入国家储委会收款账户来源。
@@ -220,29 +192,26 @@ pub trait SafetyFundAccountProvider<AccountId> {
 }
 
 /// 统一手续费收取适配器：
-/// - 投票 / 治理操作固定 `VOTE_FLAT_FEE`
+/// - 只有实际投票固定收取 `VOTE_FLAT_FEE`
+/// - 机构操作按 actor CID 的唯一费用账户收取最低链上交易费
 /// - 链上资金交易按 `ONCHAIN_FEE_RATE` 和 `ONCHAIN_MIN_FEE` 计算
 /// - 链下清算手续费由清算模块执行，不重复进入链上手续费分账
 /// - 免费调用不扣基础费
-pub struct OnchainChargeAdapter<Currency, Router, FeeKindExtractor, FeePayerExtractor>(
-    PhantomData<(Currency, Router, FeeKindExtractor, FeePayerExtractor)>,
+pub struct OnchainChargeAdapter<Currency, Router, FeeRouteProvider>(
+    PhantomData<(Currency, Router, FeeRouteProvider)>,
 );
 
-impl<T, Currency, Router, FeeKindExtractor, FeePayerExtractor> OnChargeTransaction<T>
-    for OnchainChargeAdapter<Currency, Router, FeeKindExtractor, FeePayerExtractor>
+impl<T, Currency, Router, FeeRouteProvider> OnChargeTransaction<T>
+    for OnchainChargeAdapter<Currency, Router, FeeRouteProvider>
 where
     T: TxPaymentConfig + fullnode_issuance::Config + pallet::Config,
     Currency: Balanced<T::AccountId> + 'static,
     Router: OnUnbalanced<Credit<T::AccountId, Currency>>,
-    FeeKindExtractor:
-        CallFeeKind<T::AccountId, T::RuntimeCall, <Currency as Inspect<T::AccountId>>::Balance>,
-    FeePayerExtractor: CallFeePayer<T::AccountId, T::RuntimeCall>,
+    FeeRouteProvider:
+        CallFeeRoute<T::AccountId, T::RuntimeCall, <Currency as Inspect<T::AccountId>>::Balance>,
     T::AccountId: Clone,
 {
-    type LiquidityInfo = Option<(
-        Credit<T::AccountId, Currency>,
-        Credit<T::AccountId, Currency>,
-    )>;
+    type LiquidityInfo = Option<Credit<T::AccountId, Currency>>;
     type Balance = <Currency as Inspect<T::AccountId>>::Balance;
 
     fn withdraw_fee(
@@ -252,37 +221,31 @@ where
         _fee_with_tip: Self::Balance,
         tip: Self::Balance,
     ) -> Result<Self::LiquidityInfo, TransactionValidityError> {
-        // 这里完全忽略 pallet-transaction-payment 传入的 _fee_with_tip，
-        // 改为执行本模块自定义的五类费用模型。
-        let fee_with_tip =
-            custom_fee_with_tip::<T, Currency, FeeKindExtractor>(who, call, dispatch_info, tip)?;
-        if fee_with_tip.is_zero() {
+        // 框架金额不参与制度收费，实际金额与付款账户只能来自唯一 FeeRoute。
+        let Some((payer, fee)) =
+            charge_details::<T, Currency, FeeRouteProvider>(who, call, dispatch_info, tip)?
+        else {
             return Ok(None);
-        }
-        let payer = FeePayerExtractor::fee_payer(who, call).unwrap_or_else(|| who.clone());
+        };
 
-        // 扣费使用 Exact，避免"只扣到一部分也继续执行"。
+        // Exact + Preserve：要么从明确账户完整扣款并保留 ED，要么整笔交易失败。
         let credit = Currency::withdraw(
             &payer,
-            fee_with_tip,
+            fee,
             Precision::Exact,
             Preservation::Preserve,
             Fortitude::Polite,
         )
         .map_err(|_| InvalidTransaction::Payment)?;
 
-        // tip 会单独拆出来，但后续仍和基础费一起交给 Router，
-        // 这样可以保留 tip 语义，同时复用统一分账路径。
-        let (tip_credit, inclusion_fee) = credit.split(tip);
-
         // 发出链上手续费事件，供手机端 / 浏览器 / node 读取真实手续费。
-        let base_fee: u128 = fee_with_tip.saturating_sub(tip).saturated_into();
+        let paid_fee: u128 = fee.saturated_into();
         pallet::Pallet::<T>::deposit_event(pallet::Event::FeePaid {
             who: payer.clone(),
-            fee: base_fee,
+            fee: paid_fee,
         });
 
-        Ok(Some((inclusion_fee, tip_credit)))
+        Ok(Some(credit))
     }
 
     fn can_withdraw_fee(
@@ -292,15 +255,12 @@ where
         _fee_with_tip: Self::Balance,
         tip: Self::Balance,
     ) -> Result<(), TransactionValidityError> {
-        // 预检查与正式扣费保持同一套金额计算逻辑，
-        // 否则容易出现"预检查能过、正式扣费失败"的行为偏差。
-        let fee_with_tip =
-            custom_fee_with_tip::<T, Currency, FeeKindExtractor>(who, call, dispatch_info, tip)?;
-        if fee_with_tip.is_zero() {
+        let Some((payer, fee)) =
+            charge_details::<T, Currency, FeeRouteProvider>(who, call, dispatch_info, tip)?
+        else {
             return Ok(());
-        }
-        let payer = FeePayerExtractor::fee_payer(who, call).unwrap_or_else(|| who.clone());
-        match Currency::can_withdraw(&payer, fee_with_tip) {
+        };
+        match Currency::can_withdraw(&payer, fee) {
             frame_support::traits::tokens::WithdrawConsequence::Success => Ok(()),
             _ => Err(InvalidTransaction::Payment.into()),
         }
@@ -316,10 +276,9 @@ where
     ) -> Result<(), TransactionValidityError> {
         // PROTOCOL: no post-dispatch refund.
         // 本制度按五类费用模型固定收费，协议上明确"不做执行后退款"。
-        // `_corrected_fee_with_tip` 和 `_tip` 仅来自 transaction-payment 标准接口，
-        // 本实现只对 `withdraw_fee` 已扣出的 credit 做最终分账。
-        if let Some((fee_credit, tip_credit)) = liquidity_info {
-            Router::on_unbalanceds(Some(fee_credit).into_iter().chain(Some(tip_credit)));
+        // `_corrected_fee_with_tip` 和 `_tip` 仅为框架接口参数；tip 已在预检阶段禁用。
+        if let Some(fee_credit) = liquidity_info {
+            Router::on_unbalanced(fee_credit);
         }
         Ok(())
     }
@@ -335,8 +294,8 @@ where
     }
 }
 
-impl<T, Currency, Router, FeeKindExtractor, FeePayerExtractor> TxCreditHold<T>
-    for OnchainChargeAdapter<Currency, Router, FeeKindExtractor, FeePayerExtractor>
+impl<T, Currency, Router, FeeRouteProvider> TxCreditHold<T>
+    for OnchainChargeAdapter<Currency, Router, FeeRouteProvider>
 where
     T: TxPaymentConfig,
     Currency: Balanced<T::AccountId> + 'static,
@@ -469,63 +428,52 @@ fn emit_fee_share_burn<T: pallet::Config>(reason: pallet::BurnReason, amount: u1
     pallet::Pallet::<T>::deposit_event(pallet::Event::FeeShareBurnt { reason, amount });
 }
 
-fn custom_fee_with_tip<T, Currency, FeeKindExtractor>(
+type ChargeDetails<AccountId, Balance> = Option<(AccountId, Balance)>;
+
+fn charge_details<T, Currency, FeeRouteProvider>(
     who: &T::AccountId,
     call: &T::RuntimeCall,
     _dispatch_info: &DispatchInfoOf<T::RuntimeCall>,
     tip: <Currency as Inspect<T::AccountId>>::Balance,
-) -> Result<<Currency as Inspect<T::AccountId>>::Balance, TransactionValidityError>
+) -> Result<
+    ChargeDetails<T::AccountId, <Currency as Inspect<T::AccountId>>::Balance>,
+    TransactionValidityError,
+>
 where
     T: TxPaymentConfig,
     Currency: Balanced<T::AccountId>,
-    FeeKindExtractor:
-        CallFeeKind<T::AccountId, T::RuntimeCall, <Currency as Inspect<T::AccountId>>::Balance>,
+    FeeRouteProvider:
+        CallFeeRoute<T::AccountId, T::RuntimeCall, <Currency as Inspect<T::AccountId>>::Balance>,
 {
-    // Runtime 必须把每个调用显式归入五类费用模型；
-    // Unknown 直接拒绝，防止新增交易绕过收费制度。
-    let base_fee_u128 = match FeeKindExtractor::fee_kind(who, call) {
-        FeeChargeKind::VoteFlat => primitives::fee_policy::VOTE_FLAT_FEE,
-        FeeChargeKind::OnchainAmount(amount) => {
-            // 链上资金交易才按金额套 0.1% 费率。
-            let amount_u128: u128 = amount.saturated_into();
-            calculate_onchain_fee(amount_u128)
+    // tip 不属于交易费；非零 tip 在入池预检和区块执行中都直接拒绝。
+    if !tip.is_zero() {
+        return Err(InvalidTransaction::Payment.into());
+    }
+
+    use primitives::fee_policy::FeeRoute;
+    match FeeRouteProvider::fee_route(who, call) {
+        FeeRoute::Onchain {
+            transaction_amount,
+            payer,
+        } => {
+            // 只有链上交易费按金额套 0.1% 费率；机构普通操作传零金额，固定落最低费。
+            let amount_u128: u128 = transaction_amount.saturated_into();
+            let fee_u128 = primitives::fee_policy::calculate_onchain_fee(amount_u128);
+            let fee = fee_u128.saturated_into();
+            Ok(Some((payer, fee)))
         }
-        FeeChargeKind::OffchainFee(_fee) => {
-            // 链下清算手续费已经在 offchain-transaction 结算执行时转账，
-            // 这里不再进入链上手续费 80/10/10 分账，避免重复扣费和错分账。
-            0
+        FeeRoute::Vote { payer } => {
+            let fee = primitives::fee_policy::VOTE_FLAT_FEE.saturated_into();
+            Ok(Some((payer, fee)))
         }
-        FeeChargeKind::Free => 0,
-        FeeChargeKind::Unknown => return Err(InvalidTransaction::Call.into()),
-    };
-    let base_fee: <Currency as Inspect<T::AccountId>>::Balance = base_fee_u128.saturated_into();
-    Ok(base_fee.saturating_add(tip))
-}
-
-/// 按交易金额计算链上手续费（对外公开，供其他 pallet 复用）。
-///
-/// 公式：`max(amount × ONCHAIN_FEE_RATE, ONCHAIN_MIN_FEE)`
-/// 返回值单位为"分"。
-pub fn calculate_onchain_fee(amount: u128) -> u128 {
-    let by_rate = mul_perbill_round(amount, primitives::fee_policy::ONCHAIN_FEE_RATE);
-    by_rate.max(primitives::fee_policy::ONCHAIN_MIN_FEE)
-}
-
-fn mul_perbill_round(amount: u128, rate: sp_runtime::Perbill) -> u128 {
-    // 链上精度为"分"，这里做四舍五入到分。
-    const PERBILL_DENOMINATOR: u128 = 1_000_000_000;
-    let parts: u128 = rate.deconstruct() as u128;
-    let whole = amount / PERBILL_DENOMINATOR;
-    let remainder = amount % PERBILL_DENOMINATOR;
-
-    // 先拆成"整分量"和"小数尾量"分别计算，避免 `amount * parts`
-    // 在极大金额下先溢出再饱和，导致费率结果被错误压扁。
-    // 按 Perbill 约束 parts 不超过分母，因此 whole * parts <= amount；
-    // 这里仍用饱和乘法防御未来改动破坏该约束。
-    let whole_component = whole.saturating_mul(parts);
-    let remainder_component =
-        (remainder * parts).saturating_add(PERBILL_DENOMINATOR / 2) / PERBILL_DENOMINATOR;
-    whole_component.saturating_add(remainder_component)
+        FeeRoute::Offchain { .. } => {
+            // 链下费用由 offchain 执行器按同一个路由结果和批次规则收取，
+            // 不进入链上 80/10/10 分账，当前适配器不得重复扣款。
+            Ok(None)
+        }
+        FeeRoute::Free => Ok(None),
+        FeeRoute::Reject => Err(InvalidTransaction::Call.into()),
+    }
 }
 
 #[cfg(test)]

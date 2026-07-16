@@ -69,7 +69,7 @@ fn amount_yuan_to_fen(amount_yuan: f64) -> Result<u128, String> {
 }
 
 fn calculate_transfer_fee(amount_fen: u128) -> u128 {
-    onchain::calculate_onchain_fee(amount_fen)
+    primitives::fee_policy::calculate_onchain_fee(amount_fen)
 }
 
 fn validate_transfer_remark(remark: &str) -> Result<(), String> {

@@ -5,9 +5,8 @@ import GlowCard from '../components/GlowCard'
 import QRScannerModal from '../components/QRScannerModal'
 import { buildSquareActionSignRequest, parseSignResponseSignature } from '../lib/qr-v1'
 
-type MembershipLevel = 'freedom' | 'democracy' | 'voting' | 'candidate'
-// 链上身份档（与会员档解耦）：访客身份含自由/民主两档会员。
-type IdentityLevel = 'visitor' | 'voting' | 'candidate'
+// 会员三档（ADR-036，与身份彻底解耦）：任意身份可订任意档，全组合放行。
+type MembershipLevel = 'freedom' | 'democracy' | 'spark'
 type TabKey = 'subscribe' | 'cancel'
 type Tone = 'error' | 'info' | 'success'
 // 支付方式：银行卡（Stripe 自动续订）或 USDC（预付固定时长、无自动续）。
@@ -18,12 +17,12 @@ type PrepaidDuration = 'quarter' | 'year'
 
 interface Plan {
   level: MembershipLevel
-  requiredIdentity: IdentityLevel
   name: string
   price: string
   /// 月费（分），供 USDC 季/年金额（月数×月费，无折扣）计算。
   priceCents: number
-  identity: string
+  /// 会员权益之一 = 单个聊天文件大小上限（ADR-036）。
+  chatFile: string
   dynamic: string
   article: string
 }
@@ -56,120 +55,47 @@ interface Signing {
 const plans: Plan[] = [
   {
     level: 'freedom',
-    requiredIdentity: 'visitor',
     name: '自由会员',
     price: '$2.99 / 月',
     priceCents: 299,
-    identity: '任意钱包账户',
+    chatFile: '聊天文件：单个 ≤ 10MB',
     dynamic: '动态：300 字、9 张标清图片、1 分钟标清视频',
     article: '文章：20,000 字、50 张标清图片、1 张高清首图',
   },
   {
-    // 民主会员：访客身份的 $9.99 高权益档，权益对齐投票公民会员，唯身份匿名。
     level: 'democracy',
-    requiredIdentity: 'visitor',
     name: '民主会员',
     price: '$9.99 / 月',
     priceCents: 999,
-    identity: '任意钱包账户',
+    chatFile: '聊天文件：单个 ≤ 100MB',
     dynamic: '动态：300 字、9 张高清图片、30 分钟高清视频',
     article: '文章：30,000 字、100 张高清图片、1 张高清首图',
   },
   {
-    level: 'voting',
-    requiredIdentity: 'voting',
-    name: '投票公民会员',
-    price: '$9.99 / 月',
-    priceCents: 999,
-    identity: '认证投票公民',
-    dynamic: '动态：300 字、9 张高清图片、30 分钟高清视频',
-    article: '文章：30,000 字、100 张高清图片、1 张高清首图',
-  },
-  {
-    level: 'candidate',
-    requiredIdentity: 'candidate',
-    name: '竞选公民会员',
+    level: 'spark',
+    name: '星火会员',
     price: '$99.99 / 月',
     priceCents: 9999,
-    identity: '认证选举公民',
+    chatFile: '聊天文件：单个 ≤ 5GB',
     dynamic: '动态：300 字、9 张高清图片、3 小时高清视频',
     article: '文章：30,000 字、100 张高清图片、1 张高清首图',
   },
 ]
 
-// 3 张身份卡顺序：访客 / 投票公民 / 竞选公民。
-const identityTierOrder: IdentityLevel[] = ['visitor', 'voting', 'candidate']
+// 会员三档固定顺序（价格升序，ADR-036 与身份彻底解耦）：自由 / 民主 / 星火。
+const tierOrder: MembershipLevel[] = ['freedom', 'democracy', 'spark']
 
-// 与CitizenApp 身份卡统一：档色 / 顶带前景色 / 档名 / 身份名 / 链上公开身份字段。
-const tierColor: Record<IdentityLevel, string> = {
-  visitor: '#E5A100',
-  voting: '#3B82F6',
-  candidate: '#EF4444',
+// 与 CitizenApp 会员卡统一：档色 / 顶带前景色。
+const tierColor: Record<MembershipLevel, string> = {
+  freedom: '#E5A100',
+  democracy: '#3B82F6',
+  spark: '#EF4444',
 }
-// 访客金底用深棕保对比度，投票蓝/竞选红底用白字。
-const tierOnColor: Record<IdentityLevel, string> = {
-  visitor: '#4A3000',
-  voting: '#FFFFFF',
-  candidate: '#FFFFFF',
-}
-const tierCardName: Record<IdentityLevel, string> = {
-  visitor: '访客轻节点',
-  voting: '公民轻节点 · 投票',
-  candidate: '公民轻节点 · 竞选',
-}
-const tierIdentityName: Record<IdentityLevel, string> = {
-  visitor: '访客',
-  voting: '投票公民',
-  candidate: '竞选公民',
-}
-// 该档在链上公开的身份字段（通用模板，非某用户真实值）。访客单独走「完全匿名」。
-const tierIdentityFields: Record<IdentityLevel, string[]> = {
-  visitor: [],
-  voting: ['公民身份 CID 号', '居住选区', '投票身份有效期'],
-  candidate: [
-    '公民身份 CID 号',
-    '居住选区',
-    '身份有效期',
-    '真实姓名',
-    '性别',
-    '出生地',
-    '出生日期',
-  ],
-}
-
-// 仓库扇贝勋章徽章（与 App identity_badge 一致）：档色底 + 中心白色小人（官网无
-// 登录用户，恒显小人），套半透明白圆底才能从同色顶带浮出。
-function IdentityBadge({ color, size = 40 }: { color: string; size?: number }) {
-  return (
-    <div
-      style={{
-        width: size,
-        height: size,
-        borderRadius: '50%',
-        background: 'rgba(255,255,255,0.9)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        boxShadow: '0 2px 6px rgba(0,0,0,0.14)',
-      }}
-    >
-      <svg width={Math.round(size * 0.78)} height={Math.round(size * 0.78)} viewBox="0 0 24 24" aria-hidden="true">
-        <g fill={color}>
-          <circle cx="18" cy="12" r="4.3" />
-          <circle cx="16.24" cy="16.24" r="4.3" />
-          <circle cx="12" cy="18" r="4.3" />
-          <circle cx="7.76" cy="16.24" r="4.3" />
-          <circle cx="6" cy="12" r="4.3" />
-          <circle cx="7.76" cy="7.76" r="4.3" />
-          <circle cx="12" cy="6" r="4.3" />
-          <circle cx="16.24" cy="7.76" r="4.3" />
-          <circle cx="12" cy="12" r="7.6" />
-        </g>
-        <circle cx="12" cy="9.7" r="2.3" fill="#fff" />
-        <path d="M7.7 16.4 C7.7 14 9.6 12.7 12 12.7 C14.4 12.7 16.3 14 16.3 16.4 Z" fill="#fff" />
-      </svg>
-    </div>
-  )
+// 自由金底用深棕保对比度，民主蓝/星火红底用白字。
+const tierOnColor: Record<MembershipLevel, string> = {
+  freedom: '#4A3000',
+  democracy: '#FFFFFF',
+  spark: '#FFFFFF',
 }
 
 function SectionLabel({ color, text }: { color: string; text: string }) {
@@ -253,8 +179,6 @@ function subscribeResultMessage(action: unknown): string {
       return '已升档，差价已按剩余天数结算'
     case 'downgraded':
       return '已降档，剩余价值转为会员权益抵扣后续账单'
-    case 'switched':
-      return '已切换会员档位'
     case 'resumed':
       return '已续订，订阅恢复'
     case 'already_subscribed':
@@ -592,121 +516,48 @@ export default function Membership() {
           <SectionTitle
             subtitle="CitizenApp Membership"
             title="CitizenApp 会员订阅"
-            description="四档会员统一按美元计价，订阅、取消与续订都由 CitizenApp 钱包扫码签名授权；Stripe Checkout 负责银行卡、本地法币和已启用的 USDC 支付。"
+            description="三档会员与身份彻底解耦，任意身份都可订阅任意档，统一按美元计价；订阅、取消与续订都由 CitizenApp 钱包扫码签名授权；Stripe Checkout 负责银行卡、本地法币和已启用的 USDC 支付。"
           />
         </div>
       </section>
 
       <section className="mx-auto grid max-w-7xl auto-rows-fr gap-6 px-6 py-20 sm:grid-cols-2 lg:grid-cols-4">
-        {identityTierOrder.map((tier) => {
-          const tierPlans = plans.filter((plan) => plan.requiredIdentity === tier)
-          const shown = tierPlans.find((plan) => plan.level === selectedLevel) ?? tierPlans[0]
-          const isTierSelected =
-            selectedLevel !== null && tierPlans.some((plan) => plan.level === selectedLevel)
-          const hasToggle = tierPlans.length > 1
-          const color = tierColor[tier]
-          const onColor = tierOnColor[tier]
+        {tierOrder.map((level) => {
+          const plan = plans.find((item) => item.level === level)!
+          const isSelected = selectedLevel === level
+          const color = tierColor[level]
+          const onColor = tierOnColor[level]
           return (
             <div
-              key={tier}
+              key={level}
               className="flex h-full flex-col overflow-hidden rounded-2xl bg-white"
               style={{
-                border: isTierSelected ? `2px solid ${color}` : '1px solid rgba(255,255,255,0.12)',
-                boxShadow: isTierSelected
+                border: isSelected ? `2px solid ${color}` : '1px solid rgba(255,255,255,0.12)',
+                boxShadow: isSelected
                   ? `0 10px 30px ${color}55`
                   : '0 8px 24px rgba(0,0,0,0.28)',
               }}
             >
-              {/* 档色顶带：身份名在顶 + 档名 + 右上角扇贝徽章 */}
+              {/* 档色顶带：档名（无身份字段，会员与身份已解耦） */}
               <div className="relative px-5 pb-4 pt-4" style={{ background: color }}>
                 <div className="text-[11px] font-medium" style={{ color: onColor, opacity: 0.85 }}>
-                  身份 · {tierIdentityName[tier]}
+                  会员订阅
                 </div>
                 <div className="mt-1 text-lg font-bold" style={{ color: onColor }}>
-                  {tierCardName[tier]}
-                </div>
-                <div className="absolute right-4 top-3.5">
-                  <IdentityBadge color={color} />
+                  {plan.name}
                 </div>
               </div>
 
-              {/* 卡身：链上公开身份信息 + 会员权益 + 价签 + 切换 + 订阅 */}
+              {/* 卡身：会员权益 + 价签 + 订阅 */}
               <div className="flex flex-1 flex-col p-5">
-                <SectionLabel color={color} text="链上公开的身份信息" />
-                <div className="mt-2.5">
-                  {tier === 'visitor' ? (
-                    <div className="flex items-center gap-2.5">
-                      <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="#94a3b8"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <circle cx="10" cy="8" r="4" />
-                        <path d="M4 21v-1a6 6 0 0 1 6-6h1" />
-                        <path d="m16 16 5 5M21 16l-5 5" />
-                      </svg>
-                      <div>
-                        <div className="text-[15px] font-bold text-slate-900">完全匿名</div>
-                        <div className="text-[11px] text-slate-400">没有链上身份</div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {tierIdentityFields[tier].map((field) => (
-                        <div
-                          key={field}
-                          className="flex items-center gap-2 text-[13px] font-medium text-slate-800"
-                        >
-                          <span
-                            style={{
-                              width: 5,
-                              height: 5,
-                              borderRadius: '50%',
-                              background: color,
-                              display: 'inline-block',
-                            }}
-                          />
-                          {field}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-4">
-                  <SectionLabel color={color} text="会员权益" />
-                  <div className="mt-2.5 space-y-1.5 text-[12px] leading-relaxed text-slate-600">
-                    <p>{shown.dynamic}</p>
-                    <p>{shown.article}</p>
-                  </div>
+                <SectionLabel color={color} text="会员权益" />
+                <div className="mt-2.5 space-y-1.5 text-[12px] leading-relaxed text-slate-600">
+                  <p>{plan.chatFile}</p>
+                  <p>{plan.dynamic}</p>
+                  <p>{plan.article}</p>
                 </div>
 
                 <div className="flex-1" />
-
-                {/* 访客档：自由/民主分段切换（默认自由） */}
-                {hasToggle && (
-                  <div className="mt-4 flex rounded-lg bg-slate-100 p-1 text-[13px] font-bold">
-                    {tierPlans.map((plan) => {
-                      const active = selectedLevel === plan.level
-                      return (
-                        <button
-                          key={plan.level}
-                          type="button"
-                          onClick={() => handleSelectLevel(plan.level)}
-                          className="flex-1 rounded-md py-1.5 transition-colors"
-                          style={active ? { background: color, color: onColor } : { color: '#64748b' }}
-                        >
-                          {plan.name}
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
 
                 {/* 价格：档色填充标签 */}
                 <div className="mt-3">
@@ -714,14 +565,14 @@ export default function Membership() {
                     className="inline-block rounded-lg px-3 py-1 text-base font-extrabold"
                     style={{ background: color, color: onColor }}
                   >
-                    {shown.price}
+                    {plan.price}
                   </span>
                 </div>
 
                 {/* 订阅：选中该档并切到订阅态（下方面板扫码完成） */}
                 <button
                   type="button"
-                  onClick={() => handleSelectLevel(shown.level)}
+                  onClick={() => handleSelectLevel(level)}
                   className="mt-3 w-full rounded-lg py-2.5 text-sm font-bold transition-opacity hover:opacity-90"
                   style={{ background: color, color: onColor }}
                 >

@@ -35,8 +35,8 @@
 | `NrcAccountProvider` | `onchain-transaction` | `RuntimeNrcAccountProvider` | `onchain-transaction` (OnchainFeeRouter) |
 | `SafetyFundAccountProvider` | `onchain-transaction` | `RuntimeSafetyFundAccountProvider` | `onchain-transaction` (OnchainFeeRouter) |
 | `FeeRouter` (OnUnbalanced) | `frame_support` trait | `TransferFeeRouter` | `public-manage`, `private-manage`, `personal-manage`, `multisig-transfer` |
-| `FeePayerExtractor` (CallFeePayer) | `onchain-transaction` | `RuntimeFeePayerExtractor` | `pallet-transaction-payment` (OnChargeTransaction) |
-| `FeeKindClassifier` (CallFeeKind) | `onchain-transaction` | `RuntimeFeeKindClassifier` | `pallet-transaction-payment` (OnChargeTransaction) |
+| `FeeRoute` | `primitives::fee_policy` | `RuntimeFeeRouter` 生成唯一类型 | `onchain::OnchainChargeAdapter`、链下收费执行器 |
+| `CallFeeRoute` | `onchain` | `RuntimeFeeRouter` | `pallet-transaction-payment` (`OnChargeTransaction`) |
 | `ProtectedSourceChecker` | `entity-primitives` / `offchain-transaction` | `RuntimeProtectedSourceChecker` | `public-manage`, `private-manage`, `personal-manage`, `multisig-transfer`, `offchain-transaction` |
 | `CitizenIdentityReader` | `votingengine` | `RuntimeCitizenIdentityReader`（委托 `citizen-identity`） | `votingengine` |
 | `JointVoteResultCallback` | `votingengine` | `RuntimeJointVoteResultCallback` | `votingengine` (投票通过后回调) |
@@ -72,8 +72,13 @@
 ```
 用户交易 -> pallet-transaction-payment
   -> OnchainChargeAdapter
-    -> RuntimeFeeKindClassifier (按 call 类型归入五类费用模型)
-    -> RuntimeFeePayerExtractor (offchain 批次从省储行费用地址扣; 其余由调用者扣)
+    -> RuntimeFeeRouter (一次返回 FeeRoute，费用类别和确切付款账户不可分离)
+       -> 机构操作：actor CID + admins 授权 + 唯一费用账户，任一失败即 Reject
+       -> 实际投票：Vote，固定由投票签名者支付
+       -> 普通用户/Fullnode：Onchain，由签名者支付
+       -> 未分类/未开放：Reject，不存在默认分支或付款方回落
     -> RuntimeNrcAccountProvider / RuntimeSafetyFundAccountProvider (提供 NRC 与安全基金收款账户)
     -> OnchainFeeRouter (80% 矿工 / 10% NRC / 10% 安全基金)
 ```
+
+`primitives::fee_policy::TRANSACTION_TIP` 固定为零；`WeightToFee` 和 `LengthToFee` 也固定为零，因此收费只可能来自五类路由对应执行器。

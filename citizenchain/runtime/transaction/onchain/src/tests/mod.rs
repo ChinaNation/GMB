@@ -10,7 +10,7 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_transaction_payment::OnChargeTransaction;
-use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage, Perbill};
+use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 use std::{cell::RefCell, thread_local};
 
 type Block = frame_system::mocking::MockBlockU32<Test>;
@@ -82,8 +82,9 @@ impl pallet_balances::Config for Test {
 impl pallet_transaction_payment::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type OnChargeTransaction = pallet_transaction_payment::FungibleAdapter<Balances, ()>;
-    type WeightToFee = ConstantMultiplier<Balance, frame_support::traits::ConstU128<1>>;
-    type LengthToFee = ConstantMultiplier<Balance, frame_support::traits::ConstU128<1>>;
+    // 费用只允许来自 FeeRoute 五类协议，测试环境同样禁止产生 FRAME weight/length 费用。
+    type WeightToFee = ConstantMultiplier<Balance, frame_support::traits::ConstU128<0>>;
+    type LengthToFee = ConstantMultiplier<Balance, frame_support::traits::ConstU128<0>>;
     type FeeMultiplierUpdate = ();
     type OperationalFeeMultiplier = frame_support::traits::ConstU8<1>;
     type WeightInfo = ();
@@ -153,52 +154,85 @@ fn new_test_ext() -> sp_io::TestExternalities {
     ext
 }
 
-struct FeeKindExtractorOnchainAmount;
-impl CallFeeKind<AccountId32, RuntimeCall, Balance> for FeeKindExtractorOnchainAmount {
-    fn fee_kind(_who: &AccountId32, _call: &RuntimeCall) -> FeeChargeKind<Balance> {
-        FeeChargeKind::OnchainAmount(50_000)
+struct FeeRouteOnchain;
+impl CallFeeRoute<AccountId32, RuntimeCall, Balance> for FeeRouteOnchain {
+    fn fee_route(
+        who: &AccountId32,
+        _call: &RuntimeCall,
+    ) -> primitives::fee_policy::FeeRoute<AccountId32, Balance> {
+        primitives::fee_policy::FeeRoute::Onchain {
+            transaction_amount: 50_000,
+            payer: who.clone(),
+        }
     }
 }
 
-struct FeeKindExtractorVoteFlat;
-impl CallFeeKind<AccountId32, RuntimeCall, Balance> for FeeKindExtractorVoteFlat {
-    fn fee_kind(_who: &AccountId32, _call: &RuntimeCall) -> FeeChargeKind<Balance> {
-        FeeChargeKind::VoteFlat
+struct FeeRouteVote;
+impl CallFeeRoute<AccountId32, RuntimeCall, Balance> for FeeRouteVote {
+    fn fee_route(
+        who: &AccountId32,
+        _call: &RuntimeCall,
+    ) -> primitives::fee_policy::FeeRoute<AccountId32, Balance> {
+        primitives::fee_policy::FeeRoute::Vote { payer: who.clone() }
     }
 }
 
-struct FeeKindExtractorOffchainFee;
-impl CallFeeKind<AccountId32, RuntimeCall, Balance> for FeeKindExtractorOffchainFee {
-    fn fee_kind(_who: &AccountId32, _call: &RuntimeCall) -> FeeChargeKind<Balance> {
-        FeeChargeKind::OffchainFee(88)
+struct FeeRouteOffchain;
+impl CallFeeRoute<AccountId32, RuntimeCall, Balance> for FeeRouteOffchain {
+    fn fee_route(
+        _who: &AccountId32,
+        _call: &RuntimeCall,
+    ) -> primitives::fee_policy::FeeRoute<AccountId32, Balance> {
+        primitives::fee_policy::FeeRoute::Offchain {
+            fee_amount: 88,
+            payer: primitives::fee_policy::OffchainFeePayer::BatchItemPayers,
+        }
     }
 }
 
-struct FeeKindExtractorFree;
-impl CallFeeKind<AccountId32, RuntimeCall, Balance> for FeeKindExtractorFree {
-    fn fee_kind(_who: &AccountId32, _call: &RuntimeCall) -> FeeChargeKind<Balance> {
-        FeeChargeKind::Free
+struct FeeRouteFree;
+impl CallFeeRoute<AccountId32, RuntimeCall, Balance> for FeeRouteFree {
+    fn fee_route(
+        _who: &AccountId32,
+        _call: &RuntimeCall,
+    ) -> primitives::fee_policy::FeeRoute<AccountId32, Balance> {
+        primitives::fee_policy::FeeRoute::Free
     }
 }
 
-struct FeeKindExtractorUnknown;
-impl CallFeeKind<AccountId32, RuntimeCall, Balance> for FeeKindExtractorUnknown {
-    fn fee_kind(_who: &AccountId32, _call: &RuntimeCall) -> FeeChargeKind<Balance> {
-        FeeChargeKind::Unknown
+struct FeeRouteReject;
+impl CallFeeRoute<AccountId32, RuntimeCall, Balance> for FeeRouteReject {
+    fn fee_route(
+        _who: &AccountId32,
+        _call: &RuntimeCall,
+    ) -> primitives::fee_policy::FeeRoute<AccountId32, Balance> {
+        primitives::fee_policy::FeeRoute::Reject
     }
 }
 
-struct FeeKindExtractorTinyOnchainAmount;
-impl CallFeeKind<AccountId32, RuntimeCall, Balance> for FeeKindExtractorTinyOnchainAmount {
-    fn fee_kind(_who: &AccountId32, _call: &RuntimeCall) -> FeeChargeKind<Balance> {
-        FeeChargeKind::OnchainAmount(1)
+struct FeeRouteTinyOnchain;
+impl CallFeeRoute<AccountId32, RuntimeCall, Balance> for FeeRouteTinyOnchain {
+    fn fee_route(
+        who: &AccountId32,
+        _call: &RuntimeCall,
+    ) -> primitives::fee_policy::FeeRoute<AccountId32, Balance> {
+        primitives::fee_policy::FeeRoute::Onchain {
+            transaction_amount: 1,
+            payer: who.clone(),
+        }
     }
 }
 
-struct FeePayerAsAccount2;
-impl CallFeePayer<AccountId32, RuntimeCall> for FeePayerAsAccount2 {
-    fn fee_payer(_who: &AccountId32, _call: &RuntimeCall) -> Option<AccountId32> {
-        Some(account(2))
+struct FeeRouteTinyAccount2;
+impl CallFeeRoute<AccountId32, RuntimeCall, Balance> for FeeRouteTinyAccount2 {
+    fn fee_route(
+        _who: &AccountId32,
+        _call: &RuntimeCall,
+    ) -> primitives::fee_policy::FeeRoute<AccountId32, Balance> {
+        primitives::fee_policy::FeeRoute::Onchain {
+            transaction_amount: 1,
+            payer: account(2),
+        }
     }
 }
 

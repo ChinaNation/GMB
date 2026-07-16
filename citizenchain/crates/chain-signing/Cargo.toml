@@ -19,7 +19,7 @@ frame-metadata-hash-extension = { workspace = true, default-features = true }
 frame-system = { workspace = true, default-features = true }
 hex = "0.4"
 pallet-transaction-payment = { workspace = true, default-features = true }
+primitives = { path = "../../runtime/primitives", default-features = true }
 sha2 = "0.10"
 sp-core = { workspace = true, default-features = true }
 sp-runtime = { workspace = true, default-features = true }
-

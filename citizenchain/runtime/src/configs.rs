@@ -256,8 +256,7 @@ impl pallet_transaction_payment::Config for Runtime {
             RuntimeNrcAccountProvider,
             RuntimeSafetyFundAccountProvider,
         >,
-        RuntimeFeeKindClassifier,
-        RuntimeFeePayerExtractor,
+        RuntimeFeeRouter,
     >;
     type OperationalFeeMultiplier = ConstU8<{ primitives::fee_policy::OPERATIONAL_FEE_MULTIPLIER }>;
     type WeightToFee = ConstantMultiplier<Balance, ConstU128<0>>;
@@ -303,173 +302,474 @@ impl OnUnbalanced<Credit<AccountId, Balances>> for RuntimeDustHandler {
     }
 }
 
-pub struct RuntimeFeeKindClassifier;
+pub struct RuntimeFeeRouter;
 
-impl onchain::CallFeeKind<AccountId, RuntimeCall, Balance> for RuntimeFeeKindClassifier {
-    fn fee_kind(_who: &AccountId, call: &RuntimeCall) -> onchain::FeeChargeKind<Balance> {
-        use onchain::FeeChargeKind;
+fn signer_onchain_route(
+    who: &AccountId,
+    transaction_amount: Balance,
+) -> primitives::fee_policy::FeeRoute<AccountId, Balance> {
+    primitives::fee_policy::FeeRoute::Onchain {
+        transaction_amount,
+        payer: who.clone(),
+    }
+}
+
+fn signer_vote_route(who: &AccountId) -> primitives::fee_policy::FeeRoute<AccountId, Balance> {
+    primitives::fee_policy::FeeRoute::Vote { payer: who.clone() }
+}
+
+/// 严格读取 `(cid_number, 费用账户)`；公权/私权重复、正反索引不一致或账户缺失均失败。
+fn exact_institution_fee_account(cid_number: &[u8]) -> Option<AccountId> {
+    let public_cid: public_manage::CidNumberOf<Runtime> = cid_number.to_vec().try_into().ok()?;
+    let public_name: public_manage::AccountNameOf<Runtime> =
+        primitives::account_derive::RESERVED_NAME_FEE
+            .to_vec()
+            .try_into()
+            .ok()?;
+    let public = public_manage::InstitutionAccounts::<Runtime>::get(&public_cid, &public_name);
+
+    let private_cid: private_manage::CidNumberOf<Runtime> = cid_number.to_vec().try_into().ok()?;
+    let private_name: private_manage::AccountNameOf<Runtime> =
+        primitives::account_derive::RESERVED_NAME_FEE
+            .to_vec()
+            .try_into()
+            .ok()?;
+    let private = private_manage::InstitutionAccounts::<Runtime>::get(&private_cid, &private_name);
+
+    let (account, is_public) = match (public, private) {
+        (Some(info), None) => (info.address, true),
+        (None, Some(info)) => (info.address, false),
+        _ => return None,
+    };
+    let reverse_matches = if is_public {
+        public_manage::AccountRegisteredCid::<Runtime>::get(&account).is_some_and(|info| {
+            info.cid_number.as_slice() == cid_number
+                && info.account_name.as_slice() == primitives::account_derive::RESERVED_NAME_FEE
+        })
+    } else {
+        private_manage::AccountRegisteredCid::<Runtime>::get(&account).is_some_and(|info| {
+            info.cid_number.as_slice() == cid_number
+                && info.account_name.as_slice() == primitives::account_derive::RESERVED_NAME_FEE
+        })
+    };
+    reverse_matches.then_some(account)
+}
+
+/// 账户型机构交易必须显式携带同一 CID 下的具体机构账户，禁止由账户反推或跨 CID 使用。
+fn exact_institution_account_matches(cid_number: &[u8], account: &AccountId) -> bool {
+    let public = public_manage::AccountRegisteredCid::<Runtime>::get(account);
+    let private = private_manage::AccountRegisteredCid::<Runtime>::get(account);
+    match (public, private) {
+        (Some(info), None) if info.cid_number.as_slice() == cid_number => {
+            public_manage::InstitutionAccounts::<Runtime>::get(&info.cid_number, &info.account_name)
+                .is_some_and(|stored| stored.address == *account)
+        }
+        (None, Some(info)) if info.cid_number.as_slice() == cid_number => {
+            private_manage::InstitutionAccounts::<Runtime>::get(
+                &info.cid_number,
+                &info.account_name,
+            )
+            .is_some_and(|stored| stored.address == *account)
+        }
+        _ => false,
+    }
+}
+
+fn is_authorized_institution_actor(who: &AccountId, cid_number: &[u8]) -> bool {
+    let Ok(text) = core::str::from_utf8(cid_number) else {
+        return false;
+    };
+    let Some(institution_code) = primitives::cid::code::institution_code_from_cid_number(text)
+    else {
+        return false;
+    };
+    RuntimeInstitutionAdminQuery::is_institution_admin(institution_code, cid_number, who)
+}
+
+fn institution_fee_payer(who: &AccountId, cid_number: &[u8]) -> Option<AccountId> {
+    if !is_authorized_institution_actor(who, cid_number) {
+        return None;
+    }
+    exact_institution_fee_account(cid_number)
+}
+
+fn institution_onchain_route(
+    who: &AccountId,
+    cid_number: &[u8],
+) -> primitives::fee_policy::FeeRoute<AccountId, Balance> {
+    match institution_fee_payer(who, cid_number) {
+        Some(payer) => primitives::fee_policy::FeeRoute::Onchain {
+            transaction_amount: 0,
+            payer,
+        },
+        None => primitives::fee_policy::FeeRoute::Reject,
+    }
+}
+
+fn institution_account_onchain_route(
+    who: &AccountId,
+    cid_number: &[u8],
+    institution_account: &AccountId,
+) -> primitives::fee_policy::FeeRoute<AccountId, Balance> {
+    if !exact_institution_account_matches(cid_number, institution_account) {
+        return primitives::fee_policy::FeeRoute::Reject;
+    }
+    institution_onchain_route(who, cid_number)
+}
+
+fn proposal_operation_route(
+    who: &AccountId,
+    proposal_id: u64,
+) -> primitives::fee_policy::FeeRoute<AccountId, Balance> {
+    let Some(proposal) = votingengine::Pallet::<Runtime>::proposals(proposal_id) else {
+        return primitives::fee_policy::FeeRoute::Reject;
+    };
+    match proposal.actor_cid_number {
+        Some(cid_number) => institution_onchain_route(who, cid_number.as_slice()),
+        None => signer_onchain_route(who, 0),
+    }
+}
+
+impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter {
+    fn fee_route(
+        who: &AccountId,
+        call: &RuntimeCall,
+    ) -> primitives::fee_policy::FeeRoute<AccountId, Balance> {
+        use primitives::fee_policy::FeeRoute;
 
         match call {
             RuntimeCall::OnchainTransaction(onchain::pallet::Call::transfer_with_remark {
                 amount,
                 ..
-            }) => FeeChargeKind::OnchainAmount(*amount),
-            RuntimeCall::OnchainTransaction(_) => FeeChargeKind::Unknown,
-            // PersonalManage 的 propose_create/propose_close 是治理提案交易，
-            // 交易本身固定收 1 元；执行阶段的资金手续费由对应 pallet 内部按金额另行处理。
+            }) => signer_onchain_route(who, *amount),
+
+            // 个人多签不是机构；创建提案和管理员变更属于普通链上操作，只有 cast 才是投票。
             RuntimeCall::PersonalManage(personal_manage::pallet::Call::propose_create {
                 ..
             })
             | RuntimeCall::PersonalManage(personal_manage::pallet::Call::propose_close {
                 ..
-            }) => FeeChargeKind::VoteFlat,
-            RuntimeCall::PersonalAdmins(_) => FeeChargeKind::VoteFlat,
-            RuntimeCall::PersonalManage(_) => FeeChargeKind::VoteFlat,
+            })
+            | RuntimeCall::PersonalAdmins(
+                personal_admins::pallet::Call::propose_admin_set_change { .. },
+            ) => signer_onchain_route(who, 0),
+            RuntimeCall::PersonalManage(
+                personal_manage::pallet::Call::cleanup_rejected_proposal { .. },
+            ) => FeeRoute::Free,
+
+            // 注册局机构操作：管理员只签名，交易费严格从 actor CID 的费用账户扣取。
             RuntimeCall::PublicManage(
-                public_manage::pallet::Call::propose_create_public_institution { .. },
-            )
-            | RuntimeCall::PublicManage(
-                public_manage::pallet::Call::propose_close_public_institution { .. },
-            )
-            | RuntimeCall::PublicManage(_) => FeeChargeKind::VoteFlat,
+                public_manage::pallet::Call::propose_create_public_institution {
+                    actor_cid_number,
+                    ..
+                }
+                | public_manage::pallet::Call::update_institution_info {
+                    actor_cid_number, ..
+                }
+                | public_manage::pallet::Call::add_institution_account {
+                    actor_cid_number, ..
+                },
+            ) => institution_onchain_route(who, actor_cid_number.as_slice()),
+            RuntimeCall::PublicManage(
+                public_manage::pallet::Call::propose_close_public_institution {
+                    actor_cid_number,
+                    institution_account,
+                    ..
+                },
+            ) => institution_account_onchain_route(
+                who,
+                actor_cid_number.as_slice(),
+                institution_account,
+            ),
+            RuntimeCall::PublicManage(
+                public_manage::pallet::Call::cleanup_rejected_public_proposal { .. },
+            ) => FeeRoute::Free,
             RuntimeCall::PrivateManage(
-                private_manage::pallet::Call::propose_create_private_institution { .. },
-            )
-            | RuntimeCall::PrivateManage(
-                private_manage::pallet::Call::propose_close_private_institution { .. },
-            )
-            | RuntimeCall::PrivateManage(_) => FeeChargeKind::VoteFlat,
-            RuntimeCall::AddressRegistry(_) => FeeChargeKind::VoteFlat,
-            // 免费调用交易：系统内部 / 自动化类。省储行固定利息已无公开 Call，
-            // 只在年度边界 finalize 自动执行，因此不再占用交易费分类分支。
-            RuntimeCall::System(_) => FeeChargeKind::Free,
-            RuntimeCall::Timestamp(_) => FeeChargeKind::Free,
-            RuntimeCall::CitizenIssuance(_) => FeeChargeKind::Free,
-            // GRANDPA pallet:report_equivocation(签名版)/ report_equivocation_unsigned(unsigned 路径
-            // 不走 ChargeTransactionPayment) / note_stalled(Root,本链无 sudo 实际不可达)。
-            // 等价证据上报本就属公益保护链稳定运行,统一免费。
-            RuntimeCall::Grandpa(_) => FeeChargeKind::Free,
-            // 决议发行 / 决议销毁的 propose_X 是治理提案交易，固定 1 元；
-            // 维护型 Root / 系统型调用免费。
-            RuntimeCall::ResolutionIssuance(ref issuance_call) => match issuance_call {
-                resolution_issuance::pallet::Call::propose_issuance { .. } => {
-                    FeeChargeKind::VoteFlat
+                private_manage::pallet::Call::propose_create_private_institution {
+                    actor_cid_number,
+                    ..
                 }
-                _ => FeeChargeKind::Free,
-            },
+                | private_manage::pallet::Call::update_institution_info {
+                    actor_cid_number, ..
+                }
+                | private_manage::pallet::Call::add_institution_account {
+                    actor_cid_number, ..
+                },
+            ) => institution_onchain_route(who, actor_cid_number.as_slice()),
+            RuntimeCall::PrivateManage(
+                private_manage::pallet::Call::propose_close_private_institution {
+                    actor_cid_number,
+                    institution_account,
+                    ..
+                },
+            ) => institution_account_onchain_route(
+                who,
+                actor_cid_number.as_slice(),
+                institution_account,
+            ),
+            RuntimeCall::PrivateManage(
+                private_manage::pallet::Call::cleanup_rejected_private_proposal { .. },
+            ) => FeeRoute::Free,
+
+            RuntimeCall::AddressRegistry(
+                address_registry::pallet::Call::set_catalog_version {
+                    actor_cid_number, ..
+                }
+                | address_registry::pallet::Call::set_address_name {
+                    actor_cid_number, ..
+                }
+                | address_registry::pallet::Call::remove_address_name {
+                    actor_cid_number, ..
+                }
+                | address_registry::pallet::Call::set_address {
+                    actor_cid_number, ..
+                }
+                | address_registry::pallet::Call::remove_address {
+                    actor_cid_number, ..
+                },
+            ) => institution_onchain_route(who, actor_cid_number.as_slice()),
+
+            // 框架固有、共识公益和 Root/内部维护调用免费。
+            RuntimeCall::System(_)
+            | RuntimeCall::Timestamp(_)
+            | RuntimeCall::CitizenIssuance(_)
+            | RuntimeCall::Grandpa(_) => FeeRoute::Free,
+            RuntimeCall::ResolutionIssuance(
+                resolution_issuance::pallet::Call::propose_issuance {
+                    actor_cid_number, ..
+                },
+            ) => institution_onchain_route(who, actor_cid_number.as_slice()),
+            RuntimeCall::ResolutionIssuance(
+                resolution_issuance::pallet::Call::set_allowed_recipients { .. }
+                | resolution_issuance::pallet::Call::clear_executed { .. }
+                | resolution_issuance::pallet::Call::set_paused { .. },
+            ) => FeeRoute::Free,
             RuntimeCall::ResolutionDestroy(resolution_destroy::pallet::Call::propose_destroy {
-                ..
-            }) => FeeChargeKind::VoteFlat,
-            RuntimeCall::ResolutionDestroy(_) => FeeChargeKind::Free,
-            // 投票引擎主 pallet 公开 call 共 3 个:
-            //   finalize_proposal — 任意人推动超时结算,免费;
-            //   retry_passed_proposal / cancel_passed_proposal — 管理员手动重试/取消,VOTE_FLAT_FEE。
-            RuntimeCall::VotingEngine(ref ve_call) => match ve_call {
-                votingengine::pallet::Call::finalize_proposal { .. } => FeeChargeKind::Free,
-                _ => FeeChargeKind::VoteFlat,
-            },
-            // CitizenIdentity:占号/吊销是公共登记服务,免费(滥用由链上注册局
-            // 授权门槛拦截);身份登记、更新、撤销和人口快照按投票统一价 1 元/次。
-            RuntimeCall::CitizenIdentity(ref ci_call) => match ci_call {
-                citizen_identity::pallet::Call::occupy_cid { .. }
-                | citizen_identity::pallet::Call::occupy_cids_batch { .. }
-                | citizen_identity::pallet::Call::revoke_cid { .. } => FeeChargeKind::Free,
-                _ => FeeChargeKind::VoteFlat,
-            },
-            // 广场发布没有资金交易金额，按零金额进入链上费用模型，收取
-            // ONCHAIN_MIN_FEE = 10 分；分账继续复用 OnchainFeeRouter 的 80/10/10。
-            RuntimeCall::SquarePost(_) => FeeChargeKind::OnchainAmount(0),
-            // FullnodeIssuance bind_reward_wallet / rebind_reward_wallet:1 元/次。
-            RuntimeCall::FullnodeIssuance(_) => FeeChargeKind::VoteFlat,
-            // 手动重试/取消统一收口至 votingengine::retry_passed_proposal /
-            // cancel_passed_proposal(在 RuntimeCall::VotingEngine 分支按 VOTE_FLAT_FEE 处理)。
-            // 业务 pallet 的 propose_X / cleanup_X 全部按 VOTE_FLAT_FEE 收费(1 元/次)。
-            RuntimeCall::RuntimeUpgrade(_) => FeeChargeKind::VoteFlat,
-            RuntimeCall::GrandpaKeyChange(_) => FeeChargeKind::VoteFlat,
-            // 立法院模块 propose_enact_law / propose_amend_law / propose_repeal_law 是治理提案交易,
-            // 固定按投票统一价 1 元/次(ADR-027),与其它治理 pallet 的 propose_X 一致。
-            RuntimeCall::LegislationYuan(_) => FeeChargeKind::VoteFlat,
-            // 多签转账 propose_X 只是创建治理提案，交易本身固定收 1 元；
-            // 真正转账执行时，multisig-transfer 内部再按转出金额 × 0.1% 收链上交易费。
-            RuntimeCall::MultisigTransfer(ref dt_call) => match dt_call {
-                multisig::pallet::Call::propose_transfer { .. }
-                | multisig::pallet::Call::propose_safety_fund_transfer { .. }
-                | multisig::pallet::Call::propose_sweep_to_main { .. } => FeeChargeKind::VoteFlat,
-                // 兜底:未来若新增非金额型管理 extrinsic 按投票统一价 1 元/次。
-                _ => FeeChargeKind::VoteFlat,
-            },
-            // 清算行(L2)扫码支付清算。
-            RuntimeCall::OffchainTransaction(ref offchain_call) => {
-                match offchain_call {
-                    // L3 充值 / 提现:按金额计费(链上资金交易 0.1% 最低 0.1 元)
-                    offchain::pallet::Call::deposit { amount } => {
-                        FeeChargeKind::OnchainAmount(*amount)
-                    }
-                    offchain::pallet::Call::withdraw { amount } => {
-                        FeeChargeKind::OnchainAmount(*amount)
-                    }
-                    // 清算行批次 V2 是链下交易费，结算执行阶段已经把
-                    // Σ batch[i].fee_amount 转给清算行费用账户，本层只标记类别不二次分账。
-                    offchain::pallet::Call::submit_offchain_batch { batch, .. } => {
-                        let mut total_fee: u128 = 0;
-                        for item in batch.iter() {
-                            total_fee = total_fee.saturating_add(item.fee_amount);
-                        }
-                        FeeChargeKind::OffchainFee(total_fee)
-                    }
-                    // 全局费率上限调整(Root Origin,免费)
-                    offchain::pallet::Call::set_max_l2_fee_rate { .. } => FeeChargeKind::Free,
-                    // 其他付费调用(bind_clearing_bank / switch_bank / propose_l2_fee_rate):
-                    // 按投票统一价 1 元/次
-                    _ => FeeChargeKind::VoteFlat,
-                }
-            }
-            // 3 个 mode-specific 投票 extrinsic 全部按投票统一价 1 元/次:
-            //   InternalVote::cast / JointVote::cast_admin / JointVote::cast_referendum
-            RuntimeCall::InternalVote(_) => FeeChargeKind::VoteFlat,
-            RuntimeCall::JointVote(_) => FeeChargeKind::VoteFlat,
-            // 立法投票 3 个 extrinsic(prepare_population_snapshot / cast_representative_vote /
-            // cast_referendum_vote)按投票统一价 1 元/次(ADR-027)。
-            RuntimeCall::LegislationVote(_) => FeeChargeKind::VoteFlat,
-            // 选举投票创建/投票 extrinsic 按投票统一价 1 元/次。
-            RuntimeCall::ElectionVote(_) => FeeChargeKind::VoteFlat,
-            // OnchainIssuance 暴露 10 个 propose_X extrinsic(call_index 0..=4 业务 / 10..=14 监管)。
-            // 全部按 VOTE_FLAT_FEE = 1 元/次,与 GMB 其他业务 pallet 的 propose_X 一致。
-            // 1000 GMB 创建费走 onchain_issuance::fee::reserve_creation_deposit 内部 reserve(propose_issue 内部完成),
-            // 与 RuntimeFeeKindClassifier 计费正交。
-            RuntimeCall::OnchainIssuance(_) => FeeChargeKind::VoteFlat,
-            // pallet_assets 内核所有原生 extrinsic 已被 RuntimeCallFilter 拦在入口,
-            // 永远到不了本路径;此分支仅供编译期 exhaustive 检查。
-            RuntimeCall::Assets(_) => FeeChargeKind::Free,
-            // Balances 外部入口已被 RuntimeCallFilter 全部拒绝;这里只保留穷尽分支。
-            RuntimeCall::Balances(_) => FeeChargeKind::Unknown,
-            //
-            // 不再写 `_ => Unknown` 兜底:补 RuntimeCall::Grandpa 之后所有 pallet 变体已穷尽,
-            // 将来新增 pallet 若忘记归类会编译期 non-exhaustive match 报错,
-            // 强制开发者显式选择五类费用模型之一。
-        }
-    }
-}
-
-pub struct RuntimeFeePayerExtractor;
-
-impl onchain::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePayerExtractor {
-    fn fee_payer(_who: &AccountId, call: &RuntimeCall) -> Option<AccountId> {
-        match call {
-            // 清算行 V2 批次:链上 gas 由 institution_account 对应机构的费用账户承担。
-            //
-            // **收款方主导清算**模型下,
-            // institution_account = 收款方清算行主账户。fee_account_of(institution_account)
-            // = 收款方清算行费用账户 = 同一账户既收清算手续费又付链上 gas,自给自足闭环。
-            //
-            // 提交者(origin)是该机构的某个激活管理员(已在节点端解密私钥,自动签),
-            // 但其个人钱包余额不参与 gas 扣费。
-            RuntimeCall::OffchainTransaction(offchain::pallet::Call::submit_offchain_batch {
+                actor_cid_number,
                 institution_account,
                 ..
-            }) => offchain::Pallet::<Runtime>::fee_account_of(institution_account).ok(),
-            // 其他 offchain Call 及其他 RuntimeCall 由调用者个人账户付费。
-            _ => None,
+            }) => institution_account_onchain_route(
+                who,
+                actor_cid_number.as_slice(),
+                institution_account,
+            ),
+
+            RuntimeCall::VotingEngine(votingengine::pallet::Call::finalize_proposal { .. }) => {
+                FeeRoute::Free
+            }
+            RuntimeCall::VotingEngine(
+                votingengine::pallet::Call::retry_passed_proposal { proposal_id }
+                | votingengine::pallet::Call::cancel_passed_proposal { proposal_id, .. },
+            ) => proposal_operation_route(who, *proposal_id),
+
+            RuntimeCall::CitizenIdentity(
+                citizen_identity::pallet::Call::register_voting_identity {
+                    actor_cid_number, ..
+                }
+                | citizen_identity::pallet::Call::upgrade_to_candidate_identity {
+                    actor_cid_number,
+                    ..
+                }
+                | citizen_identity::pallet::Call::update_voting_identity {
+                    actor_cid_number, ..
+                }
+                | citizen_identity::pallet::Call::update_candidate_identity {
+                    actor_cid_number, ..
+                }
+                | citizen_identity::pallet::Call::revoke_identity {
+                    actor_cid_number, ..
+                }
+                | citizen_identity::pallet::Call::occupy_cid {
+                    actor_cid_number, ..
+                }
+                | citizen_identity::pallet::Call::occupy_cids_batch {
+                    actor_cid_number, ..
+                }
+                | citizen_identity::pallet::Call::revoke_cid {
+                    actor_cid_number, ..
+                },
+            ) => institution_onchain_route(who, actor_cid_number.as_slice()),
+            RuntimeCall::CitizenIdentity(
+                citizen_identity::pallet::Call::prepare_population_snapshot { .. },
+            ) => signer_onchain_route(who, 0),
+
+            RuntimeCall::SquarePost(square_post::pallet::Call::publish_post { .. })
+            | RuntimeCall::FullnodeIssuance(
+                fullnode_issuance::pallet::Call::bind_reward_wallet { .. }
+                | fullnode_issuance::pallet::Call::rebind_reward_wallet { .. },
+            ) => signer_onchain_route(who, 0),
+
+            RuntimeCall::RuntimeUpgrade(
+                runtime_upgrade::pallet::Call::propose_runtime_upgrade {
+                    actor_cid_number, ..
+                }
+                | runtime_upgrade::pallet::Call::developer_direct_upgrade {
+                    actor_cid_number, ..
+                },
+            ) => institution_onchain_route(who, actor_cid_number.as_slice()),
+            RuntimeCall::GrandpaKeyChange(
+                grandpakey_change::pallet::Call::propose_replace_grandpa_key {
+                    actor_cid_number,
+                    ..
+                },
+            ) => institution_onchain_route(who, actor_cid_number.as_slice()),
+            RuntimeCall::LegislationYuan(
+                legislation_yuan::pallet::Call::propose_enact_law {
+                    actor_cid_number, ..
+                }
+                | legislation_yuan::pallet::Call::propose_amend_law {
+                    actor_cid_number, ..
+                }
+                | legislation_yuan::pallet::Call::propose_repeal_law {
+                    actor_cid_number, ..
+                },
+            ) => institution_onchain_route(who, actor_cid_number.as_slice()),
+
+            RuntimeCall::MultisigTransfer(multisig::pallet::Call::propose_transfer {
+                actor_cid_number,
+                funding_account,
+                ..
+            }) => match actor_cid_number {
+                Some(cid_number) => {
+                    institution_account_onchain_route(who, cid_number.as_slice(), funding_account)
+                }
+                None => signer_onchain_route(who, 0),
+            },
+            RuntimeCall::MultisigTransfer(
+                multisig::pallet::Call::propose_safety_fund_transfer {
+                    actor_cid_number,
+                    institution_account,
+                    ..
+                }
+                | multisig::pallet::Call::propose_sweep_to_main {
+                    actor_cid_number,
+                    institution_account,
+                    ..
+                },
+            ) => institution_account_onchain_route(
+                who,
+                actor_cid_number.as_slice(),
+                institution_account,
+            ),
+
+            RuntimeCall::OffchainTransaction(offchain::pallet::Call::bind_clearing_bank {
+                ..
+            })
+            | RuntimeCall::OffchainTransaction(offchain::pallet::Call::switch_bank { .. }) => {
+                signer_onchain_route(who, 0)
+            }
+            RuntimeCall::OffchainTransaction(offchain::pallet::Call::deposit { amount })
+            | RuntimeCall::OffchainTransaction(offchain::pallet::Call::withdraw { amount }) => {
+                signer_onchain_route(who, *amount)
+            }
+            RuntimeCall::OffchainTransaction(offchain::pallet::Call::submit_offchain_batch {
+                actor_cid_number,
+                institution_account,
+                batch,
+                ..
+            }) => {
+                if !exact_institution_account_matches(
+                    actor_cid_number.as_slice(),
+                    institution_account,
+                ) {
+                    return FeeRoute::Reject;
+                }
+                // 链下费用由各 item 的付款公民承担；这里仍须验证提交机构管理员，
+                // 并保证作为手续费收款方的机构费用账户唯一且正反索引一致。
+                if !is_authorized_institution_actor(who, actor_cid_number.as_slice())
+                    || exact_institution_fee_account(actor_cid_number.as_slice()).is_none()
+                {
+                    return FeeRoute::Reject;
+                }
+                let fee_amount = batch
+                    .iter()
+                    .fold(0u128, |sum, item| sum.saturating_add(item.fee_amount));
+                FeeRoute::Offchain {
+                    fee_amount,
+                    payer: primitives::fee_policy::OffchainFeePayer::BatchItemPayers,
+                }
+            }
+            RuntimeCall::OffchainTransaction(offchain::pallet::Call::propose_l2_fee_rate {
+                actor_cid_number,
+                institution_account,
+                ..
+            }) => institution_account_onchain_route(
+                who,
+                actor_cid_number.as_slice(),
+                institution_account,
+            ),
+            RuntimeCall::OffchainTransaction(
+                offchain::pallet::Call::register_clearing_bank {
+                    actor_cid_number, ..
+                }
+                | offchain::pallet::Call::update_clearing_bank_endpoint {
+                    actor_cid_number, ..
+                }
+                | offchain::pallet::Call::unregister_clearing_bank {
+                    actor_cid_number, ..
+                },
+            ) => institution_onchain_route(who, actor_cid_number.as_slice()),
+            RuntimeCall::OffchainTransaction(offchain::pallet::Call::set_max_l2_fee_rate {
+                ..
+            }) => FeeRoute::Free,
+
+            // 只有实际投票/表决动作支付固定 1 元，并且始终由投票签名者本人支付。
+            RuntimeCall::InternalVote(internal_vote::pallet::Call::cast { .. })
+            | RuntimeCall::JointVote(joint_vote::pallet::Call::cast_admin { .. })
+            | RuntimeCall::JointVote(joint_vote::pallet::Call::cast_referendum { .. })
+            | RuntimeCall::LegislationVote(
+                legislation_vote::pallet::Call::cast_representative_vote { .. }
+                | legislation_vote::pallet::Call::cast_referendum_vote { .. }
+                | legislation_vote::pallet::Call::executive_sign { .. }
+                | legislation_vote::pallet::Call::override_sign { .. }
+                | legislation_vote::pallet::Call::guard_vote { .. },
+            )
+            | RuntimeCall::ElectionVote(
+                election_vote::pallet::Call::cast_popular_vote { .. }
+                | election_vote::pallet::Call::cast_mutual_vote { .. },
+            ) => signer_vote_route(who),
+            RuntimeCall::JointVote(
+                joint_vote::pallet::Call::prepare_joint_population_snapshot {
+                    actor_cid_number,
+                    ..
+                },
+            ) => institution_onchain_route(who, actor_cid_number.as_slice()),
+            RuntimeCall::LegislationVote(
+                legislation_vote::pallet::Call::prepare_population_snapshot { .. },
+            ) => signer_onchain_route(who, 0),
+
+            // onchain-issuance 当前 10 个公开 call 都是明确的业务占位，授权后直接
+            // `Ok(())`，尚未创建投票或执行资产逻辑。未实装前统一拒绝，禁止形成
+            // “扣了机构操作费但没有业务结果”的假交易。
+            RuntimeCall::OnchainIssuance(_) => FeeRoute::Reject,
+
+            // FRAME call enum 为元数据稳定性生成 `__Ignore` 隐藏分支；每个业务 pallet
+            // 仅把未显式列出的内部 call 归为 Reject。外层 RuntimeCall 不设通配分支，
+            // 因此新增 pallet 仍会触发编译期 non-exhaustive 错误。
+            RuntimeCall::OnchainTransaction(_)
+            | RuntimeCall::FullnodeIssuance(_)
+            | RuntimeCall::ResolutionIssuance(_)
+            | RuntimeCall::VotingEngine(_)
+            | RuntimeCall::InternalVote(_)
+            | RuntimeCall::JointVote(_)
+            | RuntimeCall::ElectionVote(_)
+            | RuntimeCall::CitizenIdentity(_)
+            | RuntimeCall::RuntimeUpgrade(_)
+            | RuntimeCall::ResolutionDestroy(_)
+            | RuntimeCall::GrandpaKeyChange(_)
+            | RuntimeCall::PersonalManage(_)
+            | RuntimeCall::PersonalAdmins(_)
+            | RuntimeCall::MultisigTransfer(_)
+            | RuntimeCall::OffchainTransaction(_)
+            | RuntimeCall::LegislationYuan(_)
+            | RuntimeCall::LegislationVote(_)
+            | RuntimeCall::PublicManage(_)
+            | RuntimeCall::PrivateManage(_)
+            | RuntimeCall::AddressRegistry(_)
+            | RuntimeCall::SquarePost(_) => FeeRoute::Reject,
+
+            // 两个内核 pallet 的外部入口被 BaseCallFilter 禁用；显式 Reject，不伪装成免费。
+            RuntimeCall::Assets(_) | RuntimeCall::Balances(_) => FeeRoute::Reject,
         }
     }
 }

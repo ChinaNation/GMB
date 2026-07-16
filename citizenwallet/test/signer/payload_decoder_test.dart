@@ -79,8 +79,11 @@ void main() {
         0x00,
       ];
 
-  Uint8List withSigningTail(List<int> callData, {int nonce = 1}) =>
-      Uint8List.fromList([...callData, ...signingTail(nonce: nonce)]);
+  Uint8List withSigningTail(List<int> callData, {int nonce = 1, int tip = 0}) =>
+      Uint8List.fromList([
+        ...callData,
+        ...signingTail(nonce: nonce, tip: tip),
+      ]);
 
   List<int> citizenIdentityPayloadForTest(List<int> walletBytes) => [
         ...compactVec('CTZN-430100-0001'),
@@ -2036,6 +2039,12 @@ void main() {
     test('rejects 裸 call_data(无签名扩展尾)', () {
       expect(PayloadDecoder.decode(hexOf(buildNrcTransferCallData())), isNull,
           reason: '真实 SigningPayload 必带扩展尾,裸 call_data 拒签');
+    });
+
+    test('rejects 非零 tip 的签名扩展尾', () {
+      final payload = withSigningTail(buildNrcTransferCallData(), tip: 1);
+      expect(PayloadDecoder.decode(hexOf(payload)), isNull,
+          reason: 'tip 不属于五类交易费，冷钱包必须在签名前拒绝非零 tip');
     });
 
     test('rejects 篡改的签名扩展尾', () {

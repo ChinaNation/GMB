@@ -12,36 +12,113 @@ fn time_and_currency_constants_are_consistent() {
 }
 
 #[test]
-fn fee_payer_returns_none_for_transfer() {
-    use configs::RuntimeFeePayerExtractor;
+fn institution_transfer_route_uses_exact_fee_account() {
     use frame_support::BoundedVec;
-    use onchain::CallFeePayer;
+    use onchain::CallFeeRoute;
     use primitives::cid::china::china_cb::CHINA_CB;
 
-    let institution = AccountId::new(CHINA_CB[0].main_account);
-    let beneficiary = AccountId::new([99u8; 32]);
-    let call = RuntimeCall::MultisigTransfer(multisig::pallet::Call::propose_transfer {
-        actor_cid_number: Some(
-            CHINA_CB[0]
-                .cid_number
-                .as_bytes()
+    new_test_ext().execute_with(|| {
+        let institution = AccountId::new(CHINA_CB[0].main_account);
+        let fee_account = AccountId::new(CHINA_CB[0].fee_account);
+        let beneficiary = AccountId::new([99u8; 32]);
+        let call = RuntimeCall::MultisigTransfer(multisig::pallet::Call::propose_transfer {
+            actor_cid_number: Some(
+                CHINA_CB[0]
+                    .cid_number
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .expect("NRC CID fits"),
+            ),
+            funding_account: institution,
+            beneficiary,
+            amount: 10000,
+            remark: BoundedVec::default(),
+        });
+        let signer = AccountId::new(CHINA_CB[0].admins[0]);
+        let route = <RuntimeFeeRouter as CallFeeRoute<AccountId, RuntimeCall, Balance>>::fee_route(
+            &signer, &call,
+        );
+        assert_eq!(
+            route,
+            primitives::fee_policy::FeeRoute::Onchain {
+                transaction_amount: 0,
+                payer: fee_account,
+            }
+        );
+    });
+}
+
+#[test]
+fn institution_operation_debits_only_exact_fee_account_without_signer_fallback() {
+    use frame_support::dispatch::GetDispatchInfo;
+    use pallet_transaction_payment::OnChargeTransaction;
+    use sp_runtime::transaction_validity::{InvalidTransaction, TransactionValidityError};
+
+    type RuntimeCharge = <Runtime as pallet_transaction_payment::Config>::OnChargeTransaction;
+
+    new_test_ext().execute_with(|| {
+        let actor_cid_number: public_manage::CidNumberOf<Runtime> = CHINA_CB[0]
+            .cid_number
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("NRC CID fits");
+        let signer = AccountId::new(CHINA_CB[0].admins[0]);
+        let fee_account = AccountId::new(CHINA_CB[0].fee_account);
+        let funding_account = AccountId::new(CHINA_CB[0].main_account);
+        let call = RuntimeCall::MultisigTransfer(multisig::pallet::Call::propose_transfer {
+            actor_cid_number: Some(actor_cid_number.clone()),
+            funding_account,
+            beneficiary: AccountId::new([98u8; 32]),
+            amount: 50_000,
+            remark: Default::default(),
+        });
+        let dispatch_info = call.get_dispatch_info();
+
+        let _ = Balances::deposit_creating(&signer, 1_000);
+        let _ = Balances::deposit_creating(&fee_account, 1_000);
+        let signer_before = Balances::free_balance(&signer);
+        let fee_before = Balances::free_balance(&fee_account);
+
+        let liquidity = <RuntimeCharge as OnChargeTransaction<Runtime>>::withdraw_fee(
+            &signer,
+            &call,
+            &dispatch_info,
+            primitives::fee_policy::ONCHAIN_MIN_FEE,
+            primitives::fee_policy::TRANSACTION_TIP,
+        )
+        .expect("authorized institution operation must debit its exact fee account");
+        assert!(liquidity.is_some());
+        assert_eq!(Balances::free_balance(&signer), signer_before);
+        assert_eq!(
+            Balances::free_balance(&fee_account),
+            fee_before - primitives::fee_policy::ONCHAIN_MIN_FEE
+        );
+
+        // 删除唯一费用账户映射后必须直接拒绝；即使管理员钱包有钱也不允许改扣管理员。
+        let fee_name: public_manage::AccountNameOf<Runtime> =
+            primitives::account_derive::RESERVED_NAME_FEE
                 .to_vec()
                 .try_into()
-                .expect("NRC CID fits"),
-        ),
-        funding_account: institution,
-        beneficiary,
-        amount: 10000,
-        remark: BoundedVec::default(),
+                .expect("fee account name fits");
+        public_manage::InstitutionAccounts::<Runtime>::remove(&actor_cid_number, &fee_name);
+        public_manage::AccountRegisteredCid::<Runtime>::remove(&fee_account);
+        let signer_before_reject = Balances::free_balance(&signer);
+        let error = <RuntimeCharge as OnChargeTransaction<Runtime>>::can_withdraw_fee(
+            &signer,
+            &call,
+            &dispatch_info,
+            primitives::fee_policy::ONCHAIN_MIN_FEE,
+            primitives::fee_policy::TRANSACTION_TIP,
+        )
+        .expect_err("missing exact fee account must reject instead of falling back");
+        assert!(matches!(
+            error,
+            TransactionValidityError::Invalid(InvalidTransaction::Call)
+        ));
+        assert_eq!(Balances::free_balance(&signer), signer_before_reject);
     });
-    let signer = AccountId::new([1u8; 32]);
-    // 机构转账提案交易本身由提交者按投票统一价付费；
-    // 真正转账手续费在 pallet 执行阶段从机构账户内部扣取，FeePayerExtractor 不代付。
-    let payer = RuntimeFeePayerExtractor::fee_payer(&signer, &call);
-    assert!(
-        payer.is_none(),
-        "fee_payer must return None for MultisigTransfer (fees handled internally)"
-    );
 }
 
 /// 治理业务 pallet 的 `MODULE_TAG` 必须全局唯一。
@@ -242,31 +319,31 @@ fn resolution_destro_internal_vote_flow_executes_destroy_and_reduces_issuance() 
 }
 
 #[test]
-fn runtime_fee_kind_classifier_covers_free_onchain_vote_and_unknown_paths() {
+fn runtime_fee_router_covers_free_onchain_vote_institution_and_reject_paths() {
     new_test_ext().execute_with(|| {
+        use onchain::CallFeeRoute;
+
         let who = AccountId::new([1u8; 32]);
         let recipient = AccountId::new([2u8; 32]);
 
         let system_call = RuntimeCall::System(frame_system::Call::remark {
             remark: b"x".to_vec(),
         });
-        let free = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
-            AccountId,
-            RuntimeCall,
-            Balance,
-        >>::fee_kind(&who, &system_call);
-        assert_eq!(free, onchain::FeeChargeKind::Free);
+        let free = <RuntimeFeeRouter as CallFeeRoute<AccountId, RuntimeCall, Balance>>::fee_route(
+            &who,
+            &system_call,
+        );
+        assert_eq!(free, primitives::fee_policy::FeeRoute::Free);
 
         let transfer_call = RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death {
             dest: sp_runtime::MultiAddress::Id(recipient.clone()),
             value: 123,
         });
-        let amount = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
-            AccountId,
-            RuntimeCall,
-            Balance,
-        >>::fee_kind(&who, &transfer_call);
-        assert_eq!(amount, onchain::FeeChargeKind::Unknown);
+        let amount = <RuntimeFeeRouter as CallFeeRoute<AccountId, RuntimeCall, Balance>>::fee_route(
+            &who,
+            &transfer_call,
+        );
+        assert_eq!(amount, primitives::fee_policy::FeeRoute::Reject);
 
         let remark =
             frame_support::BoundedVec::<u8, frame_support::traits::ConstU32<99>>::try_from(
@@ -279,28 +356,52 @@ fn runtime_fee_kind_classifier_covers_free_onchain_vote_and_unknown_paths() {
                 amount: 456,
                 remark,
             });
-        let amount_with_remark = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
+        let amount_with_remark = <RuntimeFeeRouter as CallFeeRoute<
             AccountId,
             RuntimeCall,
             Balance,
-        >>::fee_kind(&who, &transfer_with_remark_call);
+        >>::fee_route(&who, &transfer_with_remark_call);
         assert_eq!(
             amount_with_remark,
-            onchain::FeeChargeKind::OnchainAmount(456)
+            primitives::fee_policy::FeeRoute::Onchain {
+                transaction_amount: 456,
+                payer: who.clone(),
+            }
         );
 
         let internal_vote_call = RuntimeCall::InternalVote(internal_vote::pallet::Call::cast {
             proposal_id: 1,
             approve: true,
         });
-        let vote_kind = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
-            AccountId,
-            RuntimeCall,
-            Balance,
-        >>::fee_kind(&who, &internal_vote_call);
-        // 投票 extrinsic 本身按治理用户操作固定 1 元计费，不再套 0.1%。
-        assert_eq!(vote_kind, onchain::FeeChargeKind::VoteFlat);
+        let vote_kind =
+            <RuntimeFeeRouter as CallFeeRoute<AccountId, RuntimeCall, Balance>>::fee_route(
+                &who,
+                &internal_vote_call,
+            );
+        assert_eq!(
+            vote_kind,
+            primitives::fee_policy::FeeRoute::Vote { payer: who.clone() }
+        );
 
+        let miner = AccountId::new([7u8; 32]);
+        let fullnode_call =
+            RuntimeCall::FullnodeIssuance(fullnode_issuance::pallet::Call::bind_reward_wallet {
+                wallet: AccountId::new([8u8; 32]),
+            });
+        let fullnode_kind =
+            <RuntimeFeeRouter as CallFeeRoute<AccountId, RuntimeCall, Balance>>::fee_route(
+                &miner,
+                &fullnode_call,
+            );
+        assert_eq!(
+            fullnode_kind,
+            primitives::fee_policy::FeeRoute::Onchain {
+                transaction_amount: 0,
+                payer: miner,
+            }
+        );
+
+        let nrc_admin = AccountId::new(CHINA_CB[0].admins[0]);
         let nrc_institution_account = AccountId::new(CHINA_CB[0].main_account);
         let resolution_destro_call =
             RuntimeCall::ResolutionDestroy(resolution_destroy::pallet::Call::propose_destroy {
@@ -313,41 +414,104 @@ fn runtime_fee_kind_classifier_covers_free_onchain_vote_and_unknown_paths() {
                 institution_account: nrc_institution_account,
                 amount: 456,
             });
-        let resolution_kind = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
+        let resolution_kind =
+            <RuntimeFeeRouter as CallFeeRoute<AccountId, RuntimeCall, Balance>>::fee_route(
+                &nrc_admin,
+                &resolution_destro_call,
+            );
+        assert_eq!(
+            resolution_kind,
+            primitives::fee_policy::FeeRoute::Onchain {
+                transaction_amount: 0,
+                payer: AccountId::new(CHINA_CB[0].fee_account),
+            }
+        );
+        let unauthorized =
+            <RuntimeFeeRouter as CallFeeRoute<AccountId, RuntimeCall, Balance>>::fee_route(
+                &who,
+                &resolution_destro_call,
+            );
+        assert_eq!(unauthorized, primitives::fee_policy::FeeRoute::Reject);
+
+        let issuance_placeholder =
+            RuntimeCall::OnchainIssuance(onchain_issuance::pallet::Call::propose_mint {
+                actor_cid_number: CHINA_CB[0]
+                    .cid_number
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .expect("NRC CID fits"),
+                asset_id: 1,
+                to: AccountId::new([6u8; 32]),
+                amount: 100,
+            });
+        let issuance_placeholder_kind = <RuntimeFeeRouter as CallFeeRoute<
             AccountId,
             RuntimeCall,
             Balance,
-        >>::fee_kind(&who, &resolution_destro_call);
-        assert_eq!(resolution_kind, onchain::FeeChargeKind::VoteFlat);
+        >>::fee_route(&nrc_admin, &issuance_placeholder);
+        assert_eq!(
+            issuance_placeholder_kind,
+            primitives::fee_policy::FeeRoute::Reject
+        );
+
+        let clearing_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
+        let clearing_admin = AccountId::new(clearing_bank.admins[0]);
+        let offchain_call =
+            RuntimeCall::OffchainTransaction(offchain::pallet::Call::submit_offchain_batch {
+                actor_cid_number: clearing_bank
+                    .cid_number
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .expect("clearing bank CID fits"),
+                institution_account: AccountId::new(clearing_bank.main_account),
+                batch_seq: 1,
+                batch: Default::default(),
+                batch_signature: Default::default(),
+            });
+        let offchain_kind =
+            <RuntimeFeeRouter as CallFeeRoute<AccountId, RuntimeCall, Balance>>::fee_route(
+                &clearing_admin,
+                &offchain_call,
+            );
+        assert_eq!(
+            offchain_kind,
+            primitives::fee_policy::FeeRoute::Offchain {
+                fee_amount: 0,
+                payer: primitives::fee_policy::OffchainFeePayer::BatchItemPayers,
+            }
+        );
 
         let unknown_balances_call =
             RuntimeCall::Balances(pallet_balances::Call::upgrade_accounts {
                 who: vec![AccountId::new([9u8; 32])],
             });
-        let unknown = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
-            AccountId,
-            RuntimeCall,
-            Balance,
-        >>::fee_kind(&who, &unknown_balances_call);
-        assert_eq!(unknown, onchain::FeeChargeKind::Unknown);
+        let unknown =
+            <RuntimeFeeRouter as CallFeeRoute<AccountId, RuntimeCall, Balance>>::fee_route(
+                &who,
+                &unknown_balances_call,
+            );
+        assert_eq!(unknown, primitives::fee_policy::FeeRoute::Reject);
     });
 }
 
 #[test]
-fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
+fn runtime_fee_router_treats_proposals_as_operations_not_votes() {
     new_test_ext().execute_with(|| {
+        use onchain::CallFeeRoute;
+
         let (p1, _) = sr25519::Pair::generate();
         let (p2, _) = sr25519::Pair::generate();
         let signer1 = MultiSigner::from(p1.public());
         let who: AccountId = signer1.into_account();
         let admin2: AccountId = MultiSigner::from(p2.public()).into_account();
 
-        let account = AccountId::new([77u8; 32]);
         let beneficiary = AccountId::new([78u8; 32]);
         let admins: personal_manage::pallet::AdminsOf<Runtime> = vec![who.clone(), admin2.clone()]
             .try_into()
             .expect("admins should fit");
-        // 本测试验证提案交易本身按投票统一价，而不是按提案金额套链上费率。
+        // 创建提案是普通操作，只有后续 cast 才是固定 1 元投票。
         let account_name: personal_manage::pallet::AccountNameOf<Runtime> =
             b"runtime-test-personal"
                 .to_vec()
@@ -361,20 +525,29 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
                 regular_threshold: 2,
                 amount: 1_000,
             });
-        let create_kind = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
-            AccountId,
-            RuntimeCall,
-            Balance,
-        >>::fee_kind(&who, &create_call);
-        assert_eq!(create_kind, onchain::FeeChargeKind::VoteFlat);
+        let create_kind =
+            <RuntimeFeeRouter as CallFeeRoute<AccountId, RuntimeCall, Balance>>::fee_route(
+                &who,
+                &create_call,
+            );
+        assert_eq!(
+            create_kind,
+            primitives::fee_policy::FeeRoute::Onchain {
+                transaction_amount: 0,
+                payer: who.clone(),
+            }
+        );
 
-        let _ = Balances::deposit_creating(&account, 777);
-        // propose_close 已加注销凭证字段；本测试只锁费用分类。
-        // 本测试只验证该 Call 走投票统一价分类,凭证值无关,填默认值即可。
+        let nrc_admin = AccountId::new(CHINA_CB[0].admins[0]);
         let close_call = RuntimeCall::PublicManage(
             public_manage::pallet::Call::propose_close_public_institution {
-                actor_cid_number: Default::default(),
-                institution_account: account,
+                actor_cid_number: CHINA_CB[0]
+                    .cid_number
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .expect("NRC CID fits"),
+                institution_account: AccountId::new(CHINA_CB[0].main_account),
                 beneficiary,
                 register_nonce: Default::default(),
                 signature: Default::default(),
@@ -382,12 +555,18 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
                 credential_signer_pubkey: [0u8; 32],
             },
         );
-        let close_kind = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
-            AccountId,
-            RuntimeCall,
-            Balance,
-        >>::fee_kind(&who, &close_call);
-        assert_eq!(close_kind, onchain::FeeChargeKind::VoteFlat);
+        let close_kind =
+            <RuntimeFeeRouter as CallFeeRoute<AccountId, RuntimeCall, Balance>>::fee_route(
+                &nrc_admin,
+                &close_call,
+            );
+        assert_eq!(
+            close_kind,
+            primitives::fee_policy::FeeRoute::Onchain {
+                transaction_amount: 0,
+                payer: AccountId::new(CHINA_CB[0].fee_account),
+            }
+        );
 
         let institution =
             AccountId::new(primitives::cid::china::china_cb::CHINA_CB[0].main_account);
@@ -406,12 +585,18 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
                 amount: 88_888,
                 remark: frame_support::BoundedVec::default(),
             });
-        let transfer_kind = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
-            AccountId,
-            RuntimeCall,
-            Balance,
-        >>::fee_kind(&who, &transfer_call);
-        assert_eq!(transfer_kind, onchain::FeeChargeKind::VoteFlat);
+        let transfer_kind =
+            <RuntimeFeeRouter as CallFeeRoute<AccountId, RuntimeCall, Balance>>::fee_route(
+                &nrc_admin,
+                &transfer_call,
+            );
+        assert_eq!(
+            transfer_kind,
+            primitives::fee_policy::FeeRoute::Onchain {
+                transaction_amount: 0,
+                payer: AccountId::new(CHINA_CB[0].fee_account),
+            }
+        );
     });
 }
 
@@ -883,6 +1068,8 @@ fn runtime_square_post_campaign_records_chain_cid_for_verified_wallet() {
 #[test]
 fn runtime_square_post_fee_kind_uses_onchain_minimum_fee() {
     new_test_ext().execute_with(|| {
+        use onchain::CallFeeRoute;
+
         let who = AccountId::new([44u8; 32]);
         let call = RuntimeCall::SquarePost(square_post::pallet::Call::publish_post {
             post_id: b"sqp_fee_kind".to_vec(),
@@ -891,18 +1078,23 @@ fn runtime_square_post_fee_kind_uses_onchain_minimum_fee() {
             storage_receipt_id: b"sqr_fee_kind".to_vec(),
             storage_until: 1_893_456_000_000,
         });
-        let fee_kind = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
-            AccountId,
-            RuntimeCall,
-            Balance,
-        >>::fee_kind(&who, &call);
-        assert_eq!(fee_kind, onchain::FeeChargeKind::OnchainAmount(0));
+        let fee_kind =
+            <RuntimeFeeRouter as CallFeeRoute<AccountId, RuntimeCall, Balance>>::fee_route(
+                &who, &call,
+            );
         assert_eq!(
-            onchain::calculate_onchain_fee(0),
+            fee_kind,
+            primitives::fee_policy::FeeRoute::Onchain {
+                transaction_amount: 0,
+                payer: who,
+            }
+        );
+        assert_eq!(
+            primitives::fee_policy::calculate_onchain_fee(0),
             primitives::fee_policy::ONCHAIN_MIN_FEE
         );
         assert_eq!(primitives::fee_policy::ONCHAIN_MIN_FEE, 10);
-        // 广场降费不得改变投票和治理类统一费用。
+        // 广场发布费不得改变实际投票的统一费用。
         assert_eq!(primitives::fee_policy::VOTE_FLAT_FEE, YUAN);
     });
 }

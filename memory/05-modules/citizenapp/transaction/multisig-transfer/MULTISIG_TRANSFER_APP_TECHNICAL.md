@@ -8,7 +8,7 @@
 - `multisig_transfer_detail_page.dart`：展示多签转账详情、投票状态和投票操作。
 - `multisig_transfer_service.dart`：构造 `MultisigTransfer::propose_*` call data，读取转账提案详情。
 - `multisig_transfer_models.dart`：多签转账、 安全基金转账、手续费划转提案模型。
-- `multisig_transfer_balance_guard.dart`：检查管理员钱包是否足以支付提案/投票交易费。
+- `multisig_transfer_balance_guard.dart`：机构提案检查 actor CID 费用账户，个人提案和实际投票检查签名者钱包。
 - `multisig_transfer_entry.dart`：多签转账入口卡片和页面跳转。
 - `multisig_transfer_proposal_adapter.dart`：给机构页、投票页和账户页使用的列表展示、详情跳转、缓存清理和数据源适配。
 
@@ -20,11 +20,12 @@
 
 ## 费用规则
 
-- 发起多签转账提案：管理员钱包按转账金额计费。
-- 多签转账投票：投票管理员钱包按 `VOTE_FLAT_FEE = 1 元` 计费。
-- 多签资金账户：执行阶段需要满足转账金额、手续费和 ED 保留要求。
+- 发起机构多签转账提案：actor CID 的费用账户支付 0.1 元，管理员钱包只签名。
+- 发起个人多签转账提案：签名者支付 0.1 元。
+- 多签转账实际投票：投票管理员钱包支付 1 元。
+- 具体资金账户：执行阶段检查转账本金；机构实际执行手续费改由费用账户支付的规则在统一执行期费用步骤落实。
 
-管理员钱包余额不足时，页面直接提示“管理员钱包余额不足”，不再让用户误以为“投票成功但一直转圈”。
+页面不得把机构提案费用显示为管理员付款：机构费用账户不足提示“机构费用账户余额不足”；个人提案或实际投票签名者不足才提示“管理员钱包余额不足”。两类普通支出预检都包含“支付后保留 ED”。
 
 ## 投票进度
 

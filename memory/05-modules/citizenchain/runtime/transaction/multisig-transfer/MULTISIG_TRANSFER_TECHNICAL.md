@@ -272,7 +272,7 @@ pub enum Error<T> {
 
 ### 6.1 计费规则
 
-由 `onchain-transaction::calculate_onchain_fee()` 计算：
+由 `primitives::fee_policy::calculate_onchain_fee()` 计算：
 
 - 基础手续费 = `max(amount × ONCHAIN_FEE_RATE, ONCHAIN_MIN_FEE)`
 - `ONCHAIN_FEE_RATE` = 0.1%（`Perbill::from_parts(1_000_000)`）
@@ -281,11 +281,12 @@ pub enum Error<T> {
 
 ### 6.2 手续费处理方式
 
-提案提交和投票交易不是免费交易：
+提案提交和投票交易不是同一类费用：
 
-- `MultisigTransfer::propose_transfer / propose_safety_fund_transfer / propose_sweep_to_main` 是治理提案交易，由签名管理员钱包按 `VOTE_FLAT_FEE = 1 元` 计费。
-- `InternalVote::cast` 由投票管理员钱包按 `VOTE_FLAT_FEE = 1 元` 计费。
-- 多签资金账户仍需在执行阶段承担实际转账金额、内部手续费和 ED 保留要求。
+- 机构 `propose_transfer / propose_safety_fund_transfer / propose_sweep_to_main` 是链上机构操作，由 actor CID 的费用账户支付 0.1 元；管理员钱包只签名。
+- 个人多签 `propose_transfer` 是普通链上操作，由签名者支付 0.1 元。
+- `InternalVote::cast` 才是实际投票，由投票管理员钱包支付 1 元。
+- 多签资金账户在执行阶段只应承担实际转账本金；实际转账手续费改由机构费用账户支付的执行期改造列入本任务第 3 步。
 
 投票通过后，pallet 的 `try_execute_transfer_from_callback` 内部还会处理转出账户侧的执行费用：
 
@@ -295,7 +296,7 @@ pub enum Error<T> {
 4. 执行 `Currency::withdraw()` 扣取手续费。
 5. 通过 `FeeRouter` 按规则分账。
 
-因此前端必须同时提示两类余额：管理员钱包余额不足会导致提案/投票交易被交易支付扩展拒绝；多签账户余额不足会导致提案执行失败。
+因此前端必须区分三类余额：机构提案检查机构费用账户，个人提案和实际投票检查签名者钱包，提案执行检查具体资金账户本金；不得用管理员钱包为机构费用兜底。
 
 ### 6.3 手续费分账
 
@@ -458,35 +459,30 @@ pub trait Config:
 在 `runtime/src/lib.rs` 中注册（pallet_index = 17）：
 ```rust
 #[runtime::pallet_index(17)]
-pub type MultisigTransfer = multisig_transfer;
+pub type MultisigTransfer = multisig;
 ```
 
 在 `runtime/src/configs/mod.rs` 中配置：
 ```rust
-impl multisig_transfer::Config for Runtime {
+impl multisig::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxRemarkLen = ConstU32<256>;
     type FeeRouter = TransferFeeRouter;
     type PersonalQuery = PersonalManage;
     type InstitutionQuery = RuntimeInstitutionQuery;
-    type WeightInfo = multisig_transfer::weights::SubstrateWeight<Runtime>;
+    type WeightInfo = multisig::weights::SubstrateWeight<Runtime>;
 }
 ```
 
-### 13.2 CallFeeKind 配置
+### 13.2 `FeeRoute` 配置
 
-`MultisigTransfer` 的 propose 系列 extrinsic 只负责创建治理提案，交易本身按投票统一价 1 元计费；真正执行转账时，模块内部再按转出金额 `max(amount × 0.1%, 0.1 元)` 扣链上交易费：
-```rust
-RuntimeCall::MultisigTransfer(ref dt_call) => match dt_call {
-    multisig_transfer::pallet::Call::propose_transfer { .. }
-    | multisig_transfer::pallet::Call::propose_safety_fund_transfer { .. }
-    | multisig_transfer::pallet::Call::propose_sweep_to_main { .. } => {
-        onchain_transaction::FeeChargeKind::VoteFlat
-    }
-    _ => onchain_transaction::FeeChargeKind::VoteFlat,
-}
-```
+`MultisigTransfer` 的 propose 系列 extrinsic 负责创建提案，但“发起提案”不是“投票”。当前统一规则为：
+
+- 机构提案：显式携带 `actor_cid_number + funding_account/institution_account`，校验账户属于该 CID 后，从该 CID 的唯一费用账户扣 0.1 元。
+- 个人多签提案：由签名者支付 0.1 元链上操作费。
+- 管理员后续执行 `InternalVote::cast` 时，才由投票签名者支付 1 元投票费。
+- 提案通过后的实际资金执行费与本金账户分离规则在统一执行期费用步骤中落实；不得让机构管理员钱包回落垫付。
 
 ### 13.3 Benchmark 注册
 
-在 `define_benchmarks!` 中添加 `[multisig_transfer, MultisigTransfer]`。
+在 `define_benchmarks!` 中添加 `[multisig, MultisigTransfer]`。

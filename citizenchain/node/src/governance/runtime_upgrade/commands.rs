@@ -42,19 +42,20 @@ fn normalize_pubkey_hex(pubkey_hex: &str) -> String {
         .to_ascii_lowercase()
 }
 
-async fn ensure_nrc_activated_admin(app: &AppHandle, pubkey_hex: &str) -> Result<(), String> {
+async fn ensure_nrc_activated_admin(app: &AppHandle, pubkey_hex: &str) -> Result<String, String> {
     let nrc_cid_number = registry::governance_overview()
         .national_councils
         .first()
         .map(|item| item.cid_number.clone())
         .ok_or_else(|| "国家储委会机构常量缺失，无法发起开发升级".to_string())?;
     let pubkey_clean = normalize_pubkey_hex(pubkey_hex);
-    let admins = activation::get_activated_admins(app.clone(), nrc_cid_number, None).await?;
+    let admins =
+        activation::get_activated_admins(app.clone(), nrc_cid_number.clone(), None).await?;
     if admins
         .iter()
         .any(|admin| normalize_pubkey_hex(&admin.pubkey_hex) == pubkey_clean)
     {
-        Ok(())
+        Ok(nrc_cid_number)
     } else {
         Err("开发升级仅允许已激活国家储委会管理员发起".to_string())
     }
@@ -72,9 +73,14 @@ pub async fn build_developer_upgrade_request(
     if !status.running {
         return Err("节点未运行，无法构建签名请求".to_string());
     }
-    ensure_nrc_activated_admin(&app, &pubkey_hex).await?;
+    let actor_cid_number = ensure_nrc_activated_admin(&app, &pubkey_hex).await?;
     tauri::async_runtime::spawn_blocking(move || {
-        runtime_signing::build_developer_upgrade_sign_request(&pubkey_hex, &wasm_path, pow_params)
+        runtime_signing::build_developer_upgrade_sign_request(
+            &pubkey_hex,
+            &actor_cid_number,
+            &wasm_path,
+            pow_params,
+        )
     })
     .await
     .map_err(|e| format!("build developer upgrade request task failed: {e}"))?
@@ -97,9 +103,13 @@ pub async fn submit_developer_upgrade(
     if !status.running {
         return Err("节点未运行，无法提交升级".to_string());
     }
-    ensure_nrc_activated_admin(&app, &expected_pubkey_hex).await?;
+    let actor_cid_number = ensure_nrc_activated_admin(&app, &expected_pubkey_hex).await?;
     tauri::async_runtime::spawn_blocking(move || {
-        let call_data = call_data::developer_direct_upgrade_from_file(&wasm_path, pow_params)?;
+        let call_data = call_data::developer_direct_upgrade_from_file(
+            &actor_cid_number,
+            &wasm_path,
+            pow_params,
+        )?;
         signing::verify_and_submit(
             &request_id,
             &expected_pubkey_hex,

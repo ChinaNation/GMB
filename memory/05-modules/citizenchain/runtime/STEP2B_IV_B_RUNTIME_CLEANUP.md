@@ -37,13 +37,10 @@ Step 3 再补。
 `weights.rs`(55 行 → 17 行):删除 3 个老方法,`WeightInfo` trait 简化为默认实现空壳;
 当前所有 new Call 权重在 `lib.rs::#[pallet::weight]` 里直接用 `T::DbWeight` 估算。
 
-### 1.2 Runtime configs(`runtime/src/configs/mod.rs`)
+### 1.2 Runtime configs（历史清理结果；当前文件为 `runtime/src/configs.rs`）
 
-- `RuntimeFeeKindClassifier` 删除 5 处老分支(`submit_offchain_batch` / `enqueue_offchain_batch`
-  / `process_queued_batch` / 及其引用 `QueuedBatches` 的 `FeePayer` 分支)。老 Call 删了
-  Pattern 永远不命中；当前新增 Call 必须显式归入五类费用模型，不再保留金额兜底。
-- `RuntimeFeePayerExtractor` 清理后只剩 `submit_offchain_batch_v2 → fee_account_of(institution_main)`
-  一条,其余 Call 走 `_ => None` 个人付费。
+- 旧分类器和独立付款提取器现已整体删除；当前只有 `RuntimeFeeRouter` 一次返回 `FeeRoute`。
+- `submit_offchain_batch` 必须显式携带 actor CID 和机构账户；路由严格解析同一 CID 的费用账户。任何缺失或不一致直接 `Reject`，不存在 `_ => None`、个人付费回落或主账户反推。
 - 删除 `impl offchain_transaction::ProtectedSourceChecker for RuntimeProtectedSourceChecker`(ProtectedSourceChecker trait 已从 pallet 移除)。
 - `offchain_transaction::Config for Runtime` 移除 `InternalVoteEngine` / `ProtectedSourceChecker`
   两个 type;`WeightInfo` 改为 `()`(pallet weights.rs 简化后 SubstrateWeight 不再存在)。

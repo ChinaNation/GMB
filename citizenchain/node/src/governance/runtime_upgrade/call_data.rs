@@ -19,28 +19,41 @@ pub(crate) fn read_wasm(wasm_path: &str) -> Result<(Vec<u8>, f64), String> {
     Ok((wasm_code, wasm_size_mb))
 }
 
-/// 构建开发期直接升级 call_data: RuntimeUpgrade.developer_direct_upgrade(code)。
+/// 构建开发期直接升级 call_data。
+///
+/// 开发直升也是国家储委会机构操作，载荷必须显式携带 `actor_cid_number`；
+/// 管理员只负责签名，链上费用由该 CID 的费用账户承担。
 pub(crate) fn developer_direct_upgrade(
+    actor_cid_number: &str,
     wasm_code: &[u8],
     pow_params: pow_difficulty::PowDifficultyParams,
-) -> Vec<u8> {
+) -> Result<Vec<u8>, String> {
+    if actor_cid_number.is_empty()
+        || actor_cid_number.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
+    {
+        return Err("actor_cid_number 超出链上协议范围".to_string());
+    }
     let wasm_len_compact = encode_compact_u32(wasm_code.len() as u32);
-    let mut call_data = Vec::with_capacity(2 + wasm_len_compact.len() + wasm_code.len());
+    let mut call_data =
+        Vec::with_capacity(2 + actor_cid_number.len() + wasm_len_compact.len() + wasm_code.len());
     call_data.push(RUNTIME_UPGRADE_PALLET_INDEX);
     call_data.push(DEVELOPER_DIRECT_UPGRADE_CALL_INDEX);
+    call_data.extend_from_slice(&encode_compact_u32(actor_cid_number.len() as u32));
+    call_data.extend_from_slice(actor_cid_number.as_bytes());
     call_data.extend_from_slice(&wasm_len_compact);
     call_data.extend_from_slice(wasm_code);
     call_data.extend_from_slice(&pow_params.encode());
-    call_data
+    Ok(call_data)
 }
 
 /// 从文件重建开发期直接升级 call_data,用于签名响应提交阶段。
 pub(crate) fn developer_direct_upgrade_from_file(
+    actor_cid_number: &str,
     wasm_path: &str,
     pow_params: pow_difficulty::PowDifficultyParams,
 ) -> Result<Vec<u8>, String> {
     let (wasm_code, _) = read_wasm(wasm_path)?;
-    Ok(developer_direct_upgrade(&wasm_code, pow_params))
+    developer_direct_upgrade(actor_cid_number, &wasm_code, pow_params)
 }
 
 /// 构建运行期协议升级提案 call_data: RuntimeUpgrade.propose_runtime_upgrade(...)。
@@ -98,7 +111,9 @@ mod tests {
     fn manual_call_encoding_matches_runtime_metadata_contract() {
         let code = vec![1u8, 2, 3];
         let params = pow_difficulty::PowDifficultyParams::genesis_default();
-        let developer_call = developer_direct_upgrade(&code, params);
+        let actor_cid_number = "LN001-NRC0G-944805165-2026";
+        let developer_call =
+            developer_direct_upgrade(actor_cid_number, &code, params).expect("developer call data");
         let decoded = citizenchain::RuntimeCall::decode_all(&mut developer_call.as_slice())
             .expect("开发期升级 call_data 必须被真实 RuntimeCall 完整解码");
         assert_eq!(decoded.encode(), developer_call);

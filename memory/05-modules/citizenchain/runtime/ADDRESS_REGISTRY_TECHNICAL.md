@@ -18,7 +18,7 @@ citizenchain/runtime/misc/address-registry/
 
 - pallet index：`33`
 - runtime 类型名：`AddressRegistry`
-- 费用模型：`VoteFlat`
+- 费用模型：注册局机构链上操作，由 `actor_cid_number` 的唯一费用账户支付 0.1 元；不是投票费。
 - 权限配置：`RuntimeAddressAuthority`
 
 ## 4. Extrinsic

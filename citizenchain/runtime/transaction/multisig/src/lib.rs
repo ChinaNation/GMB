@@ -352,7 +352,7 @@ pub mod pallet {
 
             // 预检余额（含手续费，与执行时检查一致，避免创建必定无法执行的提案）
             let amount_u128: u128 = amount.saturated_into();
-            let fee_u128 = onchain::calculate_onchain_fee(amount_u128);
+            let fee_u128 = primitives::fee_policy::calculate_onchain_fee(amount_u128);
             let fee: BalanceOf<T> = fee_u128.saturated_into();
             let total = amount
                 .checked_add(&fee)
@@ -459,7 +459,7 @@ pub mod pallet {
 
             // 预检余额（含手续费，避免创建必定无法执行的提案）
             let amount_u128: u128 = amount.saturated_into();
-            let fee_u128 = onchain::calculate_onchain_fee(amount_u128);
+            let fee_u128 = primitives::fee_policy::calculate_onchain_fee(amount_u128);
             let fee: BalanceOf<T> = fee_u128.saturated_into();
             let total = amount
                 .checked_add(&fee)
@@ -738,7 +738,7 @@ pub mod pallet {
 
             // ── 计算手续费 ──
             let amount_u128: u128 = action.amount.saturated_into();
-            let tx_fee_u128 = onchain::calculate_onchain_fee(amount_u128);
+            let tx_fee_u128 = primitives::fee_policy::calculate_onchain_fee(amount_u128);
             let tx_fee: BalanceOf<T> = tx_fee_u128.saturated_into();
 
             let fee_balance_u128: u128 =
@@ -822,7 +822,7 @@ pub mod pallet {
 
             // ── 计算手续费 ──
             let amount_u128: u128 = action.amount.saturated_into();
-            let fee_u128 = onchain::calculate_onchain_fee(amount_u128);
+            let fee_u128 = primitives::fee_policy::calculate_onchain_fee(amount_u128);
             let fee: BalanceOf<T> = fee_u128.saturated_into();
             let total = action
                 .amount
@@ -911,9 +911,9 @@ pub mod pallet {
                 Error::<T>::BeneficiaryIsProtectedAddress
             );
 
-            // ── 计算手续费（复用 onchain-transaction 公共接口） ──
+            // ── 计算手续费（复用 primitives::fee_policy 唯一公式） ──
             let amount_u128: u128 = action.amount.saturated_into();
-            let fee_u128 = onchain::calculate_onchain_fee(amount_u128);
+            let fee_u128 = primitives::fee_policy::calculate_onchain_fee(amount_u128);
             let fee: BalanceOf<T> = fee_u128.saturated_into();
             let total = action
                 .amount

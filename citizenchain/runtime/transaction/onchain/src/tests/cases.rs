@@ -70,81 +70,50 @@ fn transfer_with_remark_rejects_invalid_transfer_and_caps_remark_bytes() {
 }
 
 #[test]
-fn onchain_fee_round_and_min_work() {
-    // 1分*0.1%=0.001分 => round=0分，应用最低10分。
-    let rate = Perbill::from_parts(1_000_000); // 0.1%
-    let fee_small = mul_perbill_round(1, rate).max(primitives::fee_policy::ONCHAIN_MIN_FEE);
-    assert_eq!(fee_small, 10);
-
-    // 10000分(100元)*0.1%=10分，刚好最低线
-    let fee_boundary = mul_perbill_round(10_000, rate).max(primitives::fee_policy::ONCHAIN_MIN_FEE);
-    assert_eq!(fee_boundary, 10);
-
-    // 50000分(500元)*0.1%=50分，大于最低线按实际收取
-    let fee_large = mul_perbill_round(50_000, rate).max(primitives::fee_policy::ONCHAIN_MIN_FEE);
-    assert_eq!(fee_large, 50);
-}
-
-#[test]
-fn mul_perbill_round_half_up_works() {
-    // 500 * 0.1% = 0.5 分，按四舍五入应为 1 分
-    assert_eq!(mul_perbill_round(500, Perbill::from_parts(1_000_000)), 1);
-    // 499 * 0.1% = 0.499 分，按四舍五入应为 0 分
-    assert_eq!(mul_perbill_round(499, Perbill::from_parts(1_000_000)), 0);
-}
-
-#[test]
-fn mul_perbill_round_handles_u128_max_without_saturating_distortion() {
-    assert_eq!(
-        mul_perbill_round(u128::MAX, Perbill::from_percent(100)),
-        u128::MAX
-    );
-}
-
-#[test]
-fn custom_fee_with_tip_handles_all_fee_kinds() {
+fn charge_details_handles_all_fee_routes() {
     new_test_ext().execute_with(|| {
         let who = account(1);
         let call = sample_call();
         let info = call.get_dispatch_info();
 
-        // OnchainAmount：50_000 * 0.1% = 50 分，+ tip(3) => 53 分
-        let fee_amount = custom_fee_with_tip::<Test, Balances, FeeKindExtractorOnchainAmount>(
-            &who, &call, &info, 3,
-        )
-        .expect("onchain amount fee must be computable");
-        assert_eq!(fee_amount, 53);
+        let (payer, fee) = charge_details::<Test, Balances, FeeRouteOnchain>(&who, &call, &info, 0)
+            .expect("onchain route")
+            .expect("onchain route must charge");
+        assert_eq!(payer, who);
+        assert_eq!(fee, 50);
 
-        // VoteFlat：投票 / 治理固定 1 元，+ tip(4) => 104 分
-        let fee_vote =
-            custom_fee_with_tip::<Test, Balances, FeeKindExtractorVoteFlat>(&who, &call, &info, 4)
-                .expect("vote flat fee must be computable");
-        assert_eq!(fee_vote, 104);
+        let (_, vote_fee) =
+            charge_details::<Test, Balances, FeeRouteVote>(&account(1), &call, &info, 0)
+                .expect("vote route")
+                .expect("vote route must charge");
+        assert_eq!(vote_fee, 100);
 
-        // OffchainFee：清算手续费在清算模块执行，本层仅保留 tip
-        let fee_offchain = custom_fee_with_tip::<Test, Balances, FeeKindExtractorOffchainFee>(
-            &who, &call, &info, 5,
-        )
-        .expect("offchain fee kind must only charge tip here");
-        assert_eq!(fee_offchain, 5);
+        assert!(
+            charge_details::<Test, Balances, FeeRouteOffchain>(&account(1), &call, &info, 0,)
+                .expect("offchain route")
+                .is_none()
+        );
+        assert!(
+            charge_details::<Test, Balances, FeeRouteFree>(&account(1), &call, &info, 0,)
+                .expect("free route")
+                .is_none()
+        );
 
-        // Free：不收基础费，仅返回 tip
-        let fee_free =
-            custom_fee_with_tip::<Test, Balances, FeeKindExtractorFree>(&who, &call, &info, 7)
-                .expect("free call must only charge tip");
-        assert_eq!(fee_free, 7);
+        let reject_err =
+            charge_details::<Test, Balances, FeeRouteReject>(&account(1), &call, &info, 0)
+                .expect_err("reject route must fail");
+        assert_eq!(reject_err, InvalidTransaction::Call.into());
 
-        // Unknown：拒绝交易，避免新增调用漏归类
-        let unknown_err =
-            custom_fee_with_tip::<Test, Balances, FeeKindExtractorUnknown>(&who, &call, &info, 0)
-                .expect_err("unknown extract result should be rejected");
-        assert_eq!(unknown_err, InvalidTransaction::Call.into());
+        let tip_err =
+            charge_details::<Test, Balances, FeeRouteOnchain>(&account(1), &call, &info, 1)
+                .expect_err("non-zero tip must fail before charging");
+        assert_eq!(tip_err, InvalidTransaction::Payment.into());
     });
 }
 
 #[test]
-fn withdraw_and_can_withdraw_use_default_payer_and_min_fee() {
-    type Adapter = OnchainChargeAdapter<Balances, (), FeeKindExtractorTinyOnchainAmount, ()>;
+fn withdraw_and_can_withdraw_use_explicit_signer_payer_and_min_fee() {
+    type Adapter = OnchainChargeAdapter<Balances, (), FeeRouteTinyOnchain>;
 
     new_test_ext().execute_with(|| {
         let who = account(1);
@@ -152,23 +121,21 @@ fn withdraw_and_can_withdraw_use_default_payer_and_min_fee() {
         let info = call.get_dispatch_info();
 
         assert_ok!(<Adapter as OnChargeTransaction<Test>>::can_withdraw_fee(
-            &who, &call, &info, 0, 2
+            &who, &call, &info, 0, 0
         ));
 
-        let liq = <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&who, &call, &info, 0, 2)
+        let liq = <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&who, &call, &info, 0, 0)
             .expect("withdraw should succeed")
             .expect("non-zero fee must return liquidity info");
 
-        assert_eq!(Balances::free_balance(who), 988);
-        assert_eq!(liq.0.peek(), 10);
-        assert_eq!(liq.1.peek(), 2);
+        assert_eq!(Balances::free_balance(who), 990);
+        assert_eq!(liq.peek(), 10);
     });
 }
 
 #[test]
-fn withdraw_uses_custom_fee_payer() {
-    type Adapter =
-        OnchainChargeAdapter<Balances, (), FeeKindExtractorTinyOnchainAmount, FeePayerAsAccount2>;
+fn withdraw_uses_explicit_route_payer() {
+    type Adapter = OnchainChargeAdapter<Balances, (), FeeRouteTinyAccount2>;
 
     new_test_ext().execute_with(|| {
         let who = account(1);
@@ -187,7 +154,7 @@ fn withdraw_uses_custom_fee_payer() {
 
 #[test]
 fn withdraw_no_amount_without_tip_returns_none_and_no_fee_paid_event() {
-    type Adapter = OnchainChargeAdapter<Balances, (), FeeKindExtractorFree, ()>;
+    type Adapter = OnchainChargeAdapter<Balances, (), FeeRouteFree>;
 
     new_test_ext().execute_with(|| {
         let who = account(1);
@@ -208,7 +175,7 @@ fn withdraw_no_amount_without_tip_returns_none_and_no_fee_paid_event() {
 
 #[test]
 fn can_withdraw_and_withdraw_fail_when_insufficient_balance() {
-    type Adapter = OnchainChargeAdapter<Balances, (), FeeKindExtractorTinyOnchainAmount, ()>;
+    type Adapter = OnchainChargeAdapter<Balances, (), FeeRouteTinyOnchain>;
 
     new_test_ext().execute_with(|| {
         let poor = account(3);
@@ -665,8 +632,7 @@ fn correct_and_deposit_does_not_refund_overpayment() {
             MockNrcAccountProviderNone,
             MockSafetyFundAccountProvider,
         >,
-        FeeKindExtractorOnchainAmount,
-        (),
+        FeeRouteOnchain,
     >;
 
     new_test_ext().execute_with(|| {
@@ -675,7 +641,7 @@ fn correct_and_deposit_does_not_refund_overpayment() {
         let info = call.get_dispatch_info();
         let safety_fund = AccountId32::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT);
         let issuance_before = Balances::total_issuance();
-        let total_fee = 55u128; // base 50 + tip 5
+        let total_fee = 50u128;
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
         let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
         let safety_fund_percent = primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
@@ -695,9 +661,9 @@ fn correct_and_deposit_does_not_refund_overpayment() {
 
         MOCK_AUTHOR.with(|v| *v.borrow_mut() = None);
         let liquidity =
-            <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&who, &call, &info, 0, 5)
+            <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&who, &call, &info, 0, 0)
                 .expect("withdraw should succeed");
-        assert_eq!(Balances::free_balance(&who), 945);
+        assert_eq!(Balances::free_balance(&who), 950);
 
         assert_ok!(
             <Adapter as OnChargeTransaction<Test>>::correct_and_deposit_fee(
@@ -705,12 +671,12 @@ fn correct_and_deposit_does_not_refund_overpayment() {
                 &info,
                 &Default::default(),
                 1, // pretend corrected fee is tiny; adapter intentionally ignores it
-                5,
+                0,
                 liquidity,
             )
         );
 
-        assert_eq!(Balances::free_balance(&who), 945);
+        assert_eq!(Balances::free_balance(&who), 950);
         assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
         assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
         assert_eq!(
@@ -735,8 +701,7 @@ fn correct_and_deposit_fee_none_is_noop() {
             MockNrcAccountProvider,
             MockSafetyFundAccountProvider,
         >,
-        FeeKindExtractorOnchainAmount,
-        (),
+        FeeRouteOnchain,
     >;
 
     new_test_ext().execute_with(|| {
@@ -764,7 +729,7 @@ fn correct_and_deposit_fee_none_is_noop() {
 }
 
 #[test]
-fn tip_is_routed_with_fee_using_same_distribution() {
+fn nonzero_tip_is_rejected_without_deducting_or_distributing() {
     type Adapter = OnchainChargeAdapter<
         Balances,
         OnchainFeeRouter<
@@ -774,56 +739,20 @@ fn tip_is_routed_with_fee_using_same_distribution() {
             MockNrcAccountProvider,
             MockSafetyFundAccountProvider,
         >,
-        FeeKindExtractorTinyOnchainAmount,
-        (),
+        FeeRouteTinyOnchain,
     >;
 
     new_test_ext().execute_with(|| {
         let who = account(1);
         let call = sample_call();
         let info = call.get_dispatch_info();
-        let miner = account(9);
-        let reward_wallet = account(8);
-        let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
-        let safety_fund = AccountId32::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT);
-
-        fullnode_issuance::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
-        MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
-
-        let total_fee = 15u128; // base 10 + tip 5
-        let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
-        let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
-        let safety_fund_percent = primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
-        let total_percent = fullnode_percent
-            .saturating_add(nrc_percent)
-            .saturating_add(safety_fund_percent);
-        let expected_fullnode = total_fee.saturating_mul(fullnode_percent) / total_percent;
-        let remainder = total_fee.saturating_sub(expected_fullnode);
-        let expected_nrc = if nrc_percent.saturating_add(safety_fund_percent) == 0 {
-            0
-        } else {
-            remainder.saturating_mul(nrc_percent) / nrc_percent.saturating_add(safety_fund_percent)
-        };
-        let expected_safety_fund = remainder.saturating_sub(expected_nrc);
-
-        let liquidity =
-            <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&who, &call, &info, 0, 5)
-                .expect("withdraw should succeed");
-        assert_ok!(
-            <Adapter as OnChargeTransaction<Test>>::correct_and_deposit_fee(
-                &who,
-                &info,
-                &Default::default(),
-                total_fee,
-                5,
-                liquidity,
-            )
+        let balance_before = Balances::free_balance(&who);
+        let result = <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&who, &call, &info, 0, 5);
+        assert_eq!(
+            result.expect_err("non-zero tip must fail"),
+            InvalidTransaction::Payment.into()
         );
-
-        assert_eq!(Balances::free_balance(who), 985);
-        assert_eq!(Balances::free_balance(&reward_wallet), expected_fullnode);
-        assert_eq!(Balances::free_balance(&nrc), expected_nrc);
-        assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
+        assert_eq!(Balances::free_balance(who), balance_before);
         assert_eq!(fee_share_burn_event_total(), 0);
     });
 }
@@ -839,8 +768,7 @@ fn charge_transaction_amount_path_routes_fee_to_all_accounts() {
             MockNrcAccountProvider,
             MockSafetyFundAccountProvider,
         >,
-        FeeKindExtractorOnchainAmount,
-        (),
+        FeeRouteOnchain,
     >;
 
     new_test_ext().execute_with(|| {
@@ -855,7 +783,7 @@ fn charge_transaction_amount_path_routes_fee_to_all_accounts() {
         fullnode_issuance::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
         MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
 
-        // FeeKindExtractorOnchainAmount 固定返回 50_000 分,链上资金交易费率 0.1%,应扣 50 分。
+        // FeeRouteOnchain 固定返回 50_000 分,链上资金交易费率 0.1%,应扣 50 分。
         let total_fee = 50u128;
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
         let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
