@@ -1637,8 +1637,9 @@ mod finalize_issuance_tests {
     #[test]
     fn imported_state_is_partitioned_in_one_shared_pass() {
         let protected = primitives::governance_skeleton::fixed_institutions()[0];
-        let governance = governance_skeleton::storage_key::admin_account(&protected.main_account);
-        let ordinary_governance = governance_skeleton::storage_key::admin_account(&[1u8; 32]);
+        let governance =
+            governance_skeleton::storage_key::admin_account(protected.cid_number.as_bytes());
+        let ordinary_governance = governance_skeleton::storage_key::admin_account(b"ORDINARY-CID");
         let composition = national_body_composition::storage_key::composition_keys(
             &primitives::institution_constraints::member_composition_specs()[0],
         )[0]
@@ -1797,7 +1798,7 @@ mod finalize_issuance_tests {
             blockchain_test_harness::ImportedStateBadCaseKind::MissingGovernanceAdmin => {
                 let fixed = primitives::governance_skeleton::fixed_institutions()[0];
                 bad_state.remove(&governance_skeleton::storage_key::admin_account(
-                    &fixed.main_account,
+                    fixed.cid_number.as_bytes(),
                 ));
             }
             blockchain_test_harness::ImportedStateBadCaseKind::NonZeroFullnodeIssued => {
@@ -1829,15 +1830,6 @@ mod finalize_issuance_tests {
                 unknown_interest_key
                     .extend_from_slice(&sp_core::hashing::twox_128(b"ShadowInterest"));
                 bad_state.insert(unknown_interest_key, 1u32.encode());
-            }
-            blockchain_test_harness::ImportedStateBadCaseKind::MissingProtectedGenesisAccount => {
-                let protected_prefix = cid_lifecycle::storage_key::protected_prefix();
-                let protected_key = bad_state
-                    .keys()
-                    .find(|key| key.starts_with(&protected_prefix))
-                    .cloned()
-                    .expect("protected genesis key");
-                bad_state.remove(&protected_key);
             }
         }
         bad_state

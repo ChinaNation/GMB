@@ -6,9 +6,9 @@
 //! ## propose origin 校验铁律(ADR-011 v2 第 5.4 / 5.6 节)
 //!
 //! - **业务 5 ACTION**(OAIS/OAMT/OABN/OACL/OATR):propose 入口
-//!   `ensure!(proposer ∈ admins 模块::AdminAccounts::get(issuer_account).admins)`
+//!   `ensure!(proposer ∈ AdminAccounts[actor_cid_number].admins)`
 //! - **监管 5 ACTION**(OMFZ/OMUF/OMCF/OMFT/OMFC):propose 入口
-//!   `ensure!(proposer ∈ admins 模块::AdminAccounts::get(nrc_main_account).admins)`
+//!   `ensure!(actor_cid_number == NRC && proposer ∈ AdminAccounts[actor_cid_number].admins)`
 //!
 //! VotingEngine 自身的 cast 阶段已校验 admin 投票,但 propose 阶段额外 ensure
 //! 防止任意账户消耗 storage 提案位 / 占用投票引擎额度。
@@ -41,8 +41,10 @@ pub const ACTION_ONCHAIN_ASSET_MONITOR_FORCE_CLOSE: [u8; 4] = *b"OMFC";
 ///
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo)]
 pub struct IssueProposal<AccountId, Balance> {
-    /// 发行机构多签账户地址。
-    pub issuer_account: AccountId,
+    /// 发行机构唯一身份。
+    pub actor_cid_number: Vec<u8>,
+    /// 资产执行账户；只承载资产，不作为机构身份或管理员根。
+    pub execution_account: AccountId,
     /// 资产种类(第一期 Plain only)。
     pub class: AssetClass,
     /// 名称(过黑名单)。bound 由 runtime 配置 MaxAssetNameLen。
@@ -60,6 +62,7 @@ pub struct IssueProposal<AccountId, Balance> {
 /// 增发提案体。
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo)]
 pub struct MintProposal<AccountId, Balance> {
+    pub actor_cid_number: Vec<u8>,
     pub asset_id: u32,
     pub to: AccountId,
     pub amount: Balance,
@@ -68,6 +71,7 @@ pub struct MintProposal<AccountId, Balance> {
 /// 销毁提案体。
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo)]
 pub struct BurnProposal<AccountId, Balance> {
+    pub actor_cid_number: Vec<u8>,
     pub asset_id: u32,
     pub from: AccountId,
     pub amount: Balance,
@@ -76,12 +80,14 @@ pub struct BurnProposal<AccountId, Balance> {
 /// 关闭资产提案体(发行方主动)。
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo)]
 pub struct CloseProposal {
+    pub actor_cid_number: Vec<u8>,
     pub asset_id: u32,
 }
 
 /// 转账提案体。
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo)]
 pub struct TransferProposal<AccountId, Balance> {
+    pub actor_cid_number: Vec<u8>,
     pub asset_id: u32,
     pub from: AccountId,
     pub to: AccountId,
@@ -91,6 +97,7 @@ pub struct TransferProposal<AccountId, Balance> {
 /// 监管:冻结 / 解冻持仓。
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo)]
 pub struct MonitorFreezeProposal<AccountId> {
+    pub actor_cid_number: Vec<u8>,
     pub asset_id: u32,
     pub who: AccountId,
     pub reason_hash: [u8; 32],
@@ -99,6 +106,7 @@ pub struct MonitorFreezeProposal<AccountId> {
 /// 监管:强制 burn(扣押)。
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo)]
 pub struct MonitorConfiscateProposal<AccountId, Balance> {
+    pub actor_cid_number: Vec<u8>,
     pub asset_id: u32,
     pub who: AccountId,
     pub amount: Balance,
@@ -108,6 +116,7 @@ pub struct MonitorConfiscateProposal<AccountId, Balance> {
 /// 监管:强制划转。
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo)]
 pub struct MonitorForceTransferProposal<AccountId, Balance> {
+    pub actor_cid_number: Vec<u8>,
     pub asset_id: u32,
     pub from: AccountId,
     pub to: AccountId,
@@ -118,6 +127,7 @@ pub struct MonitorForceTransferProposal<AccountId, Balance> {
 /// 监管:整币封禁(30 天后销毁)。
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo)]
 pub struct MonitorForceCloseProposal {
+    pub actor_cid_number: Vec<u8>,
     pub asset_id: u32,
     pub reason_hash: [u8; 32],
 }

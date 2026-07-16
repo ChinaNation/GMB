@@ -8,11 +8,32 @@ fn only_authorized_admin_can_propose() {
         assert_noop!(
             ResolutionIssuance::propose_issuance(
                 RuntimeOrigin::signed(AccountId32::new([2u8; 32])),
+                actor_cid_number(),
                 reason_ok(),
                 4300,
                 allocations_ok(4300)
             ),
             sp_runtime::DispatchError::BadOrigin
+        );
+    });
+}
+
+#[test]
+fn authorized_admin_cannot_supply_invalid_actor_cid() {
+    new_test_ext().execute_with(|| {
+        let invalid_actor_cid: votingengine::types::CidNumber = b"invalid"
+            .to_vec()
+            .try_into()
+            .expect("invalid CID fixture should fit bound");
+        assert_noop!(
+            ResolutionIssuance::propose_issuance(
+                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+                invalid_actor_cid,
+                reason_ok(),
+                4300,
+                allocations_ok(4300)
+            ),
+            pallet::Error::<Test>::InvalidActorCid
         );
     });
 }
@@ -28,6 +49,7 @@ fn reject_invalid_allocation_count() {
         assert_noop!(
             ResolutionIssuance::propose_issuance(
                 RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+                actor_cid_number(),
                 reason_ok(),
                 1000,
                 alloc
@@ -42,6 +64,7 @@ fn approved_callback_executes_issuance() {
     new_test_ext().execute_with(|| {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+            actor_cid_number(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -67,6 +90,7 @@ fn approved_referendum_callback_executes_issuance() {
     new_test_ext().execute_with(|| {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+            actor_cid_number(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -89,6 +113,7 @@ fn callback_rejects_non_finalizable_engine_status() {
     new_test_ext().execute_with(|| {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+            actor_cid_number(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -110,6 +135,7 @@ fn callback_requires_votingengine_scope() {
     new_test_ext().execute_with(|| {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+            actor_cid_number(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -130,6 +156,7 @@ fn second_callback_after_executed_is_rejected() {
     new_test_ext().execute_with(|| {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+            actor_cid_number(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -157,6 +184,7 @@ fn rejected_callback_does_not_issue() {
     new_test_ext().execute_with(|| {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+            actor_cid_number(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -175,6 +203,7 @@ fn callback_rejects_corrupted_reason_with_reason_too_long() {
     new_test_ext().execute_with(|| {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+            actor_cid_number(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -183,6 +212,7 @@ fn callback_rejects_corrupted_reason_with_reason_too_long() {
         overwrite_proposal_data(
             100,
             crate::proposal::IssuanceProposalData {
+                actor_cid_number: actor_cid_number(),
                 proposer: AccountId32::new([1u8; 32]),
                 reason: vec![b'x'; 129],
                 total_amount: 4300,
@@ -205,6 +235,7 @@ fn clear_executed_does_not_allow_replay() {
     new_test_ext().execute_with(|| {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+            actor_cid_number(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -235,6 +266,7 @@ fn pause_blocks_approved_execution() {
     new_test_ext().execute_with(|| {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+            actor_cid_number(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -259,6 +291,7 @@ fn set_allowed_recipients_rejected_when_voting_exists() {
     new_test_ext().execute_with(|| {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+            actor_cid_number(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -278,6 +311,7 @@ fn issuance_event_comes_from_unified_pallet() {
     new_test_ext().execute_with(|| {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+            actor_cid_number(),
             reason_ok(),
             4300,
             allocations_ok(4300)

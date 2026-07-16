@@ -53,9 +53,9 @@ PersonalAdmins ProposalData：
 
 PersonalAdmins storage：
 
-- `PersonalAdmins::PersonalAccounts` 保存 `creator / account_name / created_at / status`。
+- `PersonalManage::PersonalAccounts` 保存 `creator / account_name / created_at / status`。
 - 管理员真源是 `PersonalAdmins::AdminAccounts`，AdminAccountKind 使用 `PersonalMultisig`。
-- 普通业务动态阈值真源是 `InternalVote.ActiveDynamicThresholds`；创建/注销生命周期阈值由投票引擎按管理员快照写成全员同意。
+- 普通业务动态阈值真源是 `InternalVote.ActivePersonalThresholds[personal_account]`；创建/注销生命周期阈值由投票引擎按提案管理员快照写成全员同意。
 - 详情页和管理员列表不得从 `PersonalAdmins::AdminAccounts` 后续字段解阈值；该 storage
   的管理员列表后面是 `creator / created_at / updated_at / status`，错位读取会出现
   类似 `1478971204/2` 的异常阈值显示。
@@ -114,8 +114,8 @@ PersonalAdmins storage：
 - discovery 只扫描 `PersonalAdmins.AdminAccounts`，并按 `kind=Personal`、`institution_code=PMUL`、本机管理员钱包过滤。
 - 个人多签列表状态刷新使用 `PersonalManageService.fetchPersonalAccountsBatch()`：
   先批量读取 `PersonalAccounts` 与 `PersonalAdmins::AdminAccounts`，再按解码出的
-  `institution_code + account_id` 批量读取 `InternalVote.ActiveDynamicThresholds`，缺失时再批量读取
-  `PendingDynamicThresholds`。
+  `personal_account` 批量读取 `InternalVote.ActivePersonalThresholds`。Pending 阈值按
+  `proposal_id` 存于 `PendingPersonalThresholds`，不得伪造账户 key 或作为活动阈值回落源。
 - 列表页从个人多签详情、创建、关闭、投票返回时只刷新相关账户或本地记录，不重新扫描全部多签。
 
 ## 3.2 创建 / 注销阈值 UI

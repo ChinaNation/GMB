@@ -126,9 +126,8 @@ fn insert_public_account<T: public_manage::Config>(
     );
 }
 
-/// 模板派生机构落地(ADR-031 卡3 全量创世直铸):账户由 CID 号确定性派生、
-/// 名称为运行态 String;不进 ProtectedGenesisAccounts(市行政区/镇行政区机构后续可治理,
-/// 且避免 59 万机构双倍保护条目)。构建期断言号格式合法 + 公权家族。
+/// 模板派生机构落地：账户由 CID 号确定性派生，名称为运行态 String。
+/// 构建期断言 CID 格式合法、公权家族且协议账户集合完整。
 fn insert_derived_public_institution<T: public_manage::Config>(
     cid_number: &str,
     cid_full_name: &str,
@@ -189,8 +188,8 @@ fn insert_derived_public_institution<T: public_manage::Config>(
     .expect("创世派生机构 CID 与机构码必须一致");
     for kind in required {
         let name = institution_protocol_account_name(*kind);
-        let account_kind = institution_kind_by_name(cid_bytes, name)
-            .expect("协议账户名必须映射到唯一派生类型");
+        let account_kind =
+            institution_kind_by_name(cid_bytes, name).expect("协议账户名必须映射到唯一派生类型");
         let address = match kind {
             InstitutionProtocolAccountKind::Main => main,
             InstitutionProtocolAccountKind::Fee => fee,
@@ -204,7 +203,7 @@ fn insert_derived_public_institution<T: public_manage::Config>(
     }
 }
 
-/// 派生机构账户落地(不标记 ProtectedGenesisAccounts)。
+/// 派生机构账户落地到 CID 正向账户真源和地址反向索引。
 fn insert_derived_account<T: public_manage::Config>(
     cid: &PublicCidNumberOf<T>,
     account_name: PublicAccountNameOf<T>,
@@ -272,8 +271,10 @@ fn insert_public_institution<T: public_manage::Config>(
     )
     .expect("固定机构 CID 与机构码必须一致");
     for kind in required {
-        if matches!(kind, InstitutionProtocolAccountKind::Main | InstitutionProtocolAccountKind::Fee)
-        {
+        if matches!(
+            kind,
+            InstitutionProtocolAccountKind::Main | InstitutionProtocolAccountKind::Fee
+        ) {
             continue;
         }
         let account_name = institution_protocol_account_name(*kind);

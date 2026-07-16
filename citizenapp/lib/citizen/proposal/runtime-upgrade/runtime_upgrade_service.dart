@@ -8,14 +8,18 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/signed_extrinsic_builder.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
+import 'package:citizenapp/citizen/shared/proposal/proposal_query_service.dart';
 
 /// 协议升级提案链上交互服务。
 ///
 /// 负责协议升级提案详情查询，并保留现有详情页投票提交能力。
 class RuntimeUpgradeService {
-  RuntimeUpgradeService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
+  RuntimeUpgradeService({ChainRpc? chainRpc})
+      : _rpc = chainRpc ?? ChainRpc(),
+        _proposalQuery = ProposalQueryService(chainRpc: chainRpc);
 
   final ChainRpc _rpc;
+  final ProposalQueryService _proposalQuery;
 
   // ──── 常量 ────
 
@@ -37,7 +41,7 @@ class RuntimeUpgradeService {
   Future<({String txHash, int usedNonce, String blockHashHex})>
       submitJointVote({
     required int proposalId,
-    required Uint8List institutionAccountId,
+    required String actorCidNumber,
     required bool approve,
     required String fromAddress,
     required Uint8List signerPubkey,
@@ -45,7 +49,7 @@ class RuntimeUpgradeService {
   }) async {
     final callData = _buildJointVoteCall(
       proposalId: proposalId,
-      institutionAccountId: institutionAccountId,
+      actorCidNumber: actorCidNumber,
       approve: approve,
     );
     final result = await _signAndSubmit(
@@ -56,7 +60,7 @@ class RuntimeUpgradeService {
     );
     await _confirmRuntimeJointVote(
       proposalId: proposalId,
-      institutionAccountId: institutionAccountId,
+      actorCidNumber: actorCidNumber,
       approve: approve,
       signerPubkey: signerPubkey,
       blockHashHex: result.blockHashHex,
@@ -70,7 +74,8 @@ class RuntimeUpgradeService {
   ///
   /// ProposalData 是 BoundedVec<u8>，SCALE 编码为 Compact 长度前缀 + 原始字节。
   /// 原始字节布局：
-  ///   proposer: AccountId32(32) + reason: Vec<u8>(Compact len + bytes)
+  ///   actor_cid_number: CidNumber + proposer: AccountId32(32)
+  ///   + reason: Vec<u8>(Compact len + bytes)
   ///   + code_hash: [u8;32] + expected_pow_params_hash: [u8;32]
   ///   + PowDifficultyParams 固定字段。真实状态只读取 VotingEngine::Proposals.status。
   Future<RuntimeUpgradeProposalInfo?> fetchRuntimeUpgradeProposal(
@@ -95,7 +100,7 @@ class RuntimeUpgradeService {
       int offset = 0;
       final (vecLen, lenBytes) = _decodeCompact(raw, offset);
       offset += lenBytes;
-      if (offset + vecLen > raw.length) return null;
+      if (offset + vecLen != raw.length) return null;
       final data = raw.sublist(offset, offset + vecLen);
       return _decodeRuntimeUpgradeAction(proposalId, data);
     } catch (_) {
@@ -113,7 +118,7 @@ class RuntimeUpgradeService {
       _u64ToLeBytes(proposalId),
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
-    if (data == null || data.length < 8) return (yes: 0, no: 0);
+    if (data == null || data.length != 8) return (yes: 0, no: 0);
     // VoteCountU32: { yes: u32, no: u32 } — 4+4 bytes little-endian
     final yes = _decodeU32(data, 0);
     final no = _decodeU32(data, 4);
@@ -122,46 +127,44 @@ class RuntimeUpgradeService {
 
   /// 查询联合投票中某机构的投票记录。
   ///
-  /// 双 map：blake2_128_concat(u64_le) + blake2_128_concat(机构 AccountId32)。
+  /// 双 map：blake2_128_concat(u64_le) + blake2_128_concat(CidNumber)。
   /// Value: Option<bool> — null=未投票，true=赞成，false=反对。
   Future<bool?> fetchJointVoteByInstitution(
-      int proposalId, Uint8List institutionAccountId) async {
+      int proposalId, String actorCidNumber) async {
     final fullKey = _buildDoubleStorageKey(
       'JointVote',
       'JointVotesByInstitution',
       _u64ToLeBytes(proposalId),
-      institutionAccountId,
+      _encodeCidNumber(actorCidNumber),
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(fullKey)}');
-    if (data == null || data.isEmpty) return null;
-    return data[0] == 1;
+    return _decodeBoolVote(data);
   }
 
   /// 查询某机构在联合投票阶段的管理员票数统计。
   Future<({int yes, int no})> fetchJointInstitutionTally(
-      int proposalId, Uint8List institutionAccountId) async {
+      int proposalId, String actorCidNumber) async {
     final fullKey = _buildDoubleStorageKey(
       'JointVote',
       'JointInstitutionTallies',
       _u64ToLeBytes(proposalId),
-      institutionAccountId,
+      _encodeCidNumber(actorCidNumber),
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(fullKey)}');
-    if (data == null || data.length < 8) return (yes: 0, no: 0);
+    if (data == null || data.length != 8) return (yes: 0, no: 0);
     return (yes: _decodeU32(data, 0), no: _decodeU32(data, 4));
   }
 
   /// 查询某管理员在某机构联合投票中的投票记录。
   Future<bool?> fetchJointAdminVote(
     int proposalId,
-    Uint8List institutionAccountId,
+    String actorCidNumber,
     String pubkeyHex,
   ) async {
-    final key = _jointAdminVoteKey(proposalId, institutionAccountId, pubkeyHex);
+    final key = _jointAdminVoteKey(proposalId, actorCidNumber, pubkeyHex);
     if (key == null) return null;
     final data = await _rpc.fetchStorage(key);
-    if (data == null || data.isEmpty) return null;
-    return data[0] == 1;
+    return _decodeBoolVote(data);
   }
 
   /// 批量查询联合投票管理员投票记录。
@@ -170,14 +173,14 @@ class RuntimeUpgradeService {
   /// `JointVotesByAdmin`，不能逐管理员发起 RPC。
   Future<Map<String, bool?>> fetchJointAdminVotesBatch(
     int proposalId,
-    Uint8List institutionAccountId,
+    String actorCidNumber,
     Iterable<String> pubkeysHex,
   ) async {
     final keyByPubkey = <String, String>{};
     for (final pubkey in pubkeysHex) {
       final clean = _normalizeHex(pubkey);
       if (clean.isEmpty) continue;
-      final key = _jointAdminVoteKey(proposalId, institutionAccountId, clean);
+      final key = _jointAdminVoteKey(proposalId, actorCidNumber, clean);
       if (key == null) continue;
       keyByPubkey[clean] = key;
     }
@@ -189,14 +192,13 @@ class RuntimeUpgradeService {
     };
   }
 
-  /// 跨提案批量查询联合投票:输入 `{proposalId: (机构account, [pubkeyHex])}`,
+  /// 跨提案批量查询联合投票:输入 `{proposalId: (机构 CID, [pubkeyHex])}`,
   /// 一次链查返回 `{proposalId: {pubkey: vote?}}`。
   ///
   /// (ADR-018 R2):与内部投票同理,广场上多个联合投票提案合并成单次
   /// 分块读取,避免每提案一次 RPC。
   Future<Map<int, Map<String, bool?>>> fetchJointAdminVotesForProposals(
-    Map<int, ({Uint8List institutionAccountId, List<String> pubkeysHex})>
-        byProposal,
+    Map<int, ({String actorCidNumber, List<String> pubkeysHex})> byProposal,
   ) async {
     final keyToCoord = <String, ({int pid, String pk})>{};
     for (final entry in byProposal.entries) {
@@ -205,7 +207,7 @@ class RuntimeUpgradeService {
         if (clean.isEmpty) continue;
         final key = _jointAdminVoteKey(
           entry.key,
-          entry.value.institutionAccountId,
+          entry.value.actorCidNumber,
           clean,
         );
         if (key == null) continue;
@@ -224,17 +226,17 @@ class RuntimeUpgradeService {
 
   String? _jointAdminVoteKey(
     int proposalId,
-    Uint8List institutionAccountId,
+    String actorCidNumber,
     String pubkeyHex,
   ) {
     final accountBytes = Uint8List.fromList(_hexDecode(pubkeyHex));
-    if (institutionAccountId.length != 32 || accountBytes.length != 32) {
+    if (accountBytes.length != 32) {
       return null;
     }
-    final compositeKey =
-        Uint8List(institutionAccountId.length + accountBytes.length)
-          ..setAll(0, institutionAccountId)
-          ..setAll(institutionAccountId.length, accountBytes);
+    final cidBytes = _encodeCidNumber(actorCidNumber);
+    final compositeKey = Uint8List(cidBytes.length + accountBytes.length)
+      ..setAll(0, cidBytes)
+      ..setAll(cidBytes.length, accountBytes);
     final fullKey = _buildDoubleStorageKey(
       'JointVote',
       'JointVotesByAdmin',
@@ -245,7 +247,10 @@ class RuntimeUpgradeService {
   }
 
   bool? _decodeBoolVote(Uint8List? data) {
-    if (data == null || data.isEmpty) return null;
+    if (data == null) return null;
+    if (data.length != 1 || (data[0] != 0 && data[0] != 1)) {
+      throw const FormatException('JointVote 投票记录必须是严格的 SCALE bool');
+    }
     return data[0] == 1;
   }
 
@@ -259,7 +264,7 @@ class RuntimeUpgradeService {
       _u64ToLeBytes(proposalId),
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
-    if (data == null || data.length < 16) return (yes: 0, no: 0);
+    if (data == null || data.length != 16) return (yes: 0, no: 0);
     // VoteCountU64: { yes: u64, no: u64 } — 8+8 bytes little-endian
     final yes = _decodeU64(data.sublist(0, 8));
     final no = _decodeU64(data.sublist(8, 16));
@@ -269,65 +274,12 @@ class RuntimeUpgradeService {
   /// 查询提案完整元数据（status + institution bytes）。
   /// 返回 null 表示提案不存在。
   Future<ProposalMeta?> fetchProposalMeta(int proposalId) async {
-    final key = _buildStorageKey(
-      'VotingEngine',
-      'Proposals',
-      _u64ToLeBytes(proposalId),
-    );
-    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
-    if (data == null || data.length < 3) return null;
-
-    final kind = data[0];
-    final stage = data[1];
-    final status = data[2];
-
-    // internal_code: Option<[u8;4]>
-    var offset = 3;
-    String? internalCode;
-    if (offset < data.length && data[offset] == 1) {
-      offset++;
-      if (offset + 4 <= data.length) {
-        internalCode =
-            _institutionCodeToString(data.sublist(offset, offset + 4));
-        offset += 4;
-      }
-    } else {
-      offset++; // skip 0x00 (None)
-    }
-
-    // account_context: Option<AccountId32>
-    Uint8List? institutionBytes;
-    if (offset < data.length && data[offset] == 1) {
-      offset++;
-      if (offset + 32 <= data.length) {
-        institutionBytes =
-            Uint8List.fromList(data.sublist(offset, offset + 32));
-        offset += 32;
-      }
-    }
-    final (subjectCidNumbers, _) = _decodeSubjectCidNumbers(data, offset);
-
-    return ProposalMeta(
-      proposalId: proposalId,
-      kind: kind,
-      stage: stage,
-      status: status,
-      internalCode: internalCode,
-      institutionBytes: institutionBytes,
-      subjectCidNumbers: subjectCidNumbers,
-    );
+    return _proposalQuery.fetchProposalMeta(proposalId);
   }
 
   /// 查询 NextProposalId（投票引擎全局递增 ID）。
-  Future<int> fetchNextProposalId() async {
-    final palletHash = _twoxx128String('VotingEngine');
-    final storageHash = _twoxx128String('NextProposalId');
-    final key = Uint8List(palletHash.length + storageHash.length);
-    key.setAll(0, palletHash);
-    key.setAll(palletHash.length, storageHash);
-    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
-    if (data == null || data.length < 8) return 0;
-    return _decodeU64(data);
+  Future<int> fetchNextProposalId() {
+    return _proposalQuery.fetchNextProposalId();
   }
 
   // ──── 内部：解码 ────
@@ -339,6 +291,10 @@ class RuntimeUpgradeService {
       if (!_startsWith(data, _moduleTag)) return null;
       var offset = _moduleTag.length;
 
+      final actorCid = _decodeCidNumber(data, offset);
+      final actorCidNumber = actorCid.$1;
+      offset = actorCid.$2;
+
       // proposer: AccountId32 (32 bytes)
       if (offset + 32 > data.length) return null;
       final proposerBytes = data.sublist(offset, offset + 32);
@@ -349,7 +305,7 @@ class RuntimeUpgradeService {
       offset += reasonLenSize;
       if (offset + reasonLen > data.length) return null;
       final reasonBytes = data.sublist(offset, offset + reasonLen);
-      final reason = utf8.decode(reasonBytes, allowMalformed: true);
+      final reason = utf8.decode(reasonBytes, allowMalformed: false);
       offset += reasonLen;
 
       // code_hash: [u8; 32]
@@ -382,6 +338,7 @@ class RuntimeUpgradeService {
 
       return RuntimeUpgradeProposalInfo(
         proposalId: proposalId,
+        actorCidNumber: actorCidNumber,
         proposer: proposerSs58,
         reason: reason,
         codeHashHex: codeHashHex,
@@ -411,18 +368,14 @@ class RuntimeUpgradeService {
 
   Uint8List _buildJointVoteCall({
     required int proposalId,
-    required Uint8List institutionAccountId,
+    required String actorCidNumber,
     required bool approve,
   }) {
-    if (institutionAccountId.length != 32) {
-      throw ArgumentError('institutionAccountId 必须为 32 字节');
-    }
-
     final output = ByteOutput();
     output.pushByte(_jointVotePalletIndex);
     output.pushByte(_jointVoteCallIndex);
     output.write(_u64ToLeBytes(proposalId));
-    output.write(institutionAccountId);
+    output.write(_encodeCidNumber(actorCidNumber));
     output.pushByte(approve ? 1 : 0);
 
     return output.toBytes();
@@ -455,7 +408,7 @@ class RuntimeUpgradeService {
   /// 入块后回读 JointVote storage，确认该管理员投票已经由 runtime 记录。
   Future<void> _confirmRuntimeJointVote({
     required int proposalId,
-    required Uint8List institutionAccountId,
+    required String actorCidNumber,
     required bool approve,
     required Uint8List signerPubkey,
     required String blockHashHex,
@@ -464,7 +417,7 @@ class RuntimeUpgradeService {
     for (var attempt = 0; attempt < 6; attempt++) {
       final chainVote = await fetchJointAdminVote(
         proposalId,
-        institutionAccountId,
+        actorCidNumber,
         pubkeyHex,
       );
       if (chainVote == approve) return;
@@ -555,28 +508,25 @@ class RuntimeUpgradeService {
     return bd.getUint32(offset, Endian.little);
   }
 
-  String _institutionCodeToString(List<int> bytes) {
-    return String.fromCharCodes(bytes.where((b) => b != 0)).toUpperCase();
+  (String, int) _decodeCidNumber(Uint8List data, int offset) {
+    final (length, lengthSize) = _decodeCompact(data, offset);
+    final start = offset + lengthSize;
+    final end = start + length;
+    if (length == 0 || length > 32 || end > data.length) {
+      throw const FormatException('CidNumber SCALE 编码无效');
+    }
+    return (
+      utf8.decode(data.sublist(start, end), allowMalformed: false),
+      end,
+    );
   }
 
-  (List<String>, int) _decodeSubjectCidNumbers(Uint8List data, int offset) {
-    if (offset >= data.length) return (const [], offset);
-    final (count, lenSize) = _decodeCompact(data, offset);
-    var cursor = offset + lenSize;
-    final result = <String>[];
-    for (var i = 0; i < count && cursor < data.length; i++) {
-      final (cidLen, cidLenSize) = _decodeCompact(data, cursor);
-      cursor += cidLenSize;
-      if (cursor + cidLen > data.length) {
-        return (List.unmodifiable(result), cursor);
-      }
-      result.add(
-        utf8.decode(data.sublist(cursor, cursor + cidLen),
-            allowMalformed: true),
-      );
-      cursor += cidLen;
+  Uint8List _encodeCidNumber(String cidNumber) {
+    final cidBytes = utf8.encode(cidNumber.trim());
+    if (cidBytes.isEmpty || cidBytes.length > 32) {
+      throw ArgumentError('机构 CID 的 UTF-8 长度必须为 1..32 字节');
     }
-    return (List.unmodifiable(result), cursor);
+    return Uint8List.fromList([(cidBytes.length << 2), ...cidBytes]);
   }
 
   /// 解码 SCALE Compact<u32>，返回 (value, bytesConsumed)。

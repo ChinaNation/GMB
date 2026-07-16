@@ -133,14 +133,12 @@ pub fn to_chapter_args(chapters: &[LawChapter]) -> Vec<ChapterArg> {
 
 // ──────────────── 读模型 DTO(链上 Law/LawVersion → 前端展示)────────────────
 
-/// 机构 + 账户引用读模型(对齐 CitizenApp `LegHouseRef`)。
+/// 立法代表机构引用；机构身份只保存 CID。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HouseRef {
-    /// 机构码(去尾 `\0`,如 `NRP`)。
-    pub code: String,
-    /// 机构进链账户(0x 小写 hex)。
-    pub account_hex: String,
+    /// 机构唯一 CID。
+    pub cid_number: String,
 }
 
 /// 法律只读视图(Law 主体 + 办理端展示版本全文,供操作端列表/详情与大屏展示)。
@@ -173,7 +171,7 @@ pub struct LawView {
     pub proposal_id: u64,
     pub published_at: u64,
     pub effective_at: u64,
-    /// 表决院序列(机构码 + 账户)。
+    /// 表决院序列(机构 CID)。
     pub houses: Vec<HouseRef>,
     /// 宪法不可修改条款号;普通法律为空。
     pub immutable_article_numbers: Vec<u32>,
@@ -187,11 +185,10 @@ pub fn institution_code_text(code: &[u8; 4]) -> String {
     String::from_utf8_lossy(&code[..end]).into_owned()
 }
 
-/// (机构码, 账户)→ `HouseRef`(账户 0x hex)。
-pub fn house_ref(code: [u8; 4], account: [u8; 32]) -> HouseRef {
+/// CID 原始字节 → 代表机构读模型。
+pub fn house_ref(cid_number: &[u8]) -> HouseRef {
     HouseRef {
-        code: institution_code_text(&code),
-        account_hex: format!("0x{}", hex::encode(account)),
+        cid_number: String::from_utf8_lossy(cid_number).into_owned(),
     }
 }
 
@@ -336,8 +333,7 @@ mod tests {
     fn institution_code_text_trims_trailing_nul() {
         assert_eq!(institution_code_text(b"NRP\0"), "NRP");
         assert_eq!(institution_code_text(b"CLEG"), "CLEG");
-        let house = house_ref(*b"NSN\0", [0xAB; 32]);
-        assert_eq!(house.code, "NSN");
-        assert!(house.account_hex.starts_with("0xabab"));
+        let house = house_ref(b"LN001-NSN0G-000000001-2026");
+        assert_eq!(house.cid_number, "LN001-NSN0G-000000001-2026");
     }
 }

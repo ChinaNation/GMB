@@ -91,9 +91,7 @@ pub fn fetch_admin_account_by_cid_number(
 }
 
 /// 按 CID 在公权/私权管理员模块双探测，非法人也以实际命中的 pallet 决定 entity 路由。
-pub fn fetch_admin_account(
-    cid_number: &str,
-) -> Result<Option<AdminAccountState>, String> {
+pub fn fetch_admin_account(cid_number: &str) -> Result<Option<AdminAccountState>, String> {
     let finalized_hash = chain_query::fetch_finalized_head()?;
     let mut found = None;
     for spec in [PUBLIC_ADMINS, PRIVATE_ADMINS] {
@@ -119,11 +117,7 @@ pub fn fetch_admin_account_for_code(
     institution_code: InstitutionCode,
 ) -> Result<Option<AdminAccountState>, String> {
     let finalized_hash = chain_query::fetch_finalized_head()?;
-    fetch_admin_account_for_code_at(
-        cid_number,
-        institution_code,
-        &finalized_hash,
-    )
+    fetch_admin_account_for_code_at(cid_number, institution_code, &finalized_hash)
 }
 
 pub fn fetch_admin_account_for_code_at(
@@ -136,12 +130,7 @@ pub fn fetch_admin_account_for_code_at(
     let Some(hex_data) = chain_query::fetch_storage_at(&storage_key, finalized_hash)? else {
         return Ok(None);
     };
-    let state = decode_admin_account_state(
-        cid_number,
-        spec,
-        &hex_data,
-        finalized_hash,
-    )?;
+    let state = decode_admin_account_state(cid_number, spec, &hex_data, finalized_hash)?;
     if state.institution_code != institution_code {
         return Err(format!(
             "管理员账户机构码不匹配：查询 {}，链上 {}",

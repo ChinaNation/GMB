@@ -276,8 +276,8 @@ fn runtime_signing_context(
     }
     let signer_pubkey_raw = std::env::var("ONCHAIN_CREDENTIAL_SIGNER_PUBKEY")
         .map_err(|_| "ONCHAIN_CREDENTIAL_SIGNER_PUBKEY not set".to_string())?;
-    let credential_signer_pubkey =
-        parse_sr25519_pubkey_bytes(signer_pubkey_raw.as_str()).ok_or_else(|| {
+    let credential_signer_pubkey = parse_sr25519_pubkey_bytes(signer_pubkey_raw.as_str())
+        .ok_or_else(|| {
             "ONCHAIN_CREDENTIAL_SIGNER_PUBKEY must be a 32-byte sr25519 pubkey hex".to_string()
         })?;
     let default_scope_province = std::env::var("ONCHAIN_CREDENTIAL_SCOPE_PROVINCE_NAME")
@@ -1027,7 +1027,9 @@ fn admin_accounts_cid_from_key(key_bytes: &[u8]) -> Result<Vec<u8>, String> {
     if !input.is_empty() {
         return Err("AdminAccounts storage key has trailing bytes".to_string());
     }
-    if cid_number.is_empty() || cid_number.len() > 32 {
+    if cid_number.is_empty()
+        || cid_number.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
+    {
         return Err("AdminAccounts cid_number length is invalid".to_string());
     }
     Ok(cid_number)

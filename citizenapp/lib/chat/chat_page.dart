@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter_blurhash/flutter_blurhash.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
@@ -115,7 +117,7 @@ class _ChatPageState extends State<ChatPage> {
   bool _polling = false;
   bool _realtimeConnecting = false;
   bool _appResumed = false;
-  bool _stickerPanelOpen = false;
+  _ComposerPanel _openPanel = _ComposerPanel.none;
   String? _error;
   Timer? _pollTimer;
   Future<void> Function()? _stopRealtime;
@@ -172,10 +174,14 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _reloadMessages() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    // 只清错误提示,不重置 _loading:首屏骨架靠初始 _loading=true 驱动,后续重载
+    // (发消息/贴纸/同步后)保持 Chat 常驻——否则整块 Chat 连同贴纸面板/分类 Tab
+    // 会 unmount 重建,连发贴纸时面板闪走、Tab 跳回第一个。
+    if (_error != null) {
+      setState(() {
+        _error = null;
+      });
+    }
     try {
       final messages = await widget.store.readMessages(widget.conversationId);
       final mediaPaths = await _resolveMediaPaths(messages);
@@ -190,7 +196,8 @@ class _ChatPageState extends State<ChatPage> {
     } catch (error) {
       _error = error.toString();
     } finally {
-      if (mounted) {
+      // 首次加载结束翻下骨架;之后 _loading 恒为 false,此处成幂等空转。
+      if (mounted && (_loading || _error != null)) {
         setState(() {
           _loading = false;
         });
@@ -416,6 +423,38 @@ class _ChatPageState extends State<ChatPage> {
           _attachmentBusy = false;
         });
       }
+    }
+  }
+
+  /// 发送贴纸:只把 `(packId, stickerId)` 交给发送链路(走 MLS 信封瞬时中转,
+  /// 零字节、零 WebRTC)。面板保持打开以便连发,不自动关闭。
+  Future<void> _handleSendSticker(String packId, String stickerId) async {
+    final sender = widget.onSendSticker;
+    if (sender == null) {
+      setState(() {
+        _error = '当前会话尚未绑定发送链路';
+      });
+      return;
+    }
+    try {
+      await sender(packId, stickerId);
+      await _reloadMessages();
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _error = error.toString();
+        });
+      }
+    }
+  }
+
+  /// 表情/贴纸面板互斥切换:同一个开则关,不同则切换;打开任一都收起键盘腾空间。
+  void _togglePanel(_ComposerPanel panel) {
+    setState(() {
+      _openPanel = _openPanel == panel ? _ComposerPanel.none : panel;
+    });
+    if (_openPanel != _ComposerPanel.none) {
+      FocusScope.of(context).unfocus();
     }
   }
 
@@ -839,6 +878,123 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  static const double _stickerRenderSize = 128;
+
+  /// 贴纸消息:按 `(packId, stickerId)` 渲染内置 Fluent 3D PNG,无气泡大图。
+  /// id 未内置(对端资产旧/缺)或解码失败时降级为占位,绝不崩。
+  Widget _buildStickerMessage(
+    BuildContext context,
+    CustomMessage message,
+    int index, {
+    required bool isSentByMe,
+    MessageGroupStatus? groupStatus,
+  }) {
+    final packId = message.metadata?['pack_id']?.toString() ?? '';
+    final stickerId = message.metadata?['sticker_id']?.toString() ?? '';
+    final known = StickerPack.isKnown(packId: packId, stickerId: stickerId);
+    final Widget content = known
+        ? Image.asset(
+            StickerPack.assetPath(stickerId),
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => _stickerFallback(),
+          )
+        : _stickerFallback();
+    return _mediaAligned(
+      isSentByMe,
+      SizedBox(
+        width: _stickerRenderSize,
+        height: _stickerRenderSize,
+        child: content,
+      ),
+    );
+  }
+
+  Widget _stickerFallback() => _mediaPlaceholder(
+        icon: Icons.emoji_emotions_outlined,
+        label: '[贴纸]',
+      );
+
+  /// 自绘 composer:复用现成 [Composer](发送/附件仍走 Chat 注入的回调),topWidget
+  /// 挂表情/贴纸开关工具条与两个互斥面板。
+  Widget _buildComposer(BuildContext context) {
+    return Composer(
+      textEditingController: _composerController,
+      topWidget: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_openPanel == _ComposerPanel.emoji) _buildEmojiPanel(context),
+          if (_openPanel == _ComposerPanel.sticker)
+            StickerPanel(
+              onPick: (packId, stickerId) =>
+                  unawaited(_handleSendSticker(packId, stickerId)),
+            ),
+          _composerToolbar(),
+        ],
+      ),
+    );
+  }
+
+  /// 表情面板:Unicode emoji 由 [EmojiPicker] 直接插入 `_composerController` 光标处,
+  /// 随文本走 `sendText`——纯客户端、零协议变更。
+  Widget _buildEmojiPanel(BuildContext context) {
+    final height = math.min(264.0, MediaQuery.sizeOf(context).height * 0.4);
+    return SizedBox(
+      height: height,
+      child: EmojiPicker(
+        textEditingController: _composerController,
+        config: Config(
+          height: height,
+          checkPlatformCompatibility: true,
+          emojiViewConfig: const EmojiViewConfig(
+            columns: 8,
+            backgroundColor: AppTheme.surfaceCard,
+          ),
+          categoryViewConfig: const CategoryViewConfig(
+            backgroundColor: AppTheme.surfaceCard,
+            indicatorColor: AppTheme.accent,
+            iconColorSelected: AppTheme.accent,
+            backspaceColor: AppTheme.accent,
+          ),
+          bottomActionBarConfig: const BottomActionBarConfig(
+            backgroundColor: AppTheme.surfaceCard,
+            buttonColor: AppTheme.surfaceElevated,
+            buttonIconColor: AppTheme.textSecondary,
+            showSearchViewButton: false,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _composerToolbar() {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            key: const ValueKey('chat-emoji-toggle'),
+            tooltip: '表情',
+            onPressed: () => _togglePanel(_ComposerPanel.emoji),
+            color: _openPanel == _ComposerPanel.emoji
+                ? AppTheme.accent
+                : AppTheme.textSecondary,
+            icon: const Icon(Icons.emoji_emotions_outlined),
+          ),
+          IconButton(
+            key: const ValueKey('chat-sticker-toggle'),
+            tooltip: '贴纸',
+            onPressed: () => _togglePanel(_ComposerPanel.sticker),
+            color: _openPanel == _ComposerPanel.sticker
+                ? AppTheme.accent
+                : AppTheme.textSecondary,
+            icon: const Icon(Icons.sticky_note_2_outlined),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final peerName = ProfilePresentation.forAccount(widget.peerUserId)
@@ -949,6 +1105,8 @@ class _ChatPageState extends State<ChatPage> {
                       imageMessageBuilder: _buildImageMessage,
                       videoMessageBuilder: _buildVideoMessage,
                       fileMessageBuilder: _buildFileMessage,
+                      customMessageBuilder: _buildStickerMessage,
+                      composerBuilder: _buildComposer,
                     ),
                     resolveUser: (id) async {
                       final isMe = id == widget.ownerAccount;
@@ -972,6 +1130,9 @@ String _formatByteSize(int bytes) {
 }
 
 enum _ChatMenuAction { deleteConversation }
+
+/// composer 上方可切换的面板;表情与贴纸互斥,none 表示都收起。
+enum _ComposerPanel { none, emoji, sticker }
 
 Future<bool> _confirmDeleteConversation(BuildContext context) async {
   final confirmed = await showDialog<bool>(

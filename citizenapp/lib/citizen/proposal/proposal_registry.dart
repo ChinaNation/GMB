@@ -37,8 +37,9 @@ class ProposalSubject {
   const ProposalSubject({
     required this.subjectType,
     required this.institutionCode,
-    required this.subjectAccountId,
     required this.adminModule,
+    this.cidNumber,
+    this.personalAccountHex,
   });
 
   factory ProposalSubject.fromInstitution({
@@ -46,61 +47,65 @@ class ProposalSubject {
     required String institutionCode,
   }) {
     final code = institutionCode.toUpperCase();
-    final account = institution.mainAccount;
     if (isPersonalAccountIdentity(institution.cidNumber) ||
         InstitutionCodeLabel.isPersonal(code)) {
       return ProposalSubject(
         subjectType: ProposalSubjectType.personalMultisig,
         institutionCode: 'PMUL',
-        subjectAccountId: account,
         adminModule: 'PersonalAdmins',
+        personalAccountHex: institution.personalAccountHex,
       );
     }
     if (InstitutionCodeLabel.isFixedGovernance(code)) {
       return ProposalSubject(
         subjectType: ProposalSubjectType.fixedGovernanceInstitution,
         institutionCode: code,
-        subjectAccountId: account,
         adminModule: 'PublicAdmins',
+        cidNumber: institution.cidNumber,
       );
     }
     if (InstitutionCodeLabel.isPublicAdminCode(code)) {
       return ProposalSubject(
         subjectType: ProposalSubjectType.publicInstitution,
         institutionCode: code,
-        subjectAccountId: account,
         adminModule: 'PublicAdmins',
+        cidNumber: institution.cidNumber,
       );
     }
     if (InstitutionCodeLabel.isPrivateAdminCode(code)) {
       return ProposalSubject(
         subjectType: ProposalSubjectType.privateInstitution,
         institutionCode: code,
-        subjectAccountId: account,
         adminModule: 'PrivateAdmins',
+        cidNumber: institution.cidNumber,
       );
     }
     if (InstitutionCodeLabel.isUnincorporated(code)) {
       return ProposalSubject(
         subjectType: ProposalSubjectType.unincorporatedInstitution,
         institutionCode: code,
-        subjectAccountId: account,
         // 非法人机构码本身不能决定 public/private 管理员模块。
         adminModule: 'Unresolved',
+        cidNumber: institution.cidNumber,
       );
     }
     return ProposalSubject(
       subjectType: ProposalSubjectType.publicInstitution,
       institutionCode: code,
-      subjectAccountId: account,
       adminModule: 'PublicAdmins',
+      cidNumber: institution.cidNumber,
     );
   }
 
   final ProposalSubjectType subjectType;
   final String institutionCode;
-  final String subjectAccountId;
   final String adminModule;
+
+  /// 机构主体唯一主键；个人多签严格为空。
+  final String? cidNumber;
+
+  /// 个人多签账户；机构主体严格不使用该字段。
+  final String? personalAccountHex;
 
   bool get isFixedGovernance =>
       subjectType == ProposalSubjectType.fixedGovernanceInstitution;

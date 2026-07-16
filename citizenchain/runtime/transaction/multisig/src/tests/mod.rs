@@ -1,20 +1,18 @@
 #![cfg(test)]
 
 use super::*;
-use admin_primitives::AdminAccountQuery;
-use codec::Encode;
 use frame_support::{
     assert_noop, assert_ok, derive_impl,
     traits::{ConstU128, ConstU32, Hooks},
 };
 use frame_system as system;
+use primitives::cid::china::china_ch::CHINA_CH;
 use primitives::cid::china::china_sf::CHINA_SF;
 use primitives::cid::china::china_zf::CHINA_ZF;
 use sp_core::{sr25519, Pair as PairT};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 use votingengine::types::{
-    code_bytes, institution_code_from_cid_number, is_registered_multisig_code, InstitutionCode,
-    FRG, NJD, PRC,
+    code_bytes, institution_code_from_cid_number, InstitutionCode, FRG, NJD, PRC,
 };
 use votingengine::{STATUS_EXECUTED, STATUS_REJECTED, STATUS_VOTING};
 
@@ -54,17 +52,8 @@ mod runtime {
     #[runtime::pallet_index(99)]
     pub type InternalVote = internal_vote;
 
-    #[runtime::pallet_index(3)]
-    pub type PublicManage = public_manage;
-
     #[runtime::pallet_index(4)]
     pub type MultisigTransfer = super;
-
-    #[runtime::pallet_index(5)]
-    pub type PublicAdmins = public_admins;
-
-    #[runtime::pallet_index(6)]
-    pub type PrivateAdmins = private_admins;
 
     #[runtime::pallet_index(7)]
     pub type PersonalManage = personal_manage;
@@ -99,66 +88,16 @@ impl pallet_balances::Config for Test {
 }
 
 pub struct TestAccountValidator;
-impl public_manage::AccountValidator<AccountId32> for TestAccountValidator {
+impl entity_primitives::AccountValidator<AccountId32> for TestAccountValidator {
     fn is_valid(address: &AccountId32) -> bool {
         address != &AccountId32::new([0u8; 32])
     }
 }
 
 pub struct TestReservedAccountChecker;
-impl public_manage::ReservedAccountGuard<AccountId32> for TestReservedAccountChecker {
+impl entity_primitives::ReservedAccountGuard<AccountId32> for TestReservedAccountChecker {
     fn is_reserved(address: &AccountId32) -> bool {
         *address == AccountId32::new([0xAA; 32])
-    }
-}
-
-pub struct TestCidInstitutionVerifier;
-impl
-    public_manage::CidInstitutionVerifier<
-        AccountId32,
-        public_manage::pallet::AccountNameOf<Test>,
-        public_manage::pallet::RegisterNonceOf<Test>,
-        public_manage::pallet::RegisterSignatureOf<Test>,
-    > for TestCidInstitutionVerifier
-{
-    fn verify_institution_registration(
-        _cid_number: &[u8],
-        cid_full_name: &public_manage::pallet::AccountNameOf<Test>,
-        _cid_short_name: &[u8],
-        account_names: &[alloc::vec::Vec<u8>],
-        nonce: &public_manage::pallet::RegisterNonceOf<Test>,
-        signature: &public_manage::pallet::RegisterSignatureOf<Test>,
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId32,
-        signer_pubkey: &[u8; 32],
-        scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-        _town_code: &[u8],
-    ) -> bool {
-        !cid_full_name.is_empty()
-            && !account_names.is_empty()
-            && !nonce.is_empty()
-            && !scope_province_name.is_empty()
-            && signer_pubkey != &[0u8; 32]
-            && signature.as_slice() == b"register-ok"
-    }
-
-    fn verify_institution_deregistration(
-        scope: u8,
-        cid_number: &[u8],
-        _account_name: &[u8],
-        _target_account: &AccountId32,
-        nonce: &public_manage::pallet::RegisterNonceOf<Test>,
-        signature: &public_manage::pallet::RegisterSignatureOf<Test>,
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId32,
-        signer_pubkey: &[u8; 32],
-    ) -> bool {
-        scope <= public_manage::pallet::SCOPE_ACCOUNT
-            && !cid_number.is_empty()
-            && !nonce.is_empty()
-            && signer_pubkey != &[0u8; 32]
-            && signature.as_slice() == b"deregister-ok"
     }
 }
 
@@ -179,305 +118,51 @@ impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityRea
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(
+    fn is_institution_admin(
         institution_code: InstitutionCode,
-        institution: AccountId32,
+        cid_number: &[u8],
         who: &AccountId32,
     ) -> bool {
-        // 优先:测试注入的 sr25519 派生 admin
-        if let Some(admins) = get_extra_admins(institution_code, &institution) {
-            return admins.iter().any(|a| a == who);
-        }
-        // Fallback:原硬编码 admin
-        let who_bytes = who.encode();
-        if who_bytes.len() != 32 {
-            return false;
-        }
-        let mut who_arr = [0u8; 32];
-        who_arr.copy_from_slice(&who_bytes);
-        match institution_code {
-            NRC | PRC => CHINA_CB
-                .iter()
-                .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
-                .unwrap_or(false),
-            PRB => CHINA_CH
-                .iter()
-                .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
-                .unwrap_or(false),
-            PMUL => personal_admins::Pallet::<Test>::is_active_account_admin(
-                institution_code,
-                institution,
-                who,
-            ),
-            c if is_registered_multisig_code(&c) => {
-                TestAdminAccountQuery::is_active_account_admin(institution_code, institution, who)
-            }
-            _ => false,
-        }
+        get_institution_admins(institution_code, cid_number)
+            .map(|admins| admins.iter().any(|admin| admin == who))
+            .unwrap_or(false)
     }
 
-    fn get_admin_list(
+    fn get_institution_admins(
         institution_code: InstitutionCode,
-        institution: AccountId32,
+        cid_number: &[u8],
     ) -> Option<Vec<AccountId32>> {
-        if let Some(admins) = get_extra_admins(institution_code, &institution) {
-            return Some(admins);
-        }
-        match institution_code {
-            NRC | PRC => CHINA_CB
-                .iter()
-                .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
-            PRB => CHINA_CH
-                .iter()
-                .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
-            PMUL => personal_admins::Pallet::<Test>::active_account_admins(
-                institution_code,
-                institution,
-            ),
-            c if is_registered_multisig_code(&c) => {
-                TestAdminAccountQuery::active_account_admins(institution_code, institution)
-            }
-            _ => None,
-        }
+        get_institution_admins(institution_code, cid_number)
+    }
+
+    fn is_personal_admin(personal_account: AccountId32, who: &AccountId32) -> bool {
+        <personal_admins::Pallet<Test> as admin_primitives::AdminAccountQuery<AccountId32>>::is_active_account_admin(
+            PMUL,
+            personal_account,
+            who,
+        )
+    }
+
+    fn get_personal_admins(personal_account: AccountId32) -> Option<Vec<AccountId32>> {
+        <personal_admins::Pallet<Test> as admin_primitives::AdminAccountQuery<AccountId32>>::active_account_admins(
+            PMUL,
+            personal_account,
+        )
     }
 }
 
 pub struct TestInternalAdminsLenProvider;
 impl votingengine::InternalAdminsLenProvider<AccountId32> for TestInternalAdminsLenProvider {
-    fn admins_len(institution_code: InstitutionCode, institution: AccountId32) -> Option<u32> {
-        match institution_code {
-            NRC | PRC => CHINA_CB
-                .iter()
-                .find(|n| AccountId32::new(n.main_account) == institution)
-                .and_then(|n| u32::try_from(n.admins.len()).ok()),
-            PRB => CHINA_CH
-                .iter()
-                .find(|n| AccountId32::new(n.main_account) == institution)
-                .and_then(|n| u32::try_from(n.admins.len()).ok()),
-            PMUL => personal_admins::Pallet::<Test>::active_account_admins_len(
-                institution_code,
-                institution,
-            ),
-            c if is_registered_multisig_code(&c) => {
-                TestAdminAccountQuery::active_account_admins_len(institution_code, institution)
-            }
-            _ => None,
-        }
-    }
-}
-
-pub struct TestAdminAccountQuery;
-impl admin_primitives::AdminAccountQuery<AccountId32> for TestAdminAccountQuery {
-    fn active_admin_account_exists(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId32,
-    ) -> bool {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Test>::active_admin_account_exists(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Test>::active_admin_account_exists(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_personal_admin_code(&institution_code) {
-            return personal_admins::Pallet::<Test>::active_admin_account_exists(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        false
+    fn institution_admins_len(institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32> {
+        get_institution_admins(institution_code, cid_number)
+            .and_then(|admins| u32::try_from(admins.len()).ok())
     }
 
-    fn is_active_account_admin(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId32,
-        who: &AccountId32,
-    ) -> bool {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Test>::is_active_account_admin(
-                institution_code,
-                admin_root_account_id,
-                who,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Test>::is_active_account_admin(
-                institution_code,
-                admin_root_account_id,
-                who,
-            );
-        }
-        if admin_primitives::is_personal_admin_code(&institution_code) {
-            return personal_admins::Pallet::<Test>::is_active_account_admin(
-                institution_code,
-                admin_root_account_id,
-                who,
-            );
-        }
-        false
-    }
-
-    fn active_account_admins(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId32,
-    ) -> Option<Vec<AccountId32>> {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Test>::active_account_admins(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Test>::active_account_admins(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_personal_admin_code(&institution_code) {
-            return personal_admins::Pallet::<Test>::active_account_admins(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        None
-    }
-
-    fn active_account_admins_len(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId32,
-    ) -> Option<u32> {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Test>::active_account_admins_len(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Test>::active_account_admins_len(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_personal_admin_code(&institution_code) {
-            return personal_admins::Pallet::<Test>::active_account_admins_len(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        None
-    }
-
-    fn pending_account_exists_for_snapshot(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId32,
-    ) -> bool {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Test>::pending_account_exists_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Test>::pending_account_exists_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_personal_admin_code(&institution_code) {
-            return personal_admins::Pallet::<Test>::pending_account_exists_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        false
-    }
-
-    fn is_pending_account_admin_for_snapshot(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId32,
-        who: &AccountId32,
-    ) -> bool {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Test>::is_pending_account_admin_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-                who,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Test>::is_pending_account_admin_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-                who,
-            );
-        }
-        if admin_primitives::is_personal_admin_code(&institution_code) {
-            return personal_admins::Pallet::<Test>::is_pending_account_admin_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-                who,
-            );
-        }
-        false
-    }
-
-    fn pending_account_admins_for_snapshot(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId32,
-    ) -> Option<Vec<AccountId32>> {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Test>::pending_account_admins_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Test>::pending_account_admins_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_personal_admin_code(&institution_code) {
-            return personal_admins::Pallet::<Test>::pending_account_admins_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        None
-    }
-
-    fn pending_account_admins_len_for_snapshot(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId32,
-    ) -> Option<u32> {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Test>::pending_account_admins_len_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Test>::pending_account_admins_len_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_personal_admin_code(&institution_code) {
-            return personal_admins::Pallet::<Test>::pending_account_admins_len_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        None
+    fn personal_admins_len(personal_account: AccountId32) -> Option<u32> {
+        <personal_admins::Pallet<Test> as admin_primitives::AdminAccountQuery<AccountId32>>::active_account_admins_len(
+            PMUL,
+            personal_account,
+        )
     }
 }
 
@@ -485,21 +170,72 @@ thread_local! {
     static PROTECTED_ACCOUNT: core::cell::RefCell<Option<AccountId32>> = core::cell::RefCell::new(None);
     static DENIED_SPEND_SOURCE: core::cell::RefCell<Option<AccountId32>> = core::cell::RefCell::new(None);
     static EXTRA_ADMINS: core::cell::RefCell<
-        std::collections::BTreeMap<(InstitutionCode, AccountId32), Vec<AccountId32>>,
+        std::collections::BTreeMap<(InstitutionCode, Vec<u8>), Vec<AccountId32>>,
+    > = core::cell::RefCell::new(std::collections::BTreeMap::new());
+    static INSTITUTION_ACCOUNTS: core::cell::RefCell<
+        std::collections::BTreeMap<AccountId32, (Vec<u8>, InstitutionCode)>,
     > = core::cell::RefCell::new(std::collections::BTreeMap::new());
 }
 
-/// 测试注入:按 (机构码, 机构账户) 注入 sr25519 派生 admin 集合。
-/// `TestInternalAdminProvider` 优先读取,未注入时 fallback 到 CHINA_CB/CHINA_CH 硬编码。
-fn set_extra_admins(code: InstitutionCode, institution: AccountId32, admins: Vec<AccountId32>) {
-    EXTRA_ADMINS.with(|m| m.borrow_mut().insert((code, institution), admins));
+/// 测试注入：机构管理员只按 `(institution_code, cid_number)` 寻址。
+fn set_institution_admins(code: InstitutionCode, cid_number: &[u8], admins: Vec<AccountId32>) {
+    EXTRA_ADMINS.with(|m| {
+        m.borrow_mut().insert((code, cid_number.to_vec()), admins);
+    });
 }
-fn get_extra_admins(code: InstitutionCode, institution: &AccountId32) -> Option<Vec<AccountId32>> {
-    EXTRA_ADMINS.with(|m| m.borrow().get(&(code, institution.clone())).cloned())
+
+fn get_institution_admins(code: InstitutionCode, cid_number: &[u8]) -> Option<Vec<AccountId32>> {
+    EXTRA_ADMINS.with(|m| m.borrow().get(&(code, cid_number.to_vec())).cloned())
+}
+
+fn register_institution_account(
+    account: AccountId32,
+    cid_number: &[u8],
+    institution_code: InstitutionCode,
+) {
+    INSTITUTION_ACCOUNTS.with(|accounts| {
+        accounts
+            .borrow_mut()
+            .insert(account, (cid_number.to_vec(), institution_code));
+    });
+}
+
+pub struct TestInstitutionQuery;
+impl entity_primitives::InstitutionMultisigQuery<AccountId32> for TestInstitutionQuery {
+    fn lookup_cid(addr: &AccountId32) -> Option<Vec<u8>> {
+        INSTITUTION_ACCOUNTS.with(|accounts| {
+            accounts
+                .borrow()
+                .get(addr)
+                .map(|(cid_number, _)| cid_number.clone())
+        })
+    }
+
+    fn lookup_org(addr: &AccountId32) -> Option<InstitutionCode> {
+        INSTITUTION_ACCOUNTS.with(|accounts| accounts.borrow().get(addr).map(|(_, code)| *code))
+    }
+
+    fn lookup_admin_config(
+        addr: &AccountId32,
+    ) -> Option<primitives::multisig::MultisigConfigSnapshot<AccountId32>> {
+        let (cid_number, code) =
+            INSTITUTION_ACCOUNTS.with(|accounts| accounts.borrow().get(addr).cloned())?;
+        let admins = get_institution_admins(code, &cid_number)?;
+        let admins_len = u32::try_from(admins.len()).ok()?;
+        Some(primitives::multisig::MultisigConfigSnapshot {
+            admins,
+            admins_len,
+            threshold: admins_len,
+        })
+    }
+
+    fn account_exists(addr: &AccountId32) -> bool {
+        INSTITUTION_ACCOUNTS.with(|accounts| accounts.borrow().contains_key(addr))
+    }
 }
 
 pub struct TestProtectedSourceChecker;
-impl public_manage::ProtectedSourceChecker<AccountId32> for TestProtectedSourceChecker {
+impl entity_primitives::ProtectedSourceChecker<AccountId32> for TestProtectedSourceChecker {
     fn is_protected(address: &AccountId32) -> bool {
         PROTECTED_ACCOUNT.with(|pa| pa.borrow().as_ref() == Some(address))
     }
@@ -563,45 +299,6 @@ impl internal_vote::Config for Test {
     type WeightInfo = ();
 }
 
-impl public_manage::pallet::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
-    type Currency = Balances;
-    type InternalVoteEngine = internal_vote::Pallet<Test>;
-    type AccountValidator = TestAccountValidator;
-    type ReservedAccountChecker = TestReservedAccountChecker;
-    type ProtectedSourceChecker = TestProtectedSourceChecker;
-    type InstitutionAsset = TestInstitutionAsset;
-    type CidInstitutionVerifier = TestCidInstitutionVerifier;
-    type AdminLifecycle = PublicAdmins;
-    type SiblingInstitutionQuery = ();
-    type RegistryAuthority = ();
-    type AdminAccountQuery = TestAdminAccountQuery;
-    type FeeRouter = ();
-    type MaxAdmins = ConstU32<10>;
-    type MaxCidNumberLength = ConstU32<47>;
-    type MaxAccountNameLength = ConstU32<128>;
-    type MaxRegisterNonceLength = ConstU32<64>;
-    type MaxRegisterSignatureLength = ConstU32<64>;
-    type MaxInstitutionAccounts = ConstU32<8>;
-    type MinCreateAmount = ConstU128<111>;
-    type MinCloseBalance = ConstU128<111>;
-    type WeightInfo = ();
-}
-
-impl public_admins::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
-    type MaxAdminsPerInstitution = ConstU32<1989>;
-    type InternalVoteEngine = internal_vote::Pallet<Test>;
-    type InstitutionQuery = public_manage::Pallet<Test>;
-}
-
-impl private_admins::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
-    type MaxAdminsPerInstitution = ConstU32<1989>;
-    type InternalVoteEngine = internal_vote::Pallet<Test>;
-    type InstitutionQuery = public_manage::Pallet<Test>;
-}
-
 impl personal_manage::pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
@@ -637,64 +334,64 @@ impl pallet::Config for Test {
     type FeeRouter = ();
     // 测试 mock 把个人多签生命周期灌进 personal-manage，
     // 个人多签管理员灌进 personal-admins，动态阈值灌进 internal-vote。
-    // InstitutionQuery 走 public-manage,用于覆盖 0x05 InstitutionAccount 账户级主体。
+    // InstitutionQuery 使用 CID 唯一主键的测试聚合查询。
     type PersonalQuery = personal_manage::Pallet<Test>;
-    type InstitutionQuery = public_manage::Pallet<Test>;
+    type InstitutionQuery = TestInstitutionQuery;
     type WeightInfo = ();
 }
 
-/// 测试 helper:从 (institution_code, institution AccountId, index) 派生 sr25519 keypair。
+/// 测试 helper：从 `(institution_code, seed_context, index)` 派生 sr25519 keypair。
 ///
-/// 同 (institution_code, institution AccountId, index) 每次调用返回相同 keypair,保证测试确定性。
+/// `seed_context` 只保证测试密钥确定性，不承担机构身份或管理员寻址语义。
 /// 公钥的 32 字节直接作为 AccountId32,满足 `pubkey_from_accountid` 的铁律。
 fn derive_admin_pair(
     institution_code: InstitutionCode,
-    institution: &AccountId32,
+    seed_context: &AccountId32,
     index: u8,
 ) -> (AccountId32, sr25519::Pair) {
     let mut seed_bytes = [0u8; 32];
     seed_bytes[0] = institution_code[0];
     seed_bytes[1] = index;
     // 后 30 字节由机构 AccountId 前 30 字节填充,保证不同机构的 seed 不同。
-    let institution_bytes: &[u8] = institution.as_ref();
-    seed_bytes[2..32].copy_from_slice(&institution_bytes[..30]);
+    let context_bytes: &[u8] = seed_context.as_ref();
+    seed_bytes[2..32].copy_from_slice(&context_bytes[..30]);
     let pair = sr25519::Pair::from_seed(&seed_bytes);
     let account = AccountId32::new(pair.public().0);
     (account, pair)
 }
 
 fn nrc_admin(index: usize) -> AccountId32 {
-    derive_admin_pair(NRC, &nrc_pallet_id(), index as u8).0
+    derive_admin_pair(NRC, &nrc_main_account(), index as u8).0
 }
 
 fn prc_admin(index: usize) -> AccountId32 {
-    derive_admin_pair(PRC, &prc_pallet_id(), index as u8).0
+    derive_admin_pair(PRC, &prc_main_account(), index as u8).0
 }
 
 fn prb_admin(index: usize) -> AccountId32 {
-    derive_admin_pair(PRB, &prb_pallet_id(), index as u8).0
+    derive_admin_pair(PRB, &prb_main_account(), index as u8).0
 }
 
 fn frg_admin(index: usize) -> AccountId32 {
-    derive_admin_pair(FRG, &frg_pallet_id(), index as u8).0
+    derive_admin_pair(FRG, &frg_main_account(), index as u8).0
 }
 
 fn njd_admin(index: usize) -> AccountId32 {
-    derive_admin_pair(NJD, &njd_pallet_id(), index as u8).0
+    derive_admin_pair(NJD, &njd_main_account(), index as u8).0
 }
 
 // 统一状态机整改:业务模块不再持有独立 vote/finalize call,投票统一走
 // `InternalVote::cast`;`cast_transfer_votes_n` 直接用 admin 账户逐个投票。
 
-fn nrc_pallet_id() -> AccountId32 {
+fn nrc_main_account() -> AccountId32 {
     AccountId32::new(CHINA_CB[0].main_account)
 }
 
-fn prc_pallet_id() -> AccountId32 {
+fn prc_main_account() -> AccountId32 {
     AccountId32::new(CHINA_CB[1].main_account)
 }
 
-fn prb_pallet_id() -> AccountId32 {
+fn prb_main_account() -> AccountId32 {
     AccountId32::new(CHINA_CH[0].main_account)
 }
 
@@ -705,7 +402,7 @@ fn frg_node() -> &'static primitives::cid::china::china_zf::ChinaZf {
         .expect("FRG must exist in CHINA_ZF")
 }
 
-fn frg_pallet_id() -> AccountId32 {
+fn frg_main_account() -> AccountId32 {
     AccountId32::new(frg_node().main_account)
 }
 
@@ -716,167 +413,107 @@ fn njd_node() -> &'static primitives::cid::china::china_sf::ChinaSf {
         .expect("NJD must exist in CHINA_SF")
 }
 
-fn njd_pallet_id() -> AccountId32 {
+fn njd_main_account() -> AccountId32 {
     AccountId32::new(njd_node().main_account)
 }
 
-fn institution_account(institution: &AccountId32) -> AccountId32 {
-    institution.clone()
+fn nrc_actor_cid() -> CidNumber {
+    protocol_cid_number(CHINA_CB[0].cid_number.as_bytes())
 }
 
-fn registered_account() -> AccountId32 {
+fn prc_actor_cid() -> CidNumber {
+    protocol_cid_number(CHINA_CB[1].cid_number.as_bytes())
+}
+
+fn prb_actor_cid() -> CidNumber {
+    protocol_cid_number(CHINA_CH[0].cid_number.as_bytes())
+}
+
+fn frg_actor_cid() -> CidNumber {
+    protocol_cid_number(frg_node().cid_number.as_bytes())
+}
+
+fn njd_actor_cid() -> CidNumber {
+    protocol_cid_number(njd_node().cid_number.as_bytes())
+}
+
+fn personal_account() -> AccountId32 {
     AccountId32::new([0x55; 32])
 }
 
-fn registered_account_admin(index: usize) -> AccountId32 {
-    registered_account_pair(index).0
+fn personal_account_admin(index: usize) -> AccountId32 {
+    personal_account_pair(index).0
 }
 
 /// 注册个人账户(PERSONAL_CODE)的 admin sr25519 keypair helper。
-/// seed 按 (PERSONAL_CODE, registered_account, index) 派生,保证确定性。
-fn registered_account_pair(index: usize) -> (AccountId32, sr25519::Pair) {
-    derive_admin_pair(PERSONAL_CODE, &registered_account(), index as u8)
+/// seed 按 (PERSONAL_CODE, personal_account, index) 派生,保证确定性。
+fn personal_account_pair(index: usize) -> (AccountId32, sr25519::Pair) {
+    derive_admin_pair(PERSONAL_CODE, &personal_account(), index as u8)
 }
 
-fn registered_account_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
+fn personal_account_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
     (0..count)
-        .map(|i| registered_account_pair(i as usize))
+        .map(|i| personal_account_pair(i as usize))
         .collect()
 }
 
-fn registered_institution_account() -> AccountId32 {
+fn institution_account() -> AccountId32 {
     AccountId32::new([0x66; 32])
 }
 
-fn registered_institution_admin(index: usize) -> AccountId32 {
-    registered_institution_pair(index).0
+fn institution_admin(index: usize) -> AccountId32 {
+    institution_pair(index).0
 }
 
 /// 机构账户(PRIVATE_CODE / 0x05)的 admin sr25519 keypair helper。
-fn registered_institution_pair(index: usize) -> (AccountId32, sr25519::Pair) {
-    derive_admin_pair(PRIVATE_CODE, &registered_institution_account(), index as u8)
+fn institution_pair(index: usize) -> (AccountId32, sr25519::Pair) {
+    derive_admin_pair(PRIVATE_CODE, &institution_account(), index as u8)
 }
 
-fn registered_institution_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
-    (0..count)
-        .map(|i| registered_institution_pair(i as usize))
-        .collect()
+fn institution_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
+    (0..count).map(|i| institution_pair(i as usize)).collect()
 }
 
-fn test_cid_number() -> public_manage::CidNumberOf<Test> {
-    b"AH001-SCB0H-202605070-2026"
-        .to_vec()
-        .try_into()
-        .expect("cid number should fit")
+fn test_cid_number() -> CidNumber {
+    primitives::cid::generator::generate_cid_number(
+        primitives::cid::generator::GenerateCidNumberInput {
+            account_pubkey: "multisig-institution",
+            p1: "0",
+            province_code: "GD",
+            province_name: "广东省",
+            city_code: "001",
+            city_name: "荔湾市",
+            year: "2026",
+            institution: "SFLP",
+        },
+    )
+    .expect("test institution CID should generate")
+    .into_bytes()
+    .try_into()
+    .expect("cid number should fit")
 }
 
-fn test_account_name() -> public_manage::AccountNameOf<Test> {
-    b"main"
-        .to_vec()
-        .try_into()
-        .expect("account name should fit")
+fn protocol_cid_number(raw: &[u8]) -> CidNumber {
+    raw.to_vec().try_into().expect("protocol CID should fit")
 }
 
-fn insert_active_registered_institution_account(
+fn insert_active_institution_account(
     account: &AccountId32,
-    admins: private_admins::pallet::AdminsOf<Test>,
+    admins: BoundedVec<AccountId32, ConstU32<1989>>,
 ) {
     let cid_number = test_cid_number();
-    let account_name = test_account_name();
-    public_manage::AccountRegisteredCid::<Test>::insert(
-        account,
-        public_manage::RegisteredInstitution {
-            cid_number: cid_number.clone(),
-            account_name: account_name.clone(),
-        },
-    );
-    public_manage::Institutions::<Test>::insert(
-        &cid_number,
-        public_manage::InstitutionInfo {
-            // 本测试只关心账户反查,机构名称可为空;town_code 非镇行政区为空。
-            cid_full_name: Default::default(),
-            cid_short_name: Default::default(),
-            town_code: Default::default(),
-            legal_representative_name: None,
-            legal_representative_cid_number: None,
-            legal_representative_account: None,
-            institution_code: PRIVATE_CODE,
-            created_at: 1,
-            status: public_manage::InstitutionLifecycleStatus::Active,
-        },
-    );
-    public_manage::InstitutionAccounts::<Test>::insert(
-        &cid_number,
-        &account_name,
-        public_manage::InstitutionAccountInfo {
-            address: account.clone(),
-            initial_balance: 0,
-            status: public_manage::InstitutionLifecycleStatus::Active,
-            is_default: true,
-            created_at: 1,
-        },
-    );
-    private_admins::AdminAccounts::<Test>::insert(
-        account.clone(),
-        admin_primitives::InstitutionAdminAccount {
-            cid_number: Default::default(),
-            institution_code: PRIVATE_CODE,
-            // 机构 admins 只保存钱包账户；岗位任职归 entity。
-            admins: admins
-                .iter()
-                .cloned()
-                .collect::<Vec<_>>()
-                .try_into()
-                .expect("institution admins should fit"),
-            status: admin_primitives::AdminAccountStatus::Active,
-        },
-    );
-    internal_vote::ActiveDynamicThresholds::<Test>::insert(PRIVATE_CODE, account.clone(), 2);
+    register_institution_account(account.clone(), cid_number.as_slice(), PRIVATE_CODE);
+    set_institution_admins(PRIVATE_CODE, cid_number.as_slice(), admins.to_vec());
+    internal_vote::ActiveInstitutionThresholds::<Test>::insert(cid_number, 2);
 }
 
-/// 为固定治理机构写入 entity 生命周期身份；管理员快照由测试 Provider 注入。
-fn insert_active_fixed_institution_identity(
+/// 为固定治理机构登记 CID 与账户归属；管理员快照按 CID 注入。
+fn insert_active_fixed_institution_account(
     institution_code: InstitutionCode,
     account: &AccountId32,
     cid_number_raw: &[u8],
 ) {
-    let cid_number: public_manage::CidNumberOf<Test> = cid_number_raw
-        .to_vec()
-        .try_into()
-        .expect("fixed institution cid should fit");
-    let account_name = test_account_name();
-    public_manage::AccountRegisteredCid::<Test>::insert(
-        account,
-        public_manage::RegisteredInstitution {
-            cid_number: cid_number.clone(),
-            account_name: account_name.clone(),
-        },
-    );
-    public_manage::Institutions::<Test>::insert(
-        &cid_number,
-        public_manage::InstitutionInfo {
-            cid_full_name: Default::default(),
-            cid_short_name: Default::default(),
-            town_code: Default::default(),
-            legal_representative_name: None,
-            legal_representative_cid_number: None,
-            legal_representative_account: None,
-            institution_code,
-            created_at: 1,
-            status: public_manage::InstitutionLifecycleStatus::Active,
-        },
-    );
-    public_manage::InstitutionAccounts::<Test>::insert(
-        &cid_number,
-        &account_name,
-        public_manage::InstitutionAccountInfo {
-            address: account.clone(),
-            initial_balance: 0,
-            status: public_manage::InstitutionLifecycleStatus::Active,
-            is_default: true,
-            created_at: 1,
-        },
-    );
+    register_institution_account(account.clone(), cid_number_raw, institution_code);
 }
 
 /// 收款人：使用一个不是管理员也不是机构的普通地址
@@ -889,27 +526,27 @@ fn last_proposal_id() -> u64 {
     votingengine::Pallet::<Test>::next_proposal_id().saturating_sub(1)
 }
 
-/// 返回 (institution_code, institution) 对应的前 `count` 个 sr25519 admin keypair。
+/// 返回 `(institution_code, seed_context)` 对应的前 `count` 个 sr25519 测试 keypair。
 fn admin_pairs(
     institution_code: InstitutionCode,
-    institution: AccountId32,
+    seed_context: AccountId32,
     count: u8,
 ) -> Vec<(AccountId32, sr25519::Pair)> {
     (0..count)
-        .map(|i| derive_admin_pair(institution_code, &institution, i))
+        .map(|i| derive_admin_pair(institution_code, &seed_context, i))
         .collect()
 }
 
 fn nrc_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
-    admin_pairs(NRC, nrc_pallet_id(), count)
+    admin_pairs(NRC, nrc_main_account(), count)
 }
 
 fn prc_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
-    admin_pairs(PRC, prc_pallet_id(), count)
+    admin_pairs(PRC, prc_main_account(), count)
 }
 
 fn prb_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
-    admin_pairs(PRB, prb_pallet_id(), count)
+    admin_pairs(PRB, prb_main_account(), count)
 }
 
 fn nrc_pass_count() -> usize {
@@ -970,11 +607,11 @@ fn new_test_ext() -> sp_io::TestExternalities {
         .expect("test storage should build");
 
     let balances = vec![
-        (institution_account(&nrc_pallet_id()), 10_000),
-        (institution_account(&prc_pallet_id()), 10_000),
-        (institution_account(&prb_pallet_id()), 10_000),
-        (institution_account(&frg_pallet_id()), 10_000),
-        (institution_account(&njd_pallet_id()), 10_000),
+        (nrc_main_account(), 10_000),
+        (prc_main_account(), 10_000),
+        (prb_main_account(), 10_000),
+        (frg_main_account(), 10_000),
+        (njd_main_account(), 10_000),
     ];
     pallet_balances::GenesisConfig::<Test> {
         balances,
@@ -984,16 +621,14 @@ fn new_test_ext() -> sp_io::TestExternalities {
     .expect("balances should assimilate");
     let mut ext: sp_io::TestExternalities = storage.into();
     ext.execute_with(|| {
+        EXTRA_ADMINS.with(|admins| admins.borrow_mut().clear());
+        INSTITUTION_ACCOUNTS.with(|accounts| accounts.borrow_mut().clear());
         // 为储备治理三档注入 sr25519 派生 admin。
         // 注入数量必须覆盖 votingengine 的固定制度阈值,保证投票测试走真实状态机。
-        // Provider 的 is_internal_admin / get_admin_list 会优先读 thread_local 注入,
-        // 未注入时 fallback 到 CHINA_CB / CHINA_CH 硬编码。
-        let nrc = nrc_pallet_id();
-        let prc = prc_pallet_id();
-        let prb = prb_pallet_id();
-        let frg = frg_pallet_id();
-        let njd = njd_pallet_id();
-        let dq = registered_account();
+        // 管理员提供器只按 `(institution_code, actor_cid_number)` 读取本测试注入值。
+        let frg = frg_main_account();
+        let njd = njd_main_account();
+        let dq = personal_account();
         let nrc_accts: Vec<AccountId32> = nrc_pass_pairs().into_iter().map(|(a, _)| a).collect();
         let prc_accts: Vec<AccountId32> = prc_pass_pairs().into_iter().map(|(a, _)| a).collect();
         let prb_accts: Vec<AccountId32> = prb_pass_pairs().into_iter().map(|(a, _)| a).collect();
@@ -1003,32 +638,29 @@ fn new_test_ext() -> sp_io::TestExternalities {
         let njd_accts: Vec<AccountId32> = (0..primitives::count_const::NJD_INTERNAL_THRESHOLD)
             .map(|index| njd_admin(index as usize))
             .collect();
-        set_extra_admins(NRC, nrc, nrc_accts);
-        set_extra_admins(PRC, prc, prc_accts);
-        set_extra_admins(PRB, prb, prb_accts);
-        set_extra_admins(FRG, frg.clone(), frg_accts);
-        set_extra_admins(NJD, njd.clone(), njd_accts);
-        insert_active_fixed_institution_identity(
+        set_institution_admins(NRC, CHINA_CB[0].cid_number.as_bytes(), nrc_accts);
+        set_institution_admins(PRC, CHINA_CB[1].cid_number.as_bytes(), prc_accts);
+        set_institution_admins(PRB, CHINA_CH[0].cid_number.as_bytes(), prb_accts);
+        set_institution_admins(FRG, frg_node().cid_number.as_bytes(), frg_accts);
+        set_institution_admins(NJD, njd_node().cid_number.as_bytes(), njd_accts);
+        insert_active_fixed_institution_account(
             NRC,
-            &nrc_pallet_id(),
+            &nrc_main_account(),
             CHINA_CB[0].cid_number.as_bytes(),
         );
-        insert_active_fixed_institution_identity(
+        insert_active_fixed_institution_account(
             PRC,
-            &prc_pallet_id(),
+            &prc_main_account(),
             CHINA_CB[1].cid_number.as_bytes(),
         );
-        insert_active_fixed_institution_identity(
+        insert_active_fixed_institution_account(
             PRB,
-            &prb_pallet_id(),
+            &prb_main_account(),
             CHINA_CH[0].cid_number.as_bytes(),
         );
-        insert_active_fixed_institution_identity(FRG, &frg, frg_node().cid_number.as_bytes());
-        insert_active_fixed_institution_identity(NJD, &njd, njd_node().cid_number.as_bytes());
-        // PERSONAL_CODE/PUBLIC_CODE/PRIVATE_CODE 的 admin 从 personal/public/private-admins 读；
-        // 动态阈值真源在 internal-vote::ActiveDynamicThresholds。
-        // personal-manage / public-manage 只保存账户生命周期状态和 org 归属。
-        // 测试需要时显式写入 PersonalAccounts + 对应管理员表。
+        insert_active_fixed_institution_account(FRG, &frg, frg_node().cid_number.as_bytes());
+        insert_active_fixed_institution_account(NJD, &njd, njd_node().cid_number.as_bytes());
+        // 个人多签管理员由 personal-admins 提供；机构管理员统一按 CID 注入。
         let _ = dq;
     });
     ext

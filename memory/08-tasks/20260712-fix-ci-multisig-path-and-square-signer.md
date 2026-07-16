@@ -18,7 +18,7 @@
 ## 必须遵守（红线）
 
 - 链上稳定标识**绝不改**：runtime 类型别名 `MultisigTransfer`（construct_runtime 名）、
-  MODULE_TAG 字节串 `b"multisig-transfer"`（SCALE 编码依赖，改则提案解码失效）。
+  当时 MODULE_TAG 字节串仍为旧长名；2026-07-15 已在 breaking runtime 中统一为 `b"multisig"`，五端 ABI 同步且不兼容旧标签。
 - CitizenApp 的 `citizenapp/lib/transaction/multisig-transfer/` 目录是独立产品当前命名、
   import 自洽，**不动**。
 - 大面积命名注册表（unified-naming.md 545/560/573、模块技术文档、node 侧目录 doc）归属已存在的
@@ -41,7 +41,7 @@
 
 - `flutter test` 两条 CI 相关测试本地通过（3 个 square 测试文件绿）。
 - CI 索引同步 grep 逻辑对新路径能取到 `propose_transfer` 的 call_index(0)。
-- 保留清单未被误改（`MultisigTransfer`、`b"multisig-transfer"`、CitizenApp 目录）。
+- 保留清单未被误改（`MultisigTransfer` 类型名、CitizenApp 业务目录）；链上 MODULE_TAG 后续已统一为 `b"multisig"`。
 - 文档路径与实际目录一致；残留已清理。
 
 ## 执行结果（2026-07-12）

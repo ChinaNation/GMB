@@ -9,13 +9,13 @@ extern crate alloc;
 
 use alloc::{vec, vec::Vec};
 
+use crate::account_derive::InstitutionProtocolAccountKind;
 use crate::cid::china::{
     china_jc::CHINA_JC, china_jy::CHINA_JY, china_lf::CHINA_LF, china_zf::CHINA_ZF,
 };
 use crate::cid::code::{
     institution_code_from_cid_number, InstitutionCode, NED, NLG, NRC, NRP, NSN, NSP, PRB, PRS,
 };
-use crate::account_derive::InstitutionProtocolAccountKind;
 
 /// 所有机构共同强制的协议账户。
 pub const COMMON_PROTOCOL_ACCOUNT_KINDS: &[InstitutionProtocolAccountKind] = &[
@@ -144,13 +144,6 @@ pub fn singleton_by_cid(cid_number: &[u8]) -> Option<SingletonInstitution> {
     singleton_institutions()
         .into_iter()
         .find(|institution| institution.cid_number.as_bytes() == cid_number)
-}
-
-/// 按主账户查询国家级永久单例。
-pub fn singleton_by_main_account(main_account: &[u8; 32]) -> Option<SingletonInstitution> {
-    singleton_institutions()
-        .into_iter()
-        .find(|institution| &institution.main_account == main_account)
 }
 
 /// 三个法定成员机构的人数区间和唯一成员岗位。

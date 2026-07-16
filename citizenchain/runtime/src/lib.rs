@@ -338,7 +338,7 @@ mod runtime {
     #[runtime::pallet_index(16)]
     pub type PowDifficulty = pow_difficulty;
 
-    // 机构多签账户转账模块：治理机构内部投票通过后从 main_account 转账（宪法保留主账户，注册型 account）
+    // 机构/个人多签账户转账模块：机构交易以 CID 为主体并显式携带 institution_account；个人交易以 personal_account 为主体。
     #[runtime::pallet_index(17)]
     pub type MultisigTransfer = multisig;
 

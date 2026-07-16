@@ -101,6 +101,16 @@ class InstitutionCodeLabel {
         code == 'NJD';
   }
 
+  /// 固定治理档制度阈值，逐字镜像 runtime
+  /// `fixed_governance_pass_threshold`；其它机构返回 null 并读取链上动态阈值。
+  static int? fixedGovernanceThreshold(String code) => switch (code) {
+        'NRC' => 13,
+        'PRC' || 'PRB' => 6,
+        'FRG' => 3,
+        'NJD' => 8,
+        _ => null,
+      };
+
   /// 是否为个人多签账户机构码(PMUL)。
   static bool isPersonal(String code) {
     return code == 'PMUL';

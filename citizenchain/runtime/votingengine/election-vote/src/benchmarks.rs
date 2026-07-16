@@ -22,8 +22,18 @@ use crate::{
 fn setup_election<T: Config>(c: u32, mode: ElectionMode) -> (u64, T::AccountId, T::AccountId) {
     let proposal_id = 0u64;
     let voter: T::AccountId = account("voter", 0, 0);
-    let organizer: T::AccountId = account("organizer", 0, 0);
-    let target: T::AccountId = account("target", 0, 0);
+    let actor_cid_number: votingengine::CidNumber = primitives::cid::china::china_cb::CHINA_CB[0]
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("NRC CID fits runtime bound");
+    let target_cid_number: votingengine::CidNumber = primitives::cid::china::china_lf::CHINA_LF[0]
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("legislature CID fits runtime bound");
     let candidates: sp_std::vec::Vec<T::AccountId> =
         (0..c).map(|index| account("candidate", index, 0)).collect();
     let selected = candidates[0].clone();
@@ -39,7 +49,8 @@ fn setup_election<T: Config>(c: u32, mode: ElectionMode) -> (u64, T::AccountId, 
             stage: mode.stage(),
             status: votingengine::STATUS_VOTING,
             internal_code: None,
-            account_context: Some(target.clone()),
+            actor_cid_number: Some(actor_cid_number.clone()),
+            execution_account: None,
             subject_cid_numbers: Default::default(),
             start: now,
             end: 2u32.saturated_into(),
@@ -52,10 +63,8 @@ fn setup_election<T: Config>(c: u32, mode: ElectionMode) -> (u64, T::AccountId, 
             mode,
             population_scope: (mode == ElectionMode::Popular)
                 .then_some(votingengine::PopulationScope::Country),
-            organizer_code: [0; 4],
-            organizer,
-            target_code: [0; 4],
-            target,
+            actor_cid_number,
+            target_cid_number,
             office_code: b"benchmark"
                 .to_vec()
                 .try_into()

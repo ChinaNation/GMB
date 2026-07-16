@@ -3,21 +3,23 @@ import 'dart:typed_data';
 /// 公权/私权机构 关闭机构多签账户提案详情（从链上 ProposalData 解码）。
 ///
 /// 链上 SCALE 布局（`pub-mgmt`/`pri-mgmt` + ACTION_CLOSE = 2 前缀之后）：
-///   account: AccountId32(32) + beneficiary: AccountId32(32)
-///   + proposer: AccountId32(32)
+///   actor_cid_number + institution_account: AccountId32(32)
+///   + beneficiary: AccountId32(32) + proposer: AccountId32(32)
 class CloseProposalInfo {
   const CloseProposalInfo({
     required this.proposalId,
-    required this.account,
+    required this.actorCidNumber,
+    required this.institutionAccount,
     required this.beneficiary,
     required this.proposer,
     this.status,
   });
 
   final int proposalId;
+  final String actorCidNumber;
 
   /// 多签账户公钥 hex（32 字节，不含 0x 前缀）。
-  final String account;
+  final String institutionAccount;
 
   /// 受益人 SS58 地址。
   final String beneficiary;
@@ -30,49 +32,20 @@ class CloseProposalInfo {
 
   /// 机构多签 AccountId32。
   Uint8List get institutionBytes {
-    final addrBytes = _hexDecode(account);
+    final addrBytes = _hexDecode(institutionAccount);
     return Uint8List.fromList(addrBytes);
   }
 
   CloseProposalInfo copyWithStatus(int? newStatus) {
     return CloseProposalInfo(
       proposalId: proposalId,
-      account: account,
+      actorCidNumber: actorCidNumber,
+      institutionAccount: institutionAccount,
       beneficiary: beneficiary,
       proposer: proposer,
       status: newStatus,
     );
   }
-}
-
-/// 多签账户状态。
-enum InstitutionStatus {
-  /// 提案投票中，尚未激活。
-  pending,
-
-  /// 投票通过、入金完成，已激活。
-  active,
-}
-
-/// 多签账户链上信息。
-///
-/// 机构状态来自 `PublicManage/PrivateManage::InstitutionAccounts`，
-/// 管理员来自对应机构管理员 pallet 的 `AdminAccounts`，动态阈值来自 `InternalVote`。
-class InstitutionAccountInfo {
-  const InstitutionAccountInfo({
-    required this.adminsLen,
-    required this.threshold,
-    required this.admins,
-    required this.status,
-  });
-
-  final int adminsLen;
-  final int? threshold;
-
-  /// 管理员公钥列表（hex，不含 0x 前缀）。
-  final List<String> admins;
-
-  final InstitutionStatus status;
 }
 
 // ──── 工具函数 ────

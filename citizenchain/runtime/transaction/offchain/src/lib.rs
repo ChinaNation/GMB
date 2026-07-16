@@ -499,10 +499,7 @@ pub mod pallet {
                 crate::bank_check::ACCOUNT_NAME_MAIN,
             )?;
             ensure!(
-                T::CidAccountQuery::is_institution_admin(
-                    actor_cid_number.as_slice(),
-                    &submitter,
-                ),
+                T::CidAccountQuery::is_institution_admin(actor_cid_number.as_slice(), &submitter,),
                 Error::<T>::UnauthorizedAdmin
             );
             Self::verify_batch_signature(
@@ -585,13 +582,7 @@ pub mod pallet {
             rpc_port: u16,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_register_clearing_bank(
-                who,
-                actor_cid_number,
-                peer_id,
-                rpc_domain,
-                rpc_port,
-            )
+            Self::do_register_clearing_bank(who, actor_cid_number, peer_id, rpc_domain, rpc_port)
         }
 
         /// 更新清算行节点的 RPC 端点(域名 / 端口),PeerId 不变。
@@ -612,12 +603,7 @@ pub mod pallet {
             new_port: u16,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_update_clearing_bank_endpoint(
-                who,
-                actor_cid_number,
-                new_domain,
-                new_port,
-            )
+            Self::do_update_clearing_bank_endpoint(who, actor_cid_number, new_domain, new_port)
         }
 
         /// 注销清算行节点声明,机构退出清算网络。

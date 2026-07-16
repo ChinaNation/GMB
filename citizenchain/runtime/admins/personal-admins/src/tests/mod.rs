@@ -67,41 +67,42 @@ impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityRea
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(
-        institution_code: InstitutionCode,
-        institution: AccountId32,
-        who: &AccountId32,
+    fn is_institution_admin(
+        _institution_code: InstitutionCode,
+        _cid_number: &[u8],
+        _who: &AccountId32,
     ) -> bool {
-        PersonalAdmins::is_active_account_admin(institution_code, institution, who)
+        false
     }
 
-    fn get_admin_list(
-        institution_code: InstitutionCode,
-        institution: AccountId32,
-    ) -> Option<Vec<AccountId32>> {
-        PersonalAdmins::active_account_admins(institution_code, institution)
+    fn is_personal_admin(personal_account: AccountId32, who: &AccountId32) -> bool {
+        PersonalAdmins::is_active_account_admin(PMUL, personal_account, who)
     }
 
-    fn is_pending_internal_admin(
-        institution_code: InstitutionCode,
-        institution: AccountId32,
-        who: &AccountId32,
-    ) -> bool {
-        PersonalAdmins::is_pending_account_admin_for_snapshot(institution_code, institution, who)
+    fn get_personal_admins(personal_account: AccountId32) -> Option<Vec<AccountId32>> {
+        PersonalAdmins::active_account_admins(PMUL, personal_account)
     }
 
-    fn get_pending_admin_list(
-        institution_code: InstitutionCode,
-        institution: AccountId32,
-    ) -> Option<Vec<AccountId32>> {
-        PersonalAdmins::pending_account_admins_for_snapshot(institution_code, institution)
+    fn is_pending_personal_admin(personal_account: AccountId32, who: &AccountId32) -> bool {
+        PersonalAdmins::is_pending_account_admin_for_snapshot(PMUL, personal_account, who)
+    }
+
+    fn get_pending_personal_admins(personal_account: AccountId32) -> Option<Vec<AccountId32>> {
+        PersonalAdmins::pending_account_admins_for_snapshot(PMUL, personal_account)
     }
 }
 
 pub struct TestInternalAdminsLenProvider;
 impl votingengine::InternalAdminsLenProvider<AccountId32> for TestInternalAdminsLenProvider {
-    fn admins_len(institution_code: InstitutionCode, institution: AccountId32) -> Option<u32> {
-        PersonalAdmins::active_account_admins_len(institution_code, institution)
+    fn institution_admins_len(
+        _institution_code: InstitutionCode,
+        _cid_number: &[u8],
+    ) -> Option<u32> {
+        None
+    }
+
+    fn personal_admins_len(personal_account: AccountId32) -> Option<u32> {
+        PersonalAdmins::active_account_admins_len(PMUL, personal_account)
     }
 }
 
@@ -174,7 +175,7 @@ fn admins(items: &[AccountId32]) -> pallet::AdminsOf<Test> {
 }
 
 fn seed_active_admin_account(account: AccountId32, admins: pallet::AdminsOf<Test>, threshold: u32) {
-    internal_vote::ActiveDynamicThresholds::<Test>::insert(PMUL, account.clone(), threshold);
+    internal_vote::ActivePersonalThresholds::<Test>::insert(account.clone(), threshold);
     pallet::AdminAccounts::<Test>::insert(
         account.clone(),
         admin_primitives::AdminAccount {
@@ -227,9 +228,10 @@ fn propose_admin_set_change_updates_personal_admins_and_threshold() {
 
         let admin_account = pallet::AdminAccounts::<Test>::get(account.clone())
             .expect("admin account should exist");
+        assert!(admin_account.cid_number.is_empty());
         assert_eq!(admin_account.admins, next_admins);
         assert_eq!(
-            internal_vote::ActiveDynamicThresholds::<Test>::get(PMUL, account),
+            internal_vote::ActivePersonalThresholds::<Test>::get(account),
             Some(3)
         );
     });

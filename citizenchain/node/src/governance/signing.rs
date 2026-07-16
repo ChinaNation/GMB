@@ -380,7 +380,7 @@ pub fn build_joint_vote_sign_request(
     if actor_cid_number.is_empty()
         || actor_cid_number.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
     {
-        return Err("actor_cid_number 长度需在 1..=32".to_string());
+        return Err("actor_cid_number 长度必须在链上 CID_NUMBER_MAX_BYTES 范围内".to_string());
     }
 
     let (spec_version, tx_version) = fetch_runtime_version()?;

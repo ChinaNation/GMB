@@ -53,7 +53,7 @@ void main() {
     expect(info?.provinceName, '广东省');
   });
 
-  test('反查不到(如注册机构账户身份):返回 null', () async {
+  test('反查不到未知机构 CID 时返回 null', () async {
     final lookup = await seedLookup([
       PublicInstitutionDto.fromJson(<String, dynamic>{
         'cid_number': cid,
@@ -63,7 +63,7 @@ void main() {
         'account_count': 2,
       }),
     ]);
-    final info = await lookup.lookup('institution-account:abc123');
+    final info = await lookup.lookup('GD001-CGOV0-000000000-2026');
     expect(info, isNull);
   });
 }

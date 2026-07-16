@@ -13,7 +13,8 @@ class MultisigTransferProposalDetailKeys {
 class TransferProposalInfo {
   const TransferProposalInfo({
     required this.proposalId,
-    required this.institutionBytes,
+    required this.actorCidNumber,
+    required this.institutionAccount,
     required this.beneficiary,
     required this.amountFen,
     required this.remark,
@@ -22,7 +23,8 @@ class TransferProposalInfo {
   });
 
   final int proposalId;
-  final Uint8List institutionBytes;
+  final String? actorCidNumber;
+  final Uint8List institutionAccount;
   final String beneficiary; // SS58
   final BigInt amountFen;
   final String remark;
@@ -36,7 +38,8 @@ class TransferProposalInfo {
   TransferProposalInfo copyWithStatus(int? newStatus) {
     return TransferProposalInfo(
       proposalId: proposalId,
-      institutionBytes: institutionBytes,
+      actorCidNumber: actorCidNumber,
+      institutionAccount: institutionAccount,
       beneficiary: beneficiary,
       amountFen: amountFen,
       remark: remark,
@@ -50,6 +53,8 @@ class TransferProposalInfo {
 class SafetyFundProposalInfo {
   const SafetyFundProposalInfo({
     required this.proposalId,
+    required this.actorCidNumber,
+    required this.institutionAccount,
     required this.beneficiary,
     required this.amountFen,
     required this.remark,
@@ -58,6 +63,8 @@ class SafetyFundProposalInfo {
   });
 
   final int proposalId;
+  final String actorCidNumber;
+  final Uint8List institutionAccount;
   final String beneficiary; // SS58
   final BigInt amountFen;
   final String remark;
@@ -71,14 +78,18 @@ class SafetyFundProposalInfo {
 class SweepProposalInfo {
   const SweepProposalInfo({
     required this.proposalId,
-    required this.institutionBytes,
+    required this.actorCidNumber,
+    required this.institutionAccount,
     required this.amountFen,
+    required this.proposer,
     this.status,
   });
 
   final int proposalId;
-  final Uint8List institutionBytes;
+  final String actorCidNumber;
+  final Uint8List institutionAccount;
   final BigInt amountFen;
+  final String proposer; // SS58
   final int? status;
 
   double get amountYuan => amountFen.toDouble() / 100;

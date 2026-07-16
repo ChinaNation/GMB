@@ -1,12 +1,12 @@
 #![cfg(test)]
 
 use super::*;
-use codec::Encode;
 use frame_support::{
     assert_noop, assert_ok, derive_impl,
     traits::{ConstU128, ConstU32, Hooks},
 };
 use frame_system as system;
+use primitives::cid::china::{china_cb::CHINA_CB, china_ch::CHINA_CH};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 use votingengine::{STATUS_PASSED, STATUS_REJECTED};
 
@@ -88,44 +88,28 @@ impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityRea
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(
+    fn is_institution_admin(
         institution_code: InstitutionCode,
-        institution: AccountId32,
+        cid_number: &[u8],
         who: &AccountId32,
     ) -> bool {
-        let who_bytes = who.encode();
-        if who_bytes.len() != 32 {
-            return false;
-        }
-        let mut who_arr = [0u8; 32];
-        who_arr.copy_from_slice(&who_bytes);
-        match institution_code {
-            NRC | PRC => CHINA_CB
-                .iter()
-                .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
-                .unwrap_or(false),
-            PRB => CHINA_CH
-                .iter()
-                .find(|n| AccountId32::new(n.main_account) == institution)
-                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
-                .unwrap_or(false),
-            _ => false,
-        }
+        Self::get_institution_admins(institution_code, cid_number)
+            .map(|admins| admins.contains(who))
+            .unwrap_or(false)
     }
 
-    fn get_admin_list(
+    fn get_institution_admins(
         institution_code: InstitutionCode,
-        institution: AccountId32,
+        cid_number: &[u8],
     ) -> Option<sp_std::vec::Vec<AccountId32>> {
         match institution_code {
             NRC | PRC => CHINA_CB
                 .iter()
-                .find(|n| AccountId32::new(n.main_account) == institution)
+                .find(|n| n.cid_number.as_bytes() == cid_number)
                 .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
             PRB => CHINA_CH
                 .iter()
-                .find(|n| AccountId32::new(n.main_account) == institution)
+                .find(|n| n.cid_number.as_bytes() == cid_number)
                 .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
             _ => None,
         }
@@ -184,7 +168,78 @@ impl pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
+    type InstitutionQuery = TestInstitutionQuery;
     type WeightInfo = ();
+}
+
+pub struct TestInstitutionQuery;
+impl entity_primitives::InstitutionMultisigQuery<AccountId32> for TestInstitutionQuery {
+    fn lookup_cid(addr: &AccountId32) -> Option<Vec<u8>> {
+        test_institution(addr).map(|(cid_number, _, _)| cid_number)
+    }
+
+    fn lookup_org(addr: &AccountId32) -> Option<InstitutionCode> {
+        test_institution(addr).map(|(_, institution_code, _)| institution_code)
+    }
+
+    fn lookup_admin_config(
+        addr: &AccountId32,
+    ) -> Option<primitives::multisig::MultisigConfigSnapshot<AccountId32>> {
+        let (_, _, admins) = test_institution(addr)?;
+        let admins_len = u32::try_from(admins.len()).ok()?;
+        Some(primitives::multisig::MultisigConfigSnapshot {
+            admins,
+            admins_len,
+            threshold: admins_len,
+        })
+    }
+
+    fn account_exists(addr: &AccountId32) -> bool {
+        test_institution(addr).is_some()
+    }
+}
+
+fn test_institution(addr: &AccountId32) -> Option<(Vec<u8>, InstitutionCode, Vec<AccountId32>)> {
+    CHINA_CB
+        .iter()
+        .filter_map(|institution| {
+            let institution_code =
+                votingengine::types::institution_code_from_cid_number(institution.cid_number)?;
+            matches!(institution_code, NRC | PRC)
+                .then(|| {
+                    (
+                        institution.cid_number.as_bytes().to_vec(),
+                        institution_code,
+                        institution
+                            .admins
+                            .iter()
+                            .copied()
+                            .map(AccountId32::new)
+                            .collect(),
+                    )
+                })
+                .filter(|_| AccountId32::new(institution.main_account) == *addr)
+        })
+        .next()
+        .or_else(|| {
+            CHINA_CH.iter().find_map(|institution| {
+                let institution_code =
+                    votingengine::types::institution_code_from_cid_number(institution.cid_number)?;
+                (institution_code == PRB && AccountId32::new(institution.main_account) == *addr)
+                    .then(|| {
+                        (
+                            institution.cid_number.as_bytes().to_vec(),
+                            institution_code,
+                            institution
+                                .admins
+                                .iter()
+                                .copied()
+                                .map(AccountId32::new)
+                                .collect(),
+                        )
+                    })
+            })
+        })
 }
 
 fn nrc_admin(index: usize) -> AccountId32 {
@@ -197,6 +252,33 @@ fn prc_admin(index: usize) -> AccountId32 {
 
 fn prb_admin(index: usize) -> AccountId32 {
     AccountId32::new(CHINA_CH[0].admins[index])
+}
+
+fn nrc_cid() -> CidNumber {
+    CHINA_CB[0]
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("NRC CID fits runtime bound")
+}
+
+fn prc_cid() -> CidNumber {
+    CHINA_CB[1]
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("PRC CID fits runtime bound")
+}
+
+fn prb_cid() -> CidNumber {
+    CHINA_CH[0]
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("PRB CID fits runtime bound")
 }
 
 fn nrc_pallet_id() -> AccountId32 {

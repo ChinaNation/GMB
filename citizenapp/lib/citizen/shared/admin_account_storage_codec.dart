@@ -1,32 +1,16 @@
-// 分类管理员模块 `AdminAccounts` value 的最小 SCALE 解码器(req 3 反向索引依赖)。
-// 机构记录为 cid + institution_code + 裸钱包集合 + status；个人多签继续使用其独立旧布局。
+// 分类管理员模块 `AdminAccounts` 的严格 SCALE 解码器。
 //
-// 链上 [AdminAccount<AdminList, AccountId, BlockNumber>] SCALE 字节布局:
-//   cid_number: BoundedVec<u8>                     (Compact<u32> + N 字节;前导,个人多签空=0x00)
-//   institution_code: [u8;4]                       (4B)
-//   kind: AdminAccountKind                         (1B,Enum 0/1/2)
-//   admins: BoundedVec<AccountId, MaxAdmins>       (Compact<u32> + N×AccountId(32B);个人多签=裸账户)
-//   creator: AccountId                             (32B)
-//   created_at: BlockNumber(u32)                   (4B)
-//   updated_at: BlockNumber(u32)                   (4B)
-//   status: AdminAccountStatus                     (1B,Enum 0/1/2)
+// - PublicAdmins / PrivateAdmins: key=CID，value=institution_code + admins。
+// - PersonalAdmins: key=personal_account，value=个人多签 AdminAccount 完整结构。
 //
-// 反向索引只需 (institutionCode, kind, admins) 三字段过滤,前导 cid_number 消费后即跳过其余字段。
-//
-// 链端定义参考:
-// - [admin-primitives/src/lib.rs::AdminAccount]
-// - [admin-primitives/src/lib.rs::AdminAccountKind]
-//   (Public=0 / Private=1 / Personal=2)
-//
-// 本文件统一放在 `lib/citizen/shared/`，供机构多签、个人多签
-// 和治理提案展示复用；业务模块不得各自复制管理员账户解码逻辑。
+// 机构 CID 只存在 storage key，机构 value 不再保存 CID、kind、生命周期或创建资料。
 
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:citizenapp/citizen/institution/institution_role_storage_codec.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
-/// SCALE 解码后的 AdminAccount 关键字段。
 class AdminAccountStorageDecoded {
   const AdminAccountStorageDecoded({
     required this.institutionCode,
@@ -34,67 +18,58 @@ class AdminAccountStorageDecoded {
     required this.adminsHex,
   });
 
-  /// 4 字节机构码字符串（"NRC"/"PRC"/"PRB"/"PMUL"/"CGOV" 等）。
   final String institutionCode;
-
-  /// 管理员账户类型:0=Public / 1=Private / 2=Personal。
   final int kind;
-
-  /// 管理员公钥 hex 列表(小写,无 0x 前缀,32 字节 = 64 hex 字符)。
   final List<String> adminsHex;
 }
 
-/// AdminAccount SCALE 解码工具集 + AccountId 提取工具。
 class AdminAccountStorageCodec {
   AdminAccountStorageCodec._();
 
-  /// 链端 `AdminAccountKind` 枚举值。
   static const int kindPublicInstitution = 0;
   static const int kindPrivateInstitution = 1;
   static const int kindPersonal = 2;
 
-  /// 解码 AdminAccount SCALE bytes;格式不符返回 null(容错,不抛异常)。
-  static AdminAccountStorageDecoded? tryDecode(Uint8List bytes) {
+  /// [kind] 必须由扫描到的 pallet 名确定，不能再从机构 value 猜测。
+  static AdminAccountStorageDecoded? tryDecode(
+    Uint8List bytes, {
+    required int kind,
+  }) {
     try {
-      if (bytes.isEmpty) return null;
-      final institution = InstitutionRoleStorageCodec.decodeAdminAccount(bytes);
-      if (institution != null) {
+      if (kind != kindPersonal) {
+        final decoded = InstitutionRoleStorageCodec.decodeAdminAccount(bytes);
+        if (decoded == null) return null;
         return AdminAccountStorageDecoded(
-          institutionCode: institution.institutionCode,
-          kind: InstitutionCodeLabel.adminAccountKind(
-              institution.institutionCode),
-          adminsHex: institution.admins,
+          institutionCode: decoded.institutionCode,
+          kind: kind,
+          adminsHex: decoded.admins,
         );
       }
-      // cid_number: BoundedVec<u8>(Compact<u32> 长度 + N 字节)。前导字段;
-      // 个人多签无机构 CID 时为空 = 单字节 0x00。本扫描恒为个人多签,故此处
-      // 通常为空,但仍须消费该字节以对齐后续 institution_code/kind/admins 偏移。
+
       var offset = 0;
       final (cidLen, cidLenBytes) = _decodeCompactU32(bytes, offset);
       offset += cidLenBytes + cidLen;
-
-      // institution_code: [u8;4] + kind: u8
       if (offset + 5 > bytes.length) return null;
-      final institutionCode =
-          InstitutionCodeLabel.codeToString(bytes.sublist(offset, offset + 4));
+      final institutionCode = InstitutionCodeLabel.codeToString(
+        bytes.sublist(offset, offset + 4),
+      );
       offset += 4;
-      final kind = bytes[offset];
-      offset += 1;
+      final storedKind = bytes[offset++];
+      if (storedKind != kindPersonal) return null;
 
-      // admins: Compact<u32> 长度前缀 + N × 32B(个人多签 = 裸 AccountId)
       final (count, lenBytesRead) = _decodeCompactU32(bytes, offset);
       offset += lenBytesRead;
       if (offset + count * 32 > bytes.length) return null;
-
       final admins = <String>[];
       for (var i = 0; i < count; i++) {
         admins.add(_hexEncode(bytes.sublist(offset, offset + 32)));
         offset += 32;
       }
-
+      // 个人多签 value 后续仍有 creator/区块号/status；扫描只消费 admins。
+      if (offset + 32 + 4 + 4 + 1 != bytes.length) return null;
       return AdminAccountStorageDecoded(
         institutionCode: institutionCode,
-        kind: kind,
+        kind: kindPersonal,
         adminsHex: admins,
       );
     } catch (_) {
@@ -102,47 +77,47 @@ class AdminAccountStorageCodec {
     }
   }
 
-  /// 从完整 storage key(twox128 prefix(32B) + blake2_128_concat(account_id)
-  /// = hash(16B) + key(32B))末 32 字节提取 AccountId。
-  static Uint8List? extractAccountIdFromKey(Uint8List storageKey) {
-    if (storageKey.length < 32) return null;
+  /// 从机构 AdminAccounts 完整 key 提取 CID。key 尾部是
+  /// `blake2_128(cid_scale) + Compact<len> + cid_bytes`。
+  static String? extractCidNumberFromKey(Uint8List storageKey) {
+    const valueOffset = 32 + 16;
+    if (storageKey.length <= valueOffset) return null;
+    try {
+      final (length, compactSize) = _decodeCompactU32(storageKey, valueOffset);
+      final start = valueOffset + compactSize;
+      if (length <= 0 || start + length != storageKey.length) return null;
+      return utf8.decode(storageKey.sublist(start), allowMalformed: false);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// PersonalAdmins 的 key 仍是 32B personal_account。
+  static Uint8List? extractPersonalAccountFromKey(Uint8List storageKey) {
+    const expectedLength = 32 + 16 + 32;
+    if (storageKey.length != expectedLength) return null;
     return Uint8List.fromList(storageKey.sublist(storageKey.length - 32));
   }
 
-  /// 把 32B AccountId 转成小写 hex；格式不符返回 null。
   static String? accountHexFromAccountId(Uint8List accountId) {
     if (accountId.length != 32) return null;
     return _hexEncode(accountId);
   }
 
-  // ──── 内部工具 ────
-
-  /// SCALE Compact<u32> 解码,返回 (value, bytesRead)。
-  /// mode 0 = 1B / 1 = 2B / 2 = 4B / 3 = big int(本场景不会触发,fallback 取 1B 长度)。
   static (int, int) _decodeCompactU32(Uint8List data, int offset) {
+    if (offset >= data.length) throw const FormatException('Compact 越界');
     final mode = data[offset] & 0x03;
     if (mode == 0) return (data[offset] >> 2, 1);
-    if (mode == 1) {
-      return ((data[offset] >> 2) | (data[offset + 1] << 6), 2);
+    if (mode == 1 && offset + 2 <= data.length) {
+      return (((data[offset + 1] << 8) | data[offset]) >> 2, 2);
     }
-    if (mode == 2) {
-      return (
-        (data[offset] >> 2) |
-            (data[offset + 1] << 6) |
-            (data[offset + 2] << 14) |
-            (data[offset + 3] << 22),
-        4
-      );
+    if (mode == 2 && offset + 4 <= data.length) {
+      final raw = ByteData.sublistView(data).getUint32(offset, Endian.little);
+      return (raw >> 2, 4);
     }
-    // mode 3: BigInt 模式,本场景 admins 数量不会触发(MaxAdmins ≤ 64)。
-    final len = ((data[offset] >> 2) + 4) & 0xFF;
-    var value = 0;
-    for (var i = 0; i < len && i < 8; i++) {
-      value |= data[offset + 1 + i] << (i * 8);
-    }
-    return (value, len + 1);
+    throw const FormatException('不支持的 Compact 编码');
   }
 
-  static String _hexEncode(Uint8List bytes) =>
+  static String _hexEncode(List<int> bytes) =>
       bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 }

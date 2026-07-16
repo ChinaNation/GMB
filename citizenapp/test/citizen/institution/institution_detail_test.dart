@@ -17,6 +17,8 @@ import 'package:citizenapp/isar/app_isar.dart';
 import '../public/public_nav_harness.dart';
 
 const _cid = 'LN001-CREG0-944805165-2026';
+const _adminAccountHex =
+    '0xabababababababababababababababababababababababababababababababab';
 
 class _FakeChainState implements InstitutionChainState {
   _FakeChainState({this.adminList = const [], this.proposalList = const []});
@@ -105,7 +107,7 @@ void main() {
       cityNames: const {'GD|001': '中央'},
     );
     final chain = _FakeChainState(
-      adminList: const ['0xadminpubkey001'],
+      adminList: const [_adminAccountHex],
       proposalList: const [
         InstitutionProposalSummary(proposalId: 7, idLabel: '提案 #7', status: 1),
       ],
@@ -159,7 +161,7 @@ void main() {
     await tester.pumpWidget(_wrap(InstitutionDetailPage(
       cidNumber: _cid,
       repository: InstitutionRepository(directory: repo),
-      chainState: _FakeChainState(adminList: const ['0xadminpubkey001']),
+      chainState: _FakeChainState(adminList: const [_adminAccountHex]),
       walletPubkeyProvider: () async => 'aa',
     )));
     await tester.pumpAndSettle();

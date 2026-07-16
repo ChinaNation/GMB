@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::*;
-use admin_primitives::{AdminAccountKind, AdminAccountStatus};
+use admin_primitives::{AdminAccountKind, InstitutionAdminQuery};
 use frame_support::{
     assert_noop, assert_ok, derive_impl,
     traits::{ConstU32, ConstU64},
@@ -56,30 +56,6 @@ impl frame_support::traits::UnixTime for TestTimeProvider {
     }
 }
 
-pub struct TestInstitutionQuery;
-impl entity_primitives::InstitutionMultisigQuery<AccountId32> for TestInstitutionQuery {
-    fn lookup_cid(addr: &AccountId32) -> Option<std::vec::Vec<u8>> {
-        let mut cid = b"TEST-PRI-".to_vec();
-        let bytes: &[u8] = addr.as_ref();
-        cid.extend_from_slice(&bytes[..4]);
-        Some(cid)
-    }
-
-    fn lookup_org(_addr: &AccountId32) -> Option<InstitutionCode> {
-        None
-    }
-
-    fn lookup_admin_config(
-        _addr: &AccountId32,
-    ) -> Option<primitives::multisig::MultisigConfigSnapshot<AccountId32>> {
-        None
-    }
-
-    fn account_exists(_addr: &AccountId32) -> bool {
-        true
-    }
-}
-
 impl votingengine::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxVoteNonceLength = ConstU32<64>;
@@ -123,7 +99,6 @@ impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
-    type InstitutionQuery = TestInstitutionQuery;
 }
 
 fn new_test_ext() -> sp_io::TestExternalities {
@@ -147,21 +122,21 @@ fn admins(count: u8) -> Vec<AccountId32> {
 #[test]
 fn private_admins_accept_private_codes_and_private_owned_unincorporated_codes() {
     new_test_ext().execute_with(|| {
-        let root = account(10);
-        assert_ok!(PrivateAdmins::do_set_active_admin_account_direct(
-            root.clone(),
-            b"TEST-CID".to_vec(),
+        let private_cid = b"GD001-SFLP0-123456789-2026".to_vec();
+        assert_ok!(PrivateAdmins::do_set_institution_admins(
+            private_cid.clone(),
             code_bytes("SFLP"),
             AdminAccountKind::PrivateInstitution,
             admins(3),
             2,
         ));
-        let stored = AdminAccounts::<Test>::get(root).expect("active private admins");
-        assert_eq!(stored.status, AdminAccountStatus::Active);
+        let private_key: AdminCidNumber = private_cid.try_into().expect("cid fits");
+        let stored = AdminAccounts::<Test>::get(private_key).expect("private admins exist");
+        assert_eq!(stored.institution_code, code_bytes("SFLP"));
+        assert_eq!(stored.admins.len(), 3);
 
-        assert_ok!(PrivateAdmins::do_set_active_admin_account_direct(
-            account(11),
-            b"TEST-CID".to_vec(),
+        assert_ok!(PrivateAdmins::do_set_institution_admins(
+            b"GD001-UNIN0-223456789-2026".to_vec(),
             code_bytes("UNIN"),
             AdminAccountKind::PrivateInstitution,
             admins(2),
@@ -173,23 +148,22 @@ fn private_admins_accept_private_codes_and_private_owned_unincorporated_codes() 
 #[test]
 fn private_admins_activate_and_query_active_admins() {
     new_test_ext().execute_with(|| {
-        let root = account(20);
-        assert_ok!(PrivateAdmins::do_set_active_admin_account_direct(
-            root.clone(),
-            b"TEST-CID".to_vec(),
+        let cid = b"GD001-JSCH0-323456789-2026".to_vec();
+        assert_ok!(PrivateAdmins::do_set_institution_admins(
+            cid.clone(),
             code_bytes("JSCH"),
             AdminAccountKind::PrivateInstitution,
             admins(3),
             2,
         ));
 
-        assert!(PrivateAdmins::is_active_account_admin(
+        assert!(PrivateAdmins::is_institution_admin(
             code_bytes("JSCH"),
-            root.clone(),
+            &cid,
             &account(0)
         ));
         assert_eq!(
-            PrivateAdmins::active_account_admins_len(code_bytes("JSCH"), root),
+            PrivateAdmins::institution_admins_len(code_bytes("JSCH"), &cid),
             Some(3)
         );
     });
@@ -199,9 +173,8 @@ fn private_admins_activate_and_query_active_admins() {
 fn private_admins_reject_public_codes() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            PrivateAdmins::do_set_active_admin_account_direct(
-                account(30),
-                b"TEST-CID".to_vec(),
+            PrivateAdmins::do_set_institution_admins(
+                b"LN001-PRS00-423456789-2026".to_vec(),
                 code_bytes("PRS"),
                 AdminAccountKind::PrivateInstitution,
                 admins(3),

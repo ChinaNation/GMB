@@ -5,8 +5,8 @@
 //! 文本 QR 路径,故不经 `auth/actions.rs` 的 prepare/commit 治理流。范式与
 //! `institution::subjects::registration::build_institution_create_sign_request` 完全一致。
 //!
-//! 机构账户解析闭包(`resolve_account`)由 handler(Phase 1B-5)注入(subjects 表查 cid_number →
-//! `chain_read::derive_house_account` 派生),本文件保持与 DB 解耦、可单测。越权前置由
+//! 机构 CID 解析闭包(`resolve_cid_number`)由 handler 注入(subjects 表按机构码和行政区查
+//! cid_number),本文件保持与 DB 解耦、可单测。越权前置由
 //! `service::precheck_legislation_scope` 在 handler 先行拦截。
 //!
 
@@ -22,16 +22,16 @@ use uuid::Uuid;
 /// 冷签动作有效期(秒),与机构创建冷签一致。
 const LEGISLATION_SIGN_TTL_SECONDS: i64 = 120;
 
-/// 立法提案冷签 `sign_request`(actor_pubkey = 发起议员;`resolve_account` 注入机构账户解析)。
+/// 立法提案冷签 `sign_request`(actor_pubkey = 发起机构管理员;闭包只解析机构 CID)。
 ///
-/// houses/executive/legislature 由宪法路由 + `resolve_account` 解析,前端不传(防越权)。
+/// houses/actor/executive/legislature 由宪法路由解析,前端不传(防越权)。
 pub(crate) fn build_propose_law_sign_request(
     input: &ProposeLawInput,
     proposer_code: [u8; 4],
     actor_pubkey: &str,
-    resolve_account: impl Fn(&[u8; 4]) -> Option<[u8; 32]>,
+    resolve_cid_number: impl Fn(&[u8; 4]) -> Option<String>,
 ) -> Result<String, Response> {
-    let chain = build_propose_law_call(input, proposer_code, resolve_account)
+    let chain = build_propose_law_call(input, proposer_code, resolve_cid_number)
         .map_err(|e| api_error(StatusCode::UNPROCESSABLE_ENTITY, 2001, e.code()))?;
     build_chain_sign_request("leg-propose", actor_pubkey, &chain.call_data, chain.action)
 }
@@ -76,8 +76,11 @@ mod tests {
     use super::super::model::{LawActionInput, LawChapter, LawSection};
     use super::*;
 
-    fn fixture_resolver(code: &[u8; 4]) -> Option<[u8; 32]> {
-        Some([code[0]; 32])
+    fn fixture_resolver(code: &[u8; 4]) -> Option<String> {
+        Some(format!(
+            "LN001-{}0G-000000001-2026",
+            super::super::model::institution_code_text(code)
+        ))
     }
 
     fn enact_input() -> ProposeLawInput {

@@ -86,8 +86,7 @@ pub fn build_propose_sweep_sign_request(
 ) -> Result<governance::signing::VoteSignRequestResult, String> {
     let pubkey_clean = normalize_pubkey(pubkey_hex)?;
     let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
-    let call_data =
-        build_sweep_call_data(actor_cid_number, institution_account_hex, amount_yuan)?;
+    let call_data = build_sweep_call_data(actor_cid_number, institution_account_hex, amount_yuan)?;
 
     governance::signing::build_sign_request_from_call_data(&pubkey_clean, &pubkey_bytes, &call_data)
 }
@@ -147,10 +146,9 @@ pub(crate) fn build_transfer_call_data(
     }
     let actor_cid = encode_actor_cid(actor_cid_number)?;
     let remark_compact = governance::signing::encode_compact_u32_pub(remark_bytes.len() as u32);
-    let mut call_data =
-        Vec::with_capacity(
-            2 + 1 + actor_cid.len() + 32 + 32 + 16 + remark_compact.len() + remark_bytes.len(),
-        );
+    let mut call_data = Vec::with_capacity(
+        2 + 1 + actor_cid.len() + 32 + 32 + 16 + remark_compact.len() + remark_bytes.len(),
+    );
     call_data.push(17u8);
     call_data.push(0u8);
     // Option<CidNumber>::Some 判别值 + CID，再跟明确的资金账户。
@@ -187,12 +185,12 @@ pub(crate) fn build_sweep_call_data(
     Ok(call_data)
 }
 
-/// SCALE 编码机构交易唯一主键 `BoundedVec<u8, 32>`。
+/// 按链上 `CID_NUMBER_MAX_BYTES` 约束 SCALE 编码机构交易唯一主键。
 fn encode_actor_cid(actor_cid_number: &str) -> Result<Vec<u8>, String> {
     if actor_cid_number.is_empty()
         || actor_cid_number.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
     {
-        return Err("actor_cid_number 长度需在 1..=32".to_string());
+        return Err("actor_cid_number 长度必须在链上 CID_NUMBER_MAX_BYTES 范围内".to_string());
     }
     let mut encoded = governance::signing::encode_compact_u32_pub(actor_cid_number.len() as u32);
     encoded.extend_from_slice(actor_cid_number.as_bytes());

@@ -187,11 +187,7 @@ pub(crate) async fn delete_account(
         return api_error(StatusCode::NOT_FOUND, 1004, "account not found");
     };
     if !can_delete_account(&account) {
-        return api_error(
-            StatusCode::CONFLICT,
-            1007,
-            "协议机构账户不可删除",
-        );
+        return api_error(StatusCode::CONFLICT, 1007, "协议机构账户不可删除");
     }
     let grant_payload = serde_json::json!({
         "target": cid_number.clone(),

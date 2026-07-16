@@ -96,7 +96,7 @@ pub fn is_registrable_custom_name(name: &[u8]) -> bool {
 ```
 
 调用方改造（全部改调新源，删本地重复）：
-- `organization-manage`：删 `InstitutionAccountRole` 枚举 + `address.rs`；`derive_institution_account`/`role_from_account_name` 合成一个薄适配 `derive_registered_account(cid, name)`：空→EmptyAccountName、`is_forbidden`→ReservedAccountName，否则 `institution_kind_by_name` 派生（只会得 Main/Fee/Named）。register.rs / accounts.rs / close.rs / benchmarks / tests 改调。
+- `public-manage/private-manage`：机构地址薄适配统一命名为 `derive_institution_account(cid_number, account_name)`；空名拒绝，协议账户和自定义账户均由 `institution_kind_by_name` 单源路由，制度专用账户只能由对应机构协议集合创建。
 - `personal-manage::derive_personal_account`：`creator.encode()`→`[u8;32]`，走 `AccountKind::Personal`。
 - `china/mod.rs`（创世）：内联 `derive_account(OP_MAIN..)`→`AccountKind::InstitutionMain{cid}.derive(SS58_FORMAT)`。
 - 后端 `accounts/derive.rs`：删 5 个 `&str` 保留名 + 路由，`derive_account(cid,name)`→`institution_kind_by_name(...).map(|k| hex::encode(k.derive(SS58_FORMAT)))`；`RESERVED_ACCOUNT_NAMES` 改 re-export 新源（&[u8]）。调用方 `admins/actions.rs:909`、`accounts/handler.rs:86`、`subjects/service.rs:344`、`citizenapp/public_institution.rs:400`（&str→&[u8] 适配）。

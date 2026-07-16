@@ -47,7 +47,7 @@ fn encode_cid_key_data(cid_number: &str) -> Result<Vec<u8>, String> {
     let raw = cid_number.as_bytes();
     if raw.is_empty() || raw.len() > 32 {
         return Err(format!(
-            "cid_number 长度需在 1..=32 字节,实际:{}",
+            "cid_number 长度必须在链上 CID_NUMBER_MAX_BYTES 范围内,实际:{}",
             raw.len()
         ));
     }
@@ -198,12 +198,9 @@ fn fetch_admin_set(
 
 /// 读取机构内部投票动态阈值。
 ///
-/// 真源 = `InternalVote::ActiveDynamicThresholds[(institution_code, main_account)]`(DoubleMap,
-/// 两层均 Blake2_128Concat);未注册返回 0。
-fn fetch_active_threshold(
-    cid_number: &str,
-    finalized_hash: &str,
-) -> Result<u32, String> {
+/// 真源 = `InternalVote::ActiveInstitutionThresholds[cid_number]`（Blake2_128Concat Map）；
+/// 机构码只用于业务分类，不参与阈值身份 key，未注册返回 0。
+fn fetch_active_threshold(cid_number: &str, finalized_hash: &str) -> Result<u32, String> {
     let cid_key = encode_cid_key_data(cid_number)?;
     let key = storage_keys::map_key("InternalVote", "ActiveInstitutionThresholds", &cid_key);
     let result = rpc_post(
@@ -298,11 +295,8 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
     let main_account = main_account.ok_or_else(|| "机构缺少唯一主账户".to_string())?;
     let fee_account = fee_account.ok_or_else(|| "机构缺少唯一费用账户".to_string())?;
 
-    let (admins, admins_len) = fetch_admin_set(
-        &inst.institution_code,
-        cid_number,
-        &finalized_hash,
-    )?;
+    let (admins, admins_len) =
+        fetch_admin_set(&inst.institution_code, cid_number, &finalized_hash)?;
     let threshold = fetch_active_threshold(cid_number, &finalized_hash)?;
 
     let cid_full_name = String::from_utf8(inst.cid_full_name.into_inner())
@@ -492,7 +486,7 @@ fn decode_account_name_from_key(full_key_hex: &str, cid_prefix_hex: &str) -> Opt
 /// 机构提案列表分页。
 ///
 /// 当前阶段返回空列表占位。提案存储在 `votingengine::Proposals[id]`,
-/// 按 cid_number 过滤需要扫描全表 + 反查 ProposalMeta.institution_hex,
+/// 按 cid_number 过滤需要扫描全表 + 对照 ProposalMeta.actor_cid_number，
 /// 实现略显重,放 follow-up 任务卡。
 ///
 /// 前端 UI 展示"暂无提案"行兜底,未来填充时无需改 UI 结构。

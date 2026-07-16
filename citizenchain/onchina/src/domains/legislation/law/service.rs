@@ -1,12 +1,12 @@
 //! 法律案提案组织:HTTP 请求 + 本节点机构 + 宪法路由 + 链上账户 → 裸 SCALE call-data。
 //!
-//! onchina 只「组织数据 + 调编码器」,不计票、不提交。各机构 `AccountId` 由调用方
-//! 注入(`resolve_account` 闭包:生产为链读,单测为夹具),保持本层纯函数可测。
+//! onchina 只「组织数据 + 调编码器」,不计票、不提交。各机构 CID 由调用方
+//! 注入(`resolve_cid_number` 闭包:生产为链读,单测为夹具),保持本层纯函数可测。
 //! 合法性最终裁决在链端 `ensure_routing`;本层 + `precheck_legislation_scope` 只做越权前置拦截(fail-closed)。
 //!
 
 use super::chain_propose::{
-    encode_propose_amend_law, encode_propose_enact_law, encode_propose_repeal_law, LegHouse,
+    encode_propose_amend_law, encode_propose_enact_law, encode_propose_repeal_law,
 };
 use super::chain_vote::encode_cast_representative_vote;
 use super::model::{to_chapter_args, LawActionInput, ProposeLawInput};
@@ -18,8 +18,8 @@ use crate::core::institution_call::ChainCall;
 pub enum LegislationError {
     /// 该层级×类型无合法宪法路由(如省教育案)。
     UnknownRouting,
-    /// 路由机构在链上无可用账户(本节点尚未对账 / 机构未上链)。
-    HouseAccountUnresolved,
+    /// 路由机构无法解析唯一 CID(本节点尚未对账 / 机构未上链)。
+    InstitutionCidUnresolved,
     /// 立法/修法标题为空。
     EmptyTitle,
     /// 立法/修法正文为空。
@@ -37,7 +37,7 @@ impl LegislationError {
     pub fn code(&self) -> &'static str {
         match self {
             Self::UnknownRouting => "LEGISLATION_UNKNOWN_ROUTING",
-            Self::HouseAccountUnresolved => "LEGISLATION_HOUSE_ACCOUNT_UNRESOLVED",
+            Self::InstitutionCidUnresolved => "LEGISLATION_INSTITUTION_CID_UNRESOLVED",
             Self::EmptyTitle => "LEGISLATION_EMPTY_TITLE",
             Self::EmptyChapters => "LEGISLATION_EMPTY_CHAPTERS",
             Self::MissingLawId => "LEGISLATION_MISSING_LAW_ID",
@@ -47,13 +47,18 @@ impl LegislationError {
     }
 }
 
-/// 把机构码经 `resolve_account` 解析为 `LegHouse`(码 + 账户)。
-fn resolve_house(
+/// 把机构码经唯一查询入口解析为机构 CID。
+fn resolve_institution_cid_number(
     code: [u8; 4],
-    resolve_account: &impl Fn(&[u8; 4]) -> Option<[u8; 32]>,
-) -> Result<LegHouse, LegislationError> {
-    let account = resolve_account(&code).ok_or(LegislationError::HouseAccountUnresolved)?;
-    Ok(LegHouse { code, account })
+    resolve_cid_number: &impl Fn(&[u8; 4]) -> Option<String>,
+) -> Result<Vec<u8>, LegislationError> {
+    let cid_number = resolve_cid_number(&code)
+        .filter(|value| {
+            !value.is_empty()
+                && value.len() <= primitives::core_const::CID_NUMBER_MAX_BYTES as usize
+        })
+        .ok_or(LegislationError::InstitutionCidUnresolved)?;
+    Ok(cid_number.into_bytes())
 }
 
 /// 写入边界 scope 前置校验(fail-closed)。
@@ -84,24 +89,25 @@ pub fn precheck_legislation_scope(
 
 /// 组织一次法律案发起 → 裸 SCALE call-data。
 ///
-/// `proposer_code` = 本节点绑定机构码(发起院 / 教委会 / 自治会);签名人(origin)= 议员本人
-/// 在冷签层提供。houses/executive/legislature 由宪法路由 + `resolve_account` 解析,前端不传(防越权)。
+/// `proposer_code` = 本节点绑定机构码(发起院 / 教委会 / 自治会);签名人(origin)= 管理员本人
+/// 在冷签层提供。所有路由机构只解析为 CID,前端不传(防越权)。
 pub fn build_propose_law_call(
     input: &ProposeLawInput,
     proposer_code: [u8; 4],
-    resolve_account: impl Fn(&[u8; 4]) -> Option<[u8; 32]>,
+    resolve_cid_number: impl Fn(&[u8; 4]) -> Option<String>,
 ) -> Result<ChainCall, LegislationError> {
     let routing = routing_for(input.tier, vote_type_is_education(input.vote_type))
         .ok_or(LegislationError::UnknownRouting)?;
 
-    let proposer = resolve_house(proposer_code, &resolve_account)?;
+    let actor_cid_number = resolve_institution_cid_number(proposer_code, &resolve_cid_number)?;
     let mut houses = Vec::with_capacity(routing.houses.len());
     for code in &routing.houses {
-        houses.push(resolve_house(*code, &resolve_account)?);
+        houses.push(resolve_institution_cid_number(*code, &resolve_cid_number)?);
     }
-    let executive = resolve_house(routing.executive, &resolve_account)?;
+    let executive_cid_number =
+        resolve_institution_cid_number(routing.executive, &resolve_cid_number)?;
     let legislature = match routing.legislature {
-        Some(code) => Some(resolve_house(code, &resolve_account)?),
+        Some(code) => Some(resolve_institution_cid_number(code, &resolve_cid_number)?),
         None => None,
     };
     let legislature_ref = legislature.as_ref();
@@ -114,9 +120,9 @@ pub fn build_propose_law_call(
                 input.tier,
                 input.scope_code,
                 &houses,
-                &proposer,
-                &executive,
-                legislature_ref,
+                &actor_cid_number,
+                &executive_cid_number,
+                legislature_ref.map(Vec::as_slice),
                 input.vote_type,
                 input.title.as_bytes(),
                 input.title_en.as_deref().map(str::as_bytes),
@@ -130,9 +136,9 @@ pub fn build_propose_law_call(
             let chapters = to_chapter_args(&input.chapters);
             Ok(encode_propose_amend_law(
                 law_id,
-                &proposer,
-                &executive,
-                legislature_ref,
+                &actor_cid_number,
+                &executive_cid_number,
+                legislature_ref.map(Vec::as_slice),
                 input.vote_type,
                 input.title.as_bytes(),
                 input.title_en.as_deref().map(str::as_bytes),
@@ -144,9 +150,9 @@ pub fn build_propose_law_call(
             let law_id = input.law_id.ok_or(LegislationError::MissingLawId)?;
             Ok(encode_propose_repeal_law(
                 law_id,
-                &proposer,
-                &executive,
-                legislature_ref,
+                &actor_cid_number,
+                &executive_cid_number,
+                legislature_ref.map(Vec::as_slice),
                 input.vote_type,
             ))
         }
@@ -174,9 +180,12 @@ mod tests {
     use super::*;
     use crate::domains::legislation::law::model::{LawChapter, LawSection};
 
-    /// 夹具解析器:任意机构码 → 确定性账户(首字节填充)。
-    fn fixture_resolver(code: &[u8; 4]) -> Option<[u8; 32]> {
-        Some([code[0]; 32])
+    /// 夹具解析器:任意机构码 → 确定性机构 CID。
+    fn fixture_resolver(code: &[u8; 4]) -> Option<String> {
+        Some(format!(
+            "LN001-{}0G-000000001-2026",
+            super::super::model::institution_code_text(code)
+        ))
     }
 
     fn enact_input(tier: u8, vote_type: u8) -> ProposeLawInput {
@@ -231,13 +240,13 @@ mod tests {
     }
 
     #[test]
-    fn unresolved_house_account_fails_closed() {
+    fn unresolved_institution_cid_fails_closed() {
         let input = enact_input(1, 2);
         // 解析器恒空 → 任一机构账户解不出即拒。
         let empty = |_: &[u8; 4]| None;
         assert!(matches!(
             build_propose_law_call(&input, *b"NRP\0", empty),
-            Err(LegislationError::HouseAccountUnresolved)
+            Err(LegislationError::InstitutionCidUnresolved)
         ));
     }
 

@@ -46,12 +46,12 @@ void main() {
 
   test('sticker carries only ids, no bytes/metadata', () {
     final encoded = ChatPayloadCodec.encode(
-      ChatContent.sticker(packId: 'fluent3d', stickerId: '1f600'),
+      ChatContent.sticker(packId: 'fluent3d', stickerId: 'grinning_face'),
     );
     final decoded = ChatPayloadCodec.decode(encoded);
     expect(decoded.kind, ChatMessageKind.sticker);
     expect(decoded.packId, 'fluent3d');
-    expect(decoded.stickerId, '1f600');
+    expect(decoded.stickerId, 'grinning_face');
     expect(decoded.summary, '[贴纸]');
     expect(decoded.isMedia, isFalse);
   });

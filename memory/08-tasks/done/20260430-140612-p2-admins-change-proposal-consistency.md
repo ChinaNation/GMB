@@ -46,7 +46,7 @@
 - 已在 `admins-change` 执行路径补充投票引擎提案元数据校验：
   - `proposal.kind == PROPOSAL_KIND_INTERNAL`
   - `proposal.stage == STAGE_INTERNAL`
-  - `proposal.account_context == Some(action.institution)`
+  - 当前最终口径：`proposal.actor_cid_number == Some(action.actor_cid_number)`，具体账户另存 `execution_account`
   - `proposal.internal_code == Some(subject.institution_code)`
 - 已补充执行路径防御测试：
   - 拒绝错误提案 kind / stage

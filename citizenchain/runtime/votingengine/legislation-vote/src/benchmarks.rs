@@ -5,7 +5,6 @@
 
 #![cfg(feature = "runtime-benchmarks")]
 
-use codec::Decode;
 use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
 use sp_runtime::traits::SaturatedConversion;
@@ -20,10 +19,6 @@ use crate::{
     Call, RepresentativeRoute, RepresentativeVoteRule, VoteProcedure,
 };
 
-fn decode<T: frame_system::Config>(raw: &[u8; 32]) -> T::AccountId {
-    T::AccountId::decode(&mut &raw[..]).expect("fixed institution account decodes")
-}
-
 fn insert_proposal<T: Config>(stage: u8, eligible_total: u64) -> u64 {
     let proposal_id = 0u64;
     let now = 1u32.saturated_into();
@@ -35,7 +30,8 @@ fn insert_proposal<T: Config>(stage: u8, eligible_total: u64) -> u64 {
             stage,
             status: votingengine::STATUS_VOTING,
             internal_code: None,
-            account_context: None,
+            actor_cid_number: Some(national_legislature(0)),
+            execution_account: None,
             subject_cid_numbers: Default::default(),
             start: now,
             end: 2u32.saturated_into(),
@@ -45,14 +41,22 @@ fn insert_proposal<T: Config>(stage: u8, eligible_total: u64) -> u64 {
     proposal_id
 }
 
-fn national_legislature<T: Config>(
-    index: usize,
-    code: votingengine::InstitutionCode,
-) -> (votingengine::InstitutionCode, T::AccountId) {
-    (
-        code,
-        decode::<T>(&primitives::cid::china::china_lf::CHINA_LF[index].main_account),
-    )
+fn national_legislature(index: usize) -> votingengine::CidNumber {
+    primitives::cid::china::china_lf::CHINA_LF[index]
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("national legislature CID fits runtime bound")
+}
+
+fn national_executive() -> votingengine::CidNumber {
+    primitives::cid::china::china_zf::CHINA_ZF[0]
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("national executive CID fits runtime bound")
 }
 
 #[benchmarks]
@@ -74,13 +78,17 @@ mod benchmarks {
     #[benchmark]
     fn cast_representative_vote() {
         let proposal_id = insert_proposal::<T>(votingengine::STAGE_LEG_REPRESENTATIVE, 0);
-        let body = national_legislature::<T>(1, primitives::cid::code::NSN);
+        let body = national_legislature(1);
         let voter: T::AccountId = account("representative", 0, 0);
         let admins = sp_runtime::sp_std::vec![voter.clone()];
         let bounded: frame_support::BoundedVec<T::AccountId, T::MaxAdminsPerInstitution> = admins
             .try_into()
             .expect("legislature admins fit runtime bound");
-        votingengine::pallet::AdminSnapshot::<T>::insert(proposal_id, &body.1, bounded);
+        votingengine::pallet::AdminSnapshot::<T>::insert(
+            proposal_id,
+            votingengine::ProposalSubject::InstitutionCid(body.clone()),
+            bounded,
+        );
         RepresentativeMetas::<T>::insert(
             proposal_id,
             RepresentativeMeta {
@@ -114,7 +122,7 @@ mod benchmarks {
         LegislationMetas::<T>::insert(
             proposal_id,
             LegislationMeta {
-                executive: national_legislature::<T>(0, primitives::cid::code::NLG),
+                executive: national_legislature(0),
                 legislature: None,
                 needs_guard: false,
             },
@@ -132,10 +140,7 @@ mod benchmarks {
     #[benchmark]
     fn executive_sign() {
         let proposal_id = insert_proposal::<T>(votingengine::STAGE_LEG_SIGN, 0);
-        let executive = (
-            primitives::cid::code::PRS,
-            decode::<T>(&primitives::cid::china::china_zf::CHINA_ZF[0].main_account),
-        );
+        let executive = national_executive();
         LegislationMetas::<T>::insert(
             proposal_id,
             LegislationMeta {
@@ -157,13 +162,12 @@ mod benchmarks {
     #[benchmark]
     fn override_sign() {
         let proposal_id = insert_proposal::<T>(votingengine::STAGE_LEG_OVERRIDE, 0);
-        let legislature = national_legislature::<T>(0, primitives::cid::code::NLG);
-        let senate = national_legislature::<T>(1, primitives::cid::code::NSN);
-        let house = national_legislature::<T>(2, primitives::cid::code::NRP);
-        let bodies: crate::RepresentativeBodies<T::AccountId> =
-            sp_runtime::sp_std::vec![senate, house]
-                .try_into()
-                .expect("two representative bodies fit bound");
+        let legislature = national_legislature(0);
+        let senate = national_legislature(1);
+        let house = national_legislature(2);
+        let bodies: crate::RepresentativeBodies = sp_runtime::sp_std::vec![senate, house]
+            .try_into()
+            .expect("two representative bodies fit bound");
         RepresentativeMetas::<T>::insert(
             proposal_id,
             RepresentativeMeta {
@@ -176,10 +180,7 @@ mod benchmarks {
         LegislationMetas::<T>::insert(
             proposal_id,
             LegislationMeta {
-                executive: (
-                    primitives::cid::code::PRS,
-                    decode::<T>(&primitives::cid::china::china_zf::CHINA_ZF[0].main_account),
-                ),
+                executive: national_executive(),
                 legislature: Some(legislature.clone()),
                 needs_guard: false,
             },

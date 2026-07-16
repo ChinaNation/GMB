@@ -69,8 +69,8 @@ pub enum CampaignStatus {
 /// 选举业务活动元数据骨架。
 ///
 /// 本结构只定义业务壳未来需要保存的字段，不在当前版本写入 storage。
-/// `vote_proposal_id` 对应 election-vote 生成的提案 ID；`organizer_account`
-/// 表示组织选举的机构账户；`target_account` 表示被选职位所属机构账户。
+/// `vote_proposal_id` 对应 election-vote 生成的提案 ID；发起机构和任职目标
+/// 都只使用 CID，机构码由 CID 解析，机构账户不参与选举身份。
 #[derive(
     codec::Encode,
     codec::Decode,
@@ -82,13 +82,11 @@ pub enum CampaignStatus {
     scale_info::TypeInfo,
     frame_support::pallet_prelude::MaxEncodedLen,
 )]
-pub struct CampaignMeta<AccountId, OfficeCode> {
+pub struct CampaignMeta<OfficeCode> {
     pub vote_proposal_id: u64,
     pub campaign_mode: CampaignMode,
-    pub organizer_code: primitives::cid::code::InstitutionCode,
-    pub organizer_account: AccountId,
-    pub target_code: primitives::cid::code::InstitutionCode,
-    pub target_account: AccountId,
+    pub actor_cid_number: votingengine::types::CidNumber,
+    pub target_cid_number: votingengine::types::CidNumber,
     pub office_code: OfficeCode,
     pub rule_id: u32,
     pub seat_count: u16,

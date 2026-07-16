@@ -73,6 +73,14 @@ const int kOpSignSquareAction = 0x1D;
 /// 二进制前缀域统一前缀长度 = GMB(3B) + op_tag(1B) = 4(对齐 BINARY_PREFIX_LEN)。
 const int kBinaryPrefixLen = 4;
 
+/// 管理员激活/解密载荷中的机构 CID 固定槽长度。
+/// 与 runtime `CID_NUMBER_MAX_BYTES`/`ACTIVATE_ADMIN_CID_LEN` 唯一对齐。
+const int kAdminCidSlotLength = 32;
+
+/// 管理员原始签名载荷中的固定字段长度。
+const int kAdminPubkeyLength = 32;
+const int kAdminNonceLength = 16;
+
 /// 签名域分隔符 GMB(3 字节 ASCII),单源对齐 core_const::GMB。
 const List<int> kGmbSignDomain = [0x47, 0x4D, 0x42]; // "GMB"
 
@@ -83,6 +91,97 @@ const List<int> kGmbSignDomain = [0x47, 0x4D, 0x42]; // "GMB"
 /// primitives::sign::binary_domain_prefix。
 Uint8List binaryDomainPrefix(int opTag) {
   return Uint8List.fromList([...kGmbSignDomain, opTag & 0xFF]);
+}
+
+/// 构造机构管理员激活原始签名载荷。
+///
+/// 布局唯一镜像 runtime `primitives::sign::activate_admin_payload`：
+/// `GMB || 0x18 || cid_number(32B 右补零) || institution_code(4B) || kind(1B)
+/// || admin_pubkey(32B) || timestamp_le(8B) || nonce(16B)`。
+Uint8List activateAdminPayload({
+  required String cidNumber,
+  required List<int> institutionCode,
+  required int kind,
+  required List<int> adminPubkey,
+  required int timestamp,
+  required List<int> nonce,
+}) {
+  if (institutionCode.length != 4) {
+    throw ArgumentError('institutionCode 必须为 4 字节');
+  }
+  if (kind < 0 || kind > 0xff) {
+    throw ArgumentError.value(kind, 'kind', 'kind 必须为 u8');
+  }
+  return _adminBinaryPayload(
+    opTag: kOpSignActivateAdmin,
+    cidNumber: cidNumber,
+    fixedFields: [
+      ...institutionCode,
+      kind,
+      ..._requireFixedBytes(
+        adminPubkey,
+        kAdminPubkeyLength,
+        'adminPubkey',
+      ),
+    ],
+    timestamp: timestamp,
+    nonce: nonce,
+  );
+}
+
+/// 构造机构管理员解密原始签名载荷。
+///
+/// 布局唯一镜像 runtime `primitives::sign::decrypt_admin_payload`：
+/// `GMB || 0x19 || cid_number(32B 右补零) || admin_pubkey(32B)
+/// || timestamp_le(8B) || nonce(16B)`。
+Uint8List decryptAdminPayload({
+  required String cidNumber,
+  required List<int> adminPubkey,
+  required int timestamp,
+  required List<int> nonce,
+}) {
+  return _adminBinaryPayload(
+    opTag: kOpSignDecrypt,
+    cidNumber: cidNumber,
+    fixedFields: _requireFixedBytes(
+      adminPubkey,
+      kAdminPubkeyLength,
+      'adminPubkey',
+    ),
+    timestamp: timestamp,
+    nonce: nonce,
+  );
+}
+
+Uint8List _adminBinaryPayload({
+  required int opTag,
+  required String cidNumber,
+  required List<int> fixedFields,
+  required int timestamp,
+  required List<int> nonce,
+}) {
+  final cidBytes = utf8.encode(cidNumber);
+  if (cidBytes.isEmpty || cidBytes.length > kAdminCidSlotLength) {
+    throw ArgumentError(
+      '机构 CID 的 UTF-8 长度必须为 1..$kAdminCidSlotLength 字节',
+    );
+  }
+  final nonceBytes = _requireFixedBytes(nonce, kAdminNonceLength, 'nonce');
+  return Uint8List.fromList([
+    ...binaryDomainPrefix(opTag),
+    ...cidBytes,
+    ...List<int>.filled(kAdminCidSlotLength - cidBytes.length, 0),
+    ...fixedFields,
+    ...u64Le(timestamp),
+    ...nonceBytes,
+  ]);
+}
+
+List<int> _requireFixedBytes(List<int> value, int length, String name) {
+  if (value.length != length) {
+    throw ArgumentError('$name 必须为 $length 字节');
+  }
+  return value;
 }
 
 /// 全仓签名消息唯一原语:`blake2_256(GMB || op_tag || scalePayload)`。

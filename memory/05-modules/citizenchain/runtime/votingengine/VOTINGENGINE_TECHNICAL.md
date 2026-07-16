@@ -8,18 +8,19 @@
 
 ## 内部投票与业务权限
 
-- `internal-vote` 是所有机构与个人多签共用的管理员投票程序，负责内部投票模式准入、有效账户上下文、管理员快照、计票、阈值快照和终态。
+- `internal-vote` 是所有机构与个人多签共用的管理员投票程序，负责内部投票模式准入、CID/个人账户主体、管理员快照、计票、阈值快照和终态。
 - “机构可以使用内部投票”不等于“机构可以发起所有接入内部投票的业务”。有效准入 = 投票引擎模式准入 + 业务 pallet 具体权限，两层任一拒绝都不能创建或执行提案。
-- `multisig` 转账允许所有 active 机构账户和个人多签账户；机构身份统一从 entity 生命周期真源解析，不维护 NRC/PRC/PRB 专用转账白名单。
+- `multisig` 转账允许已登记机构账户和个人多签账户；机构调用显式携带 `actor_cid_number + institution_account`，反向索引只校验两者归属，不反推或回落机构身份。
 - `resolution-destroy` 只允许 NRC、PRC、PRB；`grandpakey-change` 只允许 NRC、PRC。业务限制不得下沉到 `internal-vote`。
-- FRG 是一个机构、一个主账户和 215 名管理员；省域 5 人岗位组属于注册业务权限，通用内部投票只校验 FRG 规范账户身份和管理员快照。
+- FRG 是一个 CID 机构并拥有多个协议账户和 215 名管理员；省域 5 人岗位组属于注册业务权限，通用内部投票只校验 FRG CID、管理员授权和 CID 快照。
 
 ### 内部投票阈值
 
 - NRC、PRC、PRB、NJD、FRG 使用代码级永久固定阈值，不写账户级动态阈值。
 - PRS、NLG、NSN、NRP、NSP、NED 六个国家单例没有机构级动态阈值；普通内部事项在创建提案时按当前 admins 快照计算 `floor(N/2)+1`，只写 `InternalThresholdSnapshot`。
-- 六个国家单例禁止注册、生命周期和管理员变更通用入口写入 `PendingDynamicThresholds`、`ActiveDynamicThresholds` 或待变更阈值。
-- 普通注册机构与个人多签继续使用账户级动态阈值；生命周期关闭使用全员快照，具体业务权限仍由业务 pallet 校验。
+- 六个国家单例禁止写入 `ActiveInstitutionThresholds` 或待变更阈值。
+- 普通注册机构使用 `ActiveInstitutionThresholds[cid_number]`，个人多签使用
+  `ActivePersonalThresholds[personal_account]`；生命周期关闭使用全员快照，具体业务权限仍由业务 pallet 校验。
 
 ## 公民身份真源
 
@@ -104,7 +105,7 @@ legislation-vote/
 ### 资格真源与快照边界
 
 - 普选必须使用 `citizen-identity` 的 `PopulationScope`、`can_be_candidate`、`create_population_snapshot` 和 `can_vote_at`；只保存 snapshot_id，不接收、不枚举、不保存全国/省/市/镇完整选民列表。
-- 互选属于机构内部互选，必须由对应 admins provider 的 `get_admin_list` 提供机构管理员快照；调用方提交的选民集合必须与完整 admins 快照等长且逐成员一致，不得删减或夹带账户。
+- 互选属于机构内部互选，必须由对应 admins provider 的 `get_institution_admins(institution_code, cid_number)` 提供 CID 管理员快照；调用方提交的选民集合必须与完整 admins 快照等长且逐成员一致，不得删减或夹带账户。
 - `election-vote` 创建入口按 `ElectionMode` 强制检查资格来源：Popular 必须有人口作用域，Mutual 必须取得目标机构 admins 快照。
 - 普选人口作用域写入 `ElectionMeta`，资格引用写入核心 `ProposalPopulationSnapshotIds`；互选不写公民作用域，选民存于 `MutualVoters` 并按机构管理员集合校验候选人和选民。
 - 多席位计票允许完整落入剩余席位的并列组共同当选；并列组跨越席位边界时拒绝结果。

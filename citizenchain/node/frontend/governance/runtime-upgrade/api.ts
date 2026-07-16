@@ -20,12 +20,14 @@ export const runtimeUpgradeApi = {
     invoke<PowDifficultyParams>('get_pow_difficulty_params'),
   buildProposeUpgradeRequest: (
     pubkeyHex: string,
+    actorCidNumber: string,
     wasmPath: string,
     reason: string,
     powParams: PowDifficultyParams,
   ) =>
     invoke<ProposeUpgradeRequestResult>('build_propose_upgrade_request', {
       pubkeyHex,
+      actorCidNumber,
       wasmPath,
       reason,
       powParams,
@@ -34,6 +36,7 @@ export const runtimeUpgradeApi = {
     requestId: string,
     expectedPubkeyHex: string,
     expectedPayloadHash: string,
+    actorCidNumber: string,
     wasmPath: string,
     reason: string,
     powParams: PowDifficultyParams,
@@ -45,6 +48,7 @@ export const runtimeUpgradeApi = {
       requestId,
       expectedPubkeyHex,
       expectedPayloadHash,
+      actorCidNumber,
       wasmPath,
       reason,
       powParams,

@@ -111,13 +111,13 @@ signer_pubkey: [u8; 32]       = 32B 原始公钥
           ▼ ③ fetch_clearing_bank_institution_registration_info(cid_number)
 [OnChina 后端] ──→ ④ app_get_institution_registration_info 内部:
                   - 读机构数据(sharded_store)
-                  - 取签发机构主账户和当前签名管理员公钥
+                  - 取签发机构 CID（actor_cid_number）和当前签名管理员公钥
                   - 生成 register_nonce = uuid_v4 字符串
                   - signature = IssuerAdminSigner.sign(blake2_256(scale_encode(
                         GMB ++ OP_SIGN_INST ++ genesis_hash
                         ++ cid_number ++ cid_full_name ++ account_names[]
                         ++ register_nonce
-                        ++ issuer_cid_number ++ issuer_main_account ++ signer_pubkey
+                        ++ actor_cid_number ++ credential_signer_pubkey
                         ++ scope_province_name ++ scope_city_name
                     )))
                   - 响应:cid_number + cid_full_name + account_names[] + credential
@@ -131,7 +131,7 @@ signer_pubkey: [u8; 32]       = 32B 原始公钥
           │
 [chain runtime] ⑨ propose_create_institution:
                   - UsedRegisterNonce[hash(nonce)] 必须 false
-                  - 按机构码读取对应管理员 pallet 的 AdminAccounts[issuer_main_account],确认 signer_pubkey 属于该机构 admins
+                  - 按机构码读取对应管理员 pallet 的 AdminAccounts[actor_cid_number]，确认 credential_signer_pubkey 属于该 CID 的 admins
                   - 重算 payload hash + sr25519_verify(signature, hash, pubkey)
                   - 通过 → Institutions[cid_number] = Pending,创建投票提案
                   - 失败 → DispatchError,extrinsic 回滚

@@ -1,18 +1,14 @@
 // 统一机构链态读服务(ADR-028 决策 2)——合并公权 `LivePublicInstitutionChainData`
-// 与治理侧 admins 读取为一套:按机构 CID 过滤提案,按账户上下文读余额 / 管理员。
+// 与治理侧 admins 读取为一套:按机构 CID 过滤提案,按具体机构账户读余额。
 //
 //
-// - 管理员身份路由按机构码统一:固定治理档走 governanceInstitution,
-//   其余注册机构走 institutionAccount 并用**真实机构码**(修复公权侧旧链读路径对所有
-//   公权机构硬编码 'CGOV' 的 bug —— 见 ADR-028 决策 2 / 风险点 5)。
+// - 管理员身份统一按机构 CID 路由，机构码只用于选择对应 admins pallet。
 // - 读取遵守 ADR-018:余额走精确整键批量,提案走当年共享缓存客户端过滤,不长前缀扫描。
 
 import 'package:citizenapp/citizen/institution/institution.dart';
-import 'package:citizenapp/citizen/institution/institution_classification.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/services/institution_admin_service.dart';
 import 'package:citizenapp/citizen/institution/institution_role_models.dart';
-import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_proposal_adapter.dart';
 
@@ -44,7 +40,7 @@ abstract interface class InstitutionChainState {
   /// 批量余额(hex→元);精确整键 + ChainReadCache。
   Future<Map<String, double>> balances(List<String> pubkeyHexes);
 
-  /// 机构主账户管理员公钥列表(按机构码读取 Public/Private/Personal Admins)。
+  /// 机构管理员公钥列表(以 CID 为 key，按机构码选择 Public/Private Admins)。
   Future<List<String>> admins(Institution institution);
 
   /// 机构岗位与管理员任职；普通公民姓名/CID 不属于管理员链上字段。
@@ -107,25 +103,10 @@ class LiveInstitutionChainState implements InstitutionChainState {
 }
 
 /// 机构 → 管理员账户身份(单一路由,机构码决定):
-/// - 固定治理档(NRC/PRC/PRB/FRG/NJD)→ governanceInstitution;
-/// - 其余注册机构 → institutionAccount(用真实机构码,修复旧 'CGOV' 硬编码)。
+/// 所有机构统一以 CID 构造管理员主体，具体账户不进入授权身份。
 AdminAccountIdentity adminIdentityOf(Institution institution) {
-  if (InstitutionClassification.isGovernance(institution.institutionCode)) {
-    return AdminAccountIdentity.governanceInstitution(
-      accountHex: institution.mainAccountHex,
-      orgType: institution.orgType,
-      accountLabel: institution.cidFullName,
-    );
-  }
-  if (InstitutionCodeLabel.isFixedGovernance(institution.institutionCode)) {
-    return AdminAccountIdentity.fixedGovernanceInstitution(
-      accountHex: institution.mainAccountHex,
-      institutionCode: institution.institutionCode,
-      accountLabel: institution.cidFullName,
-    );
-  }
-  return AdminAccountIdentity.institutionAccount(
-    accountHex: institution.mainAccountHex,
+  return AdminAccountIdentity.institution(
+    cidNumber: institution.cidNumber,
     institutionCode: institution.institutionCode,
     accountLabel: institution.cidFullName,
   );

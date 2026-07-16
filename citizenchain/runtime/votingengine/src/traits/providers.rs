@@ -50,10 +50,9 @@ impl<AccountId> CitizenIdentityReader<AccountId> for () {
 /// 内部管理员动态提供器（可由其他治理模块提供最新管理员集合）。
 ///
 /// 一致性契约：
-/// - `is_internal_admin(institution_code, institution, who) == true` 时，同一链上状态读取到的
-///   `get_admin_list(institution_code, institution)` 必须包含 `who`。
-/// - Pending 版本的 `is_pending_internal_admin` 与 `get_pending_admin_list`
-///   必须满足同样强一致关系。
+/// - `is_institution_admin(institution_code, cid_number, who) == true` 时，同一链上状态读取到的
+///   `get_institution_admins(institution_code, cid_number)` 必须包含 `who`。
+/// - 个人多签 Pending 版本的权限与管理员列表必须满足同样强一致关系。
 ///
 /// 投票引擎会在写入管理员快照后再次校验发起人属于快照；provider 实现若出现
 /// drift，会被视为权限错误并回滚提案创建。
@@ -78,25 +77,18 @@ pub trait InternalAdminProvider<AccountId> {
     }
 
     /// 获取个人多签当前管理员列表。
-    fn get_personal_admins(
-        _personal_account: AccountId,
-    ) -> Option<sp_std::vec::Vec<AccountId>> {
+    fn get_personal_admins(_personal_account: AccountId) -> Option<sp_std::vec::Vec<AccountId>> {
         None
     }
 
     /// 查询 Pending 个人多签管理员权限。仅供创建个人多签提案使用。
-    fn is_pending_personal_admin(
-        _personal_account: AccountId,
-        _who: &AccountId,
-    ) -> bool {
+    fn is_pending_personal_admin(_personal_account: AccountId, _who: &AccountId) -> bool {
         false
     }
 
     /// 获取机构法定代表人(ADR-027 立法签署人)。
     /// 默认 None(个人账户/尚未任命);机构公开事实由 entity 的 `InstitutionInfo` 提供。
-    fn legal_representative(
-        _cid_number: &[u8],
-    ) -> Option<AccountId> {
+    fn legal_representative(_cid_number: &[u8]) -> Option<AccountId> {
         None
     }
 
@@ -128,10 +120,7 @@ impl<AccountId> InternalAdminProvider<AccountId> for () {
 /// 内部管理员总人数提供器。
 /// 联合投票会根据“剩余管理员数是否还能让赞成票达到阈值”来自动判定机构反对。
 pub trait InternalAdminsLenProvider<AccountId> {
-    fn institution_admins_len(
-        institution_code: InstitutionCode,
-        cid_number: &[u8],
-    ) -> Option<u32>;
+    fn institution_admins_len(institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32>;
 
     fn personal_admins_len(personal_account: AccountId) -> Option<u32>;
 }

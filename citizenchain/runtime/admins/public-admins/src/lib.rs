@@ -141,7 +141,10 @@ pub mod pallet {
                 cid_number,
             ) {
                 Some(expected) => {
-                    ensure!(admins.len() == expected as usize, Error::<T>::InvalidAdminsLen)
+                    ensure!(
+                        admins.len() == expected as usize,
+                        Error::<T>::InvalidAdminsLen
+                    )
                 }
                 None => match primitives::institution_constraints::member_composition_by_identity(
                     institution_code,
@@ -155,8 +158,7 @@ pub mod pallet {
                     None => {
                         ensure!(admins.len() >= 2, Error::<T>::InvalidAdminsLen);
                         ensure!(
-                            admins.len()
-                                <= <T as Config>::MaxAdminsPerInstitution::get() as usize,
+                            admins.len() <= <T as Config>::MaxAdminsPerInstitution::get() as usize,
                             Error::<T>::InvalidAdminsLen
                         );
                     }
@@ -215,12 +217,7 @@ pub mod pallet {
             threshold: u32,
         ) -> DispatchResult {
             let cid_number = Self::bound_cid(cid_number)?;
-            Self::validate_admin_set(
-                kind,
-                institution_code,
-                cid_number.as_slice(),
-                &admins,
-            )?;
+            Self::validate_admin_set(kind, institution_code, cid_number.as_slice(), &admins)?;
             let bounded: AdminsOf<T> = admins
                 .try_into()
                 .map_err(|_| Error::<T>::InvalidAdminsLen)?;
@@ -330,7 +327,7 @@ pub mod pallet {
                     .is_err()
                     {
                         return TransactionOutcome::Rollback(Err(
-                            Error::<T>::InvalidThreshold.into(),
+                            Error::<T>::InvalidThreshold.into()
                         ));
                     }
                 }
@@ -375,13 +372,7 @@ impl<T: pallet::Config> InstitutionAdminLifecycle<T::AccountId> for pallet::Pall
         admins: Vec<T::AccountId>,
         threshold: u32,
     ) -> DispatchResult {
-        Self::do_set_institution_admins(
-            cid_number,
-            institution_code,
-            kind,
-            admins,
-            threshold,
-        )
+        Self::do_set_institution_admins(cid_number, institution_code, kind, admins, threshold)
     }
 
     fn sync_institution_admins_from_assignments(
@@ -390,19 +381,12 @@ impl<T: pallet::Config> InstitutionAdminLifecycle<T::AccountId> for pallet::Pall
         institution_code: InstitutionCode,
         admins: Vec<T::AccountId>,
     ) -> DispatchResult {
-        Self::do_sync_institution_admins_from_assignments(
-            cid_number,
-            institution_code,
-            admins,
-        )
+        Self::do_sync_institution_admins_from_assignments(cid_number, institution_code, admins)
     }
 }
 
 impl<T: pallet::Config> InstitutionAdminQuery<T::AccountId> for pallet::Pallet<T> {
-    fn institution_admins_exist(
-        institution_code: InstitutionCode,
-        cid_number: &[u8],
-    ) -> bool {
+    fn institution_admins_exist(institution_code: InstitutionCode, cid_number: &[u8]) -> bool {
         Self::get_institution_admins(institution_code, cid_number).is_some()
     }
 
@@ -424,10 +408,7 @@ impl<T: pallet::Config> InstitutionAdminQuery<T::AccountId> for pallet::Pallet<T
             .map(|value| value.admins.into_inner())
     }
 
-    fn institution_admins_len(
-        institution_code: InstitutionCode,
-        cid_number: &[u8],
-    ) -> Option<u32> {
+    fn institution_admins_len(institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32> {
         Self::get_institution_admins(institution_code, cid_number)
             .map(|value| value.admins.len() as u32)
     }

@@ -196,7 +196,7 @@ fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
 #[test]
 fn resolution_destro_internal_vote_flow_executes_destroy_and_reduces_issuance() {
     new_test_ext().execute_with(|| {
-        let nrc_institution = AccountId::new(CHINA_CB[0].main_account);
+        let nrc_institution_account = AccountId::new(CHINA_CB[0].main_account);
         let nrc_account = AccountId::new(CHINA_CB[0].main_account);
         let initial_balance: Balance = 1_000;
         let destroy_amount: Balance = 100;
@@ -212,7 +212,7 @@ fn resolution_destro_internal_vote_flow_executes_destroy_and_reduces_issuance() 
                 .to_vec()
                 .try_into()
                 .expect("NRC CID fits"),
-            nrc_institution,
+            nrc_institution_account,
             destroy_amount,
         ));
 
@@ -301,7 +301,7 @@ fn runtime_fee_kind_classifier_covers_free_onchain_vote_and_unknown_paths() {
         // 投票 extrinsic 本身按治理用户操作固定 1 元计费，不再套 0.1%。
         assert_eq!(vote_kind, onchain::FeeChargeKind::VoteFlat);
 
-        let nrc_institution = AccountId::new(CHINA_CB[0].main_account);
+        let nrc_institution_account = AccountId::new(CHINA_CB[0].main_account);
         let resolution_destro_call =
             RuntimeCall::ResolutionDestroy(resolution_destroy::pallet::Call::propose_destroy {
                 actor_cid_number: CHINA_CB[0]
@@ -310,7 +310,7 @@ fn runtime_fee_kind_classifier_covers_free_onchain_vote_and_unknown_paths() {
                     .to_vec()
                     .try_into()
                     .expect("NRC CID fits"),
-                institution_account: nrc_institution,
+                institution_account: nrc_institution_account,
                 amount: 456,
             });
         let resolution_kind = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
@@ -640,14 +640,14 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
 #[test]
 fn runtime_citizen_identity_frg_province_admin_registers_voting_identity() {
     new_test_ext().execute_with(|| {
-        let (_, registrar, registrar_account) = setup_frg_citizen_identity_admin(b"43");
+        let (_, registrar, actor_cid_number) = setup_frg_citizen_identity_admin(b"43");
         let wallet_pair =
             sr25519::Pair::from_string("//citizen-wallet-1", None).expect("wallet pair");
         let wallet_account = AccountId::new(wallet_pair.public().0);
         // 占号先行:身份写入前置。
         assert_ok!(CitizenIdentity::occupy_cid(
             RuntimeOrigin::signed(registrar.clone()),
-            registrar_account.clone(),
+            actor_cid_number.clone(),
             real_cid_number("RUNTIME-0001", "CTZN", "1")
                 .try_into()
                 .expect("cid number should fit"),
@@ -666,7 +666,7 @@ fn runtime_citizen_identity_frg_province_admin_registers_voting_identity() {
 
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(registrar),
-            registrar_account,
+            actor_cid_number,
             payload,
             signature,
         ));
@@ -681,7 +681,7 @@ fn runtime_citizen_identity_frg_province_admin_registers_voting_identity() {
 #[test]
 fn runtime_citizen_identity_frg_admin_cannot_register_other_province() {
     new_test_ext().execute_with(|| {
-        let (_, registrar, registrar_account) = setup_frg_citizen_identity_admin(b"43");
+        let (_, registrar, actor_cid_number) = setup_frg_citizen_identity_admin(b"43");
         let wallet_pair =
             sr25519::Pair::from_string("//citizen-wallet-2", None).expect("wallet pair");
         let wallet_account = AccountId::new(wallet_pair.public().0);
@@ -697,7 +697,7 @@ fn runtime_citizen_identity_frg_admin_cannot_register_other_province() {
         assert_noop!(
             CitizenIdentity::register_voting_identity(
                 RuntimeOrigin::signed(registrar),
-                registrar_account,
+                actor_cid_number,
                 payload,
                 signature,
             ),
@@ -709,14 +709,14 @@ fn runtime_citizen_identity_frg_admin_cannot_register_other_province() {
 #[test]
 fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
     new_test_ext().execute_with(|| {
-        let (_, registrar, registrar_account) = setup_frg_citizen_identity_admin(b"43");
+        let (_, registrar, actor_cid_number) = setup_frg_citizen_identity_admin(b"43");
         let wallet_pair =
             sr25519::Pair::from_string("//citizen-wallet-3", None).expect("wallet pair");
         let wallet_account = AccountId::new(wallet_pair.public().0);
         // 占号先行:身份写入前置。
         assert_ok!(CitizenIdentity::occupy_cid(
             RuntimeOrigin::signed(registrar.clone()),
-            registrar_account.clone(),
+            actor_cid_number.clone(),
             real_cid_number("RUNTIME-0003", "CTZN", "1")
                 .try_into()
                 .expect("cid number should fit"),
@@ -747,7 +747,7 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
 
         assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(registrar),
-            registrar_account,
+            actor_cid_number,
             candidate,
             signature,
         ));
@@ -821,7 +821,7 @@ fn runtime_square_post_campaign_requires_citizen_identity() {
 #[test]
 fn runtime_square_post_campaign_records_chain_cid_for_verified_wallet() {
     new_test_ext().execute_with(|| {
-        let (_, registrar, registrar_account) = setup_frg_citizen_identity_admin(b"43");
+        let (_, registrar, actor_cid_number) = setup_frg_citizen_identity_admin(b"43");
         let wallet_pair =
             sr25519::Pair::from_string("//square-citizen-wallet", None).expect("wallet pair");
         let wallet_account = AccountId::new(wallet_pair.public().0);
@@ -829,7 +829,7 @@ fn runtime_square_post_campaign_records_chain_cid_for_verified_wallet() {
 
         assert_ok!(CitizenIdentity::occupy_cid(
             RuntimeOrigin::signed(registrar.clone()),
-            registrar_account.clone(),
+            actor_cid_number.clone(),
             cid_number
                 .clone()
                 .try_into()
@@ -849,7 +849,7 @@ fn runtime_square_post_campaign_records_chain_cid_for_verified_wallet() {
 
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(registrar),
-            registrar_account,
+            actor_cid_number,
             payload,
             signature,
         ));
@@ -1150,6 +1150,94 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 town_code,
             ),
             "tampered signature must reject"
+        );
+    });
+}
+
+#[test]
+fn onchain_issuance_requires_actor_cid_admin_and_matching_execution_account() {
+    new_test_ext().execute_with(|| {
+        let nrc = &CHINA_CB[0];
+        let actor_cid_number: votingengine::types::CidNumber = nrc
+            .cid_number
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("NRC CID fits runtime bound");
+        let admin = AccountId::new(nrc.admins[0]);
+        let main_account = AccountId::new(nrc.main_account);
+
+        assert_noop!(
+            OnchainIssuance::propose_issue(
+                RuntimeOrigin::signed(admin.clone()),
+                actor_cid_number.clone(),
+                AccountId::new([250u8; 32]),
+                onchain_issuance::types::AssetClass::Plain,
+                b"Institution Asset".to_vec().try_into().expect("name fits"),
+                b"IAS".to_vec().try_into().expect("symbol fits"),
+                b"plain asset"
+                    .to_vec()
+                    .try_into()
+                    .expect("description fits"),
+                2,
+                1_000,
+            ),
+            onchain_issuance::Error::<Runtime>::InvalidInstitutionContext
+        );
+
+        assert_ok!(OnchainIssuance::propose_issue(
+            RuntimeOrigin::signed(admin),
+            actor_cid_number,
+            main_account,
+            onchain_issuance::types::AssetClass::Plain,
+            b"Institution Asset".to_vec().try_into().expect("name fits"),
+            b"IAS".to_vec().try_into().expect("symbol fits"),
+            b"plain asset"
+                .to_vec()
+                .try_into()
+                .expect("description fits"),
+            2,
+            1_000,
+        ));
+    });
+}
+
+#[test]
+fn onchain_issuance_rejects_non_admin_and_non_nrc_monitor_actor() {
+    new_test_ext().execute_with(|| {
+        let nrc_cid: votingengine::types::CidNumber = CHINA_CB[0]
+            .cid_number
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("NRC CID fits runtime bound");
+        assert_noop!(
+            OnchainIssuance::propose_mint(
+                RuntimeOrigin::signed(AccountId::new([250u8; 32])),
+                nrc_cid,
+                1,
+                AccountId::new([1u8; 32]),
+                1,
+            ),
+            onchain_issuance::Error::<Runtime>::ProposeOriginNotAllowed
+        );
+
+        let prc = &CHINA_CB[1];
+        let prc_cid: votingengine::types::CidNumber = prc
+            .cid_number
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("PRC CID fits runtime bound");
+        assert_noop!(
+            OnchainIssuance::propose_monitor_freeze(
+                RuntimeOrigin::signed(AccountId::new(prc.admins[0])),
+                prc_cid,
+                1,
+                AccountId::new([1u8; 32]),
+                [7u8; 32],
+            ),
+            onchain_issuance::Error::<Runtime>::InvalidInstitutionContext
         );
     });
 }

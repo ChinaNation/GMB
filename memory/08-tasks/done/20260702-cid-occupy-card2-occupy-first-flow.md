@@ -50,7 +50,7 @@
 
 - 2026-07-03:**链端全部完成**(D2/D3/费类),受影响 crate 测试全绿:
   - citizen-identity 新增 `CidRegistry` 存储(registrar_account/commitment/居住地码/Active|Revoked 墓碑/块高)+ 三个 call:`occupy_cid`(幂等续用=同注册局+同承诺放行)/`occupy_cids_batch`(≤10,000,任一失败整笔回滚)/`revoke_cid`(墓碑+绑定身份联动吊销,作用域授权用占号时存的居住地防跨域);四个身份写入口新增 `ensure_cid_occupied_active` 前置;换号=旧号自动墓碑;`revoke_identity` 联动登记表墓碑;errors:CidAlreadyOccupied/CidNotOccupied/CidAlreadyRevoked;weights 手工保守上界三条。
-  - 机构墓碑(D3):整机构关闭置 `InstitutionLifecycleStatus::Closed`(close.rs 注释漂移一并修正);register(call 2)补 Closed 拦截(错误 `InstitutionAlreadyClosed`),堵「关闭后同号重建索引」缺口;两 pallet 同步。
+  - 该旧整机构关闭口径已被 2026-07-15 改造废止：机构 CID 永久存在，只允许关闭自定义账户；协议账户、admins、岗位和阈值保持不变。
   - 费类:occupy/batch/revoke → Free(configs/mod.rs 穷尽 match per-call 分支),其余 CitizenIdentity 调用维持 VoteFlat。
   - 测试:citizen-identity 21/21(含幂等/冲突/批量回滚/无占号拒注册/吊销墓碑不可复用/换号旧号墓碑 6 个新用例);entity 34+34(关闭用例扩墓碑断言+重注册拒绝);citizen-issuance 12+5、runtime lib 30/30 占号前置改造后全绿。
   - 顺手修工作区既有 benchmark 断链 4 处:admins×2(CHINA_CB 导入+AdminProfile 结构升级)、resolution-issuance/runtime-upgrade(PreparedPopulationSnapshot.nonce_hash→scope)、runtime 基准清单摘除无基准的 citizen-identity;全 runtime `--features runtime-benchmarks` 编译过。

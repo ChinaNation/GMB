@@ -15,7 +15,8 @@ enum LawTier {
         0 => LawTier.constitution,
         1 => LawTier.national,
         2 => LawTier.provincial,
-        _ => LawTier.municipal,
+        3 => LawTier.municipal,
+        _ => throw FormatException('未知法律层级: $i'),
       };
 
   int get index0 => index;
@@ -37,7 +38,8 @@ enum LawStatus {
   static LawStatus fromIndex(int i) => switch (i) {
         0 => LawStatus.pending,
         1 => LawStatus.effective,
-        _ => LawStatus.repealed,
+        2 => LawStatus.repealed,
+        _ => throw FormatException('未知法律状态: $i'),
       };
 
   String get label => switch (this) {
@@ -64,7 +66,8 @@ enum VoteType {
         1 => VoteType.regularEducation,
         2 => VoteType.major,
         3 => VoteType.majorEducation,
-        _ => VoteType.special,
+        4 => VoteType.special,
+        _ => throw FormatException('未知立法表决类型: $i'),
       };
 
   bool get isEducation =>
@@ -133,13 +136,6 @@ class LawChapter {
   final List<LawSection> sections;
 }
 
-/// 立法机构院(机构码 + 主账户 hex);houses[0]=发起院。
-class LawHouse {
-  const LawHouse({required this.institutionCode, required this.accountHex});
-  final String institutionCode;
-  final String accountHex;
-}
-
 /// 法律主记录(链端 `law(law_id)` 返回)。
 class Law {
   const Law({
@@ -157,7 +153,10 @@ class Law {
 
   /// 0=全国;否则 china.sqlite 行政区 code(ADR-021)。
   final int scopeCode;
-  final List<LawHouse> houses;
+
+  /// 归属立法机构 CID 序列；`houses[0]` 是发起院。
+  /// 机构码由 CID 解析，任何机构账户都不得替代机构身份。
+  final List<String> houses;
 
   /// 当前真正生效的版本。新法通过但未到生效时间时为空。
   final int? effectiveVersion;

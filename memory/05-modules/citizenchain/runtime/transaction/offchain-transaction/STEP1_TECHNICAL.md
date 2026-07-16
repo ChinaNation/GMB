@@ -51,8 +51,8 @@ pub fn subject_property_is_private_institution(cid_bytes: &[u8]) -> bool {
 pub trait CidAccountQuery<AccountId> {
     fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)>;
     fn find_account(cid_number: &[u8], account_name: &[u8]) -> Option<AccountId>;
-    fn is_active(addr: &AccountId) -> bool;
-    fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool;
+    fn account_exists(addr: &AccountId) -> bool;
+    fn is_institution_admin(cid_number: &[u8], who: &AccountId) -> bool;
     fn is_clearing_bank_eligible(addr: &AccountId) -> bool;
     fn is_registered_clearing_node(bank: &AccountId) -> bool;
 }
@@ -60,11 +60,10 @@ pub trait CidAccountQuery<AccountId> {
 // 默认 () 实现返回未登记,供测试用。
 ```
 
-**runtime 层实现**(`citizenchain/runtime/src/configs/mod.rs` 的 `MultisigCidAccountQuery`):按公权机构、私权机构、个人多签三类账户聚合链上索引:
+**runtime 层实现**（`citizenchain/runtime/src/configs.rs` 的 `MultisigCidAccountQuery`）：按公权、私权机构 CID 聚合账户索引：
 - `PublicManage::AccountRegisteredCid` / `PrivateManage::AccountRegisteredCid` → `account_info`
-- `PublicManage::CidRegisteredAccount` / `PrivateManage::CidRegisteredAccount` → `find_account`
-- `PublicManage::InstitutionAccounts` / `PrivateManage::InstitutionAccounts` → `is_active` / `is_clearing_bank_eligible`
-- `RuntimeAdminAccountQuery` 管理员查询门面 → `is_admin_of`
+- `PublicManage::InstitutionAccounts[(cid_number, account_name)]` / `PrivateManage::InstitutionAccounts[...]` → `find_account`、`account_exists`、`is_clearing_bank_eligible`
+- `RuntimeInstitutionAdminQuery` 以 `AdminAccounts[cid_number].admins` → `is_institution_admin`
 - `ClearingBankNodes` → `is_registered_clearing_node`
 
 **好处**:

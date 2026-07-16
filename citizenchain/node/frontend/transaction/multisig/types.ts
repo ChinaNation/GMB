@@ -18,7 +18,8 @@ export type VoteSubmitResult = {
 
 export type TransferProposalDetail = {
   proposalId: number;
-  institutionHex: string;
+  actorCidNumber: string | null;
+  fundingAccountHex: string;
   beneficiaryHex: string;
   amountFen: string;
   remark: string;
@@ -27,12 +28,15 @@ export type TransferProposalDetail = {
 
 export type SweepProposalDetail = {
   proposalId: number;
-  institutionHex: string;
+  actorCidNumber: string;
+  institutionAccountHex: string;
   amountFen: string;
 };
 
 export type SafetyFundProposalDetail = {
   proposalId: number;
+  actorCidNumber: string;
+  institutionAccountHex: string;
   beneficiaryHex: string;
   amountFen: string;
   remark: string;

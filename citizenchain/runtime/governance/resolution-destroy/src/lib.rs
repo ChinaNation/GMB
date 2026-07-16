@@ -137,7 +137,7 @@ pub mod pallet {
             );
             // 活跃提案数由 votingengine 在 create_internal_proposal 中统一检查
             ensure!(
-                Self::is_internal_admin(actual_org, actor_cid_number.as_slice(), &who),
+                Self::is_institution_admin(actual_org, actor_cid_number.as_slice(), &who),
                 Error::<T>::UnauthorizedAdmin
             );
 
@@ -172,7 +172,7 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        fn is_internal_admin(
+        fn is_institution_admin(
             institution_code: InstitutionCode,
             actor_cid_number: &[u8],
             who: &T::AccountId,
@@ -203,7 +203,10 @@ pub mod pallet {
                     && proposal.stage == STAGE_INTERNAL
                     && proposal.status == STATUS_PASSED
                     && proposal.internal_code == Some(actual_org)
-                    && proposal.actor_cid_number.as_ref().map(|value| value.as_slice())
+                    && proposal
+                        .actor_cid_number
+                        .as_ref()
+                        .map(|value| value.as_slice())
                         == Some(action.actor_cid_number.as_slice())
                     && proposal.execution_account == Some(action.institution_account.clone())
                     && cid.as_slice() == action.actor_cid_number.as_slice(),

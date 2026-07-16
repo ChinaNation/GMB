@@ -2,6 +2,9 @@
 //!
 //! 公开只读接口直接查询 `subjects/accounts` 结构化表。
 
+use crate::core::response::ApiResponse;
+use crate::institution::subjects::service::institution_account_kind_label;
+use crate::*;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -9,11 +12,6 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
-use crate::core::response::ApiResponse;
-use crate::institution::subjects::service::{
-    institution_account_kind_label,
-};
-use crate::*;
 
 #[derive(Serialize)]
 pub(crate) struct AppInstitutionDetail {

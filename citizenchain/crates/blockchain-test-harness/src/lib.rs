@@ -24,19 +24,16 @@ pub enum ImportedStateBadCaseKind {
     MissingProvincialBankStake,
     /// 省储行固定发行 pallet 下出现未知 storage key。
     UnknownProvincialBankStorage,
-    /// CID 生命周期保护的创世账户状态缺失。
-    MissingProtectedGenesisAccount,
 }
 
 /// NodeGuard 永久规则坏样本矩阵。
-pub const IMPORTED_STATE_BAD_CASES: [ImportedStateBadCaseKind; 7] = [
+pub const IMPORTED_STATE_BAD_CASES: [ImportedStateBadCaseKind; 6] = [
     ImportedStateBadCaseKind::MissingGovernanceAdmin,
     ImportedStateBadCaseKind::NonZeroFullnodeIssued,
     ImportedStateBadCaseKind::UnknownCitizenIssuanceKey,
     ImportedStateBadCaseKind::ChangedGenesisCitizenMax,
     ImportedStateBadCaseKind::MissingProvincialBankStake,
     ImportedStateBadCaseKind::UnknownProvincialBankStorage,
-    ImportedStateBadCaseKind::MissingProtectedGenesisAccount,
 ];
 
 impl ImportedStateBadCaseKind {
@@ -54,7 +51,6 @@ impl ImportedStateBadCaseKind {
             Self::ChangedGenesisCitizenMax => "changed_genesis_citizen_max",
             Self::MissingProvincialBankStake => "missing_provincial_bank_stake",
             Self::UnknownProvincialBankStorage => "unknown_provincial_bank_storage",
-            Self::MissingProtectedGenesisAccount => "missing_protected_genesis_account",
         }
     }
 
@@ -68,7 +64,6 @@ impl ImportedStateBadCaseKind {
             Self::MissingProvincialBankStake | Self::UnknownProvincialBankStorage => {
                 "省储行固定发行:"
             }
-            Self::MissingProtectedGenesisAccount => "CID 生命周期:",
         }
     }
 }

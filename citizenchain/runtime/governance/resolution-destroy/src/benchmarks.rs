@@ -10,8 +10,8 @@ use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
 use sp_runtime::traits::SaturatedConversion;
 
-use crate::{BalanceOf, Call, Config, Pallet, CHINA_CB};
-use votingengine::types::PRC;
+use crate::{BalanceOf, Call, Config, Pallet};
+use primitives::cid::china::china_cb::CHINA_CB;
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
@@ -23,6 +23,15 @@ fn prc_institution<T: Config>() -> T::AccountId {
 
 fn prc_admin<T: Config>(index: usize) -> T::AccountId {
     decode_account::<T>(CHINA_CB[1].admins[index])
+}
+
+fn prc_cid_number() -> votingengine::CidNumber {
+    CHINA_CB[1]
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("PRC CID fits runtime bound")
 }
 
 fn last_proposal_id<T: Config>() -> u64 {
@@ -42,7 +51,7 @@ mod benchmarks {
         #[extrinsic_call]
         propose_destroy(
             RawOrigin::Signed(proposer.clone()),
-            PRC,
+            prc_cid_number(),
             institution,
             amount,
         );

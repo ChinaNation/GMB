@@ -3,7 +3,7 @@
 extern crate alloc;
 
 use super::*;
-use admin_primitives::AdminAccountQuery;
+use admin_primitives::InstitutionAdminQuery;
 use frame_support::{
     derive_impl,
     traits::{ConstU128, ConstU32, Hooks},
@@ -19,7 +19,7 @@ std::thread_local! {
         std::cell::RefCell::new(None)
     };
 }
-use votingengine::types::{code_bytes, is_registered_multisig_code, InstitutionCode};
+use votingengine::types::{code_bytes, InstitutionCode};
 
 type Balance = u128;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -75,7 +75,7 @@ impl pallet_balances::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Balance = Balance;
     type DustRemoval = ();
-    type ExistentialDeposit = ConstU128<1>;
+    type ExistentialDeposit = ConstU128<111>;
     type AccountStore = System;
     type MaxLocks = ConstU32<0>;
     type MaxReserves = ();
@@ -139,9 +139,8 @@ impl
         account_names: &[alloc::vec::Vec<u8>],
         nonce: &crate::pallet::RegisterNonceOf<Test>,
         signature: &crate::pallet::RegisterSignatureOf<Test>,
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId32,
-        signer_pubkey: &[u8; 32],
+        _actor_cid_number: &[u8],
+        credential_signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
         _scope_city_name: &[u8],
         _town_code: &[u8],
@@ -153,38 +152,34 @@ impl
             && !cid_full_name.is_empty()
             && !nonce.is_empty()
             && !scope_province_name.is_empty()
-            && signer_pubkey != &[0u8; 32]
+            && credential_signer_pubkey != &[0u8; 32]
             && signature.as_slice() == b"register-ok"
     }
 
-    fn verify_institution_deregistration(
-        scope: u8,
+    fn verify_institution_account_close(
         cid_number: &[u8],
         _account_name: &[u8],
         _target_account: &AccountId32,
         nonce: &crate::pallet::RegisterNonceOf<Test>,
         signature: &crate::pallet::RegisterSignatureOf<Test>,
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId32,
-        signer_pubkey: &[u8; 32],
+        _credential_issuer_cid_number: &[u8],
+        credential_signer_pubkey: &[u8; 32],
     ) -> bool {
-        scope <= crate::pallet::SCOPE_ACCOUNT
-            && !cid_number.is_empty()
+        !cid_number.is_empty()
             && !nonce.is_empty()
-            && signer_pubkey != &[0u8; 32]
+            && credential_signer_pubkey != &[0u8; 32]
             && signature.as_slice() == b"deregister-ok"
     }
 }
 
-/// 注册局权限 mock:本测试包只验证 public-manage 的生命周期行为,真实 FRG/CREG
+/// 注册局权限 mock:本测试包只验证 public-manage 的机构登记行为,真实 FRG/CREG
 /// 省市边界由 runtime 配置层测试覆盖。
 pub struct TestRegistryAuthority;
 impl crate::traits::RegistryAuthority<AccountId32> for TestRegistryAuthority {
     fn can_register_institution(
         _registrar: &AccountId32,
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId32,
-        _signer_pubkey: &[u8; 32],
+        _actor_cid_number: &[u8],
+        _credential_signer_pubkey: &[u8; 32],
         target_cid_number: &[u8],
         _target_institution_code: InstitutionCode,
         scope_province_name: &[u8],
@@ -211,195 +206,28 @@ impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityRea
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(
+    fn is_institution_admin(
         institution_code: InstitutionCode,
-        institution: AccountId32,
+        cid_number: &[u8],
         who: &AccountId32,
     ) -> bool {
-        if !is_registered_multisig_code(&institution_code) {
-            return false;
-        }
-        TestAdminAccountQuery::is_active_account_admin(institution_code, institution, who)
+        PublicAdmins::is_institution_admin(institution_code, cid_number, who)
     }
 
-    fn get_admin_list(
+    fn get_institution_admins(
         institution_code: InstitutionCode,
-        institution: AccountId32,
+        cid_number: &[u8],
     ) -> Option<alloc::vec::Vec<AccountId32>> {
-        if !is_registered_multisig_code(&institution_code) {
-            return None;
-        }
-        TestAdminAccountQuery::active_account_admins(institution_code, institution)
+        PublicAdmins::institution_admins(institution_code, cid_number)
     }
 }
 
 pub struct TestInternalAdminsLenProvider;
 impl votingengine::InternalAdminsLenProvider<AccountId32> for TestInternalAdminsLenProvider {
-    fn admins_len(institution_code: InstitutionCode, institution: AccountId32) -> Option<u32> {
-        if !is_registered_multisig_code(&institution_code) {
-            return None;
-        }
-        TestAdminAccountQuery::active_account_admins_len(institution_code, institution)
+    fn institution_admins_len(institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32> {
+        PublicAdmins::institution_admins_len(institution_code, cid_number)
     }
-}
-
-pub struct TestAdminAccountQuery;
-impl admin_primitives::AdminAccountQuery<AccountId32> for TestAdminAccountQuery {
-    fn active_admin_account_exists(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId32,
-    ) -> bool {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Test>::active_admin_account_exists(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Test>::active_admin_account_exists(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        false
-    }
-
-    fn is_active_account_admin(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId32,
-        who: &AccountId32,
-    ) -> bool {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Test>::is_active_account_admin(
-                institution_code,
-                admin_root_account_id,
-                who,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Test>::is_active_account_admin(
-                institution_code,
-                admin_root_account_id,
-                who,
-            );
-        }
-        false
-    }
-
-    fn active_account_admins(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId32,
-    ) -> Option<alloc::vec::Vec<AccountId32>> {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Test>::active_account_admins(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Test>::active_account_admins(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        None
-    }
-
-    fn active_account_admins_len(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId32,
-    ) -> Option<u32> {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Test>::active_account_admins_len(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Test>::active_account_admins_len(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        None
-    }
-
-    fn pending_account_exists_for_snapshot(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId32,
-    ) -> bool {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Test>::pending_account_exists_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Test>::pending_account_exists_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        false
-    }
-
-    fn is_pending_account_admin_for_snapshot(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId32,
-        who: &AccountId32,
-    ) -> bool {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Test>::is_pending_account_admin_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-                who,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Test>::is_pending_account_admin_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-                who,
-            );
-        }
-        false
-    }
-
-    fn pending_account_admins_for_snapshot(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId32,
-    ) -> Option<alloc::vec::Vec<AccountId32>> {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Test>::pending_account_admins_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Test>::pending_account_admins_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        None
-    }
-
-    fn pending_account_admins_len_for_snapshot(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId32,
-    ) -> Option<u32> {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Test>::pending_account_admins_len_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Test>::pending_account_admins_len_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
+    fn personal_admins_len(_personal_account: AccountId32) -> Option<u32> {
         None
     }
 }
@@ -459,14 +287,12 @@ impl public_admins::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
-    type InstitutionQuery = ();
 }
 
 impl private_admins::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
-    type InstitutionQuery = ();
 }
 
 impl pallet::Config for Test {
@@ -481,7 +307,7 @@ impl pallet::Config for Test {
     type RegistryAuthority = TestRegistryAuthority;
     type AdminLifecycle = PublicAdmins;
     type SiblingInstitutionQuery = ();
-    type AdminAccountQuery = TestAdminAccountQuery;
+    type InstitutionAdminQuery = PublicAdmins;
     type FeeRouter = ();
     type MaxAdmins = ConstU32<10>;
     type MaxCidNumberLength = ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>;
@@ -489,8 +315,6 @@ impl pallet::Config for Test {
     type MaxRegisterNonceLength = ConstU32<64>;
     type MaxRegisterSignatureLength = ConstU32<64>;
     type MaxInstitutionAccounts = ConstU32<8>;
-    type MinCreateAmount = ConstU128<111>;
-    type MinCloseBalance = ConstU128<111>;
     type WeightInfo = ();
 }
 
@@ -560,10 +384,6 @@ pub fn cid_short_name(s: &[u8]) -> pallet::AccountNameOf<Test> {
 
 pub fn empty_town_code() -> pallet::AccountNameOf<Test> {
     BoundedVec::new()
-}
-
-pub fn town_code(s: &[u8]) -> pallet::AccountNameOf<Test> {
-    BoundedVec::try_from(s.to_vec()).expect("town_code fits")
 }
 
 pub fn legal_representative_name() -> pallet::AccountNameOf<Test> {
@@ -695,30 +515,11 @@ pub fn cast_yes_votes(admins: &[AccountId32], n: usize, pid: u64) -> sp_runtime:
     Ok(())
 }
 
-pub fn cast_no_votes(admins: &[AccountId32], n: usize, pid: u64) -> sp_runtime::DispatchResult {
-    use votingengine::STATUS_VOTING;
-    for who in admins.iter().take(n) {
-        <internal_vote::Pallet<Test>>::do_internal_vote(who.clone(), pid, false)?;
-        if VotingEngine::proposals(pid)
-            .map(|p| p.status != STATUS_VOTING)
-            .unwrap_or(true)
-        {
-            break;
-        }
-    }
-    if VotingEngine::proposals(pid)
-        .map(|proposal| proposal.status != STATUS_VOTING)
-        .unwrap_or(false)
-    {
-        <VotingEngine as Hooks<u64>>::on_initialize(System::block_number());
-    }
-    Ok(())
-}
-
 /// 测试用:带一组通过 TestCidInstitutionVerifier 的注销凭证发起关闭。
 /// `nonce_seed` 区分同一测试内多次调用的 nonce,避免 `UsedDeregisterNonce` 冲突。
 pub fn close_with_cred(
     origin: RuntimeOrigin,
+    actor_cid_number: pallet::CidNumberOf<Test>,
     admin_account: AccountId32,
     beneficiary: AccountId32,
     nonce_seed: u8,
@@ -731,12 +532,12 @@ pub fn close_with_cred(
         .expect("sig fits bound");
     PublicManage::propose_close_public_institution(
         origin,
+        actor_cid_number,
         admin_account,
         beneficiary,
         nonce,
         signature,
         b"ISSUER-CID".to_vec(),
-        AccountId32::new([7u8; 32]),
         [9u8; 32],
     )
 }

@@ -121,18 +121,10 @@ pub mod pallet {
 
         /// 单个机构注册交易最多可携带的账户数量。
         ///
-        /// CID 默认包含主账户和费用账户，用户可新增其他账户；这里限制链上
-        /// 初始入金列表长度，避免机构注册交易过大。
+        /// 每个 CID 必须包含约束表声明的全部协议账户，并可增加自定义账户；这里限制
+        /// 单次创建携带的账户总数，避免交易过大。
         #[pallet::constant]
         type MaxInstitutionAccounts: Get<u32>;
-
-        /// 创建时最低入金（默认应设置为 111 分 = 1.11 元）。
-        #[pallet::constant]
-        type MinCreateAmount: Get<BalanceOf<Self>>;
-
-        /// 注销时账户最低余额门槛（默认应设置为 111 分 = 1.11 元）。
-        #[pallet::constant]
-        type MinCloseBalance: Get<BalanceOf<Self>>;
 
         type WeightInfo: crate::weights::WeightInfo;
     }
@@ -192,8 +184,8 @@ pub mod pallet {
 
     /// 机构级信息(链上最小集)：key 为 cid_number。
     ///
-    /// 只保存全国可见的机构身份事实:名称(仅公权)、机构码、创建块号、生命周期状态。
-    /// 主账户/费用账户由 (cid_number, 保留名) 派生且常驻 InstitutionAccounts,不在此重复;
+    /// 只保存全国可见的机构身份事实：名称、机构码、创建块号和法定代表人。
+    /// 各类协议账户由 (cid_number, 保留名) 派生且常驻 InstitutionAccounts，不在此重复；
     /// 管理员集合长期真源在 admins 模块,动态阈值长期真源在 internal-vote,均不在此存快照。
     #[pallet::storage]
     #[pallet::getter(fn institution_of)]
@@ -226,7 +218,7 @@ pub mod pallet {
         ValueQuery,
     >;
 
-    /// 机构账户表：(cid_number, account_name) -> 账户地址与激活状态。
+    /// 机构账户表：(cid_number, account_name) -> 账户地址、初始余额与创建块号。
     #[pallet::storage]
     #[pallet::getter(fn institution_account_of)]
     pub type InstitutionAccounts<T: Config> = StorageDoubleMap<
@@ -250,10 +242,10 @@ pub mod pallet {
     pub type UsedDeregisterNonce<T: Config> =
         StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
 
-    /// 私权机构多签当前进行中的关闭提案 ID（防止并发注销提案）。
+    /// 私权机构自定义账户当前进行中的关闭提案 ID（防止并发关闭提案）。
     /// 发起 propose_close 时写入，execute_close 成功或执行失败后清除。
     /// PendingCloseProposal 分两份:个人侧在 personal-manage 自持,
-    /// 机构侧由本表承载,作用域为私权机构多签账户。
+    /// 机构侧由本表按待关闭的自定义账户地址锁定。
     #[pallet::storage]
     #[pallet::getter(fn institution_pending_close)]
     pub type InstitutionPendingClose<T: Config> =
@@ -275,19 +267,6 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {}
-    }
-
-    #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        fn on_runtime_upgrade() -> Weight {
-            let db = T::DbWeight::get();
-            let on_chain = StorageVersion::get::<Pallet<T>>();
-            if on_chain >= STORAGE_VERSION {
-                return db.reads(1);
-            }
-            STORAGE_VERSION.put::<Pallet<T>>();
-            db.reads_writes(1, 1)
-        }
     }
 
     #[pallet::event]
@@ -361,8 +340,6 @@ pub mod pallet {
 
     #[pallet::error]
     pub enum Error<T> {
-        /// 参数不完整
-        IncompleteParameters,
         /// 账户非法
         InvalidAccount,
         /// 账户为制度保留账户，不允许注册
@@ -375,33 +352,23 @@ pub mod pallet {
         InvalidThreshold,
         /// 金额不足
         InsufficientAmount,
-        /// 创建金额低于最小门槛
-        CreateAmountBelowMinimum,
-        /// 机构账户初始余额低于最小门槛
+        /// 机构账户非零初始余额低于链上 ED
         AccountInitialAmountBelowMinimum,
-        /// 注销时账户余额低于最小门槛
-        CloseBalanceBelowMinimum,
         /// 权限不足
         PermissionDenied,
         /// 注册局无权登记目标机构
         RegistryAuthorityDenied,
         /// 管理员数量不合法（必须 >=2）
         InvalidAdminsLen,
-        /// 管理员数量与列表长度不一致
-        AdminsLenMismatch,
-        /// 机构账户管理员机构码只能是公权/私权法人机构码。
+        /// 机构管理员集合的机构码只能是公权/私权法人机构码。
         /// 非法人必须由 CID 上层按所属法人归属显式路由。
         InvalidInstitutionCode,
-        /// 多签账户不存在
+        /// 机构账户不存在
         AccountNotFound,
-        /// 多签账户处于 pending 状态，不可操作
-        AccountNotActive,
         /// 注销收款账户非法（不允许等于 account）
         InvalidBeneficiary,
         /// 资金转出源地址受保护，不允许转出
         ProtectedSource,
-        /// CID机构未登记，不允许创建
-        InstitutionNotRegistered,
         /// CID 机构登记签名无效
         InvalidCidInstitutionSignature,
         /// CID ID 重复登记
@@ -412,8 +379,6 @@ pub mod pallet {
         InvalidCidNumber,
         /// 目标机构不存在。
         InstitutionNotFound,
-        /// 机构已整体关闭(墓碑),该 CID 号永不复用
-        InstitutionAlreadyClosed,
         /// 机构登记 nonce 已被使用
         RegisterNonceAlreadyUsed,
         /// 机构签发凭证缺签发机构 CID 号。
@@ -426,16 +391,12 @@ pub mod pallet {
         DerivedAccountDecodeFailed,
         /// 账户仍有保留余额，不允许注销
         ReservedBalanceRemaining,
-        /// nonce 已耗尽
-        NonceOverflow,
         /// runtime 配置不合法
         InvalidRuntimeConfig,
         /// 提案业务数据未找到
         ProposalActionNotFound,
         /// 转账失败
         TransferFailed,
-        /// 管理员非本提案管理员
-        UnauthorizedAdmin,
         /// 机构账户名为空
         EmptyAccountName,
         /// 法定代表人公开姓名为空
@@ -460,21 +421,16 @@ pub mod pallet {
         InitialAmountOverflow,
         /// 手续费扣取失败
         FeeWithdrawFailed,
-        /// 注销后转账金额低于 ED
-        CloseTransferBelowED,
-        /// 该多签账户已有进行中的关闭提案，不允许重复发起
+        /// 该自定义账户已有进行中的关闭提案，不允许重复发起
         CloseAlreadyPending,
         /// 提案未被拒绝，不可清理
         ProposalNotRejected,
-        /// 账户名占用保留角色名（"主账户"/"费用账户" 必须走 Role::Main/Fee，
-        /// 禁止作为 Role::Named 的自定义命名参数）
+        /// 账户名占用当前机构不允许拥有的协议账户名，或试图把协议名当作自定义账户名
         ReservedAccountName,
         /// sr25519 签名长度必须恰好为 64 字节
         MalformedSignature,
-        /// 创世写入的封存公权机构永不可注销关闭
+        /// 主账户、费用账户及其他制度协议账户永久存在，不允许关闭
         CannotCloseProtectedInstitution,
-        /// 治理机构(国家储委会/省储委会/省储行)永不可注销关闭
-        CannotCloseGovernance,
         /// 注销凭证验签失败
         InvalidDeregisterCredential,
         /// 注销凭证 nonce 已使用(防重放)
@@ -511,7 +467,7 @@ pub mod pallet {
         RoleHasNoAssignment,
         /// 任职去重后的管理员数量超过机构上限。
         TooManyInstitutionAdmins,
-        /// 治理结果目标不是机构主账户或与机构码不匹配。
+        /// 治理结果目标 CID 不存在或与机构码不匹配。
         InvalidAssignmentResultInstitution,
         /// 治理结果没有管理员或包含重复管理员。
         InvalidAssignmentResultAdmins,
@@ -652,7 +608,7 @@ pub mod pallet {
             )
         }
 
-        /// 发起"关闭私权机构多签账户"提案。
+        /// 发起“关闭私权机构自定义命名账户”提案。
         ///
         /// 仅服务于 CID 注册机构地址(`AccountRegisteredCid` 命中);
         /// 个人多签关闭走 personal-manage::propose_close 入口,
@@ -683,9 +639,6 @@ pub mod pallet {
             )
         }
 
-        /// 发起"创建个人多签账户"提案（无需 CID 注册）。
-        ///
-        /// 地址由 `creator + account_name` 派生：
         /// 清理已被拒绝或超时的关闭提案残留状态(机构侧)。
         /// 任意签名账户可调用。用于解决投票引擎 on_initialize 超时 reject 后
         /// 本模块无法自动收到通知导致的 InstitutionPendingClose 残留。
@@ -744,11 +697,11 @@ pub mod pallet {
         /// - `主账户`/`费用账户` → `InstitutionMain`/`InstitutionFee`(强制默认路由)
         /// - 其他非空 → `InstitutionNamed`
         ///
-        /// 这是 `register_cid_private_institution` / 机构创建 / 关闭等入口的唯一派生入口。
+        /// 这是机构创建、账户新增和自定义账户关闭等入口的唯一派生入口。
         ///
         /// 返回的 `AccountKind` 借用入参 `cid_number`/`account_name`，供调用方判断
         /// 协议账户或自定义命名账户。
-        pub fn derive_registered_account<'a>(
+        pub fn derive_institution_account<'a>(
             cid_number: &'a [u8],
             account_name: &'a [u8],
         ) -> Result<(T::AccountId, AccountKind<'a>), DispatchError> {
@@ -766,7 +719,7 @@ pub mod pallet {
         }
 
         // derive_personal_account 在 personal-manage::Pallet;
-        // private-manage 的机构地址只走 derive_registered_account。
+        // private-manage 的机构地址只走 derive_institution_account。
 
         pub(crate) fn ensure_unique_admins(admins: &[T::AccountId]) -> Result<(), DispatchError> {
             let mut seen = BTreeSet::new();
@@ -810,13 +763,12 @@ pub mod pallet {
                     && u64::from(threshold).saturating_mul(2) > u64::from(admins_len),
                 Error::<T>::InvalidThreshold
             );
-            // 账户语义校验取 profile.admin_account:注册局代创建时,发起人是注册局管理员,
-            // 目标 admins 是新机构管理员集合,这里只校验目标集合自身合法。
+            // 注册局代创建时，发起人属于注册局 CID；这里仅校验目标机构 admins 集合本身。
             Self::ensure_unique_admins(admins.as_slice())?;
             Ok(())
         }
 
-        pub(crate) fn set_active_admin_account_direct(
+        pub(crate) fn set_institution_admins(
             cid_number: &CidNumberOf<T>,
             institution_code: InstitutionCode,
             admins: &AdminsOf<T>,
@@ -895,10 +847,8 @@ impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for palle
     ) -> Option<primitives::multisig::MultisigConfigSnapshot<T::AccountId>> {
         let institution_code = Self::lookup_org(addr)?;
         let cid_number = Self::lookup_cid(addr)?;
-        let admins = T::InstitutionAdminQuery::institution_admins(
-            institution_code,
-            cid_number.as_slice(),
-        )?;
+        let admins =
+            T::InstitutionAdminQuery::institution_admins(institution_code, cid_number.as_slice())?;
         let threshold = <T as Config>::InternalVoteEngine::active_institution_threshold(
             institution_code,
             cid_number.as_slice(),
@@ -996,9 +946,10 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
             // 否决:清理关闭 Pending 记录释放地址锁定。
             match action_byte {
                 ACTION_CLOSE => {
-                    if let Ok(action) = CloseInstitutionAction::<T::AccountId, CidNumberOf<T>>::decode(
-                        &mut &raw[tag.len() + 1..],
-                    )
+                    if let Ok(action) =
+                        CloseInstitutionAction::<T::AccountId, CidNumberOf<T>>::decode(
+                            &mut &raw[tag.len() + 1..],
+                        )
                     {
                         InstitutionPendingClose::<T>::remove(&action.institution_account);
                     }

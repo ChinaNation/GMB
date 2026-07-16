@@ -49,9 +49,8 @@ impl<T: Config> Pallet<T> {
         if tally.yes >= threshold {
             <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_PASSED)?;
         } else {
-            let admins_len =
-                <votingengine::Pallet<T>>::snapshot_admins_len(proposal_id, subject)
-                    .ok_or(votingengine::Error::<T>::MissingAdminSnapshot)?;
+            let admins_len = <votingengine::Pallet<T>>::snapshot_admins_len(proposal_id, subject)
+                .ok_or(votingengine::Error::<T>::MissingAdminSnapshot)?;
             let casted = tally.yes.saturating_add(tally.no);
             let remaining = admins_len.saturating_sub(casted);
             if tally.yes.saturating_add(remaining) < threshold {

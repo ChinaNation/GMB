@@ -128,7 +128,16 @@
 - **对抗式审查(3 镜头 × 逐条 refute)**:0 处正确性缺陷,确认 1 项修复、驳回 4 项(EmojiPicker 库 dispose 漏移 textEditingController 监听=无 scrollController 时纯 no-op、有界、随页 dispose 自清,不值 workaround;最近使用 emoji 落 SharedPreferences=非 PII 的全局标准 UX,删聊天记录不该清;反向互斥/tooltip=对称逻辑低价值)。确认项:**文本经共享 controller 走 onSendText 无端到端测**(且文本发送全仓此前零测)→ 补 `chat_emoji_panel_test` 一条:断言 `EmojiPicker` 与 `Composer` 的 controller 为同一实例(防接错 controller 静默丢字)+ `enterText('你好🙂')`→点发送→`onSendText` 收到全文。
 - **测试(110→113,+3)**:`chat_emoji_panel_test`(点表情弹/收 EmojiPicker;共享 controller + 文本经 onSendText 发出;表情↔贴纸互斥)。
 - **验证**:`flutter analyze lib/chat test/chat` = No issues found;`dart format` 全过;`flutter test test/chat --concurrency=1` = **113 通过/4 跳过**。
-- **收官**:本卡三步(1 载荷地基 / 2 媒体采集传输 / 3 表情贴纸)全部完成;媒体升级唯一遗留 = 2d-2 分片断点续传(可选打磨,非阻断)。
+- **收官**:本卡三步(1 载荷地基 / 2 媒体采集传输 / 3 表情贴纸)全部完成。
+
+## 执行结果 · 步骤2d-2 分片断点续传（2026-07-15，完成）
+
+- **协议加一次握手**:`attachment_start` 后接收端回 `attachment_resume{resume_offset=本地同 attachment_id 的 .part 已存字节}`,发送端 `openRead(offset)` 只补缺口。用户定稿**不加 sha256**,完整性口径=精确大小校验 + attachmentId 内容不可变 + SCTP 有序可靠 + 续传偏移取磁盘实际大小(杜绝空洞/重叠)。
+- **接收缓冲**(`ChatAttachmentReceiveBuffer`):temp 由 `<transferId>.part` 改按 **`<attachmentId>.part`** 命名(跨尝试复用);`start` 复用已存 partial(`existing>declared` 清档重来)、append 追加写;`dispose` 由"删档"改为 **`_closeSink` 保留 partial**(断点续传核心),拒收/累积超限/大小不符仍 `_deletePartial` 删档;新增 `sweepStalePartials`(启动清 mtime 超 7 天的 `.part`,`chat_runtime` 调)。与 2d-1 `MediaResend` 衔接:peer_ready 补发同 id 只补缺口。
+- **对抗式审查(4 镜头 × 逐条 refute)**:确认 5 项、驳回 2 项,全部修复——**[高·真实 bug] 接收端无断线收口**:中途断线的 peer/append sink 常驻,同会话补发会在同一 `.part` 上开第二个 sink(两 sink 同 inode→partial 损坏/泄漏)→ 修:`onDataChannelState` Closed → `_closePeer`(释放 sink 保留 partial);**[中] 发送端未校验对端 `resume_offset`**:负值 `openRead(-1)` 抛 `RangeError`(非 Exception)逃逸门控 → 修:clamp 到 `[0, byteSize]` 越界从 0 重传;**[低] `dispose` 与在途 `finish` 竞态**删掉本要保留的 partial → 修:`_closePeer` 先 `await peer.tail` 再关流;**[中×2 测试]** `existing==declared` 零字节补发交付、`existing>declared` 清档重来补测。另**主动修**发送端 `sendAttachment` 建连/续传/ack 任一超时泄漏 peer+原生连接 → try/finally 幂等 `_closePeer`。
+- **测试(113→118,+5)**:`chat_webrtc_transport_test` 补 dispose 保留续写拼全 / handleIncomingFrame 回报偏移 / sweep 删超期 / existing==declared 零字节交付 / existing>declared 清档。
+- **验证**:`flutter analyze lib/chat test/chat` = No issues found;`dart format` 全过;`flutter test test/chat --concurrency=1` = **118 通过/4 跳过**。crypto/proto/Cloudflare/Isar **零改动**,维持零存储。
+- **收官**:媒体升级 2a–2d 全部完成,再无遗留。
 
 ## 待后续（非本卡）
 

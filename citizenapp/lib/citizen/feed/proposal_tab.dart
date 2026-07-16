@@ -87,8 +87,8 @@ class _ProposalViewState extends State<ProposalTab> {
   /// `_hasMore = _items.length < _allIds.length`。
   List<int> _allIds = const [];
 
-  /// accountHex -> InstitutionInfo。列表和详情复用,避免普通公权机构显示成账户名。
-  Map<String, InstitutionInfo> _knownInstitutionsByAccountHex = const {};
+  /// cidNumber -> InstitutionInfo。列表和详情只按机构唯一 CID 复用上下文。
+  Map<String, InstitutionInfo> _knownInstitutionsByCidNumber = const {};
 
   /// 待投票计数。
   int _pendingVoteCount = 0;
@@ -166,13 +166,13 @@ class _ProposalViewState extends State<ProposalTab> {
       // 本地缓存 _items 与 _allIds 口径不同步时同一提案出现两张卡片。
       final newItems = await _loadItemsForIds(
         newIds,
-        knownInstitutionsByAccountHex: scope.knownInstitutionsByAccountHex,
+        knownInstitutionsByCidNumber: scope.knownInstitutionsByCidNumber,
       );
       if (mounted) {
         setState(() {
           _items = _dedupById([...newItems, ..._items]);
           _allIds = fresh;
-          _knownInstitutionsByAccountHex = scope.knownInstitutionsByAccountHex;
+          _knownInstitutionsByCidNumber = scope.knownInstitutionsByCidNumber;
         });
         _updatePendingVoteCount();
       }
@@ -193,7 +193,7 @@ class _ProposalViewState extends State<ProposalTab> {
   Future<
       ({
         Set<String> subscribedInstitutionCidNumbers,
-        Map<String, InstitutionInfo> knownInstitutionsByAccountHex,
+        Map<String, InstitutionInfo> knownInstitutionsByCidNumber,
       })> _loadInstitutionScope() async {
     // 机构/行政区数据包（首装 4.2 万条行政区，秒级~十几秒）**不阻塞**提案流
     // 首屏：后台同步，首次未就绪先按链上机构码兜底显示（代码本就容忍缺数据），
@@ -214,7 +214,7 @@ class _ProposalViewState extends State<ProposalTab> {
     final known = <String, InstitutionInfo>{};
     for (final inst in [...defaultInstitutions, ...subscribedInstitutions]) {
       final info = _institutionInfoFromInstitution(inst);
-      known[_normalizeAccountHex(info.mainAccount)] = info;
+      known[info.cidNumber] = info;
     }
 
     final subscribedCidNumbers = <String>{
@@ -222,7 +222,7 @@ class _ProposalViewState extends State<ProposalTab> {
     };
     return (
       subscribedInstitutionCidNumbers: subscribedCidNumbers,
-      knownInstitutionsByAccountHex: known,
+      knownInstitutionsByCidNumber: known,
     );
   }
 
@@ -247,29 +247,27 @@ class _ProposalViewState extends State<ProposalTab> {
     final govInfo = _institutionRepo.governanceInfo(inst.cidNumber);
     if (govInfo != null) return govInfo;
     final rows = institutionAccountRows(inst);
-    final main = rows.isNotEmpty ? rows.first.accountHex : inst.mainAccountHex;
-    final fee = rows.length > 1 ? rows[1].accountHex : null;
+    if (rows.length < 2) {
+      throw StateError('机构账户集合缺少主账户或费用账户: ${inst.cidNumber}');
+    }
+    final main = rows.first.accountHex;
+    final fee = rows[1].accountHex;
     return InstitutionInfo(
       cidFullName: inst.cidFullName,
       cidShortName: inst.cidShortNameOrFullName,
       cidFullNameEn: inst.cidFullName,
       cidShortNameEn: inst.cidShortNameOrFullName,
-      cidNumber: registeredAccountIdentity(main),
+      cidNumber: inst.cidNumber,
       orgType: inst.orgType,
       accounts: InstitutionAccounts(mainAccount: main, feeAccount: fee),
       adminAccountCode: inst.institutionCode,
     );
   }
 
-  static String _normalizeAccountHex(String hex) {
-    final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
-    return clean.toLowerCase();
-  }
-
   Future<
       ({
         List<int> ids,
-        Map<String, InstitutionInfo> knownInstitutionsByAccountHex,
+        Map<String, InstitutionInfo> knownInstitutionsByCidNumber,
       })> _fetchVisibleProposalScope({bool forceRefresh = false}) async {
     final institutionScope = await _loadInstitutionScope();
     final ids = await _multisigTransferFeed.fetchCitizenProposalFeedIds(
@@ -280,8 +278,8 @@ class _ProposalViewState extends State<ProposalTab> {
     );
     return (
       ids: ids,
-      knownInstitutionsByAccountHex:
-          institutionScope.knownInstitutionsByAccountHex,
+      knownInstitutionsByCidNumber:
+          institutionScope.knownInstitutionsByCidNumber,
     );
   }
 
@@ -301,7 +299,7 @@ class _ProposalViewState extends State<ProposalTab> {
         setState(() {
           _allIds = const [];
           _items = const [];
-          _knownInstitutionsByAccountHex = scope.knownInstitutionsByAccountHex;
+          _knownInstitutionsByCidNumber = scope.knownInstitutionsByCidNumber;
           _loading = false;
         });
         widget.onPendingVoteCountChanged?.call(0);
@@ -313,14 +311,14 @@ class _ProposalViewState extends State<ProposalTab> {
           ids.sublist(0, ids.length < _pageSize ? ids.length : _pageSize);
       final items = await _loadItemsForIds(
         firstPageIds,
-        knownInstitutionsByAccountHex: scope.knownInstitutionsByAccountHex,
+        knownInstitutionsByCidNumber: scope.knownInstitutionsByCidNumber,
       );
 
       if (!mounted) return;
       setState(() {
         _allIds = ids;
         _items = items;
-        _knownInstitutionsByAccountHex = scope.knownInstitutionsByAccountHex;
+        _knownInstitutionsByCidNumber = scope.knownInstitutionsByCidNumber;
         _loading = false;
       });
 
@@ -348,7 +346,7 @@ class _ProposalViewState extends State<ProposalTab> {
       final pageIds = _allIds.sublist(from, to);
       final newItems = await _loadItemsForIds(
         pageIds,
-        knownInstitutionsByAccountHex: _knownInstitutionsByAccountHex,
+        knownInstitutionsByCidNumber: _knownInstitutionsByCidNumber,
       );
 
       if (!mounted) return;
@@ -369,7 +367,7 @@ class _ProposalViewState extends State<ProposalTab> {
   /// 返回 `_ProposalDisplayItem` 列表(顺序与入参一致)。
   Future<List<_ProposalDisplayItem>> _loadItemsForIds(
     List<int> ids, {
-    Map<String, InstitutionInfo> knownInstitutionsByAccountHex = const {},
+    Map<String, InstitutionInfo> knownInstitutionsByCidNumber = const {},
   }) async {
     if (ids.isEmpty) return const [];
 
@@ -378,9 +376,11 @@ class _ProposalViewState extends State<ProposalTab> {
 
     // 批量解析提案上下文
     final contexts = await _contextResolver.resolveBatch(
-      proposals.map((p) => p.meta.institutionBytes?.toList()).toList(),
+      proposals.map((p) => p.meta.actorCidNumber).toList(),
+      executionAccounts:
+          proposals.map((p) => p.meta.executionAccount?.toList()).toList(),
       internalCodeList: proposals.map((p) => p.meta.internalCode).toList(),
-      knownInstitutionsByAccountHex: knownInstitutionsByAccountHex,
+      knownInstitutionsByCidNumber: knownInstitutionsByCidNumber,
     );
 
     // ADR-018 R2:一次性批量算出"哪些提案需要投票",替代过去每提案各发一次
@@ -747,9 +747,10 @@ class _ProposalViewState extends State<ProposalTab> {
       if (proposals.isEmpty) return null;
       final proposal = proposals.first;
       final contexts = await _contextResolver.resolveBatch(
-        [proposal.meta.institutionBytes?.toList()],
+        [proposal.meta.actorCidNumber],
+        executionAccounts: [proposal.meta.executionAccount?.toList()],
         internalCodeList: [proposal.meta.internalCode],
-        knownInstitutionsByAccountHex: _knownInstitutionsByAccountHex,
+        knownInstitutionsByCidNumber: _knownInstitutionsByCidNumber,
       );
       final proposalContext =
           contexts.isEmpty ? const ProposalContext() : contexts.first;

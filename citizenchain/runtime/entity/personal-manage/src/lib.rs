@@ -440,8 +440,7 @@ pub mod pallet {
                 Error::<T>::ProposalActionNotFound
             );
             ensure!(
-                proposal.execution_account == Some(account)
-                    && proposal.actor_cid_number.is_none(),
+                proposal.execution_account == Some(account) && proposal.actor_cid_number.is_none(),
                 Error::<T>::ProposalActionNotFound
             );
             ensure!(

@@ -3,33 +3,30 @@ import 'dart:typed_data';
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/institution/institution_role_storage_codec.dart';
-import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
 class AdminAccountCodec {
   AdminAccountCodec._();
 
-  static AdminAccountState? decode(
-    Uint8List accountId,
-    Uint8List data, {
-    required bool personalMultisig,
-    int? institutionKind,
+  static AdminAccountState? decodeInstitution({
+    required String cidNumber,
+    required Uint8List data,
+    required int institutionKind,
   }) {
-    if (!personalMultisig) {
-      final decoded = InstitutionRoleStorageCodec.decodeAdminAccount(data);
-      if (decoded == null) return null;
-      return AdminAccountState(
-        accountHex: AdminAccountIdCodec.hexEncode(accountId),
-        institutionCode: decoded.institutionCode,
-        kind: institutionKind ??
-            InstitutionCodeLabel.adminAccountKind(decoded.institutionCode),
-        admins: decoded.admins,
-        threshold: 0,
-        creatorHex: '',
-        createdAt: 0,
-        updatedAt: 0,
-        status: decoded.status,
-      );
-    }
+    final decoded = InstitutionRoleStorageCodec.decodeAdminAccount(data);
+    if (decoded == null) return null;
+    return AdminAccountState(
+      cidNumber: cidNumber,
+      institutionCode: decoded.institutionCode,
+      kind: institutionKind,
+      admins: decoded.admins,
+      threshold: 0,
+    );
+  }
+
+  static AdminAccountState? decodePersonal(
+    Uint8List personalAccount,
+    Uint8List data,
+  ) {
     if (data.length < 5) return null;
     var offset = 0;
     // 链端 AdminAccount 前导字段 cid_number: BoundedVec<u8>(个人多签为空);仅消费字节。
@@ -60,17 +57,17 @@ class AdminAccountCodec {
     offset += 4;
     final status = data[offset];
     return AdminAccountState(
-      accountHex: AdminAccountIdCodec.hexEncode(accountId),
+      personalAccountHex: AdminAccountIdCodec.hexEncode(personalAccount),
       institutionCode: institutionCode,
       kind: kind,
       admins: admins,
       // runtime 的各管理员 `AdminAccounts` 已不再保存阈值；
       // 调用方必须从 internal-vote 动态阈值 storage 或治理固定常量补齐。
       threshold: 0,
-      creatorHex: creatorHex,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-      status: status,
+      personalCreatorHex: creatorHex,
+      personalCreatedAt: createdAt,
+      personalUpdatedAt: updatedAt,
+      personalStatus: status,
     );
   }
 

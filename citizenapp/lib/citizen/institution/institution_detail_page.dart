@@ -75,8 +75,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   Institution? _inst;
 
-  /// 提案/管理员入口使用的链上主体信息。固定治理档来自静态注册表,注册机构账户
-  /// 则由目录机构派生出 `institution-account:<mainAccount>` identity。
+  /// 提案/管理员入口使用的链上主体信息。所有机构都以目录或静态注册表中的
+  /// CID 为唯一身份；账户集合只用于具体资金操作。
   InstitutionInfo? _govInfo;
   bool get _isGovernance =>
       InstitutionClassification.isGovernance(_inst?.institutionCode ?? '');
@@ -137,8 +137,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       setState(() => _loading = false);
       return;
     }
-    // 全机构统一开提案入口:治理三类用静态档(含安全基金等专户),其余从机构派生
-    // 注册机构账户 identity。是否能发起某类提案交给 ProposalCapabilityRegistry。
+    // 全机构统一开提案入口:固定治理档使用静态档(含安全基金等专户),其余机构
+    // 由目录 CID 派生主体。是否能发起某类提案交给 ProposalCapabilityRegistry。
     final govInfo = widget.repository.governanceInfo(inst.cidNumber) ??
         _infoFromInstitution(inst);
     final subscribed = pubkey == null
@@ -158,21 +158,21 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     unawaited(_loadDynamics());
   }
 
-  /// 为非治理注册机构从 Institution 派生 InstitutionInfo(主/费账户 + 机构码)。
-  ///
-  /// 这里的 `cidNumber` 故意使用 `institution-account:<mainAccount>`,
-  /// 因为转账、管理员更换等链上 call 需要的是被管理账户 identity;真实 CID 仍保留在
-  /// Institution 页面模型中用于展示和目录查询。
+  /// 为非治理注册机构从 Institution 派生 InstitutionInfo。
+  /// CID 始终是机构主键，主/费账户只进入具体账户操作。
   InstitutionInfo _infoFromInstitution(Institution inst) {
     final rows = institutionAccountRows(inst);
-    final main = rows.isNotEmpty ? rows.first.accountHex : '';
-    final fee = rows.length > 1 ? rows[1].accountHex : null;
+    if (rows.length < 2) {
+      throw StateError('机构账户集合缺少主账户或费用账户: ${inst.cidNumber}');
+    }
+    final main = rows.first.accountHex;
+    final fee = rows[1].accountHex;
     return InstitutionInfo(
       cidFullName: inst.cidFullName,
       cidShortName: inst.cidShortNameOrFullName,
       cidFullNameEn: inst.cidFullName, // 普通公权机构暂无英文名,中文兜底
       cidShortNameEn: inst.cidShortNameOrFullName,
-      cidNumber: registeredAccountIdentity(main),
+      cidNumber: inst.cidNumber,
       orgType: inst.orgType,
       accounts: InstitutionAccounts(mainAccount: main, feeAccount: fee),
       adminAccountCode: inst.institutionCode,

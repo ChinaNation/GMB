@@ -1,9 +1,8 @@
 // AdminAccountStorageCodec golden test:固定字节 -> 固定解码结果。
 //
-// 覆盖链上三类管理员 pallet `AdminAccounts` 的最小解码路径：
-// - PublicInstitution (kind=0)
-// - Personal (kind=2)
-// - storage key 末 32B AccountId 提取
+// 覆盖链上三类管理员 pallet `AdminAccounts` 的目标布局：
+// - 机构 value 只保存 institution_code + admins，CID 来自 storage key；
+// - 个人多签 value 保持独立账户布局，personal_account 来自 storage key。
 
 import 'dart:typed_data';
 
@@ -20,22 +19,21 @@ void main() {
     return out;
   }
 
-  // 前导 cid_number: Compact<u32> 长度(<64 → 单字节 mode0)+ UTF8 字节;空 = [0x00]。
-  List<int> cidPrefix(String cid) {
+  List<int> scaleBytes(String cid) {
     final raw = cid.codeUnits;
     return [raw.length << 2, ...raw];
   }
 
   group('tryDecode', () {
-    test('成功解码 PublicInstitution(0 admins,非空前导 cid)', () {
-      // cid_number=NRC01, institution_code=NRC, kind=0, admins=Compact(0)=0x00。
+    test('成功解码 PublicInstitution(0 admins)', () {
       final bytes = Uint8List.fromList([
-        ...cidPrefix('NRC01'),
         ...codeBytes('NRC'),
-        AdminAccountStorageCodec.kindPublicInstitution,
         0,
       ]);
-      final r = AdminAccountStorageCodec.tryDecode(bytes)!;
+      final r = AdminAccountStorageCodec.tryDecode(
+        bytes,
+        kind: AdminAccountStorageCodec.kindPublicInstitution,
+      )!;
       expect(r.institutionCode, 'NRC');
       expect(r.kind, AdminAccountStorageCodec.kindPublicInstitution);
       expect(r.adminsHex, isEmpty);
@@ -46,15 +44,21 @@ void main() {
       final a2 = List.filled(32, 0x22);
       final a3 = List.filled(32, 0x33);
       final bytes = Uint8List.fromList([
-        ...cidPrefix(''), // 个人多签前导 cid 为空
+        0, // 个人多签结构中的 cid_number 为空
         ...codeBytes('PMUL'),
         AdminAccountStorageCodec.kindPersonal,
         0x0C, // Compact(3): (3<<2) | 0 = 12
         ...a1,
         ...a2,
         ...a3,
+        ...List.filled(32, 0x44),
+        ...List.filled(8, 0),
+        1,
       ]);
-      final r = AdminAccountStorageCodec.tryDecode(bytes)!;
+      final r = AdminAccountStorageCodec.tryDecode(
+        bytes,
+        kind: AdminAccountStorageCodec.kindPersonal,
+      )!;
       expect(r.institutionCode, 'PMUL');
       expect(r.kind, AdminAccountStorageCodec.kindPersonal);
       expect(r.adminsHex, ['11' * 32, '22' * 32, '33' * 32]);
@@ -64,42 +68,57 @@ void main() {
       final a1 = List.filled(32, 0x44);
       final a2 = List.filled(32, 0x55);
       final bytes = Uint8List.fromList([
-        ...cidPrefix('CGOV9'),
         ...codeBytes('CGOV'),
-        AdminAccountStorageCodec.kindPublicInstitution,
         0x08, // Compact(2)
         ...a1,
         ...a2,
       ]);
-      final r = AdminAccountStorageCodec.tryDecode(bytes)!;
+      final r = AdminAccountStorageCodec.tryDecode(
+        bytes,
+        kind: AdminAccountStorageCodec.kindPublicInstitution,
+      )!;
       expect(r.institutionCode, 'CGOV');
       expect(r.kind, AdminAccountStorageCodec.kindPublicInstitution);
       expect(r.adminsHex, ['44' * 32, '55' * 32]);
     });
 
     test('字节不足返回 null,不抛异常', () {
-      expect(AdminAccountStorageCodec.tryDecode(Uint8List(0)), isNull);
-      // 仅前导 cid 空字节、无 institution_code/kind → null。
       expect(
-          AdminAccountStorageCodec.tryDecode(Uint8List.fromList([0])), isNull);
+        AdminAccountStorageCodec.tryDecode(
+          Uint8List(0),
+          kind: AdminAccountStorageCodec.kindPublicInstitution,
+        ),
+        isNull,
+      );
+      expect(
+        AdminAccountStorageCodec.tryDecode(
+          Uint8List.fromList([0]),
+          kind: AdminAccountStorageCodec.kindPersonal,
+        ),
+        isNull,
+      );
     });
 
     test('admins 数量超过实际字节返回 null', () {
       final bytes = Uint8List.fromList([
-        ...cidPrefix(''),
         ...codeBytes('NRC'),
-        AdminAccountStorageCodec.kindPublicInstitution,
         0x08, // 声明 2 个 admin 但只给 1 个的字节。
         ...List.filled(32, 0xCC),
       ]);
-      expect(AdminAccountStorageCodec.tryDecode(bytes), isNull);
+      expect(
+        AdminAccountStorageCodec.tryDecode(
+          bytes,
+          kind: AdminAccountStorageCodec.kindPublicInstitution,
+        ),
+        isNull,
+      );
     });
 
     test('Compact 64 admins (mode=1 两字节长度)', () {
       const adminsLen = 64;
       final admins = List.generate(adminsLen, (_) => List.filled(32, 0xDD));
       final bytes = <int>[
-        ...cidPrefix(''),
+        0,
         ...codeBytes('PMUL'),
         AdminAccountStorageCodec.kindPersonal,
         0x01,
@@ -108,22 +127,35 @@ void main() {
       for (final a in admins) {
         bytes.addAll(a);
       }
-      final r = AdminAccountStorageCodec.tryDecode(Uint8List.fromList(bytes))!;
+      bytes.addAll(List.filled(32, 0xEE));
+      bytes.addAll(List.filled(8, 0));
+      bytes.add(1);
+      final r = AdminAccountStorageCodec.tryDecode(
+        Uint8List.fromList(bytes),
+        kind: AdminAccountStorageCodec.kindPersonal,
+      )!;
       expect(r.adminsHex.length, adminsLen);
     });
   });
 
-  group('extractAccountIdFromKey', () {
-    test('完整 storage key 末 32 字节 = AccountId', () {
-      final key = Uint8List(32 + 16 + 32); // prefix + hash + AccountId
-      for (var i = 32 + 16; i < key.length; i++) {
-        key[i] = i - (32 + 16);
+  group('storage key 主键提取', () {
+    test('机构 storage key 提取 CID', () {
+      const cid = 'GD001-CGOV0-123456789-2026';
+      final key = Uint8List.fromList([
+        ...List.filled(32, 0),
+        ...List.filled(16, 1),
+        ...scaleBytes(cid),
+      ]);
+      expect(AdminAccountStorageCodec.extractCidNumberFromKey(key), cid);
+    });
+
+    test('个人多签 storage key 末 32 字节 = personal_account', () {
+      final key = Uint8List(32 + 16 + 32);
+      for (var i = 48; i < key.length; i++) {
+        key[i] = i - 48;
       }
-      final accountId = AdminAccountStorageCodec.extractAccountIdFromKey(key)!;
-      expect(accountId.length, 32);
-      for (var i = 0; i < 32; i++) {
-        expect(accountId[i], i);
-      }
+      final accountId =
+          AdminAccountStorageCodec.extractPersonalAccountFromKey(key)!;
       expect(
         AdminAccountStorageCodec.accountHexFromAccountId(accountId),
         '000102030405060708090a0b0c0d0e0f'
@@ -133,7 +165,11 @@ void main() {
 
     test('storage key 长度不足返回 null', () {
       expect(
-        AdminAccountStorageCodec.extractAccountIdFromKey(Uint8List(20)),
+        AdminAccountStorageCodec.extractCidNumberFromKey(Uint8List(20)),
+        isNull,
+      );
+      expect(
+        AdminAccountStorageCodec.extractPersonalAccountFromKey(Uint8List(20)),
         isNull,
       );
       expect(

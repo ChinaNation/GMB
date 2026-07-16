@@ -208,10 +208,10 @@ pub mod pallet {
             // 仅”能解压”为曲线点还不够，small-order 弱公钥可能导致 GRANDPA 签名安全性失真。
             ensure!(!point.is_small_order(), Error::<T>::InvalidEd25519Key);
 
-            let actual_org = cid_org(actor_cid_number.as_slice())
-                .ok_or(Error::<T>::InvalidInstitution)?;
+            let actual_org =
+                cid_org(actor_cid_number.as_slice()).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
-                Self::is_internal_admin(actual_org, actor_cid_number.as_slice(), &who),
+                Self::is_institution_admin(actual_org, actor_cid_number.as_slice(), &who),
                 Error::<T>::UnauthorizedAdmin
             );
 
@@ -259,7 +259,7 @@ pub mod pallet {
 
     impl<T: Config> Pallet<T> {
         /// 检查调用者是否为指定机构的内部管理员。
-        fn is_internal_admin(
+        fn is_institution_admin(
             institution_code: InstitutionCode,
             actor_cid_number: &[u8],
             who: &T::AccountId,
@@ -294,7 +294,10 @@ pub mod pallet {
                     && proposal.stage == STAGE_INTERNAL
                     && proposal.status == STATUS_PASSED
                     && proposal.internal_code == Some(actual_org)
-                    && proposal.actor_cid_number.as_ref().map(|value| value.as_slice())
+                    && proposal
+                        .actor_cid_number
+                        .as_ref()
+                        .map(|value| value.as_slice())
                         == Some(action.actor_cid_number.as_slice())
                     && proposal.execution_account.is_none(),
                 Error::<T>::ProposalNotPassed
@@ -393,10 +396,8 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         if !approved {
             return Ok(ProposalExecutionOutcome::Executed);
         }
-        let action = GrandpaKeyReplacementAction::decode(
-            &mut &raw[crate::MODULE_TAG.len()..],
-        )
-        .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+        let action = GrandpaKeyReplacementAction::decode(&mut &raw[crate::MODULE_TAG.len()..])
+            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
 
         match pallet::Pallet::<T>::validate_action(&action) {
             Err(pallet::Error::<T>::GrandpaChangePending) => {
@@ -432,10 +433,8 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
             Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
             _ => return Ok(ProposalCancelDecision::Ignored),
         };
-        let action = GrandpaKeyReplacementAction::decode(
-            &mut &raw[crate::MODULE_TAG.len()..],
-        )
-        .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+        let action = GrandpaKeyReplacementAction::decode(&mut &raw[crate::MODULE_TAG.len()..])
+            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
         // 只允许取消确定不可执行的 GRANDPA 替换；pending change 属于可恢复失败。
         match pallet::Pallet::<T>::validate_action(&action) {
             Ok(_) => Err(pallet::Error::<T>::ProposalStillExecutable.into()),

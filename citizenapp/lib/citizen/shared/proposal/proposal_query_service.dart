@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:polkadart/polkadart.dart' show Hasher;
+import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
+import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
 import 'package:citizenapp/votingengine/internal-vote/internal_vote_query_service.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
@@ -17,11 +20,14 @@ class ProposalQueryService {
   final ChainRpc _rpc;
   final InternalVoteQueryService _internalVoteQuery;
 
+  /// 与 runtime `MaxActiveProposals = 10` 对齐的提案主体上限。
+  static const maxActiveProposalsPerSubject = 10;
+
   /// 查询 NextProposalId（投票引擎全局递增 ID）。
   Future<int> fetchNextProposalId() async {
     final key = _buildStorageValueKey('VotingEngine', 'NextProposalId');
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
-    if (data == null || data.length < 8) return 0;
+    if (data == null || data.length != 8) return 0;
     return _decodeU64(data);
   }
 
@@ -33,8 +39,90 @@ class ProposalQueryService {
       _u64ToLeBytes(proposalId),
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
-    if (data == null || data.length < 3) return null;
-    return data[2];
+    if (data == null) return null;
+    return decodeProposalMeta(proposalId, data)?.status;
+  }
+
+  /// 查询并严格解码投票引擎提案元数据。
+  Future<ProposalMeta?> fetchProposalMeta(int proposalId) async {
+    final key = _buildStorageKey(
+      'VotingEngine',
+      'Proposals',
+      _u64ToLeBytes(proposalId),
+    );
+    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    if (data == null) return null;
+    return decodeProposalMeta(proposalId, data);
+  }
+
+  /// `VotingEngine::Proposal` SCALE 解码唯一真源。
+  ///
+  /// 任何业务服务需要提案元数据时必须调用本方法，禁止复制字段布局。
+  static ProposalMeta? decodeProposalMeta(int proposalId, Uint8List data) {
+    try {
+      // Proposal = kind + stage + status + internal_code Option
+      //   + actor_cid_number Option + execution_account Option
+      //   + subject CID 集合 + start(u32) + end(u32)
+      //   + citizen_eligible_total(u64)。
+      if (data.length < 3 + 3 + 1 + 4 + 4 + 8) return null;
+      final kind = data[0];
+      final stage = data[1];
+      final status = data[2];
+      var offset = 3;
+
+      String? internalCode;
+      final internalCodeTag = data[offset++];
+      if (internalCodeTag == 1) {
+        if (offset + 4 > data.length) return null;
+        internalCode = InstitutionCodeLabel.codeToString(
+          data.sublist(offset, offset + 4),
+        );
+        offset += 4;
+      } else if (internalCodeTag != 0) {
+        return null;
+      }
+
+      String? actorCidNumber;
+      if (offset >= data.length) return null;
+      final actorCidTag = data[offset++];
+      if (actorCidTag == 1) {
+        final decoded = _readCidNumber(data, offset);
+        if (decoded == null) return null;
+        actorCidNumber = decoded.$1;
+        offset = decoded.$2;
+      } else if (actorCidTag != 0) {
+        return null;
+      }
+
+      Uint8List? executionAccount;
+      if (offset >= data.length) return null;
+      final executionAccountTag = data[offset++];
+      if (executionAccountTag == 1) {
+        if (offset + 32 > data.length) return null;
+        executionAccount =
+            Uint8List.fromList(data.sublist(offset, offset + 32));
+        offset += 32;
+      } else if (executionAccountTag != 0) {
+        return null;
+      }
+
+      final subjectCids = _decodeSubjectCidNumbers(data, offset);
+      if (subjectCids == null) return null;
+      if (subjectCids.$2 + 4 + 4 + 8 != data.length) return null;
+
+      return ProposalMeta(
+        proposalId: proposalId,
+        kind: kind,
+        stage: stage,
+        status: status,
+        internalCode: internalCode,
+        actorCidNumber: actorCidNumber,
+        executionAccount: executionAccount,
+        subjectCidNumbers: subjectCids.$1,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   /// 查询投票计数。
@@ -45,7 +133,7 @@ class ProposalQueryService {
       _u64ToLeBytes(proposalId),
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
-    if (data == null || data.length < 8) return (yes: 0, no: 0);
+    if (data == null || data.length != 8) return (yes: 0, no: 0);
     return (yes: _decodeU32(data, 0), no: _decodeU32(data, 4));
   }
 
@@ -57,7 +145,7 @@ class ProposalQueryService {
       _u64ToLeBytes(proposalId),
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
-    if (data == null || data.length < 4) return null;
+    if (data == null || data.length != 4) return null;
     return _decodeU32(data, 0);
   }
 
@@ -70,25 +158,50 @@ class ProposalQueryService {
       'VotingEngine',
       'AdminSnapshot',
       _u64ToLeBytes(proposalId),
-      Uint8List.fromList(
-        institutionIdentityToAccountId(
-          institution.cidNumber,
-          mainAccount: institution.mainAccount,
-        ),
-      ),
+      proposalSubjectKey(institution),
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
-    if (data == null || data.isEmpty) return const [];
-    final (count, lenSize) = _decodeCompact(data, 0);
-    final admins = <String>[];
-    var offset = lenSize;
-    for (var i = 0; i < count && offset + 32 <= data.length; i++) {
-      admins.add(
-        _hexEncode(Uint8List.fromList(data.sublist(offset, offset + 32))),
-      );
-      offset += 32;
+    if (data == null) {
+      throw StateError('提案 $proposalId 缺少 VotingEngine::AdminSnapshot');
     }
-    return admins;
+    final decoded = decodeAdminSnapshot(data);
+    if (decoded == null || decoded.isEmpty) {
+      throw const FormatException('VotingEngine::AdminSnapshot SCALE 数据无效');
+    }
+    return decoded;
+  }
+
+  /// 查询某个提案主体当前的活跃提案 ID。
+  Future<List<int>> fetchActiveProposalIds(InstitutionInfo institution) async {
+    return _fetchActiveProposalIdsBySubjectKey(proposalSubjectKey(institution));
+  }
+
+  /// 个人多签历史同步入口；个人多签没有 CID，只能以 AccountId 为主体。
+  Future<List<int>> fetchActivePersonalProposalIds(
+    String personalAccountHex,
+  ) {
+    return _fetchActiveProposalIdsBySubjectKey(
+      personalAccountSubjectKey(personalAccountHex),
+    );
+  }
+
+  Future<List<int>> _fetchActiveProposalIdsBySubjectKey(
+    Uint8List subjectKey,
+  ) async {
+    final key = _buildStorageKey(
+      'VotingEngine',
+      'ActiveProposalsBySubject',
+      subjectKey,
+    );
+    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    if (data == null) return const [];
+    final decoded = decodeActiveProposalIds(data);
+    if (decoded == null) {
+      throw const FormatException(
+        'VotingEngine::ActiveProposalsBySubject SCALE 数据无效',
+      );
+    }
+    return decoded;
   }
 
   /// 查询某管理员对某提案的投票记录。
@@ -170,15 +283,107 @@ class ProposalQueryService {
     return result;
   }
 
-  (int, int) _decodeCompact(Uint8List data, int offset) {
+  /// `VotingEngine::ProposalSubject` 的唯一 SCALE 编码真源。
+  ///
+  /// 机构主体固定为 `InstitutionCid(cid_number)`；只有个人多签使用
+  /// `PersonalAccount(account_id)`，机构账户绝不能替代机构 CID。
+  static Uint8List proposalSubjectKey(InstitutionInfo institution) {
+    if (isPersonalAccountIdentity(institution.cidNumber)) {
+      return personalAccountSubjectKey(institution.personalAccountHex);
+    }
+
+    return institutionCidSubjectKey(institution.cidNumber);
+  }
+
+  /// `ProposalSubject::InstitutionCid` 编码；只接受机构 CID。
+  static Uint8List institutionCidSubjectKey(String cidNumber) {
+    final normalized = cidNumber.trim();
+    if (isPersonalAccountIdentity(normalized)) {
+      throw ArgumentError('个人多签身份不得编码为 InstitutionCid');
+    }
+    final cidBytes = Uint8List.fromList(utf8.encode(normalized));
+    if (cidBytes.isEmpty || cidBytes.length > 32) {
+      throw ArgumentError('机构 CID 的 UTF-8 长度必须为 1..32 字节');
+    }
+    final length = _encodeCompactInt(cidBytes.length);
+    return Uint8List.fromList([0, ...length, ...cidBytes]);
+  }
+
+  /// `ProposalSubject::PersonalAccount` 编码；AccountId 必须恰好 32 字节。
+  static Uint8List personalAccountSubjectKey(String personalAccountHex) {
+    return Uint8List.fromList([
+      1,
+      ...institutionAccountId(personalAccountHex),
+    ]);
+  }
+
+  /// 严格解码 `BoundedVec<AccountId32>` 管理员快照。
+  static List<String>? decodeAdminSnapshot(Uint8List data) {
+    try {
+      final (count, lenSize) = _decodeCompact(data, 0);
+      if (lenSize + count * 32 != data.length) return null;
+      return List<String>.unmodifiable([
+        for (var offset = lenSize; offset < data.length; offset += 32)
+          _hexEncode(
+            Uint8List.fromList(data.sublist(offset, offset + 32)),
+          ),
+      ]);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 严格解码 `BoundedVec<u64, MaxActiveProposals>`。
+  static List<int>? decodeActiveProposalIds(Uint8List data) {
+    try {
+      final (count, lenSize) = _decodeCompact(data, 0);
+      if (count > maxActiveProposalsPerSubject ||
+          lenSize + count * 8 != data.length) {
+        return null;
+      }
+      return List<int>.unmodifiable([
+        for (var offset = lenSize; offset < data.length; offset += 8)
+          ByteData.sublistView(data, offset, offset + 8)
+              .getUint64(0, Endian.little),
+      ]);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Uint8List _encodeCompactInt(int value) {
+    if (value < 1 << 6) return Uint8List.fromList([value << 2]);
+    if (value < 1 << 14) {
+      final encoded = (value << 2) | 1;
+      return Uint8List.fromList([encoded & 0xff, encoded >> 8]);
+    }
+    final encoded = (value << 2) | 2;
+    return Uint8List.fromList([
+      encoded & 0xff,
+      (encoded >> 8) & 0xff,
+      (encoded >> 16) & 0xff,
+      (encoded >> 24) & 0xff,
+    ]);
+  }
+
+  static (int, int) _decodeCompact(Uint8List data, int offset) {
+    if (offset < 0 || offset >= data.length) {
+      throw const FormatException('Compact<u32> offset 越界');
+    }
     final first = data[offset];
     final mode = first & 0x03;
     if (mode == 0) return (first >> 2, 1);
     if (mode == 1) {
+      if (offset + 1 >= data.length) {
+        throw const FormatException('Compact<u32> mode1 长度不足');
+      }
       final val = (data[offset] | (data[offset + 1] << 8)) >> 2;
       return (val, 2);
     }
     if (mode == 2) {
+      if (offset + 3 >= data.length) {
+        throw const FormatException('Compact<u32> mode2 长度不足');
+      }
       final val = (data[offset] |
               (data[offset + 1] << 8) |
               (data[offset + 2] << 16) |
@@ -186,12 +391,39 @@ class ProposalQueryService {
           2;
       return (val, 4);
     }
-    final lenBytes = (first >> 2) + 4;
-    var val = 0;
-    for (var i = lenBytes - 1; i >= 0; i--) {
-      val = (val << 8) | data[offset + 1 + i];
+    throw const FormatException('Compact<u32> big-integer 模式不支持');
+  }
+
+  static (String, int)? _readCidNumber(Uint8List data, int offset) {
+    final (length, compactSize) = _decodeCompact(data, offset);
+    final start = offset + compactSize;
+    final end = start + length;
+    if (length <= 0 || length > 32 || end > data.length) return null;
+    try {
+      return (
+        utf8.decode(data.sublist(start, end), allowMalformed: false),
+        end,
+      );
+    } on FormatException {
+      return null;
     }
-    return (val, 1 + lenBytes);
+  }
+
+  static (List<String>, int)? _decodeSubjectCidNumbers(
+    Uint8List data,
+    int offset,
+  ) {
+    final (count, lenSize) = _decodeCompact(data, offset);
+    if (count > 256) return null;
+    var cursor = offset + lenSize;
+    final result = <String>[];
+    for (var i = 0; i < count; i++) {
+      final decoded = _readCidNumber(data, cursor);
+      if (decoded == null) return null;
+      result.add(decoded.$1);
+      cursor = decoded.$2;
+    }
+    return (List.unmodifiable(result), cursor);
   }
 
   Uint8List _u64ToLeBytes(int value) {

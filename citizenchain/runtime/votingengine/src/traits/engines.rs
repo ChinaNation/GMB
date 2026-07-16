@@ -94,7 +94,9 @@ pub trait InternalVoteEngine<AccountId> {
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        Err(DispatchError::Other("PersonalLifecycleVoteEngineNotConfigured"))
+        Err(DispatchError::Other(
+            "PersonalLifecycleVoteEngineNotConfigured",
+        ))
     }
 
     /// 创建注册个人多签的特别内部投票提案。

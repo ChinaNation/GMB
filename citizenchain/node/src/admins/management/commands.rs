@@ -7,7 +7,10 @@ use crate::{
     home,
 };
 
-use super::{account_id, storage, types::{institution_code_label, is_valid_institution_code, AdminAccountState}};
+use super::{
+    account_id, storage,
+    types::{institution_code_label, is_valid_institution_code, AdminAccountState},
+};
 
 /// 把前端传入的机构码字符串(如 "NRC"/"CGOV")转成链上 [u8;4]。空串/缺省 → None。
 fn parse_expected_code(expected: Option<&str>) -> Option<InstitutionCode> {

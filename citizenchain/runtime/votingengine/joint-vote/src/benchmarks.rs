@@ -25,7 +25,7 @@ fn setup_proposal<T: Config>(
     votingengine::Proposal<frame_system::pallet_prelude::BlockNumberFor<T>, T::AccountId>,
 ) {
     let proposal_id = 0u64;
-    let institution = decode::<T>(&primitives::cid::china::china_cb::CHINA_CB[0].main_account);
+    let nrc = &primitives::cid::china::china_cb::CHINA_CB[0];
     let now = 1u32.saturated_into();
     frame_system::Pallet::<T>::set_block_number(now);
     let proposal = votingengine::Proposal {
@@ -33,7 +33,14 @@ fn setup_proposal<T: Config>(
         stage,
         status: votingengine::STATUS_VOTING,
         internal_code: None,
-        account_context: Some(institution),
+        actor_cid_number: Some(
+            nrc.cid_number
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("NRC CID fits"),
+        ),
+        execution_account: None,
         subject_cid_numbers: Default::default(),
         start: 0u32.saturated_into(),
         end: 2u32.saturated_into(),
@@ -59,12 +66,19 @@ mod benchmarks {
             <T as votingengine::Config>::CitizenIdentityReader::create_population_snapshot(&scope)
                 .expect("benchmark population snapshot should be created");
         let now = frame_system::Pallet::<T>::block_number();
+        let actor_cid_number = primitives::cid::china::china_cb::CHINA_CB[0]
+            .cid_number
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("NRC CID fits runtime bound");
 
         #[block]
         {
             crate::pallet::PendingPopulationSnapshots::<T>::insert(
                 &who,
                 crate::pallet::PreparedPopulationSnapshot {
+                    actor_cid_number,
                     snapshot_id,
                     eligible_total,
                     prepared_at: now,
@@ -79,7 +93,12 @@ mod benchmarks {
     fn cast_admin() {
         let (proposal_id, _) = setup_proposal::<T>(votingengine::STAGE_JOINT);
         let entry = &primitives::cid::china::china_cb::CHINA_CB[0];
-        let institution = decode::<T>(&entry.main_account);
+        let actor_cid_number: votingengine::CidNumber = entry
+            .cid_number
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("NRC CID fits runtime bound");
         let voter = decode::<T>(&entry.admins[0]);
         let admins: frame_support::BoundedVec<_, T::MaxAdminsPerInstitution> = entry
             .admins
@@ -88,12 +107,16 @@ mod benchmarks {
             .collect::<sp_std::vec::Vec<_>>()
             .try_into()
             .expect("fixed NRC admins fit runtime bound");
-        votingengine::pallet::AdminSnapshot::<T>::insert(proposal_id, &institution, admins);
+        votingengine::pallet::AdminSnapshot::<T>::insert(
+            proposal_id,
+            votingengine::ProposalSubject::InstitutionCid(actor_cid_number.clone()),
+            admins,
+        );
         let threshold = votingengine::fixed_governance_pass_threshold(&votingengine::NRC)
             .expect("NRC threshold");
         JointInstitutionTallies::<T>::insert(
             proposal_id,
-            &institution,
+            &actor_cid_number,
             votingengine::VoteCountU32 {
                 yes: threshold.saturating_sub(1),
                 no: 0,
@@ -104,13 +127,13 @@ mod benchmarks {
         _(
             RawOrigin::Signed(voter),
             proposal_id,
-            institution.clone(),
+            actor_cid_number.clone(),
             true,
         );
 
         assert!(JointVotesByInstitution::<T>::contains_key(
             proposal_id,
-            institution
+            actor_cid_number
         ));
     }
 

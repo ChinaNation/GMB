@@ -59,16 +59,11 @@ class PersonalManageStorageCodec {
     return storageMapKey('PersonalAdmins', 'AdminAccounts', accountId);
   }
 
-  static Uint8List dynamicThresholdKey({
-    required String storageName,
-    required String institutionCode,
-    required Uint8List accountId,
-  }) {
-    return storageDoubleMapKey(
+  static Uint8List activePersonalThresholdKey(Uint8List personalAccount) {
+    return storageMapKey(
       'InternalVote',
-      storageName,
-      Uint8List.fromList(InstitutionCodeLabel.codeBytes(institutionCode)),
-      accountId,
+      'ActivePersonalThresholds',
+      personalAccount,
     );
   }
 

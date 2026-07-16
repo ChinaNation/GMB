@@ -47,16 +47,13 @@ pub(crate) fn do_propose_institution_close<T: Config>(
         registered.cid_number == actor_cid_number,
         Error::<T>::NotInstitutionAccount
     );
-    let account_info = InstitutionAccounts::<T>::get(
-        &actor_cid_number,
-        &registered.account_name,
-    )
-    .ok_or(Error::<T>::AccountNotFound)?;
+    let account_info = InstitutionAccounts::<T>::get(&actor_cid_number, &registered.account_name)
+        .ok_or(Error::<T>::AccountNotFound)?;
     ensure!(
         account_info.address == institution_account,
         Error::<T>::AccountNotFound
     );
-    let (_, kind) = Pallet::<T>::derive_registered_account(
+    let (_, kind) = Pallet::<T>::derive_institution_account(
         actor_cid_number.as_slice(),
         registered.account_name.as_slice(),
     )?;
@@ -83,7 +80,10 @@ pub(crate) fn do_propose_institution_close<T: Config>(
             ),
         Error::<T>::ProtectedSource
     );
-    ensure!(beneficiary != institution_account, Error::<T>::InvalidBeneficiary);
+    ensure!(
+        beneficiary != institution_account,
+        Error::<T>::InvalidBeneficiary
+    );
     ensure!(
         !T::ReservedAccountChecker::is_reserved(&beneficiary)
             && T::AccountValidator::is_valid(&beneficiary)
@@ -159,16 +159,14 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
         registered.cid_number == action.actor_cid_number,
         Error::<T>::AccountNotFound
     );
-    let account_info = InstitutionAccounts::<T>::get(
-        &action.actor_cid_number,
-        &registered.account_name,
-    )
-    .ok_or(Error::<T>::AccountNotFound)?;
+    let account_info =
+        InstitutionAccounts::<T>::get(&action.actor_cid_number, &registered.account_name)
+            .ok_or(Error::<T>::AccountNotFound)?;
     ensure!(
         account_info.address == action.institution_account,
         Error::<T>::AccountNotFound
     );
-    let (_, kind) = Pallet::<T>::derive_registered_account(
+    let (_, kind) = Pallet::<T>::derive_institution_account(
         action.actor_cid_number.as_slice(),
         registered.account_name.as_slice(),
     )?;
@@ -184,10 +182,9 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
         Error::<T>::ProtectedSource
     );
 
-    let institution_code = Pallet::<T>::resolve_institution_code_for_account(
-        &action.institution_account,
-    )
-    .ok_or(Error::<T>::AccountNotFound)?;
+    let institution_code =
+        Pallet::<T>::resolve_institution_code_for_account(&action.institution_account)
+            .ok_or(Error::<T>::AccountNotFound)?;
     let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
         .ok_or(Error::<T>::ProposalActionNotFound)?;
     ensure!(

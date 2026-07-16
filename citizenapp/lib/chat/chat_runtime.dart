@@ -751,10 +751,13 @@ class ChatRuntime {
           requestSigner: service.session.signRequest,
         );
     final docsDir = await getApplicationDocumentsDirectory();
+    final tempDirectory = '${docsDir.path}/chat/attachments/.tmp';
+    // 回收被永久放弃的续传残档(对端删会话/待投递后不会再续写的 .part)。
+    unawaited(ChatAttachmentReceiveBuffer.sweepStalePartials(tempDirectory));
     final webrtc = ChatWebrtcTransport(
       ownerAccount: account.address,
       cloud: transport,
-      tempDirectory: '${docsDir.path}/chat/attachments/.tmp',
+      tempDirectory: tempDirectory,
       onAttachment: _saveReceivedAttachmentToCache,
     );
     return _ChatOwnerContext(

@@ -66,7 +66,9 @@ pub(crate) fn build_address_chain_call(
     actor_cid_number: &str,
     input: &AddressChainCallInput,
 ) -> Result<AddressChainCallOutput, String> {
-    if actor_cid_number.is_empty() || actor_cid_number.len() > 32 {
+    if actor_cid_number.is_empty()
+        || actor_cid_number.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
+    {
         return Err("actor_cid_number is invalid".to_string());
     }
     let mut out = Vec::new();

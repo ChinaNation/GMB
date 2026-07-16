@@ -60,11 +60,11 @@ void main() {
     test('ACTIVATE_ADMIN payload 逐字节 == fixture == Rust', () {
       final v = byName['ACTIVATE_ADMIN']!;
       final inputs = v['sample_inputs'] as Map<String, dynamic>;
-      final payload = _buildActivatePayload(
-        accountId: _hexToBytes(inputs['account_id_hex'] as String),
+      final payload = activateAdminPayload(
+        cidNumber: inputs['cid_number'] as String,
         institutionCode: _hexToBytes(inputs['institution_code_hex'] as String),
         kind: inputs['kind'] as int,
-        pubkey: _hexToBytes(inputs['pubkey_hex'] as String),
+        adminPubkey: _hexToBytes(inputs['pubkey_hex'] as String),
         timestamp: inputs['timestamp'] as int,
         nonce: _hexToBytes(inputs['nonce_hex'] as String),
       );
@@ -75,9 +75,9 @@ void main() {
     test('DECRYPT challenge 逐字节 == fixture == Rust', () {
       final v = byName['DECRYPT']!;
       final inputs = v['sample_inputs'] as Map<String, dynamic>;
-      final payload = _buildDecryptChallenge(
+      final payload = decryptAdminPayload(
         cidNumber: inputs['cid_number'] as String,
-        pubkey: _hexToBytes(inputs['pubkey_hex'] as String),
+        adminPubkey: _hexToBytes(inputs['pubkey_hex'] as String),
         timestamp: inputs['timestamp'] as int,
         nonce: _hexToBytes(inputs['nonce_hex'] as String),
       );
@@ -85,64 +85,6 @@ void main() {
       expect(_hexLower(payload), (v['payload_hex'] as String).toLowerCase());
     });
   });
-}
-
-// 复刻 admin_activation_service._buildActivatePayload + node
-// activation.rs::build_activate_payload 的确定性布局(nonce/timestamp 由参数注入)。
-// prefix(4) + account_id(32) + institution_code(4) + kind(1) + pubkey(32)
-//   + timestamp_le(8) + nonce(16) = 97
-Uint8List _buildActivatePayload({
-  required Uint8List accountId,
-  required Uint8List institutionCode,
-  required int kind,
-  required Uint8List pubkey,
-  required int timestamp,
-  required Uint8List nonce,
-}) {
-  final prefix = binaryDomainPrefix(kOpSignActivateAdmin);
-  final out = Uint8List(kBinaryPrefixLen + 32 + 4 + 1 + 32 + 8 + 16);
-  var offset = 0;
-  out.setAll(offset, prefix);
-  offset += kBinaryPrefixLen;
-  out.setAll(offset, accountId);
-  offset += 32;
-  out.setAll(offset, institutionCode);
-  offset += 4;
-  out[offset++] = kind;
-  out.setAll(offset, pubkey);
-  offset += 32;
-  final bd = ByteData(8)..setUint64(0, timestamp, Endian.little);
-  out.setAll(offset, bd.buffer.asUint8List());
-  offset += 8;
-  out.setAll(offset, nonce);
-  return out;
-}
-
-// 复刻 admin_unlock.rs::build_challenge_payload 的确定性布局。
-// prefix(4) + cid_number(48 padded right-zero) + pubkey(32)
-//   + timestamp_le(8) + nonce(16) = 108
-Uint8List _buildDecryptChallenge({
-  required String cidNumber,
-  required Uint8List pubkey,
-  required int timestamp,
-  required Uint8List nonce,
-}) {
-  final prefix = binaryDomainPrefix(kOpSignDecrypt);
-  final out = Uint8List(kBinaryPrefixLen + 48 + 32 + 8 + 16);
-  var offset = 0;
-  out.setAll(offset, prefix);
-  offset += kBinaryPrefixLen;
-  final idBytes = ascii.encode(cidNumber);
-  final copyLen = idBytes.length < 48 ? idBytes.length : 48;
-  out.setRange(offset, offset + copyLen, idBytes.sublist(0, copyLen));
-  offset += 48; // 右补零
-  out.setAll(offset, pubkey);
-  offset += 32;
-  final bd = ByteData(8)..setUint64(0, timestamp, Endian.little);
-  out.setAll(offset, bd.buffer.asUint8List());
-  offset += 8;
-  out.setAll(offset, nonce);
-  return out;
 }
 
 Uint8List _hexToBytes(String hex) {

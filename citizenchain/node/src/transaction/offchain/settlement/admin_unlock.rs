@@ -24,14 +24,13 @@ use crate::governance::signing::{
     payload_b64, pubkey_b64, sha256_hash_public, QrSignRequest, QrSignResponse, SignRequestBody,
     PROTOCOL_VERSION, QR_KIND_SIGN_REQUEST, QR_KIND_SIGN_RESPONSE,
 };
-use primitives::sign::{binary_domain_prefix, BINARY_PREFIX_LEN, OP_SIGN_DECRYPT};
+use primitives::sign::{
+    binary_domain_prefix, decrypt_admin_payload, BINARY_PREFIX_LEN, DECRYPT_ADMIN_CID_LEN,
+    DECRYPT_ADMIN_PAYLOAD_LEN, OP_SIGN_DECRYPT,
+};
 
 use crate::transaction::offchain::types::{DecryptAdminRequestResult, DecryptedAdminInfo};
 
-// 解密 challenge payload 前缀 = GMB || OP_SIGN_DECRYPT(4B 二进制前缀，单一真源
-// primitives::sign)。
-/// challenge payload 长度:4 + 48 + 32 + 8 + 16 = 108 字节
-const CHALLENGE_TOTAL_LEN: usize = BINARY_PREFIX_LEN + 48 + 32 + 8 + 16;
 const DEFAULT_TTL_SECS: u64 = 90;
 
 /// 当前正在内存中"已解密"的管理员表(节点重启清空)。
@@ -79,23 +78,28 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
-/// 拼装 challenge payload:`GMB||OP_SIGN_DECRYPT(4) || cid_number(48 padded) || pubkey(32) || ts_le(8) || nonce(16)`。
-fn build_challenge_payload(pubkey_bytes: &[u8; 32], cid_number: &str, timestamp: u64) -> Vec<u8> {
-    let mut out = Vec::with_capacity(CHALLENGE_TOTAL_LEN);
-    out.extend_from_slice(&binary_domain_prefix(OP_SIGN_DECRYPT));
-
-    let id_bytes = cid_number.as_bytes();
-    let mut id_buf = [0u8; 48];
-    let copy_len = id_bytes.len().min(48);
-    id_buf[..copy_len].copy_from_slice(&id_bytes[..copy_len]);
-    out.extend_from_slice(&id_buf);
-
-    out.extend_from_slice(pubkey_bytes);
-    out.extend_from_slice(&timestamp.to_le_bytes());
-
+/// 复用 primitives 唯一原语拼装固定 92B challenge payload。
+fn build_challenge_payload(
+    pubkey_bytes: &[u8; 32],
+    cid_number: &str,
+    timestamp: u64,
+) -> Option<Vec<u8>> {
     let nonce: [u8; 16] = rand::thread_rng().gen();
-    out.extend_from_slice(&nonce);
-    out
+    decrypt_admin_payload(cid_number.as_bytes(), pubkey_bytes, timestamp, &nonce)
+}
+
+/// 验签前锁死当前共享协议长度与二进制域，旧 108B 布局直接拒绝。
+fn validate_challenge_payload(payload: &[u8]) -> Result<(), String> {
+    if payload.len() != DECRYPT_ADMIN_PAYLOAD_LEN {
+        return Err(format!(
+            "解密 challenge 长度无效:期望 {DECRYPT_ADMIN_PAYLOAD_LEN},实际 {}",
+            payload.len()
+        ));
+    }
+    if payload[..BINARY_PREFIX_LEN] != binary_domain_prefix(OP_SIGN_DECRYPT) {
+        return Err("解密 challenge 二进制域无效".to_string());
+    }
+    Ok(())
 }
 
 fn generate_request_id() -> String {
@@ -115,8 +119,8 @@ pub fn build_decrypt_admin_request(
     if clean.len() != 64 || !clean.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("公钥格式无效,应为 64 位十六进制".to_string());
     }
-    if cid_number.is_empty() || cid_number.len() > 48 {
-        return Err("cid_number 长度需在 1..=48".to_string());
+    if cid_number.is_empty() || cid_number.len() > DECRYPT_ADMIN_CID_LEN {
+        return Err("cid_number 超出链上 CID_NUMBER_MAX_BYTES 范围".to_string());
     }
     let pubkey_bytes = hex::decode(&clean).map_err(|e| format!("公钥解码失败:{e}"))?;
     let pubkey_arr: [u8; 32] = pubkey_bytes
@@ -125,7 +129,8 @@ pub fn build_decrypt_admin_request(
         .map_err(|_| "公钥长度必须为 32 字节".to_string())?;
 
     let timestamp = now_secs();
-    let payload = build_challenge_payload(&pubkey_arr, cid_number, timestamp);
+    let payload = build_challenge_payload(&pubkey_arr, cid_number, timestamp)
+        .ok_or_else(|| "cid_number 超出解密签名协议范围".to_string())?;
     let payload_hex = format!("0x{}", hex::encode(&payload));
     let payload_hash = sha256_hash_public(&payload);
     let payload_hash_hex = format!("0x{}", hex::encode(payload_hash));
@@ -237,6 +242,7 @@ pub fn verify_and_decrypt_admin(
     if context.pubkey_hex != pubkey_clean {
         return Err("challenge 上下文公钥与请求不一致".to_string());
     }
+    validate_challenge_payload(&context.payload)?;
 
     // expected_payload_hash 必须等于 SHA-256(payload)
     let local_hash = {
@@ -337,9 +343,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn challenge_payload_layout_is_108_bytes() {
-        let p = build_challenge_payload(&[0xAA; 32], "AH001-SCB0V-123456789-2026", 1234567890);
-        assert_eq!(p.len(), CHALLENGE_TOTAL_LEN);
+    fn challenge_payload_layout_uses_shared_protocol_length() {
+        let p = build_challenge_payload(&[0xAA; 32], "AH001-SCB0V-123456789-2026", 1234567890)
+            .expect("valid payload");
+        assert_eq!(p.len(), DECRYPT_ADMIN_PAYLOAD_LEN);
         assert_eq!(
             p[..BINARY_PREFIX_LEN],
             binary_domain_prefix(OP_SIGN_DECRYPT)
@@ -348,11 +355,18 @@ mod tests {
 
     #[test]
     fn challenge_payload_pubkey_position() {
-        let p = build_challenge_payload(&[0xCC; 32], "AH001-FCB0P-123456789-2026", 0);
+        let p = build_challenge_payload(&[0xCC; 32], "AH001-FCB0P-123456789-2026", 0)
+            .expect("valid payload");
         assert_eq!(
-            &p[BINARY_PREFIX_LEN + 48..BINARY_PREFIX_LEN + 48 + 32],
+            &p[BINARY_PREFIX_LEN + DECRYPT_ADMIN_CID_LEN
+                ..BINARY_PREFIX_LEN + DECRYPT_ADMIN_CID_LEN + 32],
             &[0xCC; 32]
         );
+    }
+
+    #[test]
+    fn legacy_108_byte_payload_is_rejected() {
+        assert!(validate_challenge_payload(&[0u8; 108]).is_err());
     }
 
     #[test]

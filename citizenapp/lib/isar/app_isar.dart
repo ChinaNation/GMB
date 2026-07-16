@@ -301,128 +301,6 @@ class PersonalMultisigLocalState {
   }
 }
 
-/// 机构多签本地生命周期状态。
-///
-/// 机构多签链上关闭后也继续留在本机账户列表，显示“已注销”；
-/// 用户主动点详情页右上角“删除”时，才清理本机机构账户记录。
-class InstitutionMultisigLocalState {
-  static const statusPending = 'pending';
-  static const statusActive = 'active';
-  static const statusClosed = 'closed';
-
-  static String statusKey(String accountHex) =>
-      'institution_multisig_status:${_normalizeHex(accountHex)}';
-
-  static String detailKey(String accountHex) =>
-      'institution_multisig_detail:${_normalizeHex(accountHex)}';
-
-  static Future<Map<String, String>> readStatuses(
-    Isar isar,
-    Iterable<String> accountsHex,
-  ) async {
-    final snapshots = await readStatusSnapshots(isar, accountsHex);
-    return snapshots.map((key, value) => MapEntry(key, value.status));
-  }
-
-  static Future<Map<String, MultisigLocalStatusSnapshot>> readStatusSnapshots(
-    Isar isar,
-    Iterable<String> accountsHex,
-  ) async {
-    final result = <String, MultisigLocalStatusSnapshot>{};
-    for (final address in accountsHex) {
-      final normalized = _normalizeHex(address);
-      final entity = await isar.appKvEntitys.getByKey(statusKey(normalized));
-      final status = entity?.stringValue;
-      if (status != null && status.isNotEmpty) {
-        result[normalized] = MultisigLocalStatusSnapshot(
-          status: status,
-          lastSyncAtMillis: entity?.intValue,
-        );
-      }
-    }
-    return result;
-  }
-
-  static Future<MultisigLocalDetailSnapshot?> readDetail(
-    Isar isar,
-    String accountHex,
-  ) async {
-    final entity = await isar.appKvEntitys.getByKey(detailKey(accountHex));
-    return MultisigLocalDetailSnapshot.fromJsonString(entity?.stringValue);
-  }
-
-  /// 写入机构多签详情快照；调用方必须处在 Isar writeTxn 内。
-  static Future<void> putDetailInTxn(
-    Isar isar,
-    String accountHex,
-    MultisigLocalDetailSnapshot snapshot,
-  ) async {
-    final key = detailKey(accountHex);
-    final entity = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();
-    entity
-      ..key = key
-      ..stringValue = jsonEncode(snapshot.toJson())
-      ..intValue = snapshot.lastChainRefreshAtMillis ??
-          snapshot.updatedAtMillis ??
-          DateTime.now().millisecondsSinceEpoch;
-    await isar.appKvEntitys.putByKey(entity);
-  }
-
-  /// 写入机构多签本地状态；调用方必须处在 Isar writeTxn 内。
-  static Future<void> putStatusInTxn(
-    Isar isar,
-    String accountHex,
-    String status,
-  ) async {
-    final key = statusKey(accountHex);
-    final entity = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();
-    entity
-      ..key = key
-      ..stringValue = status
-      ..intValue = DateTime.now().millisecondsSinceEpoch;
-    await isar.appKvEntitys.putByKey(entity);
-  }
-
-  /// 删除机构多签本地状态；调用方必须处在 Isar writeTxn 内。
-  static Future<void> deleteStatusInTxn(
-    Isar isar,
-    String accountHex,
-  ) async {
-    await isar.appKvEntitys
-        .where()
-        .keyEqualTo(statusKey(accountHex))
-        .deleteAll();
-  }
-
-  /// 删除机构多签详情快照；调用方必须处在 Isar writeTxn 内。
-  static Future<void> deleteDetailInTxn(
-    Isar isar,
-    String accountHex,
-  ) async {
-    await isar.appKvEntitys
-        .where()
-        .keyEqualTo(detailKey(accountHex))
-        .deleteAll();
-  }
-
-  /// 清空全部机构多签本地状态/详情；schema 迁移清缓存时使用。
-  static Future<void> clearAllInTxn(Isar isar) async {
-    await isar.appKvEntitys
-        .filter()
-        .keyStartsWith('institution_multisig_status:')
-        .deleteAll();
-    await isar.appKvEntitys
-        .filter()
-        .keyStartsWith('institution_multisig_detail:')
-        .deleteAll();
-  }
-
-  static String _normalizeHex(String hex) {
-    final h = hex.startsWith('0x') ? hex.substring(2) : hex;
-    return h.toLowerCase();
-  }
-}
-
 /// 用户创建的个人多签账户（本地持久化）。
 @collection
 class PersonalAccountEntity {
@@ -1218,7 +1096,6 @@ class WalletIsarMigration {
         // 名变更），旧 collection 数据仅为本地缓存，丢弃后由反向索引重新发现即可，
         // 无需数据迁移。这里清空新 collection 兜底，避免新旧叠加出现脏数据。
         await isar.institutionEntitys.clear();
-        await InstitutionMultisigLocalState.clearAllInTxn(isar);
       }
       if (version < 7) {
         // ADR-021 行政区唯一真源:公权机构目录从「存行政区名字」

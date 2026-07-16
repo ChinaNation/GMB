@@ -276,6 +276,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
       // 提案类交易等真正入块并核对事件后才返回，proposalId 来自
       // 链上 SafetyFundTransferProposed 事件，是业务成功的唯一凭据。
       final result = await service.submitProposeSafetyFund(
+        institution: widget.institution,
         beneficiaryAddress: _beneficiaryController.text.trim(),
         amountYuan: amountYuan,
         remark: _remarkController.text,

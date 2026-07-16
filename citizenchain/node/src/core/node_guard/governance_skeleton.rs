@@ -63,9 +63,7 @@ fn expected_roles(code: InstitutionCode) -> Vec<ExpectedRole> {
 pub mod storage_key {
     use super::{fixed_institutions, FixedInstitution, PUBLIC_ADMINS_PALLET, PUBLIC_MANAGE_PALLET};
     use codec::{Decode, Encode};
-    use primitives::governance_skeleton::{
-        fixed_institution_by_cid,
-    };
+    use primitives::governance_skeleton::fixed_institution_by_cid;
     use sp_core::hashing::blake2_128;
 
     fn storage_prefix(pallet: &[u8], storage: &[u8]) -> Vec<u8> {
@@ -493,30 +491,16 @@ mod tests {
     use super::*;
     use sp_core::hashing::{blake2_128, twox_128};
 
-    const STATUS_PENDING: AdminAccountStatus = AdminAccountStatus::Pending;
-    const STATUS_ACTIVE: AdminAccountStatus = AdminAccountStatus::Active;
-
     fn accounts_for(institution: &FixedInstitution) -> Vec<[u8; 32]> {
         (0..institution.expected_len)
             .map(|index| [(index + 1) as u8; 32])
             .collect()
     }
 
-    fn account_bytes(
-        institution: &FixedInstitution,
-        status: AdminAccountStatus,
-        admins: Vec<[u8; 32]>,
-    ) -> Vec<u8> {
-        InstitutionAdminAccount {
-            cid_number: institution
-                .cid_number
-                .as_bytes()
-                .to_vec()
-                .try_into()
-                .expect("fixed CID fits AdminCidNumber"),
+    fn account_bytes(institution: &FixedInstitution, admins: Vec<[u8; 32]>) -> Vec<u8> {
+        DecodedInstitutionAdminAccount {
             institution_code: institution.code,
             admins,
-            status,
         }
         .encode()
     }
@@ -554,8 +538,8 @@ mod tests {
         for institution in fixed_institutions() {
             let admins = accounts_for(&institution);
             state.insert(
-                storage_key::admin_account(&institution.main_account),
-                account_bytes(&institution, STATUS_ACTIVE, admins.clone()),
+                storage_key::admin_account(institution.cid_number.as_bytes()),
+                account_bytes(&institution, admins.clone()),
             );
             let mut offset = 0usize;
             for role in expected_roles(institution.code) {
@@ -599,22 +583,19 @@ mod tests {
     #[test]
     fn institution_admin_account_layout_is_exact() {
         let institution = fixed_institutions()[0];
-        let raw = account_bytes(&institution, STATUS_ACTIVE, accounts_for(&institution));
+        let raw = account_bytes(&institution, accounts_for(&institution));
         let decoded: DecodedInstitutionAdminAccount = decode_exact(&raw).expect("layout decodes");
-        assert_eq!(
-            decoded.cid_number.as_slice(),
-            institution.cid_number.as_bytes()
-        );
         assert_eq!(decoded.institution_code, institution.code);
         assert_eq!(decoded.admins.len() as u32, institution.expected_len);
-        assert_eq!(decoded.status, STATUS_ACTIVE);
     }
 
     #[test]
-    fn missing_or_inactive_fixed_account_is_rejected() {
+    fn missing_or_wrong_code_fixed_account_is_rejected() {
         let institution = fixed_institutions()[0];
         let mut state = valid_state();
-        state.remove(&storage_key::admin_account(&institution.main_account));
+        state.remove(&storage_key::admin_account(
+            institution.cid_number.as_bytes(),
+        ));
         assert_eq!(
             check_state(&state),
             Err(GuardError::FixedInstitutionMissing(institution.code))
@@ -622,12 +603,16 @@ mod tests {
 
         let mut state = valid_state();
         state.insert(
-            storage_key::admin_account(&institution.main_account),
-            account_bytes(&institution, STATUS_PENDING, accounts_for(&institution)),
+            storage_key::admin_account(institution.cid_number.as_bytes()),
+            DecodedInstitutionAdminAccount {
+                institution_code: *b"BAD\0",
+                admins: accounts_for(&institution),
+            }
+            .encode(),
         );
         assert_eq!(
             check_state(&state),
-            Err(GuardError::NotActive(institution.code))
+            Err(GuardError::InstitutionCodeChanged(institution.code))
         );
     }
 
@@ -722,7 +707,7 @@ mod tests {
             institution.cid_number.as_bytes(),
             &role.role_code,
         );
-        let admin_key = storage_key::admin_account(&institution.main_account);
+        let admin_key = storage_key::admin_account(institution.cid_number.as_bytes());
         let mut state = valid_state();
 
         let mut role_value: DecodedInstitutionRole =
@@ -753,12 +738,13 @@ mod tests {
 
     #[test]
     fn raw_key_derivation_and_trigger_prefixes_are_stable() {
-        let account = [7u8; 32];
+        let account = b"CID-KEY";
         let mut expected_admin = twox_128(b"PublicAdmins").to_vec();
         expected_admin.extend_from_slice(&twox_128(b"AdminAccounts"));
-        expected_admin.extend_from_slice(&blake2_128(&account));
-        expected_admin.extend_from_slice(&account);
-        assert_eq!(storage_key::admin_account(&account), expected_admin);
+        let encoded_account = account.to_vec().encode();
+        expected_admin.extend_from_slice(&blake2_128(&encoded_account));
+        expected_admin.extend_from_slice(&encoded_account);
+        assert_eq!(storage_key::admin_account(account), expected_admin);
 
         let cid = b"CID-1".to_vec().encode();
         let role = b"ROLE-1".to_vec().encode();
@@ -797,12 +783,12 @@ mod tests {
         let affected = fixed[0];
         let unrelated = fixed[1];
         let mut state = valid_state();
-        state.remove(&storage_key::admin_account(&unrelated.main_account));
+        state.remove(&storage_key::admin_account(unrelated.cid_number.as_bytes()));
 
         let delta = BTreeMap::from([(
-            storage_key::admin_account(&affected.main_account),
+            storage_key::admin_account(affected.cid_number.as_bytes()),
             state
-                .get(&storage_key::admin_account(&affected.main_account))
+                .get(&storage_key::admin_account(affected.cid_number.as_bytes()))
                 .cloned(),
         )]);
         assert_eq!(

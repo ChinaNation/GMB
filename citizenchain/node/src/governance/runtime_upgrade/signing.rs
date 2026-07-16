@@ -94,13 +94,15 @@ pub(crate) fn build_developer_upgrade_sign_request(
 /// 构建运行期协议升级提案签名请求。
 pub(crate) fn build_propose_runtime_upgrade_sign_request(
     pubkey_hex: &str,
+    actor_cid_number: &str,
     wasm_path: &str,
     reason: &str,
     pow_params: pow_difficulty::PowDifficultyParams,
 ) -> Result<VoteSignRequestResult, String> {
     let (pubkey_clean, pubkey_bytes) = normalize_pubkey(pubkey_hex)?;
     let (wasm_code, _wasm_size_mb) = call_data::read_wasm(wasm_path)?;
-    let call_data = call_data::propose_runtime_upgrade(&wasm_code, reason, pow_params)?;
+    let call_data =
+        call_data::propose_runtime_upgrade(actor_cid_number, &wasm_code, reason, pow_params)?;
 
     build_hashed_payload_request("upgrade", &pubkey_clean, &pubkey_bytes, &call_data)
 }

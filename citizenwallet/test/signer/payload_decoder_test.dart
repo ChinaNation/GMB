@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:citizenwallet/signer/institution_code.dart';
 import 'package:citizenwallet/signer/payload_decoder.dart';
+import 'package:citizenwallet/qr/qr_protocols.dart';
 
 void main() {
   const registryActorCid = 'ZS001-FRG07-249474503-2026';
@@ -246,6 +247,274 @@ void main() {
       expect(decoded.fields['scope_level'], 'CITY');
       expect(decoded.fields['scope_province_code'], 'GZ');
       expect(decoded.fields['scope_city_code'], '001');
+    });
+
+    group('OnchainIssuance(23) strict SCALE decode', () {
+      final executionAccount = List<int>.generate(32, (i) => i + 1);
+      final fromAccount = List<int>.filled(32, 0x31);
+      final toAccount = List<int>.filled(32, 0x42);
+      final reasonHash = List<int>.generate(32, (i) => 0xa0 + i);
+
+      List<int> assetHeader(int callIndex, int assetId) => [
+            0x17,
+            callIndex,
+            ...compactVec(registryActorCid),
+            ...u32Le(assetId),
+          ];
+
+      test('QR action codes are the unique pallet 23 call codes', () {
+        expect(QrActions.proposeAssetIssue, 0x1700);
+        expect(QrActions.proposeAssetMint, 0x1701);
+        expect(QrActions.proposeAssetBurn, 0x1702);
+        expect(QrActions.proposeAssetClose, 0x1703);
+        expect(QrActions.proposeAssetTransfer, 0x1704);
+        expect(QrActions.proposeMonitorFreeze, 0x170a);
+        expect(QrActions.proposeMonitorUnfreeze, 0x170b);
+        expect(QrActions.proposeMonitorConfiscate, 0x170c);
+        expect(QrActions.proposeMonitorForceTransfer, 0x170d);
+        expect(QrActions.proposeMonitorForceClose, 0x170e);
+      });
+
+      test('call 0 decodes actor CID and execution account in exact order', () {
+        final callData = <int>[
+          0x17,
+          0x00,
+          ...compactVec(registryActorCid),
+          ...executionAccount,
+          0, // AssetClass::Plain
+          ...compactVec('公民测试资产'),
+          ...compactVec('CTA'),
+          ...compactVec('严格 SCALE 布局测试'),
+          8,
+          ...u128LeForTest(BigInt.from(123456789)),
+        ];
+        final decoded = PayloadDecoder.decode(
+          hexOf(withSigningTail(callData)),
+        );
+
+        expect(decoded, isNotNull);
+        expect(decoded!.action, 'propose_asset_issue');
+        expect(decoded.fields['actor_cid_number'], registryActorCid);
+        expect(
+          decoded.fields['execution_account'],
+          ss58FromBytes(executionAccount),
+        );
+        expect(decoded.fields['asset_class'], 'Plain');
+        expect(decoded.fields['asset_name'], '公民测试资产');
+        expect(decoded.fields['asset_symbol'], 'CTA');
+        expect(decoded.fields['asset_description'], '严格 SCALE 布局测试');
+        expect(decoded.fields['decimals'], '8');
+        expect(decoded.fields['initial_supply_raw'], '123456789');
+        expect(
+          QrActions.fromDecodedAction(decoded.action),
+          QrActions.proposeAssetIssue,
+        );
+      });
+
+      test('calls 1..4 decode every business field', () {
+        final cases = <({
+          List<int> callData,
+          String action,
+          int qrAction,
+          Map<String, String> expected,
+        })>[
+          (
+            callData: [
+              ...assetHeader(1, 7),
+              ...toAccount,
+              ...u128LeForTest(BigInt.from(101)),
+            ],
+            action: 'propose_asset_mint',
+            qrAction: QrActions.proposeAssetMint,
+            expected: {
+              'asset_id': '7',
+              'to': ss58FromBytes(toAccount),
+              'amount_raw': '101',
+            },
+          ),
+          (
+            callData: [
+              ...assetHeader(2, 8),
+              ...fromAccount,
+              ...u128LeForTest(BigInt.from(202)),
+            ],
+            action: 'propose_asset_burn',
+            qrAction: QrActions.proposeAssetBurn,
+            expected: {
+              'asset_id': '8',
+              'from': ss58FromBytes(fromAccount),
+              'amount_raw': '202',
+            },
+          ),
+          (
+            callData: [...assetHeader(3, 9)],
+            action: 'propose_asset_close',
+            qrAction: QrActions.proposeAssetClose,
+            expected: {'asset_id': '9'},
+          ),
+          (
+            callData: [
+              ...assetHeader(4, 10),
+              ...fromAccount,
+              ...toAccount,
+              ...u128LeForTest(BigInt.from(303)),
+            ],
+            action: 'propose_asset_transfer',
+            qrAction: QrActions.proposeAssetTransfer,
+            expected: {
+              'asset_id': '10',
+              'from': ss58FromBytes(fromAccount),
+              'to': ss58FromBytes(toAccount),
+              'amount_raw': '303',
+            },
+          ),
+        ];
+
+        for (final item in cases) {
+          final decoded = PayloadDecoder.decode(
+            hexOf(withSigningTail(item.callData)),
+          );
+          expect(decoded, isNotNull, reason: item.action);
+          expect(decoded!.action, item.action);
+          expect(decoded.fields['actor_cid_number'], registryActorCid);
+          for (final field in item.expected.entries) {
+            expect(decoded.fields[field.key], field.value, reason: item.action);
+          }
+          expect(QrActions.fromDecodedAction(item.action), item.qrAction);
+        }
+      });
+
+      test('calls 10..14 decode every monitor field', () {
+        final cases = <({
+          List<int> callData,
+          String action,
+          int qrAction,
+          Map<String, String> expected,
+        })>[
+          (
+            callData: [
+              ...assetHeader(10, 11),
+              ...toAccount,
+              ...reasonHash,
+            ],
+            action: 'propose_monitor_freeze',
+            qrAction: QrActions.proposeMonitorFreeze,
+            expected: {
+              'asset_id': '11',
+              'who': ss58FromBytes(toAccount),
+            },
+          ),
+          (
+            callData: [
+              ...assetHeader(11, 12),
+              ...toAccount,
+              ...reasonHash,
+            ],
+            action: 'propose_monitor_unfreeze',
+            qrAction: QrActions.proposeMonitorUnfreeze,
+            expected: {
+              'asset_id': '12',
+              'who': ss58FromBytes(toAccount),
+            },
+          ),
+          (
+            callData: [
+              ...assetHeader(12, 13),
+              ...toAccount,
+              ...u128LeForTest(BigInt.from(404)),
+              ...reasonHash,
+            ],
+            action: 'propose_monitor_confiscate',
+            qrAction: QrActions.proposeMonitorConfiscate,
+            expected: {
+              'asset_id': '13',
+              'who': ss58FromBytes(toAccount),
+              'amount_raw': '404',
+            },
+          ),
+          (
+            callData: [
+              ...assetHeader(13, 14),
+              ...fromAccount,
+              ...toAccount,
+              ...u128LeForTest(BigInt.from(505)),
+              ...reasonHash,
+            ],
+            action: 'propose_monitor_force_transfer',
+            qrAction: QrActions.proposeMonitorForceTransfer,
+            expected: {
+              'asset_id': '14',
+              'from': ss58FromBytes(fromAccount),
+              'to': ss58FromBytes(toAccount),
+              'amount_raw': '505',
+            },
+          ),
+          (
+            callData: [...assetHeader(14, 15), ...reasonHash],
+            action: 'propose_monitor_force_close',
+            qrAction: QrActions.proposeMonitorForceClose,
+            expected: {'asset_id': '15'},
+          ),
+        ];
+
+        for (final item in cases) {
+          final decoded = PayloadDecoder.decode(
+            hexOf(withSigningTail(item.callData)),
+          );
+          expect(decoded, isNotNull, reason: item.action);
+          expect(decoded!.action, item.action);
+          expect(decoded.fields['actor_cid_number'], registryActorCid);
+          expect(decoded.fields['reason_hash'], '0x${hexLower(reasonHash)}');
+          for (final field in item.expected.entries) {
+            expect(decoded.fields[field.key], field.value, reason: item.action);
+          }
+          expect(QrActions.fromDecodedAction(item.action), item.qrAction);
+        }
+      });
+
+      test(
+          'rejects truncated, trailing, invalid enum and AccountId-only layouts',
+          () {
+        final validIssue = <int>[
+          0x17,
+          0,
+          ...compactVec(registryActorCid),
+          ...executionAccount,
+          0,
+          ...compactVec('资产'),
+          ...compactVec('ASSET'),
+          ...compactVec('说明'),
+          8,
+          ...u128LeForTest(BigInt.one),
+        ];
+        final truncated = validIssue.sublist(0, validIssue.length - 1);
+        final trailing = [...validIssue, 0xff];
+        final invalidClass = [...validIssue]
+          ..[2 + compactVec(registryActorCid).length + 32] = 2;
+        final accountIdOnly = <int>[
+          0x17,
+          0,
+          ...executionAccount,
+          0,
+          ...compactVec('资产'),
+          ...compactVec('ASSET'),
+          ...compactVec('说明'),
+          8,
+          ...u128LeForTest(BigInt.one),
+        ];
+
+        for (final rejected in [
+          truncated,
+          trailing,
+          invalidClass,
+          accountIdOnly,
+        ]) {
+          expect(
+            PayloadDecoder.decode(hexOf(withSigningTail(rejected))),
+            isNull,
+          );
+        }
+      });
     });
 
     test('decodes raw citizen identity payload', () {
@@ -532,11 +801,13 @@ void main() {
     test('decodes onchina_admin_action with SS58 review fields', () {
       final actor = '0x${List.filled(32, '11').join()}';
       final target = '0x${List.filled(32, '22').join()}';
+      const actorCidNumber = 'GD001-FRG0M-000000001-2026';
       final payload = jsonEncode({
         'domain': 'onchina_admin_governance',
         'qr_proto': 'QR_V1',
         'action_id': 'admin-action-test',
         'action_type': 'PASSKEY_REGISTER',
+        'actor_cid_number': actorCidNumber,
         'actor_pubkey': actor,
         'actor_province_name': '广东省',
         'target': target,
@@ -551,6 +822,7 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.action, 'onchina_admin_action');
       expect(decoded.fields['action_type'], '更新 Passkey');
+      expect(decoded.reviewFields['actor_cid_number'], actorCidNumber);
       expect(decoded.reviewFields['actor_province_name'], '广东省');
       expect(decoded.reviewFields['actor_pubkey'], ss58FromHex(actor));
       expect(decoded.reviewFields['target'], ss58FromHex(target));
@@ -560,6 +832,7 @@ void main() {
     test('decodes onchina admin action labels', () {
       final actor = '0x${List.filled(32, '11').join()}';
       final target = '0x${List.filled(32, '22').join()}';
+      const actorCidNumber = 'GD001-FRG0M-000000001-2026';
       final cases = {
         'CREATE_ADMIN': '新增管理员',
         'UPDATE_ADMIN': '编辑管理员',
@@ -572,6 +845,7 @@ void main() {
           'qr_proto': 'QR_V1',
           'action_id': 'admin-action-${entry.key}',
           'action_type': entry.key,
+          'actor_cid_number': actorCidNumber,
           'actor_pubkey': actor,
           'actor_province_name': '广东省',
           'target': target,
@@ -586,6 +860,21 @@ void main() {
         expect(decoded, isNotNull);
         expect(decoded!.fields['action_type'], entry.value);
       }
+    });
+
+    test('rejects legacy onchina admin action without actor CID', () {
+      final payload = jsonEncode({
+        'domain': 'onchina_admin_governance',
+        'qr_proto': 'QR_V1',
+        'action_type': 'CREATE_ADMIN',
+        'actor_pubkey': '0x${List.filled(32, '11').join()}',
+        'actor_province_name': '广东省',
+        'target': '0x${List.filled(32, '22').join()}',
+        'before_hash': 'none',
+        'after_hash': '0x${List.filled(32, '44').join()}',
+      });
+
+      expect(PayloadDecoder.decode(hexOf(utf8.encode(payload))), isNull);
     });
 
     test('decodes clearing bank register node call', () {
@@ -699,7 +988,7 @@ void main() {
 
     test('decodes clearing bank decrypt challenge', () {
       const cidNumber = 'AH001-SZG1Z-883241719-2026';
-      final idBytes = List<int>.filled(48, 0);
+      final idBytes = List<int>.filled(32, 0);
       final rawId = ascii.encode(cidNumber);
       for (var i = 0; i < rawId.length; i++) {
         idBytes[i] = rawId[i];
@@ -726,6 +1015,28 @@ void main() {
       expect(decoded!.action, 'decrypt_admin');
       expect(decoded.fields['cid_number'], cidNumber);
       expect(decoded.summary, contains('解密清算行管理员'));
+    });
+
+    test('rejects legacy 48-byte clearing bank decrypt challenge', () {
+      const cidNumber = 'AH001-SZG1Z-883241719-2026';
+      final idBytes = List<int>.filled(48, 0);
+      final rawId = ascii.encode(cidNumber);
+      for (var i = 0; i < rawId.length; i++) {
+        idBytes[i] = rawId[i];
+      }
+      final payload = Uint8List.fromList([
+        0x47,
+        0x4D,
+        0x42,
+        0x19,
+        ...idBytes,
+        ...List<int>.filled(32, 0xAA),
+        ...List<int>.filled(8, 0),
+        ...List<int>.filled(16, 0xBB),
+      ]);
+
+      expect(PayloadDecoder.decode(hexOf(payload)), isNull,
+          reason: '目标态只接受协议单源定义的 32B 机构 CID 槽位');
     });
 
     test('decodes propose_sweep_to_main CID + institution account', () {
@@ -1038,14 +1349,19 @@ void main() {
       expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
 
-    test('decodes account-level admin activation payload', () {
-      final account = List<int>.generate(32, (i) => 0x20 + i);
+    test('decodes CID-level admin activation payload', () {
+      const cidNumber = 'GD001-CGOVM-000000001-2026';
+      final cidBytes = utf8.encode(cidNumber);
+      final cidSlot = <int>[
+        ...cidBytes,
+        ...List<int>.filled(32 - cidBytes.length, 0),
+      ];
       final pubkey = List<int>.filled(32, 0xaa);
       final payload = Uint8List.fromList([
         // ADR-026 Phase 2 二进制前缀 GMB || 0x18。
         0x47, 0x4D, 0x42, 0x18,
-        ...account,
-        ...InstitutionCode.codeBytes('CGOV'), // 机构账户码(取代旧 org=5)
+        ...cidSlot,
+        ...InstitutionCode.codeBytes('CGOV'),
         0x00, // kind = PublicInstitution
         ...pubkey,
         1, 0, 0, 0, 0, 0, 0, 0, // timestamp u64 LE
@@ -1056,11 +1372,121 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'activate_admin_account');
+      expect(decoded.fields['cid_number'], cidNumber);
       expect(decoded.fields['institution_code'], 'CGOV');
-      expect(decoded.fields['account'], '0x${hexLower(account)}');
-      expect(decoded.fields['pubkey'], ss58FromBytes(pubkey));
-      expect(decoded.reviewFields['account'], ss58FromBytes(account));
-      expect(decoded.reviewFields['pubkey'], ss58FromBytes(pubkey));
+      expect(decoded.fields['admin_pubkey'], ss58FromBytes(pubkey));
+      expect(decoded.fields.containsKey('account'), isFalse);
+      expect(decoded.reviewFields['cid_number'], cidNumber);
+      expect(decoded.reviewFields['admin_pubkey'], ss58FromBytes(pubkey));
+    });
+
+    test('rejects legacy account-shaped admin activation payload', () {
+      final account = List<int>.generate(32, (i) => 0x20 + i);
+      final payload = Uint8List.fromList([
+        0x47,
+        0x4D,
+        0x42,
+        0x18,
+        ...account,
+        ...InstitutionCode.codeBytes('CGOV'),
+        0x00,
+        ...List<int>.filled(32, 0xaa),
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        ...List<int>.filled(16, 0),
+      ]);
+
+      expect(PayloadDecoder.decode(encodeHex(payload)), isNull);
+    });
+
+    test('rejects admin activation when CID and institution code mismatch', () {
+      const cidNumber = 'LN001-NRC0G-944805165-2026';
+      final cidBytes = utf8.encode(cidNumber);
+      final payload = Uint8List.fromList([
+        0x47,
+        0x4D,
+        0x42,
+        0x18,
+        ...cidBytes,
+        ...List<int>.filled(32 - cidBytes.length, 0),
+        ...InstitutionCode.codeBytes('CGOV'),
+        0x00,
+        ...List<int>.filled(32, 0xaa),
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        ...List<int>.filled(16, 0),
+      ]);
+
+      expect(PayloadDecoder.decode(encodeHex(payload)), isNull);
+    });
+
+    test('admin activation accepts both explicit unincorporated routes', () {
+      const cidNumber = 'GD001-SFGT1-000000001-2026';
+      final cidBytes = utf8.encode(cidNumber);
+      for (final kind in const [0, 1]) {
+        final payload = Uint8List.fromList([
+          0x47,
+          0x4D,
+          0x42,
+          0x18,
+          ...cidBytes,
+          ...List<int>.filled(32 - cidBytes.length, 0),
+          ...InstitutionCode.codeBytes('SFGT'),
+          kind,
+          ...List<int>.filled(32, 0xaa),
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          ...List<int>.filled(16, 0),
+        ]);
+
+        expect(PayloadDecoder.decode(encodeHex(payload)), isNotNull);
+      }
+    });
+
+    test('rejects personal multisig admin activation as institution payload',
+        () {
+      const cidNumber = 'GD001-PMUL1-000000001-2026';
+      final cidBytes = utf8.encode(cidNumber);
+      final payload = Uint8List.fromList([
+        0x47,
+        0x4D,
+        0x42,
+        0x18,
+        ...cidBytes,
+        ...List<int>.filled(32 - cidBytes.length, 0),
+        ...InstitutionCode.codeBytes('PMUL'),
+        0x02,
+        ...List<int>.filled(32, 0xaa),
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        ...List<int>.filled(16, 0),
+      ]);
+
+      expect(PayloadDecoder.decode(encodeHex(payload)), isNull);
     });
 
     test('rejects institution-account admin set change calls', () {
@@ -1851,11 +2277,14 @@ void main() {
     test('ACTIVATE_ADMIN fixture payload → decode 解出 activate_admin_account',
         () {
       final v = byName['ACTIVATE_ADMIN']!;
+      final inputs = v['sample_inputs'] as Map<String, dynamic>;
       final decoded = PayloadDecoder.decode('0x${v['payload_hex']}');
       expect(decoded, isNotNull);
       expect(decoded!.action, 'activate_admin_account');
       // institution_code = "NRC"(fixture sample),kind=0 与 NRC 固定治理码匹配。
       expect(decoded.fields['institution_code'], isNotEmpty);
+      expect(decoded.fields['cid_number'], inputs['cid_number']);
+      expect(decoded.fields.containsKey('account'), isFalse);
     });
 
     test('DECRYPT fixture payload → decode 解出 decrypt_admin + cid_number', () {

@@ -523,8 +523,7 @@ async fn create_institution_inner(
             let message = format!("write institution failed: {err}");
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
-        if let Err(err) =
-            insert_required_protocol_accounts(&state, &inst, &ctx.admin_account).await
+        if let Err(err) = insert_required_protocol_accounts(&state, &inst, &ctx.admin_account).await
         {
             let message = format!("write required protocol accounts failed: {err}");
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());

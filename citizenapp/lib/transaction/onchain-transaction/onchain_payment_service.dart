@@ -40,7 +40,7 @@ class OnchainPaymentService {
       );
     }
     if (remarkBytes > TransferRpc.maxTransferRemarkBytes) {
-      throw OnchainPaymentException(
+      throw const OnchainPaymentException(
         OnchainPaymentErrorCode.invalidDraft,
         '转账备注不能超过 ${TransferRpc.maxTransferRemarkBytes} 字节',
       );

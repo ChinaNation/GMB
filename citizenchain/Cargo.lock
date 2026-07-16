@@ -3374,6 +3374,7 @@ dependencies = [
  "primitives",
  "scale-info",
  "sp-runtime",
+ "votingengine",
 ]
 
 [[package]]
@@ -8345,6 +8346,7 @@ dependencies = [
 name = "onchain-issuance"
 version = "1.0.0"
 dependencies = [
+ "entity-primitives",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -10049,7 +10051,6 @@ dependencies = [
  "parity-scale-codec",
  "primitives",
  "private-admins",
- "public-admins",
  "scale-info",
  "sp-core",
  "sp-io",

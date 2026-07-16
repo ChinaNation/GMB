@@ -173,7 +173,7 @@ class _MultisigTransferDetailPageState
     try {
       // 根据 kind 选择对应的详情查询方法。
       // 不同 kind 写在不同的 storage map：
-      //   transfer   → VotingEngine.ProposalData（带 multisig-transfer tag）
+      //   transfer   → VotingEngine.ProposalData（带 multisig tag）
       //   safetyFund → MultisigTransfer.SafetyFundProposalActions
       //   sweep      → MultisigTransfer.SweepProposalActions
       final Future<dynamic> detailFuture;
@@ -205,15 +205,11 @@ class _MultisigTransferDetailPageState
         detailFuture,
       ]);
 
-      var admins = results[0] as List<String>;
+      final admins = results[0] as List<String>;
       final thresholdSnapshot = results[1] as int?;
       final status = results[2] as int?;
       final tally = results[3] as ({int yes, int no});
       final detail = results[4];
-      if (admins.isEmpty) {
-        admins = await _adminService.fetchAdmins(_accountIdentity);
-      }
-
       // 管理员投票记录批量读取，避免 43 个管理员产生 43 次 RPC。
       final votes = await _proposalService.fetchAdminVotesBatch(
         widget.proposalId,
@@ -393,7 +389,8 @@ class _MultisigTransferDetailPageState
     if (detail is TransferProposalInfo) {
       return {
         'kind': 'transfer',
-        'institution_bytes_hex': _toHex(detail.institutionBytes),
+        'actor_cid_number': detail.actorCidNumber,
+        'institution_account_hex': _toHex(detail.institutionAccount),
         'beneficiary': detail.beneficiary,
         'amount_fen': detail.amountFen.toString(),
         'remark': detail.remark,
@@ -404,6 +401,8 @@ class _MultisigTransferDetailPageState
     if (detail is SafetyFundProposalInfo) {
       return {
         'kind': 'safety_fund',
+        'actor_cid_number': detail.actorCidNumber,
+        'institution_account_hex': _toHex(detail.institutionAccount),
         'beneficiary': detail.beneficiary,
         'amount_fen': detail.amountFen.toString(),
         'remark': detail.remark,
@@ -414,8 +413,10 @@ class _MultisigTransferDetailPageState
     if (detail is SweepProposalInfo) {
       return {
         'kind': 'sweep',
-        'institution_bytes_hex': _toHex(detail.institutionBytes),
+        'actor_cid_number': detail.actorCidNumber,
+        'institution_account_hex': _toHex(detail.institutionAccount),
         'amount_fen': detail.amountFen.toString(),
+        'proposer': detail.proposer,
         'status': detail.status,
       };
     }
@@ -427,11 +428,14 @@ class _MultisigTransferDetailPageState
     final kind = detail['kind']?.toString();
     if (kind == 'transfer') {
       final amountFen = BigInt.tryParse(detail['amount_fen']?.toString() ?? '');
-      final institutionBytesHex = detail['institution_bytes_hex']?.toString();
-      if (amountFen == null || institutionBytesHex == null) return null;
+      final actorCidNumber = detail['actor_cid_number']?.toString();
+      final institutionAccountHex =
+          detail['institution_account_hex']?.toString();
+      if (amountFen == null || institutionAccountHex == null) return null;
       return TransferProposalInfo(
         proposalId: snapshot.proposalId,
-        institutionBytes: _hexDecode(institutionBytesHex),
+        actorCidNumber: actorCidNumber,
+        institutionAccount: _hexDecode(institutionAccountHex),
         beneficiary: detail['beneficiary']?.toString() ?? '',
         amountFen: amountFen,
         remark: detail['remark']?.toString() ?? '',
@@ -441,9 +445,18 @@ class _MultisigTransferDetailPageState
     }
     if (kind == 'safety_fund') {
       final amountFen = BigInt.tryParse(detail['amount_fen']?.toString() ?? '');
-      if (amountFen == null) return null;
+      final actorCidNumber = detail['actor_cid_number']?.toString();
+      final institutionAccountHex =
+          detail['institution_account_hex']?.toString();
+      if (amountFen == null ||
+          actorCidNumber == null ||
+          institutionAccountHex == null) {
+        return null;
+      }
       return SafetyFundProposalInfo(
         proposalId: snapshot.proposalId,
+        actorCidNumber: actorCidNumber,
+        institutionAccount: _hexDecode(institutionAccountHex),
         beneficiary: detail['beneficiary']?.toString() ?? '',
         amountFen: amountFen,
         remark: detail['remark']?.toString() ?? '',
@@ -453,12 +466,23 @@ class _MultisigTransferDetailPageState
     }
     if (kind == 'sweep') {
       final amountFen = BigInt.tryParse(detail['amount_fen']?.toString() ?? '');
-      final institutionBytesHex = detail['institution_bytes_hex']?.toString();
-      if (amountFen == null || institutionBytesHex == null) return null;
+      final actorCidNumber = detail['actor_cid_number']?.toString();
+      final institutionAccountHex =
+          detail['institution_account_hex']?.toString();
+      final proposer = detail['proposer']?.toString();
+      if (amountFen == null ||
+          actorCidNumber == null ||
+          institutionAccountHex == null ||
+          proposer == null ||
+          proposer.isEmpty) {
+        return null;
+      }
       return SweepProposalInfo(
         proposalId: snapshot.proposalId,
-        institutionBytes: _hexDecode(institutionBytesHex),
+        actorCidNumber: actorCidNumber,
+        institutionAccount: _hexDecode(institutionAccountHex),
         amountFen: amountFen,
+        proposer: proposer,
         status: snapshot.status,
       );
     }
@@ -844,7 +868,7 @@ class _MultisigTransferDetailPageState
 
   // ──── 提案信息卡片 ────
 
-  /// 提案创建者公钥（仅 transfer / safetyFund 有）。
+  /// 提案创建者公钥。
   String? get _proposerSs58 {
     switch (widget.kind) {
       case MultisigTransferKind.transfer:
@@ -852,7 +876,7 @@ class _MultisigTransferDetailPageState
       case MultisigTransferKind.safetyFund:
         return _safetyFundInfo?.proposer;
       case MultisigTransferKind.sweep:
-        return null; // sweep 提案 storage 不记录 proposer
+        return _sweepInfo?.proposer;
     }
   }
 

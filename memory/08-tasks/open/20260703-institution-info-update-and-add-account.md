@@ -8,7 +8,7 @@
 - CID 号(身份锚点,账户派生/管理员建键/档案引用全靠它)
 - 机构码、省市码(**物理编码在 CID 里**,改它=改 CID;还参与校验和/路由/费率)
 - 账户地址(CID+账户名 确定性派生,有余额)
-- 保留账户名 main/fee、created_at、is_default
+- 协议账户名及 `created_at`；协议账户是否可关闭由 `InstitutionProtocolAccountKind` 唯一判定，不保存第二份布尔标记
 
 **支持修改**(本卡新增交易):
 - cid_full_name / cid_short_name(公权+私权统一上链;私权原存空是旧框架,本卡改为存名)
@@ -30,7 +30,7 @@
 ### C. `add_institution_account` call(public + private)
 - 参数:cid_number + 新账户名(单个或列表)+ 授权凭证;
 - 校验:机构存在且 Active、账户名非空/非保留冲突/未重复、派生地址未被占用/非保留/非保护(复用 register 校验链);
-- 派生地址 → 写 `InstitutionAccounts`(status=Active,is_default=false,initial_balance=0)+ `CidRegisteredAccount` + `AccountRegisteredCid`;
+- 派生地址 → 写 `InstitutionAccounts[(cid_number, account_name)]`（`initial_balance=0`）与 `AccountRegisteredCid`；不保存状态、默认标志或重复正向表；
 - 发 `InstitutionAccountAdded` 事件。
 - **授权双路径**:①注册局授权(同 create,直接生效);②机构自己管理员经 internal_vote 提案通过(治理自治)。本卡先做注册局路径,internal-vote 路径列 follow-up。
 
@@ -54,7 +54,7 @@
 
 - 2026-07-03:**链端(A/B/C/D)完成**,public 38 + private 37 测试全绿、全 runtime(含 benchmarks)+ onchina 编译过:
   - **A 私权名上链**:`private-manage/create.rs` 从存空改为用参数存名(`_cid_short_name`→`cid_short_name`,拒空全称/简称);翻转 3 个旧行为测试(私权名现上链、空简称现拒绝)。
-  - **B/C 两个新 call**:共享模块 `institution/maintain.rs`(两 pallet 逐字节同源)——`update_institution_info`(call 6,只 mutate 全称/简称,机构码/CID/省市码不给参数)、`add_institution_account`(call 7,新账户名→派生地址→写 InstitutionAccounts/CidRegisteredAccount/AccountRegisteredCid,初始余额 0)。授权复用注册局套件(verify_institution_registration + RegistryAuthority + UsedRegisterNonce 防重放,不引入新签名域:改名 payload=cid+新全称+空账户名+nonce,加账户 payload=cid+现全称+新账户名+nonce)。
+  - **B/C 两个 call**：`update_institution_info`（call 6）只更新名称；`add_institution_account`（call 7）派生地址并写 `InstitutionAccounts` 与 `AccountRegisteredCid`。外层授权统一为 `actor_cid_number + origin`，注册局凭证仍走唯一消息构造函数。
   - **D 事件/错误/权重/测试**:新增 Event `InstitutionInfoUpdated`/`InstitutionAccountAdded`、Error `InstitutionNotFound`;weights 复用 register 上界;费类走 `RuntimeCall::PublicManage(_)`/`PrivateManage(_)` 已有 VoteFlat 兜底(1 元/次),无需改分类器。
   - 踩坑:测试 mock verifier 原要求 account_names 非空(改名传空会挂),放宽为可空(登记入口自身已在 verifier 前拒空账户名);Rust 字节串字面量不能含非 ASCII,中文账户名用 `"…".as_bytes()`。
 

@@ -36,7 +36,7 @@ fn encode_cid_key_data(cid_number: &str) -> Result<Vec<u8>, String> {
     let raw = cid_number.as_bytes();
     if raw.is_empty() || raw.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize {
         return Err(format!(
-            "cid_number 长度需在 1..=32 字节,实际:{}",
+            "cid_number 长度必须在链上 CID_NUMBER_MAX_BYTES 范围内,实际:{}",
             raw.len()
         ));
     }

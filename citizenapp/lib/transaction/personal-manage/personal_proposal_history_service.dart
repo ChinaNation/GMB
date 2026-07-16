@@ -10,8 +10,8 @@
 // 最新状态 upsert 到 Isar(同步缓存,防止其他设备发起的提案漏记)。
 
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:isar_community/isar.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 
@@ -84,7 +84,8 @@ class PersonalProposalHistoryService {
     ChainRpc? chainRpc,
     ProposalQueryService? proposalService,
   })  : _rpc = chainRpc ?? ChainRpc(),
-        _proposalService = proposalService ?? ProposalQueryService();
+        _proposalService =
+            proposalService ?? ProposalQueryService(chainRpc: chainRpc);
 
   final ChainRpc _rpc;
   final ProposalQueryService _proposalService;
@@ -262,32 +263,12 @@ class PersonalProposalHistoryService {
     String personalAccountHex,
   ) async {
     try {
-      final accountId = _personalAccountToAccountId(personalAccountHex);
-      final key = _buildStorageKey(
-        'VotingEngine',
-        'ActiveProposalsBySubject',
-        _proposalSubjectPersonalAccountKey(accountId),
+      return _proposalService.fetchActivePersonalProposalIds(
+        personalAccountHex,
       );
-      final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
-      if (data == null || data.isEmpty) return const [];
-      final (count, lenSize) = _decodeCompact(data, 0);
-      final ids = <int>[];
-      var offset = lenSize;
-      for (var i = 0; i < count && offset + 8 <= data.length; i++) {
-        ids.add(_decodeU64(data.sublist(offset, offset + 8)));
-        offset += 8;
-      }
-      return ids;
     } catch (_) {
       return const [];
     }
-  }
-
-  Uint8List _proposalSubjectPersonalAccountKey(Uint8List accountId) {
-    final result = Uint8List(1 + accountId.length);
-    result[0] = 1; // ProposalSubject::PersonalAccount
-    result.setAll(1, accountId);
-    return result;
   }
 
   Future<void> _syncActiveProposalToIsar(
@@ -308,24 +289,20 @@ class PersonalProposalHistoryService {
             .findFirst();
       });
 
-      // action 决策:
-      // 1) 本设备已发起过该提案 → 用 Isar 已存的 action(权威,与发起页面一致)
-      // 2) 首次发现(其他设备发起 / 历史扫回) → 拉链上 ProposalData 真解码
-      //    MODULE_TAG + action_byte
-      // 3) 链上数据被 90 天清理或解码失败 → fallback create
-      String action = existing?.action ?? PersonalProposalAction.create;
+      // 本机已有记录沿用其真实动作；首次发现则必须从当前链上
+      // ProposalData 严格识别，禁止把缺失/未知载荷伪装成 create。
+      String? action = existing?.action;
       if (existing == null) {
         final raw = await _fetchProposalDataRaw(proposalId);
-        if (raw != null) {
-          final decoded = _decodeActionFromProposalData(raw);
-          if (decoded != null) action = decoded;
-        }
+        if (raw == null) return;
+        action = _decodeActionFromProposalData(raw);
+        if (action == null) return;
       }
 
       await recordOrUpdate(
         personalAccountHex: personalAccountHex,
         proposalId: proposalId,
-        action: action,
+        action: action!,
         status: statusStr,
         yesVotes: tally.yes,
         noVotes: tally.no,
@@ -337,41 +314,46 @@ class PersonalProposalHistoryService {
 
   /// 从链上 `VotingEngine.ProposalData[id]` 原始字节解码 `PersonalProposalAction`。
   ///
-  /// ProposalData 是 BoundedVec<u8>:Compact<len> + bytes,bytes 格式:
-  /// `MODULE_TAG` + `action_byte`(1B) + 业务参数。
+  /// ProposalData 是 BoundedVec<u8>:Compact<len> + bytes。
   ///
   /// 个人多签提案能命中的映射:
   /// - per-mgmt + 0 → create (PersonalAdmins::propose_create)
   /// - per-mgmt + 1 → close  (PersonalAdmins::propose_close)
-  /// - multisig-transfer + 0 → transfer (MultisigTransfer::propose_transfer)
+  /// - multisig → transfer (MultisigTransfer::propose_transfer)
   /// 个人多签不会触发 safety_fund/sweep,无需识别。
   String? _decodeActionFromProposalData(Uint8List raw) {
-    if (raw.length < 2) return null;
-    final mode = raw[0] & 0x03;
-    final int offset;
-    if (mode == 0) {
-      offset = 1;
-    } else if (mode == 1) {
-      offset = 2;
-    } else if (mode == 2) {
-      offset = 4;
-    } else {
+    try {
+      final (length, lenSize) = _decodeCompact(raw, 0);
+      if (lenSize + length != raw.length) return null;
+      final data = Uint8List.sublistView(raw, lenSize);
+
+      // per-mgmt = b"per-mgmt" 8 字节，后接 action byte。
+      const perMgmt = [0x70, 0x65, 0x72, 0x2d, 0x6d, 0x67, 0x6d, 0x74];
+      if (_startsWithAt(data, perMgmt, 0)) {
+        if (perMgmt.length >= data.length) return null;
+        final action = data[perMgmt.length];
+        if (action == 0) return PersonalProposalAction.create;
+        if (action == 1) return PersonalProposalAction.close;
+        return null;
+      }
+
+      // 当前 multisig ProposalData 不含 action byte；tag 本身唯一表示转账。
+      final multisig = 'multisig'.codeUnits;
+      if (_startsWithAt(data, multisig, 0) &&
+          data.length >= multisig.length + 1 + 32 + 32 + 16 + 1 + 32 &&
+          (data[multisig.length] == 0 || data[multisig.length] == 1)) {
+        return PersonalProposalAction.transfer;
+      }
+      return null;
+    } catch (_) {
       return null;
     }
-    // per-mgmt = b"per-mgmt" 8 字节
-    const perMgmt = [0x70, 0x65, 0x72, 0x2d, 0x6d, 0x67, 0x6d, 0x74];
-    final multisigTransfer = 'multisig-transfer'.codeUnits;
-    if (_startsWithAt(raw, perMgmt, offset)) {
-      if (offset + perMgmt.length >= raw.length) return null;
-      final action = raw[offset + perMgmt.length];
-      if (action == 0) return PersonalProposalAction.create;
-      if (action == 1) return PersonalProposalAction.close;
-    } else if (_startsWithAt(raw, multisigTransfer, offset)) {
-      if (offset + multisigTransfer.length >= raw.length) return null;
-      final action = raw[offset + multisigTransfer.length];
-      if (action == 0) return PersonalProposalAction.transfer;
-    }
-    return null;
+  }
+
+  /// 测试入口：锁定当前投票引擎 ProposalData 模块标签。
+  @visibleForTesting
+  String? debugDecodeActionFromProposalData(Uint8List raw) {
+    return _decodeActionFromProposalData(raw);
   }
 
   bool _startsWithAt(Uint8List data, List<int> prefix, int offset) {
@@ -444,15 +426,6 @@ class PersonalProposalHistoryService {
 
   // ──── 编码 / 哈希工具(对齐 votingengine storage key) ────
 
-  /// 个人多签治理 AccountId。
-  Uint8List _personalAccountToAccountId(String accountHex) {
-    final addr = _hexDecode(accountHex);
-    if (addr.length != 32) {
-      throw ArgumentError('personal address 必须为 32 字节');
-    }
-    return Uint8List.fromList(addr);
-  }
-
   Uint8List _buildStorageKey(
     String pallet,
     String storage,
@@ -476,43 +449,35 @@ class PersonalProposalHistoryService {
     return result;
   }
 
-  Uint8List _hexDecode(String hex) {
-    final h = hex.startsWith('0x') ? hex.substring(2) : hex;
-    final bytes = Uint8List(h.length ~/ 2);
-    for (var i = 0; i < bytes.length; i++) {
-      bytes[i] = int.parse(h.substring(i * 2, i * 2 + 2), radix: 16);
-    }
-    return bytes;
-  }
-
   String _hexEncode(Uint8List bytes) =>
       bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
   (int, int) _decodeCompact(Uint8List data, int offset) {
-    final mode = data[offset] & 0x03;
-    if (mode == 0) return (data[offset] >> 2, 1);
+    if (offset < 0 || offset >= data.length) {
+      throw const FormatException('Compact<u32> offset 越界');
+    }
+    final first = data[offset];
+    final mode = first & 0x03;
+    if (mode == 0) return (first >> 2, 1);
     if (mode == 1) {
-      return ((data[offset] >> 2) | (data[offset + 1] << 6), 2);
+      if (offset + 1 >= data.length) {
+        throw const FormatException('Compact<u32> mode1 长度不足');
+      }
+      return ((first | data[offset + 1] << 8) >> 2, 2);
     }
     if (mode == 2) {
+      if (offset + 3 >= data.length) {
+        throw const FormatException('Compact<u32> mode2 长度不足');
+      }
       return (
-        (data[offset] >> 2) |
-            (data[offset + 1] << 6) |
-            (data[offset + 2] << 14) |
-            (data[offset + 3] << 22),
-        4
+        (first |
+                data[offset + 1] << 8 |
+                data[offset + 2] << 16 |
+                data[offset + 3] << 24) >>
+            2,
+        4,
       );
     }
-    final len = ((data[offset] >> 2) + 4) & 0xFF;
-    var value = 0;
-    for (var i = 0; i < len; i++) {
-      value |= data[offset + 1 + i] << (i * 8);
-    }
-    return (value, len + 1);
-  }
-
-  int _decodeU64(Uint8List data) {
-    final bd = ByteData.sublistView(data);
-    return bd.getUint64(0, Endian.little);
+    throw const FormatException('Compact<u32> big-integer 模式不支持');
   }
 }

@@ -5,6 +5,7 @@
 // 等价于"链上失败 → 仅返回 Isar"路径。
 
 import 'dart:typed_data';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_query_service.dart';
@@ -34,6 +35,59 @@ void main() {
 
   const personalAccount = 'aabbccddeeff00112233445566778899'
       '00112233445566778899aabbccddeeff';
+
+  List<int> compactU32(int value) {
+    if (value < 64) return [value << 2];
+    final encoded = (value << 2) | 1;
+    return [encoded & 0xff, encoded >> 8];
+  }
+
+  test('ProposalData 只识别当前 per-mgmt / multisig 标签并拒绝尾随字节', () {
+    final service = _service();
+    Uint8List wrap(List<int> body) =>
+        Uint8List.fromList([...compactU32(body.length), ...body]);
+
+    expect(
+      service.debugDecodeActionFromProposalData(
+        wrap([...utf8.encode('per-mgmt'), 0, ...List.filled(32, 1)]),
+      ),
+      PersonalProposalAction.create,
+    );
+    expect(
+      service.debugDecodeActionFromProposalData(
+        wrap([...utf8.encode('per-mgmt'), 1, ...List.filled(32, 1)]),
+      ),
+      PersonalProposalAction.close,
+    );
+    expect(
+      service.debugDecodeActionFromProposalData(
+        wrap([
+          ...utf8.encode('multisig'),
+          0, // actor_cid_number: None（个人多签）
+          ...List.filled(32, 1), // funding_account
+          ...List.filled(32, 2), // beneficiary
+          ...List.filled(16, 0), // amount
+          0, // empty remark
+          ...List.filled(32, 3), // proposer
+        ]),
+      ),
+      PersonalProposalAction.transfer,
+    );
+    expect(
+      service.debugDecodeActionFromProposalData(
+        wrap([...utf8.encode('multisig-transfer'), 0]),
+      ),
+      isNull,
+    );
+
+    final current = wrap([...utf8.encode('multisig'), 0]);
+    expect(
+      service.debugDecodeActionFromProposalData(
+        Uint8List.fromList([...current, 0]),
+      ),
+      isNull,
+    );
+  });
 
   test('recordOrUpdate inserts new entity then readAllFromIsar 返回单条', () async {
     final service = _service();

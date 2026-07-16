@@ -387,14 +387,14 @@ class _ProposalEntryPageState extends State<ProposalEntryPage> {
       if (!context.mounted) return;
 
       if (activeIds.length >=
-          ProposalLimitService.maxActiveProposalsPerInstitution) {
+          ProposalLimitService.maxActiveProposalsPerSubject) {
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('提案数量已达上限'),
             content: Text(
               '本机构当前有 ${activeIds.length} 个活跃提案，'
-              '已达上限 ${ProposalLimitService.maxActiveProposalsPerInstitution} 个。'
+              '已达上限 ${ProposalLimitService.maxActiveProposalsPerSubject} 个。'
               '请等待现有提案完成后再发起新提案。',
             ),
             actions: [

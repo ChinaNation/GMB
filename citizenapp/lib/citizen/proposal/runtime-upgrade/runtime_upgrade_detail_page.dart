@@ -144,14 +144,13 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
 
       final institution = widget.institution;
       if (institution != null) {
-        final institutionAccountId = _institutionAccountId(institution);
         futures.add(_adminService.fetchAdmins(
           AdminAccountIdentity.fromInstitution(institution),
         ));
         futures.add(_service.fetchJointVoteByInstitution(
-            widget.proposalId, institutionAccountId));
+            widget.proposalId, institution.cidNumber));
         futures.add(_service.fetchJointInstitutionTally(
-            widget.proposalId, institutionAccountId));
+            widget.proposalId, institution.cidNumber));
       }
 
       final results = await Future.wait(futures);
@@ -180,10 +179,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         }).toList(growable: false)
           ..sort((a, b) => a.walletIndex.compareTo(b.walletIndex));
 
-        final institutionBytes = _institutionAccountId(institution);
         final voteResults = await _service.fetchJointAdminVotesBatch(
           widget.proposalId,
-          institutionBytes,
+          institution.cidNumber,
           admins,
         );
         adminVotes = voteResults;
@@ -197,7 +195,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           TransferRpc(),
           chainVoteLookup: (record) => _service.fetchJointAdminVote(
             record.proposalId,
-            institutionBytes,
+            institution.cidNumber,
             record.walletPubkey,
           ),
         );
@@ -346,9 +344,10 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         'meta_status': meta?.status,
         'meta_internal_code': meta?.internalCode,
         'meta_subject_cid_numbers': meta?.subjectCidNumbers,
-        'meta_institution_bytes_hex': meta?.institutionBytes == null
+        'meta_actor_cid_number': meta?.actorCidNumber,
+        'meta_execution_account_hex': meta?.executionAccount == null
             ? null
-            : _toHex(meta!.institutionBytes!),
+            : _toHex(meta!.executionAccount!),
         'joint_yes': jointTally.yes,
         'joint_no': jointTally.no,
         'referendum_yes': referendumTally.yes,
@@ -365,6 +364,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   ) {
     if (info == null) return const {};
     return {
+      'actor_cid_number': info.actorCidNumber,
       'proposer': info.proposer,
       'reason': info.reason,
       'code_hash_hex': info.codeHashHex,
@@ -382,6 +382,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     ProposalDetailSnapshot snapshot,
   ) {
     final detail = snapshot.detail;
+    final actorCidNumber = detail['actor_cid_number']?.toString();
     final codeHash = detail['code_hash_hex']?.toString();
     final paramsHash = detail['expected_pow_params_hash_hex']?.toString();
     final paramsVersion = _toInt(detail['params_version']);
@@ -390,7 +391,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     final adjustmentInterval = _toInt(detail['adjustment_interval']);
     final maxAdjustUpFactor = _toInt(detail['max_adjust_up_factor']);
     final maxAdjustDownDivisor = _toInt(detail['max_adjust_down_divisor']);
-    if (codeHash == null ||
+    if (actorCidNumber == null ||
+        actorCidNumber.isEmpty ||
+        codeHash == null ||
         codeHash.isEmpty ||
         paramsHash == null ||
         paramsVersion == null ||
@@ -398,9 +401,12 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         targetBlockTimeMs == null ||
         adjustmentInterval == null ||
         maxAdjustUpFactor == null ||
-        maxAdjustDownDivisor == null) return null;
+        maxAdjustDownDivisor == null) {
+      return null;
+    }
     return RuntimeUpgradeProposalInfo(
       proposalId: snapshot.proposalId,
+      actorCidNumber: actorCidNumber,
       proposer: detail['proposer']?.toString() ?? '',
       reason: detail['reason']?.toString() ?? '',
       codeHashHex: codeHash,
@@ -419,19 +425,21 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     final stage = _toInt(snapshot.extra['meta_stage']);
     final status = _toInt(snapshot.extra['meta_status']);
     if (kind == null || stage == null || status == null) return null;
-    final institutionHex =
-        snapshot.extra['meta_institution_bytes_hex']?.toString();
+    final executionAccountHex =
+        snapshot.extra['meta_execution_account_hex']?.toString();
     return ProposalMeta(
       proposalId: snapshot.proposalId,
       kind: kind,
       stage: stage,
       status: status,
       internalCode: snapshot.extra['meta_internal_code']?.toString(),
+      actorCidNumber: snapshot.extra['meta_actor_cid_number']?.toString(),
       subjectCidNumbers:
           _toStringList(snapshot.extra['meta_subject_cid_numbers']),
-      institutionBytes: institutionHex == null || institutionHex.isEmpty
-          ? null
-          : Uint8List.fromList(_hexDecode(institutionHex)),
+      executionAccount:
+          executionAccountHex == null || executionAccountHex.isEmpty
+              ? null
+              : Uint8List.fromList(_hexDecode(executionAccountHex)),
     );
   }
 
@@ -460,16 +468,6 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     return hex.startsWith('0x')
         ? hex.substring(2).toLowerCase()
         : hex.toLowerCase();
-  }
-
-  Uint8List _institutionAccountId(InstitutionInfo institution) {
-    // 联合投票 storage 使用机构多签 AccountId，不从 cid_number 派生主体。
-    return Uint8List.fromList(
-      institutionIdentityToAccountId(
-        institution.cidNumber,
-        mainAccount: institution.mainAccount,
-      ),
-    );
   }
 
   Uint8List _hexDecode(String hex) {
@@ -546,10 +544,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     setState(() => _submitting = true);
 
     try {
-      final institutionBytes = _institutionAccountId(institution);
       final result = await _service.submitJointVote(
         proposalId: widget.proposalId,
-        institutionAccountId: institutionBytes,
+        actorCidNumber: institution.cidNumber,
         approve: approve,
         fromAddress: voteWallet.address,
         signerPubkey: _hexDecode(voteWallet.pubkeyHex),

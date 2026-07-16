@@ -18,8 +18,7 @@ pub const MAX_REPRESENTATIVE_BODIES: u32 = votingengine::types::MAX_REPRESENTATI
 pub type RepresentativeBody = CidNumber;
 
 /// 顺序表决机构列表。
-pub type RepresentativeBodies =
-    BoundedVec<RepresentativeBody, ConstU32<MAX_REPRESENTATIVE_BODIES>>;
+pub type RepresentativeBodies = BoundedVec<RepresentativeBody, ConstU32<MAX_REPRESENTATIVE_BODIES>>;
 
 /// 代表机构表决路线。
 ///

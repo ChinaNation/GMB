@@ -14,16 +14,17 @@ void main() {
         PalletRegistry.privateManagePallet,
         PalletRegistry.votingEnginePallet,
         PalletRegistry.runtimeUpgradePallet,
-        PalletRegistry.resolutionDestroPallet,
+        PalletRegistry.resolutionDestroyPallet,
         PalletRegistry.personalManagePallet,
         PalletRegistry.personalAdminsPallet,
         PalletRegistry.grandpaKeyChangePallet,
         PalletRegistry.resolutionIssuancePallet,
         PalletRegistry.offchainTransactionPallet,
         PalletRegistry.citizenIdentityPallet,
+        PalletRegistry.onchainIssuancePallet,
         PalletRegistry.addressRegistryPallet,
       };
-      expect(pallets.length, 14);
+      expect(pallets.length, 15);
     });
 
     test('投票引擎 sub-pallet call_index', () {
@@ -94,6 +95,20 @@ void main() {
       // 统一收口至 VotingEngine 的 4/5 两个 call_index。
       expect(PalletRegistry.retryPassedProposalCall, 4);
       expect(PalletRegistry.cancelPassedProposalCall, 5);
+    });
+
+    test('OnchainIssuance 十个调用与 runtime ABI 对齐', () {
+      expect(PalletRegistry.onchainIssuancePallet, 23);
+      expect(PalletRegistry.proposeIssueCall, 0);
+      expect(PalletRegistry.proposeMintCall, 1);
+      expect(PalletRegistry.proposeBurnCall, 2);
+      expect(PalletRegistry.proposeCloseAssetCall, 3);
+      expect(PalletRegistry.proposeAssetTransferCall, 4);
+      expect(PalletRegistry.proposeMonitorFreezeCall, 10);
+      expect(PalletRegistry.proposeMonitorUnfreezeCall, 11);
+      expect(PalletRegistry.proposeMonitorConfiscateCall, 12);
+      expect(PalletRegistry.proposeMonitorForceTransferCall, 13);
+      expect(PalletRegistry.proposeMonitorForceCloseCall, 14);
     });
 
     test('清算行 OffchainTransaction call_index 与 runtime 对齐', () {

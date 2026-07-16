@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../stickers/sticker_pack.dart';
@@ -16,7 +18,7 @@ class StickerPanel extends StatelessWidget {
   /// 点选一个贴纸时回调,参数为 `(packId, stickerId)`。
   final void Function(String packId, String stickerId) onPick;
 
-  /// 面板高度(含分类 Tab)。
+  /// 面板期望高度(含分类 Tab)。实际按视口高夹取上限,横屏/小屏不挤压消息列表。
   final double height;
 
   static const Map<StickerCategory, String> _categoryLabels = {
@@ -30,8 +32,13 @@ class StickerPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final grouped = StickerPack.grouped();
     final categories = grouped.keys.toList();
+    // 横屏/小屏可用高很低,固定 264 会把消息列表挤到不可用;按视口 40% 夹取。
+    final effectiveHeight = math.min(
+      height,
+      MediaQuery.sizeOf(context).height * 0.4,
+    );
     return SizedBox(
-      height: height,
+      height: effectiveHeight,
       child: DefaultTabController(
         length: categories.length,
         child: Column(

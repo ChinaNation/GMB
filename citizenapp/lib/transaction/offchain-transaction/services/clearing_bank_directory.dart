@@ -141,8 +141,8 @@ class ClearingBankDirectory {
   Future<String?> fetchUserBank(String userAddress) async {
     final account = Uint8List.fromList(Keyring().decodeAddress(userAddress));
     final raw = await _chainRpc.fetchStorage(_userBankKey(account));
-    if (raw == null || raw.length < 32) return null;
-    return Keyring().encodeAddress(raw.sublist(0, 32).toList(), 2027);
+    if (raw == null || raw.length != 32) return null;
+    return Keyring().encodeAddress(raw.toList(), 2027);
   }
 
   Future<List<ClearingBankNodeEndpoint>> _fetchAllEndpoints() async {
@@ -181,13 +181,13 @@ class ClearingBankDirectory {
     Uint8List raw,
   ) {
     var offset = 0;
-    final (peerId, peerNext) = _readUtf8Vec(raw, offset);
+    final (peerId, peerNext) = _readUtf8Vec(raw, offset, maxLength: 64);
     if (peerId == null) return null;
     offset = peerNext;
-    final (domain, domainNext) = _readUtf8Vec(raw, offset);
+    final (domain, domainNext) = _readUtf8Vec(raw, offset, maxLength: 128);
     if (domain == null) return null;
     offset = domainNext;
-    if (offset + 2 + 4 + 32 > raw.length) return null;
+    if (offset + 2 + 4 + 32 != raw.length) return null;
     final port = raw[offset] | (raw[offset + 1] << 8);
     offset += 2;
     final registeredAt = _readU32Le(raw, offset);
@@ -235,8 +235,8 @@ class ClearingBankDirectory {
     final bytes = _hexDecode(keyHex);
     const valueOffset = 32 + 16;
     if (bytes.length <= valueOffset) return null;
-    final (value, _) = _readUtf8Vec(bytes, valueOffset);
-    return value;
+    final (value, next) = _readUtf8Vec(bytes, valueOffset, maxLength: 32);
+    return next == bytes.length ? value : null;
   }
 
   static Uint8List _encodeBytes(List<int> raw) {
@@ -253,15 +253,23 @@ class ClearingBankDirectory {
     return [v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff];
   }
 
-  static (String?, int) _readUtf8Vec(Uint8List bytes, int offset) {
+  static (String?, int) _readUtf8Vec(
+    Uint8List bytes,
+    int offset, {
+    required int maxLength,
+  }) {
     final (len, lenSize) = _decodeCompactU32(bytes, offset);
-    if (lenSize == 0) return (null, offset);
+    if (lenSize == 0 || len <= 0 || len > maxLength) return (null, offset);
     offset += lenSize;
     if (offset + len > bytes.length) return (null, offset);
-    return (
-      utf8.decode(bytes.sublist(offset, offset + len), allowMalformed: true),
-      offset + len,
-    );
+    try {
+      return (
+        utf8.decode(bytes.sublist(offset, offset + len)),
+        offset + len,
+      );
+    } on FormatException {
+      return (null, offset);
+    }
   }
 
   static (int, int) _decodeCompactU32(Uint8List bytes, int offset) {

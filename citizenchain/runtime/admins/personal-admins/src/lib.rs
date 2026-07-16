@@ -282,8 +282,7 @@ pub mod pallet {
                 Error::<T>::InvalidLifecycleScope
             );
             ensure!(
-                proposal.execution_account == Some(account)
-                    && proposal.actor_cid_number.is_none(),
+                proposal.execution_account == Some(account) && proposal.actor_cid_number.is_none(),
                 Error::<T>::InvalidLifecycleScope
             );
             ensure!(
@@ -572,7 +571,7 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId> for pallet::Pallet<T
     fn create_pending_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        admin_root_account_id: T::AccountId,
+        personal_account: T::AccountId,
         _cid_number: Vec<u8>,
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
@@ -586,32 +585,32 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId> for pallet::Pallet<T
         Self::ensure_lifecycle_proposal(
             proposal_id,
             module_tag,
-            admin_root_account_id.clone(),
+            personal_account.clone(),
             STATUS_VOTING,
             false,
         )?;
-        Self::do_create_pending_admin_account(admin_root_account_id, kind, admins, creator)
+        Self::do_create_pending_admin_account(personal_account, kind, admins, creator)
     }
 
     fn activate_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        admin_root_account_id: T::AccountId,
+        personal_account: T::AccountId,
     ) -> DispatchResult {
         Self::ensure_lifecycle_proposal(
             proposal_id,
             module_tag,
-            admin_root_account_id.clone(),
+            personal_account.clone(),
             STATUS_PASSED,
             true,
         )?;
-        Self::do_activate_admin_account(admin_root_account_id)
+        Self::do_activate_admin_account(personal_account)
     }
 
     fn remove_pending_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        admin_root_account_id: T::AccountId,
+        personal_account: T::AccountId,
     ) -> DispatchResult {
         let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
             .ok_or(pallet::Error::<T>::ProposalActionNotFound)?;
@@ -622,86 +621,86 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId> for pallet::Pallet<T
         Self::ensure_lifecycle_proposal(
             proposal_id,
             module_tag,
-            admin_root_account_id.clone(),
+            personal_account.clone(),
             proposal.status,
             false,
         )?;
-        Self::do_remove_pending_admin_account(admin_root_account_id)
+        Self::do_remove_pending_admin_account(personal_account)
     }
 
     fn close_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        admin_root_account_id: T::AccountId,
+        personal_account: T::AccountId,
     ) -> DispatchResult {
         Self::ensure_lifecycle_proposal(
             proposal_id,
             module_tag,
-            admin_root_account_id.clone(),
+            personal_account.clone(),
             STATUS_PASSED,
             true,
         )?;
-        Self::do_close_admin_account(admin_root_account_id)
+        Self::do_close_admin_account(personal_account)
     }
 }
 
 impl<T: pallet::Config> AdminAccountQuery<T::AccountId> for pallet::Pallet<T> {
     fn active_admin_account_exists(
         institution_code: InstitutionCode,
-        admin_root_account_id: T::AccountId,
+        personal_account: T::AccountId,
     ) -> bool {
-        Self::active_admin_account_exists(institution_code, admin_root_account_id)
+        Self::active_admin_account_exists(institution_code, personal_account)
     }
 
     fn is_active_account_admin(
         institution_code: InstitutionCode,
-        admin_root_account_id: T::AccountId,
+        personal_account: T::AccountId,
         who: &T::AccountId,
     ) -> bool {
-        Self::is_active_account_admin(institution_code, admin_root_account_id, who)
+        Self::is_active_account_admin(institution_code, personal_account, who)
     }
 
     fn active_account_admins(
         institution_code: InstitutionCode,
-        admin_root_account_id: T::AccountId,
+        personal_account: T::AccountId,
     ) -> Option<Vec<T::AccountId>> {
-        Self::active_account_admins(institution_code, admin_root_account_id)
+        Self::active_account_admins(institution_code, personal_account)
     }
 
     fn active_account_admins_len(
         institution_code: InstitutionCode,
-        admin_root_account_id: T::AccountId,
+        personal_account: T::AccountId,
     ) -> Option<u32> {
-        Self::active_account_admins_len(institution_code, admin_root_account_id)
+        Self::active_account_admins_len(institution_code, personal_account)
     }
 
     fn pending_account_exists_for_snapshot(
         institution_code: InstitutionCode,
-        admin_root_account_id: T::AccountId,
+        personal_account: T::AccountId,
     ) -> bool {
-        Self::pending_account_exists_for_snapshot(institution_code, admin_root_account_id)
+        Self::pending_account_exists_for_snapshot(institution_code, personal_account)
     }
 
     fn is_pending_account_admin_for_snapshot(
         institution_code: InstitutionCode,
-        admin_root_account_id: T::AccountId,
+        personal_account: T::AccountId,
         who: &T::AccountId,
     ) -> bool {
-        Self::is_pending_account_admin_for_snapshot(institution_code, admin_root_account_id, who)
+        Self::is_pending_account_admin_for_snapshot(institution_code, personal_account, who)
     }
 
     fn pending_account_admins_for_snapshot(
         institution_code: InstitutionCode,
-        admin_root_account_id: T::AccountId,
+        personal_account: T::AccountId,
     ) -> Option<Vec<T::AccountId>> {
-        Self::pending_account_admins_for_snapshot(institution_code, admin_root_account_id)
+        Self::pending_account_admins_for_snapshot(institution_code, personal_account)
     }
 
     fn pending_account_admins_len_for_snapshot(
         institution_code: InstitutionCode,
-        admin_root_account_id: T::AccountId,
+        personal_account: T::AccountId,
     ) -> Option<u32> {
-        Self::pending_account_admins_len_for_snapshot(institution_code, admin_root_account_id)
+        Self::pending_account_admins_len_for_snapshot(institution_code, personal_account)
     }
 }
 

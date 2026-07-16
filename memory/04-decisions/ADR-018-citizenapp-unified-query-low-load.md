@@ -14,7 +14,7 @@
 | 访问模式 | 轻节点表现 | 例子 |
 |---|---|---|
 | **精确整键 `fetchStorage(完整key)`** | ✅ 正常(单 key Merkle 证明) | `ActiveProposalsBySubject[ProposalSubject]`、`InternalVotesByAccount[pid,account]`、`System.Account[account]` 余额 |
-| **keysPaged 前缀扫描,前缀嵌长 K1(ProposalSubject / blake2+cid)** | ❌ 返回空(证明拉不全,静默空) | `ProposalsByCid[cid_number]`、`CidRegisteredAccount[blake2(cid)+cid]` |
+| **keysPaged 前缀扫描,前缀嵌长 K1(ProposalSubject / blake2+cid)** | ❌ 返回空(证明拉不全,静默空) | `ProposalsByCid[cid_number]`、`InstitutionAccounts[blake2(cid)+cid,...]` |
 | **keysPaged 短前缀(整表 / ≤2B K1)** | ✅ 正常 | `ProposalsByYear[year]`、`ProposalsByCode[institution_code]`(机构码反向索引,见 [[ADR-025]])、`AdminAccounts` 整表 |
 
 **所以"功能性坏"只有长前缀 keysPaged 这一类(2 处);其余全是"能用但费节点"的负载问题。** 不需要改链端 storage 结构。
@@ -39,7 +39,7 @@ ProposalsByYear[currentYear](短key,可用) → getKeysPagedFinalized → ids
    → 共享缓存(TTL 20s)
    → 提案页 filter defaultCodes ∪ subscribedCidNumbers / 机构详情 filter subject_cid_numbers 包含机构 CID / 个人多签 filter PersonalAccount
 ```
-依据:`ProposalsByYear` 链端对每个提案无条件写、终态清理时移除;`ProposalMeta` 已解码 `kind/stage/status/internal_code/account_context/subject_cid_numbers`,客户端过滤零联网。
+依据:`ProposalsByYear` 链端对每个提案无条件写、终态清理时移除；`ProposalMeta` 已解码 `kind/stage/status/internal_code/actor_cid_number/execution_account/subject_cid_numbers`，客户端过滤零联网。
 **载荷:广场(原 3 次 ByOrg)+ 机构详情(原坏的 ByInstitution)+ 个人 → 同周期共用一份缓存 = 1 次按年取 + 1 次批量详情。**
 
 ### 2. `ChainReadCache`(新增,余额/storage 共享缓存,挂在 ChainRpc 层)
@@ -59,7 +59,7 @@ ProposalsByYear[currentYear](短key,可用) → getKeysPagedFinalized → ids
 | 位置 | 索引 | 改法 |
 |---|---|---|
 | `transaction/multisig-transfer/multisig_transfer_service.dart:290` fetchProposalIdsByInstitution | `ProposalsByCid[cid_number]` | 删,机构详情改走 ProposalFeedCache 按年取+过滤(**本次 bug 收口**) |
-| `governance/organization-manage/institution_manage_service.dart:327` listCidAccounts | `CidRegisteredAccount[blake2(cid)+cid]` | **~~改整表扫~~ 已被 §九 取代**:审计确认此方法为死代码(全仓零调用),且多签账户清单应走 `AccountRegisteredCid` 精确反查而非正向枚举 → **直接删除**,不整表化 |
+| 已删除的 `listCidAccounts` | 旧重复 CID→账户表 | 审计确认是死代码；目标态账户清单只读 `InstitutionAccounts[(cid_number, account_name)]` 正向真源，不恢复旧枚举接口 |
 
 ### B. R2 必改 — N+1 循环逐条链读(费节点,核心降载)
 | 位置 | 现状 | 改法 |
@@ -119,7 +119,7 @@ ProposalsByYear[currentYear](短key,可用) → getKeysPagedFinalized → ids
 
 ## 八、风险与回滚
 - ProposalsByYear 跨年窗口:取 currentYear,必要时并 currentYear-1(提案 90 天清理,1 年窗口足够)。
-- 整表扫 CidRegisteredAccount / AdminAccounts:注册规模上去需分页;dev 期无虞。
+- 整表扫 `InstitutionAccounts` / `AdminAccounts`：注册规模上去需分页；dev 期无虞。
 - 纯客户端改动,逐卡可独立回滚(git revert),不涉链、不涉创世。
 
 ---
@@ -170,7 +170,7 @@ lib/governance/
 - **多签(我的)**:
   - L1(卡②,纯客户端零链改):① `InstitutionDiscoveryService` + `PersonalManageDiscoveryService` 对
     同一张 `AdminAccounts` 的双扫合并为 `shared/admin_accounts_scan_service.dart` 单次扫,按 kind 分流;
-    ② 机构账户命名走 `AccountRegisteredCid[addr]` 精确批量反查聚合,**不正向枚举** `CidRegisteredAccount`;
+    ② 已知地址的机构账户命名走 `AccountRegisteredCid[addr]` 精确批量反查；已知 CID 的账户集合读取 `InstitutionAccounts` 真源；
     ③ 删死代码 `listCidAccounts`。
   - L2(ADR-019,需 runtime 升级):加 `AdminAccountsByMember` 成员反向索引,把全表扫降为按钱包精确读
     (O(n)→O(1))。这是全系统最高价值的一处链改,ADR-018"不动链端"范围外,单列。

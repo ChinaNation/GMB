@@ -188,10 +188,8 @@ void main() {
         PersonalManageStorageCodec.accountIdFromAccountHex(address),
       ))}';
       final thresholdKey =
-          '0x${hexOf(PersonalManageStorageCodec.dynamicThresholdKey(
-        storageName: 'ActiveDynamicThresholds',
-        institutionCode: 'PMUL',
-        accountId: PersonalManageStorageCodec.accountIdFromAccountHex(address),
+          '0x${hexOf(PersonalManageStorageCodec.activePersonalThresholdKey(
+        PersonalManageStorageCodec.accountIdFromAccountHex(address),
       ))}';
       rpc.responses[personalKey] = personalAccountBytes();
       rpc.responses[adminKey] = adminAccountBytes(
@@ -221,13 +219,9 @@ void main() {
           '0x${hexOf(PersonalManageStorageCodec.adminAccountKey(
             PersonalManageStorageCodec.accountIdFromAccountHex(address),
           ))}';
-      String thresholdKey(String address, String storageName) =>
-          '0x${hexOf(PersonalManageStorageCodec.dynamicThresholdKey(
-            storageName: storageName,
-            institutionCode: 'PMUL',
-            accountId: PersonalManageStorageCodec.accountIdFromAccountHex(
-              address,
-            ),
+      String thresholdKey(String address) =>
+          '0x${hexOf(PersonalManageStorageCodec.activePersonalThresholdKey(
+            PersonalManageStorageCodec.accountIdFromAccountHex(address),
           ))}';
 
       rpc.responses[personalKey(firstAddress)] = personalAccountBytes();
@@ -240,10 +234,7 @@ void main() {
         admin1: List<int>.filled(32, 0xcc),
         admin2: List<int>.filled(32, 0xdd),
       );
-      rpc.responses[thresholdKey(firstAddress, 'ActiveDynamicThresholds')] =
-          Uint8List.fromList(u32Le(2));
-      rpc.responses[thresholdKey(secondAddress, 'PendingDynamicThresholds')] =
-          Uint8List.fromList(u32Le(2));
+      rpc.responses[thresholdKey(firstAddress)] = Uint8List.fromList(u32Le(2));
 
       final infos = await service.fetchPersonalAccountsBatch([
         firstAddress,
@@ -253,15 +244,14 @@ void main() {
       expect(infos[firstAddress]!.admins, ['aa' * 32, 'bb' * 32]);
       expect(infos[secondAddress]!.admins, ['cc' * 32, 'dd' * 32]);
       expect(infos[firstAddress]!.threshold, 2);
-      expect(infos[secondAddress]!.threshold, 2);
+      expect(infos[secondAddress]!.threshold, isNull);
       expect(rpc.requestedKeys, [
         personalKey(firstAddress),
         adminKey(firstAddress),
         personalKey(secondAddress),
         adminKey(secondAddress),
-        thresholdKey(firstAddress, 'ActiveDynamicThresholds'),
-        thresholdKey(secondAddress, 'ActiveDynamicThresholds'),
-        thresholdKey(secondAddress, 'PendingDynamicThresholds'),
+        thresholdKey(firstAddress),
+        thresholdKey(secondAddress),
       ]);
     });
 

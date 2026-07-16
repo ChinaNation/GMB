@@ -1,7 +1,7 @@
 //! 入参校验工具。
 //!
 //! 三大校验入口:
-//! - `ensure_issuer_allowed` — 发行人必须是机构多签账户地址
+//! - `ensure_institution_context` — 机构 CID 与资产执行账户都必须存在
 //! - `ensure_decimals_in_range` — decimals 必须落在 [0, 18]
 //! - `contains_blacklisted_word` — name / symbol / description 字段不可命中黑名单
 //! - `ensure_class_supported` — 第一期只支持 Plain,Pegged 直接 reject
@@ -13,15 +13,16 @@ use sp_std::vec::Vec;
 pub const MIN_DECIMALS: u8 = 0;
 pub const MAX_DECIMALS: u8 = 18;
 
-/// 校验发行机构账户地址。
+/// 校验发行机构 CID 与资产执行账户。
 ///
-/// 具体“是否为已注册机构多签、发起人是否为该账户管理员”由 pallet 调用
-/// admins 模块 / 实体生命周期模块的账户级接口完成；本函数只拒绝空编码。
-pub fn ensure_issuer_allowed<AccountId: codec::Encode>(
-    issuer_account: &AccountId,
+/// 具体“CID 是否已注册、执行账户是否属于 CID、发起人是否在 CID 的 admins 中”
+/// 由 pallet 通过 entity/admins 唯一真源完成；本函数只做空值拒绝。
+pub fn ensure_institution_context<AccountId: codec::Encode>(
+    actor_cid_number: &[u8],
+    execution_account: &AccountId,
 ) -> Result<(), &'static str> {
-    if issuer_account.encode().is_empty() {
-        Err("issuer_not_allowed")
+    if actor_cid_number.is_empty() || execution_account.encode().is_empty() {
+        Err("institution_context_not_allowed")
     } else {
         Ok(())
     }
@@ -70,9 +71,10 @@ mod tests {
     use codec::Encode;
 
     #[test]
-    fn issuer_accepts_account_id() {
+    fn institution_context_requires_cid_and_execution_account() {
         let acc: [u8; 32] = [0x77; 32];
-        assert!(ensure_issuer_allowed(&acc).is_ok());
+        assert!(ensure_institution_context(b"CID", &acc).is_ok());
+        assert!(ensure_institution_context(b"", &acc).is_err());
         assert!(!acc.encode().is_empty());
     }
 

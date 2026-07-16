@@ -75,10 +75,6 @@ pub fn province_commissioner_role_name(province_name: &str) -> Vec<u8> {
 /// `guard_review_passed(approve>=4)` 里从未被锚定的「7」(见 ADR-027 §6.3)。
 pub const NJD_CONSTITUTION_GUARD_SEATS: u32 = 7;
 
-/// `AdminAccountStatus::Active` 的 SCALE 判别值(声明序 Pending=0/Active=1/Closed=2)。
-/// 由 `admin-primitives` 测试交叉钉死。
-pub const STATUS_ACTIVE: u8 = 1;
-
 /// `InstitutionRoleStatus::Active` 与 `InstitutionAssignmentStatus::Active` 的判别值。
 pub const ROLE_STATUS_ACTIVE: u8 = 0;
 pub const ASSIGNMENT_STATUS_ACTIVE: u8 = 0;
@@ -169,13 +165,6 @@ pub fn fixed_institution_by_identity(
     fixed_institutions().into_iter().find(|institution| {
         institution.code == code && institution.cid_number.as_bytes() == cid_number
     })
-}
-
-/// 按创世主账户查询受保护治理机构，供节点解析精确 `AdminAccounts` key。
-pub fn fixed_institution_by_main_account(main_account: &[u8; 32]) -> Option<FixedInstitution> {
-    fixed_institutions()
-        .into_iter()
-        .find(|institution| &institution.main_account == main_account)
 }
 
 /// 按创世 CID 查询受保护治理机构，供节点解析岗位与任职双映射 key。
@@ -335,26 +324,16 @@ mod tests {
     }
 
     #[test]
-    fn fixed_identity_requires_code_cid_and_main_account_to_match() {
+    fn fixed_identity_requires_code_and_cid_to_match() {
         let institution = fixed_institutions()[0];
-        assert!(fixed_institution_by_identity(
-            institution.code,
-            institution.cid_number.as_bytes(),
-            &institution.main_account,
-        )
-        .is_some());
-        assert!(fixed_institution_by_identity(
-            institution.code,
-            b"not-genesis-cid",
-            &institution.main_account,
-        )
-        .is_none());
-        assert!(fixed_institution_by_identity(
-            institution.code,
-            institution.cid_number.as_bytes(),
-            &[9u8; 32],
-        )
-        .is_none());
+        assert!(
+            fixed_institution_by_identity(institution.code, institution.cid_number.as_bytes(),)
+                .is_some()
+        );
+        assert!(fixed_institution_by_identity(institution.code, b"not-genesis-cid",).is_none());
+        assert!(
+            fixed_institution_by_identity(*b"CGOV", institution.cid_number.as_bytes(),).is_none()
+        );
     }
 
     #[test]

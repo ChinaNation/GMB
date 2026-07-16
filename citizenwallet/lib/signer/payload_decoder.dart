@@ -79,6 +79,17 @@ class PayloadDecoder {
   /// 二进制前缀域统一前缀长度 = GMB(3B) + op_tag(1B) = 4(对齐 BINARY_PREFIX_LEN)。
   static const _binaryPrefixLen = 4;
 
+  /// 机构 CID 固定槽长度，与 primitives::core_const::CID_NUMBER_MAX_BYTES 对齐。
+  static const _institutionCidSlotLen = 32;
+
+  /// 对齐 primitives::sign::ACTIVATE_ADMIN_PAYLOAD_LEN。
+  static const _activateAdminPayloadLen =
+      _binaryPrefixLen + _institutionCidSlotLen + 4 + 1 + 32 + 8 + 16;
+
+  /// 对齐 primitives::sign::DECRYPT_ADMIN_PAYLOAD_LEN。
+  static const _decryptAdminPayloadLen =
+      _binaryPrefixLen + _institutionCidSlotLen + 32 + 8 + 16;
+
   /// ACTIVATE_ADMIN op_tag(对齐 OP_SIGN_ACTIVATE_ADMIN)。
   static const _opSignActivateAdmin = 0x18;
 
@@ -107,14 +118,13 @@ class PayloadDecoder {
       if (adminAction != null) {
         return adminAction;
       }
-      if (raw.length ==
-              _activateAdminPrefix.length + 32 + 4 + 1 + 32 + 8 + 16 &&
+      if (raw.length == _activateAdminPayloadLen &&
           _hasPrefix(raw, _activateAdminPrefix)) {
         return _decodeActivateAdminAccount(raw);
       }
-      // DECRYPT challenge = prefix(4) + cid_number(48) + pubkey(32)
-      //   + timestamp(8) + nonce(16) = 108 字节(对齐 node CHALLENGE_TOTAL_LEN)。
-      if (raw.length == _binaryPrefixLen + 48 + 32 + 8 + 16 &&
+      // DECRYPT challenge = prefix(4) + cid_number(32) + pubkey(32)
+      //   + timestamp(8) + nonce(16)，长度由 primitives 单源常量锁定。
+      if (raw.length == _decryptAdminPayloadLen &&
           _hasPrefix(raw, _decryptPrefix)) {
         return _decodeDecryptAdmin(raw);
       }
@@ -332,7 +342,7 @@ class PayloadDecoder {
 
       // ── ResolutionDestroy(13) ──
       // execute_destroy 走 VotingEngine::retry_passed_proposal。
-      if (palletIndex == PalletRegistry.resolutionDestroPallet) {
+      if (palletIndex == PalletRegistry.resolutionDestroyPallet) {
         if (callIndex == PalletRegistry.proposeDestroyCall) {
           return _decodeProposeDestroy(bytes);
         }
@@ -399,9 +409,27 @@ class PayloadDecoder {
       }
 
       // ── OnchainIssuance(23) · 链上发行代币(Plain FT) ──
-      // 当前未实现完整 SCALE 字段解析,不能独立验证业务内容,因此红色拒签。
       if (palletIndex == PalletRegistry.onchainIssuancePallet) {
-        return null;
+        return switch (callIndex) {
+          PalletRegistry.proposeIssueCall => _decodeProposeAssetIssue(bytes),
+          PalletRegistry.proposeMintCall => _decodeProposeAssetMint(bytes),
+          PalletRegistry.proposeBurnCall => _decodeProposeAssetBurn(bytes),
+          PalletRegistry.proposeCloseAssetCall =>
+            _decodeProposeAssetClose(bytes),
+          PalletRegistry.proposeAssetTransferCall =>
+            _decodeProposeAssetTransfer(bytes),
+          PalletRegistry.proposeMonitorFreezeCall =>
+            _decodeProposeMonitorFreeze(bytes, unfreeze: false),
+          PalletRegistry.proposeMonitorUnfreezeCall =>
+            _decodeProposeMonitorFreeze(bytes, unfreeze: true),
+          PalletRegistry.proposeMonitorConfiscateCall =>
+            _decodeProposeMonitorConfiscate(bytes),
+          PalletRegistry.proposeMonitorForceTransferCall =>
+            _decodeProposeMonitorForceTransfer(bytes),
+          PalletRegistry.proposeMonitorForceCloseCall =>
+            _decodeProposeMonitorForceClose(bytes),
+          _ => null,
+        };
       }
 
       // ── LegislationYuan(25) · 立法/修法/废法发起 ──
@@ -472,12 +500,15 @@ class PayloadDecoder {
       if (value['domain'] != _onchinaAdminActionDomain) return null;
       if (value['qr_proto'] != 'QR_V1') return null;
       final actionType = value['action_type'];
+      final actorCidNumber = value['actor_cid_number'];
       final province = value['actor_province_name'];
       final actorPubkey = value['actor_pubkey'];
       final target = value['target'];
       final beforeHash = value['before_hash'];
       final afterHash = value['after_hash'];
       if (actionType is! String ||
+          actorCidNumber is! String ||
+          !_isStructuredInstitutionCid(actorCidNumber) ||
           province is! String ||
           actorPubkey is! String ||
           target is! String ||
@@ -492,6 +523,7 @@ class PayloadDecoder {
         summary: '链上中国平台管理员治理',
         fields: <String, String>{
           'action_type': _onchinaAdminActionLabel(actionType),
+          'actor_cid_number': actorCidNumber,
           'actor_province_name': province,
           'actor_pubkey': actorAddress,
           'target': targetAddress,
@@ -500,6 +532,7 @@ class PayloadDecoder {
         },
         reviewFields: <String, String>{
           'action_type': _onchinaAdminActionLabel(actionType),
+          'actor_cid_number': actorCidNumber,
           'actor_province_name': province,
           'actor_pubkey': actorAddress,
           'target': targetAddress,
@@ -795,66 +828,98 @@ class PayloadDecoder {
   //   - 用户在冷钱包屏幕上核对桌面 app 显示的 WASM 哈希后放行,
   //     签的就是这份 WASM 哈希。
   // 管理员激活（非链上交易，二进制前缀域）
-  // 格式：prefix(4B = GMB||0x18) + account_id(32B) + institution_code([u8;4])
-  //      + kind(u8) + pubkey(32B) + timestamp(8B, u64 LE) + nonce(16B) = 97B
+  // 格式：prefix(4B = GMB||0x18) + cid_number(32B,右补零)
+  //      + institution_code([u8;4]) + kind(u8) + admin_pubkey(32B)
+  //      + timestamp(8B, u64 LE) + nonce(16B) = 97B。
+  // CID 是机构唯一主键，协议账户不参与本地管理员身份绑定。
   static DecodedPayload? _decodeActivateAdminAccount(Uint8List bytes) {
-    final expectedLength =
-        _activateAdminPrefix.length + 32 + 4 + 1 + 32 + 8 + 16;
-    if (bytes.length != expectedLength) return null;
+    if (bytes.length != _activateAdminPayloadLen) return null;
 
     var offset = _activateAdminPrefix.length;
-    final accountBytes = bytes.sublist(offset, offset + 32);
-    offset += 32;
+    final cidRead = _readFixedInstitutionCidSlot(bytes, offset);
+    if (cidRead == null) return null;
+    final cidNumber = cidRead.$1;
+    offset = cidRead.$2;
 
     final codeBytes = bytes.sublist(offset, offset + 4);
     offset += 4;
     final code = InstitutionCode.codeToString(codeBytes);
     final kind = bytes[offset++];
-    if (!_activationAccountKindMatchesCode(code, kind)) return null;
+    if (!_activationAccountKindMatchesCode(code, kind) ||
+        !_cidContainsInstitutionCode(cidNumber, code)) {
+      return null;
+    }
 
     final pubkey = bytes.sublist(offset, offset + 32);
-    final accountHex = _bytesToLowerHex(accountBytes);
     final institutionLabel = InstitutionCode.codeLabel(code);
 
     return DecodedPayload(
       action: 'activate_admin_account',
       summary: '激活$institutionLabel管理员',
       fields: {
+        'cid_number': cidNumber,
         'institution_code': institutionLabel,
-        'account': accountHex,
-        'pubkey': _bytesToSs58(pubkey),
+        'admin_pubkey': _bytesToSs58(pubkey),
       },
       reviewFields: {
+        'cid_number': cidNumber,
         'institution_code': institutionLabel,
-        'account': _bytesToSs58(accountBytes),
-        'pubkey': _bytesToSs58(pubkey),
+        'admin_pubkey': _bytesToSs58(pubkey),
       },
     );
   }
 
-  // 清算行管理员解密（非链上交易，二进制前缀域）
-  // 格式：prefix(4B = GMB||0x19) + cid_number(48B, 右补零) + pubkey(32B)
-  //      + timestamp(8B, u64 LE) + nonce(16B) = 108B
-  static DecodedPayload? _decodeDecryptAdmin(Uint8List bytes) {
-    const totalLen = _binaryPrefixLen + 48 + 32 + 8 + 16;
-    if (bytes.length != totalLen) return null;
+  /// 管理员激活载荷中的机构码必须与 CID 核心段一致。
+  ///
+  /// 这里只核对 CID 内嵌的 3/4 字符机构码，不复制链端校验和与盈利属性规则。
+  static bool _cidContainsInstitutionCode(String cidNumber, String code) {
+    final segments = cidNumber.split('-');
+    return _isStructuredInstitutionCid(cidNumber) &&
+        (code.length == 3 || code.length == 4) &&
+        segments.length == 4 &&
+        segments[1].startsWith(code);
+  }
 
-    const idStart = _binaryPrefixLen;
-    final idBytes = bytes.sublist(idStart, idStart + 48);
-    var endIndex = 48;
-    while (endIndex > 0 && idBytes[endIndex - 1] == 0) {
-      endIndex--;
-    }
-    if (endIndex == 0) return null;
-    final cidNumber = String.fromCharCodes(idBytes.sublist(0, endIndex));
+  /// 只镜像 CID 的固定分段/字符布局；完整校验和仍由链端唯一实现裁决。
+  static bool _isStructuredInstitutionCid(String cidNumber) {
+    return RegExp(r'^[A-Z0-9]{5}-[A-Z0-9]{5}-[0-9]{9}-[0-9]{4}$')
+        .hasMatch(cidNumber);
+  }
+
+  // 清算行管理员解密（非链上交易，二进制前缀域）。
+  // 格式：prefix(4B = GMB||0x19) + cid_number(32B,右补零) + pubkey(32B)
+  //      + timestamp(8B, u64 LE) + nonce(16B)。旧 48B 槽位不兼容并直接拒绝。
+  static DecodedPayload? _decodeDecryptAdmin(Uint8List bytes) {
+    if (bytes.length != _decryptAdminPayloadLen) return null;
+    final cidRead = _readFixedInstitutionCidSlot(bytes, _binaryPrefixLen);
+    if (cidRead == null) return null;
 
     return DecodedPayload(
       action: 'decrypt_admin',
-      summary: '解密清算行管理员 - $cidNumber',
+      summary: '解密清算行管理员 - ${cidRead.$1}',
       fields: {
-        'cid_number': cidNumber,
+        'cid_number': cidRead.$1,
       },
     );
+  }
+
+  /// 严格读取右补零的 32 字节机构 CID 槽。
+  static (String, int)? _readFixedInstitutionCidSlot(
+    Uint8List bytes,
+    int offset,
+  ) {
+    if (offset < 0 || offset + _institutionCidSlotLen > bytes.length) {
+      return null;
+    }
+    final slot = bytes.sublist(offset, offset + _institutionCidSlotLen);
+    final zeroIndex = slot.indexOf(0);
+    final textLength = zeroIndex < 0 ? slot.length : zeroIndex;
+    if (textLength == 0 || slot.sublist(textLength).any((byte) => byte != 0)) {
+      return null;
+    }
+    final cidNumber = utf8.decode(slot.sublist(0, textLength));
+    if (!_isStructuredInstitutionCid(cidNumber)) return null;
+    return (cidNumber, offset + _institutionCidSlotLen);
   }
 
   // PublicManage(30) / PrivateManage(31) / propose_create_*_institution(5)
@@ -1323,6 +1388,302 @@ class PayloadDecoder {
     );
   }
 
+  // OnchainIssuance(23) / propose_issue(0)
+  // SCALE:actor_cid_number + execution_account + AssetClass + name + symbol
+  //   + description + decimals:u8 + initial_supply:u128。
+  static DecodedPayload? _decodeProposeAssetIssue(Uint8List bytes) {
+    var offset = 2;
+    final actorRead = _readCidNumber(bytes, offset);
+    if (actorRead == null) return null;
+    offset = actorRead.$2;
+    if (offset + 32 + 1 > bytes.length) return null;
+    final executionAccount = _bytesToSs58(
+      Uint8List.fromList(bytes.sublist(offset, offset + 32)),
+    );
+    offset += 32;
+    final assetClass = switch (bytes[offset++]) {
+      0 => 'Plain',
+      1 => 'Pegged',
+      _ => null,
+    };
+    if (assetClass == null) return null;
+
+    final nameRead = _readStrictBoundedUtf8(bytes, offset, maxLength: 64);
+    if (nameRead == null) return null;
+    offset = nameRead.$2;
+    final symbolRead = _readStrictBoundedUtf8(bytes, offset, maxLength: 16);
+    if (symbolRead == null) return null;
+    offset = symbolRead.$2;
+    final descriptionRead =
+        _readStrictBoundedUtf8(bytes, offset, maxLength: 256);
+    if (descriptionRead == null) return null;
+    offset = descriptionRead.$2;
+    if (offset + 1 + 16 > bytes.length) return null;
+    final decimals = bytes[offset++];
+    if (decimals > 18) return null;
+    final initialSupply = _readU128Le(bytes, offset);
+    offset += 16;
+    if (!_hasValidSigningTail(bytes, offset)) return null;
+
+    return DecodedPayload(
+      action: 'propose_asset_issue',
+      summary:
+          '发行资产 ${nameRead.$1}（${symbolRead.$1}），初始供应 ${_formatRawAssetAmount(initialSupply, decimals)}',
+      fields: <String, String>{
+        'actor_cid_number': actorRead.$1,
+        'execution_account': executionAccount,
+        'asset_class': assetClass,
+        'asset_name': nameRead.$1,
+        'asset_symbol': symbolRead.$1,
+        'asset_description': descriptionRead.$1,
+        'decimals': decimals.toString(),
+        'initial_supply_raw': initialSupply.toString(),
+      },
+    );
+  }
+
+  // OnchainIssuance(23) / propose_mint(1)
+  // SCALE:actor_cid_number + asset_id:u32 + to:AccountId32 + amount:u128。
+  static DecodedPayload? _decodeProposeAssetMint(Uint8List bytes) {
+    final header = _readOnchainAssetHeader(bytes);
+    if (header == null) return null;
+    var offset = header.next;
+    if (offset + 32 + 16 > bytes.length) return null;
+    final to = _bytesToSs58(
+      Uint8List.fromList(bytes.sublist(offset, offset + 32)),
+    );
+    offset += 32;
+    final amount = _readU128Le(bytes, offset);
+    offset += 16;
+    if (!_hasValidSigningTail(bytes, offset)) return null;
+    return DecodedPayload(
+      action: 'propose_asset_mint',
+      summary:
+          '资产 #${header.assetId} 增发 ${amount.toString()} raw 到 ${_truncateAddress(to)}',
+      fields: {
+        'actor_cid_number': header.actorCidNumber,
+        'asset_id': header.assetId.toString(),
+        'to': to,
+        'amount_raw': amount.toString(),
+      },
+    );
+  }
+
+  // OnchainIssuance(23) / propose_burn(2)
+  // SCALE:actor_cid_number + asset_id:u32 + from:AccountId32 + amount:u128。
+  static DecodedPayload? _decodeProposeAssetBurn(Uint8List bytes) {
+    final header = _readOnchainAssetHeader(bytes);
+    if (header == null) return null;
+    var offset = header.next;
+    if (offset + 32 + 16 > bytes.length) return null;
+    final from = _bytesToSs58(
+      Uint8List.fromList(bytes.sublist(offset, offset + 32)),
+    );
+    offset += 32;
+    final amount = _readU128Le(bytes, offset);
+    offset += 16;
+    if (!_hasValidSigningTail(bytes, offset)) return null;
+    return DecodedPayload(
+      action: 'propose_asset_burn',
+      summary:
+          '资产 #${header.assetId} 从 ${_truncateAddress(from)} 销毁 ${amount.toString()} raw',
+      fields: {
+        'actor_cid_number': header.actorCidNumber,
+        'asset_id': header.assetId.toString(),
+        'from': from,
+        'amount_raw': amount.toString(),
+      },
+    );
+  }
+
+  // OnchainIssuance(23) / propose_close(3)
+  // SCALE:actor_cid_number + asset_id:u32。
+  static DecodedPayload? _decodeProposeAssetClose(Uint8List bytes) {
+    final header = _readOnchainAssetHeader(bytes);
+    if (header == null || !_hasValidSigningTail(bytes, header.next)) {
+      return null;
+    }
+    return DecodedPayload(
+      action: 'propose_asset_close',
+      summary: '关闭资产 #${header.assetId}',
+      fields: {
+        'actor_cid_number': header.actorCidNumber,
+        'asset_id': header.assetId.toString(),
+      },
+    );
+  }
+
+  // OnchainIssuance(23) / propose_transfer(4)
+  // SCALE:actor_cid_number + asset_id:u32 + from + to + amount:u128。
+  static DecodedPayload? _decodeProposeAssetTransfer(Uint8List bytes) {
+    final header = _readOnchainAssetHeader(bytes);
+    if (header == null) return null;
+    var offset = header.next;
+    if (offset + 32 + 32 + 16 > bytes.length) return null;
+    final from = _bytesToSs58(
+      Uint8List.fromList(bytes.sublist(offset, offset + 32)),
+    );
+    offset += 32;
+    final to = _bytesToSs58(
+      Uint8List.fromList(bytes.sublist(offset, offset + 32)),
+    );
+    offset += 32;
+    final amount = _readU128Le(bytes, offset);
+    offset += 16;
+    if (!_hasValidSigningTail(bytes, offset)) return null;
+    return DecodedPayload(
+      action: 'propose_asset_transfer',
+      summary:
+          '资产 #${header.assetId} 划转 ${amount.toString()} raw：${_truncateAddress(from)} → ${_truncateAddress(to)}',
+      fields: {
+        'actor_cid_number': header.actorCidNumber,
+        'asset_id': header.assetId.toString(),
+        'from': from,
+        'to': to,
+        'amount_raw': amount.toString(),
+      },
+    );
+  }
+
+  // OnchainIssuance(23) / propose_monitor_freeze(10) / unfreeze(11)
+  // SCALE:actor_cid_number + asset_id:u32 + who:AccountId32 + reason_hash:[u8;32]。
+  static DecodedPayload? _decodeProposeMonitorFreeze(
+    Uint8List bytes, {
+    required bool unfreeze,
+  }) {
+    final header = _readOnchainAssetHeader(bytes);
+    if (header == null) return null;
+    var offset = header.next;
+    if (offset + 32 + 32 > bytes.length) return null;
+    final who = _bytesToSs58(
+      Uint8List.fromList(bytes.sublist(offset, offset + 32)),
+    );
+    offset += 32;
+    final reasonHash = _bytesToLowerHex(
+        Uint8List.fromList(bytes.sublist(offset, offset + 32)));
+    offset += 32;
+    if (!_hasValidSigningTail(bytes, offset)) return null;
+    return DecodedPayload(
+      action: unfreeze ? 'propose_monitor_unfreeze' : 'propose_monitor_freeze',
+      summary:
+          '${unfreeze ? '解冻' : '冻结'}资产 #${header.assetId} 持仓 ${_truncateAddress(who)}',
+      fields: {
+        'actor_cid_number': header.actorCidNumber,
+        'asset_id': header.assetId.toString(),
+        'who': who,
+        'reason_hash': reasonHash,
+      },
+    );
+  }
+
+  // OnchainIssuance(23) / propose_monitor_confiscate(12)
+  // SCALE:actor_cid_number + asset_id:u32 + who + amount:u128 + reason_hash。
+  static DecodedPayload? _decodeProposeMonitorConfiscate(Uint8List bytes) {
+    final header = _readOnchainAssetHeader(bytes);
+    if (header == null) return null;
+    var offset = header.next;
+    if (offset + 32 + 16 + 32 > bytes.length) return null;
+    final who = _bytesToSs58(
+      Uint8List.fromList(bytes.sublist(offset, offset + 32)),
+    );
+    offset += 32;
+    final amount = _readU128Le(bytes, offset);
+    offset += 16;
+    final reasonHash = _bytesToLowerHex(
+        Uint8List.fromList(bytes.sublist(offset, offset + 32)));
+    offset += 32;
+    if (!_hasValidSigningTail(bytes, offset)) return null;
+    return DecodedPayload(
+      action: 'propose_monitor_confiscate',
+      summary:
+          '监管扣押资产 #${header.assetId} ${amount.toString()} raw（${_truncateAddress(who)}）',
+      fields: {
+        'actor_cid_number': header.actorCidNumber,
+        'asset_id': header.assetId.toString(),
+        'who': who,
+        'amount_raw': amount.toString(),
+        'reason_hash': reasonHash,
+      },
+    );
+  }
+
+  // OnchainIssuance(23) / propose_monitor_force_transfer(13)
+  // SCALE:actor_cid_number + asset_id:u32 + from + to + amount:u128 + reason_hash。
+  static DecodedPayload? _decodeProposeMonitorForceTransfer(Uint8List bytes) {
+    final header = _readOnchainAssetHeader(bytes);
+    if (header == null) return null;
+    var offset = header.next;
+    if (offset + 32 + 32 + 16 + 32 > bytes.length) return null;
+    final from = _bytesToSs58(
+      Uint8List.fromList(bytes.sublist(offset, offset + 32)),
+    );
+    offset += 32;
+    final to = _bytesToSs58(
+      Uint8List.fromList(bytes.sublist(offset, offset + 32)),
+    );
+    offset += 32;
+    final amount = _readU128Le(bytes, offset);
+    offset += 16;
+    final reasonHash = _bytesToLowerHex(
+        Uint8List.fromList(bytes.sublist(offset, offset + 32)));
+    offset += 32;
+    if (!_hasValidSigningTail(bytes, offset)) return null;
+    return DecodedPayload(
+      action: 'propose_monitor_force_transfer',
+      summary:
+          '监管划转资产 #${header.assetId} ${amount.toString()} raw：${_truncateAddress(from)} → ${_truncateAddress(to)}',
+      fields: {
+        'actor_cid_number': header.actorCidNumber,
+        'asset_id': header.assetId.toString(),
+        'from': from,
+        'to': to,
+        'amount_raw': amount.toString(),
+        'reason_hash': reasonHash,
+      },
+    );
+  }
+
+  // OnchainIssuance(23) / propose_monitor_force_close(14)
+  // SCALE:actor_cid_number + asset_id:u32 + reason_hash:[u8;32]。
+  static DecodedPayload? _decodeProposeMonitorForceClose(Uint8List bytes) {
+    final header = _readOnchainAssetHeader(bytes);
+    if (header == null) return null;
+    var offset = header.next;
+    if (offset + 32 > bytes.length) return null;
+    final reasonHash = _bytesToLowerHex(
+        Uint8List.fromList(bytes.sublist(offset, offset + 32)));
+    offset += 32;
+    if (!_hasValidSigningTail(bytes, offset)) return null;
+    return DecodedPayload(
+      action: 'propose_monitor_force_close',
+      summary: '监管封禁资产 #${header.assetId}',
+      fields: {
+        'actor_cid_number': header.actorCidNumber,
+        'asset_id': header.assetId.toString(),
+        'reason_hash': reasonHash,
+      },
+    );
+  }
+
+  static ({String actorCidNumber, int assetId, int next})?
+      _readOnchainAssetHeader(Uint8List bytes) {
+    final actorRead = _readCidNumber(bytes, 2);
+    if (actorRead == null || actorRead.$2 + 4 > bytes.length) return null;
+    final assetId = _readU32Le(bytes, actorRead.$2);
+    return (
+      actorCidNumber: actorRead.$1,
+      assetId: assetId,
+      next: actorRead.$2 + 4,
+    );
+  }
+
+  static String _formatRawAssetAmount(BigInt amount, int decimals) {
+    if (decimals == 0) return amount.toString();
+    final padded = amount.toString().padLeft(decimals + 1, '0');
+    final split = padded.length - decimals;
+    return '${padded.substring(0, split)}.${padded.substring(split)}';
+  }
+
   // PersonalManage(7) / propose_create(0)
   // 格式：[7][0][BoundedVec account_name][BoundedVec<AccountId32> admins][u32 regular_threshold][u128 amount]
   // 个人多签独立 pallet,MODULE_TAG = b"per-mgmt"。
@@ -1541,7 +1902,8 @@ class PayloadDecoder {
     );
   }
 
-  // PersonalAdmins(29.0) / PublicAdmins(27.0) / PrivateAdmins(28.0)
+  // PersonalAdmins(29.0)。PublicAdmins/PrivateAdmins 只供机构生命周期内部调用，
+  // 没有对外管理员变更 extrinsic，禁止把个人账户布局复用于机构 CID。
   // 格式：[pallet][call][institution_code:[u8;4]][account:AccountId32][Compact<N>][admins:N*32][new_threshold:u32_le]
   static DecodedPayload? _decodeProposeAdminSetChange(Uint8List bytes) {
     if (bytes.length < 75) return null;
@@ -2933,32 +3295,16 @@ class PayloadDecoder {
     return (adminsLen ~/ 2) + 1;
   }
 
-  /// 管理员集合变更阈值合法性。
-  ///
-  /// 固定治理档机构码走制度常量；注册多签账户(个人多签/机构账户)走动态严格过半。
+  /// 个人多签管理员集合变更阈值合法性。
   static bool _validAdminChangeThreshold(
     String code,
     int adminsLen,
     int threshold,
   ) {
-    if (code == 'NRC') {
-      return adminsLen == 19 && threshold == 13;
-    }
-    if (code == 'PRC' || code == 'PRB') {
-      return adminsLen == 9 && threshold == 6;
-    }
-    if (code == 'FRG') {
-      return adminsLen == 5 && threshold == 3;
-    }
-    if (code == 'NJD') {
-      return adminsLen == 15 && threshold == 8;
-    }
-    if (InstitutionCode.isRegisteredMultisig(code)) {
-      return adminsLen >= 2 &&
-          threshold > adminsLen ~/ 2 &&
-          threshold <= adminsLen;
-    }
-    return false;
+    return InstitutionCode.isPersonal(code) &&
+        adminsLen >= 2 &&
+        threshold > adminsLen ~/ 2 &&
+        threshold <= adminsLen;
   }
 
   static bool _validAdminChangePalletForCode(
@@ -3033,6 +3379,25 @@ class PayloadDecoder {
     return (text, offset + len);
   }
 
+  /// OnchainIssuance 元数据字段的严格 BoundedVec<u8> 解码。
+  /// 非法 UTF-8、越界长度或截断一律拒绝，禁止展示替换字符后继续签名。
+  static (String, int)? _readStrictBoundedUtf8(
+    Uint8List bytes,
+    int offset, {
+    required int maxLength,
+  }) {
+    final (length, compactSize) = _decodeCompactU32(bytes, offset);
+    if (compactSize == 0 || length > maxLength) return null;
+    final start = offset + compactSize;
+    final end = start + length;
+    if (end > bytes.length) return null;
+    try {
+      return (utf8.decode(bytes.sublist(start, end)), end);
+    } on FormatException {
+      return null;
+    }
+  }
+
   /// 解码机构/公民 CID。CID 是最多 32 字节的非空 ASCII，所有机构交易都显式携带，
   /// 离线端不得从机构账户反推或回落出一个 CID。
   static (String, int)? _readCidNumber(Uint8List bytes, int offset) {
@@ -3068,17 +3433,15 @@ class PayloadDecoder {
   ///   1 = PrivateInstitution
   ///   2 = PersonalMultisig
   static bool _activationAccountKindMatchesCode(String code, int kind) {
-    if (InstitutionCode.isPersonal(code)) {
-      return kind == 2;
-    }
     if (InstitutionCode.isPublicLegal(code) ||
         InstitutionCode.isFixedGovernance(code)) {
       return kind == 0;
     }
-    if (InstitutionCode.isPrivateLegal(code) ||
-        InstitutionCode.isUnincorporated(code)) {
+    if (InstitutionCode.isPrivateLegal(code)) {
       return kind == 1;
     }
+    // 非法人机构由上层明确路由到 public/private admins，两个 kind 都合法。
+    if (InstitutionCode.isUnincorporated(code)) return kind == 0 || kind == 1;
     return false;
   }
 

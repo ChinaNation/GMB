@@ -46,12 +46,15 @@ void main() {
   group('RuntimeUpgradeService 协议升级详情解码', () {
     test('解码带 rt-upg 前缀的协议升级提案摘要', () {
       final service = RuntimeUpgradeService();
+      final actorCid =
+          Uint8List.fromList(utf8.encode('ZS001-NRC0G-944805165-2026'));
       final proposer = Uint8List.fromList(List<int>.generate(32, (i) => i));
       final reason = Uint8List.fromList(utf8.encode('升级协议参数'));
       final codeHash = Uint8List.fromList(List<int>.filled(32, 0xab));
       final paramsHash = Uint8List.fromList(List<int>.filled(32, 0xcd));
       final proposalData = Uint8List.fromList([
         ...utf8.encode('rt-upg'),
+        ...compactBytes(actorCid),
         ...proposer,
         ...compactBytes(reason),
         ...codeHash,
@@ -66,6 +69,7 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.proposalId, 7);
+      expect(decoded.actorCidNumber, 'ZS001-NRC0G-944805165-2026');
       expect(decoded.reason, '升级协议参数');
       expect(decoded.codeHashHex, List.filled(32, 'ab').join());
       expect(decoded.paramsVersion, 1);
@@ -76,10 +80,13 @@ void main() {
     test('非 rt-upg 提案摘要不按协议升级解码', () {
       final service = RuntimeUpgradeService();
       final proposer = Uint8List.fromList(List<int>.filled(32, 1));
+      final actorCid =
+          Uint8List.fromList(utf8.encode('ZS001-NRC0G-944805165-2026'));
       final reason = Uint8List.fromList(utf8.encode('其他提案'));
       final codeHash = Uint8List.fromList(List<int>.filled(32, 0xcd));
       final proposalData = Uint8List.fromList([
         ...utf8.encode('other'),
+        ...compactBytes(actorCid),
         ...proposer,
         ...compactBytes(reason),
         ...codeHash,
@@ -98,10 +105,13 @@ void main() {
     test('带旧业务状态字段的协议升级摘要不再兼容', () {
       final service = RuntimeUpgradeService();
       final proposer = Uint8List.fromList(List<int>.generate(32, (i) => i));
+      final actorCid =
+          Uint8List.fromList(utf8.encode('ZS001-NRC0G-944805165-2026'));
       final reason = Uint8List.fromList(utf8.encode('旧摘要'));
       final codeHash = Uint8List.fromList(List<int>.filled(32, 0xef));
       final proposalData = Uint8List.fromList([
         ...utf8.encode('rt-upg'),
+        ...compactBytes(actorCid),
         ...proposer,
         ...compactBytes(reason),
         ...codeHash,

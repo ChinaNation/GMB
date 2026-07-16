@@ -33,7 +33,7 @@ where
 
 /// 阶段 1:propose_issue 时 reserve 1000 GMB,写入 IssueDeposit storage。
 ///
-/// `Currency::reserve` 失败原因仅可能是 issuer 余额不足,链端在 ensure 链上拦截。
+/// `Currency::reserve` 失败原因仅可能是提案签名者余额不足，链端在 ensure 链上拦截。
 /// reserve 后 GMB 仍属 proposer,只是被锁定,直到 callback 决定 release/refund。
 pub fn reserve_creation_deposit<T: Config>(
     proposer: &T::AccountId,

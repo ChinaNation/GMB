@@ -81,20 +81,21 @@ class _PersonalManageAccountInfoPageState
       final local = await WalletIsar.instance.read((isar) async {
         final entity = await isar.personalAccountEntitys
             .filter()
-            .accountEqualTo(widget.institution.account)
+            .accountEqualTo(widget.institution.personalAccountHex)
             .findFirst();
         final statuses = await PersonalMultisigLocalState.readStatusSnapshots(
           isar,
-          [widget.institution.account],
+          [widget.institution.personalAccountHex],
         );
         final detail = await PersonalMultisigLocalState.readDetail(
           isar,
-          widget.institution.account,
+          widget.institution.personalAccountHex,
         );
         final pendingBalance = await _readPendingBalanceFromIsar(isar);
         return (
           entity: entity,
-          status: statuses[_normalizeHex(widget.institution.account)],
+          status:
+              statuses[_normalizeHex(widget.institution.personalAccountHex)],
           detail: detail,
           pendingBalance: pendingBalance,
         );
@@ -167,17 +168,17 @@ class _PersonalManageAccountInfoPageState
   Future<void> _refreshBalanceIfNeeded({bool force = false}) async {
     if (!force && !_shouldRefreshBalance()) return;
     try {
-      final balance =
-          await _rpc.fetchFinalizedBalance(widget.institution.account);
+      final balance = await _rpc
+          .fetchFinalizedBalance(widget.institution.personalAccountHex);
       final now = DateTime.now().millisecondsSinceEpoch;
       await WalletIsar.instance.writeTxn((isar) async {
         final previous = await PersonalMultisigLocalState.readDetail(
           isar,
-          widget.institution.account,
+          widget.institution.personalAccountHex,
         );
         await PersonalMultisigLocalState.putDetailInTxn(
           isar,
-          widget.institution.account,
+          widget.institution.personalAccountHex,
           MultisigLocalDetailSnapshot(
             status: previous?.status ?? _localStatus,
             admins: previous?.admins ?? _admins,
@@ -204,9 +205,9 @@ class _PersonalManageAccountInfoPageState
     if (!force && !_shouldRefreshDetail()) return;
     try {
       final infos = await _personalManageService.fetchPersonalAccountsBatch(
-        [widget.institution.account],
+        [widget.institution.personalAccountHex],
       );
-      final info = infos[_normalizeHex(widget.institution.account)];
+      final info = infos[_normalizeHex(widget.institution.personalAccountHex)];
       final status = info == null
           ? PersonalMultisigLocalState.statusClosed
           : _localStatusFromInfo(info.status);
@@ -216,22 +217,22 @@ class _PersonalManageAccountInfoPageState
       await WalletIsar.instance.writeTxn((isar) async {
         await PersonalMultisigLocalState.putStatusInTxn(
           isar,
-          widget.institution.account,
+          widget.institution.personalAccountHex,
           status,
         );
         if (info == null) {
           await PersonalMultisigLocalState.deleteDetailInTxn(
             isar,
-            widget.institution.account,
+            widget.institution.personalAccountHex,
           );
         } else {
           final previous = await PersonalMultisigLocalState.readDetail(
             isar,
-            widget.institution.account,
+            widget.institution.personalAccountHex,
           );
           await PersonalMultisigLocalState.putDetailInTxn(
             isar,
-            widget.institution.account,
+            widget.institution.personalAccountHex,
             MultisigLocalDetailSnapshot(
               status: status,
               admins: info.admins,
@@ -270,7 +271,8 @@ class _PersonalManageAccountInfoPageState
   Future<double?> _resolveBalance(MultisigStatus? status) async {
     if (status == MultisigStatus.active) {
       try {
-        return await _rpc.fetchFinalizedBalance(widget.institution.account);
+        return await _rpc
+            .fetchFinalizedBalance(widget.institution.personalAccountHex);
       } catch (_) {
         return null;
       }
@@ -284,7 +286,7 @@ class _PersonalManageAccountInfoPageState
     try {
       final entity = await isar.personalAccountProposalEntitys
           .filter()
-          .personalAccountEqualTo(widget.institution.account)
+          .personalAccountEqualTo(widget.institution.personalAccountHex)
           .actionEqualTo('create')
           .findFirst();
       if (entity?.snapshotJson == null || entity!.snapshotJson!.isEmpty) {
@@ -408,21 +410,21 @@ class _PersonalManageAccountInfoPageState
     await WalletIsar.instance.writeTxn((isar) async {
       await isar.personalAccountEntitys
           .where()
-          .accountEqualTo(widget.institution.account)
+          .accountEqualTo(widget.institution.personalAccountHex)
           .deleteAll();
       // 个人多签 create/transfer/close 提案 snapshot 一并清掉,否则
       // [PersonalProposalHistoryService] 下次会把它们再拉回详情页。
       await isar.personalAccountProposalEntitys
           .filter()
-          .personalAccountEqualTo(widget.institution.account)
+          .personalAccountEqualTo(widget.institution.personalAccountHex)
           .deleteAll();
       await PersonalMultisigLocalState.deleteStatusInTxn(
         isar,
-        widget.institution.account,
+        widget.institution.personalAccountHex,
       );
       await PersonalMultisigLocalState.deleteDetailInTxn(
         isar,
-        widget.institution.account,
+        widget.institution.personalAccountHex,
       );
     });
   }
@@ -491,7 +493,7 @@ class _PersonalManageAccountInfoPageState
     }
 
     final pid = await PersonalPendingCreateLookup()
-        .findActiveCreate(widget.institution.account);
+        .findActiveCreate(widget.institution.personalAccountHex);
     if (!mounted) return;
     if (pid == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -625,7 +627,7 @@ class _PersonalManageAccountInfoPageState
   }
 
   Widget _buildContent() {
-    final accountSs58 = _hexToSs58(widget.institution.account);
+    final accountSs58 = _hexToSs58(widget.institution.personalAccountHex);
     final info = _accountInfo;
     final statusLabel = _isClosed
         ? '已注销'
@@ -829,7 +831,7 @@ class _PersonalManageAccountInfoPageState
       final entity = await WalletIsar.instance.read((isar) {
         return isar.personalAccountEntitys
             .filter()
-            .accountEqualTo(widget.institution.account)
+            .accountEqualTo(widget.institution.personalAccountHex)
             .findFirst();
       });
       if (entity == null) return null;

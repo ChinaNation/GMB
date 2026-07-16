@@ -10,6 +10,7 @@ import 'package:citizenapp/chat/chat_runtime.dart';
 import 'package:citizenapp/chat/chat_models.dart';
 import 'package:citizenapp/chat/chat_tab.dart';
 import 'package:citizenapp/chat/storage/chat_store.dart';
+import 'package:citizenapp/chat/transport/chat_transport.dart';
 
 void main() {
   testWidgets('聊天标题为账户时改用稳定默认昵称', (tester) async {
@@ -117,6 +118,57 @@ void main() {
     expect(find.byIcon(Icons.add_comment_outlined), findsNothing);
     expect(find.byIcon(Icons.qr_code_scanner_rounded), findsNothing);
     expect(find.byIcon(Icons.qr_code_2_rounded), findsNothing);
+  });
+
+  testWidgets('进会话点贴纸 → 接线到 runtime.sendSticker(peer/conv/pack/sticker 正确)',
+      (tester) async {
+    final runtime = _FakeRuntime(address: 'alice-wallet');
+    final store = _FakeChatStore(
+      conversations: [
+        ChatConversationPreview(
+          conversationId: 'dm:alice-wallet:bob-wallet',
+          title: 'Bob',
+          peerAccount: 'bob-wallet',
+          lastMessage: 'hi',
+          lastUpdatedAt: DateTime.fromMillisecondsSinceEpoch(2),
+          unreadCount: 0,
+          deliveryState: ChatMessageDeliveryState.sent,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChatTab(
+            store: store,
+            ownerAccount: 'alice-wallet',
+            runtime: runtime,
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // 点会话进详情(Navigator.push ChatPage)。
+    await tester.tap(find.text('Bob'));
+    await tester.pump(const Duration(milliseconds: 400)); // 路由转场
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // 点贴纸开关 → 面板 → 选 grinning_face。
+    await tester.tap(find.byKey(const ValueKey('chat-sticker-toggle')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('sticker-grinning_face')));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // 委托四参逐字正确(named 参数不会换位,守的是漏接/错映射的回归)。
+    expect(
+      runtime.sentStickers.single,
+      ['bob-wallet', 'dm:alice-wallet:bob-wallet', 'fluent3d', 'grinning_face'],
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 100));
   });
 
   testWidgets('聊天 Tab deletes one local conversation after confirmation',
@@ -651,10 +703,23 @@ class _FakeRuntime extends ChatRuntime {
   int realtimeStopCount = 0;
   Future<void> Function()? realtimeNotice;
   Future<void> Function()? realtimeDisconnected;
+  // 记录贴纸发送接线的四参,验证 chat_tab 委托到 runtime.sendSticker 无换位/漏接。
+  final List<List<String>> sentStickers = <List<String>>[];
 
   @override
   Future<String?> readOwnerAccount() async {
     return address;
+  }
+
+  @override
+  Future<List<ChatDeliveryResult>> sendSticker({
+    required String peerAccount,
+    required String conversationId,
+    required String packId,
+    required String stickerId,
+  }) async {
+    sentStickers.add([peerAccount, conversationId, packId, stickerId]);
+    return const [];
   }
 
   @override

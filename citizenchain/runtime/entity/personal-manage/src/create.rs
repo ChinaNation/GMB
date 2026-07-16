@@ -7,7 +7,7 @@
 //!    creator 与 account_name,与管理员列表无关,所以未来换管理员地址不变
 //! 3. 同事务内：
 //!    - 写 Pending PersonalAccounts 占位
-//!    - 调投票引擎 create_registered_account_create_proposal_with_data
+//!    - 调投票引擎 create_personal_account_create_proposal_with_data
 //!    - 通过 `PersonalAdminLifecycle` 请求 personal-admins 写 Pending 管理员账户
 //! 4. 从投票引擎回读 expires_at,发射 PersonalCreateProposed 事件
 

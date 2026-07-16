@@ -48,6 +48,16 @@ const Map<String, String> actionLabels = {
   'propose_personal_admin_set_change': '管理员集合变更提案',
   'propose_replace_grandpa_key': 'GRANDPA 密钥提案',
   'propose_issuance': '决议发行提案',
+  'propose_asset_issue': '创建链上资产提案',
+  'propose_asset_mint': '链上资产增发提案',
+  'propose_asset_burn': '链上资产销毁提案',
+  'propose_asset_close': '关闭链上资产提案',
+  'propose_asset_transfer': '链上资产划转提案',
+  'propose_monitor_freeze': '监管冻结资产持仓提案',
+  'propose_monitor_unfreeze': '监管解冻资产持仓提案',
+  'propose_monitor_confiscate': '监管扣押资产提案',
+  'propose_monitor_force_transfer': '监管强制划转资产提案',
+  'propose_monitor_force_close': '监管封禁资产提案',
 
   // 业务提案幂等入口
   // 手动重试/取消统一显示为 retry_passed_proposal /

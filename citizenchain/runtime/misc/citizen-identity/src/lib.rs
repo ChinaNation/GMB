@@ -464,13 +464,8 @@ pub mod pallet {
 
     /// CID 占号登记表:发号全局唯一的链上真源(占号先行,墓碑不删除)。
     #[pallet::storage]
-    pub type CidRegistry<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        CidNumberBound,
-        CidRecord<BlockNumberFor<T>>,
-        OptionQuery,
-    >;
+    pub type CidRegistry<T: Config> =
+        StorageMap<_, Blake2_128Concat, CidNumberBound, CidRecord<BlockNumberFor<T>>, OptionQuery>;
 
     #[pallet::storage]
     pub type CountryVotingCount<T> = StorageValue<_, u64, ValueQuery>;

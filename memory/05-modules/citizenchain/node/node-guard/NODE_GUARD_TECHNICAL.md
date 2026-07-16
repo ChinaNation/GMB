@@ -147,24 +147,24 @@ ConstitutionGuard<NodeGuard<PowBlockImport>>
 - `Balances::TotalIssuance` 和账户余额由共享 finalize 计划统一核对；任何新增 finalize 铸发必须先纳入节点策略复算；
 - warp 只能证明下载目标态满足累计公式与最近审计自洽，不能代替历史逐块重放证明。
 
-## 8.2 当前策略：CID 与机构生命周期
+## 8.2 当前策略：CID 与机构账户完整性
 
 规范真源只认以下 RAW storage：
 
 - `CitizenIdentity::CidRegistry`；
-- `PublicManage/PrivateManage::CidRegisteredAccount`；
 - `PublicManage/PrivateManage::Institutions`；
-- `PublicManage::ProtectedGenesisAccounts` 及其创世正反向账户索引。
+- `PublicManage/PrivateManage::InstitutionAccounts`；
+- `PublicManage/PrivateManage::AccountRegisteredCid`。
 
-机构产品状态只有三种：主账户已占号而尚无机构记录表示“占号中”，`Active` 表示“运行中”，`Closed` 表示“永久关闭”。节点允许运行中机构依法更新全称和简称，也允许新 CID 使用历史名称；节点冻结的是 CID 主体和状态单调性，不冻结名称字符串。
+机构唯一主键是 CID，主账户、费用账户和制度专属账户都只是 CID 下的协议账户。节点允许依法更新机构名称、法定代表人和自定义账户集合；节点冻结 CID 身份、协议账户完整性和账户正反索引，不保存或推导机构生命周期状态。
 
 节点逐块强制：
 
 - 公民 CID 不得删除或换注册局、承诺、居住省市、登记高度，只允许 `Active → Revoked`，吊销后逐字冻结；
-- 公私权 CID 不得重复占用；机构码、创建高度、镇码不可变；主账户登记在关闭前不得删除；
-- `Institutions` 不得删除，`Closed` 不得恢复或改写，已关闭 CID 不得重新建立主账户登记；
-- 固定治理机构必须始终 `Active`，运行期不得新造同类固定机构；
-- block#0 封存账户集合、`AccountRegisteredCid`、`CidRegisteredAccount`、`InstitutionAccounts` 四向关系逐字冻结；
+- 公私权 CID 不得重复占用；机构码、创建高度、镇码不可变；`Institutions` 不得删除；
+- 固定治理机构和国家单例只允许约定创世 CID，运行期不得新造同类身份；
+- 每个机构必须完整具有 `institution_constraints` 返回的协议账户集合，协议账户不得删除、改名或换地址；只有 `InstitutionNamed` 自定义账户可依法删除；
+- `InstitutionAccounts[(cid_number, account_name)]` 与 `AccountRegisteredCid[address]` 必须闭环，账户不得脱离机构、跨 CID 或跨 namespace；
 - 所有 RAW key 都校验 `Blake2_128Concat` 哈希、SCALE 值完整解码及尾随字节，畸形状态 fail-closed。
 
 ## 8.3 当前策略：公民认证发行
@@ -267,14 +267,13 @@ pallet、storage、hasher 和 key 编码。字段重排、storage 改名或 hash
 
 | 策略 | runtime storage / 类型 | node 固定标准 |
 |---|---|---|
-| 固定治理骨架 | 89 个保护身份对应的 `PublicAdmins::AdminAccounts`、`PublicManage::InstitutionRoles`、`PublicManage::InstitutionRoleAssignments`；三张表均使用 `Blake2_128Concat` | 机构码/CID/主账户/Active/管理员总数；岗位代码/名称/所属 CID/Active/精确席位；任职 CID/岗位/Active；任职钱包去重集合必须等于 admins。成员允许轮换，来源、引用和任期由 runtime 负责；普通机构不进入原生治理分区 |
+| 固定治理骨架 | 89 个保护身份对应的 `PublicAdmins::AdminAccounts[cid_number]`、`PublicManage::InstitutionRoles`、`PublicManage::InstitutionRoleAssignments`；三张表均使用 `Blake2_128Concat` | 机构码/CID/协议主账户/管理员总数；岗位代码/名称/所属 CID/精确席位；任职 CID/岗位；任职钱包去重集合必须等于 admins。主账户只校验协议账户完整性，不作管理员 key |
 | 全节点发行 | `RewardWalletByMiner`、`LastAuthoredBlockByMiner`、`RewardedBlockCount:u32`、`TotalFullnodeIssued:u128`、`LastRewardAudit:(u32,AccountId,AccountId,u128)` | 高度 `1..=9_999_999` 每块固定 `999_900` 分；作者、钱包、累计、审计、账户完整字段和 `Balances::TotalIssuance` 差额精确 |
 | 公民发行 | `RewardedCount:u64`、CID/账户永久墓碑、`PendingRewardCount:u32`、`PendingRewards<Twox64Concat,u32,(AccountId,Hash)>`、两张临时墓碑 | 队列 `0..count-1` 连续；finalize 后临时状态清空；前 `14_436_417` 人 `999_900` 分，其后 `99_900` 分；CID 与账户均只领一次 |
 | GenesisPallet | `Phase`、`DeveloperUpgradeEnabled`、`CitizensDeclaration`、`CountryDeclaration`、`CitizenMax`，`StorageVersion=0` | 三个创世事实逐字冻结；只允许含 `:code` 的 `(Genesis,true) → (Operation,false)` 原子单向转换；旧 `TargetBlockTimeMs` 与未知 key 拒绝 |
 | 省储行固定发行 | pallet `StorageVersion=0`、`LastSettledYear:u32`、`TotalProvincialBankInterestIssued:u128`、`LastProvincialBankInterestAudit:(u32,u32,u128)`；43 个 `System::Account[stake_account]` | block#0 本金逐户等于 `stake_amount` 且永久不变；87,600 块/年，100→1 BP 连续 100 年；利息只发 `main_account`，审计、账户与总发行精确闭环；未知 pallet key 拒绝 |
 | 公民 CID | `CitizenIdentity::CidRegistry<Blake2_128Concat,CidNumber,CidRecord>` | `registrar_account/commitment/省码/市码/registered_at` 不变；只允许 `Active=0 → Revoked=1`，吊销后冻结 |
-| 机构 CID | `PublicManage/PrivateManage::{CidRegisteredAccount,AccountRegisteredCid,Institutions,InstitutionAccounts}` | CID 不删除、不跨 namespace 复用；`town_code/institution_code/created_at` 不变；法定代表人姓名/CID/账户按当前 SCALE 顺序完整解码且必须同时存在或同时为空；名称与法定代表人仅 Active 时可依法更新；`Closed=2` 永久终态 |
-| 创世封存账户 | `PublicManage::ProtectedGenesisAccounts` 及三张关联索引 | 与 block#0 逐字一致、始终 Active，不得删除、换 CID、换账户名或换地址 |
+| 机构 CID | `PublicManage/PrivateManage::{Institutions,InstitutionAccounts,AccountRegisteredCid}` | CID 不删除、不跨 namespace 复用；`town_code/institution_code/created_at` 不变；法定代表人三字段同时存在或同时为空；协议账户集合按机构制度完整且不可关闭，正反索引闭环；自定义账户允许依法删除 |
 
 共同触发口径：普通区块只检查相关 delta；`:code` 变化强制全策略复核；完整状态只扫描一次后分区；
 任一 RAW key hasher 错误、SCALE 解码失败或尾随字节均 fail-closed。`System::Account` 不能只比较

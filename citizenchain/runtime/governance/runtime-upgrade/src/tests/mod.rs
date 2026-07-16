@@ -115,7 +115,10 @@ pub struct TestJointVoteEngine;
 impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
     // 测试 mock 模拟投票引擎“已准备好投票上下文”的创建入口，
     // runtime-upgrade 测试不再传入人口快照或联合签名材料。
-    fn create_joint_proposal(_who: AccountId32) -> Result<u64, DispatchError> {
+    fn create_joint_proposal(
+        _who: AccountId32,
+        _actor_cid_number: Vec<u8>,
+    ) -> Result<u64, DispatchError> {
         NEXT_JOINT_ID.with(|id| {
             let mut id = id.borrow_mut();
             let proposal_id = *id;
@@ -126,6 +129,7 @@ impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
 
     fn create_joint_proposal_with_data(
         _who: AccountId32,
+        _actor_cid_number: Vec<u8>,
         module_tag: &[u8],
         data: Vec<u8>,
     ) -> Result<u64, DispatchError> {
@@ -154,12 +158,14 @@ impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
 
     fn create_joint_proposal_with_data_and_object(
         who: AccountId32,
+        actor_cid_number: Vec<u8>,
         module_tag: &[u8],
         data: Vec<u8>,
         object_kind: u8,
         object_data: Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        let proposal_id = Self::create_joint_proposal_with_data(who, module_tag, data)?;
+        let proposal_id =
+            Self::create_joint_proposal_with_data(who, actor_cid_number, module_tag, data)?;
         let object_len = u32::try_from(object_data.len())
             .map_err(|_| DispatchError::Other("proposal object too large"))?;
         let object_hash = <Test as frame_system::Config>::Hashing::hash(&object_data);
@@ -213,7 +219,7 @@ impl votingengine::Config for Test {
     type CitizenIdentityReader = ();
     type JointVoteResultCallback = ();
     type InternalVoteResultCallback = ();
-    type InternalAdminProvider = ();
+    type InternalAdminProvider = TestInternalAdminProvider;
     type InternalAdminsLenProvider = ();
     type MaxAdminsPerInstitution = ConstU32<32>;
     type TimeProvider = TestTimeProvider;
@@ -221,6 +227,22 @@ impl votingengine::Config for Test {
     type TrackHandlers = (InternalVote, ());
     type LegislationVoteResultCallback = ();
     type ElectionVoteResultCallback = ();
+}
+
+pub struct TestInternalAdminProvider;
+impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
+    fn is_institution_admin(
+        institution_code: votingengine::InstitutionCode,
+        cid_number: &[u8],
+        who: &AccountId32,
+    ) -> bool {
+        (institution_code == votingengine::types::NRC
+            && cid_number == nrc_cid().as_slice()
+            && *who == nrc_admin())
+            || (institution_code == votingengine::types::PRC
+                && cid_number == prc_cid().as_slice()
+                && *who == prc_admin())
+    }
 }
 
 impl internal_vote::Config for Test {
@@ -298,6 +320,24 @@ fn prc_admin() -> AccountId32 {
     AccountId32::new([3u8; 32])
 }
 
+fn nrc_cid() -> votingengine::types::CidNumber {
+    primitives::cid::china::china_cb::CHINA_CB[0]
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("NRC CID fits runtime bound")
+}
+
+fn prc_cid() -> votingengine::types::CidNumber {
+    primitives::cid::china::china_cb::CHINA_CB[1]
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("PRC CID fits runtime bound")
+}
+
 fn reason_ok() -> pallet::ReasonOf<Test> {
     b"upgrade reason"
         .to_vec()
@@ -326,6 +366,7 @@ fn decode_proposal(proposal_id: u64) -> pallet::Proposal<Test> {
 fn propose_ok() {
     assert_ok!(RuntimeUpgrade::propose_runtime_upgrade(
         RuntimeOrigin::signed(nrc_admin()),
+        nrc_cid(),
         reason_ok(),
         code_ok(),
         pow_difficulty::PowDifficultyParams::genesis_default()
@@ -351,7 +392,15 @@ fn insert_engine_proposal_with_stage_and_status(proposal_id: u64, stage: u8, sta
             stage,
             status,
             internal_code: None,
-            account_context: None,
+            actor_cid_number: Some(
+                primitives::cid::china::china_cb::CHINA_CB[0]
+                    .cid_number
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .expect("NRC CID fits runtime bound"),
+            ),
+            execution_account: None,
             subject_cid_numbers: Default::default(),
             start: 0u64,
             end: 100u64,

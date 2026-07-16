@@ -99,7 +99,10 @@ thread_local! {
 
 pub struct TestJointVoteEngine;
 impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
-    fn create_joint_proposal(_who: AccountId32) -> Result<u64, DispatchError> {
+    fn create_joint_proposal(
+        _who: AccountId32,
+        _actor_cid_number: Vec<u8>,
+    ) -> Result<u64, DispatchError> {
         NEXT_JOINT_ID.with(|id| {
             let mut id = id.borrow_mut();
             let v = *id;
@@ -110,10 +113,11 @@ impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
 
     fn create_joint_proposal_with_data(
         who: AccountId32,
+        actor_cid_number: Vec<u8>,
         module_tag: &[u8],
         data: Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        let proposal_id = Self::create_joint_proposal(who)?;
+        let proposal_id = Self::create_joint_proposal(who, actor_cid_number)?;
         let bounded_data: frame_support::BoundedVec<
             u8,
             <Test as votingengine::Config>::MaxProposalDataLen,
@@ -132,12 +136,14 @@ impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
 
     fn create_joint_proposal_with_data_and_object(
         who: AccountId32,
+        actor_cid_number: Vec<u8>,
         module_tag: &[u8],
         data: Vec<u8>,
         object_kind: u8,
         object_data: Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        let proposal_id = Self::create_joint_proposal_with_data(who, module_tag, data)?;
+        let proposal_id =
+            Self::create_joint_proposal_with_data(who, actor_cid_number, module_tag, data)?;
         let object_len = u32::try_from(object_data.len())
             .map_err(|_| DispatchError::Other("proposal object too large"))?;
         let object_hash = <Test as frame_system::Config>::Hashing::hash(&object_data);
@@ -157,6 +163,22 @@ impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
             },
         );
         Ok(proposal_id)
+    }
+}
+
+pub struct TestInternalAdminProvider;
+impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
+    fn is_institution_admin(
+        institution_code: votingengine::types::InstitutionCode,
+        cid_number: &[u8],
+        who: &AccountId32,
+    ) -> bool {
+        let expected_cid = match institution_code {
+            votingengine::types::NRC => primitives::cid::china::china_cb::CHINA_CB[0].cid_number,
+            votingengine::types::PRC => primitives::cid::china::china_cb::CHINA_CB[1].cid_number,
+            _ => return false,
+        };
+        cid_number == expected_cid.as_bytes() && who == &AccountId32::new([1u8; 32])
     }
 }
 
@@ -206,7 +228,7 @@ impl votingengine::Config for Test {
     type CitizenIdentityReader = TestCitizenIdentityReader;
     type JointVoteResultCallback = ();
     type InternalVoteResultCallback = ();
-    type InternalAdminProvider = ();
+    type InternalAdminProvider = TestInternalAdminProvider;
     type InternalAdminsLenProvider = ();
     type MaxAdminsPerInstitution = ConstU32<32>;
     type TimeProvider = TestTimeProvider;
@@ -267,7 +289,8 @@ fn insert_engine_proposal_with_stage_and_status(proposal_id: u64, stage: u8, sta
             stage,
             status,
             internal_code: None,
-            account_context: None,
+            actor_cid_number: Some(actor_cid_number()),
+            execution_account: None,
             subject_cid_numbers: Default::default(),
             start: 0u64,
             end: 100u64,
@@ -324,6 +347,15 @@ fn call_joint_callback(
 
 fn reason_ok() -> pallet::ReasonOf<Test> {
     b"issuance".to_vec().try_into().expect("reason should fit")
+}
+
+fn actor_cid_number() -> votingengine::types::CidNumber {
+    primitives::cid::china::china_cb::CHINA_CB[0]
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("NRC CID should fit")
 }
 
 fn reserve_council_accounts() -> Vec<AccountId32> {

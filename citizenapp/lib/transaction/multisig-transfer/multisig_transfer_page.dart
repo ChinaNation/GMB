@@ -291,9 +291,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
         sign: signCallback,
       );
 
-      // 若是个人多签,写入提案历史 entity(转账提案在多签详情页提案列表展示)。
-      // 本页 institution.orgType 个人/机构都是 OrgType.account,通过 Isar 查
-      // PersonalAccountEntity 命中即视作个人多签。
+      // 仅个人多签写入本地个人提案历史；机构按 CID 路由。
       await _maybeRecordPersonalProposal(
         proposalId: submitResult.proposalId,
         beneficiary: _beneficiaryController.text.trim(),
@@ -336,16 +334,20 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
     required double amountYuan,
   }) async {
     try {
+      if (!isPersonalAccountIdentity(widget.institution.cidNumber)) {
+        return;
+      }
+      final personalAccountHex = widget.institution.personalAccountHex;
       final personal = await WalletIsar.instance.read((isar) {
         return isar.personalAccountEntitys
             .filter()
-            .accountEqualTo(widget.institution.mainAccount)
+            .accountEqualTo(personalAccountHex)
             .findFirst();
       });
-      if (personal == null) return; // 非个人多签,跳过
+      if (personal == null) return;
 
       await PersonalProposalHistoryService().recordOrUpdate(
-        personalAccountHex: widget.institution.mainAccount,
+        personalAccountHex: personalAccountHex,
         proposalId: proposalId,
         action: PersonalProposalAction.transfer,
         status: PersonalProposalStatus.voting,
@@ -715,9 +717,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
             ),
           ),
         ),
-        // 个人多签和机构账户共用 OrgType.account；
-        // 这里不显示笼统 badge，避免把个人多签误标成机构账户。
-        // 直接不显示标签,只显示多签账户名(已足够标识)。
+        // 页头已显示机构名或个人多签名，不再叠加类型标签。
       ],
     );
   }

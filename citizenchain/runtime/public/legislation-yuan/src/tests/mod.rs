@@ -8,7 +8,7 @@
 //! LegislationVoteEngine 装 `()`,InternalAdminProvider 用 TestInternalAdminProvider。
 
 use super::*;
-use crate::pallet::{Article, Chapter, ChaptersOf, HousesOf, LawProposalSummary, Section};
+use crate::pallet::{Article, Chapter, ChaptersOf, Houses, LawProposalSummary, Section};
 use frame_support::{
     derive_impl, parameter_types,
     traits::{ConstU32, ConstU64},
@@ -68,11 +68,7 @@ impl pallet_timestamp::Config for Test {
 }
 
 // ───────── 测试身份常量 ─────────
-/// 立法机构链上账户(归属机构)。
-pub fn owner_body() -> AccountId32 {
-    AccountId32::new([9u8; 32])
-}
-/// 现任议员/委员(owner_body 的 admin)。
+/// 现任议员/委员（机构身份由 actor CID 表达）。
 pub fn legislator() -> AccountId32 {
     AccountId32::new([1u8; 32])
 }
@@ -100,25 +96,25 @@ impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityRea
 
 pub struct TestInternalAdminProvider;
 
-fn account_tag(account: &AccountId32) -> u8 {
-    let raw: &[u8] = account.as_ref();
-    raw[0]
-}
-
-/// legislator() 是 owner_body() 的唯一管理员;其它一律不是。
+/// legislator() 是测试发起机构 CID 的唯一管理员；其它一律不是。
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(
-        _institution_code: InstitutionCode,
-        institution: AccountId32,
+    fn is_institution_admin(
+        institution_code: InstitutionCode,
+        cid_number: &[u8],
         who: &AccountId32,
     ) -> bool {
-        matches!(account_tag(&institution), 9 | 13 | 16) && *who == legislator()
+        matches!(institution_code, code if code == *b"NRP\0" || code == *b"CSLF" || code == *b"CEDU")
+            && TestInstitutionCidQuery::cid_matches(institution_code, cid_number)
+            && *who == legislator()
     }
-    fn get_admin_list(
-        _institution_code: InstitutionCode,
-        institution: AccountId32,
+
+    fn get_institution_admins(
+        institution_code: InstitutionCode,
+        cid_number: &[u8],
     ) -> Option<Vec<AccountId32>> {
-        if matches!(account_tag(&institution), 9 | 13 | 16) {
+        if matches!(institution_code, code if code == *b"NRP\0" || code == *b"CSLF" || code == *b"CEDU")
+            && TestInstitutionCidQuery::cid_matches(institution_code, cid_number)
+        {
             Some(vec![legislator()])
         } else {
             None
@@ -126,25 +122,10 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
     }
 }
 
-/// 立法路由机构查询夹具。每个账户只绑定一个机构码和一个有效 CID；
-/// 市级机构统一落在 GD002，确保同市校验能真实覆盖。
-pub struct TestInstitutionQuery;
+/// 立法路由机构 CID 查询夹具；市级机构统一落在 GD002，确保同市校验能真实覆盖。
+pub struct TestInstitutionCidQuery;
 
-impl TestInstitutionQuery {
-    fn code(addr: &AccountId32) -> Option<InstitutionCode> {
-        match account_tag(addr) {
-            9 => Some(*b"NRP\0"),
-            10 => Some(*b"NSN\0"),
-            11 => Some(*b"PRS\0"),
-            12 => Some(*b"NLG\0"),
-            13 => Some(*b"CSLF"),
-            14 => Some(*b"CLEG"),
-            15 => Some(*b"CGOV"),
-            16 => Some(*b"CEDU"),
-            _ => None,
-        }
-    }
-
+impl TestInstitutionCidQuery {
     fn cid(code: InstitutionCode) -> Vec<u8> {
         let code_text =
             primitives::cid::code::institution_code_text(&code).expect("test institution code");
@@ -165,25 +146,25 @@ impl TestInstitutionQuery {
         .expect("test cid")
         .into_bytes()
     }
+
+    fn bounded_cid(code: InstitutionCode) -> votingengine::types::CidNumber {
+        Self::cid(code).try_into().expect("test CID should fit")
+    }
+
+    fn cid_matches(code: InstitutionCode, cid_number: &[u8]) -> bool {
+        Self::cid(code).as_slice() == cid_number
+    }
 }
 
-impl entity_primitives::InstitutionMultisigQuery<AccountId32> for TestInstitutionQuery {
-    fn lookup_cid(addr: &AccountId32) -> Option<Vec<u8>> {
-        Self::code(addr).map(Self::cid)
-    }
-
-    fn lookup_org(addr: &AccountId32) -> Option<InstitutionCode> {
-        Self::code(addr)
-    }
-
-    fn lookup_admin_config(
-        _addr: &AccountId32,
-    ) -> Option<primitives::multisig::MultisigConfigSnapshot<AccountId32>> {
-        None
-    }
-
-    fn account_exists(addr: &AccountId32) -> bool {
-        Self::code(addr).is_some()
+impl entity_primitives::InstitutionCidQuery<votingengine::types::CidNumber>
+    for TestInstitutionCidQuery
+{
+    fn cid_exists(cid_number: &votingengine::types::CidNumber) -> bool {
+        [
+            *b"NRP\0", *b"NSN\0", *b"PRS\0", *b"NLG\0", *b"CSLF", *b"CLEG", *b"CGOV", *b"CEDU",
+        ]
+        .into_iter()
+        .any(|code| Self::cid_matches(code, cid_number.as_slice()))
     }
 }
 
@@ -248,7 +229,7 @@ impl crate::pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     // 立法投票引擎单测装配为 ()(NotConfigured);端到端见 legislation-vote 测试。
     type LegislationVoteEngine = ();
-    type InstitutionQuery = TestInstitutionQuery;
+    type InstitutionCidQuery = TestInstitutionCidQuery;
     type MaxTitleLen = MaxTitleLen;
     type MaxTextLen = MaxTextLen;
     type MaxClausesPerArticle = MaxClausesPerArticle;
@@ -333,47 +314,44 @@ pub fn title(s: &[u8]) -> BoundedVec<u8, MaxTitleLen> {
 }
 
 /// 国家两院序列：国家众议会 → 国家参议会。
-pub fn houses() -> HousesOf<Test> {
+pub fn houses() -> Houses {
     BoundedVec::try_from(vec![
-        (OWNER_CODE, owner_body()),
-        (*b"NSN\0", AccountId32::new([10u8; 32])),
+        TestInstitutionCidQuery::bounded_cid(OWNER_CODE),
+        TestInstitutionCidQuery::bounded_cid(*b"NSN\0"),
     ])
     .expect("houses within bound")
 }
 
 // 国家行政签署机构(法定代表人=签署人)。
 pub const EXEC_CODE: InstitutionCode = *b"PRS\0";
-pub fn exec_body() -> AccountId32 {
-    AccountId32::new([11u8; 32])
+/// 提案机构 CID；legislator() 是其管理员。
+pub fn actor_cid_number() -> votingengine::types::CidNumber {
+    TestInstitutionCidQuery::bounded_cid(OWNER_CODE)
 }
-/// 提案机构 =(OWNER_CODE, owner_body());legislator() 是其管理员。
-pub fn proposer_body() -> (InstitutionCode, AccountId32) {
-    (OWNER_CODE, owner_body())
-}
-/// 行政签署机构 =(EXEC_CODE, exec_body())。
-pub fn executive() -> (InstitutionCode, AccountId32) {
-    (EXEC_CODE, exec_body())
+/// 行政签署机构 CID。
+pub fn executive_cid_number() -> votingengine::types::CidNumber {
+    TestInstitutionCidQuery::bounded_cid(EXEC_CODE)
 }
 
-pub fn legislature() -> Option<(InstitutionCode, AccountId32)> {
-    Some((*b"NLG\0", AccountId32::new([12u8; 32])))
+pub fn legislature_cid_number() -> Option<votingengine::types::CidNumber> {
+    Some(TestInstitutionCidQuery::bounded_cid(*b"NLG\0"))
 }
 
-pub fn municipal_houses() -> HousesOf<Test> {
-    BoundedVec::try_from(vec![(*b"CLEG", AccountId32::new([14u8; 32]))])
+pub fn municipal_houses() -> Houses {
+    BoundedVec::try_from(vec![TestInstitutionCidQuery::bounded_cid(*b"CLEG")])
         .expect("municipal houses within bound")
 }
 
-pub fn municipal_proposer_body() -> (InstitutionCode, AccountId32) {
-    (*b"CSLF", AccountId32::new([13u8; 32]))
+pub fn municipal_actor_cid_number() -> votingengine::types::CidNumber {
+    TestInstitutionCidQuery::bounded_cid(*b"CSLF")
 }
 
-pub fn municipal_education_proposer_body() -> (InstitutionCode, AccountId32) {
-    (*b"CEDU", AccountId32::new([16u8; 32]))
+pub fn municipal_education_actor_cid_number() -> votingengine::types::CidNumber {
+    TestInstitutionCidQuery::bounded_cid(*b"CEDU")
 }
 
-pub fn municipal_executive() -> (InstitutionCode, AccountId32) {
-    (*b"CGOV", AccountId32::new([15u8; 32]))
+pub fn municipal_executive_cid_number() -> votingengine::types::CidNumber {
+    TestInstitutionCidQuery::bounded_cid(*b"CGOV")
 }
 
 /// 直接构造一个 Enact 提案摘要(用于直调 write_law_version 预置法律)。
@@ -383,14 +361,19 @@ pub fn enact_summary(
     vote_type: VoteType,
     title_bytes: &[u8],
 ) -> LawProposalSummary<Test> {
-    let (houses, proposer_body, executive, legislature) = match tier {
+    let (houses, actor_cid_number, executive_cid_number, legislature_cid_number) = match tier {
         Tier::Municipal => (
             municipal_houses(),
-            municipal_proposer_body(),
-            municipal_executive(),
+            municipal_actor_cid_number(),
+            municipal_executive_cid_number(),
             None,
         ),
-        _ => (houses(), proposer_body(), executive(), legislature()),
+        _ => (
+            houses(),
+            actor_cid_number(),
+            executive_cid_number(),
+            legislature_cid_number(),
+        ),
     };
     LawProposalSummary::<Test> {
         action: LawAction::Enact,
@@ -398,9 +381,9 @@ pub fn enact_summary(
         tier,
         scope_code,
         houses,
-        proposer_body,
-        executive,
-        legislature,
+        actor_cid_number,
+        executive_cid_number,
+        legislature_cid_number,
         vote_type,
         title: title(title_bytes),
         title_en: None,

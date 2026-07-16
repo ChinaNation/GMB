@@ -162,12 +162,14 @@ pub mod pallet {
             let admins_len = bounded.len() as u32;
 
             with_transaction(|| {
-                if let Err(err) = T::InternalVoteEngine::register_active_institution_threshold_direct(
-                    institution_code,
-                    cid_number.to_vec(),
-                    admins_len,
-                    threshold,
-                ) {
+                if let Err(err) =
+                    T::InternalVoteEngine::register_active_institution_threshold_direct(
+                        institution_code,
+                        cid_number.to_vec(),
+                        admins_len,
+                        threshold,
+                    )
+                {
                     return TransactionOutcome::Rollback(Err(err));
                 }
                 let created = match AdminAccounts::<T>::get(&cid_number) {
@@ -210,8 +212,8 @@ pub mod pallet {
                 institution_code,
                 &admins,
             )?;
-            let existing = AdminAccounts::<T>::get(&cid_number)
-                .ok_or(Error::<T>::InvalidInstitution)?;
+            let existing =
+                AdminAccounts::<T>::get(&cid_number).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 existing.institution_code == institution_code,
                 Error::<T>::InstitutionCodeMismatch
@@ -235,9 +237,7 @@ pub mod pallet {
                 )
                 .is_err()
                 {
-                    return TransactionOutcome::Rollback(Err(
-                        Error::<T>::InvalidThreshold.into(),
-                    ));
+                    return TransactionOutcome::Rollback(Err(Error::<T>::InvalidThreshold.into()));
                 }
                 AdminAccounts::<T>::insert(
                     &cid_number,
@@ -280,13 +280,7 @@ impl<T: pallet::Config> InstitutionAdminLifecycle<T::AccountId> for pallet::Pall
         admins: Vec<T::AccountId>,
         threshold: u32,
     ) -> DispatchResult {
-        Self::do_set_institution_admins(
-            cid_number,
-            institution_code,
-            kind,
-            admins,
-            threshold,
-        )
+        Self::do_set_institution_admins(cid_number, institution_code, kind, admins, threshold)
     }
 
     fn sync_institution_admins_from_assignments(
@@ -295,19 +289,12 @@ impl<T: pallet::Config> InstitutionAdminLifecycle<T::AccountId> for pallet::Pall
         institution_code: InstitutionCode,
         admins: Vec<T::AccountId>,
     ) -> DispatchResult {
-        Self::do_sync_institution_admins_from_assignments(
-            cid_number,
-            institution_code,
-            admins,
-        )
+        Self::do_sync_institution_admins_from_assignments(cid_number, institution_code, admins)
     }
 }
 
 impl<T: pallet::Config> InstitutionAdminQuery<T::AccountId> for pallet::Pallet<T> {
-    fn institution_admins_exist(
-        institution_code: InstitutionCode,
-        cid_number: &[u8],
-    ) -> bool {
+    fn institution_admins_exist(institution_code: InstitutionCode, cid_number: &[u8]) -> bool {
         Self::get_institution_admins(institution_code, cid_number).is_some()
     }
 
@@ -329,10 +316,7 @@ impl<T: pallet::Config> InstitutionAdminQuery<T::AccountId> for pallet::Pallet<T
             .map(|value| value.admins.into_inner())
     }
 
-    fn institution_admins_len(
-        institution_code: InstitutionCode,
-        cid_number: &[u8],
-    ) -> Option<u32> {
+    fn institution_admins_len(institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32> {
         Self::get_institution_admins(institution_code, cid_number)
             .map(|value| value.admins.len() as u32)
     }

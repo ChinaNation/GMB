@@ -4,8 +4,8 @@
 //! - `account_names_payload_from_initial_accounts`: 把机构创建账户列表的
 //!   account_name 抽成 CID 验签 payload `Vec<Vec<u8>>`(顺序与 CID
 //!   `/registration-info.account_names` 严格一致)。
-//! - `account_names_payload_from_names`: 同样的 payload, 但接收
-//!   `register_cid_private_institution` 入口传来的 BoundedVec<AccountName>。
+//! - `account_names_payload_from_names`: 同样的 payload，但接收存量机构新增账户入口的
+//!   BoundedVec<AccountName>。
 //! - `validate_initial_accounts`: 校验机构初始账户列表合法性,派生每个账户
 //!   的链上地址,返回固化的 `CreateInstitutionAccountsOf<T>` + 主账户/
 //!   费用账户/初始余额合计,供 `do_propose_create_private_institution` 用。
@@ -41,9 +41,8 @@ pub(crate) fn account_names_payload_from_initial_accounts<T: Config>(
     Ok(names)
 }
 
-// 批量 register 入口用的 account_names_payload_from_names 实现保留在
-// lib.rs 内 `Pallet::<T>::account_names_payload_from_names`(register.rs 直接调),
-// 此处不重复。
+// 存量机构新增账户入口使用的 account_names_payload_from_names 实现在 lib.rs，
+// 此处不复制第二份规则。
 
 /// 校验机构初始账户列表合法性,派生地址,返回:
 /// - 固化的 `CreateInstitutionAccountsOf<T>`(已派生完地址)
@@ -65,14 +64,16 @@ pub(crate) fn validate_initial_accounts<T: Config>(
     ensure!(!accounts.is_empty(), Error::<T>::EmptyInstitutionAccounts);
 
     let mut seen = BTreeSet::new();
-    let required_protocol_kinds = primitives::institution_constraints::required_protocol_account_kinds(
-        primitives::cid::code::institution_code_from_cid_number(
-            core::str::from_utf8(cid_number.as_slice()).map_err(|_| Error::<T>::InvalidCidNumber)?,
+    let required_protocol_kinds =
+        primitives::institution_constraints::required_protocol_account_kinds(
+            primitives::cid::code::institution_code_from_cid_number(
+                core::str::from_utf8(cid_number.as_slice())
+                    .map_err(|_| Error::<T>::InvalidCidNumber)?,
+            )
+            .ok_or(Error::<T>::InvalidCidNumber)?,
+            cid_number.as_slice(),
         )
-        .ok_or(Error::<T>::InvalidCidNumber)?,
-        cid_number.as_slice(),
-    )
-    .ok_or(Error::<T>::InvalidCidNumber)?;
+        .ok_or(Error::<T>::InvalidCidNumber)?;
     let mut protocol_kinds = BTreeSet::new();
     let mut main_account: Option<T::AccountId> = None;
     let mut fee_account: Option<T::AccountId> = None;
@@ -91,7 +92,7 @@ pub(crate) fn validate_initial_accounts<T: Config>(
             Error::<T>::DuplicateAccountName
         );
 
-        let (address, kind) = Pallet::<T>::derive_registered_account(
+        let (address, kind) = Pallet::<T>::derive_institution_account(
             cid_number.as_slice(),
             item.account_name.as_slice(),
         )?;
@@ -140,6 +141,10 @@ pub(crate) fn validate_initial_accounts<T: Config>(
         });
     }
 
+    // 私权机构当前统一要求主账户与费用账户；分别报错，禁止把缺费用账户退化成
+    // “缺主账户”或静默补齐。其他机构类型的额外协议账户由同一约束表控制。
+    ensure!(main_account.is_some(), Error::<T>::MissingMainAccount);
+    ensure!(fee_account.is_some(), Error::<T>::MissingFeeAccount);
     ensure!(
         required_protocol_kinds
             .iter()

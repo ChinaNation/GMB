@@ -5,9 +5,9 @@
 //!
 //! **铁律**:参数顺序与 SCALE 类型必须与链端 `legislation-yuan`(pallet idx 25)逐字节一致:
 //! - `tier` / `vote_type` 是单字节枚举序号(Tier:0宪法/1国家/2省/3市;VoteType:0常规/1常规教育/2重要/3重要教育/4特别);
-//! - `houses` = `Vec<(InstitutionCode[u8;4], AccountId[u8;32])>`,带 `Compact<u32>` 数量前缀,元素裸 36 字节;
-//! - `proposer_body` / `executive` = `(InstitutionCode, AccountId)` 裸 36 字节;
-//! - `legislature` = `Option<(...)>`(0x00 None / 0x01 + 36 字节);
+//! - `houses` = `Vec<CidNumber>`,带 `Compact<u32>` 数量前缀,每项是 CID 字节向量;
+//! - `actor_cid_number` / `executive_cid_number` = 机构唯一 CID;
+//! - `legislature_cid_number` = `Option<CidNumber>`;
 //! - `title` / `title_en` = `Vec<u8>` / `Option<Vec<u8>>`(`Compact<u32>` 长度前缀);
 //! - `chapters` = 章>节>条>款 嵌套(链端 `BoundedVec` 与 `Vec` 的 SCALE 同布局,由 `ChapterArg` 派生 `Encode`);
 //! - `scope_code` = u32 小端;`effective_at` = 生效时间戳毫秒(u64 小端);`law_id` = u64 小端。
@@ -27,23 +27,6 @@ pub const PROPOSE_ENACT_LAW_CALL_INDEX: u8 = 0;
 pub const PROPOSE_AMEND_LAW_CALL_INDEX: u8 = 1;
 /// `propose_repeal_law` call index。
 pub const PROPOSE_REPEAL_LAW_CALL_INDEX: u8 = 2;
-
-/// 机构 + 账户引用(链端 `(InstitutionCode[u8;4], AccountId[u8;32])`)。
-#[derive(Debug, Clone)]
-pub struct LegHouse {
-    /// 机构码(4 字节裸字节,无长度前缀)。
-    pub code: [u8; 4],
-    /// 机构进链账户(32 字节裸字节)。
-    pub account: [u8; 32],
-}
-
-impl LegHouse {
-    /// 追加裸 36 字节(4 字节机构码 + 32 字节账户)。
-    fn encode_to(&self, out: &mut Vec<u8>) {
-        out.extend_from_slice(&self.code);
-        out.extend_from_slice(&self.account);
-    }
-}
 
 // 章>节>条>款 SCALE 镜像:`Vec` 与链端 `BoundedVec` SCALE 同布局,字段顺序锁死链端
 // `legislation-yuan` 的 `Chapter/Section/Article/Clause`(lib.rs:75/97/125/149)。
@@ -98,22 +81,11 @@ fn encode_opt_bytes(out: &mut Vec<u8>, bytes: Option<&[u8]>) {
     }
 }
 
-/// `houses: Vec<(Code,Account)>`:`Compact<u32>` 数量前缀 + 各裸 36 字节。
-fn encode_houses(out: &mut Vec<u8>, houses: &[LegHouse]) {
+/// `houses: Vec<CidNumber>`:`Compact<u32>` 数量前缀 + 各 CID 字节向量。
+fn encode_houses(out: &mut Vec<u8>, houses: &[Vec<u8>]) {
     out.extend(Compact(houses.len() as u32).encode());
-    for house in houses {
-        house.encode_to(out);
-    }
-}
-
-/// `legislature: Option<(Code,Account)>`:0x00 None / 0x01 + 36 字节。
-fn encode_opt_house(out: &mut Vec<u8>, house: Option<&LegHouse>) {
-    match house {
-        None => out.push(0x00),
-        Some(h) => {
-            out.push(0x01);
-            h.encode_to(out);
-        }
+    for cid_number in houses {
+        encode_bytes(out, cid_number);
     }
 }
 
@@ -130,10 +102,10 @@ fn encode_chapters(out: &mut Vec<u8>, chapters: &[ChapterArg]) {
 pub fn encode_propose_enact_law(
     tier: u8,
     scope_code: u32,
-    houses: &[LegHouse],
-    proposer_body: &LegHouse,
-    executive: &LegHouse,
-    legislature: Option<&LegHouse>,
+    houses: &[Vec<u8>],
+    actor_cid_number: &[u8],
+    executive_cid_number: &[u8],
+    legislature_cid_number: Option<&[u8]>,
     vote_type: u8,
     title: &[u8],
     title_en: Option<&[u8]>,
@@ -144,9 +116,9 @@ pub fn encode_propose_enact_law(
     out.push(tier);
     out.extend(scope_code.to_le_bytes());
     encode_houses(&mut out, houses);
-    proposer_body.encode_to(&mut out);
-    executive.encode_to(&mut out);
-    encode_opt_house(&mut out, legislature);
+    encode_bytes(&mut out, actor_cid_number);
+    encode_bytes(&mut out, executive_cid_number);
+    encode_opt_bytes(&mut out, legislature_cid_number);
     out.push(vote_type);
     encode_bytes(&mut out, title);
     encode_opt_bytes(&mut out, title_en);
@@ -162,9 +134,9 @@ pub fn encode_propose_enact_law(
 #[allow(clippy::too_many_arguments)]
 pub fn encode_propose_amend_law(
     law_id: u64,
-    proposer_body: &LegHouse,
-    executive: &LegHouse,
-    legislature: Option<&LegHouse>,
+    actor_cid_number: &[u8],
+    executive_cid_number: &[u8],
+    legislature_cid_number: Option<&[u8]>,
     vote_type: u8,
     title: &[u8],
     title_en: Option<&[u8]>,
@@ -173,9 +145,9 @@ pub fn encode_propose_amend_law(
 ) -> ChainCall {
     let mut out = vec![LEGISLATION_YUAN_PALLET_INDEX, PROPOSE_AMEND_LAW_CALL_INDEX];
     out.extend(law_id.to_le_bytes());
-    proposer_body.encode_to(&mut out);
-    executive.encode_to(&mut out);
-    encode_opt_house(&mut out, legislature);
+    encode_bytes(&mut out, actor_cid_number);
+    encode_bytes(&mut out, executive_cid_number);
+    encode_opt_bytes(&mut out, legislature_cid_number);
     out.push(vote_type);
     encode_bytes(&mut out, title);
     encode_opt_bytes(&mut out, title_en);
@@ -190,16 +162,16 @@ pub fn encode_propose_amend_law(
 /// 废法:pallet 25 call 2(无 `title`/`chapters`/`effective_at`)。
 pub fn encode_propose_repeal_law(
     law_id: u64,
-    proposer_body: &LegHouse,
-    executive: &LegHouse,
-    legislature: Option<&LegHouse>,
+    actor_cid_number: &[u8],
+    executive_cid_number: &[u8],
+    legislature_cid_number: Option<&[u8]>,
     vote_type: u8,
 ) -> ChainCall {
     let mut out = vec![LEGISLATION_YUAN_PALLET_INDEX, PROPOSE_REPEAL_LAW_CALL_INDEX];
     out.extend(law_id.to_le_bytes());
-    proposer_body.encode_to(&mut out);
-    executive.encode_to(&mut out);
-    encode_opt_house(&mut out, legislature);
+    encode_bytes(&mut out, actor_cid_number);
+    encode_bytes(&mut out, executive_cid_number);
+    encode_opt_bytes(&mut out, legislature_cid_number);
     out.push(vote_type);
     ChainCall {
         action: chain_action_code(LEGISLATION_YUAN_PALLET_INDEX, PROPOSE_REPEAL_LAW_CALL_INDEX),
@@ -234,11 +206,8 @@ mod tests {
         }
     }
 
-    fn house(code: &[u8; 4], seed: u8) -> LegHouse {
-        LegHouse {
-            code: *code,
-            account: [seed; 32],
-        }
+    fn cid(suffix: &str) -> Vec<u8> {
+        format!("LN001-{suffix}0G-000000001-2026").into_bytes()
     }
 
     fn sample_chapters() -> Vec<ChapterArg> {
@@ -266,18 +235,13 @@ mod tests {
         }]
     }
 
-    /// 把 `LegHouse` 投影成链端 `(InstitutionCode, AccountId)` 等价的 Rust 元组,供 codec 拼 golden。
-    fn tuple(h: &LegHouse) -> ([u8; 4], [u8; 32]) {
-        (h.code, h.account)
-    }
-
     /// 完整 `propose_enact_law` 编码:用链端真实 `Tier`/`VoteType` + codec 逐参数拼 golden,逐字节比对。
     #[test]
     fn enact_law_call_matches_codec_golden_and_prefix() {
-        let houses = vec![house(b"NRP\0", 1), house(b"NSN\0", 2)];
-        let proposer = house(b"NRP\0", 1);
-        let executive = house(b"NLG\0", 9);
-        let legislature = house(b"NSN\0", 2);
+        let houses = vec![cid("NRP"), cid("NSN")];
+        let actor_cid_number = cid("NRP");
+        let executive_cid_number = cid("PRS");
+        let legislature_cid_number = cid("NLG");
         let chapters = sample_chapters();
         let title = "道路交通安全法".as_bytes();
         let title_en = "Road Traffic Safety Law".as_bytes();
@@ -286,9 +250,9 @@ mod tests {
             1, // tier=National
             0, // scope_code 全国
             &houses,
-            &proposer,
-            &executive,
-            Some(&legislature),
+            &actor_cid_number,
+            &executive_cid_number,
+            Some(&legislature_cid_number),
             2, // vote_type=Major
             title,
             Some(title_en),
@@ -303,10 +267,10 @@ mod tests {
         let mut golden = Vec::new();
         golden.extend(Tier::National.encode());
         golden.extend(0u32.encode());
-        golden.extend(houses.iter().map(tuple).collect::<Vec<_>>().encode());
-        golden.extend(tuple(&proposer).encode());
-        golden.extend(tuple(&executive).encode());
-        golden.extend(Some(tuple(&legislature)).encode());
+        golden.extend(houses.encode());
+        golden.extend(actor_cid_number.encode());
+        golden.extend(executive_cid_number.encode());
+        golden.extend(Some(legislature_cid_number).encode());
         golden.extend(VoteType::Major.encode());
         golden.extend(title.to_vec().encode());
         golden.extend(Some(title_en.to_vec()).encode());
@@ -323,15 +287,15 @@ mod tests {
     /// 修法/废法前缀、`law_id`(u64 小端)与废法尾部(无 chapters,末字节=vote_type)。
     #[test]
     fn amend_and_repeal_prefix_law_id_and_repeal_tail() {
-        let proposer = house(b"PRP\0", 3);
-        let executive = house(b"PGV\0", 4);
-        let senate = house(b"PSN\0", 5);
+        let actor_cid_number = cid("PRP");
+        let executive_cid_number = cid("PGV");
+        let legislature_cid_number = cid("PLG");
 
         let amend = encode_propose_amend_law(
             7,
-            &proposer,
-            &executive,
-            Some(&senate),
+            &actor_cid_number,
+            &executive_cid_number,
+            Some(&legislature_cid_number),
             0,
             b"x",
             None,
@@ -342,14 +306,15 @@ mod tests {
         assert_eq!(amend.action, 0x1901);
         assert_eq!(&amend.call_data[2..10], &7u64.to_le_bytes());
 
-        let repeal = encode_propose_repeal_law(7, &proposer, &executive, None, 4);
+        let repeal =
+            encode_propose_repeal_law(7, &actor_cid_number, &executive_cid_number, None, 4);
         assert_eq!(&repeal.call_data[..2], &[25, 2]);
         assert_eq!(&repeal.call_data[2..10], &7u64.to_le_bytes());
-        // 废法尾 = legislature(None=0x00) + vote_type(4) 两字节,无 chapters/effective_at。
+        // 废法尾 = actor CID + executive CID + legislature(None) + vote_type,无正文与时间。
         let mut golden_tail = Vec::new();
-        golden_tail.extend(tuple(&proposer).encode());
-        golden_tail.extend(tuple(&executive).encode());
-        golden_tail.extend(Option::<([u8; 4], [u8; 32])>::None.encode());
+        golden_tail.extend(actor_cid_number.encode());
+        golden_tail.extend(executive_cid_number.encode());
+        golden_tail.extend(Option::<Vec<u8>>::None.encode());
         golden_tail.push(4u8);
         assert_eq!(&repeal.call_data[10..], &golden_tail[..]);
     }

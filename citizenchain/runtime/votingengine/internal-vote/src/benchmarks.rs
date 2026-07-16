@@ -32,14 +32,19 @@ fn setup<T: Config>() -> (
         stage: votingengine::STAGE_INTERNAL,
         status: votingengine::STATUS_VOTING,
         internal_code: Some(primitives::cid::code::PMUL),
-        account_context: Some(institution.clone()),
+        actor_cid_number: None,
+        execution_account: Some(institution.clone()),
         subject_cid_numbers: Default::default(),
         start: 0u32.saturated_into(),
         end: 2u32.saturated_into(),
         citizen_eligible_total: 0,
     };
     Proposals::<T>::insert(proposal_id, proposal.clone());
-    votingengine::pallet::AdminSnapshot::<T>::insert(proposal_id, institution, admins);
+    votingengine::pallet::AdminSnapshot::<T>::insert(
+        proposal_id,
+        votingengine::ProposalSubject::PersonalAccount(institution),
+        admins,
+    );
     InternalThresholdSnapshot::<T>::insert(proposal_id, 1);
     (proposal_id, voter, proposal)
 }

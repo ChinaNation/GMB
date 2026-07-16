@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:polkadart/polkadart.dart' show Hasher;
 
+import 'package:citizenapp/citizen/shared/proposal/proposal_query_service.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
 /// 立法投票阶段(链端 votingengine STAGE_LEG_*,Proposal.stage 字节)。
@@ -20,13 +22,6 @@ class LegProposalStatus {
   static const int rejected = 2;
 }
 
-/// 院/机构引用(机构码 + 账户 hex)。
-class LegRepresentativeBody {
-  const LegRepresentativeBody({required this.code, required this.accountHex});
-  final String code;
-  final String accountHex;
-}
-
 /// 代表机构表决元数据（RepresentativeMetas 镜像）。
 class LegRepresentativeMeta {
   const LegRepresentativeMeta({
@@ -38,7 +33,9 @@ class LegRepresentativeMeta {
   });
 
   final bool sequential;
-  final List<LegRepresentativeBody> bodies;
+
+  /// 按状态机顺序排列的代表机构 CID。
+  final List<String> bodies;
   final int currentBody;
   final int rule; // 0常规/1重要/2特别
   final int procedure; // 0代表表决终局/1法律专属程序
@@ -47,13 +44,13 @@ class LegRepresentativeMeta {
 /// 法律专属元数据（LegislationMetas 镜像）。
 class LegislationMeta {
   const LegislationMeta({
-    required this.executive,
-    required this.legislature,
+    required this.executiveCidNumber,
+    required this.legislatureCidNumber,
     required this.needsGuard,
   });
 
-  final LegRepresentativeBody executive;
-  final LegRepresentativeBody? legislature;
+  final String executiveCidNumber;
+  final String? legislatureCidNumber;
   final bool needsGuard; // 修宪→护宪终审
 }
 
@@ -76,60 +73,101 @@ class LegProposalState {
 /// VotingEngine.Proposals。
 class LegislationVoteQueryService {
   LegislationVoteQueryService({ChainRpc? chainRpc})
-      : _rpc = chainRpc ?? ChainRpc();
+      : _rpc = chainRpc ?? ChainRpc(),
+        _proposalQuery = ProposalQueryService(chainRpc: chainRpc);
 
   final ChainRpc _rpc;
+  final ProposalQueryService _proposalQuery;
 
   static const String _votePallet = 'LegislationVote';
 
   /// 核心提案阶段/状态(不存在返回 null)。
   Future<LegProposalState?> fetchProposalState(int proposalId) async {
-    final key = _mapKey('VotingEngine', 'Proposals', _u64Le(proposalId));
-    final data = await _rpc.fetchStorage('0x${_hex(key)}');
-    if (data == null || data.length < 3) return null;
-    return LegProposalState(kind: data[0], stage: data[1], status: data[2]);
+    final proposal = await _proposalQuery.fetchProposalMeta(proposalId);
+    if (proposal == null) return null;
+    return LegProposalState(
+      kind: proposal.kind,
+      stage: proposal.stage,
+      status: proposal.status,
+    );
   }
 
   Future<LegRepresentativeMeta?> fetchRepresentativeMeta(int proposalId) async {
     final key = _mapKey(_votePallet, 'RepresentativeMetas', _u64Le(proposalId));
     final data = await _rpc.fetchStorage('0x${_hex(key)}');
     if (data == null || data.isEmpty) return null;
-    final c = _Cursor(data);
-    final routeVariant = c.u8();
-    LegRepresentativeBody readBody() => LegRepresentativeBody(
-          code: _codeStr(c.bytes(4)),
-          accountHex: _hex(c.bytes(32)),
-        );
-    final bodies = routeVariant == 0 ? [readBody()] : c.vec(readBody);
-    if (routeVariant > 1) throw const FormatException('未知代表机构路线');
-    return LegRepresentativeMeta(
-      sequential: routeVariant == 1,
-      bodies: bodies,
-      currentBody: c.u32(),
-      rule: c.u8(),
-      procedure: c.u8(),
-    );
+    return _decodeRepresentativeMeta(data);
   }
 
   Future<LegislationMeta?> fetchLegislationMeta(int proposalId) async {
     final key = _mapKey(_votePallet, 'LegislationMetas', _u64Le(proposalId));
     final data = await _rpc.fetchStorage('0x${_hex(key)}');
     if (data == null || data.isEmpty) return null;
-    final c = _Cursor(data);
-    final executive = LegRepresentativeBody(
-      code: _codeStr(c.bytes(4)),
-      accountHex: _hex(c.bytes(32)),
-    );
-    final legislature = c.u8() == 0
-        ? null
-        : LegRepresentativeBody(
-            code: _codeStr(c.bytes(4)), accountHex: _hex(c.bytes(32)));
-    final needsGuard = c.u8() == 1;
-    return LegislationMeta(
-      executive: executive,
-      legislature: legislature,
-      needsGuard: needsGuard,
-    );
+    return _decodeLegislationMeta(data);
+  }
+
+  static LegRepresentativeMeta? debugDecodeRepresentativeMeta(
+    Uint8List data,
+  ) =>
+      _decodeRepresentativeMeta(data);
+
+  static LegislationMeta? debugDecodeLegislationMeta(Uint8List data) =>
+      _decodeLegislationMeta(data);
+
+  static LegRepresentativeMeta? _decodeRepresentativeMeta(Uint8List data) {
+    try {
+      final c = _Cursor(data);
+      final routeVariant = c.u8();
+      final bodies = switch (routeVariant) {
+        0 => [c.cidNumber()],
+        1 => c.vec(c.cidNumber),
+        _ => throw const FormatException('未知代表机构路线'),
+      };
+      if (bodies.isEmpty || bodies.length > 4) return null;
+      final currentBody = c.u32();
+      final rule = c.u8();
+      final procedure = c.u8();
+      if (!c.isDone ||
+          currentBody >= bodies.length ||
+          rule > 2 ||
+          procedure > 1) {
+        return null;
+      }
+      return LegRepresentativeMeta(
+        sequential: routeVariant == 1,
+        bodies: List.unmodifiable(bodies),
+        currentBody: currentBody,
+        rule: rule,
+        procedure: procedure,
+      );
+    } on Object {
+      return null;
+    }
+  }
+
+  static LegislationMeta? _decodeLegislationMeta(Uint8List data) {
+    try {
+      final c = _Cursor(data);
+      final executiveCidNumber = c.cidNumber();
+      final legislatureTag = c.u8();
+      final String? legislatureCidNumber;
+      if (legislatureTag == 0) {
+        legislatureCidNumber = null;
+      } else if (legislatureTag == 1) {
+        legislatureCidNumber = c.cidNumber();
+      } else {
+        return null;
+      }
+      final guardTag = c.u8();
+      if (!c.isDone || guardTag > 1) return null;
+      return LegislationMeta(
+        executiveCidNumber: executiveCidNumber,
+        legislatureCidNumber: legislatureCidNumber,
+        needsGuard: guardTag == 1,
+      );
+    } on Object {
+      return null;
+    }
   }
 
   /// 当前代表机构计票，按 body_index 独立保存。
@@ -142,7 +180,7 @@ class LegislationVoteQueryService {
       _u32Le(bodyIndex),
     );
     final data = await _rpc.fetchStorage('0x${_hex(key)}');
-    if (data == null || data.length < 8) return (yes: 0, no: 0);
+    if (data == null || data.length != 8) return (yes: 0, no: 0);
     return (yes: _u32(data, 0), no: _u32(data, 4));
   }
 
@@ -150,7 +188,7 @@ class LegislationVoteQueryService {
   Future<({int yes, int no})> fetchReferendumTally(int proposalId) async {
     final key = _mapKey(_votePallet, 'LegReferendumTally', _u64Le(proposalId));
     final data = await _rpc.fetchStorage('0x${_hex(key)}');
-    if (data == null || data.length < 16) return (yes: 0, no: 0);
+    if (data == null || data.length != 16) return (yes: 0, no: 0);
     return (yes: _u64(data, 0), no: _u64(data, 8));
   }
 
@@ -168,7 +206,7 @@ class LegislationVoteQueryService {
       tupleKey,
     );
     final data = await _rpc.fetchStorage('0x${_hex(key)}');
-    if (data == null || data.isEmpty) return null;
+    if (data == null || data.length != 1 || data[0] > 1) return null;
     return data[0] == 1;
   }
 
@@ -191,8 +229,18 @@ class LegislationVoteQueryService {
     final key = _mapKey(_votePallet, storage, _u64Le(proposalId));
     final data = await _rpc.fetchStorage('0x${_hex(key)}');
     if (data == null || data.isEmpty) return const [];
-    final c = _Cursor(data);
-    return c.vec(() => (pubkeyHex: _hex(c.bytes(32)), approve: c.u8() == 1));
+    try {
+      final c = _Cursor(data);
+      final signs = c.vec(() {
+        final pubkeyHex = _hex(c.bytes(32));
+        final approveTag = c.u8();
+        if (approveTag > 1) throw const FormatException('签署 bool 非法');
+        return (pubkeyHex: pubkeyHex, approve: approveTag == 1);
+      });
+      return c.isDone ? signs : const [];
+    } on Object {
+      return const [];
+    }
   }
 
   // ──── key 构造 ────
@@ -251,14 +299,6 @@ class LegislationVoteQueryService {
 
   static String _hex(Uint8List b) =>
       b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
-
-  static String _codeStr(Uint8List b) {
-    var end = b.length;
-    while (end > 0 && b[end - 1] == 0) {
-      end--;
-    }
-    return String.fromCharCodes(b.sublist(0, end));
-  }
 }
 
 /// 极简 SCALE 游标(本服务局部用)。
@@ -266,6 +306,8 @@ class _Cursor {
   _Cursor(this.data);
   final Uint8List data;
   int _i = 0;
+
+  bool get isDone => _i == data.length;
 
   int u8() => data[_i++];
 
@@ -313,6 +355,14 @@ class _Cursor {
     final b = data.sublist(_i, _i + n);
     _i += n;
     return b;
+  }
+
+  String cidNumber() {
+    final length = compact();
+    if (length <= 0 || length > 32) {
+      throw const FormatException('机构 CID 长度必须为 1..32 字节');
+    }
+    return utf8.decode(bytes(length));
   }
 
   List<T> vec<T>(T Function() item) {

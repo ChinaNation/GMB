@@ -9,9 +9,8 @@ class InstitutionRoleStorageCodec {
 
   static InstitutionAdminAccountStorage? decodeAdminAccount(Uint8List data) {
     var offset = 0;
-    final cid = _readBytes(data, offset);
-    if (cid == null) return null;
-    offset = cid.$2;
+    // 机构 CID 是 `AdminAccounts` 的 storage key，不在 value 中重复保存。
+    // value 唯一布局为 institution_code:[u8;4] + admins:BoundedVec<AccountId>。
     if (offset + 4 > data.length) return null;
     final code = String.fromCharCodes(
         data.sublist(offset, offset + 4).where((b) => b != 0));
@@ -25,34 +24,40 @@ class InstitutionRoleStorageCodec {
       admins.add(_hex(data.sublist(offset, offset + 32)));
       offset += 32;
     }
-    if (offset + 1 != data.length) return null;
+    if (offset != data.length) return null;
     return InstitutionAdminAccountStorage(
-      cidNumber: utf8.decode(cid.$1, allowMalformed: true),
       institutionCode: code,
       admins: admins,
-      status: data[offset],
     );
   }
 
   static InstitutionRole? decodeRole(Uint8List data) {
-    var offset = 0;
-    final cid = _readBytes(data, offset);
-    if (cid == null) return null;
-    offset = cid.$2;
-    final code = _readBytes(data, offset);
-    if (code == null) return null;
-    offset = code.$2;
-    final name = _readBytes(data, offset);
-    if (name == null) return null;
-    offset = name.$2;
-    if (offset + 2 != data.length || data[offset + 1] > 1) return null;
-    return InstitutionRole(
-      cidNumber: utf8.decode(cid.$1, allowMalformed: true),
-      roleCode: utf8.decode(code.$1, allowMalformed: true),
-      roleName: utf8.decode(name.$1, allowMalformed: true),
-      termRequired: data[offset] != 0,
-      status: InstitutionRoleStatus.values[data[offset + 1]],
-    );
+    try {
+      var offset = 0;
+      final cid = _readBytes(data, offset, minLength: 1, maxLength: 32);
+      if (cid == null) return null;
+      offset = cid.$2;
+      final code = _readBytes(data, offset, minLength: 1, maxLength: 64);
+      if (code == null) return null;
+      offset = code.$2;
+      final name = _readBytes(data, offset, minLength: 1, maxLength: 128);
+      if (name == null) return null;
+      offset = name.$2;
+      if (offset + 2 != data.length ||
+          data[offset] > 1 ||
+          data[offset + 1] > 1) {
+        return null;
+      }
+      return InstitutionRole(
+        cidNumber: utf8.decode(cid.$1),
+        roleCode: utf8.decode(code.$1),
+        roleName: utf8.decode(name.$1),
+        termRequired: data[offset] == 1,
+        status: InstitutionRoleStatus.values[data[offset + 1]],
+      );
+    } on FormatException {
+      return null;
+    }
   }
 
   static List<InstitutionAdminAssignment>? decodeAssignments(Uint8List data) {
@@ -62,13 +67,13 @@ class InstitutionRoleStorageCodec {
     offset += count.$2;
     final out = <InstitutionAdminAssignment>[];
     for (var i = 0; i < count.$1; i++) {
-      final cid = _readBytes(data, offset);
+      final cid = _readBytes(data, offset, minLength: 1, maxLength: 32);
       if (cid == null) return null;
       offset = cid.$2;
       if (offset + 32 > data.length) return null;
       final account = _hex(data.sublist(offset, offset + 32));
       offset += 32;
-      final code = _readBytes(data, offset);
+      final code = _readBytes(data, offset, minLength: 1, maxLength: 64);
       if (code == null) return null;
       offset = code.$2;
       if (offset + 9 > data.length) return null;
@@ -79,7 +84,7 @@ class InstitutionRoleStorageCodec {
           ByteData.sublistView(data).getUint32(offset, Endian.little);
       offset += 4;
       final source = data[offset++];
-      final sourceRef = _readBytes(data, offset);
+      final sourceRef = _readBytes(data, offset, maxLength: 128);
       if (sourceRef == null) return null;
       offset = sourceRef.$2;
       if (offset >= data.length ||
@@ -88,23 +93,33 @@ class InstitutionRoleStorageCodec {
       }
       final status = data[offset++];
       if (status > 1) return null;
-      out.add(InstitutionAdminAssignment(
-        cidNumber: utf8.decode(cid.$1, allowMalformed: true),
-        adminAccount: account,
-        roleCode: utf8.decode(code.$1, allowMalformed: true),
-        termStart: termStart,
-        termEnd: termEnd,
-        source: InstitutionAssignmentSource.values[source],
-        sourceRef: utf8.decode(sourceRef.$1, allowMalformed: true),
-        active: status == 0,
-      ));
+      try {
+        out.add(InstitutionAdminAssignment(
+          cidNumber: utf8.decode(cid.$1),
+          adminAccount: account,
+          roleCode: utf8.decode(code.$1),
+          termStart: termStart,
+          termEnd: termEnd,
+          source: InstitutionAssignmentSource.values[source],
+          sourceRef: utf8.decode(sourceRef.$1),
+          active: status == 0,
+        ));
+      } on FormatException {
+        return null;
+      }
     }
     return offset == data.length ? out : null;
   }
 
-  static (Uint8List, int)? _readBytes(Uint8List data, int offset) {
+  static (Uint8List, int)? _readBytes(
+    Uint8List data,
+    int offset, {
+    int minLength = 0,
+    required int maxLength,
+  }) {
     final compact = _readCompact(data, offset);
     if (compact == null) return null;
+    if (compact.$1 < minLength || compact.$1 > maxLength) return null;
     final start = offset + compact.$2;
     final end = start + compact.$1;
     if (end > data.length) return null;

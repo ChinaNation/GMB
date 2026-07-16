@@ -72,6 +72,7 @@ class _MultisigProposalDetailPageState
   // 提案详情（二选一）
   personal_models.CreateProposalInfo? _createInfo;
   personal_models.CloseProposalInfo? _closeInfo;
+  institution_models.CloseProposalInfo? _institutionCloseInfo;
 
   bool get _isCreateProposal => _createInfo != null;
 
@@ -130,28 +131,26 @@ class _MultisigProposalDetailPageState
       final rpc = ChainRpc();
 
       // step1:并行加载管理员快照、提案状态、投票计数、阈值快照。
+      // 投票资格只能来自创建时快照；缺失或损坏必须失败，禁止回落到当前 admins。
       debugPrint(
-          '[VoteDetail._load] step1: 并行 fetchAdmins/Status/Tally/Threshold...');
+          '[VoteDetail._load] step1: 并行 fetchSnapshot/Status/Tally/Threshold...');
       final thresholdFuture = _proposalService
           .fetchInternalThresholdSnapshot(widget.proposalId)
           .catchError((_) => null);
-      final adminSnapshotFuture = _proposalService
-          .fetchAdminSnapshot(widget.proposalId, widget.institution)
-          .catchError((_) => const <String>[]);
       final results = await Future.wait([
-        _adminService.fetchAdmins(_accountIdentity),
+        _proposalService.fetchAdminSnapshot(
+          widget.proposalId,
+          widget.institution,
+        ),
         _proposalService.fetchProposalStatus(widget.proposalId),
         _proposalService.fetchVoteTally(widget.proposalId),
         thresholdFuture,
-        adminSnapshotFuture,
       ]);
 
-      final activeAdmins = results[0] as List<String>;
+      final admins = results[0] as List<String>;
       final status = results[1] as int?;
       final tally = results[2] as ({int yes, int no});
       final thresholdSnapshot = results[3] as int?;
-      final snapshotAdmins = results[4] as List<String>;
-      final admins = snapshotAdmins.isNotEmpty ? snapshotAdmins : activeAdmins;
       final threshold = _resolveVoteThreshold(thresholdSnapshot, admins.length);
       debugPrint(
           '[VoteDetail._load] step1 完成 admins.len=${admins.length} status=$status yes=${tally.yes} no=${tally.no} threshold=$threshold');
@@ -163,25 +162,22 @@ class _MultisigProposalDetailPageState
       debugPrint('[VoteDetail._load] step2 完成 raw.len=${raw?.length ?? 0}');
       personal_models.CreateProposalInfo? createInfo;
       personal_models.CloseProposalInfo? closeInfo;
+      institution_models.CloseProposalInfo? institutionCloseInfo;
       if (raw != null && raw.isNotEmpty) {
         final personalDetail = _personalManageService
             .decodePersonalProposalData(widget.proposalId, raw);
         if (personalDetail is personal_models.CreateProposalInfo) {
           createInfo = personalDetail;
-        } else if (personalDetail
-            is personal_models.CloseProposalInfo) {
+        } else if (personalDetail is personal_models.CloseProposalInfo) {
           closeInfo = personalDetail;
         } else {
           final orgDetail =
               _manageService.decodeManageProposalData(widget.proposalId, raw);
           if (orgDetail is institution_models.CloseProposalInfo) {
-            closeInfo = personal_models.CloseProposalInfo(
-              proposalId: orgDetail.proposalId,
-              account: orgDetail.account,
-              beneficiary: orgDetail.beneficiary,
-              proposer: orgDetail.proposer,
-              status: orgDetail.status,
-            );
+            if (orgDetail.actorCidNumber != widget.institution.cidNumber) {
+              throw StateError('机构关闭提案 actor CID 与当前机构不一致');
+            }
+            institutionCloseInfo = orgDetail;
           }
         }
       }
@@ -235,6 +231,7 @@ class _MultisigProposalDetailPageState
           pendingPks: pendingPks,
           createInfo: createInfo,
           closeInfo: closeInfo,
+          institutionCloseInfo: institutionCloseInfo,
         ));
       } catch (_) {
         // 详情快照只是首屏加速，写入失败不能影响链上结果展示。
@@ -253,6 +250,7 @@ class _MultisigProposalDetailPageState
         _selectedVoteWallet = votable.isNotEmpty ? votable.first : null;
         _createInfo = createInfo;
         _closeInfo = closeInfo;
+        _institutionCloseInfo = institutionCloseInfo;
         if (pendingNotice != null) {
           _voteNotice = pendingNotice.$1;
           _voteNoticeIsError = pendingNotice.$2;
@@ -293,6 +291,12 @@ class _MultisigProposalDetailPageState
       }
       final createInfo = _createInfoFromSnapshot(snapshot);
       final closeInfo = _closeInfoFromSnapshot(snapshot);
+      final institutionCloseInfo = _institutionCloseInfoFromSnapshot(snapshot);
+      if (createInfo == null &&
+          closeInfo == null &&
+          institutionCloseInfo == null) {
+        return null;
+      }
       setState(() {
         _admins = admins;
         _status = snapshot.status;
@@ -305,6 +309,7 @@ class _MultisigProposalDetailPageState
         _selectedVoteWallet = votable.isNotEmpty ? votable.first : null;
         _createInfo = createInfo;
         _closeInfo = closeInfo;
+        _institutionCloseInfo = institutionCloseInfo;
         _loading = false;
         _error = null;
       });
@@ -325,6 +330,7 @@ class _MultisigProposalDetailPageState
     required Set<String> pendingPks,
     required personal_models.CreateProposalInfo? createInfo,
     required personal_models.CloseProposalInfo? closeInfo,
+    required institution_models.CloseProposalInfo? institutionCloseInfo,
   }) {
     return ProposalDetailSnapshot(
       proposalId: widget.proposalId,
@@ -343,7 +349,9 @@ class _MultisigProposalDetailPageState
           ? _createInfoToJson(createInfo)
           : closeInfo != null
               ? _closeInfoToJson(closeInfo)
-              : const {},
+              : institutionCloseInfo != null
+                  ? _institutionCloseInfoToJson(institutionCloseInfo)
+                  : const {},
     );
   }
 
@@ -372,9 +380,23 @@ class _MultisigProposalDetailPageState
     };
   }
 
+  Map<String, Object?> _institutionCloseInfoToJson(
+    institution_models.CloseProposalInfo info,
+  ) {
+    return {
+      'kind': 'institution_close',
+      'actor_cid_number': info.actorCidNumber,
+      'institution_account': info.institutionAccount,
+      'beneficiary': info.beneficiary,
+      'proposer': info.proposer,
+      'status': info.status,
+    };
+  }
+
   personal_models.CreateProposalInfo? _createInfoFromSnapshot(
     ProposalDetailSnapshot snapshot,
   ) {
+    if (!isPersonalAccountIdentity(widget.institution.cidNumber)) return null;
     final detail = snapshot.detail;
     if (detail['kind'] != 'create') return null;
     final amountFen = BigInt.tryParse(detail['amount_fen']?.toString() ?? '');
@@ -396,6 +418,7 @@ class _MultisigProposalDetailPageState
   personal_models.CloseProposalInfo? _closeInfoFromSnapshot(
     ProposalDetailSnapshot snapshot,
   ) {
+    if (!isPersonalAccountIdentity(widget.institution.cidNumber)) return null;
     final detail = snapshot.detail;
     if (detail['kind'] != 'close') return null;
     final account = detail['account']?.toString();
@@ -405,6 +428,35 @@ class _MultisigProposalDetailPageState
       account: account,
       beneficiary: detail['beneficiary']?.toString() ?? '',
       proposer: detail['proposer']?.toString() ?? '',
+      status: snapshot.status,
+    );
+  }
+
+  institution_models.CloseProposalInfo? _institutionCloseInfoFromSnapshot(
+    ProposalDetailSnapshot snapshot,
+  ) {
+    if (isPersonalAccountIdentity(widget.institution.cidNumber)) return null;
+    final detail = snapshot.detail;
+    if (detail['kind'] != 'institution_close') return null;
+    final actorCidNumber = detail['actor_cid_number']?.toString();
+    final institutionAccount = detail['institution_account']?.toString();
+    final beneficiary = detail['beneficiary']?.toString();
+    final proposer = detail['proposer']?.toString();
+    if (actorCidNumber != widget.institution.cidNumber ||
+        institutionAccount == null ||
+        institutionAccount.length != 64 ||
+        beneficiary == null ||
+        beneficiary.isEmpty ||
+        proposer == null ||
+        proposer.isEmpty) {
+      return null;
+    }
+    return institution_models.CloseProposalInfo(
+      proposalId: snapshot.proposalId,
+      actorCidNumber: actorCidNumber!,
+      institutionAccount: institutionAccount,
+      beneficiary: beneficiary,
+      proposer: proposer,
       status: snapshot.status,
     );
   }
@@ -818,6 +870,8 @@ class _MultisigProposalDetailPageState
             const SizedBox(height: 12),
             if (_createInfo != null) ..._buildCreateInfoRows(),
             if (_closeInfo != null) ..._buildCloseInfoRows(),
+            if (_institutionCloseInfo != null)
+              ..._buildInstitutionCloseInfoRows(),
           ],
         ),
       ),
@@ -871,6 +925,33 @@ class _MultisigProposalDetailPageState
       }),
       const Divider(height: 20),
       _buildInfoRow('发起人', _truncateAddress(info.proposer)),
+    ];
+  }
+
+  List<Widget> _buildInstitutionCloseInfoRows() {
+    final info = _institutionCloseInfo!;
+    final accountSs58 =
+        Keyring().encodeAddress(_hexDecode(info.institutionAccount), 2027);
+    return [
+      _buildInfoRow('机构 CID', info.actorCidNumber),
+      const Divider(height: 20),
+      _buildInfoRow('机构账户', _truncateAddress(accountSs58), onCopy: () {
+        Clipboard.setData(ClipboardData(text: accountSs58));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('地址已复制'), duration: Duration(seconds: 1)),
+        );
+      }),
+      const Divider(height: 20),
+      _buildInfoRow('受益人', _truncateAddress(info.beneficiary), onCopy: () {
+        Clipboard.setData(ClipboardData(text: info.beneficiary));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('地址已复制'), duration: Duration(seconds: 1)),
+        );
+      }),
+      const Divider(height: 20),
+      _buildInfoRow('发起管理员', _truncateAddress(info.proposer)),
     ];
   }
 

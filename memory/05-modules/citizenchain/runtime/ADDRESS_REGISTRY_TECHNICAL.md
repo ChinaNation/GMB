@@ -33,9 +33,9 @@ citizenchain/runtime/misc/address-registry/
 
 ## 5. 权限规则
 
-- `set_catalog_version` 只允许 FRG 省级组管理员通过该省级组主账户发起。
+- `set_catalog_version` 显式携带 `actor_cid_number`，只允许该 FRG 机构 CID 下具有目标省级岗位的管理员签名发起；省级岗位不是独立机构，也不存在省级组主账户。
 - FRG 省级组管理员可以更新本省任意地址。
-- CREG 管理员只能更新本市地址。
+- CREG 管理员以所属注册局 `actor_cid_number + origin` 授权，只能更新本市地址。
 - 地址模块不直接读取管理员 storage；它通过 `AddressUpdateAuthority` 抽象把权限判断交给 runtime 配置层。
 
 ## 6. 版本与存储
@@ -72,4 +72,3 @@ province_code + city_code + town_code + address_name_code + address_local_no + a
 cargo check --manifest-path citizenchain/Cargo.toml -p address-registry
 cargo check --manifest-path citizenchain/Cargo.toml -p citizenchain
 ```
-

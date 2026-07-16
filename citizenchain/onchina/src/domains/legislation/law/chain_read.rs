@@ -26,8 +26,8 @@ pub struct OnChainLaw {
     /// Tier 单字节枚举(0 宪法 / 1 国家 / 2 省 / 3 市)。
     pub tier: u8,
     pub scope_code: u32,
-    /// `BoundedVec<(InstitutionCode[u8;4], AccountId[u8;32])>`。
-    pub houses: Vec<([u8; 4], [u8; 32])>,
+    /// `BoundedVec<CidNumber>`；账户不得充当立法机构身份。
+    pub houses: Vec<Vec<u8>>,
     /// 当前真正生效的版本。新法待生效时为 None。
     pub effective_version: Option<u32>,
     /// 已写入链上的最新版本。
@@ -122,7 +122,7 @@ pub fn build_law_view(
         houses: law
             .houses
             .iter()
-            .map(|(code, account)| house_ref(*code, *account))
+            .map(|cid_number| house_ref(cid_number))
             .collect(),
         immutable_article_numbers: if law.tier == TIER_CONSTITUTION {
             immutable_article_numbers.to_vec()
@@ -140,48 +140,42 @@ pub fn operator_display_version(law: &OnChainLaw) -> Option<u32> {
         .or_else(|| (law.latest_version > 0).then_some(law.latest_version))
 }
 
-// ──────────────── 账户派生 + subxt 链取数 ────────────────
+// ──────────────── 机构 CID 解析 + subxt 链取数 ────────────────
 
-/// 机构主账户派生:cid_number → OP_MAIN 主账户 `[u8;32]`(复用 `institution::accounts::derive`)。
-///
-/// 与链端 `primitives::account_derive` 单源一致(SS58=2027 / OP_MAIN / GMB 域)。
-/// `resolve_house_account` 全链路 = 「机构码+scope → cid_number(subjects 表查)→ 本函数派生」;
-/// subjects 查在 handler 组合既有查询,本函数是可离线金标校验的派生原语。
-pub fn derive_house_account(cid_number: &str) -> Option<[u8; 32]> {
-    let hex_addr = crate::institution::accounts::derive::derive_account(cid_number, "主账户")?;
-    let bytes = hex::decode(hex_addr).ok()?;
-    <[u8; 32]>::try_from(bytes.as_slice()).ok()
-}
-
-/// 机构码 + 行政区(china code)→ 主账户:subjects 表查 cid_number → `derive_house_account`。
+/// 机构码 + 行政区(china code)→ 唯一机构 CID。
 ///
 /// `institution_code` = 文本码(如 `NRP`);`province_code`/`city_code` = china.sqlite 码
-/// (国家机构两者空,省机构仅省码,市机构省+市)。解不出(未对账/未上链)返回 None,发起层 fail-closed。
+/// (国家机构两者空,省机构仅省码,市机构省+市)。解不出或结果不唯一时返回 None,发起层 fail-closed。
 /// 自开连接,故可作 `Fn` 闭包在提案组织里按院逐个解析。
-pub(crate) fn resolve_house_account(
+pub(crate) fn resolve_institution_cid_number(
     db: &Db,
     institution_code: &str,
     province_code: &str,
     city_code: &str,
-) -> Option<[u8; 32]> {
+) -> Option<String> {
     let institution_code = institution_code.to_string();
     let province_code = province_code.to_string();
     let city_code = city_code.to_string();
     let cid_number = db
         .with_client(move |conn| {
-            let row = conn
-                .query_opt(
+            let rows = conn
+                .query(
                     "SELECT cid_number FROM subjects \
                      WHERE institution_code = $1 AND province_code = $2 AND city_code = $3 \
-                     LIMIT 1",
+                     ORDER BY cid_number LIMIT 2",
                     &[&institution_code, &province_code, &city_code],
                 )
                 .map_err(|e| format!("query institution cid_number failed: {e}"))?;
-            Ok(row.map(|r| r.get::<_, String>(0)))
+            if rows.len() != 1 {
+                return Ok(None);
+            }
+            Ok(Some(rows[0].get::<_, String>(0)))
         })
         .ok()
         .flatten()?;
-    derive_house_account(&cid_number)
+    (!cid_number.is_empty()
+        && cid_number.len() <= primitives::core_const::CID_NUMBER_MAX_BYTES as usize)
+        .then_some(cid_number)
 }
 
 /// 读取链上全部 `Law`(iterate + 镜像 decode,复用 chain_runtime 读链范式)。
@@ -363,7 +357,10 @@ mod tests {
     /// 用链端真实 `Tier`/`LawStatus` 编码 golden,onchina 镜像 decode 回读字段一致。
     #[test]
     fn law_decodes_from_runtime_encoded_bytes() {
-        let houses: Vec<([u8; 4], [u8; 32])> = vec![(*b"NRP\0", [1u8; 32]), (*b"NSN\0", [2u8; 32])];
+        let houses = vec![
+            b"LN001-NRP0G-000000001-2026".to_vec(),
+            b"LN001-NSN0G-000000001-2026".to_vec(),
+        ];
         let mut golden = Vec::new();
         golden.extend(7u64.encode());
         golden.extend(Tier::National.encode());
@@ -379,14 +376,14 @@ mod tests {
         assert_eq!(law.tier, 1); // National
         assert_eq!(law.scope_code, 100);
         assert_eq!(law.houses.len(), 2);
-        assert_eq!(law.houses[0].0, *b"NRP\0");
+        assert_eq!(law.houses[0], b"LN001-NRP0G-000000001-2026");
         assert_eq!(law.effective_version, Some(3));
         assert_eq!(law.latest_version, 3);
         assert_eq!(law.pending_version, None);
         assert_eq!(law.status, 1); // Effective
     }
 
-    /// LawVersion 镜像解码 + 组装 LawView(章节字节→String、houses→HouseRef、hash→0x hex)。
+    /// LawVersion 镜像解码 + 组装 LawView(章节字节→String、houses→CID、hash→0x hex)。
     #[test]
     fn law_version_decodes_and_builds_view() {
         let chapters = sample_chapters();
@@ -421,7 +418,10 @@ mod tests {
             law_id: 7,
             tier: 1,
             scope_code: 100,
-            houses: vec![(*b"NRP\0", [1u8; 32]), (*b"NSN\0", [2u8; 32])],
+            houses: vec![
+                b"LN001-NRP0G-000000001-2026".to_vec(),
+                b"LN001-NSN0G-000000001-2026".to_vec(),
+            ],
             effective_version: Some(2),
             latest_version: 2,
             pending_version: None,
@@ -435,7 +435,7 @@ mod tests {
         assert_eq!(view.version_title_en.as_deref(), Some("Genesis Edition"));
         assert_eq!(view.title, "道路交通安全法");
         assert_eq!(view.houses.len(), 2);
-        assert_eq!(view.houses[0].code, "NRP"); // 去尾 \0
+        assert_eq!(view.houses[0].cid_number, "LN001-NRP0G-000000001-2026");
         assert!(view.immutable_article_numbers.is_empty());
         assert!(view.content_hash.starts_with("0x"));
         assert_eq!(view.chapters[0].title, "总则");
@@ -448,17 +448,5 @@ mod tests {
         let constitution_view = build_law_view(&constitution_law, &version, None, &[1, 2]);
         assert_eq!(constitution_view.immutable_article_numbers, vec![1, 2]);
         assert!(constitution_view.version_title.is_none());
-    }
-
-    /// 机构主账户派生须与 `primitives` 金标向量逐字节一致
-    /// (fixtures/account_derive_vectors.json:LN001-NRC0G-944805165-2026 · 主账户)。
-    #[test]
-    fn house_account_derivation_matches_golden_vector() {
-        let account =
-            derive_house_account("LN001-NRC0G-944805165-2026").expect("derive main account");
-        let expected =
-            hex::decode("b38e86de933984b3a6b4190fc9d4b020ff44b38471a8a65bbf95b440e05c5153")
-                .expect("golden hex");
-        assert_eq!(account.to_vec(), expected, "机构主账户派生口径漂移");
     }
 }

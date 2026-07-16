@@ -216,7 +216,7 @@
 - 公民 `CidRegistry` 写入后不得删除或换注册局、档案承诺、居住省市和登记高度；只允许 `Active → Revoked`，吊销后永久终态。
 - 机构统一为占号中、运行中、永久关闭三种业务状态：主账户登记存在而 `Institutions` 尚不存在即占号中，`Active` 即运行中，`Closed` 即永久关闭。
 - 机构 CID 不得删除、跨公私权重复、换机构码/创建高度/镇码或关闭后恢复；主账户占号不得在关闭前删除。运行中机构名称允许依法更新，新 CID 允许使用历史名称。
-- 固定治理机构只能来自 block#0 且必须永远 `Active`；`ProtectedGenesisAccounts` 及其 `AccountRegisteredCid`、`CidRegisteredAccount`、`InstitutionAccounts` 索引以创世逐字冻结。
+- 固定治理机构只能来自 block#0；机构不保存生命周期状态。协议账户集合由 CID 制度约束永久保护，`InstitutionAccounts` 与 `AccountRegisteredCid` 必须闭环且协议账户不可删除或换地址。
 - `:code` 变化时枚举全部 CID 规范表全检；非 block#0 状态导入不能证明历史单调性，严格拒绝。
 - 本步只修改 `citizenchain/node/` 与文档，没有修改 `citizenchain/runtime/` 源码，没有增加兼容分支或平行 `BlockImport`。
 

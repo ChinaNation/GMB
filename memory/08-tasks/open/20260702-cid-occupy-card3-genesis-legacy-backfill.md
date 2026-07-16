@@ -10,7 +10,7 @@
 
 ## 处理决策
 
-1. **国/省级常量 296:** 扩展 `runtime/genesis/src/institution.rs` 遍历全部 7 个 `china_*` 数组(现只铸 CB/CH/NJD/FRG 共 89)写入 Institutions+双账户+ProtectedGenesisAccounts;NJD/FRG 管理员特例保留;国家 NSN/NRP 固定在 `CHINA_LF`。
+1. **国/省级常量 296:** 遍历全部 7 个 `china_*` 数组写入 `Institutions`、制度要求的完整协议账户集合和地址反向索引；NJD/FRG 管理员特例保留；国家 NSN/NRP 固定在 `CHINA_LF`。
 2. **模板派生机构 49,297(2026-07-04 调整为创世到市):数据不手写、不进 chainspec。** 命名与机构集真源 = onchina `gov/service.rs` 确定性模板(gov-deterministic-v8,已由用户统一命名),**搬进 primitives 作为链上/链下单源**(onchina 改引用):
    - 组装规则(全 296 常量+模板逆向验证零例外):`cid_short_name = 行政区显示名 + cid_short_name_suffix`、`cid_full_name = 行政区显示名 + cid_full_name_suffix`;
    - 创世派生范围:省级部门 11 类×43 省=473 + 市级 17 类×2,872=48,824;
@@ -51,16 +51,16 @@
   - **命名/机构集模板单源迁 primitives**:新建 `primitives/cid/official_template.rs`(OfficialOrgTemplate + cid_short_name/cid_full_name 组装 + 省部门 11/市 17/镇 14 全表);onchina `gov/service.rs` 删本地副本改引用,消除 D0 漂移风险。镇级模板保留给运行期注册使用,不进入创世枚举。
   - **行政区表嵌入 primitives**:`gen_area_data.py` 从 china.sqlite 生成紧凑二进制 `area_data.bin`(43 省/2872 市/39087 镇,578KB);新建 `primitives/cid/china/area.rs` no_std 零拷贝解析器(`for_each_area` 单回调 AreaItem 枚举 + `area_counts`)。
   - **创世派生单源**:新建 `primitives/cid/official_derive.rs`——`for_each_public_institution(f)` 用 seed+generator 确定性派生省/市公权机构(与 onchina official_institution_cid 同源,年份固定 2026);`public_institution_derived_count()`。
-  - **genesis 直铸**:`genesis/institution.rs` 新增 `insert_derived_public_institution`(号确定性派生账户、构建期 parse+公权家族断言、不进 ProtectedGenesisAccounts 避免 59 万双倍保护)+ `build_template_institutions` 调 primitives 枚举;`build()` 末尾接入。常量 296 全量直铸维持。
+  - **genesis 直铸**：`insert_derived_public_institution` 按 CID 确定性派生协议账户并做公权家族、协议账户集合断言；不建立重复保护表；`build_template_institutions` 调 primitives 枚举。
   - **测试**:primitives 断言派生数 =49,297、每号 parse 合法+公权家族+全局唯一、名称组装、区划计数 43/2872/39087。终态链上 = 296 + 49,297 = **49,593**,零交易。
 - **剩余 = 部署操作(用户 重新创世 步)**:①chainspec 形态改造(plain spec + genesis-state 创世状态包;smoldot 侧 stateRootHash)②重新创世部署(6 节点 mesh)③onchina 链上机构册只读投影 ④citizenapp 公权机构快照包重跑 ⑤旧 sfid 库删除。genesis-pallet 自身 test mock 为上一轮 runtime 重构预留断链(缺 public_manage/public_admins 等 impl),故派生断言落 primitives(编译/测试均绿);创世 state 物化在 bake 阶段发生,正式用户首启复制创世状态包。
 
 ## 进展与审计(2026-07-03)
 
-- **链端派生已完成**:primitives 新增 `official_template.rs`(命名模板单源:省部门 11/市 17/镇 14)、`official_derive.rs`(创世派生枚举,`public_institution_derived_count()==49,297`)、`china/area.rs + area_data.bin`(行政区常量:43 省/2,872 市/39,087 镇,与 china.sqlite 一致);genesis `insert_derived_public_institution`(构建期 parse+公权家族断言;派生机构 Active、主/费双账户,**不打 ProtectedGenesisAccounts 封存标记**,留给后续治理)。
+- **链端派生已完成**：primitives 提供命名模板、创世派生枚举和行政区常量；genesis 构建期校验 CID、公权家族和完整协议账户集合，不保存机构状态或额外保护标记。
 - **体积口径更新**:镇级机构不进创世,移出曾导致首启重物化的 547,218 条;正式 bake 仍产 genesis-state,但创世规模降为 49,593 机构。
 - **覆盖核实**:cities 表无 "000" 保留市(count=0,无多铸);村级无机构码(制度定稿)不铸;国家/省/市 × 对应码族创世直铸;镇级码族只服务运行期注册。
-- **账户操作语义核实**:机构账户=派生地址无私钥,唯一操作路径=管理员集合经 internal_vote(multisig-transfer 要求 `InstitutionQuery::is_active` + 发起人 `is_internal_admin`);无管理员=完全不可操作(创世余额亦为 0);创世带管理员的仅 NJD/FRG/CB/CH,其余待联邦特权直设。
+- **账户操作语义核实（2026-07-15 已按 CID 模型更新）**：机构账户是无私钥派生地址；机构交易由 `actor_cid_number` 对应 `AdminAccounts[cid_number].admins` 中的钱包签名。账户型交易额外携带并校验 `institution_account` 属于同一 CID；没有有效管理员时不可操作。
 
 ## 剩余工作清单
 

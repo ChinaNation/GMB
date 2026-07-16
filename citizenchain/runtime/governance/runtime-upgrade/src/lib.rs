@@ -204,7 +204,10 @@ pub mod pallet {
             let actor_code = votingengine::types::institution_code_from_cid_number(actor_text)
                 .ok_or(Error::<T>::InvalidActorCid)?;
             ensure!(
-                matches!(actor_code, votingengine::types::NRC | votingengine::types::PRC),
+                matches!(
+                    actor_code,
+                    votingengine::types::NRC | votingengine::types::PRC
+                ),
                 Error::<T>::InvalidActorCid
             );
             ensure!(

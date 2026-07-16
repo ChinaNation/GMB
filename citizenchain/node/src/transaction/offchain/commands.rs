@@ -122,13 +122,12 @@ pub async fn submit_register_clearing_bank(
         return Err("节点未运行,无法提交交易".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let call_data =
-            super::signing::build_register_call_data(
-                &actor_cid_number,
-                &peer_id,
-                &rpc_domain,
-                rpc_port,
-            )?;
+        let call_data = super::signing::build_register_call_data(
+            &actor_cid_number,
+            &peer_id,
+            &rpc_domain,
+            rpc_port,
+        )?;
         gov_signing::verify_and_submit(
             &request_id,
             &expected_pubkey_hex,
@@ -186,12 +185,11 @@ pub async fn submit_update_clearing_bank_endpoint(
         return Err("节点未运行".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let call_data =
-            super::signing::build_update_endpoint_call_data(
-                &actor_cid_number,
-                &new_domain,
-                new_port,
-            )?;
+        let call_data = super::signing::build_update_endpoint_call_data(
+            &actor_cid_number,
+            &new_domain,
+            new_port,
+        )?;
         gov_signing::verify_and_submit(
             &request_id,
             &expected_pubkey_hex,

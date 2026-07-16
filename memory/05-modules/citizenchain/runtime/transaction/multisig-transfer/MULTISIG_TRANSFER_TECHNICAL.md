@@ -1,6 +1,6 @@
 # Multisig Transfer 技术文档（多签资金账户转账模块）
 
-> 多签资金账户分类唯一真源 = CID 机构码（institution_code），见 [[ADR-025]]。
+> 机构唯一身份真源是 `actor_cid_number`；具体资金账户只表达本次资产来源，必须通过 entity 正反索引归属于该 CID。个人多签不使用机构 CID，以 `personal_account` 为主体。
 
 ## 2026-04-30 · 统一投票引擎状态机改造
 
@@ -26,11 +26,11 @@
 
 ## 2026-05-08 · 第5步账户级主体接入
 
-- `propose_transfer` 的 `institution: AccountId` 不再把 `0x02 注册机构归属关系` 当作可支出主体；`0x02` 只保留给机构归属与检索。
-- 治理机构仍使用 `0x01 BuiltinInstitution`，由静态预置表解析到治理机构 `main_account`。
+- 机构转账显式携带 `actor_cid_number + funding_account`；任何机构账户都不得替代 CID 作为机构身份。
+- 治理机构与注册机构使用同一模型：CID 下挂多个协议账户或自定义账户，账户正反索引用于证明 `funding_account` 属于该 CID。
 - 个人多签直接使用个人多签 `AccountId` 作为资金账户，账户状态由 `personal-manage::PersonalMultisigQuery` 校验；管理员真源由 `personal-admins` 提供。
 - 注册机构具体账户直接使用机构账户 `AccountId` 作为资金账户，账户状态由 `entity-primitives::InstitutionMultisigQuery` 校验。
-- 两类注册账户的管理员、阈值和人数都通过查询 trait 读取：个人多签走 `personal-manage` 聚合 `personal-admins`，机构账户走 `RuntimeInstitutionQuery` 聚合 `public-manage` / `private-manage`；内部投票仍是一人一票一笔链上交易。
+- 管理员、阈值和人数通过唯一查询出口读取：个人多签走 `personal_account`，机构走 CID；内部投票仍是一人一票一笔链上交易。
 
 ## 0. 功能需求
 
@@ -43,10 +43,9 @@
 - 投票通过后执行转账：从提案绑定的资金账户向收款地址划转资金。
 - 手续费在投票通过后由 pallet 内部从同一个资金账户扣取，通过 `onchain-transaction::calculate_onchain_fee()` 计算。
 - 管理员个人账户不承担任何费用。
-- 覆盖三类来源：
-  - 创世预置的治理机构 `main_account`（NRC / PRC / PRB）
-  - `personal-manage` 注册并激活的个人多签账户（个人多签资金账户 `AccountId`）
-  - 实体生命周期模块注册并激活的机构具体账户（`InstitutionAccount AccountId`）
+- 覆盖两种身份模型：
+  - 机构：`actor_cid_number + funding_account + origin(admin)`；资金账户可以是该 CID 下允许支出的主账户、费用账户、安全基金账户或自定义账户，具体业务仍受 `institution-asset` 限制。
+  - 个人多签：`personal_account + origin(admin)`，不携带机构 CID。
 
 ### 0.2 功能边界
 
@@ -54,15 +53,15 @@
   - 创世预置的治理机构（NRC / PRC / PRB）
   - `personal-manage` 注册并处于 Active 状态的个人多签账户（个人多签码 `PMUL`，`is_personal_code`）
   - 实体生命周期模块注册并处于 Active 状态的机构账户（机构账户码 `is_institution_code`）
-- 当前也尚未接入新补充的内置机构 `ZF / LF / JC / JY / SF`。
-- 联邦注册局 `FRG` 是一个机构、一个主账户和 215 名管理员，属于可发起多签转账内部提案的机构；省域 5 人岗位组只约束具体注册业务权限，不得阻断 FRG 的通用内部投票和机构账户配置查询。
+- 任一接入机构必须遵循同一 CID 身份模型；是否允许某具体账户支出由账户类型与 `institution-asset` 业务规则决定。
+- 联邦注册局 `FRG` 是一个 CID 下挂多个账户、多个管理员和岗位任职的机构；省域岗位组只表达岗位权限，不是独立机构或独立管理员真源。
 - 本模块不负责投票引擎实现，投票逻辑委托给 `votingengine` 的 `InternalVoteEngine`。
 - 执行回调不是单凭 `proposal_id + PASSED` 放行：必须处于投票引擎 callback scope，并同时匹配 `ProposalOwner`、内部投票 kind/stage、业务 action、机构码、资金账户和 CID 集合。执行前还会重新读取当前 entity 生命周期与业务权限，防止提案创建后账户失活或上下文被替换。
 - 本模块不负责个人多签账户创建、关闭、清理或管理员集合变更；这些职责分别归属 `personal-manage` 和 `personal-admins`。
 
 补充说明：
-- 只要某类内置机构被本模块的 `institution_code()` / 主账户解析逻辑正式识别，
-- 且对应管理员已接入 runtime 的 `RuntimeInternalAdminProvider`；固定阈值、普通账户动态阈值或六个单例的提案快照严格过半均由投票引擎自身提供，
+- 只要某类机构的 CID 和账户正反索引已接入 `RuntimeInstitutionQuery`，
+- 且对应 CID 的管理员已接入 runtime 的 `RuntimeInternalAdminProvider`；固定阈值、机构 CID 动态阈值或单例机构的提案快照严格过半均由投票引擎自身提供，
 - 这类机构就可以直接复用本模块和内部投票引擎发起转账提案，不需要新增转账 pallet。
 
 ### 0.3 与多签管理模块的关系
@@ -73,7 +72,7 @@
 | `personal-admins` | 个人多签管理员真源和管理员集合变更 | 个人多签账户管理员集合 | `PMUL` 内部投票 |
 | `public-manage` | 公权机构生命周期 | 公权机构账户 | CID 注册凭证 + 公权机构码内部投票 |
 | `private-manage` | 私权机构生命周期 | 私权机构账户 | CID 注册凭证 + 私权机构码内部投票 |
-| `multisig-transfer` | 多签资金账户转账 | 治理机构主账户 + Active 个人多签账户 + Active 注册机构账户 | 链上内部投票引擎（逐票投票） |
+| `multisig-transfer` | 多签资金账户转账 | CID 下允许支出的机构账户 + Active 个人多签账户 | 链上内部投票引擎（逐票投票） |
 
 ### 0.4 与 `resolution-destro` 的关系
 
@@ -92,20 +91,19 @@
 | 地址 | 类型 | 说明 |
 | --- | --- | --- |
 | `stake_account` | 质押地址 | **不允许支出**，仅用于质押 |
-| `main_account`（治理机构）/ `account`（注册多签） | 多签资金账户 | 转账和手续费均从此扣取 |
+| `funding_account` | 具体资金账户 | 机构交易必须归属于显式 CID；个人多签时就是 `personal_account` |
 
 ### 1.2 资金账户来源
 
-资金账户有三种来源：
+资金账户有两种来源：
 
-- 治理机构：`main_account` 预置于 `runtime/primitives/cid/china/china_cb.rs`（NRC + PRC）和 `runtime/primitives/cid/china/china_ch.rs`（PRB）中，通过主账户解析逻辑查找。
-- 个人多签账户：直接使用 `personal-manage` 派生并激活的个人多签 `AccountId`；账户状态由 `personal_manage::PersonalMultisigQuery` 校验 Active，管理员集合从 `personal-admins` 查询。
-- 注册型机构账户：`AccountId32` 使用 `AdminAccountKind::PublicInstitution` 或 `AdminAccountKind::PrivateInstitution` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；非法人按所属法人归属选择 public/private 管理员模块，账户状态从 `PublicManage::InstitutionAccounts 或 PrivateManage::InstitutionAccounts` 校验 Active。
+- 机构账户：调用必须携带 `Some(actor_cid_number)`；`RuntimeInstitutionQuery` 校验账户存在，并通过 `lookup_cid/lookup_org` 证明其归属与显式 CID、机构码一致。管理员集合和机构阈值均按 CID 查询。
+- 个人多签账户：调用必须携带 `None`；直接使用 `personal-manage` 派生并激活的 `personal_account`，管理员集合和个人阈值按该账户查询。
 
 ### 1.3 institution-asset 边界
 
 - 本模块在 `propose_transfer` 和 `try_execute_transfer_from_callback` 两个阶段都会调用 `institution-asset`。
-- 当前 runtime 规则下，制度保留 `main_account` 只允许本模块这类治理执行动作内部扣款。
+- runtime 按账户类型和业务 action 判断具体账户能否支出，不允许以“它是主账户”替代 CID 身份或授权校验。
 - 这样可以防止其他交易模块绕开治理流程直接动用受治理资金账户余额。
 
 ## 2. Extrinsic 接口
@@ -115,8 +113,8 @@
 ```rust
 pub fn propose_transfer(
     origin: OriginFor<T>,
-    institution_code: [u8; 4],          // CID 机构码（NRC / PRC / PRB / PMUL / 机构账户码）
-    institution: AccountId,             // 多签资金账户地址
+    actor_cid_number: Option<CidNumber>, // 机构为 Some(CID)，个人多签严格为 None
+    funding_account: AccountId,          // 实际转出资金账户
     beneficiary: T::AccountId,          // 收款地址
     amount: BalanceOf<T>,               // 转账金额
     remark: BoundedVec<u8, T::MaxRemarkLen>, // 备注
@@ -127,13 +125,9 @@ pub fn propose_transfer(
 
 1. `origin` 必须是 `signed`，提取 `proposer = ensure_signed(origin)`。
 2. `amount > 0`。
-3. `institution` 必须是有效多签资金账户：
-   - 治理机构：在 CHINA_CB / CHINA_CH 中存在；
-   - 个人多签账户：`personal-manage` 判定账户处于 Active；
-   - 注册型机构账户：RuntimeInstitutionQuery 判定机构账户处于 Active；
-   - `0x02 注册机构归属关系` 只用于机构归属/检索，不能作为转账支出主体。
-4. `institution_code` 必须与 `institution` 的实际账户分类匹配。
-5. `proposer` 必须是该多签资金账户的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验，生产 runtime 最终委托各 admins 模块）。
+3. 机构路径要求 `Some(actor_cid_number)`：`funding_account` 必须存在于机构账户正反索引，且 `lookup_cid/lookup_org` 与显式 CID 及其机构码一致。
+4. 个人多签路径要求 `None`：`personal-manage` 必须判定 `funding_account` 处于 Active。
+5. 机构路径按 `is_institution_admin(institution_code, actor_cid_number, proposer)` 授权；个人路径按 `is_personal_admin(funding_account, proposer)` 授权。
 6. `amount >= ED`（转账金额不能低于存在性保证金，防止收款地址创建失败）。
 7. `beneficiary` 不能是转出资金账户自身（不允许自转账）。
 8. `beneficiary` 不能是受保护地址（如 `stake_account`、安全基金账户、费用账户等保留地址）。
@@ -142,8 +136,8 @@ pub fn propose_transfer(
 
 **执行逻辑：**
 
-1. 编码 `MODULE_TAG + TransferAction { institution, beneficiary, amount, remark, proposer }`。
-2. 调用 `InternalVoteEngine::create_internal_proposal_with_data(proposer, institution_code, institution, MODULE_TAG, encoded)` 获取 `proposal_id`，并原子写入 owner/data/meta。
+1. 编码 `MODULE_TAG + TransferAction { actor_cid_number, funding_account, beneficiary, amount, remark, proposer }`。
+2. 机构调用 `create_institution_proposal_with_data`，个人多签调用 `create_personal_proposal_with_data`；二者都原子写入 owner/data/meta，机构提案同时绑定 CID 和执行账户。
 3. 发出 `TransferProposed` 事件。
 
 ### 2.2 投票入口
@@ -184,7 +178,8 @@ InternalVote::cast(origin, proposal_id, approve)  // pallet 20.0
 ```rust
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct TransferAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
-    pub institution: AccountId,                  // 转出多签资金账户
+    pub actor_cid_number: Option<CidNumber>,     // 机构 Some(CID)，个人 None
+    pub funding_account: AccountId,              // 实际转出资金账户
     pub beneficiary: AccountId,                  // 收款地址
     pub amount: Balance,                         // 转账金额
     pub remark: BoundedVec<u8, MaxRemarkLen>,    // 备注
@@ -201,20 +196,20 @@ pub enum Event<T: Config> {
     TransferProposed {
         proposal_id: u64,
         institution_code: [u8; 4],
-        institution: AccountId,
+        actor_cid_number: Option<CidNumber>,
         proposer: T::AccountId,
-        from: T::AccountId,                             // 转出资金账户
+        funding_account: T::AccountId,
         beneficiary: T::AccountId,
         amount: BalanceOf<T>,
         remark: BoundedVec<u8, T::MaxRemarkLen>,
         expires_at: BlockNumberFor<T>,                  // 投票超时区块
     },
     /// 投票通过但执行失败(可通过 VotingEngine::retry_passed_proposal 手动重试)
-    TransferExecutionFailed { proposal_id: u64, institution: AccountId },
+    TransferExecutionFailed { proposal_id: u64, funding_account: AccountId },
     /// 转账已执行(含手续费分账)
     TransferExecuted {
         proposal_id: u64,
-        institution: AccountId,
+        funding_account: AccountId,
         beneficiary: T::AccountId,
         amount: BalanceOf<T>,
         fee: BalanceOf<T>,
@@ -222,8 +217,9 @@ pub enum Event<T: Config> {
     // 安全基金组:结构同上
     SafetyFundTransferProposed {
         proposal_id: u64,
+        actor_cid_number: CidNumber,
         proposer: T::AccountId,
-        from: T::AccountId,                             // SAFETY_FUND_ACCOUNT
+        institution_account: T::AccountId,
         beneficiary: T::AccountId,
         amount: BalanceOf<T>,
         remark: BoundedVec<u8, T::MaxRemarkLen>,
@@ -235,14 +231,14 @@ pub enum Event<T: Config> {
     // Sweep 组:
     SweepToMainProposed {
         proposal_id: u64,
-        institution: AccountId,
+        actor_cid_number: CidNumber,
         proposer: T::AccountId,
-        from: T::AccountId,                             // fee_account
-        to: T::AccountId,                               // main_account
+        institution_account: T::AccountId,              // fee_account
+        main_account: T::AccountId,
         amount: BalanceOf<T>,
         expires_at: BlockNumberFor<T>,
     },
-    SweepToMainExecuted { proposal_id: u64, institution: AccountId, amount: BalanceOf<T>, fee: BalanceOf<T>, reserve_left: BalanceOf<T> },
+    SweepToMainExecuted { proposal_id: u64, actor_cid_number: CidNumber, institution_account: AccountId, amount: BalanceOf<T>, fee: BalanceOf<T>, reserve_left: BalanceOf<T> },
     SweepExecutionFailed { proposal_id: u64 },
 }
 ```

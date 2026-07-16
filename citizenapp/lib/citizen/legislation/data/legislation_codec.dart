@@ -17,6 +17,12 @@ class _Scale {
   final Uint8List data;
   int _i = 0;
 
+  bool get isDone => _i == data.length;
+
+  void requireDone() {
+    if (!isDone) throw const FormatException('SCALE 数据存在尾随字节');
+  }
+
   int u8() => data[_i++];
 
   int u32() {
@@ -77,14 +83,28 @@ class _Scale {
   }
 
   /// Compact(len)+len 字节 → UTF-8 字符串。
-  String boundedString() => utf8.decode(bytes(compact()), allowMalformed: true);
+  String boundedString() => utf8.decode(bytes(compact()));
+
+  /// 链端统一 CidNumber：BoundedVec<u8, 32>。
+  String cidNumber() {
+    final length = compact();
+    if (length <= 0 || length > 32) {
+      throw const FormatException('机构 CID 长度必须为 1..32 字节');
+    }
+    return utf8.decode(bytes(length));
+  }
 
   /// N 裸字节 → 小写 hex(不含 0x)。
   String hex(int n) =>
       bytes(n).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
   /// `Option<T>`:1 tag 字节(0=None / 1=Some)。
-  T? option<T>(T Function() some) => u8() == 0 ? null : some();
+  T? option<T>(T Function() some) {
+    final tag = u8();
+    if (tag == 0) return null;
+    if (tag == 1) return some();
+    throw FormatException('Option tag 非法: $tag');
+  }
 
   /// `Vec<T>`/`BoundedVec<T>`:Compact(len)+items。
   List<T> vec<T>(T Function() item) {
@@ -93,26 +113,26 @@ class _Scale {
   }
 }
 
-/// `[u8;4]` 机构码 → 字符串(去尾部 0)。
-String _codeString(Uint8List b) {
-  var end = b.length;
-  while (end > 0 && b[end - 1] == 0) {
-    end--;
-  }
-  return utf8.decode(b.sublist(0, end), allowMalformed: true);
-}
-
 /// 解 `Option<Vec<u8>>`(API 边界外层)→ 内层 SCALE 字节(None 返回 null)。
 Uint8List? decodeOptionBytes(Uint8List raw) {
   final s = _Scale(raw);
-  if (s.u8() == 0) return null;
-  return s.bytes(s.compact());
+  final tag = s.u8();
+  if (tag == 0) {
+    s.requireDone();
+    return null;
+  }
+  if (tag != 1) throw FormatException('Option tag 非法: $tag');
+  final value = s.bytes(s.compact());
+  s.requireDone();
+  return value;
 }
 
 /// 解 `list_laws` 返回的 `Vec<u64>`。
 List<int> decodeLawIds(Uint8List raw) {
   final s = _Scale(raw);
-  return s.vec(s.u64);
+  final ids = s.vec(s.u64);
+  s.requireDone();
+  return ids;
 }
 
 /// 解 `Law`(内层字节,调用方先 [decodeOptionBytes] 拆 Option)。
@@ -121,14 +141,12 @@ Law decodeLaw(Uint8List raw) {
   final lawId = s.u64();
   final tier = LawTier.fromIndex(s.u8());
   final scopeCode = s.u32();
-  final houses = s.vec(() => LawHouse(
-        institutionCode: _codeString(s.bytes(4)),
-        accountHex: s.hex(32),
-      ));
+  final houses = s.vec(s.cidNumber);
   final effectiveVersion = s.option(s.u32);
   final latestVersion = s.u32();
   final pendingVersion = s.option(s.u32);
   final status = LawStatus.fromIndex(s.u8());
+  s.requireDone();
   return Law(
     lawId: lawId,
     tier: tier,
@@ -154,6 +172,7 @@ LawVersion decodeLawVersion(Uint8List raw) {
   final proposalId = s.u64();
   final publishedAt = s.u64();
   final effectiveAt = s.u64();
+  s.requireDone();
   return LawVersion(
     lawId: lawId,
     version: version,
@@ -173,6 +192,7 @@ LawVersionLabel decodeLawVersionLabel(Uint8List raw) {
   final s = _Scale(raw);
   final title = s.boundedString();
   final titleEn = s.option(s.boundedString);
+  s.requireDone();
   return LawVersionLabel(title: title, titleEn: titleEn);
 }
 
@@ -181,6 +201,7 @@ ImmutableManifest decodeImmutableManifest(Uint8List raw) {
   final s = _Scale(raw);
   final numbers = s.vec(s.u32);
   final hashes = s.vec(() => s.hex(32));
+  s.requireDone();
   return ImmutableManifest(articleNumbers: numbers, articleHashes: hashes);
 }
 

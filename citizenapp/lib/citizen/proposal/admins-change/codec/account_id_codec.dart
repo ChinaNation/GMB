@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
@@ -22,13 +23,14 @@ class AdminAccountIdCodec {
     return bytes;
   }
 
-  static Uint8List adminAccountStorageKey(
-    Uint8List accountId, {
+  static Uint8List institutionAdminStorageKey(
+    String cidNumber, {
     required String institutionCode,
     int? adminKind,
   }) {
-    if (accountId.length != 32) {
-      throw ArgumentError('accountId 必须为 32 字节');
+    final cidBytes = utf8.encode(cidNumber);
+    if (cidBytes.isEmpty || cidBytes.length > 32) {
+      throw ArgumentError('机构 cid_number 必须为 1..32 字节');
     }
     final palletHash = Hasher.twoxx128.hashString(
       adminKind == null
@@ -36,7 +38,7 @@ class AdminAccountIdCodec {
           : InstitutionCodeLabel.adminAccountsPalletNameForKind(adminKind),
     );
     final storageHash = Hasher.twoxx128.hashString('AdminAccounts');
-    final keyHash = blake2128Concat(accountId);
+    final keyHash = blake2128Concat(scaleBytes(cidBytes));
     final out =
         Uint8List(palletHash.length + storageHash.length + keyHash.length);
     var offset = 0;
@@ -48,21 +50,11 @@ class AdminAccountIdCodec {
     return out;
   }
 
-  static List<Uint8List> adminAccountStorageKeys(Uint8List accountId) {
-    return const ['PersonalAdmins', 'PublicAdmins', 'PrivateAdmins']
-        .map((palletName) =>
-            _adminAccountStorageKeyForPallet(accountId, palletName))
-        .toList(growable: false);
-  }
-
-  static Uint8List _adminAccountStorageKeyForPallet(
-    Uint8List accountId,
-    String palletName,
-  ) {
+  static Uint8List personalAdminStorageKey(Uint8List accountId) {
     if (accountId.length != 32) {
       throw ArgumentError('accountId 必须为 32 字节');
     }
-    final palletHash = Hasher.twoxx128.hashString(palletName);
+    final palletHash = Hasher.twoxx128.hashString('PersonalAdmins');
     final storageHash = Hasher.twoxx128.hashString('AdminAccounts');
     final keyHash = blake2128Concat(accountId);
     final out =
@@ -74,6 +66,12 @@ class AdminAccountIdCodec {
     offset += storageHash.length;
     out.setAll(offset, keyHash);
     return out;
+  }
+
+  static Uint8List scaleBytes(List<int> bytes) {
+    final length = bytes.length;
+    if (length >= 64) throw ArgumentError('当前 CID SCALE 长度必须小于 64');
+    return Uint8List.fromList([length << 2, ...bytes]);
   }
 
   static Uint8List blake2128Concat(Uint8List data) {

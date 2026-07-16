@@ -125,7 +125,7 @@
 - 已更新 CitizenApp 架构文档和 governance 技术文档，清理“公民-提案只按 NRC/PRC/PRB / 广场提案列表 / 全局治理索引是真源”的旧描述。
 
 CID 真源改造执行记录（2026-07-02）：
-- 已修改 `citizenchain/runtime/votingengine`：`Proposal` 新增 `subject_cid_numbers` 与 `account_context`；`ActiveProposalsBySubject`、`InternalProposalMutexes`、`ProposalsByCid` 全部以 `ProposalSubject` / CID 为主体真源。
+- `Proposal` 当前使用 `actor_cid_number`、可选 `execution_account` 与 `subject_cid_numbers`；机构以 CID 为主体，个人多签以个人账户为主体。
 - 已修改 internal-vote / joint-vote / legislation-vote / election-vote / admins / manage / governance / multisig-transfer 等链端创建路径：机构类提案必须写入 CID；多机构提案写入多个 CID；个人多签提案写入空 CID 并使用 `PersonalAccount`。
 - 已修改 `entity-primitives::InstitutionMultisigQuery` 增加 `lookup_cid`，runtime 通过公权/私权注册表查机构 CID。
 - 已修改 CitizenApp 提案解码：`ProposalMeta`、本地摘要、运行时升级和多签转账提案解码全部读取 `subject_cid_numbers`。

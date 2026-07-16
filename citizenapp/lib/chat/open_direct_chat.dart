@@ -47,6 +47,12 @@ Future<void> openDirectChat(
           conversationId: conversationId,
           media: media,
         ),
+        onSendSticker: (packId, stickerId) => runtime.sendSticker(
+          peerAccount: peerAddress,
+          conversationId: conversationId,
+          packId: packId,
+          stickerId: stickerId,
+        ),
         onResolveMediaPath: (
           conversationId,
           attachmentId,

@@ -45,7 +45,7 @@ fn proposal_id_counter_resets_at_real_utc_year_boundary() {
     // - CurrentProposalYear 跟着系统时间切换
     new_test_ext().execute_with(|| {
         set_test_now_secs(1_830_297_599);
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
         // 主键纯单调:首个提案 = 0
         assert_eq!(proposal_id, 0);
         // 展示号:2027 年首个,seq_in_year = 0
@@ -57,7 +57,7 @@ fn proposal_id_counter_resets_at_real_utc_year_boundary() {
         assert_eq!(YearProposalCounter::<Test>::get(), 1);
 
         set_test_now_secs(1_830_297_600);
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(1), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(1), NRC, nrc_cid());
         // 主键单调累加:第二个提案 = 1(跨年也只 +1)
         assert_eq!(proposal_id, 1);
         // 展示号:2028 年首个,seq_in_year 跨年重置为 0
@@ -79,11 +79,12 @@ fn internal_proposal_must_be_created_by_same_institution_admin() {
         let outsider = AccountId32::new([7u8; 32]);
 
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_institution_proposal_with_data(
                 outsider,
                 NRC,
-                nrc_pid(),
-                subject_cids_for(NRC, &nrc_pid()),
+                nrc_cid().to_vec(),
+                None,
+                subject_cids_for(&nrc_cid()),
                 b"test",
                 b"payload".to_vec(),
             ),
@@ -91,18 +92,19 @@ fn internal_proposal_must_be_created_by_same_institution_admin() {
         );
 
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_institution_proposal_with_data(
                 prc_admin(0),
                 NRC,
-                nrc_pid(),
-                subject_cids_for(NRC, &nrc_pid()),
+                nrc_cid().to_vec(),
+                None,
+                subject_cids_for(&nrc_cid()),
                 b"test",
                 b"payload".to_vec(),
             ),
             votingengine::Error::<Test>::NoPermission
         );
 
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
         // 双层 ID v1:主键纯单调,首个提案 = 0;展示号通过 ProposalDisplayId 反查。
         assert_eq!(proposal_id, 0);
         let display = votingengine::pallet::ProposalDisplayId::<Test>::get(proposal_id)
@@ -119,18 +121,19 @@ fn internal_proposal_must_be_created_by_same_institution_admin() {
 }
 
 #[test]
-fn active_internal_proposal_rejects_pending_account() {
+fn institution_proposal_rejects_personal_code() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
-                pending_account_admin(0),
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_institution_proposal_with_data(
+                pending_personal_admin(0),
                 PERSONAL_CODE,
-                pending_account_institution(),
-                subject_cids_for(PERSONAL_CODE, &pending_account_institution()),
+                nrc_cid().to_vec(),
+                None,
+                subject_cids_for(&nrc_cid()),
                 b"test",
                 b"payload".to_vec(),
             ),
-            votingengine::Error::<Test>::InvalidInstitution
+            Error::<Test>::InvalidInternalCode
         );
     });
 }
@@ -138,7 +141,7 @@ fn active_internal_proposal_rejects_pending_account() {
 #[test]
 fn governance_internal_proposal_snapshots_fixed_threshold_not_provider() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
 
         // 测试 Provider 对治理机构故意返回 1，这里必须仍写入固定治理阈值。
         assert_eq!(
@@ -151,31 +154,27 @@ fn governance_internal_proposal_snapshots_fixed_threshold_not_provider() {
 #[test]
 fn permanent_singleton_snapshots_strict_majority_without_dynamic_threshold() {
     new_test_ext().execute_with(|| {
-        let institution = permanent_singleton_institution();
-        // 即使存在旧脏值，永久单例也不得读取账户级动态阈值。
-        ActiveDynamicThresholds::<Test>::insert(
-            PERMANENT_SINGLETON_CODE,
-            institution.clone(),
-            3,
-        );
+        let actor_cid_number = permanent_singleton_cid();
+        // 即使存在 CID 阈值脏值，永久单例也必须按管理员快照严格过半。
+        ActiveInstitutionThresholds::<Test>::insert(actor_cid_number.clone(), 3);
 
         let proposal_id = create_internal_proposal_via_engine(
             permanent_singleton_admin(0),
             PERMANENT_SINGLETON_CODE,
-            institution.clone(),
+            actor_cid_number.clone(),
         );
         assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(2));
         assert_eq!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::active_dynamic_threshold(
+            <InternalVote as InternalVoteEngine<AccountId32>>::active_institution_threshold(
                 PERMANENT_SINGLETON_CODE,
-                institution.clone(),
+                actor_cid_number.as_slice(),
             ),
             None
         );
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::register_active_dynamic_threshold_direct(
+            <InternalVote as InternalVoteEngine<AccountId32>>::register_active_institution_threshold_direct(
                 PERMANENT_SINGLETON_CODE,
-                institution,
+                actor_cid_number.to_vec(),
                 3,
                 2,
             ),
@@ -185,30 +184,22 @@ fn permanent_singleton_snapshots_strict_majority_without_dynamic_threshold() {
 }
 
 #[test]
-fn pending_account_proposal_uses_pending_snapshot_and_threshold() {
+fn pending_personal_proposal_uses_supplied_admin_snapshot_and_all_admin_threshold() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_pending_account_proposal_via_engine(
-            pending_account_admin(0),
-            PERSONAL_CODE,
-            pending_account_institution(),
+        let proposal_id = create_pending_personal_proposal_via_engine(
+            pending_personal_admin(0),
+            pending_personal_account(),
         );
 
         assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(2));
         assert!(VotingEngine::is_admin_in_snapshot(
             proposal_id,
-            pending_account_institution(),
-            &pending_account_admin(0)
+            ProposalSubject::PersonalAccount(pending_personal_account()),
+            &pending_personal_admin(0)
         ));
 
-        assert_eq!(
-            VotingEngine::proposals(proposal_id)
-                .expect("proposal should exist")
-                .status,
-            STATUS_VOTING
-        );
-
         assert_ok!(cast_internal_vote_via_extrinsic(
-            pending_account_admin(1),
+            pending_personal_admin(1),
             proposal_id,
             true
         ));
@@ -222,35 +213,44 @@ fn pending_account_proposal_uses_pending_snapshot_and_threshold() {
 }
 
 #[test]
-fn institution_account_orgs_use_dynamic_pending_snapshot_and_threshold() {
+fn institution_proposal_keeps_cid_identity_and_execution_account_separate() {
     new_test_ext().execute_with(|| {
-        for institution_code in [PUBLIC_CODE, PRIVATE_CODE] {
-            let proposal_id = create_pending_account_proposal_via_engine(
-                pending_account_admin(0),
+        for (institution_code, actor_cid_number) in
+            [(PUBLIC_CODE, public_cid()), (PRIVATE_CODE, private_cid())]
+        {
+            let execution_account = test_institution_execution_account();
+            let proposal_id = <InternalVote as InternalVoteEngine<AccountId32>>::create_institution_proposal_with_data(
+                test_institution_admin(0),
                 institution_code,
-                pending_account_institution(),
-            );
+                actor_cid_number.to_vec(),
+                Some(execution_account.clone()),
+                subject_cids_for(&actor_cid_number),
+                b"test",
+                b"payload".to_vec(),
+            )
+            .expect("institution proposal should be created");
 
-            assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(2));
+            assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(3));
             assert!(VotingEngine::is_admin_in_snapshot(
                 proposal_id,
-                pending_account_institution(),
-                &pending_account_admin(1)
+                ProposalSubject::InstitutionCid(actor_cid_number.clone()),
+                &test_institution_admin(1)
             ));
+            let proposal = VotingEngine::proposals(proposal_id).expect("proposal should exist");
+            assert_eq!(proposal.actor_cid_number, Some(actor_cid_number));
+            assert_eq!(proposal.execution_account, Some(execution_account));
         }
     });
 }
 
 #[test]
-fn pending_account_provider_threshold_requires_all_admins() {
+fn pending_personal_dynamic_threshold_must_be_strict_majority() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_registered_account_create_proposal_with_data(
-                pending_account_admin(0),
-                PERSONAL_CODE,
-                pending_account_institution(),
-                subject_cids_for(PERSONAL_CODE, &pending_account_institution()),
-                sp_std::vec![pending_account_admin(0), pending_account_admin(1)],
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_account_create_proposal_with_data(
+                pending_personal_admin(0),
+                pending_personal_account(),
+                sp_std::vec![pending_personal_admin(0), pending_personal_admin(1)],
                 1,
                 b"test",
                 b"payload".to_vec(),
@@ -261,52 +261,44 @@ fn pending_account_provider_threshold_requires_all_admins() {
 }
 
 #[test]
-fn pending_account_snapshot_data_requires_all_admins() {
+fn pending_personal_snapshot_rejects_duplicate_admins() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_registered_account_create_proposal_with_data(
-                pending_account_admin(0),
-                PERSONAL_CODE,
-                pending_account_institution(),
-                subject_cids_for(PERSONAL_CODE, &pending_account_institution()),
-                sp_std::vec![pending_account_admin(0), pending_account_admin(1)],
-                1,
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_account_create_proposal_with_data(
+                pending_personal_admin(0),
+                pending_personal_account(),
+                sp_std::vec![pending_personal_admin(0), pending_personal_admin(0)],
+                2,
                 b"test",
                 b"payload".to_vec(),
             ),
-            Error::<Test>::InvalidDynamicThreshold
+            votingengine::Error::<Test>::InvalidInstitution
         );
     });
 }
 
 #[test]
-fn explicit_threshold_proposal_requires_all_snapshot_admins() {
+fn personal_close_proposal_requires_all_snapshot_admins() {
     new_test_ext().execute_with(|| {
-        let proposal_id =
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_lifecycle_internal_proposal_with_data(
-                registered_account_admin(0),
-                PERSONAL_CODE,
-                registered_account_institution(),
-                subject_cids_for(PERSONAL_CODE, &registered_account_institution()),
-                b"close",
-                b"payload".to_vec(),
-            )
-            .expect("lifecycle proposal should be created");
+        let proposal_id = <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_lifecycle_proposal_with_data(
+            personal_admin(0),
+            personal_account(),
+            b"close",
+            b"payload".to_vec(),
+        )
+        .expect("personal close proposal should be created");
         assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(3));
     });
 }
 
 #[test]
-fn registered_account_threshold_must_not_exceed_snapshot_size() {
+fn personal_threshold_must_not_exceed_snapshot_size() {
     new_test_ext().execute_with(|| {
-        set_registered_account_threshold(4);
-
+        set_personal_threshold(4);
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
-                registered_account_admin(0),
-                PERSONAL_CODE,
-                registered_account_institution(),
-                subject_cids_for(PERSONAL_CODE, &registered_account_institution()),
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_proposal_with_data(
+                personal_admin(0),
+                personal_account(),
                 b"test",
                 b"payload".to_vec(),
             ),
@@ -316,16 +308,13 @@ fn registered_account_threshold_must_not_exceed_snapshot_size() {
 }
 
 #[test]
-fn admin_set_mutation_threshold_must_not_exceed_snapshot_size() {
+fn personal_admin_set_mutation_uses_valid_current_snapshot_threshold() {
     new_test_ext().execute_with(|| {
-        set_registered_account_threshold(4);
-
+        set_personal_threshold(4);
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_change_internal_proposal_with_data(
-                registered_account_admin(0),
-                PERSONAL_CODE,
-                registered_account_institution(),
-                subject_cids_for(PERSONAL_CODE, &registered_account_institution()),
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_admin_change_proposal_with_data(
+                personal_admin(0),
+                personal_account(),
                 3,
                 2,
                 b"test",
@@ -337,58 +326,42 @@ fn admin_set_mutation_threshold_must_not_exceed_snapshot_size() {
 }
 
 #[test]
-fn snapshot_rejects_empty_admin_list() {
+fn institution_snapshot_rejects_empty_admin_list() {
     new_test_ext().execute_with(|| {
-        set_registered_admin_list_override(Vec::new());
-
+        set_institution_admin_list_override(Vec::new());
         assert_noop!(
-            VotingEngine::snapshot_institution_admins(
-                0,
-                PERSONAL_CODE,
-                registered_account_institution(),
-                false,
-            ),
+            VotingEngine::snapshot_institution_admins(0, PUBLIC_CODE, public_cid()),
             votingengine::Error::<Test>::MissingAdminSnapshot
         );
     });
 }
 
 #[test]
-fn snapshot_rejects_duplicate_admin_list() {
+fn institution_snapshot_rejects_duplicate_admin_list() {
     new_test_ext().execute_with(|| {
-        set_registered_admin_list_override(sp_std::vec![
-            registered_account_admin(0),
-            registered_account_admin(0),
-            registered_account_admin(1),
+        set_institution_admin_list_override(sp_std::vec![
+            test_institution_admin(0),
+            test_institution_admin(0),
+            test_institution_admin(1),
         ]);
-
         assert_noop!(
-            VotingEngine::snapshot_institution_admins(
-                0,
-                PERSONAL_CODE,
-                registered_account_institution(),
-                false,
-            ),
+            VotingEngine::snapshot_institution_admins(0, PUBLIC_CODE, public_cid()),
             votingengine::Error::<Test>::InvalidInstitution
         );
     });
 }
 
 #[test]
-fn registered_account_proposal_snapshots_dynamic_threshold() {
+fn personal_proposal_snapshots_dynamic_threshold() {
     new_test_ext().execute_with(|| {
-        set_registered_account_threshold(3);
-        let proposal_id = create_internal_proposal_via_engine(
-            registered_account_admin(0),
-            PERSONAL_CODE,
-            registered_account_institution(),
-        );
+        set_personal_threshold(3);
+        let proposal_id =
+            create_personal_proposal_via_engine(personal_admin(0), personal_account());
 
         assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(3));
-        set_registered_account_threshold(2);
-
+        set_personal_threshold(2);
         assert_ok!(cast_internal_vote_via_extrinsic(
-            registered_account_admin(1),
+            personal_admin(1),
             proposal_id,
             true
         ));
@@ -398,9 +371,8 @@ fn registered_account_proposal_snapshots_dynamic_threshold() {
                 .status,
             STATUS_VOTING
         );
-
         assert_ok!(cast_internal_vote_via_extrinsic(
-            registered_account_admin(2),
+            personal_admin(2),
             proposal_id,
             true
         ));
@@ -414,21 +386,23 @@ fn registered_account_proposal_snapshots_dynamic_threshold() {
 }
 
 #[test]
-fn institution_account_orgs_snapshot_dynamic_active_threshold() {
+fn institution_orgs_snapshot_dynamic_active_threshold_by_cid() {
     new_test_ext().execute_with(|| {
-        for institution_code in [PUBLIC_CODE, PRIVATE_CODE] {
-            set_registered_account_threshold(3);
+        for (institution_code, actor_cid_number) in
+            [(PUBLIC_CODE, public_cid()), (PRIVATE_CODE, private_cid())]
+        {
+            set_institution_threshold(actor_cid_number.clone(), 3);
             let proposal_id = create_internal_proposal_via_engine(
-                registered_account_admin(0),
+                test_institution_admin(0),
                 institution_code,
-                registered_account_institution(),
+                actor_cid_number.clone(),
             );
 
             assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(3));
             assert!(VotingEngine::is_admin_in_snapshot(
                 proposal_id,
-                registered_account_institution(),
-                &registered_account_admin(2)
+                ProposalSubject::InstitutionCid(actor_cid_number),
+                &test_institution_admin(2)
             ));
         }
     });
@@ -438,17 +412,14 @@ fn institution_account_orgs_snapshot_dynamic_active_threshold() {
 fn admin_set_mutation_mutex_blocks_same_subject_regular_proposal() {
     new_test_ext().execute_with(|| {
         let proposal_id =
-            create_admin_set_mutation_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
-        let state =
-            internal_mutex_for(NRC, nrc_pid()).expect("mutex should exist");
+            create_admin_set_mutation_proposal_via_engine(personal_admin(0), personal_account());
+        let state = personal_mutex_for(personal_account()).expect("mutex should exist");
         assert_eq!(state.admin_set_mutation_proposal, Some(proposal_id));
 
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
-                nrc_admin(1),
-                NRC,
-                nrc_pid(),
-                subject_cids_for(NRC, &nrc_pid()),
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_proposal_with_data(
+                personal_admin(1),
+                personal_account(),
                 b"test",
                 b"payload".to_vec(),
             ),
@@ -460,24 +431,18 @@ fn admin_set_mutation_mutex_blocks_same_subject_regular_proposal() {
 #[test]
 fn regular_mutex_blocks_same_subject_admin_set_mutation() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_internal_proposal_via_engine(
-            nrc_admin(0),
-            NRC,
-            nrc_pid(),
-        );
-        let state = internal_mutex_for(NRC, nrc_pid())
-            .expect("mutex should exist");
+        let proposal_id =
+            create_personal_proposal_via_engine(personal_admin(0), personal_account());
+        let state = personal_mutex_for(personal_account()).expect("mutex should exist");
         assert_eq!(state.regular_active_count, 1);
         assert_eq!(state.admin_set_mutation_proposal, None);
 
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_change_internal_proposal_with_data(
-                nrc_admin(1),
-                NRC,
-                nrc_pid(),
-                subject_cids_for(NRC, &nrc_pid()),
-                primitives::count_const::NRC_ADMIN_COUNT,
-                primitives::count_const::NRC_INTERNAL_THRESHOLD,
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_admin_change_proposal_with_data(
+                personal_admin(1),
+                personal_account(),
+                3,
+                2,
                 b"test",
                 b"payload".to_vec(),
             ),
@@ -496,11 +461,11 @@ fn regular_mutex_blocks_same_subject_admin_set_mutation() {
 #[test]
 fn regular_internal_proposals_can_coexist_under_same_subject() {
     new_test_ext().execute_with(|| {
-        let first = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
-        let second = create_internal_proposal_via_engine(nrc_admin(1), NRC, nrc_pid());
+        let first = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
+        let second = create_internal_proposal_via_engine(nrc_admin(1), NRC, nrc_cid());
 
         assert_ne!(first, second);
-        let state = internal_mutex_for(NRC, nrc_pid()).expect("mutex should exist");
+        let state = internal_mutex_for(nrc_cid()).expect("mutex should exist");
         assert_eq!(state.regular_active_count, 2);
         assert_eq!(state.admin_set_mutation_proposal, None);
     });
@@ -510,7 +475,7 @@ fn regular_internal_proposals_can_coexist_under_same_subject() {
 fn admin_set_mutation_passed_status_keeps_mutex_until_terminal_status() {
     new_test_ext().execute_with(|| {
         let proposal_id =
-            create_admin_set_mutation_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+            create_admin_set_mutation_proposal_via_engine(personal_admin(0), personal_account());
 
         assert_ok!(VotingEngine::set_status_and_emit(
             proposal_id,
@@ -522,13 +487,11 @@ fn admin_set_mutation_passed_status_keeps_mutex_until_terminal_status() {
                 .status,
             STATUS_PASSED
         );
-        assert!(internal_mutex_for(NRC, nrc_pid()).is_some());
+        assert!(personal_mutex_for(personal_account()).is_some());
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
-                nrc_admin(1),
-                NRC,
-                nrc_pid(),
-                subject_cids_for(NRC, &nrc_pid()),
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_proposal_with_data(
+                personal_admin(1),
+                personal_account(),
                 b"test",
                 b"payload".to_vec(),
             ),
@@ -539,14 +502,14 @@ fn admin_set_mutation_passed_status_keeps_mutex_until_terminal_status() {
             proposal_id,
             STATUS_EXECUTION_FAILED
         ));
-        assert!(internal_mutex_for(NRC, nrc_pid()).is_none());
+        assert!(personal_mutex_for(personal_account()).is_none());
     });
 }
 
 #[test]
 fn proposal_status_transition_state_machine_is_strict() {
     new_test_ext().execute_with(|| {
-        let voting_to_passed = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let voting_to_passed = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
         assert_noop!(
             VotingEngine::set_status_and_emit(voting_to_passed, STATUS_EXECUTED),
             votingengine::Error::<Test>::InvalidProposalStatus
@@ -580,7 +543,7 @@ fn proposal_status_transition_state_machine_is_strict() {
             votingengine::Error::<Test>::InvalidProposalStatus
         );
 
-        let passed_to_failed = create_internal_proposal_via_engine(nrc_admin(1), NRC, nrc_pid());
+        let passed_to_failed = create_internal_proposal_via_engine(nrc_admin(1), NRC, nrc_cid());
         assert_ok!(VotingEngine::set_status_and_emit(
             passed_to_failed,
             STATUS_PASSED
@@ -594,7 +557,7 @@ fn proposal_status_transition_state_machine_is_strict() {
             votingengine::Error::<Test>::InvalidProposalStatus
         );
 
-        let rejected = create_internal_proposal_via_engine(nrc_admin(2), NRC, nrc_pid());
+        let rejected = create_internal_proposal_via_engine(nrc_admin(2), NRC, nrc_cid());
         assert_ok!(VotingEngine::set_status_and_emit(rejected, STATUS_REJECTED));
         assert_noop!(
             VotingEngine::set_status_and_emit(rejected, STATUS_PASSED),
@@ -606,7 +569,7 @@ fn proposal_status_transition_state_machine_is_strict() {
 #[test]
 fn internal_vote_must_be_by_same_institution_admin() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_internal_proposal_via_engine(prb_admin(0), PRB, prb_pid());
+        let proposal_id = create_internal_proposal_via_engine(prb_admin(0), PRB, prb_cid());
 
         assert_noop!(
             cast_internal_vote_via_extrinsic(nrc_admin(0), proposal_id, true),
@@ -624,7 +587,7 @@ fn internal_vote_must_be_by_same_institution_admin() {
 #[test]
 fn nrc_internal_vote_passes_at_13_yes_votes() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
 
         for i in 1..12 {
             assert_ok!(cast_internal_vote_via_extrinsic(
@@ -657,7 +620,7 @@ fn nrc_internal_vote_passes_at_13_yes_votes() {
 #[test]
 fn internal_vote_is_rejected_after_timeout() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_internal_proposal_via_engine(prc_admin(0), PRC, prc_pid());
+        let proposal_id = create_internal_proposal_via_engine(prc_admin(0), PRC, prc_cid());
 
         let proposal = VotingEngine::proposals(proposal_id).expect("proposal exists");
         System::set_block_number(proposal.end + 1);
@@ -678,7 +641,7 @@ fn internal_vote_is_rejected_after_timeout() {
 #[test]
 fn internal_vote_timeout_is_auto_rejected_on_initialize() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_internal_proposal_via_engine(prc_admin(0), PRC, prc_pid());
+        let proposal_id = create_internal_proposal_via_engine(prc_admin(0), PRC, prc_cid());
 
         let proposal = VotingEngine::proposals(proposal_id).expect("proposal exists");
         System::set_block_number(proposal.end);
@@ -713,21 +676,28 @@ fn joint_proposal_must_be_created_by_nrc_or_prc_admin() {
         assert_noop!(
             JointVote::prepare_joint_population_snapshot(
                 RuntimeOrigin::signed(outsider),
+                nrc_cid(),
                 votingengine::PopulationScope::Country,
             ),
             votingengine::Error::<Test>::NoPermission
         );
 
         // 省储委会管理员可以创建联合提案
-        prepare_population_snapshot_for(prc_admin(0), 10);
+        prepare_population_snapshot_for(prc_admin(0), prc_cid(), 10);
         assert_ok!(
-            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(prc_admin(0))
+            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                prc_admin(0),
+                prc_cid().to_vec(),
+            )
         );
 
         // 国家储委会管理员可以创建联合提案
-        prepare_population_snapshot_for(nrc_admin(0), 10);
+        prepare_population_snapshot_for(nrc_admin(0), nrc_cid(), 10);
         assert_ok!(
-            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(nrc_admin(0))
+            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                nrc_admin(0),
+                nrc_cid().to_vec(),
+            )
         );
     });
 }
@@ -736,7 +706,10 @@ fn joint_proposal_must_be_created_by_nrc_or_prc_admin() {
 fn joint_proposal_requires_prepared_population_snapshot() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(nrc_admin(0)),
+            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                nrc_admin(0),
+                nrc_cid().to_vec(),
+            ),
             joint_vote::Error::<Test>::PopulationSnapshotNotPrepared
         );
     });
@@ -745,13 +718,16 @@ fn joint_proposal_requires_prepared_population_snapshot() {
 #[test]
 fn joint_proposal_rejects_stale_population_snapshot() {
     new_test_ext().execute_with(|| {
-        prepare_population_snapshot_for(nrc_admin(0), 10);
+        prepare_population_snapshot_for(nrc_admin(0), nrc_cid(), 10);
 
         // 人口快照只代表准备快照所在区块的公民分母；
         // 隔块创建提案必须拒绝并删除过期缓存。
         System::set_block_number(2);
         assert_eq!(
-            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(nrc_admin(0)),
+            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                nrc_admin(0),
+                nrc_cid().to_vec(),
+            ),
             Err(joint_vote::Error::<Test>::PopulationSnapshotNotCurrent.into())
         );
         assert!(
@@ -763,24 +739,24 @@ fn joint_proposal_rejects_stale_population_snapshot() {
 #[test]
 fn joint_vote_requires_current_institution_admin() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_joint_proposal_for(nrc_admin(0), 10);
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), nrc_cid(), 10);
 
         assert_ok!(submit_joint_vote(
             nrc_admin(0),
             proposal_id,
-            nrc_pid(),
+            nrc_cid(),
             true
         ));
 
         assert_ok!(submit_joint_vote(
             prc_admin(0),
             proposal_id,
-            prc_pid(),
+            prc_cid(),
             true
         ));
 
         assert_noop!(
-            submit_joint_vote(prc_admin(0), proposal_id, nrc_pid(), true),
+            submit_joint_vote(prc_admin(0), proposal_id, nrc_cid(), true),
             votingengine::Error::<Test>::NoPermission
         );
     });
@@ -789,17 +765,17 @@ fn joint_vote_requires_current_institution_admin() {
 #[test]
 fn joint_vote_rejects_duplicate_admin_vote() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_joint_proposal_for(nrc_admin(0), 10);
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), nrc_cid(), 10);
 
         assert_ok!(submit_joint_vote(
             nrc_admin(0),
             proposal_id,
-            nrc_pid(),
+            nrc_cid(),
             true
         ));
 
         assert_noop!(
-            submit_joint_vote(nrc_admin(0), proposal_id, nrc_pid(), true),
+            submit_joint_vote(nrc_admin(0), proposal_id, nrc_cid(), true),
             votingengine::Error::<Test>::AlreadyVoted
         );
     });
@@ -808,17 +784,17 @@ fn joint_vote_rejects_duplicate_admin_vote() {
 #[test]
 fn joint_vote_uses_fixed_governance_threshold_not_provider() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_joint_proposal_for(nrc_admin(0), 10);
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), nrc_cid(), 10);
 
         // 测试 Provider 对治理机构故意返回 1；联合投票必须等固定阈值票数才形成机构结果。
         assert_ok!(submit_joint_vote(
             nrc_admin(0),
             proposal_id,
-            nrc_pid(),
+            nrc_cid(),
             true
         ));
         assert_eq!(
-            joint_vote::JointVotesByInstitution::<Test>::get(proposal_id, nrc_pid()),
+            joint_vote::JointVotesByInstitution::<Test>::get(proposal_id, nrc_cid()),
             None
         );
 
@@ -826,12 +802,12 @@ fn joint_vote_uses_fixed_governance_threshold_not_provider() {
             assert_ok!(submit_joint_vote(
                 nrc_admin(i),
                 proposal_id,
-                nrc_pid(),
+                nrc_cid(),
                 true
             ));
         }
         assert_eq!(
-            joint_vote::JointVotesByInstitution::<Test>::get(proposal_id, nrc_pid()),
+            joint_vote::JointVotesByInstitution::<Test>::get(proposal_id, nrc_cid()),
             Some(true)
         );
     });
@@ -840,7 +816,7 @@ fn joint_vote_uses_fixed_governance_threshold_not_provider() {
 #[test]
 fn national_judicial_yuan_uses_fixed_internal_threshold() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_internal_proposal_via_engine(njd_admin(0), NJD, njd_pid());
+        let proposal_id = create_internal_proposal_via_engine(njd_admin(0), NJD, njd_cid());
         assert_eq!(
             InternalThresholdSnapshot::<Test>::get(proposal_id),
             Some(primitives::count_const::NJD_INTERNAL_THRESHOLD)
@@ -851,12 +827,12 @@ fn national_judicial_yuan_uses_fixed_internal_threshold() {
 #[test]
 fn joint_vote_auto_rejects_institution_when_yes_is_no_longer_reachable() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_joint_proposal_for(nrc_admin(0), 10);
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), nrc_cid(), 10);
 
-        cast_joint_votes_until_finalized(proposal_id, nrc_pid(), false);
+        cast_joint_votes_until_finalized(proposal_id, nrc_cid(), false);
 
         assert_eq!(
-            joint_vote::JointVotesByInstitution::<Test>::get(proposal_id, nrc_pid()),
+            joint_vote::JointVotesByInstitution::<Test>::get(proposal_id, nrc_cid()),
             Some(false)
         );
         let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
@@ -869,70 +845,38 @@ fn joint_vote_auto_rejects_institution_when_yes_is_no_longer_reachable() {
 }
 
 #[test]
-fn joint_stage_mutex_blocks_admin_set_mutation_until_referendum_stage() {
+fn joint_stage_mutex_is_keyed_by_cid_and_released_at_referendum_stage() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_joint_proposal_for(nrc_admin(0), 10);
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), nrc_cid(), 10);
 
-        assert!(
-            internal_mutex_for(NRC, nrc_pid()).is_some()
-        );
-        assert!(
-            internal_mutex_for(PRC, prc_pid()).is_some()
-        );
-        assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_change_internal_proposal_with_data(
-                nrc_admin(1),
-                NRC,
-                nrc_pid(),
-                subject_cids_for(NRC, &nrc_pid()),
-                primitives::count_const::NRC_ADMIN_COUNT,
-                primitives::count_const::NRC_INTERNAL_THRESHOLD,
-                b"test",
-                b"payload".to_vec(),
-            ),
-            votingengine::Error::<Test>::RegularInternalProposalActive
-        );
+        assert!(internal_mutex_for(nrc_cid()).is_some());
 
-        cast_joint_votes_until_finalized(proposal_id, nrc_pid(), false);
+        cast_joint_votes_until_finalized(proposal_id, nrc_cid(), false);
         assert_eq!(
             VotingEngine::proposals(proposal_id)
                 .expect("proposal should exist")
                 .stage,
             STAGE_REFERENDUM
         );
-        assert!(
-            internal_mutex_for(NRC, nrc_pid()).is_none()
-        );
-        assert!(
-            internal_mutex_for(PRC, prc_pid()).is_none()
-        );
-
-        assert_ok!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_change_internal_proposal_with_data(
-                nrc_admin(1),
-                NRC,
-                nrc_pid(),
-                subject_cids_for(NRC, &nrc_pid()),
-                primitives::count_const::NRC_ADMIN_COUNT,
-                primitives::count_const::NRC_INTERNAL_THRESHOLD,
-                b"test",
-                b"payload".to_vec(),
-            )
-        );
+        assert!(internal_mutex_for(nrc_cid()).is_none());
     });
 }
 
 #[test]
 fn population_snapshot_can_be_prepared_for_each_joint_proposal() {
     new_test_ext().execute_with(|| {
-        prepare_population_snapshot_for(nrc_admin(0), 10);
+        prepare_population_snapshot_for(nrc_admin(0), nrc_cid(), 10);
         assert_ok!(
-            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(nrc_admin(0))
+            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                nrc_admin(0),
+                nrc_cid().to_vec(),
+            )
         );
 
         TEST_POPULATION_COUNT.with(|count| *count.borrow_mut() = 11);
         assert_ok!(JointVote::prepare_joint_population_snapshot(
             RuntimeOrigin::signed(nrc_admin(0)),
+            nrc_cid(),
             votingengine::PopulationScope::Country,
         ));
     });
@@ -1119,7 +1063,7 @@ fn joint_referendum_rejects_ineligible_account() {
 #[test]
 fn joint_referendum_rejects_when_not_in_referendum_stage() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_joint_proposal_for(nrc_admin(0), 10);
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), nrc_cid(), 10);
 
         assert_noop!(
             <joint_vote::Pallet<Test>>::do_jointreferendum_vote(nrc_admin(0), proposal_id, true),
@@ -1236,9 +1180,9 @@ fn joint_referendum_reject_threshold_function_boundaries_are_correct() {
 #[test]
 fn joint_vote_all_yes_passes_immediately() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_joint_proposal_for(nrc_admin(0), 100);
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), nrc_cid(), 100);
 
-        cast_joint_votes_until_finalized(proposal_id, nrc_pid(), true);
+        cast_joint_votes_until_finalized(proposal_id, nrc_cid(), true);
 
         for (institution, _) in all_prc_institutions() {
             cast_joint_votes_until_finalized(proposal_id, institution, true);
@@ -1260,8 +1204,8 @@ fn joint_vote_all_yes_passes_immediately() {
 #[test]
 fn joint_vote_non_unanimous_moves_to_referendum_immediately_after_one_institution_rejects() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_joint_proposal_for(nrc_admin(0), 77);
-        cast_joint_votes_until_finalized(proposal_id, nrc_pid(), true);
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), nrc_cid(), 77);
+        cast_joint_votes_until_finalized(proposal_id, nrc_cid(), true);
         let first_prc = all_prc_institutions()
             .first()
             .cloned()
@@ -1284,12 +1228,12 @@ fn joint_vote_non_unanimous_moves_to_referendum_immediately_after_one_institutio
 #[test]
 fn joint_vote_timeout_moves_to_referendum_when_not_unanimous() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_joint_proposal_for(nrc_admin(0), 88);
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), nrc_cid(), 88);
 
         assert_ok!(submit_joint_vote(
             nrc_admin(0),
             proposal_id,
-            nrc_pid(),
+            nrc_cid(),
             true
         ));
 
@@ -1313,12 +1257,12 @@ fn joint_vote_timeout_moves_to_referendum_when_not_unanimous() {
 #[test]
 fn joint_vote_timeout_auto_moves_to_referendum_on_initialize() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_joint_proposal_for(nrc_admin(0), 88);
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), nrc_cid(), 88);
 
         assert_ok!(submit_joint_vote(
             nrc_admin(0),
             proposal_id,
-            nrc_pid(),
+            nrc_cid(),
             true
         ));
 
@@ -1341,7 +1285,7 @@ fn joint_vote_timeout_auto_moves_to_referendum_on_initialize() {
 #[test]
 fn joint_vote_timeout_with_unanimous_tally_passes() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_joint_proposal_for(nrc_admin(0), 66);
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), nrc_cid(), 66);
         joint_vote::JointTallies::<Test>::insert(
             proposal_id,
             VoteCountU32 {
@@ -1367,7 +1311,7 @@ fn joint_vote_timeout_with_unanimous_tally_passes() {
 #[test]
 fn joint_vote_callback_failure_defers_execution_without_reverting_vote_result() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_joint_proposal_for(nrc_admin(0), 100);
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), nrc_cid(), 100);
 
         set_joint_callback_should_fail(true);
         assert_ok!(VotingEngine::set_status_and_emit(
@@ -1411,7 +1355,7 @@ fn joint_vote_callback_failure_does_not_cleanup_referendum_votes() {
 #[test]
 fn proposal_finalized_event_uses_status_after_joint_callback_override() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_joint_proposal_for(nrc_admin(0), 100);
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), nrc_cid(), 100);
 
         set_joint_callback_override_status(Some(STATUS_EXECUTION_FAILED));
         assert_ok!(VotingEngine::set_status_and_emit(
@@ -1454,7 +1398,7 @@ fn proposal_finalized_event_uses_status_after_joint_callback_override() {
 #[test]
 fn auto_finalize_drops_failed_joint_callback_from_expiry_bucket() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_joint_proposal_for(nrc_admin(0), 66);
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), nrc_cid(), 66);
 
         joint_vote::JointTallies::<Test>::insert(
             proposal_id,
@@ -1487,7 +1431,7 @@ fn auto_finalize_drops_failed_joint_callback_from_expiry_bucket() {
 fn auto_finalize_errors_back_off_then_enter_dead_letter_without_starving_hooks() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
         let first_attempt_at = VotingEngine::proposals(proposal_id)
             .expect("proposal should exist")
             .end
@@ -1612,7 +1556,7 @@ fn pending_cleanup_fifo_rotates_large_and_small_proposals_fairly() {
         for seed in 1..=5u8 {
             AdminSnapshot::<Test>::insert(
                 large,
-                AccountId32::new([seed; 32]),
+                ProposalSubject::PersonalAccount(AccountId32::new([seed; 32])),
                 BoundedVec::<AccountId32, ConstU32<32>>::default(),
             );
         }
@@ -1637,8 +1581,8 @@ fn pending_cleanup_fifo_rotates_large_and_small_proposals_fairly() {
 #[test]
 fn cleanup_dispatches_only_to_the_proposal_track() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
-        joint_vote::JointVotesByInstitution::<Test>::insert(proposal_id, nrc_pid(), true);
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
+        joint_vote::JointVotesByInstitution::<Test>::insert(proposal_id, nrc_cid(), true);
         PendingProposalCleanups::<Test>::insert(proposal_id, PendingCleanupStage::TrackData);
         PendingCleanupQueue::<Test>::insert(0, proposal_id);
         PendingCleanupQueueTail::<Test>::put(1);
@@ -1648,7 +1592,7 @@ fn cleanup_dispatches_only_to_the_proposal_track() {
         assert!(Proposals::<Test>::get(proposal_id).is_none());
         assert!(joint_vote::JointVotesByInstitution::<Test>::contains_key(
             proposal_id,
-            nrc_pid()
+            nrc_cid()
         ));
     });
 }
@@ -1692,7 +1636,7 @@ fn terminal_status_rolls_back_when_cleanup_cannot_be_scheduled() {
 fn retry_deadline_keeps_retry_state_when_cleanup_scheduling_fails() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
 
         assert_ok!(VotingEngine::set_status_and_emit(
             proposal_id,
@@ -1725,7 +1669,7 @@ fn retry_deadline_keeps_retry_state_when_cleanup_scheduling_fails() {
 fn retry_deadline_enters_pending_queue_when_reschedule_window_is_full() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
 
         assert_ok!(VotingEngine::set_status_and_emit(
             proposal_id,
@@ -1780,9 +1724,9 @@ fn delayed_cleanup_chunks_cleanup_across_blocks() {
         ];
 
         insert_joint_referendum_proposal(proposal_id, 10, 100);
-        joint_vote::JointVotesByInstitution::<Test>::insert(proposal_id, nrc_pid(), true);
-        joint_vote::JointVotesByInstitution::<Test>::insert(proposal_id, prc_pid(), true);
-        joint_vote::JointVotesByInstitution::<Test>::insert(proposal_id, prb_pid(), true);
+        joint_vote::JointVotesByInstitution::<Test>::insert(proposal_id, nrc_cid(), true);
+        joint_vote::JointVotesByInstitution::<Test>::insert(proposal_id, prc_cid(), true);
+        joint_vote::JointVotesByInstitution::<Test>::insert(proposal_id, prb_cid(), true);
         for account in referendum_accounts.iter() {
             joint_vote::ReferendumVotesByAccount::<Test>::insert(proposal_id, account, true);
         }
@@ -1835,7 +1779,7 @@ fn reset_internal_callback_state() {
 fn internal_vote_public_call_casts_vote() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
 
         assert_ok!(cast_internal_vote_via_extrinsic(
             nrc_admin(1),
@@ -1856,7 +1800,7 @@ fn internal_vote_public_call_casts_vote() {
 fn internal_vote_rejects_non_admin() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
 
         // 非 NRC 管理员(比如 PRB 的管理员)不能投 NRC 的内部提案。
         assert_noop!(
@@ -1871,7 +1815,7 @@ fn internal_vote_rejects_non_admin() {
 fn internal_vote_rejects_double_vote() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
         assert_noop!(
             cast_internal_vote_via_extrinsic(nrc_admin(0), proposal_id, false),
             votingengine::Error::<Test>::AlreadyVoted
@@ -1883,7 +1827,7 @@ fn internal_vote_rejects_double_vote() {
 fn internal_vote_passes_triggers_callback_approved_true() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
 
         // NRC 阈值 13 票;投 13 票赞成使提案进入 STATUS_PASSED。
         for i in 1..13 {
@@ -1910,7 +1854,7 @@ fn internal_vote_passes_triggers_callback_approved_true() {
 fn internal_vote_early_rejection_triggers_callback_approved_false() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
 
         // NRC 总管理员 19 人,阈值 13 票。7 票反对 → 剩余 12 人全同意也到不了 13,
         // 触发提前否决。
@@ -1938,7 +1882,7 @@ fn internal_vote_early_rejection_triggers_callback_approved_false() {
 fn internal_vote_callback_not_called_before_threshold() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
 
         // 投 12 票赞成(阈值 13),未达阈值不应触发回调。
         for i in 1..12 {
@@ -1964,7 +1908,7 @@ fn internal_vote_callback_not_called_before_threshold() {
 fn internal_vote_callback_err_defers_execution_without_reverting_vote() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
 
         // 前 12 票赞成(未达阈值,不触发回调,不受 SHOULD_FAIL 影响)。
         for i in 1..12 {
@@ -2006,7 +1950,7 @@ fn asynchronous_callback_errors_dead_letter_after_bounded_retries() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();
         INTERNAL_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = true);
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
 
         assert_ok!(VotingEngine::set_status_and_emit(
             proposal_id,
@@ -2053,7 +1997,7 @@ fn ignored_callback_outcome_dead_letters_after_bounded_retries() {
         reset_internal_callback_state();
         // 未识别状态映射为 Ignored，复现结果应用阶段返回 Err 的确定性失败。
         set_internal_callback_override_status(Some(0xff));
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
 
         assert_ok!(VotingEngine::set_status_and_emit(
             proposal_id,
@@ -2120,7 +2064,7 @@ fn orphan_pending_execution_is_removed_instead_of_retried() {
 fn manual_retry_third_failure_marks_execution_failed() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
 
         assert_ok!(VotingEngine::set_status_and_emit(
             proposal_id,
@@ -2194,7 +2138,7 @@ fn manual_retry_third_failure_marks_execution_failed() {
 fn default_cancel_callback_rejects_passed_retry_proposal() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
 
         assert_ok!(VotingEngine::set_status_and_emit(
             proposal_id,
@@ -2226,7 +2170,7 @@ fn automatic_fatal_failed_runs_execution_failed_terminal_hook() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();
         set_internal_callback_override_status(Some(STATUS_EXECUTION_FAILED));
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
 
         assert_ok!(VotingEngine::set_status_and_emit(
             proposal_id,
@@ -2250,7 +2194,7 @@ fn execution_failed_terminal_cleanup_error_is_queued_and_retried() {
         reset_internal_callback_state();
         set_internal_callback_override_status(Some(STATUS_EXECUTION_FAILED));
         set_internal_terminal_cleanup_should_fail(true);
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
 
         // 终态可以成立，但业务侧执行失败清理通知失败时必须留下重试入口。
         assert_ok!(VotingEngine::set_status_and_emit(
@@ -2287,7 +2231,7 @@ fn execution_failed_terminal_cleanup_error_is_queued_and_retried() {
 fn joint_retryable_outcome_is_forced_to_execution_failed() {
     new_test_ext().execute_with(|| {
         set_joint_callback_override_status(Some(STATUS_PASSED));
-        let proposal_id = create_joint_proposal_for(nrc_admin(0), 10);
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), nrc_cid(), 10);
 
         assert_ok!(VotingEngine::set_status_and_emit(
             proposal_id,
@@ -2311,7 +2255,7 @@ fn joint_retryable_outcome_is_forced_to_execution_failed() {
 fn execution_retry_deadline_expires_to_execution_failed() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();
-        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
 
         assert_ok!(VotingEngine::set_status_and_emit(
             proposal_id,
@@ -2355,7 +2299,15 @@ fn internal_vote_rejects_wrong_stage_joint_proposal() {
                 stage: STAGE_JOINT,
                 status: STATUS_VOTING,
                 internal_code: None,
-                account_context: None,
+                actor_cid_number: Some(
+                    CHINA_CB[0]
+                        .cid_number
+                        .as_bytes()
+                        .to_vec()
+                        .try_into()
+                        .expect("NRC CID fits runtime bound"),
+                ),
+                execution_account: None,
                 subject_cid_numbers: Default::default(),
                 start: now,
                 end: now + 100,

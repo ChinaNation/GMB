@@ -200,33 +200,45 @@ impl<T: Config> Pallet<T> {
             if let Some(entry) = CHINA_CB.first() {
                 let cid_number = match CidNumber::try_from(entry.cid_number.as_bytes().to_vec()) {
                     Ok(value) => value,
-                    Err(_) => return TransactionOutcome::Rollback(Err(votingengine::Error::<T>::InvalidInstitution.into())),
+                    Err(_) => {
+                        return TransactionOutcome::Rollback(Err(
+                            votingengine::Error::<T>::InvalidInstitution.into(),
+                        ))
+                    }
                 };
-                if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
-                    id, NRC, cid_number,
-                ) {
+                if let Err(err) =
+                    <votingengine::Pallet<T>>::snapshot_institution_admins(id, NRC, cid_number)
+                {
                     return TransactionOutcome::Rollback(Err(err));
                 }
             }
             for entry in CHINA_CB.iter().skip(1) {
                 let cid_number = match CidNumber::try_from(entry.cid_number.as_bytes().to_vec()) {
                     Ok(value) => value,
-                    Err(_) => return TransactionOutcome::Rollback(Err(votingengine::Error::<T>::InvalidInstitution.into())),
+                    Err(_) => {
+                        return TransactionOutcome::Rollback(Err(
+                            votingengine::Error::<T>::InvalidInstitution.into(),
+                        ))
+                    }
                 };
-                if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
-                    id, PRC, cid_number,
-                ) {
+                if let Err(err) =
+                    <votingengine::Pallet<T>>::snapshot_institution_admins(id, PRC, cid_number)
+                {
                     return TransactionOutcome::Rollback(Err(err));
                 }
             }
             for entry in CHINA_CH.iter() {
                 let cid_number = match CidNumber::try_from(entry.cid_number.as_bytes().to_vec()) {
                     Ok(value) => value,
-                    Err(_) => return TransactionOutcome::Rollback(Err(votingengine::Error::<T>::InvalidInstitution.into())),
+                    Err(_) => {
+                        return TransactionOutcome::Rollback(Err(
+                            votingengine::Error::<T>::InvalidInstitution.into(),
+                        ))
+                    }
                 };
-                if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
-                    id, PRB, cid_number,
-                ) {
+                if let Err(err) =
+                    <votingengine::Pallet<T>>::snapshot_institution_admins(id, PRB, cid_number)
+                {
                     return TransactionOutcome::Rollback(Err(err));
                 }
             }
@@ -318,12 +330,11 @@ impl<T: Config> Pallet<T> {
 
         let threshold = fixed_governance_pass_threshold(&institution_code)
             .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
-        let admins_len =
-            <votingengine::Pallet<T>>::snapshot_admins_len(
-                proposal_id,
-                ProposalSubject::InstitutionCid(cid_number.clone()),
-            )
-                .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
+        let admins_len = <votingengine::Pallet<T>>::snapshot_admins_len(
+            proposal_id,
+            ProposalSubject::InstitutionCid(cid_number.clone()),
+        )
+        .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
 
         if tally.yes >= threshold {
             return Self::finalize_joint_institution_vote(proposal_id, cid_number, true);

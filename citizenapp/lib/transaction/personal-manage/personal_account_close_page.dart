@@ -57,7 +57,7 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
   void initState() {
     super.initState();
     _selectedWallet = widget.adminWallets.first;
-    _accountSs58 = _hexToSs58(widget.institution.account);
+    _accountSs58 = _hexToSs58(widget.institution.personalAccountHex);
     _fetchBalance();
   }
 
@@ -69,7 +69,7 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
 
   Future<void> _fetchBalance() async {
     final store = AccountBalanceSnapshotStore.instance;
-    final local = await store.read(widget.institution.account);
+    final local = await store.read(widget.institution.personalAccountHex);
     if (local != null && mounted) {
       setState(() {
         _availableBalance = local.balanceYuan;
@@ -78,11 +78,11 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
       if (local.isFresh(AccountBalanceSnapshotStore.displayTtl)) return;
     }
     try {
-      final balance =
-          await ChainRpc().fetchFinalizedBalance(widget.institution.account);
+      final balance = await ChainRpc()
+          .fetchFinalizedBalance(widget.institution.personalAccountHex);
       try {
         await store.put(
-          accountHex: widget.institution.account,
+          accountHex: widget.institution.personalAccountHex,
           balanceYuan: balance,
         );
       } catch (_) {
@@ -191,7 +191,7 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
           await ProposalQueryService().fetchNextProposalId();
 
       final result = await _manageService.submitProposeClosePersonal(
-        account: widget.institution.account,
+        account: widget.institution.personalAccountHex,
         beneficiaryAddress: beneficiary,
         fromAddress: wallet.address,
         signerPubkey: Uint8List.fromList(pubkeyBytes),
@@ -200,7 +200,7 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
 
       // 写入 Isar `PersonalAccountProposalEntity`,详情页提案列表才能显示。
       await PersonalProposalHistoryService().recordOrUpdate(
-        personalAccountHex: widget.institution.account,
+        personalAccountHex: widget.institution.personalAccountHex,
         proposalId: predictedProposalId,
         action: PersonalProposalAction.close,
         status: PersonalProposalStatus.voting,

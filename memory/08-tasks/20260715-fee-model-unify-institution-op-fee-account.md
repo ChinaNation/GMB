@@ -2,7 +2,7 @@
 
 ## 状态
 
-- 当前阶段：第 1 步实施中
+- 当前阶段：第 1 步代码与自动验收完成；真实管理员签名交易验收待专用测试签名环境
 - 第 1 步方案确认：2026-07-15
 - runtime 二次确认：已获得
 - 开发方式：breaking runtime，重新创世，不做旧存储、旧 call、旧 payload 或旧命名兼容
@@ -66,7 +66,7 @@
 ### 第 1 步：机构 CID、账户、admins、岗位和交易身份唯一真源
 
 - 建立机构类型到强制协议账户集合的唯一函数。
-- 删除 `CidRegisteredAccount`、机构/账户生命周期状态、`is_default`、`ProtectedGenesisAccounts`。
+- 删除旧的 CID 正向单账户映射、机构/账户生命周期状态、重复默认标记和额外创世保护表。
 - `InstitutionAccounts[(cid_number, account_name)]` 为正向账户真源，`AccountRegisteredCid` 为反向索引。
 - public/private admins 改为 CID key，删除主账户管理员根和机构管理员关闭流程。
 - 机构阈值按 CID，个人阈值按个人账户。
@@ -147,3 +147,39 @@
 - OnChina 真实页面、CitizenApp 展示和 CitizenWallet 扫码解码全部与链上状态一致。
 
 第 1 步全部通过后停止，等待用户确认再进入第 2 步。
+
+## 第 1 步执行与验收记录（2026-07-15）
+
+### 已完成
+
+- runtime、node、OnChina、CitizenApp、CitizenWallet 已统一机构 CID 主键；机构账户只作为同一 CID 下的具体执行账户，个人多签只使用 `personal_account`。
+- `PublicAdmins/PrivateAdmins::AdminAccounts[cid_number]`、`ActiveInstitutionThresholds[cid_number]`、岗位与任职、提案主体和管理员快照均按 CID；个人管理员与阈值继续按个人账户。
+- 普通机构、国家储委会、省储行的协议账户集合由 `institution_constraints` 单源确定；协议账户不可关闭，自定义账户可关闭；零初始余额允许，非零低于 ED 拒绝。
+- 删除旧单账户映射、机构主账户身份/授权字段、机构生命周期与重复默认标记；数据库启动代码不保留旧列迁移兼容。
+- 机构账户派生统一命名为 `derive_institution_account`；runtime `MODULE_TAG` 和 owner data 统一为 `multisig`，旧标签只在拒绝测试中作为非法输入出现。
+- 第 2 步费用分类和付款方路由未实施；第 4 步人口快照与提案清理未实施。
+
+### 自动验收
+
+- runtime 及相关 pallet 全量回归通过；最终复验 `citizenchain` 42、`multisig` 24、`offchain` 24、`public-manage` 15、`private-manage` 10，均 0 失败。
+- `cargo test -p node`：270 通过、0 失败。
+- `cargo test -p onchina`：131 通过、0 失败；OnChina 前端 production build 通过。
+- CitizenApp：666 通过、5 项环境性跳过；`flutter analyze` 0 问题。
+- CitizenWallet：165 通过；`flutter analyze` 0 问题。
+- node 前端 production build、`runtime-benchmarks` 编译、`cargo fmt --all -- --check`、普通 clippy 和 `git diff --check` 均通过。
+- 旧 key、旧授权方法、旧动态阈值、旧主账户身份字段与旧账户派生接口残留扫描为 0；不把第 4 步快照入口误删。
+
+### 真实重创世状态验收
+
+- 使用最终源码重新构建 runtime WASM，导出新 chainspec 并在独立临时目录启动真实本地链；最终临时链 genesis hash 为 `0x2c5b44639235e88e602a9bf88b0473e6fe8f6e9a72b8b4a9a38fd303c212ad91`，节点和 node guard 创世完整性检查通过。
+- 新创世状态共 49,593 个机构、99,231 个机构账户，正向账户记录与反向索引数量完全一致。
+- 国家储委会 1 个，协议账户精确为主账户、费用账户、安全基金账户、两和基金账户。
+- 省储行 43 个，协议账户精确为主账户、费用账户、永久质押账户。
+- 其余机构协议账户精确为主账户、费用账户；协议集合错误数为 0；旧正向单账户 storage key 数为 0。
+- 临时验收节点已关闭，没有连接相同创世网络、没有提交交易、没有读取或使用用户私钥。
+
+### 尚未完成的真实验收
+
+- 尚未执行“注册局管理员真实扫码签名后发起创建/低于 ED/非管理员/CID 与账户不匹配/账户关闭”的端到端交易与真实页面联动。
+- 原因：当前创世管理员只有固定公钥，仓库和自动化环境没有对应私钥；不得伪造管理员、读取用户 Keychain 或要求用户在聊天中提供私钥。
+- 完成方式：由用户在本机解锁并授权一个专用测试管理员钱包参与扫码，或另行明确批准仅用于验收的测试创世管理员方案。该项通过前不进入第 2 步。

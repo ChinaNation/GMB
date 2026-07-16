@@ -83,6 +83,11 @@ pub const ACTIVATE_ADMIN_CID_LEN: usize = crate::core_const::CID_NUMBER_MAX_BYTE
 /// 管理员激活原始签名载荷固定长度。
 pub const ACTIVATE_ADMIN_PAYLOAD_LEN: usize =
     BINARY_PREFIX_LEN + ACTIVATE_ADMIN_CID_LEN + 4 + 1 + 32 + 8 + 16;
+/// 管理员解密载荷中的 CID 固定槽长度，与链上 CID 上限一致。
+pub const DECRYPT_ADMIN_CID_LEN: usize = crate::core_const::CID_NUMBER_MAX_BYTES as usize;
+/// 管理员解密原始签名载荷固定长度。
+pub const DECRYPT_ADMIN_PAYLOAD_LEN: usize =
+    BINARY_PREFIX_LEN + DECRYPT_ADMIN_CID_LEN + 32 + 8 + 16;
 
 /// 构造二进制前缀域的 4 字节前缀 `GMB || op_tag`(0x18/0x19 用)。
 pub fn binary_domain_prefix(op_tag: u8) -> [u8; BINARY_PREFIX_LEN] {
@@ -114,6 +119,30 @@ pub fn activate_admin_payload(
     payload.resize(BINARY_PREFIX_LEN + ACTIVATE_ADMIN_CID_LEN, 0);
     payload.extend_from_slice(institution_code);
     payload.push(kind);
+    payload.extend_from_slice(admin_pubkey);
+    payload.extend_from_slice(&timestamp.to_le_bytes());
+    payload.extend_from_slice(nonce);
+    Some(payload)
+}
+
+/// 构造清算行管理员本地解密原始签名载荷。
+///
+/// 布局固定为 `GMB || 0x19 || cid_number(32B,右补零) || admin_pubkey(32B)
+/// || timestamp_le(8B) || nonce(16B)`。构造方、解析方和冷钱包必须共同使用
+/// 本函数及同组长度常量，禁止另设 48B CID 槽或手工第二布局。
+pub fn decrypt_admin_payload(
+    cid_number: &[u8],
+    admin_pubkey: &[u8; 32],
+    timestamp: u64,
+    nonce: &[u8; 16],
+) -> Option<Vec<u8>> {
+    if cid_number.is_empty() || cid_number.len() > DECRYPT_ADMIN_CID_LEN {
+        return None;
+    }
+    let mut payload = Vec::with_capacity(DECRYPT_ADMIN_PAYLOAD_LEN);
+    payload.extend_from_slice(&binary_domain_prefix(OP_SIGN_DECRYPT));
+    payload.extend_from_slice(cid_number);
+    payload.resize(BINARY_PREFIX_LEN + DECRYPT_ADMIN_CID_LEN, 0);
     payload.extend_from_slice(admin_pubkey);
     payload.extend_from_slice(&timestamp.to_le_bytes());
     payload.extend_from_slice(nonce);
@@ -235,4 +264,65 @@ pub fn institution_account_close_message<Hash: Encode, AccountId: Encode, Nonce:
         credential_signer_pubkey,
     );
     signing_message(OP_SIGN_DEREGISTER, &payload.encode())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn activate_admin_payload_uses_the_shared_32_byte_cid_slot() {
+        let cid_number = b"LN001-NRC0G-944805165-2026";
+        let institution_code = *b"NRC\0";
+        let admin_pubkey = [0x22; 32];
+        let nonce = [0u8; 16];
+        let payload = activate_admin_payload(
+            cid_number,
+            &institution_code,
+            0,
+            &admin_pubkey,
+            1_700_000_000,
+            &nonce,
+        )
+        .expect("valid CID should build an activation payload");
+
+        assert_eq!(payload.len(), ACTIVATE_ADMIN_PAYLOAD_LEN);
+        assert_eq!(&payload[..BINARY_PREFIX_LEN], b"GMB\x18");
+        assert_eq!(
+            &payload[BINARY_PREFIX_LEN..BINARY_PREFIX_LEN + cid_number.len()],
+            cid_number
+        );
+        assert!(payload
+            [BINARY_PREFIX_LEN + cid_number.len()..BINARY_PREFIX_LEN + ACTIVATE_ADMIN_CID_LEN]
+            .iter()
+            .all(|byte| *byte == 0));
+    }
+
+    #[test]
+    fn decrypt_admin_payload_uses_the_same_cid_limit_and_rejects_invalid_cids() {
+        let cid_number = b"AH001-SCB0V-123456789-2026";
+        let admin_pubkey = [0x33; 32];
+        let nonce = [0u8; 16];
+        let payload = decrypt_admin_payload(cid_number, &admin_pubkey, 1_700_000_000, &nonce)
+            .expect("valid CID should build a decrypt payload");
+
+        assert_eq!(payload.len(), DECRYPT_ADMIN_PAYLOAD_LEN);
+        assert_eq!(&payload[..BINARY_PREFIX_LEN], b"GMB\x19");
+        assert_eq!(
+            &payload[BINARY_PREFIX_LEN..BINARY_PREFIX_LEN + cid_number.len()],
+            cid_number
+        );
+        assert!(payload
+            [BINARY_PREFIX_LEN + cid_number.len()..BINARY_PREFIX_LEN + DECRYPT_ADMIN_CID_LEN]
+            .iter()
+            .all(|byte| *byte == 0));
+        assert!(decrypt_admin_payload(&[], &admin_pubkey, 0, &nonce).is_none());
+        assert!(decrypt_admin_payload(
+            &[b'X'; DECRYPT_ADMIN_CID_LEN + 1],
+            &admin_pubkey,
+            0,
+            &nonce,
+        )
+        .is_none());
+    }
 }

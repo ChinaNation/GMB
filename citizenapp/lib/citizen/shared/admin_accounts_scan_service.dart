@@ -18,14 +18,18 @@ import 'package:citizenapp/rpc/smoldot_client.dart';
 @immutable
 class ScannedAdminAccount {
   const ScannedAdminAccount({
-    required this.addrHex,
+    this.cidNumber,
+    this.personalAccountHex,
     required this.institutionCode,
     required this.kind,
     required this.adminsHex,
-  });
+  }) : assert((cidNumber == null) != (personalAccountHex == null));
 
-  /// 账户小写 hex(无 0x),由 storage key 末 32B 提取。
-  final String addrHex;
+  /// 机构管理员表的唯一主键。
+  final String? cidNumber;
+
+  /// 个人多签管理员表的唯一主键。
+  final String? personalAccountHex;
 
   /// 4 字节机构码字符串（"NRC"/"PRC"/"PRB"/"PMUL"/"CGOV" 等）。
   final String institutionCode;
@@ -97,9 +101,11 @@ class AdminAccountsScanService {
     void Function(int scanned, int? total, int decoded)? onProgress,
   }) async {
     final allKeys = <String>[];
+    final kindByKey = <String, int>{};
     var partialFailure = false;
 
-    for (final prefixHex in _adminAccountsPrefixHexList()) {
+    for (final entry in _adminAccountsPrefixes()) {
+      final prefixHex = entry.prefixHex;
       String? startKey;
       while (true) {
         List<String> page;
@@ -116,6 +122,9 @@ class AdminAccountsScanService {
         }
         if (page.isEmpty) break;
         allKeys.addAll(page);
+        for (final key in page) {
+          kindByKey[key] = entry.kind;
+        }
         onProgress?.call(allKeys.length, null, 0);
         if (page.length < _pageSize) break;
         startKey = page.last;
@@ -139,21 +148,35 @@ class AdminAccountsScanService {
       for (final keyHex in batchKeys) {
         final value = values[keyHex];
         if (value == null) continue;
-        final decoded = AdminAccountStorageCodec.tryDecode(value);
+        final kind = kindByKey[keyHex];
+        if (kind == null) continue;
+        final decoded = AdminAccountStorageCodec.tryDecode(value, kind: kind);
         if (decoded == null) continue;
-        final accountId = AdminAccountStorageCodec.extractAccountIdFromKey(
-          _hexDecode(keyHex),
-        );
-        if (accountId == null) continue;
-        final addr =
-            AdminAccountStorageCodec.accountHexFromAccountId(accountId);
-        if (addr == null) continue;
-        accounts.add(ScannedAdminAccount(
-          addrHex: addr,
-          institutionCode: decoded.institutionCode,
-          kind: decoded.kind,
-          adminsHex: decoded.adminsHex,
-        ));
+        final keyBytes = _hexDecode(keyHex);
+        if (kind == AdminAccountStorageCodec.kindPersonal) {
+          final accountId =
+              AdminAccountStorageCodec.extractPersonalAccountFromKey(keyBytes);
+          if (accountId == null) continue;
+          final accountHex =
+              AdminAccountStorageCodec.accountHexFromAccountId(accountId);
+          if (accountHex == null) continue;
+          accounts.add(ScannedAdminAccount(
+            personalAccountHex: accountHex,
+            institutionCode: decoded.institutionCode,
+            kind: decoded.kind,
+            adminsHex: decoded.adminsHex,
+          ));
+        } else {
+          final cidNumber =
+              AdminAccountStorageCodec.extractCidNumberFromKey(keyBytes);
+          if (cidNumber == null) continue;
+          accounts.add(ScannedAdminAccount(
+            cidNumber: cidNumber,
+            institutionCode: decoded.institutionCode,
+            kind: decoded.kind,
+            adminsHex: decoded.adminsHex,
+          ));
+        }
       }
       onProgress?.call(allKeys.length, allKeys.length, accounts.length);
     }
@@ -186,8 +209,8 @@ class AdminAccountsScanService {
         .toList(growable: false);
   }
 
-  /// `PersonalAdmins.AdminAccounts` 双 prefix(twox128 || twox128)的 hex 形式。
-  List<String> _adminAccountsPrefixHexList() {
+  /// 每个短 prefix 同时携带 pallet 决定的主体类型，禁止再从 value 猜 kind。
+  List<({String prefixHex, int kind})> _adminAccountsPrefixes() {
     final invalid =
         palletNames.where((name) => !_allowedPalletNames.contains(name));
     if (invalid.isNotEmpty) {
@@ -199,7 +222,17 @@ class AdminAccountsScanService {
     }
     return palletNames
         .toSet()
-        .map(_adminAccountsPrefixHex)
+        .map((palletName) => (
+              prefixHex: _adminAccountsPrefixHex(palletName),
+              kind: switch (palletName) {
+                'PublicAdmins' =>
+                  AdminAccountStorageCodec.kindPublicInstitution,
+                'PrivateAdmins' =>
+                  AdminAccountStorageCodec.kindPrivateInstitution,
+                'PersonalAdmins' => AdminAccountStorageCodec.kindPersonal,
+                _ => throw StateError('未知管理员 pallet'),
+              },
+            ))
         .toList(growable: false);
   }
 

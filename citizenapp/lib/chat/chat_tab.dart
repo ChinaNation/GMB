@@ -443,6 +443,14 @@ class _ChatTabState extends State<ChatTab> {
                             conversationId: preview.conversationId,
                             media: media,
                           )),
+              onSendSticker: widget.runtime == null
+                  ? null
+                  : (packId, stickerId) => widget.runtime!.sendSticker(
+                        peerAccount: preview.peerAccount,
+                        conversationId: preview.conversationId,
+                        packId: packId,
+                        stickerId: stickerId,
+                      ),
               onResolveMediaPath: widget.runtime == null
                   ? null
                   : (

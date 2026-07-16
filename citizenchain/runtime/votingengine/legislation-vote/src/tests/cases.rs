@@ -96,9 +96,10 @@ fn representative_only_finishes_without_law_procedure() {
     new_test_ext().execute_with(|| {
         let pid = <Lib as crate::LegislationVoteEngine<AccountId32>>::create_representative_vote(
             member(1),
-            crate::RepresentativeRoute::Single((HOUSE1_CODE, house1())),
+            actor_cid_number(),
+            crate::RepresentativeRoute::Single(house1()),
             RepresentativeVoteRule::Regular,
-            Default::default(),
+            votingengine::types::ProposalSubjectCidNumbers::new(),
             b"personnel",
             vec![1],
         )
@@ -120,9 +121,10 @@ fn representative_only_rejects_special_rule() {
     new_test_ext().execute_with(|| {
         let result = <Lib as crate::LegislationVoteEngine<AccountId32>>::create_representative_vote(
             member(1),
-            crate::RepresentativeRoute::Single((HOUSE1_CODE, house1())),
+            actor_cid_number(),
+            crate::RepresentativeRoute::Single(house1()),
             RepresentativeVoteRule::Special,
-            Default::default(),
+            votingengine::types::ProposalSubjectCidNumbers::new(),
             b"personnel",
             vec![1],
         );

@@ -81,7 +81,7 @@ class Institution {
       case 'PRB':
         return OrgType.prb;
       default:
-        return OrgType.account;
+        return OrgType.institution;
     }
   }
 

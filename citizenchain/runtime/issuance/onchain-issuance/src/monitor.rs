@@ -2,8 +2,8 @@
 //!
 //! 与 ADR-011 v2 第 5.1 / 5.6 节对齐:
 //! - 监管动作走 **JointVote**(NRC admin 多签 + 全民兜底)
-//! - propose origin 校验:`ensure!(proposer ∈ admins(NRC main account))`
-//!   (NRC 治理账户来自 `T::NrcMainAccountProvider::nrc_main_account()`)
+//! - propose origin 校验:`actor_cid_number == NRC` 且
+//!   `ensure!(proposer ∈ AdminAccounts[actor_cid_number].admins)`
 //! - 强制销毁倒计时 30 天:写入 `ForceCloseSchedule[expire_block].push(asset_id)`,
 //!   `on_finalize(n)` 通过 `take(n)` O(1) 处理,不全表扫描 Assets
 //!

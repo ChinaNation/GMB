@@ -21,13 +21,15 @@ void main() {
       );
 
   ScannedAdminAccount acc({
-    required String addr,
+    required String key,
     required String institutionCode,
     required int kind,
     required List<String> admins,
   }) =>
       ScannedAdminAccount(
-        addrHex: addr,
+        cidNumber: kind == AdminAccountStorageCodec.kindPersonal ? null : key,
+        personalAccountHex:
+            kind == AdminAccountStorageCodec.kindPersonal ? key : null,
         institutionCode: institutionCode,
         kind: kind,
         adminsHex: admins,
@@ -37,13 +39,13 @@ void main() {
     test('按 kind 分流:只保留个人多签', () {
       final scan = resultOf([
         acc(
-          addr: '01',
+          key: 'CID-01',
           institutionCode: 'CGOV',
           kind: AdminAccountStorageCodec.kindPublicInstitution,
           admins: [myWallet],
         ),
         acc(
-          addr: '02',
+          key: '02',
           institutionCode: 'PMUL',
           kind: AdminAccountStorageCodec.kindPersonal,
           admins: [myWallet],
@@ -55,19 +57,19 @@ void main() {
         myPubkeysHex: {myWallet},
         kind: AdminAccountStorageCodec.kindPersonal,
       );
-      expect(personals.map((e) => e.addrHex), ['02']);
+      expect(personals.map((e) => e.personalAccountHex), ['02']);
     });
 
     test('institution_code 白名单:个人多签仍可按 PMUL 过滤', () {
       final scan = resultOf([
         acc(
-          addr: '01',
+          key: '01',
           institutionCode: 'PMUL',
           kind: AdminAccountStorageCodec.kindPersonal,
           admins: [myWallet],
         ),
         acc(
-          addr: '02',
+          key: '02',
           institutionCode: 'XXXX',
           kind: AdminAccountStorageCodec.kindPersonal,
           admins: [myWallet],
@@ -79,18 +81,18 @@ void main() {
         kind: AdminAccountStorageCodec.kindPersonal,
         codeWhitelist: const {'PMUL'},
       );
-      expect(result.map((e) => e.addrHex), ['01']);
+      expect(result.map((e) => e.personalAccountHex), ['01']);
     });
 
     test('钱包匹配:管理员不含本地钱包的账户被排除', () {
       final scan = resultOf([
         acc(
-            addr: '01',
+            key: '01',
             institutionCode: 'PMUL',
             kind: AdminAccountStorageCodec.kindPersonal,
             admins: [myWallet, otherWallet]),
         acc(
-            addr: '02',
+            key: '02',
             institutionCode: 'PMUL',
             kind: AdminAccountStorageCodec.kindPersonal,
             admins: [otherWallet]),
@@ -100,13 +102,13 @@ void main() {
         myPubkeysHex: {myWallet},
         kind: AdminAccountStorageCodec.kindPersonal,
       );
-      expect(result.map((e) => e.addrHex), ['01']);
+      expect(result.map((e) => e.personalAccountHex), ['01']);
     });
 
     test('多钱包:命中任一本地钱包即保留', () {
       final scan = resultOf([
         acc(
-            addr: '01',
+            key: '01',
             institutionCode: 'PMUL',
             kind: AdminAccountStorageCodec.kindPersonal,
             admins: [secondWallet]),
@@ -116,7 +118,7 @@ void main() {
         myPubkeysHex: {myWallet, secondWallet},
         kind: AdminAccountStorageCodec.kindPersonal,
       );
-      expect(result.map((e) => e.addrHex), ['01']);
+      expect(result.map((e) => e.personalAccountHex), ['01']);
     });
 
     test('空扫描结果返回空', () {

@@ -4,7 +4,7 @@
 `resolution-destro` 的功能需求是：为国家储委会、各省储委会、各省储行提供"机构自有资金销毁"治理流程，由机构内部管理员发起和投票，在提案通过后自动或手动执行链上销毁。
 
 模块必须满足以下要求：
-- 仅允许有效机构发起销毁提案，且 `institution_code` 必须与 `institution` 的真实归属一致。
+- 仅允许 NRC、PRC、PRB 发起销毁提案；`actor_cid_number` 是机构唯一身份，`institution_account` 是具体执行账户，链端必须用账户正反索引验证二者归属一致。
 - 仅允许目标机构自己的内部管理员发起提案和参与投票。
 - 销毁金额必须大于 0，且执行时必须保证机构账户保留最小余额 `ED`。
 - 提案投票通过后，系统应自动尝试执行销毁；若自动执行失败，提案保持 `STATUS_PASSED`，允许后续手动重试执行。
@@ -46,7 +46,7 @@
   - `Pallet::get_proposal_data`
   - `Pallet::proposals`
 - 状态常量：`STATUS_PASSED`
-- 管理员校验：`InternalAdminProvider::is_internal_admin`
+- 管理员校验：`InternalAdminProvider::is_institution_admin(institution_code, actor_cid_number, origin)`
 
 Runtime 接线：
 - `/Users/rhett/GMB/citizenchain/runtime/src/configs/mod.rs`
@@ -58,8 +58,9 @@ Runtime 接线：
 ## 3. 数据结构与存储模型
 ### 动作结构
 ```rust
-pub struct DestroyAction<Balance> {
-    pub institution: AccountId,
+pub struct DestroyAction<AccountId, Balance> {
+    pub actor_cid_number: CidNumber,
+    pub institution_account: AccountId,
     pub amount: Balance,
 }
 ```
@@ -71,21 +72,22 @@ pub struct DestroyAction<Balance> {
 ### 本模块存储
 无。提案数据、元数据、活跃提案列表均已移至 `votingengine` 统一管控（lib.rs:103 注释说明）。
 
-### 机构主账户
-- 通过 runtime primitives 的 `main_account` 常量查找治理机构主账户。
-- 执行销毁时从主账户字节 decode 出 `AccountId`。
+### 机构与执行账户
+- `actor_cid_number` 是提案主体和管理员集合的唯一机构主键。
+- `institution_account` 是本次销毁的具体机构账户，不承担机构身份语义。
+- `InstitutionMultisigQuery` 从账户反查 CID 和机构码，创建与执行阶段都必须与显式 `actor_cid_number` 一致；不得从主账户推导机构身份。
 
 ---
 
 ## 4. 外部接口（Calls）
 ### 4.1 `propose_destroy`（call index = 0）
-入参：`institution_code`, `institution`, `amount`
+入参：`actor_cid_number`, `institution_account`, `amount`
 
 流程：
 1. `ensure_signed`。
 2. 校验 `amount > 0`。
-3. 校验机构有效且 `institution_code` 匹配。
-4. 校验发起者是机构内部管理员。
+3. 从 `institution_account` 正反索引读取真实 CID/机构码，校验其属于 NRC、PRC 或 PRB，并与 `actor_cid_number` 一致。
+4. 按 `institution_code + actor_cid_number` 校验发起签名者是该机构当前管理员。
 5. 将 `DestroyAction` 加 `MODULE_TAG` 编码。
 6. 通过 `create_internal_proposal_with_data` 创建内部提案，并在同一事务中写入 owner/data/meta（活跃提案限额由投票引擎统一检查）。
 7. 发 `DestroyProposed` 事件。
@@ -109,8 +111,8 @@ pub struct DestroyAction<Balance> {
 
 ## 5. 执行逻辑（`try_execute_destroy_from_action`）
 1. 校验投票引擎提案状态为 `STATUS_PASSED`。
-2. 从常量表查找机构账户并 decode 为 `AccountId`。
-3. 校验 `free_balance >= amount + minimum_balance`（ED 保护）。
+2. 重新读取 `institution_account` 的 CID/机构码正反索引，并与动作和投票提案绑定的 `actor_cid_number`、`execution_account` 复核。
+3. 校验具体 `institution_account` 的 `free_balance >= amount + minimum_balance`（ED 保护）。
 4. 调用 `Currency::slash` 执行销毁。
 5. 校验 `remaining.is_zero()` 确认全额销毁成功。
 6. 发 `DestroyExecuted` 事件。
@@ -136,8 +138,8 @@ pub struct DestroyAction<Balance> {
 4. slash 完整性校验：
    - `ensure!(remaining.is_zero())` 确保 slash 全额完成，防止静默部分销毁。
 
-5. panic 避免：
-   - 内置机构主账户解析返回 `Option`。
+5. 身份闭环：
+   - 创建、自动执行和统一重试都复核 CID、机构码、执行账户、提案 owner/kind/stage/callback scope，不从任一机构账户反推或替代机构身份。
 
 ---
 
@@ -179,7 +181,7 @@ pub struct DestroyAction<Balance> {
 cargo test --offline --manifest-path citizenchain/runtime/governance/resolution-destro/Cargo.toml -- --nocapture
 ```
 
-当前结果：14 passed
+当前结果：15 passed
 
 覆盖重点：
 - NRC/PRC/PRB 三种组织达阈值自动执行销毁
@@ -192,7 +194,7 @@ cargo test --offline --manifest-path citizenchain/runtime/governance/resolution-
 - 重复投票由投票引擎拒绝
 - 非管理员不能触发投票引擎 retry
 - 无效机构返回 None
-- mock runtime 已跟进投票引擎新契约：`MaxAdminsPerInstitution` 与管理员快照 `get_admin_list`
+- mock runtime 已跟进投票引擎新契约：`MaxAdminsPerInstitution` 与 CID 管理员快照 `get_institution_admins`
 
 ---
 

@@ -110,15 +110,15 @@ struct MLawVersionLabel {
     title_en: Option<Vec<u8>>,
 }
 
-/// 解码 `Law`(到 status 即停)。houses = `Vec<(InstitutionCode=[u8;4], AccountId=[u8;32])>`,
-/// 与链端 `HousesOf` 一致;tier/status 为枚举变体索引(u8)。守卫据此校验宪法元数据不变式。
+/// 解码 `Law`(到 status 即停)。houses = `Vec<CidNumber>`,机构账户不参与身份表达；
+/// tier/status 为枚举变体索引(u8)。守卫据此校验宪法元数据不变式。
 #[derive(Decode)]
 #[allow(dead_code)] // law_id 占位保持字段序。
 struct MLawHead {
     law_id: u64,
     tier: u8,
     scope_code: u32,
-    houses: Vec<([u8; 4], [u8; 32])>,
+    houses: Vec<Vec<u8>>,
     effective_version: Option<u32>,
     latest_version: u32,
     pending_version: Option<u32>,
@@ -417,7 +417,7 @@ pub enum GuardError {
 pub struct ImmutableReference {
     articles: BTreeMap<u32, Vec<u8>>,
     core_articles: BTreeMap<u32, Vec<u8>>,
-    houses: Vec<([u8; 4], [u8; 32])>,
+    houses: Vec<Vec<u8>>,
     manifest: Vec<u8>,
 }
 
@@ -873,7 +873,7 @@ mod tests {
         latest_version: u32,
         pending_version: Option<u32>,
         status: u8,
-        houses: Vec<([u8; 4], [u8; 32])>,
+        houses: Vec<Vec<u8>>,
     ) -> Vec<u8> {
         let mut bytes = Vec::new();
         CONSTITUTION_LAW_ID.encode_to(&mut bytes); // law_id
@@ -887,11 +887,7 @@ mod tests {
         bytes
     }
 
-    fn law_scale_full(
-        latest_version: u32,
-        status: u8,
-        houses: Vec<([u8; 4], [u8; 32])>,
-    ) -> Vec<u8> {
+    fn law_scale_full(latest_version: u32, status: u8, houses: Vec<Vec<u8>>) -> Vec<u8> {
         let (effective_version, pending_version) = if status == LAW_STATUS_PENDING {
             (
                 (latest_version > 1).then_some(latest_version - 1),
@@ -1353,7 +1349,7 @@ mod tests {
         CONSTITUTION_LAW_ID.encode_to(&mut law);
         1u8.encode_to(&mut law); // tier = National
         0u32.encode_to(&mut law);
-        Vec::<([u8; 4], [u8; 32])>::new().encode_to(&mut law);
+        Vec::<Vec<u8>>::new().encode_to(&mut law);
         Some(2u32).encode_to(&mut law);
         2u32.encode_to(&mut law);
         Option::<u32>::None.encode_to(&mut law);
@@ -1384,7 +1380,7 @@ mod tests {
     #[test]
     fn rejects_when_houses_changed() {
         // houses 改为非空(与创世空 houses 不一致)。
-        let law = law_scale_full(2, 1, vec![(*b"NLG\0", [9u8; 32])]);
+        let law = law_scale_full(2, 1, vec![b"LN001-NLG0G-000000001-2026".to_vec()]);
         assert_eq!(
             check_with_override(2, storage_key::law(CONSTITUTION_LAW_ID), law),
             Err(GuardError::ConstitutionHousesChanged)

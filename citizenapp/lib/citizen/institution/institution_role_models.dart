@@ -83,15 +83,10 @@ class InstitutionAdminAssignment {
 /// admins pallet 的机构管理员账户值；只含钱包集合，不含岗位资料。
 class InstitutionAdminAccountStorage {
   const InstitutionAdminAccountStorage({
-    required this.cidNumber,
     required this.institutionCode,
     required this.admins,
-    required this.status,
   });
 
-  final String cidNumber;
   final String institutionCode;
   final List<String> admins;
-  final int status;
-  bool get isActive => status == 1;
 }

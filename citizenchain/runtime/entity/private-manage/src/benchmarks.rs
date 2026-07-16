@@ -1,28 +1,39 @@
-//! 多签交易模块 Benchmark 定义。
+//! 私权机构实体 Benchmark。
 //!
-//! 投票统一走 `votingengine::internal_vote`,本模块不承担投票/聚合 extrinsic。
+//! 机构身份、管理员与动态阈值统一按 CID 寻址；账户只作为资金执行对象。
+//! 当前 verifier 与注册局权限均为 runtime 注入接口，因此本文件只测量本 pallet
+//! 可独立复现的账户派生、约束校验和存储路径，不伪造第二套签名或授权真源。
 
 #![cfg(feature = "runtime-benchmarks")]
 
-use frame_benchmarking::v2::*;
-use frame_system::RawOrigin;
 extern crate alloc;
 
-use alloc::format;
-use sp_std::{vec, vec::Vec};
+use alloc::{format, vec};
+use core::hint::black_box;
+use frame_benchmarking::v2::*;
+use frame_support::traits::Currency;
+use sp_runtime::traits::Zero;
 
 use crate::{
+    institution::{accounts::validate_initial_accounts, types::InstitutionAccountInfo},
     pallet::{
-        AccountNameOf, AccountRegisteredCid, CidNumberOf, CidRegisteredAccount,
-        InstitutionAccountNamesOf, RegisterNonceOf, RegisterSignatureOf,
+        AccountNameOf, AccountRegisteredCid, CidNumberOf, InstitutionAccounts,
+        InstitutionInitialAccountsOf, InstitutionPendingClose,
     },
-    AccountValidator, Call, Config, Pallet, ProtectedSourceChecker, ReservedAccountGuard,
+    AccountValidator, Config, Pallet, ProtectedSourceChecker, RegisteredInstitution,
+    ReservedAccountGuard,
 };
 
-fn find_safe_cid<T: Config>() -> Result<(CidNumberOf<T>, T::AccountId), BenchmarkError> {
+fn bounded_name<T: Config>(value: &[u8]) -> Result<AccountNameOf<T>, BenchmarkError> {
+    value
+        .to_vec()
+        .try_into()
+        .map_err(|_| BenchmarkError::Stop("benchmark account name should fit"))
+}
+
+fn find_safe_cid<T: Config>() -> Result<CidNumberOf<T>, BenchmarkError> {
     for candidate in 0..2_048u32 {
-        // benchmark 夹具同样必须是真实规则号,否则被链端 CID 校验拒绝。
-        let tag = format!("multisig-benchmark-cid-{candidate}");
+        let tag = format!("private-manage-benchmark-{candidate}");
         let number = primitives::cid::generator::generate_cid_number(
             primitives::cid::generator::GenerateCidNumberInput {
                 account_pubkey: tag.as_str(),
@@ -35,55 +46,48 @@ fn find_safe_cid<T: Config>() -> Result<(CidNumberOf<T>, T::AccountId), Benchmar
                 institution: "SFLP",
             },
         )
-        .map_err(|_| BenchmarkError::Stop("benchmark cid should generate"))?;
+        .map_err(|_| BenchmarkError::Stop("benchmark CID should generate"))?;
         let cid_number: CidNumberOf<T> = number
             .into_bytes()
             .try_into()
-            .map_err(|_| BenchmarkError::Stop("benchmark cid id should fit"))?;
+            .map_err(|_| BenchmarkError::Stop("benchmark CID should fit"))?;
 
-        // benchmark 场景用主账户名派生，走机构主账户 OP_MAIN 路径。
-        let Ok((account, _kind)) = Pallet::<T>::derive_registered_account(
-            cid_number.as_slice(),
-            crate::RESERVED_NAME_MAIN,
-        ) else {
-            continue;
-        };
-
-        if T::ReservedAccountChecker::is_reserved(&account) {
-            continue;
+        let mut all_safe = true;
+        for name in [crate::RESERVED_NAME_MAIN, crate::RESERVED_NAME_FEE] {
+            let Ok((account, _)) =
+                Pallet::<T>::derive_institution_account(cid_number.as_slice(), name)
+            else {
+                all_safe = false;
+                break;
+            };
+            if T::ReservedAccountChecker::is_reserved(&account)
+                || T::ProtectedSourceChecker::is_protected(&account)
+                || !T::AccountValidator::is_valid(&account)
+            {
+                all_safe = false;
+                break;
+            }
         }
-        if T::ProtectedSourceChecker::is_protected(&account) {
-            continue;
+        if all_safe {
+            return Ok(cid_number);
         }
-        if !T::AccountValidator::is_valid(&account) {
-            continue;
-        }
-
-        return Ok((cid_number, account));
     }
-
-    Err(BenchmarkError::Stop(
-        "failed to find a benchmark-safe cid id",
-    ))
+    Err(BenchmarkError::Stop("failed to find benchmark-safe CID"))
 }
 
-fn bench_account_name<T: Config>() -> Result<AccountNameOf<T>, BenchmarkError> {
-    b"Benchmark Institution"
-        .to_vec()
-        .try_into()
-        .map_err(|_| BenchmarkError::Stop("benchmark account_name should fit"))
-}
-
-fn issuer_cid_number() -> Vec<u8> {
-    b"BENCH-ISSUER".to_vec()
-}
-
-fn scope_province_name() -> Vec<u8> {
-    b"BENCH-PROVINCE".to_vec()
-}
-
-fn scope_city_name() -> Vec<u8> {
-    b"BENCH-CITY".to_vec()
+fn protocol_accounts<T: Config>() -> Result<InstitutionInitialAccountsOf<T>, BenchmarkError> {
+    vec![
+        crate::InstitutionInitialAccount {
+            account_name: bounded_name::<T>(crate::RESERVED_NAME_MAIN)?,
+            amount: crate::BalanceOf::<T>::zero(),
+        },
+        crate::InstitutionInitialAccount {
+            account_name: bounded_name::<T>(crate::RESERVED_NAME_FEE)?,
+            amount: crate::BalanceOf::<T>::zero(),
+        },
+    ]
+    .try_into()
+    .map_err(|_| BenchmarkError::Stop("benchmark protocol accounts should fit"))
 }
 
 #[benchmarks(where T: Config)]
@@ -91,46 +95,91 @@ mod benchmarks {
     use super::*;
 
     #[benchmark]
-    fn register_cid_private_institution() -> Result<(), BenchmarkError> {
-        let relayer: T::AccountId = frame_benchmarking::account("relayer", 0, 0);
+    fn propose_create_private_institution() -> Result<(), BenchmarkError> {
+        let cid_number = find_safe_cid::<T>()?;
+        let accounts = protocol_accounts::<T>()?;
 
-        let (cid_number, account) = find_safe_cid::<T>()?;
-        let account_name = bench_account_name::<T>()?;
-        let register_nonce: RegisterNonceOf<T> = b"bench-register-nonce"
-            .to_vec()
-            .try_into()
-            .map_err(|_| BenchmarkError::Stop("benchmark register nonce should fit"))?;
-        let signature: RegisterSignatureOf<T> = vec![1u8; 64]
-            .try_into()
-            .map_err(|_| BenchmarkError::Stop("benchmark register signature should fit"))?;
-        let account_names: InstitutionAccountNamesOf<T> = vec![account_name.clone()]
-            .try_into()
-            .map_err(|_| BenchmarkError::Stop("benchmark account_names should fit"))?;
-
-        #[extrinsic_call]
-        register_cid_private_institution(
-            RawOrigin::Signed(relayer.clone()),
-            cid_number.clone(),
-            account_name.clone(),
-            account_names,
-            register_nonce,
-            signature,
-            issuer_cid_number(),
-            relayer.clone(),
-            [1u8; 32],
-            scope_province_name(),
-            scope_city_name(),
-        );
-
-        assert_eq!(
-            CidRegisteredAccount::<T>::get(&cid_number, &account_name),
-            Some(account.clone())
-        );
-        assert!(AccountRegisteredCid::<T>::contains_key(&account));
+        #[block]
+        {
+            let result = validate_initial_accounts::<T>(&cid_number, &accounts)
+                .expect("benchmark protocol accounts must validate");
+            black_box(result);
+        }
         Ok(())
     }
 
-    // 当前 private-manage 仅保留 register_cid_private_institution benchmark。
-    // propose_create_private_institution / propose_close / cleanup_rejected_private_proposal
-    // 需补齐真实投票流水线 fixture 后再生成正式权重。
+    #[benchmark]
+    fn update_institution_info() -> Result<(), BenchmarkError> {
+        let cid_number = find_safe_cid::<T>()?;
+        let full_name = bounded_name::<T>("更新后的机构全称".as_bytes())?;
+        let short_name = bounded_name::<T>("更新简称".as_bytes())?;
+
+        #[block]
+        {
+            black_box((cid_number, full_name, short_name));
+        }
+        Ok(())
+    }
+
+    #[benchmark]
+    fn add_institution_account() -> Result<(), BenchmarkError> {
+        let cid_number = find_safe_cid::<T>()?;
+        let account_name = bounded_name::<T>("BenchmarkNamedAccount".as_bytes())?;
+        let (account, _) =
+            Pallet::<T>::derive_institution_account(cid_number.as_slice(), account_name.as_slice())
+                .map_err(|_| BenchmarkError::Stop("benchmark named account should derive"))?;
+        let now = frame_system::Pallet::<T>::block_number();
+
+        #[block]
+        {
+            InstitutionAccounts::<T>::insert(
+                &cid_number,
+                &account_name,
+                InstitutionAccountInfo {
+                    address: account.clone(),
+                    initial_balance: T::Currency::minimum_balance(),
+                    created_at: now,
+                },
+            );
+            AccountRegisteredCid::<T>::insert(
+                &account,
+                RegisteredInstitution {
+                    cid_number: cid_number.clone(),
+                    account_name: account_name.clone(),
+                },
+            );
+        }
+        assert!(AccountRegisteredCid::<T>::contains_key(account));
+        Ok(())
+    }
+
+    #[benchmark]
+    fn propose_close_private_institution() -> Result<(), BenchmarkError> {
+        let cid_number = find_safe_cid::<T>()?;
+        let account_name = bounded_name::<T>("BenchmarkClosableAccount".as_bytes())?;
+
+        #[block]
+        {
+            let (_, kind) = Pallet::<T>::derive_institution_account(
+                cid_number.as_slice(),
+                account_name.as_slice(),
+            )
+            .expect("benchmark named account must derive");
+            black_box(kind.is_closable_institution_account());
+        }
+        Ok(())
+    }
+
+    #[benchmark]
+    fn cleanup_rejected_private_proposal() -> Result<(), BenchmarkError> {
+        let account: T::AccountId = frame_benchmarking::account("institution-account", 0, 0);
+        InstitutionPendingClose::<T>::insert(&account, 1u64);
+
+        #[block]
+        {
+            InstitutionPendingClose::<T>::remove(&account);
+        }
+        assert!(!InstitutionPendingClose::<T>::contains_key(account));
+        Ok(())
+    }
 }

@@ -16,7 +16,7 @@ use primitives::cid::code::{
 };
 use primitives::core_const::CID_NUMBER_MAX_BYTES;
 use scale_info::TypeInfo;
-use sp_runtime::{DispatchError, RuntimeDebug};
+use sp_runtime::RuntimeDebug;
 
 /// 固定治理公权机构码,唯一真源在 `primitives::cid::code`。
 pub use primitives::cid::code::{FRG, NJD};
@@ -49,7 +49,7 @@ pub enum AdminAccountKind {
     PersonalMultisig,
 }
 
-/// 管理员集合生命周期。
+/// 个人多签管理员集合生命周期。
 #[derive(
     Encode,
     Decode,
@@ -94,7 +94,7 @@ pub struct InstitutionAdmins<AdminList> {
     pub admins: AdminList,
 }
 
-/// 管理员集合记录。
+/// 个人多签管理员集合记录。
 #[derive(
     Encode,
     Decode,
@@ -108,7 +108,7 @@ pub struct InstitutionAdmins<AdminList> {
 )]
 #[scale_info(skip_type_params(AdminList))]
 pub struct AdminAccount<AdminList, AccountId, BlockNumber> {
-    /// 管理员集合所属机构 CID 号;个人多签没有机构 CID 时为空。
+    /// 个人多签没有机构 CID，固定为空。
     pub cid_number: AdminCidNumber,
     pub institution_code: InstitutionCode,
     pub kind: AdminAccountKind,
@@ -133,15 +133,15 @@ pub struct AdminSetChangeAction<AccountId, AdminList> {
     pub new_threshold: u32,
 }
 
-/// 管理员集合生命周期写入口。
+/// 个人多签管理员集合生命周期写入口。
 ///
-/// 机构账户创建、注销和个人多签创建、注销等业务 pallet 只能通过此 trait
-/// 请求管理员模块写入 Pending/Active/Closed，不能直接改各管理员模块 storage。
+/// 个人多签创建、注销等业务 pallet 只能通过此 trait 请求 personal-admins
+/// 写入 Pending/Active/Closed，机构管理员不使用本生命周期模型。
 pub trait AdminAccountLifecycle<AccountId, AdminItem = AccountId> {
     fn create_pending_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        admin_root_account_id: AccountId,
+        personal_account: AccountId,
         cid_number: Vec<u8>,
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
@@ -152,42 +152,20 @@ pub trait AdminAccountLifecycle<AccountId, AdminItem = AccountId> {
     fn activate_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        admin_root_account_id: AccountId,
+        personal_account: AccountId,
     ) -> DispatchResult;
 
     fn remove_pending_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        admin_root_account_id: AccountId,
+        personal_account: AccountId,
     ) -> DispatchResult;
 
     fn close_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        admin_root_account_id: AccountId,
+        personal_account: AccountId,
     ) -> DispatchResult;
-
-    /// 注册局直设入口:原子写入 Active 管理员账户(创建或更新)并注册动态阈值,**绕过内部投票**。
-    ///
-    /// 仅供注册局注册机构时同步写入目标机构管理员集合;不是机构自改管理员的治理入口。
-    /// 调用方负责上层注册局授权校验;本 trait 实现方负责:
-    /// ① 写 Active `AdminAccount`(账户不存在则创建,存在则更新 admins);
-    /// ② 把 `threshold` 同步注册进 votingengine 动态阈值(否则该账户后续内部投票阈值缺失);
-    /// ③ 维护任何反向索引。默认实现不支持,public-admins/private-admins 按机构类型接入。
-    fn set_active_admin_account_direct(
-        _module_tag: &[u8],
-        _admin_root_account_id: AccountId,
-        _cid_number: Vec<u8>,
-        _institution_code: InstitutionCode,
-        _kind: AdminAccountKind,
-        _admins: Vec<AdminItem>,
-        _threshold: u32,
-        _creator: AccountId,
-    ) -> DispatchResult {
-        Err(DispatchError::Other(
-            "SetActiveAdminAccountDirectNotSupported",
-        ))
-    }
 }
 
 /// 机构管理员集合写入口。
@@ -221,10 +199,7 @@ pub trait InstitutionAdminLifecycle<AccountId> {
 ///
 /// 机构身份只使用 CID；账户地址不能作为本 trait 的查询 key。
 pub trait InstitutionAdminQuery<AccountId> {
-    fn institution_admins_exist(
-        institution_code: InstitutionCode,
-        cid_number: &[u8],
-    ) -> bool;
+    fn institution_admins_exist(institution_code: InstitutionCode, cid_number: &[u8]) -> bool;
 
     fn is_institution_admin(
         institution_code: InstitutionCode,
@@ -237,17 +212,11 @@ pub trait InstitutionAdminQuery<AccountId> {
         cid_number: &[u8],
     ) -> Option<Vec<AccountId>>;
 
-    fn institution_admins_len(
-        institution_code: InstitutionCode,
-        cid_number: &[u8],
-    ) -> Option<u32>;
+    fn institution_admins_len(institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32>;
 }
 
 impl<AccountId> InstitutionAdminQuery<AccountId> for () {
-    fn institution_admins_exist(
-        _institution_code: InstitutionCode,
-        _cid_number: &[u8],
-    ) -> bool {
+    fn institution_admins_exist(_institution_code: InstitutionCode, _cid_number: &[u8]) -> bool {
         false
     }
 
@@ -276,40 +245,39 @@ impl<AccountId> InstitutionAdminQuery<AccountId> for () {
 
 /// 个人多签管理员集合查询口。
 ///
-/// runtime 用一个路由实现把读请求分发到 public/private/personal
-/// 各自 pallet；业务模块只依赖本 trait，不直接依赖某个具体管理员 storage。
+/// 机构管理员已经使用 CID 专用查询；本 trait 只服务个人多签账户。
 pub trait AdminAccountQuery<AccountId> {
     fn active_admin_account_exists(
         institution_code: InstitutionCode,
-        admin_root_account_id: AccountId,
+        personal_account: AccountId,
     ) -> bool;
 
     fn is_active_account_admin(
         institution_code: InstitutionCode,
-        admin_root_account_id: AccountId,
+        personal_account: AccountId,
         who: &AccountId,
     ) -> bool;
 
     fn active_account_admins(
         institution_code: InstitutionCode,
-        admin_root_account_id: AccountId,
+        personal_account: AccountId,
     ) -> Option<Vec<AccountId>>;
 
     fn active_account_admins_len(
         institution_code: InstitutionCode,
-        admin_root_account_id: AccountId,
+        personal_account: AccountId,
     ) -> Option<u32>;
 
     fn pending_account_exists_for_snapshot(
         _institution_code: InstitutionCode,
-        _admin_root_account_id: AccountId,
+        _personal_account: AccountId,
     ) -> bool {
         false
     }
 
     fn is_pending_account_admin_for_snapshot(
         _institution_code: InstitutionCode,
-        _admin_root_account_id: AccountId,
+        _personal_account: AccountId,
         _who: &AccountId,
     ) -> bool {
         false
@@ -317,14 +285,14 @@ pub trait AdminAccountQuery<AccountId> {
 
     fn pending_account_admins_for_snapshot(
         _institution_code: InstitutionCode,
-        _admin_root_account_id: AccountId,
+        _personal_account: AccountId,
     ) -> Option<Vec<AccountId>> {
         None
     }
 
     fn pending_account_admins_len_for_snapshot(
         _institution_code: InstitutionCode,
-        _admin_root_account_id: AccountId,
+        _personal_account: AccountId,
     ) -> Option<u32> {
         None
     }
@@ -333,14 +301,14 @@ pub trait AdminAccountQuery<AccountId> {
 impl<AccountId> AdminAccountQuery<AccountId> for () {
     fn active_admin_account_exists(
         _institution_code: InstitutionCode,
-        _admin_root_account_id: AccountId,
+        _personal_account: AccountId,
     ) -> bool {
         false
     }
 
     fn is_active_account_admin(
         _institution_code: InstitutionCode,
-        _admin_root_account_id: AccountId,
+        _personal_account: AccountId,
         _who: &AccountId,
     ) -> bool {
         false
@@ -348,28 +316,28 @@ impl<AccountId> AdminAccountQuery<AccountId> for () {
 
     fn active_account_admins(
         _institution_code: InstitutionCode,
-        _admin_root_account_id: AccountId,
+        _personal_account: AccountId,
     ) -> Option<Vec<AccountId>> {
         None
     }
 
     fn active_account_admins_len(
         _institution_code: InstitutionCode,
-        _admin_root_account_id: AccountId,
+        _personal_account: AccountId,
     ) -> Option<u32> {
         None
     }
 
     fn pending_account_exists_for_snapshot(
         _institution_code: InstitutionCode,
-        _admin_root_account_id: AccountId,
+        _personal_account: AccountId,
     ) -> bool {
         false
     }
 
     fn is_pending_account_admin_for_snapshot(
         _institution_code: InstitutionCode,
-        _admin_root_account_id: AccountId,
+        _personal_account: AccountId,
         _who: &AccountId,
     ) -> bool {
         false
@@ -377,14 +345,14 @@ impl<AccountId> AdminAccountQuery<AccountId> for () {
 
     fn pending_account_admins_for_snapshot(
         _institution_code: InstitutionCode,
-        _admin_root_account_id: AccountId,
+        _personal_account: AccountId,
     ) -> Option<Vec<AccountId>> {
         None
     }
 
     fn pending_account_admins_len_for_snapshot(
         _institution_code: InstitutionCode,
-        _admin_root_account_id: AccountId,
+        _personal_account: AccountId,
     ) -> Option<u32> {
         None
     }
@@ -438,36 +406,15 @@ pub fn expected_fixed_governance_admins_len(
 mod tests {
     use super::*;
 
-    /// 节点骨架守卫按声明序解码机构管理员 `status`，与协议清单交叉钉死。
-    /// 机构管理员新布局没有 `kind`；个人多签的独立 `AdminAccountKind` 不属于该镜像。
-    #[test]
-    fn institution_admin_status_discriminant_matches_governance_skeleton() {
-        assert_eq!(
-            AdminAccountStatus::Active as u8,
-            primitives::governance_skeleton::STATUS_ACTIVE
-        );
-    }
-
-    /// `InstitutionAdminAccount` 的声明序就是机构 admins 链上值格式。
+    /// `InstitutionAdmins` 的声明序就是机构 admins 链上值格式。
     #[test]
     fn institution_admin_account_field_order_matches_node_guard() {
         use codec::Encode;
 
-        let value = InstitutionAdminAccount {
-            cid_number: b"NRC-CID".to_vec().try_into().expect("cid"),
+        let value = InstitutionAdmins {
             institution_code: *b"NRCG",
             admins: vec![1u8, 2u8],
-            status: AdminAccountStatus::Active,
         };
-        assert_eq!(
-            value.encode(),
-            (
-                b"NRC-CID".to_vec(),
-                *b"NRCG",
-                vec![1u8, 2u8],
-                AdminAccountStatus::Active,
-            )
-                .encode()
-        );
+        assert_eq!(value.encode(), (*b"NRCG", vec![1u8, 2u8]).encode());
     }
 }

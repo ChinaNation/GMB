@@ -90,16 +90,16 @@ citizenapp/test/governance/admins-change/
 - 公权、私权、非法人及固定治理机构的管理员变化只能由 entity 治理结果从有效岗位任职派生；CitizenApp 不构造对应管理员集合变更调用。
 - `new_threshold` 是载荷必填字段，端上和链端按同一字节结构构造、解析和签名。
 - 个人多签显示动态阈值输入框，端上前置校验：`threshold * 2 > admins_len && threshold <= admins_len`。
-- 个人多签动态阈值由 `InternalVote.ActiveDynamicThresholds` 保存；机构治理阈值不属于本页面。
+- 个人多签动态阈值由 `InternalVote.ActivePersonalThresholds[personal_account]` 保存；机构阈值按 CID 使用 `ActiveInstitutionThresholds[cid_number]`，不属于本页面。
 - QR_V1 只携带 `b.a + b.d`；扫码端从 `b.d` 解码出的展示字段必须与冷钱包 decoder 逐项一致：`institution_code / subject / admins / new_threshold`。
 
 ## 管理员激活
 
 管理员激活服务位于 `/Users/rhett/GMB/citizenapp/lib/citizen/proposal/admins-change/services/admin_activation_service.dart`。机构管理员列表和提案上下文只引用该服务，不再从 `lib/institution/` 承载激活逻辑。
 
-激活记录使用 `activated_admins_v3`，只保存 `identityKey / accountIdHex / institutionCode / kind / pubkeyHex / activatedAtMs`，查询和清理都按 `accountIdHex + pubkeyHex` 精确匹配。
+激活记录使用 `activated_institution_admins_v1`，只保存 `cid_number / institution_code / kind / pubkey_hex / activated_at_ms`；查询、去重和清理统一按 `cid_number + pubkey_hex` 精确匹配，不读取旧账户主键记录。
 
-激活 QR 与 node 桌面端统一使用 QR_V1 `a=5 activate_admin_account`；payload 前缀为 `GMB || 0x18`，扫码端解码展示字段为 `institution_code / subject / pubkey`。
+激活 QR 与 node 桌面端统一使用 QR_V1 `a=5 activate_admin_account`；payload 前缀为 `GMB || 0x18`，机构主体字段固定为 `cid_number`，扫码端解码展示字段为 `institution_code / cid_number / pubkey`。
 
 ## 管理员与岗位展示
 
@@ -110,8 +110,8 @@ citizenapp/test/governance/admins-change/
 ## 2026-05-10 修复记录
 
 - citizenapp 所有 admins-change 查询、激活、页面跳转入口已改为 `AdminAccountIdentity`。
-- 个人多签、机构账户、治理机构三类主体在 App 侧明确区分；`注册机构归属关系(0x02)` 不进入管理员更换。
+- 个人多签与机构 CID 两类主体在 App 侧明确区分；机构具体账户不进入管理员集合变更或激活主键。
 - 机构账户发现、提案上下文和本地多签实体都会携带 `adminSubjectInstitutionCode`（CID 机构码）；转账、管理员更换和投票匹配按机构账户码（`is_institution_code`）进入，不再把机构账户当作个人多签码（`is_personal_code`）。
-- 管理员更换成功后按 `accountIdHex` 清理缓存；投票执行返回和详情刷新仍可清理对应 identity。
+- 管理员更换成功后按个人多签 `personal_account` 清理缓存；机构管理员查询和激活缓存只按 `cid_number` 管理。
 - 通用 `OrgType.multisig` 文案改为“多签账户”，具体“个人多签 / 机构账户”由 admins-change identity 展示。
 - 2026-06-27：管理员更换代码目录已迁到 `lib/citizen/proposal/admins-change/`；测试目录暂保留 `test/governance/admins-change/`，用于覆盖 QR call data、AdminAccounts storage key、非法人显式 kind 路由和激活缓存。

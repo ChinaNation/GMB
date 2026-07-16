@@ -4,7 +4,7 @@
 //!
 //! - **Plain FT(同质化代币,无锚定声明)**:发行人 = CID 注册机构 + personal-admins 个人多签
 //! - **GMB 唯一计费**:创建一次性收 1000 GMB(`primitives::fee_policy::ONCHAIN_ASSET_CREATE_FEE`)
-//! - **NRC 强制 monitor**:链端通过 `NrcMainAccountProvider` 全局解析,不在每条资产 storage 冗余
+//! - **NRC 强制 monitor**:交易以 NRC `actor_cid_number` 表达机构身份,不以主账户代替机构
 //! - **业务 InternalVote / 监管 JointVote**:沿用 unified_voting_entry phase 4 铁律,
 //!   业务 pallet 不暴露 wrapper extrinsic,前端直调 VotingEngine
 //!
@@ -17,7 +17,7 @@
 //!
 //! ## 协议位
 //!
-//! 用户代币用 `asset_id` 做资产编号；发行与治理账户统一使用机构多签 `AccountId`。
+//! 用户代币用 `asset_id` 做资产编号；机构治理只使用 CID，资产账户仅作执行上下文。
 //!
 //! ## 模块文件
 //!
@@ -60,6 +60,7 @@ pub const MODULE_TAG: &[u8] = b"onc-iss";
 #[allow(dead_code)]
 pub mod pallet {
     use crate::{types::OnchainAssetMeta, weights::WeightInfo};
+    use entity_primitives::InstitutionMultisigQuery;
     use frame_support::{
         pallet_prelude::*,
         traits::{Currency, ReservableCurrency},
@@ -67,6 +68,7 @@ pub mod pallet {
     use frame_system::ensure_signed;
     use frame_system::pallet_prelude::{BlockNumberFor, OriginFor};
     use sp_std::vec::Vec;
+    use votingengine::InternalAdminProvider;
 
     pub type BalanceOf<T> =
         <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -94,12 +96,8 @@ pub mod pallet {
                 Balance = BalanceOf<Self>,
             > + frame_support::traits::tokens::fungibles::Mutate<Self::AccountId>;
 
-        /// **NRC 治理账户(治理多签 main_account)** 提供器:
-        /// - monitor 5 动作的 origin 校验:proposer ∈ admins(NRC main account)
-        /// - 监管 JointVote 提案的发起人识别
-        ///
-        /// 与 `NrcFeeAccountProvider` 语义分离,不可复用同一 trait。
-        type NrcMainAccountProvider: NrcMainAccountProvider<Self::AccountId>;
+        /// 机构账户归属唯一查询；仅用于校验显式 `actor_cid_number + execution_account`。
+        type InstitutionQuery: entity_primitives::InstitutionMultisigQuery<Self::AccountId>;
 
         /// **NRC 费用账户(收创建费 fee_account)** 提供器:
         /// - 1000 GMB 创建费 unreserve 后 transfer 的目标
@@ -131,14 +129,6 @@ pub mod pallet {
         type WeightInfo: WeightInfo;
     }
 
-    /// **NRC 治理账户(治理多签 main_account)** trait。
-    ///
-    /// 实装位置:`runtime/src/configs/mod.rs::RuntimeNrcMainAccountProvider`,
-    /// 返回 `china_cb[0].main_account`。
-    pub trait NrcMainAccountProvider<AccountId> {
-        fn nrc_main_account() -> Option<AccountId>;
-    }
-
     /// **NRC 费用账户(收创建费 fee_account)** trait。
     ///
     /// 实装位置:`runtime/src/configs/mod.rs::RuntimeNrcAccountProvider`(复用既有,
@@ -152,7 +142,7 @@ pub mod pallet {
 
     /// asset_id → 资产元数据。
     ///
-    /// 用户代币的唯一权威 storage,记录 issuer / class / decimals / state。
+    /// 用户代币的唯一权威 storage，记录 actor CID、执行账户、class、decimals 和 state。
     #[pallet::storage]
     #[pallet::getter(fn asset_meta)]
     pub type AssetMetas<T: Config> = StorageMap<
@@ -251,7 +241,8 @@ pub mod pallet {
         /// 用户代币创建成功。
         AssetIssued {
             asset_id: OnchainAssetId,
-            issuer: T::AccountId,
+            actor_cid_number: votingengine::types::CidNumber,
+            execution_account: T::AccountId,
         },
         /// 用户代币增发。
         Minted {
@@ -331,8 +322,8 @@ pub mod pallet {
 
     #[pallet::error]
     pub enum Error<T> {
-        /// 发行机构账户不允许。
-        IssuerNotAllowed,
+        /// 发行机构 CID 或资产执行账户不允许。
+        InvalidInstitutionContext,
         /// decimals 越界(必须 0..=18)。
         DecimalsOutOfRange,
         /// 字段命中字符串黑名单(法币 / 锚定 / 权威 / 数字货币词)。
@@ -343,8 +334,6 @@ pub mod pallet {
         AssetClosed,
         /// 提案体解码失败。
         InvalidProposalData,
-        /// NRC 治理账户未配置。
-        NrcMainAccountMissing,
         /// NRC 费用账户未配置。
         NrcFeeAccountMissing,
         /// AssetId 溢出(u32 自增达到上限)。
@@ -357,7 +346,7 @@ pub mod pallet {
         BlacklistFull,
         /// 资产 class 暂不支持(第一期仅 Plain)。
         UnsupportedAssetClass,
-        /// propose origin 校验未通过(业务 ACTION:proposer 不在 issuer admins;
+        /// propose origin 校验未通过(业务 ACTION:proposer 不在 actor CID 的 admins;
         /// 监管 ACTION:proposer 不在 NRC admins)。
         ProposeOriginNotAllowed,
         /// metadata 不可修改(ADR-011 v2 第 5.7 节铁律)。
@@ -371,8 +360,8 @@ pub mod pallet {
     /// 业务 pallet 暴露 10 个 propose_X extrinsic(call_index 0..=4 业务 / 10..=14 监管)。
     ///
     /// 不暴露 execute/cancel wrapper(走 VotingEngine::retry_passed_proposal 9.4 / cancel_passed_proposal 9.5)。
-    /// 框架阶段每个 fn 只 ensure_signed + 占位 stub,业务逻辑(propose origin 校验 / reserve 押金 /
-    /// internal_vote::do_create_internal_proposal 等)在后续任务卡 A/B 实装。
+    /// 框架阶段先统一执行 CID 管理员授权；创建资产还强制校验 execution_account 属于同一 CID。
+    /// 资产业务执行、押金与投票创建仍由后续发行任务卡实装，但不得绕过本授权入口。
     ///
     /// call_index 5..=9 / 15+ 留洞不复用(永久 ABI)。
     #[pallet::call]
@@ -384,7 +373,8 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::issue())]
         pub fn propose_issue(
             origin: OriginFor<T>,
-            issuer_account: T::AccountId,
+            actor_cid_number: votingengine::types::CidNumber,
+            execution_account: T::AccountId,
             class: crate::types::AssetClass,
             name: BoundedVec<u8, T::MaxAssetNameLen>,
             symbol: BoundedVec<u8, T::MaxAssetSymbolLen>,
@@ -392,10 +382,17 @@ pub mod pallet {
             decimals: u8,
             initial_supply: BalanceOf<T>,
         ) -> DispatchResult {
-            let _who = ensure_signed(origin)?;
+            let who = ensure_signed(origin)?;
+            Self::ensure_actor_admin(&who, &actor_cid_number, false)?;
+            ensure!(
+                T::InstitutionQuery::lookup_cid(&execution_account).as_deref()
+                    == Some(actor_cid_number.as_slice()),
+                Error::<T>::InvalidInstitutionContext
+            );
             // 业务逻辑参数防 unused 警告(框架阶段)
             let _ = (
-                issuer_account,
+                actor_cid_number,
+                execution_account,
                 class,
                 name,
                 symbol,
@@ -404,11 +401,12 @@ pub mod pallet {
                 initial_supply,
             );
             // TODO: implement business logic (任务卡 A)
-            //   1. validation::ensure_issuer_allowed / ensure_decimals_in_range / ensure_class_supported
-            //   2. ensure proposer ∈ admins(issuer_account)
+            //   1. validation::ensure_institution_context / ensure_decimals_in_range / ensure_class_supported
+            //   2. ensure proposer ∈ admins(actor_cid_number)
             //   3. 字段过黑名单
             //   4. fee::reserve_creation_deposit(&who, proposal_id)
-            //   5. InternalVoteEngine::create_general_internal_proposal_with_data(MODULE_TAG + ACTION_OAIS + scale-encoded fields)
+            //   5. InternalVoteEngine::create_institution_proposal_with_data(
+            //      actor_cid_number + execution_account + MODULE_TAG/ACTION_OAIS 业务数据)
             Ok(())
         }
 
@@ -417,12 +415,14 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::mint())]
         pub fn propose_mint(
             origin: OriginFor<T>,
+            actor_cid_number: votingengine::types::CidNumber,
             asset_id: OnchainAssetId,
             to: T::AccountId,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
-            let _who = ensure_signed(origin)?;
-            let _ = (asset_id, to, amount);
+            let who = ensure_signed(origin)?;
+            Self::ensure_actor_admin(&who, &actor_cid_number, false)?;
+            let _ = (actor_cid_number, asset_id, to, amount);
             // TODO: implement business logic (任务卡 A)
             Ok(())
         }
@@ -432,12 +432,14 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::burn())]
         pub fn propose_burn(
             origin: OriginFor<T>,
+            actor_cid_number: votingengine::types::CidNumber,
             asset_id: OnchainAssetId,
             from: T::AccountId,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
-            let _who = ensure_signed(origin)?;
-            let _ = (asset_id, from, amount);
+            let who = ensure_signed(origin)?;
+            Self::ensure_actor_admin(&who, &actor_cid_number, false)?;
+            let _ = (actor_cid_number, asset_id, from, amount);
             // TODO: implement business logic (任务卡 A)
             Ok(())
         }
@@ -445,9 +447,14 @@ pub mod pallet {
         /// 关闭代币提案(发行方主动)。
         #[pallet::call_index(3)]
         #[pallet::weight(<T as Config>::WeightInfo::close())]
-        pub fn propose_close(origin: OriginFor<T>, asset_id: OnchainAssetId) -> DispatchResult {
-            let _who = ensure_signed(origin)?;
-            let _ = asset_id;
+        pub fn propose_close(
+            origin: OriginFor<T>,
+            actor_cid_number: votingengine::types::CidNumber,
+            asset_id: OnchainAssetId,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            Self::ensure_actor_admin(&who, &actor_cid_number, false)?;
+            let _ = (actor_cid_number, asset_id);
             // TODO: implement business logic (任务卡 A)
             Ok(())
         }
@@ -457,13 +464,15 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::transfer())]
         pub fn propose_transfer(
             origin: OriginFor<T>,
+            actor_cid_number: votingengine::types::CidNumber,
             asset_id: OnchainAssetId,
             from: T::AccountId,
             to: T::AccountId,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
-            let _who = ensure_signed(origin)?;
-            let _ = (asset_id, from, to, amount);
+            let who = ensure_signed(origin)?;
+            Self::ensure_actor_admin(&who, &actor_cid_number, false)?;
+            let _ = (actor_cid_number, asset_id, from, to, amount);
             // TODO: implement business logic (任务卡 A)
             Ok(())
         }
@@ -475,14 +484,16 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::monitor_freeze())]
         pub fn propose_monitor_freeze(
             origin: OriginFor<T>,
+            actor_cid_number: votingengine::types::CidNumber,
             asset_id: OnchainAssetId,
             who: T::AccountId,
             reason_hash: [u8; 32],
         ) -> DispatchResult {
-            let _proposer = ensure_signed(origin)?;
-            let _ = (asset_id, who, reason_hash);
+            let proposer = ensure_signed(origin)?;
+            Self::ensure_actor_admin(&proposer, &actor_cid_number, true)?;
+            let _ = (actor_cid_number, asset_id, who, reason_hash);
             // TODO: implement business logic (任务卡 B)
-            //   ensure proposer ∈ admins(NRC 机构多签 AccountId)
+            //   ensure proposer ∈ admins(actor_cid_number)
             //   JointVoteEngine::create_joint_proposal_with_data(...)
             Ok(())
         }
@@ -492,12 +503,14 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::monitor_unfreeze())]
         pub fn propose_monitor_unfreeze(
             origin: OriginFor<T>,
+            actor_cid_number: votingengine::types::CidNumber,
             asset_id: OnchainAssetId,
             who: T::AccountId,
             reason_hash: [u8; 32],
         ) -> DispatchResult {
-            let _proposer = ensure_signed(origin)?;
-            let _ = (asset_id, who, reason_hash);
+            let proposer = ensure_signed(origin)?;
+            Self::ensure_actor_admin(&proposer, &actor_cid_number, true)?;
+            let _ = (actor_cid_number, asset_id, who, reason_hash);
             // TODO: implement business logic (任务卡 B)
             Ok(())
         }
@@ -507,13 +520,15 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::monitor_confiscate())]
         pub fn propose_monitor_confiscate(
             origin: OriginFor<T>,
+            actor_cid_number: votingengine::types::CidNumber,
             asset_id: OnchainAssetId,
             who: T::AccountId,
             amount: BalanceOf<T>,
             reason_hash: [u8; 32],
         ) -> DispatchResult {
-            let _proposer = ensure_signed(origin)?;
-            let _ = (asset_id, who, amount, reason_hash);
+            let proposer = ensure_signed(origin)?;
+            Self::ensure_actor_admin(&proposer, &actor_cid_number, true)?;
+            let _ = (actor_cid_number, asset_id, who, amount, reason_hash);
             // TODO: implement business logic (任务卡 B)
             Ok(())
         }
@@ -523,14 +538,16 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::monitor_force_transfer())]
         pub fn propose_monitor_force_transfer(
             origin: OriginFor<T>,
+            actor_cid_number: votingengine::types::CidNumber,
             asset_id: OnchainAssetId,
             from: T::AccountId,
             to: T::AccountId,
             amount: BalanceOf<T>,
             reason_hash: [u8; 32],
         ) -> DispatchResult {
-            let _proposer = ensure_signed(origin)?;
-            let _ = (asset_id, from, to, amount, reason_hash);
+            let proposer = ensure_signed(origin)?;
+            Self::ensure_actor_admin(&proposer, &actor_cid_number, true)?;
+            let _ = (actor_cid_number, asset_id, from, to, amount, reason_hash);
             // TODO: implement business logic (任务卡 B)
             Ok(())
         }
@@ -540,12 +557,42 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::monitor_force_close())]
         pub fn propose_monitor_force_close(
             origin: OriginFor<T>,
+            actor_cid_number: votingengine::types::CidNumber,
             asset_id: OnchainAssetId,
             reason_hash: [u8; 32],
         ) -> DispatchResult {
-            let _proposer = ensure_signed(origin)?;
-            let _ = (asset_id, reason_hash);
+            let proposer = ensure_signed(origin)?;
+            Self::ensure_actor_admin(&proposer, &actor_cid_number, true)?;
+            let _ = (actor_cid_number, asset_id, reason_hash);
             // TODO: implement business logic (任务卡 B)
+            Ok(())
+        }
+    }
+
+    impl<T: Config> Pallet<T> {
+        /// 所有机构调用共用的外层授权入口；机构账户没有私钥，只有该 CID 的管理员签名。
+        fn ensure_actor_admin(
+            who: &T::AccountId,
+            actor_cid_number: &votingengine::types::CidNumber,
+            nrc_only: bool,
+        ) -> DispatchResult {
+            let actor_text = core::str::from_utf8(actor_cid_number.as_slice())
+                .map_err(|_| Error::<T>::InvalidInstitutionContext)?;
+            let institution_code =
+                votingengine::types::institution_code_from_cid_number(actor_text)
+                    .ok_or(Error::<T>::InvalidInstitutionContext)?;
+            ensure!(
+                !nrc_only || institution_code == votingengine::types::NRC,
+                Error::<T>::InvalidInstitutionContext
+            );
+            ensure!(
+                <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
+                    institution_code,
+                    actor_cid_number.as_slice(),
+                    who,
+                ),
+                Error::<T>::ProposeOriginNotAllowed
+            );
             Ok(())
         }
     }

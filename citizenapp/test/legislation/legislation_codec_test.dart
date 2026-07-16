@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:citizenapp/citizen/legislation/data/law_models.dart';
 import 'package:citizenapp/citizen/legislation/data/legislation_codec.dart';
+import 'package:citizenapp/votingengine/legislation-vote/legislation_vote_query_service.dart';
 
 /// 单字节 compact(仅 len<64;金标向量足够)。
 int _c(int n) => n << 2;
@@ -36,13 +37,13 @@ void main() {
   });
 
   test('decodeLaw: 宪法主记录', () {
+    const houseCid = 'LN001-NLG0G-123456789-2026';
     final raw = Uint8List.fromList([
       ..._u64(0), // law_id
       0x00, // tier=Constitution
       ..._u32(0), // scope_code=0
       _c(1), // houses len=1
-      0x4E, 0x4C, 0x47, 0x00, // NLG\0
-      ...List.filled(32, 0xAB), // account
+      ..._s(houseCid), // houses 只保存机构 CID
       ..._someU32(1), // effective_version
       ..._u32(1), // latest_version
       0x00, // pending_version=None
@@ -53,8 +54,7 @@ void main() {
     expect(law.tier, LawTier.constitution);
     expect(law.scopeCode, 0);
     expect(law.houses.length, 1);
-    expect(law.houses.first.institutionCode, 'NLG');
-    expect(law.houses.first.accountHex, 'ab' * 32);
+    expect(law.houses.first, houseCid);
     expect(law.effectiveVersion, 1);
     expect(law.latestVersion, 1);
     expect(law.pendingVersion, isNull);
@@ -89,7 +89,7 @@ void main() {
       _c(1), // clauses len=1
       ..._u32(1), ..._s('款'), 0x00, // clause number/text/text_en
       ...List.filled(32, 0), // content_hash
-      0x03, // vote_type=Special
+      0x04, // vote_type=Special
       ..._u64(0), // proposal_id
       ..._u64(10), // published_at
       ..._u64(20), // effective_at
@@ -99,7 +99,7 @@ void main() {
     expect(v.version, 1);
     expect(v.title, '法');
     expect(v.titleEn, isNull);
-    expect(v.voteType, 3);
+    expect(v.voteTypeEnum, VoteType.special);
     expect(v.publishedAt, 10);
     expect(v.effectiveAt, 20);
     expect(v.chapters.length, 1);
@@ -121,5 +121,75 @@ void main() {
     final label = decodeLawVersionLabel(raw);
     expect(label.title, '创世版');
     expect(label.titleEn, 'Genesis Edition');
+  });
+
+  test('RepresentativeMetas 路线只解码机构 CID', () {
+    const firstCid = 'LN001-NLG0G-123456789-2026';
+    const secondCid = 'LN001-NSE0G-987654321-2026';
+    final raw = Uint8List.fromList([
+      0x01, // Sequential
+      _c(2),
+      ..._s(firstCid),
+      ..._s(secondCid),
+      ..._u32(1), // current_body
+      0x02, // Special rule
+      0x01, // Legislation procedure
+    ]);
+    final meta = LegislationVoteQueryService.debugDecodeRepresentativeMeta(raw);
+    expect(meta, isNotNull);
+    expect(meta!.sequential, isTrue);
+    expect(meta.bodies, [firstCid, secondCid]);
+    expect(meta.currentBody, 1);
+    expect(meta.rule, 2);
+    expect(meta.procedure, 1);
+  });
+
+  test('LegislationMetas 行政与立法院主体只解码机构 CID', () {
+    const executiveCid = 'LN001-NED0G-123456789-2026';
+    const legislatureCid = 'LN001-NLG0G-987654321-2026';
+    final raw = Uint8List.fromList([
+      ..._s(executiveCid),
+      0x01,
+      ..._s(legislatureCid),
+      0x01,
+    ]);
+    final meta = LegislationVoteQueryService.debugDecodeLegislationMeta(raw);
+    expect(meta, isNotNull);
+    expect(meta!.executiveCidNumber, executiveCid);
+    expect(meta.legislatureCidNumber, legislatureCid);
+    expect(meta.needsGuard, isTrue);
+  });
+
+  test('立法 CID 路由拒绝旧 code+AccountId 布局和尾随字节', () {
+    final oldRoute = Uint8List.fromList([
+      0x00,
+      0x4e,
+      0x4c,
+      0x47,
+      0x00,
+      ...List.filled(32, 0xab),
+      ..._u32(0),
+      0x00,
+      0x00,
+    ]);
+    expect(
+      LegislationVoteQueryService.debugDecodeRepresentativeMeta(oldRoute),
+      isNull,
+    );
+
+    const houseCid = 'LN001-NLG0G-123456789-2026';
+    final lawWithTrailingByte = Uint8List.fromList([
+      ..._u64(0),
+      0x00,
+      ..._u32(0),
+      _c(1),
+      ..._s(houseCid),
+      ..._someU32(1),
+      ..._u32(1),
+      0x00,
+      0x01,
+      0xff,
+    ]);
+    expect(() => decodeLaw(lawWithTrailingByte), throwsFormatException);
   });
 }

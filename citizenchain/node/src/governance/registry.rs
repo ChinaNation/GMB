@@ -136,23 +136,3 @@ pub(crate) fn find_institution(cid_number: &str) -> Option<InstitutionRef> {
         .find(|item| item.cid_number == cid_number)
         .map(InstitutionRef::Prb)
 }
-
-pub(crate) fn find_institution_by_main_account(main_account: &[u8]) -> Option<InstitutionRef> {
-    CHINA_CB
-        .iter()
-        .enumerate()
-        .find(|(_, item)| item.main_account.as_slice() == main_account)
-        .map(|(index, item)| {
-            if index == 0 {
-                InstitutionRef::Nrc(item)
-            } else {
-                InstitutionRef::Prc(item)
-            }
-        })
-        .or_else(|| {
-            CHINA_CH
-                .iter()
-                .find(|item| item.main_account.as_slice() == main_account)
-                .map(InstitutionRef::Prb)
-        })
-}

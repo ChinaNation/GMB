@@ -73,10 +73,9 @@ export interface LawChapter {
   sections: LawSection[];
 }
 
-/** 机构 + 账户引用(code=去尾 \0 的机构码,accountHex=0x 小写)。 */
+/** 立法代表机构引用；机构身份只保存 CID。 */
 export interface HouseRef {
-  code: string;
-  accountHex: string;
+  cidNumber: string;
 }
 
 /** 本机构可发起的提案候选(发起菜单单源自后端 /api/v1/legislation/proposable)。 */

@@ -37,9 +37,10 @@ class InstitutionAccountRow {
 List<InstitutionAccountRow> institutionAccountRows(Institution inst) {
   final baked = inst.builtinAccounts;
   if (baked != null) {
-    final rows = <InstitutionAccountRow>[_rowFromHex('主账户', baked.mainAccount)];
-    final fee = baked.feeAccount;
-    if (fee != null) rows.add(_rowFromHex('费用账户', fee));
+    final rows = <InstitutionAccountRow>[
+      _rowFromHex('主账户', baked.mainAccount),
+      _rowFromHex('费用账户', baked.feeAccount),
+    ];
     final safety = baked.safetyFundAccount;
     if (safety != null) rows.add(_rowFromHex('安全基金账户', safety));
     final he = baked.heAccount;

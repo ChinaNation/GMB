@@ -20,9 +20,9 @@ use sp_runtime::{
 
 use crate::institution::types::InstitutionAccountInfo;
 use crate::pallet::{
-    self, AccountNameOf, AccountRegisteredCid, CidNumberOf, Error, Event, InstitutionAccountNamesOf,
-    InstitutionAccounts, Institutions, Pallet, RegisterNonceOf, RegisterSignatureOf,
-    UsedRegisterNonce,
+    self, AccountNameOf, AccountRegisteredCid, CidNumberOf, Error, Event,
+    InstitutionAccountNamesOf, InstitutionAccounts, Institutions, Pallet, RegisterNonceOf,
+    RegisterSignatureOf, UsedRegisterNonce,
 };
 use crate::traits::{
     AccountValidator, CidInstitutionVerifier, ProtectedSourceChecker, RegistryAuthority,
@@ -172,8 +172,10 @@ pub(crate) fn do_add_institution_account<T: pallet::Config>(
             !InstitutionAccounts::<T>::contains_key(&cid_number, account_name),
             Error::<T>::CidAlreadyRegistered
         );
-        let (account, _kind) =
-            Pallet::<T>::derive_registered_account(cid_number.as_slice(), account_name.as_slice())?;
+        let (account, _kind) = Pallet::<T>::derive_institution_account(
+            cid_number.as_slice(),
+            account_name.as_slice(),
+        )?;
         ensure!(
             !AccountRegisteredCid::<T>::contains_key(&account),
             Error::<T>::AccountAlreadyExists

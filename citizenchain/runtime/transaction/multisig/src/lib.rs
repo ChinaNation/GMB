@@ -1,4 +1,4 @@
-//! # 多签资金账户转账模块 (multisig-transfer)
+//! # 多签资金账户转账模块 (multisig)
 //!
 //! 本模块为所有机构多签账户和个人多签账户提供链上转账治理流程：
 //! - 管理员发起转账提案，经内部投票通过后自动执行转账并扣取手续费。
@@ -23,9 +23,7 @@ use alloc::{vec, vec::Vec};
 use primitives::account_derive::AccountKind;
 use primitives::cid::china::china_cb::{CHINA_CB, SAFETY_FUND_ACCOUNT};
 use votingengine::{
-    types::{
-        institution_code_from_cid_number, CidNumber, InstitutionCode, NRC, PMUL, PRB,
-    },
+    types::{institution_code_from_cid_number, CidNumber, InstitutionCode, NRC, PMUL, PRB},
     InternalVoteResultCallback, ProposalExecutionOutcome, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL,
     STATUS_PASSED,
 };
@@ -33,8 +31,8 @@ use votingengine::{
 pub use pallet::*;
 /// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
 pub const MODULE_TAG: &[u8] = b"multisig";
-const SAFETY_FUND_OWNER_DATA: &[u8] = b"multisig-transfer:safety";
-const SWEEP_OWNER_DATA: &[u8] = b"multisig-transfer:sweep";
+const SAFETY_FUND_OWNER_DATA: &[u8] = b"multisig:safety";
+const SWEEP_OWNER_DATA: &[u8] = b"multisig:sweep";
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
@@ -315,10 +313,8 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
-            let (institution_code, subject_cid_numbers) = Self::resolve_funding_authority(
-                actor_cid_number.as_ref(),
-                &funding_account,
-            )?;
+            let (institution_code, subject_cid_numbers) =
+                Self::resolve_funding_authority(actor_cid_number.as_ref(), &funding_account)?;
             ensure!(
                 Self::is_funding_admin(
                     institution_code,
@@ -434,7 +430,10 @@ pub mod pallet {
             ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
 
             // 验证国家储委会管理员
-            ensure!(actor_cid_number == nrc_cid(), Error::<T>::InvalidInstitution);
+            ensure!(
+                actor_cid_number == nrc_cid(),
+                Error::<T>::InvalidInstitution
+            );
             let expected_safety_fund = Self::decode_institution_account(&SAFETY_FUND_ACCOUNT)?;
             ensure!(
                 institution_account == expected_safety_fund,
@@ -614,8 +613,8 @@ pub mod pallet {
             );
             let cid_text = core::str::from_utf8(cid_number.as_slice())
                 .map_err(|_| Error::<T>::InvalidInstitution)?;
-            let institution_code = institution_code_from_cid_number(cid_text)
-                .ok_or(Error::<T>::InvalidInstitution)?;
+            let institution_code =
+                institution_code_from_cid_number(cid_text).ok_or(Error::<T>::InvalidInstitution)?;
             let stored_code = <T as Config>::InstitutionQuery::lookup_org(funding_account)
                 .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
@@ -684,8 +683,8 @@ pub mod pallet {
         fn resolve_sweep_org(cid_number: &CidNumber) -> Result<InstitutionCode, Error<T>> {
             let text = core::str::from_utf8(cid_number.as_slice())
                 .map_err(|_| Error::<T>::InvalidInstitution)?;
-            let code = institution_code_from_cid_number(text)
-                .ok_or(Error::<T>::InvalidInstitution)?;
+            let code =
+                institution_code_from_cid_number(text).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(matches!(code, NRC | PRB), Error::<T>::InvalidInstitution);
             Ok(code)
         }
@@ -976,7 +975,7 @@ pub mod pallet {
 // 统一状态机整改后业务模块不再持有独立 vote/finalize call,提案通过(或否决)
 // 由投票引擎通过 [`votingengine::InternalVoteResultCallback`] 广播回来。
 // 本 Executor 按 `MODULE_TAG` 前缀 + 独立存储键认领对应业务:
-// - `MODULE_TAG` 前缀 `multisig-transfer` → transfer
+// - `MODULE_TAG` 前缀 `multisig` → transfer
 // - `SafetyFundProposalActions[id]` 存在 → safety_fund
 // - `SweepProposalActions[id]` 存在 → sweep
 //

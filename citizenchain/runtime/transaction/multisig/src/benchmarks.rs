@@ -18,14 +18,22 @@ use frame_system::RawOrigin;
 use sp_runtime::traits::SaturatedConversion;
 
 use crate::{BalanceOf, Call, Config, Pallet, CHINA_CB};
-use votingengine::types::PRC;
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
 }
 
-fn prc_institution<T: Config>() -> T::AccountId {
+fn prc_main_account<T: Config>() -> T::AccountId {
     decode_account::<T>(CHINA_CB[1].main_account)
+}
+
+fn prc_actor_cid() -> votingengine::types::CidNumber {
+    CHINA_CB[1]
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("PRC CID should fit")
 }
 
 fn prc_admin<T: Config>(index: usize) -> T::AccountId {
@@ -46,20 +54,20 @@ mod benchmarks {
 
     #[benchmark]
     fn propose_transfer() {
-        let institution = prc_institution::<T>();
+        let funding_account = prc_main_account::<T>();
+        let actor_cid_number = prc_actor_cid();
         let proposer = prc_admin::<T>(0);
         let beneficiary = beneficiary_account::<T>();
         let amount: BalanceOf<T> = 111u128.saturated_into();
         let top_up: BalanceOf<T> = 1_000_000u128.saturated_into();
 
-        let institution_account = institution.clone();
-        let _ = T::Currency::deposit_creating(&institution_account, top_up);
+        let _ = T::Currency::deposit_creating(&funding_account, top_up);
 
         #[extrinsic_call]
         propose_transfer(
             RawOrigin::Signed(proposer.clone()),
-            PRC,
-            institution,
+            Some(actor_cid_number),
+            funding_account,
             beneficiary,
             amount,
             BoundedVec::default(),

@@ -12,7 +12,10 @@ use frame_support::{
     traits::{ConstU32, ConstU64, Hooks},
 };
 use frame_system as system;
-use primitives::cid::code::InstitutionCode;
+use primitives::cid::{
+    china::{china_jy::CHINA_JY, china_lf::CHINA_LF, china_zf::CHINA_ZF},
+    code::institution_code_from_cid_number,
+};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 use std::cell::RefCell;
 
@@ -55,20 +58,28 @@ impl system::Config for Test {
     type Lookup = IdentityLookup<Self::AccountId>;
 }
 
-// ───────── 测试机构/议员名册 ─────────
-/// 院码(占位,TestInternalAdminProvider 不按码区分,只按机构账户)。
-pub const HOUSE1_CODE: InstitutionCode = *b"NLH0"; // 众议会式
-pub const HOUSE2_CODE: InstitutionCode = *b"NLS0"; // 参议会式
-pub const HOUSE3_CODE: InstitutionCode = *b"EDU0"; // 与第一机构共享部分管理员的教育委员会式机构
+// ───────── 测试机构 CID / 议员名册 ─────────
+fn bounded_cid(cid_number: &str) -> votingengine::types::CidNumber {
+    cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("built-in institution CID should fit")
+}
 
-pub fn house1() -> AccountId32 {
-    AccountId32::new([91u8; 32])
+/// 业务发起机构与代表表决机构分离，权限统一按 actor CID 下的 admins 校验。
+pub fn actor_cid_number() -> votingengine::types::CidNumber {
+    bounded_cid(CHINA_ZF[5].cid_number)
 }
-pub fn house2() -> AccountId32 {
-    AccountId32::new([92u8; 32])
+
+pub fn house1() -> votingengine::types::CidNumber {
+    bounded_cid(CHINA_LF[2].cid_number)
 }
-pub fn house3() -> AccountId32 {
-    AccountId32::new([93u8; 32])
+pub fn house2() -> votingengine::types::CidNumber {
+    bounded_cid(CHINA_LF[1].cid_number)
+}
+pub fn house3() -> votingengine::types::CidNumber {
+    bounded_cid(CHINA_JY[0].cid_number)
 }
 /// house1 议员 = 账户 [1..=10];house2 议员 = 账户 [11..=20]。
 pub fn member(idx: u8) -> AccountId32 {
@@ -88,18 +99,16 @@ pub fn set_guard_member_ids(ids: &[u8]) {
     });
 }
 
-// 签署机构(ADR-027 修订):行政机构(总统府/省联邦政府/市政府)+ 立法院(两院级,供院长)。
-pub const EXEC_CODE: InstitutionCode = *b"CGOV"; // 行政机构(市政府式)
-pub const LEG_CODE: InstitutionCode = *b"NLG\0"; // 立法院
-pub fn exec_body() -> AccountId32 {
-    AccountId32::new([80u8; 32])
+// 签署机构(ADR-027 修订):行政机构 + 立法院(两院级,供院长)。
+pub fn exec_body() -> votingengine::types::CidNumber {
+    bounded_cid(CHINA_ZF[0].cid_number)
 }
 /// 行政首长(市长/省长/总统)= 行政机构法定代表人。
 pub fn exec_rep() -> AccountId32 {
     AccountId32::new([81u8; 32])
 }
-pub fn leg_body() -> AccountId32 {
-    AccountId32::new([70u8; 32])
+pub fn leg_body() -> votingengine::types::CidNumber {
+    bounded_cid(CHINA_LF[0].cid_number)
 }
 /// 立法院院长 = 立法院法定代表人。
 pub fn leg_rep() -> AccountId32 {
@@ -143,45 +152,59 @@ impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityRea
     }
 }
 
-/// 两院议员名册:house1 = 账户 1..=10;house2 = 账户 11..=20。
-impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(
-        _institution_code: InstitutionCode,
-        institution: AccountId32,
-        who: &AccountId32,
-    ) -> bool {
-        Self::get_admin_list(_institution_code, institution)
-            .map(|list| list.iter().any(|a| a == who))
-            .unwrap_or(false)
-    }
-    fn get_admin_list(
-        _institution_code: InstitutionCode,
-        institution: AccountId32,
+impl TestInternalAdminProvider {
+    fn institution_admins(
+        institution_code: primitives::cid::code::InstitutionCode,
+        cid_number: &[u8],
     ) -> Option<sp_runtime::sp_std::vec::Vec<AccountId32>> {
-        if institution == house1() {
+        let cid_text = core::str::from_utf8(cid_number).ok()?;
+        if institution_code_from_cid_number(cid_text) != Some(institution_code) {
+            return None;
+        }
+        if cid_number == actor_cid_number().as_slice() {
+            Some(sp_runtime::sp_std::vec![member(1), member(50)])
+        } else if cid_number == house1().as_slice() {
             Some((1u8..=10).map(member).collect())
-        } else if institution == house2() {
+        } else if cid_number == house2().as_slice() {
             Some((11u8..=20).map(member).collect())
-        } else if institution == house3() {
+        } else if cid_number == house3().as_slice() {
             Some((1u8..=10).map(member).collect())
         } else {
             None
         }
     }
+}
+
+/// 代表机构管理员与发起机构权限全部按 CID 路由，不再用机构账户充当主体。
+impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
+    fn is_institution_admin(
+        institution_code: primitives::cid::code::InstitutionCode,
+        cid_number: &[u8],
+        who: &AccountId32,
+    ) -> bool {
+        Self::institution_admins(institution_code, cid_number)
+            .map(|list| list.iter().any(|admin| admin == who))
+            .unwrap_or(false)
+    }
+
+    fn get_institution_admins(
+        institution_code: primitives::cid::code::InstitutionCode,
+        cid_number: &[u8],
+    ) -> Option<sp_runtime::sp_std::vec::Vec<AccountId32>> {
+        Self::institution_admins(institution_code, cid_number)
+    }
+
     /// 法定代表人:众议长=house1[member 1] / 参议长=house2[member 11] / 院长=leg_rep / 行政首长=exec_rep。
-    fn legal_representative(
-        _institution_code: InstitutionCode,
-        institution: AccountId32,
-    ) -> Option<AccountId32> {
-        if institution == house1() {
+    fn legal_representative(cid_number: &[u8]) -> Option<AccountId32> {
+        if cid_number == house1().as_slice() {
             Some(member(1))
-        } else if institution == house2() {
+        } else if cid_number == house2().as_slice() {
             Some(member(11))
-        } else if institution == house3() {
+        } else if cid_number == house3().as_slice() {
             Some(member(1))
-        } else if institution == leg_body() {
+        } else if cid_number == leg_body().as_slice() {
             Some(leg_rep())
-        } else if institution == exec_body() {
+        } else if cid_number == exec_body().as_slice() {
             Some(exec_rep())
         } else {
             None
@@ -197,30 +220,6 @@ pub struct TestTimeProvider;
 impl frame_support::traits::UnixTime for TestTimeProvider {
     fn now() -> core::time::Duration {
         core::time::Duration::from_secs(1_782_864_000)
-    }
-}
-
-pub struct TestInstitutionQuery;
-impl entity_primitives::InstitutionMultisigQuery<AccountId32> for TestInstitutionQuery {
-    fn lookup_cid(addr: &AccountId32) -> Option<std::vec::Vec<u8>> {
-        let mut cid = b"TEST-LEG-".to_vec();
-        let bytes: &[u8] = addr.as_ref();
-        cid.extend_from_slice(&bytes[..4]);
-        Some(cid)
-    }
-
-    fn lookup_org(_addr: &AccountId32) -> Option<InstitutionCode> {
-        None
-    }
-
-    fn lookup_admin_config(
-        _addr: &AccountId32,
-    ) -> Option<primitives::multisig::MultisigConfigSnapshot<AccountId32>> {
-        None
-    }
-
-    fn account_exists(_addr: &AccountId32) -> bool {
-        true
     }
 }
 
@@ -276,7 +275,6 @@ impl internal_vote::Config for Test {
 
 impl crate::pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
-    type InstitutionQuery = TestInstitutionQuery;
     type WeightInfo = ();
 }
 
@@ -301,7 +299,7 @@ use crate::{RepresentativeBodies, RepresentativeRoute, RepresentativeVoteRule, V
 /// 创建立法提案并注册 ProposalData(设置 ProposalOwner,终态回调需要),不自动投票。
 pub fn create(
     proposer: AccountId32,
-    bodies: sp_runtime::sp_std::vec::Vec<(InstitutionCode, AccountId32)>,
+    bodies: sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumber>,
     rule: RepresentativeVoteRule,
 ) -> u64 {
     create_inner(proposer, bodies, rule, false)
@@ -310,7 +308,7 @@ pub fn create(
 /// 修宪提案(needs_guard=true):现有流程通过后进护宪大法官终审。
 pub fn create_guard(
     proposer: AccountId32,
-    bodies: sp_runtime::sp_std::vec::Vec<(InstitutionCode, AccountId32)>,
+    bodies: sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumber>,
     rule: RepresentativeVoteRule,
 ) -> u64 {
     create_inner(proposer, bodies, rule, true)
@@ -318,18 +316,17 @@ pub fn create_guard(
 
 fn create_inner(
     proposer: AccountId32,
-    bodies: sp_runtime::sp_std::vec::Vec<(InstitutionCode, AccountId32)>,
+    bodies: sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumber>,
     rule: RepresentativeVoteRule,
     needs_guard: bool,
 ) -> u64 {
     // 单院(市)=无 legislature;两院(国/省)=携带立法院。行政签署机构恒携带。
     let legislature = if bodies.len() >= 2 {
-        Some((LEG_CODE, leg_body()))
+        Some(leg_body())
     } else {
         None
     };
-    let bounded: RepresentativeBodies<AccountId32> =
-        bodies.try_into().expect("representative route bounded");
+    let bounded: RepresentativeBodies = bodies.try_into().expect("representative route bounded");
     let route = if bounded.len() == 1 {
         RepresentativeRoute::Single(bounded.first().cloned().expect("single body"))
     } else {
@@ -337,12 +334,13 @@ fn create_inner(
     };
     let pid = Lib::do_create_representative_proposal(
         proposer,
+        actor_cid_number(),
         route,
         rule,
         VoteProcedure::Legislation,
-        Default::default(),
+        votingengine::types::ProposalSubjectCidNumbers::new(),
         Some(crate::pallet::LegislationMeta {
-            executive: (EXEC_CODE, exec_body()),
+            executive: exec_body(),
             legislature,
             needs_guard,
         }),
@@ -360,17 +358,17 @@ fn create_inner(
 }
 
 /// 单院院序列 [house1]。
-pub fn single_house() -> sp_runtime::sp_std::vec::Vec<(InstitutionCode, AccountId32)> {
-    sp_runtime::sp_std::vec![(HOUSE1_CODE, house1())]
+pub fn single_house() -> sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumber> {
+    sp_runtime::sp_std::vec![house1()]
 }
 /// 两院院序列 [house1, house2]。
-pub fn two_houses() -> sp_runtime::sp_std::vec::Vec<(InstitutionCode, AccountId32)> {
-    sp_runtime::sp_std::vec![(HOUSE1_CODE, house1()), (HOUSE2_CODE, house2())]
+pub fn two_houses() -> sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumber> {
+    sp_runtime::sp_std::vec![house1(), house2()]
 }
 
 /// 两个管理员名册重叠的代表机构，用于验证同一钱包按机构席位分别投票。
-pub fn overlapping_bodies() -> sp_runtime::sp_std::vec::Vec<(InstitutionCode, AccountId32)> {
-    sp_runtime::sp_std::vec![(HOUSE1_CODE, house1()), (HOUSE3_CODE, house3())]
+pub fn overlapping_bodies() -> sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumber> {
+    sp_runtime::sp_std::vec![house1(), house3()]
 }
 
 /// 当前提案状态(从核心读)。

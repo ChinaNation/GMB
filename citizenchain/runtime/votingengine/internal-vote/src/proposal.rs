@@ -61,39 +61,39 @@ impl<T: Config> Pallet<T> {
                     "do_create_institution_proposal: proposer is missing from CID admin snapshot"
                 );
                 return TransactionOutcome::Rollback(Err(
-                    votingengine::Error::<T>::NoPermission.into(),
+                    votingengine::Error::<T>::NoPermission.into()
                 ));
             }
             let snapshot_size = match Self::snapshot_admins_len_or_missing(id, subject) {
                 Ok(size) => size,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
-            let threshold = if let Some(fixed_threshold) =
-                fixed_governance_pass_threshold(&institution_code)
-            {
-                fixed_threshold
-            } else if primitives::institution_constraints::is_permanent_singleton_code(
-                &institution_code,
-            ) {
-                snapshot_size / 2 + 1
-            } else {
-                match active_institution_threshold::<T>(institution_code, &actor_cid_number) {
-                    Some(threshold) => threshold,
-                    None => {
-                        return TransactionOutcome::Rollback(Err(
-                            Error::<T>::MissingDynamicThreshold.into(),
-                        ))
+            let threshold =
+                if let Some(fixed_threshold) = fixed_governance_pass_threshold(&institution_code) {
+                    fixed_threshold
+                } else if primitives::institution_constraints::is_permanent_singleton_code(
+                    &institution_code,
+                ) {
+                    snapshot_size / 2 + 1
+                } else {
+                    match active_institution_threshold::<T>(institution_code, &actor_cid_number) {
+                        Some(threshold) => threshold,
+                        None => {
+                            return TransactionOutcome::Rollback(Err(
+                                Error::<T>::MissingDynamicThreshold.into(),
+                            ))
+                        }
                     }
-                }
-            };
-            let threshold_check = if primitives::institution_constraints::is_permanent_singleton_code(
-                &institution_code,
-            ) || is_registered_multisig_code(&institution_code)
-            {
-                Self::ensure_dynamic_threshold(snapshot_size, threshold)
-            } else {
-                Self::ensure_threshold_within_snapshot(snapshot_size, threshold)
-            };
+                };
+            let threshold_check =
+                if primitives::institution_constraints::is_permanent_singleton_code(
+                    &institution_code,
+                ) || is_registered_multisig_code(&institution_code)
+                {
+                    Self::ensure_dynamic_threshold(snapshot_size, threshold)
+                } else {
+                    Self::ensure_threshold_within_snapshot(snapshot_size, threshold)
+                };
             if let Err(err) = threshold_check {
                 return TransactionOutcome::Rollback(Err(err));
             }
@@ -278,7 +278,7 @@ impl<T: Config> Pallet<T> {
             let subject = ProposalSubject::PersonalAccount(personal_account.clone());
             if !<votingengine::Pallet<T>>::is_admin_in_snapshot(id, subject.clone(), &who) {
                 return TransactionOutcome::Rollback(Err(
-                    votingengine::Error::<T>::NoPermission.into(),
+                    votingengine::Error::<T>::NoPermission.into()
                 ));
             }
             let snapshot_size = match Self::snapshot_admins_len_or_missing(id, subject) {

@@ -25,7 +25,8 @@ class ProposalMeta {
     required this.stage,
     required this.status,
     this.internalCode,
-    this.institutionBytes,
+    this.actorCidNumber,
+    this.executionAccount,
     this.subjectCidNumbers = const [],
     this.displayMeta,
   });
@@ -36,10 +37,13 @@ class ProposalMeta {
   final int status; // 0=voting, 1=passed, 2=rejected
   final String? internalCode;
 
-  /// 链上 Proposal.account_context。机构归属真源不看这里,只看 [subjectCidNumbers]。
-  final Uint8List? institutionBytes;
+  /// 链上 Proposal.actor_cid_number，发起机构身份唯一真源。
+  final String? actorCidNumber;
 
-  /// 链上 Proposal.subject_cid_numbers。机构类提案归属和订阅过滤统一用 CID。
+  /// 链上 Proposal.execution_account，仅表示具体资产账户或个人多签执行账户。
+  final Uint8List? executionAccount;
+
+  /// 链上 Proposal.subject_cid_numbers，仅表示受影响机构，不替代发起机构 CID。
   final List<String> subjectCidNumbers;
 
   /// 展示号(双层 ID:主键 `proposalId` 单调,展示号年份+序号通过 `ProposalDisplayId` 反查)。
@@ -51,6 +55,7 @@ class ProposalMeta {
 class RuntimeUpgradeProposalInfo {
   const RuntimeUpgradeProposalInfo({
     required this.proposalId,
+    required this.actorCidNumber,
     required this.proposer,
     required this.reason,
     required this.codeHashHex,
@@ -64,6 +69,7 @@ class RuntimeUpgradeProposalInfo {
   });
 
   final int proposalId;
+  final String actorCidNumber;
   final String proposer; // SS58 (ss58Format 2027)
   final String reason; // UTF-8 decoded
   final String codeHashHex; // 32-byte hash as hex

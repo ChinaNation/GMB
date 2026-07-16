@@ -194,9 +194,8 @@ pub(crate) fn build_create_institution_call_data(
         inst.town_code.as_str(),
     )?;
 
-    let credential_signer_pubkey =
-        hex_to_bytes32(credential.credential_signer_pubkey.as_str())
-            .ok_or_else(|| "http:internal:credential_signer_pubkey parse failed".to_string())?;
+    let credential_signer_pubkey = hex_to_bytes32(credential.credential_signer_pubkey.as_str())
+        .ok_or_else(|| "http:internal:credential_signer_pubkey parse failed".to_string())?;
     let signature = hex_to_vec(credential.signature.as_str())
         .ok_or_else(|| "http:internal:signature parse failed".to_string())?;
 

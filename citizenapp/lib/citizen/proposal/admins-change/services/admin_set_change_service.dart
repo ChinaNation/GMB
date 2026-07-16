@@ -28,7 +28,7 @@ class AdminsChangeService {
     return PersonalAdminsChangeCallCodec.build(
       institutionCode: account.institutionCode,
       adminKind: account.kind,
-      accountId: AdminAccountIdCodec.fromHex(account.accountHex),
+      accountId: AdminAccountIdCodec.fromHex(account.personalAccountHex!),
       admins: normalized.admins,
       newThreshold: normalized.threshold,
     );

@@ -110,7 +110,7 @@ fn propose_create_writes_pending_and_reserves_fee() {
         assert_eq!(pending_account.status, types::PersonalStatus::Pending);
         assert_eq!(pending_account.account_name, name);
         assert_eq!(
-            internal_vote::PendingDynamicThresholds::<Test>::get(pid),
+            internal_vote::PendingPersonalThresholds::<Test>::get(pid),
             Some(2)
         );
         assert_eq!(
@@ -161,9 +161,12 @@ fn create_executes_when_internal_vote_reaches_threshold() {
         // 多签账户激活,资金到位,Pending 已清
         let dq_state = pallet::PersonalAccounts::<Test>::get(&dq).expect("active multisig");
         assert_eq!(dq_state.status, types::PersonalStatus::Active);
+        let admin_account = personal_admins::AdminAccounts::<Test>::get(dq.clone())
+            .expect("personal admins should be active");
+        assert!(admin_account.cid_number.is_empty());
         let account = dq.clone();
         assert_eq!(
-            internal_vote::ActiveDynamicThresholds::<Test>::get(PMUL, account),
+            internal_vote::ActivePersonalThresholds::<Test>::get(account),
             Some(2)
         );
         assert_eq!(Balances::free_balance(&dq), CREATE_AMOUNT);
@@ -244,7 +247,7 @@ fn propose_create_stores_regular_threshold_and_uses_all_admin_create_threshold()
         ));
         let pid = last_proposal_id();
         assert_eq!(
-            internal_vote::PendingDynamicThresholds::<Test>::get(pid),
+            internal_vote::PendingPersonalThresholds::<Test>::get(pid),
             Some(2)
         );
         assert_eq!(
@@ -267,7 +270,7 @@ fn two_admin_personal_create_uses_two_of_two_for_regular_and_create_threshold() 
         ));
         let pid = last_proposal_id();
         assert_eq!(
-            internal_vote::PendingDynamicThresholds::<Test>::get(pid),
+            internal_vote::PendingPersonalThresholds::<Test>::get(pid),
             Some(2)
         );
         assert_eq!(
@@ -290,7 +293,7 @@ fn sixty_four_admin_personal_create_is_allowed_and_uses_full_create_threshold() 
         ));
         let pid = last_proposal_id();
         assert_eq!(
-            internal_vote::PendingDynamicThresholds::<Test>::get(pid),
+            internal_vote::PendingPersonalThresholds::<Test>::get(pid),
             Some(33)
         );
         assert_eq!(
@@ -443,7 +446,7 @@ fn close_executes_when_internal_vote_reaches_threshold() {
         assert!(!pallet::PersonalAccounts::<Test>::contains_key(&dq));
         assert!(!pallet::PendingCloseProposal::<Test>::contains_key(&dq));
         assert!(personal_admins::AdminAccounts::<Test>::get(account.clone()).is_none());
-        assert!(internal_vote::ActiveDynamicThresholds::<Test>::get(PMUL, account).is_none());
+        assert!(internal_vote::ActivePersonalThresholds::<Test>::get(account).is_none());
 
         assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c),

@@ -49,7 +49,7 @@ class InstitutionAdminService {
       throw ArgumentError('个人多签不属于机构岗位模型');
     }
     final adminState = await _accountService.fetchByIdentity(identity);
-    if (adminState == null || !adminState.isActive) return const [];
+    if (adminState == null) return const [];
     final adminSet = adminState.admins.toSet();
     // 非法人机构码本身不能推断公权/私权，必须按链上管理员类型路由。
     final entityPallet = identity.kind == 1 ? 'PrivateManage' : 'PublicManage';

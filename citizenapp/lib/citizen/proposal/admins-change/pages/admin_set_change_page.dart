@@ -277,8 +277,8 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
         signerPubkey: AdminAccountIdCodec.hexDecode(wallet.pubkeyHex),
         sign: signCallback,
       );
-      _accountService.clearAccountCache(account.accountHex);
-      _accountService.clearIdentityCache(widget.accountIdentity);
+      _accountService.clearPersonalAccountCache(account.personalAccountHex!);
+      _accountService.clearCache(widget.accountIdentity);
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(

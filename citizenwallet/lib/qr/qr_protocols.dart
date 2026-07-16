@@ -98,6 +98,18 @@ class QrActions {
   static const int castReferendum = 0x1501;
   static const int preparePopulationSnapshot = 0x1502;
 
+  // 链上资产 OnchainIssuance(23 = 0x17)。动作码与 runtime call_index 一一对应。
+  static const int proposeAssetIssue = 0x1700;
+  static const int proposeAssetMint = 0x1701;
+  static const int proposeAssetBurn = 0x1702;
+  static const int proposeAssetClose = 0x1703;
+  static const int proposeAssetTransfer = 0x1704;
+  static const int proposeMonitorFreeze = 0x170a;
+  static const int proposeMonitorUnfreeze = 0x170b;
+  static const int proposeMonitorConfiscate = 0x170c;
+  static const int proposeMonitorForceTransfer = 0x170d;
+  static const int proposeMonitorForceClose = 0x170e;
+
   // 注册局地址目录 AddressRegistry(33 = 0x21)
   static const int setAddressCatalogVersion = 0x2100;
   static const int setAddressName = 0x2101;
@@ -179,6 +191,16 @@ class QrActions {
         'joint_vote' => jointVote,
         'cast_referendum' => castReferendum,
         'prepare_joint_population_snapshot' => preparePopulationSnapshot,
+        'propose_asset_issue' => proposeAssetIssue,
+        'propose_asset_mint' => proposeAssetMint,
+        'propose_asset_burn' => proposeAssetBurn,
+        'propose_asset_close' => proposeAssetClose,
+        'propose_asset_transfer' => proposeAssetTransfer,
+        'propose_monitor_freeze' => proposeMonitorFreeze,
+        'propose_monitor_unfreeze' => proposeMonitorUnfreeze,
+        'propose_monitor_confiscate' => proposeMonitorConfiscate,
+        'propose_monitor_force_transfer' => proposeMonitorForceTransfer,
+        'propose_monitor_force_close' => proposeMonitorForceClose,
         'set_address_catalog_version' => setAddressCatalogVersion,
         'set_address_name' => setAddressName,
         'remove_address_name' => removeAddressName,

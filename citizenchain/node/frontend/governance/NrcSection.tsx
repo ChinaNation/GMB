@@ -65,6 +65,7 @@ export function NrcSection() {
   if (view.page === 'protocol-upgrade') {
     return (
       <ProtocolUpgradeProposalPage
+        actorCidNumber={NRC_CID_NUMBER}
         adminWallets={view.adminWallets}
         onBack={backToDetail}
         onSuccess={backToDetail}

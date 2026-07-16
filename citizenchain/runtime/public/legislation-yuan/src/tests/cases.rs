@@ -143,8 +143,8 @@ fn propose_enact_by_legislator_reaches_engine_notconfigured() {
                 Tier::Municipal,
                 1001,
                 municipal_houses(),
-                municipal_proposer_body(),
-                municipal_executive(),
+                municipal_actor_cid_number(),
+                municipal_executive_cid_number(),
                 None,
                 VoteType::Regular,
                 title(b"law"),
@@ -166,8 +166,8 @@ fn municipal_education_route_reaches_engine_notconfigured() {
                 Tier::Municipal,
                 1001,
                 municipal_houses(),
-                municipal_education_proposer_body(),
-                municipal_executive(),
+                municipal_education_actor_cid_number(),
+                municipal_executive_cid_number(),
                 None,
                 VoteType::RegularEducation,
                 title(b"education law"),
@@ -181,10 +181,10 @@ fn municipal_education_route_reaches_engine_notconfigured() {
 }
 
 #[test]
-fn routing_rejects_code_account_mismatch() {
+fn routing_rejects_cid_code_mismatch() {
     new_test_ext().execute_with(|| {
-        // 字段声称是市立法会，账户却属于市政府；不能只看调用方传入的机构码。
-        let forged_houses = BoundedVec::try_from(vec![(*b"CLEG", municipal_executive().1)])
+        // houses 需要市立法会 CID，却夹带市政府 CID；机构码必须从 CID 自身解析。
+        let forged_houses = BoundedVec::try_from(vec![municipal_executive_cid_number()])
             .expect("forged houses within bound");
         assert_noop!(
             Lib::propose_enact_law(
@@ -192,8 +192,8 @@ fn routing_rejects_code_account_mismatch() {
                 Tier::Municipal,
                 1001,
                 forged_houses,
-                municipal_proposer_body(),
-                municipal_executive(),
+                municipal_actor_cid_number(),
+                municipal_executive_cid_number(),
                 None,
                 VoteType::Regular,
                 title(b"forged route"),
@@ -215,8 +215,8 @@ fn propose_enact_by_non_legislator_rejected() {
                 Tier::Municipal,
                 1001,
                 municipal_houses(),
-                municipal_proposer_body(),
-                municipal_executive(),
+                municipal_actor_cid_number(),
+                municipal_executive_cid_number(),
                 None,
                 VoteType::Regular,
                 title(b"law"),
@@ -239,8 +239,8 @@ fn propose_enact_constitution_rejected() {
                 Tier::Constitution,
                 0,
                 houses(),
-                proposer_body(),
-                executive(),
+                actor_cid_number(),
+                executive_cid_number(),
                 None,
                 VoteType::Special,
                 title(b"second constitution"),
@@ -278,8 +278,8 @@ fn propose_enact_empty_title_and_articles_rejected() {
                 Tier::Municipal,
                 1001,
                 municipal_houses(),
-                municipal_proposer_body(),
-                municipal_executive(),
+                municipal_actor_cid_number(),
+                municipal_executive_cid_number(),
                 None,
                 VoteType::Regular,
                 title(b""),
@@ -295,8 +295,8 @@ fn propose_enact_empty_title_and_articles_rejected() {
                 Tier::Municipal,
                 1001,
                 municipal_houses(),
-                municipal_proposer_body(),
-                municipal_executive(),
+                municipal_actor_cid_number(),
+                municipal_executive_cid_number(),
                 None,
                 VoteType::Regular,
                 title(b"law"),
@@ -332,7 +332,7 @@ fn seed_constitution() {
     );
     Laws::<Test>::insert(
         law_id,
-        Law::<Test> {
+        Law {
             law_id,
             tier: Tier::Constitution,
             scope_code: 0,
@@ -356,9 +356,9 @@ fn amend_constitution_immutable_article_rejected() {
             Lib::propose_amend_law(
                 RuntimeOrigin::signed(legislator()),
                 0,
-                proposer_body(),
-                executive(),
-                legislature(),
+                actor_cid_number(),
+                executive_cid_number(),
+                legislature_cid_number(),
                 VoteType::Special,
                 title(b"constitution-v2"),
                 None,
@@ -401,7 +401,7 @@ fn seed_constitution_tiered() {
     );
     Laws::<Test>::insert(
         law_id,
-        Law::<Test> {
+        Law {
             law_id,
             tier: Tier::Constitution,
             scope_code: 0,
@@ -425,9 +425,9 @@ fn amend_core_chapter_with_major_rejected() {
             Lib::propose_amend_law(
                 RuntimeOrigin::signed(legislator()),
                 0,
-                proposer_body(),
-                executive(),
-                legislature(),
+                actor_cid_number(),
+                executive_cid_number(),
+                legislature_cid_number(),
                 VoteType::Major,
                 title(b"c-v2"),
                 None,
@@ -455,9 +455,9 @@ fn amend_core_chapter_with_special_passes_gate() {
             Lib::propose_amend_law(
                 RuntimeOrigin::signed(legislator()),
                 0,
-                proposer_body(),
-                executive(),
-                legislature(),
+                actor_cid_number(),
+                executive_cid_number(),
+                legislature_cid_number(),
                 VoteType::Special,
                 title(b"c-v2"),
                 None,
@@ -485,9 +485,9 @@ fn amend_general_chapter_with_special_rejected() {
             Lib::propose_amend_law(
                 RuntimeOrigin::signed(legislator()),
                 0,
-                proposer_body(),
-                executive(),
-                legislature(),
+                actor_cid_number(),
+                executive_cid_number(),
+                legislature_cid_number(),
                 VoteType::Special,
                 title(b"c-v2"),
                 None,
@@ -515,9 +515,9 @@ fn amend_general_chapter_with_major_passes_gate() {
             Lib::propose_amend_law(
                 RuntimeOrigin::signed(legislator()),
                 0,
-                proposer_body(),
-                executive(),
-                legislature(),
+                actor_cid_number(),
+                executive_cid_number(),
+                legislature_cid_number(),
                 VoteType::Major,
                 title(b"c-v2"),
                 None,
@@ -545,9 +545,9 @@ fn amend_constitution_no_change_rejected() {
             Lib::propose_amend_law(
                 RuntimeOrigin::signed(legislator()),
                 0,
-                proposer_body(),
-                executive(),
-                legislature(),
+                actor_cid_number(),
+                executive_cid_number(),
+                legislature_cid_number(),
                 VoteType::Special,
                 title(b"c-v2"),
                 None,
@@ -629,8 +629,8 @@ fn rejects_amend_while_pending() {
             Lib::propose_amend_law(
                 RuntimeOrigin::signed(legislator()),
                 0,
-                proposer_body(),
-                executive(),
+                actor_cid_number(),
+                executive_cid_number(),
                 None,
                 VoteType::Major,
                 title(b"law-v2"),
@@ -725,9 +725,9 @@ fn amend_constitution_preserving_immutable_reaches_engine() {
             Lib::propose_amend_law(
                 RuntimeOrigin::signed(legislator()),
                 0,
-                proposer_body(),
-                executive(),
-                legislature(),
+                actor_cid_number(),
+                executive_cid_number(),
+                legislature_cid_number(),
                 VoteType::Special,
                 title(b"constitution-v2"),
                 None,
@@ -751,8 +751,8 @@ fn amend_constitution_with_regular_vote_type_rejected() {
             Lib::propose_amend_law(
                 RuntimeOrigin::signed(legislator()),
                 0,
-                proposer_body(),
-                executive(),
+                actor_cid_number(),
+                executive_cid_number(),
                 None,
                 VoteType::Regular, // 宪法修改不允许常规案
                 title(b"constitution-v2"),
@@ -773,8 +773,8 @@ fn repeal_constitution_rejected() {
             Lib::propose_repeal_law(
                 RuntimeOrigin::signed(legislator()),
                 0,
-                proposer_body(),
-                executive(),
+                actor_cid_number(),
+                executive_cid_number(),
                 None,
                 VoteType::Special
             ),
@@ -790,8 +790,8 @@ fn amend_nonexistent_law_rejected() {
             Lib::propose_amend_law(
                 RuntimeOrigin::signed(legislator()),
                 404,
-                proposer_body(),
-                executive(),
+                actor_cid_number(),
+                executive_cid_number(),
                 None,
                 VoteType::Regular,
                 title(b"x"),

@@ -19,12 +19,12 @@ use votingengine::pallet::{
     ProposalsByOwner, ProposalsByYear, ScheduledCleanupHead, ScheduledCleanupTail,
     ScheduledCleanups, YearProposalCounter,
 };
-use votingengine::types::{code_bytes, InstitutionCode, NJD, PMUL};
-// 测试用机构码:个人多签 / 公权法人 / 私权法人,均属"注册多签动态账户"。
+use votingengine::types::{code_bytes, CidNumber, InstitutionCode, ProposalSubject, NJD, PMUL};
+// 个人多签按账户键测试；公权、私权法人按机构 CID 键测试。
 const PERSONAL_CODE: InstitutionCode = PMUL;
 const PUBLIC_CODE: InstitutionCode = code_bytes("CGOV");
 const PRIVATE_CODE: InstitutionCode = code_bytes("SFLP");
-// 六个永久国家单例中的总统府：用于验证“无账户级动态阈值、按提案快照过半”。
+// 六个永久国家单例中的总统府：用于验证“不读取 CID 动态阈值、按提案快照过半”。
 const PERMANENT_SINGLETON_CODE: InstitutionCode = PRS;
 // joint mode storage 在 joint-vote sub-pallet
 use primitives::cid::china::china_cb::CHINA_CB;
@@ -158,7 +158,7 @@ thread_local! {
     static INTERNAL_TERMINAL_CLEANUP_SHOULD_FAIL: RefCell<bool> = const { RefCell::new(false) };
 }
 thread_local! {
-    static REGISTERED_ADMIN_LIST_OVERRIDE: RefCell<Option<Vec<AccountId32>>> = const { RefCell::new(None) };
+    static INSTITUTION_ADMIN_LIST_OVERRIDE: RefCell<Option<Vec<AccountId32>>> = const { RefCell::new(None) };
 }
 
 pub struct TestCitizenIdentityReader;
@@ -166,11 +166,49 @@ pub struct TestJointVoteResultCallback;
 pub struct TestInternalVoteResultCallback;
 pub struct TestInternalAdminProvider;
 
-fn pending_account_institution() -> AccountId32 {
+fn bounded_cid(raw: &[u8]) -> CidNumber {
+    raw.to_vec()
+        .try_into()
+        .expect("test CID should fit runtime bound")
+}
+
+fn nrc_cid() -> CidNumber {
+    bounded_cid(CHINA_CB[0].cid_number.as_bytes())
+}
+
+fn prc_cid() -> CidNumber {
+    bounded_cid(CHINA_CB[1].cid_number.as_bytes())
+}
+
+fn prb_cid() -> CidNumber {
+    bounded_cid(CHINA_CH[0].cid_number.as_bytes())
+}
+
+fn njd_cid() -> CidNumber {
+    bounded_cid(CHINA_SF[0].cid_number.as_bytes())
+}
+
+fn public_cid() -> CidNumber {
+    bounded_cid(b"GD001-CGOV0-123456789-2026")
+}
+
+fn private_cid() -> CidNumber {
+    bounded_cid(b"GD001-SFLP0-123456789-2026")
+}
+
+fn permanent_singleton_cid() -> CidNumber {
+    let singleton = primitives::institution_constraints::singleton_institutions()
+        .into_iter()
+        .find(|item| item.code == PERMANENT_SINGLETON_CODE)
+        .expect("PRS singleton must exist");
+    bounded_cid(singleton.cid_number.as_bytes())
+}
+
+fn pending_personal_account() -> AccountId32 {
     AccountId32::new([77u8; 32])
 }
 
-fn pending_account_admin(index: usize) -> AccountId32 {
+fn pending_personal_admin(index: usize) -> AccountId32 {
     match index {
         0 => AccountId32::new([91u8; 32]),
         1 => AccountId32::new([92u8; 32]),
@@ -178,11 +216,11 @@ fn pending_account_admin(index: usize) -> AccountId32 {
     }
 }
 
-fn registered_account_institution() -> AccountId32 {
+fn personal_account() -> AccountId32 {
     AccountId32::new([78u8; 32])
 }
 
-fn registered_account_admin(index: usize) -> AccountId32 {
+fn personal_admin(index: usize) -> AccountId32 {
     match index {
         0 => AccountId32::new([81u8; 32]),
         1 => AccountId32::new([82u8; 32]),
@@ -190,36 +228,34 @@ fn registered_account_admin(index: usize) -> AccountId32 {
     }
 }
 
-fn permanent_singleton_institution() -> AccountId32 {
-    let singleton = primitives::institution_constraints::singleton_institutions()
-        .into_iter()
-        .find(|item| item.code == PERMANENT_SINGLETON_CODE)
-        .expect("PRS singleton must exist");
-    AccountId32::new(singleton.main_account)
+fn test_institution_admin(index: usize) -> AccountId32 {
+    AccountId32::new([84u8.saturating_add(index as u8); 32])
+}
+
+fn test_institution_execution_account() -> AccountId32 {
+    AccountId32::new([88u8; 32])
 }
 
 fn permanent_singleton_admin(index: usize) -> AccountId32 {
     AccountId32::new([101u8.saturating_add(index as u8); 32])
 }
 
-fn set_registered_account_threshold(threshold: u32) {
-    for institution_code in [PERSONAL_CODE, PUBLIC_CODE, PRIVATE_CODE] {
-        ActiveDynamicThresholds::<Test>::insert(
-            institution_code,
-            registered_account_institution(),
-            threshold,
-        );
-    }
+fn set_personal_threshold(threshold: u32) {
+    ActivePersonalThresholds::<Test>::insert(personal_account(), threshold);
 }
 
-fn set_registered_admin_list_override(admins: Vec<AccountId32>) {
-    REGISTERED_ADMIN_LIST_OVERRIDE.with(|value| *value.borrow_mut() = Some(admins));
+fn set_institution_threshold(cid_number: CidNumber, threshold: u32) {
+    ActiveInstitutionThresholds::<Test>::insert(cid_number, threshold);
+}
+
+fn set_institution_admin_list_override(admins: Vec<AccountId32>) {
+    INSTITUTION_ADMIN_LIST_OVERRIDE.with(|value| *value.borrow_mut() = Some(admins));
 }
 
 impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(
+    fn is_institution_admin(
         institution_code: InstitutionCode,
-        institution: AccountId32,
+        cid_number: &[u8],
         who: &AccountId32,
     ) -> bool {
         let who_bytes = who.encode();
@@ -230,58 +266,67 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         who_arr.copy_from_slice(&who_bytes);
 
         match institution_code {
-            NRC | PRC => CHINA_CB
+            NRC => CHINA_CB
                 .iter()
-                .find(|n| AccountId32::new(n.main_account) == institution)
+                .take(1)
+                .find(|n| n.cid_number.as_bytes() == cid_number)
+                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
+                .unwrap_or(false),
+            PRC => CHINA_CB
+                .iter()
+                .skip(1)
+                .find(|n| n.cid_number.as_bytes() == cid_number)
                 .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             PRB => CHINA_CH
                 .iter()
-                .find(|n| AccountId32::new(n.main_account) == institution)
+                .find(|n| n.cid_number.as_bytes() == cid_number)
                 .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             NJD => CHINA_SF
                 .first()
-                .filter(|n| AccountId32::new(n.main_account) == institution)
+                .filter(|n| n.cid_number.as_bytes() == cid_number)
                 .map(|_| {
                     NATIONAL_JUDICIAL_YUAN_ADMINS
                         .iter()
                         .any(|admin| *admin == who_arr)
                 })
                 .unwrap_or(false),
-            PERMANENT_SINGLETON_CODE if institution == permanent_singleton_institution() => {
+            PERMANENT_SINGLETON_CODE if cid_number == permanent_singleton_cid().as_slice() => {
                 (0..3).any(|index| permanent_singleton_admin(index) == *who)
             }
-            PERSONAL_CODE | PUBLIC_CODE | PRIVATE_CODE => {
-                institution == registered_account_institution()
-                    && [
-                        registered_account_admin(0),
-                        registered_account_admin(1),
-                        registered_account_admin(2),
-                    ]
-                    .iter()
-                    .any(|admin| admin == who)
+            PUBLIC_CODE if cid_number == public_cid().as_slice() => {
+                (0..3).any(|index| test_institution_admin(index) == *who)
+            }
+            PRIVATE_CODE if cid_number == private_cid().as_slice() => {
+                (0..3).any(|index| test_institution_admin(index) == *who)
             }
             _ => false,
         }
     }
 
-    fn get_admin_list(
+    fn get_institution_admins(
         institution_code: InstitutionCode,
-        institution: AccountId32,
+        cid_number: &[u8],
     ) -> Option<sp_std::vec::Vec<AccountId32>> {
         match institution_code {
-            NRC | PRC => CHINA_CB
+            NRC => CHINA_CB
                 .iter()
-                .find(|n| AccountId32::new(n.main_account) == institution)
+                .take(1)
+                .find(|n| n.cid_number.as_bytes() == cid_number)
+                .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
+            PRC => CHINA_CB
+                .iter()
+                .skip(1)
+                .find(|n| n.cid_number.as_bytes() == cid_number)
                 .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
             PRB => CHINA_CH
                 .iter()
-                .find(|n| AccountId32::new(n.main_account) == institution)
+                .find(|n| n.cid_number.as_bytes() == cid_number)
                 .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
             NJD => CHINA_SF
                 .first()
-                .filter(|n| AccountId32::new(n.main_account) == institution)
+                .filter(|n| n.cid_number.as_bytes() == cid_number)
                 .map(|_| {
                     NATIONAL_JUDICIAL_YUAN_ADMINS
                         .iter()
@@ -289,51 +334,58 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
                         .map(AccountId32::new)
                         .collect()
                 }),
-            PERMANENT_SINGLETON_CODE if institution == permanent_singleton_institution() => {
+            PERMANENT_SINGLETON_CODE if cid_number == permanent_singleton_cid().as_slice() => {
                 Some((0..3).map(permanent_singleton_admin).collect())
             }
-            PERSONAL_CODE | PUBLIC_CODE | PRIVATE_CODE
-                if institution == registered_account_institution() =>
-            {
+            PUBLIC_CODE if cid_number == public_cid().as_slice() => {
                 let override_admins =
-                    REGISTERED_ADMIN_LIST_OVERRIDE.with(|value| value.borrow().clone());
+                    INSTITUTION_ADMIN_LIST_OVERRIDE.with(|value| value.borrow().clone());
                 Some(override_admins.unwrap_or_else(|| {
                     sp_std::vec![
-                        registered_account_admin(0),
-                        registered_account_admin(1),
-                        registered_account_admin(2),
+                        test_institution_admin(0),
+                        test_institution_admin(1),
+                        test_institution_admin(2),
                     ]
                 }))
             }
+            PRIVATE_CODE if cid_number == private_cid().as_slice() => Some(sp_std::vec![
+                test_institution_admin(0),
+                test_institution_admin(1),
+                test_institution_admin(2),
+            ]),
             _ => None,
         }
     }
 
-    fn is_pending_internal_admin(
-        institution_code: InstitutionCode,
-        institution: AccountId32,
-        who: &AccountId32,
-    ) -> bool {
-        is_registered_multisig_code(&institution_code)
-            && institution == pending_account_institution()
-            && [pending_account_admin(0), pending_account_admin(1)]
+    fn is_personal_admin(personal_account: AccountId32, who: &AccountId32) -> bool {
+        personal_account == self::personal_account()
+            && [personal_admin(0), personal_admin(1), personal_admin(2)]
                 .iter()
                 .any(|admin| admin == who)
     }
 
-    fn get_pending_admin_list(
-        institution_code: InstitutionCode,
-        institution: AccountId32,
-    ) -> Option<sp_std::vec::Vec<AccountId32>> {
-        if !is_registered_multisig_code(&institution_code)
-            || institution != pending_account_institution()
-        {
-            return None;
+    fn get_personal_admins(personal_account: AccountId32) -> Option<Vec<AccountId32>> {
+        if personal_account == self::personal_account() {
+            Some(sp_std::vec![
+                personal_admin(0),
+                personal_admin(1),
+                personal_admin(2),
+            ])
+        } else {
+            None
         }
-        Some(sp_std::vec![
-            pending_account_admin(0),
-            pending_account_admin(1)
-        ])
+    }
+
+    fn is_pending_personal_admin(personal_account: AccountId32, who: &AccountId32) -> bool {
+        personal_account == pending_personal_account()
+            && [pending_personal_admin(0), pending_personal_admin(1)]
+                .iter()
+                .any(|admin| admin == who)
+    }
+
+    fn get_pending_personal_admins(personal_account: AccountId32) -> Option<Vec<AccountId32>> {
+        (personal_account == pending_personal_account())
+            .then(|| sp_std::vec![pending_personal_admin(0), pending_personal_admin(1)])
     }
 }
 
@@ -454,88 +506,29 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         INTERNAL_CALLBACK_LOG.with(|log| log.borrow_mut().clear());
         INTERNAL_TERMINAL_CLEANUP_LOG.with(|log| log.borrow_mut().clear());
         INTERNAL_TERMINAL_CLEANUP_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = false);
-        REGISTERED_ADMIN_LIST_OVERRIDE.with(|value| *value.borrow_mut() = None);
-        set_registered_account_threshold(3);
+        INSTITUTION_ADMIN_LIST_OVERRIDE.with(|value| *value.borrow_mut() = None);
+        set_personal_threshold(3);
+        set_institution_threshold(public_cid(), 3);
+        set_institution_threshold(private_cid(), 3);
         System::set_block_number(1);
     });
     ext
 }
 
-fn nrc_pid() -> AccountId32 {
-    AccountId32::new(CHINA_CB[0].main_account)
-}
-
-fn prc_pid() -> AccountId32 {
-    AccountId32::new(CHINA_CB[1].main_account)
-}
-
-fn prb_pid() -> AccountId32 {
-    AccountId32::new(CHINA_CH[0].main_account)
-}
-
-fn njd_pid() -> AccountId32 {
-    AccountId32::new(CHINA_SF[0].main_account)
-}
-
-fn subject_cids_for(
-    institution_code: InstitutionCode,
-    institution: &AccountId32,
-) -> sp_std::vec::Vec<sp_std::vec::Vec<u8>> {
-    match institution_code {
-        NRC | PRC => CHINA_CB
-            .iter()
-            .find(|entry| AccountId32::new(entry.main_account) == *institution)
-            .map(|entry| sp_std::vec![entry.cid_number.as_bytes().to_vec()])
-            .unwrap_or_default(),
-        PRB => CHINA_CH
-            .iter()
-            .find(|entry| AccountId32::new(entry.main_account) == *institution)
-            .map(|entry| sp_std::vec![entry.cid_number.as_bytes().to_vec()])
-            .unwrap_or_default(),
-        NJD => CHINA_SF
-            .iter()
-            .find(|entry| AccountId32::new(entry.main_account) == *institution)
-            .map(|entry| sp_std::vec![entry.cid_number.as_bytes().to_vec()])
-            .unwrap_or_default(),
-        PERMANENT_SINGLETON_CODE => primitives::institution_constraints::singleton_institutions()
-            .into_iter()
-            .find(|item| item.code == PERMANENT_SINGLETON_CODE)
-            .map(|item| sp_std::vec![item.cid_number.as_bytes().to_vec()])
-            .unwrap_or_default(),
-        PERSONAL_CODE => sp_std::vec::Vec::new(),
-        PUBLIC_CODE => sp_std::vec![b"TEST-PUBLIC-CID".to_vec()],
-        PRIVATE_CODE => sp_std::vec![b"TEST-PRIVATE-CID".to_vec()],
-        _ => sp_std::vec![b"TEST-OTHER-CID".to_vec()],
-    }
-}
-
-fn first_subject_cid_for(
-    institution_code: InstitutionCode,
-    institution: &AccountId32,
-) -> votingengine::types::CidNumber {
-    let raw = subject_cids_for(institution_code, institution)
-        .into_iter()
-        .next()
-        .expect("institution cid should exist");
-    votingengine::Pallet::<Test>::bound_subject_cid_numbers(sp_std::vec![raw])
-        .expect("subject cid should be bounded")
-        .pop()
-        .expect("subject cid should be present")
+fn subject_cids_for(actor_cid_number: &CidNumber) -> Vec<Vec<u8>> {
+    sp_std::vec![actor_cid_number.to_vec()]
 }
 
 fn internal_mutex_for(
-    institution_code: InstitutionCode,
-    institution: AccountId32,
+    actor_cid_number: CidNumber,
 ) -> Option<votingengine::InternalProposalMutexState> {
-    let subject = if institution_code == PERSONAL_CODE {
-        votingengine::ProposalSubject::PersonalAccount(institution.clone())
-    } else {
-        votingengine::ProposalSubject::InstitutionCid(first_subject_cid_for(
-            institution_code,
-            &institution,
-        ))
-    };
-    VotingEngine::internal_proposal_mutex(subject)
+    VotingEngine::internal_proposal_mutex(ProposalSubject::InstitutionCid(actor_cid_number))
+}
+
+fn personal_mutex_for(
+    personal_account: AccountId32,
+) -> Option<votingengine::InternalProposalMutexState> {
+    VotingEngine::internal_proposal_mutex(ProposalSubject::PersonalAccount(personal_account))
 }
 
 fn nrc_admin(index: usize) -> AccountId32 {
@@ -546,25 +539,25 @@ fn njd_admin(index: usize) -> AccountId32 {
     AccountId32::new(NATIONAL_JUDICIAL_YUAN_ADMINS[index])
 }
 
-fn all_prc_institutions() -> Vec<(AccountId32, AccountId32)> {
+fn all_prc_institutions() -> Vec<(CidNumber, AccountId32)> {
     CHINA_CB
         .iter()
         .skip(1)
         .map(|n| {
             (
-                AccountId32::new(n.main_account),
+                bounded_cid(n.cid_number.as_bytes()),
                 AccountId32::new(n.admins[0]),
             )
         })
         .collect()
 }
 
-fn all_prb_institutions() -> Vec<(AccountId32, AccountId32)> {
+fn all_prb_institutions() -> Vec<(CidNumber, AccountId32)> {
     CHINA_CH
         .iter()
         .map(|n| {
             (
-                AccountId32::new(n.main_account),
+                bounded_cid(n.cid_number.as_bytes()),
                 AccountId32::new(n.admins[0]),
             )
         })
@@ -579,43 +572,43 @@ fn prb_admin(index: usize) -> AccountId32 {
     AccountId32::new(CHINA_CH[0].admins[index])
 }
 
-fn institution_admins(institution: AccountId32) -> Vec<AccountId32> {
+fn institution_admins(cid_number: CidNumber) -> Vec<AccountId32> {
     CHINA_CB
         .iter()
-        .find(|n| AccountId32::new(n.main_account) == institution)
+        .find(|n| n.cid_number.as_bytes() == cid_number.as_slice())
         .map(|n| n.admins.iter().copied().map(AccountId32::new).collect())
         .or_else(|| {
             CHINA_CH
                 .iter()
-                .find(|n| AccountId32::new(n.main_account) == institution)
+                .find(|n| n.cid_number.as_bytes() == cid_number.as_slice())
                 .map(|n| n.admins.iter().copied().map(AccountId32::new).collect())
         })
         .expect("institution should have admins")
 }
 
-fn institution_threshold(institution: AccountId32) -> usize {
-    if institution == nrc_pid() {
+fn institution_threshold(cid_number: CidNumber) -> usize {
+    if cid_number == nrc_cid() {
         return primitives::count_const::NRC_INTERNAL_THRESHOLD as usize;
     }
     if CHINA_CB
         .iter()
         .skip(1)
-        .any(|n| AccountId32::new(n.main_account) == institution)
+        .any(|n| n.cid_number.as_bytes() == cid_number.as_slice())
     {
         return primitives::count_const::PRC_INTERNAL_THRESHOLD as usize;
     }
     if CHINA_CH
         .iter()
-        .any(|n| AccountId32::new(n.main_account) == institution)
+        .any(|n| n.cid_number.as_bytes() == cid_number.as_slice())
     {
         return primitives::count_const::PRB_INTERNAL_THRESHOLD as usize;
     }
     panic!("unknown institution");
 }
 
-fn cast_joint_votes_until_finalized(proposal_id: u64, institution: AccountId32, approve: bool) {
-    let admins = institution_admins(institution.clone());
-    let threshold = institution_threshold(institution.clone());
+fn cast_joint_votes_until_finalized(proposal_id: u64, cid_number: CidNumber, approve: bool) {
+    let admins = institution_admins(cid_number.clone());
+    let threshold = institution_threshold(cid_number.clone());
     let required_votes = if approve {
         threshold
     } else {
@@ -625,7 +618,7 @@ fn cast_joint_votes_until_finalized(proposal_id: u64, institution: AccountId32, 
         assert_ok!(submit_joint_vote(
             admin,
             proposal_id,
-            institution.clone(),
+            cid_number.clone(),
             approve
         ));
     }
@@ -636,25 +629,37 @@ fn cast_joint_votes_until_finalized(proposal_id: u64, institution: AccountId32, 
 fn submit_joint_vote(
     who: AccountId32,
     proposal_id: u64,
-    institution: AccountId32,
+    cid_number: CidNumber,
     approve: bool,
 ) -> DispatchResult {
     // 测试 helper 直调底层 do_joint_vote,绕过 extrinsic 签名包装。
-    <joint_vote::Pallet<Test>>::do_joint_vote(who, proposal_id, institution, approve)
+    <joint_vote::Pallet<Test>>::do_joint_vote(who, proposal_id, cid_number, approve)
 }
 
-fn prepare_population_snapshot_for(who: AccountId32, eligible_total: u64) {
+fn prepare_population_snapshot_for(
+    who: AccountId32,
+    actor_cid_number: CidNumber,
+    eligible_total: u64,
+) {
     TEST_POPULATION_COUNT.with(|count| *count.borrow_mut() = eligible_total);
     assert_ok!(JointVote::prepare_joint_population_snapshot(
         RuntimeOrigin::signed(who),
+        actor_cid_number,
         votingengine::PopulationScope::Country,
     ));
 }
 
-fn create_joint_proposal_for(who: AccountId32, eligible_total: u64) -> u64 {
-    prepare_population_snapshot_for(who.clone(), eligible_total);
-    <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(who)
-        .expect("joint proposal should be created")
+fn create_joint_proposal_for(
+    who: AccountId32,
+    actor_cid_number: CidNumber,
+    eligible_total: u64,
+) -> u64 {
+    prepare_population_snapshot_for(who.clone(), actor_cid_number.clone(), eligible_total);
+    <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
+        who,
+        actor_cid_number.to_vec(),
+    )
+    .expect("joint proposal should be created")
 }
 
 fn set_joint_callback_should_fail(should_fail: bool) {
@@ -680,60 +685,54 @@ fn set_test_now_secs(secs: u64) {
 fn create_internal_proposal_via_engine(
     who: AccountId32,
     institution_code: InstitutionCode,
-    institution: AccountId32,
+    actor_cid_number: CidNumber,
 ) -> u64 {
-    <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
+    <InternalVote as InternalVoteEngine<AccountId32>>::create_institution_proposal_with_data(
         who,
         institution_code,
-        institution.clone(),
-        subject_cids_for(institution_code, &institution),
+        actor_cid_number.to_vec(),
+        None,
+        subject_cids_for(&actor_cid_number),
         b"test",
         b"payload".to_vec(),
     )
     .expect("internal proposal should be created")
 }
 
-fn create_pending_account_proposal_via_engine(
+fn create_pending_personal_proposal_via_engine(
     who: AccountId32,
-    institution_code: InstitutionCode,
-    institution: AccountId32,
+    personal_account: AccountId32,
 ) -> u64 {
-    <InternalVote as InternalVoteEngine<AccountId32>>::create_registered_account_create_proposal_with_data(
+    <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_account_create_proposal_with_data(
         who,
-        institution_code,
-        institution.clone(),
-        subject_cids_for(institution_code, &institution),
-        sp_std::vec![pending_account_admin(0), pending_account_admin(1)],
+        personal_account,
+        sp_std::vec![pending_personal_admin(0), pending_personal_admin(1)],
         2,
         b"test",
         b"payload".to_vec(),
     )
-    .expect("pending account proposal should be created")
+    .expect("pending personal proposal should be created")
+}
+
+fn create_personal_proposal_via_engine(who: AccountId32, personal_account: AccountId32) -> u64 {
+    <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_proposal_with_data(
+        who,
+        personal_account,
+        b"test",
+        b"payload".to_vec(),
+    )
+    .expect("personal proposal should be created")
 }
 
 fn create_admin_set_mutation_proposal_via_engine(
     who: AccountId32,
-    institution_code: InstitutionCode,
-    institution: AccountId32,
+    personal_account: AccountId32,
 ) -> u64 {
-    let new_threshold = if is_registered_multisig_code(&institution_code) {
-        2
-    } else {
-        votingengine::types::fixed_governance_pass_threshold(&institution_code)
-            .expect("fixed threshold")
-    };
-    <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_change_internal_proposal_with_data(
+    <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_admin_change_proposal_with_data(
         who,
-        institution_code,
-        institution.clone(),
-        subject_cids_for(institution_code, &institution),
-        <TestInternalAdminProvider as InternalAdminProvider<AccountId32>>::get_admin_list(
-            institution_code,
-            institution,
-        )
-        .map(|admins| admins.len() as u32)
-        .unwrap_or(3),
-        new_threshold,
+        personal_account,
+        3,
+        2,
         b"test",
         b"payload".to_vec(),
     )
@@ -779,7 +778,15 @@ fn insert_joint_referendum_proposal(proposal_id: u64, eligible_total: u64, end: 
             stage: STAGE_REFERENDUM,
             status: STATUS_VOTING,
             internal_code: None,
-            account_context: None,
+            actor_cid_number: Some(
+                CHINA_CB[0]
+                    .cid_number
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .expect("NRC CID fits runtime bound"),
+            ),
+            execution_account: None,
             subject_cid_numbers: Default::default(),
             start: System::block_number(),
             end,

@@ -415,10 +415,9 @@ pub mod pallet {
                 .to_vec()
                 .try_into()
                 .expect("国家立法院 CID 必须满足协议长度");
-            let constitution_houses = BoundedVec::try_from(sp_runtime::sp_std::vec![
-                nlg_cid_number,
-            ])
-            .expect("constitution houses within bound");
+            let constitution_houses =
+                BoundedVec::try_from(sp_runtime::sp_std::vec![nlg_cid_number,])
+                    .expect("constitution houses within bound");
             Self {
                 constitution_houses,
                 _phantom: Default::default(),
@@ -872,8 +871,9 @@ pub mod pallet {
                 Self::institution_code_for_cid(cid_number)? == expected_code,
                 Error::<T>::RoutingMismatch
             );
-            let parts = primitives::cid::number::parse_cid_number_parts_bytes(cid_number.as_slice())
-                .map_err(|_| Error::<T>::RoutingMismatch)?;
+            let parts =
+                primitives::cid::number::parse_cid_number_parts_bytes(cid_number.as_slice())
+                    .map_err(|_| Error::<T>::RoutingMismatch)?;
             ensure!(
                 parts.institution == expected_code,
                 Error::<T>::RoutingMismatch
@@ -937,8 +937,7 @@ pub mod pallet {
                 ensure!(scope_code == 0, Error::<T>::RoutingMismatch);
             }
 
-            let route_scope =
-                Self::ensure_route_institution(actor_cid_number, expected_proposer)?;
+            let route_scope = Self::ensure_route_institution(actor_cid_number, expected_proposer)?;
             for (house, expected_code) in houses.iter().zip(expected_houses.iter()) {
                 let scope = Self::ensure_route_institution(house, *expected_code)?;
                 ensure!(

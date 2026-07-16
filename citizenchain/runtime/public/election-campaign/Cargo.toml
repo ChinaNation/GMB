@@ -14,6 +14,7 @@ frame-system = { workspace = true }
 sp-runtime = { workspace = true }
 
 primitives = { path = "../../primitives", default-features = false }
+votingengine = { path = "../../votingengine", default-features = false }
 
 [features]
 default = ["std"]
@@ -29,4 +30,5 @@ std = [
     "frame-system/std",
     "sp-runtime/std",
     "primitives/std",
+    "votingengine/std",
 ]

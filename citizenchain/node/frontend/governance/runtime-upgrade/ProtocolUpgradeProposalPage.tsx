@@ -11,12 +11,13 @@ import type { PowDifficultyParams, ProposeUpgradeRequestResult } from './api';
 type FlowStep = 'form' | 'qr' | 'submit' | 'done' | 'error';
 
 type Props = {
+  actorCidNumber: string;
   adminWallets: AdminWalletMatch[];
   onBack: () => void;
   onSuccess: () => void;
 };
 
-export function ProtocolUpgradeProposalPage({ adminWallets, onBack, onSuccess }: Props) {
+export function ProtocolUpgradeProposalPage({ actorCidNumber, adminWallets, onBack, onSuccess }: Props) {
   const [wasmPath, setWasmPath] = useState('');
   const [wasmFileName, setWasmFileName] = useState('');
   const [reason, setReason] = useState('');
@@ -81,6 +82,7 @@ export function ProtocolUpgradeProposalPage({ adminWallets, onBack, onSuccess }:
     try {
       const result = await api.buildProposeUpgradeRequest(
         selectedPubkey,
+        actorCidNumber,
         wasmPath.trim(),
         reason.trim(),
         powParams,
@@ -95,7 +97,7 @@ export function ProtocolUpgradeProposalPage({ adminWallets, onBack, onSuccess }:
     } finally {
       setBuilding(false);
     }
-  }, [wasmPath, selectedPubkey, reason, powParams]);
+  }, [actorCidNumber, wasmPath, selectedPubkey, reason, powParams]);
 
   const handleScanResult = useCallback(async (responseText: string) => {
     const req = signRequestRef.current;
@@ -108,6 +110,7 @@ export function ProtocolUpgradeProposalPage({ adminWallets, onBack, onSuccess }:
     try {
       const result = await api.submitProposeUpgrade(
         req.requestId, pubkey, req.expectedPayloadHash,
+        actorCidNumber,
         path, reasonVal, params,
         req.signNonce, req.signBlockNumber, responseText,
       );
@@ -117,7 +120,7 @@ export function ProtocolUpgradeProposalPage({ adminWallets, onBack, onSuccess }:
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, []);
+  }, [actorCidNumber]);
 
   const canSubmit = wasmPath.trim() && selectedPubkey && reason.trim() && powParams;
 

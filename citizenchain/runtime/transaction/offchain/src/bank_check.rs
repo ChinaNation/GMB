@@ -27,8 +27,8 @@ pub const ACCOUNT_NAME_FEE: &[u8] = primitives::account_derive::RESERVED_NAME_FE
 // 机构登记表查询抽象
 /// 机构登记表查询抽象。
 ///
-/// 运行时由实体生命周期模块的 `AccountRegisteredCid` / `CidRegisteredAccount` /
-/// `InstitutionAccounts` / `ClearingBankNodes` 等链上索引组合实现。测试可用 `()` 或 mock。
+/// 运行时由 `InstitutionAccounts` 正向真源、`AccountRegisteredCid` 反向索引与
+/// `ClearingBankNodes` 组合实现。测试可用 `()` 或 mock。
 pub trait CidAccountQuery<AccountId> {
     /// 地址 → (cid_number 字节, account_name 字节)。未登记返回 None。
     fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)>;
@@ -139,15 +139,15 @@ pub fn ensure_institution_account<T: Config>(
     institution_account: &T::AccountId,
     required_account_name: &[u8],
 ) -> Result<(), Error<T>> {
-    let (registered_cid_number, registered_account_name) =
+    let (institution_cid_number, institution_account_name) =
         T::CidAccountQuery::account_info(institution_account)
             .ok_or(Error::<T>::NotRegisteredClearingBank)?;
     ensure!(
-        registered_cid_number.as_slice() == actor_cid_number,
+        institution_cid_number.as_slice() == actor_cid_number,
         Error::<T>::InstitutionMismatch
     );
     ensure!(
-        registered_account_name.as_slice() == required_account_name,
+        institution_account_name.as_slice() == required_account_name,
         Error::<T>::NotMainAccount
     );
     ensure!(

@@ -29,7 +29,8 @@ fn setup<T: Config>(status: u8) -> (u64, T::AccountId) {
             stage: crate::STAGE_INTERNAL,
             status,
             internal_code: Some(primitives::cid::code::PMUL),
-            account_context: Some(institution.clone()),
+            actor_cid_number: None,
+            execution_account: Some(institution.clone()),
             subject_cid_numbers: Default::default(),
             start: 0u32.saturated_into(),
             end: 0u32.saturated_into(),
@@ -40,7 +41,11 @@ fn setup<T: Config>(status: u8) -> (u64, T::AccountId) {
         sp_std::vec![who.clone()]
             .try_into()
             .expect("single benchmark admin fits runtime bound");
-    AdminSnapshot::<T>::insert(proposal_id, institution, admins);
+    AdminSnapshot::<T>::insert(
+        proposal_id,
+        crate::ProposalSubject::PersonalAccount(institution),
+        admins,
+    );
     if status == STATUS_PASSED {
         ProposalExecutionRetryStates::<T>::insert(
             proposal_id,

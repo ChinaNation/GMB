@@ -54,7 +54,7 @@ pub enum AssetState {
 
 /// 用户代币元数据(链端权威 storage)。
 ///
-/// storage key 是 `asset_id`，发行/治理账户是机构多签账户地址。
+/// storage key 是 `asset_id`；发行机构身份只使用 CID，资产账户只承担执行。
 #[derive(
     Encode,
     Decode,
@@ -68,8 +68,10 @@ pub enum AssetState {
 )]
 #[scale_info(skip_type_params(MaxName, MaxSymbol, MaxDescription))]
 pub struct OnchainAssetMeta<AccountId> {
-    /// 发行机构多签账户地址。
-    pub issuer_account: AccountId,
+    /// 发行机构唯一 CID。
+    pub actor_cid_number: votingengine::types::CidNumber,
+    /// 资产执行账户；不得作为机构身份或管理员寻址 key。
+    pub execution_account: AccountId,
     /// 资产种类(第一期只 Plain)。
     pub class: AssetClass,
     /// 小数位(0..=18,链端校验)。

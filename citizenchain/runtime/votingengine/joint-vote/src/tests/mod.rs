@@ -76,32 +76,41 @@ impl CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
 }
 
 pub struct TestAdminProvider;
-impl InternalAdminProvider<AccountId32> for TestAdminProvider {
-    fn is_internal_admin(
+impl TestAdminProvider {
+    fn institution_admins(
         institution_code: votingengine::InstitutionCode,
-        institution: AccountId32,
-        who: &AccountId32,
-    ) -> bool {
-        Self::get_admin_list(institution_code, institution)
-            .map(|admins| admins.contains(who))
-            .unwrap_or(false)
-    }
-
-    fn get_admin_list(
-        institution_code: votingengine::InstitutionCode,
-        institution: AccountId32,
+        cid_number: &[u8],
     ) -> Option<Vec<AccountId32>> {
         match institution_code {
             votingengine::NRC | votingengine::PRC => CHINA_CB
                 .iter()
-                .find(|entry| AccountId32::new(entry.main_account) == institution)
+                .find(|entry| entry.cid_number.as_bytes() == cid_number)
                 .map(|entry| entry.admins.iter().copied().map(AccountId32::new).collect()),
             votingengine::PRB => CHINA_CH
                 .iter()
-                .find(|entry| AccountId32::new(entry.main_account) == institution)
+                .find(|entry| entry.cid_number.as_bytes() == cid_number)
                 .map(|entry| entry.admins.iter().copied().map(AccountId32::new).collect()),
             _ => None,
         }
+    }
+}
+
+impl InternalAdminProvider<AccountId32> for TestAdminProvider {
+    fn is_institution_admin(
+        institution_code: votingengine::InstitutionCode,
+        cid_number: &[u8],
+        who: &AccountId32,
+    ) -> bool {
+        Self::institution_admins(institution_code, cid_number)
+            .map(|admins| admins.contains(who))
+            .unwrap_or(false)
+    }
+
+    fn get_institution_admins(
+        institution_code: votingengine::InstitutionCode,
+        cid_number: &[u8],
+    ) -> Option<Vec<AccountId32>> {
+        Self::institution_admins(institution_code, cid_number)
     }
 }
 
@@ -175,7 +184,11 @@ fn nrc_admin() -> AccountId32 {
     AccountId32::new(CHINA_CB[0].admins[0])
 }
 
-fn all_joint_institutions() -> Vec<(votingengine::InstitutionCode, AccountId32)> {
+fn nrc_cid_number() -> Vec<u8> {
+    CHINA_CB[0].cid_number.as_bytes().to_vec()
+}
+
+fn all_joint_institutions() -> Vec<(votingengine::InstitutionCode, Vec<u8>)> {
     CHINA_CB
         .iter()
         .enumerate()
@@ -185,40 +198,44 @@ fn all_joint_institutions() -> Vec<(votingengine::InstitutionCode, AccountId32)>
             } else {
                 votingengine::PRC
             };
-            (code, AccountId32::new(entry.main_account))
+            (code, entry.cid_number.as_bytes().to_vec())
         })
         .chain(
             CHINA_CH
                 .iter()
-                .map(|entry| (votingengine::PRB, AccountId32::new(entry.main_account))),
+                .map(|entry| (votingengine::PRB, entry.cid_number.as_bytes().to_vec())),
         )
         .collect()
 }
 
 fn admins_for(
     institution_code: votingengine::InstitutionCode,
-    institution: AccountId32,
+    cid_number: &[u8],
 ) -> Vec<AccountId32> {
-    TestAdminProvider::get_admin_list(institution_code, institution)
+    TestAdminProvider::institution_admins(institution_code, cid_number)
         .expect("joint institution should have admins")
 }
 
 fn create_joint_proposal() -> u64 {
     assert_ok!(JointVote::prepare_joint_population_snapshot(
         RuntimeOrigin::signed(nrc_admin()),
+        nrc_cid_number().try_into().expect("NRC CID should fit"),
         PopulationScope::Country,
     ));
-    <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(nrc_admin())
-        .expect("joint proposal should be created")
+    <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
+        nrc_admin(),
+        nrc_cid_number(),
+    )
+    .expect("joint proposal should be created")
 }
 
 fn finalize_institution(
     proposal_id: u64,
     institution_code: votingengine::InstitutionCode,
-    institution: AccountId32,
+    cid_number: Vec<u8>,
     approve: bool,
 ) {
-    let admins = admins_for(institution_code, institution.clone());
+    let admins = admins_for(institution_code, &cid_number);
     let threshold = votingengine::types::fixed_governance_pass_threshold(&institution_code)
         .expect("fixed institution threshold") as usize;
     let required = if approve {
@@ -230,7 +247,10 @@ fn finalize_institution(
         assert_ok!(JointVote::cast_admin(
             RuntimeOrigin::signed(admin),
             proposal_id,
-            institution.clone(),
+            cid_number
+                .clone()
+                .try_into()
+                .expect("institution CID should fit"),
             approve,
         ));
     }
@@ -285,8 +305,8 @@ fn all_105_weight_via_cast_admin_passes_and_executes() {
 fn one_institution_rejection_via_cast_admin_enters_referendum() {
     new_test_ext().execute_with(|| {
         let proposal_id = create_joint_proposal();
-        let institution = AccountId32::new(CHINA_CB[1].main_account);
-        finalize_institution(proposal_id, votingengine::PRC, institution, false);
+        let cid_number = CHINA_CB[1].cid_number.as_bytes().to_vec();
+        finalize_institution(proposal_id, votingengine::PRC, cid_number, false);
 
         let proposal = VotingEngine::proposals(proposal_id).expect("proposal should exist");
         assert_eq!(proposal.stage, STAGE_REFERENDUM);
@@ -316,8 +336,8 @@ fn joint_internal_timeout_via_public_finalizer_enters_referendum() {
 fn cast_referendum_extrinsic_uses_frozen_snapshot_and_strict_majority() {
     new_test_ext().execute_with(|| {
         let proposal_id = create_joint_proposal();
-        let institution = AccountId32::new(CHINA_CB[1].main_account);
-        finalize_institution(proposal_id, votingengine::PRC, institution, false);
+        let cid_number = CHINA_CB[1].cid_number.as_bytes().to_vec();
+        finalize_institution(proposal_id, votingengine::PRC, cid_number, false);
 
         let voters = referendum_voters();
         assert_ok!(JointVote::cast_referendum(
@@ -347,8 +367,8 @@ fn cast_referendum_extrinsic_uses_frozen_snapshot_and_strict_majority() {
 fn newly_added_voter_cannot_enter_existing_snapshot() {
     new_test_ext().execute_with(|| {
         let proposal_id = create_joint_proposal();
-        let institution = AccountId32::new(CHINA_CB[1].main_account);
-        finalize_institution(proposal_id, votingengine::PRC, institution, false);
+        let cid_number = CHINA_CB[1].cid_number.as_bytes().to_vec();
+        finalize_institution(proposal_id, votingengine::PRC, cid_number, false);
 
         let post_snapshot_account = AccountId32::new([204; 32]);
         assert!(JointVote::cast_referendum(

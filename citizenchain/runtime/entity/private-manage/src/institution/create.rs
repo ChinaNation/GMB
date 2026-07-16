@@ -1,10 +1,10 @@
 //! 机构创建流程实现。
 //!
-//! 机构最少必须有 2 个账户(主账户 + 费用账户)。
+//! 机构必须完整携带其 CID 类型要求的协议账户；普通私权机构至少包含主账户和费用账户。
 //!
 //! 唯一入口: `do_propose_create_private_institution`(call_index=5)
-//! - 一次创建机构主账户 / 费用账户 / 自定义账户列表
-//! - 凭证带签发机构 CID、签发机构主账户和签发管理员公钥
+//! - 一次创建该机构全部必需协议账户及可选自定义账户
+//! - 凭证带 actor CID 和签名管理员公钥，不以任何机构账户充当授权身份
 //! - 资金模型: 注册局交易成功即划转初始余额并激活机构与管理员集合
 
 extern crate alloc;
@@ -158,7 +158,7 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
         crate::common::ensure_proposer_can_afford::<T>(&who, initial_total)?;
 
     let now = <frame_system::Pallet<T>>::block_number();
-    // 管理员更换与内部投票直接使用机构主账户。
+    // 管理员与内部投票都按机构 CID 寻址，任何机构账户都不充当授权根。
     with_transaction(|| {
         let admins = match Pallet::<T>::store_initial_roles_and_assignments(
             &cid_number,
@@ -190,12 +190,12 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
         for account in created_accounts.iter() {
             if !account.amount.is_zero()
                 && T::Currency::transfer(
-                &who,
-                &account.address,
-                account.amount,
-                ExistenceRequirement::KeepAlive,
-            )
-            .is_err()
+                    &who,
+                    &account.address,
+                    account.amount,
+                    ExistenceRequirement::KeepAlive,
+                )
+                .is_err()
             {
                 return TransactionOutcome::Rollback(Err(Error::<T>::TransferFailed.into()));
             }
@@ -234,13 +234,10 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
             );
         }
 
-        // 注册局创建机构时直接提交目标机构管理员合集;交易成功即写 Active。
-        if let Err(err) = Pallet::<T>::set_active_admin_account_direct(
-            &cid_number,
-            institution_code,
-            &admins,
-            threshold,
-        ) {
+        // 注册局创建机构时直接提交目标机构有效管理员集合；授权与阈值均以 CID 为 key。
+        if let Err(err) =
+            Pallet::<T>::set_institution_admins(&cid_number, institution_code, &admins, threshold)
+        {
             return TransactionOutcome::Rollback(Err(err));
         }
         UsedRegisterNonce::<T>::insert(register_nonce_hash, true);

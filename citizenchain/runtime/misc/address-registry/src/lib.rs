@@ -235,7 +235,12 @@ pub mod pallet {
             let (province_code, city_code, town_code, address_name_code) =
                 Self::name_key_parts(province_code, city_code, town_code, address_name_code)?;
             let address_name = Self::bounded_address_name(address_name)?;
-            Self::ensure_authority(&who, actor_cid_number.as_slice(), &province_code, &city_code)?;
+            Self::ensure_authority(
+                &who,
+                actor_cid_number.as_slice(),
+                &province_code,
+                &city_code,
+            )?;
 
             let key = (
                 province_code.clone(),
@@ -280,7 +285,12 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
             let (province_code, city_code, town_code, address_name_code) =
                 Self::name_key_parts(province_code, city_code, town_code, address_name_code)?;
-            Self::ensure_authority(&who, actor_cid_number.as_slice(), &province_code, &city_code)?;
+            Self::ensure_authority(
+                &who,
+                actor_cid_number.as_slice(),
+                &province_code,
+                &city_code,
+            )?;
 
             let key = (
                 province_code.clone(),

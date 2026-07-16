@@ -4,9 +4,9 @@
 //! - `service.rs` 负责节点通用启动,本文件负责清算行专属启动。
 //! - 这里统一处理 CLI 参数、密钥解锁、packer/listener/reserve worker spawn。
 
-use sc_service::TaskManager;
 use primitives::account_derive::AccountKind;
 use primitives::core_const::SS58_FORMAT;
+use sc_service::TaskManager;
 use sp_core::crypto::Ss58Codec;
 use sp_runtime::AccountId32;
 use std::{
@@ -43,9 +43,7 @@ pub(crate) fn start_from_cli(
     {
         Ok(cid_number) => cid_number,
         Err(e) => {
-            log::warn!(
-                "[ClearingBank] --clearing-bank-cid-number 格式无效:{e},清算行组件不启动"
-            );
+            log::warn!("[ClearingBank] --clearing-bank-cid-number 格式无效:{e},清算行组件不启动");
             return None;
         }
     };

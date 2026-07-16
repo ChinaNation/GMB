@@ -293,7 +293,10 @@ fn decode_activate_payload(payload_bytes: &[u8]) -> Result<ActivationPayload, St
     let mut offset = BINARY_PREFIX_LEN;
     let cid_bytes = &payload_bytes[offset..offset + ACTIVATE_ADMIN_CID_LEN];
     offset += ACTIVATE_ADMIN_CID_LEN;
-    let cid_end = cid_bytes.iter().position(|byte| *byte == 0).unwrap_or(cid_bytes.len());
+    let cid_end = cid_bytes
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(cid_bytes.len());
     if cid_end == 0 || cid_bytes[cid_end..].iter().any(|byte| *byte != 0) {
         return Err("激活 payload CID 固定槽无效".to_string());
     }
@@ -351,9 +354,10 @@ pub async fn build_activate_admin_request(
 
     let expected_code = parse_expected_code(expected_institution_code.as_deref());
     let sid = cid_number.clone();
-    let state = tauri::async_runtime::spawn_blocking(move || fetch_chain_account(&sid, expected_code))
-    .await
-    .map_err(|e| format!("查询管理员账户失败: {e}"))??;
+    let state =
+        tauri::async_runtime::spawn_blocking(move || fetch_chain_account(&sid, expected_code))
+            .await
+            .map_err(|e| format!("查询管理员账户失败: {e}"))??;
 
     if !state.admins.iter().any(|a| a.account == pubkey_clean) {
         return Err("该公钥不在此管理员账户的链上管理员列表中".to_string());
@@ -564,9 +568,7 @@ pub async fn verify_activate_admin(
     }
 
     let mut activations = load_activations(&app)?;
-    activations.retain(|a| {
-        !(a.pubkey_hex == pubkey_clean && a.cid_number == decoded_cid_number)
-    });
+    activations.retain(|a| !(a.pubkey_hex == pubkey_clean && a.cid_number == decoded_cid_number));
     let activated_at = now_ms();
     activations.push(StoredActivation {
         pubkey_hex: pubkey_clean.clone(),
@@ -627,9 +629,10 @@ pub async fn get_activated_admins(
     let status = home::current_status(&app)?;
     if status.running {
         let sid = cid_number.clone();
-        let state = tauri::async_runtime::spawn_blocking(move || fetch_chain_account(&sid, expected_code))
-        .await
-        .map_err(|e| format!("查询管理员账户失败: {e}"));
+        let state =
+            tauri::async_runtime::spawn_blocking(move || fetch_chain_account(&sid, expected_code))
+                .await
+                .map_err(|e| format!("查询管理员账户失败: {e}"));
 
         match state {
             Ok(Ok(state)) => {
@@ -649,9 +652,7 @@ pub async fn get_activated_admins(
                     let _ = save_activations(&app, &activations);
                 }
             }
-            Ok(Err(e))
-                if e.contains("链上不存在")
-                    || e.contains("类型与机构码不匹配") =>
+            Ok(Err(e)) if e.contains("链上不存在") || e.contains("类型与机构码不匹配") =>
             {
                 activations.retain(|a| a.cid_number != cid_number);
                 let _ = save_activations(&app, &activations);

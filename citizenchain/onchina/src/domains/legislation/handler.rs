@@ -319,10 +319,10 @@ pub(crate) async fn propose_legislation(
     ) {
         return api_error(StatusCode::FORBIDDEN, 1003, err.code());
     }
-    // houses/executive/legislature 账户按宪法路由 + subjects 逐院解析(闭包自开连接,保持 Fn)。
+    // houses/actor/executive/legislature 只按宪法路由 + subjects 解析机构 CID。
     let db_state = state.clone();
-    let resolve_account = move |code: &[u8; 4]| {
-        chain_read::resolve_house_account(
+    let resolve_cid_number = move |code: &[u8; 4]| {
+        chain_read::resolve_institution_cid_number(
             &db_state.db,
             &institution_code_text(code),
             &province_code,
@@ -333,7 +333,7 @@ pub(crate) async fn propose_legislation(
         &input,
         proposer_code,
         ctx.admin_account.as_str(),
-        resolve_account,
+        resolve_cid_number,
     ) {
         Ok(sign_request) => Json(ApiResponse {
             code: 0,

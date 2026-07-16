@@ -794,7 +794,13 @@ fn upsert_account_chunk(
             account = EXCLUDED.account
          WHERE accounts.city_code IS DISTINCT FROM EXCLUDED.city_code
             OR accounts.account IS DISTINCT FROM EXCLUDED.account",
-        &[&cids, &province_codes, &city_codes, &account_names, &accounts],
+        &[
+            &cids,
+            &province_codes,
+            &city_codes,
+            &account_names,
+            &accounts,
+        ],
     )
     .map_err(|e| {
         format!(

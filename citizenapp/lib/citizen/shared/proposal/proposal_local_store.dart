@@ -170,7 +170,8 @@ class LocalProposalSummary {
     required this.iconKind,
     required this.updatedAtMillis,
     this.internalCode,
-    this.institutionBytesHex,
+    this.actorCidNumber,
+    this.executionAccountHex,
     this.subjectCidNumbers = const [],
     this.displayYear,
     this.displaySeqInYear,
@@ -183,7 +184,8 @@ class LocalProposalSummary {
   final int stage;
   final int status;
   final String? internalCode;
-  final String? institutionBytesHex;
+  final String? actorCidNumber;
+  final String? executionAccountHex;
   final List<String> subjectCidNumbers;
   final int? displayYear;
   final int? displaySeqInYear;
@@ -210,7 +212,8 @@ class LocalProposalSummary {
         stage: stage,
         status: status,
         internalCode: internalCode,
-        institutionBytes: _hexToBytes(institutionBytesHex),
+        actorCidNumber: actorCidNumber,
+        executionAccount: _hexToBytes(executionAccountHex),
         subjectCidNumbers: subjectCidNumbers,
         displayMeta: displayMeta,
       );
@@ -296,7 +299,8 @@ class LocalProposalSummary {
       stage: meta.stage,
       status: meta.status,
       internalCode: meta.internalCode,
-      institutionBytesHex: _bytesToHex(meta.institutionBytes),
+      actorCidNumber: meta.actorCidNumber,
+      executionAccountHex: _bytesToHex(meta.executionAccount),
       subjectCidNumbers: meta.subjectCidNumbers,
       displayYear: meta.displayMeta?.year,
       displaySeqInYear: meta.displayMeta?.seqInYear,
@@ -316,7 +320,8 @@ class LocalProposalSummary {
         'stage': stage,
         'status': status,
         'internal_code': internalCode,
-        'institution_bytes_hex': institutionBytesHex,
+        'actor_cid_number': actorCidNumber,
+        'execution_account_hex': executionAccountHex,
         'subject_cid_numbers': subjectCidNumbers,
         'display_year': displayYear,
         'display_seq_in_year': displaySeqInYear,
@@ -360,8 +365,9 @@ class LocalProposalSummary {
         stage: stage,
         status: status,
         internalCode: _toNullableString(decoded['internal_code']),
-        institutionBytesHex:
-            _toNullableString(decoded['institution_bytes_hex']),
+        actorCidNumber: _toNullableString(decoded['actor_cid_number']),
+        executionAccountHex:
+            _toNullableString(decoded['execution_account_hex']),
         subjectCidNumbers: _toStringList(decoded['subject_cid_numbers']),
         displayYear: _toInt(decoded['display_year']),
         displaySeqInYear: _toInt(decoded['display_seq_in_year']),

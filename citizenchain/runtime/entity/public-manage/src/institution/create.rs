@@ -4,7 +4,7 @@
 //!
 //! 唯一入口: `do_propose_create_public_institution`(call_index=5)
 //! - 一次创建机构主账户 / 费用账户 / 自定义账户列表
-//! - 凭证带签发机构 CID、签发机构主账户和签发管理员公钥
+//! - 凭证带操作机构 CID 和凭证签名管理员公钥
 //! - 资金模型: 注册局交易成功即划转初始余额并激活机构与管理员集合
 
 extern crate alloc;
@@ -207,12 +207,12 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
         for account in created_accounts.iter() {
             if !account.amount.is_zero()
                 && T::Currency::transfer(
-                &who,
-                &account.address,
-                account.amount,
-                ExistenceRequirement::KeepAlive,
-            )
-            .is_err()
+                    &who,
+                    &account.address,
+                    account.amount,
+                    ExistenceRequirement::KeepAlive,
+                )
+                .is_err()
             {
                 return TransactionOutcome::Rollback(Err(Error::<T>::TransferFailed.into()));
             }
@@ -252,12 +252,9 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
         }
 
         // 注册局创建机构时直接提交目标机构管理员合集;交易成功即写 Active。
-        if let Err(err) = Pallet::<T>::set_active_admin_account_direct(
-            &cid_number,
-            institution_code,
-            &admins,
-            threshold,
-        ) {
+        if let Err(err) =
+            Pallet::<T>::set_institution_admins(&cid_number, institution_code, &admins, threshold)
+        {
             return TransactionOutcome::Rollback(Err(err));
         }
         UsedRegisterNonce::<T>::insert(register_nonce_hash, true);

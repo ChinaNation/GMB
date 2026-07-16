@@ -12,7 +12,10 @@ use frame_support::{
     traits::{ConstU32, ConstU64},
 };
 use frame_system as system;
-use primitives::cid::code::InstitutionCode;
+use primitives::cid::{
+    china::{china_lf::CHINA_LF, china_zf::CHINA_ZF},
+    code::{institution_code_from_cid_number, InstitutionCode, FRG, NLG},
+};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 use votingengine::{
     CitizenIdentityReader, ElectionProposalFinalizer, ElectionVoteResultCallback,
@@ -64,23 +67,39 @@ impl system::Config for Test {
     type Lookup = IdentityLookup<Self::AccountId>;
 }
 
-const ORGANIZER_CODE: InstitutionCode = *b"CGOV";
-const TARGET_CODE: InstitutionCode = *b"NLG\0";
+const ORGANIZER_CODE: InstitutionCode = FRG;
+const TARGET_CODE: InstitutionCode = NLG;
 
 fn account(id: u8) -> AccountId32 {
     AccountId32::new([id; 32])
-}
-
-fn organizer() -> AccountId32 {
-    account(1)
 }
 
 fn organizer_admin() -> AccountId32 {
     account(2)
 }
 
-fn target() -> AccountId32 {
-    account(3)
+fn organizer_cid_number() -> votingengine::types::CidNumber {
+    CHINA_ZF
+        .iter()
+        .find(|entry| institution_code_from_cid_number(entry.cid_number) == Some(ORGANIZER_CODE))
+        .expect("federal registry CID should exist")
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("organizer CID should fit")
+}
+
+fn target_cid_number() -> votingengine::types::CidNumber {
+    CHINA_LF
+        .iter()
+        .find(|entry| institution_code_from_cid_number(entry.cid_number) == Some(TARGET_CODE))
+        .expect("national legislature CID should exist")
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("target CID should fit")
 }
 
 fn target_admins() -> Vec<AccountId32> {
@@ -95,7 +114,6 @@ thread_local! {
 
 pub struct TestCitizenIdentityReader;
 pub struct TestInternalAdminProvider;
-pub struct TestInstitutionQuery;
 
 impl CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
     fn can_vote(who: &AccountId32, _scope: &PopulationScope) -> bool {
@@ -148,42 +166,22 @@ impl CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
 }
 
 impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_internal_admin(
+    fn is_institution_admin(
         institution_code: InstitutionCode,
-        institution: AccountId32,
+        cid_number: &[u8],
         who: &AccountId32,
     ) -> bool {
         institution_code == ORGANIZER_CODE
-            && institution == organizer()
+            && cid_number == organizer_cid_number().as_slice()
             && *who == organizer_admin()
     }
 
-    fn get_admin_list(
+    fn get_institution_admins(
         institution_code: InstitutionCode,
-        institution: AccountId32,
+        cid_number: &[u8],
     ) -> Option<Vec<AccountId32>> {
-        (institution_code == TARGET_CODE && institution == target()).then(target_admins)
-    }
-}
-
-impl entity_primitives::InstitutionMultisigQuery<AccountId32> for TestInstitutionQuery {
-    fn lookup_cid(addr: &AccountId32) -> Option<Vec<u8>> {
-        let bytes: &[u8] = addr.as_ref();
-        Some([b"TEST-ELECTION-".as_slice(), &bytes[..1]].concat())
-    }
-
-    fn lookup_org(_addr: &AccountId32) -> Option<InstitutionCode> {
-        None
-    }
-
-    fn lookup_admin_config(
-        _addr: &AccountId32,
-    ) -> Option<primitives::multisig::MultisigConfigSnapshot<AccountId32>> {
-        None
-    }
-
-    fn account_exists(_addr: &AccountId32) -> bool {
-        true
+        (institution_code == TARGET_CODE && cid_number == target_cid_number().as_slice())
+            .then(target_admins)
     }
 }
 
@@ -234,7 +232,6 @@ impl crate::pallet::Config for Test {
     type MaxElectionOfficeCodeLen = ConstU32<32>;
     type MaxElectionCandidates = ConstU32<8>;
     type MaxMutualVoters = ConstU32<8>;
-    type InstitutionQuery = TestInstitutionQuery;
     type WeightInfo = ();
 }
 
@@ -257,10 +254,8 @@ fn office_code() -> crate::pallet::ElectionOfficeCodeOf<Test> {
 fn create_popular(candidates: Vec<AccountId32>) -> u64 {
     ElectionVote::do_create_popular_election(
         organizer_admin(),
-        ORGANIZER_CODE,
-        organizer(),
-        TARGET_CODE,
-        target(),
+        organizer_cid_number(),
+        target_cid_number(),
         office_code(),
         7,
         1,
@@ -276,10 +271,8 @@ fn create_mutual() -> u64 {
     let admins = target_admins();
     ElectionVote::do_create_mutual_election(
         organizer_admin(),
-        ORGANIZER_CODE,
-        organizer(),
-        TARGET_CODE,
-        target(),
+        organizer_cid_number(),
+        target_cid_number(),
         office_code(),
         8,
         1,
@@ -372,10 +365,8 @@ fn creation_rejects_untrusted_or_incomplete_snapshots() {
         assert_noop!(
             ElectionVote::do_create_mutual_election(
                 organizer_admin(),
-                ORGANIZER_CODE,
-                organizer(),
-                TARGET_CODE,
-                target(),
+                organizer_cid_number(),
+                target_cid_number(),
                 office_code(),
                 8,
                 1,
@@ -395,10 +386,8 @@ fn popular_creation_rejects_ineligible_accounts_and_bad_shape() {
         assert_noop!(
             ElectionVote::do_create_popular_election(
                 organizer_admin(),
-                ORGANIZER_CODE,
-                organizer(),
-                TARGET_CODE,
-                target(),
+                organizer_cid_number(),
+                target_cid_number(),
                 office_code(),
                 7,
                 1,
@@ -412,10 +401,8 @@ fn popular_creation_rejects_ineligible_accounts_and_bad_shape() {
         assert_noop!(
             ElectionVote::do_create_popular_election(
                 account(9),
-                ORGANIZER_CODE,
-                organizer(),
-                TARGET_CODE,
-                target(),
+                organizer_cid_number(),
+                target_cid_number(),
                 office_code(),
                 7,
                 1,

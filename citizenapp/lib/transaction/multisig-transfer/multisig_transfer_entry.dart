@@ -110,15 +110,14 @@ class MultisigTransferEntryCard extends StatelessWidget {
     final limitService = ProposalLimitService();
     final activeIds = await limitService.fetchActiveProposalIds(institution);
     if (!context.mounted) return;
-    if (activeIds.length >=
-        ProposalLimitService.maxActiveProposalsPerInstitution) {
+    if (activeIds.length >= ProposalLimitService.maxActiveProposalsPerSubject) {
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('提案数量已达上限'),
           content: Text(
             '本账户当前有 ${activeIds.length} 个活跃提案，'
-            '已达上限 ${ProposalLimitService.maxActiveProposalsPerInstitution} 个。'
+            '已达上限 ${ProposalLimitService.maxActiveProposalsPerSubject} 个。'
             '请等待现有提案完成后再发起新提案。',
           ),
           actions: [

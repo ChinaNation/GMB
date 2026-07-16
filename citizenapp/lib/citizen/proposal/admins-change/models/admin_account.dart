@@ -2,174 +2,100 @@ import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
 
-enum AdminAccountIdentityType {
-  governanceInstitution,
-  personalAccount,
-  institutionAccount,
-}
+enum AdminAccountIdentityType { institution, personalAccount }
 
+/// 管理员查询主体。机构只以 CID 为主键；个人多签只以 personal_account 为主键。
 class AdminAccountIdentity {
-  const AdminAccountIdentity({
+  const AdminAccountIdentity._({
     required this.type,
     required this.identityKey,
     required this.accountLabel,
     required this.institutionCode,
     required this.kind,
-    required this.accountHex,
+    this.cidNumber,
+    this.personalAccountHex,
   });
 
   factory AdminAccountIdentity.fromInstitution(InstitutionInfo institution) {
-    final fixedCode = institution.adminAccountCode?.toUpperCase();
-    if (fixedCode != null &&
-        InstitutionCodeLabel.isFixedGovernance(fixedCode)) {
-      return AdminAccountIdentity.fixedGovernanceInstitution(
-        accountHex: institution.mainAccount,
-        institutionCode: fixedCode,
-        accountLabel: institution.cidShortName,
-      );
-    }
-
     final personal = personalAccountHexFromIdentity(institution.cidNumber);
     if (personal != null) {
       return AdminAccountIdentity.personalAccount(
-        accountHex: personal,
+        personalAccountHex: personal,
         accountLabel: institution.cidShortName,
       );
     }
-
-    final account = registeredAccountHexFromIdentity(institution.cidNumber);
-    if (account != null) {
-      final code = institution.adminAccountCode;
-      if (code == null) {
-        throw ArgumentError('机构账户管理员更换必须提供 adminAccountCode');
-      }
-      return AdminAccountIdentity.institutionAccount(
-        accountHex: account,
-        institutionCode: code,
-        accountLabel: institution.cidShortName,
-      );
-    }
-
-    return AdminAccountIdentity.governanceInstitution(
-      accountHex: institution.mainAccount,
-      orgType: institution.orgType,
+    final code = institution.adminAccountCode?.toUpperCase() ??
+        switch (institution.orgType) {
+          0 => 'NRC',
+          1 => 'PRC',
+          2 => 'PRB',
+          _ => throw ArgumentError('机构管理员查询必须提供 institutionCode'),
+        };
+    return AdminAccountIdentity.institution(
+      cidNumber: institution.cidNumber,
+      institutionCode: code,
       accountLabel: institution.cidShortName,
     );
   }
 
-  factory AdminAccountIdentity.fixedGovernanceInstitution({
-    required String accountHex,
-    required String institutionCode,
-    required String accountLabel,
-  }) {
-    final code = institutionCode.toUpperCase();
-    if (!InstitutionCodeLabel.isFixedGovernance(code)) {
-      throw ArgumentError('固定治理机构 institutionCode 无效: $institutionCode');
-    }
-    final account = AdminAccountIdCodec.normalizeHex(accountHex);
-    AdminAccountIdCodec.fromAccountHex(account);
-    return AdminAccountIdentity(
-      type: AdminAccountIdentityType.governanceInstitution,
-      identityKey: 'fixed-governance:$code:$account',
-      accountLabel: accountLabel,
-      institutionCode: code,
-      kind: InstitutionCodeLabel.adminAccountKind(code),
-      accountHex: account,
-    );
-  }
-
-  factory AdminAccountIdentity.governanceInstitution({
-    required String accountHex,
-    required int orgType,
-    required String accountLabel,
-  }) {
-    if (orgType < 0 || orgType > 2) {
-      throw ArgumentError('治理机构 orgType 必须为 0/1/2 (NRC/PRC/PRB)');
-    }
-    final code = switch (orgType) {
-      0 => 'NRC',
-      1 => 'PRC',
-      2 => 'PRB',
-      _ => throw ArgumentError('治理机构 orgType 无效: $orgType'),
-    };
-    final account = AdminAccountIdCodec.normalizeHex(accountHex);
-    return AdminAccountIdentity(
-      type: AdminAccountIdentityType.governanceInstitution,
-      identityKey: 'governance:$code:$account',
-      accountLabel: accountLabel,
-      institutionCode: code,
-      kind: InstitutionCodeLabel.adminAccountKind(code),
-      accountHex: account,
-    );
-  }
-
-  factory AdminAccountIdentity.personalAccount({
-    required String accountHex,
-    required String accountLabel,
-  }) {
-    final account = AdminAccountIdCodec.normalizeHex(accountHex);
-    AdminAccountIdCodec.fromAccountHex(account);
-    return AdminAccountIdentity(
-      type: AdminAccountIdentityType.personalAccount,
-      identityKey: 'personal-account:$account',
-      accountLabel: accountLabel,
-      institutionCode: 'PMUL',
-      kind: InstitutionCodeLabel.adminAccountKind('PMUL'),
-      accountHex: account,
-    );
-  }
-
-  factory AdminAccountIdentity.institutionAccount({
-    required String accountHex,
+  factory AdminAccountIdentity.institution({
+    required String cidNumber,
     required String institutionCode,
     required String accountLabel,
     int? kind,
   }) {
-    if (!InstitutionCodeLabel.isInstitution(institutionCode)) {
-      throw ArgumentError(
-        '机构账户 institutionCode 必须为注册机构码，收到: $institutionCode',
-      );
+    final cid = cidNumber.trim();
+    if (cid.isEmpty) throw ArgumentError('机构 cidNumber 不能为空');
+    final normalizedCode = institutionCode.toUpperCase();
+    if (!InstitutionCodeLabel.isInstitution(normalizedCode) &&
+        !InstitutionCodeLabel.isFixedGovernance(normalizedCode)) {
+      throw ArgumentError('institutionCode 必须是机构码: $institutionCode');
     }
-    final resolvedKind = kind ??
-        _deriveInstitutionKind(
-          institutionCode,
-        );
-    final account = AdminAccountIdCodec.normalizeHex(accountHex);
-    AdminAccountIdCodec.fromAccountHex(account);
-    return AdminAccountIdentity(
-      type: AdminAccountIdentityType.institutionAccount,
-      identityKey: 'institution-account:$institutionCode:$account',
+    final resolvedKind = kind ?? _deriveInstitutionKind(normalizedCode);
+    return AdminAccountIdentity._(
+      type: AdminAccountIdentityType.institution,
+      identityKey: 'institution:$cid',
       accountLabel: accountLabel,
-      institutionCode: institutionCode,
+      institutionCode: normalizedCode,
       kind: resolvedKind,
-      accountHex: account,
+      cidNumber: cid,
+    );
+  }
+
+  factory AdminAccountIdentity.personalAccount({
+    required String personalAccountHex,
+    required String accountLabel,
+  }) {
+    final account = AdminAccountIdCodec.normalizeHex(personalAccountHex);
+    AdminAccountIdCodec.fromAccountHex(account);
+    return AdminAccountIdentity._(
+      type: AdminAccountIdentityType.personalAccount,
+      identityKey: 'personal-account:$account',
+      accountLabel: accountLabel,
+      institutionCode: 'PMUL',
+      kind: 2,
+      personalAccountHex: account,
     );
   }
 
   static int _deriveInstitutionKind(String institutionCode) {
     if (InstitutionCodeLabel.isUnincorporatedAdminCode(institutionCode)) {
-      throw ArgumentError(
-        '非法人机构码不能自动选择管理员模块，必须显式传入 kind=0(public) 或 kind=1(private)',
-      );
+      throw ArgumentError('非法人机构码必须显式传入所属法人 kind');
     }
     return InstitutionCodeLabel.adminAccountKind(institutionCode);
   }
 
   final AdminAccountIdentityType type;
   final String identityKey;
-
-  /// 管理员账户选择/提示用标签;不是机构全称或简称的第二字段。
   final String accountLabel;
-
-  /// 4 字节机构码字符串（"NRC"/"PRC"/"PRB"/"PMUL"/"CGOV" 等）。
   final String institutionCode;
   final int kind;
-  final String accountHex;
+  final String? cidNumber;
+  final String? personalAccountHex;
 
   String get typeLabel => switch (type) {
-        AdminAccountIdentityType.governanceInstitution => '创世治理机构',
+        AdminAccountIdentityType.institution => '机构',
         AdminAccountIdentityType.personalAccount => '个人多签',
-        AdminAccountIdentityType.institutionAccount => '机构账户',
       };
 
   String get orgLabel => InstitutionCodeLabel.codeLabel(institutionCode);
@@ -177,47 +103,45 @@ class AdminAccountIdentity {
 
 class AdminAccountState {
   const AdminAccountState({
-    required this.accountHex,
+    this.cidNumber,
+    this.personalAccountHex,
     required this.institutionCode,
     required this.kind,
     required this.admins,
     required this.threshold,
-    required this.creatorHex,
-    required this.createdAt,
-    required this.updatedAt,
-    required this.status,
-  });
+    this.personalCreatorHex,
+    this.personalCreatedAt,
+    this.personalUpdatedAt,
+    this.personalStatus,
+  }) : assert((cidNumber == null) != (personalAccountHex == null));
 
-  final String accountHex;
-
-  /// 4 字节机构码字符串（"NRC"/"PRC"/"PRB"/"PMUL"/"CGOV" 等）。
+  final String? cidNumber;
+  final String? personalAccountHex;
   final String institutionCode;
   final int kind;
-
-  /// 管理员钱包账户集合；机构岗位不在 admins 模块重复保存。
   final List<String> admins;
-
   final int threshold;
-  final String creatorHex;
-  final int createdAt;
-  final int updatedAt;
-  final int status;
 
-  bool get isActive => status == 1;
+  /// 以下字段只属于 PersonalAdmins 的个人多签生命周期。
+  final String? personalCreatorHex;
+  final int? personalCreatedAt;
+  final int? personalUpdatedAt;
+  final int? personalStatus;
 
-  AdminAccountState copyWith({int? threshold}) {
-    return AdminAccountState(
-      accountHex: accountHex,
-      institutionCode: institutionCode,
-      kind: kind,
-      admins: admins,
-      threshold: threshold ?? this.threshold,
-      creatorHex: creatorHex,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-      status: status,
-    );
-  }
+  bool get isActive => cidNumber != null || personalStatus == 1;
+
+  AdminAccountState copyWith({int? threshold}) => AdminAccountState(
+        cidNumber: cidNumber,
+        personalAccountHex: personalAccountHex,
+        institutionCode: institutionCode,
+        kind: kind,
+        admins: admins,
+        threshold: threshold ?? this.threshold,
+        personalCreatorHex: personalCreatorHex,
+        personalCreatedAt: personalCreatedAt,
+        personalUpdatedAt: personalUpdatedAt,
+        personalStatus: personalStatus,
+      );
 
   String get kindLabel => switch (kind) {
         0 => '公权机构',
@@ -228,10 +152,13 @@ class AdminAccountState {
 
   String get orgLabel => InstitutionCodeLabel.codeLabel(institutionCode);
 
-  String get statusLabel => switch (status) {
-        0 => '待激活',
-        1 => '已激活',
-        2 => '已关闭',
-        _ => '未知状态',
-      };
+  String get statusLabel {
+    if (cidNumber != null) return '机构管理员';
+    return switch (personalStatus) {
+      0 => '待激活',
+      1 => '已激活',
+      2 => '已关闭',
+      _ => '未知状态',
+    };
+  }
 }

@@ -38,6 +38,15 @@ fn code_max<T: Config>() -> CodeOf<T> {
         .expect("benchmark runtime code should fit")
 }
 
+fn nrc_cid_number() -> votingengine::CidNumber {
+    primitives::cid::china::china_cb::CHINA_CB[0]
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("NRC CID fits runtime bound")
+}
+
 fn prepare_population_snapshot<T>(who: &T::AccountId)
 where
     T: Config + joint_vote::Config,
@@ -53,6 +62,7 @@ where
     joint_vote::PendingPopulationSnapshots::<T>::insert(
         who,
         joint_vote::PreparedPopulationSnapshot {
+            actor_cid_number: nrc_cid_number(),
             snapshot_id,
             eligible_total,
             prepared_at,
@@ -78,6 +88,7 @@ mod benchmarks {
         {
             Pallet::<T>::propose_runtime_upgrade(
                 origin,
+                nrc_cid_number(),
                 reason,
                 code,
                 pow_difficulty::ActiveParams::<T>::get(),

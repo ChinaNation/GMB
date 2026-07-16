@@ -71,6 +71,28 @@ void main() {
       expect(fieldLabelText('effective_at'), '生效时间戳');
     });
 
+    test('链上资产全部 reviewFields key 有中文标签', () {
+      const keys = [
+        'actor_cid_number',
+        'execution_account',
+        'asset_id',
+        'asset_class',
+        'asset_name',
+        'asset_symbol',
+        'asset_description',
+        'decimals',
+        'initial_supply_raw',
+        'amount_raw',
+        'from',
+        'to',
+        'who',
+        'reason_hash',
+      ];
+      for (final key in keys) {
+        expect(fieldLabelText(key), isNot('未知字段'), reason: key);
+      }
+    });
+
     test('amount_ 前缀按账户名展开', () {
       expect(fieldLabelText('amount_'), '账户金额');
       expect(fieldLabelText('amount_主账户'), '主账户金额');

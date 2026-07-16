@@ -53,4 +53,3 @@ sp-core = { workspace = true, default-features = true }
 sp-io = { workspace = true, default-features = true }
 internal-vote = { path = "../../votingengine/internal-vote", default-features = false }
 private-admins = { path = "../../admins/private-admins", default-features = true }
-public-admins = { path = "../../admins/public-admins", default-features = true }

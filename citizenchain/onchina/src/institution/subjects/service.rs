@@ -149,7 +149,10 @@ pub fn is_protocol_account_name(account_name: &str) -> bool {
 }
 
 /// 机构账户分类标签，与 Node/CitizenApp/CitizenWallet 的展示协议一致。
-pub fn institution_account_kind_label(cid_number: &str, account_name: &str) -> Option<&'static str> {
+pub fn institution_account_kind_label(
+    cid_number: &str,
+    account_name: &str,
+) -> Option<&'static str> {
     let kind = primitives::account_derive::institution_kind_by_name(
         cid_number.as_bytes(),
         account_name.as_bytes(),

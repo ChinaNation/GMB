@@ -78,7 +78,8 @@ impl<T: Config> Pallet<T> {
                 ActivePersonalThresholds::<T>::remove(personal_account);
             }
             Some(InternalProposalRole::PersonalAdminChange) => {
-                if let Some(pending) = PendingPersonalAdminChangeThresholds::<T>::take(proposal_id) {
+                if let Some(pending) = PendingPersonalAdminChangeThresholds::<T>::take(proposal_id)
+                {
                     Self::ensure_dynamic_threshold(pending.new_admins_len, pending.new_threshold)?;
                     ActivePersonalThresholds::<T>::insert(
                         pending.personal_account,

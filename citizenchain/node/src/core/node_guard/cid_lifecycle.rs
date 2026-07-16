@@ -11,12 +11,12 @@ use codec::{Decode, Encode};
 use sp_core::hashing::blake2_128;
 
 use primitives::account_derive::{
-    institution_kind_by_name, institution_protocol_account_name,
-    institution_protocol_kind_by_name, InstitutionProtocolAccountKind,
+    institution_kind_by_name, institution_protocol_account_name, institution_protocol_kind_by_name,
+    InstitutionProtocolAccountKind,
 };
 use primitives::cid::code::{
-    is_fixed_governance_code, is_private_legal_code, is_public_legal_code,
-    is_unincorporated_code, InstitutionCode,
+    is_fixed_governance_code, is_private_legal_code, is_public_legal_code, is_unincorporated_code,
+    InstitutionCode,
 };
 use primitives::cid::number::parse_cid_number_parts_bytes;
 use primitives::core_const::SS58_FORMAT;
@@ -150,11 +150,6 @@ pub mod storage_key {
         storage_prefix(CITIZEN_IDENTITY_PALLET, b"CidRegistry")
     }
 
-    #[cfg(test)]
-    pub fn citizen_registry(cid: &[u8]) -> Vec<u8> {
-        map_vec(CITIZEN_IDENTITY_PALLET, b"CidRegistry", cid)
-    }
-
     pub fn institution_prefix(namespace: Namespace) -> Vec<u8> {
         storage_prefix(namespace.pallet(), b"Institutions")
     }
@@ -253,12 +248,10 @@ fn parse_double_vec_key(
     let first_encoded_at = first_hash_at + 16;
     let first_encoded = &key[first_encoded_at..];
     let mut input = first_encoded;
-    let first = Vec::<u8>::decode(&mut input)
-        .map_err(|_| GuardError::StorageKeyMalformed(label))?;
+    let first =
+        Vec::<u8>::decode(&mut input).map_err(|_| GuardError::StorageKeyMalformed(label))?;
     let first_encoded_len = first_encoded.len() - input.len();
-    if blake2_128(&first_encoded[..first_encoded_len])
-        != key[first_hash_at..first_encoded_at]
-    {
+    if blake2_128(&first_encoded[..first_encoded_len]) != key[first_hash_at..first_encoded_at] {
         return Err(GuardError::StorageKeyMalformed(label));
     }
     let second_hash_at = first_encoded_at + first_encoded_len;
@@ -511,8 +504,11 @@ where
                         if !kind.is_closable_institution_account() {
                             return Err(GuardError::ProtocolAccountDeleted);
                         }
-                        if post(&storage_key::account_registered(namespace, &account.address))
-                            .is_some()
+                        if post(&storage_key::account_registered(
+                            namespace,
+                            &account.address,
+                        ))
+                        .is_some()
                         {
                             return Err(GuardError::AccountReverseIndexMismatch);
                         }
@@ -599,7 +595,10 @@ where
             &mut occupied_private
         };
 
-        for key in keys.iter().filter(|key| key.starts_with(&institution_prefix)) {
+        for key in keys
+            .iter()
+            .filter(|key| key.starts_with(&institution_prefix))
+        {
             let Some(raw) = read(key) else { continue };
             let cid = parse_vec_map_key(key, &institution_prefix, "Institutions")?;
             let record: InstitutionRecord = decode_exact(&raw, "Institutions")?;
@@ -610,8 +609,7 @@ where
 
         for key in keys.iter().filter(|key| key.starts_with(&account_prefix)) {
             let Some(raw) = read(key) else { continue };
-            let (cid, name) =
-                parse_double_vec_key(key, &account_prefix, "InstitutionAccounts")?;
+            let (cid, name) = parse_double_vec_key(key, &account_prefix, "InstitutionAccounts")?;
             if !occupied.contains(&cid) {
                 return Err(GuardError::AccountWithoutInstitution);
             }
@@ -623,11 +621,12 @@ where
                     .ok_or(GuardError::AccountWithoutInstitution)?;
                 let institution: InstitutionRecord =
                     decode_exact(&institution_raw, "Institutions")?;
-                let required = primitives::institution_constraints::required_protocol_account_kinds(
-                    institution.institution_code,
-                    &cid,
-                )
-                .ok_or(GuardError::InstitutionIdentityChanged)?;
+                let required =
+                    primitives::institution_constraints::required_protocol_account_kinds(
+                        institution.institution_code,
+                        &cid,
+                    )
+                    .ok_or(GuardError::InstitutionIdentityChanged)?;
                 if !required.contains(&protocol_kind) {
                     return Err(GuardError::UnexpectedProtocolAccount);
                 }
@@ -644,14 +643,18 @@ where
                 &registered.account_name,
             ))
             .ok_or(GuardError::AccountReverseIndexMismatch)?;
-            let forward: InstitutionAccountRecord = decode_exact(&forward_raw, "InstitutionAccounts")?;
+            let forward: InstitutionAccountRecord =
+                decode_exact(&forward_raw, "InstitutionAccounts")?;
             if forward.address != account {
                 return Err(GuardError::AccountReverseIndexMismatch);
             }
         }
     }
 
-    if occupied_public.iter().any(|cid| occupied_private.contains(cid)) {
+    if occupied_public
+        .iter()
+        .any(|cid| occupied_private.contains(cid))
+    {
         return Err(GuardError::CrossNamespaceDuplicate);
     }
 

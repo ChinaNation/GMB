@@ -41,7 +41,7 @@
 
 - 任务卡已创建
 - 已读取 `citizenchain/runtime/governance/voting-engine/src/internal_vote.rs`、`active_proposal_limit.rs`、`voting-engine/src/lib.rs`、`citizenchain/runtime/src/configs/mod.rs`、`citizenchain/runtime/admins/admin-management/src/lib.rs`。
-- L1 结论：存在。`internal_vote.rs` 中 `is_internal_admin` 仍在 `#[cfg(test)]` 下回退读取 `CHINA_CB` / `CHINA_CH` 常量管理员。生产路径不受影响，但测试语义和生产 provider 语义分叉，建议修复。
+- L1 结论：当时存在测试环境的固定机构管理员回退路径。2026-07-15 已删除该回退，测试和生产现统一通过 `AdminAccounts[cid_number].admins` 查询授权。
 - L2 结论：当前描述部分过期。治理机构合法性已是显式常量表判断；但 `ORG_DUOQIAN` 仍通过 `pass_threshold(...).is_some()` / `pending_pass_threshold(...).is_some()` 判断主体是否存在，语义仍耦合，建议后续加显式 `is_known_institution` / `is_known_subject` API。
 - L3 结论：存在。`InternalThresholdProvider for ()` 仍返回治理机构固定阈值；生产 Runtime 已注入 `RuntimeInternalThresholdProvider`，但默认实现容易掩盖漏注入，建议改为 `None`。
 - L4 结论：存在。`active_proposal_limit.rs` 的 `MAX_ACTIVE_PROPOSALS = 10` 和 `ActiveProposalsBySubject` 的 `ConstU32` 上限仍是 pallet 内硬编码。建议改为 `Config::MaxActiveProposals`。

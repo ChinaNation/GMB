@@ -12,17 +12,18 @@ use super::*;
 // 这些 storage 在 votingengine 主 crate;dual_id 测试通过 super::* 拿到 votingengine::pallet 的 re-import。
 
 /// 走 `_with_data` 路径触发 `register_proposal_data` 与反向索引写入。
-fn create_general_internal_proposal_with_data_via_engine(
+fn create_institution_proposal_with_data_via_engine(
     who: AccountId32,
     institution_code: InstitutionCode,
-    institution: AccountId32,
+    actor_cid_number: CidNumber,
     module_tag: &[u8],
 ) -> u64 {
-    <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
+    <InternalVote as InternalVoteEngine<AccountId32>>::create_institution_proposal_with_data(
         who,
         institution_code,
-        institution.clone(),
-        subject_cids_for(institution_code, &institution),
+        actor_cid_number.to_vec(),
+        None,
+        subject_cids_for(&actor_cid_number),
         module_tag,
         b"payload".to_vec(),
     )
@@ -33,9 +34,9 @@ fn create_general_internal_proposal_with_data_via_engine(
 #[test]
 fn proposal_id_is_globally_monotonic_starting_from_zero() {
     new_test_ext().execute_with(|| {
-        let id0 = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
-        let id1 = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
-        let id2 = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let id0 = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
+        let id1 = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
+        let id2 = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
         assert_eq!(id0, 0);
         assert_eq!(id1, 1);
         assert_eq!(id2, 2);
@@ -48,8 +49,8 @@ fn proposal_id_is_globally_monotonic_starting_from_zero() {
 fn display_meta_seq_in_year_resets_across_year_boundary() {
     new_test_ext().execute_with(|| {
         // 2026 年内两条
-        let id0 = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
-        let id1 = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let id0 = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
+        let id1 = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
         assert_eq!(id0, 0);
         assert_eq!(id1, 1);
         let d0 = ProposalDisplayId::<Test>::get(id0).unwrap();
@@ -61,7 +62,7 @@ fn display_meta_seq_in_year_resets_across_year_boundary() {
 
         // 跨到 2027
         set_test_now_secs(1_830_297_599);
-        let id2 = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let id2 = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
         assert_eq!(id2, 2); // 主键继续 +1
         let d2 = ProposalDisplayId::<Test>::get(id2).unwrap();
         assert_eq!(d2.year, 2027);
@@ -76,11 +77,11 @@ fn display_meta_seq_in_year_resets_across_year_boundary() {
 fn year_proposal_counter_no_longer_capped_at_one_million() {
     new_test_ext().execute_with(|| {
         // 先创建一条让 CurrentProposalYear 进入 2026 分支(否则 stored_year=0 触发重置)
-        let _ = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let _ = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
         // 强制把 YearProposalCounter 设为 v0 旧 cap,看新代码会不会再拒
         YearProposalCounter::<Test>::put(1_000_000u32);
         // 仍能成功创建(v0 在此处会 ProposalIdOverflow)
-        let id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
         let display = ProposalDisplayId::<Test>::get(id).unwrap();
         assert_eq!(display.seq_in_year, 1_000_000);
         assert_eq!(YearProposalCounter::<Test>::get(), 1_000_001);
@@ -91,20 +92,17 @@ fn year_proposal_counter_no_longer_capped_at_one_million() {
 #[test]
 fn reverse_indexes_populated_after_register_proposal_data() {
     new_test_ext().execute_with(|| {
-        let id = create_general_internal_proposal_with_data_via_engine(
+        let id = create_institution_proposal_with_data_via_engine(
             nrc_admin(0),
             NRC,
-            nrc_pid(),
+            nrc_cid(),
             b"test-tag",
         );
 
         // ProposalsByCode
         assert!(ProposalsByCode::<Test>::contains_key(NRC, id));
         // ProposalsByCid
-        assert!(ProposalsByCid::<Test>::contains_key(
-            first_subject_cid_for(NRC, &nrc_pid()),
-            id
-        ));
+        assert!(ProposalsByCid::<Test>::contains_key(nrc_cid(), id));
         // ProposalsByYear
         let display = ProposalDisplayId::<Test>::get(id).unwrap();
         assert!(ProposalsByYear::<Test>::contains_key(display.year, id));
@@ -118,10 +116,10 @@ fn reverse_indexes_populated_after_register_proposal_data() {
 #[test]
 fn final_cleanup_removes_indexes_and_display_id() {
     new_test_ext().execute_with(|| {
-        let id = create_general_internal_proposal_with_data_via_engine(
+        let id = create_institution_proposal_with_data_via_engine(
             nrc_admin(0),
             NRC,
-            nrc_pid(),
+            nrc_cid(),
             b"cleanup-tag",
         );
         let display = ProposalDisplayId::<Test>::get(id).unwrap();
@@ -134,10 +132,7 @@ fn final_cleanup_removes_indexes_and_display_id() {
 
         assert!(!ProposalDisplayId::<Test>::contains_key(id));
         assert!(!ProposalsByCode::<Test>::contains_key(NRC, id));
-        assert!(!ProposalsByCid::<Test>::contains_key(
-            first_subject_cid_for(NRC, &nrc_pid()),
-            id
-        ));
+        assert!(!ProposalsByCid::<Test>::contains_key(nrc_cid(), id));
         assert!(!ProposalsByYear::<Test>::contains_key(display.year, id));
         assert!(!ProposalsByOwner::<Test>::contains_key(owner, id));
     });

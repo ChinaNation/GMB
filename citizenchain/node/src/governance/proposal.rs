@@ -124,7 +124,10 @@ pub struct ProposalFullInfo {
 #[serde(rename_all = "camelCase")]
 pub struct FeeRateProposalDetail {
     pub proposal_id: u64,
-    pub institution_hex: String,
+    /// 发起机构唯一 CID。
+    pub actor_cid_number: String,
+    /// 承担该费率业务的机构账户。
+    pub institution_account_hex: String,
     pub new_rate_bp: u32,
 }
 
@@ -1134,17 +1137,6 @@ fn resolve_cid_full_name_by_subjects(subject_cid_numbers: &[String]) -> Option<S
     })
 }
 
-/// 从投票/执行账户上下文 AccountId32 hex 反查机构名称。
-fn resolve_cid_full_name_by_account(institution_hex: Option<&str>) -> Option<String> {
-    let hex_str = institution_hex?;
-    let bytes = hex::decode(hex_str).ok()?;
-    if bytes.len() != 32 {
-        return None;
-    }
-    super::registry::find_institution_by_main_account(&bytes)
-        .map(|item| item.cid_full_name().to_string())
-}
-
 /// 列表卡片展示信息:一次解析,按动作变体生成 summary + votingengine status。
 ///
 /// 与 [`fetch_proposal_full`] 共用 [`resolve_proposal_action`],保证两条路径对同一提案看到一致内容。
@@ -1155,8 +1147,9 @@ fn fetch_proposal_display(
     let action = resolve_proposal_action(proposal_id, meta)?;
     let (summary, status, status_label_s) = match action {
         ProposalAction::Business(action) => (
-            proposal_business::format_summary(&action, |institution_hex| {
-                resolve_cid_full_name_by_account(Some(institution_hex))
+            proposal_business::format_summary(&action, |actor_cid_number| {
+                super::registry::find_institution(actor_cid_number)
+                    .map(|item| item.cid_full_name().to_string())
             }),
             meta.status,
             status_label(meta.status).to_string(),
@@ -1227,7 +1220,13 @@ fn format_destroy_summary(d: &ResolutionDestroyDetail) -> String {
     let amount: u128 = d.amount_fen.parse().unwrap_or(0);
     let inst_name = super::registry::find_institution(&d.actor_cid_number)
         .map(|item| item.cid_full_name().to_string())
-        .unwrap_or_else(|| d.actor_cid_number.clone());
+        .unwrap_or_else(|| {
+            if d.actor_cid_number.is_empty() {
+                "未知机构".to_string()
+            } else {
+                d.actor_cid_number.clone()
+            }
+        });
     format!(
         "决议销毁 {} 元：{inst_name}",
         signing::format_amount(amount as f64 / 100.0)
@@ -1236,8 +1235,15 @@ fn format_destroy_summary(d: &ResolutionDestroyDetail) -> String {
 
 fn format_fee_rate_summary(d: &FeeRateProposalDetail) -> String {
     let rate_percent = format!("{:.2}%", d.new_rate_bp as f64 / 100.0);
-    let inst_name = resolve_cid_full_name_by_account(Some(&d.institution_hex))
-        .unwrap_or_else(|| "未知机构".to_string());
+    let inst_name = super::registry::find_institution(&d.actor_cid_number)
+        .map(|item| item.cid_full_name().to_string())
+        .unwrap_or_else(|| {
+            if d.actor_cid_number.is_empty() {
+                "未知机构".to_string()
+            } else {
+                d.actor_cid_number.clone()
+            }
+        });
     format!("费率设置 {rate_percent}：{inst_name}")
 }
 
@@ -1374,6 +1380,7 @@ mod format_summary_tests {
     #[test]
     fn decode_runtime_upgrade_action_uses_current_summary_layout() {
         let mut data = Vec::from(TAG_RUNTIME_UPGRADE);
+        data.extend_from_slice(&compact_bytes_for_test(b"LN001-NRC0G-944805165-2026"));
         data.extend_from_slice(&[7u8; 32]);
         data.extend_from_slice(&compact_bytes_for_test("升级".as_bytes()));
         data.extend_from_slice(&[9u8; 32]);
@@ -1421,7 +1428,8 @@ mod format_summary_tests {
     fn format_destroy_summary_falls_back_to_unknown_institution() {
         let d = ResolutionDestroyDetail {
             proposal_id: 4,
-            institution_hex: "00".repeat(32), // 全零 → 无法反查中文名
+            actor_cid_number: String::new(),
+            institution_account_hex: "00".repeat(32),
             amount_fen: "50000".to_string(),
         };
         assert_eq!(format_destroy_summary(&d), "决议销毁 500.00 元：未知机构");
@@ -1431,7 +1439,8 @@ mod format_summary_tests {
     fn format_fee_rate_summary_shows_percent() {
         let d = FeeRateProposalDetail {
             proposal_id: 5,
-            institution_hex: "00".repeat(32),
+            actor_cid_number: String::new(),
+            institution_account_hex: "00".repeat(32),
             new_rate_bp: 150, // 1.50%
         };
         assert_eq!(format_fee_rate_summary(&d), "费率设置 1.50%：未知机构");

@@ -68,7 +68,7 @@ class PersonalManageDiscoveryService {
     Map<String, ({String creatorAccountHex, String accountName})?> metas;
     try {
       metas = await _personalManage.fetchPersonalMetasBatch(
-        mine.map((a) => a.addrHex),
+        mine.map((a) => a.personalAccountHex!),
       );
     } catch (e) {
       debugPrint('[PersonalManageDiscovery] 批量反查个人多签元数据失败: $e');
@@ -87,11 +87,12 @@ class PersonalManageDiscoveryService {
     var newlyAdded = 0;
 
     for (final acc in mine) {
-      final meta = metas[acc.addrHex];
+      final personalAccountHex = acc.personalAccountHex!;
+      final meta = metas[personalAccountHex];
       if (meta == null) continue;
-      scannedAccounts.add(acc.addrHex);
+      scannedAccounts.add(personalAccountHex);
       final added = await _upsertPersonal(
-        accountHex: acc.addrHex,
+        accountHex: personalAccountHex,
         name: meta.accountName,
         creatorAccountHex: meta.creatorAccountHex,
         matchedAdmins:

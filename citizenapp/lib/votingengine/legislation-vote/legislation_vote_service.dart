@@ -142,7 +142,7 @@ class LegislationVoteService {
     return result;
   }
 
-  /// 构造 `[28][call][proposal_id:u64_le][approve:bool]` call data(对外公开供冷钱包复用)。
+  /// 构造 `[26][call][proposal_id:u64_le][approve:bool]` call data(对外公开供冷钱包复用)。
   static Uint8List buildCallData({
     required int callIndex,
     required int proposalId,

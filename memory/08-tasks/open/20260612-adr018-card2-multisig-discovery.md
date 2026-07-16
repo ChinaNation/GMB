@@ -6,7 +6,7 @@
 
 ## 背景(纠正原卡定义)
 审计确认:
-- `listCidAccounts` 是**死代码**(全仓零调用),且 `CidRegisteredAccount` 正向枚举是 R1 禁区。
+- `listCidAccounts` 是死代码；当前已删除旧重复正向表，账户集合只读取 `InstitutionAccounts` 真源。
 - citizenapp 真正发现机构/个人多签走**全表扫 `AdminsChange::AdminAccounts`**(两个发现服务各扫一遍,同一张表扫两次=纯浪费)。
 - 多签 = "我的"(我的钱包某钱包是管理员才显示);治理机构走注册表、公权机构走后端 catalog(卡⑥),均与本卡无关。
 
@@ -32,7 +32,7 @@
 - [ ] 真机:机构多签/个人多签列表正常显示(仅我参与的);logcat 验证 AdminAccounts 全表扫 **2 次→1 次**(待 user 装机)
 
 ## 不做(边界)
-- 不做公权机构目录(卡⑥);不做 `AdminAccountsByMember` 链上反向索引(ADR-019);不动链端;不整表化 `CidRegisteredAccount`。
+- 不做公权机构目录；不做 `AdminAccountsByMember` 链上反向索引；不恢复已删除的旧账户表。
 
 ## 改动文件
 - 新增:`lib/governance/shared/admin_accounts_scan_service.dart`、`lib/governance/shared/multisig_discovery_coordinator.dart`、`test/governance/shared/{admin_accounts_scan_service,multisig_discovery_coordinator}_test.dart`

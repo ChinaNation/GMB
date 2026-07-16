@@ -104,31 +104,38 @@ class ProposalContextResolver {
 
   /// 解析用户与指定提案的关系。
   ///
-  /// [institutionBytes] Proposal.account_context 的 AccountId32（可为 null）。
+  /// [actorCidNumber] 是机构身份唯一真源；[executionAccount] 只用于个人多签
+  /// 或具体账户展示，不能反向覆盖已有 actor CID。
   /// [knownInstitution] 如果调用方已知机构信息（如从机构页面进入），直接传入跳过反查。
   Future<ProposalContext> resolve({
-    List<int>? institutionBytes,
+    String? actorCidNumber,
+    List<int>? executionAccount,
     String? internalCode,
     InstitutionInfo? knownInstitution,
   }) async {
     final wallets = await _getWallets();
-    final coldWallets = wallets.where((w) => w.isColdWallet).toList();
+    final actorCid = actorCidNumber?.trim();
+    final code = internalCode?.toUpperCase();
+    InstitutionInfo? institution;
 
-    // 1. 确定机构
-    InstitutionInfo? institution = knownInstitution;
-
-    if (institution == null && institutionBytes != null) {
-      institution = findInstitutionByAccountId(institutionBytes,
-          adminAccountCode: internalCode);
+    // 机构提案只认 actor CID。调用方传入的已知机构也必须 CID 完全一致，
+    // 禁止 execution account 或管理员钱包反向覆盖链上主体。
+    if (actorCid != null && actorCid.isNotEmpty) {
+      institution = knownInstitution?.cidNumber == actorCid
+          ? knownInstitution
+          : findInstitutionByCidNumber(actorCid);
+    } else if (code == 'PMUL' && executionAccount != null) {
+      // 个人多签没有 CID，且只有 PMUL 才允许 execution account 成为主体。
+      final executionAccountHex = _hexFromBytes(executionAccount);
+      final knownPersonalAccount = knownInstitution == null
+          ? null
+          : personalAccountHexFromIdentity(knownInstitution.cidNumber);
+      institution = knownPersonalAccount == executionAccountHex
+          ? knownInstitution
+          : personalMultisigFromAccountId(executionAccount);
     }
 
-    // 2. 如果仍然没有机构（如 account_context 反查失败），
-    //    遍历用户所有冷钱包，逐个查链上管理员列表反向匹配。
-    if (institution == null && coldWallets.isNotEmpty) {
-      institution = await _reverseMatchInstitution(coldWallets);
-    }
-
-    // 3. 匹配管理员钱包（通过激活状态判断）
+    // 匹配管理员钱包（通过激活状态判断）。
     if (institution == null) {
       return const ProposalContext();
     }
@@ -136,7 +143,7 @@ class ProposalContextResolver {
     late final AdminAccountIdentity identity;
     try {
       identity = AdminAccountIdentity.fromInstitution(institution);
-      if (institution.isRegisteredAccount) {
+      if (institution.isRegisteredInstitution) {
         final threshold = await _adminService.fetchThreshold(
           identity,
         );
@@ -185,35 +192,37 @@ class ProposalContextResolver {
   /// 批量解析多个提案的上下文（用于列表页）。
   ///
   /// 返回 Map<提案索引, ProposalContext>，与传入列表一一对应。
-  Future<List<ProposalContext>> resolveBatch(
-      List<List<int>?> institutionBytesList,
-      {List<String?>? internalCodeList,
-      Map<String, InstitutionInfo> knownInstitutionsByAccountHex =
+  Future<List<ProposalContext>> resolveBatch(List<String?> actorCidNumbers,
+      {List<List<int>?>? executionAccounts,
+      List<String?>? internalCodeList,
+      Map<String, InstitutionInfo> knownInstitutionsByCidNumber =
           const {}}) async {
     final wallets = await _getWallets();
-    final coldWallets = wallets.where((w) => w.isColdWallet).toList();
     final results = <ProposalContext>[];
     final knownInstitutions = {
-      for (final entry in knownInstitutionsByAccountHex.entries)
-        _normalize(entry.key): entry.value,
+      for (final entry in knownInstitutionsByCidNumber.entries)
+        entry.key.trim(): entry.value,
     };
 
-    for (var i = 0; i < institutionBytesList.length; i++) {
-      final institutionBytes = institutionBytesList[i];
+    for (var i = 0; i < actorCidNumbers.length; i++) {
+      final actorCidNumber = actorCidNumbers[i];
+      final executionAccount =
+          executionAccounts != null && i < executionAccounts.length
+              ? executionAccounts[i]
+              : null;
       final internalCode =
           internalCodeList != null && i < internalCodeList.length
               ? internalCodeList[i]
               : null;
       InstitutionInfo? institution;
+      final actorCid = actorCidNumber?.trim();
+      final code = internalCode?.toUpperCase();
 
-      if (institutionBytes != null) {
-        institution = knownInstitutions[_hexFromBytes(institutionBytes)] ??
-            findInstitutionByAccountId(institutionBytes,
-                adminAccountCode: internalCode);
-      }
-
-      if (institution == null && coldWallets.isNotEmpty) {
-        institution = await _reverseMatchInstitution(coldWallets);
+      if (actorCid != null && actorCid.isNotEmpty) {
+        institution =
+            knownInstitutions[actorCid] ?? findInstitutionByCidNumber(actorCid);
+      } else if (code == 'PMUL' && executionAccount != null) {
+        institution = personalMultisigFromAccountId(executionAccount);
       }
 
       if (institution == null) {
@@ -224,7 +233,7 @@ class ProposalContextResolver {
       late final AdminAccountIdentity identity;
       try {
         identity = AdminAccountIdentity.fromInstitution(institution);
-        if (institution.isRegisteredAccount) {
+        if (institution.isRegisteredInstitution) {
           final threshold = await _adminService.fetchThreshold(
             identity,
           );
@@ -284,37 +293,6 @@ class ProposalContextResolver {
     return _wallets!;
   }
 
-  /// 反向匹配：遍历所有机构，查管理员列表，看用户冷钱包是否在其中。
-  Future<InstitutionInfo?> _reverseMatchInstitution(
-    List<WalletProfile> coldWallets,
-  ) async {
-    final allInstitutions = [
-      ...kNrc,
-      ...kPrcs,
-      ...kProvincialBanks,
-    ];
-
-    final coldPubkeys = coldWallets.map((w) => _normalize(w.pubkeyHex)).toSet();
-
-    for (final inst in allInstitutions) {
-      List<String> admins;
-      try {
-        admins = await _adminService.fetchAdmins(
-          AdminAccountIdentity.fromInstitution(inst),
-        );
-      } catch (_) {
-        continue;
-      }
-      for (final admin in admins) {
-        if (coldPubkeys.contains(admin)) {
-          return inst;
-        }
-      }
-    }
-
-    return null;
-  }
-
   static String _normalize(String hex) {
     final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
     return clean.toLowerCase();
@@ -355,20 +333,16 @@ class VoteChecker {
 
     final internalByPid = <int, List<String>>{};
     final jointByPid =
-        <int, ({Uint8List institutionAccountId, List<String> pubkeysHex})>{};
+        <int, ({String actorCidNumber, List<String> pubkeysHex})>{};
     for (final t in active) {
       final pubkeys = t.adminWallets.map((w) => w.pubkeyHex).toList();
       if (t.kind == 0) {
         internalByPid[t.proposalId] = pubkeys;
       } else if (t.kind == 1 && t.institution != null) {
-        final inst = Uint8List.fromList(institutionIdentityToAccountId(
-          t.institution!.cidNumber,
-          mainAccount: t.institution!.mainAccount,
-        ));
-        if (inst.length == 32) {
-          jointByPid[t.proposalId] =
-              (institutionAccountId: inst, pubkeysHex: pubkeys);
-        }
+        jointByPid[t.proposalId] = (
+          actorCidNumber: t.institution!.cidNumber,
+          pubkeysHex: pubkeys,
+        );
       }
     }
 

@@ -10,7 +10,7 @@ use serde::Serialize;
 use subxt::{dynamic, OnlineClient, PolkadotConfig};
 
 /// votingengine `Proposal<BlockNumber, AccountId>` 解码镜像(BlockNumber=u32 / AccountId=[u8;32])。
-// 部分字段(internal_code/account_context/subject_cid_numbers/citizen_eligible_total)
+// 部分字段(internal_code/actor_cid_number/execution_account/subject_cid_numbers/citizen_eligible_total)
 // 仅为 SCALE 布局对齐,
 // LegProposalState 投影暂不读,保留以锁死解码字段序。
 #[allow(dead_code)]
@@ -24,16 +24,19 @@ pub struct OnChainProposal {
     pub status: u8,
     /// 机构码只用于提案分类/路由,不是机构归属真源。
     pub internal_code: Option<[u8; 4]>,
-    /// 投票/执行账户上下文;机构归属真源见 `subject_cid_numbers`。
-    pub account_context: Option<[u8; 32]>,
-    /// 机构归属 CID 列表;多机构关联提案在这里保存所有关联机构 CID。
+    /// 发起机构唯一身份；个人多签、公民个人或系统提案为空。
+    pub actor_cid_number: Option<Vec<u8>>,
+    /// 具体资产账户或个人多签执行账户，不得作为机构身份。
+    pub execution_account: Option<[u8; 32]>,
+    /// 受影响机构 CID 列表，不得替代发起机构 CID。
     pub subject_cid_numbers: Vec<Vec<u8>>,
     pub start: u32,
     pub end: u32,
     pub citizen_eligible_total: u64,
 }
 
-type RepresentativeBody = ([u8; 4], [u8; 32]);
+/// 代表机构身份只保存 CID。
+type RepresentativeBody = Vec<u8>;
 
 /// `RepresentativeRoute<AccountId>` SCALE 镜像。
 #[derive(Debug, Decode)]
@@ -45,7 +48,7 @@ pub enum OnChainRepresentativeRoute {
 impl OnChainRepresentativeRoute {
     fn bodies(&self) -> Vec<RepresentativeBody> {
         match self {
-            Self::Single(body) => vec![*body],
+            Self::Single(body) => vec![body.clone()],
             Self::Sequential(bodies) => bodies.clone(),
         }
     }
@@ -136,7 +139,7 @@ pub struct LegProposalState {
     /// 0=代表表决终局，1=继续法律专属程序。
     pub vote_procedure: u8,
     pub needs_guard: bool,
-    /// 代表机构路线（机构码 + 账户）。
+    /// 代表机构路线（机构 CID）。
     pub representative_bodies: Vec<HouseRef>,
     /// 阶段起止块。
     pub start_block: u32,
@@ -169,7 +172,7 @@ pub fn build_leg_proposal_state(
             .route
             .bodies()
             .iter()
-            .map(|(code, account)| house_ref(*code, *account))
+            .map(|cid_number| house_ref(cid_number))
             .collect(),
         start_block: proposal.start,
         end_block: proposal.end,
@@ -277,7 +280,8 @@ mod tests {
         golden.extend(10u8.encode()); // stage = 院内
         golden.extend(0u8.encode()); // status = 投票中
         golden.extend(Some(*b"NRP\0").encode()); // internal_code
-        golden.extend(Option::<[u8; 32]>::None.encode()); // account_context
+        golden.extend(Some(b"LN001-NRP0G-000000001-2026".to_vec()).encode()); // actor_cid_number
+        golden.extend(Option::<[u8; 32]>::None.encode()); // execution_account
         golden.extend(vec![b"LN001-NRP0G-000000001-2026".to_vec()].encode()); // subject_cid_numbers
         golden.extend(100u32.encode()); // start
         golden.extend(200u32.encode()); // end
@@ -287,6 +291,10 @@ mod tests {
         assert_eq!(proposal.kind, 2);
         assert_eq!(proposal.stage, 10);
         assert_eq!(proposal.internal_code, Some(*b"NRP\0"));
+        assert_eq!(
+            proposal.actor_cid_number.as_deref(),
+            Some(b"LN001-NRP0G-000000001-2026".as_slice())
+        );
         assert_eq!(proposal.subject_cid_numbers.len(), 1);
         assert_eq!(proposal.start, 100);
     }
@@ -294,7 +302,10 @@ mod tests {
     /// 代表元数据与法律元数据按两个独立存储布局解码。
     #[test]
     fn split_meta_mirrors_decode_independently() {
-        let bodies: Vec<RepresentativeBody> = vec![(*b"NRP\0", [1u8; 32]), (*b"NSN\0", [2u8; 32])];
+        let bodies: Vec<RepresentativeBody> = vec![
+            b"LN001-NRP0G-000000001-2026".to_vec(),
+            b"LN001-NSN0G-000000001-2026".to_vec(),
+        ];
         let mut representative_golden = Vec::new();
         representative_golden.extend(1u8.encode()); // Sequential
         representative_golden.extend(bodies.encode());
@@ -308,16 +319,16 @@ mod tests {
         assert_eq!(representative.route.bodies().len(), 2);
 
         let mut legislation_golden = Vec::new();
-        legislation_golden.extend((*b"PRS\0", [3u8; 32]).encode());
-        legislation_golden.extend(Some((*b"NLG\0", [4u8; 32])).encode());
+        legislation_golden.extend(b"LN001-PRS0G-000000001-2026".to_vec().encode());
+        legislation_golden.extend(Some(b"LN001-NLG0G-000000001-2026".to_vec()).encode());
         legislation_golden.extend(false.encode());
         legislation_golden.extend(Option::<()>::None.encode()); // referendum_scope 尾字段
         let legislation = OnChainLegislationMeta::decode(&mut &legislation_golden[..])
             .expect("decode LegislationMeta prefix");
-        assert_eq!(legislation.executive.0, *b"PRS\0");
+        assert_eq!(legislation.executive, b"LN001-PRS0G-000000001-2026");
         assert_eq!(
-            legislation.legislature.as_ref().map(|body| body.0),
-            Some(*b"NLG\0")
+            legislation.legislature.as_deref(),
+            Some(b"LN001-NLG0G-000000001-2026".as_slice())
         );
         assert!(!legislation.needs_guard);
     }
@@ -330,7 +341,8 @@ mod tests {
             stage: 10,
             status: 0,
             internal_code: None,
-            account_context: None,
+            actor_cid_number: None,
+            execution_account: None,
             subject_cid_numbers: Vec::new(),
             start: 100,
             end: 200,
@@ -338,16 +350,16 @@ mod tests {
         };
         let representative_meta = OnChainRepresentativeMeta {
             route: OnChainRepresentativeRoute::Sequential(vec![
-                (*b"NRP\0", [1u8; 32]),
-                (*b"NSN\0", [2u8; 32]),
+                b"LN001-NRP0G-000000001-2026".to_vec(),
+                b"LN001-NSN0G-000000001-2026".to_vec(),
             ]),
             current_body: 1,
             rule: OnChainRepresentativeRule::Major,
             procedure: OnChainVoteProcedure::Legislation,
         };
         let legislation_meta = OnChainLegislationMeta {
-            executive: (*b"PRS\0", [3u8; 32]),
-            legislature: Some((*b"NLG\0", [4u8; 32])),
+            executive: b"LN001-PRS0G-000000001-2026".to_vec(),
+            legislature: Some(b"LN001-NLG0G-000000001-2026".to_vec()),
             needs_guard: false,
         };
         let representative_tally = OnChainVoteCount32 { yes: 220, no: 30 };
@@ -365,7 +377,10 @@ mod tests {
         assert_eq!(state.stage, 10);
         assert_eq!(state.current_body, 1);
         assert_eq!(state.representative_bodies.len(), 2);
-        assert_eq!(state.representative_bodies[1].code, "NSN");
+        assert_eq!(
+            state.representative_bodies[1].cid_number,
+            "LN001-NSN0G-000000001-2026"
+        );
         assert_eq!(state.representative_tally.yes, 220);
         assert_eq!(state.representative_tally.no, 30);
         assert_eq!(state.referendum_tally.yes, 0);

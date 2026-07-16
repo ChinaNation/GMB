@@ -23,6 +23,7 @@ export type AdminOperationAuth = 'SESSION' | 'PASSKEY' | 'PASSKEY_COLD_SIGN';
 export type PrepareAdminActionOutput = {
   action_id: string;
   action_type: AdminActionType;
+  actor_cid_number: string;
   sign_request?: string | null;
   payload_hash: string;
   auth_type: AdminOperationAuth;
@@ -32,6 +33,7 @@ export type PrepareAdminActionOutput = {
 export type AdminSecurityGrantOutput = {
   grant_id: string;
   action_type: AdminActionType;
+  actor_cid_number: string;
   auth_type: AdminOperationAuth;
   target: string;
   expires_at: number;

@@ -74,7 +74,7 @@ citizenapp
 - 已修复 `admins-change` 动态主体关闭逻辑：个人/机构多签注销成功后删除 `Subjects[subject]` 当前状态，不再保留 `Closed` 墓碑。
 - 已新增 `admins-change` storage v4 迁移：升级时清理旧链上遗留的 Closed 动态主体；历史事件和提案不删除。
 - 已在个人多签关闭执行阶段复核 reserved 余额，避免提案后新增锁定资金导致销户不彻底。
-- 已在机构账户关闭成功后清理 `InstitutionAccounts`、`CidRegisteredAccount`、`AccountRegisteredCid` 和管理员主体当前状态，与个人多签关闭口径对齐。
+- 该旧口径已被 2026-07-15 CID 主键改造取代：机构账户关闭只删除对应 `InstitutionNamed` 正向记录和 `AccountRegisteredCid` 反向索引，机构、协议账户、admins、岗位和阈值保持不变。
 - 已在 citizenapp `ChainRpc` 增加 `System.ExtrinsicFailed` 模块错误解析，个人/机构创建确认在找成功事件前先显示真实链上失败原因。
 - 已更新 runtime 与 citizenapp 技术文档，并补充测试覆盖。
 
@@ -89,7 +89,7 @@ citizenapp
 
 2026-05-17 阈值显示补充执行记录：
 - 已修复个人/机构多签详情读取管理员主体时错把 `AdminsChange::AdminAccounts` 中 creator 字段解成 threshold 的问题。
-- 个人/机构多签当前账户详情现在只从 `AdminsChange::AdminAccounts` 读取 org 和管理员列表，普通动态阈值改从 `InternalVote.ActiveDynamicThresholds[(org, subject)]` 读取，查不到 active 时再查 pending。
+- 个人/机构多签当前账户详情的管理员和阈值已在 2026-07-15 拆成两条唯一真源：机构读取 `PublicAdmins/PrivateAdmins::AdminAccounts[cid_number]` 与 `ActiveInstitutionThresholds[cid_number]`；个人读取 `PersonalAdmins::AdminAccounts[personal_account]` 与 `ActivePersonalThresholds[personal_account]`，不做跨模型回退。
 - 账户详情中的 `threshold` 改为可空；阈值查询不到时 UI 只显示管理员人数，不再显示错位大数字。
 - 已补充个人/机构 storage codec 和 service 测试，覆盖 `AdminsChange::AdminAccounts` 不再携带 threshold 的布局。
 

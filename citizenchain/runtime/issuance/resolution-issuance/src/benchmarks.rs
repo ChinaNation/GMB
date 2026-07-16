@@ -10,9 +10,8 @@ use frame_support::{
 };
 use frame_system::RawOrigin;
 use primitives::cid::china::china_cb::CHINA_CB;
-use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Saturating, Zero};
+use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
 use sp_std::{vec, vec::Vec};
-use votingengine::CitizenIdentityReader;
 
 use crate::{pallet, AllowedRecipients, Call, Config, Pallet, VotingProposalCount};
 
@@ -60,26 +59,13 @@ fn full_allocations<T: pallet::Config>() -> (pallet::AllocationOf<T>, pallet::Ba
     )
 }
 
-fn prepare_population_snapshot<T>(who: &T::AccountId)
-where
-    T: pallet::Config + joint_vote::Config,
-{
-    let scope = votingengine::PopulationScope::Country;
-    let citizen: T::AccountId = account("resolution-issuance-citizen", 0, 0);
-    <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(&citizen, &scope);
-    let (snapshot_id, eligible_total) =
-        <T as votingengine::Config>::CitizenIdentityReader::create_population_snapshot(&scope)
-            .expect("benchmark population snapshot should be created");
-    let now = frame_system::Pallet::<T>::block_number();
-    let prepared_at = now.saturating_add(1u32.saturated_into());
-    joint_vote::PendingPopulationSnapshots::<T>::insert(
-        who,
-        joint_vote::PreparedPopulationSnapshot {
-            snapshot_id,
-            eligible_total,
-            prepared_at,
-        },
-    );
+fn nrc_cid_number() -> votingengine::types::CidNumber {
+    CHINA_CB[0]
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("NRC CID should fit")
 }
 
 #[benchmarks(where T: Config + joint_vote::Config)]
@@ -101,20 +87,24 @@ mod benchmarks {
     fn propose_issuance() {
         let origin = T::ProposeOrigin::try_successful_origin()
             .expect("benchmark proposer origin must be available");
-        let proposer = T::ProposeOrigin::ensure_origin(origin.clone())
-            .expect("benchmark proposer origin must return an account");
         let recipients = prc_recipients::<T>();
         AllowedRecipients::<T>::put(recipients);
         VotingProposalCount::<T>::put(0u32);
-        prepare_population_snapshot::<T>(&proposer);
+        let actor_cid_number = nrc_cid_number();
 
         let reason = reason_max::<T>();
         let (allocations, total_amount) = full_allocations::<T>();
 
         #[block]
         {
-            Pallet::<T>::propose_issuance(origin, reason, total_amount, allocations)
-                .expect("benchmark resolution issuance proposal should succeed");
+            Pallet::<T>::propose_issuance(
+                origin,
+                actor_cid_number,
+                reason,
+                total_amount,
+                allocations,
+            )
+            .expect("benchmark resolution issuance proposal should succeed");
         }
 
         assert_eq!(VotingProposalCount::<T>::get(), 1u32);

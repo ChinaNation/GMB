@@ -37,8 +37,8 @@ use votingengine::{
     pallet::{AdminSnapshot, Proposals},
     types::{
         fixed_governance_pass_threshold, institution_code_from_cid_number, is_personal_code,
-        is_registered_multisig_code, is_valid_governance_code, InstitutionCode,
-        CidNumber, ProposalSubject, ProposalSubjectCidNumbers, FRG, NJD, NRC, PRB, PRC,
+        is_registered_multisig_code, is_valid_governance_code, CidNumber, InstitutionCode,
+        ProposalSubject, ProposalSubjectCidNumbers, FRG, NJD, NRC, PRB, PRC,
     },
     InternalAdminProvider, InternalProposalMutexKind, Proposal, PROPOSAL_KIND_INTERNAL,
     STAGE_INTERNAL, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED,
@@ -129,23 +129,13 @@ pub mod pallet {
 
     /// 机构已激活动态阈值：CID -> threshold。机构码只做规则分类，不参与身份 key。
     #[pallet::storage]
-    pub type ActiveInstitutionThresholds<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        CidNumber,
-        u32,
-        OptionQuery,
-    >;
+    pub type ActiveInstitutionThresholds<T: Config> =
+        StorageMap<_, Blake2_128Concat, CidNumber, u32, OptionQuery>;
 
     /// 个人多签已激活动态阈值：个人多签账户 -> threshold。
     #[pallet::storage]
-    pub type ActivePersonalThresholds<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        T::AccountId,
-        u32,
-        OptionQuery,
-    >;
+    pub type ActivePersonalThresholds<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, u32, OptionQuery>;
 
     /// 管理员变更提案待应用的新动态阈值。
     #[pallet::storage]
@@ -201,10 +191,7 @@ pub mod pallet {
     }
 }
 // 内部判定 helper
-fn is_valid_institution_context(
-    institution_code: InstitutionCode,
-    cid_number: &[u8],
-) -> bool {
+fn is_valid_institution_context(institution_code: InstitutionCode, cid_number: &[u8]) -> bool {
     !is_personal_code(&institution_code)
         && is_valid_governance_code(&institution_code)
         && institution_code_from_cid_number(core::str::from_utf8(cid_number).unwrap_or_default())
@@ -234,9 +221,7 @@ fn active_institution_threshold<T: Config>(
     match institution_code {
         NRC | PRC | PRB | FRG | NJD => fixed_governance_pass_threshold(&institution_code),
         c if primitives::institution_constraints::is_permanent_singleton_code(&c) => None,
-        c if is_registered_multisig_code(&c) => {
-            ActiveInstitutionThresholds::<T>::get(cid_number)
-        }
+        c if is_registered_multisig_code(&c) => ActiveInstitutionThresholds::<T>::get(cid_number),
         _ => None,
     }
 }
@@ -277,10 +262,8 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         with_transaction(|| {
-            let proposal_id = match Self::do_create_personal_proposal(
-                who.clone(),
-                personal_account,
-            ) {
+            let proposal_id = match Self::do_create_personal_proposal(who.clone(), personal_account)
+            {
                 Ok(id) => id,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
@@ -298,13 +281,11 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         with_transaction(|| {
-            let proposal_id = match Self::do_create_personal_lifecycle_proposal(
-                who.clone(),
-                personal_account,
-            ) {
-                Ok(id) => id,
-                Err(err) => return TransactionOutcome::Rollback(Err(err)),
-            };
+            let proposal_id =
+                match Self::do_create_personal_lifecycle_proposal(who.clone(), personal_account) {
+                    Ok(id) => id,
+                    Err(err) => return TransactionOutcome::Rollback(Err(err)),
+                };
             match Self::register_data_and_auto_approve(who, proposal_id, module_tag, data) {
                 Ok(id) => TransactionOutcome::Commit(Ok(id)),
                 Err(err) => TransactionOutcome::Rollback(Err(err)),

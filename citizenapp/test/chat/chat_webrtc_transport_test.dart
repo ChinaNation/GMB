@@ -202,4 +202,113 @@ void main() {
     expect(await File(gotPath!).readAsString(), 'hello');
     expect(ackCalls, 1);
   });
+
+  test('断点续传:dispose 保留 partial,新一轮从偏移续写拼出完整文件', () async {
+    final root = await Directory.systemTemp.createTemp('gmb-resume-');
+    addTearDown(() => root.delete(recursive: true));
+
+    // 第一轮:传 2 字节后"断线"(dispose 只关流、保留 partial)。
+    final first = ChatAttachmentReceiveBuffer(tempDirectory: root.path);
+    await first.start(_startHeader(byteSize: 5), 't1');
+    await first.addChunk(const [104, 101]); // "he"
+    await first.dispose();
+    final partPath = '${root.path}/attachment-1.part';
+    expect(await File(partPath).exists(), isTrue);
+    expect(await File(partPath).length(), 2);
+
+    // 第二轮:同 attachment_id → 报偏移 2 → 只续 "llo",追加不覆盖。
+    final second = ChatAttachmentReceiveBuffer(tempDirectory: root.path);
+    await second.start(_startHeader(byteSize: 5), 't2');
+    expect(second.resumeOffset, 2);
+    await second.addChunk(const [108, 108, 111]); // "llo"
+    final received = await second.finish();
+    expect(received, isNotNull);
+    expect(await File(received!.filePath).readAsString(), 'hello');
+  });
+
+  test('handleIncomingFrame:start 后回报续传偏移(有 partial=已存量)', () async {
+    final root = await Directory.systemTemp.createTemp('gmb-frame-resume-');
+    addTearDown(() => root.delete(recursive: true));
+    final transport = _transport(
+        root.path,
+        ({
+          required senderAccount,
+          required conversationId,
+          required attachmentId,
+          required fileName,
+          required contentType,
+          required filePath,
+          required byteSize,
+        }) async {});
+
+    // 预置 3 字节的 partial(上次断线残留)。
+    await File('${root.path}/attachment-1.part').writeAsBytes(const [1, 2, 3]);
+
+    final buffer = ChatAttachmentReceiveBuffer(tempDirectory: root.path);
+    int? reported;
+    await transport.handleIncomingFrame(
+      buffer: buffer,
+      peerAccount: 'peer',
+      transferId: 't-resume',
+      message: RTCDataChannelMessage(jsonEncode(_startHeader(byteSize: 10))),
+      sendAck: () async {},
+      sendResume: (offset) async => reported = offset,
+    );
+    expect(reported, 3);
+  });
+
+  test('断点续传:已全量落盘的补发(existing==declared)零新增分片仍交付', () async {
+    final root = await Directory.systemTemp.createTemp('gmb-resume-full-');
+    addTearDown(() => root.delete(recursive: true));
+    // 上一轮已全量落盘但没收到 ack:partial 已是完整 "hello"。
+    await File('${root.path}/attachment-1.part')
+        .writeAsBytes(const [104, 101, 108, 108, 111]);
+
+    final buffer = ChatAttachmentReceiveBuffer(tempDirectory: root.path);
+    await buffer.start(_startHeader(byteSize: 5), 't-full');
+    expect(buffer.resumeOffset, 5); // 报满偏移 → 发送端 openRead(5) 空流只发 end
+    // 不 addChunk(发送端零字节补发)。
+    final received = await buffer.finish();
+    expect(received, isNotNull);
+    expect(await File(received!.filePath).readAsString(), 'hello');
+  });
+
+  test('断点续传:陈旧超大 partial(existing>declared)清档从头重传', () async {
+    final root = await Directory.systemTemp.createTemp('gmb-resume-stale-');
+    addTearDown(() => root.delete(recursive: true));
+    // 残留 20 字节的陈旧 partial,但本次声明只有 5 → 视为异常,清档从头。
+    await File('${root.path}/attachment-1.part')
+        .writeAsBytes(List<int>.filled(20, 1));
+
+    final buffer = ChatAttachmentReceiveBuffer(tempDirectory: root.path);
+    await buffer.start(_startHeader(byteSize: 5), 't-stale');
+    expect(buffer.resumeOffset, 0); // 清档,偏移归零
+    await buffer.addChunk(const [104, 101, 108, 108, 111]); // "hello"
+    final received = await buffer.finish();
+    expect(received, isNotNull);
+    expect(await File(received!.filePath).readAsString(), 'hello');
+  });
+
+  test('sweepStalePartials:删超期 .part、留新鲜的,不碰非 .part', () async {
+    final root = await Directory.systemTemp.createTemp('gmb-sweep-');
+    addTearDown(() => root.delete(recursive: true));
+    final stale = File('${root.path}/old.part');
+    await stale.writeAsBytes(const [1]);
+    await stale.setLastModified(
+      DateTime.now().subtract(const Duration(days: 8)),
+    );
+    final fresh = File('${root.path}/new.part');
+    await fresh.writeAsBytes(const [1]);
+    final other = File('${root.path}/keep.bin');
+    await other.writeAsBytes(const [1]);
+    await other.setLastModified(
+      DateTime.now().subtract(const Duration(days: 30)),
+    );
+
+    await ChatAttachmentReceiveBuffer.sweepStalePartials(root.path);
+
+    expect(await stale.exists(), isFalse); // 超期 .part 删
+    expect(await fresh.exists(), isTrue); // 新鲜 .part 留
+    expect(await other.exists(), isTrue); // 非 .part 不碰(即便更旧)
+  });
 }

@@ -23,6 +23,8 @@ pub type SafetyFundProposalActions<T: Config> = StorageMap<
 >;
 
 pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
+    pub actor_cid_number: CidNumber, // 国家储委会唯一 CID
+    pub institution_account: AccountId, // 安全基金账户
     pub beneficiary: AccountId,   // 收款地址
     pub amount: Balance,          // 转账金额
     pub remark: BoundedVec<u8, MaxRemarkLen>, // 备注
@@ -35,15 +37,15 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
 ### 1. 发起提案（propose_safety_fund_transfer，call_index=1）
 
 - **调用者**：国家储委会管理员（机构码 NRC，`is_fixed_governance_code`）
-- **参数**：beneficiary（收款地址）、amount（金额）、remark（备注）
+- **参数**：actor_cid_number、institution_account、beneficiary（收款地址）、amount（金额）、remark（备注）
 - **校验**：
   1. 金额大于零
-  2. 调用者是国家储委会管理员（通过 InternalAdminProvider::is_internal_admin 验证，institution_code=NRC）
+  2. `actor_cid_number` 必须是国家储委会 CID，`institution_account` 必须是该 CID 下的安全基金账户，调用者通过 `InternalAdminProvider::is_institution_admin(NRC, actor_cid_number, origin)` 验证
   3. InstitutionAsset::can_spend 检查安全基金账户支出权限（NrcSafetyFundTransfer）
   4. **余额预检**：`free_balance >= amount + fee + ED`，避免创建必定无法执行的提案
 - **手续费预算**：使用 `calculate_onchain_fee(amount)` 计算，即 `max(amount * 0.1%, 0.1 元)`
 - **操作**：
-  1. 通过 `InternalVoteEngine::create_internal_proposal_with_data` 创建内部提案，并绑定 owner/data/meta
+  1. 通过 `InternalVoteEngine::create_institution_proposal_with_data` 创建内部提案，并绑定 CID、执行账户、owner/data/meta
   2. 将 `SafetyFundAction` 写入独立存储
   3. 触发 `SafetyFundTransferProposed` 事件
 

@@ -15,26 +15,23 @@ void main() {
   List<int> u32(int value) => [value, 0, 0, 0];
 
   test('机构 AdminAccounts 只解码钱包集合', () {
-    final accountId = Uint8List.fromList(List.filled(32, 9));
     final value = Uint8List.fromList([
-      ...bytes('CID-1'),
       ...code('CGOV'),
       8,
       ...List.filled(32, 1),
       ...List.filled(32, 2),
-      1,
     ]);
-    final decoded = AdminAccountCodec.decode(
-      accountId,
-      value,
-      personalMultisig: false,
+    final decoded = AdminAccountCodec.decodeInstitution(
+      cidNumber: 'CID-1',
+      data: value,
+      institutionKind: 0,
     )!;
     expect(decoded.admins, ['01' * 32, '02' * 32]);
-    expect(decoded.creatorHex, isEmpty);
+    expect(decoded.cidNumber, 'CID-1');
     expect(decoded.isActive, isTrue);
   });
 
-  test('个人多签继续解码独立旧账户布局', () {
+  test('个人多签继续解码独立账户布局', () {
     final accountId = Uint8List.fromList(List.filled(32, 9));
     final value = Uint8List.fromList([
       ...bytes(''),
@@ -48,26 +45,22 @@ void main() {
       ...u32(9),
       1,
     ]);
-    final decoded = AdminAccountCodec.decode(
-      accountId,
-      value,
-      personalMultisig: true,
-    )!;
+    final decoded = AdminAccountCodec.decodePersonal(accountId, value)!;
     expect(decoded.admins, ['01' * 32, '02' * 32]);
-    expect(decoded.creatorHex, '03' * 32);
+    expect(decoded.personalCreatorHex, '03' * 32);
   });
 
   test('个人多签管理员集合校验仍按钱包账户运行', () {
     final account = AdminAccountState(
-      accountHex: '11' * 32,
+      personalAccountHex: '11' * 32,
       institutionCode: 'PMUL',
       kind: 2,
       admins: ['aa' * 32, 'bb' * 32],
       threshold: 2,
-      creatorHex: 'aa' * 32,
-      createdAt: 1,
-      updatedAt: 1,
-      status: 1,
+      personalCreatorHex: 'aa' * 32,
+      personalCreatedAt: 1,
+      personalUpdatedAt: 1,
+      personalStatus: 1,
     );
     final normalized = AdminSetValidation.validate(
       account: account,
@@ -78,11 +71,13 @@ void main() {
     expect(normalized.admins, ['aa' * 32, 'cc' * 32]);
   });
 
-  test('分类管理员 storage key 长度固定', () {
-    final key = AdminAccountIdCodec.adminAccountStorageKey(
-      Uint8List.fromList(List.filled(32, 1)),
+  test('机构管理员 storage key 以 CID 为唯一 key', () {
+    const cidNumber = 'GD001-CGOV0-123456789-2026';
+    final key = AdminAccountIdCodec.institutionAdminStorageKey(
+      cidNumber,
       institutionCode: 'CGOV',
     );
-    expect(key.length, 80);
+    expect(key.length, 32 + 16 + 1 + utf8.encode(cidNumber).length);
+    expect(key.sublist(49), utf8.encode(cidNumber));
   });
 }

@@ -231,16 +231,13 @@ impl OffchainPacker {
             }
         };
 
-        match self
-            .submitter
-            .submit(
-                self.actor_cid_number.clone(),
-                self.institution_account.clone(),
-                batch_seq,
-                batch_bytes,
-                sig,
-            )
-        {
+        match self.submitter.submit(
+            self.actor_cid_number.clone(),
+            self.institution_account.clone(),
+            batch_seq,
+            batch_bytes,
+            sig,
+        ) {
             Ok(tx_hash) => {
                 let mut last = self.last_pack_block.write().await;
                 *last = current_block;

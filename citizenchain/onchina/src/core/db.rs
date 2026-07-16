@@ -130,14 +130,6 @@ impl Db {
                 issued_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
                 closed_at        TIMESTAMPTZ
              );
-             ALTER TABLE institution_deregistrations
-                DROP COLUMN IF EXISTS scope,
-                DROP COLUMN IF EXISTS issuer_cid_number,
-                DROP COLUMN IF EXISTS issuer_main_account,
-                DROP COLUMN IF EXISTS signer_pubkey;
-             ALTER TABLE institution_deregistrations
-                ADD COLUMN IF NOT EXISTS credential_issuer_cid_number TEXT NOT NULL DEFAULT '',
-                ADD COLUMN IF NOT EXISTS credential_signer_pubkey TEXT NOT NULL DEFAULT '';
              CREATE INDEX IF NOT EXISTS idx_inst_dereg_cid
                 ON institution_deregistrations(cid_number, status);
              CREATE UNIQUE INDEX IF NOT EXISTS idx_inst_dereg_target_active
@@ -240,10 +232,6 @@ impl Db {
                 bound_at TIMESTAMPTZ NOT NULL,
                 status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'INACTIVE'))
              );
-             DELETE FROM node_institution_bindings WHERE institution_cid_number IS NULL;
-             ALTER TABLE node_institution_bindings
-                ALTER COLUMN institution_cid_number SET NOT NULL,
-                DROP COLUMN IF EXISTS institution_main_account;
              CREATE UNIQUE INDEX IF NOT EXISTS idx_node_binding_one_active
                 ON node_institution_bindings ((status)) WHERE status = 'ACTIVE';
 

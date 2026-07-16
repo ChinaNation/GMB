@@ -171,9 +171,7 @@ pub const fn institution_protocol_account_name(
 }
 
 /// 按账户名识别协议账户类别；普通自定义账户返回 `None`。
-pub fn institution_protocol_kind_by_name(
-    name: &[u8],
-) -> Option<InstitutionProtocolAccountKind> {
+pub fn institution_protocol_kind_by_name(name: &[u8]) -> Option<InstitutionProtocolAccountKind> {
     if name == RESERVED_NAME_MAIN {
         return Some(InstitutionProtocolAccountKind::Main);
     }

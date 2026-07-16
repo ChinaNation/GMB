@@ -15,6 +15,18 @@ export function MultisigTransferProposalDetailSection({ info }: Props) {
           <h3>转账详情</h3>
           <div className="proposal-detail-table">
             <div className="detail-row">
+              <span className="detail-label">发起主体</span>
+              <span className="detail-value">
+                {info.transferDetail.actorCidNumber || '个人多签'}
+              </span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">转出账户</span>
+              <code className="detail-value">
+                {hexToSs58(info.transferDetail.fundingAccountHex)}
+              </code>
+            </div>
+            <div className="detail-row">
               <span className="detail-label">金额</span>
               <span className="detail-value">
                 {formatBalance(info.transferDetail.amountFen)}
@@ -41,6 +53,16 @@ export function MultisigTransferProposalDetailSection({ info }: Props) {
           <h3>安全基金转账详情</h3>
           <div className="proposal-detail-table">
             <div className="detail-row">
+              <span className="detail-label">机构 CID</span>
+              <span className="detail-value">{info.safetyFundDetail.actorCidNumber}</span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">转出账户</span>
+              <code className="detail-value">
+                {hexToSs58(info.safetyFundDetail.institutionAccountHex)}
+              </code>
+            </div>
+            <div className="detail-row">
               <span className="detail-label">收款地址</span>
               <code className="detail-value">{hexToSs58(info.safetyFundDetail.beneficiaryHex)}</code>
             </div>
@@ -62,6 +84,16 @@ export function MultisigTransferProposalDetailSection({ info }: Props) {
         <div className="institution-info-section">
           <h3>手续费划转详情</h3>
           <div className="proposal-detail-table">
+            <div className="detail-row">
+              <span className="detail-label">机构 CID</span>
+              <span className="detail-value">{info.sweepDetail.actorCidNumber}</span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">转出账户</span>
+              <code className="detail-value">
+                {hexToSs58(info.sweepDetail.institutionAccountHex)}
+              </code>
+            </div>
             <div className="detail-row">
               <span className="detail-label">金额</span>
               <span className="detail-value">{formatBalance(info.sweepDetail.amountFen)}</span>

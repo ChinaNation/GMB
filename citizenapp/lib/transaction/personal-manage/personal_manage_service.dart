@@ -231,10 +231,7 @@ class PersonalManageService {
     if (adminData == null) return null;
     final admin = PersonalManageStorageCodec.decodeAdminAccount(adminData);
     if (admin == null) return null;
-    final threshold = await _fetchPersonalDynamicThreshold(
-      institutionCode: admin.institutionCode,
-      accountId: accountId,
-    );
+    final threshold = await _fetchActivePersonalThreshold(accountId);
     return AccountInfo(
       adminsLen: admin.adminsLen,
       threshold: threshold,
@@ -309,11 +306,7 @@ class PersonalManageService {
     for (final entry in adminByAccount.entries) {
       final accountId = accountIdByAccount[entry.key]!;
       activeThresholdKeyByAccount[entry.key] =
-          '0x${_hexEncode(PersonalManageStorageCodec.dynamicThresholdKey(
-        storageName: 'ActiveDynamicThresholds',
-        institutionCode: entry.value.institutionCode,
-        accountId: accountId,
-      ))}';
+          '0x${_hexEncode(PersonalManageStorageCodec.activePersonalThresholdKey(accountId))}';
     }
     final activeThresholdValues = await _rpc.fetchStorageBatchChunked(
       activeThresholdKeyByAccount.values,
@@ -321,34 +314,11 @@ class PersonalManageService {
     );
 
     final thresholdByAccount = <String, int?>{};
-    final pendingThresholdKeyByAccount = <String, String>{};
     for (final entry in activeThresholdKeyByAccount.entries) {
       final threshold = PersonalManageStorageCodec.decodeDynamicThreshold(
         activeThresholdValues[entry.value],
       );
       thresholdByAccount[entry.key] = threshold;
-      if (threshold == null) {
-        final admin = adminByAccount[entry.key]!;
-        pendingThresholdKeyByAccount[entry.key] =
-            '0x${_hexEncode(PersonalManageStorageCodec.dynamicThresholdKey(
-          storageName: 'PendingDynamicThresholds',
-          institutionCode: admin.institutionCode,
-          accountId: accountIdByAccount[entry.key]!,
-        ))}';
-      }
-    }
-
-    if (pendingThresholdKeyByAccount.isNotEmpty) {
-      final pendingThresholdValues = await _rpc.fetchStorageBatchChunked(
-        pendingThresholdKeyByAccount.values,
-        chunkSize: chunkSize,
-      );
-      for (final entry in pendingThresholdKeyByAccount.entries) {
-        thresholdByAccount[entry.key] =
-            PersonalManageStorageCodec.decodeDynamicThreshold(
-          pendingThresholdValues[entry.value],
-        );
-      }
     }
 
     for (final address in addresses) {
@@ -366,24 +336,12 @@ class PersonalManageService {
     return result;
   }
 
-  Future<int?> _fetchPersonalDynamicThreshold({
-    required String institutionCode,
-    required Uint8List accountId,
-  }) async {
-    for (final storageName in const [
-      'ActiveDynamicThresholds',
-      'PendingDynamicThresholds',
-    ]) {
-      final key = PersonalManageStorageCodec.dynamicThresholdKey(
-        storageName: storageName,
-        institutionCode: institutionCode,
-        accountId: accountId,
-      );
-      final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
-      final threshold = PersonalManageStorageCodec.decodeDynamicThreshold(data);
-      if (threshold != null) return threshold;
-    }
-    return null;
+  Future<int?> _fetchActivePersonalThreshold(Uint8List personalAccount) async {
+    final key = PersonalManageStorageCodec.activePersonalThresholdKey(
+      personalAccount,
+    );
+    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    return PersonalManageStorageCodec.decodeDynamicThreshold(data);
   }
 
   /// 从 ProposalData 解码 PersonalManage 创建或关闭提案。

@@ -119,6 +119,7 @@ pub async fn submit_developer_upgrade(
 pub async fn build_propose_upgrade_request(
     app: AppHandle,
     pubkey_hex: String,
+    actor_cid_number: String,
     wasm_path: String,
     reason: String,
     pow_params: pow_difficulty::PowDifficultyParams,
@@ -130,6 +131,7 @@ pub async fn build_propose_upgrade_request(
     tauri::async_runtime::spawn_blocking(move || {
         let sign_result = runtime_signing::build_propose_runtime_upgrade_sign_request(
             &pubkey_hex,
+            &actor_cid_number,
             &wasm_path,
             &reason,
             pow_params,
@@ -153,6 +155,7 @@ pub async fn submit_propose_upgrade(
     request_id: String,
     expected_pubkey_hex: String,
     expected_payload_hash: String,
+    actor_cid_number: String,
     wasm_path: String,
     reason: String,
     pow_params: pow_difficulty::PowDifficultyParams,
@@ -165,8 +168,12 @@ pub async fn submit_propose_upgrade(
         return Err("节点未运行，无法提交提案".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let call_data =
-            call_data::propose_runtime_upgrade_from_file(&wasm_path, &reason, pow_params)?;
+        let call_data = call_data::propose_runtime_upgrade_from_file(
+            &actor_cid_number,
+            &wasm_path,
+            &reason,
+            pow_params,
+        )?;
         signing::verify_and_submit(
             &request_id,
             &expected_pubkey_hex,

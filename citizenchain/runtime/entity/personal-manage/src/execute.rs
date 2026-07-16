@@ -124,7 +124,7 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
     let admins_len = Pallet::<T>::active_account_admins_len(institution_code, account.clone())
         .ok_or(Error::<T>::PersonalNotFound)?;
     let threshold = <T as Config>::InternalVoteEngine::active_personal_threshold(account.clone())
-    .ok_or(Error::<T>::PersonalNotFound)?;
+        .ok_or(Error::<T>::PersonalNotFound)?;
     let all_balance = T::Currency::free_balance(&action.account);
     // 注销执行前再次确认没有 reserved 余额，避免提案后新增锁定资金导致销户不彻底。
     ensure!(

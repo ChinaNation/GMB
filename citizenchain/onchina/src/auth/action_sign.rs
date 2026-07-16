@@ -22,6 +22,7 @@ pub(crate) struct AdminSignedPayload<'a> {
     pub(crate) action_id: &'a str,
     pub(crate) action_type: &'a str,
     pub(crate) actor_pubkey: &'a str,
+    pub(crate) actor_cid_number: &'a str,
     pub(crate) actor_province_name: &'a str,
     pub(crate) target: &'a str,
     pub(crate) request_hash: &'a str,
@@ -77,4 +78,31 @@ pub(crate) fn verify_citizen_wallet_signature(
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn canonical_admin_payload_includes_actor_cid_number_in_fixed_order() {
+        let text = signed_payload_text(AdminSignedPayload {
+            domain: "onchina_admin_governance",
+            qr_proto: "QR_V1",
+            action_id: "action-1",
+            action_type: "INSTITUTION_CREATE_ACCOUNT",
+            actor_pubkey: "0x11",
+            actor_cid_number: "LN001-FRG0G-000000001-2026",
+            actor_province_name: "北京市",
+            target: "target",
+            request_hash: "0xaa",
+            before_hash: "0xbb",
+            after_hash: "0xcc",
+            expires_at: 123,
+        });
+        assert_eq!(
+            text,
+            "{\"domain\":\"onchina_admin_governance\",\"qr_proto\":\"QR_V1\",\"action_id\":\"action-1\",\"action_type\":\"INSTITUTION_CREATE_ACCOUNT\",\"actor_pubkey\":\"0x11\",\"actor_cid_number\":\"LN001-FRG0G-000000001-2026\",\"actor_province_name\":\"北京市\",\"target\":\"target\",\"request_hash\":\"0xaa\",\"before_hash\":\"0xbb\",\"after_hash\":\"0xcc\",\"expires_at\":123}"
+        );
+    }
 }

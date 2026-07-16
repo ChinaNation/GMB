@@ -1332,7 +1332,7 @@ const List<InstitutionInfo> kFixedGovernanceInstitutions = [
     cidFullNameEn: 'Federal Registry Bureau of the Presidential Office',
     cidShortNameEn: 'Federal Registry Bureau',
     cidNumber: 'ZS001-FRG07-249474503-2026',
-    orgType: OrgType.account,
+    orgType: OrgType.institution,
     adminAccountCode: 'FRG',
     accounts: InstitutionAccounts(
       mainAccount:
@@ -1347,7 +1347,7 @@ const List<InstitutionInfo> kFixedGovernanceInstitutions = [
     cidFullNameEn: 'Judicial Yuan of the Federal Republic of the China Nation',
     cidShortNameEn: 'National Judicial Yuan',
     cidNumber: 'ZS001-NJD0T-052283563-2026',
-    orgType: OrgType.account,
+    orgType: OrgType.institution,
     adminAccountCode: 'NJD',
     accounts: InstitutionAccounts(
       mainAccount:

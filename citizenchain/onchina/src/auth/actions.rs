@@ -73,6 +73,7 @@ pub(crate) struct CommitAdminActionInput {
 pub(crate) struct AdminSecurityGrantOutput {
     grant_id: String,
     action_type: String,
+    actor_cid_number: String,
     auth_type: AdminOperationAuth,
     target: String,
     expires_at: i64,
@@ -89,6 +90,7 @@ pub(crate) enum CommitAdminActionOutput {
 pub(crate) struct PrepareAdminActionOutput {
     action_id: String,
     action_type: String,
+    actor_cid_number: String,
     sign_request: Option<String>,
     payload_hash: String,
     auth_type: AdminOperationAuth,
@@ -107,9 +109,49 @@ struct ActionPreview {
     auth_type: AdminOperationAuth,
 }
 
+/// 从节点唯一 active 绑定读取当前机构 CID，并与登录上下文机构严格对齐。
+fn actor_cid_number_for_context(
+    db: &Db,
+    ctx: &AdminAuthContext,
+) -> Result<String, axum::response::Response> {
+    let binding = repo::active_node_binding(db).map_err(|err| {
+        tracing::error!(error = %err, "query active institution binding failed");
+        api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "node binding query failed",
+        )
+    })?;
+    let binding =
+        binding.ok_or_else(|| api_error(StatusCode::FORBIDDEN, 2002, "node binding missing"))?;
+    if binding.candidate.institution_code != ctx.institution_code {
+        return Err(api_error(
+            StatusCode::FORBIDDEN,
+            2002,
+            "node binding institution mismatch",
+        ));
+    }
+    let cid_number = binding
+        .candidate
+        .institution_cid_number
+        .filter(|value| {
+            !value.is_empty()
+                && value.len() <= primitives::core_const::CID_NUMBER_MAX_BYTES as usize
+        })
+        .ok_or_else(|| {
+            api_error(
+                StatusCode::FORBIDDEN,
+                2002,
+                "node binding actor_cid_number missing",
+            )
+        })?;
+    Ok(cid_number)
+}
+
 /// 校验账号 ∈ 本机构链上 Active 管理员集合(冷签 step-up 与替换目标校验共用)。
 async fn ensure_pubkey_on_chain_admin(
     db: &Db,
+    actor_cid_number: &str,
     account_pubkey: &str,
     message: &'static str,
 ) -> Result<(), axum::response::Response> {
@@ -129,9 +171,16 @@ async fn ensure_pubkey_on_chain_admin(
             "node binding missing",
         ));
     };
+    if binding.candidate.institution_cid_number.as_deref() != Some(actor_cid_number) {
+        return Err(api_error(
+            StatusCode::FORBIDDEN,
+            2002,
+            "actor_cid_number does not match node binding",
+        ));
+    }
     let identity = chain_runtime::identity_from_binding_parts(
         &binding.candidate.institution_code,
-        binding.candidate.institution_cid_number.as_deref(),
+        Some(actor_cid_number),
         binding.candidate.frg_province_code.as_deref(),
     )
     .map_err(|err| {
@@ -163,9 +212,10 @@ async fn ensure_pubkey_on_chain_admin(
 /// 校验扫码签名 signer ∈ 本机构链上 Active 管理员集合(冷签 step-up,与登录同源)。
 async fn ensure_signer_on_chain_admin(
     db: &Db,
+    actor_cid_number: &str,
     signer_pubkey: &str,
 ) -> Result<(), axum::response::Response> {
-    ensure_pubkey_on_chain_admin(db, signer_pubkey, "not an on-chain admin").await
+    ensure_pubkey_on_chain_admin(db, actor_cid_number, signer_pubkey, "not an on-chain admin").await
 }
 
 pub(crate) async fn prepare_admin_action(
@@ -187,6 +237,10 @@ pub(crate) async fn prepare_admin_action(
             "only cold-sign actions can be prepared",
         );
     }
+    let actor_cid_number = match actor_cid_number_for_context(&state.db, &ctx) {
+        Ok(value) => value,
+        Err(resp) => return resp,
+    };
     let preview = match state.db.with_client({
         let ctx = ctx.clone();
         let action_type = input.action_type.clone();
@@ -209,6 +263,7 @@ pub(crate) async fn prepare_admin_action(
                 action_id: action_id.as_str(),
                 action_type: input.action_type.as_str(),
                 actor_pubkey: ctx.admin_account.as_str(),
+                actor_cid_number: actor_cid_number.as_str(),
                 actor_province_name: province.as_str(),
                 target: preview.target.as_str(),
                 request_hash: request_hash.as_str(),
@@ -237,6 +292,7 @@ pub(crate) async fn prepare_admin_action(
         action_type: input.action_type.as_str().to_string(),
         actor_account: ctx.admin_account.clone(),
         actor_institution_code: ctx.institution_code.clone(),
+        actor_cid_number: actor_cid_number.clone(),
         actor_province_name: province,
         actor_city_name: ctx.scope_city_name.clone(),
         auth_type: preview.auth_type.clone(),
@@ -260,6 +316,7 @@ pub(crate) async fn prepare_admin_action(
         data: PrepareAdminActionOutput {
             action_id,
             action_type: input.action_type.as_str().to_string(),
+            actor_cid_number,
             sign_request,
             payload_hash,
             auth_type: preview.auth_type,
@@ -303,6 +360,17 @@ pub(crate) async fn commit_admin_action(
     }
     if !same_admin_account(challenge.actor_account.as_str(), ctx.admin_account.as_str()) {
         return api_error(StatusCode::FORBIDDEN, 1003, "admin action owner mismatch");
+    }
+    let actor_cid_number = match actor_cid_number_for_context(&state.db, &ctx) {
+        Ok(value) => value,
+        Err(resp) => return resp,
+    };
+    if challenge.actor_cid_number != actor_cid_number {
+        return api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "admin action actor_cid_number mismatch",
+        );
     }
     let action_type = match parse_action_type(challenge.action_type.as_str()) {
         Ok(v) => v,
@@ -349,7 +417,9 @@ pub(crate) async fn commit_admin_action(
     ) {
         return resp;
     }
-    if let Err(resp) = ensure_signer_on_chain_admin(&state.db, signer_pubkey).await {
+    if let Err(resp) =
+        ensure_signer_on_chain_admin(&state.db, &actor_cid_number, signer_pubkey).await
+    {
         return resp;
     }
     // 闭包 move 会拿走 action_type,克隆一份供注销动作的 commit 后处理用。
@@ -382,6 +452,7 @@ pub(crate) async fn commit_admin_action(
                     action_type: action_type.as_str().to_string(),
                     actor_account: ctx.admin_account.clone(),
                     actor_institution_code: ctx.institution_code.clone(),
+                    actor_cid_number: current.actor_cid_number.clone(),
                     actor_province_name: ctx.scope_province_name.clone().unwrap_or_default(),
                     actor_city_name: ctx.scope_city_name.clone(),
                     auth_type: current.auth_type.clone(),
@@ -397,6 +468,7 @@ pub(crate) async fn commit_admin_action(
                 Ok(CommitAdminActionOutput::Grant(AdminSecurityGrantOutput {
                     grant_id,
                     action_type: action_type.as_str().to_string(),
+                    actor_cid_number: current.actor_cid_number,
                     auth_type: current.auth_type,
                     target: current.target,
                     expires_at: grant_expires_at.timestamp(),
@@ -529,6 +601,7 @@ pub(crate) fn require_admin_security_grant(
     if action_type.auth_type() == AdminOperationAuth::Passkey {
         return ensure_action_role_allowed(ctx, &action_type);
     }
+    let actor_cid_number = actor_cid_number_for_context(&state.db, ctx)?;
     let grant_id = headers
         .get(ADMIN_SECURITY_GRANT_HEADER)
         .and_then(|v| v.to_str().ok())
@@ -558,6 +631,7 @@ pub(crate) fn require_admin_security_grant(
         }
         if !same_admin_account(grant.actor_account.as_str(), ctx.admin_account.as_str())
             || grant.actor_institution_code != ctx.institution_code
+            || grant.actor_cid_number != actor_cid_number
         {
             return Err("http:forbidden:security grant owner mismatch".to_string());
         }

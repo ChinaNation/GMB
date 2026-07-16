@@ -589,9 +589,7 @@ fn build_citizen_identity_payload(
         .map_err(|_| api_error(StatusCode::BAD_REQUEST, 1001, "公民出生日期格式错误"))?;
     let birth_date_u32 =
         birth_date.year() as u32 * 10_000 + birth_date.month() * 100 + birth_date.day();
-    payload
-        .payload_bytes
-        .extend(birth_date_u32.to_le_bytes());
+    payload.payload_bytes.extend(birth_date_u32.to_le_bytes());
     payload.identity_level = CitizenOnchainIdentityLevel::Candidate;
     Ok(payload)
 }
@@ -674,14 +672,10 @@ pub(crate) fn active_registry_cid_number(
     })?;
     let cid_number = binding
         .and_then(|binding| binding.candidate.institution_cid_number)
-        .ok_or_else(|| {
-            api_error(
-                StatusCode::BAD_REQUEST,
-                1001,
-                "当前注册局缺少机构 CID 绑定",
-            )
-        })?;
-    if cid_number.is_empty() || cid_number.len() > 32 {
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, 1001, "当前注册局缺少机构 CID 绑定"))?;
+    if cid_number.is_empty()
+        || cid_number.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
+    {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,

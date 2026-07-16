@@ -408,7 +408,7 @@ void main() {
     for (final control in [
       ChatPayloadCodec.encode(ChatContent.text('hi')),
       ChatPayloadCodec.encode(
-        ChatContent.sticker(packId: 'fluent3d', stickerId: '1f600'),
+        ChatContent.sticker(packId: 'fluent3d', stickerId: 'grinning_face'),
       ),
     ]) {
       await expectLater(

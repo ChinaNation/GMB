@@ -61,6 +61,7 @@ export function PrcSection() {
   if (view.page === 'protocol-upgrade') {
     return (
       <ProtocolUpgradeProposalPage
+        actorCidNumber={view.cidNumber}
         adminWallets={view.adminWallets}
         onBack={() => backToDetail(view.cidNumber)}
         onSuccess={() => backToDetail(view.cidNumber)}

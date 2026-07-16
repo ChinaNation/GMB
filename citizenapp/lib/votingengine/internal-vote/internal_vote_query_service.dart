@@ -16,8 +16,7 @@ class InternalVoteQueryService {
   /// 查询某管理员对某提案的投票记录。null=未投票，true=赞成，false=反对。
   Future<bool?> fetchAdminVote(int proposalId, String pubkeyHex) async {
     final data = await _rpc.fetchStorage(_adminVoteKey(proposalId, pubkeyHex));
-    if (data == null || data.isEmpty) return null;
-    return data[0] == 1;
+    return _decodeVote(data);
   }
 
   /// 批量查询管理员投票记录。
@@ -93,7 +92,12 @@ class InternalVoteQueryService {
   }
 
   bool? _decodeVote(Uint8List? data) {
-    if (data == null || data.isEmpty) return null;
+    if (data == null) return null;
+    if (data.length != 1 || (data[0] != 0 && data[0] != 1)) {
+      throw const FormatException(
+        'InternalVotesByAccount 必须是严格的 SCALE bool',
+      );
+    }
     return data[0] == 1;
   }
 

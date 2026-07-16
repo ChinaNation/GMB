@@ -26,7 +26,7 @@ class ClearingBankBindingSnapshot {
   final String cidFullName;
   final String cidShortName;
   final String mainAccount;
-  final String? feeAccount;
+  final String feeAccount;
   final String peerId;
   final String rpcDomain;
   final int rpcPort;
@@ -65,7 +65,7 @@ class ClearingBankBindingSnapshot {
       cidFullName: (json['cid_full_name'] as String?) ?? '',
       cidShortName: (json['cid_short_name'] as String?) ?? '',
       mainAccount: (json['main_account'] as String?) ?? '',
-      feeAccount: json['fee_account'] as String?,
+      feeAccount: (json['fee_account'] as String?) ?? '',
       peerId: (json['peer_id'] as String?) ?? '',
       rpcDomain: (json['rpc_domain'] as String?) ?? '',
       rpcPort: (json['rpc_port'] as num?)?.toInt() ?? 0,
@@ -112,52 +112,12 @@ class ClearingBankPrefs {
       final snapshot = ClearingBankBindingSnapshot.fromJson(json);
       if (snapshot.cidNumber.isEmpty ||
           snapshot.mainAccount.isEmpty ||
+          snapshot.feeAccount.isEmpty ||
           snapshot.rpcDomain.isEmpty ||
           snapshot.rpcPort <= 0) {
         return null;
       }
       return snapshot;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// 只写入 `cid_number` 的轻量入口不作为业务真源使用。
-  ///
-  /// 该入口写入一个不可用于支付的最小快照；真实绑定页面必须调用 [saveSnapshot]。
-  static Future<void> save(int walletIndex, String cidNumber) async {
-    final trimmed = cidNumber.trim();
-    if (trimmed.isEmpty) {
-      await clear(walletIndex);
-    } else {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      await saveSnapshot(
-        walletIndex,
-        ClearingBankBindingSnapshot(
-          cidNumber: trimmed,
-          cidFullName: '',
-          cidShortName: '',
-          mainAccount: '',
-          feeAccount: null,
-          peerId: '',
-          rpcDomain: '',
-          rpcPort: 0,
-          boundAtMs: now,
-          lastVerifiedAtMs: now,
-        ),
-      );
-    }
-  }
-
-  /// 读取 `cid_number`,未绑定/未写入返回 `null`。
-  static Future<String?> load(int walletIndex) async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('$_keyPrefix$walletIndex');
-    if (raw == null || raw.trim().isEmpty) return null;
-    try {
-      final json = jsonDecode(raw) as Map<String, dynamic>;
-      final cidNumber = (json['cid_number'] as String?)?.trim();
-      return (cidNumber == null || cidNumber.isEmpty) ? null : cidNumber;
     } catch (_) {
       return null;
     }

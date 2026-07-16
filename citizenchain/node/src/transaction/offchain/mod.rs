@@ -102,8 +102,14 @@ pub fn start_clearing_bank_components(
         submitter,
         initial_batch_seq,
     ));
-    let event_listener = Arc::new(EventListener::new(ledger.clone(), institution_account.clone()));
-    let reserve_monitor = Arc::new(ReserveMonitor::new(ledger.clone(), institution_account.clone()));
+    let event_listener = Arc::new(EventListener::new(
+        ledger.clone(),
+        institution_account.clone(),
+    ));
+    let reserve_monitor = Arc::new(ReserveMonitor::new(
+        ledger.clone(),
+        institution_account.clone(),
+    ));
     // RPC 层需要 client 读取 UserBank / L2FeeRateBp,也复用 signer 生成真实 L2 ACK。
     let rpc_impl = Arc::new(OffchainClearingRpcImpl::new(
         ledger.clone(),

@@ -339,8 +339,7 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
               const SizedBox(height: 6),
               _kv('表决规则', _representativeRuleLabel(representativeMeta.rule)),
               const SizedBox(height: 6),
-              _kv('代表机构',
-                  representativeMeta.bodies.map((b) => b.code).join(' → ')),
+              _kv('代表机构', representativeMeta.bodies.join(' → ')),
               if (legislationMeta?.needsGuard == true) ...[
                 const SizedBox(height: 6),
                 _kv('修宪', '通过后需护宪大法官终审'),

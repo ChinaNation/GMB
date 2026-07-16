@@ -126,15 +126,8 @@ pub mod pallet {
 
     /// 联合投票机构级汇总:(proposal_id, 机构) → 赞成/反对。
     #[pallet::storage]
-    pub type JointVotesByInstitution<T: Config> = StorageDoubleMap<
-        _,
-        Blake2_128Concat,
-        u64,
-        Blake2_128Concat,
-        CidNumber,
-        bool,
-        OptionQuery,
-    >;
+    pub type JointVotesByInstitution<T: Config> =
+        StorageDoubleMap<_, Blake2_128Concat, u64, Blake2_128Concat, CidNumber, bool, OptionQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn joint_tally)]
@@ -311,7 +304,11 @@ impl<T: Config> votingengine::JointVoteEngine<T::AccountId> for Pallet<T> {
         frame_support::storage::with_transaction(|| {
             let actor_cid_number = match CidNumber::try_from(actor_cid_number) {
                 Ok(value) => value,
-                Err(_) => return frame_support::storage::TransactionOutcome::Rollback(Err(votingengine::Error::<T>::InvalidInstitution.into())),
+                Err(_) => {
+                    return frame_support::storage::TransactionOutcome::Rollback(Err(
+                        votingengine::Error::<T>::InvalidInstitution.into(),
+                    ))
+                }
             };
             let proposal_id = match Self::do_create_joint_proposal(who, actor_cid_number) {
                 Ok(id) => id,
@@ -341,7 +338,11 @@ impl<T: Config> votingengine::JointVoteEngine<T::AccountId> for Pallet<T> {
         frame_support::storage::with_transaction(|| {
             let actor_cid_number = match CidNumber::try_from(actor_cid_number) {
                 Ok(value) => value,
-                Err(_) => return frame_support::storage::TransactionOutcome::Rollback(Err(votingengine::Error::<T>::InvalidInstitution.into())),
+                Err(_) => {
+                    return frame_support::storage::TransactionOutcome::Rollback(Err(
+                        votingengine::Error::<T>::InvalidInstitution.into(),
+                    ))
+                }
             };
             let proposal_id = match Self::do_create_joint_proposal(who, actor_cid_number) {
                 Ok(id) => id,

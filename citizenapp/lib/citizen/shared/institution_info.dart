@@ -2,12 +2,13 @@
 ///
 ///
 /// - 内置治理机构静态注册表（`kNrc`/`kPrcs`/`kProvincialBanks`）+
-///   `findInstitutionByAccountId()`/`jointVoteTotal`/`jointVotePassThreshold` 在
+///   CID 查找、个人多签账户包装与联合投票常量在
 ///   `lib/citizen/institution/governance_registry.dart`。
-/// - 治理主体统一为机构多签 AccountId；cid_number 只用于查找机构资料。
+/// - 机构治理主体统一为 `cid_number`；具体账户只用于账户操作。
 library;
 
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
+import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
 /// 提案展示号格式化(双层 ID v1):`2026000123` 风格。
 ///
@@ -35,8 +36,11 @@ class OrgType {
   /// 省储行 Provincial Reserve Bank
   static const int prb = 2;
 
-  /// 多签账户。具体是个人多签还是机构账户，由 admins-change 的 account identity 区分。
-  static const int account = 3;
+  /// 其它机构（包括注册机构与非储备类固定治理机构）。
+  static const int institution = 3;
+
+  /// 个人多签账户；它不是机构，不得复用机构 CID 语义。
+  static const int personalMultisig = 4;
 
   static String label(int orgType) {
     switch (orgType) {
@@ -46,8 +50,10 @@ class OrgType {
         return '省储委会';
       case prb:
         return '省储行';
-      case account:
-        return '多签账户';
+      case institution:
+        return '机构';
+      case personalMultisig:
+        return '个人多签';
       default:
         return '未知';
     }
@@ -57,11 +63,12 @@ class OrgType {
 /// 治理机构及多签账户的制度账户集合。
 ///
 /// 内置治理机构没有笼统的 `account`；链端按主账户、费用账户、
-/// 国家储委会安全基金账户、省储行永久质押账户分别建模。个人多签/机构账户只使用主账户。
+/// 国家储委会安全基金/两和基金账户、省储行永久质押账户分别建模。
+/// 所有机构强制具有主账户与费用账户；个人多签不使用本类型。
 class InstitutionAccounts {
   const InstitutionAccounts({
     required this.mainAccount,
-    this.feeAccount,
+    required this.feeAccount,
     this.safetyFundAccount,
     this.heAccount,
     this.stakeAccount,
@@ -70,8 +77,8 @@ class InstitutionAccounts {
   /// 主账户 AccountId hex（32 字节，不含 0x）。
   final String mainAccount;
 
-  /// 费用账户 AccountId hex；内置治理机构必有，个人/注册多签账户可为空。
-  final String? feeAccount;
+  /// 费用账户 AccountId hex；所有机构强制存在。
+  final String feeAccount;
 
   /// 安全基金账户 AccountId hex；仅国家储委会存在。
   final String? safetyFundAccount;
@@ -93,11 +100,11 @@ class InstitutionInfo {
     required this.cidNumber,
     required this.orgType,
     this.accounts,
-    String? account,
+    String? personalAccountHex,
     this.adminAccountCode,
     this.internalThresholdOverride,
-  })  : assert(accounts != null || account != null),
-        _singleMainAccount = account;
+  })  : assert((accounts == null) != (personalAccountHex == null)),
+        _personalAccountHex = personalAccountHex;
 
   /// 机构全称,与后端/链端 `cid_full_name` 对齐。
   final String cidFullName;
@@ -111,8 +118,8 @@ class InstitutionInfo {
   /// 机构英文简称,与后端/链端 `cid_short_name_en` 对齐。
   final String cidShortNameEn;
 
-  /// 链上身份标识（与 Rust 常量 `cid_number` 完全一致）。
-  /// 查询治理 storage 时使用 `mainAccount` 这个 AccountId。
+  /// 链上机构身份唯一主键（与 Rust `cid_number` 完全一致）。
+  /// 任何主/费/安全基金/两和基金/质押/自定义账户都不得替代本字段。
   final String cidNumber;
 
   /// 机构类型：0=NRC, 1=PRC, 2=PRB。
@@ -123,28 +130,39 @@ class InstitutionInfo {
 
   /// 制度账户集合。
   ///
-  /// 治理机构使用生成的完整账户集合；个人多签/机构账户使用
-  /// 主账户 AccountId作为多签账户。
+  /// 所有机构使用完整账户集合；个人多签不使用本字段。
   final InstitutionAccounts? accounts;
 
-  final String? _singleMainAccount;
+  final String? _personalAccountHex;
 
-  /// 主账户 AccountId hex（32 字节，不含 0x）。
-  String get mainAccount => accounts?.mainAccount ?? _singleMainAccount!;
+  /// 资金操作的默认账户：机构为主账户，个人多签为其 AccountId。
+  /// 本字段只是账户参数，不得替代机构 `cidNumber`。
+  String get mainAccount => accounts?.mainAccount ?? personalAccountHex;
 
-  /// 个人多签/注册机构账户的多签账户；内置治理机构不得使用这个语义。
-  String get account => mainAccount;
+  /// 个人多签 AccountId hex；机构调用本 getter 直接失败。
+  String get personalAccountHex {
+    final value = _personalAccountHex;
+    if (!isPersonalAccountIdentity(cidNumber) || value == null) {
+      throw StateError('机构没有 personalAccountHex，必须使用 CID + 具体机构账户');
+    }
+    return value;
+  }
 
   /// 机构账户的动态阈值覆盖。
   final int? internalThresholdOverride;
 
-  /// 是否为链上注册的机构账户。
-  bool get isRegisteredAccount =>
-      orgType == OrgType.account && isRegisteredAccountIdentity(cidNumber);
+  /// 是否为链上注册机构。个人多签不属于机构。
+  bool get isRegisteredInstitution =>
+      orgType == OrgType.institution &&
+      !isPersonalAccountIdentity(cidNumber) &&
+      !InstitutionCodeLabel.isFixedGovernance(adminAccountCode ?? '');
 
   /// 内部投票通过阈值。
   int get internalThreshold {
     if (internalThresholdOverride != null) return internalThresholdOverride!;
+    final fixedByCode =
+        InstitutionCodeLabel.fixedGovernanceThreshold(adminAccountCode ?? '');
+    if (fixedByCode != null) return fixedByCode;
     switch (orgType) {
       case OrgType.nrc:
         return 13;
@@ -152,7 +170,8 @@ class InstitutionInfo {
         return 6;
       case OrgType.prb:
         return 6;
-      case OrgType.account:
+      case OrgType.institution:
+      case OrgType.personalMultisig:
         return 0;
       default:
         return 0;
@@ -180,7 +199,7 @@ class InstitutionInfo {
     String? cidNumber,
     int? orgType,
     InstitutionAccounts? accounts,
-    String? account,
+    String? personalAccountHex,
     String? adminAccountCode,
     int? internalThresholdOverride,
   }) {
@@ -192,7 +211,7 @@ class InstitutionInfo {
       cidNumber: cidNumber ?? this.cidNumber,
       orgType: orgType ?? this.orgType,
       accounts: accounts ?? this.accounts,
-      account: account ?? _singleMainAccount,
+      personalAccountHex: personalAccountHex ?? _personalAccountHex,
       adminAccountCode: adminAccountCode ?? this.adminAccountCode,
       internalThresholdOverride:
           internalThresholdOverride ?? this.internalThresholdOverride,
@@ -200,25 +219,7 @@ class InstitutionInfo {
   }
 }
 
-const String _registeredAccountIdentityPrefix = 'institution-account:';
 const String _personalAccountIdentityPrefix = 'personal-account:';
-
-bool isRegisteredAccountIdentity(String institutionIdentity) {
-  return institutionIdentity.startsWith(_registeredAccountIdentityPrefix);
-}
-
-String registeredAccountIdentity(String account) {
-  return '$_registeredAccountIdentityPrefix${_normalizeHex(account)}';
-}
-
-String? registeredAccountHexFromIdentity(String institutionIdentity) {
-  if (!isRegisteredAccountIdentity(institutionIdentity)) return null;
-  final hex = _normalizeHex(
-    institutionIdentity.substring(_registeredAccountIdentityPrefix.length),
-  );
-  if (hex.length != 64) return null;
-  return hex;
-}
 
 bool isPersonalAccountIdentity(String institutionIdentity) {
   return institutionIdentity.startsWith(_personalAccountIdentityPrefix);
@@ -233,25 +234,7 @@ String? personalAccountHexFromIdentity(String institutionIdentity) {
   return hex;
 }
 
-List<int> institutionIdentityToAccountId(
-  String institutionIdentity, {
-  String? mainAccount,
-}) {
-  final account = registeredAccountHexFromIdentity(institutionIdentity);
-  if (account != null) {
-    return _accountHexToBytes(account);
-  }
-  final personalAccount = personalAccountHexFromIdentity(institutionIdentity);
-  if (personalAccount != null) {
-    return _accountHexToBytes(personalAccount);
-  }
-  if (mainAccount == null) {
-    throw ArgumentError('内置治理机构必须提供 mainAccount 作为治理 AccountId');
-  }
-  return _accountHexToBytes(mainAccount);
-}
-
-List<int> _accountHexToBytes(String accountHex) {
+List<int> institutionAccountId(String accountHex) {
   final account = _hexDecode(accountHex);
   if (account.length != 32) {
     throw ArgumentError('account hex 必须为 32 字节');

@@ -382,16 +382,8 @@ mod tests {
             })
             .collect::<Vec<_>>();
         let account = DecodedAdminAccount {
-            cid_number: spec
-                .institution
-                .cid_number
-                .as_bytes()
-                .to_vec()
-                .try_into()
-                .expect("CID fits"),
             institution_code: spec.institution.code,
             admins,
-            status: AdminAccountStatus::Active,
         };
         let [admin_key, role_key, assignments_key] = storage_key::composition_keys(spec);
         BTreeMap::from([
@@ -458,12 +450,20 @@ mod tests {
             .expect("CID fits")]
         .try_into()
         .expect("single subject fits");
-        let proposal = Proposal {
+        let proposal: Proposal<u32, [u8; 32]> = Proposal {
             kind: PROPOSAL_KIND_INTERNAL,
             stage: STAGE_INTERNAL,
             status: 0,
             internal_code: Some(fixed.code),
-            account_context: Some(fixed.main_account),
+            actor_cid_number: Some(
+                fixed
+                    .cid_number
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .expect("CID fits"),
+            ),
+            execution_account: None,
             subject_cid_numbers,
             start: 1u32,
             end: 2u32,
@@ -520,12 +520,20 @@ mod tests {
             .expect("CID fits")]
         .try_into()
         .expect("single subject fits");
-        let proposal = Proposal {
+        let proposal: Proposal<u32, [u8; 32]> = Proposal {
             kind: PROPOSAL_KIND_INTERNAL,
             stage: STAGE_INTERNAL,
             status: 0,
             internal_code: Some(fixed.code),
-            account_context: Some(fixed.main_account),
+            actor_cid_number: Some(
+                fixed
+                    .cid_number
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .expect("CID fits"),
+            ),
+            execution_account: None,
             subject_cid_numbers,
             start: 1u32,
             end: 2u32,
@@ -576,7 +584,7 @@ mod tests {
                 .find(|item| item.code == code)
                 .expect("singleton exists");
             assert!(!storage_key::is_relevant(
-                &governance_skeleton::storage_key::admin_account(&singleton.main_account)
+                &governance_skeleton::storage_key::admin_account(singleton.cid_number.as_bytes(),)
             ));
             assert!(!storage_key::is_relevant(
                 &governance_skeleton::storage_key::institution_role(
@@ -601,12 +609,20 @@ mod tests {
                 .expect("CID fits")]
             .try_into()
             .expect("single subject fits");
-            let proposal = Proposal {
+            let proposal: Proposal<u32, [u8; 32]> = Proposal {
                 kind: PROPOSAL_KIND_INTERNAL,
                 stage: STAGE_INTERNAL,
                 status: 0,
                 internal_code: Some(singleton.code),
-                account_context: Some(singleton.main_account),
+                actor_cid_number: Some(
+                    singleton
+                        .cid_number
+                        .as_bytes()
+                        .to_vec()
+                        .try_into()
+                        .expect("CID fits"),
+                ),
+                execution_account: None,
                 subject_cid_numbers,
                 start: 1u32,
                 end: 2u32,
@@ -639,12 +655,20 @@ mod tests {
         .expect("single subject fits");
         let id = 40;
         let proposal_key = storage_key::proposal(id);
-        let proposal = Proposal {
+        let proposal: Proposal<u32, [u8; 32]> = Proposal {
             kind: PROPOSAL_KIND_INTERNAL,
             stage: STAGE_INTERNAL,
             status: 0,
             internal_code: Some(fixed.code),
-            account_context: Some(fixed.main_account),
+            actor_cid_number: Some(
+                fixed
+                    .cid_number
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .expect("CID fits"),
+            ),
+            execution_account: None,
             subject_cid_numbers,
             start: 1u32,
             end: 2u32,

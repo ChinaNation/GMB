@@ -6,6 +6,7 @@ fn joint_proposers_can_propose_runtime_upgrade() {
         assert_noop!(
             RuntimeUpgrade::propose_runtime_upgrade(
                 RuntimeOrigin::signed(outsider()),
+                nrc_cid(),
                 reason_ok(),
                 code_ok(),
                 pow_difficulty::PowDifficultyParams::genesis_default()
@@ -15,6 +16,7 @@ fn joint_proposers_can_propose_runtime_upgrade() {
 
         assert_ok!(RuntimeUpgrade::propose_runtime_upgrade(
             RuntimeOrigin::signed(nrc_admin()),
+            nrc_cid(),
             reason_ok(),
             code_ok(),
             pow_difficulty::PowDifficultyParams::genesis_default()
@@ -22,6 +24,7 @@ fn joint_proposers_can_propose_runtime_upgrade() {
 
         assert_ok!(RuntimeUpgrade::propose_runtime_upgrade(
             RuntimeOrigin::signed(prc_admin()),
+            prc_cid(),
             reason_ok(),
             code_ok(),
             pow_difficulty::PowDifficultyParams::genesis_default()
@@ -115,6 +118,7 @@ fn approved_upgrade_atomically_stages_versioned_pow_params() {
         next.target_block_time_ms = 120_000;
         assert_ok!(RuntimeUpgrade::propose_runtime_upgrade(
             RuntimeOrigin::signed(nrc_admin()),
+            nrc_cid(),
             reason_ok(),
             code_ok(),
             next,

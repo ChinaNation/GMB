@@ -6,8 +6,8 @@
 use crate::governance::{chain_query, storage_keys};
 use serde::Serialize;
 
-/// MODULE_TAG 前缀（必须与 runtime `multisig-transfer` pallet 保持一致）。
-const TAG_TRANSFER: &[u8] = b"multisig-transfer";
+/// MODULE_TAG 前缀（必须与 runtime `multisig` pallet 保持一致）。
+const TAG_TRANSFER: &[u8] = b"multisig";
 
 /// 普通多签转账提案详情（从 `VotingEngine::ProposalData` 解码）。
 #[derive(Debug, Clone, Serialize)]
@@ -15,8 +15,10 @@ const TAG_TRANSFER: &[u8] = b"multisig-transfer";
 pub struct TransferProposalDetail {
     /// 提案主键 ID。
     pub proposal_id: u64,
-    /// 机构多签账户 AccountId hex。
-    pub institution_hex: String,
+    /// 发起机构唯一 CID；个人多签转账为空。
+    pub actor_cid_number: Option<String>,
+    /// 实际转出资金的机构账户或个人多签账户。
+    pub funding_account_hex: String,
     /// 收款人公钥 hex。
     pub beneficiary_hex: String,
     /// 金额（分）。
@@ -33,6 +35,10 @@ pub struct TransferProposalDetail {
 pub struct SafetyFundProposalDetail {
     /// 提案主键 ID。
     pub proposal_id: u64,
+    /// 国家储委会唯一 CID。
+    pub actor_cid_number: String,
+    /// 实际转出的安全基金账户。
+    pub institution_account_hex: String,
     /// 收款人公钥 hex。
     pub beneficiary_hex: String,
     /// 金额（分）。
@@ -47,8 +53,10 @@ pub struct SafetyFundProposalDetail {
 pub struct SweepProposalDetail {
     /// 提案主键 ID。
     pub proposal_id: u64,
-    /// 机构多签账户 AccountId hex。
-    pub institution_hex: String,
+    /// 发起机构唯一 CID。
+    pub actor_cid_number: String,
+    /// 实际转出的机构费用账户。
+    pub institution_account_hex: String,
     /// 金额（分）。
     pub amount_fen: String,
 }
@@ -122,17 +130,17 @@ where
     F: Fn(&str) -> Option<String>,
 {
     match action {
-        ProposalAction::Transfer(detail) => format_transfer_summary(detail),
+        ProposalAction::Transfer(detail) => format_transfer_summary(detail, resolve_cid_full_name),
         ProposalAction::SafetyFund(detail) => format_safety_fund_summary(detail),
         ProposalAction::Sweep(detail) => format_sweep_summary(detail, resolve_cid_full_name),
     }
 }
 
 fn decode_transfer_action(proposal_id: u64, data: &[u8]) -> Option<TransferProposalDetail> {
-    // MODULE_TAG("multisig-transfer") + institution + beneficiary
-    // + amount: u128(16) + remark: Vec<u8> + proposer: [u8;32]
+    // MODULE_TAG("multisig") + actor_cid_number: Option<CidNumber> + funding_account
+    // + beneficiary + amount: u128(16) + remark: Vec<u8> + proposer: [u8;32]
     let tag = TAG_TRANSFER;
-    if data.len() < tag.len() + 32 + 32 + 16 + 1 + 32 {
+    if data.len() < tag.len() + 1 + 32 + 32 + 16 + 1 + 32 {
         return None;
     }
     if &data[..tag.len()] != tag {
@@ -140,7 +148,22 @@ fn decode_transfer_action(proposal_id: u64, data: &[u8]) -> Option<TransferPropo
     }
     let mut offset = tag.len();
 
-    let institution_hex = hex::encode(&data[offset..offset + 32]);
+    let actor_cid_number = match *data.get(offset)? {
+        0 => {
+            offset += 1;
+            None
+        }
+        1 => {
+            offset += 1;
+            Some(read_cid_number(data, &mut offset)?)
+        }
+        _ => return None,
+    };
+
+    if offset + 32 + 32 + 16 > data.len() {
+        return None;
+    }
+    let funding_account_hex = hex::encode(&data[offset..offset + 32]);
     offset += 32;
 
     let beneficiary_hex = hex::encode(&data[offset..offset + 32]);
@@ -162,10 +185,15 @@ fn decode_transfer_action(proposal_id: u64, data: &[u8]) -> Option<TransferPropo
         return None;
     }
     let proposer_hex = hex::encode(&data[offset..offset + 32]);
+    offset += 32;
+    if offset != data.len() {
+        return None;
+    }
 
     Some(TransferProposalDetail {
         proposal_id,
-        institution_hex,
+        actor_cid_number,
+        funding_account_hex,
         beneficiary_hex,
         amount_fen: amount_fen.to_string(),
         remark,
@@ -186,28 +214,37 @@ fn fetch_safety_fund_proposal_action(
         None => Ok(None),
         Some(hex_data) => {
             let data = decode_hex_storage(&hex_data)?;
-            // SafetyFundAction: beneficiary(32) + amount(u128=16) + remark(compact+bytes) + proposer(32)
-            if data.len() < 80 {
+            // SafetyFundAction: actor CID + institution_account + beneficiary + amount + remark + proposer。
+            let mut offset = 0usize;
+            let Some(actor_cid_number) = read_cid_number(&data, &mut offset) else {
+                return Ok(None);
+            };
+            if offset + 32 + 32 + 16 > data.len() {
                 return Ok(None);
             }
-            let beneficiary_hex = hex::encode(&data[..32]);
+            let institution_account_hex = hex::encode(&data[offset..offset + 32]);
+            offset += 32;
+            let beneficiary_hex = hex::encode(&data[offset..offset + 32]);
+            offset += 32;
             let amount_fen = {
                 let mut bytes = [0u8; 16];
-                bytes.copy_from_slice(&data[32..48]);
+                bytes.copy_from_slice(&data[offset..offset + 16]);
                 u128::from_le_bytes(bytes)
             };
+            offset += 16;
 
-            let (remark_len, compact_size) = read_compact_u32(&data, 48)?;
-            let remark_start = 48 + compact_size;
+            let (remark_len, compact_size) = read_compact_u32(&data, offset)?;
+            let remark_start = offset + compact_size;
             let remark_end = remark_start + remark_len as usize;
-            let remark = if remark_end <= data.len() {
-                String::from_utf8_lossy(&data[remark_start..remark_end]).to_string()
-            } else {
-                String::new()
-            };
+            if remark_end + 32 != data.len() {
+                return Ok(None);
+            }
+            let remark = String::from_utf8_lossy(&data[remark_start..remark_end]).to_string();
 
             Ok(Some(SafetyFundProposalDetail {
                 proposal_id,
+                actor_cid_number,
+                institution_account_hex,
                 beneficiary_hex,
                 amount_fen: amount_fen.to_string(),
                 remark,
@@ -227,19 +264,25 @@ fn fetch_sweep_proposal_action(proposal_id: u64) -> Result<Option<SweepProposalD
         None => Ok(None),
         Some(hex_data) => {
             let data = decode_hex_storage(&hex_data)?;
-            // SweepAction: institution(AccountId32) + amount(u128=16) + proposer(AccountId32)
-            if data.len() < 80 {
+            // SweepAction: actor CID + institution_account + amount + proposer。
+            let mut offset = 0usize;
+            let Some(actor_cid_number) = read_cid_number(&data, &mut offset) else {
+                return Ok(None);
+            };
+            if offset + 32 + 16 + 32 != data.len() {
                 return Ok(None);
             }
-            let institution_hex = hex::encode(&data[..32]);
+            let institution_account_hex = hex::encode(&data[offset..offset + 32]);
+            offset += 32;
             let amount_fen = {
                 let mut bytes = [0u8; 16];
-                bytes.copy_from_slice(&data[32..48]);
+                bytes.copy_from_slice(&data[offset..offset + 16]);
                 u128::from_le_bytes(bytes)
             };
             Ok(Some(SweepProposalDetail {
                 proposal_id,
-                institution_hex,
+                actor_cid_number,
+                institution_account_hex,
                 amount_fen: amount_fen.to_string(),
             }))
         }
@@ -280,6 +323,18 @@ fn read_compact_u32(data: &[u8], offset: usize) -> Result<(u32, usize), String> 
     }
 }
 
+fn read_cid_number(data: &[u8], offset: &mut usize) -> Option<String> {
+    let (len, compact_size) = read_compact_u32(data, *offset).ok()?;
+    *offset = offset.checked_add(compact_size)?;
+    let end = offset.checked_add(len as usize)?;
+    if end > data.len() {
+        return None;
+    }
+    let cid = core::str::from_utf8(&data[*offset..end]).ok()?.to_string();
+    *offset = end;
+    Some(cid)
+}
+
 fn truncate_chars(s: &str, max_chars: usize) -> String {
     let mut chars = s.chars();
     let truncated: String = chars.by_ref().take(max_chars).collect();
@@ -306,10 +361,18 @@ fn format_amount_fen(amount_fen: &str) -> String {
     format!("{yuan_grouped}.{cents:02}")
 }
 
-fn format_transfer_summary(detail: &TransferProposalDetail) -> String {
+fn format_transfer_summary<F>(detail: &TransferProposalDetail, resolve_cid_full_name: F) -> String
+where
+    F: Fn(&str) -> Option<String>,
+{
     let remark_short = truncate_chars(&detail.remark, 30);
+    let actor = detail
+        .actor_cid_number
+        .as_deref()
+        .and_then(resolve_cid_full_name)
+        .unwrap_or_else(|| "个人多签".to_string());
     format!(
-        "转账 {} 元：{remark_short}",
+        "{actor}转账 {} 元：{remark_short}",
         format_amount_fen(&detail.amount_fen)
     )
 }
@@ -322,8 +385,8 @@ fn format_sweep_summary<F>(detail: &SweepProposalDetail, resolve_cid_full_name: 
 where
     F: Fn(&str) -> Option<String>,
 {
-    let inst_name =
-        resolve_cid_full_name(&detail.institution_hex).unwrap_or_else(|| "未知机构".to_string());
+    let inst_name = resolve_cid_full_name(&detail.actor_cid_number)
+        .unwrap_or_else(|| detail.actor_cid_number.clone());
     format!(
         "手续费划转 {} 元：{inst_name}",
         format_amount_fen(&detail.amount_fen)
@@ -338,27 +401,54 @@ mod tests {
     fn transfer_summary_truncates_long_remark() {
         let detail = TransferProposalDetail {
             proposal_id: 1,
-            institution_hex: String::new(),
+            actor_cid_number: None,
+            funding_account_hex: String::new(),
             beneficiary_hex: String::new(),
             amount_fen: "12345".to_string(),
             remark: "一二三四五六七八九十".repeat(4),
             proposer_hex: String::new(),
         };
-        let summary = format_transfer_summary(&detail);
-        assert!(summary.starts_with("转账 123.45 元："));
+        let summary = format_transfer_summary(&detail, |_| None);
+        assert!(summary.starts_with("个人多签转账 123.45 元："));
         assert!(summary.contains('…'));
+    }
+
+    #[test]
+    fn transfer_action_decodes_actor_cid_and_funding_account() {
+        let actor_cid_number = "CHN-ORG-001";
+        let remark = "机构账户转账";
+        let mut data = TAG_TRANSFER.to_vec();
+        data.push(1);
+        data.push((actor_cid_number.len() as u8) << 2);
+        data.extend_from_slice(actor_cid_number.as_bytes());
+        data.extend_from_slice(&[0x11; 32]);
+        data.extend_from_slice(&[0x22; 32]);
+        data.extend_from_slice(&12345u128.to_le_bytes());
+        data.push((remark.len() as u8) << 2);
+        data.extend_from_slice(remark.as_bytes());
+        data.extend_from_slice(&[0x33; 32]);
+
+        let detail = decode_transfer_action(7, &data).expect("应按 runtime 新布局解码");
+        assert_eq!(detail.proposal_id, 7);
+        assert_eq!(detail.actor_cid_number.as_deref(), Some(actor_cid_number));
+        assert_eq!(detail.funding_account_hex, "11".repeat(32));
+        assert_eq!(detail.beneficiary_hex, "22".repeat(32));
+        assert_eq!(detail.amount_fen, "12345");
+        assert_eq!(detail.remark, remark);
+        assert_eq!(detail.proposer_hex, "33".repeat(32));
     }
 
     #[test]
     fn sweep_summary_uses_unknown_institution_fallback() {
         let detail = SweepProposalDetail {
             proposal_id: 2,
-            institution_hex: "00".repeat(48),
+            actor_cid_number: "CHN-UNKNOWN".to_string(),
+            institution_account_hex: "00".repeat(32),
             amount_fen: "999900".to_string(),
         };
         assert_eq!(
             format_sweep_summary(&detail, |_| None),
-            "手续费划转 9,999.00 元：未知机构"
+            "手续费划转 9,999.00 元：CHN-UNKNOWN"
         );
     }
 
@@ -366,6 +456,8 @@ mod tests {
     fn action_into_details_maps_each_field() {
         let detail = SafetyFundProposalDetail {
             proposal_id: 3,
+            actor_cid_number: "CHN-NRC".to_string(),
+            institution_account_hex: String::new(),
             beneficiary_hex: String::new(),
             amount_fen: "100".to_string(),
             remark: String::new(),

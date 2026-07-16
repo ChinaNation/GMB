@@ -54,7 +54,7 @@ pub fn build_register_call_data(
     if actor_cid_number.is_empty()
         || actor_cid_number.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
     {
-        return Err("actor_cid_number 长度需在 1..=32".to_string());
+        return Err("actor_cid_number 长度必须在链上 CID_NUMBER_MAX_BYTES 范围内".to_string());
     }
     if peer_id.is_empty() || peer_id.len() > 64 {
         return Err("peer_id 长度需在 1..=64".to_string());
@@ -66,10 +66,9 @@ pub fn build_register_call_data(
         return Err("rpc_port 必须 >= 1024".to_string());
     }
 
-    let mut call =
-        Vec::with_capacity(
-            2 + 1 + actor_cid_number.len() + 1 + peer_id.len() + 1 + rpc_domain.len() + 2,
-        );
+    let mut call = Vec::with_capacity(
+        2 + 1 + actor_cid_number.len() + 1 + peer_id.len() + 1 + rpc_domain.len() + 2,
+    );
     call.push(PALLET_INDEX);
     call.push(CALL_REGISTER);
     call.extend_from_slice(&encode_bytes_with_len(actor_cid_number.as_bytes()));
@@ -88,7 +87,7 @@ pub fn build_update_endpoint_call_data(
     if actor_cid_number.is_empty()
         || actor_cid_number.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
     {
-        return Err("actor_cid_number 长度需在 1..=32".to_string());
+        return Err("actor_cid_number 长度必须在链上 CID_NUMBER_MAX_BYTES 范围内".to_string());
     }
     if new_domain.is_empty() || new_domain.len() > 128 {
         return Err("rpc_domain 长度需在 1..=128".to_string());
@@ -96,8 +95,7 @@ pub fn build_update_endpoint_call_data(
     if new_port < 1024 {
         return Err("rpc_port 必须 >= 1024".to_string());
     }
-    let mut call =
-        Vec::with_capacity(2 + 1 + actor_cid_number.len() + 1 + new_domain.len() + 2);
+    let mut call = Vec::with_capacity(2 + 1 + actor_cid_number.len() + 1 + new_domain.len() + 2);
     call.push(PALLET_INDEX);
     call.push(CALL_UPDATE_ENDPOINT);
     call.extend_from_slice(&encode_bytes_with_len(actor_cid_number.as_bytes()));
@@ -111,7 +109,7 @@ pub fn build_unregister_call_data(actor_cid_number: &str) -> Result<Vec<u8>, Str
     if actor_cid_number.is_empty()
         || actor_cid_number.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
     {
-        return Err("actor_cid_number 长度需在 1..=32".to_string());
+        return Err("actor_cid_number 长度必须在链上 CID_NUMBER_MAX_BYTES 范围内".to_string());
     }
     let mut call = Vec::with_capacity(2 + 1 + actor_cid_number.len());
     call.push(PALLET_INDEX);
@@ -129,8 +127,7 @@ pub fn build_register_sign_request(
     rpc_port: u16,
 ) -> Result<VoteSignRequestResult, String> {
     let (clean, bytes) = parse_pubkey(pubkey_hex)?;
-    let call_data =
-        build_register_call_data(actor_cid_number, peer_id, rpc_domain, rpc_port)?;
+    let call_data = build_register_call_data(actor_cid_number, peer_id, rpc_domain, rpc_port)?;
     build_sign_request_from_call_data(&clean, &bytes, &call_data)
 }
 
@@ -142,8 +139,7 @@ pub fn build_update_endpoint_sign_request(
     new_port: u16,
 ) -> Result<VoteSignRequestResult, String> {
     let (clean, bytes) = parse_pubkey(pubkey_hex)?;
-    let call_data =
-        build_update_endpoint_call_data(actor_cid_number, new_domain, new_port)?;
+    let call_data = build_update_endpoint_call_data(actor_cid_number, new_domain, new_port)?;
     build_sign_request_from_call_data(&clean, &bytes, &call_data)
 }
 

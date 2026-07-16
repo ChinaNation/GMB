@@ -10,7 +10,7 @@
 - **🔴 创世前 blocker（独立验证发现，T3/T4 漏）**：citizenapp 其它 test/asset 仍旧 CID+旧域(public_institution_detail_test 真红 / myid_page_test / common/institution_info_test / admins-change institution_admin_service_test / public_provinces.dart:40 注释);assets/chainspec.json 旧域存储键须 bake-chainspec.sh 重生。**创世前必清零。**
 
 ### 提交与合并态验证（2026-06-22）
-- **已提交**：随并行 T3/T4 线程一并落入 HEAD `4ab8efe6 "统一机构命名"`（本线程执行期间，T3/T4 把整个脏树连同本卡 ADR-024 改动一起提交；ADR-024 标记完好：account_derive.rs / core_const 删 OP_MAIN / org-manage derive_registered_account / 后端委托 全部在 HEAD）。**该提交混合了两条线程**，非纯 ADR-024。
+- **历史提交**：随并行 T3/T4 线程一并落入 HEAD `4ab8efe6 "统一机构命名"`。2026-07-15 已按 CID 主键模型重新统一：`account_derive.rs` 保留完整协议账户 op，`public-manage/private-manage` 统一委托 `derive_institution_account(cid_number, account_name)`。
 - **合并态全量验证通过**（HEAD 上独立复跑，非子代理自报）：
   - 链端 `cargo check --workspace`（含 node 全 crate）通过 → 无任何 crate 仍引用已删的 `core_const::{OP_MAIN,derive_account,is_forbidden}`。
   - 链端账户派生测试 22 passed（含 `china_cb/ch/other_main_fee_accounts_match_derive_primitive` = china **新码** 字面值 == `account_derive::derive(cid)` 逐字节）+ `account_derive_golden` 1 passed（7 向量）。

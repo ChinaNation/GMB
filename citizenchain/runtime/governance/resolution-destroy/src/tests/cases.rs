@@ -8,7 +8,7 @@ fn nrc_destroy_executes_when_yes_votes_reach_threshold() {
 
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            NRC,
+            nrc_cid(),
             institution.clone(),
             100
         ));
@@ -30,7 +30,7 @@ fn prc_destroy_executes_when_yes_votes_reach_threshold() {
 
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(prc_admin(0)),
-            PRC,
+            prc_cid(),
             institution.clone(),
             200
         ));
@@ -52,7 +52,7 @@ fn prb_destroy_executes_when_yes_votes_reach_threshold() {
 
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(prb_admin(0)),
-            PRB,
+            prb_cid(),
             institution.clone(),
             300
         ));
@@ -76,14 +76,20 @@ fn destroy_business_rejects_other_internal_vote_institutions() {
                 votingengine::types::institution_code_from_cid_number(node.cid_number)
                     == Some(njd_code)
             })
-            .map(|node| AccountId32::new(node.main_account))
+            .map(|node| {
+                (
+                    CidNumber::try_from(node.cid_number.as_bytes().to_vec())
+                        .expect("NJD CID fits runtime bound"),
+                    AccountId32::new(node.main_account),
+                )
+            })
             .expect("NJD must exist in CHINA_SF");
 
         assert_noop!(
             ResolutionDestroy::propose_destroy(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                njd_code,
-                njd,
+                njd.0,
+                njd.1,
                 100,
             ),
             Error::<Test>::InvalidInstitution
@@ -99,7 +105,7 @@ fn non_admin_cannot_propose_or_vote() {
         assert_noop!(
             ResolutionDestroy::propose_destroy(
                 RuntimeOrigin::signed(prc_admin(0)),
-                NRC,
+                nrc_cid(),
                 institution.clone(),
                 100
             ),
@@ -108,7 +114,7 @@ fn non_admin_cannot_propose_or_vote() {
 
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            NRC,
+            nrc_cid(),
             institution.clone(),
             100
         ));
@@ -129,7 +135,7 @@ fn zero_amount_and_insufficient_balance_are_rejected() {
         assert_noop!(
             ResolutionDestroy::propose_destroy(
                 RuntimeOrigin::signed(nrc_admin(0)),
-                NRC,
+                nrc_cid(),
                 institution.clone(),
                 0
             ),
@@ -138,7 +144,7 @@ fn zero_amount_and_insufficient_balance_are_rejected() {
 
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            NRC,
+            nrc_cid(),
             institution.clone(),
             2_000
         ));
@@ -188,7 +194,7 @@ fn existential_deposit_is_preserved() {
 
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            NRC,
+            nrc_cid(),
             institution.clone(),
             1_000
         ));
@@ -220,7 +226,7 @@ fn rejected_proposal_does_not_block_new_proposal() {
         let institution = nrc_pallet_id();
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            NRC,
+            nrc_cid(),
             institution.clone(),
             100
         ));
@@ -243,7 +249,7 @@ fn rejected_proposal_does_not_block_new_proposal() {
 
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            NRC,
+            nrc_cid(),
             institution.clone(),
             50
         ));
@@ -261,7 +267,7 @@ fn execute_destroy_succeeds_after_failed_auto_execution() {
 
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            NRC,
+            nrc_cid(),
             institution.clone(),
             1_100
         ));
@@ -297,7 +303,7 @@ fn executed_proposal_does_not_block_new_proposal() {
         let institution = nrc_pallet_id();
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            NRC,
+            nrc_cid(),
             institution.clone(),
             100
         ));
@@ -309,7 +315,7 @@ fn executed_proposal_does_not_block_new_proposal() {
 
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            NRC,
+            nrc_cid(),
             institution.clone(),
             50
         ));
@@ -324,7 +330,7 @@ fn duplicate_vote_is_rejected_by_votingengine() {
         let institution = nrc_pallet_id();
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            NRC,
+            nrc_cid(),
             institution.clone(),
             100
         ));
@@ -346,7 +352,7 @@ fn execute_destroy_requires_snapshot_admin() {
 
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
-            NRC,
+            nrc_cid(),
             institution.clone(),
             1_100
         ));
@@ -368,8 +374,13 @@ fn execute_destroy_requires_snapshot_admin() {
 }
 
 #[test]
-fn institution_code_returns_none_for_invalid() {
+fn institution_query_returns_none_for_invalid_account() {
     new_test_ext().execute_with(|| {
-        assert_eq!(account_org::<Test>(AccountId32::new([0u8; 32])), None);
+        assert_eq!(
+            <TestInstitutionQuery as entity_primitives::InstitutionMultisigQuery<AccountId32>>::lookup_org(
+                &AccountId32::new([0u8; 32])
+            ),
+            None
+        );
     });
 }
