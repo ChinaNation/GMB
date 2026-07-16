@@ -469,7 +469,8 @@ where
     let mut affected = BTreeMap::new();
     for key in delta.keys() {
         if let Some(institution) = storage_key::protected_institution_for_key(key) {
-            affected.insert(institution.main_account, institution);
+            // 机构唯一主键始终是 CID；主账户只是该 CID 下的一种协议账户，不能用于机构去重。
+            affected.insert(institution.cid_number, institution);
         }
     }
     for institution in affected.values() {

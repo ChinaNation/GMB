@@ -2,10 +2,10 @@
 
 ## 状态
 
-- 当前阶段：第 5 步创世准备、五端自动验收、preview 候选链和真实 OnChina
-  运行态验收已完成；按用户要求未执行 CI、正式冻结、`--finalize` 或正式创世。
-  Rust workspace 已不排除任何 crate 全量通过；真实管理员扫码签名仍待专用测试
-  签名环境。
+- 当前阶段：第 5 步创世准备和五端自动验收已完成；GitHub WASM CI 已通过，并已用
+  同一 CI artifact 执行正式 `--finalize`，冻结 Node/CitizenApp/Cloudflare 创世派生资产。
+  正式创世尚未部署，烘焙资产已创建本地“创世”提交、尚待推送；真实管理员扫码签名仍待
+  专用测试签名环境。
 - 第 1 步方案确认：2026-07-15
 - runtime 二次确认：已获得
 - 开发方式：breaking runtime，重新创世，不做旧存储、旧 call、旧 payload 或旧命名兼容
@@ -363,16 +363,43 @@
 - `cargo test --workspace --all-targets` 不再排除任何 crate，完整退出码 0；包括 runtime
   43、node 270、OnChina 131、投票引擎 95，以及全部费用、机构账户和跨模块集成测试。
 - CitizenWallet 166 项测试和 analyze 全绿。CitizenApp Cloudflare 23 个文件共 168 项
-  测试、typecheck 全绿；CitizenApp 除工作区另一个未提交且持续挂起的群聊页面测试外，
-  其余 692 项通过、5 项环境性跳过，analyze 无问题。
+  测试、typecheck 全绿；CitizenApp 最终全量复验 694 项通过、5 项环境性跳过，
+  analyze 无问题，先前挂起的群聊页面测试也已单独和全量复验通过。
 - node 与 OnChina 前端 production build 通过；OnChina 后端已按当前源码重新构建并完成
   上述真实运行态验收。
 - 已删除业务模块手工清理入口、公开预备快照 call、中转 storage 和钱包残留动作的精确
   旧名称；定向残留扫描为 0。
 
+### CI WASM 与正式烘焙（2026-07-16）
+
+- 全部本地改动已合并为提交 `7abac7982a5c5ee25580583d456523ce2132743e`（`创世`）并
+  fast-forward 推送到 `origin/main`；runtime `spec_version=1`、`impl_version=0`、
+  `transaction_version=0`，node/workspace 版本 `1.0.0`，无需重置。
+- GitHub Actions `CitizenChain WASM` run `29530114067` 对上述提交从零构建成功；正式烘焙
+  只使用该 run 的 `citizenchain.compact.compressed.wasm`，SHA-256 为
+  `be4585ce369e658e6799be667ed5be692fc050f9c6196ab14c53f7dfa5dc6e70`。
+- `bake-chainspec.sh --finalize` 成功，CI provenance 已写入 release 状态包 manifest；
+  创世哈希为 `0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`，
+  state root 为 `0x99b4cb3031baa5e87536a22190dc81bf6bf49d3678c0abae86a312268506fe09`，
+  Node plain chainspec SHA-256 为
+  `5e609d166e8517d20ec0cd2095b88825146e34e64b3ebaba54152c7bde9d1f60`。
+- 临时节点在 51 秒内物化块 0；宪法创世、runtime `:code`、43 个省级分片、49,593 个
+  公权机构、light sync checkpoint、公权目录根和 Cloudflare 链身份交叉校验全部通过。
+  公权目录根保持
+  `ecff487ce7d2bac6cb89d064a456187b453acd27f4bee2b140f474a48d072682`。
+- 正式覆盖只修改既有文件：Node 冻结 plain chainspec、CitizenApp 轻 chainspec、
+  light sync checkpoint、43 个既有公权机构分片及 manifest、Cloudflare `wrangler.toml`；
+  没有新增、删除或兼容资产。最终 `check-chainspec-frozen.sh` 与 `git diff --check` 均通过。
+- 正式推送前复核 Node/OnChina 的机构身份残留：NodeGuard 收集受影响固定机构的临时去重
+  表仍以 `main_account` 作 key，已改为 `cid_number`；主账户继续只作为 CID 下的具体协议
+  账户。OnChina 机构、账户、管理员资料的主键分别保持 `cid_number`、
+  `(cid_number, account_name)`、`(cid_number, admin_account)`（省级分区键不改变机构
+  身份语义）。NodeGuard 定向 9 项、Node 全量 270 项测试和 Rust 格式检查均通过。
+
 ### 明确延后与阻塞项
 
-- 按用户要求，本步不运行 GitHub CI、不执行 `--finalize`、不冻结新锚点、不打正式包、
-  不发布或启动正式新创世；后续顺序固定为 CI WASM → release freeze → 软件 CI → 正式创世。
+- 正式烘焙资产已创建本地“创世”提交、尚未推送；推送后应由 Node chainspec 路径触发
+  CitizenChain 软件 CI。
+  本任务没有打正式包、部署六节点网络或启动正式新创世。
 - 真实管理员扫码签名、机构费用账户真实扣 0.1 元、余额不足失败和真实投票扣 1 元仍需
   用户在本机解锁专用测试管理员/公民钱包；不得用临时管理员、假签名或回落付款替代。
