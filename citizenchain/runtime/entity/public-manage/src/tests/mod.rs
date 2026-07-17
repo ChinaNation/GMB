@@ -13,12 +13,6 @@ use frame_system as system;
 use sp_core::{sr25519, Pair as PairT};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 
-std::thread_local! {
-    /// 当前测试线程最近生成的机构 CID；岗位夹具必须与创建交易中的 CID 完全一致。
-    static CURRENT_INSTITUTION_CID: std::cell::RefCell<Option<pallet::CidNumberOf<Test>>> = const {
-        std::cell::RefCell::new(None)
-    };
-}
 use votingengine::types::{code_bytes, InstitutionCode};
 
 type Balance = u128;
@@ -410,10 +404,6 @@ pub fn beneficiary() -> AccountId32 {
     AccountId32::new([99u8; 32])
 }
 
-pub fn cid_number(s: &[u8]) -> pallet::CidNumberOf<Test> {
-    BoundedVec::try_from(s.to_vec()).expect("cid_number fits")
-}
-
 /// 用 primitives::cid 真实生成器产 CID 号字节。
 ///
 /// tag 与旧假号一一对应:同 tag 产同号(保留去重语义),不同 tag 产不同号。
@@ -437,9 +427,7 @@ pub fn generated_cid_bytes(tag: &str, institution: &str) -> alloc::vec::Vec<u8> 
 
 /// 指定机构码的真 CID 号夹具。
 pub fn generated_cid(tag: &str, institution: &str) -> pallet::CidNumberOf<Test> {
-    let cid = BoundedVec::try_from(generated_cid_bytes(tag, institution)).expect("cid_number fits");
-    CURRENT_INSTITUTION_CID.with(|current| *current.borrow_mut() = Some(cid.clone()));
-    cid
+    BoundedVec::try_from(generated_cid_bytes(tag, institution)).expect("cid_number fits")
 }
 
 pub fn cid_full_name(s: &[u8]) -> pallet::AccountNameOf<Test> {
@@ -454,16 +442,15 @@ pub fn empty_town_code() -> pallet::AccountNameOf<Test> {
     BoundedVec::new()
 }
 
-pub fn legal_representative_name() -> pallet::AccountNameOf<Test> {
-    cid_full_name("测试法人".as_bytes())
-}
-
-pub fn legal_representative_cid_number() -> pallet::CidNumberOf<Test> {
-    cid_number(b"GD001-CTZN1-000000001-2026")
-}
-
-pub fn legal_representative_account() -> AccountId32 {
-    admin(99)
+pub fn institution_admins(count: u8) -> crate::InstitutionAdminsInputOf<Test> {
+    (0..count)
+        .map(|seed| admin_primitives::InstitutionAdmin {
+            admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+            admin_account: admin(seed),
+        })
+        .collect::<alloc::vec::Vec<_>>()
+        .try_into()
+        .expect("admins fit")
 }
 
 pub fn account_name(s: &[u8]) -> pallet::AccountNameOf<Test> {
@@ -490,73 +477,10 @@ pub fn province_name() -> alloc::vec::Vec<u8> {
     b"liaoning".to_vec()
 }
 
-fn current_institution_cid() -> pallet::CidNumberOf<Test> {
-    CURRENT_INSTITUTION_CID.with(|current| {
-        current
-            .borrow()
-            .clone()
-            .expect("generated_cid must run before role fixtures")
-    })
-}
-
-/// 构造一个机构自定义岗位。岗位属于 entity，不再放入 admins。
-pub fn institution_roles_vec() -> crate::InstitutionRolesOf<Test> {
-    let role = entity_primitives::InstitutionRole {
-        cid_number: current_institution_cid(),
-        role_code: BoundedVec::try_from(b"TEST_ADMIN".to_vec()).expect("role code fits"),
-        role_name: account_name("管理员岗位".as_bytes()),
-        term_required: false,
-        role_status: entity_primitives::InstitutionRoleStatus::Active,
-    };
-    BoundedVec::try_from(alloc::vec![role]).expect("roles fit")
-}
-
-/// 从给定账户构造注册局来源的有效任职；admins 账户集合由这些任职去重派生。
-pub fn institution_assignments_from(
-    accounts: &[AccountId32],
-) -> crate::InstitutionAdminAssignmentsOf<Test> {
-    let cid_number = current_institution_cid();
-    let assignments = accounts
-        .iter()
-        .cloned()
-        .map(
-            |admin_account| entity_primitives::InstitutionAdminAssignment {
-                cid_number: cid_number.clone(),
-                admin_account,
-                role_code: BoundedVec::try_from(b"TEST_ADMIN".to_vec()).expect("role code fits"),
-                term_start: 0,
-                term_end: 0,
-                assignment_source: entity_primitives::InstitutionAssignmentSource::Registry,
-                assignment_source_ref: BoundedVec::new(),
-                assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
-            },
-        )
-        .collect::<alloc::vec::Vec<_>>();
-    BoundedVec::try_from(assignments).expect("assignments fit")
-}
-
-pub fn institution_assignments_vec(count: u8) -> crate::InstitutionAdminAssignmentsOf<Test> {
-    let accounts = (0..count).map(admin).collect::<alloc::vec::Vec<_>>();
-    institution_assignments_from(&accounts)
-}
-
 pub fn account_names_bv(names: &[&[u8]]) -> pallet::InstitutionAccountNamesOf<Test> {
     let v: alloc::vec::Vec<pallet::AccountNameOf<Test>> =
         names.iter().map(|n| account_name(n)).collect();
     BoundedVec::try_from(v).expect("account names fit")
-}
-
-pub fn initial_accounts(items: &[(&[u8], Balance)]) -> pallet::InstitutionInitialAccountsOf<Test> {
-    let v: alloc::vec::Vec<pallet::InstitutionInitialAccountOf<Test>> = items
-        .iter()
-        .map(
-            |(n, amt)| crate::institution::types::InstitutionInitialAccount {
-                account_name: account_name(n),
-                amount: *amt,
-            },
-        )
-        .collect();
-    BoundedVec::try_from(v).expect("initial accounts fit")
 }
 
 pub fn last_proposal_id() -> u64 {

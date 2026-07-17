@@ -110,7 +110,7 @@ class PalletRegistry {
   // call_index 4 永久留洞：机构 pending 状态由投票引擎终态回调清理。
 
   /// `propose_create_*_institution` 携带机构公开信息、初始账户、岗位定义、
-  /// 岗位任职、阈值和注册局凭证；管理员钱包集合由 entity 从有效任职派生。
+  /// 首次登记只提交最小身份、管理员姓名/钱包和注册局凭证；默认法定代表人岗位与阈值由 runtime 建立。
   static const int proposeCreateInstitutionCall = 5;
   static const int updateInstitutionInfoCall = 6;
   static const int addInstitutionAccountCall = 7;

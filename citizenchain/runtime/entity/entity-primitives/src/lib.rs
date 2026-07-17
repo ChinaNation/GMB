@@ -270,18 +270,12 @@ pub trait CidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> {
         town_code: &[u8],
     ) -> bool;
 
-    /// 校验机构创建凭证。法定代表人三字段必须被同一签名覆盖，防止冷签前后被替换。
+    /// 校验机构最小创建凭证。管理员人员集合由同一签名覆盖，防止冷签前后被替换。
     fn verify_institution_creation(
         cid_number: &[u8],
         cid_full_name: &AccountName,
         cid_short_name: &[u8],
-        legal_representative_name: &[u8],
-        legal_representative_cid_number: &[u8],
-        legal_representative_account: &AccountId,
-        account_names: &[Vec<u8>],
-        funding_account: Option<&AccountId>,
-        roles_payload: &[u8],
-        assignments_payload: &[u8],
+        admins_payload: &[u8],
         nonce: &Nonce,
         signature: &Signature,
         actor_cid_number: &[u8],
@@ -290,20 +284,14 @@ pub trait CidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> {
         scope_city_name: &[u8],
         town_code: &[u8],
     ) -> bool {
-        if legal_representative_name.is_empty() || legal_representative_cid_number.is_empty() {
+        if admins_payload.is_empty() {
             return false;
         }
-        let _ = (
-            legal_representative_account,
-            funding_account,
-            roles_payload,
-            assignments_payload,
-        );
         Self::verify_institution_registration(
             cid_number,
             cid_full_name,
             cid_short_name,
-            account_names,
+            &[],
             nonce,
             signature,
             actor_cid_number,

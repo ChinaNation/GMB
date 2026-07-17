@@ -61,10 +61,6 @@ export async function createInstitution(
     parent_cid_number: input.parent_cid_number ?? null,
     private_type: input.private_type ?? null,
     partnership_kind: input.partnership_kind ?? null,
-    legal_representative_name: input.legal_representative_name ?? null,
-    legal_representative_cid_number: input.legal_representative_cid_number ?? null,
-    legal_representative_photo_path: input.legal_representative_photo_path ?? null,
-    threshold: input.threshold,
     admins: input.admins,
   };
   const grant = await createScanSignSecurityGrant(auth, 'INSTITUTION_CREATE', grantPayload, signWithScan);

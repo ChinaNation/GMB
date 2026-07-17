@@ -18,15 +18,15 @@ use frame_system::pallet_prelude::*;
 use sp_std::collections::btree_set::BTreeSet;
 
 use admin_primitives::{
-    can_store_public_admin_code, AdminAccountKind, AdminCidNumber, InstitutionAdminLifecycle,
-    InstitutionAdminQuery, InstitutionAdmins,
+    can_store_public_admin_code, AdminAccountKind, AdminCidNumber, InstitutionAdmin,
+    InstitutionAdminLifecycle, InstitutionAdminQuery, InstitutionAdmins,
 };
 use votingengine::types::InstitutionCode;
 
 pub use pallet::*;
 
 /// breaking runtime 直接重新创世，不提供旧账户 key 布局迁移。
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -48,8 +48,10 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
-    pub type AdminsOf<T> =
-        BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxAdminsPerInstitution>;
+    pub type AdminsOf<T> = BoundedVec<
+        InstitutionAdmin<<T as frame_system::Config>::AccountId>,
+        <T as Config>::MaxAdminsPerInstitution,
+    >;
     pub type InstitutionAdminsOf<T> = InstitutionAdmins<AdminsOf<T>>;
 
     /// 公权机构管理员集合。CID 是唯一 key；value 不重复保存 CID 或生命周期状态。
@@ -97,12 +99,6 @@ pub mod pallet {
             threshold: u32,
             created: bool,
         },
-        /// entity 岗位任职结果已同步到管理员集合。
-        InstitutionAdminsSyncedFromAssignments {
-            cid_number: AdminCidNumber,
-            institution_code: InstitutionCode,
-            admins_len: u32,
-        },
     }
 
     #[pallet::error]
@@ -112,15 +108,19 @@ pub mod pallet {
         InvalidAdminsLen,
         InvalidAdminAccountKind,
         InvalidThreshold,
-        MissingDynamicThreshold,
         DuplicateAdmin,
+        InvalidAdminName,
     }
 
     impl<T: Config> Pallet<T> {
-        fn ensure_unique_admins(admins: &[T::AccountId]) -> DispatchResult {
+        fn ensure_unique_admins(admins: &[InstitutionAdmin<T::AccountId>]) -> DispatchResult {
             let mut seen = BTreeSet::new();
             for admin in admins {
-                ensure!(seen.insert(admin.clone()), Error::<T>::DuplicateAdmin);
+                ensure!(!admin.admin_name.is_empty(), Error::<T>::InvalidAdminName);
+                ensure!(
+                    seen.insert(admin.admin_account.clone()),
+                    Error::<T>::DuplicateAdmin
+                );
             }
             Ok(())
         }
@@ -129,7 +129,7 @@ pub mod pallet {
             kind: AdminAccountKind,
             institution_code: InstitutionCode,
             cid_number: &[u8],
-            admins: &[T::AccountId],
+            admins: &[InstitutionAdmin<T::AccountId>],
         ) -> DispatchResult {
             ensure!(
                 kind == AdminAccountKind::PublicInstitution
@@ -213,7 +213,7 @@ pub mod pallet {
             cid_number: Vec<u8>,
             institution_code: InstitutionCode,
             kind: AdminAccountKind,
-            admins: Vec<T::AccountId>,
+            admins: Vec<InstitutionAdmin<T::AccountId>>,
             threshold: u32,
         ) -> DispatchResult {
             let cid_number = Self::bound_cid(cid_number)?;
@@ -270,83 +270,6 @@ pub mod pallet {
             })
         }
 
-        pub(crate) fn do_sync_institution_admins_from_assignments(
-            cid_number: Vec<u8>,
-            institution_code: InstitutionCode,
-            admins: Vec<T::AccountId>,
-        ) -> DispatchResult {
-            let cid_number = Self::bound_cid(cid_number)?;
-            Self::validate_admin_set(
-                AdminAccountKind::PublicInstitution,
-                institution_code,
-                cid_number.as_slice(),
-                &admins,
-            )?;
-            let bounded: AdminsOf<T> = admins
-                .try_into()
-                .map_err(|_| Error::<T>::InvalidAdminsLen)?;
-            let admins_len = bounded.len() as u32;
-            let existing = AdminAccounts::<T>::get(&cid_number);
-            let permanent_singleton = primitives::institution_constraints::singleton_by_identity(
-                institution_code,
-                cid_number.as_slice(),
-            )
-            .is_some();
-            let first_composition = existing.is_none() && permanent_singleton;
-            if let Some(existing) = &existing {
-                ensure!(
-                    existing.institution_code == institution_code,
-                    Error::<T>::InstitutionCodeMismatch
-                );
-            } else {
-                ensure!(first_composition, Error::<T>::InvalidInstitution);
-            }
-
-            let fixed_threshold =
-                primitives::cid::code::fixed_governance_pass_threshold(&institution_code);
-            let dynamic_threshold = if fixed_threshold.is_none() && !permanent_singleton {
-                Some(
-                    T::InternalVoteEngine::active_institution_threshold(
-                        institution_code,
-                        cid_number.as_slice(),
-                    )
-                    .ok_or(Error::<T>::MissingDynamicThreshold)?,
-                )
-            } else {
-                None
-            };
-
-            with_transaction(|| {
-                if let Some(threshold) = dynamic_threshold {
-                    if T::InternalVoteEngine::register_active_institution_threshold_direct(
-                        institution_code,
-                        cid_number.to_vec(),
-                        admins_len,
-                        threshold,
-                    )
-                    .is_err()
-                    {
-                        return TransactionOutcome::Rollback(Err(
-                            Error::<T>::InvalidThreshold.into()
-                        ));
-                    }
-                }
-                AdminAccounts::<T>::insert(
-                    &cid_number,
-                    InstitutionAdmins {
-                        institution_code,
-                        admins: bounded,
-                    },
-                );
-                Self::deposit_event(Event::<T>::InstitutionAdminsSyncedFromAssignments {
-                    cid_number,
-                    institution_code,
-                    admins_len,
-                });
-                TransactionOutcome::Commit(Ok(()))
-            })
-        }
-
         pub(crate) fn get_institution_admins(
             institution_code: InstitutionCode,
             cid_number: &[u8],
@@ -369,19 +292,10 @@ impl<T: pallet::Config> InstitutionAdminLifecycle<T::AccountId> for pallet::Pall
         cid_number: Vec<u8>,
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
-        admins: Vec<T::AccountId>,
+        admins: Vec<InstitutionAdmin<T::AccountId>>,
         threshold: u32,
     ) -> DispatchResult {
         Self::do_set_institution_admins(cid_number, institution_code, kind, admins, threshold)
-    }
-
-    fn sync_institution_admins_from_assignments(
-        _module_tag: &[u8],
-        cid_number: Vec<u8>,
-        institution_code: InstitutionCode,
-        admins: Vec<T::AccountId>,
-    ) -> DispatchResult {
-        Self::do_sync_institution_admins_from_assignments(cid_number, institution_code, admins)
     }
 }
 
@@ -396,7 +310,7 @@ impl<T: pallet::Config> InstitutionAdminQuery<T::AccountId> for pallet::Pallet<T
         who: &T::AccountId,
     ) -> bool {
         Self::get_institution_admins(institution_code, cid_number)
-            .map(|value| value.admins.iter().any(|admin| admin == who))
+            .map(|value| value.admins.iter().any(|admin| &admin.admin_account == who))
             .unwrap_or(false)
     }
 
@@ -404,6 +318,20 @@ impl<T: pallet::Config> InstitutionAdminQuery<T::AccountId> for pallet::Pallet<T
         institution_code: InstitutionCode,
         cid_number: &[u8],
     ) -> Option<Vec<T::AccountId>> {
+        Self::get_institution_admins(institution_code, cid_number).map(|value| {
+            value
+                .admins
+                .into_inner()
+                .into_iter()
+                .map(|admin| admin.admin_account)
+                .collect()
+        })
+    }
+
+    fn institution_admin_records(
+        institution_code: InstitutionCode,
+        cid_number: &[u8],
+    ) -> Option<Vec<InstitutionAdmin<T::AccountId>>> {
         Self::get_institution_admins(institution_code, cid_number)
             .map(|value| value.admins.into_inner())
     }

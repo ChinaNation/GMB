@@ -37,12 +37,12 @@ class AdminAccountStorageCodec {
   }) {
     try {
       if (kind != kindPersonal) {
-        final decoded = InstitutionRoleStorageCodec.decodeAdminAccount(bytes);
+        final decoded = InstitutionRoleStorageCodec.decodeAdmins(bytes);
         if (decoded == null) return null;
         return AdminAccountStorageDecoded(
           institutionCode: decoded.institutionCode,
           kind: kind,
-          adminsHex: decoded.admins,
+          adminsHex: decoded.admins.map((admin) => admin.adminAccount).toList(),
         );
       }
 

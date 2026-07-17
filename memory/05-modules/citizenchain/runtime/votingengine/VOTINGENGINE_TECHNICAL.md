@@ -219,6 +219,6 @@ WASM 的 fresh 临时节点正常启动，block#0 为
 
 2026-07-14 治理职责收口第 1 步：内部投票与业务权限完成分层。FRG 账户上下文不再错误绑定省域 5 人组；多签转账统一从 entity 解析所有机构；销毁仍由业务模块固定 NRC/PRC/PRB，GRANDPA 密钥仍固定 NRC/PRC。专项测试通过：`internal-vote` 88、`multisig` 24、`resolution-destroy` 15、`grandpakey-change` 17，runtime 整体 `cargo check` 通过。
 
-2026-07-14 治理职责收口第 2 步：六个国家单例删除账户级动态阈值，普通内部事项改为按提案管理员快照派生严格过半；首次组成只原子写岗位、任职和 admins。`internal-vote` 89、`public-admins` 8、`public-manage` 42、runtime 集成 40 项测试通过。
+2026-07-17 当前边界：六个国家单例不保存账户级动态阈值，普通内部事项按提案管理员快照派生严格过半；组成结果只写岗位和任职，绝不派生 admins。
 
 2026-07-14 治理职责收口第 3 步：业务执行端新增 owner/kind/stage/code/account/CID/action 全绑定；联合业务接受联合阶段或公投阶段的合法通过终态；立法路由改为链端双重复校验；选举引擎删除外部创建入口和直写 entity 路径。投票引擎继续只负责投票流程，业务权限与执行前复核留在业务 pallet。

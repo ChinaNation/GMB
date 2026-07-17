@@ -16,7 +16,8 @@ pub mod weights;
 mod tests;
 
 use admin_primitives::{
-    is_public_admin_code, AdminAccountKind, InstitutionAdminLifecycle, InstitutionAdminQuery,
+    is_public_admin_code, AdminAccountKind, InstitutionAdmin, InstitutionAdminLifecycle,
+    InstitutionAdminQuery,
 };
 use codec::{Decode, Encode};
 use frame_support::{
@@ -120,10 +121,8 @@ pub mod pallet {
         #[pallet::constant]
         type MaxRegisterSignatureLength: Get<u32>;
 
-        /// 单个机构注册交易最多可携带的账户数量。
-        ///
-        /// CID 默认包含主账户和费用账户，用户可新增其他账户；这里限制链上
-        /// 初始入金列表长度，避免机构注册交易过大。
+        /// runtime 为单个机构自动生成的协议账户数量上限。
+        /// 首次登记 call 不接收账户清单或初始入金。
         #[pallet::constant]
         type MaxInstitutionAccounts: Get<u32>;
 
@@ -132,6 +131,11 @@ pub mod pallet {
 
     pub type AdminsOf<T> =
         BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxAdmins>;
+    /// 首次登记提交的管理员人员集合；姓名只展示，账户是唯一授权字段。
+    pub type InstitutionAdminsInputOf<T> = BoundedVec<
+        InstitutionAdmin<<T as frame_system::Config>::AccountId>,
+        <T as Config>::MaxAdmins,
+    >;
 
     pub type CidNumberOf<T> = BoundedVec<u8, <T as Config>::MaxCidNumberLength>;
     pub type AccountNameOf<T> = BoundedVec<u8, <T as Config>::MaxAccountNameLength>;
@@ -322,7 +326,8 @@ pub mod pallet {
             initial_total: BalanceOf<T>,
             fee: BalanceOf<T>,
         },
-        /// 已完成的业务结果原子更新机构岗位、任职、法定代表人和 admins。
+        /// 已完成的业务结果原子更新机构岗位、任职和法定代表人。
+        /// admins 是独立授权真源，治理结果不得反向生成或覆盖管理员。
         InstitutionGovernanceApplied {
             cid_number: CidNumberOf<T>,
             role_changes: u32,
@@ -359,6 +364,8 @@ pub mod pallet {
         AccountAlreadyExists,
         /// 管理员重复
         DuplicateAdmin,
+        /// 管理员公开姓名为空。
+        InvalidAdminName,
         /// 阈值不合法
         InvalidThreshold,
         /// 金额不足
@@ -539,9 +546,8 @@ pub mod pallet {
 
         /// 注册创建公权机构。
         ///
-        /// 该交易注册的是“机构”而不是单个账户。创建者必须一次性提交主账户、
-        /// 费用账户以及需要初始化的自定义账户余额；交易成功即激活机构、账户
-        /// 与管理员集合。
+        /// 首次登记只提交机构最小身份和管理员人员集合；机构码、协议账户、默认
+        /// 法定代表人岗位和严格多数阈值全部由 runtime 唯一派生。
         #[pallet::call_index(5)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_create_public_institution())]
         pub fn propose_create_public_institution(
@@ -550,15 +556,7 @@ pub mod pallet {
             cid_full_name: AccountNameOf<T>,
             cid_short_name: AccountNameOf<T>,
             town_code: AccountNameOf<T>,
-            legal_representative_name: AccountNameOf<T>,
-            legal_representative_cid_number: CidNumberOf<T>,
-            legal_representative_account: T::AccountId,
-            accounts: InstitutionInitialAccountsOf<T>,
-            funding_account: Option<T::AccountId>,
-            institution_code: InstitutionCode,
-            roles: crate::institution::role::InstitutionRolesOf<T>,
-            assignments: crate::institution::role::InstitutionAdminAssignmentsOf<T>,
-            threshold: u32,
+            admins: InstitutionAdminsInputOf<T>,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
             actor_cid_number: Vec<u8>,
@@ -573,15 +571,7 @@ pub mod pallet {
                 cid_full_name,
                 cid_short_name,
                 town_code,
-                legal_representative_name,
-                legal_representative_cid_number,
-                legal_representative_account,
-                accounts,
-                funding_account,
-                institution_code,
-                roles,
-                assignments,
-                threshold,
+                admins,
                 register_nonce,
                 signature,
                 actor_cid_number,
@@ -753,24 +743,35 @@ pub mod pallet {
             Ok(Sr25519Public::from_raw(arr))
         }
 
-        pub(crate) fn ensure_admin_config(admins: &AdminsOf<T>, threshold: u32) -> DispatchResult {
+        pub(crate) fn ensure_admin_config(
+            admins: &InstitutionAdminsInputOf<T>,
+            threshold: u32,
+        ) -> DispatchResult {
             ensure!(T::MaxAdmins::get() >= 2, Error::<T>::InvalidRuntimeConfig);
             let admins_len = admins.len() as u32;
             ensure!(admins_len >= 2, Error::<T>::InvalidAdminsLen);
+            ensure!(
+                admins.iter().all(|admin| !admin.admin_name.is_empty()),
+                Error::<T>::InvalidAdminName
+            );
             ensure!(
                 threshold > 0
                     && threshold <= admins_len
                     && u64::from(threshold).saturating_mul(2) > u64::from(admins_len),
                 Error::<T>::InvalidThreshold
             );
-            Self::ensure_unique_admins(admins.as_slice())?;
+            let accounts: Vec<T::AccountId> = admins
+                .iter()
+                .map(|admin| admin.admin_account.clone())
+                .collect();
+            Self::ensure_unique_admins(accounts.as_slice())?;
             Ok(())
         }
 
         pub(crate) fn set_institution_admins(
             cid_number: &CidNumberOf<T>,
             institution_code: InstitutionCode,
-            admins: &AdminsOf<T>,
+            admins: &InstitutionAdminsInputOf<T>,
             threshold: u32,
         ) -> DispatchResult {
             Self::ensure_lifecycle_institution_code(&institution_code)?;
@@ -804,8 +805,6 @@ pub mod pallet {
             let registered = AccountRegisteredCid::<T>::get(account)?;
             Institutions::<T>::get(&registered.cid_number).map(|inst| inst.institution_code)
         }
-
-        // account_names_payload_from_initial_accounts 在 institution::accounts。
 
         /// 把批量 register 入口的 account_names 抽成验签 payload。
         pub(crate) fn account_names_payload_from_names(

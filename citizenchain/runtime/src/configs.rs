@@ -370,35 +370,6 @@ fn institution_onchain_amount_route(
     }
 }
 
-/// 机构创建是一次立即落地的资金操作：零初始余额只带 CID，非零初始余额必须
-/// 明确同一 actor CID 下的资金账户，并按初始余额合计只收取一次链上交易费。
-fn institution_creation_route(
-    who: &AccountId,
-    cid_number: &[u8],
-    funding_account: &Option<AccountId>,
-    initial_total: Option<Balance>,
-) -> primitives::fee_policy::FeeRoute<AccountId, Balance> {
-    let Some(initial_total) = initial_total else {
-        return primitives::fee_policy::FeeRoute::Reject;
-    };
-    let funding_matches =
-        match (initial_total == 0, funding_account) {
-            (true, None) => true,
-            (false, Some(account)) => exact_institution_account_matches(cid_number, account)
-                && <RuntimeInstitutionAsset as primitives::institution_asset::InstitutionAsset<
-                    AccountId,
-                >>::can_spend(
-                    account,
-                    primitives::institution_asset::InstitutionAssetAction::InstitutionCreateFunding,
-                ),
-            _ => false,
-        };
-    if !funding_matches {
-        return primitives::fee_policy::FeeRoute::Reject;
-    }
-    institution_onchain_amount_route(who, cid_number, initial_total)
-}
-
 fn institution_account_onchain_route(
     who: &AccountId,
     cid_number: &[u8],
@@ -451,18 +422,9 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
             RuntimeCall::PublicManage(
                 public_manage::pallet::Call::propose_create_public_institution {
                     actor_cid_number,
-                    accounts,
-                    funding_account,
                     ..
                 },
-            ) => institution_creation_route(
-                who,
-                actor_cid_number.as_slice(),
-                funding_account,
-                accounts
-                    .iter()
-                    .try_fold(0u128, |total, account| total.checked_add(account.amount)),
-            ),
+            ) => institution_onchain_route(who, actor_cid_number.as_slice()),
             RuntimeCall::PublicManage(
                 public_manage::pallet::Call::update_institution_info {
                     actor_cid_number, ..
@@ -485,18 +447,9 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
             RuntimeCall::PrivateManage(
                 private_manage::pallet::Call::propose_create_private_institution {
                     actor_cid_number,
-                    accounts,
-                    funding_account,
                     ..
                 },
-            ) => institution_creation_route(
-                who,
-                actor_cid_number.as_slice(),
-                funding_account,
-                accounts
-                    .iter()
-                    .try_fold(0u128, |total, account| total.checked_add(account.amount)),
-            ),
+            ) => institution_onchain_route(who, actor_cid_number.as_slice()),
             RuntimeCall::PrivateManage(
                 private_manage::pallet::Call::update_institution_info {
                     actor_cid_number, ..
@@ -1240,13 +1193,7 @@ where
         cid_number: &[u8],
         cid_full_name: &AccountName,
         cid_short_name: &[u8],
-        legal_representative_name: &[u8],
-        legal_representative_cid_number: &[u8],
-        legal_representative_account: &AccountId,
-        account_names: &[Vec<u8>],
-        funding_account: Option<&AccountId>,
-        roles_payload: &[u8],
-        assignments_payload: &[u8],
+        admins_payload: &[u8],
         nonce: &NonceBytes,
         signature: &SignatureBytes,
         actor_cid_number: &[u8],
@@ -1263,19 +1210,11 @@ where
                 scope_province_name,
                 scope_city_name,
                 cid_short_name,
-                legal_representative_account,
-                funding_account,
-                roles_payload,
-                assignments_payload,
                 town_code,
             );
             return !cid_number.is_empty()
                 && !cid_full_name.as_ref().is_empty()
-                && !legal_representative_name.is_empty()
-                && !legal_representative_cid_number.is_empty()
-                && !account_names.is_empty()
-                && !roles_payload.is_empty()
-                && !assignments_payload.is_empty()
+                && !admins_payload.is_empty()
                 && !nonce.as_ref().is_empty()
                 && !signature.as_ref().is_empty();
         }
@@ -1290,19 +1229,13 @@ where
                 return false;
             };
 
-            // 机构创建凭证必须同时覆盖法定代表人三字段，防止冷签前后被替换。
+            // 最小创建凭证覆盖管理员人员集合，防止冷签前后被替换。
             let msg = primitives::sign::institution_creation_message(
                 &frame_system::Pallet::<Runtime>::block_hash(0),
                 cid_number,
                 cid_full_name.as_ref(),
                 cid_short_name,
-                legal_representative_name,
-                legal_representative_cid_number,
-                legal_representative_account,
-                account_names,
-                funding_account,
-                roles_payload,
-                assignments_payload,
+                admins_payload,
                 nonce,
                 actor_cid_number,
                 credential_signer_pubkey,
@@ -1831,6 +1764,33 @@ impl admin_primitives::InstitutionAdminQuery<AccountId> for RuntimeInstitutionAd
         cid_number: &[u8],
     ) -> Option<u32> {
         Self::institution_admins(institution_code, cid_number).map(|admins| admins.len() as u32)
+    }
+
+    fn institution_admin_records(
+        institution_code: primitives::cid::code::InstitutionCode,
+        cid_number: &[u8],
+    ) -> Option<Vec<admin_primitives::InstitutionAdmin<AccountId>>> {
+        if admin_primitives::is_public_admin_code(&institution_code) {
+            return <public_admins::Pallet<Runtime> as admin_primitives::InstitutionAdminQuery<
+                AccountId,
+            >>::institution_admin_records(institution_code, cid_number);
+        }
+        if admin_primitives::is_private_admin_code(&institution_code) {
+            return <private_admins::Pallet<Runtime> as admin_primitives::InstitutionAdminQuery<
+                AccountId,
+            >>::institution_admin_records(institution_code, cid_number);
+        }
+        if admin_primitives::is_unincorporated_admin_code(&institution_code) {
+            return <public_admins::Pallet<Runtime> as admin_primitives::InstitutionAdminQuery<
+                AccountId,
+            >>::institution_admin_records(institution_code, cid_number)
+            .or_else(|| {
+                <private_admins::Pallet<Runtime> as admin_primitives::InstitutionAdminQuery<
+                    AccountId,
+                >>::institution_admin_records(institution_code, cid_number)
+            });
+        }
+        None
     }
 }
 

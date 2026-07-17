@@ -1606,67 +1606,24 @@ void main() {
     // 哈希,decoder 路径不可达)。改走 OfflineSignService 的"哈希直签例外"。
     // 相关回归测试见 citizenwallet/test/signer/offline_sign_service_*_test.dart。
     // 机构/决议创建 decoder:
-    // - propose_create_public_institution(30.5):公权机构多签账户创建提案
-    //   (走 CID 后端签发机构 admins 凭证)
+    // - propose_create_public_institution(30.5):注册局创建公权机构
+    //   (走 CID 后端签发机构 admins 凭证，费用只由注册局费用账户支付)
     // - propose_issuance(8.0):决议发行联合提案。
     List<int> buildProposeCreateInstitutionPayload({
       bool extraTail = false,
-      String secondAccountName = '费用账户',
     }) {
-      List<int> u128Le(BigInt value) {
-        final out = List<int>.filled(16, 0);
-        var tmp = value;
-        for (var i = 0; i < 16; i++) {
-          out[i] = (tmp & BigInt.from(0xFF)).toInt();
-          tmp = tmp >> 8;
-        }
-        return out;
-      }
-
       List<int> boundedBytes(String value) {
         final bytes = utf8.encode(value);
         return <int>[(bytes.length << 2) & 0xff, ...bytes];
-      }
-
-      List<int> role(String cid, String roleCode, String roleName) {
-        return <int>[
-          ...boundedBytes(cid),
-          ...boundedBytes(roleCode),
-          ...boundedBytes(roleName),
-          0, // term_required=false
-          0, // role_status=Active
-        ];
-      }
-
-      List<int> assignment(List<int> account, String cid, String roleCode) {
-        return <int>[
-          ...boundedBytes(cid),
-          ...account,
-          ...boundedBytes(roleCode),
-          0, 0, 0, 0, // term_start
-          0, 0, 0, 0, // term_end
-          1, // assignment_source=Registry
-          ...boundedBytes('reg-nonce-001'),
-          0, // assignment_status=Active
-        ];
       }
 
       final cid = utf8.encode('AH001-SCB0N-202605010-2026');
       final instName = utf8.encode('安徽省储行');
       final instShortName = utf8.encode('安徽储行');
       final townCode = utf8.encode('');
-      final legalRepresentativeName = utf8.encode('王法人');
-      final legalRepresentativeCidNumber =
-          utf8.encode('AH001-CTZN1-000000001-2026');
-      final legalRepresentativeAccount = List<int>.filled(32, 0x33);
-      final mainAccount = utf8.encode('主账户');
-      final feeAccount = utf8.encode(secondAccountName);
-      final mainAmount = u128Le(BigInt.from(1000000)); // 10,000.00 GMB
-      final feeAmount = u128Le(BigInt.from(222)); // 2.22 GMB
-      final fundingAccount = List<int>.filled(32, 0x44);
       final admins = [
-        List<int>.filled(32, 0x11),
-        List<int>.filled(32, 0x22),
+        ('张三', List<int>.filled(32, 0x11)),
+        ('管理员', List<int>.filled(32, 0x22)),
       ];
       final registerNonce = utf8.encode('reg-nonce-001');
       final signature = List<int>.filled(64, 0xDD);
@@ -1687,34 +1644,12 @@ void main() {
         // town_code: Vec<u8>，非镇级机构为空。
         (townCode.length << 2) & 0xff,
         ...townCode,
-        // 法定代表人三字段：姓名、唯一公民 CID、唯一钱包账户。
-        (legalRepresentativeName.length << 2) & 0xff,
-        ...legalRepresentativeName,
-        (legalRepresentativeCidNumber.length << 2) & 0xff,
-        ...legalRepresentativeCidNumber,
-        ...legalRepresentativeAccount,
-        // accounts: Vec<{name, amount}> count=2
+        // admins: Vec<{admin_name, admin_account}> count=2。
         (2 << 2) & 0xff,
-        (mainAccount.length << 2) & 0xff,
-        ...mainAccount,
-        ...mainAmount,
-        (feeAccount.length << 2) & 0xff,
-        ...feeAccount,
-        ...feeAmount,
-        // funding_account: Some(AccountId32)，因为初始入金合计非零。
-        0x01,
-        ...fundingAccount,
-        // institution_code: [u8;4] 机构账户码(取代旧 org=ORG_OTH=5)
-        ...InstitutionCode.codeBytes('CGOV'),
-        // roles: Vec<InstitutionRole> count=1
-        (1 << 2) & 0xff,
-        ...role('AH001-SCB0N-202605010-2026', 'DIRECTOR', '董事'),
-        // assignments: Vec<InstitutionAdminAssignment> count=2
-        (2 << 2) & 0xff,
-        ...assignment(admins[0], 'AH001-SCB0N-202605010-2026', 'DIRECTOR'),
-        ...assignment(admins[1], 'AH001-SCB0N-202605010-2026', 'DIRECTOR'),
-        // threshold: u32 LE = 2
-        2, 0, 0, 0,
+        ...boundedBytes(admins[0].$1),
+        ...admins[0].$2,
+        ...boundedBytes(admins[1].$1),
+        ...admins[1].$2,
         // register_nonce: Vec<u8>
         (registerNonce.length << 2) & 0xff,
         ...registerNonce,
@@ -1758,25 +1693,16 @@ void main() {
       expect(decoded.fields['cid_number'], 'AH001-SCB0N-202605010-2026');
       expect(decoded.fields['cid_full_name'], '安徽省储行');
       expect(decoded.fields['cid_short_name'], '安徽储行');
-      expect(decoded.fields['legal_representative_name'], '王法人');
-      expect(
-        decoded.fields['legal_representative_cid_number'],
-        'AH001-CTZN1-000000001-2026',
-      );
-      expect(
-        decoded.fields['legal_representative_account'],
-        ss58FromBytes(List<int>.filled(32, 0x33)),
-      );
       expect(decoded.fields.containsKey('town_code'), isFalse);
-      expect(decoded.fields['institution_code'], 'CGOV');
       expect(decoded.fields['admins_len'], '2');
-      expect(decoded.fields['threshold'], '2/2');
-      expect(decoded.fields['total_amount_yuan'], '10,002.22 GMB');
-      expect(decoded.fields['amount_主账户'], '10,000.00 GMB');
-      expect(decoded.fields['amount_费用账户'], '2.22 GMB');
       expect(
-        decoded.fields['funding_account'],
-        ss58FromBytes(List<int>.filled(32, 0x44)),
+        decoded.fields['admins'],
+        contains('张三(${ss58FromBytes(List<int>.filled(32, 0x11))})'),
+      );
+      expect(decoded.fields['default_role'], 'LR/法定代表人（空缺）');
+      expect(
+        decoded.fields['protocol_accounts'],
+        '由 runtime 按 CID 自动建立，初始余额为 0',
       );
       expect(
         decoded.fields['fee_payer'],
@@ -1801,30 +1727,15 @@ void main() {
               'P-TX-001 禁止 subject_property/sub_type/parent_cid_number 多余尾字段');
     });
 
-    // 机构类型允许的协议账户集合由 runtime primitives 唯一裁决；钱包只做结构解码，
-    // 不复制一份账户名到机构类型的业务授权表。
-    for (final protocolAccount in const ['永久质押', '安全基金', '两和基金']) {
-      test('propose_create_public_institution 完整展示协议账户「$protocolAccount」', () {
-        final payload = Uint8List.fromList(
-          buildProposeCreateInstitutionPayload(
-              secondAccountName: protocolAccount),
-        );
-        final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
-        expect(decoded, isNotNull);
-        expect(decoded!.fields['amount_$protocolAccount'], '2.22 GMB');
-      });
-    }
-
-    // 主账户/费用账户是强制默认账户，正常出现在创建凭证里，维持识别。
-    test('propose_create_public_institution 主账户/费用账户强制默认账户维持识别', () {
-      final payload = Uint8List.fromList(
-        buildProposeCreateInstitutionPayload(secondAccountName: '费用账户'),
-      );
+    test('propose_create_public_institution 不接收账户和初始入金字段', () {
+      final payload =
+          Uint8List.fromList(buildProposeCreateInstitutionPayload());
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_create_public_institution');
-      expect(decoded.fields['amount_主账户'], '10,000.00 GMB');
-      expect(decoded.fields['amount_费用账户'], '2.22 GMB');
+      expect(decoded.fields.keys.where((key) => key.startsWith('amount_')),
+          isEmpty);
+      expect(decoded.fields.containsKey('funding_account'), isFalse);
     });
 
     test('decodes current propose_create_personal with regular_threshold field',

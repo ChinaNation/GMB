@@ -11,7 +11,6 @@ import {
   checkCidFullName,
   createInstitution,
   searchParentInstitutions,
-  uploadLegalRepresentativePhoto,
   type CreateInstitutionOutput,
 } from './api';
 
@@ -30,7 +29,6 @@ export const GovCreateModal: React.FC<Props> = (props) => (
     category="GOV_INSTITUTION"
     checkCidFullName={checkCidFullName}
     createInstitution={createInstitution}
-    uploadLegalRepresentativePhoto={uploadLegalRepresentativePhoto}
     searchParentInstitutions={searchParentInstitutions}
   />
 );

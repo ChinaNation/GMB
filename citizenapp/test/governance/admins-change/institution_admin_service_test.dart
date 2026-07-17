@@ -52,12 +52,17 @@ void main() {
   Uint8List institutionAdminBytes({
     required String institutionCode,
     required List<int> admin,
-  }) =>
-      Uint8List.fromList([
-        ...codeBytes(institutionCode),
-        4,
-        ...admin,
-      ]);
+    String adminName = '管理员',
+  }) {
+    final nameBytes = utf8.encode(adminName);
+    return Uint8List.fromList([
+      ...codeBytes(institutionCode),
+      4,
+      nameBytes.length << 2,
+      ...nameBytes,
+      ...admin,
+    ]);
+  }
 
   Uint8List personalAdminBytes({required List<int> admin}) =>
       Uint8List.fromList([

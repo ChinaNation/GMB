@@ -1,7 +1,7 @@
 //! 创世机构、固定岗位任职与管理员钱包集合写入。
 //!
-//! 本文件只服务创世构建：机构、岗位和任职写入 `public-manage`，由任职钱包
-//! 去重得到的管理员集合写入 `public-admins`。运行期机构生命周期、管理员更换、
+//! 本文件只服务创世构建：机构、岗位和任职写入 `public-manage`，真实管理员人员
+//! 记录独立写入 `public-admins`。运行期机构生命周期、管理员更换、
 //! 法定代表人任命与内部投票回调均归对应业务 pallet，不在 genesis 模块承载。
 
 extern crate alloc;
@@ -30,7 +30,9 @@ use primitives::{
 };
 use sp_runtime::traits::Zero;
 
-use admin_primitives::{AdminCidNumber, InstitutionAdmins};
+use admin_primitives::{
+    AdminCidNumber, AdminName, InstitutionAdmin, InstitutionAdmins, DEFAULT_ADMIN_NAME,
+};
 use public_manage::{
     InstitutionAccountInfo, InstitutionAdminAssignment, InstitutionAssignmentSource,
     InstitutionAssignmentStatus, InstitutionInfo, InstitutionRole, InstitutionRoleStatus,
@@ -59,7 +61,7 @@ type PublicInstitutionAccountInfoOf<T> = InstitutionAccountInfo<
 type PublicRegisteredInstitutionOf<T> =
     RegisteredInstitution<PublicCidNumberOf<T>, PublicAccountNameOf<T>>;
 type PublicAdminsOf<T> = BoundedVec<
-    <T as frame_system::Config>::AccountId,
+    InstitutionAdmin<<T as frame_system::Config>::AccountId>,
     <T as public_admins::Config>::MaxAdminsPerInstitution,
 >;
 type PublicInstitutionAdminsOf<T> = InstitutionAdmins<PublicAdminsOf<T>>;
@@ -165,6 +167,8 @@ fn insert_derived_public_institution<T: public_manage::Config>(
             created_at: BlockNumberFor::<T>::default(),
         },
     );
+    public_manage::Pallet::<T>::store_default_legal_representative_role(&cid)
+        .unwrap_or_else(|_| panic!("genesis derived cid {cid_number} 默认法定代表人岗位写入失败"));
     let bounded_reserved = |value: &[u8]| -> PublicAccountNameOf<T> {
         value
             .to_vec()
@@ -255,6 +259,14 @@ fn insert_public_institution<T: public_manage::Config>(
             created_at: BlockNumberFor::<T>::default(),
         },
     );
+    public_manage::Pallet::<T>::store_default_legal_representative_role(&cid).unwrap_or_else(
+        |_| {
+            panic!(
+                "genesis institution: {} 默认法定代表人岗位写入失败",
+                cid_number
+            )
+        },
+    );
     insert_public_account::<T>(
         &cid,
         bounded_account_name::<T>(RESERVED_NAME_MAIN, "主账户名", cid_number),
@@ -306,7 +318,7 @@ fn insert_fixed_admins<T>(
     let mut roles: Vec<public_manage::institution::role::InstitutionRoleOf<T>> = Vec::new();
     let mut assignments: Vec<public_manage::institution::role::InstitutionAdminAssignmentOf<T>> =
         Vec::new();
-    let mut admin_accounts: Vec<T::AccountId> = Vec::new();
+    let mut admin_records: Vec<InstitutionAdmin<T::AccountId>> = Vec::new();
 
     for (index, raw) in raw_admins.iter().enumerate() {
         let (role_code_raw, role_name_raw) =
@@ -335,8 +347,18 @@ fn insert_fixed_admins<T>(
             assignment_source_ref: Default::default(),
             assignment_status: InstitutionAssignmentStatus::Active,
         });
-        if !admin_accounts.contains(&admin_account) {
-            admin_accounts.push(admin_account);
+        if !admin_records
+            .iter()
+            .any(|admin| admin.admin_account == admin_account)
+        {
+            let admin_name: AdminName = DEFAULT_ADMIN_NAME
+                .to_vec()
+                .try_into()
+                .expect("默认管理员姓名不得超过协议上限");
+            admin_records.push(InstitutionAdmin {
+                admin_name,
+                admin_account,
+            });
         }
     }
 
@@ -351,12 +373,12 @@ fn insert_fixed_admins<T>(
         .unwrap_or_else(|_| panic!("genesis institution: {} 岗位任职写入失败", cid_number));
 
     assert_eq!(
-        admin_accounts.len(),
+        admin_records.len(),
         raw_admins.len(),
         "genesis institution: 固定岗位钱包常量不得重复"
     );
 
-    let admins: PublicAdminsOf<T> = admin_accounts.try_into().unwrap_or_else(|_| {
+    let admins: PublicAdminsOf<T> = admin_records.try_into().unwrap_or_else(|_| {
         panic!(
             "genesis institution: cid_number {} 管理员数量超过 MaxAdminsPerInstitution",
             cid_number

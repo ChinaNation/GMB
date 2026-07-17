@@ -888,16 +888,8 @@ class PayloadDecoder {
   //     cid_full_name: AccountNameOf<T>,   // BoundedVec<u8>
   //     cid_short_name: AccountNameOf<T>,  // BoundedVec<u8>
   //     town_code: AccountNameOf<T>,       // BoundedVec<u8>
-  //     legal_representative_name: AccountNameOf<T>,
-  //     legal_representative_cid_number: CidNumberOf<T>,
-  //     legal_representative_account: AccountId32,
-  //     accounts: InstitutionInitialAccountsOf<T>,
-  //         // BoundedVec<{ account_name: BoundedVec<u8>, amount: u128 }>
-  //     funding_account: Option<AccountId32>,
-  //     institution_code: [u8; 4],      // 注册多签机构码(公权/私权/非法人法人)
-  //     roles: InstitutionRolesOf<T>,
-  //     assignments: InstitutionAssignmentsOf<T>,
-  //     threshold: u32,
+  //     admins: BoundedVec<InstitutionAdmin>,
+  //         // 每项仅 admin_name + admin_account；账户是唯一授权字段
   //     register_nonce: RegisterNonceOf<T>,   // BoundedVec<u8>
   //     signature: RegisterSignatureOf<T>,    // BoundedVec<u8> (64B sr25519)
   //     actor_cid_number: Vec<u8>,
@@ -953,159 +945,26 @@ class PayloadDecoder {
     );
     offset += townCodeLen;
 
-    // 法定代表人三字段是机构公开链上事实，冷钱包必须完整展示并拒绝空值。
-    final (legalNameLen, legalNameLenSize) = _decodeCompactU32(bytes, offset);
-    offset += legalNameLenSize;
-    if (legalNameLen == 0 || offset + legalNameLen > bytes.length) return null;
-    final legalRepresentativeName = utf8.decode(
-      bytes.sublist(offset, offset + legalNameLen),
-      allowMalformed: true,
-    );
-    offset += legalNameLen;
-
-    final (legalCidLen, legalCidLenSize) = _decodeCompactU32(bytes, offset);
-    offset += legalCidLenSize;
-    if (legalCidLen == 0 || offset + legalCidLen > bytes.length) return null;
-    final legalRepresentativeCidNumber = utf8.decode(
-      bytes.sublist(offset, offset + legalCidLen),
-      allowMalformed: true,
-    );
-    offset += legalCidLen;
-
-    if (offset + 32 > bytes.length) return null;
-    final legalRepresentativeAccount = bytes.sublist(offset, offset + 32);
-    offset += 32;
-
-    // accounts: BoundedVec<InstitutionInitialAccount>
-    //   每项 = (account_name: Vec<u8>, amount: u128)
-    final (accountsLen, accountsLenSize) = _decodeCompactU32(bytes, offset);
-    if (accountsLenSize == 0 || accountsLen == 0) return null;
-    offset += accountsLenSize;
-    BigInt accountsTotal = BigInt.zero;
-    final accountAmounts = <String, BigInt>{};
-    for (var i = 0; i < accountsLen; i++) {
-      final (subNameLen, subNameLenSize) = _decodeCompactU32(bytes, offset);
-      offset += subNameLenSize;
-      if (offset + subNameLen + 16 > bytes.length) return null;
-      final accountName = utf8.decode(
-        bytes.sublist(offset, offset + subNameLen),
-        allowMalformed: true,
-      );
-      offset += subNameLen;
-      // 协议账户集合由 runtime primitives 唯一裁决。离线端只保证展示无歧义，
-      // 不复制机构类型到账户集合的第二套业务规则。
-      if (accountName.isEmpty || accountAmounts.containsKey(accountName)) {
-        return null;
-      }
-      final amount = _readU128Le(bytes, offset);
-      accountAmounts[accountName] = amount;
-      accountsTotal += amount;
-      offset += 16;
-    }
-
-    // 零初始余额没有本金账户；非零初始余额必须展示明确 funding_account。
-    if (offset >= bytes.length) return null;
-    String? fundingAccount;
-    final fundingTag = bytes[offset++];
-    if (fundingTag == 1) {
-      if (offset + 32 > bytes.length) return null;
-      fundingAccount = _bytesToSs58(
-        Uint8List.fromList(bytes.sublist(offset, offset + 32)),
-      );
-      offset += 32;
-    } else if (fundingTag != 0) {
-      return null;
-    }
-    if ((accountsTotal == BigInt.zero) != (fundingAccount == null)) {
-      return null;
-    }
-
-    // institution_code: [u8;4]。机构账户只能使用注册多签机构码(公权/私权/非法人法人)。
-    if (offset + 4 > bytes.length) return null;
-    final code =
-        InstitutionCode.codeToString(bytes.sublist(offset, offset + 4));
-    if (!InstitutionCode.isInstitution(code)) return null;
-    offset += 4;
-
-    // roles: 每项 = cid + role_code + role_name + term_required + role_status。
-    final (rolesLen, rolesLenSize) = _decodeCompactU32(bytes, offset);
-    offset += rolesLenSize;
-    if (rolesLen == 0) return null;
-    final roleNames = <String, String>{};
-    final termRules = <String, bool>{};
-    for (var i = 0; i < rolesLen; i++) {
-      final roleCidRead = _readBoundedUtf8(bytes, offset);
-      if (roleCidRead == null || roleCidRead.$1 != cidNumber) return null;
-      offset = roleCidRead.$2;
-      final roleCodeRead = _readBoundedUtf8(bytes, offset);
-      if (roleCodeRead == null || roleCodeRead.$1.isEmpty) return null;
-      offset = roleCodeRead.$2;
-      final roleNameRead = _readBoundedUtf8(bytes, offset);
-      if (roleNameRead == null || roleNameRead.$1.isEmpty) return null;
-      offset = roleNameRead.$2;
-      if (offset + 2 > bytes.length) return null;
-      final termRequired = bytes[offset++] != 0;
-      final roleStatus = bytes[offset++];
-      if (roleStatus != 0 || roleNames.containsKey(roleCodeRead.$1)) {
-        return null;
-      }
-      roleNames[roleCodeRead.$1] = roleNameRead.$1;
-      termRules[roleCodeRead.$1] = termRequired;
-    }
-
-    // assignments: 管理员钱包与岗位绑定；管理员人数由钱包账户去重派生。
-    final (assignmentsLen, assignmentsLenSize) =
-        _decodeCompactU32(bytes, offset);
-    offset += assignmentsLenSize;
-    if (assignmentsLen == 0) return null;
+    // admins: BoundedVec<InstitutionAdmin(admin_name, admin_account)>。
+    final (adminsLen, adminsLenSize) = _decodeCompactU32(bytes, offset);
+    if (adminsLenSize == 0 || adminsLen < 2) return null;
+    offset += adminsLenSize;
     final adminAccounts = <String>{};
-    final roleAssignments = <String>[];
-    for (var i = 0; i < assignmentsLen; i++) {
-      final assignmentCidRead = _readBoundedUtf8(bytes, offset);
-      if (assignmentCidRead == null || assignmentCidRead.$1 != cidNumber) {
-        return null;
-      }
-      offset = assignmentCidRead.$2;
+    final adminLabels = <String>[];
+    for (var i = 0; i < adminsLen; i++) {
+      final adminNameRead = _readBoundedUtf8(bytes, offset);
+      if (adminNameRead == null || adminNameRead.$1.isEmpty) return null;
+      offset = adminNameRead.$2;
       if (offset + 32 > bytes.length) return null;
-      final adminHex = bytes
-          .sublist(offset, offset + 32)
+      final accountBytes =
+          Uint8List.fromList(bytes.sublist(offset, offset + 32));
+      offset += 32;
+      final accountHex = accountBytes
           .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
           .join();
-      adminAccounts.add(adminHex);
-      offset += 32;
-      final roleCodeRead = _readBoundedUtf8(bytes, offset);
-      if (roleCodeRead == null || !roleNames.containsKey(roleCodeRead.$1)) {
-        return null;
-      }
-      offset = roleCodeRead.$2;
-      if (offset + 10 > bytes.length) return null;
-      final termStart = _readU32Le(bytes, offset);
-      offset += 4;
-      final termEnd = _readU32Le(bytes, offset);
-      offset += 4;
-      final source = bytes[offset++];
-      final sourceRefOffset = _skipBoundedBytes(bytes, offset);
-      if (sourceRefOffset < 0) return null;
-      offset = sourceRefOffset;
-      final assignmentStatus = bytes[offset++];
-      final termRequired = termRules[roleCodeRead.$1] ?? false;
-      if (assignmentStatus != 0 || source > 4) return null;
-      if (termRequired
-          ? (termStart == 0 || termEnd <= termStart)
-          : (termStart != 0 || termEnd != 0)) {
-        return null;
-      }
-      roleAssignments.add('${roleNames[roleCodeRead.$1]}(${roleCodeRead.$1})');
+      if (!adminAccounts.add(accountHex)) return null;
+      adminLabels.add('${adminNameRead.$1}(${_bytesToSs58(accountBytes)})');
     }
-    final adminsLen = adminAccounts.length;
-
-    // threshold: u32 (LE)
-    if (offset + 4 > bytes.length) return null;
-    final threshold = bytes[offset] |
-        (bytes[offset + 1] << 8) |
-        (bytes[offset + 2] << 16) |
-        (bytes[offset + 3] << 24);
-    offset += 4;
 
     // register_nonce: BoundedVec<u8> — 跳过
     final (nonceLen, nonceLenSize) = _decodeCompactU32(bytes, offset);
@@ -1153,29 +1012,16 @@ class PayloadDecoder {
 
     if (!_hasValidSigningTail(bytes, offset)) return null;
 
-    final amountYuan = _fenToYuan(accountsTotal);
     final fields = <String, String>{
       'cid_number': cidNumber,
       'cid_full_name': cidFullName,
       'cid_short_name': cidShortName,
-      'legal_representative_name': legalRepresentativeName,
-      'legal_representative_cid_number': legalRepresentativeCidNumber,
-      'legal_representative_account': _bytesToSs58(legalRepresentativeAccount),
-      'institution_code': InstitutionCode.codeLabel(code),
       'admins_len': adminsLen.toString(),
-      'roles_len': rolesLen.toString(),
-      'assignments_len': assignmentsLen.toString(),
-      'assignments': roleAssignments.join('、'),
-      'threshold': '$threshold/$adminsLen',
-      'total_amount_yuan': '$amountYuan GMB',
+      'admins': adminLabels.join('、'),
+      'default_role': 'LR/法定代表人（空缺）',
+      'protocol_accounts': '由 runtime 按 CID 自动建立，初始余额为 0',
       'fee_payer': '$actorCidNumber 的链上费用账户',
     };
-    if (fundingAccount != null) {
-      fields['funding_account'] = fundingAccount;
-    }
-    for (final entry in accountAmounts.entries) {
-      fields['amount_${entry.key}'] = '${_fenToYuan(entry.value)} GMB';
-    }
     fields['actor_cid_number'] = actorCidNumber;
     fields['credential_signer_pubkey'] = _bytesToSs58(credentialSignerPubkey);
     fields['scope_province_name'] = scopeProvinceName;
@@ -1186,8 +1032,7 @@ class PayloadDecoder {
 
     return DecodedPayload(
       action: action,
-      summary:
-          '创建$entityLabel「$cidFullName」（$accountsLen 个账户，$adminsLen 管理员，阈值 $threshold，入金 $amountYuan 元）',
+      summary: '创建$entityLabel「$cidFullName」（$adminsLen 名管理员，制度账户自动建立）',
       fields: fields,
     );
   }

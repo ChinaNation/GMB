@@ -61,11 +61,20 @@ pub const ROLE_CODE_SENATOR: &[u8] = b"SENATOR";
 pub const ROLE_CODE_REPRESENTATIVE: &[u8] = b"REPRESENTATIVE";
 /// 国家教委会法定委员岗位代码。
 pub const ROLE_CODE_COMMITTEE_MEMBER: &[u8] = b"COMMITTEE_MEMBER";
+/// 每个机构自动拥有且只能拥有一个的法定代表人岗位代码。
+pub const ROLE_CODE_LEGAL_REPRESENTATIVE: &[u8] = b"LR";
 
 /// 法定成员岗位公开名称。
 pub const ROLE_NAME_SENATOR: &[u8] = "参议员".as_bytes();
 pub const ROLE_NAME_REPRESENTATIVE: &[u8] = "众议员".as_bytes();
 pub const ROLE_NAME_COMMITTEE_MEMBER: &[u8] = "委员".as_bytes();
+/// 默认法定代表人岗位公开名称。
+pub const ROLE_NAME_LEGAL_REPRESENTATIVE: &[u8] = "法定代表人".as_bytes();
+
+/// 岗位码是否为不可删除、停用、改码或改名的默认法定代表人岗位。
+pub fn is_legal_representative_role(role_code: &[u8]) -> bool {
+    role_code == ROLE_CODE_LEGAL_REPRESENTATIVE
+}
 
 /// 国家级永久单例机构的精确创世身份。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

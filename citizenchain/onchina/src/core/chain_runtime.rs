@@ -103,20 +103,14 @@ fn finish_institution_credential(
     })
 }
 
-/// 签发 call_index=5 的机构创建凭证，法定代表人三字段必须进入签名域。
+/// 签发 call_index=5 的机构最小创建凭证，管理员人员集合必须进入签名域。
 pub(crate) fn build_institution_creation_credential(
     state: &AppState,
     actor_cid_number: &str,
     cid_number: &str,
     cid_full_name: &str,
     cid_short_name: &str,
-    legal_representative_name: &str,
-    legal_representative_cid_number: &str,
-    legal_representative_account: &[u8; 32],
-    account_names: &[String],
-    funding_account: Option<&[u8; 32]>,
-    roles_payload: &[u8],
-    assignments_payload: &[u8],
+    admins_payload: &[u8],
     register_nonce: String,
     scope_province_name: &str,
     scope_city_name: &str,
@@ -131,14 +125,8 @@ pub(crate) fn build_institution_creation_credential(
     if cid_short_name.trim().is_empty() {
         return Err("cid_short_name is required".to_string());
     }
-    if legal_representative_name.trim().is_empty() {
-        return Err("legal_representative_name is required".to_string());
-    }
-    if legal_representative_cid_number.trim().is_empty() {
-        return Err("legal_representative_cid_number is required".to_string());
-    }
-    if account_names.is_empty() || account_names.iter().any(|name| name.trim().is_empty()) {
-        return Err("account_names are required".to_string());
+    if admins_payload.is_empty() {
+        return Err("admins are required".to_string());
     }
     if register_nonce.trim().is_empty() {
         return Err("register_nonce is required".to_string());
@@ -149,25 +137,15 @@ pub(crate) fn build_institution_creation_credential(
         Some(scope_province_name),
         Some(scope_city_name),
     )?;
-    let account_name_payload = account_names
-        .iter()
-        .map(|name| name.trim().as_bytes().to_vec())
-        .collect::<Vec<_>>();
     // 字段顺序必须与 RuntimeCidInstitutionVerifier 完全一致:
-    // genesis_hash + cid_number + cid_full_name + cid_short_name + 法定代表人三字段 + account_names[]
+    // genesis_hash + cid_number + cid_full_name + cid_short_name + admins
     // + nonce + 签发机构 + 作用域 + town_code。
     let payload_digest = primitives::sign::institution_creation_message(
         &genesis_hash,
         cid_number.trim().as_bytes(),
         cid_full_name.trim().as_bytes(),
         cid_short_name.trim().as_bytes(),
-        legal_representative_name.trim().as_bytes(),
-        legal_representative_cid_number.trim().as_bytes(),
-        legal_representative_account,
-        &account_name_payload,
-        funding_account,
-        roles_payload,
-        assignments_payload,
+        admins_payload,
         &register_nonce.trim().as_bytes().to_vec(),
         signing_ctx.actor_cid_number.as_bytes(),
         &signing_ctx.credential_signer_pubkey,
@@ -799,7 +777,7 @@ pub(crate) const DESKTOP_GOVERNANCE_LOGIN_UNSUPPORTED: &str =
 pub(crate) const PERSONAL_MULTISIG_LOGIN_UNSUPPORTED: &str =
     "personal multisig is not supported by OnChina";
 
-/// 链上机构 `InstitutionAdminAccount` 解码镜像。
+/// 链上机构 `InstitutionAdmins` 解码镜像。
 ///
 /// CID 只存在于 storage key；value 固定为机构码和去重管理员钱包集合。
 #[derive(Debug, Decode)]

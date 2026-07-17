@@ -404,6 +404,19 @@ pub fn account_name(value: &[u8]) -> pallet::AccountNameOf<Test> {
     value.to_vec().try_into().expect("账户名必须受界")
 }
 
+pub fn institution_admins(accounts: &[AccountId32]) -> crate::InstitutionAdminsInputOf<Test> {
+    accounts
+        .iter()
+        .cloned()
+        .map(|admin_account| admin_primitives::InstitutionAdmin {
+            admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+            admin_account,
+        })
+        .collect::<alloc::vec::Vec<_>>()
+        .try_into()
+        .expect("admins fit")
+}
+
 pub fn register_nonce(value: &[u8]) -> pallet::RegisterNonceOf<Test> {
     value.to_vec().try_into().expect("nonce 必须受界")
 }
@@ -428,77 +441,55 @@ pub fn initial_accounts(items: &[(&[u8], Balance)]) -> pallet::InstitutionInitia
         .expect("初始账户列表必须受界")
 }
 
-pub fn roles(cid_number: &pallet::CidNumberOf<Test>) -> crate::InstitutionRolesOf<Test> {
-    alloc::vec![entity_primitives::InstitutionRole {
-        cid_number: cid_number.clone(),
-        role_code: b"ADMIN".to_vec().try_into().expect("岗位码必须受界"),
-        role_name: account_name("管理员".as_bytes()),
-        term_required: false,
-        role_status: entity_primitives::InstitutionRoleStatus::Active,
-    }]
-    .try_into()
-    .expect("岗位列表必须受界")
-}
-
-pub fn assignments(
-    cid_number: &pallet::CidNumberOf<Test>,
-    admins: &[AccountId32],
-) -> crate::InstitutionAdminAssignmentsOf<Test> {
-    admins
-        .iter()
-        .cloned()
-        .map(
-            |admin_account| entity_primitives::InstitutionAdminAssignment {
-                cid_number: cid_number.clone(),
-                admin_account,
-                role_code: b"ADMIN".to_vec().try_into().expect("岗位码必须受界"),
-                term_start: 0,
-                term_end: 0,
-                assignment_source: entity_primitives::InstitutionAssignmentSource::Registry,
-                assignment_source_ref: BoundedVec::new(),
-                assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
-            },
-        )
-        .collect::<alloc::vec::Vec<_>>()
-        .try_into()
-        .expect("任职列表必须受界")
-}
-
 pub fn create_institution(
     cid_number: pallet::CidNumberOf<Test>,
-    institution_code: InstitutionCode,
+    _institution_code: InstitutionCode,
     accounts: pallet::InstitutionInitialAccountsOf<Test>,
 ) -> sp_runtime::DispatchResult {
     let target_admins = [admin(1), admin(2)];
-    let funding_account = accounts
-        .iter()
-        .any(|account| account.amount > 0)
-        .then(registry_funding_account);
     PrivateManage::propose_create_private_institution(
         RuntimeOrigin::signed(registrar()),
         cid_number.clone(),
         account_name("测试私权机构".as_bytes()),
         account_name("测试机构".as_bytes()),
         BoundedVec::new(),
-        account_name("测试法人".as_bytes()),
-        b"GD001-CTZN1-000000001-2026"
-            .to_vec()
-            .try_into()
-            .expect("法人 CID 必须受界"),
-        admin(9),
-        accounts,
-        funding_account,
-        institution_code,
-        roles(&cid_number),
-        assignments(&cid_number, &target_admins),
-        2,
+        institution_admins(&target_admins),
         register_nonce(cid_number.as_slice()),
         valid_signature(),
         b"GD001-FRG00-000000001-2026".to_vec(),
         [7u8; 32],
         "广东省".as_bytes().to_vec(),
         "荔湾市".as_bytes().to_vec(),
-    )
+    )?;
+
+    // 创建 call 不再接收账户清单或初始入金。测试若需要关闭命名账户，必须在创建
+    // 完成后走正式的新增账户入口；余额注入只用于构造后续操作场景。
+    let named_accounts = accounts
+        .iter()
+        .filter(|item| {
+            item.account_name.as_slice() != crate::RESERVED_NAME_MAIN
+                && item.account_name.as_slice() != crate::RESERVED_NAME_FEE
+        })
+        .map(|item| item.account_name.clone())
+        .collect::<alloc::vec::Vec<_>>();
+    if !named_accounts.is_empty() {
+        PrivateManage::add_institution_account(
+            RuntimeOrigin::signed(registrar()),
+            cid_number.clone(),
+            named_accounts.try_into().expect("named accounts fit"),
+            register_nonce(b"post-create-accounts"),
+            valid_signature(),
+            b"GD001-FRG00-000000001-2026".to_vec(),
+            [7u8; 32],
+            "广东省".as_bytes().to_vec(),
+            "荔湾市".as_bytes().to_vec(),
+        )?;
+    }
+    for item in accounts.iter().filter(|item| item.amount > 0) {
+        let address = account_of(&cid_number, item.account_name.as_slice());
+        let _ = Balances::deposit_creating(&address, item.amount);
+    }
+    Ok(())
 }
 
 pub fn account_of(cid_number: &pallet::CidNumberOf<Test>, name: &[u8]) -> AccountId32 {

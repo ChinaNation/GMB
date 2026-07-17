@@ -168,18 +168,8 @@ export interface LegalRepresentativePhoto {
 }
 
 export interface CreateInstitutionAdminInput {
-  /** 机构初始管理员钱包账户；同一账户可绑定多个岗位。 */
+  /** 机构初始管理员钱包账户；姓名由后端解析，首次登记不绑定岗位。 */
   admin_account: string;
-  /** 机构内稳定岗位码。 */
-  role_code: string;
-  /** 机构公开岗位名称。 */
-  role_name: string;
-  /** 岗位是否要求任期。 */
-  term_required: boolean;
-  /** 任期开始日（自纪元起天数）；无任期岗位填 0。 */
-  term_start?: number;
-  /** 任期结束日（自纪元起天数）；无任期岗位填 0。 */
-  term_end?: number;
 }
 
 // ─── 请求 DTO ─────────────────────────────────────────────────
@@ -210,13 +200,6 @@ export interface CreateInstitutionInput {
   parent_cid_number?: string;
   private_type?: PrivateType;
   partnership_kind?: PartnershipKind;
-  legal_representative_name?: string;
-  legal_representative_cid_number?: string;
-  legal_representative_photo_path?: string;
-  legal_representative_photo_name?: string;
-  legal_representative_photo_mime?: string;
-  legal_representative_photo_size?: number;
-  threshold: number;
   admins: CreateInstitutionAdminInput[];
 }
 

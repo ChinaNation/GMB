@@ -5,7 +5,7 @@
 
 extern crate alloc;
 
-use admin_primitives::{InstitutionAdminLifecycle as _, InstitutionAdminQuery as _};
+use admin_primitives::InstitutionAdminQuery as _;
 use alloc::{collections::BTreeMap, vec::Vec};
 use entity_primitives::{
     InstitutionAdminAssignment, InstitutionAssignmentSource, InstitutionAssignmentStatus,
@@ -28,7 +28,7 @@ use crate::pallet::{
 };
 
 impl<T: Config> Pallet<T> {
-    /// 原子应用私权机构岗位、任职和法定代表人最终状态，并从有效任职派生 admins。
+    /// 原子应用私权机构岗位、任职和法定代表人最终状态；管理员集合保持独立。
     pub fn apply_institution_governance_result(
         result: InstitutionGovernanceResult<T::AccountId>,
     ) -> DispatchResult {
@@ -67,6 +67,12 @@ impl<T: Config> Pallet<T> {
             institution.institution_code == result.institution_code,
             Error::<T>::InvalidAssignmentResultInstitution
         );
+        let current_admins = T::InstitutionAdminQuery::institution_admins(
+            result.institution_code,
+            cid_number.as_slice(),
+        )
+        .ok_or(Error::<T>::InvalidAssignmentResultInstitution)?;
+        let current_admin_set = current_admins.iter().cloned().collect::<BTreeSet<_>>();
 
         let mut final_roles = InstitutionRoles::<T>::iter_prefix(&cid_number)
             .collect::<BTreeMap<RoleCodeOf, InstitutionRoleOf<T>>>();
@@ -78,6 +84,12 @@ impl<T: Config> Pallet<T> {
                 .role_code
                 .try_into()
                 .map_err(|_| Error::<T>::InvalidRoleCode)?;
+            ensure!(
+                !primitives::institution_constraints::is_legal_representative_role(
+                    role_code.as_slice()
+                ),
+                Error::<T>::InvalidRoleCode
+            );
             let role_name: AccountNameOf<T> = change
                 .role_name
                 .try_into()
@@ -123,6 +135,10 @@ impl<T: Config> Pallet<T> {
             let mut stored_assignments = Vec::with_capacity(change.assignments.len());
             for target in change.assignments {
                 ensure!(
+                    current_admin_set.contains(&target.admin_account),
+                    Error::<T>::InvalidAssignmentResultAdmins
+                );
+                ensure!(
                     target.assignment_status == InstitutionAssignmentStatus::Active,
                     Error::<T>::InitialAssignmentMustBeActive
                 );
@@ -165,8 +181,6 @@ impl<T: Config> Pallet<T> {
             assignment_changes.insert(role_code, bounded);
         }
 
-        let mut assignment_order = Vec::new();
-        let mut desired_admins = BTreeSet::new();
         for (role_code, role) in &final_roles {
             let assignments = assignment_changes
                 .get(role_code)
@@ -181,6 +195,10 @@ impl<T: Config> Pallet<T> {
             }
             for assignment in &assignments {
                 ensure!(
+                    current_admin_set.contains(&assignment.admin_account),
+                    Error::<T>::InvalidAssignmentResultAdmins
+                );
+                ensure!(
                     assignment.assignment_status == InstitutionAssignmentStatus::Active,
                     Error::<T>::InitialAssignmentMustBeActive
                 );
@@ -189,36 +207,8 @@ impl<T: Config> Pallet<T> {
                     assignment.term_start,
                     assignment.term_end,
                 )?;
-                if desired_admins.insert(assignment.admin_account.clone()) {
-                    assignment_order.push(assignment.admin_account.clone());
-                }
             }
         }
-        ensure!(
-            !desired_admins.is_empty(),
-            Error::<T>::InvalidAssignmentResultAdmins
-        );
-        ensure!(
-            desired_admins.len() as u32 <= T::MaxAdmins::get(),
-            Error::<T>::TooManyInstitutionAdmins
-        );
-
-        let current_admins = T::InstitutionAdminQuery::institution_admins(
-            result.institution_code,
-            cid_number.as_slice(),
-        )
-        .ok_or(Error::<T>::InvalidAssignmentResultInstitution)?;
-        let mut remaining = desired_admins;
-        let mut derived_admins = Vec::new();
-        for admin in current_admins.into_iter().chain(assignment_order) {
-            if remaining.remove(&admin) {
-                derived_admins.push(admin);
-            }
-        }
-        ensure!(
-            remaining.is_empty(),
-            Error::<T>::InvalidAssignmentResultAdmins
-        );
 
         let legal_representative_change = result
             .legal_representative_change
@@ -248,7 +238,7 @@ impl<T: Config> Pallet<T> {
             .transpose()?;
         let role_changes_len = role_changes.len() as u32;
         let assignment_changes_len = assignment_changes.len() as u32;
-        let admins_len = derived_admins.len() as u32;
+        let admins_len = current_admins.len() as u32;
         let legal_representative_updated = legal_representative_change.is_some();
 
         with_transaction(|| {
@@ -270,14 +260,6 @@ impl<T: Config> Pallet<T> {
                         info.legal_representative_account = Some(account.clone());
                     }
                 });
-            }
-            if let Err(err) = T::AdminLifecycle::sync_institution_admins_from_assignments(
-                crate::MODULE_TAG,
-                cid_number.to_vec(),
-                result.institution_code,
-                derived_admins.clone(),
-            ) {
-                return TransactionOutcome::Rollback(Err(err));
             }
             Self::deposit_event(crate::pallet::Event::<T>::InstitutionGovernanceApplied {
                 cid_number,

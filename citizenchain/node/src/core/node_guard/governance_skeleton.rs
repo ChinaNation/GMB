@@ -8,7 +8,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use admin_primitives::InstitutionAdmins;
+use admin_primitives::{InstitutionAdmin, InstitutionAdmins};
 use codec::Decode;
 #[cfg(test)]
 use codec::Encode;
@@ -40,14 +40,20 @@ struct ExpectedRole {
 
 fn expected_roles(code: InstitutionCode) -> Vec<ExpectedRole> {
     if code == FRG {
-        return PROVINCE_CODE_INFOS
+        let mut roles = PROVINCE_CODE_INFOS
             .iter()
             .map(|province| ExpectedRole {
                 role_code: province_commissioner_role_code(province.province_code),
                 role_name: province_commissioner_role_name(province.province_name),
                 seats: FRG_PROVINCE_GROUP_ADMIN_COUNT,
             })
-            .collect();
+            .collect::<Vec<_>>();
+        roles.push(ExpectedRole {
+            role_code: primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE.to_vec(),
+            role_name: primitives::institution_constraints::ROLE_NAME_LEGAL_REPRESENTATIVE.to_vec(),
+            seats: 0,
+        });
+        return roles;
     }
     fixed_role_specs(code)
         .into_iter()
@@ -161,7 +167,7 @@ pub mod storage_key {
 }
 
 /// 节点直接使用共享协议类型解码，避免维护第二份字段顺序和枚举判别值。
-type DecodedInstitutionAdminAccount = InstitutionAdmins<Vec<[u8; 32]>>;
+type DecodedInstitutionAdmins = InstitutionAdmins<Vec<InstitutionAdmin<[u8; 32]>>>;
 type DecodedInstitutionRole = SharedInstitutionRole<Vec<u8>, Vec<u8>, Vec<u8>>;
 type DecodedInstitutionAdminAssignment =
     SharedInstitutionAdminAssignment<Vec<u8>, [u8; 32], Vec<u8>, Vec<u8>>;
@@ -349,7 +355,7 @@ where
     let expected_cid = institution.cid_number.as_bytes();
     let raw = read_raw(&storage_key::admin_account(expected_cid))
         .ok_or(GuardError::FixedInstitutionMissing(institution.code))?;
-    let account: DecodedInstitutionAdminAccount =
+    let account: DecodedInstitutionAdmins =
         decode_exact(&raw).map_err(|_| GuardError::AdminAccountDecodeFailed(institution.code))?;
     if account.institution_code != institution.code {
         return Err(GuardError::InstitutionCodeChanged(institution.code));
@@ -362,7 +368,11 @@ where
             found,
         });
     }
-    let admin_set = account.admins.iter().copied().collect::<BTreeSet<_>>();
+    let admin_set = account
+        .admins
+        .iter()
+        .map(|admin| admin.admin_account)
+        .collect::<BTreeSet<_>>();
     if admin_set.len() != account.admins.len() {
         return Err(GuardError::DuplicateAdminWallet(institution.code));
     }
@@ -499,9 +509,15 @@ mod tests {
     }
 
     fn account_bytes(institution: &FixedInstitution, admins: Vec<[u8; 32]>) -> Vec<u8> {
-        DecodedInstitutionAdminAccount {
+        DecodedInstitutionAdmins {
             institution_code: institution.code,
-            admins,
+            admins: admins
+                .into_iter()
+                .map(|admin_account| InstitutionAdmin {
+                    admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+                    admin_account,
+                })
+                .collect(),
         }
         .encode()
     }
@@ -582,10 +598,10 @@ mod tests {
     }
 
     #[test]
-    fn institution_admin_account_layout_is_exact() {
+    fn institution_admins_layout_is_exact() {
         let institution = fixed_institutions()[0];
         let raw = account_bytes(&institution, accounts_for(&institution));
-        let decoded: DecodedInstitutionAdminAccount = decode_exact(&raw).expect("layout decodes");
+        let decoded: DecodedInstitutionAdmins = decode_exact(&raw).expect("layout decodes");
         assert_eq!(decoded.institution_code, institution.code);
         assert_eq!(decoded.admins.len() as u32, institution.expected_len);
     }
@@ -605,9 +621,15 @@ mod tests {
         let mut state = valid_state();
         state.insert(
             storage_key::admin_account(institution.cid_number.as_bytes()),
-            DecodedInstitutionAdminAccount {
+            DecodedInstitutionAdmins {
                 institution_code: *b"BAD\0",
-                admins: accounts_for(&institution),
+                admins: accounts_for(&institution)
+                    .into_iter()
+                    .map(|admin_account| InstitutionAdmin {
+                        admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+                        admin_account,
+                    })
+                    .collect(),
             }
             .encode(),
         );
@@ -728,10 +750,10 @@ mod tests {
         assignments[0].admin_account = [250u8; 32];
         state.insert(assignments_key, assignments.encode());
 
-        let mut account: DecodedInstitutionAdminAccount =
+        let mut account: DecodedInstitutionAdmins =
             decode_exact(state.get(&admin_key).expect("admin account exists"))
                 .expect("admin account decodes");
-        account.admins[0] = [250u8; 32];
+        account.admins[0].admin_account = [250u8; 32];
         state.insert(admin_key, account.encode());
 
         assert_eq!(check_state(&state), Ok(()));

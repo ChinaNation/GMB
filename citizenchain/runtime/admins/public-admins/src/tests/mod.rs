@@ -115,17 +115,25 @@ fn account(seed: u8) -> AccountId32 {
     AccountId32::new([seed; 32])
 }
 
-/// admins 只保存钱包账户；岗位、任期、来源等由 entity 管理。
-fn admins(count: u8) -> Vec<AccountId32> {
-    (0..count).map(account).collect()
+/// admins 保存显示姓名和授权钱包；岗位、任期、来源等由 entity 管理。
+fn admins(count: u8) -> Vec<InstitutionAdmin<AccountId32>> {
+    (0..count)
+        .map(|seed| InstitutionAdmin {
+            admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+            admin_account: account(seed),
+        })
+        .collect()
 }
 
-fn indexed_admins(count: u32) -> Vec<AccountId32> {
+fn indexed_admins(count: u32) -> Vec<InstitutionAdmin<AccountId32>> {
     (0..count)
         .map(|index| {
             let mut raw = [0u8; 32];
             raw[..4].copy_from_slice(&index.to_le_bytes());
-            AccountId32::new(raw)
+            InstitutionAdmin {
+                admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+                admin_account: AccountId32::new(raw),
+            }
         })
         .collect()
 }
@@ -267,21 +275,23 @@ fn permanent_member_body_code_rejects_non_genesis_cid() {
 }
 
 #[test]
-fn first_member_body_composition_atomically_creates_admins_without_dynamic_threshold() {
+fn member_body_admins_are_registered_independently_without_dynamic_threshold() {
     new_test_ext().execute_with(|| {
         let spec = primitives::institution_constraints::member_composition_specs()[0];
         let members = indexed_admins(spec.min_members);
-        assert_ok!(PublicAdmins::do_sync_institution_admins_from_assignments(
+        assert_ok!(PublicAdmins::do_set_institution_admins(
             spec.institution.cid_number.as_bytes().to_vec(),
             spec.institution.code,
+            AdminAccountKind::PublicInstitution,
             members.clone(),
+            spec.min_members / 2 + 1,
         ));
         assert_eq!(
             AdminAccounts::<Test>::get(
                 AdminCidNumber::try_from(spec.institution.cid_number.as_bytes().to_vec())
                     .expect("cid fits")
             )
-            .expect("first composition creates admins")
+            .expect("independently registered admins exist")
             .admins
             .to_vec(),
             members
@@ -297,7 +307,7 @@ fn first_member_body_composition_atomically_creates_admins_without_dynamic_thres
 }
 
 #[test]
-fn fixed_governance_assignment_sync_uses_compile_time_threshold_only() {
+fn fixed_governance_admin_update_uses_compile_time_threshold_only() {
     new_test_ext().execute_with(|| {
         let fixed = primitives::governance_skeleton::fixed_institutions()
             .into_iter()
@@ -321,12 +331,17 @@ fn fixed_governance_assignment_sync_uses_compile_time_threshold_only() {
         ));
 
         let replacement = (40..40 + NRC_ADMIN_COUNT as u8)
-            .map(account)
+            .map(|seed| InstitutionAdmin {
+                admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+                admin_account: account(seed),
+            })
             .collect::<Vec<_>>();
-        assert_ok!(PublicAdmins::do_sync_institution_admins_from_assignments(
+        assert_ok!(PublicAdmins::do_set_institution_admins(
             cid_number.to_vec(),
             code,
+            AdminAccountKind::PublicInstitution,
             replacement.clone(),
+            fixed_threshold,
         ));
 
         assert_eq!(

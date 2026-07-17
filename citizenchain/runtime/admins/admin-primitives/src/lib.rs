@@ -24,6 +24,33 @@ pub use primitives::cid::code::{FRG, NJD};
 /// 管理员集合所属机构 CID 号类型。
 pub type AdminCidNumber = BoundedVec<u8, ConstU32<CID_NUMBER_MAX_BYTES>>;
 
+/// 管理员公开姓名最大字节数；姓名只用于展示，不参与权限判断。
+pub const ADMIN_NAME_MAX_BYTES: u32 = 128;
+/// 无法从公民资料解析真实姓名时使用的唯一默认展示名。
+pub const DEFAULT_ADMIN_NAME: &[u8] = "管理员".as_bytes();
+/// 机构管理员公开姓名。
+pub type AdminName = BoundedVec<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>;
+
+/// 机构管理员人员记录。
+///
+/// `admin_account` 是唯一授权字段；`admin_name` 只承载公开展示语义。岗位和任职
+/// 由 entity 独立保存，禁止从任职记录反向派生或覆盖本记录。
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Clone,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+    PartialEq,
+    Eq,
+)]
+pub struct InstitutionAdmin<AccountId> {
+    pub admin_name: AdminName,
+    pub admin_account: AccountId,
+}
+
 /// 管理员集合所属类型。
 #[derive(
     Encode,
@@ -73,8 +100,8 @@ pub enum AdminAccountStatus {
 
 /// 机构管理员集合。
 ///
-/// 本结构只保存机构管理员钱包账户及必要路由状态；姓名、CID、岗位、任期和来源
-/// 全部归 `entity` 的岗位任职存储。机构管理员没有“创建人、创建时间、更新时间”字段。
+/// 本结构只保存管理员人员记录及必要路由状态；岗位、任期和任职来源全部归
+/// `entity` 的岗位任职存储。机构管理员没有“创建人、创建时间、更新时间”字段。
 #[derive(
     Encode,
     Decode,
@@ -90,7 +117,7 @@ pub enum AdminAccountStatus {
 pub struct InstitutionAdmins<AdminList> {
     /// 机构码，用于把查询路由到对应公权或私权业务。
     pub institution_code: InstitutionCode,
-    /// 去重后的管理员钱包账户集合。
+    /// 按钱包账户去重的管理员人员集合。
     pub admins: AdminList,
 }
 
@@ -171,27 +198,16 @@ pub trait AdminAccountLifecycle<AccountId, AdminItem = AccountId> {
 /// 机构管理员集合写入口。
 ///
 /// 机构的来源、岗位和任职全部由 entity 表达，因此该接口不接收 `creator`，也不承担
-/// 个人多签的创建语义。公权与私权 entity 只通过本接口原子写入纯钱包账户集合。
+/// 个人多签的创建语义。公权与私权 entity 只通过本接口原子写入管理员人员集合。
 pub trait InstitutionAdminLifecycle<AccountId> {
-    /// 注册局直设机构的有效管理员账户，并同步登记动态投票阈值。
+    /// 注册局直设机构的有效管理员人员集合，并同步登记动态投票阈值。
     fn set_institution_admins(
         module_tag: &[u8],
         cid_number: Vec<u8>,
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
-        admins: Vec<AccountId>,
+        admins: Vec<InstitutionAdmin<AccountId>>,
         threshold: u32,
-    ) -> DispatchResult;
-
-    /// entity 任职结果生效后同步机构管理员钱包集合。
-    ///
-    /// 调用方不传阈值：固定机构继续使用编译期固定阈值，动态机构继续使用当前 Active
-    /// 动态阈值，避免岗位任职结果越权修改投票制度。
-    fn sync_institution_admins_from_assignments(
-        module_tag: &[u8],
-        cid_number: Vec<u8>,
-        institution_code: InstitutionCode,
-        admins: Vec<AccountId>,
     ) -> DispatchResult;
 }
 
@@ -211,6 +227,12 @@ pub trait InstitutionAdminQuery<AccountId> {
         institution_code: InstitutionCode,
         cid_number: &[u8],
     ) -> Option<Vec<AccountId>>;
+
+    /// 返回完整管理员人员记录；授权调用方仍必须只比较 `admin_account`。
+    fn institution_admin_records(
+        institution_code: InstitutionCode,
+        cid_number: &[u8],
+    ) -> Option<Vec<InstitutionAdmin<AccountId>>>;
 
     fn institution_admins_len(institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32>;
 }
@@ -239,6 +261,13 @@ impl<AccountId> InstitutionAdminQuery<AccountId> for () {
         _institution_code: InstitutionCode,
         _cid_number: &[u8],
     ) -> Option<u32> {
+        None
+    }
+
+    fn institution_admin_records(
+        _institution_code: InstitutionCode,
+        _cid_number: &[u8],
+    ) -> Option<Vec<InstitutionAdmin<AccountId>>> {
         None
     }
 }

@@ -2,9 +2,9 @@
 
 ## 当前状态
 
-- 状态：进行中
-- 当前步骤：第六步除重新创世外已完成；等待用户另行确认重新创世
-- 最新业务确认：2026-07-13
+- 状态：已被 `20260717-institution-minimal-registration.md` 的管理员人员独立模型替代；以下旧执行记录只说明历史，不再定义当前协议
+- 当前步骤：停止；当前实现与验收以 2026-07-17 任务卡为准
+- 最新业务确认：2026-07-17
 - 实施方式：逐步输出技术方案，用户确认后才执行；每步完成后立即更新文档、完善中文注释、删除残留，再输出下一步方案
 
 ## 任务目标
@@ -12,7 +12,7 @@
 将机构信息、机构岗位、机构管理员任职与管理员集合彻底拆分到正确模块：
 
 - 机构信息、机构岗位和机构管理员任职归 `entity`。
-- 机构管理员钱包账户集合 `admins` 及其生命周期归 `admins`。
+- 机构管理员 `admin_name + admin_account` 人员集合及其生命周期归 `admins`，岗位不得反向派生管理员。
 - 投票引擎只决定普选、互选、提名任免等任职结果，不保存第二份管理员或岗位真源。
 - 所有机构在真实法定代表人任免生效后都必须公开上链；创世没有真实任免资料时不得伪造。
 - 个人多签及 `personal-admins` 完全排除在本机构岗位模型之外。
@@ -109,7 +109,7 @@ admins: BoundedVec<AccountId>
 
 1. 纠正文档和任务卡中的通用岗位权限、创世法定代表人错误口径。
 2. 将法定代表人三个公开字段迁移到 `entity`，并完成全端契约对齐。
-3. 在 `entity` 建立机构岗位和任职，`admins` 收口为管理员账户集合。
+3. 在 `entity` 建立机构岗位和任职；2026-07-17 更正为 `admins` 独立保存姓名与账户，不由任职派生。
 4. 接通创世、注册局和现有普选/互选来源，建立可供未来业务调用的通用机构治理结果底座；不提前实现具体业务细则。
 5. 改造 OnChina、CitizenApp 和公民钱包的管理与展示。
 6. Node 模型改造、全仓残留清理与真实运行态验收；重新创世单独执行。
@@ -125,7 +125,7 @@ admins: BoundedVec<AccountId>
 
 - [x] 修正“链上不保存真实身份”过宽口径，区分普通公民隐私与依法公开身份。
 - [x] 确认真实法定代表人任免生效后三个字段必须公开上链，创世不得伪造或回退到 `admins[0]`。
-- [x] 确认机构岗位和任职关系归 `entity`，管理员账户集合归 `admins`。
+- [x] 确认机构岗位和任职关系归 `entity`；2026-07-17 更正为管理员姓名与账户人员集合归 `admins`。
 - [x] 删除无代码依据的 `role_permissions` 和通用岗位权限口径。
 - [x] 确认任职只记录制度来源，不存在 `creator`。
 - [x] 确认个人多签完全排除在本任务的机构岗位模型之外。
@@ -148,7 +148,7 @@ admins: BoundedVec<AccountId>
 
 - [x] 在 `entity-primitives` 建立 `InstitutionRole`、`InstitutionAdminAssignment`、岗位/任职状态和五类任职来源的统一 SCALE 类型。
 - [x] 公权与私权 `entity` 新增按“机构 CID + 岗位代码”存储的岗位目录和任职关系；初始管理员钱包集合由有效任职去重派生，不再由调用方重复提交第二份名单。
-- [x] 机构创建签名域加入完整岗位与任职载荷，注册创建只接受 `Registry` 来源；创世写入只接受 `Genesis` 来源。
+- [x] 此旧签名域已于 2026-07-17 删除；当前创建凭证覆盖最小身份与 `admins(admin_name + admin_account)`，不携带岗位或任职。
 - [x] `public-admins`、`private-admins` 的机构记录收口为 `cid_number + institution_code + admins + status`，其中 `admins` 只编码钱包账户；删除 `AdminProfile`、机构管理员创建人、创建/更新时间、岗位资料和任职来源副本。
 - [x] 新增不含 `creator` 的机构管理员生命周期接口；个人多签继续使用其独立账户模型和管理员变更流程，不与机构管理员接口混用。
 - [x] 删除公权/私权 admins 中旧机构管理员集合变更 extrinsic、投票回调、Pending 创建路径、旧事件和错误；机构管理员变更必须在第四步由任职结果驱动。
@@ -157,7 +157,7 @@ admins: BoundedVec<AccountId>
 - [x] Node Guard 与创世共用 `primitives/governance_skeleton.rs` 中的固定机构、岗位代码和席位协议清单；
   `runtime/genesis/src/institution/fixed_roles.rs` 负责五类岗位、席位与既有钱包索引映射，
   `runtime/genesis/src/institution/seeder.rs` 是岗位/任职/管理员账户的唯一实际写入方；清单和映射均不写 storage。
-- [x] Node Guard 已按新的 `InstitutionAdminAccount`（cid、机构码、钱包账户集合、状态）镜像校验；
+- [x] Node Guard 当前按 `InstitutionAdmins`（storage key 为 CID，value 为机构码与姓名/钱包人员集合）共享类型校验；
   删除旧 `AdminProfile`、creator/时间字段和不存在的 FRG 虚拟省组规则。FRG 省专员席位仍由 entity 任职真源表达。
 - [x] runtime 新增创世逐项验收，核对固定岗位席位、`Genesis` 来源及每个常量钱包账户；公权/私权 entity、admins、multisig 和 runtime 测试已恢复编译并通过目标测试。
 - [x] 创世模块已拆分为 `institution/mod.rs + fixed_roles.rs + seeder.rs`；构建前断言钱包数量等于席位总数、固定钱包无重复，创世法定代表人三字段保持全空。
@@ -176,7 +176,7 @@ admins: BoundedVec<AccountId>
 - [x] `election-vote` 的普选、互选元数据任期统一为自纪元起 `u32` 天；终态当选结果分别映射为 `PopularElection`、`MutualElection`，以 `proposal_id` SCALE 编码作为 `assignment_source_ref`。
 - [x] runtime 新增结果路由：公权机构交 `public-manage`，私权机构交 `private-manage`；未知机构码关闭失败，不建立第三份任职或管理员真源。
 - [x] entity 在写入前校验目标机构、主账户、岗位状态、任期、结果账户唯一性；固定创世岗位额外按治理骨架强制法定席位数。
-- [x] 目标岗位任职整体替换后，entity 从该机构全部有效岗位任职重新派生去重 admins；岗位任职和 admins 钱包集合在同一 storage transaction 内提交，任一失败全部回滚。
+- [x] 此旧实现已于 2026-07-17 删除：目标岗位任职整体替换只更新岗位/任职，任职必须引用既有管理员，不再派生 admins。
 - [x] 动态机构保持既有 Active 多签阈值，结果无权修改阈值；固定治理机构继续使用代码级固定阈值且不创建动态阈值 storage。
 - [x] `public-admins`、`private-admins` 只保留 entity 内部同步入口，不恢复旧机构管理员变更 call、投票回调、Pending 或兼容分支。
 - [x] `NominationAppointment` 仍只有强类型来源，仓库当前没有合法任免流程生产者和制度规则，本步骤未伪造任免 workflow。
@@ -203,18 +203,18 @@ admins: BoundedVec<AccountId>
 - [x] 单岗位整体同任期结果协议已删除，统一替换为 `InstitutionGovernanceResult`；不保留旧 trait、旧事件或兼容路由。
 - [x] 单个治理结果可同时包含动态岗位定义变化、多个岗位的完整目标任职集合，以及可选的法定代表人姓名、CID、钱包账户三字段整体更新。
 - [x] 每条任职独立携带任期、制度来源、来源引用和状态；不再把一个岗位内所有管理员错误压成同一任期或同一来源。
-- [x] 公权、私权 entity 先校验完整目标状态，再在同一 storage transaction 写入岗位、任职、法定代表人与 admins；任一环节失败全部回滚。
+- [x] 2026-07-17 更正：公权、私权 entity 原子写岗位、任职与法定代表人，但不写独立 admins 人员集合。
 - [x] 动态机构岗位允许新增、名称/任期要求变化、停用和暂时空缺；停用岗位必须同时清空任职。岗位代码作为稳定键，不提供改码路径。
 - [x] 五类固定创世机构的岗位定义不可由运行期业务修改，岗位任职可以依法轮换但必须保持治理骨架法定席位。
 - [x] runtime 只按机构码路由结果；`election-vote` 已改为通用协议的现有生产者，不改变普选/互选业务规则，也不新增提名任免等具体业务模块。
 - [x] 治理结果没有外部 extrinsic，不改变 call index、二维码动作或现有 storage SCALE 布局；法定代表人仍不要求等于管理员。
-- [x] 新增测试覆盖动态岗位、多任职独立任期/来源、动态岗位空缺、停用岗位约束、法定代表人整体更新、admins 派生、四类状态同事务回滚及固定岗位定义/席位保护。
+- [x] 2026-07-17 测试已改为覆盖动态岗位、多任职、空缺岗位、法定代表人更新、admins 不随岗位变化及固定岗位保护。
 - [x] B2 回归验收：entity/admins/选举/立法/runtime 共 200 项测试全部通过；node、runtime `no_std`、`runtime-benchmarks` 和 OnChina 编译通过。benchmark 检查仅保留仓库既有 `resolution-issuance` 未使用 `Hash` 警告。
 - [x] B2 真实运行态：当前源码 production WASM 构建成功，压缩产物 SHA-256 为 `ce23906e713ff629d7d777f0f9905e834c49e444f6de08f8b8a722b78a5e465e`；嵌入该 WASM 的 fresh headless 节点通过 Node Guard 并启动 RPC，`system_health.isSyncing=false`，block#0 为 `0xc6d08c02c14c77305680e024e66a7226804e2cda5bb9dfd718e18868ea61c104`。真实 metadata 含 `InstitutionGovernanceApplied`、`InstitutionRoles`、`InstitutionRoleAssignments`，旧任职结果事件不存在；验收后节点和临时数据均已清理。
 
 ## 第五步执行记录
 
-- [x] OnChina 机构创建表单和冷签编码改为显式提交岗位定义 `roles` 与任职关系 `assignments`；`admins` 只由 entity 从有效任职去重派生，不再提交人数或管理员资料副本。
+- [x] 此旧创建协议已于 2026-07-17 物理删除；当前只提交最小身份与 `admins(admin_name + admin_account)`，不提交 roles/assignments。
 - [x] OnChina 链读改为联合读取 `PublicAdmins/PrivateAdmins::AdminAccounts` 钱包集合与 `PublicManage/PrivateManage` 岗位、任职；联邦注册局省域从稳定的 `PROVINCE_COMMISSIONER_<省码>` 岗位取得，不再读取虚拟省组。
 - [x] OnChina 管理员展示统一改为 `InstitutionAssignmentCard`，删除旧资料卡、旧姓名/CID/岗位内嵌投影和本地管理员姓名编辑依赖；同一钱包可展示多个有效任职。
 - [x] 删除 OnChina 旧 `REPLACE_GOVERNING_REGISTRY` 本地替换动作及其后端预检/写库、scope 迁移、错误码和前端按钮；FRG 岗位任职目录只读，禁止用本地投影冒充换届结果。

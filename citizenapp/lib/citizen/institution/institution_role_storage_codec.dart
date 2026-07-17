@@ -7,10 +7,11 @@ import 'institution_role_models.dart';
 class InstitutionRoleStorageCodec {
   InstitutionRoleStorageCodec._();
 
-  static InstitutionAdminAccountStorage? decodeAdminAccount(Uint8List data) {
+  static InstitutionAdminsStorage? decodeAdmins(Uint8List data) {
     var offset = 0;
     // 机构 CID 是 `AdminAccounts` 的 storage key，不在 value 中重复保存。
-    // value 唯一布局为 institution_code:[u8;4] + admins:BoundedVec<AccountId>。
+    // value 唯一布局为 institution_code:[u8;4]
+    // + admins:BoundedVec<(admin_name:BoundedVec<u8>, admin_account:AccountId)>。
     if (offset + 4 > data.length) return null;
     final code = String.fromCharCodes(
         data.sublist(offset, offset + 4).where((b) => b != 0));
@@ -18,14 +19,24 @@ class InstitutionRoleStorageCodec {
     final count = _readCompact(data, offset);
     if (count == null) return null;
     offset += count.$2;
-    final admins = <String>[];
+    final admins = <InstitutionAdminPerson>[];
     for (var i = 0; i < count.$1; i++) {
+      final name = _readBytes(data, offset, minLength: 1, maxLength: 128);
+      if (name == null) return null;
+      offset = name.$2;
       if (offset + 32 > data.length) return null;
-      admins.add(_hex(data.sublist(offset, offset + 32)));
+      try {
+        admins.add(InstitutionAdminPerson(
+          adminName: utf8.decode(name.$1),
+          adminAccount: _hex(data.sublist(offset, offset + 32)),
+        ));
+      } on FormatException {
+        return null;
+      }
       offset += 32;
     }
     if (offset != data.length) return null;
-    return InstitutionAdminAccountStorage(
+    return InstitutionAdminsStorage(
       institutionCode: code,
       admins: admins,
     );

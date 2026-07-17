@@ -11,13 +11,11 @@ use entity_primitives::{
     InstitutionRole, InstitutionRoleQuery, InstitutionRoleStatus, ASSIGNMENT_SOURCE_REF_MAX_BYTES,
     INSTITUTION_ROLE_CODE_MAX_BYTES,
 };
-use frame_support::{ensure, traits::ConstU32, BoundedVec};
-use sp_runtime::DispatchError;
+use frame_support::{dispatch::DispatchResult, ensure, traits::ConstU32, BoundedVec};
 use sp_std::collections::btree_set::BTreeSet;
 
 use crate::pallet::{
-    AccountNameOf, AdminsOf, CidNumberOf, Config, Error, InstitutionRoleAssignments,
-    InstitutionRoles, Pallet,
+    AccountNameOf, CidNumberOf, Config, Error, InstitutionRoleAssignments, InstitutionRoles, Pallet,
 };
 
 pub type RoleCodeOf = BoundedVec<u8, ConstU32<INSTITUTION_ROLE_CODE_MAX_BYTES>>;
@@ -36,18 +34,14 @@ pub type RoleAssignmentsOf<T> =
     BoundedVec<InstitutionAdminAssignmentOf<T>, <T as Config>::MaxAdmins>;
 
 impl<T: Config> Pallet<T> {
-    /// 注册创建时校验并原子写入岗位、任职，返回去重管理员账户。
-    pub fn store_initial_roles_and_assignments(
+    /// 校验并写入一组机构岗位和任职；管理员集合独立维护，禁止由任职反向派生。
+    pub fn store_roles_and_assignments(
         cid_number: &CidNumberOf<T>,
         roles: &InstitutionRolesOf<T>,
         assignments: &InstitutionAdminAssignmentsOf<T>,
         expected_source: InstitutionAssignmentSource,
-    ) -> Result<AdminsOf<T>, DispatchError> {
+    ) -> DispatchResult {
         ensure!(!roles.is_empty(), Error::<T>::InstitutionRolesEmpty);
-        ensure!(
-            !assignments.is_empty(),
-            Error::<T>::InstitutionAssignmentsEmpty
-        );
 
         let mut role_codes = BTreeSet::new();
         for role in roles.iter() {
@@ -65,8 +59,6 @@ impl<T: Config> Pallet<T> {
         }
 
         let mut assignment_keys = BTreeSet::new();
-        let mut seen_admin_accounts = BTreeSet::new();
-        let mut admin_accounts = Vec::new();
         for assignment in assignments.iter() {
             ensure!(
                 assignment.cid_number == *cid_number,
@@ -102,24 +94,7 @@ impl<T: Config> Pallet<T> {
                 )),
                 Error::<T>::DuplicateAssignment
             );
-            if seen_admin_accounts.insert(assignment.admin_account.clone()) {
-                // 保持任职载荷顺序，admins 仅做去重派生，不按账户字节重新排序。
-                admin_accounts.push(assignment.admin_account.clone());
-            }
         }
-
-        for role in roles.iter() {
-            ensure!(
-                assignments
-                    .iter()
-                    .any(|assignment| assignment.role_code == role.role_code),
-                Error::<T>::RoleHasNoAssignment
-            );
-        }
-
-        let bounded_admins: AdminsOf<T> = admin_accounts
-            .try_into()
-            .map_err(|_| Error::<T>::TooManyInstitutionAdmins)?;
 
         for role in roles.iter() {
             let role_assignments: Vec<InstitutionAdminAssignmentOf<T>> = assignments
@@ -138,7 +113,50 @@ impl<T: Config> Pallet<T> {
             );
         }
 
-        Ok(bounded_admins)
+        Ok(())
+    }
+
+    /// 为新机构写入唯一默认法定代表人岗位；首次登记允许岗位空缺。
+    pub fn store_default_legal_representative_role(cid_number: &CidNumberOf<T>) -> DispatchResult {
+        let role_code: RoleCodeOf =
+            primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE
+                .to_vec()
+                .try_into()
+                .map_err(|_| Error::<T>::InvalidRoleCode)?;
+        let role_name: AccountNameOf<T> =
+            primitives::institution_constraints::ROLE_NAME_LEGAL_REPRESENTATIVE
+                .to_vec()
+                .try_into()
+                .map_err(|_| Error::<T>::InvalidRoleName)?;
+        if let Some(existing) = InstitutionRoles::<T>::get(cid_number, &role_code) {
+            ensure!(
+                existing.cid_number == *cid_number
+                    && existing.role_code == role_code
+                    && existing.role_name == role_name
+                    && !existing.term_required
+                    && existing.role_status == InstitutionRoleStatus::Active
+                    && InstitutionRoleAssignments::<T>::get(cid_number, &role_code).is_empty(),
+                Error::<T>::DuplicateRoleCode
+            );
+            return Ok(());
+        }
+        InstitutionRoles::<T>::insert(
+            cid_number,
+            &role_code,
+            InstitutionRole {
+                cid_number: cid_number.clone(),
+                role_code: role_code.clone(),
+                role_name,
+                term_required: false,
+                role_status: InstitutionRoleStatus::Active,
+            },
+        );
+        InstitutionRoleAssignments::<T>::insert(
+            cid_number,
+            role_code,
+            RoleAssignmentsOf::<T>::default(),
+        );
+        Ok(())
     }
 }
 

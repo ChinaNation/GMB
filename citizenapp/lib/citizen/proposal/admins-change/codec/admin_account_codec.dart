@@ -12,13 +12,13 @@ class AdminAccountCodec {
     required Uint8List data,
     required int institutionKind,
   }) {
-    final decoded = InstitutionRoleStorageCodec.decodeAdminAccount(data);
+    final decoded = InstitutionRoleStorageCodec.decodeAdmins(data);
     if (decoded == null) return null;
     return AdminAccountState(
       cidNumber: cidNumber,
       institutionCode: decoded.institutionCode,
       kind: institutionKind,
-      admins: decoded.admins,
+      admins: decoded.admins.map((admin) => admin.adminAccount).toList(),
       threshold: 0,
     );
   }

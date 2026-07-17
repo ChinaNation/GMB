@@ -87,7 +87,7 @@ citizenapp/test/governance/admins-change/
 规则：
 
 - 只允许 PMUL 个人多签走 `PersonalAdmins(29).propose_admin_set_change(0)`；codec 和 service 对其它 `AdminAccountKind` 关闭失败。
-- 公权、私权、非法人及固定治理机构的管理员变化只能由 entity 治理结果从有效岗位任职派生；CitizenApp 不构造对应管理员集合变更调用。
+- 公权、私权、非法人及固定治理机构的管理员人员集合独立于岗位任职；CitizenApp 当前不构造对应管理员集合变更调用，第2步再接入专用维护协议。
 - `new_threshold` 是载荷必填字段，端上和链端按同一字节结构构造、解析和签名。
 - 个人多签显示动态阈值输入框，端上前置校验：`threshold * 2 > admins_len && threshold <= admins_len`。
 - 个人多签动态阈值由 `InternalVote.ActivePersonalThresholds[personal_account]` 保存；机构阈值按 CID 使用 `ActiveInstitutionThresholds[cid_number]`，不属于本页面。

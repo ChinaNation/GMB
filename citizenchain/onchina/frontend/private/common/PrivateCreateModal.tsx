@@ -10,7 +10,6 @@ import type { ScanSignResolver } from '../../admins/securityApi';
 import {
   checkCidFullName,
   searchParentInstitutions,
-  uploadLegalRepresentativePhoto,
 } from './api';
 
 interface Props {
@@ -31,7 +30,6 @@ export const PrivateCreateModal: React.FC<Props> = (props) => (
     privateType={props.privateType}
     checkCidFullName={checkCidFullName}
     createInstitution={props.createInstitution}
-    uploadLegalRepresentativePhoto={uploadLegalRepresentativePhoto}
     searchParentInstitutions={searchParentInstitutions}
   />
 );

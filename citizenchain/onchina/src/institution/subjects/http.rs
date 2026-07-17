@@ -9,9 +9,7 @@ use crate::auth::login::AdminAuthContext;
 use crate::auth::repo;
 use crate::crypto::pubkey::normalize_admin_account;
 use crate::institution::subjects::model::Institution;
-use crate::institution::subjects::service::{
-    build_required_protocol_accounts_for_institution, ServiceError,
-};
+use crate::institution::subjects::service::ServiceError;
 use crate::{api_error, AppState};
 
 pub(crate) const MAX_PROVINCE_CHARS: usize = 100;
@@ -95,17 +93,4 @@ pub(crate) fn resolve_created_by(
         Ok((name_opt, Some(institution_code)))
     });
     result.unwrap_or((None, None))
-}
-
-pub(crate) async fn insert_required_protocol_accounts(
-    state: &AppState,
-    inst: &Institution,
-    created_by: &str,
-) -> Result<(), String> {
-    let accounts = build_required_protocol_accounts_for_institution(inst, created_by)
-        .map_err(|error| error.message().to_string())?;
-    for account in accounts {
-        state.db.upsert_institution_account_row(&account)?;
-    }
-    Ok(())
 }

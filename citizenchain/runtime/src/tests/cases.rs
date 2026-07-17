@@ -1163,10 +1163,6 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
         let cid_short_name: &[u8] = b"test-inst";
         let account_names: Vec<Vec<u8>> = vec![b"main-account".to_vec(), b"fee-account".to_vec()];
         let town_code: &[u8] = b"";
-        let legal_representative_name: &[u8] = "测试代表".as_bytes();
-        let legal_representative_cid_number: &[u8] = b"CID-LEGAL-REP-001";
-        let legal_representative_account = AccountId::new([77u8; 32]);
-
         let make_signature = |signing_pair: &sr25519::Pair, admin_pubkey: &[u8; 32]| {
             let msg = primitives::sign::institution_registration_message(
                 &frame_system::Pallet::<Runtime>::block_hash(0),
@@ -1210,19 +1206,13 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
             "main admin signature should pass"
         );
 
-        let funding_account = AccountId::new([79u8; 32]);
+        let admins_payload = b"test-admins".as_slice();
         let creation_message = primitives::sign::institution_creation_message(
             &frame_system::Pallet::<Runtime>::block_hash(0),
             cid_number,
             cid_full_name.as_slice(),
             cid_short_name,
-            legal_representative_name,
-            legal_representative_cid_number,
-            &legal_representative_account,
-            &account_names,
-            Some(&funding_account),
-            b"test-roles".as_slice(),
-            b"test-assignments".as_slice(),
+            admins_payload,
             &register_nonce,
             issuer_cid_number.as_slice(),
             &main_admin_pubkey,
@@ -1246,13 +1236,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 cid_number,
                 &cid_full_name,
                 cid_short_name,
-                legal_representative_name,
-                legal_representative_cid_number,
-                &legal_representative_account,
-                &account_names,
-                Some(&funding_account),
-                b"test-roles".as_slice(),
-                b"test-assignments".as_slice(),
+                admins_payload,
                 &register_nonce,
                 &creation_signature,
                 issuer_cid_number.as_slice(),
@@ -1261,7 +1245,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 scope_city_name.as_slice(),
                 town_code,
             ),
-            "institution creation signature covering legal representative fields should pass"
+            "institution creation signature covering admins should pass"
         );
         assert!(
             !<RuntimeCidInstitutionVerifier as entity_primitives::CidInstitutionVerifier<
@@ -1273,13 +1257,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 cid_number,
                 &cid_full_name,
                 cid_short_name,
-                legal_representative_name,
-                legal_representative_cid_number,
-                &AccountId::new([78u8; 32]),
-                &account_names,
-                Some(&funding_account),
-                b"test-roles".as_slice(),
-                b"test-assignments".as_slice(),
+                b"tampered-admins".as_slice(),
                 &register_nonce,
                 &creation_signature,
                 issuer_cid_number.as_slice(),
@@ -1288,34 +1266,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 scope_city_name.as_slice(),
                 town_code,
             ),
-            "tampered legal representative account must reject"
-        );
-        assert!(
-            !<RuntimeCidInstitutionVerifier as entity_primitives::CidInstitutionVerifier<
-                AccountId,
-                public_manage::pallet::AccountNameOf<Runtime>,
-                public_manage::pallet::RegisterNonceOf<Runtime>,
-                public_manage::pallet::RegisterSignatureOf<Runtime>,
-            >>::verify_institution_creation(
-                cid_number,
-                &cid_full_name,
-                cid_short_name,
-                legal_representative_name,
-                legal_representative_cid_number,
-                &legal_representative_account,
-                &account_names,
-                Some(&AccountId::new([80u8; 32])),
-                b"test-roles".as_slice(),
-                b"test-assignments".as_slice(),
-                &register_nonce,
-                &creation_signature,
-                issuer_cid_number.as_slice(),
-                &main_admin_pubkey,
-                province_bytes.as_slice(),
-                scope_city_name.as_slice(),
-                town_code,
-            ),
-            "tampered funding account must reject"
+            "tampered admins must reject"
         );
 
         let backup_signature = make_signature(&backup_pair, &backup_admin_pubkey);
@@ -1716,7 +1667,7 @@ fn genesis_national_singletons_exist_and_member_bodies_are_unconstituted() {
     });
 }
 
-/// 参议会首次组成必须原子满足法定岗位、人数区间和 admins 闭环，之后不得跌破下限。
+/// 参议会必须先独立登记 admins，治理结果只能把既有管理员任命到法定岗位。
 #[test]
 fn national_member_body_first_composition_and_permanent_range_are_enforced() {
     new_test_ext().execute_with(|| {
@@ -1776,6 +1727,28 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
             }
         };
 
+        let established_admins = members(spec.min_members);
+        public_admins::AdminAccounts::<Runtime>::insert(
+            cid_number.clone(),
+            admin_primitives::InstitutionAdmins {
+                institution_code: spec.institution.code,
+                admins: established_admins
+                    .iter()
+                    .cloned()
+                    .map(|admin_account| admin_primitives::InstitutionAdmin {
+                        admin_name: "管理员"
+                            .as_bytes()
+                            .to_vec()
+                            .try_into()
+                            .expect("admin name fits"),
+                        admin_account,
+                    })
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .expect("member body admins fit"),
+            },
+        );
+
         assert_noop!(
             public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(
                 members(spec.min_members - 1),
@@ -1785,12 +1758,12 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
         );
         assert_ok!(
             public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(
-                members(spec.min_members),
+                established_admins.clone(),
                 true,
             ))
         );
         let account = public_admins::AdminAccounts::<Runtime>::get(&cid_number)
-            .expect("first composition creates admins");
+            .expect("admins remain independently registered");
         assert_eq!(account.admins.len() as u32, spec.min_members);
         assert_eq!(
             internal_vote::ActiveInstitutionThresholds::<Runtime>::get(&cid_number),
@@ -1833,7 +1806,7 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
     });
 }
 
-/// 立法院、监察院、总统府创世只占用唯一身份，首次治理结果再原子组成岗位、任职和 admins。
+/// 立法院、监察院、总统府必须先独立登记 admins，岗位任职不得反向生成管理员。
 #[test]
 fn national_singletons_without_member_ranges_can_be_composed_once() {
     new_test_ext().execute_with(|| {
@@ -1857,6 +1830,26 @@ fn national_singletons_without_member_ranges_can_be_composed_once() {
                 .expect("singleton CID fits");
             let role_code_raw = b"RUNTIME_MEMBER".to_vec();
             let admins = vec![AccountId::new([91u8; 32]), AccountId::new([92u8; 32])];
+            public_admins::AdminAccounts::<Runtime>::insert(
+                cid_number.clone(),
+                admin_primitives::InstitutionAdmins {
+                    institution_code: singleton.code,
+                    admins: admins
+                        .iter()
+                        .cloned()
+                        .map(|admin_account| admin_primitives::InstitutionAdmin {
+                            admin_name: "管理员"
+                                .as_bytes()
+                                .to_vec()
+                                .try_into()
+                                .expect("admin name fits"),
+                            admin_account,
+                        })
+                        .collect::<Vec<_>>()
+                        .try_into()
+                        .expect("singleton admins fit"),
+                },
+            );
             let result = entity_primitives::InstitutionGovernanceResult {
                 institution_code: singleton.code,
                 cid_number: singleton.cid_number.as_bytes().to_vec(),
@@ -1891,8 +1884,15 @@ fn national_singletons_without_member_ranges_can_be_composed_once() {
                 public_manage::Pallet::<Runtime>::apply_institution_governance_result(result)
             );
             let account = public_admins::AdminAccounts::<Runtime>::get(&cid_number)
-                .expect("first composition creates admins");
-            assert_eq!(account.admins.to_vec(), admins);
+                .expect("admins remain independently registered");
+            assert_eq!(
+                account
+                    .admins
+                    .iter()
+                    .map(|admin| admin.admin_account.clone())
+                    .collect::<Vec<_>>(),
+                admins
+            );
             assert_eq!(
                 internal_vote::ActiveInstitutionThresholds::<Runtime>::get(cid_number),
                 None
@@ -1969,7 +1969,12 @@ fn genesis_fixed_institution_roles_and_assignments_are_complete() {
                     .expect("committee code")
             );
             assert_eq!(
-                admin_account.admins.into_inner(),
+                admin_account
+                    .admins
+                    .into_inner()
+                    .into_iter()
+                    .map(|admin| admin.admin_account)
+                    .collect::<Vec<_>>(),
                 node.admins
                     .iter()
                     .copied()
@@ -2018,7 +2023,12 @@ fn genesis_fixed_institution_roles_and_assignments_are_complete() {
             let admin_account = public_admins::AdminAccounts::<Runtime>::get(&cid_number)
                 .expect("director admin account exists");
             assert_eq!(
-                admin_account.admins.into_inner(),
+                admin_account
+                    .admins
+                    .into_inner()
+                    .into_iter()
+                    .map(|admin| admin.admin_account)
+                    .collect::<Vec<_>>(),
                 node.admins
                     .iter()
                     .copied()
@@ -2187,6 +2197,18 @@ fn runtime_governance_result_router_enforces_fixed_role_seats() {
             })
             .expect("NJD genesis node exists");
         let result_source_ref = 700u64.encode();
+        let njd_cid_number: public_manage::pallet::CidNumberOf<Runtime> = njd
+            .cid_number
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("NJD cid fits");
+        let njd_admins = public_admins::AdminAccounts::<Runtime>::get(&njd_cid_number)
+            .expect("NJD genesis admins exist")
+            .admins
+            .into_iter()
+            .map(|admin| admin.admin_account)
+            .collect::<Vec<_>>();
         let result = |accounts: Vec<AccountId>| {
             let assignments = accounts
                 .into_iter()
@@ -2233,32 +2255,29 @@ fn runtime_governance_result_router_enforces_fixed_role_seats() {
 
         assert_noop!(
             <RuntimeInstitutionGovernanceResultHandler as entity_primitives::InstitutionGovernanceResultHandler<AccountId>>::apply_institution_governance_result(
-                result(vec![AccountId::new([61u8; 32])])
+                result(vec![njd_admins[0].clone()])
             ),
             public_manage::Error::<Runtime>::FixedRoleSeatsMismatch
         );
 
-        let replacement = (70u8..77)
-            .map(|seed| AccountId::new([seed; 32]))
+        let mut replacement = njd_admins
+            .iter()
+            .take(primitives::governance_skeleton::NJD_CONSTITUTION_GUARD_SEATS as usize)
+            .cloned()
             .collect::<Vec<_>>();
+        replacement.rotate_left(1);
         assert_ok!(
             <RuntimeInstitutionGovernanceResultHandler as entity_primitives::InstitutionGovernanceResultHandler<AccountId>>::apply_institution_governance_result(
                 result(replacement.clone())
             )
         );
 
-        let cid_number: public_manage::pallet::CidNumberOf<Runtime> = njd
-            .cid_number
-            .as_bytes()
-            .to_vec()
-            .try_into()
-            .expect("NJD cid fits");
         let role_code: public_manage::RoleCodeOf = primitives::governance_skeleton::ROLE_CODE_CONSTITUTION_GUARD
             .to_vec()
             .try_into()
             .expect("NJD role code fits");
         let stored = public_manage::InstitutionRoleAssignments::<Runtime>::get(
-            cid_number.clone(),
+            njd_cid_number.clone(),
             role_code,
         );
         assert_eq!(
@@ -2269,7 +2288,7 @@ fn runtime_governance_result_router_enforces_fixed_role_seats() {
             replacement
         );
         assert_eq!(
-            internal_vote::ActiveInstitutionThresholds::<Runtime>::get(cid_number),
+            internal_vote::ActiveInstitutionThresholds::<Runtime>::get(njd_cid_number),
             None
         );
     });

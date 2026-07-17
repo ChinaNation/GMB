@@ -8,7 +8,6 @@ import {
   checkCidFullName,
   createInstitution,
   searchParentInstitutions,
-  uploadLegalRepresentativePhoto,
   type CreateInstitutionOutput,
 } from './api';
 
@@ -27,7 +26,6 @@ export const EducationCreateModal: React.FC<Props> = (props) => (
     category="EDUCATION_FORM"
     checkCidFullName={checkCidFullName}
     createInstitution={createInstitution}
-    uploadLegalRepresentativePhoto={uploadLegalRepresentativePhoto}
     searchParentInstitutions={searchParentInstitutions}
   />
 );

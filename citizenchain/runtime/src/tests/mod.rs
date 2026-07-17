@@ -50,10 +50,14 @@ fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32
         issuer_cid_number.clone(),
         admin_primitives::InstitutionAdmins {
             institution_code: votingengine::types::PRC,
-            // admins 只保存钱包账户；岗位、来源、任期归 entity。
+            // admins 保存姓名和钱包；岗位、来源、任期归 entity。
             admins: admin_accounts
                 .iter()
                 .cloned()
+                .map(|admin_account| admin_primitives::InstitutionAdmin {
+                    admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+                    admin_account,
+                })
                 .collect::<Vec<_>>()
                 .try_into()
                 .expect("test admins should fit"),
@@ -209,9 +213,12 @@ fn setup_frg_citizen_identity_admin(
         cid_number.clone(),
         admin_primitives::InstitutionAdmins {
             institution_code: admin_primitives::FRG,
-            admins: vec![registrar.clone()]
-                .try_into()
-                .expect("single registrar admin fits"),
+            admins: vec![admin_primitives::InstitutionAdmin {
+                admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+                admin_account: registrar.clone(),
+            }]
+            .try_into()
+            .expect("single registrar admin fits"),
         },
     );
     public_manage::AccountRegisteredCid::<Runtime>::insert(

@@ -40,7 +40,7 @@
 
 - `PublicAdmins/PrivateAdmins::AdminAccounts[cid_number]` 是机构执行授权真源。
 - 管理员唯一字段为 `admins`。
-- 岗位和任职统一以 `(cid_number, role_code)` 组织；有效任职变化原子刷新同一 CID 的 `admins`。
+- 岗位和任职统一以 `(cid_number, role_code)` 组织；2026-07-17 起管理员人员集合独立维护，任职变化不得刷新或覆盖同一 CID 的 `admins`。
 - 机构动态阈值使用 `ActiveInstitutionThresholds[cid_number]`。
 - 个人多签继续使用 `ActivePersonalThresholds[personal_account]`，不得伪造机构 CID。
 
@@ -228,7 +228,7 @@
 ### 已完成
 
 - `primitives::fee_policy` 增加唯一链上执行期收费接口；`onchain` 实现通用执行收费器，与外层 `FeeRoute` 共用同一费率常量、80/10/10 分账和 `FeePaid` 事件，不存在第二套费种分类。
-- 公权/私权机构创建 ABI 增加显式 `funding_account`：非零初始本金只能从 actor CID 下符合用途的确切机构账户支出，零初始本金必须不传资金账户；签名原文、OnChina 构建、CitizenWallet 解码已同步。
+- 2026-07-17 后续最小登记协议已删除创建 ABI 的 `funding_account`、账户数组和初始入金；首次登记统一建立零余额协议账户，后续入金另走账户交易。
 - 公权/私权机构创建、关闭，机构多签转账、安全基金转账、费用账户归集和决议销毁的执行费，全部只从 actor CID 的确切费用账户收取；本金仍只从载荷指定的所属机构账户支出，任一账户缺失、归属不一致或余额不足均原子失败，管理员钱包无代付路径。
 - 个人多签创建的本金和执行费由创建者支付；关闭执行费从个人多签账户收取。关闭的重复固定余额门槛已删除，提案和执行均按统一费率公式 + 链上 ED 动态校验。
 - 协议账户仍不允许关闭，只有 `InstitutionNamed` 可关闭；普通支出和收费统一 `KeepAlive`，显式账户关闭转出才使用 `AllowDeath`。

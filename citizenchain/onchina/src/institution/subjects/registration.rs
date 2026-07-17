@@ -10,7 +10,7 @@ use axum::{
     Json,
 };
 use chrono::{Duration, Utc};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use uuid::Uuid;
 
 use crate::auth::actions::require_admin_security_grant;
@@ -21,19 +21,16 @@ use crate::cid::code;
 use crate::cid::InstitutionCategory;
 use crate::crypto::pubkey::normalize_admin_account;
 use crate::domains::private::common::resolve_private_type_rule;
-use crate::institution::admins::model::InstitutionAdmin;
-use crate::institution::admins::repo::upsert_institution_admin;
 use crate::institution::subjects::http::{
-    extract_city_code, extract_province_code, insert_required_protocol_accounts,
-    service_error_to_response, MAX_CITY_CHARS, MAX_PROVINCE_CHARS,
+    extract_city_code, extract_province_code, service_error_to_response, MAX_CITY_CHARS,
+    MAX_PROVINCE_CHARS,
 };
 use crate::institution::subjects::model::{
     is_education_school_type, CreateInstitutionAdminInput, CreateInstitutionInput,
     CreateInstitutionOutput, Institution, InstitutionListFilter, InstitutionListRow,
 };
 use crate::institution::subjects::service::{
-    derive_category, resolve_legal_representative_scope_for_codes, validate_cid_full_name,
-    validate_cid_short_name, validate_legal_representative_required,
+    derive_category, validate_cid_full_name, validate_cid_short_name,
 };
 use crate::institution::subjects::unincorporated_org;
 use crate::scope::get_visible_scope;
@@ -97,10 +94,6 @@ async fn create_institution_inner(
         "parent_cid_number": input.parent_cid_number.clone(),
         "private_type": input.private_type.clone(),
         "partnership_kind": input.partnership_kind.clone(),
-        "legal_representative_name": input.legal_representative_name.clone(),
-        "legal_representative_cid_number": input.legal_representative_cid_number.clone(),
-        "legal_representative_photo_path": input.legal_representative_photo_path.clone(),
-        "threshold": input.threshold,
         "admins": input.admins.clone(),
     });
     if let Err(resp) = require_admin_security_grant(
@@ -135,7 +128,13 @@ async fn create_institution_inner(
     // 机构类别一律由机构码派生。
     let institution = code::institution_code_from_str(&institution_code);
     let p1 = private_rule
-        .map(|rule| rule.p1.to_string())
+        .map(|rule| {
+            if rule.private_type == crate::domains::private::common::PrivateType::Association {
+                input.p1.as_deref().unwrap_or("").trim().to_string()
+            } else {
+                rule.p1.to_string()
+            }
+        })
         .unwrap_or_else(|| input.p1.as_deref().unwrap_or("").trim().to_string());
     if institution.is_none() || institution_code.is_empty() {
         return api_error(StatusCode::BAD_REQUEST, 1001, "institution is required");
@@ -322,7 +321,7 @@ async fn create_institution_inner(
             );
         }
     }
-    let normalized_admins = match validate_initial_admins(&input.admins, input.threshold) {
+    let normalized_admins = match validate_initial_admins(&input.admins) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -353,7 +352,6 @@ async fn create_institution_inner(
             None
         }
     };
-    let mut parent_for_legal_representative_scope: Option<Institution> = None;
     if let Some(ref parent_cid) = parent_cid_number {
         let Some((parent, _)) = (match state.db.get_institution_with_accounts(parent_cid) {
             Ok(v) => v,
@@ -397,49 +395,7 @@ async fn create_institution_inner(
                 "非法人盈利属性必须继承所属法人",
             );
         }
-        parent_for_legal_representative_scope = Some(parent);
     }
-    let Some(province_code_for_legal_rep) = province_code_by_name(&province) else {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "unknown province");
-    };
-    let Some(city_code_for_legal_rep) = city_code_by_name(&province, &city) else {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "unknown city");
-    };
-    let legal_rep = match validate_legal_representative_required(
-        input.legal_representative_name.as_deref(),
-        input.legal_representative_cid_number.as_deref(),
-        input.legal_representative_photo_path.as_deref(),
-        input.legal_representative_photo_name.as_deref(),
-        input.legal_representative_photo_mime.as_deref(),
-        input.legal_representative_photo_size,
-    ) {
-        Ok(v) => v,
-        Err(e) => return service_error_to_response(e),
-    };
-    let legal_representative_scope = resolve_legal_representative_scope_for_codes(
-        institution_code.as_str(),
-        education_type.as_deref(),
-        province_code_for_legal_rep,
-        city_code_for_legal_rep,
-        parent_for_legal_representative_scope.as_ref(),
-    );
-    let legal_representative_account = match state.db.legal_representative_account_in_scope(
-        legal_rep.cid_number.as_str(),
-        &legal_representative_scope,
-    ) {
-        Ok(Some(account)) => account,
-        Ok(None) => {
-            return api_error(
-                StatusCode::BAD_REQUEST,
-                1001,
-                legal_representative_scope.legal_representative_error_message(),
-            );
-        }
-        Err(err) => {
-            let message = format!("query legal representative failed: {err}");
-            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
-        }
-    };
     if let Some(ref cid_full_name_value) = cid_full_name {
         let conflict = match state
             .db
@@ -455,22 +411,23 @@ async fn create_institution_inner(
             return api_error(StatusCode::CONFLICT, 1007, "该机构全称已被使用");
         }
     }
-    // 随机 UUID 种子 + 1000 次撞号重试 + 格式校验 收敛在 cid::seed,
-    // 本处只传参 + DB 查重回调(原行为:DB 错误 .ok().flatten() 视为不存在,逐字节保留)。
+    // 随机 UUID 种子 + 1000 次撞号重试 + 格式校验收敛在 cid::seed。
+    // 正式机构投影和链确认前待登记区必须同时参与撞号保护；任一查询失败均按已占用处理，
+    // 禁止数据库故障时退化为“CID 不存在”。
     let cid = match crate::cid::dynamic_institution_cid(
         province.as_str(),
         city.as_str(),
         institution_code.as_str(),
         p1.as_str(),
         |candidate| {
-            Ok::<bool, std::convert::Infallible>(
-                state
-                    .db
-                    .get_institution_with_accounts(candidate)
-                    .ok()
-                    .flatten()
-                    .is_some(),
-            )
+            let formal_exists = state
+                .db
+                .get_institution_with_accounts(candidate)
+                .map(|value| value.is_some())?;
+            let pending_exists = state
+                .db
+                .pending_institution_registration_exists(candidate)?;
+            Ok::<bool, String>(formal_exists || pending_exists)
         },
     ) {
         Ok(v) => v,
@@ -486,6 +443,10 @@ async fn create_institution_inner(
                 1005,
                 "institution cid_number collision retry exhausted",
             );
+        }
+        Err(crate::cid::SeedCidError::Exists(err)) => {
+            let message = format!("query institution cid_number failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     };
     {
@@ -509,45 +470,70 @@ async fn create_institution_inner(
                 .map(|kind| kind.as_code().to_string()),
             has_legal_personality: private_rule.map(|rule| rule.has_legal_personality),
             parent_cid_number: parent_cid_number.clone(),
-            legal_representative_name: Some(legal_rep.legal_representative_name.clone()),
-            legal_representative_cid_number: Some(legal_rep.cid_number.clone()),
-            legal_representative_account: Some(legal_representative_account),
-            legal_representative_photo_path: Some(legal_rep.photo_path.clone()),
-            legal_representative_photo_name: Some(legal_rep.photo_name.clone()),
-            legal_representative_photo_mime: Some(legal_rep.photo_mime.clone()),
-            legal_representative_photo_size: Some(legal_rep.photo_size),
+            legal_representative_name: None,
+            legal_representative_cid_number: None,
+            legal_representative_account: None,
+            legal_representative_photo_path: None,
+            legal_representative_photo_name: None,
+            legal_representative_photo_mime: None,
+            legal_representative_photo_size: None,
             created_by: ctx.admin_account.clone(),
             created_at: Utc::now(),
         };
-        if let Err(err) = state.db.upsert_institution_row(&inst) {
-            let message = format!("write institution failed: {err}");
-            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
-        }
-        if let Err(err) = insert_required_protocol_accounts(&state, &inst, &ctx.admin_account).await
-        {
-            let message = format!("write required protocol accounts failed: {err}");
-            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
-        }
-        if let Err(err) = insert_initial_admins(
-            &state,
-            &inst,
-            normalized_admins.as_slice(),
-            ctx.admin_account.as_str(),
-        ) {
-            let message = format!("write institution admins failed: {err}");
-            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
-        }
         let institution_create_sign_request = match build_institution_create_sign_request(
             &state,
-            actor_cid_number,
-            cid.as_str(),
-            input.threshold,
+            actor_cid_number.as_str(),
+            &inst,
             normalized_admins.as_slice(),
             ctx.admin_account.as_str(),
         ) {
             Ok(v) => v,
             Err(resp) => return resp,
         };
+        // 链确认前只保存待确认草稿，禁止提前写入 subjects/accounts/admins 正式投影。
+        let institution_payload = match serde_json::to_value(&inst) {
+            Ok(value) => value,
+            Err(err) => {
+                let message = format!("encode pending institution failed: {err}");
+                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+            }
+        };
+        let admins_payload = match serde_json::to_value(&normalized_admins) {
+            Ok(value) => value,
+            Err(err) => {
+                let message = format!("encode pending institution admins failed: {err}");
+                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+            }
+        };
+        let pending_cid = cid.clone();
+        let pending_actor_cid = actor_cid_number.clone();
+        let pending_created_by = ctx.admin_account.clone();
+        if let Err(err) = state.db.with_client(move |conn| {
+            conn.execute(
+                "INSERT INTO pending_institution_registrations (
+                    cid_number, institution_payload, admins_payload,
+                    actor_cid_number, created_by, created_at
+                 ) VALUES ($1, $2, $3, $4, $5, now())
+                 ON CONFLICT (cid_number) DO UPDATE SET
+                    institution_payload = EXCLUDED.institution_payload,
+                    admins_payload = EXCLUDED.admins_payload,
+                    actor_cid_number = EXCLUDED.actor_cid_number,
+                    created_by = EXCLUDED.created_by,
+                    created_at = now()",
+                &[
+                    &pending_cid,
+                    &institution_payload,
+                    &admins_payload,
+                    &pending_actor_cid,
+                    &pending_created_by,
+                ],
+            )
+            .map_err(|e| format!("write pending institution registration failed: {e}"))?;
+            Ok(())
+        }) {
+            let message = format!("write pending institution registration failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+        }
         crate::core::runtime_ops::append_audit_log(
             &state,
             "INSTITUTION_CREATE",
@@ -566,7 +552,6 @@ async fn create_institution_inner(
                 "partnership_kind": inst.partnership_kind.clone(),
                 "parent_cid_number": parent_cid_number.clone(),
                 "admins_len": normalized_admins.len(),
-                "threshold": input.threshold,
             }),
         );
         Json(ApiResponse {
@@ -585,11 +570,8 @@ async fn create_institution_inner(
 
 fn validate_initial_admins(
     admins: &[CreateInstitutionAdminInput],
-    threshold: u32,
 ) -> Result<Vec<CreateInstitutionAdminInput>, Response> {
     let mut unique_accounts = HashSet::new();
-    let mut role_definitions: HashMap<String, (String, bool)> = HashMap::new();
-    let mut assignment_keys = HashSet::new();
     let mut normalized = Vec::with_capacity(admins.len());
     for admin in admins {
         let Some(admin_account) = normalize_admin_account(admin.admin_account.as_str()) else {
@@ -599,67 +581,14 @@ fn validate_initial_admins(
                 "admin_account format invalid",
             ));
         };
-        let role_code = admin.role_code.trim().to_string();
-        if role_code.is_empty()
-            || role_code.len() > 64
-            || !role_code
-                .bytes()
-                .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
-        {
+        if !unique_accounts.insert(admin_account.clone()) {
             return Err(api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "岗位码只能包含大写字母、数字、下划线，且不得超过 64 字节",
+                "管理员账户不能重复",
             ));
         }
-        let role_name = admin.role_name.trim().to_string();
-        if role_name.is_empty() {
-            return Err(api_error(StatusCode::BAD_REQUEST, 1001, "岗位名称不能为空"));
-        }
-        let term_start = admin.term_start.unwrap_or(0);
-        let term_end = admin.term_end.unwrap_or(0);
-        if admin.term_required {
-            if term_start == 0 || term_end <= term_start {
-                return Err(api_error(
-                    StatusCode::BAD_REQUEST,
-                    1001,
-                    "有任期岗位必须填写有效的开始和结束日序",
-                ));
-            }
-        } else if term_start != 0 || term_end != 0 {
-            return Err(api_error(
-                StatusCode::BAD_REQUEST,
-                1001,
-                "无任期岗位的开始和结束日序必须为 0",
-            ));
-        }
-        if let Some((known_name, known_term_required)) = role_definitions.get(&role_code) {
-            if known_name != &role_name || *known_term_required != admin.term_required {
-                return Err(api_error(
-                    StatusCode::BAD_REQUEST,
-                    1001,
-                    "同一岗位码的岗位名称和任期规则必须一致",
-                ));
-            }
-        } else {
-            role_definitions.insert(role_code.clone(), (role_name.clone(), admin.term_required));
-        }
-        if !assignment_keys.insert((admin_account.clone(), role_code.clone())) {
-            return Err(api_error(
-                StatusCode::BAD_REQUEST,
-                1001,
-                "同一管理员账户不能重复绑定同一岗位",
-            ));
-        }
-        unique_accounts.insert(admin_account.clone());
-        normalized.push(CreateInstitutionAdminInput {
-            admin_account,
-            role_code,
-            role_name,
-            term_required: admin.term_required,
-            term_start: Some(term_start),
-            term_end: Some(term_end),
-        });
+        normalized.push(CreateInstitutionAdminInput { admin_account });
     }
     if unique_accounts.len() < 2 {
         return Err(api_error(
@@ -668,92 +597,26 @@ fn validate_initial_admins(
             "机构初始管理员至少需要 2 人",
         ));
     }
-    let admins_len = unique_accounts.len() as u32;
-    let min_threshold = admins_len / 2 + 1;
-    if threshold < min_threshold || threshold > admins_len {
-        return Err(api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "管理员阈值必须严格过半且不超过管理员人数",
-        ));
-    }
     Ok(normalized)
-}
-
-fn insert_initial_admins(
-    state: &AppState,
-    inst: &Institution,
-    admins: &[CreateInstitutionAdminInput],
-    created_by: &str,
-) -> Result<(), String> {
-    let now = Utc::now();
-    let mut inserted_accounts = HashSet::new();
-    for admin in admins {
-        // 本地表只缓存管理员钱包；同一钱包的多个岗位只在链上 entity 任职关系保存。
-        if !inserted_accounts.insert(admin.admin_account.as_str()) {
-            continue;
-        }
-        upsert_institution_admin(
-            &state.db,
-            &InstitutionAdmin {
-                cid_number: inst.cid_number.clone(),
-                province_code: inst.province_code.clone(),
-                city_code: Some(inst.city_code.clone()).filter(|v| !v.trim().is_empty()),
-                admin_account: admin.admin_account.clone(),
-                admin_department: None,
-                admin_job: None,
-                admin_contact_phone: None,
-                admin_contact_email: None,
-                admin_photo_path: None,
-                admin_photo_name: None,
-                admin_photo_mime: None,
-                admin_photo_size: None,
-                admin_passkey_credential_id: None,
-                admin_source_id: None,
-                admin_status: Some("ACTIVE".to_string()),
-                admin_updated_at: Some(now),
-                created_by: Some(created_by.to_string()),
-                operation_log_id: None,
-                created_at: now,
-                province_name: inst.province_name.clone(),
-                city_name: inst.city_name.clone(),
-            },
-        )?;
-    }
-    Ok(())
 }
 
 fn build_institution_create_sign_request(
     state: &AppState,
-    actor_cid_number: String,
-    cid_number: &str,
-    threshold: u32,
+    actor_cid_number: &str,
+    inst: &Institution,
     admins: &[CreateInstitutionAdminInput],
     actor_pubkey: &str,
 ) -> Result<String, Response> {
     let action_id = format!("cid-institution-create-{}", Uuid::new_v4());
     let issued_at = Utc::now();
     let expires_at = issued_at + Duration::seconds(120);
-    let chain = state
-        .db
-        .with_client({
-            let state = state.clone();
-            let actor_cid_number = actor_cid_number.clone();
-            let cid_number = cid_number.to_string();
-            let admins = admins.to_vec();
-            move |conn| {
-                let data =
-                    crate::institution::subjects::registration_call::build_create_institution_call_data(
-                        &state,
-                        conn,
-                        actor_cid_number.as_str(),
-                        cid_number.as_str(),
-                        threshold,
-                        &admins,
-                    )?;
-                Ok(data)
-            }
-        })
+    let chain =
+        crate::institution::subjects::registration_call::build_create_institution_call_data(
+            state,
+            actor_cid_number,
+            inst,
+            admins,
+        )
         .map_err(|err| {
             let message = format!("build institution chain call failed: {err}");
             api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str())

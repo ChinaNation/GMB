@@ -80,13 +80,24 @@ class InstitutionAdminAssignment {
       );
 }
 
-/// admins pallet 的机构管理员账户值；只含钱包集合，不含岗位资料。
-class InstitutionAdminAccountStorage {
-  const InstitutionAdminAccountStorage({
+/// 机构管理员人员记录；姓名只展示，账户是唯一授权字段。
+class InstitutionAdminPerson {
+  const InstitutionAdminPerson({
+    required this.adminName,
+    required this.adminAccount,
+  });
+
+  final String adminName;
+  final String adminAccount;
+}
+
+/// admins pallet 的机构管理员值；岗位资料仍由 entity 独立保存。
+class InstitutionAdminsStorage {
+  const InstitutionAdminsStorage({
     required this.institutionCode,
     required this.admins,
   });
 
   final String institutionCode;
-  final List<String> admins;
+  final List<InstitutionAdminPerson> admins;
 }

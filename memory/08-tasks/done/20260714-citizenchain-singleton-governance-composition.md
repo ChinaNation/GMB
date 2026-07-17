@@ -2,7 +2,7 @@
 
 ## 状态
 
-- 已完成（2026-07-14）。
+- 已完成（2026-07-14）；管理员派生部分已于 2026-07-17 被独立 admins 人员模型替代。
 - 第 1/5 至第 5/5 步均已完成。
 
 ## 任务目标
@@ -16,7 +16,7 @@
 ## 设计边界
 
 - 六个国家机构保留现有 block#0 机构身份、CID、主账户和费用账户。
-- 六个国家单例允许从创世“尚未组成”状态原子写入岗位、任职和 admins；NSN、NRP、NED 组成后不得删除指定成员岗位或退回人数下限以下。
+- 六个国家单例创世具有空缺 `LR / 法定代表人` 默认岗位；组成前必须先独立建立 admins，再由治理结果写入成员岗位和任职。NSN、NRP、NED 组成后不得删除指定成员岗位或退回人数下限以下。
 - 三个成员机构的 admins 必须等于指定成员岗位有效任职钱包去重集合，避免非成员获得代表机构投票资格。
 - 其他辅助岗位允许运行期增删改，但不得引入指定成员岗位之外的新 admin 钱包。
 - 不修改 ConstitutionGuard，不放宽 NodeGuard 的发行、PoW、CID、GenesisPallet 等既有策略。
@@ -51,7 +51,7 @@
 - [x] `resolution-destroy` 继续在业务模块固定 NRC/PRC/PRB，新增 NJD 拒绝回归；`grandpakey-change` 现有 NRC/PRC 限权复核正确。
 - [x] 第 1 步验证：`internal-vote` 88、`multisig` 24、`resolution-destroy` 15、`grandpakey-change` 17 项测试通过，runtime 整体 `cargo check` 通过。
 - [x] 第 2 步删除首次组成自动写入动态阈值的错误实现；六个国家单例拒绝所有账户级动态阈值写入，一般内部事项在提案创建时按 admins 快照生成 `floor(N/2)+1` 阈值快照。
-- [x] 六个国家单例首次有效治理结果只原子写岗位、任职和 admins；NSN/NRP/NED 继续强制法定岗位、人数区间和 admins 闭环，NLG/NSP/PRS 不增加岗位或人数限制。
+- [x] 2026-07-17 更正：首次有效治理结果只写岗位和任职，admins 必须预先独立登记；NSN/NRP/NED 继续强制法定岗位、人数区间和既有管理员闭环。
 - [x] 第 2 步验证：primitives 66、`internal-vote` 89、`public-admins` 8、`public-manage` 42、runtime 集成 40 项测试通过；runtime 默认特性与 `no_std` 编译通过。
 - [x] 第 3 步：业务执行端不再只凭“提案已通过”放行。多签转账、销毁、GRANDPA 密钥变更、机构/个人生命周期统一绑定 callback scope、`ProposalOwner`、proposal kind/stage、机构码、账户、CID 和业务 action，并在执行前复核当前业务权限。
 - [x] 联合业务同时接受 `STAGE_JOINT` 与 `STAGE_REFERENDUM` 的合法通过终态；决议发行和 runtime 升级新增联合公投通过回归，runtime 升级额外复算 wasm 对象哈希。
@@ -67,7 +67,7 @@
 
 - 新增 `primitives::institution_constraints` 单一真源，六个国家级单例身份、两院组成关系、三个成员岗位及人数区间不再散落手写。
 - runtime 注册局拒绝新建六类单例码，public-manage 注销入口拒绝关闭；NodeGuard 同时拒绝固定治理码/六类单例码占用非规范 CID。
-- 六个国家单例创世保持岗位、任职、admins 和动态阈值全空；首次治理结果原子写岗位、任职和 admins。旧的账户级最小严格过半动态阈值实现已删除。
+- 六个国家单例创世只含空缺默认 LR 岗位，不含成员岗位、任职、admins 或动态阈值；组成前先独立登记 admins，治理结果再写成员岗位和任职。
 - 新增 `national_body_composition` 原生策略；五类固定治理码的 `InternalThresholdSnapshot` 必须等于编译期阈值，FRG 省岗位组上下文同样覆盖。
 - 当前累计回归：primitives 66/66、public-admins 8/8、public-manage 42/42、runtime 集成 40/40、NodeGuard 整组 88/88；其中 NodeGuard 国家组成专项 8/8、CID 生命周期专项 15/15。
 - 最新正式冻结：GitHub `CitizenChain WASM` run `29530114067` artifact 校验通过；`runtime_wasm_hash=be4585ce369e658e6799be667ed5be692fc050f9c6196ab14c53f7dfa5dc6e70`，物化耗时 51 秒。

@@ -40,7 +40,8 @@ class InstitutionAdminService {
     return _accountService.fetchAdmins(identity);
   }
 
-  /// 从 entity 唯一真源读取机构岗位和有效任职，并与 admins 钱包集合交叉校验。
+  /// 从 entity 读取机构岗位和有效任职，并与独立 admins 钱包集合交叉校验。
+  /// 管理员可以暂时不担任任何岗位，因此不要求岗位任职覆盖全部管理员。
   Future<List<InstitutionAdminAssignment>> fetchAssignments(
     AdminAccountIdentity identity,
     String cidNumber,
@@ -79,10 +80,6 @@ class InstitutionAdminService {
           out.add(assignment.withRole(role));
         }
       }
-    }
-    final covered = out.map((assignment) => assignment.adminAccount).toSet();
-    if (!covered.containsAll(adminSet)) {
-      throw StateError('机构管理员钱包缺少有效岗位任职');
     }
     return out;
   }

@@ -1,6 +1,6 @@
 # 第1部分 · 公民币订阅完整技术架构（可直接实现）
 
-> **对抗审查已并入（3 CRITICAL + 2 HIGH）**：① `Subscriptions` 改**单 hasher** `StorageMap<(AccountId,IssuerKey)>` 匹配 BFF storageMapKey；② `SubscriptionPlan` 是 **2 字节枚举** `[tag][value]`（非 1B）；③ `CreatorTier` 是 **17 字节含 tier_code**（非 16B）；④ 桶满**不误判欠费**（只真实余额失败才 PastDue）；⑤ `do_subscribe` **幂等防双扣** + `SubscriptionStatus` 补 `Cancelled`。★`pallet_index=34`（复用 square-post，非 35）。call_index 待拍板。
+> **对抗审查已并入（3 CRITICAL + 2 HIGH）**：① `Subscriptions` 改**单 hasher** `StorageMap<(AccountId,IssuerKey)>` 匹配 BFF storageMapKey；② `SubscriptionPlan` 是 **2 字节枚举** `[tag][value]`（非 1B）；③ `CreatorTier` 是 **17 字节含 tier_code**（非 16B）；④ 桶满**不误判欠费**（只真实余额失败才 PastDue）；⑤ `do_subscribe` **幂等防双扣** + `SubscriptionStatus` 补 `Cancelled`。⑥ **订阅所有类型/常量/trait 全在 `square-post` 模块内声明，零 `primitives`（区块链核心常量库）改动**——`MembershipLevel`/护栏常量/按月周期/`IncomeLedgerWriter` trait 均为 square-post 私有，不得写入 primitives（§2.2/§2.3 的 primitives 写法为错误残留，以模块内声明为准）。★`pallet_index=34`（复用 square-post，非 35）。call_index 待拍板。
 
 真源依据：`memory/01-architecture/gmb/membership-tax.md` + `memory/08-tasks/open/20260716-citizen-coin-subscription.md` + ADR-037；文档与代码冲突处一律以**任务卡 + 实际代码基线**为准（下文★逐字项已核实）。
 
@@ -64,11 +64,14 @@ runtime/misc/square-post/src/
 
 **Cargo.toml**（仿 `grammar/grandpakey-change`）新增 path 依赖：`primitives`、`votingengine`、`entity-primitives`，均透传 `/std` feature；`[dev-dependencies]` 加 `internal-vote` 供治理路径测试。
 
-### 2.2 primitives 新增（纯类型，不放 storage）
+### 2.2 类型与常量（★全在 square-post 模块内，零 primitives 改动）
+
+> 全部声明在 **`square-post/src/subscription.rs`** 模块内（pallet 私有），**不进 `primitives`**（核心常量库只放全链共享基础设施，订阅业务不得写入）。第1部分**不含 IncomeLedger**（税务第2部分再在 square-post 加 Config 关联类型 + billing 调用点）。
 
 ```rust
-// primitives/src/membership_price.rs
+// ── square-post/src/subscription.rs 内（模块私有，非 primitives） ──
 #[derive(Clone, Copy, Encode, Decode, DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[repr(u8)]
 pub enum MembershipLevel { Freedom = 0, Democracy = 1, Spark = 2 }
 
 pub const PLATFORM_PRICE_DEFAULT_FEN: [(MembershipLevel, u128); 3] = [
@@ -76,26 +79,18 @@ pub const PLATFORM_PRICE_DEFAULT_FEN: [(MembershipLevel, u128); 3] = [
     (MembershipLevel::Democracy, 599_900),
     (MembershipLevel::Spark,     5_999_900),
 ];
-pub const PLATFORM_PRICE_MIN_FEN: u128 = /* 拍板 */;
-pub const PLATFORM_PRICE_MAX_FEN: u128 = /* 拍板 */;
-pub const CREATOR_PRICE_MIN_FEN: u128 = /* 拍板 */;
-pub const CREATOR_PRICE_MAX_FEN: u128 = /* 拍板 */;
+pub const PLATFORM_PRICE_MIN_FEN: u128 = 100;            // 【推荐·拍板】1 元
+pub const PLATFORM_PRICE_MAX_FEN: u128 = 100_000_000;   // 【推荐·拍板】100 万元
+pub const CREATOR_PRICE_MIN_FEN: u128 = 100;            // 【推荐·拍板】1 元
+pub const CREATOR_PRICE_MAX_FEN: u128 = 10_000_000;     // 【推荐·拍板】10 万元/月
 
-// primitives/src/income_ledger.rs
-pub struct TaxPeriod { pub year: u16, pub month: u8 }
-pub trait IncomeLedgerWriter<AccountId, Balance> {
-    fn record_income(payee: AccountId, period: TaxPeriod, amount: Balance) -> DispatchResult;
-}
-impl<A, B> IncomeLedgerWriter<A, B> for () {
-    fn record_income(_: A, _: TaxPeriod, _: B) -> DispatchResult { Ok(()) }  // 第1/2期空实现
-}
-pub fn tax_period_at(now_ms: u64) -> TaxPeriod { /* no_std 民用公历天数算法 */ }
+/// 按月扣款周期（区块）。30 天@6 分钟/块 = 7200；模块内 const，不读也不改 pow_const。
+pub const BILLING_PERIOD_BLOCKS: u32 = 7_200;
 
-// primitives/src/pow_const.rs 追加一行
-pub const BLOCKS_PER_MONTH: u64 = BLOCKS_PER_DAY * 30; // =7_200，30天制度近似月
+// IncomeLedgerWriter trait + TaxPeriod：第1部分不建，税务第2部分在本模块内加（下游 tax pallet 实现）。
 ```
 
-> ★依据维度1/3：`BLOCKS_PER_MONTH=7_200` 是制度近似（30天口径），与 `BLOCKS_PER_YEAR=87_600` 独立使用、**互不换算**，不要从年值反推月值。
+> ★零 primitives：`BILLING_PERIOD_BLOCKS` 是订阅业务常量，声明在 square-post 模块内；不往 `primitives::pow_const` 加、也不必读它（7200 直接写死并注释口径）。
 
 ### 2.3 Config（完整关联类型）
 
@@ -109,8 +104,9 @@ pub trait Config: frame_system::Config + votingengine::Config {
     type CitizenIdentity: SquarePostCitizenIdentityProvider<Self::AccountId>;   // 既有，发帖用
     type Currency: Currency<Self::AccountId>;                                    // 扣款/收款共用
     type InstitutionAccountQuery: entity_primitives::InstitutionMultisigQuery<Self::AccountId>;
-    type IncomeLedger: primitives::income_ledger::IncomeLedgerWriter<Self::AccountId, BalanceOf<Self>>;
-    type TimeProvider: UnixTime;                                                 // 仅记账期年/月
+    // ★第1部分不含以下两项（属税务，第2部分再加）；MembershipLevel/护栏/trait 均在 square-post 模块内，不进 primitives：
+    // type IncomeLedger: IncomeLedgerWriter<Self::AccountId, BalanceOf<Self>>;  // 模块内 trait，第2部分税务 pallet 实现
+    // type TimeProvider: UnixTime;                                              // 第2部分记账期年/月
     type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
     #[pallet::constant] type MaxSquarePostIdLen: Get<u32>;

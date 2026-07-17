@@ -1,8 +1,7 @@
 //! `propose_create_institution` SCALE call-data 编码器。
 //!
-//! OnChina 只构造裸 call data，不提交 extrinsic。机构初始管理员只通过
-//! 机构岗位 `roles` 与管理员任职 `assignments` 编码，
-//! `admins` 由 entity 从有效任职去重派生。
+//! OnChina 只构造裸 call data，不提交 extrinsic。首次登记只编码机构最小身份和
+//! `admins(admin_name + admin_account)`；协议账户、法定代表人岗位和阈值由 runtime 派生。
 
 use codec::{Compact, Encode};
 
@@ -22,61 +21,11 @@ pub fn create_institution_pallet_index(institution_code: &[u8; 4]) -> u8 {
     }
 }
 
-/// 机构岗位状态 SCALE 判别值。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
-pub enum InstitutionRoleStatusTag {
-    Active = 0,
-    Inactive = 1,
-}
-
-/// 机构任职来源 SCALE 判别值。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
-pub enum InstitutionAssignmentSourceTag {
-    Genesis = 0,
-    Registry = 1,
-    PopularElection = 2,
-    MutualElection = 3,
-    NominationAppointment = 4,
-}
-
-/// 机构任职状态 SCALE 判别值。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
-pub enum InstitutionAssignmentStatusTag {
-    Active = 0,
-    Ended = 1,
-}
-
-/// 单个机构初始账户。
+/// 首次登记管理员人员记录。
 #[derive(Debug, Clone)]
-pub struct InitialAccountArg {
-    pub account_name: String,
-    pub amount: u128,
-}
-
-/// 单个机构岗位定义，对齐 `entity_primitives::InstitutionRole` 字段顺序。
-#[derive(Debug, Clone)]
-pub struct InstitutionRoleArg {
-    pub cid_number: Vec<u8>,
-    pub role_code: Vec<u8>,
-    pub role_name: Vec<u8>,
-    pub term_required: bool,
-    pub role_status: InstitutionRoleStatusTag,
-}
-
-/// 单条管理员任职，对齐 `entity_primitives::InstitutionAdminAssignment` 字段顺序。
-#[derive(Debug, Clone)]
-pub struct InstitutionAssignmentArg {
-    pub cid_number: Vec<u8>,
+pub struct InstitutionAdminArg {
+    pub admin_name: Vec<u8>,
     pub admin_account: [u8; 32],
-    pub role_code: Vec<u8>,
-    pub term_start: u32,
-    pub term_end: u32,
-    pub assignment_source: InstitutionAssignmentSourceTag,
-    pub assignment_source_ref: Vec<u8>,
-    pub assignment_status: InstitutionAssignmentStatusTag,
 }
 
 /// `propose_create_{public,private}_institution` 完整参数。
@@ -86,16 +35,9 @@ pub struct ProposeCreateInstitutionArgs {
     pub cid_full_name: Vec<u8>,
     pub cid_short_name: Vec<u8>,
     pub town_code: Vec<u8>,
-    pub legal_representative_name: Vec<u8>,
-    pub legal_representative_cid_number: Vec<u8>,
-    pub legal_representative_account: [u8; 32],
-    pub accounts: Vec<InitialAccountArg>,
-    /// 零初始余额必须为 None；非零初始余额必须是操作机构的明确资金账户。
-    pub funding_account: Option<[u8; 32]>,
+    pub admins: Vec<InstitutionAdminArg>,
+    /// 只用于选择 public/private pallet，不编码进 runtime call。
     pub institution_code: [u8; 4],
-    pub roles: Vec<InstitutionRoleArg>,
-    pub assignments: Vec<InstitutionAssignmentArg>,
-    pub threshold: u32,
     pub register_nonce: Vec<u8>,
     pub signature: Vec<u8>,
     pub actor_cid_number: Vec<u8>,
@@ -109,39 +51,12 @@ fn encode_bytes(out: &mut Vec<u8>, value: &[u8]) {
     out.extend_from_slice(value);
 }
 
-fn encode_role(out: &mut Vec<u8>, role: &InstitutionRoleArg) {
-    encode_bytes(out, &role.cid_number);
-    encode_bytes(out, &role.role_code);
-    encode_bytes(out, &role.role_name);
-    out.push(u8::from(role.term_required));
-    out.push(role.role_status as u8);
-}
-
-fn encode_assignment(out: &mut Vec<u8>, assignment: &InstitutionAssignmentArg) {
-    encode_bytes(out, &assignment.cid_number);
-    out.extend_from_slice(&assignment.admin_account);
-    encode_bytes(out, &assignment.role_code);
-    out.extend(assignment.term_start.to_le_bytes());
-    out.extend(assignment.term_end.to_le_bytes());
-    out.push(assignment.assignment_source as u8);
-    encode_bytes(out, &assignment.assignment_source_ref);
-    out.push(assignment.assignment_status as u8);
-}
-
-/// 构造与 runtime `roles.encode()` 完全一致的签名载荷。
-pub fn encode_roles_payload(roles: &[InstitutionRoleArg]) -> Vec<u8> {
-    let mut out = Compact(roles.len() as u32).encode();
-    for role in roles {
-        encode_role(&mut out, role);
-    }
-    out
-}
-
-/// 构造与 runtime `assignments.encode()` 完全一致的签名载荷。
-pub fn encode_assignments_payload(assignments: &[InstitutionAssignmentArg]) -> Vec<u8> {
-    let mut out = Compact(assignments.len() as u32).encode();
-    for assignment in assignments {
-        encode_assignment(&mut out, assignment);
+/// 构造与 runtime `BoundedVec<InstitutionAdmin>` 完全一致的签名与 call 载荷。
+pub fn encode_admins_payload(admins: &[InstitutionAdminArg]) -> Vec<u8> {
+    let mut out = Compact(admins.len() as u32).encode();
+    for admin in admins {
+        encode_bytes(&mut out, &admin.admin_name);
+        out.extend_from_slice(&admin.admin_account);
     }
     out
 }
@@ -166,22 +81,7 @@ pub fn encode_propose_create_institution(args: &ProposeCreateInstitutionArgs) ->
     encode_bytes(&mut out, &args.cid_full_name);
     encode_bytes(&mut out, &args.cid_short_name);
     encode_bytes(&mut out, &args.town_code);
-    encode_bytes(&mut out, &args.legal_representative_name);
-    encode_bytes(&mut out, &args.legal_representative_cid_number);
-    out.extend_from_slice(&args.legal_representative_account);
-
-    out.extend(Compact(args.accounts.len() as u32).encode());
-    for account in &args.accounts {
-        encode_bytes(&mut out, account.account_name.as_bytes());
-        out.extend(account.amount.to_le_bytes());
-    }
-    out.extend(args.funding_account.encode());
-
-    out.extend_from_slice(&args.institution_code);
-    out.extend(encode_roles_payload(&args.roles));
-    out.extend(encode_assignments_payload(&args.assignments));
-
-    out.extend(args.threshold.to_le_bytes());
+    out.extend(encode_admins_payload(&args.admins));
     encode_bytes(&mut out, &args.register_nonce);
     encode_bytes(&mut out, &args.signature);
     encode_bytes(&mut out, &args.actor_cid_number);
@@ -198,128 +98,43 @@ pub fn encode_propose_create_institution(args: &ProposeCreateInstitutionArgs) ->
 #[cfg(test)]
 mod tests {
     use super::*;
-    use entity_primitives::{
-        InstitutionAdminAssignment, InstitutionAssignmentSource, InstitutionAssignmentStatus,
-        InstitutionRole, InstitutionRoleStatus,
-    };
-
-    fn sample_role() -> InstitutionRoleArg {
-        InstitutionRoleArg {
-            cid_number: b"GD001-COMPANY-0001".to_vec(),
-            role_code: b"DIRECTOR".to_vec(),
-            role_name: "董事".as_bytes().to_vec(),
-            term_required: true,
-            role_status: InstitutionRoleStatusTag::Active,
-        }
-    }
-
-    fn sample_assignment(seed: u8) -> InstitutionAssignmentArg {
-        InstitutionAssignmentArg {
-            cid_number: b"GD001-COMPANY-0001".to_vec(),
-            admin_account: [seed; 32],
-            role_code: b"DIRECTOR".to_vec(),
-            term_start: 20_000,
-            term_end: 21_825,
-            assignment_source: InstitutionAssignmentSourceTag::Registry,
-            assignment_source_ref: b"registry-record-1".to_vec(),
-            assignment_status: InstitutionAssignmentStatusTag::Active,
-        }
-    }
-
     #[test]
-    fn role_and_assignment_tags_match_entity_enums() {
-        assert_eq!(
-            InstitutionRoleStatusTag::Active as u8,
-            InstitutionRoleStatus::Active.encode()[0]
-        );
-        assert_eq!(
-            InstitutionRoleStatusTag::Inactive as u8,
-            InstitutionRoleStatus::Inactive.encode()[0]
-        );
-        let sources = [
-            (
-                InstitutionAssignmentSourceTag::Genesis,
-                InstitutionAssignmentSource::Genesis,
-            ),
-            (
-                InstitutionAssignmentSourceTag::Registry,
-                InstitutionAssignmentSource::Registry,
-            ),
-            (
-                InstitutionAssignmentSourceTag::PopularElection,
-                InstitutionAssignmentSource::PopularElection,
-            ),
-            (
-                InstitutionAssignmentSourceTag::MutualElection,
-                InstitutionAssignmentSource::MutualElection,
-            ),
-            (
-                InstitutionAssignmentSourceTag::NominationAppointment,
-                InstitutionAssignmentSource::NominationAppointment,
-            ),
+    fn admin_payload_encodes_name_then_account() {
+        let admins = vec![
+            InstitutionAdminArg {
+                admin_name: "张三".as_bytes().to_vec(),
+                admin_account: [1; 32],
+            },
+            InstitutionAdminArg {
+                admin_name: "管理员".as_bytes().to_vec(),
+                admin_account: [2; 32],
+            },
         ];
-        for (tag, real) in sources {
-            assert_eq!(tag as u8, real.encode()[0]);
-        }
-        assert_eq!(
-            InstitutionAssignmentStatusTag::Active as u8,
-            InstitutionAssignmentStatus::Active.encode()[0]
-        );
-        assert_eq!(
-            InstitutionAssignmentStatusTag::Ended as u8,
-            InstitutionAssignmentStatus::Ended.encode()[0]
-        );
+        let expected = admins
+            .iter()
+            .map(|admin| (admin.admin_name.clone(), admin.admin_account))
+            .collect::<Vec<_>>();
+        assert_eq!(encode_admins_payload(&admins), expected.encode());
     }
 
     #[test]
-    fn role_and_assignment_encoding_match_entity_types() {
-        let role = sample_role();
-        let mut encoded_role = Vec::new();
-        encode_role(&mut encoded_role, &role);
-        let real_role = InstitutionRole {
-            cid_number: role.cid_number.clone(),
-            role_code: role.role_code.clone(),
-            role_name: role.role_name.clone(),
-            term_required: role.term_required,
-            role_status: InstitutionRoleStatus::Active,
-        };
-        assert_eq!(encoded_role, real_role.encode());
-
-        let assignment = sample_assignment(7);
-        let mut encoded_assignment = Vec::new();
-        encode_assignment(&mut encoded_assignment, &assignment);
-        let real_assignment = InstitutionAdminAssignment {
-            cid_number: assignment.cid_number.clone(),
-            admin_account: assignment.admin_account,
-            role_code: assignment.role_code.clone(),
-            term_start: assignment.term_start,
-            term_end: assignment.term_end,
-            assignment_source: InstitutionAssignmentSource::Registry,
-            assignment_source_ref: assignment.assignment_source_ref.clone(),
-            assignment_status: InstitutionAssignmentStatus::Active,
-        };
-        assert_eq!(encoded_assignment, real_assignment.encode());
-    }
-
-    #[test]
-    fn full_create_payload_uses_roles_and_assignments() {
+    fn minimal_create_payload_matches_runtime_call_field_order() {
         let args = ProposeCreateInstitutionArgs {
             cid_number: b"GD001-COMPANY-0001".to_vec(),
             cid_full_name: "测试机构".as_bytes().to_vec(),
             cid_short_name: "测试".as_bytes().to_vec(),
             town_code: Vec::new(),
-            legal_representative_name: "法人".as_bytes().to_vec(),
-            legal_representative_cid_number: b"GD001-CTZN-1".to_vec(),
-            legal_representative_account: [9; 32],
-            accounts: vec![InitialAccountArg {
-                account_name: "主账户".to_string(),
-                amount: 111,
-            }],
-            funding_account: Some([8; 32]),
+            admins: vec![
+                InstitutionAdminArg {
+                    admin_name: "张三".as_bytes().to_vec(),
+                    admin_account: [1; 32],
+                },
+                InstitutionAdminArg {
+                    admin_name: "管理员".as_bytes().to_vec(),
+                    admin_account: [2; 32],
+                },
+            ],
             institution_code: *b"SFLP",
-            roles: vec![sample_role()],
-            assignments: vec![sample_assignment(1), sample_assignment(2)],
-            threshold: 2,
             register_nonce: b"nonce".to_vec(),
             signature: vec![3; 64],
             actor_cid_number: b"issuer".to_vec(),
@@ -331,43 +146,12 @@ mod tests {
         assert_eq!(&encoded.call_data[..2], &[31, 5]);
         assert_eq!(encoded.action, 0x1f05);
 
-        let real_roles = vec![InstitutionRole {
-            cid_number: args.roles[0].cid_number.clone(),
-            role_code: args.roles[0].role_code.clone(),
-            role_name: args.roles[0].role_name.clone(),
-            term_required: true,
-            role_status: InstitutionRoleStatus::Active,
-        }];
-        let real_assignments = args
-            .assignments
-            .iter()
-            .map(|assignment| InstitutionAdminAssignment {
-                cid_number: assignment.cid_number.clone(),
-                admin_account: assignment.admin_account,
-                role_code: assignment.role_code.clone(),
-                term_start: assignment.term_start,
-                term_end: assignment.term_end,
-                assignment_source: InstitutionAssignmentSource::Registry,
-                assignment_source_ref: assignment.assignment_source_ref.clone(),
-                assignment_status: InstitutionAssignmentStatus::Active,
-            })
-            .collect::<Vec<_>>();
-
-        let real_accounts = vec![("主账户".as_bytes().to_vec(), 111_u128)];
         let mut expected = vec![31, 5];
         expected.extend(args.cid_number.encode());
         expected.extend(args.cid_full_name.encode());
         expected.extend(args.cid_short_name.encode());
         expected.extend(args.town_code.encode());
-        expected.extend(args.legal_representative_name.encode());
-        expected.extend(args.legal_representative_cid_number.encode());
-        expected.extend(args.legal_representative_account.encode());
-        expected.extend(real_accounts.encode());
-        expected.extend(args.funding_account.encode());
-        expected.extend(args.institution_code.encode());
-        expected.extend(real_roles.encode());
-        expected.extend(real_assignments.encode());
-        expected.extend(args.threshold.encode());
+        expected.extend(encode_admins_payload(&args.admins));
         expected.extend(args.register_nonce.encode());
         expected.extend(args.signature.encode());
         expected.extend(args.actor_cid_number.encode());

@@ -18,29 +18,16 @@ fn fund_registry_account() {
 fn create_cgov(
     tag: &str,
     nonce: &[u8],
-    accounts: pallet::InstitutionInitialAccountsOf<Test>,
     signature: pallet::RegisterSignatureOf<Test>,
 ) -> pallet::CidNumberOf<Test> {
     let cid = generated_cid(tag, "CGOV");
-    let funding_account = accounts
-        .iter()
-        .any(|account| account.amount > 0)
-        .then(registry_funding_account);
     assert_ok!(PublicManage::propose_create_public_institution(
         RuntimeOrigin::signed(creator()),
         cid.clone(),
         cid_full_name("测试公权机构".as_bytes()),
         cid_short_name("测试机构".as_bytes()),
         empty_town_code(),
-        legal_representative_name(),
-        legal_representative_cid_number(),
-        legal_representative_account(),
-        accounts,
-        funding_account,
-        code_bytes("CGOV"),
-        institution_roles_vec(),
-        institution_assignments_vec(3),
-        2,
+        institution_admins(3),
         register_nonce(nonce),
         signature,
         b"REGISTRY-CID".to_vec(),
@@ -53,16 +40,34 @@ fn create_cgov(
 
 fn create_cgov_with_custom(tag: &str) -> pallet::CidNumberOf<Test> {
     fund_registry_account();
-    create_cgov(
-        tag,
-        tag.as_bytes(),
-        initial_accounts(&[
-            (RESERVED_NAME_MAIN, ACCOUNT_AMOUNT),
-            (RESERVED_NAME_FEE, ACCOUNT_AMOUNT),
-            (CUSTOM_ACCOUNT_NAME, ACCOUNT_AMOUNT),
-        ]),
+    let cid = create_cgov(tag, tag.as_bytes(), valid_signature());
+    assert_ok!(PublicManage::add_institution_account(
+        RuntimeOrigin::signed(creator()),
+        cid.clone(),
+        account_names_bv(&[CUSTOM_ACCOUNT_NAME]),
+        register_nonce(format!("{tag}-custom").as_bytes()),
         valid_signature(),
-    )
+        b"REGISTRY-CID".to_vec(),
+        signer_pubkey(),
+        province_name(),
+        Vec::new(),
+    ));
+    assert_ok!(Balances::force_set_balance(
+        RuntimeOrigin::root(),
+        account_of(&cid, CUSTOM_ACCOUNT_NAME),
+        ACCOUNT_AMOUNT,
+    ));
+    assert_ok!(Balances::force_set_balance(
+        RuntimeOrigin::root(),
+        account_of(&cid, RESERVED_NAME_MAIN),
+        ACCOUNT_AMOUNT,
+    ));
+    assert_ok!(Balances::force_set_balance(
+        RuntimeOrigin::root(),
+        account_of(&cid, RESERVED_NAME_FEE),
+        ACCOUNT_AMOUNT,
+    ));
+    cid
 }
 
 fn account_of(cid: &pallet::CidNumberOf<Test>, name: &[u8]) -> AccountId32 {
@@ -96,7 +101,14 @@ fn creation_uses_cid_as_identity_and_writes_all_account_indexes() {
 
         let admins =
             public_admins::AdminAccounts::<Test>::get(&cid).expect("admins must be keyed by CID");
-        assert_eq!(admins.admins.as_slice(), &[admin(0), admin(1), admin(2)]);
+        assert_eq!(
+            admins
+                .admins
+                .iter()
+                .map(|admin| admin.admin_account.clone())
+                .collect::<Vec<_>>(),
+            vec![admin(0), admin(1), admin(2)]
+        );
         assert!(PublicAdmins::is_institution_admin(
             code_bytes("CGOV"),
             cid.as_slice(),
@@ -112,8 +124,16 @@ fn creation_uses_cid_as_identity_and_writes_all_account_indexes() {
             >>::legal_representative(
                 cid.as_slice(),
             ),
-            Some(legal_representative_account())
+            None
         );
+        let legal_role_code: crate::institution::role::RoleCodeOf =
+            primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE
+                .to_vec()
+                .try_into()
+                .expect("LR role code fits");
+        let legal_role = pallet::InstitutionRoles::<Test>::get(&cid, legal_role_code)
+            .expect("default LR role exists");
+        assert_eq!(legal_role.role_name.as_slice(), "法定代表人".as_bytes());
     });
 }
 
@@ -121,12 +141,7 @@ fn creation_uses_cid_as_identity_and_writes_all_account_indexes() {
 fn creation_accepts_zero_protocol_account_balances() {
     new_test_ext().execute_with(|| {
         fund_registry_account();
-        let cid = create_cgov(
-            "zero-balances",
-            b"zero-balances",
-            initial_accounts(&[(RESERVED_NAME_MAIN, 0), (RESERVED_NAME_FEE, 0)]),
-            valid_signature(),
-        );
+        let cid = create_cgov("zero-balances", b"zero-balances", valid_signature());
         assert_eq!(
             Balances::free_balance(account_of(&cid, RESERVED_NAME_MAIN)),
             0
@@ -139,67 +154,25 @@ fn creation_accepts_zero_protocol_account_balances() {
 }
 
 #[test]
-fn creation_rejects_nonzero_account_balance_below_ed() {
+fn creation_rejects_fewer_than_two_admins() {
     new_test_ext().execute_with(|| {
-        fund_registry_account();
-        let cid = generated_cid("below-ed", "CGOV");
+        let cid = generated_cid("one-admin", "CGOV");
         assert_noop!(
             PublicManage::propose_create_public_institution(
                 RuntimeOrigin::signed(creator()),
                 cid,
-                cid_full_name("低余额机构".as_bytes()),
-                cid_short_name("低余额".as_bytes()),
+                cid_full_name("单管理员机构".as_bytes()),
+                cid_short_name("单管理员".as_bytes()),
                 empty_town_code(),
-                legal_representative_name(),
-                legal_representative_cid_number(),
-                legal_representative_account(),
-                initial_accounts(&[(RESERVED_NAME_MAIN, 1), (RESERVED_NAME_FEE, ACCOUNT_AMOUNT)]),
-                Some(registry_funding_account()),
-                code_bytes("CGOV"),
-                institution_roles_vec(),
-                institution_assignments_vec(3),
-                2,
-                register_nonce(b"below-ed"),
+                institution_admins(1),
+                register_nonce(b"one-admin"),
                 valid_signature(),
                 b"REGISTRY-CID".to_vec(),
                 signer_pubkey(),
                 province_name(),
                 Vec::new(),
             ),
-            Error::<Test>::AccountInitialAmountBelowMinimum
-        );
-    });
-}
-
-#[test]
-fn creation_requires_complete_protocol_account_set() {
-    new_test_ext().execute_with(|| {
-        fund_registry_account();
-        let cid = generated_cid("missing-fee", "CGOV");
-        assert_noop!(
-            PublicManage::propose_create_public_institution(
-                RuntimeOrigin::signed(creator()),
-                cid,
-                cid_full_name("缺费用账户机构".as_bytes()),
-                cid_short_name("缺费用账户".as_bytes()),
-                empty_town_code(),
-                legal_representative_name(),
-                legal_representative_cid_number(),
-                legal_representative_account(),
-                initial_accounts(&[(RESERVED_NAME_MAIN, ACCOUNT_AMOUNT)]),
-                Some(registry_funding_account()),
-                code_bytes("CGOV"),
-                institution_roles_vec(),
-                institution_assignments_vec(3),
-                2,
-                register_nonce(b"missing-fee"),
-                valid_signature(),
-                b"REGISTRY-CID".to_vec(),
-                signer_pubkey(),
-                province_name(),
-                Vec::new(),
-            ),
-            Error::<Test>::MissingMainAccount
+            Error::<Test>::InvalidAdminsLen
         );
     });
 }
@@ -216,18 +189,7 @@ fn creation_rejects_invalid_signature_without_partial_state() {
                 cid_full_name("无效签名机构".as_bytes()),
                 cid_short_name("无效签名".as_bytes()),
                 empty_town_code(),
-                legal_representative_name(),
-                legal_representative_cid_number(),
-                legal_representative_account(),
-                initial_accounts(&[
-                    (RESERVED_NAME_MAIN, ACCOUNT_AMOUNT),
-                    (RESERVED_NAME_FEE, ACCOUNT_AMOUNT),
-                ]),
-                Some(registry_funding_account()),
-                code_bytes("CGOV"),
-                institution_roles_vec(),
-                institution_assignments_vec(3),
-                2,
+                institution_admins(3),
                 register_nonce(b"invalid-signature"),
                 invalid_signature(),
                 b"REGISTRY-CID".to_vec(),
@@ -253,18 +215,7 @@ fn creation_rejects_duplicate_cid_and_replayed_nonce() {
                 cid_full_name("重复机构".as_bytes()),
                 cid_short_name("重复".as_bytes()),
                 empty_town_code(),
-                legal_representative_name(),
-                legal_representative_cid_number(),
-                legal_representative_account(),
-                initial_accounts(&[
-                    (RESERVED_NAME_MAIN, ACCOUNT_AMOUNT),
-                    (RESERVED_NAME_FEE, ACCOUNT_AMOUNT),
-                ]),
-                Some(registry_funding_account()),
-                code_bytes("CGOV"),
-                institution_roles_vec(),
-                institution_assignments_vec(3),
-                2,
+                institution_admins(3),
                 register_nonce(b"duplicate-cid"),
                 valid_signature(),
                 b"REGISTRY-CID".to_vec(),

@@ -226,21 +226,8 @@ pub const VALID_DOC_TYPES: &[&str] =
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateInstitutionAdminInput {
-    /// 机构初始管理员钱包账户。同一账户可以担任同一机构的多个不同岗位。
+    /// 机构初始管理员钱包账户；姓名由后端公民资料解析，首次登记不绑定岗位。
     pub admin_account: String,
-    /// 机构内稳定岗位码，只允许大写 ASCII、数字和下划线。
-    pub role_code: String,
-    /// 机构公开岗位名称。
-    pub role_name: String,
-    /// 岗位是否要求任期。
-    #[serde(default)]
-    pub term_required: bool,
-    /// 任期开始日（自纪元起天数）；无任期岗位必须为 0。
-    #[serde(default)]
-    pub term_start: Option<u32>,
-    /// 任期结束日（自纪元起天数）；无任期岗位必须为 0。
-    #[serde(default)]
-    pub term_end: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -268,24 +255,7 @@ pub struct CreateInstitutionInput {
     /// 合伙类型。private_type=PARTNERSHIP 时必传,其它类型不接收。
     #[serde(default)]
     pub partnership_kind: Option<String>,
-    /// 法定代表人姓名,新增机构必填。
-    #[serde(default)]
-    pub legal_representative_name: Option<String>,
-    /// 法定代表人身份ID,新增机构必填,且必须选择正常状态公民。
-    #[serde(default)]
-    pub legal_representative_cid_number: Option<String>,
-    /// 证件照上传接口返回的服务端路径,新增机构必填。
-    #[serde(default)]
-    pub legal_representative_photo_path: Option<String>,
-    #[serde(default)]
-    pub legal_representative_photo_name: Option<String>,
-    #[serde(default)]
-    pub legal_representative_photo_mime: Option<String>,
-    #[serde(default)]
-    pub legal_representative_photo_size: Option<u64>,
-    /// 初始管理员阈值。必须满足严格过半,并且不超过 admins 数量。
-    pub threshold: u32,
-    /// 初始管理员合集。注册局创建机构的同一笔链交易会把这些管理员写成 Active。
+    /// 初始管理员合集；runtime 自动采用严格多数阈值。
     #[serde(default)]
     pub admins: Vec<CreateInstitutionAdminInput>,
 }

@@ -17,17 +17,23 @@ void main() {
     return [encoded & 0xff, (encoded >> 8) & 0xff];
   }
 
-  test('机构管理员账户只解码钱包集合', () {
+  test('机构管理员按姓名与授权钱包解码', () {
     final value = Uint8List.fromList([
       ...utf8.encode('CGOV'),
       8,
+      ...bytes('张三'),
       ...List.filled(32, 1),
+      ...bytes('管理员'),
       ...List.filled(32, 2),
     ]);
-    final decoded = InstitutionRoleStorageCodec.decodeAdminAccount(value)!;
+    final decoded = InstitutionRoleStorageCodec.decodeAdmins(value)!;
     expect(decoded.institutionCode, 'CGOV');
     expect(decoded.admins, hasLength(2));
-    expect(decoded.admins, ['01' * 32, '02' * 32]);
+    expect(decoded.admins.map((admin) => admin.adminName), ['张三', '管理员']);
+    expect(
+      decoded.admins.map((admin) => admin.adminAccount),
+      ['01' * 32, '02' * 32],
+    );
   });
 
   test('岗位和任职分别按 entity 布局解码', () {

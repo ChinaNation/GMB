@@ -1,6 +1,7 @@
 //! 注册协会私权机构。
 //!
-//! 注册协会固定为 `S + AS`,具有法人资格且非营利,由会员、理事和监事构成。
+//! 注册协会固定为 `SFAS`，具有法人资格，由会员、理事和监事构成；盈利属性由每个
+//! 机构实例在首次登记时显式选择，不在模块常量中固定。
 
 use axum::{
     extract::{Query, State},
@@ -21,14 +22,12 @@ use crate::AppState;
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct AssociationProfile {
     pub(crate) identity_code: &'static str,
-    pub(crate) p1: &'static str,
     pub(crate) has_legal_personality: bool,
     pub(crate) member_role: ParticipantRole,
 }
 
 pub(crate) const PROFILE: AssociationProfile = AssociationProfile {
     identity_code: "SFAS",
-    p1: "0",
     has_legal_personality: true,
     member_role: ParticipantRole::Member,
 };
@@ -44,7 +43,6 @@ pub(crate) const SPEC: PrivateModuleSpec = PrivateModuleSpec {
 fn lock_input(input: &mut CreateInstitutionInput) -> Result<(), &'static str> {
     assert_module_spec(&SPEC);
     debug_assert_eq!(PROFILE.identity_code, "SFAS");
-    debug_assert_eq!(PROFILE.p1, "0");
     debug_assert!(PROFILE.has_legal_personality);
     debug_assert_eq!(PROFILE.member_role, ParticipantRole::Member);
     let rule = fixed_rule(SPEC.private_type)?;

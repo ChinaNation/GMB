@@ -32,6 +32,9 @@ use crate::count_const::{
     FRG_PROVINCE_GROUP_ADMIN_COUNT, NJD_ADMIN_COUNT, NRC_ADMIN_COUNT, PRB_ADMIN_COUNT,
     PRC_ADMIN_COUNT,
 };
+use crate::institution_constraints::{
+    ROLE_CODE_LEGAL_REPRESENTATIVE, ROLE_NAME_LEGAL_REPRESENTATIVE,
+};
 
 /// 护宪大法官公开岗位名单源。创世与节点守卫逐字节共用，禁止各处手写字符串。
 pub const ROLE_CONSTITUTION_GUARD: &[u8] = "护宪大法官".as_bytes();
@@ -176,7 +179,7 @@ pub fn fixed_institution_by_cid(cid_number: &[u8]) -> Option<FixedInstitution> {
 
 /// 固定机构的岗位与席位。FRG 的 43 个省专员岗位由省码动态生成，不走本函数。
 pub fn fixed_role_specs(code: InstitutionCode) -> Vec<FixedRoleSpec> {
-    match code {
+    let mut roles = match code {
         NRC | PRC => vec![FixedRoleSpec {
             role_code: ROLE_CODE_COMMITTEE_MEMBER,
             role_name: ROLE_NAME_COMMITTEE_MEMBER,
@@ -214,7 +217,15 @@ pub fn fixed_role_specs(code: InstitutionCode) -> Vec<FixedRoleSpec> {
             },
         ],
         _ => Vec::new(),
+    };
+    if matches!(code, NRC | PRC | PRB | NJD) {
+        roles.push(FixedRoleSpec {
+            role_code: ROLE_CODE_LEGAL_REPRESENTATIVE,
+            role_name: ROLE_NAME_LEGAL_REPRESENTATIVE,
+            seats: 0,
+        });
     }
+    roles
 }
 
 /// 查询固定机构某岗位的法定席位数；非固定机构或清单外岗位返回 `None`。
@@ -222,6 +233,9 @@ pub fn fixed_role_specs(code: InstitutionCode) -> Vec<FixedRoleSpec> {
 /// entity 在应用选举结果前使用本函数执行 runtime 侧前置拒绝，Node Guard 再从节点层
 /// 独立复核同一清单。FRG 的 43 个省专员岗位按稳定省码逐一匹配。
 pub fn fixed_role_seats(code: InstitutionCode, role_code: &[u8]) -> Option<u32> {
+    if role_code == ROLE_CODE_LEGAL_REPRESENTATIVE {
+        return Some(0);
+    }
     if code == FRG {
         return PROVINCE_CODE_INFOS.iter().find_map(|province| {
             (province_commissioner_role_code(province.province_code) == role_code)

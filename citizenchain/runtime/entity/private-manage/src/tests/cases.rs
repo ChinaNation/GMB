@@ -44,13 +44,24 @@ fn create_uses_cid_as_the_only_institution_identity() {
         );
         assert!(pallet::InstitutionRoles::<Test>::contains_key(
             &cid_number,
-            crate::RoleCodeOf::try_from(b"ADMIN".to_vec()).expect("岗位码必须受界")
+            crate::RoleCodeOf::try_from(
+                primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE.to_vec()
+            )
+            .expect("LR 岗位码必须受界")
         ));
+        assert!(pallet::InstitutionRoleAssignments::<Test>::get(
+            &cid_number,
+            crate::RoleCodeOf::try_from(
+                primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE.to_vec()
+            )
+            .expect("LR 岗位码必须受界")
+        )
+        .is_empty());
     });
 }
 
 #[test]
-fn protocol_accounts_accept_zero_and_reject_nonzero_below_ed() {
+fn protocol_accounts_are_automatically_created_with_zero_balance() {
     new_test_ext().execute_with(|| {
         let zero_cid = generated_cid("private-zero", "SFLP");
         assert_ok!(create_institution(
@@ -63,7 +74,7 @@ fn protocol_accounts_accept_zero_and_reject_nonzero_below_ed() {
         ));
         assert_eq!(
             pallet::InstitutionAccounts::<Test>::get(
-                zero_cid,
+                &zero_cid,
                 account_name(crate::RESERVED_NAME_MAIN)
             )
             .expect("主账户必须存在")
@@ -71,33 +82,35 @@ fn protocol_accounts_accept_zero_and_reject_nonzero_below_ed() {
             0
         );
 
-        let below_ed_cid = generated_cid("private-below-ed", "SFLP");
-        assert_noop!(
-            create_institution(
-                below_ed_cid,
-                code_bytes("SFLP"),
-                initial_accounts(&[
-                    (crate::RESERVED_NAME_MAIN, 99),
-                    (crate::RESERVED_NAME_FEE, 0),
-                ]),
-            ),
-            pallet::Error::<Test>::AccountInitialAmountBelowMinimum
+        assert_eq!(
+            pallet::InstitutionAccounts::<Test>::get(
+                &zero_cid,
+                account_name(crate::RESERVED_NAME_FEE)
+            )
+            .expect("费用账户必须存在")
+            .initial_balance,
+            0
         );
     });
 }
 
 #[test]
-fn common_private_institution_requires_main_and_fee_accounts() {
+fn creation_derives_protocol_accounts_without_client_account_input() {
     new_test_ext().execute_with(|| {
         let cid_number = generated_cid("private-missing-fee", "SFLP");
-        assert_noop!(
-            create_institution(
-                cid_number,
-                code_bytes("SFLP"),
-                initial_accounts(&[(crate::RESERVED_NAME_MAIN, 0)]),
-            ),
-            pallet::Error::<Test>::MissingFeeAccount
-        );
+        assert_ok!(create_institution(
+            cid_number.clone(),
+            code_bytes("SFLP"),
+            initial_accounts(&[]),
+        ));
+        assert!(pallet::InstitutionAccounts::<Test>::contains_key(
+            &cid_number,
+            account_name(crate::RESERVED_NAME_MAIN)
+        ));
+        assert!(pallet::InstitutionAccounts::<Test>::contains_key(
+            &cid_number,
+            account_name(crate::RESERVED_NAME_FEE)
+        ));
     });
 }
 

@@ -425,6 +425,19 @@ impl Db {
                 PRIMARY KEY (province_code, cid_number)
              ) PARTITION BY LIST (province_code);
 
+             -- 机构创建二维码生成后、链确认前的唯一草稿区。这里不是正式机构投影；
+             -- subjects/accounts/institution_admins 只能在链确认后由同步流程写入。
+             CREATE TABLE IF NOT EXISTS pending_institution_registrations (
+                cid_number TEXT PRIMARY KEY,
+                institution_payload JSONB NOT NULL,
+                admins_payload JSONB NOT NULL,
+                actor_cid_number TEXT NOT NULL,
+                created_by TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+             );
+             CREATE INDEX IF NOT EXISTS idx_pending_institution_registrations_created_at
+                ON pending_institution_registrations(created_at);
+
              -- 机构管理员链下私密资料唯一归属表。
              -- 岗位、任期和来源由 entity 链上任职保存；本表只承接联系方式、证件照、passkey 等。
              -- 按 province_code 省级分区,复合主键 (province_code, cid_number, admin_account)。

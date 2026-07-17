@@ -23,8 +23,8 @@
 
 - `election-campaign`：业务规则、活动元数据、候选/选民快照来源和投票创建入口。
 - `election-vote`：选举投票流程、投票记录、计票、终态结果快照、结果回调和清理。
-- `public-manage` / `private-manage`：机构岗位与任职唯一真源，校验结果并派生 admins。
-- `public-admins` / `private-admins`：机构管理员钱包账户集合，不保存岗位或任职来源。
+- `public-manage` / `private-manage`：机构岗位与任职唯一真源，校验任职目标属于既有 admins，但不修改管理员集合。
+- `public-admins` / `private-admins`：机构管理员姓名与钱包账户集合，不保存岗位或任职来源。
 - `citizen-identity`：投票身份、参选身份和人口统计唯一真源。
 
 ## 后续接入原则

@@ -108,7 +108,7 @@ pub trait DeveloperUpgradeCheck {
 
 - `citizenchain/runtime/genesis/src/lib.rs`：类型、存储、创世构建和开发者升级查询；
 - `citizenchain/runtime/genesis/src/institution/fixed_roles.rs`：89 个受保护创世机构的固定岗位、席位和钱包索引映射；
-- PRS、NLG、NSN、NRP、NSP、NED 六个国家级单例在 block#0 只写精确机构身份、主账户与费用账户，不写岗位、任职、admins 或动态阈值，以完整缺省形态表示“尚未组成”。首次组成属于运行期原子治理；其中 NSN、NRP、NED 还受法定成员岗位与人数区间约束。
+- PRS、NLG、NSN、NRP、NSP、NED 六个国家级单例在 block#0 写精确机构身份、制度账户和唯一空缺 `LR / 法定代表人` 岗位，不写成员岗位、任职、admins 或动态阈值。首次组成前先独立登记 admins；其中 NSN、NRP、NED 还受法定成员岗位与人数区间约束。
 - `citizenchain/runtime/genesis/src/institution/seeder.rs`：创世机构、岗位、任职和管理员钱包唯一写入方；
 - `citizenchain/runtime/genesis/src/tests/mod.rs`：pallet 单元测试；
 - `citizenchain/runtime/primitives/src/genesis.rs`：三个创世事实的固定真源；

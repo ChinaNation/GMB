@@ -114,9 +114,14 @@ fn account(seed: u8) -> AccountId32 {
     AccountId32::new([seed; 32])
 }
 
-/// admins 只保存钱包账户；岗位、任期、来源等由 entity 管理。
-fn admins(count: u8) -> Vec<AccountId32> {
-    (0..count).map(account).collect()
+/// admins 保存显示姓名和授权钱包；岗位、任期、来源等由 entity 管理。
+fn admins(count: u8) -> Vec<InstitutionAdmin<AccountId32>> {
+    (0..count)
+        .map(|seed| InstitutionAdmin {
+            admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+            admin_account: account(seed),
+        })
+        .collect()
 }
 
 #[test]

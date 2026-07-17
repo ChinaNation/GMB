@@ -1,41 +1,34 @@
 //! 机构创建流程实现。
 //!
-//! 机构必须完整携带其 CID 类型要求的协议账户；普通私权机构至少包含主账户和费用账户。
+//! 机构按 CID 类型自动建立全部强制协议账户，初始余额统一为零。
 //!
 //! 唯一入口: `do_propose_create_private_institution`(call_index=5)
-//! - 一次创建该机构全部必需协议账户及可选自定义账户
+//! - 载荷只包含机构最小身份和至少两个管理员人员记录
 //! - 凭证带 actor CID 和签名管理员公钥，不以任何机构账户充当授权身份
-//! - 资金模型: 注册局交易成功即划转初始余额并激活机构与管理员集合
+//! - runtime 自动派生机构码、协议账户、默认法定代表人岗位和严格多数阈值
 
 extern crate alloc;
 
-use codec::Encode;
-use entity_primitives::InstitutionMultisigQuery;
-
-use crate::institution::accounts::{
-    account_names_payload_from_initial_accounts, validate_initial_accounts,
-};
+use crate::institution::accounts::{build_required_protocol_accounts, validate_initial_accounts};
 use crate::institution::types::{InstitutionAccountInfo, InstitutionInfo};
 use crate::pallet::{
     AccountNameOf, AccountRegisteredCid, CidNumberOf, Config, Error, Event, InstitutionAccounts,
-    InstitutionInitialAccountsOf, Institutions, Pallet, RegisterNonceOf, RegisterSignatureOf,
+    InstitutionAdminsInputOf, Institutions, Pallet, RegisterNonceOf, RegisterSignatureOf,
     UsedRegisterNonce,
 };
 use crate::traits::{
     CidInstitutionVerifier, InstitutionCidQuery, ProtectedSourceChecker, RegistryAuthority,
 };
 use crate::RegisteredInstitution;
+use codec::Encode;
 use frame_support::{
     ensure,
     storage::{with_transaction, TransactionOutcome},
-    traits::{Currency, ExistenceRequirement},
 };
-use primitives::institution_asset::{InstitutionAsset, InstitutionAssetAction};
 use sp_runtime::{
-    traits::{CheckedAdd, Hash, SaturatedConversion, Zero},
+    traits::{Hash, SaturatedConversion},
     DispatchResult,
 };
-use votingengine::types::InstitutionCode;
 
 /// 机构注册创建(call_index=5)。
 #[allow(clippy::too_many_arguments)]
@@ -45,15 +38,7 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
     cid_full_name: AccountNameOf<T>,
     cid_short_name: AccountNameOf<T>,
     town_code: AccountNameOf<T>,
-    legal_representative_name: AccountNameOf<T>,
-    legal_representative_cid_number: CidNumberOf<T>,
-    legal_representative_account: T::AccountId,
-    accounts: InstitutionInitialAccountsOf<T>,
-    funding_account: Option<T::AccountId>,
-    institution_code: InstitutionCode,
-    roles: crate::institution::role::InstitutionRolesOf<T>,
-    assignments: crate::institution::role::InstitutionAdminAssignmentsOf<T>,
-    threshold: u32,
+    admins: InstitutionAdminsInputOf<T>,
     register_nonce: RegisterNonceOf<T>,
     signature: RegisterSignatureOf<T>,
     actor_cid_number: alloc::vec::Vec<u8>,
@@ -74,22 +59,11 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
             || primitives::cid::code::is_unincorporated_code(&parts.institution),
         Error::<T>::InvalidCidNumber
     );
-    ensure!(
-        parts.institution == institution_code,
-        Error::<T>::InvalidCidNumber
-    );
+    let institution_code = parts.institution;
     // 私权机构名称上链:链是机构信息唯一真源(注册局本地库为同步副本),
     // 公权/私权统一。全称必填,简称非空。
     ensure!(!cid_full_name.is_empty(), Error::<T>::EmptyAccountName);
     ensure!(!cid_short_name.is_empty(), Error::<T>::EmptyAccountName);
-    ensure!(
-        !legal_representative_name.is_empty(),
-        Error::<T>::EmptyLegalRepresentativeName
-    );
-    ensure!(
-        !legal_representative_cid_number.is_empty(),
-        Error::<T>::EmptyLegalRepresentativeCidNumber
-    );
     ensure!(town_code.is_empty(), Error::<T>::InvalidTownCode);
     let (stored_full_name, stored_short_name, stored_town_code) = (
         cid_full_name.clone(),
@@ -119,19 +93,14 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
         !UsedRegisterNonce::<T>::get(register_nonce_hash),
         Error::<T>::RegisterNonceAlreadyUsed
     );
-    let account_name_payload = account_names_payload_from_initial_accounts::<T>(&accounts)?;
+    let threshold = admins.len() as u32 / 2 + 1;
+    Pallet::<T>::ensure_admin_config(&admins, threshold)?;
     ensure!(
         T::CidInstitutionVerifier::verify_institution_creation(
             cid_number.as_slice(),
             &cid_full_name,
             cid_short_name.as_slice(),
-            legal_representative_name.as_slice(),
-            legal_representative_cid_number.as_slice(),
-            &legal_representative_account,
-            &account_name_payload,
-            funding_account.as_ref(),
-            &roles.encode(),
-            &assignments.encode(),
+            &admins.encode(),
             &register_nonce,
             &signature,
             actor_cid_number.as_slice(),
@@ -155,64 +124,18 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
         Error::<T>::RegistryAuthorityDenied
     );
 
+    let protocol_accounts = build_required_protocol_accounts::<T>(&cid_number)?;
     let (created_accounts, main_account, _fee_account, initial_total) =
-        validate_initial_accounts::<T>(&cid_number, &accounts)?;
-    let funding_account = match (initial_total.is_zero(), funding_account) {
-        (true, None) => None,
-        (true, Some(_)) => return Err(Error::<T>::UnexpectedFundingAccount.into()),
-        (false, None) => return Err(Error::<T>::FundingAccountRequired.into()),
-        (false, Some(account)) => {
-            ensure!(
-                T::InstitutionQuery::account_belongs_to(actor_cid_number.as_slice(), &account)
-                    && T::InstitutionAsset::can_spend(
-                        &account,
-                        InstitutionAssetAction::InstitutionCreateFunding,
-                    ),
-                Error::<T>::InvalidFundingAccount
-            );
-            let required = initial_total
-                .checked_add(&T::Currency::minimum_balance())
-                .ok_or(Error::<T>::InsufficientAmount)?;
-            ensure!(
-                T::Currency::free_balance(&account) >= required,
-                Error::<T>::InsufficientAmount
-            );
-            Some(account)
-        }
-    };
-    // 外层 FeeRoute 已按 initial_total 从 actor CID 费用账户收取一次完整链上费。
+        validate_initial_accounts::<T>(&cid_number, &protocol_accounts)?;
+    // 首次登记没有入金；外层 FeeRoute 只从 actor CID 费用账户收取机构操作最低费。
     let fee = primitives::fee_policy::calculate_onchain_fee(initial_total.saturated_into())
         .saturated_into();
 
     let now = <frame_system::Pallet<T>>::block_number();
     // 管理员与内部投票都按机构 CID 寻址，任何机构账户都不充当授权根。
     with_transaction(|| {
-        let admins = match Pallet::<T>::store_initial_roles_and_assignments(
-            &cid_number,
-            &roles,
-            &assignments,
-            entity_primitives::InstitutionAssignmentSource::Registry,
-        ) {
-            Ok(admins) => admins,
-            Err(err) => return TransactionOutcome::Rollback(Err(err)),
-        };
-        if let Err(err) = Pallet::<T>::ensure_admin_config(&admins, threshold) {
+        if let Err(err) = Pallet::<T>::store_default_legal_representative_role(&cid_number) {
             return TransactionOutcome::Rollback(Err(err));
-        }
-        if let Some(source) = funding_account.as_ref() {
-            for account in created_accounts.iter() {
-                if !account.amount.is_zero()
-                    && T::Currency::transfer(
-                        source,
-                        &account.address,
-                        account.amount,
-                        ExistenceRequirement::KeepAlive,
-                    )
-                    .is_err()
-                {
-                    return TransactionOutcome::Rollback(Err(Error::<T>::TransferFailed.into()));
-                }
-            }
         }
 
         Institutions::<T>::insert(
@@ -221,9 +144,9 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
                 cid_full_name: stored_full_name.clone(),
                 cid_short_name: stored_short_name.clone(),
                 town_code: stored_town_code.clone(),
-                legal_representative_name: Some(legal_representative_name.clone()),
-                legal_representative_cid_number: Some(legal_representative_cid_number.clone()),
-                legal_representative_account: Some(legal_representative_account.clone()),
+                legal_representative_name: None,
+                legal_representative_cid_number: None,
+                legal_representative_account: None,
                 institution_code,
                 created_at: now,
             },

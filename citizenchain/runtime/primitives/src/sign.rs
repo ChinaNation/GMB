@@ -205,18 +205,12 @@ pub fn institution_registration_message<Hash: Encode, Nonce: AsRef<[u8]>>(
 
 /// CID 机构创建凭证消息唯一构造入口。
 #[allow(clippy::too_many_arguments)]
-pub fn institution_creation_message<Hash: Encode, AccountId: Encode, Nonce: AsRef<[u8]>>(
+pub fn institution_creation_message<Hash: Encode, Nonce: AsRef<[u8]>>(
     genesis_hash: &Hash,
     cid_number: &[u8],
     cid_full_name: &[u8],
     cid_short_name: &[u8],
-    legal_representative_name: &[u8],
-    legal_representative_cid_number: &[u8],
-    legal_representative_account: &AccountId,
-    account_names: &[Vec<u8>],
-    funding_account: Option<&AccountId>,
-    roles_payload: &[u8],
-    assignments_payload: &[u8],
+    admins_payload: &[u8],
     nonce: &Nonce,
     actor_cid_number: &[u8],
     credential_signer_pubkey: &[u8; 32],
@@ -229,13 +223,7 @@ pub fn institution_creation_message<Hash: Encode, AccountId: Encode, Nonce: AsRe
         cid_number,
         cid_full_name,
         cid_short_name,
-        legal_representative_name,
-        legal_representative_cid_number,
-        legal_representative_account,
-        account_names,
-        funding_account,
-        roles_payload,
-        assignments_payload,
+        admins_payload,
         nonce.as_ref(),
         actor_cid_number,
         credential_signer_pubkey,

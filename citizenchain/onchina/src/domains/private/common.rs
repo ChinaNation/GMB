@@ -106,7 +106,10 @@ pub(crate) fn lock_input_to_rule(input: &mut CreateInstitutionInput, rule: Priva
     input.private_type = Some(rule.private_type.as_code().to_string());
     input.partnership_kind = rule.partnership_kind.map(|kind| kind.as_code().to_string());
     input.institution = rule.institution_code.to_string();
-    input.p1 = Some(rule.p1.to_string());
+    // 注册协会 SFAS 的盈利属性由本次实例显式选择；其它私权类型继续由类型规则锁定。
+    if rule.private_type != PrivateType::Association {
+        input.p1 = Some(rule.p1.to_string());
+    }
     // 六类目标私权机构都是独立主体;非法人个体经营/无限合伙也不挂靠所属法人。
     input.parent_cid_number = None;
 }
@@ -185,7 +188,7 @@ pub(crate) fn resolve_private_type_rule(
         PrivateType::Association => PrivateTypeRule {
             private_type,
             partnership_kind: None,
-            // 注册协会(SFAS)盈利可变,p1 默认非盈利;按实例选盈利属后续增强(需注册 API 传入)。
+            // 注册协会(SFAS)的 p1 由实例输入；此默认值不允许覆盖请求。
             institution_code: "SFAS",
             p1: "0",
             has_legal_personality: true,

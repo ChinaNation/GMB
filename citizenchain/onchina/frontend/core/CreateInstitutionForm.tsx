@@ -8,8 +8,8 @@
 //       搜索范围由后端按地域规则预过滤(分校→本市学校本部;公权→本市市级/本省省级/国家级)
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { AutoComplete, Button, Col, Form, Input, InputNumber, Modal, QRCode, Row, Select, Spin, Switch, Typography, Upload } from 'antd';
-import { DeleteOutlined, PlusOutlined, SearchOutlined, UploadOutlined } from '@ant-design/icons';
+import { AutoComplete, Button, Col, Form, Input, Modal, QRCode, Row, Select, Spin, Typography } from 'antd';
+import { DeleteOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import type { AdminAuth } from '../auth/types';
 import { listCidTowns, type CidCityItem, type CidTownItem } from '../china/api';
 import { loadCachedCidCities } from '../china/metaCache';
@@ -17,13 +17,11 @@ import type {
   CreateInstitutionInput,
   CreateInstitutionOutput,
   EducationType,
-  LegalRepresentativePhoto,
   ParentInstitutionRow,
   PartnershipKind,
   PrivateType,
   SearchParentsOptions,
 } from '../subjects/api';
-import { searchLegalRepresentativeCitizens } from '../citizens/api';
 import {
   computeEducationInstitutionCode,
   EDUCATION_INSTITUTION_CODE_LABEL,
@@ -57,20 +55,8 @@ interface FormValues {
   cid_short_name?: string;
   /** 需挂靠的非法人必填;个体经营/无限合伙不接受所属法人。 */
   parent_cid_number?: string;
-  legal_representative_name: string;
-  legal_representative_cid_number: string;
-  legal_representative_photo_path: string;
-  legal_representative_photo_name: string;
-  legal_representative_photo_mime: string;
-  legal_representative_photo_size?: number;
-  threshold: number;
   admins: {
     admin_account: string;
-    role_code: string;
-    role_name: string;
-    term_required: boolean;
-    term_start?: number;
-    term_end?: number;
   }[];
 }
 
@@ -87,11 +73,6 @@ type CreateInstitution = (
   signWithScan: ScanSignResolver,
 ) => Promise<CreateInstitutionOutput>;
 
-type UploadLegalRepresentativePhoto = (
-  auth: AdminAuth,
-  file: File,
-) => Promise<LegalRepresentativePhoto>;
-
 type SearchParentInstitutions = (
   auth: AdminAuth,
   q: string,
@@ -107,7 +88,6 @@ export interface CreateInstitutionFormProps {
   lockedCityName: string | null;
   checkCidFullName: CheckCidFullName;
   createInstitution: CreateInstitution;
-  uploadLegalRepresentativePhoto: UploadLegalRepresentativePhoto;
   searchParentInstitutions: SearchParentInstitutions;
   onCancel: () => void;
   onCreated: (result: CreateInstitutionOutput) => void;
@@ -122,7 +102,6 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   lockedCityName,
   checkCidFullName,
   createInstitution,
-  uploadLegalRepresentativePhoto,
   searchParentInstitutions,
   onCancel,
   onCreated,
@@ -138,10 +117,6 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [cidFullNameChecking, setCidFullNameChecking] = useState(false);
   const [cidFullNameAvailable, setCidFullNameAvailable] = useState<boolean | null>(null);
-  const [legalRepSearching, setLegalRepSearching] = useState(false);
-  const [legalRepOptions, setLegalRepOptions] = useState<string[]>([]);
-  const [photoUploading, setPhotoUploading] = useState(false);
-  const [photoName, setPhotoName] = useState<string>('');
 
   const [currentSubjectProperty, setCurrentSubjectProperty] = useState<string>(
     locks.subjectPropertyChoices[0]?.value ?? '',
@@ -165,7 +140,6 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const isF = currentSubjectProperty === 'F';
   const requiresParent = isF && !isPrivate;
   const showEducationType = isEducation && !isF;
-  const watchedAdmins = Form.useWatch('admins', form) as FormValues['admins'] | undefined;
   const requiresTown = isGov && currentSubjectProperty === 'G' && (watchedInstitution ?? '').startsWith('T');
 
   // 机构创建阶段直接写入全称和简称,字段只允许 cid_full_name/cid_short_name。
@@ -180,7 +154,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       }]
     : locks.subjectPropertyChoices;
   const instChoices = useMemo(() => {
-    if (privateRule) {
+    if (privateRule && privateType !== 'ASSOCIATION') {
       return [{ value: privateRule.institution, label: PRIVATE_TYPE_LABEL[privateRule.privateType] }];
     }
     // 教育入口的机构码按 subject_property×education_type 派生(大学 GUN/SUN vs 中小初学 GSCH/SFSC,
@@ -201,6 +175,16 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     return instChoices.filter((item) => item.value !== 'CREG');
   }, [currentSubjectProperty, instChoices, isGov, lockedCityName]);
   const p1Locks = useMemo(() => {
+    if (privateType === 'ASSOCIATION') {
+      return {
+        choices: [
+          { value: '1', label: '盈利' },
+          { value: '0', label: '非盈利' },
+        ],
+        value: undefined,
+        locked: false,
+      };
+    }
     if (privateRule) {
       return {
         choices: [
@@ -213,7 +197,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       };
     }
     return p1LocksForSubject(currentSubjectProperty, selectedParent);
-  }, [currentSubjectProperty, selectedParent, privateRule]);
+  }, [currentSubjectProperty, selectedParent, privateRule, privateType]);
 
   const resetParentState = () => {
     setSelectedParent(null);
@@ -236,7 +220,11 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     const defaultCollectName = isPrivate || isEducation || isGov;
     form.setFieldsValue({
       subject_property: defaultSubjectProperty,
-      p1: defaultRule?.p1 ?? p1LocksForSubject(defaultSubjectProperty, null).value,
+      p1: privateType === 'ASSOCIATION'
+        ? undefined
+        : defaultRule
+          ? defaultRule.p1
+          : p1LocksForSubject(defaultSubjectProperty, null).value,
       province_name: lockedProvinceName ?? '',
       city_name: lockedCityName ?? '',
       town_name: undefined,
@@ -247,20 +235,11 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       cid_full_name: defaultCollectName ? '' : undefined,
       cid_short_name: defaultCollectName ? '' : undefined,
       parent_cid_number: undefined,
-      legal_representative_name: '',
-      legal_representative_cid_number: '',
-      legal_representative_photo_path: '',
-      legal_representative_photo_name: '',
-      legal_representative_photo_mime: '',
-      legal_representative_photo_size: undefined,
-      threshold: 2,
       admins: [
-        { admin_account: '', role_code: '', role_name: '', term_required: false, term_start: 0, term_end: 0 },
-        { admin_account: '', role_code: '', role_name: '', term_required: false, term_start: 0, term_end: 0 },
+        { admin_account: '' },
+        { admin_account: '' },
       ],
     });
-    setLegalRepOptions([]);
-    setPhotoName('');
   }, [open, category, privateType, lockedProvinceName, lockedCityName]);
 
   useEffect(() => {
@@ -324,7 +303,6 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     setCidFullNameAvailable(null);
     // 切主体属性必须重置所属法人与 p1(F 的 p1 是父级继承值,残留会提交旧值)。
     resetParentState();
-    setLegalRepOptions([]);
     const nextInstitution = institutionChoicesFor(category, subject_property)[0]?.value;
     const nextEducationType = isEducation && subject_property !== 'F'
       ? (form.getFieldValue('education_type') ?? SCHOOL_EDUCATION_TYPE_OPTIONS[0]?.value)
@@ -361,7 +339,6 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       parent_cid_number: undefined,
     });
     resetParentState();
-    setLegalRepOptions([]);
   };
 
   // ── 所属法人搜索/选定(仅 F)────────────────────────────────
@@ -411,14 +388,12 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     setSelectedParent(row);
     // 盈利属性附属于所属法人:选定父级即重算 p1(后端 unincorporated_org 同规则复核)
     form.setFieldsValue({ p1: inheritedP1(row.subject_property, row.p1) });
-    setLegalRepOptions([]);
   };
 
   const onParentInputChange = (value: string) => {
     if (selectedParent && value !== selectedParent.cid_number) {
       setSelectedParent(null);
       form.setFieldsValue({ p1: undefined });
-      setLegalRepOptions([]);
     }
   };
 
@@ -467,68 +442,6 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     if (cidFullNameAvailable !== null) setCidFullNameAvailable(null);
   };
 
-  // ── 法定代表人 ───────────────────────────────────────────
-
-  const triggerLegalRepSearch = async () => {
-    const q = (form.getFieldValue('legal_representative_cid_number') ?? '').trim();
-    if (!q) {
-      notice.warning('请先输入法定代表人身份ID关键字');
-      return;
-    }
-    const province_name = (form.getFieldValue('province_name') ?? '').trim();
-    const city_name = (form.getFieldValue('city_name') ?? '').trim();
-    const subjectProperty = (form.getFieldValue('subject_property') ?? '').trim();
-    const institution = (form.getFieldValue('institution') ?? '').trim();
-    if (!province_name || !city_name || !subjectProperty || !institution) {
-      notice.warning('请先选择省、市、主体属性和机构');
-      return;
-    }
-    if (requiresParent && !selectedParent) {
-      notice.warning('请先从搜索结果中选择所属法人');
-      return;
-    }
-    setLegalRepSearching(true);
-    try {
-      const rows = await searchLegalRepresentativeCitizens(auth, q, {
-        province_name:  province_name,
-        city_name:  city_name,
-        subject_property: subjectProperty,
-        institution,
-        education_type: showEducationType ? form.getFieldValue('education_type') : undefined,
-        parent_cid_number: requiresParent ? selectedParent?.cid_number : undefined,
-      });
-      setLegalRepOptions(rows);
-      if (rows.length === 0) {
-        notice.info('未找到正常状态公民');
-      }
-    } catch (err) {
-      notice.error(err, '');
-      setLegalRepOptions([]);
-    } finally {
-      setLegalRepSearching(false);
-    }
-  };
-
-  const handlePhotoUpload = async (file: File) => {
-    setPhotoUploading(true);
-    try {
-      const photo = await uploadLegalRepresentativePhoto(auth, file);
-      form.setFieldsValue({
-        legal_representative_photo_path: photo.file_path,
-        legal_representative_photo_name: photo.file_name,
-        legal_representative_photo_mime: photo.mime_type,
-        legal_representative_photo_size: photo.file_size,
-      });
-      setPhotoName(photo.file_name);
-      notice.success('证件照已上传');
-    } catch (err) {
-      notice.error(err, '证件照上传失败');
-    } finally {
-      setPhotoUploading(false);
-    }
-    return false;
-  };
-
   // ── 提交 ─────────────────────────────────────────────────
 
   const onSubmit = async (values: FormValues) => {
@@ -552,21 +465,11 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     const admins = (values.admins ?? [])
       .map((admin) => ({
         admin_account: admin.admin_account.trim(),
-        role_code: admin.role_code.trim(),
-        role_name: admin.role_name.trim(),
-        term_required: admin.term_required,
-        term_start: admin.term_required ? admin.term_start : 0,
-        term_end: admin.term_required ? admin.term_end : 0,
       }))
       .filter((admin) => admin.admin_account);
     const uniqueAdminCount = new Set(admins.map((admin) => admin.admin_account)).size;
-    const minThreshold = Math.floor(uniqueAdminCount / 2) + 1;
     if (uniqueAdminCount < 2) {
       notice.warning('请至少填写 2 名初始管理员');
-      return;
-    }
-    if (!values.threshold || values.threshold < minThreshold || values.threshold > uniqueAdminCount) {
-      notice.warning(`管理员阈值必须在 ${minThreshold} 到 ${uniqueAdminCount} 之间`);
       return;
     }
     if (requiresTown && !(values.town_name ?? '').trim()) {
@@ -594,13 +497,6 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         partnership_kind: isPrivate && privateType === 'PARTNERSHIP'
           ? values.partnership_kind
           : undefined,
-        legal_representative_name: values.legal_representative_name.trim(),
-        legal_representative_cid_number: values.legal_representative_cid_number.trim(),
-        legal_representative_photo_path: values.legal_representative_photo_path,
-        legal_representative_photo_name: values.legal_representative_photo_name,
-        legal_representative_photo_mime: values.legal_representative_photo_mime,
-        legal_representative_photo_size: values.legal_representative_photo_size,
-        threshold: values.threshold,
         admins,
       }, signWithScan);
       if (isPrivate && privateType) {
@@ -631,12 +527,6 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const subjectPropertyDisabled = isPrivate || subjectPropertyChoices.length === 1;
   const instDisabled = visibleInstChoices.length === 1;
   const cidFullNameCheckPassed = !collectNameInModal || cidFullNameAvailable === true;
-  const adminsCount = new Set(
-    (watchedAdmins ?? [])
-      .map((admin) => admin.admin_account?.trim())
-      .filter((account): account is string => !!account),
-  ).size;
-  const minThreshold = Math.floor(adminsCount / 2) + 1;
   const closeChainModal = () => {
     if (!createdResult) return;
     const result = createdResult;
@@ -676,7 +566,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       destroyOnClose
     >
       <Form form={form} layout="vertical" onFinish={onSubmit}>
-        {/* 短选项字段双列排布压低弹窗高度;所属法人/法定代表人身份ID 内容长,保持整行。 */}
+        {/* 短选项字段双列排布压低弹窗高度；所属法人内容长，保持整行。 */}
         <Row gutter={16}>
           {isPrivate && privateType === 'PARTNERSHIP' && (
             <Col span={24}>
@@ -738,7 +628,6 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
                     resetParentState();
                     form.setFieldsValue({ parent_cid_number: undefined, p1: undefined });
                   }
-                  setLegalRepOptions([]);
                 }}
               />
             </Form.Item>
@@ -887,86 +776,15 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
             )}
           </>
         )}
-        <Row gutter={16}>
-          <Col span={12}>
-            <Form.Item
-              label="法定代表人姓名"
-              name="legal_representative_name"
-              rules={[
-                { required: true, message: '请输入法定代表人姓名' },
-                { max: 30, message: '最多 30 个字' },
-              ]}
-            >
-              <Input placeholder="请输入法定代表人姓名" maxLength={30} />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item label="法定代表人证件照" required>
-              <Upload
-                accept="image/jpeg,image/png,image/webp"
-                showUploadList={false}
-                beforeUpload={(file) => handlePhotoUpload(file as File)}
-              >
-                <Button icon={<UploadOutlined />} loading={photoUploading}>
-                  上传证件照
-                </Button>
-              </Upload>
-              {photoName && (
-                <div style={{ color: '#52c41a', marginTop: 8, fontSize: 12 }}>
-                  {photoName}
-                </div>
-              )}
-            </Form.Item>
-          </Col>
-        </Row>
-        <Form.Item
-          label="法定代表人身份ID"
-          name="legal_representative_cid_number"
-          rules={[{ required: true, message: '请选择法定代表人身份ID' }]}
-        >
-          <AutoComplete
-            filterOption={false}
-            options={legalRepOptions.map((cidNumber) => ({
-              value: cidNumber,
-              label: cidNumber,
-            }))}
-          >
-            <Input
-              placeholder="输入身份ID后点击搜索"
-              suffix={
-                <span
-                  style={{
-                    cursor: legalRepSearching ? 'default' : 'pointer',
-                    color: legalRepSearching ? '#999' : '#1890ff',
-                  }}
-                  onClick={legalRepSearching ? undefined : triggerLegalRepSearch}
-                  title="搜索正常状态公民"
-                >
-                  {legalRepSearching ? <Spin size="small" /> : <SearchOutlined />}
-                </span>
-              }
-            />
-          </AutoComplete>
-        </Form.Item>
-        <Form.Item
-          name="legal_representative_photo_path"
-          rules={[{ required: true, message: '请上传法定代表人证件照' }]}
-          hidden
-        >
-          <Input />
-        </Form.Item>
-        <Form.Item name="legal_representative_photo_name" hidden><Input /></Form.Item>
-        <Form.Item name="legal_representative_photo_mime" hidden><Input /></Form.Item>
-        <Form.Item name="legal_representative_photo_size" hidden><Input type="number" /></Form.Item>
         <Form.List name="admins">
           {(fields, { add, remove }) => (
             <div style={{ marginTop: 8 }}>
               <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
-                初始管理员与岗位
+                初始管理员（至少 2 人）
               </Typography.Text>
               {fields.map((field, index) => (
                 <Row gutter={8} key={field.key} align="top">
-                  <Col span={8}>
+                  <Col span={21}>
                     <Form.Item
                       {...field}
                       label={index === 0 ? '管理员账户' : undefined}
@@ -974,39 +792,6 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
                       rules={[{ required: true, message: '请输入管理员账户' }]}
                     >
                       <Input placeholder="0x 公钥或 SS58 地址" />
-                    </Form.Item>
-                  </Col>
-                  <Col span={5}>
-                    <Form.Item
-                      {...field}
-                      label={index === 0 ? '岗位码' : undefined}
-                      name={[field.name, 'role_code']}
-                      rules={[
-                        { required: true, message: '请输入岗位码' },
-                        { pattern: /^[A-Z0-9_]+$/, message: '仅限大写字母、数字和下划线' },
-                      ]}
-                    >
-                      <Input placeholder="ROLE_CODE" maxLength={64} />
-                    </Form.Item>
-                  </Col>
-                  <Col span={5}>
-                    <Form.Item
-                      {...field}
-                      label={index === 0 ? '岗位名称' : undefined}
-                      name={[field.name, 'role_name']}
-                      rules={[{ required: true, message: '请输入岗位名称' }]}
-                    >
-                      <Input placeholder="公开岗位名称" />
-                    </Form.Item>
-                  </Col>
-                  <Col span={3}>
-                    <Form.Item
-                      {...field}
-                      label={index === 0 ? '有任期' : undefined}
-                      name={[field.name, 'term_required']}
-                      valuePropName="checked"
-                    >
-                      <Switch />
                     </Form.Item>
                   </Col>
                   <Col span={3}>
@@ -1018,57 +803,17 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
                       style={{ marginTop: index === 0 ? 30 : 0, width: '100%' }}
                     />
                   </Col>
-                  <Form.Item noStyle shouldUpdate={(prev, next) => prev.admins?.[field.name]?.term_required !== next.admins?.[field.name]?.term_required}>
-                    {({ getFieldValue }) => getFieldValue(['admins', field.name, 'term_required']) ? (
-                      <>
-                        <Col span={8}>
-                          <Form.Item
-                            {...field}
-                            label="任期开始日序"
-                            name={[field.name, 'term_start']}
-                            rules={[{ required: true, message: '请输入开始日序' }]}
-                          >
-                            <InputNumber min={1} precision={0} style={{ width: '100%' }} />
-                          </Form.Item>
-                        </Col>
-                        <Col span={8}>
-                          <Form.Item
-                            {...field}
-                            label="任期结束日序"
-                            name={[field.name, 'term_end']}
-                            rules={[{ required: true, message: '请输入结束日序' }]}
-                          >
-                            <InputNumber min={1} precision={0} style={{ width: '100%' }} />
-                          </Form.Item>
-                        </Col>
-                      </>
-                    ) : null}
-                  </Form.Item>
                 </Row>
               ))}
-              <Button icon={<PlusOutlined />} onClick={() => add({ admin_account: '', role_code: '', role_name: '', term_required: false, term_start: 0, term_end: 0 })}>
-                添加管理员岗位
+              <Button icon={<PlusOutlined />} onClick={() => add({ admin_account: '' })}>
+                添加管理员
               </Button>
+              <div style={{ color: '#888', fontSize: 12, marginTop: 8 }}>
+                管理员姓名由公民资料解析；无法解析时显示“管理员”。岗位在机构创建后单独维护。
+              </div>
             </div>
           )}
         </Form.List>
-        <Form.Item
-          label="管理员阈值"
-          name="threshold"
-          rules={[
-            { required: true, message: '请输入管理员阈值' },
-            {
-              validator: (_, value) => {
-                if (!value || value < minThreshold || value > Math.max(adminsCount, 1)) {
-                  return Promise.reject(new Error(`阈值必须在 ${minThreshold} 到 ${Math.max(adminsCount, 1)} 之间`));
-                }
-                return Promise.resolve();
-              },
-            },
-          ]}
-        >
-          <InputNumber min={minThreshold} max={Math.max(adminsCount, 1)} style={{ width: '100%' }} />
-        </Form.Item>
         {!collectNameInModal && (
           <div style={{ color: '#888', fontSize: 12, marginTop: -8 }}>
             提示:本步骤仅生成身份ID。生成后请在详情页设置机构全称等信息。
