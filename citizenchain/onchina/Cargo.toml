@@ -72,13 +72,13 @@ pallet-transaction-payment = { workspace = true, default-features = true }
 frame-metadata-hash-extension = { workspace = true, default-features = true }
 sp-runtime = { workspace = true, default-features = true }
 codec = { workspace = true, default-features = true }
+admin-primitives = { path = "../runtime/admins/admin-primitives" }
+entity-primitives = { path = "../runtime/entity/entity-primitives" }
 webauthn-rs = { version = "0.5.5", features = ["danger-allow-state-serialisation"] }
 mdns-sd = "0.20.1"
 
 [dev-dependencies]
 webauthn-authenticator-rs = { version = "0.5.5", features = ["softpasskey"] }
-# 仅供机构创建编码器交叉校验：使用 entity 的真实岗位、任职类型锁死 SCALE。
-entity-primitives = { path = "../runtime/entity/entity-primitives" }
 # 仅供立法 call-data 编码器交叉校验测试:用链端真实 Tier/VoteType
 # .encode() 比对,锁死 legislation-yuan SCALE 不漂移。
 legislation-yuan = { path = "../runtime/public/legislation-yuan" }

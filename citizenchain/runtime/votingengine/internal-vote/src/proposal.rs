@@ -11,6 +11,26 @@ impl<T: Config> Pallet<T> {
         execution_account: Option<T::AccountId>,
         subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
     ) -> Result<u64, DispatchError> {
+        Self::do_create_institution_proposal_with_mutex(
+            who,
+            institution_code,
+            actor_cid_number,
+            execution_account,
+            subject_cid_numbers,
+            InternalProposalMutexKind::Regular,
+            InternalProposalRole::General,
+        )
+    }
+
+    pub(crate) fn do_create_institution_proposal_with_mutex(
+        who: T::AccountId,
+        institution_code: InstitutionCode,
+        actor_cid_number: sp_std::vec::Vec<u8>,
+        execution_account: Option<T::AccountId>,
+        subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
+        mutex_kind: InternalProposalMutexKind,
+        role: InternalProposalRole,
+    ) -> Result<u64, DispatchError> {
         ensure!(
             is_valid_governance_code(&institution_code) && !is_personal_code(&institution_code),
             Error::<T>::InvalidInternalCode
@@ -44,7 +64,7 @@ impl<T: Config> Pallet<T> {
         };
 
         with_transaction(|| {
-            let id = match Self::allocate_and_lock(&proposal, InternalProposalMutexKind::Regular) {
+            let id = match Self::allocate_and_lock(&proposal, mutex_kind) {
                 Ok(id) => id,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
@@ -97,13 +117,7 @@ impl<T: Config> Pallet<T> {
             if let Err(err) = threshold_check {
                 return TransactionOutcome::Rollback(Err(err));
             }
-            Self::finish_proposal_create(
-                id,
-                proposal,
-                end,
-                threshold,
-                InternalProposalRole::General,
-            )
+            Self::finish_proposal_create(id, proposal, end, threshold, role)
         })
     }
 

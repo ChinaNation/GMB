@@ -2215,6 +2215,14 @@ fn main() {
                 "/api/v1/admin/own-institution",
                 get(auth::get_own_institution),
             )
+            .route(
+                "/api/v1/admin/institution/governance/prepare",
+                post(institution::admins::prepare_institution_governance),
+            )
+            .route(
+                "/api/v1/admin/institution/admins/register/prepare",
+                post(institution::admins::prepare_register_institution_admins),
+            )
             // 机构相关 API 外部路径保持稳定,内部按 subjects/gov/private/accounts/docs 归属。
             // - GET  /api/v1/institutions/check-cid-full-name             — cid_full_name 查重
             // - POST /api/v1/institutions/create                          — 公权/教育通用机构生成(不上链)

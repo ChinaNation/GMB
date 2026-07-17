@@ -431,6 +431,13 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                 }
                 | public_manage::pallet::Call::add_institution_account {
                     actor_cid_number, ..
+                }
+                | public_manage::pallet::Call::propose_institution_governance {
+                    actor_cid_number,
+                    ..
+                }
+                | public_manage::pallet::Call::register_institution_admins {
+                    actor_cid_number, ..
                 },
             ) => institution_onchain_route(who, actor_cid_number.as_slice()),
             RuntimeCall::PublicManage(
@@ -455,6 +462,13 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                     actor_cid_number, ..
                 }
                 | private_manage::pallet::Call::add_institution_account {
+                    actor_cid_number, ..
+                }
+                | private_manage::pallet::Call::propose_institution_governance {
+                    actor_cid_number,
+                    ..
+                }
+                | private_manage::pallet::Call::register_institution_admins {
                     actor_cid_number, ..
                 },
             ) => institution_onchain_route(who, actor_cid_number.as_slice()),
@@ -1249,6 +1263,55 @@ where
                 scope_province_name,
                 scope_city_name,
                 town_code,
+            );
+
+            sr25519_verify(&signature, &msg, &public)
+        }
+    }
+
+    fn verify_institution_governance(
+        cid_number: &[u8],
+        governance_payload: &[u8],
+        nonce: &NonceBytes,
+        signature: &SignatureBytes,
+        actor_cid_number: &[u8],
+        credential_signer_pubkey: &[u8; 32],
+        scope_province_name: &[u8],
+        scope_city_name: &[u8],
+    ) -> bool {
+        #[cfg(feature = "runtime-benchmarks")]
+        {
+            let _ = (
+                actor_cid_number,
+                credential_signer_pubkey,
+                scope_province_name,
+                scope_city_name,
+            );
+            return !cid_number.is_empty()
+                && !governance_payload.is_empty()
+                && !nonce.as_ref().is_empty()
+                && !signature.as_ref().is_empty();
+        }
+
+        #[cfg(not(feature = "runtime-benchmarks"))]
+        {
+            let Some(public) = issuer_admin_public(actor_cid_number, credential_signer_pubkey)
+            else {
+                return false;
+            };
+            let Some(signature) = sr25519_signature_from_bytes(signature.as_ref()) else {
+                return false;
+            };
+
+            let msg = primitives::sign::institution_governance_message(
+                &frame_system::Pallet::<Runtime>::block_hash(0),
+                cid_number,
+                governance_payload,
+                nonce,
+                actor_cid_number,
+                credential_signer_pubkey,
+                scope_province_name,
+                scope_city_name,
             );
 
             sr25519_verify(&signature, &msg, &public)

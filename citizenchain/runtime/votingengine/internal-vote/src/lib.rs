@@ -69,6 +69,7 @@ pub enum InternalProposalRole {
     PersonalCreate,
     PersonalClose,
     PersonalAdminChange,
+    InstitutionAdminChange,
 }
 
 #[derive(Encode, Decode, Clone, Copy, RuntimeDebug, TypeInfo, MaxEncodedLen, PartialEq, Eq)]
@@ -264,6 +265,33 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         with_transaction(|| {
             let proposal_id = match Self::do_create_personal_proposal(who.clone(), personal_account)
             {
+                Ok(id) => id,
+                Err(err) => return TransactionOutcome::Rollback(Err(err)),
+            };
+            match Self::register_data_and_auto_approve(who, proposal_id, module_tag, data) {
+                Ok(id) => TransactionOutcome::Commit(Ok(id)),
+                Err(err) => TransactionOutcome::Rollback(Err(err)),
+            }
+        })
+    }
+
+    fn create_institution_admin_change_proposal_with_data(
+        who: T::AccountId,
+        institution_code: InstitutionCode,
+        actor_cid_number: sp_std::vec::Vec<u8>,
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        with_transaction(|| {
+            let proposal_id = match Self::do_create_institution_proposal_with_mutex(
+                who.clone(),
+                institution_code,
+                actor_cid_number,
+                None,
+                sp_std::vec::Vec::new(),
+                InternalProposalMutexKind::AdminSetMutationExclusive,
+                InternalProposalRole::InstitutionAdminChange,
+            ) {
                 Ok(id) => id,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };

@@ -3466,6 +3466,7 @@ dependencies = [
 name = "entity-primitives"
 version = "1.0.0"
 dependencies = [
+ "admin-primitives",
  "frame-support",
  "parity-scale-codec",
  "primitives",
@@ -8372,6 +8373,7 @@ dependencies = [
 name = "onchina"
 version = "1.0.0"
 dependencies = [
+ "admin-primitives",
  "aes-gcm",
  "async-trait",
  "axum",

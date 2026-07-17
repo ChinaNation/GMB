@@ -114,6 +114,8 @@ class PalletRegistry {
   static const int proposeCreateInstitutionCall = 5;
   static const int updateInstitutionInfoCall = 6;
   static const int addInstitutionAccountCall = 7;
+  static const int proposeInstitutionGovernanceCall = 8;
+  static const int registerInstitutionAdminsCall = 9;
 
   // ---- PersonalManage (7) · 个人多签生命周期 ----
   // 个人多签独立 pallet,MODULE_TAG = b"per-mgmt",

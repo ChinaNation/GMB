@@ -210,6 +210,7 @@ fn source_label(source: InstitutionAssignmentSource) -> &'static str {
         InstitutionAssignmentSource::PopularElection => "普选",
         InstitutionAssignmentSource::MutualElection => "互选",
         InstitutionAssignmentSource::NominationAppointment => "提名任免",
+        InstitutionAssignmentSource::InstitutionGovernance => "机构内部治理",
     }
 }
 

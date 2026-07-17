@@ -61,6 +61,8 @@ pub enum InstitutionAssignmentSource {
     MutualElection,
     /// 提名任免最终结果写入。
     NominationAppointment,
+    /// 机构内部治理提案最终结果写入。
+    InstitutionGovernance,
 }
 
 /// 管理员任职当前状态。

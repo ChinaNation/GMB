@@ -122,9 +122,11 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 法定代表人账户 | `legal_representative_account` | runtime / OnChina / CitizenApp / CitizenWallet | 法定代表人唯一钱包账户 |
 | 机构岗位 | `InstitutionRole` | runtime entity / 跨端模型 | 某机构内的岗位身份和制度事实 |
 | 机构管理员任职 | `InstitutionAdminAssignment` | runtime entity / 跨端模型 | 绑定机构、管理员钱包账户、岗位、任期和来源 |
-| 任职来源 | `assignment_source` | runtime entity / API / 跨端 | 创世、注册局、普选、互选或提名任免 |
+| 任职来源 | `assignment_source` | runtime entity / API / 跨端 | 创世、注册局、普选、互选、提名任免或本机构内部治理 |
 | 任职来源记录 | `assignment_source_ref` | runtime entity / API / 跨端 | 对应的选举、投票、登记或任免记录 ID |
 | 管理员集合 | `admins` | runtime admins / 跨端 | 当前有效管理员钱包账户集合，机构类不再内嵌 `AdminProfile` |
+| 机构治理动作 | `InstitutionGovernanceAction` | runtime entity / OnChina / CitizenWallet | 本机构内部治理载荷，原子表达管理员集合、岗位任职和法定代表人目标变更 |
+| 解除法定代表人 | `clear_legal_representative` | OnChina API / frontend | 机构治理请求中清空链上法定代表人三字段的布尔开关，不得和 `legal_representative_cid_number` 同时提交 |
 
 上述字段不得用 `legal_rep_*`、`admin_role`、`admin_title`、`admin_term_*`、`admin_source_*` 或其他局部别名进入新目标结构。
 

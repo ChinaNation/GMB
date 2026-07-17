@@ -162,6 +162,51 @@ pub(crate) fn build_institution_creation_credential(
     )
 }
 
+/// 签发 call_index=8/9 的机构治理凭证，治理 action 的 SCALE 字节必须进入签名域。
+#[allow(dead_code)]
+pub(crate) fn build_institution_governance_credential(
+    state: &AppState,
+    actor_cid_number: &str,
+    cid_number: &str,
+    governance_payload: &[u8],
+    register_nonce: String,
+    scope_province_name: &str,
+    scope_city_name: &str,
+) -> Result<RuntimeInstitutionRegistrationCredential, String> {
+    if cid_number.trim().is_empty() {
+        return Err("cid_number is required".to_string());
+    }
+    if governance_payload.is_empty() {
+        return Err("governance_payload is required".to_string());
+    }
+    if register_nonce.trim().is_empty() {
+        return Err("register_nonce is required".to_string());
+    }
+    let genesis_hash = resolve_chain_genesis_hash()?;
+    let signing_ctx = runtime_signing_context(
+        actor_cid_number,
+        Some(scope_province_name),
+        Some(scope_city_name),
+    )?;
+    let payload_digest = primitives::sign::institution_governance_message(
+        &genesis_hash,
+        cid_number.trim().as_bytes(),
+        governance_payload,
+        &register_nonce.trim().as_bytes().to_vec(),
+        signing_ctx.actor_cid_number.as_bytes(),
+        &signing_ctx.credential_signer_pubkey,
+        signing_ctx.scope_province_name.as_bytes(),
+        signing_ctx.scope_city_name.as_bytes(),
+    );
+    finish_institution_credential(
+        state,
+        genesis_hash,
+        register_nonce,
+        signing_ctx,
+        payload_digest,
+    )
+}
+
 /// 注销凭证签名 payload 的 blake2_256 摘要(纯函数,便于 golden 测试锁字节)。
 ///
 /// **铁律**:元素顺序与 SCALE 类型必须与链端 `verify_institution_deregistration`

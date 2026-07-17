@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 状态：进行中
-- 当前步骤：第1步已完成组件级验收，等待用户确认第2步方案
+- 当前步骤：第3步已完成组件级改造与解除法定代表人补齐，正在执行真实运行态验收
 - 用户确认：2026-07-17
 - 执行规则：每一步先确认方案；执行完成后立即更新文档、完善中文注释、清理残留，再输出下一步技术方案
 
@@ -75,7 +75,7 @@
 
 ### 第3步
 
-- 五端读侧统一、界面收口和全仓残留审计。
+- 五端读侧统一、OnChina 页面入口收口、普通岗位短随机码生成和全仓残留审计。
 - 真实本地链、PostgreSQL、OnChina 页面和二维码签名全链路验收。
 - 完成最终文档和任务归档。
 
@@ -94,6 +94,30 @@
 - [x] Node、OnChina、CitizenApp、CitizenWallet按新协议编译和测试通过。
 - [x] 第1步完成组件级真实编译、单测和前端构建；真实本地链、PostgreSQL、页面与二维码全链路验收按既定三步范围统一在第3步执行，不在本步伪报。
 - [x] 文档已更新、中文注释已完善、旧代码和旧口径已清理。
+
+## 第2步验收标准
+
+- [x] 公权/私权机构统一新增 `propose_institution_governance`，本机构管理员可发起内部治理提案。
+- [x] 公权/私权机构统一新增 `register_institution_admins`，注册局管理员可按注册局权限直接完整替换目标机构 `admins`。
+- [x] 机构管理员集合变更使用内部投票引擎管理员变更互斥通道，不建立第二套管理员真源。
+- [x] 岗位、任职和法定代表人治理通过 `InstitutionGovernanceAction` 原子表达；岗位任职来源只能是 `InstitutionGovernance`，不能伪装成普选、互选或任命结果。
+- [x] 注册局直接登记管理员只替换 `admins`，不反向写岗位任职。
+- [x] 新增 call 纳入 runtime 机构操作费用路由，0.1 元只从 `actor_cid_number` 费用账户扣除，管理员钱包只签名，不允许回落。
+- [x] Node、OnChina、CitizenApp、CitizenWallet 已同步新来源枚举、call index、QR 动作码和解码规则。
+- [x] 第2步完成链端、协议、扫码解码和移动端组件级验收；OnChina 页面入口、短随机岗位码生成和真实链/数据库/页面/二维码全链路验收在第3步执行，不伪造运行态结论。
+- [x] 文档已更新、中文注释已完善、旧协议口径已清理。
+
+## 第3步验收标准
+
+- [x] OnChina 后端新增本机构治理 prepare 入口，构造 `propose_institution_governance` 链签名请求。
+- [x] OnChina 后端新增注册局直接登记机构管理员 prepare 入口，构造 `register_institution_admins` 链签名请求。
+- [x] 统一链签 submit 已支持机构治理 purpose；交易成功后只记审计，不本地改 `admins`、岗位或任职投影。
+- [x] 公权/注册局详情页新增“机构治理”tab，支持管理员集合、岗位、任职、法定代表人任命/更换/解除和注册局直接登记管理员。
+- [x] 私权详情页新增“机构治理”tab，支持本机构内部治理和法定代表人任命/更换/解除。
+- [x] 普通岗位码由页面自动生成短随机码，链上继续按 `(cid_number, role_code)` 最终校验唯一。
+- [x] 组件级验收通过：OnChina 后端 `cargo check`、OnChina 编码器测试、OnChina 前端生产构建和 diff 空白检查均通过。
+- [ ] 真实运行态验收：当前源码 WASM fresh 链、临时 PostgreSQL、OnChina HTTP 页面和链投影已通过；交互式 CitizenWallet 扫码签名仍需真实管理员登录会话与扫码设备，本线程未伪造私钥或会话，未标记全链路完成。
+- [x] 法定代表人“解除为空”：runtime `InstitutionLegalRepresentativeChange::Clear` 已能原子清空三字段，OnChina 与 CitizenWallet 已同步。
 
 ## 强制约束
 
@@ -123,3 +147,13 @@
 - 2026-07-17：协会 `SFAS` 的规则值改为 `p1=None`，明确表示实例必须显式选择盈利属性；删除模块内固定非盈利残留。
 - 2026-07-17：验收通过：runtime 43 项、public/private admins 13 项、public/private manage 26 项、Node Guard 9 项、OnChina 3 项目标测试、CitizenApp 10 项目标测试、CitizenWallet payload decoder 87 项测试；两个 Flutter analyze、OnChina/Node cargo check、前端生产构建和格式检查均通过。
 - 2026-07-17：本线程未连接 app terminal，且本机未发现 9944/9933/8964/5173/5432 监听服务；按第3步范围保留真实链、数据库、页面和二维码全链路验收，不伪造运行态结论。
+- 2026-07-17：用户确认第2步并二次确认允许修改 `citizenchain/runtime/`。
+- 2026-07-17：runtime 新增 `InstitutionGovernanceAction/Proposal`、机构治理签名域、PublicManage/PrivateManage call 8/9、内部投票管理员变更互斥通道和机构操作费用路由；本机构治理与注册局直接登记管理员均只认 `actor_cid_number + admins + origin`。
+- 2026-07-17：Node、OnChina、CitizenApp、CitizenWallet 同步 `InstitutionGovernance` 来源、call index、QR 动作码和冷钱包解码；旧“机构管理员任职无独立扫码 call”的文档口径已清理。
+- 2026-07-17：第2步验收通过：`cargo check -p entity-primitives -p internal-vote -p public-manage -p private-manage -p citizenchain -p node -p onchina`、`cargo test -p citizenchain --lib`、`cargo test -p onchina core::institution_call`、CitizenWallet `pallet_registry_test.dart + payload_decoder_test.dart`、CitizenApp 机构 storage codec 测试、两个 Flutter analyze 均通过。
+- 2026-07-17：用户确认第3步。
+- 2026-07-17：OnChina 后端新增机构治理 prepare、注册局直接登记管理员 prepare，并扩展统一链签会话 submit 的机构治理 purpose；机构治理交易成功后只审计，不本地改正式投影。
+- 2026-07-17：OnChina 公权/注册局详情页和私权详情页新增“机构治理”tab；普通岗位码页面自动生成短随机码，管理员集合/岗位/任职/法定代表人任命、更换或解除均构造链上治理交易。
+- 2026-07-17：runtime 法定代表人治理补齐 `Set/Clear`，解除时 `InstitutionInfo.legal_representative_name/cid_number/account` 三字段原子清空；OnChina API 新增 `clear_legal_representative`，CitizenWallet 已同步解码。
+- 2026-07-17：第3步组件级验收通过：`cargo check -p onchina`、`cargo fmt -p onchina -- --check`、`cargo test -p onchina core::institution_call`、OnChina 前端 `npm run build`、`git diff --check`。
+- 2026-07-17：真实运行态补验：`WASM_BUILD_FROM_SOURCE=1 cargo build -p node --bin citizenchain` 通过；当前源码 `citizenchain-fresh --tmp` 在 RPC `127.0.0.1:19944` 启动成功，`system_health.isSyncing=false`，genesis `0x17280b79d2136bb45813890a6effbb2c9b78ea46b6f77e05226e6de1140d3b63`，metadata hex 长度 `416058`。OnChina 使用临时内嵌 PostgreSQL `127.0.0.1:15433` 和 HTTP `127.0.0.1:18964` 启动成功，链投影 `subjects=49,593`、`accounts=99,231`，首页 `/` 返回 200，旧 `legal_rep_*` 列数量为 0，新 `legal_representative_*` 三字段列齐备且当前投影非空值为 0；验收后 OnChina、内嵌 PG 和 fresh 节点均已停止。

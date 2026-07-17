@@ -4,9 +4,724 @@
 //! 本子模块只承接链下私密档案(部门/联系方式/证件照/passkey 绑定)与链投影,
 //! 落库到 `institution_admins` 省级分区表。控制台登录元数据走独立的 `admins` 表,与此无关。
 
+use axum::{
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+    Json,
+};
+use chrono::{Duration, Utc};
+use codec::Encode;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use crate::{
+    actor_ip_from_headers, api_error,
+    auth::{login::parse_sr25519_pubkey_bytes, repo as auth_repo},
+    core::{
+        chain_submit,
+        institution_call::{
+            encode_propose_institution_governance, encode_register_institution_admins,
+            InstitutionAdminArg, ProposeInstitutionGovernanceArgs, RegisterInstitutionAdminsArgs,
+        },
+    },
+    domains::citizens::{
+        chain_identity::ensure_registry_admin,
+        occupy::{ChainSignSession, SESSION_TTL_SECS},
+    },
+    require_admin_any, ApiResponse, AppState,
+};
+
 pub(crate) mod chain_roles;
 pub(crate) mod model;
 pub(crate) mod repo;
 
 #[allow(unused_imports)]
 pub(crate) use model::InstitutionAdmin;
+
+pub(crate) const PURPOSE_INSTITUTION_GOVERNANCE: &str = "INSTITUTION_GOVERNANCE";
+pub(crate) const PURPOSE_INSTITUTION_REGISTER_ADMINS: &str = "INSTITUTION_REGISTER_ADMINS";
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct InstitutionAdminInput {
+    pub(crate) admin_name: String,
+    pub(crate) admin_account: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct InstitutionRoleChangeInput {
+    pub(crate) role_code: String,
+    pub(crate) role_name: String,
+    #[serde(default)]
+    pub(crate) term_required: bool,
+    #[serde(default = "default_active_role_status")]
+    pub(crate) role_status: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct InstitutionAssignmentTargetInput {
+    pub(crate) admin_account: String,
+    #[serde(default)]
+    pub(crate) term_start: u32,
+    #[serde(default)]
+    pub(crate) term_end: u32,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct InstitutionAssignmentChangeInput {
+    pub(crate) role_code: String,
+    #[serde(default)]
+    pub(crate) assignments: Vec<InstitutionAssignmentTargetInput>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct PrepareInstitutionGovernanceInput {
+    pub(crate) cid_number: String,
+    #[serde(default)]
+    pub(crate) admins: Vec<InstitutionAdminInput>,
+    #[serde(default)]
+    pub(crate) role_changes: Vec<InstitutionRoleChangeInput>,
+    #[serde(default)]
+    pub(crate) assignment_changes: Vec<InstitutionAssignmentChangeInput>,
+    #[serde(default)]
+    pub(crate) legal_representative_cid_number: Option<String>,
+    #[serde(default)]
+    pub(crate) clear_legal_representative: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct PrepareRegisterInstitutionAdminsInput {
+    pub(crate) cid_number: String,
+    pub(crate) admins: Vec<InstitutionAdminInput>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct PrepareInstitutionChainOutput {
+    pub(crate) request_id: String,
+    pub(crate) cid_number: String,
+    pub(crate) chain_action: u16,
+    pub(crate) call_data_hex: String,
+    pub(crate) sign_request: String,
+    pub(crate) expires_at: i64,
+}
+
+fn default_active_role_status() -> String {
+    "ACTIVE".to_string()
+}
+
+fn code_bytes(institution_code: &str) -> Result<[u8; 4], axum::response::Response> {
+    let raw = institution_code.trim().as_bytes();
+    if raw.is_empty() || raw.len() > 4 {
+        return Err(api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "institution_code invalid",
+        ));
+    }
+    let mut out = [0u8; 4];
+    out[..raw.len()].copy_from_slice(raw);
+    Ok(out)
+}
+
+fn parse_admin_inputs(
+    admins: &[InstitutionAdminInput],
+) -> Result<
+    (
+        Vec<InstitutionAdminArg>,
+        Vec<admin_primitives::InstitutionAdmin<[u8; 32]>>,
+    ),
+    axum::response::Response,
+> {
+    let mut args = Vec::with_capacity(admins.len());
+    let mut action_admins = Vec::with_capacity(admins.len());
+    let mut seen = std::collections::BTreeSet::new();
+    for admin in admins {
+        let admin_name = admin.admin_name.trim();
+        if admin_name.is_empty() {
+            return Err(api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "管理员姓名不能为空",
+            ));
+        }
+        let admin_account =
+            parse_sr25519_pubkey_bytes(admin.admin_account.trim()).ok_or_else(|| {
+                api_error(
+                    StatusCode::BAD_REQUEST,
+                    1001,
+                    "管理员账户必须是 sr25519 公钥或 SS58 地址",
+                )
+            })?;
+        if !seen.insert(admin_account) {
+            return Err(api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "管理员账户不能重复",
+            ));
+        }
+        let name_vec = admin_name.as_bytes().to_vec();
+        let bounded_name: admin_primitives::AdminName = name_vec
+            .clone()
+            .try_into()
+            .map_err(|_| api_error(StatusCode::BAD_REQUEST, 1001, "管理员姓名过长"))?;
+        args.push(InstitutionAdminArg {
+            admin_name: name_vec,
+            admin_account,
+        });
+        action_admins.push(admin_primitives::InstitutionAdmin {
+            admin_name: bounded_name,
+            admin_account,
+        });
+    }
+    if action_admins.len() < 2 {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "机构管理员至少需要 2 人",
+        ));
+    }
+    Ok((args, action_admins))
+}
+
+fn parse_role_status(
+    value: &str,
+) -> Result<entity_primitives::InstitutionRoleStatus, axum::response::Response> {
+    match value.trim().to_ascii_uppercase().as_str() {
+        "" | "ACTIVE" => Ok(entity_primitives::InstitutionRoleStatus::Active),
+        "INACTIVE" => Ok(entity_primitives::InstitutionRoleStatus::Inactive),
+        _ => Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "岗位状态只能是 ACTIVE 或 INACTIVE",
+        )),
+    }
+}
+
+fn role_changes(
+    input: &[InstitutionRoleChangeInput],
+) -> Result<Vec<entity_primitives::InstitutionRoleChange>, axum::response::Response> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut out = Vec::with_capacity(input.len());
+    for item in input {
+        let role_code = item.role_code.trim();
+        let role_name = item.role_name.trim();
+        if role_code.is_empty() || role_name.is_empty() {
+            return Err(api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "岗位码和岗位名称不能为空",
+            ));
+        }
+        if !seen.insert(role_code.to_string()) {
+            return Err(api_error(StatusCode::BAD_REQUEST, 1001, "岗位码不能重复"));
+        }
+        out.push(entity_primitives::InstitutionRoleChange {
+            role_code: role_code.as_bytes().to_vec(),
+            role_name: role_name.as_bytes().to_vec(),
+            term_required: item.term_required,
+            role_status: parse_role_status(&item.role_status)?,
+        });
+    }
+    Ok(out)
+}
+
+fn assignment_changes(
+    input: &[InstitutionAssignmentChangeInput],
+) -> Result<
+    Vec<entity_primitives::InstitutionRoleAssignmentChange<[u8; 32]>>,
+    axum::response::Response,
+> {
+    let mut seen_roles = std::collections::BTreeSet::new();
+    let mut out = Vec::with_capacity(input.len());
+    for item in input {
+        let role_code = item.role_code.trim();
+        if role_code.is_empty() {
+            return Err(api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "任职岗位码不能为空",
+            ));
+        }
+        if !seen_roles.insert(role_code.to_string()) {
+            return Err(api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "任职变更岗位码不能重复",
+            ));
+        }
+        let mut seen_accounts = std::collections::BTreeSet::new();
+        let mut assignments = Vec::with_capacity(item.assignments.len());
+        for target in &item.assignments {
+            let admin_account = parse_sr25519_pubkey_bytes(target.admin_account.trim())
+                .ok_or_else(|| {
+                    api_error(
+                        StatusCode::BAD_REQUEST,
+                        1001,
+                        "任职管理员账户必须是 sr25519 公钥或 SS58 地址",
+                    )
+                })?;
+            if !seen_accounts.insert(admin_account) {
+                return Err(api_error(
+                    StatusCode::BAD_REQUEST,
+                    1001,
+                    "同一岗位任职账户不能重复",
+                ));
+            }
+            assignments.push(entity_primitives::InstitutionAssignmentTarget {
+                admin_account,
+                term_start: target.term_start,
+                term_end: target.term_end,
+                assignment_source:
+                    entity_primitives::InstitutionAssignmentSource::InstitutionGovernance,
+                assignment_source_ref: b"onchina-governance".to_vec(),
+                assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
+            });
+        }
+        out.push(entity_primitives::InstitutionRoleAssignmentChange {
+            role_code: role_code.as_bytes().to_vec(),
+            assignments,
+        });
+    }
+    Ok(out)
+}
+
+fn legal_representative_change(
+    state: &AppState,
+    cid_number: Option<&str>,
+    clear_legal_representative: bool,
+) -> Result<
+    Option<entity_primitives::InstitutionLegalRepresentativeChange<[u8; 32]>>,
+    axum::response::Response,
+> {
+    if clear_legal_representative {
+        if cid_number
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .is_some()
+        {
+            return Err(api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "解除法定代表人时不能同时填写法定代表人公民CID",
+            ));
+        }
+        return Ok(Some(
+            entity_primitives::InstitutionLegalRepresentativeChange::Clear,
+        ));
+    }
+    let Some(cid_number) = cid_number.map(str::trim).filter(|v| !v.is_empty()) else {
+        return Ok(None);
+    };
+    let record = match state.db.find_citizen_by_cid(cid_number) {
+        Ok(Some(record)) => record,
+        Ok(None) => {
+            return Err(api_error(
+                StatusCode::NOT_FOUND,
+                1004,
+                "法定代表人公民档案不存在",
+            ))
+        }
+        Err(err) => {
+            tracing::error!(error = %err, "query legal representative citizen failed");
+            return Err(api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "法定代表人档案查询失败",
+            ));
+        }
+    };
+    let Some(wallet_pubkey) = record.wallet_pubkey.as_deref() else {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "法定代表人公民未绑定钱包",
+        ));
+    };
+    let account = parse_sr25519_pubkey_bytes(wallet_pubkey).ok_or_else(|| {
+        api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "法定代表人钱包公钥格式错误",
+        )
+    })?;
+    let name = format!(
+        "{}{}",
+        record.citizen_family_name.trim(),
+        record.citizen_given_name.trim()
+    );
+    if name.trim().is_empty() {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "法定代表人姓名为空",
+        ));
+    }
+    Ok(Some(
+        entity_primitives::InstitutionLegalRepresentativeChange::Set {
+            legal_representative_name: name.as_bytes().to_vec(),
+            legal_representative_cid_number: cid_number.as_bytes().to_vec(),
+            legal_representative_account: account,
+        },
+    ))
+}
+
+async fn build_chain_sign_output(
+    state: &AppState,
+    actor_pubkey: &str,
+    cid_number: &str,
+    purpose: &'static str,
+    call_data: Vec<u8>,
+    chain_action: u16,
+    context: serde_json::Value,
+) -> Result<PrepareInstitutionChainOutput, axum::response::Response> {
+    let prepared = chain_submit::prepare_signing(&call_data, actor_pubkey)
+        .await
+        .map_err(|err| {
+            tracing::error!(error = %err, "prepare institution governance signing failed");
+            api_error(
+                StatusCode::BAD_GATEWAY,
+                1004,
+                "链签名载荷准备失败(链不可用)",
+            )
+        })?;
+    let issued_at = Utc::now();
+    let expires_at = issued_at + Duration::seconds(SESSION_TTL_SECS);
+    let request_id = format!("institution-governance-{}", Uuid::new_v4());
+    let sign_request = crate::core::qr::build_sign_request_bytes(
+        request_id.as_str(),
+        issued_at.timestamp(),
+        expires_at.timestamp(),
+        actor_pubkey,
+        &prepared.payload,
+        chain_action,
+    )?;
+    let session = ChainSignSession {
+        request_id: request_id.clone(),
+        purpose: purpose.to_string(),
+        actor_pubkey: actor_pubkey.to_string(),
+        call_data: call_data.clone(),
+        nonce: prepared.nonce,
+        signing_hash: prepared.signing_hash_hex,
+        context,
+        expires_at,
+        consumed_at: None,
+    };
+    state
+        .db
+        .insert_chain_sign_session(&session)
+        .map_err(|err| {
+            tracing::error!(error = %err, "insert institution governance session failed");
+            api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "机构治理冷签会话落库失败",
+            )
+        })?;
+    Ok(PrepareInstitutionChainOutput {
+        request_id,
+        cid_number: cid_number.to_string(),
+        chain_action,
+        call_data_hex: format!("0x{}", hex::encode(call_data)),
+        sign_request,
+        expires_at: expires_at.timestamp(),
+    })
+}
+
+pub(crate) async fn prepare_institution_governance(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(input): Json<PrepareInstitutionGovernanceInput>,
+) -> impl IntoResponse {
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let binding = match auth_repo::active_node_binding(&state.db) {
+        Ok(Some(binding)) => binding,
+        Ok(None) => return api_error(StatusCode::FORBIDDEN, 2002, "not an on-chain admin"),
+        Err(err) => {
+            tracing::error!(error = %err, "query node binding failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "node binding query failed",
+            );
+        }
+    };
+    let cid_number = input.cid_number.trim();
+    if cid_number != binding.institution_cid_number
+        || binding.institution_code != ctx.institution_code
+    {
+        return api_error(StatusCode::FORBIDDEN, 1003, "只能发起本机构治理");
+    }
+    let Some((inst, _)) = (match state.db.get_institution_with_accounts(cid_number) {
+        Ok(value) => value,
+        Err(err) => {
+            tracing::error!(error = %err, "query institution failed");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, "机构查询失败");
+        }
+    }) else {
+        return api_error(StatusCode::NOT_FOUND, 1004, "机构不存在");
+    };
+    let role_changes = match role_changes(&input.role_changes) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let assignment_changes = match assignment_changes(&input.assignment_changes) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let legal = match legal_representative_change(
+        &state,
+        input.legal_representative_cid_number.as_deref(),
+        input.clear_legal_representative,
+    ) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let action = if input.admins.is_empty() {
+        if role_changes.is_empty() && assignment_changes.is_empty() && legal.is_none() {
+            return api_error(StatusCode::BAD_REQUEST, 1001, "机构治理内容不能为空");
+        }
+        entity_primitives::InstitutionGovernanceAction::MutateRolesAndAssignments {
+            role_changes,
+            assignment_changes,
+            legal_representative_change: legal,
+        }
+    } else {
+        let (_, admins) = match parse_admin_inputs(&input.admins) {
+            Ok(v) => v,
+            Err(resp) => return resp,
+        };
+        if role_changes.is_empty() && assignment_changes.is_empty() && legal.is_none() {
+            entity_primitives::InstitutionGovernanceAction::ReplaceAdmins { admins }
+        } else {
+            entity_primitives::InstitutionGovernanceAction::ReplaceAdminsAndMutateRoles {
+                admins,
+                role_changes,
+                assignment_changes,
+                legal_representative_change: legal,
+            }
+        }
+    };
+    let action_payload = action.encode();
+    let nonce = format!("onchina-governance-{}", Uuid::new_v4());
+    let province = ctx.scope_province_name.clone().unwrap_or_default();
+    let city = ctx.scope_city_name.clone().unwrap_or_default();
+    let credential = match crate::core::chain_runtime::build_institution_governance_credential(
+        &state,
+        cid_number,
+        cid_number,
+        &action_payload,
+        nonce,
+        province.as_str(),
+        city.as_str(),
+    ) {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::error!(error = %err, "build governance credential failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "机构治理凭证签发失败",
+            );
+        }
+    };
+    let signature = match hex::decode(credential.signature.trim_start_matches("0x")) {
+        Ok(v) => v,
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "治理凭证签名格式错误",
+            )
+        }
+    };
+    let signer = match parse_sr25519_pubkey_bytes(&credential.credential_signer_pubkey) {
+        Some(v) => v,
+        None => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "治理凭证签发公钥格式错误",
+            )
+        }
+    };
+    let code = match code_bytes(&inst.institution_code) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let chain = encode_propose_institution_governance(&ProposeInstitutionGovernanceArgs {
+        cid_number: cid_number.as_bytes().to_vec(),
+        governance_action: action_payload,
+        institution_code: code,
+        register_nonce: credential.register_nonce.as_bytes().to_vec(),
+        signature,
+        actor_cid_number: cid_number.as_bytes().to_vec(),
+        credential_signer_pubkey: signer,
+        scope_province_name: province.as_bytes().to_vec(),
+        scope_city_name: city.as_bytes().to_vec(),
+    });
+    let output = match build_chain_sign_output(
+        &state,
+        ctx.admin_account.as_str(),
+        cid_number,
+        PURPOSE_INSTITUTION_GOVERNANCE,
+        chain.call_data,
+        chain.action,
+        serde_json::json!({ "cid_number": cid_number, "op": "governance" }),
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    crate::core::runtime_ops::append_audit_log(
+        &state,
+        "INSTITUTION_GOVERNANCE_PREPARE",
+        &ctx.admin_account,
+        Some(cid_number.to_string()),
+        serde_json::json!({ "cid_number": cid_number, "actor_ip": actor_ip_from_headers(&headers) }),
+    );
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: output,
+    })
+    .into_response()
+}
+
+pub(crate) async fn prepare_register_institution_admins(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(input): Json<PrepareRegisterInstitutionAdminsInput>,
+) -> impl IntoResponse {
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    if let Err(resp) = ensure_registry_admin(&ctx) {
+        return resp;
+    }
+    let binding = match auth_repo::active_node_binding(&state.db) {
+        Ok(Some(binding)) => binding,
+        Ok(None) => return api_error(StatusCode::FORBIDDEN, 2002, "not an on-chain admin"),
+        Err(err) => {
+            tracing::error!(error = %err, "query node binding failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "node binding query failed",
+            );
+        }
+    };
+    if binding.institution_code != ctx.institution_code {
+        return api_error(StatusCode::FORBIDDEN, 1003, "permission denied");
+    }
+    let cid_number = input.cid_number.trim();
+    let Some((inst, _)) = (match state.db.get_institution_with_accounts(cid_number) {
+        Ok(value) => value,
+        Err(err) => {
+            tracing::error!(error = %err, "query institution failed");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, "机构查询失败");
+        }
+    }) else {
+        return api_error(StatusCode::NOT_FOUND, 1004, "机构不存在");
+    };
+    let (admin_args, action_admins) = match parse_admin_inputs(&input.admins) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let action = entity_primitives::InstitutionGovernanceAction::ReplaceAdmins {
+        admins: action_admins,
+    };
+    let action_payload = action.encode();
+    let nonce = format!("onchina-register-admins-{}", Uuid::new_v4());
+    let province = ctx.scope_province_name.clone().unwrap_or_default();
+    let city = ctx.scope_city_name.clone().unwrap_or_default();
+    let credential = match crate::core::chain_runtime::build_institution_governance_credential(
+        &state,
+        binding.institution_cid_number.as_str(),
+        cid_number,
+        &action_payload,
+        nonce,
+        province.as_str(),
+        city.as_str(),
+    ) {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::error!(error = %err, "build register admins credential failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "管理员登记凭证签发失败",
+            );
+        }
+    };
+    let signature = match hex::decode(credential.signature.trim_start_matches("0x")) {
+        Ok(v) => v,
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "管理员登记凭证签名格式错误",
+            )
+        }
+    };
+    let signer = match parse_sr25519_pubkey_bytes(&credential.credential_signer_pubkey) {
+        Some(v) => v,
+        None => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "管理员登记凭证签发公钥格式错误",
+            )
+        }
+    };
+    let code = match code_bytes(&inst.institution_code) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let chain = encode_register_institution_admins(&RegisterInstitutionAdminsArgs {
+        cid_number: cid_number.as_bytes().to_vec(),
+        admins: admin_args,
+        institution_code: code,
+        register_nonce: credential.register_nonce.as_bytes().to_vec(),
+        signature,
+        actor_cid_number: binding.institution_cid_number.as_bytes().to_vec(),
+        credential_signer_pubkey: signer,
+        scope_province_name: province.as_bytes().to_vec(),
+        scope_city_name: city.as_bytes().to_vec(),
+    });
+    let output = match build_chain_sign_output(
+        &state,
+        ctx.admin_account.as_str(),
+        cid_number,
+        PURPOSE_INSTITUTION_REGISTER_ADMINS,
+        chain.call_data,
+        chain.action,
+        serde_json::json!({
+            "cid_number": cid_number,
+            "actor_cid_number": binding.institution_cid_number,
+            "op": "register_admins"
+        }),
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    crate::core::runtime_ops::append_audit_log(
+        &state,
+        "INSTITUTION_REGISTER_ADMINS_PREPARE",
+        &ctx.admin_account,
+        Some(cid_number.to_string()),
+        serde_json::json!({ "cid_number": cid_number, "actor_ip": actor_ip_from_headers(&headers) }),
+    );
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: output,
+    })
+    .into_response()
+}

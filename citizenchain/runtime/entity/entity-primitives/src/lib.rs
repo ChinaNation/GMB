@@ -25,7 +25,8 @@ pub use primitives::multisig::{AccountValidator, ProtectedSourceChecker, Reserve
 pub mod institution_governance;
 pub mod institution_role;
 pub use institution_governance::{
-    InstitutionAssignmentTarget, InstitutionGovernanceResult, InstitutionGovernanceResultHandler,
+    InstitutionAssignmentTarget, InstitutionGovernanceAction, InstitutionGovernanceProposal,
+    InstitutionGovernanceResult, InstitutionGovernanceResultHandler,
     InstitutionLegalRepresentativeChange, InstitutionRoleAssignmentChange, InstitutionRoleChange,
 };
 pub use institution_role::{
@@ -300,6 +301,20 @@ pub trait CidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> {
             scope_city_name,
             town_code,
         )
+    }
+
+    /// 校验机构成立后的统一治理凭证。
+    fn verify_institution_governance(
+        _cid_number: &[u8],
+        _governance_payload: &[u8],
+        _nonce: &Nonce,
+        _signature: &Signature,
+        _actor_cid_number: &[u8],
+        _credential_signer_pubkey: &[u8; 32],
+        _scope_province_name: &[u8],
+        _scope_city_name: &[u8],
+    ) -> bool {
+        false
     }
 
     /// 校验 CID 机构自定义账户关闭凭证。

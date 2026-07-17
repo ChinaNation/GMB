@@ -74,10 +74,14 @@ class QrActions {
   static const int publicInstitutionCreate = 0x1e05;
   static const int publicInstitutionUpdateInfo = 0x1e06;
   static const int publicInstitutionAddAccount = 0x1e07;
+  static const int publicInstitutionGovernance = 0x1e08;
+  static const int publicInstitutionRegisterAdmins = 0x1e09;
   static const int privateInstitutionClose = 0x1f01;
   static const int privateInstitutionCreate = 0x1f05;
   static const int privateInstitutionUpdateInfo = 0x1f06;
   static const int privateInstitutionAddAccount = 0x1f07;
+  static const int privateInstitutionGovernance = 0x1f08;
+  static const int privateInstitutionRegisterAdmins = 0x1f09;
   static const int multisigTransfer = 0x1100;
   static const int safetyFundTransfer = 0x1101;
   static const int sweepToMain = 0x1102;
@@ -160,10 +164,16 @@ class QrActions {
         'propose_create_public_institution' => publicInstitutionCreate,
         'update_public_institution_info' => publicInstitutionUpdateInfo,
         'add_public_institution_account' => publicInstitutionAddAccount,
+        'propose_public_institution_governance' => publicInstitutionGovernance,
+        'register_public_institution_admins' => publicInstitutionRegisterAdmins,
         'propose_close_private_institution' => privateInstitutionClose,
         'propose_create_private_institution' => privateInstitutionCreate,
         'update_private_institution_info' => privateInstitutionUpdateInfo,
         'add_private_institution_account' => privateInstitutionAddAccount,
+        'propose_private_institution_governance' =>
+          privateInstitutionGovernance,
+        'register_private_institution_admins' =>
+          privateInstitutionRegisterAdmins,
         'propose_transfer' => multisigTransfer,
         'propose_safety_fund_transfer' => safetyFundTransfer,
         'propose_sweep_to_main' => sweepToMain,

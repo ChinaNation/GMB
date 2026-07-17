@@ -65,6 +65,8 @@ void main() {
       expect(PalletRegistry.proposeCreateInstitutionCall, 5);
       expect(PalletRegistry.updateInstitutionInfoCall, 6);
       expect(PalletRegistry.addInstitutionAccountCall, 7);
+      expect(PalletRegistry.proposeInstitutionGovernanceCall, 8);
+      expect(PalletRegistry.registerInstitutionAdminsCall, 9);
 
       // PersonalManage(7):个人多签生命周期;PersonalAdmins(29):管理员集合变更。
       expect(PalletRegistry.personalManagePallet, 7);

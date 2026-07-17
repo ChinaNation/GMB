@@ -8,6 +8,7 @@ enum InstitutionAssignmentSource {
   popularElection,
   mutualElection,
   nominationAppointment,
+  institutionGovernance,
 }
 
 extension InstitutionAssignmentSourceLabel on InstitutionAssignmentSource {
@@ -17,6 +18,7 @@ extension InstitutionAssignmentSourceLabel on InstitutionAssignmentSource {
         InstitutionAssignmentSource.popularElection => '普选',
         InstitutionAssignmentSource.mutualElection => '互选',
         InstitutionAssignmentSource.nominationAppointment => '提名任免',
+        InstitutionAssignmentSource.institutionGovernance => '机构内部治理',
       };
 }
 

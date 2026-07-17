@@ -234,6 +234,34 @@ pub fn institution_creation_message<Hash: Encode, Nonce: AsRef<[u8]>>(
     signing_message(OP_SIGN_INST, &payload.encode())
 }
 
+/// CID 机构治理凭证消息唯一构造入口。
+///
+/// `governance_payload` 是链上统一治理 action 的 SCALE 字节；调用方不得拆字段
+/// 另造第二套签名材料。
+#[allow(clippy::too_many_arguments)]
+pub fn institution_governance_message<Hash: Encode, Nonce: AsRef<[u8]>>(
+    genesis_hash: &Hash,
+    cid_number: &[u8],
+    governance_payload: &[u8],
+    nonce: &Nonce,
+    actor_cid_number: &[u8],
+    credential_signer_pubkey: &[u8; 32],
+    scope_province_name: &[u8],
+    scope_city_name: &[u8],
+) -> [u8; 32] {
+    let payload = (
+        genesis_hash,
+        cid_number,
+        governance_payload,
+        nonce.as_ref(),
+        actor_cid_number,
+        credential_signer_pubkey,
+        scope_province_name,
+        scope_city_name,
+    );
+    signing_message(OP_SIGN_INST, &payload.encode())
+}
+
 /// CID 机构自定义账户关闭凭证消息唯一构造入口。
 pub fn institution_account_close_message<Hash: Encode, AccountId: Encode, Nonce: AsRef<[u8]>>(
     genesis_hash: &Hash,

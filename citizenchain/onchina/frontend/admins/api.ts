@@ -46,6 +46,52 @@ export type OwnInstitutionAdminListOutput = {
   rows: OwnInstitutionAdminRow[];
 };
 
+export type InstitutionGovernanceAdminInput = {
+  admin_name: string;
+  admin_account: string;
+};
+
+export type InstitutionGovernanceRoleChangeInput = {
+  role_code: string;
+  role_name: string;
+  term_required: boolean;
+  role_status: 'ACTIVE' | 'INACTIVE';
+};
+
+export type InstitutionGovernanceAssignmentTargetInput = {
+  admin_account: string;
+  term_start: number;
+  term_end: number;
+};
+
+export type InstitutionGovernanceAssignmentChangeInput = {
+  role_code: string;
+  assignments: InstitutionGovernanceAssignmentTargetInput[];
+};
+
+export type PrepareInstitutionGovernanceInput = {
+  cid_number: string;
+  admins?: InstitutionGovernanceAdminInput[];
+  role_changes?: InstitutionGovernanceRoleChangeInput[];
+  assignment_changes?: InstitutionGovernanceAssignmentChangeInput[];
+  legal_representative_cid_number?: string | null;
+  clear_legal_representative?: boolean;
+};
+
+export type PrepareRegisterInstitutionAdminsInput = {
+  cid_number: string;
+  admins: InstitutionGovernanceAdminInput[];
+};
+
+export type PrepareInstitutionChainOutput = {
+  request_id: string;
+  cid_number: string;
+  chain_action: number;
+  call_data_hex: string;
+  sign_request: string;
+  expires_at: number;
+};
+
 export async function listFederalRegistryAdmins(auth: AdminAuth): Promise<FederalRegistryAdminRow[]> {
   return request<FederalRegistryAdminRow[]>('/api/v1/admin/federal-registry-admins', {
     method: 'GET',
@@ -64,5 +110,33 @@ export async function getOwnInstitution(auth: AdminAuth): Promise<InstitutionDet
   return request<InstitutionDetail>('/api/v1/admin/own-institution', {
     method: 'GET',
     headers: adminHeaders(auth),
+  });
+}
+
+export async function prepareInstitutionGovernance(
+  auth: AdminAuth,
+  input: PrepareInstitutionGovernanceInput,
+): Promise<PrepareInstitutionChainOutput> {
+  return request<PrepareInstitutionChainOutput>('/api/v1/admin/institution/governance/prepare', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...adminHeaders(auth),
+    },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function prepareRegisterInstitutionAdmins(
+  auth: AdminAuth,
+  input: PrepareRegisterInstitutionAdminsInput,
+): Promise<PrepareInstitutionChainOutput> {
+  return request<PrepareInstitutionChainOutput>('/api/v1/admin/institution/admins/register/prepare', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...adminHeaders(auth),
+    },
+    body: JSON.stringify(input),
   });
 }

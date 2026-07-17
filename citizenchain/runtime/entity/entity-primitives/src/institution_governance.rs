@@ -15,6 +15,7 @@ use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 
 use crate::{InstitutionAssignmentSource, InstitutionAssignmentStatus, InstitutionRoleStatus};
+use admin_primitives::InstitutionAdmin;
 
 /// 动态岗位的目标定义。
 ///
@@ -50,14 +51,19 @@ pub struct InstitutionRoleAssignmentChange<AccountId> {
     pub assignments: Vec<InstitutionAssignmentTarget<AccountId>>,
 }
 
-/// 法定代表人公开信息目标值。
+/// 法定代表人公开信息目标变更。
 ///
-/// 三个字段只能整体设置；没有“只改姓名/CID/账户”或使用管理员首位回退的路径。
+/// 三个字段只能整体设置或整体清空；没有“只改姓名/CID/账户”或使用管理员首位回退的路径。
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo, PartialEq, Eq)]
-pub struct InstitutionLegalRepresentativeChange<AccountId> {
-    pub legal_representative_name: Vec<u8>,
-    pub legal_representative_cid_number: Vec<u8>,
-    pub legal_representative_account: AccountId,
+pub enum InstitutionLegalRepresentativeChange<AccountId> {
+    /// 任命或更换法定代表人，三个公开字段必须同时写入。
+    Set {
+        legal_representative_name: Vec<u8>,
+        legal_representative_cid_number: Vec<u8>,
+        legal_representative_account: AccountId,
+    },
+    /// 解除当前法定代表人，三个公开字段必须同时清空。
+    Clear,
 }
 
 /// 业务模块交给 entity 的机构治理最终结果。
@@ -74,6 +80,40 @@ pub struct InstitutionGovernanceResult<AccountId> {
     pub legal_representative_change: Option<InstitutionLegalRepresentativeChange<AccountId>>,
     /// 指向产生本结果的登记、选举、投票或其他业务记录；不存在 `creator` 字段。
     pub result_source_ref: Vec<u8>,
+}
+
+/// 机构成立后的统一治理动作。
+///
+/// `admins` 是机构签名权限集合；岗位和任职是机构职务事实。二者可以在同一
+/// action 内原子执行，但任何一方都不能从另一方反向派生。
+#[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo, PartialEq, Eq)]
+pub enum InstitutionGovernanceAction<AccountId> {
+    /// 本机构内部投票通过后，完整替换机构 `admins` 真源。
+    ReplaceAdmins {
+        admins: Vec<InstitutionAdmin<AccountId>>,
+    },
+    /// 调整岗位定义、岗位任职和法定代表人，不改变机构 `admins`。
+    MutateRolesAndAssignments {
+        role_changes: Vec<InstitutionRoleChange>,
+        assignment_changes: Vec<InstitutionRoleAssignmentChange<AccountId>>,
+        legal_representative_change: Option<InstitutionLegalRepresentativeChange<AccountId>>,
+    },
+    /// 同一提案内原子替换管理员并调整岗位/任职。
+    ReplaceAdminsAndMutateRoles {
+        admins: Vec<InstitutionAdmin<AccountId>>,
+        role_changes: Vec<InstitutionRoleChange>,
+        assignment_changes: Vec<InstitutionRoleAssignmentChange<AccountId>>,
+        legal_representative_change: Option<InstitutionLegalRepresentativeChange<AccountId>>,
+    },
+}
+
+/// 写入 ProposalData 的机构治理提案载荷。
+#[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo, PartialEq, Eq)]
+pub struct InstitutionGovernanceProposal<AccountId> {
+    pub institution_code: InstitutionCode,
+    /// 被治理机构 CID。机构唯一主键只能是 CID，不能用机构账户替代。
+    pub cid_number: Vec<u8>,
+    pub action: InstitutionGovernanceAction<AccountId>,
 }
 
 /// 已完成业务结果写入 entity 的唯一跨模块入口。

@@ -10,7 +10,8 @@ use admin_primitives::InstitutionAdminQuery as _;
 use alloc::{collections::BTreeMap, vec::Vec};
 use entity_primitives::{
     InstitutionAdminAssignment, InstitutionAssignmentSource, InstitutionAssignmentStatus,
-    InstitutionGovernanceResult, InstitutionRole, InstitutionRoleStatus,
+    InstitutionGovernanceResult, InstitutionLegalRepresentativeChange, InstitutionRole,
+    InstitutionRoleStatus,
 };
 use frame_support::{
     dispatch::DispatchResult,
@@ -27,6 +28,11 @@ use crate::pallet::{
     AccountNameOf, CidNumberOf, Config, Error, InstitutionRoleAssignments, InstitutionRoles,
     Institutions, Pallet,
 };
+
+enum LegalRepresentativeTarget<T: Config> {
+    Set(AccountNameOf<T>, CidNumberOf<T>, T::AccountId),
+    Clear,
+}
 
 impl<T: Config> Pallet<T> {
     /// 原子应用公权机构岗位、任职和法定代表人最终状态；管理员集合保持独立。
@@ -165,6 +171,7 @@ impl<T: Config> Pallet<T> {
                         InstitutionAssignmentSource::PopularElection
                             | InstitutionAssignmentSource::MutualElection
                             | InstitutionAssignmentSource::NominationAppointment
+                            | InstitutionAssignmentSource::InstitutionGovernance
                     ),
                     Error::<T>::InvalidAssignmentSource
                 );
@@ -279,27 +286,37 @@ impl<T: Config> Pallet<T> {
         let legal_representative_change = result
             .legal_representative_change
             .map(|change| {
-                ensure!(
-                    !change.legal_representative_name.is_empty(),
-                    Error::<T>::EmptyLegalRepresentativeName
-                );
-                ensure!(
-                    !change.legal_representative_cid_number.is_empty(),
-                    Error::<T>::EmptyLegalRepresentativeCidNumber
-                );
-                let name: AccountNameOf<T> = change
-                    .legal_representative_name
-                    .try_into()
-                    .map_err(|_| Error::<T>::EmptyLegalRepresentativeName)?;
-                let citizen_cid: CidNumberOf<T> = change
-                    .legal_representative_cid_number
-                    .try_into()
-                    .map_err(|_| Error::<T>::EmptyLegalRepresentativeCidNumber)?;
-                Ok::<_, sp_runtime::DispatchError>((
-                    name,
-                    citizen_cid,
-                    change.legal_representative_account,
-                ))
+                match change {
+                    InstitutionLegalRepresentativeChange::Set {
+                        legal_representative_name,
+                        legal_representative_cid_number,
+                        legal_representative_account,
+                    } => {
+                        ensure!(
+                            !legal_representative_name.is_empty(),
+                            Error::<T>::EmptyLegalRepresentativeName
+                        );
+                        ensure!(
+                            !legal_representative_cid_number.is_empty(),
+                            Error::<T>::EmptyLegalRepresentativeCidNumber
+                        );
+                        let name: AccountNameOf<T> = legal_representative_name
+                            .try_into()
+                            .map_err(|_| Error::<T>::EmptyLegalRepresentativeName)?;
+                        let citizen_cid: CidNumberOf<T> = legal_representative_cid_number
+                            .try_into()
+                            .map_err(|_| Error::<T>::EmptyLegalRepresentativeCidNumber)?;
+                        Ok::<_, sp_runtime::DispatchError>(LegalRepresentativeTarget::<T>::Set(
+                            name,
+                            citizen_cid,
+                            legal_representative_account,
+                        ))
+                    }
+                    // 解除法定代表人只清空 InstitutionInfo 三字段，不影响 LR 岗位本身。
+                    InstitutionLegalRepresentativeChange::Clear => {
+                        Ok(LegalRepresentativeTarget::<T>::Clear)
+                    }
+                }
             })
             .transpose()?;
         let role_changes_len = role_changes.len() as u32;
@@ -318,12 +335,21 @@ impl<T: Config> Pallet<T> {
                     assignments.clone(),
                 );
             }
-            if let Some((name, citizen_cid, account)) = &legal_representative_change {
+            if let Some(change) = legal_representative_change {
                 Institutions::<T>::mutate(&cid_number, |maybe| {
                     if let Some(info) = maybe {
-                        info.legal_representative_name = Some(name.clone());
-                        info.legal_representative_cid_number = Some(citizen_cid.clone());
-                        info.legal_representative_account = Some(account.clone());
+                        match change {
+                            LegalRepresentativeTarget::Set(name, citizen_cid, account) => {
+                                info.legal_representative_name = Some(name);
+                                info.legal_representative_cid_number = Some(citizen_cid);
+                                info.legal_representative_account = Some(account);
+                            }
+                            LegalRepresentativeTarget::Clear => {
+                                info.legal_representative_name = None;
+                                info.legal_representative_cid_number = None;
+                                info.legal_representative_account = None;
+                            }
+                        }
                     }
                 });
             }

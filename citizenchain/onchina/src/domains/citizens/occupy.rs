@@ -37,7 +37,7 @@ const REVOKE_CID_CALL_INDEX: u8 = 8;
 /// 发号碰撞重试上限(对齐 n9 桶 1000 次重试死规则)。
 const CID_GENERATE_MAX_RETRY: u32 = 1000;
 /// 冷签会话有效期(秒)。
-const SESSION_TTL_SECS: i64 = 600;
+pub(crate) const SESSION_TTL_SECS: i64 = 600;
 
 pub(crate) const PURPOSE_CITIZEN_OCCUPY: &str = "CITIZEN_OCCUPY";
 pub(crate) const PURPOSE_CITIZEN_REVOKE: &str = "CITIZEN_REVOKE";
@@ -511,9 +511,6 @@ pub(crate) async fn submit_chain_sign(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    if let Err(resp) = ensure_registry_admin(&ctx) {
-        return resp;
-    }
     let session = match state.db.find_chain_sign_session(input.request_id.as_str()) {
         Ok(Some(v)) => v,
         Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "冷签会话不存在"),
@@ -533,6 +530,14 @@ pub(crate) async fn submit_chain_sign(
     }
     if !same_pubkey_hex(input.signer_pubkey.as_str(), session.actor_pubkey.as_str()) {
         return api_error(StatusCode::FORBIDDEN, 1003, "签名钱包与会话管理员不一致");
+    }
+    if matches!(
+        session.purpose.as_str(),
+        PURPOSE_CITIZEN_OCCUPY | PURPOSE_CITIZEN_REVOKE | PURPOSE_CITIZEN_IDENTITY_PUSH
+    ) {
+        if let Err(resp) = ensure_registry_admin(&ctx) {
+            return resp;
+        }
     }
 
     let tx_hash = match chain_submit::assemble_and_submit(
@@ -618,6 +623,11 @@ pub(crate) async fn submit_chain_sign(
                 tracing::error!(error = %err, "update citizen onchain failed");
                 return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "上链状态回写失败");
             }
+        }
+        crate::institution::admins::PURPOSE_INSTITUTION_GOVERNANCE
+        | crate::institution::admins::PURPOSE_INSTITUTION_REGISTER_ADMINS => {
+            // 机构治理与注册局登记管理员的最终真源在链上。提交成功后仅记录审计；
+            // OnChina 读侧继续通过链上 admins / roles / assignments 读取，不本地改正式投影。
         }
         other => {
             tracing::error!(purpose = %other, "unknown chain sign purpose");

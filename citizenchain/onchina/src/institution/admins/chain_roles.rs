@@ -65,6 +65,7 @@ fn assignment_source_label(source: u8) -> &'static str {
         2 => "普选",
         3 => "互选",
         4 => "提名任免",
+        5 => "机构内部治理",
         _ => "",
     }
 }

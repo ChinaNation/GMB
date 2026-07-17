@@ -1738,6 +1738,103 @@ void main() {
       expect(decoded.fields.containsKey('funding_account'), isFalse);
     });
 
+    List<int> buildInstitutionAdminsForGovernance() {
+      return <int>[
+        ...compactU32(2),
+        ...compactVec('张三'),
+        ...List<int>.filled(32, 0x31),
+        ...compactVec('李四'),
+        ...List<int>.filled(32, 0x32),
+      ];
+    }
+
+    List<int> appendGovernanceCredentialTail(
+        List<int> payload, String actorCid) {
+      return <int>[
+        ...payload,
+        ...compactVec('gov-nonce-001'),
+        ...compactU32(64),
+        ...List<int>.filled(64, 0x44),
+        ...compactVec(actorCid),
+        ...List<int>.generate(32, (i) => 0xA0 + (i & 0x0F)),
+        ...compactVec('贵州省'),
+        ...compactVec('贵阳市'),
+      ];
+    }
+
+    test('decodes propose_public_institution_governance 替换管理员集合', () {
+      const cidNumber = 'GZ001-SFAS1-123456789-2026';
+      final payload = Uint8List.fromList(appendGovernanceCredentialTail(
+        <int>[
+          0x1e,
+          0x08,
+          ...compactVec(cidNumber),
+          0x00, // InstitutionGovernanceAction::ReplaceAdmins
+          ...buildInstitutionAdminsForGovernance(),
+        ],
+        cidNumber,
+      ));
+
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_public_institution_governance');
+      expect(decoded.fields['cid_number'], cidNumber);
+      expect(decoded.fields['governance_action'], '替换管理员集合');
+      expect(decoded.fields['governance_detail'], contains('2 名管理员'));
+      expect(decoded.fields['actor_cid_number'], cidNumber);
+      expect(decoded.fields['fee_payer'], '$cidNumber 的链上费用账户');
+      expect(decoded.fields['scope_province_name'], '贵州省');
+      expect(decoded.fields['scope_city_name'], '贵阳市');
+    });
+
+    test('decodes propose_public_institution_governance 解除法定代表人', () {
+      const cidNumber = 'GZ001-SFAS1-123456789-2026';
+      final payload = Uint8List.fromList(appendGovernanceCredentialTail(
+        <int>[
+          0x1e,
+          0x08,
+          ...compactVec(cidNumber),
+          0x01, // InstitutionGovernanceAction::MutateRolesAndAssignments
+          ...compactU32(0), // role_changes
+          ...compactU32(0), // assignment_changes
+          0x01, // Option<InstitutionLegalRepresentativeChange>::Some
+          0x01, // InstitutionLegalRepresentativeChange::Clear
+        ],
+        cidNumber,
+      ));
+
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_public_institution_governance');
+      expect(decoded.fields['governance_action'], '岗位/任职治理');
+      expect(decoded.fields['governance_detail'], contains('含法定代表人解除'));
+    });
+
+    test('decodes register_private_institution_admins 注册局直接登记管理员', () {
+      const cidNumber = 'GD001-COMP1-123456789-2026';
+      final payload = Uint8List.fromList(appendGovernanceCredentialTail(
+        <int>[
+          0x1f,
+          0x09,
+          ...compactVec(cidNumber),
+          ...buildInstitutionAdminsForGovernance(),
+        ],
+        registryActorCid,
+      ));
+
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'register_private_institution_admins');
+      expect(decoded.fields['cid_number'], cidNumber);
+      expect(decoded.fields['admins_len'], '2');
+      expect(decoded.fields['admins'],
+          contains('张三(${ss58FromBytes(List<int>.filled(32, 0x31))})'));
+      expect(decoded.fields['actor_cid_number'], registryActorCid);
+      expect(decoded.fields['fee_payer'], '$registryActorCid 的链上费用账户');
+      expect(decoded.fields['scope_province_name'], '贵州省');
+      expect(decoded.fields['scope_city_name'], '贵阳市');
+    });
+
     test('decodes current propose_create_personal with regular_threshold field',
         () {
       final name = utf8.encode('家庭基金');

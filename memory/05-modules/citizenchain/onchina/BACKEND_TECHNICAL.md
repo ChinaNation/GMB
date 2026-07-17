@@ -140,9 +140,17 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 公民身份上链(`CITIZEN_ONCHAIN_PUSH`)属注册局上链操作,同归 `PASSKEY_COLD_SIGN` 最严档:`prepare` 与 `complete` 各消费一次一次性 grant,grant 载荷绑定 `{cid_number, wallet_account}` 且 target = cid_number,与业务请求逐字段一致才放行。
 
-联邦注册局机构 `admins` 和岗位任职在 OnChina 完全只读，换届只能由治理业务写入 entity，不允许本地新增、删除或替换。市注册局本地登记目录每省每市最多 30 人，统计必须同时带省和市，但该目录不是链上管理员资格真源。NJD、普通公权机构、私权机构和非法人组织本期只能查看本机构链上 active admin 与岗位任职，不能在 OnChina 内维护管理员集合。
+联邦注册局机构 `admins` 和岗位任职不得本地直接改库；换届只能构造链上治理或注册局登记动作后由 entity 写入。市注册局本地登记目录每省每市最多 30 人，统计必须同时带省和市，但该目录不是链上管理员资格真源。NJD、普通公权机构、私权机构和非法人组织的本机构管理员/岗位维护也必须走链上 `propose_institution_governance`，不得在 OnChina 内建立第二套管理员集合。
 
 机构管理员列表 API 联合读取链上 `admins(admin_name + admin_account)` 人员集合与 entity 岗位定义、有效任职。`institution/admins/chain_roles.rs` 负责公权/私权岗位路由、任职合并和 FRG 省专员范围解析；本地联系方式、照片和 Passkey 不得成为管理员资格或岗位真源。岗位权限不建立通用表，具体业务模块按“机构 + 有效岗位 + 业务动作”硬规则判定。
+
+机构治理链写入口：
+
+- `POST /api/v1/admin/institution/governance/prepare`：本机构管理员发起 `propose_institution_governance`，后端只接受当前节点绑定机构 CID，构造完整 runtime 签名载荷并写入 `chain_sign_sessions`。管理员集合、岗位、任职和法定代表人任命/更换/解除都只进入链上 call data，不写本地正式投影；解除时提交 `clear_legal_representative=true`，不得同时提交 `legal_representative_cid_number`。
+- `POST /api/v1/admin/institution/admins/register/prepare`：注册局管理员发起 `register_institution_admins`，目标机构 CID 从请求读取，actor CID 只来自当前节点绑定注册局 CID。
+- 提交阶段复用统一链签会话 submit。机构治理 purpose 进块后只记录审计；OnChina 读侧继续读取链上 `admins / InstitutionRoles / InstitutionRoleAssignments`，禁止在提交成功后本地直接改管理员或岗位真源。
+- 普通岗位码由前端自动生成短码并允许人工调整；runtime 仍以 `(cid_number, role_code)` 做最终唯一性裁决。
+- 法定代表人治理使用 runtime `InstitutionLegalRepresentativeChange::Set/Clear`，任命/更换时三字段同时写入，解除时三字段同时清空。
 
 ## 10. 机构工作台能力映射
 
@@ -150,7 +158,7 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 - `FRG` 是 Tier1 创世注册局，进入 `registry` 工作台，能力必须是 `CREG` 的超集：可进入公民、私权、教育、公权机构、市注册局和联邦注册局，并可在本省范围内登记机构、写业务、维护市注册局管理员、维护本省联邦注册局管理员。
 - `CREG` 是 Tier2 下级注册局，进入 `registry` 工作台，保留本市公民/机构/业务写入能力；同时必须能进入“联邦注册局”入口，只读查看本省联邦注册局管理员列表，不得发起联邦注册局管理员编辑或更换。
-- `NJD` 进入 `judicial` 工作台，不复用注册局 UI。当前工作台按 `operations / display / records` 分类：显示页可只读查看本机构信息和链上 active admin 列表；护宪终审、管理员变更和操作记录入口保留清单位置，未接入链上动作前保持禁用。
+- `NJD` 进入 `judicial` 工作台，不复用注册局 UI。当前工作台按 `operations / display / records` 分类：显示页可只读查看本机构信息和链上 active admin 列表；管理员变更和岗位治理入口必须构造 `propose_institution_governance` 链动作，护宪终审按专属业务能力接入。
 - 立法机构进入 `legislation` 工作台或通用工作台的立法入口，立法能力由 `domains/legislation/category.rs` 和 `can_*_legislation` 位决定。
 - 普通公权机构、私权机构和非法人组织进入 `generic` 工作台；当前至少可只读查看本机构链上 active admin 列表，专属操作按后续机构能力接入。
 - `NRC`、`PRC`、`PRB` 走节点桌面端，不获得 OnChina 网页能力。
@@ -173,6 +181,8 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 - 接口不得读取 `china.sqlite` 运行态派生公权机构,也不得把本地 `subjects/gov/accounts` 投影作为授权真源。
 
 ## 11. 验收
+
+2026-07-17 机构治理运行态补验：当前源码 `citizenchain-fresh --tmp` 使用 `WASM_BUILD_FROM_SOURCE=1` 构建后启动成功，OnChina 使用临时内嵌 PostgreSQL 和 `ONCHAIN_WS_URL=ws://127.0.0.1:19944` 连接 fresh 链启动成功；启动期完成公权链投影 `49,593` 个机构与 `99,231` 个账户，首页 HTTP 返回 200，`subjects` 表旧 `legal_rep_*` 列为 0，新 `legal_representative_*` 三字段列齐备。交互式 CitizenWallet 扫码签名需要真实管理员登录会话和扫码设备，本次仅完成链、数据库、服务和页面基础运行态，不伪造扫码签名结果。
 
 ```text
 rg "mod chain;|crate::chain|chain::" citizenchain/onchina/src -g '*.rs'

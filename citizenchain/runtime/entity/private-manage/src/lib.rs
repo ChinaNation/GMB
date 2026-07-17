@@ -28,6 +28,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 use sp_core::sr25519::Public as Sr25519Public;
+use sp_runtime::traits::Hash;
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
 pub use traits::{
     AccountValidator, CidInstitutionVerifier, InstitutionCidQuery, InstitutionMultisigQuery,
@@ -40,6 +41,7 @@ use votingengine::{
 
 pub use entity_primitives::{
     InstitutionAdminAssignment, InstitutionAssignmentSource, InstitutionAssignmentStatus,
+    InstitutionGovernanceAction, InstitutionGovernanceProposal, InstitutionGovernanceResult,
     InstitutionRole, InstitutionRoleStatus,
 };
 pub use institution::role::{
@@ -136,6 +138,8 @@ pub mod pallet {
         InstitutionAdmin<<T as frame_system::Config>::AccountId>,
         <T as Config>::MaxAdmins,
     >;
+    pub type InstitutionGovernanceActionOf<T> =
+        InstitutionGovernanceAction<<T as frame_system::Config>::AccountId>;
 
     pub type CidNumberOf<T> = BoundedVec<u8, <T as Config>::MaxCidNumberLength>;
     pub type AccountNameOf<T> = BoundedVec<u8, <T as Config>::MaxAccountNameLength>;
@@ -322,6 +326,18 @@ pub mod pallet {
             legal_representative_updated: bool,
             result_source_ref: crate::institution::role::AssignmentSourceRefOf,
         },
+        /// 机构内部治理提案已创建，后续由内部投票引擎计票和回调执行。
+        InstitutionGovernanceProposed {
+            proposal_id: u64,
+            cid_number: CidNumberOf<T>,
+            proposer: T::AccountId,
+        },
+        /// 注册局已直接登记目标机构管理员集合。
+        InstitutionAdminsRegistered {
+            cid_number: CidNumberOf<T>,
+            admins_len: u32,
+            submitter: T::AccountId,
+        },
         /// CID 机构登记
         CidInstitutionRegistered {
             cid_number: CidNumberOf<T>,
@@ -496,11 +512,14 @@ pub mod pallet {
         DuplicateGovernanceAssignmentChange,
         /// 已停用岗位仍有有效任职。
         InactiveRoleHasAssignments,
+        /// 机构治理提案载荷为空或不能解码。
+        InvalidInstitutionGovernanceAction,
     }
 
     /// 提案操作类型标记：存储在 ProposalData 的第一个字节。
     /// ACTION = 1 永久保留空位,不复用。
     pub const ACTION_CLOSE: u8 = 2;
+    pub const ACTION_GOVERNANCE: u8 = 3;
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
@@ -597,6 +616,70 @@ pub mod pallet {
                 submitter,
                 cid_number,
                 account_names,
+                register_nonce,
+                signature,
+                actor_cid_number,
+                credential_signer_pubkey,
+                scope_province_name,
+                scope_city_name,
+            )
+        }
+
+        /// 本机构管理员发起机构内部治理提案。
+        ///
+        /// 本入口只允许治理 `actor_cid_number == cid_number` 的本机构；注册局替
+        /// 目标机构登记管理员集合必须走 `register_institution_admins`。
+        #[pallet::call_index(8)]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::update_institution_info())]
+        #[allow(clippy::too_many_arguments)]
+        pub fn propose_institution_governance(
+            origin: OriginFor<T>,
+            cid_number: CidNumberOf<T>,
+            action: InstitutionGovernanceActionOf<T>,
+            register_nonce: RegisterNonceOf<T>,
+            signature: RegisterSignatureOf<T>,
+            actor_cid_number: Vec<u8>,
+            credential_signer_pubkey: [u8; 32],
+            scope_province_name: Vec<u8>,
+            scope_city_name: Vec<u8>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            Self::do_propose_institution_governance(
+                who,
+                cid_number,
+                action,
+                register_nonce,
+                signature,
+                actor_cid_number,
+                credential_signer_pubkey,
+                scope_province_name,
+                scope_city_name,
+            )
+        }
+
+        /// 注册局直接登记目标私权/非法人机构管理员集合。
+        ///
+        /// 本入口不创建目标机构内部投票；权限来自注册局 `actor_cid_number`，
+        /// 最终仍写入同一个 `private-admins::AdminAccounts[cid]` 真源。
+        #[pallet::call_index(9)]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::update_institution_info())]
+        #[allow(clippy::too_many_arguments)]
+        pub fn register_institution_admins(
+            origin: OriginFor<T>,
+            cid_number: CidNumberOf<T>,
+            admins: InstitutionAdminsInputOf<T>,
+            register_nonce: RegisterNonceOf<T>,
+            signature: RegisterSignatureOf<T>,
+            actor_cid_number: Vec<u8>,
+            credential_signer_pubkey: [u8; 32],
+            scope_province_name: Vec<u8>,
+            scope_city_name: Vec<u8>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            Self::do_register_institution_admins(
+                who,
+                cid_number,
+                admins,
                 register_nonce,
                 signature,
                 actor_cid_number,
@@ -748,6 +831,318 @@ pub mod pallet {
                 admins.iter().cloned().collect(),
                 threshold,
             )
+        }
+
+        fn validate_governance_signature(
+            who: &T::AccountId,
+            cid_number: &CidNumberOf<T>,
+            governance_payload: &[u8],
+            register_nonce: &RegisterNonceOf<T>,
+            signature: &RegisterSignatureOf<T>,
+            actor_cid_number: &[u8],
+            credential_signer_pubkey: &[u8; 32],
+            scope_province_name: &[u8],
+            scope_city_name: &[u8],
+        ) -> DispatchResult {
+            let signer_pubkey = Self::pubkey_from_accountid(who)?;
+            ensure!(
+                <Sr25519Public as AsRef<[u8; 32]>>::as_ref(&signer_pubkey)
+                    == credential_signer_pubkey,
+                Error::<T>::InvalidCidInstitutionSignature
+            );
+            ensure!(
+                T::CidInstitutionVerifier::verify_institution_governance(
+                    cid_number.as_slice(),
+                    governance_payload,
+                    register_nonce,
+                    signature,
+                    actor_cid_number,
+                    credential_signer_pubkey,
+                    scope_province_name,
+                    scope_city_name,
+                ),
+                Error::<T>::InvalidCidInstitutionSignature
+            );
+            Ok(())
+        }
+
+        fn governance_action_replaces_admins(action: &InstitutionGovernanceActionOf<T>) -> bool {
+            matches!(
+                action,
+                InstitutionGovernanceAction::ReplaceAdmins { .. }
+                    | InstitutionGovernanceAction::ReplaceAdminsAndMutateRoles { .. }
+            )
+        }
+
+        fn ensure_governance_action_valid(
+            action: &InstitutionGovernanceActionOf<T>,
+        ) -> DispatchResult {
+            match action {
+                InstitutionGovernanceAction::ReplaceAdmins { admins } => {
+                    let bounded: InstitutionAdminsInputOf<T> = admins
+                        .clone()
+                        .try_into()
+                        .map_err(|_| Error::<T>::TooManyInstitutionAdmins)?;
+                    let threshold = bounded.len() as u32 / 2 + 1;
+                    Self::ensure_admin_config(&bounded, threshold)
+                }
+                InstitutionGovernanceAction::MutateRolesAndAssignments {
+                    role_changes,
+                    assignment_changes,
+                    legal_representative_change,
+                } => {
+                    for change in assignment_changes {
+                        for target in &change.assignments {
+                            ensure!(
+                                target.assignment_source
+                                    == InstitutionAssignmentSource::InstitutionGovernance,
+                                Error::<T>::InvalidAssignmentSource
+                            );
+                        }
+                    }
+                    ensure!(
+                        !role_changes.is_empty()
+                            || !assignment_changes.is_empty()
+                            || legal_representative_change.is_some(),
+                        Error::<T>::GovernanceResultEmpty
+                    );
+                    Ok(())
+                }
+                InstitutionGovernanceAction::ReplaceAdminsAndMutateRoles {
+                    admins,
+                    role_changes,
+                    assignment_changes,
+                    legal_representative_change,
+                } => {
+                    let bounded: InstitutionAdminsInputOf<T> = admins
+                        .clone()
+                        .try_into()
+                        .map_err(|_| Error::<T>::TooManyInstitutionAdmins)?;
+                    let threshold = bounded.len() as u32 / 2 + 1;
+                    Self::ensure_admin_config(&bounded, threshold)?;
+                    for change in assignment_changes {
+                        for target in &change.assignments {
+                            ensure!(
+                                target.assignment_source
+                                    == InstitutionAssignmentSource::InstitutionGovernance,
+                                Error::<T>::InvalidAssignmentSource
+                            );
+                        }
+                    }
+                    ensure!(
+                        !role_changes.is_empty()
+                            || !assignment_changes.is_empty()
+                            || legal_representative_change.is_some(),
+                        Error::<T>::GovernanceResultEmpty
+                    );
+                    Ok(())
+                }
+            }
+        }
+
+        #[allow(clippy::too_many_arguments)]
+        pub(crate) fn do_propose_institution_governance(
+            who: T::AccountId,
+            cid_number: CidNumberOf<T>,
+            action: InstitutionGovernanceActionOf<T>,
+            register_nonce: RegisterNonceOf<T>,
+            signature: RegisterSignatureOf<T>,
+            actor_cid_number: Vec<u8>,
+            credential_signer_pubkey: [u8; 32],
+            scope_province_name: Vec<u8>,
+            scope_city_name: Vec<u8>,
+        ) -> DispatchResult {
+            ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
+            ensure!(
+                actor_cid_number.as_slice() == cid_number.as_slice(),
+                Error::<T>::RegistryAuthorityDenied
+            );
+            let info =
+                Institutions::<T>::get(&cid_number).ok_or(Error::<T>::InstitutionNotFound)?;
+            Self::ensure_lifecycle_institution_code(&info.institution_code)?;
+            ensure!(
+                T::InstitutionAdminQuery::is_institution_admin(
+                    info.institution_code,
+                    cid_number.as_slice(),
+                    &who,
+                ),
+                Error::<T>::RegistryAuthorityDenied
+            );
+            Self::ensure_governance_action_valid(&action)?;
+            let action_payload = action.encode();
+            let nonce_hash = <T as frame_system::Config>::Hashing::hash(register_nonce.as_slice());
+            ensure!(
+                !UsedRegisterNonce::<T>::get(nonce_hash),
+                Error::<T>::RegisterNonceAlreadyUsed
+            );
+            Self::validate_governance_signature(
+                &who,
+                &cid_number,
+                &action_payload,
+                &register_nonce,
+                &signature,
+                actor_cid_number.as_slice(),
+                &credential_signer_pubkey,
+                scope_province_name.as_slice(),
+                scope_city_name.as_slice(),
+            )?;
+            let proposal = InstitutionGovernanceProposal {
+                institution_code: info.institution_code,
+                cid_number: cid_number.to_vec(),
+                action,
+            };
+            let mut data = Vec::from(crate::MODULE_TAG);
+            data.push(ACTION_GOVERNANCE);
+            data.extend_from_slice(&proposal.encode());
+            let proposal_id = if Self::governance_action_replaces_admins(&proposal.action) {
+                T::InternalVoteEngine::create_institution_admin_change_proposal_with_data(
+                    who.clone(),
+                    info.institution_code,
+                    cid_number.to_vec(),
+                    crate::MODULE_TAG,
+                    data,
+                )?
+            } else {
+                T::InternalVoteEngine::create_institution_proposal_with_data(
+                    who.clone(),
+                    info.institution_code,
+                    cid_number.to_vec(),
+                    None,
+                    Vec::new(),
+                    crate::MODULE_TAG,
+                    data,
+                )?
+            };
+            UsedRegisterNonce::<T>::insert(nonce_hash, true);
+            Self::deposit_event(Event::<T>::InstitutionGovernanceProposed {
+                proposal_id,
+                cid_number,
+                proposer: who,
+            });
+            Ok(())
+        }
+
+        #[allow(clippy::too_many_arguments)]
+        pub(crate) fn do_register_institution_admins(
+            who: T::AccountId,
+            cid_number: CidNumberOf<T>,
+            admins: InstitutionAdminsInputOf<T>,
+            register_nonce: RegisterNonceOf<T>,
+            signature: RegisterSignatureOf<T>,
+            actor_cid_number: Vec<u8>,
+            credential_signer_pubkey: [u8; 32],
+            scope_province_name: Vec<u8>,
+            scope_city_name: Vec<u8>,
+        ) -> DispatchResult {
+            ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
+            let info =
+                Institutions::<T>::get(&cid_number).ok_or(Error::<T>::InstitutionNotFound)?;
+            Self::ensure_lifecycle_institution_code(&info.institution_code)?;
+            let threshold = admins.len() as u32 / 2 + 1;
+            Self::ensure_admin_config(&admins, threshold)?;
+            let action = InstitutionGovernanceAction::ReplaceAdmins {
+                admins: admins.iter().cloned().collect(),
+            };
+            let action_payload = action.encode();
+            let nonce_hash = <T as frame_system::Config>::Hashing::hash(register_nonce.as_slice());
+            ensure!(
+                !UsedRegisterNonce::<T>::get(nonce_hash),
+                Error::<T>::RegisterNonceAlreadyUsed
+            );
+            Self::validate_governance_signature(
+                &who,
+                &cid_number,
+                &action_payload,
+                &register_nonce,
+                &signature,
+                actor_cid_number.as_slice(),
+                &credential_signer_pubkey,
+                scope_province_name.as_slice(),
+                scope_city_name.as_slice(),
+            )?;
+            ensure!(
+                T::RegistryAuthority::can_register_institution(
+                    &who,
+                    actor_cid_number.as_slice(),
+                    &credential_signer_pubkey,
+                    cid_number.as_slice(),
+                    info.institution_code,
+                    scope_province_name.as_slice(),
+                    scope_city_name.as_slice(),
+                ),
+                Error::<T>::RegistryAuthorityDenied
+            );
+            Self::set_institution_admins(&cid_number, info.institution_code, &admins, threshold)?;
+            UsedRegisterNonce::<T>::insert(nonce_hash, true);
+            Self::deposit_event(Event::<T>::InstitutionAdminsRegistered {
+                cid_number,
+                admins_len: admins.len() as u32,
+                submitter: who,
+            });
+            Ok(())
+        }
+
+        pub(crate) fn execute_governance_proposal(
+            proposal_id: u64,
+            proposal: InstitutionGovernanceProposal<T::AccountId>,
+        ) -> DispatchResult {
+            let cid_number: CidNumberOf<T> = proposal
+                .cid_number
+                .clone()
+                .try_into()
+                .map_err(|_| Error::<T>::InvalidAssignmentResultInstitution)?;
+            let result_source_ref = proposal_id.to_le_bytes().to_vec();
+            match proposal.action {
+                InstitutionGovernanceAction::ReplaceAdmins { admins } => {
+                    let bounded: InstitutionAdminsInputOf<T> = admins
+                        .try_into()
+                        .map_err(|_| Error::<T>::TooManyInstitutionAdmins)?;
+                    let threshold = bounded.len() as u32 / 2 + 1;
+                    Self::set_institution_admins(
+                        &cid_number,
+                        proposal.institution_code,
+                        &bounded,
+                        threshold,
+                    )
+                }
+                InstitutionGovernanceAction::MutateRolesAndAssignments {
+                    role_changes,
+                    assignment_changes,
+                    legal_representative_change,
+                } => Self::apply_institution_governance_result(InstitutionGovernanceResult {
+                    institution_code: proposal.institution_code,
+                    cid_number: proposal.cid_number,
+                    role_changes,
+                    assignment_changes,
+                    legal_representative_change,
+                    result_source_ref,
+                }),
+                InstitutionGovernanceAction::ReplaceAdminsAndMutateRoles {
+                    admins,
+                    role_changes,
+                    assignment_changes,
+                    legal_representative_change,
+                } => {
+                    let bounded: InstitutionAdminsInputOf<T> = admins
+                        .try_into()
+                        .map_err(|_| Error::<T>::TooManyInstitutionAdmins)?;
+                    let threshold = bounded.len() as u32 / 2 + 1;
+                    Self::set_institution_admins(
+                        &cid_number,
+                        proposal.institution_code,
+                        &bounded,
+                        threshold,
+                    )?;
+                    Self::apply_institution_governance_result(InstitutionGovernanceResult {
+                        institution_code: proposal.institution_code,
+                        cid_number: proposal.cid_number,
+                        role_changes,
+                        assignment_changes,
+                        legal_representative_change,
+                        result_source_ref,
+                    })
+                }
+            }
         }
 
         /// 私权机构生命周期模块只接受私权法人机构码。
@@ -920,6 +1315,26 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                                 account: action.institution_account,
                             },
                         );
+                        return Ok(ProposalExecutionOutcome::RetryableFailed);
+                    }
+                    return Ok(ProposalExecutionOutcome::Executed);
+                }
+                ACTION_GOVERNANCE => {
+                    let proposal = InstitutionGovernanceProposal::<T::AccountId>::decode(
+                        &mut &raw[tag.len() + 1..],
+                    )
+                    .map_err(|_| pallet::Error::<T>::InvalidInstitutionGovernanceAction)?;
+                    let exec_result =
+                        with_transaction(
+                            || match pallet::Pallet::<T>::execute_governance_proposal(
+                                proposal_id,
+                                proposal,
+                            ) {
+                                Ok(()) => TransactionOutcome::Commit(Ok(())),
+                                Err(e) => TransactionOutcome::Rollback(Err(e)),
+                            },
+                        );
+                    if exec_result.is_err() {
                         return Ok(ProposalExecutionOutcome::RetryableFailed);
                     }
                     return Ok(ProposalExecutionOutcome::Executed);

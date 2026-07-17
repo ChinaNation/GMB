@@ -1806,6 +1806,61 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
     });
 }
 
+/// 法定代表人治理必须支持整体任命/更换与整体解除，不能留下姓名、CID 或账户半字段。
+#[test]
+fn institution_governance_can_clear_legal_representative_atomically() {
+    new_test_ext().execute_with(|| {
+        genesis_pallet::institution::build::<Runtime>();
+        let cid_number = CHINA_CB[0].cid_number.as_bytes().to_vec();
+        let institution_code =
+            primitives::cid::code::institution_code_from_cid_number(CHINA_CB[0].cid_number)
+                .expect("CHINA_CB CID must contain institution code");
+        let representative_account = AccountId::new([88u8; 32]);
+        let result = |legal_representative_change| {
+            entity_primitives::InstitutionGovernanceResult {
+                institution_code,
+                cid_number: cid_number.clone(),
+                role_changes: vec![],
+                assignment_changes: vec![],
+                legal_representative_change,
+                result_source_ref: b"legal-representative-governance".to_vec(),
+            }
+        };
+
+        assert_ok!(
+            public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(Some(
+                entity_primitives::InstitutionLegalRepresentativeChange::Set {
+                    legal_representative_name: "法定代表人"
+                        .as_bytes()
+                        .to_vec(),
+                    legal_representative_cid_number: b"CITIZEN-LR-001".to_vec(),
+                    legal_representative_account: representative_account.clone(),
+                },
+            )))
+        );
+        let cid: public_manage::CidNumberOf<Runtime> =
+            cid_number.clone().try_into().expect("CID fits");
+        let stored = public_manage::Institutions::<Runtime>::get(&cid)
+            .expect("genesis institution exists");
+        assert!(stored.legal_representative_name.is_some());
+        assert_eq!(
+            stored.legal_representative_account,
+            Some(representative_account)
+        );
+
+        assert_ok!(
+            public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(Some(
+                entity_primitives::InstitutionLegalRepresentativeChange::Clear,
+            )))
+        );
+        let cleared = public_manage::Institutions::<Runtime>::get(&cid)
+            .expect("genesis institution still exists");
+        assert!(cleared.legal_representative_name.is_none());
+        assert!(cleared.legal_representative_cid_number.is_none());
+        assert!(cleared.legal_representative_account.is_none());
+    });
+}
+
 /// 立法院、监察院、总统府必须先独立登记 admins，岗位任职不得反向生成管理员。
 #[test]
 fn national_singletons_without_member_ranges_can_be_composed_once() {
