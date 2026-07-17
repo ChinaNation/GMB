@@ -51,10 +51,11 @@ citizenchain/onchina/src/
 
 - 机构主写入只进入 `institution/subjects`、`domains/gov`、`domains/private`、`institution/accounts` 和 `domains/docs`。
 - 公民主写入只进入 `domains/citizens`、`subjects`、`citizens`、`citizen_documents`、`passport_numbers` 和 `sequence_counters`。
-- 管理员写入只进入 `admins`(本地元数据缓存)和短生命周期安全运行态表;成员资格真源在链上(`federal_registry_scope` 表已退役,见 [[project_onchina_registry_tier_chainread_2026_06_29]])。
+- 管理员写入只进入 `admins`（本地展示元数据）和短生命周期安全运行态表；成员资格与岗位范围只来自链上，禁止建立本地管理员授权范围表。
 - 公权机构唯一真源是链上 `PublicManage`;`subjects/gov/accounts` 中的公权行只是本地查询投影,投影版本只记录在 `chain_projection_state`。
 - 链上状态字段只作本地投影缓存(`subjects.chain_status`、`accounts.chain_status`),不得成为第二授权真源。
-- `node_institution_bindings` 只缓存本节点当前绑定机构。FRG 绑定始终是一个 FRG 机构身份，不得拆成虚拟省组身份；省级办理范围来自管理员钱包在 entity 中有效的 `PROVINCE_COMMISSIONER_<省码>` 任职，机构 CID/全称/简称/主账户来自 FRG 主体投影。绑定缺少 FRG 主账户时必须关闭失败。
+- `node_institution_bindings` 只保存本节点当前绑定的链上身份键：`candidate_id / institution_code / institution_cid_number / frg_province_code`。FRG 绑定始终是一个 FRG 机构身份，不得拆成虚拟省组身份；省级办理范围来自管理员钱包在 entity 中有效的 `PROVINCE_COMMISSIONER_<省码>` 任职，机构 CID/全称/简称/主账户来自 FRG 主体投影且只作身份与展示。绑定表不得保存名称或省市镇权限派生值。
+- `admin_sessions.candidate_id` 必须与 active binding 严格一致；旧会话、解绑后会话、重绑前会话和候选不一致会话一律失效，不存在兼容回落。
 - 审计写入统一走结构化审计入口，详情字段只保存事实，不保存 UI 文案。
 
 ### 4.1 公权机构链投影

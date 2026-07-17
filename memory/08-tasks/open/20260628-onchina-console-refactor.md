@@ -25,7 +25,7 @@ citizenchain/registry（→ onchina），自动分工：CID Agent（后端身份
 
 ## 链端事实（已核实，决定 R3 可纯在 registry 内交付）
 
-- FRG（联邦注册局）→ `PublicAdmins::FederalRegistryProvinceGroups`（idx29，按省组读取）。
+- FRG（联邦注册局）→ `PublicAdmins::AdminAccounts`（idx29）读取管理员集合，`PublicManage::InstitutionRoleAssignments` 读取省岗位任职。
 - CREG（市注册局）→ `PublicAdmins::AdminAccounts`（idx29）。
 - NJD（国家司法院）→ `PublicAdmins::AdminAccounts`（idx29），允许登录 OnChina，本期只读“本机构管理员”。
 - NRC/PRC/PRB（国家储委会 / 省储委会 / 省储行）→ 链上属 `PublicAdmins`，但产品边界为节点桌面端，不登录 OnChina 网页控制台。
@@ -43,7 +43,7 @@ citizenchain/registry（→ onchina），自动分工：CID Agent（后端身份
 
 ### Phase 0 · 平台地基（全局阻塞前置）
 - **01** 登录反查 + 节点绑定：`chain_runtime` 从 `verified_pubkey` 扫描链上 active admin 集合生成候选机构；`onchain_gate` 首次登录返回绑定候选，确认后写 `node_institution_bindings`；后续登录按 active binding 复查 signer ∈ 本机构 active admin；解绑 / 换机构通过 `NODE_BINDING_UNBIND` 冷签动作先停用 active binding，再重新登录绑定。文件：`src/core/chain_runtime.rs`、`src/auth/login/*`、`src/auth/repo.rs`、`src/auth/actions.rs`。依赖：无。风险：高。
-- **02** `AdminAuthContext` 扩展多值字段 + 审计改写全部 `registry_org_code` 访问点（约 123 处 / 18 文件）+ DTO 同步。文件：`src/admins/login/{model,onchain_gate}.rs`、`src/admins/model.rs`。依赖：01。风险：高。
+- **02** `AdminAuthContext` 扩展多值字段 + 清理旧二值机构字段访问点（约 123 处 / 18 文件）+ DTO 同步。文件：`src/admins/login/{model,onchain_gate}.rs`、`src/admins/model.rs`。依赖：01。风险：高。
 
 ### Phase 1 · auth 主线
 - **03** `admins/` → `auth/` 纯位移（login/actions/签名/grant），更新全库 `use` 路径 + main.rs mod。依赖：02。风险：中。
@@ -65,7 +65,7 @@ citizenchain/registry（→ onchina），自动分工：CID Agent（后端身份
 - **13** `domains/` 平移（gov/private/citizens/docs/education）。依赖：02/07。风险：中。
 - **14** 前端身份字段二值→多值对齐 + 能力位渲染 tab + localStorage 缓存版本 bump + 形状校验自愈。文件：`frontend/{App.tsx,auth/,admins/,hooks/useScope.ts,utils/storedAuth.ts}`。依赖：02。风险：中。
 - **15** 注释去历史化：全 registry 内改成描述当前实现。依赖：09/10/13。风险：低。
-- **16** 残留清理 + memory/ADR 回写（验证零 `FederalRegistry/CityRegistry/is_federal/registry_org_code` 残桩）。依赖：15。风险：低。
+- **16** 残留清理 + memory/ADR 回写（验证零旧双角色字段和授权分支残桩）。依赖：15。风险：低。
 - **17** 目录/crate 改名 registry→onchina（**唯一外部步骤，触及 9 文件，动工前沟通**）：git mv + Cargo.toml + workspace member + node/registry_proc + tauri.conf.json + scripts + env 改名。依赖：16。风险：高。
 
 ## 验收标准
@@ -86,15 +86,15 @@ citizenchain/registry（→ onchina），自动分工：CID Agent（后端身份
 - [x] 01-准入口径验收（2026-06-30）：`cargo test --manifest-path citizenchain/Cargo.toml -p onchina` 76 passed；`npm --prefix citizenchain/onchina/frontend run build` 通过；`https://onchina.local:8964` 真实 HTTP 验收因当前本机未启动 OnChina 服务、8964 无监听且 `onchina.local` 不可解析而未完成。
 - [x] 04-CA 提示收口（2026-06-30）：登录页和登录后后台仅在当前页面不是可信 HTTPS 安全上下文时显示机构 CA 下载提示；`https:` + `window.isSecureContext=true` 时隐藏提示；公民入口 tab 文案从“首页”改为“公民”。
 - [x] 01-补 节点解绑 / 换机构闭环：新增 `NODE_BINDING_UNBIND` 冷签安全动作，当前本机会话管理员 prepare，冷钱包 active admin 签名 commit，成功后 active binding 置 `INACTIVE` 并删除本节点所有管理员 session；换机构必须解绑后重新扫码绑定新机构。
-- [x] 02 身份二值→多值（registry_org_code→institution_code+admin_level）：6 DTO + AdminUser + repo 56处 + db schema(列改名迁移+去CHECK+索引) + onchain_gate + 12 consumer 文件共 160 处；cargo check+test 绿(53 passed)；零残留
+- [x] 02 身份二值→多值（统一为 `institution_code + admin_level`）：6 DTO + AdminUser + repo 56处 + db schema + onchain_gate + 12 consumer 文件共 160 处；cargo check+test 绿(53 passed)；零残留
 - [x] 03 auth 位移（用户改主意执行）：`git mv src/admins → src/auth`;全库 `crate::admins::`→`crate::auth::`(词边界避开 city_registry_admins,~51 处)+ main.rs `mod admins`→`mod auth` 与 bare `admins::`→`auth::`;58 测试绿
 - [x] 04 统一入口 + mDNS（当前统一入口固定为 https://onchina.local:8964；main.rs 绑定 0.0.0.0:8964；platform/mdns.rs 用 mdns-sd 广告 _onchina._tcp.local 主机名 onchina.local:8964[best-effort,不再提供主机名覆盖]；CORS 默认 origins 保留 https://onchina.local:8964 和前端开发端口；部署 env：LAN 用 onchina.local 须 ONCHINA_ENABLE_TLS=on + ONCHINA_PASSKEY_RP_ID=onchina.local + ONCHINA_PASSKEY_ORIGIN=https://onchina.local:8964[WebAuthn secure context]）
 - [x] 05 三档鉴权 + 默认拒绝（AdminOperationAuth{Session,Passkey,PasskeyColdSign}；auth_type 穷尽 match；is_session；新增三档守卫单测；Session/PasskeyColdSign=原 LoginState/ScanSign 行为保留，Passkey 档保留待 06 接通，无安全空窗；cargo test 54 passed；档名注释全现在时化）
 - [x] 06 passkey 模块（webauthn-rs v0.5.5；3 表[credentials/ceremonies/assertions]+admins/passkey 模块[register/assert begin·finish 4 端点]+require_passkey_assertion 一次性令牌；三档强制：prepare 仅 PasskeyColdSign、commit 流+UpdateX handler 消费断言；UpdateX 提升 Passkey；FRG 门禁解耦为 requires_federal_admin 保行为；fail-closed 不降档；前端 passkeyClient.ts[原生 navigator.credentials+base64url]；cargo test 57 passed 含 SoftPasskey 全流程往返；frontend tsc 绿）
 - [x] 07 institution 位移（用户改主意执行）：`accounts/`+`subjects/` git mv 嵌入新 `institution/`(新 institution/mod.rs 声明两 pub(crate) 子模块);`crate::accounts::`→`crate::institution::accounts::`、`crate::subjects::`→`crate::institution::subjects::`(~87 处)+ main.rs 合并 mod;58 测试绿
-- [x] 08 scope 多档化（用户执行 08→09→10→12 路径）：`VisibleScope` 重写为五档(全国/省/市/镇/私权自机构) + 镇维度 + `nationwide` 标志;`get_visible_scope` 按 `admin_level` 派生,**FRG 先于 admin_level 特判为省级**(FRG 码属 NATIONAL 但管理员按省分区);`repo::derive_admin_scope_conn` 改为从 active binding 取省/市/镇,不再读取节点 `ONCHAIN_CREDENTIAL_SCOPE_*`;ctx+3 DTO 加 `scope_town_name`;6 处机构 scope 检查加 `includes_town`;8 个 get_visible_scope 单测。**镇档语义**:记录无镇维度(town 空,手动创建机构 town_code 恒空)= 不限镇对镇级可见,只排除明确属其他镇的对账机构(includes_town + B SQL 一致 lenient)。**公民不按镇**(A 撤销:公民省/市级精度,镇非其 scope 轴)。
+- [x] 08 scope 多档化（用户执行 08→09→10→12 路径）：`VisibleScope` 重写为五档(全国/省/市/镇/私权自机构) + 镇维度 + `nationwide` 标志;`get_visible_scope` 按 `admin_level` 派生,**FRG 先于 admin_level 特判为省级**(FRG 码属 NATIONAL 但管理员按省分区);`repo::derive_admin_scope_conn` 统一从绑定身份键派生，FRG 省范围只读取链上岗位码;ctx+3 DTO 加 `scope_town_name`;6 处机构 scope 检查加 `includes_town`;8 个 get_visible_scope 单测。**镇档语义**:记录无镇维度(town 空,手动创建机构 town_code 恒空)= 不限镇对镇级可见,只排除明确属其他镇的对账机构(includes_town + B SQL 一致 lenient)。**公民不按镇**(A 撤销:公民省/市级精度,镇非其 scope 轴)。
 - [x] 09 admin 泛化(**完成 2026-06-29**,见 [20260629-onchina-09-10-admin-seed-generalization](20260629-onchina-09-10-admin-seed-generalization.md)):Tier 谓词单点 + AdminActionType→Tier 中性名 + capability can_view_own_admins;零 FRG/CREG 字面。
-- [x] 10 seed 泛化(**完成 2026-06-29**,re-scope 为退役):删 seed.rs/run_seed_federal_admins/federal_registry_scope 表;FRG 全走链读 FederalRegistryProvinceGroups(每节点单省)。
+- [x] 10 seed 泛化(**完成 2026-06-29**):删除本地管理员授权范围表；FRG 管理员与省岗位全走链读。
 - [x] 08-补 B/C/D（card 08 收尾,对抗式验证 sound×4）：**B** gov 公权机构列表按镇过滤(`list_official_institutions_scope` 加 town_code 入参 + SQL `$7` lenient;handler 串 locked_town/town_code;query DTO 加 town_name);**C** 前端 useScope 泛化为 admin_level 五档(删 FRG/CREG 硬编码,镜像后端)+ `scope_town_name`(types/api/3 构造点)+ storedAuth v4→v5;**D** `search_parent_institutions` 补 scope 管辖校验(原丢弃 ctx,任一管理员可跨省/市搜父机构=预存越权洞)。68 测试 + node + tsc 绿
 - [x] 17-补 启动横幅修(card 17 漏扫 dev 脚本)：run.sh/clean-run.sh 产品名 `注册局 Web`→`链上中国平台`、URL `127.0.0.1:8964`→统一入口 `onchina.local:8964`(+dev/passkey 直连 127.0.0.1 因安全上下文);框架 `注册局`→`机构`,保留 FRG dev 身份/护照域引用
 - [x] 11 能力模型（后端单源 + 会话下发 + 前端镜像）：新 platform/capability.rs（CapabilitySet serde camelCase 对齐前端 RoleCapabilities，capabilities_for 内置 FRG/CREG、其它空能力占位）；AdminAuthOutput/AdminIdentifyOutput 加 capabilities，4 构造点(handler×2/onchain_gate/qr_login)派生；前端 capabilityMap 删硬编码 FRG/CREG 表只留类型+EMPTY 兜底，AuthContext 改读 auth.capabilities，types/api/LoginView×2/App 带 capabilities；cargo test 57 过 + tsc 绿；其它机构功能后续实现时在 capability.rs 逐个补能力位
@@ -102,8 +102,10 @@ citizenchain/registry（→ onchina），自动分工：CID Agent（后端身份
 - [x] 13 domains 平移（用户改主意执行）：`gov/`+`private/`+`citizens/`+`docs/` git mv 嵌入新 `domains/`(citizenapp 独立 BFF 不动;新 domains/mod.rs);`crate::{gov,private,citizens,docs}::`→`crate::domains::*`(citizens 词边界不误伤 citizenapp)+ main.rs 合并 mod;**踩坑**:gov/service.rs 7 处 `#[path="../../../runtime/.../china_*.rs"]` 因下沉一层补成 `../../../../`;`cargo fmt` 规范 perl 编辑格式;58 测试绿
 - [x] 14 前端身份对齐 + 能力 tab + passkey UX（types/api/AuthContext/LoginView/App 切 institution_code+admin_level；新 platform/capabilityMap.ts 镜像后端权限[FRG/CREG 内置,其它占位]；useScope 按机构码；storedAuth v4 bump+形状校验自愈；后端新增 GET passkey/status；passkey 操作列按钮 repurpose 为 self-only[删 codex 的 'key' 换账户错误分支],红点驱动真实状态,未注册登录默认跳管理员列表；passkeyClient.getPasskeyStatus + usePasskey hook；tsc+cargo 绿；残留仅 admin_security_api 错误码契约,保留正确）
 - [x] 15 注释去历史化（全 onchina/src + frontend 扫描零"从X改Y/原来/之前/现已"历史化措辞;改名期注释全程现在时书写,无需返工)
-- [x] 16 残留清理 + 回写（零 `registry_org_code`/`RegistryOrgCode`/`is_federal`/双角色残桩;db.rs 死迁移片段[registry_org_code→institution_code rename DO-block + DROP CONSTRAINT/INDEX]清除,基表已直定义 institution_code;ADR-030 + 本卡回写)
-- [x] 17 目录/crate 改名 registry→onchina（用户批准提前做）：git mv registry→onchina；onchina/Cargo.toml(name/bin/description) + citizenchain/Cargo.toml workspace member；main.rs env REGISTRY_FRONTEND_DIST→ONCHINA_FRONTEND_DIST + serve_registry→serve_console + 日志/CLI/服务标识/内嵌PG库名(registry→onchina)/TLS证书名(onchina-cert/key.pem)/兜底路径(/opt/onchina) 全产品名残留清零；node：git mv registry_proc→onchina_proc 全重写(ONCHINA_CHILD/onchina 二进制·资源 onchina-bin·env ONCHINA_FRONTEND_DIST·日志[onchina]) + main.rs/desktop 调用方；tauri.conf.json resources(onchina-bin/onchina-frontend) + node/resources git mv + .gitignore；scripts(prepack.sh/.ps1/run.sh/clean-run.sh 全改 + 端口 8899→8964 + git mv registry-{backup,restore}.sh·postgresql.conf.sample→onchina-*)；保留=注册局领域名(federal_registry/city_registry/federal_registry_scope)与 node 内 governance::registry/prometheus_registry(非本次产品名;注:registry_org_code 旧列名已在卡16连同 db.rs 死迁移清除)；cargo check onchina+node 绿 + onchina 57 测试过 + frontend tsc 0 err；零产品名残留
+- [x] 16 残留清理 + 回写（零旧双角色字段、类型、谓词和授权分支残桩；基表直接定义 `institution_code`；ADR-030 + 本卡回写）
+- [x] 17 目录/crate 改名 registry→onchina（用户批准提前做）：git mv registry→onchina；onchina/Cargo.toml(name/bin/description) + citizenchain/Cargo.toml workspace member；main.rs env REGISTRY_FRONTEND_DIST→ONCHINA_FRONTEND_DIST + serve_registry→serve_console + 日志/CLI/服务标识/内嵌PG库名(registry→onchina)/TLS证书名(onchina-cert/key.pem)/兜底路径(/opt/onchina) 全产品名残留清零；node：git mv registry_proc→onchina_proc 全重写(ONCHINA_CHILD/onchina 二进制·资源 onchina-bin·env ONCHINA_FRONTEND_DIST·日志[onchina]) + main.rs/desktop 调用方；tauri.conf.json resources(onchina-bin/onchina-frontend) + node/resources git mv + .gitignore；scripts(prepack.sh/.ps1/run.sh/clean-run.sh 全改 + 端口 8899→8964；node 内 governance 注册表与监控注册表属于正确领域命名；cargo check onchina+node 绿 + onchina 57 测试过 + frontend tsc 0 err；零产品名残留
+- [x] 01-权限真源修复（2026-07-16）：`node_institution_bindings` 收敛为链上身份键，删除名称/省市镇派生字段；FRG `scope_province_name` 只由 `InstitutionRoleAssignments` 省岗位码派生，机构 CID 登记地址只补展示元数据；删除本地 FRG 省权限缓存；`admin_sessions` 增加并强制校验 `candidate_id`，解绑、重绑、缺失或不一致会话立即删除，无回落分支。
+- [x] 01-权限真源真实验收（2026-07-16）：本地 PostgreSQL 临时克隆库完成迁移，旧权限缓存表和绑定派生列不存在、旧会话清零；真实 OnChina `127.0.0.1:18964` + 本地链 `127.0.0.1:9944` 调用 `/api/v1/admin/auth/check`，在 FRG 机构登记地址为中枢省、绑定岗位码为 `GZ` 时返回 `scope_province_name=贵州省`；篡改会话候选后返回 `ONCHINA_AUTH_INVALID_ACCESS_TOKEN` 且会话行被删除。`cargo fmt --package onchina -- --check`、`cargo test -p onchina`（133 passed）、`cargo clippy -p onchina --all-targets`、前端 `tsc --noEmit` 与隔离生产构建全部通过；临时服务、临时数据库均已清理，源数据库未改动。
 
 ## 待统一修复（对抗式审查发现）——✅ 已全部修复并对抗式验证（2026-06-28）
 
@@ -118,7 +120,7 @@ card 06/14 审查发现 8(App.tsx 默认跳转覆盖手动切 tab→hasInitializ
 
 已排除(误报/非问题):发现 2(DELETE RETURNING 行锁原子)、发现 4(counter 回退 webauthn-rs 已处理)、发现 7(VisibleScope 泛化属 card 08/09);owner 隔离类 get_login_sign_request/get_qr_login_result 按随机 challenge_id 走预认证(无身份,正确不加 actor 过滤);auth_type 分档无错配(状态变更/上链全 PasskeyColdSign)。
 
-验收:`cargo test -p onchina` 58 passed(含新增守卫单测)· `cargo check -p node` 绿 · 零 `registry_org_code`/`RegistryOrgCode`/`is_federal`/历史化注释残留(db.rs 死迁移片段同步清除)。
+验收:`cargo test -p onchina` 58 passed(含新增守卫单测)· `cargo check -p node` 绿 · 零旧双角色字段、类型、谓词与历史化注释残留。
 
 ---
 

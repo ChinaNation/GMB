@@ -59,11 +59,29 @@ pub(super) fn admin_auth(
             return Err("http:unauthorized:access token expired".to_string());
         }
 
-        session.last_active_at = now;
-        repo::touch_admin_session_conn(conn, &session)?;
+        let Some(binding) = repo::get_active_node_binding_conn(conn)? else {
+            conn.execute("DELETE FROM admin_sessions WHERE token = $1", &[&token])
+                .map_err(|e| format!("delete unbound admin session failed: {e}"))?;
+            return Err("http:unauthorized:invalid access token".to_string());
+        };
+        // 会话必须锁定到签发时的链上机构候选；解绑、重绑或机构切换后对应会话立即失效。
+        if session.candidate_id != binding.candidate_id
+            || session.institution_code != binding.institution_code
+        {
+            conn.execute("DELETE FROM admin_sessions WHERE token = $1", &[&token])
+                .map_err(|e| format!("delete binding-mismatched admin session failed: {e}"))?;
+            return Err("http:unauthorized:invalid access token".to_string());
+        }
 
         let admin = repo::get_admin_by_account_conn(conn, &session.admin_account)?
             .ok_or_else(|| "http:forbidden:admin not found".to_string())?;
+        if admin.institution_code != session.institution_code {
+            conn.execute("DELETE FROM admin_sessions WHERE token = $1", &[&token])
+                .map_err(|e| format!("delete institution-mismatched admin session failed: {e}"))?;
+            return Err("http:unauthorized:invalid access token".to_string());
+        }
+        session.last_active_at = now;
+        repo::touch_admin_session_conn(conn, &session)?;
         let institution_code = admin.institution_code.clone();
         let is_frg = crate::core::chain_runtime::is_tier1_registry(&institution_code);
         let admin_level = crate::core::chain_runtime::admin_level_label_for(&institution_code);

@@ -30,70 +30,20 @@ fn admin_from_row(row: &postgres::Row) -> Result<AdminUser, String> {
 }
 
 fn binding_from_row(row: &postgres::Row) -> Result<NodeInstitutionBinding, String> {
-    let binding_id: String = row.get(0);
-    let institution_code: String = row.get(2);
-    let candidate = AdminInstitutionCandidate {
-        candidate_id: row.get(1),
-        institution_code: institution_code.clone(),
-        admin_level: crate::core::chain_runtime::admin_level_label_for(&institution_code),
-        institution_cid_number: row.get(4),
-        frg_province_code: row.get(5),
-        cid_full_name: row.get(6),
-        cid_short_name: row.get(7),
-        scope_province_name: row.get(8),
-        scope_city_name: row.get(9),
-        scope_town_name: row.get(10),
-    };
     Ok(NodeInstitutionBinding {
-        binding_id,
-        candidate,
-        bound_admin_pubkey: row.get(11),
-        bound_at: row.get(12),
-        status: row.get(13),
+        binding_id: row.get(0),
+        candidate_id: row.get(1),
+        institution_code: row.get(2),
+        institution_cid_number: row.get(3),
+        frg_province_code: row.get(4),
+        bound_admin_pubkey: row.get(5),
+        bound_at: row.get(6),
+        status: row.get(7),
     })
 }
 
-fn hydrate_binding_candidate_metadata_conn(
-    conn: &mut Client,
-    binding: &mut NodeInstitutionBinding,
-) -> Result<bool, String> {
-    hydrate_candidate_metadata_conn(conn, &mut binding.candidate)
-}
-
-fn persist_binding_candidate_metadata_conn(
-    conn: &mut Client,
-    binding: &NodeInstitutionBinding,
-) -> Result<(), String> {
-    conn.execute(
-        "UPDATE node_institution_bindings
-         SET institution_cid_number = $2,
-             cid_full_name = $3,
-             cid_short_name = $4,
-             scope_province_name = $5,
-             scope_city_name = $6,
-             scope_town_name = $7
-         WHERE binding_id = $1 AND status = 'ACTIVE'",
-        &[
-            &binding.binding_id,
-            &binding.candidate.institution_cid_number,
-            &binding.candidate.cid_full_name,
-            &binding.candidate.cid_short_name,
-            &binding.candidate.scope_province_name,
-            &binding.candidate.scope_city_name,
-            &binding.candidate.scope_town_name,
-        ],
-    )
-    .map_err(|e| {
-        format!(
-            "persist node binding candidate metadata failed: {}",
-            postgres_error_text(&e)
-        )
-    })?;
-    Ok(())
-}
-
-// Tier1 创世注册局管理员「全走链读」(决策③):权威集合在链上
-// 管理员钱包来自 FRG AdminAccounts，省维度由 entity 省专员岗位派生后回填本地缓存。
+// Tier1 创世注册局管理员「全走链读」：管理员钱包来自 FRG AdminAccounts，
+// 省维度只来自 InstitutionRoleAssignments；本地不得建立权限缓存。
 
 pub(crate) fn get_admin_by_id_and_registry_org_conn(
     conn: &mut Client,
@@ -222,82 +172,32 @@ pub(crate) fn resolve_admin_account_key_conn(
     Ok(row.map(|r| r.get(0)))
 }
 
-/// Tier1/Tier2 注册局管理员的省作用域。
-///
-/// 节点机构身份由首次链上 active admin 登录后绑定,省作用域取 active 绑定,
-/// 不再读取节点 `ONCHAIN_CREDENTIAL_SCOPE_*` 环境变量。
-pub(crate) fn province_scope_for_registry_org_conn(
+/// 派生管理员的省/市/镇作用域。登录签发与会话重建共用此唯一入口：
+/// FRG 省作用域只认绑定中的链上 `InstitutionRoleAssignments` 省岗位码；
+/// 其它机构按绑定 CID 的机构行政区投影解析。绑定缺失或机构不一致一律失败关闭。
+pub(crate) fn derive_admin_scope_conn(
     conn: &mut Client,
     admin_account: &str,
     institution_code: &str,
-) -> Result<Option<String>, String> {
-    if crate::core::chain_runtime::is_tier1_registry(institution_code) {
-        if let Some(province_name) =
-            federal_registry_admin_scope_conn(conn, admin_account)?.filter(|v| !v.trim().is_empty())
-        {
-            return Ok(Some(province_name));
-        }
-    }
-    Ok(get_active_node_binding_conn(conn)?
-        .and_then(|binding| binding.candidate.scope_province_name))
-}
-
-/// 写入联邦注册局管理员的链上省级组归属缓存。
-///
-/// 该缓存由 FRG 省专员岗位全量链读派生，只供列表显示和同省操作预检使用。
-pub(crate) fn upsert_federal_registry_admin_scope_conn(
-    conn: &mut Client,
-    admin_account: &str,
-    province_name: &str,
-) -> Result<(), String> {
-    let admin_account = admin_account.trim();
-    let province_name = province_name.trim();
-    if admin_account.is_empty() || province_name.is_empty() {
-        return Ok(());
-    }
-    conn.execute(
-        "INSERT INTO federal_registry_admin_scopes(admin_account, province_name, updated_at)
-         VALUES ($1, $2, now())
-         ON CONFLICT (admin_account) DO UPDATE SET
-            province_name = EXCLUDED.province_name,
-            updated_at = EXCLUDED.updated_at",
-        &[&admin_account, &province_name],
-    )
-    .map_err(|e| format!("upsert federal registry admin scope failed: {e}"))?;
-    Ok(())
-}
-
-pub(crate) fn federal_registry_admin_scope_conn(
-    conn: &mut Client,
-    admin_account: &str,
-) -> Result<Option<String>, String> {
-    let row = conn
-        .query_opt(
-            "SELECT province_name
-             FROM federal_registry_admin_scopes
-             WHERE lower(admin_account) = lower($1)",
-            &[&admin_account],
-        )
-        .map_err(|e| format!("query federal registry admin scope failed: {e}"))?;
-    Ok(row.map(|r| r.get(0)))
-}
-
-/// 派生管理员的省/市/镇作用域。**登录签发(onchain_gate)与会话重建(guards)共用此唯一来源**,
-/// 保证两路口径逐字段一致(避免 login 与后续请求 scope 漂移)。维度按机构行政层级裁剪:
-/// - 省/市/镇:统一取本节点 active 绑定,绑定来自链上 active admin 反查后的二次确认。
-pub(crate) fn derive_admin_scope_conn(
-    conn: &mut Client,
-    _admin_account: &str,
-    _institution_code: &str,
 ) -> Result<(Option<String>, Option<String>, Option<String>), String> {
-    let Some(binding) = get_active_node_binding_conn(conn)? else {
-        return Ok((None, None, None));
+    let Some(admin) = get_admin_by_account_conn(conn, admin_account)? else {
+        return Err("admin not found while deriving authorization scope".to_string());
     };
-    Ok((
-        binding.candidate.scope_province_name,
-        binding.candidate.scope_city_name,
-        binding.candidate.scope_town_name,
-    ))
+    if admin.institution_code != institution_code {
+        return Err("admin institution does not match requested authorization scope".to_string());
+    }
+    let Some(binding) = get_active_node_binding_conn(conn)? else {
+        return Err("active node binding is required for authorization scope".to_string());
+    };
+    if binding.institution_code != institution_code {
+        return Err("active node binding institution mismatch".to_string());
+    }
+    authorization_scope_from_identity_conn(
+        conn,
+        binding.institution_code.as_str(),
+        binding.institution_cid_number.as_str(),
+        binding.frg_province_code.as_deref(),
+    )
 }
 
 /// 解析当前管理员所属机构的 cid_short_name 单一字段。
@@ -403,7 +303,8 @@ pub(crate) fn resolve_binding_candidate_metadata_conn(
     Ok(row.map(|r| (r.get(0), r.get(1), r.get(2), r.get(3), r.get(4), r.get(5))))
 }
 
-pub(crate) fn hydrate_candidate_metadata_conn(
+/// 只补齐候选机构的展示元数据。该函数禁止写入任何授权作用域。
+pub(crate) fn hydrate_candidate_institution_metadata_conn(
     conn: &mut Client,
     candidate: &mut AdminInstitutionCandidate,
 ) -> Result<bool, String> {
@@ -416,32 +317,118 @@ pub(crate) fn hydrate_candidate_metadata_conn(
     else {
         return Err("binding candidate institution_cid_number is required".to_string());
     };
-    let Some((cid_number, cid_full_name, cid_short_name, province_code, city_code, town_code)) =
+    let Some((cid_number, cid_full_name, cid_short_name, _, _, _)) =
         resolve_binding_candidate_metadata_conn(conn, cid_number.as_str())?
     else {
         return Ok(false);
     };
-    let (province_name, city_name, town_name) = crate::cid::china::area_display_names(
-        province_code.as_str(),
-        Some(city_code.as_str()),
-        Some(town_code.as_str()),
-    );
     let changed = candidate.institution_cid_number.as_deref() != Some(cid_number.as_str())
         || candidate.cid_full_name != cid_full_name
-        || candidate.cid_short_name != cid_short_name
-        || candidate.scope_province_name.as_deref()
-            != (!province_name.is_empty()).then_some(province_name.as_str())
-        || candidate.scope_city_name.as_deref()
-            != (!city_name.is_empty()).then_some(city_name.as_str())
-        || candidate.scope_town_name.as_deref()
-            != (!town_name.is_empty()).then_some(town_name.as_str());
+        || candidate.cid_short_name != cid_short_name;
     candidate.institution_cid_number = Some(cid_number);
     candidate.cid_full_name = cid_full_name;
     candidate.cid_short_name = cid_short_name;
-    candidate.scope_province_name = (!province_name.is_empty()).then_some(province_name);
-    candidate.scope_city_name = (!city_name.is_empty()).then_some(city_name);
-    candidate.scope_town_name = (!town_name.is_empty()).then_some(town_name);
     Ok(changed)
+}
+
+/// 从授权真源派生候选的行政作用域。
+///
+/// FRG 的机构 CID 行政区只是登记地址，绝不能覆盖省管理员岗位；其省作用域仅由
+/// `frg_province_code`（链上 InstitutionRoleAssignments）决定。其它机构才读取 CID 投影位置。
+fn authorization_scope_from_identity_conn(
+    conn: &mut Client,
+    institution_code: &str,
+    institution_cid_number: &str,
+    frg_province_code: Option<&str>,
+) -> Result<(Option<String>, Option<String>, Option<String>), String> {
+    let identity = crate::core::chain_runtime::identity_from_binding_parts(
+        institution_code,
+        Some(institution_cid_number),
+        frg_province_code,
+    )?;
+    let institution_scope = if crate::core::chain_runtime::is_tier1_registry(institution_code) {
+        None
+    } else {
+        let Some((_, _, _, province_code, city_code, town_code)) =
+            resolve_binding_candidate_metadata_conn(conn, institution_cid_number)?
+        else {
+            return Err("binding institution metadata not found".to_string());
+        };
+        let (province_name, city_name, town_name) = crate::cid::china::area_display_names(
+            province_code.as_str(),
+            Some(city_code.as_str()),
+            Some(town_code.as_str()),
+        );
+        Some((
+            (!province_name.is_empty()).then_some(province_name),
+            (!city_name.is_empty()).then_some(city_name),
+            (!town_name.is_empty()).then_some(town_name),
+        ))
+    };
+    authorization_scope_from_sources(
+        institution_code,
+        identity.frg_province_code,
+        institution_scope,
+    )
+}
+
+fn authorization_scope_from_sources(
+    institution_code: &str,
+    frg_province_code: Option<[u8; 2]>,
+    institution_scope: Option<(Option<String>, Option<String>, Option<String>)>,
+) -> Result<(Option<String>, Option<String>, Option<String>), String> {
+    if crate::core::chain_runtime::is_tier1_registry(institution_code) {
+        let province_code = frg_province_code
+            .ok_or_else(|| "FRG authorization requires frg_province_code".to_string())?;
+        let province_name = crate::core::chain_runtime::chain_province_name_by_code(province_code)
+            .ok_or_else(|| "FRG authorization province code is unknown".to_string())?;
+        return Ok((Some(province_name), None, None));
+    }
+    institution_scope.ok_or_else(|| "binding institution scope is required".to_string())
+}
+
+pub(crate) fn derive_candidate_authorization_scope_conn(
+    conn: &mut Client,
+    candidate: &mut AdminInstitutionCandidate,
+) -> Result<(), String> {
+    let cid_number = candidate
+        .institution_cid_number
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "binding candidate institution_cid_number is required".to_string())?;
+    let (province_name, city_name, town_name) = authorization_scope_from_identity_conn(
+        conn,
+        candidate.institution_code.as_str(),
+        cid_number,
+        candidate.frg_province_code.as_deref(),
+    )?;
+    candidate.scope_province_name = province_name;
+    candidate.scope_city_name = city_name;
+    candidate.scope_town_name = town_name;
+    Ok(())
+}
+
+/// 把原始节点绑定转换为临时展示候选；派生结果只存在内存，不回写绑定表。
+pub(crate) fn candidate_for_binding_conn(
+    conn: &mut Client,
+    binding: &NodeInstitutionBinding,
+) -> Result<AdminInstitutionCandidate, String> {
+    let mut candidate = AdminInstitutionCandidate {
+        candidate_id: binding.candidate_id.clone(),
+        institution_code: binding.institution_code.clone(),
+        admin_level: crate::core::chain_runtime::admin_level_label_for(&binding.institution_code),
+        institution_cid_number: Some(binding.institution_cid_number.clone()),
+        frg_province_code: binding.frg_province_code.clone(),
+        cid_full_name: None,
+        cid_short_name: None,
+        scope_province_name: None,
+        scope_city_name: None,
+        scope_town_name: None,
+    };
+    derive_candidate_authorization_scope_conn(conn, &mut candidate)?;
+    hydrate_candidate_institution_metadata_conn(conn, &mut candidate)?;
+    Ok(candidate)
 }
 
 pub(crate) fn get_active_node_binding_conn(
@@ -449,10 +436,8 @@ pub(crate) fn get_active_node_binding_conn(
 ) -> Result<Option<NodeInstitutionBinding>, String> {
     let row = conn
         .query_opt(
-            "SELECT binding_id, candidate_id, institution_code, NULL::TEXT AS admin_level,
-                    institution_cid_number, frg_province_code,
-                    cid_full_name, cid_short_name, scope_province_name, scope_city_name,
-                    scope_town_name, bound_admin_pubkey, bound_at, status
+            "SELECT binding_id, candidate_id, institution_code, institution_cid_number,
+                    frg_province_code, bound_admin_pubkey, bound_at, status
              FROM node_institution_bindings
              WHERE status = 'ACTIVE'
              ORDER BY bound_at DESC
@@ -465,15 +450,7 @@ pub(crate) fn get_active_node_binding_conn(
                 postgres_error_text(&e)
             )
         })?;
-    let Some(row) = row else {
-        return Ok(None);
-    };
-    let mut binding = binding_from_row(&row)?;
-    // 展示元数据来自本地机构投影，绑定身份始终以链上 CID 为准。
-    if hydrate_binding_candidate_metadata_conn(conn, &mut binding)? {
-        persist_binding_candidate_metadata_conn(conn, &binding)?;
-    }
-    Ok(Some(binding))
+    row.as_ref().map(binding_from_row).transpose()
 }
 
 pub(crate) fn active_node_binding(db: &Db) -> Result<Option<NodeInstitutionBinding>, String> {
@@ -499,22 +476,15 @@ pub(crate) fn upsert_active_node_binding_conn(
     conn.execute(
         "INSERT INTO node_institution_bindings (
             binding_id, candidate_id, institution_code, institution_cid_number,
-            frg_province_code, cid_full_name, cid_short_name,
-            scope_province_name, scope_city_name, scope_town_name, bound_admin_pubkey,
-            bound_at, status
+            frg_province_code, bound_admin_pubkey, bound_at, status
          )
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
         &[
             &binding.binding_id,
-            &binding.candidate.candidate_id,
-            &binding.candidate.institution_code,
-            &binding.candidate.institution_cid_number,
-            &binding.candidate.frg_province_code,
-            &binding.candidate.cid_full_name,
-            &binding.candidate.cid_short_name,
-            &binding.candidate.scope_province_name,
-            &binding.candidate.scope_city_name,
-            &binding.candidate.scope_town_name,
+            &binding.candidate_id,
+            &binding.institution_code,
+            &binding.institution_cid_number,
+            &binding.frg_province_code,
             &binding.bound_admin_pubkey,
             &binding.bound_at,
             &binding.status,
@@ -943,11 +913,12 @@ pub(crate) fn insert_admin_session_conn(
     let payload =
         serde_json::to_value(session).map_err(|e| format!("encode admin session failed: {e}"))?;
     conn.execute(
-        "INSERT INTO admin_sessions(token, admin_account, institution_code, expires_at, last_active_at, payload)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        "INSERT INTO admin_sessions(token, admin_account, institution_code, candidate_id, expires_at, last_active_at, payload)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (token) DO UPDATE SET
             admin_account = EXCLUDED.admin_account,
             institution_code = EXCLUDED.institution_code,
+            candidate_id = EXCLUDED.candidate_id,
             expires_at = EXCLUDED.expires_at,
             last_active_at = EXCLUDED.last_active_at,
             payload = EXCLUDED.payload",
@@ -955,6 +926,7 @@ pub(crate) fn insert_admin_session_conn(
             &session.token,
             &session.admin_account,
             &session.institution_code,
+            &session.candidate_id,
             &session.expire_at,
             &session.last_active_at,
             &payload,
@@ -1198,4 +1170,28 @@ pub(crate) fn get_active_deregistration_by_cid_conn(
         credential_issuer_cid_number: r.get(4),
         credential_signer_pubkey: r.get(5),
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::authorization_scope_from_sources;
+
+    #[test]
+    fn frg_role_province_cannot_be_overwritten_by_institution_location() {
+        let institution_location =
+            Some((Some("中枢省".to_string()), Some("锦程市".to_string()), None));
+        let scope = authorization_scope_from_sources("FRG", Some(*b"GZ"), institution_location)
+            .expect("FRG role province must resolve");
+
+        assert_eq!(scope, (Some("贵州省".to_string()), None, None));
+    }
+
+    #[test]
+    fn frg_authorization_fails_without_role_province() {
+        let result = authorization_scope_from_sources("FRG", None, None);
+        assert_eq!(
+            result.unwrap_err(),
+            "FRG authorization requires frg_province_code"
+        );
+    }
 }

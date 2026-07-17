@@ -208,7 +208,7 @@
 
 - warp 目标态可校验累计公式、最近审计和当前收款状态自洽，但无法仅凭一个状态快照证明全部历史区块逐笔到账；历史保证来自守卫节点逐块执行或可信 finalized 状态提供方，不把累计字段表述为密码学历史证明。
 
-## 第 4 步执行结果（2026-07-10）
+## 第 4 步历史执行结果（2026-07-10，机构永久生命周期规则已于 2026-07-16 被当前方案替代）
 
 ### 代码与规则
 
@@ -470,7 +470,7 @@
   A/B/C 均同步到 block#1，三端哈希一致：
   `0xe0fccc0790f9761226865a2fa96a5eb9e19eb34169191f49faf3afee4817b3c8`。
 - 恶意拒绝矩阵在三节点网络保持运行期间重跑：NodeGuard `76/76`、ConstitutionGuard `40/40`；
-  覆盖空块、固定治理骨架、全节点发行、公民发行、省储行固定发行、CID 生命周期、PoW 动态难度、
+  覆盖空块、固定治理骨架、全节点发行、公民发行、省储行固定发行、CID 和手续费制度，
   runtime upgrade audit、完整状态导入和护宪规则的拒绝路径。矩阵证明拒绝返回 `KnownBad` 且不委派内层导入。
 - 第二笔真实 Alice `System::remark` 交易 hash：
   `0x89179977bd67be499ee5aa38031c9c8ecc6da851436208e21a2048b0887b571e`；
@@ -625,7 +625,7 @@
 - 新增 `ImportedPolicyStats`，只记录总扫描及治理/全节点发行/公民发行/省储行固定发行/CID 分区数，不保存跨块状态。
 - 当前 runtime 真实 block#0 全 storage 通过全部 NodeGuard 策略，且扫描计数严格等于输入 key 数。
 - 删除固定治理机构、非零 PoW 创世累计、未知 CitizenIssuance key、删除创世封存账户均在对应策略拒绝。
-- 非 block#0 完整快照继续由 CID 策略严格返回 `NonGenesisStateImportForbidden`。
+- CID 完整状态允许任意高度导入校验；普通机构允许依法删除，block#0 精确机构基准仍禁止删除或替换。
 - ConstitutionGuard 对版本和凭据 storage 前缀下的畸形 Blake2_128Concat key 新增
   `StorageKeyMalformed`，完整状态不能把畸形相关 key 当成无关 key 忽略。
 
@@ -734,7 +734,7 @@
   block#2，不再构造空 proposal，也没有 runtime panic；临时 chainspec、数据库、测试 keystore
   和日志验收后全部删除。
 
-## PoW 动态难度、可升级参数与 NodeGuard 守卫（2026-07-12，已完成）
+## 历史记录：PoW 动态难度 NodeGuard 策略（2026-07-12 实施，2026-07-16 已删除）
 
 ### 已完成代码
 
@@ -748,8 +748,8 @@
   `LastRuntimeUpgradeAudit`；NodeGuard 用审计把 `:code`、旧/新参数 hash 和激活高度绑定。
 - 节点挖矿改为直接读取 `PowDifficulty::CurrentDifficulty` RAW storage，不再保留
   `PowDifficultyApi` Runtime API 或固定难度兜底。
-- 新增 node `pow_difficulty` 守卫策略，覆盖创世、普通调整、参数激活、runtime 升级审计和完整状态导入；
-  未知 key、畸形 SCALE、普通区块改参数、非法版本、审计缺失或 hash 不一致全部 fail-closed。
+- 当时新增的 node `pow_difficulty` 守卫策略现已完整删除；PoW runtime、节点挖矿和链上难度读取保持原状，
+  NodeGuard 不再复算或冻结 PoW 难度参数。
 - runtime 空块最终拒绝继续保留；NodeGuard 预执行拒绝和本地交易池门控只作为前置防线。
 
 ### benchmark 与清理
@@ -787,5 +787,37 @@
   `0xaaf286249a775bcac3bb107b7e7f4c15ccb3fb2eaebb8d0cf87e81464d7ae7fb`，
   区块包含 2 条 extrinsics（timestamp + Alice remark）和 2 条 digest logs；Alice nonce 从 0 变为 1，
   pending extrinsics 清零，节点 2 同步到 block#1。
-- 验收期间无 NodeGuard / ConstitutionGuard / PoW 难度守卫拒绝合法 block#1；临时节点、chainspec、
+- 当时验收期间无 NodeGuard / ConstitutionGuard 拒绝合法 block#1；临时节点、chainspec、
   签名器、数据库和日志已全部删除。
+
+## CID 与手续费制度守卫收口（2026-07-16）
+
+### 执行边界
+
+- 本次只修改 `citizenchain/node/`、节点测试和文档，`citizenchain/runtime/` 零修改；没有版本迁移、
+  旧数据兼容、Runtime API、manifest 或 WASM hash 白名单。
+- 删除 NodeGuard 的 `pow_difficulty.rs` 及注册、完整状态分区和启动检查残留；PoW 共识本身不在本次范围。
+- CID 节点规则只校验省市码、机构码、盈利属性和校验码。随机段与年份段只作为校验码原始载荷，
+  不校验长度、字符、随机派生值或具体年份。
+- 只有 block#0 精确机构禁止删除、跨命名空间复制或替换身份；普通机构继续由 runtime 依法创建、
+  修改、关闭和删除，NodeGuard 只要求删除时账户与正反索引同步清空。
+- 手续费固定口径为：链上费率 0.1%、链上最低 10 分、投票固定 100 分、链下最低 1 分、
+  清算行及全局最高费率 0.1%。
+- 链下费率只冻结最高值，不增加最低费率规则；费率为 0% 时每笔仍执行最低 1 分手续费。
+
+### 拒块行为
+
+- 普通区块核对链上转账/投票 `FeePaid`、链下 `PaymentSettled` 和清算行费率 storage。
+- `:code` 变化时直接执行候选 WASM 的 50,000 分转账、1 分转账和一次投票，按付款账户余额差额
+  判定行为，不要求候选 runtime 先随节点发布。
+- 任一规则非法统一返回 `KnownBad` 且不委派内层导入器；已运行节点继续使用此前合法 runtime，
+  P2P、RPC 和挖矿服务不因非法升级区块退出。
+
+### 自动化
+
+- `cargo check -p node --bin citizenchain` 通过。
+- `cargo fmt -p node -- --check` 通过。
+- `cargo test -p node core::node_guard --bin citizenchain -- --nocapture`：75/75 通过。
+- `WASM_BUILD_FROM_SOURCE=1 cargo test -p node current_wasm_passes_candidate_runtime_fee_behavior_probes --bin citizenchain -- --nocapture`：1/1 通过；真实候选 WASM 完成链上费率、最低费和投票费隔离行为验证。
+- CID 定向测试：普通机构删除通过、创世机构删除拒绝、四项 CID 规则通过。
+- 手续费定向测试：0.1%、链上最低 10 分、投票 100 分、链下最低 1 分、最高 0.1% 及实际事件核对通过；当前链下入口被 `BaseCallFilter` 禁用时只接受精确 `CallFiltered`，以后开放入口必须通过真实最低费清算探针。

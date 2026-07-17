@@ -19,7 +19,7 @@ use axum::{
 };
 use tokio::sync::Mutex;
 
-use crate::auth::repo::active_node_binding;
+use crate::auth::repo;
 use crate::core::chain_runtime::identity_from_binding_parts;
 use crate::core::response::ApiResponse;
 use crate::{api_error, AppState};
@@ -88,7 +88,7 @@ async fn cached_board(state: &AppState) -> Result<DisplayBoard, Response> {
 
 /// 冷路径:解析节点绑定 → 身份 → 装配看板。错误细节仅落日志,对外回固定文案。
 async fn build_board_uncached(state: &AppState) -> Result<DisplayBoard, Response> {
-    let binding = match active_node_binding(&state.db) {
+    let binding = match repo::active_node_binding(&state.db) {
         Ok(Some(binding)) => binding,
         Ok(None) => {
             return Err(api_error(
@@ -106,7 +106,21 @@ async fn build_board_uncached(state: &AppState) -> Result<DisplayBoard, Response
             ));
         }
     };
-    let candidate = binding.candidate;
+    // 绑定表只存链上身份键；名称与授权作用域在使用点从各自真源临时派生。
+    let candidate = match state
+        .db
+        .with_client(move |conn| repo::candidate_for_binding_conn(conn, &binding))
+    {
+        Ok(candidate) => candidate,
+        Err(err) => {
+            tracing::warn!(error = %err, "display board: binding metadata derivation failed");
+            return Err(api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "node configuration error",
+            ));
+        }
+    };
     let identity = match identity_from_binding_parts(
         &candidate.institution_code,
         candidate.institution_cid_number.as_deref(),

@@ -671,7 +671,7 @@ pub(crate) fn active_registry_cid_number(
         )
     })?;
     let cid_number = binding
-        .and_then(|binding| binding.candidate.institution_cid_number)
+        .map(|binding| binding.institution_cid_number)
         .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, 1001, "当前注册局缺少机构 CID 绑定"))?;
     if cid_number.is_empty()
         || cid_number.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize

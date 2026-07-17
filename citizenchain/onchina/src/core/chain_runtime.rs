@@ -787,7 +787,7 @@ fn resolve_signing_keypair(seed_text: &str) -> Result<Arc<Sr25519Pair>, String> 
 // `PublicAdmins`(公权法人,含固定治理档 NRC/PRC/PRB/NJD/FRG)、
 // `PrivateAdmins`(私权法人:股权/股份/有限合伙/公益/协会/私立学校等)。
 // 节点按自身机构码路由到对应 pallet,登录验签后比对该集合放行,
-// 本地 admins 表仅作元数据/省映射缓存。个人多签 PMUL 不在控制台范围。
+// 本地 admins 表仅作展示元数据缓存，不保存管理员省权限。个人多签 PMUL 不在控制台范围。
 /// 联邦注册局机构码,镜像 `admin_primitives::FRG`(`*b"FRG\0"`)。
 /// onchina 不依赖 admin-primitives(避免引入 frame-support 重依赖),
 /// 此处单字面镜像;FRG 为稳定常量,与链端保持一致即可。

@@ -8,7 +8,7 @@
 use super::*;
 
 use sc_chain_spec::{ChainType, Properties};
-use sc_client_api::TrieCacheContext;
+use sc_client_api::{StorageProvider, TrieCacheContext};
 use sc_consensus::{BlockImport, BlockImportParams, ImportResult, StateAction, StorageChanges};
 use sc_network::{
     config::{MultiaddrWithPeerId, NetworkConfiguration},
@@ -32,7 +32,35 @@ use sp_runtime::{
     Digest, DigestItem, OpaqueExtrinsic,
 };
 use sp_state_machine::Backend as _;
-use std::time::Duration;
+use std::{
+    sync::atomic::{AtomicUsize, Ordering},
+    time::Duration,
+};
+
+#[derive(Clone, Default)]
+struct CountingImport {
+    imports: Arc<AtomicUsize>,
+}
+
+#[async_trait::async_trait]
+impl BlockImport<Block> for CountingImport {
+    type Error = sp_consensus::Error;
+
+    async fn check_block(
+        &self,
+        _block: sc_consensus::BlockCheckParams<Block>,
+    ) -> Result<ImportResult, Self::Error> {
+        Ok(ImportResult::AlreadyInChain)
+    }
+
+    async fn import_block(
+        &self,
+        _block: BlockImportParams<Block>,
+    ) -> Result<ImportResult, Self::Error> {
+        self.imports.fetch_add(1, Ordering::SeqCst);
+        Ok(ImportResult::AlreadyInChain)
+    }
+}
 
 struct TestNode {
     config: Configuration,
@@ -264,6 +292,33 @@ fn mutate_to_self_consistent_guarded_state(
     params.header.set_state_root(bad_root);
 }
 
+/// 在预计算 delta 中直接篡改 manifest；测试随后移除 body，确保 ConstitutionGuard 走
+/// `ApplyChanges(Changes)` 的真实提交前分支，而不是靠执行失败间接拒块。
+fn mutate_precomputed_manifest(params: &mut BlockImportParams<Block>, client: &Arc<FullClient>) {
+    let parent_hash = *params.header.parent_hash();
+    let StateAction::ApplyChanges(StorageChanges::Changes(changes)) = &mut params.state_action
+    else {
+        panic!("legal remark block must carry precomputed storage changes");
+    };
+    let key = crate::core::constitution::storage_key::manifest();
+    let mut value = client
+        .storage(parent_hash, &sp_storage::StorageKey(key.clone()))
+        .expect("read parent manifest")
+        .expect("parent manifest exists")
+        .0;
+    value[0] ^= 1;
+    if let Some((_, existing)) = changes
+        .main_storage_changes
+        .iter_mut()
+        .find(|(existing_key, _)| existing_key == &key)
+    {
+        *existing = Some(value);
+    } else {
+        changes.main_storage_changes.push((key, Some(value)));
+    }
+    params.body = None;
+}
+
 fn seal_with_valid_pow(params: &mut BlockImportParams<Block>, client: &Arc<FullClient>) {
     let parent_hash = *params.header.parent_hash();
     let pre_hash = params.header.hash();
@@ -454,6 +509,52 @@ fn first_listen_address(node: &TestNode) -> MultiaddrWithPeerId {
         multiaddr: address,
         peer_id: node.network.local_peer_id(),
     }
+}
+
+#[test]
+fn constitution_guard_rejects_manifest_delta_and_then_accepts_legal_delta() {
+    if skip_without_wasm_binary(
+        "constitution_guard_rejects_manifest_delta_and_then_accepts_legal_delta",
+    ) {
+        return;
+    }
+    let runtime = tokio::runtime::Runtime::new().expect("create tokio runtime");
+    let config = test_config("constitution-guard-direct", runtime.handle().clone());
+    let base_path = config.base_path.path().to_path_buf();
+    let sc_service::PartialComponents {
+        client,
+        backend,
+        task_manager,
+        ..
+    } = new_partial(&config).expect("create partial service");
+    let inner = CountingImport::default();
+    let imports = inner.imports.clone();
+    let guard = crate::core::constitution::ConstitutionGuard::new(inner, client.clone(), backend)
+        .expect("create constitution guard from valid block zero");
+
+    let mut malicious = legal_remark_block_params(&client);
+    mutate_precomputed_manifest(&mut malicious, &client);
+    let rejected = runtime
+        .block_on(guard.import_block(malicious))
+        .expect("constitution guard rejection result");
+    assert_eq!(rejected, ImportResult::KnownBad);
+    assert_eq!(imports.load(Ordering::SeqCst), 0);
+    assert_eq!(client.info().best_number, 0);
+
+    // 同一个无状态守卫拒绝非法块后，下一份合法预计算 delta 仍能委派，节点无需重启。
+    let mut legal = legal_remark_block_params(&client);
+    legal.body = None;
+    let accepted = runtime
+        .block_on(guard.import_block(legal))
+        .expect("legal import after manifest rejection");
+    assert_eq!(accepted, ImportResult::AlreadyInChain);
+    assert_eq!(imports.load(Ordering::SeqCst), 1);
+    assert_eq!(client.info().best_number, 0);
+
+    drop(guard);
+    drop(client);
+    drop(task_manager);
+    std::fs::remove_dir_all(base_path).expect("remove constitution guard test temp base");
 }
 
 #[test]

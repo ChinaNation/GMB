@@ -2,7 +2,8 @@
 
 ## 1. 定位
 
-`ConstitutionGuard` 是公民链最高优先级、独立最外层的原生 `BlockImport` 包装器。网络导入与本地挖矿固定为：
+`ConstitutionGuard` 是公民链最高优先级、独立最外层的原生 `BlockImport` 包装器。它只输出二态判定：
+合法为 `Ok` 并继续导入，非法为 `Err` 并转换成 `KnownBad`。网络导入与本地挖矿固定为：
 
 ```text
 ConstitutionGuard<NodeGuard<PowBlockImport>>
@@ -38,6 +39,7 @@ ConstitutionGuard<NodeGuard<PowBlockImport>>
 - 状态只允许 `Pending/Effective`，并严格校验 effective/latest/pending 指针组合；
 - `houses` 与 block#0 一致，`LawsByScope[Constitution][0]` 必须恰为 `[0]`；
 - manifest 在运行期与 block#0 编码逐字一致；
+- 已进入父状态的历史版本和两类修宪凭据逐字冻结，后续区块不得修改、删除或事后补写；
 - 每个版本值内部 `law_id/version` 必须与 RAW key 一致；
 - `content_hash=blake2_256(chapters.encode())`；
 - 全文条号全局唯一，不允许用重复条号隐藏第二份条文；
@@ -52,6 +54,10 @@ ConstitutionGuard<NodeGuard<PowBlockImport>>
 - `Execute/ExecuteIfPossible` 且无 body：无法独立证明后置状态，fail-closed；
 - `Skip`：只允许不执行、不导入状态的语义；
 - 触及立法院前缀或 `:code` 时全检，任何读取、执行或解码错误都返回 `KnownBad`。
+
+`KnownBad` 是单个区块的导入结果，不是节点退出条件。非法区块不会调用下一层导入器，不写数据库、
+不成为最佳块，也不能修改 `:code`；节点继续停留在父块并使用原 runtime，后续合法区块仍可继续导入。
+启动期 block#0 基准校验仍保留，创世基准本身非法时节点拒绝启动。
 
 普通块依据前态已经通过守卫的归纳条件，只复核当前有效状态和本块 delta 触及的历史版本；同时拒绝 `latest_version` 回退及超范围隐藏版本。warp 和启动没有前态归纳条件，因此枚举并复核全部版本。
 
@@ -116,3 +122,17 @@ ConstitutionGuard 39 个定向测试已经覆盖 Law[0] 缺失/身份错误、ti
 合法状态、不可修改条款篡改、缺关键 key、隐藏版本、历史版本篡改以及畸形版本/凭据 hasher 均有
 提交前测试覆盖。2026-07-12 ConstitutionGuard `40/40` 通过；当前 fresh block#0 真实启动也通过
 ConstitutionGuard 创世基准构造。
+
+## 11. 非法区块拒绝与历史冻结验收（2026-07-16）
+
+- 守卫内部判定已收口为 `Result<(), String>`：只有合法和非法，不保留不可达的第三状态；
+- 父状态中已存在的 `LawVersions[0][version]`、`ConstitutionAmendmentProof[version]`、
+  `ConstitutionGuardVoteProof[version]` 全部逐字冻结；合法新版本及其同块新凭据仍可写入；
+- 凭据版本号不得落在 `1..=latest_version` 之外，不能隐藏未来凭据；
+- 四类非法输入统一返回 `KnownBad`，内层导入次数为零；连续拒绝后合法输入仍可委派；
+- ConstitutionGuard `44/44`、NodeGuard/共享闸门 `74/74`、node `cargo check` 与格式检查通过；
+- 真实 client/backend 的 manifest 恶意 delta 返回 `KnownBad`、best 保持 block#0、内层零调用，随后合法 delta 继续委派；
+- 真实双节点守卫栈 P2P 坏块验收通过：诚实节点保持父块且数据库无坏块；
+- 使用当前源码 WASM 的 fresh 节点启动成功，`chain_getBlockHash(0)` 为
+  `0x8347f61bd28c93c4ce6d6b98f4b5a70f185841e0ac87b0bab9eb8c6caf8375ed`，
+  `system_health.isSyncing=false`，`constitution_getDocument.source=legislation-raw`；节点正常退出。

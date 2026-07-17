@@ -5,11 +5,12 @@
 //!
 //! 1. **渲染**(展示):从链上结构化宪法(章>节>条>款 + 中英双语)重建《公民宪法》HTML,
 //!    复用原 CSS 外壳,供桌面端「公民宪法」tab 显示(`constitution_getDocument` RPC)。
-//! 2. **不可修改条款守卫**(L2 共识层):宪法第 1/2/3/17/19/24/34/42 条为「不可修改条款」,
-//!    本守卫在区块导入时逐块校验这些条文与**创世(block#0)逐字一致**,违者拒块。
+//! 2. **宪法守卫**(L2 共识层):逐块保护不可修改条款、manifest、历史版本和修宪凭据；
+//!    其中第 1/2/3/17/19/24/34/42 条必须与**创世(block#0)逐字一致**，历史记录写入后永久冻结。
 //!    执法逻辑在 runtime 之外的节点二进制里,清单(`primitives::IMMUTABLE_CONSTITUTION_ARTICLES`)
 //!    编译进二进制 —— 故 setCode / migration / 改清单常量都改不动这些条文;唯一修改路径 =
-//!    改创世(创世哈希变 = 新链)或改节点二进制(硬分叉),即「只能重新创世」。详见 ADR-027 §7。
+//!    改创世(创世哈希变 = 新链)或改节点二进制(硬分叉),即「只能重新创世」。非法区块返回
+//!    `KnownBad` 且不进入内层导入器，节点继续使用父区块状态和原 runtime。详见 ADR-027 §7。
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -554,6 +555,57 @@ where
         if let Some(version) = storage_key::constitution_version_from_key(key) {
             if !(GENESIS_CONSTITUTION_VERSION..=latest_version).contains(&version) {
                 return Err(GuardError::VersionOutsideDeclaredRange(version));
+            }
+        }
+        if let Some(version) = storage_key::constitution_proof_version_from_key(key) {
+            if !(GENESIS_CONSTITUTION_VERSION..=latest_version).contains(&version) {
+                return Err(GuardError::VersionOutsideDeclaredRange(version));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 冻结父状态中已经存在的历史宪法版本和修宪凭据。
+///
+/// 合法修宪可以在同一区块新增下一个版本及其凭据；记录一旦出现在父状态，后续区块只能原样
+/// 保留，不能修改、删除，也不能为已经存在的历史版本事后补写凭据。这样“历史记录合法”与
+/// “历史记录未被篡改”是两层独立检查，恶意 runtime 无法用另一份仍过阈值的数据替换旧记录。
+fn check_frozen_constitution_records<F>(
+    delta: &BTreeMap<Vec<u8>, Option<Vec<u8>>>,
+    read_parent: F,
+) -> Result<(), String>
+where
+    F: Fn(&[u8]) -> Result<Option<Vec<u8>>, String>,
+{
+    for (key, after) in delta {
+        if storage_key::is_constitution_version_key_candidate(key) {
+            let version = storage_key::constitution_version_from_key(key)
+                .ok_or_else(|| "宪法历史版本 RAW key 非法".to_string())?;
+            if let Some(before) = read_parent(key)? {
+                if after.as_deref() != Some(before.as_slice()) {
+                    return Err(format!("宪法历史版本 {version} 已被冻结，不得修改或删除"));
+                }
+            }
+            continue;
+        }
+
+        if storage_key::is_constitution_proof_key_candidate(key) {
+            let version = storage_key::constitution_proof_version_from_key(key)
+                .ok_or_else(|| "修宪凭据 RAW key 非法".to_string())?;
+            match read_parent(key)? {
+                Some(before) if after.as_deref() != Some(before.as_slice()) => {
+                    return Err(format!("修宪凭据 {version} 已被冻结，不得修改或删除"));
+                }
+                None if after.is_some() => {
+                    let historical_version = storage_key::law_version(CONSTITUTION_LAW_ID, version);
+                    if read_parent(&historical_version)?.is_some() {
+                        return Err(format!(
+                            "宪法历史版本 {version} 已存在，不得事后补写修宪凭据"
+                        ));
+                    }
+                }
+                _ => {}
             }
         }
     }
@@ -1108,6 +1160,89 @@ mod tests {
         let mut runtime_delta = BTreeMap::new();
         runtime_delta.insert(sp_storage::well_known_keys::CODE.to_vec(), Some(vec![3]));
         assert!(needs_full_invariant_check(&runtime_delta));
+    }
+
+    #[test]
+    fn existing_history_and_amendment_proofs_are_frozen_against_runtime_rewrites() {
+        let version_key = storage_key::law_version(CONSTITUTION_LAW_ID, 2);
+        let referendum_key = storage_key::constitution_amendment_proof(2);
+        let guard_key = storage_key::constitution_guard_vote_proof(2);
+        let parent = BTreeMap::from([
+            (version_key.clone(), vec![1, 2, 3]),
+            (referendum_key.clone(), (100u64, 80u64, 5u64).encode()),
+            (guard_key.clone(), 4u32.encode()),
+        ]);
+        let read_parent = |key: &[u8]| Ok(parent.get(key).cloned());
+
+        // 改写或删除既有历史版本，即使新内容自身结构合法，也必须按篡改拒绝。
+        assert!(check_frozen_constitution_records(
+            &BTreeMap::from([(version_key.clone(), Some(vec![9, 9, 9]))]),
+            read_parent,
+        )
+        .is_err());
+        assert!(check_frozen_constitution_records(
+            &BTreeMap::from([(version_key.clone(), None)]),
+            read_parent,
+        )
+        .is_err());
+
+        // 把既有凭据替换成另一组仍满足阈值的数据，或直接删除，同样属于历史篡改。
+        assert!(check_frozen_constitution_records(
+            &BTreeMap::from([(referendum_key.clone(), Some((100u64, 90u64, 0u64).encode()))]),
+            read_parent,
+        )
+        .is_err());
+        assert!(check_frozen_constitution_records(
+            &BTreeMap::from([(guard_key.clone(), Some(7u32.encode()))]),
+            read_parent,
+        )
+        .is_err());
+        assert!(check_frozen_constitution_records(
+            &BTreeMap::from([(guard_key, None)]),
+            read_parent,
+        )
+        .is_err());
+
+        // 已存在的历史版本不允许事后补写凭据；合法新版本及其同块凭据仍可进入后置校验。
+        let late_proof = storage_key::constitution_guard_vote_proof(2);
+        let mut parent_without_guard_proof = parent.clone();
+        parent_without_guard_proof.remove(&late_proof);
+        assert!(check_frozen_constitution_records(
+            &BTreeMap::from([(late_proof, Some(4u32.encode()))]),
+            |key| Ok(parent_without_guard_proof.get(key).cloned()),
+        )
+        .is_err());
+
+        let new_version = storage_key::law_version(CONSTITUTION_LAW_ID, 3);
+        let new_proof = storage_key::constitution_guard_vote_proof(3);
+        assert_eq!(
+            check_frozen_constitution_records(
+                &BTreeMap::from([
+                    (new_version, Some(vec![4, 5, 6])),
+                    (new_proof, Some(4u32.encode())),
+                ]),
+                read_parent,
+            ),
+            Ok(())
+        );
+
+        // 无状态变化的同值 delta 不应污染后续合法导入。
+        assert_eq!(
+            check_frozen_constitution_records(
+                &BTreeMap::from([(version_key, Some(vec![1, 2, 3]))]),
+                read_parent,
+            ),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn proof_version_cannot_hide_above_declared_latest_version() {
+        let hidden = storage_key::constitution_guard_vote_proof(9);
+        assert_eq!(
+            check_version_key_range([&hidden], 2),
+            Err(GuardError::VersionOutsideDeclaredRange(9))
+        );
     }
 
     #[test]

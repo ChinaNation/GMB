@@ -217,6 +217,8 @@ legislation-vote/src/
   对携带 body 的区块在父状态上**只读执行**得到后置存储变更,若变更触及立法院模块存储,则据「变更 ∪ 父状态」
   RAW 重建宪法相关键(`Laws[0]`/`LawVersions[0][v]`,硬编码 `Blake2_128Concat` key,**不读链上 metadata**),
   逐条比对**创世(block#0)基准**;命中违规 → `Ok(ImportResult::KnownBad)`(内层永不调用,块不入库、不成最佳块)。
+  已存在的历史版本和两类修宪凭据同时与父状态逐字比对，禁止修改、删除或事后补写；非法 runtime 升级块
+  只被拒绝，节点继续停留在父状态并使用原 runtime，不因业务守卫判定而退出。
   装配在 `service.rs` 两处导入(网络导入队列 + 本地挖矿),故诚实节点既不接受也不产出违规块。
 - **L3 创世锚 + 二进制锚 + 链上 manifest**(均已落地):内容基准从 block#0 状态派生(创世哈希为之背书,改它=换链);
   不可修改条款**清单**为 `primitives::count_const::IMMUTABLE_CONSTITUTION_ARTICLES` 常量、**编译进节点二进制**(链上 WASM 改不到节点副本)。
@@ -226,7 +228,7 @@ legislation-vote/src/
   改这 8 条的唯一路径 = 改创世(新创世哈希=新链)+ 改节点二进制(硬分叉),即「只能重新创世」。
 
 威胁覆盖:普通 amend→L1 拒;setCode 删 L1 / migration 直写存储 / 改清单常量 / 改版本指针指向篡改版本 /
-改 pallet 名让 key 落空(fail-safe 拒)→ 全部 L2 拒块。`detect_violation` 自身执行/取数出错时也 fail-closed 拒块,
+改 pallet 名让 key 落空(fail-safe 拒)→ 全部 L2 拒块。`verify_block` 自身执行/取数出错时也 fail-closed 拒块,
 不保留未经校验的导入路径。**待用户多节点真机 QA**:构造恶意改第一条的块,验证全网 orphan。
 
 2026-07-10 第二轮节点加固进一步冻结：manifest 每次全检都必须与 block#0 编码逐字一致；`Law` 内部

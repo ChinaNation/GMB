@@ -11,8 +11,8 @@ mod fullnode_issuance;
 mod genesis_pallet;
 mod governance_skeleton;
 mod national_body_composition;
-mod pow_difficulty;
 mod provincialbank_interest;
+mod runtime_policy;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -84,7 +84,7 @@ where
 }
 
 /// 节点镜像的 `frame_system::AccountInfo<u32, pallet_balances::AccountData<u128>>`。
-#[derive(Debug, Decode, Eq, PartialEq)]
+#[derive(Debug, Decode, codec::Encode, Eq, PartialEq)]
 pub(super) struct MAccountInfo {
     nonce: u32,
     consumers: u32,
@@ -93,7 +93,7 @@ pub(super) struct MAccountInfo {
     data: MAccountData,
 }
 
-#[derive(Debug, Decode, Eq, PartialEq)]
+#[derive(Debug, Decode, codec::Encode, Eq, PartialEq)]
 pub(super) struct MAccountData {
     free: u128,
     reserved: u128,
@@ -154,8 +154,8 @@ struct ImportedPolicyState {
     fullnode_issuance: BTreeMap<Vec<u8>, Vec<u8>>,
     citizen_issuance: BTreeMap<Vec<u8>, Vec<u8>>,
     genesis_pallet: BTreeMap<Vec<u8>, Vec<u8>>,
-    pow_difficulty: BTreeMap<Vec<u8>, Vec<u8>>,
     provincialbank_interest: BTreeMap<Vec<u8>, Vec<u8>>,
+    runtime_policy: BTreeMap<Vec<u8>, Vec<u8>>,
     cid: BTreeMap<Vec<u8>, Vec<u8>>,
     scanned: usize,
 }
@@ -168,8 +168,8 @@ struct ImportedPolicyStats {
     fullnode_issuance: usize,
     citizen_issuance: usize,
     genesis_pallet: usize,
-    pow_difficulty: usize,
     provincialbank_interest: usize,
+    runtime_policy: usize,
     cid: usize,
 }
 
@@ -182,8 +182,8 @@ impl ImportedPolicyState {
             fullnode_issuance: self.fullnode_issuance.len(),
             citizen_issuance: self.citizen_issuance.len(),
             genesis_pallet: self.genesis_pallet.len(),
-            pow_difficulty: self.pow_difficulty.len(),
             provincialbank_interest: self.provincialbank_interest.len(),
+            runtime_policy: self.runtime_policy.len(),
             cid: self.cid.len(),
         }
     }
@@ -199,7 +199,6 @@ where
     let total_issuance_key = fullnode_issuance::storage_key::total_issuance();
     let citizen_issuance_prefix = citizen_issuance::storage_key::pallet_prefix();
     let genesis_pallet_prefix = genesis_pallet::storage_key::pallet_prefix();
-    let pow_difficulty_prefix = pow_difficulty::storage_key::pallet_prefix();
     let provincialbank_prefix = provincialbank_interest::storage_key::pallet_prefix();
     let provincialbank_keys = provincialbank_interest::relevant_import_keys();
     let cid_prefixes = cid_lifecycle::storage_key::relevant_prefixes();
@@ -229,13 +228,13 @@ where
         if key.starts_with(&genesis_pallet_prefix) {
             state.genesis_pallet.insert(key.clone(), value.clone());
         }
-        if key.starts_with(&pow_difficulty_prefix) {
-            state.pow_difficulty.insert(key.clone(), value.clone());
-        }
         if key.starts_with(&provincialbank_prefix) || provincialbank_keys.contains(key) {
             state
                 .provincialbank_interest
                 .insert(key.clone(), value.clone());
+        }
+        if runtime_policy::storage_key::is_relevant(key) {
+            state.runtime_policy.insert(key.clone(), value.clone());
         }
     }
     state
@@ -264,10 +263,10 @@ where
         .map_err(|e| format!("公民认证发行:{e:?}"))?;
     genesis_pallet::check_imported_state(state.genesis_pallet.iter())
         .map_err(|e| format!("创世模块:{e:?}"))?;
-    pow_difficulty::check_imported_genesis(state.pow_difficulty.iter())
-        .map_err(|e| format!("PoW 动态难度:{e:?}"))?;
     provincialbank_interest::check_imported_genesis(state.provincialbank_interest.iter())
         .map_err(|e| format!("省储行固定发行:{e:?}"))?;
+    runtime_policy::check_imported_state(state.runtime_policy.iter())
+        .map_err(|e| format!("手续费制度:{e}"))?;
     cid_lifecycle::check_imported_genesis(state.cid.iter(), cid_reference)
         .map_err(|e| format!("CID 生命周期:{e:?}"))?;
     Ok(state.stats())
@@ -484,13 +483,13 @@ impl<I> NodeGuard<I> {
         )?;
         genesis_pallet::check_genesis(|key| genesis_pallet_state.get(key).cloned())
             .map_err(|e| format!("节点守卫:GenesisPallet 创世事实校验失败:{e:?}"))?;
-        let pow_difficulty_state = Self::pallet_state(
+        let runtime_policy_state = Self::pallet_state(
             &client,
             genesis_hash,
-            pow_difficulty::storage_key::pallet_prefix(),
+            sp_core::hashing::twox_128(b"OffchainTransaction"),
         )?;
-        pow_difficulty::check_genesis(|key| pow_difficulty_state.get(key).cloned())
-            .map_err(|e| format!("节点守卫:PoW 动态难度创世状态校验失败:{e:?}"))?;
+        runtime_policy::check_imported_state(runtime_policy_state.iter())
+            .map_err(|e| format!("节点守卫:创世手续费制度校验失败:{e}"))?;
         let cid_keys = Self::cid_state_keys(&client, genesis_hash)?;
         let cid_lifecycle = cid_lifecycle::GenesisReference::from_genesis(&cid_keys, |key| {
             client
@@ -572,15 +571,15 @@ impl<I> NodeGuard<I> {
         let stats = verify_imported_state_params(params, &self.cid_lifecycle)?;
         log::debug!(
             target: "node-guard",
-            "完整状态单遍扫描:总键 {},治理 {},国家组成/固定阈值 {},全节点发行/账户 {},公民发行 {},创世模块 {},PoW 动态难度 {},省储行固定发行 {},CID {}",
+            "完整状态单遍扫描:总键 {},治理 {},国家组成/固定阈值 {},全节点发行/账户 {},公民发行 {},创世模块 {},省储行固定发行 {},手续费制度 {},CID {}",
             stats.scanned,
             stats.governance,
             stats.national_body_composition,
             stats.fullnode_issuance,
             stats.citizen_issuance,
             stats.genesis_pallet,
-            stats.pow_difficulty,
             stats.provincialbank_interest,
+            stats.runtime_policy,
             stats.cid,
         );
         Ok(())
@@ -628,7 +627,7 @@ impl<I> NodeGuard<I> {
             pre_changes.main_storage_changes.into_iter().collect();
 
         // 第二阶段完整执行同一区块，得到 finalize 后状态；两阶段都只在 overlay 中执行，不提交后端。
-        let block = Block::new(params.header.clone(), body);
+        let block = Block::new(params.header.clone(), body.clone());
         let api = self.client.runtime_api();
         api.execute_block(parent_hash, block.into())
             .map_err(|e| format!("只读执行区块失败:{e}"))?;
@@ -659,23 +658,26 @@ impl<I> NodeGuard<I> {
             }
         };
 
-        let mut issuance_plan = FinalizeIssuancePlan::default();
-        if let Err(reason) = pow_difficulty::check_transition(
-            *params.header.number(),
-            &post_delta,
-            &read_parent,
-            &read_post,
-        ) {
+        if let Err(reason) = runtime_policy::check_transition(&post_delta, &read_post) {
             log::error!(
                 target: "node-guard",
-                "拒绝区块 #{} ({:?}):PoW 动态难度永久规则被破坏 —— {:?}",
+                "拒绝区块 #{} ({:?}):手续费制度状态非法 —— {reason}",
                 params.header.number(),
                 params.post_hash(),
-                reason,
+            );
+            return Ok(true);
+        }
+        if let Err(reason) = runtime_policy::check_block(&body, &read_post) {
+            log::error!(
+                target: "node-guard",
+                "拒绝区块 #{} ({:?}):实际手续费结果非法 —— {reason}",
+                params.header.number(),
+                params.post_hash(),
             );
             return Ok(true);
         }
 
+        let mut issuance_plan = FinalizeIssuancePlan::default();
         if let Err(reason) = genesis_pallet::check_transition(&post_delta, &read_parent, &read_post)
         {
             log::error!(
@@ -804,6 +806,55 @@ impl<I> NodeGuard<I> {
         }
 
         if post_delta.contains_key(sp_storage::well_known_keys::CODE) {
+            // 候选 runtime 生效前全量复核当前/待生效清算行费率；不能只看升级块
+            // 自己触及的 key，否则新 WASM 可以把存量非法值留到后续块再激活。
+            let mut fee_keys = Self::state_keys_for_prefixes(
+                &self.client,
+                parent_hash,
+                runtime_policy::storage_key::relevant_prefixes().to_vec(),
+            )?
+            .into_iter()
+            .map(|key| (key, ()))
+            .collect::<BTreeMap<_, _>>();
+            fee_keys.insert(runtime_policy::storage_key::max_rate(), ());
+            for key in post_delta
+                .keys()
+                .filter(|key| runtime_policy::storage_key::is_relevant(key))
+            {
+                fee_keys.insert(key.clone(), ());
+            }
+            let fee_state = fee_keys
+                .into_keys()
+                .filter_map(|key| read_post(&key).map(|value| (key, value)))
+                .collect::<BTreeMap<_, _>>();
+            if let Err(reason) = runtime_policy::check_imported_state(fee_state.iter()) {
+                log::error!(
+                    target: "node-guard",
+                    "拒绝区块 #{} ({:?}):候选 runtime 清算费率全检失败 —— {reason}",
+                    params.header.number(),
+                    params.post_hash(),
+                );
+                return Ok(true);
+            }
+            let candidate_code =
+                read_post(sp_storage::well_known_keys::CODE).ok_or("runtime 升级后缺少 :code")?;
+            if let Err(reason) = runtime_policy::check_candidate_runtime(
+                &parent_state,
+                parent_hash,
+                params.post_hash(),
+                *params.header.number(),
+                &post_delta,
+                &candidate_code,
+                self.client.info().genesis_hash,
+            ) {
+                log::error!(
+                    target: "node-guard",
+                    "拒绝区块 #{} ({:?}):候选 runtime 手续费行为非法 —— {reason}",
+                    params.header.number(),
+                    params.post_hash(),
+                );
+                return Ok(true);
+            }
             if let Err(reason) = genesis_pallet::check_full_state(&read_post) {
                 log::error!(
                     target: "node-guard",
@@ -1546,6 +1597,35 @@ mod finalize_issuance_tests {
     }
 
     #[test]
+    fn current_wasm_passes_candidate_runtime_fee_behavior_probes() {
+        if skip_without_wasm_binary("current_wasm_passes_candidate_runtime_fee_behavior_probes") {
+            return;
+        }
+        let runtime = tokio::runtime::Runtime::new().expect("create tokio runtime");
+        let config = test_config(runtime.handle().clone());
+        let sc_service::PartialComponents {
+            client,
+            backend,
+            task_manager: _task_manager,
+            ..
+        } = crate::core::service::new_partial(&config).expect("create partial node service");
+        let genesis_hash = client.info().genesis_hash;
+        let parent_state = backend
+            .state_at(genesis_hash, TrieCacheContext::Untrusted)
+            .expect("read genesis state");
+        runtime_policy::check_candidate_runtime(
+            &parent_state,
+            genesis_hash,
+            genesis_hash,
+            0,
+            &BTreeMap::new(),
+            citizenchain::WASM_BINARY.expect("checked above"),
+            genesis_hash,
+        )
+        .expect("current WASM must satisfy node-side fee behavior probes");
+    }
+
+    #[test]
     fn self_consistent_bad_precomputed_block_is_known_bad_before_inner_import() {
         if skip_without_wasm_binary(
             "self_consistent_bad_precomputed_block_is_known_bad_before_inner_import",
@@ -1648,6 +1728,7 @@ mod finalize_issuance_tests {
         let citizen = citizen_issuance::storage_key::rewarded_count();
         let genesis = genesis_pallet::storage_key::citizen_max();
         let provincialbank = provincialbank_interest::storage_key::last_settled_year();
+        let runtime_policy = runtime_policy::storage_key::max_rate();
         let cid = cid_lifecycle::storage_key::citizen_registry_prefix();
         let unrelated = b"unrelated".to_vec();
         let pairs = BTreeMap::from([
@@ -1658,11 +1739,12 @@ mod finalize_issuance_tests {
             (citizen.clone(), vec![3]),
             (genesis.clone(), vec![4]),
             (provincialbank.clone(), vec![4]),
+            (runtime_policy.clone(), 10u32.encode()),
             (cid.clone(), vec![4]),
             (unrelated, vec![5]),
         ]);
         let state = partition_imported_state(pairs.iter());
-        assert_eq!(state.scanned, 9);
+        assert_eq!(state.scanned, 10);
         assert_eq!(
             state.governance.keys().cloned().collect::<Vec<_>>(),
             [governance]
@@ -1694,6 +1776,10 @@ mod finalize_issuance_tests {
                 .cloned()
                 .collect::<Vec<_>>(),
             [provincialbank]
+        );
+        assert_eq!(
+            state.runtime_policy.keys().cloned().collect::<Vec<_>>(),
+            [runtime_policy]
         );
         assert_eq!(state.cid.keys().cloned().collect::<Vec<_>>(), [cid]);
     }
@@ -1836,14 +1922,7 @@ mod finalize_issuance_tests {
     }
 
     #[test]
-    fn non_genesis_complete_state_is_always_rejected_by_cid_policy() {
-        let empty = BTreeMap::<Vec<u8>, Vec<u8>>::new();
-        assert!(verify_imported_policy_state(
-            1,
-            empty.iter(),
-            &cid_lifecycle::GenesisReference::default(),
-        )
-        .expect_err("non-genesis snapshot cannot prove CID monotonicity")
-        .contains("NonGenesisStateImportForbidden"));
+    fn cid_policy_accepts_complete_state_import_at_non_genesis_height() {
+        assert_eq!(cid_lifecycle::check_state_import_height(1), Ok(()));
     }
 }

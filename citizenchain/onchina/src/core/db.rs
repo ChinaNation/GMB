@@ -171,18 +171,6 @@ impl Db {
              CREATE INDEX IF NOT EXISTS idx_admins_account_lower ON admins(lower(admin_account));
              CREATE INDEX IF NOT EXISTS idx_admins_created_by_lower ON admins(lower(created_by));
 
-             -- 联邦注册局管理员按 entity 省专员岗位派生的省归属缓存。
-             -- 管理员真源为 FRG AdminAccounts，省界真源为 InstitutionRoleAssignments。
-             CREATE TABLE IF NOT EXISTS federal_registry_admin_scopes (
-                admin_account TEXT PRIMARY KEY,
-                province_name TEXT NOT NULL,
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-             );
-             CREATE INDEX IF NOT EXISTS idx_frg_admin_scopes_province
-                ON federal_registry_admin_scopes(province_name);
-
-             -- 节点机构归属由 active admin 首次登录绑定,行政区真源为 china.sqlite。
-
              CREATE TABLE IF NOT EXISTS admin_action_challenges (
                 action_id TEXT PRIMARY KEY,
                 actor_account TEXT NOT NULL,
@@ -216,24 +204,29 @@ impl Db {
              CREATE INDEX IF NOT EXISTS idx_admin_login_sign_requests_expires
                 ON admin_login_sign_requests(expires_at);
 
-             -- 本节点首次由链上 active admin 确认后绑定唯一机构;链上管理员关系仍是真源。
+             -- 本节点首次由链上 active admin 确认后绑定唯一机构。
+             -- 绑定只存链上身份键，禁止缓存名称和行政权限等派生字段。
              CREATE TABLE IF NOT EXISTS node_institution_bindings (
                 binding_id TEXT PRIMARY KEY,
                 candidate_id TEXT NOT NULL,
                 institution_code TEXT NOT NULL,
                 institution_cid_number TEXT NOT NULL,
                 frg_province_code TEXT,
-                cid_full_name TEXT,
-                cid_short_name TEXT,
-                scope_province_name TEXT,
-                scope_city_name TEXT,
-                scope_town_name TEXT,
                 bound_admin_pubkey TEXT NOT NULL,
                 bound_at TIMESTAMPTZ NOT NULL,
                 status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'INACTIVE'))
              );
+             ALTER TABLE node_institution_bindings
+                DROP COLUMN IF EXISTS cid_full_name,
+                DROP COLUMN IF EXISTS cid_short_name,
+                DROP COLUMN IF EXISTS scope_province_name,
+                DROP COLUMN IF EXISTS scope_city_name,
+                DROP COLUMN IF EXISTS scope_town_name;
              CREATE UNIQUE INDEX IF NOT EXISTS idx_node_binding_one_active
                 ON node_institution_bindings ((status)) WHERE status = 'ACTIVE';
+
+             -- FRG 省权限不允许本地持久化；启动时确保该错误授权表不存在。
+             DROP TABLE IF EXISTS federal_registry_admin_scopes;
 
              CREATE TABLE IF NOT EXISTS node_binding_challenges (
                 binding_challenge_id TEXT PRIMARY KEY,
@@ -260,13 +253,20 @@ impl Db {
                 token TEXT PRIMARY KEY,
                 admin_account TEXT NOT NULL,
                 institution_code TEXT NOT NULL,
+                candidate_id TEXT NOT NULL,
                 expires_at TIMESTAMPTZ NOT NULL,
                 last_active_at TIMESTAMPTZ NOT NULL,
                 payload JSONB NOT NULL
              );
              ALTER TABLE admin_sessions
+                ADD COLUMN IF NOT EXISTS candidate_id TEXT;
+             -- 缺少绑定候选的会话无法证明仍属于当前机构，必须失败关闭。
+             DELETE FROM admin_sessions
+             WHERE candidate_id IS NULL OR btrim(candidate_id) = '';
+             ALTER TABLE admin_sessions
                 ALTER COLUMN admin_account SET NOT NULL,
-                ALTER COLUMN institution_code SET NOT NULL;
+                ALTER COLUMN institution_code SET NOT NULL,
+                ALTER COLUMN candidate_id SET NOT NULL;
              CREATE INDEX IF NOT EXISTS idx_admin_sessions_account
                 ON admin_sessions(admin_account);
              CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires

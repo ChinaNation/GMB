@@ -13,7 +13,6 @@ use std::collections::BTreeMap;
 
 use crate::auth::login::build_admin_name_from_user;
 use crate::auth::repo;
-use crate::crypto::pubkey::same_admin_account;
 use crate::*;
 
 fn balance_lookup_key(account: &str) -> String {
@@ -128,24 +127,18 @@ pub(crate) async fn list_city_registry_admins(
     .into_response()
 }
 
-pub(crate) fn can_manage_city_registry_conn(
-    conn: &mut Client,
-    actor_account: &str,
+pub(crate) fn can_manage_city_registry(
     actor_province_name: Option<&str>,
     city_registry: &AdminUser,
-) -> Result<bool, String> {
-    if same_admin_account(city_registry.created_by.as_str(), actor_account) {
-        return Ok(true);
-    }
+) -> bool {
     let Some(scope) = actor_province_name else {
-        return Ok(false);
+        return false;
     };
-    let city_registry_scope = repo::province_scope_for_registry_org_conn(
-        conn,
-        &city_registry.admin_account,
-        &city_registry.institution_code,
-    )?;
-    Ok(city_registry_scope.as_deref() == Some(scope))
+    let Some(city_code) = crate::cid::china::city_code_by_name(scope, &city_registry.city_name)
+    else {
+        return false;
+    };
+    city_code != "000"
 }
 
 pub(crate) fn find_city_registry_by_id_conn(
@@ -203,40 +196,27 @@ pub(crate) fn creator_admin_name_conn(
     let Some(creator) = repo::get_admin_by_account_conn(conn, creator_account)? else {
         return Ok("未知注册局管理员".to_string());
     };
-    let province = if crate::core::chain_runtime::is_tier1_registry(&creator.institution_code) {
-        repo::province_scope_for_registry_org_conn(
-            conn,
-            &creator.admin_account,
-            &creator.institution_code,
-        )?
-    } else {
-        None
-    };
-    Ok(build_admin_name_from_user(&creator, province.as_deref()))
+    // 创建者名称只作展示，禁止从本地表反推授权省份。
+    Ok(build_admin_name_from_user(&creator, None))
 }
 
-pub(crate) fn ensure_city_in_creator_province_conn(
-    conn: &mut Client,
-    creator_account: &str,
+pub(crate) fn ensure_city_in_province(
+    province_name: &str,
     city: &str,
 ) -> Result<(String, String), axum::response::Response> {
+    let province_name = province_name.trim();
+    if province_name.is_empty() {
+        return Err(api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "admin province scope missing",
+        ));
+    }
     let city = city.trim();
     if city.is_empty() {
         return Err(api_error(StatusCode::BAD_REQUEST, 1001, "city is required"));
     }
-    let province_name = repo::province_scope_for_registry_org_conn(conn, creator_account, "FRG")
-        .map_err(|err| {
-            let message = format!("query creator province failed: {err}");
-            api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str())
-        })?
-        .ok_or_else(|| {
-            api_error(
-                StatusCode::BAD_REQUEST,
-                1001,
-                "cannot resolve province from created_by",
-            )
-        })?;
-    let Some(city_code) = crate::cid::china::city_code_by_name(province_name.as_str(), city) else {
+    let Some(city_code) = crate::cid::china::city_code_by_name(province_name, city) else {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,
@@ -250,5 +230,5 @@ pub(crate) fn ensure_city_in_creator_province_conn(
             "province placeholder city (000) is not allowed",
         ));
     }
-    Ok((province_name, city.to_string()))
+    Ok((province_name.to_string(), city.to_string()))
 }

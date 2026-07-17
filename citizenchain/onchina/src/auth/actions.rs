@@ -21,8 +21,8 @@ use crate::auth::action_sign::{
     AdminSignedPayload, ADMIN_ACTION_TTL_SECONDS,
 };
 use crate::auth::city_registry_admins::{
-    can_manage_city_registry_conn, city_registry_row_from_user_conn,
-    count_city_registry_admins_in_city_conn, ensure_city_in_creator_province_conn,
+    can_manage_city_registry, city_registry_row_from_user_conn,
+    count_city_registry_admins_in_city_conn, ensure_city_in_province,
     find_city_registry_by_id_conn, MAX_ADMIN_NAME_CHARS, MAX_CITY_REGISTRY_ADMINS_PER_CITY,
 };
 use crate::auth::login::AdminAuthContext;
@@ -124,27 +124,23 @@ fn actor_cid_number_for_context(
     })?;
     let binding =
         binding.ok_or_else(|| api_error(StatusCode::FORBIDDEN, 2002, "node binding missing"))?;
-    if binding.candidate.institution_code != ctx.institution_code {
+    if binding.institution_code != ctx.institution_code {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             2002,
             "node binding institution mismatch",
         ));
     }
-    let cid_number = binding
-        .candidate
-        .institution_cid_number
-        .filter(|value| {
-            !value.is_empty()
-                && value.len() <= primitives::core_const::CID_NUMBER_MAX_BYTES as usize
-        })
-        .ok_or_else(|| {
-            api_error(
-                StatusCode::FORBIDDEN,
-                2002,
-                "node binding actor_cid_number missing",
-            )
-        })?;
+    let cid_number = binding.institution_cid_number;
+    if cid_number.is_empty()
+        || cid_number.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
+    {
+        return Err(api_error(
+            StatusCode::FORBIDDEN,
+            2002,
+            "node binding actor_cid_number missing",
+        ));
+    }
     Ok(cid_number)
 }
 
@@ -171,7 +167,7 @@ async fn ensure_pubkey_on_chain_admin(
             "node binding missing",
         ));
     };
-    if binding.candidate.institution_cid_number.as_deref() != Some(actor_cid_number) {
+    if binding.institution_cid_number != actor_cid_number {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             2002,
@@ -179,9 +175,9 @@ async fn ensure_pubkey_on_chain_admin(
         ));
     }
     let identity = chain_runtime::identity_from_binding_parts(
-        &binding.candidate.institution_code,
+        &binding.institution_code,
         Some(actor_cid_number),
-        binding.candidate.frg_province_code.as_deref(),
+        binding.frg_province_code.as_deref(),
     )
     .map_err(|err| {
         tracing::error!(error = %err, "node binding is invalid");
@@ -515,15 +511,15 @@ pub(crate) async fn commit_admin_action(
                 return admin_action_error("http:internal:target account parse failed".to_string());
             };
             let credential_actor_cid_number = match repo::active_node_binding(&state.db) {
-                Ok(Some(binding)) => match binding.candidate.institution_cid_number {
-                    Some(value) if !value.trim().is_empty() => value,
-                    _ => {
+                Ok(Some(binding)) => {
+                    if binding.institution_cid_number.trim().is_empty() {
                         drop_issued(&state, nonce);
                         return admin_action_error(
                             "http:internal:active binding cid_number is required".to_string(),
                         );
                     }
-                },
+                    binding.institution_cid_number
+                }
                 Ok(None) => {
                     drop_issued(&state, nonce);
                     return admin_action_error(
@@ -886,9 +882,12 @@ fn validate_create_city_registry_conn(
             .unwrap_or_else(|| "CREG".to_string());
         return Err(duplicate_admin_account_error(&institution_code));
     }
-    let (province, city) =
-        ensure_city_in_creator_province_conn(conn, created_by.as_str(), input.city_name.as_str())
-            .map_err(response_to_string)?;
+    let province_name = ctx
+        .scope_province_name
+        .as_deref()
+        .ok_or_else(|| "http:forbidden:admin province scope missing".to_string())?;
+    let (province, city) = ensure_city_in_province(province_name, input.city_name.as_str())
+        .map_err(response_to_string)?;
     if count_city_registry_admins_in_city_conn(conn, province.as_str(), city.as_str())?
         >= MAX_CITY_REGISTRY_ADMINS_PER_CITY
     {
@@ -968,12 +967,7 @@ fn require_manageable_city_registry_conn(
 ) -> Result<AdminUser, String> {
     let city_registry = find_city_registry_by_id_conn(conn, id)?
         .ok_or_else(|| "http:not_found:city admin not found".to_string())?;
-    if !can_manage_city_registry_conn(
-        conn,
-        ctx.admin_account.as_str(),
-        ctx.scope_province_name.as_deref(),
-        &city_registry,
-    )? {
+    if !can_manage_city_registry(ctx.scope_province_name.as_deref(), &city_registry) {
         return Err("http:forbidden:cannot manage other province city registry admins".to_string());
     }
     Ok(city_registry)
@@ -1055,8 +1049,8 @@ fn preview_node_binding_unbind_conn(
         return Err("http:conflict:node binding missing".to_string());
     };
     let binding_id = binding.binding_id.clone();
-    let candidate_id = binding.candidate.candidate_id.clone();
-    let institution_code = binding.candidate.institution_code.clone();
+    let candidate_id = binding.candidate_id.clone();
+    let institution_code = binding.institution_code.clone();
     let after = json!({
         "unbind": true,
         "binding_id": binding_id,
@@ -1066,7 +1060,7 @@ fn preview_node_binding_unbind_conn(
     Ok(ActionPreview {
         before_hash: hash_serialized(&binding),
         after_hash: hash_json(&after),
-        target: binding.candidate.candidate_id,
+        target: binding.candidate_id,
         auth_type: action_type.auth_type(),
     })
 }
@@ -1082,8 +1076,8 @@ fn apply_node_binding_unbind_conn(conn: &mut Client) -> Result<serde_json::Value
     let removed_sessions = repo::delete_all_admin_sessions_conn(conn)?;
     Ok(json!({
         "binding_id": binding.binding_id,
-        "candidate_id": binding.candidate.candidate_id,
-        "institution_code": binding.candidate.institution_code,
+        "candidate_id": binding.candidate_id,
+        "institution_code": binding.institution_code,
         "status": "INACTIVE",
         "removed_sessions": removed_sessions,
     }))

@@ -28,6 +28,8 @@ pub(crate) struct AdminSession {
     pub(crate) token: String,
     pub(crate) admin_account: String,
     pub(crate) institution_code: String,
+    /// 会话签发时命中的链上机构候选。每次鉴权必须与节点当前绑定严格一致。
+    pub(crate) candidate_id: String,
     pub(crate) expire_at: DateTime<Utc>,
     #[serde(default = "default_now_utc")]
     pub(crate) last_active_at: DateTime<Utc>,
@@ -50,7 +52,11 @@ pub(crate) struct AdminInstitutionCandidate {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct NodeInstitutionBinding {
     pub(crate) binding_id: String,
-    pub(crate) candidate: AdminInstitutionCandidate,
+    /// 绑定只持久化链上身份键；名称和行政权限禁止写入绑定表，使用时从各自真源派生。
+    pub(crate) candidate_id: String,
+    pub(crate) institution_code: String,
+    pub(crate) institution_cid_number: String,
+    pub(crate) frg_province_code: Option<String>,
     pub(crate) bound_admin_pubkey: String,
     pub(crate) bound_at: DateTime<Utc>,
     pub(crate) status: String,

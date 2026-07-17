@@ -178,8 +178,10 @@
 - `memory/08-tasks/open/20260715-citizenapp-chat-media-emoji.md`
 - `memory/08-tasks/open/20260715-citizenapp-contact-actions.md`
 - `memory/08-tasks/open/20260715-citizenapp-profile-fallback-unification.md`
-- `memory/08-tasks/open/20260716-citizen-coin-native-membership.md`
+- `memory/08-tasks/open/20260716-citizen-coin-subscription.md`
+- `memory/08-tasks/open/20260716-onchain-tax-settlement.md`
 - `memory/08-tasks/open/20260716-membership-decouple-rollout-alignment.md`
+- `memory/08-tasks/open/20260716-constitution-guard-reject-block.md`
 - `memory/08-tasks/open/runtime-full-audit.md`
 
 ## done

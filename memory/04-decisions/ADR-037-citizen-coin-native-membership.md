@@ -80,5 +80,5 @@
 
 ## 后续动作
 
-- 任务卡：`memory/08-tasks/open/20260716-citizen-coin-native-membership.md`（第 1 期平台会员 / 第 2 期创作者会员 / 第 3 期税务 ADR-038）。
+- 任务卡：`memory/08-tasks/open/20260716-citizen-coin-subscription.md`（第1部分订阅:平台会员+创作者会员,含框架目录方案）；税务=`20260716-onchain-tax-settlement.md`（第2部分,ADR-038）。
 - **待用户拍板架构政策点后**定稿 Accepted、进入实现（先链端 subscription pallet）。

@@ -15,10 +15,10 @@ use primitives::account_derive::{
     InstitutionProtocolAccountKind,
 };
 use primitives::cid::code::{
-    is_fixed_governance_code, is_private_legal_code, is_public_legal_code, is_unincorporated_code,
-    InstitutionCode,
+    institution_code_from_str, is_fixed_governance_code, is_person_code, is_private_legal_code,
+    is_public_legal_code, is_three_char_code, is_unincorporated_code, profit_policy,
+    province_code_text, InstitutionCode, ProfitPolicy,
 };
-use primitives::cid::number::parse_cid_number_parts_bytes;
 use primitives::core_const::SS58_FORMAT;
 
 const CITIZEN_IDENTITY_PALLET: &[u8] = b"CitizenIdentity";
@@ -44,6 +44,13 @@ impl Namespace {
         match self {
             Self::Public => Self::Private,
             Self::Private => Self::Public,
+        }
+    }
+
+    fn id(self) -> u8 {
+        match self {
+            Self::Public => 0,
+            Self::Private => 1,
         }
     }
 }
@@ -90,9 +97,22 @@ struct InstitutionAccountRecord {
     created_at: u32,
 }
 
-/// 新模型不再冻结一组“创世保护账户”；永久性由账户类别和 CID 制度约束直接决定。
+/// 创世机构只冻结不可替换的身份字段；名称和法定代表人仍由 runtime 业务管理。
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct GenesisInstitutionIdentity {
+    institution_code: InstitutionCode,
+    town_code: Vec<u8>,
+    created_at: u32,
+}
+
+/// block#0 的机构身份基准。
+///
+/// 普通机构不进入本集合，后续可以依法修改或删除；节点只永久保护创世机构本身不被
+/// 删除、跨命名空间复制或替换成另一主体。
 #[derive(Clone, Debug, Default)]
-pub struct GenesisReference;
+pub struct GenesisReference {
+    institutions: BTreeMap<(u8, Vec<u8>), GenesisInstitutionIdentity>,
+}
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum GuardError {
@@ -105,7 +125,8 @@ pub enum GuardError {
     CitizenCidIdentityChanged,
     CitizenCidStatusInvalid,
     CitizenCidRevocationHeightInvalid,
-    InstitutionDeleted,
+    GenesisInstitutionDeleted,
+    GenesisInstitutionChanged,
     InstitutionIdentityChanged,
     InstitutionLegalRepresentativeInvalid,
     FixedInstitutionCreatedAfterGenesis,
@@ -119,7 +140,6 @@ pub enum GuardError {
     UnexpectedProtocolAccount,
     SingletonInstitutionMissing,
     SingletonInstitutionIdentityMismatch,
-    NonGenesisStateImportForbidden,
 }
 
 pub mod storage_key {
@@ -267,10 +287,107 @@ fn parse_double_vec_key(
     Ok((first, second))
 }
 
+fn checksum_value(byte: u8) -> usize {
+    match byte {
+        b'0'..=b'9' => usize::from(byte - b'0'),
+        b'A'..=b'Z' => usize::from(byte - b'A') + 10,
+        _ => 0,
+    }
+}
+
+fn checksum_acc(parts: &[&[u8]]) -> usize {
+    let mut index = 0usize;
+    let mut total = 0usize;
+    for byte in parts.iter().flat_map(|part| part.iter().copied()) {
+        index = index.saturating_add(1);
+        total = total.wrapping_add(index.wrapping_mul(checksum_value(byte)));
+    }
+    total
+}
+
+fn valid_province_city(code: InstitutionCode, r5: &[u8]) -> bool {
+    let Ok(province): Result<[u8; 2], _> = r5[..2].try_into() else {
+        return false;
+    };
+    if province_code_text(&province).is_none() {
+        return false;
+    }
+    let city = &r5[2..];
+    if is_person_code(&code) {
+        return city == b"000";
+    }
+
+    let mut found = false;
+    primitives::cid::china::area::for_each_area(|item| {
+        if let primitives::cid::china::area::AreaItem::City(candidate) = item {
+            if candidate.province_code.as_bytes() == province
+                && candidate.city_code.as_bytes() == city
+            {
+                found = true;
+            }
+        }
+    });
+    found
+}
+
+/// 节点只背书省市码、机构码、盈利属性和校验码四项制度规则。
+///
+/// 中间随机段和末尾年份段只作为校验码原始载荷使用，本函数不判断其长度、字符、
+/// 随机派生值或具体年份。
 fn parse_cid(cid: &[u8]) -> Result<InstitutionCode, GuardError> {
-    parse_cid_number_parts_bytes(cid)
-        .map(|parts| parts.institution)
-        .map_err(|_| GuardError::InvalidCid)
+    let segments = cid.split(|byte| *byte == b'-').collect::<Vec<_>>();
+    if segments.len() != 4 || segments[0].len() != 5 || segments[1].len() != 5 {
+        return Err(GuardError::InvalidCid);
+    }
+    let r5 = segments[0];
+    let core = segments[1];
+    if !r5.iter().all(u8::is_ascii_alphanumeric)
+        || !core.iter().all(u8::is_ascii_alphanumeric)
+        || r5.iter().any(u8::is_ascii_lowercase)
+        || core.iter().any(u8::is_ascii_lowercase)
+    {
+        return Err(GuardError::InvalidCid);
+    }
+
+    let (code_text, profit, checksum, expected_checksum) = if core[3].is_ascii_digit() {
+        let code_text = core::str::from_utf8(&core[..3]).map_err(|_| GuardError::InvalidCid)?;
+        let profit = match core[3] {
+            b'0' => false,
+            b'1' => true,
+            _ => return Err(GuardError::InvalidCid),
+        };
+        let total = checksum_acc(&[r5, &core[..4], segments[2], segments[3]]);
+        let expected = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"[total % 36];
+        (code_text, profit, core[4], expected)
+    } else {
+        let code_text = core::str::from_utf8(&core[..4]).map_err(|_| GuardError::InvalidCid)?;
+        let profit = core[4].is_ascii_digit();
+        if !profit && !core[4].is_ascii_uppercase() {
+            return Err(GuardError::InvalidCid);
+        }
+        let total = checksum_acc(&[r5, &core[..4], segments[2], segments[3]]);
+        let expected = if profit {
+            b'0' + (total % 10) as u8
+        } else {
+            b'A' + (total % 26) as u8
+        };
+        (code_text, profit, core[4], expected)
+    };
+
+    let code = institution_code_from_str(code_text).ok_or(GuardError::InvalidCid)?;
+    if is_three_char_code(&code) != (code_text.len() == 3) || checksum != expected_checksum {
+        return Err(GuardError::InvalidCid);
+    }
+    match profit_policy(&code) {
+        Some(ProfitPolicy::NonProfit) if profit => return Err(GuardError::InvalidCid),
+        Some(ProfitPolicy::Profit) if !profit => return Err(GuardError::InvalidCid),
+        Some(_) => {}
+        None => return Err(GuardError::InvalidCid),
+    }
+    if !valid_province_city(code, r5) {
+        return Err(GuardError::InvalidCid);
+    }
+    Ok(code)
 }
 
 fn validate_cid_namespace(cid: &[u8], namespace: Namespace) -> Result<InstitutionCode, GuardError> {
@@ -438,7 +555,7 @@ pub fn check_transition<FParent, FPost>(
     delta: &BTreeMap<Vec<u8>, Option<Vec<u8>>>,
     parent: FParent,
     post: FPost,
-    _reference: &GenesisReference,
+    reference: &GenesisReference,
 ) -> Result<(), GuardError>
 where
     FParent: Fn(&[u8]) -> Option<Vec<u8>>,
@@ -460,20 +577,27 @@ where
         for key in delta.keys() {
             if key.starts_with(&institution_prefix) {
                 let cid = parse_vec_map_key(key, &institution_prefix, "Institutions")?;
-                let post_raw = post(key).ok_or(GuardError::InstitutionDeleted)?;
+                let protected = reference.institutions.get(&(namespace_id, cid.clone()));
+                let Some(post_raw) = post(key) else {
+                    if protected.is_some() {
+                        return Err(GuardError::GenesisInstitutionDeleted);
+                    }
+                    // 普通机构可以由 runtime 依法删除；关联账户和索引由后续全状态检查
+                    // 确认已经同时清空，NodeGuard 不再把普通主体永久化。
+                    continue;
+                };
                 let post_record: InstitutionRecord = decode_exact(&post_raw, "Institutions")?;
                 validate_institution_record(namespace, &cid, &post_record)?;
                 if post(&storage_key::institution(namespace.sibling(), &cid)).is_some() {
                     return Err(GuardError::CrossNamespaceDuplicate);
                 }
-                if let Some(parent_raw) = parent(key) {
-                    let parent_record: InstitutionRecord =
-                        decode_exact(&parent_raw, "Institutions")?;
-                    if parent_record.institution_code != post_record.institution_code
-                        || parent_record.created_at != post_record.created_at
-                        || parent_record.town_code != post_record.town_code
-                    {
-                        return Err(GuardError::InstitutionIdentityChanged);
+                if parent(key).is_some() {
+                    if protected.is_some_and(|identity| {
+                        identity.institution_code != post_record.institution_code
+                            || identity.created_at != post_record.created_at
+                            || identity.town_code != post_record.town_code
+                    }) {
+                        return Err(GuardError::GenesisInstitutionChanged);
                     }
                 } else if is_fixed_governance_code(&post_record.institution_code)
                     || primitives::institution_constraints::is_permanent_singleton_code(
@@ -488,21 +612,28 @@ where
             if key.starts_with(&account_prefix) {
                 let (cid, name) =
                     parse_double_vec_key(key, &account_prefix, "InstitutionAccounts")?;
-                let institution_raw = post(&storage_key::institution(namespace, &cid))
-                    .ok_or(GuardError::AccountWithoutInstitution)?;
-                let institution: InstitutionRecord =
-                    decode_exact(&institution_raw, "Institutions")?;
-                validate_institution_record(namespace, &cid, &institution)?;
+                let institution = post(&storage_key::institution(namespace, &cid))
+                    .map(|raw| decode_exact::<InstitutionRecord>(&raw, "Institutions"))
+                    .transpose()?;
+                if let Some(institution) = &institution {
+                    validate_institution_record(namespace, &cid, institution)?;
+                }
                 match (parent(key), post(key)) {
-                    (Some(before), Some(after)) if before == after => {}
+                    (Some(before), Some(after)) if before == after => {
+                        if institution.is_none() {
+                            return Err(GuardError::AccountWithoutInstitution);
+                        }
+                    }
                     (Some(_), Some(_)) => return Err(GuardError::AccountChanged),
                     (Some(before), None) => {
                         let account: InstitutionAccountRecord =
                             decode_exact(&before, "InstitutionAccounts")?;
-                        let kind = institution_kind_by_name(&cid, &name)
-                            .ok_or(GuardError::AccountAddressMismatch)?;
-                        if !kind.is_closable_institution_account() {
-                            return Err(GuardError::ProtocolAccountDeleted);
+                        if institution.is_some() {
+                            let kind = institution_kind_by_name(&cid, &name)
+                                .ok_or(GuardError::AccountAddressMismatch)?;
+                            if !kind.is_closable_institution_account() {
+                                return Err(GuardError::ProtocolAccountDeleted);
+                            }
                         }
                         if post(&storage_key::account_registered(
                             namespace,
@@ -514,6 +645,9 @@ where
                         }
                     }
                     (None, Some(after)) => {
+                        let institution = institution
+                            .as_ref()
+                            .ok_or(GuardError::AccountWithoutInstitution)?;
                         let account: InstitutionAccountRecord =
                             decode_exact(&after, "InstitutionAccounts")?;
                         validate_account_record(&cid, &name, &account)?;
@@ -532,7 +666,9 @@ where
                     }
                     (None, None) => {}
                 }
-                touched_institutions.insert((namespace_id, cid));
+                if institution.is_some() {
+                    touched_institutions.insert((namespace_id, cid));
+                }
             }
 
             if key.starts_with(&reverse_prefix) {
@@ -571,7 +707,11 @@ where
     Ok(())
 }
 
-fn validate_full_state<F>(keys: &[Vec<u8>], read: &F) -> Result<(), GuardError>
+fn validate_full_state<F>(
+    keys: &[Vec<u8>],
+    read: &F,
+    reference: Option<&GenesisReference>,
+) -> Result<(), GuardError>
 where
     F: Fn(&[u8]) -> Option<Vec<u8>>,
 {
@@ -658,6 +798,28 @@ where
         return Err(GuardError::CrossNamespaceDuplicate);
     }
 
+    if let Some(reference) = reference {
+        for ((namespace_id, cid), identity) in &reference.institutions {
+            let namespace = if *namespace_id == Namespace::Public.id() {
+                Namespace::Public
+            } else {
+                Namespace::Private
+            };
+            let raw = read(&storage_key::institution(namespace, cid))
+                .ok_or(GuardError::GenesisInstitutionDeleted)?;
+            let record: InstitutionRecord = decode_exact(&raw, "Institutions")?;
+            if record.institution_code != identity.institution_code
+                || record.created_at != identity.created_at
+                || record.town_code != identity.town_code
+            {
+                return Err(GuardError::GenesisInstitutionChanged);
+            }
+            if read(&storage_key::institution(namespace.sibling(), cid)).is_some() {
+                return Err(GuardError::CrossNamespaceDuplicate);
+            }
+        }
+    }
+
     for singleton in primitives::institution_constraints::singleton_institutions() {
         let cid = singleton.cid_number.as_bytes();
         let raw = read(&storage_key::institution(Namespace::Public, cid))
@@ -685,20 +847,37 @@ impl GenesisReference {
     where
         F: Fn(&[u8]) -> Option<Vec<u8>>,
     {
-        validate_full_state(keys, &read)?;
-        Ok(Self)
+        validate_full_state(keys, &read, None)?;
+        let mut institutions = BTreeMap::new();
+        for namespace in [Namespace::Public, Namespace::Private] {
+            let prefix = storage_key::institution_prefix(namespace);
+            for key in keys.iter().filter(|key| key.starts_with(&prefix)) {
+                let Some(raw) = read(key) else { continue };
+                let cid = parse_vec_map_key(key, &prefix, "Institutions")?;
+                let record: InstitutionRecord = decode_exact(&raw, "Institutions")?;
+                institutions.insert(
+                    (namespace.id(), cid),
+                    GenesisInstitutionIdentity {
+                        institution_code: record.institution_code,
+                        town_code: record.town_code,
+                        created_at: record.created_at,
+                    },
+                );
+            }
+        }
+        Ok(Self { institutions })
     }
 }
 
 pub fn check_full_state<F>(
     keys: &[Vec<u8>],
     read: F,
-    _reference: &GenesisReference,
+    reference: &GenesisReference,
 ) -> Result<(), GuardError>
 where
     F: Fn(&[u8]) -> Option<Vec<u8>>,
 {
-    validate_full_state(keys, &read)
+    validate_full_state(keys, &read, Some(reference))
 }
 
 pub fn check_imported_genesis<'a, I>(
@@ -718,21 +897,128 @@ where
     check_full_state(&keys, |key| map.get(key).cloned(), reference)
 }
 
-/// CID 历史单调性无法由非创世单快照证明，因此禁止非 block#0 状态导入。
-pub fn check_state_import_height(block: u32) -> Result<(), GuardError> {
-    if block == 0 {
-        Ok(())
-    } else {
-        Err(GuardError::NonGenesisStateImportForbidden)
-    }
+/// 当前规则只保护 block#0 精确机构集合与导入态完整性，不再把普通机构生命周期
+/// 误当作永久单调历史，因此任意高度的完整状态都可以独立验证。
+pub fn check_state_import_height(_block: u32) -> Result<(), GuardError> {
+    Ok(())
 }
 
 pub fn needs_full_check(delta: &BTreeMap<Vec<u8>, Option<Vec<u8>>>) -> bool {
-    delta.contains_key(CODE_KEY)
+    if delta.contains_key(CODE_KEY) {
+        return true;
+    }
+    [Namespace::Public, Namespace::Private]
+        .into_iter()
+        .map(storage_key::institution_prefix)
+        .any(|prefix| {
+            delta
+                .iter()
+                .any(|(key, value)| key.starts_with(&prefix) && value.is_none())
+        })
 }
 
 pub fn is_relevant_key(key: &[u8]) -> bool {
     matches_relevant_prefixes(key, &storage_key::relevant_prefixes())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cid_with_unchecked_tail(
+        r5: &[u8],
+        code: &[u8],
+        profit: u8,
+        n9: &[u8],
+        year: &[u8],
+    ) -> Vec<u8> {
+        let total = checksum_acc(&[r5, code, &[profit], n9, year]);
+        let checksum = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"[total % 36];
+        [r5, b"-", code, &[profit, checksum], b"-", n9, b"-", year].concat()
+    }
+
+    fn private_record() -> InstitutionRecord {
+        InstitutionRecord {
+            cid_full_name: b"ordinary company".to_vec(),
+            cid_short_name: b"company".to_vec(),
+            town_code: Vec::new(),
+            legal_representative_name: None,
+            legal_representative_cid_number: None,
+            legal_representative_account: None,
+            institution_code: *b"SFGQ",
+            created_at: 10,
+        }
+    }
+
+    #[test]
+    fn cid_guard_checks_only_province_city_code_profit_and_checksum() {
+        // 随机段和年份段故意使用非数字、非标准长度；只要四项受保护规则及由原始
+        // 载荷计算出的校验位正确，NodeGuard 就不额外背书 N9/年份派生规则。
+        let cid = cid_with_unchecked_tail(b"GD001", b"NRC", b'0', b"X", b"");
+        assert_eq!(parse_cid(&cid), Ok(*b"NRC\0"));
+
+        let bad_city = cid_with_unchecked_tail(b"GD999", b"NRC", b'0', b"X", b"");
+        assert_eq!(parse_cid(&bad_city), Err(GuardError::InvalidCid));
+
+        let mut bad_checksum = cid;
+        bad_checksum[10] = if bad_checksum[10] == b'Z' { b'Y' } else { b'Z' };
+        assert_eq!(parse_cid(&bad_checksum), Err(GuardError::InvalidCid));
+    }
+
+    #[test]
+    fn ordinary_institution_can_be_deleted_but_genesis_institution_cannot() {
+        let cid = primitives::cid::generator::generate_cid_number(
+            primitives::cid::generator::GenerateCidNumberInput {
+                account_pubkey: "ordinary",
+                p1: "1",
+                province_code: "GD",
+                province_name: "广东省",
+                city_code: "001",
+                city_name: "荔湾市",
+                year: "2026",
+                institution: "SFGQ",
+            },
+        )
+        .expect("valid private CID")
+        .into_bytes();
+        let key = storage_key::institution(Namespace::Private, &cid);
+        let before = private_record().encode();
+        let delta = BTreeMap::from([(key.clone(), None)]);
+        let parent = BTreeMap::from([(key.clone(), before)]);
+        let post = BTreeMap::<Vec<u8>, Vec<u8>>::new();
+
+        assert_eq!(
+            check_transition(
+                11,
+                &delta,
+                |raw| parent.get(raw).cloned(),
+                |raw| post.get(raw).cloned(),
+                &GenesisReference::default(),
+            ),
+            Ok(())
+        );
+
+        let reference = GenesisReference {
+            institutions: BTreeMap::from([(
+                (Namespace::Private.id(), cid),
+                GenesisInstitutionIdentity {
+                    institution_code: *b"SFGQ",
+                    town_code: Vec::new(),
+                    created_at: 10,
+                },
+            )]),
+        };
+        assert_eq!(
+            check_transition(
+                11,
+                &delta,
+                |raw| parent.get(raw).cloned(),
+                |raw| post.get(raw).cloned(),
+                &reference,
+            ),
+            Err(GuardError::GenesisInstitutionDeleted)
+        );
+    }
 }
 
 pub fn matches_relevant_prefixes(key: &[u8], prefixes: &[Vec<u8>]) -> bool {

@@ -52,7 +52,7 @@ OnChina 管理端只承认当前节点 active binding 绑定机构的链上 acti
 
 所有业务列表和 CRUD 必须将登录态转换为后端 scope 条件：
 
-- FRG：按本节点绑定的省级组限制。
+- FRG：按登录管理员在链上 `InstitutionRoleAssignments` 中的省岗位码限制；机构 CID 登记地址不得参与管理员权限派生。
 - CREG：按本节点绑定的市级范围限制。
 - 省 / 市 / 镇级机构：按 `admin_level` 派生的省 / 市 / 镇范围限制。
 - 私权和非法人机构：按本机构链上身份限制。
@@ -61,6 +61,8 @@ OnChina 管理端只承认当前节点 active binding 绑定机构的链上 acti
 - PMUL 和其它个人主体不进入 OnChina 网页控制台。
 
 禁止先读取全量数据再在 Rust 或前端过滤。
+
+节点绑定只保存链上身份键，不保存名称或行政权限派生值。会话必须绑定 `candidate_id`，每次请求都与当前 active binding 严格比对；任何缺失或不一致都失败关闭并清除会话。
 
 ## 5. 扫码签名和验签
 

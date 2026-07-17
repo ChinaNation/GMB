@@ -22,7 +22,7 @@
 - 税务是收款方作为纳税主体的**后置周期义务**，与订阅资金流解耦。
 
 **2. 纳税主体 = CID；税务管辖由 CID 决定**
-- 纳税主体键 = 稳定 CID（个人 CID / 机构 CID）；机构类型由 CID 反查 `institution_code`（ADR-025 单源，不建第二套分类）。
+- **收款方标识是钱包账户**（订阅侧 `IssuerKey::Creator=AccountId`，创作者无 CID 限制、任意钱包账户可开、收款不受限）；税务侧从收款账户**唯一解析 CID**（个人 citizen-identity / 机构 CID，防伪造）：有 CID → 按 CID 记台账、链上申报结算；**无 CID → 自行申报、不进链上台账、不阻塞收款**。机构类型由 CID 反查 `institution_code`（ADR-025 单源，不建第二套分类）。
 - **CID 决定归属税务机构**（CID 内含地域 → 地方税务机构管辖）。
 - **无 CID 主体**：不纳入链上自动结算，由用户**自行申报**（链下/例外路径，架构留口不强制）。
 
@@ -77,6 +77,6 @@ IncomeLedger: StorageMap<(taxpayer_cid, tax_period), accrued_income /*分*/>
 
 ## 后续动作
 
-- 任务卡：`memory/08-tasks/open/20260716-citizen-coin-native-membership.md`（第 3 期税务改为申报期结算机制）。
+- 任务卡：`memory/08-tasks/open/20260716-onchain-tax-settlement.md`（第2部分税务·申报期结算,串行在订阅卡之后）。
 - 具体税率/征收规则待税务机构运行期设定，不入本架构。
 - 落地后同步 `memory/05-modules`、runtime 索引、`unified-protocols.md`。

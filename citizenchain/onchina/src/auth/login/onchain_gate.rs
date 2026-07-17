@@ -108,12 +108,9 @@ fn candidate_from_membership_conn(
         scope_town_name: None,
     };
 
-    if let Some(province_code) = membership.frg_province_code {
-        candidate.scope_province_name = chain_runtime::chain_province_name_by_code(province_code);
-    }
-
-    // 候选写入绑定前统一补齐机构 CID 与账户元数据;FRG 省组的 scope 保留链上省组 key。
-    repo::hydrate_candidate_metadata_conn(conn, &mut candidate)?;
+    // 权限先从链上身份键派生，展示元数据随后补齐且不得覆盖权限字段。
+    repo::derive_candidate_authorization_scope_conn(conn, &mut candidate)?;
+    repo::hydrate_candidate_institution_metadata_conn(conn, &mut candidate)?;
     Ok(candidate)
 }
 
@@ -131,7 +128,7 @@ fn binding_matches_candidate(
     binding: &NodeInstitutionBinding,
     candidate: &AdminInstitutionCandidate,
 ) -> bool {
-    binding.candidate.candidate_id == candidate.candidate_id
+    binding.candidate_id == candidate.candidate_id
 }
 
 async fn find_allowed_memberships_for_login(
@@ -255,9 +252,19 @@ pub(super) async fn confirm_node_binding_after_onchain_gate(
     else {
         return Err(GateError::BindingMismatch);
     };
+    let institution_cid_number =
+        fresh_selected
+            .institution_cid_number
+            .clone()
+            .ok_or_else(|| {
+                GateError::BindingInvalid("selected institution CID is required".to_string())
+            })?;
     let binding = NodeInstitutionBinding {
         binding_id: Uuid::new_v4().to_string(),
-        candidate: fresh_selected.clone(),
+        candidate_id: fresh_selected.candidate_id.clone(),
+        institution_code: fresh_selected.institution_code.clone(),
+        institution_cid_number,
+        frg_province_code: fresh_selected.frg_province_code.clone(),
         bound_admin_pubkey: normalized.clone(),
         bound_at: now,
         status: "ACTIVE".to_string(),
@@ -282,6 +289,7 @@ async fn issue_session_for_candidate(
     now: DateTime<Utc>,
 ) -> Result<(String, DateTime<Utc>, AdminIdentifyOutput), GateError> {
     let institution_code = candidate.institution_code.clone();
+    let candidate_id = candidate.candidate_id.clone();
     let scope_province_name = candidate.scope_province_name.clone();
     let scope_city_name = candidate.scope_city_name.clone();
     let scope_town_name = candidate.scope_town_name.clone();
@@ -335,6 +343,7 @@ async fn issue_session_for_candidate(
                     token: access_token.clone(),
                     admin_account: admin.admin_account.clone(),
                     institution_code: institution_code.clone(),
+                    candidate_id: candidate_id.clone(),
                     expire_at,
                     last_active_at: now,
                 },
@@ -393,15 +402,15 @@ async fn revoke_stale_admin_sessions_once(db: &Db) -> Result<(), String> {
         return Ok(());
     };
     let identity = chain_runtime::identity_from_binding_parts(
-        &binding.candidate.institution_code,
-        binding.candidate.institution_cid_number.as_deref(),
-        binding.candidate.frg_province_code.as_deref(),
+        &binding.institution_code,
+        Some(binding.institution_cid_number.as_str()),
+        binding.frg_province_code.as_deref(),
     )?;
     let Some(onchain_admins) = chain_runtime::fetch_active_admins_onchain(&identity).await? else {
         // 账户暂不存在(链未就绪/未配),不冒然清退本地会话。
         return Ok(());
     };
-    let institution_code = binding.candidate.institution_code.clone();
+    let institution_code = binding.institution_code.clone();
     db.with_client(move |conn| {
         let accounts = repo::list_session_admin_accounts_conn(conn, &institution_code)?;
         for account in accounts {

@@ -14,8 +14,8 @@
   - 类型：代码与注释；同步清理黑色卡片在注册局表格中的残留调用。
 
 - `citizenchain/onchina/src/auth/`
-  - 用途：联邦注册局管理员接口返回全量省级组，并维护本地省份映射缓存供同省更换校验使用。
-  - 边界：权限真源仍是链上 `PublicAdmins::FederalRegistryProvinceGroups`；本地只缓存展示与校验所需的省份归属。
+  - 用途：联邦注册局管理员接口联合读取 `PublicAdmins::AdminAccounts` 与 `PublicManage::InstitutionRoleAssignments`，直接返回全量省岗位任职。
+  - 边界：管理员成员资格与省岗位均以链上为唯一真源；本地只保存展示元数据，不保存省份权限缓存。
   - 类型：代码与注释；不新增独立授权真源。
 
 - `citizenchain/onchina/src/core/`
@@ -31,7 +31,7 @@
 ## 实施步骤
 
 1. 创建任务卡，确认前后端影响范围。
-2. 后端新增全量联邦注册局省级组读取与省份映射缓存。
+2. 后端新增全量联邦注册局管理员与省岗位任职联合链读。
 3. 前端注册局管理员列表表格化，并加入完整信息弹窗。
 4. 更新文档、清理注册局列表黑色卡片残留。
 5. 执行编译、构建和真实运行态验收。
@@ -49,9 +49,9 @@
 ## 执行记录
 
 - 2026-07-03：任务卡创建。
-- 2026-07-03：后端改为全量读取 `FederalRegistryProvinceGroups` 43 个省级组，新增 `federal_registry_admin_scopes` 缓存省份归属，清理旧单省链读函数。
+- 2026-07-03：后端全量返回 43 省联邦注册局管理员目录；当前实现联合读取 `AdminAccounts` 和 `InstitutionRoleAssignments`，不落本地权限缓存。
 - 2026-07-03：前端联邦注册局、市注册局和注册局工作台本机构管理员表格停止嵌入黑色管理员卡片；passkey 按钮统一显示 `密钥`；非操作列点击弹完整信息。
 - 2026-07-03：文档已同步更新 `memory/01-architecture/onchina/ONCHINA_TECHNICAL.md` 与 `memory/01-architecture/onchina/README.md`，说明注册局表格化、FRG 全量目录和链上真源边界。
-- 2026-07-03：真实运行态验收使用临时 OnChina 实例 `127.0.0.1:8976` + 临时内嵌 PostgreSQL `55433` + 本地链 RPC `127.0.0.1:9944`；`/api/v1/admin/federal-registry-admins` 返回 `215` 条、`43` 个省、每省 `5` 人，中枢省 `5` 人排在前 5 条；`federal_registry_admin_scopes` 同步为 `215` 条、`43` 个省。
+- 2026-07-03：真实运行态验收使用临时 OnChina 实例 `127.0.0.1:8976` + 临时内嵌 PostgreSQL `55433` + 本地链 RPC `127.0.0.1:9944`；`/api/v1/admin/federal-registry-admins` 返回 `215` 条、`43` 个省、每省 `5` 人，中枢省 `5` 人排在前 5 条。
 - 2026-07-03：会话校验 `/api/v1/admin/auth/check` 确认临时 FRG 管理员登录态返回 `institution_code=FRG`、`scope_province_name=中枢省`、`cid_short_name=联邦注册局`、`workspace_kind=registry`，并下发联邦/市注册局管理能力位。
 - 2026-07-03：前端 dist 静态托管验证通过，根页面引用新资产 `assets/index-n3xrpt25.js`，该资产 HTTP 200。

@@ -37,7 +37,8 @@ ConstitutionGuard<NodeGuard<PowBlockImport>>
 | `citizenchain/node/src/core/node_guard/citizen_issuance.rs` | 公民认证发行 RAW key、待发队列/身份镜像、双重防重、档位公式、创世空状态与逐块纯判定 |
 | `citizenchain/node/src/core/node_guard/provincialbank_interest.rs` | 43 家省储行创立质押本金、100 年固定递减利息、年度审计及共享 finalize 计划纯判定 |
 | `citizenchain/node/src/core/node_guard/genesis_pallet.rs` | 三项永久创世事实、两字段一次性阶段状态机、旧出块时间字段清除与 RAW/SCALE 纯判定 |
-| `citizenchain/node/src/core/node_guard/cid_lifecycle.rs` | 公民 CID、公私权机构 CID、占号/运行/永久关闭单调状态机、固定创世机构与封存账户索引的节点原生判定 |
+| `citizenchain/node/src/core/node_guard/cid_lifecycle.rs` | CID 省市码、机构码、盈利属性和校验码；block#0 机构身份基准及机构账户索引完整性 |
+| `citizenchain/node/src/core/node_guard/runtime_policy.rs` | 节点固定手续费口径、清算行费率上限、普通区块实际收费结果和候选 WASM 隔离行为探针 |
 | `citizenchain/node/src/core/constitution/guard.rs` | 独立最外层宪法守卫，不受 `NodeGuard` 内部策略注册与重排影响 |
 | `citizenchain/node/src/core/service.rs` | 在网络导入与挖矿导入两处装配同一守卫顺序 |
 
@@ -61,8 +62,11 @@ ConstitutionGuard<NodeGuard<PowBlockImport>>
 再向同一个 `FinalizeIssuancePlan` 按收款账户登记金额。统一结算器按账户汇总后核对
 `System::Account` free balance 与 `Balances::TotalIssuance`，并拒绝任何未登记的 finalize
 账户变化；同一账户同时命中多项固定发行时不会互相覆盖。决议发行和链上发行仍在 extrinsic
-阶段按各自治理边界执行，不进入固定 finalize 计划。CID 生命周期策略只检查本块
-触及的规范 RAW key，并在 `:code` 变化时枚举全部规范表复核。治理骨架只保护清单中的
+阶段按各自治理边界执行，不进入固定 finalize 计划。CID 策略只检查本块触及的规范 RAW key，
+机构删除时检查关联账户/索引已一并清空，并在 `:code` 变化时枚举全部规范表复核。
+手续费策略逐块核对链上转账、投票及链下清算的实际费用结果；`:code` 变化时在隔离 overlay
+中真实执行两档转账和一次投票。链下入口开放时再真实执行一笔最低手续费清算；当前入口被
+`BaseCallFilter` 明确禁用时，没有可执行的链下收费路径。候选 WASM 行为不符即拒绝升级区块。治理骨架只保护清单中的
 89 个创世机构，保护身份必须同时匹配机构码、CID 和主账户。普通区块只在 delta 触及受保护
 机构的精确管理员、岗位或任职 key 时检查对应机构；一般机构治理变化不触发本策略。
 只有 `:code` 变化时才全量复核 89 个机构，并枚举复核所有存量内部阈值快照；因此新 WASM
@@ -77,6 +81,7 @@ ConstitutionGuard<NodeGuard<PowBlockImport>>
 区块 body 必须包含 timestamp inherent 之外至少一笔用户交易。该检查在任何 runtime
 预执行之前完成，使网络空块和本地 proposal 竞态优先返回 `KnownBad`。这只是提前闸门；
 `pow-difficulty` runtime 同时保留最终共识断言，防止修改或绕过 NodeGuard 的节点产出空块。
+PoW 难度调整不再属于 NodeGuard 策略；节点共识仍从链上读取并执行难度。
 
 ## 5. warp 与完整状态导入
 
@@ -84,11 +89,11 @@ ConstitutionGuard<NodeGuard<PowBlockImport>>
 
 - 导入态满足全部节点永久策略后才委派内层导入器；
 - 状态形态无法识别、关键 key 缺失、SCALE 解码失败或不变式不符时一律 fail-closed；
-- 当前一次扫描同时抽取 89 个保护机构治理状态、NSN/NRP/NED 三张精确组成状态、内部阈值快照及其提案、`FullnodeIssuance`、`CitizenIssuance`、`GenesisPallet`、`ProvincialBankInterest`、相关 `System::Account`、`Balances::TotalIssuance` 及 CID 规范表；后续策略必须继续复用同一份完整导入态；
-- CID 删除/复用属于历史单调性，非创世单快照不能证明，因此 CID 策略只允许 block#0 完整状态导入，严格拒绝非 block#0 状态导入。
+- 当前一次扫描同时抽取 89 个保护机构治理状态、NSN/NRP/NED 三张精确组成状态、内部阈值快照及其提案、`FullnodeIssuance`、`CitizenIssuance`、`GenesisPallet`、`ProvincialBankInterest`、手续费状态、相关 `System::Account`、`Balances::TotalIssuance` 及 CID 规范表；后续策略必须继续复用同一份完整导入态；
+- 普通机构允许依法删除，CID 策略不再伪造“所有机构永久存在”的历史单调性；任意高度完整状态均可校验，但 block#0 精确机构集合仍必须与启动时建立的创世基准一致。
 
 完整态实现使用一次共享分区扫描：输入 key 只遍历一次，并只抽取 89 个受保护机构的治理状态以及全节点发行/账户、
-公民发行、创世模块、省储行固定发行和 CID 生命周期所需状态。共享分区测试证明输入 key 只扫描一次，
+公民发行、创世模块、省储行固定发行、手续费制度和 CID 所需状态。共享分区测试证明输入 key 只扫描一次，
 并覆盖统一 `KnownBad` 返回和拒绝路径内层导入零调用；真实 warp 导入和峰值内存仍必须在任务关闭前完成。
 
 ## 6. 启动锚定
@@ -156,12 +161,13 @@ ConstitutionGuard<NodeGuard<PowBlockImport>>
 - `PublicManage/PrivateManage::InstitutionAccounts`；
 - `PublicManage/PrivateManage::AccountRegisteredCid`。
 
-机构唯一主键是 CID，主账户、费用账户和制度专属账户都只是 CID 下的协议账户。节点允许依法更新机构名称、法定代表人和自定义账户集合；节点冻结 CID 身份、协议账户完整性和账户正反索引，不保存或推导机构生命周期状态。
+机构唯一主键是 CID，主账户、费用账户和制度专属账户都只是 CID 下的协议账户。普通机构的创建、修改、关闭和删除全部归 runtime 业务规则；NodeGuard 不把普通公司永久化。节点只冻结 block#0 机构身份基准，并检查存续机构协议账户与正反索引完整性。
 
 节点逐块强制：
 
 - 公民 CID 不得删除或换注册局、承诺、居住省市、登记高度，只允许 `Active → Revoked`，吊销后逐字冻结；
-- 公私权 CID 不得重复占用；机构码、创建高度、镇码不可变；`Institutions` 不得删除；
+- 公私权 CID 不得同时占用；普通机构可以依法修改身份字段或删除，删除时必须同步清除其账户和索引；
+- block#0 精确机构不得删除、跨公私权命名空间复制，且机构码、创建高度和镇码不得替换；名称和法定代表人仍可依法更新；
 - 固定治理机构和国家单例只允许约定创世 CID，运行期不得新造同类身份；
 - 每个机构必须完整具有 `institution_constraints` 返回的协议账户集合，协议账户不得删除、改名或换地址；只有 `InstitutionNamed` 自定义账户可依法删除；
 - `InstitutionAccounts[(cid_number, account_name)]` 与 `AccountRegisteredCid[address]` 必须闭环，账户不得脱离机构、跨 CID 或跨 namespace；
@@ -201,24 +207,18 @@ ConstitutionGuard<NodeGuard<PowBlockImport>>
 - PoW 六分钟目标属于独立 PoW 难度规则，不再进入 Genesis/Operation 阶段状态机；
 - 启动、正常区块、`:code` 后全检和完整状态共享扫描使用同一组 RAW/SCALE 规则。
 
-## 8.6 当前策略：PoW 动态难度
+## 8.6 当前策略：手续费与清算费率
 
-- `CurrentDifficulty`、`ActiveParams`、`PendingParams`、`WindowStartBlock`、`WindowStartMs`
-  和 `LastAdjustment` 全部进入 NodeGuard RAW storage 分区，未知同前缀 key 或畸形 SCALE 一律拒绝；
-- 创世状态必须等于 `PowDifficultyParams::genesis_default()`、`POW_INITIAL_DIFFICULTY` 和空窗口；
-- 普通区块只能按父状态 `ActiveParams` 推进窗口和难度，`CurrentDifficulty` 为 0、窗口回退、
-  非调整点改难度、调整点审计不一致全部拒绝；
-- 参数只能由含 `:code` 的 runtime 升级块暂存，普通区块不得直接写 `ActiveParams` 或
-  `PendingParams`；
-- 参数激活发生在暂存后的下一块，激活块必须保持当前难度不变、清空 pending、重置窗口；
-- runtime 升级块必须同时出现 `RuntimeUpgradeAudit` 与 `PendingParams`，code hash、旧/新参数 hash、
-  `activate_at`、执行路径和算法版本全部一致，否则拒绝导入；
-- `params_version` 必须随参数值变化递增；`algorithm_version` 必须等于节点支持的算法版本。
-- 当前自动化基线：NodeGuard 76/76，ConstitutionGuard 40/40。
-- 2026-07-12 真实运行态基线：普通 release WASM fresh 双节点临时链中，无交易停在 block#0；
-  Alice 真实 signed remark 交易产出 block#1
-  `0xaaf286249a775bcac3bb107b7e7f4c15ccb3fb2eaebb8d0cf87e81464d7ae7fb`，
-  节点 2 同步到 block#1，NodeGuard 与 ConstitutionGuard 未拒绝合法新区块。
+- 链上资金交易费固定为交易金额的 0.1%，最低 10 分；投票固定 100 分；链下最低手续费 1 分；
+- 清算行当前费率、待生效费率和全局上限均不得超过 0.1%；不额外冻结费率下限，0% 仍按每笔最低 1 分收费；缺省全局值 0 表示采用固定上限；
+- 普通区块按 extrinsic 阶段核对 `FeePaid`，链下结算按收款方清算行费率核对 `PaymentSettled`；
+- runtime 升级不使用 WASM hash 白名单，也不要求先发布新节点。候选 WASM 在隔离 overlay 中执行
+  50,000 分转账、1 分转账和一次投票，直接按付款账户余额差额验证 0.1%、最低 10 分和固定 100 分；
+- 候选 runtime 若开放链下交易入口，还必须真实完成一笔最低 1 分的清算；当前入口被
+  `BaseCallFilter` 明确禁用时，只接受精确的 `CallFiltered`，以后开放入口的升级必须通过真实清算探针；
+- 候选行为、费率 storage 或实际结算结果任一非法，升级区块返回 `KnownBad`；内层导入器不被调用，
+  节点继续运行当前已导入的合法 runtime、P2P 和 RPC；
+- PoW 难度检查已从 NodeGuard 删除，PoW runtime 与节点挖矿逻辑未删除、未修改。
 
 ## 9. 第 3 步验收基线
 
@@ -299,8 +299,8 @@ pallet、storage、hasher 和 key 编码。字段重排、storage 改名或 hash
   SCALE 尾随字节和共享发行计划登记。
 - 公民发行覆盖队列缺号、残留、临时标记缺失、身份哈希、反向索引、永久墓碑、累计人数、未知 key、
   Twox64Concat 篡改及共享计划溢出/总发行/未计划账户变化。
-- CID 生命周期覆盖公民删除/换主体/吊销恢复、机构码/镇码/创建高度变化、Closed 墓碑改写或恢复、
-  公私权重复、固定机构状态、创世封存索引、畸形 hasher 和尾随字节。
+- CID 策略覆盖公民删除/换主体/吊销恢复、四项 CID 生成规则、创世机构删除或身份替换、
+  公私权重复、存续机构账户索引、畸形 hasher 和尾随字节；普通机构完整删除明确允许。
 - `import_if_verified` 统一闸门连续两次拒绝均返回 `KnownBad` 且内层调用数不增加；随后合法输入仍能
   正常委派，证明闸门没有跨块污染状态。NodeGuard 与最外层 ConstitutionGuard 均只通过该闸门委派。
 
@@ -308,18 +308,20 @@ pallet、storage、hasher 和 key 编码。字段重排、storage 改名或 hash
 
 ## 14. 第 6.3 步完整状态与 warp 提交前校验
 
-完整下载态的生产校验已收敛到 `verify_imported_policy_state`：先检查 CID 导入高度，再把输入 key
-只遍历一次并分区，依次验证固定治理骨架、全节点发行、公民发行、省储行固定发行和 CID 生命周期，最后返回扫描统计。
+完整下载态的生产校验已收敛到 `verify_imported_policy_state`：输入 key 只遍历一次并分区，依次验证
+固定治理骨架、全节点发行、公民发行、省储行固定发行、手续费制度和 CID，最后返回扫描统计。
 `NodeGuard::verify_imported_state` 直接调用该函数，测试与生产不再各保留一套判定。
+
+2026-07-16 当前回归基线：`cargo check -p node --bin citizenchain`、`cargo fmt -p node -- --check`
+均通过；NodeGuard 全套 `75/75` 通过；启用源码 WASM 后的候选 runtime 隔离行为探针 `1/1` 通过。
 
 当前自动化证明：
 
 - 当前 runtime 真实 block#0 全 storage 可通过全部 NodeGuard 策略，且 `scanned == 输入 key 总数`；
 - 删除固定治理机构、把创世 PoW 累计改为非零、加入未知公民发行 key、删除创世封存账户，分别在
   对应策略处提交前拒绝；
-- 任意非 block#0 完整快照在进入分区扫描前由 CID 策略返回
-  `NonGenesisStateImportForbidden`，不得为了 warp 可用性放宽历史单调性；
-- `ImportedPolicyStats` 只记录总扫描数和五个策略分区数，不缓存状态或跨区块结论。
+- 任意高度的完整快照均可进入纯状态校验；创世机构仍按 block#0 基准逐一核对，普通机构不要求永久存在；
+- `ImportedPolicyStats` 只记录总扫描数和策略分区数，不缓存状态或跨区块结论。
 
 ## 14.1 第 6 步真实三节点与拒绝矩阵验收（2026-07-12）
 
@@ -327,9 +329,9 @@ pallet、storage、hasher 和 key 编码。字段重排、storage 改名或 hash
   三端均达到 `peers=2`、`isSyncing=false`。
 - 第一笔 Alice 真实 `System::remark` 交易进入 block#1，A/B/C 哈希一致：
   `0xe0fccc0790f9761226865a2fa96a5eb9e19eb34169191f49faf3afee4817b3c8`。
-- 网络保持运行期间重跑拒绝矩阵：NodeGuard `76/76`、ConstitutionGuard `40/40`。矩阵覆盖永久治理骨架、
-  全节点发行、公民发行、省储行固定发行、CID 生命周期、PoW 动态难度、runtime 升级审计、完整状态导入
-  和护宪规则；拒绝路径返回 `KnownBad` 且不委派内层导入。
+- 网络保持运行期间重跑拒绝矩阵：NodeGuard `76/76`、ConstitutionGuard `40/40`。当时矩阵覆盖永久治理骨架、
+  全节点发行、公民发行、省储行固定发行、CID、runtime 升级审计、完整状态导入和护宪规则；当前版本另纳入
+  手续费制度，并已删除 NodeGuard 的 PoW 难度策略。拒绝路径返回 `KnownBad` 且不委派内层导入。
 - 第二笔 Alice 真实 `System::remark` 交易进入 block#2，A/B/C 哈希一致：
   `0x961012a973cf9695367037b7f9554df2ef541cda17ed5315a7c72b2600bd2a0a`；
   Alice nonce=2，pending extrinsics=0，证明拒绝矩阵后合法链继续推进。

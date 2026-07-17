@@ -5,7 +5,7 @@
 
 use super::*;
 
-/// 在区块进入规范链之前校验宪法不可修改条款和结构不变式。
+/// 在区块进入规范链之前校验宪法四类永久记录；合法返回 `Ok`，非法统一拒块。
 pub struct ConstitutionGuard<I> {
     inner: I,
     client: Arc<FullClient>,
@@ -73,10 +73,18 @@ impl<I> ConstitutionGuard<I> {
         &self,
         parent_hash: <Block as BlockT>::Hash,
         delta: BTreeMap<Vec<u8>, Option<Vec<u8>>>,
-    ) -> Result<bool, String> {
+    ) -> Result<(), String> {
         if !needs_full_invariant_check(&delta) {
-            return Ok(false);
+            return Ok(());
         }
+        // 历史版本与修宪凭据一旦进入父状态即永久冻结。仅复核后置值“仍合法”是不够的，
+        // 否则恶意 runtime 可以把旧记录替换成另一份同样过阈值的内容而不被发现。
+        check_frozen_constitution_records(&delta, |key| {
+            self.client
+                .storage(parent_hash, &StorageKey(key.to_vec()))
+                .map(|value| value.map(|data| data.0))
+                .map_err(|error| format!("读取父状态宪法永久记录失败:{error}"))
+        })?;
         let read_post = |key: &[u8]| -> Option<Vec<u8>> {
             match delta.get(key) {
                 Some(value) => value.clone(),
@@ -115,7 +123,6 @@ impl<I> ConstitutionGuard<I> {
             ));
         }
         check_immutable_articles(&read_post, &self.reference)
-            .map(|()| false)
             .map_err(|reason| format!("宪法不变式被破坏:{reason:?}"))?;
         // 任一历史版本 RAW key 被新增、修改或删除时，都按目标后置状态单独复核该版本。
         for key in delta.keys() {
@@ -126,11 +133,11 @@ impl<I> ConstitutionGuard<I> {
                     .map_err(|reason| format!("宪法历史版本 {version} 非法:{reason:?}"))?;
             }
         }
-        Ok(false)
+        Ok(())
     }
 
-    /// 对普通导入形态取得可验证的后置 storage delta；无法证明时 fail-closed。
-    fn detect_violation(&self, params: &BlockImportParams<Block>) -> Result<bool, String> {
+    /// 对普通导入形态取得可验证的后置 storage delta；`Ok` 为合法，任何 `Err` 都拒块。
+    fn verify_block(&self, params: &BlockImportParams<Block>) -> Result<(), String> {
         let parent_hash = *params.header.parent_hash();
         if let Some(body) = &params.body {
             let block = Block::new(params.header.clone(), body.clone());
@@ -155,7 +162,7 @@ impl<I> ConstitutionGuard<I> {
                 self.check_delta(parent_hash, delta)
             }
             // Skip 明确定义为不执行且不导入状态，因此不可能在本次导入中改写宪法状态。
-            StateAction::Skip => Ok(false),
+            StateAction::Skip => Ok(()),
             StateAction::Execute | StateAction::ExecuteIfPossible => {
                 Err("执行型区块缺少 body,无法独立证明宪法后置状态".into())
             }
@@ -196,18 +203,90 @@ where
             return crate::core::node_guard::import_if_verified(&self.inner, params, verdict).await;
         }
 
-        let verdict = match self.detect_violation(&params) {
-            Ok(true) => Err("宪法永久规则明确判定为违规".to_string()),
-            Ok(false) => Ok(()),
-            Err(reason) => {
-                log::error!(
-                    target: "constitution-guard",
-                    "守卫判定失败,fail-closed 拒块 ({:?}):{reason}",
-                    params.post_hash(),
-                );
-                Err(reason)
-            }
-        };
+        let verdict = self.verify_block(&params);
+        if let Err(reason) = &verdict {
+            log::error!(
+                target: "constitution-guard",
+                "宪法区块非法，返回 KnownBad 并保留父状态 ({:?}):{reason}",
+                params.post_hash(),
+            );
+        }
         crate::core::node_guard::import_if_verified(&self.inner, params, verdict).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[derive(Default)]
+    struct CountingImport {
+        imports: AtomicUsize,
+    }
+
+    #[async_trait::async_trait]
+    impl BlockImport<Block> for CountingImport {
+        type Error = ConsensusError;
+
+        async fn check_block(
+            &self,
+            _block: BlockCheckParams<Block>,
+        ) -> Result<ImportResult, Self::Error> {
+            Ok(ImportResult::AlreadyInChain)
+        }
+
+        async fn import_block(
+            &self,
+            _block: BlockImportParams<Block>,
+        ) -> Result<ImportResult, Self::Error> {
+            self.imports.fetch_add(1, Ordering::SeqCst);
+            Ok(ImportResult::AlreadyInChain)
+        }
+    }
+
+    fn import_params(number: u32) -> BlockImportParams<Block> {
+        use sp_consensus::BlockOrigin;
+        use sp_core::H256;
+        use sp_runtime::Digest;
+
+        let header = citizenchain::opaque::Header::new(
+            number,
+            H256::repeat_byte(1),
+            H256::repeat_byte(2),
+            H256::repeat_byte(3),
+            Digest::default(),
+        );
+        BlockImportParams::new(BlockOrigin::NetworkInitialSync, header)
+    }
+
+    #[test]
+    fn four_constitution_tamper_classes_return_known_bad_without_stopping_next_import() {
+        let inner = CountingImport::default();
+        for (number, reason) in [
+            (1, "不可修改条款被篡改"),
+            (2, "manifest 被篡改"),
+            (3, "历史版本被篡改"),
+            (4, "修宪凭据被篡改"),
+        ] {
+            let result = futures::executor::block_on(crate::core::node_guard::import_if_verified(
+                &inner,
+                import_params(number),
+                Err(reason.into()),
+            ))
+            .expect("非法宪法区块应返回导入结果而不是终止节点");
+            assert_eq!(result, ImportResult::KnownBad);
+            assert_eq!(inner.imports.load(Ordering::SeqCst), 0);
+        }
+
+        // 闸门无跨块污染：连续拒绝后，下一合法区块仍可正常委派给旧 runtime 的内层导入器。
+        let accepted = futures::executor::block_on(crate::core::node_guard::import_if_verified(
+            &inner,
+            import_params(5),
+            Ok(()),
+        ))
+        .expect("合法区块应在拒绝后继续导入");
+        assert_eq!(accepted, ImportResult::AlreadyInChain);
+        assert_eq!(inner.imports.load(Ordering::SeqCst), 1);
     }
 }

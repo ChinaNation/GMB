@@ -28,8 +28,7 @@ fn balance_fen(balances: &BTreeMap<String, Option<String>>, account: &str) -> Op
 /// Tier1 创世注册局管理员列表(全量省级组,「全走链读」决策③)。
 ///
 /// 权威管理员集合在 FRG 唯一 `AdminAccounts`，43 省边界来自 entity 省专员岗位；
-/// 回填本地缓存(缺失即补,保证有本地 id 供换届按 id 定位),并同步
-/// `federal_registry_admin_scopes` 作为同省操作预检缓存。成员资格仍以链上 Active 集合为唯一真源。
+/// 本地只回填显示和换届定位所需的管理员元数据；成员资格与省作用域始终来自链上。
 pub(crate) async fn list_federal_registry_admins(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -60,8 +59,8 @@ pub(crate) async fn list_federal_registry_admins(
         }
     };
     let identity = match chain_runtime::identity_from_binding_parts(
-        &binding.candidate.institution_code,
-        binding.candidate.institution_cid_number.as_deref(),
+        &binding.institution_code,
+        Some(binding.institution_cid_number.as_str()),
         None,
     ) {
         Ok(identity) => identity,
@@ -109,7 +108,6 @@ pub(crate) async fn list_federal_registry_admins(
             let _province_code = group.province_code;
             for assignment in &group.assignments {
                 let account = &assignment.account_hex;
-                repo::upsert_federal_registry_admin_scope_conn(conn, account, &province_name)?;
                 // 缓存缺失即补一条 built_in 行(名字空→显示回退),保证有本地 id 供换届定位。
                 let admin = match repo::get_admin_by_account_conn(conn, account)? {
                     Some(admin) => admin,
@@ -189,13 +187,13 @@ pub(crate) async fn list_own_institution_admins(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     };
-    if binding.candidate.institution_code != ctx.institution_code {
+    if binding.institution_code != ctx.institution_code {
         return api_error(StatusCode::FORBIDDEN, 1003, "permission denied");
     }
     let identity = match chain_runtime::identity_from_binding_parts(
-        &binding.candidate.institution_code,
-        binding.candidate.institution_cid_number.as_deref(),
-        binding.candidate.frg_province_code.as_deref(),
+        &binding.institution_code,
+        Some(binding.institution_cid_number.as_str()),
+        binding.frg_province_code.as_deref(),
     ) {
         Ok(identity) => identity,
         Err(err) => {
@@ -297,23 +295,17 @@ pub(crate) async fn get_own_institution(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     };
-    if binding.candidate.institution_code != ctx.institution_code {
+    if binding.institution_code != ctx.institution_code {
         return api_error(StatusCode::FORBIDDEN, 1003, "permission denied");
     }
-    let Some(cid_number) = binding
-        .candidate
-        .institution_cid_number
-        .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map(str::to_string)
-    else {
+    let cid_number = binding.institution_cid_number.trim().to_string();
+    if cid_number.is_empty() {
         return api_error(
             StatusCode::CONFLICT,
             1007,
             "binding institution_cid_number is required",
         );
-    };
+    }
     let Some((inst, accounts)) = (match state.db.get_institution_with_accounts(cid_number.as_str())
     {
         Ok(v) => v,

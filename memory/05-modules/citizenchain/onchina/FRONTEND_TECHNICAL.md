@@ -37,6 +37,7 @@ citizenchain/onchina/frontend/
 - 业务组件不得自己解析 `QR_V1`，不得自己翻译扫码端字段名。
 - 前端不得恢复独立 `frontend/api/` 或 `frontend/chain/` 业务目录。
 - 机构差异不得继续塞进 `App.tsx`。新增机构 UI 必须进入 `workspace/<机构类>/` 或对应业务目录，`App.tsx` 只保留登录态、布局和工作台路由。
+- 前端行政权限只消费登录完成或 `/api/v1/admin/auth/check` 返回的 `scope_*`；不得从机构详情、管理员目录或本地缓存反推权限。服务端判定会话失效时必须清除整个前端登录态并重新登录。
 
 ## 4. 页面和文案规则
 

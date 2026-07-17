@@ -333,6 +333,31 @@ pub(crate) async fn admin_auth_qr_result(
         if result.session_id != query.session_id.trim() {
             return api_error(StatusCode::FORBIDDEN, 1003, "challenge session mismatch");
         }
+        let access_token_for_check = result.access_token.clone();
+        let session_is_current = state.db.with_client(move |conn| {
+            let Some(session) = repo::get_admin_session_conn(conn, &access_token_for_check)? else {
+                return Ok(false);
+            };
+            let Some(binding) = repo::get_active_node_binding_conn(conn)? else {
+                return Ok(false);
+            };
+            Ok(session.candidate_id == binding.candidate_id
+                && session.institution_code == binding.institution_code)
+        });
+        match session_is_current {
+            Ok(true) => {}
+            Ok(false) => {
+                return api_error(
+                    StatusCode::UNAUTHORIZED,
+                    1002,
+                    "login session is no longer valid",
+                );
+            }
+            Err(err) => {
+                let message = format!("validate qr login session failed: {err}");
+                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+            }
+        }
         let admin = match repo::get_admin_by_account(&state.db, &result.admin_account) {
             Ok(v) => v,
             Err(err) => {

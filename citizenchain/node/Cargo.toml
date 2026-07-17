@@ -83,6 +83,11 @@ codec = { workspace = true, default-features = true }
 entity-primitives = { path = "../runtime/entity/entity-primitives", default-features = true }
 admin-primitives = { path = "../runtime/admins/admin-primitives", default-features = true }
 votingengine = { path = "../runtime/votingengine", default-features = true }
+# NodeGuard 直接匹配五类实际投票 call，避免依赖 runtime 自报费用分类。
+internal-vote = { path = "../runtime/votingengine/internal-vote", default-features = true }
+joint-vote = { path = "../runtime/votingengine/joint-vote", default-features = true }
+election-vote = { path = "../runtime/votingengine/election-vote", default-features = true }
+legislation-vote = { path = "../runtime/votingengine/legislation-vote", default-features = true }
 
 # These dependencies are used for runtime benchmarking
 frame-benchmarking-cli = { workspace = true, default-features = true }
