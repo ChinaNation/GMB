@@ -129,11 +129,9 @@ async fn create_institution_inner(
     let institution = code::institution_code_from_str(&institution_code);
     let p1 = private_rule
         .map(|rule| {
-            if rule.private_type == crate::domains::private::common::PrivateType::Association {
-                input.p1.as_deref().unwrap_or("").trim().to_string()
-            } else {
-                rule.p1.to_string()
-            }
+            rule.p1
+                .map(str::to_string)
+                .unwrap_or_else(|| input.p1.as_deref().unwrap_or("").trim().to_string())
         })
         .unwrap_or_else(|| input.p1.as_deref().unwrap_or("").trim().to_string());
     if institution.is_none() || institution_code.is_empty() {

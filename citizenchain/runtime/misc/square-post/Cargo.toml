@@ -13,9 +13,12 @@ frame-support = { workspace = true }
 frame-system = { workspace = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
+primitives = { path = "../../primitives", default-features = false }              # 统一常量：费用账户派生名
+entity-primitives = { path = "../../entity/entity-primitives", default-features = false } # 机构账户查询 trait
 
 [dev-dependencies]
 sp-io = { workspace = true }
+pallet-balances = { workspace = true, features = ["std"] }
 
 [features]
 default = ["std"]
@@ -31,4 +34,6 @@ std = [
     "frame-system/std",
     "sp-runtime/std",
     "sp-std/std",
+    "primitives/std",
+    "entity-primitives/std",
 ]

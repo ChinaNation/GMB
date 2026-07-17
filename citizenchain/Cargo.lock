@@ -14329,9 +14329,12 @@ dependencies = [
 name = "square-post"
 version = "1.0.0"
 dependencies = [
+ "entity-primitives",
  "frame-support",
  "frame-system",
+ "pallet-balances",
  "parity-scale-codec",
+ "primitives",
  "scale-info",
  "sp-io",
  "sp-runtime",

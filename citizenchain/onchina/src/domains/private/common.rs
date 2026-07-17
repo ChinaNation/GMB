@@ -87,7 +87,8 @@ pub(crate) struct PrivateTypeRule {
     pub(crate) private_type: PrivateType,
     pub(crate) partnership_kind: Option<PartnershipKind>,
     pub(crate) institution_code: &'static str,
-    pub(crate) p1: &'static str,
+    /// `Some` 表示由类型规则固定；`None` 表示必须由本次机构实例显式提交。
+    pub(crate) p1: Option<&'static str>,
     pub(crate) has_legal_personality: bool,
 }
 
@@ -107,8 +108,8 @@ pub(crate) fn lock_input_to_rule(input: &mut CreateInstitutionInput, rule: Priva
     input.partnership_kind = rule.partnership_kind.map(|kind| kind.as_code().to_string());
     input.institution = rule.institution_code.to_string();
     // 注册协会 SFAS 的盈利属性由本次实例显式选择；其它私权类型继续由类型规则锁定。
-    if rule.private_type != PrivateType::Association {
-        input.p1 = Some(rule.p1.to_string());
+    if let Some(p1) = rule.p1 {
+        input.p1 = Some(p1.to_string());
     }
     // 六类目标私权机构都是独立主体;非法人个体经营/无限合伙也不挂靠所属法人。
     input.parent_cid_number = None;
@@ -142,7 +143,7 @@ pub(crate) fn resolve_private_type_rule(
             private_type,
             partnership_kind: None,
             institution_code: "SFGT",
-            p1: "1",
+            p1: Some("1"),
             has_legal_personality: false,
         },
         PrivateType::Partnership => match partnership_kind
@@ -153,14 +154,14 @@ pub(crate) fn resolve_private_type_rule(
                 private_type,
                 partnership_kind: Some(PartnershipKind::General),
                 institution_code: "SFGP",
-                p1: "1",
+                p1: Some("1"),
                 has_legal_personality: false,
             },
             PartnershipKind::Limited => PrivateTypeRule {
                 private_type,
                 partnership_kind: Some(PartnershipKind::Limited),
                 institution_code: "SFLP",
-                p1: "1",
+                p1: Some("1"),
                 has_legal_personality: true,
             },
         },
@@ -168,31 +169,48 @@ pub(crate) fn resolve_private_type_rule(
             private_type,
             partnership_kind: None,
             institution_code: "SFGQ",
-            p1: "1",
+            p1: Some("1"),
             has_legal_personality: true,
         },
         PrivateType::Corporation => PrivateTypeRule {
             private_type,
             partnership_kind: None,
             institution_code: "SFGF",
-            p1: "1",
+            p1: Some("1"),
             has_legal_personality: true,
         },
         PrivateType::Welfare => PrivateTypeRule {
             private_type,
             partnership_kind: None,
             institution_code: "SFGY",
-            p1: "0",
+            p1: Some("0"),
             has_legal_personality: true,
         },
         PrivateType::Association => PrivateTypeRule {
             private_type,
             partnership_kind: None,
-            // 注册协会(SFAS)的 p1 由实例输入；此默认值不允许覆盖请求。
+            // 注册协会(SFAS)的 p1 由实例输入；类型规则不提供默认值。
             institution_code: "SFAS",
-            p1: "0",
+            p1: None,
             has_legal_personality: true,
         },
     };
     Ok(rule)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn association_keeps_instance_p1_while_fixed_types_define_p1() {
+        let association = resolve_private_type_rule("ASSOCIATION", None).expect("association");
+        assert_eq!(association.institution_code, "SFAS");
+        assert_eq!(association.p1, None);
+
+        let company = resolve_private_type_rule("COMPANY", None).expect("company");
+        assert_eq!(company.p1, Some("1"));
+        let welfare = resolve_private_type_rule("WELFARE", None).expect("welfare");
+        assert_eq!(welfare.p1, Some("0"));
+    }
 }

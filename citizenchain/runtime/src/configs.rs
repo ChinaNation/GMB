@@ -549,11 +549,18 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                 },
             ) => institution_onchain_route(who, actor_cid_number.as_slice()),
 
-            RuntimeCall::SquarePost(square_post::pallet::Call::publish_post { .. })
+            // 广场内容域:发帖 + 会员订阅热签动作,发起人自付链上费。
+            RuntimeCall::SquarePost(
+                square_post::pallet::Call::publish_post { .. }
+                | square_post::pallet::Call::subscribe { .. }
+                | square_post::pallet::Call::cancel { .. },
+            )
             | RuntimeCall::FullnodeIssuance(
                 fullnode_issuance::pallet::Call::bind_reward_wallet { .. }
                 | fullnode_issuance::pallet::Call::rebind_reward_wallet { .. },
             ) => signer_onchain_route(who, 0),
+            // 续扣由续订触发方(keeper)代发,免手续费。
+            RuntimeCall::SquarePost(square_post::pallet::Call::charge_due { .. }) => FeeRoute::Free,
 
             RuntimeCall::RuntimeUpgrade(
                 runtime_upgrade::pallet::Call::propose_runtime_upgrade {
@@ -1490,6 +1497,10 @@ impl square_post::SquarePostCitizenIdentityProvider<AccountId>
 impl square_post::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type CitizenIdentity = RuntimeSquarePostCitizenIdentity;
+    type Currency = Balances;
+    type TimeProvider = crate::Timestamp;
+    type InstitutionAccountQuery = RuntimeInstitutionQuery;
+    type MaxCreatorTiers = ConstU32<16>;
     type MaxSquarePostIdLen = ConstU32<64>;
     type MaxSquareCidNumberLen = ConstU32<32>;
     type MaxSquareStorageReceiptIdLen = ConstU32<96>;
