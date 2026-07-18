@@ -33,4 +33,39 @@ void main() {
       throwsArgumentError,
     );
   });
+
+  // 平台轨金标向量（subscription_scale_vectors.json）：
+  //   subscribe = [34][1][Platform=00][Level=00][MembershipLevel]；cancel = [34][2][00]。
+  test('subscribe(Platform, Level(spark)) 字节对齐金标向量', () {
+    final call = SubscriptionRpc.buildSubscribePlatformCall(
+      SubscriptionRpc.membershipLevelByte('spark'),
+    );
+    // calldata_subscribe_platform_spark = 2201000002
+    expect(_hex(call), '2201000002');
+  });
+
+  test('subscribe(Platform) 三档字节', () {
+    expect(
+      _hex(SubscriptionRpc.buildSubscribePlatformCall(
+          SubscriptionRpc.membershipLevelByte('freedom'))),
+      '2201000000',
+    );
+    expect(
+      _hex(SubscriptionRpc.buildSubscribePlatformCall(
+          SubscriptionRpc.membershipLevelByte('democracy'))),
+      '2201000001',
+    );
+  });
+
+  test('cancel(Platform) 字节对齐', () {
+    // call_cancel_platform=0200 → 带 pallet 前缀 = 220200
+    expect(_hex(SubscriptionRpc.buildCancelPlatformCall()), '220200');
+  });
+
+  test('未知平台会员档抛 ArgumentError', () {
+    expect(
+      () => SubscriptionRpc.membershipLevelByte('gold'),
+      throwsArgumentError,
+    );
+  });
 }

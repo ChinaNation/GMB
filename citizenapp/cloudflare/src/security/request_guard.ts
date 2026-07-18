@@ -70,7 +70,7 @@ function allowedOrigins(env: Env): Set<string> {
 
 /**
  * 统一入口风控：预登录按 IP 粗限流，登录后按钱包精确限流；写接口和计费型读取
- * 必须提供 P-256 设备证明。Stripe/Stream webhook 使用各自签名，不重复套设备证明。
+ * 必须提供 P-256 设备证明。Stream webhook 使用各自签名，不重复套设备证明。
  */
 export async function guardRequest(request: Request, env: Env, path: string): Promise<void> {
   assertAllowedOrigin(request, env);
@@ -118,14 +118,11 @@ async function sessionOrNull(request: Request, env: Env): Promise<SessionState |
 }
 
 function isWebhook(path: string): boolean {
-  return path === '/v1/square/membership/webhook' ||
-    path === '/v1/square/uploads/stream/webhook';
+  return path === '/v1/square/uploads/stream/webhook';
 }
 
 function requiresDeviceProof(path: string, method: string): boolean {
   if (path.startsWith('/v1/square/auth/')) return false;
-  if (path.startsWith('/v1/square/membership/subscribe')) return false;
-  if (path.startsWith('/v1/square/membership/cancel')) return false;
   if (path.startsWith('/v1/square/account/delete')) return false;
   // Image.network 只能稳定携带 Bearer header；资料媒体仍由 handler 强制校验钱包
   // session，但不要求它动态生成 P-256 请求签名。

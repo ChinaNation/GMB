@@ -6,7 +6,7 @@ preview_urls = false
 stream = { binding = "STREAM" }
 
 # 远端部署前必须把 database_id / kv id 替换为 Cloudflare 实际资源 ID。
-# Cloudflare API token、R2 冷归档访问密钥、Stripe secret key、Stripe webhook secret、Stream webhook secret 不得写入本文件。
+# Cloudflare API token、R2 冷归档访问密钥、Stream webhook secret 不得写入本文件。
 # 用户资料、清单和图片不取得 R2 写入授权；R2 密钥只允许服务端内部冷归档使用。
 # CHAIN_URL 与两项 CHAIN_ID / CHAIN_SECRET 服务令牌必须分别使用 wrangler secret 配置，禁止写入 vars 或仓库。
 
@@ -48,18 +48,10 @@ crons = ["*/5 * * * *", "0 3 * * *"]
 [vars]
 SESSION_TTL_SECONDS = "86400"
 UPLOAD_TTL_SECONDS = "900"
-STRIPE_DEV_PROXY = "0"
 ARCHIVE_ENABLED = "0"
 ARCHIVE_LAPSE_DAYS = "90"
 APNS_ENV = "production"
 R2_BUCKET = "citizenapp-square-media"
-# Stripe price id 不是密钥，可按官网订阅实际价格填入；webhook secret 必须用 wrangler secret 配置。
-# 会员三档（ADR-036，与身份解耦）：自由 / 民主 / 薪火。
-FREEDOM_PRICE_ID = ""
-DEMOCRACY_PRICE_ID = ""
-SPARK_PRICE_ID = ""
-CHECKOUT_SUCCESS_URL = ""
-CHECKOUT_CANCEL_URL = ""
 IMAGES_URL = ""
 STREAM_URL = ""
 MEDIA_TTL_SECONDS = "300"
@@ -128,16 +120,10 @@ crons = ["*/5 * * * *", "0 3 * * *"]
 [env.staging.vars]
 SESSION_TTL_SECONDS = "86400"
 UPLOAD_TTL_SECONDS = "900"
-STRIPE_DEV_PROXY = "0"
 ARCHIVE_ENABLED = "0"
 ARCHIVE_LAPSE_DAYS = "90"
 APNS_ENV = "sandbox"
 R2_BUCKET = "citizenapp-square-media-staging"
-FREEDOM_PRICE_ID = "price_1TtCrvQlQZ1x0Cw8k9kKmvVR"
-DEMOCRACY_PRICE_ID = "price_1TtCrvQlQZ1x0Cw8xntRj1Lc"
-SPARK_PRICE_ID = "price_1TtCrxQlQZ1x0Cw8ecTyP2X0"
-CHECKOUT_SUCCESS_URL = "https://www.crcfrcn.com/membership?status=success"
-CHECKOUT_CANCEL_URL = "https://www.crcfrcn.com/membership?status=cancel"
 IMAGES_URL = "https://imagedelivery.net/UOEmEDe-GxX_DiS70z3GIg"
 STREAM_URL = "https://customer-e3w478wvlbq2nl3g.cloudflarestream.com"
 MEDIA_TTL_SECONDS = "300"
@@ -196,23 +182,17 @@ crons = ["*/5 * * * *", "0 3 * * *"]
 [env.production.vars]
 SESSION_TTL_SECONDS = "86400"
 UPLOAD_TTL_SECONDS = "900"
-STRIPE_DEV_PROXY = "0"
 # 生产启用退订满 90 天视频冷归档；本地与 staging 保持关闭。
 ARCHIVE_ENABLED = "1"
 ARCHIVE_LAPSE_DAYS = "90"
 APNS_ENV = "production"
 R2_BUCKET = "citizenapp-square-media"
-FREEDOM_PRICE_ID = "price_1TrrMkHSzSYWD2rFsabKgbxa"
-DEMOCRACY_PRICE_ID = "price_1TrrN3HSzSYWD2rFVtf8YsEY"
-SPARK_PRICE_ID = "price_1TrrNCHSzSYWD2rFrZTsmKhl"
 # 稳定币充值(topup)生产：两币同走 Base 主网，USDC/USDT 合约已内置（代码 config.ts）；
 # TOPUP_SETTLE_TOKEN 是结算令牌，必须用 `wrangler secret put TOPUP_SETTLE_TOKEN --env production`，不写入本文件。
 TOPUP_NETWORK = "mainnet"
 TOPUP_RECV_ADDRESS = "0x5ce9b56b9d1812a7cf29841e21756f09ca7d223b"
 TOPUP_BASE_RPC_URL = "https://mainnet.base.org"
 TOPUP_MIN_CONFIRMATIONS = "0"
-CHECKOUT_SUCCESS_URL = "https://www.crcfrcn.com/membership?status=success"
-CHECKOUT_CANCEL_URL = "https://www.crcfrcn.com/membership?status=cancel"
 IMAGES_URL = "https://imagedelivery.net/UOEmEDe-GxX_DiS70z3GIg"
 STREAM_URL = "https://customer-e3w478wvlbq2nl3g.cloudflarestream.com"
 MEDIA_TTL_SECONDS = "300"

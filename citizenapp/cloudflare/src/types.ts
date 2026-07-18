@@ -56,19 +56,6 @@ export interface Env {
   RELAY_ENABLED?: string;
   RELAY_MAX_BYTES?: string;
   RELAY_PER_MINUTE?: string;
-  // Stripe webhook secret 必须使用 Cloudflare secret/变量配置，不能写入仓库或下发 App。
-  STRIPE_HOOK_SECRET?: string;
-  STRIPE_HOOK_WINDOW?: string;
-  // 只允许本地 Miniflare 验证使用；生产环境必须保持关闭。
-  STRIPE_DEV_PROXY?: string;
-  // Stripe secret key 只允许放 Worker Secret，用于官网创建 Checkout Session。
-  STRIPE_API_KEY?: string;
-  // 会员三档 Stripe price ID（ADR-036，与身份解耦）：自由 $2.99 / 民主 $9.99 / 薪火 $99.99。
-  FREEDOM_PRICE_ID?: string;
-  DEMOCRACY_PRICE_ID?: string;
-  SPARK_PRICE_ID?: string;
-  CHECKOUT_SUCCESS_URL?: string;
-  CHECKOUT_CANCEL_URL?: string;
   // Cloudflare Images / Stream API token 只放 Worker Secret；App 只拿一次性上传 URL。
   CF_API_TOKEN?: string;
   IMAGES_URL?: string;
@@ -136,20 +123,18 @@ export interface ContactCiphertextRow {
 export interface MembershipRow {
   owner_account: string;
   membership_level: string;
+  // 下次扣款时刻（链上 next_charge_at 镜像），同时作计费周期终点。
   expires_at: number;
   updated_at: number;
-  subscription_source: string;
-  stripe_customer_id: string | null;
-  stripe_subscription_id: string | null;
-  stripe_price_id: string | null;
+  // 镜像链上订阅态：active（有效）/ past_due（欠费）/ cancelled（已取消）。
   subscription_status: string;
+  // 计费周期镜像（用量额度窗口）：起点=订阅/续订时刻、终点=下次扣款。
   current_period_start: number | null;
   current_period_end: number | null;
-  cancel_at_period_end: number;
   // 会员权益失效时刻（退订满 N 月冷归档的时钟起点；重订置 NULL）。
   entitlement_lapsed_at: number | null;
-  // USDC 预付路线的支付凭证（Stripe payment_intent id）；卡订阅为 NULL（ADR-034）。
-  prepaid_payment_ref: string | null;
+  // 最近一次订阅/取消上链交易哈希（幂等确认凭证）。
+  last_tx_hash: string | null;
 }
 
 export interface UploadItemInput {

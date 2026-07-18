@@ -7,7 +7,6 @@ const navItems = [
   { path: '/technology', label: '区块链' },
   { path: '/tokenomics', label: '公民币' },
   { path: '/ecosystem', label: '产品' },
-  { path: '/membership', label: '会员订阅' },
   { path: '/governance', label: '治理体系' },
   { path: '/whitepaper', label: '白皮书' },
   { path: '/constitution', label: '公民宪法' },

@@ -18,7 +18,6 @@ export type ResourceKey =
   | 'chat_relay'
   | 'chat_relay_blob'
   | 'push_wake'
-  | 'stripe_webhook'
   | 'stream_webhook'
   | 'chain_extrinsic'
   | 'chain_extrinsic_json'
@@ -123,7 +122,6 @@ export const resourceLimits: Readonly<Record<ResourceKey, ResourceLimit>> = {
   // 大媒体中转密文块:5GB 明文 + 分块 tag/帧头余量。
   chat_relay_blob: { max_bytes: 5200 * mib },
   push_wake: { max_bytes: 1 * kib },
-  stripe_webhook: { max_bytes: 256 * kib },
   stream_webhook: { max_bytes: 64 * kib },
   chain_extrinsic: { max_bytes: 64 * kib },
   chain_extrinsic_json: { max_bytes: 132 * kib },
@@ -185,10 +183,7 @@ const routeLimits: readonly RouteLimit[] = [
   route('POST', /^\/v1\/square\/auth\/(challenge|session)$/),
   route('POST', /^\/v1\/square\/auth\/device\/register$/),
   route('GET', /^\/v1\/square\/membership$/),
-  route('POST', /^\/v1\/square\/membership\/(subscribe|cancel|prepaid)\/challenge$/),
-  route('POST', /^\/v1\/square\/membership\/(subscribe|cancel|prepaid)$/),
-  route('POST', /^\/v1\/square\/membership\/prepaid\/change(?:\/challenge)?$/),
-  route('POST', /^\/v1\/square\/membership\/webhook$/, 'stripe_webhook'),
+  route('POST', /^\/v1\/square\/membership\/confirm$/),
   route('POST', /^\/v1\/square\/account\/delete(?:\/challenge)?$/),
   route('GET', /^\/v1\/square\/topup\/config$/),
   route('POST', /^\/v1\/square\/topup\/submit$/),

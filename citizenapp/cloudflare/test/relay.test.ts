@@ -45,7 +45,6 @@ function buildEnv(level: string | null = 'spark') {
         owner_account: 'owner',
         membership_level: level,
         subscription_status: 'active',
-        subscription_source: 'stripe',
         expires_at: Date.now() + 60_000,
       };
   const db = {

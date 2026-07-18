@@ -1,7 +1,5 @@
 import type { Env, FeedKind } from "./types";
 import {
-  cancelMembershipChallengeRoute,
-  cancelMembershipRoute,
   deleteAccountChallengeRoute,
   deleteAccountRoute,
 } from "./account/service";
@@ -28,13 +26,7 @@ import {
 import { feedRoute } from "./feeds/service";
 import { followRoute, unfollowRoute } from "./feeds/follows";
 import { mediaRoute } from "./media/service";
-import { subscribeChallengeRoute, subscribeConfirmRoute } from "./membership/subscribe";
-import {
-  prepaidChallengeRoute,
-  prepaidChangeChallengeRoute,
-  prepaidChangeConfirmRoute,
-  prepaidConfirmRoute
-} from "./membership/prepaid";
+import { platformSubscriptionConfirmRoute } from "./membership/citizen_coin";
 import { membershipRoute } from "./membership/service";
 import {
   creatorOverviewRoute,
@@ -45,7 +37,6 @@ import {
   creatorSubscriptionConfirmRoute,
   creatorSubscriptionStatusRoute,
 } from "./membership/creator";
-import { stripeWebhookRoute } from "./membership/webhook";
 import { signalRoute } from "./moderation/service";
 import { isTopupPath, routeTopup } from "./topup/routes";
 import { confirmPostRoute, deletePostRoute } from "./posts/confirm";
@@ -118,32 +109,9 @@ export async function routeRequest(
   if (request.method === "GET" && path === "/v1/square/membership") {
     return membershipRoute(request, env);
   }
-  if (request.method === "POST" && path === "/v1/square/membership/subscribe/challenge") {
-    return subscribeChallengeRoute(request, env);
-  }
-  if (request.method === "POST" && path === "/v1/square/membership/subscribe") {
-    return subscribeConfirmRoute(request, env);
-  }
-  if (request.method === "POST" && path === "/v1/square/membership/prepaid/challenge") {
-    return prepaidChallengeRoute(request, env);
-  }
-  if (request.method === "POST" && path === "/v1/square/membership/prepaid") {
-    return prepaidConfirmRoute(request, env);
-  }
-  if (request.method === "POST" && path === "/v1/square/membership/prepaid/change/challenge") {
-    return prepaidChangeChallengeRoute(request, env);
-  }
-  if (request.method === "POST" && path === "/v1/square/membership/prepaid/change") {
-    return prepaidChangeConfirmRoute(request, env);
-  }
-  if (request.method === "POST" && path === "/v1/square/membership/webhook") {
-    return stripeWebhookRoute(request, env);
-  }
-  if (request.method === "POST" && path === "/v1/square/membership/cancel/challenge") {
-    return cancelMembershipChallengeRoute(request, env);
-  }
-  if (request.method === "POST" && path === "/v1/square/membership/cancel") {
-    return cancelMembershipRoute(request, env);
+  // 平台会员公民币轨：订阅/取消由 App 热钱包 extrinsic 上链，此处只做上链后镜像确认。
+  if (request.method === "POST" && path === "/v1/square/membership/confirm") {
+    return platformSubscriptionConfirmRoute(request, env);
   }
   if (request.method === "POST" && path === "/v1/square/account/delete/challenge") {
     return deleteAccountChallengeRoute(request, env);

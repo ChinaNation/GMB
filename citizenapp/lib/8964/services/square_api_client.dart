@@ -47,30 +47,24 @@ class SquareMembershipState {
     this.membershipLevel,
     this.subscriptionStatus,
     this.subscriptionActive = false,
-    this.cancelAtPeriodEnd = false,
     this.currentPeriodStart = 0,
-    this.subscriptionSource,
     this.plans = const <SquareMembershipPlan>[],
   });
 
   final bool active;
   final int expiresAt;
   final String? membershipLevel;
+
+  /// 订阅生命周期态（链上单源镜像）：`active`=自动续费中 / `past_due`=欠费待补
+  /// / `cancelled`=已取消。按钮双态与横幅文案据此判定。
   final String? subscriptionStatus;
 
   /// 订阅是否已支付且未过期（worker `subscription_active`）。解耦后权益态即订阅态，
-  /// [active] 与本字段等值；按钮三态与徽章勾均据此判定。
+  /// [active] 与本字段等值；按钮双态与徽章勾均据此判定。
   final bool subscriptionActive;
-
-  /// 是否已在官网发起「到期取消」（Stripe `cancel_at_period_end`）：true=已取消
-  /// 但当期未到期（按钮显示「续订会员」）；false=自动续费中（按钮显示「取消订阅」）。
-  final bool cancelAtPeriodEnd;
 
   /// 本期订阅开始（毫秒）；与 [expiresAt] 组成会员卡「订阅起止」展示（ADR-034 段4）。
   final int currentPeriodStart;
-
-  /// 支付路线：`usdc_prepaid`=预付、`stripe`=自动续费；null=无订阅。
-  final String? subscriptionSource;
 
   final List<SquareMembershipPlan> plans;
 
@@ -85,9 +79,6 @@ class SquareMembershipState {
   SquareMembershipPlan? get activePlan =>
       active ? planForLevel(membershipLevel) : null;
 
-  /// USDC 预付路线（无自动续、到期自然失效）。
-  bool get isPrepaid => subscriptionSource == 'usdc_prepaid';
-
   /// 有可展示的订阅起止窗口（已支付且起止时间齐备）。
   bool get hasSubscriptionWindow =>
       subscriptionActive && currentPeriodStart > 0 && expiresAt > 0;
@@ -97,7 +88,6 @@ class SquareMembershipPlan {
   const SquareMembershipPlan({
     required this.membershipLevel,
     required this.displayName,
-    required this.priceUsdMonthly,
     required this.chatFileMaxBytes,
     required this.dynamicTextMaxChars,
     required this.dynamicImageQuality,
@@ -115,7 +105,6 @@ class SquareMembershipPlan {
 
   final String membershipLevel;
   final String displayName;
-  final String priceUsdMonthly;
 
   /// 聊天文件大小上限（字节，会员权益之一，ADR-036）：自由 10MB / 民主 100MB / 薪火 5GB。
   final int chatFileMaxBytes;
@@ -131,8 +120,6 @@ class SquareMembershipPlan {
   final String articleCoverQuality;
   final String articleImageQuality;
   final int articleMaxImages;
-
-  String get priceLabel => '\$$priceUsdMonthly / 月';
 
   String get chatFileLabel => '聊天文件：单个 ≤ ${_fileSize(chatFileMaxBytes)}';
 
@@ -454,19 +441,6 @@ class SquareApiClient
     );
   }
 
-  /// 取消订阅：到期取消（当期用完再终止）。目前由官网扫码触发，App 侧底座就位。
-  Future<void> cancelMembership({
-    required String ownerAccount,
-    required SquareActionSigner signAction,
-  }) {
-    return _consumeAccountAction(
-      ownerAccount: ownerAccount,
-      challengePath: '/v1/square/membership/cancel/challenge',
-      confirmPath: '/v1/square/membership/cancel',
-      signAction: signAction,
-    );
-  }
-
   /// 账户敏感动作签名往返：取挑战 → 客户端**钉死** op_tag 重算摘要并签 → 提交确认。
   /// 绝不采信服务端下发的 op_tag（固定 [kOpSignSquareAction]），防被诱导跨域签名。
   Future<void> _consumeAccountAction({
@@ -542,11 +516,26 @@ class SquareApiClient
       membershipLevel: membershipLevel,
       subscriptionStatus: membership['subscription_status']?.toString(),
       subscriptionActive: subscriptionActive,
-      cancelAtPeriodEnd: membership['cancel_at_period_end'] == true ||
-          _asInt(membership['cancel_at_period_end']) != 0,
       currentPeriodStart: _asInt(membership['current_period_start']),
-      subscriptionSource: membership['subscription_source']?.toString(),
       plans: plans,
+    );
+  }
+
+  /// 平台会员订阅/取消上链后回执镜像（best-effort，链上已是真源，失败不阻塞）。
+  /// 带 [level]=订阅确认（镜像 active）；缺 [level]=取消确认（镜像 cancelled）。
+  /// owner 由 Worker 从 session 派生，客户端不上传。
+  Future<void> confirmPlatformSubscription({
+    required SquareSession session,
+    required String txHash,
+    String? level,
+  }) async {
+    await _postJson(
+      '/v1/square/membership/confirm',
+      {
+        'tx_hash': txHash,
+        if (level != null) 'level': level,
+      },
+      session: session,
     );
   }
 
@@ -1110,7 +1099,6 @@ class SquareApiClient
     return SquareMembershipPlan(
       membershipLevel: _requireString(data, 'membership_level'),
       displayName: _requireString(data, 'display_name'),
-      priceUsdMonthly: _requireString(data, 'price_usd_monthly'),
       chatFileMaxBytes: _asInt(data['chat_file_max_bytes']),
       dynamicTextMaxChars: _asInt(dynamicQuota['text_max_chars']),
       dynamicImageQuality: dynamicQuota['image_quality']?.toString() ?? 'sd',

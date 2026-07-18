@@ -1,34 +1,249 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { encodeAddress } from '@polkadot/util-crypto';
-import { membershipRoute, subscriptionIsActive } from '../src/membership/service';
-import { stripeWebhookRoute, verifyStripeSignature } from '../src/membership/webhook';
-import { routeRequest } from '../src/routes';
+import { platformSubscriptionConfirmRoute } from '../src/membership/citizen_coin';
+import {
+  batchMemberships,
+  getMembership,
+  membershipRoute,
+  requireActiveMembership,
+  subscriptionIsActive
+} from '../src/membership/service';
+import { membershipPlanList } from '../src/membership/plans';
 import type { Env, MembershipRow, SessionState } from '../src/types';
+
+// 会员支付已全部切公民币链上订阅（唯一支付轨）：App 侧热钱包 extrinsic 把订阅/取消上链，
+// 本 BFF 只做上链后确认镜像。Stripe / USDC 预付 / 换档折算等旧轨全部下线，这里只覆盖公民币轨。
 
 const ownerBytes = Uint8Array.from(Array.from({ length: 32 }, (_, index) => index + 11));
 const owner = encodeAddress(ownerBytes, 2027);
+const otherBytes = Uint8Array.from(Array.from({ length: 32 }, (_, index) => index + 71));
+const otherOwner = encodeAddress(otherBytes, 2027);
 const sessionToken = 'session_member';
-const stripeSecret = 'whsec_test_secret';
+const txHash = '0x' + 'a'.repeat(64);
+const txHash2 = '0x' + 'b'.repeat(64);
 
-describe('membership route（ADR-036 解耦：只看订阅，不涉身份）', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
+describe('platformSubscriptionConfirmRoute（公民币轨上链后镜像）', () => {
+  it('带合法 level 的确认写入 active 镜像', async () => {
+    const { env, db } = fakeEnv();
+
+    const response = await platformSubscriptionConfirmRoute(
+      confirmRequest({ tx_hash: txHash, level: 'spark' }),
+      env
+    );
+    const body = (await response.json()) as {
+      ok: boolean;
+      status: string;
+      membership_level: string;
+    };
+
+    expect(body).toMatchObject({ ok: true, status: 'active', membership_level: 'spark' });
+    const row = db.memberships.get(owner);
+    expect(row).toMatchObject({
+      owner_account: owner,
+      membership_level: 'spark',
+      subscription_status: 'active',
+      entitlement_lapsed_at: null,
+      last_tx_hash: txHash
+    });
+    // 计费周期窗口写入：终点晚于起点，供用量额度与徽章一个稳定窗口。
+    expect((row?.current_period_end ?? 0) > (row?.current_period_start ?? 0)).toBe(true);
   });
 
-  it('returns an active membership and all three plans', async () => {
-    const env = fakeEnv({
-      membership: membershipRow({ membership_level: 'spark' }),
-      storageResponses: []
-    });
+  it('缺 level 的确认把订阅镜像翻 cancelled 并记权益失效时刻', async () => {
+    const { env, db } = fakeEnv();
+    db.memberships.set(owner, membershipRow({ subscription_status: 'active' }));
 
-    const response = await membershipRoute(request('https://w/v1/square/membership'), env);
+    const response = await platformSubscriptionConfirmRoute(
+      confirmRequest({ tx_hash: txHash2 }),
+      env
+    );
+    const body = (await response.json()) as { ok: boolean; status: string };
+
+    expect(body).toEqual({ ok: true, status: 'cancelled' });
+    const row = db.memberships.get(owner);
+    expect(row?.subscription_status).toBe('cancelled');
+    expect(row?.entitlement_lapsed_at).not.toBeNull();
+    expect(row?.last_tx_hash).toBe(txHash2);
+  });
+
+  it('owner 由 session 派生，不采信 body 里的账户', async () => {
+    const { env, db } = fakeEnv();
+
+    await platformSubscriptionConfirmRoute(
+      confirmRequest({ tx_hash: txHash, level: 'freedom', owner_account: otherOwner }),
+      env
+    );
+
+    // 镜像落在 session owner，而非 body 伪造的 otherOwner。
+    expect(db.memberships.has(owner)).toBe(true);
+    expect(db.memberships.has(otherOwner)).toBe(false);
+  });
+
+  it('非法 tx_hash 抛 400 invalid_request', async () => {
+    const { env, db } = fakeEnv();
+
+    await expect(
+      platformSubscriptionConfirmRoute(
+        confirmRequest({ tx_hash: '0xnothex', level: 'freedom' }),
+        env
+      )
+    ).rejects.toMatchObject({ status: 400, code: 'invalid_request' });
+    // 大写 hex 同样不合法（要求 0x + 64 位小写 hex）。
+    await expect(
+      platformSubscriptionConfirmRoute(
+        confirmRequest({ tx_hash: '0x' + 'A'.repeat(64), level: 'freedom' }),
+        env
+      )
+    ).rejects.toMatchObject({ status: 400, code: 'invalid_request' });
+    expect(db.memberships.size).toBe(0);
+  });
+
+  it('重复确认按 owner 主键 upsert，保持幂等只留一行', async () => {
+    const { env, db } = fakeEnv();
+
+    await platformSubscriptionConfirmRoute(
+      confirmRequest({ tx_hash: txHash, level: 'freedom' }),
+      env
+    );
+    await platformSubscriptionConfirmRoute(
+      confirmRequest({ tx_hash: txHash2, level: 'democracy' }),
+      env
+    );
+
+    expect(db.memberships.size).toBe(1);
+    const row = db.memberships.get(owner);
+    // 后一次确认覆盖档位与 tx_hash（同 owner 主键 upsert）。
+    expect(row?.membership_level).toBe('democracy');
+    expect(row?.last_tx_hash).toBe(txHash2);
+    expect(row?.subscription_status).toBe('active');
+  });
+
+  it('取消后再订阅把 active 复位、entitlement_lapsed_at 清空', async () => {
+    const { env, db } = fakeEnv();
+
+    await platformSubscriptionConfirmRoute(
+      confirmRequest({ tx_hash: txHash, level: 'freedom' }),
+      env
+    );
+    await platformSubscriptionConfirmRoute(confirmRequest({ tx_hash: txHash2 }), env);
+    expect(db.memberships.get(owner)?.subscription_status).toBe('cancelled');
+    expect(db.memberships.get(owner)?.entitlement_lapsed_at).not.toBeNull();
+
+    await platformSubscriptionConfirmRoute(
+      confirmRequest({ tx_hash: txHash, level: 'spark' }),
+      env
+    );
+    const row = db.memberships.get(owner);
+    expect(row?.subscription_status).toBe('active');
+    expect(row?.entitlement_lapsed_at).toBeNull();
+    expect(row?.membership_level).toBe('spark');
+  });
+});
+
+describe('getMembership / batchMemberships（读新列）', () => {
+  it('getMembership 读回订阅镜像新列', async () => {
+    const { env, db } = fakeEnv();
+    db.memberships.set(owner, membershipRow({ membership_level: 'democracy' }));
+
+    const row = await getMembership(env, owner);
+
+    expect(row).not.toBeNull();
+    expect(row?.membership_level).toBe('democracy');
+    expect(row?.subscription_status).toBe('active');
+    // 新列均可读：周期窗口、权益失效时刻、最近交易哈希。
+    expect(row).toHaveProperty('current_period_start');
+    expect(row).toHaveProperty('current_period_end');
+    expect(row).toHaveProperty('entitlement_lapsed_at');
+    expect(row).toHaveProperty('last_tx_hash');
+  });
+
+  it('getMembership 对无镜像账户返回 null', async () => {
+    const { env } = fakeEnv();
+    expect(await getMembership(env, owner)).toBeNull();
+  });
+
+  it('batchMemberships 一次 IN() 查询返回多作者镜像', async () => {
+    const { env, db } = fakeEnv();
+    db.memberships.set(owner, membershipRow({ membership_level: 'spark' }));
+    db.memberships.set(otherOwner, membershipRow({ owner_account: otherOwner, membership_level: 'freedom' }));
+
+    const map = await batchMemberships(env, [owner, otherOwner, owner]);
+
+    expect(map.size).toBe(2);
+    expect(map.get(owner)?.membership_level).toBe('spark');
+    expect(map.get(otherOwner)?.membership_level).toBe('freedom');
+  });
+
+  it('batchMemberships 空入参返回空 Map，不发查询', async () => {
+    const { env } = fakeEnv();
+    const map = await batchMemberships(env, []);
+    expect(map.size).toBe(0);
+  });
+});
+
+describe('subscriptionIsActive（只看 subscription_status）', () => {
+  it('status=active 判有效', () => {
+    expect(subscriptionIsActive(membershipRow({ subscription_status: 'active' }))).toBe(true);
+  });
+
+  it('status 非 active 一律判无效（cancelled / past_due），不再看 expires_at', () => {
+    // expires_at 仍在未来，但状态非 active 即视为无效——按月续扣发生在链上，镜像以状态为准。
+    const future = Date.now() + 86_400_000;
+    expect(
+      subscriptionIsActive(
+        membershipRow({ subscription_status: 'cancelled', expires_at: future })
+      )
+    ).toBe(false);
+    expect(
+      subscriptionIsActive(
+        membershipRow({ subscription_status: 'past_due', expires_at: future })
+      )
+    ).toBe(false);
+  });
+});
+
+describe('requireActiveMembership（门禁2）', () => {
+  it('订阅有效则放行并返回镜像行', async () => {
+    const { env, db } = fakeEnv();
+    db.memberships.set(owner, membershipRow({ subscription_status: 'active' }));
+
+    const row = await requireActiveMembership(env, owner);
+    expect(row.owner_account).toBe(owner);
+  });
+
+  it('无镜像抛 402 membership_required', async () => {
+    const { env } = fakeEnv();
+    await expect(requireActiveMembership(env, owner)).rejects.toMatchObject({
+      status: 402,
+      code: 'membership_required'
+    });
+  });
+
+  it('订阅非 active 抛 402 membership_inactive', async () => {
+    const { env, db } = fakeEnv();
+    db.memberships.set(owner, membershipRow({ subscription_status: 'cancelled' }));
+    await expect(requireActiveMembership(env, owner)).rejects.toMatchObject({
+      status: 402,
+      code: 'membership_inactive'
+    });
+  });
+});
+
+describe('membershipRoute（返回 plans + membership + active）', () => {
+  it('返回有效订阅镜像与全部三档套餐', async () => {
+    const { env, db } = fakeEnv();
+    db.memberships.set(owner, membershipRow({ membership_level: 'spark' }));
+
+    const response = await membershipRoute(sessionRequest(), env);
     const body = (await response.json()) as {
+      ok: boolean;
       active: boolean;
       subscription_active: boolean;
       membership: { membership_level: string } | null;
       plans: Array<{ membership_level: string }>;
     };
 
+    expect(body.ok).toBe(true);
     expect(body.active).toBe(true);
     expect(body.subscription_active).toBe(true);
     expect(body.membership?.membership_level).toBe('spark');
@@ -40,22 +255,21 @@ describe('membership route（ADR-036 解耦：只看订阅，不涉身份）', (
     ]);
   });
 
-  it('reports an expired membership as inactive', async () => {
-    const env = fakeEnv({
-      membership: membershipRow({ membership_level: 'democracy', expires_at: 1 }),
-      storageResponses: []
-    });
+  it('已取消订阅报为 inactive', async () => {
+    const { env, db } = fakeEnv();
+    db.memberships.set(owner, membershipRow({ subscription_status: 'cancelled' }));
 
-    const response = await membershipRoute(request('https://w/v1/square/membership'), env);
-    const body = (await response.json()) as { active: boolean };
+    const response = await membershipRoute(sessionRequest(), env);
+    const body = (await response.json()) as { active: boolean; subscription_active: boolean };
 
     expect(body.active).toBe(false);
+    expect(body.subscription_active).toBe(false);
   });
 
-  it('returns no membership but still all three plans for a fresh account', async () => {
-    const env = fakeEnv({ membership: null, storageResponses: [] });
+  it('无订阅账户仍返回三档套餐，membership 为 null', async () => {
+    const { env } = fakeEnv();
 
-    const response = await membershipRoute(request('https://w/v1/square/membership'), env);
+    const response = await membershipRoute(sessionRequest(), env);
     const body = (await response.json()) as {
       active: boolean;
       membership: unknown;
@@ -68,536 +282,27 @@ describe('membership route（ADR-036 解耦：只看订阅，不涉身份）', (
   });
 });
 
-describe('stripe membership webhook', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('upserts a spark membership from a signed subscription event', async () => {
-    const db = new FakeDb();
-    const env = fakeEnv({
-      db,
-      membership: null,
-      storageResponses: [],
-      stripeSecret
-    });
-    const body = stripeEvent({
-      membership_level: 'spark',
-      status: 'active',
-      periodEnd: 1_893_456_000
-    });
-
-    // 通过总路由验收 webhook 的唯一正式路径，防止模块重命名后出现重复路径。
-    const response = await routeRequest(await signedRequest(body), env);
-    const json = (await response.json()) as { action: string; membership_level: string };
-
-    expect(json).toMatchObject({
-      action: 'subscription_upserted',
-      membership_level: 'spark'
-    });
-    expect(db.memberships.get(owner)).toMatchObject({
-      membership_level: 'spark',
-      subscription_status: 'active',
-      stripe_subscription_id: 'sub_test'
-    });
-  });
-
-  it('upserts freedom membership without reading chain identity', async () => {
-    const db = new FakeDb();
-    const env = fakeEnv({
-      db,
-      membership: null,
-      storageResponses: [],
-      stripeSecret
-    });
-    const body = stripeEvent({
-      membership_level: 'freedom',
-      status: 'active',
-      periodEnd: 1_893_456_000
-    });
-
-    const response = await stripeWebhookRoute(await signedRequest(body), env);
-    const json = (await response.json()) as { action: string; membership_level: string };
-
-    expect(json).toMatchObject({
-      action: 'subscription_upserted',
-      membership_level: 'freedom'
-    });
-    // 解耦后所有档位都不再读链身份。
-    expect(fetch).not.toHaveBeenCalled();
-    expect(db.memberships.get(owner)).toMatchObject({
-      membership_level: 'freedom',
-      subscription_status: 'active'
-    });
-  });
-
-  it('upserts democracy membership with its own USD price', async () => {
-    const db = new FakeDb();
-    const env = fakeEnv({
-      db,
-      membership: null,
-      storageResponses: [],
-      stripeSecret
-    });
-    const body = stripeEvent({
-      membership_level: 'democracy',
-      status: 'active',
-      periodEnd: 1_893_456_000
-    });
-
-    const response = await stripeWebhookRoute(await signedRequest(body), env);
-    const json = (await response.json()) as { action: string; membership_level: string };
-
-    expect(json).toMatchObject({
-      action: 'subscription_upserted',
-      membership_level: 'democracy'
-    });
-    expect(fetch).not.toHaveBeenCalled();
-    expect(db.memberships.get(owner)).toMatchObject({
-      membership_level: 'democracy',
-      subscription_status: 'active',
-      stripe_price_id: 'price_democracy'
-    });
-  });
-
-  it('upserts from a new-API event with item-level current_period_end（顶层为空也不报错）', async () => {
-    const db = new FakeDb();
-    const env = fakeEnv({ db, membership: null, storageResponses: [], stripeSecret });
-    const body = stripeEvent({
-      membership_level: 'freedom',
-      status: 'active',
-      periodEnd: 1_893_456_000,
-      periodOnItem: true
-    });
-
-    const response = await stripeWebhookRoute(await signedRequest(body), env);
-    const json = (await response.json()) as { action: string };
-
-    // 不再因顶层 current_period_end 为空抛 invalid_stripe_subscription。
-    expect(json.action).toBe('subscription_upserted');
-    expect(db.memberships.get(owner)).toMatchObject({
-      membership_level: 'freedom',
-      subscription_status: 'active',
-      expires_at: 1_893_456_000 * 1000
-    });
-  });
-
-  it('迟到的旧 subscription.updated 会回读 Stripe 当前对象，不回滚新档位', async () => {
-    const db = new FakeDb();
-    const currentEvent = JSON.parse(
-      stripeEvent({
-        membership_level: 'democracy',
-        status: 'active',
-        periodEnd: 1_903_456_000
-      })
-    ) as { data: { object: Record<string, unknown> } };
-    const env = fakeEnv({
-      db,
-      membership: null,
-      storageResponses: [],
-      stripeSecret,
-      stripeDevProxy: false,
-      stripeSubscription: currentEvent.data.object
-    });
-    // 投递快照仍是旧 freedom；真实 Stripe 当前对象已是 democracy。
-    const staleBody = stripeEvent({
-      membership_level: 'freedom',
-      status: 'active',
-      periodEnd: 1_893_456_000
-    });
-
-    const response = await stripeWebhookRoute(await signedRequest(staleBody), env);
-    expect(((await response.json()) as { membership_level: string }).membership_level).toBe(
-      'democracy'
-    );
-    expect(db.memberships.get(owner)).toMatchObject({
-      membership_level: 'democracy',
-      expires_at: 1_903_456_000 * 1000
-    });
-  });
-
-  it('旧卡迟到 updated 不得覆盖已生效的 USDC 预付会员', async () => {
-    const db = new FakeDb();
-    db.memberships.set(owner, membershipRow({
-      subscription_source: 'usdc_prepaid',
-      stripe_customer_id: null,
-      stripe_subscription_id: null,
-      stripe_price_id: null,
-      prepaid_payment_ref: 'pi_new_usdc'
-    }));
-    const env = fakeEnv({ db, membership: null, storageResponses: [], stripeSecret });
-    const body = stripeEvent({
-      membership_level: 'freedom',
-      status: 'active',
-      periodEnd: 1_893_456_000
-    });
-
-    const response = await stripeWebhookRoute(await signedRequest(body), env);
-    expect(((await response.json()) as { action: string }).action).toBe(
-      'subscription_superseded'
-    );
-    expect(db.memberships.get(owner)).toMatchObject({
-      subscription_source: 'usdc_prepaid',
-      stripe_subscription_id: null,
-      prepaid_payment_ref: 'pi_new_usdc'
-    });
-  });
-
-  it('带服务器切换标志的新卡订阅可以覆盖 USDC 预付会员', async () => {
-    const db = new FakeDb();
-    db.memberships.set(owner, membershipRow({
-      subscription_source: 'usdc_prepaid',
-      stripe_customer_id: null,
-      stripe_subscription_id: null,
-      stripe_price_id: null,
-      prepaid_payment_ref: 'pi_old_usdc'
-    }));
-    const env = fakeEnv({ db, membership: null, storageResponses: [], stripeSecret });
-    const parsed = JSON.parse(stripeEvent({
-      membership_level: 'freedom',
-      status: 'trialing',
-      periodEnd: 1_893_456_000
-    })) as { data: { object: { metadata: Record<string, string> } } };
-    parsed.data.object.metadata.payment_switch = 'usdc_to_stripe';
-
-    const response = await stripeWebhookRoute(
-      await signedRequest(JSON.stringify(parsed)),
-      env
-    );
-    expect(((await response.json()) as { action: string }).action).toBe(
-      'subscription_upserted'
-    );
-    expect(db.memberships.get(owner)).toMatchObject({
-      subscription_source: 'stripe',
-      stripe_subscription_id: 'sub_test',
-      subscription_status: 'trialing'
-    });
-  });
-
-  it('rejects a subscription whose Stripe Price is not USD', async () => {
-    const db = new FakeDb();
-    const env = fakeEnv({
-      db,
-      membership: null,
-      storageResponses: [],
-      stripeSecret
-    });
-    const body = stripeEvent({
-      membership_level: 'freedom',
-      status: 'active',
-      periodEnd: 1_893_456_000,
-      priceCurrency: 'hkd',
-      priceUnitAmount: 2400
-    });
-
-    await expect(stripeWebhookRoute(await signedRequest(body), env)).rejects.toMatchObject({
-      code: 'stripe_price_currency_mismatch'
-    });
-    expect(db.memberships.get(owner)).toBeUndefined();
-  });
-
-  it('rejects a subscription whose Stripe Price amount does not match the member level', async () => {
-    const db = new FakeDb();
-    const env = fakeEnv({
-      db,
-      membership: null,
-      storageResponses: [],
-      stripeSecret
-    });
-    const body = stripeEvent({
-      membership_level: 'democracy',
-      status: 'active',
-      periodEnd: 1_893_456_000,
-      priceUnitAmount: 299
-    });
-
-    await expect(stripeWebhookRoute(await signedRequest(body), env)).rejects.toMatchObject({
-      code: 'stripe_price_amount_mismatch'
-    });
-    expect(db.memberships.get(owner)).toBeUndefined();
-  });
-
-  it('rejects a webhook with an invalid signature', async () => {
-    await expect(
-      verifyStripeSignature('{"id":"evt"}', 't=123,v1=bad', stripeSecret, 123, 300)
-    ).rejects.toMatchObject({ code: 'stripe_signature_mismatch' });
-  });
-
-  it('grants USDC prepaid duration from a paid prepaid checkout.session.completed', async () => {
-    const db = new FakeDb();
-    const env = fakeEnv({ db, membership: null, storageResponses: [], stripeSecret });
-    const body = JSON.stringify({
-      id: 'evt_prepaid',
-      type: 'checkout.session.completed',
-      created: Math.floor(Date.now() / 1000),
-      data: {
-        object: {
-          id: 'cs_prepaid_freedom_quarter',
-          payment_status: 'paid',
-          payment_method_types: ['crypto'],
-          payment_intent: 'pi_test',
-          metadata: {
-            route: 'usdc_prepaid',
-            owner_account: owner,
-            membership_level: 'freedom',
-            duration: 'quarter'
-          }
-        }
-      }
-    });
-
-    const response = await stripeWebhookRoute(await signedRequest(body), env);
-    const json = (await response.json()) as { action: string; membership_level: string };
-
-    expect(json).toMatchObject({ action: 'prepaid_granted', membership_level: 'freedom' });
-    const row = db.memberships.get(owner);
-    expect(row?.subscription_source).toBe('usdc_prepaid');
-    expect(row?.membership_level).toBe('freedom');
-    // 从 now 起叠 3 个月 → 到期在未来。
-    expect((row?.expires_at ?? 0) > Date.now()).toBe(true);
-    expect(row?.prepaid_payment_ref).toBe('pi_test');
-  });
-
-  it('重复投递同一 Stripe 事件不会重复延长 USDC 时长', async () => {
-    const db = new FakeDb();
-    const env = fakeEnv({ db, membership: null, storageResponses: [], stripeSecret });
-    const body = JSON.stringify({
-      id: 'evt_prepaid_replay',
-      type: 'checkout.session.completed',
-      created: Math.floor(Date.now() / 1000),
-      data: {
-        object: {
-          id: 'cs_prepaid_replay',
-          payment_status: 'paid',
-          payment_method_types: ['crypto'],
-          payment_intent: 'pi_replay',
-          metadata: {
-            route: 'usdc_prepaid',
-            owner_account: owner,
-            membership_level: 'freedom',
-            duration: 'quarter'
-          }
-        }
-      }
-    });
-
-    const first = await stripeWebhookRoute(await signedRequest(body), env);
-    expect(((await first.json()) as { action: string }).action).toBe('prepaid_granted');
-    const firstExpires = db.memberships.get(owner)?.expires_at;
-
-    const repeated = await stripeWebhookRoute(await signedRequest(body), env);
-    expect(((await repeated.json()) as { action: string }).action).toBe(
-      'stripe_event_duplicate'
-    );
-    expect(db.memberships.get(owner)?.expires_at).toBe(firstExpires);
-    expect(db.stripePayments.size).toBe(1);
-  });
-
-  it('USDC webhook 若不是 Stripe Crypto 支付则拒绝授权', async () => {
-    const db = new FakeDb();
-    const env = fakeEnv({ db, membership: null, storageResponses: [], stripeSecret });
-    const body = JSON.stringify({
-      id: 'evt_prepaid_card',
-      type: 'checkout.session.completed',
-      created: Math.floor(Date.now() / 1000),
-      data: {
-        object: {
-          id: 'cs_prepaid_card',
-          payment_status: 'paid',
-          payment_method_types: ['card'],
-          payment_intent: 'pi_card',
-          metadata: {
-            route: 'usdc_prepaid',
-            owner_account: owner,
-            membership_level: 'freedom',
-            duration: 'quarter'
-          }
-        }
-      }
-    });
-
-    await expect(stripeWebhookRoute(await signedRequest(body), env)).rejects.toMatchObject({
-      code: 'stripe_crypto_required'
-    });
-    expect(db.memberships.get(owner)).toBeUndefined();
-    expect(db.stripeWebhookEvents.has('evt_prepaid_card')).toBe(false);
-  });
-
-  it('applies USDC upgrade (level only, keeps expires) from a paid usdc_prepaid_upgrade checkout', async () => {
-    const db = new FakeDb();
-    const env = fakeEnv({
-      db,
-      membership: membershipRow({
-        subscription_source: 'usdc_prepaid',
-        membership_level: 'freedom',
-        stripe_subscription_id: null,
-        expires_at: Date.now() + 30 * 86_400_000
-      }),
-      storageResponses: [],
-      stripeSecret
-    });
-    const body = JSON.stringify({
-      id: 'evt_upgrade',
-      type: 'checkout.session.completed',
-      created: Math.floor(Date.now() / 1000),
-      data: {
-        object: {
-          id: 'cs_prepaid_upgrade_democracy',
-          payment_status: 'paid',
-          payment_method_types: ['crypto'],
-          payment_intent: 'pi_up',
-          metadata: {
-            route: 'usdc_prepaid_upgrade',
-            owner_account: owner,
-            membership_level: 'democracy'
-          }
-        }
-      }
-    });
-
-    const response = await stripeWebhookRoute(await signedRequest(body), env);
-    const json = (await response.json()) as { action: string; membership_level: string };
-    expect(json).toMatchObject({ action: 'prepaid_upgraded', membership_level: 'democracy' });
-  });
-
-  it('卡→USDC 切换：预付授权益前设卡到期取消，行转 usdc_prepaid 从卡到期日往后叠', async () => {
-    const db = new FakeDb();
-    const cardEnd = Date.now() + 20 * 86_400_000;
-    const env = fakeEnv({
-      db,
-      membership: membershipRow({
-        subscription_source: 'stripe',
-        membership_level: 'freedom',
-        stripe_subscription_id: 'sub_card',
-        expires_at: cardEnd
-      }),
-      storageResponses: [],
-      stripeSecret
-    });
-    const body = JSON.stringify({
-      id: 'evt_switch',
-      type: 'checkout.session.completed',
-      created: Math.floor(Date.now() / 1000),
-      data: {
-        object: {
-          id: 'cs_prepaid_freedom_quarter',
-          payment_status: 'paid',
-          payment_method_types: ['crypto'],
-          payment_intent: 'pi_sw',
-          metadata: {
-            route: 'usdc_prepaid',
-            owner_account: owner,
-            membership_level: 'freedom',
-            duration: 'quarter'
-          }
-        }
-      }
-    });
-
-    const response = await stripeWebhookRoute(await signedRequest(body), env);
-    const json = (await response.json()) as { action: string };
-    expect(json.action).toBe('prepaid_granted');
-    const row = db.memberships.get(owner);
-    expect(row?.subscription_source).toBe('usdc_prepaid');
-    // 从卡到期日往后叠 3 个月 → 到期晚于卡到期。
-    expect((row?.expires_at ?? 0) > cardEnd).toBe(true);
-  });
-
-  it('异档并存兜底：已有 freedom USDC，spark 预付按价值折算而非直贴档差', async () => {
-    const db = new FakeDb();
-    const freedomEnd = Date.now() + 90 * 86_400_000;
-    const env = fakeEnv({
-      db,
-      membership: membershipRow({
-        subscription_source: 'usdc_prepaid',
-        membership_level: 'freedom',
-        stripe_subscription_id: null,
-        current_period_start: Date.now(),
-        expires_at: freedomEnd
-      }),
-      storageResponses: [],
-      stripeSecret
-    });
-    const body = JSON.stringify({
-      id: 'evt_fold',
-      type: 'checkout.session.completed',
-      created: Math.floor(Date.now() / 1000),
-      data: {
-        object: {
-          id: 'cs_prepaid_spark_quarter',
-          payment_status: 'paid',
-          payment_method_types: ['crypto'],
-          payment_intent: 'pi_fold',
-          metadata: {
-            route: 'usdc_prepaid',
-            owner_account: owner,
-            membership_level: 'spark',
-            duration: 'quarter'
-          }
-        }
-      }
-    });
-
-    const response = await stripeWebhookRoute(await signedRequest(body), env);
-    expect(((await response.json()) as { action: string }).action).toBe('prepaid_granted');
-    const row = db.memberships.get(owner);
-    expect(row?.membership_level).toBe('spark');
-    // 兜底：now+3月 + 折算(90×299/9999≈3天)，绝非朴素的 freedom 到期(now+90d)再叠 3 月(≈180d)。
-    const naiveEnd = freedomEnd + 3 * 30 * 86_400_000;
-    expect((row?.expires_at ?? 0) < naiveEnd).toBe(true);
-    expect((row?.expires_at ?? 0) < Date.now() + 120 * 86_400_000).toBe(true);
-    // 至少含买到的 3 个日历月。
-    expect((row?.expires_at ?? 0) > Date.now() + 85 * 86_400_000).toBe(true);
-  });
-
-  it('does not grant on a card checkout.session.completed (no prepaid route)', async () => {
-    const db = new FakeDb();
-    const env = fakeEnv({ db, membership: null, storageResponses: [], stripeSecret });
-    const body = JSON.stringify({
-      id: 'evt_card_checkout',
-      type: 'checkout.session.completed',
-      created: Math.floor(Date.now() / 1000),
-      data: { object: { id: 'cs_card', payment_status: 'paid', metadata: {} } }
-    });
-
-    const response = await stripeWebhookRoute(await signedRequest(body), env);
-    const json = (await response.json()) as { action: string };
-    expect(json.action).toBe('checkout_session_observed');
-    expect(db.memberships.get(owner)).toBeUndefined();
+describe('membershipPlanList（不含美元字段）', () => {
+  it('三档套餐均无任何美元计价字段', () => {
+    const plans = membershipPlanList();
+    expect(plans.map((plan) => plan.membership_level)).toEqual(['freedom', 'democracy', 'spark']);
+    for (const plan of plans) {
+      // 计价与扣款是链上 square-post（PlatformPrice + billing keeper）的职责，套餐表只定档位与配额。
+      expect(plan).not.toHaveProperty('price_currency');
+      expect(plan).not.toHaveProperty('price_usd_cents');
+      expect(plan).not.toHaveProperty('price_usd_monthly');
+      // 保留的档位字段：展示名、聊天文件上限、动态与文章配额。
+      expect(plan).toHaveProperty('display_name');
+      expect(plan).toHaveProperty('chat_file_max_bytes');
+      expect(plan).toHaveProperty('dynamic');
+      expect(plan).toHaveProperty('article');
+    }
   });
 });
 
-describe('subscriptionIsActive (USDC 预付)', () => {
-  it('usdc_prepaid 只看 expires_at：未到期=有效、过期=无效（不看 status）', () => {
-    const future = membershipRow({
-      subscription_source: 'usdc_prepaid',
-      subscription_status: 'active',
-      stripe_subscription_id: null,
-      expires_at: Date.now() + 86_400_000
-    });
-    const past = membershipRow({
-      subscription_source: 'usdc_prepaid',
-      subscription_status: 'active',
-      stripe_subscription_id: null,
-      expires_at: Date.now() - 1000
-    });
-    expect(subscriptionIsActive(future)).toBe(true);
-    expect(subscriptionIsActive(past)).toBe(false);
-  });
-});
-
-function fakeEnv(input: {
-  db?: FakeDb;
-  membership?: MembershipRow | null;
-  storageResponses: Array<string | null>;
-  stripeSecret?: string;
-  stripeDevProxy?: boolean;
-  stripeSubscription?: Record<string, unknown>;
-}): Env {
-  const db = input.db ?? new FakeDb();
-  if (input.membership !== undefined && input.membership !== null) {
-    db.memberships.set(input.membership.owner_account, input.membership);
-  }
+/// 构造带 session 的测试 env 与内存版 square_memberships。
+function fakeEnv(): { env: Env; db: FakeDb } {
+  const db = new FakeDb();
   const session: SessionState = {
     owner_account: owner,
     device_key_hash: 'a'.repeat(64),
@@ -605,145 +310,48 @@ function fakeEnv(input: {
     expires_at: Date.now() + 60_000
   };
   const kv = new FakeKv(new Map([[`square_session:${sessionToken}`, session]]));
-  const responses = [...input.storageResponses];
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (request: RequestInfo | URL) => {
-      if (request.toString().startsWith('https://api.stripe.com/')) {
-        return Response.json(input.stripeSubscription ?? {});
-      }
-      return Response.json({
-        jsonrpc: '2.0',
-        id: 1,
-        result: responses.shift() ?? null
-      });
-    })
-  );
-
-  return {
+  const env = {
     DB: db as unknown as D1Database,
-    SQUARE_MEDIA: {} as R2Bucket,
-    SQUARE_CACHE: kv as unknown as KVNamespace,
-    CHAIN_URL: 'https://chain.test',
-    CHAIN_ID: 'worker-rpc.access',
-    CHAIN_SECRET: 'test-access-secret',
-    STRIPE_HOOK_SECRET: input.stripeSecret,
-    STRIPE_API_KEY: 'sk_test_secret',
-    STRIPE_DEV_PROXY: input.stripeDevProxy === false ? '0' : '1',
-    FREEDOM_PRICE_ID: 'price_freedom',
-    DEMOCRACY_PRICE_ID: 'price_democracy',
-    SPARK_PRICE_ID: 'price_spark'
+    SQUARE_CACHE: kv as unknown as KVNamespace
   } as unknown as Env;
+  return { env, db };
 }
 
-function request(url: string): Request {
-  return new Request(url, {
-    headers: {
-      authorization: `Bearer ${sessionToken}`
-    }
+/// GET /v1/square/membership 请求（带登录态）。
+function sessionRequest(): Request {
+  return new Request('https://w/v1/square/membership', {
+    headers: { authorization: `Bearer ${sessionToken}` }
   });
 }
 
-async function signedRequest(body: string): Promise<Request> {
-  const timestamp = Math.floor(Date.now() / 1000);
-  const signature = await hmacSha256Hex(stripeSecret, `${timestamp}.${body}`);
-  return new Request('https://w/v1/square/membership/webhook', {
+/// POST /v1/square/membership/confirm 请求（带登录态与 JSON body）。
+function confirmRequest(body: Record<string, unknown>): Request {
+  return new Request('https://w/v1/square/membership/confirm', {
     method: 'POST',
     headers: {
-      'stripe-signature': `t=${timestamp},v1=${signature}`,
-      'content-length': String(new TextEncoder().encode(body).byteLength)
+      authorization: `Bearer ${sessionToken}`,
+      'content-type': 'application/json'
     },
-    body
+    body: JSON.stringify(body)
   });
 }
 
-function stripeEvent(input: {
-  membership_level: string;
-  status: string;
-  periodEnd: number;
-  priceCurrency?: string;
-  priceUnitAmount?: number;
-  periodOnItem?: boolean;
-}): string {
-  const price = stripePriceForMembership(input.membership_level);
-  const periodStart = 1_800_000_000;
-  const item: Record<string, unknown> = {
-    price: {
-      id: price.id,
-      currency: input.priceCurrency ?? price.currency,
-      unit_amount: input.priceUnitAmount ?? price.unit_amount
-    }
-  };
-  const object: Record<string, unknown> = {
-    id: 'sub_test',
-    customer: 'cus_test',
-    status: input.status,
-    cancel_at_period_end: false,
-    metadata: { owner_account: owner, membership_level: input.membership_level }
-  };
-  // 新版 API：计费周期在 item 上、订阅顶层缺省；旧版：在顶层。
-  if (input.periodOnItem) {
-    item.current_period_start = periodStart;
-    item.current_period_end = input.periodEnd;
-  } else {
-    object.current_period_start = periodStart;
-    object.current_period_end = input.periodEnd;
-  }
-  object.items = { data: [item] };
-  return JSON.stringify({
-    id: 'evt_test',
-    type: 'customer.subscription.updated',
-    created: Math.floor(Date.now() / 1000),
-    data: { object }
-  });
-}
-
-function stripePriceForMembership(level: string): {
-  id: string;
-  currency: 'usd';
-  unit_amount: number;
-} {
-  if (level === 'spark') {
-    return { id: 'price_spark', currency: 'usd', unit_amount: 9999 };
-  }
-  if (level === 'democracy') {
-    return { id: 'price_democracy', currency: 'usd', unit_amount: 999 };
-  }
-  return { id: 'price_freedom', currency: 'usd', unit_amount: 299 };
-}
-
+/// 新订阅镜像行（公民币轨，无任何 stripe/prepaid 列）。
 function membershipRow(overrides: Partial<MembershipRow> = {}): MembershipRow {
-  const expiresAt = Date.now() + 86_400_000;
+  const now = Date.now();
+  const periodEnd = now + 30 * 86_400_000;
   return {
     owner_account: owner,
     membership_level: 'freedom',
-    expires_at: expiresAt,
-    updated_at: Date.now(),
-    subscription_source: 'stripe',
-    stripe_customer_id: 'cus_test',
-    stripe_subscription_id: 'sub_test',
-    stripe_price_id: 'price_test',
+    expires_at: periodEnd,
+    updated_at: now,
     subscription_status: 'active',
-    current_period_start: Date.now() - 1000,
-    current_period_end: expiresAt,
-    cancel_at_period_end: 0,
+    current_period_start: now,
+    current_period_end: periodEnd,
     entitlement_lapsed_at: null,
-    prepaid_payment_ref: null,
+    last_tx_hash: null,
     ...overrides
   };
-}
-
-async function hmacSha256Hex(secret: string, payload: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
-  return [...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 class FakeKv {
@@ -754,34 +362,13 @@ class FakeKv {
   }
 }
 
+/// 内存版 square_memberships：按 owner_account 主键存 MembershipRow，
+/// 覆盖 citizen_coin 订阅 upsert / 取消 UPDATE 与 service 的 SELECT / IN() 查询。
 class FakeDb {
   memberships = new Map<string, MembershipRow>();
-  stripeWebhookEvents = new Map<
-    string,
-    { processed_at: number | null; received_at: number }
-  >();
-  stripePayments = new Set<string>();
 
   prepare(sql: string): FakeStmt {
     return new FakeStmt(this, sql);
-  }
-
-  async batch(statements: FakeStmt[]): Promise<Array<{ success: boolean }>> {
-    const membershipsBefore = new Map(
-      [...this.memberships].map(([key, value]) => [key, { ...value }])
-    );
-    const eventsBefore = new Map(
-      [...this.stripeWebhookEvents].map(([key, value]) => [key, { ...value }])
-    );
-    const paymentsBefore = new Set(this.stripePayments);
-    try {
-      return await Promise.all(statements.map((statement) => statement.run()));
-    } catch (error) {
-      this.memberships = membershipsBefore;
-      this.stripeWebhookEvents = eventsBefore;
-      this.stripePayments = paymentsBefore;
-      throw error;
-    }
   }
 }
 
@@ -799,131 +386,58 @@ class FakeStmt {
   }
 
   async first<T>(): Promise<T | null> {
-    if (this.sql.includes('FROM square_memberships')) {
+    if (this.sql.includes('FROM square_memberships') && this.sql.includes('owner_account = ?')) {
       return (this.db.memberships.get(this.args[0] as string) ?? null) as T | null;
-    }
-    if (this.sql.includes('FROM square_stripe_webhook_events')) {
-      return (this.db.stripeWebhookEvents.get(this.args[0] as string) ?? null) as T | null;
-    }
-    if (this.sql.includes('FROM square_stripe_payments')) {
-      const paymentIntentId = this.args[0] as string;
-      return (this.db.stripePayments.has(paymentIntentId)
-        ? { stripe_payment_intent_id: paymentIntentId }
-        : null) as T | null;
     }
     return null;
   }
 
   async all<T>(): Promise<{ results: T[]; success: boolean }> {
-    // 本测试不构造已归档视频；实现 D1 all() 契约，确保续订回灌路径真实执行且无告警。
+    if (this.sql.includes('FROM square_memberships') && this.sql.includes('owner_account IN')) {
+      const wanted = new Set(this.args as string[]);
+      const rows = [...this.db.memberships.values()].filter((row) =>
+        wanted.has(row.owner_account)
+      );
+      return { results: rows as unknown as T[], success: true };
+    }
     return { results: [], success: true };
   }
 
   async run(): Promise<{ success: boolean; meta: { changes: number } }> {
-    if (this.sql.includes('INSERT OR IGNORE INTO square_stripe_webhook_events')) {
-      const eventId = this.args[0] as string;
-      if (this.db.stripeWebhookEvents.has(eventId)) {
-        return { success: true, meta: { changes: 0 } };
-      }
-      this.db.stripeWebhookEvents.set(eventId, {
-        processed_at: null,
-        received_at: this.args[4] as number
+    // 订阅确认 upsert：binds = [owner, level, expires, updated, periodStart, periodEnd, txHash]。
+    if (this.sql.includes('INSERT INTO square_memberships')) {
+      const ownerAccount = this.args[0] as string;
+      this.db.memberships.set(ownerAccount, {
+        owner_account: ownerAccount,
+        membership_level: this.args[1] as string,
+        expires_at: this.args[2] as number,
+        updated_at: this.args[3] as number,
+        subscription_status: 'active',
+        current_period_start: this.args[4] as number,
+        current_period_end: this.args[5] as number,
+        entitlement_lapsed_at: null,
+        last_tx_hash: this.args[6] as string
       });
       return { success: true, meta: { changes: 1 } };
     }
-    if (
-      this.sql.includes('UPDATE square_stripe_webhook_events') &&
-      this.sql.includes('SET processed_at')
-    ) {
-      const eventId = this.args[1] as string;
-      const event = this.db.stripeWebhookEvents.get(eventId);
-      if (event) event.processed_at = this.args[0] as number;
-      return { success: true, meta: { changes: event ? 1 : 0 } };
-    }
-    if (
-      this.sql.includes('UPDATE square_stripe_webhook_events') &&
-      this.sql.includes('SET received_at')
-    ) {
-      const eventId = this.args[1] as string;
-      const event = this.db.stripeWebhookEvents.get(eventId);
-      const canReclaim = event != null && event.processed_at == null && event.received_at < (this.args[2] as number);
-      if (canReclaim) event.received_at = this.args[0] as number;
-      return { success: true, meta: { changes: canReclaim ? 1 : 0 } };
-    }
-    if (this.sql.includes('DELETE FROM square_stripe_webhook_events')) {
-      const eventId = this.args[0] as string;
-      const event = this.db.stripeWebhookEvents.get(eventId);
-      const deleted = event != null && event.processed_at == null;
-      if (deleted) this.db.stripeWebhookEvents.delete(eventId);
-      return { success: true, meta: { changes: deleted ? 1 : 0 } };
-    }
-    if (this.sql.includes('INSERT INTO square_stripe_payments')) {
-      const paymentIntentId = this.args[0] as string;
-      if (this.db.stripePayments.has(paymentIntentId)) {
-        throw new Error('UNIQUE constraint failed: square_stripe_payments.stripe_payment_intent_id');
+    // 取消确认 UPDATE：binds = [nowForLapsed, txHash, nowForUpdated, owner]。
+    if (this.sql.includes('UPDATE square_memberships') && this.sql.includes("'cancelled'")) {
+      const nowForLapsed = this.args[0] as number;
+      const txHashArg = this.args[1] as string;
+      const nowForUpdated = this.args[2] as number;
+      const ownerAccount = this.args[3] as string;
+      const existing = this.db.memberships.get(ownerAccount);
+      if (!existing) {
+        return { success: true, meta: { changes: 0 } };
       }
-      this.db.stripePayments.add(paymentIntentId);
+      this.db.memberships.set(ownerAccount, {
+        ...existing,
+        subscription_status: 'cancelled',
+        entitlement_lapsed_at: existing.entitlement_lapsed_at ?? nowForLapsed,
+        last_tx_hash: txHashArg,
+        updated_at: nowForUpdated
+      });
       return { success: true, meta: { changes: 1 } };
-    }
-    if (this.sql.includes('INSERT INTO square_memberships')) {
-      const ownerAccount = this.args[0] as string;
-      if (this.sql.includes("VALUES (?, ?, ?, ?, 'usdc_prepaid'")) {
-        // USDC 预付 binds（解耦后无身份列）: [owner, level, expires, updated, start, end, ref]
-        this.db.memberships.set(
-          ownerAccount,
-          membershipRow({
-            owner_account: ownerAccount,
-            membership_level: this.args[1] as string,
-            expires_at: this.args[2] as number,
-            subscription_source: 'usdc_prepaid',
-            stripe_subscription_id: null,
-            subscription_status: 'active',
-            current_period_start: this.args[4] as number,
-            current_period_end: this.args[5] as number,
-            prepaid_payment_ref: this.args[6] as string | null
-          })
-        );
-      } else {
-        const existing = this.db.memberships.get(ownerAccount);
-        // 卡订阅 binds: [owner, level, expires, updated, customer, sub, price, status,
-        //   start, end, cancel, allowPrepaidSwitch]（解耦后无身份列）。
-        const allowPrepaidSwitch = this.args[11] === 1;
-        if (existing?.subscription_source === 'usdc_prepaid' && !allowPrepaidSwitch) {
-          return { success: true, meta: { changes: 0 } };
-        }
-        this.db.memberships.set(ownerAccount, {
-          owner_account: ownerAccount,
-          membership_level: this.args[1] as string,
-          expires_at: this.args[2] as number,
-          updated_at: this.args[3] as number,
-          subscription_source: 'stripe',
-          stripe_customer_id: this.args[4] as string | null,
-          stripe_subscription_id: this.args[5] as string,
-          stripe_price_id: this.args[6] as string | null,
-          subscription_status: this.args[7] as string,
-          current_period_start: this.args[8] as number | null,
-          current_period_end: this.args[9] as number,
-          cancel_at_period_end: this.args[10] as number,
-          entitlement_lapsed_at: null,
-          prepaid_payment_ref: null
-        });
-      }
-      return { success: true, meta: { changes: 1 } };
-    }
-    if (this.sql.includes('UPDATE square_memberships') && this.sql.includes('stripe_subscription_id')) {
-      const status = this.args[0] as string;
-      const subscriptionId = this.args[4] as string;
-      for (const [ownerAccount, row] of this.db.memberships) {
-        if (row.stripe_subscription_id === subscriptionId) {
-          this.db.memberships.set(ownerAccount, {
-            ...row,
-            subscription_status: status,
-            expires_at: this.args[1] as number,
-            updated_at: this.args[2] as number,
-            entitlement_lapsed_at: row.entitlement_lapsed_at ?? (this.args[3] as number)
-          });
-        }
-      }
     }
     return { success: true, meta: { changes: 1 } };
   }

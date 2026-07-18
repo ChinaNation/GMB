@@ -51,58 +51,31 @@ CREATE TABLE square_rate_windows (
 CREATE INDEX idx_square_rate_windows_expires
   ON square_rate_windows(expires_at);
 
+-- 平台会员公民币订阅镜像（唯一支付轨）：订阅/取消由 App 热钱包 extrinsic 上链
+-- （square-post idx34），价格与按月扣款以链上 PlatformPrice + billing keeper 为真源；
+-- 本表只镜像订阅态供发帖门禁与徽章读取，last_tx_hash 幂等。
 CREATE TABLE square_memberships (
   owner_account TEXT PRIMARY KEY,
   membership_level TEXT NOT NULL,
+  -- 下次扣款时刻（链上 next_charge_at 镜像），同时作计费周期终点。
   expires_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
-  subscription_source TEXT NOT NULL DEFAULT 'stripe',
-  stripe_customer_id TEXT,
-  stripe_subscription_id TEXT,
-  stripe_price_id TEXT,
+  -- 镜像链上订阅态：active（有效）/ past_due（欠费）/ cancelled（已取消）。
   subscription_status TEXT NOT NULL,
+  -- 计费周期镜像（用量额度窗口）：起点=订阅/续订时刻、终点=下次扣款。
   current_period_start INTEGER,
   current_period_end INTEGER,
-  cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
   -- 会员与身份彻底解耦（ADR-036）：不再存 identity_level / frozen_at / collection_paused。
+  -- 会员权益失效时刻（退订满 N 月视频冷归档时钟起点；重订置 NULL）。
   entitlement_lapsed_at INTEGER,
-  prepaid_payment_ref TEXT
+  -- 最近一次订阅/取消上链交易哈希（幂等确认凭证）。
+  last_tx_hash TEXT
 );
-CREATE UNIQUE INDEX idx_square_memberships_stripe_subscription
-  ON square_memberships(stripe_subscription_id)
-  WHERE stripe_subscription_id IS NOT NULL;
-CREATE INDEX idx_square_memberships_stripe_customer
-  ON square_memberships(stripe_customer_id)
-  WHERE stripe_customer_id IS NOT NULL;
 CREATE INDEX idx_square_memberships_state
   ON square_memberships(subscription_status, expires_at);
 CREATE INDEX idx_square_memberships_lapsed
   ON square_memberships(entitlement_lapsed_at)
   WHERE entitlement_lapsed_at IS NOT NULL;
-
--- Stripe webhook 事件先以 event_id 原子占位，重复投递只允许一个处理者进入业务写入。
-CREATE TABLE square_stripe_webhook_events (
-  event_id TEXT PRIMARY KEY,
-  event_type TEXT NOT NULL,
-  stripe_object_id TEXT,
-  event_created_at INTEGER NOT NULL,
-  received_at INTEGER NOT NULL,
-  processed_at INTEGER
-);
-CREATE INDEX idx_square_stripe_webhook_events_processed
-  ON square_stripe_webhook_events(processed_at, received_at);
-
--- 一次性 Stripe Crypto 付款永久去重；同一 payment_intent 不能重复授时长或重复换档。
-CREATE TABLE square_stripe_payments (
-  stripe_payment_intent_id TEXT PRIMARY KEY,
-  checkout_session_id TEXT NOT NULL,
-  owner_account TEXT NOT NULL,
-  membership_level TEXT NOT NULL,
-  payment_route TEXT NOT NULL,
-  granted_at INTEGER NOT NULL
-);
-CREATE INDEX idx_square_stripe_payments_owner
-  ON square_stripe_payments(owner_account, granted_at);
 
 CREATE TABLE square_uploads (
   upload_id TEXT PRIMARY KEY,

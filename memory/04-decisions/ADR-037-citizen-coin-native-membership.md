@@ -1,16 +1,17 @@
 # ADR-037 公民币原生会员订阅：按月自动扣 + 双边订阅市场（接 ADR-036 / 取代 ADR-034 加密路线 / 税务见 ADR-038）
 
-- 状态：**Proposed（草案，待用户拍板后定稿；本轮只出架构，不改链码）**
-- 决议日期：2026-07-16（草案，2 轮迭代 + 架构探源/对抗审查修正并入）
+- 状态：**Accepted（2026-07-17 定稿）**
+- 决议日期：2026-07-16 草案 → 2026-07-17 定稿
+- **定稿修订（2026-07-17，覆盖草案「只留卡」口径）**：**Stripe 美元支付全面下线，银行卡轨一并清除**。平台会员与创作者会员**统一走公民币链上订阅，无第二支付轨**。原草案「银行卡仍走 Stripe（只留卡）」作废；USD 定价、Stripe checkout/webhook、USDC 预付、官网会员页全部删除，价格唯一真源＝链上 `PlatformPrice`。下方正文凡提「只留卡 / 卡轨 / USD 价 / 官网卡档」均按本修订理解为**已删除**。
 - 关联：ADR-036（会员身份解耦三档）、ADR-034（USDC 预付——本决策**取代其加密路线**）、ADR-033（生命周期）、ADR-011、**ADR-038（创作者收入所得税，本 ADR 税务侧）**、ADR-030（onchina 控制台）、ADR-028/ADR-020（广场/聊天门禁）、`primitives::fee_policy`/`account_derive`/`cid`。
 
 ## 标题
 
-会员订阅直接用公民币【原生 GMB Balances】**按月自动扣**，钱包账户即唯一身份。落**双边订阅市场**：① 用户向"技术公司"订阅（平台会员）② 任意用户开自己会员体系被别人订阅赚公民币（创作者会员，扣所得税后归创作者，税务见 ADR-038）。**银行卡仍走 Stripe（只留卡，清除原虚拟货币订阅）**。
+会员订阅直接用公民币【原生 GMB Balances】**按月自动扣**，钱包账户即唯一身份。落**双边订阅市场**：① 用户向"技术公司"订阅（平台会员）② 任意用户开自己会员体系被别人订阅赚公民币（创作者会员，扣所得税后归创作者，税务见 ADR-038）。**支付轨唯一＝公民币，Stripe（含银行卡）与 USDC 预付全面下线**（2026-07-17 定稿修订）。
 
 ## 背景
 
-- ADR-034 的 USDC 路线依赖 Stripe 加密能力；LIVE 账户被判 `crypto_payments=inactive`，生产不可用。用户定调：平台+创作者订阅统一用公民币按月扣；Stripe 只保留银行卡。
+- ADR-034 的 USDC 路线依赖 Stripe 加密能力；LIVE 账户被判 `crypto_payments=inactive`，生产不可用。用户定调：平台+创作者订阅统一用公民币按月扣；**Stripe（含银行卡）全面下线**（2026-07-17 定稿）。
 - 独特优势：GMB 自有 runtime，可做外链做不到的原生订阅 pallet 按月自动扣。
 - 事实核对：公民币＝原生 GMB（2 位精度元/分、ED=111 分）；链上暂无订阅 pallet；worker 已能链读 + 交易广播兜底；现"订阅签名"`op_tag 0x1D` 是链下 BFF 授权（只留给卡轨），公民币要真金上链不复用 0x1D。
 
@@ -32,8 +33,8 @@
 - **平台三档公民币月价＝链上可写 `PlatformPrice: StorageMap<MembershipLevel, u128 /*分*/>`**，默认 `freedom=199900 / democracy=599900 / spark=5999900` 分（＝1999/5999/59999 元）。
 - 修订理由：需求 3"技术公司在 onchina 控制台自助调价"——常量改动要重新创世，与自助调价冲突（探源 gaps）。故价格**下沉链上 storage**，由技术公司经 `internal-vote` 写入（见 7）。`primitives::membership_price` 只留 `MembershipLevel` 枚举 + 单位 + 硬上下限护栏（是否设护栏＝拍板点），**不放可调数值**。
 - 创作者档：`CreatorPlans: StorageMap<Creator(cid), BoundedVec<CreatorTier{price_fen, tier_code}>>`，价格/权益由创作者自设，`set_creator_plans` caller 须解析为**已闭合 CID 纳税主体**（ADR-038 第 2 节）否则拒当创作者。
-- 不引预言机；USD 价仅留卡轨；两轨、两种订阅均不跨折算。
-- **双价源一致性（并入审查 L）**：`MembershipLevel` 档位集合以 `primitives` 枚举为唯一形状源，卡轨 `plans.ts` USD 价与币轨 `PlatformPrice` 分价各自存储，加启动期/CI 断言"两侧覆盖档位集合必须一致"（缺档 fail），防跨轨漂移。
+- 不引预言机；无 USD 价、无第二支付轨；两种订阅均不跨折算。
+- **价唯一真源（定稿修订）**：`MembershipLevel` 档位集合以 `primitives` 枚举为唯一形状源；**价格唯一真源＝链上 `PlatformPrice`（分）**，worker `plans.ts` 只存配额（发帖/媒体/聊天上限）不存价，App 直接链读 `PlatformPrice` 展示。原「卡轨 USD 价 vs 币轨分价双源一致性断言」随卡轨删除而作废。
 
 **4. 资金去向：全额到收款方，税走后置申报期结算（ADR-038）**
 - ① 平台会员：全额进 `PLATFORM_MEMBERSHIP_ACCOUNT` ＝「中国公民链技术有限公司」私权法人机构 `OP_MAIN`（**公司后期注册，地址注册后再填单源常量**；填入前平台公民币轨挂起）。
@@ -42,7 +43,7 @@
 - 均不进两和基金（OP_HE 专用）。
 
 **5. 权益（用量）体系分层：链上订阅关系为唯一真源**
-- ① 平台档用量（ADR-036 发帖/媒体/聊天文件上限）：资格＝链上 `Subscription[(user, Platform)]`（真源）；权益**值**＝Worker `plans.ts`/`limits/catalog.ts`（与支付路线无关，卡币两轨共用，链上不重复存值）；强制点保持现状三层。
+- ① 平台档用量（ADR-036 发帖/媒体/聊天文件上限）：资格＝链上 `Subscription[(user, Platform)]`（真源）；权益**值**＝Worker `plans.ts`/`limits/catalog.ts`（与支付无关，链上不重复存值）；强制点保持现状三层。
 - ② 创作者"解锁专属内容"：资格＝链上 `Subscription[(subscriber, Creator(cid))]`；BFF 新增 `requireCreatorSubscription`（与 `requireActiveMembership` 同构），挂广场私密帖/聊天群加入/信封解密授权点；依赖 ADR-028/ADR-020，属净新建。**门禁链读失败一律 fail-closed 拒绝**（并入审查 L，防 smoldot 抖动泄漏）。
 
 **6. 无退款契约（并入审查遗漏项）**
@@ -62,17 +63,17 @@
 
 ## 边界
 
-- 公民币轨天生 App-only（官网无私钥）；官网只出卡档 + "用 App 公民币订阅"把手。
-- 公民币获取途径（转账/发行/交易）是前置依赖，不在本卡；无币者留卡轨。
+- 公民币轨天生 App-only（官网无私钥）；官网会员页已整页删除，会员订阅只在 App 内完成。
+- 公民币获取途径（转账/充值/交易）是前置依赖，不在本卡；无币者需先获取公民币再订阅（无卡轨兜底）。
 - 创作者所得税＝ADR-038；本 ADR 只在扣款处调用 `TaxQuery`。
 
 ## 影响
 
 - **链（重大，重新创世无 migration）**：新 `subscription` pallet（`PlatformPrice`/`CreatorPlans`/`Subscription`/`DueQueue` + `subscribe`/`cancel`/`set_creator_plans`/`set_platform_price` + `on_initialize` 桶扫，全额转收款方）；收款成功向 ADR-038 `IncomeLedger` 记账（订阅侧不预扣税）。
-- **Worker**：删 `prepaid.ts` 等 USDC/Stripe-Crypto 残桩（见下）；加 `citizen_coin.ts`（链读 `Subscription` 确认 + 镜像 D1 `subscription_source='citizen_coin'`，`tx_hash` 幂等）+ `requireCreatorSubscription`；`service.ts` `subscriptionIsActive` 加 `citizen_coin` 分支；`types.ts`；D1 基线重建。复用 `chain/rpc.ts`+`chain/extrinsic_relay.ts`。
-- **Stripe 只留卡·删残桩清单**：整文件 `membership/prepaid.ts`；`webhook.ts` 的 `processPrepaidCheckout`+`checkout.session.completed` 分派；`service.ts` 的 `upsertPrepaidMembership`/`applyPrepaidTierChange`/`usdc_prepaid` 分支/`square_stripe_payments`/`allowPrepaidSwitch`；`subscribe.ts` 的 `trialEnd`/`payment_switch`；`account/service.ts` usdc 分支；D1 `square_stripe_payments` 表 + `prepaid_payment_ref` 列；`/prepaid*` 四路由；官网 `Membership.tsx` 加密预付整块 UI；`square_api_client.dart` `isPrepaid`。（`asset_balance_tile.dart` 的 "USDC" 是资产币种符号，勿误删。）保留卡轨收敛为 `customer.subscription.created/updated/deleted` 三事件。
-- **App**：`membership_page.dart` 公民币轨；创作者"开启我的会员/设档定价"+订阅他人 UI；专属内容发布/解锁门禁；删 USDC 入口。
-- **官网**：`Membership.tsx` 删加密卡 + 加把手，卡档不变。
+- **Worker（as-built 2026-07-17）**：删 `membership/{subscribe,webhook,prepaid,stripe_api}.ts` 四文件；加 `membership/citizen_coin.ts`（`platformSubscriptionConfirmRoute`：上链后镜像确认 + `last_tx_hash` 幂等，路由 `POST /v1/square/membership/confirm`）；`service.ts` `subscriptionIsActive` 收敛为按 `subscription_status='active'`（与创作者门禁同口径）；`types.ts` Env 删全部 Stripe 变量、`MembershipRow` 删 `subscription_source/stripe_*/cancel_at_period_end/prepaid_payment_ref`；`routes.ts`/`limits/catalog.ts`/`security/request_guard.ts` 删 subscribe/cancel/prepaid/webhook 路由与豁免；`account/service.ts` 删 Stripe 取消端点（订阅取消改走链上 extrinsic）；`account/purge.ts` 删注销退订（订阅与注销解耦）；`action_challenge.ts` `SignedAction` 删 `cancel_membership`/`subscribe_membership`；D1 `0001` 重建 `square_memberships`（新 schema）+ 删 `square_stripe_webhook_events`/`square_stripe_payments` 两表 + 删 `0002` 迁移。
+- **App（as-built）**：`rpc/subscription_rpc.dart` 加平台档 `subscribePlatform`/`cancelPlatform`（SCALE 对齐金标向量 `subscription_scale_vectors.json`）；`my/membership/subscription_service.dart`（平台订阅编排：热签+生物识别+confirm）；`membership_page.dart` 由官网跳转壳重建为 App 内公民币订阅；价格链读 `PlatformPrice`（`8964/chain/square_chain_service.dart`）；`8964/services/square_api_client.dart` 删 `priceUsdMonthly/isPrepaid/cancelAtPeriodEnd/subscriptionSource` + 加 `confirmPlatformSubscription`。创作者轨（已公民币）不动。
+- **官网（as-built）**：`citizenweb` 会员页 `Membership.tsx` **整页删除**（含路由/导航/专属组件），官网不再承载会员支付。
+- **控制台 / 配置（as-built）**：`citizenconsole` 删 `membership-test`/`membership-e2e` 动作 + `STRIPE_API_KEY`/`STRIPE_HOOK_SECRET` secret + `cloudflare-membership-e2e.mjs`；`wrangler.toml` 删 `FREEDOM/DEMOCRACY/SPARK_PRICE_ID`/`CHECKOUT_*`/`STRIPE_DEV_PROXY` 及 Stripe secret 说明（`TOPUP_*` 边界保留）。
 
 ## 备选方案
 
@@ -81,4 +82,4 @@
 ## 后续动作
 
 - 任务卡：`memory/08-tasks/open/20260716-citizen-coin-subscription.md`（第1部分订阅:平台会员+创作者会员,含框架目录方案）；税务=`20260716-onchain-tax-settlement.md`（第2部分,ADR-038）。
-- **待用户拍板架构政策点后**定稿 Accepted、进入实现（先链端 subscription pallet）。
+- **已定稿 Accepted**（2026-07-17）。链端 `square-post` 订阅 pallet + 创作者公民币轨已实建；本次（2026-07-17）完成平台会员改公民币 + Stripe/USDC 全系下线（Worker/App/官网/控制台/配置，as-built 见「影响」）。剩余：技术公司注册后补 `PLATFORM_MEMBERSHIP_ACCOUNT` 并接 onchina 调价；平台/创作者 confirm 的链读硬化（当前信任上链 tx，与创作者同一 TODO）。

@@ -1,14 +1,11 @@
 import type { Env, MediaAssetRow } from '../types';
 import { sanitizeOwnerAccount } from '../storage/r2_keys';
 import { deleteProviderAsset } from '../media/cloudflare_assets';
-import { getMembership } from '../membership/service';
-import { cancelStripeSubscriptionNow } from '../membership/stripe_api';
 import { clearOwnerSessions } from '../auth/session_index';
 import { closeChatRealtime } from '../chat/realtime';
 import { releaseStoredMedia } from '../limits/usage';
 
 export interface PurgeAccountResult {
-  stripe_canceled: boolean;
   deleted_media_assets: number;
   deleted_r2_objects: number;
   deleted_rows: number;
@@ -17,15 +14,13 @@ export interface PurgeAccountResult {
 /// 硬删除某账户在 Cloudflare 的**全部**数据。原则：
 /// - Chat 不保存消息或附件；注销先断开连接并删除全部设备路由材料。
 /// - 所有包含 A 的账户引用都删除，不保留粉丝、消费记录或影子关联。
-/// - Stripe 或媒体提供商失败不得阻塞 Chat 隐私数据硬删除。
+/// - 会员订阅与注销解耦：注销只删本地数据，不代签链上退订；链上订阅由用户自行取消或欠费即停。
+/// - 媒体提供商失败不得阻塞 Chat 隐私数据硬删除。
 export async function purgeAccount(
   env: Env,
   ownerAccount: string
 ): Promise<PurgeAccountResult> {
-  // 1. 先取会员，拿 stripe_subscription_id（删了就取不到了）。
-  const membership = await getMembership(env, ownerAccount);
-
-  // 2. Chat 活动连接先关闭；通信元数据和通讯录密文立即硬删除，支付故障不能阻塞隐私删除。
+  // 1. Chat 活动连接先关闭；通信元数据和通讯录密文立即硬删除，故障不能阻塞隐私删除。
   await closeChatRealtime(env, ownerAccount);
   await env.DB.batch([
     env.DB.prepare(`DELETE FROM chat_keypackages WHERE owner_account = ?`).bind(ownerAccount),
@@ -34,14 +29,7 @@ export async function purgeAccount(
     env.DB.prepare(`DELETE FROM square_contacts WHERE owner_account = ?`).bind(ownerAccount),
   ]);
 
-  // 3. Stripe 立即退订；Chat 已先删除，失败时账户可用主钥签名再次执行剩余清理。
-  let stripeCanceled = false;
-  if (membership?.stripe_subscription_id) {
-    await cancelStripeSubscriptionNow(env, membership.stripe_subscription_id);
-    stripeCanceled = true;
-  }
-
-  // 4. Images/Stream：先按 owner 取 provider_asset_id 删 provider 本体，再删 D1 行。
+  // 2. Images/Stream：先按 owner 取 provider_asset_id 删 provider 本体，再删 D1 行。
   const mediaRows =
     (
       await env.DB.prepare(
@@ -59,7 +47,7 @@ export async function purgeAccount(
   }
   await releaseStoredMedia(env, mediaRows);
 
-  // 5. R2 只清理当前允许的资料、广场和归档对象；Chat 永远不创建 R2 对象。
+  // 3. R2 只清理当前允许的资料、广场和归档对象；Chat 永远不创建 R2 对象。
   const safeOwner = sanitizeOwnerAccount(ownerAccount);
   let deletedR2 = 0;
   deletedR2 += await deleteR2Prefix(env, `profile/${safeOwner}/`);
@@ -67,7 +55,7 @@ export async function purgeAccount(
   // 视频冷归档的 R2 冷存原片一并硬删（注销才删；退订只归档不删）。
   deletedR2 += await deleteR2Prefix(env, `archive/${safeOwner}/`);
 
-  // 6. D1 批删账户全部引用。
+  // 4. D1 批删账户全部引用。
   const bind = (sql: string) => env.DB.prepare(sql).bind(ownerAccount);
   const results = await env.DB.batch([
     bind(`DELETE FROM square_memberships WHERE owner_account = ?`),
@@ -86,12 +74,11 @@ export async function purgeAccount(
   ]);
   const deletedRows = results.reduce((sum, result) => sum + (result.meta?.changes ?? 0), 0);
 
-  // 7. KV：身份缓存 + 该账户全部会话。
+  // 5. KV：身份缓存 + 该账户全部会话。
   await env.SQUARE_CACHE.delete(`square_identity:${ownerAccount}`);
   await clearOwnerSessions(env, ownerAccount);
 
   return {
-    stripe_canceled: stripeCanceled,
     deleted_media_assets: mediaRows.length,
     deleted_r2_objects: deletedR2,
     deleted_rows: deletedRows

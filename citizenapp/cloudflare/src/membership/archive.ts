@@ -60,7 +60,7 @@ export async function runVideoArchiveSweep(env: Env): Promise<{ owners: number; 
   return { owners: owners.length, archived };
 }
 
-/// 重订解冻：把该 owner 已归档的视频回灌 Stream。由 Stripe 订阅重新生效时触发。
+/// 重订解冻：把该 owner 已归档的视频回灌 Stream。由会员订阅重新生效时触发。
 export async function restoreOwnerVideos(env: Env, ownerAccount: string): Promise<{ restored: number }> {
   const videos = await selectVideoAssets(env, ownerAccount, 'archived');
   let restored = 0;

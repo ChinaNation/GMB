@@ -402,15 +402,11 @@ class FakeStmt {
         membership_level: 'democracy',
         expires_at: Date.now() + 60_000,
         updated_at: Date.now(),
-        subscription_source: 'stripe',
-        stripe_customer_id: 'cus_test',
-        stripe_subscription_id: 'sub_test',
-        stripe_price_id: 'price_test',
         subscription_status: 'active',
         current_period_start: Date.now(),
         current_period_end: Date.now() + 60_000,
-        cancel_at_period_end: 0,
-        entitlement_lapsed_at: null
+        entitlement_lapsed_at: null,
+        last_tx_hash: null
       } as T;
     }
     if (this.sql.includes('FROM square_uploads')) {

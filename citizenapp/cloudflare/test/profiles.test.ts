@@ -120,11 +120,12 @@ describe('GET /v1/square/users/:account', () => {
     });
   });
 
-  it('reports an expired membership as not active', async () => {
-    // 会员过期（expires_at 已过）→ membership_active=false（客户端据此不给勾）。
+  it('reports a cancelled membership as not active', async () => {
+    // 公民币轨只看镜像订阅态：subscription_status 非 active（已取消）→ membership_active=false
+    // （客户端据此不给勾）；不再按 expires_at 判过期。
     const env = fakeEnv({
       identity: { identity_level: 'voting', cid_number: 'CN001-CTZN-000000001-2026' },
-      membership: { membership_level: 'democracy', expires_at: 1 }
+      membership: { membership_level: 'democracy', subscription_status: 'cancelled' }
     });
     const response = await getUserProfileRoute(
       request(`https://w/v1/square/users/${owner}`, { authToken: 'tok' }),

@@ -55,7 +55,7 @@ export async function reserveUploadUsage(input: {
 }
 
 /**
- * Stripe 正常事件必须给出周期起点；缺失或越界时按固定周期终点反推，保证同一周期
+ * 计费周期镜像给出周期起点；缺失或越界时按固定周期终点反推，保证同一周期
  * 的每次请求都命中同一个 D1 主键，不能用请求时间制造新周期绕过累计额度。
  */
 export function membershipUsagePeriod(
@@ -180,8 +180,8 @@ async function assertProfitBudget(env: Env, hasVideo: boolean): Promise<void> {
     `SELECT COALESCE(SUM(CASE membership_level
         WHEN 'freedom' THEN 299 WHEN 'spark' THEN 9999 ELSE 999 END), 0) AS cents
       FROM square_memberships
-      WHERE subscription_status IN ('active', 'trialing') AND expires_at > ?`
-  ).bind(nowMs()).first<{ cents: number }>();
+      WHERE subscription_status = 'active'`
+  ).first<{ cents: number }>();
   const totals = await env.DB.prepare(
     `SELECT
       COALESCE(SUM(CASE WHEN resource_key = 'square_video' THEN video_seconds ELSE 0 END), 0) AS video_seconds,

@@ -9,6 +9,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/signed_extrinsic_builder.dart';
+import 'package:citizenapp/rpc/subscription_rpc.dart' show SubscriptionRpc;
 
 class SquareChainPublishedResult {
   const SquareChainPublishedResult({
@@ -122,6 +123,62 @@ class SquareChainService implements SquarePostChainPublisher {
       cidNumber: cid,
       identityLevel: candData != null ? 'candidate' : 'voting',
     );
+  }
+
+  /// 读链上平台会员某档月价：`PlatformPrice[level]`（u128 分，OptionQuery）。
+  /// 平台价链上单源（治理设置），未设该档返回 null，页面据此显示占位。
+  Future<int?> fetchPlatformPriceFen(String level) async {
+    final data = await _rpc.fetchStorage(
+      '0x${hexEncode(_platformPriceKey(SubscriptionRpc.membershipLevelByte(level)))}',
+    );
+    return decodePlatformPriceFen(data);
+  }
+
+  /// 一次读三档平台价（自由/民主/薪火），会员页据此逐档展示；缺档不入表。
+  Future<Map<String, int>> fetchAllPlatformPrices() async {
+    const levels = ['freedom', 'democracy', 'spark'];
+    final prices = <String, int>{};
+    for (final level in levels) {
+      final fen = await fetchPlatformPriceFen(level);
+      if (fen != null) prices[level] = fen;
+    }
+    return prices;
+  }
+
+  /// `PlatformPrice` map 键：twox128(SquarePost) ++ twox128(PlatformPrice)
+  /// ++ Twox64Concat(levelByte)。Twox64Concat(x) = twox64(x) ++ x。
+  static Uint8List _platformPriceKey(int levelByte) {
+    final palletHash = Hasher.twoxx128.hashString('SquarePost');
+    final storageHash = Hasher.twoxx128.hashString('PlatformPrice');
+    final levelBytes = Uint8List.fromList([levelByte]);
+    final keyHash = Hasher.twoxx64.hash(levelBytes);
+    final result = Uint8List(
+      palletHash.length +
+          storageHash.length +
+          keyHash.length +
+          levelBytes.length,
+    );
+    var offset = 0;
+    result.setAll(offset, palletHash);
+    offset += palletHash.length;
+    result.setAll(offset, storageHash);
+    offset += storageHash.length;
+    result.setAll(offset, keyHash);
+    offset += keyHash.length;
+    result.setAll(offset, levelBytes);
+    return result;
+  }
+
+  /// 解码 `PlatformPrice` 值：u128 小端 16 字节 → int（分级金额在 int 安全范围）。
+  /// 未设（null）或字节不足返回 null。
+  @visibleForTesting
+  static int? decodePlatformPriceFen(Uint8List? data) {
+    if (data == null || data.length < 16) return null;
+    var value = BigInt.zero;
+    for (var i = 15; i >= 0; i--) {
+      value = (value << 8) | BigInt.from(data[i]);
+    }
+    return value.toInt();
   }
 
   @visibleForTesting

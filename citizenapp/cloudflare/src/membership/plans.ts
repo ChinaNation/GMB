@@ -1,15 +1,13 @@
 // 会员套餐真源（ADR-036：会员与身份彻底解耦）。会员档 `membership_level` 是纯付费订阅轴，
 // **不再绑定任何身份档**——任意身份（访客/投票/竞选）可订阅任意会员档，全组合放行。
-// 三档：freedom 自由 $2.99 / democracy 民主 $9.99 / spark 薪火 $99.99。发帖额度、媒体质量、
-// 聊天文件上限均按所购套餐（membershipPlan(level)）。一改此表须同步 App 卡片、官网
-// Membership.tsx、Stripe price 映射（FREEDOM/DEMOCRACY/SPARK_PRICE_ID）与 webhook 反查。
+// 三档：freedom 自由 / democracy 民主 / spark 薪火。发帖额度、媒体质量、聊天文件上限均按
+// 所购套餐（membershipPlan(level)）。**价格与按月扣款是链上 `square-post` 的 `PlatformPrice`
+// 与 billing keeper 的职责**（公民币，分）；本表只定档位与配额，不涉计价。一改此表须同步 App 卡片。
 import { resourceLimit } from '../limits/catalog';
 
 export type MembershipLevel = 'freedom' | 'democracy' | 'spark';
 
 export type MediaQuality = 'sd' | 'hd';
-
-export type MembershipPriceCurrency = 'usd';
 
 const mib = 1024 * 1024;
 
@@ -37,9 +35,6 @@ export interface ArticleQuota {
 export interface MembershipPlan {
   membership_level: MembershipLevel;
   display_name: string;
-  price_currency: MembershipPriceCurrency;
-  price_usd_cents: number;
-  price_usd_monthly: string;
   /// 聊天文件大小上限（字节，会员权益之一，ADR-036）。媒体走 WebRTC P2P，客户端按此档强制；
   /// >100MB（仅 spark）的 Cloudflare 瞬时中转 transport 归卡2 阶段3，本表只定档位上限值。
   chat_file_max_bytes: number;
@@ -51,9 +46,6 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
   freedom: {
     membership_level: 'freedom',
     display_name: '自由会员',
-    price_currency: 'usd',
-    price_usd_cents: 299,
-    price_usd_monthly: '2.99',
     chat_file_max_bytes: 10 * mib,
     dynamic: {
       text_max_chars: 300,
@@ -77,9 +69,6 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
   democracy: {
     membership_level: 'democracy',
     display_name: '民主会员',
-    price_currency: 'usd',
-    price_usd_cents: 999,
-    price_usd_monthly: '9.99',
     chat_file_max_bytes: 100 * mib,
     dynamic: {
       text_max_chars: 300,
@@ -103,9 +92,6 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
   spark: {
     membership_level: 'spark',
     display_name: '薪火会员',
-    price_currency: 'usd',
-    price_usd_cents: 9999,
-    price_usd_monthly: '99.99',
     chat_file_max_bytes: 5120 * mib,
     dynamic: {
       text_max_chars: 300,

@@ -1,26 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import 'package:citizenapp/8964/chain/square_chain_service.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
+import 'package:citizenapp/my/creator/creator_money.dart' show fenToYuanLabel;
+import 'package:citizenapp/my/membership/subscription_service.dart';
 import 'package:citizenapp/ui/app_theme.dart';
-
-/// 官网会员订阅页（订阅 / 取消订阅 / 续订会员均在官网完成，App 只负责拉起浏览器）。
-///
-/// 默认打开已部署的官网会员页；官网主域不同时，构建期用
-/// `--dart-define=MEMBERSHIP_URL=...` 覆盖即可。
-class MembershipSiteConfig {
-  const MembershipSiteConfig._();
-
-  static const _defineName = 'MEMBERSHIP_URL';
-  static const _configured = String.fromEnvironment(_defineName);
-  static const _prodUrl = 'https://www.crcfrcn.com/membership';
-
-  static String get membershipUrl {
-    final value = _configured.trim();
-    return value.isNotEmpty ? value : _prodUrl;
-  }
-}
 
 /// 会员三档固定顺序（与价格升序一致，ADR-036，与身份彻底解耦）：
 /// 自由 freedom < 民主 democracy < 薪火 spark。
@@ -28,16 +13,25 @@ const List<String> _tierOrder = ['freedom', 'democracy', 'spark'];
 
 /// 「会员」页：三档订阅卡前后层叠，当前会员档卡在最上层，另两档退到下层露边等候选；
 /// 左右滑动 / 点击把候选档换到最上层。任意身份可订任意档（无身份门槛）。
+///
+/// 订阅 / 取消全部在 App 内完成：热钱包上链热签（生物识别）→ 链上 square-post
+/// 订阅授权 → confirm 刷新镜像。价格由链上 `PlatformPrice[level]` 单源读取（公民币）。
 class MembershipPage extends StatefulWidget {
   const MembershipPage({
     super.key,
     SquareApiClient? apiClient,
+    SquareChainService? chainService,
     SquareSessionProvider? sessionProvider,
+    SubscriptionService? subscriptionService,
   })  : _apiClient = apiClient,
-        _sessionProvider = sessionProvider;
+        _chainService = chainService,
+        _sessionProvider = sessionProvider,
+        _subscriptionService = subscriptionService;
 
   final SquareApiClient? _apiClient;
+  final SquareChainService? _chainService;
   final SquareSessionProvider? _sessionProvider;
+  final SubscriptionService? _subscriptionService;
 
   @override
   State<MembershipPage> createState() => _MembershipPageState();
@@ -47,12 +41,19 @@ class _MembershipPageState extends State<MembershipPage>
     with SingleTickerProviderStateMixin {
   late final SquareApiClient _apiClient =
       widget._apiClient ?? SquareApiClient();
+  late final SquareChainService _chainService =
+      widget._chainService ?? SquareChainService();
   late final SquareSessionProvider _sessionProvider =
       widget._sessionProvider ?? SquareSessionProvider.instance;
+  late final SubscriptionService _subscriptionService =
+      widget._subscriptionService ?? SubscriptionService();
   late final AnimationController _snapController;
   Animation<double>? _snapAnim;
 
   bool _loading = true;
+
+  /// 订阅 / 取消上链进行中：期间禁用按钮、显示按钮内进度圈。
+  bool _busy = false;
   Object? _error;
   _MembershipViewData? _data;
 
@@ -88,18 +89,29 @@ class _MembershipPageState extends State<MembershipPage>
       final session = await _sessionProvider.ensureSession();
       final _MembershipViewData data;
       if (session == null) {
-        data = const _MembershipViewData(ownerAccount: '', state: null);
+        data = const _MembershipViewData(
+          ownerAccount: '',
+          state: null,
+          prices: <String, int>{},
+        );
       } else {
+        // 会员态与链上价格并行拉取；价格 best-effort（读不到该档显示占位「—」）。
+        final pricesFuture = _chainService
+            .fetchAllPlatformPrices()
+            .catchError((_) => const <String, int>{});
         final state = await _apiClient.fetchMembership(session);
+        final prices = await pricesFuture;
         data = _MembershipViewData(
           ownerAccount: session.ownerAccount,
           state: state,
+          prices: prices,
         );
       }
       if (!mounted) return;
       // 默认停在「当前所购会员档」卡；无订阅则停在首档（自由）。
-      final defaultIndex =
-          data.state == null ? 0 : _tierIndexOfLevel(data.state!.membershipLevel);
+      final defaultIndex = data.state == null
+          ? 0
+          : _tierIndexOfLevel(data.state!.membershipLevel);
       setState(() {
         _data = data;
         _page = defaultIndex.toDouble();
@@ -111,6 +123,31 @@ class _MembershipPageState extends State<MembershipPage>
         _error = e;
         _loading = false;
       });
+    }
+  }
+
+  /// App 内订阅 / 取消：据当前订阅态决定动作 → 上链热签（生物识别）→ confirm → 刷新。
+  /// 失败弹 SnackBar（文案单源自 [SubscriptionException]）。
+  Future<void> _handleAction(String level) async {
+    if (_busy) return;
+    final state = _data?.state;
+    if (state == null) return;
+    final action = _actionFor(state, level);
+    setState(() => _busy = true);
+    try {
+      if (action == _SubscribeAction.cancel) {
+        await _subscriptionService.cancel();
+      } else {
+        await _subscriptionService.subscribe(level);
+      }
+      if (!mounted) return;
+      await _load();
+    } on SubscriptionException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -214,6 +251,7 @@ class _MembershipPageState extends State<MembershipPage>
                         index: index,
                         plan: plans[index],
                         state: state,
+                        priceFen: data.prices[plans[index].membershipLevel],
                         cardWidth: cardWidth,
                         cardHeight: bandHeight,
                         peek: peek,
@@ -243,6 +281,7 @@ class _MembershipPageState extends State<MembershipPage>
     required int index,
     required SquareMembershipPlan plan,
     required SquareMembershipState state,
+    required int? priceFen,
     required double cardWidth,
     required double cardHeight,
     required double peek,
@@ -265,7 +304,9 @@ class _MembershipPageState extends State<MembershipPage>
             child: _MembershipTierCard(
               plan: plan,
               state: state,
-              onTapAction: () => _openMembershipSite(context),
+              priceFen: priceFen,
+              busy: _busy,
+              onTapAction: () => _handleAction(plan.membershipLevel),
               elevated: isFront,
             ),
           ),
@@ -289,47 +330,43 @@ class _MembershipPageState extends State<MembershipPage>
       ),
     );
   }
-
-  Future<void> _openMembershipSite(BuildContext context) async {
-    final uri = Uri.tryParse(MembershipSiteConfig.membershipUrl);
-    var ok = false;
-    if (uri != null) {
-      try {
-        ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } on Exception catch (_) {
-        ok = false;
-      }
-    }
-    if (!ok && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('无法打开官网，请稍后再试')),
-      );
-    }
-  }
 }
 
 class _MembershipViewData {
   const _MembershipViewData({
     required this.ownerAccount,
     required this.state,
+    required this.prices,
   });
 
   final String ownerAccount;
   final SquareMembershipState? state;
+
+  /// 各档链上月价（分，公民币）；缺档表示链上未设该档价，卡片显示占位「—」。
+  final Map<String, int> prices;
 }
 
 /// 单张会员档卡（ADR-036）：一张卡 = 一个订阅档（自由/民主/薪火）。档色顶带 + 大字档名
-/// + 会员权益（聊天文件上限 / 动态 / 文章）+ 价格 + 订阅按钮。无任何身份字段。
+/// + 会员权益（聊天文件上限 / 动态 / 文章）+ 公民币月价 + 订阅按钮。无任何身份字段。
 class _MembershipTierCard extends StatelessWidget {
   const _MembershipTierCard({
     required this.plan,
     required this.state,
+    required this.priceFen,
+    required this.busy,
     required this.onTapAction,
     this.elevated = true,
   });
 
   final SquareMembershipPlan plan;
   final SquareMembershipState state;
+
+  /// 本档链上月价（分）；null=链上未设该档价，价签显示占位「—」。
+  final int? priceFen;
+
+  /// 订阅 / 取消上链进行中：禁用按钮并显示进度圈。
+  final bool busy;
+
   final VoidCallback onTapAction;
 
   /// 是否在最上层（决定投影强度）。
@@ -405,7 +442,7 @@ class _MembershipTierCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  // 价格：档色填充标签。
+                  // 价格：档色填充标签，公民币月价（链上单源，读不到显示「—」）。
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -414,7 +451,7 @@ class _MembershipTierCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      plan.priceLabel,
+                      _priceLabel(priceFen),
                       style: TextStyle(
                         color: onTier,
                         fontSize: 16,
@@ -428,6 +465,8 @@ class _MembershipTierCard extends StatelessWidget {
                     child: _SubscribeButton(
                       label: _actionLabel(action),
                       color: tierColor,
+                      busy: busy,
+                      subscribe: action == _SubscribeAction.subscribe,
                       onTap: onTapAction,
                     ),
                   ),
@@ -490,40 +529,60 @@ class _MembershipTierCard extends StatelessWidget {
   }
 }
 
-/// 订阅按钮三态：未订阅本档→订阅 / 本档自动续费中→取消订阅 / 本档已取消未到期→续订会员。
-enum _SubscribeAction { subscribe, cancel, resume }
+/// 本档链上月价 → 展示文案；null=链上未设该档价，显示占位「—」。
+String _priceLabel(int? priceFen) =>
+    priceFen == null ? '—' : '${fenToYuanLabel(priceFen)} 公民币/月';
+
+/// 订阅按钮双态：未订阅本档→订阅 / 本档订阅生效中→取消订阅。
+enum _SubscribeAction { subscribe, cancel }
 
 _SubscribeAction _actionFor(SquareMembershipState state, String level) {
   final isActiveTier =
       state.subscriptionActive && state.membershipLevel == level;
-  if (!isActiveTier) return _SubscribeAction.subscribe;
-  return state.cancelAtPeriodEnd
-      ? _SubscribeAction.resume
-      : _SubscribeAction.cancel;
+  return isActiveTier ? _SubscribeAction.cancel : _SubscribeAction.subscribe;
 }
 
 String _actionLabel(_SubscribeAction action) => switch (action) {
       _SubscribeAction.subscribe => '订阅',
       _SubscribeAction.cancel => '取消订阅',
-      _SubscribeAction.resume => '续订会员',
     };
 
 class _SubscribeButton extends StatelessWidget {
   const _SubscribeButton({
     required this.label,
     required this.color,
+    required this.busy,
+    required this.subscribe,
     required this.onTap,
   });
 
   final String label;
   final Color color;
+  final bool busy;
+
+  /// true=订阅动作（前景色实心）；false=取消动作（图标区分）。
+  final bool subscribe;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return FilledButton.icon(
-      onPressed: onTap,
-      icon: const Icon(Icons.open_in_new, size: 16),
+      onPressed: busy ? null : onTap,
+      icon: busy
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : Icon(
+              subscribe
+                  ? Icons.workspace_premium_outlined
+                  : Icons.cancel_outlined,
+              size: 16,
+            ),
       label: Text(label),
       style: FilledButton.styleFrom(
         backgroundColor: color,
@@ -635,8 +694,8 @@ class _PageDots extends StatelessWidget {
   }
 }
 
-/// 订阅起止横幅（ADR-034 段4）：展示当前有效会员的档位、支付路线与订阅起止日期。
-/// 会员操作（订阅 / 取消 / 换档）在官网完成，App 只读展示。
+/// 订阅起止横幅（ADR-034 段4）：展示当前有效会员的档位、续费态与订阅起止日期。
+/// 会员操作（订阅 / 取消）已在 App 内卡片按钮完成，横幅只读展示。
 class _ActiveMembershipBanner extends StatelessWidget {
   const _ActiveMembershipBanner({required this.state});
 
@@ -646,12 +705,12 @@ class _ActiveMembershipBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final plan = state.planForLevel(state.membershipLevel);
     final name = plan?.displayName ?? '会员';
-    // 路线标签直白点出续费行为：预付到期失效、卡已取消到期终止、卡在续则自动续费。
-    final route = state.isPrepaid
-        ? '预付 · 到期失效'
-        : state.cancelAtPeriodEnd
-            ? '已取消 · 到期终止'
-            : '自动续费';
+    // 续费态直白点出扣款行为：已取消到期终止、欠费待补扣、其余自动续费。
+    final route = switch (state.subscriptionStatus) {
+      'cancelled' => '已取消 · 到期终止',
+      'past_due' => '欠费 · 待补扣',
+      _ => '自动续费',
+    };
     final window =
         '订阅 ${_formatYmd(state.currentPeriodStart)} ~ ${_formatYmd(state.expiresAt)}';
     return Container(
@@ -748,12 +807,12 @@ class _MembershipMessage extends StatelessWidget {
 
 const int _mib = 1024 * 1024;
 
-/// 三档兜底套餐：Worker 未下发 plans 时使用，与官网和 Worker 参数对齐（ADR-036）。
+/// 三档兜底套餐：Worker 未下发 plans 时使用，与 Worker 权益参数对齐（ADR-036）。
+/// 价格不入兜底套餐（链上 `PlatformPrice` 单源），只兜底权益字段。
 const List<SquareMembershipPlan> _fallbackMembershipPlans = [
   SquareMembershipPlan(
     membershipLevel: 'freedom',
     displayName: '自由会员',
-    priceUsdMonthly: '2.99',
     chatFileMaxBytes: 10 * _mib,
     dynamicTextMaxChars: 300,
     dynamicImageQuality: 'sd',
@@ -771,7 +830,6 @@ const List<SquareMembershipPlan> _fallbackMembershipPlans = [
   SquareMembershipPlan(
     membershipLevel: 'democracy',
     displayName: '民主会员',
-    priceUsdMonthly: '9.99',
     chatFileMaxBytes: 100 * _mib,
     dynamicTextMaxChars: 300,
     dynamicImageQuality: 'hd',
@@ -789,7 +847,6 @@ const List<SquareMembershipPlan> _fallbackMembershipPlans = [
   SquareMembershipPlan(
     membershipLevel: 'spark',
     displayName: '薪火会员',
-    priceUsdMonthly: '99.99',
     chatFileMaxBytes: 5120 * _mib,
     dynamicTextMaxChars: 300,
     dynamicImageQuality: 'hd',
@@ -812,7 +869,8 @@ List<SquareMembershipPlan> _orderedPlans(List<SquareMembershipPlan> plans) {
     for (final plan in plans) {
       if (plan.membershipLevel == level) return plan;
     }
-    return _fallbackMembershipPlans.firstWhere((p) => p.membershipLevel == level);
+    return _fallbackMembershipPlans
+        .firstWhere((p) => p.membershipLevel == level);
   }
 
   return _tierOrder.map(planFor).toList();

@@ -112,7 +112,7 @@ describe('consumeActionSignature', () => {
     await expect(
       consumeActionSignature(env, {
         ownerAccount: OWNER,
-        action: 'cancel_membership',
+        action: 'set_creator_plan',
         challengeId: challenge.challengeId,
         signature: 'sig'
       })
@@ -263,16 +263,16 @@ class FakeKv {
 
 describe('purgeAccount', () => {
   afterEach(() => vi.unstubAllGlobals());
-  // 不 mock stripe_api：真 cancelStripeSubscriptionNow 在 dev 短路成功、缺密钥抛 503，
-  // 直接用 env 驱动「退订成功 / 退订失败」两条路径，避免 mock spy 的报错串扰。
-  function buildEnv(options?: { stripeConfigured?: boolean }): {
+  // 会员订阅与注销已解耦（公民币轨）：注销只硬删本地数据，不代签链上退订，
+  // 因此不再有 stripe 退订成功/失败分支，purge 也不再抛支付相关错误。
+  function buildEnv(): {
     env: Env;
     db: PurgeDb;
     r2: FakeR2;
     kv: FakeKv;
   } {
     const db = new PurgeDb();
-    db.membership = { owner_account: OWNER, stripe_subscription_id: 'sub_1' };
+    db.membership = { owner_account: OWNER };
     db.mediaRows = [{
       upload_id: 'squ_1', post_id: 'sqp_1', owner_account: OWNER, media_index: 0,
       media_kind: 'image', provider: 'cloudflare_images', provider_asset_id: 'img_1',
@@ -291,25 +291,26 @@ describe('purgeAccount', () => {
     kv.store.set(`square_identity:${OWNER}`, '{"identity_level":"voting"}');
     kv.store.set(`square_sessions_by_owner:${OWNER}`, JSON.stringify(['tok1']));
     kv.store.set('square_session:tok1', '{}');
-    // STRIPE_DEV_PROXY 短路真退订；不设则缺密钥 → cancel 抛 503。
     const env = {
       DB: db,
       SQUARE_MEDIA: r2,
       SQUARE_CACHE: kv,
       CF_ACCOUNT_ID: 'account',
-      CF_API_TOKEN: 'token',
-      ...(options?.stripeConfigured === false ? {} : { STRIPE_DEV_PROXY: '1' })
+      CF_API_TOKEN: 'token'
     } as unknown as Env;
     return { env, db, r2, kv };
   }
 
-  it('cancels Stripe, deletes all A rows and current R2 objects, and clears sessions', async () => {
+  it('硬删除全部 A 行与当前 R2 对象、清空会话，并返回删除计数', async () => {
     const { env, db, r2, kv } = buildEnv();
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({ success: true, result: {} })));
 
     const result = await purgeAccount(env, OWNER);
 
-    expect(result.stripe_canceled).toBe(true);
+    // 新 PurgeAccountResult 形状：只含三项计数，不再有 stripe_canceled。
+    expect(result.deleted_media_assets).toBe(1);
+    expect(result.deleted_r2_objects).toBe(3);
+    expect(result.deleted_rows).toBeGreaterThan(0);
 
     // A 的 Chat 路由、浏览、关注两端引用和业务表全部进入硬删除清单。
     const joined = db.deletes.join('\n');
@@ -329,16 +330,5 @@ describe('purgeAccount', () => {
     expect(kv.store.has(`square_identity:${OWNER}`)).toBe(false);
     expect(kv.store.has('square_session:tok1')).toBe(false);
     expect(kv.store.has(`square_sessions_by_owner:${OWNER}`)).toBe(false);
-  });
-
-  it('deletes Chat privacy data before reporting a Stripe cancellation failure', async () => {
-    const { env, db, r2 } = buildEnv({ stripeConfigured: false });
-
-    await expect(purgeAccount(env, OWNER)).rejects.toMatchObject({
-      code: 'stripe_not_configured'
-    });
-    expect(db.deletes.join('\n')).toContain('DELETE FROM chat_devices WHERE owner_account = ?');
-    expect(db.deletes.join('\n')).toContain('DELETE FROM square_contacts WHERE owner_account = ?');
-    expect(r2.deleted).toHaveLength(0);
   });
 });

@@ -17,16 +17,14 @@ import {
 /// set_creator_plan：创作者覆盖式设置自己会员档（离链存 Cloudflare，context=tiers 规范化哈希，防替换）。
 export type SignedAction =
   | 'delete_account'
-  | 'cancel_membership'
-  | 'subscribe_membership'
   | 'set_creator_plan';
 
 const ACTION_CHALLENGE_TTL_SECONDS = 300;
 
 /// 动作签名 SCALE payload：`action ‖ owner ‖ challenge_id [‖ context] ‖ expires_at`。
 /// action 编入正文 → 登录/其它动作的签名无法被重放成本动作；[context] 为动作专属
-/// 绑定字段（subscribe_membership = 会员等级），存在时插在 challenge_id 与 expires_at
-/// 之间，防「签一次换挡下单」。被签消息 = signing_message(OP_SIGN_SQUARE_ACTION, payload)。
+/// 绑定字段（set_creator_plan = tiers 规范化哈希），存在时插在 challenge_id 与 expires_at
+/// 之间，防「签一次改内容」。被签消息 = signing_message(OP_SIGN_SQUARE_ACTION, payload)。
 function buildActionScalePayload(
   action: SignedAction,
   ownerAccount: string,
@@ -80,7 +78,7 @@ export interface ActionSignatureInput {
   action: SignedAction;
   challengeId: string;
   signature: string;
-  /// 动作专属绑定字段（subscribe_membership = 会员等级），须与下发时一致。
+  /// 动作专属绑定字段（set_creator_plan = tiers 规范化哈希），须与下发时一致。
   context?: string;
 }
 
@@ -145,7 +143,7 @@ export async function consumeActionSignature(
 }
 
 /// 释放（回滚）一个已消费的动作挑战：used_at 重置为 NULL，供下游副作用
-/// （Stripe 建单 / 取消、purge）失败后原地重试，避免烧掉签名逼用户重签。
+/// （purge 注销）失败后原地重试，避免烧掉签名逼用户重签。
 /// 仅应在 consumeActionSignature 成功、随后副作用失败时调用；expires_at 不变，
 /// 因此释放不延长挑战寿命、不放大重放窗口。
 export async function releaseActionChallenge(
