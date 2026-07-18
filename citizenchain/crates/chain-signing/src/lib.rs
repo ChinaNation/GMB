@@ -13,7 +13,13 @@ use sp_runtime::{generic::Era, traits::IdentifyAccount, AccountId32, MultiAddres
 pub struct SigningMaterial {
     pub call: runtime::RuntimeCall,
     pub tx_ext: runtime::TxExtension,
+    /// QR `b.d` 必须携带的完整审阅载荷。
+    ///
+    /// 这里不能调用 `SignedPayload::encode()` 取值：Substrate 在 payload
+    /// 超过 256 字节时会把 Encode/using_encoded 结果替换成 32 字节
+    /// blake2_256。QR 展示需要完整 payload，签名才使用下方 `signing_bytes`。
     pub payload: Vec<u8>,
+    /// sr25519 实际签名输入，严格复用 Substrate `SignedPayload::using_encoded` 规则。
     pub signing_bytes: Vec<u8>,
 }
 
@@ -76,34 +82,35 @@ pub fn build_signing_material_from_call(
     tx_version: u32,
 ) -> SigningMaterial {
     let tx_ext = build_tx_extension(nonce);
-    let raw_payload = runtime::SignedPayload::from_raw(
-        call.clone(),
-        tx_ext.clone(),
-        (
-            (),
-            (),
-            (),
-            spec_version,
-            tx_version,
-            genesis_hash,
-            genesis_hash,
-            (),
-            (),
-            (),
-            None,
-            (),
-        ),
+    let additional_signed = (
+        (),
+        (),
+        (),
+        spec_version,
+        tx_version,
+        genesis_hash,
+        genesis_hash,
+        (),
+        (),
+        (),
+        None,
+        (),
     );
+    // 审阅载荷是 SignedPayload 的原始三元组 SCALE 字节，用于钱包完整解码和中文展示。
+    // 签名字节另走 `using_encoded`，保留 Substrate 对 >256B payload 签 hash 的规则。
+    let review_payload = (call.clone(), tx_ext.clone(), additional_signed).encode();
+    let raw_payload =
+        runtime::SignedPayload::from_raw(call.clone(), tx_ext.clone(), additional_signed);
 
     SigningMaterial {
         call,
         tx_ext,
-        payload: raw_payload.encode(),
+        payload: review_payload,
         signing_bytes: raw_payload.using_encoded(|payload| payload.to_vec()),
     }
 }
 
-/// 构建 QR 冷签需要的完整 payload 和实际 sr25519 签名字节。
+/// 构建 QR 冷签需要的完整审阅 payload 和实际 sr25519 签名字节。
 pub fn build_signing_payloads(
     call_data: &[u8],
     genesis_hash: &[u8; 32],
@@ -245,6 +252,21 @@ pub fn dry_run_reject_message(result_bytes: &[u8], raw_hex: &str) -> String {
     format!("交易校验失败，已拒绝提交: {reason} (hex: {raw_hex})")
 }
 
+/// 把 dry-run RPC 层失败转为中文预检拒绝。
+///
+/// 这里覆盖 RuntimeApi / wasm trap 等运行时校验崩溃；调用方不得继续
+/// `author_submitExtrinsic`，否则同一错误会在交易池终审阶段再次冒出。
+pub fn preflight_reject_message(error: &str) -> String {
+    if error.contains("RuntimeApi")
+        || error.contains("wasm trap")
+        || error.contains("unreachable")
+        || error.contains("TaggedTransactionQueue_validate_transaction")
+    {
+        return format!("链运行时校验失败，交易未提交: {error}");
+    }
+    format!("链交易预检失败，交易未提交: {error}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -258,6 +280,7 @@ mod tests {
         let genesis = [9u8; 32];
         let m = build_signing_material(&call_data, &genesis, 5, 1, 1).expect("material");
         assert_eq!(m.call.encode(), call_data);
+        // 小载荷:签名输入 == 审阅 payload 本体。
         assert!(m.payload.len() <= 256);
         assert_eq!(m.signing_bytes, m.payload);
 
@@ -265,8 +288,10 @@ mod tests {
             remark: vec![7u8; 400],
         });
         let big = build_signing_material(&big_call.encode(), &genesis, 5, 1, 1).expect("material");
+        // 大载荷:QR 仍必须拿到完整审阅 payload；只有实际签名输入是 32 字节 blake2_256。
+        assert!(big.payload.len() > 256);
         assert_eq!(big.signing_bytes.len(), 32);
-        assert_eq!(big.payload, big.signing_bytes);
+        assert_ne!(big.payload, big.signing_bytes);
     }
 
     #[test]
@@ -291,5 +316,14 @@ mod tests {
             dry_run_reject_message(&[0x01, 0x00, 0x02], "0x010002"),
             "上一笔交易尚未出块，请稍候再试"
         );
+    }
+
+    #[test]
+    fn preflight_runtime_api_error_stops_before_submit() {
+        let message = preflight_reject_message(
+            r#"RuntimeApi("Execution failed: wasm trap: unreachable in TaggedTransactionQueue_validate_transaction")"#,
+        );
+        assert!(message.starts_with("链运行时校验失败，交易未提交"));
+        assert!(message.contains("TaggedTransactionQueue_validate_transaction"));
     }
 }

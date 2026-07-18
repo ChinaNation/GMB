@@ -2,9 +2,10 @@
 
 use super::*;
 use admin_primitives::{AdminAccountKind, InstitutionAdminQuery};
+use codec::Encode;
 use frame_support::{
     assert_noop, assert_ok, derive_impl,
-    traits::{ConstU32, ConstU64},
+    traits::{ConstU32, ConstU64, Hooks, StorageVersion},
 };
 use frame_system as system;
 use primitives::cid::code::code_bytes;
@@ -136,6 +137,45 @@ fn indexed_admins(count: u32) -> Vec<InstitutionAdmin<AccountId32>> {
             }
         })
         .collect()
+}
+
+#[test]
+fn public_admins_upgrade_migrates_legacy_account_vec() {
+    new_test_ext().execute_with(|| {
+        let cid: AdminCidNumber = b"GD001-CGOV0-923456789-2026"
+            .to_vec()
+            .try_into()
+            .expect("cid fits");
+        type LegacyAdmins = BoundedVec<AccountId32, ConstU32<1989>>;
+        let legacy_admins: LegacyAdmins = vec![account(1), account(2), account(3)]
+            .try_into()
+            .expect("legacy admins fit");
+        let legacy = InstitutionAdmins {
+            institution_code: code_bytes("CGOV"),
+            admins: legacy_admins,
+        };
+
+        sp_io::storage::set(
+            &AdminAccounts::<Test>::hashed_key_for(&cid),
+            &legacy.encode(),
+        );
+        StorageVersion::new(2).put::<Pallet<Test>>();
+
+        <PublicAdmins as Hooks<BlockNumberFor<Test>>>::on_runtime_upgrade();
+
+        let stored = AdminAccounts::<Test>::get(&cid).expect("migrated admins exist");
+        assert_eq!(stored.institution_code, code_bytes("CGOV"));
+        assert_eq!(stored.admins.len(), 3);
+        assert_eq!(stored.admins[0].admin_account, account(1));
+        assert_eq!(
+            stored.admins[0].admin_name.as_slice(),
+            admin_primitives::DEFAULT_ADMIN_NAME
+        );
+        assert_eq!(
+            StorageVersion::get::<Pallet<Test>>(),
+            StorageVersion::new(4)
+        );
+    });
 }
 
 #[test]

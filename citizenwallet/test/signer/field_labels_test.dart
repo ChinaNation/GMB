@@ -1,7 +1,22 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:citizenwallet/signer/action_labels.dart';
 import 'package:citizenwallet/signer/field_labels.dart';
 
 void main() {
+  group('action labels', () {
+    test('已登记 action code 必须有中文动作名', () {
+      for (final entry in actionKeyByCode.entries) {
+        expect(
+          actionLabelForDecodedAction(entry.value),
+          isNotNull,
+          reason: '0x${entry.key.toRadixString(16)} 缺少中文动作名',
+        );
+      }
+      expect(actionLabelForQrAction(9), '广场账户动作签名');
+      expect(actionLabelForQrAction(0x7fff), isNull);
+    });
+  });
+
   group('fieldLabelText', () {
     test('公民身份确认(citizen_identity)全部 reviewFields key 有中文标签', () {
       const keys = [
@@ -13,7 +28,7 @@ void main() {
         'residence',
       ];
       for (final key in keys) {
-        expect(fieldLabelText(key), isNot('未知字段'), reason: key);
+        expect(hasFieldLabel(key), isTrue, reason: key);
       }
     });
 
@@ -28,7 +43,7 @@ void main() {
         'residence',
       ];
       for (final key in keys) {
-        expect(fieldLabelText(key), isNot('未知字段'), reason: key);
+        expect(hasFieldLabel(key), isTrue, reason: key);
       }
     });
 
@@ -47,7 +62,7 @@ void main() {
         'citizen_sex',
       ];
       for (final key in keys) {
-        expect(fieldLabelText(key), isNot('未知字段'), reason: key);
+        expect(hasFieldLabel(key), isTrue, reason: key);
       }
     });
 
@@ -89,7 +104,7 @@ void main() {
         'reason_hash',
       ];
       for (final key in keys) {
-        expect(fieldLabelText(key), isNot('未知字段'), reason: key);
+        expect(hasFieldLabel(key), isTrue, reason: key);
       }
     });
 
@@ -98,8 +113,13 @@ void main() {
       expect(fieldLabelText('amount_主账户'), '主账户金额');
     });
 
-    test('未登记 key 用中文兜底', () {
-      expect(fieldLabelText('never_registered_key'), '未知字段');
+    test('未登记 key 不允许生成展示兜底', () {
+      expect(fieldLabelTextOrNull('never_registered_key'), isNull);
+      expect(hasFieldLabel('never_registered_key'), isFalse);
+      expect(
+        () => fieldLabelText('never_registered_key'),
+        throwsStateError,
+      );
     });
   });
 

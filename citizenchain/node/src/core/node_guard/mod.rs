@@ -40,7 +40,7 @@ pub struct NodeGuard<I> {
     inner: I,
     client: Arc<FullClient>,
     backend: Arc<FullBackend>,
-    cid_lifecycle: cid_lifecycle::GenesisReference,
+    cid_lifecycle: Option<cid_lifecycle::GenesisReference>,
 }
 
 /// 所有合法 finalize 原生发行按账户汇总后，由 `NodeGuard` 统一核对余额和总发行量。
@@ -397,115 +397,191 @@ fn verify_precomputed_changes(
 }
 
 impl<I> NodeGuard<I> {
-    /// 装配节点守卫，并用 block#0 状态校验当前所有已注册永久策略的创世基准。
-    pub fn new(
-        inner: I,
-        client: Arc<FullClient>,
-        backend: Arc<FullBackend>,
-    ) -> Result<Self, String> {
+    /// 装配节点守卫。
+    ///
+    /// 启动阶段只做本机已持有状态的守卫自检：自检失败说明当前数据库里已有状态和当前
+    /// 节点二进制不完全匹配，但不能反过来杀死节点进程。节点守卫真正执法的边界是后续
+    /// 区块、状态包和候选 runtime 导入；这些路径仍然 fail-closed，坏输入一律不委派内层导入器。
+    pub fn new(inner: I, client: Arc<FullClient>, backend: Arc<FullBackend>) -> Self {
         let genesis_hash = client.info().genesis_hash;
-        let governance_catalog_keys = Self::state_keys_for_prefixes(
+        let mut startup_issues = Vec::<String>::new();
+
+        let governance_catalog_keys = match Self::state_keys_for_prefixes(
             &client,
             genesis_hash,
             governance_skeleton::storage_key::fixed_catalog_prefixes(),
-        )?;
-        governance_skeleton::check_catalog_keys(&governance_catalog_keys)
-            .map_err(|e| format!("节点守卫:创世固定治理岗位目录校验失败:{e:?}"))?;
-        governance_skeleton::check_skeleton_invariants(|key| {
+        ) {
+            Ok(keys) => keys,
+            Err(reason) => {
+                startup_issues.push(format!("固定治理岗位目录枚举失败:{reason}"));
+                Vec::new()
+            }
+        };
+        if let Err(reason) = governance_skeleton::check_catalog_keys(&governance_catalog_keys) {
+            startup_issues.push(format!("固定治理岗位目录校验失败:{reason:?}"));
+        }
+        if let Err(reason) = governance_skeleton::check_skeleton_invariants(|key| {
             client
                 .storage(genesis_hash, &StorageKey(key.to_vec()))
                 .ok()
                 .flatten()
                 .map(|data| data.0)
-        })
-        .map_err(|e| format!("节点守卫:创世固定治理骨架校验失败:{e:?}"))?;
-        national_body_composition::check_full_state(|key| {
+        }) {
+            startup_issues.push(format!("固定治理骨架校验失败:{reason:?}"));
+        }
+        if let Err(reason) = national_body_composition::check_full_state(|key| {
             client
                 .storage(genesis_hash, &StorageKey(key.to_vec()))
                 .ok()
                 .flatten()
                 .map(|data| data.0)
-        })
-        .map_err(|e| format!("节点守卫:创世国家机构组成校验失败:{e:?}"))?;
-        let vote_state_keys = Self::state_keys_for_prefixes(
+        }) {
+            startup_issues.push(format!("国家机构组成校验失败:{reason:?}"));
+        }
+        let vote_state_keys = match Self::state_keys_for_prefixes(
             &client,
             genesis_hash,
             vec![
                 national_body_composition::storage_key::threshold_prefix(),
                 national_body_composition::storage_key::proposal_prefix(),
             ],
-        )?;
-        national_body_composition::check_vote_state_keys(&vote_state_keys, |key| {
+        ) {
+            Ok(keys) => keys,
+            Err(reason) => {
+                startup_issues.push(format!("固定治理阈值枚举失败:{reason}"));
+                Vec::new()
+            }
+        };
+        if let Err(reason) =
+            national_body_composition::check_vote_state_keys(&vote_state_keys, |key| {
+                client
+                    .storage(genesis_hash, &StorageKey(key.to_vec()))
+                    .ok()
+                    .flatten()
+                    .map(|data| data.0)
+            })
+        {
+            startup_issues.push(format!("固定治理阈值校验失败:{reason:?}"));
+        }
+        if let Err(reason) = fullnode_issuance::check_genesis(|key| {
             client
                 .storage(genesis_hash, &StorageKey(key.to_vec()))
                 .ok()
                 .flatten()
                 .map(|data| data.0)
-        })
-        .map_err(|e| format!("节点守卫:创世固定治理阈值校验失败:{e:?}"))?;
-        fullnode_issuance::check_genesis(|key| {
-            client
-                .storage(genesis_hash, &StorageKey(key.to_vec()))
-                .ok()
-                .flatten()
-                .map(|data| data.0)
-        })
-        .map_err(|e| format!("节点守卫:创世全节点发行审计状态校验失败:{e:?}"))?;
-        let mut provincialbank_state = Self::pallet_state(
+        }) {
+            startup_issues.push(format!("全节点发行审计状态校验失败:{reason:?}"));
+        }
+        let mut provincialbank_state = match Self::pallet_state(
             &client,
             genesis_hash,
             provincialbank_interest::storage_key::pallet_prefix(),
-        )?;
+        ) {
+            Ok(state) => state,
+            Err(reason) => {
+                startup_issues.push(format!("省储行固定发行状态枚举失败:{reason}"));
+                BTreeMap::new()
+            }
+        };
         for key in provincialbank_interest::relevant_import_keys() {
             if key.starts_with(&provincialbank_interest::storage_key::pallet_prefix()) {
                 continue;
             }
-            if let Some(value) = client
-                .storage(genesis_hash, &StorageKey(key.clone()))
-                .map_err(|e| format!("读取创世省储行质押本金失败:{e}"))?
-            {
-                provincialbank_state.insert(key, value.0);
+            match client.storage(genesis_hash, &StorageKey(key.clone())) {
+                Ok(Some(value)) => {
+                    provincialbank_state.insert(key, value.0);
+                }
+                Ok(None) => {}
+                Err(reason) => startup_issues.push(format!("读取省储行质押本金失败:{reason}")),
             }
         }
-        provincialbank_interest::check_imported_genesis(provincialbank_state.iter())
-            .map_err(|e| format!("节点守卫:创世省储行固定发行校验失败:{e:?}"))?;
-        let citizen_issuance_state = Self::pallet_state(
+        if let Err(reason) =
+            provincialbank_interest::check_imported_genesis(provincialbank_state.iter())
+        {
+            startup_issues.push(format!("省储行固定发行校验失败:{reason:?}"));
+        }
+        let citizen_issuance_state = match Self::pallet_state(
             &client,
             genesis_hash,
             citizen_issuance::storage_key::pallet_prefix(),
-        )?;
-        citizen_issuance::check_genesis_key_values(citizen_issuance_state.iter())
-            .map_err(|e| format!("节点守卫:创世公民认证发行状态校验失败:{e:?}"))?;
-        let genesis_pallet_state = Self::pallet_state(
+        ) {
+            Ok(state) => state,
+            Err(reason) => {
+                startup_issues.push(format!("公民认证发行状态枚举失败:{reason}"));
+                BTreeMap::new()
+            }
+        };
+        if let Err(reason) =
+            citizen_issuance::check_genesis_key_values(citizen_issuance_state.iter())
+        {
+            startup_issues.push(format!("公民认证发行状态校验失败:{reason:?}"));
+        }
+        let genesis_pallet_state = match Self::pallet_state(
             &client,
             genesis_hash,
             genesis_pallet::storage_key::pallet_prefix(),
-        )?;
-        genesis_pallet::check_genesis(|key| genesis_pallet_state.get(key).cloned())
-            .map_err(|e| format!("节点守卫:GenesisPallet 创世事实校验失败:{e:?}"))?;
-        let runtime_policy_state = Self::pallet_state(
+        ) {
+            Ok(state) => state,
+            Err(reason) => {
+                startup_issues.push(format!("GenesisPallet 状态枚举失败:{reason}"));
+                BTreeMap::new()
+            }
+        };
+        if let Err(reason) =
+            genesis_pallet::check_genesis(|key| genesis_pallet_state.get(key).cloned())
+        {
+            startup_issues.push(format!("GenesisPallet 事实校验失败:{reason:?}"));
+        }
+        let runtime_policy_state = match Self::pallet_state(
             &client,
             genesis_hash,
             sp_core::hashing::twox_128(b"OffchainTransaction"),
-        )?;
-        runtime_policy::check_imported_state(runtime_policy_state.iter())
-            .map_err(|e| format!("节点守卫:创世手续费制度校验失败:{e}"))?;
-        let cid_keys = Self::cid_state_keys(&client, genesis_hash)?;
-        let cid_lifecycle = cid_lifecycle::GenesisReference::from_genesis(&cid_keys, |key| {
-            client
-                .storage(genesis_hash, &StorageKey(key.to_vec()))
-                .ok()
-                .flatten()
-                .map(|data| data.0)
-        })
-        .map_err(|e| format!("节点守卫:创世 CID 生命周期基准校验失败:{e:?}"))?;
+        ) {
+            Ok(state) => state,
+            Err(reason) => {
+                startup_issues.push(format!("手续费制度状态枚举失败:{reason}"));
+                BTreeMap::new()
+            }
+        };
+        if let Err(reason) = runtime_policy::check_imported_state(runtime_policy_state.iter()) {
+            startup_issues.push(format!("手续费制度校验失败:{reason}"));
+        }
+        let cid_lifecycle = match Self::cid_state_keys(&client, genesis_hash)
+            .map_err(|reason| format!("CID 生命周期基准枚举失败:{reason}"))
+            .and_then(|cid_keys| {
+                cid_lifecycle::GenesisReference::from_genesis(&cid_keys, |key| {
+                    client
+                        .storage(genesis_hash, &StorageKey(key.to_vec()))
+                        .ok()
+                        .flatten()
+                        .map(|data| data.0)
+                })
+                .map_err(|reason| format!("CID 生命周期基准校验失败:{reason:?}"))
+            }) {
+            Ok(reference) => Some(reference),
+            Err(reason) => {
+                startup_issues.push(reason);
+                None
+            }
+        };
 
-        Ok(Self {
+        if startup_issues.is_empty() {
+            log::info!(target: "node-guard", "节点守卫启动自检通过");
+        } else {
+            // 启动自检只报告本机现有状态风险；导入新块和候选 runtime 时仍由守卫 fail-closed。
+            log::error!(
+                target: "node-guard",
+                "节点守卫启动自检未通过，节点继续启动并保持导入守卫: {}",
+                startup_issues.join("；")
+            );
+        }
+
+        Self {
             inner,
             client,
             backend,
             cid_lifecycle,
-        })
+        }
     }
 
     /// 枚举节点原生 CID 策略承认的全部规范 RAW 表；只用于启动与 runtime 升级全检。
@@ -568,7 +644,7 @@ impl<I> NodeGuard<I> {
 
     /// 提交前校验 warp/状态导入携带的完整下载态；无法抽取或不满足策略时一律拒绝导入。
     fn verify_imported_state(&self, params: &BlockImportParams<Block>) -> Result<(), String> {
-        let stats = verify_imported_state_params(params, &self.cid_lifecycle)?;
+        let stats = verify_imported_state_params(params, self.cid_lifecycle.as_ref())?;
         log::debug!(
             target: "node-guard",
             "完整状态单遍扫描:总键 {},治理 {},国家组成/固定阈值 {},全节点发行/账户 {},公民发行 {},创世模块 {},省储行固定发行 {},手续费制度 {},CID {}",
@@ -762,24 +838,47 @@ impl<I> NodeGuard<I> {
             return Ok(true);
         }
 
-        if let Err(reason) = cid_lifecycle::check_transition(
-            *params.header.number(),
-            &post_delta,
-            &read_parent,
-            &read_post,
-            &self.cid_lifecycle,
-        ) {
+        if let Some(cid_lifecycle) = self.cid_lifecycle.as_ref() {
+            if let Err(reason) = cid_lifecycle::check_transition(
+                *params.header.number(),
+                &post_delta,
+                &read_parent,
+                &read_post,
+                cid_lifecycle,
+            ) {
+                log::error!(
+                    target: "node-guard",
+                    "拒绝区块 #{} ({:?}):CID 生命周期永久规则被破坏 —— {:?}",
+                    params.header.number(),
+                    params.post_hash(),
+                    reason,
+                );
+                return Ok(true);
+            }
+        } else if post_delta
+            .keys()
+            .any(|key| cid_lifecycle::is_relevant_key(key))
+            || cid_lifecycle::needs_full_check(&post_delta)
+        {
             log::error!(
                 target: "node-guard",
-                "拒绝区块 #{} ({:?}):CID 生命周期永久规则被破坏 —— {:?}",
+                "拒绝区块 #{} ({:?}):CID 生命周期启动基准不可用，不能验证受保护状态变更",
                 params.header.number(),
                 params.post_hash(),
-                reason,
             );
             return Ok(true);
         }
 
         if cid_lifecycle::needs_full_check(&post_delta) {
+            let Some(cid_lifecycle) = self.cid_lifecycle.as_ref() else {
+                log::error!(
+                    target: "node-guard",
+                    "拒绝区块 #{} ({:?}):CID 生命周期启动基准不可用，不能复核候选 runtime",
+                    params.header.number(),
+                    params.post_hash(),
+                );
+                return Ok(true);
+            };
             let mut keys: BTreeMap<Vec<u8>, ()> = Self::cid_state_keys(&self.client, parent_hash)?
                 .into_iter()
                 .map(|key| (key, ()))
@@ -791,9 +890,7 @@ impl<I> NodeGuard<I> {
                 keys.insert(key.clone(), ());
             }
             let keys: Vec<Vec<u8>> = keys.into_keys().collect();
-            if let Err(reason) =
-                cid_lifecycle::check_full_state(&keys, &read_post, &self.cid_lifecycle)
-            {
+            if let Err(reason) = cid_lifecycle::check_full_state(&keys, &read_post, cid_lifecycle) {
                 log::error!(
                     target: "node-guard",
                     "拒绝区块 #{} ({:?}):runtime 升级后的 CID 规范表全检失败 —— {:?}",
@@ -955,12 +1052,13 @@ impl<I> NodeGuard<I> {
 /// 完整状态导入路径会在委派内层导入前执行永久规则。
 fn verify_imported_state_params(
     params: &BlockImportParams<Block>,
-    cid_reference: &cid_lifecycle::GenesisReference,
+    cid_reference: Option<&cid_lifecycle::GenesisReference>,
 ) -> Result<ImportedPolicyStats, String> {
     let imported = match &params.state_action {
         StateAction::ApplyChanges(StorageChanges::Import(imported)) => imported,
         _ => return Err("warp 状态非 ApplyChanges(Import) 形态,无法提交前校验".into()),
     };
+    let cid_reference = cid_reference.ok_or("CID 生命周期启动基准不可用，拒绝完整状态导入")?;
     // 所有策略复用同一遍 imported state 扫描，禁止为单项永久规则再新增包装器。
     verify_imported_policy_state(
         *params.header.number(),
@@ -1517,7 +1615,7 @@ mod finalize_issuance_tests {
                 case.label()
             );
 
-            let verdict = verify_imported_state_params(&params, &reference);
+            let verdict = verify_imported_state_params(&params, Some(&reference));
             let err = verdict
                 .as_ref()
                 .expect_err("bad imported state must fail before inner import");
@@ -1552,7 +1650,7 @@ mod finalize_issuance_tests {
         let inner = CountingImport::default();
         let params = import_params_with_state(0, top.clone());
 
-        let stats = verify_imported_state_params(&params, &reference)
+        let stats = verify_imported_state_params(&params, Some(&reference))
             .expect("legal block zero complete state must pass");
         assert_eq!(stats.scanned, top.len());
 
@@ -1575,8 +1673,7 @@ mod finalize_issuance_tests {
             task_manager: _task_manager,
             ..
         } = crate::core::service::new_partial(&config).expect("create partial node service");
-        let guard = NodeGuard::new(CountingImport::default(), client.clone(), backend.clone())
-            .expect("create node guard");
+        let guard = NodeGuard::new(CountingImport::default(), client.clone(), backend.clone());
 
         let legal = legal_remark_block_params(&client);
         assert_eq!(
@@ -1593,6 +1690,18 @@ mod finalize_issuance_tests {
         assert!(
             err.contains("预计算"),
             "应由预计算 changes 一致性检查拒绝，实际错误: {err}"
+        );
+    }
+
+    #[test]
+    fn imported_state_rejects_when_cid_startup_baseline_unavailable() {
+        let storage = full_runtime_genesis_storage();
+        let params = import_params_with_state(0, storage.top);
+        let err = verify_imported_state_params(&params, None)
+            .expect_err("完整状态导入必须依赖 CID 启动基准");
+        assert!(
+            err.contains("CID 生命周期启动基准不可用"),
+            "错误必须说明是启动基准不可用，实际错误: {err}"
         );
     }
 
@@ -1642,8 +1751,7 @@ mod finalize_issuance_tests {
         } = crate::core::service::new_partial(&config).expect("create partial node service");
         let inner = SharedCountingImport::default();
         let imports = inner.imports.clone();
-        let guard =
-            NodeGuard::new(inner, client.clone(), backend.clone()).expect("create node guard");
+        let guard = NodeGuard::new(inner, client.clone(), backend.clone());
 
         let mut malicious = legal_remark_block_params(&client);
         mutate_precomputed_changes_to_guarded_state(&mut malicious, &client, &backend, true);

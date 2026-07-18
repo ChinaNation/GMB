@@ -65,7 +65,7 @@ void main() {
   // polkadart 编码一致:era(0x00 immortal) + Compact<nonce> + Compact<tip>
   // + mode(0x00) + spec(4) + tx(4) + genesis(32) + birth=genesis(32) + None。
   // 真实 QR payload_hex = call_data + 本尾部;链上分支夹具必须带尾构造,
-  // 裸 call_data 会被 decoder 的尾部校验拒绝(decodeFailed → 红色)。
+  // 裸 call_data 会被 decoder 的尾部校验拒绝(Reject → 红色)。
   final tailGenesis = List<int>.generate(32, (i) => 0x49 ^ i);
   List<int> signingTail({int nonce = 1, int tip = 0}) => [
         0x00,
@@ -1607,7 +1607,7 @@ void main() {
     // 相关回归测试见 citizenwallet/test/signer/offline_sign_service_*_test.dart。
     // 机构/决议创建 decoder:
     // - propose_create_public_institution(30.5):注册局创建公权机构
-    //   (走 CID 后端签发机构 admins 凭证，费用只由注册局费用账户支付)
+    //   (只签最终链交易一次，费用只由注册局费用账户支付)
     // - propose_issuance(8.0):决议发行联合提案。
     List<int> buildProposeCreateInstitutionPayload({
       bool extraTail = false,
@@ -1625,11 +1625,6 @@ void main() {
         ('张三', List<int>.filled(32, 0x11)),
         ('管理员', List<int>.filled(32, 0x22)),
       ];
-      final registerNonce = utf8.encode('reg-nonce-001');
-      final signature = List<int>.filled(64, 0xDD);
-      final credentialSigner = List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
-      final scopeProvince = utf8.encode('安徽省');
-      final scopeCity = utf8.encode('合肥市');
       final payload = <int>[
         0x1e, 0x05, // pallet=30 call=5
         // cid_number: Vec<u8>
@@ -1650,20 +1645,8 @@ void main() {
         ...admins[0].$2,
         ...boundedBytes(admins[1].$1),
         ...admins[1].$2,
-        // register_nonce: Vec<u8>
-        (registerNonce.length << 2) & 0xff,
-        ...registerNonce,
-        // signature: Vec<u8> 64B (Compact mode 1)
-        0x01, 0x01,
-        ...signature,
-        // actor_cid_number + credential_signer_pubkey。
+        // actor_cid_number。外层 origin 必须属于该 CID 的 admins。
         ...compactVec(registryActorCid),
-        ...credentialSigner,
-        // scope_province_name / scope_city_name
-        (scopeProvince.length << 2) & 0xff,
-        ...scopeProvince,
-        (scopeCity.length << 2) & 0xff,
-        ...scopeCity,
       ];
       if (extraTail) {
         final subjectProperty = utf8.encode('S');
@@ -1683,8 +1666,6 @@ void main() {
     test(
         'decodes propose_create_public_institution (pallet=30 call=5) 含 actor/scope',
         () {
-      final credentialSigner = List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
-
       final payload =
           Uint8List.fromList(buildProposeCreateInstitutionPayload());
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
@@ -1710,12 +1691,9 @@ void main() {
       );
       expect(decoded.fields.containsKey('subject_property'), isFalse);
       expect(decoded.fields['actor_cid_number'], registryActorCid);
-      expect(decoded.fields['scope_province_name'], '安徽省');
-      expect(decoded.fields['scope_city_name'], '合肥市');
-      expect(
-        decoded.fields['credential_signer_pubkey'],
-        ss58FromBytes(credentialSigner),
-      );
+      expect(decoded.fields.containsKey('scope_province_name'), isFalse);
+      expect(decoded.fields.containsKey('scope_city_name'), isFalse);
+      expect(decoded.fields.containsKey('credential_signer_pubkey'), isFalse);
     });
 
     test('propose_create_public_institution 带多余尾字段时拒绝解码', () {

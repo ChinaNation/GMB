@@ -29,7 +29,8 @@ pub(crate) fn build_sign_request(
 
 /// 把已确定的待签 payload **裸字节**包装成 QR_V1/k=1 envelope。
 ///
-/// 机构上链 call data 是 SCALE 二进制(非 UTF-8 文本),走本入口直接放进 `b.d`。
+/// 普通链交易传入值必须是完整 `review_payload`，钱包依赖它完整解码和中文展示；
+/// 32 字节 `signing_bytes` 只允许 Runtime 升级 hash-only 专用入口使用。
 pub(crate) fn build_sign_request_bytes(
     request_id: &str,
     _issued_at: i64,

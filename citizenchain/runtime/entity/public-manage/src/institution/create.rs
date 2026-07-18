@@ -4,7 +4,7 @@
 //!
 //! 唯一入口: `do_propose_create_public_institution`(call_index=5)
 //! - 载荷只包含机构最小身份和至少两个管理员人员记录
-//! - 凭证带操作机构 CID 和凭证签名管理员公钥
+//! - 操作机构 CID 表示注册局 actor,签名者只来自 extrinsic origin
 //! - runtime 自动派生机构码、协议账户、默认法定代表人岗位和严格多数阈值
 
 extern crate alloc;
@@ -13,22 +13,15 @@ use crate::institution::accounts::{build_required_protocol_accounts, validate_in
 use crate::institution::types::{InstitutionAccountInfo, InstitutionInfo};
 use crate::pallet::{
     AccountNameOf, AccountRegisteredCid, CidNumberOf, Config, Error, Event, InstitutionAccounts,
-    InstitutionAdminsInputOf, Institutions, Pallet, RegisterNonceOf, RegisterSignatureOf,
-    UsedRegisterNonce,
+    InstitutionAdminsInputOf, Institutions, Pallet,
 };
-use crate::traits::{
-    CidInstitutionVerifier, InstitutionCidQuery, ProtectedSourceChecker, RegistryAuthority,
-};
+use crate::traits::{InstitutionCidQuery, ProtectedSourceChecker, RegistryAuthority};
 use crate::RegisteredInstitution;
-use codec::Encode;
 use frame_support::{
     ensure,
     storage::{with_transaction, TransactionOutcome},
 };
-use sp_runtime::{
-    traits::{Hash, SaturatedConversion},
-    DispatchResult,
-};
+use sp_runtime::{traits::SaturatedConversion, DispatchResult};
 use votingengine::types::InstitutionCode;
 
 fn ensure_public_town_code<T: Config>(
@@ -52,7 +45,6 @@ fn ensure_public_town_code<T: Config>(
 }
 
 /// 机构注册创建(call_index=5)。
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn do_propose_create_public_institution<T: Config>(
     who: T::AccountId,
     cid_number: CidNumberOf<T>,
@@ -60,12 +52,7 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
     cid_short_name: AccountNameOf<T>,
     town_code: AccountNameOf<T>,
     admins: InstitutionAdminsInputOf<T>,
-    register_nonce: RegisterNonceOf<T>,
-    signature: RegisterSignatureOf<T>,
     actor_cid_number: alloc::vec::Vec<u8>,
-    credential_signer_pubkey: [u8; 32],
-    scope_province_name: alloc::vec::Vec<u8>,
-    scope_city_name: alloc::vec::Vec<u8>,
 ) -> DispatchResult {
     ensure!(
         !T::ProtectedSourceChecker::is_protected(&who),
@@ -94,10 +81,6 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
         Error::<T>::EmptyIssuerCidNumber
     );
     ensure!(
-        !scope_province_name.is_empty(),
-        Error::<T>::EmptyScopeProvinceName
-    );
-    ensure!(
         !Institutions::<T>::contains_key(&cid_number),
         Error::<T>::InstitutionAlreadyExists
     );
@@ -107,38 +90,14 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
     );
     Pallet::<T>::ensure_lifecycle_institution_code(&institution_code)?;
 
-    let register_nonce_hash = <T as frame_system::Config>::Hashing::hash(register_nonce.as_slice());
-    ensure!(
-        !UsedRegisterNonce::<T>::get(register_nonce_hash),
-        Error::<T>::RegisterNonceAlreadyUsed
-    );
     let threshold = admins.len() as u32 / 2 + 1;
     Pallet::<T>::ensure_admin_config(&admins, threshold)?;
     ensure!(
-        T::CidInstitutionVerifier::verify_institution_creation(
-            cid_number.as_slice(),
-            &cid_full_name,
-            cid_short_name.as_slice(),
-            &admins.encode(),
-            &register_nonce,
-            &signature,
-            actor_cid_number.as_slice(),
-            &credential_signer_pubkey,
-            scope_province_name.as_slice(),
-            scope_city_name.as_slice(),
-            town_code.as_slice(),
-        ),
-        Error::<T>::InvalidCidInstitutionSignature
-    );
-    ensure!(
-        T::RegistryAuthority::can_register_institution(
+        T::RegistryAuthority::can_register_institution_origin(
             &who,
             actor_cid_number.as_slice(),
-            &credential_signer_pubkey,
             cid_number.as_slice(),
             institution_code,
-            scope_province_name.as_slice(),
-            scope_city_name.as_slice(),
         ),
         Error::<T>::RegistryAuthorityDenied
     );
@@ -195,7 +154,6 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
         {
             return TransactionOutcome::Rollback(Err(err));
         }
-        UsedRegisterNonce::<T>::insert(register_nonce_hash, true);
         TransactionOutcome::Commit(Ok(()))
     })?;
 

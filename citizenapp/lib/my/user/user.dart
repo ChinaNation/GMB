@@ -11,6 +11,7 @@ import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/my/myid/identity_badge_snapshot_store.dart';
+import 'package:citizenapp/my/creator/creator_page.dart';
 import 'package:citizenapp/my/membership/membership_page.dart';
 import 'package:citizenapp/my/myid/myid_page.dart';
 import 'package:citizenapp/my/myid/myid_service.dart';
@@ -247,6 +248,13 @@ class _ProfilePageState extends State<MyTab> {
     await _loadState();
   }
 
+  void _openCreator() {
+    // 创作者档位/收入与 MyTab 头部展示无关，跟随「电子护照/设置」惯例不回读 _loadState。
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => const CreatorPage()),
+    );
+  }
+
   Widget _buildProfileCard() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
@@ -440,6 +448,19 @@ class _ProfilePageState extends State<MyTab> {
                 ),
                 title: '会员',
                 onTap: _openMembership,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _buildEntryCard(
+                leading: const Icon(
+                  Icons.storefront_outlined,
+                  color: AppTheme.info,
+                  size: 22,
+                ),
+                title: '创作者',
+                onTap: _openCreator,
               ),
             ),
             const SizedBox(height: 12),

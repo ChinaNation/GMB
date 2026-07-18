@@ -4,21 +4,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/widgets/wallet_action_card.dart';
 
-/// WalletActionCard 渲染 + SnackBar 行为测试(v2 三列版)。
+/// WalletActionCard 渲染 + 行为测试(步骤 4 三按钮重排版)。
 ///
 /// 验证点:
-/// - 三列 label:充值 / 提现 / 零钱包 全部渲染。
-/// - 三列图标:arrow_circle_down_outlined / arrow_circle_up_outlined /
-///   account_balance_wallet_outlined 全部渲染。
-/// - 未绑定时充值 / 提现点击 → SnackBar「请先绑定清算行」。
-/// - 零钱包列下方小字 `未绑定` 可见。
-/// - 整卡只有 2 个 InkWell(充值 + 提现),零钱包列不可点击。
+/// - 三列 label:充值 / 提现 / 零钱包 全部渲染,图标全部渲染。
+/// - 未绑定时零钱包列小字 `未绑定` 可见。
+/// - 充值不再受清算行绑定门槛(不属于清算行);提现 / 零钱包未绑定点击 → 提示先绑定。
+/// - 三列现在都可点击(充值 + 提现 + 零钱包),整卡 3 个 InkWell。
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  // 构造一个最小可用的 WalletProfile 用于 widget 入参。
   const wallet = WalletProfile(
     walletIndex: 0,
     walletName: '测试钱包',
@@ -60,31 +57,32 @@ void main() {
     expect(find.text('未绑定'), findsOneWidget);
   });
 
-  testWidgets('tapping 充值 asks user to bind clearing bank', (tester) async {
-    await pumpCard(tester);
-    // 定位图标而非 label,避免点到占位 Text('\u00A0') 或 label 文本
-    // 这些非 InkWell 区域。InkWell 包住图标圆圈,点图标最稳。
-    await tester.tap(find.byIcon(Icons.arrow_circle_down_outlined));
-    await tester.pump(); // trigger snackbar
-    expect(find.text('请先在“清算行”页面绑定清算行'), findsOneWidget);
-  });
-
-  testWidgets('tapping 提现 asks user to bind clearing bank', (tester) async {
+  testWidgets('tapping 提现 unbound asks user to bind clearing bank',
+      (tester) async {
     await pumpCard(tester);
     await tester.tap(find.byIcon(Icons.arrow_circle_up_outlined));
     await tester.pump();
     expect(find.text('请先在“清算行”页面绑定清算行'), findsOneWidget);
   });
 
-  testWidgets('零钱包 column is non-interactive: exactly 2 InkWells in card',
+  testWidgets('tapping 零钱包 unbound asks user to bind clearing bank',
       (tester) async {
     await pumpCard(tester);
-    // 整卡只有 2 个 InkWell(充值 + 提现)。零钱包列是静态展示,不包
-    // InkWell / GestureDetector / onTap 回调。这条是硬规则。
+    // 零钱包现在可点击:未绑定时进入前提示先绑定(不再是静态展示)。
+    await tester.tap(find.byIcon(Icons.account_balance_wallet_outlined));
+    await tester.pump();
+    expect(find.text('请先在“清算行”页面绑定清算行'), findsOneWidget);
+  });
+
+  testWidgets('all three columns are clickable: exactly 3 InkWells in card',
+      (tester) async {
+    await pumpCard(tester);
+    // 步骤 4:零钱包改为可点击进详情页,整卡 3 个 InkWell(充值 + 提现 + 零钱包)。
+    // 充值不再弹「请先绑定」(它是链上充值,与清算行无关),故此处只做结构断言。
     expect(
       tester.widgetList(find.byType(InkWell)),
-      hasLength(2),
-      reason: '零钱包列不可点击,整卡只允许有 2 个 InkWell(充值 + 提现)',
+      hasLength(3),
+      reason: '三列都可点击,整卡应有 3 个 InkWell',
     );
   });
 }

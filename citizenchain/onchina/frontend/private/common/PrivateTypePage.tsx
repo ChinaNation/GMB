@@ -12,7 +12,6 @@ import type {
   PageResult,
   PrivateType,
 } from '../../subjects/api';
-import type { ScanSignResolver } from '../../admins/securityApi';
 import { PRIVATE_TYPE_LABEL } from '../../subjects/labels';
 import { PrivateCreateModal } from './PrivateCreateModal';
 import { PrivateListTable } from './PrivateListTable';
@@ -27,7 +26,6 @@ export interface PrivateTypePageProps {
   createInstitution: (
     auth: AdminAuth,
     input: CreateInstitutionInput,
-    signWithScan: ScanSignResolver,
   ) => Promise<CreateInstitutionOutput>;
   listInstitutions: (auth: AdminAuth, query: {
     province_name: string;

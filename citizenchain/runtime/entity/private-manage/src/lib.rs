@@ -540,12 +540,7 @@ pub mod pallet {
             cid_short_name: AccountNameOf<T>,
             town_code: AccountNameOf<T>,
             admins: InstitutionAdminsInputOf<T>,
-            register_nonce: RegisterNonceOf<T>,
-            signature: RegisterSignatureOf<T>,
             actor_cid_number: Vec<u8>,
-            credential_signer_pubkey: [u8; 32],
-            scope_province_name: Vec<u8>,
-            scope_city_name: Vec<u8>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             crate::institution::create::do_propose_create_private_institution::<T>(
@@ -555,12 +550,7 @@ pub mod pallet {
                 cid_short_name,
                 town_code,
                 admins,
-                register_nonce,
-                signature,
                 actor_cid_number,
-                credential_signer_pubkey,
-                scope_province_name,
-                scope_city_name,
             )
         }
 

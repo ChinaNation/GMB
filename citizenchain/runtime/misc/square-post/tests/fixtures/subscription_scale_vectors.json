@@ -1,0 +1,95 @@
+{
+  "pallet_index": 34,
+  "vectors": [
+    {
+      "hex": "00",
+      "name": "membership_level_freedom",
+      "note": "MembershipLevel::Freedom"
+    },
+    {
+      "hex": "01",
+      "name": "membership_level_democracy",
+      "note": "MembershipLevel::Democracy"
+    },
+    {
+      "hex": "02",
+      "name": "membership_level_spark",
+      "note": "MembershipLevel::Spark"
+    },
+    {
+      "hex": "00",
+      "name": "issuer_platform",
+      "note": "IssuerKey::Platform"
+    },
+    {
+      "hex": "010202020202020202020202020202020202020202020202020202020202020202",
+      "name": "issuer_creator",
+      "note": "IssuerKey::Creator(0x02*32)"
+    },
+    {
+      "hex": "0002",
+      "name": "plan_level_spark",
+      "note": "SubscriptionPlan::Level(Spark)"
+    },
+    {
+      "hex": "015c270900000000000000000000000000",
+      "name": "plan_creator_price_599900",
+      "note": "SubscriptionPlan::CreatorPrice(599900)"
+    },
+    {
+      "hex": "00",
+      "name": "status_active",
+      "note": "SubscriptionStatus::Active"
+    },
+    {
+      "hex": "01",
+      "name": "status_past_due",
+      "note": "SubscriptionStatus::PastDue"
+    },
+    {
+      "hex": "02",
+      "name": "status_cancelled",
+      "note": "SubscriptionStatus::Cancelled"
+    },
+    {
+      "hex": "00021c8d5b000000000000000000000000000068e5cf8b01000000",
+      "name": "state_platform_spark",
+      "note": "SubscriptionState{Level(Spark),5999900,1700000000000,Active}"
+    },
+    {
+      "hex": "015c2709000000000000000000000000005c2709000000000000000000000000000068e5cf8b01000000",
+      "name": "state_creator",
+      "note": "SubscriptionState{CreatorPrice(599900),599900,1700000000000,Active}"
+    },
+    {
+      "hex": "01000002",
+      "name": "call_subscribe_platform_spark",
+      "note": "Call::subscribe{Platform, Level(Spark)}"
+    },
+    {
+      "hex": "01010202020202020202020202020202020202020202020202020202020202020202015c270900000000000000000000000000",
+      "name": "call_subscribe_creator",
+      "note": "Call::subscribe{Creator(0x02*32), CreatorPrice(599900)}"
+    },
+    {
+      "hex": "0200",
+      "name": "call_cancel_platform",
+      "note": "Call::cancel{Platform}"
+    },
+    {
+      "hex": "0401010101010101010101010101010101010101010101010101010101010101010000",
+      "name": "call_charge_due_platform_none",
+      "note": "Call::charge_due{sub=0x01*32, Platform, None}"
+    },
+    {
+      "hex": "040101010101010101010101010101010101010101010101010101010101010101010202020202020202020202020202020202020202020202020202020202020202015c270900000000000000000000000000",
+      "name": "call_charge_due_creator_some",
+      "note": "Call::charge_due{sub=0x01*32, Creator(0x02*32), Some(599900)}"
+    },
+    {
+      "hex": "2201000002",
+      "name": "calldata_subscribe_platform_spark",
+      "note": "0x22(pallet=34) ++ Call::subscribe{Platform,Level(Spark)}"
+    }
+  ]
+}

@@ -41,7 +41,7 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
   - 本地开发启动和重新创世脚本使用当前源码构建 runtime，不从 GitHub CI 下载 WASM
   - 手动发布成功后上传 4 个用户安装包、updater 内部资产、updater 签名产物与 `citizenchain-latest.json` 到 GitHub Release，供桌面端点击更新链路使用
   - 桌面端启动检查到可用 updater 后，顶部 `设置` tab 显示红点；红点只读取 Tauri updater 状态，不另建已读/未读状态
-  - Linux 服务器部署只允许通过本机 `deploy/` 控制台选择一个权威节点，并使用当前提交最新成功 CI 的 `公民链-Linux-amd.deb`；节点 IP、身份私钥、GRANDPA 私钥和 SSH 私钥来自该节点独立 Keychain 项，不允许恢复 GitHub workflow 固定 IP 批量部署。
+  - Linux 服务器部署只允许通过本机 `citizenconsole/` 控制台选择一个权威节点，并使用当前提交最新成功 CI 的 `公民链-Linux-amd.deb`；节点 IP、身份私钥、GRANDPA 私钥和 SSH 私钥来自该节点独立 Keychain 项，不允许恢复 GitHub workflow 固定 IP 批量部署。
 - 代码目录：
   - `citizenchain/node/**`
   - `citizenchain/node/frontend/**`

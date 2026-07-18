@@ -33,10 +33,10 @@ fn build_hashed_payload_request(
         build_signing_payloads(call_data, &genesis_hash, nonce, spec_version, tx_version)?;
     let request_id = generate_request_id(request_prefix);
 
-    // Runtime WASM 交易 payload 远大于 QR 承载能力。Substrate sr25519 在 payload
-    // 超过 256 字节时实际签 blake2_256(payload)，这里直接复用 runtime helper 返回的
-    // signing_bytes，禁止 runtime-upgrade 另起一套哈希规则。
-    // expected_payload_hash 必须对应 QR 中实际发送的 payload_hex。
+    // Runtime WASM 交易 payload 远大于 QR 承载能力，是 QR_V1 唯一 hash-only 例外。
+    // `full_payload` 只留在本地 session 校验；QR `b.d` 发送 `signing_bytes`，
+    // 与 Substrate sr25519 实际签名输入完全一致，禁止 runtime-upgrade 另起哈希规则。
+    // expected_payload_hash 必须对应 QR 中实际发送的 hash-only payload。
     let payload_hash = sha256_hash(&payload_for_qr);
     let payload_hash_hex = hex::encode(payload_hash);
     let full_payload_hash_hex = hex::encode(sha256_hash(&full_payload));

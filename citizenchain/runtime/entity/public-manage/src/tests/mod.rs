@@ -243,6 +243,17 @@ impl crate::traits::RegistryAuthority<AccountId32> for TestRegistryAuthority {
     ) -> bool {
         !target_cid_number.is_empty() && !scope_province_name.is_empty()
     }
+
+    fn can_register_institution_origin(
+        registrar: &AccountId32,
+        actor_cid_number: &[u8],
+        target_cid_number: &[u8],
+        _target_institution_code: InstitutionCode,
+    ) -> bool {
+        registrar == &creator()
+            && actor_cid_number == b"REGISTRY-CID"
+            && !target_cid_number.is_empty()
+    }
 }
 
 pub struct TestCitizenIdentityReader;

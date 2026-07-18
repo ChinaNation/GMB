@@ -92,6 +92,15 @@ export async function guardRequest(request: Request, env: Env, path: string): Pr
   }
   // relay 已在模块内按 IP 哈希做原子限流，交易本体也已由钱包签名；避免双重计数。
   if (path === '/v1/chain/extrinsics/relay') return;
+  // 结算子接口只给本地部署控制台调用，handler 内用 TOPUP_SETTLE_TOKEN 鉴权，
+  // 不套 IP 限流（避免控制台批量补发被节流）。
+  if (path.startsWith('/v1/square/topup/settlement/')) return;
+  // 充值(topup)不挂广场会话：钱包功能独立于广场登录，正确性来自链上真实到账。
+  // 仅按 IP 粗限流，防刷 EVM RPC。
+  if (path.startsWith('/v1/square/topup/')) {
+    await enforceRateLimit(env, `topup:${ipKey}`, 60, 60);
+    return;
+  }
 
   const session = await sessionOrNull(request, env);
   const rateKey = session ? `owner:${session.owner_account}` : `ip:${ipKey}`;

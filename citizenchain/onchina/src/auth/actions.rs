@@ -110,7 +110,7 @@ struct ActionPreview {
 }
 
 /// 从节点唯一 active 绑定读取当前机构 CID，并与登录上下文机构严格对齐。
-fn actor_cid_number_for_context(
+pub(crate) fn actor_cid_number_for_context(
     db: &Db,
     ctx: &AdminAuthContext,
 ) -> Result<String, axum::response::Response> {
@@ -274,7 +274,7 @@ pub(crate) async fn prepare_admin_action(
                 expires_at.timestamp(),
                 ctx.admin_account.as_str(),
                 payload_text.as_str(),
-                crate::core::qr::ACTION_ONCHINA_ADMIN,
+                crate::core::qr::action_onchina_admin(),
             ) {
                 Ok(v) => v,
                 Err(resp) => return resp,
@@ -586,16 +586,40 @@ pub(crate) fn require_admin_security_grant(
     target: &str,
     request_payload: Option<&serde_json::Value>,
 ) -> Result<(), axum::response::Response> {
-    // Session 档不要求扫码签名 grant——会话已是链上已证管理员,仅按动作角色边界
-    // (联邦/省 scope)放行,不消费一次性 grant。Passkey / PasskeyColdSign 档继续校验 grant。
     if action_type.is_session() {
         return ensure_action_role_allowed(ctx, &action_type);
     }
-    // Passkey / PasskeyColdSign 档:先消费 passkey 断言(fail-closed,绝不降档)。
-    crate::auth::passkey::require_passkey_assertion(state, headers, &ctx.admin_account)?;
-    // Passkey 档(重要操作)到此按角色边界放行;PasskeyColdSign 档继续校验冷签 grant。
     if action_type.auth_type() == AdminOperationAuth::Passkey {
+        crate::auth::passkey::require_passkey_assertion(state, headers, &ctx.admin_account)?;
         return ensure_action_role_allowed(ctx, &action_type);
+    }
+    consume_admin_security_grant(state, headers, ctx, action_type, target, request_payload)
+        .map(|_| ())
+}
+
+pub(crate) fn consume_admin_security_grant(
+    state: &AppState,
+    headers: &HeaderMap,
+    ctx: &AdminAuthContext,
+    action_type: AdminActionType,
+    target: &str,
+    request_payload: Option<&serde_json::Value>,
+) -> Result<AdminSecurityGrant, axum::response::Response> {
+    if action_type.is_session() {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "security grant is not available for session action",
+        ));
+    }
+    // PasskeyColdSign 档:先消费 passkey 断言(fail-closed,绝不降档),再消费冷签 grant。
+    crate::auth::passkey::require_passkey_assertion(state, headers, &ctx.admin_account)?;
+    if action_type.auth_type() == AdminOperationAuth::Passkey {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "security grant is not available for passkey action",
+        ));
     }
     let actor_cid_number = actor_cid_number_for_context(&state.db, ctx)?;
     let grant_id = headers
@@ -644,11 +668,13 @@ pub(crate) fn require_admin_security_grant(
                 return Err("http:forbidden:security grant payload mismatch".to_string());
             }
         }
+        let consumed = grant.clone();
         grant.consumed = true;
-        repo::insert_security_grant_conn(conn, &grant)
+        repo::insert_security_grant_conn(conn, &grant)?;
+        Ok(consumed)
     });
     match result {
-        Ok(()) => Ok(()),
+        Ok(grant) => Ok(grant),
         Err(err) => Err(admin_action_error(err)),
     }
 }
@@ -755,6 +781,7 @@ fn precheck_institution_target_scope_conn(
 /// 新建机构在 prepare 阶段预检省/市/镇管辖权,与 create_institution_inner 的
 /// locked_province/locked_city 校验逐字段等价:scope 锁定省/市/镇时,申报省/市/镇必须留空或
 /// 等于锁定值(留空交业务 handler 用锁定值回填),不会比 handler 更严而误拒。
+/// 管理员阈值由链端按严格多数自动计算,prepare 不再接收 threshold 字段。
 fn precheck_institution_create_scope(
     ctx: &AdminAuthContext,
     payload: &serde_json::Value,
@@ -783,14 +810,6 @@ fn precheck_institution_create_scope(
         return Err(
             "http:bad_request:institution admins must contain at least two accounts".to_string(),
         );
-    }
-    let threshold = payload
-        .get("threshold")
-        .and_then(|v| v.as_u64())
-        .ok_or_else(|| "http:bad_request:threshold is required".to_string())?;
-    let admins_len = admins.len() as u64;
-    if threshold < admins_len / 2 + 1 || threshold > admins_len {
-        return Err("http:bad_request:threshold must be strict majority".to_string());
     }
     let mut normalized_accounts: Vec<String> = Vec::with_capacity(admins.len());
     for item in admins {

@@ -168,7 +168,12 @@ export interface LegalRepresentativePhoto {
 }
 
 export interface CreateInstitutionAdminInput {
-  /** 机构初始管理员钱包账户；姓名由后端解析，首次登记不绑定岗位。 */
+  /**
+   * 管理员展示姓名；授权唯一依据仍是 admin_account。
+   * 创建机构时不绑定岗位，不填则后端按公民资料解析，仍无法解析时显示“管理员”。
+   */
+  admin_name?: string | null;
+  /** 机构初始管理员钱包账户。 */
   admin_account: string;
 }
 
@@ -203,7 +208,57 @@ export interface CreateInstitutionInput {
   admins: CreateInstitutionAdminInput[];
 }
 
+export interface InstitutionCreatePayload {
+  subject_property: string;
+  p1: string | null;
+  province_name: string | null;
+  city_name: string;
+  town_name: string | null;
+  institution: string;
+  education_type: EducationType | null;
+  cid_full_name: string | null;
+  cid_short_name: string | null;
+  parent_cid_number: string | null;
+  private_type: PrivateType | null;
+  partnership_kind: PartnershipKind | null;
+  admins: CreateInstitutionAdminInput[];
+}
+
+function nullableTrim(value?: string | null): string | null {
+  const trimmed = (value ?? '').trim();
+  return trimmed ? trimmed : null;
+}
+
+/**
+ * 创建机构第 1 步 payload 的唯一前端构造点。
+ *
+ * 扫码授权和正式提交必须共用这一份 JSON；可空字段统一显式写入 null，
+ * 避免 prepare 阶段与 create 阶段因为 undefined 被 JSON.stringify 省略而哈希不一致。
+ */
+export function buildInstitutionCreatePayload(input: CreateInstitutionInput): InstitutionCreatePayload {
+  return {
+    subject_property: input.subject_property.trim(),
+    p1: nullableTrim(input.p1),
+    province_name: nullableTrim(input.province_name),
+    city_name: input.city_name.trim(),
+    town_name: nullableTrim(input.town_name),
+    institution: input.institution.trim(),
+    education_type: nullableTrim(input.education_type) as EducationType | null,
+    cid_full_name: nullableTrim(input.cid_full_name),
+    cid_short_name: nullableTrim(input.cid_short_name),
+    parent_cid_number: nullableTrim(input.parent_cid_number),
+    private_type: nullableTrim(input.private_type) as PrivateType | null,
+    partnership_kind: nullableTrim(input.partnership_kind) as PartnershipKind | null,
+    admins: (input.admins ?? []).map((admin) => ({
+      admin_name: nullableTrim(admin.admin_name) ?? '管理员',
+      admin_account: admin.admin_account.trim(),
+    })),
+  };
+}
+
 export interface CreateInstitutionOutput {
+  /** 链签会话 ID，提交钱包签名响应时原样回传。 */
+  request_id: string;
   cid_number: string;
   /** 创建成功后的机构全称。 */
   cid_full_name: string | null;

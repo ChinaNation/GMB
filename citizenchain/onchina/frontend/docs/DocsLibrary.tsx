@@ -70,7 +70,15 @@ export const DocsLibrary: React.FC<Props> = ({
     if (!rawFile || !rawFile.name) return false;
     setUploading(true);
     try {
-      await uploadDocument(auth, cidNumber, rawFile, selectedDocType);
+      // 上传资料的冷签授权 payload 必须与后端 grant_payload 完全一致:
+      // target + file_name + doc_type + file_size,否则正式提交会被 hash mismatch 拒绝。
+      const grant = await createScanSignGrant('INSTITUTION_UPLOAD_DOCUMENT', {
+        target: cidNumber,
+        file_name: rawFile.name,
+        doc_type: selectedDocType,
+        file_size: rawFile.size,
+      });
+      await uploadDocument(auth, cidNumber, rawFile, selectedDocType, grant);
       notice.success('文件上传成功');
       load();
     } catch (err) {
@@ -91,10 +99,11 @@ export const DocsLibrary: React.FC<Props> = ({
 
   const onDelete = async (doc: InstitutionDocument) => {
     try {
+      // 删除资料同样按后端 grant_payload 逐字段生成授权,不得夹带旧字段或把 doc_id 转字符串。
       const grant = await createScanSignGrant('INSTITUTION_DELETE_DOCUMENT', {
         target: cidNumber,
-        cid_number: cidNumber,
-        doc_id: String(doc.id),
+        doc_id: doc.id,
+        file_name: doc.file_name,
       });
       await deleteDocument(auth, cidNumber, doc.id, grant);
       notice.success('文件已删除');

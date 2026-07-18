@@ -391,12 +391,6 @@ impl Db {
                           AND ($2::text IS NULL OR province_code = $2)
                           AND ($3::text IS NULL OR city_code = $3)
                           AND ($4::text IS NULL OR cid_number <> $4)
-                        UNION ALL
-                        SELECT 1 FROM pending_institution_registrations
-                        WHERE institution_payload->>'cid_full_name' = $1
-                          AND ($2::text IS NULL OR institution_payload->>'province_code' = $2)
-                          AND ($3::text IS NULL OR institution_payload->>'city_code' = $3)
-                          AND ($4::text IS NULL OR cid_number <> $4)
                      )",
                     &[
                         &cid_full_name,
@@ -406,29 +400,6 @@ impl Db {
                     ],
                 )
                 .map_err(|e| format!("query cid_full_name conflict failed: {e}"))?;
-            Ok(row.get(0))
-        })
-    }
-
-    /// 判断 CID 是否已经存在于待确认机构登记区。
-    ///
-    /// 待确认区不是机构正式投影，但必须参与生成阶段的撞号保护，避免两个尚未上链的
-    /// 登记二维码使用同一个 CID。链上确认后的正式状态仍只以链和正式投影为准。
-    pub(crate) fn pending_institution_registration_exists(
-        &self,
-        cid_number: &str,
-    ) -> Result<bool, String> {
-        let cid_number = cid_number.trim().to_string();
-        self.with_client(move |conn| {
-            let row = conn
-                .query_one(
-                    "SELECT EXISTS (
-                        SELECT 1 FROM pending_institution_registrations
-                        WHERE cid_number = $1
-                     )",
-                    &[&cid_number],
-                )
-                .map_err(|e| format!("query pending institution registration failed: {e}"))?;
             Ok(row.get(0))
         })
     }

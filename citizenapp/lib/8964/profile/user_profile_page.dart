@@ -12,6 +12,7 @@ import 'package:citizenapp/8964/profile/services/citizen_profile_cache.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/profile/user_qr_page.dart';
 import 'package:citizenapp/8964/profile/widgets/collapsible_header.dart';
+import 'package:citizenapp/8964/profile/widgets/creator_subscribe_button.dart';
 import 'package:citizenapp/8964/profile/widgets/profile_action_icons.dart';
 import 'package:citizenapp/8964/profile/widgets/profile_category_tabs.dart';
 import 'package:citizenapp/8964/profile/widgets/profile_header_card.dart';
@@ -475,6 +476,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         onChat: _openChatWithUser,
                         onToggleFollow: _toggleFollow,
                       ),
+                      // 他人主页才显示「订阅 TA / 取消」（订阅创作者会员，上链热签）。
+                      creatorSubscribeButton: widget.isSelf
+                          ? null
+                          : CreatorSubscribeButton(
+                              creatorAccount: widget.ownerAccount,
+                            ),
                     ),
                   ),
                 ),

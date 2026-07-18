@@ -24,7 +24,10 @@ class SignRequestBody implements QrBody {
   /// 期望签名者公钥 `u`:32 字节公钥的 base64url 无填充编码。
   final String signerPubkey;
 
-  /// 待签载荷 `d`:原始 payload bytes 的 base64url 无填充编码。
+  /// 审阅载荷 `d`:原始 review_payload bytes 的 base64url 无填充编码。
+  ///
+  /// 普通链交易必须是可完整解码和中文展示的 review_payload；实际签名字节由
+  /// 签名端按 action 重新计算，不能把 32 字节 signing bytes 冒充成这里的载荷。
   final String payload;
 
   Uint8List get payloadBytes => _b64ToBytes(payload, 'd');

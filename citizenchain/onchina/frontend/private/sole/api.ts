@@ -12,15 +12,13 @@ import {
   createInstitution as createPrivateInstitution,
   listPrivateInstitutions,
 } from '../common/api';
-import type { ScanSignResolver } from '../../admins/securityApi';
 import { SOLE_ROUTE_SEGMENT } from './types';
 
 export function createSoleInstitution(
   auth: AdminAuth,
   input: CreateInstitutionInput,
-  signWithScan: ScanSignResolver,
 ): Promise<CreateInstitutionOutput> {
-  return createPrivateInstitution(auth, SOLE_ROUTE_SEGMENT, input, signWithScan);
+  return createPrivateInstitution(auth, SOLE_ROUTE_SEGMENT, input);
 }
 
 export function listSoleInstitutions(

@@ -6,7 +6,6 @@ import React from 'react';
 import type { AdminAuth } from '../../auth/types';
 import { CreateInstitutionForm } from '../../core/CreateInstitutionForm';
 import type { CreateInstitutionInput, CreateInstitutionOutput, PrivateType } from '../../subjects/api';
-import type { ScanSignResolver } from '../../admins/securityApi';
 import {
   checkCidFullName,
   searchParentInstitutions,
@@ -18,7 +17,7 @@ interface Props {
   lockedProvinceName: string | null;
   lockedCityName: string | null;
   privateType: PrivateType;
-  createInstitution: (auth: AdminAuth, input: CreateInstitutionInput, signWithScan: ScanSignResolver) => Promise<CreateInstitutionOutput>;
+  createInstitution: (auth: AdminAuth, input: CreateInstitutionInput) => Promise<CreateInstitutionOutput>;
   onCancel: () => void;
   onCreated: (result: CreateInstitutionOutput) => void;
 }

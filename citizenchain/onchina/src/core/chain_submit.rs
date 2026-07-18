@@ -19,7 +19,7 @@ const WAIT_POLL_INTERVAL_SECS: u64 = 3;
 /// prepare 阶段产物:随会话持久化,submit 阶段重建校验。
 pub(crate) struct PreparedChainSign {
     pub nonce: u32,
-    /// 给 QR 的完整签名载荷字节。
+    /// 给 QR `b.d` 的完整审阅载荷字节；不得用 32 字节签名哈希替代。
     pub payload: Vec<u8>,
     /// sha256(签名输入) hex,submit 阶段重建校验防 runtime 漂移。
     pub signing_hash_hex: String,
@@ -92,7 +92,7 @@ pub(crate) async fn fetch_nonce(pubkey_hex: &str) -> Result<u32, String> {
         .ok_or_else(|| "accountNextIndex malformed".to_string())
 }
 
-/// prepare:实时取 nonce/版本/创世哈希,构建冷签载荷与校验哈希。
+/// prepare:实时取 nonce/版本/创世哈希,构建 QR 审阅载荷与签名校验哈希。
 pub(crate) async fn prepare_signing(
     call_data: &[u8],
     signer_pubkey_hex: &str,
@@ -145,8 +145,8 @@ pub(crate) async fn assemble_and_submit(
     let extrinsic = chain_signing::assemble_signed_extrinsic(material, public, signature);
     let extrinsic_hex = chain_signing::signed_extrinsic_hex(&extrinsic);
 
-    // dry-run:Future/Stale 提交后只会"看似成功永不上链",必须先拒;
-    // dry-run RPC 本身不可用时保持可用性兜底继续提交,由交易池终审。
+    // dry-run 是提交前硬预检。任何 RuntimeApi trap、交易无效或 RPC 不可用都必须
+    // 停止提交，禁止跳过预检后把 wasm panic 原样推给浏览器。
     match rpc_post(
         "system_dryRun",
         Value::Array(vec![Value::from(extrinsic_hex.clone())]),
@@ -169,7 +169,7 @@ pub(crate) async fn assemble_and_submit(
             }
         }
         Err(e) => {
-            tracing::warn!(error = %e, "system_dryRun 不可用,跳过预检继续提交");
+            return Err(chain_signing::preflight_reject_message(&e));
         }
     }
 
@@ -257,7 +257,7 @@ mod tests {
     use citizenchain as runtime;
     use codec::Encode;
 
-    /// 材料构建离线自洽:同输入同产物,call 解码回等值,>256B 载荷签名输入为 blake2。
+    /// 材料构建离线自洽:同输入同产物,call 解码回等值,>256B 审阅载荷仍完整保留。
     #[test]
     fn signing_material_roundtrip_and_hash_rule() {
         let call = runtime::RuntimeCall::System(frame_system::Call::remark {
@@ -268,7 +268,7 @@ mod tests {
         let m =
             chain_signing::build_signing_material(&call_data, &genesis, 5, 1, 1).expect("material");
         assert_eq!(m.call.encode(), call_data);
-        // 小载荷:签名输入 == payload 本体。
+        // 小载荷:签名输入 == 审阅 payload 本体。
         assert!(m.payload.len() <= 256);
         assert_eq!(m.signing_bytes, m.payload);
 
@@ -277,10 +277,10 @@ mod tests {
         });
         let big = chain_signing::build_signing_material(&big_call.encode(), &genesis, 5, 1, 1)
             .expect("material");
-        // 大载荷:SignedPayload 的 Encode 规则内置 >256B 改签 blake2_256,
-        // encode() 与 using_encoded 同值 —— payload 即最终签名输入(32 字节哈希)。
+        // 大载荷:QR 仍必须拿到完整审阅 payload；只有实际签名输入是 32 字节 blake2_256。
+        assert!(big.payload.len() > 256);
         assert_eq!(big.signing_bytes.len(), 32);
-        assert_eq!(big.payload, big.signing_bytes);
+        assert_ne!(big.payload, big.signing_bytes);
     }
 
     #[test]

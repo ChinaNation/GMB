@@ -6,10 +6,13 @@
 //!   收到触发即扣一次；「到期没到期」由本机/Cloudflare 读时间戳算好后再触发。
 //! - 首扣（`subscribe`）与续扣（`charge_due`）共用唯一原子路径 [`Pallet::try_charge`]，
 //!   杜绝两套扣款逻辑漂移。
+//! - 价源分层：**平台价链上真源**（续扣现读 `PlatformPrice`）；**创作者价链下真源**
+//!   （续扣由 keeper 按创作者当前价带入 → 改价后续扣自然走新价）。
 
 use crate::pallet::{BalanceOf, Config, Error, Event, Pallet, Subscriptions};
 use crate::subscription::{IssuerKey, SubscriptionPlan, SubscriptionState, SubscriptionStatus};
 use frame_support::{
+    ensure,
     storage::with_storage_layer,
     traits::{Currency, ExistenceRequirement, UnixTime},
 };
@@ -57,21 +60,34 @@ impl<T: Config> Pallet<T> {
 
     /// 续扣：收到续订触发方调用即扣一次（链上零到期判断）。
     ///
-    /// 扣款失败 → 写 `PastDue`（在 `try_charge` 的回滚层之外，欠费即停不重试、不续扣）。
+    /// - 平台：`amount` 必须为 `None`（平台价链上真源，不接受 keeper 带价），现读 `PlatformPrice`。
+    /// - 创作者：`amount` 必须为 `Some(当前价)`（创作者价链下真源，keeper 带入），改价后走新价。
+    ///
+    /// 扣款失败 → 写 `PastDue`（在 `try_charge` 回滚层之外，欠费即停不重试）。
     /// 本函数整体返回 `Ok`：续扣失败不是 extrinsic 失败，状态已记 `PastDue`。
     pub(crate) fn do_charge_due(
         subscriber: T::AccountId,
         issuer: IssuerKey<T::AccountId>,
+        amount: Option<u128>,
     ) -> DispatchResult {
         let key = (subscriber.clone(), issuer.clone());
         let state = Subscriptions::<T>::get(&key).ok_or(Error::<T>::SubscriptionNotFound)?;
         // 已取消的订阅不续扣。
-        frame_support::ensure!(
+        ensure!(
             state.status != SubscriptionStatus::Cancelled,
             Error::<T>::SubscriptionNotFound
         );
-        let now = Self::now_ms();
-        if Self::try_charge(&subscriber, &issuer, state.plan, now).is_err() {
+        let plan = match issuer {
+            IssuerKey::Platform => {
+                ensure!(amount.is_none(), Error::<T>::PlanIssuerMismatch);
+                state.plan // Level(level) → resolve 现读 PlatformPrice[level]
+            }
+            IssuerKey::Creator(_) => {
+                let current = amount.ok_or(Error::<T>::CreatorPriceRequired)?;
+                SubscriptionPlan::CreatorPrice(current)
+            }
+        };
+        if Self::try_charge(&subscriber, &issuer, plan, Self::now_ms()).is_err() {
             Subscriptions::<T>::mutate(&key, |slot| {
                 if let Some(s) = slot {
                     s.status = SubscriptionStatus::PastDue;

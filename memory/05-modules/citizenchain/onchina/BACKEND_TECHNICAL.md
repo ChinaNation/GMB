@@ -52,8 +52,8 @@ citizenchain/onchina/src/
 - 机构主写入只进入 `institution/subjects`、`domains/gov`、`domains/private`、`institution/accounts` 和 `domains/docs`。
 - 公民主写入只进入 `domains/citizens`、`subjects`、`citizens`、`citizen_documents`、`passport_numbers` 和 `sequence_counters`。
 - 管理员写入只进入 `admins`（本地展示元数据）和短生命周期安全运行态表；成员资格与岗位范围只来自链上，禁止建立本地管理员授权范围表。
-- 新机构首次登记只提交机构 CID 基础资料和至少两个管理员钱包。后端从公民档案解析管理员姓名，未解析到姓名时使用“管理员”；链上确认前只写 `pending_institution_registrations` 待确认区，禁止提前写入 `subjects/accounts/institution_admins` 正式投影。
-- `pending_institution_registrations` 不是机构或授权真源，只保存已生成扫码交易但尚未被链确认的登记载荷，并参与 CID/机构全称防重复校验；链确认后的正式投影由链同步流程写入并删除对应待确认记录。
+- 新机构首次登记只提交机构 CID 基础资料和至少两个管理员钱包。后端从公民档案解析管理员姓名，未解析到姓名时使用“管理员”；链上确认前只允许写 `chain_sign_sessions` 短期签名会话，禁止写入任何机构业务草稿或占用表。
+- 创建机构和创建公民只有两种业务结果：链上确认成功后写正式投影；未链上确认就是失败，并删除对应短期签名会话，不保留名称、CID、管理员或公民档案占用。
 - 公权机构唯一真源是链上 `PublicManage`;`subjects/gov/accounts` 中的公权行只是本地查询投影,投影版本只记录在 `chain_projection_state`。
 - 链上状态字段只作本地投影缓存(`subjects.chain_status`、`accounts.chain_status`),不得成为第二授权真源。
 - `node_institution_bindings` 只保存本节点当前绑定的链上身份键：`candidate_id / institution_code / institution_cid_number / frg_province_code`。FRG 绑定始终是一个 FRG 机构身份，不得拆成虚拟省组身份；省级办理范围来自管理员钱包在 entity 中有效的 `PROVINCE_COMMISSIONER_<省码>` 任职，机构 CID/全称/简称/主账户来自 FRG 主体投影且只作身份与展示。绑定表不得保存名称或省市镇权限派生值。
@@ -111,7 +111,9 @@ citizenchain/onchina/src/
 
 业务模块不得新增全局链目录，不得在 handler 内手写 pallet/call 字节或二维码动作码。动作码、payload、签名/验签规则以 `memory/07-ai/unified-protocols.md` 为唯一登记入口。
 
-机构首次登记的链调用只编码 `actor_cid_number + cid_number + cid_full_name + cid_short_name + town_code + admins + auth`。法定代表人、岗位任职、治理阈值、协议账户地址和注资金额均不得由首次登记表单或调用载荷提交；runtime 自动创建唯一默认“法定代表人”岗位、严格多数阈值及该机构类型要求的零余额协议账户。协会 `SFAS` 的 `p1` 必须由注册局在盈利/非盈利中显式选择，后端不得固定为非盈利。
+机构首次登记的链调用只编码 `cid_number + cid_full_name + cid_short_name + town_code + admins + actor_cid_number`。法定代表人、岗位任职、治理阈值、协议账户地址和注资金额均不得由首次登记表单或调用载荷提交；runtime 自动创建唯一默认“法定代表人”岗位、严格多数阈值及该机构类型要求的零余额协议账户。协会 `SFAS` 的 `p1` 必须由注册局在盈利/非盈利中显式选择，后端不得固定为非盈利。
+
+机构首次登记不再存在内层 runtime 创建凭证。后端只生成最终链交易签名会话，`origin` 是当前注册局管理员钱包，runtime 通过 `origin + actor_cid_number` 校验该管理员是否属于对应注册局机构 `admins` 并具备目标机构登记权限。创建机构链路不得读取 `ONCHINA_SIGNING_SEED_HEX` 或 `ONCHAIN_CREDENTIAL_SIGNER_PUBKEY`，不得生成 `a=8 institution_create_credential`，不得要求管理员钱包签两次。
 
 ## 7. HTTPS 和机构 CA
 
@@ -141,6 +143,10 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 公民身份上链(`CITIZEN_ONCHAIN_PUSH`)属注册局上链操作,同归 `PASSKEY_COLD_SIGN` 最严档:`prepare` 与 `complete` 各消费一次一次性 grant,grant 载荷绑定 `{cid_number, wallet_account}` 且 target = cid_number,与业务请求逐字段一致才放行。
 
 联邦注册局机构 `admins` 和岗位任职不得本地直接改库；换届只能构造链上治理或注册局登记动作后由 entity 写入。市注册局本地登记目录每省每市最多 30 人，统计必须同时带省和市，但该目录不是链上管理员资格真源。NJD、普通公权机构、私权机构和非法人组织的本机构管理员/岗位维护也必须走链上 `propose_institution_governance`，不得在 OnChina 内建立第二套管理员集合。
+
+创建机构(`INSTITUTION_CREATE`)属扫码授权动作。后端 `prepare` 阶段只预检管辖范围和至少两个不重复 `admin_account`，不再接收 `threshold`；正式创建阶段的授权 payload 必须与前端 `buildInstitutionCreatePayload` 同构，包含 `subject_property / p1 / province_name / city_name / town_name / institution / education_type / cid_full_name / cid_short_name / parent_cid_number / private_type / partnership_kind / admins`。`admins` 每项只允许 `admin_name + admin_account`，授权仍只比较账户。
+
+`PASSKEY_COLD_SIGN` 正式提交的安全门统一在 `auth/actions.rs::require_admin_security_grant`：先消费 `X-Passkey-Assertion`，再消费 `x-cid-security-grant`，任一缺失、过期、归属不匹配或 payload hash 不匹配都 fail-closed，不允许降级为 SESSION 或只验冷签 grant。机构资料上传、资料删除、机构详情更新等链下写操作虽然不直接提交链交易，也必须按各自后端 `grant_payload` 逐字段绑定授权：上传资料为 `target/file_name/doc_type/file_size`，删除资料为 `target/doc_id/file_name`，机构详情更新为 `target/cid_number/cid_full_name/parent_cid_number/legal_representative_name/legal_representative_cid_number/legal_representative_photo_path`。
 
 机构管理员列表 API 联合读取链上 `admins(admin_name + admin_account)` 人员集合与 entity 岗位定义、有效任职。`institution/admins/chain_roles.rs` 负责公权/私权岗位路由、任职合并和 FRG 省专员范围解析；本地联系方式、照片和 Passkey 不得成为管理员资格或岗位真源。岗位权限不建立通用表，具体业务模块按“机构 + 有效岗位 + 业务动作”硬规则判定。
 

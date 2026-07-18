@@ -1,5 +1,7 @@
 import '../qr/qr_protocols.dart';
 import '../wallet/wallet_manager.dart';
+import 'action_labels.dart';
+import 'field_labels.dart';
 import 'payload_decoder.dart';
 import 'qr_signer.dart';
 
@@ -26,18 +28,24 @@ class OfflineSignException implements Exception {
 class OfflineSignVerification {
   const OfflineSignVerification({
     required this.decoded,
-    required this.contentMatch,
+    required this.status,
+    required this.actionLabel,
+    this.rejectReason,
   });
 
   final DecodedPayload? decoded;
-  final ContentMatchStatus contentMatch;
+  final SignDecisionStatus status;
+  final String? actionLabel;
+  final String? rejectReason;
+
+  bool get canSign => status == SignDecisionStatus.normal;
 }
 
-enum ContentMatchStatus {
-  matched,
-  mismatched,
-  decodeFailed,
-}
+/// 公民钱包扫码签名只允许两种终态。
+///
+/// normal = 绿色,允许签名；reject = 红色,禁止签名。
+/// 不再保留“动作不匹配/解码失败”等独立状态,原因统一放入 rejectReason。
+enum SignDecisionStatus { normal, reject }
 
 /// 离线签名执行服务。
 class OfflineSignService {
@@ -56,42 +64,95 @@ class OfflineSignService {
 
   OfflineSignVerification verifyPayload(SignRequestEnvelope request) {
     final body = request.body;
+    final qrActionLabel = actionLabelForQrAction(body.action);
+    if (qrActionLabel == null) {
+      return const OfflineSignVerification(
+        decoded: null,
+        status: SignDecisionStatus.reject,
+        actionLabel: null,
+        rejectReason: '未登记的签名动作，已拒绝签名',
+      );
+    }
 
     // Runtime 升级只在 QR 中携带 32B 待签摘要,原始 WASM call_data 留在生成端 session。
     if (QrActions.isRuntimeHashOnly(body.action)) {
       if (body.payloadBytes.length == 32) {
-        return const OfflineSignVerification(
+        return OfflineSignVerification(
           decoded: null,
-          contentMatch: ContentMatchStatus.matched,
+          status: SignDecisionStatus.normal,
+          actionLabel: qrActionLabel,
         );
       }
-      // 例外条件不全(payload 不是 32B / 缺 wasm_hash 字段),仍按 decodeFailed 处理。
-      return const OfflineSignVerification(
+      return OfflineSignVerification(
         decoded: null,
-        contentMatch: ContentMatchStatus.decodeFailed,
+        status: SignDecisionStatus.reject,
+        actionLabel: qrActionLabel,
+        rejectReason: 'Runtime 升级签名载荷必须是 32 字节哈希，已拒绝签名',
       );
     }
 
     final decoded = PayloadDecoder.decode(body.payloadHex);
 
     if (decoded == null) {
-      return const OfflineSignVerification(
+      return OfflineSignVerification(
         decoded: null,
-        contentMatch: ContentMatchStatus.decodeFailed,
+        status: SignDecisionStatus.reject,
+        actionLabel: qrActionLabel,
+        rejectReason: body.payloadBytes.length == 32 &&
+                QrActions.isChainAction(body.action)
+            ? '普通链交易不能只签 32 字节哈希，已拒绝签名'
+            : '签名载荷无法解码，已拒绝签名',
+      );
+    }
+
+    final decodedActionLabel = actionLabelForDecodedAction(decoded.action);
+    if (decodedActionLabel == null) {
+      return OfflineSignVerification(
+        decoded: decoded,
+        status: SignDecisionStatus.reject,
+        actionLabel: qrActionLabel,
+        rejectReason: '签名动作缺少中文名称，已拒绝签名',
       );
     }
 
     final decodedAction = QrActions.fromDecodedAction(decoded.action);
-    if (decodedAction != 0 && decodedAction != body.action) {
+    if (decodedAction == 0) {
       return OfflineSignVerification(
         decoded: decoded,
-        contentMatch: ContentMatchStatus.mismatched,
+        status: SignDecisionStatus.reject,
+        actionLabel: qrActionLabel,
+        rejectReason: '签名动作未登记，已拒绝签名',
+      );
+    }
+    if (decodedAction != body.action) {
+      return OfflineSignVerification(
+        decoded: decoded,
+        status: SignDecisionStatus.reject,
+        actionLabel: qrActionLabel,
+        rejectReason: '签名动作和载荷内容不匹配，已拒绝签名',
+      );
+    }
+
+    String? missingField;
+    for (final fieldKey in decoded.reviewFields.keys) {
+      if (!hasFieldLabel(fieldKey)) {
+        missingField = fieldKey;
+        break;
+      }
+    }
+    if (missingField != null) {
+      return OfflineSignVerification(
+        decoded: decoded,
+        status: SignDecisionStatus.reject,
+        actionLabel: decodedActionLabel,
+        rejectReason: '签名字段缺少中文名称，已拒绝签名',
       );
     }
 
     return OfflineSignVerification(
       decoded: decoded,
-      contentMatch: ContentMatchStatus.matched,
+      status: SignDecisionStatus.normal,
+      actionLabel: decodedActionLabel,
     );
   }
 
@@ -139,19 +200,14 @@ class OfflineSignService {
     }
 
     final verification = verifyPayload(request);
-    // 两色识别模型:action 与 payload 解码一致才绿色放行。
-    switch (verification.contentMatch) {
-      case ContentMatchStatus.matched:
+    // 两色识别模型:只有 normal 绿色态才允许签名;reject 红色态绝不签名。
+    switch (verification.status) {
+      case SignDecisionStatus.normal:
         break;
-      case ContentMatchStatus.mismatched:
-        throw const OfflineSignException(
+      case SignDecisionStatus.reject:
+        throw OfflineSignException(
           OfflineSignErrorCode.contentMismatch,
-          '交易内容与摘要不符,拒绝签名',
-        );
-      case ContentMatchStatus.decodeFailed:
-        throw const OfflineSignException(
-          OfflineSignErrorCode.contentMismatch,
-          '无法独立验证交易内容,禁止签名',
+          verification.rejectReason ?? '签名请求已拒绝',
         );
     }
 

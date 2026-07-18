@@ -3,8 +3,8 @@
 
 import type { AdminAuth } from '../../auth/types';
 import {
-  createScanSignSecurityGrant,
-  type ScanSignResolver,
+  securityGrantSubmitHeaders,
+  type AdminSecurityGrantOutput,
 } from '../../admins/securityApi';
 import { adminRequest } from '../../utils/http';
 import type {
@@ -21,8 +21,7 @@ import type {
   SearchParentsOptions,
   UpdateInstitutionInput,
 } from '../../subjects/api';
-
-const SECURITY_GRANT_HEADER = 'x-cid-security-grant';
+import { buildInstitutionCreatePayload } from '../../subjects/api';
 
 export type {
   CreateInstitutionInput,
@@ -52,32 +51,17 @@ export async function checkCidFullName(
   );
 }
 
-// 创建机构属 PASSKEY_COLD_SIGN 操作,需冷钱包扫码签名授权;signWithScan 由创建弹窗注入。
+// 创建私权机构只返回最终链交易签名请求；管理员钱包签名由表单统一处理一次。
 export async function createInstitution(
   auth: AdminAuth,
   routeSegment: string,
   input: CreateInstitutionInput,
-  signWithScan: ScanSignResolver,
 ): Promise<CreateInstitutionOutput> {
-  const grantPayload = {
-    subject_property: input.subject_property,
-    p1: input.p1 ?? null,
-    province_name: input.province_name ?? null,
-    city_name: input.city_name,
-    institution: input.institution,
-    education_type: input.education_type ?? null,
-    cid_full_name: input.cid_full_name ?? null,
-    cid_short_name: input.cid_short_name ?? null,
-    parent_cid_number: input.parent_cid_number ?? null,
-    private_type: input.private_type ?? null,
-    partnership_kind: input.partnership_kind ?? null,
-    admins: input.admins,
-  };
-  const grant = await createScanSignSecurityGrant(auth, 'INSTITUTION_CREATE', grantPayload, signWithScan);
+  const payload = buildInstitutionCreatePayload(input);
   return adminRequest<CreateInstitutionOutput>(`/api/v1/private/${routeSegment}`, auth, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', [SECURITY_GRANT_HEADER]: grant.grant_id },
-    body: JSON.stringify(input),
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
   });
 }
 
@@ -143,18 +127,38 @@ export async function searchParentInstitutions(
   );
 }
 
-// 更新机构属 SESSION 操作(仅需有效会话),无需扫码签名授权,直接调用。
+export function buildInstitutionUpdateSecurityPayload(
+  cidNumber: string,
+  input: UpdateInstitutionInput,
+) {
+  return {
+    target: cidNumber,
+    cid_number: cidNumber,
+    cid_full_name: input.cid_full_name ?? null,
+    parent_cid_number: input.parent_cid_number ?? null,
+    legal_representative_name: input.legal_representative_name ?? null,
+    legal_representative_cid_number: input.legal_representative_cid_number ?? null,
+    legal_representative_photo_path: input.legal_representative_photo_path ?? null,
+  };
+}
+
+// 更新机构属 PASSKEY_COLD_SIGN 操作:
+// 授权 payload 只绑定后端实际校验字段;正式提交必须同时携带冷签 grant 与 Passkey assertion。
 export async function updateInstitution(
   auth: AdminAuth,
   cidNumber: string,
   input: UpdateInstitutionInput,
+  securityGrant: AdminSecurityGrantOutput,
 ): Promise<Institution> {
+  const headers = await securityGrantSubmitHeaders(auth, securityGrant, {
+    'content-type': 'application/json',
+  });
   return adminRequest<Institution>(
     `/api/v1/institutions/${encodeURIComponent(cidNumber)}`,
     auth,
     {
       method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
+      headers,
       body: JSON.stringify(input),
     },
   );

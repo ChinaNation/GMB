@@ -89,13 +89,17 @@ Future<void> _handleSquareActionSignRequest(
 
 Future<bool?> _showActionConfirm(
     BuildContext context, SquareActionSignPrep prep) {
+  final fieldLines = prep.decoded.reviewFields!
+      .map((field) => '${field.label}：${field.value}')
+      .join('\n');
   return showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       title: const Text('确认签名'),
       content: Text(
         '账户：${_shortAddress(prep.wallet.address)}\n'
-        '操作：${prep.decoded.displayTitle}\n\n'
+        '动作：${prep.actionLabel}\n'
+        '$fieldLines\n\n'
         '确认后将用本机钱包对此操作签名。',
       ),
       actions: [

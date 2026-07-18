@@ -226,12 +226,17 @@ pub const VALID_DOC_TYPES: &[&str] =
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateInstitutionAdminInput {
-    /// 机构初始管理员钱包账户；姓名由后端公民资料解析，首次登记不绑定岗位。
+    /// 管理员展示姓名;授权唯一依据仍是 admin_account。首次登记不绑定岗位。
+    #[serde(default)]
+    pub admin_name: Option<String>,
+    /// 机构初始管理员钱包账户。
     pub admin_account: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CreateInstitutionInput {
+    /// 主体属性(G/F/S)。创建机构第 1 步授权 payload 单源字段,实际类别仍由机构码规则校验。
+    pub subject_property: String,
     pub p1: Option<String>,
     pub province_name: Option<String>,
     pub city_name: String,
@@ -262,11 +267,13 @@ pub struct CreateInstitutionInput {
 
 #[derive(Debug, Serialize)]
 pub struct CreateInstitutionOutput {
+    /// 链签会话 ID；管理员钱包回签后由 OnChina 用它提交唯一链交易。
+    pub request_id: String,
     pub cid_number: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cid_full_name: Option<String>,
     pub category: InstitutionCategory,
-    /// 机构上链创建专用 QR_V1/k=1。b.d 是 propose_create_institution 裸 SCALE call data。
+    /// 机构上链创建专用 QR_V1/k=1。b.d 是完整链交易签名 payload。
     pub institution_create_sign_request: String,
 }
 

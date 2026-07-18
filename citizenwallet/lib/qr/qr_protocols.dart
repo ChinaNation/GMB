@@ -1,3 +1,5 @@
+import 'package:citizenwallet/qr/generated/qr_action_registry.g.dart';
+
 /// QR_V1 统一二维码协议常量。
 ///
 /// 唯一事实源:`memory/01-architecture/qr/qr-protocol-spec.md`
@@ -49,6 +51,10 @@ class QrActions {
   static const int activateAdmin = 5;
   static const int decryptAdmin = 6;
   static const int runtimeUpgradeHash = 7;
+
+  /// 广场账户动作由 CitizenApp 热钱包签名；CitizenWallet 扫到时只能识别后拒绝，
+  /// 不能退回成未知数字或盲签。
+  static const int squareAccountAction = 9;
 
   static const int transferWithRemark = 0x0400;
   static const int personalCreate = 0x0700;
@@ -138,86 +144,11 @@ class QrActions {
       action == activateAdmin || action == decryptAdmin;
 
   static bool isRuntimeHashOnly(int action) =>
-      action == runtimeUpgradeHash ||
-      action == proposeRuntimeUpgrade ||
-      action == developerDirectUpgrade;
+      GeneratedQrActionRegistry.isHashOnlyAction(action);
 
-  static int fromDecodedAction(String action) => switch (action) {
-        'transfer' => transferWithRemark,
-        'propose_create_personal' => personalCreate,
-        'propose_close_personal' => personalClose,
-        'propose_issuance' => resolutionIssuance,
-        'finalize_proposal' => finalizeProposal,
-        'retry_passed_proposal' => retryPassedProposal,
-        'cancel_passed_proposal' => cancelPassedProposal,
-        'register_voting_identity' => registerVotingIdentity,
-        'upgrade_to_candidate_identity' => upgradeToCandidateIdentity,
-        'update_voting_identity' => updateVotingIdentity,
-        'update_candidate_identity' => updateCandidateIdentity,
-        'revoke_identity' => revokeIdentity,
-        'propose_personal_admin_set_change' => personalAdminSetChange,
-        'propose_runtime_upgrade' => proposeRuntimeUpgrade,
-        'developer_direct_upgrade' => developerDirectUpgrade,
-        'propose_destroy' => resolutionDestroy,
-        'propose_replace_grandpa_key' => grandpaKeyChange,
-        'propose_close_public_institution' => publicInstitutionClose,
-        'propose_create_public_institution' => publicInstitutionCreate,
-        'update_public_institution_info' => publicInstitutionUpdateInfo,
-        'add_public_institution_account' => publicInstitutionAddAccount,
-        'propose_public_institution_governance' => publicInstitutionGovernance,
-        'register_public_institution_admins' => publicInstitutionRegisterAdmins,
-        'propose_close_private_institution' => privateInstitutionClose,
-        'propose_create_private_institution' => privateInstitutionCreate,
-        'update_private_institution_info' => privateInstitutionUpdateInfo,
-        'add_private_institution_account' => privateInstitutionAddAccount,
-        'propose_private_institution_governance' =>
-          privateInstitutionGovernance,
-        'register_private_institution_admins' =>
-          privateInstitutionRegisterAdmins,
-        'propose_transfer' => multisigTransfer,
-        'propose_safety_fund_transfer' => safetyFundTransfer,
-        'propose_sweep_to_main' => sweepToMain,
-        'bind_clearing_bank' => bindClearingBank,
-        'deposit_clearing_bank' => depositClearingBank,
-        'withdraw_clearing_bank' => withdrawClearingBank,
-        'switch_clearing_bank' => switchClearingBank,
-        'propose_l2_fee_rate' => proposeL2FeeRate,
-        'register_clearing_bank' => registerClearingBank,
-        'update_clearing_bank_endpoint' => updateClearingBankEndpoint,
-        'unregister_clearing_bank' => unregisterClearingBank,
-        'internal_vote' => internalVote,
-        'joint_vote' => jointVote,
-        'cast_referendum' => castReferendum,
-        'propose_asset_issue' => proposeAssetIssue,
-        'propose_asset_mint' => proposeAssetMint,
-        'propose_asset_burn' => proposeAssetBurn,
-        'propose_asset_close' => proposeAssetClose,
-        'propose_asset_transfer' => proposeAssetTransfer,
-        'propose_monitor_freeze' => proposeMonitorFreeze,
-        'propose_monitor_unfreeze' => proposeMonitorUnfreeze,
-        'propose_monitor_confiscate' => proposeMonitorConfiscate,
-        'propose_monitor_force_transfer' => proposeMonitorForceTransfer,
-        'propose_monitor_force_close' => proposeMonitorForceClose,
-        'set_address_catalog_version' => setAddressCatalogVersion,
-        'set_address_name' => setAddressName,
-        'remove_address_name' => removeAddressName,
-        'set_address' => setAddress,
-        'remove_address' => removeAddress,
-        'propose_enact_law' => proposeEnactLaw,
-        'propose_amend_law' => proposeAmendLaw,
-        'propose_repeal_law' => proposeRepealLaw,
-        'cast_representative_vote' => castRepresentativeVote,
-        'cast_referendum_vote' => castLegislationReferendum,
-        'executive_sign' => executiveSign,
-        'override_sign' => overrideSign,
-        'guard_vote' => guardVote,
-        'activate_admin_account' => activateAdmin,
-        'decrypt_admin' => decryptAdmin,
-        'citizen_identity' => citizenIdentity,
-        'occupy_cid' => occupyCid,
-        'occupy_cids_batch' => occupyCidsBatch,
-        'revoke_cid' => revokeCid,
-        'onchina_admin_action' => onchinaAdmin,
-        _ => 0,
-      };
+  static int fromDecodedAction(String action) {
+    // 公民参选身份确认复用 a=2 的公民身份签名域，具体身份等级由 payload 字段展示。
+    if (action == 'citizen_candidate_identity') return citizenIdentity;
+    return GeneratedQrActionRegistry.actionCodeForKey(action) ?? 0;
+  }
 }

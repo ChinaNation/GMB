@@ -1,7 +1,7 @@
 // 治理投票 QR 签名：构建 QR_V1 签名请求、验证响应、提交 extrinsic。
 //
 // 协议流程：
-// 1. 后端构建未签名 signing payload + QR 请求 JSON
+// 1. 后端构建未签名 review_payload + QR 请求 JSON
 // 2. 前端显示 QR 码 → 用户用 citizenwallet 离线设备扫码签名
 // 3. 前端摄像头扫描响应 QR → 传回后端
 // 4. 后端按本地 session 校验 request id/pubkey → 构建 signed extrinsic → 提交到链
@@ -36,7 +36,9 @@ pub(crate) const QR_KIND_SIGN_RESPONSE: u8 = primitives::sign::QR_KIND_SIGN_RESP
 struct ChainSignSession {
     expected_pubkey_hex: String,
     call_data_hex: String,
+    /// QR `b.d` 携带的完整审阅载荷 SHA-256。
     payload_hash_hex: String,
+    /// sr25519 实际签名输入 SHA-256，用于提交前重建校验。
     signing_payload_hash_hex: String,
     nonce: u32,
     expires_at: u64,
@@ -194,7 +196,10 @@ pub struct SignRequestBody {
     /// u:签名账户 32B 公钥,base64url(no padding)。
     #[serde(rename = "u")]
     pub pubkey: String,
-    /// d:完整 signing payload bytes,base64url(no padding)。
+    /// d:完整 review_payload bytes,base64url(no padding)。
+    ///
+    /// 普通链交易必须可被钱包完整解码和中文展示；32B signing bytes 仅 Runtime 升级
+    /// hash-only 请求允许进入 QR。
     #[serde(rename = "d")]
     pub payload: String,
 }
@@ -252,7 +257,7 @@ pub struct VoteSignRequestResult {
     pub call_data_hex: String,
     /// 请求 ID（用于后续验证匹配）。
     pub request_id: String,
-    /// 签名 payload 的 SHA-256 哈希（用于验证响应）。
+    /// QR 审阅 payload 的 SHA-256 哈希（用于验证响应）。
     pub expected_payload_hash: String,
     /// 签名时使用的 nonce（提交时必须复用）。
     pub sign_nonce: u32,
@@ -276,7 +281,7 @@ pub struct VoteSubmitResult {
 ///
 /// Call 编码: `[0x14][0x00][proposal_id:u64_le][approve:bool]` 共 11 字节。
 ///
-/// 返回 QR 签名请求 JSON + 请求 ID + 预期 payload hash。
+/// 返回 QR 签名请求 JSON + 请求 ID + 预期审阅 payload hash。
 pub fn build_vote_sign_request(
     proposal_id: u64,
     pubkey_hex: &str,
@@ -309,7 +314,7 @@ pub fn build_vote_sign_request(
     let (payload, signing_bytes) =
         build_signing_payloads(&call_data, &genesis_hash, nonce, spec_version, tx_version)?;
 
-    // 计算 payload hash
+    // 计算审阅 payload hash 与实际签名字节 hash，分别用于 QR 会话和提交校验。
     let payload_hash = sha256_hash(&payload);
     let payload_hash_hex = hex::encode(payload_hash);
     let signing_payload_hash_hex = hex::encode(sha256_hash(&signing_bytes));
@@ -719,7 +724,7 @@ pub(crate) fn fetch_runtime_version() -> Result<(u32, u32), String> {
     Ok((spec as u32, tx as u32))
 }
 
-/// 构建链交易冷签 payload。
+/// 构建链交易冷签审阅 payload 与实际签名字节。
 pub(crate) fn build_signing_payloads(
     call_data: &[u8],
     genesis_hash: &[u8; 32],
@@ -852,7 +857,7 @@ pub(crate) fn generate_request_id_public(prefix: &str) -> String {
 
 /// 通用签名请求构建：给定 call_data,返回完整的 QR_V1/k=1 签名请求。
 ///
-/// 供 transaction 模块等外部调用方使用，避免重复获取链上参数和构建 payload。
+/// 供 transaction 模块等外部调用方使用，避免重复获取链上参数和构建 review_payload。
 pub fn build_sign_request_from_call_data(
     pubkey_hex: &str,
     pubkey_bytes: &[u8],

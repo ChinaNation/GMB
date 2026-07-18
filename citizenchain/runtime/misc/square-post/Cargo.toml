@@ -19,6 +19,7 @@ entity-primitives = { path = "../../entity/entity-primitives", default-features 
 [dev-dependencies]
 sp-io = { workspace = true }
 pallet-balances = { workspace = true, features = ["std"] }
+serde_json = { workspace = true, default-features = false, features = ["std"] } # 金标 SCALE 向量 fixture
 
 [features]
 default = ["std"]

@@ -147,9 +147,9 @@
 
 ### 冻结 chainspec 部署风险
 
-- 默认冻结 chainspec（创世哈希 `0xb57c…9971`）真实启动时，`NodeGuard::new` 在 NRC 管理员记录上返回 `AdminAccountDecodeFailed` 并按 fail-closed 拒绝启动。
+- 默认冻结 chainspec（创世哈希 `0xb57c…9971`）真实启动时，`NodeGuard::new` 在 NRC 管理员记录上返回 `AdminAccountDecodeFailed`；该历史记录已被 2026-07-17 的“启动自检非致命化”修正，节点启动不再因此失败，后续导入仍 fail-closed。
 - 该问题与固定治理骨架任务已记录的风险一致：冻结 chainspec 使用旧 `AdminAccount` SCALE 字段模型，而当前源码/当前 fresh 创世使用新模型；本次包装器迁移没有改变治理骨架解码或规则语义。
-- 不允许为旧冻结状态增加兼容解码。正式部署前必须按预上线重新创世流程重新烘焙 chainspec、创世状态包及关联轻客户端资产。
+- 不允许为旧冻结状态增加兼容解码。正式部署只能通过正式 runtime 升级、状态迁移和链规范发布流程处理，不增加旧模型双轨。
 
 ## 第 2 步执行结果（2026-07-10）
 
@@ -821,3 +821,22 @@
 - `WASM_BUILD_FROM_SOURCE=1 cargo test -p node current_wasm_passes_candidate_runtime_fee_behavior_probes --bin citizenchain -- --nocapture`：1/1 通过；真实候选 WASM 完成链上费率、最低费和投票费隔离行为验证。
 - CID 定向测试：普通机构删除通过、创世机构删除拒绝、四项 CID 规则通过。
 - 手续费定向测试：0.1%、链上最低 10 分、投票 100 分、链下最低 1 分、最高 0.1% 及实际事件核对通过；当前链下入口被 `BaseCallFilter` 禁用时只接受精确 `CallFiltered`，以后开放入口必须通过真实最低费清算探针。
+
+## 节点守卫启动自检非致命化（2026-07-17）
+
+### 执行边界
+
+- 本次只修改 `citizenchain/node/` 的节点守卫和服务装配，不修改 `citizenchain/runtime/`。
+- `NodeGuard::new` 不再把启动自检失败上抛给 `service.rs`，节点进程必须继续启动，继续提供已有合法状态上的 P2P、RPC 和挖矿服务。
+- 启动自检失败只记录 `node-guard` 错误日志；后续普通区块、完整状态包和候选 runtime 导入仍然 fail-closed。
+- 如果 CID 启动基准不可用，普通块只要触及 CID 规范表或携带候选 runtime 即拒绝；完整状态导入直接拒绝，避免在无法证明基准时导入受保护状态。
+- 网络导入路径和本地挖矿路径均使用同一口径，不能出现一个路径杀进程、另一个路径拒块的双轨行为。
+
+### 验收要求
+
+- `cargo fmt --manifest-path citizenchain/node/Cargo.toml --check`：通过。
+- `cargo check --manifest-path citizenchain/node/Cargo.toml`：通过。
+- `cargo test --manifest-path citizenchain/node/Cargo.toml node_guard`：77/77 通过，新增覆盖“CID 启动基准不可用时完整状态导入拒绝”。
+- `git diff --check`：通过。
+- Headless 临时 base-path 启动验收已尝试；桌面二进制需要 `CITIZENCHAIN_HEADLESS=1` 才进入裸 CLI。未加该变量时命中了当前本机正在运行的 `gmb.dev` 数据库锁；加变量后 80 秒内只输出进入无头模式，未吐 Substrate 启动标记，未将该项记为通过，也未强杀用户正在运行的节点。
+- 当前已由编译、NodeGuard 导入拒绝矩阵和完整状态策略测试证明：启动自检不再上抛给 `service.rs`，非法导入仍返回 `KnownBad` 且不委派内层导入器。

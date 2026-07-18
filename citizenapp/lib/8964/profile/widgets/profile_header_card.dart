@@ -23,6 +23,7 @@ class ProfileHeaderCard extends StatelessWidget {
     this.onFollowing,
     this.onFollowers,
     this.onPosts,
+    this.creatorSubscribeButton,
   });
 
   final String ownerAccount;
@@ -38,6 +39,9 @@ class ProfileHeaderCard extends StatelessWidget {
 
   /// 右上三图标（[ProfileActionIcons]）。
   final Widget actions;
+
+  /// 他人主页「订阅 TA / 取消」按钮（[CreatorSubscribeButton]）；本人主页传 null 不显示。
+  final Widget? creatorSubscribeButton;
 
   final VoidCallback? onFollowing;
   final VoidCallback? onFollowers;
@@ -137,6 +141,10 @@ class ProfileHeaderCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (creatorSubscribeButton != null) ...[
+                  const SizedBox(height: 12),
+                  creatorSubscribeButton!,
+                ],
               ],
             ),
           ),

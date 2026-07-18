@@ -7,11 +7,9 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import 'app_theme.dart';
 import 'scan_overlay.dart';
-import '../signer/action_labels.dart';
 import '../signer/field_labels.dart';
 import '../signer/offline_sign_service.dart';
 import '../signer/qr_signer.dart';
-import '../qr/qr_protocols.dart';
 import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
 
@@ -347,42 +345,34 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
   Widget _buildTransactionDetails(
       SignRequestEnvelope request, OfflineSignVerification verification) {
     final decoded = verification.decoded;
-    final match = verification.contentMatch;
+    final rejected = verification.status == SignDecisionStatus.reject;
 
     final Widget statusBanner;
-    switch (match) {
-      case ContentMatchStatus.matched:
+    switch (verification.status) {
+      case SignDecisionStatus.normal:
         statusBanner = _buildBanner(
           color: AppTheme.success,
           icon: Icons.verified_rounded,
-          text: '交易内容已独立验证,可安全签名',
+          text: '签名状态正常，内容已完整中文解释，可以签名',
         );
-      case ContentMatchStatus.mismatched:
+      case SignDecisionStatus.reject:
         statusBanner = _buildBanner(
           color: AppTheme.danger,
           icon: Icons.dangerous_rounded,
-          text: '警告:二维码动作与交易内容不符,禁止签名',
-        );
-      case ContentMatchStatus.decodeFailed:
-        // 两色识别模型:无法解码 → 红色拒签。
-        statusBanner = _buildBanner(
-          color: AppTheme.danger,
-          icon: Icons.dangerous_rounded,
-          text: '警告:无法独立验证交易内容,禁止签名',
+          text: verification.rejectReason ?? '签名请求已拒绝',
         );
     }
 
-    final actionLabel = decoded != null
-        ? actionLabels[decoded.action] ?? decoded.action
-        : _actionLabel(request.body.action);
+    final actionLabel = verification.actionLabel ?? '未登记签名动作';
 
     final List<Widget> detailRows;
-    if (decoded != null) {
+    if (!rejected && decoded != null) {
       detailRows = [
         _detailRow('交易类型', actionLabel),
         ...decoded.reviewFields.entries.map((e) {
+          final label = fieldLabelTextOrNull(e.key);
           return _detailRow(
-            fieldLabelText(e.key),
+            label ?? '未翻译字段',
             fieldValueText(e.key, e.value),
           );
         }),
@@ -390,7 +380,8 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     } else {
       detailRows = [
         _detailRow('交易类型', actionLabel),
-        _detailRow('载荷', '${request.body.payloadBytes.length} 字节'),
+        _detailRow('状态', '拒绝签名'),
+        _detailRow('原因', verification.rejectReason ?? '签名请求已拒绝'),
       ];
     }
 
@@ -474,11 +465,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
   Widget _buildRequestSummary(SignRequestEnvelope request) {
     final expired = _remainingSeconds <= 0;
     final verification = _verification;
-    final isMismatched =
-        verification?.contentMatch == ContentMatchStatus.mismatched;
-    // 两色识别模型:decodeFailed 一律红色拒签。
-    final isDecodeFailed =
-        verification?.contentMatch == ContentMatchStatus.decodeFailed;
+    final isRejected = verification?.status == SignDecisionStatus.reject;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -524,14 +511,14 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
         if (verification != null)
           _buildTransactionDetails(request, verification),
         const SizedBox(height: 16),
-        if (isDecodeFailed) ...[
+        if (isRejected) ...[
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: AppTheme.bannerDecoration(AppTheme.danger),
-            child: const Text(
-              '无法独立验证交易内容，禁止签名。请升级冷钱包后重试。',
-              style: TextStyle(
+            child: Text(
+              verification?.rejectReason ?? '签名请求已拒绝',
+              style: const TextStyle(
                 color: AppTheme.danger,
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
@@ -552,9 +539,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
             Expanded(
               child: FilledButton(
                 onPressed:
-                    (_signing || expired || isMismatched || isDecodeFailed)
-                        ? null
-                        : _signRequest,
+                    (_signing || expired || isRejected) ? null : _signRequest,
                 child: _signing
                     ? const SizedBox(
                         width: 20,
@@ -654,9 +639,4 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
           : (request != null ? _buildRequestSummary(request) : _buildScanner()),
     );
   }
-}
-
-String _actionLabel(int action) {
-  if (QrActions.isRuntimeHashOnly(action)) return 'Runtime 升级签名';
-  return '动作 $action';
 }

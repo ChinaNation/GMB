@@ -98,8 +98,8 @@ impl Db {
     fn init_current_schema(conn: &mut postgres::Client) -> Result<(), String> {
         conn.batch_execute(
             "-- 机构自定义命名账户的关闭凭证；协议账户永久不可关闭。
-             -- 链交易冷签会话(ADR-031 D6/D7):prepare 落库,submit 单次消费;
-             -- 占号先行 = 链上进块后才建档,会话携带校验哈希防 runtime 漂移。
+             -- 链交易冷签会话(ADR-031 D6/D7):prepare 只保存短期签名 payload;
+             -- submit 后无论成功失败都删除,不得作为公民/机构的第三种业务状态。
              CREATE TABLE IF NOT EXISTS chain_sign_sessions (
                 request_id   TEXT PRIMARY KEY,
                 purpose      TEXT NOT NULL,
@@ -114,6 +114,10 @@ impl Db {
              );
              CREATE INDEX IF NOT EXISTS idx_chain_sign_sessions_expiry
                 ON chain_sign_sessions(expires_at) WHERE consumed_at IS NULL;
+
+             -- 旧版机构创建曾有链确认前业务草稿区。现在创建机构只有两种结果:
+             -- 链上成功后写正式投影;未链上成功不得保留本地业务占用。
+             DROP TABLE IF EXISTS pending_institution_registrations;
 
              CREATE TABLE IF NOT EXISTS institution_deregistrations (
                 id               BIGSERIAL PRIMARY KEY,
@@ -424,19 +428,6 @@ impl Db {
                 updated_at TIMESTAMPTZ NOT NULL,
                 PRIMARY KEY (province_code, cid_number)
              ) PARTITION BY LIST (province_code);
-
-             -- 机构创建二维码生成后、链确认前的唯一草稿区。这里不是正式机构投影；
-             -- subjects/accounts/institution_admins 只能在链确认后由同步流程写入。
-             CREATE TABLE IF NOT EXISTS pending_institution_registrations (
-                cid_number TEXT PRIMARY KEY,
-                institution_payload JSONB NOT NULL,
-                admins_payload JSONB NOT NULL,
-                actor_cid_number TEXT NOT NULL,
-                created_by TEXT NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-             );
-             CREATE INDEX IF NOT EXISTS idx_pending_institution_registrations_created_at
-                ON pending_institution_registrations(created_at);
 
              -- 机构管理员链下私密资料唯一归属表。
              -- 岗位、任期和来源由 entity 链上任职保存；本表只承接联系方式、证件照、passkey 等。

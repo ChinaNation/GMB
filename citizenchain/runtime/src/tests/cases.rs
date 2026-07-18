@@ -1816,23 +1816,19 @@ fn institution_governance_can_clear_legal_representative_atomically() {
             primitives::cid::code::institution_code_from_cid_number(CHINA_CB[0].cid_number)
                 .expect("CHINA_CB CID must contain institution code");
         let representative_account = AccountId::new([88u8; 32]);
-        let result = |legal_representative_change| {
-            entity_primitives::InstitutionGovernanceResult {
-                institution_code,
-                cid_number: cid_number.clone(),
-                role_changes: vec![],
-                assignment_changes: vec![],
-                legal_representative_change,
-                result_source_ref: b"legal-representative-governance".to_vec(),
-            }
+        let result = |legal_representative_change| entity_primitives::InstitutionGovernanceResult {
+            institution_code,
+            cid_number: cid_number.clone(),
+            role_changes: vec![],
+            assignment_changes: vec![],
+            legal_representative_change,
+            result_source_ref: b"legal-representative-governance".to_vec(),
         };
 
         assert_ok!(
             public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(Some(
                 entity_primitives::InstitutionLegalRepresentativeChange::Set {
-                    legal_representative_name: "法定代表人"
-                        .as_bytes()
-                        .to_vec(),
+                    legal_representative_name: "法定代表人".as_bytes().to_vec(),
                     legal_representative_cid_number: b"CITIZEN-LR-001".to_vec(),
                     legal_representative_account: representative_account.clone(),
                 },
@@ -1840,8 +1836,8 @@ fn institution_governance_can_clear_legal_representative_atomically() {
         );
         let cid: public_manage::CidNumberOf<Runtime> =
             cid_number.clone().try_into().expect("CID fits");
-        let stored = public_manage::Institutions::<Runtime>::get(&cid)
-            .expect("genesis institution exists");
+        let stored =
+            public_manage::Institutions::<Runtime>::get(&cid).expect("genesis institution exists");
         assert!(stored.legal_representative_name.is_some());
         assert_eq!(
             stored.legal_representative_account,

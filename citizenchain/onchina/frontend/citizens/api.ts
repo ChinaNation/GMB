@@ -4,16 +4,21 @@
 
 import type { AdminAuth } from '../auth/types';
 import {
-  createScanSignSecurityGrant,
+  createColdSignSubmitHeaders,
   type ScanSignResolver,
 } from '../admins/securityApi';
 import { adminHeaders, adminRequest, request } from '../utils/http';
 
-const SECURITY_GRANT_HEADER = 'x-cid-security-grant';
-
 export type CitizenState = 'NORMAL' | 'REVOKED';
 export type CitizenSex = 'MALE' | 'FEMALE';
 export type CitizenOnchainIdentityLevel = 'voting' | 'candidate';
+
+function jsonAdminHeaders(auth: AdminAuth): Record<string, string> {
+  return {
+    'content-type': 'application/json',
+    ...Object.fromEntries(new Headers(adminHeaders(auth)).entries()),
+  };
+}
 
 export type CitizenRow = {
   id: number;
@@ -257,21 +262,18 @@ export async function prepareCitizenRevoke(
   walletAccount: string,
   signWithScan: ScanSignResolver,
 ): Promise<PrepareCitizenRevokeResult> {
-  const grant = await createScanSignSecurityGrant(
+  const headers = await createColdSignSubmitHeaders(
     auth,
     'CITIZEN_ONCHAIN_PUSH',
     { cid_number: cidNumber, wallet_account: walletAccount },
     signWithScan,
+    jsonAdminHeaders(auth),
   );
   return request<PrepareCitizenRevokeResult>(
     `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/revoke/prepare`,
     {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        [SECURITY_GRANT_HEADER]: grant.grant_id,
-        ...adminHeaders(auth),
-      },
+      headers,
       body: JSON.stringify({ wallet_account: walletAccount }),
     },
   );
@@ -286,14 +288,14 @@ async function citizenOnchainGrant(
   walletAccount: string,
   identityLevel: CitizenOnchainIdentityLevel,
   signWithScan: ScanSignResolver,
-): Promise<string> {
-  const grant = await createScanSignSecurityGrant(
+): Promise<Record<string, string>> {
+  return createColdSignSubmitHeaders(
     auth,
     'CITIZEN_ONCHAIN_PUSH',
     { cid_number: cidNumber, wallet_account: walletAccount, identity_level: identityLevel },
     signWithScan,
+    jsonAdminHeaders(auth),
   );
-  return grant.grant_id;
 }
 
 export async function prepareCitizenOnchainSignature(
@@ -303,16 +305,12 @@ export async function prepareCitizenOnchainSignature(
   identityLevel: CitizenOnchainIdentityLevel,
   signWithScan: ScanSignResolver,
 ): Promise<PrepareCitizenOnchainResult> {
-  const grantId = await citizenOnchainGrant(auth, cidNumber, walletAccount, identityLevel, signWithScan);
+  const headers = await citizenOnchainGrant(auth, cidNumber, walletAccount, identityLevel, signWithScan);
   return request<PrepareCitizenOnchainResult>(
     `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/prepare`,
     {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        [SECURITY_GRANT_HEADER]: grantId,
-        ...adminHeaders(auth),
-      },
+      headers,
       body: JSON.stringify({ wallet_account: walletAccount, identity_level: identityLevel }),
     },
   );
@@ -326,16 +324,12 @@ export async function completeCitizenOnchainSignature(
   signResponse: string,
   signWithScan: ScanSignResolver,
 ): Promise<CompleteCitizenOnchainResult> {
-  const grantId = await citizenOnchainGrant(auth, cidNumber, walletAccount, identityLevel, signWithScan);
+  const headers = await citizenOnchainGrant(auth, cidNumber, walletAccount, identityLevel, signWithScan);
   return request<CompleteCitizenOnchainResult>(
     `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/complete`,
     {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        [SECURITY_GRANT_HEADER]: grantId,
-        ...adminHeaders(auth),
-      },
+      headers,
       body: JSON.stringify({
         wallet_account: walletAccount,
         identity_level: identityLevel,

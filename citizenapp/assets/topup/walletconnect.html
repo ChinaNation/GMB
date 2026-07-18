@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <title>连接钱包支付</title>
+    <style>
+      :root { color-scheme: light; }
+      html, body { margin: 0; height: 100%; background: #F7F9FC; color: #1A2B3C;
+        font-family: -apple-system, "PingFang SC", "Segoe UI", Roboto, sans-serif; }
+      .wrap { min-height: 100%; display: flex; flex-direction: column; align-items: center;
+        justify-content: center; text-align: center; padding: 24px; box-sizing: border-box; }
+      .spinner { width: 44px; height: 44px; border: 3px solid rgba(0,122,116,.18);
+        border-top-color: #007A74; border-radius: 50%; animation: spin 1s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .title { margin: 18px 0 4px; font-size: 16px; }
+      .sub { margin: 0; font-size: 13px; color: #5A6B7C; }
+      .amount { margin-top: 10px; font-size: 15px; font-weight: 600; color: #007A74; }
+      .err { color: #EF4444; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="spinner" id="spinner"></div>
+      <p class="title" id="title">正在唤起 WalletConnect…</p>
+      <p class="sub" id="sub">在弹出的钱包中确认连接与支付</p>
+      <p class="amount" id="amount"></p>
+    </div>
+    <script type="module">
+      // 稳定币支付:WalletConnect v2 provider 连自托管钱包(MetaMask/OKX/Bitget)→ 发 ERC-20 转账。
+      // App 通过 window.__TOPUP__ 注入参数,拿到 txHash 后经 TopupBridge 回传;失败回传 error。
+      import { EthereumProvider } from 'https://esm.sh/@walletconnect/ethereum-provider@2';
+
+      const $ = (id) => document.getElementById(id);
+      function report(payload) {
+        if (window.TopupBridge && window.TopupBridge.postMessage) {
+          window.TopupBridge.postMessage(JSON.stringify(payload));
+        }
+      }
+      function fail(message) {
+        $('spinner').style.display = 'none';
+        $('title').textContent = '未完成';
+        $('title').className = 'title err';
+        $('sub').textContent = message;
+        report({ ok: false, error: message });
+      }
+
+      window.startTopup = async () => {
+        const cfg = window.__TOPUP__;
+        if (!cfg || !cfg.projectId) { fail('WalletConnect 未配置'); return; }
+        $('amount').textContent = `支付 ${cfg.payDisplay} ${cfg.token} · ${cfg.label}`;
+        try {
+          const provider = await EthereumProvider.init({
+            projectId: cfg.projectId,
+            chains: [cfg.chainId],
+            showQrModal: true,
+            metadata: {
+              name: 'CitizenApp',
+              description: '链上充值购买公民币',
+              url: 'https://www.crcfrcn.com',
+              icons: [],
+            },
+          });
+          await provider.connect();
+          const from = Array.isArray(provider.accounts) ? provider.accounts[0] : null;
+          if (!from) { fail('未获取到钱包地址'); return; }
+          $('title').textContent = '请在钱包中确认支付';
+          const txHash = await provider.request({
+            method: 'eth_sendTransaction',
+            params: [{ from, to: cfg.to, data: cfg.data, value: '0x0' }],
+          });
+          $('spinner').style.display = 'none';
+          $('title').textContent = '已提交';
+          $('sub').textContent = '正在返回 App 确认到账…';
+          report({ ok: true, txHash, payer: from });
+        } catch (e) {
+          fail((e && e.message) ? e.message : '支付未完成或已取消');
+        }
+      };
+
+      if (window.__TOPUP__) window.startTopup();
+    </script>
+  </body>
+</html>

@@ -25,8 +25,12 @@ use votingengine::types::InstitutionCode;
 
 pub use pallet::*;
 
-/// breaking runtime 直接重新创世，不提供旧账户 key 布局迁移。
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
+/// v4: 机构管理员集合从 `Vec<AccountId>` 升级为
+/// `Vec<InstitutionAdmin { admin_name, admin_account }>`。
+///
+/// 正式链不得再依赖重建数据；旧 v2 存储在 runtime 升级时一次性翻译为目标结构，
+/// 查询路径只认 v4 新结构，不保留双轨兼容。
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -53,6 +57,9 @@ pub mod pallet {
         <T as Config>::MaxAdminsPerInstitution,
     >;
     pub type InstitutionAdminsOf<T> = InstitutionAdmins<AdminsOf<T>>;
+    type LegacyAdminsOf<T> =
+        BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxAdminsPerInstitution>;
+    type LegacyInstitutionAdminsOf<T> = InstitutionAdmins<LegacyAdminsOf<T>>;
 
     /// 公权机构管理员集合。CID 是唯一 key；value 不重复保存 CID 或生命周期状态。
     #[pallet::storage]
@@ -75,6 +82,44 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn on_runtime_upgrade() -> Weight {
+            let db = T::DbWeight::get();
+            let on_chain = StorageVersion::get::<Pallet<T>>();
+            if on_chain >= STORAGE_VERSION {
+                return db.reads(1);
+            }
+
+            let mut migrated = 0u64;
+            if on_chain <= StorageVersion::new(2) {
+                AdminAccounts::<T>::translate::<LegacyInstitutionAdminsOf<T>, _>(
+                    |_cid_number, legacy| {
+                        migrated = migrated.saturating_add(1);
+                        let admins = legacy
+                            .admins
+                            .into_inner()
+                            .into_iter()
+                            .map(|admin_account| InstitutionAdmin {
+                                admin_name: admin_primitives::AdminName::truncate_from(
+                                    admin_primitives::DEFAULT_ADMIN_NAME.to_vec(),
+                                ),
+                                admin_account,
+                            })
+                            .collect::<Vec<_>>();
+                        let Ok(admins) = AdminsOf::<T>::try_from(admins) else {
+                            return None;
+                        };
+                        Some(InstitutionAdmins {
+                            institution_code: legacy.institution_code,
+                            admins,
+                        })
+                    },
+                );
+            }
+
+            STORAGE_VERSION.put::<Pallet<T>>();
+            db.reads_writes(1u64.saturating_add(migrated), 1u64.saturating_add(migrated))
+        }
+
         fn integrity_test() {
             assert!(
                 <T as Config>::MaxAdminsPerInstitution::get() >= 2,

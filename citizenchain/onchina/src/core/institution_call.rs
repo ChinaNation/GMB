@@ -44,12 +44,7 @@ pub struct ProposeCreateInstitutionArgs {
     pub admins: Vec<InstitutionAdminArg>,
     /// 只用于选择 public/private pallet，不编码进 runtime call。
     pub institution_code: [u8; 4],
-    pub register_nonce: Vec<u8>,
-    pub signature: Vec<u8>,
     pub actor_cid_number: Vec<u8>,
-    pub credential_signer_pubkey: [u8; 32],
-    pub scope_province_name: Vec<u8>,
-    pub scope_city_name: Vec<u8>,
 }
 
 /// `propose_institution_governance` 完整参数。
@@ -119,12 +114,7 @@ pub fn encode_propose_create_institution(args: &ProposeCreateInstitutionArgs) ->
     encode_bytes(&mut out, &args.cid_short_name);
     encode_bytes(&mut out, &args.town_code);
     out.extend(encode_admins_payload(&args.admins));
-    encode_bytes(&mut out, &args.register_nonce);
-    encode_bytes(&mut out, &args.signature);
     encode_bytes(&mut out, &args.actor_cid_number);
-    out.extend_from_slice(&args.credential_signer_pubkey);
-    encode_bytes(&mut out, &args.scope_province_name);
-    encode_bytes(&mut out, &args.scope_city_name);
 
     ChainCall {
         action: chain_action_code(pallet_index, PROPOSE_CREATE_INSTITUTION_CALL_INDEX),
@@ -214,12 +204,7 @@ mod tests {
                 },
             ],
             institution_code: *b"SFLP",
-            register_nonce: b"nonce".to_vec(),
-            signature: vec![3; 64],
             actor_cid_number: b"issuer".to_vec(),
-            credential_signer_pubkey: [5; 32],
-            scope_province_name: "广东省".as_bytes().to_vec(),
-            scope_city_name: "广州市".as_bytes().to_vec(),
         };
         let encoded = encode_propose_create_institution(&args);
         assert_eq!(&encoded.call_data[..2], &[31, 5]);
@@ -231,12 +216,7 @@ mod tests {
         expected.extend(args.cid_short_name.encode());
         expected.extend(args.town_code.encode());
         expected.extend(encode_admins_payload(&args.admins));
-        expected.extend(args.register_nonce.encode());
-        expected.extend(args.signature.encode());
         expected.extend(args.actor_cid_number.encode());
-        expected.extend(args.credential_signer_pubkey.encode());
-        expected.extend(args.scope_province_name.encode());
-        expected.extend(args.scope_city_name.encode());
         assert_eq!(encoded.call_data, expected);
     }
 

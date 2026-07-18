@@ -4,6 +4,7 @@
 // - 机构 value 只保存 institution_code + admins，CID 来自 storage key；
 // - 个人多签 value 保持独立账户布局，personal_account 来自 storage key。
 
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -22,6 +23,11 @@ void main() {
   List<int> scaleBytes(String cid) {
     final raw = cid.codeUnits;
     return [raw.length << 2, ...raw];
+  }
+
+  List<int> adminBytes(String name, List<int> account) {
+    final raw = utf8.encode(name);
+    return [raw.length << 2, ...raw, ...account];
   }
 
   group('tryDecode', () {
@@ -70,8 +76,8 @@ void main() {
       final bytes = Uint8List.fromList([
         ...codeBytes('CGOV'),
         0x08, // Compact(2)
-        ...a1,
-        ...a2,
+        ...adminBytes('张三', a1),
+        ...adminBytes('李四', a2),
       ]);
       final r = AdminAccountStorageCodec.tryDecode(
         bytes,
@@ -102,8 +108,8 @@ void main() {
     test('admins 数量超过实际字节返回 null', () {
       final bytes = Uint8List.fromList([
         ...codeBytes('NRC'),
-        0x08, // 声明 2 个 admin 但只给 1 个的字节。
-        ...List.filled(32, 0xCC),
+        0x08, // 声明 2 个 admin 但只给 1 个完整管理员的字节。
+        ...adminBytes('管理员', List.filled(32, 0xCC)),
       ]);
       expect(
         AdminAccountStorageCodec.tryDecode(

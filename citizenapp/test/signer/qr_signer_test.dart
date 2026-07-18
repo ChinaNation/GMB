@@ -227,5 +227,21 @@ void main() {
       expect(actual, viaPrimitive);
       expect(actual.toList(), isNot([1, 2, 3, 4]));
     });
+
+    test('action registry mirror returns Chinese label or null', () {
+      expect(
+        QrActions.actionLabelForCode(QrActions.squareAccountAction),
+        '广场账户动作签名',
+      );
+      expect(QrActions.actionKeyForCode(QrActions.login), 'login');
+      expect(QrActions.actionLabelForCode(0x7fff), isNull);
+      for (final entry in QrActions.actionKeyByCode.entries) {
+        expect(
+          QrActions.actionLabelForKey(entry.value),
+          isNotNull,
+          reason: '0x${entry.key.toRadixString(16)} 缺少中文动作名',
+        );
+      }
+    });
   });
 }

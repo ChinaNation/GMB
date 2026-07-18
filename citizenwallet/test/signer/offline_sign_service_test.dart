@@ -62,8 +62,7 @@ void main() {
       hotWallet = (await walletManager.getWalletByIndex(1))!;
     });
 
-    test('signParsedRequest should sign matched internal_vote (统一入口)',
-        () async {
+    test('signParsedRequest should sign normal internal_vote (统一入口)', () async {
       // 所有管理员投票走 InternalVote(20).cast(0)
       // payload = [0x14][0x00][u64 LE proposal_id=1][bool approve=1] + 扩展尾
       final payloadHex = _withSigningTailHex('0x1400010000000000000001');
@@ -93,7 +92,7 @@ void main() {
       );
     });
 
-    test('signParsedRequest 拒绝 mismatched(action 不一致)', () async {
+    test('signParsedRequest 拒绝 action 与 payload 不一致', () async {
       // decode 成功但 QR action 和 decoded.action 不一致 → 红色拒签。
       final payloadHex = _withSigningTailHex('0x1400070000000000000001');
       final request = _buildTestRequest(
@@ -131,12 +130,62 @@ void main() {
       );
 
       final verification = service.verifyPayload(request);
-      // Should decode successfully (matched or at least not null)
+      expect(verification.status, SignDecisionStatus.normal);
+      expect(verification.canSign, isTrue);
+      expect(verification.actionLabel, '转账');
       expect(verification.decoded, isNotNull);
       expect(verification.decoded!.action, 'transfer');
     });
 
-    test('signParsedRequest should reject mismatched pubkey', () async {
+    test('verifyPayload 拒绝普通链交易 32 字节 hash-only payload', () {
+      final request = _buildTestRequest(
+        requestId: 'offline-req-test-hash-only-reject',
+        pubkey: '0x${hotWallet.pubkeyHex}',
+        payloadHex:
+            '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        action: QrActions.privateInstitutionCreate,
+      );
+
+      final verification = service.verifyPayload(request);
+
+      expect(verification.status, SignDecisionStatus.reject);
+      expect(verification.canSign, isFalse);
+      expect(verification.actionLabel, '创建私权机构');
+      expect(verification.rejectReason, contains('普通链交易不能只签 32 字节哈希'));
+    });
+
+    test('verifyPayload 拒绝未登记 action', () {
+      final request = _buildTestRequest(
+        requestId: 'offline-req-test-unknown-action',
+        pubkey: '0x${hotWallet.pubkeyHex}',
+        payloadHex: _withSigningTailHex('0x1400010000000000000001'),
+        action: 0x7fff,
+      );
+
+      final verification = service.verifyPayload(request);
+
+      expect(verification.status, SignDecisionStatus.reject);
+      expect(verification.actionLabel, isNull);
+      expect(verification.rejectReason, contains('未登记的签名动作'));
+    });
+
+    test('verifyPayload 识别广场动作中文名但钱包端拒绝签名', () {
+      final request = _buildTestRequest(
+        requestId: 'offline-req-test-square-action',
+        pubkey: '0x${hotWallet.pubkeyHex}',
+        payloadHex: '0x01020304',
+        action: QrActions.squareAccountAction,
+      );
+
+      final verification = service.verifyPayload(request);
+
+      expect(verification.status, SignDecisionStatus.reject);
+      expect(verification.canSign, isFalse);
+      expect(verification.actionLabel, '广场账户动作签名');
+      expect(verification.rejectReason, contains('签名载荷无法解码'));
+    });
+
+    test('signParsedRequest should reject wrong pubkey', () async {
       final request = _buildTestRequest(
         requestId: 'offline-req-test-0002',
         pubkey:

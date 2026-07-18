@@ -56,8 +56,12 @@ citizenchain/onchina/frontend/
 - 新增公民弹窗不得出现手填身份 CID、手填护照有效期、居住省市选择或投票账户公钥输入框。
 - 新增公民弹窗必须展示当前办理城市对应的居住省市,只允许选择居住镇;出生省市镇必须选择。
 - 新增公民请求只提交 `province_name / city_name / town_code` 和 `birth_*` 字段;不得向后端发送旧的第二套居住字段。
-- 新增机构第一步只收集机构全称、简称和至少两个管理员钱包，以及机构分类本身必需的行政区/类型字段；不得要求法定代表人、岗位码、岗位名、任期、任职、治理阈值、机构账户地址或注资金额。
-- 管理员是人员而不是岗位。首次登记界面只录入钱包账户，管理员姓名由后端从公民档案解析；无公民姓名时展示默认名称“管理员”。首次登记不得生成管理员岗位任职。
+- 新增机构第一步只收集机构全称、简称和至少两个管理员姓名/钱包账户，以及机构分类本身必需的主体属性、行政区和类型字段；不得要求法定代表人、岗位码、岗位名、任期、任职、治理阈值、机构账户地址或注资金额。
+- 管理员是人员而不是岗位。首次登记界面只录入 `admins(admin_name + admin_account)`，授权只认钱包账户；姓名为空或仍为默认“管理员”时由后端尝试从公民档案解析，仍无法解析才展示“管理员”。首次登记不得生成管理员岗位任职。
+- 创建机构正式提交必须共用 `subjects/api.ts::buildInstitutionCreatePayload`，可空字段显式写入 `null`，禁止各入口手写第二份 payload 或让 `undefined` 造成请求漂移。
+- 创建机构只允许一次管理员钱包签名：后端返回最终链交易 `sign_request`，前端用 `core/useChainSign.tsx` 展示该二维码，收到 CitizenWallet 签名响应后直接调用统一链交易 submit；不得再叠加 `INSTITUTION_CREATE` 安全动作、`a=8 institution_create_credential` 或任何内层创建凭证二维码。
+- 所有 `PASSKEY_COLD_SIGN` 正式业务提交必须同时携带冷签 grant 和 Passkey assertion。创建机构、创建/删除账户、公民身份上链等可直接使用 `admins/securityApi.ts::createColdSignSubmitHeaders`；已由组件先取得 grant 的资料上传/删除、机构详情更新等必须使用 `securityGrantSubmitHeaders`。业务模块禁止手写 `x-cid-security-grant` 或只提交 grant 不提交 Passkey assertion。
+- 机构资料上传、资料删除、机构详情更新的扫码授权 payload 必须与后端 `grant_payload` 逐字段同形；资料上传使用 `target/file_name/doc_type/file_size`，资料删除使用 `target/doc_id/file_name`，机构详情更新使用 `target/cid_number/cid_full_name/parent_cid_number/legal_representative_name/legal_representative_cid_number/legal_representative_photo_path`。
 - 每个机构的唯一默认岗位是“法定代表人”，由 runtime 创建且首次为空缺；前端不得要求用户手填该岗位码，也不得把“管理员”当成统一岗位名。
 - 股份公司等私权机构只有所有最小必填字段及至少两个不重复管理员钱包均合法时才启用生成按钮。协会 `SFAS` 必须显式选择盈利或非盈利，前端不得固定为非盈利。
 - 公民详情页负责链上身份上链:未满 16 周岁、无选举资格或档案非正常时禁用推送;推送时必须先选择“投票身份”或“参选身份”,再录入钱包账户、生成目标公民钱包签名二维码,验签后展示注册局管理员链上交易二维码。

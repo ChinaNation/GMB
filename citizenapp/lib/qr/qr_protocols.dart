@@ -1,3 +1,5 @@
+import 'package:citizenapp/qr/generated/qr_action_registry.g.dart';
+
 /// QR_V1 统一二维码协议常量。
 ///
 /// 唯一事实源:`memory/01-architecture/qr/qr-protocol-spec.md`
@@ -39,6 +41,9 @@ enum QrKind {
 }
 
 /// QR_V1 业务动作码。`k` 只表达扫码流向,业务场景必须放在 `a`。
+///
+/// 当前 Dart 动作表由 `citizenchain/crates/qr-protocol/registry/actions.yaml`
+/// 生成；本文件只保留调用方仍在使用的常量别名和协议辅助函数。
 class QrActions {
   QrActions._();
 
@@ -100,48 +105,31 @@ class QrActions {
       action == activateAdmin || action == decryptAdmin;
 
   static bool isRuntimeHashOnly(int action) =>
-      action == runtimeUpgradeHash ||
-      action == proposeRuntimeUpgrade ||
-      action == developerDirectUpgrade;
+      GeneratedQrActionRegistry.isHashOnlyAction(action);
 
-  static int fromDecodedAction(String action) => switch (action) {
-        'transfer' => transferWithRemark,
-        'propose_create_personal' => personalCreate,
-        'propose_close_personal' => personalClose,
-        'propose_issuance' => resolutionIssuance,
-        'finalize_proposal' => finalizeProposal,
-        'retry_passed_proposal' => retryPassedProposal,
-        'cancel_passed_proposal' => cancelPassedProposal,
-        'propose_personal_admin_set_change' => personalAdminsChange,
-        'propose_runtime_upgrade' => proposeRuntimeUpgrade,
-        'developer_direct_upgrade' => developerDirectUpgrade,
-        'propose_destroy' => resolutionDestroy,
-        'propose_replace_grandpa_key' => grandpaKeyChange,
-        'propose_transfer' => multisigTransfer,
-        'propose_safety_fund_transfer' => safetyFundTransfer,
-        'propose_sweep_to_main' => sweepToMain,
-        'bind_clearing_bank' => bindClearingBank,
-        'deposit_clearing_bank' => depositClearingBank,
-        'withdraw_clearing_bank' => withdrawClearingBank,
-        'switch_clearing_bank' => switchClearingBank,
-        'register_clearing_bank' => registerClearingBank,
-        'update_clearing_bank_endpoint' => updateClearingBankEndpoint,
-        'unregister_clearing_bank' => unregisterClearingBank,
-        'internal_vote' => internalVote,
-        'joint_vote' => jointVote,
-        'cast_referendum' => castReferendum,
-        'propose_enact_law' => legislationEnact,
-        'propose_amend_law' => legislationAmend,
-        'propose_repeal_law' => legislationRepeal,
-        'cast_representative_vote' => legislationRepresentativeVote,
-        'cast_referendum_vote' => legislationReferendum,
-        'executive_sign' => legislationExecutiveSign,
-        'override_sign' => legislationOverrideSign,
-        'guard_vote' => legislationGuardVote,
-        'activate_admin_account' => activateAdmin,
-        'decrypt_admin' => decryptAdmin,
-        'citizen_identity' => citizenIdentity,
-        'onchina_admin_action' => onchinaAdmin,
-        _ => 0,
-      };
+  /// QR 数字动作码 → registry action_key。查不到即未登记,签名端必须拒绝。
+  static const Map<int, String> actionKeyByCode =
+      GeneratedQrActionRegistry.actionKeyByCode;
+
+  /// registry action_key → 中文动作名。签名 UI 只能展示这里的中文名。
+  static const Map<String, String> actionLabelZhByKey =
+      GeneratedQrActionRegistry.actionLabelZhByKey;
+
+  static String? actionKeyForCode(int actionCode) =>
+      actionKeyByCode[actionCode];
+
+  static String? actionLabelForCode(int actionCode) {
+    final key = actionKeyForCode(actionCode);
+    if (key == null) return null;
+    return actionLabelZhByKey[key];
+  }
+
+  static String? actionLabelForKey(String actionKey) =>
+      actionLabelZhByKey[actionKey];
+
+  static int fromDecodedAction(String action) {
+    // 公民参选身份确认复用 a=2 的公民身份签名域，具体身份等级由 payload 字段展示。
+    if (action == 'citizen_candidate_identity') return citizenIdentity;
+    return GeneratedQrActionRegistry.actionCodeForKey(action) ?? 0;
+  }
 }

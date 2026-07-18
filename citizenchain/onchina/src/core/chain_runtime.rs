@@ -103,65 +103,6 @@ fn finish_institution_credential(
     })
 }
 
-/// 签发 call_index=5 的机构最小创建凭证，管理员人员集合必须进入签名域。
-pub(crate) fn build_institution_creation_credential(
-    state: &AppState,
-    actor_cid_number: &str,
-    cid_number: &str,
-    cid_full_name: &str,
-    cid_short_name: &str,
-    admins_payload: &[u8],
-    register_nonce: String,
-    scope_province_name: &str,
-    scope_city_name: &str,
-    town_code: &str,
-) -> Result<RuntimeInstitutionRegistrationCredential, String> {
-    if cid_number.trim().is_empty() {
-        return Err("cid_number is required".to_string());
-    }
-    if cid_full_name.trim().is_empty() {
-        return Err("cid_full_name is required".to_string());
-    }
-    if cid_short_name.trim().is_empty() {
-        return Err("cid_short_name is required".to_string());
-    }
-    if admins_payload.is_empty() {
-        return Err("admins are required".to_string());
-    }
-    if register_nonce.trim().is_empty() {
-        return Err("register_nonce is required".to_string());
-    }
-    let genesis_hash = resolve_chain_genesis_hash()?;
-    let signing_ctx = runtime_signing_context(
-        actor_cid_number,
-        Some(scope_province_name),
-        Some(scope_city_name),
-    )?;
-    // 字段顺序必须与 RuntimeCidInstitutionVerifier 完全一致:
-    // genesis_hash + cid_number + cid_full_name + cid_short_name + admins
-    // + nonce + 签发机构 + 作用域 + town_code。
-    let payload_digest = primitives::sign::institution_creation_message(
-        &genesis_hash,
-        cid_number.trim().as_bytes(),
-        cid_full_name.trim().as_bytes(),
-        cid_short_name.trim().as_bytes(),
-        admins_payload,
-        &register_nonce.trim().as_bytes().to_vec(),
-        signing_ctx.actor_cid_number.as_bytes(),
-        &signing_ctx.credential_signer_pubkey,
-        signing_ctx.scope_province_name.as_bytes(),
-        signing_ctx.scope_city_name.as_bytes(),
-        town_code.trim().as_bytes(),
-    );
-    finish_institution_credential(
-        state,
-        genesis_hash,
-        register_nonce,
-        signing_ctx,
-        payload_digest,
-    )
-}
-
 /// 签发 call_index=8/9 的机构治理凭证，治理 action 的 SCALE 字节必须进入签名域。
 #[allow(dead_code)]
 pub(crate) fn build_institution_governance_credential(

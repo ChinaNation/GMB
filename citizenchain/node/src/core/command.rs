@@ -44,7 +44,7 @@ impl SubstrateCli for Cli {
             "" | "citizenchain" | "dev" | "local" | "staging" => {
                 Box::new(chain_spec::chain_config()?)
             }
-            // 仅供本机 clean-run / bake 流程重新创世时导出 fresh plain chainspec 使用。
+            // 仅供本机 clean-run / bake 流程导出隔离 fresh plain chainspec 使用。
             "citizenchain-fresh" => Box::new(chain_spec::fresh_genesis_config()?),
             path => Box::new(chain_spec::ChainSpec::from_json_file(
                 std::path::PathBuf::from(path),

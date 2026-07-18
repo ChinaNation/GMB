@@ -352,11 +352,10 @@ pub fn new_partial(config: &Configuration) -> Result<Service, ServiceError> {
         },
     );
 
-    // 节点守卫统一承载宪法以外的节点级死规则。当前首项为固定治理骨架：
-    // 逐块背书固定机构存在性、名额、护宪 7 席等结构不变式(I1..I7)。
+    // 节点守卫统一承载宪法以外的节点级死规则。启动自检失败只记录警戒状态，
+    // 不能阻断节点进程；后续区块、完整状态和候选 runtime 导入仍由守卫强拒绝。
     let node_guard =
-        crate::core::node_guard::NodeGuard::new(pow_block_import, client.clone(), backend.clone())
-            .map_err(ServiceError::Other)?;
+        crate::core::node_guard::NodeGuard::new(pow_block_import, client.clone(), backend.clone());
 
     // 宪法守卫保持独立且位于最外层(ADR-027 §7)：先执行整条链最高优先级的
     // 不可修改条款校验，再进入节点守卫及 PoW 导入；runtime 升级无法绕过两层执法。
@@ -652,11 +651,10 @@ pub fn new_full(
             pr() > 0
         }
     };
-    // 本地挖矿导入路径与网络导入路径使用相同的节点守卫，避免诚实矿工产出
-    // 破坏固定治理骨架的区块。
+    // 本地挖矿导入路径与网络导入路径使用相同的节点守卫；启动自检不杀节点，
+    // 挖出的坏块仍必须在委派 PoW/GRANDPA 前被拒绝。
     let mining_node_guard =
-        crate::core::node_guard::NodeGuard::new(pow_block_import, client.clone(), backend.clone())
-            .map_err(ServiceError::Other)?;
+        crate::core::node_guard::NodeGuard::new(pow_block_import, client.clone(), backend.clone());
 
     // 宪法守卫在挖矿路径同样保持独立最外层，确保最高规则不会被普通节点守卫
     // 的后续扩展、重排或 runtime 升级稀释。

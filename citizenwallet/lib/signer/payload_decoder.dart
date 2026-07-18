@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../chain/chain_constants.dart';
+import '../qr/generated/qr_action_registry.g.dart';
 import 'institution_code.dart';
 import 'pallet_registry.dart';
 
@@ -49,12 +50,20 @@ class PayloadDecoder {
   /// SS58 地址前缀。
   static const int _ss58Prefix = ChainConstants.ss58Prefix;
 
+  /// 固定审阅展示值统一来自 qr-protocol 生成表；decoder 只提供动态字段。
+  static String _reviewValue(
+    String fieldKey,
+    Map<String, String> values,
+  ) {
+    return GeneratedQrActionRegistry.fieldValueForKey(fieldKey, values) ?? '';
+  }
+
   /// 尝试从 payload_hex 中解码交易信息。
   ///
   /// [payloadHex] 为完整 SigningPayload 编码的 hex 字符串。
   /// call data 从 payload 起始位置开始，以 pallet_index 和 call_index 为前两字节。
   ///
-  /// 返回 null 表示无法识别或解码失败 → strict 模式下 decodeFailed → 禁止签名。
+  /// 返回 null 表示无法识别或解码失败 → strict 模式下 Reject → 禁止签名。
   // 二进制前缀域:
   //   ACTIVATE_ADMIN → 前 4 字节 GMB(3B) || 0x18
   //   DECRYPT        → 前 4 字节 GMB(3B) || 0x19
@@ -137,8 +146,8 @@ class PayloadDecoder {
     }
 
     // 防误签由 strict 两色模式独家把关:
-    // - decoder 解析失败(任何分支不匹配返回 null) → decodeFailed → 禁止签名
-    // - 解析成功但 QR 动作码与 decoded.action 不一致 → mismatched → 禁止签名
+    // - decoder 解析失败(任何分支不匹配返回 null) → Reject → 禁止签名
+    // - 解析成功但 QR 动作码与 decoded.action 不一致 → Reject → 禁止签名
     // 不按 spec_version 锁布局,合法新 spec 可直接解码,布局变了 strict 模式自动拦截。
     try {
       final bytes = _hexToBytes(payloadHex);
@@ -656,10 +665,18 @@ class PayloadDecoder {
         if (actorCidNumber != null) 'actor_cid_number': actorCidNumber,
         if (actorCidNumber != null) 'institution_account': fundingAccount,
         if (actorCidNumber == null) 'personal_account': fundingAccount,
-        'operation_fee_payer':
-            actorCidNumber == null ? '签名管理员钱包' : '$actorCidNumber 的链上费用账户',
-        'execution_fee_payer':
-            actorCidNumber == null ? fundingAccount : '$actorCidNumber 的链上费用账户',
+        'operation_fee_payer': actorCidNumber == null
+            ? '签名管理员钱包'
+            : _reviewValue(
+                'operation_fee_payer',
+                {'actor_cid_number': actorCidNumber},
+              ),
+        'execution_fee_payer': actorCidNumber == null
+            ? fundingAccount
+            : _reviewValue(
+                'execution_fee_payer',
+                {'actor_cid_number': actorCidNumber},
+              ),
         'beneficiary': beneficiary,
         'amount_yuan': '$amountYuan GMB',
         'remark': remark,
@@ -899,7 +916,7 @@ class PayloadDecoder {
 
   // PublicManage(30) / PrivateManage(31) / propose_create_*_institution(5)
   //
-  // 链端调用(外层 origin 是 actor_cid_number 的管理员；内层凭证只表达注册局背书):
+  // 链端调用(外层 origin 是 actor_cid_number 的管理员；不再存在创建机构内层凭证):
   //   pub fn propose_create_*_institution(
   //     origin,
   //     cid_number: CidNumberOf<T>,                 // BoundedVec<u8>
@@ -908,12 +925,7 @@ class PayloadDecoder {
   //     town_code: AccountNameOf<T>,       // BoundedVec<u8>
   //     admins: BoundedVec<InstitutionAdmin>,
   //         // 每项仅 admin_name + admin_account；账户是唯一授权字段
-  //     register_nonce: RegisterNonceOf<T>,   // BoundedVec<u8>
-  //     signature: RegisterSignatureOf<T>,    // BoundedVec<u8> (64B sr25519)
   //     actor_cid_number: Vec<u8>,
-  //     credential_signer_pubkey: [u8; 32],
-  //     scope_province_name: Vec<u8>,
-  //     scope_city_name: Vec<u8>,
   //   )
   //
   // SCALE 顺序与上述完全一致。机构授权只认 actor CID 下的 admins，
@@ -984,66 +996,26 @@ class PayloadDecoder {
       adminLabels.add('${adminNameRead.$1}(${_bytesToSs58(accountBytes)})');
     }
 
-    // register_nonce: BoundedVec<u8> — 跳过
-    final (nonceLen, nonceLenSize) = _decodeCompactU32(bytes, offset);
-    offset += nonceLenSize;
-    if (offset + nonceLen > bytes.length) return null;
-    offset += nonceLen;
-
-    // signature: BoundedVec<u8> — 跳过
-    final (sigLen, sigLenSize) = _decodeCompactU32(bytes, offset);
-    offset += sigLenSize;
-    if (offset + sigLen > bytes.length) return null;
-    offset += sigLen;
-
     // actor_cid_number: Vec<u8>。外层 origin 必须属于该 CID 的 admins。
     final actorRead = _readCidNumber(bytes, offset);
     if (actorRead == null) return null;
     final actorCidNumber = actorRead.$1;
     offset = actorRead.$2;
 
-    // credential_signer_pubkey: [u8; 32]，只用于验证注册局业务凭证。
-    if (offset + 32 > bytes.length) return null;
-    final credentialSignerPubkey = bytes.sublist(offset, offset + 32);
-    offset += 32;
-
-    // scope_province_name: Vec<u8>
-    final (scopeProvinceLen, scopeProvinceLenSize) =
-        _decodeCompactU32(bytes, offset);
-    offset += scopeProvinceLenSize;
-    if (offset + scopeProvinceLen > bytes.length) return null;
-    final scopeProvinceName = utf8.decode(
-      bytes.sublist(offset, offset + scopeProvinceLen),
-      allowMalformed: true,
-    );
-    offset += scopeProvinceLen;
-
-    // scope_city_name: Vec<u8>
-    final (scopeCityLen, scopeCityLenSize) = _decodeCompactU32(bytes, offset);
-    offset += scopeCityLenSize;
-    if (offset + scopeCityLen > bytes.length) return null;
-    final scopeCityName = utf8.decode(
-      bytes.sublist(offset, offset + scopeCityLen),
-      allowMalformed: true,
-    );
-    offset += scopeCityLen;
-
     if (!_hasValidSigningTail(bytes, offset)) return null;
 
+    final reviewValues = {'actor_cid_number': actorCidNumber};
     final fields = <String, String>{
       'cid_number': cidNumber,
       'cid_full_name': cidFullName,
       'cid_short_name': cidShortName,
       'admins_len': adminsLen.toString(),
       'admins': adminLabels.join('、'),
-      'default_role': 'LR/法定代表人（空缺）',
-      'protocol_accounts': '由 runtime 按 CID 自动建立，初始余额为 0',
-      'fee_payer': '$actorCidNumber 的链上费用账户',
+      'default_role': _reviewValue('default_role', reviewValues),
+      'protocol_accounts': _reviewValue('protocol_accounts', reviewValues),
+      'fee_payer': _reviewValue('fee_payer', reviewValues),
     };
     fields['actor_cid_number'] = actorCidNumber;
-    fields['credential_signer_pubkey'] = _bytesToSs58(credentialSignerPubkey);
-    fields['scope_province_name'] = scopeProvinceName;
-    fields['scope_city_name'] = scopeCityName;
     if (townCode.isNotEmpty) {
       fields['town_code'] = townCode;
     }
@@ -1208,7 +1180,10 @@ class PayloadDecoder {
         'governance_action': actionRead.$1,
         'governance_detail': actionRead.$2,
         'actor_cid_number': actorRead.$1,
-        'fee_payer': '${actorRead.$1} 的链上费用账户',
+        'fee_payer': _reviewValue(
+          'fee_payer',
+          {'actor_cid_number': actorRead.$1},
+        ),
         'credential_signer_pubkey': _bytesToSs58(credentialSigner),
         'scope_province_name': scopeProvinceName,
         'scope_city_name': scopeCityName,
@@ -1257,7 +1232,10 @@ class PayloadDecoder {
         'admins_len': adminsRead.$1.toString(),
         'admins': adminsRead.$2,
         'actor_cid_number': actorRead.$1,
-        'fee_payer': '${actorRead.$1} 的链上费用账户',
+        'fee_payer': _reviewValue(
+          'fee_payer',
+          {'actor_cid_number': actorRead.$1},
+        ),
         'credential_signer_pubkey': _bytesToSs58(credentialSigner),
         'scope_province_name': scopeProvinceName,
         'scope_city_name': scopeCityName,
@@ -1783,8 +1761,14 @@ class PayloadDecoder {
       fields: {
         'actor_cid_number': actorRead.$1,
         'institution_account': _bytesToSs58(institutionAccount),
-        'operation_fee_payer': '${actorRead.$1} 的链上费用账户',
-        'execution_fee_payer': '${actorRead.$1} 的链上费用账户',
+        'operation_fee_payer': _reviewValue(
+          'operation_fee_payer',
+          {'actor_cid_number': actorRead.$1},
+        ),
+        'execution_fee_payer': _reviewValue(
+          'execution_fee_payer',
+          {'actor_cid_number': actorRead.$1},
+        ),
         'beneficiary': beneficiary,
         'amount_yuan': '$amountYuan GMB',
         'remark': remark,
@@ -1813,8 +1797,14 @@ class PayloadDecoder {
       fields: {
         'actor_cid_number': actorRead.$1,
         'institution_account': institutionAccount,
-        'operation_fee_payer': '${actorRead.$1} 的链上费用账户',
-        'execution_fee_payer': '${actorRead.$1} 的链上费用账户',
+        'operation_fee_payer': _reviewValue(
+          'operation_fee_payer',
+          {'actor_cid_number': actorRead.$1},
+        ),
+        'execution_fee_payer': _reviewValue(
+          'execution_fee_payer',
+          {'actor_cid_number': actorRead.$1},
+        ),
         'amount_yuan': '$amountYuan GMB',
       },
     );
@@ -1841,8 +1831,14 @@ class PayloadDecoder {
       fields: {
         'actor_cid_number': actorRead.$1,
         'institution_account': institutionAccount,
-        'operation_fee_payer': '${actorRead.$1} 的链上费用账户',
-        'execution_fee_payer': '${actorRead.$1} 的链上费用账户',
+        'operation_fee_payer': _reviewValue(
+          'operation_fee_payer',
+          {'actor_cid_number': actorRead.$1},
+        ),
+        'execution_fee_payer': _reviewValue(
+          'execution_fee_payer',
+          {'actor_cid_number': actorRead.$1},
+        ),
         'amount_yuan': '$amountYuan GMB',
       },
     );

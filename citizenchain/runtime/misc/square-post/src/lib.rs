@@ -15,8 +15,7 @@ pub mod subscription;
 pub mod weights;
 
 pub use subscription::{
-    CreatorTier, IssuerKey, MembershipLevel, SubscriptionPlan, SubscriptionState,
-    SubscriptionStatus,
+    IssuerKey, MembershipLevel, SubscriptionPlan, SubscriptionState, SubscriptionStatus,
 };
 
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
@@ -107,9 +106,8 @@ pub mod pallet {
     >;
 
     /// 扣款余额类型。
-    pub type BalanceOf<T> = <<T as Config>::Currency as Currency<
-        <T as frame_system::Config>::AccountId,
-    >>::Balance;
+    pub type BalanceOf<T> =
+        <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
     /// 订阅关系键：`(订阅者账户, 收款主体)`，单 hasher 元组键（对齐 BFF storageMapKey）。
     pub type SubKeyOf<T> = (
@@ -133,10 +131,6 @@ pub mod pallet {
 
         /// 机构账户查询：平台会员收款方=技术公司费用账户由此派生。
         type InstitutionAccountQuery: entity_primitives::InstitutionMultisigQuery<Self::AccountId>;
-
-        /// 单个创作者档位数量上限（FRAME 强制的存储大小上限，非价格护栏）。
-        #[pallet::constant]
-        type MaxCreatorTiers: Get<u32>;
 
         #[pallet::constant]
         type MaxSquarePostIdLen: Get<u32>;
@@ -176,15 +170,7 @@ pub mod pallet {
     #[pallet::storage]
     pub type PlatformCidNumber<T: Config> = StorageValue<_, CidNumberOf<T>, OptionQuery>;
 
-    /// 创作者档位表：`创作者钱包账户 -> 档位集合`。键=任意钱包账户，无 CID 要求。
-    #[pallet::storage]
-    pub type CreatorPlans<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        T::AccountId,
-        BoundedVec<CreatorTier, T::MaxCreatorTiers>,
-        ValueQuery,
-    >;
+    // 创作者档定义（名称/档种类/月季年周期/价格）全部链下（App 本地设 + Cloudflare 存），链上不存。
 
     /// 续订触发方账户（keeper）。`charge_due` 仅允许此账户调用；`None` = 未设 → 续扣挂起。
     #[pallet::storage]
@@ -241,14 +227,18 @@ pub mod pallet {
         CannotSubscribeSelf,
         /// 订阅记录不存在。
         SubscriptionNotFound,
-        /// 收款主体与档位类型不匹配。
+        /// 收款主体与档位类型不匹配 / 续扣带价与主体不匹配。
         PlanIssuerMismatch,
         /// 平台该档价未设置。
         PlatformPriceNotSet,
         /// 技术公司 CID 未绑定 / 费用账户不可派生。
         PlatformNotBound,
-        /// 创作者该档位不存在。
-        CreatorTierNotFound,
+        /// 创作者不是当前有效平台会员（不能被订阅）。
+        CreatorNotPlatformMember,
+        /// 价格必须大于 0。
+        ZeroPrice,
+        /// 创作者续扣缺当前价（keeper 必须带入）。
+        CreatorPriceRequired,
         /// 调用者不是续订触发方（keeper）。
         NotBillingKeeper,
     }
@@ -347,19 +337,23 @@ pub mod pallet {
         // call_index(3) = set_creator_plans 预留（第2步创作者会员）。
 
         /// 续扣：仅允许续订触发方（keeper）调用；收到即扣一次，链上不判到期。
+        ///
+        /// `amount`：平台传 `None`（链上现读 `PlatformPrice`）；创作者传 `Some(当前价)`
+        /// （创作者价在链下，keeper 按创作者当前价带入 → 改价后续扣走新价）。
         #[pallet::call_index(4)]
         #[pallet::weight(T::WeightInfo::charge_due())]
         pub fn charge_due(
             origin: OriginFor<T>,
             subscriber: T::AccountId,
             issuer: IssuerKey<T::AccountId>,
+            amount: Option<u128>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             ensure!(
                 BillingKeeper::<T>::get().as_ref() == Some(&who),
                 Error::<T>::NotBillingKeeper
             );
-            Self::do_charge_due(subscriber, issuer)
+            Self::do_charge_due(subscriber, issuer, amount)
         }
 
         // call_index(5) = propose_set_platform_price 预留（第3步平台改价治理）。

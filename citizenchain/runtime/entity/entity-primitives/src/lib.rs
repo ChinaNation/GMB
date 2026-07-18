@@ -363,10 +363,27 @@ impl<AccountId, AccountName, Nonce, Signature>
 
 /// 注册局登记权限抽象。
 ///
-/// 签名验真只证明某个管理员签过登记凭证;本 trait 额外证明该签发机构
-/// 对目标机构有登记权。public/private manage 只依赖这个抽象,具体 FRG/CREG 省市规则
-/// 由 runtime 统一实现,避免业务 pallet 复制行政区与创世管理员细节。
+/// 新创建机构只认交易 `origin + actor_cid_number`:管理员钱包签最终链交易一次,
+/// runtime 再确认该 `origin` 是 actor 机构的 active admin 且有登记目标机构权限。
+/// 旧的凭证形态仅供改名、增账户、关闭命名账户等尚未收敛的维护 call 使用,不得用于
+/// 新创建机构流程。
 pub trait RegistryAuthority<AccountId> {
+    /// 当前 origin 是否可代表 actor CID 创建目标机构。
+    fn can_register_institution_origin(
+        registrar: &AccountId,
+        actor_cid_number: &[u8],
+        target_cid_number: &[u8],
+        target_institution_code: InstitutionCode,
+    ) -> bool {
+        let _ = (
+            registrar,
+            actor_cid_number,
+            target_cid_number,
+            target_institution_code,
+        );
+        false
+    }
+
     /// 当前 origin 是否可按签发凭证登记目标机构。
     fn can_register_institution(
         registrar: &AccountId,
@@ -380,6 +397,15 @@ pub trait RegistryAuthority<AccountId> {
 }
 
 impl<AccountId> RegistryAuthority<AccountId> for () {
+    fn can_register_institution_origin(
+        _registrar: &AccountId,
+        _actor_cid_number: &[u8],
+        _target_cid_number: &[u8],
+        _target_institution_code: InstitutionCode,
+    ) -> bool {
+        false
+    }
+
     fn can_register_institution(
         _registrar: &AccountId,
         _actor_cid_number: &[u8],

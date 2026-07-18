@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'package:citizenapp/transaction/onchain-topup/onchain_topup_page.dart';
 import 'package:citizenapp/transaction/offchain-transaction/rpc/offchain_clearing_rpc.dart';
 import 'package:citizenapp/transaction/offchain-transaction/services/clearing_bank_prefs.dart';
-import 'package:citizenapp/transaction/offchain-transaction/pages/deposit_page.dart';
+import 'package:citizenapp/transaction/offchain-transaction/pages/petty_wallet_page.dart';
 import 'package:citizenapp/transaction/offchain-transaction/pages/withdraw_page.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -10,9 +11,9 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// 钱包详情页第 2 卡片:3 列等宽布局(充值/提现/零钱包)。
 ///
 ///
-/// - 布局:Row + 3 个 Expanded,三列等宽,spaceAround 分布。
-/// - 充值列 / 提现列:已绑定清算行时进入真实充值 / 提现页;未绑定时提示先绑定。
-/// - 零钱包列:**静态展示**,严格不加 InkWell / GestureDetector / onTap 回调。
+/// - 充值:进「链上充值」页(稳定币购买公民币,与清算行无关,**不需要绑定清算行**)。
+/// - 提现:零钱包 → 链上账户,需已绑定清算行,否则提示先绑定。
+/// - 零钱包:**可点击**进「零钱包详情页」(链下清算行零钱包),需已绑定;页内含充值到零钱包。
 /// - 零钱包余额来自当前绑定清算行快照中的节点端点,通过 `offchain_queryBalance`
 ///   查询;失败时展示节点不可达,不再写死 0.00 元。
 class WalletActionCard extends StatefulWidget {
@@ -73,7 +74,7 @@ class WalletActionCardState extends State<WalletActionCard> {
             child: _ClickableAction(
               icon: Icons.arrow_circle_down_outlined,
               label: '充值',
-              onTap: () => _openDeposit(context),
+              onTap: () => _openTopup(context),
             ),
           ),
           Expanded(
@@ -84,22 +85,23 @@ class WalletActionCardState extends State<WalletActionCard> {
             ),
           ),
           Expanded(
-            child: _StaticBalance(balanceText: _balanceText),
+            child: _BalanceAction(
+              balanceText: _balanceText,
+              onTap: () => _openPettyWallet(context),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _openDeposit(BuildContext context) async {
-    final binding = _binding;
-    if (binding == null) {
-      _showNeedBinding(context);
-      return;
-    }
+  /// 充值 = 稳定币购买公民币,进链上充值页;不依赖清算行绑定。
+  Future<void> _openTopup(BuildContext context) async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => DepositPage(wallet: widget.wallet)),
+      MaterialPageRoute(
+        builder: (_) => OnchainTopupPage(gmbAddress: widget.wallet.address),
+      ),
     );
     await refresh();
   }
@@ -116,6 +118,26 @@ class WalletActionCardState extends State<WalletActionCard> {
         builder: (_) => WithdrawPage(
           wallet: widget.wallet,
           wssUrl: binding.wssUrl,
+        ),
+      ),
+    );
+    await refresh();
+  }
+
+  /// 零钱包 = 进清算行零钱包详情页(余额 + 充值到零钱包 + 提现);需已绑定。
+  Future<void> _openPettyWallet(BuildContext context) async {
+    final binding = _binding;
+    if (binding == null) {
+      _showNeedBinding(context);
+      return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PettyWalletPage(
+          wallet: widget.wallet,
+          wssUrl: binding.wssUrl,
+          displayTitle: binding.displayTitle,
         ),
       ),
     );
@@ -142,7 +164,7 @@ class WalletActionCardState extends State<WalletActionCard> {
 ///
 ///
 /// - 使用 `Material + InkWell` 组合,ripple 限制在 `CircleBorder` 内,不溢出圆圈。
-/// - 底部用一个非断空格 `\u00A0` 占位,保证和零钱包列的 `0.00 元` 行高对齐,
+/// - 底部用一个非断空格 ` ` 占位,保证和零钱包列的 `0.00 元` 行高对齐,
 ///   避免 3 列底部不齐。
 class _ClickableAction extends StatelessWidget {
   const _ClickableAction({
@@ -189,7 +211,7 @@ class _ClickableAction extends StatelessWidget {
         const SizedBox(height: 4),
         // 非断空格占位,保证三列底部和零钱包列的 0.00 元对齐。
         const Text(
-          '\u00A0',
+          ' ',
           style: TextStyle(
             fontSize: 12,
             color: AppTheme.textTertiary,
@@ -200,32 +222,33 @@ class _ClickableAction extends StatelessWidget {
   }
 }
 
-/// 零钱包列:纯静态展示,**禁止**包 InkWell / GestureDetector,不响应任何点击。
-///
-///
-/// - 图标用普通 Container + BoxShape.circle,没有 Material 涟漪,也没有 onTap。
-/// - `0.00 元` 是占位,等清算行功能落地后接真实数据。
-class _StaticBalance extends StatelessWidget {
-  const _StaticBalance({required this.balanceText});
+/// 零钱包列:**可点击**进零钱包详情页;圆形图标 ripple + 标签 + 余额文本。
+class _BalanceAction extends StatelessWidget {
+  const _BalanceAction({required this.balanceText, required this.onTap});
 
   final String balanceText;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(
-            color: AppTheme.primary.withAlpha(15),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(
-            Icons.account_balance_wallet_outlined,
-            size: 28,
-            color: AppTheme.primaryDark,
+        Material(
+          color: AppTheme.primary.withAlpha(15),
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: const SizedBox(
+              width: 56,
+              height: 56,
+              child: Icon(
+                Icons.account_balance_wallet_outlined,
+                size: 28,
+                color: AppTheme.primaryDark,
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 8),

@@ -69,6 +69,7 @@ flutter:
   assets:
     - assets/profile_defaults/
     - assets/badges/
+    - assets/topup/walletconnect.html
     - assets/stickers/fluent3d/
     - assets/chainspec.json
     - assets/light_sync_state.json

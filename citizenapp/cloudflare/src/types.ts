@@ -83,6 +83,21 @@ export interface Env {
   // 退订视频冷归档：开关（'1' 开）与阈值（天，缺省 90）。关闭时 Cron 不做任何归档。
   ARCHIVE_ENABLED?: string;
   ARCHIVE_LAPSE_DAYS?: string;
+  // 稳定币充值购买公民币（topup）：网络 / 收款地址 / 各链 EVM RPC / 合约覆盖 / 确认数 / 结算令牌。
+  // 'mainnet' | 'testnet'（缺省 testnet，沙箱期）。
+  TOPUP_NETWORK?: string;
+  // 平台/国储会 EVM 收款地址（同一 EOA 跨链复用）。
+  TOPUP_RECV_ADDRESS?: string;
+  // 各链 EVM JSON-RPC（必须 https）；若 URL 内嵌 API key 则改用 wrangler secret。
+  TOPUP_BASE_RPC_URL?: string;
+  TOPUP_ARBITRUM_RPC_URL?: string;
+  // 覆盖代币合约地址（testnet mock USDT 必填；mainnet 用代码内置默认）。
+  TOPUP_USDC_CONTRACT?: string;
+  TOPUP_USDT_CONTRACT?: string;
+  // 最小确认数；>0 按 latest 计算，=0（缺省）按 finalized 区块判定。
+  TOPUP_MIN_CONFIRMATIONS?: string;
+  // 本地部署控制台↔Worker 结算接口鉴权令牌，只放 Worker Secret。
+  TOPUP_SETTLE_TOKEN?: string;
 }
 
 export interface SessionState {

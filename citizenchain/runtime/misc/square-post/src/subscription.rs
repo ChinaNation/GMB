@@ -5,19 +5,22 @@
 //! - 自动扣款在 [`crate::billing`]；链上不做任何日历/周期计算。
 //! - 时间只以原始 unix 毫秒时间戳存储（`SubscriptionState::last_charged_at`），
 //!   "到期没到期""付费到什么年月日"全部由本机（CitizenApp）读时间戳自行计算，链上不解释。
+//! - **平台会员**：三档定义与价格在链上（`PlatformPrice`），续扣现读链上价。
+//! - **创作者会员**：档定义（名称/档种类/月季年周期/价格）**全部链下**（App 本地设 + Cloudflare 存）；
+//!   链上只存最小订阅记录（价/时间戳/状态）做付款；续扣价由续订触发方（keeper）按创作者当前价带入。
 
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 
 use crate::pallet::{
-    Config, CreatorPlans, Error, Event, Pallet, PlatformCidNumber, PlatformPrice, Subscriptions,
+    Config, Error, Event, Pallet, PlatformCidNumber, PlatformPrice, Subscriptions,
 };
 use entity_primitives::InstitutionMultisigQuery;
 use frame_support::ensure;
 use sp_runtime::{DispatchError, DispatchResult};
 
-/// 平台会员三档。语义与官网法币轨共享同一套档位（价源各自独立、不跨折算）。
+/// 平台会员三档。链上定义，价格经技术公司治理写入 `PlatformPrice`。
 #[derive(
     Clone,
     Copy,
@@ -64,7 +67,10 @@ pub enum IssuerKey<AccountId> {
     Creator(AccountId),
 }
 
-/// 订阅档位选择。平台用 `Level`、创作者用 `Tier`（档位码）。SCALE 2 字节。
+/// 订阅档位选择。
+///
+/// - 平台用 `Level`（携带档位，续扣现读 `PlatformPrice[level]`）。
+/// - 创作者用 `CreatorPrice`（携带价，分）：创作者档在链下，链上只记价快照，续扣价由 keeper 现带。
 #[derive(
     Clone,
     Copy,
@@ -80,8 +86,8 @@ pub enum IssuerKey<AccountId> {
 pub enum SubscriptionPlan {
     /// 平台档位。
     Level(MembershipLevel),
-    /// 创作者档位码。
-    Tier(u8),
+    /// 创作者当前价（分）。
+    CreatorPrice(u128),
 }
 
 /// 订阅状态。`Cancelled` 保留记录支持续订，不删。
@@ -106,9 +112,10 @@ pub enum SubscriptionStatus {
     Cancelled,
 }
 
-/// 单条订阅链上状态。
+/// 单条订阅链上最小记录。
 ///
 /// `last_charged_at` 是上次成功扣款的 unix 毫秒时间戳，仅供本机计算日历到期日；链上不解释、不比较。
+/// 取消精确时刻由 `Cancelled` 事件承载，不在本记录重复存。
 #[derive(
     Clone,
     Copy,
@@ -122,9 +129,9 @@ pub enum SubscriptionStatus {
     MaxEncodedLen,
 )]
 pub struct SubscriptionState {
-    /// 档位选择。
+    /// 平台=Level(用于续扣现读价)；创作者=CreatorPrice(记录用，续扣价由 keeper 现带)。
     pub plan: SubscriptionPlan,
-    /// 最近成功扣款金额（分）快照，仅展示/审计，不作下次扣款依据。
+    /// 最近成功扣款金额（分）。
     pub price_fen: u128,
     /// 上次成功扣款时间戳（unix 毫秒），供本机算日历。
     pub last_charged_at: u64,
@@ -132,33 +139,12 @@ pub struct SubscriptionState {
     pub status: SubscriptionStatus,
 }
 
-/// 创作者单档：档位码 + 月价（分）。不存展示名（展示名/介绍全链下）。SCALE 17 字节。
-#[derive(
-    Clone,
-    Copy,
-    Encode,
-    Decode,
-    DecodeWithMemTracking,
-    Eq,
-    PartialEq,
-    RuntimeDebug,
-    TypeInfo,
-    MaxEncodedLen,
-)]
-pub struct CreatorTier {
-    /// 档位码（App 连续赋号，与订阅 `Tier(tier_code)` 同义）。
-    pub tier_code: u8,
-    /// 月价（分）。
-    pub price_fen: u128,
-}
-
 impl<T: Config> Pallet<T> {
     /// 订阅（幂等"确保 Active"语义），首扣即时完成。
     ///
-    /// - 无记录 → 开新单，立即首扣。
-    /// - 同档 Active → 幂等 no-op，不重复扣款。
-    /// - 同档 Cancelled → 只翻回 Active，不重扣（续订不二次收费）。
-    /// - 换档 / PastDue → 视为重新开单，立即首扣。
+    /// - 创作者臂：`who` 不能订自己；**创作者必须是有效平台会员（链上强制）**。
+    /// - 无记录 → 开新单立即首扣；同档 Active → 幂等 no-op；同档 Cancelled → 翻 Active 不重扣；
+    ///   换档 / PastDue → 重新开单立即首扣。
     pub(crate) fn do_subscribe(
         who: T::AccountId,
         issuer: IssuerKey<T::AccountId>,
@@ -166,6 +152,11 @@ impl<T: Config> Pallet<T> {
     ) -> DispatchResult {
         if let IssuerKey::Creator(ref creator) = issuer {
             ensure!(creator != &who, Error::<T>::CannotSubscribeSelf);
+            // 点3：创作者必须是当前有效平台会员，链上强制（非 Cloudflare）。
+            let creator_is_member = Subscriptions::<T>::get((creator.clone(), IssuerKey::Platform))
+                .map(|state| state.status == SubscriptionStatus::Active)
+                .unwrap_or(false);
+            ensure!(creator_is_member, Error::<T>::CreatorNotPlatformMember);
         }
         let key = (who.clone(), issuer.clone());
         if let Some(existing) = Subscriptions::<T>::get(&key) {
@@ -197,10 +188,7 @@ impl<T: Config> Pallet<T> {
     }
 
     /// 取消：写 `Cancelled` 保留记录（供续订恢复），幂等。
-    pub(crate) fn do_cancel(
-        who: T::AccountId,
-        issuer: IssuerKey<T::AccountId>,
-    ) -> DispatchResult {
+    pub(crate) fn do_cancel(who: T::AccountId, issuer: IssuerKey<T::AccountId>) -> DispatchResult {
         let key = (who.clone(), issuer.clone());
         Subscriptions::<T>::try_mutate(&key, |slot| -> DispatchResult {
             let state = slot.as_mut().ok_or(Error::<T>::SubscriptionNotFound)?;
@@ -215,6 +203,9 @@ impl<T: Config> Pallet<T> {
     }
 
     /// 唯一定价 / 收款方解析入口，首扣与续扣共用；现读现算，杜绝第二价源。
+    ///
+    /// - 平台：价现读 `PlatformPrice[level]`（链上真源），收款方=费用账户。
+    /// - 创作者：价=`plan` 携带的 `CreatorPrice`（>0），收款方=创作者本人，全额零折算。
     pub(crate) fn resolve_price_and_payee(
         issuer: &IssuerKey<T::AccountId>,
         plan: &SubscriptionPlan,
@@ -224,7 +215,6 @@ impl<T: Config> Pallet<T> {
                 let price =
                     PlatformPrice::<T>::get(level).ok_or(Error::<T>::PlatformPriceNotSet)?;
                 let cid = PlatformCidNumber::<T>::get().ok_or(Error::<T>::PlatformNotBound)?;
-                // 平台收款方 = 技术公司「费用账户」（OP_FEE），非主账户。
                 let payee = T::InstitutionAccountQuery::lookup_institution_account(
                     cid.as_slice(),
                     primitives::account_derive::RESERVED_NAME_FEE,
@@ -232,13 +222,9 @@ impl<T: Config> Pallet<T> {
                 .ok_or(Error::<T>::PlatformNotBound)?;
                 Ok((price, payee))
             }
-            (IssuerKey::Creator(creator), SubscriptionPlan::Tier(tier_code)) => {
-                let tier = CreatorPlans::<T>::get(creator)
-                    .into_iter()
-                    .find(|t| t.tier_code == *tier_code)
-                    .ok_or(Error::<T>::CreatorTierNotFound)?;
-                // 创作者收款方 = 本人钱包账户，全额转，零折算。
-                Ok((tier.price_fen, creator.clone()))
+            (IssuerKey::Creator(creator), SubscriptionPlan::CreatorPrice(amount)) => {
+                ensure!(*amount > 0, Error::<T>::ZeroPrice);
+                Ok((*amount, creator.clone()))
             }
             _ => Err(Error::<T>::PlanIssuerMismatch.into()),
         }

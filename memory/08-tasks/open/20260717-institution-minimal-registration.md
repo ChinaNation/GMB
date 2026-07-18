@@ -143,7 +143,7 @@
 - 2026-07-17：用户确认第1步、新任务卡创建及指定runtime路径二次修改权限。
 - 2026-07-17：runtime 管理员值收敛为 `admin_name + admin_account`，岗位与管理员彻底解耦；首次登记自动建立空缺 `LR / 法定代表人` 岗位、严格多数阈值和零余额强制协议账户。
 - 2026-07-17：公权/私权创建 call、OnChina 生成端、CitizenWallet 解码端统一为最小载荷；旧法定代表人、账户数组、岗位任职、阈值和注资字段已删除，不保留兼容分支。
-- 2026-07-17：OnChina 链确认前只写 `pending_institution_registrations`，正式 `subjects/accounts/institution_admins` 禁止预写；待确认登记同时参与 CID 和机构全称查重。
+- 2026-07-17：OnChina 删除机构创建链确认前业务草稿区；创建机构/创建公民只允许 `chain_sign_sessions` 承载短期签名会话，且会话不参与 CID/名称占用，submit 成功或失败后删除。链上确认成功后才写 `subjects/accounts/institution_admins` / `citizens` 正式投影。
 - 2026-07-17：协会 `SFAS` 的规则值改为 `p1=None`，明确表示实例必须显式选择盈利属性；删除模块内固定非盈利残留。
 - 2026-07-17：验收通过：runtime 43 项、public/private admins 13 项、public/private manage 26 项、Node Guard 9 项、OnChina 3 项目标测试、CitizenApp 10 项目标测试、CitizenWallet payload decoder 87 项测试；两个 Flutter analyze、OnChina/Node cargo check、前端生产构建和格式检查均通过。
 - 2026-07-17：本线程未连接 app terminal，且本机未发现 9944/9933/8964/5173/5432 监听服务；按第3步范围保留真实链、数据库、页面和二维码全链路验收，不伪造运行态结论。
@@ -157,3 +157,9 @@
 - 2026-07-17：runtime 法定代表人治理补齐 `Set/Clear`，解除时 `InstitutionInfo.legal_representative_name/cid_number/account` 三字段原子清空；OnChina API 新增 `clear_legal_representative`，CitizenWallet 已同步解码。
 - 2026-07-17：第3步组件级验收通过：`cargo check -p onchina`、`cargo fmt -p onchina -- --check`、`cargo test -p onchina core::institution_call`、OnChina 前端 `npm run build`、`git diff --check`。
 - 2026-07-17：真实运行态补验：`WASM_BUILD_FROM_SOURCE=1 cargo build -p node --bin citizenchain` 通过；当前源码 `citizenchain-fresh --tmp` 在 RPC `127.0.0.1:19944` 启动成功，`system_health.isSyncing=false`，genesis `0x17280b79d2136bb45813890a6effbb2c9b78ea46b6f77e05226e6de1140d3b63`，metadata hex 长度 `416058`。OnChina 使用临时内嵌 PostgreSQL `127.0.0.1:15433` 和 HTTP `127.0.0.1:18964` 启动成功，链投影 `subjects=49,593`、`accounts=99,231`，首页 `/` 返回 200，旧 `legal_rep_*` 列数量为 0，新 `legal_representative_*` 三字段列齐备且当前投影非空值为 0；验收后 OnChina、内嵌 PG 和 fresh 节点均已停止。
+- 2026-07-17：修复 OnChina 新增机构第 1 步“请求内容不正确”：删除 `INSTITUTION_CREATE` prepare 阶段残留 `threshold` 校验；公权、教育、私权三个前端入口统一复用 `buildInstitutionCreatePayload`，扫码授权 payload 与正式提交 body 完全一致；`admins` 首次登记表单补齐 `admin_name + admin_account`，但授权只认账户。
+- 2026-07-17：修复 OnChina 新增机构正式提交“创建机构失败”：原因是前端只提交 `x-cid-security-grant`，未提交后端 `PASSKEY_COLD_SIGN` 安全门要求的 `X-Passkey-Assertion`。统一新增 `createColdSignSubmitHeaders/securityGrantSubmitHeaders` 正式提交入口，创建机构、创建/删除账户、公民身份上链、机构资料上传/删除、机构详情更新均改为同时携带冷签 grant 与 Passkey assertion；资料和详情更新的授权 payload 已按后端 `grant_payload` 逐字段同形清理，删除业务模块手写半套安全头残留。
+- 2026-07-17：修复 OnChina 新增机构“双钱包签名”模型错误：创建机构不再生成 `INSTITUTION_CREATE` 安全动作、不再使用 `a=8 institution_create_credential`、不再携带 `register_nonce/signature/credential_signer_pubkey/scope_*` 内层凭证；后端只生成最终链交易签名会话，管理员钱包签一次后直接提交统一链交易 submit。
+- 2026-07-18：补 `public-admins` / `private-admins` 管理员存储 v4 migration，旧 `Vec<AccountId>` 管理员集合在 runtime 升级时一次性翻译为 `admin_name + admin_account`；OnChina dryRun 预检遇到 RuntimeApi/wasm trap 直接失败，不继续提交；移动端固定展示值统一从 QR registry 生成物读取。
+- 2026-07-17：OnChina、CitizenWallet、CitizenApp 已同步删除 `institution_create_credential` 动作码；CitizenWallet 对 `0x1e05/0x1f05` 按新 call-data 顺序解码并统一中文展示，创建机构链路不再存在内层凭证 Option 分支。
+- 2026-07-17：本轮验收通过：`cargo check -p citizenchain`、`cargo check -p onchina`、`cargo test -p public-manage -p private-manage`、`cargo test -p onchina core::institution_call`、OnChina 前端 `npm run build`、CitizenWallet `flutter analyze`、CitizenWallet `flutter test test/signer/payload_decoder_test.dart test/signer/field_labels_test.dart`、CitizenApp `flutter test test/qr/qr_router_test.dart`、CitizenApp `flutter analyze`、`git diff --check`。OnChina test 构建仍有既有 `GENESIS_CITIZEN_MAX` 未用常量警告，与本次创建机构签名链路无关。

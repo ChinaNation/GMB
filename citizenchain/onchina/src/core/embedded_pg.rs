@@ -78,9 +78,23 @@ fn pg_tool(name: &str) -> PathBuf {
     pg_bin_dir().join(exe)
 }
 
+/// 给 PG 子进程注入保底 locale。`C` 三平台必带(macOS/Linux 无需生成、Windows 无害),
+/// 规避 macOS「postmaster became multithreaded during startup」(无有效 locale 时
+/// CoreFoundation 触发多线程,postmaster 直接 FATAL 退出)。与集群 `--no-locale`
+/// (C 排序)一致,不改语义;UTF8 是编码,中文数据存取不受影响。
+///
+/// 必须显式设置:双击启动(macOS LaunchServices)与 launchd 都是无 `LANG` 的精简
+/// 环境,只有从 Terminal 启动才会带 shell 的 locale——不能依赖用户机器环境。
+fn apply_pg_locale(cmd: &mut Command) {
+    cmd.env("LC_ALL", "C");
+    cmd.env("LANG", "C");
+}
+
 fn run(tool: &Path, args: &[&str]) -> Result<(), String> {
-    let output = Command::new(tool)
-        .args(args)
+    let mut cmd = Command::new(tool);
+    cmd.args(args);
+    apply_pg_locale(&mut cmd);
+    let output = cmd
         .output()
         .map_err(|e| format!("run {} failed: {e}", tool.display()))?;
     if !output.status.success() {
@@ -180,11 +194,10 @@ pub(crate) fn stop() {
 
 fn is_running(data_dir: &Path) -> bool {
     let data = data_dir.to_string_lossy().to_string();
-    Command::new(pg_tool("pg_ctl"))
-        .args(["status", "-D", data.as_str()])
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    let mut cmd = Command::new(pg_tool("pg_ctl"));
+    cmd.args(["status", "-D", data.as_str()]);
+    apply_pg_locale(&mut cmd);
+    cmd.output().map(|o| o.status.success()).unwrap_or(false)
 }
 
 /// 首启写入归档/WAL 配置:配了 `ONCHINA_PG_WAL_ARCHIVE_DIR`(NAS 路径)则开 PITR 归档,否则关。

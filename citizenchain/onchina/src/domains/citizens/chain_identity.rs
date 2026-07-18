@@ -148,7 +148,7 @@ pub(crate) async fn prepare_citizen_onchain_signature(
         expires_at.timestamp(),
         wallet.pubkey.as_str(),
         &payload.payload_bytes,
-        crate::core::qr::ACTION_CITIZEN_IDENTITY,
+        crate::core::qr::action_citizen_identity(),
     ) {
         Ok(v) => v,
         Err(resp) => return resp,

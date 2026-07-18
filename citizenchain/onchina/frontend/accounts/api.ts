@@ -2,14 +2,13 @@
 
 import type { AdminAuth } from '../auth/types';
 import {
-  createScanSignSecurityGrant,
+  createColdSignSubmitHeaders,
+  securityGrantSubmitHeaders,
   type AdminSecurityGrantOutput,
   type ScanSignResolver,
 } from '../admins/securityApi';
 import { adminRequest } from '../utils/http';
 import type { CreateAccountOutput, InstitutionAccount } from '../subjects/api';
-
-const SECURITY_GRANT_HEADER = 'x-cid-security-grant';
 
 export type { CreateAccountOutput, InstitutionAccount, MultisigChainStatus } from '../subjects/api';
 
@@ -21,13 +20,19 @@ export async function createAccount(
   signWithScan: ScanSignResolver,
 ): Promise<CreateAccountOutput> {
   const grantPayload = { target: cidNumber, cid_number: cidNumber, account_name: accountName };
-  const grant = await createScanSignSecurityGrant(auth, 'INSTITUTION_CREATE_ACCOUNT', grantPayload, signWithScan);
+  const headers = await createColdSignSubmitHeaders(
+    auth,
+    'INSTITUTION_CREATE_ACCOUNT',
+    grantPayload,
+    signWithScan,
+    { 'content-type': 'application/json' },
+  );
   return adminRequest<CreateAccountOutput>(
     `/api/v1/institutions/${encodeURIComponent(cidNumber)}/account/create`,
     auth,
     {
       method: 'POST',
-      headers: { 'content-type': 'application/json', [SECURITY_GRANT_HEADER]: grant.grant_id },
+      headers,
       body: JSON.stringify({ account_name: accountName }),
     },
   );
@@ -49,9 +54,10 @@ export async function deleteAccount(
   accountName: string,
   securityGrant: AdminSecurityGrantOutput,
 ): Promise<{ deleted: boolean }> {
+  const headers = await securityGrantSubmitHeaders(auth, securityGrant);
   return adminRequest<{ deleted: boolean }>(
     `/api/v1/institutions/${encodeURIComponent(cidNumber)}/account/${encodeURIComponent(accountName)}`,
     auth,
-    { method: 'DELETE', headers: { [SECURITY_GRANT_HEADER]: securityGrant.grant_id } },
+    { method: 'DELETE', headers },
   );
 }

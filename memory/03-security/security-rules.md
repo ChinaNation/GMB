@@ -39,7 +39,7 @@
 - 文档未更新视为未完成
 - 主要 review 问题未处理不能发布
 - 目标结构和真实运行态验收未完成时不能发布
-- 本机部署只能从根 `deploy/` 控制台进入；该目录只追踪不含密钥的源码，`.runtime/`、日志、编译产物和私密文件必须被 Git 忽略。服务只监听 `127.0.0.1`，使用随机 HttpOnly 会话 Cookie、严格 Origin 校验、单任务互斥和日志脱敏。
+- 本机部署只能从根 `citizenconsole/` 控制台进入；该目录只追踪不含密钥的源码，`.runtime/`、日志、编译产物和私密文件必须被 Git 忽略。服务只监听 `127.0.0.1`，使用随机 HttpOnly 会话 Cookie、严格 Origin 校验、单任务互斥和日志脱敏。
 - 本机部署 Secret 只允许保存在 macOS Keychain，远端流水线 Secret 只允许保存在 GitHub Secrets；禁止明文 Secret 文件、浏览器回传、前端存储或日志输出。
 - 测试部署和 CI 无需密码；production、Release 和服务器部署在启动目标命令前必须逐次通过 Touch ID 生物识别，不允许设备密码降级。
 - CitizenChain 的44个权威节点必须使用逐节点隔离的 Keychain 项保存服务器 IP、节点身份私钥和 GRANDPA 验证私钥；这些共识身份私钥永远不得共享。需要部署控制台管理的服务器统一使用 `deploy` SSH 身份，私钥只允许写入已配置节点的 Keychain 项和 GitHub Secret，不得留在 `.ssh`、仓库、明文清单或 workflow 普通输入中；本机只允许保留非机密的 `deploy.pub`。明确不使用该身份的节点不得强行写入。

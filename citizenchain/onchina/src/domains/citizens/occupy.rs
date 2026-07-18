@@ -4,8 +4,8 @@
 //!           链上同承诺幂等续用)→ 构造 `occupy_cid` 冷签载荷 → 会话落库 → 返回 QR;
 //! submit  = 管理员扫码回签 → 组装/dry-run/提交/等进块 → 档案落库(占号先行:
 //!           链上成功才建档)。
-//! 吊销(purpose=CITIZEN_REVOKE)与链上身份推送(purpose=CITIZEN_IDENTITY_PUSH)
-//! 复用同一 submit 入口,按会话 purpose 分派落库动作。
+//! 吊销(purpose=CITIZEN_REVOKE)、链上身份推送(purpose=CITIZEN_IDENTITY_PUSH)
+//! 与机构创建(purpose=institution-create)复用同一 submit 入口,按会话 purpose 分派落库动作。
 
 use axum::{
     extract::{Path, State},
@@ -29,6 +29,8 @@ use crate::domains::citizens::admin_entry::{
 use crate::domains::citizens::chain_identity::{
     active_registry_cid_number, ensure_registry_admin, same_pubkey_hex,
 };
+use crate::institution::admins::model::InstitutionAdmin;
+use crate::institution::subjects::model::{CreateInstitutionAdminInput, Institution};
 use crate::*;
 
 const CITIZEN_IDENTITY_PALLET_INDEX: u8 = 10;
@@ -43,7 +45,10 @@ pub(crate) const PURPOSE_CITIZEN_OCCUPY: &str = "CITIZEN_OCCUPY";
 pub(crate) const PURPOSE_CITIZEN_REVOKE: &str = "CITIZEN_REVOKE";
 pub(crate) const PURPOSE_CITIZEN_IDENTITY_PUSH: &str = "CITIZEN_IDENTITY_PUSH";
 
-/// 链冷签会话:prepare 落库,submit 消费(单次)。
+/// 链冷签会话:prepare 只保存短期签名 payload。
+///
+/// 这不是公民或机构的业务草稿状态。submit 成功或失败后都必须删除;
+/// 公民/机构正式数据只能在链上确认成功后写入正式投影表。
 pub(crate) struct ChainSignSession {
     pub(crate) request_id: String,
     pub(crate) purpose: String,
@@ -121,14 +126,14 @@ impl Db {
         })
     }
 
-    pub(crate) fn consume_chain_sign_session(&self, request_id: &str) -> Result<(), String> {
+    pub(crate) fn delete_chain_sign_session(&self, request_id: &str) -> Result<(), String> {
         let request_id = request_id.trim().to_string();
         self.with_client(move |conn| {
             conn.execute(
-                "UPDATE chain_sign_sessions SET consumed_at = now() WHERE request_id = $1",
+                "DELETE FROM chain_sign_sessions WHERE request_id = $1",
                 &[&request_id],
             )
-            .map_err(|e| format!("consume chain sign session failed: {e}"))?;
+            .map_err(|e| format!("delete chain sign session failed: {e}"))?;
             Ok(())
         })
     }
@@ -501,7 +506,79 @@ pub(crate) async fn prepare_citizen_revoke(
     .into_response()
 }
 
-/// 统一链交易 submit:验签者一致 → 组装/dry-run/提交 → 等进块 → 按 purpose 落库。
+fn delete_session_best_effort(state: &AppState, request_id: &str, reason: &str) {
+    if let Err(err) = state.db.delete_chain_sign_session(request_id) {
+        tracing::error!(
+            error = %err,
+            request_id = %request_id,
+            reason = %reason,
+            "delete chain sign session failed"
+        );
+    }
+}
+
+fn persist_institution_create_projection_after_chain_success(
+    state: &AppState,
+    session: &ChainSignSession,
+    tx_hash: &str,
+    admin_account: &str,
+) -> Result<(), String> {
+    let inst: Institution = serde_json::from_value(
+        session
+            .context
+            .get("institution")
+            .cloned()
+            .ok_or_else(|| "institution-create session missing institution".to_string())?,
+    )
+    .map_err(|e| format!("decode institution-create institution failed: {e}"))?;
+    let admins: Vec<CreateInstitutionAdminInput> = serde_json::from_value(
+        session
+            .context
+            .get("admins")
+            .cloned()
+            .ok_or_else(|| "institution-create session missing admins".to_string())?,
+    )
+    .map_err(|e| format!("decode institution-create admins failed: {e}"))?;
+
+    state.db.upsert_institution_row(&inst)?;
+    let now = Utc::now();
+    let city_code = if inst.city_code.trim().is_empty() {
+        None
+    } else {
+        Some(inst.city_code.clone())
+    };
+    for admin in admins {
+        crate::institution::admins::repo::upsert_institution_admin(
+            &state.db,
+            &InstitutionAdmin {
+                cid_number: inst.cid_number.clone(),
+                province_code: inst.province_code.clone(),
+                city_code: city_code.clone(),
+                admin_account: admin.admin_account,
+                admin_department: None,
+                admin_job: None,
+                admin_contact_phone: None,
+                admin_contact_email: None,
+                admin_photo_path: None,
+                admin_photo_name: None,
+                admin_photo_mime: None,
+                admin_photo_size: None,
+                admin_passkey_credential_id: None,
+                admin_source_id: Some(session.request_id.clone()),
+                admin_status: Some("ACTIVE".to_string()),
+                admin_updated_at: Some(now),
+                created_by: Some(admin_account.to_string()),
+                operation_log_id: Some(tx_hash.to_string()),
+                created_at: now,
+                province_name: inst.province_name.clone(),
+                city_name: inst.city_name.clone(),
+            },
+        )?;
+    }
+    Ok(())
+}
+
+/// 统一链交易 submit:验签者一致 → 组装/dry-run/提交 → 等进块 → 按 purpose 落正式投影。
 pub(crate) async fn submit_chain_sign(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -520,22 +597,30 @@ pub(crate) async fn submit_chain_sign(
         }
     };
     if session.consumed_at.is_some() {
+        delete_session_best_effort(&state, session.request_id.as_str(), "consumed residue");
         return api_error(StatusCode::CONFLICT, 1005, "冷签会话已被消费");
     }
     if session.expires_at < Utc::now() {
+        delete_session_best_effort(&state, session.request_id.as_str(), "expired");
         return api_error(StatusCode::GONE, 1005, "冷签会话已过期,请重新发起");
     }
     if !same_pubkey_hex(session.actor_pubkey.as_str(), ctx.admin_account.as_str()) {
+        delete_session_best_effort(&state, session.request_id.as_str(), "actor mismatch");
         return api_error(StatusCode::FORBIDDEN, 1003, "只有发起管理员可以提交本会话");
     }
     if !same_pubkey_hex(input.signer_pubkey.as_str(), session.actor_pubkey.as_str()) {
+        delete_session_best_effort(&state, session.request_id.as_str(), "signer mismatch");
         return api_error(StatusCode::FORBIDDEN, 1003, "签名钱包与会话管理员不一致");
     }
     if matches!(
         session.purpose.as_str(),
-        PURPOSE_CITIZEN_OCCUPY | PURPOSE_CITIZEN_REVOKE | PURPOSE_CITIZEN_IDENTITY_PUSH
+        PURPOSE_CITIZEN_OCCUPY
+            | PURPOSE_CITIZEN_REVOKE
+            | PURPOSE_CITIZEN_IDENTITY_PUSH
+            | crate::institution::subjects::registration::PURPOSE_INSTITUTION_CREATE
     ) {
         if let Err(resp) = ensure_registry_admin(&ctx) {
+            delete_session_best_effort(&state, session.request_id.as_str(), "registry auth failed");
             return resp;
         }
     }
@@ -552,6 +637,7 @@ pub(crate) async fn submit_chain_sign(
         Ok(v) => v,
         Err(err) => {
             tracing::error!(error = %err, "chain submit failed");
+            delete_session_best_effort(&state, session.request_id.as_str(), "chain submit failed");
             let detail = format!("链交易提交失败: {err}");
             return api_error(StatusCode::UNPROCESSABLE_ENTITY, 2004, detail.as_str());
         }
@@ -560,6 +646,7 @@ pub(crate) async fn submit_chain_sign(
         chain_submit::wait_nonce_consumed(session.actor_pubkey.as_str(), session.nonce).await
     {
         tracing::error!(error = %err, tx_hash = %tx_hash, "wait inclusion failed");
+        delete_session_best_effort(&state, session.request_id.as_str(), "wait inclusion failed");
         let detail = format!("交易已提交({tx_hash})但未确认进块: {err}");
         return api_error(StatusCode::BAD_GATEWAY, 2004, detail.as_str());
     }
@@ -575,7 +662,7 @@ pub(crate) async fn submit_chain_sign(
         .unwrap_or_default()
         .to_string();
 
-    // 按 purpose 分派落库动作(链上已成功;本地失败可凭同会话/同承诺幂等重试)。
+    // 按 purpose 分派落正式投影。这里已经链上确认;失败路径不得提前写业务数据。
     let mut citizen_output = None;
     match session.purpose.as_str() {
         PURPOSE_CITIZEN_OCCUPY => {
@@ -587,7 +674,12 @@ pub(crate) async fn submit_chain_sign(
             {
                 Some(v) => v,
                 None => {
-                    return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "会话档案数据损坏")
+                    delete_session_best_effort(
+                        &state,
+                        session.request_id.as_str(),
+                        "invalid citizen context",
+                    );
+                    return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "会话档案数据损坏");
                 }
             };
             let record = match persist_citizen_record(
@@ -600,7 +692,14 @@ pub(crate) async fn submit_chain_sign(
                 block_number,
             ) {
                 Ok(v) => v,
-                Err(resp) => return resp,
+                Err(resp) => {
+                    delete_session_best_effort(
+                        &state,
+                        session.request_id.as_str(),
+                        "persist citizen failed",
+                    );
+                    return resp;
+                }
             };
             citizen_output = Some(create_output_from_record(record));
         }
@@ -611,6 +710,11 @@ pub(crate) async fn submit_chain_sign(
                 tx_hash.as_str(),
             ) {
                 tracing::error!(error = %err, "mark citizen revoked failed");
+                delete_session_best_effort(
+                    &state,
+                    session.request_id.as_str(),
+                    "mark citizen revoked failed",
+                );
                 return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "吊销落库失败");
             }
         }
@@ -621,25 +725,36 @@ pub(crate) async fn submit_chain_sign(
                     .update_citizen_onchain(cid_number.as_str(), tx_hash.as_str(), block_number)
             {
                 tracing::error!(error = %err, "update citizen onchain failed");
+                delete_session_best_effort(
+                    &state,
+                    session.request_id.as_str(),
+                    "update citizen onchain failed",
+                );
                 return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "上链状态回写失败");
+            }
+        }
+        crate::institution::subjects::registration::PURPOSE_INSTITUTION_CREATE => {
+            if let Err(err) = persist_institution_create_projection_after_chain_success(
+                &state,
+                &session,
+                tx_hash.as_str(),
+                ctx.admin_account.as_str(),
+            ) {
+                tracing::error!(error = %err, "persist institution create projection failed");
             }
         }
         crate::institution::admins::PURPOSE_INSTITUTION_GOVERNANCE
         | crate::institution::admins::PURPOSE_INSTITUTION_REGISTER_ADMINS => {
             // 机构治理与注册局登记管理员的最终真源在链上。提交成功后仅记录审计；
-            // OnChina 读侧继续通过链上 admins / roles / assignments 读取，不本地改正式投影。
+            // OnChina 读侧继续通过链上 admins / roles / assignments 读取。
         }
         other => {
             tracing::error!(purpose = %other, "unknown chain sign purpose");
+            delete_session_best_effort(&state, session.request_id.as_str(), "unknown purpose");
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "未知会话用途");
         }
     }
-    if let Err(err) = state
-        .db
-        .consume_chain_sign_session(session.request_id.as_str())
-    {
-        tracing::error!(error = %err, "consume session failed");
-    }
+    delete_session_best_effort(&state, session.request_id.as_str(), "completed");
 
     crate::core::runtime_ops::append_audit_log(
         &state,

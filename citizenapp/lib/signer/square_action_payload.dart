@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:citizenapp/qr/generated/qr_action_registry.g.dart';
+
 /// 广场账户动作签名 payload（两色内容核对用）。
 ///
 /// 布局须与 Worker `account/action_challenge.buildActionScalePayload` 逐字节一致：
@@ -24,26 +26,46 @@ class SquareActionPayload {
   /// 动作专属绑定字段（subscribe_membership = 会员等级）。
   final String? context;
 
-  /// 人类可读的动作标题，展示给用户核对（禁盲签）。
-  String get displayTitle {
-    switch (action) {
-      case 'subscribe_membership':
-        return context == null ? '订阅会员' : '订阅会员（$context）';
-      case 'cancel_membership':
-        return '取消订阅';
-      case 'delete_account':
-        return '注销用户';
-      default:
-        return action;
+  /// registry 镜像中文动作名。未命中返回 null,签名入口必须红色拒绝。
+  String? get actionTypeLabel => _squareActionTypeLabels[action];
+
+  /// 用户确认页展示字段。字段名缺中文时返回 null,调用方必须拒绝签名。
+  List<SquareReviewField>? get reviewFields {
+    final actionType = actionTypeLabel;
+    if (actionType == null) return null;
+    final fields = <SquareReviewField>[];
+    if (!_appendField(fields, 'action_type', actionType)) return null;
+    if (!_appendField(fields, 'owner_account', ownerAccount)) return null;
+    if (!_appendField(fields, 'challenge_id', challengeId)) return null;
+    if (context != null &&
+        !_appendField(fields, 'membership_level', context!)) {
+      return null;
     }
+    if (!_appendField(fields, 'expires_at', _formatExpiresAt(expiresAt))) {
+      return null;
+    }
+    return fields;
   }
 }
 
-const Set<String> _knownActions = {
-  'subscribe_membership',
-  'cancel_membership',
-  'delete_account',
+/// 广场账户子动作中文名，镜像 qr-protocol registry 的 square_account_action decoder。
+const Map<String, String> _squareActionTypeLabels = {
+  'subscribe_membership': '订阅会员',
+  'cancel_membership': '取消订阅',
+  'delete_account': '注销用户',
 };
+
+class SquareReviewField {
+  const SquareReviewField({
+    required this.key,
+    required this.label,
+    required this.value,
+  });
+
+  final String key;
+  final String label;
+  final String value;
+}
 
 /// 解码 payloadHex。无法识别 / 布局不符 / 未知动作一律返回 null（调用方须禁止签名）。
 SquareActionPayload? decodeSquareActionPayload(String payloadHex) {
@@ -53,7 +75,7 @@ SquareActionPayload? decodeSquareActionPayload(String payloadHex) {
 
     final (action, o1) = _readString(bytes, offset);
     offset = o1;
-    if (!_knownActions.contains(action)) return null;
+    if (!_squareActionTypeLabels.containsKey(action)) return null;
 
     final (owner, o2) = _readString(bytes, offset);
     offset = o2;
@@ -71,16 +93,30 @@ SquareActionPayload? decodeSquareActionPayload(String payloadHex) {
     if (bytes.length - offset != 8) return null;
     final expiresAt = _u64Le(bytes, offset);
 
-    return SquareActionPayload(
+    final decoded = SquareActionPayload(
       action: action,
       ownerAccount: owner,
       challengeId: challengeId,
       expiresAt: expiresAt,
       context: context,
     );
+    if (decoded.reviewFields == null) return null;
+    return decoded;
   } on Object {
     return null;
   }
+}
+
+bool _appendField(List<SquareReviewField> fields, String key, String value) {
+  final label = GeneratedQrActionRegistry.fieldLabelForKey(key);
+  if (label == null || label.isEmpty) return false;
+  fields.add(SquareReviewField(key: key, label: label, value: value));
+  return true;
+}
+
+String _formatExpiresAt(int value) {
+  final millis = value > 1000000000000 ? value : value * 1000;
+  return DateTime.fromMillisecondsSinceEpoch(millis).toLocal().toString();
 }
 
 (String, int) _readString(Uint8List bytes, int offset) {

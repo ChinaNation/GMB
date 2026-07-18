@@ -13,13 +13,17 @@ void main() {
   List<int> code(String value) =>
       [...value.codeUnits, ...List.filled(4 - value.length, 0)];
   List<int> u32(int value) => [value, 0, 0, 0];
+  List<int> admin(String name, int accountByte) => [
+        ...bytes(name),
+        ...List.filled(32, accountByte),
+      ];
 
   test('机构 AdminAccounts 只解码钱包集合', () {
     final value = Uint8List.fromList([
       ...code('CGOV'),
       8,
-      ...List.filled(32, 1),
-      ...List.filled(32, 2),
+      ...admin('张三', 1),
+      ...admin('李四', 2),
     ]);
     final decoded = AdminAccountCodec.decodeInstitution(
       cidNumber: 'CID-1',

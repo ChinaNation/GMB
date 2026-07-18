@@ -5,6 +5,7 @@ members = [
     "onchina",                               # onchina 多机构统一控制台:CID 身份 + 链下明细 + 鉴权 + 颁发(ADR-029/030)
     "crates/blockchain-test-harness",        # 区块链真实验收与坏块构造测试工具（非生产路径）
     "crates/chain-signing",                  # Rust host 端链交易签名材料唯一真源
+    "crates/qr-protocol",                    # QR_V1 扫码签名 action registry 与中文展示唯一代码真源
     "runtime",                               # 链上运行时
     "runtime/primitives",                    # 运行时共享常量与基础类型
 

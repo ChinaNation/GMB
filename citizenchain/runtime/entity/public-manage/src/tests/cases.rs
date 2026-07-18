@@ -15,11 +15,7 @@ fn fund_registry_account() {
     ));
 }
 
-fn create_cgov(
-    tag: &str,
-    nonce: &[u8],
-    signature: pallet::RegisterSignatureOf<Test>,
-) -> pallet::CidNumberOf<Test> {
+fn create_cgov(tag: &str) -> pallet::CidNumberOf<Test> {
     let cid = generated_cid(tag, "CGOV");
     assert_ok!(PublicManage::propose_create_public_institution(
         RuntimeOrigin::signed(creator()),
@@ -28,19 +24,14 @@ fn create_cgov(
         cid_short_name("测试机构".as_bytes()),
         empty_town_code(),
         institution_admins(3),
-        register_nonce(nonce),
-        signature,
         b"REGISTRY-CID".to_vec(),
-        signer_pubkey(),
-        province_name(),
-        Vec::new(),
     ));
     cid
 }
 
 fn create_cgov_with_custom(tag: &str) -> pallet::CidNumberOf<Test> {
     fund_registry_account();
-    let cid = create_cgov(tag, tag.as_bytes(), valid_signature());
+    let cid = create_cgov(tag);
     assert_ok!(PublicManage::add_institution_account(
         RuntimeOrigin::signed(creator()),
         cid.clone(),
@@ -141,7 +132,7 @@ fn creation_uses_cid_as_identity_and_writes_all_account_indexes() {
 fn creation_accepts_zero_protocol_account_balances() {
     new_test_ext().execute_with(|| {
         fund_registry_account();
-        let cid = create_cgov("zero-balances", b"zero-balances", valid_signature());
+        let cid = create_cgov("zero-balances");
         assert_eq!(
             Balances::free_balance(account_of(&cid, RESERVED_NAME_MAIN)),
             0
@@ -165,12 +156,7 @@ fn creation_rejects_fewer_than_two_admins() {
                 cid_short_name("单管理员".as_bytes()),
                 empty_town_code(),
                 institution_admins(1),
-                register_nonce(b"one-admin"),
-                valid_signature(),
                 b"REGISTRY-CID".to_vec(),
-                signer_pubkey(),
-                province_name(),
-                Vec::new(),
             ),
             Error::<Test>::InvalidAdminsLen
         );
@@ -178,26 +164,21 @@ fn creation_rejects_fewer_than_two_admins() {
 }
 
 #[test]
-fn creation_rejects_invalid_signature_without_partial_state() {
+fn creation_rejects_non_registry_origin_without_partial_state() {
     new_test_ext().execute_with(|| {
         fund_registry_account();
-        let cid = generated_cid("invalid-signature", "CGOV");
+        let cid = generated_cid("bad-origin", "CGOV");
         assert_noop!(
             PublicManage::propose_create_public_institution(
-                RuntimeOrigin::signed(creator()),
+                RuntimeOrigin::signed(admin(9)),
                 cid.clone(),
-                cid_full_name("无效签名机构".as_bytes()),
-                cid_short_name("无效签名".as_bytes()),
+                cid_full_name("无权登记机构".as_bytes()),
+                cid_short_name("无权登记".as_bytes()),
                 empty_town_code(),
                 institution_admins(3),
-                register_nonce(b"invalid-signature"),
-                invalid_signature(),
                 b"REGISTRY-CID".to_vec(),
-                signer_pubkey(),
-                province_name(),
-                Vec::new(),
             ),
-            Error::<Test>::InvalidCidInstitutionSignature
+            Error::<Test>::RegistryAuthorityDenied
         );
         assert!(!pallet::Institutions::<Test>::contains_key(&cid));
         assert!(!public_admins::AdminAccounts::<Test>::contains_key(&cid));
@@ -216,12 +197,7 @@ fn creation_rejects_duplicate_cid_and_replayed_nonce() {
                 cid_short_name("重复".as_bytes()),
                 empty_town_code(),
                 institution_admins(3),
-                register_nonce(b"duplicate-cid"),
-                valid_signature(),
                 b"REGISTRY-CID".to_vec(),
-                signer_pubkey(),
-                province_name(),
-                Vec::new(),
             ),
             Error::<Test>::InstitutionAlreadyExists
         );

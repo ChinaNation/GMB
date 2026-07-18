@@ -14,7 +14,12 @@ import {
 } from '../shared/signing_message';
 
 /// 需要钱包 sr25519 主钥签名授权的敏感动作。
-export type SignedAction = 'delete_account' | 'cancel_membership' | 'subscribe_membership';
+/// set_creator_plan：创作者覆盖式设置自己会员档（离链存 Cloudflare，context=tiers 规范化哈希，防替换）。
+export type SignedAction =
+  | 'delete_account'
+  | 'cancel_membership'
+  | 'subscribe_membership'
+  | 'set_creator_plan';
 
 const ACTION_CHALLENGE_TTL_SECONDS = 300;
 

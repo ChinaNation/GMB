@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 正常启动:不清库,用【冻结 SSOT】(node/chainspecs/citizenchain.plain.json)续跑现有链。
-# 要清链并用当前源码现造创世,改用 clean-run.sh。
+# 要清理本机数据并启动隔离 fresh 链,改用 clean-run.sh。
 #
 # 启动后:节点自动挖矿;链上中国平台需在节点设置页手动启动,统一入口 https://onchina.local:8964。
 # 平台登录与节点启动**解耦**:本机构管理员用冷钱包扫码、对链上 Active 管理员集合
@@ -60,7 +60,7 @@ export ONCHINA_FRONTEND_DIST="$REPO_ROOT/onchina/frontend/dist"
 export ONCHINA_ENABLE_TLS=1
 export ONCHINA_TLS_DIR="$HOME/Library/Application Support/gmb.dev/onchina-tls"
 # 公权机构目录只允许从链上投影到本地缓存;开发启动不再打开旧本地生成开关。
-# 链不可达或投影不可读时,链上中国按 fail-closed 拒绝启动。
+# 链不可达或投影不可读时,链上中国按 fail-closed 不放行平台服务。
 
 # ── dev 平台签名与链上凭证签发配置(本地测试值)──
 # 这些变量只让本地能签登录 QR 挑战和链上凭证;节点启动、平台启动、

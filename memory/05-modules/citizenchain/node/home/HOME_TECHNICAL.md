@@ -45,7 +45,7 @@ WASM CI 版本规则：
 - CI 不自动提交 `spec_version` 回 `main`，源码版本仍由开发者按真实 runtime 变更维护
 - 生成的 `citizenchain-wasm` artifact 只用于显式的开发升级、下载脚本或链上 `System.set_code` 流程；本地启动脚本不下载、不内置该 artifact
 - 三端桌面安装包 CI 不再由 WASM CI 自动触发，也不再下载/内置最新 WASM；现有链要使用最新 runtime 仍必须走 runtime 升级
-- GitHub workflow 只保留 CI 与正式 Release，不再持有固定服务器清单或批量部署入口。Linux 服务器部署统一从本机 `deploy/` 控制台选择44个权威节点之一，下载当前提交已成功 CI 的 `公民链-Linux-amd.deb`，逐节点写入匹配的身份/GRANDPA 密钥并部署；不会清除 `/opt/citizenchain/data` 区块库。
+- GitHub workflow 只保留 CI 与正式 Release，不再持有固定服务器清单或批量部署入口。Linux 服务器部署统一从本机 `citizenconsole/` 控制台选择44个权威节点之一，下载当前提交已成功 CI 的 `公民链-Linux-amd.deb`，逐节点写入匹配的身份/GRANDPA 密钥并部署；不会清除 `/opt/citizenchain/data` 区块库。
 
 ## 白皮书显示规则
 

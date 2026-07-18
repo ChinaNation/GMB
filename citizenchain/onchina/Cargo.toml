@@ -63,6 +63,7 @@ async-trait = "0.1"
 
 # 链上共享原语(随 workspace 统一到 ss58-2027-fix-citizenapp-grandpa 分支的 sp-core)
 chain-signing = { path = "../crates/chain-signing" }
+qr-protocol = { path = "../crates/qr-protocol" }
 sp-core = { workspace = true, default-features = true }
 primitives = { path = "../runtime/primitives" }
 # 链交易组装+提交(D7):与 node 端同一套 runtime 类型拼 SignedPayload/UncheckedExtrinsic

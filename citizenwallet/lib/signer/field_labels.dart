@@ -1,10 +1,10 @@
-/// 扫码确认页 reviewFields 字段名中文翻译单源。
-///
-/// decoder(payload_decoder.dart)的 `reviewFields` 保留英文机器 key 用于
-/// 跨端验真,到 UI 层统一经本文件翻译。payload_decoder 新增 reviewFields key
-/// 时必须同步登记本表,并在 test/signer/field_labels_test.dart 补断言;
-/// 未登记字段用中文兜底,避免直接把英文 key 展示给用户。
-library;
+// 扫码确认页 reviewFields 字段名中文翻译单源。
+//
+// decoder(payload_decoder.dart)的 `reviewFields` 保留英文机器 key 用于
+// 跨端验真,到 UI 层统一经本文件翻译。payload_decoder 新增 reviewFields key
+// 时必须先登记 `citizenchain/crates/qr-protocol/registry/fields.yaml`,
+// 再同步本表并补测试。未登记字段必须红色拒绝,不得 fallback 展示英文 key。
+import 'package:citizenwallet/qr/generated/qr_action_registry.g.dart';
 
 /// fields value 转换(如 approve: true → 赞成)。
 String fieldValueText(String key, String value) {
@@ -12,109 +12,25 @@ String fieldValueText(String key, String value) {
   return value;
 }
 
-/// reviewFields key → 中文字段名。
-String fieldLabelText(String key) {
+bool hasFieldLabel(String key) => fieldLabelTextOrNull(key) != null;
+
+/// reviewFields key → 中文字段名；未登记返回 null,调用方必须红色拒绝。
+String? fieldLabelTextOrNull(String key) {
   if (key.startsWith('amount_')) {
     final accountName = key.substring('amount_'.length);
     return accountName.isEmpty ? '账户金额' : '$accountName金额';
   }
-  return switch (key) {
-    'to' => '收款账户',
-    'beneficiary' => '收款账户',
-    'account' => '账户',
-    'institution_account' => '机构账户',
-    'execution_account' => '资产执行账户',
-    'personal_account' => '个人多签账户',
-    'funding_account' => '出资账户',
-    'fee_payer' => '费用付款账户',
-    'operation_fee_payer' => '操作费付款账户',
-    'execution_fee_payer' => '执行费付款账户',
-    'institution_code' => '机构类型',
-    'cid_number' => 'CID编号',
-    'actor_cid_number' => '操作机构CID',
-    'credential_issuer_cid_number' => '凭证签发机构CID',
-    'credential_signer_pubkey' => '凭证签发管理员',
-    'cid_full_name' => '机构全称',
-    'account_name' => '账户名称',
-    'amount_yuan' => '金额',
-    'total_amount_yuan' => '总金额',
-    'remark' => '备注',
-    'reason' => '原因',
-    'proposal_id' => '提案编号',
-    'approve' => '投票意见',
-    'admins' => '管理员',
-    'admins_len' => '管理员人数',
-    'threshold' => '阈值',
-    'regular_threshold' => '普通阈值',
-    'create_threshold' => '创建阈值',
-    'new_threshold' => '新阈值',
-    'scope_province_name' => '省级范围',
-    'scope_city_name' => '市级范围',
-    'account_names' => '机构账户名称',
-    'account_count' => '机构账户数量',
-    'cid_count' => 'CID数量',
-    'allocation_count' => '分配项数',
-    'asset_id' => '资产编号',
-    'asset_class' => '资产类型',
-    'asset_name' => '资产名称',
-    'asset_symbol' => '资产符号',
-    'asset_description' => '资产说明',
-    'decimals' => '资产精度',
-    'initial_supply_raw' => '初始供应量(raw)',
-    'amount_raw' => '资产数量(raw)',
-    'from' => '来源账户',
-    'who' => '目标持仓账户',
-    'reason_hash' => '监管文书哈希',
-    'action_type' => '操作类型',
-    'actor_province_name' => '操作省份',
-    'actor_pubkey' => '操作管理员',
-    'target' => '目标账户',
-    'before_hash' => '变更前哈希',
-    'after_hash' => '变更后哈希',
-    'admin_pubkey' => '管理员账户',
-    'bank_main' => '清算行主账户',
-    'new_bank' => '新清算行',
-    'peer_id' => '节点标识',
-    'rpc_domain' => '节点域名',
-    'rpc_port' => '节点端口',
-    'new_domain' => '新节点域名',
-    'new_port' => '新节点端口',
-    'new_rate_bp' => '链下费率',
-    'new_key' => '新密钥',
-    'expires_at' => '过期时间',
-    'title' => '法律标题',
-    'tier' => '法律层级',
-    'vote_type' => '表决类型',
-    'scope_code' => '行政区代码',
-    'houses' => '表决院',
-    'chapter_count' => '章数',
-    'article_count' => '条数',
-    'effective_at' => '生效时间戳',
-    'law_id' => '法律编号',
-    'eligible_total' => '合格选民数',
-    'executive_cid_number' => '行政机构CID',
-    'legislature_cid_number' => '立法机构CID',
-    'catalog_version' => '地址库版本',
-    'catalog_hash' => '地址库哈希',
-    'province_code' => '省级代码',
-    'city_code' => '市级代码',
-    'town_code' => '镇级代码',
-    'address_name_code' => '地址名称代码',
-    'address_name' => '地址名称',
-    'address_local_no' => '本地地址编号',
-    'address_detail' => '地址详情',
-    // 公民链上身份(citizen_identity / register_voting_identity /
-    // upgrade_to_candidate_identity)。
-    'identity_level' => '身份类型',
-    'wallet_account' => '公民钱包账户',
-    'citizen_age_years' => '周岁年龄',
-    'valid_range' => '护照有效期',
-    'citizen_status' => '身份状态',
-    'residence' => '居住地',
-    'birth_place' => '出生地',
-    'birth_date' => '出生日期',
-    'citizen_full_name' => '公民姓名',
-    'citizen_sex' => '公民性别',
-    _ => '未知字段',
-  };
+  return GeneratedQrActionRegistry.fieldLabelForKey(key);
+}
+
+/// reviewFields key → 中文字段名。
+///
+/// 仅保留给既有测试和非签名确认辅助场景；真正签名放行必须使用
+/// [fieldLabelTextOrNull] / [hasFieldLabel]。未登记字段直接抛错,不能生成展示兜底。
+String fieldLabelText(String key) {
+  final label = fieldLabelTextOrNull(key);
+  if (label == null) {
+    throw StateError('签名字段缺少中文名称');
+  }
+  return label;
 }

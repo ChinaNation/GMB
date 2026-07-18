@@ -239,6 +239,17 @@ impl crate::traits::RegistryAuthority<AccountId32> for TestRegistryAuthority {
             && !target_cid_number.is_empty()
             && !scope_province_name.is_empty()
     }
+
+    fn can_register_institution_origin(
+        registrar_account: &AccountId32,
+        actor_cid_number: &[u8],
+        target_cid_number: &[u8],
+        _target_institution_code: InstitutionCode,
+    ) -> bool {
+        registrar_account == &registrar()
+            && actor_cid_number == b"GD001-FRG00-000000001-2026"
+            && !target_cid_number.is_empty()
+    }
 }
 
 pub struct TestCitizenIdentityReader;
@@ -454,12 +465,7 @@ pub fn create_institution(
         account_name("测试机构".as_bytes()),
         BoundedVec::new(),
         institution_admins(&target_admins),
-        register_nonce(cid_number.as_slice()),
-        valid_signature(),
         b"GD001-FRG00-000000001-2026".to_vec(),
-        [7u8; 32],
-        "广东省".as_bytes().to_vec(),
-        "荔湾市".as_bytes().to_vec(),
     )?;
 
     // 创建 call 不再接收账户清单或初始入金。测试若需要关闭命名账户，必须在创建

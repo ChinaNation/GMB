@@ -161,14 +161,14 @@ GMB/
 ├── citizenweb/           # 官方网站代码
 ├── memory/            # AI 编程系统与正式文档真源
 ├── scripts/           # 非部署仓库工具，本机目录
-├── deploy/            # 可追踪的本机部署控制台源码，.runtime 与私密材料忽略
+├── citizenconsole/            # 可追踪的本机部署控制台源码，.runtime 与私密材料忽略
 ├── docs/              # 展示资料与静态发布资料
 └── .github/           # CI/CD、审查和安装包流水线
 ```
 
 ## 8. 发布边界
 
-本机统一发布入口固定为 `deploy/` 可视化控制台。不含密钥的控制台源码由 Git 追踪，`.runtime/`、日志、编译产物和私密材料精确忽略。控制台用六个模块图标分别承载 CitizenApp Cloudflare、CitizenWeb、CitizenApp、CitizenWallet、CitizenChain 和 CitizenChain WASM；模块详情显示可执行操作、Keychain/GitHub Secrets 状态和每项密钥的简短中文用途，但绝不读取到浏览器或显示密钥明文。
+本机统一发布入口固定为 `citizenconsole/` 可视化控制台。不含密钥的控制台源码由 Git 追踪，`.runtime/`、日志、编译产物和私密材料精确忽略。控制台用七个模块图标分别承载 CitizenConsole、CitizenApp Cloudflare、CitizenWeb、CitizenChain WASM（上排四）与 CitizenApp、CitizenWallet、CitizenChain（下排三）；其中 CitizenConsole 卡点击进入专属整页（非弹窗）管理稳定币充值发币订单与发币热钱包，其余六个为部署模块，点开弹窗显示可执行操作、Keychain/GitHub Secrets 状态和每项密钥的简短中文用途，但绝不读取到浏览器或显示密钥明文。
 
 测试部署和 CI 无需密码；production、Release 和服务器部署每次执行前必须通过 macOS Touch ID，失败时不得启动目标命令。部署 Secret 只保存在 macOS Keychain 或 GitHub Secrets，`.ssh`、仓库及根目录不得保留部署私钥明文。GitHub `workflow_dispatch` 使用显式 `mode=ci/release` 隔离构建与发布；服务器部署由本地控制台独立执行，目标服务器直接下载 GitHub 最新成功 CI 产物，CI 模式不得创建 Release 或部署服务器。
 

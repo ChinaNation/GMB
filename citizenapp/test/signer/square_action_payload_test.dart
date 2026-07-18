@@ -40,7 +40,11 @@ void main() {
     expect(decoded.challengeId, 'sqa_abc');
     expect(decoded.context, isNull);
     expect(decoded.expiresAt, 1700000000000);
-    expect(decoded.displayTitle, '取消订阅');
+    expect(decoded.actionTypeLabel, '取消订阅');
+    expect(
+      decoded.reviewFields!.map((field) => field.label),
+      containsAll(['操作类型', '用户账户', '挑战编号', '过期时间']),
+    );
   });
 
   test('decodes subscribe_membership with level context', () {
@@ -55,7 +59,11 @@ void main() {
     expect(decoded, isNotNull);
     expect(decoded!.action, 'subscribe_membership');
     expect(decoded.context, 'voting');
-    expect(decoded.displayTitle, '订阅会员（voting）');
+    expect(decoded.actionTypeLabel, '订阅会员');
+    expect(
+      decoded.reviewFields!.map((field) => '${field.label}:${field.value}'),
+      contains('会员等级:voting'),
+    );
   });
 
   test('rejects unknown action → null (no blind sign)', () {
@@ -76,6 +84,7 @@ void main() {
       expiresAt: 1,
     );
     expect(decodeSquareActionPayload('${hex}ff'), isNull); // 多一字节
-    expect(decodeSquareActionPayload(hex.substring(0, hex.length - 4)), isNull); // 缺尾
+    expect(decodeSquareActionPayload(hex.substring(0, hex.length - 4)),
+        isNull); // 缺尾
   });
 }

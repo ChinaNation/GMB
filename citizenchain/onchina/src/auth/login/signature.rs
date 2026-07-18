@@ -14,6 +14,22 @@ pub(crate) fn verify_admin_signature(
     message: &str,
     signature_text: &str,
 ) -> bool {
+    if verify_admin_signature_bytes(admin_account, message.as_bytes(), signature_text) {
+        return true;
+    }
+    let wrapped = format!("<Bytes>{}</Bytes>", message);
+    verify_admin_signature_bytes(admin_account, wrapped.as_bytes(), signature_text)
+}
+
+/// 校验管理员钱包对原始字节的 sr25519 签名。
+///
+/// 链上中国治理 JSON 统一走 `verify_admin_signature`；本函数只作为内部底层验签工具，
+/// 不再承载机构创建内层凭证入口。
+pub(crate) fn verify_admin_signature_bytes(
+    admin_account: &str,
+    message: &[u8],
+    signature_text: &str,
+) -> bool {
     let Some(pubkey_bytes) = parse_sr25519_pubkey_bytes(admin_account) else {
         return false;
     };
@@ -35,16 +51,7 @@ pub(crate) fn verify_admin_signature(
         Err(_) => return false,
     };
     let ctx = signing_context(b"substrate");
-    if pubkey
-        .verify(ctx.bytes(message.as_bytes()), &signature)
-        .is_ok()
-    {
-        return true;
-    }
-    let wrapped = format!("<Bytes>{}</Bytes>", message);
-    pubkey
-        .verify(ctx.bytes(wrapped.as_bytes()), &signature)
-        .is_ok()
+    pubkey.verify(ctx.bytes(message), &signature).is_ok()
 }
 
 pub(super) fn build_login_qr_system_signature(

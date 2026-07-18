@@ -20,6 +20,9 @@ class QrSignResponsePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final fieldLines = decoded.reviewFields!
+        .map((field) => '${field.label}：${field.value}')
+        .join('\n');
     return Scaffold(
       appBar: AppBar(title: const Text('签名结果')),
       body: SafeArea(
@@ -29,8 +32,9 @@ class QrSignResponsePage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Text(
-                decoded.displayTitle,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                '广场账户动作签名\n$fieldLines',
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),

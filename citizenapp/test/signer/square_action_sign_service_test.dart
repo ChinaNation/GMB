@@ -11,8 +11,10 @@ import 'package:citizenapp/signer/square_action_sign_service.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 const _owner = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
-final Uint8List _pubBytes = Uint8List.fromList(List.generate(32, (i) => (i + 7) & 0xff));
-final String _pubHex = _pubBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+final Uint8List _pubBytes =
+    Uint8List.fromList(List.generate(32, (i) => (i + 7) & 0xff));
+final String _pubHex =
+    _pubBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
 Uint8List _payloadBytes() => Uint8List.fromList(<int>[
       ...scaleString('cancel_membership'),
@@ -21,21 +23,23 @@ Uint8List _payloadBytes() => Uint8List.fromList(<int>[
       ...u64Le(1700000000000),
     ]);
 
-String _hex(List<int> b) => b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+String _hex(List<int> b) =>
+    b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
 
-String _signRequestRaw() {
+String _signRequestRaw({int action = QrActions.squareAccountAction}) {
   final signer = QrSigner();
   return signer.encodeRequest(
     signer.buildRequest(
       requestId: QrSigner.generateRequestId(prefix: 'sq-'),
       pubkey: '0x$_pubHex',
       payloadHex: '0x${_hex(_payloadBytes())}',
-      action: QrActions.squareAccountAction,
+      action: action,
     ),
   );
 }
 
-WalletProfile _wallet({required String pubkeyHex, String signMode = 'local', int index = 3}) {
+WalletProfile _wallet(
+    {required String pubkeyHex, String signMode = 'local', int index = 3}) {
   return WalletProfile(
     walletIndex: index,
     walletName: 'w',
@@ -73,12 +77,56 @@ class _FakeWalletManager extends WalletManager {
 void main() {
   final service = SquareActionSignService();
 
-  test('prepare resolves owner wallet by QR u pubkey + decodes action', () async {
+  test('prepare resolves owner wallet by QR u pubkey + decodes action',
+      () async {
     final wm = _FakeWalletManager([_wallet(pubkeyHex: _pubHex)]);
     final prep = await service.prepare(_signRequestRaw(), wm);
     expect(prep.wallet.walletIndex, 3);
+    expect(prep.actionLabel, '广场账户动作签名');
     expect(prep.decoded.action, 'cancel_membership');
-    expect(prep.decoded.displayTitle, '取消订阅');
+    expect(prep.decoded.actionTypeLabel, '取消订阅');
+    expect(prep.decoded.reviewFields, isNotNull);
+  });
+
+  test('prepare rejects unknown action before signing', () async {
+    final wm = _FakeWalletManager([_wallet(pubkeyHex: _pubHex)]);
+    await expectLater(
+      service.prepare(_signRequestRaw(action: 0x7fff), wm),
+      throwsA(
+        isA<SquareActionSignException>()
+            .having(
+              (e) => e.error,
+              'error',
+              SquareActionSignError.unsupportedAction,
+            )
+            .having(
+              (e) => e.message,
+              'message',
+              contains('未登记的签名动作'),
+            ),
+      ),
+    );
+  });
+
+  test('prepare rejects registered but unsupported action before signing',
+      () async {
+    final wm = _FakeWalletManager([_wallet(pubkeyHex: _pubHex)]);
+    await expectLater(
+      service.prepare(_signRequestRaw(action: QrActions.login), wm),
+      throwsA(
+        isA<SquareActionSignException>()
+            .having(
+              (e) => e.error,
+              'error',
+              SquareActionSignError.unsupportedAction,
+            )
+            .having(
+              (e) => e.message,
+              'message',
+              contains('登录确认 暂不支持在公民端签名'),
+            ),
+      ),
+    );
   });
 
   test('prepare throws accountNotLocal when no wallet matches u', () async {
@@ -96,7 +144,8 @@ void main() {
   });
 
   test('prepare rejects cold wallet', () async {
-    final wm = _FakeWalletManager([_wallet(pubkeyHex: _pubHex, signMode: 'external')]);
+    final wm =
+        _FakeWalletManager([_wallet(pubkeyHex: _pubHex, signMode: 'external')]);
     await expectLater(
       service.prepare(_signRequestRaw(), wm),
       throwsA(
@@ -109,7 +158,9 @@ void main() {
     );
   });
 
-  test('sign signs signing_message(0x1D) with owner wallet and builds signResponse', () async {
+  test(
+      'sign signs signing_message(0x1D) with owner wallet and builds signResponse',
+      () async {
     final wm = _FakeWalletManager([_wallet(pubkeyHex: _pubHex)]);
     final prep = await service.prepare(_signRequestRaw(), wm);
 
@@ -117,7 +168,8 @@ void main() {
 
     // 用 owner 钱包（index 3）对 signing_message(0x1D, payload) 签名。
     expect(wm.signedIndex, 3);
-    final expected = signingMessage(opTag: kOpSignSquareAction, scalePayload: _payloadBytes());
+    final expected = signingMessage(
+        opTag: kOpSignSquareAction, scalePayload: _payloadBytes());
     expect(wm.signedPayload, expected);
 
     // signResponse envelope 携带该 64B 签名。

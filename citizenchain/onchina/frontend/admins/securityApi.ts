@@ -3,7 +3,10 @@
 // PASSKEY_COLD_SIGN 动作走 prepare → 冷钱包扫码签名 → commit。
 
 import type { AdminAuth } from '../auth/types';
+import { assertPasskey, PASSKEY_ASSERTION_HEADER } from '../auth/passkey/passkeyClient';
 import { ApiError, adminRequest } from '../utils/http';
+
+export const SECURITY_GRANT_HEADER = 'x-cid-security-grant';
 
 export type AdminActionType =
   | 'CREATE_SUBORDINATE_REGISTRY'
@@ -110,4 +113,34 @@ export async function createScanSignSecurityGrant(
     signature,
     payload_hash: prepared.payload_hash,
   });
+}
+
+// PASSKEY_COLD_SIGN 正式业务提交必须同时携带两份一次性凭证:
+// 1) 冷钱包扫码签名得到的 security grant;
+// 2) 当前管理员本机 passkey 断言。
+// 后端 require_admin_security_grant 会先消费 passkey,再消费 grant;二者缺一即 fail-closed。
+export async function securityGrantSubmitHeaders(
+  auth: AdminAuth,
+  securityGrant: AdminSecurityGrantOutput,
+  baseHeaders: Record<string, string> = {},
+): Promise<Record<string, string>> {
+  const passkeyAssertion = await assertPasskey(auth);
+  return {
+    ...baseHeaders,
+    [SECURITY_GRANT_HEADER]: securityGrant.grant_id,
+    [PASSKEY_ASSERTION_HEADER]: passkeyAssertion,
+  };
+}
+
+// 最常用路径:prepare → 冷钱包扫码 commit → passkey → 返回正式业务提交头。
+// 调用方只负责传入与业务请求逐字段一致的 payload,避免授权和提交出现第二真源。
+export async function createColdSignSubmitHeaders(
+  auth: AdminAuth,
+  actionType: AdminActionType,
+  payload: unknown,
+  signWithScan: ScanSignResolver,
+  baseHeaders: Record<string, string> = {},
+): Promise<Record<string, string>> {
+  const grant = await createScanSignSecurityGrant(auth, actionType, payload, signWithScan);
+  return securityGrantSubmitHeaders(auth, grant, baseHeaders);
 }

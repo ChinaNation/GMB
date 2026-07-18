@@ -969,6 +969,66 @@ fn is_active_frg_province_commissioner(
 }
 
 impl entity_primitives::RegistryAuthority<AccountId> for RuntimeRegistryAuthority {
+    fn can_register_institution_origin(
+        registrar: &AccountId,
+        actor_cid_number: &[u8],
+        target_cid_number: &[u8],
+        target_institution_code: primitives::cid::code::InstitutionCode,
+    ) -> bool {
+        let Some(actor_code) = cid_institution_code(actor_cid_number) else {
+            return false;
+        };
+        if !RuntimeInstitutionAdminQuery::is_institution_admin(
+            actor_code,
+            actor_cid_number,
+            registrar,
+        ) {
+            return false;
+        }
+        let Some(parsed_target_code) = cid_institution_code(target_cid_number) else {
+            return false;
+        };
+        if parsed_target_code != target_institution_code
+            || primitives::cid::code::is_fixed_governance_code(&target_institution_code)
+            || primitives::institution_constraints::is_permanent_singleton_code(
+                &target_institution_code,
+            )
+        {
+            return false;
+        }
+
+        let Ok((target_province_code, target_city_code)) =
+            primitives::cid::number::cid_scope_codes(target_cid_number)
+        else {
+            return false;
+        };
+
+        const CITY_REGISTRY_CODE: primitives::cid::code::InstitutionCode = *b"CREG";
+        if actor_code == admin_primitives::FRG {
+            return is_active_frg_province_commissioner(
+                actor_cid_number,
+                registrar,
+                &target_province_code,
+            );
+        }
+
+        if actor_code == CITY_REGISTRY_CODE {
+            if target_institution_code == CITY_REGISTRY_CODE {
+                return false;
+            }
+            let Ok((issuer_province_code, issuer_city_code)) =
+                primitives::cid::number::cid_scope_codes(actor_cid_number)
+            else {
+                return false;
+            };
+            // CREG 只能登记本市非 CREG 机构;市归属由 CID R5 直接校验。
+            return issuer_province_code == target_province_code
+                && issuer_city_code == target_city_code;
+        }
+
+        false
+    }
+
     fn can_register_institution(
         registrar: &AccountId,
         actor_cid_number: &[u8],
@@ -1563,7 +1623,6 @@ impl square_post::Config for Runtime {
     type Currency = Balances;
     type TimeProvider = crate::Timestamp;
     type InstitutionAccountQuery = RuntimeInstitutionQuery;
-    type MaxCreatorTiers = ConstU32<16>;
     type MaxSquarePostIdLen = ConstU32<64>;
     type MaxSquareCidNumberLen = ConstU32<32>;
     type MaxSquareStorageReceiptIdLen = ConstU32<96>;

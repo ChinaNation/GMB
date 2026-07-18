@@ -2,10 +2,6 @@
 // 市详情确定性市公民教育委员会直接列表展示,学校和 F+JY 非法人教育机构按精确搜索返回。
 
 import type { AdminAuth } from '../auth/types';
-import {
-  createScanSignSecurityGrant,
-  type ScanSignResolver,
-} from '../admins/securityApi';
 import { adminRequest } from '../utils/http';
 import type {
   CreateInstitutionInput,
@@ -17,8 +13,7 @@ import type {
   ParentInstitutionRow,
   SearchParentsOptions,
 } from '../subjects/api';
-
-const SECURITY_GRANT_HEADER = 'x-cid-security-grant';
+import { buildInstitutionCreatePayload } from '../subjects/api';
 
 export type {
   CreateInstitutionInput,
@@ -43,31 +38,16 @@ export async function checkCidFullName(
   );
 }
 
-// 创建教育机构属 PASSKEY_COLD_SIGN 操作,需冷钱包扫码签名授权;signWithScan 由创建弹窗注入。
+// 创建教育机构只返回最终链交易签名请求；管理员钱包签名由表单统一处理一次。
 export async function createInstitution(
   auth: AdminAuth,
   input: CreateInstitutionInput,
-  signWithScan: ScanSignResolver,
 ): Promise<CreateInstitutionOutput> {
-  const grantPayload = {
-    subject_property: input.subject_property,
-    p1: input.p1 ?? null,
-    province_name: input.province_name ?? null,
-    city_name: input.city_name,
-    institution: input.institution,
-    education_type: input.education_type ?? null,
-    cid_full_name: input.cid_full_name ?? null,
-    cid_short_name: input.cid_short_name ?? null,
-    parent_cid_number: input.parent_cid_number ?? null,
-    private_type: input.private_type ?? null,
-    partnership_kind: input.partnership_kind ?? null,
-    admins: input.admins,
-  };
-  const grant = await createScanSignSecurityGrant(auth, 'INSTITUTION_CREATE', grantPayload, signWithScan);
+  const payload = buildInstitutionCreatePayload(input);
   return adminRequest<CreateInstitutionOutput>('/api/v1/institutions/create', auth, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', [SECURITY_GRANT_HEADER]: grant.grant_id },
-    body: JSON.stringify(input),
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
   });
 }
 

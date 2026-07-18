@@ -28,11 +28,13 @@ class SquareActionSignException implements Exception {
 class SquareActionSignPrep {
   const SquareActionSignPrep({
     required this.request,
+    required this.actionLabel,
     required this.decoded,
     required this.wallet,
   });
 
   final SignRequestEnvelope request;
+  final String actionLabel;
   final SquareActionPayload decoded;
   final WalletProfile wallet;
 }
@@ -47,28 +49,39 @@ class SquareActionSignService {
   final QrSigner _signer;
 
   /// 解析 + 两色解码 + 定位钱包（不签名、不弹生物识别）。失败抛 [SquareActionSignException]。
-  Future<SquareActionSignPrep> prepare(String raw, WalletManager walletManager) async {
+  Future<SquareActionSignPrep> prepare(
+      String raw, WalletManager walletManager) async {
     final SignRequestEnvelope request;
     try {
       request = _signer.parseRequest(raw);
     } on QrSignException catch (e) {
-      throw SquareActionSignException(SquareActionSignError.invalidRequest, e.message);
+      throw SquareActionSignException(
+          SquareActionSignError.invalidRequest, e.message);
     }
     final body = request.body;
-    if (body.action != QrActions.squareAccountAction) {
+    final actionLabel = QrActions.actionLabelForCode(body.action);
+    if (actionLabel == null) {
       throw const SquareActionSignException(
         SquareActionSignError.unsupportedAction,
-        '暂不支持该签名类型',
+        '未登记的签名动作，已拒绝签名',
+      );
+    }
+    if (body.action != QrActions.squareAccountAction) {
+      throw SquareActionSignException(
+        SquareActionSignError.unsupportedAction,
+        '$actionLabel 暂不支持在公民端签名，已拒绝签名',
       );
     }
     final decoded = decodeSquareActionPayload(body.payloadHex);
-    if (decoded == null) {
+    final reviewFields = decoded?.reviewFields;
+    if (decoded == null || reviewFields == null) {
       throw const SquareActionSignException(
         SquareActionSignError.undecodable,
-        '无法解析签名内容，禁止签名',
+        '签名内容无法完整中文展示，已拒绝签名',
       );
     }
-    final wallet = await _resolveWalletByPubkey(walletManager, body.pubkeyBytes);
+    final wallet =
+        await _resolveWalletByPubkey(walletManager, body.pubkeyBytes);
     if (wallet == null) {
       throw const SquareActionSignException(
         SquareActionSignError.accountNotLocal,
@@ -81,16 +94,23 @@ class SquareActionSignService {
         '冷钱包无法在此签名',
       );
     }
-    return SquareActionSignPrep(request: request, decoded: decoded, wallet: wallet);
+    return SquareActionSignPrep(
+      request: request,
+      actionLabel: actionLabel,
+      decoded: decoded,
+      wallet: wallet,
+    );
   }
 
   /// 主钥签名（读硬件金库、弹生物识别）→ 构造 signResponse envelope JSON。
-  Future<String> sign(SquareActionSignPrep prep, WalletManager walletManager) async {
+  Future<String> sign(
+      SquareActionSignPrep prep, WalletManager walletManager) async {
     final signBytes = QrSigner.signingBytesForHex(
       payloadHex: prep.request.body.payloadHex,
       action: prep.request.body.action,
     );
-    final signature = await walletManager.signWithWallet(prep.wallet.walletIndex, signBytes);
+    final signature =
+        await walletManager.signWithWallet(prep.wallet.walletIndex, signBytes);
     final response = _signer.buildResponse(
       request: prep.request,
       signatureHex: '0x${bytesToHex(signature)}',
@@ -112,7 +132,8 @@ class SquareActionSignService {
   }
 
   static String _normalizeHex(String hex) {
-    final text = hex.startsWith('0x') || hex.startsWith('0X') ? hex.substring(2) : hex;
+    final text =
+        hex.startsWith('0x') || hex.startsWith('0X') ? hex.substring(2) : hex;
     return text.toLowerCase();
   }
 }

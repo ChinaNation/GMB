@@ -182,6 +182,7 @@
 - `memory/08-tasks/open/20260716-onchain-tax-settlement.md`
 - `memory/08-tasks/open/20260716-membership-decouple-rollout-alignment.md`
 - `memory/08-tasks/open/20260716-constitution-guard-reject-block.md`
+- `memory/08-tasks/open/20260717-citizenapp-stablecoin-topup.md`
 - `memory/08-tasks/open/runtime-full-audit.md`
 
 ## done

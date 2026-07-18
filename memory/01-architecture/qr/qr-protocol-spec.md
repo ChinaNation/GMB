@@ -1,7 +1,7 @@
 # QR_V1 统一二维码协议规范
 
 - 版本:`QR_V1`
-- 更新日期:2026-06-23
+- 更新日期:2026-07-18
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
 - 范围:全仓库所有“生成二维码 -> 扫码识别 -> 签名/确认 -> 签名响应验签”的二维码流程
 
@@ -12,9 +12,11 @@
 3. 唯一签名请求字段:`a/g/u/d`。业务场景放在 `a`,扫码流向放在 `k`。
 4. 唯一签名响应字段:`u/s`。签名响应不携带 payload、payload hash、签名时间或展示字段。
 5. 唯一验签真源:生成方按 `i` 找回本地 session 中的 action、payload、公钥和过期时间后验签。
-6. 唯一展示真源:扫码端必须由 `a + d(payload)` 本地解码展示;QR 不携带 `display`、`summary`、`fields`。
+6. 唯一展示真源:扫码端必须由 `a + d(review_payload)` 本地解码展示;QR 不携带 `display`、`summary`、`fields`。
 7. 固定码不出现时效字段:`i/e` 直接不存在,不是 `null`、`0` 或空串。
 8. 不兼容旧字段。解析器遇到旧字段、别名字段、未知字段必须报错。
+9. 签名判定只有两种结果:`Normal/正常` 或 `Reject/拒绝`。不得引入未知、警告、部分识别、可忽略等第三状态。
+10. 用户可见确认内容必须全部来自本地中文 action registry 和 payload decoder;动作名、字段名或枚举值缺少中文翻译时必须红色拒绝。
 
 ## 2. 顶层 Envelope
 
@@ -73,20 +75,29 @@
 | `a` | int | 是 | 业务动作码,见 `qr-action-registry.md` |
 | `g` | int | 是 | 签名算法码,当前只允许 `1 = sr25519` |
 | `u` | string | 是 | 期望签名者 32 字节公钥,base64url 无填充 |
-| `d` | string | 是 | 待签 payload 原始字节,base64url 无填充 |
+| `d` | string | 是 | `review_payload` 原始字节,base64url 无填充;除 Runtime 升级 hash-only 外,必须可被扫码端完整解码和中文展示 |
+
+`review_payload` 与签名字节必须分离:
+
+| 名称 | 含义 | 规则 |
+|---|---|---|
+| `review_payload` | QR `b.d` 携带、给用户审阅和中文展示的完整载荷 | 普通交易必须完整可解码;不得用 32B hash 冒充 |
+| `signing_bytes` | 钱包实际交给 sr25519 签名的字节 | 由扫码端根据 action 和 `review_payload` 本地计算 |
 
 签名字节规则:
 
 | 场景 | `a` 规则 | 签名字节 |
 |---|---|---|
-| 普通链交易 | `a = (pallet_index << 8) | call_index` | `d` 必须是生成方用当前 runtime 类型构造的 `SignedPayload` SCALE 字节;长度 ≤256B 签原文,>256B 签 `blake2_256(payload)` |
+| 普通链交易 | `a = (pallet_index << 8) | call_index` | `d` 必须是生成方用当前 runtime 类型构造的完整 `SignedPayload` 原始三元组 SCALE 字节;长度 ≤256B 签原文,>256B 签 `blake2_256(review_payload)` |
 | 登录 | `a = 1` | 签 payload 原文 |
 | 公民链上身份确认 | `a = 2` | `d` 必须是 `VotingIdentityPayload` SCALE bytes,签 `blake2_256(GMB || 0x10 || d)` |
 | OnChina 管理员治理文本载荷 | `a = 3` | 签 payload 原文 |
 | 管理员激活 / 解密 | `a = 5/6` | 签二进制 payload 原文 |
-| Runtime 升级哈希签名 | `a = 7` 或 RuntimeUpgrade 链 action | `d` 必须是同一 runtime `SignedPayload::using_encoded` 得到的 32B signing bytes,签该 32B |
+| Runtime 升级哈希签名 | `a = 7` 或已登记 RuntimeUpgrade hash-only action | `d` 允许是 32B signing bytes,签该 32B;这是 QR_V1 唯一 hash-only 例外 |
 
-链交易生成方不得手写拼接 `call_data/era/nonce/tip/additional_signed` 或 signed extrinsic。citizenchain node、CitizenApp 热钱包和其它链交易生成方必须统一使用当前 runtime 类型构造 `TxExtension`、`SignedPayload` 和 `UncheckedExtrinsic`，再把 `SignedPayload` 的 SCALE 字节放入 `b.d`。
+链交易生成方不得手写拼接 `call_data/era/nonce/tip/additional_signed` 或 signed extrinsic。citizenchain node、CitizenApp 热钱包、OnChina 和其它链交易生成方必须统一使用当前 runtime 类型构造 `TxExtension`、`SignedPayload` 和 `UncheckedExtrinsic`；QR `b.d` 放入完整 `review_payload`，实际签名输入单独按 `SignedPayload::using_encoded` 计算。
+
+普通链交易若 `b.d` 只有 32 字节且不能按 action registry 解码为完整业务 payload,扫码端必须红色拒绝,不得展示“载荷 32 字节”后继续签名。
 
 ## 5. k=2 sign_response
 
@@ -208,3 +219,24 @@ memory/01-architecture/qr/qr-protocol-fixtures/user_transfer.json
 3. 同步 Rust / TS / Dart 的解析、生成、验签入口。
 4. 跑真实扫码签名链路或对应端到端测试。
 5. 更新任务卡和模块文档。
+
+## 12. Action registry 代码真源
+
+当前唯一代码真源:
+
+```text
+citizenchain/crates/qr-protocol/registry/actions.yaml
+citizenchain/crates/qr-protocol/registry/fields.yaml
+citizenchain/crates/qr-protocol/registry/reject_reasons.yaml
+```
+
+`memory/01-architecture/qr/qr-action-registry.md` 是人类可读登记表和审查入口;代码、测试、生成和跨端校验必须以 `citizenchain/crates/qr-protocol/registry/*` 为准。各端不得再手写第二套 action 常量、中文标签、字段标签或签名判定分支。
+
+当前已知散落实现只允许作为待收归对象,不得继续作为协议真源:
+
+- `citizenapp/lib/qr/*`
+- `citizenwallet/lib/qr/*`
+- `citizenchain/onchina/src/core/qr/*`
+- `citizenchain/node/src/governance/signing.rs`
+- `citizenchain/node/frontend/shared/qr/citizenQr.ts`
+- `citizenweb/src/lib/qr-v1.ts`

@@ -4,7 +4,7 @@
 //
 // 用法:
 //   const { signWithScan, scanSignModal } = useScanSignGrant();
-//   await createInstitution(auth, input, signWithScan);
+//   await createAccount(auth, cidNumber, accountName, signWithScan);
 //   ...在 JSX 末尾渲染 {scanSignModal}
 
 import { useCallback, useState, type ReactNode } from 'react';

@@ -1,9 +1,0 @@
-{
-  "name": "gmb-deploy-dashboard",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "start": "bash ./start.sh",
-    "check": "node --check server.mjs && bash -n start.sh actions/*.sh keychain.sh"
-  }
-}

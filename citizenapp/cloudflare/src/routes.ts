@@ -36,8 +36,18 @@ import {
   prepaidConfirmRoute
 } from "./membership/prepaid";
 import { membershipRoute } from "./membership/service";
+import {
+  creatorOverviewRoute,
+  creatorPlanChallengeRoute,
+  creatorPlanOfRoute,
+  creatorPlanRoute,
+  creatorPlanSaveRoute,
+  creatorSubscriptionConfirmRoute,
+  creatorSubscriptionStatusRoute,
+} from "./membership/creator";
 import { stripeWebhookRoute } from "./membership/webhook";
 import { signalRoute } from "./moderation/service";
+import { isTopupPath, routeTopup } from "./topup/routes";
 import { confirmPostRoute, deletePostRoute } from "./posts/confirm";
 import { prepareProfileAsset, putProfileAsset } from "./profiles/assets";
 import {
@@ -140,6 +150,35 @@ export async function routeRequest(
   }
   if (request.method === "POST" && path === "/v1/square/account/delete") {
     return deleteAccountRoute(request, env);
+  }
+  // 稳定币充值购买公民币:App(config/submit/status)+ 本地部署控制台结算(settlement/*)。
+  if (isTopupPath(path)) {
+    return routeTopup(request, env, path);
+  }
+  if (request.method === "GET" && path === "/v1/square/creator/plan") {
+    return creatorPlanRoute(request, env);
+  }
+  if (request.method === "GET" && path === "/v1/square/creator/overview") {
+    return creatorOverviewRoute(request, env);
+  }
+  if (request.method === "POST" && path === "/v1/square/creator/plan/challenge") {
+    return creatorPlanChallengeRoute(request, env);
+  }
+  if (request.method === "POST" && path === "/v1/square/creator/plan") {
+    return creatorPlanSaveRoute(request, env);
+  }
+  if (request.method === "POST" && path === "/v1/square/creator/subscription/confirm") {
+    return creatorSubscriptionConfirmRoute(request, env);
+  }
+  if (request.method === "GET" && path.startsWith("/v1/square/creator/plan/")) {
+    return creatorPlanOfRoute(request, env, path.slice("/v1/square/creator/plan/".length));
+  }
+  if (request.method === "GET" && path.startsWith("/v1/square/creator/subscription/")) {
+    return creatorSubscriptionStatusRoute(
+      request,
+      env,
+      path.slice("/v1/square/creator/subscription/".length),
+    );
   }
   if (request.method === "GET" && path === "/v1/square/contacts") {
     return listContactsRoute(request, env);

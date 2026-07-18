@@ -47,6 +47,7 @@ import {
 } from '../subjects/labels';
 import { useInstitutionCodeLabels } from '../subjects/institutionLabels';
 import {
+  buildInstitutionUpdateSecurityPayload,
   checkCidFullName,
   searchParentInstitutions,
   updateInstitution,
@@ -460,7 +461,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     }
     setSavingInfo(true);
     try {
-      await updateInstitution(auth, inst.cid_number, {
+      const input = {
         cid_full_name: cidFullName,
         parent_cid_number: requiresParent ? values.parent_cid_number : undefined,
         legal_representative_name: legalRepresentativeName,
@@ -469,7 +470,14 @@ export const PrivateDetailLayout: React.FC<Props> = ({
         legal_representative_photo_name: values.legal_representative_photo_name,
         legal_representative_photo_mime: values.legal_representative_photo_mime,
         legal_representative_photo_size: values.legal_representative_photo_size,
-      });
+      };
+      // 机构详情更新走 PASSKEY_COLD_SIGN。这里先按后端 grant_payload 同形生成冷签授权,
+      // 再由 API 层补 Passkey assertion 与 grant 头,避免授权 hash 与正式请求漂移。
+      const grant = await createScanSignGrant(
+        'INSTITUTION_UPDATE',
+        buildInstitutionUpdateSecurityPayload(inst.cid_number, input),
+      );
+      await updateInstitution(auth, inst.cid_number, input, grant);
       notice.success('机构信息已保存');
       setEditing(false);
       onReload();

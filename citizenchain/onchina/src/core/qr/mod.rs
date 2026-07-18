@@ -9,6 +9,7 @@ pub(crate) use sign_request::{build_sign_request, build_sign_request_bytes};
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
 
 pub const QR_V1: &str = "QR_V1";
 
@@ -27,14 +28,33 @@ impl QrKind {
     }
 }
 
-pub const ACTION_LOGIN: u16 = 1;
+fn registry_action_code(action_key: &str) -> u16 {
+    qr_protocol::action_by_key(action_key)
+        .unwrap_or_else(|error| panic!("QR action registry 缺少 {action_key}: {error}"))
+        .action_code
+}
+
+static ACTION_LOGIN_CODE: LazyLock<u16> = LazyLock::new(|| registry_action_code("login"));
+static ACTION_CITIZEN_IDENTITY_CODE: LazyLock<u16> =
+    LazyLock::new(|| registry_action_code("citizen_identity"));
+static ACTION_ONCHINA_ADMIN_CODE: LazyLock<u16> =
+    LazyLock::new(|| registry_action_code("onchina_admin_action"));
+
+pub(crate) fn action_login() -> u16 {
+    *ACTION_LOGIN_CODE
+}
+
 /// 公民链上身份 payload 确认(非链交易,b.d=VotingIdentityPayload SCALE bytes),
 /// 公民钱包对 `signing_message(OP_SIGN_CITIZEN_IDENTITY, b.d)` 签名。
-pub const ACTION_CITIZEN_IDENTITY: u16 = 2;
+pub(crate) fn action_citizen_identity() -> u16 {
+    *ACTION_CITIZEN_IDENTITY_CODE
+}
+
 /// 注册局管理员治理文本确认(非链动作,b.d=onchina_admin_governance canonical JSON),
 /// 对应 qr-action-registry.md 非链动作码 a=3。
-pub const ACTION_ONCHINA_ADMIN: u16 = 3;
-
+pub(crate) fn action_onchina_admin() -> u16 {
+    *ACTION_ONCHINA_ADMIN_CODE
+}
 // 链交易动作码(机构创建/管理员集合)不在此处发明扁平常量:
 // 统一用 `core::institution_call::chain_action_code(pallet,call)` 派生(b.a 与 b.d 同源),
 // 公权机构创建=0x1e05、私权机构创建=0x1f05。机构管理员变更由 entity 治理结果驱动，
@@ -102,7 +122,7 @@ impl SignRequestEnvelope {
 /// 登录签名请求 payload 固定为 `system|sys_sig` 的 UTF-8 字节。
 pub fn login_request_body(system: &str, sys_pubkey: &str, sys_sig: &str) -> SignRequestBody {
     SignRequestBody {
-        action: ACTION_LOGIN,
+        action: action_login(),
         sig_alg: 1,
         pubkey: pubkey_hex_to_b64(sys_pubkey).unwrap_or_default(),
         payload: URL_SAFE_NO_PAD.encode(format!("{}|{}", system, sys_sig).as_bytes()),
