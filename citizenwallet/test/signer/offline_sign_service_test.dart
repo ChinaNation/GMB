@@ -80,6 +80,7 @@ void main() {
         request: request,
       );
 
+      expect(walletManager.signCallCount, 1);
       expect(response.id, request.id);
       expect(response.body.pubkeyHex, '0x${hotWallet.pubkeyHex}');
       expect(
@@ -115,6 +116,7 @@ void main() {
           ),
         ),
       );
+      expect(walletManager.signCallCount, 0);
     });
 
     test('verifyPayload decodes transfer payload', () {
@@ -142,12 +144,13 @@ void main() {
       final cidBytes = cid.codeUnits;
       final price = List<int>.filled(16, 0)..[0] = 100;
       final payloadHex = '0x${_toHex([
-        34, 5,
-        cidBytes.length << 2,
-        ...cidBytes,
-        2,
-        ...price,
-      ])}';
+            34,
+            5,
+            cidBytes.length << 2,
+            ...cidBytes,
+            2,
+            ...price,
+          ])}';
       final request = _buildTestRequest(
         requestId: 'offline-platform-price',
         pubkey: '0x${hotWallet.pubkeyHex}',
@@ -161,7 +164,8 @@ void main() {
       expect(verification.decoded!.fields['membership_level'], '薪火会员');
     });
 
-    test('verifyPayload rejects platform price payload with mismatched action', () {
+    test('verifyPayload rejects platform price payload with mismatched action',
+        () {
       const cid = 'GD001-SFGQ0-000000001-2026';
       final cidBytes = cid.codeUnits;
       final price = List<int>.filled(16, 0)..[0] = 100;
@@ -169,12 +173,13 @@ void main() {
         requestId: 'offline-platform-price-mismatch',
         pubkey: '0x${hotWallet.pubkeyHex}',
         payloadHex: '0x${_toHex([
-          34, 5,
-          cidBytes.length << 2,
-          ...cidBytes,
-          0,
-          ...price,
-        ])}',
+              34,
+              5,
+              cidBytes.length << 2,
+              ...cidBytes,
+              0,
+              ...price,
+            ])}',
         action: QrActions.transferWithRemark,
       );
 
@@ -303,6 +308,7 @@ class _FakeWalletManager extends WalletManager {
       'bottom drive obey lake curtain smoke basket hold race lonely fit walk';
 
   _WalletFixture? _hotFixture;
+  int signCallCount = 0;
 
   Future<_WalletFixture> _ensureHotFixture() async {
     final existing = _hotFixture;
@@ -346,6 +352,7 @@ class _FakeWalletManager extends WalletManager {
 
   @override
   Future<Uint8List> signWithWallet(int walletIndex, Uint8List payload) async {
+    signCallCount += 1;
     final hot = await _ensureHotFixture();
     if (walletIndex != hot.profile.walletIndex) {
       throw const WalletAuthException('未找到指定钱包');

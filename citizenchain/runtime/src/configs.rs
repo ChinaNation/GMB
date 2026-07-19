@@ -127,6 +127,14 @@ fn is_cb_fee_account(address: &AccountId) -> bool {
         .any(|n| address == &AccountId::new(n.fee_account))
 }
 
+/// 检查是否为中国公民链技术有限公司费用账户。
+fn is_citizenchain_fee_account(address: &AccountId) -> bool {
+    address
+        == &AccountId::new(
+            primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY.fee_account,
+        )
+}
+
 fn is_reserved_main_account(address: &AccountId) -> bool {
     let raw: &[u8] = address.as_ref();
     if raw.len() != 32 {
@@ -884,7 +892,15 @@ impl primitives::institution_asset::InstitutionAsset<AccountId> for RuntimeInsti
             );
         }
 
-        // 4. 国家储委会安全基金账户：只允许安全基金转账
+        // 4. 公民链技术公司费用账户：同样只允许手续费归集；必须先于宽泛保留账户匹配。
+        if is_citizenchain_fee_account(source) {
+            return matches!(
+                action,
+                primitives::institution_asset::InstitutionAssetAction::OffchainFeeSweepExecute
+            );
+        }
+
+        // 5. 国家储委会安全基金账户：只允许安全基金转账
         if source == &AccountId::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT) {
             return matches!(
                 action,
@@ -892,7 +908,7 @@ impl primitives::institution_asset::InstitutionAsset<AccountId> for RuntimeInsti
             );
         }
 
-        // 5. 多签保留主账户：可为机构创建提供本金，也可执行多签转账和关闭。
+        // 6. 多签保留主账户：可为机构创建提供本金，也可执行多签转账和关闭。
         if is_reserved_main_account(source) {
             return matches!(
                 action,

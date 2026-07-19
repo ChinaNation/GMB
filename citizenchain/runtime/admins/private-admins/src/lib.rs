@@ -208,6 +208,22 @@ pub mod pallet {
             })
         }
 
+        /// 创世专用写入口：复用运行期完整校验并同步严格多数阈值，不另建管理员真源。
+        pub fn store_genesis_institution_admins(
+            cid_number: Vec<u8>,
+            institution_code: InstitutionCode,
+            admins: Vec<Admin<T::AccountId>>,
+            threshold: u32,
+        ) -> DispatchResult {
+            Self::do_set_institution_admins(
+                cid_number,
+                institution_code,
+                AdminAccountKind::PrivateInstitution,
+                admins,
+                threshold,
+            )
+        }
+
         pub(crate) fn get_institution_admins(
             institution_code: InstitutionCode,
             cid_number: &[u8],

@@ -10,7 +10,7 @@
 
 ## 当前有效边界
 
-- 机构管理员人员真源归 `public-admins` / `private-admins`，每项只含 `admin_name + admin_account`；授权只比较钱包账户。
+- 机构管理员人员真源归 `public-admins` / `private-admins`，每项字段顺序固定为 `admin_account + family_name + given_name`；授权只比较钱包账户，姓、名只展示。
 - 机构岗位和管理员任职真源归 `entity`，与 admins 独立；管理员可以无岗位，岗位可以空缺。
 - 机构的主账户、费用账户和其它业务账户共享机构层有效管理员与岗位任职事实；具体账户能执行什么操作，由对应业务模块硬规则决定。
 - 固定创世机构岗位定义与法定席位受治理骨架保护，任职可以依法轮换；岗位任职不得反向生成或覆盖管理员钱包集合。
@@ -21,7 +21,7 @@
 ## 禁止恢复
 
 - 不得恢复机构 `AdminSetChangeAction`、public/private admins 管理员集合变更 call 或机构“换管理员”通用入口。
-- 不得恢复机构管理员 `creator`、`created_at`、`updated_at`、公民 CID、岗位或来源的内嵌副本；`admin_name` 是唯一允许的展示字段。
+- 不得恢复机构管理员 `creator`、`created_at`、`updated_at`、公民 CID、岗位或来源的内嵌副本；只允许 `family_name`、`given_name` 作为展示字段。
 - 不得把个人多签管理员变更规则套用到机构。
 
 本文件只保留 ADR 编号和替代关系；当前实现与验收以 ADR-023、runtime admins/entity 技术文档及上述任务卡为准。

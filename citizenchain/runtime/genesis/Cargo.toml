@@ -18,6 +18,8 @@ primitives = { path = "../primitives", default-features = false }
 admin-primitives = { path = "../admins/admin-primitives", default-features = false }
 public-manage = { path = "../entity/public-manage", default-features = false }
 public-admins = { path = "../admins/public-admins", default-features = false }
+private-manage = { path = "../entity/private-manage", default-features = false }
+private-admins = { path = "../admins/private-admins", default-features = false }
 
 [features]
 default = ["std"]
@@ -26,6 +28,8 @@ runtime-benchmarks = [
     "frame-system/runtime-benchmarks",
     "public-admins/runtime-benchmarks",
     "public-manage/runtime-benchmarks",
+    "private-admins/runtime-benchmarks",
+    "private-manage/runtime-benchmarks",
 ]
 try-runtime = []
 std = [
@@ -39,6 +43,8 @@ std = [
     "admin-primitives/std",
     "public-manage/std",
     "public-admins/std",
+    "private-manage/std",
+    "private-admins/std",
 ]
 
 [dev-dependencies]

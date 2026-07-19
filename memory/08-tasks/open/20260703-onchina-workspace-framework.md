@@ -130,6 +130,6 @@ OnChina 链上中国定位为所有机构共用的操作台。注册局、司法
 - `cargo check --manifest-path citizenchain/onchina/Cargo.toml` 通过。
 - `./node_modules/.bin/tsc -p tsconfig.json --noEmit --incremental false` 在 `citizenchain/onchina/frontend` 通过。
 - `./node_modules/.bin/vite build --outDir /tmp/onchina-workspace-vite-build --emptyOutDir` 通过；仅保留 Vite 大 chunk 提示。
-- 真实本地后端 `http://127.0.0.1:8965` 验收通过：使用现有 NJD 会话调用 `/api/v1/admin/auth/check` 返回 `workspace_kind=judicial`、`workspace_title=国家司法院工作台`、`admin_name=国家司法院管理员`。
+- 真实本地后端 `http://127.0.0.1:8965` 验收通过：使用现有 NJD 会话调用 `/api/v1/admin/auth/check` 返回司法工作台类型、标题和当时的合并姓名展示字段；该字段现已统一为 `family_name + given_name`。
 - 真实本地后端连接链 RPC 后，NJD 会话调用 `/api/v1/admin/own-institution-admins` 返回 15 名国家司法院链上 active admin，不再为空或 500。
 - 真实页面验收通过：国家司法院页面显示“国家司法院工作台”和“操作 / 显示 / 记录”，顶部显示“国家司法院 · 国家司法院管理员”，未显示注册局 tab 或“市注册局管理员”。

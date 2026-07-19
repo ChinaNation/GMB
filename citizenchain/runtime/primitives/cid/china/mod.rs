@@ -7,6 +7,7 @@ pub mod china_lf;
 pub mod china_sf;
 pub mod china_zb;
 pub mod china_zf;
+pub mod citizenchain;
 
 /// 内置机构名称四元组的 runtime 指纹。
 pub fn builtin_institution_name_digest() -> [u8; 32] {
@@ -18,6 +19,10 @@ pub fn builtin_institution_name_digest() -> [u8; 32] {
     fold_builtin_names(&mut digest, china_jy::CHINA_JY);
     fold_builtin_names(&mut digest, china_cb::CHINA_CB);
     fold_builtin_names(&mut digest, china_ch::CHINA_CH);
+    fold_builtin_names(
+        &mut digest,
+        core::slice::from_ref(&citizenchain::CITIZENCHAIN_TECHNOLOGY),
+    );
     digest
 }
 
@@ -105,6 +110,7 @@ impl_builtin_institution_name!(china_jc::ChinaJc);
 impl_builtin_institution_name!(china_jy::ChinaJy);
 impl_builtin_institution_name!(china_cb::ChinaCb);
 impl_builtin_institution_name!(china_ch::ChinaCh);
+impl_builtin_institution_name!(citizenchain::ChinaCitizenChain);
 
 /// 内置机构主/费用账户派生对拍测试。
 #[cfg(test)]
@@ -178,6 +184,10 @@ mod derive_consistency_tests {
         check_arr!(super::china_sf::CHINA_SF, "司法");
         check_arr!(super::china_jc::CHINA_JC, "监察");
         check_arr!(super::china_jy::CHINA_JY, "教育");
+        check_arr!(
+            core::slice::from_ref(&super::citizenchain::CITIZENCHAIN_TECHNOLOGY),
+            "公民链技术"
+        );
     }
 
     #[test]
@@ -199,6 +209,9 @@ mod derive_consistency_tests {
         push_main_fee!(super::china_lf::CHINA_LF);
         push_main_fee!(super::china_sf::CHINA_SF);
         push_main_fee!(super::china_jy::CHINA_JY);
+        push_main_fee!(core::slice::from_ref(
+            &super::citizenchain::CITIZENCHAIN_TECHNOLOGY,
+        ));
         accounts.extend(
             super::china_ch::CHINA_CH
                 .iter()
@@ -270,5 +283,9 @@ mod derive_consistency_tests {
         check_arr!(super::china_jy::CHINA_JY, "教育");
         check_arr!(super::china_cb::CHINA_CB, "储委会");
         check_arr!(super::china_ch::CHINA_CH, "储行");
+        check_arr!(
+            core::slice::from_ref(&super::citizenchain::CITIZENCHAIN_TECHNOLOGY),
+            "公民链技术"
+        );
     }
 }

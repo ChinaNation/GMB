@@ -96,7 +96,7 @@
 已完成验收:
 
 - `flutter test test/signer/qr_signer_test.dart test/signer/square_action_payload_test.dart test/signer/square_action_sign_service_test.dart`（`citizenapp`）
-- `flutter test test/common/admin_account_storage_codec_test.dart test/governance/admins-change/admins_change_codec_test.dart`（`citizenapp`，同步修正旧测试夹具为当前机构管理员 `(admin_name, admin_account)` storage 布局）
+- `flutter test test/common/admin_account_storage_codec_test.dart test/governance/admins-change/admins_change_codec_test.dart`（`citizenapp`，当时同步到机构管理员“合并姓名 + 账户” storage 布局；该布局现已由三字段协议取代）
 - `flutter test`（`citizenapp`，721 通过 / 5 跳过）
 - `flutter test test/signer/field_labels_test.dart test/signer/offline_sign_service_test.dart`（`citizenwallet`）
 - `flutter test`（`citizenwallet`）
@@ -155,7 +155,7 @@
 
 已修复:
 
-- `citizenchain/runtime/admins/public-admins/src/lib.rs` 与 `private-admins/src/lib.rs`：`AdminAccounts` 存储版本升至 v4，增加从旧 `Vec<AccountId>` 到 `Vec<InstitutionAdmin { admin_name, admin_account }>` 的一次性 migration，避免交易池 validate 阶段读取旧存储时 panic。
+- `citizenchain/runtime/admins/public-admins/src/lib.rs` 与 `private-admins/src/lib.rs`：当时曾增加从旧纯账户到“合并姓名 + 账户”布局的一次性 migration；该迁移和两种旧布局现均已删除，不属于正式创世协议。
 - `citizenchain/runtime/admins/public-admins/src/tests/mod.rs` 与 `private-admins/src/tests/mod.rs`：补旧管理员集合编码迁移回归测试。
 - `citizenchain/onchina/src/core/chain_submit.rs`：`system_dryRun` RPC 层错误直接失败返回，不再继续 `author_submitExtrinsic`。
 - `citizenchain/crates/chain-signing/src/lib.rs`：新增 preflight 错误中文归类，RuntimeApi / wasm trap 明确显示为“链运行时校验失败，交易未提交”。

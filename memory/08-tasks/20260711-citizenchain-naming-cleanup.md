@@ -109,7 +109,7 @@ citizenchain `cargo check` GREEN、onchina 前端 tsc GREEN、CitizenApp/Citizen
 之前所有阶段验收只跑 `cargo check` + `flutter analyze` + 定向 test;这次补跑**完整**测试套件,发现验收项「签名夹具/测试全绿」在 Rust 侧与 CitizenApp 侧**从未真正达成**(check 不编译测试目标 → pallet 测试腐烂长期未被发现)。
 
 - **CitizenWallet 完整 `flutter test`:✅ All tests passed。**
-- **citizenchain `cargo test --workspace`:❌ 3 crate 测试目标编译失败**(`multisig` 15 错 / `pow-difficulty` 10 错 / `citizenchain` runtime 1 错,0 套件跑起)。**遗留、非本次造成**:报错全是**管理员/注册字段漂移**——测试仍用旧 `AdminProfile{account,name,admin_role,source}`,现结构已 `admin_account/admin_cid_number/admin_name/role_code/role_name/admin_source`(= 2026-06-28「机构/管理员字段定稿」runtime breaking,早本任务两周+);另有 AdminAccount 缺 cid_number、get/set_extra_admins 找不到、mock 缺 RegistryAuthority/InstitutionQuery、genesis::institution 解析不到。**佐证与本轮无关:pow-difficulty 任何阶段都没碰、报错无一提及 institution_asset/entity-primitives/搬动的生命周期类型。** 修它=独立活(≥3 crate 测试 mock 更新到新字段+补 trait+修引用),非命名审计范围,待用户定夺。
+- **citizenchain `cargo test --workspace`:❌ 3 crate 测试目标编译失败**(`multisig` 15 错 / `pow-difficulty` 10 错 / `citizenchain` runtime 1 错,0 套件跑起)。**遗留、非本次造成**:报错全是**管理员/注册字段漂移**——测试仍用旧 `AdminProfile{account,name,admin_role,source}`，当时目标结构包含账户、公民 CID、合并姓名、岗位和来源字段(该模型现已废弃);另有 AdminAccount 缺 cid_number、get/set_extra_admins 找不到、mock 缺 RegistryAuthority/InstitutionQuery、genesis::institution 解析不到。**佐证与本轮无关:pow-difficulty 任何阶段都没碰、报错无一提及 institution_asset/entity-primitives/搬动的生命周期类型。** 修它=独立活(≥3 crate 测试 mock 更新到当时字段+补 trait+修引用),非命名审计范围,待用户定夺。
 - **CitizenApp 完整 `flutter test`:+486 通过 / 35 失败,且 10 分钟超时被截断**(35 含真失败+超时未跑;本轮未直接改 citizenapp lib,疑似阶段 B 改名遗留或大套件超时,待甄别)。
 - **未跑:** feature-gated 构建 `--features runtime-benchmarks` / `try-runtime`。
 
@@ -121,7 +121,7 @@ citizenchain `cargo check` GREEN、onchina 前端 tsc GREEN、CitizenApp/Citizen
 
 - **citizenchain**(1 错):cases.rs:1120 `genesis::institution::build`→`genesis_pallet::institution::build`(裸 `genesis` 撞本地 genesis.rs 模块,crate 真名 genesis_pallet;stage-A genesis 改名残留)。
 - **internal-vote**(3 错):历史联合快照公开入口改名未传导到 3 处测试；当时已对齐，现该公开入口已整体删除。
-- **multisig**(15 错):测试 mock 补 AdminAccount.cid_number、AdminProfile 字段改名(account→admin_account/name→admin_name/admin_role→role_code+role_name/source→admin_source+admin_source_ref)、三 Config 补关联型(RegistryAuthority=()、InstitutionQuery=public_manage::Pallet<Test>)、重建 thread-local get/set_extra_admins helper(2026-06-28 admin 字段定稿漂移)。
+- **multisig**(15 错):测试 mock 补 AdminAccount.cid_number、AdminProfile 字段按当时的账户/合并姓名/岗位/来源模型改名、三 Config 补关联型(RegistryAuthority=()、InstitutionQuery=public_manage::Pallet<Test>)、重建 thread-local get/set_extra_admins helper(2026-06-28 旧管理员字段定稿漂移；现已废弃)。
 - **pow-difficulty + genesis-pallet**(10+5 错):**方案二解耦 `genesis_pallet::Config` 治理 supertrait**。genesis 加窄 trait `GenesisInstitutionSeeder`(seed 注入)+ `TargetBlockTime`(读块时间);Config 去 public_manage/public_admins supertrait 改 `InstitutionSeeder` 关联型;genesis_build 改 `<T::InstitutionSeeder as GenesisInstitutionSeeder>::seed()`;runtime configs.rs 加 `RuntimeGenesisSeeder`(调 institution::build::<Runtime>)+ pow-difficulty `type BlockTime=GenesisPallet`;pow-difficulty Config 去 genesis_pallet::Config supertrait 改窄 trait BlockTime;两测试 mock 用 dummy seeder/MockBlockTime,不再 mock 治理栈。**institution.rs 零改、seeding 逻辑不变、运行期零影响**(照搬已有 DeveloperUpgradeCheck 先例)。
 - **onchina**(9 错)——**不是测试问题,是生产冷签编码 bug**(encode_admin_profile/AdminProfileArg 用旧 AdminProfile 布局,与链端不一致,影响创建机构/管理员上链交易),**单独立项 task_b6c1a9f8**(新窗口),跨四端 + 重生金标夹具。
 

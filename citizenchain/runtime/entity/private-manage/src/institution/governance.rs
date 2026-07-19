@@ -73,6 +73,11 @@ impl<T: Config> Pallet<T> {
             institution.institution_code == result.institution_code,
             Error::<T>::InvalidAssignmentResultInstitution
         );
+        let protected_company =
+            primitives::cid::china::citizenchain::is_citizenchain_technology_identity(
+                result.institution_code,
+                cid_number.as_slice(),
+            );
         let current_admins = T::InstitutionAdminQuery::institution_admins(
             result.institution_code,
             cid_number.as_slice(),
@@ -90,6 +95,12 @@ impl<T: Config> Pallet<T> {
                 .role_code
                 .try_into()
                 .map_err(|_| Error::<T>::InvalidRoleCode)?;
+            ensure!(
+                !protected_company
+                    || primitives::cid::china::citizenchain::fixed_role(role_code.as_slice())
+                        .is_none(),
+                Error::<T>::InvalidRoleCode
+            );
             ensure!(
                 !primitives::institution_constraints::is_legal_representative_role(
                     role_code.as_slice()
@@ -215,6 +226,18 @@ impl<T: Config> Pallet<T> {
                     assignment.term_end,
                 )?;
             }
+            if protected_company {
+                if let Some(fixed_role) =
+                    primitives::cid::china::citizenchain::fixed_role(role_code.as_slice())
+                {
+                    ensure!(
+                        role.role_status == InstitutionRoleStatus::Active
+                            && role.role_name.as_slice() == fixed_role.role_name
+                            && assignments.len() == fixed_role.seats as usize,
+                        Error::<T>::FixedRoleSeatsMismatch
+                    );
+                }
+            }
         }
 
         let legal_representative_change = result
@@ -253,6 +276,50 @@ impl<T: Config> Pallet<T> {
                 }
             })
             .transpose()?;
+        if protected_company {
+            let legal_representative_account = match &legal_representative_change {
+                Some(LegalRepresentativeTarget::Set(_, _, account)) => Some(account.clone()),
+                Some(LegalRepresentativeTarget::Clear) => None,
+                None => institution.legal_representative_account.clone(),
+            }
+            .ok_or(Error::<T>::FixedRoleSeatsMismatch)?;
+            let legal_role_code: RoleCodeOf =
+                primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE
+                    .to_vec()
+                    .try_into()
+                    .map_err(|_| Error::<T>::InvalidRoleCode)?;
+            let legal_assignments = assignment_changes
+                .get(&legal_role_code)
+                .cloned()
+                .unwrap_or_else(|| {
+                    InstitutionRoleAssignments::<T>::get(&cid_number, &legal_role_code)
+                });
+            ensure!(
+                legal_assignments.len() == 1
+                    && legal_assignments[0].admin_account == legal_representative_account,
+                Error::<T>::FixedRoleSeatsMismatch
+            );
+
+            let assigned_admins = primitives::cid::china::citizenchain::CITIZENCHAIN_FIXED_ROLES
+                .iter()
+                .flat_map(|fixed_role| {
+                    let role_code = RoleCodeOf::try_from(fixed_role.role_code.to_vec())
+                        .expect("公民链技术固定岗位代码必须满足协议上限");
+                    assignment_changes
+                        .get(&role_code)
+                        .cloned()
+                        .unwrap_or_else(|| {
+                            InstitutionRoleAssignments::<T>::get(&cid_number, &role_code)
+                        })
+                        .into_iter()
+                        .map(|assignment| assignment.admin_account)
+                })
+                .collect::<BTreeSet<_>>();
+            ensure!(
+                assigned_admins.len() == 3 && assigned_admins == current_admin_set,
+                Error::<T>::InvalidAssignmentResultAdmins
+            );
+        }
         let role_changes_len = role_changes.len() as u32;
         let assignment_changes_len = assignment_changes.len() as u32;
         let admins_len = current_admins.len() as u32;

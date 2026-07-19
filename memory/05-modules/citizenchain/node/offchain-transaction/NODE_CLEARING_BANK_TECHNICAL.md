@@ -75,28 +75,21 @@ Tauri 命令按业务拆分:
 
 DTO 统一见 `transaction/offchain_transaction/types.rs`。
 
-## 4. propose_create_institution(call_index 5)字节布局
+## 4. 机构创建(call_index 5)字节布局
 
-链端 [`organization-manage::propose_create_institution`](citizenchain/runtime/governance/organization_manage/src/lib.rs) 11 入参:
+链端按机构属性路由到 `PublicManage(30).propose_create_public_institution` 或 `PrivateManage(31).propose_create_private_institution`，两者使用同一最小字段顺序：
 
 ```
-[pallet_index=17][call_index=5]
-cid_number: BoundedVec<u8>            = Compact(len) || bytes
-cid_full_name: BoundedVec<u8>   = Compact(len) || bytes
-accounts: BoundedVec<InstitutionInitialAccount>
-                                    = Compact(N) || N × (account_name_compact || amount_u128_le)
-institution_code: [u8;4]    = 机构账户码（is_institution_code，公权或私权法人）
-admins_len: u32                    = u32 LE
-admins: BoundedVec<AccountId32>
-                                    = Compact(N) || N × 32B
-threshold: u32                      = u32 LE
-register_nonce: BoundedVec<u8>      = Compact(len) || bytes
-signature: BoundedVec<u8>(64)       = Compact(64) || 64B
-province_name: Vec<u8>                   = Compact(len) || bytes
-signer_pubkey: [u8; 32]       = 32B 原始公钥
+[pallet_index=30|31][call_index=5]
+cid_number: BoundedVec<u8>       = Compact(len) || bytes
+cid_full_name: BoundedVec<u8>    = Compact(len) || bytes
+cid_short_name: BoundedVec<u8>   = Compact(len) || bytes
+town_code: BoundedVec<u8>        = Compact(len) || bytes
+admins: BoundedVec<Admin>        = Compact(N) || N × (admin_account[32] || family_name || given_name)
+actor_cid_number: Vec<u8>        = Compact(len) || bytes
 ```
 
-**任何字段顺序变更必须同步改 `governance/organization_manage/signing.rs::build_propose_create_institution_call_data`**,否则公民钱包签名 payload 与链上 call_data 不一致。
+管理员记录的字段顺序固定为 `admin_account + family_name + given_name`；账户是唯一授权字段，姓、名只展示。任何字段顺序变更都必须同步 Node/OnChina/CitizenApp 生成端与 CitizenWallet 解码端，否则签名 payload 与链上 call data 不一致。
 
 注册业务字段只允许来自 CID `registration-info` 的 `cid_number / cid_full_name / account_names[]`。
 `subject_property / sub_type / parent_cid_number` 只属于 `eligible-search` 查询筛选和展示,不得进入注册 call_data。

@@ -20,7 +20,7 @@
 - 各类管理员的链上管理员集合分别保存在各自 pallet 的 `AdminAccounts`。
 - runtime 只通过 `RuntimeAdminAccountQuery` 聚合读取各管理员模块，业务 pallet 不直接扫多个 storage。
 - 注册个人多签和普通注册机构账户的动态阈值由 `votingengine/internal-vote` 的动态阈值表保存；NRC/PRC/PRB/FRG/NJD 使用代码级固定阈值；PRS/NLG/NSN/NRP/NSP/NED 不保存账户级阈值，由每个内部提案按 admins 快照派生严格过半。
-- 创世机构本体、协议账户、默认法定代表人岗位、固定岗位和创世任职由 `runtime/genesis/src/institution/seeder.rs` 写入 `public-manage`；只有存在真实管理员钱包的创世机构才独立写入 `public-admins`，不得从岗位伪造钱包。
+- 创世机构本体、协议账户、默认法定代表人岗位、固定岗位和创世任职由 `runtime/genesis/src/institution/seeder.rs` 唯一写入：既有公权机构写 `public-manage` / `public-admins`，中国公民链技术有限公司写 `private-manage` / `private-admins`；不得跨命名空间或从岗位伪造钱包。
 - 旧创世机构/管理员运行期模块已删除，不允许恢复为运行期治理模块或影子真源。
 
 ## 管理员集合目标字段
@@ -60,6 +60,7 @@
 - FRG 在 `public-admins` 只有一个含 215 个钱包的机构管理员集合；43 个省专员岗位、每岗5人的分组真源在 entity 任职 storage，不存在虚拟省组账户。
 - 岗位任职不得驱动管理员更换；public/private admins 当前不暴露对外管理员集合变更 extrinsic，管理员维护入口在第2步单独实现。
 - Node Guard 同时保护固定机构 `InstitutionAdmins`、entity 岗位和任职：岗位目录与席位固定，固定治理机构任职钱包集合必须与 `admins` 账户字段完全一致；成员可依法原子轮换。
+- 私权创世技术公司固定为三名管理员、三岗位各一席和 2/3 阈值；固定岗位不能改名、停用、增删或扩席，管理员换人必须和对应岗位任职在一个治理结果中原子更新，裸 `ReplaceAdmins` 会被拒绝。
 - `public-admins`、`private-admins` 没有 `WeightInfo` 和 `weights.rs`；其写入仅由 entity 生命周期内部接口调用。
 - 正式创世只接受当前三字段 SCALE 布局；旧纯账户、旧单姓名记录和 runtime storage migration 均已删除，不保留兼容路径。
 

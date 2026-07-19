@@ -17,8 +17,6 @@
   field_label_zh: 地址名称代码
 - field_key: admin_account
   field_label_zh: 管理员钱包地址
-- field_key: admin_name
-  field_label_zh: 管理员姓名
 - field_key: admins
   field_label_zh: 管理员
 - field_key: admins_len
@@ -59,6 +57,8 @@
   field_label_zh: 合格选民数
 - field_key: expires_at
   field_label_zh: 过期时间
+- field_key: family_name
+  field_label_zh: 姓
 - field_key: institution
   field_label_zh: 机构
 - field_key: institution_code
@@ -69,6 +69,8 @@
   field_label_zh: 治理动作
 - field_key: governance_detail
   field_label_zh: 治理详情
+- field_key: given_name
+  field_label_zh: 名
 - field_key: membership_level
   field_label_zh: 会员等级
 - field_key: new_domain

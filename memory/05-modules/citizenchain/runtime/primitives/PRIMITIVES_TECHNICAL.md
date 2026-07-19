@@ -31,7 +31,8 @@
 | `china/china_jy.rs` | 公民教育委员会 |
 | `china/china_lf.rs` | 46 个立法机构（国家立法院 + 国家参议会 + 国家众议会 + 43 省级联邦立法院） |
 | `china/china_sf.rs` | 44 个司法院（国家司法院 + 43 省级联邦司法院） |
-| `china/china_zb.rs` | 637 个制度保留地址（防抢注） |
+| `china/citizenchain.rs` | 私权创世机构“中国公民链技术有限公司”的身份、协议账户、法定代表人、三名管理员、固定岗位和 2/3 阈值唯一常量真源 |
+| `china/china_zb.rs` | 639 个制度保留地址（防抢注） |
 | `china/china_zf.rs` | 71 个政府机构（总统府 + 联邦局 + 部委 + 宪法国家级机构 + 43 省级联邦政府） |
 
 ---
@@ -128,7 +129,8 @@
 - 内置机构名称统一使用 `cid_full_name / cid_short_name / cid_full_name_en / cid_short_name_en` 四字段。
 - `builtin_institution_name_digest()` 覆盖全部内置机构名称四字段；修改任一名称字段都必须通过 runtime 升级生效。
 - 具体机构命名规范见 `memory/07-ai/institution-naming.md`。
-- `china_zb.rs` 中的 637 个保留地址由 `RuntimeReservedAccountGuard` 注入 `public-manage`、`private-manage`、`personal-manage`，在注册和创建账户时统一校验，防止抢注制度地址。
+- `china_zb.rs` 中的 639 个保留地址由 `RuntimeReservedAccountGuard` 注入 `public-manage`、`private-manage`、`personal-manage`，在注册和创建账户时统一校验，防止抢注制度地址；其中新增的技术公司主账户和费用账户与其它制度账户同等保护。
+- `governance_skeleton.rs` 继续只表达既有 89 个公权固定治理机构；私权技术公司的固定治理真源独立位于 `china/citizenchain.rs`，NodeGuard 合并后保护总数为 90，避免把私权机构伪装进公权清单。
 
 ---
 

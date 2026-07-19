@@ -1,6 +1,6 @@
 # CitizenApp QR 技术说明
 
-- 更新日期:2026-06-22
+- 更新日期:2026-07-19
 - 唯一事实源:`memory/01-architecture/qr/qr-protocol-spec.md`
 - Action 注册表:`memory/01-architecture/qr/qr-action-registry.md`
 
@@ -72,6 +72,8 @@ CitizenApp 扫描 `k=2` 签名响应:
 - 签名页面:`citizenapp/lib/qr/pages/qr_sign_session_page.dart`
 
 任何新增扫码签名场景必须先登记 action,再复用这些入口。
+
+管理员人员字段的协议顺序固定为 `admin_account + family_name + given_name`。CitizenApp 构造个人多签创建、个人管理员更换或机构相关链交易时，必须把三个字段完整写入 `review_payload`；CitizenWallet 只在确认页合并显示姓名，不按姓名授权。同一次业务操作只生成一个签名请求并接收一个签名响应，不叠加第二次确认签名。
 
 ## 6. 测试要求
 

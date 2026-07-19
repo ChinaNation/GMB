@@ -1624,6 +1624,111 @@ fn genesis_public_institutions_full_mint_counts() {
     });
 }
 
+/// 中国公民链技术有限公司以私权创世机构写入，三名人员、三岗、法定代表人与阈值同源一致。
+#[test]
+fn genesis_citizenchain_technology_is_complete_and_protected() {
+    new_test_ext().execute_with(|| {
+        genesis_pallet::institution::build::<Runtime>();
+        let company = primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY;
+        let cid: private_manage::pallet::CidNumberOf<Runtime> = company
+            .cid_number
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("company CID fits");
+        let info = private_manage::Institutions::<Runtime>::get(&cid)
+            .expect("citizenchain technology genesis institution exists");
+        assert_eq!(
+            info.cid_full_name.as_slice(),
+            company.cid_full_name.as_bytes()
+        );
+        assert_eq!(
+            info.cid_short_name.as_slice(),
+            company.cid_short_name.as_bytes()
+        );
+        assert_eq!(
+            info.legal_representative_name
+                .as_ref()
+                .map(|value| value.as_slice()),
+            Some("程伟".as_bytes())
+        );
+        assert_eq!(
+            info.legal_representative_cid_number
+                .as_ref()
+                .map(|value| value.as_slice()),
+            Some("GZ000-CTZN6-198805200-2026".as_bytes())
+        );
+        assert_eq!(
+            info.legal_representative_account,
+            Some(AccountId::new(
+                primitives::cid::china::citizenchain::CITIZENCHAIN_GENESIS_ADMINS[0].admin_account,
+            ))
+        );
+
+        let admin_cid: admin_primitives::AdminCidNumber = company
+            .cid_number
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("admin CID fits");
+        let admins =
+            private_admins::AdminAccounts::<Runtime>::get(admin_cid).expect("company admins exist");
+        assert_eq!(admins.institution_code, *b"SFGQ");
+        assert_eq!(admins.admins.len(), 3);
+        assert_eq!(admins.admins[0].family_name.as_slice(), "程".as_bytes());
+        assert_eq!(admins.admins[0].given_name.as_slice(), "伟".as_bytes());
+        assert_eq!(admins.admins[1].family_name.as_slice(), "管理".as_bytes());
+        assert_eq!(admins.admins[1].given_name.as_slice(), "员".as_bytes());
+
+        for (index, fixed_role) in primitives::cid::china::citizenchain::CITIZENCHAIN_FIXED_ROLES
+            .iter()
+            .enumerate()
+        {
+            let role_code: private_manage::RoleCodeOf = fixed_role
+                .role_code
+                .to_vec()
+                .try_into()
+                .expect("fixed role code fits");
+            let role = private_manage::InstitutionRoles::<Runtime>::get(&cid, &role_code)
+                .expect("fixed company role exists");
+            assert_eq!(role.role_name.as_slice(), fixed_role.role_name);
+            assert_eq!(
+                role.role_status,
+                entity_primitives::InstitutionRoleStatus::Active
+            );
+            let assignments =
+                private_manage::InstitutionRoleAssignments::<Runtime>::get(&cid, role_code);
+            assert_eq!(assignments.len(), 1);
+            assert_eq!(
+                assignments[0].admin_account,
+                AccountId::new(
+                    primitives::cid::china::citizenchain::CITIZENCHAIN_GENESIS_ADMINS[index]
+                        .admin_account,
+                )
+            );
+        }
+        assert_eq!(
+            internal_vote::ActiveInstitutionThresholds::<Runtime>::get(&cid),
+            Some(2)
+        );
+        assert!(RuntimeReservedAccountGuard::is_reserved(&AccountId::new(
+            company.main_account
+        )));
+        assert!(RuntimeReservedAccountGuard::is_reserved(&AccountId::new(
+            company.fee_account
+        )));
+        assert!(!RuntimeInstitutionAsset::can_spend(
+            &AccountId::new(company.fee_account),
+            InstitutionAssetAction::MultisigTransferExecute
+        ));
+        assert!(RuntimeInstitutionAsset::can_spend(
+            &AccountId::new(company.fee_account),
+            InstitutionAssetAction::OffchainFeeSweepExecute
+        ));
+        assert_eq!(private_manage::Institutions::<Runtime>::iter().count(), 1);
+    });
+}
+
 /// 六个国家级单例在 block#0 精确占用约定身份；三个成员机构保持完整的“尚未组成”状态。
 #[test]
 fn genesis_national_singletons_exist_and_member_bodies_are_unconstituted() {

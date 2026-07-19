@@ -150,6 +150,8 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 机构管理员列表 API 联合读取链上 `admins(admin_account + family_name + given_name)` 人员集合与 entity 岗位定义、有效任职。`institution/admins/chain_roles.rs` 负责公权/私权岗位路由、任职合并和 FRG 省专员范围解析；管理员即使没有岗位也必须保留人员行，姓名只展示，授权只比较账户。本地联系方式、照片和 Passkey 不得成为管理员资格或岗位真源。岗位权限不建立通用表，具体业务模块按“机构 + 有效岗位 + 业务动作”硬规则判定。
 
+链上机构唯一查询先读取 `PublicManage::Institutions[cid_number]`，未命中再读取 `PrivateManage::Institutions[cid_number]`，不建立本地分流真源；公私权 CID 不重复由 runtime 与 NodeGuard 的链上不变式保证。创世公权目录全量投影仍精确为 49,593 个机构和 99,231 个协议账户；中国公民链技术有限公司 `GZ018-SFGQ1-201206100-2026` 属私权创世机构，只参加独立私权存在性审计，不冒充公权目录行，也不增加公权投影计数。启动抽样当前覆盖 32 个派生公权机构、1 个公权常量机构和该技术公司，共 34 项。
+
 机构治理链写入口：
 
 - `POST /api/v1/admin/institution/governance/prepare`：本机构管理员发起 `propose_institution_governance`，后端只接受当前节点绑定机构 CID，构造完整 runtime 签名载荷并写入 `chain_sign_sessions`。管理员集合、岗位、任职和法定代表人任命/更换/解除都只进入链上 call data，不写本地正式投影；解除时提交 `clear_legal_representative=true`，不得同时提交 `legal_representative_cid_number`。
@@ -194,6 +196,8 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 2026-07-17 机构治理运行态补验：当前源码 `citizenchain-fresh --tmp` 使用 `WASM_BUILD_FROM_SOURCE=1` 构建后启动成功，OnChina 使用临时内嵌 PostgreSQL 和 `ONCHAIN_WS_URL=ws://127.0.0.1:19944` 连接 fresh 链启动成功；启动期完成公权链投影 `49,593` 个机构与 `99,231` 个账户，首页 HTTP 返回 200，`subjects` 表旧 `legal_rep_*` 列为 0，新 `legal_representative_*` 三字段列齐备。交互式 CitizenWallet 扫码签名需要真实管理员登录会话和扫码设备，本次仅完成链、数据库、服务和页面基础运行态，不伪造扫码签名结果。
 
 2026-07-19 正式创世前管理员三字段第 3 步验收：OnChina 后端登录态、链上管理员解码、机构创建与治理编码、注册局目录、机构管理员投影和 PostgreSQL 全部统一为 `admin_account + family_name + given_name`。隔离 `citizenchain-fresh` 节点通过 NodeGuard 并返回 `isSyncing=false`；临时 PostgreSQL 实际建表确认 `admins`、`institution_admins` 均有姓、名分列且旧合并姓名列为 0。另以旧合并姓名单列模拟旧表后重启，服务直接删除旧列并把缺失姓名落为“管理”“员”，没有兼容拆分或双轨。真实链投影仍为 49,593 个机构、99,231 个账户，健康接口为 `UP`、首页返回 200、未登录鉴权返回稳定 401。验收进程均已停止，临时数据已清理；本步没有烘焙正式 chainspec、没有切换正式节点数据。
+
+2026-07-19 私权创世技术公司第 6 步验收：`institution_lookup` 已实现在相同 CID 主键下依次读取 `PublicManage` 和 `PrivateManage`，公权全量目录迭代继续只读取公权 storage；启动抽样固定增加技术公司，全量公权审计先独立核验技术公司存在，再执行 49,593 个公权机构的双向比对。OnChina 137 项测试通过；没有把技术公司复制进本地公权投影、没有读取本地公民数据库生成法定代表人，也没有新增第二套公司身份常量。
 
 ```text
 rg "mod chain;|crate::chain|chain::" citizenchain/onchina/src -g '*.rs'

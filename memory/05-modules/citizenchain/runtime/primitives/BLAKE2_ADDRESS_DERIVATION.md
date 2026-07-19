@@ -64,12 +64,12 @@ CID 机构的账户名被链端硬翻译成 `InstitutionAccountRole`：
 
 | 类型 | 数量 | 文件 |
 |---|---|---|
-| main_account | 296 | china_cb(44) + china_ch(43) + china_zf(71) + china_jc(47) + china_lf(46) + china_sf(44) + china_jy(1) |
-| fee_account | 296 | china_cb(44) + china_ch(43) + china_zf(71) + china_jc(47) + china_lf(46) + china_sf(44) + china_jy(1) |
+| main_account | 297 | 296 个公权内置机构 + 中国公民链技术有限公司（私权创世机构） |
+| fee_account | 297 | 296 个公权内置机构 + 中国公民链技术有限公司（私权创世机构） |
 | stake_account | 43 | china_ch |
 | SAFETY_FUND_ACCOUNT | 1 | china_cb（全局唯一常量） |
 | NRC_HE_ACCOUNT | 1 | china_cb（全局唯一常量） |
-| `CHINA_RESERVED_MAIN_ACCOUNTS` 汇总 | 637 唯一项 | china_zb（内置主/费用账户、省储行质押账户、国家储委会安全基金和两和基金的排序去重表） |
+| `CHINA_RESERVED_MAIN_ACCOUNTS` 汇总 | 639 唯一项 | china_zb（内置主/费用账户、省储行质押账户、国家储委会安全基金和两和基金的排序去重表） |
 
 ## 示例
 

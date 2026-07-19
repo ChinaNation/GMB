@@ -23,6 +23,17 @@ void main() {
     return [bytes.length << 2, ...bytes];
   }
 
+  List<int> adminPerson(
+    List<int> adminAccount,
+    String familyName,
+    String givenName,
+  ) =>
+      [
+        ...adminAccount,
+        ...compactVec(familyName),
+        ...compactVec(givenName),
+      ];
+
   List<int> u128LeForTest(BigInt value) {
     final out = List<int>.filled(16, 0);
     var tmp = value;
@@ -1240,7 +1251,7 @@ void main() {
       for (final item in [
         (29, 0, 'PMUL', 2, 2, 'propose_personal_admin_set_change'),
       ]) {
-        final admins = List<List<int>>.generate(
+        final adminAccounts = List<List<int>>.generate(
           item.$4,
           (i) => List<int>.filled(32, 0x11 + i),
         );
@@ -1250,7 +1261,9 @@ void main() {
           ...InstitutionCode.codeBytes(item.$3),
           ...account,
           item.$4 << 2, // Compact(admins.length)
-          for (final admin in admins) ...admin,
+          for (var i = 0; i < adminAccounts.length; i++)
+            ...adminPerson(
+                adminAccounts[i], i == 0 ? '张' : '管理', i == 0 ? '三' : '员'),
           ...u32Le(item.$5),
         ]);
 
@@ -1262,12 +1275,22 @@ void main() {
             InstitutionCode.codeLabel(item.$3));
         expect(decoded.fields['account'], '0x${hexLower(account)}');
         expect(
-          decoded.fields['admins'],
-          admins
-              .map((admin) =>
-                  '0x${admin.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}')
-              .join(','),
+          jsonDecode(decoded.fields['admins']!) as List<dynamic>,
+          [
+            {
+              'admin_account': '0x${hexLower(adminAccounts[0])}',
+              'family_name': '张',
+              'given_name': '三',
+            },
+            {
+              'admin_account': '0x${hexLower(adminAccounts[1])}',
+              'family_name': '管理',
+              'given_name': '员',
+            },
+          ],
         );
+        expect(decoded.reviewFields['admins'], contains('张三('));
+        expect(decoded.reviewFields['admins'], contains('管理员('));
         expect(decoded.reviewFields['new_threshold'], '${item.$5}/${item.$4}');
         expect(decoded.summary, contains('管理员集合变更'));
       }
@@ -1296,8 +1319,8 @@ void main() {
         ...InstitutionCode.codeBytes('PMUL'),
         ...account,
         0x08,
-        ...List<int>.filled(32, 0x11),
-        ...List<int>.filled(32, 0x22),
+        ...adminPerson(List<int>.filled(32, 0x11), '张', '三'),
+        ...adminPerson(List<int>.filled(32, 0x22), '李', '四'),
       ]);
 
       expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
@@ -1311,8 +1334,8 @@ void main() {
         ...InstitutionCode.codeBytes('PMUL'),
         ...account,
         0x08,
-        ...List<int>.filled(32, 0x11),
-        ...List<int>.filled(32, 0x22),
+        ...adminPerson(List<int>.filled(32, 0x11), '张', '三'),
+        ...adminPerson(List<int>.filled(32, 0x22), '李', '四'),
         ...u32Le(2),
         0xff,
       ]);
@@ -1327,12 +1350,78 @@ void main() {
         ...InstitutionCode.codeBytes('PMUL'),
         ...account,
         0x0c, // Compact(3)
-        ...List<int>.filled(32, 0x11),
-        ...List<int>.filled(32, 0x22),
-        ...List<int>.filled(32, 0x33),
+        ...adminPerson(List<int>.filled(32, 0x11), '张', '三'),
+        ...adminPerson(List<int>.filled(32, 0x22), '李', '四'),
+        ...adminPerson(List<int>.filled(32, 0x33), '王', '五'),
         ...u32Le(1),
       ]);
 
+      expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
+    });
+
+    test('rejects propose_admin_set_change legacy pure-account layout', () {
+      final account = List<int>.filled(32, 0x80);
+      final payload = <int>[
+        0x1d,
+        0x00,
+        ...InstitutionCode.codeBytes('PMUL'),
+        ...account,
+        ...compactU32(2),
+        ...List<int>.filled(32, 0x11),
+        ...List<int>.filled(32, 0x22),
+        ...u32Le(2),
+      ];
+      expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
+    });
+
+    test('rejects propose_admin_set_change legacy combined-name layout', () {
+      final account = List<int>.filled(32, 0x80);
+      final payload = <int>[
+        0x1d,
+        0x00,
+        ...InstitutionCode.codeBytes('PMUL'),
+        ...account,
+        ...compactU32(2),
+        ...compactVec('张三'),
+        ...List<int>.filled(32, 0x11),
+        ...compactVec('李四'),
+        ...List<int>.filled(32, 0x22),
+        ...u32Le(2),
+      ];
+      expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
+    });
+
+    test('rejects propose_admin_set_change duplicate admin_account', () {
+      final account = List<int>.filled(32, 0x80);
+      final duplicate = List<int>.filled(32, 0x11);
+      final payload = <int>[
+        0x1d,
+        0x00,
+        ...InstitutionCode.codeBytes('PMUL'),
+        ...account,
+        ...compactU32(2),
+        ...adminPerson(duplicate, '张', '三'),
+        ...adminPerson(duplicate, '李', '四'),
+        ...u32Le(2),
+      ];
+      expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
+    });
+
+    test('rejects propose_admin_set_change malformed UTF-8 name', () {
+      final account = List<int>.filled(32, 0x80);
+      final payload = <int>[
+        0x1d,
+        0x00,
+        ...InstitutionCode.codeBytes('PMUL'),
+        ...account,
+        ...compactU32(2),
+        ...List<int>.filled(32, 0x11),
+        ...compactU32(1),
+        0xff,
+        ...compactVec('三'),
+        ...adminPerson(List<int>.filled(32, 0x22), '李', '四'),
+        ...u32Le(2),
+      ];
       expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
 
@@ -1594,7 +1683,8 @@ void main() {
     test('decodes SquarePost platform price proposal with Chinese fields', () {
       const actorCid = 'GD001-SFGQ0-000000001-2026';
       final payload = <int>[
-        34, 5,
+        34,
+        5,
         ...compactVec(actorCid),
         1,
         ...u128LeForTest(BigInt.from(123456)),
@@ -1610,7 +1700,8 @@ void main() {
     test('rejects invalid SquarePost platform price proposal payloads', () {
       const actorCid = 'GD001-SFGQ0-000000001-2026';
       List<int> call(int level, BigInt price) => <int>[
-            34, 5,
+            34,
+            5,
             ...compactVec(actorCid),
             level,
             ...u128LeForTest(price),
@@ -1659,8 +1750,8 @@ void main() {
       final instShortName = utf8.encode('安徽储行');
       final townCode = utf8.encode('');
       final admins = [
-        ('张三', List<int>.filled(32, 0x11)),
-        ('管理员', List<int>.filled(32, 0x22)),
+        (List<int>.filled(32, 0x11), '张', '三'),
+        (List<int>.filled(32, 0x22), '管理', '员'),
       ];
       final payload = <int>[
         0x1e, 0x05, // pallet=30 call=5
@@ -1676,12 +1767,14 @@ void main() {
         // town_code: Vec<u8>，非镇级机构为空。
         (townCode.length << 2) & 0xff,
         ...townCode,
-        // admins: Vec<{admin_name, admin_account}> count=2。
+        // admins: Vec<{admin_account, family_name, given_name}> count=2。
         (2 << 2) & 0xff,
-        ...boundedBytes(admins[0].$1),
-        ...admins[0].$2,
-        ...boundedBytes(admins[1].$1),
-        ...admins[1].$2,
+        ...admins[0].$1,
+        ...boundedBytes(admins[0].$2),
+        ...boundedBytes(admins[0].$3),
+        ...admins[1].$1,
+        ...boundedBytes(admins[1].$2),
+        ...boundedBytes(admins[1].$3),
         // actor_cid_number。外层 origin 必须属于该 CID 的 admins。
         ...compactVec(registryActorCid),
       ];
@@ -1714,7 +1807,7 @@ void main() {
       expect(decoded.fields.containsKey('town_code'), isFalse);
       expect(decoded.fields['admins_len'], '2');
       expect(
-        decoded.fields['admins'],
+        decoded.reviewFields['admins'],
         contains('张三(${ss58FromBytes(List<int>.filled(32, 0x11))})'),
       );
       expect(
@@ -1759,10 +1852,8 @@ void main() {
     List<int> buildInstitutionAdminsForGovernance() {
       return <int>[
         ...compactU32(2),
-        ...compactVec('张三'),
-        ...List<int>.filled(32, 0x31),
-        ...compactVec('李四'),
-        ...List<int>.filled(32, 0x32),
+        ...adminPerson(List<int>.filled(32, 0x31), '张', '三'),
+        ...adminPerson(List<int>.filled(32, 0x32), '李', '四'),
       ];
     }
 
@@ -1845,7 +1936,7 @@ void main() {
       expect(decoded!.action, 'register_private_institution_admins');
       expect(decoded.fields['cid_number'], cidNumber);
       expect(decoded.fields['admins_len'], '2');
-      expect(decoded.fields['admins'],
+      expect(decoded.reviewFields['admins'],
           contains('张三(${ss58FromBytes(List<int>.filled(32, 0x31))})'));
       expect(decoded.fields['actor_cid_number'], registryActorCid);
       expect(decoded.fields['fee_payer'], '$registryActorCid 的链上费用账户');
@@ -1857,9 +1948,9 @@ void main() {
         () {
       final name = utf8.encode('家庭基金');
       final admins = [
-        List<int>.filled(32, 0x11),
-        List<int>.filled(32, 0x22),
-        List<int>.filled(32, 0x33),
+        adminPerson(List<int>.filled(32, 0x11), '张', '三'),
+        adminPerson(List<int>.filled(32, 0x22), '李', '四'),
+        adminPerson(List<int>.filled(32, 0x33), '管理', '员'),
       ];
       final payload = Uint8List.fromList([
         0x07,
@@ -1877,6 +1968,8 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_create_personal');
       expect(decoded.fields['account_name'], '家庭基金');
+      expect(decoded.reviewFields['admins'], contains('张三('));
+      expect(decoded.reviewFields['admins'], contains('管理员('));
       expect(decoded.fields['admins_len'], '3');
       expect(decoded.fields['regular_threshold'], '3/3');
       expect(decoded.fields['create_threshold'], '3/3');
@@ -1887,9 +1980,9 @@ void main() {
     test('rejects propose_create_personal without regular_threshold', () {
       final name = utf8.encode('家庭基金');
       final admins = [
-        List<int>.filled(32, 0x11),
-        List<int>.filled(32, 0x22),
-        List<int>.filled(32, 0x33),
+        adminPerson(List<int>.filled(32, 0x11), '张', '三'),
+        adminPerson(List<int>.filled(32, 0x22), '李', '四'),
+        adminPerson(List<int>.filled(32, 0x33), '王', '五'),
       ];
       final payload = Uint8List.fromList([
         0x07,
@@ -1910,10 +2003,10 @@ void main() {
         () {
       final name = utf8.encode('家庭基金');
       final admins = [
-        List<int>.filled(32, 0x11),
-        List<int>.filled(32, 0x22),
-        List<int>.filled(32, 0x33),
-        List<int>.filled(32, 0x44),
+        adminPerson(List<int>.filled(32, 0x11), '张', '三'),
+        adminPerson(List<int>.filled(32, 0x22), '李', '四'),
+        adminPerson(List<int>.filled(32, 0x33), '王', '五'),
+        adminPerson(List<int>.filled(32, 0x44), '赵', '六'),
       ];
       final payload = Uint8List.fromList([
         0x07,

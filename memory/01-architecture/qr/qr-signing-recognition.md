@@ -1,6 +1,6 @@
 # QR_V1 扫码签名两色识别方案
 
-- 更新日期:2026-07-18
+- 更新日期:2026-07-19
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
 - 范围:CitizenWallet / CitizenApp 扫描 QR 后的识别、展示、签名放行和签名响应验签规则
 - 依赖:
@@ -62,6 +62,8 @@
 6. `b.s` 解码为 64 字节
 7. 生成方用本地 session 重新计算 `review_payload` hash,必须等于 session.expected_payload_hash
 8. 按 session 的 `a + review_payload` 计算签名字节后 sr25519 验签通过
+
+CitizenWallet 对同一已扫描请求只允许调用一次钱包密钥：签名进行中时忽略重复点击，首个响应二维码生成后彻底禁用再次签名。同一业务操作不叠加“字段确认签名”“周期确认签名”或其它第二签名。
 
 签名响应中不得出现 payload、payload hash、签名时间、摘要字段。若出现旧字段,解析器应报错。
 
@@ -130,6 +132,8 @@ SignDecisionStatus.reject = 红色,禁止签名
 ```
 
 钱包侧不得再恢复 `matched / mismatched / decodeFailed` 等第三状态。任一 action 未登记、动作缺少中文名、payload 无法解码、字段缺少中文名、普通链交易只携带 32B hash/signing bytes,均返回 `reject` 并禁用签名按钮。
+
+管理员人员载荷只接受 `admin_account + family_name + given_name` 的严格 SCALE 顺序；旧纯账户数组、旧合并姓名、重复账户、空姓名或非法 UTF-8 一律红色拒签。确认页仅在显示时按中文顺序合并姓、名，授权与去重只比较账户。
 
 已落地文件:
 

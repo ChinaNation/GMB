@@ -61,8 +61,7 @@
 ## 完成情况(2026-07-09,已验收)
 
 - `node/Cargo.toml`:加 `[dev-dependencies] admin-primitives`(金标向量用真类型 encode)。
-- `codec.rs::decode_admin_account`:头部解 `cid_number` + profile 四字符串(admin_cid_number/admin_name/
-  role_code/role_name)+ 尾 `admin_source_ref`;展示 `admin_role`←`role_name`;两手搓测试替换为金标向量测试。
+- `codec.rs::decode_admin_account`:头部解 `cid_number` + 当时 profile 四字符串（公民 CID / 旧合并姓名 / 岗位代码 / 岗位名称）+ 尾 `admin_source_ref`;展示 `admin_role`←`role_name`;两手搓测试替换为金标向量测试。
 - `types.rs::source_label`:补 `5 => "提名任免"`。
 - `institution_read/chain.rs`:`OnChainAdminAccount` 补头部 `cid_number`;`OnChainAdminProfile` 补
   `role_code`/`role_name`(原 `title`→`role_name`)+ 尾 `admin_source_ref`;`OnChainAdminSource` 补第 6

@@ -36,6 +36,17 @@ class DecodedPayload {
   final Map<String, String> reviewFields;
 }
 
+/// 管理员人员的钱包端解码结果。
+///
+/// 字段名与 runtime、CitizenApp 完全一致；账户是唯一授权与去重
+/// 字段，姓、名只在确认页按中文顺序合并显示。
+typedef _DecodedAdminPerson = ({
+  Uint8List accountBytes,
+  String adminAccountHex,
+  String familyName,
+  String givenName,
+});
+
 /// SCALE call data 解码器。
 ///
 /// 根据 pallet_index + call_index 识别已知交易类型，
@@ -929,8 +940,8 @@ class PayloadDecoder {
   //     cid_full_name: AccountNameOf<T>,   // BoundedVec<u8>
   //     cid_short_name: AccountNameOf<T>,  // BoundedVec<u8>
   //     town_code: AccountNameOf<T>,       // BoundedVec<u8>
-  //     admins: BoundedVec<InstitutionAdmin>,
-  //         // 每项仅 admin_name + admin_account；账户是唯一授权字段
+  //     admins: BoundedVec<Admin>,
+  //         // 每项固定为 admin_account + family_name + given_name
   //     actor_cid_number: Vec<u8>,
   //   )
   //
@@ -981,26 +992,16 @@ class PayloadDecoder {
     );
     offset += townCodeLen;
 
-    // admins: BoundedVec<InstitutionAdmin(admin_name, admin_account)>。
-    final (adminsLen, adminsLenSize) = _decodeCompactU32(bytes, offset);
-    if (adminsLenSize == 0 || adminsLen < 2) return null;
-    offset += adminsLenSize;
-    final adminAccounts = <String>{};
-    final adminLabels = <String>[];
-    for (var i = 0; i < adminsLen; i++) {
-      final adminNameRead = _readBoundedUtf8(bytes, offset);
-      if (adminNameRead == null || adminNameRead.$1.isEmpty) return null;
-      offset = adminNameRead.$2;
-      if (offset + 32 > bytes.length) return null;
-      final accountBytes =
-          Uint8List.fromList(bytes.sublist(offset, offset + 32));
-      offset += 32;
-      final accountHex = accountBytes
-          .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
-          .join();
-      if (!adminAccounts.add(accountHex)) return null;
-      adminLabels.add('${adminNameRead.$1}(${_bytesToSs58(accountBytes)})');
-    }
+    final adminsRead = _readAdminPersons(
+      bytes,
+      offset,
+      minCount: 2,
+      maxCount: 1989,
+    );
+    if (adminsRead == null) return null;
+    final admins = adminsRead.$1;
+    final adminsLen = admins.length;
+    offset = adminsRead.$2;
 
     // actor_cid_number: Vec<u8>。外层 origin 必须属于该 CID 的 admins。
     final actorRead = _readCidNumber(bytes, offset);
@@ -1016,7 +1017,7 @@ class PayloadDecoder {
       'cid_full_name': cidFullName,
       'cid_short_name': cidShortName,
       'admins_len': adminsLen.toString(),
-      'admins': adminLabels.join('、'),
+      'admins': _adminMachineValue(admins),
       'default_role': _reviewValue('default_role', reviewValues),
       'protocol_accounts': _reviewValue('protocol_accounts', reviewValues),
       'fee_payer': _reviewValue('fee_payer', reviewValues),
@@ -1026,10 +1027,13 @@ class PayloadDecoder {
       fields['town_code'] = townCode;
     }
 
+    final reviewFields = Map<String, String>.of(fields)
+      ..['admins'] = _adminReviewValue(admins);
     return DecodedPayload(
       action: action,
       summary: '创建$entityLabel「$cidFullName」（$adminsLen 名管理员，制度账户自动建立）',
       fields: fields,
+      reviewFields: reviewFields,
     );
   }
 
@@ -1210,9 +1214,15 @@ class PayloadDecoder {
     if (cidRead == null) return null;
     final cidNumber = cidRead.$1;
     offset = cidRead.$2;
-    final adminsRead = _readInstitutionAdmins(bytes, offset);
-    if (adminsRead == null || adminsRead.$1 < 2) return null;
-    offset = adminsRead.$3;
+    final adminsRead = _readAdminPersons(
+      bytes,
+      offset,
+      minCount: 2,
+      maxCount: 1989,
+    );
+    if (adminsRead == null) return null;
+    final admins = adminsRead.$1;
+    offset = adminsRead.$2;
     offset = _skipBoundedBytes(bytes, offset); // register_nonce
     if (offset < 0) return null;
     offset = _skipBoundedBytes(bytes, offset); // signature
@@ -1232,11 +1242,24 @@ class PayloadDecoder {
     if (!_hasValidSigningTail(bytes, offset)) return null;
     return DecodedPayload(
       action: action,
-      summary: '注册局登记$entityLabel $cidNumber 的 ${adminsRead.$1} 名管理员',
+      summary: '注册局登记$entityLabel $cidNumber 的 ${admins.length} 名管理员',
       fields: {
         'cid_number': cidNumber,
-        'admins_len': adminsRead.$1.toString(),
-        'admins': adminsRead.$2,
+        'admins_len': admins.length.toString(),
+        'admins': _adminMachineValue(admins),
+        'actor_cid_number': actorRead.$1,
+        'fee_payer': _reviewValue(
+          'fee_payer',
+          {'actor_cid_number': actorRead.$1},
+        ),
+        'credential_signer_pubkey': _bytesToSs58(credentialSigner),
+        'scope_province_name': scopeProvinceName,
+        'scope_city_name': scopeCityName,
+      },
+      reviewFields: {
+        'cid_number': cidNumber,
+        'admins_len': admins.length.toString(),
+        'admins': _adminReviewValue(admins),
         'actor_cid_number': actorRead.$1,
         'fee_payer': _reviewValue(
           'fee_payer',
@@ -1609,7 +1632,7 @@ class PayloadDecoder {
   }
 
   // PersonalManage(7) / propose_create(0)
-  // 格式：[7][0][BoundedVec account_name][BoundedVec<AccountId32> admins][u32 regular_threshold][u128 amount]
+  // 格式：[7][0][BoundedVec account_name][BoundedVec<Admin> admins][u32 regular_threshold][u128 amount]
   // 个人多签独立 pallet,MODULE_TAG = b"per-mgmt"。
   // 机构生命周期模块 call=3 留洞不复用。
   static DecodedPayload? _decodeProposeCreatePersonal(Uint8List bytes) {
@@ -1626,12 +1649,16 @@ class PayloadDecoder {
         allowMalformed: true);
     offset += accountNameLen;
 
-    // admins: BoundedVec<AccountId32>。admins_len 由向量长度派生。
-    final (adminsLen, adminsLenSize) = _decodeCompactU32(bytes, offset);
-    offset += adminsLenSize;
-    if (adminsLen < 2 || adminsLen > 64) return null;
-    if (offset + adminsLen * 32 > bytes.length) return null;
-    offset += adminsLen * 32;
+    final adminsRead = _readAdminPersons(
+      bytes,
+      offset,
+      minCount: 2,
+      maxCount: 64,
+    );
+    if (adminsRead == null) return null;
+    final admins = adminsRead.$1;
+    final adminsLen = admins.length;
+    offset = adminsRead.$2;
 
     if (offset + 4 + 16 > bytes.length) return null;
     if (!_hasValidSigningTail(bytes, offset + 4 + 16)) return null;
@@ -1655,6 +1682,15 @@ class PayloadDecoder {
           '创建个人多签「$accountName」（$adminsLen 管理员，普通阈值 $regularThreshold，注册全员同意，入金 $amountYuan 元）',
       fields: {
         'account_name': accountName,
+        'admins': _adminMachineValue(admins),
+        'admins_len': adminsLen.toString(),
+        'regular_threshold': '$regularThreshold/$adminsLen',
+        'create_threshold': '$adminsLen/$adminsLen',
+        'amount_yuan': '$amountYuan GMB',
+      },
+      reviewFields: {
+        'account_name': accountName,
+        'admins': _adminReviewValue(admins),
         'admins_len': adminsLen.toString(),
         'regular_threshold': '$regularThreshold/$adminsLen',
         'create_threshold': '$adminsLen/$adminsLen',
@@ -1852,7 +1888,8 @@ class PayloadDecoder {
 
   // PersonalAdmins(29.0)。PublicAdmins/PrivateAdmins 只供机构生命周期内部调用，
   // 没有对外管理员变更 extrinsic，禁止把个人账户布局复用于机构 CID。
-  // 格式：[pallet][call][institution_code:[u8;4]][account:AccountId32][Compact<N>][admins:N*32][new_threshold:u32_le]
+  // 格式：[pallet][call][institution_code:[u8;4]][account:AccountId32]
+  //       [Compact<N>][admins:N*(admin_account+family_name+given_name)][new_threshold:u32_le]
   static DecodedPayload? _decodeProposeAdminSetChange(Uint8List bytes) {
     if (bytes.length < 75) return null;
     final palletIndex = bytes[0];
@@ -1868,19 +1905,16 @@ class PayloadDecoder {
     final accountHex = _bytesToLowerHex(accountBytes);
     offset += 32;
 
-    final (adminsLen, countSize) = _decodeCompactU32(bytes, offset);
-    if (countSize == 0 || adminsLen < 1) return null;
-    offset += countSize;
-
-    final admins = <String>[];
-    final adminAddresses = <String>[];
-    for (var i = 0; i < adminsLen; i++) {
-      if (offset + 32 > bytes.length) return null;
-      final admin = bytes.sublist(offset, offset + 32);
-      admins.add(_bytesToLowerHex(admin));
-      adminAddresses.add(_bytesToSs58(admin));
-      offset += 32;
-    }
+    final adminsRead = _readAdminPersons(
+      bytes,
+      offset,
+      minCount: 2,
+      maxCount: 64,
+    );
+    if (adminsRead == null) return null;
+    final admins = adminsRead.$1;
+    final adminsLen = admins.length;
+    offset = adminsRead.$2;
     if (offset + 4 > bytes.length) return null;
     if (!_hasValidSigningTail(bytes, offset + 4)) return null;
     final newThreshold = _readU32Le(bytes, offset);
@@ -1898,12 +1932,12 @@ class PayloadDecoder {
       fields: {
         'institution_code': institutionLabel,
         'account': accountHex,
-        'admins': admins.join(','),
+        'admins': _adminMachineValue(admins),
       },
       reviewFields: {
         'institution_code': institutionLabel,
         'account': _bytesToSs58(accountBytes),
-        'admins': adminAddresses.join(','),
+        'admins': _adminReviewValue(admins),
         'new_threshold': thresholdLabel,
       },
     );
@@ -3285,29 +3319,92 @@ class PayloadDecoder {
     return (text, offset + len);
   }
 
-  /// 解码 `Vec<InstitutionAdmin>`；管理员账户是唯一授权字段，姓名只展示。
-  static (int, String, int)? _readInstitutionAdmins(
+  /// 严格解码全仓统一的 `Vec<Admin>`。
+  ///
+  /// SCALE 顺序只允许 `admin_account + family_name + given_name`。旧纯账户、
+  /// 旧合并姓名、空姓名、非法 UTF-8 和重复账户全部拒签。
+  static (List<_DecodedAdminPerson>, int)? _readAdminPersons(
     Uint8List bytes,
-    int offset,
-  ) {
+    int offset, {
+    required int minCount,
+    required int maxCount,
+  }) {
     final (count, countSize) = _decodeCompactU32(bytes, offset);
-    if (countSize == 0) return null;
+    if (countSize == 0 || count < minCount || count > maxCount) return null;
     offset += countSize;
     final seen = <String>{};
-    final labels = <String>[];
+    final admins = <_DecodedAdminPerson>[];
     for (var index = 0; index < count; index++) {
-      final nameRead = _readBoundedUtf8(bytes, offset);
-      if (nameRead == null || nameRead.$1.isEmpty) return null;
-      offset = nameRead.$2;
       if (offset + 32 > bytes.length) return null;
       final accountBytes =
           Uint8List.fromList(bytes.sublist(offset, offset + 32));
       offset += 32;
       final accountHex = _bytesToLowerHex(accountBytes);
       if (!seen.add(accountHex)) return null;
-      labels.add('${nameRead.$1}(${_bytesToSs58(accountBytes)})');
+      final familyNameRead = _readAdminName(bytes, offset);
+      if (familyNameRead == null) return null;
+      offset = familyNameRead.$2;
+      final givenNameRead = _readAdminName(bytes, offset);
+      if (givenNameRead == null) return null;
+      offset = givenNameRead.$2;
+      admins.add((
+        accountBytes: accountBytes,
+        adminAccountHex: accountHex,
+        familyName: familyNameRead.$1,
+        givenName: givenNameRead.$1,
+      ));
     }
-    return (count, labels.join('、'), offset);
+    return (List<_DecodedAdminPerson>.unmodifiable(admins), offset);
+  }
+
+  /// 管理员姓、名各自必须是 1..=128 字节的严格 UTF-8。
+  static (String, int)? _readAdminName(Uint8List bytes, int offset) {
+    if (offset >= bytes.length) return null;
+    final (length, lengthSize) = _decodeCompactU32(bytes, offset);
+    if (lengthSize == 0 || length < 1 || length > 128) return null;
+    final start = offset + lengthSize;
+    final end = start + length;
+    if (end > bytes.length) return null;
+    try {
+      return (utf8.decode(bytes.sublist(start, end)), end);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static String _adminMachineValue(List<_DecodedAdminPerson> admins) {
+    return jsonEncode([
+      for (final admin in admins)
+        {
+          'admin_account': admin.adminAccountHex,
+          'family_name': admin.familyName,
+          'given_name': admin.givenName,
+        },
+    ]);
+  }
+
+  static String _adminReviewValue(List<_DecodedAdminPerson> admins) {
+    return admins
+        .map(
+          (admin) =>
+              '${admin.familyName}${admin.givenName}(${_bytesToSs58(admin.accountBytes)})',
+        )
+        .join('、');
+  }
+
+  /// 机构治理共用读取器；对外只返回人数、展示文本和新偏移。
+  static (int, String, int)? _readInstitutionAdmins(
+    Uint8List bytes,
+    int offset,
+  ) {
+    final read = _readAdminPersons(
+      bytes,
+      offset,
+      minCount: 0,
+      maxCount: 1989,
+    );
+    if (read == null) return null;
+    return (read.$1.length, _adminReviewValue(read.$1), read.$2);
   }
 
   static (String, String, int)? _readInstitutionGovernanceAction(

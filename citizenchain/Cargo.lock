@@ -4586,6 +4586,8 @@ dependencies = [
  "frame-system",
  "parity-scale-codec",
  "primitives",
+ "private-admins",
+ "private-manage",
  "public-admins",
  "public-manage",
  "scale-info",

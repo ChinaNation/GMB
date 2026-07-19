@@ -512,6 +512,8 @@ pub mod pallet {
         DuplicateGovernanceAssignmentChange,
         /// 已停用岗位仍有有效任职。
         InactiveRoleHasAssignments,
+        /// 受保护创世机构固定岗位名称、状态或席位数发生变化。
+        FixedRoleSeatsMismatch,
         /// 机构治理提案载荷为空或不能解码。
         InvalidInstitutionGovernanceAction,
     }
@@ -882,10 +884,21 @@ pub mod pallet {
         }
 
         fn ensure_governance_action_valid(
+            institution_code: InstitutionCode,
+            cid_number: &[u8],
             action: &InstitutionGovernanceActionOf<T>,
         ) -> DispatchResult {
+            let protected_company =
+                primitives::cid::china::citizenchain::is_citizenchain_technology_identity(
+                    institution_code,
+                    cid_number,
+                );
             match action {
                 InstitutionGovernanceAction::ReplaceAdmins { admins } => {
+                    ensure!(
+                        !protected_company,
+                        Error::<T>::InvalidInstitutionGovernanceAction
+                    );
                     let bounded: InstitutionAdminsInputOf<T> = admins
                         .clone()
                         .try_into()
@@ -976,7 +989,11 @@ pub mod pallet {
                 ),
                 Error::<T>::RegistryAuthorityDenied
             );
-            Self::ensure_governance_action_valid(&action)?;
+            Self::ensure_governance_action_valid(
+                info.institution_code,
+                cid_number.as_slice(),
+                &action,
+            )?;
             let action_payload = action.encode();
             let nonce_hash = <T as frame_system::Config>::Hashing::hash(register_nonce.as_slice());
             ensure!(
@@ -1136,19 +1153,32 @@ pub mod pallet {
                         .try_into()
                         .map_err(|_| Error::<T>::TooManyInstitutionAdmins)?;
                     let threshold = bounded.len() as u32 / 2 + 1;
-                    Self::set_institution_admins(
-                        &cid_number,
-                        proposal.institution_code,
-                        &bounded,
-                        threshold,
-                    )?;
-                    Self::apply_institution_governance_result(InstitutionGovernanceResult {
-                        institution_code: proposal.institution_code,
-                        cid_number: proposal.cid_number,
-                        role_changes,
-                        assignment_changes,
-                        legal_representative_change,
-                        result_source_ref,
+                    frame_support::storage::with_transaction(|| {
+                        if let Err(error) = Self::set_institution_admins(
+                            &cid_number,
+                            proposal.institution_code,
+                            &bounded,
+                            threshold,
+                        ) {
+                            return frame_support::storage::TransactionOutcome::Rollback(Err(
+                                error,
+                            ));
+                        }
+                        match Self::apply_institution_governance_result(
+                            InstitutionGovernanceResult {
+                                institution_code: proposal.institution_code,
+                                cid_number: proposal.cid_number,
+                                role_changes,
+                                assignment_changes,
+                                legal_representative_change,
+                                result_source_ref,
+                            },
+                        ) {
+                            Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
+                            Err(error) => {
+                                frame_support::storage::TransactionOutcome::Rollback(Err(error))
+                            }
+                        }
                     })
                 }
             }

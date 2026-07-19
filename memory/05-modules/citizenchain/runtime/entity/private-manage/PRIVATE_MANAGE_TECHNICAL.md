@@ -17,6 +17,8 @@
 - 本机构治理只能由 `actor_cid_number == cid_number` 的当前管理员发起；管理员集合变更走内部投票引擎的管理员变更互斥通道，岗位/任职/法定代表人治理走内部投票普通通道。
 - 注册局直接替换目标机构 `admins` 只允许走 `register_institution_admins`，外层 `origin` 仍必须是注册局机构 `actor_cid_number` 的管理员。
 - 法定代表人只读取 `InstitutionInfo` 三字段，不在 admins 中保存副本。
+- 中国公民链技术有限公司 `GZ018-SFGQ1-201206100-2026` 是受保护私权创世机构：`LR`、`GENESIS_PRODUCT_MANAGER`、`GENESIS_PROGRAMMER` 三岗位名称和一席配置固定，三岗位任职账户并集必须精确等于当前三名 admins。
+- 技术公司依法换人时必须提交同一治理动作，同时替换 admins 和对应岗位任职；执行使用显式 storage transaction 保证全成或全退。法定代表人账户变化还必须与 `InstitutionInfo.legal_representative_account` 同步，禁止单独替换管理员集合造成治理骨架分叉。
 
 ## 链上入口
 

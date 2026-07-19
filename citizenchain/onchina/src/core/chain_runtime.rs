@@ -1207,7 +1207,7 @@ struct RawInstitutionAccountInfo {
     _created_at: u32,
 }
 
-/// 读链上 `PublicManage::Institutions[cid]`;None = 未登记。
+/// 按唯一 CID 读取链上机构；依次查询公权、私权两个实体命名空间，禁止本地猜测归属。
 pub(crate) async fn institution_lookup(
     cid_number: &str,
 ) -> Result<Option<OnChainInstitution>, String> {
@@ -1220,30 +1220,33 @@ pub(crate) async fn institution_lookup(
         .at_latest()
         .await
         .map_err(|e| format!("get latest chain storage failed: {e}"))?;
-    let query = dynamic::storage(
-        "PublicManage",
-        "Institutions",
-        vec![dynamic::Value::from_bytes(cid_number.as_bytes())],
-    );
-    let Some(value) = storage
-        .fetch(&query)
-        .await
-        .map_err(|e| format!("fetch institution failed: {e}"))?
-    else {
-        return Ok(None);
-    };
-    let mut raw = value.encoded();
-    let info = RawInstitutionInfo::decode(&mut raw)
-        .map_err(|e| format!("decode institution info failed: {e}"))?;
-    Ok(Some(OnChainInstitution {
-        cid_full_name: info.cid_full_name,
-        cid_short_name: info.cid_short_name,
-        town_code: info.town_code,
-        legal_representative_name: info.legal_representative_name,
-        legal_representative_cid_number: info.legal_representative_cid_number,
-        legal_representative_account: info.legal_representative_account,
-        institution_code: info.institution_code,
-    }))
+    for pallet in ["PublicManage", "PrivateManage"] {
+        let query = dynamic::storage(
+            pallet,
+            "Institutions",
+            vec![dynamic::Value::from_bytes(cid_number.as_bytes())],
+        );
+        let Some(value) = storage
+            .fetch(&query)
+            .await
+            .map_err(|e| format!("fetch {pallet} institution failed: {e}"))?
+        else {
+            continue;
+        };
+        let mut raw = value.encoded();
+        let info = RawInstitutionInfo::decode(&mut raw)
+            .map_err(|e| format!("decode {pallet} institution info failed: {e}"))?;
+        return Ok(Some(OnChainInstitution {
+            cid_full_name: info.cid_full_name,
+            cid_short_name: info.cid_short_name,
+            town_code: info.town_code,
+            legal_representative_name: info.legal_representative_name,
+            legal_representative_cid_number: info.legal_representative_cid_number,
+            legal_representative_account: info.legal_representative_account,
+            institution_code: info.institution_code,
+        }));
+    }
+    Ok(None)
 }
 
 /// 全量遍历链上 `PublicManage::Institutions`(部署验收对账用),

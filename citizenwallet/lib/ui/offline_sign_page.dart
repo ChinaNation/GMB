@@ -167,7 +167,9 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
 
   Future<void> _signRequest() async {
     final request = _request;
-    if (request == null) return;
+    // 同一个已扫描请求只允许进入一次密钥签名：签名进行中或
+    // 已生成响应二维码时直接返回，不叠加任何确认签名。
+    if (request == null || _signing || _response != null) return;
     if (_remainingSeconds <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('签名请求已过期，请重新扫描')),

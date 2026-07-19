@@ -148,6 +148,7 @@
   signing_category: chain_tx
   required_fields:
     - account_name
+    - admins
     - admins_len
     - regular_threshold
     - create_threshold

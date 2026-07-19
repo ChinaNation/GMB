@@ -3,7 +3,7 @@
 
 use hex_literal::hex;
 
-pub const CHINA_RESERVED_MAIN_ACCOUNTS: &[[u8; 32]; 637] = &[
+pub const CHINA_RESERVED_MAIN_ACCOUNTS: &[[u8; 32]; 639] = &[
     hex!("0003751d234a7a8afd21b2f5ec07f7bfc8232b20e38a7cd3f7b2c261bf164a7f"),
     hex!("0016695ce634d377fc5348f6e31bac12f89c275112bbf0683783a026e7d6e1bb"),
     hex!("002f6b2fe2fd730dad5d9cb14b986cafa5c89c2573fd45a3db50ee3c2c519093"),
@@ -189,6 +189,7 @@ pub const CHINA_RESERVED_MAIN_ACCOUNTS: &[[u8; 32]; 637] = &[
     hex!("4ad042132b11edfbc574767e0bd95cc0cef09835999419c9a08dc88703a91185"),
     hex!("4b05f4fd4e07fe55084d26a64ca7fa787681e5130dd02344851d5f1ea93e95e0"),
     hex!("4b32b2e56a52d354a8b0fbf706fd3ae71ab9c5be06b046ccb603c458b22fb276"),
+    hex!("4bc5b8dd3770b1230c79fb8e048f27ae4f4ccf6d6890de0399123a617ccf305f"),
     hex!("4c88fa75a9de7b53b6680ff452a8d3d6bc00c8b0cd3d54e2708b0560cb0fccc2"),
     hex!("4cd0feb630979395cbfb9f70c51dd1e58d772a326b7d5d54056b35eee026c754"),
     hex!("4e31b05d0bbe175f63629a153ac347c5d070cdc64807852077ec92ef683de059"),
@@ -292,6 +293,7 @@ pub const CHINA_RESERVED_MAIN_ACCOUNTS: &[[u8; 32]; 637] = &[
     hex!("79658c848bcf8d02a6be75cf26cb1bdb543f6d6d2715e04a111bb67e000b9858"),
     hex!("7967979e230219cc5f8cec485133cd83e101ed9ca0c7339eddbbf6e44041468d"),
     hex!("798a2d662e9e1a5511b5b3c21bcc176b1dbb7bdfcf150608959c8bc11473e6cc"),
+    hex!("7a20b8b7b1147abfdb24615222e3c9d77f1ff9a85d2a509fcf51dc89a64d1712"),
     hex!("7c0c099ee4df10c5bd3f618ddf132b6d15390fa27d2c1369f70aeb6b5f3907e5"),
     hex!("7c3a4bbff9ea5923b137e6f404c30794347869264e4d150c563083ca13c2a26b"),
     hex!("7c58afe79f958169c651a92dc76c87ddde6e3b68b49a08ee4649627683a0994b"),

@@ -428,7 +428,7 @@ export async function rotateShengSigner(auth, province): Promise<ShengSignerRow>
 pub(crate) struct AdminUser {
     pub(crate) id: u64,
     pub(crate) admin_pubkey: String,
-    pub(crate) admin_name: String,
+    pub(crate) legacy_combined_name: String, // 当时的旧合并姓名示意，现已废弃
     pub(crate) role: AdminRole,
     pub(crate) status: AdminStatus,
     pub(crate) built_in: bool,

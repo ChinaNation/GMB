@@ -1,6 +1,6 @@
 # QR_V1 Action Registry
 
-- 更新日期:2026-07-18
+- 更新日期:2026-07-19
 - 状态:人类可读登记表;代码真源为 `citizenchain/crates/qr-protocol/registry/*`
 - 范围:`k=1` 签名请求的 `b.a` 数字动作码
 - 依赖:
@@ -71,7 +71,7 @@ a = (pallet_index << 8) | call_index
 | a(hex) | pallet.call | decoder action | payload 展示字段 | 签发方 |
 |---|---|---|---|---|
 | `0x0400` | `OnchainTransaction.transfer_with_remark` | `transfer` | `to`, `amount_yuan`, `remark` | citizenchain node / CitizenApp |
-| `0x0700` | `PersonalManage.propose_create` | `propose_create_personal` | `account_name`, `admins_len`, `regular_threshold`, `create_threshold`, `amount_yuan` | CitizenApp |
+| `0x0700` | `PersonalManage.propose_create` | `propose_create_personal` | `account_name`, `admins(admin_account + family_name + given_name)`, `admins_len`, `regular_threshold`, `create_threshold`, `amount_yuan` | CitizenApp |
 | `0x0701` | `PersonalManage.propose_close` | `propose_close_personal` | `account`, `beneficiary` | CitizenApp |
 | `0x1d00` | `PersonalAdmins.propose_admin_set_change` | `propose_personal_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | CitizenApp |
 | `0x0800` | `ResolutionIssuance.propose_resolution_issuance` | `propose_resolution_issuance` | `reason`, `amount_yuan`, `allocation_count`, `eligible_total`, `province_name`, `signer_pubkey` | citizenchain node / CitizenApp |
@@ -84,17 +84,17 @@ a = (pallet_index << 8) | call_index
 | `0x0d00` | `ResolutionDestro.propose_destroy` | `propose_destroy` | `institution_code`, `amount_yuan` | CitizenApp |
 | `0x0f00` | `GrandpaKeyChange.propose_replace_grandpa_key` | `propose_replace_grandpa_key` | `institution`, `new_key` | citizenchain node |
 | `0x1e01` | `PublicManage.propose_close_public_institution` | `propose_close_public_institution` | `account`, `beneficiary` | CitizenApp |
-| `0x1e05` | `PublicManage.propose_create_public_institution` | `propose_create_public_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `town_code`, `admins(admin_name + admin_account)`, `actor_cid_number` | OnChina（注册局录入，最终链交易签名一次） |
+| `0x1e05` | `PublicManage.propose_create_public_institution` | `propose_create_public_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `town_code`, `admins(admin_account + family_name + given_name)`, `actor_cid_number` | OnChina（注册局录入，最终链交易签名一次） |
 | `0x1e06` | `PublicManage.update_institution_info` | `update_public_institution_info` | `cid_number`, `cid_full_name`, `cid_short_name`, `actor_cid_number`, `credential_signer_pubkey`, `scope_*` | OnChina（注册局登记管理） |
 | `0x1e07` | `PublicManage.add_institution_account` | `add_public_institution_account` | `cid_number`, `account_names`, `account_count`, `actor_cid_number`, `credential_signer_pubkey`, `scope_*` | OnChina（注册局登记管理） |
 | `0x1e08` | `PublicManage.propose_institution_governance` | `propose_public_institution_governance` | `cid_number`, `governance_action`, `governance_detail`, `actor_cid_number`, `fee_payer`, `credential_signer_pubkey`, `scope_*` | OnChina（本机构治理） |
-| `0x1e09` | `PublicManage.register_institution_admins` | `register_public_institution_admins` | `cid_number`, `admins(admin_name + admin_account)`, `register_nonce`, `signature`, `actor_cid_number`, `credential_signer_pubkey`, `scope_*` | OnChina（注册局直接登记管理员） |
+| `0x1e09` | `PublicManage.register_institution_admins` | `register_public_institution_admins` | `cid_number`, `admins(admin_account + family_name + given_name)`, `register_nonce`, `signature`, `actor_cid_number`, `credential_signer_pubkey`, `scope_*` | OnChina（注册局直接登记管理员） |
 | `0x1f01` | `PrivateManage.propose_close_private_institution` | `propose_close_private_institution` | `account`, `beneficiary` | CitizenApp |
-| `0x1f05` | `PrivateManage.propose_create_private_institution` | `propose_create_private_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `town_code`, `admins(admin_name + admin_account)`, `actor_cid_number` | OnChina（注册局录入，最终链交易签名一次） |
+| `0x1f05` | `PrivateManage.propose_create_private_institution` | `propose_create_private_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `town_code`, `admins(admin_account + family_name + given_name)`, `actor_cid_number` | OnChina（注册局录入，最终链交易签名一次） |
 | `0x1f06` | `PrivateManage.update_institution_info` | `update_private_institution_info` | `cid_number`, `cid_full_name`, `cid_short_name`, `actor_cid_number`, `credential_signer_pubkey`, `scope_*` | OnChina（注册局登记管理） |
 | `0x1f07` | `PrivateManage.add_institution_account` | `add_private_institution_account` | `cid_number`, `account_names`, `account_count`, `actor_cid_number`, `credential_signer_pubkey`, `scope_*` | OnChina（注册局登记管理） |
 | `0x1f08` | `PrivateManage.propose_institution_governance` | `propose_private_institution_governance` | `cid_number`, `governance_action`, `governance_detail`, `actor_cid_number`, `fee_payer`, `credential_signer_pubkey`, `scope_*` | OnChina（本机构治理） |
-| `0x1f09` | `PrivateManage.register_institution_admins` | `register_private_institution_admins` | `cid_number`, `admins(admin_name + admin_account)`, `register_nonce`, `signature`, `actor_cid_number`, `credential_signer_pubkey`, `scope_*` | OnChina（注册局直接登记管理员） |
+| `0x1f09` | `PrivateManage.register_institution_admins` | `register_private_institution_admins` | `cid_number`, `admins(admin_account + family_name + given_name)`, `register_nonce`, `signature`, `actor_cid_number`, `credential_signer_pubkey`, `scope_*` | OnChina（注册局直接登记管理员） |
 | `0x2100` | `AddressRegistry.set_catalog_version` | `set_address_catalog_version` | `registrar_account`, `catalog_version`, `catalog_hash` | onchina |
 | `0x2101` | `AddressRegistry.set_address_name` | `set_address_name` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code`, `address_name` | onchina |
 | `0x2102` | `AddressRegistry.remove_address_name` | `remove_address_name` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code` | onchina |

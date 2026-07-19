@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 状态：已完成，成果并入 `20260628-institution-admin-field-model-onchain.md`
-- 当前模型：固定机构岗位定义和法定席位归 entity；admins 独立保存 `admin_name + admin_account` 人员集合。固定治理骨架可约束任职集合与 admins 一致，但不得由岗位反向派生管理员。
+- 当前模型：固定机构岗位定义和法定席位归 entity；admins 独立保存 `admin_account + family_name + given_name` 人员集合。固定治理骨架可约束任职集合与 admins 一致，但不得由岗位反向派生管理员。
 
 ## 完成结果
 

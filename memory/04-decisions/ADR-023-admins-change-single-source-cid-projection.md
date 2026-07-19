@@ -10,7 +10,7 @@
 机构 CID + admins 中的管理员钱包账户
 ```
 
-- `public-admins`、`private-admins` 保存机构管理员人员集合，每项只含 `admin_name + admin_account`；姓名只展示，账户是唯一授权字段。
+- `public-admins`、`private-admins` 保存机构管理员人员集合，每项字段顺序固定为 `admin_account + family_name + given_name`；姓、名只展示，账户是唯一授权字段。
 - 机构信息、岗位定义和岗位任职唯一真源在对应 `entity` pallet。
 - entity 接收治理结果后只更新岗位/任职和法定代表人；任职目标必须是既有管理员，岗位不得生成、删除或覆盖 `admins`。
 - 个人多签完全独立，由 `personal-admins` 保存账户和管理员集合，并保留自己的 `propose_admin_set_change`。

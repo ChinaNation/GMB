@@ -158,6 +158,20 @@ impl<T: Config> Pallet<T> {
         );
         Ok(())
     }
+
+    /// 创世专用入口：来源必须为 `Genesis`，失败由创世构建直接中止。
+    pub fn store_genesis_roles_and_assignments(
+        cid_number: &CidNumberOf<T>,
+        roles: &InstitutionRolesOf<T>,
+        assignments: &InstitutionAdminAssignmentsOf<T>,
+    ) -> DispatchResult {
+        Self::store_roles_and_assignments(
+            cid_number,
+            roles,
+            assignments,
+            InstitutionAssignmentSource::Genesis,
+        )
+    }
 }
 
 impl<T: Config> InstitutionRoleQuery<T::AccountId> for Pallet<T> {

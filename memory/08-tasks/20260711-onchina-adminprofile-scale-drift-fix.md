@@ -5,7 +5,7 @@
 来源:命名审计任务([[project_naming_audit_2026_07_11]])阶段 G 跑 `cargo test --workspace` 时暴露的遗留生产 bug,独立于命名任务。
 
 链端权威 `AdminProfile`(admin-primitives/src/lib.rs:96-115,2026-06-28 runtime breaking [[project_institution_admin_field_model_2026_06_28]])自那日起为 **9 字段**:
-`admin_account[32] · admin_cid_number(BV) · admin_name(BV) · role_code(BV) · role_name(BV) · term_start(u32) · term_end(u32) · admin_source(enum1B) · admin_source_ref(BV)`
+当时布局为 `admin_account[32] · admin_cid_number(BV) · 旧合并姓名(BV) · role_code(BV) · role_name(BV) · term_start(u32) · term_end(u32) · admin_source(enum1B) · admin_source_ref(BV)`；该模型现已废弃，不是当前协议。
 —— `admin_role` 拆成 `role_code + role_name`,尾部新增 `admin_source_ref`。
 
 onchina 的手工 SCALE 编/解仍是 **7 字段旧布局**,冷签创建机构 call data 在链端解错位、执行失败/数据错乱。`cargo check` 抓不到(不引用链端字段名);唯一能抓的逐字节比对测试因引用已删 `admin_role: BoundedVec` 编译失败、从未跑到,故坏了 40 天没暴露。
