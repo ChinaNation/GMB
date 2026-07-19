@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:isar_community/isar.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 
 part 'app_isar.g.dart';
 
@@ -128,7 +129,7 @@ class MultisigLocalDetailSnapshot {
   });
 
   final String status;
-  final List<String> admins;
+  final List<AdminPerson> admins;
   final int? threshold;
   final double? balanceYuan;
   final int? lastChainRefreshAtMillis;
@@ -137,7 +138,15 @@ class MultisigLocalDetailSnapshot {
 
   Map<String, dynamic> toJson() => {
         'status': status,
-        'admins': admins,
+        'admins': admins
+            .map(
+              (admin) => {
+                'admin_account': admin.admin_account,
+                'family_name': admin.family_name,
+                'given_name': admin.given_name,
+              },
+            )
+            .toList(growable: false),
         'threshold': threshold,
         'balance_yuan': balanceYuan,
         'last_chain_refresh_at_millis': lastChainRefreshAtMillis,
@@ -151,12 +160,31 @@ class MultisigLocalDetailSnapshot {
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) return null;
       final adminRaw = decoded['admins'];
-      final admins = adminRaw is List
-          ? adminRaw
-              .map((item) => item.toString().toLowerCase())
-              .where((item) => item.isNotEmpty)
-              .toList(growable: false)
-          : const <String>[];
+      if (adminRaw is! List) return null;
+      final admins = <AdminPerson>[];
+      final accounts = <String>{};
+      for (final item in adminRaw) {
+        if (item is! Map) return null;
+        final account = item['admin_account'];
+        final familyName = item['family_name'];
+        final givenName = item['given_name'];
+        if (account is! String ||
+            familyName is! String ||
+            givenName is! String ||
+            account.isEmpty ||
+            familyName.isEmpty ||
+            givenName.isEmpty ||
+            !accounts.add(account.toLowerCase())) {
+          return null;
+        }
+        admins.add(
+          AdminPerson(
+            admin_account: account.toLowerCase(),
+            family_name: familyName,
+            given_name: givenName,
+          ),
+        );
+      }
       final status = decoded['status']?.toString();
       if (status == null || status.isEmpty) return null;
       return MultisigLocalDetailSnapshot(

@@ -1,3 +1,5 @@
+import 'admin_account.dart';
+
 class AdminsChangeDraft {
   const AdminsChangeDraft({
     required this.accountHex,
@@ -10,6 +12,6 @@ class AdminsChangeDraft {
 
   /// 4 字节机构码字符串（"NRC"/"PRC"/"PRB"/"PMUL"/"CGOV" 等）。
   final String institutionCode;
-  final List<String> currentAdmins;
-  final List<String> admins;
+  final List<AdminPerson> currentAdmins;
+  final List<AdminPerson> admins;
 }

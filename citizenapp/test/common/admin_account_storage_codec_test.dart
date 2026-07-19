@@ -21,14 +21,20 @@ void main() {
   }
 
   List<int> scaleBytes(String cid) {
-    final raw = cid.codeUnits;
+    final raw = utf8.encode(cid);
     return [raw.length << 2, ...raw];
   }
 
-  List<int> adminBytes(String name, List<int> account) {
-    final raw = utf8.encode(name);
-    return [raw.length << 2, ...raw, ...account];
-  }
+  List<int> adminBytes(
+    String familyName,
+    String givenName,
+    List<int> account,
+  ) =>
+      [
+        ...account,
+        ...scaleBytes(familyName),
+        ...scaleBytes(givenName),
+      ];
 
   group('tryDecode', () {
     test('成功解码 PublicInstitution(0 admins)', () {
@@ -42,7 +48,7 @@ void main() {
       )!;
       expect(r.institutionCode, 'NRC');
       expect(r.kind, AdminAccountStorageCodec.kindPublicInstitution);
-      expect(r.adminsHex, isEmpty);
+      expect(r.admins, isEmpty);
     });
 
     test('成功解码 Personal 含 3 个 admin(空前导 cid=0x00)', () {
@@ -54,9 +60,9 @@ void main() {
         ...codeBytes('PMUL'),
         AdminAccountStorageCodec.kindPersonal,
         0x0C, // Compact(3): (3<<2) | 0 = 12
-        ...a1,
-        ...a2,
-        ...a3,
+        ...adminBytes('张', '三', a1),
+        ...adminBytes('李', '四', a2),
+        ...adminBytes('管理', '员', a3),
         ...List.filled(32, 0x44),
         ...List.filled(8, 0),
         1,
@@ -67,7 +73,10 @@ void main() {
       )!;
       expect(r.institutionCode, 'PMUL');
       expect(r.kind, AdminAccountStorageCodec.kindPersonal);
-      expect(r.adminsHex, ['11' * 32, '22' * 32, '33' * 32]);
+      expect(
+        r.admins.map((admin) => admin.admin_account),
+        ['11' * 32, '22' * 32, '33' * 32],
+      );
     });
 
     test('成功解码 PublicInstitution 含 2 个 admin', () {
@@ -76,8 +85,8 @@ void main() {
       final bytes = Uint8List.fromList([
         ...codeBytes('CGOV'),
         0x08, // Compact(2)
-        ...adminBytes('张三', a1),
-        ...adminBytes('李四', a2),
+        ...adminBytes('张', '三', a1),
+        ...adminBytes('李', '四', a2),
       ]);
       final r = AdminAccountStorageCodec.tryDecode(
         bytes,
@@ -85,7 +94,10 @@ void main() {
       )!;
       expect(r.institutionCode, 'CGOV');
       expect(r.kind, AdminAccountStorageCodec.kindPublicInstitution);
-      expect(r.adminsHex, ['44' * 32, '55' * 32]);
+      expect(
+        r.admins.map((admin) => admin.admin_account),
+        ['44' * 32, '55' * 32],
+      );
     });
 
     test('字节不足返回 null,不抛异常', () {
@@ -109,7 +121,7 @@ void main() {
       final bytes = Uint8List.fromList([
         ...codeBytes('NRC'),
         0x08, // 声明 2 个 admin 但只给 1 个完整管理员的字节。
-        ...adminBytes('管理员', List.filled(32, 0xCC)),
+        ...adminBytes('管理', '员', List.filled(32, 0xCC)),
       ]);
       expect(
         AdminAccountStorageCodec.tryDecode(
@@ -130,8 +142,10 @@ void main() {
         0x01,
         0x01,
       ];
-      for (final a in admins) {
-        bytes.addAll(a);
+      for (var i = 0; i < admins.length; i++) {
+        final account = List<int>.from(admins[i]);
+        account[0] = i;
+        bytes.addAll(adminBytes('管理', '员', account));
       }
       bytes.addAll(List.filled(32, 0xEE));
       bytes.addAll(List.filled(8, 0));
@@ -140,7 +154,7 @@ void main() {
         Uint8List.fromList(bytes),
         kind: AdminAccountStorageCodec.kindPersonal,
       )!;
-      expect(r.adminsHex.length, adminsLen);
+      expect(r.admins.length, adminsLen);
     });
   });
 

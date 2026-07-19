@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 
 /// PersonalAdmins 创建个人多签提案详情（从链上 ProposalData 解码）。
 ///
@@ -119,8 +120,8 @@ class AccountInfo {
   final int adminsLen;
   final int? threshold;
 
-  /// 管理员公钥列表（hex，不含 0x 前缀）。
-  final List<String> admins;
+  /// 完整管理员人员集合；授权只比较 `admin_account`。
+  final List<AdminPerson> admins;
 
   final MultisigStatus status;
 }

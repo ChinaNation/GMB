@@ -40,7 +40,7 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
   final _changeService = AdminsChangeService();
   final _thresholdController = TextEditingController();
   AdminAccountState? _subject;
-  List<String> _admins = const [];
+  List<AdminPerson> _admins = const [];
   Map<String, double> _balanceByAccount = const {};
   WalletProfile? _selectedWallet;
   bool _loading = true;
@@ -73,11 +73,13 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
       if (!mounted) return;
       setState(() {
         _subject = account;
-        _admins = account?.admins ?? const [];
+        _admins = account?.admins ?? const <AdminPerson>[];
         if (account != null) _syncThresholdInput(account, _admins.length);
         _loading = false;
       });
-      unawaited(_loadBalances(account?.admins ?? const []));
+      unawaited(
+        _loadBalances(account?.admins ?? const <AdminPerson>[]),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -146,7 +148,7 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
     );
   }
 
-  void _setNewAdmins(AdminAccountState account, List<String> value) {
+  void _setNewAdmins(AdminAccountState account, List<AdminPerson> value) {
     setState(() {
       _admins = value;
       _syncThresholdInput(account, value.length);
@@ -162,9 +164,9 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
         .toLowerCase();
   }
 
-  Future<void> _loadBalances(List<String> admins) async {
+  Future<void> _loadBalances(List<AdminPerson> admins) async {
     final accounts = {
-      for (final account in admins) _balanceKey(account),
+      for (final admin in admins) _balanceKey(admin.admin_account),
     }.where((account) => account.isNotEmpty).toList(growable: false);
     if (accounts.isEmpty) {
       if (mounted) setState(() => _balanceByAccount = const {});

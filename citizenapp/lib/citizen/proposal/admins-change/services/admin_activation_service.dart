@@ -105,7 +105,8 @@ class ActivationService {
     // 链上交叉校验
     try {
       final chainAdmins = await _adminService.fetchAdmins(identity);
-      final validPubkeys = chainAdmins.toSet();
+      final validPubkeys =
+          chainAdmins.map((admin) => admin.admin_account).toSet();
       final before = all.length;
       all.removeWhere(
         (a) => a.cidNumber == cidNumber && !validPubkeys.contains(a.pubkeyHex),
@@ -177,7 +178,7 @@ class ActivationService {
 
     // 验证是链上管理员
     final admins = await _adminService.fetchAdmins(identity);
-    if (!admins.contains(pk)) {
+    if (!admins.any((admin) => admin.admin_account == pk)) {
       throw Exception('该公钥不在此管理员账户的链上管理员列表中');
     }
 

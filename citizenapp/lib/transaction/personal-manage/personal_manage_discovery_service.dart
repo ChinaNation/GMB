@@ -95,8 +95,10 @@ class PersonalManageDiscoveryService {
         accountHex: personalAccountHex,
         name: meta.accountName,
         creatorAccountHex: meta.creatorAccountHex,
-        matchedAdmins:
-            acc.adminsHex.where(myPubkeys.contains).toList(growable: false),
+        matchedAdmins: acc.admins
+            .map((admin) => admin.admin_account)
+            .where(myPubkeys.contains)
+            .toList(growable: false),
       );
       if (added) newlyAdded++;
     }

@@ -17,6 +17,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 
 import 'personal_manage_service.dart';
 import 'personal_proposal_history_service.dart';
@@ -40,7 +41,7 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
   final _manageService = PersonalManageService();
 
   bool _submitting = false;
-  final List<String> _admins = [];
+  final List<AdminPerson> _admins = [];
   WalletProfile? _selectedWallet;
   List<WalletProfile> _wallets = [];
   String? _creatorPubkey; // 创建人公钥（始终占管理员列表第一位，不可移除）
@@ -79,11 +80,18 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
     if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
     // 移除旧创建人
     if (_creatorPubkey != null) {
-      _admins.remove(_creatorPubkey);
+      _admins.removeWhere((admin) => admin.admin_account == _creatorPubkey);
     }
     _creatorPubkey = pubkey;
-    _admins.remove(pubkey); // 防重复
-    _admins.insert(0, pubkey);
+    _admins.removeWhere((admin) => admin.admin_account == pubkey); // 防重复
+    _admins.insert(
+      0,
+      AdminPerson(
+        admin_account: pubkey,
+        family_name: '管理',
+        given_name: '员',
+      ),
+    );
   }
 
   // ──── 地址预览 ────
@@ -125,7 +133,7 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
         final address = (env.body as dynamic).address?.toString() ?? '';
         if (address.isEmpty) throw const FormatException('缺少 address 字段');
         final pubkey = Keyring().decodeAddress(address);
-        _addAdminPubkey(_toHex(pubkey));
+        await _promptAdminNamesAndAdd(_toHex(pubkey));
         return;
       }
     } catch (e) {
@@ -144,8 +152,22 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
     );
   }
 
-  void _addAdminPubkey(String hex) {
-    if (_admins.contains(hex)) {
+  Future<void> _promptAdminNamesAndAdd(String accountHex) async {
+    final names = await _editNamesDialog();
+    if (names == null || !mounted) return;
+    _addAdmin(
+      AdminPerson(
+        admin_account: accountHex,
+        family_name: names.$1,
+        given_name: names.$2,
+      ),
+    );
+  }
+
+  void _addAdmin(AdminPerson admin) {
+    if (_admins.any(
+      (item) => item.admin_account == admin.admin_account,
+    )) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('该管理员已在列表中')),
       );
@@ -158,17 +180,79 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
       return;
     }
     setState(() {
-      _admins.add(hex);
+      _admins.add(admin);
       _syncThresholdInput();
     });
   }
 
   void _removeAdmin(int index) {
     // 创建人不可移除
-    if (_admins[index] == _creatorPubkey) return;
+    if (_admins[index].admin_account == _creatorPubkey) return;
     setState(() {
       _admins.removeAt(index);
       _syncThresholdInput();
+    });
+  }
+
+  Future<(String, String)?> _editNamesDialog({AdminPerson? admin}) async {
+    final familyController =
+        TextEditingController(text: admin?.family_name ?? '管理');
+    final givenController =
+        TextEditingController(text: admin?.given_name ?? '员');
+    final result = await showDialog<(String, String)>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('管理员姓名'),
+        content: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: familyController,
+                decoration: const InputDecoration(labelText: '姓'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: givenController,
+                decoration: const InputDecoration(labelText: '名'),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final family = familyController.text.trim();
+              final given = givenController.text.trim();
+              Navigator.pop(
+                dialogContext,
+                (family.isEmpty ? '管理' : family, given.isEmpty ? '员' : given),
+              );
+            },
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    familyController.dispose();
+    givenController.dispose();
+    return result;
+  }
+
+  Future<void> _editAdminNames(int index) async {
+    final current = _admins[index];
+    final names = await _editNamesDialog(admin: current);
+    if (names == null || !mounted) return;
+    setState(() {
+      _admins[index] = current.copyWith(
+        family_name: names.$1,
+        given_name: names.$2,
+      );
     });
   }
 
@@ -279,8 +363,6 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
         return;
       }
 
-      final adminsBytes =
-          _admins.map((hex) => Uint8List.fromList(_hexDecode(hex))).toList();
       final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
 
       // 热钱包：先认证，后续用本地签名；冷钱包：走 QR 签名。
@@ -319,7 +401,7 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
 
       final result = await _manageService.submitProposeCreatePersonal(
         accountName: nameBytes,
-        admins: adminsBytes,
+        admins: _admins,
         regularThreshold: regularThreshold,
         amountFen: amountFen,
         fromAddress: wallet.address,
@@ -438,8 +520,9 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
           _buildSectionTitle('管理员列表（${_admins.length}/64）'),
           const SizedBox(height: 8),
           ..._admins.asMap().entries.map((entry) {
-            final ss58 = _hexToSs58(entry.value);
-            final isCreator = entry.value == _creatorPubkey;
+            final admin = entry.value;
+            final ss58 = _hexToSs58(admin.admin_account);
+            final isCreator = admin.admin_account == _creatorPubkey;
             return ListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
@@ -475,13 +558,23 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
                   ],
                 ],
               ),
-              trailing: isCreator
-                  ? null
-                  : IconButton(
+              subtitle: Text('${admin.family_name}${admin.given_name}'),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: '编辑姓名',
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    onPressed: () => _editAdminNames(entry.key),
+                  ),
+                  if (!isCreator)
+                    IconButton(
                       icon: const Icon(Icons.close,
                           size: 18, color: AppTheme.danger),
                       onPressed: () => _removeAdmin(entry.key),
                     ),
+                ],
+              ),
             );
           }),
           OutlinedButton.icon(

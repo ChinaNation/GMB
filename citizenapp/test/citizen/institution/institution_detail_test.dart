@@ -11,6 +11,7 @@ import 'package:citizenapp/citizen/institution/institution_detail_page.dart';
 import 'package:citizenapp/citizen/institution/institution_repository.dart';
 import 'package:citizenapp/citizen/public/data/public_institution_dto.dart';
 import 'package:citizenapp/citizen/institution/institution_role_models.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 
@@ -30,22 +31,28 @@ class _FakeChainState implements InstitutionChainState {
       {for (final h in pubkeyHexes) h: 12.5};
 
   @override
-  Future<List<String>> admins(Institution institution) async => adminList;
-
-  @override
-  Future<List<InstitutionAdminAssignment>> assignments(
+  Future<List<InstitutionAdminView>> adminViews(
           Institution institution) async =>
       adminList
-          .map((account) => InstitutionAdminAssignment(
-                cidNumber: institution.cidNumber,
-                adminAccount: account,
-                roleCode: 'MEMBER',
-                roleName: '委员',
-                termStart: 0,
-                termEnd: 0,
-                source: InstitutionAssignmentSource.genesis,
-                sourceRef: '',
-                active: true,
+          .map((account) => InstitutionAdminView(
+                admin: AdminPerson(
+                  admin_account: account,
+                  family_name: '管理',
+                  given_name: '员',
+                ),
+                assignments: [
+                  InstitutionAdminAssignment(
+                    cidNumber: institution.cidNumber,
+                    admin_account: account,
+                    roleCode: 'MEMBER',
+                    roleName: '委员',
+                    termStart: 0,
+                    termEnd: 0,
+                    source: InstitutionAssignmentSource.genesis,
+                    sourceRef: '',
+                    active: true,
+                  ),
+                ],
               ))
           .toList();
 

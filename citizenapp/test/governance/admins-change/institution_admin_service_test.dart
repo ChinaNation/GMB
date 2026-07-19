@@ -7,6 +7,7 @@ import 'package:citizenapp/citizen/proposal/admins-change/services/admin_account
 import 'package:citizenapp/citizen/proposal/admins-change/services/admin_activation_service.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/services/institution_admin_service.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
+import 'package:citizenapp/citizen/institution/institution_role_models.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
@@ -26,10 +27,10 @@ class FakeChainRpc extends ChainRpc {
 class FakeAdminService extends InstitutionAdminService {
   FakeAdminService({required this.admins});
 
-  final List<String> admins;
+  final List<AdminPerson> admins;
 
   @override
-  Future<List<String>> fetchAdmins(AdminAccountIdentity identity) async =>
+  Future<List<AdminPerson>> fetchAdmins(AdminAccountIdentity identity) async =>
       admins;
 }
 
@@ -52,30 +53,41 @@ void main() {
   Uint8List institutionAdminBytes({
     required String institutionCode,
     required List<int> admin,
-    String adminName = '管理员',
+    String familyName = '管理',
+    String givenName = '员',
   }) {
-    final nameBytes = utf8.encode(adminName);
+    final familyBytes = utf8.encode(familyName);
+    final givenBytes = utf8.encode(givenName);
     return Uint8List.fromList([
       ...codeBytes(institutionCode),
       4,
-      nameBytes.length << 2,
-      ...nameBytes,
       ...admin,
+      familyBytes.length << 2,
+      ...familyBytes,
+      givenBytes.length << 2,
+      ...givenBytes,
     ]);
   }
 
-  Uint8List personalAdminBytes({required List<int> admin}) =>
-      Uint8List.fromList([
-        0,
-        ...codeBytes('PMUL'),
-        2,
-        4,
-        ...admin,
-        ...List<int>.filled(32, 0xcc),
-        ...u32Le(1),
-        ...u32Le(2),
-        1,
-      ]);
+  Uint8List personalAdminBytes({required List<int> admin}) {
+    final familyBytes = utf8.encode('管理');
+    final givenBytes = utf8.encode('员');
+    return Uint8List.fromList([
+      0,
+      ...codeBytes('PMUL'),
+      2,
+      4,
+      ...admin,
+      familyBytes.length << 2,
+      ...familyBytes,
+      givenBytes.length << 2,
+      ...givenBytes,
+      ...List<int>.filled(32, 0xcc),
+      ...u32Le(1),
+      ...u32Le(2),
+      1,
+    ]);
+  }
 
   String thresholdKey({
     required String storageName,
@@ -115,7 +127,10 @@ void main() {
       accountLabel: '机构账户',
       kind: 1,
     );
-    expect(await service.fetchAdmins(identity), ['aa' * 32]);
+    expect(
+      (await service.fetchAdmins(identity)).map((admin) => admin.admin_account),
+      ['aa' * 32],
+    );
     expect(await service.fetchThreshold(identity), 2);
     expect(rpc.requestedKeys, [accountKey, thresholdStorageKey]);
   });
@@ -140,7 +155,10 @@ void main() {
       personalAccountHex: accountHex,
       accountLabel: '个人多签',
     );
-    expect(await service.fetchAdmins(identity), ['bb' * 32]);
+    expect(
+      (await service.fetchAdmins(identity)).map((admin) => admin.admin_account),
+      ['bb' * 32],
+    );
     expect(await service.fetchThreshold(identity), 2);
     expect(rpc.requestedKeys, [accountKey, thresholdStorageKey]);
   });
@@ -303,7 +321,15 @@ void main() {
       ),
     });
     final service = ActivationService(
-      adminService: FakeAdminService(admins: ['aa' * 32]),
+      adminService: FakeAdminService(
+        admins: [
+          AdminPerson(
+            admin_account: 'aa' * 32,
+            family_name: '管理',
+            given_name: '员',
+          ),
+        ],
+      ),
     );
 
     final records = await service.getActivatedAdmins(identity);
@@ -313,5 +339,39 @@ void main() {
       'aa' * 32,
       'cc' * 32,
     });
+  });
+
+  test('管理员人员左连接岗位且无岗位人员不丢失', () {
+    final first = AdminPerson(
+      admin_account: 'aa' * 32,
+      family_name: '张',
+      given_name: '三',
+    );
+    final second = AdminPerson(
+      admin_account: 'bb' * 32,
+      family_name: '李',
+      given_name: '四',
+    );
+    final assignment = InstitutionAdminAssignment(
+      cidNumber: 'CID-1',
+      admin_account: first.admin_account,
+      roleCode: 'DIRECTOR',
+      roleName: '负责人',
+      termStart: 0,
+      termEnd: 0,
+      source: InstitutionAssignmentSource.genesis,
+      sourceRef: '',
+      active: true,
+    );
+
+    final views = InstitutionAdminService.mergeAdminViews(
+      [first, second],
+      [assignment],
+    );
+
+    expect(views, hasLength(2));
+    expect(views.first.assignments, [assignment]);
+    expect(views.last.admin.admin_account, second.admin_account);
+    expect(views.last.assignments, isEmpty);
   });
 }

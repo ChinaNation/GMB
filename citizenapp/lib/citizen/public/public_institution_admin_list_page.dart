@@ -17,7 +17,7 @@ class PublicInstitutionAdminListPage extends StatefulWidget {
     required this.admins,
   });
 
-  final List<InstitutionAdminAssignment> admins;
+  final List<InstitutionAdminView> admins;
 
   @override
   State<PublicInstitutionAdminListPage> createState() =>
@@ -52,8 +52,7 @@ class _PublicInstitutionAdminListPageState
 
   Future<void> _loadBalances() async {
     final accounts = {
-      for (final assignment in widget.admins)
-        _balanceKey(assignment.adminAccount),
+      for (final view in widget.admins) _balanceKey(view.admin.admin_account),
     }.where((account) => account.isNotEmpty).toList(growable: false);
     if (accounts.isEmpty) {
       if (mounted) setState(() => _balanceByAccount = const {});
@@ -89,12 +88,12 @@ class _PublicInstitutionAdminListPageState
               itemCount: widget.admins.length,
               separatorBuilder: (_, __) => const SizedBox(height: 10),
               itemBuilder: (context, i) {
-                final assignment = widget.admins[i];
+                final adminView = widget.admins[i];
                 return InstitutionAssignmentCard(
-                  assignment: assignment,
+                  adminView: adminView,
                   index: i + 1,
-                  balanceYuan:
-                      _balanceByAccount[_balanceKey(assignment.adminAccount)],
+                  balanceYuan: _balanceByAccount[
+                      _balanceKey(adminView.admin.admin_account)],
                 );
               },
             ),
@@ -114,7 +113,7 @@ class _PublicInstitutionAdminListPageState
                 style: TextStyle(fontSize: 14, color: AppTheme.textSecondary)),
             SizedBox(height: 6),
             Text(
-              '该机构链上暂无有效岗位任职',
+              '该机构链上暂无管理员',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12.5, color: AppTheme.textTertiary),
             ),

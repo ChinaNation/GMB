@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
 
@@ -12,16 +13,37 @@ class AdminSetDiffCard extends StatelessWidget {
     this.balances = const {},
   });
 
-  final List<String> currentAdmins;
-  final List<String> admins;
+  final List<AdminPerson> currentAdmins;
+  final List<AdminPerson> admins;
   final Map<String, double> balances;
 
   @override
   Widget build(BuildContext context) {
-    final current = currentAdmins.map(AdminAccountIdCodec.normalizeHex).toSet();
-    final next = admins.map(AdminAccountIdCodec.normalizeHex).toSet();
-    final added = next.where((item) => !current.contains(item)).toList();
-    final removed = current.where((item) => !next.contains(item)).toList();
+    final current = {
+      for (final admin in currentAdmins)
+        AdminAccountIdCodec.normalizeHex(admin.admin_account): admin,
+    };
+    final next = {
+      for (final admin in admins)
+        AdminAccountIdCodec.normalizeHex(admin.admin_account): admin,
+    };
+    final added = next.entries
+        .where((entry) => !current.containsKey(entry.key))
+        .map((entry) => entry.value)
+        .toList();
+    final removed = current.entries
+        .where((entry) => !next.containsKey(entry.key))
+        .map((entry) => entry.value)
+        .toList();
+    final renamed = next.entries
+        .where((entry) {
+          final old = current[entry.key];
+          return old != null &&
+              (old.family_name != entry.value.family_name ||
+                  old.given_name != entry.value.given_name);
+        })
+        .map((entry) => entry.value)
+        .toList();
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
@@ -36,25 +58,29 @@ class AdminSetDiffCard extends StatelessWidget {
             _buildAccountList('新增', added),
             const SizedBox(height: 8),
             _buildAccountList('移除', removed),
+            const SizedBox(height: 8),
+            _buildAccountList('姓名调整', renamed),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildAccountList(String title, List<String> accounts) {
-    if (accounts.isEmpty) return Text('$title：无');
+  Widget _buildAccountList(String title, List<AdminPerson> admins) {
+    if (admins.isEmpty) return Text('$title：无');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('$title：'),
         const SizedBox(height: 6),
-        for (final account in accounts) ...[
+        for (final admin in admins) ...[
           ListTile(
             dense: true,
-            title: Text(ss58FromHex(account)),
+            title: Text('${admin.family_name}${admin.given_name}'),
             subtitle: Text(
-                '余额：${AmountFormat.formatThousands(balances[AdminAccountIdCodec.normalizeHex(account)])} 元'),
+              '${ss58FromHex(admin.admin_account)}\n'
+              '余额：${AmountFormat.formatThousands(balances[AdminAccountIdCodec.normalizeHex(admin.admin_account)])} 元',
+            ),
           ),
           const SizedBox(height: 6),
         ],

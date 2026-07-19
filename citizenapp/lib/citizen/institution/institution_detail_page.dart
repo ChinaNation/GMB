@@ -92,8 +92,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   double? _mainBalanceYuan;
   bool _mainBalanceLoading = true;
 
-  List<String> _admins = const [];
-  List<InstitutionAdminAssignment> _adminAssignments = const [];
+  List<InstitutionAdminView> _adminViews = const [];
 
   // 治理路径专用(管理员角色 / 激活 / 富提案列表)。
   List<WalletProfile> _adminWallets = const [];
@@ -218,18 +217,19 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     }
     try {
       final results = await Future.wait<Object>([
-        _adminService.fetchAdmins(identity),
+        _adminService.fetchAdminViews(identity, _inst!.cidNumber),
         _contextResolver.resolve(knownInstitution: govInfo),
         _activationService
             .getActivatedAdmins(identity)
             .catchError((_) => <ActivatedAdmin>[]),
-        _adminService.fetchAssignments(identity, _inst!.cidNumber),
       ]);
-      final admins = results[0] as List<String>;
+      final adminViews = results[0] as List<InstitutionAdminView>;
+      final adminAccounts = adminViews
+          .map((view) => view.admin.admin_account)
+          .toList(growable: false);
       final ctx = results[1] as ProposalContext;
-      final adminAssignments = results[3] as List<InstitutionAdminAssignment>;
       final activated = results[2] as List<ActivatedAdmin>;
-      final coldPubkeys = await _loadImportedColdPubkeys(admins);
+      final coldPubkeys = await _loadImportedColdPubkeys(adminAccounts);
       if (ctx.isAdmin) {
         ProposalContextResolver.markInstitutionAdmin(
           _inst?.cidNumber ?? govInfo.cidNumber,
@@ -237,11 +237,10 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       }
       if (!mounted) return;
       final shouldUpdateAdmins =
-          _isGovernance || admins.isNotEmpty || _admins.isEmpty;
+          _isGovernance || adminViews.isNotEmpty || _adminViews.isEmpty;
       setState(() {
         if (shouldUpdateAdmins) {
-          _admins = admins;
-          _adminAssignments = adminAssignments;
+          _adminViews = adminViews;
         }
         _govInfo = ctx.institution ?? govInfo;
         _adminWallets = ctx.adminWallets;
@@ -302,14 +301,10 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   Future<void> _loadPublicDynamics(Institution inst) async {
     try {
-      final assignments = await _chainState.assignments(inst);
+      final adminViews = await _chainState.adminViews(inst);
       if (mounted) {
         setState(() {
-          _adminAssignments = assignments;
-          _admins = assignments
-              .map((item) => item.adminAccount)
-              .toSet()
-              .toList(growable: false);
+          _adminViews = adminViews;
         });
       }
     } on Exception {
@@ -551,7 +546,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     return _entryCard(
       icon: Icons.people_outline,
       title: '管理员',
-      subtitle: '共 ${_admins.length} 位管理员',
+      subtitle: '共 ${_adminViews.length} 位管理员',
       onTap: _accountIdentity != null
           ? _openGovernanceAdminList
           : _openPublicAdminList,
@@ -567,7 +562,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         builder: (_) => AdminListPage(
           institution: govInfo,
           accountIdentity: identity,
-          admins: _adminAssignments,
+          admins: _adminViews,
           importedColdPubkeys: _importedColdPubkeys,
           activatedPubkeys: _activatedPubkeys,
           badgeColor: AppTheme.primary,
@@ -584,8 +579,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   void _openPublicAdminList() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            PublicInstitutionAdminListPage(admins: _adminAssignments),
+        builder: (_) => PublicInstitutionAdminListPage(admins: _adminViews),
       ),
     );
   }

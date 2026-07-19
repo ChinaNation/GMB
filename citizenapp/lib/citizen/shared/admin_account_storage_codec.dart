@@ -9,18 +9,19 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:citizenapp/citizen/institution/institution_role_storage_codec.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
 class AdminAccountStorageDecoded {
   const AdminAccountStorageDecoded({
     required this.institutionCode,
     required this.kind,
-    required this.adminsHex,
+    required this.admins,
   });
 
   final String institutionCode;
   final int kind;
-  final List<String> adminsHex;
+  final List<AdminPerson> admins;
 }
 
 class AdminAccountStorageCodec {
@@ -42,7 +43,7 @@ class AdminAccountStorageCodec {
         return AdminAccountStorageDecoded(
           institutionCode: decoded.institutionCode,
           kind: kind,
-          adminsHex: decoded.admins.map((admin) => admin.adminAccount).toList(),
+          admins: decoded.admins,
         );
       }
 
@@ -57,20 +58,17 @@ class AdminAccountStorageCodec {
       final storedKind = bytes[offset++];
       if (storedKind != kindPersonal) return null;
 
-      final (count, lenBytesRead) = _decodeCompactU32(bytes, offset);
-      offset += lenBytesRead;
-      if (offset + count * 32 > bytes.length) return null;
-      final admins = <String>[];
-      for (var i = 0; i < count; i++) {
-        admins.add(_hexEncode(bytes.sublist(offset, offset + 32)));
-        offset += 32;
-      }
+      final decodedAdmins =
+          InstitutionRoleStorageCodec.decodeAdminVector(bytes, offset);
+      if (decodedAdmins == null) return null;
+      final admins = decodedAdmins.$1;
+      offset = decodedAdmins.$2;
       // 个人多签 value 后续仍有 creator/区块号/status；扫描只消费 admins。
       if (offset + 32 + 4 + 4 + 1 != bytes.length) return null;
       return AdminAccountStorageDecoded(
         institutionCode: institutionCode,
         kind: kindPersonal,
-        adminsHex: admins,
+        admins: admins,
       );
     } catch (_) {
       return null;

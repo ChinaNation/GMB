@@ -17,22 +17,61 @@ void main() {
     return [encoded & 0xff, (encoded >> 8) & 0xff];
   }
 
-  test('机构管理员按姓名与授权钱包解码', () {
+  test('机构管理员按账户、姓、名严格解码', () {
     final value = Uint8List.fromList([
       ...utf8.encode('CGOV'),
       8,
-      ...bytes('张三'),
       ...List.filled(32, 1),
-      ...bytes('管理员'),
+      ...bytes('张'),
+      ...bytes('三'),
       ...List.filled(32, 2),
+      ...bytes('管理'),
+      ...bytes('员'),
     ]);
     final decoded = InstitutionRoleStorageCodec.decodeAdmins(value)!;
     expect(decoded.institutionCode, 'CGOV');
     expect(decoded.admins, hasLength(2));
-    expect(decoded.admins.map((admin) => admin.adminName), ['张三', '管理员']);
+    expect(decoded.admins.map((admin) => admin.family_name), ['张', '管理']);
+    expect(decoded.admins.map((admin) => admin.given_name), ['三', '员']);
     expect(
-      decoded.admins.map((admin) => admin.adminAccount),
+      decoded.admins.map((admin) => admin.admin_account),
       ['01' * 32, '02' * 32],
+    );
+  });
+
+  test('机构管理员拒绝纯账户、合并姓名和重复账户布局', () {
+    final account = List.filled(32, 7);
+    expect(
+      InstitutionRoleStorageCodec.decodeAdmins(
+        Uint8List.fromList([...utf8.encode('CGOV'), 4, ...account]),
+      ),
+      isNull,
+    );
+    expect(
+      InstitutionRoleStorageCodec.decodeAdmins(
+        Uint8List.fromList([
+          ...utf8.encode('CGOV'),
+          4,
+          ...bytes('管理员'),
+          ...account,
+        ]),
+      ),
+      isNull,
+    );
+    expect(
+      InstitutionRoleStorageCodec.decodeAdmins(
+        Uint8List.fromList([
+          ...utf8.encode('CGOV'),
+          8,
+          ...account,
+          ...bytes('管'),
+          ...bytes('理'),
+          ...account,
+          ...bytes('管'),
+          ...bytes('员'),
+        ]),
+      ),
+      isNull,
     );
   });
 
@@ -67,7 +106,7 @@ void main() {
     ]))!
             .single;
     expect(assignment.source, InstitutionAssignmentSource.registry);
-    expect(assignment.adminAccount, '07' * 32);
+    expect(assignment.admin_account, '07' * 32);
   });
 
   test('岗位身份文本拒绝畸形 UTF-8 和非法 bool', () {

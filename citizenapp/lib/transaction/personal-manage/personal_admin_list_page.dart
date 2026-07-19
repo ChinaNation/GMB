@@ -20,6 +20,7 @@ import 'package:flutter/material.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:citizenapp/citizen/shared/institution_info.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_query_service.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_context.dart';
 import 'package:citizenapp/citizen/shared/institution_manage_detail_page.dart';
@@ -60,8 +61,8 @@ class PersonalAdminListPage extends StatefulWidget {
   /// 多签当前状态(Pending / Active)。
   final MultisigStatus multisigStatus;
 
-  /// 管理员公钥列表(小写 hex,无 0x 前缀)。
-  final List<String> admins;
+  /// 完整管理员人员集合；权限和投票匹配只使用 `admin_account`。
+  final List<AdminPerson> admins;
 
   /// 用户本地能签名的 admin 钱包子集(由调用方过滤好)。
   final List<WalletProfile> adminWallets;
@@ -299,7 +300,8 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
       ),
       child: Column(
         children: List.generate(widget.admins.length, (index) {
-          final pubkey = widget.admins[index].toLowerCase();
+          final admin = widget.admins[index];
+          final pubkey = admin.admin_account.toLowerCase();
           final ss58 = _pubkeyToSS58(pubkey);
           final isCreator = widget.creatorPubkeyHex != null &&
               widget.creatorPubkeyHex!.toLowerCase() == pubkey;
@@ -321,16 +323,16 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
                   ),
                 ),
                 title: Text(
-                  ss58,
-                  style: const TextStyle(
+                  '${admin.family_name}${admin.given_name}',
+                ),
+                subtitle: Text(
+                  isCreator ? '$ss58\n创建者' : ss58,
+                  style: TextStyle(
                     fontSize: 11,
                     fontFamily: 'monospace',
+                    color: isCreator ? AppTheme.accent : null,
                   ),
                 ),
-                subtitle: isCreator
-                    ? const Text('创建者',
-                        style: TextStyle(fontSize: 11, color: AppTheme.accent))
-                    : null,
                 trailing: _buildActivateButton(state),
               ),
             ],

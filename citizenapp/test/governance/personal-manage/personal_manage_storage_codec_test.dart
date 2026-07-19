@@ -26,6 +26,17 @@ void main() {
         (value >> 24) & 0xff,
       ];
 
+  List<int> adminBytes(
+    List<int> account,
+    String familyName,
+    String givenName,
+  ) =>
+      [
+        ...account,
+        ...compactVec(familyName),
+        ...compactVec(givenName),
+      ];
+
   group('PersonalManageStorageCodec', () {
     test('builds personal account id', () {
       final personal =
@@ -58,8 +69,8 @@ void main() {
         ...codeBytes('PMUL'),
         2,
         (2 << 2) & 0xff,
-        ...admin1,
-        ...admin2,
+        ...adminBytes(admin1, '张', '三'),
+        ...adminBytes(admin2, '李', '四'),
         ...List<int>.filled(32, 0x44),
         ...u32Le(100),
         ...u32Le(101),
@@ -70,7 +81,12 @@ void main() {
 
       expect(decoded.institutionCode, 'PMUL');
       expect(decoded.adminsLen, 2);
-      expect(decoded.admins, ['aa' * 32, 'bb' * 32]);
+      expect(
+        decoded.admins.map((admin) => admin.admin_account),
+        ['aa' * 32, 'bb' * 32],
+      );
+      expect(decoded.admins.map((admin) => admin.family_name), ['张', '李']);
+      expect(decoded.admins.map((admin) => admin.given_name), ['三', '四']);
     });
   });
 }

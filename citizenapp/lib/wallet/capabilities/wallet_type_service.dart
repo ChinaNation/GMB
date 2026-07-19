@@ -54,8 +54,8 @@ class WalletLabelService {
     final labelsByAdmin = <String, Set<String>>{};
     for (final account in scan.accounts) {
       final label = InstitutionCodeLabel.codeLabel(account.institutionCode);
-      for (final admin in account.adminsHex) {
-        final normalized = _normalizePubkeyHex(admin);
+      for (final admin in account.admins) {
+        final normalized = _normalizePubkeyHex(admin.admin_account);
         if (normalized != null) {
           labelsByAdmin.putIfAbsent(normalized, () => <String>{}).add(label);
         }

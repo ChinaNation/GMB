@@ -40,11 +40,8 @@ abstract interface class InstitutionChainState {
   /// 批量余额(hex→元);精确整键 + ChainReadCache。
   Future<Map<String, double>> balances(List<String> pubkeyHexes);
 
-  /// 机构管理员公钥列表(以 CID 为 key，按机构码选择 Public/Private Admins)。
-  Future<List<String>> admins(Institution institution);
-
-  /// 机构岗位与管理员任职；普通公民姓名/CID 不属于管理员链上字段。
-  Future<List<InstitutionAdminAssignment>> assignments(Institution institution);
+  /// 完整管理员人员集合左连接岗位任职；无岗位管理员仍保留。
+  Future<List<InstitutionAdminView>> adminViews(Institution institution);
 
   /// 该机构当年提案(按 subject_cid_numbers 包含机构 CID 过滤当年缓存)。
   Future<List<InstitutionProposalSummary>> proposals(Institution institution);
@@ -71,14 +68,8 @@ class LiveInstitutionChainState implements InstitutionChainState {
   }
 
   @override
-  Future<List<String>> admins(Institution institution) {
-    return _adminService.fetchAdmins(adminIdentityOf(institution));
-  }
-
-  @override
-  Future<List<InstitutionAdminAssignment>> assignments(
-      Institution institution) {
-    return _adminService.fetchAssignments(
+  Future<List<InstitutionAdminView>> adminViews(Institution institution) {
+    return _adminService.fetchAdminViews(
       adminIdentityOf(institution),
       institution.cidNumber,
     );

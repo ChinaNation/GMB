@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
+
 import 'institution_role_models.dart';
 
 /// entity 岗位/任职与 admins 钱包集合的严格 SCALE 解码器。
@@ -11,35 +13,68 @@ class InstitutionRoleStorageCodec {
     var offset = 0;
     // 机构 CID 是 `AdminAccounts` 的 storage key，不在 value 中重复保存。
     // value 唯一布局为 institution_code:[u8;4]
-    // + admins:BoundedVec<(admin_name:BoundedVec<u8>, admin_account:AccountId)>。
+    // + admins:BoundedVec<(admin_account, family_name, given_name)>。
     if (offset + 4 > data.length) return null;
     final code = String.fromCharCodes(
         data.sublist(offset, offset + 4).where((b) => b != 0));
     offset += 4;
-    final count = _readCompact(data, offset);
-    if (count == null) return null;
-    offset += count.$2;
-    final admins = <InstitutionAdminPerson>[];
-    for (var i = 0; i < count.$1; i++) {
-      final name = _readBytes(data, offset, minLength: 1, maxLength: 128);
-      if (name == null) return null;
-      offset = name.$2;
-      if (offset + 32 > data.length) return null;
-      try {
-        admins.add(InstitutionAdminPerson(
-          adminName: utf8.decode(name.$1),
-          adminAccount: _hex(data.sublist(offset, offset + 32)),
-        ));
-      } on FormatException {
-        return null;
-      }
-      offset += 32;
-    }
+    final decodedAdmins = decodeAdminVector(data, offset);
+    if (decodedAdmins == null) return null;
+    final admins = decodedAdmins.$1;
+    offset = decodedAdmins.$2;
     if (offset != data.length) return null;
     return InstitutionAdminsStorage(
       institutionCode: code,
       admins: admins,
     );
+  }
+
+  /// 从指定偏移严格解码统一管理员集合，并返回下一字段偏移。
+  ///
+  /// 机构管理员、个人多签管理员和全量管理员扫描必须共用本入口，避免
+  /// 在不同页面复制 SCALE 字段顺序。账户重复、空姓名、畸形 UTF-8 均拒绝。
+  static (List<AdminPerson>, int)? decodeAdminVector(
+    Uint8List data,
+    int offset,
+  ) {
+    final count = _readCompact(data, offset);
+    if (count == null) return null;
+    offset += count.$2;
+    final admins = <AdminPerson>[];
+    final accounts = <String>{};
+    for (var i = 0; i < count.$1; i++) {
+      if (offset + 32 > data.length) return null;
+      final accountHex = _hex(data.sublist(offset, offset + 32));
+      offset += 32;
+      final familyName = _readBytes(
+        data,
+        offset,
+        minLength: 1,
+        maxLength: 128,
+      );
+      if (familyName == null) return null;
+      offset = familyName.$2;
+      final givenName = _readBytes(
+        data,
+        offset,
+        minLength: 1,
+        maxLength: 128,
+      );
+      if (givenName == null) return null;
+      offset = givenName.$2;
+      try {
+        final admin = AdminPerson(
+          admin_account: accountHex,
+          family_name: utf8.decode(familyName.$1),
+          given_name: utf8.decode(givenName.$1),
+        );
+        if (!accounts.add(admin.admin_account)) return null;
+        admins.add(admin);
+      } on FormatException {
+        return null;
+      }
+    }
+    return (admins, offset);
   }
 
   static InstitutionRole? decodeRole(Uint8List data) {
@@ -107,7 +142,7 @@ class InstitutionRoleStorageCodec {
       try {
         out.add(InstitutionAdminAssignment(
           cidNumber: utf8.decode(cid.$1),
-          adminAccount: account,
+          admin_account: account,
           roleCode: utf8.decode(code.$1),
           termStart: termStart,
           termEnd: termEnd,

@@ -31,8 +31,8 @@ class AdminListPage extends StatefulWidget {
   final InstitutionInfo institution;
   final AdminAccountIdentity accountIdentity;
 
-  /// 机构管理员岗位任职；同一钱包可出现多条不同岗位记录。
-  final List<InstitutionAdminAssignment> admins;
+  /// 机构管理员人员视图；同一管理员的多个岗位归在同一人员行。
+  final List<InstitutionAdminView> admins;
 
   /// 用户已导入的冷钱包公钥集合（小写 hex，不含 0x）。
   final Set<String> importedColdPubkeys;
@@ -77,8 +77,7 @@ class _AdminListPageState extends State<AdminListPage> {
 
   Future<void> _loadBalances() async {
     final accounts = {
-      for (final assignment in widget.admins)
-        _balanceKey(assignment.adminAccount),
+      for (final view in widget.admins) _balanceKey(view.admin.admin_account),
     }.where((account) => account.isNotEmpty).toList(growable: false);
     if (accounts.isEmpty) {
       if (mounted) setState(() => _balanceByAccount = const {});
@@ -141,13 +140,13 @@ class _AdminListPageState extends State<AdminListPage> {
             )
           else
             ...List.generate(widget.admins.length, (index) {
-              final assignment = widget.admins[index];
-              final pubkey = assignment.adminAccount;
+              final adminView = widget.admins[index];
+              final pubkey = adminView.admin.admin_account;
               final isImported = widget.importedColdPubkeys.contains(pubkey);
               final isActivated = _activatedPubkeys.contains(pubkey);
               return _AdminTile(
                 index: index + 1,
-                assignment: assignment,
+                adminView: adminView,
                 isImported: isImported,
                 isActivated: isActivated,
                 institution: widget.institution,
@@ -207,7 +206,7 @@ class _AdminListPageState extends State<AdminListPage> {
 class _AdminTile extends StatelessWidget {
   const _AdminTile({
     required this.index,
-    required this.assignment,
+    required this.adminView,
     required this.isImported,
     required this.isActivated,
     required this.institution,
@@ -218,10 +217,10 @@ class _AdminTile extends StatelessWidget {
 
   final int index;
 
-  final InstitutionAdminAssignment assignment;
+  final InstitutionAdminView adminView;
 
   /// 管理员账户(小写 hex);激活/匹配仍按账户。
-  String get pubkeyHex => assignment.adminAccount;
+  String get pubkeyHex => adminView.admin.admin_account;
 
   /// 用户是否已导入此公钥的冷钱包。
   final bool isImported;
@@ -304,7 +303,7 @@ class _AdminTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: InstitutionAssignmentCard(
-        assignment: assignment,
+        adminView: adminView,
         index: index,
         balanceYuan: balanceYuan,
         trailing: _buildActivationControl(context),

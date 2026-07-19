@@ -17,7 +17,7 @@ class InstitutionAdminState {
     this.threshold,
   });
 
-  final List<String> admins;
+  final List<AdminPerson> admins;
 
   /// 机构岗位任职；个人多签不使用本字段。
   final List<InstitutionAdminAssignment> assignments;
@@ -36,7 +36,7 @@ class InstitutionAdminService {
   final ChainRpc _rpc;
   final AdminAccountService _accountService;
 
-  Future<List<String>> fetchAdmins(AdminAccountIdentity identity) {
+  Future<List<AdminPerson>> fetchAdmins(AdminAccountIdentity identity) {
     return _accountService.fetchAdmins(identity);
   }
 
@@ -51,7 +51,8 @@ class InstitutionAdminService {
     }
     final adminState = await _accountService.fetchByIdentity(identity);
     if (adminState == null) return const [];
-    final adminSet = adminState.admins.toSet();
+    final adminSet =
+        adminState.admins.map((admin) => admin.admin_account).toSet();
     // 非法人机构码本身不能推断公权/私权，必须按链上管理员类型路由。
     final entityPallet = identity.kind == 1 ? 'PrivateManage' : 'PublicManage';
     final roleValues =
@@ -76,12 +77,44 @@ class InstitutionAdminService {
         if (assignment.cidNumber == cidNumber &&
             assignment.active &&
             role != null &&
-            adminSet.contains(assignment.adminAccount)) {
+            adminSet.contains(assignment.admin_account)) {
           out.add(assignment.withRole(role));
         }
       }
     }
     return out;
+  }
+
+  /// 以管理员人员集合为主表左连接岗位任职；管理员无岗位时仍返回人员行。
+  Future<List<InstitutionAdminView>> fetchAdminViews(
+    AdminAccountIdentity identity,
+    String cidNumber,
+  ) async {
+    final account = await _accountService.fetchByIdentity(identity);
+    if (account == null) return const [];
+    final assignments = await fetchAssignments(identity, cidNumber);
+    return mergeAdminViews(account.admins, assignments);
+  }
+
+  /// 纯函数合并人员与岗位，供链读和测试共用；结果顺序严格跟随 admins 真源。
+  static List<InstitutionAdminView> mergeAdminViews(
+    List<AdminPerson> admins,
+    List<InstitutionAdminAssignment> assignments,
+  ) {
+    final byAccount = <String, List<InstitutionAdminAssignment>>{};
+    for (final assignment in assignments) {
+      byAccount.putIfAbsent(assignment.admin_account, () => []).add(assignment);
+    }
+    return admins
+        .map(
+          (admin) => InstitutionAdminView(
+            admin: admin,
+            assignments: List.unmodifiable(
+              byAccount[admin.admin_account] ?? const [],
+            ),
+          ),
+        )
+        .toList(growable: false);
   }
 
   Future<int?> fetchThreshold(AdminAccountIdentity identity) {

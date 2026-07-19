@@ -1,6 +1,6 @@
 # citizenapp 管理员更换模块技术文档
 
-最新更新：2026-07-13。
+最新更新：2026-07-19。
 
 ## 模块定位
 
@@ -58,11 +58,11 @@ citizenapp/test/governance/admins-change/
 
 1. 只有 `PMUL` 个人多签显示“换管理员”入口并进入 `AdminsChangePage`。
 2. 调用方构造 `personalAccount` 类型的 `AdminAccountIdentity`，由 `AdminAccountService` 读取 `PersonalAdmins::AdminAccounts`。
-3. 机构账户页面只读取 `PublicAdmins / PrivateAdmins::AdminAccounts` 钱包集合，并通过 `InstitutionAdminService` 联合读取 entity 岗位任职，不进入管理员集合编辑流程。
-4. 用户选择管理员钱包、编辑完整管理员集合。
+3. 机构账户页面读取 `PublicAdmins / PrivateAdmins::AdminAccounts` 中的人员集合，并通过 `InstitutionAdminService` 左连接 entity 岗位任职；没有岗位的管理员仍保留在人员列表中，不进入机构管理员集合编辑流程。
+4. 用户编辑个人多签完整管理员集合；每项字段固定为 `admin_account + family_name + given_name`，账户是唯一授权和去重字段，姓、名只用于展示。
 5. `AdminSetValidation` 做端上前置校验，同时校验目标阈值。
 6. `PersonalAdminsChangeCallCodec` 固定构造 `PersonalAdmins.propose_admin_set_change` call data。
-7. `AdminSetChangeService` 通过 `SignedExtrinsicBuilder` 走热钱包或公民钱包签名并提交。
+7. `AdminSetChangeService` 通过 `SignedExtrinsicBuilder` 走热钱包或公民钱包签名并提交；同一次管理员更换只保留一个最终交易签名回调，不叠加姓名确认签名。
 
 ## 主体身份与查询门面
 
@@ -81,7 +81,9 @@ citizenapp/test/governance/admins-change/
 个人多签管理员更换载荷固定为：
 
 ```text
-[pallet][call][institution_code:[u8;4]][account_id:32][admins:Compact<Vec<AccountId32>>][new_threshold:u32_le]
+[pallet][call][institution_code:[u8;4]][account_id:32][admins:Compact<Vec<Admin>>][new_threshold:u32_le]
+
+Admin = [admin_account:AccountId32][family_name:Compact<Vec<u8>>][given_name:Compact<Vec<u8>>]
 ```
 
 规则：
@@ -89,6 +91,7 @@ citizenapp/test/governance/admins-change/
 - 只允许 PMUL 个人多签走 `PersonalAdmins(29).propose_admin_set_change(0)`；codec 和 service 对其它 `AdminAccountKind` 关闭失败。
 - 公权、私权、非法人及固定治理机构的管理员人员集合独立于岗位任职；CitizenApp 当前不构造对应管理员集合变更调用，第2步再接入专用维护协议。
 - `new_threshold` 是载荷必填字段，端上和链端按同一字节结构构造、解析和签名。
+- `family_name / given_name` 各自为 1..=128 UTF-8 字节；新增时留空分别规范为“管理”、“员”，不从联系人备注或合并姓名拆分生成。
 - 个人多签显示动态阈值输入框，端上前置校验：`threshold * 2 > admins_len && threshold <= admins_len`。
 - 个人多签动态阈值由 `InternalVote.ActivePersonalThresholds[personal_account]` 保存；机构阈值按 CID 使用 `ActiveInstitutionThresholds[cid_number]`，不属于本页面。
 - QR_V1 只携带 `b.a + b.d`；扫码端从 `b.d` 解码出的展示字段必须与冷钱包 decoder 逐项一致：`institution_code / subject / admins / new_threshold`。
@@ -103,8 +106,9 @@ citizenapp/test/governance/admins-change/
 
 ## 管理员与岗位展示
 
-- `AdminAccountService` 对机构账户只解码 `admins` 钱包集合；`InstitutionAdminService` 再从对应 entity pallet 联合读取岗位定义和有效任职，并校验每个管理员钱包都有有效岗位。
-- 机构管理员列表和公开机构管理员列表统一使用 `/Users/rhett/GMB/citizenapp/lib/citizen/institution/institution_assignment_card.dart`；展示岗位、任期、来源、账户和余额，不保存管理员姓名或公民 CID 副本。
+- `AdminAccountService` 对机构和个人多签均严格解码 `admins: Vec<Admin>`，必须完整包含 `admin_account + family_name + given_name`；旧纯账户、合并姓名或尾部多余字节一律拒绝。
+- `InstitutionAdminService` 将管理员人员真源与 entity 岗位任职做左连接；授权只比较 `admin_account`，管理员可以没有岗位，同一管理员也可展示多个岗位。
+- 机构管理员列表和公开机构管理员列表统一使用 `/Users/rhett/GMB/citizenapp/lib/citizen/institution/institution_assignment_card.dart`；姓名只在 UI 中按中文顺序合并显示，同时展示账户、岗位、任期、来源和余额。
 - 个人多签仍由独立 `AdminAccount` 布局和个人管理员集合页面处理；`PersonalAdmins.propose_admin_set_change` 是 CitizenApp 唯一保留的管理员集合变更调用，公权/私权机构不得从客户端直接改写管理员集合。
 
 ## 2026-05-10 修复记录
@@ -115,3 +119,11 @@ citizenapp/test/governance/admins-change/
 - 管理员更换成功后按个人多签 `personal_account` 清理缓存；机构管理员查询和激活缓存只按 `cid_number` 管理。
 - 通用 `OrgType.multisig` 文案改为“多签账户”，具体“个人多签 / 机构账户”由 admins-change identity 展示。
 - 2026-06-27：管理员更换代码目录已迁到 `lib/citizen/proposal/admins-change/`；测试目录暂保留 `test/governance/admins-change/`，用于覆盖 QR call data、AdminAccounts storage key、非法人显式 kind 路由和激活缓存。
+
+## 2026-07-19 管理员三字段验收
+
+- CitizenApp 机构、个人多签的 storage 解码、页面模型、创建/更换 call、本地快照和钱包匹配已统一为 `admin_account + family_name + given_name`。
+- `flutter analyze --no-fatal-infos` 无问题；专项 41 项通过；完整 `flutter test` 741 项通过、5 项按既有原生 smoldot 环境条件跳过。
+- 当前源码的隔离 `citizenchain-fresh` 节点启动成功，block#0 为 `0xc1dc759689aed0a8f8361dc3cb0e39c1faf19cfc55c7611b02ccc79ce04524c6`，`stateRoot=0x967155d28abe492052ef4bfd59a1ddbebce8cdaa57d9baaad446028848061a5e`，`isSyncing=false`。
+- 真实 RPC 读取首个 `PublicAdmins::AdminAccounts` 值，解出 9 个管理员，每项均含账户、“管理”、“员”，尾部剩余字节为 0。
+- Android arm64 debug APK 在 Pixel 8a 安装启动成功；真机当时未解锁，改用仓库现有 Android 模拟器完成真实页面渲染，创建钱包页正常显示且无 Flutter 异常。验收节点、模拟器和临时截图已停止/清理。

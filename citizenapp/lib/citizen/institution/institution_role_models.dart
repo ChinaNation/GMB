@@ -1,3 +1,8 @@
+// 业务字段必须与链上管理员任职的 `admin_account` 逐字一致。
+// ignore_for_file: non_constant_identifier_names
+
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
+
 /// 机构岗位状态，序号与 entity runtime 枚举一致。
 enum InstitutionRoleStatus { active, inactive }
 
@@ -43,7 +48,7 @@ class InstitutionRole {
 class InstitutionAdminAssignment {
   const InstitutionAdminAssignment({
     required this.cidNumber,
-    required this.adminAccount,
+    required this.admin_account,
     required this.roleCode,
     required this.termStart,
     required this.termEnd,
@@ -55,7 +60,7 @@ class InstitutionAdminAssignment {
   });
 
   final String cidNumber;
-  final String adminAccount;
+  final String admin_account;
   final String roleCode;
   final String roleName;
   final bool termRequired;
@@ -70,7 +75,7 @@ class InstitutionAdminAssignment {
   InstitutionAdminAssignment withRole(InstitutionRole role) =>
       InstitutionAdminAssignment(
         cidNumber: cidNumber,
-        adminAccount: adminAccount,
+        admin_account: admin_account,
         roleCode: roleCode,
         roleName: role.roleName,
         termRequired: role.termRequired,
@@ -82,17 +87,6 @@ class InstitutionAdminAssignment {
       );
 }
 
-/// 机构管理员人员记录；姓名只展示，账户是唯一授权字段。
-class InstitutionAdminPerson {
-  const InstitutionAdminPerson({
-    required this.adminName,
-    required this.adminAccount,
-  });
-
-  final String adminName;
-  final String adminAccount;
-}
-
 /// admins pallet 的机构管理员值；岗位资料仍由 entity 独立保存。
 class InstitutionAdminsStorage {
   const InstitutionAdminsStorage({
@@ -101,5 +95,18 @@ class InstitutionAdminsStorage {
   });
 
   final String institutionCode;
-  final List<InstitutionAdminPerson> admins;
+  final List<AdminPerson> admins;
+}
+
+/// 一名机构管理员及其零到多条岗位任职。
+///
+/// 管理员人员集合是主记录；岗位任职只是附加展示。没有岗位的管理员仍保留本行。
+class InstitutionAdminView {
+  const InstitutionAdminView({
+    required this.admin,
+    this.assignments = const [],
+  });
+
+  final AdminPerson admin;
+  final List<InstitutionAdminAssignment> assignments;
 }

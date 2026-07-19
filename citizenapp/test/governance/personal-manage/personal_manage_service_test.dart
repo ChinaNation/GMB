@@ -6,6 +6,7 @@ import 'package:citizenapp/transaction/personal-manage/personal_manage_models.da
 import 'package:citizenapp/transaction/personal-manage/personal_manage_service.dart';
 import 'package:citizenapp/transaction/personal-manage/personal_manage_storage_codec.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 
 class FakeChainRpc extends ChainRpc {
   final Map<String, Uint8List?> responses = {};
@@ -55,6 +56,28 @@ void main() {
     return [encoded & 0xff, (encoded >> 8) & 0xff];
   }
 
+  List<int> adminBytes(
+    List<int> account, {
+    String familyName = '管理',
+    String givenName = '员',
+  }) =>
+      [
+        ...account,
+        ...compactVec(familyName),
+        ...compactVec(givenName),
+      ];
+
+  AdminPerson adminPerson(
+    List<int> account, {
+    String familyName = '管理',
+    String givenName = '员',
+  }) =>
+      AdminPerson(
+        admin_account: hexOf(account),
+        family_name: familyName,
+        given_name: givenName,
+      );
+
   List<int> u32Le(int value) => [
         value & 0xff,
         (value >> 8) & 0xff,
@@ -100,8 +123,8 @@ void main() {
       ...codeBytes('PMUL'),
       2, // AdminAccountKind::PersonalMultisig
       (2 << 2) & 0xff,
-      ...admin1,
-      ...admin2,
+      ...adminBytes(admin1, familyName: '张', givenName: '三'),
+      ...adminBytes(admin2, familyName: '李', givenName: '四'),
       ...List<int>.filled(32, 0x44), // creator
       ...u32Le(100), // created_at
       ...u32Le(101), // updated_at
@@ -117,7 +140,10 @@ void main() {
 
       final callData = PersonalManageService.buildProposeCreatePersonalCallData(
         accountName: accountName,
-        admins: [admin1, admin2],
+        admins: [
+          adminPerson(admin1, familyName: '张', givenName: '三'),
+          adminPerson(admin2, familyName: '李', givenName: '四'),
+        ],
         regularThreshold: 2,
         amountFen: BigInt.from(111),
       );
@@ -127,8 +153,8 @@ void main() {
         0x00,
         ...compactVec('家庭基金'),
         (2 << 2) & 0xff,
-        ...admin1,
-        ...admin2,
+        ...adminBytes(admin1, familyName: '张', givenName: '三'),
+        ...adminBytes(admin2, familyName: '李', givenName: '四'),
         ...u32Le(2),
         ...u128Le(BigInt.from(111)),
       ];
@@ -139,7 +165,7 @@ void main() {
     test('rejects regular_threshold below strict majority', () {
       final admins = List.generate(
         4,
-        (i) => Uint8List.fromList(List<int>.filled(32, 0x10 + i)),
+        (i) => adminPerson(List<int>.filled(32, 0x10 + i)),
       );
 
       expect(
@@ -201,7 +227,10 @@ void main() {
       final info = await service.fetchPersonalAccount(address);
 
       expect(info, isNotNull);
-      expect(info!.admins, ['cc' * 32, 'dd' * 32]);
+      expect(
+        info!.admins.map((admin) => admin.admin_account),
+        ['cc' * 32, 'dd' * 32],
+      );
       expect(info.threshold, 2);
       expect(info.status, MultisigStatus.active);
       expect(rpc.requestedKeys, [personalKey, adminKey, thresholdKey]);
@@ -241,8 +270,14 @@ void main() {
         secondAddress,
       ]);
 
-      expect(infos[firstAddress]!.admins, ['aa' * 32, 'bb' * 32]);
-      expect(infos[secondAddress]!.admins, ['cc' * 32, 'dd' * 32]);
+      expect(
+        infos[firstAddress]!.admins.map((admin) => admin.admin_account),
+        ['aa' * 32, 'bb' * 32],
+      );
+      expect(
+        infos[secondAddress]!.admins.map((admin) => admin.admin_account),
+        ['cc' * 32, 'dd' * 32],
+      );
       expect(infos[firstAddress]!.threshold, 2);
       expect(infos[secondAddress]!.threshold, isNull);
       expect(rpc.requestedKeys, [

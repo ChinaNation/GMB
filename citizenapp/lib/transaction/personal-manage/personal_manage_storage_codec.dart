@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:polkadart/polkadart.dart' show Hasher;
+import 'package:citizenapp/citizen/institution/institution_role_storage_codec.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
 /// 个人多签账户生命周期快照。
@@ -32,7 +34,7 @@ class PersonalManageAdminSnapshot {
 
   final String institutionCode;
   final int adminsLen;
-  final List<String> admins;
+  final List<AdminPerson> admins;
 }
 
 /// PersonalManage 专属 storage codec。
@@ -102,20 +104,17 @@ class PersonalManageStorageCodec {
         InstitutionCodeLabel.codeToString(data.sublist(offset, offset + 4));
     offset += 4;
     offset++; // AdminAccountKind
-    final (count, lenSize) = readCompactU32(data, offset);
-    offset += lenSize;
-    final admins = <String>[];
-    for (var i = 0; i < count; i++) {
-      if (offset + 32 > data.length) return null;
-      admins.add(hexEncode(data.sublist(offset, offset + 32)));
-      offset += 32;
-    }
+    final decodedAdmins =
+        InstitutionRoleStorageCodec.decodeAdminVector(data, offset);
+    if (decodedAdmins == null) return null;
+    final admins = decodedAdmins.$1;
+    offset = decodedAdmins.$2;
     // PersonalAdmins::AdminAccounts 不保存 threshold；
     // 后续字段是 creator/created_at/updated_at/status，阈值必须另查 InternalVote。
-    if (offset + 32 + 4 + 4 + 1 > data.length) return null;
+    if (offset + 32 + 4 + 4 + 1 != data.length) return null;
     return PersonalManageAdminSnapshot(
       institutionCode: institutionCode,
-      adminsLen: count,
+      adminsLen: admins.length,
       admins: admins,
     );
   }

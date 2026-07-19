@@ -7,6 +7,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/citizen/shared/admin_account_storage_codec.dart';
 import 'package:citizenapp/citizen/shared/admin_accounts_scan_service.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 
 void main() {
   final myWallet = 'aa' * 32; // 64 hex
@@ -24,7 +25,7 @@ void main() {
     required String key,
     required String institutionCode,
     required int kind,
-    required List<String> admins,
+    required List<String> adminAccounts,
   }) =>
       ScannedAdminAccount(
         cidNumber: kind == AdminAccountStorageCodec.kindPersonal ? null : key,
@@ -32,7 +33,15 @@ void main() {
             kind == AdminAccountStorageCodec.kindPersonal ? key : null,
         institutionCode: institutionCode,
         kind: kind,
-        adminsHex: admins,
+        admins: adminAccounts
+            .map(
+              (account) => AdminPerson(
+                admin_account: account,
+                family_name: '管理',
+                given_name: '员',
+              ),
+            )
+            .toList(growable: false),
       );
 
   group('AdminAccountsScanService.filterMine', () {
@@ -42,13 +51,13 @@ void main() {
           key: 'CID-01',
           institutionCode: 'CGOV',
           kind: AdminAccountStorageCodec.kindPublicInstitution,
-          admins: [myWallet],
+          adminAccounts: [myWallet],
         ),
         acc(
           key: '02',
           institutionCode: 'PMUL',
           kind: AdminAccountStorageCodec.kindPersonal,
-          admins: [myWallet],
+          adminAccounts: [myWallet],
         ),
       ]);
 
@@ -66,13 +75,13 @@ void main() {
           key: '01',
           institutionCode: 'PMUL',
           kind: AdminAccountStorageCodec.kindPersonal,
-          admins: [myWallet],
+          adminAccounts: [myWallet],
         ),
         acc(
           key: '02',
           institutionCode: 'XXXX',
           kind: AdminAccountStorageCodec.kindPersonal,
-          admins: [myWallet],
+          adminAccounts: [myWallet],
         ),
       ]);
       final result = AdminAccountsScanService.filterMine(
@@ -90,12 +99,12 @@ void main() {
             key: '01',
             institutionCode: 'PMUL',
             kind: AdminAccountStorageCodec.kindPersonal,
-            admins: [myWallet, otherWallet]),
+            adminAccounts: [myWallet, otherWallet]),
         acc(
             key: '02',
             institutionCode: 'PMUL',
             kind: AdminAccountStorageCodec.kindPersonal,
-            admins: [otherWallet]),
+            adminAccounts: [otherWallet]),
       ]);
       final result = AdminAccountsScanService.filterMine(
         scan,
@@ -111,7 +120,7 @@ void main() {
             key: '01',
             institutionCode: 'PMUL',
             kind: AdminAccountStorageCodec.kindPersonal,
-            admins: [secondWallet]),
+            adminAccounts: [secondWallet]),
       ]);
       final result = AdminAccountsScanService.filterMine(
         scan,

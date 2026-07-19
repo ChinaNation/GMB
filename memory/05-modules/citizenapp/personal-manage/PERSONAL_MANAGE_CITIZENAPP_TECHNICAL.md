@@ -43,6 +43,8 @@
   不构造人工清理交易。
 - `PersonalAdmins::propose_admin_set_change`：pallet `29`，call `0`，字段顺序固定为
   `institution_code / account_id / admins / new_threshold`，`institution_code` 必须为 `PMUL`。
+- 上述两个 call 中 `admins` 每项的 SCALE 顺序统一为
+  `admin_account / family_name / given_name`；账户是唯一授权、去重和钱包匹配字段，姓、名不参与授权。
 - `regular_threshold` 为用户输入的普通提案阈值，App 侧校验范围为
   `floor(admins_len / 2) + 1 ..= admins_len`；注册提案通过阈值固定为全员同意。
 
@@ -60,9 +62,12 @@ PersonalAdmins storage：
 - 详情页和管理员列表不得从 `PersonalAdmins::AdminAccounts` 后续字段解阈值；该 storage
   的管理员列表后面是 `creator / created_at / updated_at / status`，错位读取会出现
   类似 `1478971204/2` 的异常阈值显示。
+- CitizenApp 本地详情快照仅保存三字段管理员 JSON 对象；旧字符串数组、空姓名、重复账户或泛化字段不兼容读取。
 
 个人多签创建提交规则：
 
+- 扫码只取得管理员钱包账户；姓、名在 CitizenApp 分开输入，留空时分别落为“管理”、“员”，不拆分联系人备注或其它合并姓名。
+- 创建和管理员更换都只调用一次最终交易签名；姓、名编辑、周期确认或设备变更不引入额外签名。
 - 创建前必须校验发起钱包 free 余额覆盖 `amount + fee + ED`。
 - `fee` 使用链上 `onchain_transaction::calculate_onchain_fee` 同口径：
   `max(amount * 0.1%, 0.10 元)`；`ED` 当前为 `1.11 元`。
@@ -163,3 +168,8 @@ cd citizenapp
 flutter analyze
 flutter test test/governance/personal-manage
 ```
+
+2026-07-19 管理员三字段验收：CitizenApp `flutter analyze --no-fatal-infos`
+无问题，完整 `flutter test` 741 项通过、5 项因纯 Dart 测试环境缺少原生
+smoldot 库按既有条件跳过；专项测试覆盖三字段 storage/call 逐字节解码、
+旧布局拒绝、重复账户拒绝与无岗位管理员保留。

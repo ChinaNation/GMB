@@ -1,8 +1,38 @@
+// 业务字段必须与 Rust、TypeScript、SQL 的管理员三字段逐字一致。
+// ignore_for_file: non_constant_identifier_names
+
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
 
 enum AdminAccountIdentityType { institution, personalAccount }
+
+/// 全仓统一的管理员人员记录。
+///
+/// `admin_account` 是唯一授权与去重字段；姓、名只用于人员姓名展示，
+/// 页面需要姓名时现场按中文顺序组合，不保存合并姓名。
+class AdminPerson {
+  const AdminPerson({
+    required this.admin_account,
+    required this.family_name,
+    required this.given_name,
+  });
+
+  final String admin_account;
+  final String family_name;
+  final String given_name;
+
+  AdminPerson copyWith({
+    String? admin_account,
+    String? family_name,
+    String? given_name,
+  }) =>
+      AdminPerson(
+        admin_account: admin_account ?? this.admin_account,
+        family_name: family_name ?? this.family_name,
+        given_name: given_name ?? this.given_name,
+      );
+}
 
 /// 管理员查询主体。机构只以 CID 为主键；个人多签只以 personal_account 为主键。
 class AdminAccountIdentity {
@@ -119,7 +149,7 @@ class AdminAccountState {
   final String? personalAccountHex;
   final String institutionCode;
   final int kind;
-  final List<String> admins;
+  final List<AdminPerson> admins;
   final int threshold;
 
   /// 以下字段只属于 PersonalAdmins 的个人多签生命周期。

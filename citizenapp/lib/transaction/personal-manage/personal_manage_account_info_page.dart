@@ -8,6 +8,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_entry.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/votingengine/internal-vote/internal_vote_service.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/ui/app_theme.dart';
@@ -47,7 +48,7 @@ class _PersonalManageAccountInfoPageState
   final ChainRpc _rpc = ChainRpc();
 
   AccountInfo? _accountInfo;
-  List<String> _admins = const [];
+  List<AdminPerson> _admins = const [];
   String _localStatus = PersonalMultisigLocalState.statusPending;
   int? _lastDetailRefreshAtMillis;
   int? _lastBalanceRefreshAtMillis;
@@ -62,7 +63,7 @@ class _PersonalManageAccountInfoPageState
     super.initState();
     _localStatus =
         widget.initialLocalStatus ?? PersonalMultisigLocalState.statusPending;
-    _admins = _normalizeAdminPubkeys(widget.initialAdminPubkeys);
+    _admins = _adminsFromAccounts(widget.initialAdminPubkeys);
     _isClosed = _localStatus == PersonalMultisigLocalState.statusClosed;
     _load();
   }
@@ -106,12 +107,13 @@ class _PersonalManageAccountInfoPageState
           widget.initialLocalStatus ??
           PersonalMultisigLocalState.statusPending;
       final isClosed = status == PersonalMultisigLocalState.statusClosed;
-      final admins = local.detail?.admins.isNotEmpty == true
-          ? local.detail!.admins
-          : local.entity?.matchedAdminPubkeys.isNotEmpty == true
-              ? local.entity!.matchedAdminPubkeys
-              : widget.initialAdminPubkeys;
-      final normalizedAdmins = _normalizeAdminPubkeys(admins);
+      final normalizedAdmins = local.detail?.admins.isNotEmpty == true
+          ? _normalizeAdmins(local.detail!.admins)
+          : _adminsFromAccounts(
+              local.entity?.matchedAdminPubkeys.isNotEmpty == true
+                  ? local.entity!.matchedAdminPubkeys
+                  : widget.initialAdminPubkeys,
+            );
       final statusEnum = _statusEnumFromLocal(status);
       final accountInfo = isClosed
           ? null
@@ -254,7 +256,7 @@ class _PersonalManageAccountInfoPageState
         _localStatus = status;
         _isClosed = status == PersonalMultisigLocalState.statusClosed;
         _accountInfo = info;
-        _admins = _normalizeAdminPubkeys(info?.admins);
+        _admins = _normalizeAdmins(info?.admins);
         _balanceYuan = _isClosed ? null : balance ?? _balanceYuan;
         _lastDetailRefreshAtMillis = now;
         if (_isClosed) {
@@ -315,13 +317,29 @@ class _PersonalManageAccountInfoPageState
         : MultisigStatus.pending;
   }
 
-  List<String> _normalizeAdminPubkeys(List<String>? admins) {
+  List<AdminPerson> _normalizeAdmins(List<AdminPerson>? admins) {
     if (admins == null) return const [];
     return admins
-        .map(_normalizeHex)
-        .where((item) => item.isNotEmpty)
+        .map(
+          (admin) => admin.copyWith(
+            admin_account: _normalizeHex(admin.admin_account),
+          ),
+        )
+        .where((admin) => admin.admin_account.isNotEmpty)
         .toList(growable: false);
   }
+
+  List<AdminPerson> _adminsFromAccounts(List<String> accounts) => accounts
+      .map(_normalizeHex)
+      .where((account) => account.isNotEmpty)
+      .map(
+        (account) => AdminPerson(
+          admin_account: account,
+          family_name: '管理',
+          given_name: '员',
+        ),
+      )
+      .toList(growable: false);
 
   String _normalizeHex(String hex) {
     final h = hex.startsWith('0x') ? hex.substring(2) : hex;
@@ -398,7 +416,7 @@ class _PersonalManageAccountInfoPageState
   Future<List<WalletProfile>> _getAdminWallets() async {
     final wm = WalletManager();
     final wallets = await wm.getWallets();
-    final adminSet = _admins.toSet();
+    final adminSet = _admins.map((admin) => admin.admin_account).toSet();
     return wallets.where((w) {
       var pk = w.pubkeyHex.toLowerCase();
       if (pk.startsWith('0x')) pk = pk.substring(2);

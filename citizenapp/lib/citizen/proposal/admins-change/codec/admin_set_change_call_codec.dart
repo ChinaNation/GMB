@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:polkadart/scale_codec.dart' show ByteOutput, CompactBigIntCodec;
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
 class PersonalAdminsChangeCallCodec {
@@ -14,7 +16,7 @@ class PersonalAdminsChangeCallCodec {
     required String institutionCode,
     required int adminKind,
     required Uint8List accountId,
-    required List<String> admins,
+    required List<AdminPerson> admins,
     required int newThreshold,
   }) {
     if (accountId.length != 32) {
@@ -35,16 +37,27 @@ class PersonalAdminsChangeCallCodec {
     output.write(accountId);
     output.write(CompactBigIntCodec.codec.encode(BigInt.from(admins.length)));
     for (final admin in admins) {
-      final bytes = AdminAccountIdCodec.hexDecode(admin);
+      final bytes = AdminAccountIdCodec.hexDecode(admin.admin_account);
       if (bytes.length != 32) {
         throw ArgumentError('管理员公钥必须为 32 字节');
       }
       output.write(bytes);
+      _writeName(output, admin.family_name, 'family_name');
+      _writeName(output, admin.given_name, 'given_name');
     }
     final thresholdBytes = Uint8List(4);
     ByteData.sublistView(thresholdBytes)
         .setUint32(0, newThreshold, Endian.little);
     output.write(thresholdBytes);
     return output.toBytes();
+  }
+
+  static void _writeName(ByteOutput output, String value, String field) {
+    final bytes = utf8.encode(value.trim());
+    if (bytes.isEmpty || bytes.length > 128) {
+      throw ArgumentError('$field 长度必须在 1..=128 字节');
+    }
+    output.write(CompactBigIntCodec.codec.encode(BigInt.from(bytes.length)));
+    output.write(Uint8List.fromList(bytes));
   }
 }

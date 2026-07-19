@@ -10,6 +10,7 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/shared/admin_account_storage_codec.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
@@ -22,7 +23,7 @@ class ScannedAdminAccount {
     this.personalAccountHex,
     required this.institutionCode,
     required this.kind,
-    required this.adminsHex,
+    required this.admins,
   }) : assert((cidNumber == null) != (personalAccountHex == null));
 
   /// 机构管理员表的唯一主键。
@@ -37,8 +38,8 @@ class ScannedAdminAccount {
   /// 管理员账户类型(0=Public,1=Private,2=Personal)。
   final int kind;
 
-  /// 管理员公钥小写 hex 列表(无 0x,32B = 64 hex)。
-  final List<String> adminsHex;
+  /// 完整管理员人员集合；账户是小写 hex，姓、名只用于展示。
+  final List<AdminPerson> admins;
 }
 
 /// 一次全表扫描的结果。
@@ -164,7 +165,7 @@ class AdminAccountsScanService {
             personalAccountHex: accountHex,
             institutionCode: decoded.institutionCode,
             kind: decoded.kind,
-            adminsHex: decoded.adminsHex,
+            admins: decoded.admins,
           ));
         } else {
           final cidNumber =
@@ -174,7 +175,7 @@ class AdminAccountsScanService {
             cidNumber: cidNumber,
             institutionCode: decoded.institutionCode,
             kind: decoded.kind,
-            adminsHex: decoded.adminsHex,
+            admins: decoded.admins,
           ));
         }
       }
@@ -204,7 +205,9 @@ class AdminAccountsScanService {
               acceptedKinds.contains(a.kind) &&
               (codeWhitelist == null ||
                   codeWhitelist.contains(a.institutionCode)) &&
-              a.adminsHex.any(myPubkeysHex.contains),
+              a.admins.any(
+                (admin) => myPubkeysHex.contains(admin.admin_account),
+              ),
         )
         .toList(growable: false);
   }

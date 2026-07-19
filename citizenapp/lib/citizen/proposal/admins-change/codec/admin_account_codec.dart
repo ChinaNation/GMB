@@ -18,7 +18,7 @@ class AdminAccountCodec {
       cidNumber: cidNumber,
       institutionCode: decoded.institutionCode,
       kind: institutionKind,
-      admins: decoded.admins.map((admin) => admin.adminAccount).toList(),
+      admins: decoded.admins,
       threshold: 0,
     );
   }
@@ -38,16 +38,12 @@ class AdminAccountCodec {
     );
     offset += 4;
     final kind = data[offset++];
-    final (count, countLen) = readCompactU32(data, offset);
-    offset += countLen;
-    final admins = <String>[];
-    for (var i = 0; i < count; i++) {
-      if (offset + 32 > data.length) return null;
-      admins.add(
-          AdminAccountIdCodec.hexEncode(data.sublist(offset, offset + 32)));
-      offset += 32;
-    }
-    if (offset + 32 + 4 + 4 + 1 > data.length) return null;
+    final decodedAdmins =
+        InstitutionRoleStorageCodec.decodeAdminVector(data, offset);
+    if (decodedAdmins == null) return null;
+    final admins = decodedAdmins.$1;
+    offset = decodedAdmins.$2;
+    if (offset + 32 + 4 + 4 + 1 != data.length) return null;
     final creatorHex =
         AdminAccountIdCodec.hexEncode(data.sublist(offset, offset + 32));
     offset += 32;
@@ -56,6 +52,7 @@ class AdminAccountCodec {
     final updatedAt = _readU32(data, offset);
     offset += 4;
     final status = data[offset];
+    if (status > 2) return null;
     return AdminAccountState(
       personalAccountHex: AdminAccountIdCodec.hexEncode(personalAccount),
       institutionCode: institutionCode,

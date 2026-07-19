@@ -16,7 +16,7 @@ class AdminsChangeService {
   Uint8List buildCallData({
     required AdminAccountState account,
     required String proposerPubkeyHex,
-    required List<String> admins,
+    required List<AdminPerson> admins,
     required int newThreshold,
   }) {
     final normalized = AdminSetValidation.validate(
@@ -36,7 +36,7 @@ class AdminsChangeService {
 
   Future<AdminsChangeSubmitResult> submit({
     required AdminAccountState account,
-    required List<String> admins,
+    required List<AdminPerson> admins,
     required int newThreshold,
     required String fromAddress,
     required Uint8List signerPubkey,

@@ -1,8 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/signed_extrinsic_builder.dart';
+import 'package:citizenapp/citizen/institution/institution_role_storage_codec.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 
 import 'personal_manage_models.dart';
 import 'personal_manage_storage_codec.dart';
@@ -53,7 +58,7 @@ class PersonalManageService {
         String blockHashHex,
       })> submitProposeCreatePersonal({
     required Uint8List accountName,
-    required List<Uint8List> admins,
+    required List<AdminPerson> admins,
     required int regularThreshold,
     required BigInt amountFen,
     required String fromAddress,
@@ -93,7 +98,7 @@ class PersonalManageService {
   @visibleForTesting
   static Uint8List buildProposeCreatePersonalCallData({
     required Uint8List accountName,
-    required List<Uint8List> admins,
+    required List<AdminPerson> admins,
     required int regularThreshold,
     required BigInt amountFen,
   }) {
@@ -109,7 +114,8 @@ class PersonalManageService {
           'regular_threshold 范围必须在 $minThreshold..=${admins.length}');
     }
     final seen = <String>{};
-    for (final pubkey in admins) {
+    for (final admin in admins) {
+      final pubkey = AdminAccountIdCodec.hexDecode(admin.admin_account);
       if (pubkey.length != 32) {
         throw ArgumentError('admins 每项必须为 32 字节');
       }
@@ -117,6 +123,8 @@ class PersonalManageService {
       if (!seen.add(hex)) {
         throw ArgumentError('admins 不允许重复');
       }
+      _validateAdminName(admin.family_name, 'family_name');
+      _validateAdminName(admin.given_name, 'given_name');
     }
     if (amountFen <= BigInt.zero) {
       throw ArgumentError('amount 必须大于 0');
@@ -131,10 +139,12 @@ class PersonalManageService {
         CompactBigIntCodec.codec.encode(BigInt.from(accountName.length)));
     output.write(accountName);
 
-    // admins: BoundedVec<AccountId32>
+    // admins: BoundedVec<Admin(admin_account + family_name + given_name)>
     output.write(CompactBigIntCodec.codec.encode(BigInt.from(admins.length)));
-    for (final pubkey in admins) {
-      output.write(pubkey);
+    for (final admin in admins) {
+      output.write(AdminAccountIdCodec.hexDecode(admin.admin_account));
+      _writeAdminName(output, admin.family_name);
+      _writeAdminName(output, admin.given_name);
     }
 
     // regular_threshold: u32 little-endian。注册提案阈值仍由链端固定为全员通过。
@@ -144,6 +154,19 @@ class PersonalManageService {
     output.write(_u128ToLeBytesStatic(amountFen));
 
     return output.toBytes();
+  }
+
+  static void _validateAdminName(String value, String field) {
+    final bytes = utf8.encode(value.trim());
+    if (bytes.isEmpty || bytes.length > 128) {
+      throw ArgumentError('$field 长度必须在 1..=128 字节');
+    }
+  }
+
+  static void _writeAdminName(ByteOutput output, String value) {
+    final bytes = utf8.encode(value.trim());
+    output.write(CompactBigIntCodec.codec.encode(BigInt.from(bytes.length)));
+    output.write(Uint8List.fromList(bytes));
   }
 
   /// 提交 PersonalManage::propose_close extrinsic。
@@ -430,7 +453,7 @@ class PersonalManageService {
       _confirmPersonalAccountProposedEvent({
     required String blockHashHex,
     required Uint8List accountName,
-    required List<Uint8List> admins,
+    required List<AdminPerson> admins,
     required int regularThreshold,
     required BigInt amountFen,
     required Uint8List proposerPubkey,
@@ -462,7 +485,7 @@ class PersonalManageService {
   ({int proposalId, String accountHex})? _findPersonalAccountProposedEvent(
     Uint8List data, {
     required Uint8List accountName,
-    required List<Uint8List> admins,
+    required List<AdminPerson> admins,
     required int regularThreshold,
     required BigInt amountFen,
     required Uint8List proposerPubkey,
@@ -510,7 +533,7 @@ class PersonalManageService {
     Uint8List data,
     int offset, {
     required Uint8List accountName,
-    required List<Uint8List> admins,
+    required List<AdminPerson> admins,
     required int regularThreshold,
     required BigInt amountFen,
     required Uint8List proposerPubkey,
@@ -527,14 +550,11 @@ class PersonalManageService {
       final nameRead = _readCompactBytes(data, pos);
       if (nameRead == null) return null;
       pos = nameRead.nextOffset;
-      final (adminsLen, adminsLenBytes) = _decodeCompact(data, pos);
-      pos += adminsLenBytes;
-      if (adminsLen < 0 || pos + adminsLen * 32 > data.length) return null;
-      final eventAdmins = <Uint8List>[];
-      for (var i = 0; i < adminsLen; i++) {
-        eventAdmins.add(Uint8List.fromList(data.sublist(pos, pos + 32)));
-        pos += 32;
-      }
+      final decodedAdmins =
+          InstitutionRoleStorageCodec.decodeAdminVector(data, pos);
+      if (decodedAdmins == null) return null;
+      final eventAdmins = decodedAdmins.$1;
+      pos = decodedAdmins.$2;
       if (pos + 4 + 4 + 16 + 16 > data.length) return null;
       final eventAdminsLen = _readU32Le(data, pos);
       pos += 4;
@@ -661,12 +681,16 @@ class PersonalManageService {
   }
 
   static bool _adminListsEqual(
-    List<Uint8List> left,
-    List<Uint8List> right,
+    List<AdminPerson> left,
+    List<AdminPerson> right,
   ) {
     if (left.length != right.length) return false;
     for (var i = 0; i < left.length; i++) {
-      if (!_bytesEqual(left[i], right[i])) return false;
+      if (left[i].admin_account != right[i].admin_account ||
+          left[i].family_name != right[i].family_name ||
+          left[i].given_name != right[i].given_name) {
+        return false;
+      }
     }
     return true;
   }

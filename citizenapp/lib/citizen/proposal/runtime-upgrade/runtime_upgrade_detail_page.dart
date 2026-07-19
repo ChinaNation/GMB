@@ -168,8 +168,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       Set<String> pendingPubkeys = const {};
 
       if (institution != null) {
-        admins = (results[4] as List<String>)
-            .map((pubkey) => _normalizeHex(pubkey))
+        admins = (results[4] as List<AdminPerson>)
+            .map((admin) => _normalizeHex(admin.admin_account))
             .toList(growable: false);
         institutionVote = results[5] as bool?;
         institutionAdminTally = results[6] as ({int yes, int no});

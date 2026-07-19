@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 状态：进行中
-- 当前步骤：正式创世前统一改造第3步 OnChina 管理员三字段对齐已完成；下一步为 CitizenApp 管理员三字段对齐
+- 当前步骤：正式创世前统一改造第4步 CitizenApp 管理员三字段对齐已完成；下一步为第5步 CitizenWallet 与统一 QR 协议对齐
 - 用户确认：2026-07-17
 - 执行规则：每一步先确认方案；执行完成后立即更新文档、完善中文注释、清理残留，再输出下一步技术方案
 
@@ -168,5 +168,7 @@
 - 2026-07-18：第2步验证通过：`cargo check -p node`、Node 280 项测试、Node 前端 TypeScript 与 Vite 生产构建、旧管理员结构 / 纯账户布局 / 合并姓名字段 / DTO 泛化账户字段残留检查全部通过。当前源码强制重建 WASM 后，隔离 `citizenchain-fresh` 真实启动成功，block#0 `0xc1dc759689aed0a8f8361dc3cb0e39c1faf19cfc55c7611b02ccc79ce04524c6`、`stateRoot=0x967155d28abe492052ef4bfd59a1ddbebce8cdaa57d9baaad446028848061a5e`、`isSyncing=false`；节点已停止并清理临时数据，本步未烘焙正式 chainspec 或切换正式数据。
 - 2026-07-19：正式创世前统一改造第3步完成。OnChina 链上管理员严格解码、登录候选与会话、注册局目录、机构创建/治理载荷、机构管理员投影、PostgreSQL 和现有 UI 页面全部统一为 `admin_account + family_name + given_name`；授权只比较账户，页面只在展示时合并姓、名，没有岗位的管理员仍保留人员行。
 - 2026-07-19：第3步验证通过：OnChina 137 项测试、后端生产编译、前端 TypeScript/Vite 生产构建和旧字段残留检查通过。隔离 fresh 节点 block#0 为 `0xc1dc759689aed0a8f8361dc3cb0e39c1faf19cfc55c7611b02ccc79ce04524c6`、`stateRoot=0x967155d28abe492052ef4bfd59a1ddbebce8cdaa57d9baaad446028848061a5e`、`isSyncing=false`；临时 PostgreSQL 实测旧合并姓名列为 0，并验证旧单列重启后被直接删除、默认落为“管理”“员”。链投影 49,593 个机构、99,231 个账户，健康接口和首页正常。所有验收进程已停止，临时数据已移入废纸篓；未烘焙正式 chainspec、未切换正式节点数据。
+- 2026-07-19：正式创世前统一改造第4步完成。CitizenApp 机构/个人多签管理员模型、严格 SCALE 解码、创建/更换 call、本地快照、钱包匹配与现有页面全部统一为 `admin_account + family_name + given_name`；授权只比较账户，无岗位管理员仍保留，姓、名只在 UI 合并显示，创建/更换仍只有一次最终交易签名。
+- 2026-07-19：第4步验证通过：`flutter analyze --no-fatal-infos` 无问题，41 项专项测试和 741 项完整测试通过，5 项因纯 Dart 环境缺少原生 smoldot 库按既有条件跳过。隔离 fresh 节点运行正常，block#0/stateRoot 与第2、3步一致；真实 RPC 抽样的 `PublicAdmins::AdminAccounts` 解出 9 个完整三字段管理员且无尾部字节。Android arm64 APK 在 Pixel 8a 安装启动，并在现有 Android 模拟器完成真实页面渲染；验收节点、模拟器和临时截图已清理。本步未修改 runtime、未烘焙正式 chainspec、未切换正式数据。
 - 2026-07-17：OnChina、CitizenWallet、CitizenApp 已同步删除 `institution_create_credential` 动作码；CitizenWallet 对 `0x1e05/0x1f05` 按新 call-data 顺序解码并统一中文展示，创建机构链路不再存在内层凭证 Option 分支。
 - 2026-07-17：本轮验收通过：`cargo check -p citizenchain`、`cargo check -p onchina`、`cargo test -p public-manage -p private-manage`、`cargo test -p onchina core::institution_call`、OnChina 前端 `npm run build`、CitizenWallet `flutter analyze`、CitizenWallet `flutter test test/signer/payload_decoder_test.dart test/signer/field_labels_test.dart`、CitizenApp `flutter test test/qr/qr_router_test.dart`、CitizenApp `flutter analyze`、`git diff --check`。OnChina test 构建仍有既有 `GENESIS_CITIZEN_MAX` 未用常量警告，与本次创建机构签名链路无关。

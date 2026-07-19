@@ -74,7 +74,7 @@ class AdminAccountService {
     return state;
   }
 
-  Future<List<String>> fetchAdmins(AdminAccountIdentity identity) async =>
+  Future<List<AdminPerson>> fetchAdmins(AdminAccountIdentity identity) async =>
       (await fetchByIdentity(identity))?.admins ?? const [];
 
   Future<int?> fetchThreshold(AdminAccountIdentity identity) async =>
@@ -85,7 +85,8 @@ class AdminAccountService {
     AdminAccountIdentity identity,
   ) async {
     final clean = AdminAccountIdCodec.normalizeHex(pubkeyHex);
-    return (await fetchAdmins(identity)).contains(clean);
+    return (await fetchAdmins(identity))
+        .any((admin) => admin.admin_account == clean);
   }
 
   void clearCache([AdminAccountIdentity? identity]) {
