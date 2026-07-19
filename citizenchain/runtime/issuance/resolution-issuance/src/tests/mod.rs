@@ -80,7 +80,7 @@ impl frame_support::traits::EnsureOrigin<RuntimeOrigin> for EnsureNrcAdminForTes
 
     fn try_origin(o: RuntimeOrigin) -> Result<Self::Success, RuntimeOrigin> {
         let who = frame_system::EnsureSigned::<AccountId32>::try_origin(o)?;
-        if who == AccountId32::new([1u8; 32]) {
+        if who == AccountId32::new([1u8; 32]) || who == AccountId32::new([4u8; 32]) {
             Ok(who)
         } else {
             Err(RuntimeOrigin::from(frame_system::RawOrigin::Signed(who)))
@@ -98,26 +98,29 @@ thread_local! {
 }
 
 pub struct TestJointVoteEngine;
-impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
-    fn create_joint_proposal(
-        _who: AccountId32,
-        _actor_cid_number: Vec<u8>,
-    ) -> Result<u64, DispatchError> {
+impl TestJointVoteEngine {
+    fn allocate_id() -> u64 {
         NEXT_JOINT_ID.with(|id| {
             let mut id = id.borrow_mut();
-            let v = *id;
+            let value = *id;
             *id = id.saturating_add(1);
-            Ok(v)
+            value
         })
     }
+}
 
+impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
     fn create_joint_proposal_with_data(
-        who: AccountId32,
-        actor_cid_number: Vec<u8>,
-        module_tag: &[u8],
+        _who: AccountId32,
+        _actor_cid_number: Vec<u8>,
+        vote_plan: votingengine::types::VotePlanOf<AccountId32>,
         data: Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        let proposal_id = Self::create_joint_proposal(who, actor_cid_number)?;
+        let hash = <Test as frame_system::Config>::Hashing::hash(data.as_slice());
+        if hash.as_ref() != vote_plan.business_object_hash.as_slice() {
+            return Err(DispatchError::Other("business object hash mismatch"));
+        }
+        let proposal_id = Self::allocate_id();
         let bounded_data: frame_support::BoundedVec<
             u8,
             <Test as votingengine::Config>::MaxProposalDataLen,
@@ -125,25 +128,27 @@ impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
             .try_into()
             .map_err(|_| DispatchError::Other("proposal data too large"))?;
         let owner: frame_support::BoundedVec<u8, <Test as votingengine::Config>::MaxModuleTagLen> =
-            module_tag
+            vote_plan
+                .proposal_owner
                 .to_vec()
                 .try_into()
                 .map_err(|_| DispatchError::Other("module tag too large"))?;
         votingengine::ProposalData::<Test>::insert(proposal_id, bounded_data);
         votingengine::ProposalOwner::<Test>::insert(proposal_id, owner);
+        votingengine::ProposalVotePlans::<Test>::insert(proposal_id, vote_plan);
         Ok(proposal_id)
     }
 
     fn create_joint_proposal_with_data_and_object(
         who: AccountId32,
         actor_cid_number: Vec<u8>,
-        module_tag: &[u8],
+        vote_plan: votingengine::types::VotePlanOf<AccountId32>,
         data: Vec<u8>,
         object_kind: u8,
         object_data: Vec<u8>,
     ) -> Result<u64, DispatchError> {
         let proposal_id =
-            Self::create_joint_proposal_with_data(who, actor_cid_number, module_tag, data)?;
+            Self::create_joint_proposal_with_data(who, actor_cid_number, vote_plan, data)?;
         let object_len = u32::try_from(object_data.len())
             .map_err(|_| DispatchError::Other("proposal object too large"))?;
         let object_hash = <Test as frame_system::Config>::Hashing::hash(&object_data);
@@ -179,6 +184,44 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             _ => return false,
         };
         cid_number == expected_cid.as_bytes() && who == &AccountId32::new([1u8; 32])
+    }
+}
+
+pub struct TestInstitutionRoleAuthorization;
+impl entity_primitives::InstitutionRoleAuthorizationQuery<AccountId32>
+    for TestInstitutionRoleAuthorization
+{
+    fn role_has_permission(
+        role_subject: &entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>,
+        business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
+        operation: entity_primitives::RolePermissionOperation,
+    ) -> bool {
+        role_subject.role_code == primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+            && business_action_id.module_tag == crate::MODULE_TAG
+            && business_action_id.action_code
+                == entity_primitives::business_action::ACTION_RESOLUTION_ISSUANCE
+            && operation == entity_primitives::RolePermissionOperation::Propose
+    }
+
+    fn is_authorized(
+        admin: &AccountId32,
+        role_subject: &entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>,
+        business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
+        operation: entity_primitives::RolePermissionOperation,
+    ) -> bool {
+        let valid_cid = [
+            primitives::cid::china::china_cb::CHINA_CB[0]
+                .cid_number
+                .as_bytes(),
+            primitives::cid::china::china_cb::CHINA_CB[1]
+                .cid_number
+                .as_bytes(),
+        ]
+        .iter()
+        .any(|cid| *cid == role_subject.cid_number.as_slice());
+        admin == &AccountId32::new([1u8; 32])
+            && valid_cid
+            && Self::role_has_permission(role_subject, business_action_id, operation)
     }
 }
 
@@ -250,6 +293,7 @@ impl pallet::Config for Test {
     type RecipientSetOrigin = frame_system::EnsureRoot<AccountId32>;
     type MaintenanceOrigin = frame_system::EnsureRoot<AccountId32>;
     type JointVoteEngine = TestJointVoteEngine;
+    type InstitutionRoleAuthorization = TestInstitutionRoleAuthorization;
     type MaxReasonLen = ConstU32<128>;
     type MaxAllocations = ConstU32<64>;
     type MaxTotalIssuance = ConstU128<14_434_973_780_000>;

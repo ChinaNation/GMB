@@ -21,7 +21,7 @@
 | `src/citizen_const.rs` | 公民认证发行常量 |
 | `src/count_const.rs` | 投票治理常量（机构数量、投票阈值、期限、不可修改条款清单） |
 | `src/constitution.rs` | 修宪「章→档位」分类判定单源（第十九条 `classify`/`AmendmentScope`，runtime 与节点守卫共用） |
-| `src/governance_skeleton.rs` | 创世治理保护清单：精确枚举 89 个机构及其机构码、CID、主账户、管理员人数、岗位代码/名称和席位；完整身份查询禁止只按机构码扩大保护范围。实际 storage 写入唯一在 genesis seeder，Node Guard 使用共享管理员/entity 类型解码 |
+| `src/governance_skeleton.rs` | 创世治理保护清单：精确枚举 89 个机构及其机构码、CID、主账户、管理员人数、岗位代码/名称和席位；普通固定岗位保持精确任职数，唯一 LR 岗位允许 0..=1 任职。岗位不定义阈值，阈值属于机构/投票计划。完整身份查询禁止只按机构码扩大保护范围。实际 storage 写入唯一在 genesis seeder，Node Guard 使用共享管理员/entity 类型解码 |
 | `src/institution_constraints.rs` | 国家级单例与成员组成永久约束：精确枚举 PRS/NLG/NSN/NRP/NSP/NED 六个创世身份，固定 NSN `SENATOR` 105–155、NRP `REPRESENTATIVE` 305–355、NED `COMMITTEE_MEMBER` 105–155，并声明 NLG 由 NSN、NRP 组成；不冻结 NLG/NSP/PRS 的岗位或 admins，六个单例的内部投票规则由投票引擎按提案类型处理 |
 | `src/genesis.rs` | 创世宣言、创世人口、创世发行总量 |
 | `china/mod.rs` | 机构常量模块声明 |
@@ -31,7 +31,7 @@
 | `china/china_jy.rs` | 公民教育委员会 |
 | `china/china_lf.rs` | 46 个立法机构（国家立法院 + 国家参议会 + 国家众议会 + 43 省级联邦立法院） |
 | `china/china_sf.rs` | 44 个司法院（国家司法院 + 43 省级联邦司法院） |
-| `china/citizenchain.rs` | 私权创世机构“中国公民链技术有限公司”的身份、协议账户、法定代表人、三名管理员、固定岗位和 2/3 阈值唯一常量真源 |
+| `china/citizenchain.rs` | 私权创世机构“中国公民链技术股份有限公司”的身份、协议账户、法定代表人、三名管理员、固定岗位和 2/3 阈值唯一常量真源 |
 | `china/china_zb.rs` | 639 个制度保留地址（防抢注） |
 | `china/china_zf.rs` | 71 个政府机构（总统府 + 联邦局 + 部委 + 宪法国家级机构 + 43 省级联邦政府） |
 

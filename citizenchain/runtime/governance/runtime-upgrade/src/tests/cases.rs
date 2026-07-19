@@ -38,6 +38,43 @@ fn joint_proposers_can_propose_runtime_upgrade() {
             votingengine::Pallet::<Test>::get_proposal_data(101).is_some(),
             "PRC proposer should create proposal data"
         );
+        for proposal_id in [100, 101] {
+            let plan = votingengine::ProposalVotePlans::<Test>::get(proposal_id)
+                .expect("runtime upgrade must bind vote plan");
+            assert_eq!(
+                plan.business_action_id.action_code,
+                entity_primitives::business_action::ACTION_RUNTIME_UPGRADE
+            );
+            assert_eq!(plan.voter_subjects.len(), 87);
+            assert_eq!(
+                plan.voter_subjects
+                    .iter()
+                    .filter(|subject| matches!(
+                        subject,
+                        entity_primitives::AuthorizationSubject::Institution(role)
+                            if role.role_code.as_slice()
+                                == primitives::governance_skeleton::ROLE_CODE_DIRECTOR
+                    ))
+                    .count(),
+                43
+            );
+        }
+    });
+}
+
+#[test]
+fn administrator_without_committee_role_cannot_propose_runtime_upgrade() {
+    new_test_ext().execute_with(|| {
+        assert_noop!(
+            RuntimeUpgrade::propose_runtime_upgrade(
+                RuntimeOrigin::signed(ordinary_staff_admin()),
+                nrc_cid(),
+                reason_ok(),
+                code_ok(),
+                pow_difficulty::PowDifficultyParams::genesis_default()
+            ),
+            pallet::Error::<Test>::UnauthorizedActorRole
+        );
     });
 }
 

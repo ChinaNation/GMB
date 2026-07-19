@@ -6,21 +6,30 @@
 
 业务模块只提交提案语义，不能自行实现投票流程、人口快照、投票资格、计票、通过判定或清理状态机。
 
+ADR-039 已于 2026-07-19 冻结机构岗位主体目标。任务卡第 5A 步已完成联合投票切片：`joint-vote`、协议升级和决议发行不再以 CID 全体 admins 作为授权或选民来源。`internal-vote`、`legislation-vote` 和 `election-vote` 的相关机构路径仍待后续步骤迁移，不是联合投票的兼容路径。
+
 ## 内部投票与业务权限
 
-- `internal-vote` 是所有机构与个人多签共用的管理员投票程序，负责内部投票模式准入、CID/个人账户主体、管理员快照、计票、阈值快照和终态。
-- “机构可以使用内部投票”不等于“机构可以发起所有接入内部投票的业务”。有效准入 = 投票引擎模式准入 + 业务 pallet 具体权限，两层任一拒绝都不能创建或执行提案。
+- `internal-vote` 是机构岗位主体与个人多签共用的投票程序；两类授权主体必须用 `AuthorizationSubject` 强类型分离。
+- 共享 `VotePlan` 的 SCALE 字段顺序固定为 `business_action_id`、`proposal_owner`、`proposer_subject`、`voter_subjects`、`voting_engine`、`business_object_hash`；最多绑定 256 个投票主体。
+- `VotingEngineKind` discriminant 固定为 `Internal = 0`、`Joint = 1`、`Election = 2`、`Legislation = 3`。构造器强制 owner 与 module tag 相同、投票主体非空且不重复，并禁止机构岗位与个人多签主体混用。
+- 联合投票创建时必须携带完整 `VotePlan`；核心引擎一次性写入 `ProposalVotePlans`，要求 `ProposalOwner` 与 plan 相同，拒绝重复绑定。
+- 目标机构提案由业务模块先校验 `RoleSubject(cid_number, role_code)` 的 `Propose` 权限，并静态选择唯一投票引擎、绑定 `VotePlan`。引擎不得接受调用方选择引擎，也不得把“属于 admins”当业务准入。
+- 机构投票资格按 VotePlan 中一个或多个 voter `RoleSubject` 的有效任职账户建立不可变快照；不得自动快照该 CID 的全体 admins。个人多签仍按 personal_account 的管理员集合快照。
+- `VoterSnapshot[(proposal_id, RoleSubject)]` 保存每个岗位主体的有效任职账户；`EffectiveVoterSnapshot[(proposal_id, cid_number)]` 保存该 CID 所有参与岗位的账户并集并去重。因此同一账户在同一 CID 兼任多岗只能投一票，但在不同 CID 的有效任职可分别投票。
+- 投票引擎只负责快照、资格、票据、阈值、计票、终态、重试和清理；业务合法性、业务对象绑定及通过后的具体执行归对应业务 pallet。
 - `multisig` 转账允许已登记机构账户和个人多签账户；机构调用显式携带 `actor_cid_number + institution_account`，反向索引只校验两者归属，不反推或回落机构身份。
 - `resolution-destroy` 只允许 NRC、PRC、PRB；`grandpakey-change` 只允许 NRC、PRC。业务限制不得下沉到 `internal-vote`。
-- FRG 是一个 CID 机构并拥有多个协议账户和 215 名管理员；省域 5 人岗位组属于注册业务权限，通用内部投票只校验 FRG CID、管理员授权和 CID 快照。
+- FRG 是一个 CID 机构并拥有多个协议账户和 215 名管理员；省域 5 人岗位组属于注册业务权限，目标投票和发起资格必须解析对应省专员 `RoleSubject`，不能把 FRG 全体 admins 纳入。
+- 协议升级与决议发行都固定使用联合投票：NRC/43 个 PRC 委员岗位可发起和投票，43 个 PRB `DIRECTOR / 董事` 岗位只投票；岗位只提供资格主体，不能选择引擎或自带岗位阈值。
+- 联合投票引擎还会校验 proposer 是 plan 中 NRC/PRC 委员主体的有效任职账户，并要求 plan 精确覆盖 44 个 CHINA_CB 委员主体和 43 个 CHINA_CH 董事主体；缺失、多出、重复或跨类型主体均 fail-closed。
 
 ### 内部投票阈值
 
 - NRC、PRC、PRB、NJD、FRG 使用代码级永久固定阈值，不写账户级动态阈值。
-- PRS、NLG、NSN、NRP、NSP、NED 六个国家单例没有机构级动态阈值；普通内部事项在创建提案时按当前 admins 快照计算 `floor(N/2)+1`，只写 `InternalThresholdSnapshot`。
+- PRS、NLG、NSN、NRP、NSP、NED 六个国家单例没有机构级动态阈值；ADR-039 目标普通内部事项按 VotePlan 指定岗位主体的合格任职快照计算 `floor(N/2)+1`，只写 `InternalThresholdSnapshot`，不按全体 admins 计算。
 - 六个国家单例禁止写入 `ActiveInstitutionThresholds` 或待变更阈值。
-- 普通注册机构使用 `ActiveInstitutionThresholds[cid_number]`，个人多签使用
-  `ActivePersonalThresholds[personal_account]`；生命周期关闭使用全员快照，具体业务权限仍由业务 pallet 校验。
+- 普通注册机构的初始投票规则在机构创建时与初始治理岗位、权限和任职原子建立；机构具体阈值必须与 VotePlan 指定岗位主体绑定。个人多签继续使用 `ActivePersonalThresholds[personal_account]`；生命周期关闭同样不得绕过岗位主体授权。
 
 ## 公民身份真源
 
@@ -75,7 +84,7 @@ OnChina 本地数据库只能用于注册局录入和界面提示，不能作为
   重大案不创建。
 - 代表机构表决：`cast_representative_vote(proposal_id, approve)`。
 - 特别案公投：`cast_referendum_vote(proposal_id, approve)`。
-- 行政签署、三人会签、护宪终审继续按账户和机构管理员快照判定。
+- 行政签署、三人会签、护宪终审目标均按业务模块绑定的机构岗位主体快照判定，不按机构全体管理员快照判定。
 - `legislation-yuan` 在创建提案和投票通过写入前分别复核一次法定路由：固定院序、发起机构、行政签署机构、会签机构、active 账户和 CID 行政区必须全部一致。客户端携带的路由字段不是授权真源。
 
 ### 固定框架
@@ -110,9 +119,9 @@ legislation-vote/
 ### 资格真源与快照边界
 
 - 普选必须使用 `citizen-identity` 的 `PopulationScope`、`can_be_candidate`、`create_population_snapshot` 和 `can_vote_at`；只保存 snapshot_id，不接收、不枚举、不保存全国/省/市/镇完整选民列表。
-- 互选属于机构内部互选，必须由对应 admins provider 的 `get_institution_admins(institution_code, cid_number)` 提供 CID 管理员快照；调用方提交的选民集合必须与完整 admins 快照等长且逐成员一致，不得删减或夹带账户。
-- `election-vote` 创建入口按 `ElectionMode` 强制检查资格来源：Popular 必须有人口作用域，Mutual 必须取得目标机构 admins 快照。
-- 普选人口作用域写入 `ElectionMeta`，资格引用写入核心 `ProposalPopulationSnapshotIds`；互选不写公民作用域，选民存于 `MutualVoters` 并按机构管理员集合校验候选人和选民。
+- 互选属于机构岗位业务；目标选民必须来自业务模块 VotePlan 指定的 voter `RoleSubject` 有效任职快照。调用方不得提交或删减选民集合。
+- `election-vote` 创建入口按 `ElectionMode` 强制检查资格来源：Popular 必须有人口作用域，Mutual 必须取得已绑定岗位主体快照。
+- 普选人口作用域写入 `ElectionMeta`，资格引用写入核心 `ProposalPopulationSnapshotIds`；互选不写公民作用域，选民存于 `MutualVoters` 并按岗位主体快照校验候选人和选民。
 - 多席位计票允许完整落入剩余席位的并列组共同当选；并列组跨越席位边界时拒绝结果。
 
 ## 清理
@@ -123,7 +132,7 @@ legislation-vote/
 
 - `ScheduledCleanups + ScheduledCleanupHead/Tail` 是 90 天保留期的延迟 FIFO；固定保留期保证写入顺序就是到期顺序，不再使用有界区块桶或向后扫描候选桶。
 - 到期任务转入 `PendingCleanupQueue + PendingCleanupQueueHead/Tail` 就绪 FIFO；每个提案每轮只执行一个有界步骤，未完成任务排回队尾。
-- 清理阶段固定为 `AdminSnapshots → TrackData → ProposalObject → FinalCleanup`；`TrackData` 只派发到提案所属 Track，不再空扫四类 sub-pallet。
+- 清理阶段固定为 `AdminSnapshots → VoterSnapshots → EffectiveVoterSnapshots → TrackData → ProposalObject → FinalCleanup`；`TrackData` 只派发到提案所属 Track，不再空扫四类 sub-pallet。`FinalCleanup` 同步删除 `ProposalVotePlans`。
 - 激活数、清理步骤数和 `MaxCleanupWeightPerBlock` 同时限流；单个大型公投不能阻塞后续提案，也不能挤占自动终结或业务执行的独立预算。
 
 ## 生产代码职责边界
@@ -150,7 +159,7 @@ legislation-vote/
 - `on_initialize` 在到期桶尚未排空时不再提前返回，执行重试、终态清理和 90 天清理管线每块都能继续获得有界处理机会。
 - 投票判定与业务执行已通过 `PendingProposalExecutions` 解耦；队列按 weight 预算执行，错误指数退避并在三次失败后 dead-letter，既有手动重试和终态清理契约已完成适配。
 - `finalize_proposal` 只承担投票判定与执行入队，不再叠加 `set_code`；`set_code` 最重成本只归入 `process_pending_execution` 异步执行预算。五个投票 crate 的正式 benchmark 已生成并写入生产权重。
-- `joint-vote` 本 crate 现有 10 项直属测试，除纯函数边界外直接覆盖 `cast_admin`、`cast_referendum`、105 票全票、机构否决和超时转公投；`internal-vote` 继续提供跨 pallet 回归覆盖。
+- `joint-vote` 本 crate 现有 12 项直属测试，除原有 `cast_admin`、`cast_referendum`、105 票全票、机构否决和超时转公投外，直接覆盖 `VotePlan`/岗位快照绑定、同 CID 去重和跨 CID 独立投票；`internal-vote` 继续提供跨 pallet 回归覆盖。
 - `legislation-vote` 的 signing、guard、referendum、result、cleanup 文件已承载实际规则或清理辅助，不再是纯注释残桩。
 - 正式链重新创世采用最终布局：五个投票 pallet 以及本次触达的 `public-admins`、`public-manage`、`private-manage` 的 `StorageVersion` 全部为 1；开发期 storage alias、升级翻译、迁移类型和迁移测试已删除，runtime 全仓不存在高于 1 的 storage version。
 
@@ -166,7 +175,7 @@ legislation-vote/
 - `citizen-identity` 以全局 `eligibility_revision` 和每账户不可变版本历史冻结创建时资格；同一区块多次身份写入也能确定顺序，账户查询按版本数二分定位。
 - 联合公投、立法公投和 Popular 选举统一绑定 `ProposalPopulationSnapshotIds`；旧的 `ReferendumScopes`、`LegislationMeta.referendum_scope`、Popular 全量选民表及 `MaxElectionVoters` 已删除。
 - Popular 不再受完整选区人数的 `BoundedVec` 限制；Mutual 的 `MaxMutualVoters` 与 Runtime `MaxAdminsPerInstitution` 使用同一上限。
-- `joint-vote` crate 直属测试由 3 个纯函数测试扩展到 10 项，直接覆盖 `cast_admin`、`cast_referendum`、105 票全票执行、机构否决转公投、超时转公投和创建后新增选民拒绝。
+- `joint-vote` crate 直属测试当前为 12 项，直接覆盖 `cast_admin`、`cast_referendum`、105 票全票执行、机构否决转公投、超时转公投、创建后新增选民拒绝、岗位快照绑定和有效选民去重。
 - 自动执行结果应用阶段的确定性错误不再每块无限重排；R2 回归用例覆盖 `Ignored` 三次退避后 dead-letter，以及孤儿执行队列立即删除。
 
 ## 2026-07-14 生产 Benchmark 与动态权重
@@ -219,6 +228,6 @@ WASM 的 fresh 临时节点正常启动，block#0 为
 
 2026-07-14 治理职责收口第 1 步：内部投票与业务权限完成分层。FRG 账户上下文不再错误绑定省域 5 人组；多签转账统一从 entity 解析所有机构；销毁仍由业务模块固定 NRC/PRC/PRB，GRANDPA 密钥仍固定 NRC/PRC。专项测试通过：`internal-vote` 88、`multisig` 24、`resolution-destroy` 15、`grandpakey-change` 17，runtime 整体 `cargo check` 通过。
 
-2026-07-17 当前边界：六个国家单例不保存账户级动态阈值，普通内部事项按提案管理员快照派生严格过半；组成结果只写岗位和任职，绝不派生 admins。
+2026-07-17 的“普通内部事项按提案管理员快照派生严格过半”口径已被 ADR-039 取代；目标按 VotePlan 指定岗位主体的有效任职快照派生。组成结果仍只写岗位和任职，绝不派生 admins。
 
 2026-07-14 治理职责收口第 3 步：业务执行端新增 owner/kind/stage/code/account/CID/action 全绑定；联合业务接受联合阶段或公投阶段的合法通过终态；立法路由改为链端双重复校验；选举引擎删除外部创建入口和直写 entity 路径。投票引擎继续只负责投票流程，业务权限与执行前复核留在业务 pallet。

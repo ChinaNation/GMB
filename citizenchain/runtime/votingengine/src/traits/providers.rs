@@ -137,3 +137,29 @@ impl<AccountId> InternalAdminsLenProvider<AccountId> for () {
         None
     }
 }
+
+/// 机构岗位任职快照提供器。
+///
+/// 本接口只暴露岗位任职事实，不解释业务权限。业务模块必须在调用投票引擎前通过
+/// `InstitutionRoleAuthorizationQuery` 完成“CID + 岗位码 + 业务动作”的授权校验。
+pub trait InstitutionRoleProvider<AccountId> {
+    /// 账户是否正在指定机构岗位有效任职。
+    fn is_active_assignment(cid_number: &[u8], who: &AccountId, role_code: &[u8]) -> bool;
+
+    /// 读取指定机构岗位当前全部有效任职账户，用于提案创建时冻结投票资格。
+    fn active_accounts_for_role(cid_number: &[u8], role_code: &[u8])
+        -> sp_std::vec::Vec<AccountId>;
+}
+
+impl<AccountId> InstitutionRoleProvider<AccountId> for () {
+    fn is_active_assignment(_cid_number: &[u8], _who: &AccountId, _role_code: &[u8]) -> bool {
+        false
+    }
+
+    fn active_accounts_for_role(
+        _cid_number: &[u8],
+        _role_code: &[u8],
+    ) -> sp_std::vec::Vec<AccountId> {
+        sp_std::vec::Vec::new()
+    }
+}

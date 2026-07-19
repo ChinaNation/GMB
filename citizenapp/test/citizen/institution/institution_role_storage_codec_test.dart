@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:citizenapp/citizen/institution/institution_role_models.dart';
@@ -16,6 +17,90 @@ void main() {
     final encoded = (value << 2) | 1;
     return [encoded & 0xff, (encoded >> 8) & 0xff];
   }
+
+  Map<String, dynamic> readRolePermissionFixture() {
+    final candidates = [
+      File('../memory/06-quality/fixtures/institution_role_permission_v1.json'),
+      File('memory/06-quality/fixtures/institution_role_permission_v1.json'),
+    ];
+    final file = candidates.firstWhere((candidate) => candidate.existsSync());
+    return jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+  }
+
+  Uint8List fixtureBytes(Map<String, dynamic> fixture, String name) {
+    final cases = fixture['cases']! as List<dynamic>;
+    final entry = cases
+        .cast<Map<String, dynamic>>()
+        .singleWhere((item) => item['name'] == name);
+    final hex = entry['encoded_hex']! as String;
+    return Uint8List.fromList([
+      for (var index = 0; index < hex.length; index += 2)
+        int.parse(hex.substring(index, index + 2), radix: 16),
+    ]);
+  }
+
+  test('岗位权限与 VotePlan 严格解码统一 SCALE fixture', () {
+    final fixture = readRolePermissionFixture();
+    final role = InstitutionRoleStorageCodec.decodeRoleSubject(
+      fixtureBytes(fixture, 'role_subject_nrc_committee'),
+    )!;
+    expect(role.cidNumber, 'LN001-NRC0G-944805165-2026');
+    expect(role.roleCode, 'COMMITTEE_MEMBER');
+
+    final action = InstitutionRoleStorageCodec.decodeBusinessActionId(
+      fixtureBytes(fixture, 'business_action_resolution_issuance'),
+    )!;
+    expect(action.moduleTag, 'res-iss');
+    expect(action.actionCode, 0);
+
+    final permission = InstitutionRoleStorageCodec.decodeRoleBusinessPermission(
+      fixtureBytes(fixture, 'permission_resolution_issuance_propose'),
+    )!;
+    expect(permission.operation, RolePermissionOperation.propose);
+    expect(permission.roleSubject.roleCode, 'COMMITTEE_MEMBER');
+
+    final personal = InstitutionRoleStorageCodec.decodeAuthorizationSubject(
+      fixtureBytes(fixture, 'authorization_personal_multisig'),
+    )!;
+    expect(personal.isInstitution, isFalse);
+    expect(personal.personalAccountHex, '07' * 32);
+
+    final plan = InstitutionRoleStorageCodec.decodeVotePlan(
+      fixtureBytes(fixture, 'vote_plan_resolution_issuance_joint'),
+    )!;
+    expect(plan.businessActionId.moduleTag, 'res-iss');
+    expect(plan.proposalOwner, 'res-iss');
+    expect(plan.proposerSubject.roleSubject!.roleCode, 'COMMITTEE_MEMBER');
+    expect(plan.voterSubjects, hasLength(3));
+    expect(plan.voterSubjects.last.roleSubject!.roleCode, 'DIRECTOR');
+    expect(plan.votingEngine, VotingEngineKind.joint);
+    expect(plan.businessObjectHash, 'ab' * 32);
+
+    final withTrailingByte = Uint8List.fromList([
+      ...fixtureBytes(fixture, 'vote_plan_resolution_issuance_joint'),
+      0,
+    ]);
+    expect(
+        InstitutionRoleStorageCodec.decodeVotePlan(withTrailingByte), isNull);
+  });
+
+  test('岗位权限 storage 向量严格解码并拒绝重复项', () {
+    final fixture = readRolePermissionFixture();
+    final permission =
+        fixtureBytes(fixture, 'permission_resolution_issuance_propose');
+    final decoded = InstitutionRoleStorageCodec.decodeRolePermissions(
+      Uint8List.fromList([4, ...permission]),
+    )!;
+    expect(decoded, hasLength(1));
+    expect(decoded.single.businessActionId.moduleTag, 'res-iss');
+
+    expect(
+      InstitutionRoleStorageCodec.decodeRolePermissions(
+        Uint8List.fromList([8, ...permission, ...permission]),
+      ),
+      isNull,
+    );
+  });
 
   test('机构管理员按账户、姓、名严格解码', () {
     final value = Uint8List.fromList([
@@ -107,6 +192,34 @@ void main() {
             .single;
     expect(assignment.source, InstitutionAssignmentSource.registry);
     expect(assignment.admin_account, '07' * 32);
+  });
+
+  test('任期窗口包含起止日且无任期岗位只接受零值', () {
+    final base = InstitutionAdminAssignment(
+      cidNumber: 'CID-1',
+      admin_account: '07' * 32,
+      roleCode: 'ROLE-1',
+      termStart: 10,
+      termEnd: 20,
+      source: InstitutionAssignmentSource.institutionGovernance,
+      sourceRef: 'proposal',
+      active: true,
+      termRequired: true,
+    );
+    expect(base.isEffectiveOnDay(10), isTrue);
+    expect(base.isEffectiveOnDay(20), isTrue);
+    expect(base.isEffectiveOnDay(21), isFalse);
+    final nonTerm = InstitutionAdminAssignment(
+      cidNumber: 'CID-1',
+      admin_account: '07' * 32,
+      roleCode: 'ROLE-2',
+      termStart: 0,
+      termEnd: 0,
+      source: InstitutionAssignmentSource.institutionGovernance,
+      sourceRef: 'proposal',
+      active: true,
+    );
+    expect(nonTerm.isEffectiveOnDay(20), isTrue);
   });
 
   test('岗位身份文本拒绝畸形 UTF-8 和非法 bool', () {

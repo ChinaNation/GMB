@@ -400,6 +400,20 @@ fn insert_fixed_admins<T>(
             .unwrap_or_else(|_| panic!("genesis institution: {} 任职数量超限", cid_number));
     public_manage::Pallet::<T>::store_genesis_roles_and_assignments(&cid, &roles, &assignments)
         .unwrap_or_else(|_| panic!("genesis institution: {} 岗位任职写入失败", cid_number));
+    for role in &roles {
+        public_manage::Pallet::<T>::store_genesis_fixed_role_permissions(&cid, &role.role_code)
+            .unwrap_or_else(|_| panic!("genesis institution: {} 固定岗位权限写入失败", cid_number));
+    }
+    let legal_representative_role: public_manage::institution::role::RoleCodeOf =
+        primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE
+            .to_vec()
+            .try_into()
+            .unwrap_or_else(|_| panic!("genesis institution: {} LR 岗位代码过长", cid_number));
+    public_manage::Pallet::<T>::store_genesis_fixed_role_permissions(
+        &cid,
+        &legal_representative_role,
+    )
+    .unwrap_or_else(|_| panic!("genesis institution: {} LR 空权限写入失败", cid_number));
 
     assert_eq!(
         admin_records.len(),
@@ -425,7 +439,7 @@ fn insert_fixed_admins<T>(
     public_admins::AdminAccounts::<T>::insert(admin_cid, institution_admins);
 }
 
-/// 写入中国公民链技术有限公司正式创世状态。
+/// 写入中国公民链技术股份有限公司正式创世状态。
 ///
 /// 机构身份、主/费用账户、三名管理员、三个固定岗位、法定代表人三字段和 2/3
 /// 内部治理阈值在同一创世构建中完成，任何一项不一致都直接中止创世。
@@ -577,6 +591,10 @@ where
             .expect("genesis citizenchain: 固定岗位任职数量超过协议上限");
     private_manage::Pallet::<T>::store_genesis_roles_and_assignments(&cid, &roles, &assignments)
         .expect("genesis citizenchain: 固定岗位和任职写入失败");
+    for role in &roles {
+        private_manage::Pallet::<T>::store_genesis_fixed_role_permissions(&cid, &role.role_code)
+            .expect("genesis citizenchain: 固定岗位权限写入失败");
+    }
     private_admins::Pallet::<T>::store_genesis_institution_admins(
         company.cid_number.as_bytes().to_vec(),
         parts.institution,

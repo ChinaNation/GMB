@@ -1,6 +1,6 @@
 {
   "pallet_index": 34,
-  "state_platform": "0002000068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c01000000",
+  "state_platform": "00020068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c010000001c8d5b0000000000000000000000000000",
   "vectors": [
     {
       "hex": "00",
@@ -53,7 +53,27 @@
       "note": "SubscriptionStatus::Terminated"
     },
     {
-      "hex": "0002000068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c01000000",
+      "hex": "03",
+      "name": "status_suspended",
+      "note": "SubscriptionStatus::Suspended"
+    },
+    {
+      "hex": "04",
+      "name": "status_creator_paused",
+      "note": "SubscriptionStatus::CreatorPaused（创作者掉平台会员，粉丝暂停但留调度）"
+    },
+    {
+      "hex": "00",
+      "name": "suspend_reason_need_reconsent",
+      "note": "SuspendReason::NeedReconsent（创作者计划改价/改周期待再签名）"
+    },
+    {
+      "hex": "01",
+      "name": "suspend_reason_insufficient_balance",
+      "note": "SuspendReason::InsufficientBalance（续费余额不足）"
+    },
+    {
+      "hex": "00020068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c010000001c8d5b0000000000000000000000000000",
       "name": "state_platform_spark_active",
       "note": "目标 SubscriptionState SCALE 顺序"
     },

@@ -34,7 +34,7 @@ import {
   prepareRegisterInstitutionAdmins,
   type InstitutionGovernanceAdminInput,
   type InstitutionGovernanceAssignmentChangeInput,
-  type InstitutionGovernanceRoleChangeInput,
+  type InstitutionGovernanceRoleMutationInput,
 } from '../admins/api';
 import { isSubordinateRegistry, isTier1Registry } from '../platform/registryTier';
 
@@ -74,19 +74,14 @@ type GovernanceFormValues = {
   admins_text?: string;
   role_code?: string;
   role_name?: string;
+  role_mutation?: 'CREATE' | 'RENAME' | 'DELETE';
   term_required?: boolean;
-  role_status?: 'ACTIVE' | 'INACTIVE';
+  role_permissions_text?: string;
+  role_initial_assignments_text?: string;
   assignments_text?: string;
   legal_representative_cid_number?: string;
   clear_legal_representative?: boolean;
 };
-
-function generateShortRoleCode(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const bytes = new Uint8Array(4);
-  crypto.getRandomValues(bytes);
-  return `R${Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('')}`;
-}
 
 function parseAdminsText(text?: string): InstitutionGovernanceAdminInput[] {
   return (text ?? '')
@@ -100,6 +95,29 @@ function parseAdminsText(text?: string): InstitutionGovernanceAdminInput[] {
       }
       return { admin_account: account, family_name: familyName, given_name: givenName };
     });
+}
+
+function parseRolePermissions(text?: string) {
+  return (text ?? '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+    const [moduleTag, actionCodeRaw, operation] = line.split(/[,，]/).map((part) => part.trim());
+    const actionCode = Number(actionCodeRaw);
+    if (!moduleTag || !Number.isInteger(actionCode) || actionCode < 0 || !['PROPOSE', 'VOTE'].includes(operation)) {
+      throw new Error('岗位权限每行格式必须是：模块标签,动作码,PROPOSE或VOTE');
+    }
+    return { module_tag: moduleTag, action_code: actionCode, operation: operation as 'PROPOSE' | 'VOTE' };
+  });
+}
+
+function parseInitialAssignments(text?: string) {
+  return (text ?? '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+    const [account, termStartRaw = '0', termEndRaw = '0'] = line.split(/[,，]/).map((part) => part.trim());
+    const termStart = Number(termStartRaw || 0);
+    const termEnd = Number(termEndRaw || 0);
+    if (!account || !Number.isInteger(termStart) || !Number.isInteger(termEnd) || termStart < 0 || termEnd < 0) {
+      throw new Error('初始任职每行格式必须是：管理员账户,任期开始,任期结束');
+    }
+    return { admin_account: account, term_start: termStart, term_end: termEnd };
+  });
 }
 
 function parseAssignmentsText(text?: string): InstitutionGovernanceAssignmentChangeInput[] {
@@ -144,9 +162,9 @@ function InstitutionGovernancePanel({
 
   useEffect(() => {
     form.setFieldsValue({
-      role_code: generateShortRoleCode(),
-      role_status: 'ACTIVE',
+      role_mutation: 'CREATE',
       term_required: false,
+      role_permissions_text: 'pub-mgmt,3,PROPOSE\npub-mgmt,3,VOTE',
     });
   }, [form, cidNumber]);
 
@@ -164,17 +182,17 @@ function InstitutionGovernancePanel({
 
   const valuesToGovernancePayload = (values: GovernanceFormValues) => {
     const admins = parseAdminsText(values.admins_text);
-    const roleChanges: InstitutionGovernanceRoleChangeInput[] = [];
+    const roleMutations: InstitutionGovernanceRoleMutationInput[] = [];
+    const mutation = values.role_mutation;
     const roleCode = values.role_code?.trim() ?? '';
     const roleName = values.role_name?.trim() ?? '';
-    if (roleCode || roleName) {
-      if (!roleCode || !roleName) throw new Error('岗位码和岗位名称必须同时填写');
-      roleChanges.push({
-        role_code: roleCode,
-        role_name: roleName,
-        term_required: Boolean(values.term_required),
-        role_status: values.role_status ?? 'ACTIVE',
-      });
+    if (mutation === 'CREATE' && roleName) {
+      roleMutations.push({ mutation, role_name: roleName, term_required: Boolean(values.term_required), permissions: parseRolePermissions(values.role_permissions_text), assignments: parseInitialAssignments(values.role_initial_assignments_text) });
+    } else if (mutation === 'RENAME' && (roleCode || roleName)) {
+      if (!roleCode || !roleName) throw new Error('岗位改名必须同时填写岗位码和新名称');
+      roleMutations.push({ mutation, role_code: roleCode, role_name: roleName });
+    } else if (mutation === 'DELETE' && roleCode) {
+      roleMutations.push({ mutation, role_code: roleCode });
     }
     const legalRepresentativeCidNumber = values.legal_representative_cid_number?.trim() || undefined;
     const clearLegalRepresentative = Boolean(values.clear_legal_representative);
@@ -184,7 +202,7 @@ function InstitutionGovernancePanel({
     return {
       cid_number: cidNumber,
       admins: admins.length ? admins : undefined,
-      role_changes: roleChanges.length ? roleChanges : undefined,
+      role_mutations: roleMutations.length ? roleMutations : undefined,
       assignment_changes: parseAssignmentsText(values.assignments_text),
       legal_representative_cid_number: legalRepresentativeCidNumber,
       clear_legal_representative: clearLegalRepresentative || undefined,
@@ -231,7 +249,7 @@ function InstitutionGovernancePanel({
         showIcon
         style={{ marginBottom: 16 }}
         message="管理员是人，岗位是职位；本页面只构造链上治理交易，不本地改管理员真源。"
-        description="管理员集合每行填“姓,名,账户”。岗位码默认自动生成短码；任职每行填“岗位码,管理员账户,任期开始,任期结束”。法定代表人任命/更换只填公民 CID；解除则清空链上三字段。"
+        description="管理员集合每行填“姓,名,账户”。创建岗位时岗位码由 runtime 生成；岗位权限与初始任职随创建原子提交。法定代表人任命/更换只填公民 CID；解除则清空链上三字段。"
       />
       <Form form={form} layout="vertical" disabled={!canWrite || submitting}>
         <Form.Item label="管理员集合" name="admins_text">
@@ -242,19 +260,14 @@ function InstitutionGovernancePanel({
         </Form.Item>
         <Divider orientation="left">岗位</Divider>
         <Row gutter={12}>
-          <Col xs={24} md={8}>
-            <Form.Item label="岗位码" name="role_code">
-              <Input
-                addonAfter={(
-                  <Button
-                    size="small"
-                    type="link"
-                    onClick={() => form.setFieldsValue({ role_code: generateShortRoleCode() })}
-                  >
-                    重生成
-                  </Button>
-                )}
-              />
+          <Col xs={24} md={6}>
+            <Form.Item label="岗位操作" name="role_mutation">
+              <Select options={[{ label: '创建', value: 'CREATE' }, { label: '改名', value: 'RENAME' }, { label: '删除', value: 'DELETE' }]} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={6}>
+            <Form.Item label="岗位码（改名/删除）" name="role_code">
+              <Input placeholder="创建时留空，由 runtime 生成" />
             </Form.Item>
           </Col>
           <Col xs={24} md={8}>
@@ -263,21 +276,17 @@ function InstitutionGovernancePanel({
             </Form.Item>
           </Col>
           <Col xs={24} md={4}>
-            <Form.Item label="岗位状态" name="role_status">
-              <Select
-                options={[
-                  { label: '启用', value: 'ACTIVE' },
-                  { label: '停用', value: 'INACTIVE' },
-                ]}
-              />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={4}>
             <Form.Item name="term_required" valuePropName="checked" label="任期">
               <Checkbox>要求任期</Checkbox>
             </Form.Item>
           </Col>
         </Row>
+        <Form.Item label="创建岗位权限" name="role_permissions_text">
+          <Input.TextArea rows={3} placeholder={'pub-mgmt,3,PROPOSE\npub-mgmt,3,VOTE'} />
+        </Form.Item>
+        <Form.Item label="创建岗位初始任职" name="role_initial_assignments_text">
+          <Input.TextArea rows={3} placeholder={'w5...,0,0'} />
+        </Form.Item>
         <Form.Item label="岗位任职" name="assignments_text">
           <Input.TextArea rows={4} placeholder={'RABCD,w5...,0,0'} />
         </Form.Item>

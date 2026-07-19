@@ -6,21 +6,31 @@
 
 extern crate alloc;
 
+use admin_primitives::InstitutionAdminQuery as _;
 use alloc::vec::Vec;
 use entity_primitives::{
-    InstitutionAdminAssignment, InstitutionAssignmentSource, InstitutionAssignmentStatus,
-    InstitutionRole, InstitutionRoleQuery, InstitutionRoleStatus, ASSIGNMENT_SOURCE_REF_MAX_BYTES,
-    INSTITUTION_ROLE_CODE_MAX_BYTES,
+    BusinessActionId, InstitutionAdminAssignment, InstitutionAssignmentSource,
+    InstitutionAssignmentStatus, InstitutionCapabilityPolicy as _, InstitutionRole,
+    InstitutionRoleAuthorizationQuery, InstitutionRoleQuery, InstitutionRoleStatus,
+    RoleBusinessPermission, RolePermissionOperation, RoleSubject, ASSIGNMENT_SOURCE_REF_MAX_BYTES,
+    BUSINESS_MODULE_TAG_MAX_BYTES, INSTITUTION_ROLE_CODE_MAX_BYTES, MAX_ROLE_PERMISSIONS_PER_ROLE,
 };
-use frame_support::{dispatch::DispatchResult, ensure, traits::ConstU32, BoundedVec};
+use frame_support::{
+    dispatch::DispatchResult,
+    ensure,
+    traits::{ConstU32, UnixTime},
+    BoundedVec,
+};
 use sp_std::collections::btree_set::BTreeSet;
 
 use crate::pallet::{
-    AccountNameOf, CidNumberOf, Config, Error, InstitutionRoleAssignments, InstitutionRoles, Pallet,
+    AccountNameOf, CidNumberOf, Config, Error, InstitutionRoleAssignments,
+    InstitutionRolePermissions, InstitutionRoles, Institutions, Pallet, UsedRoleCodes,
 };
 
 pub type RoleCodeOf = BoundedVec<u8, ConstU32<INSTITUTION_ROLE_CODE_MAX_BYTES>>;
 pub type AssignmentSourceRefOf = BoundedVec<u8, ConstU32<ASSIGNMENT_SOURCE_REF_MAX_BYTES>>;
+pub type ModuleTagOf = BoundedVec<u8, ConstU32<BUSINESS_MODULE_TAG_MAX_BYTES>>;
 pub type InstitutionRoleOf<T> = InstitutionRole<CidNumberOf<T>, RoleCodeOf, AccountNameOf<T>>;
 pub type InstitutionRolesOf<T> = BoundedVec<InstitutionRoleOf<T>, <T as Config>::MaxAdmins>;
 pub type InstitutionAdminAssignmentOf<T> = InstitutionAdminAssignment<
@@ -33,8 +43,56 @@ pub type InstitutionAdminAssignmentsOf<T> =
     BoundedVec<InstitutionAdminAssignmentOf<T>, <T as Config>::MaxAdmins>;
 pub type RoleAssignmentsOf<T> =
     BoundedVec<InstitutionAdminAssignmentOf<T>, <T as Config>::MaxAdmins>;
+pub type RolePermissionOf<T> = RoleBusinessPermission<CidNumberOf<T>, RoleCodeOf, ModuleTagOf>;
+pub type RolePermissionsOf<T> =
+    BoundedVec<RolePermissionOf<T>, ConstU32<MAX_ROLE_PERMISSIONS_PER_ROLE>>;
+
+const MAX_ROLE_CODE_GENERATION_ATTEMPTS: u32 = 16;
 
 impl<T: Config> Pallet<T> {
+    /// 为已通过提案分配永不复用的动态岗位码；调用方没有提交岗位码的入口。
+    pub(crate) fn allocate_dynamic_role_code(
+        cid_number: &CidNumberOf<T>,
+        current_nonce: u64,
+        proposal_id: u64,
+    ) -> Result<(RoleCodeOf, u64), Error<T>> {
+        let mut nonce = current_nonce;
+        for _ in 0..MAX_ROLE_CODE_GENERATION_ATTEMPTS {
+            let raw = entity_primitives::generate_dynamic_role_code(
+                cid_number.as_slice(),
+                nonce,
+                proposal_id,
+            );
+            nonce = nonce.checked_add(1).ok_or(Error::<T>::RoleNonceOverflow)?;
+            let role_code: RoleCodeOf = raw.try_into().map_err(|_| Error::<T>::InvalidRoleCode)?;
+            if !UsedRoleCodes::<T>::get(cid_number, &role_code)
+                && !InstitutionRoles::<T>::contains_key(cid_number, &role_code)
+            {
+                return Ok((role_code, nonce));
+            }
+        }
+        Err(Error::<T>::RoleCodeGenerationExhausted)
+    }
+
+    fn is_assignment_effective(
+        role: &InstitutionRoleOf<T>,
+        assignment: &InstitutionAdminAssignmentOf<T>,
+    ) -> bool {
+        if assignment.assignment_status != InstitutionAssignmentStatus::Active {
+            return false;
+        }
+        if !role.term_required {
+            return assignment.term_start == 0 && assignment.term_end == 0;
+        }
+        let current_day = <T::TimeProvider as UnixTime>::now().as_secs() / 86_400;
+        let Ok(current_day) = u32::try_from(current_day) else {
+            return false;
+        };
+        assignment.term_start > 0
+            && assignment.term_start <= current_day
+            && current_day <= assignment.term_end
+    }
+
     /// 校验并写入一组岗位、任职。
     ///
     /// 注册创建只接受 `Registry`，创世构建只接受 `Genesis`；投票中的中间状态
@@ -48,10 +106,20 @@ impl<T: Config> Pallet<T> {
         ensure!(!roles.is_empty(), Error::<T>::InstitutionRolesEmpty);
 
         let mut role_codes = BTreeSet::new();
+        let mut role_names = BTreeSet::new();
         for role in roles.iter() {
             ensure!(role.cid_number == *cid_number, Error::<T>::RoleCidMismatch);
             ensure!(!role.role_code.is_empty(), Error::<T>::InvalidRoleCode);
             ensure!(!role.role_name.is_empty(), Error::<T>::InvalidRoleName);
+            ensure!(
+                !InstitutionRoles::<T>::contains_key(cid_number, &role.role_code),
+                Error::<T>::DuplicateRoleCode
+            );
+            ensure!(
+                !InstitutionRoles::<T>::iter_prefix(cid_number)
+                    .any(|(_, existing)| existing.role_name == role.role_name),
+                Error::<T>::DuplicateRoleName
+            );
             ensure!(
                 role.role_status == InstitutionRoleStatus::Active,
                 Error::<T>::InitialRoleMustBeActive
@@ -59,6 +127,10 @@ impl<T: Config> Pallet<T> {
             ensure!(
                 role_codes.insert(role.role_code.clone()),
                 Error::<T>::DuplicateRoleCode
+            );
+            ensure!(
+                role_names.insert(role.role_name.clone()),
+                Error::<T>::DuplicateRoleName
             );
         }
 
@@ -82,7 +154,7 @@ impl<T: Config> Pallet<T> {
                 .ok_or(Error::<T>::AssignmentRoleNotFound)?;
             if role.term_required {
                 ensure!(
-                    assignment.term_start > 0 && assignment.term_end > assignment.term_start,
+                    assignment.term_start > 0 && assignment.term_end >= assignment.term_start,
                     Error::<T>::InvalidAssignmentTerm
                 );
             } else {
@@ -106,6 +178,14 @@ impl<T: Config> Pallet<T> {
                 .filter(|assignment| assignment.role_code == role.role_code)
                 .cloned()
                 .collect();
+            if primitives::institution_constraints::is_legal_representative_role(
+                role.role_code.as_slice(),
+            ) {
+                ensure!(
+                    role_assignments.len() <= 1,
+                    Error::<T>::FixedRoleSeatsMismatch
+                );
+            }
             let bounded_assignments: RoleAssignmentsOf<T> = role_assignments
                 .try_into()
                 .map_err(|_| Error::<T>::TooManyInstitutionAdmins)?;
@@ -132,6 +212,12 @@ impl<T: Config> Pallet<T> {
                 .to_vec()
                 .try_into()
                 .map_err(|_| Error::<T>::InvalidRoleName)?;
+        ensure!(
+            !InstitutionRoles::<T>::iter_prefix(cid_number).any(|(existing_code, existing)| {
+                existing_code != role_code && existing.role_name == role_name
+            }),
+            Error::<T>::DuplicateRoleName
+        );
         if let Some(existing) = InstitutionRoles::<T>::get(cid_number, &role_code) {
             ensure!(
                 existing.cid_number == *cid_number
@@ -139,7 +225,7 @@ impl<T: Config> Pallet<T> {
                     && existing.role_name == role_name
                     && !existing.term_required
                     && existing.role_status == InstitutionRoleStatus::Active
-                    && InstitutionRoleAssignments::<T>::get(cid_number, &role_code).is_empty(),
+                    && InstitutionRoleAssignments::<T>::get(cid_number, &role_code).len() <= 1,
                 Error::<T>::DuplicateRoleCode
             );
             return Ok(());
@@ -176,6 +262,73 @@ impl<T: Config> Pallet<T> {
             InstitutionAssignmentSource::Genesis,
         )
     }
+
+    /// 创世专用入口：按共享固定目录写入受保护岗位权限，包含永久空权限的 LR。
+    ///
+    /// 权限主体必须是准确的创世 CID + 固定岗位码；任一动作超出该 CID 顶层能力时，
+    /// 创世构建立即失败，禁止写入半套权限或按机构码扩大授权。
+    pub fn store_genesis_fixed_role_permissions(
+        cid_number: &CidNumberOf<T>,
+        role_code: &RoleCodeOf,
+    ) -> DispatchResult {
+        let institution =
+            Institutions::<T>::get(cid_number).ok_or(Error::<T>::InstitutionNotFound)?;
+        ensure!(
+            primitives::governance_skeleton::fixed_role_seats_by_identity(
+                institution.institution_code,
+                cid_number.as_slice(),
+                role_code.as_slice(),
+            )
+            .is_some(),
+            Error::<T>::FixedRoleDefinitionImmutable
+        );
+        ensure!(
+            InstitutionRoles::<T>::contains_key(cid_number, role_code),
+            Error::<T>::AssignmentRoleNotFound
+        );
+
+        let mut permissions = Vec::new();
+        for spec in entity_primitives::fixed_role_permission_specs(
+            institution.institution_code,
+            cid_number.as_slice(),
+            role_code.as_slice(),
+        ) {
+            let module_tag: ModuleTagOf = spec
+                .module_tag
+                .to_vec()
+                .try_into()
+                .map_err(|_| Error::<T>::InvalidRolePermission)?;
+            let business_action_id = BusinessActionId {
+                module_tag,
+                action_code: spec.action_code,
+            };
+            ensure!(
+                T::InstitutionCapabilityPolicy::allows(
+                    cid_number.as_slice(),
+                    &BusinessActionId {
+                        module_tag: business_action_id.module_tag.clone().into_inner(),
+                        action_code: business_action_id.action_code,
+                    },
+                    spec.operation,
+                ),
+                Error::<T>::InstitutionCapabilityDenied
+            );
+            permissions.push(RoleBusinessPermission {
+                role_subject: RoleSubject {
+                    cid_number: cid_number.clone(),
+                    role_code: role_code.clone(),
+                },
+                business_action_id,
+                operation: spec.operation,
+            });
+        }
+        let permissions: RolePermissionsOf<T> = permissions
+            .try_into()
+            .map_err(|_| Error::<T>::TooManyRolePermissions)?;
+        InstitutionRolePermissions::<T>::insert(cid_number, role_code, permissions);
+        UsedRoleCodes::<T>::insert(cid_number, role_code, true);
+        Ok(())
+    }
 }
 
 impl<T: Config> InstitutionRoleQuery<T::AccountId> for Pallet<T> {
@@ -195,8 +348,8 @@ impl<T: Config> InstitutionRoleQuery<T::AccountId> for Pallet<T> {
         InstitutionRoleAssignments::<T>::get(cid_number, role_code)
             .into_iter()
             .any(|assignment| {
-                assignment.assignment_status == InstitutionAssignmentStatus::Active
-                    && &assignment.admin_account == admin
+                &assignment.admin_account == admin
+                    && Pallet::<T>::is_assignment_effective(&role, &assignment)
             })
     }
 
@@ -215,9 +368,7 @@ impl<T: Config> InstitutionRoleQuery<T::AccountId> for Pallet<T> {
         }
         InstitutionRoleAssignments::<T>::get(cid_number, role_code)
             .into_iter()
-            .filter(|assignment| {
-                assignment.assignment_status == InstitutionAssignmentStatus::Active
-            })
+            .filter(|assignment| Pallet::<T>::is_assignment_effective(&role, assignment))
             .map(|assignment| assignment.admin_account)
             .collect()
     }
@@ -228,15 +379,72 @@ impl<T: Config> InstitutionRoleQuery<T::AccountId> for Pallet<T> {
         };
         InstitutionRoles::<T>::iter_prefix(&cid_number)
             .filter(|(_, role)| role.role_status == InstitutionRoleStatus::Active)
-            .filter_map(|(role_code, _)| {
+            .filter_map(|(role_code, role)| {
                 let active = InstitutionRoleAssignments::<T>::get(&cid_number, &role_code)
                     .into_iter()
                     .any(|assignment| {
-                        assignment.assignment_status == InstitutionAssignmentStatus::Active
-                            && &assignment.admin_account == admin
+                        &assignment.admin_account == admin
+                            && Pallet::<T>::is_assignment_effective(&role, &assignment)
                     });
                 active.then(|| role_code.into_inner())
             })
             .collect()
+    }
+}
+
+impl<T: Config> InstitutionRoleAuthorizationQuery<T::AccountId> for Pallet<T> {
+    fn role_has_permission(
+        role_subject: &RoleSubject<Vec<u8>, Vec<u8>>,
+        business_action_id: &BusinessActionId<Vec<u8>>,
+        operation: RolePermissionOperation,
+    ) -> bool {
+        let Ok(cid_number) = CidNumberOf::<T>::try_from(role_subject.cid_number.clone()) else {
+            return false;
+        };
+        let Ok(role_code) = RoleCodeOf::try_from(role_subject.role_code.clone()) else {
+            return false;
+        };
+        if !InstitutionRoles::<T>::contains_key(&cid_number, &role_code)
+            || !T::InstitutionCapabilityPolicy::allows(
+                cid_number.as_slice(),
+                business_action_id,
+                operation,
+            )
+        {
+            return false;
+        }
+        InstitutionRolePermissions::<T>::get(&cid_number, &role_code)
+            .into_iter()
+            .any(|permission| {
+                permission.role_subject.cid_number.as_slice() == cid_number.as_slice()
+                    && permission.role_subject.role_code.as_slice() == role_code.as_slice()
+                    && permission.business_action_id.module_tag.as_slice()
+                        == business_action_id.module_tag.as_slice()
+                    && permission.business_action_id.action_code == business_action_id.action_code
+                    && permission.operation == operation
+            })
+    }
+
+    fn is_authorized(
+        admin: &T::AccountId,
+        role_subject: &RoleSubject<Vec<u8>, Vec<u8>>,
+        business_action_id: &BusinessActionId<Vec<u8>>,
+        operation: RolePermissionOperation,
+    ) -> bool {
+        let Ok(cid_number) = CidNumberOf::<T>::try_from(role_subject.cid_number.clone()) else {
+            return false;
+        };
+        let Some(institution) = Institutions::<T>::get(&cid_number) else {
+            return false;
+        };
+        T::InstitutionAdminQuery::is_institution_admin(
+            institution.institution_code,
+            cid_number.as_slice(),
+            admin,
+        ) && <Self as InstitutionRoleQuery<T::AccountId>>::is_active_assignment(
+            cid_number.as_slice(),
+            admin,
+            role_subject.role_code.as_slice(),
+        ) && Self::role_has_permission(role_subject, business_action_id, operation)
     }
 }

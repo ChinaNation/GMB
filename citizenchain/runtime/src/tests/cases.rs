@@ -12,6 +12,125 @@ fn time_and_currency_constants_are_consistent() {
 }
 
 #[test]
+fn protected_genesis_institution_can_add_dynamic_role_without_mutating_fixed_roles() {
+    use entity_primitives::{InstitutionRoleMutation, RolePermissionOperation};
+    use frame_support::assert_ok;
+
+    new_test_ext().execute_with(|| {
+        let nrc = &primitives::cid::china::china_cb::CHINA_CB[0];
+        let cid_number: public_manage::pallet::CidNumberOf<Runtime> = nrc
+            .cid_number
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("NRC CID fits");
+        let proposal_id = 9001;
+        let dynamic_code =
+            entity_primitives::generate_dynamic_role_code(cid_number.as_slice(), 0, proposal_id);
+        assert_ok!(PublicManage::apply_institution_governance_result(
+            entity_primitives::InstitutionGovernanceResult {
+                institution_code: primitives::cid::code::NRC,
+                cid_number: cid_number.to_vec(),
+                proposal_id,
+                role_mutations: vec![InstitutionRoleMutation::Create {
+                    role_name: "审计工作人员".as_bytes().to_vec(),
+                    term_required: false,
+                    permissions: vec![entity_primitives::RolePermissionSpec {
+                        business_action_id: entity_primitives::BusinessActionId {
+                            module_tag: public_manage::MODULE_TAG.to_vec(),
+                            action_code: u32::from(public_manage::pallet::ACTION_GOVERNANCE),
+                        },
+                        operation: RolePermissionOperation::Propose,
+                    }],
+                    assignments: vec![entity_primitives::InstitutionAssignmentTarget {
+                        admin_account: AccountId::new(nrc.admins[0]),
+                        term_start: 0,
+                        term_end: 0,
+                        assignment_source:
+                            entity_primitives::InstitutionAssignmentSource::InstitutionGovernance,
+                        assignment_source_ref: b"proposal-9001".to_vec(),
+                        assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
+                    }],
+                }],
+                assignment_changes: vec![],
+                legal_representative_change: None,
+                result_source_ref: b"proposal-9001".to_vec(),
+            }
+        ));
+
+        let dynamic_code: public_manage::RoleCodeOf =
+            dynamic_code.try_into().expect("dynamic role code fits");
+        assert!(public_manage::InstitutionRoles::<Runtime>::contains_key(
+            &cid_number,
+            &dynamic_code
+        ));
+        let fixed_code: public_manage::RoleCodeOf =
+            primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                .to_vec()
+                .try_into()
+                .expect("fixed role code fits");
+        assert!(public_manage::InstitutionRoles::<Runtime>::contains_key(
+            &cid_number,
+            fixed_code
+        ));
+
+        let company = primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY;
+        let company_cid: private_manage::pallet::CidNumberOf<Runtime> = company
+            .cid_number
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("company CID fits");
+        let company_proposal_id = 9002;
+        let company_dynamic_code = entity_primitives::generate_dynamic_role_code(
+            company_cid.as_slice(),
+            0,
+            company_proposal_id,
+        );
+        assert_ok!(PrivateManage::apply_institution_governance_result(
+            entity_primitives::InstitutionGovernanceResult {
+                institution_code: *b"SFGQ",
+                cid_number: company_cid.to_vec(),
+                proposal_id: company_proposal_id,
+                role_mutations: vec![InstitutionRoleMutation::Create {
+                    role_name: "安全工作人员".as_bytes().to_vec(),
+                    term_required: false,
+                    permissions: vec![entity_primitives::RolePermissionSpec {
+                        business_action_id: entity_primitives::BusinessActionId {
+                            module_tag: private_manage::MODULE_TAG.to_vec(),
+                            action_code: u32::from(private_manage::pallet::ACTION_GOVERNANCE),
+                        },
+                        operation: RolePermissionOperation::Vote,
+                    }],
+                    assignments: vec![entity_primitives::InstitutionAssignmentTarget {
+                        admin_account: AccountId::new(
+                            primitives::cid::china::citizenchain::CITIZENCHAIN_GENESIS_ADMINS[0]
+                                .admin_account,
+                        ),
+                        term_start: 0,
+                        term_end: 0,
+                        assignment_source:
+                            entity_primitives::InstitutionAssignmentSource::InstitutionGovernance,
+                        assignment_source_ref: b"proposal-9002".to_vec(),
+                        assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
+                    }],
+                }],
+                assignment_changes: vec![],
+                legal_representative_change: None,
+                result_source_ref: b"proposal-9002".to_vec(),
+            }
+        ));
+        let company_dynamic_code: private_manage::RoleCodeOf = company_dynamic_code
+            .try_into()
+            .expect("company dynamic role code fits");
+        assert!(private_manage::InstitutionRoles::<Runtime>::contains_key(
+            &company_cid,
+            company_dynamic_code
+        ));
+    });
+}
+
+#[test]
 fn institution_transfer_route_uses_exact_fee_account() {
     use frame_support::BoundedVec;
     use onchain::CallFeeRoute;
@@ -1532,8 +1651,6 @@ fn ordinary_account_allows_all_actions() {
 #[test]
 fn genesis_public_institutions_full_mint_counts() {
     new_test_ext().execute_with(|| {
-        genesis_pallet::institution::build::<Runtime>();
-
         let builtin_count = primitives::cid::china::china_cb::CHINA_CB.len()
             + primitives::cid::china::china_ch::CHINA_CH.len()
             + primitives::cid::china::china_zf::CHINA_ZF.len()
@@ -1624,11 +1741,10 @@ fn genesis_public_institutions_full_mint_counts() {
     });
 }
 
-/// 中国公民链技术有限公司以私权创世机构写入，三名人员、三岗、法定代表人与阈值同源一致。
+/// 中国公民链技术股份有限公司以私权创世机构写入，三名人员、三岗、法定代表人与阈值同源一致。
 #[test]
 fn genesis_citizenchain_technology_is_complete_and_protected() {
     new_test_ext().execute_with(|| {
-        genesis_pallet::institution::build::<Runtime>();
         let company = primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY;
         let cid: private_manage::pallet::CidNumberOf<Runtime> = company
             .cid_number
@@ -1697,7 +1813,7 @@ fn genesis_citizenchain_technology_is_complete_and_protected() {
                 entity_primitives::InstitutionRoleStatus::Active
             );
             let assignments =
-                private_manage::InstitutionRoleAssignments::<Runtime>::get(&cid, role_code);
+                private_manage::InstitutionRoleAssignments::<Runtime>::get(&cid, &role_code);
             assert_eq!(assignments.len(), 1);
             assert_eq!(
                 assignments[0].admin_account,
@@ -1706,6 +1822,21 @@ fn genesis_citizenchain_technology_is_complete_and_protected() {
                         .admin_account,
                 )
             );
+            let permissions =
+                private_manage::InstitutionRolePermissions::<Runtime>::get(&cid, &role_code);
+            let expected = entity_primitives::fixed_role_permission_specs(
+                *b"SFGQ",
+                cid.as_slice(),
+                fixed_role.role_code,
+            );
+            assert_eq!(permissions.len(), expected.len());
+            assert!(permissions.iter().zip(expected).all(|(actual, expected)| {
+                actual.role_subject.cid_number == cid
+                    && actual.role_subject.role_code == role_code
+                    && actual.business_action_id.module_tag.as_slice() == expected.module_tag
+                    && actual.business_action_id.action_code == expected.action_code
+                    && actual.operation == expected.operation
+            }));
         }
         assert_eq!(
             internal_vote::ActiveInstitutionThresholds::<Runtime>::get(&cid),
@@ -1733,7 +1864,6 @@ fn genesis_citizenchain_technology_is_complete_and_protected() {
 #[test]
 fn genesis_national_singletons_exist_and_member_bodies_are_unconstituted() {
     new_test_ext().execute_with(|| {
-        genesis_pallet::institution::build::<Runtime>();
         for singleton in primitives::institution_constraints::singleton_institutions() {
             let cid: public_manage::pallet::CidNumberOf<Runtime> = singleton
                 .cid_number
@@ -1785,7 +1915,6 @@ fn genesis_national_singletons_exist_and_member_bodies_are_unconstituted() {
 #[test]
 fn national_member_body_first_composition_and_permanent_range_are_enforced() {
     new_test_ext().execute_with(|| {
-        genesis_pallet::institution::build::<Runtime>();
         let spec = primitives::institution_constraints::member_composition_specs()[0];
         let main = AccountId::new(spec.institution.main_account);
         let cid_number: public_manage::pallet::CidNumberOf<Runtime> = spec
@@ -1804,41 +1933,31 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
                 })
                 .collect::<Vec<_>>()
         };
-        let result = |accounts: Vec<AccountId>, include_role: bool| {
-            entity_primitives::InstitutionGovernanceResult {
-                institution_code: spec.institution.code,
-                cid_number: spec.institution.cid_number.as_bytes().to_vec(),
-                role_changes: include_role
-                    .then(|| {
-                        vec![entity_primitives::InstitutionRoleChange {
-                            role_code: spec.role_code.to_vec(),
-                            role_name: spec.role_name.to_vec(),
-                            term_required: false,
-                            role_status: entity_primitives::InstitutionRoleStatus::Active,
-                        }]
-                    })
-                    .unwrap_or_default(),
-                assignment_changes: vec![entity_primitives::InstitutionRoleAssignmentChange {
-                    role_code: spec.role_code.to_vec(),
-                    assignments: accounts
-                        .into_iter()
-                        .map(
-                            |admin_account| entity_primitives::InstitutionAssignmentTarget {
-                                admin_account,
-                                term_start: 0,
-                                term_end: 0,
-                                assignment_source:
-                                    entity_primitives::InstitutionAssignmentSource::PopularElection,
-                                assignment_source_ref: b"national-election".to_vec(),
-                                assignment_status:
-                                    entity_primitives::InstitutionAssignmentStatus::Active,
-                            },
-                        )
-                        .collect(),
-                }],
-                legal_representative_change: None,
-                result_source_ref: b"national-election".to_vec(),
-            }
+        let result = |accounts: Vec<AccountId>| entity_primitives::InstitutionGovernanceResult {
+            institution_code: spec.institution.code,
+            cid_number: spec.institution.cid_number.as_bytes().to_vec(),
+            proposal_id: 1,
+            role_mutations: vec![],
+            assignment_changes: vec![entity_primitives::InstitutionRoleAssignmentChange {
+                role_code: spec.role_code.to_vec(),
+                assignments: accounts
+                    .into_iter()
+                    .map(
+                        |admin_account| entity_primitives::InstitutionAssignmentTarget {
+                            admin_account,
+                            term_start: 0,
+                            term_end: 0,
+                            assignment_source:
+                                entity_primitives::InstitutionAssignmentSource::PopularElection,
+                            assignment_source_ref: b"national-election".to_vec(),
+                            assignment_status:
+                                entity_primitives::InstitutionAssignmentStatus::Active,
+                        },
+                    )
+                    .collect(),
+            }],
+            legal_representative_change: None,
+            result_source_ref: b"national-election".to_vec(),
         };
 
         let established_admins = members(spec.min_members);
@@ -1867,18 +1986,36 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
                     .expect("member body admins fit"),
             },
         );
+        let member_role_code: public_manage::RoleCodeOf = spec
+            .role_code
+            .to_vec()
+            .try_into()
+            .expect("member role code fits");
+        public_manage::InstitutionRoles::<Runtime>::insert(
+            &cid_number,
+            &member_role_code,
+            entity_primitives::InstitutionRole {
+                cid_number: cid_number.clone(),
+                role_code: member_role_code.clone(),
+                role_name: spec
+                    .role_name
+                    .to_vec()
+                    .try_into()
+                    .expect("member role name fits"),
+                term_required: false,
+                role_status: entity_primitives::InstitutionRoleStatus::Active,
+            },
+        );
 
         assert_noop!(
-            public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(
-                members(spec.min_members - 1),
-                true,
-            )),
+            public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(members(
+                spec.min_members - 1,
+            ))),
             public_manage::Error::<Runtime>::RequiredMemberCountOutOfRange
         );
         assert_ok!(
             public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(
                 established_admins.clone(),
-                true,
             ))
         );
         let account = public_admins::AdminAccounts::<Runtime>::get(&cid_number)
@@ -1909,10 +2046,9 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
         );
 
         assert_noop!(
-            public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(
-                members(spec.min_members - 1),
-                false,
-            )),
+            public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(members(
+                spec.min_members - 1,
+            ))),
             public_manage::Error::<Runtime>::RequiredMemberCountOutOfRange
         );
         assert_eq!(
@@ -1929,50 +2065,116 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
 #[test]
 fn institution_governance_can_clear_legal_representative_atomically() {
     new_test_ext().execute_with(|| {
-        genesis_pallet::institution::build::<Runtime>();
         let cid_number = CHINA_CB[0].cid_number.as_bytes().to_vec();
         let institution_code =
             primitives::cid::code::institution_code_from_cid_number(CHINA_CB[0].cid_number)
                 .expect("CHINA_CB CID must contain institution code");
-        let representative_account = AccountId::new([88u8; 32]);
-        let result = |legal_representative_change| entity_primitives::InstitutionGovernanceResult {
-            institution_code,
-            cid_number: cid_number.clone(),
-            role_changes: vec![],
-            assignment_changes: vec![],
-            legal_representative_change,
-            result_source_ref: b"legal-representative-governance".to_vec(),
+        let cid: public_manage::CidNumberOf<Runtime> =
+            cid_number.clone().try_into().expect("CID fits");
+        let representative_account = public_admins::AdminAccounts::<Runtime>::get(&cid)
+            .expect("NRC genesis admins exist")
+            .admins[0]
+            .admin_account
+            .clone();
+        let result = |legal_representative_change, assignments| {
+            entity_primitives::InstitutionGovernanceResult {
+                institution_code,
+                cid_number: cid_number.clone(),
+                proposal_id: 2,
+                role_mutations: vec![],
+                assignment_changes: vec![entity_primitives::InstitutionRoleAssignmentChange {
+                    role_code: primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE
+                        .to_vec(),
+                    assignments,
+                }],
+                legal_representative_change,
+                result_source_ref: b"legal-representative-governance".to_vec(),
+            }
+        };
+        let representative_assignment = entity_primitives::InstitutionAssignmentTarget {
+            admin_account: representative_account.clone(),
+            term_start: 0,
+            term_end: 0,
+            assignment_source:
+                entity_primitives::InstitutionAssignmentSource::InstitutionGovernance,
+            assignment_source_ref: b"legal-representative-governance".to_vec(),
+            assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
         };
 
         assert_ok!(
-            public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(Some(
-                entity_primitives::InstitutionLegalRepresentativeChange::Set {
-                    legal_representative_name: "法定代表人".as_bytes().to_vec(),
-                    legal_representative_cid_number: b"CITIZEN-LR-001".to_vec(),
-                    legal_representative_account: representative_account.clone(),
-                },
-            )))
+            public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(
+                Some(
+                    entity_primitives::InstitutionLegalRepresentativeChange::Set {
+                        legal_representative_name: "法定代表人".as_bytes().to_vec(),
+                        legal_representative_cid_number: b"CITIZEN-LR-001".to_vec(),
+                        legal_representative_account: representative_account.clone(),
+                    },
+                ),
+                vec![representative_assignment],
+            ))
         );
-        let cid: public_manage::CidNumberOf<Runtime> =
-            cid_number.clone().try_into().expect("CID fits");
         let stored =
             public_manage::Institutions::<Runtime>::get(&cid).expect("genesis institution exists");
         assert!(stored.legal_representative_name.is_some());
         assert_eq!(
             stored.legal_representative_account,
-            Some(representative_account)
+            Some(representative_account.clone())
         );
 
         assert_ok!(
-            public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(Some(
-                entity_primitives::InstitutionLegalRepresentativeChange::Clear,
-            )))
+            public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(
+                Some(entity_primitives::InstitutionLegalRepresentativeChange::Clear),
+                vec![],
+            ))
         );
         let cleared = public_manage::Institutions::<Runtime>::get(&cid)
             .expect("genesis institution still exists");
         assert!(cleared.legal_representative_name.is_none());
         assert!(cleared.legal_representative_cid_number.is_none());
         assert!(cleared.legal_representative_account.is_none());
+
+        let second_account = public_admins::AdminAccounts::<Runtime>::get(&cid)
+            .expect("NRC genesis admins remain")
+            .admins[1]
+            .admin_account
+            .clone();
+        let second_assignment = entity_primitives::InstitutionAssignmentTarget {
+            admin_account: second_account,
+            term_start: 0,
+            term_end: 0,
+            assignment_source:
+                entity_primitives::InstitutionAssignmentSource::InstitutionGovernance,
+            assignment_source_ref: b"legal-representative-governance".to_vec(),
+            assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
+        };
+        assert_noop!(
+            public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(
+                Some(
+                    entity_primitives::InstitutionLegalRepresentativeChange::Set {
+                        legal_representative_name: "重复法定代表人".as_bytes().to_vec(),
+                        legal_representative_cid_number: b"CITIZEN-LR-002".to_vec(),
+                        legal_representative_account: representative_account,
+                    },
+                ),
+                vec![
+                    entity_primitives::InstitutionAssignmentTarget {
+                        admin_account: public_admins::AdminAccounts::<Runtime>::get(&cid)
+                            .expect("NRC genesis admins remain")
+                            .admins[0]
+                            .admin_account
+                            .clone(),
+                        term_start: 0,
+                        term_end: 0,
+                        assignment_source:
+                            entity_primitives::InstitutionAssignmentSource::InstitutionGovernance,
+                        assignment_source_ref: b"legal-representative-governance".to_vec(),
+                        assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
+                    },
+                    second_assignment,
+                ],
+            )),
+            public_manage::Error::<Runtime>::FixedRoleSeatsMismatch
+        );
     });
 }
 
@@ -1980,7 +2182,6 @@ fn institution_governance_can_clear_legal_representative_atomically() {
 #[test]
 fn national_singletons_without_member_ranges_can_be_composed_once() {
     new_test_ext().execute_with(|| {
-        genesis_pallet::institution::build::<Runtime>();
         for singleton in primitives::institution_constraints::singleton_institutions()
             .into_iter()
             .filter(|item| {
@@ -1998,7 +2199,6 @@ fn national_singletons_without_member_ranges_can_be_composed_once() {
                 .to_vec()
                 .try_into()
                 .expect("singleton CID fits");
-            let role_code_raw = b"RUNTIME_MEMBER".to_vec();
             let admins = vec![AccountId::new([91u8; 32]), AccountId::new([92u8; 32])];
             public_admins::AdminAccounts::<Runtime>::insert(
                 cid_number.clone(),
@@ -2028,14 +2228,17 @@ fn national_singletons_without_member_ranges_can_be_composed_once() {
             let result = entity_primitives::InstitutionGovernanceResult {
                 institution_code: singleton.code,
                 cid_number: singleton.cid_number.as_bytes().to_vec(),
-                role_changes: vec![entity_primitives::InstitutionRoleChange {
-                    role_code: role_code_raw.clone(),
+                proposal_id: 100,
+                role_mutations: vec![entity_primitives::InstitutionRoleMutation::Create {
                     role_name: "运行期成员".as_bytes().to_vec(),
                     term_required: false,
-                    role_status: entity_primitives::InstitutionRoleStatus::Active,
-                }],
-                assignment_changes: vec![entity_primitives::InstitutionRoleAssignmentChange {
-                    role_code: role_code_raw.clone(),
+                    permissions: vec![entity_primitives::RolePermissionSpec {
+                        business_action_id: entity_primitives::BusinessActionId {
+                            module_tag: public_manage::MODULE_TAG.to_vec(),
+                            action_code: u32::from(public_manage::pallet::ACTION_GOVERNANCE),
+                        },
+                        operation: entity_primitives::RolePermissionOperation::Propose,
+                    }],
                     assignments: admins
                         .iter()
                         .cloned()
@@ -2051,6 +2254,7 @@ fn national_singletons_without_member_ranges_can_be_composed_once() {
                         })
                         .collect(),
                 }],
+                assignment_changes: vec![],
                 legal_representative_change: None,
                 result_source_ref: b"first-composition".to_vec(),
             };
@@ -2360,6 +2564,92 @@ fn genesis_fixed_institution_roles_and_assignments_are_complete() {
     });
 }
 
+/// 固定权限必须由创世直接写入；协议升级和决议发行均为 NRC/PRC 发起并投票、PRB 仅投票。
+#[test]
+fn genesis_fixed_role_permissions_match_the_shared_catalog() {
+    use entity_primitives::{
+        business_action::{
+            ACTION_RESOLUTION_ISSUANCE, ACTION_RUNTIME_UPGRADE, MODULE_RESOLUTION_ISSUANCE,
+            MODULE_RUNTIME_UPGRADE,
+        },
+        RolePermissionOperation,
+    };
+
+    new_test_ext().execute_with(|| {
+        let role_code = |raw: &[u8]| -> public_manage::RoleCodeOf {
+            raw.to_vec().try_into().expect("fixed role code fits")
+        };
+        let cid = |raw: &str| -> public_manage::pallet::CidNumberOf<Runtime> {
+            raw.as_bytes().to_vec().try_into().expect("fixed cid fits")
+        };
+        let has = |permissions: &public_manage::RolePermissionsOf<Runtime>,
+                   module_tag: &[u8],
+                   action_code: u32,
+                   operation: RolePermissionOperation| {
+            permissions.iter().any(|permission| {
+                permission.business_action_id.module_tag.as_slice() == module_tag
+                    && permission.business_action_id.action_code == action_code
+                    && permission.operation == operation
+            })
+        };
+
+        for node in primitives::cid::china::china_cb::CHINA_CB.iter() {
+            let cid_number = cid(node.cid_number);
+            let code = role_code(primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER);
+            let permissions =
+                public_manage::InstitutionRolePermissions::<Runtime>::get(&cid_number, &code);
+            assert!(has(
+                &permissions,
+                MODULE_RUNTIME_UPGRADE,
+                ACTION_RUNTIME_UPGRADE,
+                RolePermissionOperation::Propose,
+            ));
+            assert!(has(
+                &permissions,
+                MODULE_RUNTIME_UPGRADE,
+                ACTION_RUNTIME_UPGRADE,
+                RolePermissionOperation::Vote,
+            ));
+        }
+
+        let prb = &primitives::cid::china::china_ch::CHINA_CH[0];
+        let prb_cid = cid(prb.cid_number);
+        let director = role_code(primitives::governance_skeleton::ROLE_CODE_DIRECTOR);
+        let permissions =
+            public_manage::InstitutionRolePermissions::<Runtime>::get(&prb_cid, &director);
+        assert!(has(
+            &permissions,
+            MODULE_RUNTIME_UPGRADE,
+            ACTION_RUNTIME_UPGRADE,
+            RolePermissionOperation::Vote,
+        ));
+        assert!(!has(
+            &permissions,
+            MODULE_RUNTIME_UPGRADE,
+            ACTION_RUNTIME_UPGRADE,
+            RolePermissionOperation::Propose,
+        ));
+        assert!(has(
+            &permissions,
+            MODULE_RESOLUTION_ISSUANCE,
+            ACTION_RESOLUTION_ISSUANCE,
+            RolePermissionOperation::Vote,
+        ));
+        assert!(!has(
+            &permissions,
+            MODULE_RESOLUTION_ISSUANCE,
+            ACTION_RESOLUTION_ISSUANCE,
+            RolePermissionOperation::Propose,
+        ));
+
+        let nrc = &primitives::cid::china::china_cb::CHINA_CB[0];
+        let nrc_cid = cid(nrc.cid_number);
+        let lr = role_code(primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE);
+        assert!(public_manage::InstitutionRolePermissions::<Runtime>::contains_key(&nrc_cid, &lr));
+        assert!(public_manage::InstitutionRolePermissions::<Runtime>::get(&nrc_cid, lr).is_empty());
+    });
+}
+
 /// runtime 必须把选举结果路由到 public-manage，并在写入前拒绝固定岗位席位漂移。
 #[test]
 fn runtime_governance_result_router_enforces_fixed_role_seats() {
@@ -2400,7 +2690,8 @@ fn runtime_governance_result_router_enforces_fixed_role_seats() {
             entity_primitives::InstitutionGovernanceResult {
                 institution_code: primitives::cid::code::NJD,
                 cid_number: njd.cid_number.as_bytes().to_vec(),
-                role_changes: vec![],
+                proposal_id: 700,
+                role_mutations: vec![],
                 assignment_changes: vec![
                     entity_primitives::InstitutionRoleAssignmentChange {
                         role_code:
@@ -2415,11 +2706,9 @@ fn runtime_governance_result_router_enforces_fixed_role_seats() {
         };
 
         let mut role_change = result(vec![]);
-        role_change.role_changes = vec![entity_primitives::InstitutionRoleChange {
+        role_change.role_mutations = vec![entity_primitives::InstitutionRoleMutation::Rename {
             role_code: primitives::governance_skeleton::ROLE_CODE_CONSTITUTION_GUARD.to_vec(),
             role_name: "修改固定岗位".as_bytes().to_vec(),
-            term_required: false,
-            role_status: entity_primitives::InstitutionRoleStatus::Active,
         }];
         assert_noop!(
             <RuntimeInstitutionGovernanceResultHandler as entity_primitives::InstitutionGovernanceResultHandler<AccountId>>::apply_institution_governance_result(

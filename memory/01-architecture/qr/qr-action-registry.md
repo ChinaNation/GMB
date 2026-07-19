@@ -84,13 +84,11 @@ a = (pallet_index << 8) | call_index
 | `0x0d00` | `ResolutionDestro.propose_destroy` | `propose_destroy` | `institution_code`, `amount_yuan` | CitizenApp |
 | `0x0f00` | `GrandpaKeyChange.propose_replace_grandpa_key` | `propose_replace_grandpa_key` | `institution`, `new_key` | citizenchain node |
 | `0x1e01` | `PublicManage.propose_close_public_institution` | `propose_close_public_institution` | `account`, `beneficiary` | CitizenApp |
-| `0x1e05` | `PublicManage.propose_create_public_institution` | `propose_create_public_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `town_code`, `admins(admin_account + family_name + given_name)`, `actor_cid_number` | OnChina（注册局录入，最终链交易签名一次） |
 | `0x1e06` | `PublicManage.update_institution_info` | `update_public_institution_info` | `cid_number`, `cid_full_name`, `cid_short_name`, `actor_cid_number`, `credential_signer_pubkey`, `scope_*` | OnChina（注册局登记管理） |
 | `0x1e07` | `PublicManage.add_institution_account` | `add_public_institution_account` | `cid_number`, `account_names`, `account_count`, `actor_cid_number`, `credential_signer_pubkey`, `scope_*` | OnChina（注册局登记管理） |
 | `0x1e08` | `PublicManage.propose_institution_governance` | `propose_public_institution_governance` | `cid_number`, `governance_action`, `governance_detail`, `actor_cid_number`, `fee_payer`, `credential_signer_pubkey`, `scope_*` | OnChina（本机构治理） |
 | `0x1e09` | `PublicManage.register_institution_admins` | `register_public_institution_admins` | `cid_number`, `admins(admin_account + family_name + given_name)`, `register_nonce`, `signature`, `actor_cid_number`, `credential_signer_pubkey`, `scope_*` | OnChina（注册局直接登记管理员） |
 | `0x1f01` | `PrivateManage.propose_close_private_institution` | `propose_close_private_institution` | `account`, `beneficiary` | CitizenApp |
-| `0x1f05` | `PrivateManage.propose_create_private_institution` | `propose_create_private_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `town_code`, `admins(admin_account + family_name + given_name)`, `actor_cid_number` | OnChina（注册局录入，最终链交易签名一次） |
 | `0x1f06` | `PrivateManage.update_institution_info` | `update_private_institution_info` | `cid_number`, `cid_full_name`, `cid_short_name`, `actor_cid_number`, `credential_signer_pubkey`, `scope_*` | OnChina（注册局登记管理） |
 | `0x1f07` | `PrivateManage.add_institution_account` | `add_private_institution_account` | `cid_number`, `account_names`, `account_count`, `actor_cid_number`, `credential_signer_pubkey`, `scope_*` | OnChina（注册局登记管理） |
 | `0x1f08` | `PrivateManage.propose_institution_governance` | `propose_private_institution_governance` | `cid_number`, `governance_action`, `governance_detail`, `actor_cid_number`, `fee_payer`, `credential_signer_pubkey`, `scope_*` | OnChina（本机构治理） |
@@ -104,7 +102,7 @@ a = (pallet_index << 8) | call_index
 | `0x1101` | `MultisigTransfer.propose_safety_fund` | `propose_safety_fund_transfer` | `beneficiary`, `amount_yuan`, `remark` | citizenchain node / CitizenApp |
 | `0x1102` | `MultisigTransfer.propose_sweep` | `propose_sweep_to_main` | `institution`, `amount_yuan` | citizenchain node / CitizenApp |
 
-永久留洞：`0x0702`、`0x0a05`、`0x1502`、`0x1a00`、`0x1e04`、`0x1f04`。
+永久留洞：`0x0702`、`0x0a05`、`0x1502`、`0x1a00`、`0x1e04`、`0x1e05`、`0x1f04`、`0x1f05`。
 这些位置不进入 action registry，不允许 CitizenApp/CitizenWallet 构造、解码或兼容；
 人口快照与拒绝终态清理都由 runtime 投票引擎内部完成。
 | `0x1332` | `OffchainTransaction.register_clearing_bank` | `register_clearing_bank` | `cid_number`, `peer_id`, `rpc_domain`, `rpc_port` | citizenchain node |

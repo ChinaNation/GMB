@@ -82,6 +82,31 @@ impl<T: Config> Pallet<T> {
                 let next = if result.maybe_cursor.is_some() {
                     PendingCleanupStage::AdminSnapshots
                 } else {
+                    PendingCleanupStage::VoterSnapshots
+                };
+                (
+                    Some(next),
+                    db.reads_writes(u64::from(result.loops), u64::from(result.unique)),
+                )
+            }
+            PendingCleanupStage::VoterSnapshots => {
+                let result = VoterSnapshot::<T>::clear_prefix(proposal_id, cleanup_limit, None);
+                let next = if result.maybe_cursor.is_some() {
+                    PendingCleanupStage::VoterSnapshots
+                } else {
+                    PendingCleanupStage::EffectiveVoterSnapshots
+                };
+                (
+                    Some(next),
+                    db.reads_writes(u64::from(result.loops), u64::from(result.unique)),
+                )
+            }
+            PendingCleanupStage::EffectiveVoterSnapshots => {
+                let result =
+                    EffectiveVoterSnapshot::<T>::clear_prefix(proposal_id, cleanup_limit, None);
+                let next = if result.maybe_cursor.is_some() {
+                    PendingCleanupStage::EffectiveVoterSnapshots
+                } else {
                     PendingCleanupStage::TrackData
                 };
                 (
@@ -152,6 +177,7 @@ impl<T: Config> Pallet<T> {
                 Proposals::<T>::remove(proposal_id);
                 ProposalData::<T>::remove(proposal_id);
                 ProposalOwner::<T>::remove(proposal_id);
+                ProposalVotePlans::<T>::remove(proposal_id);
                 ProposalMeta::<T>::remove(proposal_id);
                 if let Some(snapshot_id) = ProposalPopulationSnapshotIds::<T>::take(proposal_id) {
                     T::CitizenIdentityReader::release_population_snapshot(snapshot_id);
@@ -162,7 +188,7 @@ impl<T: Config> Pallet<T> {
                 TerminalFinalizationDeadLetters::<T>::remove(proposal_id);
                 AutoFinalizeRetryStates::<T>::remove(proposal_id);
                 AutoFinalizeDeadLetters::<T>::remove(proposal_id);
-                (None, track_weight.saturating_add(db.reads_writes(2, 18)))
+                (None, track_weight.saturating_add(db.reads_writes(2, 19)))
             }
         }
     }

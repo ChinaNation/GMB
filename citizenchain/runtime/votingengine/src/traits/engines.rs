@@ -3,25 +3,20 @@
 use frame_support::dispatch::DispatchResult;
 use sp_runtime::DispatchError;
 
-use crate::types::InstitutionCode;
+use crate::types::{InstitutionCode, VotePlanOf};
 
 pub trait JointVoteEngine<AccountId> {
-    fn create_joint_proposal(
-        who: AccountId,
-        actor_cid_number: sp_std::vec::Vec<u8>,
-    ) -> Result<u64, DispatchError>;
-
     fn create_joint_proposal_with_data(
         who: AccountId,
         actor_cid_number: sp_std::vec::Vec<u8>,
-        module_tag: &[u8],
+        vote_plan: VotePlanOf<AccountId>,
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError>;
 
     fn create_joint_proposal_with_data_and_object(
         who: AccountId,
         actor_cid_number: sp_std::vec::Vec<u8>,
-        module_tag: &[u8],
+        vote_plan: VotePlanOf<AccountId>,
         data: sp_std::vec::Vec<u8>,
         object_kind: u8,
         object_data: sp_std::vec::Vec<u8>,
@@ -29,17 +24,10 @@ pub trait JointVoteEngine<AccountId> {
 }
 
 impl<AccountId> JointVoteEngine<AccountId> for () {
-    fn create_joint_proposal(
-        _who: AccountId,
-        _actor_cid_number: sp_std::vec::Vec<u8>,
-    ) -> Result<u64, DispatchError> {
-        Err(DispatchError::Other("JointVoteEngineNotConfigured"))
-    }
-
     fn create_joint_proposal_with_data(
         _who: AccountId,
         _actor_cid_number: sp_std::vec::Vec<u8>,
-        _module_tag: &[u8],
+        _vote_plan: VotePlanOf<AccountId>,
         _data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         Err(DispatchError::Other("JointVoteEngineNotConfigured"))
@@ -48,7 +36,7 @@ impl<AccountId> JointVoteEngine<AccountId> for () {
     fn create_joint_proposal_with_data_and_object(
         _who: AccountId,
         _actor_cid_number: sp_std::vec::Vec<u8>,
-        _module_tag: &[u8],
+        _vote_plan: VotePlanOf<AccountId>,
         _data: sp_std::vec::Vec<u8>,
         _object_kind: u8,
         _object_data: sp_std::vec::Vec<u8>,

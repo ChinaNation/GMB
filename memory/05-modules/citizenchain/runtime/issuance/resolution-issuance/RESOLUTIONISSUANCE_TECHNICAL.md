@@ -3,6 +3,7 @@
 ## 2026-07-14 投票与执行绑定
 
 - 决议发行继续只由联合投票引擎推进；业务模块不实现计票或公投。
+- 仅 NRC 和 43 个 PRC 的 `COMMITTEE_MEMBER / 委员` 岗位有效任职账户可发起；联合选民由 NRC/PRC 委员与 43 PRB `DIRECTOR / 董事` 组成，PRB 只投票。
 - 回调执行必须匹配本模块 `ProposalOwner`、联合 proposal kind、`STAGE_JOINT` 或 `STAGE_REFERENDUM`、通过状态和原始发行摘要。
 - 联合机构直接一致通过与转入联合公投后通过都执行同一份绑定发行决议；公投阶段不得因 stage 不同被误判为异常执行失败。
 
@@ -55,7 +56,7 @@ citizenchain/runtime/issuance/resolution-issuance/
 - `execution.rs`：发行执行、防重放、累计发行、暂停与短期执行记录清理。
 - `validation.rs`：收款名单、金额、分配明细和 CHINA_CB 地址校验。
 - `migration.rs`：storage version 与开发期 fresh genesis 说明；当前只维护 storage version。
-- `benchmarks.rs` / `weights.rs`：合并后的 benchmark 与权重，覆盖全部公开 call。当前 `weights.rs` 为保守 fallback，不伪装成正式 benchmark 产物；发布前仍需用带 Benchmark Runtime API 的 WASM 重新生成。
+- `benchmarks.rs` / `weights.rs`：覆盖全部公开 call；当前 `weights.rs` 已用本步 benchmark runtime WASM、50 steps / 20 repeats 重新生成。
 - `tests.rs`：提案、回调、执行、暂停、清理和事件来源回归测试。
 
 ## 4. Runtime 接口
@@ -83,17 +84,18 @@ citizenchain/runtime/issuance/resolution-issuance/
 
 ## 6. 核心流程
 
-1. 管理员调用 `propose_resolution_issuance`，只提交决议发行业务数据。
-2. 模块校验理由、总金额、分配明细和合法收款名单。
-3. 模块通过 `JointVoteEngine::create_joint_proposal_with_data` 创建联合投票提案，并在同一事务中写入 owner/data/meta；人口快照准备和消费由投票引擎完成。
-4. `ProposalData` 内容为 `MODULE_TAG + IssuanceProposalData`。
-5. 投票引擎终结联合投票后，在自身状态转换事务内回调 `ResolutionIssuance`。
-6. 如果投票通过，模块在同一事务内执行发行、记录防重放并递减计数；提案数据由 votingengine 终态清理队列统一延迟清理。
-7. 如果投票否决，模块只递减计数；提案数据由 votingengine 终态清理队列统一延迟清理。
-8. 如果投票通过且执行成功，模块发出执行事件，并返回 `ProposalExecutionOutcome::Executed`。
-9. 如果投票通过但执行失败，模块发出失败事件，并返回 `ProposalExecutionOutcome::FatalFailed`。
-10. allocation 结构性校验集中在 `validation.rs`：收款人集合、唯一性、单笔非零与总额匹配由共享校验统一负责。
-11. `execution.rs` 在共享校验后只保留执行期专属检查：暂停、防重放、理由长度、Existential Deposit、单笔 cap、累计 cap 和实际入账结果。
+1. 签名账户调用 `propose_resolution_issuance`，只提交决议发行业务数据。
+2. 模块校验理由、总金额、分配明细和合法收款名单，并要求签名账户对 `RoleSubject(actor_cid_number, COMMITTEE_MEMBER)` 拥有决议发行 `Propose` 权限。
+3. 模块构造固定联合 `VotePlan`：NRC + 43 PRC `COMMITTEE_MEMBER` 为可发起/可投票主体，43 PRB `DIRECTOR` 为只投票主体，`business_object_hash` 绑定完整发行业务数据摘要。
+4. 模块通过 `JointVoteEngine::create_joint_proposal_with_data` 创建联合投票提案，并在同一事务中写入 plan、owner/data/meta 和岗位有效任职快照；人口快照准备和消费由投票引擎完成。
+5. `ProposalData` 内容为 `MODULE_TAG + IssuanceProposalData`。
+6. 投票引擎终结联合投票后，在自身状态转换事务内回调 `ResolutionIssuance`。
+7. 如果投票通过，模块在同一事务内执行发行、记录防重放并递减计数；提案数据由 votingengine 终态清理队列统一延迟清理。
+8. 如果投票否决，模块只递减计数；提案数据由 votingengine 终态清理队列统一延迟清理。
+9. 如果投票通过且执行成功，模块发出执行事件，并返回 `ProposalExecutionOutcome::Executed`。
+10. 如果投票通过但执行失败，模块发出失败事件，并返回 `ProposalExecutionOutcome::FatalFailed`。
+11. allocation 结构性校验集中在 `validation.rs`：收款人集合、唯一性、单笔非零与总额匹配由共享校验统一负责。
+12. `execution.rs` 在共享校验后只保留执行期专属检查：暂停、防重放、理由长度、Existential Deposit、单笔 cap、累计 cap 和实际入账结果。
 
 ## 7. 安全边界
 
@@ -108,6 +110,7 @@ citizenchain/runtime/issuance/resolution-issuance/
   - `approved=true` 时只接受 `STATUS_PASSED`。
   - `approved=false` 时只接受 `STATUS_REJECTED`。
   - 已进入 `STATUS_EXECUTED` / `STATUS_EXECUTION_FAILED` 等终态的提案不得二次回调。
+- 发起授权与投票资格分层：业务模块校验委员岗位 `Propose`；投票引擎只根据已绑定 `VotePlan` 和岗位有效任职快照接受票据。
 
 ## 8. 联动影响
 
@@ -129,5 +132,11 @@ WASM_BUILD_FROM_SOURCE=1 cargo check -p citizenchain --features runtime-benchmar
 
 - `benchmarks.rs` 已覆盖 `set_allowed_recipients`、`propose_resolution_issuance`、`clear_executed`、`set_paused` 四个公开入口；`propose_resolution_issuance` benchmark 已删除人口快照、联合签名、省份和签名管理员公钥参数，避免业务模块继续承载投票引擎职责。
 - Cargo feature：`runtime-benchmarks` 会向 `pallet-balances` 与 `votingengine` 传播；`primitives` 当前不暴露 benchmark feature，不在传播列表中。
-- 当前本地尝试生成正式 `weights.rs` 时，普通 CI WASM 缺少 Benchmark Runtime API；`WASM_BUILD_FROM_SOURCE=1` 又被 `wasm32v1-none` 下 `serde_core` / `byte-slice-cast` 的 `std` feature 问题阻塞。
-- 因此 `weights.rs` 暂时采用偏高保守 fallback，发布前必须准备 benchmark runtime WASM 后重新生成。
+- benchmark 环境先构建真实创世机构，再写入 NRC/PRC 委员与 PRB 董事岗位、任职和固定权限，不再用 admins 伪装业务授权。
+- `propose_issuance` 已用当前 benchmark runtime WASM、50 steps / 20 repeats 重算：368 reads / 280 writes，参考时间 1.977 s，真实计入 87 个岗位快照、87 个 CID 有效选民快照和 `ProposalVotePlans`。
+
+## 11. 岗位授权回归
+
+- 目标模块当前 19 项测试通过。
+- 普通 staff 即使属于 NRC admins，只要没有 NRC 委员岗位有效任职和 `Propose` 权限，仍不得创建决议发行提案。
+- `VotePlan` 回归检查 44 个委员主体、43 个 PRB 董事主体、联合引擎和业务对象哈希。

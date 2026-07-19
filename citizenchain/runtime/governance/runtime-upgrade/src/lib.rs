@@ -23,9 +23,17 @@ pub trait RuntimeCodeExecutor {
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
+    use entity_primitives::{
+        AuthorizationSubject, BusinessActionId, InstitutionRoleAuthorizationQuery,
+        RolePermissionOperation, RoleSubject,
+    };
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
     use genesis_pallet::DeveloperUpgradeCheck;
+    use primitives::{
+        cid::{china::china_cb::CHINA_CB, china::china_ch::CHINA_CH},
+        governance_skeleton::{ROLE_CODE_COMMITTEE_MEMBER, ROLE_CODE_DIRECTOR},
+    };
     use sp_runtime::{
         traits::{Hash, SaturatedConversion},
         DispatchError,
@@ -118,6 +126,8 @@ pub mod pallet {
         type DeveloperUpgradeOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
 
         type JointVoteEngine: JointVoteEngine<Self::AccountId>;
+        /// 协议升级业务按“机构 CID + 委员岗位”校验提案权限。
+        type InstitutionRoleAuthorization: InstitutionRoleAuthorizationQuery<Self::AccountId>;
         type RuntimeCodeExecutor: RuntimeCodeExecutor;
 
         /// 开发者直升 runtime 开关检查（由 genesis_pallet-pallet 注入）。
@@ -175,6 +185,8 @@ pub mod pallet {
         EmptyRuntimeCode,
         InvalidActorCid,
         UnauthorizedActorAdmin,
+        /// 发起人没有目标机构委员岗位的协议升级提案权限。
+        UnauthorizedActorRole,
         ProposalNotFound,
         ProposalNotVoting,
         JointVoteCreateFailed,
@@ -210,13 +222,22 @@ pub mod pallet {
                 ),
                 Error::<T>::InvalidActorCid
             );
+            let proposer_role = RoleSubject {
+                cid_number: actor_cid_number.to_vec(),
+                role_code: ROLE_CODE_COMMITTEE_MEMBER.to_vec(),
+            };
+            let business_action = BusinessActionId {
+                module_tag: crate::MODULE_TAG.to_vec(),
+                action_code: entity_primitives::business_action::ACTION_RUNTIME_UPGRADE,
+            };
             ensure!(
-                <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
-                    actor_code,
-                    actor_cid_number.as_slice(),
+                T::InstitutionRoleAuthorization::is_authorized(
                     &proposer,
+                    &proposer_role,
+                    &business_action,
+                    RolePermissionOperation::Propose,
                 ),
-                Error::<T>::UnauthorizedActorAdmin
+                Error::<T>::UnauthorizedActorRole
             );
 
             ensure!(!reason.is_empty(), Error::<T>::EmptyReason);
@@ -227,6 +248,8 @@ pub mod pallet {
 
             let code_vec = code.into_inner();
             let code_hash = T::Hashing::hash(code_vec.as_slice());
+            let mut business_object_hash = [0u8; 32];
+            business_object_hash.copy_from_slice(code_hash.as_ref());
             let expected_pow_params_hash =
                 T::Hashing::hash_of(&pow_difficulty::ActiveParams::<T>::get());
             let pow_params_hash = T::Hashing::hash_of(&new_pow_params);
@@ -240,10 +263,11 @@ pub mod pallet {
             };
             let mut encoded = sp_runtime::sp_std::vec::Vec::from(crate::MODULE_TAG);
             encoded.extend_from_slice(&proposal.encode());
+            let vote_plan = Self::build_vote_plan(&actor_cid_number, business_object_hash)?;
             let proposal_id = T::JointVoteEngine::create_joint_proposal_with_data_and_object(
                 proposer.clone(),
                 actor_cid_number.to_vec(),
-                crate::MODULE_TAG,
+                vote_plan,
                 encoded,
                 PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
                 code_vec,
@@ -315,6 +339,72 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        fn bounded_role_subject(
+            cid_number: &[u8],
+            role_code: &[u8],
+        ) -> Result<
+            entity_primitives::RoleSubject<
+                votingengine::types::CidNumber,
+                votingengine::types::RoleCode,
+            >,
+            DispatchError,
+        > {
+            Ok(entity_primitives::RoleSubject {
+                cid_number: cid_number
+                    .to_vec()
+                    .try_into()
+                    .map_err(|_| Error::<T>::InvalidActorCid)?,
+                role_code: role_code
+                    .to_vec()
+                    .try_into()
+                    .map_err(|_| Error::<T>::InvalidActorCid)?,
+            })
+        }
+
+        /// 协议升级固定使用 NRC/PRC 委员与 PRB 董事组成的联合投票计划。
+        fn build_vote_plan(
+            actor_cid_number: &votingengine::types::CidNumber,
+            business_object_hash: [u8; 32],
+        ) -> Result<votingengine::types::VotePlanOf<T::AccountId>, DispatchError> {
+            let proposer_role = Self::bounded_role_subject(
+                actor_cid_number.as_slice(),
+                ROLE_CODE_COMMITTEE_MEMBER,
+            )?;
+            let mut voters = sp_runtime::sp_std::vec::Vec::new();
+            for entry in CHINA_CB.iter() {
+                voters.push(AuthorizationSubject::Institution(
+                    Self::bounded_role_subject(
+                        entry.cid_number.as_bytes(),
+                        ROLE_CODE_COMMITTEE_MEMBER,
+                    )?,
+                ));
+            }
+            for entry in CHINA_CH.iter() {
+                voters.push(AuthorizationSubject::Institution(
+                    Self::bounded_role_subject(entry.cid_number.as_bytes(), ROLE_CODE_DIRECTOR)?,
+                ));
+            }
+            let module_tag: BoundedVec<
+                u8,
+                ConstU32<{ entity_primitives::BUSINESS_MODULE_TAG_MAX_BYTES }>,
+            > = crate::MODULE_TAG
+                .to_vec()
+                .try_into()
+                .map_err(|_| Error::<T>::JointVoteCreateFailed)?;
+            votingengine::types::VotePlanOf::<T::AccountId>::try_new(
+                BusinessActionId {
+                    module_tag: module_tag.clone(),
+                    action_code: entity_primitives::business_action::ACTION_RUNTIME_UPGRADE,
+                },
+                module_tag,
+                AuthorizationSubject::Institution(proposer_role),
+                voters,
+                votingengine::types::VotingEngineKind::Joint,
+                business_object_hash,
+            )
+            .map_err(|_| Error::<T>::JointVoteCreateFailed.into())
+        }
+
         #[frame_support::transactional]
         fn execute_upgrade_bundle(
             code: &[u8],

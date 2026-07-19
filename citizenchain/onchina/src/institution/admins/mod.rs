@@ -52,13 +52,25 @@ pub(crate) struct InstitutionAdminInput {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct InstitutionRoleChangeInput {
-    pub(crate) role_code: String,
-    pub(crate) role_name: String,
+pub(crate) struct InstitutionRolePermissionInput {
+    pub(crate) module_tag: String,
+    pub(crate) action_code: u32,
+    pub(crate) operation: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct InstitutionRoleMutationInput {
+    pub(crate) mutation: String,
+    #[serde(default)]
+    pub(crate) role_code: Option<String>,
+    #[serde(default)]
+    pub(crate) role_name: Option<String>,
     #[serde(default)]
     pub(crate) term_required: bool,
-    #[serde(default = "default_active_role_status")]
-    pub(crate) role_status: String,
+    #[serde(default)]
+    pub(crate) permissions: Vec<InstitutionRolePermissionInput>,
+    #[serde(default)]
+    pub(crate) assignments: Vec<InstitutionAssignmentTargetInput>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -83,7 +95,7 @@ pub(crate) struct PrepareInstitutionGovernanceInput {
     #[serde(default)]
     pub(crate) admins: Vec<InstitutionAdminInput>,
     #[serde(default)]
-    pub(crate) role_changes: Vec<InstitutionRoleChangeInput>,
+    pub(crate) role_mutations: Vec<InstitutionRoleMutationInput>,
     #[serde(default)]
     pub(crate) assignment_changes: Vec<InstitutionAssignmentChangeInput>,
     #[serde(default)]
@@ -106,10 +118,6 @@ pub(crate) struct PrepareInstitutionChainOutput {
     pub(crate) call_data_hex: String,
     pub(crate) sign_request: String,
     pub(crate) expires_at: i64,
-}
-
-fn default_active_role_status() -> String {
-    "ACTIVE".to_string()
 }
 
 fn code_bytes(institution_code: &str) -> Result<[u8; 4], axum::response::Response> {
@@ -216,44 +224,188 @@ fn parse_admin_inputs(
     Ok((args, action_admins))
 }
 
-fn parse_role_status(
+fn parse_permission_operation(
     value: &str,
-) -> Result<entity_primitives::InstitutionRoleStatus, axum::response::Response> {
+) -> Result<entity_primitives::RolePermissionOperation, axum::response::Response> {
     match value.trim().to_ascii_uppercase().as_str() {
-        "" | "ACTIVE" => Ok(entity_primitives::InstitutionRoleStatus::Active),
-        "INACTIVE" => Ok(entity_primitives::InstitutionRoleStatus::Inactive),
+        "PROPOSE" => Ok(entity_primitives::RolePermissionOperation::Propose),
+        "VOTE" => Ok(entity_primitives::RolePermissionOperation::Vote),
         _ => Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "岗位状态只能是 ACTIVE 或 INACTIVE",
+            "岗位权限操作只能是 PROPOSE 或 VOTE",
         )),
     }
 }
 
-fn role_changes(
-    input: &[InstitutionRoleChangeInput],
-) -> Result<Vec<entity_primitives::InstitutionRoleChange>, axum::response::Response> {
-    let mut seen = std::collections::BTreeSet::new();
+fn assignment_targets(
+    input: &[InstitutionAssignmentTargetInput],
+) -> Result<Vec<entity_primitives::InstitutionAssignmentTarget<[u8; 32]>>, axum::response::Response>
+{
+    let mut seen_accounts = std::collections::BTreeSet::new();
     let mut out = Vec::with_capacity(input.len());
-    for item in input {
-        let role_code = item.role_code.trim();
-        let role_name = item.role_name.trim();
-        if role_code.is_empty() || role_name.is_empty() {
+    for target in input {
+        let admin_account =
+            parse_sr25519_pubkey_bytes(target.admin_account.trim()).ok_or_else(|| {
+                api_error(
+                    StatusCode::BAD_REQUEST,
+                    1001,
+                    "任职管理员账户必须是 sr25519 公钥或 SS58 地址",
+                )
+            })?;
+        if !seen_accounts.insert(admin_account) {
             return Err(api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "岗位码和岗位名称不能为空",
+                "同一岗位任职账户不能重复",
             ));
         }
-        if !seen.insert(role_code.to_string()) {
-            return Err(api_error(StatusCode::BAD_REQUEST, 1001, "岗位码不能重复"));
-        }
-        out.push(entity_primitives::InstitutionRoleChange {
-            role_code: role_code.as_bytes().to_vec(),
-            role_name: role_name.as_bytes().to_vec(),
-            term_required: item.term_required,
-            role_status: parse_role_status(&item.role_status)?,
+        out.push(entity_primitives::InstitutionAssignmentTarget {
+            admin_account,
+            term_start: target.term_start,
+            term_end: target.term_end,
+            assignment_source:
+                entity_primitives::InstitutionAssignmentSource::InstitutionGovernance,
+            assignment_source_ref: b"onchina-governance".to_vec(),
+            assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
         });
+    }
+    Ok(out)
+}
+
+fn role_mutations(
+    input: &[InstitutionRoleMutationInput],
+) -> Result<Vec<entity_primitives::InstitutionRoleMutation<[u8; 32]>>, axum::response::Response> {
+    let mut out = Vec::with_capacity(input.len());
+    for item in input {
+        match item.mutation.trim().to_ascii_uppercase().as_str() {
+            "CREATE" => {
+                if item
+                    .role_code
+                    .as_deref()
+                    .is_some_and(|value| !value.trim().is_empty())
+                {
+                    return Err(api_error(
+                        StatusCode::BAD_REQUEST,
+                        1001,
+                        "创建岗位不得提交岗位码",
+                    ));
+                }
+                let role_name = item.role_name.as_deref().unwrap_or_default().trim();
+                if role_name.is_empty() || item.permissions.is_empty() {
+                    return Err(api_error(
+                        StatusCode::BAD_REQUEST,
+                        1001,
+                        "创建岗位必须提交岗位名和权限",
+                    ));
+                }
+                if role_name.len() > 128 || item.permissions.len() > 256 {
+                    return Err(api_error(
+                        StatusCode::BAD_REQUEST,
+                        1001,
+                        "岗位名或岗位权限数量超过链上上限",
+                    ));
+                }
+                for assignment in &item.assignments {
+                    let valid_term = if item.term_required {
+                        assignment.term_start > 0 && assignment.term_end >= assignment.term_start
+                    } else {
+                        assignment.term_start == 0 && assignment.term_end == 0
+                    };
+                    if !valid_term {
+                        return Err(api_error(
+                            StatusCode::BAD_REQUEST,
+                            1001,
+                            "初始任职任期与岗位任期规则不一致",
+                        ));
+                    }
+                }
+                let mut seen_permissions = std::collections::BTreeSet::new();
+                let mut permissions = Vec::with_capacity(item.permissions.len());
+                for permission in &item.permissions {
+                    let module_tag = permission.module_tag.trim();
+                    let operation = parse_permission_operation(&permission.operation)?;
+                    if module_tag.is_empty()
+                        || module_tag.len() > 32
+                        || !seen_permissions.insert((
+                            module_tag.to_string(),
+                            permission.action_code,
+                            operation as u8,
+                        ))
+                    {
+                        return Err(api_error(
+                            StatusCode::BAD_REQUEST,
+                            1001,
+                            "岗位权限不能为空或重复",
+                        ));
+                    }
+                    permissions.push(entity_primitives::RolePermissionSpec {
+                        business_action_id: entity_primitives::BusinessActionId {
+                            module_tag: module_tag.as_bytes().to_vec(),
+                            action_code: permission.action_code,
+                        },
+                        operation,
+                    });
+                }
+                out.push(entity_primitives::InstitutionRoleMutation::Create {
+                    role_name: role_name.as_bytes().to_vec(),
+                    term_required: item.term_required,
+                    permissions,
+                    assignments: assignment_targets(&item.assignments)?,
+                });
+            }
+            "RENAME" => {
+                let role_code = item.role_code.as_deref().unwrap_or_default().trim();
+                let role_name = item.role_name.as_deref().unwrap_or_default().trim();
+                if role_code.is_empty()
+                    || role_code.len() > 64
+                    || role_name.is_empty()
+                    || role_name.len() > 128
+                    || item.term_required
+                    || !item.permissions.is_empty()
+                    || !item.assignments.is_empty()
+                {
+                    return Err(api_error(
+                        StatusCode::BAD_REQUEST,
+                        1001,
+                        "改名只能提交岗位码和新岗位名",
+                    ));
+                }
+                out.push(entity_primitives::InstitutionRoleMutation::Rename {
+                    role_code: role_code.as_bytes().to_vec(),
+                    role_name: role_name.as_bytes().to_vec(),
+                });
+            }
+            "DELETE" => {
+                let role_code = item.role_code.as_deref().unwrap_or_default().trim();
+                if role_code.is_empty()
+                    || role_code.len() > 64
+                    || item
+                        .role_name
+                        .as_deref()
+                        .is_some_and(|value| !value.trim().is_empty())
+                    || item.term_required
+                    || !item.permissions.is_empty()
+                    || !item.assignments.is_empty()
+                {
+                    return Err(api_error(
+                        StatusCode::BAD_REQUEST,
+                        1001,
+                        "删除只能提交岗位码",
+                    ));
+                }
+                out.push(entity_primitives::InstitutionRoleMutation::Delete {
+                    role_code: role_code.as_bytes().to_vec(),
+                });
+            }
+            _ => {
+                return Err(api_error(
+                    StatusCode::BAD_REQUEST,
+                    1001,
+                    "岗位操作只能是 CREATE、RENAME 或 DELETE",
+                ))
+            }
+        }
     }
     Ok(out)
 }
@@ -282,34 +434,7 @@ fn assignment_changes(
                 "任职变更岗位码不能重复",
             ));
         }
-        let mut seen_accounts = std::collections::BTreeSet::new();
-        let mut assignments = Vec::with_capacity(item.assignments.len());
-        for target in &item.assignments {
-            let admin_account = parse_sr25519_pubkey_bytes(target.admin_account.trim())
-                .ok_or_else(|| {
-                    api_error(
-                        StatusCode::BAD_REQUEST,
-                        1001,
-                        "任职管理员账户必须是 sr25519 公钥或 SS58 地址",
-                    )
-                })?;
-            if !seen_accounts.insert(admin_account) {
-                return Err(api_error(
-                    StatusCode::BAD_REQUEST,
-                    1001,
-                    "同一岗位任职账户不能重复",
-                ));
-            }
-            assignments.push(entity_primitives::InstitutionAssignmentTarget {
-                admin_account,
-                term_start: target.term_start,
-                term_end: target.term_end,
-                assignment_source:
-                    entity_primitives::InstitutionAssignmentSource::InstitutionGovernance,
-                assignment_source_ref: b"onchina-governance".to_vec(),
-                assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
-            });
-        }
+        let assignments = assignment_targets(&item.assignments)?;
         out.push(entity_primitives::InstitutionRoleAssignmentChange {
             role_code: role_code.as_bytes().to_vec(),
             assignments,
@@ -496,7 +621,7 @@ pub(crate) async fn prepare_institution_governance(
     }) else {
         return api_error(StatusCode::NOT_FOUND, 1004, "机构不存在");
     };
-    let role_changes = match role_changes(&input.role_changes) {
+    let role_mutations = match role_mutations(&input.role_mutations) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -513,11 +638,11 @@ pub(crate) async fn prepare_institution_governance(
         Err(resp) => return resp,
     };
     let action = if input.admins.is_empty() {
-        if role_changes.is_empty() && assignment_changes.is_empty() && legal.is_none() {
+        if role_mutations.is_empty() && assignment_changes.is_empty() && legal.is_none() {
             return api_error(StatusCode::BAD_REQUEST, 1001, "机构治理内容不能为空");
         }
         entity_primitives::InstitutionGovernanceAction::MutateRolesAndAssignments {
-            role_changes,
+            role_mutations,
             assignment_changes,
             legal_representative_change: legal,
         }
@@ -526,12 +651,12 @@ pub(crate) async fn prepare_institution_governance(
             Ok(v) => v,
             Err(resp) => return resp,
         };
-        if role_changes.is_empty() && assignment_changes.is_empty() && legal.is_none() {
+        if role_mutations.is_empty() && assignment_changes.is_empty() && legal.is_none() {
             entity_primitives::InstitutionGovernanceAction::ReplaceAdmins { admins }
         } else {
             entity_primitives::InstitutionGovernanceAction::ReplaceAdminsAndMutateRoles {
                 admins,
-                role_changes,
+                role_mutations,
                 assignment_changes,
                 legal_representative_change: legal,
             }

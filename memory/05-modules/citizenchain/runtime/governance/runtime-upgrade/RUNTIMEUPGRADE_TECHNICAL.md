@@ -3,9 +3,9 @@
 ## 0. 功能需求
 ### 0.1 模块职责
 `runtime-upgrade` 负责把"Runtime wasm 升级"包装成一个受治理约束的链上流程，核心要求是：
-- 仅允许国家储委会（NRC）和 43 个省储委会（PRC）管理员发起升级提案。
+- 仅允许 NRC 和 43 个 PRC 的 `COMMITTEE_MEMBER / 委员` 岗位有效任职账户发起升级提案，仅属于 admins 不构成授权。
 - 升级提案必须先经过 `votingengine` 的联合投票。
-- 联合阶段由各机构管理员个人钱包直接上链投票，链上按机构阈值自动形成机构结果。
+- 联合阶段由 `VotePlan` 固定绑定 NRC + 43 PRC 委员岗位和 43 PRB `DIRECTOR / 董事` 岗位；有效任职账户用个人钱包直接上链投票，链上按机构阈值形成机构结果。PRB 董事只有投票权，没有提案权。
 - 联合投票通过后才允许执行 `set_code`。
 - 开发期直升通道只允许国家储委会管理员使用，并且必须受 `DeveloperUpgradeEnabled` 开关约束。
 - 投票结果、执行结果必须在链上可追踪。
@@ -38,7 +38,7 @@
 
 ## 1. 模块定位
 `runtime-upgrade` 是"协议升级治理编排模块"，负责：
-- 接收国家储委会或省储委会管理员提交的 wasm 升级提案；
+- 接收 NRC/PRC 委员岗位有效任职账户提交的 wasm 升级提案；
 - 调用 `votingengine` 创建联合投票；
 - 在联合投票回调后执行 `set_code`；
 - 摘要数据存储在 `votingengine` 的 `ProposalData`；
@@ -72,6 +72,7 @@ Runtime 配置位置：
 
 当前接线：
 - `ProposeOrigin = EnsureJointProposer`
+- `InstitutionRoleAuthorization = PublicManage`
 - `DeveloperUpgradeOrigin = EnsureNrcAdmin`
 - `JointVoteEngine = VotingEngine`
 - `RuntimeCodeExecutor = RuntimeSetCodeExecutor`
@@ -87,7 +88,7 @@ Runtime 配置位置：
 
 ## 3. 核心数据结构
 ### 3.1 Proposal（摘要，序列化存入 votingengine ProposalData）
-- `proposer: AccountId`：提案发起人（国家储委会或省储委会管理员）
+- `proposer: AccountId`：提案发起人（NRC 或 PRC 委员岗位的有效任职账户）
 - `reason: BoundedVec<u8, MaxReasonLen>`：升级理由
 - `code_hash: Hash`：升级 code 哈希，便于事件与链下审计对齐
 
@@ -113,16 +114,19 @@ Runtime 配置位置：
 - `ProposalObject`：存放 runtime wasm 原始字节
 - `ProposalMeta`：存放提案创建时间
 - `Proposals`：投票引擎核心提案表（状态、阶段、截止区块等）
+- `ProposalVotePlans`：一次性绑定协议升级动作、提案主体、87 个投票岗位主体、联合引擎和 runtime WASM 对象哈希
+- `VoterSnapshot` / `EffectiveVoterSnapshot`：分别保存岗位有效任职快照和按 CID 合并去重的有效选民快照
 
 ## 5. 外部接口
 ### 5.1 `propose_runtime_upgrade`（call index = 0）
 流程：
-1. 校验 `ProposeOrigin`（`EnsureJointProposer`）。
+1. 校验 `ProposeOrigin`（`EnsureJointProposer`），再用 `InstitutionRoleAuthorization` 校验签名账户对 `RoleSubject(actor_cid_number, COMMITTEE_MEMBER)` 拥有协议升级 `Propose` 权限。
 2. 校验 `reason` 与 `code` 非空，并校验 `new_pow_params` 的参数/算法版本合法。
 3. 计算 `code_hash`、当前 `ActiveParams` hash 与新 PoW 参数 hash，构造摘要 `Proposal`
    并加 `MODULE_TAG` 序列化。
-4. 调用 `JointVoteEngine::create_joint_proposal_with_data_and_object` 创建联合投票，并在同一事务中写入 owner/data/meta 和 runtime wasm 对象。
-5. 发出 `RuntimeUpgradeProposed` 事件。
+4. 构造固定联合 `VotePlan`：NRC + 43 PRC `COMMITTEE_MEMBER` 为可发起/可投票主体，43 PRB `DIRECTOR` 为只投票主体，`business_object_hash` 绑定 runtime WASM 对象哈希。
+5. 调用 `JointVoteEngine::create_joint_proposal_with_data_and_object` 创建联合投票，并在同一事务中写入 plan、owner/data/meta、岗位选民快照和 runtime wasm 对象。
+6. 发出 `RuntimeUpgradeProposed` 事件。
 
 边界：
 - 该接口接收 `origin / reason / code / new_pow_params`。
@@ -237,9 +241,8 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 旧版 benchmark 存在偏差。现已修复：
 - `propose_runtime_upgrade` benchmark 改为真实 extrinsic
 - `propose_runtime_upgrade` benchmark 已删除人口快照、联合签名、省份和签名管理员公钥参数。
-- benchmark 环境按当前 `AdminAccount` 编码种下 NRC、43 个 PRC、43 个 PRB 管理员表，
-  让真实联合投票快照路径可执行。
-- 权重已用当前源码 WASM、50 steps / 20 repeats 重算：270 reads / 364 writes，时间模型约 9.023 ms。
+- benchmark 环境先构建真实创世机构，再写入 NRC/PRC 委员与 PRB 董事岗位、任职和固定权限，不再用 admins 伪装业务授权。
+- 权重已用当前 benchmark runtime WASM、50 steps / 20 repeats 重算：367 reads / 281 writes，参考时间 12.483 s，并真实计入 87 个岗位快照、87 个 CID 有效选民快照与 `ProposalVotePlans`。
 - `finalize_joint_vote` benchmark 与权重项已删除，终结执行成本由 `votingengine` 的联合投票终态回调路径覆盖。
 
 ### 7.5 已收口入口
@@ -254,8 +257,9 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 - `on_joint_vote_finalized` 回调入口
 
 ## 9. 测试覆盖
-已覆盖（当前单测与框架完整性检查共 18 个测试）：
-- 国家储委会和省储委会管理员均可发起提案，非联合提案发起人拒绝
+已覆盖（当前单测与框架完整性检查共 20 个测试）：
+- NRC 和 PRC 委员岗位有效任职账户可发起提案，普通 staff 即使属于 admins 也被拒绝
+- `VotePlan` 精确绑定 44 个委员主体、43 个董事主体、联合引擎与 runtime WASM 对象哈希
 - 提案摘要与对象数据正确分别存入 votingengine
 - 联合投票拒绝时保持 votingengine `STATUS_REJECTED`（含 wasm 对象保留到统一清理）
 - 联合投票通过并成功执行进入 votingengine `STATUS_EXECUTED`

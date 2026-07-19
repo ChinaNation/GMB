@@ -1,10 +1,17 @@
 //! 投票引擎核心数据结构与常量定义。
 //!
 //! 包括:提案 ID 别名、提案/投票各类计数 struct、提案状态阶段常量、
-//! 内部提案互斥锁结构、执行重试状态、清理阶段枚举等。
+//! 内部提案互斥锁结构、执行重试状态、清理阶段枚举以及业务模块绑定的投票计划等。
 
+extern crate alloc;
+
+use alloc::vec::Vec;
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::pallet_prelude::{BoundedVec, ConstU32};
+pub use entity_primitives::{AuthorizationSubject, BusinessActionId, RoleSubject};
+use frame_support::{
+    pallet_prelude::{BoundedVec, ConstU32, DecodeWithMemTracking},
+    traits::Get,
+};
 use scale_info::TypeInfo;
 
 pub const PROPOSAL_KIND_INTERNAL: u8 = 0;
@@ -26,6 +33,304 @@ pub use primitives::cid::code::{
 
 /// 机构 CID 号链上固定上限。所有机构类主体以 CID 作为唯一身份真源。
 pub type CidNumber = BoundedVec<u8, ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>>;
+
+/// 机构岗位码。上限与 entity 岗位 storage 契约一致。
+pub type RoleCode =
+    BoundedVec<u8, ConstU32<{ entity_primitives::INSTITUTION_ROLE_CODE_MAX_BYTES }>>;
+
+/// 全链投票计划使用的固定模块标签上限。
+///
+/// `JointVoteEngine` 是跨 pallet trait，不能携带 runtime 关联类型；因此接口使用与
+/// `entity-primitives` 协议常量完全一致的固定上限。runtime 的 `MaxModuleTagLen` 必须
+/// 保持同值，业务 owner 索引仍使用该关联类型。
+pub type VotePlanOf<AccountId> =
+    VotePlan<AccountId, ConstU32<{ entity_primitives::BUSINESS_MODULE_TAG_MAX_BYTES }>>;
+
+/// 单个投票计划最多绑定的授权主体数量。
+pub const MAX_VOTE_PLAN_SUBJECTS: u32 = MAX_PROPOSAL_SUBJECT_CIDS;
+
+/// 投票引擎类型。业务模块必须静态选择，调用方不得传入或覆盖。
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    TypeInfo,
+    MaxEncodedLen,
+)]
+pub enum VotingEngineKind {
+    /// 机构岗位或个人多签内部投票。
+    Internal,
+    /// 多个机构岗位主体参与的联合投票。
+    Joint,
+    /// 普选或机构岗位互选。
+    Election,
+    /// 代表机构、签署、公投及护宪终审组成的立法投票。
+    Legislation,
+}
+
+/// 投票计划字段或主体组合不合法。
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    TypeInfo,
+    MaxEncodedLen,
+)]
+pub enum VotePlanValidationError {
+    /// 业务 owner 与业务动作的 module tag 不一致。
+    ProposalOwnerMismatch,
+    /// 没有任何投票主体。
+    VoterSubjectsEmpty,
+    /// 投票主体超过协议上限。
+    TooManyVoterSubjects,
+    /// 同一完整授权主体重复出现。
+    DuplicateVoterSubject,
+    /// 机构岗位主体与个人多签主体混用，或个人多签账户不一致。
+    AuthorizationSubjectMismatch,
+}
+
+/// 业务模块在创建提案时绑定的完整投票计划。
+///
+/// 本类型只冻结跨模块和跨端 SCALE 字段序；本步骤不写入 storage，也不改变现有投票流程。
+#[derive(
+    Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
+)]
+#[scale_info(skip_type_params(MaxModuleTagLen))]
+pub struct VotePlan<AccountId, MaxModuleTagLen>
+where
+    MaxModuleTagLen: Get<u32>,
+{
+    /// 业务模块与具体动作的稳定标识。
+    pub business_action_id: BusinessActionId<BoundedVec<u8, MaxModuleTagLen>>,
+    /// 现有 ProposalOwner 业务模块标签，必须与 business_action_id.module_tag 相等。
+    pub proposal_owner: BoundedVec<u8, MaxModuleTagLen>,
+    /// 发起提案的机构岗位主体或个人多签主体。
+    pub proposer_subject: AuthorizationSubject<CidNumber, RoleCode, AccountId>,
+    /// 有资格投票的岗位主体集合；个人多签固定为同一账户一项。
+    pub voter_subjects: BoundedVec<
+        AuthorizationSubject<CidNumber, RoleCode, AccountId>,
+        ConstU32<MAX_VOTE_PLAN_SUBJECTS>,
+    >,
+    /// 业务模块静态选择的投票引擎。
+    pub voting_engine: VotingEngineKind,
+    /// 业务对象的 32 字节摘要，防止提案与执行对象错绑。
+    pub business_object_hash: [u8; 32],
+}
+
+impl<AccountId, MaxModuleTagLen> VotePlan<AccountId, MaxModuleTagLen>
+where
+    AccountId: PartialEq,
+    MaxModuleTagLen: Get<u32>,
+{
+    /// 构造并校验投票计划，禁止空主体、重复主体和机构/个人多签混用。
+    pub fn try_new(
+        business_action_id: BusinessActionId<BoundedVec<u8, MaxModuleTagLen>>,
+        proposal_owner: BoundedVec<u8, MaxModuleTagLen>,
+        proposer_subject: AuthorizationSubject<CidNumber, RoleCode, AccountId>,
+        voter_subjects: Vec<AuthorizationSubject<CidNumber, RoleCode, AccountId>>,
+        voting_engine: VotingEngineKind,
+        business_object_hash: [u8; 32],
+    ) -> Result<Self, VotePlanValidationError> {
+        if business_action_id.module_tag != proposal_owner {
+            return Err(VotePlanValidationError::ProposalOwnerMismatch);
+        }
+        if voter_subjects.is_empty() {
+            return Err(VotePlanValidationError::VoterSubjectsEmpty);
+        }
+        for (index, subject) in voter_subjects.iter().enumerate() {
+            if voter_subjects[..index].contains(subject) {
+                return Err(VotePlanValidationError::DuplicateVoterSubject);
+            }
+        }
+        match &proposer_subject {
+            AuthorizationSubject::Institution(_) => {
+                if voter_subjects
+                    .iter()
+                    .any(|subject| !matches!(subject, AuthorizationSubject::Institution(_)))
+                {
+                    return Err(VotePlanValidationError::AuthorizationSubjectMismatch);
+                }
+            }
+            AuthorizationSubject::PersonalMultisig(account) => {
+                let same_personal_account = matches!(
+                    voter_subjects.first(),
+                    Some(AuthorizationSubject::PersonalMultisig(voter_account))
+                        if voter_account == account
+                );
+                if voter_subjects.len() != 1 || !same_personal_account {
+                    return Err(VotePlanValidationError::AuthorizationSubjectMismatch);
+                }
+            }
+        }
+        let voter_subjects = voter_subjects
+            .try_into()
+            .map_err(|_| VotePlanValidationError::TooManyVoterSubjects)?;
+        Ok(Self {
+            business_action_id,
+            proposal_owner,
+            proposer_subject,
+            voter_subjects,
+            voting_engine,
+            business_object_hash,
+        })
+    }
+}
+
+#[cfg(test)]
+mod vote_plan_tests {
+    use super::*;
+    use entity_primitives::RoleSubject;
+
+    type MaxModuleTagLen = ConstU32<32>;
+    type TestVotePlan = VotePlan<[u8; 32], MaxModuleTagLen>;
+
+    fn bounded(bytes: &[u8]) -> BoundedVec<u8, MaxModuleTagLen> {
+        bytes.to_vec().try_into().expect("测试标签长度合法")
+    }
+
+    fn institution(
+        cid_number: &[u8],
+        role_code: &[u8],
+    ) -> AuthorizationSubject<CidNumber, RoleCode, [u8; 32]> {
+        AuthorizationSubject::Institution(RoleSubject {
+            cid_number: cid_number.to_vec().try_into().expect("测试 CID 长度合法"),
+            role_code: role_code.to_vec().try_into().expect("测试岗位码长度合法"),
+        })
+    }
+
+    fn valid_plan() -> TestVotePlan {
+        let proposer = institution(b"LN001-NRC0G-944805165-2026", b"COMMITTEE_MEMBER");
+        let voters = vec![
+            proposer.clone(),
+            institution(b"ZS001-PRC0E-016974075-2026", b"COMMITTEE_MEMBER"),
+            institution(b"ZS001-PRB08-233384677-2026", b"DIRECTOR"),
+        ];
+        TestVotePlan::try_new(
+            BusinessActionId {
+                module_tag: bounded(b"res-iss"),
+                action_code: 0,
+            },
+            bounded(b"res-iss"),
+            proposer,
+            voters,
+            VotingEngineKind::Joint,
+            [0xabu8; 32],
+        )
+        .expect("测试投票计划必须合法")
+    }
+
+    #[test]
+    fn voting_engine_discriminants_are_stable() {
+        assert_eq!(VotingEngineKind::Internal.encode(), vec![0]);
+        assert_eq!(VotingEngineKind::Joint.encode(), vec![1]);
+        assert_eq!(VotingEngineKind::Election.encode(), vec![2]);
+        assert_eq!(VotingEngineKind::Legislation.encode(), vec![3]);
+    }
+
+    #[test]
+    fn vote_plan_field_order_is_stable() {
+        let plan = valid_plan();
+        assert_eq!(
+            plan.encode(),
+            (
+                plan.business_action_id.clone(),
+                plan.proposal_owner.clone(),
+                plan.proposer_subject.clone(),
+                plan.voter_subjects.clone(),
+                plan.voting_engine,
+                plan.business_object_hash,
+            )
+                .encode()
+        );
+    }
+
+    #[test]
+    fn vote_plan_rejects_invalid_subject_combinations() {
+        let proposer = institution(b"LN001-NRC0G-944805165-2026", b"COMMITTEE_MEMBER");
+        let action = BusinessActionId {
+            module_tag: bounded(b"res-iss"),
+            action_code: 0,
+        };
+        let create = |owner: &[u8], proposer_subject, voter_subjects| {
+            TestVotePlan::try_new(
+                action.clone(),
+                bounded(owner),
+                proposer_subject,
+                voter_subjects,
+                VotingEngineKind::Joint,
+                [0xabu8; 32],
+            )
+        };
+
+        assert!(matches!(
+            create(b"wrong", proposer.clone(), vec![proposer.clone()]),
+            Err(VotePlanValidationError::ProposalOwnerMismatch)
+        ));
+        assert!(matches!(
+            create(b"res-iss", proposer.clone(), Vec::new()),
+            Err(VotePlanValidationError::VoterSubjectsEmpty)
+        ));
+        assert!(matches!(
+            create(
+                b"res-iss",
+                proposer.clone(),
+                vec![proposer.clone(), proposer.clone()],
+            ),
+            Err(VotePlanValidationError::DuplicateVoterSubject)
+        ));
+        assert!(matches!(
+            create(
+                b"res-iss",
+                proposer,
+                vec![AuthorizationSubject::PersonalMultisig([7u8; 32])],
+            ),
+            Err(VotePlanValidationError::AuthorizationSubjectMismatch)
+        ));
+    }
+
+    #[test]
+    fn personal_multisig_plan_requires_the_same_single_account() {
+        let personal = AuthorizationSubject::PersonalMultisig([7u8; 32]);
+        let result = TestVotePlan::try_new(
+            BusinessActionId {
+                module_tag: bounded(b"multisig"),
+                action_code: 0,
+            },
+            bounded(b"multisig"),
+            personal.clone(),
+            vec![personal],
+            VotingEngineKind::Internal,
+            [0xcdu8; 32],
+        );
+        assert!(result.is_ok());
+
+        let mismatched = TestVotePlan::try_new(
+            BusinessActionId {
+                module_tag: bounded(b"multisig"),
+                action_code: 0,
+            },
+            bounded(b"multisig"),
+            AuthorizationSubject::PersonalMultisig([7u8; 32]),
+            vec![AuthorizationSubject::PersonalMultisig([8u8; 32])],
+            VotingEngineKind::Internal,
+            [0xcdu8; 32],
+        );
+        assert!(matches!(
+            mismatched,
+            Err(VotePlanValidationError::AuthorizationSubjectMismatch)
+        ));
+    }
+}
 
 /// 单个提案最多关联的机构 CID 数。联合投票需要覆盖 NRC + PRC + PRB 全体机构。
 pub const MAX_PROPOSAL_SUBJECT_CIDS: u32 = 256;
@@ -227,6 +532,10 @@ pub struct VoteCountU64 {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub enum PendingCleanupStage {
     AdminSnapshots,
+    /// 清理按完整岗位主体冻结的投票人快照。
+    VoterSnapshots,
+    /// 清理同一机构内按账户去重后的有效投票人快照。
+    EffectiveVoterSnapshots,
     /// 仅派发到提案所属 Track，禁止跨模式空扫所有 sub-pallet。
     TrackData,
     /// 清理大对象存储（ProposalObject + ProposalObjectMeta）。

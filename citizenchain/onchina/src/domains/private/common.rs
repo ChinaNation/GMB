@@ -89,7 +89,6 @@ pub(crate) struct PrivateTypeRule {
     pub(crate) institution_code: &'static str,
     /// `Some` 表示由类型规则固定；`None` 表示必须由本次机构实例显式提交。
     pub(crate) p1: Option<&'static str>,
-    pub(crate) has_legal_personality: bool,
 }
 
 /// 私权机构真实子模块的静态边界描述。
@@ -144,7 +143,6 @@ pub(crate) fn resolve_private_type_rule(
             partnership_kind: None,
             institution_code: "SFGT",
             p1: Some("1"),
-            has_legal_personality: false,
         },
         PrivateType::Partnership => match partnership_kind
             .and_then(PartnershipKind::from_str)
@@ -155,14 +153,12 @@ pub(crate) fn resolve_private_type_rule(
                 partnership_kind: Some(PartnershipKind::General),
                 institution_code: "SFGP",
                 p1: Some("1"),
-                has_legal_personality: false,
             },
             PartnershipKind::Limited => PrivateTypeRule {
                 private_type,
                 partnership_kind: Some(PartnershipKind::Limited),
                 institution_code: "SFLP",
                 p1: Some("1"),
-                has_legal_personality: true,
             },
         },
         PrivateType::Company => PrivateTypeRule {
@@ -170,21 +166,18 @@ pub(crate) fn resolve_private_type_rule(
             partnership_kind: None,
             institution_code: "SFGQ",
             p1: Some("1"),
-            has_legal_personality: true,
         },
         PrivateType::Corporation => PrivateTypeRule {
             private_type,
             partnership_kind: None,
             institution_code: "SFGF",
             p1: Some("1"),
-            has_legal_personality: true,
         },
         PrivateType::Welfare => PrivateTypeRule {
             private_type,
             partnership_kind: None,
             institution_code: "SFGY",
             p1: Some("0"),
-            has_legal_personality: true,
         },
         PrivateType::Association => PrivateTypeRule {
             private_type,
@@ -192,7 +185,6 @@ pub(crate) fn resolve_private_type_rule(
             // 注册协会(SFAS)的 p1 由实例输入；类型规则不提供默认值。
             institution_code: "SFAS",
             p1: None,
-            has_legal_personality: true,
         },
     };
     Ok(rule)

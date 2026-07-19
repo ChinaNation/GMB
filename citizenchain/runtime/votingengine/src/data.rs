@@ -19,7 +19,7 @@ use sp_runtime::DispatchError;
 use crate::pallet::ProposalExecutionRetryStates;
 use crate::pallet::{
     self, Error, ProposalData, ProposalDisplayId, ProposalMeta, ProposalObject, ProposalObjectMeta,
-    ProposalOwner, Proposals,
+    ProposalOwner, ProposalVotePlans, Proposals,
 };
 #[cfg(feature = "runtime-benchmarks")]
 use crate::ExecutionRetryState;
@@ -28,6 +28,27 @@ use crate::STATUS_PASSED;
 use crate::{ProposalMetadata, ProposalObjectMetadata};
 
 impl<T: pallet::Config> pallet::Pallet<T> {
+    /// 在提案创建事务内一次性绑定业务模块给出的投票计划。
+    pub fn bind_vote_plan(
+        proposal_id: u64,
+        vote_plan: crate::types::VotePlanOf<T::AccountId>,
+    ) -> DispatchResult {
+        ensure!(
+            Proposals::<T>::contains_key(proposal_id),
+            Error::<T>::ProposalNotFound
+        );
+        ensure!(
+            !ProposalVotePlans::<T>::contains_key(proposal_id),
+            Error::<T>::VotePlanAlreadyBound
+        );
+        ensure!(
+            !ProposalOwner::<T>::contains_key(proposal_id),
+            Error::<T>::ProposalDataAlreadyRegistered
+        );
+        ProposalVotePlans::<T>::insert(proposal_id, vote_plan);
+        Ok(())
+    }
+
     fn bounded_module_tag(
         module_tag: &[u8],
     ) -> Result<BoundedVec<u8, T::MaxModuleTagLen>, DispatchError> {
@@ -57,6 +78,12 @@ impl<T: pallet::Config> pallet::Pallet<T> {
             Error::<T>::ProposalDataAlreadyRegistered
         );
         let owner = Self::bounded_module_tag(module_tag)?;
+        if let Some(vote_plan) = ProposalVotePlans::<T>::get(proposal_id) {
+            ensure!(
+                vote_plan.proposal_owner.as_slice() == owner.as_slice(),
+                Error::<T>::ProposalOwnerMismatch
+            );
+        }
         let bounded: BoundedVec<u8, T::MaxProposalDataLen> = data
             .try_into()
             .map_err(|_| DispatchError::Other("ProposalDataTooLarge"))?;

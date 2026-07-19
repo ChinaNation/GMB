@@ -4,8 +4,8 @@
 //!           链上同承诺幂等续用)→ 构造 `occupy_cid` 冷签载荷 → 会话落库 → 返回 QR;
 //! submit  = 管理员扫码回签 → 组装/dry-run/提交/等进块 → 档案落库(占号先行:
 //!           链上成功才建档)。
-//! 吊销(purpose=CITIZEN_REVOKE)、链上身份推送(purpose=CITIZEN_IDENTITY_PUSH)
-//! 与机构创建(purpose=institution-create)复用同一 submit 入口,按会话 purpose 分派落库动作。
+//! 吊销(purpose=CITIZEN_REVOKE)与链上身份推送(purpose=CITIZEN_IDENTITY_PUSH)
+//! 复用同一 submit 入口，按会话 purpose 分派落库动作。
 
 use axum::{
     extract::{Path, State},
@@ -29,8 +29,6 @@ use crate::domains::citizens::admin_entry::{
 use crate::domains::citizens::chain_identity::{
     active_registry_cid_number, ensure_registry_admin, same_pubkey_hex,
 };
-use crate::institution::admins::model::InstitutionAdmin;
-use crate::institution::subjects::model::{CreateInstitutionAdminInput, Institution};
 use crate::*;
 
 const CITIZEN_IDENTITY_PALLET_INDEX: u8 = 10;
@@ -532,69 +530,6 @@ fn delete_session_best_effort(state: &AppState, request_id: &str, reason: &str) 
     }
 }
 
-fn persist_institution_create_projection_after_chain_success(
-    state: &AppState,
-    session: &ChainSignSession,
-    tx_hash: &str,
-    admin_account: &str,
-) -> Result<(), String> {
-    let inst: Institution = serde_json::from_value(
-        session
-            .context
-            .get("institution")
-            .cloned()
-            .ok_or_else(|| "institution-create session missing institution".to_string())?,
-    )
-    .map_err(|e| format!("decode institution-create institution failed: {e}"))?;
-    let admins: Vec<CreateInstitutionAdminInput> = serde_json::from_value(
-        session
-            .context
-            .get("admins")
-            .cloned()
-            .ok_or_else(|| "institution-create session missing admins".to_string())?,
-    )
-    .map_err(|e| format!("decode institution-create admins failed: {e}"))?;
-
-    state.db.upsert_institution_row(&inst)?;
-    let now = Utc::now();
-    let city_code = if inst.city_code.trim().is_empty() {
-        None
-    } else {
-        Some(inst.city_code.clone())
-    };
-    for admin in admins {
-        crate::institution::admins::repo::upsert_institution_admin(
-            &state.db,
-            &InstitutionAdmin {
-                cid_number: inst.cid_number.clone(),
-                province_code: inst.province_code.clone(),
-                city_code: city_code.clone(),
-                admin_account: admin.admin_account,
-                family_name: admin.family_name.unwrap_or_else(|| "管理".to_string()),
-                given_name: admin.given_name.unwrap_or_else(|| "员".to_string()),
-                admin_department: None,
-                admin_job: None,
-                admin_contact_phone: None,
-                admin_contact_email: None,
-                admin_photo_path: None,
-                admin_photo_name: None,
-                admin_photo_mime: None,
-                admin_photo_size: None,
-                admin_passkey_credential_id: None,
-                admin_source_id: Some(session.request_id.clone()),
-                admin_status: Some("ACTIVE".to_string()),
-                admin_updated_at: Some(now),
-                created_by: Some(admin_account.to_string()),
-                operation_log_id: Some(tx_hash.to_string()),
-                created_at: now,
-                province_name: inst.province_name.clone(),
-                city_name: inst.city_name.clone(),
-            },
-        )?;
-    }
-    Ok(())
-}
-
 /// 统一链交易 submit:验签者一致 → 组装/dry-run/提交 → 等进块 → 按 purpose 落正式投影。
 pub(crate) async fn submit_chain_sign(
     State(state): State<AppState>,
@@ -631,10 +566,7 @@ pub(crate) async fn submit_chain_sign(
     }
     if matches!(
         session.purpose.as_str(),
-        PURPOSE_CITIZEN_OCCUPY
-            | PURPOSE_CITIZEN_REVOKE
-            | PURPOSE_CITIZEN_IDENTITY_PUSH
-            | crate::institution::subjects::registration::PURPOSE_INSTITUTION_CREATE
+        PURPOSE_CITIZEN_OCCUPY | PURPOSE_CITIZEN_REVOKE | PURPOSE_CITIZEN_IDENTITY_PUSH
     ) {
         if let Err(resp) = ensure_registry_admin(&ctx) {
             delete_session_best_effort(&state, session.request_id.as_str(), "registry auth failed");
@@ -834,16 +766,6 @@ pub(crate) async fn submit_chain_sign(
                     "update citizen onchain failed",
                 );
                 return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "上链状态回写失败");
-            }
-        }
-        crate::institution::subjects::registration::PURPOSE_INSTITUTION_CREATE => {
-            if let Err(err) = persist_institution_create_projection_after_chain_success(
-                &state,
-                &session,
-                tx_hash.as_str(),
-                ctx.admin_account.as_str(),
-            ) {
-                tracing::error!(error = %err, "persist institution create projection failed");
             }
         }
         crate::institution::admins::PURPOSE_INSTITUTION_GOVERNANCE

@@ -1,9 +1,10 @@
 use std::collections::{BTreeMap, HashMap};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use ::codec::{Decode, Encode};
 use entity_primitives::{
     InstitutionAdminAssignment, InstitutionAssignmentSource, InstitutionAssignmentStatus,
-    InstitutionRole, InstitutionRoleStatus,
+    InstitutionRole, InstitutionRoleStatus, RoleBusinessPermission, RolePermissionOperation,
 };
 use primitives::cid::code::{
     is_fixed_governance_code, is_private_legal_code, is_public_legal_code, is_unincorporated_code,
@@ -13,7 +14,7 @@ use primitives::cid::code::{
 use super::codec;
 use super::types::{
     institution_code_label, kind_label, AdminAccountState, AdminDecoded, InstitutionAdminInfo,
-    InstitutionRoleAssignmentInfo,
+    InstitutionRoleAssignmentInfo, InstitutionRolePermissionInfo,
 };
 use crate::governance::registry;
 use crate::governance::types::InstitutionType;
@@ -21,6 +22,7 @@ use crate::governance::{chain_query, storage_keys};
 
 type RawRole = InstitutionRole<Vec<u8>, Vec<u8>, Vec<u8>>;
 type RawAssignment = InstitutionAdminAssignment<Vec<u8>, [u8; 32], Vec<u8>, Vec<u8>>;
+type RawPermission = RoleBusinessPermission<Vec<u8>, Vec<u8>, Vec<u8>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AdminPalletSpec {
@@ -214,6 +216,25 @@ fn source_label(source: InstitutionAssignmentSource) -> &'static str {
     }
 }
 
+fn permission_operation_label(operation: RolePermissionOperation) -> &'static str {
+    match operation {
+        RolePermissionOperation::Propose => "发起提案",
+        RolePermissionOperation::Vote => "参与投票",
+    }
+}
+
+fn assignment_is_effective(role: &RawRole, assignment: &RawAssignment, current_day: u32) -> bool {
+    if assignment.assignment_status != InstitutionAssignmentStatus::Active {
+        return false;
+    }
+    if !role.term_required {
+        return assignment.term_start == 0 && assignment.term_end == 0;
+    }
+    assignment.term_start > 0
+        && assignment.term_start <= current_day
+        && current_day <= assignment.term_end
+}
+
 fn utf8(value: Vec<u8>, label: &str) -> Result<String, String> {
     String::from_utf8(value).map_err(|_| format!("{label} 不是 UTF-8"))
 }
@@ -233,6 +254,7 @@ fn fetch_role_assignments(
     finalized_hash: &str,
 ) -> Result<Vec<InstitutionAdminInfo>, String> {
     let role_prefix = role_storage_prefix(spec, "InstitutionRoles", cid_number);
+    let permission_prefix = role_storage_prefix(spec, "InstitutionRolePermissions", cid_number);
     let assignment_prefix = role_storage_prefix(spec, "InstitutionRoleAssignments", cid_number);
     let mut roles = HashMap::<Vec<u8>, RawRole>::new();
     for key in fetch_all_keys_at(&role_prefix, finalized_hash)? {
@@ -242,6 +264,39 @@ fn fetch_role_assignments(
         if role.cid_number == cid_number && role.role_status == InstitutionRoleStatus::Active {
             roles.insert(role.role_code.clone(), role);
         }
+    }
+    let mut permissions = HashMap::<Vec<u8>, Vec<InstitutionRolePermissionInfo>>::new();
+    for key in fetch_all_keys_at(&permission_prefix, finalized_hash)? {
+        let value = chain_query::fetch_storage_at(&key, finalized_hash)?
+            .ok_or_else(|| "岗位权限 key 在同一 finalized 快照中缺少 value".to_string())?;
+        let stored: Vec<RawPermission> = decode_exact(&value, "InstitutionRolePermissions")?;
+        for permission in stored {
+            if permission.role_subject.cid_number != cid_number {
+                return Err("岗位权限所属 CID 与 storage 前缀不一致".to_string());
+            }
+            let role_code = permission.role_subject.role_code;
+            if !roles.contains_key(&role_code) {
+                return Err("岗位权限引用了不存在或已停用的岗位".to_string());
+            }
+            permissions
+                .entry(role_code)
+                .or_default()
+                .push(InstitutionRolePermissionInfo {
+                    module_tag: utf8(permission.business_action_id.module_tag, "业务模块标签")?,
+                    action_code: permission.business_action_id.action_code,
+                    operation: permission.operation as u8,
+                    operation_label: permission_operation_label(permission.operation).to_string(),
+                });
+        }
+    }
+    for role_permissions in permissions.values_mut() {
+        role_permissions.sort_by(|left, right| {
+            (&left.module_tag, left.action_code, left.operation).cmp(&(
+                &right.module_tag,
+                right.action_code,
+                right.operation,
+            ))
+        });
     }
 
     let mut grouped =
@@ -257,14 +312,19 @@ fn fetch_role_assignments(
             return Err("机构管理员账户重复".to_string());
         }
     }
+    let current_day = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "系统时间早于 Unix epoch".to_string())?
+        .as_secs()
+        / 86_400;
+    let current_day =
+        u32::try_from(current_day).map_err(|_| "当前 UTC 日期超出 u32 范围".to_string())?;
     for key in fetch_all_keys_at(&assignment_prefix, finalized_hash)? {
         let value = chain_query::fetch_storage_at(&key, finalized_hash)?
             .ok_or_else(|| "任职 key 在同一 finalized 快照中缺少 value".to_string())?;
         let assignments: Vec<RawAssignment> = decode_exact(&value, "InstitutionRoleAssignments")?;
         for assignment in assignments {
-            if assignment.cid_number != cid_number
-                || assignment.assignment_status != InstitutionAssignmentStatus::Active
-            {
+            if assignment.cid_number != cid_number {
                 continue;
             }
             let account = hex::encode(assignment.admin_account);
@@ -274,8 +334,11 @@ fn fetch_role_assignments(
             let role = roles
                 .get(&assignment.role_code)
                 .ok_or_else(|| "有效机构任职引用了不存在或已停用的岗位".to_string())?;
+            if !assignment_is_effective(role, &assignment, current_day) {
+                continue;
+            }
             account_assignments.push(InstitutionRoleAssignmentInfo {
-                role_code: utf8(assignment.role_code, "岗位码")?,
+                role_code: utf8(assignment.role_code.clone(), "岗位码")?,
                 role_name: utf8(role.role_name.clone(), "岗位名称")?,
                 term_required: role.term_required,
                 term_start: assignment.term_start,
@@ -283,6 +346,10 @@ fn fetch_role_assignments(
                 assignment_source: assignment.assignment_source as u8,
                 assignment_source_label: source_label(assignment.assignment_source).to_string(),
                 assignment_source_ref: display_source_ref(assignment.assignment_source_ref),
+                permissions: permissions
+                    .get(&assignment.role_code)
+                    .cloned()
+                    .unwrap_or_default(),
             });
         }
     }
@@ -316,11 +383,51 @@ fn decode_hex_storage(hex_str: &str) -> Result<Vec<u8>, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::display_source_ref;
+    use super::{assignment_is_effective, display_source_ref, permission_operation_label};
+    use entity_primitives::{
+        InstitutionAdminAssignment, InstitutionAssignmentSource, InstitutionAssignmentStatus,
+        InstitutionRole, InstitutionRoleStatus, RolePermissionOperation,
+    };
 
     #[test]
     fn source_ref_keeps_text_and_hexes_binary_ids() {
         assert_eq!(display_source_ref(b"registry-1".to_vec()), "registry-1");
         assert_eq!(display_source_ref(vec![1, 0, 0, 0]), "0x01000000");
+    }
+
+    #[test]
+    fn permission_operation_uses_stable_chinese_labels() {
+        assert_eq!(
+            permission_operation_label(RolePermissionOperation::Propose),
+            "发起提案"
+        );
+        assert_eq!(
+            permission_operation_label(RolePermissionOperation::Vote),
+            "参与投票"
+        );
+    }
+
+    #[test]
+    fn assignment_term_window_is_inclusive() {
+        let role = InstitutionRole {
+            cid_number: b"CID".to_vec(),
+            role_code: b"ROLE".to_vec(),
+            role_name: b"Role".to_vec(),
+            term_required: true,
+            role_status: InstitutionRoleStatus::Active,
+        };
+        let assignment = InstitutionAdminAssignment {
+            cid_number: b"CID".to_vec(),
+            admin_account: [1; 32],
+            role_code: b"ROLE".to_vec(),
+            term_start: 10,
+            term_end: 20,
+            assignment_source: InstitutionAssignmentSource::InstitutionGovernance,
+            assignment_source_ref: b"proposal".to_vec(),
+            assignment_status: InstitutionAssignmentStatus::Active,
+        };
+        assert!(assignment_is_effective(&role, &assignment, 10));
+        assert!(assignment_is_effective(&role, &assignment, 20));
+        assert!(!assignment_is_effective(&role, &assignment, 21));
     }
 }

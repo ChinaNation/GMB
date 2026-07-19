@@ -126,7 +126,7 @@ fn is_cb_fee_account(address: &AccountId) -> bool {
         .any(|n| address == &AccountId::new(n.fee_account))
 }
 
-/// 检查是否为中国公民链技术有限公司费用账户。
+/// 检查是否为中国公民链技术股份有限公司费用账户。
 fn is_citizenchain_fee_account(address: &AccountId) -> bool {
     address
         == &AccountId::new(
@@ -427,12 +427,6 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
 
             // 注册局机构操作：管理员只签名，交易费严格从 actor CID 的费用账户扣取。
             RuntimeCall::PublicManage(
-                public_manage::pallet::Call::propose_create_public_institution {
-                    actor_cid_number,
-                    ..
-                },
-            ) => institution_onchain_route(who, actor_cid_number.as_slice()),
-            RuntimeCall::PublicManage(
                 public_manage::pallet::Call::update_institution_info {
                     actor_cid_number, ..
                 }
@@ -458,12 +452,6 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                 actor_cid_number.as_slice(),
                 institution_account,
             ),
-            RuntimeCall::PrivateManage(
-                private_manage::pallet::Call::propose_create_private_institution {
-                    actor_cid_number,
-                    ..
-                },
-            ) => institution_onchain_route(who, actor_cid_number.as_slice()),
             RuntimeCall::PrivateManage(
                 private_manage::pallet::Call::update_institution_info {
                     actor_cid_number, ..
@@ -1451,6 +1439,53 @@ where
     }
 }
 
+/// 完整 CID 的顶层业务能力策略：固定创世机构走共享白名单，普通机构仅开放自身治理。
+pub struct RuntimeInstitutionCapabilityPolicy;
+
+impl entity_primitives::InstitutionCapabilityPolicy for RuntimeInstitutionCapabilityPolicy {
+    fn allows(
+        cid_number: &[u8],
+        business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
+        operation: entity_primitives::RolePermissionOperation,
+    ) -> bool {
+        let Ok(parts) = primitives::cid::number::parse_cid_number_parts_bytes(cid_number) else {
+            return false;
+        };
+        let public_cid =
+            public_manage::pallet::CidNumberOf::<Runtime>::try_from(cid_number.to_vec()).ok();
+        let private_cid =
+            private_manage::pallet::CidNumberOf::<Runtime>::try_from(cid_number.to_vec()).ok();
+        let in_public = public_cid
+            .as_ref()
+            .is_some_and(public_manage::Institutions::<Runtime>::contains_key);
+        let in_private = private_cid
+            .as_ref()
+            .is_some_and(private_manage::Institutions::<Runtime>::contains_key);
+        let (expected_module, expected_action) = match (in_public, in_private) {
+            (true, false) => (
+                public_manage::MODULE_TAG,
+                u32::from(public_manage::pallet::ACTION_GOVERNANCE),
+            ),
+            (false, true) => (
+                private_manage::MODULE_TAG,
+                u32::from(private_manage::pallet::ACTION_GOVERNANCE),
+            ),
+            _ => return false,
+        };
+        if entity_primitives::fixed_institution_capability_allows(
+            parts.institution,
+            cid_number,
+            business_action_id.module_tag.as_slice(),
+            business_action_id.action_code,
+            operation,
+        ) {
+            return true;
+        }
+        business_action_id.module_tag.as_slice() == expected_module
+            && business_action_id.action_code == expected_action
+    }
+}
+
 impl public_manage::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
@@ -1458,6 +1493,7 @@ impl public_manage::Config for Runtime {
     type AdminLifecycle = PublicAdmins;
     type SiblingInstitutionQuery = PrivateManage;
     type InstitutionAdminQuery = RuntimeInstitutionAdminQuery;
+    type InstitutionCapabilityPolicy = RuntimeInstitutionCapabilityPolicy;
     type AccountValidator = RuntimeAccountValidator;
     type ReservedAccountChecker = RuntimeReservedAccountGuard;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
@@ -1483,6 +1519,7 @@ impl private_manage::Config for Runtime {
     type AdminLifecycle = PrivateAdmins;
     type SiblingInstitutionQuery = PublicManage;
     type InstitutionAdminQuery = RuntimeInstitutionAdminQuery;
+    type InstitutionCapabilityPolicy = RuntimeInstitutionCapabilityPolicy;
     type AccountValidator = RuntimeAccountValidator;
     type ReservedAccountChecker = RuntimeReservedAccountGuard;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
@@ -1647,7 +1684,7 @@ impl square_post::Config for Runtime {
     type MaxSquarePostIdLen = ConstU32<64>;
     type MaxSquareCidNumberLen = ConstU32<32>;
     type MaxSquareStorageReceiptIdLen = ConstU32<96>;
-    type MaxSubscriptionRenewalsPerBlock = ConstU32<64>;
+    type MaxSubscriptionRenewalsPerBlock = ConstU32<50_000>;
     type WeightInfo = square_post::weights::SubstrateWeight<Runtime>;
 }
 
@@ -2229,19 +2266,88 @@ fn seed_benchmark_public_admin_account(
 }
 
 #[cfg(feature = "runtime-benchmarks")]
+fn seed_benchmark_joint_role(
+    cid_number: &'static str,
+    role_code: &[u8],
+    role_name: &[u8],
+    raw_admins: &[[u8; 32]],
+) -> Result<(), ()> {
+    let cid: public_manage::pallet::CidNumberOf<Runtime> =
+        cid_number.as_bytes().to_vec().try_into().map_err(|_| ())?;
+    let role_code: public_manage::institution::role::RoleCodeOf =
+        role_code.to_vec().try_into().map_err(|_| ())?;
+    let role_name: public_manage::pallet::AccountNameOf<Runtime> =
+        role_name.to_vec().try_into().map_err(|_| ())?;
+    public_manage::InstitutionRoles::<Runtime>::insert(
+        &cid,
+        &role_code,
+        entity_primitives::InstitutionRole {
+            cid_number: cid.clone(),
+            role_code: role_code.clone(),
+            role_name,
+            term_required: false,
+            role_status: entity_primitives::InstitutionRoleStatus::Active,
+        },
+    );
+    let assignments: public_manage::institution::role::RoleAssignmentsOf<Runtime> = raw_admins
+        .iter()
+        .map(|raw_admin| entity_primitives::InstitutionAdminAssignment {
+            cid_number: cid.clone(),
+            admin_account: AccountId::new(*raw_admin),
+            role_code: role_code.clone(),
+            term_start: 0,
+            term_end: 0,
+            assignment_source: entity_primitives::InstitutionAssignmentSource::Genesis,
+            assignment_source_ref: Default::default(),
+            assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
+        })
+        .collect::<Vec<_>>()
+        .try_into()
+        .map_err(|_| ())?;
+    public_manage::InstitutionRoleAssignments::<Runtime>::insert(&cid, &role_code, assignments);
+    public_manage::Pallet::<Runtime>::store_genesis_fixed_role_permissions(&cid, &role_code)
+        .map_err(|_| ())
+}
+
+#[cfg(feature = "runtime-benchmarks")]
 fn seed_benchmark_joint_admins_origin() -> Result<RuntimeOrigin, ()> {
     let nrc = primitives::cid::china::china_cb::CHINA_CB
         .first()
         .ok_or(())?;
+    let nrc_cid: public_manage::pallet::CidNumberOf<Runtime> = nrc
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .map_err(|_| ())?;
+    if !public_manage::Institutions::<Runtime>::contains_key(&nrc_cid) {
+        // benchmark 外部状态默认不执行完整链规创世；联合提案必须使用真实创世岗位、
+        // 任职和权限目录，禁止重新伪造一套“管理员即有权”的 benchmark 数据。
+        genesis_pallet::institution::build::<Runtime>();
+    }
+    // spec-genesis 与 benchmark WASM 之间只通过 storage 交接；在岗位目录完成后按当前
+    // `admins` SCALE 类型重写管理员集合，避免宿主侧旧编码污染岗位授权读取。
     let admin = seed_benchmark_public_admin_account(
         nrc.cid_number,
         primitives::cid::code::NRC,
+        nrc.admins,
+    )?;
+    seed_benchmark_joint_role(
+        nrc.cid_number,
+        primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER,
+        primitives::governance_skeleton::ROLE_NAME_COMMITTEE_MEMBER,
         nrc.admins,
     )?;
     for entry in primitives::cid::china::china_cb::CHINA_CB.iter().skip(1) {
         seed_benchmark_public_admin_account(
             entry.cid_number,
             primitives::cid::code::PRC,
+            entry.admins,
+        )?;
+        seed_benchmark_joint_role(
+            entry.cid_number,
+            primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER,
+            primitives::governance_skeleton::ROLE_NAME_COMMITTEE_MEMBER,
             entry.admins,
         )?;
     }
@@ -2251,8 +2357,13 @@ fn seed_benchmark_joint_admins_origin() -> Result<RuntimeOrigin, ()> {
             primitives::cid::code::PRB,
             entry.admins,
         )?;
+        seed_benchmark_joint_role(
+            entry.cid_number,
+            primitives::governance_skeleton::ROLE_CODE_DIRECTOR,
+            primitives::governance_skeleton::ROLE_NAME_DIRECTOR,
+            entry.admins,
+        )?;
     }
-
     Ok(RuntimeOrigin::from(frame_system::RawOrigin::Signed(admin)))
 }
 
@@ -2313,6 +2424,7 @@ impl resolution_issuance::Config for Runtime {
     type MaintenanceOrigin = frame_system::EnsureRoot<AccountId>;
     type WeightInfo = resolution_issuance::weights::SubstrateWeight<Runtime>;
     type JointVoteEngine = JointVote;
+    type InstitutionRoleAuthorization = public_manage::Pallet<Runtime>;
     type MaxReasonLen = ResolutionIssuanceMaxReasonLen;
     type MaxAllocations = ResolutionIssuanceMaxAllocations;
     type MaxTotalIssuance = ResolutionIssuanceMaxTotalIssuance;
@@ -2324,6 +2436,7 @@ impl runtime_upgrade::Config for Runtime {
     type ProposeOrigin = EnsureJointProposer;
     type DeveloperUpgradeOrigin = EnsureNrcAdmin;
     type JointVoteEngine = JointVote;
+    type InstitutionRoleAuthorization = public_manage::Pallet<Runtime>;
     type RuntimeCodeExecutor = RuntimeSetCodeExecutor;
     type DeveloperUpgradeCheck = GenesisPallet;
     type MaxReasonLen = RuntimeUpgradeMaxReasonLen;
@@ -2496,6 +2609,7 @@ impl internal_vote::Config for Runtime {
 
 impl joint_vote::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionRoleProvider = RuntimeInstitutionRoleProvider;
     type WeightInfo = joint_vote::weights::SubstrateWeight<Runtime>;
 }
 
@@ -2616,6 +2730,24 @@ impl votingengine::InternalAdminsLenProvider<AccountId> for RuntimeInternalAdmin
         RuntimeAdminAccountQuery::active_account_admins_len(
             votingengine::types::PMUL,
             personal_account,
+        )
+    }
+}
+
+/// 联合投票只读取公权机构岗位任职；业务权限由对应业务模块各自前置校验。
+pub struct RuntimeInstitutionRoleProvider;
+
+impl votingengine::InstitutionRoleProvider<AccountId> for RuntimeInstitutionRoleProvider {
+    fn is_active_assignment(cid_number: &[u8], who: &AccountId, role_code: &[u8]) -> bool {
+        <public_manage::Pallet<Runtime> as InstitutionRoleQuery<AccountId>>::is_active_assignment(
+            cid_number, who, role_code,
+        )
+    }
+
+    fn active_accounts_for_role(cid_number: &[u8], role_code: &[u8]) -> Vec<AccountId> {
+        <public_manage::Pallet<Runtime> as InstitutionRoleQuery<AccountId>>::active_accounts_for_role(
+            cid_number,
+            role_code,
         )
     }
 }

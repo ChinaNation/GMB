@@ -56,11 +56,19 @@ export type InstitutionGovernanceAdminInput = {
   given_name: string;
 };
 
-export type InstitutionGovernanceRoleChangeInput = {
-  role_code: string;
-  role_name: string;
-  term_required: boolean;
-  role_status: 'ACTIVE' | 'INACTIVE';
+export type InstitutionRolePermissionInput = {
+  module_tag: string;
+  action_code: number;
+  operation: 'PROPOSE' | 'VOTE';
+};
+
+export type InstitutionGovernanceRoleMutationInput = {
+  mutation: 'CREATE' | 'RENAME' | 'DELETE';
+  role_code?: string;
+  role_name?: string;
+  term_required?: boolean;
+  permissions?: InstitutionRolePermissionInput[];
+  assignments?: InstitutionGovernanceAssignmentTargetInput[];
 };
 
 export type InstitutionGovernanceAssignmentTargetInput = {
@@ -77,7 +85,7 @@ export type InstitutionGovernanceAssignmentChangeInput = {
 export type PrepareInstitutionGovernanceInput = {
   cid_number: string;
   admins?: InstitutionGovernanceAdminInput[];
-  role_changes?: InstitutionGovernanceRoleChangeInput[];
+  role_mutations?: InstitutionGovernanceRoleMutationInput[];
   assignment_changes?: InstitutionGovernanceAssignmentChangeInput[];
   legal_representative_cid_number?: string | null;
   clear_legal_representative?: boolean;

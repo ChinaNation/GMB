@@ -1,6 +1,16 @@
 use primitives::cid::code::{is_valid_governance_code, InstitutionCode};
 use serde::Serialize;
 
+/// 一个岗位绑定的一条业务动作权限。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstitutionRolePermissionInfo {
+    pub module_tag: String,
+    pub action_code: u32,
+    pub operation: u8,
+    pub operation_label: String,
+}
+
 /// 管理员钱包在机构岗位上的一条有效任职。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -13,6 +23,8 @@ pub struct InstitutionRoleAssignmentInfo {
     pub assignment_source: u8,
     pub assignment_source_label: String,
     pub assignment_source_ref: String,
+    /// 权限属于岗位而非管理员；为便于桌面端核对，随每条有效岗位任职展示。
+    pub permissions: Vec<InstitutionRolePermissionInfo>,
 }
 
 /// 一个机构管理员人员记录及其在本机构的全部有效岗位任职。

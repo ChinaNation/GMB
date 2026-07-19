@@ -7,7 +7,7 @@
 - 保存 `Genesis` / `Operation` 链阶段；
 - 保存开发者能否直接升级 runtime 的一次性开关；
 - 在 block#0 写入创世宣言、国家宣言和创世人口；
-- 调用 runtime 注入的机构 seeder 写入创世机构、固定岗位、创世任职和管理员钱包集合。
+- 调用 runtime 注入的机构 seeder 写入创世机构、固定岗位、固定岗位权限、创世任职和管理员钱包集合。
 
 本模块不提供 extrinsic，不保存 PoW 出块时间，也不向节点提供出块时间 Runtime API。
 PoW 六分钟是 `primitives::pow_const::POW_TARGET_BLOCK_TIME_MS` 固定的难度调整平均目标，
@@ -24,16 +24,24 @@ runtime/genesis/src/institution/
 
 - 岗位协议常量来自 `primitives::governance_skeleton`，钱包来自既有 `CHINA_*` 常量；
 - 构建前断言固定钱包数量等于席位总数，且固定岗位钱包不得重复；
-- 既有公权创世机构的法定代表人不是创世必填项，三字段保持全空；不得从管理员首位、机构主账户或其它钱包推导；
+- 全部机构必须写入唯一 `LR / 法定代表人` 岗位；岗位可以没有任职，公开法定代表人三字段可全空，不得从管理员首位、机构主账户或其它钱包推导；
 - 后续依法任命法定代表人属于 entity 运行期流程，不属于 genesis 职责。
 
-私权创世机构“中国公民链技术有限公司”是唯一明确携带法定代表人的例外：
+私权创世机构“中国公民链技术股份有限公司”是唯一明确携带法定代表人的例外：
 
 - 公司 CID：`GZ018-SFGQ1-201206100-2026`；主账户 `0x7a20b8b7b1147abfdb24615222e3c9d77f1ff9a85d2a509fcf51dc89a64d1712`，费用账户 `0x4bc5b8dd3770b1230c79fb8e048f27ae4f4ccf6d6890de0399123a617ccf305f`；
 - 法定代表人为程伟，公民 CID 引用 `GZ000-CTZN6-198805200-2026`，法定代表人账户 `0xd6d73cfd7d6b7c5692749b7c46fd3fe398f16f84283910dbf15f74472e1e3938`；创世不伪造第二份公民记录，后续由对应注册局依法从链上公民真源核验；
-- 三名管理员岗位固定为 `LR / 法定代表人`、`GENESIS_PRODUCT_MANAGER / 创世产品经理`、`GENESIS_PROGRAMMER / 创世程序员`，每岗一席；管理员人员项统一保存 `admin_account + family_name + given_name`，缺名两人保存“管理”“员”；
+- 三名管理员岗位固定为 `LR / 法定代表人`、`GENESIS_PRODUCT_MANAGER / 创世产品经理`、`GENESIS_PROGRAMMER / 创世程序员`，每岗一席；三者的岗位码、岗位名和岗位权限永久固定，但公司仍可增加普通动态岗位。管理员人员项统一保存 `admin_account + family_name + given_name`，缺名两人保存“管理”“员”；
 - `PrivateAdmins::AdminAccounts` 和三项 `PrivateManage` 岗位/任职在同一创世构建中写入，`InternalVote` 动态阈值固定登记为 2，即 3 人中 2 人通过；
-- 公司身份、主/费用协议账户以及三岗位治理骨架受 NodeGuard 保护，成员依法轮换必须通过同一原子治理结果同步更新 admins 和岗位任职，不能裸改其中一侧。
+- 公司身份、主/费用协议账户以及三个固定岗位治理骨架受 NodeGuard 保护，成员依法轮换必须通过同一原子治理结果同步更新 admins 和岗位任职，不能裸改其中一侧；NodeGuard 不得禁止新增普通动态岗位。
+
+## 1.1 ADR-039 目标创世权限（实现中）
+
+- 创世 seeder 必须为全部创世固定岗位写入固定 `RoleBusinessPermission`，不能只写岗位码、名称和席位。
+- 创世 admins 只作为可任职人员集合，不直接取得业务权限；业务权限必须来自固定岗位的有效创世任职。
+- 全部创世固定岗位使用既定固定码；动态岗位码生成使用 `GMB_ROLE_V1`，但 genesis 不用动态算法替代固定码。
+- 普通机构不由 genesis seeder 创建；其运行期创建必须原子建立 LR、至少一个初始治理岗位及权限、任职和投票规则。
+- 本节是 ADR-039 目标，runtime/genesis 与 NodeGuard 代码迁移分别在任务卡第 3、4 步执行。
 
 ## 2. 五个受守卫字段
 

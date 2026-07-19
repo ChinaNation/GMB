@@ -349,6 +349,18 @@ impl private_admins::Config for Test {
     type InternalVoteEngine = internal_vote::Pallet<Test>;
 }
 
+/// 岗位生命周期单测只验证 entity 约束，允许测试 CID 持有提交的业务动作权限。
+pub struct TestInstitutionCapabilityPolicy;
+impl entity_primitives::InstitutionCapabilityPolicy for TestInstitutionCapabilityPolicy {
+    fn allows(
+        _cid_number: &[u8],
+        _business_action_id: &entity_primitives::BusinessActionId<alloc::vec::Vec<u8>>,
+        _operation: entity_primitives::RolePermissionOperation,
+    ) -> bool {
+        true
+    }
+}
+
 impl pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
@@ -356,6 +368,7 @@ impl pallet::Config for Test {
     type AdminLifecycle = PrivateAdmins;
     type SiblingInstitutionQuery = ();
     type InstitutionAdminQuery = PrivateAdmins;
+    type InstitutionCapabilityPolicy = TestInstitutionCapabilityPolicy;
     type AccountValidator = TestAccountValidator;
     type ReservedAccountChecker = TestReservedAccountChecker;
     type ProtectedSourceChecker = TestProtectedSourceChecker;
@@ -455,19 +468,49 @@ pub fn initial_accounts(items: &[(&[u8], Balance)]) -> pallet::InstitutionInitia
 
 pub fn create_institution(
     cid_number: pallet::CidNumberOf<Test>,
-    _institution_code: InstitutionCode,
+    institution_code: InstitutionCode,
     accounts: pallet::InstitutionInitialAccountsOf<Test>,
 ) -> sp_runtime::DispatchResult {
     let target_admins = [admin(1), admin(2)];
-    PrivateManage::propose_create_private_institution(
-        RuntimeOrigin::signed(registrar()),
-        cid_number.clone(),
-        account_name("测试私权机构".as_bytes()),
-        account_name("测试机构".as_bytes()),
-        BoundedVec::new(),
-        institution_admins(&target_admins),
-        b"GD001-FRG00-000000001-2026".to_vec(),
-    )?;
+    let protocol_accounts =
+        crate::institution::accounts::build_required_protocol_accounts::<Test>(&cid_number)?;
+    let (created_accounts, _, _, _) = crate::institution::accounts::validate_initial_accounts::<
+        Test,
+    >(&cid_number, &protocol_accounts)?;
+    PrivateManage::store_default_legal_representative_role(&cid_number)?;
+    pallet::Institutions::<Test>::insert(
+        &cid_number,
+        crate::InstitutionInfo {
+            cid_full_name: account_name("测试私权机构".as_bytes()),
+            cid_short_name: account_name("测试机构".as_bytes()),
+            town_code: BoundedVec::new(),
+            legal_representative_name: None,
+            legal_representative_cid_number: None,
+            legal_representative_account: None,
+            institution_code,
+            created_at: System::block_number(),
+        },
+    );
+    for account in created_accounts {
+        pallet::InstitutionAccounts::<Test>::insert(
+            &cid_number,
+            &account.account_name,
+            crate::InstitutionAccountInfo {
+                address: account.address.clone(),
+                initial_balance: account.amount,
+                created_at: System::block_number(),
+            },
+        );
+        pallet::AccountRegisteredCid::<Test>::insert(
+            &account.address,
+            crate::RegisteredInstitution {
+                cid_number: cid_number.clone(),
+                account_name: account.account_name,
+            },
+        );
+    }
+    let admins = institution_admins(&target_admins);
+    PrivateManage::set_institution_admins(&cid_number, institution_code, &admins, 2)?;
 
     // 创建 call 不再接收账户清单或初始入金。测试若需要关闭命名账户，必须在创建
     // 完成后走正式的新增账户入口；余额注入只用于构造后续操作场景。

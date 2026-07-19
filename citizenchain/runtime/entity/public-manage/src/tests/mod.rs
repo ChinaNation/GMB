@@ -362,6 +362,18 @@ impl private_admins::Config for Test {
     type InternalVoteEngine = internal_vote::Pallet<Test>;
 }
 
+/// 岗位生命周期单测只验证 entity 约束，允许测试 CID 持有提交的业务动作权限。
+pub struct TestInstitutionCapabilityPolicy;
+impl entity_primitives::InstitutionCapabilityPolicy for TestInstitutionCapabilityPolicy {
+    fn allows(
+        _cid_number: &[u8],
+        _business_action_id: &entity_primitives::BusinessActionId<alloc::vec::Vec<u8>>,
+        _operation: entity_primitives::RolePermissionOperation,
+    ) -> bool {
+        true
+    }
+}
+
 impl pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
@@ -377,6 +389,7 @@ impl pallet::Config for Test {
     type AdminLifecycle = PublicAdmins;
     type SiblingInstitutionQuery = ();
     type InstitutionAdminQuery = PublicAdmins;
+    type InstitutionCapabilityPolicy = TestInstitutionCapabilityPolicy;
     type MaxAdmins = ConstU32<10>;
     type MaxCidNumberLength = ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>;
     type MaxAccountNameLength = ConstU32<128>;

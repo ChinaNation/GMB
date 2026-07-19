@@ -22,17 +22,25 @@ use sp_runtime::RuntimeDebug;
 // 仍以 primitives::multisig 为唯一真源，entity-primitives 只做实体侧统一出口。
 pub use primitives::multisig::{AccountValidator, ProtectedSourceChecker, ReservedAccountGuard};
 
+pub mod business_action;
 pub mod institution_governance;
 pub mod institution_role;
+pub use business_action::{
+    fixed_institution_capability_allows, fixed_role_permission_specs, FixedRolePermissionSpec,
+};
 pub use institution_governance::{
     InstitutionAssignmentTarget, InstitutionGovernanceAction, InstitutionGovernanceProposal,
     InstitutionGovernanceResult, InstitutionGovernanceResultHandler,
-    InstitutionLegalRepresentativeChange, InstitutionRoleAssignmentChange, InstitutionRoleChange,
+    InstitutionLegalRepresentativeChange, InstitutionRoleAssignmentChange, InstitutionRoleMutation,
+    RolePermissionSpec,
 };
 pub use institution_role::{
-    InstitutionAdminAssignment, InstitutionAssignmentSource, InstitutionAssignmentStatus,
-    InstitutionRole, InstitutionRoleQuery, InstitutionRoleStatus, ASSIGNMENT_SOURCE_REF_MAX_BYTES,
-    INSTITUTION_ROLE_CODE_MAX_BYTES,
+    generate_dynamic_role_code, AuthorizationSubject, BusinessActionId, InstitutionAdminAssignment,
+    InstitutionAssignmentSource, InstitutionAssignmentStatus, InstitutionCapabilityPolicy,
+    InstitutionRole, InstitutionRoleAuthorizationQuery, InstitutionRoleQuery,
+    InstitutionRoleStatus, RoleBusinessPermission, RolePermissionOperation, RoleSubject,
+    ASSIGNMENT_SOURCE_REF_MAX_BYTES, BUSINESS_MODULE_TAG_MAX_BYTES, GMB_ROLE_V1,
+    INSTITUTION_ROLE_CODE_MAX_BYTES, MAX_ROLE_PERMISSIONS_PER_ROLE,
 };
 
 // ===== 机构生命周期共用 storage 值类型(唯一真源) =====

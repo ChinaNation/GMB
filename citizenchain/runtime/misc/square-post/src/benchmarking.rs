@@ -3,7 +3,7 @@
 #![cfg(feature = "runtime-benchmarks")]
 
 use crate::{
-    pallet::{Call, Config, Pallet, RenewalIndex, RenewalSchedule, Subscriptions},
+    pallet::{Call, Config, Pallet, PlatformPrice, RenewalIndex, RenewalSchedule, Subscriptions},
     IssuerKey, MembershipLevel, SubscriptionPlan, SubscriptionState, SubscriptionStatus,
 };
 use frame_benchmarking::v2::*;
@@ -18,12 +18,13 @@ mod benchmarks {
             plan: SubscriptionPlan::Platform {
                 membership_level: MembershipLevel::Freedom,
             },
-            pending_plan: None,
             started_at: 1,
             last_charged_at: 1,
             last_charged_price_fen: 1,
             paid_until: 2,
             subscription_status: SubscriptionStatus::Active,
+            authorized_price_fen: 1,
+            suspend_reason: None,
         }
     }
 
@@ -44,6 +45,24 @@ mod benchmarks {
                 .subscription_status,
             SubscriptionStatus::Cancelled
         );
+    }
+
+    /// 单笔到期续费处理路径（on_idle 按此估算每块可排空笔数）。
+    #[benchmark]
+    fn process_one_due() {
+        let subscriber: T::AccountId = whitelisted_caller();
+        let key = (subscriber.clone(), IssuerKey::Platform);
+        PlatformPrice::<T>::insert(MembershipLevel::Freedom, 199_900u128);
+        Subscriptions::<T>::insert(&key, active_platform_state::<T>());
+        RenewalSchedule::<T>::insert(2u64.to_be_bytes(), &key, ());
+        RenewalIndex::<T>::insert(&key, 2u64);
+
+        #[block]
+        {
+            Pallet::<T>::process_due_subscriptions(3u64, 1);
+        }
+
+        assert!(!RenewalSchedule::<T>::contains_key(2u64.to_be_bytes(), &key));
     }
 
     impl_benchmark_test_suite!(Pallet, crate::tests::new_test_ext(), crate::tests::Test,);

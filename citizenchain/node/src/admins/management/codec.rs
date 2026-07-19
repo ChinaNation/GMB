@@ -43,6 +43,31 @@ pub fn decode_admin_account(data: &[u8]) -> Result<AdminAccountDecoded, String> 
 mod tests {
     use super::*;
 
+    fn fixture_case(name: &str) -> Vec<u8> {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../memory/06-quality/fixtures/institution_role_permission_v1.json"
+        )))
+        .expect("岗位权限 fixture 必须是合法 JSON");
+        let encoded = fixture["cases"]
+            .as_array()
+            .and_then(|cases| {
+                cases
+                    .iter()
+                    .find(|case| case["name"].as_str() == Some(name))
+            })
+            .and_then(|case| case["encoded_hex"].as_str())
+            .expect("岗位权限 fixture 用例必须存在");
+        hex::decode(encoded).expect("岗位权限 fixture 必须是合法 hex")
+    }
+
+    fn decode_exact<T: Decode>(bytes: &[u8]) -> T {
+        let mut input = bytes;
+        let decoded = T::decode(&mut input).expect("fixture SCALE 必须可解码");
+        assert!(input.is_empty(), "fixture SCALE 不得存在尾随字节");
+        decoded
+    }
+
     #[test]
     fn institution_admins_decodes_unified_admin_records() {
         use codec::Encode;
@@ -96,5 +121,37 @@ mod tests {
         }
         .encode();
         assert!(decode_admin_account(&empty_name).is_err());
+    }
+
+    #[test]
+    fn institution_role_permission_fixture_matches_shared_rust_types() {
+        use entity_primitives::{
+            AuthorizationSubject, BusinessActionId, RoleBusinessPermission, RoleSubject,
+        };
+        use frame_support::pallet_prelude::{ConstU32, DecodeWithMemTracking};
+        use votingengine::VotePlan;
+
+        let role: RoleSubject<Vec<u8>, Vec<u8>> =
+            decode_exact(&fixture_case("role_subject_nrc_committee"));
+        assert_eq!(role.cid_number, b"LN001-NRC0G-944805165-2026");
+        assert_eq!(role.role_code, b"COMMITTEE_MEMBER");
+
+        let action: BusinessActionId<Vec<u8>> =
+            decode_exact(&fixture_case("business_action_resolution_issuance"));
+        assert_eq!(action.module_tag, b"res-iss");
+        assert_eq!(action.action_code, 0);
+
+        let _: RoleBusinessPermission<Vec<u8>, Vec<u8>, Vec<u8>> =
+            decode_exact(&fixture_case("permission_resolution_issuance_propose"));
+        let _: AuthorizationSubject<Vec<u8>, Vec<u8>, [u8; 32]> =
+            decode_exact(&fixture_case("authorization_personal_multisig"));
+
+        type FixturePlan = VotePlan<[u8; 32], ConstU32<32>>;
+        let plan: FixturePlan = decode_exact(&fixture_case("vote_plan_resolution_issuance_joint"));
+        assert_eq!(plan.voter_subjects.len(), 3);
+        assert_eq!(plan.business_object_hash, [0xabu8; 32]);
+
+        fn requires_mem_tracking<T: DecodeWithMemTracking>() {}
+        requires_mem_tracking::<FixturePlan>();
     }
 }

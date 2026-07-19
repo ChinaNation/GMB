@@ -208,10 +208,12 @@ impl<T: Config> Pallet<T> {
             .into_iter()
             .next()
             .ok_or(Error::<T>::InvalidInstitution)?;
-        ensure!(
-            Self::is_admin_in_snapshot(proposal_id, subject, who),
-            Error::<T>::NoPermission
-        );
+        let authorized = if proposal.kind == PROPOSAL_KIND_JOINT {
+            Self::is_effective_voter_in_snapshot(proposal_id, subject, who)
+        } else {
+            Self::is_admin_in_snapshot(proposal_id, subject, who)
+        };
+        ensure!(authorized, Error::<T>::NoPermission);
         Ok(())
     }
 

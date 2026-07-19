@@ -1,4 +1,5 @@
 use super::*;
+use frame_support::traits::GetCallName;
 use frame_support::{assert_noop, assert_ok};
 
 use crate::{AccountKind, Error, RESERVED_NAME_FEE, RESERVED_NAME_MAIN};
@@ -6,6 +7,39 @@ use crate::{AccountKind, Error, RESERVED_NAME_FEE, RESERVED_NAME_MAIN};
 const ACCOUNT_AMOUNT: Balance = 1_000;
 const REGISTRY_FUNDING_BALANCE: Balance = 100_000;
 const CUSTOM_ACCOUNT_NAME: &[u8] = "专项账户".as_bytes();
+
+#[test]
+fn direct_institution_creation_call_is_permanently_absent() {
+    let calls = <pallet::Call<Test> as GetCallName>::get_call_names();
+    assert!(!calls.contains(&"propose_create_public_institution"));
+}
+
+fn governance_assignment(
+    account: AccountId32,
+    term_start: u32,
+    term_end: u32,
+) -> entity_primitives::InstitutionAssignmentTarget<AccountId32> {
+    entity_primitives::InstitutionAssignmentTarget {
+        admin_account: account,
+        term_start,
+        term_end,
+        assignment_source: entity_primitives::InstitutionAssignmentSource::InstitutionGovernance,
+        assignment_source_ref: b"proposal-result".to_vec(),
+        assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
+    }
+}
+
+fn governance_permission(
+    operation: entity_primitives::RolePermissionOperation,
+) -> entity_primitives::RolePermissionSpec {
+    entity_primitives::RolePermissionSpec {
+        business_action_id: entity_primitives::BusinessActionId {
+            module_tag: b"pub-mgmt".to_vec(),
+            action_code: 3,
+        },
+        operation,
+    }
+}
 
 fn fund_registry_account() {
     assert_ok!(Balances::force_set_balance(
@@ -17,14 +51,51 @@ fn fund_registry_account() {
 
 fn create_cgov(tag: &str) -> pallet::CidNumberOf<Test> {
     let cid = generated_cid(tag, "CGOV");
-    assert_ok!(PublicManage::propose_create_public_institution(
-        RuntimeOrigin::signed(creator()),
-        cid.clone(),
-        cid_full_name("测试公权机构".as_bytes()),
-        cid_short_name("测试机构".as_bytes()),
-        empty_town_code(),
-        institution_admins(3),
-        b"REGISTRY-CID".to_vec(),
+    let institution_code = code_bytes("CGOV");
+    let protocol_accounts =
+        crate::institution::accounts::build_required_protocol_accounts::<Test>(&cid)
+            .expect("测试协议账户必须可构造");
+    let (created_accounts, _, _, _) =
+        crate::institution::accounts::validate_initial_accounts::<Test>(&cid, &protocol_accounts)
+            .expect("测试协议账户必须合法");
+    assert_ok!(PublicManage::store_default_legal_representative_role(&cid));
+    pallet::Institutions::<Test>::insert(
+        &cid,
+        crate::InstitutionInfo {
+            cid_full_name: cid_full_name("测试公权机构".as_bytes()),
+            cid_short_name: cid_short_name("测试机构".as_bytes()),
+            town_code: empty_town_code(),
+            legal_representative_name: None,
+            legal_representative_cid_number: None,
+            legal_representative_account: None,
+            institution_code,
+            created_at: System::block_number(),
+        },
+    );
+    for account in created_accounts {
+        pallet::InstitutionAccounts::<Test>::insert(
+            &cid,
+            &account.account_name,
+            crate::InstitutionAccountInfo {
+                address: account.address.clone(),
+                initial_balance: account.amount,
+                created_at: System::block_number(),
+            },
+        );
+        pallet::AccountRegisteredCid::<Test>::insert(
+            &account.address,
+            crate::RegisteredInstitution {
+                cid_number: cid.clone(),
+                account_name: account.account_name,
+            },
+        );
+    }
+    let admins = institution_admins(3);
+    assert_ok!(PublicManage::set_institution_admins(
+        &cid,
+        institution_code,
+        &admins,
+        2,
     ));
     cid
 }
@@ -61,147 +132,228 @@ fn create_cgov_with_custom(tag: &str) -> pallet::CidNumberOf<Test> {
     cid
 }
 
+#[test]
+fn dynamic_role_lifecycle_persists_permissions_and_never_reuses_code() {
+    new_test_ext().execute_with(|| {
+        use entity_primitives::{
+            InstitutionRoleAuthorizationQuery, InstitutionRoleMutation, InstitutionRoleQuery,
+            RolePermissionOperation, RoleSubject,
+        };
+
+        let cid = create_cgov("dynamic-role-lifecycle");
+        let first_code = entity_primitives::generate_dynamic_role_code(cid.as_slice(), 0, 42);
+        let action = entity_primitives::BusinessActionId {
+            module_tag: b"pub-mgmt".to_vec(),
+            action_code: 3,
+        };
+        assert_ok!(PublicManage::apply_institution_governance_result(
+            entity_primitives::InstitutionGovernanceResult {
+                institution_code: code_bytes("CGOV"),
+                cid_number: cid.to_vec(),
+                proposal_id: 42,
+                role_mutations: vec![InstitutionRoleMutation::Create {
+                    role_name: "财务负责人".as_bytes().to_vec(),
+                    term_required: false,
+                    permissions: vec![
+                        governance_permission(RolePermissionOperation::Propose),
+                        governance_permission(RolePermissionOperation::Vote),
+                    ],
+                    assignments: vec![governance_assignment(admin(0), 0, 0)],
+                }],
+                assignment_changes: vec![],
+                legal_representative_change: None,
+                result_source_ref: b"proposal-42".to_vec(),
+            }
+        ));
+
+        let bounded_code: crate::institution::role::RoleCodeOf =
+            first_code.clone().try_into().expect("code fits");
+        assert_eq!(pallet::InstitutionRoleNonce::<Test>::get(&cid), 1);
+        assert!(pallet::UsedRoleCodes::<Test>::get(&cid, &bounded_code));
+        assert!(pallet::InstitutionRoles::<Test>::contains_key(
+            &cid,
+            &bounded_code
+        ));
+        assert_eq!(
+            pallet::InstitutionRolePermissions::<Test>::get(&cid, &bounded_code).len(),
+            2
+        );
+        let subject = RoleSubject {
+            cid_number: cid.to_vec(),
+            role_code: first_code.clone(),
+        };
+        assert!(<PublicManage as InstitutionRoleAuthorizationQuery<
+            AccountId32,
+        >>::is_authorized(
+            &admin(0),
+            &subject,
+            &action,
+            RolePermissionOperation::Propose,
+        ));
+        assert!(!<PublicManage as InstitutionRoleAuthorizationQuery<
+            AccountId32,
+        >>::is_authorized(
+            &admin(9),
+            &subject,
+            &action,
+            RolePermissionOperation::Propose,
+        ));
+
+        assert_ok!(PublicManage::apply_institution_governance_result(
+            entity_primitives::InstitutionGovernanceResult {
+                institution_code: code_bytes("CGOV"),
+                cid_number: cid.to_vec(),
+                proposal_id: 43,
+                role_mutations: vec![InstitutionRoleMutation::Rename {
+                    role_code: first_code.clone(),
+                    role_name: "资金负责人".as_bytes().to_vec(),
+                }],
+                assignment_changes: vec![],
+                legal_representative_change: None,
+                result_source_ref: b"proposal-43".to_vec(),
+            }
+        ));
+        assert_eq!(
+            pallet::InstitutionRoles::<Test>::get(&cid, &bounded_code)
+                .expect("role exists")
+                .role_name
+                .as_slice(),
+            "资金负责人".as_bytes()
+        );
+
+        assert_ok!(PublicManage::apply_institution_governance_result(
+            entity_primitives::InstitutionGovernanceResult {
+                institution_code: code_bytes("CGOV"),
+                cid_number: cid.to_vec(),
+                proposal_id: 44,
+                role_mutations: vec![InstitutionRoleMutation::Delete {
+                    role_code: first_code.clone(),
+                }],
+                assignment_changes: vec![],
+                legal_representative_change: None,
+                result_source_ref: b"proposal-44".to_vec(),
+            }
+        ));
+        assert!(!pallet::InstitutionRoles::<Test>::contains_key(
+            &cid,
+            &bounded_code
+        ));
+        assert!(pallet::InstitutionRolePermissions::<Test>::get(&cid, &bounded_code).is_empty());
+        assert!(pallet::InstitutionRoleAssignments::<Test>::get(&cid, &bounded_code).is_empty());
+        assert!(pallet::UsedRoleCodes::<Test>::get(&cid, &bounded_code));
+
+        assert_ok!(PublicManage::apply_institution_governance_result(
+            entity_primitives::InstitutionGovernanceResult {
+                institution_code: code_bytes("CGOV"),
+                cid_number: cid.to_vec(),
+                proposal_id: 42,
+                role_mutations: vec![InstitutionRoleMutation::Create {
+                    role_name: "新岗位".as_bytes().to_vec(),
+                    term_required: false,
+                    permissions: vec![governance_permission(RolePermissionOperation::Propose)],
+                    assignments: vec![],
+                }],
+                assignment_changes: vec![],
+                legal_representative_change: None,
+                result_source_ref: b"proposal-42-second".to_vec(),
+            }
+        ));
+        let second_code = entity_primitives::generate_dynamic_role_code(cid.as_slice(), 1, 42);
+        assert_ne!(first_code, second_code);
+        assert!(pallet::UsedRoleCodes::<Test>::get(
+            &cid,
+            crate::institution::role::RoleCodeOf::try_from(second_code).expect("code fits")
+        ));
+        assert!(
+            !<PublicManage as InstitutionRoleQuery<AccountId32>>::is_active_assignment(
+                cid.as_slice(),
+                &admin(0),
+                first_code.as_slice(),
+            )
+        );
+    });
+}
+
+#[test]
+fn dynamic_role_name_cannot_duplicate_legal_representative_name() {
+    new_test_ext().execute_with(|| {
+        use entity_primitives::{InstitutionRoleMutation, RolePermissionOperation};
+
+        let cid = create_cgov("duplicate-lr-name");
+        assert_noop!(
+            PublicManage::apply_institution_governance_result(
+                entity_primitives::InstitutionGovernanceResult {
+                    institution_code: code_bytes("CGOV"),
+                    cid_number: cid.to_vec(),
+                    proposal_id: 78,
+                    role_mutations: vec![InstitutionRoleMutation::Create {
+                        role_name:
+                            primitives::institution_constraints::ROLE_NAME_LEGAL_REPRESENTATIVE
+                                .to_vec(),
+                        term_required: false,
+                        permissions: vec![governance_permission(RolePermissionOperation::Propose,)],
+                        assignments: vec![],
+                    }],
+                    assignment_changes: vec![],
+                    legal_representative_change: None,
+                    result_source_ref: b"proposal-78".to_vec(),
+                }
+            ),
+            Error::<Test>::DuplicateRoleName
+        );
+    });
+}
+
+#[test]
+fn assignment_authorization_respects_inclusive_term_window() {
+    new_test_ext().execute_with(|| {
+        use entity_primitives::{
+            InstitutionRoleMutation, InstitutionRoleQuery, RolePermissionOperation,
+        };
+
+        let cid = create_cgov("dynamic-role-term");
+        let role_code = entity_primitives::generate_dynamic_role_code(cid.as_slice(), 0, 77);
+        assert_ok!(PublicManage::apply_institution_governance_result(
+            entity_primitives::InstitutionGovernanceResult {
+                institution_code: code_bytes("CGOV"),
+                cid_number: cid.to_vec(),
+                proposal_id: 77,
+                role_mutations: vec![InstitutionRoleMutation::Create {
+                    role_name: "任期岗位".as_bytes().to_vec(),
+                    term_required: true,
+                    permissions: vec![governance_permission(RolePermissionOperation::Vote)],
+                    assignments: vec![
+                        governance_assignment(admin(0), 20_635, 20_635),
+                        governance_assignment(admin(1), 20_600, 20_634),
+                    ],
+                }],
+                assignment_changes: vec![],
+                legal_representative_change: None,
+                result_source_ref: b"proposal-77".to_vec(),
+            }
+        ));
+
+        assert!(
+            <PublicManage as InstitutionRoleQuery<AccountId32>>::is_active_assignment(
+                cid.as_slice(),
+                &admin(0),
+                role_code.as_slice(),
+            )
+        );
+        assert!(
+            !<PublicManage as InstitutionRoleQuery<AccountId32>>::is_active_assignment(
+                cid.as_slice(),
+                &admin(1),
+                role_code.as_slice(),
+            )
+        );
+    });
+}
+
 fn account_of(cid: &pallet::CidNumberOf<Test>, name: &[u8]) -> AccountId32 {
     pallet::InstitutionAccounts::<Test>::get(cid, account_name(name))
         .expect("institution account must exist")
         .address
-}
-
-#[test]
-fn creation_uses_cid_as_identity_and_writes_all_account_indexes() {
-    new_test_ext().execute_with(|| {
-        let cid = create_cgov_with_custom("create-cid-source");
-        let main = account_of(&cid, RESERVED_NAME_MAIN);
-        let fee = account_of(&cid, RESERVED_NAME_FEE);
-        let custom = account_of(&cid, CUSTOM_ACCOUNT_NAME);
-
-        assert_ne!(main, fee);
-        assert_ne!(main, custom);
-        assert_eq!(
-            pallet::AccountRegisteredCid::<Test>::get(&main)
-                .expect("reverse main account index")
-                .cid_number,
-            cid
-        );
-        assert_eq!(
-            pallet::AccountRegisteredCid::<Test>::get(&fee)
-                .expect("reverse fee account index")
-                .cid_number,
-            cid
-        );
-
-        let admins =
-            public_admins::AdminAccounts::<Test>::get(&cid).expect("admins must be keyed by CID");
-        assert_eq!(
-            admins
-                .admins
-                .iter()
-                .map(|admin| admin.admin_account.clone())
-                .collect::<Vec<_>>(),
-            vec![admin(0), admin(1), admin(2)]
-        );
-        assert!(PublicAdmins::is_institution_admin(
-            code_bytes("CGOV"),
-            cid.as_slice(),
-            &admin(0),
-        ));
-        assert_eq!(
-            internal_vote::ActiveInstitutionThresholds::<Test>::get(&cid),
-            Some(2)
-        );
-        assert_eq!(
-            <PublicManage as entity_primitives::InstitutionLegalRepresentativeQuery<
-                AccountId32,
-            >>::legal_representative(
-                cid.as_slice(),
-            ),
-            None
-        );
-        let legal_role_code: crate::institution::role::RoleCodeOf =
-            primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE
-                .to_vec()
-                .try_into()
-                .expect("LR role code fits");
-        let legal_role = pallet::InstitutionRoles::<Test>::get(&cid, legal_role_code)
-            .expect("default LR role exists");
-        assert_eq!(legal_role.role_name.as_slice(), "法定代表人".as_bytes());
-    });
-}
-
-#[test]
-fn creation_accepts_zero_protocol_account_balances() {
-    new_test_ext().execute_with(|| {
-        fund_registry_account();
-        let cid = create_cgov("zero-balances");
-        assert_eq!(
-            Balances::free_balance(account_of(&cid, RESERVED_NAME_MAIN)),
-            0
-        );
-        assert_eq!(
-            Balances::free_balance(account_of(&cid, RESERVED_NAME_FEE)),
-            0
-        );
-    });
-}
-
-#[test]
-fn creation_rejects_fewer_than_two_admins() {
-    new_test_ext().execute_with(|| {
-        let cid = generated_cid("one-admin", "CGOV");
-        assert_noop!(
-            PublicManage::propose_create_public_institution(
-                RuntimeOrigin::signed(creator()),
-                cid,
-                cid_full_name("单管理员机构".as_bytes()),
-                cid_short_name("单管理员".as_bytes()),
-                empty_town_code(),
-                institution_admins(1),
-                b"REGISTRY-CID".to_vec(),
-            ),
-            Error::<Test>::InvalidAdminsLen
-        );
-    });
-}
-
-#[test]
-fn creation_rejects_non_registry_origin_without_partial_state() {
-    new_test_ext().execute_with(|| {
-        fund_registry_account();
-        let cid = generated_cid("bad-origin", "CGOV");
-        assert_noop!(
-            PublicManage::propose_create_public_institution(
-                RuntimeOrigin::signed(admin(9)),
-                cid.clone(),
-                cid_full_name("无权登记机构".as_bytes()),
-                cid_short_name("无权登记".as_bytes()),
-                empty_town_code(),
-                institution_admins(3),
-                b"REGISTRY-CID".to_vec(),
-            ),
-            Error::<Test>::RegistryAuthorityDenied
-        );
-        assert!(!pallet::Institutions::<Test>::contains_key(&cid));
-        assert!(!public_admins::AdminAccounts::<Test>::contains_key(&cid));
-    });
-}
-
-#[test]
-fn creation_rejects_duplicate_cid_and_replayed_nonce() {
-    new_test_ext().execute_with(|| {
-        let cid = create_cgov_with_custom("duplicate-cid");
-        assert_noop!(
-            PublicManage::propose_create_public_institution(
-                RuntimeOrigin::signed(creator()),
-                cid,
-                cid_full_name("重复机构".as_bytes()),
-                cid_short_name("重复".as_bytes()),
-                empty_town_code(),
-                institution_admins(3),
-                b"REGISTRY-CID".to_vec(),
-            ),
-            Error::<Test>::InstitutionAlreadyExists
-        );
-    });
 }
 
 #[test]

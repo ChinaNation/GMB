@@ -7,12 +7,12 @@
 //!   `do_finalize_jointreferendum_timeout`。
 //!
 //! 共用基础设施仍归 [`votingengine`] 引擎核心,本 pallet 通过
-//! `Config: votingengine::Config` 直接访问 `Proposals` / `AdminSnapshot` 等共用 storage。
+//! `Config: votingengine::Config` 直接访问提案、投票计划与岗位投票人快照等共用 storage。
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::pallet_prelude::DispatchResult;
-use sp_runtime::DispatchError;
+use sp_runtime::{traits::Hash as _, DispatchError};
 
 use primitives::cid::china::china_cb::CHINA_CB;
 use primitives::cid::china::china_ch::CHINA_CH;
@@ -93,6 +93,8 @@ pub mod pallet {
     pub trait Config: frame_system::Config + votingengine::Config {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        /// 联合提案创建时读取岗位当前有效任职，业务权限仍由业务模块校验。
+        type InstitutionRoleProvider: votingengine::InstitutionRoleProvider<Self::AccountId>;
         type WeightInfo: crate::weights::WeightInfo;
     }
 
@@ -220,19 +222,10 @@ pub mod pallet {
 }
 // trait 实现 — 业务方法住在 jointinternal / jointreferendum 子模块
 impl<T: Config> votingengine::JointVoteEngine<T::AccountId> for Pallet<T> {
-    fn create_joint_proposal(
-        who: T::AccountId,
-        actor_cid_number: sp_std::vec::Vec<u8>,
-    ) -> Result<u64, DispatchError> {
-        let actor_cid_number = CidNumber::try_from(actor_cid_number)
-            .map_err(|_| votingengine::Error::<T>::InvalidInstitution)?;
-        Self::do_create_joint_proposal(who, actor_cid_number)
-    }
-
     fn create_joint_proposal_with_data(
         who: T::AccountId,
         actor_cid_number: sp_std::vec::Vec<u8>,
-        module_tag: &[u8],
+        vote_plan: votingengine::types::VotePlanOf<T::AccountId>,
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         frame_support::storage::with_transaction(|| {
@@ -244,14 +237,22 @@ impl<T: Config> votingengine::JointVoteEngine<T::AccountId> for Pallet<T> {
                     ))
                 }
             };
-            let proposal_id = match Self::do_create_joint_proposal(who, actor_cid_number) {
+            let data_hash = T::Hashing::hash(data.as_slice());
+            if data_hash.as_ref() != vote_plan.business_object_hash.as_slice() {
+                return frame_support::storage::TransactionOutcome::Rollback(Err(
+                    votingengine::Error::<T>::InvalidVotePlan.into(),
+                ));
+            }
+            let module_tag = vote_plan.proposal_owner.clone();
+            let proposal_id = match Self::do_create_joint_proposal(who, actor_cid_number, vote_plan)
+            {
                 Ok(id) => id,
                 Err(err) => return frame_support::storage::TransactionOutcome::Rollback(Err(err)),
             };
             let now = <frame_system::Pallet<T>>::block_number();
             match <votingengine::Pallet<T>>::register_proposal_data(
                 proposal_id,
-                module_tag,
+                module_tag.as_slice(),
                 data,
                 now,
             ) {
@@ -264,7 +265,7 @@ impl<T: Config> votingengine::JointVoteEngine<T::AccountId> for Pallet<T> {
     fn create_joint_proposal_with_data_and_object(
         who: T::AccountId,
         actor_cid_number: sp_std::vec::Vec<u8>,
-        module_tag: &[u8],
+        vote_plan: votingengine::types::VotePlanOf<T::AccountId>,
         data: sp_std::vec::Vec<u8>,
         object_kind: u8,
         object_data: sp_std::vec::Vec<u8>,
@@ -278,14 +279,22 @@ impl<T: Config> votingengine::JointVoteEngine<T::AccountId> for Pallet<T> {
                     ))
                 }
             };
-            let proposal_id = match Self::do_create_joint_proposal(who, actor_cid_number) {
+            let object_hash = T::Hashing::hash(object_data.as_slice());
+            if object_hash.as_ref() != vote_plan.business_object_hash.as_slice() {
+                return frame_support::storage::TransactionOutcome::Rollback(Err(
+                    votingengine::Error::<T>::InvalidVotePlan.into(),
+                ));
+            }
+            let module_tag = vote_plan.proposal_owner.clone();
+            let proposal_id = match Self::do_create_joint_proposal(who, actor_cid_number, vote_plan)
+            {
                 Ok(id) => id,
                 Err(err) => return frame_support::storage::TransactionOutcome::Rollback(Err(err)),
             };
             let now = <frame_system::Pallet<T>>::block_number();
             if let Err(err) = <votingengine::Pallet<T>>::register_proposal_data(
                 proposal_id,
-                module_tag,
+                module_tag.as_slice(),
                 data,
                 now,
             ) {

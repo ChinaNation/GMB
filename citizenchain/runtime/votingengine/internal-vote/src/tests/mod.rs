@@ -30,7 +30,10 @@ const PERMANENT_SINGLETON_CODE: InstitutionCode = PRS;
 use primitives::cid::china::china_cb::CHINA_CB;
 use primitives::cid::china::china_ch::CHINA_CH;
 use primitives::cid::china::china_sf::{CHINA_SF, NATIONAL_JUDICIAL_YUAN_ADMINS};
-use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage, DispatchError};
+use sp_runtime::{
+    traits::{Hash as _, IdentityLookup},
+    AccountId32, BuildStorage, DispatchError,
+};
 use votingengine::traits::{
     InternalAdminProvider, InternalVoteEngine, InternalVoteResultCallback, JointVoteEngine,
     JointVoteResultCallback,
@@ -121,6 +124,7 @@ impl crate::Config for Test {
 
 impl joint_vote::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionRoleProvider = TestInternalAdminProvider;
     type WeightInfo = ();
 }
 
@@ -389,6 +393,33 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
     }
 }
 
+impl votingengine::InstitutionRoleProvider<AccountId32> for TestInternalAdminProvider {
+    fn is_active_assignment(cid_number: &[u8], who: &AccountId32, role_code: &[u8]) -> bool {
+        Self::active_accounts_for_role(cid_number, role_code).contains(who)
+    }
+
+    fn active_accounts_for_role(cid_number: &[u8], role_code: &[u8]) -> Vec<AccountId32> {
+        let Ok(cid_text) = core::str::from_utf8(cid_number) else {
+            return Vec::new();
+        };
+        let Some(code) = votingengine::types::institution_code_from_cid_number(cid_text) else {
+            return Vec::new();
+        };
+        let expected_role = if matches!(code, NRC | PRC) {
+            primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+        } else if code == PRB {
+            primitives::governance_skeleton::ROLE_CODE_DIRECTOR
+        } else {
+            return Vec::new();
+        };
+        if role_code != expected_role {
+            return Vec::new();
+        }
+        <Self as InternalAdminProvider<AccountId32>>::get_institution_admins(code, cid_number)
+            .unwrap_or_default()
+    }
+}
+
 const DEFAULT_TEST_NOW_SECS: u64 = 1_782_864_000;
 
 /// 测试用时间提供器：默认返回 2026 年中，可由单测覆盖为指定 UTC 秒。
@@ -645,12 +676,84 @@ fn create_joint_proposal_for(
     actor_cid_number: CidNumber,
     eligible_total: u64,
 ) -> u64 {
+    try_create_joint_proposal_for(who, actor_cid_number, eligible_total)
+        .expect("joint proposal should be created")
+}
+
+fn try_create_joint_proposal_for(
+    who: AccountId32,
+    actor_cid_number: CidNumber,
+    eligible_total: u64,
+) -> Result<u64, DispatchError> {
     set_population_count(eligible_total);
-    <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
+    let data = b"joint-test".to_vec();
+    let hash = <Test as frame_system::Config>::Hashing::hash(data.as_slice());
+    let mut business_object_hash = [0u8; 32];
+    business_object_hash.copy_from_slice(hash.as_ref());
+    let actor_text = core::str::from_utf8(actor_cid_number.as_slice())
+        .map_err(|_| DispatchError::Other("invalid actor CID"))?;
+    let actor_code = votingengine::types::institution_code_from_cid_number(actor_text)
+        .ok_or(DispatchError::Other("invalid actor CID"))?;
+    let proposer_role_code = if matches!(actor_code, NRC | PRC) {
+        primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+    } else {
+        primitives::governance_skeleton::ROLE_CODE_DIRECTOR
+    };
+    let proposer_subject =
+        votingengine::types::AuthorizationSubject::Institution(votingengine::types::RoleSubject {
+            cid_number: actor_cid_number.clone(),
+            role_code: proposer_role_code
+                .to_vec()
+                .try_into()
+                .map_err(|_| DispatchError::Other("invalid proposer role"))?,
+        });
+    let voter_subjects = CHINA_CB
+        .iter()
+        .map(|entry| {
+            votingengine::types::AuthorizationSubject::Institution(
+                votingengine::types::RoleSubject {
+                    cid_number: bounded_cid(entry.cid_number.as_bytes()),
+                    role_code: primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                        .to_vec()
+                        .try_into()
+                        .expect("bounded committee role"),
+                },
+            )
+        })
+        .chain(CHINA_CH.iter().map(|entry| {
+            votingengine::types::AuthorizationSubject::Institution(
+                votingengine::types::RoleSubject {
+                    cid_number: bounded_cid(entry.cid_number.as_bytes()),
+                    role_code: primitives::governance_skeleton::ROLE_CODE_DIRECTOR
+                        .to_vec()
+                        .try_into()
+                        .expect("bounded director role"),
+                },
+            )
+        }))
+        .collect();
+    let module_tag: BoundedVec<u8, ConstU32<32>> = b"joint-test"
+        .to_vec()
+        .try_into()
+        .map_err(|_| DispatchError::Other("invalid module tag"))?;
+    let vote_plan = votingengine::types::VotePlanOf::try_new(
+        votingengine::types::BusinessActionId {
+            module_tag: module_tag.clone(),
+            action_code: 0,
+        },
+        module_tag,
+        proposer_subject,
+        voter_subjects,
+        votingengine::types::VotingEngineKind::Joint,
+        business_object_hash,
+    )
+    .map_err(|_| DispatchError::Other("invalid joint vote plan"))?;
+    <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal_with_data(
         who,
         actor_cid_number.to_vec(),
+        vote_plan,
+        data,
     )
-    .expect("joint proposal should be created")
 }
 
 fn set_joint_callback_should_fail(should_fail: bool) {

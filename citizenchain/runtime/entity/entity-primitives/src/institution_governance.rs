@@ -14,18 +14,20 @@ use primitives::cid::code::InstitutionCode;
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 
-use crate::{InstitutionAssignmentSource, InstitutionAssignmentStatus, InstitutionRoleStatus};
+use crate::{
+    BusinessActionId, InstitutionAssignmentSource, InstitutionAssignmentStatus,
+    RolePermissionOperation,
+};
 use admin_primitives::Admin;
 
-/// 动态岗位的目标定义。
+/// 创建动态岗位时提交的权限规格。
 ///
-/// `role_code` 是稳定键；已有岗位只能更新公开名称、任期要求和状态，不能换码。
+/// 创建者不知道 runtime 即将生成的岗位码，因此这里只提交业务动作和操作；entity
+/// 在执行通过提案时补齐完整 `RoleSubject`，形成 `RoleBusinessPermission`。
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo, PartialEq, Eq)]
-pub struct InstitutionRoleChange {
-    pub role_code: Vec<u8>,
-    pub role_name: Vec<u8>,
-    pub term_required: bool,
-    pub role_status: InstitutionRoleStatus,
+pub struct RolePermissionSpec {
+    pub business_action_id: BusinessActionId<Vec<u8>>,
+    pub operation: RolePermissionOperation,
 }
 
 /// 单条目标任职。
@@ -51,6 +53,28 @@ pub struct InstitutionRoleAssignmentChange<AccountId> {
     pub assignments: Vec<InstitutionAssignmentTarget<AccountId>>,
 }
 
+/// 动态岗位唯一允许的生命周期操作。
+///
+/// 创建时禁止提交岗位码；改名不能夹带权限或任期变化；删除后岗位码由
+/// `UsedRoleCodes` 永久占用，不存在恢复或复用分支。
+#[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo, PartialEq, Eq)]
+pub enum InstitutionRoleMutation<AccountId> {
+    /// 创建新动态岗位，并原子写入不可变权限与初始任职。
+    Create {
+        role_name: Vec<u8>,
+        term_required: bool,
+        permissions: Vec<RolePermissionSpec>,
+        assignments: Vec<InstitutionAssignmentTarget<AccountId>>,
+    },
+    /// 只修改现有动态岗位的公开名称。
+    Rename {
+        role_code: Vec<u8>,
+        role_name: Vec<u8>,
+    },
+    /// 删除现有动态岗位、权限和当前任职；岗位码永久不释放。
+    Delete { role_code: Vec<u8> },
+}
+
 /// 法定代表人公开信息目标变更。
 ///
 /// 三个字段只能整体设置或整体清空；没有“只改姓名/CID/账户”或使用管理员首位回退的路径。
@@ -69,13 +93,15 @@ pub enum InstitutionLegalRepresentativeChange<AccountId> {
 /// 业务模块交给 entity 的机构治理最终结果。
 ///
 /// 一个结果可以同时调整多个岗位、多个岗位任职及法定代表人；entity 必须在同一
-/// storage transaction 内完成写入和 admins 派生，任一步失败则全部回滚。
+/// storage transaction 内完成结果写入与 admins/任职一致性校验，任一步失败则全部回滚。
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo, PartialEq, Eq)]
 pub struct InstitutionGovernanceResult<AccountId> {
     pub institution_code: InstitutionCode,
     /// 被治理机构的唯一身份 CID；不得使用主账户或任意账户代替。
     pub cid_number: Vec<u8>,
-    pub role_changes: Vec<InstitutionRoleChange>,
+    /// 投票引擎实际分配的提案 ID；动态岗位码必须使用该值生成。
+    pub proposal_id: u64,
+    pub role_mutations: Vec<InstitutionRoleMutation<AccountId>>,
     pub assignment_changes: Vec<InstitutionRoleAssignmentChange<AccountId>>,
     pub legal_representative_change: Option<InstitutionLegalRepresentativeChange<AccountId>>,
     /// 指向产生本结果的登记、选举、投票或其他业务记录；不存在 `creator` 字段。
@@ -84,22 +110,22 @@ pub struct InstitutionGovernanceResult<AccountId> {
 
 /// 机构成立后的统一治理动作。
 ///
-/// `admins` 是机构签名权限集合；岗位和任职是机构职务事实。二者可以在同一
-/// action 内原子执行，但任何一方都不能从另一方反向派生。
+/// `admins` 是机构可任职人员名册；岗位和任职是机构职务事实，岗位权限才是业务
+/// 授权真源。三者可以在同一 action 内原子执行，但任何一方都不能从另一方反向派生。
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo, PartialEq, Eq)]
 pub enum InstitutionGovernanceAction<AccountId> {
     /// 本机构内部投票通过后，完整替换机构 `admins` 真源。
     ReplaceAdmins { admins: Vec<Admin<AccountId>> },
     /// 调整岗位定义、岗位任职和法定代表人，不改变机构 `admins`。
     MutateRolesAndAssignments {
-        role_changes: Vec<InstitutionRoleChange>,
+        role_mutations: Vec<InstitutionRoleMutation<AccountId>>,
         assignment_changes: Vec<InstitutionRoleAssignmentChange<AccountId>>,
         legal_representative_change: Option<InstitutionLegalRepresentativeChange<AccountId>>,
     },
     /// 同一提案内原子替换管理员并调整岗位/任职。
     ReplaceAdminsAndMutateRoles {
         admins: Vec<Admin<AccountId>>,
-        role_changes: Vec<InstitutionRoleChange>,
+        role_mutations: Vec<InstitutionRoleMutation<AccountId>>,
         assignment_changes: Vec<InstitutionRoleAssignmentChange<AccountId>>,
         legal_representative_change: Option<InstitutionLegalRepresentativeChange<AccountId>>,
     },
@@ -113,22 +139,22 @@ impl<AccountId> InstitutionGovernanceAction<AccountId> {
                 admins: admins.into_iter().map(Admin::normalize_names).collect(),
             },
             Self::MutateRolesAndAssignments {
-                role_changes,
+                role_mutations,
                 assignment_changes,
                 legal_representative_change,
             } => Self::MutateRolesAndAssignments {
-                role_changes,
+                role_mutations,
                 assignment_changes,
                 legal_representative_change,
             },
             Self::ReplaceAdminsAndMutateRoles {
                 admins,
-                role_changes,
+                role_mutations,
                 assignment_changes,
                 legal_representative_change,
             } => Self::ReplaceAdminsAndMutateRoles {
                 admins: admins.into_iter().map(Admin::normalize_names).collect(),
-                role_changes,
+                role_mutations,
                 assignment_changes,
                 legal_representative_change,
             },

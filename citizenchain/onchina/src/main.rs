@@ -2200,7 +2200,7 @@ fn main() {
             )
             // 机构相关 API 外部路径保持稳定,内部按 subjects/gov/private/accounts/docs 归属。
             // - GET  /api/v1/institutions/check-cid-full-name             — cid_full_name 查重
-            // - POST /api/v1/institutions/create                          — 公权/教育通用机构生成(不上链)
+            // - POST /api/v1/institutions/create                          — 已关闭；新原子创建业务落地前返回 501
             // - POST /api/v1/private/<type>                              — 六类私权机构专属生成入口
             // - POST /api/v1/institutions/:cid_number/account/create         — 只登记账户名称,不上链
             // - GET  /api/v1/institutions/list                            — 公权/教育按 scope 过滤的机构列表

@@ -27,6 +27,7 @@ pub const MODULE_TAG: &[u8] = b"res-iss";
 pub mod pallet {
     use crate::{proposal::RecipientAmount, weights::WeightInfo};
     use codec::Decode;
+    use entity_primitives::InstitutionRoleAuthorizationQuery;
     use frame_support::{pallet_prelude::*, traits::Currency};
     use frame_system::pallet_prelude::*;
     use primitives::cid::china::china_cb::CHINA_CB;
@@ -66,6 +67,8 @@ pub mod pallet {
 
         /// 统一投票引擎：本模块只创建联合提案，投票动作由投票引擎公开入口承载。
         type JointVoteEngine: JointVoteEngine<Self::AccountId>;
+        /// 决议发行按“机构 CID + 委员岗位”校验提案权限。
+        type InstitutionRoleAuthorization: InstitutionRoleAuthorizationQuery<Self::AccountId>;
 
         #[pallet::constant]
         type MaxReasonLen: Get<u32>;
@@ -240,7 +243,8 @@ pub mod pallet {
         PalletPaused,
         ProposalNotFinalizable,
         InvalidActorCid,
-        UnauthorizedActorAdmin,
+        /// 发起人没有目标机构委员岗位的决议发行提案权限。
+        UnauthorizedActorRole,
     }
 
     #[pallet::call]

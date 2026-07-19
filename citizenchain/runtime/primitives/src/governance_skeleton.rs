@@ -258,6 +258,23 @@ pub fn fixed_role_seats_by_identity(
     fixed_role_seats(code, role_code)
 }
 
+/// 查询受保护创世岗位允许的有效任职人数区间。
+///
+/// 普通固定岗位必须保持协议席位数；`LR / 法定代表人` 是每个机构唯一且永久存在的
+/// 岗位，但任职允许在空缺和一人之间依法切换。阈值不属于岗位，不在此处表达。
+pub fn fixed_role_assignment_bounds_by_identity(
+    code: InstitutionCode,
+    cid_number: &[u8],
+    role_code: &[u8],
+) -> Option<(u32, u32)> {
+    let seats = fixed_role_seats_by_identity(code, cid_number, role_code)?;
+    if role_code == ROLE_CODE_LEGAL_REPRESENTATIVE {
+        Some((0, 1))
+    } else {
+        Some((seats, seats))
+    }
+}
+
 /// 联邦注册局固定机构规格。FRG 只有一个管理员账户，省级边界由 43 个岗位表达。
 pub fn federal_registry_institution() -> FixedInstitution {
     let node = CHINA_ZF
@@ -347,6 +364,27 @@ mod tests {
         assert!(fixed_institution_by_identity(institution.code, b"not-genesis-cid",).is_none());
         assert!(
             fixed_institution_by_identity(*b"CGOV", institution.cid_number.as_bytes(),).is_none()
+        );
+    }
+
+    #[test]
+    fn legal_representative_has_one_role_and_zero_or_one_assignment() {
+        let institution = fixed_institutions()[0];
+        assert_eq!(
+            fixed_role_assignment_bounds_by_identity(
+                institution.code,
+                institution.cid_number.as_bytes(),
+                ROLE_CODE_LEGAL_REPRESENTATIVE,
+            ),
+            Some((0, 1))
+        );
+        assert_eq!(
+            fixed_role_assignment_bounds_by_identity(
+                institution.code,
+                institution.cid_number.as_bytes(),
+                fixed_role_specs(institution.code)[0].role_code,
+            ),
+            Some((institution.expected_len, institution.expected_len))
         );
     }
 

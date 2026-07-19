@@ -5,18 +5,26 @@ use crate::pallet::{
     VotingProposalCount,
 };
 use codec::{Decode, Encode};
+use entity_primitives::{
+    AuthorizationSubject, BusinessActionId, InstitutionRoleAuthorizationQuery,
+    RolePermissionOperation, RoleSubject,
+};
 use frame_support::{
     dispatch::DispatchResult,
     ensure,
     pallet_prelude::*,
     storage::{with_transaction, TransactionOutcome},
 };
-use sp_runtime::traits::Zero;
+use primitives::{
+    cid::{china::china_cb::CHINA_CB, china::china_ch::CHINA_CH},
+    governance_skeleton::{ROLE_CODE_COMMITTEE_MEMBER, ROLE_CODE_DIRECTOR},
+};
+use sp_runtime::traits::{Hash as HashT, Zero};
 use sp_runtime::DispatchError;
 use sp_std::vec::Vec;
 use votingengine::{
-    InternalAdminProvider, JointVoteEngine, PROPOSAL_KIND_JOINT, STAGE_JOINT, STAGE_REFERENDUM,
-    STATUS_PASSED, STATUS_REJECTED,
+    JointVoteEngine, PROPOSAL_KIND_JOINT, STAGE_JOINT, STAGE_REFERENDUM, STATUS_PASSED,
+    STATUS_REJECTED,
 };
 
 #[derive(
@@ -47,6 +55,70 @@ pub struct IssuanceProposalData<AccountId, Balance> {
 }
 
 impl<T: Config> Pallet<T> {
+    fn bounded_role_subject(
+        cid_number: &[u8],
+        role_code: &[u8],
+    ) -> Result<
+        entity_primitives::RoleSubject<
+            votingengine::types::CidNumber,
+            votingengine::types::RoleCode,
+        >,
+        DispatchError,
+    > {
+        Ok(entity_primitives::RoleSubject {
+            cid_number: cid_number
+                .to_vec()
+                .try_into()
+                .map_err(|_| Error::<T>::InvalidActorCid)?,
+            role_code: role_code
+                .to_vec()
+                .try_into()
+                .map_err(|_| Error::<T>::InvalidActorCid)?,
+        })
+    }
+
+    /// 决议发行与协议升级使用完全相同的固定联合投票岗位集合。
+    fn build_vote_plan(
+        actor_cid_number: &votingengine::types::CidNumber,
+        business_object_hash: [u8; 32],
+    ) -> Result<votingengine::types::VotePlanOf<T::AccountId>, DispatchError> {
+        let proposer_role =
+            Self::bounded_role_subject(actor_cid_number.as_slice(), ROLE_CODE_COMMITTEE_MEMBER)?;
+        let mut voters = Vec::new();
+        for entry in CHINA_CB.iter() {
+            voters.push(AuthorizationSubject::Institution(
+                Self::bounded_role_subject(
+                    entry.cid_number.as_bytes(),
+                    ROLE_CODE_COMMITTEE_MEMBER,
+                )?,
+            ));
+        }
+        for entry in CHINA_CH.iter() {
+            voters.push(AuthorizationSubject::Institution(
+                Self::bounded_role_subject(entry.cid_number.as_bytes(), ROLE_CODE_DIRECTOR)?,
+            ));
+        }
+        let module_tag: BoundedVec<
+            u8,
+            ConstU32<{ entity_primitives::BUSINESS_MODULE_TAG_MAX_BYTES }>,
+        > = crate::MODULE_TAG
+            .to_vec()
+            .try_into()
+            .map_err(|_| Error::<T>::JointVoteCreateFailed)?;
+        votingengine::types::VotePlanOf::<T::AccountId>::try_new(
+            BusinessActionId {
+                module_tag: module_tag.clone(),
+                action_code: entity_primitives::business_action::ACTION_RESOLUTION_ISSUANCE,
+            },
+            module_tag,
+            AuthorizationSubject::Institution(proposer_role),
+            voters,
+            votingengine::types::VotingEngineKind::Joint,
+            business_object_hash,
+        )
+        .map_err(|_| Error::<T>::JointVoteCreateFailed.into())
+    }
+
     pub(crate) fn create_resolution_issuance_proposal(
         proposer: T::AccountId,
         actor_cid_number: votingengine::types::CidNumber,
@@ -66,13 +138,22 @@ impl<T: Config> Pallet<T> {
             ),
             Error::<T>::InvalidActorCid
         );
+        let proposer_role = RoleSubject {
+            cid_number: actor_cid_number.to_vec(),
+            role_code: ROLE_CODE_COMMITTEE_MEMBER.to_vec(),
+        };
+        let business_action = BusinessActionId {
+            module_tag: crate::MODULE_TAG.to_vec(),
+            action_code: entity_primitives::business_action::ACTION_RESOLUTION_ISSUANCE,
+        };
         ensure!(
-            <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
-                actor_code,
-                actor_cid_number.as_slice(),
+            T::InstitutionRoleAuthorization::is_authorized(
                 &proposer,
+                &proposer_role,
+                &business_action,
+                RolePermissionOperation::Propose,
             ),
-            Error::<T>::UnauthorizedActorAdmin
+            Error::<T>::UnauthorizedActorRole
         );
         Self::validate_proposal_allocations(&total_amount, allocations.as_slice())?;
 
@@ -88,10 +169,17 @@ impl<T: Config> Pallet<T> {
             };
             let mut encoded = Vec::from(crate::MODULE_TAG);
             encoded.extend_from_slice(&data.encode());
+            let encoded_hash = T::Hashing::hash(encoded.as_slice());
+            let mut business_object_hash = [0u8; 32];
+            business_object_hash.copy_from_slice(encoded_hash.as_ref());
+            let vote_plan = match Self::build_vote_plan(&actor_cid_number, business_object_hash) {
+                Ok(plan) => plan,
+                Err(err) => return TransactionOutcome::Rollback(Err(err)),
+            };
             let proposal_id = match T::JointVoteEngine::create_joint_proposal_with_data(
                 proposer.clone(),
                 actor_cid_number.to_vec(),
-                crate::MODULE_TAG,
+                vote_plan,
                 encoded,
             ) {
                 Ok(id) => id,

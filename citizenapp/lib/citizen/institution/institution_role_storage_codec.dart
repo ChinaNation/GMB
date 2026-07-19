@@ -157,6 +157,190 @@ class InstitutionRoleStorageCodec {
     return offset == data.length ? out : null;
   }
 
+  /// 严格解码完整机构岗位授权主体。
+  static RoleSubject? decodeRoleSubject(Uint8List data) {
+    final decoded = _decodeRoleSubjectAt(data, 0);
+    return decoded != null && decoded.$2 == data.length ? decoded.$1 : null;
+  }
+
+  /// 严格解码业务动作标识。
+  static BusinessActionId? decodeBusinessActionId(Uint8List data) {
+    final decoded = _decodeBusinessActionIdAt(data, 0);
+    return decoded != null && decoded.$2 == data.length ? decoded.$1 : null;
+  }
+
+  /// 严格解码岗位业务权限。
+  static RoleBusinessPermission? decodeRoleBusinessPermission(Uint8List data) {
+    final decoded = _decodeRoleBusinessPermissionAt(data, 0);
+    return decoded != null && decoded.$2 == data.length ? decoded.$1 : null;
+  }
+
+  /// 严格解码 `InstitutionRolePermissions[(cid, role_code)]` 的完整向量值。
+  static List<RoleBusinessPermission>? decodeRolePermissions(Uint8List data) {
+    final count = _readCompact(data, 0);
+    if (count == null || count.$1 > 256) return null;
+    var offset = count.$2;
+    final permissions = <RoleBusinessPermission>[];
+    final seen = <String>{};
+    for (var index = 0; index < count.$1; index++) {
+      final permission = _decodeRoleBusinessPermissionAt(data, offset);
+      if (permission == null) return null;
+      offset = permission.$2;
+      final item = permission.$1;
+      final key = '${item.roleSubject.cidNumber}:${item.roleSubject.roleCode}:'
+          '${item.businessActionId.moduleTag}:${item.businessActionId.actionCode}:'
+          '${item.operation.index}';
+      if (!seen.add(key)) return null;
+      permissions.add(item);
+    }
+    return offset == data.length ? List.unmodifiable(permissions) : null;
+  }
+
+  static (RoleBusinessPermission, int)? _decodeRoleBusinessPermissionAt(
+    Uint8List data,
+    int offset,
+  ) {
+    final role = _decodeRoleSubjectAt(data, offset);
+    if (role == null) return null;
+    final action = _decodeBusinessActionIdAt(data, role.$2);
+    if (action == null || action.$2 >= data.length) return null;
+    final operation = data[action.$2];
+    if (operation >= RolePermissionOperation.values.length) return null;
+    return (
+      RoleBusinessPermission(
+        roleSubject: role.$1,
+        businessActionId: action.$1,
+        operation: RolePermissionOperation.values[operation],
+      ),
+      action.$2 + 1,
+    );
+  }
+
+  /// 严格解码机构岗位或个人多签授权主体。
+  static AuthorizationSubject? decodeAuthorizationSubject(Uint8List data) {
+    final decoded = _decodeAuthorizationSubjectAt(data, 0);
+    return decoded != null && decoded.$2 == data.length ? decoded.$1 : null;
+  }
+
+  /// 严格解码业务模块绑定的投票计划。
+  static VotePlan? decodeVotePlan(Uint8List data) {
+    final action = _decodeBusinessActionIdAt(data, 0);
+    if (action == null) return null;
+    final owner = _readUtf8(data, action.$2, minLength: 1, maxLength: 32);
+    if (owner == null || owner.$1 != action.$1.moduleTag) return null;
+    final proposer = _decodeAuthorizationSubjectAt(data, owner.$2);
+    if (proposer == null) return null;
+    final count = _readCompact(data, proposer.$2);
+    if (count == null || count.$1 < 1 || count.$1 > 256) return null;
+    var offset = proposer.$2 + count.$2;
+    final voters = <AuthorizationSubject>[];
+    final voterKeys = <String>{};
+    for (var index = 0; index < count.$1; index++) {
+      final voter = _decodeAuthorizationSubjectAt(data, offset);
+      if (voter == null) return null;
+      offset = voter.$2;
+      final key = voter.$1.isInstitution
+          ? 'i:${voter.$1.roleSubject!.cidNumber}:${voter.$1.roleSubject!.roleCode}'
+          : 'p:${voter.$1.personalAccountHex}';
+      if (!voterKeys.add(key)) return null;
+      voters.add(voter.$1);
+    }
+    if (offset >= data.length) return null;
+    final engine = data[offset++];
+    if (engine >= VotingEngineKind.values.length ||
+        offset + 32 != data.length) {
+      return null;
+    }
+    if (proposer.$1.isInstitution) {
+      if (voters.any((voter) => !voter.isInstitution)) return null;
+    } else {
+      if (voters.length != 1 ||
+          voters.single.isInstitution ||
+          voters.single.personalAccountHex != proposer.$1.personalAccountHex) {
+        return null;
+      }
+    }
+    return VotePlan(
+      businessActionId: action.$1,
+      proposalOwner: owner.$1,
+      proposerSubject: proposer.$1,
+      voterSubjects: List.unmodifiable(voters),
+      votingEngine: VotingEngineKind.values[engine],
+      businessObjectHash: _hex(data.sublist(offset, offset + 32)),
+    );
+  }
+
+  static (RoleSubject, int)? _decodeRoleSubjectAt(
+    Uint8List data,
+    int offset,
+  ) {
+    final cid = _readUtf8(data, offset, minLength: 1, maxLength: 32);
+    if (cid == null) return null;
+    final roleCode = _readUtf8(data, cid.$2, minLength: 1, maxLength: 64);
+    if (roleCode == null) return null;
+    return (
+      RoleSubject(cidNumber: cid.$1, roleCode: roleCode.$1),
+      roleCode.$2,
+    );
+  }
+
+  static (BusinessActionId, int)? _decodeBusinessActionIdAt(
+    Uint8List data,
+    int offset,
+  ) {
+    final moduleTag = _readUtf8(data, offset, minLength: 1, maxLength: 32);
+    if (moduleTag == null || moduleTag.$2 + 4 > data.length) return null;
+    final actionCode =
+        ByteData.sublistView(data).getUint32(moduleTag.$2, Endian.little);
+    return (
+      BusinessActionId(moduleTag: moduleTag.$1, actionCode: actionCode),
+      moduleTag.$2 + 4,
+    );
+  }
+
+  static (AuthorizationSubject, int)? _decodeAuthorizationSubjectAt(
+    Uint8List data,
+    int offset,
+  ) {
+    if (offset >= data.length) return null;
+    final kind = data[offset++];
+    if (kind == 0) {
+      final role = _decodeRoleSubjectAt(data, offset);
+      return role == null
+          ? null
+          : (AuthorizationSubject.institution(role.$1), role.$2);
+    }
+    if (kind == 1 && offset + 32 <= data.length) {
+      return (
+        AuthorizationSubject.personalMultisig(
+          _hex(data.sublist(offset, offset + 32)),
+        ),
+        offset + 32,
+      );
+    }
+    return null;
+  }
+
+  static (String, int)? _readUtf8(
+    Uint8List data,
+    int offset, {
+    required int minLength,
+    required int maxLength,
+  }) {
+    final value = _readBytes(
+      data,
+      offset,
+      minLength: minLength,
+      maxLength: maxLength,
+    );
+    if (value == null) return null;
+    try {
+      return (utf8.decode(value.$1), value.$2);
+    } on FormatException {
+      return null;
+    }
+  }
+
   static (Uint8List, int)? _readBytes(
     Uint8List data,
     int offset, {

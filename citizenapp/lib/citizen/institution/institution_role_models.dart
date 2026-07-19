@@ -6,6 +6,76 @@ import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.d
 /// 机构岗位状态，序号与 entity runtime 枚举一致。
 enum InstitutionRoleStatus { active, inactive }
 
+/// 岗位对一个业务动作拥有的权限操作，序号与 runtime SCALE 枚举一致。
+enum RolePermissionOperation { propose, vote }
+
+/// 业务模块静态指定的投票引擎，序号与 runtime SCALE 枚举一致。
+enum VotingEngineKind { internal, joint, election, legislation }
+
+/// 完整机构岗位授权主体；CID 和岗位码缺一不可。
+class RoleSubject {
+  const RoleSubject({required this.cidNumber, required this.roleCode});
+
+  final String cidNumber;
+  final String roleCode;
+}
+
+/// 业务模块与模块内动作的稳定标识。
+class BusinessActionId {
+  const BusinessActionId({required this.moduleTag, required this.actionCode});
+
+  final String moduleTag;
+  final int actionCode;
+}
+
+/// 一条完整岗位业务权限。
+class RoleBusinessPermission {
+  const RoleBusinessPermission({
+    required this.roleSubject,
+    required this.businessActionId,
+    required this.operation,
+  });
+
+  final RoleSubject roleSubject;
+  final BusinessActionId businessActionId;
+  final RolePermissionOperation operation;
+}
+
+/// 机构岗位或个人多签授权主体。
+///
+/// 两个字段只允许存在其一；构造器固定分支，避免调用方混合主体。
+class AuthorizationSubject {
+  const AuthorizationSubject.institution(this.roleSubject)
+      : personalAccountHex = null;
+
+  const AuthorizationSubject.personalMultisig(this.personalAccountHex)
+      : roleSubject = null;
+
+  final RoleSubject? roleSubject;
+  final String? personalAccountHex;
+
+  bool get isInstitution => roleSubject != null;
+}
+
+/// 业务模块创建提案时绑定的投票计划。
+class VotePlan {
+  const VotePlan({
+    required this.businessActionId,
+    required this.proposalOwner,
+    required this.proposerSubject,
+    required this.voterSubjects,
+    required this.votingEngine,
+    required this.businessObjectHash,
+  });
+
+  final BusinessActionId businessActionId;
+  final String proposalOwner;
+  final AuthorizationSubject proposerSubject;
+  final List<AuthorizationSubject> voterSubjects;
+  final VotingEngineKind votingEngine;
+  final String businessObjectHash;
+}
+
 /// 管理员任职来源，序号与 entity runtime 枚举一致。
 enum InstitutionAssignmentSource {
   genesis,
@@ -71,6 +141,13 @@ class InstitutionAdminAssignment {
   final bool active;
 
   String get termLabel => termRequired ? '$termStart ~ $termEnd（自纪元日序）' : '无任期';
+
+  /// 与 runtime 一致按 UTC 纪元日判断有效任职；起止日均包含在任期内。
+  bool isEffectiveOnDay(int currentDay) {
+    if (!active) return false;
+    if (!termRequired) return termStart == 0 && termEnd == 0;
+    return termStart > 0 && termStart <= currentDay && currentDay <= termEnd;
+  }
 
   InstitutionAdminAssignment withRole(InstitutionRole role) =>
       InstitutionAdminAssignment(

@@ -1,6 +1,189 @@
 use super::*;
+use frame_support::traits::GetCallName;
 use frame_support::{assert_noop, assert_ok, BoundedVec};
 use votingengine::{types::code_bytes, InternalVoteEngine as _};
+
+#[test]
+fn direct_institution_creation_call_is_permanently_absent() {
+    let calls = <pallet::Call<Test> as GetCallName>::get_call_names();
+    assert!(!calls.contains(&"propose_create_private_institution"));
+}
+
+fn governance_assignment(
+    account: AccountId32,
+) -> entity_primitives::InstitutionAssignmentTarget<AccountId32> {
+    entity_primitives::InstitutionAssignmentTarget {
+        admin_account: account,
+        term_start: 0,
+        term_end: 0,
+        assignment_source: entity_primitives::InstitutionAssignmentSource::InstitutionGovernance,
+        assignment_source_ref: b"proposal-result".to_vec(),
+        assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
+    }
+}
+
+#[test]
+fn private_dynamic_role_is_authorized_only_for_assigned_admin() {
+    new_test_ext().execute_with(|| {
+        use entity_primitives::{
+            InstitutionRoleAuthorizationQuery, InstitutionRoleMutation, RolePermissionOperation,
+            RoleSubject,
+        };
+
+        let cid_number = generated_cid("private-role", "SFLP");
+        let code = code_bytes("SFLP");
+        assert_ok!(create_institution(
+            cid_number.clone(),
+            code,
+            initial_accounts(&[
+                (crate::RESERVED_NAME_MAIN, 0),
+                (crate::RESERVED_NAME_FEE, 0),
+            ]),
+        ));
+        let action = entity_primitives::BusinessActionId {
+            module_tag: b"pri-mgmt".to_vec(),
+            action_code: 3,
+        };
+        assert_ok!(PrivateManage::apply_institution_governance_result(
+            entity_primitives::InstitutionGovernanceResult {
+                institution_code: code,
+                cid_number: cid_number.to_vec(),
+                proposal_id: 51,
+                role_mutations: vec![InstitutionRoleMutation::Create {
+                    role_name: "财务负责人".as_bytes().to_vec(),
+                    term_required: false,
+                    permissions: vec![entity_primitives::RolePermissionSpec {
+                        business_action_id: action.clone(),
+                        operation: RolePermissionOperation::Propose,
+                    }],
+                    assignments: vec![governance_assignment(admin(1))],
+                }],
+                assignment_changes: vec![],
+                legal_representative_change: None,
+                result_source_ref: b"proposal-51".to_vec(),
+            }
+        ));
+
+        let role_code = entity_primitives::generate_dynamic_role_code(cid_number.as_slice(), 0, 51);
+        let subject = RoleSubject {
+            cid_number: cid_number.to_vec(),
+            role_code,
+        };
+        assert!(<PrivateManage as InstitutionRoleAuthorizationQuery<
+            AccountId32,
+        >>::is_authorized(
+            &admin(1),
+            &subject,
+            &action,
+            RolePermissionOperation::Propose,
+        ));
+        assert!(!<PrivateManage as InstitutionRoleAuthorizationQuery<
+            AccountId32,
+        >>::is_authorized(
+            &admin(2),
+            &subject,
+            &action,
+            RolePermissionOperation::Propose,
+        ));
+    });
+}
+
+#[test]
+fn private_legal_representative_role_is_unique_and_allows_zero_or_one_assignment() {
+    new_test_ext().execute_with(|| {
+        use entity_primitives::{
+            InstitutionLegalRepresentativeChange, InstitutionRoleAssignmentChange,
+            InstitutionRoleMutation, RolePermissionOperation,
+        };
+
+        let cid_number = generated_cid("private-lr", "SFLP");
+        let code = code_bytes("SFLP");
+        assert_ok!(create_institution(
+            cid_number.clone(),
+            code,
+            initial_accounts(&[
+                (crate::RESERVED_NAME_MAIN, 0),
+                (crate::RESERVED_NAME_FEE, 0),
+            ]),
+        ));
+
+        assert_noop!(
+            PrivateManage::apply_institution_governance_result(
+                entity_primitives::InstitutionGovernanceResult {
+                    institution_code: code,
+                    cid_number: cid_number.to_vec(),
+                    proposal_id: 52,
+                    role_mutations: vec![InstitutionRoleMutation::Create {
+                        role_name:
+                            primitives::institution_constraints::ROLE_NAME_LEGAL_REPRESENTATIVE
+                                .to_vec(),
+                        term_required: false,
+                        permissions: vec![entity_primitives::RolePermissionSpec {
+                            business_action_id: entity_primitives::BusinessActionId {
+                                module_tag: b"pri-mgmt".to_vec(),
+                                action_code: 3,
+                            },
+                            operation: RolePermissionOperation::Propose,
+                        }],
+                        assignments: vec![],
+                    }],
+                    assignment_changes: vec![],
+                    legal_representative_change: None,
+                    result_source_ref: b"proposal-52".to_vec(),
+                }
+            ),
+            Error::<Test>::DuplicateRoleName
+        );
+
+        let lr_code = primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE.to_vec();
+        assert_ok!(PrivateManage::apply_institution_governance_result(
+            entity_primitives::InstitutionGovernanceResult {
+                institution_code: code,
+                cid_number: cid_number.to_vec(),
+                proposal_id: 53,
+                role_mutations: vec![],
+                assignment_changes: vec![InstitutionRoleAssignmentChange {
+                    role_code: lr_code.clone(),
+                    assignments: vec![governance_assignment(admin(1))],
+                }],
+                legal_representative_change: Some(InstitutionLegalRepresentativeChange::Set {
+                    legal_representative_name: "张三".as_bytes().to_vec(),
+                    legal_representative_cid_number: b"CITIZEN-LR-PRIVATE".to_vec(),
+                    legal_representative_account: admin(1),
+                }),
+                result_source_ref: b"proposal-53".to_vec(),
+            }
+        ));
+        assert_eq!(
+            pallet::InstitutionRoleAssignments::<Test>::get(
+                &cid_number,
+                crate::RoleCodeOf::try_from(lr_code.clone()).expect("LR code fits"),
+            )
+            .len(),
+            1
+        );
+
+        assert_ok!(PrivateManage::apply_institution_governance_result(
+            entity_primitives::InstitutionGovernanceResult {
+                institution_code: code,
+                cid_number: cid_number.to_vec(),
+                proposal_id: 54,
+                role_mutations: vec![],
+                assignment_changes: vec![InstitutionRoleAssignmentChange {
+                    role_code: lr_code,
+                    assignments: vec![],
+                }],
+                legal_representative_change: Some(InstitutionLegalRepresentativeChange::Clear),
+                result_source_ref: b"proposal-54".to_vec(),
+            }
+        ));
+        let institution =
+            pallet::Institutions::<Test>::get(&cid_number).expect("private institution remains");
+        assert!(institution.legal_representative_name.is_none());
+        assert!(institution.legal_representative_cid_number.is_none());
+        assert!(institution.legal_representative_account.is_none());
+    });
+}
 
 #[test]
 fn create_uses_cid_as_the_only_institution_identity() {

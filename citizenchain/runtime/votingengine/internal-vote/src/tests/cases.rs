@@ -674,33 +674,20 @@ fn joint_proposal_must_be_created_by_nrc_or_prc_admin() {
         // 外部人员不能创建联合提案
         let outsider = AccountId32::new([9u8; 32]);
         assert_noop!(
-            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-                outsider,
-                nrc_cid().to_vec(),
-            ),
+            try_create_joint_proposal_for(outsider, nrc_cid(), 10,),
             votingengine::Error::<Test>::NoPermission
         );
 
         // 省储委会管理员可以创建联合提案
         set_population_count(10);
-        assert_ok!(
-            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-                prc_admin(0),
-                prc_cid().to_vec(),
-            )
-        );
+        assert_ok!(try_create_joint_proposal_for(prc_admin(0), prc_cid(), 10,));
 
         // 国家储委会管理员可以创建联合提案
         // 使用独立外部状态验证另一类合法发起人，避免两个联合提案争用同一组治理锁。
     });
     new_test_ext().execute_with(|| {
         set_population_count(10);
-        assert_ok!(
-            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-                nrc_admin(0),
-                nrc_cid().to_vec(),
-            )
-        );
+        assert_ok!(try_create_joint_proposal_for(nrc_admin(0), nrc_cid(), 10,));
     });
 }
 
@@ -708,11 +695,8 @@ fn joint_proposal_must_be_created_by_nrc_or_prc_admin() {
 fn joint_proposal_creates_and_binds_population_snapshot_inline() {
     new_test_ext().execute_with(|| {
         set_population_count(10);
-        let proposal_id = <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-            nrc_admin(0),
-            nrc_cid().to_vec(),
-        )
-        .expect("joint proposal should create its own snapshot");
+        let proposal_id = try_create_joint_proposal_for(nrc_admin(0), nrc_cid(), 10)
+            .expect("joint proposal should create its own snapshot");
         assert_eq!(
             VotingEngine::proposals(proposal_id)
                 .expect("proposal exists")
@@ -731,10 +715,7 @@ fn joint_proposal_with_empty_population_rolls_back() {
     new_test_ext().execute_with(|| {
         set_population_count(0);
         assert_noop!(
-            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-                nrc_admin(0),
-                nrc_cid().to_vec(),
-            ),
+            try_create_joint_proposal_for(nrc_admin(0), nrc_cid(), 0,),
             joint_vote::Error::<Test>::CitizenEligibleTotalNotSet
         );
         assert_eq!(votingengine::pallet::NextProposalId::<Test>::get(), 0);
@@ -1106,6 +1087,48 @@ fn delayed_cleanup_cleans_referendum_votes_after_retention() {
             0,
             nrc_admin(0)
         ));
+    });
+}
+
+#[test]
+fn delayed_cleanup_removes_joint_vote_plan_and_role_snapshots() {
+    new_test_ext().execute_with(|| {
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), nrc_cid(), 100);
+        assert!(votingengine::ProposalVotePlans::<Test>::contains_key(
+            proposal_id
+        ));
+        assert!(
+            votingengine::VoterSnapshot::<Test>::iter_prefix(proposal_id)
+                .next()
+                .is_some()
+        );
+        assert!(
+            votingengine::EffectiveVoterSnapshot::<Test>::iter_prefix(proposal_id)
+                .next()
+                .is_some()
+        );
+
+        assert_ok!(VotingEngine::set_status_and_emit(
+            proposal_id,
+            STATUS_REJECTED
+        ));
+        let retention = 90u64 * primitives::pow_const::BLOCKS_PER_DAY;
+        for offset in 0..30u64 {
+            System::set_block_number(retention + offset);
+            <VotingEngine as Hooks<u64>>::on_initialize(retention + offset);
+        }
+
+        assert!(!votingengine::ProposalVotePlans::<Test>::contains_key(
+            proposal_id
+        ));
+        assert_eq!(
+            votingengine::VoterSnapshot::<Test>::iter_prefix(proposal_id).count(),
+            0
+        );
+        assert_eq!(
+            votingengine::EffectiveVoterSnapshot::<Test>::iter_prefix(proposal_id).count(),
+            0
+        );
     });
 }
 
@@ -1557,7 +1580,7 @@ fn pending_cleanup_fifo_rotates_large_and_small_proposals_fairly() {
         assert!(PendingProposalCleanups::<Test>::contains_key(large));
         assert_eq!(
             PendingProposalCleanups::<Test>::get(small),
-            Some(PendingCleanupStage::TrackData)
+            Some(PendingCleanupStage::VoterSnapshots)
         );
         assert_eq!(PendingCleanupQueueHead::<Test>::get(), 3);
         assert_eq!(PendingCleanupQueueTail::<Test>::get(), 5);

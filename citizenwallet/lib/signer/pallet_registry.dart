@@ -109,9 +109,8 @@ class PalletRegistry {
   static const int proposeCloseInstitutionCall = 1;
   // call_index 4 永久留洞：机构 pending 状态由投票引擎终态回调清理。
 
-  /// `propose_create_*_institution` 携带机构公开信息、初始账户、岗位定义、
-  /// 首次登记只提交最小身份、管理员姓名/钱包和注册局凭证；默认法定代表人岗位与阈值由 runtime 建立。
-  static const int proposeCreateInstitutionCall = 5;
+  // call_index 5 永久关闭：普通机构创建必须改由业务模块提交包含初始岗位、权限、
+  // 任职和投票规则的原子结果，不保留旧直接创建载荷。
   static const int updateInstitutionInfoCall = 6;
   static const int addInstitutionAccountCall = 7;
   static const int proposeInstitutionGovernanceCall = 8;

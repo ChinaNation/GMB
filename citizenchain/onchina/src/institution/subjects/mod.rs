@@ -8,8 +8,6 @@ pub(crate) mod chain_multisig_info;
 pub(crate) mod http;
 pub(crate) mod model;
 pub(crate) mod registration;
-/// 组装 propose_create_institution 链上参数并编码裸 SCALE call data。
-pub(crate) mod registration_call;
 pub(crate) mod schema;
 pub(crate) mod service;
 pub(crate) mod unincorporated_org;
@@ -17,11 +15,11 @@ pub(crate) mod unincorporated_org;
 #[allow(unused_imports)]
 pub use model::{
     account_key_from_string, account_key_to_string, is_education_school_type, AccountKey,
-    CreateAccountInput, CreateAccountOutput, CreateInstitutionInput, CreateInstitutionOutput,
-    Institution, InstitutionAccount, InstitutionDetailOutput, InstitutionDocument,
-    InstitutionListFilter, InstitutionListRow, LegalRepresentativePhoto, ParentInstitutionRow,
-    UpdateInstitutionInput, EDUCATION_COMMITTEE_TYPES, EDUCATION_SCHOOL_TYPES,
-    EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE, EDUCATION_TYPE_EARLY_SCHOOL,
-    EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE, EDUCATION_TYPE_PRIMARY_SCHOOL,
-    EDUCATION_TYPE_SECONDARY_SCHOOL, EDUCATION_TYPE_UNIVERSITY, VALID_DOC_TYPES,
+    CreateAccountInput, CreateAccountOutput, CreateInstitutionInput, Institution,
+    InstitutionAccount, InstitutionDetailOutput, InstitutionDocument, InstitutionListFilter,
+    InstitutionListRow, LegalRepresentativePhoto, ParentInstitutionRow, UpdateInstitutionInput,
+    EDUCATION_COMMITTEE_TYPES, EDUCATION_SCHOOL_TYPES, EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE,
+    EDUCATION_TYPE_EARLY_SCHOOL, EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE,
+    EDUCATION_TYPE_PRIMARY_SCHOOL, EDUCATION_TYPE_SECONDARY_SCHOOL, EDUCATION_TYPE_UNIVERSITY,
+    VALID_DOC_TYPES,
 };

@@ -77,13 +77,11 @@ class QrActions {
   static const int resolutionDestroy = 0x0d00;
   static const int grandpaKeyChange = 0x0f00;
   static const int publicInstitutionClose = 0x1e01;
-  static const int publicInstitutionCreate = 0x1e05;
   static const int publicInstitutionUpdateInfo = 0x1e06;
   static const int publicInstitutionAddAccount = 0x1e07;
   static const int publicInstitutionGovernance = 0x1e08;
   static const int publicInstitutionRegisterAdmins = 0x1e09;
   static const int privateInstitutionClose = 0x1f01;
-  static const int privateInstitutionCreate = 0x1f05;
   static const int privateInstitutionUpdateInfo = 0x1f06;
   static const int privateInstitutionAddAccount = 0x1f07;
   static const int privateInstitutionGovernance = 0x1f08;

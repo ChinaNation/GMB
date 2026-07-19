@@ -115,6 +115,32 @@ impl InternalAdminProvider<AccountId32> for TestAdminProvider {
     }
 }
 
+impl votingengine::InstitutionRoleProvider<AccountId32> for TestAdminProvider {
+    fn is_active_assignment(cid_number: &[u8], who: &AccountId32, role_code: &[u8]) -> bool {
+        Self::active_accounts_for_role(cid_number, role_code).contains(who)
+    }
+
+    fn active_accounts_for_role(cid_number: &[u8], role_code: &[u8]) -> Vec<AccountId32> {
+        let Ok(cid_text) = core::str::from_utf8(cid_number) else {
+            return Vec::new();
+        };
+        let Some(code) = votingengine::types::institution_code_from_cid_number(cid_text) else {
+            return Vec::new();
+        };
+        let expected_role = if matches!(code, votingengine::NRC | votingengine::PRC) {
+            primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+        } else if code == votingengine::PRB {
+            primitives::governance_skeleton::ROLE_CODE_DIRECTOR
+        } else {
+            return Vec::new();
+        };
+        if role_code != expected_role {
+            return Vec::new();
+        }
+        Self::institution_admins(code, cid_number).unwrap_or_default()
+    }
+}
+
 pub struct TestJointCallback;
 impl JointVoteResultCallback for TestJointCallback {
     fn on_joint_vote_finalized(
@@ -161,6 +187,7 @@ impl votingengine::Config for Test {
 
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionRoleProvider = TestAdminProvider;
     type WeightInfo = ();
 }
 
@@ -218,11 +245,146 @@ fn admins_for(
 }
 
 fn create_joint_proposal() -> u64 {
-    <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
+    let data = b"joint-test".to_vec();
+    let hash = <Test as frame_system::Config>::Hashing::hash(data.as_slice());
+    let mut business_object_hash = [0u8; 32];
+    business_object_hash.copy_from_slice(hash.as_ref());
+    let proposer_subject =
+        votingengine::types::AuthorizationSubject::Institution(votingengine::types::RoleSubject {
+            cid_number: nrc_cid_number().try_into().expect("bounded NRC CID"),
+            role_code: primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                .to_vec()
+                .try_into()
+                .expect("bounded committee role"),
+        });
+    let voter_subjects = all_joint_institutions()
+        .into_iter()
+        .map(|(code, cid)| {
+            let role_code = if matches!(code, votingengine::NRC | votingengine::PRC) {
+                primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+            } else {
+                primitives::governance_skeleton::ROLE_CODE_DIRECTOR
+            };
+            votingengine::types::AuthorizationSubject::Institution(
+                votingengine::types::RoleSubject {
+                    cid_number: cid.try_into().expect("bounded joint CID"),
+                    role_code: role_code.to_vec().try_into().expect("bounded role code"),
+                },
+            )
+        })
+        .collect();
+    let module_tag: frame_support::BoundedVec<u8, ConstU32<32>> = b"joint-test"
+        .to_vec()
+        .try_into()
+        .expect("bounded module tag");
+    let vote_plan = votingengine::types::VotePlanOf::try_new(
+        votingengine::types::BusinessActionId {
+            module_tag: module_tag.clone(),
+            action_code: 0,
+        },
+        module_tag,
+        proposer_subject,
+        voter_subjects,
+        votingengine::types::VotingEngineKind::Joint,
+        business_object_hash,
+    )
+    .expect("valid joint vote plan");
+    <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal_with_data(
         nrc_admin(),
         nrc_cid_number(),
+        vote_plan,
+        data,
     )
     .expect("joint proposal should be created")
+}
+
+#[test]
+fn joint_proposal_binds_role_plan_and_never_writes_admin_snapshot() {
+    new_test_ext().execute_with(|| {
+        let proposal_id = create_joint_proposal();
+        let plan = votingengine::ProposalVotePlans::<Test>::get(proposal_id)
+            .expect("joint proposal must bind vote plan");
+        assert_eq!(plan.voter_subjects.len(), CHINA_CB.len() + CHINA_CH.len());
+        assert_eq!(
+            votingengine::VoterSnapshot::<Test>::iter_prefix(proposal_id).count(),
+            CHINA_CB.len() + CHINA_CH.len()
+        );
+        assert_eq!(
+            votingengine::EffectiveVoterSnapshot::<Test>::iter_prefix(proposal_id).count(),
+            CHINA_CB.len() + CHINA_CH.len()
+        );
+        assert_eq!(
+            votingengine::AdminSnapshot::<Test>::iter_prefix(proposal_id).count(),
+            0,
+            "migrated joint proposals must not write administrator snapshots"
+        );
+    });
+}
+
+#[test]
+fn effective_voter_snapshot_deduplicates_within_cid_but_not_across_cids() {
+    new_test_ext().execute_with(|| {
+        let proposal_id = 77;
+        let account = AccountId32::new([77; 32]);
+        let second = AccountId32::new([78; 32]);
+        let cid_a: votingengine::types::CidNumber =
+            nrc_cid_number().try_into().expect("bounded NRC CID");
+        let cid_b: votingengine::types::CidNumber = CHINA_CB[1]
+            .cid_number
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("bounded PRC CID");
+        let role = |cid: votingengine::types::CidNumber, code: &[u8]| {
+            votingengine::types::AuthorizationSubject::Institution(
+                votingengine::types::RoleSubject {
+                    cid_number: cid,
+                    role_code: code.to_vec().try_into().expect("bounded test role"),
+                },
+            )
+        };
+
+        assert_ok!(VotingEngine::snapshot_role_voters(
+            proposal_id,
+            role(cid_a.clone(), b"ROLE_A"),
+            vec![account.clone(), second]
+        ));
+        assert_ok!(VotingEngine::snapshot_role_voters(
+            proposal_id,
+            role(cid_a.clone(), b"ROLE_B"),
+            vec![account.clone()]
+        ));
+        assert_ok!(VotingEngine::snapshot_role_voters(
+            proposal_id,
+            role(cid_b.clone(), b"ROLE_C"),
+            vec![account.clone()]
+        ));
+
+        assert_eq!(
+            VotingEngine::effective_voters_len(
+                proposal_id,
+                votingengine::types::ProposalSubject::InstitutionCid(cid_a.clone())
+            ),
+            Some(2)
+        );
+        assert_eq!(
+            VotingEngine::effective_voters_len(
+                proposal_id,
+                votingengine::types::ProposalSubject::InstitutionCid(cid_b.clone())
+            ),
+            Some(1)
+        );
+        assert!(VotingEngine::is_effective_voter_in_snapshot(
+            proposal_id,
+            votingengine::types::ProposalSubject::InstitutionCid(cid_a),
+            &account
+        ));
+        assert!(VotingEngine::is_effective_voter_in_snapshot(
+            proposal_id,
+            votingengine::types::ProposalSubject::InstitutionCid(cid_b),
+            &account
+        ));
+    });
 }
 
 fn finalize_institution(

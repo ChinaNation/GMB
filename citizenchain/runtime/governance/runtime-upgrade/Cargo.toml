@@ -16,6 +16,7 @@ sp-runtime = { workspace = true }
 sp-io = { workspace = true }
 
 primitives = { path = "../../primitives", default-features = false }
+entity-primitives = { path = "../../entity/entity-primitives", default-features = false }
 votingengine = { path = "../../votingengine", default-features = false }
 joint-vote = { path = "../../votingengine/joint-vote", default-features = false }
 genesis-pallet = { path = "../../genesis", default-features = false }
@@ -32,6 +33,7 @@ std = [
     "sp-runtime/std",
     "sp-io/std",
     "primitives/std",
+    "entity-primitives/std",
     "votingengine/std",
     "joint-vote/std",
     "genesis-pallet/std",

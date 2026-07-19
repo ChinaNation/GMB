@@ -350,10 +350,9 @@ pub mod pallet {
             );
             // TODO: implement business logic (任务卡 A)
             //   1. validation::ensure_institution_context / ensure_decimals_in_range / ensure_class_supported
-            //   2. ensure proposer ∈ admins(actor_cid_number)
+            //   2. 按业务动作校验 proposer 对目标 RoleSubject 的 Propose 权限
             //   3. 字段过黑名单
-            //   4. InternalVoteEngine::create_institution_proposal_with_data(
-            //      actor_cid_number + execution_account + MODULE_TAG/ACTION_OAIS 业务数据)
+            //   4. 构造绑定业务对象与岗位选民主体的 VotePlan，再调用指定的内部投票引擎
             Ok(())
         }
 
@@ -440,8 +439,8 @@ pub mod pallet {
             Self::ensure_actor_admin(&proposer, &actor_cid_number, true)?;
             let _ = (actor_cid_number, asset_id, who, reason_hash);
             // TODO: implement business logic (任务卡 B)
-            //   ensure proposer ∈ admins(actor_cid_number)
-            //   JointVoteEngine::create_joint_proposal_with_data(...)
+            //   校验 proposer 对 NRC 委员 RoleSubject 的监管冻结 Propose 权限
+            //   构造含 NRC 委员投票主体的固定 VotePlan，再调用指定的联合投票引擎
             Ok(())
         }
 

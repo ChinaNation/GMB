@@ -65,17 +65,17 @@ mod benchmarks {
             .try_into()
             .expect("NRC CID fits runtime bound");
         let voter = decode::<T>(&entry.admins[0]);
-        let admins: frame_support::BoundedVec<_, T::MaxAdminsPerInstitution> = entry
+        let voters: frame_support::BoundedVec<_, T::MaxAdminsPerInstitution> = entry
             .admins
             .iter()
             .map(decode::<T>)
             .collect::<sp_std::vec::Vec<_>>()
             .try_into()
             .expect("fixed NRC admins fit runtime bound");
-        votingengine::pallet::AdminSnapshot::<T>::insert(
+        votingengine::pallet::EffectiveVoterSnapshot::<T>::insert(
             proposal_id,
             votingengine::ProposalSubject::InstitutionCid(actor_cid_number.clone()),
-            admins,
+            voters,
         );
         let threshold = votingengine::fixed_governance_pass_threshold(&votingengine::NRC)
             .expect("NRC threshold");

@@ -61,9 +61,9 @@ pub(crate) fn action_citizen_identity() -> u16 {
 pub(crate) fn action_onchina_admin() -> u16 {
     *ACTION_ONCHINA_ADMIN_CODE
 }
-// 链交易动作码(机构创建/管理员集合)不在此处发明扁平常量:
+// 链交易动作码(机构治理/管理员集合)不在此处发明扁平常量:
 // 统一用 `core::institution_call::chain_action_code(pallet,call)` 派生(b.a 与 b.d 同源),
-// 公权机构创建=0x1e05、私权机构创建=0x1f05。机构管理员变更由 entity 治理结果驱动，
+// 旧机构直接创建 call 5 已关闭。机构管理员变更由 entity 治理结果驱动，
 // 不存在 public/private admins 的直接集合变更动作。
 // 详见 qr-action-registry.md「链交易动作码」。
 

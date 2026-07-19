@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 状态：进行中
-- 当前步骤：正式创世前统一改造第6步“中国公民链技术有限公司”创世机构接入已完成；下一步为第7步正式创世阻塞审计
+- 当前步骤：正式创世前统一改造第6步“中国公民链技术股份有限公司”创世机构接入已完成；下一步为第7步正式创世阻塞审计
 - 用户确认：2026-07-17
 - 执行规则：每一步先确认方案；执行完成后立即更新文档、完善中文注释、清理残留，再输出下一步技术方案
 
@@ -174,8 +174,8 @@
 - 2026-07-19：CitizenWallet 同一已扫描请求只允许一次密钥调用：签名进行中或已生成响应二维码时拒绝重复触发；同一次业务操作不叠加姓名确认签名或其它第二签名。统一 action registry 已重新生成 CitizenApp/CitizenWallet 两端产物，个人多签创建的必显字段补齐 `admins`。
 - 2026-07-19：第5步验证通过：`qr-protocol` 6 项一致性/守卫测试、CitizenWallet `flutter analyze`、179 项全量测试、Android arm64 debug 构建、CitizenApp `flutter analyze` 及 QR/签名 53 项测试全部通过。Pixel 8a 真机安装后 `org.citizenwallet/.MainActivity` 真实启动、进程存活并渲染“还没有钱包”首屏；设备无钱包，未创建测试私钥、未伪造扫码签名或链交易。Android 16 同时报告现有 Flutter/插件原生库未满足 16 KB 页面对齐，关闭系统提示后应用正常渲染；该独立发布风险留待正式创世前阻塞审计处理。
 - 2026-07-19：第5步旧字段、旧载荷和旧文档口径已清理；全仓非 runtime 仅保留 OnChina 启动时 `DROP COLUMN IF EXISTS` 删除旧数据库合并姓名列的清理 SQL，不存在兼容读取。本步未修改 runtime、未烘焙 chainspec、未切换节点数据、未部署或推送。
-- 2026-07-19：正式创世前统一改造第6步完成。新增私权创世机构“中国公民链技术有限公司”唯一常量源：公司 CID `GZ018-SFGQ1-201206100-2026`，主/费用账户按最终 CID 权威派生；法定代表人程伟引用公民 CID `GZ000-CTZN6-198805200-2026`，不伪造第二份公民记录。公司在 block#0 写入 `PrivateManage/PrivateAdmins`，三名管理员统一使用 `admin_account + family_name + given_name`，固定 `LR / GENESIS_PRODUCT_MANAGER / GENESIS_PROGRAMMER` 三岗位各一席和 2/3 阈值。
-- 2026-07-19：技术公司身份、协议账户和治理骨架纳入 NodeGuard，总保护数为 90（89 公权 + 1 私权）；固定岗位不能增删、改名、停用或扩席，三岗位任职并集必须等于三名 admins，法定代表人账户必须与 `LR` 任职一致。依法换人必须在同一治理结果中原子同步 admins、岗位任职及必要的法定代表人字段，裸替换会被拒绝。
+- 2026-07-19：正式创世前统一改造第6步完成。新增私权创世机构“中国公民链技术股份有限公司”唯一常量源：公司 CID `GZ018-SFGQ1-201206100-2026`，主/费用账户按最终 CID 权威派生；法定代表人程伟引用公民 CID `GZ000-CTZN6-198805200-2026`，不伪造第二份公民记录。公司在 block#0 写入 `PrivateManage/PrivateAdmins`，三名管理员统一使用 `admin_account + family_name + given_name`，固定 `LR / GENESIS_PRODUCT_MANAGER / GENESIS_PROGRAMMER` 三岗位各一席和 2/3 阈值。
+- 2026-07-19：技术公司身份、协议账户和治理骨架纳入 NodeGuard，总保护数为 90（89 公权 + 1 私权）；固定岗位不能增删、改名或停用，产品经理和程序员各固定一席，唯一 `LR` 允许 0..=1 任职。任职账户必须属于 admins，同一岗位内去重，但允许跨岗位兼任；法定代表人三字段必须与 `LR` 任职同时空缺或账户一致。依法换人时，岗位任职和法定代表人字段必须原子同步；新任人员尚不在 admins 时才同时更新名册。
 - 2026-07-19：第6步验证通过：primitives 72 项、private-admins/private-manage 17 项、runtime 45 项、Node 281 项、OnChina 137 项测试全部通过；生产/no-default-features 编译、WASM 强制重建、格式和残留检查通过。当前源码以隔离 `citizenchain-fresh --tmp` 真实启动，节点守卫启动自检通过，block#0 `0x1732f0f1005d7e8ee7f9292e35a036698ece48569f6aca8e01f56f264761083d`、`stateRoot=0x37379726b7245af3123618fe032fa5355e17ec847159703daf6a9b5322a04fd3`、`isSyncing=false`。本步未烘焙正式 chainspec、未更新 CitizenApp/Cloudflare 正式资产、未切换节点数据、未部署或推送。
 - 2026-07-17：OnChina、CitizenWallet、CitizenApp 已同步删除 `institution_create_credential` 动作码；CitizenWallet 对 `0x1e05/0x1f05` 按新 call-data 顺序解码并统一中文展示，创建机构链路不再存在内层凭证 Option 分支。
 - 2026-07-17：本轮验收通过：`cargo check -p citizenchain`、`cargo check -p onchina`、`cargo test -p public-manage -p private-manage`、`cargo test -p onchina core::institution_call`、OnChina 前端 `npm run build`、CitizenWallet `flutter analyze`、CitizenWallet `flutter test test/signer/payload_decoder_test.dart test/signer/field_labels_test.dart`、CitizenApp `flutter test test/qr/qr_router_test.dart`、CitizenApp `flutter analyze`、`git diff --check`。OnChina test 构建仍有既有 `GENESIS_CITIZEN_MAX` 未用常量警告，与本次创建机构签名链路无关。

@@ -157,7 +157,7 @@ impl SubscriptionPlan {
     }
 }
 
-/// 余额不足或付款计划失效都进入 `Terminated`，不会自动重试。
+/// 订阅生命周期状态。`Suspended` 暂停续扣但保留粉丝关系，`Terminated` 仅用于显式关闭/清档。
 #[derive(
     Clone,
     Copy,
@@ -175,6 +175,30 @@ pub enum SubscriptionStatus {
     Active = 0,
     Cancelled = 1,
     Terminated = 2,
+    Suspended = 3,
+    /// 创作者掉平台会员，粉丝订阅暂停扣费但仍留在续费调度，创作者恢复即自动续。
+    CreatorPaused = 4,
+}
+
+/// 挂起原因。`Suspended` 时为 `Some`，其余状态为 `None`。
+#[derive(
+    Clone,
+    Copy,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Eq,
+    PartialEq,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+)]
+#[repr(u8)]
+pub enum SuspendReason {
+    /// 所属创作者计划价格/周期变更，待订阅者再签名恢复。
+    NeedReconsent = 0,
+    /// 续费时订阅者余额不足，待充值后再签恢复。
+    InsufficientBalance = 1,
 }
 
 /// 链上订阅真源。所有时间都是 UTC Unix 毫秒时间戳。
@@ -191,7 +215,6 @@ pub enum SubscriptionStatus {
 )]
 pub struct SubscriptionState {
     pub plan: SubscriptionPlan,
-    pub pending_plan: Option<SubscriptionPlan>,
     /// 首次成功扣款所在区块的共识时间戳。
     pub started_at: u64,
     /// 最近一次成功扣款所在区块的共识时间戳。
@@ -200,6 +223,10 @@ pub struct SubscriptionState {
     /// 已付权益的独占到期上界，同时也是下一次自动扣款的计划时间。
     pub paid_until: u64,
     pub subscription_status: SubscriptionStatus,
+    /// 订阅者已授权用于自动续费的价格；改价重签检测与换挡折算以此为基准价。
+    pub authorized_price_fen: u128,
+    /// 挂起原因；`Suspended` 时为 `Some`，其余为 `None`。
+    pub suspend_reason: Option<SuspendReason>,
 }
 
 /// 将 UTC Unix 毫秒时间戳增加一个真实公历周期。

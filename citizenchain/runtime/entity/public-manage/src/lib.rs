@@ -41,11 +41,11 @@ use votingengine::{
 pub use entity_primitives::{
     InstitutionAdminAssignment, InstitutionAssignmentSource, InstitutionAssignmentStatus,
     InstitutionGovernanceAction, InstitutionGovernanceProposal, InstitutionGovernanceResult,
-    InstitutionRole, InstitutionRoleStatus,
+    InstitutionRole, InstitutionRoleMutation, InstitutionRoleStatus, RolePermissionSpec,
 };
 pub use institution::role::{
     InstitutionAdminAssignmentOf, InstitutionAdminAssignmentsOf, InstitutionRoleOf,
-    InstitutionRolesOf, RoleCodeOf,
+    InstitutionRolesOf, ModuleTagOf, RoleCodeOf, RolePermissionsOf,
 };
 pub use institution::types::{
     CloseInstitutionAction, CreateInstitutionAccount, InstitutionAccountInfo, InstitutionInfo,
@@ -61,7 +61,8 @@ pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
     // 全新创世直接采用最终布局，不保留历史迁移版本。
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+    // 开发期无存量链数据；岗位权限、nonce 与永久占用表按最终结构直接以 v2 创世。
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {
@@ -81,6 +82,9 @@ pub mod pallet {
 
         /// 管理员统一查询入口，由 runtime 路由到公权/私权/创世管理员模块。
         type InstitutionAdminQuery: InstitutionAdminQuery<Self::AccountId>;
+
+        /// 完整 CID 的顶层业务能力策略；未知能力必须拒绝。
+        type InstitutionCapabilityPolicy: entity_primitives::InstitutionCapabilityPolicy;
 
         type AccountValidator: AccountValidator<Self::AccountId>;
         type ReservedAccountChecker: ReservedAccountGuard<Self::AccountId>;
@@ -123,7 +127,6 @@ pub mod pallet {
         type MaxRegisterSignatureLength: Get<u32>;
 
         /// runtime 为单个机构自动生成的协议账户数量上限。
-        /// 首次登记 call 不接收账户清单或初始入金。
         #[pallet::constant]
         type MaxInstitutionAccounts: Get<u32>;
 
@@ -132,7 +135,7 @@ pub mod pallet {
 
     pub type AdminsOf<T> =
         BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxAdmins>;
-    /// 首次登记提交的管理员人员集合；姓名只展示，账户是唯一授权字段。
+    /// 机构原子初始化使用的管理员人员集合；姓名只展示，账户是唯一授权字段。
     pub type InstitutionAdminsInputOf<T> =
         BoundedVec<Admin<<T as frame_system::Config>::AccountId>, <T as Config>::MaxAdmins>;
     pub type InstitutionGovernanceActionOf<T> =
@@ -222,6 +225,38 @@ pub mod pallet {
         Blake2_128Concat,
         crate::institution::role::RoleCodeOf,
         crate::institution::role::RoleAssignmentsOf<T>,
+        ValueQuery,
+    >;
+
+    /// 机构岗位不可变业务权限；岗位改名不得改写本表。
+    #[pallet::storage]
+    #[pallet::getter(fn institution_role_permissions)]
+    pub type InstitutionRolePermissions<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        CidNumberOf<T>,
+        Blake2_128Concat,
+        crate::institution::role::RoleCodeOf,
+        crate::institution::role::RolePermissionsOf<T>,
+        ValueQuery,
+    >;
+
+    /// 每个机构单调递增的动态岗位码 nonce。
+    #[pallet::storage]
+    #[pallet::getter(fn institution_role_nonce)]
+    pub type InstitutionRoleNonce<T: Config> =
+        StorageMap<_, Blake2_128Concat, CidNumberOf<T>, u64, ValueQuery>;
+
+    /// 机构内全部历史已用岗位码；岗位删除后永久保留。
+    #[pallet::storage]
+    #[pallet::getter(fn used_role_code)]
+    pub type UsedRoleCodes<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        CidNumberOf<T>,
+        Blake2_128Concat,
+        crate::institution::role::RoleCodeOf,
+        bool,
         ValueQuery,
     >;
 
@@ -318,7 +353,7 @@ pub mod pallet {
         /// admins 是独立授权真源，治理结果不得反向生成或覆盖管理员。
         InstitutionGovernanceApplied {
             cid_number: CidNumberOf<T>,
-            role_changes: u32,
+            role_mutations: u32,
             assignment_changes: u32,
             admins_len: u32,
             legal_representative_updated: bool,
@@ -488,6 +523,8 @@ pub mod pallet {
         InitialRoleMustBeActive,
         /// 同一机构内岗位代码重复。
         DuplicateRoleCode,
+        /// 同一机构内岗位名称重复；同名席位必须归属于同一个岗位码。
+        DuplicateRoleName,
         /// 任职所属 CID 与创建目标不一致。
         AssignmentCidMismatch,
         /// 任职来源与当前写入流程不一致。
@@ -536,6 +573,20 @@ pub mod pallet {
         NonMemberAdminForbidden,
         /// 机构治理提案载荷为空或不能解码。
         InvalidInstitutionGovernanceAction,
+        /// 动态岗位必须至少绑定一项不可变业务权限。
+        RolePermissionsEmpty,
+        /// 岗位权限字段或模块标签非法。
+        InvalidRolePermission,
+        /// 同一岗位重复提交相同业务权限。
+        DuplicateRolePermission,
+        /// 单个岗位权限数量超过协议上限。
+        TooManyRolePermissions,
+        /// 目标权限超出完整 CID 的顶层业务能力。
+        InstitutionCapabilityDenied,
+        /// 动态岗位 nonce 已耗尽。
+        RoleNonceOverflow,
+        /// 有限次碰撞重试后仍无法生成未使用岗位码。
+        RoleCodeGenerationExhausted,
     }
 
     /// 提案操作类型标记：存储在 ProposalData 的第一个字节。
@@ -549,32 +600,8 @@ pub mod pallet {
 
         // call_index = 0 永久保留空位,不复用
 
-        /// 注册创建公权机构。
-        ///
-        /// 首次登记只提交机构最小身份和管理员人员集合；机构码、协议账户、默认
-        /// 法定代表人岗位和严格多数阈值全部由 runtime 唯一派生。
-        #[pallet::call_index(5)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_create_public_institution())]
-        pub fn propose_create_public_institution(
-            origin: OriginFor<T>,
-            cid_number: CidNumberOf<T>,
-            cid_full_name: AccountNameOf<T>,
-            cid_short_name: AccountNameOf<T>,
-            town_code: AccountNameOf<T>,
-            admins: InstitutionAdminsInputOf<T>,
-            actor_cid_number: Vec<u8>,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            crate::institution::create::do_propose_create_public_institution::<T>(
-                who,
-                cid_number,
-                cid_full_name,
-                cid_short_name,
-                town_code,
-                admins,
-                actor_cid_number,
-            )
-        }
+        // call_index = 5 永久关闭旧普通机构直写创建入口；恢复创建时必须使用新的
+        // VotePlan 业务入口和真实 proposal_id，不复用旧载荷。
 
         /// 注册局更新机构全称/简称(链是机构信息唯一真源)。
         /// 机构码/CID/省市码物理编码在 CID 里,不可改故不作为参数。
@@ -915,10 +942,21 @@ pub mod pallet {
                     Self::ensure_admin_config(&bounded, threshold)
                 }
                 InstitutionGovernanceAction::MutateRolesAndAssignments {
-                    role_changes,
+                    role_mutations,
                     assignment_changes,
                     legal_representative_change,
                 } => {
+                    for mutation in role_mutations {
+                        if let InstitutionRoleMutation::Create { assignments, .. } = mutation {
+                            for target in assignments {
+                                ensure!(
+                                    target.assignment_source
+                                        == InstitutionAssignmentSource::InstitutionGovernance,
+                                    Error::<T>::InvalidAssignmentSource
+                                );
+                            }
+                        }
+                    }
                     for change in assignment_changes {
                         for target in &change.assignments {
                             ensure!(
@@ -929,7 +967,7 @@ pub mod pallet {
                         }
                     }
                     ensure!(
-                        !role_changes.is_empty()
+                        !role_mutations.is_empty()
                             || !assignment_changes.is_empty()
                             || legal_representative_change.is_some(),
                         Error::<T>::GovernanceResultEmpty
@@ -938,7 +976,7 @@ pub mod pallet {
                 }
                 InstitutionGovernanceAction::ReplaceAdminsAndMutateRoles {
                     admins,
-                    role_changes,
+                    role_mutations,
                     assignment_changes,
                     legal_representative_change,
                 } => {
@@ -948,6 +986,17 @@ pub mod pallet {
                         .map_err(|_| Error::<T>::TooManyInstitutionAdmins)?;
                     let threshold = bounded.len() as u32 / 2 + 1;
                     Self::ensure_admin_config(&bounded, threshold)?;
+                    for mutation in role_mutations {
+                        if let InstitutionRoleMutation::Create { assignments, .. } = mutation {
+                            for target in assignments {
+                                ensure!(
+                                    target.assignment_source
+                                        == InstitutionAssignmentSource::InstitutionGovernance,
+                                    Error::<T>::InvalidAssignmentSource
+                                );
+                            }
+                        }
+                    }
                     for change in assignment_changes {
                         for target in &change.assignments {
                             ensure!(
@@ -958,7 +1007,7 @@ pub mod pallet {
                         }
                     }
                     ensure!(
-                        !role_changes.is_empty()
+                        !role_mutations.is_empty()
                             || !assignment_changes.is_empty()
                             || legal_representative_change.is_some(),
                         Error::<T>::GovernanceResultEmpty
@@ -1136,20 +1185,21 @@ pub mod pallet {
                     )
                 }
                 InstitutionGovernanceAction::MutateRolesAndAssignments {
-                    role_changes,
+                    role_mutations,
                     assignment_changes,
                     legal_representative_change,
                 } => Self::apply_institution_governance_result(InstitutionGovernanceResult {
                     institution_code: proposal.institution_code,
                     cid_number: proposal.cid_number,
-                    role_changes,
+                    proposal_id,
+                    role_mutations,
                     assignment_changes,
                     legal_representative_change,
                     result_source_ref,
                 }),
                 InstitutionGovernanceAction::ReplaceAdminsAndMutateRoles {
                     admins,
-                    role_changes,
+                    role_mutations,
                     assignment_changes,
                     legal_representative_change,
                 } => {
@@ -1157,19 +1207,33 @@ pub mod pallet {
                         .try_into()
                         .map_err(|_| Error::<T>::TooManyInstitutionAdmins)?;
                     let threshold = bounded.len() as u32 / 2 + 1;
-                    Self::set_institution_admins(
-                        &cid_number,
-                        proposal.institution_code,
-                        &bounded,
-                        threshold,
-                    )?;
-                    Self::apply_institution_governance_result(InstitutionGovernanceResult {
-                        institution_code: proposal.institution_code,
-                        cid_number: proposal.cid_number,
-                        role_changes,
-                        assignment_changes,
-                        legal_representative_change,
-                        result_source_ref,
+                    frame_support::storage::with_transaction(|| {
+                        if let Err(error) = Self::set_institution_admins(
+                            &cid_number,
+                            proposal.institution_code,
+                            &bounded,
+                            threshold,
+                        ) {
+                            return frame_support::storage::TransactionOutcome::Rollback(Err(
+                                error,
+                            ));
+                        }
+                        match Self::apply_institution_governance_result(
+                            InstitutionGovernanceResult {
+                                institution_code: proposal.institution_code,
+                                cid_number: proposal.cid_number,
+                                proposal_id,
+                                role_mutations,
+                                assignment_changes,
+                                legal_representative_change,
+                                result_source_ref,
+                            },
+                        ) {
+                            Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
+                            Err(error) => {
+                                frame_support::storage::TransactionOutcome::Rollback(Err(error))
+                            }
+                        }
                     })
                 }
             }

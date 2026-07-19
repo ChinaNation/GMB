@@ -72,7 +72,7 @@ impl frame_support::traits::EnsureOrigin<RuntimeOrigin> for EnsureJointProposerF
 
     fn try_origin(o: RuntimeOrigin) -> Result<Self::Success, RuntimeOrigin> {
         let who = frame_system::EnsureSigned::<AccountId32>::try_origin(o)?;
-        if who == nrc_admin() || who == prc_admin() {
+        if who == nrc_admin() || who == prc_admin() || who == ordinary_staff_admin() {
             Ok(who)
         } else {
             Err(RuntimeOrigin::from(frame_system::RawOrigin::Signed(who)))
@@ -112,60 +112,73 @@ thread_local! {
 }
 
 pub struct TestJointVoteEngine;
-impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
-    // 测试 mock 模拟投票引擎“已准备好投票上下文”的创建入口，
-    // runtime-upgrade 测试不再传入人口快照或联合签名材料。
-    fn create_joint_proposal(
-        _who: AccountId32,
-        _actor_cid_number: Vec<u8>,
-    ) -> Result<u64, DispatchError> {
+impl TestJointVoteEngine {
+    fn allocate_id() -> u64 {
         NEXT_JOINT_ID.with(|id| {
             let mut id = id.borrow_mut();
             let proposal_id = *id;
             *id = id.saturating_add(1);
-            Ok(proposal_id)
+            proposal_id
         })
     }
 
-    fn create_joint_proposal_with_data(
-        _who: AccountId32,
-        _actor_cid_number: Vec<u8>,
-        module_tag: &[u8],
+    fn store_data(
+        proposal_id: u64,
+        vote_plan: votingengine::types::VotePlanOf<AccountId32>,
         data: Vec<u8>,
-    ) -> Result<u64, DispatchError> {
-        NEXT_JOINT_ID.with(|id| {
-            let mut id = id.borrow_mut();
-            let proposal_id = *id;
-            *id = id.saturating_add(1);
-            let bounded_data: frame_support::BoundedVec<
-                u8,
-                <Test as votingengine::Config>::MaxProposalDataLen,
-            > = data
-                .try_into()
-                .map_err(|_| DispatchError::Other("proposal data too large"))?;
-            let owner: frame_support::BoundedVec<
-                u8,
-                <Test as votingengine::Config>::MaxModuleTagLen,
-            > = module_tag
+    ) -> Result<(), DispatchError> {
+        let bounded_data: frame_support::BoundedVec<
+            u8,
+            <Test as votingengine::Config>::MaxProposalDataLen,
+        > = data
+            .try_into()
+            .map_err(|_| DispatchError::Other("proposal data too large"))?;
+        let owner: frame_support::BoundedVec<u8, <Test as votingengine::Config>::MaxModuleTagLen> =
+            vote_plan
+                .proposal_owner
                 .to_vec()
                 .try_into()
                 .map_err(|_| DispatchError::Other("module tag too large"))?;
-            votingengine::ProposalData::<Test>::insert(proposal_id, bounded_data);
-            votingengine::ProposalOwner::<Test>::insert(proposal_id, owner);
-            Ok(proposal_id)
-        })
+        votingengine::ProposalData::<Test>::insert(proposal_id, bounded_data);
+        votingengine::ProposalOwner::<Test>::insert(proposal_id, owner);
+        votingengine::ProposalVotePlans::<Test>::insert(proposal_id, vote_plan);
+        Ok(())
+    }
+}
+
+impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
+    // 测试 mock 模拟投票引擎“已准备好投票上下文”的创建入口，
+    // runtime-upgrade 测试不再传入人口快照或联合签名材料。
+    fn create_joint_proposal_with_data(
+        _who: AccountId32,
+        _actor_cid_number: Vec<u8>,
+        vote_plan: votingengine::types::VotePlanOf<AccountId32>,
+        data: Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        let hash = <Test as frame_system::Config>::Hashing::hash(data.as_slice());
+        if hash.as_ref() != vote_plan.business_object_hash.as_slice() {
+            return Err(DispatchError::Other("business object hash mismatch"));
+        }
+        let proposal_id = Self::allocate_id();
+        Self::store_data(proposal_id, vote_plan, data)?;
+        Ok(proposal_id)
     }
 
     fn create_joint_proposal_with_data_and_object(
         who: AccountId32,
         actor_cid_number: Vec<u8>,
-        module_tag: &[u8],
+        vote_plan: votingengine::types::VotePlanOf<AccountId32>,
         data: Vec<u8>,
         object_kind: u8,
         object_data: Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        let proposal_id =
-            Self::create_joint_proposal_with_data(who, actor_cid_number, module_tag, data)?;
+        let object_hash = <Test as frame_system::Config>::Hashing::hash(&object_data);
+        if object_hash.as_ref() != vote_plan.business_object_hash.as_slice() {
+            return Err(DispatchError::Other("business object hash mismatch"));
+        }
+        let _ = (who, actor_cid_number);
+        let proposal_id = Self::allocate_id();
+        Self::store_data(proposal_id, vote_plan, data)?;
         let object_len = u32::try_from(object_data.len())
             .map_err(|_| DispatchError::Other("proposal object too large"))?;
         let object_hash = <Test as frame_system::Config>::Hashing::hash(&object_data);
@@ -245,6 +258,34 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
     }
 }
 
+pub struct TestInstitutionRoleAuthorization;
+impl entity_primitives::InstitutionRoleAuthorizationQuery<AccountId32>
+    for TestInstitutionRoleAuthorization
+{
+    fn role_has_permission(
+        role_subject: &entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>,
+        business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
+        operation: entity_primitives::RolePermissionOperation,
+    ) -> bool {
+        role_subject.role_code == primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+            && business_action_id.module_tag == crate::MODULE_TAG
+            && business_action_id.action_code
+                == entity_primitives::business_action::ACTION_RUNTIME_UPGRADE
+            && operation == entity_primitives::RolePermissionOperation::Propose
+    }
+
+    fn is_authorized(
+        admin: &AccountId32,
+        role_subject: &entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>,
+        business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
+        operation: entity_primitives::RolePermissionOperation,
+    ) -> bool {
+        let valid_actor = (role_subject.cid_number == nrc_cid().to_vec() && admin == &nrc_admin())
+            || (role_subject.cid_number == prc_cid().to_vec() && admin == &prc_admin());
+        valid_actor && Self::role_has_permission(role_subject, business_action_id, operation)
+    }
+}
+
 impl internal_vote::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
@@ -266,6 +307,7 @@ impl pallet::Config for Test {
     type ProposeOrigin = EnsureJointProposerForTest;
     type DeveloperUpgradeOrigin = EnsureNrcAdminForTest;
     type JointVoteEngine = TestJointVoteEngine;
+    type InstitutionRoleAuthorization = TestInstitutionRoleAuthorization;
     type RuntimeCodeExecutor = TestRuntimeCodeExecutor;
     type DeveloperUpgradeCheck = TestDeveloperUpgradeCheck;
     type MaxReasonLen = ConstU32<64>;
@@ -314,6 +356,10 @@ fn nrc_admin() -> AccountId32 {
 
 fn outsider() -> AccountId32 {
     AccountId32::new([2u8; 32])
+}
+
+fn ordinary_staff_admin() -> AccountId32 {
+    AccountId32::new([4u8; 32])
 }
 
 fn prc_admin() -> AccountId32 {

@@ -1,4 +1,4 @@
-use codec::{Decode, Encode};
+use codec::Decode;
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
 use std::{
@@ -548,20 +548,6 @@ pub(crate) struct PlatformMembershipSnapshot {
     pub(crate) spark_price_fen: Option<u128>,
 }
 
-fn decode_scale_vec_string(storage_hex: &str) -> Result<String, String> {
-    let clean = storage_hex
-        .strip_prefix("0x")
-        .or_else(|| storage_hex.strip_prefix("0X"))
-        .unwrap_or(storage_hex);
-    let bytes = hex::decode(clean).map_err(|e| format!("decode storage hex failed: {e}"))?;
-    let value = Vec::<u8>::decode(&mut &bytes[..])
-        .map_err(|e| format!("decode SCALE byte vector failed: {e}"))?;
-    if value.encode() != bytes {
-        return Err("SCALE byte vector has trailing bytes".to_string());
-    }
-    String::from_utf8(value).map_err(|e| format!("platform CID is not UTF-8: {e}"))
-}
-
 fn decode_scale_u128(storage_hex: &str) -> Result<u128, String> {
     let clean = storage_hex
         .strip_prefix("0x")
@@ -584,8 +570,8 @@ pub(crate) async fn fetch_platform_membership_snapshot(
     let http_url = super::chain_url::chain_http_url()?;
     let client = reqwest::Client::new();
     let block_hash = fetch_finalized_head_via_http(&client, http_url.as_str()).await?;
+    // 平台机构 CID 为创世固定常量，不再从链上存储读取；仅批量读取三档 finalized 价格。
     let keys = [
-        storage_value_key(b"SquarePost", b"PlatformCidNumber"),
         twox64_concat_storage_map_key(b"SquarePost", b"PlatformPrice", &[0]),
         twox64_concat_storage_map_key(b"SquarePost", b"PlatformPrice", &[1]),
         twox64_concat_storage_map_key(b"SquarePost", b"PlatformPrice", &[2]),
@@ -630,11 +616,6 @@ pub(crate) async fn fetch_platform_membership_snapshot(
         };
         values.insert(item.id, value);
     }
-    let platform_cid_number = values
-        .remove(&1)
-        .flatten()
-        .map(|value| decode_scale_vec_string(&value))
-        .transpose()?;
     let decode_price = |id: u64, values: &BTreeMap<u64, Option<String>>| {
         values
             .get(&id)
@@ -645,10 +626,15 @@ pub(crate) async fn fetch_platform_membership_snapshot(
     };
     Ok(PlatformMembershipSnapshot {
         block_hash,
-        platform_cid_number,
-        freedom_price_fen: decode_price(2, &values)?,
-        democracy_price_fen: decode_price(3, &values)?,
-        spark_price_fen: decode_price(4, &values)?,
+        // 平台机构永久固定为创世技术公司，CID 单源自创世常量，不读链上存储。
+        platform_cid_number: Some(
+            primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY
+                .cid_number
+                .to_string(),
+        ),
+        freedom_price_fen: decode_price(1, &values)?,
+        democracy_price_fen: decode_price(2, &values)?,
+        spark_price_fen: decode_price(3, &values)?,
     })
 }
 
@@ -1559,24 +1545,13 @@ pub(crate) async fn fetch_active_admins_onchain(
 #[cfg(test)]
 mod tests {
     use super::{
-        decode_scale_u128, decode_scale_vec_string, deregistration_payload_digest,
-        is_production_mode, parse_hex_hash32, trusted_production_chain_by_hash,
+        decode_scale_u128, deregistration_payload_digest, is_production_mode, parse_hex_hash32,
+        trusted_production_chain_by_hash,
     };
 
     #[test]
-    fn platform_membership_storage_values_decode_strictly() {
-        use codec::Encode;
-
-        let cid = b"GD001-SFGQ0-000000001-2026".to_vec().encode();
-        assert_eq!(
-            decode_scale_vec_string(&format!("0x{}", hex::encode(&cid))).unwrap(),
-            "GD001-SFGQ0-000000001-2026"
-        );
-
-        let mut cid_with_tail = cid;
-        cid_with_tail.push(0);
-        assert!(decode_scale_vec_string(&hex::encode(cid_with_tail)).is_err());
-
+    fn platform_price_storage_values_decode_strictly() {
+        // 平台 CID 已是创世常量，不再从链上解码；仅严格校验三档价格 u128 解码。
         let price = 123_456_u128;
         assert_eq!(
             decode_scale_u128(&format!("0x{}", hex::encode(price.to_le_bytes()))).unwrap(),

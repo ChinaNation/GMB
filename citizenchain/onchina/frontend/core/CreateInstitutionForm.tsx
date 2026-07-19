@@ -1,5 +1,7 @@
 // 机构新增弹窗共享表单(私权/公权/教育三入口共用)。
-// 各入口只传入本模块 API 函数,不在公共组件里越过业务边界。
+// 当前只保留待第 6 步复用的资料录入界面；提交按钮固定关闭，任何入口都不能生成
+// 已删除的 PublicManage/PrivateManage call 5。新业务模块接入时必须同时提交岗位、权限、
+// 任职和投票规则，再重新开放提交。
 //
 // 主体属性统一联动(与后端号码生成器/subjects/unincorporated_org 同源):
 //   G → 盈利属性锁死非盈利;公权入口建公权机构(ZF/LF/SF/JC)、教育入口建公立学校(JY),全称必填
@@ -37,6 +39,9 @@ import {
 } from '../subjects/labels';
 import { notice } from '../utils/notice';
 import { submitChainSign, useChainSign } from './useChainSign';
+
+// 第 6 步新原子创建业务接入前保持关闭；不得用旧 call 5 临时放开。
+const INSTITUTION_CREATION_ENABLED = false;
 
 interface FormValues {
   subject_property: string;
@@ -444,6 +449,10 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   // ── 提交 ─────────────────────────────────────────────────
 
   const onSubmit = async (values: FormValues) => {
+    if (!INSTITUTION_CREATION_ENABLED) {
+      notice.warning('机构创建业务模块尚未接入，当前不能提交');
+      return;
+    }
     if (collectNameInModal && cidFullNameAvailable !== true) {
       notice.warning('请先点击搜索图标检查机构全称是否可用');
       return;
@@ -534,8 +543,6 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
 
   const subjectPropertyDisabled = isPrivate || subjectPropertyChoices.length === 1;
   const instDisabled = visibleInstChoices.length === 1;
-  const cidFullNameCheckPassed = !collectNameInModal || cidFullNameAvailable === true;
-
   return (
     <>
     <Modal
@@ -554,19 +561,18 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
           key="submit"
           type="primary"
           loading={submitting}
-          disabled={!cidFullNameCheckPassed}
-          style={
-            cidFullNameCheckPassed
-              ? { backgroundColor: '#52c41a', borderColor: '#52c41a' }
-              : undefined
-          }
+          disabled={!INSTITUTION_CREATION_ENABLED}
+          title="机构创建业务模块尚未接入"
           onClick={() => form.submit()}
         >
-          生成
+          创建入口已关闭
         </Button>,
       ]}
       destroyOnClose
     >
+      <Typography.Text type="danger" style={{ display: 'block', marginBottom: 16 }}>
+        机构创建业务模块尚未接入；必须能原子提交 LR、初始治理岗位、权限、任职和投票规则后才会开放。
+      </Typography.Text>
       <Form form={form} layout="vertical" onFinish={onSubmit}>
         {/* 短选项字段双列排布压低弹窗高度；所属法人内容长，保持整行。 */}
         <Row gutter={16}>
@@ -829,7 +835,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
                 添加管理员
               </Button>
               <div style={{ color: '#888', fontSize: 12, marginTop: 8 }}>
-                姓和名分别保存；授权只认管理员账户。不填时分别按“管理”“员”处理，岗位在机构创建后单独维护。
+                姓和名分别保存；管理员账户本身不授权。新创建业务必须把初始岗位、权限、任职和投票规则与机构一起原子提交。
               </div>
             </div>
           )}

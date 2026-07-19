@@ -8,7 +8,7 @@ pub(crate) mod db;
 /// 内嵌私有 PostgreSQL 生命周期(onchina 自管;Card 05 零依赖部署)。
 pub(crate) mod embedded_pg;
 pub(crate) mod http_security;
-/// propose_create_institution 裸 SCALE call data 编码器(onchina 唯一真源)。
+/// 机构治理裸 SCALE call data 编码器（OnChina 唯一真源）。
 pub(crate) mod institution_call;
 /// QR_V1 协议和链上中国平台签名二维码构造。
 #[allow(dead_code)]

@@ -264,9 +264,6 @@ class PayloadDecoder {
           palletIndex == PalletRegistry.privateManagePallet) {
         final isPublic = palletIndex == PalletRegistry.publicManagePallet;
         final entityLabel = isPublic ? '公权机构' : '私权机构';
-        final createAction = isPublic
-            ? 'propose_create_public_institution'
-            : 'propose_create_private_institution';
         final closeAction = isPublic
             ? 'propose_close_public_institution'
             : 'propose_close_private_institution';
@@ -276,13 +273,6 @@ class PayloadDecoder {
           return _decodeProposeCloseInstitution(
             bytes,
             action: closeAction,
-            entityLabel: entityLabel,
-          );
-        }
-        if (callIndex == PalletRegistry.proposeCreateInstitutionCall) {
-          return _decodeProposeCreateInstitution(
-            bytes,
-            action: createAction,
             entityLabel: entityLabel,
           );
         }
@@ -929,112 +919,6 @@ class PayloadDecoder {
     final cidNumber = utf8.decode(slot.sublist(0, textLength));
     if (!_isStructuredInstitutionCid(cidNumber)) return null;
     return (cidNumber, offset + _institutionCidSlotLen);
-  }
-
-  // PublicManage(30) / PrivateManage(31) / propose_create_*_institution(5)
-  //
-  // 链端调用(外层 origin 是 actor_cid_number 的管理员；不再存在创建机构内层凭证):
-  //   pub fn propose_create_*_institution(
-  //     origin,
-  //     cid_number: CidNumberOf<T>,                 // BoundedVec<u8>
-  //     cid_full_name: AccountNameOf<T>,   // BoundedVec<u8>
-  //     cid_short_name: AccountNameOf<T>,  // BoundedVec<u8>
-  //     town_code: AccountNameOf<T>,       // BoundedVec<u8>
-  //     admins: BoundedVec<Admin>,
-  //         // 每项固定为 admin_account + family_name + given_name
-  //     actor_cid_number: Vec<u8>,
-  //   )
-  //
-  // SCALE 顺序与上述完全一致。机构授权只认 actor CID 下的 admins，
-  // 不得恢复主账户身份或主账户管理员根。
-  // 禁止在尾部追加 subject_property/sub_type/parent_cid_number 等多余字段。
-  static DecodedPayload? _decodeProposeCreateInstitution(
-    Uint8List bytes, {
-    required String action,
-    required String entityLabel,
-  }) {
-    if (bytes.length < 10) return null;
-    var offset = 2;
-
-    // cid_number: BoundedVec<u8>
-    final (cidLen, cidLenSize) = _decodeCompactU32(bytes, offset);
-    offset += cidLenSize;
-    if (offset + cidLen > bytes.length) return null;
-    final cidNumber = utf8.decode(bytes.sublist(offset, offset + cidLen),
-        allowMalformed: true);
-    offset += cidLen;
-
-    // cid_full_name: BoundedVec<u8>
-    final (nameLen, nameLenSize) = _decodeCompactU32(bytes, offset);
-    offset += nameLenSize;
-    if (offset + nameLen > bytes.length) return null;
-    final cidFullName = utf8.decode(bytes.sublist(offset, offset + nameLen),
-        allowMalformed: true);
-    offset += nameLen;
-
-    // cid_short_name: BoundedVec<u8>
-    final (shortNameLen, shortNameLenSize) = _decodeCompactU32(bytes, offset);
-    offset += shortNameLenSize;
-    if (offset + shortNameLen > bytes.length) return null;
-    final cidShortName = utf8.decode(
-      bytes.sublist(offset, offset + shortNameLen),
-      allowMalformed: true,
-    );
-    offset += shortNameLen;
-
-    // town_code: BoundedVec<u8>。非镇级为空;镇级公权机构为 3 字节镇码。
-    final (townCodeLen, townCodeLenSize) = _decodeCompactU32(bytes, offset);
-    offset += townCodeLenSize;
-    if (offset + townCodeLen > bytes.length) return null;
-    final townCode = utf8.decode(
-      bytes.sublist(offset, offset + townCodeLen),
-      allowMalformed: true,
-    );
-    offset += townCodeLen;
-
-    final adminsRead = _readAdminPersons(
-      bytes,
-      offset,
-      minCount: 2,
-      maxCount: 1989,
-    );
-    if (adminsRead == null) return null;
-    final admins = adminsRead.$1;
-    final adminsLen = admins.length;
-    offset = adminsRead.$2;
-
-    // actor_cid_number: Vec<u8>。外层 origin 必须属于该 CID 的 admins。
-    final actorRead = _readCidNumber(bytes, offset);
-    if (actorRead == null) return null;
-    final actorCidNumber = actorRead.$1;
-    offset = actorRead.$2;
-
-    if (!_hasValidSigningTail(bytes, offset)) return null;
-
-    final reviewValues = {'actor_cid_number': actorCidNumber};
-    final fields = <String, String>{
-      'cid_number': cidNumber,
-      'cid_full_name': cidFullName,
-      'cid_short_name': cidShortName,
-      'admins_len': adminsLen.toString(),
-      'admins': _adminMachineValue(admins),
-      'default_role': _reviewValue('default_role', reviewValues),
-      'protocol_accounts': _reviewValue('protocol_accounts', reviewValues),
-      'fee_payer': _reviewValue('fee_payer', reviewValues),
-    };
-    fields['actor_cid_number'] = actorCidNumber;
-    if (townCode.isNotEmpty) {
-      fields['town_code'] = townCode;
-    }
-
-    final reviewFields = Map<String, String>.of(fields)
-      ..['admins'] = _adminReviewValue(admins);
-    return DecodedPayload(
-      action: action,
-      summary: '创建$entityLabel「$cidFullName」（$adminsLen 名管理员，制度账户自动建立）',
-      fields: fields,
-      reviewFields: reviewFields,
-    );
   }
 
   // PublicManage(30) / PrivateManage(31) / update_institution_info(6)
@@ -3438,43 +3322,127 @@ class PayloadDecoder {
   }
 
   static (String, int)? _skipRoleGovernance(Uint8List bytes, int offset) {
-    final roleChanges = _skipRoleChanges(bytes, offset);
-    if (roleChanges == null) return null;
-    offset = roleChanges.$2;
+    final roleMutations = _skipRoleMutations(bytes, offset);
+    if (roleMutations == null) return null;
+    offset = roleMutations.$2;
     final assignmentChanges = _skipAssignmentChanges(bytes, offset);
     if (assignmentChanges == null) return null;
     offset = assignmentChanges.$2;
     final legal = _skipLegalRepresentativeChange(bytes, offset);
     if (legal == null) return null;
     offset = legal.$2;
-    if (roleChanges.$1 == 0 && assignmentChanges.$1 == 0 && legal.$1.isEmpty) {
+    if (roleMutations.$1 == 0 &&
+        assignmentChanges.$1 == 0 &&
+        legal.$1.isEmpty) {
       return null;
     }
     final legalText = legal.$1.isEmpty ? '' : '，${legal.$1}';
     return (
-      '${roleChanges.$1} 个岗位变更，${assignmentChanges.$1} 个任职集合变更$legalText',
+      '${roleMutations.$1} 个岗位生命周期操作，${assignmentChanges.$1} 个任职集合变更$legalText',
       offset,
     );
   }
 
-  static (int, int)? _skipRoleChanges(Uint8List bytes, int offset) {
+  /// 严格读取 `Vec<InstitutionRoleMutation>`。
+  ///
+  /// Create 不含岗位码；权限与初始任职必须随创建原子提交。Rename/Delete 只接受
+  /// 已有岗位码，因而旧 `InstitutionRoleChange` 布局不会被误识别为新协议。
+  static (int, int)? _skipRoleMutations(Uint8List bytes, int offset) {
     final (count, countSize) = _decodeCompactU32(bytes, offset);
     if (countSize == 0) return null;
     offset += countSize;
+    final seenExistingRoleCodes = <String>{};
+    for (var index = 0; index < count; index++) {
+      if (offset >= bytes.length) return null;
+      final variant = bytes[offset++];
+      if (variant == 0) {
+        final name = _readUtf8Vec(bytes, offset);
+        if (name.$1 == null || name.$1!.isEmpty) return null;
+        offset = name.$2;
+        if (offset >= bytes.length || bytes[offset] > 1) return null;
+        offset += 1; // term_required:bool
+        final permissions = _skipRolePermissionSpecs(bytes, offset);
+        if (permissions == null || permissions.$1 == 0) return null;
+        offset = permissions.$2;
+        final assignments = _skipAssignmentTargets(bytes, offset);
+        if (assignments == null) return null;
+        offset = assignments.$2;
+        continue;
+      }
+      if (variant == 1) {
+        final code = _readUtf8Vec(bytes, offset);
+        if (code.$1 == null ||
+            code.$1!.isEmpty ||
+            !seenExistingRoleCodes.add(code.$1!)) {
+          return null;
+        }
+        offset = code.$2;
+        final name = _readUtf8Vec(bytes, offset);
+        if (name.$1 == null || name.$1!.isEmpty) return null;
+        offset = name.$2;
+        continue;
+      }
+      if (variant == 2) {
+        final code = _readUtf8Vec(bytes, offset);
+        if (code.$1 == null ||
+            code.$1!.isEmpty ||
+            !seenExistingRoleCodes.add(code.$1!)) {
+          return null;
+        }
+        offset = code.$2;
+        continue;
+      }
+      return null;
+    }
+    return (count, offset);
+  }
+
+  static (int, int)? _skipRolePermissionSpecs(
+    Uint8List bytes,
+    int offset,
+  ) {
+    final (count, countSize) = _decodeCompactU32(bytes, offset);
+    if (countSize == 0 || count > 256) return null;
+    offset += countSize;
     final seen = <String>{};
     for (var index = 0; index < count; index++) {
-      final code = _readUtf8Vec(bytes, offset);
-      if (code.$1 == null || code.$1!.isEmpty || !seen.add(code.$1!)) {
+      final moduleTag = _readUtf8Vec(bytes, offset);
+      if (moduleTag.$1 == null || moduleTag.$1!.isEmpty) return null;
+      offset = moduleTag.$2;
+      if (offset + 5 > bytes.length) return null;
+      final actionCode = _readU32Le(bytes, offset);
+      offset += 4;
+      final operation = bytes[offset++];
+      if (operation > 1 ||
+          !seen.add('${moduleTag.$1}:$actionCode:$operation')) {
         return null;
       }
-      offset = code.$2;
-      final name = _readUtf8Vec(bytes, offset);
-      if (name.$1 == null || name.$1!.isEmpty) return null;
-      offset = name.$2;
-      if (offset + 2 > bytes.length) return null;
-      final termRequired = bytes[offset++];
+    }
+    return (count, offset);
+  }
+
+  static (int, int)? _skipAssignmentTargets(
+    Uint8List bytes,
+    int offset,
+  ) {
+    final (count, countSize) = _decodeCompactU32(bytes, offset);
+    if (countSize == 0) return null;
+    offset += countSize;
+    final seenAccounts = <String>{};
+    for (var index = 0; index < count; index++) {
+      if (offset + 32 + 4 + 4 + 1 > bytes.length) return null;
+      final account = _bytesToLowerHex(bytes.sublist(offset, offset + 32));
+      if (!seenAccounts.add(account)) return null;
+      offset += 32;
+      offset += 4; // term_start:u32
+      offset += 4; // term_end:u32
+      final source = bytes[offset++];
+      // 机构治理动作唯一允许 InstitutionGovernance=5；其他来源只能由对应业务结果写入。
+      if (source != 5) return null;
+      offset = _skipBoundedBytes(bytes, offset); // assignment_source_ref
+      if (offset < 0 || offset >= bytes.length) return null;
       final status = bytes[offset++];
-      if (termRequired > 1 || status > 1) return null;
+      if (status > 1) return null;
     }
     return (count, offset);
   }
@@ -3490,27 +3458,9 @@ class PayloadDecoder {
         return null;
       }
       offset = role.$2;
-      final (assignmentCount, assignmentSize) =
-          _decodeCompactU32(bytes, offset);
-      if (assignmentSize == 0) return null;
-      offset += assignmentSize;
-      final seenAccounts = <String>{};
-      for (var i = 0; i < assignmentCount; i++) {
-        if (offset + 32 + 4 + 4 + 1 > bytes.length) return null;
-        final account = _bytesToLowerHex(bytes.sublist(offset, offset + 32));
-        if (!seenAccounts.add(account)) return null;
-        offset += 32;
-        offset += 4; // term_start:u32
-        offset += 4; // term_end:u32
-        final source = bytes[offset++];
-        // 0 Genesis,1 Registry,2 PopularElection,3 MutualElection,
-        // 4 NominationAppointment,5 InstitutionGovernance。
-        if (source > 5) return null;
-        offset = _skipBoundedBytes(bytes, offset); // assignment_source_ref
-        if (offset < 0 || offset >= bytes.length) return null;
-        final status = bytes[offset++];
-        if (status > 1) return null;
-      }
+      final assignments = _skipAssignmentTargets(bytes, offset);
+      if (assignments == null) return null;
+      offset = assignments.$2;
     }
     return (count, offset);
   }

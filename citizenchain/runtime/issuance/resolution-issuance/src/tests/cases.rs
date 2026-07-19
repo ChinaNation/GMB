@@ -19,6 +19,22 @@ fn only_authorized_admin_can_propose() {
 }
 
 #[test]
+fn administrator_without_committee_role_cannot_propose() {
+    new_test_ext().execute_with(|| {
+        assert_noop!(
+            ResolutionIssuance::propose_issuance(
+                RuntimeOrigin::signed(AccountId32::new([4u8; 32])),
+                actor_cid_number(),
+                reason_ok(),
+                4300,
+                allocations_ok(4300)
+            ),
+            pallet::Error::<Test>::UnauthorizedActorRole
+        );
+    });
+}
+
+#[test]
 fn authorized_admin_cannot_supply_invalid_actor_cid() {
     new_test_ext().execute_with(|| {
         let invalid_actor_cid: votingengine::types::CidNumber = b"invalid"
@@ -69,6 +85,25 @@ fn approved_callback_executes_issuance() {
             4300,
             allocations_ok(4300)
         ));
+        let plan = votingengine::ProposalVotePlans::<Test>::get(100)
+            .expect("resolution issuance must bind vote plan");
+        assert_eq!(
+            plan.business_action_id.action_code,
+            entity_primitives::business_action::ACTION_RESOLUTION_ISSUANCE
+        );
+        assert_eq!(plan.voter_subjects.len(), 87);
+        assert_eq!(
+            plan.voter_subjects
+                .iter()
+                .filter(|subject| matches!(
+                    subject,
+                    entity_primitives::AuthorizationSubject::Institution(role)
+                        if role.role_code.as_slice()
+                            == primitives::governance_skeleton::ROLE_CODE_DIRECTOR
+                ))
+                .count(),
+            43
+        );
 
         insert_engine_proposal(100);
         assert_ok!(call_joint_callback(100, true));

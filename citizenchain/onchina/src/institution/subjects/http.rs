@@ -12,9 +12,6 @@ use crate::institution::subjects::model::Institution;
 use crate::institution::subjects::service::ServiceError;
 use crate::{api_error, AppState};
 
-pub(crate) const MAX_PROVINCE_CHARS: usize = 100;
-pub(crate) const MAX_CITY_CHARS: usize = 100;
-
 pub(crate) fn service_error_to_response(e: ServiceError) -> axum::response::Response {
     let status = match e {
         ServiceError::BadInput(_) => StatusCode::BAD_REQUEST,
@@ -27,26 +24,6 @@ pub(crate) fn service_error_to_response(e: ServiceError) -> axum::response::Resp
         ServiceError::Conflict(_) => 1007,
     };
     api_error(status, code, e.message())
-}
-
-pub(crate) fn extract_province_code(cid: &str) -> String {
-    cid.split('-')
-        .next()
-        .map(|r5| r5[..2.min(r5.len())].to_string())
-        .unwrap_or_default()
-}
-
-pub(crate) fn extract_city_code(cid: &str) -> String {
-    cid.split('-')
-        .next()
-        .and_then(|r5| {
-            if r5.len() >= 5 {
-                Some(r5[2..5].to_string())
-            } else {
-                None
-            }
-        })
-        .unwrap_or_default()
 }
 
 /// 机构可见性闸,与全仓 get_visible_scope/includes_* 同一 fail-closed 语义——

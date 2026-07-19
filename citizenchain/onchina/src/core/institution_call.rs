@@ -1,7 +1,7 @@
-//! `propose_create_institution` SCALE call-data 编码器。
+//! 机构治理 SCALE call-data 编码器。
 //!
-//! OnChina 只构造裸 call data，不提交 extrinsic。首次登记只编码机构最小身份和
-//! `admins(admin_account + family_name + given_name)`；协议账户、法定代表人岗位和阈值由 runtime 派生。
+//! OnChina 只构造裸 call data，不提交 extrinsic。旧机构直接创建 call 5 已关闭；
+//! 本模块只保留现存机构治理和注册局管理员登记调用。
 
 use codec::{Compact, Encode};
 
@@ -9,8 +9,6 @@ use codec::{Compact, Encode};
 pub const PUBLIC_MANAGE_PALLET_INDEX: u8 = 30;
 /// PrivateManage pallet 索引。
 pub const PRIVATE_MANAGE_PALLET_INDEX: u8 = 31;
-/// 公私权机构创建 call index。
-pub const PROPOSE_CREATE_INSTITUTION_CALL_INDEX: u8 = 5;
 /// 机构内部治理提案 call index。
 #[allow(dead_code)]
 pub const PROPOSE_INSTITUTION_GOVERNANCE_CALL_INDEX: u8 = 8;
@@ -18,8 +16,8 @@ pub const PROPOSE_INSTITUTION_GOVERNANCE_CALL_INDEX: u8 = 8;
 #[allow(dead_code)]
 pub const REGISTER_INSTITUTION_ADMINS_CALL_INDEX: u8 = 9;
 
-/// 按机构码派生机构创建目标 pallet。
-pub fn create_institution_pallet_index(institution_code: &[u8; 4]) -> u8 {
+/// 按机构码派生机构管理目标 pallet。
+pub fn institution_manage_pallet_index(institution_code: &[u8; 4]) -> u8 {
     if primitives::cid::code::is_private_legal_code(institution_code) {
         PRIVATE_MANAGE_PALLET_INDEX
     } else {
@@ -27,25 +25,12 @@ pub fn create_institution_pallet_index(institution_code: &[u8; 4]) -> u8 {
     }
 }
 
-/// 首次登记管理员人员记录。
+/// 机构治理和登记使用的管理员人员记录。
 #[derive(Debug, Clone, Encode)]
 pub struct InstitutionAdminArg {
     pub admin_account: [u8; 32],
     pub family_name: admin_primitives::FamilyName,
     pub given_name: admin_primitives::GivenName,
-}
-
-/// `propose_create_{public,private}_institution` 完整参数。
-#[derive(Debug, Clone)]
-pub struct ProposeCreateInstitutionArgs {
-    pub cid_number: Vec<u8>,
-    pub cid_full_name: Vec<u8>,
-    pub cid_short_name: Vec<u8>,
-    pub town_code: Vec<u8>,
-    pub admins: Vec<InstitutionAdminArg>,
-    /// 只用于选择 public/private pallet，不编码进 runtime call。
-    pub institution_code: [u8; 4],
-    pub actor_cid_number: Vec<u8>,
 }
 
 /// `propose_institution_governance` 完整参数。
@@ -100,28 +85,10 @@ pub struct ChainCall {
     pub call_data: Vec<u8>,
 }
 
-/// 编码机构创建调用。字段顺序与 runtime call index 5 完全一致。
-pub fn encode_propose_create_institution(args: &ProposeCreateInstitutionArgs) -> ChainCall {
-    let pallet_index = create_institution_pallet_index(&args.institution_code);
-    let mut out = vec![pallet_index, PROPOSE_CREATE_INSTITUTION_CALL_INDEX];
-
-    encode_bytes(&mut out, &args.cid_number);
-    encode_bytes(&mut out, &args.cid_full_name);
-    encode_bytes(&mut out, &args.cid_short_name);
-    encode_bytes(&mut out, &args.town_code);
-    out.extend(encode_admins_payload(&args.admins));
-    encode_bytes(&mut out, &args.actor_cid_number);
-
-    ChainCall {
-        action: chain_action_code(pallet_index, PROPOSE_CREATE_INSTITUTION_CALL_INDEX),
-        call_data: out,
-    }
-}
-
 /// 编码机构内部治理提案调用。字段顺序与 runtime call index 8 完全一致。
 #[allow(dead_code)]
 pub fn encode_propose_institution_governance(args: &ProposeInstitutionGovernanceArgs) -> ChainCall {
-    let pallet_index = create_institution_pallet_index(&args.institution_code);
+    let pallet_index = institution_manage_pallet_index(&args.institution_code);
     let mut out = vec![pallet_index, PROPOSE_INSTITUTION_GOVERNANCE_CALL_INDEX];
 
     encode_bytes(&mut out, &args.cid_number);
@@ -142,7 +109,7 @@ pub fn encode_propose_institution_governance(args: &ProposeInstitutionGovernance
 /// 编码注册局登记机构管理员集合调用。字段顺序与 runtime call index 9 完全一致。
 #[allow(dead_code)]
 pub fn encode_register_institution_admins(args: &RegisterInstitutionAdminsArgs) -> ChainCall {
-    let pallet_index = create_institution_pallet_index(&args.institution_code);
+    let pallet_index = institution_manage_pallet_index(&args.institution_code);
     let mut out = vec![pallet_index, REGISTER_INSTITUTION_ADMINS_CALL_INDEX];
 
     encode_bytes(&mut out, &args.cid_number);
@@ -194,31 +161,6 @@ mod tests {
             })
             .collect::<Vec<_>>();
         assert_eq!(encode_admins_payload(&admins), expected.encode());
-    }
-
-    #[test]
-    fn minimal_create_payload_matches_runtime_call_field_order() {
-        let args = ProposeCreateInstitutionArgs {
-            cid_number: b"GD001-COMPANY-0001".to_vec(),
-            cid_full_name: "测试机构".as_bytes().to_vec(),
-            cid_short_name: "测试".as_bytes().to_vec(),
-            town_code: Vec::new(),
-            admins: vec![admin([1; 32], "张", "三"), admin([2; 32], "管理", "员")],
-            institution_code: *b"SFLP",
-            actor_cid_number: b"issuer".to_vec(),
-        };
-        let encoded = encode_propose_create_institution(&args);
-        assert_eq!(&encoded.call_data[..2], &[31, 5]);
-        assert_eq!(encoded.action, 0x1f05);
-
-        let mut expected = vec![31, 5];
-        expected.extend(args.cid_number.encode());
-        expected.extend(args.cid_full_name.encode());
-        expected.extend(args.cid_short_name.encode());
-        expected.extend(args.town_code.encode());
-        expected.extend(encode_admins_payload(&args.admins));
-        expected.extend(args.actor_cid_number.encode());
-        assert_eq!(encoded.call_data, expected);
     }
 
     #[test]

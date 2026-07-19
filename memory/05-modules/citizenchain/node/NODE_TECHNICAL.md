@@ -42,7 +42,7 @@
 - `NodeGuard` 统一承载固定治理骨架、全节点 PoW 发行、公民认证发行和 CID/机构生命周期，不为单项规则新增平行包装器。
 - 全节点与公民认证两类 `on_finalize` 铸发进入共享发行计划，按账户汇总后统一核对余额与总发行；未登记的 finalize 发行直接拒绝。
 - CID 策略只永久保护 block#0 机构不被删除、跨命名空间复制或替换身份；普通机构继续由 runtime 依法创建、修改、关闭和删除，删除时必须同步清理账户正反索引。
-- 固定治理骨架当前合计保护 90 个机构：原 89 个公权机构继续读取 `PublicAdmins/PublicManage`，中国公民链技术有限公司读取 `PrivateAdmins/PrivateManage`；私权技术公司的协议账户、三名管理员、三项固定岗位和岗位任职闭环同样 fail-closed。
+- 固定治理骨架当前合计保护 90 个机构：原 89 个公权机构继续读取 `PublicAdmins/PublicManage`，中国公民链技术股份有限公司读取 `PrivateAdmins/PrivateManage`；私权技术公司的协议账户、三名管理员、三项固定岗位、固定权限和岗位任职闭环同样 fail-closed。
 - 详细规则、信任上限与验收基线见 `memory/05-modules/citizenchain/node/node-guard/NODE_GUARD_TECHNICAL.md`。
 - 2026-07-12 最终三节点验收：A/B/C 临时 fresh 网络同步到 block#1
   `0xe0fccc0790f9761226865a2fa96a5eb9e19eb34169191f49faf3afee4817b3c8` 和 block#2

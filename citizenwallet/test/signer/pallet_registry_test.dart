@@ -64,7 +64,6 @@ void main() {
       expect(PalletRegistry.publicManagePallet, 30);
       expect(PalletRegistry.privateManagePallet, 31);
       expect(PalletRegistry.proposeCloseInstitutionCall, 1);
-      expect(PalletRegistry.proposeCreateInstitutionCall, 5);
       expect(PalletRegistry.updateInstitutionInfoCall, 6);
       expect(PalletRegistry.addInstitutionAccountCall, 7);
       expect(PalletRegistry.proposeInstitutionGovernanceCall, 8);

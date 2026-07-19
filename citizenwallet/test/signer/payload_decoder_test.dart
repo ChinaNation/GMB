@@ -7,6 +7,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:citizenwallet/qr/generated/qr_action_registry.g.dart';
 import 'package:citizenwallet/signer/institution_code.dart';
 import 'package:citizenwallet/signer/payload_decoder.dart';
+import 'package:citizenwallet/signer/role_permission_codec.dart';
 import 'package:citizenwallet/qr/qr_protocols.dart';
 
 void main() {
@@ -72,6 +73,68 @@ void main() {
     final v = (value << 2) | 2;
     return [v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff];
   }
+
+  Map<String, dynamic> readRolePermissionFixture() {
+    final candidates = [
+      File('../memory/06-quality/fixtures/institution_role_permission_v1.json'),
+      File('memory/06-quality/fixtures/institution_role_permission_v1.json'),
+    ];
+    final file = candidates.firstWhere((candidate) => candidate.existsSync());
+    return jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+  }
+
+  Uint8List roleFixtureBytes(Map<String, dynamic> fixture, String name) {
+    final cases = fixture['cases']! as List<dynamic>;
+    final entry = cases
+        .cast<Map<String, dynamic>>()
+        .singleWhere((item) => item['name'] == name);
+    final hex = entry['encoded_hex']! as String;
+    return Uint8List.fromList([
+      for (var index = 0; index < hex.length; index += 2)
+        int.parse(hex.substring(index, index + 2), radix: 16),
+    ]);
+  }
+
+  test('岗位权限与 VotePlan 严格解码统一 SCALE fixture', () {
+    final fixture = readRolePermissionFixture();
+    final role = RolePermissionCodec.decodeRoleSubject(
+      roleFixtureBytes(fixture, 'role_subject_nrc_committee'),
+    )!;
+    expect(role.cidNumber, nrcActorCid);
+    expect(role.roleCode, 'COMMITTEE_MEMBER');
+
+    final action = RolePermissionCodec.decodeBusinessActionId(
+      roleFixtureBytes(fixture, 'business_action_resolution_issuance'),
+    )!;
+    expect(action.moduleTag, 'res-iss');
+    expect(action.actionCode, 0);
+
+    final permission = RolePermissionCodec.decodeRoleBusinessPermission(
+      roleFixtureBytes(fixture, 'permission_resolution_issuance_propose'),
+    )!;
+    expect(permission.operation, RolePermissionOperation.propose);
+
+    final personal = RolePermissionCodec.decodeAuthorizationSubject(
+      roleFixtureBytes(fixture, 'authorization_personal_multisig'),
+    )!;
+    expect(personal.isInstitution, isFalse);
+    expect(personal.personalAccountHex, '07' * 32);
+
+    final plan = RolePermissionCodec.decodeVotePlan(
+      roleFixtureBytes(fixture, 'vote_plan_resolution_issuance_joint'),
+    )!;
+    expect(plan.proposalOwner, 'res-iss');
+    expect(plan.voterSubjects, hasLength(3));
+    expect(plan.voterSubjects.last.roleSubject!.roleCode, 'DIRECTOR');
+    expect(plan.votingEngine, VotingEngineKind.joint);
+    expect(plan.businessObjectHash, 'ab' * 32);
+
+    final withTrailingByte = Uint8List.fromList([
+      ...roleFixtureBytes(fixture, 'vote_plan_resolution_issuance_joint'),
+      0,
+    ]);
+    expect(RolePermissionCodec.decodeVotePlan(withTrailingByte), isNull);
+  });
 
   // SigningPayload 扩展尾,布局与节点端 build_signing_payload / citizenapp
   // polkadart 编码一致:era(0x00 immortal) + Compact<nonce> + Compact<tip>
@@ -1733,120 +1796,15 @@ void main() {
     // (call_data 含 600KB+ WASM,塞不进 QR;server 在 QR 里只放 32 字节 blake2
     // 哈希,decoder 路径不可达)。改走 OfflineSignService 的"哈希直签例外"。
     // 相关回归测试见 citizenwallet/test/signer/offline_sign_service_*_test.dart。
-    // 机构/决议创建 decoder:
-    // - propose_create_public_institution(30.5):注册局创建公权机构
-    //   (只签最终链交易一次，费用只由注册局费用账户支付)
-    // - propose_issuance(8.0):决议发行联合提案。
-    List<int> buildProposeCreateInstitutionPayload({
-      bool extraTail = false,
-    }) {
-      List<int> boundedBytes(String value) {
-        final bytes = utf8.encode(value);
-        return <int>[(bytes.length << 2) & 0xff, ...bytes];
-      }
-
-      final cid = utf8.encode('AH001-SCB0N-202605010-2026');
-      final instName = utf8.encode('安徽省储行');
-      final instShortName = utf8.encode('安徽储行');
-      final townCode = utf8.encode('');
-      final admins = [
-        (List<int>.filled(32, 0x11), '张', '三'),
-        (List<int>.filled(32, 0x22), '管理', '员'),
-      ];
-      final payload = <int>[
-        0x1e, 0x05, // pallet=30 call=5
-        // cid_number: Vec<u8>
-        (cid.length << 2) & 0xff,
-        ...cid,
-        // cid_full_name: Vec<u8>
-        (instName.length << 2) & 0xff,
-        ...instName,
-        // cid_short_name: Vec<u8>
-        (instShortName.length << 2) & 0xff,
-        ...instShortName,
-        // town_code: Vec<u8>，非镇级机构为空。
-        (townCode.length << 2) & 0xff,
-        ...townCode,
-        // admins: Vec<{admin_account, family_name, given_name}> count=2。
-        (2 << 2) & 0xff,
-        ...admins[0].$1,
-        ...boundedBytes(admins[0].$2),
-        ...boundedBytes(admins[0].$3),
-        ...admins[1].$1,
-        ...boundedBytes(admins[1].$2),
-        ...boundedBytes(admins[1].$3),
-        // actor_cid_number。外层 origin 必须属于该 CID 的 admins。
-        ...compactVec(registryActorCid),
-      ];
-      if (extraTail) {
-        final subjectProperty = utf8.encode('S');
-        final subType = utf8.encode('SHENG_BANK');
-        payload.addAll([
-          (subjectProperty.length << 2) & 0xff,
-          ...subjectProperty,
-          0x01,
-          (subType.length << 2) & 0xff,
-          ...subType,
-          0x00,
+    test('已关闭的机构直接创建 call 5 必须拒绝解码', () {
+      for (final pallet in [0x1e, 0x1f]) {
+        final payload = Uint8List.fromList([
+          pallet,
+          0x05,
+          ...compactVec('AH001-SCB0N-202605010-2026'),
         ]);
+        expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
       }
-      return payload;
-    }
-
-    test(
-        'decodes propose_create_public_institution (pallet=30 call=5) 含 actor/scope',
-        () {
-      final payload =
-          Uint8List.fromList(buildProposeCreateInstitutionPayload());
-      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'propose_create_public_institution');
-      expect(decoded.fields['cid_number'], 'AH001-SCB0N-202605010-2026');
-      expect(decoded.fields['cid_full_name'], '安徽省储行');
-      expect(decoded.fields['cid_short_name'], '安徽储行');
-      expect(decoded.fields.containsKey('town_code'), isFalse);
-      expect(decoded.fields['admins_len'], '2');
-      expect(
-        decoded.reviewFields['admins'],
-        contains('张三(${ss58FromBytes(List<int>.filled(32, 0x11))})'),
-      );
-      expect(
-        decoded.fields['default_role'],
-        GeneratedQrActionRegistry.fieldValueForKey('default_role', {}),
-      );
-      expect(
-        decoded.fields['protocol_accounts'],
-        GeneratedQrActionRegistry.fieldValueForKey('protocol_accounts', {}),
-      );
-      expect(
-        decoded.fields['fee_payer'],
-        '$registryActorCid 的链上费用账户',
-      );
-      expect(decoded.fields.containsKey('subject_property'), isFalse);
-      expect(decoded.fields['actor_cid_number'], registryActorCid);
-      expect(decoded.fields.containsKey('scope_province_name'), isFalse);
-      expect(decoded.fields.containsKey('scope_city_name'), isFalse);
-      expect(decoded.fields.containsKey('credential_signer_pubkey'), isFalse);
-    });
-
-    test('propose_create_public_institution 带多余尾字段时拒绝解码', () {
-      final payload = Uint8List.fromList(
-          buildProposeCreateInstitutionPayload(extraTail: true));
-      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
-      expect(decoded, isNull,
-          reason:
-              'P-TX-001 禁止 subject_property/sub_type/parent_cid_number 多余尾字段');
-    });
-
-    test('propose_create_public_institution 不接收账户和初始入金字段', () {
-      final payload =
-          Uint8List.fromList(buildProposeCreateInstitutionPayload());
-      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'propose_create_public_institution');
-      expect(decoded.fields.keys.where((key) => key.startsWith('amount_')),
-          isEmpty);
-      expect(decoded.fields.containsKey('funding_account'), isFalse);
     });
 
     List<int> buildInstitutionAdminsForGovernance() {
@@ -1917,6 +1875,66 @@ void main() {
       expect(decoded!.action, 'propose_public_institution_governance');
       expect(decoded.fields['governance_action'], '岗位/任职治理');
       expect(decoded.fields['governance_detail'], contains('含法定代表人解除'));
+    });
+
+    test('decodes 新协议岗位创建及其权限和初始任职', () {
+      const cidNumber = 'GZ001-SFAS1-123456789-2026';
+      final payload = Uint8List.fromList(appendGovernanceCredentialTail(
+        <int>[
+          0x1e,
+          0x08,
+          ...compactVec(cidNumber),
+          0x01, // InstitutionGovernanceAction::MutateRolesAndAssignments
+          ...compactU32(1), // role_mutations
+          0x00, // InstitutionRoleMutation::Create
+          ...compactVec('财务负责人'),
+          0x01, // term_required
+          ...compactU32(2), // permissions
+          ...compactVec('pub-mgmt'),
+          ...u32Le(3),
+          0x00, // Propose
+          ...compactVec('pub-mgmt'),
+          ...u32Le(3),
+          0x01, // Vote
+          ...compactU32(1), // initial assignments
+          ...List<int>.filled(32, 0x31),
+          ...u32Le(100),
+          ...u32Le(200),
+          0x05, // InstitutionGovernance
+          ...compactVec('proposal-42'),
+          0x00, // Active
+          ...compactU32(0), // assignment_changes
+          0x00, // legal_representative_change=None
+        ],
+        cidNumber,
+      ));
+
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_public_institution_governance');
+      expect(decoded.fields['governance_detail'], contains('1 个岗位生命周期操作'));
+    });
+
+    test('旧 InstitutionRoleChange 布局必须拒绝解码', () {
+      const cidNumber = 'GZ001-SFAS1-123456789-2026';
+      final payload = Uint8List.fromList(appendGovernanceCredentialTail(
+        <int>[
+          0x1e,
+          0x08,
+          ...compactVec(cidNumber),
+          0x01,
+          ...compactU32(1),
+          ...compactVec('OLD_ROLE'),
+          ...compactVec('旧岗位'),
+          0x00,
+          0x00,
+          ...compactU32(0),
+          0x00,
+        ],
+        cidNumber,
+      ));
+
+      expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
 
     test('decodes register_private_institution_admins 注册局直接登记管理员', () {

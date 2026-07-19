@@ -1,20 +1,86 @@
-//! 提案管理员快照。
+//! 提案管理员快照与岗位投票人快照。
 //!
-//! 提案创建时锁定参与机构的管理员名单(`AdminSnapshot`),投票期间不随
-//! 链上管理员名单变化。投票引擎在投票时通过快照判断资格,保证管理员
-//! 更换不影响已经在投票中的提案过程。
+//! 联合提案创建时按 `VotePlan` 锁定每个岗位主体的有效任职账户，再按 CID
+//! 合并去重；投票期间不随后续任职变化。`AdminSnapshot` 只供尚未迁移的其他
+//! Track 与独立个人多签路径使用，不得用于已迁移的联合投票资格判定。
 //!
 //! - `is_admin_in_snapshot`:查快照判断某人是否是该提案某机构的管理员
 //! - `snapshot_admins_len`:快照中某机构的管理员数量
 //! - `snapshot_institution_admins`:从 `InternalAdminProvider` 拉取当前管理员列表写入快照
+//! - `snapshot_role_subjects`:按完整岗位主体写入任职快照和 CID 有效选民快照
 
 use frame_support::pallet_prelude::{BoundedVec, DispatchResult};
 
-use crate::pallet::{self, AdminSnapshot, Error};
-use crate::types::{CidNumber, InstitutionCode, ProposalSubject};
+use crate::pallet::{self, AdminSnapshot, EffectiveVoterSnapshot, Error, VoterSnapshot};
+use crate::types::{AuthorizationSubject, CidNumber, InstitutionCode, ProposalSubject};
 use crate::InternalAdminProvider;
 
 impl<T: pallet::Config> pallet::Pallet<T> {
+    /// 查询某完整岗位主体冻结的投票人名单。
+    pub fn is_subject_voter_in_snapshot(
+        proposal_id: u64,
+        subject: AuthorizationSubject<CidNumber, crate::types::RoleCode, T::AccountId>,
+        who: &T::AccountId,
+    ) -> bool {
+        VoterSnapshot::<T>::get(proposal_id, subject)
+            .map(|voters| voters.iter().any(|account| account == who))
+            .unwrap_or(false)
+    }
+
+    /// 查询同一机构内按账户去重后的有效投票资格。
+    pub fn is_effective_voter_in_snapshot(
+        proposal_id: u64,
+        subject: ProposalSubject<T::AccountId>,
+        who: &T::AccountId,
+    ) -> bool {
+        EffectiveVoterSnapshot::<T>::get(proposal_id, subject)
+            .map(|voters| voters.iter().any(|account| account == who))
+            .unwrap_or(false)
+    }
+
+    /// 查询同一机构有效投票人的去重人数。
+    pub fn effective_voters_len(
+        proposal_id: u64,
+        subject: ProposalSubject<T::AccountId>,
+    ) -> Option<u32> {
+        EffectiveVoterSnapshot::<T>::get(proposal_id, subject).map(|voters| voters.len() as u32)
+    }
+
+    /// 冻结一个完整岗位主体的当前有效任职账户，并同步维护机构内去重投票人集合。
+    pub fn snapshot_role_voters(
+        proposal_id: u64,
+        subject: AuthorizationSubject<CidNumber, crate::types::RoleCode, T::AccountId>,
+        voters: sp_std::vec::Vec<T::AccountId>,
+    ) -> DispatchResult {
+        let institution_cid = match &subject {
+            AuthorizationSubject::Institution(role_subject) => role_subject.cid_number.clone(),
+            AuthorizationSubject::PersonalMultisig(_) => {
+                return Err(Error::<T>::InvalidVotePlan.into())
+            }
+        };
+        frame_support::ensure!(
+            !VoterSnapshot::<T>::contains_key(proposal_id, &subject),
+            Error::<T>::VotePlanAlreadyBound
+        );
+        Self::ensure_valid_voter_snapshot(voters.as_slice())?;
+        let bounded = BoundedVec::<T::AccountId, T::MaxAdminsPerInstitution>::try_from(voters)
+            .map_err(|_| Error::<T>::InvalidInstitution)?;
+
+        let effective_subject = ProposalSubject::InstitutionCid(institution_cid);
+        let mut effective =
+            EffectiveVoterSnapshot::<T>::get(proposal_id, &effective_subject).unwrap_or_default();
+        for voter in bounded.iter() {
+            if !effective.iter().any(|existing| existing == voter) {
+                effective
+                    .try_push(voter.clone())
+                    .map_err(|_| Error::<T>::InvalidInstitution)?;
+            }
+        }
+        VoterSnapshot::<T>::insert(proposal_id, subject, bounded);
+        EffectiveVoterSnapshot::<T>::insert(proposal_id, effective_subject, effective);
+        Ok(())
+    }
+
     /// 查询快照中某管理员是否在指定机构的管理员名单中。
     pub fn is_admin_in_snapshot(
         proposal_id: u64,
@@ -41,6 +107,16 @@ impl<T: pallet::Config> pallet::Pallet<T> {
         for i in 0..admins.len() {
             for j in i.saturating_add(1)..admins.len() {
                 frame_support::ensure!(admins[i] != admins[j], Error::<T>::InvalidInstitution);
+            }
+        }
+        Ok(())
+    }
+
+    fn ensure_valid_voter_snapshot(voters: &[T::AccountId]) -> DispatchResult {
+        frame_support::ensure!(!voters.is_empty(), Error::<T>::MissingVoterSnapshot);
+        for i in 0..voters.len() {
+            for j in i.saturating_add(1)..voters.len() {
+                frame_support::ensure!(voters[i] != voters[j], Error::<T>::InvalidInstitution);
             }
         }
         Ok(())

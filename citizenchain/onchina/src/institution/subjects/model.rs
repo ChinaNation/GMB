@@ -238,7 +238,7 @@ pub struct CreateInstitutionAdminInput {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateInstitutionInput {
-    /// 主体属性(G/F/S)。创建机构第 1 步授权 payload 单源字段,实际类别仍由机构码规则校验。
+    /// 主体属性(G/F/S)。仅保留给第 6 步新原子创建业务的资料录入，当前接口固定关闭。
     pub subject_property: String,
     pub p1: Option<String>,
     pub province_name: Option<String>,
@@ -266,18 +266,6 @@ pub struct CreateInstitutionInput {
     /// 初始管理员合集；runtime 自动采用严格多数阈值。
     #[serde(default)]
     pub admins: Vec<CreateInstitutionAdminInput>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct CreateInstitutionOutput {
-    /// 链签会话 ID；管理员钱包回签后由 OnChina 用它提交唯一链交易。
-    pub request_id: String,
-    pub cid_number: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cid_full_name: Option<String>,
-    pub category: InstitutionCategory,
-    /// 机构上链创建专用 QR_V1/k=1。b.d 是完整链交易签名 payload。
-    pub institution_create_sign_request: String,
 }
 
 /// 机构详情页提交的可编辑字段。私权类型由身份 ID 机构码决定,创建后不允许改。

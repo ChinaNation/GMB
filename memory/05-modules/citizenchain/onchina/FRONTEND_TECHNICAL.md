@@ -57,13 +57,11 @@ citizenchain/onchina/frontend/
 - 新增公民弹窗不得出现手填身份 CID、手填护照有效期、居住省市选择或投票账户公钥输入框。
 - 新增公民弹窗必须展示当前办理城市对应的居住省市,只允许选择居住镇;出生省市镇必须选择。
 - 新增公民请求只提交 `province_name / city_name / town_code` 和 `birth_*` 字段;不得向后端发送旧的第二套居住字段。
-- 新增机构第一步只收集机构全称、简称和至少两个管理员的姓、名、钱包账户，以及机构分类本身必需的主体属性、行政区和类型字段；不得要求法定代表人、岗位码、岗位名、任期、任职、治理阈值、机构账户地址或注资金额。
-- 管理员是人员而不是岗位。首次登记界面只录入 `admins(admin_account + family_name + given_name)`，授权只认钱包账户；姓、名未解析时分别使用“管理”“员”，页面只在展示时合并为“管理员”。首次登记不得生成管理员岗位任职。
-- 创建机构正式提交必须共用 `subjects/api.ts::buildInstitutionCreatePayload`，可空字段显式写入 `null`，禁止各入口手写第二份 payload 或让 `undefined` 造成请求漂移。
-- 创建机构只允许一次管理员钱包签名：后端返回最终链交易 `sign_request`，前端用 `core/useChainSign.tsx` 展示该二维码，收到 CitizenWallet 签名响应后直接调用统一链交易 submit；不得再叠加 `INSTITUTION_CREATE` 安全动作、`a=8 institution_create_credential` 或任何内层创建凭证二维码。
+- 旧机构直接创建流程已关闭：共享创建弹窗当前只保留资料录入布局，按钮固定禁用并说明必须原子提交 LR、初始治理岗位、不可变权限、初始任职和投票规则；前端不得调用旧 API、生成旧签名二维码或提交 `0x1e05/0x1f05`。
+- 第 6 步接入新机构创建业务时，表单必须在同一业务载荷中收集机构资料、至少两个 admins、至少一个初始治理岗位及其权限和任职、初始投票规则；动态岗位码仍由 runtime 生成，前端不得手填或预生成。
 - 所有 `PASSKEY_COLD_SIGN` 正式业务提交必须同时携带冷签 grant 和 Passkey assertion。创建机构、创建/删除账户、公民身份上链等可直接使用 `admins/securityApi.ts::createColdSignSubmitHeaders`；已由组件先取得 grant 的资料上传/删除、机构详情更新等必须使用 `securityGrantSubmitHeaders`。业务模块禁止手写 `x-cid-security-grant` 或只提交 grant 不提交 Passkey assertion。
 - 机构资料上传、资料删除、机构详情更新的扫码授权 payload 必须与后端 `grant_payload` 逐字段同形；资料上传使用 `target/file_name/doc_type/file_size`，资料删除使用 `target/doc_id/file_name`，机构详情更新使用 `target/cid_number/cid_full_name/parent_cid_number/legal_representative_name/legal_representative_cid_number/legal_representative_photo_path`。
-- 每个机构的唯一默认岗位是“法定代表人”，由 runtime 创建且首次为空缺；前端不得要求用户手填该岗位码，也不得把“管理员”当成统一岗位名。
+- 每个机构必须存在唯一 `LR / 法定代表人` 岗位且允许空缺；前端不得要求用户手填 LR 岗位码，也不得把“管理员”当成统一岗位名。
 - 股份公司等私权机构只有所有最小必填字段及至少两个不重复管理员钱包均合法时才启用生成按钮。协会 `SFAS` 必须显式选择盈利或非盈利，前端不得固定为非盈利。
 - 公民详情页负责链上身份上链:未满 16 周岁、无选举资格或档案非正常时禁用推送;推送时必须先选择“投票身份”或“参选身份”,再录入钱包账户、生成目标公民钱包签名二维码,验签后展示注册局管理员链上交易二维码。
 - “投票身份”提交 `identity_level=voting`,链交易为 `CitizenIdentity.register_voting_identity(10.0)`;“参选身份”提交 `identity_level=candidate`,链交易为 `CitizenIdentity.upgrade_to_candidate_identity(10.1)`。
@@ -141,4 +139,4 @@ rg "NotAllowedError.*摄像头" citizenchain/onchina/frontend --glob '!node_modu
 
 涉及登录、权限、扫码或页面展示的变更，必须启动真实本地服务并检查真实页面；只通过 `npm run build` 不算完成。
 
-2026-07-19 正式创世前管理员三字段第 3 步验收：登录态、Header、机构首次登记、机构治理批量输入、市注册局管理员新增、联邦/本机构管理员列表均统一消费 `admin_account + family_name + given_name`；输入页分别填写姓、名，列表和 Header 只在渲染时按中文顺序合并。既有页面布局、机构治理 tab 和管理员卡片保留。TypeScript 与 Vite 生产构建通过，真实 OnChina 首页返回 200 且包含“链上中国平台”；构建产生的临时哈希资产已清理，未在本步烘焙或部署正式前端资产。
+2026-07-19 管理员三字段验收已统一登录态、Header、机构治理批量输入、市注册局管理员新增、联邦/本机构管理员列表的 `admin_account + family_name + given_name`。ADR-039 第 3 步随后关闭了当时仍存在的机构首次登记提交路径；当前创建按钮固定禁用，不能把该历史验收解读为旧创建流程仍有效。当前 TypeScript 与 Vite 生产构建通过。

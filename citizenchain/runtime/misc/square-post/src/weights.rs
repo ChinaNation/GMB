@@ -8,7 +8,8 @@ pub trait WeightInfo {
     fn set_creator_plans(tiers: u32) -> Weight;
     fn change_subscription_plan() -> Weight;
     fn propose_set_platform_price() -> Weight;
-    fn on_initialize(renewals: u32) -> Weight;
+    /// 单笔到期续费（读价/收款方 + 转账 + 状态写 + 双向调度索引）；on_idle 按此估算每块可排空笔数。
+    fn process_one_due() -> Weight;
 }
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
@@ -41,15 +42,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
         Weight::from_parts(85_000_000, 0).saturating_add(T::DbWeight::get().reads_writes(4, 5))
     }
 
-    fn on_initialize(renewals: u32) -> Weight {
-        Weight::from_parts(10_000_000, 0).saturating_add(
-            Weight::from_parts(85_000_000, 0)
-                .saturating_mul(renewals.into())
-                .saturating_add(T::DbWeight::get().reads_writes(
-                    8u64.saturating_mul(renewals.into()),
-                    7u64.saturating_mul(renewals.into()),
-                )),
-        )
+    fn process_one_due() -> Weight {
+        Weight::from_parts(85_000_000, 0).saturating_add(T::DbWeight::get().reads_writes(8, 7))
     }
 }
 
@@ -78,7 +72,7 @@ impl WeightInfo for () {
         Weight::zero()
     }
 
-    fn on_initialize(_renewals: u32) -> Weight {
+    fn process_one_due() -> Weight {
         Weight::zero()
     }
 }

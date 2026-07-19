@@ -69,16 +69,18 @@ class InstitutionAdminService {
       }
     }
     final out = <InstitutionAdminAssignment>[];
+    final currentDay = DateTime.now().toUtc().millisecondsSinceEpoch ~/
+        Duration.millisecondsPerDay;
     for (final value in assignmentValues) {
       final decoded = InstitutionRoleStorageCodec.decodeAssignments(value);
       if (decoded == null) continue;
       for (final assignment in decoded) {
         final role = roles[assignment.roleCode];
         if (assignment.cidNumber == cidNumber &&
-            assignment.active &&
             role != null &&
             adminSet.contains(assignment.admin_account)) {
-          out.add(assignment.withRole(role));
+          final effective = assignment.withRole(role);
+          if (effective.isEffectiveOnDay(currentDay)) out.add(effective);
         }
       }
     }

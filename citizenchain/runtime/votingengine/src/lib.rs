@@ -1,7 +1,8 @@
 //! # 投票引擎 (votingengine)
 //!
 //! 投票基础设施模块，统一承载四类投票流程：
-//! - **内部投票**（INTERNAL）：机构内部管理员按阈值投票，赞成 ≥ 阈值提前通过，
+//! - **内部投票**（INTERNAL）：目标模型按业务模块绑定的机构岗位主体或个人多签主体投票，
+//!   当前管理员快照实现将在后续步骤替换；赞成 ≥ 阈值提前通过，
 //!   剩余票不足达到阈值提前否决，30 天超时兜底否决。
 
 //! - **联合投票**（JOINT）：国家储委会/省储委会/省储行管理员按票权加权投票，
@@ -14,8 +15,8 @@
 //!   核心只提供提案生命周期、超时结算分发、回调和清理状态机。
 //!
 //! 关键机制：
-//! - **管理员快照锁定**：提案创建时锁定管理员名单，投票期间不受链上管理员更换影响。
-//! - **联合提案发起权**：国家储委会和省储委会管理员均可发起联合投票提案。
+//! - **授权主体快照锁定**：目标模型按 `VotePlan` 锁定岗位有效任职或个人多签管理员名单。
+//! - **联合提案发起权**：由业务模块绑定的完整机构岗位主体决定，不按机构全体管理员决定。
 //!
 //! 通过 trait 为上层治理模块提供标准化能力：
 //! - `InternalVoteEngine` / `JointVoteEngine`：业务模块发起提案的内部入口;
@@ -194,7 +195,7 @@ pub mod pallet {
     ///
     /// 布局:提案主键纯单调 u64 + ProposalDisplayId 展示号 +
     /// ProposalsByCode/Institution/Owner/Year 4 张反向索引,创世直写,无历史回填。
-    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
@@ -265,6 +266,45 @@ pub mod pallet {
     /// 投票时查快照判定资格，保证管理员更换不影响已有提案的投票过程。
     #[pallet::storage]
     pub type AdminSnapshot<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        Blake2_128Concat,
+        ProposalSubject<T::AccountId>,
+        BoundedVec<T::AccountId, T::MaxAdminsPerInstitution>,
+        OptionQuery,
+    >;
+
+    /// 提案投票计划。联合提案必须在创建事务内绑定且只能绑定一次。
+    #[pallet::storage]
+    #[pallet::getter(fn proposal_vote_plan)]
+    pub type ProposalVotePlans<T: Config> =
+        StorageMap<_, Blake2_128Concat, u64, crate::types::VotePlanOf<T::AccountId>, OptionQuery>;
+
+    /// 完整授权主体的投票人快照。
+    ///
+    /// 机构主体的 key 同时包含 CID 与岗位码，禁止退化成裸 CID 管理员集合。
+    #[pallet::storage]
+    pub type VoterSnapshot<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        Blake2_128Concat,
+        crate::types::AuthorizationSubject<
+            crate::types::CidNumber,
+            crate::types::RoleCode,
+            T::AccountId,
+        >,
+        BoundedVec<T::AccountId, T::MaxAdminsPerInstitution>,
+        OptionQuery,
+    >;
+
+    /// 同一机构内多个投票岗位按账户去重后的有效投票人快照。
+    ///
+    /// 联合投票以 `(proposal_id, CID, account)` 记票，因此同一账户在同一机构担任多个
+    /// 投票岗位也只能产生一票；同一账户在不同 CID 的快照互不影响。
+    #[pallet::storage]
+    pub type EffectiveVoterSnapshot<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         u64,
@@ -573,6 +613,12 @@ pub mod pallet {
         InvalidProposalStatus,
         /// 内部投票管理员快照缺失。
         MissingAdminSnapshot,
+        /// 投票计划尚未绑定或对应岗位投票人快照为空。
+        MissingVoterSnapshot,
+        /// 提案已经绑定投票计划，禁止覆盖。
+        VotePlanAlreadyBound,
+        /// 投票计划与提案、业务数据或业务对象不一致。
+        InvalidVotePlan,
         /// 机构标识不属于任何已知类型（NRC/PRC/PRB/多签）。
         InvalidInstitution,
         /// 调用者无权执行此操作（非管理员或外部 extrinsic 直接调用）。

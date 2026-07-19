@@ -1,4 +1,4 @@
-//! 中国公民链技术有限公司正式创世常量。
+//! 中国公民链技术股份有限公司正式创世常量。
 //!
 //! 本文件是该私权创世机构身份、协议账户、三名创世管理员和固定岗位的唯一常量源。
 //! 创世播种与原生节点守卫必须共同读取这里的值，禁止在各模块重复手写。
@@ -23,7 +23,7 @@ pub const LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER: &str = "GZ000-CTZN6-198805200
 /// 法定代表人链上展示姓名。
 pub const LEGAL_REPRESENTATIVE_NAME: &str = "程伟";
 
-/// 中国公民链技术有限公司内置身份。
+/// 中国公民链技术股份有限公司内置身份。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct ChinaCitizenChain {
     pub cid_full_name: &'static str,
@@ -53,9 +53,9 @@ pub struct CitizenChainFixedRole {
     pub seats: u32,
 }
 
-/// 中国公民链技术有限公司正式创世身份。
+/// 中国公民链技术股份有限公司正式创世身份。
 pub const CITIZENCHAIN_TECHNOLOGY: ChinaCitizenChain = ChinaCitizenChain {
-    cid_full_name: "中国公民链技术有限公司",
+    cid_full_name: "中国公民链技术股份有限公司",
     cid_short_name: "公民链技术",
     cid_full_name_en: "China CitizenChain Technology Co., Ltd.",
     cid_short_name_en: "CitizenChain Technology",
@@ -111,7 +111,7 @@ pub const CITIZENCHAIN_FIXED_ROLES: &[CitizenChainFixedRole] = &[
 /// 该机构内部治理固定采用三人严格过半。
 pub const CITIZENCHAIN_GOVERNANCE_THRESHOLD: u32 = 2;
 
-/// 精确判断中国公民链技术有限公司创世身份，禁止只按通用 `SFGQ` 机构码扩大保护范围。
+/// 精确判断中国公民链技术股份有限公司创世身份，禁止只按通用 `SFGQ` 机构码扩大保护范围。
 pub fn is_citizenchain_technology_identity(code: [u8; 4], cid_number: &[u8]) -> bool {
     code == *b"SFGQ" && cid_number == CITIZENCHAIN_TECHNOLOGY.cid_number.as_bytes()
 }

@@ -2,8 +2,8 @@
 
 ## 当前状态
 
-- 状态：已被 `20260717-institution-minimal-registration.md` 的管理员人员独立模型替代；以下旧执行记录只说明历史，不再定义当前协议
-- 当前步骤：停止；当前实现与验收以 2026-07-17 任务卡为准
+- 状态：已被 `20260717-institution-minimal-registration.md` 和 ADR-039 机构岗位权限模型取代；以下旧执行记录只说明历史，不再定义当前协议
+- 当前步骤：停止；目标架构与后续实施以 `20260719-institution-role-permission-unify.md` 和 ADR-039 为准
 - 最新业务确认：2026-07-17
 - 实施方式：逐步输出技术方案，用户确认后才执行；每步完成后立即更新文档、完善中文注释、删除残留，再输出下一步方案
 
@@ -29,7 +29,7 @@
 
 - 一个公民只有一个 `cid_number`，且只能绑定一个钱包账户。
 - 一个钱包账户只能绑定一个公民 CID。
-- 一个机构管理员就是一个取得机构管理资格的钱包账户，不新建管理员身份 ID。
+- 一个机构管理员是机构可任职人员名册中的钱包账户，不新建管理员身份 ID；管理员账户本身没有机构业务权限。
 - 一个管理员钱包账户可在多个机构任职，同一机构可有多个管理员。
 - 管理员能否执行具体机构业务，由对应业务模块依据“机构 + 有效岗位 + 有效任职 + 业务动作”的硬规则确定。
 
@@ -58,7 +58,7 @@
 | `term_required` | 该岗位是否强制任期 |
 | `role_status` | 岗位是否有效 |
 
-岗位不保存 `role_permissions`，也不建立通用权限枚举或权限表。机构信息维护、机构账户管理、机构注销、资产管理、宪法和立法等操作继续由各自业务模块的现有硬规则判定；本模型只提供机构、岗位和有效任职事实。
+本段旧结论已被 ADR-039 取代：岗位必须保存强类型 `RoleBusinessPermission`，完整授权主体为 `RoleSubject(cid_number, role_code)`；业务模块仍负责业务动作、指定投票引擎和通过后执行，不建立泛化字符串权限表。
 
 ### 机构管理员任职
 
@@ -164,8 +164,8 @@ Admin { admin_account, family_name, given_name }
 - [x] 第三步创世收口验收：补齐 `no_std` 的 `alloc::vec` 宏导入；固定岗位映射 4 项、管理员 SCALE 契约 2 项、协议清单 4 项、真实 runtime 创世 1 项测试通过，runtime/node 全目标编译通过。
 - [x] 第三步真实运行态：使用当前源码 production WASM 启动 `citizenchain-fresh` headless 临时节点，NodeGuard 通过、RPC 正常、block#0 可查询；创世哈希为 `0x1a3de5fdfdf75f37480b1964d7339ec7a7d38cd0716abf672dbf3ae7a4ed257e`，验收后节点正常退出。
 - [x] Node Guard 已接入 `PublicManage::InstitutionRoles` 与 `InstitutionRoleAssignments`：固定机构岗位目录、NJD 7/1/2/5、FRG 43×5、任职状态/任期及任职钱包与 `admins` 集合一致性均纳入启动、普通区块、`:code` 和完整状态导入校验。
-- [x] Node Guard 允许管理员、任职来源、来源引用和合法任期原子轮换；禁止固定岗位缺失、改名、停用、额外岗位、席位变化、重复占席、畸形 RAW key 和 SCALE 尾随字节；不读取法定代表人。
-- [x] 固定岗位 Node Guard 验收：纯策略 8/8、`entity-primitives` 5/5、真实 block#0 完整状态和缺失/额外岗位拒绝测试通过，runtime/node 全目标编译及 production WASM 构建通过。
+- [x] 历史实现中 Node Guard 允许管理员、任职来源、来源引用和合法任期原子轮换，并曾禁止固定机构出现额外岗位；ADR-039 已取代“额外岗位禁止”，目标只保护强制 LR、创世固定岗位及其固定权限，允许普通动态岗位。
+- [x] 历史固定岗位 Node Guard 验收曾包含额外岗位拒绝；任务卡第 4 步必须替换为“额外动态岗位允许、伪造或修改固定岗位/权限拒绝”，其余历史测试数据仅作记录。
 - [x] 固定岗位 Node Guard 真实运行态：fresh headless 临时节点启动和 RPC 正常，block#0 为 `0x1a3de5fdfdf75f37480b1964d7339ec7a7d38cd0716abf672dbf3ae7a4ed257e`，验收后节点正常退出。
 - [x] `public-admins/src/weights.rs`、`private-admins/src/weights.rs`、旧 benchmark 及对应 `WeightInfo`/runtime benchmark 注册已删除；机构 admins 不再暴露可计权的管理员集合变更 extrinsic，`runtime-benchmarks` 特性编译通过。
 - [x] OnChina、CitizenApp、公民钱包的机构管理员协议和界面已在第五步改为“管理员钱包集合 + entity 岗位任职”。

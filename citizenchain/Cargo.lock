@@ -11026,6 +11026,7 @@ dependencies = [
 name = "resolution-issuance"
 version = "1.0.0"
 dependencies = [
+ "entity-primitives",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -11178,6 +11179,7 @@ dependencies = [
 name = "runtime-upgrade"
 version = "1.0.0"
 dependencies = [
+ "entity-primitives",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -14365,6 +14367,7 @@ dependencies = [
  "parity-scale-codec",
  "primitives",
  "scale-info",
+ "serde",
  "serde_json",
  "sp-io",
  "sp-runtime",
@@ -16511,6 +16514,7 @@ name = "votingengine"
 version = "1.0.0"
 dependencies = [
  "citizen-identity",
+ "entity-primitives",
  "frame-benchmarking",
  "frame-support",
  "frame-system",

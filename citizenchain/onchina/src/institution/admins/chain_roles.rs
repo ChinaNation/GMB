@@ -72,6 +72,27 @@ fn assignment_source_label(source: u8) -> &'static str {
     }
 }
 
+fn assignment_is_effective(
+    role: &RawInstitutionRole,
+    assignment: &RawInstitutionAssignment,
+    current_day: u32,
+) -> bool {
+    if assignment.assignment_status != ASSIGNMENT_STATUS_ACTIVE {
+        return false;
+    }
+    if !role.term_required {
+        return assignment.term_start == 0 && assignment.term_end == 0;
+    }
+    assignment.term_start > 0
+        && assignment.term_start <= current_day
+        && current_day <= assignment.term_end
+}
+
+fn current_utc_day() -> Result<u32, String> {
+    let current_day = chrono::Utc::now().timestamp().div_euclid(86_400);
+    u32::try_from(current_day).map_err(|_| "current UTC day is outside u32 range".to_string())
+}
+
 fn entity_pallet_name(admin_pallet: AdminPallet) -> &'static str {
     match admin_pallet {
         AdminPallet::PublicAdmins => "PublicManage",
@@ -148,11 +169,10 @@ fn merge_active_assignments(
         .filter(|role| role.role_status == ROLE_STATUS_ACTIVE)
         .map(|role| (role.role_code.clone(), role))
         .collect();
+    let current_day = current_utc_day()?;
     let mut views = Vec::new();
     for assignment in assignments {
-        if assignment.assignment_status != ASSIGNMENT_STATUS_ACTIVE
-            || !active_admins.contains_key(&assignment.admin_account)
-        {
+        if !active_admins.contains_key(&assignment.admin_account) {
             continue;
         }
         let Some(role) = active_roles.get(&assignment.role_code) else {
@@ -160,6 +180,9 @@ fn merge_active_assignments(
                 "active institution assignment references a missing active role".to_string(),
             );
         };
+        if !assignment_is_effective(role, &assignment, current_day) {
+            continue;
+        }
         views.push(InstitutionAssignmentView {
             account_hex: format!("0x{}", hex::encode(assignment.admin_account)),
             family_name: active_admins[&assignment.admin_account].0.clone(),
@@ -257,17 +280,19 @@ pub(crate) async fn fetch_frg_province_codes_for_admin(
 ) -> Result<Vec<[u8; 2]>, String> {
     let (roles, assignments) =
         read_roles_and_assignments(cid_number, AdminPallet::PublicAdmins).await?;
-    let active_role_codes: HashSet<Vec<u8>> = roles
+    let active_roles: HashMap<Vec<u8>, RawInstitutionRole> = roles
         .into_iter()
         .filter(|role| role.role_status == ROLE_STATUS_ACTIVE)
-        .map(|role| role.role_code)
+        .map(|role| (role.role_code.clone(), role))
         .collect();
+    let current_day = current_utc_day()?;
     let assigned_codes: HashSet<Vec<u8>> = assignments
         .into_iter()
         .filter(|assignment| {
             assignment.admin_account == admin_account
-                && assignment.assignment_status == ASSIGNMENT_STATUS_ACTIVE
-                && active_role_codes.contains(&assignment.role_code)
+                && active_roles
+                    .get(&assignment.role_code)
+                    .is_some_and(|role| assignment_is_effective(role, assignment, current_day))
         })
         .map(|assignment| assignment.role_code)
         .collect();
@@ -293,17 +318,18 @@ pub(crate) async fn fetch_frg_admins_for_province(
     let (roles, assignments) =
         read_roles_and_assignments(cid_number, AdminPallet::PublicAdmins).await?;
     let expected = primitives::governance_skeleton::province_commissioner_role_code(province_code);
-    let role_active = roles
+    let role = roles
         .into_iter()
-        .any(|role| role.role_status == ROLE_STATUS_ACTIVE && role.role_code == expected);
-    if !role_active {
+        .find(|role| role.role_status == ROLE_STATUS_ACTIVE && role.role_code == expected);
+    let Some(role) = role else {
         return Err("federal registry province commissioner role is not active".to_string());
-    }
+    };
+    let current_day = current_utc_day()?;
     Ok(assignments
         .into_iter()
         .filter(|assignment| {
             assignment.role_code == expected
-                && assignment.assignment_status == ASSIGNMENT_STATUS_ACTIVE
+                && assignment_is_effective(&role, assignment, current_day)
         })
         .map(|assignment| assignment.admin_account)
         .collect())
@@ -333,4 +359,99 @@ pub(crate) async fn fetch_all_federal_registry_assignments(
             }
         })
         .collect())
+}
+
+#[cfg(test)]
+mod scale_contract_tests {
+    use super::*;
+    use entity_primitives::{
+        AuthorizationSubject, BusinessActionId, RoleBusinessPermission, RoleSubject,
+    };
+    use frame_support::pallet_prelude::{BoundedVec, ConstU32};
+
+    type FixtureCid = BoundedVec<u8, ConstU32<32>>;
+    type FixtureRoleCode = BoundedVec<u8, ConstU32<64>>;
+    type FixtureModuleTag = BoundedVec<u8, ConstU32<32>>;
+    type FixtureSubject = AuthorizationSubject<FixtureCid, FixtureRoleCode, [u8; 32]>;
+    type FixtureVoters = BoundedVec<FixtureSubject, ConstU32<256>>;
+    type FixtureVotePlan = (
+        BusinessActionId<FixtureModuleTag>,
+        FixtureModuleTag,
+        FixtureSubject,
+        FixtureVoters,
+        u8,
+        [u8; 32],
+    );
+
+    #[test]
+    fn assignment_term_window_is_inclusive_and_non_term_requires_zeroes() {
+        let role = RawInstitutionRole {
+            cid_number: b"CID".to_vec(),
+            role_code: b"ROLE".to_vec(),
+            role_name: b"Role".to_vec(),
+            term_required: true,
+            role_status: ROLE_STATUS_ACTIVE,
+        };
+        let mut assignment = RawInstitutionAssignment {
+            cid_number: b"CID".to_vec(),
+            admin_account: [1; 32],
+            role_code: b"ROLE".to_vec(),
+            term_start: 10,
+            term_end: 20,
+            assignment_source: 5,
+            assignment_source_ref: b"proposal".to_vec(),
+            assignment_status: ASSIGNMENT_STATUS_ACTIVE,
+        };
+        assert!(assignment_is_effective(&role, &assignment, 10));
+        assert!(assignment_is_effective(&role, &assignment, 20));
+        assert!(!assignment_is_effective(&role, &assignment, 21));
+        assignment.term_start = 0;
+        assignment.term_end = 0;
+        assert!(!assignment_is_effective(&role, &assignment, 10));
+    }
+
+    fn fixture_case(name: &str) -> Vec<u8> {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../memory/06-quality/fixtures/institution_role_permission_v1.json"
+        )))
+        .expect("岗位权限 fixture 必须是合法 JSON");
+        let encoded = fixture["cases"]
+            .as_array()
+            .and_then(|cases| {
+                cases
+                    .iter()
+                    .find(|case| case["name"].as_str() == Some(name))
+            })
+            .and_then(|case| case["encoded_hex"].as_str())
+            .expect("岗位权限 fixture 用例必须存在");
+        hex::decode(encoded).expect("岗位权限 fixture 必须是合法 hex")
+    }
+
+    fn decode_exact<T: Decode>(bytes: &[u8]) -> T {
+        let mut input = bytes;
+        let decoded = T::decode(&mut input).expect("fixture SCALE 必须可解码");
+        assert!(input.is_empty(), "fixture SCALE 不得存在尾随字节");
+        decoded
+    }
+
+    #[test]
+    fn institution_role_permission_fixture_decodes_exactly() {
+        let role: RoleSubject<Vec<u8>, Vec<u8>> =
+            decode_exact(&fixture_case("role_subject_nrc_committee"));
+        assert_eq!(role.cid_number, b"LN001-NRC0G-944805165-2026");
+        assert_eq!(role.role_code, b"COMMITTEE_MEMBER");
+
+        let _: RoleBusinessPermission<Vec<u8>, Vec<u8>, Vec<u8>> =
+            decode_exact(&fixture_case("permission_resolution_issuance_propose"));
+        let _: AuthorizationSubject<Vec<u8>, Vec<u8>, [u8; 32]> =
+            decode_exact(&fixture_case("authorization_personal_multisig"));
+
+        let plan: FixtureVotePlan =
+            decode_exact(&fixture_case("vote_plan_resolution_issuance_joint"));
+        assert_eq!(plan.1.as_slice(), b"res-iss");
+        assert_eq!(plan.3.len(), 3);
+        assert_eq!(plan.4, 1);
+        assert_eq!(plan.5, [0xabu8; 32]);
+    }
 }

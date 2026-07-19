@@ -1915,7 +1915,7 @@ mod finalize_issuance_tests {
     }
 
     #[test]
-    fn complete_state_rejects_missing_and_extra_fixed_roles() {
+    fn complete_state_rejects_missing_fixed_role_and_allows_dynamic_role_key() {
         let storage = full_runtime_genesis_storage();
         let top = storage.top;
         let cid_keys: Vec<Vec<u8>> = top
@@ -1946,9 +1946,8 @@ mod finalize_issuance_tests {
             ),
             Vec::new(),
         );
-        let err = verify_imported_policy_state(0, extra.iter(), &reference)
-            .expect_err("extra fixed role must fail");
-        assert!(err.starts_with("固定治理岗位目录:UnknownFixedRole"));
+        verify_imported_policy_state(0, extra.iter(), &reference)
+            .expect("受保护机构的动态岗位由 runtime 治理，不得被误判为额外固定岗位");
     }
 
     #[test]

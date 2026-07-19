@@ -1,8 +1,8 @@
 //! 固定治理机构的管理员、岗位与任职节点策略（档 A）。
 //!
 //! `PublicAdmins::AdminAccounts` 保存管理员账户与姓、名，`PublicManage` 保存岗位与任职。
-//! 本策略按共享编译期清单校验 89 个公权固定治理机构和中国公民链技术有限公司：
-//! 固定岗位目录和席位不允许漂移，具体管理员允许依法原子轮换。任职来源、引用和任期
+//! 本策略按共享编译期清单校验 89 个公权固定治理机构和中国公民链技术股份有限公司：
+//! 固定岗位目录、席位与权限不允许漂移，具体管理员允许依法原子轮换。任职来源、引用和任期
 //! 属于 runtime 业务合法性，不在原生组织结构守卫中重复解释。
 //! 既有公权机构的法定代表人不是创世必填项；技术公司明确具有法定代表人，守卫只额外
 //! 校验其机构信息账户与固定 `LR` 任职一致，不复制公民资料真源。
@@ -16,8 +16,9 @@ use codec::Encode;
 #[cfg(test)]
 use entity_primitives::InstitutionAssignmentSource;
 use entity_primitives::{
-    InstitutionAdminAssignment as SharedInstitutionAdminAssignment, InstitutionAssignmentStatus,
-    InstitutionRole as SharedInstitutionRole, InstitutionRoleStatus,
+    BusinessActionId, InstitutionAdminAssignment as SharedInstitutionAdminAssignment,
+    InstitutionAssignmentStatus, InstitutionRole as SharedInstitutionRole, InstitutionRoleStatus,
+    RoleBusinessPermission, RoleSubject,
 };
 
 use primitives::{
@@ -136,6 +137,14 @@ pub mod storage_key {
         storage_prefix(PRIVATE_MANAGE_PALLET, b"InstitutionRoleAssignments")
     }
 
+    pub fn institution_role_permissions_prefix() -> Vec<u8> {
+        storage_prefix(PUBLIC_MANAGE_PALLET, b"InstitutionRolePermissions")
+    }
+
+    pub fn private_institution_role_permissions_prefix() -> Vec<u8> {
+        storage_prefix(PRIVATE_MANAGE_PALLET, b"InstitutionRolePermissions")
+    }
+
     pub fn private_institutions_prefix() -> Vec<u8> {
         storage_prefix(PRIVATE_MANAGE_PALLET, b"Institutions")
     }
@@ -194,6 +203,15 @@ pub mod storage_key {
         double_map_key(prefix, cid_number, role_code)
     }
 
+    pub fn institution_role_permissions(cid_number: &[u8], role_code: &[u8]) -> Vec<u8> {
+        let prefix = if is_private_protected_cid(cid_number) {
+            private_institution_role_permissions_prefix()
+        } else {
+            institution_role_permissions_prefix()
+        };
+        double_map_key(prefix, cid_number, role_code)
+    }
+
     fn fixed_cid_prefix(storage_prefix: Vec<u8>, cid_number: &[u8]) -> Vec<u8> {
         let mut prefix = storage_prefix;
         prefix.extend_from_slice(&blake2_128_concat(&cid_number.to_vec().encode()));
@@ -205,19 +223,22 @@ pub mod storage_key {
         let mut prefixes = Vec::new();
         for institution in protected_institutions() {
             let cid = institution.cid_number.as_bytes();
-            let (roles, assignments) = if is_private_protected_cid(cid) {
+            let (roles, assignments, permissions) = if is_private_protected_cid(cid) {
                 (
                     private_institution_roles_prefix(),
                     private_institution_role_assignments_prefix(),
+                    private_institution_role_permissions_prefix(),
                 )
             } else {
                 (
                     institution_roles_prefix(),
                     institution_role_assignments_prefix(),
+                    institution_role_permissions_prefix(),
                 )
             };
             prefixes.push(fixed_cid_prefix(roles, cid));
             prefixes.push(fixed_cid_prefix(assignments, cid));
+            prefixes.push(fixed_cid_prefix(permissions, cid));
             if is_private_protected_cid(cid) {
                 prefixes.push(private_institution(cid));
             }
@@ -242,8 +263,10 @@ pub mod storage_key {
         let prefixes = [
             institution_roles_prefix(),
             institution_role_assignments_prefix(),
+            institution_role_permissions_prefix(),
             private_institution_roles_prefix(),
             private_institution_role_assignments_prefix(),
+            private_institution_role_permissions_prefix(),
         ];
         let parsed = prefixes
             .iter()
@@ -266,6 +289,7 @@ type DecodedInstitutionAdmins = InstitutionAdmins<Vec<Admin<[u8; 32]>>>;
 type DecodedInstitutionRole = SharedInstitutionRole<Vec<u8>, Vec<u8>, Vec<u8>>;
 type DecodedInstitutionAdminAssignment =
     SharedInstitutionAdminAssignment<Vec<u8>, [u8; 32], Vec<u8>, Vec<u8>>;
+type DecodedRoleBusinessPermission = RoleBusinessPermission<Vec<u8>, Vec<u8>, Vec<u8>>;
 type DecodedInstitutionInfo = entity_primitives::InstitutionInfo<u32, Vec<u8>, Vec<u8>, [u8; 32]>;
 
 /// 固定治理骨架校验失败原因。
@@ -313,6 +337,18 @@ pub enum GuardError {
         code: [u8; 4],
         role_code: Vec<u8>,
     },
+    PermissionsMissing {
+        code: [u8; 4],
+        role_code: Vec<u8>,
+    },
+    PermissionsDecodeFailed {
+        code: [u8; 4],
+        role_code: Vec<u8>,
+    },
+    PermissionsChanged {
+        code: [u8; 4],
+        role_code: Vec<u8>,
+    },
     SeatsChanged {
         code: [u8; 4],
         role_code: Vec<u8>,
@@ -335,10 +371,7 @@ pub enum GuardError {
     AdminAssignmentSetMismatch([u8; 4]),
     LegalRepresentativeInfoMissing([u8; 4]),
     LegalRepresentativeAssignmentMismatch([u8; 4]),
-    UnknownFixedRole {
-        code: [u8; 4],
-        role_code: Vec<u8>,
-    },
+    InstitutionFullNameChanged([u8; 4]),
 }
 
 fn decode_exact<T: Decode>(raw: &[u8]) -> Result<T, ()> {
@@ -377,58 +410,30 @@ fn parse_double_map_key(key: &[u8], prefix: &[u8]) -> Result<(Vec<u8>, Vec<u8>),
     Ok((cid_number, role_code))
 }
 
-fn fixed_institution_in<'a>(
-    fixed: &'a [FixedInstitution],
-    cid_number: &[u8],
-) -> Option<&'a FixedInstitution> {
-    fixed
-        .iter()
-        .find(|institution| institution.cid_number.as_bytes() == cid_number)
-}
-
-/// 校验岗位/任职 RAW key 形态，并禁止固定机构出现协议清单外岗位。
+/// 解析岗位、任职和权限 RAW key 形态。
+///
+/// 固定岗位逐项强校验；受保护机构依法新增的动态岗位由 runtime 治理，节点不得误判为
+/// 非法“额外固定岗位”。无法解析的非规范 key 同样交由 FRAME/runtime 处理。
 pub fn check_catalog_keys<I, K>(keys: I) -> Result<(), GuardError>
 where
     I: IntoIterator<Item = K>,
     K: AsRef<[u8]>,
 {
-    let role_prefixes = [
+    let prefixes = [
         storage_key::institution_roles_prefix(),
         storage_key::private_institution_roles_prefix(),
-    ];
-    let assignment_prefixes = [
         storage_key::institution_role_assignments_prefix(),
         storage_key::private_institution_role_assignments_prefix(),
+        storage_key::institution_role_permissions_prefix(),
+        storage_key::private_institution_role_permissions_prefix(),
     ];
-    let fixed = protected_institutions();
 
     for raw_key in keys {
         let key = raw_key.as_ref();
-        let parsed = role_prefixes
+        let _parsed = prefixes
             .iter()
-            .chain(assignment_prefixes.iter())
             .find(|prefix| key.starts_with(prefix.as_slice()))
             .map(|prefix| parse_double_map_key(key, prefix));
-        let Some(parsed) = parsed else {
-            continue;
-        };
-        // 无法解析的额外 key 不会成为 FRAME 规范岗位；只要受保护机构的规范 key
-        // 仍完整存在，它不属于原生治理骨架。通用 storage 合法性由 runtime 负责。
-        let Ok((cid_number, role_code)) = parsed else {
-            continue;
-        };
-        let Some(institution) = fixed_institution_in(&fixed, &cid_number) else {
-            continue;
-        };
-        if !expected_roles(institution)
-            .iter()
-            .any(|expected| expected.role_code == role_code)
-        {
-            return Err(GuardError::UnknownFixedRole {
-                code: institution.code,
-                role_code,
-            });
-        }
     }
     Ok(())
 }
@@ -461,18 +466,20 @@ where
             .ok_or(GuardError::LegalRepresentativeInfoMissing(institution.code))?;
         let info: DecodedInstitutionInfo = decode_exact(&raw)
             .map_err(|_| GuardError::LegalRepresentativeInfoMissing(institution.code))?;
-        if info.institution_code != institution.code
-            || info
-                .legal_representative_name
-                .as_ref()
-                .is_none_or(Vec::is_empty)
-            || info
-                .legal_representative_cid_number
-                .as_ref()
-                .is_none_or(Vec::is_empty)
-            || info.legal_representative_account.is_none()
-        {
+        let legal_representative_fields_valid = match (
+            &info.legal_representative_name,
+            &info.legal_representative_cid_number,
+            &info.legal_representative_account,
+        ) {
+            (None, None, None) => true,
+            (Some(name), Some(cid_number), Some(_)) => !name.is_empty() && !cid_number.is_empty(),
+            _ => false,
+        };
+        if info.institution_code != institution.code || !legal_representative_fields_valid {
             return Err(GuardError::LegalRepresentativeInfoMissing(institution.code));
+        }
+        if info.cid_full_name != CITIZENCHAIN_TECHNOLOGY.cid_full_name.as_bytes() {
+            return Err(GuardError::InstitutionFullNameChanged(institution.code));
         }
         Some(info)
     } else {
@@ -510,7 +517,6 @@ where
         return Err(GuardError::DuplicateAdminWallet(institution.code));
     }
 
-    let mut assigned_wallets = BTreeSet::new();
     let mut legal_representative_assignment = None;
     for expected_role in expected_roles(institution) {
         let role_key = storage_key::institution_role(expected_cid, &expected_role.role_code);
@@ -548,6 +554,43 @@ where
             });
         }
 
+        let permissions_key =
+            storage_key::institution_role_permissions(expected_cid, &expected_role.role_code);
+        let permissions_raw =
+            read_raw(&permissions_key).ok_or_else(|| GuardError::PermissionsMissing {
+                code: institution.code,
+                role_code: expected_role.role_code.clone(),
+            })?;
+        let permissions: Vec<DecodedRoleBusinessPermission> = decode_exact(&permissions_raw)
+            .map_err(|_| GuardError::PermissionsDecodeFailed {
+                code: institution.code,
+                role_code: expected_role.role_code.clone(),
+            })?;
+        let expected_permissions = entity_primitives::fixed_role_permission_specs(
+            institution.code,
+            expected_cid,
+            &expected_role.role_code,
+        )
+        .into_iter()
+        .map(|permission| RoleBusinessPermission {
+            role_subject: RoleSubject {
+                cid_number: expected_cid.to_vec(),
+                role_code: expected_role.role_code.clone(),
+            },
+            business_action_id: BusinessActionId {
+                module_tag: permission.module_tag.to_vec(),
+                action_code: permission.action_code,
+            },
+            operation: permission.operation,
+        })
+        .collect::<Vec<_>>();
+        if permissions != expected_permissions {
+            return Err(GuardError::PermissionsChanged {
+                code: institution.code,
+                role_code: expected_role.role_code.clone(),
+            });
+        }
+
         let assignments_key =
             storage_key::institution_role_assignments(expected_cid, &expected_role.role_code);
         let assignments_raw =
@@ -561,14 +604,34 @@ where
                 role_code: expected_role.role_code.clone(),
             })?;
         let found = assignments.len() as u32;
-        if found != expected_role.seats {
+        let is_legal_representative = expected_role.role_code
+            == primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE;
+        let (min_assignments, max_assignments) = if is_private_protected_cid(expected_cid) {
+            if is_legal_representative {
+                (0, 1)
+            } else {
+                (expected_role.seats, expected_role.seats)
+            }
+        } else {
+            primitives::governance_skeleton::fixed_role_assignment_bounds_by_identity(
+                institution.code,
+                expected_cid,
+                &expected_role.role_code,
+            )
+            .ok_or_else(|| GuardError::RoleMissing {
+                code: institution.code,
+                role_code: expected_role.role_code.clone(),
+            })?
+        };
+        if found < min_assignments || found > max_assignments {
             return Err(GuardError::SeatsChanged {
                 code: institution.code,
                 role_code: expected_role.role_code,
-                expected: expected_role.seats,
+                expected: max_assignments,
                 found,
             });
         }
+        let mut role_assignment_wallets = BTreeSet::new();
         for assignment in assignments {
             if assignment.cid_number != expected_cid {
                 return Err(GuardError::AssignmentCidChanged {
@@ -588,18 +651,16 @@ where
                     role_code: expected_role.role_code,
                 });
             }
-            if !assigned_wallets.insert(assignment.admin_account) {
+            if !admin_set.contains(&assignment.admin_account) {
+                return Err(GuardError::AdminAssignmentSetMismatch(institution.code));
+            }
+            if !role_assignment_wallets.insert(assignment.admin_account) {
                 return Err(GuardError::DuplicateAssignmentWallet(institution.code));
             }
-            if expected_role.role_code
-                == primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE
-            {
+            if is_legal_representative {
                 legal_representative_assignment = Some(assignment.admin_account);
             }
         }
-    }
-    if assigned_wallets != admin_set {
-        return Err(GuardError::AdminAssignmentSetMismatch(institution.code));
     }
     if let Some(info) = private_info {
         if info.legal_representative_account != legal_representative_assignment {
@@ -682,7 +743,7 @@ mod tests {
 
     fn private_info_bytes(institution: &FixedInstitution, legal_account: [u8; 32]) -> Vec<u8> {
         DecodedInstitutionInfo {
-            cid_full_name: "中国公民链技术有限公司".as_bytes().to_vec(),
+            cid_full_name: CITIZENCHAIN_TECHNOLOGY.cid_full_name.as_bytes().to_vec(),
             cid_short_name: "公民链技术".as_bytes().to_vec(),
             town_code: Vec::new(),
             legal_representative_name: Some("程伟".as_bytes().to_vec()),
@@ -695,6 +756,28 @@ mod tests {
             institution_code: institution.code,
             created_at: 0,
         }
+        .encode()
+    }
+
+    fn permission_bytes(institution: &FixedInstitution, role: &ExpectedRole) -> Vec<u8> {
+        entity_primitives::fixed_role_permission_specs(
+            institution.code,
+            institution.cid_number.as_bytes(),
+            &role.role_code,
+        )
+        .into_iter()
+        .map(|permission| RoleBusinessPermission {
+            role_subject: RoleSubject {
+                cid_number: institution.cid_number.as_bytes().to_vec(),
+                role_code: role.role_code.clone(),
+            },
+            business_action_id: BusinessActionId {
+                module_tag: permission.module_tag.to_vec(),
+                action_code: permission.action_code,
+            },
+            operation: permission.operation,
+        })
+        .collect::<Vec<DecodedRoleBusinessPermission>>()
         .encode()
     }
 
@@ -737,6 +820,13 @@ mod tests {
                         &role.role_code,
                     ),
                     role_bytes(&institution, &role),
+                );
+                state.insert(
+                    storage_key::institution_role_permissions(
+                        institution.cid_number.as_bytes(),
+                        &role.role_code,
+                    ),
+                    permission_bytes(&institution, &role),
                 );
                 let end = offset + role.seats as usize;
                 let assignments = admins[offset..end]
@@ -801,6 +891,86 @@ mod tests {
             Err(GuardError::LegalRepresentativeAssignmentMismatch(
                 company.code
             ))
+        );
+
+        let mut renamed = valid_state();
+        let mut info: DecodedInstitutionInfo = decode_exact(
+            renamed
+                .get(&storage_key::private_institution(
+                    company.cid_number.as_bytes(),
+                ))
+                .expect("company institution info exists"),
+        )
+        .expect("company institution info decodes");
+        info.cid_full_name = "错误公司全称".as_bytes().to_vec();
+        renamed.insert(
+            storage_key::private_institution(company.cid_number.as_bytes()),
+            info.encode(),
+        );
+        assert_eq!(
+            check_state(&renamed),
+            Err(GuardError::InstitutionFullNameChanged(company.code))
+        );
+
+        let lr_role = expected_roles(&company)
+            .into_iter()
+            .find(|role| {
+                role.role_code
+                    == primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE
+            })
+            .expect("company LR role");
+        let lr_assignments_key = storage_key::institution_role_assignments(
+            company.cid_number.as_bytes(),
+            &lr_role.role_code,
+        );
+
+        // LR 岗位永久存在，但允许机构信息三字段与该岗位任职同时清空。
+        let mut vacant = valid_state();
+        let info_key = storage_key::private_institution(company.cid_number.as_bytes());
+        let mut info: DecodedInstitutionInfo =
+            decode_exact(vacant.get(&info_key).expect("company info exists"))
+                .expect("company info decodes");
+        info.legal_representative_name = None;
+        info.legal_representative_cid_number = None;
+        info.legal_representative_account = None;
+        vacant.insert(info_key.clone(), info.encode());
+        vacant.insert(
+            lr_assignments_key.clone(),
+            Vec::<DecodedInstitutionAdminAssignment>::new().encode(),
+        );
+        assert_eq!(check_state(&vacant), Ok(()));
+
+        // 管理员可以同时担任 LR 与另一个固定岗位；权限仍按两个岗位主体分别取得。
+        let mut overlapping = valid_state();
+        let overlap_account = accounts_for(&company)[1];
+        let mut info: DecodedInstitutionInfo =
+            decode_exact(overlapping.get(&info_key).expect("company info exists"))
+                .expect("company info decodes");
+        info.legal_representative_account = Some(overlap_account);
+        overlapping.insert(info_key, info.encode());
+        overlapping.insert(
+            lr_assignments_key.clone(),
+            vec![assignment(&company, &lr_role, overlap_account)].encode(),
+        );
+        assert_eq!(check_state(&overlapping), Ok(()));
+
+        let mut two_representatives = valid_state();
+        two_representatives.insert(
+            lr_assignments_key,
+            vec![
+                assignment(&company, &lr_role, accounts_for(&company)[0]),
+                assignment(&company, &lr_role, accounts_for(&company)[1]),
+            ]
+            .encode(),
+        );
+        assert_eq!(
+            check_state(&two_representatives),
+            Err(GuardError::SeatsChanged {
+                code: company.code,
+                role_code: lr_role.role_code,
+                expected: 1,
+                found: 2,
+            })
         );
     }
 
@@ -872,7 +1042,7 @@ mod tests {
     }
 
     #[test]
-    fn missing_renamed_or_extra_fixed_role_is_rejected() {
+    fn missing_or_renamed_fixed_role_is_rejected_and_dynamic_role_is_allowed() {
         let institution = fixed_institutions()[0];
         let role = expected_roles(&institution)[0].clone();
         let role_key =
@@ -906,17 +1076,45 @@ mod tests {
             storage_key::institution_role(institution.cid_number.as_bytes(), b"EXTRA_ROLE"),
             Vec::new(),
         );
+        assert_eq!(check_state(&state), Ok(()));
+    }
+
+    #[test]
+    fn missing_or_changed_fixed_role_permissions_are_rejected() {
+        let institution = fixed_institutions()[0];
+        let role = expected_roles(&institution)[0].clone();
+        let key = storage_key::institution_role_permissions(
+            institution.cid_number.as_bytes(),
+            &role.role_code,
+        );
+
+        let mut missing = valid_state();
+        missing.remove(&key);
         assert_eq!(
-            check_state(&state),
-            Err(GuardError::UnknownFixedRole {
+            check_state(&missing),
+            Err(GuardError::PermissionsMissing {
                 code: institution.code,
-                role_code: b"EXTRA_ROLE".to_vec(),
+                role_code: role.role_code.clone(),
+            })
+        );
+
+        let mut changed = valid_state();
+        let mut permissions: Vec<DecodedRoleBusinessPermission> =
+            decode_exact(changed.get(&key).expect("permissions exist"))
+                .expect("permissions decode");
+        permissions[0].business_action_id.action_code += 1;
+        changed.insert(key, permissions.encode());
+        assert_eq!(
+            check_state(&changed),
+            Err(GuardError::PermissionsChanged {
+                code: institution.code,
+                role_code: role.role_code,
             })
         );
     }
 
     #[test]
-    fn changed_seat_count_or_admin_union_is_rejected() {
+    fn changed_seat_count_or_non_admin_assignment_is_rejected() {
         let institution = fixed_institutions()[0];
         let role = expected_roles(&institution)[0].clone();
         let assignments_key = storage_key::institution_role_assignments(

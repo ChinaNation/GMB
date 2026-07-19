@@ -20,7 +20,7 @@ pub mod weights;
 
 pub use subscription::{
     BillingPeriod, CreatorTier, CreatorTiers, IssuerKey, MembershipLevel, PeriodPrice,
-    PeriodPrices, SubscriptionPlan, SubscriptionState, SubscriptionStatus, TierId,
+    PeriodPrices, SubscriptionPlan, SubscriptionState, SubscriptionStatus, SuspendReason, TierId,
 };
 
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
@@ -249,14 +249,26 @@ pub mod pallet {
             issuer: IssuerKey<T::AccountId>,
             paid_until: u64,
         },
-        /// runtime 到期扣款失败，订阅已经终止且不会自动重试。
-        SubscriptionPaymentFailed {
+        /// 续费被挂起（创作者改价待再签名 / 余额不足待充值再签），保留粉丝关系、退出续费调度。
+        SubscriptionSuspended {
             subscriber: T::AccountId,
             issuer: IssuerKey<T::AccountId>,
-            attempted_price_fen: u128,
-            attempted_at: u64,
+            reason: SuspendReason,
+            suspended_at: u64,
         },
-        /// 付款计划、创作者资格或公历换算失效，自动扣款已经终止。
+        /// 创作者改价后订阅者到期前再签名，已授权价更新为当前价、当前周期不重复扣款。
+        SubscriptionReconsented {
+            subscriber: T::AccountId,
+            issuer: IssuerKey<T::AccountId>,
+            authorized_price_fen: u128,
+        },
+        /// 创作者掉平台会员，其粉丝订阅暂停扣费但保留、仍留调度，创作者恢复即自动续。
+        SubscriptionCreatorPaused {
+            subscriber: T::AccountId,
+            issuer: IssuerKey<T::AccountId>,
+            paused_at: u64,
+        },
+        /// 公历换算失效等真实失败，自动扣款已经终止。
         SubscriptionRenewalStopped {
             subscriber: T::AccountId,
             issuer: IssuerKey<T::AccountId>,
@@ -268,11 +280,13 @@ pub mod pallet {
             issuer: IssuerKey<T::AccountId>,
             paid_until: u64,
         },
-        /// 当前周期结束后切换到目标计划。
-        SubscriptionPlanChangePending {
+        /// 换挡立即生效：`charged_now` 为本次折算实际扣款额，`paid_until` 为新到期时间。
+        SubscriptionPlanChanged {
             subscriber: T::AccountId,
             issuer: IssuerKey<T::AccountId>,
             new_plan: SubscriptionPlan,
+            charged_now: u128,
+            paid_until: u64,
         },
         /// 创作者已经覆盖式更新自己的链上付款套餐。
         CreatorPlansSet {
@@ -344,17 +358,23 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
-            // 到期处理在 on_finalize 执行，确保本区块 Timestamp inherent 已写入；这里预留
-            // 最坏情况权重，避免自动转账挤占未计费的区块资源。
-            T::WeightInfo::on_initialize(T::MaxSubscriptionRenewalsPerBlock::get())
-        }
-
-        fn on_finalize(_n: BlockNumberFor<T>) {
-            Self::process_due_subscriptions(
-                Self::now_ms(),
-                T::MaxSubscriptionRenewalsPerBlock::get(),
-            );
+        /// 到期续费在 on_idle 按当块剩余权重尽量排空，不静态预留最坏权重。
+        /// Timestamp inherent 已于 on_idle 前写入，`now_ms` 可用。
+        fn on_idle(_n: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
+            let per = T::WeightInfo::process_one_due();
+            let cap = u64::from(T::MaxSubscriptionRenewalsPerBlock::get());
+            let per_ref = per.ref_time();
+            // 权重未计量（如测试 `()` 权重）时按 backstop 上限排空；否则按当块剩余权重估算笔数。
+            let limit = if per_ref == 0 {
+                cap
+            } else {
+                core::cmp::min(remaining_weight.ref_time() / per_ref, cap)
+            } as u32;
+            if limit == 0 {
+                return Weight::zero();
+            }
+            let processed = Self::process_due_subscriptions(Self::now_ms(), limit);
+            per.saturating_mul(u64::from(processed))
         }
 
         #[cfg(feature = "try-runtime")]
@@ -362,17 +382,20 @@ pub mod pallet {
             // 运行期不变量（非迁移专属）：订阅状态与到期调度双向索引必须一致。
             for (key, state) in Subscriptions::<T>::iter() {
                 match state.subscription_status {
-                    SubscriptionStatus::Active => {
+                    // 留在调度里的两态：CreatorPaused 的重试 due 不等于 paid_until，
+                    // 故只校验「有调度项且双向一致」，不再绑定 paid_until。
+                    SubscriptionStatus::Active | SubscriptionStatus::CreatorPaused => {
                         ensure!(
-                            RenewalIndex::<T>::get(&key) == Some(state.paid_until)
-                                && RenewalSchedule::<T>::contains_key(
-                                    state.paid_until.to_be_bytes(),
-                                    &key,
-                                ),
-                            "square-post try_state: active subscription schedule mismatch"
+                            matches!(
+                                RenewalIndex::<T>::get(&key),
+                                Some(due) if RenewalSchedule::<T>::contains_key(due.to_be_bytes(), &key)
+                            ),
+                            "square-post try_state: scheduled subscription missing renewal entry"
                         );
                     }
-                    SubscriptionStatus::Cancelled | SubscriptionStatus::Terminated => {
+                    SubscriptionStatus::Cancelled
+                    | SubscriptionStatus::Terminated
+                    | SubscriptionStatus::Suspended => {
                         ensure!(
                             !RenewalIndex::<T>::contains_key(&key),
                             "square-post try_state: inactive subscription remains scheduled"

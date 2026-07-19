@@ -8,18 +8,14 @@
 
 extern crate alloc;
 
-use alloc::{format, vec};
+use alloc::format;
 use core::hint::black_box;
 use frame_benchmarking::v2::*;
 use frame_support::traits::Currency;
-use sp_runtime::traits::Zero;
 
 use crate::{
-    institution::{accounts::validate_initial_accounts, types::InstitutionAccountInfo},
-    pallet::{
-        AccountNameOf, AccountRegisteredCid, CidNumberOf, InstitutionAccounts,
-        InstitutionInitialAccountsOf,
-    },
+    institution::types::InstitutionAccountInfo,
+    pallet::{AccountNameOf, AccountRegisteredCid, CidNumberOf, InstitutionAccounts},
     AccountValidator, Config, Pallet, ProtectedSourceChecker, RegisteredInstitution,
     ReservedAccountGuard,
 };
@@ -75,38 +71,9 @@ fn find_safe_cid<T: Config>() -> Result<CidNumberOf<T>, BenchmarkError> {
     Err(BenchmarkError::Stop("failed to find benchmark-safe CID"))
 }
 
-fn protocol_accounts<T: Config>() -> Result<InstitutionInitialAccountsOf<T>, BenchmarkError> {
-    vec![
-        crate::InstitutionInitialAccount {
-            account_name: bounded_name::<T>(crate::RESERVED_NAME_MAIN)?,
-            amount: crate::BalanceOf::<T>::zero(),
-        },
-        crate::InstitutionInitialAccount {
-            account_name: bounded_name::<T>(crate::RESERVED_NAME_FEE)?,
-            amount: crate::BalanceOf::<T>::zero(),
-        },
-    ]
-    .try_into()
-    .map_err(|_| BenchmarkError::Stop("benchmark protocol accounts should fit"))
-}
-
 #[benchmarks(where T: Config)]
 mod benchmarks {
     use super::*;
-
-    #[benchmark]
-    fn propose_create_private_institution() -> Result<(), BenchmarkError> {
-        let cid_number = find_safe_cid::<T>()?;
-        let accounts = protocol_accounts::<T>()?;
-
-        #[block]
-        {
-            let result = validate_initial_accounts::<T>(&cid_number, &accounts)
-                .expect("benchmark protocol accounts must validate");
-            black_box(result);
-        }
-        Ok(())
-    }
 
     #[benchmark]
     fn update_institution_info() -> Result<(), BenchmarkError> {

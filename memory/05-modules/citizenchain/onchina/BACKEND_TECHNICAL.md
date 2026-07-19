@@ -52,7 +52,7 @@ citizenchain/onchina/src/
 - 机构主写入只进入 `institution/subjects`、`domains/gov`、`domains/private`、`institution/accounts` 和 `domains/docs`。
 - 公民主写入只进入 `domains/citizens`、`subjects`、`citizens`、`citizen_documents`、`passport_numbers` 和 `sequence_counters`。
 - 管理员写入只进入 `admins`（本地展示元数据）和短生命周期安全运行态表；管理员字段固定为 `admin_account + family_name + given_name`，成员资格与岗位范围只来自链上，禁止建立本地管理员授权范围表。
-- 新机构首次登记只提交机构 CID 基础资料和至少两个管理员的账户、姓、名。后端分别从公民档案解析姓、名，未解析到时分别使用“管理”“员”；链上确认前只允许写 `chain_sign_sessions` 短期签名会话，禁止写入任何机构业务草稿或占用表。
+- 旧机构直接创建 API 当前固定返回 501，不写 `chain_sign_sessions`、机构业务草稿、占用表或本地机构投影。第 6 步的新业务模块必须原子提交 CID 基础资料、admins、LR、初始治理岗位/权限/任职/投票规则和协议账户后，才能重新开放创建。
 - 创建机构和创建公民只有两种业务结果：链上确认成功后写正式投影；未链上确认就是失败，并删除对应短期签名会话，不保留名称、CID、管理员或公民档案占用。
 - 公权机构唯一真源是链上 `PublicManage`;`subjects/gov/accounts` 中的公权行只是本地查询投影,投影版本只记录在 `chain_projection_state`。
 - 链上状态字段只作本地投影缓存(`subjects.chain_status`、`accounts.chain_status`),不得成为第二授权真源。
@@ -111,9 +111,7 @@ citizenchain/onchina/src/
 
 业务模块不得新增全局链目录，不得在 handler 内手写 pallet/call 字节或二维码动作码。动作码、payload、签名/验签规则以 `memory/07-ai/unified-protocols.md` 为唯一登记入口。
 
-机构首次登记的链调用只编码 `cid_number + cid_full_name + cid_short_name + town_code + admins + actor_cid_number`。法定代表人、岗位任职、治理阈值、协议账户地址和注资金额均不得由首次登记表单或调用载荷提交；runtime 自动创建唯一默认“法定代表人”岗位、严格多数阈值及该机构类型要求的零余额协议账户。协会 `SFAS` 的 `p1` 必须由注册局在盈利/非盈利中显式选择，后端不得固定为非盈利。
-
-机构首次登记不再存在内层 runtime 创建凭证。后端只生成最终链交易签名会话，`origin` 是当前注册局管理员钱包，runtime 通过 `origin + actor_cid_number` 校验该管理员是否属于对应注册局机构 `admins` 并具备目标机构登记权限。创建机构链路不得读取 `ONCHINA_SIGNING_SEED_HEX` 或 `ONCHAIN_CREDENTIAL_SIGNER_PUBKEY`，不得生成 `a=8 institution_create_credential`，不得要求管理员钱包签两次。
+PublicManage/PrivateManage call 5 及 `0x1e05/0x1f05` 已永久留洞，后端不得继续编码旧 `cid_number + cid_full_name + cid_short_name + town_code + admins + actor_cid_number` 载荷。新创建协议由第 6 步独立业务模块另行登记；必须携带注册局完整 `RoleSubject`，并原子绑定目标机构的岗位、权限、任职和投票规则，不能只凭注册局 admins 或在创建后补权限。
 
 ## 7. HTTPS 和机构 CA
 
@@ -144,20 +142,20 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 联邦注册局机构 `admins` 和岗位任职不得本地直接改库；换届只能构造链上治理或注册局登记动作后由 entity 写入。市注册局本地登记目录每省每市最多 30 人，统计必须同时带省和市，但该目录不是链上管理员资格真源。NJD、普通公权机构、私权机构和非法人组织的本机构管理员/岗位维护也必须走链上 `propose_institution_governance`，不得在 OnChina 内建立第二套管理员集合。
 
-创建机构(`INSTITUTION_CREATE`)属扫码授权动作。后端 `prepare` 阶段只预检管辖范围和至少两个不重复 `admin_account`，不再接收 `threshold`；正式创建阶段的授权 payload 必须与前端 `buildInstitutionCreatePayload` 同构，包含 `subject_property / p1 / province_name / city_name / town_name / institution / education_type / cid_full_name / cid_short_name / parent_cid_number / private_type / partnership_kind / admins`。`admins` 每项字段顺序固定为 `admin_account + family_name + given_name`，授权仍只比较账户。
+`INSTITUTION_CREATE` 旧扫码授权链路当前不允许进入 prepare/submit；创建 handler 在鉴权后固定返回 501，不能生成安全 grant、链签会话或旧 call data。第 6 步启用新业务时必须重新登记完整原子载荷和权限主体，不能沿用本段已删除字段集。
 
 `PASSKEY_COLD_SIGN` 正式提交的安全门统一在 `auth/actions.rs::require_admin_security_grant`：先消费 `X-Passkey-Assertion`，再消费 `x-cid-security-grant`，任一缺失、过期、归属不匹配或 payload hash 不匹配都 fail-closed，不允许降级为 SESSION 或只验冷签 grant。机构资料上传、资料删除、机构详情更新等链下写操作虽然不直接提交链交易，也必须按各自后端 `grant_payload` 逐字段绑定授权：上传资料为 `target/file_name/doc_type/file_size`，删除资料为 `target/doc_id/file_name`，机构详情更新为 `target/cid_number/cid_full_name/parent_cid_number/legal_representative_name/legal_representative_cid_number/legal_representative_photo_path`。
 
-机构管理员列表 API 联合读取链上 `admins(admin_account + family_name + given_name)` 人员集合与 entity 岗位定义、有效任职。`institution/admins/chain_roles.rs` 负责公权/私权岗位路由、任职合并和 FRG 省专员范围解析；管理员即使没有岗位也必须保留人员行，姓名只展示，授权只比较账户。本地联系方式、照片和 Passkey 不得成为管理员资格或岗位真源。岗位权限不建立通用表，具体业务模块按“机构 + 有效岗位 + 业务动作”硬规则判定。
+机构管理员列表 API 联合读取链上 `admins(admin_account + family_name + given_name)` 人员集合与 entity 岗位、`InstitutionRolePermissions` 和有效任职。`institution/admins/chain_roles.rs` 负责公权/私权岗位路由、任职合并和 FRG 省专员范围解析；管理员即使没有岗位也必须保留人员行，姓名只展示。本地联系方式、照片和 Passkey 不得成为管理员资格或岗位真源；业务授权必须由完整 `RoleSubject + BusinessActionId + operation` 查询，不按账户或前端标签推断。
 
-链上机构唯一查询先读取 `PublicManage::Institutions[cid_number]`，未命中再读取 `PrivateManage::Institutions[cid_number]`，不建立本地分流真源；公私权 CID 不重复由 runtime 与 NodeGuard 的链上不变式保证。创世公权目录全量投影仍精确为 49,593 个机构和 99,231 个协议账户；中国公民链技术有限公司 `GZ018-SFGQ1-201206100-2026` 属私权创世机构，只参加独立私权存在性审计，不冒充公权目录行，也不增加公权投影计数。启动抽样当前覆盖 32 个派生公权机构、1 个公权常量机构和该技术公司，共 34 项。
+链上机构唯一查询先读取 `PublicManage::Institutions[cid_number]`，未命中再读取 `PrivateManage::Institutions[cid_number]`，不建立本地分流真源；公私权 CID 不重复由 runtime 与 NodeGuard 的链上不变式保证。创世公权目录全量投影仍精确为 49,593 个机构和 99,231 个协议账户；中国公民链技术股份有限公司 `GZ018-SFGQ1-201206100-2026` 属私权创世机构，只参加独立私权存在性审计，不冒充公权目录行，也不增加公权投影计数。启动抽样当前覆盖 32 个派生公权机构、1 个公权常量机构和该技术公司，共 34 项。
 
 机构治理链写入口：
 
 - `POST /api/v1/admin/institution/governance/prepare`：本机构管理员发起 `propose_institution_governance`，后端只接受当前节点绑定机构 CID，构造完整 runtime 签名载荷并写入 `chain_sign_sessions`。管理员集合、岗位、任职和法定代表人任命/更换/解除都只进入链上 call data，不写本地正式投影；解除时提交 `clear_legal_representative=true`，不得同时提交 `legal_representative_cid_number`。
 - `POST /api/v1/admin/institution/admins/register/prepare`：注册局管理员发起 `register_institution_admins`，目标机构 CID 从请求读取，actor CID 只来自当前节点绑定注册局 CID。
 - 提交阶段复用统一链签会话 submit。机构治理 purpose 进块后只记录审计；OnChina 读侧继续读取链上 `admins / InstitutionRoles / InstitutionRoleAssignments`，禁止在提交成功后本地直接改管理员或岗位真源。
-- 普通岗位码由前端自动生成短码并允许人工调整；runtime 仍以 `(cid_number, role_code)` 做最终唯一性裁决。
+- 创建动态岗位时前端不得提交岗位码；runtime 使用 `GMB_ROLE_V1`、CID、单调 nonce 和真实 proposal_id 生成 `R_<32 位大写十六进制>`，删除后永久不复用。
 - 法定代表人治理使用 runtime `InstitutionLegalRepresentativeChange::Set/Clear`，任命/更换时三字段同时写入，解除时三字段同时清空。
 
 ## 10. 机构工作台能力映射

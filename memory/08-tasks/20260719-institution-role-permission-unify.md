@@ -1,98 +1,209 @@
-# 任务卡：机构岗位权限模型统一（岗位=权限载体·治理岗/自治岗·法人岗必存·创世技术公司）
+# 任务卡：机构岗位权限与投票职责统一
 
-## 任务需求
+状态：执行中。2026-07-19 已完成第 1 至第 4 步和第 5A 联合投票切片：协议升级与决议发行已按岗位校验发起权限，联合引擎已按 `VotePlan` 的岗位有效任职快照判定投票资格。其他投票引擎和业务模块尚未完成迁移，不得将第 5A 误写为整体目标已完成。
 
-把机构权限模型统一为「岗位是权限唯一载体、任职即授权、全机构统一」，落地以下已确认口径：
+## 最终需求
 
-- 权限两级：**机构权限（顶层，由 CID 内机构码派生封顶）+ 岗位权限（键 `cid+role_code`，必须 ⊆ 机构权限）**。
-- 岗位两类：**治理岗（系统内置固定码/名，创世机构定死）/ 自治岗（机构后期自由增删、只可改岗位名）**。
-- **所有 `role_code` 一律不可改，只增删；唯一可改字段 = `role_name`（仅自治岗）。**
-- **法定代表人岗（`LR`）全机构创世必存、不可删、可零任职**；给 `FRG` 补齐 `LR`。
-- 岗位任期由对应投票引擎（普选/互选/提名/注册局/创世）写入，**鉴权新增 `now ∈ [term_start, term_end]` 时点窗口**。
-- 阈值/投票主体沿用既有投票引擎（最低过半、`admins_len ≥ 2`）；**投票引擎与业务模块不重写，只在机构层接入**。
-- 新增**创世技术公司**（私权 `SFGQ`）三个治理岗：`LR` + `GENESIS_PRODUCT_MANAGER`（创世产品经理，1 席）+ `GENESIS_PROGRAMMER`（创世程序员，1 席）。
-  - CID：`GZ018-SFGQ1-201206100-2026`
-  - 主账户：`0x7a20b8b7b1147abfdb24615222e3c9d77f1ff9a85d2a509fcf51dc89a64d1712`
-  - 费用账户：`0x4bc5b8dd3770b1230c79fb8e048f27ae4f4ccf6d6890de0399123a617ccf305f`
+- 机构授权主体唯一表示为 `RoleSubject { cid_number, role_code }`，即“机构 CID + 机构内岗位码”。
+- `admins` 只是机构可任职人员集合。管理员账户本身没有业务权限；只有该账户对某个 `RoleSubject` 存在有效任职时，才取得该岗位被授予的业务动作权限。
+- 机构 CID 决定机构可拥有的顶层业务能力；岗位权限必须落在该 CID 的顶层能力范围内。具体业务发起、投票等权限由 `RoleBusinessPermission` 绑定 `RoleSubject + BusinessActionId + operation`。
+- 业务模块负责前置校验 `RoleSubject` 权限、静态选择唯一投票引擎、绑定业务对象和参与主体，并在投票通过后执行具体业务。投票引擎不得由管理员、岗位或调用参数选择，也不得解释或执行具体业务。
+- 全部机构与个人多签状态变更必须经过指定投票引擎；只读、创世写入、投票引擎自身维护及已通过提案的确定性回调不重新发起投票。
+- 协议升级和决议发行采用相同联合权限：NRC/43 个 PRC 委员岗位可发起并投票，43 个 PRB 正式 `DIRECTOR / 董事` 岗位只参与投票；资格按完整 `RoleSubject` 判断，不按机构全体 admins 判断。
+- 所有机构必须永久存在唯一 `LR / 法定代表人` 岗位，允许空缺且任职只能为 0 或 1 人，但不得改名、删除或替换岗位码；法定代表人三字段必须与 LR 任职原子一致。
+- 所有创世固定岗位的岗位码、岗位名和岗位权限永久固定，包括目标全称“中国公民链技术股份有限公司”的 `LR`、`GENESIS_PRODUCT_MANAGER`、`GENESIS_PROGRAMMER`。创世机构仍可依法增加普通动态岗位。
+- 除固定岗位外，动态 `role_code` 由 runtime 生成，在机构内唯一、不可修改、删除后永不复用；`role_name` 可依法新增、修改和删除。岗位权限随岗位码固定，改变权限必须删除旧岗位并生成新岗位码。
+- `role_name` 同样在机构内唯一；同名多人属于同一个岗位的多个席位。一个管理员可以担任多个不同岗位，同一岗位内不得重复占席。岗位没有独立阈值，阈值属于机构或业务投票计划。
+- 动态岗位码格式为 `R_<32 位大写十六进制>`。随机材料统一为 `blake2_256(SCALE(GMB_ROLE_V1, cid_number, institution_role_nonce, proposal_id))` 的前 16 字节；调用方不得提交岗位码，`UsedRoleCodes[(cid_number, role_code)]` 永久保留已用记录。
+- 普通机构创建必须原子提交管理员集合、强制 `LR`、至少一个初始治理岗位及其权限、初始任职和初始投票规则，避免“管理员没有权限但机构又没有岗位”的启动死锁。
+- 个人多签使用独立 `AuthorizationSubject::PersonalMultisig`，不混入机构岗位授权模型。
+- 用户已确认技术公司中文全称统一为“中国公民链技术股份有限公司”；CID `GZ018-SFGQ1-201206100-2026`、中英文简称、英文全称、主账户 `0x7a20b8b7b1147abfdb24615222e3c9d77f1ff9a85d2a509fcf51dc89a64d1712`、费用账户 `0x4bc5b8dd3770b1230c79fb8e048f27ae4f4ccf6d6890de0399123a617ccf305f` 和三名创世管理员均不改变。第 4B runtime 路径已取得单独二次确认。
 
-链开发期零用户：彻底改、零残留、重新创世，不做迁移/兼容。
+开发期无正式用户数据：按最终结构重新创世，不保留旧授权、旧载荷、旧 storage、旧命名或双轨兼容。
+
+## 职责边界
+
+```text
+管理员账户
+  └─ 有效任职 ─> RoleSubject(cid_number, role_code)
+                    ├─ 业务模块校验 Propose / Vote 权限
+                    ├─ 业务模块静态选择投票引擎并绑定 VotePlan
+                    └─ 投票引擎快照合格任职账户、计票、判定终态
+                                         └─ 业务模块执行已绑定业务
+```
+
+- `admins`：人员名册和任职候选范围，不是业务授权真源、投票主体或费用回落付款人。
+- `entity`：岗位、岗位权限、岗位码 nonce/永久占用、任职及法定代表人真源。
+- 业务模块：业务动作权限、指定投票引擎、业务对象绑定和通过后执行真源。
+- `votingengine`：资格快照、票据、阈值、计票、终态和维护真源，不保存岗位权限，不执行具体业务。
+- `NodeGuard`：只永久保护强制 `LR`、创世固定岗位及其固定权限；不得禁止创世机构新增普通动态岗位。
+
+## 分步骤实施
+
+1. **架构、命名与协议冻结（已完成）**：新增 ADR-039，修订 ADR-023 与统一命名/协议/模块文档，冻结职责边界、动态岗位码算法和分步计划。
+2. **共享授权类型与跨端 SCALE 契约（已完成）**：实现 `RoleSubject`、`BusinessActionId`、`RoleBusinessPermission`、`AuthorizationSubject`、`VotePlan` 等强类型，并在 runtime、Node、OnChina、CitizenApp、CitizenWallet 同步字段序和 fixture。
+3. **岗位、权限、任职与生命周期（已完成）**：在 public/private entity 实现岗位权限、动态码生成、永久不复用、岗位增删改名、任职有效性、强制 LR 保护和统一授权查询；关闭无法满足原子初始化要求的旧机构直接创建 call 5。
+4. **创世固定岗位与 NodeGuard**：第 4A 只读盘点并确认完整矩阵；第 4B 固化全部创世岗位及权限，纳入技术公司三个固定岗位，并允许保护机构增加普通动态岗位。
+5. **投票引擎按岗位主体快照**：机构投票从全体 admins 快照改为 VotePlan 指定的一个或多个 `RoleSubject` 有效任职账户快照；个人多签保持独立主体。第 5A 已完成 joint-vote + 协议升级 + 决议发行；第 5B/5C 继续迁移其他引擎和业务。
+6. **基础业务模块接入**：新增机构创建业务模块并原子建立 admins、LR、初始治理岗位/权限/任职/投票规则；岗位维护、任职、管理员更换、账户、转账和个人多签全部按业务模块指定引擎接入。
+7. **治理、发行和公共业务接入**：协议升级、GRANDPA、销毁、决议发行、注册、选举、立法等逐模块登记岗位权限和指定投票引擎。
+8. **全端真实验收与残留清理**：完成 UI/QR、真实 fresh runtime、真实服务和页面验收，删除全部旧管理员授权与旧投票主体口径，回写最终文档。
+
+每一步必须先输出完整技术方案并等待确认；任何涉及 `citizenchain/runtime/` 的步骤还必须列出完整 runtime 路径，取得该步单独二次确认后才能执行。
 
 ## 预计修改目录
 
-- `citizenchain/runtime/entity/entity-primitives/`
-  - 用途：`InstitutionRole` 加 `permissions`(位标志) + `role_class`(治理岗/自治岗)，删 `term_required`；新增 `CapabilitySet` 能力位与「岗位权限 ⊆ 机构权限」校验 trait；补 SCALE 字段序契约测试。
-  - 边界：只放共用类型与 trait，不持有 storage、不写业务规则。
-  - 类型：runtime 共用原语，breaking，需用户二次确认。
+- `memory/04-decisions/`：记录 ADR-039 并修订 ADR-023；仅文档，不涉及代码。
+- `memory/01-architecture/`、`memory/05-modules/`、`memory/07-ai/`、`memory/08-tasks/`：统一架构、模块、命名、协议和任务状态；包含文档修订与旧口径清理。
+- `citizenchain/runtime/entity/`：已实现岗位、岗位权限、任职、动态岗位码、统一授权查询和旧直接创建入口关闭；后续只按已确认步骤接入创世与业务模块。
+- `citizenchain/runtime/admins/`：后续收口 admins 为人员名册并移除管理员即授权语义；涉及 runtime 代码、测试和残留清理。
+- `citizenchain/runtime/votingengine/`：已完成联合投票岗位资格快照、CID 有效选民去重和 VotePlan 绑定；后续继续迁移其他 Track，涉及 runtime 代码、测试和残留清理。
+- `citizenchain/runtime/{governance,issuance,public,transaction,misc}/`：协议升级和决议发行已接入岗位权限与固定联合 VotePlan；其他业务后续逐个接入，涉及 runtime 代码、测试和残留清理。
+- `citizenchain/runtime/primitives/`、`citizenchain/runtime/genesis/`、`citizenchain/runtime/src/`：后续承载共享常量、创世固定岗位/权限、runtime 接线；涉及 runtime 代码、测试和残留清理。
+- `citizenchain/node/`：后续同步 NodeGuard、交易构造和解码；涉及 Node 代码、测试和残留清理。
+- `citizenchain/onchina/`：后续同步机构工作台授权、链读写和岗位管理；涉及后端/前端代码、真实服务验收和残留清理。
+- `citizenapp/`、`citizenwallet/`：后续同步提案、投票、QR/SCALE 解码和展示；涉及客户端代码、测试和残留清理。
 
-- `citizenchain/runtime/entity/public-manage/`、`private-manage/`
-  - 用途：岗位 CRUD（增/删/改名）；`LR` 必存不可删；任期时点窗口接入 `is_active_assignment`/`active_accounts_for_role`；治理结果校验更新（保留固定席位与 member_composition 不变量）。
-  - 边界：只改机构岗位/任职/权限校验，不扩展业务规则、不改投票引擎职责。
-  - 类型：runtime 代码与测试。
+## 总体验收
 
-- `citizenchain/runtime/admins/`
-  - 用途：把「机构 admins 集合 = 治理岗投票主体有效任职者」口径对齐，保证投票引擎读到的分母只含治理岗；自治岗工作人员不入 admins。
-  - 边界：只改口径与派生一致性，不改投票引擎接口。
-  - 类型：runtime 代码与测试。
-
-- `citizenchain/runtime/primitives/`
-  - 用途：`governance_skeleton` 增两个新岗位码/名（`GENESIS_PRODUCT_MANAGER`/`GENESIS_PROGRAMMER`）与技术公司固定规格；`institution_constraints` 增「机构权限（顶层）派生表」与全机构 `LR` 必存约束；`count_const` 增技术公司席位常量。
-  - 边界：结构性协议单源；业务能力位常量放 entity 侧不进 primitives 核心（遵守 no-business-types-in-primitives）。
-  - 类型：runtime 协议常量，breaking。
-
-- `citizenchain/runtime/genesis/`
-  - 用途：技术公司常量入库（CID/主账户/费用账户）与三岗创世播种；`FRG` 补 `LR` 空岗；`fixed_roles` 钱包→岗位映射更新。
-  - 边界：只写创世，不写运行期逻辑；重新创世无迁移。
-  - 类型：创世播种代码与测试。
-
-- `citizenchain/runtime/src/configs.rs`
-  - 用途：新增机构 capability 查询入口，把既有机构鉴权 gate 切到「持岗位权限的有效在任者」口径；省专员/护宪大法官两条主权路径统一为「∈ admins ∩ 有效岗位任职」双校验。
-  - 边界：只接线机构层授权解析，不新增/改写业务模块与投票引擎。
-  - 类型：runtime 装配代码与测试。
-
-- `citizenchain/node/src/core/node_guard/governance_skeleton.rs`
-  - 用途：节点守卫同步新骨架（技术公司/两新岗/`LR` 必存/权限位字段序）。
-  - 边界：只测守卫行为与 RAW 解码，不改业务。
-  - 类型：节点守卫代码与测试。
-
-- `citizenchain/onchina/`
-  - 用途：机构/岗位/权限 SCALE 读写与展示同步（含新岗位码/名、权限位展示、技术公司）。
-  - 类型：CID 控制台前后端，需与链端字段序逐字节对齐。
-
-- `citizenchain/wallet`（CitizenWallet）、CitizenApp
-  - 用途：岗位/任职/权限 SCALE decode 同步（两色识别、护照/机构详情展示）。
-  - 类型：移动端解码同步。
-
-- `memory/04-decisions/ADR-039-institution-role-permission-model.md`
-  - 用途：新增机构岗位权限模型 ADR（两级权限、治理岗/自治岗、LR 必存、任期窗口、投票主体=治理岗）。
-  - 类型：架构决策文档。
-
-- `memory/05-modules/`、`memory/08-tasks/`
-  - 用途：模块技术文档与本任务卡状态回写。
-  - 类型：文档。
-
-## 分步
-
-- 第 1 步（类型/权限模型）：entity-primitives 类型改造 + capability 位 + 岗位权限⊆机构权限校验 + 契约测试。
-- 第 2 步（创世）：技术公司常量入库 + 两新岗位码/名 + `FRG` 补 `LR` + 全机构 `LR` 必存 + genesis 播种。
-- 第 3 步（岗位 CRUD + 任期窗口）：public/private-manage 增删改名 + 任期时点鉴权 + admins=治理岗投票主体口径。
-- 第 4 步（鉴权接入）：configs.rs capability 查询接入既有 gate，主权双校验统一。
-- 第 5 步（节点守卫 + 四端 SCALE 同步）：node_guard / onchina / CitizenWallet / CitizenApp。
-- 第 6 步（测试与验收 + ADR-039 + 文档回写）。
-
-## 验收要求
-
-- `cargo test` 覆盖 entity/admins/primitives/genesis/configs 受影响 crate（含字段序契约测试）。
-- `cargo check --no-default-features`（wasm 侧）通过。
-- `cargo fmt --check` 通过；`cargo clippy -- -D warnings` 通过。
-- 重新创世启动开发链，技术公司三岗、`FRG` `LR`、各创世机构岗位任职按骨架写入且节点守卫逐块通过。
-- onchina / CitizenWallet / CitizenApp 对新 SCALE 结构 decode 无红、无 decodeFailed。
-- 主权路径（省专员登记 / 护宪修宪终审）双校验一致，越权/漂移 fail-closed。
+- 任一管理员未担任有效岗位时，不能发起或参与任何机构业务；任一权限判定都能追溯到完整 `RoleSubject`。
+- 同一管理员可在多个机构、多个岗位任职，各权限互不串用；同机构不同岗位不能继承彼此权限。
+- 每个业务动作只使用其代码静态指定的投票引擎，调用方无法改选；投票引擎不包含业务执行逻辑。
+- 联合投票按 VotePlan 中的岗位主体分别快照和计票，不把参与机构全部 admins 自动纳入。
+- `LR` 永久存在并允许空缺；创世固定岗位不可变；普通动态岗位码在机构内唯一、删除后永不复用，域分隔符精确为 `GMB_ROLE_V1`。
+- 普通机构创建后立即拥有可用的治理岗位、任职和投票规则，不存在临时管理员特权或启动死锁。
+- runtime、Node、OnChina、CitizenApp、CitizenWallet 的 SCALE/QR/字段命名逐字节一致。
+- 完成相关编译、单测、no_std、clippy、fresh 链、NodeGuard、真实 HTTP/页面/签名和投票执行验收；最终无旧模型残留。
 
 ## 进度
 
-- [ ] 第 1 步 类型/权限模型
-- [ ] 第 2 步 创世常量与播种
-- [ ] 第 3 步 岗位 CRUD 与任期窗口
-- [ ] 第 4 步 鉴权接入
-- [ ] 第 5 步 节点守卫与四端同步
-- [ ] 第 6 步 测试验收与 ADR/文档
+- [x] 第 1 步：架构、命名与协议冻结
+- [x] 第 2 步：共享授权类型与跨端 SCALE 契约
+- [x] 第 3 步：岗位、权限、任职与生命周期
+- [x] 第 4A 步：创世固定岗位权限只读盘点与推荐矩阵
+- [x] 第 4B 步：创世固定岗位权限、技术公司全称与 NodeGuard 实施
+- [x] 第 5A 步：联合投票 VotePlan/岗位快照及协议升级、决议发行接入
+- [ ] 第 5 步：投票引擎按岗位主体快照
+- [ ] 第 6 步：基础业务模块接入
+- [ ] 第 7 步：治理、发行和公共业务接入
+- [ ] 第 8 步：全端真实验收与残留清理
+
+## 第 2 步完成记录（2026-07-19）
+
+- runtime 共享类型已落在 `entity-primitives`，`VotePlan`、`VotingEngineKind` 与构造期主体组合校验已落在共享 `votingengine` crate；未写入现有提案 storage，未改变 pallet/call/storage index。
+- `RolePermissionOperation`、`AuthorizationSubject`、`VotingEngineKind` 的 discriminant 和所有结构字段序均由 Rust 单测锁定。
+- Node 使用共享 Rust 类型读取统一金标；OnChina、CitizenApp、CitizenWallet 对同一金标严格解码。CitizenApp 与 CitizenWallet 拒绝非法主体组合和尾随字段。
+- 唯一跨端金标为 `memory/06-quality/fixtures/institution_role_permission_v1.json`，不建立端侧私有协议副本。
+- 验收通过：`entity-primitives` 6 项、`votingengine` 4 项、Node fixture 1 项、OnChina fixture 1 项；两个共享 crate 的 `no_std` 检查通过；CitizenApp 6 项、CitizenWallet 97 项目标测试全部通过，目标 Dart 文件 analyze 无问题。
+- 本步骤目标 crate 在仅屏蔽既存 lint（`too_many_arguments`、`unnecessary_lazy_evaluations`、`manual_is_multiple_of`、`type_complexity`）后通过 `clippy -D warnings`；不屏蔽时还会被既存 `primitives` 数字分组等 45 项和上述既存 lint 拦截，本步骤未越界修改这些旧文件。
+- `citizenchain/Cargo.lock` 仅为 `votingengine` 增加已确认的 `entity-primitives` 依赖；Square Post 的既有未提交依赖改动保持不动。
+
+## 第 3 步完成记录（2026-07-19）
+
+- public/private entity 新增 `InstitutionRolePermissions`、`InstitutionRoleNonce`、`UsedRoleCodes`，storage version 直接提升为 2；当前链无创世、无数据，因此不保留 migration 或旧 storage 兼容。
+- 动态岗位创建不接收岗位码，由 runtime 使用精确域分隔符 `GMB_ROLE_V1`、CID、单调 nonce 和真实 `proposal_id` 生成 `R_<32 位大写十六进制>`；删除后只清理当前岗位、权限和任职，永久占用记录不删除。
+- `InstitutionRoleMutation::{Create,Rename,Delete}` 已替代旧岗位变更布局。Create 原子写入不可变权限和初始任职；Rename 只改动态岗位名；Delete 禁止删除 LR 和创世固定岗位。保护创世机构仍可增加普通动态岗位。
+- 任职有效性统一为 UTC 日：有任期岗位使用闭区间 `[term_start, term_end]`，允许同日起止；无任期岗位必须精确为 `0/0`。授权查询同时校验 CID 存在、origin 属于 admins、有效任职、完整权限主体、业务动作、操作类型和 CID 顶层能力。
+- PublicManage/PrivateManage 的旧 call index 5 已从 runtime metadata、权重、费用路由、OnChina 构造器、QR registry 和 CitizenWallet decoder 全部删除并永久留洞。OnChina 创建 API 在第 6 步新业务模块落地前固定返回 501，禁止恢复旧直接创建路径。
+- Node 已读取岗位权限 storage 并按 runtime 相同 UTC 日规则过滤任职；OnChina 已同步新治理载荷；CitizenApp/CitizenWallet 已同步严格 SCALE 解码，旧岗位布局和两个 call 5 动作均拒绝。
+- 验收通过：共享/entity 目标测试 37 项、runtime 46 项、Node 岗位管理 6 项、NodeGuard 当前骨架 11 项、OnChina 5 项、QR registry 6 项、CitizenApp 8 项、CitizenWallet 107 项；目标 no_std、目标 clippy（仅屏蔽既存跨依赖 lint）、Node/OnChina check、OnChina production build 和 `git diff --check` 均通过。
+- fresh `--dev --tmp` 节点真实初始化 genesis、开放 RPC、返回 metadata 并运行到 best #9；同时复现 NodeGuard 启动自检 `AdminAccountDecodeFailed(NRC)`。启动守卫按既定边界记录错误后继续服务，问题属于第 4 步真实创世/NodeGuard 对拍，不能在第 3 步伪装为已通过。
+- OnChina 新前端已把创建按钮固定禁用并明确显示原子创建前置条件，后端创建 handler 固定返回 501；生产构建通过。带真实管理员会话的 HTTP/页面回归统一留到第 8 步，当前不使用旧载荷做兼容验收。
+- 全仓 `cargo fmt --all -- --check` 仍被用户既有 Square Post 测试文件的单处换行差异拦截；第 3 步全部目标 Rust 包格式检查通过，未越界格式化该文件。
+- 第 4B 已取得矩阵确认、新文件确认和 runtime 单独二次确认；实现严格采用重新创世，不保留旧权限、旧公司全称或旧管理员布局兼容。
+
+## 第 4A 步盘点结果与固定矩阵（2026-07-19，已确认并实施）
+
+### 盘点结论
+
+- 第 4B 已把 `InstitutionRolePermissions` 写入当前源码生成的创世态，并把 `RuntimeInstitutionCapabilityPolicy` 改为准确 CID/机构身份的显式白名单；未知组合继续 fail-closed。业务模块仍主要按 `admins` 判断，真正切换由第 5 至第 7 步完成。
+- 用户最终确认协议升级与决议发行相同，由 NRC 和 43 个 PRC 的 `COMMITTEE_MEMBER` 共同拥有 `Propose + Vote`；不再采用早期 NRC 单方草案。
+- 决议发行按已确认目标：NRC/PRC `COMMITTEE_MEMBER` 可发起和投票，PRB `DIRECTOR` 只投票。
+- FRG 是一个 CID、215 名 admins、43 个 `PROVINCE_COMMISSIONER_<省码>` 岗位；省级业务只能绑定目标省岗位的 5 人快照，禁止退回全体 admins。机构级动作若未来需要跨省共同决定，必须由业务 `VotePlan` 明确列出参与岗位，不能复用当前 FRG `3/5` 省组阈值代表全机构。
+- `address-registry`、`citizen-identity` 当前仍是直接写状态且没有 `MODULE_TAG`，机构原子登记模块尚不存在；第 4B 只冻结其稳定业务动作标识和固定岗位权限，不把这些动作误写成已经过投票。实际投票入口在第 6/7 步完成。
+- 第 3 步记录的 `AdminAccountDecodeFailed(NRC)` 已只读定位：当前运行节点使用的冻结 block#0 中，`PublicAdmins::AdminAccounts[NRC]` RAW 值仍是旧的 19 个纯账户数组（机构码后直接为 `Compact(19) + 19 * AccountId32`，共 613 字节），没有当前 `Admin { admin_account, family_name, given_name }`。`node/src/core/command.rs` 又把 `--dev` 映射到冻结 chainspec，所以该错误是旧冻结创世与当前代码不一致，不是 NodeGuard 当前共享解码器错误。禁止增加旧布局兼容；第 4B 真实验收必须以当前源码/WASM 生成隔离 `citizenchain-fresh` 临时创世，正式 chainspec 重烤仍放在最终创世流程。
+- 固定岗位权限永久不可修改，因此采用最小授权：没有已确认固定职责的能力不授予。未来业务应由机构依法新建动态岗位承接，不能借 runtime 升级给既有固定岗位追加权限。
+- 除技术公司外，受保护创世机构的 `LR` 固定为空权限；技术公司 `LR` 是该准确 CID 的单独固定规格，不形成全局 LR 权限。
+
+### 稳定业务动作目录
+
+`BusinessActionId.action_code` 是独立稳定业务码，不以 pallet call index 作为鉴权真源；下列数值为便于审计而与现有稳定 call/action 号对齐，后续即使交易入口调整也不得复用或改义。
+
+| `module_tag/action_code` | 业务语义 | 当前状态 |
+|---|---|---|
+| `pub-mgmt/3`、`pri-mgmt/3` | 本机构管理员、岗位、任职和法定代表人治理 | 已有内部投票，但仍按 admins 发起/快照 |
+| `rt-upg/0` | 协议升级 | 第 5A 已按 NRC/PRC 委员发起、87 个岗位主体联合投票 |
+| `res-iss/0` | 决议发行 | 第 5A 已按 NRC/PRC 委员发起，PRB 董事只投票 |
+| `res-dst/0` | 决议销毁 | 已有内部投票 |
+| `gra-key/0` | GRANDPA 密钥更换 | 已有内部投票 |
+| `multisig/0` | 机构普通转账 | 已有内部投票 |
+| `multisig/1` | NRC 安全基金转账 | 已有内部投票 |
+| `multisig/2` | 费用账户划转主账户 | 已有内部投票，当前只支持 NRC/PRB |
+| `onc-iss/10..14` | NRC 冻结、解冻、扣押、强制划转、整币封禁监管 | 已有联合投票入口，但执行逻辑仍有占位，不能视为可用业务 |
+| `leg-yuan/1` | 修改法律；NJD 护宪岗位只参与修宪终审阶段 | 已有立法投票与护宪阶段 |
+| `sqr-sub/5` | 技术公司平台会员价格调整 | 已有内部投票 |
+| `cit-id/0..4,6..8` | 公民投票身份登记、升级、更新、注销及 CID 占号/批量占号/吊销 | 第 4B 新增稳定 tag/常量；第 7 步改为投票业务入口 |
+| `addr-reg/0..4` | 地址库版本、地址名称和完整地址的增删改 | 第 4B 新增稳定 tag/常量；第 7 步改为投票业务入口 |
+| `ins-reg/0` | 原子登记机构、admins、LR、初始治理岗位/权限/任职/规则 | 预留给第 6 步新机构登记业务模块 |
+
+### 固定岗位权限
+
+表中 `P` = `Propose`，`V` = `Vote`；未列出的动作一律无权限。
+
+| 固定机构/岗位 | 推荐固定权限 |
+|---|---|
+| NRC `COMMITTEE_MEMBER` | `pub-mgmt/3 P+V`；`rt-upg/0 P+V`；`res-iss/0 P+V`；`res-dst/0 P+V`；`gra-key/0 P+V`；`multisig/0,1,2 P+V`；`onc-iss/10..14 P+V` |
+| 每个 PRC `COMMITTEE_MEMBER` | `pub-mgmt/3 P+V`；`rt-upg/0 P+V`；`res-iss/0 P+V`；`res-dst/0 P+V`；`gra-key/0 P+V`；`multisig/0 P+V` |
+| 每个 PRB `DIRECTOR` | `pub-mgmt/3 P+V`；`rt-upg/0 V`；`res-iss/0 V`；`res-dst/0 P+V`；`multisig/0,2 P+V` |
+| NJD `CHIEF_JUSTICE` | `pub-mgmt/3 P+V`；只由首席大法官发起司法院本机构治理 |
+| NJD `DEPUTY_CHIEF_JUSTICE`、`JUSTICE` | `pub-mgmt/3 V` |
+| NJD `CONSTITUTION_GUARD` | `pub-mgmt/3 V`；`leg-yuan/1 V`，后者只用于修宪护宪终审 |
+| FRG 每个 `PROVINCE_COMMISSIONER_<省码>` | `pub-mgmt/3 P+V`（仅本省岗位任职治理）；`ins-reg/0 P+V`；`cit-id/0..4,6..8 P+V`；`addr-reg/0..4 P+V`；所有业务必须按目标省码绑定同一个省岗位 |
+| 技术公司 `LR` | `pri-mgmt/3 P+V`；`sqr-sub/5 V` |
+| 技术公司 `GENESIS_PRODUCT_MANAGER` | `pri-mgmt/3 P+V`；`sqr-sub/5 P+V` |
+| 技术公司 `GENESIS_PROGRAMMER` | `pri-mgmt/3 P+V`；`sqr-sub/5 V` |
+| 上述公权创世机构的 `LR` | 空权限；岗位永久存在且允许空缺，但不继承委员、董事、司法或注册权限 |
+
+### 明确不授予的能力
+
+- 技术公司三个固定岗位不取得协议升级权限；协议升级由 NRC/PRC 委员岗位发起和投票，PRB 董事岗位只投票。
+- NRC/PRC/PRB/NJD/FRG/技术公司固定岗位均不默认取得普通链上资产发行权限；确有需要时新建动态岗位。
+- NJD、FRG 和技术公司固定岗位不默认取得机构转账权限；应先通过本机构治理新建财务动态岗位，避免把司法、注册、产品或程序岗位永久变成财务岗位。
+- `developer_direct_upgrade` 不登记为业务权限；正式创世前必须保持关闭，后续不得用开发入口绕过投票。
+- entity 当前 call 6/7/9 的注册局直接更新信息、加账户、登记 admins 不作为固定权限继续保留；第 6/7 步应由原子登记或本机构治理业务替代并清理旧直写路径。
+
+### 第 4B 实施确认
+
+- 用户已确认本节动作 tag/code 与完整岗位矩阵，并最终修正协议升级与决议发行完全一致：NRC/PRC 委员 `P+V`、PRB 董事 `V`。
+- 第 4B 全部 `citizenchain/runtime/` 路径、新增 `business_action.rs` 及 Git 跟踪均已取得明确确认和 runtime 单独二次确认。
+- 技术公司中文全称变更与第 4B 同批重新创世，不做 migration、旧名兼容或双读；英文全称保持 `China CitizenChain Technology Co., Ltd.`，因为该法律形式英文表达仍成立。
+
+## 第 4B 步完成记录（2026-07-19）
+
+- `entity-primitives/business_action.rs` 成为稳定业务动作和创世固定岗位权限唯一目录；固定权限以完整 CID + 岗位码生成，不向管理员账户直接授权。协议升级与决议发行均为 NRC/PRC `P+V`、PRB `V`。
+- public/private entity 创世入口把每个固定岗位权限写入 `InstitutionRolePermissions`，包括公权固定机构永久空权限的 `LR`；`UsedRoleCodes` 同步永久占用。FRG 43 个省专员岗位各自保留同省边界。
+- runtime CID 顶层能力先核对机构实际存在于唯一公权或私权 storage，再按准确受保护身份开放固定白名单；普通机构仍只开放自身岗位治理，未知、跨 CID 或超范围组合拒绝。
+- NodeGuard 精确校验每个固定岗位的完整权限数组、主体 CID/岗位码、动作和 `Propose/Vote`，并校验技术公司中文全称；固定权限缺失、解码失败或变化均拒绝。创世机构新增普通动态岗位不再被误判为额外固定岗位。
+- 技术公司中文全称已统一为“中国公民链技术股份有限公司”；CID、账户、中英文简称、英文全称和管理员不变，全仓源码与文档不保留旧中文全称。
+- 验收通过：`entity-primitives` 10 项单测、runtime 两项创世权限目标测试、NodeGuard 12 项目标单测；当前源码完整 block#0 经 NodeGuard 全策略一次扫描通过，删除固定岗位被拒绝且动态岗位 key 被接受。最新源码 WASM 通过 `citizenchain-fresh --tmp` 隔离节点真实启动，RPC `isSyncing=false`，创世哈希 `0x0b0d3f1a601660d8a884cb732e82f6ee7e1403a5dd981e2f11d47a819ec93bda`、state root `0x297e29646bad2d1c24397294f17bfb9d7528a16c67245b660c917487f88727d6`；验收节点已停止。正式冻结 chainspec 未在本步骤重烤，继续由最终创世流程唯一生成。
+
+## 第 4B 确认后校正记录（2026-07-19）
+
+- 按最终确认把协议升级补齐为与决议发行完全相同的联合权限矩阵：NRC/43 个 PRC `COMMITTEE_MEMBER` 为 `Propose + Vote`，43 个 PRB 正式 `DIRECTOR / 董事` 为 `Vote`，PRB 不得发起两类业务。
+- 机构内岗位码和岗位名分别唯一；同名多人统一写入一个岗位的多个任职席位。管理员可以兼任不同岗位，同一岗位内同一账户不得重复占席。
+- 所有机构唯一 `LR` 岗位的任职区间统一为 0..=1；法定代表人姓名、个人 CID、账户三字段与 `LR` 任职必须原子设置或原子清空。技术公司同样允许 LR 空缺，产品经理和程序员固定岗位仍各一席。
+- NodeGuard 不再要求固定岗位任职并集等于 admins，也不再禁止跨岗位兼任；仍要求每个固定岗位精确满足自身席位边界、任职账户属于本机构 admins、同一岗位内不重复，并保护固定权限数组不变。
+- 校正专项已通过：`entity-primitives` 10 项、`primitives::governance_skeleton` 7 项、`public-manage` 14 项、`private-manage` 14 项、NodeGuard 治理骨架 12 项，以及 runtime 法定代表人原子一致性、创世固定权限、固定席位路由 3 项测试；四个目标 crate 的 `no_std` 检查与 `git diff --check` 均通过。
+- 当前源码强制重建 WASM/Node 后，`citizenchain-fresh --tmp` 隔离链真实启动且 RPC `isSyncing=false`；新创世哈希为 `0xa96d68d95c9f05f6ad893c93e4738e993bf031eb9eebb64506f0d7174418c805`，state root 为 `0x630708630485316c372a182a0ede4670c3d487353f8462719f58dc03ec4ec5c6`。19944 临时进程已停止，遗留 `substratePvmy8J` 临时目录已移入废纸篓；正式 chainspec 未重烤。
+
+## 第 5A 步完成记录（2026-07-19）
+
+- 共享 `votingengine` storage version 直接提升为 3，新增 `ProposalVotePlans`、按完整 `RoleSubject` 存储的 `VoterSnapshot` 和按 CID 合并去重的 `EffectiveVoterSnapshot`。当前链无正式数据，不保留 migration、旧提案兼容或联合投票双轨 storage。
+- `JointVoteEngine` 创建接口必须携带 `VotePlan`，旧的裸创建入口已删除。联合引擎要求 proposer 是 plan 中 NRC/PRC 委员主体的有效任职账户，并要求选民主体精确覆盖 NRC + 43 PRC 委员和 43 PRB 董事。
+- 同一账户在同一 CID 兼任多个参与岗位时在 `EffectiveVoterSnapshot` 中去重为一票；同一账户在不同 CID 的有效任职则各有一票。联合投票、手动恢复和清理均使用新快照，已迁移联合提案不写 `AdminSnapshot`。
+- 协议升级和决议发行均在业务模块前置校验 `RoleSubject(actor_cid_number, COMMITTEE_MEMBER)` 的对应 `Propose` 权限，两者均构造 87 个岗位主体的固定联合 `VotePlan`；PRB `DIRECTOR` 只在 voter subjects 中，不能发起。普通 staff 即使属于 admins，没有委员岗位有效任职与权限时也被拒绝。
+- benchmark fixture 已改为构建真实创世机构、岗位、任职和固定权限，不再用 admins 替代业务授权。正式权重已用当前 benchmark runtime WASM、50 steps / 20 repeats 重新生成：`joint-vote::cast_admin` 为 6 reads / 4 writes；决议发行提案为 368 reads / 280 writes / 1.977 s；协议升级提案为 367 reads / 281 writes / 12.483 s。
+- 验收通过：`internal-vote` 96、`joint-vote` 12、`resolution-issuance` 19、`runtime-upgrade` 20、`votingengine` 4，runtime 全量 47 项单测；四个目标 crate `no_std`、runtime benchmark feature check、`git diff --check` 通过。目标 Clippy 在仅屏蔽已有跨依赖 lint 后以 `-D warnings` 通过，未越界修改旧 lint 所在文件。
+- 当前源码强制重建 WASM/Node 后，`citizenchain-fresh` 隔离链真实启动，RPC `isSyncing=false`，runtime `specVersion=2`；block#0/genesis hash 为 `0x474e2b7870041f940143cd039c9a27cd0693c3518723b45c6c860cb99ce1114e`，state root 为 `0xdf1e13803e4c7a21b2301f7bcbc4cab5708bdaa960651d6cd0104eb44d2b7b64`。19945 验收进程已停止，临时 base path 已移入废纸篓；正式冻结 chainspec 未重烤。
+- 最终残留扫描发现 `onchain-issuance` 两处 TODO 仍把 admins 写成业务授权条件；该额外 runtime 路径取得单独二次确认后已只清理注释，统一为业务模块校验 `RoleSubject + BusinessActionId + Propose` 并构造指定引擎 `VotePlan`；未改动该模块占位业务逻辑。
+- 第 5A 完成不代表整体第 5 步完成；`internal-vote`、`legislation-vote`、`election-vote` 和其他业务模块仍按第 5B/5C 分步迁移。
