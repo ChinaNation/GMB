@@ -317,8 +317,25 @@ pub fn set_institution_can_spend(can_spend: bool) {
 }
 
 pub fn admins_vec(count: u8) -> pallet::AdminsOf<Test> {
-    let v: alloc::vec::Vec<AccountId32> = (0..count).map(|i| admin(i)).collect();
-    BoundedVec::try_from(v).expect("admins fit")
+    admin_records((0..count).map(admin).collect())
+}
+
+pub fn admin_record(admin_account: AccountId32) -> admin_primitives::Admin<AccountId32> {
+    admin_primitives::Admin {
+        admin_account,
+        family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
+        given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
+    }
+}
+
+pub fn admin_records(admin_accounts: alloc::vec::Vec<AccountId32>) -> pallet::AdminsOf<Test> {
+    BoundedVec::try_from(
+        admin_accounts
+            .into_iter()
+            .map(admin_record)
+            .collect::<alloc::vec::Vec<_>>(),
+    )
+    .expect("admins fit")
 }
 
 pub fn last_proposal_id() -> u64 {
@@ -387,8 +404,7 @@ pub fn seed_active_multisig(
     // personal-admins 写 Active 管理员账户,让 propose_close 的 is_active_account_admin 通过。
     // 普通业务阈值归 internal-vote 管，不再写入管理员主体。
     let account = account.clone();
-    let admins_ac: personal_admins::AdminsOf<Test> =
-        BoundedVec::try_from(admins.to_vec()).expect("admins fit ac");
+    let admins_ac: personal_admins::AdminsOf<Test> = admin_records(admins.to_vec());
     let threshold = (admins.len() as u32 / 2).saturating_add(1);
     internal_vote::ActivePersonalThresholds::<Test>::insert(account.clone(), threshold);
     personal_admins::AdminAccounts::<Test>::insert(

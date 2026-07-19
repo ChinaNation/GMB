@@ -1,6 +1,6 @@
 //! 机构管理员「链下私密资料」数据模型。
 //!
-//! 管理员链上身份只有钱包账户；岗位、任期和来源归 entity 任职真源。
+//! 管理员链上人员记录包含账户、姓、名；授权只使用账户，岗位、任期和来源归 entity。
 //! 本模型只承接链下私密档案(部门/联系方式/证件照/passkey 绑定等)
 //! 落库到 `institution_admins` 省级分区表。管理员资格只从链上 CID-key `admins` 读取。
 //!
@@ -27,6 +27,10 @@ pub struct InstitutionAdmin {
     pub city_code: Option<String>,
     /// 进链的管理员钱包账户。
     pub admin_account: String,
+    /// 链上管理员姓。
+    pub family_name: String,
+    /// 链上管理员名。
+    pub given_name: String,
     /// 部门。链下私密档案。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub admin_department: Option<String>,

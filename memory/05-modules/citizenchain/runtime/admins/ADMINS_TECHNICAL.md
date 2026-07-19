@@ -1,6 +1,6 @@
 # runtime admins 技术文档
 
-最新更新：2026-07-17。`citizenchain/runtime/admins/` 由四个 crate 组成，管理员链上状态按管理员类型分别保存在各自 pallet。
+最新更新：2026-07-18。`citizenchain/runtime/admins/` 由四个 crate 组成，管理员链上状态按管理员类型分别保存在各自 pallet。
 
 ## 模块边界
 
@@ -14,9 +14,9 @@
 ## 唯一真源
 
 - 机构管理员集合由 `admin-primitives::InstitutionAdmins` 表达；storage key 是 `cid_number`，value 只含 `institution_code + admins`。
-- 机构 `admins` 每项统一为 `InstitutionAdmin { admin_name, admin_account }`。姓名只展示，钱包账户是唯一签名授权字段；不保存公民 CID、岗位、任期和任职来源。
+- 所有 `admins` 每项统一为 `Admin { admin_account, family_name, given_name }`。姓、名只展示，钱包账户是唯一签名授权字段；不保存公民 CID、岗位、任期和任职来源。
 - 机构岗位定义和任职关系归 `entity`，与管理员人员集合独立：管理员可以没有岗位，岗位可以空缺；岗位变化不得反向生成、删除或覆盖 admins。
-- 个人多签管理员保持 `personal-admins` 独立模型，不使用机构岗位或机构任职关系。
+- 个人多签继续由 `personal-admins` 独立管理业务和 storage，但管理员项与机构使用同一个 `Admin` 三字段结构；不使用机构岗位或机构任职关系。
 - 各类管理员的链上管理员集合分别保存在各自 pallet 的 `AdminAccounts`。
 - runtime 只通过 `RuntimeAdminAccountQuery` 聚合读取各管理员模块，业务 pallet 不直接扫多个 storage。
 - 注册个人多签和普通注册机构账户的动态阈值由 `votingengine/internal-vote` 的动态阈值表保存；NRC/PRC/PRB/FRG/NJD 使用代码级固定阈值；PRS/NLG/NSN/NRP/NSP/NED 不保存账户级阈值，由每个内部提案按 admins 快照派生严格过半。
@@ -29,7 +29,9 @@
 |------|------|
 | `cid_number` | 管理员集合所属机构 CID 号；个人多签没有机构 CID 时为空。 |
 | `institution_code` | 管理员集合所属机构码。 |
-| `admins` | 当前管理员人员集合；每项只含 `admin_name + admin_account`。 |
+| `admins` | 当前管理员人员集合；每项字段顺序固定为 `admin_account + family_name + given_name`。 |
+
+姓名缺失时，runtime 在进入签名载荷、投票数据或 storage 前分别补为 `family_name="管理"`、`given_name="员"`；前端按中文顺序组合显示“管理员”。授权、去重和投票资格只能读取 `admin_account`。
 
 机构岗位、任期、权限和任职来源不属于本表，统一读取 entity 的 `InstitutionRole` 与 `InstitutionAdminAssignment`。
 
@@ -50,7 +52,7 @@
 - 公权机构生命周期由 `public-manage` 发起，只写 `public-admins`；固定治理机构由创世写入，同样只在 `public-admins` 承担运行期管理员治理。
 - 私权机构生命周期由 `private-manage` 发起，只写 `private-admins`。
 - 个人多签账户生命周期由 `personal-manage` 发起，只写 `personal-admins`；管理员更换 call 为 `PersonalAdmins(29).propose_admin_set_change(0)`。
-- 公权/私权机构创建时，entity 把 `cid_number` 和至少两项 `admin_name + admin_account` 交给对应 admins 模块，并自动采用严格多数阈值；首次登记不创建管理员岗位任职。
+- 公权/私权机构创建时，entity 把 `cid_number` 和至少两项三字段 `Admin` 记录交给对应 admins 模块，并自动采用严格多数阈值；首次登记不创建管理员岗位任职。
 - 已完成业务把通用机构治理结果交给 entity；entity 只更新岗位、任职和法定代表人，且任职目标必须是该机构既有管理员。
 - admins 不接收岗位结果、不解释岗位变化，也不保存任职来源；管理员的新增、删除、换人和姓名更新由独立管理员维护流程处理。
 - 动态机构同步时沿用既有 Active 多签阈值；固定治理机构继续使用代码级固定阈值，任职结果不能修改阈值制度。
@@ -59,6 +61,7 @@
 - 岗位任职不得驱动管理员更换；public/private admins 当前不暴露对外管理员集合变更 extrinsic，管理员维护入口在第2步单独实现。
 - Node Guard 同时保护固定机构 `InstitutionAdmins`、entity 岗位和任职：岗位目录与席位固定，固定治理机构任职钱包集合必须与 `admins` 账户字段完全一致；成员可依法原子轮换。
 - `public-admins`、`private-admins` 没有 `WeightInfo` 和 `weights.rs`；其写入仅由 entity 生命周期内部接口调用。
+- 正式创世只接受当前三字段 SCALE 布局；旧纯账户、旧单姓名记录和 runtime storage migration 均已删除，不保留兼容路径。
 
 ## MODULE_TAG
 

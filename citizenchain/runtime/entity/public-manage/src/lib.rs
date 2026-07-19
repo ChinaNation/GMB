@@ -16,8 +16,7 @@ pub mod weights;
 mod tests;
 
 use admin_primitives::{
-    is_public_admin_code, AdminAccountKind, InstitutionAdmin, InstitutionAdminLifecycle,
-    InstitutionAdminQuery,
+    is_public_admin_code, Admin, AdminAccountKind, InstitutionAdminLifecycle, InstitutionAdminQuery,
 };
 use codec::{Decode, Encode};
 use frame_support::{
@@ -134,10 +133,8 @@ pub mod pallet {
     pub type AdminsOf<T> =
         BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxAdmins>;
     /// 首次登记提交的管理员人员集合；姓名只展示，账户是唯一授权字段。
-    pub type InstitutionAdminsInputOf<T> = BoundedVec<
-        InstitutionAdmin<<T as frame_system::Config>::AccountId>,
-        <T as Config>::MaxAdmins,
-    >;
+    pub type InstitutionAdminsInputOf<T> =
+        BoundedVec<Admin<<T as frame_system::Config>::AccountId>, <T as Config>::MaxAdmins>;
     pub type InstitutionGovernanceActionOf<T> =
         InstitutionGovernanceAction<<T as frame_system::Config>::AccountId>;
 
@@ -279,19 +276,6 @@ pub mod pallet {
         fn build(&self) {}
     }
 
-    #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        fn on_runtime_upgrade() -> Weight {
-            let db = T::DbWeight::get();
-            let on_chain = StorageVersion::get::<Pallet<T>>();
-            if on_chain >= STORAGE_VERSION {
-                return db.reads(1);
-            }
-            STORAGE_VERSION.put::<Pallet<T>>();
-            db.reads_writes(1, 1)
-        }
-    }
-
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -380,8 +364,10 @@ pub mod pallet {
         AccountAlreadyExists,
         /// 管理员重复
         DuplicateAdmin,
-        /// 管理员公开姓名为空。
-        InvalidAdminName,
+        /// 管理员姓为空。
+        InvalidFamilyName,
+        /// 管理员名为空。
+        InvalidGivenName,
         /// 阈值不合法
         InvalidThreshold,
         /// 金额不足
@@ -824,8 +810,12 @@ pub mod pallet {
             let admins_len = admins.len() as u32;
             ensure!(admins_len >= 2, Error::<T>::InvalidAdminsLen);
             ensure!(
-                admins.iter().all(|admin| !admin.admin_name.is_empty()),
-                Error::<T>::InvalidAdminName
+                admins.iter().all(|admin| !admin.family_name.is_empty()),
+                Error::<T>::InvalidFamilyName
+            );
+            ensure!(
+                admins.iter().all(|admin| !admin.given_name.is_empty()),
+                Error::<T>::InvalidGivenName
             );
             ensure!(
                 threshold > 0
@@ -839,6 +829,19 @@ pub mod pallet {
                 .collect();
             Self::ensure_unique_admins(accounts.as_slice())?;
             Ok(())
+        }
+
+        /// 在进入签名、投票和存储流程前统一补齐管理员姓、名默认值。
+        pub(crate) fn normalize_institution_admins(
+            admins: InstitutionAdminsInputOf<T>,
+        ) -> InstitutionAdminsInputOf<T> {
+            InstitutionAdminsInputOf::<T>::truncate_from(
+                admins
+                    .into_inner()
+                    .into_iter()
+                    .map(Admin::normalize_names)
+                    .collect(),
+            )
         }
 
         pub(crate) fn set_institution_admins(
@@ -977,6 +980,7 @@ pub mod pallet {
             scope_province_name: Vec<u8>,
             scope_city_name: Vec<u8>,
         ) -> DispatchResult {
+            let action = action.normalize_admin_person_names();
             ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
             ensure!(
                 actor_cid_number.as_slice() == cid_number.as_slice(),
@@ -1059,6 +1063,7 @@ pub mod pallet {
             scope_province_name: Vec<u8>,
             scope_city_name: Vec<u8>,
         ) -> DispatchResult {
+            let admins = Self::normalize_institution_admins(admins);
             ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
             let info =
                 Institutions::<T>::get(&cid_number).ok_or(Error::<T>::InstitutionNotFound)?;

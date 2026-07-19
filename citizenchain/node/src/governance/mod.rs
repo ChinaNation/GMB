@@ -125,11 +125,15 @@ fn collect_admins(
         .into_iter()
         .map(|admin| {
             let balance_fen = block_hash
-                .and_then(|hash| institution::fetch_balance_at(&admin.account, Some(hash)).ok())
+                .and_then(|hash| {
+                    institution::fetch_balance_at(&admin.admin_account, Some(hash)).ok()
+                })
                 .flatten()
                 .map(|value| value.to_string());
             types::AdminInfo {
-                account: admin.account,
+                admin_account: admin.admin_account,
+                family_name: admin.family_name,
+                given_name: admin.given_name,
                 assignments: admin.assignments,
                 balance_fen,
             }

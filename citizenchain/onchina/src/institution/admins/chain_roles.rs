@@ -36,10 +36,12 @@ struct RawInstitutionAssignment {
     assignment_status: u8,
 }
 
-/// 管理员钱包在机构岗位上的一条有效任职投影。
+/// 管理员人员记录和一条可选有效任职的联合投影。
 #[derive(Debug, Clone)]
 pub(crate) struct InstitutionAssignmentView {
     pub(crate) account_hex: String,
+    pub(crate) family_name: String,
+    pub(crate) given_name: String,
     pub(crate) role_code: String,
     pub(crate) role_name: String,
     pub(crate) term_required: bool,
@@ -139,7 +141,7 @@ async fn read_roles_and_assignments(
 fn merge_active_assignments(
     roles: Vec<RawInstitutionRole>,
     assignments: Vec<RawInstitutionAssignment>,
-    active_admins: &HashSet<[u8; 32]>,
+    active_admins: &HashMap<[u8; 32], (String, String)>,
 ) -> Result<Vec<InstitutionAssignmentView>, String> {
     let active_roles: HashMap<Vec<u8>, RawInstitutionRole> = roles
         .into_iter()
@@ -149,7 +151,7 @@ fn merge_active_assignments(
     let mut views = Vec::new();
     for assignment in assignments {
         if assignment.assignment_status != ASSIGNMENT_STATUS_ACTIVE
-            || !active_admins.contains(&assignment.admin_account)
+            || !active_admins.contains_key(&assignment.admin_account)
         {
             continue;
         }
@@ -160,6 +162,8 @@ fn merge_active_assignments(
         };
         views.push(InstitutionAssignmentView {
             account_hex: format!("0x{}", hex::encode(assignment.admin_account)),
+            family_name: active_admins[&assignment.admin_account].0.clone(),
+            given_name: active_admins[&assignment.admin_account].1.clone(),
             role_code: String::from_utf8_lossy(&assignment.role_code).to_string(),
             role_name: String::from_utf8_lossy(&role.role_name).to_string(),
             term_required: role.term_required,
@@ -180,7 +184,7 @@ fn merge_active_assignments(
     Ok(views)
 }
 
-/// 合并本机构 Active 管理员集合与 Active 任职；缺少任职的管理员视为链上不一致。
+/// 合并本机构管理员人员集合与有效任职；没有岗位的管理员仍返回一条空任职投影。
 pub(crate) async fn fetch_active_assignments_onchain(
     identity: &NodeInstitutionIdentity,
 ) -> Result<Option<Vec<InstitutionAssignmentView>>, String> {
@@ -188,10 +192,16 @@ pub(crate) async fn fetch_active_assignments_onchain(
     let Some(admins) = fetch_active_admins_onchain(identity).await? else {
         return Ok(None);
     };
-    let active_admins: HashSet<[u8; 32]> = admins
+    let active_admins: HashMap<[u8; 32], (String, String)> = admins
         .iter()
-        .map(|account| {
-            crate::auth::login::parse_sr25519_pubkey_bytes(account)
+        .map(|admin| {
+            crate::auth::login::parse_sr25519_pubkey_bytes(&admin.admin_account)
+                .map(|account| {
+                    (
+                        account,
+                        (admin.family_name.clone(), admin.given_name.clone()),
+                    )
+                })
                 .ok_or_else(|| "active admin account decode failed".to_string())
         })
         .collect::<Result<_, _>>()?;
@@ -208,10 +218,33 @@ pub(crate) async fn fetch_active_assignments_onchain(
                 primitives::governance_skeleton::province_commissioner_role_code(province_code);
             views.retain(|view| view.role_code.as_bytes() == expected.as_slice());
         }
-        let covered: HashSet<&str> = views.iter().map(|view| view.account_hex.as_str()).collect();
-        if identity.frg_province_code.is_none() && covered.len() != active_admins.len() {
-            return Err("active institution admin has no active role assignment".to_string());
+        let covered = views
+            .iter()
+            .filter_map(|view| crate::auth::login::parse_sr25519_pubkey_bytes(&view.account_hex))
+            .collect::<HashSet<_>>();
+        for (admin_account, (family_name, given_name)) in &active_admins {
+            if covered.contains(admin_account) {
+                continue;
+            }
+            views.push(InstitutionAssignmentView {
+                account_hex: format!("0x{}", hex::encode(admin_account)),
+                family_name: family_name.clone(),
+                given_name: given_name.clone(),
+                role_code: String::new(),
+                role_name: String::new(),
+                term_required: false,
+                term_start: 0,
+                term_end: 0,
+                assignment_source: 0,
+                assignment_source_label: String::new(),
+                assignment_source_ref: String::new(),
+            });
         }
+        views.sort_by(|left, right| {
+            left.account_hex
+                .cmp(&right.account_hex)
+                .then(left.role_code.cmp(&right.role_code))
+        });
         return Ok(Some(views));
     }
     Err("institution roles not found in matching entity pallet".to_string())

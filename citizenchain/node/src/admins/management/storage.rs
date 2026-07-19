@@ -12,7 +12,7 @@ use primitives::cid::code::{
 
 use super::codec;
 use super::types::{
-    institution_code_label, kind_label, AdminAccountState, InstitutionAdminInfo,
+    institution_code_label, kind_label, AdminAccountState, AdminDecoded, InstitutionAdminInfo,
     InstitutionRoleAssignmentInfo,
 };
 use crate::governance::registry;
@@ -229,7 +229,7 @@ fn display_source_ref(value: Vec<u8>) -> String {
 fn fetch_role_assignments(
     spec: AdminPalletSpec,
     cid_number: &[u8],
-    admin_accounts: &[String],
+    admin_records: &[AdminDecoded],
     finalized_hash: &str,
 ) -> Result<Vec<InstitutionAdminInfo>, String> {
     let role_prefix = role_storage_prefix(spec, "InstitutionRoles", cid_number);
@@ -244,9 +244,18 @@ fn fetch_role_assignments(
         }
     }
 
-    let mut grouped = BTreeMap::<String, Vec<InstitutionRoleAssignmentInfo>>::new();
-    for account in admin_accounts {
-        grouped.entry(account.to_ascii_lowercase()).or_default();
+    let mut grouped =
+        BTreeMap::<String, (&AdminDecoded, Vec<InstitutionRoleAssignmentInfo>)>::new();
+    for admin in admin_records {
+        if grouped
+            .insert(
+                admin.admin_account.to_ascii_lowercase(),
+                (admin, Vec::new()),
+            )
+            .is_some()
+        {
+            return Err("机构管理员账户重复".to_string());
+        }
     }
     for key in fetch_all_keys_at(&assignment_prefix, finalized_hash)? {
         let value = chain_query::fetch_storage_at(&key, finalized_hash)?
@@ -259,7 +268,7 @@ fn fetch_role_assignments(
                 continue;
             }
             let account = hex::encode(assignment.admin_account);
-            let Some(account_assignments) = grouped.get_mut(&account) else {
+            let Some((_, account_assignments)) = grouped.get_mut(&account) else {
                 continue;
             };
             let role = roles
@@ -279,13 +288,13 @@ fn fetch_role_assignments(
     }
 
     let mut admins = Vec::with_capacity(grouped.len());
-    for (account, mut assignments) in grouped {
-        if assignments.is_empty() {
-            return Err(format!("机构管理员钱包 {account} 缺少有效岗位任职"));
-        }
+    for (admin_account, (admin, mut assignments)) in grouped {
+        // 管理员身份和岗位任职是两套独立状态；新任管理员可以尚未取得岗位。
         assignments.sort_by(|left, right| left.role_code.cmp(&right.role_code));
         admins.push(InstitutionAdminInfo {
-            account,
+            admin_account,
+            family_name: admin.family_name.clone(),
+            given_name: admin.given_name.clone(),
             assignments,
         });
     }

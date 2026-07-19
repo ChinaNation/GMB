@@ -94,11 +94,11 @@ function parseAdminsText(text?: string): InstitutionGovernanceAdminInput[] {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const [name, account] = line.split(/[,，]/).map((part) => part.trim());
-      if (!name || !account) {
-        throw new Error('管理员集合每行格式必须是：姓名,账户');
+      const [familyName, givenName, account] = line.split(/[,，]/).map((part) => part.trim());
+      if (!familyName || !givenName || !account) {
+        throw new Error('管理员集合每行格式必须是：姓,名,账户');
       }
-      return { admin_name: name, admin_account: account };
+      return { admin_account: account, family_name: familyName, given_name: givenName };
     });
 }
 
@@ -231,13 +231,13 @@ function InstitutionGovernancePanel({
         showIcon
         style={{ marginBottom: 16 }}
         message="管理员是人，岗位是职位；本页面只构造链上治理交易，不本地改管理员真源。"
-        description="管理员集合每行填“姓名,账户”。岗位码默认自动生成短码；任职每行填“岗位码,管理员账户,任期开始,任期结束”。法定代表人任命/更换只填公民 CID；解除则清空链上三字段。"
+        description="管理员集合每行填“姓,名,账户”。岗位码默认自动生成短码；任职每行填“岗位码,管理员账户,任期开始,任期结束”。法定代表人任命/更换只填公民 CID；解除则清空链上三字段。"
       />
       <Form form={form} layout="vertical" disabled={!canWrite || submitting}>
         <Form.Item label="管理员集合" name="admins_text">
           <Input.TextArea
             rows={4}
-            placeholder={'张三,w5...\n李四,w5...'}
+            placeholder={'张,三,w5...\n李,四,w5...'}
           />
         </Form.Item>
         <Divider orientation="left">岗位</Divider>

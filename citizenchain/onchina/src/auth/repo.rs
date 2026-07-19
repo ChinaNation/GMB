@@ -19,13 +19,14 @@ fn admin_from_row(row: &postgres::Row) -> Result<AdminUser, String> {
     Ok(AdminUser {
         id: u64::try_from(id).unwrap_or(0),
         admin_account: row.get(1),
-        admin_name: row.get(2),
-        institution_code: row.get(3),
-        built_in: row.get(4),
-        created_by: row.get(5),
-        created_at: row.get(6),
-        updated_at: row.get(7),
-        city_name: row.get(8),
+        family_name: row.get(2),
+        given_name: row.get(3),
+        institution_code: row.get(4),
+        built_in: row.get(5),
+        created_by: row.get(6),
+        created_at: row.get(7),
+        updated_at: row.get(8),
+        city_name: row.get(9),
     })
 }
 
@@ -53,7 +54,7 @@ pub(crate) fn get_admin_by_id_and_registry_org_conn(
     let id = id as i64;
     let row = conn
         .query_opt(
-            "SELECT admin_id, admin_account, admin_name, institution_code, built_in, created_by, created_at, updated_at, city_name
+            "SELECT admin_id, admin_account, family_name, given_name, institution_code, built_in, created_by, created_at, updated_at, city_name
              FROM admins
              WHERE admin_id = $1 AND institution_code = $2",
             &[&id, &institution_code],
@@ -84,7 +85,7 @@ pub(crate) fn list_city_registry_admins_by_scope_conn(
             .map_err(|e| format!("count city registry admins by city failed: {e}"))?;
         let rows = conn
             .query(
-                "SELECT admin_id, admin_account, admin_name, institution_code, built_in, created_by, created_at, updated_at, city_name
+                "SELECT admin_id, admin_account, family_name, given_name, institution_code, built_in, created_by, created_at, updated_at, city_name
                  FROM admins
                  WHERE institution_code = $1 AND city_name = $2
                  ORDER BY admin_id DESC
@@ -102,7 +103,7 @@ pub(crate) fn list_city_registry_admins_by_scope_conn(
             .map_err(|e| format!("count city registry admins failed: {e}"))?;
         let rows = conn
             .query(
-                "SELECT admin_id, admin_account, admin_name, institution_code, built_in, created_by, created_at, updated_at, city_name
+                "SELECT admin_id, admin_account, family_name, given_name, institution_code, built_in, created_by, created_at, updated_at, city_name
                  FROM admins
                  WHERE institution_code = $1
                  ORDER BY admin_id DESC
@@ -150,7 +151,7 @@ pub(crate) fn get_admin_by_account_conn(
 ) -> Result<Option<AdminUser>, String> {
     let row = conn
         .query_opt(
-            "SELECT admin_id, admin_account, admin_name, institution_code, built_in, created_by, created_at, updated_at, city_name
+            "SELECT admin_id, admin_account, family_name, given_name, institution_code, built_in, created_by, created_at, updated_at, city_name
              FROM admins
              WHERE lower(admin_account) = lower($1)",
             &[&admin_account],
@@ -601,13 +602,11 @@ pub(crate) fn next_admin_id_conn(conn: &mut Client) -> Result<u64, String> {
 /// 本函数只维护 `admins` 登录元数据缓存本身。
 pub(crate) fn upsert_admin_conn(conn: &mut Client, admin: &AdminUser) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO admins(admin_id, admin_account, admin_name, institution_code, built_in, created_by, created_at, updated_at, city_name)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        "INSERT INTO admins(admin_id, admin_account, family_name, given_name, institution_code, built_in, created_by, created_at, updated_at, city_name)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (admin_account) DO UPDATE SET
-            admin_name = CASE
-                WHEN trim(EXCLUDED.admin_name) <> '' THEN EXCLUDED.admin_name
-                ELSE admins.admin_name
-            END,
+            family_name = EXCLUDED.family_name,
+            given_name = EXCLUDED.given_name,
             institution_code = EXCLUDED.institution_code,
             built_in = EXCLUDED.built_in,
             created_by = EXCLUDED.created_by,
@@ -616,7 +615,8 @@ pub(crate) fn upsert_admin_conn(conn: &mut Client, admin: &AdminUser) -> Result<
         &[
             &(admin.id as i64),
             &admin.admin_account,
-            &admin.admin_name,
+            &admin.family_name,
+            &admin.given_name,
             &admin.institution_code,
             &admin.built_in,
             &admin.created_by,

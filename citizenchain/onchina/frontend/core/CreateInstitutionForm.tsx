@@ -55,8 +55,9 @@ interface FormValues {
   /** 需挂靠的非法人必填;个体经营/无限合伙不接受所属法人。 */
   parent_cid_number?: string;
   admins: {
-    admin_name?: string;
     admin_account: string;
+    family_name?: string;
+    given_name?: string;
   }[];
 }
 
@@ -234,8 +235,8 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       cid_short_name: defaultCollectName ? '' : undefined,
       parent_cid_number: undefined,
       admins: [
-        { admin_name: '管理员', admin_account: '' },
-        { admin_name: '管理员', admin_account: '' },
+        { admin_account: '', family_name: '管理', given_name: '员' },
+        { admin_account: '', family_name: '管理', given_name: '员' },
       ],
     });
   }, [open, category, privateType, lockedProvinceName, lockedCityName]);
@@ -462,8 +463,9 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       : values.institution.trim();
     const admins = (values.admins ?? [])
       .map((admin) => ({
-        admin_name: (admin.admin_name ?? '').trim() || '管理员',
         admin_account: admin.admin_account.trim(),
+        family_name: (admin.family_name ?? '').trim() || '管理',
+        given_name: (admin.given_name ?? '').trim() || '员',
       }))
       .filter((admin) => admin.admin_account);
     const uniqueAdminCount = new Set(admins.map((admin) => admin.admin_account)).size;
@@ -784,15 +786,23 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
               </Typography.Text>
               {fields.map((field, index) => (
                 <Row gutter={8} key={field.key} align="top">
-                  <Col span={7}>
+                  <Col span={5}>
                     <Form.Item
-                      label={index === 0 ? '管理员名称' : undefined}
-                      name={[field.name, 'admin_name']}
+                      label={index === 0 ? '姓' : undefined}
+                      name={[field.name, 'family_name']}
                     >
-                      <Input placeholder="默认 管理员" />
+                      <Input placeholder="默认 管理" />
                     </Form.Item>
                   </Col>
-                  <Col span={14}>
+                  <Col span={5}>
+                    <Form.Item
+                      label={index === 0 ? '名' : undefined}
+                      name={[field.name, 'given_name']}
+                    >
+                      <Input placeholder="默认 员" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={11}>
                     <Form.Item
                       label={index === 0 ? '管理员账户' : undefined}
                       name={[field.name, 'admin_account']}
@@ -812,11 +822,14 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
                   </Col>
                 </Row>
               ))}
-              <Button icon={<PlusOutlined />} onClick={() => add({ admin_name: '管理员', admin_account: '' })}>
+              <Button
+                icon={<PlusOutlined />}
+                onClick={() => add({ admin_account: '', family_name: '管理', given_name: '员' })}
+              >
                 添加管理员
               </Button>
               <div style={{ color: '#888', fontSize: 12, marginTop: 8 }}>
-                管理员名称只用于展示，授权只认管理员账户；不填时按“管理员”处理。岗位在机构创建后单独维护。
+                姓和名分别保存；授权只认管理员账户。不填时分别按“管理”“员”处理，岗位在机构创建后单独维护。
               </div>
             </div>
           )}

@@ -11,7 +11,7 @@ use axum::{
 use postgres::Client;
 use std::collections::BTreeMap;
 
-use crate::auth::login::build_admin_name_from_user;
+use crate::auth::login::admin_person_names;
 use crate::auth::repo;
 use crate::*;
 
@@ -31,7 +31,7 @@ fn balance_fen(balances: &BTreeMap<String, Option<String>>, account: &str) -> Op
         .flatten()
 }
 
-pub(crate) const MAX_ADMIN_NAME_CHARS: usize = 200;
+pub(crate) const MAX_ADMIN_PERSON_NAME_BYTES: usize = 128;
 pub(crate) const MAX_CITY_REGISTRY_ADMINS_PER_CITY: usize = 30;
 
 pub(crate) async fn list_city_registry_admins(
@@ -152,31 +152,22 @@ pub(crate) fn city_registry_row_from_user_conn(
     conn: &mut Client,
     city_registry: &AdminUser,
 ) -> Result<CityRegistryAdminRow, String> {
+    let (created_by_family_name, created_by_given_name) =
+        creator_person_names_conn(conn, city_registry.created_by.as_str())?;
     Ok(CityRegistryAdminRow {
         id: city_registry.id,
         admin_account: city_registry.admin_account.clone(),
-        admin_name: city_registry_display_name(city_registry),
+        family_name: city_registry.family_name.clone(),
+        given_name: city_registry.given_name.clone(),
         balance_fen: None,
         institution_code: city_registry.institution_code.clone(),
         built_in: city_registry.built_in,
         created_by: city_registry.created_by.clone(),
-        created_by_name: creator_admin_name_conn(conn, city_registry.created_by.as_str())?,
+        created_by_family_name,
+        created_by_given_name,
         created_at: city_registry.created_at,
         city_name: city_registry.city_name.clone(),
     })
-}
-
-fn city_registry_display_name(city_registry: &AdminUser) -> String {
-    let name = city_registry.admin_name.trim();
-    if !name.is_empty() {
-        return name.to_string();
-    }
-    let city = city_registry.city_name.trim();
-    if city.is_empty() {
-        return "市注册局管理员".to_string();
-    }
-    let suffix = if city.ends_with('市') { "" } else { "市" };
-    format!("{city}{suffix}注册局管理员")
 }
 
 pub(crate) fn count_city_registry_admins_in_city_conn(
@@ -189,15 +180,15 @@ pub(crate) fn count_city_registry_admins_in_city_conn(
     repo::count_city_registry_admins_by_city_conn(conn, city)
 }
 
-pub(crate) fn creator_admin_name_conn(
+pub(crate) fn creator_person_names_conn(
     conn: &mut Client,
     creator_account: &str,
-) -> Result<String, String> {
+) -> Result<(String, String), String> {
     let Some(creator) = repo::get_admin_by_account_conn(conn, creator_account)? else {
-        return Ok("未知注册局管理员".to_string());
+        return Ok(("管理".to_string(), "员".to_string()));
     };
-    // 创建者名称只作展示，禁止从本地表反推授权省份。
-    Ok(build_admin_name_from_user(&creator, None))
+    // 创建者姓名只作展示，禁止从本地表反推授权省份。
+    Ok(admin_person_names(&creator))
 }
 
 pub(crate) fn ensure_city_in_province(

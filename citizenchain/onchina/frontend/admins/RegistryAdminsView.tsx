@@ -295,7 +295,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
   const activeProvince = selectedFederalRegistry?.province_name ?? normalizeScopeProvinceName(auth?.scope_province_name);
   const activeCity = selectedCity ?? (isSubordinateRegistry(auth?.institution_code) ? auth?.scope_city_name ?? null : null);
 
-  const [addCityRegistryForm] = Form.useForm<{ city_registry_account: string; city_registry_admin_name: string; city_scope_city_name: string }>();
+  const [addCityRegistryForm] = Form.useForm<{ city_registry_account: string; family_name: string; given_name: string; city_scope_city_name: string }>();
   const [adminActionModal, setAdminActionModal] = useState<AdminActionModalState | null>(null);
   const [adminActionLoading, setAdminActionLoading] = useState(false);
   const [adminActionCommitLoading, setAdminActionCommitLoading] = useState(false);
@@ -524,17 +524,18 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
 
   // ── 事件处理 ──
 
-  const onCreateCityRegistry = async (values: { city_registry_account: string; city_registry_admin_name: string; city_name?: string }) => {
+  const onCreateCityRegistry = async (values: { city_registry_account: string; family_name: string; given_name: string; city_name?: string }) => {
     if (!auth) return;
     const inputAddr = values.city_registry_account?.trim();
-    const admin_name = values.city_registry_admin_name?.trim();
+    const family_name = values.family_name?.trim();
+    const given_name = values.given_name?.trim();
     const city = (values.city_name ?? '').trim();
     if (!inputAddr) {
       notice.error('请输入管理员账户');
       return;
     }
-    if (!admin_name) {
-      notice.error('请输入管理员姓名');
+    if (!family_name || !given_name) {
+      notice.error('请分别输入管理员姓和名');
       return;
     }
     if (!city) {
@@ -557,7 +558,8 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
     try {
       const created = await runSecuredAction<CityRegistryAdminRow>('CREATE_SUBORDINATE_REGISTRY', {
         admin_account,
-        admin_name,
+        family_name,
+        given_name,
         city_name: city,
       });
       notice.success('管理员新增成功');

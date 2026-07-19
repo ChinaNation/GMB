@@ -17,7 +17,6 @@ use super::model::{
     AdminIdentifyOutput, AdminInstitutionCandidate, AdminSession, NodeBindingChallenge,
     NodeBindingRequiredOutput, NodeInstitutionBinding,
 };
-use super::signature::build_admin_name_from_user;
 
 /// 链上集合鉴权失败分类(映射 HTTP 状态)。
 pub(super) enum GateError {
@@ -298,6 +297,25 @@ async fn issue_session_for_candidate(
         .institution_cid_number
         .clone()
         .ok_or_else(|| GateError::BindingInvalid("institution CID is required".to_string()))?;
+    let identity = chain_runtime::identity_from_binding_parts(
+        &institution_code,
+        Some(&institution_cid_number),
+        candidate.frg_province_code.as_deref(),
+    )
+    .map_err(GateError::BindingInvalid)?;
+    let chain_admins = chain_runtime::fetch_active_admins_onchain(&identity)
+        .await
+        .map_err(GateError::ChainUnreachable)?;
+    let chain_admin = chain_admins
+        .as_ref()
+        .and_then(|admins| {
+            admins
+                .iter()
+                .find(|admin| same_admin_account(&admin.admin_account, verified_pubkey))
+        })
+        .ok_or(GateError::NotOnchainAdmin)?;
+    let chain_family_name = chain_admin.family_name.clone();
+    let chain_given_name = chain_admin.given_name.clone();
     let pubkey_for_db = verified_pubkey.to_string();
     let mut result = state
         .db
@@ -308,6 +326,8 @@ async fn issue_session_for_candidate(
                 Some(mut current) => {
                     // 链上身份与本地登记冲突时,以链上机构码为准(去中心化真源)。
                     current.institution_code = institution_code.clone();
+                    current.family_name = chain_family_name.clone();
+                    current.given_name = chain_given_name.clone();
                     current.city_name = scope_city_name.clone().unwrap_or_default();
                     current.updated_at = Some(now);
                     current
@@ -315,7 +335,8 @@ async fn issue_session_for_candidate(
                 None => AdminUser {
                     id: repo::next_admin_id_conn(conn)?,
                     admin_account: pubkey_for_db.clone(),
-                    admin_name: String::new(),
+                    family_name: chain_family_name.clone(),
+                    given_name: chain_given_name.clone(),
                     institution_code: institution_code.clone(),
                     built_in: false,
                     created_by: pubkey_for_db.clone(),
@@ -327,7 +348,6 @@ async fn issue_session_for_candidate(
 
             // 节点机构归属已由 active binding 承载;admins 只缓存登录管理员元数据。
             repo::upsert_admin_conn(conn, &admin)?;
-            let admin_name = build_admin_name_from_user(&admin, scope_province_name.as_deref());
             let cid_short_name = cid_short_name.or_else(|| {
                 repo::resolve_home_cid_short_name_conn(
                     conn,
@@ -371,7 +391,8 @@ async fn issue_session_for_candidate(
                     admin_level,
                     capabilities,
                     workspace,
-                    admin_name,
+                    family_name: admin.family_name,
+                    given_name: admin.given_name,
                     scope_province_name,
                     scope_city_name,
                     scope_town_name,
@@ -426,7 +447,7 @@ async fn revoke_stale_admin_sessions_once(db: &Db) -> Result<(), String> {
         for account in accounts {
             let still_admin = onchain_admins
                 .iter()
-                .any(|admin| same_admin_account(admin, account.as_str()));
+                .any(|admin| same_admin_account(&admin.admin_account, account.as_str()));
             if !still_admin {
                 let removed = repo::delete_admin_sessions_for_account_conn(conn, account.as_str())?;
                 if removed > 0 {

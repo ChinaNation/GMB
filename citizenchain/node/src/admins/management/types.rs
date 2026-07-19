@@ -15,12 +15,16 @@ pub struct InstitutionRoleAssignmentInfo {
     pub assignment_source_ref: String,
 }
 
-/// 一个机构管理员钱包及其在本机构的全部有效岗位任职。
+/// 一个机构管理员人员记录及其在本机构的全部有效岗位任职。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstitutionAdminInfo {
     /// 管理员钱包账户，hex 不含 0x。
-    pub account: String,
+    pub admin_account: String,
+    /// 管理员姓；缺失值由 runtime 统一补为“管理”。
+    pub family_name: String,
+    /// 管理员名；缺失值由 runtime 统一补为“员”。
+    pub given_name: String,
     pub assignments: Vec<InstitutionRoleAssignmentInfo>,
 }
 
@@ -44,7 +48,15 @@ pub struct AdminAccountState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AdminAccountDecoded {
     pub institution_code: InstitutionCode,
-    pub admins: Vec<String>,
+    pub admins: Vec<AdminDecoded>,
+}
+
+/// 从共享 SCALE 类型严格解码出的管理员三字段记录。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdminDecoded {
+    pub admin_account: String,
+    pub family_name: String,
+    pub given_name: String,
 }
 
 /// 机构码 4 字符展示串（末尾 `\0` 填充字节去掉）。

@@ -76,21 +76,22 @@ pub(crate) fn ensure_institution_visible_to_admin(
 pub(crate) fn resolve_created_by(
     state: &AppState,
     created_by: &str,
-) -> (Option<String>, Option<String>) {
+) -> (Option<String>, Option<String>, Option<String>) {
     let Some(norm) = normalize_admin_account(created_by) else {
-        return (None, None);
+        return (None, None, None);
     };
     let result = state.db.with_client(move |conn| {
         let Some(admin) = repo::get_admin_by_account_conn(conn, norm.as_str())? else {
-            return Ok((None, None));
+            return Ok((None, None, None));
         };
         let institution_code = admin.institution_code.clone();
-        let name_opt = if admin.admin_name.trim().is_empty() {
-            None
-        } else {
-            Some(admin.admin_name)
-        };
-        Ok((name_opt, Some(institution_code)))
+        let family_name = admin.family_name.trim().to_string();
+        let given_name = admin.given_name.trim().to_string();
+        Ok((
+            (!family_name.is_empty()).then_some(family_name),
+            (!given_name.is_empty()).then_some(given_name),
+            Some(institution_code),
+        ))
     });
-    result.unwrap_or((None, None))
+    result.unwrap_or((None, None, None))
 }

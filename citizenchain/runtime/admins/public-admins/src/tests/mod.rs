@@ -2,10 +2,9 @@
 
 use super::*;
 use admin_primitives::{AdminAccountKind, InstitutionAdminQuery};
-use codec::Encode;
 use frame_support::{
     assert_noop, assert_ok, derive_impl,
-    traits::{ConstU32, ConstU64, Hooks, StorageVersion},
+    traits::{ConstU32, ConstU64},
 };
 use frame_system as system;
 use primitives::cid::code::code_bytes;
@@ -117,64 +116,48 @@ fn account(seed: u8) -> AccountId32 {
 }
 
 /// admins 保存显示姓名和授权钱包；岗位、任期、来源等由 entity 管理。
-fn admins(count: u8) -> Vec<InstitutionAdmin<AccountId32>> {
+fn admins(count: u8) -> Vec<Admin<AccountId32>> {
     (0..count)
-        .map(|seed| InstitutionAdmin {
-            admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+        .map(|seed| Admin {
             admin_account: account(seed),
+            family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
+            given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
         })
         .collect()
 }
 
-fn indexed_admins(count: u32) -> Vec<InstitutionAdmin<AccountId32>> {
+fn indexed_admins(count: u32) -> Vec<Admin<AccountId32>> {
     (0..count)
         .map(|index| {
             let mut raw = [0u8; 32];
             raw[..4].copy_from_slice(&index.to_le_bytes());
-            InstitutionAdmin {
-                admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+            Admin {
                 admin_account: AccountId32::new(raw),
+                family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
+                given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
             }
         })
         .collect()
 }
 
 #[test]
-fn public_admins_upgrade_migrates_legacy_account_vec() {
+fn public_admins_normalize_missing_person_name_before_storage() {
     new_test_ext().execute_with(|| {
-        let cid: AdminCidNumber = b"GD001-CGOV0-923456789-2026"
-            .to_vec()
-            .try_into()
-            .expect("cid fits");
-        type LegacyAdmins = BoundedVec<AccountId32, ConstU32<1989>>;
-        let legacy_admins: LegacyAdmins = vec![account(1), account(2), account(3)]
-            .try_into()
-            .expect("legacy admins fit");
-        let legacy = InstitutionAdmins {
-            institution_code: code_bytes("CGOV"),
-            admins: legacy_admins,
-        };
-
-        sp_io::storage::set(
-            &AdminAccounts::<Test>::hashed_key_for(&cid),
-            &legacy.encode(),
-        );
-        StorageVersion::new(2).put::<Pallet<Test>>();
-
-        <PublicAdmins as Hooks<BlockNumberFor<Test>>>::on_runtime_upgrade();
-
-        let stored = AdminAccounts::<Test>::get(&cid).expect("migrated admins exist");
-        assert_eq!(stored.institution_code, code_bytes("CGOV"));
-        assert_eq!(stored.admins.len(), 3);
-        assert_eq!(stored.admins[0].admin_account, account(1));
-        assert_eq!(
-            stored.admins[0].admin_name.as_slice(),
-            admin_primitives::DEFAULT_ADMIN_NAME
-        );
-        assert_eq!(
-            StorageVersion::get::<Pallet<Test>>(),
-            StorageVersion::new(4)
-        );
+        let mut input = admins(3);
+        input[0].family_name = Default::default();
+        input[0].given_name = Default::default();
+        assert_ok!(PublicAdmins::do_set_institution_admins(
+            b"GD001-CGOV0-923456789-2026".to_vec(),
+            code_bytes("CGOV"),
+            AdminAccountKind::PublicInstitution,
+            input,
+            2,
+        ));
+        let cid =
+            AdminCidNumber::try_from(b"GD001-CGOV0-923456789-2026".to_vec()).expect("cid fits");
+        let stored = AdminAccounts::<Test>::get(cid).expect("admins exist");
+        assert_eq!(stored.admins[0].family_name.as_slice(), "管理".as_bytes());
+        assert_eq!(stored.admins[0].given_name.as_slice(), "员".as_bytes());
     });
 }
 
@@ -371,9 +354,10 @@ fn fixed_governance_admin_update_uses_compile_time_threshold_only() {
         ));
 
         let replacement = (40..40 + NRC_ADMIN_COUNT as u8)
-            .map(|seed| InstitutionAdmin {
-                admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+            .map(|seed| Admin {
                 admin_account: account(seed),
+                family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
+                given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
             })
             .collect::<Vec<_>>();
         assert_ok!(PublicAdmins::do_set_institution_admins(

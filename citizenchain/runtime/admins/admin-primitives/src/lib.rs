@@ -24,17 +24,22 @@ pub use primitives::cid::code::{FRG, NJD};
 /// 管理员集合所属机构 CID 号类型。
 pub type AdminCidNumber = BoundedVec<u8, ConstU32<CID_NUMBER_MAX_BYTES>>;
 
-/// 管理员公开姓名最大字节数；姓名只用于展示，不参与权限判断。
-pub const ADMIN_NAME_MAX_BYTES: u32 = 128;
-/// 无法从公民资料解析真实姓名时使用的唯一默认展示名。
-pub const DEFAULT_ADMIN_NAME: &[u8] = "管理员".as_bytes();
-/// 机构管理员公开姓名。
-pub type AdminName = BoundedVec<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>;
+/// 管理员姓、名各自的最大字节数；姓名只用于展示，不参与权限判断。
+pub const ADMIN_PERSON_NAME_MAX_BYTES: u32 = 128;
+/// 无法取得真实姓氏时使用的唯一默认姓。
+pub const DEFAULT_ADMIN_FAMILY_NAME: &[u8] = "管理".as_bytes();
+/// 无法取得真实名字时使用的唯一默认名。
+pub const DEFAULT_ADMIN_GIVEN_NAME: &[u8] = "员".as_bytes();
+/// 与链上中国公民字段同名的姓。
+pub type FamilyName = BoundedVec<u8, ConstU32<ADMIN_PERSON_NAME_MAX_BYTES>>;
+/// 与链上中国公民字段同名的名。
+pub type GivenName = BoundedVec<u8, ConstU32<ADMIN_PERSON_NAME_MAX_BYTES>>;
 
-/// 机构管理员人员记录。
+/// 全仓统一管理员人员记录。
 ///
-/// `admin_account` 是唯一授权字段；`admin_name` 只承载公开展示语义。岗位和任职
-/// 由 entity 独立保存，禁止从任职记录反向派生或覆盖本记录。
+/// `admin_account` 是唯一授权字段；`family_name`、`given_name` 与链上中国公民姓名
+/// 字段逐字对齐，只承载人员姓名。机构岗位和任职由 entity 独立保存，个人多签也复用
+/// 本结构，不再保存纯账户管理员数组。
 #[derive(
     Encode,
     Decode,
@@ -46,9 +51,23 @@ pub type AdminName = BoundedVec<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>;
     PartialEq,
     Eq,
 )]
-pub struct InstitutionAdmin<AccountId> {
-    pub admin_name: AdminName,
+pub struct Admin<AccountId> {
     pub admin_account: AccountId,
+    pub family_name: FamilyName,
+    pub given_name: GivenName,
+}
+
+impl<AccountId> Admin<AccountId> {
+    /// 将缺失的姓、名分别规范化为“管理”“员”；账户始终由调用方强制提供。
+    pub fn normalize_names(mut self) -> Self {
+        if self.family_name.is_empty() {
+            self.family_name = FamilyName::truncate_from(DEFAULT_ADMIN_FAMILY_NAME.to_vec());
+        }
+        if self.given_name.is_empty() {
+            self.given_name = GivenName::truncate_from(DEFAULT_ADMIN_GIVEN_NAME.to_vec());
+        }
+        self
+    }
 }
 
 /// 管理员集合所属类型。
@@ -206,7 +225,7 @@ pub trait InstitutionAdminLifecycle<AccountId> {
         cid_number: Vec<u8>,
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
-        admins: Vec<InstitutionAdmin<AccountId>>,
+        admins: Vec<Admin<AccountId>>,
         threshold: u32,
     ) -> DispatchResult;
 }
@@ -232,7 +251,7 @@ pub trait InstitutionAdminQuery<AccountId> {
     fn institution_admin_records(
         institution_code: InstitutionCode,
         cid_number: &[u8],
-    ) -> Option<Vec<InstitutionAdmin<AccountId>>>;
+    ) -> Option<Vec<Admin<AccountId>>>;
 
     fn institution_admins_len(institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32>;
 }
@@ -267,7 +286,7 @@ impl<AccountId> InstitutionAdminQuery<AccountId> for () {
     fn institution_admin_records(
         _institution_code: InstitutionCode,
         _cid_number: &[u8],
-    ) -> Option<Vec<InstitutionAdmin<AccountId>>> {
+    ) -> Option<Vec<Admin<AccountId>>> {
         None
     }
 }
@@ -291,6 +310,12 @@ pub trait AdminAccountQuery<AccountId> {
         institution_code: InstitutionCode,
         personal_account: AccountId,
     ) -> Option<Vec<AccountId>>;
+
+    /// 返回个人多签完整管理员人员记录；授权调用方仍只能比较账户。
+    fn active_account_admin_records(
+        institution_code: InstitutionCode,
+        personal_account: AccountId,
+    ) -> Option<Vec<Admin<AccountId>>>;
 
     fn active_account_admins_len(
         institution_code: InstitutionCode,
@@ -316,6 +341,13 @@ pub trait AdminAccountQuery<AccountId> {
         _institution_code: InstitutionCode,
         _personal_account: AccountId,
     ) -> Option<Vec<AccountId>> {
+        None
+    }
+
+    fn pending_account_admin_records_for_snapshot(
+        _institution_code: InstitutionCode,
+        _personal_account: AccountId,
+    ) -> Option<Vec<Admin<AccountId>>> {
         None
     }
 
@@ -350,6 +382,13 @@ impl<AccountId> AdminAccountQuery<AccountId> for () {
         None
     }
 
+    fn active_account_admin_records(
+        _institution_code: InstitutionCode,
+        _personal_account: AccountId,
+    ) -> Option<Vec<Admin<AccountId>>> {
+        None
+    }
+
     fn active_account_admins_len(
         _institution_code: InstitutionCode,
         _personal_account: AccountId,
@@ -376,6 +415,13 @@ impl<AccountId> AdminAccountQuery<AccountId> for () {
         _institution_code: InstitutionCode,
         _personal_account: AccountId,
     ) -> Option<Vec<AccountId>> {
+        None
+    }
+
+    fn pending_account_admin_records_for_snapshot(
+        _institution_code: InstitutionCode,
+        _personal_account: AccountId,
+    ) -> Option<Vec<Admin<AccountId>>> {
         None
     }
 
@@ -435,15 +481,35 @@ pub fn expected_fixed_governance_admins_len(
 mod tests {
     use super::*;
 
-    /// `InstitutionAdmins` 的声明序就是机构 admins 链上值格式。
+    /// 管理员声明序固定为账户、姓、名，机构值只在前面增加机构码。
     #[test]
     fn institution_admin_account_field_order_matches_node_guard() {
         use codec::Encode;
 
+        let admin = Admin {
+            admin_account: 7u8,
+            family_name: FamilyName::truncate_from("张".as_bytes().to_vec()),
+            given_name: GivenName::truncate_from("三".as_bytes().to_vec()),
+        };
         let value = InstitutionAdmins {
             institution_code: *b"NRCG",
-            admins: vec![1u8, 2u8],
+            admins: vec![admin.clone()],
         };
-        assert_eq!(value.encode(), (*b"NRCG", vec![1u8, 2u8]).encode());
+        assert_eq!(
+            value.encode(),
+            (*b"NRCG", vec![(7u8, admin.family_name, admin.given_name)]).encode()
+        );
+    }
+
+    #[test]
+    fn missing_person_name_uses_management_default() {
+        let admin = Admin {
+            admin_account: 1u8,
+            family_name: FamilyName::default(),
+            given_name: GivenName::default(),
+        }
+        .normalize_names();
+        assert_eq!(admin.family_name.as_slice(), "管理".as_bytes());
+        assert_eq!(admin.given_name.as_slice(), "员".as_bytes());
     }
 }

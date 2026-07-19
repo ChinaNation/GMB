@@ -1,6 +1,6 @@
 //! 机构管理员链下私密资料子模块。
 //!
-//! 管理员链上身份只有钱包账户；岗位、任期和来源由 entity 模块的任职关系表达。
+//! 管理员链上人员记录使用账户、姓、名；授权只比较账户，岗位、任期和来源由 entity 表达。
 //! 本子模块只承接链下私密档案(部门/联系方式/证件照/passkey 绑定)与链投影,
 //! 落库到 `institution_admins` 省级分区表。控制台登录元数据走独立的 `admins` 表,与此无关。
 
@@ -44,8 +44,11 @@ pub(crate) const PURPOSE_INSTITUTION_REGISTER_ADMINS: &str = "INSTITUTION_REGIST
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct InstitutionAdminInput {
-    pub(crate) admin_name: String,
     pub(crate) admin_account: String,
+    #[serde(default)]
+    pub(crate) family_name: Option<String>,
+    #[serde(default)]
+    pub(crate) given_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -124,11 +127,12 @@ fn code_bytes(institution_code: &str) -> Result<[u8; 4], axum::response::Respons
 }
 
 fn parse_admin_inputs(
+    state: &AppState,
     admins: &[InstitutionAdminInput],
 ) -> Result<
     (
         Vec<InstitutionAdminArg>,
-        Vec<admin_primitives::InstitutionAdmin<[u8; 32]>>,
+        Vec<admin_primitives::Admin<[u8; 32]>>,
     ),
     axum::response::Response,
 > {
@@ -136,14 +140,6 @@ fn parse_admin_inputs(
     let mut action_admins = Vec::with_capacity(admins.len());
     let mut seen = std::collections::BTreeSet::new();
     for admin in admins {
-        let admin_name = admin.admin_name.trim();
-        if admin_name.is_empty() {
-            return Err(api_error(
-                StatusCode::BAD_REQUEST,
-                1001,
-                "管理员姓名不能为空",
-            ));
-        }
         let admin_account =
             parse_sr25519_pubkey_bytes(admin.admin_account.trim()).ok_or_else(|| {
                 api_error(
@@ -159,18 +155,55 @@ fn parse_admin_inputs(
                 "管理员账户不能重复",
             ));
         }
-        let name_vec = admin_name.as_bytes().to_vec();
-        let bounded_name: admin_primitives::AdminName = name_vec
-            .clone()
+        let citizen = state
+            .db
+            .find_citizen_by_wallet(admin.admin_account.trim())
+            .map_err(|err| api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, &err))?;
+        let family_name = admin
+            .family_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                citizen
+                    .as_ref()
+                    .map(|record| record.citizen_family_name.trim())
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| "管理".to_string());
+        let given_name = admin
+            .given_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                citizen
+                    .as_ref()
+                    .map(|record| record.citizen_given_name.trim())
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| "员".to_string());
+        let family_name: admin_primitives::FamilyName = family_name
+            .into_bytes()
             .try_into()
-            .map_err(|_| api_error(StatusCode::BAD_REQUEST, 1001, "管理员姓名过长"))?;
+            .map_err(|_| api_error(StatusCode::BAD_REQUEST, 1001, "管理员姓过长"))?;
+        let given_name: admin_primitives::GivenName = given_name
+            .into_bytes()
+            .try_into()
+            .map_err(|_| api_error(StatusCode::BAD_REQUEST, 1001, "管理员名过长"))?;
         args.push(InstitutionAdminArg {
-            admin_name: name_vec,
             admin_account,
+            family_name: family_name.clone(),
+            given_name: given_name.clone(),
         });
-        action_admins.push(admin_primitives::InstitutionAdmin {
-            admin_name: bounded_name,
+        action_admins.push(admin_primitives::Admin {
             admin_account,
+            family_name,
+            given_name,
         });
     }
     if action_admins.len() < 2 {
@@ -489,7 +522,7 @@ pub(crate) async fn prepare_institution_governance(
             legal_representative_change: legal,
         }
     } else {
-        let (_, admins) = match parse_admin_inputs(&input.admins) {
+        let (_, admins) = match parse_admin_inputs(&state, &input.admins) {
             Ok(v) => v,
             Err(resp) => return resp,
         };
@@ -628,7 +661,7 @@ pub(crate) async fn prepare_register_institution_admins(
     }) else {
         return api_error(StatusCode::NOT_FOUND, 1004, "机构不存在");
     };
-    let (admin_args, action_admins) = match parse_admin_inputs(&input.admins) {
+    let (admin_args, action_admins) = match parse_admin_inputs(&state, &input.admins) {
         Ok(v) => v,
         Err(resp) => return resp,
     };

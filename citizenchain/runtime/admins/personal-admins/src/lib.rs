@@ -13,8 +13,8 @@
 extern crate alloc;
 
 use admin_primitives::{
-    AdminAccount, AdminAccountKind, AdminAccountLifecycle, AdminAccountQuery, AdminAccountStatus,
-    AdminSetChangeAction,
+    Admin, AdminAccount, AdminAccountKind, AdminAccountLifecycle, AdminAccountQuery,
+    AdminAccountStatus, AdminSetChangeAction,
 };
 use alloc::vec::Vec;
 use codec::{Decode, Encode};
@@ -71,8 +71,10 @@ pub mod pallet {
         type WeightInfo: crate::weights::WeightInfo;
     }
 
-    pub type AdminsOf<T> =
-        BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxPersonalAccountAdmins>;
+    pub type AdminsOf<T> = BoundedVec<
+        Admin<<T as frame_system::Config>::AccountId>,
+        <T as Config>::MaxPersonalAccountAdmins,
+    >;
 
     pub type AdminAccountOf<T> =
         AdminAccount<AdminsOf<T>, <T as frame_system::Config>::AccountId, BlockNumberFor<T>>;
@@ -83,8 +85,8 @@ pub mod pallet {
 
     /// 个人多签管理员集合。key 为 personal_account。
     ///
-    /// 个人多签不依赖 CID 资料，管理员真源只保存 AccountId 集合。
-    /// 账户名、创建者和生命周期状态属于 personal-manage。
+    /// 个人多签不依赖 CID 资料，但管理员同样保存账户、姓、名三字段完整记录。
+    /// 授权只比较 `admin_account`；账户名、创建者和生命周期状态属于 personal-manage。
     #[pallet::storage]
     #[pallet::getter(fn admin_account_of)]
     pub type AdminAccounts<T: Config> =
@@ -156,6 +158,8 @@ pub mod pallet {
         AdminSetUnchanged,
         ProposalActionNotFound,
         InvalidLifecycleScope,
+        InvalidFamilyName,
+        InvalidGivenName,
     }
 
     #[pallet::call]
@@ -175,6 +179,7 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             ensure!(institution_code == PMUL, Error::<T>::NotPersonalAccount);
+            let admins = Self::normalize_admins(admins);
             let current =
                 AdminAccounts::<T>::get(account.clone()).ok_or(Error::<T>::PersonalNotFound)?;
             ensure!(
@@ -184,7 +189,12 @@ pub mod pallet {
                 Error::<T>::NotPersonalAccount
             );
             let current_admins = current.admins.clone().into_inner();
-            ensure!(current_admins.contains(&who), Error::<T>::PermissionDenied);
+            ensure!(
+                current_admins
+                    .iter()
+                    .any(|admin| admin.admin_account == who),
+                Error::<T>::PermissionDenied
+            );
             Self::validate_admin_set_for_change(&admins, new_threshold)?;
             ensure!(
                 !Self::same_admin_set(current_admins.as_slice(), admins.as_slice()),
@@ -223,6 +233,17 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        /// 姓、名缺失时在进入链上业务校验前统一补成“管理”“员”。
+        fn normalize_admins(admins: AdminsOf<T>) -> AdminsOf<T> {
+            AdminsOf::<T>::truncate_from(
+                admins
+                    .into_inner()
+                    .into_iter()
+                    .map(Admin::normalize_names)
+                    .collect(),
+            )
+        }
+
         fn validate_admin_set_for_change(
             admins: &AdminsOf<T>,
             new_threshold: u32,
@@ -246,18 +267,25 @@ pub mod pallet {
         fn ensure_unique_admins(admins: &AdminsOf<T>) -> DispatchResult {
             let mut seen = BTreeSet::new();
             for admin in admins.iter() {
-                ensure!(seen.insert(admin.clone()), Error::<T>::DuplicateAdmin);
+                ensure!(!admin.family_name.is_empty(), Error::<T>::InvalidFamilyName);
+                ensure!(!admin.given_name.is_empty(), Error::<T>::InvalidGivenName);
+                ensure!(
+                    seen.insert(admin.admin_account.clone()),
+                    Error::<T>::DuplicateAdmin
+                );
             }
             Ok(())
         }
 
-        fn same_admin_set(left: &[T::AccountId], right: &[T::AccountId]) -> bool {
+        fn same_admin_set(left: &[Admin<T::AccountId>], right: &[Admin<T::AccountId>]) -> bool {
             if left.len() != right.len() {
                 return false;
             }
-            let left_set: BTreeSet<T::AccountId> = left.iter().cloned().collect();
-            let right_set: BTreeSet<T::AccountId> = right.iter().cloned().collect();
-            left_set == right_set
+            let mut left = left.to_vec();
+            let mut right = right.to_vec();
+            left.sort_by(|a, b| a.admin_account.cmp(&b.admin_account));
+            right.sort_by(|a, b| a.admin_account.cmp(&b.admin_account));
+            left == right
         }
 
         pub(crate) fn ensure_lifecycle_proposal(
@@ -305,7 +333,7 @@ pub mod pallet {
         pub(crate) fn do_create_pending_admin_account(
             account: T::AccountId,
             kind: AdminAccountKind,
-            admins: Vec<T::AccountId>,
+            admins: Vec<Admin<T::AccountId>>,
             creator: T::AccountId,
         ) -> DispatchResult {
             ensure!(
@@ -317,6 +345,9 @@ pub mod pallet {
                 Error::<T>::PersonalAlreadyExists
             );
             let bounded: AdminsOf<T> = admins
+                .into_iter()
+                .map(Admin::normalize_names)
+                .collect::<Vec<_>>()
                 .try_into()
                 .map_err(|_| Error::<T>::InvalidAdminsLen)?;
             Self::ensure_unique_admins(&bounded)?;
@@ -421,13 +452,34 @@ pub mod pallet {
             ) else {
                 return false;
             };
-            admin_account.admins.iter().any(|admin| admin == who)
+            admin_account
+                .admins
+                .iter()
+                .any(|admin| &admin.admin_account == who)
         }
 
         pub fn active_account_admins(
             institution_code: InstitutionCode,
             account: T::AccountId,
         ) -> Option<Vec<T::AccountId>> {
+            Some(
+                Self::admin_account_with_status(
+                    institution_code,
+                    account,
+                    AdminAccountStatus::Active,
+                )?
+                .admins
+                .into_inner()
+                .into_iter()
+                .map(|admin| admin.admin_account)
+                .collect(),
+            )
+        }
+
+        pub fn active_account_admin_records(
+            institution_code: InstitutionCode,
+            account: T::AccountId,
+        ) -> Option<Vec<Admin<T::AccountId>>> {
             Some(
                 Self::admin_account_with_status(
                     institution_code,
@@ -474,13 +526,34 @@ pub mod pallet {
             ) else {
                 return false;
             };
-            admin_account.admins.iter().any(|admin| admin == who)
+            admin_account
+                .admins
+                .iter()
+                .any(|admin| &admin.admin_account == who)
         }
 
         pub fn pending_account_admins_for_snapshot(
             institution_code: InstitutionCode,
             account: T::AccountId,
         ) -> Option<Vec<T::AccountId>> {
+            Some(
+                Self::admin_account_with_status(
+                    institution_code,
+                    account,
+                    AdminAccountStatus::Pending,
+                )?
+                .admins
+                .into_inner()
+                .into_iter()
+                .map(|admin| admin.admin_account)
+                .collect(),
+            )
+        }
+
+        pub fn pending_account_admin_records_for_snapshot(
+            institution_code: InstitutionCode,
+            account: T::AccountId,
+        ) -> Option<Vec<Admin<T::AccountId>>> {
             Some(
                 Self::admin_account_with_status(
                     institution_code,
@@ -567,7 +640,9 @@ pub mod pallet {
     }
 }
 
-impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId> for pallet::Pallet<T> {
+impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId, Admin<T::AccountId>>
+    for pallet::Pallet<T>
+{
     fn create_pending_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
@@ -575,7 +650,7 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId> for pallet::Pallet<T
         _cid_number: Vec<u8>,
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
-        admins: Vec<T::AccountId>,
+        admins: Vec<Admin<T::AccountId>>,
         creator: T::AccountId,
     ) -> DispatchResult {
         ensure!(
@@ -667,6 +742,13 @@ impl<T: pallet::Config> AdminAccountQuery<T::AccountId> for pallet::Pallet<T> {
         Self::active_account_admins(institution_code, personal_account)
     }
 
+    fn active_account_admin_records(
+        institution_code: InstitutionCode,
+        personal_account: T::AccountId,
+    ) -> Option<Vec<Admin<T::AccountId>>> {
+        Self::active_account_admin_records(institution_code, personal_account)
+    }
+
     fn active_account_admins_len(
         institution_code: InstitutionCode,
         personal_account: T::AccountId,
@@ -694,6 +776,13 @@ impl<T: pallet::Config> AdminAccountQuery<T::AccountId> for pallet::Pallet<T> {
         personal_account: T::AccountId,
     ) -> Option<Vec<T::AccountId>> {
         Self::pending_account_admins_for_snapshot(institution_code, personal_account)
+    }
+
+    fn pending_account_admin_records_for_snapshot(
+        institution_code: InstitutionCode,
+        personal_account: T::AccountId,
+    ) -> Option<Vec<Admin<T::AccountId>>> {
+        Self::pending_account_admin_records_for_snapshot(institution_code, personal_account)
     }
 
     fn pending_account_admins_len_for_snapshot(

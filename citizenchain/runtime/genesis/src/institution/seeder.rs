@@ -31,7 +31,8 @@ use primitives::{
 use sp_runtime::traits::Zero;
 
 use admin_primitives::{
-    AdminCidNumber, AdminName, InstitutionAdmin, InstitutionAdmins, DEFAULT_ADMIN_NAME,
+    Admin, AdminCidNumber, FamilyName, GivenName, InstitutionAdmins, DEFAULT_ADMIN_FAMILY_NAME,
+    DEFAULT_ADMIN_GIVEN_NAME,
 };
 use public_manage::{
     InstitutionAccountInfo, InstitutionAdminAssignment, InstitutionAssignmentSource,
@@ -61,7 +62,7 @@ type PublicInstitutionAccountInfoOf<T> = InstitutionAccountInfo<
 type PublicRegisteredInstitutionOf<T> =
     RegisteredInstitution<PublicCidNumberOf<T>, PublicAccountNameOf<T>>;
 type PublicAdminsOf<T> = BoundedVec<
-    InstitutionAdmin<<T as frame_system::Config>::AccountId>,
+    Admin<<T as frame_system::Config>::AccountId>,
     <T as public_admins::Config>::MaxAdminsPerInstitution,
 >;
 type PublicInstitutionAdminsOf<T> = InstitutionAdmins<PublicAdminsOf<T>>;
@@ -318,7 +319,7 @@ fn insert_fixed_admins<T>(
     let mut roles: Vec<public_manage::institution::role::InstitutionRoleOf<T>> = Vec::new();
     let mut assignments: Vec<public_manage::institution::role::InstitutionAdminAssignmentOf<T>> =
         Vec::new();
-    let mut admin_records: Vec<InstitutionAdmin<T::AccountId>> = Vec::new();
+    let mut admin_records: Vec<Admin<T::AccountId>> = Vec::new();
 
     for (index, raw) in raw_admins.iter().enumerate() {
         let (role_code_raw, role_name_raw) =
@@ -351,13 +352,18 @@ fn insert_fixed_admins<T>(
             .iter()
             .any(|admin| admin.admin_account == admin_account)
         {
-            let admin_name: AdminName = DEFAULT_ADMIN_NAME
+            let family_name: FamilyName = DEFAULT_ADMIN_FAMILY_NAME
                 .to_vec()
                 .try_into()
-                .expect("默认管理员姓名不得超过协议上限");
-            admin_records.push(InstitutionAdmin {
-                admin_name,
+                .expect("默认管理员姓不得超过协议上限");
+            let given_name: GivenName = DEFAULT_ADMIN_GIVEN_NAME
+                .to_vec()
+                .try_into()
+                .expect("默认管理员名不得超过协议上限");
+            admin_records.push(Admin {
                 admin_account,
+                family_name,
+                given_name,
             });
         }
     }

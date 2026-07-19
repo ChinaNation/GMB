@@ -127,9 +127,9 @@ function parseGovernanceAdmins(text?: string): InstitutionGovernanceAdminInput[]
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const [adminName, adminAccount] = line.split(/[,，]/).map((part) => part.trim());
-      if (!adminName || !adminAccount) throw new Error('管理员集合每行格式必须是：姓名,账户');
-      return { admin_name: adminName, admin_account: adminAccount };
+      const [familyName, givenName, adminAccount] = line.split(/[,，]/).map((part) => part.trim());
+      if (!familyName || !givenName || !adminAccount) throw new Error('管理员集合每行格式必须是：姓,名,账户');
+      return { admin_account: adminAccount, family_name: familyName, given_name: givenName };
     });
 }
 
@@ -498,11 +498,12 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     const roleLabel = detail.created_by_role
       ? CREATED_BY_ROLE_LABEL[detail.created_by_role] ?? detail.created_by_role
       : '';
+    const creatorName = `${detail.created_by_family_name ?? ''}${detail.created_by_given_name ?? ''}`;
     // 三态:姓名+角色 / 仅角色(内置管理员未设姓名)/ 完全未知
-    if (detail.created_by_name) {
+    if (creatorName) {
       return (
         <span>
-          {detail.created_by_name}
+          {creatorName}
           {roleLabel && (
             <Typography.Text type="secondary" style={{ marginLeft: 6, fontSize: 12 }}>
               ({roleLabel})
@@ -903,11 +904,11 @@ export const PrivateDetailLayout: React.FC<Props> = ({
         showIcon
         style={{ marginBottom: 16 }}
         message="管理员是人，岗位是职位；本页面只构造链上治理交易，不本地改管理员真源。"
-        description="管理员集合每行填“姓名,账户”。岗位码默认自动生成短码；任职每行填“岗位码,管理员账户,任期开始,任期结束”。法定代表人任命/更换只填公民 CID；解除则清空链上三字段。"
+        description="管理员集合每行填“姓,名,账户”。岗位码默认自动生成短码；任职每行填“岗位码,管理员账户,任期开始,任期结束”。法定代表人任命/更换只填公民 CID；解除则清空链上三字段。"
       />
       <Form form={governanceForm} layout="vertical" disabled={!canWrite || governanceSubmitting}>
         <Form.Item label="管理员集合" name="admins_text">
-          <Input.TextArea rows={4} placeholder={'张三,w5...\n李四,w5...'} />
+          <Input.TextArea rows={4} placeholder={'张,三,w5...\n李,四,w5...'} />
         </Form.Item>
         <Divider orientation="left">岗位</Divider>
         <Row gutter={12}>

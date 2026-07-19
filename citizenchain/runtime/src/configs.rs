@@ -1909,7 +1909,7 @@ impl admin_primitives::InstitutionAdminQuery<AccountId> for RuntimeInstitutionAd
     fn institution_admin_records(
         institution_code: primitives::cid::code::InstitutionCode,
         cid_number: &[u8],
-    ) -> Option<Vec<admin_primitives::InstitutionAdmin<AccountId>>> {
+    ) -> Option<Vec<admin_primitives::Admin<AccountId>>> {
         if admin_primitives::is_public_admin_code(&institution_code) {
             return <public_admins::Pallet<Runtime> as admin_primitives::InstitutionAdminQuery<
                 AccountId,
@@ -1978,6 +1978,19 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
         None
     }
 
+    fn active_account_admin_records(
+        institution_code: primitives::cid::code::InstitutionCode,
+        personal_account: AccountId,
+    ) -> Option<Vec<admin_primitives::Admin<AccountId>>> {
+        if admin_primitives::is_personal_admin_code(&institution_code) {
+            return personal_admins::Pallet::<Runtime>::active_account_admin_records(
+                institution_code,
+                personal_account,
+            );
+        }
+        None
+    }
+
     fn active_account_admins_len(
         institution_code: primitives::cid::code::InstitutionCode,
         personal_account: AccountId,
@@ -2019,6 +2032,19 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
     ) -> Option<Vec<AccountId>> {
         if admin_primitives::is_personal_admin_code(&institution_code) {
             return personal_admins::Pallet::<Runtime>::pending_account_admins_for_snapshot(
+                institution_code,
+                personal_account,
+            );
+        }
+        None
+    }
+
+    fn pending_account_admin_records_for_snapshot(
+        institution_code: primitives::cid::code::InstitutionCode,
+        personal_account: AccountId,
+    ) -> Option<Vec<admin_primitives::Admin<AccountId>>> {
+        if admin_primitives::is_personal_admin_code(&institution_code) {
+            return personal_admins::Pallet::<Runtime>::pending_account_admin_records_for_snapshot(
                 institution_code,
                 personal_account,
             );
@@ -2163,7 +2189,15 @@ fn seed_benchmark_public_admin_account(
     let first_admin = AccountId::new(raw_admins.first().copied().ok_or(())?);
     let admins: public_admins::AdminsOf<Runtime> = raw_admins
         .iter()
-        .map(|raw_admin| AccountId::new(*raw_admin))
+        .map(|raw_admin| admin_primitives::Admin {
+            admin_account: AccountId::new(*raw_admin),
+            family_name: admin_primitives::FamilyName::truncate_from(
+                admin_primitives::DEFAULT_ADMIN_FAMILY_NAME.to_vec(),
+            ),
+            given_name: admin_primitives::GivenName::truncate_from(
+                admin_primitives::DEFAULT_ADMIN_GIVEN_NAME.to_vec(),
+            ),
+        })
         .collect::<Vec<_>>()
         .try_into()
         .map_err(|_| ())?;

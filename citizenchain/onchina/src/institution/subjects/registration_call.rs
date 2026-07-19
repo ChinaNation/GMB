@@ -4,9 +4,8 @@
 //! 对齐的 `ProposeCreateInstitutionArgs`,再交 `core::institution_call` 编码。
 //! onchina 只产 call data,最终链签由管理员钱包对 extrinsic origin 签一次。
 //!
-//! 管理员组装规则：表单显式填写姓名时优先使用；未填写或仍为默认“管理员”时，
-//! 钱包能命中公民资料则使用公民姓名，否则名称固定为“管理员”。
-//! 姓名只展示，唯一授权字段仍是钱包账户。首次登记不提交岗位或任职。
+//! 管理员组装规则：姓、名分别优先使用表单值；缺失时按钱包读取公民姓名，仍缺失
+//! 则分别使用“管理”“员”。姓名只展示，唯一授权字段仍是钱包账户。
 //! 机构 `cid_short_name` 只取 subjects.cid_short_name,与 `cid_full_name` 同源上链。
 
 use crate::auth::login::parse_sr25519_pubkey_bytes;
@@ -61,30 +60,47 @@ pub(crate) fn build_create_institution_call_data(
         if !seen_accounts.insert(admin_account) {
             return Err("http:bad_request:duplicate admin_account".to_string());
         }
-        let requested_admin_name = form
-            .admin_name
+        let citizen = state
+            .db
+            .find_citizen_by_wallet(form.admin_account.as_str())?;
+        let family_name = form
+            .family_name
             .as_deref()
             .map(str::trim)
-            .filter(|name| !name.is_empty() && *name != "管理员")
-            .map(str::to_string);
-        let admin_name = match requested_admin_name {
-            Some(name) => name,
-            None => state
-                .db
-                .find_citizen_by_wallet(form.admin_account.as_str())?
-                .map(|citizen| {
-                    format!(
-                        "{}{}",
-                        citizen.citizen_family_name.trim(),
-                        citizen.citizen_given_name.trim()
-                    )
-                })
-                .filter(|name| !name.is_empty())
-                .unwrap_or_else(|| "管理员".to_string()),
-        };
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                citizen
+                    .as_ref()
+                    .map(|record| record.citizen_family_name.trim())
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| "管理".to_string());
+        let given_name = form
+            .given_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                citizen
+                    .as_ref()
+                    .map(|record| record.citizen_given_name.trim())
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| "员".to_string());
         admins.push(InstitutionAdminArg {
-            admin_name: admin_name.into_bytes(),
             admin_account,
+            family_name: family_name
+                .into_bytes()
+                .try_into()
+                .map_err(|_| "http:bad_request:family_name too long".to_string())?,
+            given_name: given_name
+                .into_bytes()
+                .try_into()
+                .map_err(|_| "http:bad_request:given_name too long".to_string())?,
         });
     }
     if admins.len() < 2 {

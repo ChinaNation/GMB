@@ -455,9 +455,10 @@ pub fn empty_town_code() -> pallet::AccountNameOf<Test> {
 
 pub fn institution_admins(count: u8) -> crate::InstitutionAdminsInputOf<Test> {
     (0..count)
-        .map(|seed| admin_primitives::InstitutionAdmin {
-            admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+        .map(|seed| admin_primitives::Admin {
             admin_account: admin(seed),
+            family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
+            given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
         })
         .collect::<alloc::vec::Vec<_>>()
         .try_into()

@@ -51,7 +51,8 @@ export function InstitutionAssignmentCard({
   status,
 }: Props) {
   const topAction = action ?? status;
-  const accountText = admin.account ? hexToSs58(admin.account) : '';
+  const accountText = admin.adminAccount ? hexToSs58(admin.adminAccount) : '';
+  const personName = `${admin.familyName}${admin.givenName}`;
   const balanceText = balanceFen != null ? formatBalance(balanceFen) : '';
 
   return (
@@ -62,12 +63,15 @@ export function InstitutionAssignmentCard({
       </div>
 
       <div className="institution-assignment-account">
+        <AssignmentField label="管理员姓名" value={personName} />
         <AssignmentField label="管理员账户" value={accountText} />
         <AssignmentField label="账户余额" value={balanceText} />
       </div>
 
       <div className="institution-assignment-list">
-        {admin.assignments.map((assignment) => (
+        {admin.assignments.length === 0 ? (
+          <div className="institution-assignment-item">暂无岗位</div>
+        ) : admin.assignments.map((assignment) => (
           <div className="institution-assignment-item" key={assignment.roleCode}>
             <div className="institution-assignment-role">
               {assignment.roleName}

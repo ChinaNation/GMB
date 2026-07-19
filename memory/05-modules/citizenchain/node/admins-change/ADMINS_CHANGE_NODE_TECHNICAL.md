@@ -1,10 +1,10 @@
 # Node 机构管理员读取与本机激活技术文档
 
-最新更新：2026-07-13。
+最新更新：2026-07-18。
 
 ## 模块定位
 
-Node 桌面端只负责读取 `admin_name + admin_account` 管理员事实、展示岗位任职和激活本机管理员钱包。Node 不提供机构管理员集合直接变更入口；机构岗位或任职变化由 `entity` 独立更新，不得派生或覆盖 `admins`。
+Node 桌面端只负责读取 `admin_account + family_name + given_name` 管理员事实、展示人员姓名和岗位任职、激活本机管理员钱包。Node 不提供机构管理员集合直接变更入口；机构岗位或任职变化由 `entity` 独立更新，不得派生或覆盖 `admins`。姓名只用于展示，授权与本机激活资格只比较 `admin_account`。
 
 个人多签管理员属于 CitizenApp 的独立个人多签业务，不进入本模块。
 
@@ -37,11 +37,13 @@ citizenchain/node/frontend/admins/
 
 机构管理员展示必须在同一个 finalized block hash 上联合读取：
 
-1. 从 `PublicAdmins` 或 `PrivateAdmins::AdminAccounts` 读取机构 CID、机构码、管理员钱包集合和状态。
+1. 从 `PublicAdmins` 或 `PrivateAdmins::AdminAccounts` 读取机构码和管理员三字段集合；CID 只存在于 storage key，不在 value 中重复保存。
 2. 从对应 `PublicManage` 或 `PrivateManage::InstitutionRoles` 读取有效岗位。
 3. 从对应 `InstitutionRoleAssignments` 读取有效任职。
 4. 按管理员钱包聚合全部有效岗位任职；同一钱包在同一机构只显示一张卡片。
-5. 任一管理员钱包没有有效任职，或有效任职引用了不存在/停用岗位时，返回链上状态不一致错误，不伪造空资料。
+5. 管理员允许没有岗位，此时保留管理员人员记录并返回空 `assignments`；只有有效任职引用不存在或停用岗位时才返回链上状态不一致错误。
+
+Node 直接使用 `admin-primitives::InstitutionAdmins<Vec<Admin<[u8; 32]>>>` 精确 SCALE 解码，拒绝尾随字节、旧纯账户数组、重复账户、空姓名和非 UTF-8 姓名，不保留旧布局兼容。
 
 非法人机构不能只凭机构码猜测公权或私权归属；按账户同时探测两个 admins 模块，以真实命中的模块确定 entity 路由。同一账户若同时命中两个模块，直接拒绝。
 
@@ -51,7 +53,9 @@ citizenchain/node/frontend/admins/
 
 | 字段 | 中文说明 |
 |---|---|
-| `account` | 管理员唯一钱包账户，hex 不含 `0x` |
+| `admin_account` | 管理员唯一钱包账户，hex 不含 `0x` |
+| `family_name` | 管理员姓，只用于展示 |
+| `given_name` | 管理员名，只用于展示 |
 | `assignments` | 该钱包在本机构的全部有效岗位任职 |
 
 `InstitutionRoleAssignmentInfo`：
@@ -66,7 +70,7 @@ citizenchain/node/frontend/admins/
 | `assignment_source_label` | 创世、注册局、普选、互选或提名任免 |
 | `assignment_source_ref` | 对应登记、选举、投票或任免结果引用 |
 
-机构管理员 DTO 不包含管理员姓名、公民 CID、`creator`、`created_at` 或 `updated_at`。普通公民身份资料不能从机构管理员钱包反推或展示。
+机构管理员 DTO 不包含公民 CID、`creator`、`created_at` 或 `updated_at`。Node 只显示链上管理员记录已经保存的姓、名，不从钱包反推公民身份资料。
 
 ## 本机管理员激活
 
@@ -82,9 +86,9 @@ GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(0x18)
 + nonce(16)
 ```
 
-- 激活前必须在 finalized 链上状态中确认钱包属于该机构当前管理员集合且具有有效岗位任职。
+- 激活前必须在 finalized 链上状态中确认钱包属于该机构当前管理员集合；管理员没有岗位也不影响管理员授权。
 - 验签后写入 `{app_data}/activated-admin-accounts.json`；记录按机构账户、机构码、类型和钱包归档。
-- 每次读取已激活管理员时重新与链上当前管理员集合交叉校验，失效任职不再赋予本地操作资格。
+- 每次读取已激活管理员时重新与链上当前管理员集合交叉校验；从 `admins` 移除后本地激活立即失效。
 - 动态机构必须提供 `accountHex`；只有固定治理机构可用内置 CID 派生账户。
 
 ## Tauri 命令
@@ -103,13 +107,15 @@ GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(0x18)
 `InstitutionAssignmentCard` 固定按一个管理员钱包展示：
 
 - 顶部：序号和激活/投票操作状态。
-- 账户区：管理员钱包 SS58 地址、finalized 余额。
+- 账户区：按中文顺序合并的管理员姓、名，管理员钱包 SS58 地址和 finalized 余额。
 - 任职区：逐条显示岗位名称、岗位代码、任期、来源和来源依据。
 
-卡片不展示管理员姓名或公民 CID。同一钱包有多个岗位时在同一卡片内分条展示；投票资格仍按钱包唯一计算，不能按岗位重复生成同一机构内的票。
+卡片不展示公民 CID。同一钱包有多个岗位时在同一卡片内分条展示，没有岗位时显示“暂无岗位”；投票资格仍按 `admin_account` 唯一计算，不能按姓名或岗位重复生成同一机构内的票。
 
 ## 验收规则
 
 - Rust 必须通过 Node 编译和测试，前端必须通过 TypeScript/Vite 生产构建。
-- 旧 `AdminProfile`、机构管理员集合编辑器、差异卡片、直接变更 API/命令和“换管理员”入口必须为零。
+- 废弃管理员结构、纯账户数组、旧姓名与账户字段别名、机构管理员集合编辑器、差异卡片、直接变更 API/命令和“换管理员”入口必须为零。
 - 真实验收使用节点 RPC 与实际前端产物；若用户明确暂缓重新创世，只能基于现有链规格验证 Node Guard、RPC、metadata 和页面，不得把重新创世标记为已完成。
+
+2026-07-18 第2步真实验收：强制从当前源码重建 runtime WASM 和 Node 后，以 `citizenchain-fresh`、独立临时数据目录、禁用挖矿方式启动成功；NodeGuard 未拒绝三字段管理员状态。RPC 返回 block#0 `0xc1dc759689aed0a8f8361dc3cb0e39c1faf19cfc55c7611b02ccc79ce04524c6`，`stateRoot=0x967155d28abe492052ef4bfd59a1ddbebce8cdaa57d9baaad446028848061a5e`，`system_health.isSyncing=false`，metadata 响应 422,564 字节。节点正常停止，352 MiB 临时数据已移入废纸篓；本次未烘焙正式 chainspec、未切换正式节点数据。

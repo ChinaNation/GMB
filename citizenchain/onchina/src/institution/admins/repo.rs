@@ -12,6 +12,7 @@ use crate::institution::admins::model::InstitutionAdmin;
 use crate::scope::{filter_by_scope, rules::VisibleScope};
 
 const SELECT_COLUMNS: &str = "cid_number, province_code, city_code, admin_account,
+    family_name, given_name,
     admin_department, admin_job, admin_contact_phone, admin_contact_email,
     admin_photo_path, admin_photo_name, admin_photo_mime, admin_photo_size,
     admin_passkey_credential_id, admin_source_id, admin_status,
@@ -23,27 +24,29 @@ fn row_to_admin(row: &postgres::Row) -> InstitutionAdmin {
     // 名字按 code 现场派生(单源 china.sqlite),库里不存名字副本。
     let (province_name, city_name, _town_name) =
         area_display_names(province_code.as_str(), city_code.as_deref(), None);
-    let photo_size: Option<i64> = row.get(11);
+    let photo_size: Option<i64> = row.get(13);
     InstitutionAdmin {
         cid_number: row.get(0),
         province_code,
         city_code,
         admin_account: row.get(3),
-        admin_department: row.get(4),
-        admin_job: row.get(5),
-        admin_contact_phone: row.get(6),
-        admin_contact_email: row.get(7),
-        admin_photo_path: row.get(8),
-        admin_photo_name: row.get(9),
-        admin_photo_mime: row.get(10),
+        family_name: row.get(4),
+        given_name: row.get(5),
+        admin_department: row.get(6),
+        admin_job: row.get(7),
+        admin_contact_phone: row.get(8),
+        admin_contact_email: row.get(9),
+        admin_photo_path: row.get(10),
+        admin_photo_name: row.get(11),
+        admin_photo_mime: row.get(12),
         admin_photo_size: photo_size.and_then(|v| u64::try_from(v).ok()),
-        admin_passkey_credential_id: row.get(12),
-        admin_source_id: row.get(13),
-        admin_status: row.get(14),
-        admin_updated_at: row.get(15),
-        created_by: row.get(16),
-        operation_log_id: row.get(17),
-        created_at: row.get(18),
+        admin_passkey_credential_id: row.get(14),
+        admin_source_id: row.get(15),
+        admin_status: row.get(16),
+        admin_updated_at: row.get(17),
+        created_by: row.get(18),
+        operation_log_id: row.get(19),
+        created_at: row.get(20),
         province_name,
         city_name,
     }
@@ -57,16 +60,19 @@ pub(crate) fn upsert_institution_admin(db: &Db, admin: &InstitutionAdmin) -> Res
         conn.execute(
             "INSERT INTO institution_admins (
                 cid_number, province_code, city_code, admin_account,
+                family_name, given_name,
                 admin_department, admin_job, admin_contact_phone, admin_contact_email,
                 admin_photo_path, admin_photo_name, admin_photo_mime, admin_photo_size,
                 admin_passkey_credential_id, admin_source_id, admin_status,
                 admin_updated_at, created_by, operation_log_id
              ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                $16, $17, $18
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                $15, $16, $17, $18, $19, $20
              )
              ON CONFLICT (province_code, cid_number, admin_account) DO UPDATE SET
                 city_code = EXCLUDED.city_code,
+                family_name = EXCLUDED.family_name,
+                given_name = EXCLUDED.given_name,
                 admin_department = EXCLUDED.admin_department,
                 admin_job = EXCLUDED.admin_job,
                 admin_contact_phone = EXCLUDED.admin_contact_phone,
@@ -86,6 +92,8 @@ pub(crate) fn upsert_institution_admin(db: &Db, admin: &InstitutionAdmin) -> Res
                 &admin.province_code,
                 &admin.city_code,
                 &admin.admin_account,
+                &admin.family_name,
+                &admin.given_name,
                 &admin.admin_department,
                 &admin.admin_job,
                 &admin.admin_contact_phone,

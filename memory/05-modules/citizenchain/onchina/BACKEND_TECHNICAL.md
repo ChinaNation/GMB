@@ -51,8 +51,8 @@ citizenchain/onchina/src/
 
 - 机构主写入只进入 `institution/subjects`、`domains/gov`、`domains/private`、`institution/accounts` 和 `domains/docs`。
 - 公民主写入只进入 `domains/citizens`、`subjects`、`citizens`、`citizen_documents`、`passport_numbers` 和 `sequence_counters`。
-- 管理员写入只进入 `admins`（本地展示元数据）和短生命周期安全运行态表；成员资格与岗位范围只来自链上，禁止建立本地管理员授权范围表。
-- 新机构首次登记只提交机构 CID 基础资料和至少两个管理员钱包。后端从公民档案解析管理员姓名，未解析到姓名时使用“管理员”；链上确认前只允许写 `chain_sign_sessions` 短期签名会话，禁止写入任何机构业务草稿或占用表。
+- 管理员写入只进入 `admins`（本地展示元数据）和短生命周期安全运行态表；管理员字段固定为 `admin_account + family_name + given_name`，成员资格与岗位范围只来自链上，禁止建立本地管理员授权范围表。
+- 新机构首次登记只提交机构 CID 基础资料和至少两个管理员的账户、姓、名。后端分别从公民档案解析姓、名，未解析到时分别使用“管理”“员”；链上确认前只允许写 `chain_sign_sessions` 短期签名会话，禁止写入任何机构业务草稿或占用表。
 - 创建机构和创建公民只有两种业务结果：链上确认成功后写正式投影；未链上确认就是失败，并删除对应短期签名会话，不保留名称、CID、管理员或公民档案占用。
 - 公权机构唯一真源是链上 `PublicManage`;`subjects/gov/accounts` 中的公权行只是本地查询投影,投影版本只记录在 `chain_projection_state`。
 - 链上状态字段只作本地投影缓存(`subjects.chain_status`、`accounts.chain_status`),不得成为第二授权真源。
@@ -144,11 +144,11 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 联邦注册局机构 `admins` 和岗位任职不得本地直接改库；换届只能构造链上治理或注册局登记动作后由 entity 写入。市注册局本地登记目录每省每市最多 30 人，统计必须同时带省和市，但该目录不是链上管理员资格真源。NJD、普通公权机构、私权机构和非法人组织的本机构管理员/岗位维护也必须走链上 `propose_institution_governance`，不得在 OnChina 内建立第二套管理员集合。
 
-创建机构(`INSTITUTION_CREATE`)属扫码授权动作。后端 `prepare` 阶段只预检管辖范围和至少两个不重复 `admin_account`，不再接收 `threshold`；正式创建阶段的授权 payload 必须与前端 `buildInstitutionCreatePayload` 同构，包含 `subject_property / p1 / province_name / city_name / town_name / institution / education_type / cid_full_name / cid_short_name / parent_cid_number / private_type / partnership_kind / admins`。`admins` 每项只允许 `admin_name + admin_account`，授权仍只比较账户。
+创建机构(`INSTITUTION_CREATE`)属扫码授权动作。后端 `prepare` 阶段只预检管辖范围和至少两个不重复 `admin_account`，不再接收 `threshold`；正式创建阶段的授权 payload 必须与前端 `buildInstitutionCreatePayload` 同构，包含 `subject_property / p1 / province_name / city_name / town_name / institution / education_type / cid_full_name / cid_short_name / parent_cid_number / private_type / partnership_kind / admins`。`admins` 每项字段顺序固定为 `admin_account + family_name + given_name`，授权仍只比较账户。
 
 `PASSKEY_COLD_SIGN` 正式提交的安全门统一在 `auth/actions.rs::require_admin_security_grant`：先消费 `X-Passkey-Assertion`，再消费 `x-cid-security-grant`，任一缺失、过期、归属不匹配或 payload hash 不匹配都 fail-closed，不允许降级为 SESSION 或只验冷签 grant。机构资料上传、资料删除、机构详情更新等链下写操作虽然不直接提交链交易，也必须按各自后端 `grant_payload` 逐字段绑定授权：上传资料为 `target/file_name/doc_type/file_size`，删除资料为 `target/doc_id/file_name`，机构详情更新为 `target/cid_number/cid_full_name/parent_cid_number/legal_representative_name/legal_representative_cid_number/legal_representative_photo_path`。
 
-机构管理员列表 API 联合读取链上 `admins(admin_name + admin_account)` 人员集合与 entity 岗位定义、有效任职。`institution/admins/chain_roles.rs` 负责公权/私权岗位路由、任职合并和 FRG 省专员范围解析；本地联系方式、照片和 Passkey 不得成为管理员资格或岗位真源。岗位权限不建立通用表，具体业务模块按“机构 + 有效岗位 + 业务动作”硬规则判定。
+机构管理员列表 API 联合读取链上 `admins(admin_account + family_name + given_name)` 人员集合与 entity 岗位定义、有效任职。`institution/admins/chain_roles.rs` 负责公权/私权岗位路由、任职合并和 FRG 省专员范围解析；管理员即使没有岗位也必须保留人员行，姓名只展示，授权只比较账户。本地联系方式、照片和 Passkey 不得成为管理员资格或岗位真源。岗位权限不建立通用表，具体业务模块按“机构 + 有效岗位 + 业务动作”硬规则判定。
 
 机构治理链写入口：
 
@@ -192,6 +192,8 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 ## 11. 验收
 
 2026-07-17 机构治理运行态补验：当前源码 `citizenchain-fresh --tmp` 使用 `WASM_BUILD_FROM_SOURCE=1` 构建后启动成功，OnChina 使用临时内嵌 PostgreSQL 和 `ONCHAIN_WS_URL=ws://127.0.0.1:19944` 连接 fresh 链启动成功；启动期完成公权链投影 `49,593` 个机构与 `99,231` 个账户，首页 HTTP 返回 200，`subjects` 表旧 `legal_rep_*` 列为 0，新 `legal_representative_*` 三字段列齐备。交互式 CitizenWallet 扫码签名需要真实管理员登录会话和扫码设备，本次仅完成链、数据库、服务和页面基础运行态，不伪造扫码签名结果。
+
+2026-07-19 正式创世前管理员三字段第 3 步验收：OnChina 后端登录态、链上管理员解码、机构创建与治理编码、注册局目录、机构管理员投影和 PostgreSQL 全部统一为 `admin_account + family_name + given_name`。隔离 `citizenchain-fresh` 节点通过 NodeGuard 并返回 `isSyncing=false`；临时 PostgreSQL 实际建表确认 `admins`、`institution_admins` 均有姓、名分列且旧合并姓名列为 0。另以旧合并姓名单列模拟旧表后重启，服务直接删除旧列并把缺失姓名落为“管理”“员”，没有兼容拆分或双轨。真实链投影仍为 49,593 个机构、99,231 个账户，健康接口为 `UP`、首页返回 200、未登录鉴权返回稳定 401。验收进程均已停止，临时数据已清理；本步没有烘焙正式 chainspec、没有切换正式节点数据。
 
 ```text
 rg "mod chain;|crate::chain|chain::" citizenchain/onchina/src -g '*.rs'

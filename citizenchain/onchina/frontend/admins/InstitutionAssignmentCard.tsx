@@ -2,9 +2,11 @@ import type { ReactNode } from 'react';
 import { Descriptions, Typography } from 'antd';
 import { tryEncodeSs58 } from '../utils/ss58';
 
-/** 管理员钱包与机构岗位的一条任职关系；不承载公民姓名或公民 CID。 */
+/** 管理员钱包与机构岗位的一条任职关系；姓名按链上管理员记录的两个字段投影。 */
 export type InstitutionAssignmentLike = {
   admin_account: string;
+  family_name?: string | null;
+  given_name?: string | null;
   province_name?: string | null;
   city_name?: string | null;
   institution_code?: string | null;
@@ -17,7 +19,6 @@ export type InstitutionAssignmentLike = {
   assignment_source_ref?: string | null;
   balance_fen?: string | null;
   built_in?: boolean | null;
-  created_by_name?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -44,7 +45,7 @@ export function formatAdminBalanceFen(fen?: string | null): string {
 }
 
 export function assignmentDisplayLabel(assignment: InstitutionAssignmentLike): string {
-  return assignment.role_name?.trim() || assignment.role_code?.trim() || '';
+  return `${assignment.family_name?.trim() ?? ''}${assignment.given_name?.trim() ?? ''}`;
 }
 
 function Field({ label, value, trailing }: { label: string; value: string; trailing?: ReactNode }) {
@@ -64,6 +65,7 @@ export function InstitutionAssignmentCard({ assignment, index, action, status, a
       {index != null ? <span style={{ color: '#bfdbfe', fontWeight: 700 }}>{index}</span> : <span />}
       <span>{topAction}</span>
     </div>
+    <Field label="姓名" value={assignmentDisplayLabel(assignment)} />
     <Field label="岗位" value={assignment.role_name ?? ''} />
     <Field label="岗位码" value={assignment.role_code ?? ''} />
     <Field label="任期" value={assignmentTermText(assignment)} />
@@ -78,6 +80,7 @@ export function InstitutionAssignmentDetails({ assignment, areaLabel, areaValue 
   const ss58 = assignment.admin_account ? tryEncodeSs58(assignment.admin_account) : '';
   return <Descriptions column={1} size="small" bordered>
     {areaLabel ? <Descriptions.Item label={areaLabel}>{areaValue || '-'}</Descriptions.Item> : null}
+    <Descriptions.Item label="姓名">{assignmentDisplayLabel(assignment) || '-'}</Descriptions.Item>
     <Descriptions.Item label="岗位">{assignment.role_name || '-'}</Descriptions.Item>
     <Descriptions.Item label="岗位码">{assignment.role_code || '-'}</Descriptions.Item>
     <Descriptions.Item label="任期">{assignmentTermText(assignment) || '-'}</Descriptions.Item>

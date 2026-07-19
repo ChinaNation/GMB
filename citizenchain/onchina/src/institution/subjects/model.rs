@@ -226,9 +226,12 @@ pub const VALID_DOC_TYPES: &[&str] =
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateInstitutionAdminInput {
-    /// 管理员展示姓名;授权唯一依据仍是 admin_account。首次登记不绑定岗位。
+    /// 管理员姓；缺失时先查公民资料，仍缺失则使用“管理”。
     #[serde(default)]
-    pub admin_name: Option<String>,
+    pub family_name: Option<String>,
+    /// 管理员名；缺失时先查公民资料，仍缺失则使用“员”。
+    #[serde(default)]
+    pub given_name: Option<String>,
     /// 机构初始管理员钱包账户。
     pub admin_account: String,
 }
@@ -383,10 +386,12 @@ pub struct InstitutionListRow {
     pub parent_cid_number: Option<String>,
     pub account_count: usize,
     pub created_at: DateTime<Utc>,
-    /// 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users)
-    /// 命中:admin_name;未命中:None(前端显示为"未知")
+    /// 创建该机构的登录管理员姓；与管理员记录字段同名，不保存合并姓名。
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_by_name: Option<String>,
+    pub created_by_family_name: Option<String>,
+    /// 创建该机构的登录管理员名；页面展示时再与姓合并。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_by_given_name: Option<String>,
     /// 创建者角色:"FEDERAL_REGISTRY" / "CITY_REGISTRY" / None
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_role: Option<String>,
@@ -416,9 +421,12 @@ pub struct ParentInstitutionRow {
 pub struct InstitutionDetailOutput {
     pub institution: Institution,
     pub accounts: Vec<InstitutionAccount>,
-    /// 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users)
+    /// 创建该机构的登录管理员姓(按 created_by 账户反查 admins)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_by_name: Option<String>,
+    pub created_by_family_name: Option<String>,
+    /// 创建该机构的登录管理员名(按 created_by 账户反查 admins)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_by_given_name: Option<String>,
     /// 创建者角色:"FEDERAL_REGISTRY" / "CITY_REGISTRY"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_role: Option<String>,

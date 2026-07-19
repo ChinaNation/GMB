@@ -524,6 +524,15 @@ fn runtime_fee_router_treats_proposals_as_operations_not_votes() {
 
         let beneficiary = AccountId::new([78u8; 32]);
         let admins: personal_manage::pallet::AdminsOf<Runtime> = vec![who.clone(), admin2.clone()]
+            .into_iter()
+            .map(|admin_account| admin_primitives::Admin {
+                admin_account,
+                family_name: admin_primitives::FamilyName::truncate_from(
+                    "管理".as_bytes().to_vec(),
+                ),
+                given_name: admin_primitives::GivenName::truncate_from("员".as_bytes().to_vec()),
+            })
+            .collect::<Vec<_>>()
             .try_into()
             .expect("admins should fit");
         // 创建提案是普通操作，只有后续 cast 才是固定 1 元投票。
@@ -1735,13 +1744,18 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
                 admins: established_admins
                     .iter()
                     .cloned()
-                    .map(|admin_account| admin_primitives::InstitutionAdmin {
-                        admin_name: "管理员"
+                    .map(|admin_account| admin_primitives::Admin {
+                        admin_account,
+                        family_name: "管理"
                             .as_bytes()
                             .to_vec()
                             .try_into()
-                            .expect("admin name fits"),
-                        admin_account,
+                            .expect("family name fits"),
+                        given_name: "员"
+                            .as_bytes()
+                            .to_vec()
+                            .try_into()
+                            .expect("given name fits"),
                     })
                     .collect::<Vec<_>>()
                     .try_into()
@@ -1888,13 +1902,18 @@ fn national_singletons_without_member_ranges_can_be_composed_once() {
                     admins: admins
                         .iter()
                         .cloned()
-                        .map(|admin_account| admin_primitives::InstitutionAdmin {
-                            admin_name: "管理员"
+                        .map(|admin_account| admin_primitives::Admin {
+                            admin_account,
+                            family_name: "管理"
                                 .as_bytes()
                                 .to_vec()
                                 .try_into()
-                                .expect("admin name fits"),
-                            admin_account,
+                                .expect("family name fits"),
+                            given_name: "员"
+                                .as_bytes()
+                                .to_vec()
+                                .try_into()
+                                .expect("given name fits"),
                         })
                         .collect::<Vec<_>>()
                         .try_into()

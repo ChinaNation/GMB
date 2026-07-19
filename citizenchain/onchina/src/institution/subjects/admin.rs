@@ -616,14 +616,16 @@ pub(crate) async fn get_institution(
     {
         return api_error(StatusCode::FORBIDDEN, 1003, "out of admin scope");
     }
-    let (created_by_name, created_by_role) = resolve_created_by(&state, &inst.created_by);
+    let (created_by_family_name, created_by_given_name, created_by_role) =
+        resolve_created_by(&state, &inst.created_by);
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
         data: InstitutionDetailOutput {
             institution: inst,
             accounts,
-            created_by_name,
+            created_by_family_name,
+            created_by_given_name,
             created_by_role,
         },
     })
@@ -665,14 +667,16 @@ pub(crate) async fn get_federal_registry(
     }) else {
         return api_error(StatusCode::NOT_FOUND, 1004, "federal registry not found");
     };
-    let (created_by_name, created_by_role) = resolve_created_by(&state, &inst.created_by);
+    let (created_by_family_name, created_by_given_name, created_by_role) =
+        resolve_created_by(&state, &inst.created_by);
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
         data: InstitutionDetailOutput {
             institution: inst,
             accounts,
-            created_by_name,
+            created_by_family_name,
+            created_by_given_name,
             created_by_role,
         },
     })

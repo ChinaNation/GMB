@@ -94,6 +94,8 @@ mod tests {
     fn profile(hex_tail: &str, _name: &str) -> InstitutionAssignmentView {
         InstitutionAssignmentView {
             account_hex: format!("0x{hex_tail}"),
+            family_name: "管理".to_string(),
+            given_name: "员".to_string(),
             role_code: "MEMBER".to_string(),
             role_name: "委员".to_string(),
             term_required: false,

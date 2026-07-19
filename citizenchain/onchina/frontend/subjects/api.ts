@@ -123,8 +123,10 @@ export interface InstitutionListRow {
   parent_cid_number?: string | null;
   account_count: number;
   created_at: string;
-  /** 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users);未命中 null */
-  created_by_name?: string | null;
+  /** 创建该机构的登录管理员姓；未命中时为空。 */
+  created_by_family_name?: string | null;
+  /** 创建该机构的登录管理员名；未命中时为空。 */
+  created_by_given_name?: string | null;
   /** 创建者角色:FEDERAL_REGISTRY / CITY_REGISTRY;未命中 null */
   created_by_role?: string | null;
 }
@@ -143,8 +145,9 @@ export interface PageResult<T> {
 export interface InstitutionDetail {
   institution: Institution;
   accounts: InstitutionAccount[];
-  /** 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users) */
-  created_by_name?: string | null;
+  /** 创建该机构的登录管理员姓、名；页面只在展示时合并。 */
+  created_by_family_name?: string | null;
+  created_by_given_name?: string | null;
   /** 创建者角色:FEDERAL_REGISTRY / CITY_REGISTRY */
   created_by_role?: string | null;
 }
@@ -168,13 +171,12 @@ export interface LegalRepresentativePhoto {
 }
 
 export interface CreateInstitutionAdminInput {
-  /**
-   * 管理员展示姓名；授权唯一依据仍是 admin_account。
-   * 创建机构时不绑定岗位，不填则后端按公民资料解析，仍无法解析时显示“管理员”。
-   */
-  admin_name?: string | null;
   /** 机构初始管理员钱包账户。 */
   admin_account: string;
+  /** 管理员姓；不填时后端按公民资料解析，仍无法解析则使用“管理”。 */
+  family_name?: string | null;
+  /** 管理员名；不填时后端按公民资料解析，仍无法解析则使用“员”。 */
+  given_name?: string | null;
 }
 
 // ─── 请求 DTO ─────────────────────────────────────────────────
@@ -250,8 +252,9 @@ export function buildInstitutionCreatePayload(input: CreateInstitutionInput): In
     private_type: nullableTrim(input.private_type) as PrivateType | null,
     partnership_kind: nullableTrim(input.partnership_kind) as PartnershipKind | null,
     admins: (input.admins ?? []).map((admin) => ({
-      admin_name: nullableTrim(admin.admin_name) ?? '管理员',
       admin_account: admin.admin_account.trim(),
+      family_name: nullableTrim(admin.family_name) ?? '管理',
+      given_name: nullableTrim(admin.given_name) ?? '员',
     })),
   };
 }

@@ -10,7 +10,7 @@
 
 当前统一展示契约为：
 
-- admins 提供 `admin_name + admin_account` 管理员人员集合；授权只比较钱包账户。
+- admins 提供 `admin_account + family_name + given_name` 管理员人员集合；授权只比较钱包账户。
 - entity 提供机构岗位和管理员任职唯一真源。
 - 前端按一个管理员钱包聚合全部有效任职，展示钱包、余额、岗位、任期、来源和来源引用。
 - 普通公民姓名和 CID 不从管理员钱包推导或展示。

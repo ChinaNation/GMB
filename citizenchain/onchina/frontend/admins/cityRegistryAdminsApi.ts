@@ -7,12 +7,14 @@ import { adminHeaders, request } from '../utils/http';
 export type CityRegistryAdminRow = {
   id: number;
   admin_account: string;
-  admin_name: string;
+  family_name: string;
+  given_name: string;
   balance_fen?: string | null;
   institution_code: string;
   built_in: boolean;
   created_by: string;
-  created_by_name?: string;
+  created_by_family_name: string;
+  created_by_given_name: string;
   created_at: string;
   city_name: string;
 };

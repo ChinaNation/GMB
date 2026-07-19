@@ -36,7 +36,7 @@ mod tests;
 pub use traits::PersonalMultisigQuery;
 pub use types::{PersonalAccount, PersonalCloseAction, PersonalCreateAction, PersonalStatus};
 
-use admin_primitives::{AdminAccountKind, AdminAccountLifecycle, AdminAccountQuery};
+use admin_primitives::{Admin, AdminAccountKind, AdminAccountLifecycle, AdminAccountQuery};
 use codec::{Decode, Encode};
 use frame_support::{
     ensure,
@@ -80,7 +80,7 @@ pub mod pallet {
         ///
         /// 本模块只请求 personal-admins 写 Pending/Active/Closed 管理员账户，
         /// 不直接保存或修改个人多签管理员集合。
-        type PersonalAdminLifecycle: AdminAccountLifecycle<Self::AccountId>;
+        type PersonalAdminLifecycle: AdminAccountLifecycle<Self::AccountId, Admin<Self::AccountId>>;
 
         /// 个人多签管理员查询入口。
         ///
@@ -108,8 +108,10 @@ pub mod pallet {
         type WeightInfo: crate::weights::WeightInfo;
     }
 
-    pub type AdminsOf<T> =
-        BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxPersonalAccountAdmins>;
+    pub type AdminsOf<T> = BoundedVec<
+        Admin<<T as frame_system::Config>::AccountId>,
+        <T as Config>::MaxPersonalAccountAdmins,
+    >;
 
     pub type PersonalAccountOf<T> = PersonalAccount<
         <T as frame_system::Config>::AccountId,
@@ -170,19 +172,6 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {}
-    }
-
-    #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        fn on_runtime_upgrade() -> Weight {
-            let db = T::DbWeight::get();
-            let on_chain = StorageVersion::get::<Pallet<T>>();
-            if on_chain >= STORAGE_VERSION {
-                return db.reads(1);
-            }
-            STORAGE_VERSION.put::<Pallet<T>>();
-            db.reads_writes(1, 1)
-        }
     }
 
     #[pallet::event]
@@ -252,6 +241,8 @@ pub mod pallet {
         InvalidAccount,
         AccountReserved,
         DuplicateAdmin,
+        InvalidFamilyName,
+        InvalidGivenName,
         InvalidThreshold,
         InsufficientAmount,
         CreateAmountBelowMinimum,
@@ -367,17 +358,33 @@ pub mod pallet {
             );
             Self::ensure_unique_admins(admins)?;
             ensure!(
-                admins.iter().any(|admin| admin == who),
+                admins.iter().any(|admin| &admin.admin_account == who),
                 Error::<T>::PermissionDenied
             );
             Ok(regular_threshold)
+        }
+
+        /// 将缺失的管理员姓、名规范化为“管理”“员”，授权字段保持账户不变。
+        pub(crate) fn normalize_admins(admins: AdminsOf<T>) -> AdminsOf<T> {
+            AdminsOf::<T>::truncate_from(
+                admins
+                    .into_inner()
+                    .into_iter()
+                    .map(Admin::normalize_names)
+                    .collect(),
+            )
         }
 
         pub(crate) fn ensure_unique_admins(admins: &AdminsOf<T>) -> Result<(), DispatchError> {
             use sp_std::collections::btree_set::BTreeSet;
             let mut seen = BTreeSet::new();
             for admin in admins.iter() {
-                ensure!(seen.insert(admin.clone()), Error::<T>::DuplicateAdmin);
+                ensure!(!admin.family_name.is_empty(), Error::<T>::InvalidFamilyName);
+                ensure!(!admin.given_name.is_empty(), Error::<T>::InvalidGivenName);
+                ensure!(
+                    seen.insert(admin.admin_account.clone()),
+                    Error::<T>::DuplicateAdmin
+                );
             }
             Ok(())
         }

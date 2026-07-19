@@ -19,8 +19,8 @@ use crate::*;
 use super::model::*;
 use super::onchain_gate;
 use super::signature::{
-    build_admin_name, build_admin_name_from_user, build_login_qr_system_signature,
-    extract_domain_from_origin, verify_admin_signature,
+    admin_person_names, build_login_qr_system_signature, extract_domain_from_origin,
+    verify_admin_signature,
 };
 use super::LOGIN_SIGN_REQUEST_TTL_SECONDS;
 
@@ -403,6 +403,10 @@ pub(crate) async fn admin_auth_qr_result(
             capabilities,
             workspace_modules,
         );
+        let (family_name, given_name) = admin
+            .as_ref()
+            .map(admin_person_names)
+            .unwrap_or_else(|| ("管理".to_string(), "员".to_string()));
         return Json(ApiResponse {
             code: 0,
             message: "ok".to_string(),
@@ -420,16 +424,8 @@ pub(crate) async fn admin_auth_qr_result(
                     ),
                     capabilities,
                     workspace,
-                    admin_name: admin
-                        .as_ref()
-                        .map(|v| build_admin_name_from_user(v, province.as_deref()))
-                        .unwrap_or_else(|| {
-                            build_admin_name(
-                                &result.admin_account,
-                                &result.institution_code,
-                                province.as_deref(),
-                            )
-                        }),
+                    family_name,
+                    given_name,
                     scope_province_name: province,
                     scope_city_name,
                     scope_town_name,

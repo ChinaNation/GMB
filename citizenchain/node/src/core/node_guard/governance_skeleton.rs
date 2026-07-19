@@ -1,6 +1,6 @@
 //! 固定治理机构的管理员、岗位与任职节点策略（档 A）。
 //!
-//! `PublicAdmins::AdminAccounts` 只保存管理员钱包集合，`PublicManage` 保存岗位与任职。
+//! `PublicAdmins::AdminAccounts` 保存管理员账户与姓、名，`PublicManage` 保存岗位与任职。
 //! 本策略按 `primitives::governance_skeleton` 的编译期清单校验 89 个受保护创世机构：
 //! 固定岗位目录和席位不允许漂移，具体管理员允许依法原子轮换。任职来源、引用和任期
 //! 属于 runtime 业务合法性，不在原生组织结构守卫中重复解释。
@@ -8,7 +8,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use admin_primitives::{InstitutionAdmin, InstitutionAdmins};
+use admin_primitives::{Admin, InstitutionAdmins};
 use codec::Decode;
 #[cfg(test)]
 use codec::Encode;
@@ -167,7 +167,7 @@ pub mod storage_key {
 }
 
 /// 节点直接使用共享协议类型解码，避免维护第二份字段顺序和枚举判别值。
-type DecodedInstitutionAdmins = InstitutionAdmins<Vec<InstitutionAdmin<[u8; 32]>>>;
+type DecodedInstitutionAdmins = InstitutionAdmins<Vec<Admin<[u8; 32]>>>;
 type DecodedInstitutionRole = SharedInstitutionRole<Vec<u8>, Vec<u8>, Vec<u8>>;
 type DecodedInstitutionAdminAssignment =
     SharedInstitutionAdminAssignment<Vec<u8>, [u8; 32], Vec<u8>, Vec<u8>>;
@@ -183,6 +183,7 @@ pub enum GuardError {
         expected: u32,
         found: u32,
     },
+    InvalidAdminPersonName([u8; 4]),
     DuplicateAdminWallet([u8; 4]),
     RoleMissing {
         code: [u8; 4],
@@ -330,7 +331,7 @@ where
     Ok(())
 }
 
-/// 校验全部 89 个受保护创世机构的管理员集合、固定岗位和任职席位。
+/// 校验全部 89 个受保护创世机构的管理员人员集合、固定岗位和任职席位。
 ///
 /// 固定岗位代码、名称、所属机构和席位数不可改变；管理员钱包可以依法更新。任职来源、
 /// 来源引用与任期只要求共享 SCALE 能完整解码，具体业务合法性由 runtime 与投票引擎负责。
@@ -367,6 +368,14 @@ where
             expected: institution.expected_len,
             found,
         });
+    }
+    if account.admins.iter().any(|admin| {
+        admin.family_name.is_empty()
+            || admin.given_name.is_empty()
+            || core::str::from_utf8(admin.family_name.as_slice()).is_err()
+            || core::str::from_utf8(admin.given_name.as_slice()).is_err()
+    }) {
+        return Err(GuardError::InvalidAdminPersonName(institution.code));
     }
     let admin_set = account
         .admins
@@ -513,9 +522,10 @@ mod tests {
             institution_code: institution.code,
             admins: admins
                 .into_iter()
-                .map(|admin_account| InstitutionAdmin {
-                    admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+                .map(|admin_account| Admin {
                     admin_account,
+                    family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
+                    given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
                 })
                 .collect(),
         }
@@ -607,6 +617,30 @@ mod tests {
     }
 
     #[test]
+    fn person_name_changes_do_not_change_authority_but_invalid_names_are_rejected() {
+        let institution = fixed_institutions()[0];
+        let admin_key = storage_key::admin_account(institution.cid_number.as_bytes());
+        let mut state = valid_state();
+        let mut account: DecodedInstitutionAdmins =
+            decode_exact(state.get(&admin_key).expect("admin account exists"))
+                .expect("admin account decodes");
+        account.admins[0].family_name = "张".as_bytes().to_vec().try_into().expect("name fits");
+        account.admins[0].given_name = "三".as_bytes().to_vec().try_into().expect("name fits");
+        state.insert(admin_key.clone(), account.encode());
+        assert_eq!(check_state(&state), Ok(()));
+
+        let mut account: DecodedInstitutionAdmins =
+            decode_exact(state.get(&admin_key).expect("admin account exists"))
+                .expect("admin account decodes");
+        account.admins[0].family_name = Vec::new().try_into().expect("empty name fits");
+        state.insert(admin_key, account.encode());
+        assert_eq!(
+            check_state(&state),
+            Err(GuardError::InvalidAdminPersonName(institution.code))
+        );
+    }
+
+    #[test]
     fn missing_or_wrong_code_fixed_account_is_rejected() {
         let institution = fixed_institutions()[0];
         let mut state = valid_state();
@@ -625,9 +659,10 @@ mod tests {
                 institution_code: *b"BAD\0",
                 admins: accounts_for(&institution)
                     .into_iter()
-                    .map(|admin_account| InstitutionAdmin {
-                        admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+                    .map(|admin_account| Admin {
                         admin_account,
+                        family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
+                        given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
                     })
                     .collect(),
             }

@@ -419,9 +419,10 @@ pub fn institution_admins(accounts: &[AccountId32]) -> crate::InstitutionAdminsI
     accounts
         .iter()
         .cloned()
-        .map(|admin_account| admin_primitives::InstitutionAdmin {
-            admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+        .map(|admin_account| admin_primitives::Admin {
             admin_account,
+            family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
+            given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
         })
         .collect::<alloc::vec::Vec<_>>()
         .try_into()

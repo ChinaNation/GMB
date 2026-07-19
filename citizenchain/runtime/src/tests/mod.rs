@@ -54,9 +54,10 @@ fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32
             admins: admin_accounts
                 .iter()
                 .cloned()
-                .map(|admin_account| admin_primitives::InstitutionAdmin {
-                    admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+                .map(|admin_account| admin_primitives::Admin {
                     admin_account,
+                    family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
+                    given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
                 })
                 .collect::<Vec<_>>()
                 .try_into()
@@ -213,9 +214,10 @@ fn setup_frg_citizen_identity_admin(
         cid_number.clone(),
         admin_primitives::InstitutionAdmins {
             institution_code: admin_primitives::FRG,
-            admins: vec![admin_primitives::InstitutionAdmin {
-                admin_name: "管理员".as_bytes().to_vec().try_into().expect("name fits"),
+            admins: vec![admin_primitives::Admin {
                 admin_account: registrar.clone(),
+                family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
+                given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
             }]
             .try_into()
             .expect("single registrar admin fits"),

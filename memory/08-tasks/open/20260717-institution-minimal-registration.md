@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 状态：进行中
-- 当前步骤：第3步已完成组件级改造与解除法定代表人补齐，正在执行真实运行态验收
+- 当前步骤：正式创世前统一改造第3步 OnChina 管理员三字段对齐已完成；下一步为 CitizenApp 管理员三字段对齐
 - 用户确认：2026-07-17
 - 执行规则：每一步先确认方案；执行完成后立即更新文档、完善中文注释、清理残留，再输出下一步技术方案
 
@@ -11,9 +11,9 @@
 
 机构唯一主键继续使用 `cid_number`，但管理员和岗位必须彻底分离：
 
-- 管理员是人，统一保存在 `admins`，每项由 `admin_name + admin_account` 组成。
-- `admin_account` 是钱包账户和唯一签名授权字段；`admin_name` 只用于公开展示，不参与授权。
-- 管理员钱包能从 OnChina 公民资料解析姓名时使用公民姓名；无法解析时名称统一为“管理员”。
+- 管理员是人，机构和个人多签统一保存在 `admins`，每项字段顺序固定为 `admin_account + family_name + given_name`。
+- `admin_account` 是钱包账户和唯一签名授权字段；`family_name`、`given_name` 只用于姓名展示，不参与授权。
+- 管理员钱包能从 OnChina 公民资料解析姓名时分别写入姓、名；无法解析时分别使用“管理”“员”，前端按中文顺序合并显示“管理员”。
 - 普通机构始终至少有两个管理员；固定治理机构继续遵守制度精确人数。
 - 岗位是机构职位，不是管理员；管理员可无岗位，岗位可空缺。
 - 每个机构必须默认且唯一存在 `LR / 法定代表人` 岗位；该岗位不可删除、停用、改名或改码。
@@ -61,7 +61,7 @@
 - 所有机构自动建立唯一 `LR / 法定代表人` 岗位，允许空缺。
 - 首次创建载荷收紧为最小身份字段、管理员集合和注册局授权字段。
 - runtime 自动派生机构码、全部强制协议账户和严格多数阈值。
-- OnChina 按钱包解析公民姓名，无法解析时使用“管理员”。
+- OnChina 按钱包分别解析公民姓、名，无法解析时分别使用“管理”“员”。
 - `SFAS` 盈利属性改为实例必选。
 - CitizenWallet、Node、CitizenApp 同步新 storage/call 契约。
 
@@ -81,7 +81,7 @@
 
 ## 第1步验收标准
 
-- [x] `admins` 每项只使用 `admin_name + admin_account`，授权只比较账户。
+- [x] `admins` 每项只使用 `admin_account + family_name + given_name`，授权只比较账户。
 - [x] 普通机构管理员少于2人时拒绝。
 - [x] 没有任何岗位任职的管理员仍然拥有机构管理员签名权限。
 - [x] 岗位新增或清空任职不会改变管理员集合。
@@ -116,6 +116,7 @@
 - [x] 私权详情页新增“机构治理”tab，支持本机构内部治理和法定代表人任命/更换/解除。
 - [x] 普通岗位码由页面自动生成短随机码，链上继续按 `(cid_number, role_code)` 最终校验唯一。
 - [x] 组件级验收通过：OnChina 后端 `cargo check`、OnChina 编码器测试、OnChina 前端生产构建和 diff 空白检查均通过。
+- [x] 正式创世前第3步：OnChina 登录态、链读/链写、PostgreSQL 和前端全部统一为 `admin_account + family_name + given_name`，旧合并姓名字段只保留在删除旧列的清理 SQL 中。
 - [ ] 真实运行态验收：当前源码 WASM fresh 链、临时 PostgreSQL、OnChina HTTP 页面和链投影已通过；交互式 CitizenWallet 扫码签名仍需真实管理员登录会话与扫码设备，本线程未伪造私钥或会话，未标记全链路完成。
 - [x] 法定代表人“解除为空”：runtime `InstitutionLegalRepresentativeChange::Clear` 已能原子清空三字段，OnChina 与 CitizenWallet 已同步。
 
@@ -127,7 +128,7 @@
 - 不从 `admins[0]` 推导法定代表人。
 - 不保留旧call、旧SCALE布局、旧二维码解码或旧数据库写入流程。
 - 不在链确认前写入OnChina正式机构投影。
-- 不修改个人多签管理员的数据模型。
+- 机构和个人多签管理员使用同一个 `Admin` 三字段结构；个人多签仍保持独立业务和 storage，不与机构岗位任职混用。
 - 不推送GitHub、不部署、不重新创世，除非用户另行授权。
 
 ## 输出物
@@ -141,7 +142,7 @@
 ## 执行记录
 
 - 2026-07-17：用户确认第1步、新任务卡创建及指定runtime路径二次修改权限。
-- 2026-07-17：runtime 管理员值收敛为 `admin_name + admin_account`，岗位与管理员彻底解耦；首次登记自动建立空缺 `LR / 法定代表人` 岗位、严格多数阈值和零余额强制协议账户。
+- 2026-07-17：runtime 管理员人员记录与岗位完成解耦；首次登记自动建立空缺 `LR / 法定代表人` 岗位、严格多数阈值和零余额强制协议账户。
 - 2026-07-17：公权/私权创建 call、OnChina 生成端、CitizenWallet 解码端统一为最小载荷；旧法定代表人、账户数组、岗位任职、阈值和注资字段已删除，不保留兼容分支。
 - 2026-07-17：OnChina 删除机构创建链确认前业务草稿区；创建机构/创建公民只允许 `chain_sign_sessions` 承载短期签名会话，且会话不参与 CID/名称占用，submit 成功或失败后删除。链上确认成功后才写 `subjects/accounts/institution_admins` / `citizens` 正式投影。
 - 2026-07-17：协会 `SFAS` 的规则值改为 `p1=None`，明确表示实例必须显式选择盈利属性；删除模块内固定非盈利残留。
@@ -157,9 +158,15 @@
 - 2026-07-17：runtime 法定代表人治理补齐 `Set/Clear`，解除时 `InstitutionInfo.legal_representative_name/cid_number/account` 三字段原子清空；OnChina API 新增 `clear_legal_representative`，CitizenWallet 已同步解码。
 - 2026-07-17：第3步组件级验收通过：`cargo check -p onchina`、`cargo fmt -p onchina -- --check`、`cargo test -p onchina core::institution_call`、OnChina 前端 `npm run build`、`git diff --check`。
 - 2026-07-17：真实运行态补验：`WASM_BUILD_FROM_SOURCE=1 cargo build -p node --bin citizenchain` 通过；当前源码 `citizenchain-fresh --tmp` 在 RPC `127.0.0.1:19944` 启动成功，`system_health.isSyncing=false`，genesis `0x17280b79d2136bb45813890a6effbb2c9b78ea46b6f77e05226e6de1140d3b63`，metadata hex 长度 `416058`。OnChina 使用临时内嵌 PostgreSQL `127.0.0.1:15433` 和 HTTP `127.0.0.1:18964` 启动成功，链投影 `subjects=49,593`、`accounts=99,231`，首页 `/` 返回 200，旧 `legal_rep_*` 列数量为 0，新 `legal_representative_*` 三字段列齐备且当前投影非空值为 0；验收后 OnChina、内嵌 PG 和 fresh 节点均已停止。
-- 2026-07-17：修复 OnChina 新增机构第 1 步“请求内容不正确”：删除 `INSTITUTION_CREATE` prepare 阶段残留 `threshold` 校验；公权、教育、私权三个前端入口统一复用 `buildInstitutionCreatePayload`，扫码授权 payload 与正式提交 body 完全一致；`admins` 首次登记表单补齐 `admin_name + admin_account`，但授权只认账户。
+- 2026-07-17：修复 OnChina 新增机构第 1 步“请求内容不正确”：删除 `INSTITUTION_CREATE` prepare 阶段残留 `threshold` 校验；公权、教育、私权三个前端入口统一复用 `buildInstitutionCreatePayload`，扫码授权 payload 与正式提交 body 完全一致；授权始终只认管理员账户。
 - 2026-07-17：修复 OnChina 新增机构正式提交“创建机构失败”：原因是前端只提交 `x-cid-security-grant`，未提交后端 `PASSKEY_COLD_SIGN` 安全门要求的 `X-Passkey-Assertion`。统一新增 `createColdSignSubmitHeaders/securityGrantSubmitHeaders` 正式提交入口，创建机构、创建/删除账户、公民身份上链、机构资料上传/删除、机构详情更新均改为同时携带冷签 grant 与 Passkey assertion；资料和详情更新的授权 payload 已按后端 `grant_payload` 逐字段同形清理，删除业务模块手写半套安全头残留。
 - 2026-07-17：修复 OnChina 新增机构“双钱包签名”模型错误：创建机构不再生成 `INSTITUTION_CREATE` 安全动作、不再使用 `a=8 institution_create_credential`、不再携带 `register_nonce/signature/credential_signer_pubkey/scope_*` 内层凭证；后端只生成最终链交易签名会话，管理员钱包签一次后直接提交统一链交易 submit。
-- 2026-07-18：补 `public-admins` / `private-admins` 管理员存储 v4 migration，旧 `Vec<AccountId>` 管理员集合在 runtime 升级时一次性翻译为 `admin_name + admin_account`；OnChina dryRun 预检遇到 RuntimeApi/wasm trap 直接失败，不继续提交；移动端固定展示值统一从 QR registry 生成物读取。
+- 2026-07-18：正式创世前最终协议取代旧迁移方案：删除 `public-admins` / `private-admins` 历史存储翻译，不保留纯账户、单姓名或双轨布局。
+- 2026-07-18：正式创世前统一改造第1步完成。`admin-primitives::Admin` 字段顺序固定为 `admin_account + family_name + given_name`；公权、私权、个人多签和创世固定管理员全部保存同一结构，权限判断只比较账户，缺失姓名在签名/投票/存储前分别规范化为“管理”“员”。
+- 2026-07-18：第1步验证通过：runtime 及 9 个相关 crate 生产编译、`runtime-benchmarks` 编译、127 项专项单测、格式化与 diff 检查全部通过；runtime 中旧合并姓名字段、旧管理员类型和历史迁移代码残留为 0。
+- 2026-07-18：正式创世前统一改造第2步完成。Node 共享 SCALE 解码、治理 DTO、链下清算读取、管理员激活、投票状态页和 NodeGuard 全部统一为 `admin_account + family_name + given_name`；管理员允许没有岗位，姓名只展示，授权和治理组成只比较账户。
+- 2026-07-18：第2步验证通过：`cargo check -p node`、Node 280 项测试、Node 前端 TypeScript 与 Vite 生产构建、旧管理员结构 / 纯账户布局 / 合并姓名字段 / DTO 泛化账户字段残留检查全部通过。当前源码强制重建 WASM 后，隔离 `citizenchain-fresh` 真实启动成功，block#0 `0xc1dc759689aed0a8f8361dc3cb0e39c1faf19cfc55c7611b02ccc79ce04524c6`、`stateRoot=0x967155d28abe492052ef4bfd59a1ddbebce8cdaa57d9baaad446028848061a5e`、`isSyncing=false`；节点已停止并清理临时数据，本步未烘焙正式 chainspec 或切换正式数据。
+- 2026-07-19：正式创世前统一改造第3步完成。OnChina 链上管理员严格解码、登录候选与会话、注册局目录、机构创建/治理载荷、机构管理员投影、PostgreSQL 和现有 UI 页面全部统一为 `admin_account + family_name + given_name`；授权只比较账户，页面只在展示时合并姓、名，没有岗位的管理员仍保留人员行。
+- 2026-07-19：第3步验证通过：OnChina 137 项测试、后端生产编译、前端 TypeScript/Vite 生产构建和旧字段残留检查通过。隔离 fresh 节点 block#0 为 `0xc1dc759689aed0a8f8361dc3cb0e39c1faf19cfc55c7611b02ccc79ce04524c6`、`stateRoot=0x967155d28abe492052ef4bfd59a1ddbebce8cdaa57d9baaad446028848061a5e`、`isSyncing=false`；临时 PostgreSQL 实测旧合并姓名列为 0，并验证旧单列重启后被直接删除、默认落为“管理”“员”。链投影 49,593 个机构、99,231 个账户，健康接口和首页正常。所有验收进程已停止，临时数据已移入废纸篓；未烘焙正式 chainspec、未切换正式节点数据。
 - 2026-07-17：OnChina、CitizenWallet、CitizenApp 已同步删除 `institution_create_credential` 动作码；CitizenWallet 对 `0x1e05/0x1f05` 按新 call-data 顺序解码并统一中文展示，创建机构链路不再存在内层凭证 Option 分支。
 - 2026-07-17：本轮验收通过：`cargo check -p citizenchain`、`cargo check -p onchina`、`cargo test -p public-manage -p private-manage`、`cargo test -p onchina core::institution_call`、OnChina 前端 `npm run build`、CitizenWallet `flutter analyze`、CitizenWallet `flutter test test/signer/payload_decoder_test.dart test/signer/field_labels_test.dart`、CitizenApp `flutter test test/qr/qr_router_test.dart`、CitizenApp `flutter analyze`、`git diff --check`。OnChina test 构建仍有既有 `GENESIS_CITIZEN_MAX` 未用常量警告，与本次创建机构签名链路无关。

@@ -20,7 +20,7 @@
 
 ## 链上入口
 
-- `propose_create_private_institution`（call 5）：只接收目标 CID、全称、简称、镇码、`admins(admin_name + admin_account)` 和注册局授权字段。机构码从 CID 解析；runtime 自动建立完整零余额协议账户、唯一空缺 `LR / 法定代表人` 岗位和严格多数阈值。
+- `propose_create_private_institution`（call 5）：只接收目标 CID、全称、简称、镇码、`admins(admin_account + family_name + given_name)` 和注册局授权字段。机构码从 CID 解析；runtime 在签名/投票前补齐缺失姓名，并自动建立完整零余额协议账户、唯一空缺 `LR / 法定代表人` 岗位和严格多数阈值。
 - `update_institution_info`（call 6）：注册局管理员更新目标机构名称。
 - `add_institution_account`（call 7）：注册局管理员给目标 CID 新增自定义账户。
 - `propose_institution_governance`（call 8）：本机构管理员发起内部治理提案，可原子替换 `admins`、变更动态岗位/任职、整体设置或清空法定代表人三字段；岗位任职来源必须是 `InstitutionGovernance`，不得伪装成普选、互选或任命结果。

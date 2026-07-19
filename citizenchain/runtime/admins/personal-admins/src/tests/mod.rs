@@ -171,7 +171,18 @@ fn personal_account() -> AccountId32 {
 }
 
 fn admins(items: &[AccountId32]) -> pallet::AdminsOf<Test> {
-    BoundedVec::try_from(items.to_vec()).expect("admins fit")
+    BoundedVec::try_from(
+        items
+            .iter()
+            .cloned()
+            .map(|admin_account| admin_primitives::Admin {
+                admin_account,
+                family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
+                given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
+            })
+            .collect::<Vec<_>>(),
+    )
+    .expect("admins fit")
 }
 
 fn seed_active_admin_account(account: AccountId32, admins: pallet::AdminsOf<Test>, threshold: u32) {
@@ -207,7 +218,14 @@ fn propose_admin_set_change_updates_personal_admins_and_threshold() {
         let old_admins = admins(&[admin(0), admin(1), admin(2)]);
         seed_active_admin_account(account.clone(), old_admins.clone(), 2);
 
-        let next_admins = admins(&[admin(0), admin(3), admin(4), admin(5)]);
+        let mut next_admins = admins(&[admin(0), admin(3), admin(4), admin(5)]);
+        next_admins[1].family_name = Default::default();
+        next_admins[1].given_name = Default::default();
+        let mut expected_admins = next_admins.clone();
+        expected_admins[1].family_name =
+            admin_primitives::FamilyName::truncate_from("管理".as_bytes().to_vec());
+        expected_admins[1].given_name =
+            admin_primitives::GivenName::truncate_from("员".as_bytes().to_vec());
         assert_ok!(PersonalAdmins::propose_admin_set_change(
             RuntimeOrigin::signed(admin(0)),
             PMUL,
@@ -229,7 +247,7 @@ fn propose_admin_set_change_updates_personal_admins_and_threshold() {
         let admin_account = pallet::AdminAccounts::<Test>::get(account.clone())
             .expect("admin account should exist");
         assert!(admin_account.cid_number.is_empty());
-        assert_eq!(admin_account.admins, next_admins);
+        assert_eq!(admin_account.admins, expected_admins);
         assert_eq!(
             internal_vote::ActivePersonalThresholds::<Test>::get(account),
             Some(3)

@@ -108,14 +108,20 @@ pub(crate) async fn list_federal_registry_admins(
             let _province_code = group.province_code;
             for assignment in &group.assignments {
                 let account = &assignment.account_hex;
-                // 缓存缺失即补一条 built_in 行(名字空→显示回退),保证有本地 id 供换届定位。
+                // 缓存缺失即按链上姓、名补一条 built_in 行，保证有本地 id 供换届定位。
                 let admin = match repo::get_admin_by_account_conn(conn, account)? {
-                    Some(admin) => admin,
+                    Some(mut admin) => {
+                        admin.family_name = assignment.family_name.clone();
+                        admin.given_name = assignment.given_name.clone();
+                        repo::upsert_admin_conn(conn, &admin)?;
+                        admin
+                    }
                     None => {
                         let row = AdminUser {
                             id: repo::next_admin_id_conn(conn)?,
                             admin_account: account.clone(),
-                            admin_name: String::new(),
+                            family_name: assignment.family_name.clone(),
+                            given_name: assignment.given_name.clone(),
                             institution_code: tier1_code.clone(),
                             built_in: true,
                             created_by: "SYSTEM".to_string(),
@@ -132,6 +138,8 @@ pub(crate) async fn list_federal_registry_admins(
                     id: admin.id,
                     province_name: province_name.clone(),
                     admin_account: admin.admin_account,
+                    family_name: assignment.family_name.clone(),
+                    given_name: assignment.given_name.clone(),
                     role_code: assignment.role_code.clone(),
                     role_name: assignment.role_name.clone(),
                     term_required: assignment.term_required,
@@ -242,6 +250,8 @@ pub(crate) async fn list_own_institution_admins(
             let balance = balance_fen(&balance_by_account, assignment.account_hex.as_str());
             rows.push(OwnInstitutionAdminRow {
                 admin_account: assignment.account_hex,
+                family_name: assignment.family_name,
+                given_name: assignment.given_name,
                 role_code: assignment.role_code,
                 role_name: assignment.role_name,
                 term_required: assignment.term_required,
@@ -316,14 +326,16 @@ pub(crate) async fn get_own_institution(
     }) else {
         return api_error(StatusCode::NOT_FOUND, 1004, "institution not found");
     };
-    let (created_by_name, created_by_role) = resolve_created_by(&state, &inst.created_by);
+    let (created_by_family_name, created_by_given_name, created_by_role) =
+        resolve_created_by(&state, &inst.created_by);
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
         data: InstitutionDetailOutput {
             institution: inst,
             accounts,
-            created_by_name,
+            created_by_family_name,
+            created_by_given_name,
             created_by_role,
         },
     })

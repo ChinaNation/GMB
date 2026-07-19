@@ -17,7 +17,9 @@ export type TokenAdminAuth = {
   capabilities?: CapabilitySet;
   /** 当前机构工作台清单,用于按机构类型挂载 UI。 */
   workspace?: InstitutionWorkspace;
-  admin_name?: string;
+  /** 管理员姓、名与链上管理员记录保持同名；页面仅在展示时合并。 */
+  family_name: string;
+  given_name: string;
   scope_province_name?: string | null;
   /** 市级及以下机构所属的市。 */
   scope_city_name?: string | null;

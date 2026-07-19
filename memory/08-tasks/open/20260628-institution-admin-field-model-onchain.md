@@ -12,7 +12,7 @@
 将机构信息、机构岗位、机构管理员任职与管理员集合彻底拆分到正确模块：
 
 - 机构信息、机构岗位和机构管理员任职归 `entity`。
-- 机构管理员 `admin_name + admin_account` 人员集合及其生命周期归 `admins`，岗位不得反向派生管理员。
+- 管理员 `admin_account + family_name + given_name` 人员集合及其生命周期归 `admins`，岗位不得反向派生管理员。
 - 投票引擎只决定普选、互选、提名任免等任职结果，不保存第二份管理员或岗位真源。
 - 所有机构在真实法定代表人任免生效后都必须公开上链；创世没有真实任免资料时不得伪造。
 - 个人多签及 `personal-admins` 完全排除在本机构岗位模型之外。
@@ -87,15 +87,15 @@
 
 ### 管理员集合
 
-`public-admins` 和 `private-admins` 中的目标字段为：
+`public-admins`、`private-admins` 和 `personal-admins` 中的目标管理员项为：
 
 ```text
-admins: BoundedVec<AccountId>
+Admin { admin_account, family_name, given_name }
 ```
 
 - 不再内嵌 `AdminProfile`。
 - 管理员集合目标记录不保存 `creator`、`created_at`、`updated_at`；链上来源和时间由对应任职关系、事件及区块确定。
-- 不保存 `admin_name`、`admin_cid_number`、`role_code`、`role_name`、`term_start`、`term_end`、`admin_source`、`admin_source_ref`。
+- 不保存合并姓名、公民 CID、岗位、任期或来源副本。
 - runtime、Node、OnChina、CitizenApp 和公民钱包中的机构 `AdminProfile` 协议及机构管理员直接变更入口均已删除。
 
 ## 信任与隐私边界
@@ -148,11 +148,11 @@ admins: BoundedVec<AccountId>
 
 - [x] 在 `entity-primitives` 建立 `InstitutionRole`、`InstitutionAdminAssignment`、岗位/任职状态和五类任职来源的统一 SCALE 类型。
 - [x] 公权与私权 `entity` 新增按“机构 CID + 岗位代码”存储的岗位目录和任职关系；初始管理员钱包集合由有效任职去重派生，不再由调用方重复提交第二份名单。
-- [x] 此旧签名域已于 2026-07-17 删除；当前创建凭证覆盖最小身份与 `admins(admin_name + admin_account)`，不携带岗位或任职。
-- [x] `public-admins`、`private-admins` 的机构记录收口为 `cid_number + institution_code + admins + status`，其中 `admins` 只编码钱包账户；删除 `AdminProfile`、机构管理员创建人、创建/更新时间、岗位资料和任职来源副本。
+- [x] 此旧签名域已于 2026-07-17 删除；当前创建凭证覆盖最小身份与三字段 `admins`，不携带岗位或任职。
+- [x] `public-admins`、`private-admins` 的机构记录收口为 `cid_number + institution_code + admins`，其中每个管理员编码账户、姓、名；删除机构管理员创建人、创建/更新时间、岗位资料和任职来源副本。
 - [x] 新增不含 `creator` 的机构管理员生命周期接口；个人多签继续使用其独立账户模型和管理员变更流程，不与机构管理员接口混用。
 - [x] 删除公权/私权 admins 中旧机构管理员集合变更 extrinsic、投票回调、Pending 创建路径、旧事件和错误；机构管理员变更必须在第四步由任职结果驱动。
-- [x] 五类固定创世机构由 `runtime/genesis/src/institution/seeder.rs` 实际写入岗位、任职和纯管理员账户：国家/省储委会为委员，省储行为董事，国家司法院为 7 护宪大法官、1 首席、2 次席、5 大法官，联邦注册局为 43 个省专员岗位且每岗 5 人。
+- [x] 五类固定创世机构由 `runtime/genesis/src/institution/seeder.rs` 实际写入岗位、任职和三字段管理员记录：国家/省储委会为委员，省储行为董事，国家司法院为 7 护宪大法官、1 首席、2 次席、5 大法官，联邦注册局为 43 个省专员岗位且每岗 5 人。
 - [x] 联邦注册局不再保存 43 个虚拟管理员组；省级权限统一按 FRG 机构 CID、稳定省专员岗位代码和有效任职查询。
 - [x] Node Guard 与创世共用 `primitives/governance_skeleton.rs` 中的固定机构、岗位代码和席位协议清单；
   `runtime/genesis/src/institution/fixed_roles.rs` 负责五类岗位、席位与既有钱包索引映射，
@@ -214,7 +214,7 @@ admins: BoundedVec<AccountId>
 
 ## 第五步执行记录
 
-- [x] 此旧创建协议已于 2026-07-17 物理删除；当前只提交最小身份与 `admins(admin_name + admin_account)`，不提交 roles/assignments。
+- [x] 此旧创建协议已于 2026-07-17 物理删除；当前只提交最小身份与三字段 `admins`，不提交 roles/assignments。
 - [x] OnChina 链读改为联合读取 `PublicAdmins/PrivateAdmins::AdminAccounts` 钱包集合与 `PublicManage/PrivateManage` 岗位、任职；联邦注册局省域从稳定的 `PROVINCE_COMMISSIONER_<省码>` 岗位取得，不再读取虚拟省组。
 - [x] OnChina 管理员展示统一改为 `InstitutionAssignmentCard`，删除旧资料卡、旧姓名/CID/岗位内嵌投影和本地管理员姓名编辑依赖；同一钱包可展示多个有效任职。
 - [x] 删除 OnChina 旧 `REPLACE_GOVERNING_REGISTRY` 本地替换动作及其后端预检/写库、scope 迁移、错误码和前端按钮；FRG 岗位任职目录只读，禁止用本地投影冒充换届结果。
@@ -247,7 +247,7 @@ admins: BoundedVec<AccountId>
 - runtime 中不再存在机构管理员 `AdminProfile` 内嵌布局。
 - 已任命法定代表人的机构都有可查询的链上三字段；尚未任命的创世机构没有占位值或 `admins[0]` 回退值。
 - 机构岗位和机构管理员任职关系有唯一 entity 真源；具体业务权限由对应业务模块硬规则判定。
-- `admins` 只保存管理员钱包账户集合。
+- `admins` 只保存管理员账户、姓、名三字段集合；授权只认账户。
 - 一个管理员可在多个机构任职，一个机构可有多个管理员。
 - 无有效岗位任职或任期失效的账户不具有对应机构权限。
 - 个人多签行为和存储不受本机构岗位改造影响。

@@ -11,6 +11,8 @@ export type FederalRegistryAdminRow = {
   id: number;
   province_name: string;
   admin_account: string;
+  family_name: string;
+  given_name: string;
   role_code: string;
   role_name: string;
   term_required: boolean;
@@ -28,6 +30,8 @@ export type FederalRegistryAdminRow = {
 
 export type OwnInstitutionAdminRow = {
   admin_account: string;
+  family_name: string;
+  given_name: string;
   role_code: string;
   role_name: string;
   term_required: boolean;
@@ -47,8 +51,9 @@ export type OwnInstitutionAdminListOutput = {
 };
 
 export type InstitutionGovernanceAdminInput = {
-  admin_name: string;
   admin_account: string;
+  family_name: string;
+  given_name: string;
 };
 
 export type InstitutionGovernanceRoleChangeInput = {

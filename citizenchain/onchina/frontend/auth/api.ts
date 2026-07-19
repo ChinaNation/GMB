@@ -14,7 +14,8 @@ export type AdminAuthCheck = {
   admin_level?: string | null;
   capabilities?: CapabilitySet;
   workspace?: InstitutionWorkspace;
-  admin_name: string;
+  family_name: string;
+  given_name: string;
   scope_province_name?: string | null;
   scope_city_name?: string | null;
   scope_town_name?: string | null;
@@ -28,7 +29,8 @@ export type AdminIdentifyResult = {
   admin_level?: string | null;
   capabilities?: CapabilitySet;
   workspace?: InstitutionWorkspace;
-  admin_name: string;
+  family_name: string;
+  given_name: string;
   scope_province_name?: string | null;
   scope_city_name?: string | null;
   scope_town_name?: string | null;

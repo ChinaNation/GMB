@@ -1,7 +1,7 @@
 //! `propose_create_institution` SCALE call-data 编码器。
 //!
 //! OnChina 只构造裸 call data，不提交 extrinsic。首次登记只编码机构最小身份和
-//! `admins(admin_name + admin_account)`；协议账户、法定代表人岗位和阈值由 runtime 派生。
+//! `admins(admin_account + family_name + given_name)`；协议账户、法定代表人岗位和阈值由 runtime 派生。
 
 use codec::{Compact, Encode};
 
@@ -28,10 +28,11 @@ pub fn create_institution_pallet_index(institution_code: &[u8; 4]) -> u8 {
 }
 
 /// 首次登记管理员人员记录。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode)]
 pub struct InstitutionAdminArg {
-    pub admin_name: Vec<u8>,
     pub admin_account: [u8; 32],
+    pub family_name: admin_primitives::FamilyName,
+    pub given_name: admin_primitives::GivenName,
 }
 
 /// `propose_create_{public,private}_institution` 完整参数。
@@ -83,14 +84,9 @@ fn encode_bytes(out: &mut Vec<u8>, value: &[u8]) {
     out.extend_from_slice(value);
 }
 
-/// 构造与 runtime `BoundedVec<InstitutionAdmin>` 完全一致的签名与 call 载荷。
+/// 构造与 runtime `BoundedVec<Admin>` 完全一致的签名与 call 载荷。
 pub fn encode_admins_payload(admins: &[InstitutionAdminArg]) -> Vec<u8> {
-    let mut out = Compact(admins.len() as u32).encode();
-    for admin in admins {
-        encode_bytes(&mut out, &admin.admin_name);
-        out.extend_from_slice(&admin.admin_account);
-    }
-    out
+    admins.encode()
 }
 
 /// QR 链动作码：`(pallet_index << 8) | call_index`。
@@ -167,21 +163,35 @@ pub fn encode_register_institution_admins(args: &RegisterInstitutionAdminsArgs) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn admin(admin_account: [u8; 32], family_name: &str, given_name: &str) -> InstitutionAdminArg {
+        InstitutionAdminArg {
+            admin_account,
+            family_name: family_name
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("family name fits"),
+            given_name: given_name
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("given name fits"),
+        }
+    }
+
     #[test]
-    fn admin_payload_encodes_name_then_account() {
-        let admins = vec![
-            InstitutionAdminArg {
-                admin_name: "张三".as_bytes().to_vec(),
-                admin_account: [1; 32],
-            },
-            InstitutionAdminArg {
-                admin_name: "管理员".as_bytes().to_vec(),
-                admin_account: [2; 32],
-            },
-        ];
+    fn admin_payload_encodes_account_family_name_and_given_name() {
+        let admins = vec![admin([1; 32], "张", "三"), admin([2; 32], "管理", "员")];
         let expected = admins
             .iter()
-            .map(|admin| (admin.admin_name.clone(), admin.admin_account))
+            .map(|admin| {
+                (
+                    admin.admin_account,
+                    admin.family_name.clone(),
+                    admin.given_name.clone(),
+                )
+            })
             .collect::<Vec<_>>();
         assert_eq!(encode_admins_payload(&admins), expected.encode());
     }
@@ -193,16 +203,7 @@ mod tests {
             cid_full_name: "测试机构".as_bytes().to_vec(),
             cid_short_name: "测试".as_bytes().to_vec(),
             town_code: Vec::new(),
-            admins: vec![
-                InstitutionAdminArg {
-                    admin_name: "张三".as_bytes().to_vec(),
-                    admin_account: [1; 32],
-                },
-                InstitutionAdminArg {
-                    admin_name: "管理员".as_bytes().to_vec(),
-                    admin_account: [2; 32],
-                },
-            ],
+            admins: vec![admin([1; 32], "张", "三"), admin([2; 32], "管理", "员")],
             institution_code: *b"SFLP",
             actor_cid_number: b"issuer".to_vec(),
         };
@@ -242,16 +243,7 @@ mod tests {
     fn register_admins_payload_matches_runtime_call_field_order() {
         let args = RegisterInstitutionAdminsArgs {
             cid_number: b"LN001-SFAS-0001".to_vec(),
-            admins: vec![
-                InstitutionAdminArg {
-                    admin_name: "张三".as_bytes().to_vec(),
-                    admin_account: [1; 32],
-                },
-                InstitutionAdminArg {
-                    admin_name: "李四".as_bytes().to_vec(),
-                    admin_account: [2; 32],
-                },
-            ],
+            admins: vec![admin([1; 32], "张", "三"), admin([2; 32], "李", "四")],
             institution_code: *b"SFAS",
             register_nonce: b"nonce".to_vec(),
             signature: vec![9; 64],

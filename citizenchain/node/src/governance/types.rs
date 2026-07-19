@@ -24,11 +24,13 @@ impl InstitutionType {
     }
 }
 
-/// 机构管理员钱包、全部有效岗位任职及可选链上余额。
+/// 机构管理员人员记录、全部有效岗位任职及可选链上余额。
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AdminInfo {
-    pub account: String,
+    pub admin_account: String,
+    pub family_name: String,
+    pub given_name: String,
     pub assignments: Vec<crate::admins::management::types::InstitutionRoleAssignmentInfo>,
     /// 链上余额（分），节点未运行或余额查询失败时为 null。
     pub balance_fen: Option<String>,

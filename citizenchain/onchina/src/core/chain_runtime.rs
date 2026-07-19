@@ -897,13 +897,39 @@ pub(crate) const DESKTOP_GOVERNANCE_LOGIN_UNSUPPORTED: &str =
 pub(crate) const PERSONAL_MULTISIG_LOGIN_UNSUPPORTED: &str =
     "personal multisig is not supported by OnChina";
 
-/// 链上机构 `InstitutionAdmins` 解码镜像。
-///
-/// CID 只存在于 storage key；value 固定为机构码和去重管理员钱包集合。
-#[derive(Debug, Decode)]
-struct OnChainAdminAccount {
-    institution_code: [u8; 4],
-    admins: Vec<[u8; 32]>,
+/// 链上机构管理员集合直接复用 runtime 共享类型，禁止维护第二份字段顺序。
+type OnChainAdminAccount =
+    admin_primitives::InstitutionAdmins<Vec<admin_primitives::Admin<[u8; 32]>>>;
+
+/// 提供给 OnChina 鉴权、目录和页面的链上管理员人员记录。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct OnChainAdmin {
+    pub(crate) admin_account: String,
+    pub(crate) family_name: String,
+    pub(crate) given_name: String,
+}
+
+fn decode_onchain_admin_account(raw: &[u8]) -> Result<OnChainAdminAccount, String> {
+    let mut input = raw;
+    let decoded = OnChainAdminAccount::decode(&mut input)
+        .map_err(|e| format!("decode InstitutionAdmins failed: {e}"))?;
+    if !input.is_empty() {
+        return Err("InstitutionAdmins has trailing bytes".to_string());
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for admin in &decoded.admins {
+        if !seen.insert(admin.admin_account) {
+            return Err("InstitutionAdmins contains duplicate admin_account".to_string());
+        }
+        if admin.family_name.is_empty() || admin.given_name.is_empty() {
+            return Err("InstitutionAdmins family_name/given_name is empty".to_string());
+        }
+        std::str::from_utf8(admin.family_name.as_slice())
+            .map_err(|_| "InstitutionAdmins family_name is not UTF-8".to_string())?;
+        std::str::from_utf8(admin.given_name.as_slice())
+            .map_err(|_| "InstitutionAdmins given_name is not UTF-8".to_string())?;
+    }
+    Ok(decoded)
 }
 
 /// 机构 Active 管理员集合所属链上 pallet。
@@ -1112,7 +1138,10 @@ pub(crate) fn storage_key_suffix<const N: usize>(key_bytes: &[u8]) -> Result<[u8
 }
 
 fn contains_admin(decoded: &OnChainAdminAccount, target: &[u8; 32]) -> bool {
-    decoded.admins.iter().any(|account| account == target)
+    decoded
+        .admins
+        .iter()
+        .any(|admin| &admin.admin_account == target)
 }
 
 /// 解出 `Blake2_128Concat<CidNumber>` storage key 中的 CID。
@@ -1398,8 +1427,8 @@ pub(crate) async fn find_active_admin_memberships(
         while let Some(item) = iter.next().await {
             let kv = item
                 .map_err(|e| format!("read {} AdminAccounts failed: {e}", pallet.pallet_name()))?;
-            let mut raw = kv.value.encoded();
-            let decoded = OnChainAdminAccount::decode(&mut raw).map_err(|e| {
+            let raw = kv.value.encoded();
+            let decoded = decode_onchain_admin_account(raw).map_err(|e| {
                 format!("decode {} AdminAccounts failed: {e}", pallet.pallet_name())
             })?;
             if !contains_admin(&decoded, &target) {
@@ -1455,7 +1484,7 @@ pub(crate) async fn find_active_admin_memberships(
     Ok(memberships)
 }
 
-/// 读取本节点机构的链上 Active 管理员公钥集合(0x 小写 hex 列表)。
+/// 读取本节点机构的链上管理员人员集合；授权方只使用 `admin_account`。
 ///
 /// 按候选 pallet 顺序探测 `<Pallet>::AdminAccounts[cid_number]`，命中首个集合即返回。
 ///
@@ -1463,7 +1492,7 @@ pub(crate) async fn find_active_admin_memberships(
 /// 读 latest 块(membership 变更治理级稀有,后台扫描持续复查)。
 pub(crate) async fn fetch_active_admins_onchain(
     identity: &NodeInstitutionIdentity,
-) -> Result<Option<Vec<String>>, String> {
+) -> Result<Option<Vec<OnChainAdmin>>, String> {
     let ws_url = super::chain_url::chain_ws_url()?;
     let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
         .await
@@ -1494,10 +1523,10 @@ pub(crate) async fn fetch_active_admins_onchain(
         else {
             continue;
         };
-        let mut raw = thunk.encoded();
-        let decoded = OnChainAdminAccount::decode(&mut raw)
+        let raw = thunk.encoded();
+        let decoded = decode_onchain_admin_account(raw)
             .map_err(|e| format!("decode on-chain admin account failed: {e}"))?;
-        let mut admin_accounts = decoded.admins;
+        let mut admin_records = decoded.admins;
         if let Some(province_code) = identity.frg_province_code {
             let province_admins =
                 crate::institution::admins::chain_roles::fetch_frg_admins_for_province(
@@ -1505,12 +1534,20 @@ pub(crate) async fn fetch_active_admins_onchain(
                     province_code,
                 )
                 .await?;
-            admin_accounts.retain(|account| province_admins.contains(account));
+            admin_records.retain(|admin| province_admins.contains(&admin.admin_account));
         }
-        let admins = admin_accounts
-            .iter()
-            .map(|account| format!("0x{}", hex::encode(account)))
-            .collect();
+        let admins = admin_records
+            .into_iter()
+            .map(|admin| {
+                Ok(OnChainAdmin {
+                    admin_account: format!("0x{}", hex::encode(admin.admin_account)),
+                    family_name: String::from_utf8(admin.family_name.into_inner())
+                        .map_err(|_| "on-chain family_name is not UTF-8".to_string())?,
+                    given_name: String::from_utf8(admin.given_name.into_inner())
+                        .map_err(|_| "on-chain given_name is not UTF-8".to_string())?,
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
         return Ok(Some(admins));
     }
     Ok(None)
@@ -1545,17 +1582,36 @@ mod tests {
         assert!(decode_scale_u128("0x01").is_err());
     }
 
-    /// 锁定机构管理员 value 的双字段 SCALE 布局；CID 只存在于 storage key。
+    /// 锁定机构管理员 value 的三字段 SCALE 布局；CID 只存在于 storage key。
     #[test]
-    fn onchain_institution_admin_account_decodes_wallets_only() {
-        use codec::{Decode, Encode};
+    fn onchain_institution_admin_account_decodes_unified_records_only() {
+        use codec::Encode;
 
-        let bytes = (*b"CREG", vec![[0x42u8; 32]]).encode();
-        let decoded = super::OnChainAdminAccount::decode(&mut &bytes[..])
-            .expect("institution admin account mirror must decode wallet-only layout");
+        let bytes = admin_primitives::InstitutionAdmins {
+            institution_code: *b"CREG",
+            admins: vec![admin_primitives::Admin {
+                admin_account: [0x42u8; 32],
+                family_name: "管理"
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .expect("family name fits"),
+                given_name: "员"
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .expect("given name fits"),
+            }],
+        }
+        .encode();
+        let decoded = super::decode_onchain_admin_account(&bytes)
+            .expect("institution admin account must decode unified layout");
         assert_eq!(decoded.institution_code, *b"CREG");
         assert_eq!(decoded.admins.len(), 1);
-        assert_eq!(decoded.admins[0], [0x42; 32]);
+        assert_eq!(decoded.admins[0].admin_account, [0x42; 32]);
+
+        let old_layout = (*b"CREG", vec![[0x42u8; 32]]).encode();
+        assert!(super::decode_onchain_admin_account(&old_layout).is_err());
     }
 
     #[test]

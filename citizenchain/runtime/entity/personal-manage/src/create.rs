@@ -37,6 +37,7 @@ pub(crate) fn do_propose_create<T: Config>(
     regular_threshold: u32,
     amount: BalanceOf<T>,
 ) -> DispatchResult {
+    let admins = Pallet::<T>::normalize_admins(admins);
     ensure!(
         !T::ProtectedSourceChecker::is_protected(&who),
         Error::<T>::ProtectedSource
@@ -99,7 +100,10 @@ pub(crate) fn do_propose_create<T: Config>(
         let proposal_id = match <T as Config>::InternalVoteEngine::create_personal_account_create_proposal_with_data(
             who.clone(),
             institution.clone(),
-            admins.iter().cloned().collect(),
+            admins
+                .iter()
+                .map(|admin| admin.admin_account.clone())
+                .collect(),
             regular_threshold,
             crate::MODULE_TAG,
             data,

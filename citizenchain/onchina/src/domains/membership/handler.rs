@@ -97,7 +97,7 @@ pub(crate) async fn recheck_platform_admin(
         .ok_or_else(|| api_error(StatusCode::FORBIDDEN, 2002, "institution admins missing"))?;
     if !admins
         .iter()
-        .any(|admin| same_admin_account(admin, ctx.admin_account.as_str()))
+        .any(|admin| same_admin_account(&admin.admin_account, ctx.admin_account.as_str()))
     {
         return Err(api_error(
             StatusCode::FORBIDDEN,

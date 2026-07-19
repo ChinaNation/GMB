@@ -90,7 +90,8 @@ pub(crate) struct AdminAuthContext {
     pub(crate) institution_code: String,
     /// 行政层级标签(NATIONAL/PROVINCE/CITY/TOWN);私权法人/非法人无层级为 None。
     pub(crate) admin_level: Option<String>,
-    pub(crate) admin_name: String,
+    pub(crate) family_name: String,
+    pub(crate) given_name: String,
     pub(crate) scope_province_name: Option<String>,
     /// 市级及以下机构有值：登记的市（用于列表按市过滤、生成时强制锁定）。
     pub(crate) scope_city_name: Option<String>,
@@ -111,7 +112,8 @@ pub(crate) struct AdminAuthOutput {
     pub(crate) capabilities: crate::platform::capability::CapabilitySet,
     /// 当前机构工作台清单,用于前端按机构类型挂载 UI。
     pub(crate) workspace: crate::workspace::InstitutionWorkspace,
-    pub(crate) admin_name: String,
+    pub(crate) family_name: String,
+    pub(crate) given_name: String,
     pub(crate) scope_province_name: Option<String>,
     pub(crate) scope_city_name: Option<String>,
     pub(crate) scope_town_name: Option<String>,
@@ -134,7 +136,8 @@ pub(crate) struct AdminIdentifyOutput {
     pub(crate) capabilities: crate::platform::capability::CapabilitySet,
     /// 当前机构工作台清单,用于前端按机构类型挂载 UI。
     pub(crate) workspace: crate::workspace::InstitutionWorkspace,
-    pub(crate) admin_name: String,
+    pub(crate) family_name: String,
+    pub(crate) given_name: String,
     pub(crate) scope_province_name: Option<String>,
     pub(crate) scope_city_name: Option<String>,
     pub(crate) scope_town_name: Option<String>,

@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 pub(crate) struct AdminUser {
     pub(crate) id: u64,
     pub(crate) admin_account: String,
-    #[serde(default)]
-    pub(crate) admin_name: String,
+    pub(crate) family_name: String,
+    pub(crate) given_name: String,
     /// 所属机构码(3/4 字符文本,如 FRG/CREG/NLG)。
     pub(crate) institution_code: String,
     /// 初始联邦注册局管理员由代码内置,不可删除;代码以外新增管理员为 false。
@@ -29,13 +29,15 @@ pub(crate) struct AdminUser {
 pub(crate) struct CityRegistryAdminRow {
     pub(crate) id: u64,
     pub(crate) admin_account: String,
-    pub(crate) admin_name: String,
+    pub(crate) family_name: String,
+    pub(crate) given_name: String,
     /// 链上 finalized free 余额(分);查询失败或账户不存在时为空。
     pub(crate) balance_fen: Option<String>,
     pub(crate) institution_code: String,
     pub(crate) built_in: bool,
     pub(crate) created_by: String,
-    pub(crate) created_by_name: String,
+    pub(crate) created_by_family_name: String,
+    pub(crate) created_by_given_name: String,
     pub(crate) created_at: DateTime<Utc>,
     pub(crate) city_name: String,
 }
@@ -55,6 +57,8 @@ pub(crate) struct FederalRegistryAdminRow {
     pub(crate) id: u64,
     pub(crate) province_name: String,
     pub(crate) admin_account: String,
+    pub(crate) family_name: String,
+    pub(crate) given_name: String,
     pub(crate) role_code: String,
     pub(crate) role_name: String,
     pub(crate) term_required: bool,
@@ -75,6 +79,8 @@ pub(crate) struct FederalRegistryAdminRow {
 #[derive(Serialize)]
 pub(crate) struct OwnInstitutionAdminRow {
     pub(crate) admin_account: String,
+    pub(crate) family_name: String,
+    pub(crate) given_name: String,
     pub(crate) role_code: String,
     pub(crate) role_name: String,
     pub(crate) term_required: bool,
@@ -98,7 +104,8 @@ pub(crate) struct OwnInstitutionAdminListOutput {
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct CreateCityRegistryAdminInput {
     pub(crate) admin_account: String,
-    pub(crate) admin_name: String,
+    pub(crate) family_name: String,
+    pub(crate) given_name: String,
     /// CityRegistry 所属的市，必填，且必须属于 created_by 对应联邦注册局管理员的省份（不可为省辖市）
     pub(crate) city_name: String,
     /// 可选：指定该 city_registry 归属的联邦注册局管理员账户。

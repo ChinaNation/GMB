@@ -26,6 +26,4 @@ pub(crate) use qr_login::{
     admin_auth_qr_complete, admin_auth_qr_result, admin_auth_qr_sign_request,
 };
 pub(crate) use signature::verify_admin_signature;
-pub(crate) use signature::{
-    build_admin_name_from_user, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes,
-};
+pub(crate) use signature::{admin_person_names, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes};

@@ -197,7 +197,6 @@ function translateKnownMessage(raw: string, fallback: string): string {
     return '无法连接服务器，请检查网络或服务状态';
   }
   if (lower.startsWith('request failed')) return fallback;
-  if (text === 'admin_name is required') return '请输入管理员姓名';
   if (lower.endsWith(' is required')) return requiredFieldText(lower);
   if (lower.startsWith('invalid ')) return invalidFieldText(lower);
   if (lower.startsWith('unknown ')) return unknownFieldText(lower);

@@ -54,6 +54,7 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
     admins: InstitutionAdminsInputOf<T>,
     actor_cid_number: alloc::vec::Vec<u8>,
 ) -> DispatchResult {
+    let admins = Pallet::<T>::normalize_institution_admins(admins);
     ensure!(
         !T::ProtectedSourceChecker::is_protected(&who),
         Error::<T>::ProtectedSource

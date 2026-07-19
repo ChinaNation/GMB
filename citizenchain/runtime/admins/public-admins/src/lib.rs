@@ -18,19 +18,15 @@ use frame_system::pallet_prelude::*;
 use sp_std::collections::btree_set::BTreeSet;
 
 use admin_primitives::{
-    can_store_public_admin_code, AdminAccountKind, AdminCidNumber, InstitutionAdmin,
+    can_store_public_admin_code, Admin, AdminAccountKind, AdminCidNumber,
     InstitutionAdminLifecycle, InstitutionAdminQuery, InstitutionAdmins,
 };
 use votingengine::types::InstitutionCode;
 
 pub use pallet::*;
 
-/// v4: 机构管理员集合从 `Vec<AccountId>` 升级为
-/// `Vec<InstitutionAdmin { admin_name, admin_account }>`。
-///
-/// 正式链不得再依赖重建数据；旧 v2 存储在 runtime 升级时一次性翻译为目标结构，
-/// 查询路径只认 v4 新结构，不保留双轨兼容。
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
+/// 正式创世只接受统一管理员记录，不保留旧纯账户或单姓名存储迁移。
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -53,13 +49,10 @@ pub mod pallet {
     pub struct Pallet<T>(_);
 
     pub type AdminsOf<T> = BoundedVec<
-        InstitutionAdmin<<T as frame_system::Config>::AccountId>,
+        Admin<<T as frame_system::Config>::AccountId>,
         <T as Config>::MaxAdminsPerInstitution,
     >;
     pub type InstitutionAdminsOf<T> = InstitutionAdmins<AdminsOf<T>>;
-    type LegacyAdminsOf<T> =
-        BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxAdminsPerInstitution>;
-    type LegacyInstitutionAdminsOf<T> = InstitutionAdmins<LegacyAdminsOf<T>>;
 
     /// 公权机构管理员集合。CID 是唯一 key；value 不重复保存 CID 或生命周期状态。
     #[pallet::storage]
@@ -82,44 +75,6 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        fn on_runtime_upgrade() -> Weight {
-            let db = T::DbWeight::get();
-            let on_chain = StorageVersion::get::<Pallet<T>>();
-            if on_chain >= STORAGE_VERSION {
-                return db.reads(1);
-            }
-
-            let mut migrated = 0u64;
-            if on_chain <= StorageVersion::new(2) {
-                AdminAccounts::<T>::translate::<LegacyInstitutionAdminsOf<T>, _>(
-                    |_cid_number, legacy| {
-                        migrated = migrated.saturating_add(1);
-                        let admins = legacy
-                            .admins
-                            .into_inner()
-                            .into_iter()
-                            .map(|admin_account| InstitutionAdmin {
-                                admin_name: admin_primitives::AdminName::truncate_from(
-                                    admin_primitives::DEFAULT_ADMIN_NAME.to_vec(),
-                                ),
-                                admin_account,
-                            })
-                            .collect::<Vec<_>>();
-                        let Ok(admins) = AdminsOf::<T>::try_from(admins) else {
-                            return None;
-                        };
-                        Some(InstitutionAdmins {
-                            institution_code: legacy.institution_code,
-                            admins,
-                        })
-                    },
-                );
-            }
-
-            STORAGE_VERSION.put::<Pallet<T>>();
-            db.reads_writes(1u64.saturating_add(migrated), 1u64.saturating_add(migrated))
-        }
-
         fn integrity_test() {
             assert!(
                 <T as Config>::MaxAdminsPerInstitution::get() >= 2,
@@ -154,14 +109,16 @@ pub mod pallet {
         InvalidAdminAccountKind,
         InvalidThreshold,
         DuplicateAdmin,
-        InvalidAdminName,
+        InvalidFamilyName,
+        InvalidGivenName,
     }
 
     impl<T: Config> Pallet<T> {
-        fn ensure_unique_admins(admins: &[InstitutionAdmin<T::AccountId>]) -> DispatchResult {
+        fn ensure_unique_admins(admins: &[Admin<T::AccountId>]) -> DispatchResult {
             let mut seen = BTreeSet::new();
             for admin in admins {
-                ensure!(!admin.admin_name.is_empty(), Error::<T>::InvalidAdminName);
+                ensure!(!admin.family_name.is_empty(), Error::<T>::InvalidFamilyName);
+                ensure!(!admin.given_name.is_empty(), Error::<T>::InvalidGivenName);
                 ensure!(
                     seen.insert(admin.admin_account.clone()),
                     Error::<T>::DuplicateAdmin
@@ -174,7 +131,7 @@ pub mod pallet {
             kind: AdminAccountKind,
             institution_code: InstitutionCode,
             cid_number: &[u8],
-            admins: &[InstitutionAdmin<T::AccountId>],
+            admins: &[Admin<T::AccountId>],
         ) -> DispatchResult {
             ensure!(
                 kind == AdminAccountKind::PublicInstitution
@@ -258,10 +215,14 @@ pub mod pallet {
             cid_number: Vec<u8>,
             institution_code: InstitutionCode,
             kind: AdminAccountKind,
-            admins: Vec<InstitutionAdmin<T::AccountId>>,
+            admins: Vec<Admin<T::AccountId>>,
             threshold: u32,
         ) -> DispatchResult {
             let cid_number = Self::bound_cid(cid_number)?;
+            let admins = admins
+                .into_iter()
+                .map(Admin::normalize_names)
+                .collect::<Vec<_>>();
             Self::validate_admin_set(kind, institution_code, cid_number.as_slice(), &admins)?;
             let bounded: AdminsOf<T> = admins
                 .try_into()
@@ -337,7 +298,7 @@ impl<T: pallet::Config> InstitutionAdminLifecycle<T::AccountId> for pallet::Pall
         cid_number: Vec<u8>,
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
-        admins: Vec<InstitutionAdmin<T::AccountId>>,
+        admins: Vec<Admin<T::AccountId>>,
         threshold: u32,
     ) -> DispatchResult {
         Self::do_set_institution_admins(cid_number, institution_code, kind, admins, threshold)
@@ -376,7 +337,7 @@ impl<T: pallet::Config> InstitutionAdminQuery<T::AccountId> for pallet::Pallet<T
     fn institution_admin_records(
         institution_code: InstitutionCode,
         cid_number: &[u8],
-    ) -> Option<Vec<InstitutionAdmin<T::AccountId>>> {
+    ) -> Option<Vec<Admin<T::AccountId>>> {
         Self::get_institution_admins(institution_code, cid_number)
             .map(|value| value.admins.into_inner())
     }

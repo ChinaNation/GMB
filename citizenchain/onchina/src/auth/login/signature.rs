@@ -151,54 +151,20 @@ pub(super) fn extract_domain_from_origin(origin: &str) -> Option<String> {
     Some(domain.to_string())
 }
 
-pub(crate) fn build_admin_name(
-    // 参数保留以稳定调用签名;显示名不按账号反查。
-    _admin_account: &str,
-    institution_code: &str,
-    _scope_province_name: Option<&str>,
-) -> String {
-    // Tier1 创世注册局默认名不带省份;省份是列表列字段,不是姓名的一部分。
-    if crate::core::chain_runtime::is_tier1_registry(institution_code) {
-        "联邦注册局管理员".to_string()
-    } else if crate::core::chain_runtime::is_subordinate_registry(institution_code) {
-        "市注册局管理员".to_string()
-    } else if institution_code == "NJD" {
-        "国家司法院管理员".to_string()
-    } else {
-        "机构管理员".to_string()
-    }
-}
-
-pub(crate) fn build_admin_name_from_user(
-    admin: &AdminUser,
-    scope_province_name: Option<&str>,
-) -> String {
-    // 优先使用 admin_name(真实姓名),空或旧合成名则 fallback 到机构默认名。
-    let name = admin.admin_name.trim();
-    let old_generated_federal_name =
-        crate::core::chain_runtime::is_tier1_registry(&admin.institution_code)
-            && is_generated_federal_registry_name(name);
-    if !name.is_empty() && !old_generated_federal_name {
-        return name.to_string();
-    }
-    if crate::core::chain_runtime::is_subordinate_registry(&admin.institution_code) {
-        let city = admin.city_name.trim();
-        if !city.is_empty() {
-            let suffix = if city.ends_with('市') { "" } else { "市" };
-            return format!("{city}{suffix}注册局管理员");
-        }
-    }
-    build_admin_name(
-        &admin.admin_account,
-        &admin.institution_code,
-        scope_province_name,
+/// 返回管理员链上姓、名；本地异常空值分别收敛为“管理”“员”。
+pub(crate) fn admin_person_names(admin: &AdminUser) -> (String, String) {
+    let family_name = admin.family_name.trim();
+    let given_name = admin.given_name.trim();
+    (
+        if family_name.is_empty() {
+            "管理".to_string()
+        } else {
+            family_name.to_string()
+        },
+        if given_name.is_empty() {
+            "员".to_string()
+        } else {
+            given_name.to_string()
+        },
     )
-}
-
-fn is_generated_federal_registry_name(name: &str) -> bool {
-    if !matches!(name.chars().last(), Some('1'..='5')) {
-        return false;
-    }
-    let prefix = &name[..name.len() - 1];
-    prefix.ends_with("联邦注册局管理员")
 }

@@ -1,13 +1,13 @@
 //! 国家级成员机构组成与固定内部阈值的节点永久策略。
 //!
 //! NSN、NRP、NED 在 block#0 可以尚未组成；首次组成后，指定成员岗位、人数区间以及
-//! admins=成员钱包集合必须永久成立，且不得退回未组成状态。NLG、NSP、PRS 只冻结身份，
+//! admins 中的账户集合必须等于成员钱包集合，且不得退回未组成状态。NLG、NSP、PRS 只冻结身份，
 //! 不冻结岗位或 admins；六个国家级单例均不冻结账户级动态阈值。五类固定治理机构的
 //! 内部提案阈值快照按固定治理码复核。
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use admin_primitives::InstitutionAdmins;
+use admin_primitives::{Admin, InstitutionAdmins};
 use codec::{Decode, Encode};
 use entity_primitives::{
     InstitutionAdminAssignment, InstitutionAssignmentStatus, InstitutionRole, InstitutionRoleStatus,
@@ -21,7 +21,7 @@ use super::governance_skeleton;
 const INTERNAL_VOTE_PALLET: &[u8] = b"InternalVote";
 const VOTING_ENGINE_PALLET: &[u8] = b"VotingEngine";
 
-type DecodedAdminAccount = InstitutionAdmins<Vec<[u8; 32]>>;
+type DecodedAdminAccount = InstitutionAdmins<Vec<Admin<[u8; 32]>>>;
 type DecodedRole = InstitutionRole<Vec<u8>, Vec<u8>, Vec<u8>>;
 type DecodedAssignment = InstitutionAdminAssignment<Vec<u8>, [u8; 32], Vec<u8>, Vec<u8>>;
 
@@ -36,6 +36,7 @@ pub enum GuardError {
     PartialUnconstitutedState([u8; 4]),
     AdminAccountDecodeFailed([u8; 4]),
     AdminIdentityChanged([u8; 4]),
+    InvalidAdminPersonName([u8; 4]),
     MemberRoleDecodeFailed([u8; 4]),
     MemberRoleChanged([u8; 4]),
     AssignmentsDecodeFailed([u8; 4]),
@@ -176,6 +177,14 @@ where
     if account.institution_code != spec.institution.code {
         return Err(GuardError::AdminIdentityChanged(spec.institution.code));
     }
+    if account.admins.iter().any(|admin| {
+        admin.family_name.is_empty()
+            || admin.given_name.is_empty()
+            || core::str::from_utf8(admin.family_name.as_slice()).is_err()
+            || core::str::from_utf8(admin.given_name.as_slice()).is_err()
+    }) {
+        return Err(GuardError::InvalidAdminPersonName(spec.institution.code));
+    }
 
     let role: DecodedRole = decode_exact(raw[1].as_deref().unwrap_or_default())
         .map_err(|_| GuardError::MemberRoleDecodeFailed(spec.institution.code))?;
@@ -211,7 +220,11 @@ where
             return Err(GuardError::DuplicateMember(spec.institution.code));
         }
     }
-    let admins = account.admins.into_iter().collect::<BTreeSet<_>>();
+    let admins = account
+        .admins
+        .into_iter()
+        .map(|admin| admin.admin_account)
+        .collect::<BTreeSet<_>>();
     if admins.len() != members.len() || admins != members {
         return Err(GuardError::AdminMemberSetMismatch(spec.institution.code));
     }
@@ -359,7 +372,7 @@ mod tests {
     }
 
     fn formed_state(spec: &MemberCompositionSpec, count: u32) -> BTreeMap<Vec<u8>, Vec<u8>> {
-        let admins = (0..count).map(account).collect::<Vec<_>>();
+        let admin_accounts = (0..count).map(account).collect::<Vec<_>>();
         let role = DecodedRole {
             cid_number: spec.institution.cid_number.as_bytes().to_vec(),
             role_code: spec.role_code.to_vec(),
@@ -367,7 +380,7 @@ mod tests {
             term_required: false,
             role_status: InstitutionRoleStatus::Active,
         };
-        let assignments = admins
+        let assignments = admin_accounts
             .iter()
             .copied()
             .map(|admin_account| DecodedAssignment {
@@ -383,7 +396,14 @@ mod tests {
             .collect::<Vec<_>>();
         let account = DecodedAdminAccount {
             institution_code: spec.institution.code,
-            admins,
+            admins: admin_accounts
+                .into_iter()
+                .map(|admin_account| Admin {
+                    admin_account,
+                    family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
+                    given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
+                })
+                .collect(),
         };
         let [admin_key, role_key, assignments_key] = storage_key::composition_keys(spec);
         BTreeMap::from([
@@ -401,6 +421,30 @@ mod tests {
             state.extend(formed_state(&spec, spec.min_members));
         }
         assert_eq!(check_full_state(|key| state.get(key).cloned()), Ok(()));
+    }
+
+    #[test]
+    fn member_names_do_not_define_membership_but_must_be_valid() {
+        let spec = member_composition_specs()[0];
+        let admin_key = storage_key::composition_keys(&spec)[0].clone();
+        let mut state = formed_state(&spec, spec.min_members);
+        let mut account: DecodedAdminAccount =
+            decode_exact(state.get(&admin_key).expect("admin account exists"))
+                .expect("admin account decodes");
+        account.admins[0].family_name = "张".as_bytes().to_vec().try_into().expect("name fits");
+        account.admins[0].given_name = "三".as_bytes().to_vec().try_into().expect("name fits");
+        state.insert(admin_key.clone(), account.encode());
+        assert_eq!(check_full_state(|key| state.get(key).cloned()), Ok(()));
+
+        let mut account: DecodedAdminAccount =
+            decode_exact(state.get(&admin_key).expect("admin account exists"))
+                .expect("admin account decodes");
+        account.admins[0].given_name = Vec::new().try_into().expect("empty name fits");
+        state.insert(admin_key, account.encode());
+        assert_eq!(
+            check_full_state(|key| state.get(key).cloned()),
+            Err(GuardError::InvalidAdminPersonName(spec.institution.code))
+        );
     }
 
     #[test]

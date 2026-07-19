@@ -131,7 +131,7 @@ export function AdminListPage({ cidNumber, accountRef, onBack }: Props) {
       ) : (
         <div className="admin-grid">
           {detail.admins.map((admin, i) => {
-            const pubkey = admin.account;
+            const pubkey = admin.adminAccount;
             const isActivated = activatedAdmins.some(
               a => a.pubkeyHex.toLowerCase() === pubkey.toLowerCase()
             );

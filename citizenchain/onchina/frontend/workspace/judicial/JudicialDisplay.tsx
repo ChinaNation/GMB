@@ -162,8 +162,10 @@ export function OwnInstitutionInfoPanel({ auth }: JudicialDisplayProps) {
           {inst?.legal_representative_cid_number ? (
             <Descriptions.Item label="法定代表人身份ID">{inst.legal_representative_cid_number}</Descriptions.Item>
           ) : null}
-          {detail?.created_by_name ? (
-            <Descriptions.Item label="登记管理员">{detail.created_by_name}</Descriptions.Item>
+          {detail?.created_by_family_name || detail?.created_by_given_name ? (
+            <Descriptions.Item label="登记管理员">
+              {`${detail.created_by_family_name ?? ''}${detail.created_by_given_name ?? ''}`}
+            </Descriptions.Item>
           ) : null}
           {detail?.created_by_role ? (
             <Descriptions.Item label="登记机构码">{detail.created_by_role}</Descriptions.Item>

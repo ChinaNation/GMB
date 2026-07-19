@@ -80,20 +80,28 @@ export function AddCityRegistryAdminModal({ state }: AddCityRegistryAdminModalPr
         <Form
           form={addCityRegistryForm}
           layout="vertical"
-          onFinish={(values: { city_registry_admin_name: string; city_registry_account: string; city_scope_city_name: string }) =>
+          onFinish={(values: { family_name: string; given_name: string; city_registry_account: string; city_scope_city_name: string }) =>
             onCreateCityRegistry({
-              city_registry_admin_name: values.city_registry_admin_name,
+              family_name: values.family_name,
+              given_name: values.given_name,
               city_registry_account: values.city_registry_account,
               city_name: values.city_scope_city_name,
             })
           }
         >
           <Form.Item
-            label="姓名"
-            name="city_registry_admin_name"
-            rules={[{ required: true, message: '请输入市注册局管理员姓名' }]}
+            label="姓"
+            name="family_name"
+            rules={[{ required: true, message: '请输入市注册局管理员姓' }]}
           >
-            <Input placeholder="请输入市注册局管理员姓名" />
+            <Input placeholder="请输入市注册局管理员姓" />
+          </Form.Item>
+          <Form.Item
+            label="名"
+            name="given_name"
+            rules={[{ required: true, message: '请输入市注册局管理员名' }]}
+          >
+            <Input placeholder="请输入市注册局管理员名" />
           </Form.Item>
           <Form.Item
             label="市"

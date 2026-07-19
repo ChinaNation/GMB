@@ -15,7 +15,7 @@ use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 
 use crate::{InstitutionAssignmentSource, InstitutionAssignmentStatus, InstitutionRoleStatus};
-use admin_primitives::InstitutionAdmin;
+use admin_primitives::Admin;
 
 /// 动态岗位的目标定义。
 ///
@@ -89,9 +89,7 @@ pub struct InstitutionGovernanceResult<AccountId> {
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo, PartialEq, Eq)]
 pub enum InstitutionGovernanceAction<AccountId> {
     /// 本机构内部投票通过后，完整替换机构 `admins` 真源。
-    ReplaceAdmins {
-        admins: Vec<InstitutionAdmin<AccountId>>,
-    },
+    ReplaceAdmins { admins: Vec<Admin<AccountId>> },
     /// 调整岗位定义、岗位任职和法定代表人，不改变机构 `admins`。
     MutateRolesAndAssignments {
         role_changes: Vec<InstitutionRoleChange>,
@@ -100,11 +98,42 @@ pub enum InstitutionGovernanceAction<AccountId> {
     },
     /// 同一提案内原子替换管理员并调整岗位/任职。
     ReplaceAdminsAndMutateRoles {
-        admins: Vec<InstitutionAdmin<AccountId>>,
+        admins: Vec<Admin<AccountId>>,
         role_changes: Vec<InstitutionRoleChange>,
         assignment_changes: Vec<InstitutionRoleAssignmentChange<AccountId>>,
         legal_representative_change: Option<InstitutionLegalRepresentativeChange<AccountId>>,
     },
+}
+
+impl<AccountId> InstitutionGovernanceAction<AccountId> {
+    /// 在签名载荷和投票数据生成前补齐管理员默认姓名，保证提案与最终链上记录一致。
+    pub fn normalize_admin_person_names(self) -> Self {
+        match self {
+            Self::ReplaceAdmins { admins } => Self::ReplaceAdmins {
+                admins: admins.into_iter().map(Admin::normalize_names).collect(),
+            },
+            Self::MutateRolesAndAssignments {
+                role_changes,
+                assignment_changes,
+                legal_representative_change,
+            } => Self::MutateRolesAndAssignments {
+                role_changes,
+                assignment_changes,
+                legal_representative_change,
+            },
+            Self::ReplaceAdminsAndMutateRoles {
+                admins,
+                role_changes,
+                assignment_changes,
+                legal_representative_change,
+            } => Self::ReplaceAdminsAndMutateRoles {
+                admins: admins.into_iter().map(Admin::normalize_names).collect(),
+                role_changes,
+                assignment_changes,
+                legal_representative_change,
+            },
+        }
+    }
 }
 
 /// 写入 ProposalData 的机构治理提案载荷。

@@ -199,6 +199,7 @@ async fn create_institution_inner(
 }
 
 fn validate_initial_admins(
+    state: &AppState,
     admins: &[CreateInstitutionAdminInput],
 ) -> Result<Vec<CreateInstitutionAdminInput>, Response> {
     let mut unique_accounts = HashSet::new();
@@ -218,9 +219,28 @@ fn validate_initial_admins(
                 "管理员账户不能重复",
             ));
         }
+        let citizen = state
+            .db
+            .find_citizen_by_wallet(admin.admin_account.as_str())
+            .map_err(|err| api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, &err))?;
+        let family_name = normalize_initial_person_name(admin.family_name.as_deref())
+            .or_else(|| {
+                citizen.as_ref().and_then(|record| {
+                    normalize_initial_person_name(Some(&record.citizen_family_name))
+                })
+            })
+            .unwrap_or_else(|| "管理".to_string());
+        let given_name = normalize_initial_person_name(admin.given_name.as_deref())
+            .or_else(|| {
+                citizen.as_ref().and_then(|record| {
+                    normalize_initial_person_name(Some(&record.citizen_given_name))
+                })
+            })
+            .unwrap_or_else(|| "员".to_string());
         normalized.push(CreateInstitutionAdminInput {
-            admin_name: Some(normalize_initial_admin_name(admin.admin_name.as_deref())),
             admin_account,
+            family_name: Some(family_name),
+            given_name: Some(given_name),
         });
     }
     if unique_accounts.len() < 2 {
@@ -233,13 +253,10 @@ fn validate_initial_admins(
     Ok(normalized)
 }
 
-fn normalize_initial_admin_name(raw: Option<&str>) -> String {
-    let name = raw.unwrap_or("").trim();
-    if name.is_empty() {
-        "管理员".to_string()
-    } else {
-        name.to_string()
-    }
+fn normalize_initial_person_name(raw: Option<&str>) -> Option<String> {
+    raw.map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
 }
 
 pub(crate) fn prepare_institution_create_from_input(
@@ -494,7 +511,7 @@ pub(crate) fn prepare_institution_create_from_input(
             ));
         }
     }
-    let normalized_admins = validate_initial_admins(&input.admins)?;
+    let normalized_admins = validate_initial_admins(state, &input.admins)?;
     if is_private && p1 != "0" && p1 != "1" {
         return Err(api_error(StatusCode::BAD_REQUEST, 1001, "P1 非法(仅 0/1)"));
     }

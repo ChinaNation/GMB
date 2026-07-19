@@ -212,7 +212,8 @@ fn stable_institution_cursor_id(cid_number: &str) -> i64 {
 fn institution_row_from_record(
     inst: &crate::institution::subjects::Institution,
     account_count: usize,
-    created_by_name: Option<String>,
+    created_by_family_name: Option<String>,
+    created_by_given_name: Option<String>,
     created_by_role: Option<String>,
 ) -> crate::institution::subjects::InstitutionListRow {
     crate::institution::subjects::InstitutionListRow {
@@ -232,7 +233,8 @@ fn institution_row_from_record(
         parent_cid_number: inst.parent_cid_number.clone(),
         account_count,
         created_at: inst.created_at,
-        created_by_name,
+        created_by_family_name,
+        created_by_given_name,
         created_by_role,
     }
 }
@@ -244,12 +246,13 @@ fn institution_row_from_pg_row(
     let category = institution_category_from_text(category_text.as_str())
         .ok_or_else(|| format!("invalid institution category: {category_text}"))?;
     let account_count_i64: i64 = row.get(15);
-    let created_by_name: Option<String> = row.get(16);
-    let created_by_role: Option<String> = row.get(17);
-    let cid_full_name: Option<String> = row.get(18);
-    let cid_short_name: Option<String> = row.get(19);
-    let town_code: Option<String> = row.get(21);
-    let education_type: Option<String> = row.get(22);
+    let created_by_family_name: Option<String> = row.get(16);
+    let created_by_given_name: Option<String> = row.get(17);
+    let created_by_role: Option<String> = row.get(18);
+    let cid_full_name: Option<String> = row.get(19);
+    let cid_short_name: Option<String> = row.get(20);
+    let town_code: Option<String> = row.get(22);
+    let education_type: Option<String> = row.get(23);
     // 省/市/镇名字按 code 现场从 china.sqlite 派生,库里不存名字副本(ADR-021)。
     let province_code: String = row.get(6);
     let city_code: Option<String> = row.get(7);
@@ -290,7 +293,8 @@ fn institution_row_from_pg_row(
     let item = institution_row_from_record(
         &inst,
         usize::try_from(account_count_i64).unwrap_or(0),
-        created_by_name,
+        created_by_family_name,
+        created_by_given_name,
         created_by_role,
     );
     Ok(item)
@@ -1464,7 +1468,7 @@ impl Db {
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
 				                                    s.parent_cid_number, s.created_by, s.created_at,
 				                                    COALESCE(ac.account_count, 0),
-				                                    a.admin_name, a.institution_code, s.cid_full_name, s.cid_short_name,
+				                                    a.family_name, a.given_name, a.institution_code, s.cid_full_name, s.cid_short_name,
 				                                    ''::text AS town_name, COALESCE(s.town_code, ''),
 				                                    s.education_type
 		                             FROM subjects s
@@ -1544,7 +1548,7 @@ impl Db {
                                     s.private_type, s.partnership_kind, s.has_legal_personality,
                                     s.parent_cid_number, s.created_by, s.created_at,
                                     COALESCE(ac.account_count, 0),
-                                    a.admin_name, a.institution_code, s.cid_full_name, s.cid_short_name,
+                                    a.family_name, a.given_name, a.institution_code, s.cid_full_name, s.cid_short_name,
                                     ''::text AS town_name, COALESCE(s.town_code, ''),
                                     s.education_type
 	                     FROM subjects s
@@ -1608,7 +1612,7 @@ impl Db {
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
 				                                    s.parent_cid_number, s.created_by, s.created_at,
 			                                    COALESCE(ac.account_count, 0),
-			                                    a.admin_name, a.institution_code, s.cid_full_name, s.cid_short_name,
+			                                    a.family_name, a.given_name, a.institution_code, s.cid_full_name, s.cid_short_name,
 			                                    ''::text AS town_name, COALESCE(s.town_code, ''),
 			                                    s.education_type
 	                             FROM subjects s

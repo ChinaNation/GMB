@@ -439,7 +439,15 @@ fn seed_offchain_minimum_fee_probe(
         Some(
             admin_primitives::InstitutionAdmins {
                 institution_code: *b"SFGQ",
-                admins: vec![submitter],
+                admins: vec![admin_primitives::Admin {
+                    admin_account: submitter,
+                    family_name: admin_primitives::FamilyName::truncate_from(
+                        admin_primitives::DEFAULT_ADMIN_FAMILY_NAME.to_vec(),
+                    ),
+                    given_name: admin_primitives::GivenName::truncate_from(
+                        admin_primitives::DEFAULT_ADMIN_GIVEN_NAME.to_vec(),
+                    ),
+                }],
             }
             .encode(),
         ),

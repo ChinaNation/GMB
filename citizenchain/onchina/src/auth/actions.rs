@@ -23,7 +23,7 @@ use crate::auth::action_sign::{
 use crate::auth::city_registry_admins::{
     can_manage_city_registry, city_registry_row_from_user_conn,
     count_city_registry_admins_in_city_conn, ensure_city_in_province,
-    find_city_registry_by_id_conn, MAX_ADMIN_NAME_CHARS, MAX_CITY_REGISTRY_ADMINS_PER_CITY,
+    find_city_registry_by_id_conn, MAX_ADMIN_PERSON_NAME_BYTES, MAX_CITY_REGISTRY_ADMINS_PER_CITY,
 };
 use crate::auth::login::AdminAuthContext;
 use crate::auth::operation_auth::{
@@ -198,7 +198,7 @@ async fn ensure_pubkey_on_chain_admin(
         .ok_or_else(|| api_error(StatusCode::FORBIDDEN, 2002, message))?;
     if !onchain
         .iter()
-        .any(|admin| same_admin_account(admin, normalized.as_str()))
+        .any(|admin| same_admin_account(&admin.admin_account, normalized.as_str()))
     {
         return Err(api_error(StatusCode::FORBIDDEN, 2002, message));
     }
@@ -689,12 +689,13 @@ fn preview_action_conn(
         AdminActionType::CreateCityRegistry => {
             let input: CreateCityRegistryAdminInput = serde_json::from_value(payload.clone())
                 .map_err(|_| "http:bad_request:invalid create payload".to_string())?;
-            let (admin_account, admin_name, city, created_by) =
+            let (admin_account, family_name, given_name, city, created_by) =
                 validate_create_city_registry_conn(conn, ctx, &input)?;
             let after = json!({
                 "institution_code": "CREG",
                 "admin_account": admin_account,
-                "admin_name": admin_name,
+                "family_name": family_name,
+                "given_name": given_name,
                 "city_name": city,
                 "created_by": created_by,
             });
@@ -875,11 +876,12 @@ fn validate_create_city_registry_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
     input: &CreateCityRegistryAdminInput,
-) -> Result<(String, String, String, String), String> {
+) -> Result<(String, String, String, String, String), String> {
     let Some(admin_account) = normalize_admin_account(input.admin_account.as_str()) else {
         return Err("http:bad_request:admin_account format invalid".to_string());
     };
-    let admin_name = validate_admin_name(input.admin_name.as_str())?;
+    let family_name = validate_person_name(input.family_name.as_str(), "family_name")?;
+    let given_name = validate_person_name(input.given_name.as_str(), "given_name")?;
     let created_by = match input.created_by.as_deref().map(str::trim) {
         None | Some("") => ctx.admin_account.clone(),
         Some(raw) => {
@@ -912,7 +914,7 @@ fn validate_create_city_registry_conn(
     {
         return Err("http:conflict:city admin city limit reached".to_string());
     }
-    Ok((admin_account, admin_name, city, created_by))
+    Ok((admin_account, family_name, given_name, city, created_by))
 }
 
 /// 机构自定义命名账户注销校验。协议账户永久存在，机构本身没有注销路径。
@@ -968,13 +970,13 @@ fn validate_institution_deregister_conn(
     })
 }
 
-fn validate_admin_name(name: &str) -> Result<String, String> {
+fn validate_person_name(name: &str, field: &str) -> Result<String, String> {
     let name = name.trim();
     if name.is_empty() {
-        return Err("http:bad_request:admin_name is required".to_string());
+        return Err(format!("http:bad_request:{field} is required"));
     }
-    if name.chars().count() > MAX_ADMIN_NAME_CHARS {
-        return Err("http:bad_request:admin_name too long".to_string());
+    if name.len() > MAX_ADMIN_PERSON_NAME_BYTES {
+        return Err(format!("http:bad_request:{field} too long"));
     }
     Ok(name.to_string())
 }
@@ -1107,13 +1109,14 @@ fn apply_create_city_registry_conn(
     ctx: &AdminAuthContext,
     input: &CreateCityRegistryAdminInput,
 ) -> Result<serde_json::Value, String> {
-    let (admin_account, admin_name, city, created_by) =
+    let (admin_account, family_name, given_name, city, created_by) =
         validate_create_city_registry_conn(conn, ctx, input)?;
     let now = Utc::now();
     let row = AdminUser {
         id: repo::next_admin_id_conn(conn)?,
         admin_account: admin_account.clone(),
-        admin_name,
+        family_name,
+        given_name,
         institution_code: "CREG".to_string(),
         built_in: false,
         created_by,

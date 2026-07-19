@@ -57,8 +57,8 @@ citizenchain/onchina/frontend/
 - 新增公民弹窗不得出现手填身份 CID、手填护照有效期、居住省市选择或投票账户公钥输入框。
 - 新增公民弹窗必须展示当前办理城市对应的居住省市,只允许选择居住镇;出生省市镇必须选择。
 - 新增公民请求只提交 `province_name / city_name / town_code` 和 `birth_*` 字段;不得向后端发送旧的第二套居住字段。
-- 新增机构第一步只收集机构全称、简称和至少两个管理员姓名/钱包账户，以及机构分类本身必需的主体属性、行政区和类型字段；不得要求法定代表人、岗位码、岗位名、任期、任职、治理阈值、机构账户地址或注资金额。
-- 管理员是人员而不是岗位。首次登记界面只录入 `admins(admin_name + admin_account)`，授权只认钱包账户；姓名为空或仍为默认“管理员”时由后端尝试从公民档案解析，仍无法解析才展示“管理员”。首次登记不得生成管理员岗位任职。
+- 新增机构第一步只收集机构全称、简称和至少两个管理员的姓、名、钱包账户，以及机构分类本身必需的主体属性、行政区和类型字段；不得要求法定代表人、岗位码、岗位名、任期、任职、治理阈值、机构账户地址或注资金额。
+- 管理员是人员而不是岗位。首次登记界面只录入 `admins(admin_account + family_name + given_name)`，授权只认钱包账户；姓、名未解析时分别使用“管理”“员”，页面只在展示时合并为“管理员”。首次登记不得生成管理员岗位任职。
 - 创建机构正式提交必须共用 `subjects/api.ts::buildInstitutionCreatePayload`，可空字段显式写入 `null`，禁止各入口手写第二份 payload 或让 `undefined` 造成请求漂移。
 - 创建机构只允许一次管理员钱包签名：后端返回最终链交易 `sign_request`，前端用 `core/useChainSign.tsx` 展示该二维码，收到 CitizenWallet 签名响应后直接调用统一链交易 submit；不得再叠加 `INSTITUTION_CREATE` 安全动作、`a=8 institution_create_credential` 或任何内层创建凭证二维码。
 - 所有 `PASSKEY_COLD_SIGN` 正式业务提交必须同时携带冷签 grant 和 Passkey assertion。创建机构、创建/删除账户、公民身份上链等可直接使用 `admins/securityApi.ts::createColdSignSubmitHeaders`；已由组件先取得 grant 的资料上传/删除、机构详情更新等必须使用 `securityGrantSubmitHeaders`。业务模块禁止手写 `x-cid-security-grant` 或只提交 grant 不提交 Passkey assertion。
@@ -69,10 +69,10 @@ citizenchain/onchina/frontend/
 - “投票身份”提交 `identity_level=voting`,链交易为 `CitizenIdentity.register_voting_identity(10.0)`;“参选身份”提交 `identity_level=candidate`,链交易为 `CitizenIdentity.upgrade_to_candidate_identity(10.1)`。
 - 公民详情页底部必须显示公民独立资料库,资料类型固定为“护照相片 / 出生证明 / 监护人护照 / 其他材料”。该区域只调用 `citizens/api.ts` 的公民资料接口,不得复用机构资料库 `docs/DocumentLibrary.tsx`。
 - 投票账户只有一个输入框,用于填写 SS58 地址或点击扫码图标回填账户;提交后列表和详情只显示 SS58 地址。
-- 机构管理员列表使用 `admins/InstitutionAssignmentCard.tsx` 展示管理员钱包、岗位、任期、任职来源和余额；同一钱包在同一机构有多个岗位时按任职分别展示。岗位权限不作为卡片字段，由对应业务模块按硬规则决定。
+- 机构管理员列表使用 `admins/InstitutionAssignmentCard.tsx` 展示由 `family_name + given_name` 合并的姓名、管理员钱包、岗位、任期、任职来源和余额；没有岗位的管理员仍显示，岗位栏为空。同一钱包在同一机构有多个岗位时按任职分别展示。岗位权限不作为卡片字段，由对应业务模块按硬规则决定。
 - 注册局管理员列表保持既有表格布局。非注册局机构的本机构管理员列表必须使用卡片墙，桌面端一行两张管理员卡片，小屏一行一张；不得再显示“管理员信息 / 操作”两列表头。
 - 非注册局本机构管理员卡片中，当前登录管理员自己的 passkey 按钮文案固定为“密钥”，按钮放在“余额”行右侧靠右；未设置 passkey 时继续用红点提示。
-- 管理员列表不得提供本地 `admin_name` 编辑入口；联邦注册局管理员岗位目录完全只读，换届由治理业务写入 entity 后自动反映。市注册局本地登记目录仍可新增/删除，但不得成为链上管理员资格或岗位真源。
+- 管理员列表不得提供本地合并姓名编辑入口；登录态、注册局目录、机构创建和治理输入统一传递 `family_name / given_name`，只在 UI 渲染时合并。联邦注册局管理员岗位目录完全只读，换届由治理业务写入 entity 后自动反映。市注册局本地登记目录仍可新增/删除，但不得成为链上管理员资格或岗位真源。
 - 非注册局工作台“显示”页必须调用 `/api/v1/admin/own-institution` 展示本机构完整信息，至少包括机构全称、简称、身份ID、机构码、机构类别、主体状态、行政层级、辖区、盈利属性、主账户、主账户地址、主账户状态、账户数量和创建时间；法定代表人姓名、CID、账户读取 entity 链上公开字段，有值时显示；证件照片仍为 OnChina 链下字段。教育分类、私权类型、合伙类型、所属法人等字段有值时再显示。
 - 立法法律列表和详情页的版本显示必须优先使用后端 `LawView.versionTitle/versionTitleEn`；只有链上版本标签为空时才显示 `vN`，不得在前端硬编码 `v1=创世版`。
 
@@ -140,3 +140,5 @@ rg "NotAllowedError.*摄像头" citizenchain/onchina/frontend --glob '!node_modu
 ```
 
 涉及登录、权限、扫码或页面展示的变更，必须启动真实本地服务并检查真实页面；只通过 `npm run build` 不算完成。
+
+2026-07-19 正式创世前管理员三字段第 3 步验收：登录态、Header、机构首次登记、机构治理批量输入、市注册局管理员新增、联邦/本机构管理员列表均统一消费 `admin_account + family_name + given_name`；输入页分别填写姓、名，列表和 Header 只在渲染时按中文顺序合并。既有页面布局、机构治理 tab 和管理员卡片保留。TypeScript 与 Vite 生产构建通过，真实 OnChina 首页返回 200 且包含“链上中国平台”；构建产生的临时哈希资产已清理，未在本步烘焙或部署正式前端资产。

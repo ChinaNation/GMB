@@ -83,7 +83,9 @@ export type InstitutionRoleAssignmentInfo = {
 };
 
 export type InstitutionAdminInfo = {
-  account: string;
+  adminAccount: string;
+  familyName: string;
+  givenName: string;
   assignments: InstitutionRoleAssignmentInfo[];
 };
 

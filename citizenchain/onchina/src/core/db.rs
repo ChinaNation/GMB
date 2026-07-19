@@ -158,7 +158,8 @@ impl Db {
              CREATE TABLE IF NOT EXISTS admins (
                 admin_id BIGINT PRIMARY KEY,
                 admin_account TEXT NOT NULL UNIQUE,
-                admin_name TEXT NOT NULL,
+                family_name TEXT NOT NULL,
+                given_name TEXT NOT NULL,
                 institution_code TEXT NOT NULL,
                 built_in BOOLEAN NOT NULL DEFAULT FALSE,
                 created_by TEXT NOT NULL DEFAULT 'SYSTEM',
@@ -166,25 +167,22 @@ impl Db {
                 updated_at TIMESTAMPTZ,
                 city_name TEXT NOT NULL DEFAULT ''
              );
-             DO $$
-             BEGIN
-                IF EXISTS (
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_name = 'admins' AND column_name = 'admin_display_name'
-                ) AND NOT EXISTS (
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_name = 'admins' AND column_name = 'admin_name'
-                ) THEN
-                    ALTER TABLE admins RENAME COLUMN admin_display_name TO admin_name;
-                END IF;
-             END $$;
+             ALTER TABLE admins
+                ADD COLUMN IF NOT EXISTS family_name TEXT NOT NULL DEFAULT '管理',
+                ADD COLUMN IF NOT EXISTS given_name TEXT NOT NULL DEFAULT '员';
              UPDATE admins
-             SET admin_name = ''
-             WHERE admin_name IS NULL OR lower(admin_name) = lower(admin_account);
+             SET family_name = '管理'
+             WHERE family_name IS NULL OR trim(family_name) = '';
+             UPDATE admins
+             SET given_name = '员'
+             WHERE given_name IS NULL OR trim(given_name) = '';
              ALTER TABLE admins
                 ALTER COLUMN admin_account SET NOT NULL,
-                ALTER COLUMN admin_name SET NOT NULL,
+                ALTER COLUMN family_name SET NOT NULL,
+                ALTER COLUMN given_name SET NOT NULL,
                 ALTER COLUMN institution_code SET NOT NULL;
+             ALTER TABLE admins DROP COLUMN IF EXISTS admin_name;
+             ALTER TABLE admins DROP COLUMN IF EXISTS admin_display_name;
              CREATE UNIQUE INDEX IF NOT EXISTS admins_admin_account_key ON admins(admin_account);
              CREATE INDEX IF NOT EXISTS idx_admins_institution_code ON admins(institution_code);
              CREATE INDEX IF NOT EXISTS idx_admins_institution_code_city_name ON admins(institution_code, city_name);
@@ -453,6 +451,8 @@ impl Db {
                 province_code TEXT NOT NULL,
                 city_code TEXT,
                 admin_account TEXT NOT NULL,
+                family_name TEXT NOT NULL DEFAULT '管理',
+                given_name TEXT NOT NULL DEFAULT '员',
                 admin_department TEXT,
                 admin_job TEXT,
                 admin_contact_phone TEXT,
@@ -823,6 +823,8 @@ impl Db {
                 DROP COLUMN IF EXISTS chain_block_number;
              ALTER TABLE accounts DROP COLUMN IF EXISTS chain_status;
              ALTER TABLE institution_admins
+                ADD COLUMN IF NOT EXISTS family_name TEXT NOT NULL DEFAULT '管理',
+                ADD COLUMN IF NOT EXISTS given_name TEXT NOT NULL DEFAULT '员',
                 DROP COLUMN IF EXISTS chain_status,
                 DROP COLUMN IF EXISTS chain_tx_hash,
                 DROP COLUMN IF EXISTS chain_block_number;",

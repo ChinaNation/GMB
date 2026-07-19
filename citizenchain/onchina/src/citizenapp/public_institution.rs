@@ -66,7 +66,7 @@ fn parse_category(value: &str) -> InstitutionCategory {
 
 /// 公权机构目录公开行(白名单 DTO)。
 ///
-/// 安全红线:**显式不含** created_by_name / created_by_role / private_type / partnership_kind。
+/// 安全红线：显式不含创建管理员姓、名、角色，也不含 private_type / partnership_kind。
 /// 新增字段前必须确认其可公开。
 /// 已确认可公开:法定代表人姓名、CID 和钱包账户属于机构公开信息；三字段无任免时均不下发。
 #[derive(Debug, Serialize)]

@@ -64,7 +64,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
       setInfo(d);
     } catch (_) {}
     if (curInst && curSid) {
-      const statuses = await fetchVoteStatuses(proposalId, curInst.admins.map(a => a.account), curSid);
+      const statuses = await fetchVoteStatuses(proposalId, curInst.admins.map(a => a.adminAccount), curSid);
       // 已确认上链的投票或超时的投票，从 pending 中移除
       setPendingVotes((prev) => {
         const next = new Map(prev);
@@ -106,7 +106,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
             wallets = activated.map(a => ({ address: hexToSs58(a.pubkeyHex), pubkeyHex: a.pubkeyHex, walletLabel: '' }));
             setDetectedAdminWallets(wallets);
           }
-          await fetchVoteStatuses(proposalId, inst.admins.map(a => a.account), sid);
+          await fetchVoteStatuses(proposalId, inst.admins.map(a => a.adminAccount), sid);
         } catch (_) {}
       }
     };
@@ -243,7 +243,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
           <h3>管理员投票状态（{institution.admins.length} 人）</h3>
           <div className="admin-grid">
             {institution.admins.map((admin, i) => {
-              const pubkey = admin.account;
+              const pubkey = admin.adminAccount;
               const pk = pubkey.toLowerCase();
               const myWallet = adminWallets.find(w => w.pubkeyHex.toLowerCase() === pk);
               const vs = voteStatuses[pk];

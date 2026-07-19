@@ -20,8 +20,7 @@ use super::guards::{admin_auth, bearer_token};
 use super::model::*;
 use super::onchain_gate;
 use super::signature::{
-    build_admin_name_from_user, extract_domain_from_origin, parse_admin_identity_qr,
-    verify_admin_signature,
+    admin_person_names, extract_domain_from_origin, parse_admin_identity_qr, verify_admin_signature,
 };
 use super::LOGIN_SIGN_REQUEST_TTL_SECONDS;
 
@@ -64,7 +63,8 @@ pub(crate) async fn admin_auth_check(
             admin_level: ctx.admin_level,
             capabilities,
             workspace,
-            admin_name: ctx.admin_name,
+            family_name: ctx.family_name,
+            given_name: ctx.given_name,
             scope_province_name: ctx.scope_province_name,
             scope_city_name: ctx.scope_city_name,
             scope_town_name: ctx.scope_town_name,
@@ -160,6 +160,7 @@ pub(crate) async fn admin_auth_identify(
         capabilities,
         workspace_modules,
     );
+    let (family_name, given_name) = admin_person_names(&admin);
 
     Json(ApiResponse {
         code: 0,
@@ -171,7 +172,8 @@ pub(crate) async fn admin_auth_identify(
             admin_level: crate::core::chain_runtime::admin_level_label_for(&admin.institution_code),
             capabilities,
             workspace,
-            admin_name: build_admin_name_from_user(&admin, province.as_deref()),
+            family_name,
+            given_name,
             scope_province_name: province,
             scope_city_name,
             scope_town_name,

@@ -21,12 +21,11 @@ import { notice } from './utils/notice';
 
 const { Header, Content } = Layout;
 
-/** Header 右上角管理员身份与姓名。 */
-function resolveHeaderAdminIdentity(auth: AdminAuth | null): { cidShortName: string; adminName: string } {
-  if (!auth) return { cidShortName: '', adminName: '' };
-  const name = typeof auth.admin_name === 'string' ? auth.admin_name.trim() : '';
+/** Header 右上角管理员身份；姓名仍保留姓、名两个精确字段，渲染时才拼接。 */
+function resolveHeaderAdminIdentity(auth: AdminAuth | null): { cidShortName: string; family_name: string; given_name: string } {
+  if (!auth) return { cidShortName: '', family_name: '', given_name: '' };
   const cidShortName = typeof auth.cid_short_name === 'string' ? auth.cid_short_name.trim() : '';
-  return { cidShortName, adminName: name || '暂未设置' };
+  return { cidShortName, family_name: auth.family_name.trim(), given_name: auth.given_name.trim() };
 }
 
 function AppInner() {
@@ -57,7 +56,8 @@ function AppInner() {
           admin_level: checked.admin_level ?? null,
           capabilities: checked.capabilities,
           workspace: checked.workspace ?? auth.workspace,
-          admin_name: checked.admin_name,
+          family_name: checked.family_name,
+          given_name: checked.given_name,
           scope_province_name: checked.scope_province_name ?? null,
           scope_city_name: checked.scope_city_name ?? null,
           scope_town_name: checked.scope_town_name ?? null,
@@ -193,7 +193,9 @@ function AppInner() {
                   </span>
                 </>
               )}
-              <span>{headerAdminIdentity.adminName}</span>
+              <span>
+                {`${headerAdminIdentity.family_name}${headerAdminIdentity.given_name}` || '暂未设置'}
+              </span>
             </Typography.Text>
             <Button
               size="small"

@@ -22,7 +22,7 @@ export function ClearingBankAdminListPage({
   onBack,
 }: Props) {
   const accounts = useMemo(
-    () => Array.from(new Set(admins.map((profile) => profile.account.trim().replace(/^0x/i, '').toLowerCase()))),
+    () => Array.from(new Set(admins.map((profile) => profile.adminAccount.trim().replace(/^0x/i, '').toLowerCase()))),
     [admins],
   );
   const [balanceByAccount, setBalanceByAccount] = useState<Record<string, string | null>>({});
@@ -60,10 +60,10 @@ export function ClearingBankAdminListPage({
         <div className="admin-grid">
           {admins.map((profile, idx) => (
             <InstitutionAssignmentCard
-              key={profile.account}
+              key={profile.adminAccount}
               admin={profile}
               index={idx + 1}
-              balanceFen={balanceByAccount[profile.account.trim().replace(/^0x/i, '').toLowerCase()] ?? null}
+              balanceFen={balanceByAccount[profile.adminAccount.trim().replace(/^0x/i, '').toLowerCase()] ?? null}
             />
           ))}
         </div>

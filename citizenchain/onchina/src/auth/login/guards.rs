@@ -12,7 +12,7 @@ use crate::auth::repo;
 use crate::*;
 
 use super::model::AdminAuthContext;
-use super::signature::build_admin_name_from_user;
+use super::signature::admin_person_names;
 
 pub(super) fn admin_auth(
     state: &AppState,
@@ -102,7 +102,7 @@ pub(super) fn admin_auth(
             return Err("http:forbidden:admin province scope missing".to_string());
         }
 
-        let admin_name = build_admin_name_from_user(&admin, scope_province_name.as_deref());
+        let (family_name, given_name) = admin_person_names(&admin);
         let cid_short_name = repo::resolve_home_cid_short_name_conn(
             conn,
             &admin.institution_code,
@@ -114,7 +114,8 @@ pub(super) fn admin_auth(
             institution_cid_number: binding.institution_cid_number,
             institution_code,
             admin_level,
-            admin_name,
+            family_name,
+            given_name,
             scope_province_name,
             scope_city_name,
             scope_town_name,

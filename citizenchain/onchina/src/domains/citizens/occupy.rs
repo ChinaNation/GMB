@@ -570,6 +570,8 @@ fn persist_institution_create_projection_after_chain_success(
                 province_code: inst.province_code.clone(),
                 city_code: city_code.clone(),
                 admin_account: admin.admin_account,
+                family_name: admin.family_name.unwrap_or_else(|| "管理".to_string()),
+                given_name: admin.given_name.unwrap_or_else(|| "员".to_string()),
                 admin_department: None,
                 admin_job: None,
                 admin_contact_phone: None,
