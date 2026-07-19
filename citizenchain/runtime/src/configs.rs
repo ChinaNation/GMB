@@ -93,8 +93,8 @@ parameter_types! {
 ///
 /// This can be a tuple of types, each implementing `OnRuntimeUpgrade`.
 ///
-/// 本链全新创世,无历史链上数据需迁移,故为空。
-/// 将来链上线后如需单块迁移,在此 tuple 挂入 `OnRuntimeUpgrade` 即可。
+/// SquarePost v1→v2 迁移由 pallet 自身 `Hooks::on_runtime_upgrade` 执行；
+/// 这里仅保留 runtime 级独立迁移集合，当前为空。
 #[allow(unused_parens)]
 type SingleBlockMigrations = ();
 
@@ -563,18 +563,23 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                 },
             ) => institution_onchain_route(who, actor_cid_number.as_slice()),
 
-            // 广场内容域:发帖 + 会员订阅热签动作,发起人自付链上费。
+            // 广场内容域：只有发帖、订阅、取消、换档和创作者档位管理属于签名动作；
+            // 到期续费由 runtime 内部时间戳调度执行，不进入外部 call 路由。
             RuntimeCall::SquarePost(
                 square_post::pallet::Call::publish_post { .. }
                 | square_post::pallet::Call::subscribe { .. }
-                | square_post::pallet::Call::cancel { .. },
+                | square_post::pallet::Call::cancel { .. }
+                | square_post::pallet::Call::set_creator_plans { .. }
+                | square_post::pallet::Call::change_subscription_plan { .. },
             )
             | RuntimeCall::FullnodeIssuance(
                 fullnode_issuance::pallet::Call::bind_reward_wallet { .. }
                 | fullnode_issuance::pallet::Call::rebind_reward_wallet { .. },
             ) => signer_onchain_route(who, 0),
-            // 续扣由续订触发方(keeper)代发,免手续费。
-            RuntimeCall::SquarePost(square_post::pallet::Call::charge_due { .. }) => FeeRoute::Free,
+            RuntimeCall::SquarePost(square_post::pallet::Call::propose_set_platform_price {
+                actor_cid_number,
+                ..
+            }) => institution_onchain_route(who, actor_cid_number.as_slice()),
 
             RuntimeCall::RuntimeUpgrade(
                 runtime_upgrade::pallet::Call::propose_runtime_upgrade {
@@ -1623,9 +1628,11 @@ impl square_post::Config for Runtime {
     type Currency = Balances;
     type TimeProvider = crate::Timestamp;
     type InstitutionAccountQuery = RuntimeInstitutionQuery;
+    type InternalVoteEngine = InternalVote;
     type MaxSquarePostIdLen = ConstU32<64>;
     type MaxSquareCidNumberLen = ConstU32<32>;
     type MaxSquareStorageReceiptIdLen = ConstU32<96>;
+    type MaxSubscriptionRenewalsPerBlock = ConstU32<64>;
     type WeightInfo = square_post::weights::SubstrateWeight<Runtime>;
 }
 
@@ -2395,7 +2402,7 @@ impl votingengine::Config for Runtime {
     type CleanupKeysPerStep = ConstU32<256>;
     type CitizenIdentityReader = RuntimeCitizenIdentityReader;
     type JointVoteResultCallback = RuntimeJointVoteResultCallback;
-    // 内部投票终态回调注册 5 个顶层槽位；公权/私权机构生命周期共用一个 tuple 槽位，
+    // 内部投票终态回调注册 6 个顶层槽位；公权/私权机构生命周期共用一个 tuple 槽位，
     // 个人多签生命周期和个人多签管理员共用一个 tuple 槽位。
     // 顺序按调用频率降序:transfer / multisig manage 类业务最频繁,
     // grandpa key 替换最稀有放最后(tuple iterate 时命中越早越省 gas)。
@@ -2413,6 +2420,7 @@ impl votingengine::Config for Runtime {
         ),
         resolution_destroy::InternalVoteExecutor<Runtime>,
         grandpakey_change::InternalVoteExecutor<Runtime>,
+        square_post::InternalVoteExecutor<Runtime>,
     );
     type InternalAdminProvider = RuntimeInternalAdminProvider;
     type InternalAdminsLenProvider = RuntimeInternalAdminsLenProvider;

@@ -1,100 +1,287 @@
-//! 自动扣款引擎。
+//! runtime 内部真实公历自动扣款引擎。
 //!
-//! 职责边界（死规则）：
-//! - runtime 只负责「钱的流动」：现读价/收款方 → 原子转账 → 记录状态。
-//! - 链上**不做**任何日历/周期/到期判断：`charge_due` 由续订触发方（链下 keeper）调用，
-//!   收到触发即扣一次；「到期没到期」由本机/Cloudflare 读时间戳算好后再触发。
-//! - 首扣（`subscribe`）与续扣（`charge_due`）共用唯一原子路径 [`Pallet::try_charge`]，
-//!   杜绝两套扣款逻辑漂移。
-//! - 价源分层：**平台价链上真源**（续扣现读 `PlatformPrice`）；**创作者价链下真源**
-//!   （续扣由 keeper 按创作者当前价带入 → 改价后续扣自然走新价）。
+//! 用户签名订阅后，链上订阅状态就是持续扣款授权；只有签名取消才撤销。每个区块结束时
+//! 使用已经写入的共识时间戳处理到期调度，不需要 CitizenApp、Cloudflare 或外部交易。
 
-use crate::pallet::{BalanceOf, Config, Error, Event, Pallet, Subscriptions};
-use crate::subscription::{IssuerKey, SubscriptionPlan, SubscriptionState, SubscriptionStatus};
+use crate::{
+    pallet::{
+        BalanceOf, Config, CreatorPlans, Error, Event, Pallet, RenewalIndex, RenewalSchedule,
+        SubKeyOf, Subscriptions,
+    },
+    subscription::{
+        add_calendar_period, CreatorTier, CreatorTiers, IssuerKey, SubscriptionPlan,
+        SubscriptionState, SubscriptionStatus,
+    },
+};
 use frame_support::{
     ensure,
     storage::with_storage_layer,
-    traits::{Currency, ExistenceRequirement, UnixTime},
+    traits::{Currency, ExistenceRequirement},
 };
-use sp_runtime::{DispatchResult, SaturatedConversion};
+use sp_runtime::{traits::SaturatedConversion, DispatchResult};
+use sp_std::vec::Vec;
 
 impl<T: Config> Pallet<T> {
-    /// 当前 unix 毫秒时间戳（链上共识挂钟 `pallet_timestamp`）。
-    pub(crate) fn now_ms() -> u64 {
-        T::TimeProvider::now().as_millis().saturated_into::<u64>()
+    /// 订阅并立即完成首次扣款。已有 Active 同计划幂等；已取消但尚未到期时恢复调度且不重扣。
+    pub(crate) fn do_subscribe(
+        subscriber: T::AccountId,
+        issuer: IssuerKey<T::AccountId>,
+        plan: SubscriptionPlan,
+        expected_price_fen: u128,
+    ) -> DispatchResult {
+        Self::ensure_subscription_ready()?;
+        if let IssuerKey::Creator(creator) = &issuer {
+            ensure!(creator != &subscriber, Error::<T>::CannotSubscribeSelf);
+        }
+        let now = Self::now_ms();
+        let key = (subscriber.clone(), issuer.clone());
+        if let Some(mut state) = Subscriptions::<T>::get(&key) {
+            if state.subscription_status == SubscriptionStatus::Active {
+                ensure!(state.plan == plan, Error::<T>::TermsLocked);
+                return Ok(());
+            }
+            if state.subscription_status == SubscriptionStatus::Cancelled && now < state.paid_until
+            {
+                ensure!(state.plan == plan, Error::<T>::TermsLocked);
+                state.subscription_status = SubscriptionStatus::Active;
+                Subscriptions::<T>::insert(&key, state.clone());
+                Self::schedule_renewal(&key, state.paid_until);
+                Self::deposit_event(Event::SubscriptionResumed {
+                    subscriber,
+                    issuer,
+                    paid_until: state.paid_until,
+                });
+                return Ok(());
+            }
+        }
+        Self::charge_and_schedule(subscriber, issuer, plan, Some(expected_price_fen), true)
     }
 
-    /// 原子扣款：现读价/收款方 → 转账 → 写状态。首扣与续扣的唯一执行路径。
-    ///
-    /// 全过程在 `with_storage_layer` 内：任一步失败整笔回滚（已转账/已写状态全部撤销），
-    /// 不留「已订阅未扣款」悬空态。
-    pub(crate) fn try_charge(
-        subscriber: &T::AccountId,
-        issuer: &IssuerKey<T::AccountId>,
+    /// 用户主动订阅或到期后签名更换计划时的原子扣款路径。
+    fn charge_and_schedule(
+        subscriber: T::AccountId,
+        issuer: IssuerKey<T::AccountId>,
         plan: SubscriptionPlan,
-        now: u64,
+        expected_price_fen: Option<u128>,
+        reset_started_at: bool,
     ) -> DispatchResult {
         with_storage_layer(|| -> DispatchResult {
-            let (price_fen, payee) = Self::resolve_price_and_payee(issuer, &plan)?;
+            let now = Self::now_ms();
+            let (price_fen, payee) = Self::current_price_and_payee(&issuer, &plan, now)?;
+            if let Some(expected) = expected_price_fen {
+                ensure!(expected == price_fen, Error::<T>::SignedPriceChanged);
+            }
+            let paid_until = add_calendar_period(now, plan.billing_period())
+                .ok_or(Error::<T>::CalendarOverflow)?;
             let amount: BalanceOf<T> = price_fen.saturated_into();
-            // KeepAlive：扣额使付款人低于存在性余额即拒。
-            T::Currency::transfer(subscriber, &payee, amount, ExistenceRequirement::KeepAlive)?;
+            T::Currency::transfer(&subscriber, &payee, amount, ExistenceRequirement::KeepAlive)?;
+
             let key = (subscriber.clone(), issuer.clone());
+            let previous = Subscriptions::<T>::get(&key);
+            Self::unschedule_renewal(&key);
+            let started_at = if reset_started_at {
+                now
+            } else {
+                previous
+                    .as_ref()
+                    .map(|state| state.started_at)
+                    .unwrap_or(now)
+            };
             Subscriptions::<T>::insert(
                 &key,
                 SubscriptionState {
-                    plan,
-                    price_fen,
+                    plan: plan.clone(),
+                    pending_plan: None,
+                    started_at,
                     last_charged_at: now,
-                    status: SubscriptionStatus::Active,
+                    last_charged_price_fen: price_fen,
+                    paid_until,
+                    subscription_status: SubscriptionStatus::Active,
                 },
             );
-            Self::deposit_event(Event::Charged {
-                subscriber: subscriber.clone(),
-                issuer: issuer.clone(),
-                amount,
+            Self::schedule_renewal(&key, paid_until);
+            Self::deposit_event(Event::SubscriptionCharged {
+                subscriber,
+                issuer,
+                plan,
+                price_fen,
+                charged_at: now,
+                paid_until,
             });
             Ok(())
         })
     }
 
-    /// 续扣：收到续订触发方调用即扣一次（链上零到期判断）。
-    ///
-    /// - 平台：`amount` 必须为 `None`（平台价链上真源，不接受 keeper 带价），现读 `PlatformPrice`。
-    /// - 创作者：`amount` 必须为 `Some(当前价)`（创作者价链下真源，keeper 带入），改价后走新价。
-    ///
-    /// 扣款失败 → 写 `PastDue`（在 `try_charge` 回滚层之外，欠费即停不重试）。
-    /// 本函数整体返回 `Ok`：续扣失败不是 extrinsic 失败，状态已记 `PastDue`。
-    pub(crate) fn do_charge_due(
+    /// 按时间戳有序处理到期任务。链曾停止出块时，逾期周期按顺序继续处理直到追上当前时间。
+    pub(crate) fn process_due_subscriptions(now: u64, limit: u32) -> u32 {
+        let mut processed = 0u32;
+        while processed < limit {
+            let Some((due_key, subscription_key)) = RenewalSchedule::<T>::iter_keys().next() else {
+                break;
+            };
+            let due_at = u64::from_be_bytes(due_key);
+            if due_at > now {
+                break;
+            }
+            RenewalSchedule::<T>::remove(due_key, &subscription_key);
+            RenewalIndex::<T>::remove(&subscription_key);
+            Self::process_one_due(subscription_key, due_at, now);
+            processed = processed.saturating_add(1);
+        }
+        processed
+    }
+
+    fn process_one_due(key: SubKeyOf<T>, due_at: u64, now: u64) {
+        let Some(mut state) = Subscriptions::<T>::get(&key) else {
+            return;
+        };
+        if state.subscription_status != SubscriptionStatus::Active || state.paid_until != due_at {
+            return;
+        }
+        let (subscriber, issuer) = key.clone();
+        let plan = state
+            .pending_plan
+            .clone()
+            .unwrap_or_else(|| state.plan.clone());
+        let Ok((price_fen, payee)) = Self::current_price_and_payee(&issuer, &plan, now) else {
+            state.pending_plan = None;
+            state.subscription_status = SubscriptionStatus::Terminated;
+            Subscriptions::<T>::insert(&key, state);
+            Self::deposit_event(Event::SubscriptionRenewalStopped {
+                subscriber,
+                issuer,
+                stopped_at: now,
+            });
+            return;
+        };
+        let Some(paid_until) = add_calendar_period(due_at, plan.billing_period()) else {
+            state.pending_plan = None;
+            state.subscription_status = SubscriptionStatus::Terminated;
+            Subscriptions::<T>::insert(&key, state);
+            Self::deposit_event(Event::SubscriptionRenewalStopped {
+                subscriber,
+                issuer,
+                stopped_at: now,
+            });
+            return;
+        };
+        let amount: BalanceOf<T> = price_fen.saturated_into();
+        if T::Currency::transfer(&subscriber, &payee, amount, ExistenceRequirement::KeepAlive)
+            .is_err()
+        {
+            state.pending_plan = None;
+            state.subscription_status = SubscriptionStatus::Terminated;
+            Subscriptions::<T>::insert(&key, state);
+            Self::deposit_event(Event::SubscriptionPaymentFailed {
+                subscriber,
+                issuer,
+                attempted_price_fen: price_fen,
+                attempted_at: now,
+            });
+            return;
+        }
+
+        state.plan = plan.clone();
+        state.pending_plan = None;
+        state.last_charged_at = now;
+        state.last_charged_price_fen = price_fen;
+        state.paid_until = paid_until;
+        state.subscription_status = SubscriptionStatus::Active;
+        Subscriptions::<T>::insert(&key, state);
+        Self::schedule_renewal(&key, paid_until);
+        Self::deposit_event(Event::SubscriptionCharged {
+            subscriber,
+            issuer,
+            plan,
+            price_fen,
+            charged_at: now,
+            paid_until,
+        });
+    }
+
+    pub(crate) fn schedule_renewal(key: &SubKeyOf<T>, due_at: u64) {
+        Self::unschedule_renewal(key);
+        RenewalSchedule::<T>::insert(due_at.to_be_bytes(), key, ());
+        RenewalIndex::<T>::insert(key, due_at);
+    }
+
+    pub(crate) fn unschedule_renewal(key: &SubKeyOf<T>) {
+        if let Some(previous) = RenewalIndex::<T>::take(key) {
+            RenewalSchedule::<T>::remove(previous.to_be_bytes(), key);
+        }
+    }
+
+    /// 签名取消是撤销自动扣款授权的唯一方式；当前已付款权益不缩短。
+    pub(crate) fn do_cancel(
         subscriber: T::AccountId,
         issuer: IssuerKey<T::AccountId>,
-        amount: Option<u128>,
     ) -> DispatchResult {
+        Self::ensure_subscription_ready()?;
         let key = (subscriber.clone(), issuer.clone());
-        let state = Subscriptions::<T>::get(&key).ok_or(Error::<T>::SubscriptionNotFound)?;
-        // 已取消的订阅不续扣。
+        let paid_until = Subscriptions::<T>::try_mutate(&key, |slot| {
+            let state = slot.as_mut().ok_or(Error::<T>::SubscriptionNotFound)?;
+            state.pending_plan = None;
+            state.subscription_status = SubscriptionStatus::Cancelled;
+            Ok::<_, Error<T>>(state.paid_until)
+        })?;
+        Self::unschedule_renewal(&key);
+        Self::deposit_event(Event::SubscriptionCancelled {
+            subscriber,
+            issuer,
+            paid_until,
+        });
+        Ok(())
+    }
+
+    /// 未到期时登记下周期计划；已终止或已过期时按目标当前价立即扣款并重新调度。
+    pub(crate) fn do_change_subscription_plan(
+        subscriber: T::AccountId,
+        issuer: IssuerKey<T::AccountId>,
+        new_plan: SubscriptionPlan,
+        expected_price_fen: u128,
+    ) -> DispatchResult {
+        Self::ensure_subscription_ready()?;
+        let key = (subscriber.clone(), issuer.clone());
+        let mut state = Subscriptions::<T>::get(&key).ok_or(Error::<T>::SubscriptionNotFound)?;
+        let now = Self::now_ms();
+        let (current_price, _) = Self::current_price_and_payee(&issuer, &new_plan, now)?;
         ensure!(
-            state.status != SubscriptionStatus::Cancelled,
-            Error::<T>::SubscriptionNotFound
+            current_price == expected_price_fen,
+            Error::<T>::SignedPriceChanged
         );
-        let plan = match issuer {
-            IssuerKey::Platform => {
-                ensure!(amount.is_none(), Error::<T>::PlanIssuerMismatch);
-                state.plan // Level(level) → resolve 现读 PlatformPrice[level]
-            }
-            IssuerKey::Creator(_) => {
-                let current = amount.ok_or(Error::<T>::CreatorPriceRequired)?;
-                SubscriptionPlan::CreatorPrice(current)
-            }
-        };
-        if Self::try_charge(&subscriber, &issuer, plan, Self::now_ms()).is_err() {
-            Subscriptions::<T>::mutate(&key, |slot| {
-                if let Some(s) = slot {
-                    s.status = SubscriptionStatus::PastDue;
-                }
+        if now < state.paid_until {
+            state.pending_plan = Some(new_plan.clone());
+            state.subscription_status = SubscriptionStatus::Active;
+            let paid_until = state.paid_until;
+            Subscriptions::<T>::insert(&key, state);
+            Self::schedule_renewal(&key, paid_until);
+            Self::deposit_event(Event::SubscriptionPlanChangePending {
+                subscriber,
+                issuer,
+                new_plan,
             });
-            Self::deposit_event(Event::ChargeFailed { subscriber, issuer });
+            return Ok(());
         }
+        Self::charge_and_schedule(subscriber, issuer, new_plan, Some(expected_price_fen), true)
+    }
+
+    /// 创作者覆盖式写入自己的链上付款套餐；展示资料仍只在 Cloudflare/D1。
+    pub(crate) fn do_set_creator_plans(
+        creator: T::AccountId,
+        tiers: Vec<CreatorTier>,
+    ) -> DispatchResult {
+        Self::ensure_subscription_ready()?;
+        ensure!(
+            Self::has_effective_platform_subscription(&creator, Self::now_ms()),
+            Error::<T>::CreatorNotPlatformMember
+        );
+        Self::validate_creator_tiers(&tiers)?;
+        let bounded = CreatorTiers::try_from(tiers).map_err(|_| Error::<T>::TooManyCreatorTiers)?;
+        CreatorPlans::<T>::insert(&creator, bounded.clone());
+        Self::deposit_event(Event::CreatorPlansSet {
+            creator,
+            tier_count: bounded.len() as u32,
+        });
         Ok(())
     }
 }

@@ -1,20 +1,21 @@
 {
   "pallet_index": 34,
+  "state_platform": "0002000068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c01000000",
   "vectors": [
     {
       "hex": "00",
-      "name": "membership_level_freedom",
-      "note": "MembershipLevel::Freedom"
+      "name": "billing_period_monthly",
+      "note": "BillingPeriod::Monthly；只表示自然日历类型"
     },
     {
       "hex": "01",
-      "name": "membership_level_democracy",
-      "note": "MembershipLevel::Democracy"
+      "name": "billing_period_quarterly",
+      "note": "BillingPeriod::Quarterly；只表示自然日历类型"
     },
     {
       "hex": "02",
-      "name": "membership_level_spark",
-      "note": "MembershipLevel::Spark"
+      "name": "billing_period_yearly",
+      "note": "BillingPeriod::Yearly；只表示自然日历类型"
     },
     {
       "hex": "00",
@@ -28,13 +29,13 @@
     },
     {
       "hex": "0002",
-      "name": "plan_level_spark",
-      "note": "SubscriptionPlan::Level(Spark)"
+      "name": "plan_platform_spark",
+      "note": "SubscriptionPlan::Platform{Spark}"
     },
     {
-      "hex": "015c270900000000000000000000000000",
-      "name": "plan_creator_price_599900",
-      "note": "SubscriptionPlan::CreatorPrice(599900)"
+      "hex": "0124737570706f7274657200",
+      "name": "plan_creator_supporter_monthly",
+      "note": "SubscriptionPlan::Creator{tier_id=supporter,billing_period=Monthly}"
     },
     {
       "hex": "00",
@@ -43,33 +44,23 @@
     },
     {
       "hex": "01",
-      "name": "status_past_due",
-      "note": "SubscriptionStatus::PastDue"
-    },
-    {
-      "hex": "02",
       "name": "status_cancelled",
       "note": "SubscriptionStatus::Cancelled"
     },
     {
-      "hex": "00021c8d5b000000000000000000000000000068e5cf8b01000000",
-      "name": "state_platform_spark",
-      "note": "SubscriptionState{Level(Spark),5999900,1700000000000,Active}"
+      "hex": "02",
+      "name": "status_terminated",
+      "note": "SubscriptionStatus::Terminated"
     },
     {
-      "hex": "015c2709000000000000000000000000005c2709000000000000000000000000000068e5cf8b01000000",
-      "name": "state_creator",
-      "note": "SubscriptionState{CreatorPrice(599900),599900,1700000000000,Active}"
+      "hex": "0002000068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c01000000",
+      "name": "state_platform_spark_active",
+      "note": "目标 SubscriptionState SCALE 顺序"
     },
     {
-      "hex": "01000002",
+      "hex": "010000021c8d5b00000000000000000000000000",
       "name": "call_subscribe_platform_spark",
-      "note": "Call::subscribe{Platform, Level(Spark)}"
-    },
-    {
-      "hex": "01010202020202020202020202020202020202020202020202020202020202020202015c270900000000000000000000000000",
-      "name": "call_subscribe_creator",
-      "note": "Call::subscribe{Creator(0x02*32), CreatorPrice(599900)}"
+      "note": "Call::subscribe{Platform,Platform{Spark},expected_price_fen}"
     },
     {
       "hex": "0200",
@@ -77,19 +68,9 @@
       "note": "Call::cancel{Platform}"
     },
     {
-      "hex": "0401010101010101010101010101010101010101010101010101010101010101010000",
-      "name": "call_charge_due_platform_none",
-      "note": "Call::charge_due{sub=0x01*32, Platform, None}"
-    },
-    {
-      "hex": "040101010101010101010101010101010101010101010101010101010101010101010202020202020202020202020202020202020202020202020202020202020202015c270900000000000000000000000000",
-      "name": "call_charge_due_creator_some",
-      "note": "Call::charge_due{sub=0x01*32, Creator(0x02*32), Some(599900)}"
-    },
-    {
-      "hex": "2201000002",
+      "hex": "22010000021c8d5b00000000000000000000000000",
       "name": "calldata_subscribe_platform_spark",
-      "note": "0x22(pallet=34) ++ Call::subscribe{Platform,Level(Spark)}"
+      "note": "pallet 0x22 + subscribe"
     }
   ]
 }

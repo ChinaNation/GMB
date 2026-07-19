@@ -5,7 +5,10 @@ pub trait WeightInfo {
     fn publish_post() -> Weight;
     fn subscribe() -> Weight;
     fn cancel() -> Weight;
-    fn charge_due() -> Weight;
+    fn set_creator_plans(tiers: u32) -> Weight;
+    fn change_subscription_plan() -> Weight;
+    fn propose_set_platform_price() -> Weight;
+    fn on_initialize(renewals: u32) -> Weight;
 }
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
@@ -15,18 +18,38 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
         Weight::from_parts(30_000_000, 0).saturating_add(T::DbWeight::get().reads_writes(2, 2))
     }
 
-    // 订阅=首扣：读价/CID/机构账户 + 转账 + 写订阅态。占位权重，第4步基准替换。
+    // 首扣：价格/CID/机构账户 + 转账 + Active 状态 + 双向调度索引。
     fn subscribe() -> Weight {
-        Weight::from_parts(45_000_000, 0).saturating_add(T::DbWeight::get().reads_writes(4, 3))
+        Weight::from_parts(75_000_000, 0).saturating_add(T::DbWeight::get().reads_writes(8, 6))
     }
 
     fn cancel() -> Weight {
-        Weight::from_parts(20_000_000, 0).saturating_add(T::DbWeight::get().reads_writes(1, 1))
+        Weight::from_parts(25_000_000, 0).saturating_add(T::DbWeight::get().reads_writes(3, 3))
     }
 
-    // 续扣：读订阅态 + 现读价/收款方 + 转账 + 写订阅态。占位权重，第4步基准替换。
-    fn charge_due() -> Weight {
-        Weight::from_parts(45_000_000, 0).saturating_add(T::DbWeight::get().reads_writes(5, 3))
+    fn set_creator_plans(tiers: u32) -> Weight {
+        Weight::from_parts(30_000_000, 0)
+            .saturating_add(Weight::from_parts(3_000_000, 0).saturating_mul(tiers.into()))
+            .saturating_add(T::DbWeight::get().reads_writes(2, 1))
+    }
+
+    fn change_subscription_plan() -> Weight {
+        Weight::from_parts(78_000_000, 0).saturating_add(T::DbWeight::get().reads_writes(8, 6))
+    }
+
+    fn propose_set_platform_price() -> Weight {
+        Weight::from_parts(85_000_000, 0).saturating_add(T::DbWeight::get().reads_writes(4, 5))
+    }
+
+    fn on_initialize(renewals: u32) -> Weight {
+        Weight::from_parts(10_000_000, 0).saturating_add(
+            Weight::from_parts(85_000_000, 0)
+                .saturating_mul(renewals.into())
+                .saturating_add(T::DbWeight::get().reads_writes(
+                    8u64.saturating_mul(renewals.into()),
+                    7u64.saturating_mul(renewals.into()),
+                )),
+        )
     }
 }
 
@@ -43,7 +66,19 @@ impl WeightInfo for () {
         Weight::zero()
     }
 
-    fn charge_due() -> Weight {
+    fn set_creator_plans(_tiers: u32) -> Weight {
+        Weight::zero()
+    }
+
+    fn change_subscription_plan() -> Weight {
+        Weight::zero()
+    }
+
+    fn propose_set_platform_price() -> Weight {
+        Weight::zero()
+    }
+
+    fn on_initialize(_renewals: u32) -> Weight {
         Weight::zero()
     }
 }

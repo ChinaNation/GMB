@@ -14356,6 +14356,7 @@ name = "square-post"
 version = "1.0.0"
 dependencies = [
  "entity-primitives",
+ "frame-benchmarking",
  "frame-support",
  "frame-system",
  "pallet-balances",
@@ -14366,6 +14367,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
+ "votingengine",
 ]
 
 [[package]]

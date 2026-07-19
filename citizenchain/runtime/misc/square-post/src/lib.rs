@@ -4,18 +4,23 @@
 //! 本 pallet 是「广场内容域」的唯一链上模块，承载两类职责：
 //! 1. 广场动态链上发布索引（`publish_post`）——只记录发布事实、内容哈希和存储回执，
 //!    媒体内容必须保存在独立内容存储网络，不得写入 runtime storage。
-//! 2. 会员订阅**自动扣费核**（公民币单轨）——平台会员与创作者会员共用一套订阅状态机
-//!    与扣款引擎；runtime 只做「钱的流动」，换档折算/预览/门禁/权益计算/展示全部链下。
+//! 2. 会员订阅自动扣款核（公民币单轨）——用户签名订阅后由 runtime 按共识时间戳和
+//!    真实 UTC 公历自动扣款，只有用户签名取消才撤销持续扣款授权。
 //!
-//! 订阅相关类型与逻辑分布：类型与订阅/取消/定价见 [`subscription`]，自动扣款见 [`billing`]。
+//! 订阅类型和公历换算见 [`subscription`]，自动扣款见 [`billing`]，原地升级见 [`migration`]。
 
 pub use pallet::*;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
 pub mod billing;
+pub mod migration;
+pub mod proposal;
 pub mod subscription;
 pub mod weights;
 
 pub use subscription::{
-    IssuerKey, MembershipLevel, SubscriptionPlan, SubscriptionState, SubscriptionStatus,
+    BillingPeriod, CreatorTier, CreatorTiers, IssuerKey, MembershipLevel, PeriodPrice,
+    PeriodPrices, SubscriptionPlan, SubscriptionState, SubscriptionStatus, TierId,
 };
 
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
@@ -23,6 +28,9 @@ use frame_support::BoundedVec;
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 use sp_std::vec::Vec;
+
+/// 统一投票引擎 ProposalData 的模块前缀。
+pub const MODULE_TAG: &[u8] = b"sqr-sub";
 
 /// 广场发布分类。
 #[derive(
@@ -92,7 +100,10 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
 
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+    pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+    pub(crate) const FREEDOM_PRICE_FEN: u128 = 199_900;
+    pub(crate) const DEMOCRACY_PRICE_FEN: u128 = 599_900;
+    pub(crate) const SPARK_PRICE_FEN: u128 = 5_999_900;
 
     pub type PostIdOf<T> = BoundedVec<u8, <T as Config>::MaxSquarePostIdLen>;
     pub type CidNumberOf<T> = BoundedVec<u8, <T as Config>::MaxSquareCidNumberLen>;
@@ -126,11 +137,14 @@ pub mod pallet {
         /// 公民币扣款/收款货币。
         type Currency: Currency<Self::AccountId>;
 
-        /// 链上共识挂钟（`pallet_timestamp`）；只用于记录扣款时间戳，链上不做日历运算。
+        /// 链上共识挂钟（`pallet_timestamp`）；自动扣款只使用该共识时间源。
         type TimeProvider: UnixTime;
 
         /// 机构账户查询：平台会员收款方=技术公司费用账户由此派生。
         type InstitutionAccountQuery: entity_primitives::InstitutionMultisigQuery<Self::AccountId>;
+
+        /// 平台调价只能经统一内部投票引擎创建提案。
+        type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
         #[pallet::constant]
         type MaxSquarePostIdLen: Get<u32>;
@@ -138,7 +152,9 @@ pub mod pallet {
         type MaxSquareCidNumberLen: Get<u32>;
         #[pallet::constant]
         type MaxSquareStorageReceiptIdLen: Get<u32>;
-
+        /// 单区块最多处理的到期周期数；包含链停后恢复时的历史到期周期。
+        #[pallet::constant]
+        type MaxSubscriptionRenewalsPerBlock: Get<u32>;
         type WeightInfo: crate::weights::WeightInfo;
     }
 
@@ -161,6 +177,16 @@ pub mod pallet {
     pub type Subscriptions<T: Config> =
         StorageMap<_, Blake2_128Concat, SubKeyOf<T>, SubscriptionState, OptionQuery>;
 
+    /// 自动扣款时间索引。第一键使用大端时间戳，使 storage 迭代顺序等于真实时间顺序。
+    #[pallet::storage]
+    pub type RenewalSchedule<T: Config> =
+        StorageDoubleMap<_, Identity, [u8; 8], Blake2_128Concat, SubKeyOf<T>, (), OptionQuery>;
+
+    /// 订阅关系到当前扣款时间的反向索引，供取消和换档精确移除旧调度。
+    #[pallet::storage]
+    pub type RenewalIndex<T: Config> =
+        StorageMap<_, Blake2_128Concat, SubKeyOf<T>, u64, OptionQuery>;
+
     /// 平台三档价（分）。链上可变真源，由技术公司经治理写入（治理在后续步接入）。
     #[pallet::storage]
     pub type PlatformPrice<T: Config> =
@@ -170,11 +196,14 @@ pub mod pallet {
     #[pallet::storage]
     pub type PlatformCidNumber<T: Config> = StorageValue<_, CidNumberOf<T>, OptionQuery>;
 
-    // 创作者档定义（名称/档种类/月季年周期/价格）全部链下（App 本地设 + Cloudflare 存），链上不存。
-
-    /// 续订触发方账户（keeper）。`charge_due` 仅允许此账户调用；`None` = 未设 → 续扣挂起。
+    /// 创作者链上付款套餐；名称、说明、权益和媒体仍只保存在 Cloudflare/D1。
     #[pallet::storage]
-    pub type BillingKeeper<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
+    pub type CreatorPlans<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, CreatorTiers, ValueQuery>;
+
+    /// 防御性迁移阻断标志。发现任何旧订阅数据时保留原数据并禁止新订阅 call。
+    #[pallet::storage]
+    pub type MigrationBlocked<T: Config> = StorageValue<_, bool, ValueQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -190,27 +219,64 @@ pub mod pallet {
             storage_until: u64,
             created_block: BlockNumberFor<T>,
         },
-        /// 订阅已建立 / 恢复 Active。
-        Subscribed {
+        /// 首扣或 runtime 自动续费已经完成，并登记下一次真实公历扣款时间。
+        SubscriptionCharged {
             subscriber: T::AccountId,
             issuer: IssuerKey<T::AccountId>,
             plan: SubscriptionPlan,
+            price_fen: u128,
+            charged_at: u64,
+            paid_until: u64,
         },
-        /// 一次成功扣款（首扣或续扣）。
-        Charged {
+        /// 已取消但尚未到期的相同计划恢复，当前已付周期不重复扣款。
+        SubscriptionResumed {
             subscriber: T::AccountId,
             issuer: IssuerKey<T::AccountId>,
-            amount: BalanceOf<T>,
+            paid_until: u64,
         },
-        /// 续扣失败，订阅已翻 PastDue（欠费即停）。
-        ChargeFailed {
+        /// runtime 到期扣款失败，订阅已经终止且不会自动重试。
+        SubscriptionPaymentFailed {
             subscriber: T::AccountId,
             issuer: IssuerKey<T::AccountId>,
+            attempted_price_fen: u128,
+            attempted_at: u64,
         },
-        /// 订阅已取消（记录保留）。
-        Cancelled {
+        /// 付款计划、创作者资格或公历换算失效，自动扣款已经终止。
+        SubscriptionRenewalStopped {
             subscriber: T::AccountId,
             issuer: IssuerKey<T::AccountId>,
+            stopped_at: u64,
+        },
+        /// 取消后 `paid_until` 之前的已付权益仍有效。
+        SubscriptionCancelled {
+            subscriber: T::AccountId,
+            issuer: IssuerKey<T::AccountId>,
+            paid_until: u64,
+        },
+        /// 当前周期结束后切换到目标计划。
+        SubscriptionPlanChangePending {
+            subscriber: T::AccountId,
+            issuer: IssuerKey<T::AccountId>,
+            new_plan: SubscriptionPlan,
+        },
+        /// 创作者已经覆盖式更新自己的链上付款套餐。
+        CreatorPlansSet {
+            creator: T::AccountId,
+            tier_count: u32,
+        },
+        /// 平台价格调整提案已交给统一投票引擎。
+        PlatformPriceChangeProposed {
+            proposal_id: u64,
+            actor_cid_number: votingengine::types::CidNumber,
+            membership_level: MembershipLevel,
+            new_price_fen: u128,
+        },
+        /// 统一投票通过后，平台价格已落地。
+        PlatformPriceChanged {
+            proposal_id: u64,
+            membership_level: MembershipLevel,
+            old_price_fen: Option<u128>,
+            new_price_fen: u128,
         },
     }
 
@@ -227,7 +293,7 @@ pub mod pallet {
         CannotSubscribeSelf,
         /// 订阅记录不存在。
         SubscriptionNotFound,
-        /// 收款主体与档位类型不匹配 / 续扣带价与主体不匹配。
+        /// 收款主体与签名条款不匹配。
         PlanIssuerMismatch,
         /// 平台该档价未设置。
         PlatformPriceNotSet,
@@ -237,10 +303,65 @@ pub mod pallet {
         CreatorNotPlatformMember,
         /// 价格必须大于 0。
         ZeroPrice,
-        /// 创作者续扣缺当前价（keeper 必须带入）。
-        CreatorPriceRequired,
-        /// 调用者不是续订触发方（keeper）。
-        NotBillingKeeper,
+        /// 交易签名价已不等于当前平台价，客户端必须刷新后重新签名。
+        SignedPriceChanged,
+        /// 已付款周期内条款锁定，不在 runtime 做换档折算。
+        TermsLocked,
+        /// 共识时间戳增加真实公历周期后超出可表示范围。
+        CalendarOverflow,
+        /// 创作者付款档位不存在或缺少目标周期价格。
+        CreatorPlanNotFound,
+        EmptyTierId,
+        DuplicateTierId,
+        DuplicateBillingPeriod,
+        TooManyCreatorTiers,
+        /// 原地升级尚未完成或因发现旧订阅数据被阻断。
+        MigrationIncomplete,
+        /// 平台调价发起 CID 不是已绑定技术公司。
+        NotPlatformInstitution,
+        /// CID 无法解析为合法机构码。
+        InvalidInstitution,
+        /// 平台价格必须大于 0。
+        InvalidPlatformPrice,
+        /// 投票提案数据不存在或不属于本模块。
+        ProposalActionNotFound,
+        /// 投票尚未通过或提案作用域不匹配。
+        ProposalNotPassed,
+    }
+
+    #[pallet::hooks]
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
+            // 到期处理在 on_finalize 执行，确保本区块 Timestamp inherent 已写入；这里预留
+            // 最坏情况权重，避免自动转账挤占未计费的区块资源。
+            T::WeightInfo::on_initialize(T::MaxSubscriptionRenewalsPerBlock::get())
+        }
+
+        fn on_finalize(_n: BlockNumberFor<T>) {
+            Self::process_due_subscriptions(
+                Self::now_ms(),
+                T::MaxSubscriptionRenewalsPerBlock::get(),
+            );
+        }
+
+        fn on_runtime_upgrade() -> Weight {
+            crate::migration::migrate::<T>()
+        }
+
+        #[cfg(feature = "try-runtime")]
+        fn pre_upgrade() -> Result<Vec<u8>, sp_runtime::TryRuntimeError> {
+            crate::migration::pre_upgrade::<T>()
+        }
+
+        #[cfg(feature = "try-runtime")]
+        fn post_upgrade(state: Vec<u8>) -> Result<(), sp_runtime::TryRuntimeError> {
+            crate::migration::post_upgrade::<T>(state)
+        }
+
+        #[cfg(feature = "try-runtime")]
+        fn try_state(_n: BlockNumberFor<T>) -> Result<(), sp_runtime::TryRuntimeError> {
+            crate::migration::try_state::<T>()
+        }
     }
 
     #[pallet::call]
@@ -321,9 +442,10 @@ pub mod pallet {
             origin: OriginFor<T>,
             issuer: IssuerKey<T::AccountId>,
             plan: SubscriptionPlan,
+            expected_price_fen: u128,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_subscribe(who, issuer, plan)
+            Self::do_subscribe(who, issuer, plan, expected_price_fen)
         }
 
         /// 取消订阅（写 Cancelled 保留记录，停止续扣）。
@@ -334,29 +456,45 @@ pub mod pallet {
             Self::do_cancel(who, issuer)
         }
 
-        // call_index(3) = set_creator_plans 预留（第2步创作者会员）。
-
-        /// 续扣：仅允许续订触发方（keeper）调用；收到即扣一次，链上不判到期。
-        ///
-        /// `amount`：平台传 `None`（链上现读 `PlatformPrice`）；创作者传 `Some(当前价)`
-        /// （创作者价在链下，keeper 按创作者当前价带入 → 改价后续扣走新价）。
-        #[pallet::call_index(4)]
-        #[pallet::weight(T::WeightInfo::charge_due())]
-        pub fn charge_due(
-            origin: OriginFor<T>,
-            subscriber: T::AccountId,
-            issuer: IssuerKey<T::AccountId>,
-            amount: Option<u128>,
-        ) -> DispatchResult {
+        /// 创作者覆盖式更新自己的链上付款套餐。
+        #[pallet::call_index(3)]
+        #[pallet::weight(T::WeightInfo::set_creator_plans(tiers.len() as u32))]
+        pub fn set_creator_plans(origin: OriginFor<T>, tiers: Vec<CreatorTier>) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            ensure!(
-                BillingKeeper::<T>::get().as_ref() == Some(&who),
-                Error::<T>::NotBillingKeeper
-            );
-            Self::do_charge_due(subscriber, issuer, amount)
+            Self::do_set_creator_plans(who, tiers)
         }
 
-        // call_index(5) = propose_set_platform_price 预留（第3步平台改价治理）。
+        /// 当前周期内只登记待切换计划；已到期时立即按目标当前价扣款。
+        #[pallet::call_index(4)]
+        #[pallet::weight(T::WeightInfo::change_subscription_plan())]
+        pub fn change_subscription_plan(
+            origin: OriginFor<T>,
+            issuer: IssuerKey<T::AccountId>,
+            new_plan: SubscriptionPlan,
+            expected_price_fen: u128,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            Self::do_change_subscription_plan(who, issuer, new_plan, expected_price_fen)
+        }
+
+        /// 发起平台价格调整内部投票。
+        /// 投票资格、管理员快照、阈值、计票和终态推进全部由统一投票引擎处理。
+        #[pallet::call_index(5)]
+        #[pallet::weight(T::WeightInfo::propose_set_platform_price())]
+        pub fn propose_set_platform_price(
+            origin: OriginFor<T>,
+            actor_cid_number: votingengine::types::CidNumber,
+            membership_level: MembershipLevel,
+            new_price_fen: u128,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            crate::proposal::propose_price_change::<T>(
+                who,
+                actor_cid_number,
+                membership_level,
+                new_price_fen,
+            )
+        }
     }
 
     impl<T: Config> Pallet<T> {
@@ -370,6 +508,8 @@ pub mod pallet {
         }
     }
 }
+
+pub use proposal::InternalVoteExecutor;
 
 #[cfg(test)]
 mod tests;
