@@ -3,14 +3,12 @@ name: CitizenWallet CI
 on:
   push:
     branches: [main]
+    # 中文注释:按 ci-path-routing——runtime/** 改动只走 citizenchain-wasm.yml。
+    # 钱包 CI 只由钱包自身代码触发,不再监听 runtime 文件,做到 runtime 推送「只允许 WASM CI」。
     paths:
       - ".github/workflows/citizenwallet-ci.yml"
       - ".fvm/fvm_config.json"
       - "citizenwallet/**"
-      - "citizenchain/runtime/src/lib.rs"
-      - "citizenchain/runtime/transaction/multisig/src/lib.rs"
-      - "citizenchain/runtime/votingengine/joint-vote/src/lib.rs"
-      - "citizenchain/runtime/votingengine/internal-vote/src/lib.rs"
   workflow_dispatch:
     inputs:
       mode:

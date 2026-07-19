@@ -1,11 +1,9 @@
 name: CitizenChain WASM
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/citizenchain-wasm.yml"
-      - "citizenchain/runtime/**"
+  # 中文注释:WASM CI 只由公民控制台「运行 WASM CI」手动触发(workflow_dispatch)。
+  # 不再随 runtime push 自动跑——runtime 推送时只允许本工作流,不连带触发钱包等其它 CI,
+  # 也避免「push 版(不做版本校验)+ dispatch 版」双跑并发互相取消的竞态。
   workflow_dispatch:
 
 concurrency:
@@ -33,13 +31,12 @@ jobs:
       - name: 安装系统依赖
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libclang-dev openssh-client
 
-      # 中文注释:push 自动 CI 只编译当前源码,不访问服务器、不读取 SSH/RPC Secret。
-      # 手动 Run workflow 才以链上 WASM 版本为准做保护性检查:源码版本不足时只在 CI 工作区临时 +1。
+      # 中文注释:以链上 WASM 版本为准做保护性检查——SSH 登入中枢省权威节点读 runtime spec_version,
+      # 源码版本不足时只在 CI 工作区把 spec_version 抬到「链上版本 +1」(不改源码、不提交)。
       - name: 校验链上 WASM 版本并临时提升源码版本
-        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           GMB_SSH_KEY: ${{ secrets.GMB_SSH_KEY }}
-          GMB_CHAIN_HOST: 147.224.14.117
+          GMB_CHAIN_HOST: 64.181.239.233
           GMB_CHAIN_USER: ubuntu
           GMB_CHAIN_PORT: "22"
         run: |
@@ -120,9 +117,8 @@ jobs:
               summary.write(f"- 本次编译 spec_version: `{build_spec_version}`\n")
           PY
 
-      # WASM 是后续本地启动和桌面打包的基础产物，push 与手动运行都上传本次 CI 产物。
+      # WASM 是后续本地启动和桌面打包的基础产物,手动运行上传本次 CI 产物。
       - name: 清理旧版 WASM artifact
-        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

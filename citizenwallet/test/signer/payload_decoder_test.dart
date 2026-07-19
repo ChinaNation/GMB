@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
+import 'package:citizenwallet/qr/generated/qr_action_registry.g.dart';
 import 'package:citizenwallet/signer/institution_code.dart';
 import 'package:citizenwallet/signer/payload_decoder.dart';
 import 'package:citizenwallet/qr/qr_protocols.dart';
@@ -1680,10 +1681,13 @@ void main() {
         decoded.fields['admins'],
         contains('张三(${ss58FromBytes(List<int>.filled(32, 0x11))})'),
       );
-      expect(decoded.fields['default_role'], 'LR/法定代表人（空缺）');
+      expect(
+        decoded.fields['default_role'],
+        GeneratedQrActionRegistry.fieldValueForKey('default_role', {}),
+      );
       expect(
         decoded.fields['protocol_accounts'],
-        '由 runtime 按 CID 自动建立，初始余额为 0',
+        GeneratedQrActionRegistry.fieldValueForKey('protocol_accounts', {}),
       );
       expect(
         decoded.fields['fee_payer'],
