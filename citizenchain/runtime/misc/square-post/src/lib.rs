@@ -7,13 +7,13 @@
 //! 2. 会员订阅自动扣款核（公民币单轨）——用户签名订阅后由 runtime 按共识时间戳和
 //!    真实 UTC 公历自动扣款，只有用户签名取消才撤销持续扣款授权。
 //!
-//! 订阅类型和公历换算见 [`subscription`]，自动扣款见 [`billing`]，原地升级见 [`migration`]。
+//! 订阅类型和公历换算见 [`subscription`]，自动扣款见 [`billing`]。
+//! 开发期零用户、重新创世模型：平台三档价由创世播种，不设任何迁移。
 
 pub use pallet::*;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 pub mod billing;
-pub mod migration;
 pub mod proposal;
 pub mod subscription;
 pub mod weights;
@@ -192,18 +192,33 @@ pub mod pallet {
     pub type PlatformPrice<T: Config> =
         StorageMap<_, Twox64Concat, MembershipLevel, u128, OptionQuery>;
 
-    /// 技术公司 CID 绑定；`None` = 未绑定 → 平台轨 fail-closed 挂起（`PlatformNotBound`）。
-    #[pallet::storage]
-    pub type PlatformCidNumber<T: Config> = StorageValue<_, CidNumberOf<T>, OptionQuery>;
-
     /// 创作者链上付款套餐；名称、说明、权益和媒体仍只保存在 Cloudflare/D1。
     #[pallet::storage]
     pub type CreatorPlans<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, CreatorTiers, ValueQuery>;
 
-    /// 防御性迁移阻断标志。发现任何旧订阅数据时保留原数据并禁止新订阅 call。
-    #[pallet::storage]
-    pub type MigrationBlocked<T: Config> = StorageValue<_, bool, ValueQuery>;
+    /// 平台三档价创世播种：重新创世时无条件写入默认价，之后仅经统一内部投票调整。
+    #[pallet::genesis_config]
+    pub struct GenesisConfig<T: Config> {
+        pub _marker: PhantomData<T>,
+    }
+
+    impl<T: Config> Default for GenesisConfig<T> {
+        fn default() -> Self {
+            Self {
+                _marker: PhantomData,
+            }
+        }
+    }
+
+    #[pallet::genesis_build]
+    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+        fn build(&self) {
+            PlatformPrice::<T>::insert(MembershipLevel::Freedom, FREEDOM_PRICE_FEN);
+            PlatformPrice::<T>::insert(MembershipLevel::Democracy, DEMOCRACY_PRICE_FEN);
+            PlatformPrice::<T>::insert(MembershipLevel::Spark, SPARK_PRICE_FEN);
+        }
+    }
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -297,7 +312,7 @@ pub mod pallet {
         PlanIssuerMismatch,
         /// 平台该档价未设置。
         PlatformPriceNotSet,
-        /// 技术公司 CID 未绑定 / 费用账户不可派生。
+        /// 技术公司费用账户不可派生（平台 CID 为创世固定常量，正常不发生，保留 fail-closed）。
         PlatformNotBound,
         /// 创作者不是当前有效平台会员（不能被订阅）。
         CreatorNotPlatformMember,
@@ -315,8 +330,6 @@ pub mod pallet {
         DuplicateTierId,
         DuplicateBillingPeriod,
         TooManyCreatorTiers,
-        /// 原地升级尚未完成或因发现旧订阅数据被阻断。
-        MigrationIncomplete,
         /// 平台调价发起 CID 不是已绑定技术公司。
         NotPlatformInstitution,
         /// CID 无法解析为合法机构码。
@@ -344,23 +357,36 @@ pub mod pallet {
             );
         }
 
-        fn on_runtime_upgrade() -> Weight {
-            crate::migration::migrate::<T>()
-        }
-
-        #[cfg(feature = "try-runtime")]
-        fn pre_upgrade() -> Result<Vec<u8>, sp_runtime::TryRuntimeError> {
-            crate::migration::pre_upgrade::<T>()
-        }
-
-        #[cfg(feature = "try-runtime")]
-        fn post_upgrade(state: Vec<u8>) -> Result<(), sp_runtime::TryRuntimeError> {
-            crate::migration::post_upgrade::<T>(state)
-        }
-
         #[cfg(feature = "try-runtime")]
         fn try_state(_n: BlockNumberFor<T>) -> Result<(), sp_runtime::TryRuntimeError> {
-            crate::migration::try_state::<T>()
+            // 运行期不变量（非迁移专属）：订阅状态与到期调度双向索引必须一致。
+            for (key, state) in Subscriptions::<T>::iter() {
+                match state.subscription_status {
+                    SubscriptionStatus::Active => {
+                        ensure!(
+                            RenewalIndex::<T>::get(&key) == Some(state.paid_until)
+                                && RenewalSchedule::<T>::contains_key(
+                                    state.paid_until.to_be_bytes(),
+                                    &key,
+                                ),
+                            "square-post try_state: active subscription schedule mismatch"
+                        );
+                    }
+                    SubscriptionStatus::Cancelled | SubscriptionStatus::Terminated => {
+                        ensure!(
+                            !RenewalIndex::<T>::contains_key(&key),
+                            "square-post try_state: inactive subscription remains scheduled"
+                        );
+                    }
+                }
+            }
+            for (due_key, key, ()) in RenewalSchedule::<T>::iter() {
+                ensure!(
+                    RenewalIndex::<T>::get(&key) == Some(u64::from_be_bytes(due_key)),
+                    "square-post try_state: renewal reverse index mismatch"
+                );
+            }
+            Ok(())
         }
     }
 

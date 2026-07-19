@@ -3,7 +3,7 @@
 //! 本模块只创建投票 action 并处理终态回调，不实现资格、快照、计票或状态推进。
 
 use crate::{
-    pallet::{Config, Error, Event, Pallet, PlatformCidNumber, PlatformPrice},
+    pallet::{Config, Error, Event, Pallet, PlatformPrice},
     MembershipLevel,
 };
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
@@ -37,15 +37,18 @@ pub(crate) fn propose_price_change<T: Config>(
     new_price_fen: u128,
 ) -> DispatchResult {
     ensure!(new_price_fen > 0, Error::<T>::InvalidPlatformPrice);
-    let platform_cid = PlatformCidNumber::<T>::get().ok_or(Error::<T>::PlatformNotBound)?;
-    ensure!(
-        platform_cid.as_slice() == actor_cid_number.as_slice(),
-        Error::<T>::NotPlatformInstitution
-    );
     let actor_text = core::str::from_utf8(actor_cid_number.as_slice())
         .map_err(|_| Error::<T>::InvalidInstitution)?;
     let institution_code = votingengine::types::institution_code_from_cid_number(actor_text)
         .ok_or(Error::<T>::InvalidInstitution)?;
+    // 平台机构永久固定为创世技术公司，直接以创世常量断言（机构码 SFGQ + 准确 CID）。
+    ensure!(
+        primitives::cid::china::citizenchain::is_citizenchain_technology_identity(
+            institution_code,
+            actor_cid_number.as_slice(),
+        ),
+        Error::<T>::NotPlatformInstitution
+    );
     let action = PlatformPriceUpdateAction {
         actor_cid_number: actor_cid_number.clone(),
         membership_level,
@@ -101,7 +104,6 @@ where
             .map_err(|_| Error::<T>::ProposalActionNotFound)?;
         let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
             .ok_or(Error::<T>::ProposalActionNotFound)?;
-        let platform_cid = PlatformCidNumber::<T>::get().ok_or(Error::<T>::PlatformNotBound)?;
         ensure!(
             votingengine::Pallet::<T>::is_callback_execution_scope(proposal_id)
                 && proposal.kind == PROPOSAL_KIND_INTERNAL
@@ -109,7 +111,11 @@ where
                 && proposal.status == STATUS_PASSED
                 && proposal.actor_cid_number.as_ref().map(|cid| cid.as_slice())
                     == Some(action.actor_cid_number.as_slice())
-                && platform_cid.as_slice() == action.actor_cid_number.as_slice()
+                // 平台机构永久固定为创世技术公司，以创世常量 CID 断言，不读可写存储。
+                && action.actor_cid_number.as_slice()
+                    == primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY
+                        .cid_number
+                        .as_bytes()
                 && proposal.execution_account.is_none(),
             Error::<T>::ProposalNotPassed
         );

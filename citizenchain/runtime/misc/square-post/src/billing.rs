@@ -29,7 +29,6 @@ impl<T: Config> Pallet<T> {
         plan: SubscriptionPlan,
         expected_price_fen: u128,
     ) -> DispatchResult {
-        Self::ensure_subscription_ready()?;
         if let IssuerKey::Creator(creator) = &issuer {
             ensure!(creator != &subscriber, Error::<T>::CannotSubscribeSelf);
         }
@@ -216,7 +215,6 @@ impl<T: Config> Pallet<T> {
         subscriber: T::AccountId,
         issuer: IssuerKey<T::AccountId>,
     ) -> DispatchResult {
-        Self::ensure_subscription_ready()?;
         let key = (subscriber.clone(), issuer.clone());
         let paid_until = Subscriptions::<T>::try_mutate(&key, |slot| {
             let state = slot.as_mut().ok_or(Error::<T>::SubscriptionNotFound)?;
@@ -240,7 +238,6 @@ impl<T: Config> Pallet<T> {
         new_plan: SubscriptionPlan,
         expected_price_fen: u128,
     ) -> DispatchResult {
-        Self::ensure_subscription_ready()?;
         let key = (subscriber.clone(), issuer.clone());
         let mut state = Subscriptions::<T>::get(&key).ok_or(Error::<T>::SubscriptionNotFound)?;
         let now = Self::now_ms();
@@ -270,7 +267,6 @@ impl<T: Config> Pallet<T> {
         creator: T::AccountId,
         tiers: Vec<CreatorTier>,
     ) -> DispatchResult {
-        Self::ensure_subscription_ready()?;
         ensure!(
             Self::has_effective_platform_subscription(&creator, Self::now_ms()),
             Error::<T>::CreatorNotPlatformMember

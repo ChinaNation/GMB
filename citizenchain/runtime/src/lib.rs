@@ -82,8 +82,8 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     // public-manage / private-manage / personal-manage / votingengine /
     // multisig-transfer / offchain-transaction / onchain-transaction / institution-asset /
     // square-post。
-    // v2: square-post 订阅改为 CitizenApp 驱动的真实公历时间戳协议，
-    // runtime 只执行扣款、最小状态和时间戳比较，并原地升级 StorageVersion v1→v2。
+    // square-post 订阅采用 runtime 真实公历时间戳协议：只执行扣款、最小状态和时间戳比较；
+    // 平台三档价由创世播种，平台机构 CID 为创世固定常量，开发期零用户不设迁移。
     spec_version: 2,
     impl_version: 0,
     apis: apis::RUNTIME_API_VERSIONS,
@@ -228,8 +228,7 @@ pub type SignedPayload = generic::SignedPayload<RuntimeCall, TxExtension>;
 
 /// Runtime upgrade migrations 集合。
 ///
-/// SquarePost v1→v2 迁移由 pallet 自身 Hooks 执行；本元组只承载独立于 pallet 的
-/// runtime 级迁移，当前为空。
+/// 开发期零用户、重新创世模型：各 pallet 均不设迁移；本元组承载 runtime 级迁移，当前为空。
 pub type Migrations = ();
 
 /// Executive: handles dispatch to the various modules.

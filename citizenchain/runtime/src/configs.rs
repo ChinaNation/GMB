@@ -93,8 +93,7 @@ parameter_types! {
 ///
 /// This can be a tuple of types, each implementing `OnRuntimeUpgrade`.
 ///
-/// SquarePost v1→v2 迁移由 pallet 自身 `Hooks::on_runtime_upgrade` 执行；
-/// 这里仅保留 runtime 级独立迁移集合，当前为空。
+/// 开发期零用户、重新创世模型：各 pallet 不设迁移；这里仅保留 runtime 级独立迁移集合，当前为空。
 #[allow(unused_parens)]
 type SingleBlockMigrations = ();
 

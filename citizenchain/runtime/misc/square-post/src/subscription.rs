@@ -13,9 +13,7 @@ use frame_support::{
 use scale_info::TypeInfo;
 use sp_runtime::{traits::SaturatedConversion, DispatchError, RuntimeDebug};
 
-use crate::pallet::{
-    Config, CreatorPlans, Error, Pallet, PlatformCidNumber, PlatformPrice, Subscriptions,
-};
+use crate::pallet::{Config, CreatorPlans, Error, Pallet, PlatformPrice, Subscriptions};
 
 /// 创作者付款档位编号只承担链上引用，不保存名称、说明或权益文案。
 pub type TierId = BoundedVec<u8, ConstU32<32>>;
@@ -279,17 +277,6 @@ impl<T: Config> Pallet<T> {
         T::TimeProvider::now().as_millis().saturated_into::<u64>()
     }
 
-    /// 新订阅 call 在迁移未完成或被阻断时统一 fail-closed。
-    pub(crate) fn ensure_subscription_ready() -> Result<(), DispatchError> {
-        ensure!(
-            !crate::pallet::MigrationBlocked::<T>::get()
-                && frame_support::traits::StorageVersion::get::<Pallet<T>>()
-                    == crate::migration::TARGET_STORAGE_VERSION,
-            Error::<T>::MigrationIncomplete
-        );
-        Ok(())
-    }
-
     /// 已付款且尚未到期的 Active/Cancelled 平台订阅都继续提供本周期权益。
     pub(crate) fn has_effective_platform_subscription(account: &T::AccountId, now: u64) -> bool {
         Subscriptions::<T>::get((account.clone(), IssuerKey::Platform))
@@ -313,9 +300,12 @@ impl<T: Config> Pallet<T> {
                 let price = PlatformPrice::<T>::get(membership_level)
                     .ok_or(Error::<T>::PlatformPriceNotSet)?;
                 ensure!(price > 0, Error::<T>::ZeroPrice);
-                let cid = PlatformCidNumber::<T>::get().ok_or(Error::<T>::PlatformNotBound)?;
+                // 平台订阅机构永久固定为创世技术公司，CID 单源自创世常量，不读可写存储。
+                let cid = primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY
+                    .cid_number
+                    .as_bytes();
                 let payee = T::InstitutionAccountQuery::lookup_institution_account(
-                    cid.as_slice(),
+                    cid,
                     primitives::account_derive::RESERVED_NAME_FEE,
                 )
                 .ok_or(Error::<T>::PlatformNotBound)?;

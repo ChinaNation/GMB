@@ -1,9 +1,7 @@
 #![cfg(test)]
 
 use super::*;
-use crate::pallet::{
-    CidNumberOf, CreatorPlans, PlatformCidNumber, PlatformPrice, RenewalIndex, Subscriptions,
-};
+use crate::pallet::{CreatorPlans, PlatformPrice, RenewalIndex, Subscriptions};
 use frame_support::{
     assert_noop, assert_ok, derive_impl,
     traits::{ConstU128, ConstU32, Hooks, UnixTime},
@@ -132,7 +130,11 @@ impl crate::pallet::Config for Test {
     type WeightInfo = ();
 }
 
-const PLATFORM_CID: &[u8] = b"GD001-TECH1-000000001-2026";
+// 平台机构永久固定为创世技术公司，测试与 pallet 共用同一创世常量 CID。
+const PLATFORM_CID: &[u8] =
+    primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY
+        .cid_number
+        .as_bytes();
 const PLATFORM_PRICE: u128 = 5_999_900;
 
 fn account(byte: u8) -> AccountId32 {
@@ -184,10 +186,9 @@ fn creator_tier(price_fen: u128) -> CreatorTier {
 }
 
 fn setup_platform() {
+    // 平台 CID 已是创世常量，无需绑定；仅播种测试所需三档价。
     PlatformPrice::<Test>::insert(MembershipLevel::Spark, PLATFORM_PRICE);
     PlatformPrice::<Test>::insert(MembershipLevel::Freedom, 199_900);
-    let cid = CidNumberOf::<Test>::try_from(PLATFORM_CID.to_vec()).expect("cid fits");
-    PlatformCidNumber::<Test>::put(cid);
 }
 
 fn set_active_platform_member(account: AccountId32) {
@@ -223,7 +224,6 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
     ext.execute_with(|| {
         System::set_block_number(1);
         set_now(1_700_000_000_000);
-        crate::migration::TARGET_STORAGE_VERSION.put::<crate::pallet::Pallet<Test>>();
     });
     ext
 }
@@ -520,4 +520,24 @@ fn scale_fixture_matches_target_contract() {
         to_hex(&state.encode()),
         fixture["state_platform"].as_str().unwrap()
     );
+}
+
+#[test]
+fn genesis_build_seeds_default_platform_prices() {
+    use frame_support::traits::BuildGenesisConfig;
+    new_test_ext().execute_with(|| {
+        crate::pallet::GenesisConfig::<Test>::default().build();
+        assert_eq!(
+            PlatformPrice::<Test>::get(MembershipLevel::Freedom),
+            Some(crate::pallet::FREEDOM_PRICE_FEN)
+        );
+        assert_eq!(
+            PlatformPrice::<Test>::get(MembershipLevel::Democracy),
+            Some(crate::pallet::DEMOCRACY_PRICE_FEN)
+        );
+        assert_eq!(
+            PlatformPrice::<Test>::get(MembershipLevel::Spark),
+            Some(crate::pallet::SPARK_PRICE_FEN)
+        );
+    });
 }

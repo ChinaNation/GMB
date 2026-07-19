@@ -9,6 +9,7 @@ license = "MIT"
 [dependencies]
 codec = { workspace = true }
 scale-info = { workspace = true }
+serde = { workspace = true }                                                     # 创世价格播种 genesis_config 派生
 frame-support = { workspace = true }
 frame-system = { workspace = true }
 frame-benchmarking = { workspace = true, optional = true }
