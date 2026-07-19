@@ -259,6 +259,7 @@ mod tests {
     ) -> AdminAuthContext {
         AdminAuthContext {
             admin_account: "0xabc".to_string(),
+            institution_cid_number: "LN001-FRG0G-000000001-2026".to_string(),
             institution_code: institution_code.to_string(),
             admin_level: admin_level.map(str::to_string),
             admin_name: String::new(),

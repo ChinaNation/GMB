@@ -1,8 +1,10 @@
 // 立法与表决前端 API(对接 onchina /api/v1/legislation/*)。
-// 发起/表决返回扫码上链 sign_request(字符串),由冷签弹窗渲染成 QR 交 CitizenApp/CitizenWallet 提交;
+// 发起/表决返回统一链签名准备结果：CitizenWallet 签名一次并显示响应二维码，
+// OnChina 回扫后通过唯一提交入口上链；
 // 读法律/提案进度直读链投影。通用 http 走 utils/http.ts,本模块不另造请求封装。
 
 import type { AdminAuth } from '../auth/types';
+import type { ChainSignPrepare } from '../core/useChainSign';
 import { adminRequest } from '../utils/http';
 import type {
   LawView,
@@ -46,25 +48,25 @@ export async function getProposalState(
   return adminRequest<LegProposalState>(`/api/v1/legislation/proposals/${proposalId}`, auth);
 }
 
-/** POST 发起法律案,返回扫码上链 sign_request。 */
+/** POST 发起法律案，返回统一链签名准备结果。 */
 export async function proposeLegislation(
   auth: AdminAuth,
   input: ProposeLawInput,
-): Promise<string> {
-  return adminRequest<string>('/api/v1/legislation/propose', auth, {
+): Promise<ChainSignPrepare> {
+  return adminRequest<ChainSignPrepare>('/api/v1/legislation/propose', auth, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
   });
 }
 
-/** POST 当前代表机构表决，返回扫码上链 sign_request。 */
+/** POST 当前代表机构表决，返回统一链签名准备结果。 */
 export async function castRepresentativeVote(
   auth: AdminAuth,
   proposalId: number,
   approve: boolean,
-): Promise<string> {
-  return adminRequest<string>('/api/v1/legislation/representative-vote', auth, {
+): Promise<ChainSignPrepare> {
+  return adminRequest<ChainSignPrepare>('/api/v1/legislation/representative-vote', auth, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ proposalId, approve }),

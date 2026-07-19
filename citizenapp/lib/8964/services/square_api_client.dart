@@ -43,16 +43,16 @@ class SquareSession {
 class SquareMembershipState {
   const SquareMembershipState({
     required this.active,
-    required this.expiresAt,
+    required this.paidUntil,
     this.membershipLevel,
     this.subscriptionStatus,
     this.subscriptionActive = false,
-    this.currentPeriodStart = 0,
+    this.lastChargedAt = 0,
     this.plans = const <SquareMembershipPlan>[],
   });
 
   final bool active;
-  final int expiresAt;
+  final int paidUntil;
   final String? membershipLevel;
 
   /// 订阅生命周期态（链上单源镜像）：`active`=自动续费授权有效 /
@@ -64,8 +64,8 @@ class SquareMembershipState {
   /// [active] 与本字段等值；按钮双态与徽章勾均据此判定。
   final bool subscriptionActive;
 
-  /// 本期订阅开始（毫秒）；与 [expiresAt] 组成会员卡「订阅起止」展示（ADR-034 段4）。
-  final int currentPeriodStart;
+  /// 最近一次真实扣款时间（毫秒）；与 [paidUntil] 组成会员卡当前已付周期展示。
+  final int lastChargedAt;
 
   final List<SquareMembershipPlan> plans;
 
@@ -82,7 +82,7 @@ class SquareMembershipState {
 
   /// 有可展示的订阅起止窗口（已支付且起止时间齐备）。
   bool get hasSubscriptionWindow =>
-      subscriptionActive && currentPeriodStart > 0 && expiresAt > 0;
+      subscriptionActive && lastChargedAt > 0 && paidUntil > 0;
 }
 
 class SquareMembershipPlan {
@@ -504,7 +504,7 @@ class SquareApiClient
       ChatMediaLimits.applyMembershipLevel(null);
       return SquareMembershipState(
         active: false,
-        expiresAt: 0,
+        paidUntil: 0,
         plans: plans,
       );
     }
@@ -513,11 +513,11 @@ class SquareApiClient
     ChatMediaLimits.applyMembershipLevel(active ? membershipLevel : null);
     return SquareMembershipState(
       active: active,
-      expiresAt: _asInt(membership['expires_at']),
+      paidUntil: _asInt(membership['paid_until']),
       membershipLevel: membershipLevel,
       subscriptionStatus: membership['subscription_status']?.toString(),
       subscriptionActive: subscriptionActive,
-      currentPeriodStart: _asInt(membership['current_period_start']),
+      lastChargedAt: _asInt(membership['last_charged_at']),
       plans: plans,
     );
   }
@@ -528,13 +528,19 @@ class SquareApiClient
   Future<void> confirmPlatformSubscription({
     required SquareSession session,
     required String txHash,
-    String? level,
+    required String blockHashHex,
+    required String signedExtrinsicHex,
+    required String action,
+    String? membershipLevel,
   }) async {
     await _postJson(
       '/v1/square/membership/confirm',
       {
         'tx_hash': txHash,
-        if (level != null) 'level': level,
+        'block_hash': blockHashHex,
+        'signed_extrinsic_hex': signedExtrinsicHex,
+        'action': action,
+        if (membershipLevel != null) 'membership_level': membershipLevel,
       },
       session: session,
       finalizedMirror: true,

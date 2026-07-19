@@ -36,8 +36,7 @@ import {
   type CreateFormCategory,
 } from '../subjects/labels';
 import { notice } from '../utils/notice';
-import { submitCitizenChainSign } from '../citizens/api';
-import { useChainSign } from './useChainSign';
+import { submitChainSign, useChainSign } from './useChainSign';
 
 interface FormValues {
   subject_property: string;
@@ -500,7 +499,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         admins,
       });
       const signed = await signChain(result.request_id, result.institution_create_sign_request);
-      await submitCitizenChainSign(
+      await submitChainSign(
         auth,
         result.request_id,
         signed.signer_pubkey,

@@ -77,7 +77,7 @@ async function selectLapsedOwners(env: Env, cutoff: number, limit: number): Prom
       JOIN square_media_assets a ON a.owner_account = m.owner_account
       WHERE m.entitlement_lapsed_at IS NOT NULL
         AND m.entitlement_lapsed_at <= ?
-        AND m.subscription_status NOT IN ('active', 'trialing')
+        AND m.subscription_status IN ('cancelled', 'terminated')
         AND a.media_kind = 'video'
         AND a.archive_state = 'live'
       LIMIT ?`

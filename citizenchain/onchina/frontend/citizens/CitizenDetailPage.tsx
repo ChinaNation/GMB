@@ -34,12 +34,11 @@ import type { AdminAuth } from '../auth/types';
 import { glassCardHeadStyle, glassCardStyle } from '../core/cardStyles';
 import { CitizenSignatureModal } from '../core/CitizenSignatureModal';
 import { ScanAccountModal } from '../core/ScanAccountModal';
-import { useChainSign } from '../core/useChainSign';
+import { submitChainSign, useChainSign } from '../core/useChainSign';
 import { notice } from '../utils/notice';
 import {
   CITIZEN_DOCUMENT_TYPES,
   completeCitizenOnchainSignature,
-  submitCitizenChainSign,
   prepareCitizenRevoke,
   deleteCitizenDocument,
   downloadCitizenDocument,
@@ -226,12 +225,12 @@ export function CitizenDetailPage({
         raw,
       );
       setPrepared(null);
-      notice.success('公民钱包签名已验证,请用管理员冷钱包签名并提交上链');
-      // D7:身份上链交易由 onchina 组装提交,管理员冷钱包只签不提交。
+      notice.success('公民钱包签名已验证，请用注册局管理员公民钱包签名并提交上链');
+      // D7：身份上链交易由 OnChina 组装提交，注册局管理员 CitizenWallet 只签名一次并显示响应二维码。
       const signed = await signChain(output.request_id, output.citizen_identity_chain_sign_request);
       setChainSubmitting(true);
       try {
-        const submitted = await submitCitizenChainSign(
+        const submitted = await submitChainSign(
           auth,
           output.request_id,
           signed.signer_pubkey,
@@ -263,7 +262,7 @@ export function CitizenDetailPage({
       // 吊销同样只做一次 Passkey 和一次最终链签。
       const prep = await prepareCitizenRevoke(auth, current.cid_number, walletAccount);
       const signed = await signChain(prep.request_id, prep.sign_request);
-      const submitted = await submitCitizenChainSign(
+      const submitted = await submitChainSign(
         auth,
         prep.request_id,
         signed.signer_pubkey,

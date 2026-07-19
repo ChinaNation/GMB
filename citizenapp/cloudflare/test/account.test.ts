@@ -308,7 +308,7 @@ describe('purgeAccount', () => {
 
     const result = await purgeAccount(env, OWNER);
 
-    // 新 PurgeAccountResult 形状：只含三项计数，不再有 stripe_canceled。
+    // PurgeAccountResult 只返回本地硬删除计数，不触发任何外部订阅副作用。
     expect(result.deleted_media_assets).toBe(1);
     expect(result.deleted_r2_objects).toBe(3);
     expect(result.deleted_rows).toBeGreaterThan(0);

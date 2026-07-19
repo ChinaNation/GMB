@@ -1,18 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { encodeAddress } from "@polkadot/util-crypto";
-import { hexToBytes } from "../src/shared/signing_message";
+import { blake2AsU8a, encodeAddress } from "@polkadot/util-crypto";
+import { bytesToHex, hexToBytes } from "../src/shared/signing_message";
 import { storageValueKey } from "../src/chain/storage_key";
 import {
   buildCreatorPlansKey,
   buildSubscriptionKey,
+  bindFinalizedTransactionConfirmation,
   decodeCreatorPlans,
   decodeSubscriptionState,
+  verifyFinalizedSubscriptionTransaction,
 } from "../src/chain/subscription";
-import {
-  creatorPlanSaveRoute,
-  type CreatorPlanSaveDeps,
-} from "../src/membership/creator";
-import type { Env, SessionState } from "../src/types";
+import type { Env } from "../src/types";
 
 const STATE_PLATFORM =
   "0002000068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c01000000";
@@ -119,105 +117,166 @@ describe("buildSubscriptionKey", () => {
   });
 });
 
-describe("creatorPlanSaveRoute", () => {
-  it("finalized CreatorPlans 一致后直接保存展示名，不要求第二次业务签名", async () => {
-    const stored: unknown[][] = [];
-    const env = creatorPlanEnv(stored);
-    const response = await creatorPlanSaveRoute(
-      creatorPlanRequest({
-        tx_hash: "0x" + "a".repeat(64),
-        tiers: [
-          {
-            tier_id: "supporter",
-            name: "支持者",
-            prices_fen: { monthly: 50 },
-          },
-        ],
-      }),
-      env,
-      creatorPlanDeps(50n),
-    );
-    const body = (await response.json()) as {
-      plan: { tiers: Array<{ name: string; prices_fen: { monthly: number } }> };
-    };
-
-    expect(body.plan.tiers[0]).toEqual({
-      tier_id: "supporter",
-      name: "支持者",
-      prices_fen: { monthly: 50 },
-    });
-    expect(stored).toHaveLength(1);
-    expect(JSON.parse(stored[0][1] as string)).toEqual(body.plan.tiers);
+describe("finalized 订阅交易证明", () => {
+  it("校验交易哈希、签名账户、调用参数、区块包含关系和 finalized 主链", async () => {
+    const signer = new Uint8Array(32).fill(7);
+    const owner = encodeAddress(signer, 2027);
+    const call = Uint8Array.from([34, 1, 0, 0, 2, ...new Uint8Array(16).fill(1)]);
+    const signed = signedExtrinsic(signer, call);
+    const signedHex = `0x${bytesToHex(signed)}`;
+    const txHash = `0x${bytesToHex(blake2AsU8a(signed, 256))}`;
+    const blockHash = `0x${"a".repeat(64)}`;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = rpcFetch({ blockHash, signedHex });
+    try {
+      await expect(verifyFinalizedSubscriptionTransaction(
+        rpcEnv(),
+        owner,
+        { kind: "platform_subscribe", membershipLevel: "spark" },
+        { txHash, blockHash, signedExtrinsicHex: signedHex },
+      )).resolves.toMatchObject({
+        txHash,
+        blockHash,
+        blockNumber: 16,
+        extrinsicIndex: 0,
+        chainTimestamp: 1_700_000_000_000,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
-  it("请求价格与 finalized 链价不一致时拒绝写 Cloudflare", async () => {
-    const stored: unknown[][] = [];
-    await expect(
-      creatorPlanSaveRoute(
-        creatorPlanRequest({
-          tx_hash: "0x" + "b".repeat(64),
-          tiers: [
-            {
-              tier_id: "supporter",
-              name: "支持者",
-              prices_fen: { monthly: 51 },
-            },
-          ],
-        }),
-        creatorPlanEnv(stored),
-        creatorPlanDeps(50n),
-      ),
-    ).rejects.toMatchObject({
-      status: 409,
-      code: "creator_plans_not_finalized",
-    });
-    expect(stored).toHaveLength(0);
+  it("同一 signed extrinsic 不能冒充另一档位操作", async () => {
+    const signer = new Uint8Array(32).fill(7);
+    const signed = signedExtrinsic(
+      signer,
+      Uint8Array.from([34, 1, 0, 0, 2, ...new Uint8Array(16).fill(1)]),
+    );
+    await expect(verifyFinalizedSubscriptionTransaction(
+      rpcEnv(),
+      encodeAddress(signer, 2027),
+      { kind: "platform_subscribe", membershipLevel: "freedom" },
+      {
+        txHash: `0x${bytesToHex(blake2AsU8a(signed, 256))}`,
+        blockHash: `0x${"a".repeat(64)}`,
+        signedExtrinsicHex: `0x${bytesToHex(signed)}`,
+      },
+    )).rejects.toMatchObject({ code: "subscription_tx_action_mismatch" });
+  });
+
+  it("同一 tx_hash 只允许绑定同一规范化业务请求，原请求可幂等重试", async () => {
+    const db = new ProofDb();
+    const env = { DB: db as unknown as D1Database } as Env;
+    const transaction = {
+      txHash: `0x${"1".repeat(64)}`,
+      blockHash: `0x${"2".repeat(64)}`,
+      blockNumber: 10,
+      extrinsicIndex: 1,
+      chainTimestamp: 1000,
+      action: { kind: "platform_cancel" as const },
+    };
+    await bindFinalizedTransactionConfirmation(env, "owner", transaction, "a".repeat(64), 2000);
+    await expect(bindFinalizedTransactionConfirmation(
+      env,
+      "owner",
+      transaction,
+      "a".repeat(64),
+      3000,
+    )).resolves.toBeUndefined();
+    await expect(bindFinalizedTransactionConfirmation(
+      env,
+      "owner",
+      transaction,
+      "b".repeat(64),
+      3000,
+    )).rejects.toMatchObject({ code: "subscription_tx_already_bound" });
   });
 });
 
-function creatorPlanRequest(body: Record<string, unknown>): Request {
-  return new Request("https://w/v1/square/creator/plan", {
-    method: "POST",
-    headers: {
-      authorization: "Bearer creator-session",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+class ProofDb {
+  row: Record<string, unknown> | null = null;
+  prepare(sql: string): ProofStmt { return new ProofStmt(this, sql); }
 }
 
-function creatorPlanDeps(price: bigint): CreatorPlanSaveDeps {
-  return {
-    readCreatorPlans: async () => [
-      { tierId: "supporter", pricesFen: { monthly: price } },
-    ],
-  };
+class ProofStmt {
+  private args: unknown[] = [];
+  constructor(private readonly db: ProofDb, private readonly sql: string) {}
+  bind(...args: unknown[]): ProofStmt { this.args = args; return this; }
+  async run(): Promise<{ meta: { changes: number } }> {
+    if (this.sql.includes("INSERT OR IGNORE") && !this.db.row) {
+      this.db.row = {
+        owner_account: this.args[1],
+        block_hash: this.args[2],
+        block_number: this.args[3],
+        extrinsic_index: this.args[4],
+        action_kind: this.args[5],
+        request_hash: this.args[6],
+        chain_timestamp: this.args[7],
+      };
+      return { meta: { changes: 1 } };
+    }
+    return { meta: { changes: 0 } };
+  }
+  async first<T>(): Promise<T | null> {
+    return this.db.row as T | null;
+  }
 }
 
-function creatorPlanEnv(stored: unknown[][]): Env {
-  const session: SessionState = {
-    owner_account: encodeAddress(new Uint8Array(32).fill(8), 2027),
-    device_key_hash: "d".repeat(64),
-    created_at: Date.now(),
-    expires_at: Date.now() + 60_000,
-  };
-  const statement = {
-    args: [] as unknown[],
-    bind(...args: unknown[]) {
-      this.args = args;
-      return this;
-    },
-    async run() {
-      stored.push(this.args);
-      return { success: true, meta: { changes: 1 } };
-    },
-  };
+function signedExtrinsic(signer: Uint8Array, call: Uint8Array): Uint8Array {
+  const body = Uint8Array.from([
+    0x84,
+    0x00,
+    ...signer,
+    0x01,
+    ...new Uint8Array(64).fill(9),
+    0x00,
+    0x00,
+    0x00,
+    ...call,
+  ]);
+  return Uint8Array.from([...compact(body.length), ...body]);
+}
+
+function compact(value: number): number[] {
+  if (value < 64) return [value << 2];
+  const encoded = (value << 2) | 1;
+  return [encoded & 0xff, (encoded >> 8) & 0xff];
+}
+
+function rpcEnv(): Env {
   return {
-    DB: {
-      prepare: () => statement,
-    } as unknown as D1Database,
-    SQUARE_CACHE: {
-      get: async () => session,
-    } as unknown as KVNamespace,
+    CHAIN_URL: "https://node.internal/rpc",
+    CHAIN_ID: "access-id",
+    CHAIN_SECRET: "access-secret",
   } as Env;
+}
+
+function rpcFetch(input: { blockHash: string; signedHex: string }): typeof fetch {
+  return (async (_url: string | URL | Request, init?: RequestInit) => {
+    const request = JSON.parse(String(init?.body)) as { id: number; method: string; params: unknown[] };
+    let result: unknown;
+    switch (request.method) {
+      case "chain_getFinalizedHead":
+        result = input.blockHash;
+        break;
+      case "chain_getBlock":
+        result = { block: { header: { number: "0x10" }, extrinsics: [input.signedHex] } };
+        break;
+      case "chain_getHeader":
+        result = { number: "0x10" };
+        break;
+      case "chain_getBlockHash":
+        result = input.blockHash;
+        break;
+      case "state_getStorage":
+        result = "0x0068e5cf8b010000";
+        break;
+      default:
+        throw new Error(`unexpected rpc ${request.method}`);
+    }
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: request.id, result }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
 }

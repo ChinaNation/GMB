@@ -101,7 +101,7 @@ class _MembershipPageState extends State<MembershipPage>
           _apiClient.fetchMembership(session).catchError(
                 (_) => const SquareMembershipState(
                   active: false,
-                  expiresAt: 0,
+                  paidUntil: 0,
                 ),
               ),
           _chainService
@@ -641,7 +641,7 @@ SquareMembershipState _stateFromFinalized(
   if (chain == null) {
     return SquareMembershipState(
       active: false,
-      expiresAt: 0,
+      paidUntil: 0,
       plans: mirror.plans,
     );
   }
@@ -651,11 +651,11 @@ SquareMembershipState _stateFromFinalized(
   final effective = chain.isEffectiveAt(snapshot.chainNowMs);
   return SquareMembershipState(
     active: effective,
-    expiresAt: chain.paidUntil,
+    paidUntil: chain.paidUntil,
     membershipLevel: chain.plan.membershipLevel,
     subscriptionStatus: chain.status,
     subscriptionActive: effective,
-    currentPeriodStart: chain.lastChargedAt,
+    lastChargedAt: chain.lastChargedAt,
     plans: mirror.plans,
   );
 }
@@ -778,7 +778,7 @@ class _ActiveMembershipBanner extends StatelessWidget {
       _ => '链上到期自动续费',
     };
     final window =
-        '订阅 ${_formatYmd(state.currentPeriodStart)} ~ ${_formatYmd(state.expiresAt)}';
+        '订阅 ${_formatYmd(state.lastChargedAt)} ~ ${_formatYmd(state.paidUntil)}';
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       padding: const EdgeInsets.all(12),

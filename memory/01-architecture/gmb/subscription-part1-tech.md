@@ -152,7 +152,7 @@ MigrationBlocked -> bool
 
 - `set_creator_plans` 覆盖式写入创作者自己的链上付款字段。
 - 新订阅和下一次真实续费读取最新价格；当前已付周期不变。
-- 创作者在 CitizenApp 同一次业务提交中填写档位标识、名称和周期价格，并只签名一次 `set_creator_plans` 交易；finalized 后 Cloudflare 接收交易哈希并严格读取链上付款字段，仅保存档位名称等展示资料。
+- 创作者在 CitizenApp 同一次业务提交中填写档位标识、名称和周期价格，并只签名一次 `set_creator_plans` 交易；finalized 后 App 把交易哈希、区块哈希和完整已签名 extrinsic 连同展示资料提交给 Cloudflare，Worker 严格复核交易包含关系和同一区块链上状态后保存镜像。
 - Cloudflare 展示资料必须引用 finalized 的 `creator_account + tier_id`，不得保存第二份扣款真源价格；finalized 后的镜像只用 Bearer 会话和链读复核，不生成设备请求签名。边缘保存失败只能重试镜像 HTTP，不得再次签名或重复提交链上交易。
 - `propose_set_platform_price` 只调用统一内部投票引擎；人口快照、资格、计票和状态推进不进入业务 pallet。
 
@@ -162,12 +162,17 @@ MigrationBlocked -> bool
 
 ## 12. Cloudflare/D1
 
-- 只严格解码 finalized `Subscriptions` 并镜像链上字段。
-- confirm 只做链读核实后的快速镜像，不信任请求中的价格、状态或到期值，也不代表周期确认。
-- 低频对账用于纠偏，不进行高频全表扫描。
-- 门禁使用链上 `paid_until` 与当前链时间戳比较；状态未知、镜像过期或链读失败时 fail-closed。
-- 不计算公历、不提交续费、不持有扣款密钥、不保存第二份价格真源。
-- 同一业务操作的链上交易 finalized 后，所有镜像与重试都不再产生账户签名或设备请求签名。
+- 钱包账户是所有镜像的业务主键；平台订阅主键为 `owner_account`，创作者档位主键为 `(creator_account, tier_id)`，创作者订阅主键为 `(subscriber_account, creator_account)`。
+- confirm 请求固定携带 `tx_hash`、`block_hash`、`signed_extrinsic_hex` 和业务动作；订阅或换档携带目标档位，创作者订阅同时携带 `creator_account`、`tier_id`、`billing_period`，创作者套餐保存同时携带展示档位数组。
+- Worker 重新计算 extrinsic 哈希，严格解码签名者、pallet/call index 与 SCALE 参数，校验签名者等于 Bearer 会话钱包、指定区块属于 finalized 主链且确实包含该完整 extrinsic，再读取同一区块 `Timestamp.Now`、`Subscriptions` 或 `CreatorPlans`。请求中的价格、状态和期限从不作为真源。
+- `chain_transaction_confirmations` 将一笔 finalized 交易首次绑定到钱包、区块、extrinsic 序号、动作和规范化请求哈希；完全相同的 HTTP 重试幂等成功，同一交易换钱包、换动作或换展示资料一律冲突拒绝。
+- `square_memberships` 和 `square_creator_subscriptions` 镜像完整链上状态、finalized 锚点及最近一次交易哈希；`last_charged_price_fen` 只是已发生扣款的审计镜像，不能作为下一次扣款价格真源。
+- `square_creator_tiers` 按档位规范化保存展示名称和 finalized `CreatorPlans` 镜像；覆盖保存使用 D1 batch 原子替换，不保留退役档位残行。
+- `chain_clock` 只接受更高 finalized 区块，保存同一区块链时间戳和本地观测时刻。门禁统一要求状态为 `Active` 或尚在已付期内的 `Cancelled`、`chain_timestamp < paid_until` 且链时钟未陈旧；`Terminated`、未知状态、缺时钟、未来观测、陈旧时钟和到期全部 fail-closed。
+- Cron 每轮只读取一次 finalized 头和时间戳，只查询 `Active AND paid_until <= chain_timestamp` 的到期候选，按固定上限逐行纠偏；不扫描未到期全表，不计算公历，不触发扣款或续费。
+- 平台发布、上传预留、平台用量与创作者管理等 Cloudflare 资源入口都调用同一平台门禁；创作者订阅专属资源必须在签发数据或短效资源地址前调用创作者订阅门禁。仓库当前没有创作者专属内容路由，因此本步骤不虚构该产品功能。
+- CitizenApp 按钱包保存最近 finalized 证明和有界镜像待重试队列；App 再次运行时只重试 Bearer HTTP，不再次签名或提交链上交易。Cloudflare 不可用不阻断链上订阅操作。
+- 直接端到端 P2P 媒体不占用 Cloudflare 存储或中转，App 的发送端与接收端仍执行本地大小门禁；这类端到端数据不应被表述为 Cloudflare 可集中强制的订阅权益。Cloudflare 承载的上传、存储、中转和签名 URL 则全部由服务端门禁强制执行。
 
 ## 13. 原地 runtime 升级
 
@@ -198,6 +203,7 @@ MigrationBlocked -> bool
 
 - 订阅、取消、换套餐和创作者设置套餐各自使用一笔热钱包标准 extrinsic，并等待 finalized；同一业务操作不得追加第二次账户签名，自动续费没有用户交易或签名。
 - 第三步已经接入完整页面流程、finalized 状态读取、真实日期展示和创作者一次签名后边缘镜像重试，不实现续费编排。
+- 第四步已把 finalized 证明扩展为交易哈希、区块哈希和完整已签名 extrinsic；App 按钱包持久化有限证明历史与待重试队列，镜像失败不重复签名。
 - 页面显示使用 `DateTime.fromMillisecondsSinceEpoch(...).toLocal()` 展示真实日期和时间，不显示区块高度或“固定天数”。
 - Cloudflare 暂时不可用时，App 仍以 finalized 链上价格、档位和订阅状态工作；展示名称可使用本地兜底。
 
@@ -207,12 +213,26 @@ MigrationBlocked -> bool
 - 业务转账金额为零时仍收取最低链上交易费；不得把取消订阅或只改状态误判成免费操作。
 - runtime 到期自动扣款在区块执行阶段内部运行，不是外部交易，因此不追加用户交易费。
 
+## 14.2 OnChina 平台调价与机构工作台
+
+- 所有机构管理员都从链上中国统一入口扫码登录。登录态必须携带节点绑定的准确 `institution_cid_number`，工作台由后端根据准确 CID、机构类型和链上权限下发；前端不得根据机构码猜测工作台。
+- 注册局、私权、司法、立法、其它公权和非法人机构使用不同工作台。私权机构只查看本机构信息、链上 `admins` 和被授权模块，不复用注册局的公民、机构目录或登记页面。
+- 平台会员价格模块是实例级授权：只有当前绑定 CID 与同一 finalized 区块读取的 `PlatformCidNumber` 精确相等时才下发。OnChina 不在 PostgreSQL 保存平台价格或平台 CID 副本。
+- 调价 API 为 `GET /api/v1/membership/platform-prices` 与 `POST /api/v1/membership/platform-prices/propose`。prepare 和 submit 都重新检查节点绑定、准确平台 CID 和链上 active `admins`，任何无法确认都 fail-closed。
+- 所有 OnChina 链交易共用 `POST /api/v1/admin/chain/submit` 与同一 core 提交器。流程固定为：OnChina 展示请求二维码，CitizenWallet 只签名一次并显示响应二维码，OnChina 回扫后验签、dry-run、提交并等待进块。禁止业务模块另建提交 URL、二维码协议或签名流程。
+- 平台调价动作在唯一 QR registry 中为 `propose_set_platform_price`；CitizenWallet 必须中文展示技术公司 CID、目标平台档位和新价格，未知或不完整载荷直接拒签。
+- `propose_set_platform_price` 只创建统一内部投票提案。资格、计票、推进和终态执行归投票引擎，OnChina 和 SquarePost 不实现第二套投票。
+
 ## 15. 真实验收
 
 - runtime 单元测试、金标 SCALE、benchmark 编译、完整 runtime 测试和 WASM 构建通过。
 - 在真实链数据库副本确认旧 StorageVersion、订阅相关前缀为空及迁移 pre/post 不变量。
 - runtime 覆盖月末、闰年、跨年、季和年周期计算、自动续费、停链后补扣和余额不足终止。
 - Cloudflare 严格解码新状态，拒绝尾随字节和非法标签，且不包含任何日期计算。
+- Cloudflare 必须验证 finalized 主链中完整已签名 extrinsic、同一区块状态和首次请求绑定；旧区块证明不能刷新链时钟。
+- 本地 Worker、D1 与 HTTP 必须实测缺设备证明的 finalized 镜像请求可进入业务校验，而其它受保护写请求仍保持设备证明门禁。
+- OnChina 已在隔离本地 PostgreSQL 上连接真实本地链并完成链投影同步；平台价格、调价提案和统一提交接口在无登录态时均 fail-closed，旧公民专属提交入口已移除。
+- OnChina、CitizenWallet 与统一二维码注册表已完成编译、静态分析和自动测试；最终跨端调价交易、内部投票终态及完整订阅生命周期纳入第 6 步总验收。
 - 后续步骤必须完成真机、真实本地链、真实 Worker/D1/HTTP 的端到端验收。
 
 ## 16. 禁止事项

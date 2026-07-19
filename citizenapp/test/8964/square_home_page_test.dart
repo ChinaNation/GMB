@@ -109,7 +109,7 @@ void main() {
         feedSource: const _FakeFeedSource(),
         membershipLoader: () async => const SquareMembershipState(
           active: true,
-          expiresAt: 9999999999999,
+          paidUntil: 9999999999999,
           membershipLevel: 'freedom',
         ),
       )),
@@ -157,7 +157,7 @@ void main() {
         feedSource: const _FakeFeedSource(),
         membershipLoader: () async => const SquareMembershipState(
           active: false,
-          expiresAt: 0,
+          paidUntil: 0,
         ),
       )),
     );

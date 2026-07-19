@@ -7,6 +7,8 @@ import type { InstitutionWorkspace } from '../workspace/types';
 export type TokenAdminAuth = {
   access_token: string;
   admin_account: string;
+  /** 当前会话绑定的准确机构 CID；由后端根据激活节点绑定派生。 */
+  institution_cid_number: string;
   /** 所属机构码(3/4 字符文本,如 FRG/CREG)。 */
   institution_code: string;
   /** 行政层级标签(NATIONAL/PROVINCE/CITY/TOWN);私权法人/非法人为空。 */

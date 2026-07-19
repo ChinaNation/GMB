@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:citizenwallet/qr/qr_protocols.dart';
 import 'package:citizenwallet/signer/pallet_registry.dart';
 
 void main() {
@@ -23,8 +24,9 @@ void main() {
         PalletRegistry.citizenIdentityPallet,
         PalletRegistry.onchainIssuancePallet,
         PalletRegistry.addressRegistryPallet,
+        PalletRegistry.squarePostPallet,
       };
-      expect(pallets.length, 15);
+      expect(pallets.length, 16);
     });
 
     test('投票引擎 sub-pallet call_index', () {
@@ -130,6 +132,12 @@ void main() {
       expect(PalletRegistry.removeAddressNameCall, 2);
       expect(PalletRegistry.setAddressCall, 3);
       expect(PalletRegistry.removeAddressCall, 4);
+    });
+
+    test('SquarePost 平台调价 call_index 与 runtime 对齐', () {
+      expect(PalletRegistry.squarePostPallet, 34);
+      expect(PalletRegistry.proposeSetPlatformPriceCall, 5);
+      expect(QrActions.proposeSetPlatformPrice, 0x2205);
     });
   });
 }

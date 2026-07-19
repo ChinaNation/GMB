@@ -244,7 +244,6 @@ jobs:
           apk_path="citizenapp/build/app/outputs/flutter-apk/公民.apk"
           apk_sha256="$(shasum -a 256 "$apk_path" | awk '{print $1}')"
           published_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          release_tag="citizenapp-android-v${version_name}-${version_code}"
           manifest_path="citizenapp/build/app/outputs/flutter-apk/citizenapp-android-update.json"
 
           cat > "$manifest_path" <<EOF
@@ -261,35 +260,28 @@ jobs:
           }
           EOF
 
-          echo "CITIZENAPP_ANDROID_RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
-
-      - name: 发布 GitHub Release
+      # 中文注释:发布到唯一「滚动 Release」(固定 tag release,始终 Latest);同仓库三产品共用,--clobber 只覆盖公民.apk 与其清单。
+      - name: 发布到滚动 Release
         if: ${{ env.GMB_RELEASE_MODE == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
+          tag="release"
           apk_path="citizenapp/build/app/outputs/flutter-apk/公民.apk"
           manifest_path="citizenapp/build/app/outputs/flutter-apk/citizenapp-android-update.json"
-          release_title="citizenapp Android ${CITIZENAPP_ANDROID_RELEASE_TAG#citizenapp-android-v}"
 
-          if gh release view "$CITIZENAPP_ANDROID_RELEASE_TAG" >/dev/null 2>&1; then
-            gh release edit "$CITIZENAPP_ANDROID_RELEASE_TAG" \
-              --title "$release_title" \
-              --notes-file "$manifest_path" \
-              --latest=false
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --latest >/dev/null
           else
-            gh release create "$CITIZENAPP_ANDROID_RELEASE_TAG" \
-              --title "$release_title" \
-              --notes-file "$manifest_path" \
-              --latest=false
+            gh release create "$tag" \
+              --title 'GMB 正式版' \
+              --notes 'GMB 各产品最新正式版(滚动发布,始终 Latest)。' \
+              --latest --target "$GITHUB_SHA"
           fi
 
-          gh release upload "$CITIZENAPP_ANDROID_RELEASE_TAG" \
-            "$apk_path" \
-            "$manifest_path" \
-            --clobber
+          gh release upload "$tag" "$apk_path" "$manifest_path" --clobber
 
       # 只有 GitHub 页面手动运行时才维护 APK 产物。
       - name: 清理旧版 APK artifact

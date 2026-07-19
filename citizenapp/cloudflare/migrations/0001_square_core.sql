@@ -51,34 +51,93 @@ CREATE TABLE square_rate_windows (
 CREATE INDEX idx_square_rate_windows_expires
   ON square_rate_windows(expires_at);
 
--- 平台会员公民币订阅镜像（唯一支付轨）：订阅/取消由 App 热钱包 extrinsic 上链
--- （square-post idx34），价格与按月扣款以链上 PlatformPrice + billing keeper 为真源；
--- 本表只镜像订阅态供发帖门禁与徽章读取，last_tx_hash 幂等。
+-- finalized 链时间单例。Worker 只用它判断订阅权益和镜像新鲜度，不计算公历日期。
+CREATE TABLE chain_clock (
+  clock_id INTEGER PRIMARY KEY CHECK(clock_id = 1),
+  chain_timestamp INTEGER NOT NULL,
+  finalized_block_number INTEGER NOT NULL,
+  finalized_block_hash TEXT NOT NULL,
+  observed_at INTEGER NOT NULL
+);
+
+-- 平台订阅 finalized 镜像。钱包账户是唯一业务主键；价格、状态和时间只来自链上。
 CREATE TABLE square_memberships (
   owner_account TEXT PRIMARY KEY,
   membership_level TEXT NOT NULL,
-  -- 下次扣款时刻（链上 next_charge_at 镜像），同时作计费周期终点。
-  expires_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  -- 镜像链上订阅态：active（自动续费有效）/ terminated（扣款失败终止）/ cancelled（用户取消）。
-  subscription_status TEXT NOT NULL,
-  -- 计费周期镜像（用量额度窗口）：起点=订阅/续订时刻、终点=下次扣款。
-  current_period_start INTEGER,
-  current_period_end INTEGER,
-  -- 会员与身份彻底解耦（ADR-036）：不再存 identity_level / frozen_at / collection_paused。
-  -- 会员权益失效时刻（退订满 N 月视频冷归档时钟起点；重订置 NULL）。
+  pending_membership_level TEXT,
+  started_at INTEGER NOT NULL,
+  last_charged_at INTEGER NOT NULL,
+  last_charged_price_fen INTEGER NOT NULL,
+  paid_until INTEGER NOT NULL,
+  subscription_status TEXT NOT NULL CHECK(subscription_status IN ('active', 'cancelled', 'terminated')),
+  finalized_block_number INTEGER NOT NULL,
+  finalized_block_hash TEXT NOT NULL,
+  verified_at INTEGER NOT NULL,
   entitlement_lapsed_at INTEGER,
-  -- 最近一次订阅/取消上链交易哈希（幂等确认凭证）。
   last_tx_hash TEXT
 );
 CREATE INDEX idx_square_memberships_state
-  ON square_memberships(subscription_status, expires_at);
+  ON square_memberships(subscription_status, paid_until);
 CREATE INDEX idx_square_memberships_lapsed
   ON square_memberships(entitlement_lapsed_at)
   WHERE entitlement_lapsed_at IS NOT NULL;
--- 对账器按 updated_at 最旧优先滚动取批（membership/reconcile.ts）。
 CREATE INDEX idx_square_memberships_reconcile
-  ON square_memberships(updated_at);
+  ON square_memberships(subscription_status, paid_until, verified_at);
+
+-- 创作者档位展示镜像。每档以创作者钱包账户 + tier_id 为关系主键；价格仍以链上为真源。
+CREATE TABLE square_creator_tiers (
+  creator_account TEXT NOT NULL,
+  tier_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  tier_order INTEGER NOT NULL,
+  monthly_price_fen INTEGER,
+  quarterly_price_fen INTEGER,
+  yearly_price_fen INTEGER,
+  finalized_block_number INTEGER NOT NULL,
+  finalized_block_hash TEXT NOT NULL,
+  verified_at INTEGER NOT NULL,
+  last_tx_hash TEXT NOT NULL,
+  PRIMARY KEY(creator_account, tier_id)
+);
+
+-- 创作者订阅关系必须使用订阅者钱包 + 创作者钱包复合主键，允许同一账户订阅多个创作者。
+CREATE TABLE square_creator_subscriptions (
+  subscriber_account TEXT NOT NULL,
+  creator_account TEXT NOT NULL,
+  tier_id TEXT NOT NULL,
+  billing_period TEXT NOT NULL CHECK(billing_period IN ('monthly', 'quarterly', 'yearly')),
+  pending_tier_id TEXT,
+  pending_billing_period TEXT CHECK(pending_billing_period IS NULL OR pending_billing_period IN ('monthly', 'quarterly', 'yearly')),
+  started_at INTEGER NOT NULL,
+  last_charged_at INTEGER NOT NULL,
+  last_charged_price_fen INTEGER NOT NULL,
+  paid_until INTEGER NOT NULL,
+  subscription_status TEXT NOT NULL CHECK(subscription_status IN ('active', 'cancelled', 'terminated')),
+  finalized_block_number INTEGER NOT NULL,
+  finalized_block_hash TEXT NOT NULL,
+  verified_at INTEGER NOT NULL,
+  last_tx_hash TEXT NOT NULL,
+  PRIMARY KEY(subscriber_account, creator_account)
+);
+CREATE INDEX idx_square_creator_subscriptions_creator
+  ON square_creator_subscriptions(creator_account, subscription_status, paid_until);
+CREATE INDEX idx_square_creator_subscriptions_reconcile
+  ON square_creator_subscriptions(subscription_status, paid_until, verified_at);
+
+-- Cloudflare 只保留 finalized 交易的最小不可变证明；完整交易仍在链上，避免重复占用 D1。
+CREATE TABLE chain_transaction_confirmations (
+  tx_hash TEXT PRIMARY KEY,
+  owner_account TEXT NOT NULL,
+  block_hash TEXT NOT NULL,
+  block_number INTEGER NOT NULL,
+  extrinsic_index INTEGER NOT NULL,
+  action_kind TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  chain_timestamp INTEGER NOT NULL,
+  confirmed_at INTEGER NOT NULL
+);
+CREATE INDEX idx_chain_transaction_confirmations_owner
+  ON chain_transaction_confirmations(owner_account, confirmed_at DESC);
 
 CREATE TABLE square_uploads (
   upload_id TEXT PRIMARY KEY,

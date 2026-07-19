@@ -639,6 +639,67 @@ pub(crate) async fn submit_chain_sign(
             return resp;
         }
     }
+    if session.purpose == crate::domains::membership::PURPOSE_PLATFORM_PRICE_PROPOSAL {
+        if let Err(resp) =
+            crate::domains::membership::handler::recheck_platform_admin(&state, &ctx).await
+        {
+            delete_session_best_effort(
+                &state,
+                session.request_id.as_str(),
+                "platform admin recheck failed",
+            );
+            return resp;
+        }
+    }
+    if matches!(
+        session.purpose.as_str(),
+        crate::domains::legislation::law::action::PURPOSE_LEGISLATION_PROPOSE
+            | crate::domains::legislation::law::action::PURPOSE_LEGISLATION_REPRESENTATIVE_VOTE
+    ) {
+        let session_cid_number = session
+            .context
+            .get("cid_number")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default();
+        let authorized = session_cid_number == ctx.institution_cid_number
+            && match session.purpose.as_str() {
+                crate::domains::legislation::law::action::PURPOSE_LEGISLATION_PROPOSE => {
+                    let vote_type = session
+                        .context
+                        .get("operation")
+                        .and_then(|value| value.get("vote_type"))
+                        .and_then(|value| value.as_u64())
+                        .and_then(|value| u8::try_from(value).ok());
+                    vote_type.is_some_and(|vote_type| {
+                        crate::domains::legislation::category::proposable_candidates(
+                            &ctx.institution_code,
+                        )
+                        .iter()
+                        .any(|candidate| candidate.vote_types.contains(&vote_type))
+                    })
+                }
+                crate::domains::legislation::law::action::PURPOSE_LEGISLATION_REPRESENTATIVE_VOTE => {
+                    matches!(
+                        crate::domains::legislation::category::legislation_role(
+                            &ctx.institution_code
+                        ),
+                        Some(
+                            crate::domains::legislation::category::LegislationRole::ProposerHouse
+                                | crate::domains::legislation::category::LegislationRole::ReviewHouse
+                        )
+                    )
+                }
+                _ => false,
+            };
+        if !authorized {
+            delete_session_best_effort(
+                &state,
+                session.request_id.as_str(),
+                "legislation authorization recheck failed",
+            );
+            return api_error(StatusCode::FORBIDDEN, 1003, "当前机构无权提交该立法链交易");
+        }
+    }
 
     let tx_hash = match chain_submit::assemble_and_submit(
         &session.call_data,
@@ -788,6 +849,13 @@ pub(crate) async fn submit_chain_sign(
             // 机构治理与注册局登记管理员的最终真源在链上。提交成功后仅记录审计；
             // OnChina 读侧继续通过链上 admins / roles / assignments 读取。
         }
+        crate::domains::membership::PURPOSE_PLATFORM_PRICE_PROPOSAL => {
+            // 平台价格与内部投票提案的唯一真源均在链上；提交成功后不保存本地价格副本。
+        }
+        crate::domains::legislation::law::action::PURPOSE_LEGISLATION_PROPOSE
+        | crate::domains::legislation::law::action::PURPOSE_LEGISLATION_REPRESENTATIVE_VOTE => {
+            // 立法提案和代表机构表决的真源均在链上；OnChina 不保存投票副本、不推进状态。
+        }
         other => {
             tracing::error!(purpose = %other, "unknown chain sign purpose");
             delete_session_best_effort(&state, session.request_id.as_str(), "unknown purpose");
@@ -798,7 +866,7 @@ pub(crate) async fn submit_chain_sign(
 
     crate::core::runtime_ops::append_audit_log(
         &state,
-        "CITIZEN_CHAIN_SUBMIT",
+        "CHAIN_SIGN_SUBMIT",
         &ctx.admin_account,
         Some(cid_number.clone()),
         serde_json::json!({

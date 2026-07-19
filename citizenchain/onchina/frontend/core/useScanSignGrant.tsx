@@ -78,8 +78,8 @@ export function useScanSignGrant(
       onCancel={onCancel}
       qrTitle="签名二维码"
       qrValue={pending?.prepared.sign_request ?? undefined}
-      qrHint="使用管理员冷钱包扫码签名"
-      scannerHint="扫描冷钱包生成的签名响应二维码"
+      qrHint="使用管理员公民钱包扫码签名"
+      scannerHint="扫描公民钱包生成的签名响应二维码"
       scannerDisabled={scanning}
       scannerLoading={scanning}
       onDetected={onDetected}

@@ -26,6 +26,9 @@ concurrency:
   group: citizenwallet-ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     name: 构建 公民钱包.apk
@@ -178,3 +181,26 @@ jobs:
           retention-days: 30
           overwrite: true
           if-no-files-found: error
+
+      # 中文注释:正式发布=把签名 公民钱包.apk 覆盖上传到唯一「滚动 Release」(固定 tag release,始终 Latest)。
+      # 公民钱包是离线钱包,无应用内更新,故不生成更新清单。同仓库三产品共用该 Release,--clobber 只覆盖 公民钱包.apk。
+      - name: 发布到滚动 Release
+        if: ${{ env.GMB_RELEASE_MODE == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          tag="release"
+          apk_path="citizenwallet/build/app/outputs/flutter-apk/公民钱包.apk"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --latest >/dev/null
+          else
+            gh release create "$tag" \
+              --title 'GMB 正式版' \
+              --notes 'GMB 各产品最新正式版(滚动发布,始终 Latest)。' \
+              --latest --target "$GITHUB_SHA"
+          fi
+
+          gh release upload "$tag" "$apk_path" --clobber

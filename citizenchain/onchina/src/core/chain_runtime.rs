@@ -1,4 +1,4 @@
-use codec::Decode;
+use codec::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
 use std::{
@@ -516,6 +516,140 @@ fn twox_128(input: &[u8]) -> [u8; 16] {
     out[..8].copy_from_slice(&r0.to_le_bytes());
     out[8..].copy_from_slice(&r1.to_le_bytes());
     out
+}
+
+fn twox_64(input: &[u8]) -> [u8; 8] {
+    let mut hasher = XxHash64::with_seed(0);
+    hasher.write(input);
+    hasher.finish().to_le_bytes()
+}
+
+fn storage_value_key(pallet: &[u8], item: &[u8]) -> Vec<u8> {
+    let mut key = Vec::with_capacity(32);
+    key.extend_from_slice(&twox_128(pallet));
+    key.extend_from_slice(&twox_128(item));
+    key
+}
+
+fn twox64_concat_storage_map_key(pallet: &[u8], item: &[u8], encoded_key: &[u8]) -> Vec<u8> {
+    let mut key = storage_value_key(pallet, item);
+    key.extend_from_slice(&twox_64(encoded_key));
+    key.extend_from_slice(encoded_key);
+    key
+}
+
+/// finalized `SquarePost` 平台价格快照。价格单位固定为分，CID 和价格均不落本地副本。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub(crate) struct PlatformMembershipSnapshot {
+    pub(crate) block_hash: String,
+    pub(crate) platform_cid_number: Option<String>,
+    pub(crate) freedom_price_fen: Option<u128>,
+    pub(crate) democracy_price_fen: Option<u128>,
+    pub(crate) spark_price_fen: Option<u128>,
+}
+
+fn decode_scale_vec_string(storage_hex: &str) -> Result<String, String> {
+    let clean = storage_hex
+        .strip_prefix("0x")
+        .or_else(|| storage_hex.strip_prefix("0X"))
+        .unwrap_or(storage_hex);
+    let bytes = hex::decode(clean).map_err(|e| format!("decode storage hex failed: {e}"))?;
+    let value = Vec::<u8>::decode(&mut &bytes[..])
+        .map_err(|e| format!("decode SCALE byte vector failed: {e}"))?;
+    if value.encode() != bytes {
+        return Err("SCALE byte vector has trailing bytes".to_string());
+    }
+    String::from_utf8(value).map_err(|e| format!("platform CID is not UTF-8: {e}"))
+}
+
+fn decode_scale_u128(storage_hex: &str) -> Result<u128, String> {
+    let clean = storage_hex
+        .strip_prefix("0x")
+        .or_else(|| storage_hex.strip_prefix("0X"))
+        .unwrap_or(storage_hex);
+    let bytes = hex::decode(clean).map_err(|e| format!("decode storage hex failed: {e}"))?;
+    if bytes.len() != 16 {
+        return Err("platform price storage must be exactly 16 bytes".to_string());
+    }
+    let mut value = [0_u8; 16];
+    value.copy_from_slice(&bytes);
+    Ok(u128::from_le_bytes(value))
+}
+
+/// 一次批量 RPC 读取同一 finalized 区块的技术公司 CID 与三档平台价格。
+///
+/// 不读取 best head，不使用 PostgreSQL 缓存；任一 RPC 错误由上层 fail-closed 处理。
+pub(crate) async fn fetch_platform_membership_snapshot(
+) -> Result<PlatformMembershipSnapshot, String> {
+    let http_url = super::chain_url::chain_http_url()?;
+    let client = reqwest::Client::new();
+    let block_hash = fetch_finalized_head_via_http(&client, http_url.as_str()).await?;
+    let keys = [
+        storage_value_key(b"SquarePost", b"PlatformCidNumber"),
+        twox64_concat_storage_map_key(b"SquarePost", b"PlatformPrice", &[0]),
+        twox64_concat_storage_map_key(b"SquarePost", b"PlatformPrice", &[1]),
+        twox64_concat_storage_map_key(b"SquarePost", b"PlatformPrice", &[2]),
+    ];
+    let requests = keys
+        .iter()
+        .enumerate()
+        .map(|(index, key)| {
+            serde_json::json!({
+                "id": (index + 1) as u64,
+                "jsonrpc": "2.0",
+                "method": "state_getStorage",
+                "params": [format!("0x{}", hex::encode(key)), block_hash.clone()]
+            })
+        })
+        .collect::<Vec<_>>();
+    let response = client
+        .post(http_url)
+        .json(&requests)
+        .send()
+        .await
+        .map_err(|e| format!("connect chain http rpc for platform membership failed: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "chain http rpc returned status {}",
+            response.status()
+        ));
+    }
+    let payload = response
+        .json::<Vec<ChainRpcValueResponse>>()
+        .await
+        .map_err(|e| format!("decode platform membership RPC response failed: {e}"))?;
+    let mut values = BTreeMap::<u64, Option<String>>::new();
+    for item in payload {
+        if let Some(error) = item.error {
+            return Err(format!("chain http rpc returned error: {error}"));
+        }
+        let value = match item.result {
+            None | Some(serde_json::Value::Null) => None,
+            Some(serde_json::Value::String(value)) => Some(value),
+            Some(_) => return Err("platform membership storage result is not hex".to_string()),
+        };
+        values.insert(item.id, value);
+    }
+    let platform_cid_number = values
+        .remove(&1)
+        .flatten()
+        .map(|value| decode_scale_vec_string(&value))
+        .transpose()?;
+    let decode_price = |id: u64, values: &BTreeMap<u64, Option<String>>| {
+        values
+            .get(&id)
+            .cloned()
+            .flatten()
+            .map(|value| decode_scale_u128(&value))
+            .transpose()
+    };
+    Ok(PlatformMembershipSnapshot {
+        block_hash,
+        platform_cid_number,
+        freedom_price_fen: decode_price(2, &values)?,
+        democracy_price_fen: decode_price(3, &values)?,
+        spark_price_fen: decode_price(4, &values)?,
+    })
 }
 
 fn system_account_storage_key(account_id: &[u8; 32]) -> String {
@@ -1385,9 +1519,31 @@ pub(crate) async fn fetch_active_admins_onchain(
 #[cfg(test)]
 mod tests {
     use super::{
-        deregistration_payload_digest, is_production_mode, parse_hex_hash32,
-        trusted_production_chain_by_hash,
+        decode_scale_u128, decode_scale_vec_string, deregistration_payload_digest,
+        is_production_mode, parse_hex_hash32, trusted_production_chain_by_hash,
     };
+
+    #[test]
+    fn platform_membership_storage_values_decode_strictly() {
+        use codec::Encode;
+
+        let cid = b"GD001-SFGQ0-000000001-2026".to_vec().encode();
+        assert_eq!(
+            decode_scale_vec_string(&format!("0x{}", hex::encode(&cid))).unwrap(),
+            "GD001-SFGQ0-000000001-2026"
+        );
+
+        let mut cid_with_tail = cid;
+        cid_with_tail.push(0);
+        assert!(decode_scale_vec_string(&hex::encode(cid_with_tail)).is_err());
+
+        let price = 123_456_u128;
+        assert_eq!(
+            decode_scale_u128(&format!("0x{}", hex::encode(price.to_le_bytes()))).unwrap(),
+            price
+        );
+        assert!(decode_scale_u128("0x01").is_err());
+    }
 
     /// 锁定机构管理员 value 的双字段 SCALE 布局；CID 只存在于 storage key。
     #[test]

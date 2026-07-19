@@ -12,7 +12,12 @@ const CHAIN_RPC_MAX_RESPONSE_BYTES =
   resourceLimit("chain_rpc_response").max_bytes;
 
 type ChainRpcMethod =
-  "chain_getFinalizedHead" | "state_getStorage" | "author_submitExtrinsic";
+  | "chain_getFinalizedHead"
+  | "chain_getHeader"
+  | "chain_getBlock"
+  | "chain_getBlockHash"
+  | "state_getStorage"
+  | "author_submitExtrinsic";
 type JsonRpcId = number | string;
 
 interface ChainRpcConfig {
@@ -57,12 +62,19 @@ export async function fetchChainStorage(
   return result;
 }
 
-/// 在 finalized 头读取 storage。订阅、余额和权限等业务真态不得读取 best 头，
-/// 否则短暂分叉可能把尚未最终确定的状态写入 D1 或用于放行权限。
-export async function fetchFinalizedChainStorage(
-  env: Env,
-  storageKeyHex: string,
-): Promise<string | null> {
+export interface ChainBlockHeader {
+  number: string;
+}
+
+export interface ChainSignedBlock {
+  block: {
+    header: ChainBlockHeader;
+    extrinsics: string[];
+  };
+}
+
+/** 读取并校验最终区块头；所有订阅镜像都从这里取得唯一 finalized 锚点。 */
+export async function fetchFinalizedHead(env: Env): Promise<string> {
   const finalizedHead = await callChainRpc(
     env,
     "chain_getFinalizedHead",
@@ -79,6 +91,67 @@ export async function fetchFinalizedChainStorage(
       "链服务节点未返回有效最终区块",
     );
   }
+  return finalizedHead.toLowerCase();
+}
+
+/** 读取指定区块头；调用方必须另行校验它属于 finalized 主链。 */
+export async function fetchBlockHeader(
+  env: Env,
+  blockHashHex: string,
+): Promise<ChainBlockHeader> {
+  const result = await callChainRpc(env, "chain_getHeader", [blockHashHex], 1);
+  if (!isRecord(result) || typeof result.number !== "string") {
+    throw new HttpError(502, "chain_rpc_invalid_response", "链服务节点返回了无效区块头");
+  }
+  return { number: result.number };
+}
+
+/** 读取指定区块本体；只保留订阅证明需要的头和 extrinsic 列表。 */
+export async function fetchSignedBlock(
+  env: Env,
+  blockHashHex: string,
+): Promise<ChainSignedBlock> {
+  const result = await callChainRpc(env, "chain_getBlock", [blockHashHex], 1);
+  if (!isRecord(result) || !isRecord(result.block)) {
+    throw new HttpError(502, "chain_rpc_invalid_response", "链服务节点返回了无效区块");
+  }
+  const header = result.block.header;
+  const extrinsics = result.block.extrinsics;
+  if (
+    !isRecord(header) ||
+    typeof header.number !== "string" ||
+    !Array.isArray(extrinsics) ||
+    extrinsics.some((value) => typeof value !== "string")
+  ) {
+    throw new HttpError(502, "chain_rpc_invalid_response", "链服务节点返回了无效区块内容");
+  }
+  return {
+    block: {
+      header: { number: header.number },
+      extrinsics: extrinsics as string[],
+    },
+  };
+}
+
+/** 按高度读取主链区块哈希，用于排除同高度的非 canonical 分叉块。 */
+export async function fetchCanonicalBlockHash(
+  env: Env,
+  blockNumber: number,
+): Promise<string> {
+  const result = await callChainRpc(env, "chain_getBlockHash", [blockNumber], 1);
+  if (typeof result !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(result)) {
+    throw new HttpError(502, "chain_rpc_invalid_response", "链服务节点未返回主链区块哈希");
+  }
+  return result.toLowerCase();
+}
+
+/// 在 finalized 头读取 storage。订阅、余额和权限等业务真态不得读取 best 头，
+/// 否则短暂分叉可能把尚未最终确定的状态写入 D1 或用于放行权限。
+export async function fetchFinalizedChainStorage(
+  env: Env,
+  storageKeyHex: string,
+): Promise<string | null> {
+  const finalizedHead = await fetchFinalizedHead(env);
   return fetchChainStorage(env, storageKeyHex, finalizedHead);
 }
 
@@ -86,7 +159,7 @@ export async function fetchFinalizedChainStorage(
 export async function callChainRpc(
   env: Env,
   method: ChainRpcMethod,
-  params: string[],
+  params: unknown[],
   requestId: JsonRpcId,
 ): Promise<unknown> {
   const config = requireChainRpcConfig(env);

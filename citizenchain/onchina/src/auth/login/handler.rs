@@ -45,10 +45,13 @@ pub(crate) async fn admin_auth_check(
         Err(resp) => return resp,
     };
     let capabilities = crate::platform::capability::capabilities_for(&ctx.institution_code);
+    let workspace_modules =
+        crate::domains::membership::workspace_modules_for(&ctx.institution_cid_number).await;
     let workspace = crate::workspace::build_institution_workspace(
         &ctx.institution_code,
         ctx.cid_short_name.as_deref(),
         capabilities,
+        workspace_modules,
     );
     Json(ApiResponse {
         code: 0,
@@ -56,6 +59,7 @@ pub(crate) async fn admin_auth_check(
         data: AdminAuthOutput {
             ok: true,
             admin_account: ctx.admin_account,
+            institution_cid_number: ctx.institution_cid_number,
             institution_code: ctx.institution_code,
             admin_level: ctx.admin_level,
             capabilities,
@@ -108,6 +112,20 @@ pub(crate) async fn admin_auth_identify(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     };
+    let binding = match repo::active_node_binding(&state.db) {
+        Ok(Some(v)) if v.institution_code == admin.institution_code => v,
+        Ok(_) => {
+            return api_error(
+                StatusCode::FORBIDDEN,
+                2002,
+                "admin does not belong to the active node institution",
+            )
+        }
+        Err(err) => {
+            let message = format!("query active node binding failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+        }
+    };
     let admin_account_for_scope = admin.admin_account.clone();
     let institution_code_for_scope = admin.institution_code.clone();
     let (province, scope_city_name, scope_town_name) = match state.db.with_client(move |conn| {
@@ -134,10 +152,13 @@ pub(crate) async fn admin_auth_identify(
     )
     .unwrap_or(None);
     let capabilities = crate::platform::capability::capabilities_for(&admin.institution_code);
+    let workspace_modules =
+        crate::domains::membership::workspace_modules_for(&binding.institution_cid_number).await;
     let workspace = crate::workspace::build_institution_workspace(
         &admin.institution_code,
         cid_short_name.as_deref(),
         capabilities,
+        workspace_modules,
     );
 
     Json(ApiResponse {
@@ -145,6 +166,7 @@ pub(crate) async fn admin_auth_identify(
         message: "ok".to_string(),
         data: AdminIdentifyOutput {
             admin_account: admin.admin_account.clone(),
+            institution_cid_number: binding.institution_cid_number,
             institution_code: admin.institution_code.clone(),
             admin_level: crate::core::chain_runtime::admin_level_label_for(&admin.institution_code),
             capabilities,

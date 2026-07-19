@@ -1,20 +1,30 @@
 import type { Env, MembershipRow } from '../types';
 import { HttpError, jsonResponse, requireSession } from '../shared/http';
 import { membershipPlanList } from './plans';
+import { nowMs } from '../shared/time';
 
 /// 会员状态读取 + 门禁（写入镜像见 `citizen_coin.ts`）。
 /// 会员与身份彻底解耦（ADR-036）：会员权益只看订阅是否有效（subscriptionIsActive），
 /// 不再读链上身份、不再有「身份≠档位」冻结或暂停收款。身份展示由 chain/identity 与
 /// profiles 各自负责，会员侧一概不涉身份。
-/// 价格与扣款真源是链上 `square-post`；到期时间由 CitizenApp 计算并上链，BFF 只镜像 finalized 订阅态。
+/// 价格、状态和到期时间都来自 finalized `square-post`；BFF 不计算公历。
 
 const MEMBERSHIP_COLUMNS =
-  `owner_account, membership_level, expires_at, updated_at, subscription_status,
-    current_period_start, current_period_end, entitlement_lapsed_at, last_tx_hash`;
+  `m.owner_account, m.membership_level, m.pending_membership_level, m.started_at,
+    m.last_charged_at, m.last_charged_price_fen, m.paid_until,
+    m.subscription_status, m.finalized_block_number, m.finalized_block_hash,
+    m.verified_at, m.entitlement_lapsed_at, m.last_tx_hash,
+    c.chain_timestamp, c.observed_at AS chain_observed_at`;
+
+/// 链时钟超过三个计划 Cron 周期仍未刷新即拒绝，防止停更镜像无限放行已过期权益。
+export const CHAIN_CLOCK_MAX_STALENESS_MS = 15 * 60 * 1000;
 
 export async function getMembership(env: Env, ownerAccount: string): Promise<MembershipRow | null> {
   return env.DB.prepare(
-    `SELECT ${MEMBERSHIP_COLUMNS} FROM square_memberships WHERE owner_account = ?`
+    `SELECT ${MEMBERSHIP_COLUMNS}
+      FROM square_memberships m
+      LEFT JOIN chain_clock c ON c.clock_id = 1
+      WHERE m.owner_account = ?`
   )
     .bind(ownerAccount)
     .first<MembershipRow>();
@@ -32,7 +42,10 @@ export async function batchMemberships(
   }
   const placeholders = distinct.map(() => '?').join(', ');
   const result = await env.DB.prepare(
-    `SELECT ${MEMBERSHIP_COLUMNS} FROM square_memberships WHERE owner_account IN (${placeholders})`
+    `SELECT ${MEMBERSHIP_COLUMNS}
+      FROM square_memberships m
+      LEFT JOIN chain_clock c ON c.clock_id = 1
+      WHERE m.owner_account IN (${placeholders})`
   )
     .bind(...distinct)
     .all<MembershipRow>();
@@ -72,8 +85,38 @@ export async function membershipRoute(request: Request, env: Env): Promise<Respo
   });
 }
 
-/// 会员是否有效：镜像订阅态为 active 即放行。按月自动续扣发生在链上，客户端确认之间
-/// 镜像不应按 expires_at 假过期误拦（与创作者门禁 `requireCreatorSubscription` 同口径）。
-export function subscriptionIsActive(membership: MembershipRow): boolean {
-  return membership.subscription_status === 'active';
+/// Active 或已签名取消但尚在已付周期内的 Cancelled 都有效；终止、过期、无链时钟或时钟陈旧拒绝。
+export function subscriptionIsActive(
+  membership: MembershipRow,
+  observedNow: number = nowMs(),
+): boolean {
+  return isSubscriptionMirrorEffective({
+    subscription_status: membership.subscription_status,
+    paid_until: membership.paid_until,
+    chain_timestamp: membership.chain_timestamp,
+    chain_observed_at: membership.chain_observed_at,
+  }, observedNow);
+}
+
+export function isSubscriptionMirrorEffective(
+  mirror: {
+    subscription_status: string;
+    paid_until: number;
+    chain_timestamp: number | null;
+    chain_observed_at: number | null;
+  },
+  observedNow: number = nowMs(),
+): boolean {
+  if (mirror.subscription_status !== 'active' && mirror.subscription_status !== 'cancelled') {
+    return false;
+  }
+  if (
+    mirror.chain_timestamp === null ||
+    mirror.chain_observed_at === null ||
+    observedNow < mirror.chain_observed_at ||
+    observedNow - mirror.chain_observed_at > CHAIN_CLOCK_MAX_STALENESS_MS
+  ) {
+    return false;
+  }
+  return mirror.chain_timestamp < mirror.paid_until;
 }

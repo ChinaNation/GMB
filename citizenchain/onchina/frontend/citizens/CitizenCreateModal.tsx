@@ -6,10 +6,10 @@ import { Alert, Button, DatePicker, Form, Input, Modal, Select, Switch } from 'a
 import type { Dayjs } from 'dayjs';
 
 import type { AdminAuth } from '../auth/types';
-import { useChainSign } from '../core/useChainSign';
+import { submitChainSign, useChainSign } from '../core/useChainSign';
 import {
   prepareCitizenOccupy,
-  submitCitizenChainSign,
+  type CreateCitizenResult,
   type CitizenSex,
   type CreateCitizenInput,
 } from './api';
@@ -168,9 +168,9 @@ export function CitizenCreateModal({
     setSubmitting(true);
     try {
       const prepared = await prepareCitizenOccupy(auth, payload);
-      // 占号先行:管理员冷钱包扫码签占号交易 → onchina 组装提交 → 进块后才落档案。
+      // 占号先行：管理员 CitizenWallet 只签名一次并展示响应二维码，OnChina 回扫提交，进块后才落档案。
       const signed = await signChain(prepared.request_id, prepared.sign_request);
-      const submitted = await submitCitizenChainSign(
+      const submitted = await submitChainSign<CreateCitizenResult>(
         auth,
         prepared.request_id,
         signed.signer_pubkey,

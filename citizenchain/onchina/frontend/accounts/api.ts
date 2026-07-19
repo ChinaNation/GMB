@@ -12,7 +12,7 @@ import type { CreateAccountOutput, InstitutionAccount } from '../subjects/api';
 
 export type { CreateAccountOutput, InstitutionAccount, MultisigChainStatus } from '../subjects/api';
 
-// 新增机构账户属 PASSKEY_COLD_SIGN 操作,需冷钱包扫码签名授权;signWithScan 由创建弹窗注入。
+// 新增机构账户属 PASSKEY_COLD_SIGN 操作，需 CitizenWallet 扫码签名授权；signWithScan 由创建弹窗注入。
 export async function createAccount(
   auth: AdminAuth,
   cidNumber: string,

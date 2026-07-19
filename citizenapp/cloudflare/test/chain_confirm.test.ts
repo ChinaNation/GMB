@@ -456,13 +456,19 @@ class FakeStmt {
       return {
         owner_account: ownerAccount,
         membership_level: "democracy",
-        expires_at: Date.now() + 60_000,
-        updated_at: Date.now(),
+        pending_membership_level: null,
+        started_at: Date.now() - 60_000,
+        last_charged_at: Date.now() - 60_000,
+        last_charged_price_fen: 100,
+        paid_until: Date.now() + 60_000,
         subscription_status: "active",
-        current_period_start: Date.now(),
-        current_period_end: Date.now() + 60_000,
+        finalized_block_number: 1,
+        finalized_block_hash: `0x${"1".repeat(64)}`,
+        verified_at: Date.now(),
         entitlement_lapsed_at: null,
         last_tx_hash: null,
+        chain_timestamp: Date.now(),
+        chain_observed_at: Date.now(),
       } as T;
     }
     if (this.sql.includes("FROM square_uploads")) {

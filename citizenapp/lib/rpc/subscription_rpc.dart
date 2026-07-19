@@ -91,6 +91,14 @@ class ChainCreatorTier {
   final Map<String, BigInt> pricesFen;
 }
 
+/// 一次账户签名交易 finalized 后的完整本地证明；Cloudflare 重试只复用这些字节，不再签名。
+typedef FinalizedSubscriptionTransaction = ({
+  String txHash,
+  int usedNonce,
+  String blockHashHex,
+  String signedExtrinsicHex,
+});
+
 /// SquarePost 订阅 SCALE 与标准热钱包 extrinsic 入口。
 ///
 /// CitizenApp 只提交需要账户签名的订阅、取消、换档和创作者档位管理。首次扣款后的
@@ -125,8 +133,7 @@ class SubscriptionRpc {
         _ => throw ArgumentError('未知订阅周期：$period'),
       };
 
-  Future<({String txHash, int usedNonce, String blockHashHex})>
-      subscribePlatform({
+  Future<FinalizedSubscriptionTransaction> subscribePlatform({
     required String fromAddress,
     required Uint8List signerPubkey,
     required String level,
@@ -145,8 +152,7 @@ class SubscriptionRpc {
             onWatchEvent: onWatchEvent,
           );
 
-  Future<({String txHash, int usedNonce, String blockHashHex})>
-      subscribeCreator({
+  Future<FinalizedSubscriptionTransaction> subscribeCreator({
     required String fromAddress,
     required Uint8List signerPubkey,
     required String creatorAddress,
@@ -169,7 +175,7 @@ class SubscriptionRpc {
             onWatchEvent: onWatchEvent,
           );
 
-  Future<({String txHash, int usedNonce, String blockHashHex})> cancelPlatform({
+  Future<FinalizedSubscriptionTransaction> cancelPlatform({
     required String fromAddress,
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
@@ -183,7 +189,7 @@ class SubscriptionRpc {
         onWatchEvent: onWatchEvent,
       );
 
-  Future<({String txHash, int usedNonce, String blockHashHex})> cancelCreator({
+  Future<FinalizedSubscriptionTransaction> cancelCreator({
     required String fromAddress,
     required Uint8List signerPubkey,
     required String creatorAddress,
@@ -200,8 +206,7 @@ class SubscriptionRpc {
         onWatchEvent: onWatchEvent,
       );
 
-  Future<({String txHash, int usedNonce, String blockHashHex})>
-      changePlatformPlan({
+  Future<FinalizedSubscriptionTransaction> changePlatformPlan({
     required String fromAddress,
     required Uint8List signerPubkey,
     required String level,
@@ -220,8 +225,7 @@ class SubscriptionRpc {
             onWatchEvent: onWatchEvent,
           );
 
-  Future<({String txHash, int usedNonce, String blockHashHex})>
-      changeCreatorPlan({
+  Future<FinalizedSubscriptionTransaction> changeCreatorPlan({
     required String fromAddress,
     required Uint8List signerPubkey,
     required String creatorAddress,
@@ -245,8 +249,7 @@ class SubscriptionRpc {
           );
 
   /// 创作者一次签名覆盖链上付款档位；Cloudflare 保存展示字段时不得再索要业务签名。
-  Future<({String txHash, int usedNonce, String blockHashHex})>
-      setCreatorPlans({
+  Future<FinalizedSubscriptionTransaction> setCreatorPlans({
     required String fromAddress,
     required Uint8List signerPubkey,
     required List<CreatorTierInput> tiers,
@@ -299,23 +302,37 @@ class SubscriptionRpc {
     return data == null ? const <ChainCreatorTier>[] : decodeCreatorPlans(data);
   }
 
-  Future<({String txHash, int usedNonce, String blockHashHex})>
-      _submitFinalized({
+  Future<FinalizedSubscriptionTransaction> _submitFinalized({
     required Uint8List callData,
     required String fromAddress,
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
-  }) =>
-          SignedExtrinsicBuilder(chainRpc: _rpc, logLabel: 'SubscriptionRpc')
-              .signAndSubmitInBlock(
-            callData: callData,
-            fromAddress: fromAddress,
-            signerPubkey: signerPubkey,
-            sign: sign,
-            onWatchEvent: onWatchEvent,
-            waitForFinalized: true,
-          );
+  }) async {
+    SignedExtrinsicTrace? signedTrace;
+    final result = await SignedExtrinsicBuilder(
+      chainRpc: _rpc,
+      logLabel: 'SubscriptionRpc',
+    ).signAndSubmitInBlock(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
+      onTrace: (trace) => signedTrace = trace,
+      onWatchEvent: onWatchEvent,
+      waitForFinalized: true,
+    );
+    final encoded = signedTrace?.encoded;
+    if (encoded == null) {
+      throw StateError('订阅交易已 finalized，但本地签名交易证明缺失');
+    }
+    return (
+      txHash: result.txHash,
+      usedNonce: result.usedNonce,
+      blockHashHex: result.blockHashHex,
+      signedExtrinsicHex: '0x${SignedExtrinsicBuilder.hexEncode(encoded)}',
+    );
+  }
 
   static Uint8List buildSubscribePlatformCall(
     int levelByte,

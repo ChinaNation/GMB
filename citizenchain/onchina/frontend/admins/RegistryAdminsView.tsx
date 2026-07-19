@@ -661,8 +661,8 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
         }}
         qrTitle="签名二维码"
         qrValue={adminActionModal?.signRequest}
-        qrHint="使用当前管理员冷钱包扫码签名"
-        scannerHint="扫描冷钱包生成的签名响应二维码"
+        qrHint="使用当前管理员公民钱包扫码签名"
+        scannerHint="扫描公民钱包生成的签名响应二维码"
         scannerDisabled={adminActionCommitLoading}
         scannerLoading={adminActionCommitLoading}
         onDetected={handleAdminActionSignedResponse}

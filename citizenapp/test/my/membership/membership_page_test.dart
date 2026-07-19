@@ -73,15 +73,13 @@ class _RecordingSubscriptionService extends SubscriptionService {
           : ChainSubscriptionState(
               plan: ChainSubscriptionPlan.platform(level),
               pendingPlan: null,
-              startedAt: source.currentPeriodStart == 0
-                  ? now - 1000
-                  : source.currentPeriodStart,
-              lastChargedAt: source.currentPeriodStart == 0
-                  ? now - 1000
-                  : source.currentPeriodStart,
+              startedAt:
+                  source.lastChargedAt == 0 ? now - 1000 : source.lastChargedAt,
+              lastChargedAt:
+                  source.lastChargedAt == 0 ? now - 1000 : source.lastChargedAt,
               lastChargedPriceFen: BigInt.one,
               paidUntil:
-                  source.expiresAt == 0 ? now + 600000 : source.expiresAt,
+                  source.paidUntil == 0 ? now + 600000 : source.paidUntil,
               status: status,
             ),
       chainNowMs: now,
@@ -114,15 +112,15 @@ SquareMembershipState _state({
   bool subscriptionActive = false,
   String? membershipLevel,
   String? subscriptionStatus,
-  int currentPeriodStart = 0,
+  int lastChargedAt = 0,
 }) {
   return SquareMembershipState(
     active: active,
-    expiresAt: active ? DateTime.now().millisecondsSinceEpoch + 600000 : 0,
+    paidUntil: active ? DateTime.now().millisecondsSinceEpoch + 600000 : 0,
     membershipLevel: membershipLevel,
     subscriptionStatus: subscriptionStatus,
     subscriptionActive: subscriptionActive,
-    currentPeriodStart: currentPeriodStart,
+    lastChargedAt: lastChargedAt,
     plans: const [],
   );
 }
@@ -186,7 +184,10 @@ void main() {
     await api.confirmPlatformSubscription(
       session: session,
       txHash: '0x${List.filled(64, 'a').join()}',
-      level: 'freedom',
+      blockHashHex: '0x${List.filled(64, 'b').join()}',
+      signedExtrinsicHex: '0x0102',
+      action: 'subscribe',
+      membershipLevel: 'freedom',
     );
 
     expect(deviceSignCount, 0);
@@ -356,7 +357,7 @@ void main() {
         subscriptionActive: true,
         membershipLevel: 'democracy',
         subscriptionStatus: 'active',
-        currentPeriodStart: DateTime.now().millisecondsSinceEpoch,
+        lastChargedAt: DateTime.now().millisecondsSinceEpoch,
       ),
     );
 
@@ -372,7 +373,7 @@ void main() {
         subscriptionActive: true,
         membershipLevel: 'democracy',
         subscriptionStatus: 'cancelled',
-        currentPeriodStart: DateTime.now().millisecondsSinceEpoch,
+        lastChargedAt: DateTime.now().millisecondsSinceEpoch,
       ),
     );
 
@@ -383,18 +384,18 @@ void main() {
   test('SquareMembershipState 订阅窗口 getter', () {
     const withWindow = SquareMembershipState(
       active: true,
-      expiresAt: 2000,
+      paidUntil: 2000,
       subscriptionActive: true,
-      currentPeriodStart: 1000,
+      lastChargedAt: 1000,
     );
     expect(withWindow.hasSubscriptionWindow, isTrue);
 
     const noWindow = SquareMembershipState(
       active: true,
-      expiresAt: 2000,
+      paidUntil: 2000,
       subscriptionActive: true,
     );
-    // 缺 current_period_start（=0）→ 无可展示窗口。
+    // 缺 last_charged_at（=0）→ 无可展示窗口。
     expect(noWindow.hasSubscriptionWindow, isFalse);
   });
 }

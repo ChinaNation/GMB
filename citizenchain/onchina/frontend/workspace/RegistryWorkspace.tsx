@@ -1,4 +1,4 @@
-// 注册局工作台挂载层。只搬迁原 App.tsx 的 tab 调度,不改注册局业务 UI。
+// 注册局工作台挂载层。私权目录是注册局登记与管理入口，不是私权机构自己的工作台。
 
 import { useEffect, useState } from 'react';
 import type { AdminAuth } from '../auth/types';
@@ -222,4 +222,3 @@ export function RegistryWorkspace({
     </>
   );
 }
-

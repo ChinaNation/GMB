@@ -111,6 +111,7 @@ pub(super) fn admin_auth(
         )?;
         Ok(AdminAuthContext {
             admin_account: admin.admin_account,
+            institution_cid_number: binding.institution_cid_number,
             institution_code,
             admin_level,
             admin_name,

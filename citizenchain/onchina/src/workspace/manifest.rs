@@ -6,8 +6,8 @@ use crate::platform::capability::CapabilitySet;
 
 use super::kind::workspace_kind_for;
 use super::model::{
-    InstitutionWorkspace, WorkspaceAction, WorkspaceActionItem, WorkspaceKind, WorkspaceSection,
-    WorkspaceSectionKind,
+    InstitutionWorkspace, WorkspaceAction, WorkspaceActionItem, WorkspaceKind, WorkspaceModule,
+    WorkspaceSection, WorkspaceSectionKind,
 };
 
 fn action(action: WorkspaceAction, title: &str, enabled: bool) -> WorkspaceActionItem {
@@ -37,9 +37,11 @@ fn workspace_title(
 ) -> String {
     let fallback = match workspace_kind {
         WorkspaceKind::Registry => "注册局工作台",
+        WorkspaceKind::Private => "私权机构工作台",
         WorkspaceKind::Judicial => "司法院工作台",
         WorkspaceKind::Legislation => "立法机构工作台",
-        WorkspaceKind::Generic => "机构工作台",
+        WorkspaceKind::Public => "公权机构工作台",
+        WorkspaceKind::Unincorporated => "非法人机构工作台",
     };
     cid_short_name
         .map(str::trim)
@@ -188,7 +190,7 @@ fn legislation_sections(capabilities: CapabilitySet) -> Vec<WorkspaceSection> {
     ]
 }
 
-fn generic_sections(capabilities: CapabilitySet) -> Vec<WorkspaceSection> {
+fn own_institution_sections(capabilities: CapabilitySet) -> Vec<WorkspaceSection> {
     vec![
         section(
             WorkspaceSectionKind::Operations,
@@ -228,17 +230,60 @@ pub(crate) fn build_institution_workspace(
     institution_code: &str,
     cid_short_name: Option<&str>,
     capabilities: CapabilitySet,
+    workspace_modules: Vec<WorkspaceModule>,
 ) -> InstitutionWorkspace {
     let workspace_kind = workspace_kind_for(institution_code);
     let workspace_sections = match workspace_kind {
         WorkspaceKind::Registry => registry_sections(capabilities),
+        WorkspaceKind::Private => own_institution_sections(capabilities),
         WorkspaceKind::Judicial => judicial_sections(capabilities),
         WorkspaceKind::Legislation => legislation_sections(capabilities),
-        WorkspaceKind::Generic => generic_sections(capabilities),
+        WorkspaceKind::Public | WorkspaceKind::Unincorporated => {
+            own_institution_sections(capabilities)
+        }
     };
     InstitutionWorkspace {
         workspace_kind,
         workspace_title: workspace_title(workspace_kind, cid_short_name, institution_code),
         workspace_sections,
+        workspace_modules,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn private_legal_institution_gets_own_private_workspace() {
+        let workspace = build_institution_workspace(
+            "SFGQ",
+            Some("技术公司"),
+            crate::platform::capability::capabilities_for("SFGQ"),
+            vec![WorkspaceModule::PlatformMembershipPrice],
+        );
+        assert_eq!(workspace.workspace_kind, WorkspaceKind::Private);
+        assert_eq!(
+            workspace.workspace_modules,
+            vec![WorkspaceModule::PlatformMembershipPrice]
+        );
+    }
+
+    #[test]
+    fn registry_and_private_workspaces_never_share_kind() {
+        let registry = build_institution_workspace(
+            "FRG",
+            None,
+            crate::platform::capability::capabilities_for("FRG"),
+            Vec::new(),
+        );
+        let private = build_institution_workspace(
+            "SFGQ",
+            None,
+            crate::platform::capability::capabilities_for("SFGQ"),
+            Vec::new(),
+        );
+        assert_eq!(registry.workspace_kind, WorkspaceKind::Registry);
+        assert_eq!(private.workspace_kind, WorkspaceKind::Private);
     }
 }

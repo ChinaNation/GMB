@@ -122,6 +122,9 @@ class QrActions {
   static const int setAddress = 0x2103;
   static const int removeAddress = 0x2104;
 
+  // 平台技术公司调价提案 SquarePost(34 = 0x22)
+  static const int proposeSetPlatformPrice = 0x2205;
+
   // 立法院 LegislationYuan(25 = 0x19)
   static const int proposeEnactLaw = 0x1900;
   static const int proposeAmendLaw = 0x1901;

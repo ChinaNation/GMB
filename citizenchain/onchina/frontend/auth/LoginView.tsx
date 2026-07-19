@@ -82,6 +82,7 @@ export function LoginView() {
     const nextAuth: AdminAuth = {
       access_token: accessToken,
       admin_account: admin.admin_account,
+      institution_cid_number: admin.institution_cid_number,
       institution_code: admin.institution_code,
       admin_level: admin.admin_level ?? null,
       capabilities: admin.capabilities,

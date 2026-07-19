@@ -10,8 +10,8 @@ import { LawListTable } from './law/LawListTable';
 import { LawDetailView } from './law/LawDetailView';
 import { ProposeMenu } from './law/ProposeMenu';
 import { ProposalProgressView } from './law/ProposalProgressView';
-import { SignRequestModal } from './law/SignRequestModal';
 import { castRepresentativeVote } from '../api';
+import { submitChainSign, useChainSign } from '../../core/useChainSign';
 
 interface Props {
   auth: AdminAuth;
@@ -51,13 +51,21 @@ function roleTag(auth: AdminAuth): { text: string; color: string } {
 function RepresentativeVotePanel({ auth }: Props) {
   const [proposalId, setProposalId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [signRequest, setSignRequest] = useState<string | null>(null);
+  const { signChain, chainSignModal } = useChainSign('代表机构表决链交易签名');
 
   const vote = async (approve: boolean) => {
     if (proposalId === null) return;
     setSubmitting(true);
     try {
-      setSignRequest(await castRepresentativeVote(auth, proposalId, approve));
+      const prepared = await castRepresentativeVote(auth, proposalId, approve);
+      const signed = await signChain(prepared.request_id, prepared.sign_request);
+      const submitted = await submitChainSign(
+        auth,
+        prepared.request_id,
+        signed.signer_pubkey,
+        signed.signature,
+      );
+      message.success(`表决交易已提交：${submitted.tx_hash}`);
     } catch (error: unknown) {
       message.error(error instanceof Error ? error.message : '表决提交失败');
     } finally {
@@ -91,11 +99,7 @@ function RepresentativeVotePanel({ auth }: Props) {
           反对
         </Button>
       </Space>
-      <SignRequestModal
-        signRequest={signRequest}
-        onClose={() => setSignRequest(null)}
-        title="扫码签署表决并提交上链"
-      />
+      {chainSignModal}
     </div>
   );
 }

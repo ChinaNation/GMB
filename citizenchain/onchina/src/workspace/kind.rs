@@ -17,5 +17,14 @@ pub(crate) fn workspace_kind_for(institution_code: &str) -> WorkspaceKind {
     if crate::domains::legislation::category::legislation_role(institution_code).is_some() {
         return WorkspaceKind::Legislation;
     }
-    WorkspaceKind::Generic
+    let Some(code) = primitives::cid::code::institution_code_from_str(institution_code) else {
+        return WorkspaceKind::Public;
+    };
+    if primitives::cid::code::is_private_legal_code(&code) {
+        return WorkspaceKind::Private;
+    }
+    if primitives::cid::code::is_unincorporated_code(&code) {
+        return WorkspaceKind::Unincorporated;
+    }
+    WorkspaceKind::Public
 }

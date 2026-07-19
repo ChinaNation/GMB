@@ -81,6 +81,7 @@ class GeneratedQrActionRegistry {
     0x2102: 'remove_address_name',
     0x2103: 'set_address',
     0x2104: 'remove_address',
+    0x2205: 'propose_set_platform_price',
   };
 
   static const Map<String, int> actionCodeByKey = {
@@ -160,6 +161,7 @@ class GeneratedQrActionRegistry {
     'remove_address_name': 0x2102,
     'set_address': 0x2103,
     'remove_address': 0x2104,
+    'propose_set_platform_price': 0x2205,
   };
 
   static const Map<String, String> actionLabelZhByKey = {
@@ -239,6 +241,7 @@ class GeneratedQrActionRegistry {
     'remove_address_name': '删除地址名称',
     'set_address': '设置详细地址',
     'remove_address': '删除详细地址',
+    'propose_set_platform_price': '发起平台会员调价提案',
   };
 
   static const Map<String, String> fieldLabelZhByKey = {
@@ -318,6 +321,7 @@ class GeneratedQrActionRegistry {
     'new_domain': '新域名',
     'new_key': '新密钥',
     'new_port': '新端口',
+    'new_price_fen': '新平台价格',
     'new_rate_bp': '链下费率',
     'new_threshold': '新阈值',
     'operation_fee_payer': '操作费付款账户',

@@ -2314,6 +2314,15 @@ fn main() {
                 "/api/v1/legislation/proposals/:proposal_id",
                 get(domains::legislation::handler::get_proposal_state),
             )
+            // 技术公司私权工作台：finalized 平台价格查询，以及 CitizenWallet 一次签名、OnChina 回扫提交的调价提案。
+            .route(
+                "/api/v1/membership/platform-prices",
+                get(domains::membership::handler::platform_prices),
+            )
+            .route(
+                "/api/v1/membership/platform-prices/propose",
+                post(domains::membership::handler::propose_platform_price),
+            )
             // 联邦注册局机构详情(只读,绕过 scope,所有联邦注册局管理员可读)
             .route(
                 "/api/v1/institutions/federal-registry",
@@ -2323,15 +2332,15 @@ fn main() {
                 "/api/v1/admin/audit-logs",
                 get(audit::admin_list_audit_logs),
             )
-            // 建档占号先行(ADR-031):POST = 占号 prepare(返回冷签 QR),
-            // 链上进块后经 chain/submit 才落档案;列表查询走 GET。
+            // 建档占号先行(ADR-031):POST = 占号 prepare（返回 CitizenWallet 签名请求二维码），
+            // 链上进块后经全业务统一 chain/submit 才落档案;列表查询走 GET。
             .route(
                 "/api/v1/admin/citizens",
                 get(domains::citizens::handler::admin_list_citizens)
                     .post(domains::citizens::occupy::prepare_citizen_occupy),
             )
             .route(
-                "/api/v1/admin/citizens/chain/submit",
+                "/api/v1/admin/chain/submit",
                 post(domains::citizens::occupy::submit_chain_sign),
             )
             .route(

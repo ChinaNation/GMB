@@ -294,8 +294,12 @@ async fn issue_session_for_candidate(
     let scope_city_name = candidate.scope_city_name.clone();
     let scope_town_name = candidate.scope_town_name.clone();
     let cid_short_name = candidate.cid_short_name.clone();
+    let institution_cid_number = candidate
+        .institution_cid_number
+        .clone()
+        .ok_or_else(|| GateError::BindingInvalid("institution CID is required".to_string()))?;
     let pubkey_for_db = verified_pubkey.to_string();
-    let result = state
+    let mut result = state
         .db
         .with_client(move |conn| {
             // 已有本地行优先(保留既有省映射 / 既有市行 id);否则按节点身份新建元数据行。
@@ -355,12 +359,14 @@ async fn issue_session_for_candidate(
                 &institution_code,
                 cid_short_name.as_deref(),
                 capabilities,
+                Vec::new(),
             );
             Ok((
                 access_token,
                 expire_at,
                 AdminIdentifyOutput {
                     admin_account: admin.admin_account,
+                    institution_cid_number,
                     institution_code: institution_code.clone(),
                     admin_level,
                     capabilities,
@@ -374,6 +380,10 @@ async fn issue_session_for_candidate(
             ))
         })
         .map_err(GateError::Db)?;
+
+    let workspace_modules =
+        crate::domains::membership::workspace_modules_for(&result.2.institution_cid_number).await;
+    result.2.workspace.workspace_modules = workspace_modules;
 
     Ok(result)
 }

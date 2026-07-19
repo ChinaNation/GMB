@@ -1,38 +1,37 @@
-import { describe, expect, it } from 'vitest';
-import { reconcileMemberships, type ReconcileDeps } from '../src/membership/reconcile';
-import type { ChainSubscriptionState } from '../src/chain/subscription';
-import type { Env } from '../src/types';
+import { describe, expect, it } from "vitest";
+import { reconcileMemberships, type ReconcileDeps } from "../src/membership/reconcile";
+import type { ChainSubscriptionState } from "../src/chain/subscription";
+import type { Env } from "../src/types";
 
-// 对账器把 D1 会员镜像对齐链上订阅真态。链读用注入的假实现替换（不打真链）；
-// isChainRpcConfigured 只看 env 三件套，配齐即可通过软跳过闸门。
+const POINT = {
+  blockHash: `0x${"a".repeat(64)}`,
+  blockNumber: 90,
+  chainTimestamp: 9_000,
+  observedAt: 10_000,
+};
 
-const NOW = 9_000_000;
-
-interface FakeRow {
+interface Row {
   owner_account: string;
   membership_level: string;
+  pending_membership_level: string | null;
+  paid_until: number;
   subscription_status: string;
-  current_period_start: number | null;
-  current_period_end: number | null;
-  expires_at: number;
+  verified_at: number;
   entitlement_lapsed_at: number | null;
-  updated_at: number;
 }
 
-/// 内存版 square_memberships：覆盖对账器的 SELECT(order/limit) 与两种 UPDATE。
 class FakeDb {
-  rows = new Map<string, FakeRow>();
+  rows = new Map<string, Row>();
 
-  seed(row: Partial<FakeRow> & { owner_account: string }): void {
-    this.rows.set(row.owner_account, {
-      membership_level: 'freedom',
-      subscription_status: 'active',
-      current_period_start: 0,
-      current_period_end: 0,
-      expires_at: 0,
+  seed(owner: string, paidUntil: number, status = "active"): void {
+    this.rows.set(owner, {
+      owner_account: owner,
+      membership_level: "freedom",
+      pending_membership_level: null,
+      paid_until: paidUntil,
+      subscription_status: status,
+      verified_at: 1,
       entitlement_lapsed_at: null,
-      updated_at: 0,
-      ...row
     });
   }
 
@@ -44,245 +43,130 @@ class FakeDb {
 class FakeStmt {
   private args: unknown[] = [];
   constructor(private readonly db: FakeDb, private readonly sql: string) {}
+  bind(...args: unknown[]): FakeStmt { this.args = args; return this; }
 
-  bind(...args: unknown[]): FakeStmt {
-    this.args = args;
-    return this;
-  }
-
-  async all<T>(): Promise<{ results: T[]; success: boolean }> {
-    if (
-      this.sql.includes('SELECT owner_account FROM square_memberships') &&
-      this.sql.includes('ORDER BY updated_at ASC LIMIT')
-    ) {
-      const limit = this.args[0] as number;
-      const owners = [...this.db.rows.values()]
-        .sort((a, b) => a.updated_at - b.updated_at)
+  async all<T>(): Promise<{ results: T[] }> {
+    if (this.sql.includes("SELECT owner_account FROM square_memberships")) {
+      const [chainTimestamp, limit] = this.args as [number, number];
+      const results = [...this.db.rows.values()]
+        .filter((row) => row.subscription_status === "active" && row.paid_until <= chainTimestamp)
+        .sort((a, b) => a.paid_until - b.paid_until)
         .slice(0, limit)
         .map((row) => ({ owner_account: row.owner_account }));
-      return { results: owners as unknown as T[], success: true };
+      return { results: results as T[] };
     }
-    return { results: [], success: true };
+    return { results: [] };
   }
 
-  async run(): Promise<{ success: boolean; meta: { changes: number } }> {
-    // Active 刷新：binds = [level, periodStart, periodEnd, expires, now, owner]。
-    if (this.sql.includes('UPDATE square_memberships') && this.sql.includes("subscription_status = 'active'")) {
-      const owner = this.args[5] as string;
-      const existing = this.db.rows.get(owner);
-      if (existing) {
-        this.db.rows.set(owner, {
-          ...existing,
-          membership_level: this.args[0] as string,
-          subscription_status: 'active',
-          current_period_start: this.args[1] as number,
-          current_period_end: this.args[2] as number,
-          expires_at: this.args[3] as number,
-          entitlement_lapsed_at: null,
-          updated_at: this.args[4] as number
-        });
-      }
-      return { success: true, meta: { changes: existing ? 1 : 0 } };
-    }
-    // 收紧（terminated/cancelled）：binds = [status, nowForLapsed, nowForUpdated, owner]。
-    if (this.sql.includes('UPDATE square_memberships') && this.sql.includes('COALESCE(entitlement_lapsed_at')) {
+  async run(): Promise<{ meta: { changes: number } }> {
+    if (this.sql.includes("INSERT INTO chain_clock")) return { meta: { changes: 1 } };
+    if (this.sql.includes("subscription_status = 'terminated'")) {
       const owner = this.args[3] as string;
-      const existing = this.db.rows.get(owner);
-      if (existing) {
-        this.db.rows.set(owner, {
-          ...existing,
-          subscription_status: this.args[0] as string,
-          entitlement_lapsed_at: existing.entitlement_lapsed_at ?? (this.args[1] as number),
-          updated_at: this.args[2] as number
-        });
+      const row = this.db.rows.get(owner);
+      if (row) {
+        row.subscription_status = "terminated";
+        row.pending_membership_level = null;
+        row.entitlement_lapsed_at = row.paid_until;
+        row.verified_at = this.args[2] as number;
       }
-      return { success: true, meta: { changes: existing ? 1 : 0 } };
+      return { meta: { changes: row ? 1 : 0 } };
     }
-    return { success: true, meta: { changes: 1 } };
+    if (this.sql.includes("UPDATE square_memberships SET membership_level")) {
+      const owner = this.args[11] as string;
+      const row = this.db.rows.get(owner);
+      if (row) {
+        row.membership_level = this.args[0] as string;
+        row.pending_membership_level = this.args[1] as string | null;
+        row.paid_until = this.args[5] as number;
+        row.subscription_status = this.args[6] as string;
+        row.verified_at = this.args[9] as number;
+        row.entitlement_lapsed_at = this.args[10] as number | null;
+      }
+      return { meta: { changes: row ? 1 : 0 } };
+    }
+    return { meta: { changes: 1 } };
   }
 }
 
-/// 配齐链 RPC env（isChainRpcConfigured 通过）+ 对账开关。
-function fakeEnv(db: FakeDb, overrides: Partial<Env> = {}): Env {
+function env(db: FakeDb, overrides: Partial<Env> = {}): Env {
   return {
     DB: db as unknown as D1Database,
-    CHAIN_URL: 'https://node.internal/rpc',
-    CHAIN_ID: 'access-id',
-    CHAIN_SECRET: 'access-secret',
-    MEMBERSHIP_RECONCILE_ENABLED: '1',
-    MEMBERSHIP_RECONCILE_BATCH: '50',
-    ...overrides
-  } as unknown as Env;
+    CHAIN_URL: "https://node.internal/rpc",
+    CHAIN_ID: "id",
+    CHAIN_SECRET: "secret",
+    MEMBERSHIP_RECONCILE_ENABLED: "1",
+    MEMBERSHIP_RECONCILE_BATCH: "50",
+    ...overrides,
+  } as Env;
 }
 
-/// 注入假链读：subscriber→态映射；throwOwners 里的账户抛错模拟链读失败。
 function deps(
-  map: Record<string, ChainSubscriptionState | null>,
-  throwOwners: Set<string> = new Set()
+  states: Record<string, ChainSubscriptionState | null>,
+  fail = new Set<string>(),
 ): ReconcileDeps {
   return {
-    now: () => NOW,
-    readSubscription: async (_env, subscriber, _issuer) => {
-      if (throwOwners.has(subscriber)) throw new Error('chain read failed');
-      return map[subscriber] ?? null;
-    }
+    finalizedPoint: async () => POINT,
+    readSubscriptionAtBlock: async (_env, subscriber) => {
+      if (fail.has(subscriber)) throw new Error("chain failed");
+      return states[subscriber] ?? null;
+    },
   };
 }
 
-/// 内存版 KV：仅覆盖 get，供开关测试。
-class FakeKv {
-  constructor(private readonly store: Map<string, string>) {}
-  async get(key: string): Promise<string | null> {
-    return this.store.get(key) ?? null;
-  }
-}
-
-function active(level: 'freedom' | 'democracy' | 'spark', lastChargedAt: number): ChainSubscriptionState {
+function active(level: "freedom" | "democracy" | "spark"): ChainSubscriptionState {
   return {
-    plan: { kind: 'platform', membershipLevel: level },
+    plan: { kind: "platform", membershipLevel: level },
     pendingPlan: null,
-    startedAt: lastChargedAt,
-    lastChargedAt,
-    lastChargedPriceFen: 199_900n,
-    paidUntil: lastChargedAt + 1_000,
-    status: 'active'
+    startedAt: 1_000,
+    lastChargedAt: 9_000,
+    lastChargedPriceFen: 200n,
+    paidUntil: 20_000,
+    status: "active",
   };
 }
 
-describe('reconcileMemberships（状态对账，fail-closed）', () => {
-  it('链上 Active → 镜像刷新为 active、档位取链、周期锚 last_charged、清权益失效时刻', async () => {
+describe("平台订阅低资源到期对账", () => {
+  it("只扫描已到期 Active，未到期记录不读链", async () => {
     const db = new FakeDb();
-    db.seed({ owner_account: 'A', subscription_status: 'cancelled', entitlement_lapsed_at: 123, updated_at: 100 });
-    const result = await reconcileMemberships(fakeEnv(db), deps({ A: active('democracy', 1000) }));
-
+    db.seed("due", 8_000);
+    db.seed("future", 12_000);
+    const result = await reconcileMemberships(env(db), deps({ due: active("democracy") }));
     expect(result).toEqual({ scanned: 1, updated: 1, failed: 0 });
-    const row = db.rows.get('A')!;
-    expect(row.subscription_status).toBe('active');
-    expect(row.membership_level).toBe('democracy');
-    expect(row.entitlement_lapsed_at).toBeNull();
-    expect(row.current_period_start).toBe(1000);
-    expect((row.current_period_end ?? 0) > (row.current_period_start ?? 0)).toBe(true);
-    expect(row.updated_at).toBe(NOW);
+    expect(db.rows.get("due")?.membership_level).toBe("democracy");
+    expect(db.rows.get("due")?.paid_until).toBe(20_000);
+    expect(db.rows.get("future")?.paid_until).toBe(12_000);
   });
 
-  it('链上查无订阅 → 镜像收紧 cancelled 并记权益失效时刻', async () => {
+  it("链上查无时 fail-closed 为 terminated", async () => {
     const db = new FakeDb();
-    db.seed({ owner_account: 'A', subscription_status: 'active', entitlement_lapsed_at: null, updated_at: 100 });
-    await reconcileMemberships(fakeEnv(db), deps({ A: null }));
-
-    const row = db.rows.get('A')!;
-    expect(row.subscription_status).toBe('cancelled');
-    expect(row.entitlement_lapsed_at).toBe(NOW);
+    db.seed("due", 8_000);
+    await reconcileMemberships(env(db), deps({ due: null }));
+    expect(db.rows.get("due")?.subscription_status).toBe("terminated");
   });
 
-  it('链上 Terminated → 镜像收紧 terminated 并记权益失效时刻', async () => {
+  it("单条链读失败不阻断同批其它记录", async () => {
     const db = new FakeDb();
-    db.seed({ owner_account: 'A', subscription_status: 'active', updated_at: 100 });
-    await reconcileMemberships(
-      fakeEnv(db),
-      deps({ A: { ...active('freedom', 1000), status: 'terminated' } })
-    );
-
-    const row = db.rows.get('A')!;
-    expect(row.subscription_status).toBe('terminated');
-    expect(row.entitlement_lapsed_at).toBe(NOW);
-  });
-
-  it('开关关闭时直接返回、零扫描', async () => {
-    const db = new FakeDb();
-    db.seed({ owner_account: 'A', subscription_status: 'active', updated_at: 100 });
+    db.seed("bad", 7_000);
+    db.seed("good", 8_000);
     const result = await reconcileMemberships(
-      fakeEnv(db, { MEMBERSHIP_RECONCILE_ENABLED: '0' }),
-      deps({ A: null })
+      env(db),
+      deps({ good: active("spark") }, new Set(["bad"])),
     );
-    expect(result).toEqual({ scanned: 0, updated: 0, failed: 0 });
-    expect(db.rows.get('A')!.subscription_status).toBe('active');
-  });
-
-  it('链 RPC 未配置时软跳过、零扫描', async () => {
-    const db = new FakeDb();
-    db.seed({ owner_account: 'A', subscription_status: 'active', updated_at: 100 });
-    const result = await reconcileMemberships(
-      fakeEnv(db, { CHAIN_URL: undefined }),
-      deps({ A: null })
-    );
-    expect(result).toEqual({ scanned: 0, updated: 0, failed: 0 });
-    expect(db.rows.get('A')!.subscription_status).toBe('active');
-  });
-
-  it('KV 开关 = 0 覆盖 wrangler var = 1 → 停', async () => {
-    const db = new FakeDb();
-    db.seed({ owner_account: 'A', subscription_status: 'active', updated_at: 100 });
-    const env = fakeEnv(db, {
-      MEMBERSHIP_RECONCILE_ENABLED: '1',
-      SQUARE_CACHE: new FakeKv(
-        new Map([['flag:membership_reconcile', '0']])
-      ) as unknown as KVNamespace
-    });
-    const result = await reconcileMemberships(env, deps({ A: null }));
-    expect(result).toEqual({ scanned: 0, updated: 0, failed: 0 });
-    expect(db.rows.get('A')!.subscription_status).toBe('active');
-  });
-
-  it('KV 开关 = 1 覆盖 wrangler var = 0 → 跑', async () => {
-    const db = new FakeDb();
-    db.seed({ owner_account: 'A', subscription_status: 'active', updated_at: 100 });
-    const env = fakeEnv(db, {
-      MEMBERSHIP_RECONCILE_ENABLED: '0',
-      SQUARE_CACHE: new FakeKv(
-        new Map([['flag:membership_reconcile', '1']])
-      ) as unknown as KVNamespace
-    });
-    const result = await reconcileMemberships(env, deps({ A: null }));
-    expect(result.scanned).toBe(1);
-    expect(db.rows.get('A')!.subscription_status).toBe('cancelled');
-  });
-
-  it('限流分批：按 updated_at 最旧优先，只取 batch 条', async () => {
-    const db = new FakeDb();
-    db.seed({ owner_account: 'old1', updated_at: 100, subscription_status: 'active' });
-    db.seed({ owner_account: 'old2', updated_at: 200, subscription_status: 'active' });
-    db.seed({ owner_account: 'newer', updated_at: 300, subscription_status: 'active' });
-
-    const result = await reconcileMemberships(
-      fakeEnv(db, { MEMBERSHIP_RECONCILE_BATCH: '2' }),
-      deps({ old1: null, old2: null, newer: null })
-    );
-
-    expect(result.scanned).toBe(2);
-    // 最旧两条被处理（updated_at → NOW、状态收紧）；最新一条本轮未动。
-    expect(db.rows.get('old1')!.updated_at).toBe(NOW);
-    expect(db.rows.get('old2')!.updated_at).toBe(NOW);
-    expect(db.rows.get('newer')!.updated_at).toBe(300);
-    expect(db.rows.get('newer')!.subscription_status).toBe('active');
-  });
-
-  it('单条链读失败不阻断整批：失败行不动，其它行照常对账', async () => {
-    const db = new FakeDb();
-    db.seed({ owner_account: 'X', updated_at: 100, subscription_status: 'active' });
-    db.seed({ owner_account: 'Y', updated_at: 200, subscription_status: 'cancelled' });
-
-    const result = await reconcileMemberships(
-      fakeEnv(db),
-      deps({ Y: active('spark', 1000) }, new Set(['X']))
-    );
-
     expect(result).toEqual({ scanned: 2, updated: 1, failed: 1 });
-    // X 链读失败：不动 updated_at（下轮重试）。
-    expect(db.rows.get('X')!.updated_at).toBe(100);
-    // Y 正常对账为 active。
-    expect(db.rows.get('Y')!.subscription_status).toBe('active');
-    expect(db.rows.get('Y')!.membership_level).toBe('spark');
+    expect(db.rows.get("bad")?.verified_at).toBe(1);
+    expect(db.rows.get("good")?.membership_level).toBe("spark");
   });
 
-  it('幂等：同态跑两轮结果一致', async () => {
+  it("关闭开关或链 RPC 未配置时零扫描", async () => {
     const db = new FakeDb();
-    db.seed({ owner_account: 'A', subscription_status: 'cancelled', updated_at: 100 });
-    const d = deps({ A: active('freedom', 1000) });
-    await reconcileMemberships(fakeEnv(db), d);
-    const first = { ...db.rows.get('A')! };
-    await reconcileMemberships(fakeEnv(db), d);
-    const second = db.rows.get('A')!;
-    expect(second).toEqual(first);
+    db.seed("due", 8_000);
+    await expect(reconcileMemberships(
+      env(db, { MEMBERSHIP_RECONCILE_ENABLED: "0" }),
+      deps({ due: null }),
+    )).resolves.toEqual({ scanned: 0, updated: 0, failed: 0 });
+    await expect(reconcileMemberships(
+      env(db, { CHAIN_URL: undefined }),
+      deps({ due: null }),
+    )).resolves.toEqual({ scanned: 0, updated: 0, failed: 0 });
   });
 });

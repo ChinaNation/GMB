@@ -209,4 +209,8 @@ class PalletRegistry {
   static const int removeAddressNameCall = 2;
   static const int setAddressCall = 3;
   static const int removeAddressCall = 4;
+
+  // ---- SquarePost (34) · 平台会员价格治理 ----
+  static const int squarePostPallet = 34;
+  static const int proposeSetPlatformPriceCall = 5;
 }

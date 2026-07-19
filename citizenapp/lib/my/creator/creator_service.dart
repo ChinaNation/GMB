@@ -144,6 +144,8 @@ class CreatorService {
         session: session,
         ownerAccount: wallet.address,
         txHash: result.txHash,
+        blockHashHex: result.blockHashHex,
+        signedExtrinsicHex: result.signedExtrinsicHex,
         tiers: tiers,
       );
     } on SecureSeedException catch (e) {
@@ -170,6 +172,8 @@ class CreatorService {
   Future<void> _writePendingMirror({
     required String ownerAccount,
     required String txHash,
+    required String blockHashHex,
+    required String signedExtrinsicHex,
     required List<CreatorTier> tiers,
   }) async {
     final prefs = await _prefs;
@@ -177,6 +181,8 @@ class CreatorService {
       _pendingMirrorKey(ownerAccount),
       jsonEncode({
         'tx_hash': txHash,
+        'block_hash': blockHashHex,
+        'signed_extrinsic_hex': signedExtrinsicHex,
         'tiers': tiers.map((tier) => tier.toJson()).toList(growable: false),
       }),
     );
@@ -196,8 +202,15 @@ class CreatorService {
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) return;
       final txHash = decoded['tx_hash'];
+      final blockHashHex = decoded['block_hash'];
+      final signedExtrinsicHex = decoded['signed_extrinsic_hex'];
       final rawTiers = decoded['tiers'];
-      if (txHash is! String || rawTiers is! List) return;
+      if (txHash is! String ||
+          blockHashHex is! String ||
+          signedExtrinsicHex is! String ||
+          rawTiers is! List) {
+        return;
+      }
       final tiers = rawTiers
           .whereType<Map<String, dynamic>>()
           .map(CreatorTier.fromJson)
@@ -205,6 +218,8 @@ class CreatorService {
       await _api.saveMyPlan(
         session: session,
         txHash: txHash,
+        blockHashHex: blockHashHex,
+        signedExtrinsicHex: signedExtrinsicHex,
         tiers: tiers,
       );
       await prefs.remove(_pendingMirrorKey(session.ownerAccount));
@@ -218,6 +233,8 @@ class CreatorService {
     required SquareSession session,
     required String ownerAccount,
     required String txHash,
+    required String blockHashHex,
+    required String signedExtrinsicHex,
     required List<CreatorTier> tiers,
   }) async {
     final localPlan = CreatorPlan(
@@ -226,9 +243,17 @@ class CreatorService {
       updatedAt: 0,
     );
     try {
+      await _appendLocalTransaction(
+        ownerAccount: ownerAccount,
+        txHash: txHash,
+        blockHashHex: blockHashHex,
+        signedExtrinsicHex: signedExtrinsicHex,
+      );
       await _writePendingMirror(
         ownerAccount: ownerAccount,
         txHash: txHash,
+        blockHashHex: blockHashHex,
+        signedExtrinsicHex: signedExtrinsicHex,
         tiers: tiers,
       );
     } on Exception {
@@ -240,6 +265,8 @@ class CreatorService {
       displayPlan = await _api.saveMyPlan(
         session: session,
         txHash: txHash,
+        blockHashHex: blockHashHex,
+        signedExtrinsicHex: signedExtrinsicHex,
         tiers: tiers,
       );
       await _clearPendingMirror(ownerAccount);
@@ -257,5 +284,33 @@ class CreatorService {
     } on Exception {
       return localPlan;
     }
+  }
+
+  /// 本地按钱包账户保留有限条 finalized 交易证明；Cloudflare 成功后也不删除链上交易记录。
+  Future<void> _appendLocalTransaction({
+    required String ownerAccount,
+    required String txHash,
+    required String blockHashHex,
+    required String signedExtrinsicHex,
+  }) async {
+    final prefs = await _prefs;
+    final key = 'subscription_tx_history:$ownerAccount';
+    final raw = prefs.getString(key);
+    final history = <Map<String, dynamic>>[];
+    if (raw != null) {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        history.addAll(decoded.whereType<Map<String, dynamic>>());
+      }
+    }
+    history.removeWhere((item) => item['tx_hash'] == txHash);
+    history.add({
+      'action': 'set_creator_plans',
+      'tx_hash': txHash,
+      'block_hash': blockHashHex,
+      'signed_extrinsic_hex': signedExtrinsicHex,
+    });
+    if (history.length > 50) history.removeRange(0, history.length - 50);
+    await prefs.setString(key, jsonEncode(history));
   }
 }

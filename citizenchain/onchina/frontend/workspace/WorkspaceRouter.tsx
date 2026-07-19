@@ -1,12 +1,12 @@
-// 机构工作台路由。登录机构决定进入注册局、司法院或通用机构工作台。
+// 机构工作台路由。工作台类型由后端按准确机构 CID 下发，前端不得自行猜测权限。
 
+import { Alert } from 'antd';
 import type { AdminAuth } from '../auth/types';
 import type { CapabilitySet } from '../auth/AuthContext';
 import type { CidMetaResult } from '../china/api';
-import { isSubordinateRegistry, isTier1Registry } from '../platform/registryTier';
-import type { InstitutionWorkspace, WorkspaceKind } from './types';
 import { GenericWorkspace } from './GenericWorkspace';
 import { JudicialWorkspace } from './judicial/JudicialWorkspace';
+import { PrivateInstitutionWorkspace } from './PrivateInstitutionWorkspace';
 import { RegistryWorkspace } from './RegistryWorkspace';
 
 export type WorkspaceRouterProps = {
@@ -17,29 +17,6 @@ export type WorkspaceRouterProps = {
   setCidMeta: (next: CidMetaResult | null) => void;
 };
 
-function fallbackWorkspaceKind(auth: AdminAuth, capabilities: CapabilitySet): WorkspaceKind {
-  if (isTier1Registry(auth.institution_code) || isSubordinateRegistry(auth.institution_code)) {
-    return 'registry';
-  }
-  if (auth.institution_code === 'NJD') return 'judicial';
-  if (capabilities.canViewLegislation) return 'legislation';
-  return 'generic';
-}
-
-function fallbackWorkspace(auth: AdminAuth, capabilities: CapabilitySet): InstitutionWorkspace {
-  const workspaceKind = fallbackWorkspaceKind(auth, capabilities);
-  const workspaceTitle = `${auth.cid_short_name || auth.institution_code}工作台`;
-  return {
-    workspace_kind: workspaceKind,
-    workspace_title: workspaceTitle,
-    workspace_sections: [
-      { workspace_section: 'operations', workspace_section_title: '操作', workspace_actions: [] },
-      { workspace_section: 'display', workspace_section_title: '显示', workspace_actions: [] },
-      { workspace_section: 'records', workspace_section_title: '记录', workspace_actions: [] },
-    ],
-  };
-}
-
 export function WorkspaceRouter({
   auth,
   capabilities,
@@ -47,11 +24,11 @@ export function WorkspaceRouter({
   cidMeta,
   setCidMeta,
 }: WorkspaceRouterProps) {
-  const authWithWorkspace: AdminAuth = {
-    ...auth,
-    workspace: auth.workspace ?? fallbackWorkspace(auth, capabilities),
-  };
-  const workspaceKind = authWithWorkspace.workspace?.workspace_kind ?? 'generic';
+  if (!auth.workspace) {
+    return <Alert type="error" showIcon message="后端未返回机构工作台，已拒绝加载页面" />;
+  }
+  const authWithWorkspace = auth;
+  const workspaceKind = auth.workspace.workspace_kind;
 
   if (workspaceKind === 'registry') {
     return (
@@ -67,6 +44,8 @@ export function WorkspaceRouter({
   if (workspaceKind === 'judicial') {
     return <JudicialWorkspace auth={authWithWorkspace} />;
   }
+  if (workspaceKind === 'private') {
+    return <PrivateInstitutionWorkspace auth={authWithWorkspace} />;
+  }
   return <GenericWorkspace auth={authWithWorkspace} />;
 }
-

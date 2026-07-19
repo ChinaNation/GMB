@@ -62,8 +62,7 @@ import { DocsLibrary } from '../docs/DocsLibrary';
 import { notice } from '../utils/notice';
 import { InstitutionDetailNavLayout } from '../core/InstitutionDetailNavLayout';
 import { OperationRecords } from '../gov/OperationRecords';
-import { useChainSign } from '../core/useChainSign';
-import { submitCitizenChainSign } from '../citizens/api';
+import { submitChainSign, useChainSign } from '../core/useChainSign';
 import {
   prepareInstitutionGovernance,
   type InstitutionGovernanceAdminInput,
@@ -882,7 +881,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
         clear_legal_representative: clearLegalRepresentative || undefined,
       });
       const signed = await signGovernanceChain(prepared.request_id, prepared.sign_request);
-      const output = await submitCitizenChainSign(
+      const output = await submitChainSign(
         auth,
         prepared.request_id,
         signed.signer_pubkey,

@@ -77,6 +77,8 @@
   field_label_zh: 新密钥
 - field_key: new_port
   field_label_zh: 新端口
+- field_key: new_price_fen
+  field_label_zh: 新平台价格
 - field_key: new_threshold
   field_label_zh: 新阈值
 - field_key: operator_account

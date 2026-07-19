@@ -1,106 +1,221 @@
 import type { Env } from "../types";
-import { HttpError, jsonResponse, requireSession } from "../shared/http";
+import { HttpError, jsonResponse, readJson, requireSession } from "../shared/http";
+import { sha256Hex } from "../shared/hash";
 import { nowMs } from "../shared/time";
 import {
-  readPlatformSubscription,
+  bindFinalizedTransactionConfirmation,
+  readSubscriptionAtBlock,
+  updateChainClock,
+  verifyFinalizedSubscriptionTransaction,
   type ChainSubscriptionState,
+  type FinalizedTransactionProofInput,
+  type PlatformLevel,
+  type SubscriptionBusinessAction,
+  type VerifiedFinalizedTransaction,
 } from "../chain/subscription";
 import { assertMembershipLevel } from "./plans";
 
-/// 平台会员公民币轨 BFF：App 侧已用热钱包 extrinsic 把订阅/取消上链（subscribe/cancel，
-/// pallet=square-post idx34，收款方=技术公司费用账户），本模块只做**上链后确认镜像**——
-/// 把订阅态镜像进 D1 `square_memberships` 供发帖门禁与徽章读取，`tx_hash` 幂等。
-/// 价格以链上 `PlatformPrice` 为唯一真源，BFF 不涉计价、不涉扣款、不计算自然日历。
-///
-/// 门禁口径与创作者一致（`creator.ts`）：只看镜像 `subscription_status='active'`，不按
-/// `expires_at` 判过期——按月自动续扣发生在链上，客户端确认之间镜像不应假过期误拦。
-///
-/// confirm 必须先读取 finalized 链上 `Subscriptions`，只有链上状态与请求动作完全一致才写
-/// D1；定时对账只负责续费/欠费后的持续同步，不承担纠正伪造 confirm 的安全职责。
+/**
+ * 平台订阅 BFF 只接收 CitizenApp 已完成的一次账户签名交易证明。Worker 校验完整交易属于
+ * 当前钱包、位于 finalized 主链、调用参数与动作一致，再读取同一区块订阅状态并镜像。
+ * 任何 HTTP 重试都只使用 Bearer 会话，不产生第二次账户或设备签名。
+ */
+
+type PlatformAction = "subscribe" | "cancel" | "change";
+
+interface PlatformConfirmBody {
+  tx_hash?: unknown;
+  block_hash?: unknown;
+  signed_extrinsic_hex?: unknown;
+  action?: unknown;
+  membership_level?: unknown;
+}
 
 export interface PlatformSubscriptionConfirmDeps {
-  readPlatformSubscription: (
+  verifyTransaction: (
     env: Env,
     ownerAccount: string,
+    expectedAction: SubscriptionBusinessAction,
+    proof: FinalizedTransactionProofInput,
+  ) => Promise<VerifiedFinalizedTransaction>;
+  readSubscriptionAtBlock: (
+    env: Env,
+    ownerAccount: string,
+    blockHash: string,
   ) => Promise<ChainSubscriptionState | null>;
 }
 
 const defaultConfirmDeps: PlatformSubscriptionConfirmDeps = {
-  readPlatformSubscription,
+  verifyTransaction: verifyFinalizedSubscriptionTransaction,
+  readSubscriptionAtBlock: (env, ownerAccount, blockHash) =>
+    readSubscriptionAtBlock(env, ownerAccount, { kind: "platform" }, blockHash),
 };
 
-/// POST /v1/square/membership/confirm —— 平台会员订阅/取消上链后镜像（幂等）。
-/// owner 由 session 派生（不采信 body）；带合法 `level`=订阅→active，缺 `level`=取消→cancelled。
+/** POST /v1/square/membership/confirm —— finalized 平台订阅镜像（严格幂等）。 */
 export async function platformSubscriptionConfirmRoute(
   request: Request,
   env: Env,
   deps: PlatformSubscriptionConfirmDeps = defaultConfirmDeps,
 ): Promise<Response> {
   const session = await requireSession(request, env);
-  const body = (await request.json()) as { tx_hash?: unknown; level?: unknown };
-  const txHash = typeof body.tx_hash === "string" ? body.tx_hash : "";
-  if (!/^0x[0-9a-f]{64}$/.test(txHash)) {
-    throw new HttpError(400, "invalid_request", "确认参数不完整");
-  }
-  const owner = session.owner_account;
-  const now = nowMs();
-  const hasLevel =
-    body.level !== undefined && body.level !== null && body.level !== "";
-  const chainState = await deps.readPlatformSubscription(env, owner);
+  const body = await readJson<PlatformConfirmBody>(request);
+  const action = platformAction(body.action);
+  const membershipLevel =
+    action === "cancel" ? null : assertMembershipLevel(body.membership_level);
+  const expectedAction = expectedPlatformAction(action, membershipLevel);
+  const proof = transactionProof(body);
+  const transaction = await deps.verifyTransaction(
+    env,
+    session.owner_account,
+    expectedAction,
+    proof,
+  );
+  const state = await deps.readSubscriptionAtBlock(
+    env,
+    session.owner_account,
+    transaction.blockHash,
+  );
+  assertPlatformStateMatches(state, action, membershipLevel);
 
-  if (!hasLevel) {
-    if (chainState === null || chainState.status !== "cancelled") {
-      throw new HttpError(
-        409,
-        "subscription_state_not_finalized",
-        "链上取消状态尚未最终确认",
-      );
-    }
-    // 取消：翻 cancelled 并记权益失效时刻（视频冷归档时钟起点）；保留行用于展示与归档。
-    await env.DB.prepare(
-      `UPDATE square_memberships
-        SET subscription_status = 'cancelled',
-            entitlement_lapsed_at = COALESCE(entitlement_lapsed_at, ?),
-            last_tx_hash = ?, updated_at = ?
-        WHERE owner_account = ?`,
-    )
-      .bind(now, txHash, now, owner)
-      .run();
-    return jsonResponse({ ok: true, status: "cancelled" });
-  }
+  const confirmedAt = nowMs();
+  const requestHash = await sha256Hex(
+    JSON.stringify({ action, membership_level: membershipLevel }),
+  );
+  await bindFinalizedTransactionConfirmation(
+    env,
+    session.owner_account,
+    transaction,
+    requestHash,
+    confirmedAt,
+  );
+  await updateChainClock(env, {
+    chainTimestamp: transaction.chainTimestamp,
+    blockNumber: transaction.blockNumber,
+    blockHash: transaction.blockHash,
+    observedAt: confirmedAt,
+  });
+  await mirrorPlatformState(env, session.owner_account, state!, transaction, confirmedAt);
+  return jsonResponse({
+    ok: true,
+    subscription_status: state!.status,
+    membership_level: state!.plan.kind === "platform" ? state!.plan.membershipLevel : null,
+    paid_until: state!.paidUntil,
+  });
+}
 
-  const level = assertMembershipLevel(body.level);
+function platformAction(value: unknown): PlatformAction {
+  if (value === "subscribe" || value === "cancel" || value === "change") return value;
+  throw new HttpError(400, "invalid_subscription_action", "平台订阅操作不合法");
+}
+
+function expectedPlatformAction(
+  action: PlatformAction,
+  membershipLevel: PlatformLevel | null,
+): SubscriptionBusinessAction {
+  if (action === "cancel") return { kind: "platform_cancel" };
+  if (!membershipLevel) throw new HttpError(400, "invalid_request", "平台会员档位缺失");
+  return action === "subscribe"
+    ? { kind: "platform_subscribe", membershipLevel }
+    : { kind: "platform_change", membershipLevel };
+}
+
+function transactionProof(body: PlatformConfirmBody): FinalizedTransactionProofInput {
   if (
-    chainState === null ||
-    chainState.status !== "active" ||
-    chainState.plan.kind !== "platform" ||
-    chainState.plan.membershipLevel !== level
+    typeof body.tx_hash !== "string" ||
+    typeof body.block_hash !== "string" ||
+    typeof body.signed_extrinsic_hex !== "string"
   ) {
-    throw new HttpError(
-      409,
-      "subscription_state_not_finalized",
-      "链上订阅状态尚未最终确认",
-    );
+    throw new HttpError(400, "invalid_transaction_proof", "finalized 交易证明不完整");
   }
-  // Worker 只镜像 runtime 已计算并 finalized 的链上时间戳，不复制自然日历算法。
-  const periodStart = chainState.lastChargedAt;
-  const periodEnd = chainState.paidUntil;
+  return {
+    txHash: body.tx_hash,
+    blockHash: body.block_hash,
+    signedExtrinsicHex: body.signed_extrinsic_hex,
+  };
+}
+
+function assertPlatformStateMatches(
+  state: ChainSubscriptionState | null,
+  action: PlatformAction,
+  requestedLevel: PlatformLevel | null,
+): void {
+  if (state === null || state.plan.kind !== "platform") {
+    throw new HttpError(409, "subscription_state_not_finalized", "链上平台订阅状态尚未最终确认");
+  }
+  if (action === "cancel") {
+    if (state.status !== "cancelled") {
+      throw new HttpError(409, "subscription_state_not_finalized", "链上取消状态尚未最终确认");
+    }
+    return;
+  }
+  const pendingMatches =
+    state.pendingPlan?.kind === "platform" &&
+    state.pendingPlan.membershipLevel === requestedLevel;
+  if (
+    state.status !== "active" ||
+    (state.plan.membershipLevel !== requestedLevel && !pendingMatches)
+  ) {
+    throw new HttpError(409, "subscription_state_not_finalized", "链上平台订阅或换档状态尚未最终确认");
+  }
+}
+
+async function mirrorPlatformState(
+  env: Env,
+  ownerAccount: string,
+  state: ChainSubscriptionState,
+  transaction: VerifiedFinalizedTransaction,
+  verifiedAt: number,
+): Promise<void> {
+  if (state.plan.kind !== "platform") {
+    throw new HttpError(409, "subscription_state_not_finalized", "链上平台订阅计划不合法");
+  }
+  const pendingMembershipLevel =
+    state.pendingPlan?.kind === "platform" ? state.pendingPlan.membershipLevel : null;
+  const lastChargedPriceFen = safePrice(state.lastChargedPriceFen);
+  const entitlementLapsedAt = state.status === "active" ? null : state.paidUntil;
   await env.DB.prepare(
     `INSERT INTO square_memberships
-      (owner_account, membership_level, expires_at, updated_at, subscription_status,
-       current_period_start, current_period_end, entitlement_lapsed_at, last_tx_hash)
-      VALUES (?, ?, ?, ?, 'active', ?, ?, NULL, ?)
+      (owner_account, membership_level, pending_membership_level, started_at,
+       last_charged_at, last_charged_price_fen, paid_until, subscription_status,
+       finalized_block_number, finalized_block_hash, verified_at,
+       entitlement_lapsed_at, last_tx_hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(owner_account) DO UPDATE SET
         membership_level = excluded.membership_level,
-        expires_at = excluded.expires_at,
-        updated_at = excluded.updated_at,
-        subscription_status = 'active',
-        current_period_start = excluded.current_period_start,
-        current_period_end = excluded.current_period_end,
-        entitlement_lapsed_at = NULL,
-        last_tx_hash = excluded.last_tx_hash`,
+        pending_membership_level = excluded.pending_membership_level,
+        started_at = excluded.started_at,
+        last_charged_at = excluded.last_charged_at,
+        last_charged_price_fen = excluded.last_charged_price_fen,
+        paid_until = excluded.paid_until,
+        subscription_status = excluded.subscription_status,
+        finalized_block_number = excluded.finalized_block_number,
+        finalized_block_hash = excluded.finalized_block_hash,
+        verified_at = excluded.verified_at,
+        entitlement_lapsed_at = excluded.entitlement_lapsed_at,
+        last_tx_hash = excluded.last_tx_hash
+      WHERE excluded.finalized_block_number >= square_memberships.finalized_block_number`,
   )
-    .bind(owner, level, periodEnd, now, periodStart, periodEnd, txHash)
+    .bind(
+      ownerAccount,
+      state.plan.membershipLevel,
+      pendingMembershipLevel,
+      state.startedAt,
+      state.lastChargedAt,
+      lastChargedPriceFen,
+      state.paidUntil,
+      state.status,
+      transaction.blockNumber,
+      transaction.blockHash,
+      verifiedAt,
+      entitlementLapsedAt,
+      transaction.txHash,
+    )
     .run();
-  return jsonResponse({ ok: true, status: "active", membership_level: level });
+}
+
+function safePrice(value: bigint): number {
+  if (value <= 0n || value > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new HttpError(502, "subscription_price_out_of_range", "链上订阅价格超出边缘服务范围");
+  }
+  return Number(value);
 }

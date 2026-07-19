@@ -84,6 +84,8 @@ pub(crate) struct QrLoginResultRecord {
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct AdminAuthContext {
     pub(crate) admin_account: String,
+    /// 当前会话绑定的准确机构 CID；机构码只负责分类，不能代替机构唯一身份。
+    pub(crate) institution_cid_number: String,
     /// 所属机构码(3/4 字符文本,前端据此渲染工作台入口与能力)。
     pub(crate) institution_code: String,
     /// 行政层级标签(NATIONAL/PROVINCE/CITY/TOWN);私权法人/非法人无层级为 None。
@@ -102,6 +104,7 @@ pub(crate) struct AdminAuthContext {
 pub(crate) struct AdminAuthOutput {
     pub(crate) ok: bool,
     pub(crate) admin_account: String,
+    pub(crate) institution_cid_number: String,
     pub(crate) institution_code: String,
     pub(crate) admin_level: Option<String>,
     /// 机构能力位(后端单源,前端据此渲染工作台入口)。
@@ -123,6 +126,8 @@ pub(crate) struct AdminIdentifyInput {
 #[derive(Serialize)]
 pub(crate) struct AdminIdentifyOutput {
     pub(crate) admin_account: String,
+    /// 扫码登录成功后由节点激活绑定派生，禁止浏览器自报。
+    pub(crate) institution_cid_number: String,
     pub(crate) institution_code: String,
     pub(crate) admin_level: Option<String>,
     /// 机构能力位(后端单源,前端据此渲染工作台入口)。

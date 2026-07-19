@@ -306,7 +306,8 @@ pub(crate) async fn complete_citizen_onchain_signature(
         payload.identity_level.call_index(),
     );
     // D7:QR 载荷 = 完整 runtime 签名载荷(与钱包解码器扩展尾规则对齐),
-    // 回签后经 /citizens/chain/submit 由 onchina 组装提交,QR 只签不提交。
+    // CitizenWallet 只签名一次并显示响应二维码；OnChina 回扫后经
+    // /api/v1/admin/chain/submit 统一组装和提交。
     let prepared =
         match crate::core::chain_submit::prepare_signing(&call, ctx.admin_account.as_str()).await {
             Ok(v) => v,

@@ -129,18 +129,20 @@ export interface ContactCiphertextRow {
 export interface MembershipRow {
   owner_account: string;
   membership_level: string;
-  // 下次扣款时刻（链上 next_charge_at 镜像），同时作计费周期终点。
-  expires_at: number;
-  updated_at: number;
-  // 镜像链上订阅态：active（自动续费有效）/ terminated（扣款失败终止）/ cancelled（用户取消）。
+  pending_membership_level: string | null;
+  started_at: number;
+  last_charged_at: number;
+  last_charged_price_fen: number;
+  paid_until: number;
   subscription_status: string;
-  // 计费周期镜像（用量额度窗口）：起点=订阅/续订时刻、终点=下次扣款。
-  current_period_start: number | null;
-  current_period_end: number | null;
-  // 会员权益失效时刻（退订满 N 月冷归档的时钟起点；重订置 NULL）。
+  finalized_block_number: number;
+  finalized_block_hash: string;
+  verified_at: number;
   entitlement_lapsed_at: number | null;
-  // 最近一次订阅/取消上链交易哈希（幂等确认凭证）。
   last_tx_hash: string | null;
+  // 由查询与 chain_clock 单例联结；缺失或过期时所有边缘权益 fail-closed。
+  chain_timestamp: number | null;
+  chain_observed_at: number | null;
 }
 
 export interface UploadItemInput {

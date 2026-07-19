@@ -191,15 +191,6 @@ export type PrepareCitizenOccupyResult = {
   expires_at: number;
 };
 
-/** 链交易 submit 返回:占号成功落库的公民档案(占号用途)。 */
-export type ChainSubmitResult = {
-  purpose: string;
-  cid_number: string;
-  tx_hash: string;
-  block_number?: number | null;
-  citizen?: CreateCitizenResult | null;
-};
-
 /** 吊销 prepare 返回:冷签 QR。 */
 export type PrepareCitizenRevokeResult = {
   request_id: string;
@@ -209,8 +200,8 @@ export type PrepareCitizenRevokeResult = {
 };
 
 /**
- * 建档占号 prepare:后端校验档案并生成号,返回管理员冷钱包签名的占号 QR。
- * 此步不落任何档案 —— 占号交易进块后才建档(见 submitCitizenChainSign)。
+ * 建档占号 prepare:后端校验档案并生成号，返回管理员 CitizenWallet 签名的占号 QR。
+ * 此步不落任何档案 —— 占号交易经 core 统一提交入口进块后才建档。
  */
 export async function prepareCitizenOccupy(
   auth: AdminAuth,
@@ -227,32 +218,8 @@ export async function prepareCitizenOccupy(
 }
 
 /**
- * 统一链交易 submit:管理员冷钱包回签后由 onchina 组装、dry-run、提交并等进块;
- * 占号用途在进块后落公民档案并回传。
- */
-export async function submitCitizenChainSign(
-  auth: AdminAuth,
-  requestId: string,
-  signerPubkey: string,
-  signature: string,
-): Promise<ChainSubmitResult> {
-  return request<ChainSubmitResult>('/api/v1/admin/citizens/chain/submit', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...adminHeaders(auth),
-    },
-    body: JSON.stringify({
-      request_id: requestId,
-      signer_pubkey: signerPubkey,
-      signature,
-    }),
-  });
-}
-
-/**
  * 吊销 prepare:登记表墓碑(号永不复用),最严档 PASSKEY_COLD_SIGN grant。
- * 返回冷签 QR,回签后同样走 submitCitizenChainSign。
+ * 返回冷签 QR,回签后同样走 core 统一提交入口。
  */
 export async function prepareCitizenRevoke(
   auth: AdminAuth,

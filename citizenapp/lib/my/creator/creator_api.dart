@@ -22,6 +22,8 @@ abstract interface class CreatorApi {
   Future<CreatorPlan> saveMyPlan({
     required SquareSession session,
     required String txHash,
+    required String blockHashHex,
+    required String signedExtrinsicHex,
     required List<CreatorTier> tiers,
   });
 
@@ -33,9 +35,12 @@ abstract interface class CreatorApi {
   Future<void> confirmCreatorSubscription({
     required SquareSession session,
     required String txHash,
+    required String blockHashHex,
+    required String signedExtrinsicHex,
+    required String action,
     required String creatorAccount,
     String? tierId,
-    String? period,
+    String? billingPeriod,
   });
 }
 
@@ -82,6 +87,8 @@ class CreatorApiHttp implements CreatorApi {
   Future<CreatorPlan> saveMyPlan({
     required SquareSession session,
     required String txHash,
+    required String blockHashHex,
+    required String signedExtrinsicHex,
     required List<CreatorTier> tiers,
   }) async {
     final tiersJson = tiers.map((tier) => tier.toJson()).toList();
@@ -89,6 +96,8 @@ class CreatorApiHttp implements CreatorApi {
       '/v1/square/creator/plan',
       {
         'tx_hash': txHash,
+        'block_hash': blockHashHex,
+        'signed_extrinsic_hex': signedExtrinsicHex,
         'tiers': tiersJson,
       },
       session,
@@ -116,17 +125,23 @@ class CreatorApiHttp implements CreatorApi {
   Future<void> confirmCreatorSubscription({
     required SquareSession session,
     required String txHash,
+    required String blockHashHex,
+    required String signedExtrinsicHex,
+    required String action,
     required String creatorAccount,
     String? tierId,
-    String? period,
+    String? billingPeriod,
   }) async {
     await _postFinalizedMirrorJson(
       '/v1/square/creator/subscription/confirm',
       {
         'tx_hash': txHash,
+        'block_hash': blockHashHex,
+        'signed_extrinsic_hex': signedExtrinsicHex,
+        'action': action,
         'creator_account': creatorAccount,
         if (tierId != null) 'tier_id': tierId,
-        if (period != null) 'period': period,
+        if (billingPeriod != null) 'billing_period': billingPeriod,
       },
       session,
     );
@@ -231,6 +246,8 @@ class FakeCreatorApi implements CreatorApi {
   Future<CreatorPlan> saveMyPlan({
     required SquareSession session,
     required String txHash,
+    required String blockHashHex,
+    required String signedExtrinsicHex,
     required List<CreatorTier> tiers,
   }) async {
     lastSaveTxHash = txHash;
@@ -251,8 +268,11 @@ class FakeCreatorApi implements CreatorApi {
   Future<void> confirmCreatorSubscription({
     required SquareSession session,
     required String txHash,
+    required String blockHashHex,
+    required String signedExtrinsicHex,
+    required String action,
     required String creatorAccount,
     String? tierId,
-    String? period,
+    String? billingPeriod,
   }) async {}
 }

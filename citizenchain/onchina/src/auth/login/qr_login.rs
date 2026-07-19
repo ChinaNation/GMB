@@ -336,17 +336,21 @@ pub(crate) async fn admin_auth_qr_result(
         let access_token_for_check = result.access_token.clone();
         let session_is_current = state.db.with_client(move |conn| {
             let Some(session) = repo::get_admin_session_conn(conn, &access_token_for_check)? else {
-                return Ok(false);
+                return Ok(None);
             };
             let Some(binding) = repo::get_active_node_binding_conn(conn)? else {
-                return Ok(false);
+                return Ok(None);
             };
-            Ok(session.candidate_id == binding.candidate_id
-                && session.institution_code == binding.institution_code)
+            if session.candidate_id != binding.candidate_id
+                || session.institution_code != binding.institution_code
+            {
+                return Ok(None);
+            }
+            Ok(Some(binding.institution_cid_number))
         });
-        match session_is_current {
-            Ok(true) => {}
-            Ok(false) => {
+        let institution_cid_number = match session_is_current {
+            Ok(Some(value)) => value,
+            Ok(None) => {
                 return api_error(
                     StatusCode::UNAUTHORIZED,
                     1002,
@@ -357,7 +361,7 @@ pub(crate) async fn admin_auth_qr_result(
                 let message = format!("validate qr login session failed: {err}");
                 return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
             }
-        }
+        };
         let admin = match repo::get_admin_by_account(&state.db, &result.admin_account) {
             Ok(v) => v,
             Err(err) => {
@@ -391,10 +395,13 @@ pub(crate) async fn admin_auth_qr_result(
         )
         .unwrap_or(None);
         let capabilities = crate::platform::capability::capabilities_for(&result.institution_code);
+        let workspace_modules =
+            crate::domains::membership::workspace_modules_for(&institution_cid_number).await;
         let workspace = crate::workspace::build_institution_workspace(
             &result.institution_code,
             cid_short_name.as_deref(),
             capabilities,
+            workspace_modules,
         );
         return Json(ApiResponse {
             code: 0,
@@ -406,6 +413,7 @@ pub(crate) async fn admin_auth_qr_result(
                 expire_at: Some(result.expire_at.timestamp()),
                 admin: Some(AdminIdentifyOutput {
                     admin_account: result.admin_account.clone(),
+                    institution_cid_number,
                     institution_code: result.institution_code.clone(),
                     admin_level: crate::core::chain_runtime::admin_level_label_for(
                         &result.institution_code,

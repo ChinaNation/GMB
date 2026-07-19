@@ -9,9 +9,20 @@ use serde::Serialize;
 #[serde(rename_all = "snake_case")]
 pub(crate) enum WorkspaceKind {
     Registry,
+    Private,
     Judicial,
     Legislation,
-    Generic,
+    Public,
+    Unincorporated,
+}
+
+/// 当前准确机构实例可挂载的专属业务模块。
+///
+/// 类型能力只能决定工作台大类；平台技术公司等唯一机构必须按 CID 实例授权。
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WorkspaceModule {
+    PlatformMembershipPrice,
 }
 
 /// 工作台顶层分区。
@@ -64,4 +75,5 @@ pub(crate) struct InstitutionWorkspace {
     pub(crate) workspace_kind: WorkspaceKind,
     pub(crate) workspace_title: String,
     pub(crate) workspace_sections: Vec<WorkspaceSection>,
+    pub(crate) workspace_modules: Vec<WorkspaceModule>,
 }

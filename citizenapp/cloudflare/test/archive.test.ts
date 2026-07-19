@@ -52,8 +52,8 @@ class FakeStmt {
               (m) =>
                 m.entitlement_lapsed_at !== null &&
                 m.entitlement_lapsed_at <= cutoff &&
-                m.subscription_status !== 'active' &&
-                m.subscription_status !== 'trialing' &&
+                (m.subscription_status === 'cancelled' ||
+                  m.subscription_status === 'terminated') &&
                 this.db.videos.some(
                   (v) =>
                     v.owner_account === m.owner_account &&
@@ -189,7 +189,7 @@ describe('video cold archive', () => {
     const db = new FakeDb();
     db.memberships.push({
       owner_account: 'owner_1',
-      subscription_status: 'canceled',
+      subscription_status: 'cancelled',
       entitlement_lapsed_at: Date.now() - 100 * DAY_MS
     });
     db.videos.push(video());
@@ -205,7 +205,7 @@ describe('video cold archive', () => {
     const db = new FakeDb();
     db.memberships.push({
       owner_account: 'owner_1',
-      subscription_status: 'canceled',
+      subscription_status: 'cancelled',
       entitlement_lapsed_at: Date.now() - 10 * DAY_MS
     });
     db.videos.push(video());
@@ -220,7 +220,7 @@ describe('video cold archive', () => {
     const db = new FakeDb();
     db.memberships.push({
       owner_account: 'owner_1',
-      subscription_status: 'canceled',
+      subscription_status: 'cancelled',
       entitlement_lapsed_at: Date.now() - 100 * DAY_MS
     });
     db.videos.push(video());

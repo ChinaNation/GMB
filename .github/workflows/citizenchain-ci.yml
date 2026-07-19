@@ -30,7 +30,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  CITIZENCHAIN_DESKTOP_VERSION: 1.0.${{ github.run_number }}
+  # 中文注释:桌面端版本以源码 tauri.conf.json/Cargo.toml 为准(由公民控制台按 ci=+0.0.1 / release=+0.1 自增),CI 不再用 run_number 覆盖。
   GMB_RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'release' }}
 
 jobs:
@@ -44,8 +44,8 @@ jobs:
           - platform: linux
             name: Linux amd
             os: ubuntu-latest
-            artifact: 公民链-Linux-amd
-            installer_name: 公民链-Linux-amd.deb
+            artifact: 公民链AMD
+            installer_name: 公民链AMD.deb
             push_bundle_targets: deb
             manual_bundle_targets: deb,appimage
             updater_asset_name: citizenchain-updater-linux-amd.AppImage
@@ -55,8 +55,8 @@ jobs:
           - platform: linux
             name: Linux arm
             os: ubuntu-24.04-arm
-            artifact: 公民链-Linux-arm
-            installer_name: 公民链-Linux-arm.deb
+            artifact: 公民链ARM
+            installer_name: 公民链ARM.deb
             push_bundle_targets: deb
             manual_bundle_targets: deb,appimage
             updater_asset_name: citizenchain-updater-linux-arm.AppImage
@@ -66,8 +66,8 @@ jobs:
           - platform: windows
             name: Windows
             os: windows-latest
-            artifact: 公民链-Windows
-            installer_name: 公民链-Windows.exe
+            artifact: 公民链Windows
+            installer_name: 公民链.exe
             push_bundle_targets: nsis
             manual_bundle_targets: nsis
             expected_runner_arch: X64
@@ -75,8 +75,8 @@ jobs:
           - platform: macos
             name: macOS Apple
             os: macos-15
-            artifact: 公民链-macOS-apple
-            installer_name: 公民链-macOS-apple.dmg
+            artifact: 公民链macOS
+            installer_name: 公民链.dmg
             push_bundle_targets: dmg
             manual_bundle_targets: dmg
             updater_asset_name: citizenchain-updater-macos-apple.app.tar.gz
@@ -117,7 +117,6 @@ jobs:
           set -euo pipefail
           node <<'NODE'
           const fs = require('fs');
-          const version = process.env.CITIZENCHAIN_DESKTOP_VERSION;
           const isManualRelease = process.env.GMB_RELEASE_MODE === 'true';
           const targetSource = isManualRelease
             ? process.env.CITIZENCHAIN_MANUAL_BUNDLE_TARGETS
@@ -131,17 +130,10 @@ jobs:
             throw new Error('缺少本 matrix 的 Tauri bundle targets。');
           }
 
-          const cargoPath = 'citizenchain/Cargo.toml';
-          let cargo = fs.readFileSync(cargoPath, 'utf8');
-          cargo = cargo.replace(
-            /(\[workspace\.package\][\s\S]*?\nversion\s*=\s*")[^"]+(")/,
-            `$1${version}$2`
-          );
-          fs.writeFileSync(cargoPath, cargo);
-
+          // 中文注释:版本号以源码 tauri.conf.json 为准(公民控制台已按 ci/release 自增),CI 不覆盖,只设 bundle 目标。
           const tauriPath = 'citizenchain/node/tauri.conf.json';
           const tauri = JSON.parse(fs.readFileSync(tauriPath, 'utf8'));
-          tauri.version = version;
+          const version = tauri.version;
           tauri.bundle = tauri.bundle || {};
           // 中文注释：push 只生成用户安装包；手动发布允许额外生成 updater 内部产物。
           tauri.bundle.targets = bundleTargets;
@@ -149,7 +141,7 @@ jobs:
           delete tauri.bundle.createUpdaterArtifacts;
           fs.writeFileSync(tauriPath, `${JSON.stringify(tauri, null, 2)}\n`);
 
-          console.log(`桌面端本次发布版本: ${version}`);
+          console.log(`桌面端版本(源码): ${version}`);
           console.log(`手动发布模式: ${isManualRelease ? '是' : '否'}`);
           console.log(`Tauri bundle targets: ${bundleTargets.join(',')}`);
           NODE
@@ -388,24 +380,24 @@ jobs:
       - name: 发布到 GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          DESKTOP_VERSION: ${{ env.CITIZENCHAIN_DESKTOP_VERSION }}
           CURRENT_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
 
-          tag="citizenchain-v${DESKTOP_VERSION}"
-          title="CitizenChain ${DESKTOP_VERSION}"
-          notes="公民链桌面端 ${DESKTOP_VERSION}。本发布的用户安装包固定为 4 个，另包含自动更新专用内部资产；runtime WASM 继续走链上 setCode 协议升级。"
+          # 中文注释:发布到唯一「滚动 Release」(固定 tag release,始终 Latest);版本号取源码 tauri.conf.json。
+          tag="release"
+          version="$(python3 -c "import json;print(json.load(open('citizenchain/node/tauri.conf.json'))['version'])")"
+          title="GMB 正式版"
+          notes="CitizenChain 桌面端 v${version}(滚动发布,始终 Latest);runtime WASM 走链上 setCode 协议升级。"
 
           node <<'NODE'
           const fs = require('fs');
           const path = require('path');
 
           const root = 'release-artifacts';
-          const version = process.env.DESKTOP_VERSION;
           const repo = process.env.CURRENT_REPOSITORY;
-          const tag = `citizenchain-v${version}`;
-          const notes = `公民链桌面端 ${version}。`;
+          const version = JSON.parse(fs.readFileSync('citizenchain/node/tauri.conf.json', 'utf8')).version;
+          const notes = `CitizenChain 桌面端 v${version}。`;
 
           function walk(dir) {
             return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -417,10 +409,10 @@ jobs:
           const files = new Map(walk(root).map((file) => [path.basename(file), file]));
           const platforms = {};
           const requiredInstallers = [
-            '公民链-macOS-apple.dmg',
-            '公民链-Windows.exe',
-            '公民链-Linux-amd.deb',
-            '公民链-Linux-arm.deb',
+            '公民链.dmg',
+            '公民链.exe',
+            '公民链AMD.deb',
+            '公民链ARM.deb',
           ];
 
           for (const installer of requiredInstallers) {
@@ -430,7 +422,7 @@ jobs:
           }
 
           function assetUrl(name) {
-            return `https://github.com/${repo}/releases/download/${tag}/${encodeURIComponent(name)}`;
+            return `https://github.com/${repo}/releases/latest/download/${encodeURIComponent(name)}`;
           }
 
           function addPlatform(platform, assetName) {
@@ -447,7 +439,7 @@ jobs:
 
           addPlatform('linux-x86_64', 'citizenchain-updater-linux-amd.AppImage');
           addPlatform('linux-aarch64', 'citizenchain-updater-linux-arm.AppImage');
-          addPlatform('windows-x86_64', '公民链-Windows.exe');
+          addPlatform('windows-x86_64', '公民链.exe');
           addPlatform('darwin-aarch64', 'citizenchain-updater-macos-apple.app.tar.gz');
 
           fs.writeFileSync(
@@ -469,6 +461,7 @@ jobs:
 
           if gh release view "$tag" --repo "$CURRENT_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" "${assets[@]}" --clobber --repo "$CURRENT_REPOSITORY"
+            gh release edit "$tag" --latest --repo "$CURRENT_REPOSITORY"
           else
-            gh release create "$tag" "${assets[@]}" --repo "$CURRENT_REPOSITORY" --target "$GITHUB_SHA" --title "$title" --notes "$notes"
+            gh release create "$tag" "${assets[@]}" --repo "$CURRENT_REPOSITORY" --target "$GITHUB_SHA" --title "$title" --notes "$notes" --latest
           fi

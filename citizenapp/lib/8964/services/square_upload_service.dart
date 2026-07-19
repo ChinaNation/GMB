@@ -130,7 +130,7 @@ class SquareUploadService implements SquareContentUploader {
 
     onStage?.call(SquarePublishStage.preparingStorage);
     final membership = await _api.fetchMembership(session);
-    if (!membership.active || membership.expiresAt <= 0) {
+    if (!membership.active || membership.paidUntil <= 0) {
       throw const SquareApiException('需要有效会员才能使用广场内容存储');
     }
     _validateMembershipQuota(
@@ -174,7 +174,7 @@ class SquareUploadService implements SquareContentUploader {
       postId: prepared.postId,
       contentHash: manifestHash,
       storageReceiptId: prepared.storageReceiptId,
-      storageUntil: membership.expiresAt,
+      storageUntil: membership.paidUntil,
       manifestHash: manifestHash,
       manifestBytes: manifestBytes,
       mediaDrafts: mediaDrafts,

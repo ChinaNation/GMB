@@ -120,9 +120,7 @@ describe('GET /v1/square/users/:account', () => {
     });
   });
 
-  it('reports a cancelled membership as not active', async () => {
-    // 公民币轨只看镜像订阅态：subscription_status 非 active（已取消）→ membership_active=false
-    // （客户端据此不给勾）；不再按 expires_at 判过期。
+  it('reports a cancelled membership as active until paid_until', async () => {
     const env = fakeEnv({
       identity: { identity_level: 'voting', cid_number: 'CN001-CTZN-000000001-2026' },
       membership: { membership_level: 'democracy', subscription_status: 'cancelled' }
@@ -136,7 +134,7 @@ describe('GET /v1/square/users/:account', () => {
     expect(body.profile).toMatchObject({
       identity_level: 'voting',
       membership_level: 'democracy',
-      membership_active: false
+      membership_active: true
     });
   });
 
@@ -353,7 +351,7 @@ interface FakeEnvOptions {
   membership?: {
     membership_level: 'freedom' | 'democracy' | 'spark';
     subscription_status?: string;
-    expires_at?: number;
+    paid_until?: number;
   };
 }
 
@@ -399,7 +397,9 @@ function fakeEnv(options: FakeEnvOptions = {}): Env {
         owner_account: owner,
         membership_level: options.membership.membership_level,
         subscription_status: options.membership.subscription_status ?? 'active',
-        expires_at: options.membership.expires_at ?? Date.now() + 60_000
+        paid_until: options.membership.paid_until ?? Date.now() + 60_000,
+        chain_timestamp: Date.now(),
+        chain_observed_at: Date.now()
       }
     : null;
 

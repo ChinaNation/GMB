@@ -34,6 +34,8 @@ void main() {
     final plan = await api.saveMyPlan(
       session: session,
       txHash: '0x${List.filled(64, 'a').join()}',
+      blockHashHex: '0x${List.filled(64, 'b').join()}',
+      signedExtrinsicHex: '0x0102',
       tiers: const [tier],
     );
 
@@ -47,12 +49,15 @@ void main() {
     final paths = <String>[];
     var deviceSignCount = 0;
     final txHash = '0x${List.filled(64, 'b').join()}';
+    final blockHash = '0x${List.filled(64, 'c').join()}';
     final api = CreatorApiHttp(
       baseUrl: 'https://creator.test',
       httpClient: MockClient((request) async {
         paths.add(request.url.path);
         final body = jsonDecode(request.body) as Map<String, dynamic>;
         expect(body['tx_hash'], txHash);
+        expect(body['block_hash'], blockHash);
+        expect(body['signed_extrinsic_hex'], '0x0102');
         expect(body, isNot(contains('challenge_id')));
         expect(body, isNot(contains('signature')));
         expect(request.headers['authorization'], 'Bearer t');
@@ -83,6 +88,8 @@ void main() {
     await api.saveMyPlan(
       session: signedSession,
       txHash: txHash,
+      blockHashHex: blockHash,
+      signedExtrinsicHex: '0x0102',
       tiers: const [tier],
     );
 
@@ -195,8 +202,7 @@ class _FakeSubscriptionRpc extends SubscriptionRpc {
       );
 
   @override
-  Future<({String txHash, int usedNonce, String blockHashHex})>
-      setCreatorPlans({
+  Future<FinalizedSubscriptionTransaction> setCreatorPlans({
     required String fromAddress,
     required Uint8List signerPubkey,
     required List<CreatorTierInput> tiers,
@@ -210,6 +216,7 @@ class _FakeSubscriptionRpc extends SubscriptionRpc {
       txHash: '0x${List.filled(64, 'c').join()}',
       usedNonce: 1,
       blockHashHex: '0x${List.filled(64, 'd').join()}',
+      signedExtrinsicHex: '0x0102',
     );
   }
 
@@ -232,6 +239,8 @@ class _FlakyCreatorApi extends FakeCreatorApi {
   Future<CreatorPlan> saveMyPlan({
     required SquareSession session,
     required String txHash,
+    required String blockHashHex,
+    required String signedExtrinsicHex,
     required List<CreatorTier> tiers,
   }) async {
     saveCount++;
@@ -239,6 +248,8 @@ class _FlakyCreatorApi extends FakeCreatorApi {
     return super.saveMyPlan(
       session: session,
       txHash: txHash,
+      blockHashHex: blockHashHex,
+      signedExtrinsicHex: signedExtrinsicHex,
       tiers: tiers,
     );
   }

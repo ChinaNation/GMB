@@ -52,6 +52,7 @@ function AppInner() {
         const refreshedAuth: AdminAuth = {
           ...auth,
           admin_account: checked.admin_account,
+          institution_cid_number: checked.institution_cid_number,
           institution_code: checked.institution_code,
           admin_level: checked.admin_level ?? null,
           capabilities: checked.capabilities,

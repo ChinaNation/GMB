@@ -79,20 +79,18 @@ describe('Cloudflare 统一资源限制', () => {
     })).toThrow(expect.objectContaining({ code: 'resource_size_invalid' }));
   });
 
-  it('订阅周期起点缺失时使用稳定周期而不是请求时间', () => {
-    const periodEnd = 2_000_000_000_000;
-    const first = membershipUsagePeriod({
-      current_period_start: null,
-      current_period_end: periodEnd,
-      expires_at: periodEnd,
+  it('用量周期严格复用链上最近扣款与 paid_until，不推算固定天数', () => {
+    expect(membershipUsagePeriod({
+      last_charged_at: 1_700_000_000_000,
+      paid_until: 1_702_678_400_000,
+    })).toEqual({
+      periodStart: 1_700_000_000_000,
+      periodEnd: 1_702_678_400_000,
     });
-    const second = membershipUsagePeriod({
-      current_period_start: null,
-      current_period_end: periodEnd,
-      expires_at: periodEnd,
-    });
-    expect(first).toEqual(second);
-    expect(first.periodStart).toBe(periodEnd - 31 * 24 * 60 * 60 * 1000);
+    expect(() => membershipUsagePeriod({
+      last_charged_at: 1000,
+      paid_until: 1000,
+    })).toThrow(expect.objectContaining({ code: 'subscription_period_invalid' }));
   });
 });
 

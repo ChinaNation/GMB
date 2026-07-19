@@ -411,6 +411,12 @@ class PayloadDecoder {
         return _decodeAddressRegistryCall(bytes, callIndex);
       }
 
+      // ── SquarePost(34) · 技术公司发起平台会员调价内部投票 ──
+      if (palletIndex == PalletRegistry.squarePostPallet &&
+          callIndex == PalletRegistry.proposeSetPlatformPriceCall) {
+        return _decodeProposeSetPlatformPrice(bytes);
+      }
+
       // ── OnchainIssuance(23) · 链上发行代币(Plain FT) ──
       if (palletIndex == PalletRegistry.onchainIssuancePallet) {
         return switch (callIndex) {
@@ -3020,6 +3026,38 @@ class PayloadDecoder {
       summary:
           '$actionText ${fields['province_code']}/${fields['city_code']}/${fields['town_code']}',
       fields: fields,
+    );
+  }
+
+  // SquarePost(34) / propose_set_platform_price(5)
+  // SCALE:actor_cid_number + membership_level:u8 + new_price_fen:u128。
+  static DecodedPayload? _decodeProposeSetPlatformPrice(Uint8List bytes) {
+    final actorRead = _readCidNumber(bytes, 2);
+    if (actorRead == null) return null;
+    var offset = actorRead.$2;
+    if (offset + 1 + 16 > bytes.length) return null;
+    final membershipLevel = bytes[offset++];
+    final membershipLabel = switch (membershipLevel) {
+      0 => '自由会员',
+      1 => '民主会员',
+      2 => '薪火会员',
+      _ => null,
+    };
+    if (membershipLabel == null) return null;
+    final newPriceFen = _readU128Le(bytes, offset);
+    offset += 16;
+    if (newPriceFen <= BigInt.zero || !_hasCallDataEnd(bytes, offset)) {
+      return null;
+    }
+    final priceText = '${_fenToYuan(newPriceFen)} 元（$newPriceFen 分）';
+    return DecodedPayload(
+      action: 'propose_set_platform_price',
+      summary: '由 ${actorRead.$1} 发起$membershipLabel调价提案：$priceText',
+      fields: {
+        'actor_cid_number': actorRead.$1,
+        'membership_level': membershipLabel,
+        'new_price_fen': priceText,
+      },
     );
   }
 

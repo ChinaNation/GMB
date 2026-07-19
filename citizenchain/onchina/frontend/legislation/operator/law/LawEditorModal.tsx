@@ -1,12 +1,12 @@
 // 法律案结构化编辑器(章>节>条>款 + 元字段)。立法/修法带正文,废法只填 law_id。
-// 2D-1:组装 ProposeLawInput 并预览(校验编辑器产出正确);冷签提交(sign_request→QR)在 2D-2 接入。
+// 组装 ProposeLawInput 后进入 OnChina 统一链签名流程，不在立法模块另造提交实现。
 // 嵌套不可变更新用 structuredClone(草稿改后整体替换),保持 React 引用变更即渲染。
 
 import React, { useState } from 'react';
 import { Button, Divider, Input, InputNumber, Modal, Space, Typography, message } from 'antd';
 import type { AdminAuth } from '../../../auth/types';
+import { submitChainSign, useChainSign } from '../../../core/useChainSign';
 import { proposeLegislation } from '../../api';
-import { SignRequestModal } from './SignRequestModal';
 import type {
   LawActionInput,
   LawArticle,
@@ -72,7 +72,7 @@ export function LawEditorModal({ open, auth, lawAction, tier, voteType, onClose 
   const [lawId, setLawId] = useState<number | null>(null);
   const [chapters, setChapters] = useState<LawChapter[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [signRequest, setSignRequest] = useState<string | null>(null);
+  const { signChain, chainSignModal } = useChainSign('立法提案链交易签名');
 
   const needsLawId = lawAction === 'amend' || lawAction === 'repeal';
   const needsChapters = lawAction === 'enact' || lawAction === 'amend';
@@ -100,18 +100,21 @@ export function LawEditorModal({ open, auth, lawAction, tier, voteType, onClose 
   const submit = async () => {
     setSubmitting(true);
     try {
-      const request = await proposeLegislation(auth, buildInput());
-      setSignRequest(request);
+      const prepared = await proposeLegislation(auth, buildInput());
+      const signed = await signChain(prepared.request_id, prepared.sign_request);
+      const submitted = await submitChainSign(
+        auth,
+        prepared.request_id,
+        signed.signer_pubkey,
+        signed.signature,
+      );
+      message.success(`立法提案交易已提交：${submitted.tx_hash}`);
+      onClose();
     } catch (e: unknown) {
       message.error(e instanceof Error ? e.message : '发起提案失败');
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const closeSign = () => {
-    setSignRequest(null);
-    onClose();
   };
 
   return (
@@ -121,7 +124,7 @@ export function LawEditorModal({ open, auth, lawAction, tier, voteType, onClose 
       title={`${ACTION_LABEL[lawAction]}(${voteTypeLabel(voteType)})`}
       onCancel={onClose}
       onOk={submit}
-      okText="发起并生成签名码"
+      okText="发起提案"
       confirmLoading={submitting}
       width={860}
       destroyOnClose
@@ -246,7 +249,7 @@ export function LawEditorModal({ open, auth, lawAction, tier, voteType, onClose 
         </>
       )}
     </Modal>
-      <SignRequestModal signRequest={signRequest} onClose={closeSign} />
+      {chainSignModal}
     </>
   );
 }

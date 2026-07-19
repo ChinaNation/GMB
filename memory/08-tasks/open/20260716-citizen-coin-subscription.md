@@ -1,7 +1,7 @@
 # 任务卡：公民币平台订阅与创作者订阅统一改造
 
 > 状态：执行中
-> 当前步骤：第 3 步已完成；等待确认第 4 步
+> 当前步骤：第 5 步已完成；等待确认第 6 步
 > 唯一架构文档：`memory/01-architecture/gmb/subscription-part1-tech.md`
 > 决策记录：`memory/04-decisions/ADR-037-citizen-coin-native-membership.md`
 
@@ -81,7 +81,7 @@
 - `citizenapp/`：订阅、取消、换套餐热签，finalized 状态读取和真实日期展示；无续费提交。
 - `citizenapp/cloudflare/`：创作者展示资料、finalized 镜像、低频对账和内容权益门禁；无扣款权、无日期计算。
 - `citizenchain/onchina/`：技术公司平台调价治理入口。
-- `citizenwallet/`：平台调价冷签中文识别；普通订阅不进入冷钱包。
+- `citizenwallet/`：平台调价载荷中文识别、一次签名和响应二维码展示；普通订阅不进入 CitizenWallet。
 - `memory/`：任务、协议、命名、ADR、架构和验收事实真源。
 
 ## 5. 分步骤执行
@@ -89,8 +89,8 @@
 - [x] 第 1 步：统一任务卡、ADR、协议、命名与技术架构。
 - [x] 第 2 步：完成 square-post runtime 原地升级与链上订阅状态机。
 - [x] 第 3 步：完成 CitizenApp 平台/创作者订阅和换套餐流程。
-- [ ] 第 4 步：完成 Cloudflare/D1 finalized 镜像、对账和权益门禁。
-- [ ] 第 5 步：完成 OnChina 平台调价与 CitizenWallet 冷签识别。
+- [x] 第 4 步：完成 Cloudflare/D1 finalized 镜像、对账和权益门禁。
+- [x] 第 5 步：完成 OnChina 平台调价、机构工作台隔离与 CitizenWallet 一次签名响应回扫。
 - [ ] 第 6 步：完成跨端真实运行态验收、残留总清理和任务归档。
 
 每一步都必须先输出技术方案并取得确认；执行后立即更新文档、完善中文注释、清理残留，再输出下一步技术方案。
@@ -184,14 +184,14 @@
 - 保留 CitizenApp 已有会员三卡 UI、创作者页和广场创作者订阅按钮，只替换其数据真源与操作编排。
 - `subscription_rpc.dart` 已接入 `Subscriptions`、`CreatorPlans` 和同一 finalized 区块的 `Timestamp.Now` 严格读取；非法枚举、截断及尾随字节全部 fail-closed。
 - 平台订阅和创作者订阅均已接入订阅、取消、换档的一次账户签名交易；页面直接使用 finalized 链状态显示真实本地日期，不计算或提交到期日期。
-- 创作者设置档位采用一次 `set_creator_plans` 签名。链上 finalized 后，Cloudflare 接收交易哈希并严格读取 finalized 付款字段，只保存展示字段；这些镜像请求只用 Bearer 会话与 finalized 链读复核，不生成设备请求签名。边缘保存失败会在 CitizenApp 下次运行时只重试 HTTP 镜像，不再次签名或提交链上交易。
+- 创作者设置档位采用一次 `set_creator_plans` 签名。链上 finalized 后，Cloudflare 接收交易哈希、区块哈希和完整已签名 extrinsic，严格复核签名钱包、调用参数、区块包含关系及同一区块 finalized 付款字段，只保存可重建镜像和展示字段；这些镜像请求只用 Bearer 会话，不生成设备请求签名。边缘保存失败会在 CitizenApp 下次运行时只重试 HTTP 镜像，不再次签名或提交链上交易。
 - Cloudflare 暂时不可用时，CitizenApp 仍可读取链上价格、档位和订阅真态；展示名称使用现有本地兜底，边缘服务不再成为链上功能前置条件。
 - 已审计 runtime 交易收费路由：`subscribe`、`cancel`、`change_subscription_plan`、`set_creator_plans` 均进入签名账户收费路由，并由统一交易支付扩展扣费；零业务金额仍适用最低链上交易费。runtime 自动续费属于系统内部执行，不生成外部收费交易。
 - CitizenApp 目标静态分析通过，目标测试 29 项通过；Cloudflare TypeScript 类型检查、目标测试 45 项和完整测试 178 项通过；`git diff --check` 通过。
 - 真实本地 Worker 已启动并通过 `/health` HTTP 检查；CitizenApp 已在真实 Android 设备安装、启动并检查现有会员与创作者 UI，创作者平台会员门禁按 finalized 真态显示。
 - 当前运行中的本地链仍是旧 runtime，尚未安装第 2 步产物；因此不能虚构本步骤的真实签名交易 finalized 验收。未执行 runtime 升级、链数据库写入、远端部署、Git 提交或推送；真实跨端交易验收在获得单独部署授权后纳入第 6 步。
 
-## 13. 第 4 步技术方案（待确认）
+## 13. 第 4 步技术方案（已执行）
 
 ### 13.1 目标
 
@@ -200,7 +200,7 @@
 ### 13.2 实现范围
 
 1. 平台与创作者订阅镜像统一保存 finalized 链字段：订阅者、收款主体、当前套餐、待生效套餐、开始时间、最近扣款时间、最近扣款价格、已付权益截止时间、状态、finalized 区块号和区块哈希。
-2. 首次订阅、取消、换档及创作者套餐保存的 HTTP 确认只接收交易哈希和必要展示字段，只使用现有 Bearer 会话，不生成设备请求签名；Worker 从 finalized 链状态复核后幂等写 D1，不信任客户端提交的价格、状态或时间。
+2. 首次订阅、取消、换档及创作者套餐保存的 HTTP 确认接收交易哈希、区块哈希、完整已签名 extrinsic、动作和必要展示字段，只使用现有 Bearer 会话，不生成设备请求签名；Worker 复算哈希、严格解码签名者与调用参数、确认交易位于 finalized 主链区块，并从同一区块状态复核后幂等写 D1，不信任客户端提交的状态或时间。
 3. 权益有效口径统一为：`Active` 且链上当前时间早于 `paid_until`，或 `Cancelled` 且链上当前时间仍早于 `paid_until`；`Terminated`、过期、未知状态、解码失败和链读失败全部拒绝。取消不能立即剥夺已经付款的权益。
 4. 创作者资格门禁使用同一 finalized 平台订阅有效口径；创作者内容门禁使用订阅者对该创作者的 finalized 订阅有效口径，不采信 D1 自报状态。
 5. 对账采用有界、低频、分批游标方式，只纠正已有镜像；不全链高频扫描、不运行外部续费任务、不在 Worker 计算公历。确认路径优先精确链读，D1 索引只服务查询与有限批次。
@@ -232,3 +232,70 @@
 - 验证同一个创作者套餐业务操作从一次链上签名到边缘镜像完成全程没有第二次签名；镜像失败重试只产生 HTTP 请求。
 - 验证 `Cancelled` 在 `paid_until` 前仍有权益、到期后拒绝，`Terminated` 始终拒绝。
 - 更新文档、完善中文注释并清除旧路由、旧字段、旧签名和旧状态判断残留后，输出第 5 步完整技术方案。
+
+## 14. 第 4 步执行记录（2026-07-18）
+
+- finalized 镜像已从弱交易引用收紧为完整交易证明：Worker 复算 `tx_hash`，严格解码 signed extrinsic 的签名钱包、pallet/call 和参数，确认 `block_hash` 属于 finalized 主链、完整 extrinsic 确实包含在该区块，再读取同一区块 `Timestamp.Now`、`Subscriptions` 或 `CreatorPlans`。
+- 新增交易首次绑定约束：同一 `tx_hash` 只能绑定一个钱包、区块、extrinsic 序号、动作和规范化请求哈希；相同 HTTP 重试幂等，改绑钱包、动作或展示资料返回冲突。
+- D1 基线已统一使用钱包账户键：平台订阅主键为 `owner_account`，创作者档位复合主键为 `(creator_account,tier_id)`，创作者订阅复合主键为 `(subscriber_account,creator_account)`；旧的 `0004_creator.sql` 迁移已删除，未保留兼容表或双轨字段。
+- `chain_clock` 只接受更高 finalized 区块。统一门禁接受未到期的 `Active` 和 `Cancelled`，拒绝 `Terminated`、到期、缺失、未来观测或陈旧链时钟；平台发布/上传/用量、创作者套餐管理与创作者统计共用该 fail-closed 口径。
+- 对账 Cron 每轮只读取一次 finalized 头与时间戳，只查询已到期的 Active 平台/创作者镜像候选，按有界批次逐行纠偏；不扫描未到期全表、不计算公历、不触发续费，单行链读失败不阻断同批其它记录。
+- CitizenApp 已按钱包持久化 finalized 交易证明历史和有界待镜像队列；App 再次运行时只重试 Bearer HTTP，不再次签名或重复提交链上交易，原有会员与创作者 UI 页面保持不变。
+- Worker TypeScript 类型检查通过；26 个测试文件、154 项测试通过；Wrangler 本地启动阶段构建与分析通过。CitizenApp 全仓静态分析通过，全量 Flutter 测试 738 项通过，5 项因纯 Dart 宿主缺少原生库按既有条件跳过，没有失败。
+- 真实本地 D1 基线迁移执行 51 条命令成功并确认五张订阅相关表存在；真实本地 Worker `/health` 返回 200。finalized 镜像路由在 Bearer 且无设备证明时进入业务参数校验，普通受保护写路由在缺设备证明时仍返回 401，证明“镜像不二次签名”没有放宽其它写入口。
+- 本步骤没有修改 `citizenchain/runtime/`，没有写生产 D1、没有部署 Cloudflare、没有升级链数据库，也没有提交或推送 Git。
+
+## 15. 第 5 步执行记录（2026-07-18）
+
+- 登录、扫码登录轮询、鉴权检查和工作台清单统一携带节点绑定的准确 `institution_cid_number`；前端不再根据机构码猜测工作台，后端未返回工作台时直接拒绝加载。
+- 工作台类型已拆分为注册局、私权、司法、立法、其它公权和非法人机构。私权机构管理员仍从链上中国统一入口扫码登录，但只进入本机构信息、`admins` 和经授权模块，不复用注册局的公民、机构目录或登记 UI。
+- 平台会员模块只在当前绑定 CID 与 finalized `PlatformCidNumber` 精确一致时下发；查询与发起前读取同一 finalized 区块的三档 `PlatformPrice`，链读、CID、节点绑定或链上 `admins` 任一无法确认均 fail-closed，PostgreSQL 不保存价格副本。
+- 调价提案严格构造 `SquarePost::propose_set_platform_price`，仅调用现有统一内部投票引擎。OnChina 不实现投票资格、计票、推进或执行，也不保存投票表。
+- 链签流程已收口到唯一 core 实现和统一 `POST /api/v1/admin/chain/submit`：OnChina 展示请求二维码，CitizenWallet 只签名一次并显示响应二维码，OnChina 回扫响应后统一验签、dry-run、提交并等待进块；旧公民专属提交 URL 和业务专属提交实现已移除。
+- prepare 与 submit 都重新核对当前节点绑定、准确平台 CID 和链上 active `admins`，防止 prepare 后撤权继续提交。调价外部交易继续经过统一交易收费；投票引擎系统执行不追加签名或外部交易。
+- 唯一二维码 registry 已登记 `propose_set_platform_price` 与中文字段。CitizenWallet 严格显示技术公司 CID、目标档位和新价格，并拒绝未知档位、零价、截断、尾随字节、call/action 不一致及非标准载荷。
+- OnChina 140 项测试、CitizenWallet signer 139 项测试、二维码 registry 一致性和单注册表守卫全部通过；前端生产构建和 Dart 静态分析通过。
+- 真实本地验收使用隔离 OnChina 与临时 PostgreSQL 连接真实本地 CitizenChain，完成链投影同步并达到健康状态 UP；未登录访问平台价格、调价提案和统一提交均返回拒绝，旧提交入口已失效。隔离进程与临时数据已停止并清理。
+- 本步骤未修改 `citizenchain/runtime/`，未部署、未写生产数据库、未提交或推送 Git。
+
+## 16. 第 6 步完整技术方案（等待确认）
+
+### 16.1 目标
+
+在不增加任何签名、不新建业务流程的前提下，完成平台订阅、创作者订阅、自动续费、Cloudflare 镜像、机构工作台和平台调价的一次跨端真实运行态总验收；清除全仓旧接口、旧字段、旧文案和重复实现，所有验收事实回写文档后归档本任务。
+
+### 16.2 执行顺序
+
+1. 固定验收环境：使用独立本地链状态、独立 OnChina/PostgreSQL、真实本地 Worker/D1 和 CitizenApp/CitizenWallet 调试运行；先记录 genesis、finalized 区块和测试账户，禁止触碰生产状态。
+2. 验收 CitizenApp 平台订阅：订阅、取消、换档各只签名一次；finalized 后显示真实本地日期，Cloudflare 镜像失败重试不再签名；取消后已付期内权益有效、到期后拒绝。
+3. 验收创作者链路：有效平台会员才能设置创作者套餐；一次签名同时确认链上付款字段，finalized 后 Cloudflare 保存展示资料；订阅、换档和取消分别只签名一次，款项进入创作者钱包。
+4. 验收 runtime 自动续费：推进真实共识时间到到期点，确认无需 App、设备、Cloudflare 或外部提交即可自动扣款；余额不足、套餐失效和创作者平台资格失效均终止且不重试。此项只运行现有代码；若发现必须修改 runtime，立即停止并列出完整路径、改动和原因，另行取得 runtime 二次确认。
+5. 验收 OnChina 调价：平台机构管理员从统一登录入口进入专属工作台，OnChina 出请求二维码，CitizenWallet 只签名一次并显示响应二维码，OnChina 回扫统一提交；确认链上只创建统一内部投票提案，业务模块没有第二套投票。
+6. 执行全仓残留审计：清理旧订阅 API、旧提交 URL、第二次签名、设备确认、外部续费、区块高度周期、固定天数文案、重复 action registry 和错误产品命名；复跑各端全量测试与真实 HTTP/页面检查。
+7. 更新架构、ADR、统一协议、模块文档和任务卡；全部完成后把本任务卡从 `open` 移至仓库既有完成态目录，不新建归档文件。
+
+### 16.3 预计修改目录
+
+- `citizenapp/lib/`：代码、注释与残留清理；只修复跨端验收发现的订阅、finalized 展示、一次签名或镜像重试问题，保留既有会员和创作者 UI。
+- `citizenapp/test/`：现有测试与残留清理；补足一次签名、真实日期展示、镜像重试和门禁回归，不新增测试文件。
+- `citizenapp/cloudflare/src/`、`citizenapp/cloudflare/test/`、`citizenapp/cloudflare/migrations/`：Worker/D1 代码、测试、基线和残留清理；只处理 finalized 镜像、幂等和权益门禁，禁止承担扣款、续费或日期计算。
+- `citizenchain/onchina/src/`、`citizenchain/onchina/frontend/`：代码、页面、中文注释和残留清理；验收准确 CID 工作台、平台调价与唯一响应二维码回扫提交，不新增投票或第二套提交器。
+- `citizenwallet/lib/`、`citizenwallet/test/`：代码、中文显示、严格拒签测试和残留清理；验收一次签名及响应二维码，不接入普通用户订阅。
+- `citizenchain/crates/qr-protocol/registry/`：协议与生成物一致性清理；保持唯一动作注册表，不另建扫码协议。
+- `citizenchain/runtime/`：默认只读验收，禁止产生任何 diff；如真实验收发现 runtime 缺陷，必须先暂停并取得逐路径二次确认后才能修改。
+- `memory/01-architecture/`、`memory/04-decisions/`、`memory/05-modules/`、`memory/07-ai/`、`memory/08-tasks/`：文档、任务归档和残留清理；记录真实证据、最终接口和禁止边界，不创建新文档文件。
+
+### 16.4 不修改与停止条件
+
+- 不部署 Cloudflare、OnChina 或链升级，不写生产 D1/PostgreSQL，不推送 GitHub或触发远端 workflow。
+- 不新增目录或文件；如验收确需新增，先列完整路径、用途、原因和 Git 跟踪状态并等待确认。
+- 不兼容旧订阅、旧二维码、旧 URL 或旧数据格式。
+- 任何无法从真实运行输出确认的签名次数、扣款、分账、门禁或投票结果都不得推断；立即停下并沟通。
+
+### 16.5 完成标准
+
+- 平台与创作者的订阅、取消、换档和创作者设置套餐均证明同一业务操作只有一次签名；自动续费证明没有签名和外部提交。
+- 真实共识时间下的首次扣款、到期自动扣款、停链恢复补扣、余额不足终止、已付取消权益和下一周期换档全部取得真实链上证据。
+- CitizenWallet 平台调价只签名一次并生成响应二维码，OnChina 回扫后由唯一入口提交并得到 finalized 交易或明确的真实环境阻断证据。
+- Cloudflare/D1 只保存可重建 finalized 镜像和展示资料，所有平台/创作者资源门禁不能通过直接调用绕过。
+- 全量测试、真实本地服务、真实 HTTP 和相关页面验收通过；文档、注释、生成物与代码一致，无旧流程残留，任务卡完成归档。

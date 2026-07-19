@@ -4,8 +4,6 @@ import { HttpError } from '../shared/http';
 import { nowMs } from '../shared/time';
 import { usageLimits } from './catalog';
 
-const FALLBACK_PERIOD_MS = 31 * 24 * 60 * 60 * 1000;
-
 export async function reserveUploadUsage(input: {
   env: Env;
   upload_id: string;
@@ -59,14 +57,12 @@ export async function reserveUploadUsage(input: {
  * 的每次请求都命中同一个 D1 主键，不能用请求时间制造新周期绕过累计额度。
  */
 export function membershipUsagePeriod(
-  membership: Pick<MembershipRow, 'current_period_start' | 'current_period_end' | 'expires_at'>,
+  membership: Pick<MembershipRow, 'last_charged_at' | 'paid_until'>,
 ): { periodStart: number; periodEnd: number } {
-  const periodEnd = membership.current_period_end ?? membership.expires_at;
-  const declaredStart = membership.current_period_start;
-  const periodStart = declaredStart !== null && declaredStart < periodEnd
-    ? declaredStart
-    : Math.max(0, periodEnd - FALLBACK_PERIOD_MS);
-  return { periodStart, periodEnd };
+  if (membership.last_charged_at < 0 || membership.last_charged_at >= membership.paid_until) {
+    throw new HttpError(503, 'subscription_period_invalid', 'finalized 订阅用量周期不合法');
+  }
+  return { periodStart: membership.last_charged_at, periodEnd: membership.paid_until };
 }
 
 /** 完成上传时一次性把预留转为周期用量，重复 complete 不会重复计数。 */
@@ -177,10 +173,11 @@ function releaseTotalStatement(env: Env, key: string, assets: MediaAssetRow[]): 
 /** 收入预算是成本熔断，不替代单账户额度；达到阈值时先停止新视频，再停止新媒体。 */
 async function assertProfitBudget(env: Env, hasVideo: boolean): Promise<void> {
   const revenue = await env.DB.prepare(
-    `SELECT COALESCE(SUM(CASE membership_level
-        WHEN 'freedom' THEN 299 WHEN 'spark' THEN 9999 ELSE 999 END), 0) AS cents
-      FROM square_memberships
-      WHERE subscription_status = 'active'`
+    `SELECT COALESCE(SUM(m.last_charged_price_fen), 0) AS cents
+      FROM square_memberships m
+      JOIN chain_clock c ON c.clock_id = 1
+      WHERE m.subscription_status IN ('active', 'cancelled')
+        AND c.chain_timestamp < m.paid_until`
   ).first<{ cents: number }>();
   const totals = await env.DB.prepare(
     `SELECT

@@ -9,6 +9,7 @@ import type { InstitutionWorkspace } from '../workspace/types';
 export type AdminAuthCheck = {
   ok: boolean;
   admin_account: string;
+  institution_cid_number: string;
   institution_code: string;
   admin_level?: string | null;
   capabilities?: CapabilitySet;
@@ -22,6 +23,7 @@ export type AdminAuthCheck = {
 
 export type AdminIdentifyResult = {
   admin_account: string;
+  institution_cid_number: string;
   institution_code: string;
   admin_level?: string | null;
   capabilities?: CapabilitySet;

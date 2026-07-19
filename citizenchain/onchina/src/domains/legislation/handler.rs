@@ -1,6 +1,6 @@
 //! 立法与表决 HTTP handler(`/api/v1/legislation/*`)。
 //!
-//! 发起/表决产出扫码上链 `sign_request`(冷签由 CitizenWallet 提交,onchina 不提交);
+//! 发起/表决产出扫码上链 `sign_request`；CitizenWallet 只签名一次并显示响应二维码，OnChina 回扫响应后通过统一入口提交；
 //! 读法律/提案进度直读链。后端强制:① 登录绑定机构(只有该院管理员可达)② 本机构能否发起该
 //! 类型提案(`category::proposable_candidates`)③ 越权前置(`service::precheck_legislation_scope`)。
 //! 能力位是前端渲染门控,后端以此三重边界为准。
@@ -278,7 +278,7 @@ pub(crate) async fn get_proposal_state(
     }
 }
 
-/// POST /api/v1/legislation/propose —— 发起法律案,返回扫码上链 sign_request。
+/// POST /api/v1/legislation/propose —— 发起法律案，返回统一链签名准备结果。
 pub(crate) async fn propose_legislation(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -329,16 +329,20 @@ pub(crate) async fn propose_legislation(
             &city_code,
         )
     };
-    match action::build_propose_law_sign_request(
+    match action::prepare_propose_law_sign(
+        &state,
         &input,
         proposer_code,
         ctx.admin_account.as_str(),
+        ctx.institution_cid_number.as_str(),
         resolve_cid_number,
-    ) {
-        Ok(sign_request) => Json(ApiResponse {
+    )
+    .await
+    {
+        Ok(output) => Json(ApiResponse {
             code: 0,
             message: "ok".to_string(),
-            data: sign_request,
+            data: output,
         })
         .into_response(),
         Err(resp) => resp,
@@ -367,15 +371,19 @@ pub(crate) async fn cast_representative_vote(
             "institution cannot cast representative vote",
         );
     }
-    match action::build_representative_vote_sign_request(
+    match action::prepare_representative_vote_sign(
+        &state,
         input.proposal_id,
         input.approve,
         ctx.admin_account.as_str(),
-    ) {
-        Ok(sign_request) => Json(ApiResponse {
+        ctx.institution_cid_number.as_str(),
+    )
+    .await
+    {
+        Ok(output) => Json(ApiResponse {
             code: 0,
             message: "ok".to_string(),
-            data: sign_request,
+            data: output,
         })
         .into_response(),
         Err(resp) => resp,

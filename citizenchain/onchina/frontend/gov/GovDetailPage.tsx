@@ -28,8 +28,7 @@ import {
 } from '../china/metaCache';
 import { InstitutionDetailNavLayout } from '../core/InstitutionDetailNavLayout';
 import { OperationRecords } from './OperationRecords';
-import { useChainSign } from '../core/useChainSign';
-import { submitCitizenChainSign } from '../citizens/api';
+import { submitChainSign, useChainSign } from '../core/useChainSign';
 import {
   prepareInstitutionGovernance,
   prepareRegisterInstitutionAdmins,
@@ -153,7 +152,7 @@ function InstitutionGovernancePanel({
 
   const submitPrepared = async (requestId: string, signRequest: string) => {
     const signed = await signChain(requestId, signRequest);
-    const output = await submitCitizenChainSign(
+    const output = await submitChainSign(
       auth,
       requestId,
       signed.signer_pubkey,
@@ -586,8 +585,8 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
         }}
         qrTitle="签名二维码"
         qrValue={securityModal?.signRequest}
-        qrHint="使用联邦注册局管理员冷钱包扫码签名"
-        scannerHint="扫描冷钱包生成的签名响应二维码"
+        qrHint="使用当前注册局管理员公民钱包扫码签名"
+        scannerHint="扫描公民钱包生成的签名响应二维码"
         scannerDisabled={securityCommitLoading}
         scannerLoading={securityCommitLoading}
         onDetected={handleSecuritySignedResponse}

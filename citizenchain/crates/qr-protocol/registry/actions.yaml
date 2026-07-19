@@ -106,6 +106,21 @@
     - expires_at
     - membership_level
 
+- action_key: propose_set_platform_price
+  action_code: 0x2205
+  action_label_zh: 发起平台会员调价提案
+  kind: chain_call
+  qr_kind: sign_request
+  pallet: SquarePost
+  call: propose_set_platform_price
+  decoder: propose_set_platform_price
+  hash_only_allowed: false
+  signing_category: chain_tx
+  required_fields:
+    - actor_cid_number
+    - membership_level
+    - new_price_fen
+
 - action_key: transfer
   action_code: 0x0400
   action_label_zh: 转账

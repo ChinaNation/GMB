@@ -2,7 +2,8 @@
 //!
 //! 链端 `legislation-vote` 的 5 个表决/签署 call 形态完全相同——
 //! `(proposal_id: u64, approve: bool)`(lib.rs:317/329/342/355/367)。
-//! 复用 `core::institution_call` 的「构造裸 call data → 冷签 → CitizenWallet 提交」通道。
+//! 复用「构造裸 call data → CitizenWallet 一次签名并显示响应二维码
+//! → OnChina 回扫后统一提交」通道。
 //!
 //! 特别案人口快照由投票引擎按 `actor_cid_number` 推导作用域并随提案原子生成，本文件不承载快照调用。
 //!

@@ -2,7 +2,7 @@ import type { Env } from './types';
 import { errorResponse } from './shared/http';
 import { routeRequest } from './routes';
 import { runVideoArchiveSweep } from './membership/archive';
-import { reconcileMemberships, reconcileCreatorSubscriptions } from './membership/reconcile';
+import { reconcileSubscriptions } from './membership/reconcile';
 import { applyCors, cleanupSecurityState } from './security/request_guard';
 import { cleanupExpiredUploads } from './uploads/service';
 import { cleanupExpiredReservations } from './limits/usage';
@@ -25,9 +25,8 @@ export default {
       cleanupExpiredUploads(env),
       cleanupSecurityState(env),
       cleanupExpiredReservations(env),
-      // 对账平台/创作者订阅镜像与链上真态（各自 KV 开关关闭时内部直接返回）。
-      reconcileMemberships(env),
-      reconcileCreatorSubscriptions(env),
+      // 平台与创作者共享同一个 finalized 链锚点，只处理已经到期的有限候选。
+      reconcileSubscriptions(env),
     ];
     if (_controller.cron === '0 3 * * *') {
       jobs.push(runVideoArchiveSweep(env));

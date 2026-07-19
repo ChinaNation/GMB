@@ -1,7 +1,7 @@
 # CID 占号先行与吊销墓碑(占号体系 卡2)
 
 > 设计真源:`memory/04-decisions/ADR-031-cid-occupy-registry.md`(D2/D3/D6/D7/D8)。2026-07-02 代码核查补充的硬约束:
-> - onchina 现无任何自动提交交易通路(全部=裸 call_data→冷签→钱包提交),须按 D7 补「组装+dry-run+author_submitExtrinsic」后端提交骨架(参照 node/src/governance/signing.rs:612-683),QR 仍只签不提交;
+> - 当时 OnChina 尚无统一链交易提交通路，须按 D7 补「组装+dry-run+author_submitExtrinsic」后端提交骨架（参照 node/src/governance/signing.rs:612-683）；该项现已统一为 OnChina 展示请求二维码、CitizenWallet 一次签名并展示响应二维码、OnChina 回扫响应后提交；
 > - 机构关闭现状=账户级物理删除、`Institutions` 永不删但状态从未置 Closed;须按 D3 落地 Closed 墓碑语义 + 堵 register(call 2)不查本 pallet Institutions 的重注册缺口;
 > - citizens.onchain_tx_hash 等列现无写入者,须按 D8 经 indexer 事件回写闭环;
 > - 新增 `occupy_cids_batch`(≤10,000 项/笔)供公民批量建档;占号/吊销费类 **Free(2026-07-02 已决,ADR-031 Q4)**,滥用由链上注册局授权门槛拦截。
@@ -55,11 +55,11 @@
   - 测试:citizen-identity 21/21(含幂等/冲突/批量回滚/无占号拒注册/吊销墓碑不可复用/换号旧号墓碑 6 个新用例);entity 34+34(关闭用例扩墓碑断言+重注册拒绝);citizen-issuance 12+5、runtime lib 30/30 占号前置改造后全绿。
   - 顺手修工作区既有 benchmark 断链 4 处:admins×2(CHINA_CB 导入+AdminProfile 结构升级)、resolution-issuance/runtime-upgrade(PreparedPopulationSnapshot.nonce_hash→scope)、runtime 基准清单摘除无基准的 citizen-identity;全 runtime `--features runtime-benchmarks` 编译过。
 - 2026-07-03:**onchina 侧(D6/D7/D8)完成**,onchina 134 测试全绿、前端 tsc+build 通过、node crate 不受影响:
-  - **D7 提交通路** `core/chain_submit.rs`:onchina 唯一 extrinsic 组装+提交模块(依赖 citizenchain/frame-system/pallet-transaction-payment/frame-metadata-hash-extension,与 node signing.rs 同源拼 SignedPayload);`prepare_signing`(实时 nonce+版本+创世哈希→冷签载荷+校验哈希)、`assemble_and_submit`(重建校验哈希防漂移→本地 sr25519 验签→system_dryRun 拒 Future/Stale→author_submitExtrinsic)、`wait_nonce_consumed`(accountNextIndex 越过=进块代理,95s 超时)、`find_extrinsic_block`(回溯 20 块比对 blake2 交易哈希);**QR 仍只签不提交**,冷钱包边界不变。2 单测绿。
-  - **D6 建档流程** `domains/citizens/occupy.rs`:两阶段——prepare(校验→种子+nonce 0..999 碰撞重试+本地/链上双预查+链上同承诺幂等续用→`occupy_cid` 冷签会话)、submit(统一入口,按 purpose 分派:占号进块后落档案、吊销墓碑、身份上链回写);`chain_sign_sessions` 表(prepare 落库 submit 单次消费,携签名哈希防漂移)。`admin_entry.rs` 重构为 `validate_citizen_input`/`citizen_cid_seed`/`generate_citizen_cid_candidate`/`persist_citizen_record`/`create_output_from_record` 五段复用。清档走 `revoke_cid` + `mark_citizen_revoked`(本地 REVOKED 墓碑)。
+  - **D7 提交通路** `core/chain_submit.rs`:OnChina 唯一 extrinsic 组装+提交模块(依赖 citizenchain/frame-system/pallet-transaction-payment/frame-metadata-hash-extension,与 node signing.rs 同源拼 SignedPayload);`prepare_signing`(实时 nonce+版本+创世哈希→CitizenWallet 签名载荷+校验哈希)、`assemble_and_submit`(重建校验哈希防漂移→本地 sr25519 验签→system_dryRun 拒 Future/Stale→author_submitExtrinsic)、`wait_nonce_consumed`(accountNextIndex 越过=进块代理,95s 超时)、`find_extrinsic_block`(回溯 20 块比对 blake2 交易哈希);CitizenWallet 只签名一次并显示响应二维码，由 OnChina 回扫响应后提交。2 单测绿。
+  - **D6 建档流程** `domains/citizens/occupy.rs`:两阶段——prepare(校验→种子+nonce 0..999 碰撞重试+本地/链上双预查+链上同承诺幂等续用→`occupy_cid` 签名会话)、submit(统一入口,按 purpose 分派:占号进块后落档案、吊销墓碑、身份上链回写);`chain_sign_sessions` 表(prepare 落库 submit 单次消费,携签名哈希防漂移)。`admin_entry.rs` 重构为 `validate_citizen_input`/`citizen_cid_seed`/`generate_citizen_cid_candidate`/`persist_citizen_record`/`create_output_from_record` 五段复用。清档走 `revoke_cid` + `mark_citizen_revoked`(本地 REVOKED 墓碑)。
   - **D8 回写闭环**:提交路径同步回写 `onchain_tx_hash/onchain_block_number/onchain_at`(update_citizen_onchain / persist 时写入),补齐"无写入者"缺口;`chain_runtime::cid_registry_lookup` 读链上 CidRegistry 供发号预查与幂等识别。
   - **chain_identity.rs**:complete 切 D7——QR 载荷改完整签名载荷(对齐钱包扩展尾解码器)、落 `CITIZEN_IDENTITY_PUSH` 会话,回签经统一 submit 提交。
-  - **前端**:`core/useChainSign.tsx`(展示 sign_request QR→扫码→解析 signer_pubkey/signature);`api.ts` 改两阶段(prepareCitizenOccupy/submitCitizenChainSign/prepareCitizenRevoke);CreateModal 占号先行+冷签+进块落库;DetailPage 身份上链改 onchina 提交+新增"吊销身份(墓碑)"按钮;删旧"已提交链上交易"手动 QR 与死状态。
+  - **前端**:`core/useChainSign.tsx`(展示 sign_request QR→CitizenWallet 一次签名并显示响应二维码→OnChina 回扫并解析 signer_pubkey/signature);`api.ts` 改两阶段(prepareCitizenOccupy/统一 chain submit/prepareCitizenRevoke);CreateModal 占号先行+一次签名+进块落库;DetailPage 身份上链改 OnChina 统一提交+新增"吊销身份(墓碑)"按钮;删旧"已提交链上交易"手动 QR 与死状态。
   - 踩坑:onchina 原 `parity-scale-codec` 与 runtime 传入的 `codec` 同 crate 双名冲突,统一去重为 workspace `codec`(9 文件改引用);submit 入参从 raw sign_response 改 signer_pubkey+signature(与前端 signWithScan 同形,后端按会话字节重新验签,安全不减)。
 
 ## 状态

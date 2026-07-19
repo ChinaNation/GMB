@@ -1,6 +1,6 @@
 // 管理员安全动作 API。
 // 管理端权限统一为 SESSION / PASSKEY / PASSKEY_COLD_SIGN 三档。
-// PASSKEY_COLD_SIGN 动作走 prepare → 冷钱包扫码签名 → commit。
+// PASSKEY_COLD_SIGN 动作走 prepare → CitizenWallet 扫码签名一次并显示响应二维码 → OnChina 回扫 commit。
 
 import type { AdminAuth } from '../auth/types';
 import { assertPasskey, PASSKEY_ASSERTION_HEADER } from '../auth/passkey/passkeyClient';
@@ -71,7 +71,7 @@ export async function prepareAdminAction(
   });
 }
 
-// PASSKEY_COLD_SIGN commit 只携带冷钱包扫码签名字段。
+// PASSKEY_COLD_SIGN commit 只携带 CitizenWallet 扫码签名响应字段。
 export async function commitAdminAction<T>(
   auth: AdminAuth,
   input: {
@@ -116,7 +116,7 @@ export async function createScanSignSecurityGrant(
 }
 
 // PASSKEY_COLD_SIGN 正式业务提交必须同时携带两份一次性凭证:
-// 1) 冷钱包扫码签名得到的 security grant;
+// 1) CitizenWallet 扫码签名一次得到的 security grant;
 // 2) 当前管理员本机 passkey 断言。
 // 后端 require_admin_security_grant 会先消费 passkey,再消费 grant;二者缺一即 fail-closed。
 export async function securityGrantSubmitHeaders(
@@ -132,7 +132,7 @@ export async function securityGrantSubmitHeaders(
   };
 }
 
-// 最常用路径:prepare → 冷钱包扫码 commit → passkey → 返回正式业务提交头。
+// 最常用路径：prepare → CitizenWallet 一次签名响应回扫 commit → passkey → 返回正式业务提交头。
 // 调用方只负责传入与业务请求逐字段一致的 payload,避免授权和提交出现第二真源。
 export async function createColdSignSubmitHeaders(
   auth: AdminAuth,

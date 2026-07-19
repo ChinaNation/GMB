@@ -9,4 +9,6 @@ pub(crate) mod docs;
 pub(crate) mod gov;
 /// 立法与表决域（业务提案 / 代表机构表决 / 大屏只读）。
 pub(crate) mod legislation;
+/// 平台会员价格治理域；只构造统一投票提案交易，不实现投票流程。
+pub(crate) mod membership;
 pub(crate) mod private;

@@ -137,6 +137,52 @@ void main() {
       expect(verification.decoded!.action, 'transfer');
     });
 
+    test('verifyPayload accepts exact SquarePost platform price action', () {
+      const cid = 'GD001-SFGQ0-000000001-2026';
+      final cidBytes = cid.codeUnits;
+      final price = List<int>.filled(16, 0)..[0] = 100;
+      final payloadHex = '0x${_toHex([
+        34, 5,
+        cidBytes.length << 2,
+        ...cidBytes,
+        2,
+        ...price,
+      ])}';
+      final request = _buildTestRequest(
+        requestId: 'offline-platform-price',
+        pubkey: '0x${hotWallet.pubkeyHex}',
+        payloadHex: payloadHex,
+        action: QrActions.proposeSetPlatformPrice,
+      );
+
+      final verification = service.verifyPayload(request);
+      expect(verification.status, SignDecisionStatus.normal);
+      expect(verification.actionLabel, '发起平台会员调价提案');
+      expect(verification.decoded!.fields['membership_level'], '薪火会员');
+    });
+
+    test('verifyPayload rejects platform price payload with mismatched action', () {
+      const cid = 'GD001-SFGQ0-000000001-2026';
+      final cidBytes = cid.codeUnits;
+      final price = List<int>.filled(16, 0)..[0] = 100;
+      final request = _buildTestRequest(
+        requestId: 'offline-platform-price-mismatch',
+        pubkey: '0x${hotWallet.pubkeyHex}',
+        payloadHex: '0x${_toHex([
+          34, 5,
+          cidBytes.length << 2,
+          ...cidBytes,
+          0,
+          ...price,
+        ])}',
+        action: QrActions.transferWithRemark,
+      );
+
+      final verification = service.verifyPayload(request);
+      expect(verification.status, SignDecisionStatus.reject);
+      expect(verification.rejectReason, contains('不匹配'));
+    });
+
     test('verifyPayload 拒绝普通链交易 32 字节 hash-only payload', () {
       final request = _buildTestRequest(
         requestId: 'offline-req-test-hash-only-reject',

@@ -59,7 +59,7 @@ export default function DownloadButton({ productLabel, options }: DownloadButton
                 <a
                   key={option.label}
                   role="menuitem"
-                  href={`${RELEASE_BASE}/${option.asset}`}
+                  href={`${RELEASE_BASE}/${encodeURIComponent(option.asset)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => setOpen(false)}

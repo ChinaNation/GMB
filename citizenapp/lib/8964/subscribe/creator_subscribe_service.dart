@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
@@ -9,6 +10,7 @@ import 'package:citizenapp/wallet/core/secure_seed_store.dart'
     show SecureSeedException;
 import 'package:citizenapp/wallet/core/seed_sign_error.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class CreatorSubscribeException implements Exception {
   const CreatorSubscribeException(this.message);
@@ -27,24 +29,29 @@ class CreatorSubscribeService {
     WalletManager? walletManager,
     SquareSessionProvider? sessionProvider,
     CreatorApi? api,
+    SharedPreferences? preferences,
   })  : _rpc = rpc ?? SubscriptionRpc(),
         _wallet = walletManager ?? WalletManager(),
         _session = sessionProvider ?? SquareSessionProvider.instance,
-        _api = api ?? CreatorApiHttp();
+        _api = api ?? CreatorApiHttp(),
+        _preferences = preferences;
 
   final SubscriptionRpc _rpc;
   final WalletManager _wallet;
   final SquareSessionProvider _session;
   final CreatorApi _api;
+  final SharedPreferences? _preferences;
 
   Future<FinalizedSubscriptionSnapshot> fetchFinalizedState({
     required String subscriberAddress,
     required String creatorAddress,
-  }) =>
-      _rpc.fetchSubscriptionSnapshot(
+  }) async {
+    await _retryPendingMirrors(subscriberAddress);
+    return _rpc.fetchSubscriptionSnapshot(
         subscriberAddress: subscriberAddress,
         creatorAddress: creatorAddress,
       );
+  }
 
   Future<List<ChainCreatorTier>> fetchCreatorPlans(String creatorAddress) =>
       _rpc.fetchCreatorPlans(creatorAddress);
@@ -73,10 +80,14 @@ class CreatorSubscribeService {
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
+        ownerAccount: wallet.address,
         txHash: result.txHash,
+        blockHashHex: result.blockHashHex,
+        signedExtrinsicHex: result.signedExtrinsicHex,
+        action: 'subscribe',
         creatorAddress: creatorAddress,
         tierId: tierId,
-        period: period,
+        billingPeriod: period,
       );
     } on SecureSeedException catch (e) {
       throw CreatorSubscribeException(seedSignErrorMessage(e));
@@ -101,7 +112,14 @@ class CreatorSubscribeService {
         sign: (payload) => _wallet.signWithWallet(wallet.walletIndex, payload),
         onWatchEvent: onWatchEvent,
       );
-      await _confirm(txHash: result.txHash, creatorAddress: creatorAddress);
+      await _confirm(
+        ownerAccount: wallet.address,
+        txHash: result.txHash,
+        blockHashHex: result.blockHashHex,
+        signedExtrinsicHex: result.signedExtrinsicHex,
+        action: 'cancel',
+        creatorAddress: creatorAddress,
+      );
     } on SecureSeedException catch (e) {
       throw CreatorSubscribeException(seedSignErrorMessage(e));
     } on WalletAuthException catch (e) {
@@ -135,10 +153,14 @@ class CreatorSubscribeService {
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
+        ownerAccount: wallet.address,
         txHash: result.txHash,
+        blockHashHex: result.blockHashHex,
+        signedExtrinsicHex: result.signedExtrinsicHex,
+        action: 'change',
         creatorAddress: creatorAddress,
         tierId: tierId,
-        period: period,
+        billingPeriod: period,
       );
     } on SecureSeedException catch (e) {
       throw CreatorSubscribeException(seedSignErrorMessage(e));
@@ -157,25 +179,127 @@ class CreatorSubscribeService {
     return wallet;
   }
 
-  /// best-effort 回执：链上已是真源，失败不阻塞（下次进页刷新会再对齐）。
+  Future<SharedPreferences> get _prefs async {
+    final preferences = _preferences;
+    if (preferences != null) return preferences;
+    return SharedPreferences.getInstance();
+  }
+
+  String _pendingKey(String ownerAccount) =>
+      'creator_subscription_mirror_pending:$ownerAccount';
+
+  /// finalized 回执按钱包账户持久化；HTTP 失败只重放同一交易证明，不要求第二次签名。
   Future<void> _confirm({
+    required String ownerAccount,
     required String txHash,
+    required String blockHashHex,
+    required String signedExtrinsicHex,
+    required String action,
     required String creatorAddress,
     String? tierId,
-    String? period,
+    String? billingPeriod,
   }) async {
+    final proof = <String, dynamic>{
+      'tx_hash': txHash,
+      'block_hash': blockHashHex,
+      'signed_extrinsic_hex': signedExtrinsicHex,
+      'action': action,
+      'creator_account': creatorAddress,
+      if (tierId != null) 'tier_id': tierId,
+      if (billingPeriod != null) 'billing_period': billingPeriod,
+    };
+    try {
+      await _storeLocalProof(ownerAccount, proof);
+    } on Exception {
+      // 链上已 finalized；本地缓存异常不得转化为重新签名。
+    }
     try {
       final session = await _session.ensureSession();
-      if (session == null) return;
+      if (session == null || session.ownerAccount != ownerAccount) return;
       await _api.confirmCreatorSubscription(
         session: session,
         txHash: txHash,
+        blockHashHex: blockHashHex,
+        signedExtrinsicHex: signedExtrinsicHex,
+        action: action,
         creatorAccount: creatorAddress,
         tierId: tierId,
-        period: period,
+        billingPeriod: billingPeriod,
       );
+      await _removePendingProof(ownerAccount, txHash);
     } on Exception {
-      // 链上已成功；镜像回执失败仅忽略，进页刷新会再对齐。
+      // 保留证明，下次进入创作者订阅页仅重试 HTTP。
     }
+  }
+
+  Future<void> _retryPendingMirrors(String ownerAccount) async {
+    try {
+      final session = await _session.ensureSession();
+      if (session == null || session.ownerAccount != ownerAccount) return;
+      final pending = await _readList(_pendingKey(ownerAccount));
+      for (final proof in List<Map<String, dynamic>>.from(pending)) {
+        final txHash = proof['tx_hash'];
+        final blockHashHex = proof['block_hash'];
+        final signedExtrinsicHex = proof['signed_extrinsic_hex'];
+        final action = proof['action'];
+        final creatorAccount = proof['creator_account'];
+        if (txHash is! String ||
+            blockHashHex is! String ||
+            signedExtrinsicHex is! String ||
+            action is! String ||
+            creatorAccount is! String) {
+          continue;
+        }
+        await _api.confirmCreatorSubscription(
+          session: session,
+          txHash: txHash,
+          blockHashHex: blockHashHex,
+          signedExtrinsicHex: signedExtrinsicHex,
+          action: action,
+          creatorAccount: creatorAccount,
+          tierId: proof['tier_id'] as String?,
+          billingPeriod: proof['billing_period'] as String?,
+        );
+        await _removePendingProof(ownerAccount, txHash);
+      }
+    } on Exception {
+      // Cloudflare 不可用不影响链上自动续费，证明继续保留。
+    }
+  }
+
+  Future<void> _storeLocalProof(
+      String ownerAccount, Map<String, dynamic> proof) async {
+    final pending = await _readList(_pendingKey(ownerAccount));
+    pending.removeWhere((item) => item['tx_hash'] == proof['tx_hash']);
+    pending.add(proof);
+    await (await _prefs).setString(_pendingKey(ownerAccount), jsonEncode(pending));
+
+    final historyKey = 'subscription_tx_history:$ownerAccount';
+    final history = await _readList(historyKey);
+    history.removeWhere((item) => item['tx_hash'] == proof['tx_hash']);
+    history.add(proof);
+    if (history.length > 50) history.removeRange(0, history.length - 50);
+    await (await _prefs).setString(historyKey, jsonEncode(history));
+  }
+
+  Future<void> _removePendingProof(
+      String ownerAccount, String txHash) async {
+    final pending = await _readList(_pendingKey(ownerAccount));
+    pending.removeWhere((item) => item['tx_hash'] == txHash);
+    final prefs = await _prefs;
+    if (pending.isEmpty) {
+      await prefs.remove(_pendingKey(ownerAccount));
+    } else {
+      await prefs.setString(_pendingKey(ownerAccount), jsonEncode(pending));
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _readList(String key) async {
+    final raw = (await _prefs).getString(key);
+    if (raw == null) return <Map<String, dynamic>>[];
+    final decoded = jsonDecode(raw);
+    return decoded is List
+        ? decoded.whereType<Map<String, dynamic>>().toList(growable: true)
+        : <Map<String, dynamic>>[];
   }
 }

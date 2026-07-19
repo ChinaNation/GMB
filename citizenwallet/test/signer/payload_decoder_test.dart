@@ -1591,6 +1591,42 @@ void main() {
       expect(decoded, isNull);
     });
 
+    test('decodes SquarePost platform price proposal with Chinese fields', () {
+      const actorCid = 'GD001-SFGQ0-000000001-2026';
+      final payload = <int>[
+        34, 5,
+        ...compactVec(actorCid),
+        1,
+        ...u128LeForTest(BigInt.from(123456)),
+      ];
+      final decoded = PayloadDecoder.decode(hexOf(payload));
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_set_platform_price');
+      expect(decoded.fields['actor_cid_number'], actorCid);
+      expect(decoded.fields['membership_level'], '民主会员');
+      expect(decoded.fields['new_price_fen'], contains('123456 分'));
+    });
+
+    test('rejects invalid SquarePost platform price proposal payloads', () {
+      const actorCid = 'GD001-SFGQ0-000000001-2026';
+      List<int> call(int level, BigInt price) => <int>[
+            34, 5,
+            ...compactVec(actorCid),
+            level,
+            ...u128LeForTest(price),
+          ];
+      expect(PayloadDecoder.decode(hexOf(call(3, BigInt.one))), isNull);
+      expect(PayloadDecoder.decode(hexOf(call(0, BigInt.zero))), isNull);
+      expect(
+        PayloadDecoder.decode(hexOf([...call(2, BigInt.one), 0xff])),
+        isNull,
+      );
+      expect(
+        PayloadDecoder.decode(hexOf(call(2, BigInt.one)..removeLast())),
+        isNull,
+      );
+    });
+
     test('decodes personal close action as propose_close_personal', () {
       final payload = Uint8List.fromList([
         0x07, 0x01, // PersonalManage.propose_close

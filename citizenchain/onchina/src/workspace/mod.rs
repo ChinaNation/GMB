@@ -8,4 +8,4 @@ mod manifest;
 mod model;
 
 pub(crate) use manifest::build_institution_workspace;
-pub(crate) use model::InstitutionWorkspace;
+pub(crate) use model::{InstitutionWorkspace, WorkspaceModule};

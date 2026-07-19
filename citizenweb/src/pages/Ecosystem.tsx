@@ -32,7 +32,7 @@ const systems: ProductSystem[] = [
     color: 'gold',
     downloads: [
       { label: 'iOS', kind: 'store', message: '请前往 App Store 搜索「公民 CitizenApp」下载安装。' },
-      { label: 'Android', kind: 'file', asset: 'citizenapp-android.apk' },
+      { label: 'Android', kind: 'file', asset: '公民.apk' },
     ],
   },
   {
@@ -54,7 +54,7 @@ const systems: ProductSystem[] = [
     fullWidth: false,
     downloads: [
       { label: 'iOS', kind: 'store', message: '请前往 App Store 搜索「公民钱包 CitizenWallet」下载安装。' },
-      { label: 'Android', kind: 'file', asset: 'citizenwallet-android.apk' },
+      { label: 'Android', kind: 'file', asset: '公民钱包.apk' },
     ],
   },
   {
@@ -75,10 +75,10 @@ const systems: ProductSystem[] = [
     color: 'blue',
     fullWidth: true,
     downloads: [
-      { label: 'macOS', kind: 'file', asset: 'citizenchain-macos-arm64.dmg' },
-      { label: 'Windows', kind: 'file', asset: 'citizenchain-windows-x64.msi' },
-      { label: 'Linux-arm', kind: 'file', asset: 'citizenchain-linux-arm64.deb' },
-      { label: 'Linux-amd', kind: 'file', asset: 'citizenchain-linux-amd64.deb' },
+      { label: 'macOS', kind: 'file', asset: '公民链.dmg' },
+      { label: 'Windows', kind: 'file', asset: '公民链.exe' },
+      { label: 'Linux-arm', kind: 'file', asset: '公民链ARM.deb' },
+      { label: 'Linux-amd', kind: 'file', asset: '公民链AMD.deb' },
     ],
   },
 ]
