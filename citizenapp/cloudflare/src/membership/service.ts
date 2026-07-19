@@ -6,7 +6,7 @@ import { membershipPlanList } from './plans';
 /// 会员与身份彻底解耦（ADR-036）：会员权益只看订阅是否有效（subscriptionIsActive），
 /// 不再读链上身份、不再有「身份≠档位」冻结或暂停收款。身份展示由 chain/identity 与
 /// profiles 各自负责，会员侧一概不涉身份。
-/// 计价与按月扣款由链上 `square-post`（PlatformPrice + billing keeper）负责，BFF 只镜像订阅态。
+/// 价格与扣款真源是链上 `square-post`；到期时间由 CitizenApp 计算并上链，BFF 只镜像 finalized 订阅态。
 
 const MEMBERSHIP_COLUMNS =
   `owner_account, membership_level, expires_at, updated_at, subscription_status,

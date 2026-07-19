@@ -59,7 +59,10 @@ fn current_state() -> OnChinaPlatformState {
     let (status, status_label, detail) = match health {
         None => ("stopped", "未开启", None),
         Some(Ok(())) => ("enabled", "已开启", None),
-        Some(Err(err)) => ("starting", "启动中", Some(err)),
+        // 进程已启动但健康检查暂未通过时，只能表达“启动中”。
+        // 失败原因必须等启动动作最终超时或显式失败后再返回 error，避免界面同时显示
+        // “启动中”和“启动失败”两套互相冲突的状态。
+        Some(Err(_)) => ("starting", "启动中", None),
     };
     OnChinaPlatformState {
         running: process_running,
@@ -70,15 +73,33 @@ fn current_state() -> OnChinaPlatformState {
     }
 }
 
-fn wait_until_healthy() -> OnChinaPlatformState {
+fn failed_state(running: bool, detail: String) -> OnChinaPlatformState {
+    OnChinaPlatformState {
+        running,
+        status: "error",
+        status_label: "启动失败",
+        url: ONCHINA_PLATFORM_URL,
+        detail: Some(detail),
+    }
+}
+
+fn wait_until_healthy_after_start() -> OnChinaPlatformState {
+    let mut last_error = "链上中国平台健康检查未通过".to_string();
     for _ in 0..20 {
-        let state = current_state();
-        if state.status == "enabled" || !state.running {
-            return state;
+        let process_running = crate::onchina_proc::is_onchina_running();
+        if !process_running {
+            return failed_state(false, "链上中国平台启动失败:子进程已退出".to_string());
+        }
+        match onchina_health_ok() {
+            Ok(()) => return current_state(),
+            Err(err) => last_error = err,
         }
         std::thread::sleep(Duration::from_millis(500));
     }
-    current_state()
+    failed_state(
+        crate::onchina_proc::is_onchina_running(),
+        format!("链上中国平台启动失败:{last_error}"),
+    )
 }
 
 #[tauri::command]
@@ -91,11 +112,16 @@ pub fn start_onchina_platform(app: AppHandle) -> Result<OnChinaPlatformState, St
     if let Err(err) = security::append_audit_log(&app, "start_onchina_platform", "attempt") {
         eprintln!("[审计] start_onchina_platform attempt 日志写入失败:{err}");
     }
-    crate::onchina_proc::start_onchina(&app)?;
+    if let Err(err) = crate::onchina_proc::start_onchina(&app) {
+        if let Err(log_err) = security::append_audit_log(&app, "start_onchina_platform", "failed") {
+            eprintln!("[审计] start_onchina_platform failed 日志写入失败:{log_err}");
+        }
+        return Ok(failed_state(false, err));
+    }
     if let Err(err) = security::append_audit_log(&app, "start_onchina_platform", "success") {
         eprintln!("[审计] start_onchina_platform success 日志写入失败:{err}");
     }
-    Ok(wait_until_healthy())
+    Ok(wait_until_healthy_after_start())
 }
 
 #[tauri::command]

@@ -164,7 +164,7 @@ class GeneratedQrActionRegistry {
 
   static const Map<String, String> actionLabelZhByKey = {
     'login': '登录确认',
-    'citizen_identity': '公民身份确认',
+    'citizen_identity': '公民签名确认',
     'onchina_admin_action': '链上中国管理员确认',
     'activate_admin_account': '管理员账户激活',
     'decrypt_admin': '管理员解密确认',

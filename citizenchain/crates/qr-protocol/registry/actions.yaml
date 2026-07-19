@@ -17,7 +17,7 @@
 
 - action_key: citizen_identity
   action_code: 2
-  action_label_zh: 公民身份确认
+  action_label_zh: 公民签名确认
   kind: offchain_sign
   qr_kind: sign_request
   pallet:

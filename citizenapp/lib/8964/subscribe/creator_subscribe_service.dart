@@ -19,8 +19,8 @@ class CreatorSubscribeException implements Exception {
 
 /// 订阅者侧编排：在他人主页订阅 / 取消订阅创作者会员。
 ///
-/// 订阅、取消**都是上链热签 + 生物识别**：订阅签=授权按月自动扣款，取消签=撤销授权；
-/// 按月续扣由 keeper 依此授权 `charge_due` 拉取，不逐月再签。confirm 仅刷新 Cloudflare 镜像。
+/// 用户只为订阅、取消和换档签名；首次扣款、真实公历到期时间与后续自动扣款由
+/// runtime 根据共识时间戳完成，CitizenApp 不提交续费或周期确认。
 class CreatorSubscribeService {
   CreatorSubscribeService({
     SubscriptionRpc? rpc,
@@ -36,6 +36,18 @@ class CreatorSubscribeService {
   final WalletManager _wallet;
   final SquareSessionProvider _session;
   final CreatorApi _api;
+
+  Future<FinalizedSubscriptionSnapshot> fetchFinalizedState({
+    required String subscriberAddress,
+    required String creatorAddress,
+  }) =>
+      _rpc.fetchSubscriptionSnapshot(
+        subscriberAddress: subscriberAddress,
+        creatorAddress: creatorAddress,
+      );
+
+  Future<List<ChainCreatorTier>> fetchCreatorPlans(String creatorAddress) =>
+      _rpc.fetchCreatorPlans(creatorAddress);
 
   /// 订阅创作者某档某周期（priceFen=该档该周期价，分）。
   Future<void> subscribe({
@@ -54,7 +66,9 @@ class CreatorSubscribeService {
         fromAddress: wallet.address,
         signerPubkey: Uint8List.fromList(hexToBytes(wallet.pubkeyHex)),
         creatorAddress: creatorAddress,
-        priceFen: BigInt.from(priceFen),
+        tierId: tierId,
+        billingPeriod: period,
+        expectedPriceFen: BigInt.from(priceFen),
         sign: (payload) => _wallet.signWithWallet(wallet.walletIndex, payload),
         onWatchEvent: onWatchEvent,
       );
@@ -94,6 +108,44 @@ class CreatorSubscribeService {
       throw CreatorSubscribeException(e.message);
     } on Exception catch (e) {
       throw CreatorSubscribeException('取消失败：$e');
+    }
+  }
+
+  /// 更换创作者档位或周期；同一换档业务只提交这一笔账户签名交易。
+  Future<void> changePlan({
+    required String creatorAddress,
+    required String tierId,
+    required String period,
+    required int priceFen,
+    TxPoolWatchCallback? onWatchEvent,
+  }) async {
+    final wallet = await _requireHotWallet();
+    if (wallet.address == creatorAddress) {
+      throw const CreatorSubscribeException('不能订阅自己');
+    }
+    try {
+      final result = await _rpc.changeCreatorPlan(
+        fromAddress: wallet.address,
+        signerPubkey: Uint8List.fromList(hexToBytes(wallet.pubkeyHex)),
+        creatorAddress: creatorAddress,
+        tierId: tierId,
+        billingPeriod: period,
+        expectedPriceFen: BigInt.from(priceFen),
+        sign: (payload) => _wallet.signWithWallet(wallet.walletIndex, payload),
+        onWatchEvent: onWatchEvent,
+      );
+      await _confirm(
+        txHash: result.txHash,
+        creatorAddress: creatorAddress,
+        tierId: tierId,
+        period: period,
+      );
+    } on SecureSeedException catch (e) {
+      throw CreatorSubscribeException(seedSignErrorMessage(e));
+    } on WalletAuthException catch (e) {
+      throw CreatorSubscribeException(e.message);
+    } on Exception catch (e) {
+      throw CreatorSubscribeException('更换订阅失败：$e');
     }
   }
 

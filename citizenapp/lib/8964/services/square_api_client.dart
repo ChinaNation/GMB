@@ -55,8 +55,9 @@ class SquareMembershipState {
   final int expiresAt;
   final String? membershipLevel;
 
-  /// 订阅生命周期态（链上单源镜像）：`active`=自动续费中 / `past_due`=欠费待补
-  /// / `cancelled`=已取消。按钮双态与横幅文案据此判定。
+  /// 订阅生命周期态（链上单源镜像）：`active`=自动续费授权有效 /
+  /// `terminated`=到期扣款失败并终止 / `cancelled`=用户已签名取消。
+  /// 按钮双态与横幅文案据此判定。
   final String? subscriptionStatus;
 
   /// 订阅是否已支付且未过期（worker `subscription_active`）。解耦后权益态即订阅态，
@@ -536,6 +537,7 @@ class SquareApiClient
         if (level != null) 'level': level,
       },
       session: session,
+      finalizedMirror: true,
     );
   }
 
@@ -969,17 +971,31 @@ class SquareApiClient
     String path,
     Map<String, Object?> body, {
     SquareSession? session,
+    bool finalizedMirror = false,
   }) async {
     final encoded = jsonEncode(body);
     final uri = _uri(path);
     final response = await _http
         .post(
           uri,
-          headers: await _headers('POST', uri, encoded, session),
+          headers: finalizedMirror
+              ? _finalizedMirrorHeaders(session)
+              : await _headers('POST', uri, encoded, session),
           body: encoded,
         )
         .timeout(const Duration(seconds: 20));
     return _decodeResponse(response);
+  }
+
+  /// 业务交易已经账户签名并 finalized；回执只用会话鉴权，不能再生成设备签名。
+  Map<String, String> _finalizedMirrorHeaders(SquareSession? session) {
+    if (session == null) {
+      throw const SquareApiException('会员镜像回执缺少登录态');
+    }
+    return {
+      'content-type': 'application/json; charset=utf-8',
+      'authorization': 'Bearer ${session.sessionToken}',
+    };
   }
 
   Future<Map<String, dynamic>> _putJson(

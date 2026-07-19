@@ -186,7 +186,7 @@ void main() {
   });
 
   group('QrSigner.signingBytesFor', () {
-    test('公民身份确认使用 GMB OP_SIGN_CITIZEN_IDENTITY 哈希域', () {
+    test('公民签名确认使用 GMB OP_SIGN_CITIZEN_IDENTITY 哈希域', () {
       final body = SignRequestBody.fromHex(
         action: QrActions.citizenIdentity,
         pubkeyHex: testPubkeyHex,

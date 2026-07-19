@@ -162,6 +162,7 @@
 - `citizenchain/crates/qr-protocol/registry/fields.yaml`、`src/registry.rs`、`src/export.rs`：字段 registry 增加 `field_value_zh`，固定展示值由唯一 registry 生成。
 - `citizenapp/lib/qr/generated/qr_action_registry.g.dart` 与 `citizenwallet/lib/qr/generated/qr_action_registry.g.dart`：重新生成，包含 `fieldValueZhByKey`。
 - `citizenwallet/lib/signer/payload_decoder.dart`：创建机构、机构治理和机构账户交易的“默认岗位/制度账户/费用付款账户”展示值只从生成 registry 读取，不再在 decoder 里保存第二份中文值。
+- `citizenwallet/test/signer/payload_decoder_test.dart`：创建机构 payload decoder 测试不再手写旧固定文案，改为读取生成 registry，避免测试成为第二展示真源。
 
 已完成验收:
 
@@ -169,6 +170,7 @@
 - `cargo test --manifest-path citizenchain/crates/qr-protocol/Cargo.toml`
 - `cargo test --manifest-path citizenchain/crates/chain-signing/Cargo.toml`
 - `cargo check --manifest-path citizenchain/Cargo.toml -p onchina`
+- `flutter test test/signer/payload_decoder_test.dart`（`citizenwallet`）
 - `flutter analyze`（`citizenwallet`）
 - `flutter analyze`（`citizenapp`）
 

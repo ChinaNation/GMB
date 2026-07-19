@@ -18,7 +18,7 @@ void main() {
   });
 
   group('fieldLabelText', () {
-    test('公民身份确认(citizen_identity)全部 reviewFields key 有中文标签', () {
+    test('公民签名确认(citizen_identity)全部 reviewFields key 有中文标签', () {
       const keys = [
         'cid_number',
         'wallet_account',

@@ -147,6 +147,58 @@ citizenapp（前端 + Worker）+ deploy（本地控制台）三处；citizenchai
   - **依赖已装**：`citizenconsole/` `npm install`（`@polkadot/api` 等，`node_modules` git 忽略）。
   - **本机自启动**：`~/Library/LaunchAgents/com.gmb.deploy-console.plist` ~~仍指向旧 `GMB/deploy/`~~ → **2026-07-18 复核已是新路径**（4 处全 `GMB/citizenconsole/`），常驻进程已在新路径运行，无需再改。
 
+- **2026-07-18 · 控制台端口统一固定为 8888(原 41731)**
+  - 用户要求端口全部统一。**888 实测绑不了**(`EACCES`:<1024 特权端口 + 用户级 LaunchAgent 非 root;改 root 守护会让 Touch ID 失效、不可接受)→ 用户拍板改 **8888**(≥1024 免特权)。
+  - 改三处并对齐:`server.mjs` 默认端口 `41731`→`8888`;`socket-launcher.swift` 注释同步;`~/Library/LaunchAgents/com.gmb.deploy-console.plist` `SockServiceName`→`8888`。前端用相对 URL + 动态 `${port}`(validHost/validOrigin 自动跟随),无硬编码需改。
+  - `launchctl bootout+bootstrap` 重载生效。实测:8888 在监听✓、41731 已释放✓、浏览器 `http://127.0.0.1:8888/` 正常(公民控制台 7 卡)。**此后控制台固定 8888。**
+
+- **2026-07-18 · 折叠指示器改两线 chevron(永久禁实心三角)+ 澄清控制台固定端口 41731**
+  - ①展开/折叠指示从实心三角 `▶▼`(用户永久否决)改为**两条线的 SVG chevron**(`<polyline>`,收缩指右、`.open` 时 `rotate(90deg)` 指下),并 `margin-left:auto` 靠**行最右**;改 `citizenconsole.js`(`CHEVRON_SVG`+toggle 切 `.open` 类)+`styles.css`(`.token-expand svg`/`.open`)。**已存死规则** [[feedback_no_solid_triangle_use_line_chevron]]。
+  - ②澄清:控制台前端固定在 `http://127.0.0.1:41731`(代码默认 `GMB_DEPLOY_PORT||41731`+plist socket 41731);之前浏览器里看到的 `41799` 只是我起的临时测试实例端口,非真实地址。此后一律在 41731 验证,不再用 41799。
+  - 验收:41731 实测 chevron 为 SVG 折线(无实心三角字符)、靠操作列右缘、默认收缩;无 console error。
+  - 用户拍板:①按币种分键存(`TOKEN_USDC`/`TOKEN_USDT`,各存一个地址),白名单由子键合成,弃用单一 `TOKEN_CONTRACTS` 键;②父行"已配置"=所有子行都配了才算。
+  - 后端 `routes.mjs`:加 `TOKEN_SYMBOLS=['USDC','USDT']`→`TOKEN_KEYS`;`NON_SECRET` 用 `TOKEN_KEYS` 替换 `TOKEN_CONTRACTS`;`readConfig.tokenContracts` 由 `TOKEN_KEYS` 合成(小写);`validateConfigValue` 改单地址校验(`/i`);`saveConfig` 存前转小写;`deleteConfig` 走 `ALL_ITEMS`(含子键)。M2 复验/白名单逻辑不变。
+  - 前端 `citizenconsole.js`:`TOKEN_CONTRACTS` 行改**可折叠父行**——`renderTokenParent`:操作列=状态文字(已配置/未配置,**无配置按钮**)+ ▶/▼ 三角(默认收缩、点击展开,`tokenExpanded` 跨重渲染保留);展开显示子行(`.token-sub`,`↳ USDC/USDT 合约地址`),各自 配置/更换/删除 走既有 `/api/topup/config`(+delete)。加币种=往 `TOKENS`/`TOKEN_SYMBOLS` 各加一项。`styles.css` 加 `.token-expand/.token-status/.token-sub-name`。
+  - 验收:`node --check` 过;测试实例实测——父行无配置按钮、默认收缩(子行 hidden)、点▶展开出 USDC/USDT 两子行各带配置按钮、编号父6子无号/NODE_WS7/MIN_CONFIRMATIONS8、无 console error、残留=0;已重启常驻控制台(后端生效)。
+
+- **2026-07-18 · TOKEN_CONTRACTS 写不进诊断+修:放宽地址大小写**
+  - 现象:填了正确合约地址仍写不进。诊断:常驻控制台已是新码(进程晚于 routes.mjs 落盘、伪造 Host→403)、`keychain topup:TOKEN_CONTRACTS` 为空、日志无写错→是**校验把输入判为不合格**回 400。根因候选:大写 `0X` 前缀被旧正则 `/^0x[0-9a-fA-F]{40}$/` 拒(小写 x 强制);或逗号分隔某段位数不对/含隐藏字符。
+  - 修:`validateConfigValue` 的 RECV_ADDRESS/TOKEN_CONTRACTS 正则加 `/i`(接受 `0X` 与大写十六进制);`saveConfig` 存储前把二者统一转小写(与 M2 `toLowerCase` 交叉校验口径一致)。已重启常驻控制台生效。仍失败则看行内红字(位数/格式)或值含隐藏字符。
+
+- **2026-07-18 · CitizenApp Cloudflare「会员镜像对账」开关:两行改「一行两开关」+ 删说明文字**
+  - 该开关由会员/Stripe 迁移那条线加入(非本卡功能),本轮按用户要求收敛 UI:①删掉整个 `reconcile-head`(标题「会员镜像对账」+说明「即时开关 production…跳过该轮对账」);②两个开关(平台会员对账/创作者会员对账)从**竖排两行**改为**同一行左右并排**(左=平台会员对账、右=创作者会员对账),**两个开关都保留**(用户澄清:是"一行两个开关",不是合并成一个)。
+  - 改 `app.js`(`renderReconcileToggles` 两开关同容器、`loadReconcileFlags` 复原 membership+creator 双读)+ `styles.css`(`.reconcile-list` 改 `grid-template-columns:1fr 1fr` 横排,删 `.reconcile-head` 死规则)。后端 `server.mjs`/`cloudflare.sh` reconcile 端点不动。纯前端(静态)刷新即见;实测同一行两开关(top 相同)、标签平台/创作者会员对账、无 head/说明文字、无 console error。
+  - 另:发币会话解锁按钮文案从「解锁发币会话（Touch ID）」改为「解锁」(citizenconsole.html)。
+
+- **2026-07-18 · 修正:解锁是功能级开关,放回配置卡右上角(不进配置列表)**
+  - 上一版误把「解锁」做成配置表第 1 行的操作按钮——错。解锁是「整个发币功能」的会话开关,归右上角;配置列表只放"可配置参数"。
+  - 定稿:配置卡标题右上角=`解锁发币会话(Touch ID)`按钮 + 解锁状态 pill(`.tp-head`/`.tp-unlock`,无地址);配置列表第 1 行=`发币地址`(简介列展示解锁后派生的 SS58 地址,操作=配置/更换发币钱包私钥[走 `/wallet`,占位提示输入 64hex 私钥]+删除),其后为 7 个参数行(WORKER_BASE_URL…MIN_CONFIRMATIONS)。发币私钥并入「发币地址」这一行(keychain 字段仍 DISBURSE_KEY),不再单列 DISBURSE_KEY 行。
+  - 纯前端(html/js/css 静态),常驻控制台无需重启,刷新即见;实测 8 行、解锁在右上角不在列表、无 console error。
+
+- **2026-07-18 · 充值发币配置表微调:发币地址成第 1 行 + 删说明文字 + 解锁移入表内**
+  - 配置表**第 1 行改为「发币地址」**(私钥派生、只读展示;简介列解锁后显示 SS58 地址、未解锁显示占位;状态=解锁圆点;操作=「解锁（Touch ID）」);`DISBURSE_KEY` 顺延为第 2 行。
+  - 删除「配置」标题下整段说明文字(hint 段落);删除页头右上角解锁块(解锁按钮+地址+pill 及 `setSession`),解锁改由第 1 行按钮触发,成功消息只提示「会话已解锁」不再重复贴地址(此前页头+消息双重显示地址,用户明确否掉)。
+  - 纯前端改动(citizenconsole.html/js,静态读盘),常驻控制台无需重启,浏览器刷新即见。实测 9 行(发币地址居首)、无重复地址、无 console error。
+
+- **2026-07-18 · 充值发币专属页:发币钱包私钥并入配置表 + 独立卡片删除**
+  - 删掉独立「发币钱包」卡片(`#privateKey`/`#walletAddress`/`#saveWallet`/`#walletMsg` 全清);发币私钥 `DISBURSE_KEY` 作为**配置表第 1 行**(简介=专用发币热钱包私钥说明),secret+wallet 标记:设置/更换走 `/api/topup/wallet`(64hex 校验+派生地址+Touch ID),删除走 `/api/topup/config/delete`。
+  - 「解锁发币会话(Touch ID)」按钮 + 解锁状态 pill + 发币地址移到**「配置」标题右上角**(`.tp-head`/`.tp-unlock`/`.tp-addr`);解锁/写入反馈统一进 `#configMsg`。
+  - 后端:`deleteConfig` 放宽到 `ALL_ITEMS`(含 `DISBURSE_KEY`),删发币私钥时 `sessionSeedHex=null` 同步锁会话。
+  - 验收:`node --check` 过;浏览器实测配置表 8 行(DISBURSE_KEY 居首)、旧卡片 DOM 已无、解锁在 header、无 console error;重启常驻控制台(41731)使后端生效。
+  - **重要经验**:控制台后端(server.mjs/topup/*.mjs)改动后**必须重启常驻进程**才生效(Node 不热载 import;静态 web/* 每次读盘所以前端秒见)——本轮已代为重启。
+
+- **2026-07-18 · 控制台安全审查修复(H1/M1/M2/M3/M4/M5 + L1/L2/L3)+ 充值发币配置表格化**
+  - **H1 双花**:`topup/routes.mjs` 加 `settleInFlight` 在途锁(并发 `runSettle` 第二个 409 拒);`runSettle` 拆薄壳 + `runSettleInner`(try/finally 释放锁);`ledger.mjs` 改原子写(temp→rename)防并发读写损坏。
+  - **M1**:`server.mjs` `githubSecretSet/Delete` 补 `cwd: rootDir`(此前 launchd cwd=/ 必失败)。
+  - **M2 独立复验**:新增 `TOKEN_CONTRACTS` 配置(代币白名单);`runSettleInner` 发币前用控制台自配 `recvAddress`+白名单交叉校验 Worker 下发的 `recv_address/token_contract`,不符置异常(fail-closed);`cfg.recvAddress` 从死配置变真校验基准。
+  - **M3**:`server.mjs` 加 `validHost` 前置防线(只认 `127.0.0.1:port`/`localhost:port`),挡 DNS rebinding;curl 验伪造 Host→403。
+  - **M4**:`chain_transfer.mjs` `signAndSendFinalized` 加 120s 超时 + 处理 `isDropped/isInvalid/isUsurped`,防悬挂(未上链停 disbursing,下轮转人工)。
+  - **M5**:新增 `test/{evm_verify,ledger,settle}.test.mjs`(node 内置 test,零依赖);`evm_verify.mjs` 导出内部函数、`routes.mjs` 加 `__setSessionSeedForTest` 测试缝;`package.json` 加 `test` 脚本(`node --test test/*.test.mjs`);**22/22 通过**(H1 并发锁、幂等①②、M2 守卫、EVM 边界、台账原子写)。
+  - **L1** `readBody` 1MB 上限;**L2** `saveConfig` 写入(含 SETTLE_TOKEN)统一过 Touch ID;**L3** `app.js`+`citizenconsole.js` 收到「无效本机会话」403 自动整页刷新,并把 `/citizenconsole.html` 改为免会话直出+种 cookie(否则子页刷新死循环)。
+  - **充值发币配置表格化**:`citizenconsole.html`+`citizenconsole.js` 把「配置」区从表单改成与 Cloudflare 同款五列表(序号｜密钥名称｜简介｜状态｜操作);状态只用圆点(绿已配置/红未配置)、令牌/私钥不回显,操作未配置→配置、已配置→更换+删除,配置/更换/删除全过 Touch ID;后端加 `POST /api/topup/config/delete`(白名单+Touch ID),`server.mjs` 给 topup ctx 注入 `keychainDelete`。
+  - 与方案两处更优差异:①未建 `settle_deps.mjs`,改用 `runSettle(res,ctx,deps=默认)` 默认参数注入(少一文件);②测试中发现并修 L3 子页死循环(两 HTML 入口页都种 cookie)。
+  - 验收:`node --check`(server+topup+web)+`bash -n cloudflare.sh` 过;`node --test` 22/22;浏览器实测专属页配置表 7 行红点未配置+配置按钮+行内编辑器,无 console error;残留=0(旧 `CFG_BADGES`/`saveConfig` 按钮/`cfg-*` badge/`ARBITRUM` 清空)。
+
 - **2026-07-18 · 公民控制台密钥状态重构为表格（配置/更换/删除，全程 Touch ID）**
   - 需求：把各卡片弹窗里的密钥状态从纯文本列表（`staging:CF_ACCOUNT_ID …`）改成**五列表格**：序号｜密钥名称｜简介｜状态｜操作。状态 `未配置`（红）/`已配置`（绿）；操作栏未配置→`配置`、已配置→`更换`+`删除`；写入与删除**都必须 Touch ID**；删除=从本机安全存储（Keychain / GitHub Secret）删对应密钥。适用所有含密钥的卡片，不止 CitizenApp Cloudflare。
   - 后端（`citizenconsole/server.mjs`）：新增 `githubSecretSet/githubSecretDelete/resolveSecretTarget`（按 `moduleId` + 密钥名 + store 白名单校验，越权拒）；新增 `POST /api/secret/set`、`POST /api/secret/delete`，两者均先 `resolveSecretTarget` 白名单校验 → `authorizeProduction('写入/删除密钥 …')`（Touch ID）→ `keychainPut/githubSecretSet` 或 `keychainDelete/githubSecretDelete`。

@@ -1,8 +1,8 @@
 // 会员套餐真源（ADR-036：会员与身份彻底解耦）。会员档 `membership_level` 是纯付费订阅轴，
 // **不再绑定任何身份档**——任意身份（访客/投票/竞选）可订阅任意会员档，全组合放行。
 // 三档：freedom 自由 / democracy 民主 / spark 薪火。发帖额度、媒体质量、聊天文件上限均按
-// 所购套餐（membershipPlan(level)）。**价格与按月扣款是链上 `square-post` 的 `PlatformPrice`
-// 与 billing keeper 的职责**（公民币，分）；本表只定档位与配额，不涉计价。一改此表须同步 App 卡片。
+// 所购套餐（membershipPlan(level)）。**价格真源与实际扣款属于链上 `square-post`，真实公历
+// 到期时间由 CitizenApp 计算并上链**；本表只定档位与配额，不涉计价。一改此表须同步 App 卡片。
 import { resourceLimit } from '../limits/catalog';
 
 export type MembershipLevel = 'freedom' | 'democracy' | 'spark';

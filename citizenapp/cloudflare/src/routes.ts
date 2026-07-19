@@ -30,12 +30,10 @@ import { platformSubscriptionConfirmRoute } from "./membership/citizen_coin";
 import { membershipRoute } from "./membership/service";
 import {
   creatorOverviewRoute,
-  creatorPlanChallengeRoute,
   creatorPlanOfRoute,
   creatorPlanRoute,
   creatorPlanSaveRoute,
   creatorSubscriptionConfirmRoute,
-  creatorSubscriptionStatusRoute,
 } from "./membership/creator";
 import { signalRoute } from "./moderation/service";
 import { isTopupPath, routeTopup } from "./topup/routes";
@@ -129,9 +127,6 @@ export async function routeRequest(
   if (request.method === "GET" && path === "/v1/square/creator/overview") {
     return creatorOverviewRoute(request, env);
   }
-  if (request.method === "POST" && path === "/v1/square/creator/plan/challenge") {
-    return creatorPlanChallengeRoute(request, env);
-  }
   if (request.method === "POST" && path === "/v1/square/creator/plan") {
     return creatorPlanSaveRoute(request, env);
   }
@@ -140,13 +135,6 @@ export async function routeRequest(
   }
   if (request.method === "GET" && path.startsWith("/v1/square/creator/plan/")) {
     return creatorPlanOfRoute(request, env, path.slice("/v1/square/creator/plan/".length));
-  }
-  if (request.method === "GET" && path.startsWith("/v1/square/creator/subscription/")) {
-    return creatorSubscriptionStatusRoute(
-      request,
-      env,
-      path.slice("/v1/square/creator/subscription/".length),
-    );
   }
   if (request.method === "GET" && path === "/v1/square/contacts") {
     return listContactsRoute(request, env);

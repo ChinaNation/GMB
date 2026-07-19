@@ -12,8 +12,8 @@ import 'package:citizenapp/ui/app_theme.dart';
 
 /// 「我的 → 创作者」：管理自己的创作者会员（档位 / 收入概览）。
 ///
-/// 三态：加载中 / 门禁（需先成为平台会员）/ 已开通。档位定义全链下（Cloudflare 存），
-/// 保存经统一 0x1D 主钥签名（生物识别）。
+/// 三态：加载中 / 无当前有效平台会员 / 已开通。档位价格链上保存，名称由 Cloudflare 保存；
+/// 整次保存只产生一次 `set_creator_plans` 账户签名。
 class CreatorPage extends StatefulWidget {
   const CreatorPage({super.key, CreatorService? service}) : _service = service;
 
@@ -129,7 +129,7 @@ class _CreatorPageState extends State<CreatorPage> {
           const SizedBox(height: 14),
           const Center(
             child: Text(
-              '价格以公民币结算 · 订阅款全额进你的钱包 · 档位在本机设置',
+              '价格以公民币结算 · 订阅款全额进你的钱包 · 保存只签名一次',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 11, color: AppTheme.textTertiary),
             ),

@@ -1,5 +1,7 @@
 # 公民上链最严鉴权(passkey+冷签)+ 候选人性别上链 + 消费端护照有效期门
 
+> 2026-07-18 流程鉴权部分已由 `20260718-citizen-onchain-single-signature-flow.md` 取代：不得再恢复 prepare/complete 各消费一次 grant。当前唯一口径为一次 Passkey、一次公民钱包签名、一次管理员最终链签；本卡其余投票门禁历史记录保留。
+
 ## 任务目标
 
 1. 注册局上链操作升最严档:OnChina 公民身份上链 prepare/complete 两接口挂

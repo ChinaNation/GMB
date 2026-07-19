@@ -70,6 +70,12 @@ export interface Env {
   // 退订视频冷归档：开关（'1' 开）与阈值（天，缺省 90）。关闭时 Cron 不做任何归档。
   ARCHIVE_ENABLED?: string;
   ARCHIVE_LAPSE_DAYS?: string;
+  // 会员镜像对账：平台/创作者各自开关（'1' 开）+ 共用每轮批量（缺省 50，上限 500）。
+  // 均为 wrangler 默认值；运行期以 KV 开关（flag:membership_reconcile / flag:creator_reconcile）
+  // 优先，供控制台即时开关。关闭时 Cron 对账内部直接返回。
+  MEMBERSHIP_RECONCILE_ENABLED?: string;
+  CREATOR_RECONCILE_ENABLED?: string;
+  MEMBERSHIP_RECONCILE_BATCH?: string;
   // 稳定币充值购买公民币（topup）：网络 / 收款地址 / 各链 EVM RPC / 合约覆盖 / 确认数 / 结算令牌。
   // 'mainnet' | 'testnet'（缺省 testnet，沙箱期）。
   TOPUP_NETWORK?: string;
@@ -126,7 +132,7 @@ export interface MembershipRow {
   // 下次扣款时刻（链上 next_charge_at 镜像），同时作计费周期终点。
   expires_at: number;
   updated_at: number;
-  // 镜像链上订阅态：active（有效）/ past_due（欠费）/ cancelled（已取消）。
+  // 镜像链上订阅态：active（自动续费有效）/ terminated（扣款失败终止）/ cancelled（用户取消）。
   subscription_status: string;
   // 计费周期镜像（用量额度窗口）：起点=订阅/续订时刻、终点=下次扣款。
   current_period_start: number | null;

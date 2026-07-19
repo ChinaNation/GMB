@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'package:citizenapp/ui/app_theme.dart';
 
-/// 未开通门禁态：创作者必须先成为平台会员（链上校验）。
+/// 未开通门禁态：runtime 要求创作者具有当前有效的平台会员权益。
 ///
-/// [onOpenMembership] 引导去「会员」页开通平台会员。
+/// [onOpenMembership] 引导去现有会员页完成订阅。
 class CreatorGateView extends StatelessWidget {
   const CreatorGateView({super.key, required this.onOpenMembership});
 
@@ -63,7 +63,7 @@ class CreatorGateView extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '需先成为平台会员',
+                          '需要有效平台会员',
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -72,7 +72,7 @@ class CreatorGateView extends StatelessWidget {
                         ),
                         SizedBox(height: 2),
                         Text(
-                          '开通创作者会员前，你需先订阅平台会员（链上校验）。',
+                          '平台会员权益有效时，可以创建会员档并直接收取公民币订阅款。',
                           style: TextStyle(
                             fontSize: 12,
                             height: 1.5,
@@ -89,7 +89,7 @@ class CreatorGateView extends StatelessWidget {
             FilledButton.icon(
               onPressed: onOpenMembership,
               icon: const Icon(Icons.workspace_premium_outlined, size: 19),
-              label: const Text('去开通平台会员'),
+              label: const Text('去订阅平台会员'),
             ),
           ],
         ),

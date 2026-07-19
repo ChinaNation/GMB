@@ -124,6 +124,16 @@ function isWebhook(path: string): boolean {
 function requiresDeviceProof(path: string, method: string): boolean {
   if (path.startsWith('/v1/square/auth/')) return false;
   if (path.startsWith('/v1/square/account/delete')) return false;
+  // 这些回执对应的链上业务已经由账户签名并 finalized；再次要求设备签名会让同一业务
+  // 产生第二次签名。handler 仍强制校验 Bearer 会话、交易哈希和 finalized 链状态。
+  if (
+    method === 'POST' &&
+    (path === '/v1/square/membership/confirm' ||
+      path === '/v1/square/creator/subscription/confirm' ||
+      path === '/v1/square/creator/plan')
+  ) {
+    return false;
+  }
   // Image.network 只能稳定携带 Bearer header；资料媒体仍由 handler 强制校验钱包
   // session，但不要求它动态生成 P-256 请求签名。
   if (path.startsWith('/v1/square/media/')) return false;

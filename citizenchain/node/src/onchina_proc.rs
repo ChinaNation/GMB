@@ -7,6 +7,8 @@
 //! (Tauri resources)。本模块**不碰 PG**——只把资源/数据路径用环境变量告诉 onchina,
 //! onchina 自管内嵌 PG 与内网 TLS(见 `onchina/src/core/{embedded_pg,tls}.rs`)。
 
+#[cfg(unix)]
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::Mutex;
@@ -16,6 +18,14 @@ use tauri::{AppHandle, Manager};
 
 /// 进程内唯一的 onchina 子进程句柄。
 static ONCHINA_CHILD: Mutex<Option<Child>> = Mutex::new(None);
+
+/// OnChina 平台固定监听端口；节点启动按钮只能管理这一套本机平台服务。
+#[cfg(unix)]
+const ONCHINA_PORT: u16 = 8964;
+
+/// 清理旧进程后等待端口释放的次数。每次 200ms，总等待约 4 秒。
+#[cfg(unix)]
+const STALE_CLEANUP_ATTEMPTS: usize = 20;
 
 /// 解析 onchina 二进制路径:优先随包 `resources/onchina-bin/`(打包形态),
 /// 兜底节点可执行文件同目录(开发期 `cargo build` 后的 `target/<profile>/onchina`)。
@@ -130,6 +140,154 @@ fn reap_finished_child(child: &mut Option<Child>) {
     }
 }
 
+#[cfg(unix)]
+fn command_stdout(program: &str, args: &[String]) -> Option<String> {
+    let output = Command::new(program).args(args).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+#[cfg(unix)]
+fn pids_from_stdout(stdout: &str) -> BTreeSet<u32> {
+    stdout
+        .lines()
+        .filter_map(|line| line.trim().parse::<u32>().ok())
+        .filter(|pid| *pid != std::process::id())
+        .collect()
+}
+
+#[cfg(unix)]
+fn listener_pids_on_onchina_port() -> BTreeSet<u32> {
+    let port = format!("-iTCP:{ONCHINA_PORT}");
+    command_stdout(
+        "lsof",
+        &[
+            "-nP".to_string(),
+            "-t".to_string(),
+            port,
+            "-sTCP:LISTEN".to_string(),
+        ],
+    )
+    .map(|stdout| pids_from_stdout(&stdout))
+    .unwrap_or_default()
+}
+
+#[cfg(unix)]
+fn onchina_named_pids() -> BTreeSet<u32> {
+    command_stdout("pgrep", &["-x".to_string(), "onchina".to_string()])
+        .map(|stdout| pids_from_stdout(&stdout))
+        .unwrap_or_default()
+}
+
+#[cfg(unix)]
+fn process_command(pid: u32) -> String {
+    command_stdout(
+        "ps",
+        &[
+            "-p".to_string(),
+            pid.to_string(),
+            "-o".to_string(),
+            "comm=".to_string(),
+            "-o".to_string(),
+            "args=".to_string(),
+        ],
+    )
+    .unwrap_or_default()
+}
+
+#[cfg(unix)]
+fn is_onchina_process(pid: u32) -> bool {
+    process_command(pid)
+        .split_whitespace()
+        .any(|part| part == "onchina" || part.ends_with("/onchina"))
+}
+
+#[cfg(unix)]
+fn signal_pid(pid: u32, signal: &str) {
+    let _ = Command::new("kill")
+        .arg(signal)
+        .arg(pid.to_string())
+        .status();
+}
+
+#[cfg(unix)]
+fn stale_onchina_processes() -> BTreeSet<u32> {
+    let mut pids = onchina_named_pids();
+    for pid in listener_pids_on_onchina_port() {
+        if is_onchina_process(pid) {
+            pids.insert(pid);
+        }
+    }
+    pids
+}
+
+#[cfg(unix)]
+fn foreign_onchina_port_listeners() -> Vec<u32> {
+    listener_pids_on_onchina_port()
+        .into_iter()
+        .filter(|pid| !is_onchina_process(*pid))
+        .collect()
+}
+
+#[cfg(unix)]
+fn wait_until_no_stale_onchina_processes() -> Result<(), String> {
+    for _ in 0..STALE_CLEANUP_ATTEMPTS {
+        let foreign_port_pids = foreign_onchina_port_listeners();
+        if !foreign_port_pids.is_empty() {
+            return Err(format!(
+                "链上中国平台端口 {ONCHINA_PORT} 已被非 OnChina 进程占用,pid={foreign_port_pids:?}"
+            ));
+        }
+        if stale_onchina_processes().is_empty() {
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    Err(format!(
+        "旧链上中国平台进程仍未退出,pid={:?}",
+        stale_onchina_processes()
+    ))
+}
+
+/// 启动前清理旧 OnChina 孤儿进程。
+///
+/// 节点桌面端只持有“本次启动出来”的 child handle；如果上一次节点异常退出，
+/// OnChina 可能留成 PPID=1 的孤儿进程并继续占用 8964。这里在用户点击“启动”
+/// 时先按进程名和固定端口清理旧 OnChina，避免新进程连到陈旧数据库连接池后崩溃。
+#[cfg(unix)]
+fn clean_stale_onchina_processes_before_start() -> Result<(), String> {
+    let foreign_port_pids = foreign_onchina_port_listeners();
+    if !foreign_port_pids.is_empty() {
+        return Err(format!(
+            "链上中国平台端口 {ONCHINA_PORT} 已被非 OnChina 进程占用,pid={foreign_port_pids:?}"
+        ));
+    }
+
+    let pids = stale_onchina_processes();
+    if pids.is_empty() {
+        return Ok(());
+    }
+
+    for pid in &pids {
+        signal_pid(*pid, "-TERM");
+    }
+    if wait_until_no_stale_onchina_processes().is_err() {
+        for pid in stale_onchina_processes() {
+            signal_pid(pid, "-KILL");
+        }
+    }
+    wait_until_no_stale_onchina_processes()?;
+    eprintln!("[onchina] 已清理旧链上中国平台进程 pid={pids:?}");
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn clean_stale_onchina_processes_before_start() -> Result<(), String> {
+    Ok(())
+}
+
 /// 返回由本节点桌面端拉起的 onchina 子进程是否仍在运行。
 pub fn is_onchina_running() -> bool {
     let mut guard = match ONCHINA_CHILD.lock() {
@@ -156,6 +314,7 @@ pub fn start_onchina(app: &AppHandle) -> Result<(), String> {
     if guard.is_some() {
         return Ok(());
     }
+    clean_stale_onchina_processes_before_start()?;
     // OnChina 启动入口依赖链 RPC 读取 genesis hash 和链上投影。节点线程存在但
     // 创世 state 尚未物化完成时,这里必须 fail-fast,避免子进程启动后 panic。
     crate::shared::rpc::wait_for_local_rpc_ready(Duration::from_secs(3), || Ok(()))

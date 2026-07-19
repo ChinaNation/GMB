@@ -127,6 +127,22 @@ CitizenApp 不承担管理员登录或冷钱包确认职责。
 
 国储会核心节点不作为公民端公共 RPC 入口；生产网络必须拆分核心/权威节点、公开 bootnode、RPC service node、Archive/Indexer 等角色。
 
+### 5.5 公民币订阅主流程
+
+平台订阅与创作者订阅统一使用公民币，并入 `SquarePost` pallet index `34`；详细契约见 `memory/01-architecture/gmb/subscription-part1-tech.md` 和 `memory/07-ai/unified-protocols.md` 的 P-TX-014、P-STORAGE-006。
+
+1. CitizenApp 从 finalized 链状态读取平台价格或创作者付款套餐。
+2. CitizenChain 完成首扣，以当前区块唯一共识时间戳按 UTC 真实公历计算到期时间，并登记自动续费调度。
+3. 到期后 runtime 无需用户再次签名，自动按最新链上价格从订阅钱包扣款并推进一个真实公历周期；不使用区块高度或固定天数表达期限。
+4. 停链期间到期的周期在恢复出块后按到期顺序补扣；余额不足或套餐失效立即终止且不重试。
+5. 平台款进入技术公司费用账户，创作者款全额进入创作者钱包。
+6. CitizenApp 对订阅、取消、换套餐以及创作者覆盖设置自己套餐分别只签名一次并显示链上真实日期；Cloudflare 在交易 finalized 后只用 Bearer 会话与链读复核付款字段、保存镜像和创作者展示资料，镜像及失败重试不得再次生成账户签名或设备请求签名，也不计算日期、不提交扣款、不持有第二份价格真源。
+7. OnChina 与 CitizenWallet 只承接技术公司平台调价的治理冷签流程，普通订阅保持 CitizenApp 热签。
+
+成为创作者的唯一资格是当前拥有有效平台订阅。创作者改价对存量订阅的下一次真实扣款生效；当前已付周期不补差价。runtime 使用有界到期索引在区块结束阶段自动续费。现有链必须通过 StorageVersion 原地升级保留全部无关状态，禁止重新创世、替换 chainspec 或恢复旧订阅流程。
+
+订阅、取消、换套餐和创作者设置套餐都是用户发起的非系统链上交易，统一收取链上交易费；业务转账金额为零不代表免交易费。runtime 内部自动续费不是外部交易，不另收用户交易费。
+
 ## 6. 共享协议与统一口径
 
 ### 6.1 QR_V1
@@ -172,7 +188,7 @@ GMB/
 
 测试部署和 CI 无需密码；production、Release 和服务器部署每次执行前必须通过 macOS Touch ID，失败时不得启动目标命令。部署 Secret 只保存在 macOS Keychain 或 GitHub Secrets，`.ssh`、仓库及根目录不得保留部署私钥明文。GitHub `workflow_dispatch` 使用显式 `mode=ci/release` 隔离构建与发布；服务器部署由本地控制台独立执行，目标服务器直接下载 GitHub 最新成功 CI 产物，CI 模式不得创建 Release 或部署服务器。
 
-CitizenWeb 的“测试部署”只在本机构建并启动 `http://127.0.0.1:41732`，不创建测试 Pages 项目；“关闭测试部署”停止该本地进程。生产部署只更新已经存在的 `citizenweb` Pages 项目，并继续使用 `https://www.crcfrcn.com` 做真实健康检查。
+CitizenWeb 只保留“测试部署”和“生产部署”两个按钮卡片：“测试部署”在启动前自动停止旧本地测试进程，再在本机构建并启动 `http://127.0.0.1:41732`，不创建测试 Pages 项目；生产部署只更新已经存在的 `citizenweb` Pages 项目，并继续使用 `https://www.crcfrcn.com` 做真实健康检查。官网部署固定使用 `citizenweb/package-lock.json` 锁定的 Wrangler 版本；生产项目存在性门禁只解析 `wrangler pages project list --json`，不得再 grep 表格输出。
 
 - Runtime 升级：修改 `citizenchain/runtime/**` 或被 runtime 直接依赖且影响链上行为的 primitives。
 - Native Node / 桌面安装包：修改 `citizenchain/node/**`、桌面前端、Tauri、打包或发布脚本。

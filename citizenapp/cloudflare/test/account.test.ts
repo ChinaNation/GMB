@@ -105,16 +105,17 @@ describe('consumeActionSignature', () => {
     });
   });
 
-  it('rejects a signature issued for a different action', async () => {
+  it('rejects a signature issued for a different action context', async () => {
     const { env } = challengeEnv();
     mockVerify.mockResolvedValue(true);
-    const challenge = await issueActionChallenge(env, OWNER, 'delete_account');
+    const challenge = await issueActionChallenge(env, OWNER, 'delete_account', 'context-a');
     await expect(
       consumeActionSignature(env, {
         ownerAccount: OWNER,
-        action: 'set_creator_plan',
+        action: 'delete_account',
         challengeId: challenge.challengeId,
-        signature: 'sig'
+        signature: 'sig',
+        context: 'context-b'
       })
     ).rejects.toMatchObject({ code: 'action_mismatch' });
     expect(mockVerify).not.toHaveBeenCalled();

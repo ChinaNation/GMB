@@ -9,7 +9,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 /// 编辑/新增会员档底部弹窗。
 ///
 /// 档名（元展示）+ 月/季/年三周期（开关 + 元价输入，可只开部分）。保存=覆盖式写全部档位，
-/// 经 [CreatorService.saveTiers] 走统一 0x1D 主钥签名（★弹一次生物识别）。返回最新 [CreatorPlan]。
+/// 经 [CreatorService.saveTiers] 只签一次链上交易，finalized 后保存 Cloudflare 展示名。
 class CreatorPlanEditSheet extends StatefulWidget {
   const CreatorPlanEditSheet({
     super.key,
@@ -244,7 +244,7 @@ class _CreatorPlanEditSheetState extends State<CreatorPlanEditSheet> {
     await _commit(remaining);
   }
 
-  /// 覆盖式保存全部档位（触发生物识别）。成功回传最新计划并关闭。
+  /// 覆盖式保存全部档位（一次账户签名）。成功回传最新计划并关闭。
   Future<void> _commit(List<CreatorTier> tiers) async {
     setState(() => _saving = true);
     try {

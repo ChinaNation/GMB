@@ -67,7 +67,7 @@ pub(crate) enum AdminActionType {
     /// 发起预算案(政府;Phase 4 接入)。
     ProposeBudget,
     /// 注册局推送公民身份上链(prepare 生成公民待签载荷 + complete 验签绑定,
-    /// 两步各消费一次 grant)。
+    /// 公民上链操作：一次 Passkey 后进入短期业务操作会话，最终链签独立完成。
     CitizenOnchainPush,
 }
 
@@ -124,9 +124,9 @@ impl AdminActionType {
             | Self::OverrideSign
             | Self::GuardVote
             | Self::ProposePersonnel
-            | Self::ProposeBudget
-            // 注册局上链操作一律最严档:passkey 断言 + 冷钱包扫码签名。
-            | Self::CitizenOnchainPush => AdminOperationAuth::PasskeyColdSign,
+            | Self::ProposeBudget => AdminOperationAuth::PasskeyColdSign,
+            // 最终管理员链签就是该角色唯一钱包签名，不再额外签安全 grant。
+            Self::CitizenOnchainPush => AdminOperationAuth::Passkey,
         }
     }
 
@@ -256,11 +256,10 @@ mod tests {
     }
 
     #[test]
-    fn citizen_onchain_push_is_cold_sign_and_round_trips() {
-        // 注册局上链操作最严档:passkey + 冷签;不属 Tier1 治理能力边界
-        // (Tier1/下辖注册局都能办理本辖区公民,由 ensure_registry_admin + scope 收口)。
+    fn citizen_onchain_push_uses_one_passkey_and_round_trips() {
+        // 最终链签已是管理员唯一钱包签名，操作创建阶段只额外消费一次 Passkey。
         let action = AdminActionType::CitizenOnchainPush;
-        assert_eq!(action.auth_type(), AdminOperationAuth::PasskeyColdSign);
+        assert_eq!(action.auth_type(), AdminOperationAuth::Passkey);
         assert!(!action.requires_governing_capability());
         assert!(!action.is_governance());
         let parsed = parse_action_type(action.as_str()).expect("citizen action parses");

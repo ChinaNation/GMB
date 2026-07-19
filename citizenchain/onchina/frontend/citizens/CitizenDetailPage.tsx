@@ -34,7 +34,6 @@ import type { AdminAuth } from '../auth/types';
 import { glassCardHeadStyle, glassCardStyle } from '../core/cardStyles';
 import { CitizenSignatureModal } from '../core/CitizenSignatureModal';
 import { ScanAccountModal } from '../core/ScanAccountModal';
-import { useScanSignGrant } from '../core/useScanSignGrant';
 import { useChainSign } from '../core/useChainSign';
 import { notice } from '../utils/notice';
 import {
@@ -153,9 +152,6 @@ export function CitizenDetailPage({
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [documentUploading, setDocumentUploading] = useState(false);
   const [selectedDocumentType, setSelectedDocumentType] = useState<CitizenDocumentType>('其他材料');
-  // 公民身份上链为注册局最严档操作:prepare/complete 前各弹一次
-  // passkey + 管理员冷钱包扫码签名,换取一次性安全 grant。
-  const { signWithScan, scanSignModal } = useScanSignGrant('管理员安全确认');
   const { signChain, chainSignModal } = useChainSign('注册局链交易签名');
   const [chainSubmitting, setChainSubmitting] = useState(false);
 
@@ -198,7 +194,6 @@ export function CitizenDetailPage({
         current.cid_number,
         values.wallet_account.trim(),
         values.identity_level,
-        signWithScan,
       );
       setPrepared(output);
       notice.success('公民钱包签名二维码已生成');
@@ -229,10 +224,8 @@ export function CitizenDetailPage({
         walletAccount,
         identityLevel,
         raw,
-        signWithScan,
       );
       setPrepared(null);
-      updateWalletAddress(output.wallet_address);
       notice.success('公民钱包签名已验证,请用管理员冷钱包签名并提交上链');
       // D7:身份上链交易由 onchina 组装提交,管理员冷钱包只签不提交。
       const signed = await signChain(output.request_id, output.citizen_identity_chain_sign_request);
@@ -245,7 +238,9 @@ export function CitizenDetailPage({
           signed.signature,
         );
         notice.success(`公民身份已上链,交易哈希：${submitted.tx_hash}`);
+        // 钱包绑定只在链交易最终确认后反映到页面，避免未上链先显示已绑定。
         onUpdated({ ...current, wallet_address: output.wallet_address });
+        updateWalletAddress(output.wallet_address);
       } finally {
         setChainSubmitting(false);
       }
@@ -265,8 +260,8 @@ export function CitizenDetailPage({
     }
     setChainSubmitting(true);
     try {
-      // 吊销 = 登记表墓碑(号永不复用),先取最严档 grant 再冷签提交。
-      const prep = await prepareCitizenRevoke(auth, current.cid_number, walletAccount, signWithScan);
+      // 吊销同样只做一次 Passkey 和一次最终链签。
+      const prep = await prepareCitizenRevoke(auth, current.cid_number, walletAccount);
       const signed = await signChain(prep.request_id, prep.sign_request);
       const submitted = await submitCitizenChainSign(
         auth,
@@ -543,10 +538,9 @@ export function CitizenDetailPage({
         }}
       />
 
-      {scanSignModal}
 
       <CitizenSignatureModal
-        title={prepared?.identity_level === 'candidate' ? '参选身份签名确认' : '投票身份签名确认'}
+        title={prepared?.action_label_zh ?? '公民签名确认'}
         open={!!prepared}
         onCancel={() => setPrepared(null)}
         qrTitle="身份载荷签名二维码"

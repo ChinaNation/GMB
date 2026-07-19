@@ -3,10 +3,7 @@
 // 通用请求能力只从 utils/http.ts 引入,本文件不承接机构或管理员模块接口。
 
 import type { AdminAuth } from '../auth/types';
-import {
-  createColdSignSubmitHeaders,
-  type ScanSignResolver,
-} from '../admins/securityApi';
+import { assertPasskey, PASSKEY_ASSERTION_HEADER } from '../auth/passkey/passkeyClient';
 import { adminHeaders, adminRequest, request } from '../utils/http';
 
 export type CitizenState = 'NORMAL' | 'REVOKED';
@@ -107,6 +104,7 @@ export type PrepareCitizenOnchainResult = {
   citizen_age_years: number;
   payload_hex: string;
   sign_request: string;
+  action_label_zh: string;
   expires_at: number;
 };
 
@@ -260,15 +258,9 @@ export async function prepareCitizenRevoke(
   auth: AdminAuth,
   cidNumber: string,
   walletAccount: string,
-  signWithScan: ScanSignResolver,
 ): Promise<PrepareCitizenRevokeResult> {
-  const headers = await createColdSignSubmitHeaders(
-    auth,
-    'CITIZEN_ONCHAIN_PUSH',
-    { cid_number: cidNumber, wallet_account: walletAccount },
-    signWithScan,
-    jsonAdminHeaders(auth),
-  );
+  const assertion = await assertPasskey(auth);
+  const headers = { ...jsonAdminHeaders(auth), [PASSKEY_ASSERTION_HEADER]: assertion };
   return request<PrepareCitizenRevokeResult>(
     `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/revoke/prepare`,
     {
@@ -279,33 +271,15 @@ export async function prepareCitizenRevoke(
   );
 }
 
-// 公民身份上链属注册局上链操作,最严档 PASSKEY_COLD_SIGN:
-// prepare 与 complete 各自先取一次性安全 grant(passkey + 管理员冷钱包扫码签名),
-// grant 载荷绑定 { cid_number, wallet_account },必须与业务请求逐字段一致。
-async function citizenOnchainGrant(
-  auth: AdminAuth,
-  cidNumber: string,
-  walletAccount: string,
-  identityLevel: CitizenOnchainIdentityLevel,
-  signWithScan: ScanSignResolver,
-): Promise<Record<string, string>> {
-  return createColdSignSubmitHeaders(
-    auth,
-    'CITIZEN_ONCHAIN_PUSH',
-    { cid_number: cidNumber, wallet_account: walletAccount, identity_level: identityLevel },
-    signWithScan,
-    jsonAdminHeaders(auth),
-  );
-}
-
 export async function prepareCitizenOnchainSignature(
   auth: AdminAuth,
   cidNumber: string,
   walletAccount: string,
   identityLevel: CitizenOnchainIdentityLevel,
-  signWithScan: ScanSignResolver,
 ): Promise<PrepareCitizenOnchainResult> {
-  const headers = await citizenOnchainGrant(auth, cidNumber, walletAccount, identityLevel, signWithScan);
+  // 一次业务操作只在创建时消费一次 Passkey；后续回执由短期操作会话关联。
+  const assertion = await assertPasskey(auth);
+  const headers = { ...jsonAdminHeaders(auth), [PASSKEY_ASSERTION_HEADER]: assertion };
   return request<PrepareCitizenOnchainResult>(
     `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/prepare`,
     {
@@ -322,9 +296,8 @@ export async function completeCitizenOnchainSignature(
   walletAccount: string,
   identityLevel: CitizenOnchainIdentityLevel,
   signResponse: string,
-  signWithScan: ScanSignResolver,
 ): Promise<CompleteCitizenOnchainResult> {
-  const headers = await citizenOnchainGrant(auth, cidNumber, walletAccount, identityLevel, signWithScan);
+  const headers = jsonAdminHeaders(auth);
   return request<CompleteCitizenOnchainResult>(
     `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/complete`,
     {

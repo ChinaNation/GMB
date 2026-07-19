@@ -8,7 +8,7 @@
 输入文档：
 - citizenchain/node/src/core/rpc.rs(constitution_getDocument:RAW 读语义参考)
 - citizenchain/node/src/core/constitution/mod.rs(storage_key:Pallet=LegislationYuan,Laws/LawVersions/LawVersionLabels/ConstitutionImmutableManifest)
-- citizenchain/scripts/check-constitution-genesis.py(parse_law/parse_version/parse_manifest 可移植底本;House 固定 36B)
+- citizenchain/scripts/check-constitution-genesis.py(parse_law/parse_version/parse_manifest 可移植底本;当前 `houses` 为 `Vec<CidNumber>`,每项按 SCALE `Vec<u8>` 读取)
 - citizenchain/runtime/public/legislation-yuan/src/lib.rs(Law/LawVersion/Chapter/Section/Article/Clause/LawVersionLabel 字段序)
 - citizenchain/node/src/core/constitution/render.rs(渲染对齐:双语/徽章/目录)
 - citizenapp/cloudflare/src/chain/{rpc,storage_key,identity}.ts(已有 state_getStorage + xxhash/blake2 + SCALE readCompact 原语)
@@ -45,4 +45,5 @@
 - [x] 官网:tsc -b + vite build 通过(Constitution 独立懒 chunk 1.73kB gz)、eslint 通过
 - [x] 浏览器验证:桌面+移动截图,tab 位置正确、白皮书风目录/双语/徽章/版本、第三章教委会第四章储委会、无 console 错误;临时 mock 已删
 - [x] 文档更新(CITIZENWEB_TECHNICAL 3.3 + 模块定位)+ 残留清理(无遗留)
+- [x] 2026-07-18 回归修复:runtime `Houses` 已是 `Vec<CidNumber>`，Worker 旧解码仍按 House 定长 36B 跳过，导致线上 `Laws[0].effective_version=Some(1)` 被读偏成 `None`，官网显示“链上宪法尚无生效版本”。已改为逐项读取 `CidNumber(Vec<u8>)`，并用 26 字节线上同型 CID fixture 覆盖回归测试。
 - [ ] 【部署】wrangler 部署 Worker + 官网构建部署后线上核对(读链需现网 CHAIN_URL;可选设 CONSTITUTION_TTL_SECONDS)

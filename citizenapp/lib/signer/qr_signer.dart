@@ -213,7 +213,7 @@ class QrSigner {
   }
 
   /// 按动作码构造签名原文,与 citizenwallet `signingBytesFor` 逐字节一致:
-  /// - 公民身份确认(0x10)走 GMB 哈希域 signingMessage;
+  /// - 公民签名确认(0x10)走 GMB 哈希域 signingMessage;
   /// - 链交易复刻 SignedPayload::using_encoded:
   ///   payload <= 256B 签原文,>256B 签 blake2_256(payload)。
   static Uint8List signingBytesForHex({

@@ -164,24 +164,39 @@ impl Db {
     ///
     /// 出生日期 `citizen_birth_date` 是新增公民时必填、写入后不可修改的字段,
     /// 任何编辑/回写路径都不得进入其 SET 子句(与链端 `BirthDateImmutable` 对齐)。
-    pub(crate) fn update_citizen_onchain(
+    pub(crate) fn confirm_citizen_identity_onchain(
         &self,
         cid_number: &str,
+        wallet_pubkey: &str,
+        wallet_address: &str,
+        admin_account: &str,
         onchain_tx_hash: &str,
         onchain_block_number: Option<u64>,
     ) -> Result<u64, String> {
         let cid_number = cid_number.to_string();
+        let wallet_pubkey = wallet_pubkey.to_string();
+        let wallet_address = wallet_address.to_string();
+        let admin_account = admin_account.to_string();
         let onchain_tx_hash = onchain_tx_hash.to_string();
         let block = onchain_block_number.map(|n| n as i64);
         self.with_client(move |conn| {
             conn.execute(
                 "UPDATE citizens
-                 SET onchain_tx_hash = $2, onchain_block_number = $3, onchain_at = now(),
-                     updated_at = now()
+                 SET wallet_pubkey = $2, wallet_address = $3, wallet_sig_alg = 'sr25519',
+                     wallet_verified_at = now(), onchain_tx_hash = $4,
+                     onchain_block_number = $5, onchain_at = now(),
+                     updated_by = $6, updated_at = now()
                  WHERE cid_number = $1",
-                &[&cid_number, &onchain_tx_hash, &block],
+                &[
+                    &cid_number,
+                    &wallet_pubkey,
+                    &wallet_address,
+                    &onchain_tx_hash,
+                    &block,
+                    &admin_account,
+                ],
             )
-            .map_err(|e| format!("update citizen onchain failed: {e}"))
+            .map_err(|e| format!("confirm citizen identity onchain failed: {e}"))
         })
     }
 }
@@ -719,11 +734,36 @@ pub(crate) async fn submit_chain_sign(
             }
         }
         PURPOSE_CITIZEN_IDENTITY_PUSH => {
-            if let Err(err) =
-                state
-                    .db
-                    .update_citizen_onchain(cid_number.as_str(), tx_hash.as_str(), block_number)
-            {
+            let wallet_pubkey = session
+                .context
+                .get("wallet_pubkey")
+                .and_then(|v| v.as_str());
+            let wallet_address = session
+                .context
+                .get("wallet_address")
+                .and_then(|v| v.as_str());
+            let (Some(wallet_pubkey), Some(wallet_address)) = (wallet_pubkey, wallet_address)
+            else {
+                delete_session_best_effort(
+                    &state,
+                    session.request_id.as_str(),
+                    "identity context invalid",
+                );
+                return api_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    1004,
+                    "身份上链会话数据损坏",
+                );
+            };
+            // 只有链交易最终确认后，才一次性绑定公民钱包并记录上链结果。
+            if let Err(err) = state.db.confirm_citizen_identity_onchain(
+                cid_number.as_str(),
+                wallet_pubkey,
+                wallet_address,
+                ctx.admin_account.as_str(),
+                tx_hash.as_str(),
+                block_number,
+            ) {
                 tracing::error!(error = %err, "update citizen onchain failed");
                 delete_session_best_effort(
                     &state,

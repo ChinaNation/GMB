@@ -19,9 +19,8 @@ class SubscriptionException implements Exception {
 
 /// 平台会员订阅编排：在「我的 → 会员」页订阅 / 取消平台会员（自由/民主/薪火）。
 ///
-/// 订阅、取消**都是上链热签 + 生物识别**：订阅签=授权按月自动扣公民币，取消签=撤销授权；
-/// 按月续扣由 keeper 依此授权 `charge_due` 拉取，不逐月再签。平台档价格链上单源，
-/// 客户端不传价。confirm 仅刷新 Cloudflare 镜像（best-effort，链上已是真源）。
+/// 用户签名订阅、取消和换档；首次扣款、真实公历到期时间与后续自动扣款由 runtime
+/// 根据共识时间戳完成。CitizenApp 不提交续费或周期确认。
 class SubscriptionService {
   SubscriptionService({
     SubscriptionRpc? rpc,
@@ -38,9 +37,15 @@ class SubscriptionService {
   final SquareSessionProvider _session;
   final SquareApiClient _api;
 
+  /// 会员页只以 finalized 链状态和同区块共识时间戳决定当前档位与权益。
+  Future<FinalizedSubscriptionSnapshot> fetchFinalizedState(
+          String ownerAccount) =>
+      _rpc.fetchSubscriptionSnapshot(subscriberAddress: ownerAccount);
+
   /// 订阅平台会员某档（level=freedom/democracy/spark）。
   Future<void> subscribe(
-    String level, {
+    String level,
+    int expectedPriceFen, {
     TxPoolWatchCallback? onWatchEvent,
   }) async {
     final wallet = await _requireHotWallet();
@@ -49,6 +54,7 @@ class SubscriptionService {
         fromAddress: wallet.address,
         signerPubkey: Uint8List.fromList(hexToBytes(wallet.pubkeyHex)),
         level: level,
+        expectedPriceFen: BigInt.from(expectedPriceFen),
         sign: (payload) => _wallet.signWithWallet(wallet.walletIndex, payload),
         onWatchEvent: onWatchEvent,
       );
@@ -79,6 +85,32 @@ class SubscriptionService {
       throw SubscriptionException(e.message);
     } on Exception catch (e) {
       throw SubscriptionException('取消失败：$e');
+    }
+  }
+
+  /// 更换平台会员档。当前已付周期内仅登记待切换档位，具体生效时间由 runtime 决定。
+  Future<void> changePlan(
+    String level,
+    int expectedPriceFen, {
+    TxPoolWatchCallback? onWatchEvent,
+  }) async {
+    final wallet = await _requireHotWallet();
+    try {
+      final result = await _rpc.changePlatformPlan(
+        fromAddress: wallet.address,
+        signerPubkey: Uint8List.fromList(hexToBytes(wallet.pubkeyHex)),
+        level: level,
+        expectedPriceFen: BigInt.from(expectedPriceFen),
+        sign: (payload) => _wallet.signWithWallet(wallet.walletIndex, payload),
+        onWatchEvent: onWatchEvent,
+      );
+      await _confirm(txHash: result.txHash, level: level);
+    } on SecureSeedException catch (e) {
+      throw SubscriptionException(seedSignErrorMessage(e));
+    } on WalletAuthException catch (e) {
+      throw SubscriptionException(e.message);
+    } on Exception catch (e) {
+      throw SubscriptionException('更换订阅失败：$e');
     }
   }
 

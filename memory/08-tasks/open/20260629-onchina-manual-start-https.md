@@ -40,6 +40,8 @@
 - 设置页显示 `链上中国平台`、`未开启 / 启动中 / 已开启` 状态标签、`https://onchina.local:8964` 和 `启动 / 关闭` 按钮。
 - 点击启动或关闭弹出二次确认。
 - 确认后 OnChina 子进程启动或停止；只有 `/api/v1/health` 返回 `UP` 后状态标签才显示 `已开启`，进程存在但健康检查未通过时显示 `启动中`。
+- 点击启动时先清理上一轮异常退出后遗留的旧 OnChina 孤儿进程和 8964 监听；如果端口被非 OnChina 进程占用，必须明确显示 `启动失败`，不得误杀其它进程。
+- `启动中` 不显示红色失败详情；只有启动动作最终失败、子进程退出或健康检查超时后，才显示 `启动失败` 和具体原因。
 - 退出节点程序后 OnChina 子进程被清理。
 - 登录签名响应失败时显示明确中文原因，不再统一掉到“登录签名响应处理失败”。
 - 文档同步说明 HTTPS 统一入口和手动启动行为。
@@ -47,7 +49,7 @@
 ## 执行记录
 
 - 已移除 `citizenchain/node/src/desktop/mod.rs` 中节点启动阶段自动调用 `onchina_proc::start_onchina` 的逻辑。
-- 已新增 `citizenchain/node/src/settings/onchina_platform/mod.rs`，提供 `get_onchina_platform` / `start_onchina_platform` / `stop_onchina_platform` Tauri 命令。
+- 已新增 `citizenchain/node/src/settings/onchina_platform.rs`，提供 `get_onchina_platform` / `start_onchina_platform` / `stop_onchina_platform` Tauri 命令。
 - 已新增 `citizenchain/node/frontend/settings/OnChinaPlatformSection.tsx`，设置页在“全节点模式”和“通信节点功能”之间显示状态标签、固定 HTTPS 入口和启动 / 关闭按钮。
 - 已把设置页状态改为真实健康状态：`已开启` 只代表 OnChina 进程存活且健康接口返回 `UP`，不再把“刚点启动/仅有进程句柄”误判为已开启。
 - 已补齐节点解绑 / 换机构安全闭环：`NODE_BINDING_UNBIND` 复用现有管理员安全动作 prepare/commit，要求本机会话管理员 + 冷钱包 active admin 签名确认；commit 后停用 active binding 并清退管理员会话。
@@ -63,6 +65,7 @@
 - 已修正前端注册局 passkey 入口：未设置 passkey 的 FRG/CREG 管理员只显示自己机构管理员列表入口；设置完成后按后端能力表显示完整业务 tab。
 - 已修正联邦注册局管理员列表：FRG 进入时显示本省编辑/更换/passkey 操作，CREG 进入时只显示本省联邦注册局管理员只读表格，不显示操作列。
 - 已更新 `run.sh` / `clean-run.sh`，本地开发脚本准备 HTTPS 环境但仍要求在设置页手动启动平台。
+- 2026-07-18:已修正节点设置页启动链上中国平台的旧进程处理和状态展示：`start_onchina_platform` 调用前清理旧 OnChina 孤儿进程 / 8964 端口监听；健康检查暂未通过时只返回 `启动中` 且不携带失败详情；启动失败、子进程退出或健康检查超时才返回 `启动失败`。
 - 已同步更新架构文档、节点技术文档、ADR-030 和部署形态文档。
 
 ## 验收记录

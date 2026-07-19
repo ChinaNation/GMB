@@ -92,6 +92,7 @@
 - 已更新 `memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md`，记录 Worker 运维命令、App `--dart-define`、R2/链 RPC 密钥边界和远端资源 ID 占位规则。
 - 已更新 `memory/07-ai/unified-protocols.md`；后续统一资源限制任务已彻底替换早期上传设计，当前不保留用户 R2 写入授权或开发代理分支。
 - 本阶段未修改 `citizenchain/runtime/`，未写入 Cloudflare token、R2 access key、R2 secret key 或链 RPC 私密地址，未触碰 GitHub 远端。
+- 2026-07-18：修复官网公民宪法接口解码错位。`citizenweb` 的公民宪法页通过同源 `/api/v1/constitution` 读取 Worker；Worker RAW 读 `LegislationYuan::Laws[0]` 时仍按历史 House 定长 36B 跳过，实际 runtime 当前 `houses = Vec<CidNumber>`，每个 `CidNumber` 是 SCALE `Vec<u8>`，导致线上 `effective_version=Some(1)` 被错读为 `None` 并返回 `constitution_not_effective`。已把 Worker 解码改为逐项读取 `CidNumber(Vec<u8>)`，并用 26 字节线上同型 CID fixture 覆盖回归测试。
 
 ## 验收结果
 
@@ -103,3 +104,4 @@
 - `flutter test test/8964/square_chain_service_test.dart test/8964/square_publish_service_test.dart test/8964/square_feed_service_test.dart test/8964/square_home_page_test.dart`：通过，9 个测试通过。
 - `git diff --check`：通过。
 - 残留清理：已删除 `citizenapp/cloudflare/node_modules`、`citizenapp/cloudflare/.wrangler`；未发现 `wrangler`、`workerd` 或本地链服务进程残留。
+- 2026-07-18 宪法接口修复验收：`npm --prefix citizenapp/cloudflare run typecheck` 通过；`npm --prefix citizenapp/cloudflare test -- constitution.test.ts` 8/8 通过；`npm --prefix citizenapp/cloudflare test` 26 个测试文件、174 项通过。线上节点 `constitution_getDocument` 已确认 `source=legislation-raw` 且返回 HTML，链上 `Laws[0]` raw 解码校验为 `effective_version=1`。

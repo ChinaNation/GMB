@@ -195,7 +195,9 @@ function utf8(bytes: Uint8Array): string {
 }
 
 /// 解码 `Law`（到 effective_version 即可）。字段序：law_id u64、tier u8、scope_code u32、
-/// houses `Vec<([u8;4],[u8;32])>`（每项定长 36B）、effective_version `Option<u32>`。
+/// houses `Vec<CidNumber>`、effective_version `Option<u32>`。
+/// `CidNumber` 是 SCALE `Vec<u8>`；这里必须逐项读 compact length，不能按历史
+/// “机构码 + AccountId = 36B” 固定长度跳过，否则会把 effective_version 读偏。
 /// 只读显式 effective_version：宪法只展示已生效版，不提前露修宪待生效版（ADR-027 §6.1）。
 export function decodeEffectiveVersion(lawBytes: Uint8Array): number | null {
   const reader = new ScaleReader(lawBytes);
@@ -203,7 +205,9 @@ export function decodeEffectiveVersion(lawBytes: Uint8Array): number | null {
   reader.u8(); // tier: 枚举变体索引
   reader.u32(); // scope_code
   const housesLen = reader.vecLen(16); // 立法机构院数（单院/两院）
-  reader.skip(housesLen * 36); // 每院 = [u8;4] 机构码 + [u8;32] AccountId
+  for (let i = 0; i < housesLen; i += 1) {
+    reader.bytes(); // 每院 = CidNumber(Vec<u8>)
+  }
   return reader.optionU32();
 }
 

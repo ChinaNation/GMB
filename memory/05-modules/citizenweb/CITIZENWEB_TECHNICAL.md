@@ -49,7 +49,7 @@ npm run build
 
 - `/constitution` tab 位于导航「白皮书」与「关于我们」之间（`Header.tsx` navItems），lazy 加载 `pages/Constitution.tsx`，UI 复用白皮书 `whitepaper-*` 样式（左目录树 + 右正文 + 回顶），另加 `constitution-*`（版本标签、不可修改徽章、章标题复位）。
 - 数据源：`GET {VITE_API_URL||'/api'}/v1/constitution`（Cloudflare Worker），返回结构化 `citizenapp.constitution.v1`：`{version, content_hash, version_label{cn,en}, immutable_articles[], chapters[章>节>条>款 + 中英]}`。官网用 **JSX 直接渲染**（无 `dangerouslySetInnerHTML`），中英并列、条级「不可修改条款 · Immutable」徽章、顶部版本标签、底部链上内容摘要。
-- Worker 侧（`citizenapp/cloudflare/src/chain/constitution.ts`）：经 CF Access 反代用**已放行的 `state_getStorage`** RAW 读 `Laws[0]`→显式 `effective_version`（只展示已生效版，不露待生效修宪版，ADR-027 §6.1）→`LawVersions[0][v]` / `LawVersionLabels[0][v]` / `ConstitutionImmutableManifest`，TS 逐字节 SCALE 解码（字段序对齐 runtime `legislation-yuan`；House 定长 36B），KV 短缓存 `CONSTITUTION_TTL_SECONDS`（缺省 300s，修宪后一个 TTL 内刷新）。安全口径与节点 `constitution_getDocument` 一致（RAW 读，不走可被恶意升级伪造的 runtime API）。
+- Worker 侧（`citizenapp/cloudflare/src/chain/constitution.ts`）：经 CF Access 反代用**已放行的 `state_getStorage`** RAW 读 `Laws[0]`→显式 `effective_version`（只展示已生效版，不露待生效修宪版，ADR-027 §6.1）→`LawVersions[0][v]` / `LawVersionLabels[0][v]` / `ConstitutionImmutableManifest`，TS 逐字节 SCALE 解码（字段序对齐 runtime `legislation-yuan`；`houses` 为 `Vec<CidNumber>`，每项按 SCALE `Vec<u8>` 读取），KV 短缓存 `CONSTITUTION_TTL_SECONDS`（缺省 300s，修宪后一个 TTL 内刷新）。安全口径与节点 `constitution_getDocument` 一致（RAW 读，不走可被恶意升级伪造的 runtime API）。
 - 该页公开只读，Worker guard 早返回放行、无会话门禁；解码器单测以真 `constitution.scale` 为夹具（`test/constitution.test.ts`）。
 
 ## 3.1. 白皮书结构维护记录
@@ -75,7 +75,7 @@ npm run build
 
 ## 4. 线上部署口径
 
-当前官网由 Cloudflare Pages 项目 `citizenweb` 承载，正式域名为 `https://www.crcfrcn.com`；`/membership` 与同源 `/api` 共同组成官网订阅入口。发布使用 `npx wrangler pages deploy dist --project-name citizenweb --branch main`，发布后必须真实访问 `/membership` 验证页面与同源 API。
+当前官网由 Cloudflare Pages 项目 `citizenweb` 承载，正式域名为 `https://www.crcfrcn.com`；`/membership` 与同源 `/api` 共同组成官网订阅入口。生产发布必须先 `npm ci` 安装 `citizenweb/package-lock.json` 锁定的 Wrangler，再使用 `npm exec -- wrangler pages deploy dist --project-name citizenweb --branch main`，发布后必须真实访问 `/membership` 验证页面与同源 API。
 
 以下 Nginx 流程是 2026-04-30 的历史部署记录，不是当前 production 发布入口：
 

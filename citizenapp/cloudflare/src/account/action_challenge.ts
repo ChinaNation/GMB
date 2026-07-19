@@ -13,18 +13,15 @@ import {
   u64Le
 } from '../shared/signing_message';
 
-/// 需要钱包 sr25519 主钥签名授权的敏感动作。
-/// set_creator_plan：创作者覆盖式设置自己会员档（离链存 Cloudflare，context=tiers 规范化哈希，防替换）。
-export type SignedAction =
-  | 'delete_account'
-  | 'set_creator_plan';
+/// 需要钱包 sr25519 主钥签名授权的敏感动作。创作者档位已改为链上交易签名，
+/// 不得再复用本离链挑战形成第二次业务签名。
+export type SignedAction = 'delete_account';
 
 const ACTION_CHALLENGE_TTL_SECONDS = 300;
 
 /// 动作签名 SCALE payload：`action ‖ owner ‖ challenge_id [‖ context] ‖ expires_at`。
-/// action 编入正文 → 登录/其它动作的签名无法被重放成本动作；[context] 为动作专属
-/// 绑定字段（set_creator_plan = tiers 规范化哈希），存在时插在 challenge_id 与 expires_at
-/// 之间，防「签一次改内容」。被签消息 = signing_message(OP_SIGN_SQUARE_ACTION, payload)。
+/// action 编入正文 → 登录/其它动作的签名无法被重放成本动作；[context] 若存在则插在
+/// challenge_id 与 expires_at 之间。被签消息 = signing_message(OP_SIGN_SQUARE_ACTION, payload)。
 function buildActionScalePayload(
   action: SignedAction,
   ownerAccount: string,
@@ -78,7 +75,7 @@ export interface ActionSignatureInput {
   action: SignedAction;
   challengeId: string;
   signature: string;
-  /// 动作专属绑定字段（set_creator_plan = tiers 规范化哈希），须与下发时一致。
+  /// 动作专属绑定字段，须与下发时一致。
   context?: string;
 }
 

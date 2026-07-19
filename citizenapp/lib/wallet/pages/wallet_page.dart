@@ -7,6 +7,7 @@ import 'package:citizenapp/qr/bodies/user_contact_body.dart';
 import 'package:citizenapp/qr/bodies/user_transfer_body.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
 import 'package:citizenapp/qr/qr_router.dart';
+import 'package:citizenapp/qr/scan_dispatch_flow.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
@@ -930,6 +931,12 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
 
   Future<void> _onMenuAction(String action) async {
     switch (action) {
+      case 'scan_sign':
+        await openScanDispatchFlow(
+          context: context,
+          paymentWallet: widget.wallet,
+          signingWallet: widget.wallet,
+        );
       case 'clearing_bank':
         // 跳转「设置清算行」占位页。真实搜索/绑定流程等后续任务卡。
         await Navigator.of(context).push(
@@ -1067,6 +1074,11 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
               icon: const Icon(Icons.more_vert),
               onSelected: _onMenuAction,
               itemBuilder: (_) => [
+                if (widget.wallet.isHotWallet)
+                  const PopupMenuItem(
+                    value: 'scan_sign',
+                    child: Text('扫一扫'),
+                  ),
                 const PopupMenuItem(
                   value: 'clearing_bank',
                   child: Text('清算行'),

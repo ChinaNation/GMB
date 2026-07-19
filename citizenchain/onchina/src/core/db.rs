@@ -100,6 +100,22 @@ impl Db {
             "-- 机构自定义命名账户的关闭凭证；协议账户永久不可关闭。
              -- 链交易冷签会话(ADR-031 D6/D7):prepare 只保存短期签名 payload;
              -- submit 后无论成功失败都删除,不得作为公民/机构的第三种业务状态。
+             -- 公民身份上链短期操作：一次 Passkey 创建、一次公民回签消费。
+             CREATE TABLE IF NOT EXISTS citizen_onchain_operations (
+                 operation_id TEXT PRIMARY KEY,
+                 admin_account TEXT NOT NULL,
+                 institution_code TEXT NOT NULL,
+                 cid_number TEXT NOT NULL,
+                 wallet_pubkey TEXT NOT NULL,
+                 wallet_address TEXT NOT NULL,
+                 identity_level TEXT NOT NULL,
+                 payload_hex TEXT NOT NULL,
+                 expires_at TIMESTAMPTZ NOT NULL,
+                 citizen_signed_at TIMESTAMPTZ
+             );
+             CREATE INDEX IF NOT EXISTS idx_citizen_onchain_operations_expiry
+                 ON citizen_onchain_operations(expires_at);
+
              CREATE TABLE IF NOT EXISTS chain_sign_sessions (
                 request_id   TEXT PRIMARY KEY,
                 purpose      TEXT NOT NULL,

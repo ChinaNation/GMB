@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
 import 'package:citizenapp/qr/pages/qr_sign_response_page.dart';
+import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/square_action_sign_service.dart';
+import 'package:citizenapp/signer/citizen_identity_sign_service.dart';
+import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/transaction/offchain-transaction/services/offchain_scan_flow.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 import 'package:citizenapp/wallet/core/seed_sign_error.dart';
@@ -16,6 +19,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 Future<void> openScanDispatchFlow({
   required BuildContext context,
   required WalletProfile? paymentWallet,
+  WalletProfile? signingWallet,
 }) async {
   final scanned = await Navigator.of(context).push<Object?>(
     MaterialPageRoute(
@@ -37,7 +41,12 @@ Future<void> openScanDispatchFlow({
     return;
   }
   if (scanned is String) {
-    await _handleSquareActionSignRequest(context, scanned);
+    final action = QrSigner().parseRequest(scanned).body.action;
+    if (action == QrActions.citizenIdentity) {
+      await _handleCitizenIdentitySignRequest(context, scanned, signingWallet);
+    } else {
+      await _handleSquareActionSignRequest(context, scanned);
+    }
   }
 }
 
@@ -81,10 +90,65 @@ Future<void> _handleSquareActionSignRequest(
     MaterialPageRoute(
       builder: (_) => QrSignResponsePage(
         responseJson: responseJson,
-        decoded: prep.decoded,
+        actionLabel: prep.actionLabel,
+        reviewEntries: prep.decoded.reviewFields!
+            .map((field) => (field.label, field.value))
+            .toList(),
       ),
     ),
   );
+}
+
+Future<void> _handleCitizenIdentitySignRequest(
+  BuildContext context,
+  String raw,
+  WalletProfile? signingWallet,
+) async {
+  final service = CitizenIdentitySignService();
+  final walletManager = WalletManager();
+  try {
+    final prep = await service.prepare(
+      raw,
+      walletManager,
+      requiredWallet: signingWallet,
+    );
+    if (!context.mounted) return;
+    final fields = prep.decoded.reviewEntries;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(prep.actionLabel),
+        content:
+            Text(fields.map((field) => '${field.$1}：${field.$2}').join('\n')),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('取消')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('确认签名')),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final response = await service.sign(prep, walletManager);
+    if (!context.mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => QrSignResponsePage(
+        responseJson: response,
+        actionLabel: prep.actionLabel,
+        reviewEntries: fields,
+      ),
+    ));
+  } on CitizenIdentitySignException catch (error) {
+    if (context.mounted) _snack(context, error.message);
+  } on SecureSeedException catch (error) {
+    if (context.mounted) _snack(context, seedSignErrorMessage(error));
+  } on WalletAuthException catch (error) {
+    if (context.mounted) _snack(context, error.message);
+  } on Exception catch (error) {
+    if (context.mounted) _snack(context, '签名失败：$error');
+  }
 }
 
 Future<bool?> _showActionConfirm(

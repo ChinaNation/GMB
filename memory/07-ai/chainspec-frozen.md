@@ -111,7 +111,7 @@
    `CITIZENAPP_REQUIRE_STATE_ROOT=1`。
 2. `citizenchain/node/src/home/process/mod.rs` 在启动节点前尝试安装内置
    `genesis-state/`，并在 RPC `chain_getBlockHash(0)` 成功前保持首次“初始化中”或普通“启动中”。
-3. `citizenchain/node/src/onchina_proc/mod.rs` 启动 OnChina 前必须确认本机链 RPC 已就绪。
+3. `citizenchain/node/src/onchina_proc.rs` 启动 OnChina 前必须确认本机链 RPC 已就绪。
 4. `citizenchain/scripts/prepack.sh` / `prepack.ps1` 只允许复制 `manifest.json` 与
    `chains/citizenchain/db/**`；任何符号链接、TLS、network、keystore 或其他路径都必须失败关闭。
    macOS 部署归档必须禁用 AppleDouble，禁止把系统扩展属性展开成 `._*` 成员。

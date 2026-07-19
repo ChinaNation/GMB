@@ -1,146 +1,234 @@
-# 任务卡：公民币订阅（第1部分 · 融入广场内容体系）
+# 任务卡：公民币平台订阅与创作者订阅统一改造
 
-> 状态：**Phase A 平台会员 + Stripe/USDC 全系下线 已完成（2026-07-17，见文末「执行记录」）**；Phase B 创作者会员链上/编排已实建。**完整技术架构真源（精确签名/扣款算法/闭合/命名/审查修正）= `memory/01-architecture/gmb/subscription-part1-tech.md`**；依据 ADR-037（2026-07-17 定稿 Accepted）+ `memory/01-architecture/gmb/membership-tax.md`。第2部分税务见 `20260716-onchain-tax-settlement.md`（串行在后，不阻塞本卡）。
+> 状态：执行中
+> 当前步骤：第 3 步已完成；等待确认第 4 步
+> 唯一架构文档：`memory/01-architecture/gmb/subscription-part1-tech.md`
+> 决策记录：`memory/04-decisions/ADR-037-citizen-coin-native-membership.md`
 
-任务需求：会员订阅是 CitizenApp 内容功能，**融入现有广场/内容体系，不新建独立模块**。链上**并入 `square-post`（保持此名）做最小实现**；App"我的"页在**会员与通讯录之间加"创作者"栏**（用户管理自己创作者订阅的入口）；BFF 用现有 `membership/` 内容模块。必要功能只两条：**① 用户订阅平台会员 ② 用户订阅创作者会员**。Stripe 只留卡。
+## 1. 任务目标
 
-所属模块：citizenchain（`misc/square-post` 扩展 + `primitives`）、cloudflare（`membership/` 内容 BFF）、citizenapp（`my/user`+`my/membership`+`my/creator`+`8964`）、onchina（调价入口）、citizenweb、CitizenWallet。
+在保留现有 CitizenChain 及全部无关链上状态的前提下，把平台订阅与创作者订阅统一为一套公民币原生订阅系统，并贯通 CitizenApp、CitizenChain、Cloudflare/D1、OnChina 和 CitizenWallet。
 
-必须遵守：
-- **不新建 pallet**：会员订阅并入 `square-post`（发帖+会员同属广场内容域），复用其 `pallet_index`。
-- **链上尽量最小**（核心 vs 非核心 §1.4）：pallet 只放订阅状态/平台价/创作者档/扣款调度；换档折算/预览/异档守卫/门禁/镜像/展示**全链下**。
-- 签名分层：公民订阅热钱包标准 extrinsic + 生物识别（禁 op_tag 0x1D、禁冷钱包盲签）；技术公司调价冷签 internal-vote。
-- 平台价链上 storage（技术公司 onchina 调）；`primitives::membership_price` 只放枚举/护栏。
-- 链开发期重新创世无 migration/兼容/spec_version/残留；不清楚先沟通。
+本任务禁止重新创世、替换 chainspec、清空链数据库或恢复 Stripe、USDC、外部计费 keeper。现有正式链已确认没有订阅数据；runtime 升级仍必须使用 StorageVersion 原地升级并在发现任何订阅记录时中止。
 
----
+## 2. 最终业务规则
 
-## 框架目录方案（融入版；`[新增]/[改动]/[删除]`；`A`=平台会员 `B`=创作者会员）
+### 2.1 平台订阅
 
-### ① 链层 citizenchain/runtime/misc/square-post/（扩展，**零新增 pallet，保持名**）
+- 三档平台会员为 `freedom`、`democracy`、`spark`。
+- 档位价格唯一真源为链上 `PlatformPrice`。
+- 用户在 CitizenApp 对订阅、取消、换档签名。
+- 首次扣款和每次 runtime 自动续费均读取扣款时最新链上价格。
+- 订阅款全额进入技术公司费用账户。
+- 平台调价只允许通过统一投票引擎，不得在业务模块内实现投票。
 
-现状：广场发帖索引（`SquarePosts`/`PublishedPostCountByAccount` + `publish_post`，无调度无治理）。扩展为**广场内容业务 pallet**（发帖 + 会员订阅）：
-```
-runtime/misc/square-post/src/
-├── lib.rs           [改动·A] 聚合 Config/Storage/Event/Error/GenesisConfig/call/#[pallet::hooks]
-│     Config  +Currency(扣公民币) +调价治理接口 +护栏常量(MaxCreatorTiers 等)
-│     Storage +Subscriptions:(subscriber,IssuerKey)->SubscriptionState  +PlatformPrice:MembershipLevel->u128分
-│             +CreatorPlans:AccountId->BoundedVec<CreatorTier>(创作者=任意钱包账户,无CID要求)  +DueQueue:BlockNumber->BoundedVec<SubKey>
-│     call    +subscribe(issuer,plan)/cancel(issuer)[热·A/B] +set_creator_plans(tiers)[热·B] +propose_set_platform_price[冷·A]
-│     hooks   +on_initialize 桶扫 DueQueue:with_storage_layer 原子{扣款→全额转 issuer→顺延};失败→欠费即停
-│     Genesis PlatformPrice 三档默认(199900/599900/5999900) + IssuerKey::Platform 绑技术公司 CID
-├── post.rs          [改动·A] 原发帖逻辑抽出(publish_post + SquarePosts)
-├── subscription.rs  [新增·A] IssuerKey{Platform,Creator(AccountId)}(创作者=任意钱包账户,无CID限制) · SubscriptionState{level_or_tier,price_fen,next_charge_at,status} · CreatorTier · subscribe/cancel/set_creator_plans
-├── billing.rs       [新增·A] on_initialize 按月扣款桶扫(欠费即停)
-├── proposal.rs      [新增·A] MODULE_TAG + propose_set_platform_price 治理提案 + InternalVoteExecutor
-├── weights.rs / benchmarks.rs [改动]
-└── tests/{mod,cases,billing}.rs [改动]
+### 2.2 创作者订阅
 
-runtime/primitives/src/membership_price.rs  [新增·A] MembershipLevel{Freedom,Democracy,Spark} + 单位(分) + 护栏(不放可调价)
-runtime/src/configs.rs  [改动·A] square-post Config 补 Currency/治理/护栏;回调元组接 square-post::InternalVoteExecutor;
-                                CallFilter:subscribe/cancel/set_creator_plans 放行;FeeRoute:热签→signer_onchain·propose→institution_onchain·billing→Free
-node/src/core/chain_spec.rs  [改动·A] square-post GenesisConfig 写 PlatformPrice 三档 + Platform 绑技术公司 CID
-```
-（`PLATFORM_MEMBERSHIP_ACCOUNT`=技术公司账户，公司后期注册后补；补入前平台轨挂起。IncomeLedger 记账 hook 留空，税务第2部分再接。）
+- 成为创作者的唯一资格是当前拥有有效平台订阅。
+- 链上只保存扣款必需的 `tier_id`、`billing_period` 和 `price_fen`。
+- 档位名称、说明、权益文案和媒体资料只保存在 Cloudflare/D1。
+- 创作者修改套餐扣款字段必须签名上链。
+- 创作者改价对全部存量订阅的下一次扣款生效；当前已付周期不补差价。
+- 到期后由 runtime 根据当前区块共识时间戳自动扣款，不需要续费签名或周期确认。
+- App、设备和 Cloudflare 在线状态不影响续费；停链期间到期周期在恢复出块后依次补扣。
+- 创作者订阅款全额进入创作者钱包。
+- 创作者在 CitizenApp 一次提交自己的档位标识、名称与各真实公历周期价格；同一业务操作只签名一次。链上交易 finalized 后，Cloudflare 接收交易哈希、严格读取 finalized 链上付款字段并保存展示名称，不得再要求账户签名或设备请求签名。
 
-### ② 客户端 App citizenapp/lib（融入现有内容目录）
+### 2.3 换套餐与生命周期
 
-```
-my/user/user.dart                     [改动·A] 菜单「会员」与「通讯录」之间插入「创作者」栏:_openCreator→CreatorPage(user.dart:441-457 之间)
-my/membership/membership_page.dart    [改动·A] 平台会员公民币轨:选三档→SubscriptionService.subscribe(Platform,level)→生物识别→上链→confirm;banner 加 PastDue;删 USDC
-my/creator/creator_page.dart          [新增·B] 「创作者」栏落地:管理我的创作者订阅——设我的会员档/价·看谁订阅了我·我的公民币收入(读链/BFF)
-my/creator/creator_plan_edit_page.dart[新增·B] 编辑创作者档位/月价(热签 set_creator_plans)
-my/membership/subscription_service.dart[新增·A] 编排:校验+SubscriptionRpc+生物识别;平台/创作者共用靠 IssuerKey 区分
-rpc/subscription_rpc.dart             [新增·A] square-post pallet_index + subscribe/cancel/set_creator_plans call_index + SignedExtrinsicBuilder
-8964/profile/widgets/subscribe_button.dart [新增·B] 广场他人主页「订阅 TA」→ subscribe(Creator(creator_account),tier)
-```
+- Active 且未到期：换套餐写入 `pending_plan`，下一次续费时生效。
+- 已取消或已终止：换套餐作为新的签名授权，立即按当前价格首扣并恢复 Active。
+- 不退款、不补差价、不按天折算。
+- `Cancelled` 只停止续费，已付权益保留至 `paid_until`。
+- `Terminated` 表示余额不足、真实转账失败或套餐失效，自动续费永久停止且不重试。
+- 订阅周期只使用时间戳和真实公历，与区块高度无关。
+- 自然公历只在 runtime 按 UTC 确定性计算；CitizenApp 和 Cloudflare 都不得提交到期时间。
 
-### ③ 边缘 BFF cloudflare/src/membership/（现有内容模块，加公民币轨）
+### 2.4 签名与交易收费
 
-```
-membership/citizen_coin.ts   [新增·A] 链读 Subscriptions 确认 + D1 幂等镜像(tx_hash PK) + requireCreatorSubscription[B](fail-closed 门禁)
-membership/service.ts        [改动·A/B] subscriptionIsActive 加 citizen_coin 分支;+upsertCitizenCoin;+requireCreatorSubscription
-membership/prepaid.ts        [删除·A] 整文件(USDC)
-membership/{subscribe,webhook,plans}.ts + account/service + routes + limits/catalog + types + migrations/0001_square_core.sql  [改动·A] 删 USDC 残桩;source 收窄 stripe|citizen_coin;建 square_citizen_coin_payments(tx_hash PK)
-```
-（残留归零：`grep -rn 'prepaid\|usdc' cloudflare/src` = 0。）
+- 同一个业务操作只允许一次签名，不得把链上提交、finalized 后镜像、重试镜像拆成账户签名或设备请求签名。
+- 订阅、取消、换套餐、创作者设置套餐分别是一笔用户发起的链上交易，各自按统一链上交易费规则收费。
+- 所有产生区块且不属于系统内部执行的交易都必须收费；不能因为业务金额为零而免除交易费。
+- runtime 内部自动续费不是外部用户交易，不追加用户交易费，也不要求签名。
 
-### ④ 机构治理层 onchina/src（技术公司调价·冷签，操作 square-post 治理 call）
+## 3. 链上固定契约
 
-```
-domains/membership/  [新增·A] {mod,model,chain_call,handler}.rs  SQUARE_POST_PALLET_INDEX + CALL_PROPOSE_SET_PLATFORM_PRICE + build_*()
-auth/operation_auth.rs  [改动·A] AdminActionType::SetPlatformPrice(PasskeyColdSign 四 arm)
-platform/capability.rs  [改动·A] can_set_platform_price(技术公司唯一 CID 精确)
-workspace/manifest.rs   [改动·A] set_platform_price action
-```
+`SquarePost` pallet index 固定为 `34 / 0x22`，不新建 pallet。
 
-### ⑤ 官网 citizenweb/src
-```
-pages/Membership.tsx              [改动·A] 删加密预付 UI;保留 Stripe 卡轨闭环
-components/CitizenCoinHandle.tsx  [新增·A] 「用 App 公民币订阅」把手,零签名
-```
+| call index | 调用 |
+|---:|---|
+| `0` | `publish_post` |
+| `1` | `subscribe(issuer, plan, expected_price_fen)` |
+| `2` | `cancel(issuer)` |
+| `3` | `set_creator_plans(tiers)` |
+| `4` | `change_subscription_plan(issuer, new_plan, expected_price_fen)` |
+| `5` | `propose_set_platform_price(...)` |
+不存在外部续费或周期确认 call。订阅签名持续授权 runtime 自动扣款，直到订阅者签名取消。
 
-### ⑥ 冷钱包 CitizenWallet lib（仅调价冷签）
-```
-signer/pallet_registry.dart / payload_decoder.dart / qr/qr_protocols.dart  [改动·A] square-post 的 propose_set_platform_price 三处登记
-```
+核心 storage：
 
----
+- `Subscriptions`
+- `PlatformPrice`
+- `PlatformCidNumber`
+- `CreatorPlans`
+- `RenewalSchedule`
+- `RenewalIndex`
+- `MigrationBlocked`
 
-## 两条必要功能（最小闭环）
-- **① 订阅平台会员**：`membership_page` 选三档 → `subscribe(Platform, level)` 热签上链 → 按月 `on_initialize` 自动扣公民币入技术公司账户 → 欠费即停；worker 链读确认镜像 D1 → 权益生效。
-- **② 订阅创作者会员**：**创作者=任意钱包账户（无 CID 限制，谁都能开）**。创作者在「创作者」栏 `set_creator_plans` 设档/价 → 订阅者在广场他人主页 `subscribe(Creator(creator_account), tier)` → 按月扣款**全额转创作者钱包账户** → BFF `requireCreatorSubscription(subscriber, creator_account)` 门禁解锁专属内容。**收款不受 CID 限制**；CID 只在税务侧（第2部分）用——有 CID 走链上申报结算、无 CID 自行申报，均不阻塞收款。
+## 4. 模块边界
 
-**链上不做**（全链下）：换档/降档折算、金额预览、异档守卫、内容门禁、D1 镜像、收入/历史展示、UI。
+- `citizenchain/runtime/misc/square-post/`：价格、扣款、确定性 UTC 公历、到期调度、最小订阅状态、迁移和平台调价回调。
+- `citizenapp/`：订阅、取消、换套餐热签，finalized 状态读取和真实日期展示；无续费提交。
+- `citizenapp/cloudflare/`：创作者展示资料、finalized 镜像、低频对账和内容权益门禁；无扣款权、无日期计算。
+- `citizenchain/onchina/`：技术公司平台调价治理入口。
+- `citizenwallet/`：平台调价冷签中文识别；普通订阅不进入冷钱包。
+- `memory/`：任务、协议、命名、ADR、架构和验收事实真源。
 
-## 分阶段
-- **Phase A 平台会员**：square-post 扩订阅+扣款+调价 + primitives + BFF 公民币轨 + 删 USDC + App「会员」页轨 + `user.dart` 加「创作者」栏(占位) + onchina 调价 + 官网 + 冷签登记。
-- **Phase B 创作者会员**：`CreatorPlans`/`set_creator_plans` + `subscribe(Creator)` + BFF 门禁 + `my/creator/` 管理页 + 广场「订阅 TA」。依赖广场/聊天权限(ADR-028/020)。
+## 5. 分步骤执行
 
-## 验收标准
-- 平台会员全链跑通:签→首扣→上链→worker 确认→权益生效;按月自动续扣;余额不足即停可充值重订。
-- 创作者可设档被订阅、款全额进钱包、订阅有效才解锁专属内容。
-- `square-post` 扩展后发帖(publish_post)回归不破;卡轨不破;USDC 残桩零残留;**无新增 pallet**。
-- 「创作者」栏在 user.dart 会员与通讯录之间;pallet 仅含核心(无编排/折算/门禁/展示行);重新创世一次成功。
+- [x] 第 1 步：统一任务卡、ADR、协议、命名与技术架构。
+- [x] 第 2 步：完成 square-post runtime 原地升级与链上订阅状态机。
+- [x] 第 3 步：完成 CitizenApp 平台/创作者订阅和换套餐流程。
+- [ ] 第 4 步：完成 Cloudflare/D1 finalized 镜像、对账和权益门禁。
+- [ ] 第 5 步：完成 OnChina 平台调价与 CitizenWallet 冷签识别。
+- [ ] 第 6 步：完成跨端真实运行态验收、残留总清理和任务归档。
 
-影响范围：citizenchain(square-post 扩展+重新创世) + 5 端。链改须用户显式确认后动手;Phase B 依赖广场/聊天权限系统。
+每一步都必须先输出技术方案并取得确认；执行后立即更新文档、完善中文注释、清理残留，再输出下一步技术方案。
 
----
+## 6. 文件与新增限制
 
-## 执行记录（2026-07-17）：平台会员改公民币 + Stripe/USDC 全系下线
+- 继续使用本任务卡，不新建第二张执行任务卡。
+- 任何 runtime 修改必须单独取得二次确认。
+- 任何新增文件或目录必须列出完整路径、用途、原因、Git 跟踪状态并取得确认。
+- 禁止 Git push、PR、远端 workflow 和生产部署，除非当前任务另行明确授权。
 
-用户决策：**彻底下线 Stripe 美元 + USDC 预付会员支付（卡轨也删），平台+创作者统一公民币；禁兼容、禁残留、一次删干净。链端不动（已实建）。** 四项拍板：① 新增 `citizen_coin.ts` + `subscription_service.dart`（其余不新建文件，更新本卡）；② D1 直接删 `square_stripe_*` 两表（非链创世，边缘镜像，零用户+禁兼容）；③ 订阅与注销彻底解耦，删注销/purge 的 Stripe 退订，不补链上退订；④ 官网会员页整页删除。全程在主检出 `/Users/rhett/GMB` 操作。
+## 7. 完成标准
 
-**链端 citizenchain：零改动**（已确认 `square-post` idx34 已含 Platform+Creator 双轨、`PlatformPrice` 三档创世、billing keeper、金标向量 `subscription_scale_vectors.json`）。
+- 平台和创作者首次扣款、runtime 自动续费、停链后补扣、取消、换套餐、余额不足终止全部按目标语义运行。
+- 创作者平台订阅资格在 App、runtime 和 Cloudflare 三层一致执行。
+- 创作者改价能作用于全部存量订阅的下一次扣款。
+- D1 只作为 finalized 链状态镜像，任何外部请求不得触发续费或延长权益。
+- runtime 在现有链状态副本上完成真实原地升级验收，无关状态不变。
+- CitizenApp 真机、真实本地 Worker/D1、真实 HTTP、真实链上交易完成端到端验收。
+- 代码、测试、中文注释、协议、ADR、架构、任务卡和 UI 文案无旧订阅路线残留。
 
-**Worker BFF `citizenapp/cloudflare`**：
-- 删 `membership/{subscribe,webhook,prepaid,stripe_api}.ts` 四文件。
-- 新增 `membership/citizen_coin.ts`：`platformSubscriptionConfirmRoute`（`POST /v1/square/membership/confirm`，带 level=订阅→镜像 active、缺 level=取消→cancelled，`last_tx_hash` 幂等，owner 由 session 派生）。
-- `membership/service.ts`：剥净 Stripe/USDC 写函数，保留读取路径，`subscriptionIsActive` 收敛为 `subscription_status==='active'`（与创作者门禁同口径）。
-- `membership/plans.ts`：删 `price_usd_*`/`price_currency`，配额表保留（价改链上 `PlatformPrice`）。
-- `types.ts`：Env 删全部 Stripe 变量；`MembershipRow` 新 schema（删 `subscription_source/stripe_*/cancel_at_period_end/prepaid_payment_ref`，加 `last_tx_hash`）。
-- `routes.ts`/`limits/catalog.ts`/`limits/usage.ts`/`security/request_guard.ts`：删 subscribe/cancel/prepaid/webhook 路由、`stripe_webhook` 限额、Stripe webhook 豁免、subscribe/cancel 设备证明豁免；接入 confirm 路由。
-- `account/service.ts`：删 Stripe 取消订阅端点（取消改走链上 extrinsic），收敛为纯注销。
-- `account/purge.ts`：删 Stripe 退订步骤（订阅与注销解耦），`PurgeAccountResult` 删 `stripe_canceled`。
-- `account/action_challenge.ts`：`SignedAction` 删 `cancel_membership`/`subscribe_membership`。
-- `membership/archive.ts`：仅改注释（非 Stripe 逻辑，保留视频冷归档）。
-- D1：`migrations/0001_square_core.sql` 重写 `square_memberships`（公民币 schema）+ 删 `square_stripe_webhook_events`/`square_stripe_payments` 两表；删 `migrations/0002_stripe_webhook_events.sql`。
-- 测试：删 `membership_subscribe.test.ts`，重写 `membership.test.ts`/`account.test.ts`/清 `chain_confirm.test.ts`/`relay.test.ts`。
+## 8. 当前已知工作区状态
 
-**App `citizenapp/lib`**：
-- `rpc/subscription_rpc.dart`：加 `subscribePlatform`/`cancelPlatform`（SCALE=`[34][1][00][00][level]` / `[34][2][00]`，对齐金标向量）。
-- `8964/chain/square_chain_service.dart`：加 `fetchPlatformPriceFen`（链读 `PlatformPrice`，Twox64Concat，u128 分）。
-- `8964/services/square_api_client.dart`：删 `priceUsdMonthly/isPrepaid/cancelAtPeriodEnd/subscriptionSource`，加 `confirmPlatformSubscription`。
-- `my/membership/subscription_service.dart`【新增】：平台订阅编排（校验+RPC+生物识别+confirm，镜像 `creator_subscribe_service.dart`）。
-- `my/membership/membership_page.dart`：由官网跳转壳重建为 App 内公民币订阅，价格链读 `PlatformPrice`（公民币）。
-- `test/my/membership/membership_page_test.dart`：重写公民币轨。
+仓库仍有多个并行任务留下的未提交修改。当前任务只收敛订阅相关目标文件，保留 OnChina、CitizenConsole、CitizenWeb、钱包及其他任务的无关改动，不擅自暂存、提交、回退或清理用户工作。
 
-**官网 `citizenweb`**：`src/pages/Membership.tsx` + 路由/导航/专属组件（QRScannerModal/qr-v1）+ 专属依赖整删；`npm run build` 通过。
+## 9. 第 1 步执行记录（2026-07-18）
 
-**控制台 `citizenconsole`**：删 `membership-test`/`membership-e2e` 动作 + `STRIPE_API_KEY`/`STRIPE_HOOK_SECRET` secret + `cloudflare-membership-e2e.mjs`。
+- 重写本任务卡，固定六步执行顺序和每步确认门禁。
+- 重写 ADR-037 和订阅完整技术架构。
+- 在统一协议登记 P-TX-014 和 P-STORAGE-006。
+- 在统一命名登记订阅跨端字段并删除会员支付 Stripe/USDC 旧命名。
+- 将旧链端专项任务卡移入 `done/`，清除其可执行 keeper 和永久锁价旧方案。
+- 更新仓库技术总览的公民币订阅主流程。
+- `git diff --check` 通过；`bash scripts/check-startup-acceptance.sh --ci` 通过。
+- 本步骤没有修改代码、runtime、数据库、链状态或远端。
 
-**配置 `wrangler.toml`**：删 `FREEDOM/DEMOCRACY/SPARK_PRICE_ID`、`CHECKOUT_*`、`STRIPE_DEV_PROXY` 及 Stripe secret 说明（`TOPUP_*` 边界保留）。
+## 10. 第 2 步执行记录（2026-07-18）
 
-**边界（未动）**：topup 全线（`onchain-topup/`、`cloudflare/src/topup/`、`TOPUP_*`、`test/topup.test.ts`）；创作者已公民币轨（`my/creator/`、`8964/subscribe/`、`subscribeCreator`/`cancelCreator`）。
+- `SquarePost` 由订阅签名建立持续授权；删除外部 `renew`、周期确认及对应签名入口。
+- 首次订阅立即读取链上当前价格并转账；runtime 从当前区块唯一共识时间戳确定性计算下一个真实 UTC 公历到期时间。
+- 新增 `RenewalSchedule` 与 `RenewalIndex` 有界调度；到期自动读取最新价格扣款，停链恢复后按到期顺序补扣全部应付周期。
+- 余额不足、真实转账失败、平台收款账户失效、创作者资格或套餐失效时写 `Terminated`、移除调度且不重试；签名取消写 `Cancelled` 并保留当前已付权益。
+- 未到期签名换套餐写 `pending_plan`，在下一次自动扣款原子生效；已取消或已终止后换套餐建立新的自动扣款授权。
+- CitizenApp 已删除公历计算、续费和周期确认 RPC，只保留订阅、取消、换套餐及创作者套餐管理签名，并展示链上时间戳。
+- Cloudflare 严格镜像 finalized 状态，不计算公历、不触发续费、不保存第二份价格真源；完整镜像、对账和门禁仍归第 4 步。
+- StorageVersion 原地迁移和 try-runtime pre/post 校验继续保留；发现旧订阅或调度数据时阻断，不转换、不兼容。
+- 回归结果：`square-post` 单元测试 14 项、完整 runtime 单元测试 44 项、CitizenApp 目标测试 17 项通过；CitizenApp 目标静态分析无问题；Cloudflare 目标测试 42 项和 TypeScript 类型检查通过；runtime benchmark 与 try-runtime 特性编译通过。
+- 在开发链数据库只读副本完成真实 try-runtime：原链 runtime 版本 1、新 runtime 版本 2，完整状态解码、迁移 pre/post、全部 pallet try-state、第二次迁移幂等性和权重安全检查均通过；原数据库未写入，验收副本已移入系统废纸篓。
+- 已用 `WASM_BUILD_FROM_SOURCE=1` 恢复普通生产 release WASM；未执行链上升级、原数据库写入、Git 提交、Git 推送、远端 workflow 或生产部署。
 
-**遗留 TODO（与创作者同一约束，非本次新增）**：平台/创作者 confirm 当前信任 App 上链的 tx，未做 worker 链读 `Subscriptions` 核实（镜像为门禁缓存，链上为真源）；`PLATFORM_MEMBERSHIP_ACCOUNT` 待技术公司注册后补。
+## 11. 第 3 步技术方案（已执行）
+
+### 11.1 目标
+
+完成 CitizenApp 平台订阅和创作者订阅的用户流程。App 只对订阅、取消、换套餐以及创作者管理自己套餐的操作签名；启动、恢复前台和设备更换只刷新 finalized 链状态，绝不提交续费、周期确认或其它签名。
+
+### 11.2 实现范围
+
+1. 在 `subscription_rpc.dart` 增加新 `SubscriptionState` SCALE 严格解码和 finalized storage 读取，字段顺序与 P-STORAGE-006 完全一致；继续只保留 call index 1—4 的 App 业务调用。
+2. 平台会员页直接读取 finalized `PlatformPrice` 与当前账户平台订阅，完成订阅、取消、换档、等待 finalized、刷新状态和防重复点击。
+3. 创作者订阅页读取 finalized `CreatorPlans` 与当前账户对该创作者的订阅，按月、季、年展示链上当前价格，完成订阅、取消、换档和 finalized 刷新。
+4. 创作者套餐管理使用创作者账户签名覆盖式提交 `set_creator_plans`；名称、说明、权益和媒体仍只走现有 Cloudflare 展示资料接口，不复制链上付款价格。
+5. 所有页面仅把链上 unix 毫秒时间戳转换为本地真实日期显示；`Active` 显示下次链上自动扣款时间，`Cancelled` 显示已付权益截止时间，`Terminated` 显示订阅已终止并允许用户重新签名订阅或换套餐。
+6. App 生命周期监听只做 finalized 状态刷新和 UI 更新，禁止产生任何自动交易、设备授权、续费签名或周期确认。
+
+### 11.3 预计修改目录
+
+- `citizenapp/lib/rpc/`：代码；实现订阅 storage key、SCALE 严格解码和 finalized 链读，边界是不新增续费 call。
+- `citizenapp/lib/my/membership/`：代码；完成平台订阅、取消、换档、状态刷新和真实日期展示。
+- `citizenapp/lib/8964/subscribe/`、`citizenapp/lib/my/creator/`：代码；完成创作者订阅与创作者套餐管理，展示字段仍与链上付款字段分离。
+- `citizenapp/test/`：测试；补齐跨端金标、RPC、service、widget、生命周期只读刷新和错误态测试；预计复用现有测试文件，不新增文件。
+- `memory/01-architecture/gmb/`、`memory/07-ai/`、本任务卡：文档与残留清理；同步最终 App 行为、字段、测试和真实验收事实，不修改 runtime 方案。
+
+### 11.4 不修改范围
+
+- 不修改 `citizenchain/runtime/`，因此第 3 步不触发 runtime 二次确认。
+- 不实现 Cloudflare 完整对账和门禁；该范围保留到第 4 步。
+- 不修改 OnChina、CitizenWallet、链数据库、chainspec 或部署配置。
+- 不新增外部续费服务、keeper、App 定时扣款、周期确认、设备签名或兼容旧协议。
+
+### 11.5 验收
+
+- Dart 与 runtime 金标 SCALE 逐字节一致，非法标签、截断和尾随字节 fail-closed。
+- 平台与创作者订阅、取消、换套餐分别完成真实本地链 signed extrinsic → finalized → App 状态刷新。
+- App 重启、恢复前台和更换设备仅产生链读，不产生交易或签名请求。
+- 页面显示真实本地日期，且 Active、Cancelled、Terminated 三态和按钮行为与链上一致。
+- Flutter 单元、service、widget、静态分析和真机/模拟器真实运行态验收通过；随后更新文档、完善中文注释并清理旧文案与旧入口。
+
+## 12. 第 3 步执行记录（2026-07-18）
+
+- 保留 CitizenApp 已有会员三卡 UI、创作者页和广场创作者订阅按钮，只替换其数据真源与操作编排。
+- `subscription_rpc.dart` 已接入 `Subscriptions`、`CreatorPlans` 和同一 finalized 区块的 `Timestamp.Now` 严格读取；非法枚举、截断及尾随字节全部 fail-closed。
+- 平台订阅和创作者订阅均已接入订阅、取消、换档的一次账户签名交易；页面直接使用 finalized 链状态显示真实本地日期，不计算或提交到期日期。
+- 创作者设置档位采用一次 `set_creator_plans` 签名。链上 finalized 后，Cloudflare 接收交易哈希并严格读取 finalized 付款字段，只保存展示字段；这些镜像请求只用 Bearer 会话与 finalized 链读复核，不生成设备请求签名。边缘保存失败会在 CitizenApp 下次运行时只重试 HTTP 镜像，不再次签名或提交链上交易。
+- Cloudflare 暂时不可用时，CitizenApp 仍可读取链上价格、档位和订阅真态；展示名称使用现有本地兜底，边缘服务不再成为链上功能前置条件。
+- 已审计 runtime 交易收费路由：`subscribe`、`cancel`、`change_subscription_plan`、`set_creator_plans` 均进入签名账户收费路由，并由统一交易支付扩展扣费；零业务金额仍适用最低链上交易费。runtime 自动续费属于系统内部执行，不生成外部收费交易。
+- CitizenApp 目标静态分析通过，目标测试 29 项通过；Cloudflare TypeScript 类型检查、目标测试 45 项和完整测试 178 项通过；`git diff --check` 通过。
+- 真实本地 Worker 已启动并通过 `/health` HTTP 检查；CitizenApp 已在真实 Android 设备安装、启动并检查现有会员与创作者 UI，创作者平台会员门禁按 finalized 真态显示。
+- 当前运行中的本地链仍是旧 runtime，尚未安装第 2 步产物；因此不能虚构本步骤的真实签名交易 finalized 验收。未执行 runtime 升级、链数据库写入、远端部署、Git 提交或推送；真实跨端交易验收在获得单独部署授权后纳入第 6 步。
+
+## 13. 第 4 步技术方案（待确认）
+
+### 13.1 目标
+
+完成 Cloudflare/D1 的 finalized 订阅镜像、低资源对账和内容权益门禁。Cloudflare 只加速读取与保存展示资料，任何 HTTP 请求都不能扣款、续费、延长权益、决定价格或要求第二次签名。
+
+### 13.2 实现范围
+
+1. 平台与创作者订阅镜像统一保存 finalized 链字段：订阅者、收款主体、当前套餐、待生效套餐、开始时间、最近扣款时间、最近扣款价格、已付权益截止时间、状态、finalized 区块号和区块哈希。
+2. 首次订阅、取消、换档及创作者套餐保存的 HTTP 确认只接收交易哈希和必要展示字段，只使用现有 Bearer 会话，不生成设备请求签名；Worker 从 finalized 链状态复核后幂等写 D1，不信任客户端提交的价格、状态或时间。
+3. 权益有效口径统一为：`Active` 且链上当前时间早于 `paid_until`，或 `Cancelled` 且链上当前时间仍早于 `paid_until`；`Terminated`、过期、未知状态、解码失败和链读失败全部拒绝。取消不能立即剥夺已经付款的权益。
+4. 创作者资格门禁使用同一 finalized 平台订阅有效口径；创作者内容门禁使用订阅者对该创作者的 finalized 订阅有效口径，不采信 D1 自报状态。
+5. 对账采用有界、低频、分批游标方式，只纠正已有镜像；不全链高频扫描、不运行外部续费任务、不在 Worker 计算公历。确认路径优先精确链读，D1 索引只服务查询与有限批次。
+6. 创作者档位名称等展示资料继续保存在 D1；付款套餐和价格从 finalized `CreatorPlans` 复核并镜像，链上始终是唯一扣款真源。
+7. 删除旧状态判断、旧确认载荷、已移除路由、二次业务签名和把 D1 当真源的残留，不保留兼容分支。
+
+### 13.3 预计修改目录
+
+- `citizenapp/cloudflare/src/chain/`：代码；统一 finalized storage 读取、严格 SCALE 解码、同一区块时间戳与交易复核，边界是不发起任何扣款交易。
+- `citizenapp/cloudflare/src/membership/`：代码与残留清理；实现平台/创作者镜像、低频分批对账及统一有效权益门禁，删除旧状态和二次签名路径。
+- `citizenapp/cloudflare/migrations/`：数据库文档或现有迁移调整；统一镜像字段、复合唯一键和对账索引，不保存第二份价格真源，不新增兼容表。
+- `citizenapp/cloudflare/src/routes.ts`、`src/limits/`、`src/types.ts`：代码与残留清理；收敛确认路由、请求类型、限流和 fail-closed 边界。
+- `citizenapp/cloudflare/test/`：测试；覆盖 finalized 复核、幂等、取消后已付权益、终止拒绝、待生效换档、链读失败和有界对账；优先复用现有测试文件。
+- `citizenapp/lib/8964/`、`citizenapp/lib/my/`：仅在真实 HTTP 契约需要时修改现有 API 调用与错误展示，不改变已经保留的 UI，也不增加签名。
+- `memory/01-architecture/gmb/` 与本任务卡：文档和残留清理；记录最终 Worker/D1 契约、资源边界、测试及真实验收事实。
+
+本步骤预计不新建文件或目录；如检查后确需新增，必须先列出完整路径、用途、原因及 Git 跟踪状态并再次取得确认。
+
+### 13.4 不修改范围
+
+- 不修改 `citizenchain/runtime/`、OnChina、CitizenWallet、chainspec 或链数据库。
+- 不部署 Cloudflare、不写生产 D1、不推送 GitHub，也不触发远端 workflow。
+- 不实现外部续费、周期确认、新的账户或设备签名、日期计算、全链扫描或旧接口兼容。
+
+### 13.5 验收
+
+- Worker 类型检查和目标测试通过；严格解码、幂等和 fail-closed 测试覆盖完整。
+- 使用真实本地 Worker、真实本地 D1 和真实 HTTP 验证确认、查询、门禁与有界对账。
+- 验证同一个创作者套餐业务操作从一次链上签名到边缘镜像完成全程没有第二次签名；镜像失败重试只产生 HTTP 请求。
+- 验证 `Cancelled` 在 `paid_until` 前仍有权益、到期后拒绝，`Terminated` 始终拒绝。
+- 更新文档、完善中文注释并清除旧路由、旧字段、旧签名和旧状态判断残留后，输出第 5 步完整技术方案。

@@ -146,6 +146,7 @@ class SignedExtrinsicBuilder {
     required Future<Uint8List> Function(Uint8List payload) sign,
     void Function(SignedExtrinsicTrace trace)? onTrace,
     TxPoolWatchCallback? onWatchEvent,
+    bool waitForFinalized = false,
   }) async {
     debugPrint('[$_logLabel] 步骤1: 获取 metadata...');
     final metadata = await _rpc.fetchMetadata();
@@ -208,6 +209,7 @@ class SignedExtrinsicBuilder {
       final result = await _rpc.submitExtrinsicAndWaitForInBlock(
         encoded,
         onWatchEvent: onWatchEvent,
+        waitForFinalized: waitForFinalized,
       );
       final blockHashHex = result.included.blockHashHex;
       if (blockHashHex == null || blockHashHex.isEmpty) {

@@ -15,8 +15,6 @@ use serde::{Deserialize, Serialize};
 use sp_core::{sr25519, Pair};
 use uuid::Uuid;
 
-use crate::auth::actions::require_admin_security_grant;
-use crate::auth::operation_auth::AdminActionType;
 use crate::domains::citizens::admin_entry::{
     citizen_record_from_row, resolve_wallet_account, ResolvedWallet,
 };
@@ -65,6 +63,7 @@ pub(crate) struct PrepareCitizenOnchainOutput {
     pub(crate) citizen_age_years: u8,
     pub(crate) payload_hex: String,
     pub(crate) sign_request: String,
+    pub(crate) action_label_zh: String,
     pub(crate) expires_at: i64,
 }
 
@@ -100,20 +99,11 @@ pub(crate) async fn prepare_citizen_onchain_signature(
     if let Err(resp) = ensure_registry_admin(&ctx) {
         return resp;
     }
-    // 注册局上链操作最严档:passkey 断言 + 冷钱包扫码签名 grant,
-    // grant 与 cid_number/wallet_account 载荷绑定,单次消费。
-    let grant_payload = serde_json::json!({
-        "cid_number": cid_number,
-        "wallet_account": input.wallet_account,
-        "identity_level": input.identity_level.as_str(),
-    });
-    if let Err(resp) = require_admin_security_grant(
+    // 整个业务操作只消费这一次 Passkey；后续公民回签通过 operation_id 绑定。
+    if let Err(resp) = crate::auth::passkey::require_passkey_assertion(
         &state,
         &headers,
-        &ctx,
-        AdminActionType::CitizenOnchainPush,
-        cid_number.as_str(),
-        Some(&grant_payload),
+        ctx.admin_account.as_str(),
     ) {
         return resp;
     }
@@ -153,6 +143,25 @@ pub(crate) async fn prepare_citizen_onchain_signature(
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    let operation = CitizenOnchainOperation {
+        operation_id: request_id,
+        admin_account: ctx.admin_account,
+        institution_code: ctx.institution_code,
+        cid_number: record.cid_number.clone(),
+        wallet_pubkey: wallet.pubkey.clone(),
+        wallet_address: wallet.address.clone(),
+        identity_level: payload.identity_level.as_str().to_string(),
+        payload_hex: hex::encode(&payload.payload_bytes),
+        expires_at,
+    };
+    if let Err(err) = state.db.insert_citizen_onchain_operation(&operation) {
+        tracing::error!(error = %err, "insert citizen onchain operation failed");
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "公民签名操作落库失败",
+        );
+    }
 
     Json(ApiResponse {
         code: 0,
@@ -165,6 +174,7 @@ pub(crate) async fn prepare_citizen_onchain_signature(
             citizen_age_years: payload.citizen_age_years,
             payload_hex: format!("0x{}", hex::encode(payload.payload_bytes)),
             sign_request,
+            action_label_zh: crate::core::qr::action_label_zh("citizen_identity"),
             expires_at: expires_at.timestamp(),
         },
     })
@@ -184,28 +194,11 @@ pub(crate) async fn complete_citizen_onchain_signature(
     if let Err(resp) = ensure_registry_admin(&ctx) {
         return resp;
     }
-    // complete 同为上链操作,单独消费一次最严档 grant;载荷绑定不含
-    // sign_response(公民回执在 grant 签发时尚不存在)。
-    let grant_payload = serde_json::json!({
-        "cid_number": cid_number,
-        "wallet_account": input.wallet_account,
-        "identity_level": input.identity_level.as_str(),
-    });
-    if let Err(resp) = require_admin_security_grant(
-        &state,
-        &headers,
-        &ctx,
-        AdminActionType::CitizenOnchainPush,
-        cid_number.as_str(),
-        Some(&grant_payload),
-    ) {
-        return resp;
-    }
     let wallet = match resolve_wallet_account(input.wallet_account.as_str()) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let mut record = match state.db.find_citizen_by_cid(cid_number.as_str()) {
+    let record = match state.db.find_citizen_by_cid(cid_number.as_str()) {
         Ok(Some(v)) => v,
         Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "公民档案不存在"),
         Err(err) => {
@@ -230,6 +223,41 @@ pub(crate) async fn complete_citizen_onchain_signature(
             return api_error(StatusCode::BAD_REQUEST, 1001, detail.as_str());
         }
     };
+    let operation_id = match sign_response
+        .id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+    {
+        Some(value) => value,
+        None => return api_error(StatusCode::BAD_REQUEST, 1001, "公民签名响应缺少操作编号"),
+    };
+    let operation = match state.db.find_citizen_onchain_operation(operation_id) {
+        Ok(Some(value)) => value,
+        Ok(None) => return api_error(StatusCode::GONE, 2003, "公民签名操作不存在或已失效"),
+        Err(err) => {
+            tracing::error!(error = %err, "query citizen onchain operation failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "公民签名操作查询失败",
+            );
+        }
+    };
+    if operation.admin_account != ctx.admin_account
+        || operation.institution_code != ctx.institution_code
+        || operation.cid_number != cid_number
+        || operation.wallet_pubkey != wallet.pubkey
+        || operation.wallet_address != wallet.address
+        || operation.identity_level != input.identity_level.as_str()
+        || operation.payload_hex != hex::encode(&payload.payload_bytes)
+    {
+        return api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "公民签名响应与当前业务操作不一致",
+        );
+    }
     let signer_pubkey = sign_response.body.pubkey;
     if !same_pubkey_hex(signer_pubkey.as_str(), wallet.pubkey.as_str()) {
         return api_error(StatusCode::FORBIDDEN, 1003, "签名钱包与录入钱包不一致");
@@ -245,6 +273,18 @@ pub(crate) async fn complete_citizen_onchain_signature(
             2004,
             "公民钱包签名校验失败",
         );
+    }
+    match state.db.consume_citizen_onchain_operation(operation_id) {
+        Ok(true) => {}
+        Ok(false) => return api_error(StatusCode::CONFLICT, 2003, "公民签名操作已消费或已过期"),
+        Err(err) => {
+            tracing::error!(error = %err, "consume citizen onchain operation failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "公民签名操作消费失败",
+            );
+        }
     }
 
     let actor_cid_number = match active_registry_cid_number(&state) {
@@ -303,6 +343,8 @@ pub(crate) async fn complete_citizen_onchain_signature(
         context: serde_json::json!({
             "cid_number": record.cid_number,
             "identity_level": payload.identity_level.as_str(),
+            "wallet_pubkey": wallet.pubkey,
+            "wallet_address": wallet.address,
         }),
         expires_at,
         consumed_at: None,
@@ -311,37 +353,6 @@ pub(crate) async fn complete_citizen_onchain_signature(
         tracing::error!(error = %err, "insert identity push session failed");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "冷签会话落库失败");
     }
-
-    let now = Utc::now();
-    record.wallet_pubkey = Some(wallet.pubkey.clone());
-    record.wallet_address = Some(wallet.address.clone());
-    record.wallet_sig_alg = Some("sr25519".to_string());
-    record.wallet_verified_at = Some(now);
-    record.updated_by = Some(ctx.admin_account.clone());
-    record.updated_at = now;
-    if let Err(err) = state.db.upsert_citizen_row(&record) {
-        tracing::error!(error = %err, "update citizen wallet binding failed");
-        return api_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            1004,
-            "公民钱包绑定落库失败",
-        );
-    }
-
-    crate::core::runtime_ops::append_audit_log(
-        &state,
-        "CITIZEN_ONCHAIN_PREPARE",
-        &ctx.admin_account,
-        Some(record.cid_number.clone()),
-        serde_json::json!({
-            "cid_number": record.cid_number,
-            "identity_level": payload.identity_level.as_str(),
-            "wallet_address": wallet.address,
-            "citizen_age_years": payload.citizen_age_years,
-            "request_id": request_id_from_headers(&headers),
-            "actor_ip": actor_ip_from_headers(&headers),
-        }),
-    );
 
     Json(ApiResponse {
         code: 0,
@@ -360,7 +371,93 @@ pub(crate) async fn complete_citizen_onchain_signature(
     .into_response()
 }
 
+#[derive(Clone)]
+struct CitizenOnchainOperation {
+    operation_id: String,
+    admin_account: String,
+    institution_code: String,
+    cid_number: String,
+    wallet_pubkey: String,
+    wallet_address: String,
+    identity_level: String,
+    payload_hex: String,
+    expires_at: chrono::DateTime<Utc>,
+}
+
 impl Db {
+    fn insert_citizen_onchain_operation(
+        &self,
+        operation: &CitizenOnchainOperation,
+    ) -> Result<(), String> {
+        let operation = operation.clone();
+        self.with_client(move |conn| {
+            conn.execute(
+                "DELETE FROM citizen_onchain_operations WHERE expires_at < now()",
+                &[],
+            )
+            .map_err(|e| format!("delete expired citizen onchain operations failed: {e}"))?;
+            conn.execute(
+                "INSERT INTO citizen_onchain_operations
+                 (operation_id, admin_account, institution_code, cid_number, wallet_pubkey,
+                  wallet_address, identity_level, payload_hex, expires_at)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+                &[
+                    &operation.operation_id,
+                    &operation.admin_account,
+                    &operation.institution_code,
+                    &operation.cid_number,
+                    &operation.wallet_pubkey,
+                    &operation.wallet_address,
+                    &operation.identity_level,
+                    &operation.payload_hex,
+                    &operation.expires_at,
+                ],
+            )
+            .map_err(|e| format!("insert citizen onchain operation failed: {e}"))?;
+            Ok(())
+        })
+    }
+
+    fn find_citizen_onchain_operation(
+        &self,
+        operation_id: &str,
+    ) -> Result<Option<CitizenOnchainOperation>, String> {
+        let operation_id = operation_id.to_string();
+        self.with_client(move |conn| {
+            let row = conn.query_opt(
+                "SELECT operation_id, admin_account, institution_code, cid_number, wallet_pubkey,
+                        wallet_address, identity_level, payload_hex, expires_at
+                 FROM citizen_onchain_operations
+                 WHERE operation_id = $1 AND citizen_signed_at IS NULL AND expires_at >= now()",
+                &[&operation_id],
+            ).map_err(|e| format!("query citizen onchain operation failed: {e}"))?;
+            Ok(row.map(|row| CitizenOnchainOperation {
+                operation_id: row.get(0),
+                admin_account: row.get(1),
+                institution_code: row.get(2),
+                cid_number: row.get(3),
+                wallet_pubkey: row.get(4),
+                wallet_address: row.get(5),
+                identity_level: row.get(6),
+                payload_hex: row.get(7),
+                expires_at: row.get(8),
+            }))
+        })
+    }
+
+    fn consume_citizen_onchain_operation(&self, operation_id: &str) -> Result<bool, String> {
+        let operation_id = operation_id.to_string();
+        self.with_client(move |conn| {
+            conn.execute(
+                "UPDATE citizen_onchain_operations SET citizen_signed_at = now()
+             WHERE operation_id = $1 AND citizen_signed_at IS NULL AND expires_at >= now()",
+                &[&operation_id],
+            )
+            .map(|count| count == 1)
+            .map_err(|e| format!("consume citizen onchain operation failed: {e}"))
+        })
+    }
+
     pub(crate) fn find_citizen_by_cid(
         &self,
         cid_number: &str,

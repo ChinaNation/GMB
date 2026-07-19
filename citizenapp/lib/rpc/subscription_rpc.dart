@@ -1,22 +1,100 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart/scale_codec.dart' show ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'chain_rpc.dart';
 import 'signed_extrinsic_builder.dart';
 
-/// square-post 会员订阅上链 RPC：订阅 / 取消**平台会员**与**创作者会员**（热签标准
-/// extrinsic）。
+/// 创作者链上付款档位中的周期价格。
+class CreatorPeriodPriceInput {
+  const CreatorPeriodPriceInput({
+    required this.billingPeriod,
+    required this.priceFen,
+  });
+
+  final String billingPeriod;
+  final BigInt priceFen;
+}
+
+/// 创作者覆盖式提交的链上付款档位；名称、说明和权益不进入 SCALE。
+class CreatorTierInput {
+  const CreatorTierInput({required this.tierId, required this.pricesFen});
+
+  final String tierId;
+  final List<CreatorPeriodPriceInput> pricesFen;
+}
+
+/// finalized `Subscriptions` 中的平台或创作者付款计划。
+class ChainSubscriptionPlan {
+  const ChainSubscriptionPlan.platform(this.membershipLevel)
+      : kind = 'platform',
+        tierId = null,
+        billingPeriod = null;
+
+  const ChainSubscriptionPlan.creator(this.tierId, this.billingPeriod)
+      : kind = 'creator',
+        membershipLevel = null;
+
+  final String kind;
+  final String? membershipLevel;
+  final String? tierId;
+  final String? billingPeriod;
+}
+
+/// 链上订阅真态；所有时间字段均为 UTC Unix 毫秒时间戳。
+class ChainSubscriptionState {
+  const ChainSubscriptionState({
+    required this.plan,
+    required this.pendingPlan,
+    required this.startedAt,
+    required this.lastChargedAt,
+    required this.lastChargedPriceFen,
+    required this.paidUntil,
+    required this.status,
+  });
+
+  final ChainSubscriptionPlan plan;
+  final ChainSubscriptionPlan? pendingPlan;
+  final int startedAt;
+  final int lastChargedAt;
+  final BigInt lastChargedPriceFen;
+  final int paidUntil;
+  final String status;
+
+  /// Active 与已签名取消但仍在已付周期内的 Cancelled 都继续提供权益。
+  bool isEffectiveAt(int chainNowMs) =>
+      (status == 'active' || status == 'cancelled') && chainNowMs < paidUntil;
+}
+
+/// 同一 finalized 区块上的订阅状态与共识时间戳，避免本机时钟参与权益判断。
+class FinalizedSubscriptionSnapshot {
+  const FinalizedSubscriptionSnapshot({
+    required this.state,
+    required this.chainNowMs,
+    required this.blockHashHex,
+  });
+
+  final ChainSubscriptionState? state;
+  final int chainNowMs;
+  final String blockHashHex;
+}
+
+/// finalized `CreatorPlans` 中的单个链上付款档位。
+class ChainCreatorTier {
+  const ChainCreatorTier({required this.tierId, required this.pricesFen});
+
+  final String tierId;
+  final Map<String, BigInt> pricesFen;
+}
+
+/// SquarePost 订阅 SCALE 与标准热钱包 extrinsic 入口。
 ///
-/// SCALE 布局逐字节对齐链端金标向量（`subscription_scale_vectors.json`，pallet=34）：
-///   平台订阅   = [34][1][IssuerKey::Platform=00][SubscriptionPlan::Level=00+MembershipLevel]
-///   平台取消   = [34][2][IssuerKey::Platform=00]
-///   创作者订阅 = [34][1][IssuerKey::Creator=01+32B][SubscriptionPlan::CreatorPrice=01+u128LE]
-///   创作者取消 = [34][2][IssuerKey::Creator=01+32B]
-/// 订阅=授权按月自动扣款、取消=撤销授权，二者都必须用户签名（读硬件金库弹一次生物识别）；
-/// 按月续扣由 keeper 依此授权 `charge_due` 拉取，不逐月再签。平台档价格全在链上
-/// `PlatformPrice[level]` 单源存储，客户端不再随 call 传价（与创作者自定价档不同）。
+/// CitizenApp 只提交需要账户签名的订阅、取消、换档和创作者档位管理。首次扣款后的
+/// 真实公历到期时间及后续自动扣款全部由 runtime 根据共识时间戳完成。
 class SubscriptionRpc {
   SubscriptionRpc({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 
@@ -25,20 +103,14 @@ class SubscriptionRpc {
   static const int _squarePostPalletIndex = 34;
   static const int _subscribeCallIndex = 1;
   static const int _cancelCallIndex = 2;
+  static const int _setCreatorPlansCallIndex = 3;
+  static const int _changePlanCallIndex = 4;
 
-  /// `IssuerKey::Platform` 变体标签（Platform=0x00 / Creator=0x01+32B）。
   static const int _issuerPlatformTag = 0;
-
-  /// `IssuerKey::Creator` 变体标签（Platform=0x00 / Creator=0x01+32B）。
   static const int _issuerCreatorTag = 1;
+  static const int _planPlatformTag = 0;
+  static const int _planCreatorTag = 1;
 
-  /// `SubscriptionPlan::Level` 变体标签（Level=0x00+MembershipLevel / CreatorPrice=0x01+u128LE）。
-  static const int _planLevelTag = 0;
-
-  /// `SubscriptionPlan::CreatorPrice` 变体标签（Level=0x00 / CreatorPrice=0x01+u128LE）。
-  static const int _planCreatorPriceTag = 1;
-
-  /// 平台会员档字符串 → `MembershipLevel` 单字节（Freedom=0/Democracy=1/Spark=2）。
   static int membershipLevelByte(String level) => switch (level) {
         'freedom' => 0,
         'democracy' => 1,
@@ -46,142 +118,538 @@ class SubscriptionRpc {
         _ => throw ArgumentError('未知平台会员档：$level'),
       };
 
-  /// 订阅平台会员某档：`subscribe(Platform, Level(level))`。
+  static int billingPeriodByte(String period) => switch (period) {
+        'monthly' => 0,
+        'quarterly' => 1,
+        'yearly' => 2,
+        _ => throw ArgumentError('未知订阅周期：$period'),
+      };
+
   Future<({String txHash, int usedNonce, String blockHashHex})>
       subscribePlatform({
     required String fromAddress,
     required Uint8List signerPubkey,
     required String level,
+    required BigInt expectedPriceFen,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
-  }) {
-    final callData = buildSubscribePlatformCall(membershipLevelByte(level));
-    return SignedExtrinsicBuilder(chainRpc: _rpc, logLabel: 'SubscriptionRpc')
-        .signAndSubmitInBlock(
-      callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
-      sign: sign,
-      onWatchEvent: onWatchEvent,
-    );
-  }
+  }) =>
+          _submitFinalized(
+            callData: buildSubscribePlatformCall(
+              membershipLevelByte(level),
+              expectedPriceFen,
+            ),
+            fromAddress: fromAddress,
+            signerPubkey: signerPubkey,
+            sign: sign,
+            onWatchEvent: onWatchEvent,
+          );
 
-  /// 取消平台会员：`cancel(Platform)`。
-  Future<({String txHash, int usedNonce, String blockHashHex})> cancelPlatform({
-    required String fromAddress,
-    required Uint8List signerPubkey,
-    required Future<Uint8List> Function(Uint8List payload) sign,
-    TxPoolWatchCallback? onWatchEvent,
-  }) {
-    final callData = buildCancelPlatformCall();
-    return SignedExtrinsicBuilder(chainRpc: _rpc, logLabel: 'SubscriptionRpc')
-        .signAndSubmitInBlock(
-      callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
-      sign: sign,
-      onWatchEvent: onWatchEvent,
-    );
-  }
-
-  /// [34][1][00][00][levelByte]
-  static Uint8List buildSubscribePlatformCall(int levelByte) {
-    final output = ByteOutput();
-    output.pushByte(_squarePostPalletIndex);
-    output.pushByte(_subscribeCallIndex);
-    output.pushByte(_issuerPlatformTag);
-    output.pushByte(_planLevelTag);
-    output.pushByte(levelByte);
-    return output.toBytes();
-  }
-
-  /// [34][2][00]
-  static Uint8List buildCancelPlatformCall() {
-    final output = ByteOutput();
-    output.pushByte(_squarePostPalletIndex);
-    output.pushByte(_cancelCallIndex);
-    output.pushByte(_issuerPlatformTag);
-    return output.toBytes();
-  }
-
-  /// 订阅创作者会员：`subscribe(Creator(creator), CreatorPrice(priceFen))`。
   Future<({String txHash, int usedNonce, String blockHashHex})>
       subscribeCreator({
     required String fromAddress,
     required Uint8List signerPubkey,
     required String creatorAddress,
-    required BigInt priceFen,
+    required String tierId,
+    required String billingPeriod,
+    required BigInt expectedPriceFen,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
-  }) {
-    final creatorAccount = Keyring().decodeAddress(creatorAddress);
-    final callData = buildSubscribeCreatorCall(creatorAccount, priceFen);
-    return SignedExtrinsicBuilder(chainRpc: _rpc, logLabel: 'SubscriptionRpc')
-        .signAndSubmitInBlock(
-      callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
-      sign: sign,
-      onWatchEvent: onWatchEvent,
-    );
-  }
+  }) =>
+          _submitFinalized(
+            callData: buildSubscribeCreatorCall(
+              Uint8List.fromList(Keyring().decodeAddress(creatorAddress)),
+              tierId,
+              billingPeriod,
+              expectedPriceFen,
+            ),
+            fromAddress: fromAddress,
+            signerPubkey: signerPubkey,
+            sign: sign,
+            onWatchEvent: onWatchEvent,
+          );
 
-  /// 取消创作者会员：`cancel(Creator(creator))`。
+  Future<({String txHash, int usedNonce, String blockHashHex})> cancelPlatform({
+    required String fromAddress,
+    required Uint8List signerPubkey,
+    required Future<Uint8List> Function(Uint8List payload) sign,
+    TxPoolWatchCallback? onWatchEvent,
+  }) =>
+      _submitFinalized(
+        callData: buildCancelPlatformCall(),
+        fromAddress: fromAddress,
+        signerPubkey: signerPubkey,
+        sign: sign,
+        onWatchEvent: onWatchEvent,
+      );
+
   Future<({String txHash, int usedNonce, String blockHashHex})> cancelCreator({
     required String fromAddress,
     required Uint8List signerPubkey,
     required String creatorAddress,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
-  }) {
-    final creatorAccount = Keyring().decodeAddress(creatorAddress);
-    final callData = buildCancelCreatorCall(creatorAccount);
-    return SignedExtrinsicBuilder(chainRpc: _rpc, logLabel: 'SubscriptionRpc')
-        .signAndSubmitInBlock(
-      callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
-      sign: sign,
-      onWatchEvent: onWatchEvent,
+  }) =>
+      _submitFinalized(
+        callData: buildCancelCreatorCall(
+          Uint8List.fromList(Keyring().decodeAddress(creatorAddress)),
+        ),
+        fromAddress: fromAddress,
+        signerPubkey: signerPubkey,
+        sign: sign,
+        onWatchEvent: onWatchEvent,
+      );
+
+  Future<({String txHash, int usedNonce, String blockHashHex})>
+      changePlatformPlan({
+    required String fromAddress,
+    required Uint8List signerPubkey,
+    required String level,
+    required BigInt expectedPriceFen,
+    required Future<Uint8List> Function(Uint8List payload) sign,
+    TxPoolWatchCallback? onWatchEvent,
+  }) =>
+          _submitFinalized(
+            callData: buildChangePlatformPlanCall(
+              membershipLevelByte(level),
+              expectedPriceFen,
+            ),
+            fromAddress: fromAddress,
+            signerPubkey: signerPubkey,
+            sign: sign,
+            onWatchEvent: onWatchEvent,
+          );
+
+  Future<({String txHash, int usedNonce, String blockHashHex})>
+      changeCreatorPlan({
+    required String fromAddress,
+    required Uint8List signerPubkey,
+    required String creatorAddress,
+    required String tierId,
+    required String billingPeriod,
+    required BigInt expectedPriceFen,
+    required Future<Uint8List> Function(Uint8List payload) sign,
+    TxPoolWatchCallback? onWatchEvent,
+  }) =>
+          _submitFinalized(
+            callData: buildChangeCreatorPlanCall(
+              Uint8List.fromList(Keyring().decodeAddress(creatorAddress)),
+              tierId,
+              billingPeriod,
+              expectedPriceFen,
+            ),
+            fromAddress: fromAddress,
+            signerPubkey: signerPubkey,
+            sign: sign,
+            onWatchEvent: onWatchEvent,
+          );
+
+  /// 创作者一次签名覆盖链上付款档位；Cloudflare 保存展示字段时不得再索要业务签名。
+  Future<({String txHash, int usedNonce, String blockHashHex})>
+      setCreatorPlans({
+    required String fromAddress,
+    required Uint8List signerPubkey,
+    required List<CreatorTierInput> tiers,
+    required Future<Uint8List> Function(Uint8List payload) sign,
+    TxPoolWatchCallback? onWatchEvent,
+  }) =>
+          _submitFinalized(
+            callData: buildSetCreatorPlansCall(tiers),
+            fromAddress: fromAddress,
+            signerPubkey: signerPubkey,
+            sign: sign,
+            onWatchEvent: onWatchEvent,
+          );
+
+  /// 在同一个 finalized 区块读取订阅真态与 `Timestamp.Now`。
+  Future<FinalizedSubscriptionSnapshot> fetchSubscriptionSnapshot({
+    required String subscriberAddress,
+    String? creatorAddress,
+  }) async {
+    final block = await _rpc.fetchFinalizedBlock();
+    final blockHashHex = '0x${_hex(block.blockHash)}';
+    final subscriptionKey = buildSubscriptionStorageKey(
+      Uint8List.fromList(Keyring().decodeAddress(subscriberAddress)),
+      creatorAddress == null
+          ? null
+          : Uint8List.fromList(Keyring().decodeAddress(creatorAddress)),
+    );
+    final timestampKey = buildStorageValueKey('Timestamp', 'Now');
+    final values = await Future.wait([
+      _rpc.fetchStorageAtBlock('0x${_hex(subscriptionKey)}', blockHashHex),
+      _rpc.fetchStorageAtBlock('0x${_hex(timestampKey)}', blockHashHex),
+    ]);
+    final timestamp = values[1];
+    if (timestamp == null || timestamp.length != 8) {
+      throw const FormatException('finalized Timestamp.Now 缺失或编码不合法');
+    }
+    return FinalizedSubscriptionSnapshot(
+      state: values[0] == null ? null : decodeSubscriptionState(values[0]!),
+      chainNowMs: _readUnsignedLittleEndian(timestamp, 0, 8).toInt(),
+      blockHashHex: blockHashHex,
     );
   }
 
-  /// [34][1][01][creator32B][01][priceFen u128LE]
-  static Uint8List buildSubscribeCreatorCall(
-      Uint8List creatorAccount, BigInt priceFen) {
-    final output = ByteOutput();
-    output.pushByte(_squarePostPalletIndex);
-    output.pushByte(_subscribeCallIndex);
-    output.pushByte(_issuerCreatorTag);
-    output.write(creatorAccount);
-    output.pushByte(_planCreatorPriceTag);
-    output.write(_u128LittleEndian(priceFen));
+  /// 读取创作者 finalized 链上付款档位；名称等展示字段不在这里出现。
+  Future<List<ChainCreatorTier>> fetchCreatorPlans(
+      String creatorAddress) async {
+    final account = Uint8List.fromList(Keyring().decodeAddress(creatorAddress));
+    final key = buildCreatorPlansStorageKey(account);
+    final data = await _rpc.fetchStorage('0x${_hex(key)}');
+    return data == null ? const <ChainCreatorTier>[] : decodeCreatorPlans(data);
+  }
+
+  Future<({String txHash, int usedNonce, String blockHashHex})>
+      _submitFinalized({
+    required Uint8List callData,
+    required String fromAddress,
+    required Uint8List signerPubkey,
+    required Future<Uint8List> Function(Uint8List payload) sign,
+    TxPoolWatchCallback? onWatchEvent,
+  }) =>
+          SignedExtrinsicBuilder(chainRpc: _rpc, logLabel: 'SubscriptionRpc')
+              .signAndSubmitInBlock(
+            callData: callData,
+            fromAddress: fromAddress,
+            signerPubkey: signerPubkey,
+            sign: sign,
+            onWatchEvent: onWatchEvent,
+            waitForFinalized: true,
+          );
+
+  static Uint8List buildSubscribePlatformCall(
+    int levelByte,
+    BigInt expectedPriceFen,
+  ) {
+    final output = _call(_subscribeCallIndex)
+      ..pushByte(_issuerPlatformTag)
+      ..pushByte(_planPlatformTag)
+      ..pushByte(levelByte)
+      ..write(_u128LittleEndian(expectedPriceFen));
     return output.toBytes();
   }
 
-  /// [34][2][01][creator32B]
-  static Uint8List buildCancelCreatorCall(Uint8List creatorAccount) {
-    final output = ByteOutput();
-    output.pushByte(_squarePostPalletIndex);
-    output.pushByte(_cancelCallIndex);
-    output.pushByte(_issuerCreatorTag);
-    output.write(creatorAccount);
+  static Uint8List buildSubscribeCreatorCall(
+    Uint8List creatorAccount,
+    String tierId,
+    String billingPeriod,
+    BigInt expectedPriceFen,
+  ) {
+    final output = _call(_subscribeCallIndex);
+    _writeCreatorIssuerAndPlan(
+      output,
+      creatorAccount,
+      tierId,
+      billingPeriod,
+    );
+    output.write(_u128LittleEndian(expectedPriceFen));
     return output.toBytes();
+  }
+
+  static Uint8List buildCancelPlatformCall() =>
+      (_call(_cancelCallIndex)..pushByte(_issuerPlatformTag)).toBytes();
+
+  static Uint8List buildCancelCreatorCall(Uint8List creatorAccount) =>
+      (_call(_cancelCallIndex)
+            ..pushByte(_issuerCreatorTag)
+            ..write(_account32(creatorAccount)))
+          .toBytes();
+
+  static Uint8List buildChangePlatformPlanCall(
+    int levelByte,
+    BigInt expectedPriceFen,
+  ) =>
+      (_call(_changePlanCallIndex)
+            ..pushByte(_issuerPlatformTag)
+            ..pushByte(_planPlatformTag)
+            ..pushByte(levelByte)
+            ..write(_u128LittleEndian(expectedPriceFen)))
+          .toBytes();
+
+  static Uint8List buildChangeCreatorPlanCall(
+    Uint8List creatorAccount,
+    String tierId,
+    String billingPeriod,
+    BigInt expectedPriceFen,
+  ) {
+    final output = _call(_changePlanCallIndex);
+    _writeCreatorIssuerAndPlan(
+      output,
+      creatorAccount,
+      tierId,
+      billingPeriod,
+    );
+    output.write(_u128LittleEndian(expectedPriceFen));
+    return output.toBytes();
+  }
+
+  static Uint8List buildSetCreatorPlansCall(List<CreatorTierInput> tiers) {
+    final output = _call(_setCreatorPlansCallIndex);
+    _writeCompactLength(output, tiers.length);
+    for (final tier in tiers) {
+      _writeBytes(output, Uint8List.fromList(tier.tierId.codeUnits));
+      _writeCompactLength(output, tier.pricesFen.length);
+      for (final price in tier.pricesFen) {
+        output.pushByte(billingPeriodByte(price.billingPeriod));
+        output.write(_u128LittleEndian(price.priceFen));
+      }
+    }
+    return output.toBytes();
+  }
+
+  static ByteOutput _call(int callIndex) => ByteOutput()
+    ..pushByte(_squarePostPalletIndex)
+    ..pushByte(callIndex);
+
+  static void _writeCreatorIssuerAndPlan(
+    ByteOutput output,
+    Uint8List creatorAccount,
+    String tierId,
+    String billingPeriod,
+  ) {
+    output
+      ..pushByte(_issuerCreatorTag)
+      ..write(_account32(creatorAccount))
+      ..pushByte(_planCreatorTag);
+    _writeBytes(output, Uint8List.fromList(tierId.codeUnits));
+    output.pushByte(billingPeriodByte(billingPeriod));
+  }
+
+  static Uint8List _account32(Uint8List value) {
+    if (value.length != 32) throw ArgumentError('账户公钥必须为 32 字节');
+    return value;
+  }
+
+  static void _writeBytes(ByteOutput output, Uint8List value) {
+    if (value.isEmpty ||
+        value.length > 32 ||
+        value.any((byte) => byte > 0x7f)) {
+      throw ArgumentError('tier_id 必须为 1-32 字节 ASCII');
+    }
+    _writeCompactLength(output, value.length);
+    output.write(value);
+  }
+
+  static void _writeCompactLength(ByteOutput output, int length) {
+    if (length < 0 || length >= 64) {
+      throw ArgumentError('当前 SCALE 紧凑长度只接受 0-63');
+    }
+    output.pushByte(length << 2);
   }
 
   static Uint8List _u128LittleEndian(BigInt value) {
-    if (value <= BigInt.zero) {
-      throw ArgumentError('订阅金额必须大于 0');
-    }
+    if (value <= BigInt.zero) throw ArgumentError('订阅金额必须大于 0');
     final out = Uint8List(16);
     var remaining = value;
-    for (var i = 0; i < out.length; i++) {
-      out[i] = (remaining & BigInt.from(0xff)).toInt();
-      remaining = remaining >> 8;
+    for (var index = 0; index < out.length; index++) {
+      out[index] = (remaining & BigInt.from(0xff)).toInt();
+      remaining >>= 8;
     }
-    if (remaining != BigInt.zero) {
-      throw ArgumentError('金额超出 u128 范围');
-    }
+    if (remaining != BigInt.zero) throw ArgumentError('金额超出 u128 范围');
     return out;
+  }
+
+  /// `Subscriptions[(subscriber, issuer)]` 的 Blake2_128Concat 单键布局。
+  @visibleForTesting
+  static Uint8List buildSubscriptionStorageKey(
+    Uint8List subscriberAccount,
+    Uint8List? creatorAccount,
+  ) {
+    final raw = BytesBuilder(copy: false)
+      ..add(_account32(subscriberAccount))
+      ..addByte(
+          creatorAccount == null ? _issuerPlatformTag : _issuerCreatorTag);
+    if (creatorAccount != null) raw.add(_account32(creatorAccount));
+    return _storageMapKey('SquarePost', 'Subscriptions', raw.takeBytes());
+  }
+
+  /// `CreatorPlans[creator]` 的 Blake2_128Concat 单键布局。
+  @visibleForTesting
+  static Uint8List buildCreatorPlansStorageKey(Uint8List creatorAccount) =>
+      _storageMapKey('SquarePost', 'CreatorPlans', _account32(creatorAccount));
+
+  @visibleForTesting
+  static Uint8List buildStorageValueKey(String pallet, String storage) =>
+      Uint8List.fromList([
+        ...Hasher.twoxx128.hashString(pallet),
+        ...Hasher.twoxx128.hashString(storage),
+      ]);
+
+  static Uint8List _storageMapKey(
+    String pallet,
+    String storage,
+    Uint8List keyData,
+  ) =>
+      Uint8List.fromList([
+        ...buildStorageValueKey(pallet, storage),
+        ...Hasher.blake2b128.hash(keyData),
+        ...keyData,
+      ]);
+
+  /// 严格解码 `SubscriptionState`；截断、非法枚举和尾随字节直接报错，禁止降级成无订阅。
+  @visibleForTesting
+  static ChainSubscriptionState decodeSubscriptionState(Uint8List data) {
+    final reader = _ScaleReader(data);
+    final plan = _readPlan(reader);
+    final pendingTag = reader.byte();
+    final ChainSubscriptionPlan? pendingPlan;
+    if (pendingTag == 0) {
+      pendingPlan = null;
+    } else if (pendingTag == 1) {
+      pendingPlan = _readPlan(reader);
+    } else {
+      throw const FormatException('pending_plan Option 枚举不合法');
+    }
+    final startedAt = reader.u64();
+    final lastChargedAt = reader.u64();
+    final lastChargedPriceFen = reader.u128();
+    final paidUntil = reader.u64();
+    final status = switch (reader.byte()) {
+      0 => 'active',
+      1 => 'cancelled',
+      2 => 'terminated',
+      _ => throw const FormatException('subscription_status 枚举不合法'),
+    };
+    reader.requireEnd();
+    if (paidUntil <= lastChargedAt) {
+      throw const FormatException('paid_until 必须晚于最近扣款时间');
+    }
+    return ChainSubscriptionState(
+      plan: plan,
+      pendingPlan: pendingPlan,
+      startedAt: startedAt,
+      lastChargedAt: lastChargedAt,
+      lastChargedPriceFen: lastChargedPriceFen,
+      paidUntil: paidUntil,
+      status: status,
+    );
+  }
+
+  /// 严格解码 `CreatorTiers`；价格、周期和 tier_id 全部来自 finalized 链上真态。
+  @visibleForTesting
+  static List<ChainCreatorTier> decodeCreatorPlans(Uint8List data) {
+    final reader = _ScaleReader(data);
+    final count = reader.compactLength(max: 10, allowZero: true);
+    final tiers = <ChainCreatorTier>[];
+    final tierIds = <String>{};
+    for (var index = 0; index < count; index++) {
+      final tierId = reader.ascii(maxLength: 32);
+      if (!tierIds.add(tierId)) {
+        throw const FormatException('链上 creator tier_id 重复');
+      }
+      final priceCount = reader.compactLength(max: 3);
+      final prices = <String, BigInt>{};
+      for (var priceIndex = 0; priceIndex < priceCount; priceIndex++) {
+        final period = switch (reader.byte()) {
+          0 => 'monthly',
+          1 => 'quarterly',
+          2 => 'yearly',
+          _ => throw const FormatException('billing_period 枚举不合法'),
+        };
+        final price = reader.u128();
+        if (price <= BigInt.zero || prices.containsKey(period)) {
+          throw const FormatException('链上创作者周期价格不合法');
+        }
+        prices[period] = price;
+      }
+      tiers.add(ChainCreatorTier(tierId: tierId, pricesFen: prices));
+    }
+    reader.requireEnd();
+    return List.unmodifiable(tiers);
+  }
+
+  static ChainSubscriptionPlan _readPlan(_ScaleReader reader) {
+    final tag = reader.byte();
+    if (tag == _planPlatformTag) {
+      final level = switch (reader.byte()) {
+        0 => 'freedom',
+        1 => 'democracy',
+        2 => 'spark',
+        _ => throw const FormatException('membership_level 枚举不合法'),
+      };
+      return ChainSubscriptionPlan.platform(level);
+    }
+    if (tag == _planCreatorTag) {
+      final tierId = reader.ascii(maxLength: 32);
+      final period = switch (reader.byte()) {
+        0 => 'monthly',
+        1 => 'quarterly',
+        2 => 'yearly',
+        _ => throw const FormatException('billing_period 枚举不合法'),
+      };
+      return ChainSubscriptionPlan.creator(tierId, period);
+    }
+    throw const FormatException('subscription plan 枚举不合法');
+  }
+
+  static BigInt _readUnsignedLittleEndian(
+      Uint8List data, int offset, int length) {
+    if (offset < 0 || length < 0 || offset + length > data.length) {
+      throw const FormatException('无符号整数 SCALE 数据截断');
+    }
+    var value = BigInt.zero;
+    for (var index = length - 1; index >= 0; index--) {
+      value = (value << 8) | BigInt.from(data[offset + index]);
+    }
+    return value;
+  }
+
+  static String _hex(Uint8List bytes) =>
+      bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+}
+
+class _ScaleReader {
+  _ScaleReader(this.data);
+
+  final Uint8List data;
+  int offset = 0;
+
+  int byte() {
+    if (offset >= data.length) throw const FormatException('SCALE 数据截断');
+    return data[offset++];
+  }
+
+  int compactLength({required int max, bool allowZero = false}) {
+    final first = byte();
+    if ((first & 0x03) != 0) {
+      throw const FormatException('紧凑长度编码超出当前协议边界');
+    }
+    final length = first >> 2;
+    if ((!allowZero && length == 0) || length > max) {
+      throw const FormatException('紧凑长度不合法');
+    }
+    return length;
+  }
+
+  String ascii({required int maxLength}) {
+    final length = compactLength(max: maxLength);
+    if (offset + length > data.length) {
+      throw const FormatException('SCALE 字节串截断');
+    }
+    final bytes = data.sublist(offset, offset + length);
+    offset += length;
+    if (bytes.any((value) => value > 0x7f)) {
+      throw const FormatException('tier_id 必须为 ASCII');
+    }
+    return utf8.decode(bytes, allowMalformed: false);
+  }
+
+  int u64() =>
+      SubscriptionRpc._readUnsignedLittleEndian(data, _take(8), 8).toInt();
+
+  BigInt u128() =>
+      SubscriptionRpc._readUnsignedLittleEndian(data, _take(16), 16);
+
+  int _take(int length) {
+    final start = offset;
+    if (start + length > data.length) {
+      throw const FormatException('SCALE 整数截断');
+    }
+    offset += length;
+    return start;
+  }
+
+  void requireEnd() {
+    if (offset != data.length) throw const FormatException('SCALE 存在尾随字节');
   }
 }

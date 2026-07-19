@@ -1,3 +1,5 @@
+import 'package:citizenapp/rpc/subscription_rpc.dart' show ChainCreatorTier;
+
 /// 订阅周期。创作者每档可只开其中部分周期。
 enum BillingPeriod { monthly, quarterly, yearly }
 
@@ -24,7 +26,7 @@ extension BillingPeriodKey on BillingPeriod {
       };
 }
 
-/// 创作者单个会员档（全链下：本机设置 + Cloudflare 存，链上不存）。
+/// 创作者单个会员档：tier_id 与周期价格以链上为真源，名称由 Cloudflare 保存。
 ///
 /// 价格一律以「分」为后端/链单一口径存储；展示与输入的「元」换算只发生在 UI 边界。
 
@@ -35,13 +37,13 @@ class CreatorTier {
     required this.pricesFen,
   });
 
-  /// 档位稳定 id（Cloudflare 生成/回传；用于编辑、删除定位与订阅关联）。
+  /// 档位稳定 id（CreatorPlans 链上引用；用于编辑、删除定位与订阅关联）。
   final String tierId;
 
   /// 档名（创作者自定义，如「铁杆粉丝」）。
   final String name;
 
-  /// 各周期价（分，公民币）；只含已开启周期，未开启的周期 key 缺席。
+  /// 各周期价（分，公民币）；由 finalized CreatorPlans 读取。
   final Map<BillingPeriod, int> pricesFen;
 
   bool hasPeriod(BillingPeriod period) => pricesFen.containsKey(period);
@@ -83,6 +85,36 @@ class CreatorTier {
       pricesFen: prices,
     );
   }
+}
+
+/// 将 Cloudflare 展示名与 finalized 链上档位合并；价格绝不从 Cloudflare 覆盖链上值。
+CreatorPlan mergeCreatorPlanWithChain({
+  required String creatorAccount,
+  required CreatorPlan? displayPlan,
+  required List<ChainCreatorTier> chainTiers,
+}) {
+  final names = <String, String>{
+    for (final tier in displayPlan?.tiers ?? const <CreatorTier>[])
+      tier.tierId: tier.name,
+  };
+  final tiers = <CreatorTier>[];
+  for (final tier in chainTiers) {
+    final prices = <BillingPeriod, int>{};
+    for (final entry in tier.pricesFen.entries) {
+      final period = BillingPeriodKey.tryParse(entry.key);
+      if (period != null) prices[period] = entry.value.toInt();
+    }
+    tiers.add(CreatorTier(
+      tierId: tier.tierId,
+      name: names[tier.tierId] ?? '',
+      pricesFen: prices,
+    ));
+  }
+  return CreatorPlan(
+    creatorAccount: creatorAccount,
+    tiers: List.unmodifiable(tiers),
+    updatedAt: displayPlan?.updatedAt ?? 0,
+  );
 }
 
 /// 创作者会员计划（一名创作者的全部档位，≤ [maxTiers]）。

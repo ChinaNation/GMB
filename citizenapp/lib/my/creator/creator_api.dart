@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -8,16 +7,10 @@ import 'package:citizenapp/8964/services/square_api_client.dart'
 import 'package:citizenapp/8964/services/square_request_signer.dart';
 import 'package:citizenapp/my/creator/models/creator_overview.dart';
 import 'package:citizenapp/my/creator/models/creator_plan.dart';
-import 'package:citizenapp/signer/signing.dart';
-
-/// 广场账户动作主钥签名器（0x1D 摘要 → sr25519 主钥签，读硬件金库弹一次生物识别）。
-/// 与 `SquareApiClient.SquareActionSigner` 同形；由 [CreatorService] 用 WalletManager 提供。
-typedef CreatorActionSigner = Future<String> Function(Uint8List actionMessage);
 
 /// 创作者档位/概览的边缘（Cloudflare）数据源。
 ///
-/// 档位定义（名称/周期/价格）全链下：读写都在 Cloudflare；写入经**现有广场账户动作
-/// 统一签名**（`OP_SIGN_SQUARE_ACTION` 0x1D，challenge→主钥签→confirm），不新增签名协议。
+/// tier_id/周期/价格以 finalized 链状态为真源；Cloudflare 只保存名称等展示数据。
 abstract interface class CreatorApi {
   /// 读我的档位；无档位返回 null。
   Future<CreatorPlan?> fetchMyPlan(SquareSession session);
@@ -25,20 +18,15 @@ abstract interface class CreatorApi {
   /// 读概览（订阅人数 / 预计月收入 / 档位数，均为预计值）。
   Future<CreatorOverview> fetchOverview(SquareSession session);
 
-  /// 覆盖式保存我的档位。走广场账户动作签名往返：challenge → [signAction]（生物识别）→ confirm。
+  /// 链上一次签名交易 finalized 后保存展示数据；本请求不得再触发账户业务签名。
   Future<CreatorPlan> saveMyPlan({
     required SquareSession session,
-    required String ownerAccount,
+    required String txHash,
     required List<CreatorTier> tiers,
-    required CreatorActionSigner signAction,
   });
 
   /// 读某创作者的档位（订阅者在他人主页选档用）。无档返回 null。
   Future<CreatorPlan?> fetchPlanOf(
-      SquareSession session, String creatorAccount);
-
-  /// 我对某创作者的订阅态（按钮双态）：`active`/`past_due`/`cancelled`；未订阅返回 null。
-  Future<String?> fetchMySubscriptionTo(
       SquareSession session, String creatorAccount);
 
   /// 订阅/取消创作者会员上链后回执镜像（best-effort，链上已是真源）。
@@ -58,13 +46,12 @@ class CreatorApiException implements Exception {
   String toString() => 'CreatorApiException: $message';
 }
 
-/// 生产实现：直连 Cloudflare Worker，复用现有会话鉴权与统一签名。
+/// 生产实现：直连 Cloudflare Worker，复用会话与设备级请求认证。
 ///
 /// 依赖 BFF 端点（另立 Cloudflare 卡实现）：
 ///   GET  /v1/square/creator/plan
 ///   GET  /v1/square/creator/overview
-///   POST /v1/square/creator/plan/challenge   （发起动作挑战，绑 tiers 哈希）
-///   POST /v1/square/creator/plan             （验签后覆盖写 D1）
+///   POST /v1/square/creator/plan             （校验 finalized 链状态后覆盖展示镜像）
 class CreatorApiHttp implements CreatorApi {
   CreatorApiHttp({String? baseUrl, http.Client? httpClient})
       : baseUrl = SquareApiConfig.normalizeBaseUrl(
@@ -94,35 +81,14 @@ class CreatorApiHttp implements CreatorApi {
   @override
   Future<CreatorPlan> saveMyPlan({
     required SquareSession session,
-    required String ownerAccount,
+    required String txHash,
     required List<CreatorTier> tiers,
-    required CreatorActionSigner signAction,
   }) async {
     final tiersJson = tiers.map((tier) => tier.toJson()).toList();
-    // 1) 发起动作挑战（Worker 绑 action='set_creator_plan' + owner + tiers 哈希 + 过期）。
-    final challenge = await _postJson(
-      '/v1/square/creator/plan/challenge',
-      {'owner_account': ownerAccount, 'tiers': tiersJson},
-      session,
-    );
-    final payloadHex = challenge['signing_payload_hex'];
-    final challengeId = challenge['challenge_id'];
-    if (payloadHex is! String || challengeId is! String) {
-      throw const CreatorApiException('创作者档位挑战响应不完整');
-    }
-    // 2) 客户端钉死 op_tag（0x1D 广场账户动作），主钥签名（生物识别）。
-    final message = signingMessage(
-      opTag: kOpSignSquareAction,
-      scalePayload: _hexToBytes(payloadHex),
-    );
-    final signature = await signAction(message);
-    // 3) 提交确认：Worker 验签 + tiers 哈希一致 → 覆盖写 D1，回传最新计划。
-    final saved = await _postJson(
+    final saved = await _postFinalizedMirrorJson(
       '/v1/square/creator/plan',
       {
-        'owner_account': ownerAccount,
-        'challenge_id': challengeId,
-        'signature': signature,
+        'tx_hash': txHash,
         'tiers': tiersJson,
       },
       session,
@@ -147,17 +113,6 @@ class CreatorApiHttp implements CreatorApi {
   }
 
   @override
-  Future<String?> fetchMySubscriptionTo(
-      SquareSession session, String creatorAccount) async {
-    final data = await _getJson(
-      '/v1/square/creator/subscription/${Uri.encodeComponent(creatorAccount)}',
-      session,
-    );
-    final status = data['status'];
-    return status is String ? status : null;
-  }
-
-  @override
   Future<void> confirmCreatorSubscription({
     required SquareSession session,
     required String txHash,
@@ -165,7 +120,7 @@ class CreatorApiHttp implements CreatorApi {
     String? tierId,
     String? period,
   }) async {
-    await _postJson(
+    await _postFinalizedMirrorJson(
       '/v1/square/creator/subscription/confirm',
       {
         'tx_hash': txHash,
@@ -186,7 +141,8 @@ class CreatorApiHttp implements CreatorApi {
     return _decode(response);
   }
 
-  Future<Map<String, dynamic>> _postJson(
+  /// 链上业务已经由账户签名并 finalized；镜像请求只携带会话，不再生成设备签名。
+  Future<Map<String, dynamic>> _postFinalizedMirrorJson(
     String path,
     Map<String, Object?> body,
     SquareSession session,
@@ -194,9 +150,14 @@ class CreatorApiHttp implements CreatorApi {
     final encoded = jsonEncode(body);
     final uri = Uri.parse('$baseUrl$path');
     final response = await _http
-        .post(uri,
-            headers: await _headers('POST', uri, encoded, session),
-            body: encoded)
+        .post(
+          uri,
+          headers: {
+            'content-type': 'application/json; charset=utf-8',
+            'authorization': 'Bearer ${session.sessionToken}',
+          },
+          body: encoded,
+        )
         .timeout(const Duration(seconds: 20));
     return _decode(response);
   }
@@ -241,23 +202,9 @@ class CreatorApiHttp implements CreatorApi {
     }
     return decoded;
   }
-
-  static Uint8List _hexToBytes(String input) {
-    final text = input.startsWith('0x') || input.startsWith('0X')
-        ? input.substring(2)
-        : input;
-    if (text.length.isOdd) {
-      throw const CreatorApiException('hex 长度必须为偶数');
-    }
-    final out = Uint8List(text.length ~/ 2);
-    for (var i = 0; i < out.length; i++) {
-      out[i] = int.parse(text.substring(i * 2, i * 2 + 2), radix: 16);
-    }
-    return out;
-  }
 }
 
-/// 离线内存实现：本地开发 / 测试用（不依赖真 Cloudflare），仍触发真实的主钥签名（生物识别）。
+/// 离线内存实现：本地开发 / 测试用（不依赖真 Cloudflare）。
 class FakeCreatorApi implements CreatorApi {
   FakeCreatorApi({CreatorPlan? initialPlan, CreatorOverview? overview})
       : _plan = initialPlan,
@@ -266,8 +213,7 @@ class FakeCreatorApi implements CreatorApi {
   CreatorPlan? _plan;
   final CreatorOverview? _overview;
 
-  /// 记录最近一次保存是否真的调用了签名器（供测试断言"编辑必过生物识别"）。
-  bool lastSaveSigned = false;
+  String? lastSaveTxHash;
 
   @override
   Future<CreatorPlan?> fetchMyPlan(SquareSession session) async => _plan;
@@ -284,15 +230,15 @@ class FakeCreatorApi implements CreatorApi {
   @override
   Future<CreatorPlan> saveMyPlan({
     required SquareSession session,
-    required String ownerAccount,
+    required String txHash,
     required List<CreatorTier> tiers,
-    required CreatorActionSigner signAction,
   }) async {
-    // 即便离线也走一次主钥签名，保证"编辑会员档=核心操作必过生物识别"的行为一致。
-    await signAction(Uint8List.fromList(utf8.encode('set_creator_plan')));
-    lastSaveSigned = true;
-    _plan =
-        CreatorPlan(creatorAccount: ownerAccount, tiers: tiers, updatedAt: 0);
+    lastSaveTxHash = txHash;
+    _plan = CreatorPlan(
+      creatorAccount: session.ownerAccount,
+      tiers: tiers,
+      updatedAt: 0,
+    );
     return _plan!;
   }
 
@@ -300,11 +246,6 @@ class FakeCreatorApi implements CreatorApi {
   Future<CreatorPlan?> fetchPlanOf(
           SquareSession session, String creatorAccount) async =>
       _plan;
-
-  @override
-  Future<String?> fetchMySubscriptionTo(
-          SquareSession session, String creatorAccount) async =>
-      null;
 
   @override
   Future<void> confirmCreatorSubscription({

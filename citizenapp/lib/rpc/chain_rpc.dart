@@ -385,6 +385,7 @@ class ChainRpc {
       submitExtrinsicAndWaitForInBlock(
     Uint8List encoded, {
     TxPoolWatchCallback? onWatchEvent,
+    bool waitForFinalized = false,
     Duration timeout = const Duration(minutes: 20),
   }) async {
     final hex = '0x${_hexEncode(encoded)}';
@@ -420,7 +421,10 @@ class ChainRpc {
               done.completeError(StateError(watchEvent.description));
               return;
             }
-            if (watchEvent.isIncluded && !done.isCompleted) {
+            final reachedTarget = waitForFinalized
+                ? watchEvent.kind == TxPoolWatchKind.finalized
+                : watchEvent.isIncluded;
+            if (reachedTarget && !done.isCompleted) {
               final blockHashHex = watchEvent.blockHashHex;
               if (blockHashHex == null || blockHashHex.isEmpty) {
                 done.completeError(StateError('交易已入块，但订阅状态未返回区块哈希'));
@@ -691,6 +695,19 @@ class ChainRpc {
     final valueHex = await SmoldotClientManager.instance.request(
       'state_getStorage',
       [keyHex, blockHashHex],
+    ) as String?;
+    if (valueHex == null || valueHex.isEmpty) return null;
+    return _hexDecode(_stripHexPrefix(valueHex));
+  }
+
+  /// 查询指定 finalized 区块上的任意 storage；调用方必须显式提供目标区块哈希。
+  Future<Uint8List?> fetchStorageAtBlock(
+    String storageKeyHex,
+    String blockHashHex,
+  ) async {
+    final valueHex = await SmoldotClientManager.instance.request(
+      'state_getStorage',
+      [storageKeyHex, blockHashHex],
     ) as String?;
     if (valueHex == null || valueHex.isEmpty) return null;
     return _hexDecode(_stripHexPrefix(valueHex));

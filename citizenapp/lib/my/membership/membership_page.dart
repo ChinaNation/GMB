@@ -5,6 +5,7 @@ import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/my/creator/creator_money.dart' show fenToYuanLabel;
 import 'package:citizenapp/my/membership/subscription_service.dart';
+import 'package:citizenapp/rpc/subscription_rpc.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 /// 会员三档固定顺序（与价格升序一致，ADR-036，与身份彻底解耦）：
@@ -95,15 +96,25 @@ class _MembershipPageState extends State<MembershipPage>
           prices: <String, int>{},
         );
       } else {
-        // 会员态与链上价格并行拉取；价格 best-effort（读不到该档显示占位「—」）。
-        final pricesFuture = _chainService
-            .fetchAllPlatformPrices()
-            .catchError((_) => const <String, int>{});
-        final state = await _apiClient.fetchMembership(session);
-        final prices = await pricesFuture;
+        // 展示套餐、链上价格、finalized 订阅真态并行读取；状态与时间不采信边缘镜像。
+        final results = await Future.wait<Object>([
+          _apiClient.fetchMembership(session).catchError(
+                (_) => const SquareMembershipState(
+                  active: false,
+                  expiresAt: 0,
+                ),
+              ),
+          _chainService
+              .fetchAllPlatformPrices()
+              .catchError((_) => const <String, int>{}),
+          _subscriptionService.fetchFinalizedState(session.ownerAccount),
+        ]);
+        final mirror = results[0] as SquareMembershipState;
+        final prices = results[1] as Map<String, int>;
+        final snapshot = results[2] as FinalizedSubscriptionSnapshot;
         data = _MembershipViewData(
           ownerAccount: session.ownerAccount,
-          state: state,
+          state: _stateFromFinalized(mirror, snapshot),
           prices: prices,
         );
       }
@@ -133,12 +144,20 @@ class _MembershipPageState extends State<MembershipPage>
     final state = _data?.state;
     if (state == null) return;
     final action = _actionFor(state, level);
+    if (action != _SubscribeAction.cancel && _data?.prices[level] == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('链上会员价格尚未就绪，请刷新后重试')),
+      );
+      return;
+    }
     setState(() => _busy = true);
     try {
       if (action == _SubscribeAction.cancel) {
         await _subscriptionService.cancel();
+      } else if (action == _SubscribeAction.change) {
+        await _subscriptionService.changePlan(level, _data!.prices[level]!);
       } else {
-        await _subscriptionService.subscribe(level);
+        await _subscriptionService.subscribe(level, _data!.prices[level]!);
       }
       if (!mounted) return;
       await _load();
@@ -235,6 +254,7 @@ class _MembershipPageState extends State<MembershipPage>
         if (state.hasSubscriptionWindow) _ActiveMembershipBanner(state: state),
         Expanded(
           child: GestureDetector(
+            key: const ValueKey('membership-tier-stack-gesture'),
             behavior: HitTestBehavior.opaque,
             onHorizontalDragStart: (_) => _snapController.stop(),
             onHorizontalDragUpdate: (d) => _onDragUpdate(d, cardWidth),
@@ -463,10 +483,15 @@ class _MembershipTierCard extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: _SubscribeButton(
-                      label: _actionLabel(action),
+                      label:
+                          action != _SubscribeAction.cancel && priceFen == null
+                              ? '链上价格未就绪'
+                              : _actionLabel(action),
                       color: tierColor,
                       busy: busy,
-                      subscribe: action == _SubscribeAction.subscribe,
+                      action: action,
+                      enabled:
+                          action == _SubscribeAction.cancel || priceFen != null,
                       onTap: onTapAction,
                     ),
                   ),
@@ -533,17 +558,25 @@ class _MembershipTierCard extends StatelessWidget {
 String _priceLabel(int? priceFen) =>
     priceFen == null ? '—' : '${fenToYuanLabel(priceFen)} 公民币/月';
 
-/// 订阅按钮双态：未订阅本档→订阅 / 本档订阅生效中→取消订阅。
-enum _SubscribeAction { subscribe, cancel }
+/// 同一业务操作只签一次：新订阅、取消当前订阅、换到另一档分别提交一笔链上交易。
+enum _SubscribeAction { subscribe, change, cancel }
 
 _SubscribeAction _actionFor(SquareMembershipState state, String level) {
-  final isActiveTier =
-      state.subscriptionActive && state.membershipLevel == level;
-  return isActiveTier ? _SubscribeAction.cancel : _SubscribeAction.subscribe;
+  if (state.subscriptionStatus == 'active') {
+    return state.membershipLevel == level
+        ? _SubscribeAction.cancel
+        : _SubscribeAction.change;
+  }
+  if (state.subscriptionStatus == 'cancelled' &&
+      state.membershipLevel != level) {
+    return _SubscribeAction.change;
+  }
+  return _SubscribeAction.subscribe;
 }
 
 String _actionLabel(_SubscribeAction action) => switch (action) {
       _SubscribeAction.subscribe => '订阅',
+      _SubscribeAction.change => '更换为此档',
       _SubscribeAction.cancel => '取消订阅',
     };
 
@@ -552,7 +585,8 @@ class _SubscribeButton extends StatelessWidget {
     required this.label,
     required this.color,
     required this.busy,
-    required this.subscribe,
+    required this.action,
+    required this.enabled,
     required this.onTap,
   });
 
@@ -560,14 +594,16 @@ class _SubscribeButton extends StatelessWidget {
   final Color color;
   final bool busy;
 
-  /// true=订阅动作（前景色实心）；false=取消动作（图标区分）。
-  final bool subscribe;
+  final _SubscribeAction action;
+
+  /// 链上价格未就绪时禁止发起订阅；取消既有订阅不依赖当前价格。
+  final bool enabled;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return FilledButton.icon(
-      onPressed: busy ? null : onTap,
+      onPressed: busy || !enabled ? null : onTap,
       icon: busy
           ? const SizedBox(
               width: 16,
@@ -578,9 +614,11 @@ class _SubscribeButton extends StatelessWidget {
               ),
             )
           : Icon(
-              subscribe
-                  ? Icons.workspace_premium_outlined
-                  : Icons.cancel_outlined,
+              switch (action) {
+                _SubscribeAction.subscribe => Icons.workspace_premium_outlined,
+                _SubscribeAction.change => Icons.swap_horiz,
+                _SubscribeAction.cancel => Icons.cancel_outlined,
+              },
               size: 16,
             ),
       label: Text(label),
@@ -592,6 +630,34 @@ class _SubscribeButton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 用 finalized 真态覆盖 Cloudflare 镜像状态，只保留 Worker 下发的展示套餐定义。
+SquareMembershipState _stateFromFinalized(
+  SquareMembershipState mirror,
+  FinalizedSubscriptionSnapshot snapshot,
+) {
+  final chain = snapshot.state;
+  if (chain == null) {
+    return SquareMembershipState(
+      active: false,
+      expiresAt: 0,
+      plans: mirror.plans,
+    );
+  }
+  if (chain.plan.kind != 'platform' || chain.plan.membershipLevel == null) {
+    throw const FormatException('平台会员读取到了非平台订阅计划');
+  }
+  final effective = chain.isEffectiveAt(snapshot.chainNowMs);
+  return SquareMembershipState(
+    active: effective,
+    expiresAt: chain.paidUntil,
+    membershipLevel: chain.plan.membershipLevel,
+    subscriptionStatus: chain.status,
+    subscriptionActive: effective,
+    currentPeriodStart: chain.lastChargedAt,
+    plans: mirror.plans,
+  );
 }
 
 /// 卡内分区小标题（会员权益）。
@@ -705,11 +771,11 @@ class _ActiveMembershipBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final plan = state.planForLevel(state.membershipLevel);
     final name = plan?.displayName ?? '会员';
-    // 续费态直白点出扣款行为：已取消到期终止、欠费待补扣、其余自动续费。
+    // 用户订阅授权未取消时，runtime 按链上真实公历到期时间自动扣款。
     final route = switch (state.subscriptionStatus) {
       'cancelled' => '已取消 · 到期终止',
-      'past_due' => '欠费 · 待补扣',
-      _ => '自动续费',
+      'terminated' => '扣款失败 · 订阅已终止',
+      _ => '链上到期自动续费',
     };
     final window =
         '订阅 ${_formatYmd(state.currentPeriodStart)} ~ ${_formatYmd(state.expiresAt)}';

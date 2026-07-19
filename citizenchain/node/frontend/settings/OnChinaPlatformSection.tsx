@@ -66,7 +66,7 @@ export function OnChinaPlatformSection({ platform, onUpdated }: Props) {
           {saving ? '处理中' : actionText}
         </button>
       </div>
-      {platform?.detail && status !== 'enabled' ? (
+      {platform?.detail && status === 'error' ? (
         <p className="section-inline-error">{platform.detail}</p>
       ) : null}
       {error ? <p className="section-inline-error">{error}</p> : null}

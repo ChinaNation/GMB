@@ -59,6 +59,10 @@ function cat(...parts: Uint8Array[]): Uint8Array {
 function toHex(bytes: Uint8Array): string {
   return `0x${[...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
 }
+function cidNumber(value: string): Uint8Array {
+  const bytes = new TextEncoder().encode(value);
+  return cat(compactLen(bytes.length), bytes);
+}
 
 describe('constitution SCALE 解码', () => {
   it('对真 constitution.scale 解出 7 章，第三/四章为极简标题', () => {
@@ -88,13 +92,14 @@ describe('constitution SCALE 解码', () => {
   });
 
   it('decodeEffectiveVersion 跳过 houses 读出生效版本', () => {
-    // law_id=0, tier=0, scope=0, houses=1 项(36B), effective_version=Some(1)
+    // law_id=0, tier=0, scope=0, houses=1 项(CidNumber=Vec<u8>), effective_version=Some(1)。
+    // 线上宪法 Law(0) 的 house CID 长度为 26B；旧固定 36B 跳过会读偏成 None。
     const law = cat(
       u64le(0),
       Uint8Array.of(0),
       u32le(0),
       compactLen(1),
-      new Uint8Array(36),
+      cidNumber('ZS001-NLF13-581844128-2026'),
       Uint8Array.of(1),
       u32le(1)
     );
@@ -140,7 +145,8 @@ describe('fetchConstitutionDocument 端到端（mock 链读）', () => {
       u64le(0),
       Uint8Array.of(0),
       u32le(0),
-      compactLen(0),
+      compactLen(1),
+      cidNumber('ZS001-NLF13-581844128-2026'),
       Uint8Array.of(1),
       u32le(1)
     );

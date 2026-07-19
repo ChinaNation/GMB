@@ -89,7 +89,7 @@
 ### 3.4 官网 citizenweb
 
 - 构建：`npm run build`（tsc+vite，已过）。
-- 部署：`npx wrangler pages deploy dist --project-name citizenweb --branch main`（生产 `www.crcfrcn.com`）。
+- 部署：先在 `citizenweb/` 执行 `npm ci` 安装锁定依赖，再执行 `npm exec -- wrangler pages deploy dist --project-name citizenweb --branch main`（生产 `www.crcfrcn.com`）。
 - 验收：真实访问 `/membership` 确认三档并列卡（自由/民主/薪火）、聊天文件上限行、无身份字段、无控制台报错、同源 `/api` 通。
 
 ### 3.5 CitizenApp（Flutter）

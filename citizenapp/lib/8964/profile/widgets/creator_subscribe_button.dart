@@ -5,12 +5,13 @@ import 'package:citizenapp/8964/subscribe/creator_subscribe_service.dart';
 import 'package:citizenapp/my/creator/creator_api.dart';
 import 'package:citizenapp/my/creator/creator_money.dart';
 import 'package:citizenapp/my/creator/models/creator_plan.dart';
+import 'package:citizenapp/rpc/subscription_rpc.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 /// 广场他人主页「订阅 TA / 取消」按钮（订阅者侧）。
 ///
-/// 有档才显示；双态：未订阅→「订阅 TA」（选档/周期→上链热签+生物识别）、已订阅→「已订阅·取消」
-/// （二次确认→上链热签+生物识别）。订阅=授权按月扣款、取消=撤销。
+/// 有档才显示；订阅、取消、更换分别只提交一笔账户签名交易。价格只采用 finalized 链上档位，
+/// Cloudflare 计划只补充档名等展示字段。
 class CreatorSubscribeButton extends StatefulWidget {
   const CreatorSubscribeButton({
     super.key,
@@ -41,7 +42,7 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
   bool _loading = true;
   bool _busy = false;
   CreatorPlan? _plan;
-  String? _status;
+  FinalizedSubscriptionSnapshot? _snapshot;
 
   @override
   void initState() {
@@ -57,13 +58,27 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
         if (mounted) setState(() => _loading = false);
         return;
       }
-      final plan = await _api.fetchPlanOf(session, widget.creatorAccount);
-      final status =
-          await _api.fetchMySubscriptionTo(session, widget.creatorAccount);
+      final results = await Future.wait<Object?>([
+        // Cloudflare 只补档位名称；不可用时仍按 finalized 链上档位订阅。
+        _api
+            .fetchPlanOf(session, widget.creatorAccount)
+            .catchError((_) => null),
+        _service.fetchCreatorPlans(widget.creatorAccount),
+        _service.fetchFinalizedState(
+          subscriberAddress: session.ownerAccount,
+          creatorAddress: widget.creatorAccount,
+        ),
+      ]);
+      final displayPlan = results[0] as CreatorPlan?;
+      final chainTiers = results[1] as List<ChainCreatorTier>;
       if (!mounted) return;
       setState(() {
-        _plan = plan;
-        _status = status;
+        _plan = mergeCreatorPlanWithChain(
+          creatorAccount: widget.creatorAccount,
+          displayPlan: displayPlan,
+          chainTiers: chainTiers,
+        );
+        _snapshot = results[2] as FinalizedSubscriptionSnapshot;
         _loading = false;
       });
     } on Exception {
@@ -77,12 +92,23 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
     if (_loading || _plan == null || _plan!.tiers.isEmpty) {
       return const SizedBox.shrink();
     }
-    final subscribed = _status == 'active';
+    final subscribed = _snapshot?.state?.status == 'active';
     if (subscribed) {
-      return OutlinedButton.icon(
-        onPressed: _busy ? null : _cancel,
-        icon: const Icon(Icons.check_circle_outline, size: 18),
-        label: const Text('已订阅 · 取消'),
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          FilledButton.icon(
+            onPressed: _busy ? null : _openPicker,
+            icon: const Icon(Icons.swap_horiz, size: 18),
+            label: const Text('更换会员档'),
+          ),
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _cancel,
+            icon: const Icon(Icons.cancel_outlined, size: 18),
+            label: const Text('取消订阅'),
+          ),
+        ],
       );
     }
     return FilledButton.icon(
@@ -99,12 +125,28 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
       builder: (_) => _TierPeriodPicker(plan: _plan!),
     );
     if (selection == null || !mounted) return;
-    await _run(() => _service.subscribe(
-          creatorAddress: widget.creatorAccount,
-          tierId: selection.tierId,
-          period: selection.period.key,
-          priceFen: selection.priceFen,
-        ));
+    final current = _snapshot?.state;
+    final samePlan = current?.plan.kind == 'creator' &&
+        current?.plan.tierId == selection.tierId &&
+        current?.plan.billingPeriod == selection.period.key;
+    final shouldChange =
+        (current?.status == 'active' || current?.status == 'cancelled') &&
+            !samePlan;
+    await _run(
+      () => shouldChange
+          ? _service.changePlan(
+              creatorAddress: widget.creatorAccount,
+              tierId: selection.tierId,
+              period: selection.period.key,
+              priceFen: selection.priceFen,
+            )
+          : _service.subscribe(
+              creatorAddress: widget.creatorAccount,
+              tierId: selection.tierId,
+              period: selection.period.key,
+              priceFen: selection.priceFen,
+            ),
+    );
   }
 
   Future<void> _cancel() async {

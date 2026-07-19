@@ -100,10 +100,10 @@ citizenchain/onchina/src/
 - 机构注册信息凭证、账户列表 DTO 和 handler：`institution/subjects/chain_*.rs`
 - 投票资格提示查询：`domains/citizens/chain_vote.rs`
 - 公民链上身份推送：`domains/citizens/chain_identity.rs`
-  - `POST /api/v1/admin/citizens/:cid_number/onchain/prepare` 生成 `a=2 citizen_identity` 签名请求,由目标公民钱包签名;请求体必须包含 `wallet_account` 和 `identity_level`。
+  - `POST /api/v1/admin/citizens/:cid_number/onchain/prepare` 只消费一次 Passkey，建立 180 秒 `citizen_onchain_operations` 操作并生成 `a=2 citizen_identity` 签名请求；请求体必须包含 `wallet_account` 和 `identity_level`。
   - `identity_level=voting` 编码 `VotingIdentityPayload`，完成后生成 `0x0a00 register_voting_identity` 注册局管理员链上签名二维码。
   - `identity_level=candidate` 编码 `CandidateIdentityPayload`，完成后生成 `0x0a01 upgrade_to_candidate_identity` 注册局管理员链上签名二维码；该交易同时写入投票身份和参选身份。
-  - `POST /api/v1/admin/citizens/:cid_number/onchain/complete` 验证公民钱包签名后才落库钱包绑定并生成管理员冷签二维码。
+  - `POST /api/v1/admin/citizens/:cid_number/onchain/complete` 不再二次认证；它按签名响应 `id` 校验管理员、机构、CID、钱包、身份级别和完整 payload，原子消费操作后生成管理员最终链签二维码。钱包绑定和上链投影只在最终链交易确认后一次性落库。
 - 联合投票本地人数查询：`domains/citizens/chain_joint_vote.rs`
 - 地址变更调用：`domains/address/chain_call.rs`
 - 立法法律只读链读：`domains/legislation/law/chain_read.rs` 负责读取 `Law`、`LawVersion`、`LawVersionLabels` 和宪法不可修改条款 manifest；`LawView.version_title/version_title_en` 只能来自链上 `LawVersionLabels[(law_id, version)]`。
@@ -140,7 +140,7 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 市注册局本地目录维护、Passkey 更新、节点解绑和链写动作必须使用相应安全档。业务 handler 只负责构造业务动作，二维码协议包装和签名结果识别归 `core/qr/`。
 
-公民身份上链(`CITIZEN_ONCHAIN_PUSH`)属注册局上链操作,同归 `PASSKEY_COLD_SIGN` 最严档:`prepare` 与 `complete` 各消费一次一次性 grant,grant 载荷绑定 `{cid_number, wallet_account}` 且 target = cid_number,与业务请求逐字段一致才放行。
+公民身份上链(`CITIZEN_ONCHAIN_PUSH`)固定为一次业务操作：管理员 Passkey 一次、目标公民钱包签名一次、管理员最终链交易签名一次。最终链签已经承担管理员钱包授权，不得再叠加安全 grant 冷签；`complete` 依靠一次性 `citizen_onchain_operations` 防串单、防过期和防重放。
 
 联邦注册局机构 `admins` 和岗位任职不得本地直接改库；换届只能构造链上治理或注册局登记动作后由 entity 写入。市注册局本地登记目录每省每市最多 30 人，统计必须同时带省和市，但该目录不是链上管理员资格真源。NJD、普通公权机构、私权机构和非法人组织的本机构管理员/岗位维护也必须走链上 `propose_institution_governance`，不得在 OnChina 内建立第二套管理员集合。
 

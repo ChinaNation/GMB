@@ -34,6 +34,12 @@ fn registry_action_code(action_key: &str) -> u16 {
         .action_code
 }
 
+pub(crate) fn action_label_zh(action_key: &str) -> String {
+    qr_protocol::action_by_key(action_key)
+        .unwrap_or_else(|error| panic!("QR action registry 缺少 {action_key}: {error}"))
+        .action_label_zh
+}
+
 static ACTION_LOGIN_CODE: LazyLock<u16> = LazyLock::new(|| registry_action_code("login"));
 static ACTION_CITIZEN_IDENTITY_CODE: LazyLock<u16> =
     LazyLock::new(|| registry_action_code("citizen_identity"));

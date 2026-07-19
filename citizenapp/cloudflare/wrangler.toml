@@ -50,6 +50,11 @@ SESSION_TTL_SECONDS = "86400"
 UPLOAD_TTL_SECONDS = "900"
 ARCHIVE_ENABLED = "0"
 ARCHIVE_LAPSE_DAYS = "90"
+# 会员镜像对账默认（本地默认关；staging/production 开）。批量缺省 50、上限 500。
+# 运行期以 KV 开关（flag:membership_reconcile / flag:creator_reconcile）优先，供控制台即时切。
+MEMBERSHIP_RECONCILE_ENABLED = "0"
+CREATOR_RECONCILE_ENABLED = "0"
+MEMBERSHIP_RECONCILE_BATCH = "50"
 APNS_ENV = "production"
 R2_BUCKET = "citizenapp-square-media"
 IMAGES_URL = ""
@@ -122,6 +127,10 @@ SESSION_TTL_SECONDS = "86400"
 UPLOAD_TTL_SECONDS = "900"
 ARCHIVE_ENABLED = "0"
 ARCHIVE_LAPSE_DAYS = "90"
+# 会员镜像对账默认（staging 开，每 5 分钟对齐链上订阅真态）。运行期以 KV 开关优先。
+MEMBERSHIP_RECONCILE_ENABLED = "1"
+CREATOR_RECONCILE_ENABLED = "1"
+MEMBERSHIP_RECONCILE_BATCH = "50"
 APNS_ENV = "sandbox"
 R2_BUCKET = "citizenapp-square-media-staging"
 IMAGES_URL = "https://imagedelivery.net/UOEmEDe-GxX_DiS70z3GIg"
@@ -185,6 +194,10 @@ UPLOAD_TTL_SECONDS = "900"
 # 生产启用退订满 90 天视频冷归档；本地与 staging 保持关闭。
 ARCHIVE_ENABLED = "1"
 ARCHIVE_LAPSE_DAYS = "90"
+# 会员镜像对账默认（生产开，每 5 分钟对齐链上订阅真态）。运行期以 KV 开关优先（控制台即时切）。
+MEMBERSHIP_RECONCILE_ENABLED = "1"
+CREATOR_RECONCILE_ENABLED = "1"
+MEMBERSHIP_RECONCILE_BATCH = "50"
 APNS_ENV = "production"
 R2_BUCKET = "citizenapp-square-media"
 # 稳定币充值(topup)生产：两币同走 Base 主网，USDC/USDT 合约已内置（代码 config.ts）；

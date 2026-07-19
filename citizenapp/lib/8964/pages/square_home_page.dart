@@ -125,7 +125,11 @@ class _SquareHomePageState extends State<SquareHomePage> {
     }
     _operationalIdentityAccount = walletAccount;
     final future = _loadIdentity(readLiveChain: true);
-    setState(() => _identityFuture = future);
+    // setState 回调必须返回 void；赋值表达式会返回 Future，Flutter 会把它判定为
+    // 异步 setState 并抛异常，因此改成语句块明确只做同步状态赋值。
+    setState(() {
+      _identityFuture = future;
+    });
     try {
       await future;
     } catch (e) {

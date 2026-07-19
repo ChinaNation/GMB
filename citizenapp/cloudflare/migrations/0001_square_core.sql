@@ -60,7 +60,7 @@ CREATE TABLE square_memberships (
   -- 下次扣款时刻（链上 next_charge_at 镜像），同时作计费周期终点。
   expires_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
-  -- 镜像链上订阅态：active（有效）/ past_due（欠费）/ cancelled（已取消）。
+  -- 镜像链上订阅态：active（自动续费有效）/ terminated（扣款失败终止）/ cancelled（用户取消）。
   subscription_status TEXT NOT NULL,
   -- 计费周期镜像（用量额度窗口）：起点=订阅/续订时刻、终点=下次扣款。
   current_period_start INTEGER,
@@ -76,6 +76,9 @@ CREATE INDEX idx_square_memberships_state
 CREATE INDEX idx_square_memberships_lapsed
   ON square_memberships(entitlement_lapsed_at)
   WHERE entitlement_lapsed_at IS NOT NULL;
+-- 对账器按 updated_at 最旧优先滚动取批（membership/reconcile.ts）。
+CREATE INDEX idx_square_memberships_reconcile
+  ON square_memberships(updated_at);
 
 CREATE TABLE square_uploads (
   upload_id TEXT PRIMARY KEY,
