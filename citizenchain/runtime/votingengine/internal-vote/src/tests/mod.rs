@@ -119,6 +119,7 @@ impl votingengine::Config for Test {
 
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionRoleProvider = TestInternalAdminProvider;
     type WeightInfo = ();
 }
 
@@ -130,7 +131,6 @@ impl joint_vote::Config for Test {
 
 thread_local! {
     static TEST_POPULATION_COUNT: RefCell<u64> = const { RefCell::new(100) };
-    static TEST_POPULATION_SNAPSHOT_ID: RefCell<u64> = const { RefCell::new(0) };
 }
 thread_local! {
     static TEST_NOW_SECS: RefCell<u64> = const { RefCell::new(DEFAULT_TEST_NOW_SECS) };
@@ -405,18 +405,22 @@ impl votingengine::InstitutionRoleProvider<AccountId32> for TestInternalAdminPro
         let Some(code) = votingengine::types::institution_code_from_cid_number(cid_text) else {
             return Vec::new();
         };
-        let expected_role = if matches!(code, NRC | PRC) {
-            primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
-        } else if code == PRB {
-            primitives::governance_skeleton::ROLE_CODE_DIRECTOR
-        } else {
-            return Vec::new();
-        };
+        let expected_role = test_institution_role(code);
         if role_code != expected_role {
             return Vec::new();
         }
         <Self as InternalAdminProvider<AccountId32>>::get_institution_admins(code, cid_number)
             .unwrap_or_default()
+    }
+}
+
+fn test_institution_role(code: InstitutionCode) -> &'static [u8] {
+    if matches!(code, NRC | PRC) {
+        primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+    } else if code == PRB {
+        primitives::governance_skeleton::ROLE_CODE_DIRECTOR
+    } else {
+        b"TEST_ROLE"
     }
 }
 
@@ -442,20 +446,16 @@ impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityRea
         TEST_POPULATION_COUNT.with(|count| *count.borrow())
     }
 
-    fn create_population_snapshot(
-        _scope: &votingengine::PopulationScope,
-    ) -> Result<(u64, u64), DispatchError> {
-        let eligible_total = TEST_POPULATION_COUNT.with(|count| *count.borrow());
-        let snapshot_id = TEST_POPULATION_SNAPSHOT_ID.with(|next| {
-            let mut next = next.borrow_mut();
-            let snapshot_id = *next;
-            *next = (*next).saturating_add(1);
-            snapshot_id
-        });
-        Ok((snapshot_id, eligible_total))
+    fn population_data(scope: &votingengine::PopulationScope) -> votingengine::PopulationData {
+        votingengine::PopulationData {
+            scope: scope.clone(),
+            eligible_total: TEST_POPULATION_COUNT.with(|count| *count.borrow()),
+            eligibility_revision: 1,
+            eligibility_date: 20_000,
+        }
     }
 
-    fn can_vote_at(who: &AccountId32, _snapshot_id: u64) -> bool {
+    fn can_vote_at(who: &AccountId32, _population_data: &votingengine::PopulationData) -> bool {
         who == &nrc_admin(0)
     }
 }
@@ -528,7 +528,6 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     let mut ext = sp_io::TestExternalities::new(storage);
     ext.execute_with(|| {
         TEST_POPULATION_COUNT.with(|count| *count.borrow_mut() = 100);
-        TEST_POPULATION_SNAPSHOT_ID.with(|next| *next.borrow_mut() = 0);
         TEST_NOW_SECS.with(|secs| *secs.borrow_mut() = DEFAULT_TEST_NOW_SECS);
         JOINT_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = false);
         JOINT_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = None);
@@ -781,16 +780,55 @@ fn create_internal_proposal_via_engine(
     institution_code: InstitutionCode,
     actor_cid_number: CidNumber,
 ) -> u64 {
+    let data = b"payload".to_vec();
+    let vote_plan = internal_vote_plan(&actor_cid_number, &data);
     <InternalVote as InternalVoteEngine<AccountId32>>::create_institution_proposal_with_data(
         who,
         institution_code,
         actor_cid_number.to_vec(),
         None,
         subject_cids_for(&actor_cid_number),
-        b"test",
-        b"payload".to_vec(),
+        vote_plan,
+        data,
     )
     .expect("internal proposal should be created")
+}
+
+fn internal_vote_plan(
+    actor_cid_number: &CidNumber,
+    data: &[u8],
+) -> votingengine::types::VotePlanOf<AccountId32> {
+    internal_vote_plan_with_owner(actor_cid_number, b"test", data)
+}
+
+fn internal_vote_plan_with_owner(
+    actor_cid_number: &CidNumber,
+    module_tag: &[u8],
+    data: &[u8],
+) -> votingengine::types::VotePlanOf<AccountId32> {
+    let actor_text = core::str::from_utf8(actor_cid_number.as_slice()).expect("valid CID");
+    let code = votingengine::types::institution_code_from_cid_number(actor_text)
+        .expect("known institution code");
+    let role_code = test_institution_role(code);
+    let owner: BoundedVec<u8, ConstU32<32>> = module_tag.to_vec().try_into().expect("owner");
+    let role_subject = votingengine::types::RoleSubject {
+        cid_number: actor_cid_number.clone(),
+        role_code: role_code.to_vec().try_into().expect("role code"),
+    };
+    votingengine::types::VotePlanOf::try_new(
+        votingengine::types::BusinessActionId {
+            module_tag: owner.clone(),
+            action_code: 0,
+        },
+        owner,
+        votingengine::types::AuthorizationSubject::Institution(role_subject.clone()),
+        vec![votingengine::types::AuthorizationSubject::Institution(
+            role_subject,
+        )],
+        votingengine::types::VotingEngineKind::Internal,
+        sp_io::hashing::blake2_256(data),
+    )
+    .expect("valid internal vote plan")
 }
 
 fn create_pending_personal_proposal_via_engine(
@@ -884,10 +922,20 @@ fn insert_joint_referendum_proposal(proposal_id: u64, eligible_total: u64, end: 
             subject_cid_numbers: Default::default(),
             start: System::block_number(),
             end,
-            citizen_eligible_total: eligible_total,
         },
     );
-    votingengine::ProposalPopulationSnapshotIds::<Test>::insert(proposal_id, proposal_id);
+    votingengine::ProposalPopulationSnapshots::<Test>::insert(
+        proposal_id,
+        votingengine::ProposalPopulationSnapshot {
+            population_data: votingengine::PopulationData {
+                scope: votingengine::PopulationScope::Country,
+                eligible_total,
+                eligibility_revision: proposal_id,
+                eligibility_date: 20_000,
+            },
+            created_at: System::block_number(),
+        },
+    );
 }
 
 fn full_retry_deadline_bucket(seed: u64) -> BoundedVec<u64, ConstU32<128>> {

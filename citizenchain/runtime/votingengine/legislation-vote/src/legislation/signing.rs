@@ -14,16 +14,7 @@ pub(crate) fn override_approved(approvals: usize) -> bool {
 use crate::*;
 
 impl<T: Config> Pallet<T> {
-    /// 实时查机构法定代表人(机构首脑;ADR-027 签署人)。
-    pub(crate) fn legal_representative_of(
-        cid_number: &votingengine::types::CidNumber,
-    ) -> Option<T::AccountId> {
-        <T as votingengine::Config>::InternalAdminProvider::legal_representative(
-            cid_number.as_slice(),
-        )
-    }
-
-    /// 行政签署:机构法定代表人(市长/省长/总统)批准=生效;否决:市行政区=否决/省行政区/国家=退回会签。
+    /// 行政签署：只认建案时冻结的行政机构 LR 岗位任职。
     pub fn do_executive_sign(who: T::AccountId, proposal_id: u64, approve: bool) -> DispatchResult {
         let proposal =
             Proposals::<T>::get(proposal_id).ok_or(votingengine::Error::<T>::ProposalNotFound)?;
@@ -37,9 +28,15 @@ impl<T: Config> Pallet<T> {
         );
         let meta = pallet::LegislationMetas::<T>::get(proposal_id)
             .ok_or(Error::<T>::ProposalMetaMissing)?;
-        let rep = Self::legal_representative_of(&meta.executive)
-            .ok_or(Error::<T>::NotLegalRepresentative)?;
-        ensure!(who == rep, Error::<T>::NotLegalRepresentative);
+        let executive = meta.executive.ok_or(Error::<T>::NotLegalRepresentative)?;
+        ensure!(
+            <votingengine::Pallet<T>>::is_subject_voter_in_snapshot(
+                proposal_id,
+                AuthorizationSubject::Institution(executive),
+                &who,
+            ),
+            Error::<T>::NotLegalRepresentative
+        );
         Self::deposit_event(pallet::Event::<T>::LegislationExecutiveSigned {
             proposal_id,
             who,
@@ -47,35 +44,13 @@ impl<T: Config> Pallet<T> {
         });
         if approve {
             Self::finalize_or_guard(proposal_id, meta.needs_guard)
-        } else if meta.legislature.is_some() {
+        } else if !meta.override_signers.is_empty() {
             // 省行政区/国家:否决 → 退回三人会签救济。
             Self::advance_to_override(proposal_id)
         } else {
             // 市行政区:无救济,否决即否决。
             <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_REJECTED)
         }
-    }
-
-    /// 三人会签合法身份(院长 + 众议长 + 参议长 = 立法院/众议会/参议会三机构法定代表人)。
-    pub(crate) fn override_signers_for_proposal(
-        proposal_id: u64,
-        meta: &pallet::LegislationMeta,
-    ) -> sp_runtime::sp_std::vec::Vec<T::AccountId> {
-        let mut out = sp_runtime::sp_std::vec::Vec::new();
-        if let Some(leg) = meta.legislature.as_ref() {
-            if let Some(rep) = Self::legal_representative_of(leg) {
-                out.push(rep);
-            }
-        }
-        let Some(representative) = pallet::RepresentativeMetas::<T>::get(proposal_id) else {
-            return out;
-        };
-        for body in representative.route.bodies() {
-            if let Some(rep) = Self::legal_representative_of(&body) {
-                out.push(rep);
-            }
-        }
-        out
     }
 
     /// 三人会签:院长/参议长/众议长各一票,任一否决=否决,集齐 3 个不同身份赞成=生效。
@@ -92,9 +67,14 @@ impl<T: Config> Pallet<T> {
         );
         let meta = pallet::LegislationMetas::<T>::get(proposal_id)
             .ok_or(Error::<T>::ProposalMetaMissing)?;
-        let signers = Self::override_signers_for_proposal(proposal_id, &meta);
         ensure!(
-            signers.iter().any(|s| s == &who),
+            meta.override_signers.iter().any(|subject| {
+                <votingengine::Pallet<T>>::is_subject_voter_in_snapshot(
+                    proposal_id,
+                    AuthorizationSubject::Institution(subject.clone()),
+                    &who,
+                )
+            }),
             Error::<T>::NotOverrideSigner
         );
         let mut signs = pallet::LegOverrideSigns::<T>::get(proposal_id);
@@ -146,7 +126,7 @@ impl<T: Config> Pallet<T> {
         );
         let meta = pallet::LegislationMetas::<T>::get(proposal_id)
             .ok_or(Error::<T>::ProposalMetaMissing)?;
-        if meta.legislature.is_some() {
+        if !meta.override_signers.is_empty() {
             Self::advance_to_override(proposal_id)
         } else {
             Self::finalize_or_guard(proposal_id, meta.needs_guard)

@@ -127,7 +127,7 @@ class _ProposalEntryPageState extends State<ProposalEntryPage> {
             ),
           ),
 
-          // ──── 非管理员提示 ────
+          // ──── 未激活签名钱包提示 ────
           if (!widget.isActivated)
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
@@ -148,7 +148,7 @@ class _ProposalEntryPageState extends State<ProposalEntryPage> {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '仅管理员可发起提案，请先在管理员列表中激活身份',
+                        '请先激活机构签名钱包；能否发起由链上机构 CID 与岗位码共同校验',
                         style: TextStyle(
                           fontSize: 12,
                           color: AppTheme.textTertiary,

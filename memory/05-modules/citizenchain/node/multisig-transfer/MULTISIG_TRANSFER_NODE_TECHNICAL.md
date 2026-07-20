@@ -4,8 +4,8 @@
 
 node 端多签转账拆为独立目录：
 
-- `citizenchain/node/src/transaction/multisig_transfer/`：Tauri 命令、签名构造、call_data、AccountId 编码、提案详情解码和独立 storage 查询。
-- `citizenchain/node/frontend/transaction/multisig-transfer/`：多签转账、安全基金转账、手续费划转的创建页面、详情展示组件、API 和类型。
+- `citizenchain/node/src/transaction/multisig/`：Tauri 命令、签名构造、call_data、AccountId 编码、提案详情解码和独立 storage 查询。
+- `citizenchain/node/frontend/transaction/multisig/`：多签转账、安全基金转账、手续费划转的创建页面、详情展示组件、API 和类型。
 
 `governance` 不再注册 `build_propose_transfer_request / submit_propose_transfer`、安全基金转账、手续费划转等 pallet=17 创建/提交命令；前端也不再在 `governance/api.ts` 中暴露这些 API。
 
@@ -18,6 +18,12 @@ node 端多签转账拆为独立目录：
 ## 支持范围
 
 runtime 的多签转账业务允许所有 active 机构账户，并统一调用 `internal-vote`；是否能发起销毁、密钥变更等其他内部投票业务由对应业务模块单独判断，不能由本转账模块或投票引擎代替判断。
+
+三类机构提案都必须由页面独立收集 `proposer_role_code`，Rust 构造器按 runtime 字段顺序严格编码，不得用当前管理员、机构类型或投票引擎推断岗位码：
+
+- 普通机构转账：`Option::Some(actor_cid_number) + Option::Some(proposer_role_code) + funding_account + beneficiary + amount + remark`。
+- NRC 安全基金转账：`actor_cid_number + proposer_role_code + institution_account + beneficiary + amount + remark`。
+- 费用账户划转：`actor_cid_number + proposer_role_code + institution_account + amount`。
 
 node 端只支持：
 
@@ -35,7 +41,7 @@ node 端明确拒绝：
 ```json
 {
   "action": "propose_transfer",
-  "fields": ["institution", "beneficiary", "amount_yuan", "remark"]
+  "fields": ["institution", "proposer_role_code", "beneficiary", "amount_yuan", "remark"]
 }
 ```
 

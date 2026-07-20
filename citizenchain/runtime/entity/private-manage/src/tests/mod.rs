@@ -340,7 +340,90 @@ impl votingengine::Config for Test {
 
 impl internal_vote::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionRoleProvider = TestInstitutionRoleProvider;
     type WeightInfo = ();
+}
+
+pub struct TestInstitutionRoleProvider;
+
+impl votingengine::InstitutionRoleProvider<AccountId32> for TestInstitutionRoleProvider {
+    fn is_active_assignment(cid_number: &[u8], who: &AccountId32, role_code: &[u8]) -> bool {
+        <crate::Pallet<Test> as entity_primitives::InstitutionRoleQuery<AccountId32>>::is_active_assignment(
+            cid_number,
+            who,
+            role_code,
+        )
+    }
+
+    fn active_accounts_for_role(cid_number: &[u8], role_code: &[u8]) -> Vec<AccountId32> {
+        <crate::Pallet<Test> as entity_primitives::InstitutionRoleQuery<AccountId32>>::active_accounts_for_role(
+            cid_number,
+            role_code,
+        )
+    }
+}
+
+pub fn grant_close_role(cid_number: &pallet::CidNumberOf<Test>) -> crate::RoleCodeOf {
+    let role_code: crate::RoleCodeOf = b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits");
+    pallet::InstitutionRoles::<Test>::insert(
+        cid_number,
+        &role_code,
+        entity_primitives::InstitutionRole {
+            cid_number: cid_number.clone(),
+            role_code: role_code.clone(),
+            role_name: account_name("关闭账户岗位".as_bytes()),
+            term_required: false,
+            role_status: entity_primitives::InstitutionRoleStatus::Active,
+        },
+    );
+    let assignments = [admin(1), admin(2)]
+        .into_iter()
+        .map(
+            |admin_account| entity_primitives::InstitutionAdminAssignment {
+                cid_number: cid_number.clone(),
+                admin_account,
+                role_code: role_code.clone(),
+                term_start: 0,
+                term_end: 0,
+                assignment_source:
+                    entity_primitives::InstitutionAssignmentSource::InstitutionGovernance,
+                assignment_source_ref: BoundedVec::default(),
+                assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
+            },
+        )
+        .collect::<Vec<_>>();
+    pallet::InstitutionRoleAssignments::<Test>::insert(
+        cid_number,
+        &role_code,
+        crate::institution::role::RoleAssignmentsOf::<Test>::try_from(assignments)
+            .expect("assignments fit"),
+    );
+    let permissions = [
+        entity_primitives::RolePermissionOperation::Propose,
+        entity_primitives::RolePermissionOperation::Vote,
+    ]
+    .into_iter()
+    .map(|operation| entity_primitives::RoleBusinessPermission {
+        role_subject: entity_primitives::RoleSubject {
+            cid_number: cid_number.clone(),
+            role_code: role_code.clone(),
+        },
+        business_action_id: entity_primitives::BusinessActionId {
+            module_tag: crate::MODULE_TAG
+                .to_vec()
+                .try_into()
+                .expect("module tag fits"),
+            action_code: entity_primitives::business_action::ACTION_INSTITUTION_CLOSE,
+        },
+        operation,
+    })
+    .collect::<Vec<_>>();
+    pallet::InstitutionRolePermissions::<Test>::insert(
+        cid_number,
+        &role_code,
+        BoundedVec::try_from(permissions).expect("permissions fit"),
+    );
+    role_code
 }
 
 impl private_admins::Config for Test {
@@ -511,6 +594,7 @@ pub fn create_institution(
     }
     let admins = institution_admins(&target_admins);
     PrivateManage::set_institution_admins(&cid_number, institution_code, &admins, 2)?;
+    grant_close_role(&cid_number);
 
     // 创建 call 不再接收账户清单或初始入金。测试若需要关闭命名账户，必须在创建
     // 完成后走正式的新增账户入口；余额注入只用于构造后续操作场景。

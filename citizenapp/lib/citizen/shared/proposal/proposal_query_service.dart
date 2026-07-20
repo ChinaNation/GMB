@@ -62,9 +62,9 @@ class ProposalQueryService {
     try {
       // Proposal = kind + stage + status + internal_code Option
       //   + actor_cid_number Option + execution_account Option
-      //   + subject CID 集合 + start(u32) + end(u32)
-      //   + citizen_eligible_total(u64)。
-      if (data.length < 3 + 3 + 1 + 4 + 4 + 8) return null;
+      //   + subject CID 集合 + start(u32) + end(u32)。
+      // 公民分母属于投票引擎按 proposal_id 保存的独立人口快照，不在 Proposal 重复存储。
+      if (data.length < 3 + 3 + 1 + 4 + 4) return null;
       final kind = data[0];
       final stage = data[1];
       final status = data[2];
@@ -108,7 +108,7 @@ class ProposalQueryService {
 
       final subjectCids = _decodeSubjectCidNumbers(data, offset);
       if (subjectCids == null) return null;
-      if (subjectCids.$2 + 4 + 4 + 8 != data.length) return null;
+      if (subjectCids.$2 + 4 + 4 != data.length) return null;
 
       return ProposalMeta(
         proposalId: proposalId,
@@ -167,6 +167,38 @@ class ProposalQueryService {
     final decoded = decodeAdminSnapshot(data);
     if (decoded == null || decoded.isEmpty) {
       throw const FormatException('VotingEngine::AdminSnapshot SCALE 数据无效');
+    }
+    return decoded;
+  }
+
+  /// 查询提案创建时锁定的实际投票账户快照。
+  ///
+  /// 机构提案只读取按岗位主体合并去重后的 `EffectiveVoterSnapshot`；
+  /// 个人多签才读取 `AdminSnapshot`。禁止在机构快照缺失时回落当前 admins。
+  Future<List<String>> fetchEligibleVoterSnapshot(
+    int proposalId,
+    InstitutionInfo institution,
+  ) async {
+    if (isPersonalAccountIdentity(institution.cidNumber)) {
+      return fetchAdminSnapshot(proposalId, institution);
+    }
+    final key = _buildDoubleStorageKey(
+      'VotingEngine',
+      'EffectiveVoterSnapshot',
+      _u64ToLeBytes(proposalId),
+      proposalSubjectKey(institution),
+    );
+    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    if (data == null) {
+      throw StateError(
+        '提案 $proposalId 缺少 VotingEngine::EffectiveVoterSnapshot',
+      );
+    }
+    final decoded = decodeAdminSnapshot(data);
+    if (decoded == null || decoded.isEmpty) {
+      throw const FormatException(
+        'VotingEngine::EffectiveVoterSnapshot SCALE 数据无效',
+      );
     }
     return decoded;
   }

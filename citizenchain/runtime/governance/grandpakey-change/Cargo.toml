@@ -20,6 +20,7 @@ pallet-grandpa = { workspace = true }
 curve25519-dalek = { version = "4.1.3", default-features = false, features = ["alloc"] }
 
 primitives = { path = "../../primitives", default-features = false }
+entity-primitives = { path = "../../entity/entity-primitives", default-features = false }
 votingengine = { path = "../../votingengine", default-features = false }
 
 [dev-dependencies]
@@ -47,6 +48,7 @@ std = [
     "sp-consensus-grandpa/std",
     "pallet-grandpa/std",
     "primitives/std",
+    "entity-primitives/std",
     "votingengine/std",
 ]
 runtime-benchmarks = [

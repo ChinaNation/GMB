@@ -4,7 +4,7 @@ use votingengine::PopulationScope;
 use frame_support::{assert_ok, derive_impl, traits::ConstU32, traits::Hooks};
 use frame_system as system;
 use primitives::cid::china::{china_cb::CHINA_CB, china_ch::CHINA_CH};
-use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage, DispatchError};
+use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 use votingengine::{
     traits::{
         CitizenIdentityReader, InternalAdminProvider, JointVoteEngine, JointVoteResultCallback,
@@ -67,12 +67,17 @@ impl CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
         referendum_voters().len() as u64
     }
 
-    fn create_population_snapshot(_scope: &PopulationScope) -> Result<(u64, u64), DispatchError> {
-        Ok((7, referendum_voters().len() as u64))
+    fn population_data(scope: &PopulationScope) -> votingengine::PopulationData {
+        votingengine::PopulationData {
+            scope: scope.clone(),
+            eligible_total: referendum_voters().len() as u64,
+            eligibility_revision: 7,
+            eligibility_date: 20_000,
+        }
     }
 
-    fn can_vote_at(who: &AccountId32, snapshot_id: u64) -> bool {
-        snapshot_id == 7 && referendum_voters().contains(who)
+    fn can_vote_at(who: &AccountId32, population_data: &votingengine::PopulationData) -> bool {
+        population_data.eligibility_revision == 7 && referendum_voters().contains(who)
     }
 }
 

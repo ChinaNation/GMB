@@ -142,7 +142,8 @@ impl<T: Config> Pallet<T> {
         (VOTING_DURATION_BLOCKS as u64).saturated_into()
     }
 
-    /// 创建联合投票提案。锁定全部参与机构(NRC + 43 PRC + 43 PRB)管理员快照,
+    /// 创建联合投票提案。锁定全部参与机构（NRC + 43 PRC 委员、43 PRB 董事）
+    /// 岗位有效选民快照，
     /// 同一事务内创建并绑定全国人口快照，后续阶段切换不再改写。
     pub fn do_create_joint_proposal(
         who: T::AccountId,
@@ -155,20 +156,6 @@ impl<T: Config> Pallet<T> {
         let subject_cid_numbers = joint_subject_cid_numbers::<T>()?;
 
         with_transaction(|| {
-            // 联合治理协议固定为全国公投。快照创建必须处于提案事务内，
-            // 后续任何管理员快照、数据绑定或排期失败都会连同快照一起回滚。
-            let (snapshot_id, eligible_total) =
-                match <votingengine::Pallet<T>>::create_population_snapshot(
-                    &PopulationScope::Country,
-                ) {
-                    Ok(value) => value,
-                    Err(err) => return TransactionOutcome::Rollback(Err(err)),
-                };
-            if eligible_total == 0 {
-                return TransactionOutcome::Rollback(Err(
-                    Error::<T>::CitizenEligibleTotalNotSet.into()
-                ));
-            }
             let proposal = Proposal {
                 kind: PROPOSAL_KIND_JOINT,
                 stage: STAGE_JOINT,
@@ -179,7 +166,6 @@ impl<T: Config> Pallet<T> {
                 subject_cid_numbers,
                 start: now,
                 end,
-                citizen_eligible_total: eligible_total,
             };
             let id = match <votingengine::Pallet<T>>::allocate_proposal_id() {
                 Ok(id) => id,
@@ -227,8 +213,19 @@ impl<T: Config> Pallet<T> {
             if let Err(err) = <votingengine::Pallet<T>>::bind_vote_plan(id, vote_plan) {
                 return TransactionOutcome::Rollback(Err(err));
             }
-            if let Err(err) = <votingengine::Pallet<T>>::bind_population_snapshot(id, snapshot_id) {
-                return TransactionOutcome::Rollback(Err(err));
+            // 联合治理协议固定使用全国人口。投票引擎只读取 citizen-identity 已维护的
+            // 人口数据并在本提案下生成快照；后续失败由外层事务整体回滚。
+            match <votingengine::Pallet<T>>::create_population_snapshot(
+                id,
+                &PopulationScope::Country,
+            ) {
+                Ok(0) => {
+                    return TransactionOutcome::Rollback(Err(
+                        Error::<T>::CitizenEligibleTotalNotSet.into(),
+                    ))
+                }
+                Ok(_) => {}
+                Err(err) => return TransactionOutcome::Rollback(Err(err)),
             }
             if let Err(err) = <votingengine::Pallet<T>>::schedule_proposal_expiry(id, end) {
                 return TransactionOutcome::Rollback(Err(err));
@@ -389,21 +386,26 @@ impl<T: Config> Pallet<T> {
         let now = <frame_system::Pallet<T>>::block_number();
         let referendum_end = now.saturating_add(Self::referendum_stage_duration());
         with_transaction(|| {
-            let (eligible_total, old_end) = match Proposals::<T>::try_mutate(
+            let eligible_total =
+                match <votingengine::Pallet<T>>::population_eligible_total_of(proposal_id) {
+                    Some(total) => total,
+                    None => {
+                        return TransactionOutcome::Rollback(Err(
+                            Error::<T>::CitizenEligibleTotalNotSet.into(),
+                        ))
+                    }
+                };
+            let old_end = match Proposals::<T>::try_mutate(
                 proposal_id,
-                |maybe| -> Result<
-                    (u64, frame_system::pallet_prelude::BlockNumberFor<T>),
-                    DispatchError,
-                > {
+                |maybe| -> Result<frame_system::pallet_prelude::BlockNumberFor<T>, DispatchError> {
                     let proposal = maybe
                         .as_mut()
                         .ok_or(votingengine::Error::<T>::ProposalNotFound)?;
-                    let eligible_total = proposal.citizen_eligible_total;
                     let old_end = proposal.end;
                     proposal.stage = votingengine::STAGE_REFERENDUM;
                     proposal.start = now;
                     proposal.end = referendum_end;
-                    Ok((eligible_total, old_end))
+                    Ok(old_end)
                 },
             ) {
                 Ok(v) => v,

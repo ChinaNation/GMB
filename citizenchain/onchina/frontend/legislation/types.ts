@@ -113,6 +113,8 @@ export interface LawView {
 /** 发起法律案请求体(houses/executive/legislature 由后端按宪法路由解析,前端不传)。 */
 export interface ProposeLawInput {
   lawAction: LawActionInput;
+  /** 当前管理员用于发起该业务的机构岗位码。 */
+  proposerRoleCode: string;
   tier: number;
   scopeCode: number;
   voteType: number;

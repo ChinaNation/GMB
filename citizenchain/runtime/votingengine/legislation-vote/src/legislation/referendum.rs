@@ -11,21 +11,26 @@ impl<T: Config> Pallet<T> {
         let now = <frame_system::Pallet<T>>::block_number();
         let end = now.saturating_add(Self::stage_duration());
         with_transaction(|| {
-            let (eligible_total, old_end) = match Proposals::<T>::try_mutate(
+            let eligible_total =
+                match <votingengine::Pallet<T>>::population_eligible_total_of(proposal_id) {
+                    Some(total) => total,
+                    None => {
+                        return TransactionOutcome::Rollback(Err(
+                            Error::<T>::CitizenEligibleTotalNotSet.into(),
+                        ))
+                    }
+                };
+            let old_end = match Proposals::<T>::try_mutate(
                 proposal_id,
-                |maybe| -> Result<
-                    (u64, frame_system::pallet_prelude::BlockNumberFor<T>),
-                    DispatchError,
-                > {
+                |maybe| -> Result<frame_system::pallet_prelude::BlockNumberFor<T>, DispatchError> {
                     let p = maybe
                         .as_mut()
                         .ok_or(votingengine::Error::<T>::ProposalNotFound)?;
-                    let eligible_total = p.citizen_eligible_total;
                     let old = p.end;
                     p.stage = STAGE_LEG_REFERENDUM;
                     p.start = now;
                     p.end = end;
-                    Ok((eligible_total, old))
+                    Ok(old)
                 },
             ) {
                 Ok(v) => v,
@@ -68,10 +73,9 @@ impl<T: Config> Pallet<T> {
             proposal.stage == STAGE_LEG_REFERENDUM,
             votingengine::Error::<T>::InvalidProposalStage
         );
-        ensure!(
-            proposal.citizen_eligible_total > 0,
-            Error::<T>::CitizenEligibleTotalNotSet
-        );
+        let eligible_total = <votingengine::Pallet<T>>::population_eligible_total_of(proposal_id)
+            .ok_or(Error::<T>::CitizenEligibleTotalNotSet)?;
+        ensure!(eligible_total > 0, Error::<T>::CitizenEligibleTotalNotSet);
         ensure!(
             <votingengine::Pallet<T>>::can_vote_at_population_snapshot(proposal_id, &who),
             Error::<T>::CitizenNotEligible
@@ -82,7 +86,7 @@ impl<T: Config> Pallet<T> {
         );
         let current_tally = pallet::LegReferendumTally::<T>::get(proposal_id);
         ensure!(
-            current_tally.yes.saturating_add(current_tally.no) < proposal.citizen_eligible_total,
+            current_tally.yes.saturating_add(current_tally.no) < eligible_total,
             Error::<T>::ReferendumSnapshotExhausted
         );
 
@@ -120,11 +124,9 @@ impl<T: Config> Pallet<T> {
             votingengine::Error::<T>::VoteNotExpired
         );
         let tally = pallet::LegReferendumTally::<T>::get(proposal_id);
-        if crate::legislation::referendum::passed(
-            proposal.citizen_eligible_total,
-            tally.yes,
-            tally.no,
-        ) {
+        let eligible_total = <votingengine::Pallet<T>>::population_eligible_total_of(proposal_id)
+            .ok_or(Error::<T>::CitizenEligibleTotalNotSet)?;
+        if crate::legislation::referendum::passed(eligible_total, tally.yes, tally.no) {
             // 公投通过:修宪(特别案)转护宪大法官终审,否则直接生效。
             let meta = pallet::LegislationMetas::<T>::get(proposal_id)
                 .ok_or(Error::<T>::ProposalMetaMissing)?;

@@ -35,17 +35,20 @@ cd "$CHAIN_ROOT"
 cargo build --release --features runtime-benchmarks --bin citizenchain
 echo "    编译完成"
 
-RUNTIME_WASM="$(find "$CHAIN_ROOT/target/release/wbuild" -type f -name '*.compact.compressed.wasm' ! -path '*/frame-storage-access-test-runtime/*' | sort | head -n 1)"
-if [ -z "$RUNTIME_WASM" ]; then
-    echo "⚠ 未找到 benchmark runtime WASM"
-    exit 1
-fi
-echo "==> 使用 benchmark runtime WASM: $RUNTIME_WASM"
+# 当前 runtime 的链规 preset 只在 std 节点侧提供，WASM 不能通过
+# `--genesis-builder=runtime` 构造完整创世状态。基准因此从当前二进制导出一次性
+# fresh spec，并用 spec-genesis 交给 benchmark externalities；退出后立即删除。
+BENCHMARK_SPEC="$(mktemp -t citizenchain-benchmark-spec)"
+trap 'rm -f "$BENCHMARK_SPEC"' EXIT
+./target/release/citizenchain export-chain-spec \
+    --chain citizenchain-fresh \
+    --output "$BENCHMARK_SPEC"
+echo "==> 已导出当前源码 fresh spec: $BENCHMARK_SPEC"
 
 # ── 3. 跑 benchmark ──
 # 本清单只包含 benchmark 覆盖当前 WeightInfo 的 pallet。
 # 以下模块当前不得自动覆盖:
-# - public_manage/private_manage: benchmarks.rs 只覆盖 1 个方法,weights.rs 有 4 个方法。
+# - public_manage/private_manage: benchmark 夹具没有执行完整治理外部调用，不能覆盖正式权重。
 # - personal_manage / offchain_transaction:benchmark 文件为空或未挂载到 runtime registry。
 # - onchain_issuance:业务仍是 stub,正式权重必须等业务实装后生成。
 # - genesis_pallet:无 extrinsic,WeightInfo 为空实现。
@@ -86,7 +89,7 @@ for entry in "${PALLETS[@]}"; do
     echo "▶ $PALLET"
     echo "══════════════════════════════════════"
     if ./target/release/citizenchain benchmark pallet \
-        --runtime="$RUNTIME_WASM" \
+        --chain="$BENCHMARK_SPEC" \
         --genesis-builder=spec-genesis \
         --pallet="$PALLET" \
         --extrinsic='*' \

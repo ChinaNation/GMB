@@ -9,8 +9,9 @@ enum AdminAccountIdentityType { institution, personalAccount }
 
 /// 全仓统一的管理员人员记录。
 ///
-/// `admin_account` 是唯一授权与去重字段；姓、名只用于人员姓名展示，
-/// 页面需要姓名时现场按中文顺序组合，不保存合并姓名。
+/// `admin_account` 是人员记录唯一标识与去重字段；姓、名只用于人员姓名展示，
+/// 页面需要姓名时现场按中文顺序组合，不保存合并姓名。机构业务授权必须另查
+/// `CID + 岗位码`，个人多签才直接以管理员集合授权。
 class AdminPerson {
   const AdminPerson({
     required this.admin_account,

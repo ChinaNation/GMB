@@ -179,9 +179,7 @@ impl<T: Config> Pallet<T> {
                 ProposalOwner::<T>::remove(proposal_id);
                 ProposalVotePlans::<T>::remove(proposal_id);
                 ProposalMeta::<T>::remove(proposal_id);
-                if let Some(snapshot_id) = ProposalPopulationSnapshotIds::<T>::take(proposal_id) {
-                    T::CitizenIdentityReader::release_population_snapshot(snapshot_id);
-                }
+                ProposalPopulationSnapshots::<T>::remove(proposal_id);
                 ProposalExecutionRetryStates::<T>::remove(proposal_id);
                 PendingProposalExecutions::<T>::remove(proposal_id);
                 PendingTerminalFinalizations::<T>::remove(proposal_id);

@@ -28,7 +28,9 @@ use admin_primitives::{AdminAccountQuery, InstitutionAdminQuery};
 use alloc::vec::Vec;
 use codec::Decode;
 use entity_primitives::InstitutionMultisigQuery;
-use entity_primitives::InstitutionRoleQuery;
+use entity_primitives::{
+    InstitutionRoleAuthorizationQuery, InstitutionRoleQuery, RolePermissionOperation,
+};
 #[cfg(not(feature = "runtime-benchmarks"))]
 use frame_support::traits::UnfilteredDispatchable;
 use frame_support::{
@@ -1461,15 +1463,9 @@ impl entity_primitives::InstitutionCapabilityPolicy for RuntimeInstitutionCapabi
         let in_private = private_cid
             .as_ref()
             .is_some_and(private_manage::Institutions::<Runtime>::contains_key);
-        let (expected_module, expected_action) = match (in_public, in_private) {
-            (true, false) => (
-                public_manage::MODULE_TAG,
-                u32::from(public_manage::pallet::ACTION_GOVERNANCE),
-            ),
-            (false, true) => (
-                private_manage::MODULE_TAG,
-                u32::from(private_manage::pallet::ACTION_GOVERNANCE),
-            ),
+        let expected_module = match (in_public, in_private) {
+            (true, false) => public_manage::MODULE_TAG,
+            (false, true) => private_manage::MODULE_TAG,
             _ => return false,
         };
         if entity_primitives::fixed_institution_capability_allows(
@@ -1481,8 +1477,22 @@ impl entity_primitives::InstitutionCapabilityPolicy for RuntimeInstitutionCapabi
         ) {
             return true;
         }
+        if in_public
+            && entity_primitives::business_action::legislation_institution_capability_allows(
+                parts.institution,
+                business_action_id.module_tag.as_slice(),
+                business_action_id.action_code,
+                operation,
+            )
+        {
+            return true;
+        }
         business_action_id.module_tag.as_slice() == expected_module
-            && business_action_id.action_code == expected_action
+            && matches!(
+                business_action_id.action_code,
+                entity_primitives::business_action::ACTION_INSTITUTION_CLOSE
+                    | entity_primitives::business_action::ACTION_INSTITUTION_GOVERNANCE
+            )
     }
 }
 
@@ -1681,6 +1691,7 @@ impl square_post::Config for Runtime {
     type TimeProvider = crate::Timestamp;
     type InstitutionAccountQuery = RuntimeInstitutionQuery;
     type InternalVoteEngine = InternalVote;
+    type InstitutionRoleAuthorization = RuntimeInstitutionRoleAuthorization;
     type MaxSquarePostIdLen = ConstU32<64>;
     type MaxSquareCidNumberLen = ConstU32<32>;
     type MaxSquareStorageReceiptIdLen = ConstU32<96>;
@@ -1732,6 +1743,7 @@ impl resolution_destroy::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = InternalVote;
+    type InstitutionRoleAuthorization = RuntimeInstitutionRoleAuthorization;
     type InstitutionQuery = RuntimeInstitutionQuery;
     type OnchainFeeCharger =
         onchain::OnchainExecutionFeeCharger<Runtime, Balances, OnchainExecutionFeeDistributor>;
@@ -1742,6 +1754,7 @@ impl grandpakey_change::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type GrandpaChangeDelay = GrandpaAuthoritySetChangeDelay;
     type InternalVoteEngine = InternalVote;
+    type InstitutionRoleAuthorization = RuntimeInstitutionRoleAuthorization;
     type WeightInfo = grandpakey_change::weights::SubstrateWeight<Runtime>;
 }
 
@@ -1778,6 +1791,7 @@ impl multisig::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = InternalVote;
+    type InstitutionRoleAuthorization = RuntimeInstitutionRoleAuthorization;
     type InstitutionAsset = RuntimeInstitutionAsset;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type MaxRemarkLen = ConstU32<256>;
@@ -2494,6 +2508,7 @@ impl legislation_yuan::Config for Runtime {
     // 立法投票引擎接真实 legislation-vote sub-pallet(ADR-027 第2步),投票端到端流程打通。
     type LegislationVoteEngine = LegislationVote;
     type InstitutionCidQuery = RuntimeInstitutionCidQuery;
+    type InstitutionRoleAuthorization = RuntimeInstitutionRoleAuthorization;
     type MaxTitleLen = LegislationMaxTitleLen;
     type MaxTextLen = LegislationMaxTextLen;
     type MaxClausesPerArticle = LegislationMaxClausesPerArticle;
@@ -2604,6 +2619,7 @@ impl votingengine::Config for Runtime {
 // sub-pallet 各自 Config 需 RuntimeEvent + 自家 WeightInfo。
 impl internal_vote::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionRoleProvider = RuntimeInstitutionRoleProvider;
     type WeightInfo = internal_vote::weights::SubstrateWeight<Runtime>;
 }
 
@@ -2618,7 +2634,7 @@ impl election_vote::Config for Runtime {
     type MaxElectionOfficeCodeLen = ConstU32<64>;
     type MaxElectionCandidates = ConstU32<256>;
     // 互选选民就是目标机构完整 admins 快照，边界必须与管理员真源一致。
-    type MaxMutualVoters = MaxAdminsPerInstitution;
+    type InstitutionRoleProvider = RuntimeInstitutionRoleProvider;
     type WeightInfo = election_vote::weights::SubstrateWeight<Runtime>;
 }
 
@@ -2626,6 +2642,7 @@ impl election_campaign::Config for Runtime {}
 
 impl legislation_vote::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionRoleProvider = RuntimeInstitutionRoleProvider;
     type WeightInfo = legislation_vote::weights::SubstrateWeight<Runtime>;
 }
 
@@ -2734,21 +2751,117 @@ impl votingengine::InternalAdminsLenProvider<AccountId> for RuntimeInternalAdmin
     }
 }
 
-/// 联合投票只读取公权机构岗位任职；业务权限由对应业务模块各自前置校验。
+/// 跨业务机构岗位授权路由；CID 必须只存在于公权或私权一个机构目录中。
+pub struct RuntimeInstitutionRoleAuthorization;
+
+impl InstitutionRoleAuthorizationQuery<AccountId> for RuntimeInstitutionRoleAuthorization {
+    fn role_has_permission(
+        role_subject: &entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>,
+        business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
+        operation: RolePermissionOperation,
+    ) -> bool {
+        match institution_role_directory(role_subject.cid_number.as_slice()) {
+            Some(true) => <public_manage::Pallet<Runtime> as InstitutionRoleAuthorizationQuery<
+                AccountId,
+            >>::role_has_permission(
+                role_subject, business_action_id, operation
+            ),
+            Some(false) => <private_manage::Pallet<Runtime> as InstitutionRoleAuthorizationQuery<
+                AccountId,
+            >>::role_has_permission(
+                role_subject, business_action_id, operation
+            ),
+            None => false,
+        }
+    }
+
+    fn is_authorized(
+        who: &AccountId,
+        role_subject: &entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>,
+        business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
+        operation: RolePermissionOperation,
+    ) -> bool {
+        match institution_role_directory(role_subject.cid_number.as_slice()) {
+            Some(true) => <public_manage::Pallet<Runtime> as InstitutionRoleAuthorizationQuery<
+                AccountId,
+            >>::is_authorized(
+                who, role_subject, business_action_id, operation
+            ),
+            Some(false) => <private_manage::Pallet<Runtime> as InstitutionRoleAuthorizationQuery<
+                AccountId,
+            >>::is_authorized(
+                who, role_subject, business_action_id, operation
+            ),
+            None => false,
+        }
+    }
+
+    fn role_subjects_with_permission(
+        cid_number: &[u8],
+        business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
+        operation: RolePermissionOperation,
+    ) -> Vec<entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>> {
+        match institution_role_directory(cid_number) {
+            Some(true) => <public_manage::Pallet<Runtime> as InstitutionRoleAuthorizationQuery<
+                AccountId,
+            >>::role_subjects_with_permission(
+                cid_number, business_action_id, operation
+            ),
+            Some(false) => <private_manage::Pallet<Runtime> as InstitutionRoleAuthorizationQuery<
+                AccountId,
+            >>::role_subjects_with_permission(
+                cid_number, business_action_id, operation
+            ),
+            None => Vec::new(),
+        }
+    }
+}
+
+/// 返回 `Some(true)` 表示公权、`Some(false)` 表示私权；不存在或双重登记均拒绝。
+fn institution_role_directory(cid_number: &[u8]) -> Option<bool> {
+    let public_cid =
+        public_manage::pallet::CidNumberOf::<Runtime>::try_from(cid_number.to_vec()).ok();
+    let private_cid =
+        private_manage::pallet::CidNumberOf::<Runtime>::try_from(cid_number.to_vec()).ok();
+    let in_public = public_cid
+        .as_ref()
+        .is_some_and(public_manage::Institutions::<Runtime>::contains_key);
+    let in_private = private_cid
+        .as_ref()
+        .is_some_and(private_manage::Institutions::<Runtime>::contains_key);
+    match (in_public, in_private) {
+        (true, false) => Some(true),
+        (false, true) => Some(false),
+        _ => None,
+    }
+}
+
+/// 内部投票与联合投票统一读取公权或私权机构的岗位任职快照。
 pub struct RuntimeInstitutionRoleProvider;
 
 impl votingengine::InstitutionRoleProvider<AccountId> for RuntimeInstitutionRoleProvider {
     fn is_active_assignment(cid_number: &[u8], who: &AccountId, role_code: &[u8]) -> bool {
-        <public_manage::Pallet<Runtime> as InstitutionRoleQuery<AccountId>>::is_active_assignment(
-            cid_number, who, role_code,
-        )
+        match institution_role_directory(cid_number) {
+            Some(true) => <public_manage::Pallet<Runtime> as InstitutionRoleQuery<
+                AccountId,
+            >>::is_active_assignment(cid_number, who, role_code),
+            Some(false) => <private_manage::Pallet<Runtime> as InstitutionRoleQuery<
+                AccountId,
+            >>::is_active_assignment(cid_number, who, role_code),
+            None => false,
+        }
     }
 
     fn active_accounts_for_role(cid_number: &[u8], role_code: &[u8]) -> Vec<AccountId> {
-        <public_manage::Pallet<Runtime> as InstitutionRoleQuery<AccountId>>::active_accounts_for_role(
-            cid_number,
-            role_code,
-        )
+        match institution_role_directory(cid_number) {
+            Some(true) => <public_manage::Pallet<Runtime> as InstitutionRoleQuery<
+                AccountId,
+            >>::active_accounts_for_role(cid_number, role_code),
+            Some(false) => <private_manage::Pallet<Runtime> as InstitutionRoleQuery<
+                AccountId,
+            >>::active_accounts_for_role(cid_number, role_code),
+            None => Vec::new(),
+        }
     }
 }
 
@@ -2773,24 +2886,18 @@ impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityRe
         >>::population_count(scope)
     }
 
-    fn create_population_snapshot(
+    fn population_data(
         scope: &citizen_identity::PopulationScope,
-    ) -> Result<(u64, u64), sp_runtime::DispatchError> {
+    ) -> citizen_identity::PopulationData {
         <citizen_identity::Pallet<Runtime> as citizen_identity::CitizenIdentityProvider<
             AccountId,
-        >>::create_population_snapshot(scope)
+        >>::population_data(scope)
     }
 
-    fn can_vote_at(who: &AccountId, snapshot_id: u64) -> bool {
+    fn can_vote_at(who: &AccountId, population_data: &citizen_identity::PopulationData) -> bool {
         <citizen_identity::Pallet<Runtime> as citizen_identity::CitizenIdentityProvider<
             AccountId,
-        >>::can_vote_at(who, snapshot_id)
-    }
-
-    fn release_population_snapshot(snapshot_id: u64) {
-        <citizen_identity::Pallet<Runtime> as citizen_identity::CitizenIdentityProvider<
-            AccountId,
-        >>::release_population_snapshot(snapshot_id)
+        >>::can_vote_at(who, population_data)
     }
 
     #[cfg(feature = "runtime-benchmarks")]

@@ -28,9 +28,9 @@
 - call 5 已永久关闭并从 metadata/QR/钱包解码移除。普通机构创建由第 6 步的新业务模块原子提交 admins、完整零余额协议账户、强制 LR、至少一个初始治理岗位及固定权限、初始任职和初始投票规则；不得恢复旧直接创建载荷。
 - `update_institution_info`（call 6）：注册局管理员更新目标机构名称。
 - `add_institution_account`（call 7）：注册局管理员给目标 CID 批量新增自定义账户。
-- `propose_institution_governance`（call 8）：本机构管理员发起内部治理提案，可原子替换 `admins`、变更动态岗位/任职、整体设置或清空法定代表人三字段；岗位任职来源必须是 `InstitutionGovernance`，不得伪装成普选、互选或任命结果。
+- `propose_institution_governance`（call 8）：本机构指定岗位任职人发起内部治理提案；SCALE 在 `actor_cid_number` 后固定编码独立 `proposer_role_code`。入口校验完整 `RoleSubject + pub-mgmt/3 + Propose`，再按同一 CID 拥有 `Vote` 权限的岗位构造内部 `VotePlan`。通过后可原子替换 `admins`、变更动态岗位/任职、整体设置或清空法定代表人三字段；岗位任职来源必须是 `InstitutionGovernance`，不得伪装成普选、互选或任命结果。
 - `register_institution_admins`（call 9）：注册局管理员按注册局授权直接完整替换目标机构 `admins`，用于注册局管理路径，不改岗位任职。
-- `propose_close_public_institution`（call 1）：账户型交易，严格使用 `actor_cid_number + institution_account + origin`，只允许关闭该 CID 下自定义账户。
+- `propose_close_public_institution`（call 1）：账户型交易，严格使用 `actor_cid_number + proposer_role_code + institution_account + origin`；只有拥有 `pub-mgmt/2 + Propose` 的有效岗位任职人可发起，投票主体来自拥有对应 `Vote` 权限的岗位，只允许关闭该 CID 下自定义账户。
 - `apply_institution_governance_result` 是内部回调，不是 extrinsic。
 - call 0、call 4 与 call 5 永久留洞，不复用、不兼容；关闭提案否决、超时或执行失败后的
   `InstitutionPendingClose` 只由 votingengine 终态回调清除，不存在人工清理交易。

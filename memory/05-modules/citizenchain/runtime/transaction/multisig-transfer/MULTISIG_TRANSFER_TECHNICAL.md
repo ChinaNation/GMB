@@ -7,11 +7,11 @@
 本模块所有 3 组业务（transfer / safety_fund / sweep）已统一接入 `votingengine` 生命周期：
 
 - 提案创建使用 `create_internal_proposal_with_data`，在同一事务中绑定 `ProposalOwner`、`ProposalData` 和 `ProposalMeta`。
-- 管理员投票统一走 `InternalVote::cast(proposal_id, approve)`，本模块不再提供独立 vote/finalize call。
+- 投票统一走 `InternalVote::cast(proposal_id, approve)`，本模块不再提供独立 vote/finalize call；机构资格来自岗位有效任职快照，个人多签资格来自管理员快照。
 - 投票通过后由 `InternalVoteExecutor` 自动执行。
 - 自动执行成功返回 `ProposalExecutionOutcome::Executed`，投票引擎转 `STATUS_EXECUTED`。
 - 自动执行失败返回 `ProposalExecutionOutcome::RetryableFailed`，提案保持 `STATUS_PASSED` 并进入统一 retry state。
-- **统一入口（2026-05-02 整改）**：execute_xxx wrapper extrinsic 已物理删除。前端直接调用 `VotingEngine::retry_passed_proposal(proposal_id)`，由投票引擎统一校验快照管理员权限、最多 3 次手动失败和 retry deadline。
+- **统一入口（2026-05-02 整改）**：execute_xxx wrapper extrinsic 已物理删除。前端直接调用 `VotingEngine::retry_passed_proposal(proposal_id)`，由投票引擎按机构岗位选民快照/个人管理员快照分流校验、最多 3 次手动失败和 retry deadline。
 
 ### 入口对照
 
@@ -24,13 +24,15 @@
 投票走统一入口 `InternalVote::cast`(pallet 20.0),手动重试/取消走
 `VotingEngine::retry_passed_proposal`(9.4)/`cancel_passed_proposal`(9.5)。
 
-## 2026-05-08 · 第5步账户级主体接入
+## 2026-07-19 · 机构岗位主体接入
 
-- 机构转账显式携带 `actor_cid_number + funding_account`；任何机构账户都不得替代 CID 作为机构身份。
+- 机构转账显式携带 `actor_cid_number + proposer_role_code + funding_account`；任何机构账户或管理员身份都不得替代完整岗位主体。
 - 治理机构与注册机构使用同一模型：CID 下挂多个协议账户或自定义账户，账户正反索引用于证明 `funding_account` 属于该 CID。
 - 个人多签直接使用个人多签 `AccountId` 作为资金账户，账户状态由 `personal-manage::PersonalMultisigQuery` 校验；管理员真源由 `personal-admins` 提供。
 - 注册机构具体账户直接使用机构账户 `AccountId` 作为资金账户，账户状态由 `entity-primitives::InstitutionMultisigQuery` 校验。
-- 管理员、阈值和人数通过唯一查询出口读取：个人多签走 `personal_account`，机构走 CID；内部投票仍是一人一票一笔链上交易。
+- 机构调用必须同时携带 `actor_cid_number + proposer_role_code`；业务模块校验完整 `RoleSubject + multisig/<action> + Propose`，并按同一业务的 `Vote` 权限岗位构造 `VotePlan`。机构 admins 只限制谁能任职，不产生转账权限。
+- 个人多签调用必须同时携带 `actor_cid_number=None + proposer_role_code=None`，继续按 `personal_account` 的管理员集合授权。两类主体没有兼容回落。
+- 阈值仍属于机构或个人多签，不属于岗位；内部投票仍是一人一票一笔链上交易。
 
 ## 0. 功能需求
 
@@ -38,13 +40,13 @@
 
 `multisig-transfer` 负责多签资金账户通过内部投票引擎发起转账：
 
-- 多签资金账户管理员发起转账提案，指定收款地址、金额和备注。
-- 多签资金账户管理员通过内部投票引擎逐票投票。
+- 机构由拥有目标转账业务 `Propose` 权限的岗位有效任职人发起，个人多签由其管理员发起；提案指定收款地址、金额和备注。
+- 机构按 `VotePlan` 指定岗位的有效任职快照逐票投票，个人多签按个人管理员快照逐票投票。
 - 投票通过后执行转账：从提案绑定的资金账户向收款地址划转资金。
 - 执行手续费通过 `fee_policy::calculate_onchain_fee()` 计算，并由统一 `OnchainFeeCharger` 收取：机构路径只扣 actor CID 费用账户，个人多签路径扣个人账户。
-- 管理员钱包只承担自己发起的个人操作费和实际投票费，绝不承担机构操作费或机构资金执行费。
+- 签名钱包只承担自己发起的个人操作费和实际投票费，绝不承担机构操作费或机构资金执行费。
 - 覆盖两种身份模型：
-  - 机构：`actor_cid_number + funding_account + origin(admin)`；资金账户可以是该 CID 下允许支出的主账户、费用账户、安全基金账户或自定义账户，具体业务仍受 `institution-asset` 限制。
+  - 机构：`actor_cid_number + proposer_role_code + funding_account + origin`；资金账户可以是该 CID 下允许支出的主账户、费用账户、安全基金账户或自定义账户，具体业务仍受岗位权限和 `institution-asset` 限制。
   - 个人多签：`personal_account + origin(admin)`，不携带机构 CID。
 
 ### 0.2 功能边界
@@ -59,10 +61,7 @@
 - 执行回调不是单凭 `proposal_id + PASSED` 放行：必须处于投票引擎 callback scope，并同时匹配 `ProposalOwner`、内部投票 kind/stage、业务 action、机构码、资金账户和 CID 集合。执行前还会重新读取当前 entity 生命周期与业务权限，防止提案创建后账户失活或上下文被替换。
 - 本模块不负责个人多签账户创建、关闭、清理或管理员集合变更；这些职责分别归属 `personal-manage` 和 `personal-admins`。
 
-补充说明：
-- 只要某类机构的 CID 和账户正反索引已接入 `RuntimeInstitutionQuery`，
-- 且对应 CID 的管理员已接入 runtime 的 `RuntimeInternalAdminProvider`；固定阈值、机构 CID 动态阈值或单例机构的提案快照严格过半均由投票引擎自身提供，
-- 这类机构就可以直接复用本模块和内部投票引擎发起转账提案，不需要新增转账 pallet。
+补充说明：任一机构要复用本模块，除 CID/账户正反索引外，还必须在 entity 中登记对应 `multisig` 业务动作的岗位权限与有效任职；仅接入 admins 不足以发起或投票。投票引擎继续读取机构阈值，不建立岗位阈值。
 
 ### 0.3 与多签管理模块的关系
 
@@ -97,8 +96,8 @@
 
 资金账户有两种来源：
 
-- 机构账户：调用必须携带 `Some(actor_cid_number)`；`RuntimeInstitutionQuery` 校验账户存在，并通过 `lookup_cid/lookup_org` 证明其归属与显式 CID、机构码一致。管理员集合和机构阈值均按 CID 查询。
-- 个人多签账户：调用必须携带 `None`；直接使用 `personal-manage` 派生并激活的 `personal_account`，管理员集合和个人阈值按该账户查询。
+- 机构账户：调用必须携带 `Some(actor_cid_number)` 与 `Some(proposer_role_code)`；`RuntimeInstitutionQuery` 校验账户存在，并通过 `lookup_cid/lookup_org` 证明其归属与显式 CID、机构码一致。岗位权限/任职和机构阈值均按 CID 查询。
+- 个人多签账户：两个 Option 必须同时为 `None`；直接使用 `personal-manage` 派生并激活的 `personal_account`，管理员集合和个人阈值按该账户查询。
 
 ### 1.3 institution-asset 边界
 
@@ -114,6 +113,7 @@
 pub fn propose_transfer(
     origin: OriginFor<T>,
     actor_cid_number: Option<CidNumber>, // 机构为 Some(CID)，个人多签严格为 None
+    proposer_role_code: Option<RoleCode>, // 机构为 Some(岗位码)，个人多签严格为 None
     funding_account: AccountId,          // 实际转出资金账户
     beneficiary: T::AccountId,          // 收款地址
     amount: BalanceOf<T>,               // 转账金额
@@ -127,7 +127,7 @@ pub fn propose_transfer(
 2. `amount > 0`。
 3. 机构路径要求 `Some(actor_cid_number)`：`funding_account` 必须存在于机构账户正反索引，且 `lookup_cid/lookup_org` 与显式 CID 及其机构码一致。
 4. 个人多签路径要求 `None`：`personal-manage` 必须判定 `funding_account` 处于 Active。
-5. 机构路径按 `is_institution_admin(institution_code, actor_cid_number, proposer)` 授权；个人路径按 `is_personal_admin(funding_account, proposer)` 授权。
+5. 机构路径按完整 `RoleSubject(actor_cid_number, proposer_role_code)` 校验 `multisig/0 + Propose`，并枚举 `multisig/0 + Vote` 岗位构造固定内部 `VotePlan`；个人路径按 `is_personal_admin(funding_account, proposer)` 授权。
 6. `amount >= ED`（转账金额不能低于存在性保证金，防止收款地址创建失败）。
 7. `beneficiary` 不能是转出资金账户自身（不允许自转账）。
 8. `beneficiary` 不能是受保护地址（如 `stake_account`、安全基金账户、费用账户等保留地址）。
@@ -137,18 +137,18 @@ pub fn propose_transfer(
 **执行逻辑：**
 
 1. 编码 `MODULE_TAG + TransferAction { actor_cid_number, funding_account, beneficiary, amount, remark, proposer }`。
-2. 机构调用 `create_institution_proposal_with_data`，个人多签调用 `create_personal_proposal_with_data`；二者都原子写入 owner/data/meta，机构提案同时绑定 CID 和执行账户。
+2. 机构调用 `create_institution_proposal_with_data` 并携带业务模块构造的 `VotePlan`，个人多签调用 `create_personal_proposal_with_data`；二者都原子写入 owner/data/meta，机构提案同时绑定 CID、岗位快照和执行账户。
 3. 发出 `TransferProposed` 事件。
 
 ### 2.2 投票入口
 
-本模块不提供独立的投票/超时结算 extrinsic。管理员投票统一走:
+本模块不提供独立的投票/超时结算 extrinsic。投票统一走：
 
 ```rust
 InternalVote::cast(origin, proposal_id, approve)  // pallet 20.0
 ```
 
-投票引擎根据提案创建时的管理员快照和阈值快照做权限、防双投和阈值判定。达到通过阈值后，投票引擎回调本模块的 `InternalVoteExecutor` 自动执行转账。
+投票引擎对机构读取提案创建时的 `EffectiveVoterSnapshot`，对个人多签读取 `AdminSnapshot`，并结合阈值快照做权限、防双投和阈值判定。达到通过阈值后，投票引擎回调本模块的 `InternalVoteExecutor` 自动执行转账。
 
 ### 2.3 手动重试 / 取消入口
 
@@ -183,7 +183,7 @@ pub struct TransferAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
     pub beneficiary: AccountId,                  // 收款地址
     pub amount: Balance,                         // 转账金额
     pub remark: BoundedVec<u8, MaxRemarkLen>,    // 备注
-    pub proposer: AccountId,                     // 发起管理员
+    pub proposer: AccountId,                     // 发起账户（机构为岗位任职人，个人为管理员）
 }
 ```
 
@@ -252,7 +252,7 @@ pub enum Event<T: Config> {
 pub enum Error<T> {
     InvalidInstitution,              // 多签资金账户不存在或未激活
     InstitutionCodeMismatch,         // institution_code 与资金账户分类不匹配
-    UnauthorizedAdmin,               // 非该多签资金账户管理员(propose 阶段)
+    UnauthorizedAdmin,               // 机构无岗位任职/权限，或个人多签非管理员
     ZeroAmount,                      // 金额为零
     AmountBelowExistentialDeposit,   // 金额低于 ED
     SelfTransferNotAllowed,          // 不能转给自己
@@ -284,9 +284,9 @@ pub enum Error<T> {
 
 提案提交和投票交易不是同一类费用：
 
-- 机构 `propose_transfer / propose_safety_fund_transfer / propose_sweep_to_main` 是链上机构操作，由 actor CID 的费用账户支付 0.1 元；管理员钱包只签名。
+- 机构 `propose_transfer / propose_safety_fund_transfer / propose_sweep_to_main` 是链上机构操作，由 actor CID 的费用账户支付 0.1 元；岗位任职人的钱包只签名。
 - 个人多签 `propose_transfer` 是普通链上操作，由签名者支付 0.1 元。
-- `InternalVote::cast` 才是实际投票，由投票管理员钱包支付 1 元。
+- `InternalVote::cast` 才是实际投票，由合格选民签名钱包支付 1 元。
 - 投票通过后的机构资金执行中，具体 `funding_account` 或安全基金账户只支付本金，actor CID 的费用账户支付执行手续费；sweep 的本金和执行手续费都由其明确的费用账户支付。
 - 个人多签执行中，个人账户同时支付本金和执行手续费。任何路径都不允许改扣提案管理员钱包。
 
@@ -298,7 +298,7 @@ pub enum Error<T> {
 4. 在同一 storage transaction 中调用 `OnchainFeeCharger::charge()` 并执行本金转账。
 5. 任一扣款或转账失败全部回滚；成功后通过统一分账器按 80/10/10 分账并在执行事件中记录 `fee_payer`（sweep 的 `institution_account` 本身即付款账户）。
 
-因此前端必须区分四项余额责任：机构提案操作费、机构执行费检查 actor CID 费用账户，机构执行本金检查具体资金账户，个人提案/个人执行检查个人账户，实际投票检查投票签名者；不得用管理员钱包为机构费用兜底。
+因此前端必须区分四项余额责任：机构提案操作费、机构执行费检查 actor CID 费用账户，机构执行本金检查具体资金账户，个人提案/个人执行检查个人账户，实际投票检查投票签名者；不得用岗位任职人或 admins 人员钱包为机构费用兜底。
 
 ### 6.3 手续费分账
 
@@ -362,11 +362,11 @@ VOTING → PASSED（待执行） → EXECUTED（已执行，终态）
 ### 8.1 时序
 
 ```
-区块 N  : 管理员A 发起 propose_transfer(...)
+区块 N  : 岗位任职人A（或个人多签管理员A）发起 propose_transfer(...)
            → 创建提案 proposal_id=X
            → emit TransferProposed { from, beneficiary, amount, remark, expires_at, ... }
 
-区块 N+k: 快照管理员逐个提交 InternalVote::cast(X, approve=true)
+区块 N+k: 机构岗位快照选民（或个人管理员快照成员）逐个提交 InternalVote::cast(X, approve=true)
            → STATUS_PASSED 达阈值
            → 同一交易内 callback 自动执行
            → emit TransferExecuted 或 TransferExecutionFailed
@@ -392,7 +392,7 @@ VOTING → PASSED（待执行） → EXECUTED（已执行，终态）
 
 | 存储 | 说明 |
 | --- | --- |
-| `InternalVotesByAccount<(proposal_id, AccountId)>` → `bool` | 每位管理员的投票记录 |
+| `InternalVotesByAccount<(proposal_id, AccountId)>` → `bool` | 每位合格选民的投票记录 |
 | `InternalTallies<proposal_id>` → `{ yes: u32, no: u32 }` | 赞成/反对计数 |
 | `Proposals<proposal_id>` → `Proposal` | 提案状态（voting/passed/rejected） |
 
@@ -401,7 +401,7 @@ VOTING → PASSED（待执行） → EXECUTED（已执行，终态）
 App 可通过 `state_getStorage` 查询上述存储项，展示：
 - 提案当前状态（投票中/已通过/已拒绝）
 - 赞成票数 / 反对票数 / 阈值
-- 每位管理员的投票明细（赞成/反对/未投票）
+- 每位合格选民的投票明细（赞成/反对/未投票）
 
 ## 10. Config Trait
 
@@ -439,7 +439,7 @@ pub trait Config:
 
 | Extrinsic | 预估 Weight | DB 读 | DB 写 |
 | --- | --- | --- | --- |
-| `propose_transfer` | ~55 ms | 5 | 7 |
+| `propose_transfer` | 289 ms | 31 | 23 |
 | `propose_safety_fund_transfer` | 待 benchmark | - | - |
 | `propose_sweep_to_main` | 待 benchmark | - | - |
 
@@ -482,10 +482,10 @@ impl multisig::Config for Runtime {
 
 `MultisigTransfer` 的 propose 系列 extrinsic 负责创建提案，但“发起提案”不是“投票”。当前统一规则为：
 
-- 机构提案：显式携带 `actor_cid_number + funding_account/institution_account`，校验账户属于该 CID 后，从该 CID 的唯一费用账户扣 0.1 元。
+- 机构提案：显式携带 `actor_cid_number + proposer_role_code + funding_account/institution_account`，校验完整岗位权限和账户归属后，从该 CID 的唯一费用账户扣 0.1 元。
 - 个人多签提案：由签名者支付 0.1 元链上操作费。
-- 管理员后续执行 `InternalVote::cast` 时，才由投票签名者支付 1 元投票费。
-- 提案通过后的机构资金执行费只从 actor CID 费用账户支付，本金只从明确的机构账户支付；个人多签由个人账户支付。所有扣款原子执行，不得让机构管理员钱包垫付。
+- 合格选民后续执行 `InternalVote::cast` 时，才由投票签名者支付 1 元投票费。
+- 提案通过后的机构资金执行费只从 actor CID 费用账户支付，本金只从明确的机构账户支付；个人多签由个人账户支付。所有扣款原子执行，不得让机构岗位任职人或 admins 人员钱包垫付。
 
 ### 13.3 Benchmark 注册
 

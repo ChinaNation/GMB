@@ -67,6 +67,8 @@ pub struct LawChapter {
 pub struct ProposeLawInput {
     /// 立法动作。
     pub law_action: LawActionInput,
+    /// 发起账户在当前机构内实际任职的岗位码。
+    pub proposer_role_code: String,
     /// 层级(0 宪法 / 1 国家 / 2 省 / 3 市,对齐链 Tier::as_u8)。
     pub tier: u8,
     /// 层级行政区码(0 = 全国)。
@@ -248,6 +250,7 @@ mod tests {
     fn proposal_request_deserializes_camel_case() {
         let json = r#"{
             "lawAction":"enact","tier":1,"scopeCode":0,"voteType":2,
+            "proposerRoleCode":"REPRESENTATIVE",
             "title":"道路交通安全法","titleEn":"Road Traffic Safety Law",
             "chapters":[{"number":1,"title":"总则","sections":[]}],
             "effectiveAt":1000,"lawId":null

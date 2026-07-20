@@ -238,7 +238,8 @@ impl<T: Config> Pallet<T> {
                 if kind == PROPOSAL_KIND_INTERNAL {
                     Self::schedule_execution_retry(proposal_id)
                 } else {
-                    // 当前统一 retry/cancel 管理员权限只支持内部提案；
+                    // 当前统一 retry/cancel 资格只支持内部提案；机构按岗位有效选民
+                    // 快照、个人多签按管理员快照；
                     // joint callback 若误返回 RetryableFailed，立即失败终态，避免 PASSED 卡死。
                     Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)
                 }

@@ -9,7 +9,7 @@ ADR-039 已冻结机构岗位权限目标模型。任务卡第 2 步已落地共
 ## 边界
 
 - 定义 `EntityKind`，区分公权机构、私权机构、个人多签。
-- 当前定义 `InstitutionMultisigQuery`，供交易、清算、扫码验签等模块统一查询公权/私权机构账户状态和管理员数据；ADR-039 迁移后，机构投票快照必须改由 VotePlan 的 `RoleSubject` 有效任职解析，不能继续返回 CID 全体 admins 作为投票主体。
+- 当前定义 `InstitutionMultisigQuery`，供交易、清算、扫码验签等模块统一查询公权/私权机构账户状态和 admins 人员数据；机构内部/联合投票已改由 `VotePlan` 的 `RoleSubject` 有效任职解析，不得把该查询返回的 CID 全体 admins 用作投票主体。
 - 定义 `InstitutionCidQuery`，供 `public-manage` 和 `private-manage` 互查 CID 是否已登记，防止同一 CID 在多个生命周期模块重复写入。
 - 定义 `CidInstitutionVerifier`，统一 CID 机构登记、注销凭证验签接口。
 - 定义 `InstitutionGovernanceAction` 与 `InstitutionGovernanceProposal`，统一表达本机构内部治理中的 `admins` 完整替换、`InstitutionRoleMutation::{Create,Rename,Delete}`、任职变更和法定代表人三字段整体设置或清空；创建岗位不接收 `role_code`，必须原子携带不可变权限和初始任职。

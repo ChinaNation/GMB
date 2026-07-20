@@ -9,6 +9,7 @@ use crate::governance;
 pub fn build_propose_transfer_sign_request(
     pubkey_hex: &str,
     actor_cid_number: &str,
+    proposer_role_code: &str,
     institution_account_hex: &str,
     beneficiary_address: &str,
     amount_yuan: f64,
@@ -46,6 +47,7 @@ pub fn build_propose_transfer_sign_request(
 
     let call_data = build_transfer_call_data(
         actor_cid_number,
+        proposer_role_code,
         &institution_account,
         &beneficiary_bytes,
         amount_fen,
@@ -59,6 +61,7 @@ pub fn build_propose_transfer_sign_request(
 pub fn build_propose_safety_fund_sign_request(
     pubkey_hex: &str,
     actor_cid_number: &str,
+    proposer_role_code: &str,
     institution_account_hex: &str,
     beneficiary_address: &str,
     amount_yuan: f64,
@@ -68,6 +71,7 @@ pub fn build_propose_safety_fund_sign_request(
     let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
     let call_data = build_safety_fund_call_data(
         actor_cid_number,
+        proposer_role_code,
         institution_account_hex,
         beneficiary_address,
         amount_yuan,
@@ -81,12 +85,18 @@ pub fn build_propose_safety_fund_sign_request(
 pub fn build_propose_sweep_sign_request(
     pubkey_hex: &str,
     actor_cid_number: &str,
+    proposer_role_code: &str,
     institution_account_hex: &str,
     amount_yuan: f64,
 ) -> Result<governance::signing::VoteSignRequestResult, String> {
     let pubkey_clean = normalize_pubkey(pubkey_hex)?;
     let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
-    let call_data = build_sweep_call_data(actor_cid_number, institution_account_hex, amount_yuan)?;
+    let call_data = build_sweep_call_data(
+        actor_cid_number,
+        proposer_role_code,
+        institution_account_hex,
+        amount_yuan,
+    )?;
 
     governance::signing::build_sign_request_from_call_data(&pubkey_clean, &pubkey_bytes, &call_data)
 }
@@ -94,6 +104,7 @@ pub fn build_propose_sweep_sign_request(
 /// 安全基金转账 call_data，供签名构造和签名响应提交复用。
 pub(crate) fn build_safety_fund_call_data(
     actor_cid_number: &str,
+    proposer_role_code: &str,
     institution_account_hex: &str,
     beneficiary_address: &str,
     amount_yuan: f64,
@@ -114,14 +125,22 @@ pub(crate) fn build_safety_fund_call_data(
     let institution_account =
         super::account_id::institution_account_from_hex(institution_account_hex)?;
     let actor_cid = encode_actor_cid(actor_cid_number)?;
+    let proposer_role = encode_proposer_role_code(proposer_role_code)?;
     let remark_compact = governance::signing::encode_compact_u32_pub(remark_bytes.len() as u32);
 
     let mut call_data = Vec::with_capacity(
-        2 + actor_cid.len() + 32 + 32 + 16 + remark_compact.len() + remark_bytes.len(),
+        2 + actor_cid.len()
+            + proposer_role.len()
+            + 32
+            + 32
+            + 16
+            + remark_compact.len()
+            + remark_bytes.len(),
     );
     call_data.push(17u8);
     call_data.push(1u8);
     call_data.extend_from_slice(&actor_cid);
+    call_data.extend_from_slice(&proposer_role);
     call_data.extend_from_slice(&institution_account);
     call_data.extend_from_slice(&beneficiary_bytes);
     call_data.extend_from_slice(&amount_fen.to_le_bytes());
@@ -133,6 +152,7 @@ pub(crate) fn build_safety_fund_call_data(
 /// 普通机构多签转账 call_data，供签名构造和签名响应提交复用。
 pub(crate) fn build_transfer_call_data(
     actor_cid_number: &str,
+    proposer_role_code: &str,
     institution_account: &[u8; 32],
     beneficiary_bytes: &[u8; 32],
     amount_fen: u128,
@@ -145,15 +165,27 @@ pub(crate) fn build_transfer_call_data(
         ));
     }
     let actor_cid = encode_actor_cid(actor_cid_number)?;
+    let proposer_role = encode_proposer_role_code(proposer_role_code)?;
     let remark_compact = governance::signing::encode_compact_u32_pub(remark_bytes.len() as u32);
     let mut call_data = Vec::with_capacity(
-        2 + 1 + actor_cid.len() + 32 + 32 + 16 + remark_compact.len() + remark_bytes.len(),
+        2 + 1
+            + actor_cid.len()
+            + 1
+            + proposer_role.len()
+            + 32
+            + 32
+            + 16
+            + remark_compact.len()
+            + remark_bytes.len(),
     );
     call_data.push(17u8);
     call_data.push(0u8);
     // Option<CidNumber>::Some 判别值 + CID，再跟明确的资金账户。
     call_data.push(1u8);
     call_data.extend_from_slice(&actor_cid);
+    // 机构转账必须同时携带 Option<RoleCode>::Some。
+    call_data.push(1u8);
+    call_data.extend_from_slice(&proposer_role);
     call_data.extend_from_slice(institution_account);
     call_data.extend_from_slice(beneficiary_bytes);
     call_data.extend_from_slice(&amount_fen.to_le_bytes());
@@ -165,6 +197,7 @@ pub(crate) fn build_transfer_call_data(
 /// 手续费划转 call_data，供签名构造和签名响应提交复用。
 pub(crate) fn build_sweep_call_data(
     actor_cid_number: &str,
+    proposer_role_code: &str,
     institution_account_hex: &str,
     amount_yuan: f64,
 ) -> Result<Vec<u8>, String> {
@@ -175,11 +208,13 @@ pub(crate) fn build_sweep_call_data(
     let institution_account =
         super::account_id::institution_account_from_hex(institution_account_hex)?;
     let actor_cid = encode_actor_cid(actor_cid_number)?;
+    let proposer_role = encode_proposer_role_code(proposer_role_code)?;
 
-    let mut call_data = Vec::with_capacity(2 + actor_cid.len() + 32 + 16);
+    let mut call_data = Vec::with_capacity(2 + actor_cid.len() + proposer_role.len() + 32 + 16);
     call_data.push(17u8);
     call_data.push(2u8);
     call_data.extend_from_slice(&actor_cid);
+    call_data.extend_from_slice(&proposer_role);
     call_data.extend_from_slice(&institution_account);
     call_data.extend_from_slice(&amount_fen.to_le_bytes());
     Ok(call_data)
@@ -194,6 +229,18 @@ fn encode_actor_cid(actor_cid_number: &str) -> Result<Vec<u8>, String> {
     }
     let mut encoded = governance::signing::encode_compact_u32_pub(actor_cid_number.len() as u32);
     encoded.extend_from_slice(actor_cid_number.as_bytes());
+    Ok(encoded)
+}
+
+/// 按链上 `RoleCode` 上限编码岗位码；管理员账户本身不代表业务权限。
+fn encode_proposer_role_code(proposer_role_code: &str) -> Result<Vec<u8>, String> {
+    let proposer_role_code = proposer_role_code.trim();
+    if proposer_role_code.is_empty() || proposer_role_code.as_bytes().len() > 64 {
+        return Err("proposer_role_code 长度必须为 1 到 64 字节".to_string());
+    }
+    let mut encoded =
+        governance::signing::encode_compact_u32_pub(proposer_role_code.as_bytes().len() as u32);
+    encoded.extend_from_slice(proposer_role_code.as_bytes());
     Ok(encoded)
 }
 

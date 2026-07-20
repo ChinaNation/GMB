@@ -119,7 +119,7 @@ pub mod pallet {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        /// 允许国家储委会或省储委会管理员发起 runtime 升级提案。
+        /// 只完成签名来源校验；协议升级业务权限随后按机构 CID + 委员岗位校验。
         type ProposeOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
 
         /// 开发期直接升级权限：只允许国家储委会管理员绕过投票执行 set_code。
@@ -197,7 +197,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// 国家储委会或省储委会管理员发起 runtime 升级提案，升级流程走联合投票。
+        /// NRC/PRC 委员岗位任职人发起 runtime 升级提案，升级流程走联合投票。
         /// 本模块只提交协议升级业务内容；人口快照、联合签名、
         /// 投票资格和计票流程全部由 votingengine 负责。
         #[pallet::call_index(0)]

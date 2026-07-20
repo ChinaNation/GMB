@@ -7,7 +7,7 @@
 /// 直接红色拒签。
 ///
 /// 投票引擎统一入口:
-/// - 业务 pallet 不承载投票,管理员投票走 `InternalVote::cast`(20.0)
+/// - 业务 pallet 不承载投票，机构岗位选民/个人多签管理员走 `InternalVote::cast`(20.0)
 /// - 联合投票内部投票阶段走 `JointVote::cast_admin`(21.0),
 ///   联合公投阶段走 `JointVote::cast_referendum`(21.1)
 /// - 引擎核心 `VotingEngine` (9) 仅承载 `finalize_proposal`(9.3) /

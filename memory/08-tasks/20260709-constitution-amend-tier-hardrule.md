@@ -79,7 +79,7 @@ node 侧改为从 block#0 **另派生核心章基准**(`ImmutableReference.core_
 「只记录 vote_type==Special」可被撒谎的 runtime 伪造 → 再落一层**永久公投凭据**:
 
 - `primitives::constitution::referendum_passed`(口径单源,votingengine `legislation_referendum_final_passed` 改转发)。
-- `votingengine` 核心加 `citizen_eligible_total_of` getter;`LegislationVoteEngine` trait 加 `referendum_result(proposal_id)` 只读查询(+`()` impl 返 None);legislation-vote 实现(读 eligible + `LegReferendumTally`)。
+- `votingengine` 核心通过 proposal 人口快照提供合资格人口总数；`LegislationVoteEngine` trait 加 `referendum_result(proposal_id)` 只读查询（`()` 实现返回 None）；legislation-vote 实现读取快照分母与 `LegReferendumTally`。
 - legislation-yuan 新**永久** StorageMap `ConstitutionAmendmentProof: version→(eligible,yes,no)`;`write_law_version` 对核心章改动版本取 `referendum_result` + 过口径后写入;缺/不过 → `ReferendumProofMissing`/`ReferendumNotPassed`。
 - node `check_core_referendum_proof`:核心章有改动的版本逐块读凭据 + 复核口径,缺/不过 → `CoreClauseReferendumMissing/NotPassed` 拒块。storage_key 加 `constitution_amendment_proof`。
 

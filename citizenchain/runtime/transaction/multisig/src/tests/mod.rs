@@ -14,6 +14,7 @@ use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 use votingengine::types::{
     code_bytes, institution_code_from_cid_number, InstitutionCode, FRG, NJD, PRC,
 };
+use votingengine::InstitutionRoleProvider as _;
 use votingengine::{STATUS_EXECUTED, STATUS_REJECTED, STATUS_VOTING};
 
 // 测试用机构码:个人多签 / 私权法人,均属"注册多签动态账户"。
@@ -148,6 +149,123 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             PMUL,
             personal_account,
         )
+    }
+}
+
+pub struct TestInstitutionRoleProvider;
+
+fn test_role_code(institution_code: InstitutionCode) -> &'static [u8] {
+    if institution_code == PRB {
+        primitives::governance_skeleton::ROLE_CODE_DIRECTOR
+    } else {
+        primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+    }
+}
+
+fn propose_transfer(
+    origin: RuntimeOrigin,
+    actor_cid_number: Option<CidNumber>,
+    funding_account: AccountId32,
+    beneficiary: AccountId32,
+    amount: Balance,
+    remark: BoundedVec<u8, ConstU32<256>>,
+) -> sp_runtime::DispatchResult {
+    let proposer_role_code = actor_cid_number.as_ref().map(|cid_number| {
+        let cid_text = core::str::from_utf8(cid_number.as_slice()).expect("valid test CID");
+        let code = votingengine::types::institution_code_from_cid_number(cid_text)
+            .expect("known test institution");
+        test_role_code(code)
+            .to_vec()
+            .try_into()
+            .expect("test role fits")
+    });
+    MultisigTransfer::propose_transfer(
+        origin,
+        actor_cid_number,
+        proposer_role_code,
+        funding_account,
+        beneficiary,
+        amount,
+        remark,
+    )
+}
+
+impl votingengine::InstitutionRoleProvider<AccountId32> for TestInstitutionRoleProvider {
+    fn is_active_assignment(cid_number: &[u8], who: &AccountId32, role_code: &[u8]) -> bool {
+        Self::active_accounts_for_role(cid_number, role_code).contains(who)
+    }
+
+    fn active_accounts_for_role(cid_number: &[u8], role_code: &[u8]) -> Vec<AccountId32> {
+        let Some(code) = core::str::from_utf8(cid_number)
+            .ok()
+            .and_then(votingengine::types::institution_code_from_cid_number)
+        else {
+            return Vec::new();
+        };
+        if test_role_code(code) != role_code {
+            return Vec::new();
+        }
+        get_institution_admins(code, cid_number).unwrap_or_default()
+    }
+}
+
+impl entity_primitives::InstitutionRoleAuthorizationQuery<AccountId32>
+    for TestInstitutionRoleProvider
+{
+    fn role_has_permission(
+        role_subject: &entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>,
+        business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
+        _operation: entity_primitives::RolePermissionOperation,
+    ) -> bool {
+        let Some(code) = core::str::from_utf8(role_subject.cid_number.as_slice())
+            .ok()
+            .and_then(votingengine::types::institution_code_from_cid_number)
+        else {
+            return false;
+        };
+        role_subject.role_code.as_slice() == test_role_code(code)
+            && business_action_id.module_tag.as_slice() == crate::MODULE_TAG
+            && matches!(
+                business_action_id.action_code,
+                entity_primitives::business_action::ACTION_MULTISIG_TRANSFER
+                    | entity_primitives::business_action::ACTION_SAFETY_FUND_TRANSFER
+                    | entity_primitives::business_action::ACTION_FEE_SWEEP_TO_MAIN
+            )
+    }
+
+    fn is_authorized(
+        admin: &AccountId32,
+        role_subject: &entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>,
+        business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
+        operation: entity_primitives::RolePermissionOperation,
+    ) -> bool {
+        Self::role_has_permission(role_subject, business_action_id, operation)
+            && Self::is_active_assignment(
+                role_subject.cid_number.as_slice(),
+                admin,
+                role_subject.role_code.as_slice(),
+            )
+    }
+
+    fn role_subjects_with_permission(
+        cid_number: &[u8],
+        business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
+        operation: entity_primitives::RolePermissionOperation,
+    ) -> Vec<entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>> {
+        let Some(code) = core::str::from_utf8(cid_number)
+            .ok()
+            .and_then(votingengine::types::institution_code_from_cid_number)
+        else {
+            return Vec::new();
+        };
+        let role_subject = entity_primitives::RoleSubject {
+            cid_number: cid_number.to_vec(),
+            role_code: test_role_code(code).to_vec(),
+        };
+        Self::role_has_permission(&role_subject, business_action_id, operation)
+            .then_some(role_subject)
+            .into_iter()
+            .collect()
     }
 }
 
@@ -341,6 +459,7 @@ impl votingengine::Config for Test {
 
 impl internal_vote::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionRoleProvider = TestInstitutionRoleProvider;
     type WeightInfo = ();
 }
 
@@ -372,6 +491,7 @@ impl pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
+    type InstitutionRoleAuthorization = TestInstitutionRoleProvider;
     type InstitutionAsset = TestInstitutionAsset;
     type ProtectedSourceChecker = TestProtectedSourceChecker;
     type MaxRemarkLen = ConstU32<256>;
@@ -588,7 +708,7 @@ fn insert_active_institution_account(
     internal_vote::ActiveInstitutionThresholds::<Test>::insert(cid_number, 2);
 }
 
-/// 为固定治理机构登记 CID 与账户归属；管理员快照按 CID 注入。
+/// 为固定治理机构登记 CID、账户归属、岗位权限与任职，供 `VotePlan` 建立快照。
 fn insert_active_fixed_institution_account(
     institution_code: InstitutionCode,
     account: &AccountId32,

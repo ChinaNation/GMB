@@ -107,6 +107,8 @@ citizenchain/onchina/src/
 - 联合投票本地人数查询：`domains/citizens/chain_joint_vote.rs`
 - 地址变更调用：`domains/address/chain_call.rs`
 - 立法法律只读链读：`domains/legislation/law/chain_read.rs` 负责读取 `Law`、`LawVersion`、`LawVersionLabels` 和宪法不可修改条款 manifest；`LawView.version_title/version_title_en` 只能来自链上 `LawVersionLabels[(law_id, version)]`。
+- 立法提案写入：`domains/legislation/law/chain_propose.rs` 的新法、修法、废法载荷必须在 `actor_cid_number` 后紧接必填 `proposer_role_code`。后端只做 1..64 字节和 SCALE 顺序校验，真正发起权限由 runtime 按完整岗位主体校验；不得从管理员登录态推导岗位码或恢复无岗位码旧载荷。
+- `domains/legislation/chain_read_proposal.rs` 必须按当前核心 `Proposal` 布局解码；人口分母已独立存于投票引擎 `ProposalPopulationSnapshots`，不得在 Proposal 镜像恢复 `citizen_eligible_total` 尾字段。
 - 通用 SCALE、genesis hash、RPC URL 和交易提交辅助：`core/chain_*.rs`
 
 业务模块不得新增全局链目录，不得在 handler 内手写 pallet/call 字节或二维码动作码。动作码、payload、签名/验签规则以 `memory/07-ai/unified-protocols.md` 为唯一登记入口。
@@ -152,7 +154,7 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 机构治理链写入口：
 
-- `POST /api/v1/admin/institution/governance/prepare`：本机构管理员发起 `propose_institution_governance`，后端只接受当前节点绑定机构 CID，构造完整 runtime 签名载荷并写入 `chain_sign_sessions`。管理员集合、岗位、任职和法定代表人任命/更换/解除都只进入链上 call data，不写本地正式投影；解除时提交 `clear_legal_representative=true`，不得同时提交 `legal_representative_cid_number`。
+- `POST /api/v1/admin/institution/governance/prepare`：请求必须独立携带必填 `proposer_role_code`；后端只接受当前节点绑定机构 CID，按 `cid_number + action + register_nonce + signature + actor_cid_number + proposer_role_code + credential_signer_pubkey + scope` 的 runtime 顺序构造签名载荷并写入 `chain_sign_sessions`。管理员登录态不产生业务权限，最终由 runtime 校验完整岗位主体。管理员集合、岗位、任职和法定代表人任命/更换/解除都只进入链上 call data，不写本地正式投影；解除时提交 `clear_legal_representative=true`，不得同时提交 `legal_representative_cid_number`。
 - `POST /api/v1/admin/institution/admins/register/prepare`：注册局管理员发起 `register_institution_admins`，目标机构 CID 从请求读取，actor CID 只来自当前节点绑定注册局 CID。
 - 提交阶段复用统一链签会话 submit。机构治理 purpose 进块后只记录审计；OnChina 读侧继续读取链上 `admins / InstitutionRoles / InstitutionRoleAssignments`，禁止在提交成功后本地直接改管理员或岗位真源。
 - 创建动态岗位时前端不得提交岗位码；runtime 使用 `GMB_ROLE_V1`、CID、单调 nonce 和真实 proposal_id 生成 `R_<32 位大写十六进制>`，删除后永久不复用。
@@ -169,7 +171,7 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 - 私权机构进入 `private` 工作台，只下发本机构信息、链上 active admin 与准确 CID 授权模块；普通公权、立法和非法人机构分别使用 `public`、`legislation`、`unincorporated` 工作台种类，可共用通用显示壳但不得恢复 `generic` 权限语义。
 - 登录、扫码登录轮询、鉴权检查和工作台返回统一携带 active binding 的准确 `institution_cid_number`；后端未能解析准确 CID 时 fail-closed，前端不得根据 `institution_code` 猜测。
 - 平台会员模块只在准确 CID 等于同一 finalized 区块的 `SquarePost::PlatformCidNumber` 时下发。`domains/membership/` 只读取 finalized 价格、构造 `propose_set_platform_price` 和校验链上 `admins`，不保存价格、不实现投票。
-- 所有链交易签名响应统一提交到 `POST /api/v1/admin/chain/submit`；业务域只 prepare，不得新建第二套 submit handler。平台调价 prepare 和 submit 两阶段都必须复核绑定、准确平台 CID 与链上 active 管理员集合。
+- 所有链交易签名响应统一提交到 `POST /api/v1/admin/chain/submit`；业务域只 prepare，不得新建第二套 submit handler。平台调价 prepare 必须携带 `proposer_role_code`，按 `actor_cid_number + proposer_role_code + membership_level + new_price_fen` 编码；prepare/submit 复核节点绑定和准确平台 CID，业务授权最终只认链上岗位任职与 `sqr-sub/5` 权限，不把 active admins 当授权真源。
 - `NRC`、`PRC`、`PRB` 走节点桌面端，不获得 OnChina 网页能力。
 - `PMUL` 和其它个人主体不获得 OnChina 网页能力。
 - 前端工作台展示只使用后端下发的 `workspace` 和 `capabilities`；后端 handler、scope 和链上 active admin 校验仍是安全边界。

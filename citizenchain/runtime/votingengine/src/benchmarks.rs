@@ -10,7 +10,8 @@ use sp_runtime::traits::SaturatedConversion;
 
 use crate::{
     pallet::{
-        AdminSnapshot, Config, PendingProposalExecutions, ProposalExecutionRetryStates, Proposals,
+        Config, EffectiveVoterSnapshot, PendingProposalExecutions, ProposalExecutionRetryStates,
+        Proposals,
     },
     Call, ExecutionRetryState, Pallet, PendingExecutionState, Proposal, STATUS_PASSED,
     STATUS_VOTING,
@@ -20,6 +21,10 @@ fn setup<T: Config>(status: u8) -> (u64, T::AccountId) {
     let proposal_id = 0u64;
     let institution: T::AccountId = account("institution", 0, 0);
     let who: T::AccountId = account("admin", 0, 0);
+    let actor_cid_number: crate::types::CidNumber = b"BENCHMARK-CID"
+        .to_vec()
+        .try_into()
+        .expect("benchmark CID fits runtime bound");
     let now = 1u32.saturated_into();
     frame_system::Pallet::<T>::set_block_number(now);
     Proposals::<T>::insert(
@@ -29,21 +34,21 @@ fn setup<T: Config>(status: u8) -> (u64, T::AccountId) {
             stage: crate::STAGE_INTERNAL,
             status,
             internal_code: Some(primitives::cid::code::PMUL),
-            actor_cid_number: None,
+            actor_cid_number: Some(actor_cid_number.clone()),
             execution_account: Some(institution.clone()),
             subject_cid_numbers: Default::default(),
             start: 0u32.saturated_into(),
             end: 0u32.saturated_into(),
-            citizen_eligible_total: 0,
         },
     );
     let admins: frame_support::BoundedVec<T::AccountId, T::MaxAdminsPerInstitution> =
         sp_std::vec![who.clone()]
             .try_into()
             .expect("single benchmark admin fits runtime bound");
-    AdminSnapshot::<T>::insert(
+    // 机构业务的重试与取消权限来自岗位有效任职快照；个人多签才读取 AdminSnapshot。
+    EffectiveVoterSnapshot::<T>::insert(
         proposal_id,
-        crate::ProposalSubject::PersonalAccount(institution),
+        crate::ProposalSubject::InstitutionCid(actor_cid_number),
         admins,
     );
     if status == STATUS_PASSED {

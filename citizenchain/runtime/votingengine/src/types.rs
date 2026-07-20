@@ -38,6 +38,18 @@ pub type CidNumber = BoundedVec<u8, ConstU32<{ primitives::core_const::CID_NUMBE
 pub type RoleCode =
     BoundedVec<u8, ConstU32<{ entity_primitives::INSTITUTION_ROLE_CODE_MAX_BYTES }>>;
 
+/// 投票引擎按提案保存的人口快照。
+///
+/// 人口数据全部来自 citizen-identity；投票引擎只增加创建区块并冻结为提案历史，
+/// 不自行统计或解释人口。
+#[derive(
+    Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
+)]
+pub struct ProposalPopulationSnapshot<BlockNumber> {
+    pub population_data: citizen_identity::PopulationData,
+    pub created_at: BlockNumber,
+}
+
 /// 全链投票计划使用的固定模块标签上限。
 ///
 /// `JointVoteEngine` 是跨 pallet trait，不能携带 runtime 关联类型；因此接口使用与
@@ -117,6 +129,8 @@ where
     /// 发起提案的机构岗位主体或个人多签主体。
     pub proposer_subject: AuthorizationSubject<CidNumber, RoleCode, AccountId>,
     /// 有资格投票的岗位主体集合；个人多签固定为同一账户一项。
+    /// 普选的选民来自提案人口快照，因此 `Election` 普选计划允许为空；互选仍由
+    /// election-vote 强制要求至少一个机构岗位主体。
     pub voter_subjects: BoundedVec<
         AuthorizationSubject<CidNumber, RoleCode, AccountId>,
         ConstU32<MAX_VOTE_PLAN_SUBJECTS>,
@@ -144,7 +158,7 @@ where
         if business_action_id.module_tag != proposal_owner {
             return Err(VotePlanValidationError::ProposalOwnerMismatch);
         }
-        if voter_subjects.is_empty() {
+        if voter_subjects.is_empty() && voting_engine != VotingEngineKind::Election {
             return Err(VotePlanValidationError::VoterSubjectsEmpty);
         }
         for (index, subject) in voter_subjects.iter().enumerate() {
@@ -494,8 +508,6 @@ pub struct Proposal<BlockNumber, AccountId> {
     pub start: BlockNumber,
     /// 本阶段截止区块（超过则超时）
     pub end: BlockNumber,
-    /// 联合公投阶段的可投票总人数（由外部资格系统给出）
-    pub citizen_eligible_total: u64,
 }
 
 impl<BlockNumber, AccountId: Clone> Proposal<BlockNumber, AccountId> {

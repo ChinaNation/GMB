@@ -285,14 +285,14 @@ pub enum PopulationScope {
     TypeInfo,
     MaxEncodedLen,
 )]
-pub struct PopulationSnapshot<BlockNumber> {
+pub struct PopulationData {
     pub scope: PopulationScope,
     pub eligible_total: u64,
-    pub created_at: BlockNumber,
-    /// 快照创建时已经提交的最后一个身份资格版本。
+    /// 读取人口数据时已经提交的最后一个身份资格版本。
     pub eligibility_revision: u64,
-    /// 快照创建时的 UTC+8 日期，护照有效期按该日期冻结判定。
-    pub snapshot_date: u32,
+    /// 读取人口数据时的 UTC+8 日期，投票引擎据此冻结护照判定日期。
+    /// 该人口数据用于资格历史判定的 UTC+8 日期；本字段不是身份模块快照标识。
+    pub eligibility_date: u32,
 }
 
 /// 单个账户的一段不可变投票资格历史。
@@ -370,11 +370,8 @@ pub trait CitizenIdentityProvider<AccountId> {
     fn can_vote(who: &AccountId, scope: &PopulationScope) -> bool;
     fn can_be_candidate(who: &AccountId, scope: &PopulationScope) -> bool;
     fn population_count(scope: &PopulationScope) -> u64;
-    fn create_population_snapshot(
-        scope: &PopulationScope,
-    ) -> Result<(u64, u64), sp_runtime::DispatchError>;
-    fn can_vote_at(who: &AccountId, snapshot_id: u64) -> bool;
-    fn release_population_snapshot(snapshot_id: u64);
+    fn population_data(scope: &PopulationScope) -> PopulationData;
+    fn can_vote_at(who: &AccountId, population_data: &PopulationData) -> bool;
 }
 
 impl<AccountId> CitizenIdentityProvider<AccountId> for () {
@@ -390,19 +387,18 @@ impl<AccountId> CitizenIdentityProvider<AccountId> for () {
         0
     }
 
-    fn create_population_snapshot(
-        _scope: &PopulationScope,
-    ) -> Result<(u64, u64), sp_runtime::DispatchError> {
-        Err(sp_runtime::DispatchError::Other(
-            "citizen identity snapshot provider unavailable",
-        ))
+    fn population_data(scope: &PopulationScope) -> PopulationData {
+        PopulationData {
+            scope: scope.clone(),
+            eligible_total: 0,
+            eligibility_revision: 0,
+            eligibility_date: 0,
+        }
     }
 
-    fn can_vote_at(_who: &AccountId, _snapshot_id: u64) -> bool {
+    fn can_vote_at(_who: &AccountId, _population_data: &PopulationData) -> bool {
         false
     }
-
-    fn release_population_snapshot(_snapshot_id: u64) {}
 }
 
 #[frame_support::pallet]
@@ -487,13 +483,6 @@ pub mod pallet {
         ValueQuery,
     >;
 
-    #[pallet::storage]
-    pub type NextSnapshotId<T> = StorageValue<_, u64, ValueQuery>;
-
-    #[pallet::storage]
-    pub type PopulationSnapshots<T: Config> =
-        StorageMap<_, Blake2_128Concat, u64, PopulationSnapshot<BlockNumberFor<T>>, OptionQuery>;
-
     /// 全局身份资格修订号。每次投票身份写入严格递增，用于冻结同区块交易顺序。
     #[pallet::storage]
     pub type NextEligibilityRevision<T> = StorageValue<_, u64, ValueQuery>;
@@ -538,15 +527,6 @@ pub mod pallet {
             wallet_account: T::AccountId,
             cid_number: CidNumberBound,
         },
-        PopulationSnapshotCreated {
-            snapshot_id: u64,
-            scope: PopulationScope,
-            eligible_total: u64,
-        },
-        /// 投票引擎完成历史保留后释放人口快照。
-        PopulationSnapshotReleased {
-            snapshot_id: u64,
-        },
         CidOccupied {
             cid_number: CidNumberBound,
             registrar_cid_number: CidNumberBound,
@@ -577,8 +557,6 @@ pub mod pallet {
         CidAlreadyOccupied,
         CidNotOccupied,
         CidAlreadyRevoked,
-        /// 人口快照 ID 达到 u64 上限。
-        PopulationSnapshotIdOverflow,
         /// 身份资格修订号达到 u64 上限。
         EligibilityRevisionOverflow,
         /// 单账户身份历史版本数达到 u64 上限。
@@ -1334,33 +1312,17 @@ pub mod pallet {
             }
         }
 
-        /// 创建供治理投票使用的不可变人口快照。
+        /// 返回投票引擎生成提案快照所需的同源人口数据。
         ///
-        /// snapshot 同时冻结分母、身份资格 revision 和护照判定日期；消费模块只能
-        /// 保存 snapshot_id，不能重新拼接一份链下选民名单。
-        pub fn create_governance_population_snapshot(
-            scope: &PopulationScope,
-        ) -> Result<(u64, u64), sp_runtime::DispatchError> {
-            let snapshot_id = NextSnapshotId::<T>::get();
-            let next_snapshot_id = snapshot_id
-                .checked_add(1)
-                .ok_or(Error::<T>::PopulationSnapshotIdOverflow)?;
-            let eligible_total = Self::population_count_for_scope(scope);
-            let snapshot = PopulationSnapshot {
+        /// 本函数只读取 citizen-identity 自有的四级人口计数、资格 revision 和日期，
+        /// 不创建、保存或释放任何投票快照。
+        pub fn governance_population_data(scope: &PopulationScope) -> PopulationData {
+            PopulationData {
                 scope: scope.clone(),
-                eligible_total,
-                created_at: frame_system::Pallet::<T>::block_number(),
+                eligible_total: Self::population_count_for_scope(scope),
                 eligibility_revision: NextEligibilityRevision::<T>::get(),
-                snapshot_date: Self::current_date_int(),
-            };
-            PopulationSnapshots::<T>::insert(snapshot_id, snapshot);
-            NextSnapshotId::<T>::put(next_snapshot_id);
-            Self::deposit_event(Event::<T>::PopulationSnapshotCreated {
-                snapshot_id,
-                scope: scope.clone(),
-                eligible_total,
-            });
-            Ok((snapshot_id, eligible_total))
+                eligibility_date: Self::current_date_int(),
+            }
         }
 
         /// 按快照 revision 二分定位账户当时的身份版本。
@@ -1397,25 +1359,19 @@ pub mod pallet {
             Some(version.identity)
         }
 
-        /// 使用 citizen-identity 自有历史验证账户在 snapshot 创建时是否具备资格。
-        pub fn can_vote_at_snapshot(who: &T::AccountId, snapshot_id: u64) -> bool {
-            let Some(snapshot) = PopulationSnapshots::<T>::get(snapshot_id) else {
-                return false;
-            };
-            let Some(identity) = Self::identity_at_revision(who, snapshot.eligibility_revision)
+        /// 使用 citizen-identity 自有历史验证账户在投票引擎快照时点是否具备资格。
+        pub fn can_vote_at_population_data(
+            who: &T::AccountId,
+            population_data: &PopulationData,
+        ) -> bool {
+            let Some(identity) =
+                Self::identity_at_revision(who, population_data.eligibility_revision)
             else {
                 return false;
             };
             Self::identity_counts_as_voter(&identity)
-                && Self::passport_window_valid_on(&identity, snapshot.snapshot_date)
-                && Self::scope_matches(&identity, &snapshot.scope)
-        }
-
-        /// 提案历史清理完成后释放快照元数据；身份版本仍作为链上身份审计历史保留。
-        pub fn release_governance_population_snapshot(snapshot_id: u64) {
-            if PopulationSnapshots::<T>::take(snapshot_id).is_some() {
-                Self::deposit_event(Event::<T>::PopulationSnapshotReleased { snapshot_id });
-            }
+                && Self::passport_window_valid_on(&identity, population_data.eligibility_date)
+                && Self::scope_matches(&identity, &population_data.scope)
         }
     }
 
@@ -1443,18 +1399,12 @@ pub mod pallet {
             Self::population_count_for_scope(scope)
         }
 
-        fn create_population_snapshot(
-            scope: &PopulationScope,
-        ) -> Result<(u64, u64), sp_runtime::DispatchError> {
-            Self::create_governance_population_snapshot(scope)
+        fn population_data(scope: &PopulationScope) -> PopulationData {
+            Self::governance_population_data(scope)
         }
 
-        fn can_vote_at(who: &T::AccountId, snapshot_id: u64) -> bool {
-            Self::can_vote_at_snapshot(who, snapshot_id)
-        }
-
-        fn release_population_snapshot(snapshot_id: u64) {
-            Self::release_governance_population_snapshot(snapshot_id)
+        fn can_vote_at(who: &T::AccountId, population_data: &PopulationData) -> bool {
+            Self::can_vote_at_population_data(who, population_data)
         }
     }
 }

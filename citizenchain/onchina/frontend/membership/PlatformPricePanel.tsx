@@ -30,6 +30,7 @@ export function PlatformPricePanel({ auth }: { auth: AdminAuth }) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [membershipLevel, setMembershipLevel] = useState<PlatformMembershipLevel>('freedom');
+  const [proposerRoleCode, setProposerRoleCode] = useState('GENESIS_PRODUCT_MANAGER');
   const [newPriceFen, setNewPriceFen] = useState('');
   const { signChain, chainSignModal } = useChainSign('平台会员调价提案签名');
 
@@ -50,6 +51,11 @@ export function PlatformPricePanel({ auth }: { auth: AdminAuth }) {
   }, [reload]);
 
   const submit = async () => {
+    const roleCode = proposerRoleCode.trim();
+    if (!roleCode) {
+      notice.error('必须填写提案发起岗位码');
+      return;
+    }
     const value = newPriceFen.trim();
     if (!/^[1-9]\d*$/.test(value)) {
       notice.error('新价格必须是正整数分');
@@ -57,7 +63,7 @@ export function PlatformPricePanel({ auth }: { auth: AdminAuth }) {
     }
     setSubmitting(true);
     try {
-      const result = await proposePlatformPrice(auth, membershipLevel, value);
+      const result = await proposePlatformPrice(auth, roleCode, membershipLevel, value);
       const signed = await signChain(result.request_id, result.sign_request);
       const submitted = await submitChainSign(
         auth,
@@ -110,6 +116,13 @@ export function PlatformPricePanel({ auth }: { auth: AdminAuth }) {
               value,
               label: levelLabels[value],
             }))}
+          />
+          <Input
+            value={proposerRoleCode}
+            onChange={(event) => setProposerRoleCode(event.target.value)}
+            placeholder="提案发起岗位码"
+            maxLength={64}
+            style={{ width: 320 }}
           />
           <Space wrap>
             <Input

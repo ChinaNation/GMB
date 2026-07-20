@@ -149,6 +149,12 @@ fn institution_transfer_route_uses_exact_fee_account() {
                     .try_into()
                     .expect("NRC CID fits"),
             ),
+            proposer_role_code: Some(
+                primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                    .to_vec()
+                    .try_into()
+                    .expect("committee role fits"),
+            ),
             funding_account: institution,
             beneficiary,
             amount: 10000,
@@ -188,6 +194,12 @@ fn institution_operation_debits_only_exact_fee_account_without_signer_fallback()
         let funding_account = AccountId::new(CHINA_CB[0].main_account);
         let call = RuntimeCall::MultisigTransfer(multisig::pallet::Call::propose_transfer {
             actor_cid_number: Some(actor_cid_number.clone()),
+            proposer_role_code: Some(
+                primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                    .to_vec()
+                    .try_into()
+                    .expect("committee role fits"),
+            ),
             funding_account,
             beneficiary: AccountId::new([98u8; 32]),
             amount: 50_000,
@@ -359,7 +371,6 @@ fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
                 subject_cid_numbers: Default::default(),
                 start: 0u32,
                 end: 100u32,
-                citizen_eligible_total: 10,
             },
         );
 
@@ -411,6 +422,10 @@ fn resolution_destro_internal_vote_flow_executes_destroy_and_reduces_issuance() 
                 .to_vec()
                 .try_into()
                 .expect("NRC CID fits"),
+            primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                .to_vec()
+                .try_into()
+                .expect("committee role fits"),
             nrc_institution_account,
             destroy_amount,
         ));
@@ -545,6 +560,10 @@ fn runtime_fee_router_covers_free_onchain_vote_institution_and_reject_paths() {
                     .to_vec()
                     .try_into()
                     .expect("NRC CID fits"),
+                proposer_role_code: primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                    .to_vec()
+                    .try_into()
+                    .expect("committee role fits"),
                 institution_account: nrc_institution_account,
                 amount: 456,
             });
@@ -690,6 +709,10 @@ fn runtime_fee_router_treats_proposals_as_operations_not_votes() {
                     .to_vec()
                     .try_into()
                     .expect("NRC CID fits"),
+                proposer_role_code: primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                    .to_vec()
+                    .try_into()
+                    .expect("committee role fits"),
                 institution_account: AccountId::new(CHINA_CB[0].main_account),
                 beneficiary,
                 register_nonce: Default::default(),
@@ -722,6 +745,12 @@ fn runtime_fee_router_treats_proposals_as_operations_not_votes() {
                         .to_vec()
                         .try_into()
                         .expect("NRC CID fits"),
+                ),
+                proposer_role_code: Some(
+                    primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                        .to_vec()
+                        .try_into()
+                        .expect("committee role fits"),
                 ),
                 funding_account: institution,
                 beneficiary: AccountId::new([79u8; 32]),
@@ -935,7 +964,6 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
                 subject_cid_numbers: Default::default(),
                 start: 0u32,
                 end: 100u32,
-                citizen_eligible_total: 10,
             },
         );
 
@@ -2025,12 +2053,33 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
             internal_vote::ActiveInstitutionThresholds::<Runtime>::get(&cid_number),
             None
         );
+        let vote_plan = votingengine::VotePlanOf::<AccountId>::try_new(
+            votingengine::BusinessActionId {
+                module_tag: b"test".to_vec().try_into().expect("owner fits"),
+                action_code: 0,
+            },
+            b"test".to_vec().try_into().expect("owner fits"),
+            votingengine::AuthorizationSubject::Institution(votingengine::RoleSubject {
+                cid_number: cid_number.clone().try_into().expect("CID fits"),
+                role_code: member_role_code.clone().try_into().expect("role fits"),
+            }),
+            vec![votingengine::AuthorizationSubject::Institution(
+                votingengine::RoleSubject {
+                    cid_number: cid_number.clone().try_into().expect("CID fits"),
+                    role_code: member_role_code.clone().try_into().expect("role fits"),
+                },
+            )],
+            votingengine::VotingEngineKind::Internal,
+            [0u8; 32],
+        )
+        .expect("valid singleton vote plan");
         let proposal_id = internal_vote::Pallet::<Runtime>::do_create_institution_proposal(
             members(1)[0].clone(),
             spec.institution.code,
             spec.institution.cid_number.as_bytes().to_vec(),
             None,
             vec![spec.institution.cid_number.as_bytes().to_vec()],
+            &vote_plan,
         )
         .expect("composed singleton can create internal proposal");
         assert_eq!(

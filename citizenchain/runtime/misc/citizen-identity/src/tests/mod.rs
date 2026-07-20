@@ -365,7 +365,7 @@ fn revoke_identity_marks_status_and_removes_population_count() {
 }
 
 #[test]
-fn population_snapshot_reads_current_scope_count() {
+fn population_data_reads_current_scope_count() {
     new_test_ext().execute_with(|| {
         // 占号先行:身份写入前置。
         occupy_tag("0001");
@@ -377,20 +377,19 @@ fn population_snapshot_reads_current_scope_count() {
             valid_signature(),
         ));
 
-        CitizenIdentity::create_governance_population_snapshot(&town_scope())
-            .expect("votingengine provider can create snapshot");
-
-        let snapshot = PopulationSnapshots::<Test>::get(0).expect("snapshot should exist");
-        assert_eq!(snapshot.eligible_total, 1);
-        assert_eq!(snapshot.eligibility_revision, 1);
-        assert_eq!(snapshot.snapshot_date, 20260702);
-        assert!(CitizenIdentity::can_vote_at_snapshot(&1, 0));
-        assert_eq!(NextSnapshotId::<Test>::get(), 1);
+        let population_data = CitizenIdentity::governance_population_data(&town_scope());
+        assert_eq!(population_data.eligible_total, 1);
+        assert_eq!(population_data.eligibility_revision, 1);
+        assert_eq!(population_data.eligibility_date, 20260702);
+        assert!(CitizenIdentity::can_vote_at_population_data(
+            &1,
+            &population_data
+        ));
     });
 }
 
 #[test]
-fn population_snapshot_freezes_membership_before_identity_update() {
+fn population_data_revision_freezes_membership_before_identity_update() {
     new_test_ext().execute_with(|| {
         occupy_tag("SNAPSHOT-OLD");
         occupy_tag("SNAPSHOT-NEW");
@@ -401,11 +400,12 @@ fn population_snapshot_freezes_membership_before_identity_update() {
             valid_signature(),
         ));
 
-        let (old_snapshot_id, old_total) =
-            CitizenIdentity::create_governance_population_snapshot(&town_scope())
-                .expect("old snapshot should be created");
-        assert_eq!(old_total, 1);
-        assert!(CitizenIdentity::can_vote_at_snapshot(&1, old_snapshot_id));
+        let old_population_data = CitizenIdentity::governance_population_data(&town_scope());
+        assert_eq!(old_population_data.eligible_total, 1);
+        assert!(CitizenIdentity::can_vote_at_population_data(
+            &1,
+            &old_population_data
+        ));
 
         // 同一账户迁往另一乡镇后，旧提案仍按创建时身份判断；新提案使用新身份。
         let mut moved = voting_payload(1, &citizen_cid_number("SNAPSHOT-NEW"));
@@ -417,16 +417,16 @@ fn population_snapshot_freezes_membership_before_identity_update() {
             valid_signature(),
         ));
 
-        assert!(CitizenIdentity::can_vote_at_snapshot(&1, old_snapshot_id));
-        let (new_snapshot_id, new_total) =
-            CitizenIdentity::create_governance_population_snapshot(&town_scope())
-                .expect("new snapshot should be created");
-        assert_eq!(new_total, 0);
-        assert!(!CitizenIdentity::can_vote_at_snapshot(&1, new_snapshot_id));
-
-        CitizenIdentity::release_governance_population_snapshot(old_snapshot_id);
-        assert!(!PopulationSnapshots::<Test>::contains_key(old_snapshot_id));
-        assert!(!CitizenIdentity::can_vote_at_snapshot(&1, old_snapshot_id));
+        assert!(CitizenIdentity::can_vote_at_population_data(
+            &1,
+            &old_population_data
+        ));
+        let new_population_data = CitizenIdentity::governance_population_data(&town_scope());
+        assert_eq!(new_population_data.eligible_total, 0);
+        assert!(!CitizenIdentity::can_vote_at_population_data(
+            &1,
+            &new_population_data
+        ));
     });
 }
 

@@ -10,6 +10,7 @@ use primitives::cid::china::china_cb::CHINA_CB;
 use sp_core::{Pair, Void};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 use votingengine::STATUS_EXECUTION_FAILED;
+use votingengine::{InstitutionRoleProvider as _, InternalAdminProvider as _};
 
 type Block = frame_system::mocking::MockBlock<Test>;
 
@@ -124,6 +125,79 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
     }
 }
 
+pub struct TestInstitutionRoleProvider;
+
+fn committee_role() -> votingengine::types::RoleCode {
+    primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+        .to_vec()
+        .try_into()
+        .expect("committee role fits protocol bound")
+}
+
+impl votingengine::InstitutionRoleProvider<AccountId32> for TestInstitutionRoleProvider {
+    fn is_active_assignment(cid_number: &[u8], who: &AccountId32, role_code: &[u8]) -> bool {
+        Self::active_accounts_for_role(cid_number, role_code).contains(who)
+    }
+
+    fn active_accounts_for_role(cid_number: &[u8], role_code: &[u8]) -> Vec<AccountId32> {
+        if role_code != primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER {
+            return Vec::new();
+        }
+        let Some(code) = core::str::from_utf8(cid_number)
+            .ok()
+            .and_then(votingengine::types::institution_code_from_cid_number)
+        else {
+            return Vec::new();
+        };
+        TestInternalAdminProvider::get_institution_admins(code, cid_number).unwrap_or_default()
+    }
+}
+
+impl entity_primitives::InstitutionRoleAuthorizationQuery<AccountId32>
+    for TestInstitutionRoleProvider
+{
+    fn role_has_permission(
+        role_subject: &entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>,
+        business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
+        _operation: entity_primitives::RolePermissionOperation,
+    ) -> bool {
+        role_subject.role_code.as_slice()
+            == primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+            && business_action_id.module_tag.as_slice() == crate::MODULE_TAG
+            && business_action_id.action_code
+                == entity_primitives::business_action::ACTION_GRANDPA_KEY_CHANGE
+    }
+
+    fn is_authorized(
+        admin: &AccountId32,
+        role_subject: &entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>,
+        business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
+        operation: entity_primitives::RolePermissionOperation,
+    ) -> bool {
+        Self::role_has_permission(role_subject, business_action_id, operation)
+            && Self::is_active_assignment(
+                role_subject.cid_number.as_slice(),
+                admin,
+                role_subject.role_code.as_slice(),
+            )
+    }
+
+    fn role_subjects_with_permission(
+        cid_number: &[u8],
+        business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
+        operation: entity_primitives::RolePermissionOperation,
+    ) -> Vec<entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>> {
+        let role_subject = entity_primitives::RoleSubject {
+            cid_number: cid_number.to_vec(),
+            role_code: primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER.to_vec(),
+        };
+        Self::role_has_permission(&role_subject, business_action_id, operation)
+            .then_some(role_subject)
+            .into_iter()
+            .collect()
+    }
+}
+
 pub struct TestTimeProvider;
 
 impl frame_support::traits::UnixTime for TestTimeProvider {
@@ -168,6 +242,7 @@ impl votingengine::Config for Test {
 
 impl internal_vote::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionRoleProvider = TestInstitutionRoleProvider;
     type WeightInfo = ();
 }
 
@@ -175,6 +250,7 @@ impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type GrandpaChangeDelay = GrandpaChangeDelay;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
+    type InstitutionRoleAuthorization = TestInstitutionRoleProvider;
     type WeightInfo = ();
 }
 

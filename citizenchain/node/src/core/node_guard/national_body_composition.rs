@@ -511,7 +511,6 @@ mod tests {
             subject_cid_numbers,
             start: 1u32,
             end: 2u32,
-            citizen_eligible_total: 0,
         };
         let id = 7;
         let expected = primitives::cid::code::fixed_governance_pass_threshold(&fixed.code)
@@ -581,7 +580,6 @@ mod tests {
             subject_cid_numbers,
             start: 1u32,
             end: 2u32,
-            citizen_eligible_total: 0,
         };
         let id = 8;
         let expected = primitives::cid::code::fixed_governance_pass_threshold(&fixed.code)
@@ -670,7 +668,6 @@ mod tests {
                 subject_cid_numbers,
                 start: 1u32,
                 end: 2u32,
-                citizen_eligible_total: 0,
             };
             let id = index as u64 + 20;
             let threshold_key = storage_key::threshold(id);
@@ -716,7 +713,6 @@ mod tests {
             subject_cid_numbers,
             start: 1u32,
             end: 2u32,
-            citizen_eligible_total: 0,
         };
         let state = BTreeMap::from([(proposal_key.clone(), proposal.encode())]);
         let delta = BTreeMap::from([(proposal_key, state.values().next().cloned())]);

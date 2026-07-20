@@ -85,9 +85,9 @@ class ProposalVoteProgress extends StatelessWidget {
   }
 }
 
-// ──── 管理员投票明细组件 ────
+// ──── 合格选民投票明细组件 ────
 
-/// 管理员投票明细列表（编号地址 + 投票状态标签）。
+/// 提案创建时合格选民的投票明细列表（编号地址 + 投票状态标签）。
 class ProposalAdminVoteList extends StatelessWidget {
   const ProposalAdminVoteList({
     super.key,
@@ -97,13 +97,13 @@ class ProposalAdminVoteList extends StatelessWidget {
     this.proposerSs58,
   });
 
-  /// 管理员公钥列表（小写 hex，不含 0x）。
+  /// 合格选民公钥列表（小写 hex，不含 0x）。
   final List<String> admins;
 
   /// 投票记录：pubkeyHex → true(赞成) / false(反对) / null(未投票)。
   final Map<String, bool?> adminVotes;
 
-  /// 已提交但尚未上链确认的管理员公钥集合。
+  /// 已提交但尚未上链确认的选民公钥集合。
   final Set<String> pendingPubkeys;
 
   /// 发起人的 SS58 地址（可选，用于显示"发起人"徽章）。
@@ -126,7 +126,7 @@ class ProposalAdminVoteList extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
               child: Text(
-                '管理员投票明细（共 ${admins.length} 人）',
+                '合格选民投票明细（共 ${admins.length} 人）',
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
@@ -139,8 +139,7 @@ class ProposalAdminVoteList extends StatelessWidget {
               final pubkey = admins[index];
               final vote = adminVotes[pubkey];
               final ss58 = _pubkeyToSS58(pubkey);
-              final isProposer =
-                  proposerSs58 != null && proposerSs58 == ss58;
+              final isProposer = proposerSs58 != null && proposerSs58 == ss58;
 
               return ListTile(
                 dense: true,
@@ -377,7 +376,7 @@ class ProposalVoteActions extends StatelessWidget {
             const Padding(
               padding: EdgeInsets.only(bottom: 10),
               child: Text(
-                '你的管理员钱包均已投票',
+                '你已导入的合格投票钱包均已投票',
                 style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
                 textAlign: TextAlign.center,
               ),

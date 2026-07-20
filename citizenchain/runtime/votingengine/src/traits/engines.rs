@@ -61,19 +61,19 @@ pub trait InternalVoteEngine<AccountId> {
         actor_cid_number: sp_std::vec::Vec<u8>,
         execution_account: Option<AccountId>,
         subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
-        module_tag: &[u8],
+        vote_plan: VotePlanOf<AccountId>,
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError>;
 
     /// 创建机构管理员集合变更提案。
     ///
-    /// 本次投票仍使用当前 active 管理员快照和当前阈值；变更通过后的新阈值由
-    /// admins 模块在回调执行成功时按新 `admins` 集合登记。
+    /// 本次机构投票使用业务模块传入 `VotePlan` 的岗位有效选民快照和当前机构阈值；
+    /// 变更通过后的新阈值由 admins 模块在回调执行成功时登记。
     fn create_institution_admin_change_proposal_with_data(
         _who: AccountId,
         _institution_code: InstitutionCode,
         _actor_cid_number: sp_std::vec::Vec<u8>,
-        _module_tag: &[u8],
+        _vote_plan: VotePlanOf<AccountId>,
         _data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         Err(DispatchError::Other(
@@ -192,7 +192,7 @@ impl<AccountId> InternalVoteEngine<AccountId> for () {
         _actor_cid_number: sp_std::vec::Vec<u8>,
         _execution_account: Option<AccountId>,
         _subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
-        _module_tag: &[u8],
+        _vote_plan: VotePlanOf<AccountId>,
         _data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         Err(DispatchError::Other("InternalVoteEngineNotConfigured"))

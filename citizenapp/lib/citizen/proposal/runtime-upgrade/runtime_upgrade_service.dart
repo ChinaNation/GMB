@@ -34,7 +34,7 @@ class RuntimeUpgradeService {
 
   // ──── Extrinsic 提交 ────
 
-  /// 提交机构管理员的联合投票。
+  /// 提交机构岗位有效选民的联合投票。
   ///
   /// 联合投票必须等待入块，并回读 runtime JointVote storage。
   /// txHash 只代表交易提交，不能代表投票已经生效。
@@ -141,7 +141,7 @@ class RuntimeUpgradeService {
     return _decodeBoolVote(data);
   }
 
-  /// 查询某机构在联合投票阶段的管理员票数统计。
+  /// 查询某机构在联合投票阶段的岗位选民票数统计。
   Future<({int yes, int no})> fetchJointInstitutionTally(
       int proposalId, String actorCidNumber) async {
     final fullKey = _buildDoubleStorageKey(
@@ -155,7 +155,7 @@ class RuntimeUpgradeService {
     return (yes: _decodeU32(data, 0), no: _decodeU32(data, 4));
   }
 
-  /// 查询某管理员在某机构联合投票中的投票记录。
+  /// 查询某岗位快照选民在某机构联合投票中的投票记录。
   Future<bool?> fetchJointAdminVote(
     int proposalId,
     String actorCidNumber,
@@ -167,10 +167,10 @@ class RuntimeUpgradeService {
     return _decodeBoolVote(data);
   }
 
-  /// 批量查询联合投票管理员投票记录。
+  /// 批量查询联合投票岗位选民记录。
   ///
-  /// 协议升级详情页最多会显示 43 个管理员，必须批量读取
-  /// `JointVotesByAdmin`，不能逐管理员发起 RPC。
+  /// 协议升级详情页必须批量读取稳定 storage `JointVotesByAdmin`，不能逐个
+  /// 岗位选民发起 RPC；storage 旧名不构成管理员授权语义。
   Future<Map<String, bool?>> fetchJointAdminVotesBatch(
     int proposalId,
     String actorCidNumber,
@@ -405,7 +405,7 @@ class RuntimeUpgradeService {
     );
   }
 
-  /// 入块后回读 JointVote storage，确认该管理员投票已经由 runtime 记录。
+  /// 入块后回读 JointVote storage，确认该岗位选民投票已由 runtime 记录。
   Future<void> _confirmRuntimeJointVote({
     required int proposalId,
     required String actorCidNumber,
@@ -435,7 +435,7 @@ class RuntimeUpgradeService {
     if (failure != null) {
       throw StateError('runtime 拒绝联合投票：${failure.description}');
     }
-    throw StateError('交易已入块，但 runtime JointVote 未记录该管理员投票');
+    throw StateError('交易已入块，但 runtime JointVote 未记录该岗位选民投票');
   }
 
   // ──── 内部：storage key 构造 ────

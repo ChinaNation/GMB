@@ -7,11 +7,18 @@ use crate::{
     MembershipLevel,
 };
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
+use entity_primitives::InstitutionRoleAuthorizationQuery;
 use frame_support::ensure;
 use scale_info::TypeInfo;
 use sp_runtime::{DispatchResult, RuntimeDebug};
 use sp_std::vec::Vec;
-use votingengine::InternalVoteEngine;
+use votingengine::{
+    types::{
+        AuthorizationSubject, BusinessActionId, CidNumber, RoleCode, RoleSubject, VotePlanOf,
+        VotingEngineKind,
+    },
+    InternalVoteEngine,
+};
 
 #[derive(
     Clone,
@@ -33,6 +40,7 @@ pub struct PlatformPriceUpdateAction {
 pub(crate) fn propose_price_change<T: Config>(
     who: T::AccountId,
     actor_cid_number: votingengine::types::CidNumber,
+    proposer_role_code: votingengine::types::RoleCode,
     membership_level: MembershipLevel,
     new_price_fen: u128,
 ) -> DispatchResult {
@@ -56,13 +64,68 @@ pub(crate) fn propose_price_change<T: Config>(
     };
     let mut encoded = Vec::from(crate::MODULE_TAG);
     encoded.extend_from_slice(&action.encode());
+    let action_code = entity_primitives::business_action::ACTION_PLATFORM_PRICE;
+    let action_id = BusinessActionId {
+        module_tag: crate::MODULE_TAG.to_vec(),
+        action_code,
+    };
+    let proposer = entity_primitives::RoleSubject {
+        cid_number: actor_cid_number.to_vec(),
+        role_code: proposer_role_code.to_vec(),
+    };
+    ensure!(
+        T::InstitutionRoleAuthorization::is_authorized(
+            &who,
+            &proposer,
+            &action_id,
+            entity_primitives::RolePermissionOperation::Propose,
+        ),
+        Error::<T>::InvalidInstitution
+    );
+    let voter_subjects = T::InstitutionRoleAuthorization::role_subjects_with_permission(
+        actor_cid_number.as_slice(),
+        &action_id,
+        entity_primitives::RolePermissionOperation::Vote,
+    )
+    .into_iter()
+    .map(|role| {
+        Ok(AuthorizationSubject::Institution(RoleSubject {
+            cid_number: CidNumber::try_from(role.cid_number)
+                .map_err(|_| sp_runtime::DispatchError::Other("InvalidVotePlan"))?,
+            role_code: RoleCode::try_from(role.role_code)
+                .map_err(|_| sp_runtime::DispatchError::Other("InvalidVotePlan"))?,
+        }))
+    })
+    .collect::<Result<Vec<_>, sp_runtime::DispatchError>>()?;
+    let owner: frame_support::BoundedVec<
+        u8,
+        frame_support::traits::ConstU32<{ entity_primitives::BUSINESS_MODULE_TAG_MAX_BYTES }>,
+    > = crate::MODULE_TAG
+        .to_vec()
+        .try_into()
+        .map_err(|_| sp_runtime::DispatchError::Other("InvalidVotePlan"))?;
+    let vote_plan = VotePlanOf::<T::AccountId>::try_new(
+        BusinessActionId {
+            module_tag: owner.clone(),
+            action_code,
+        },
+        owner,
+        AuthorizationSubject::Institution(RoleSubject {
+            cid_number: actor_cid_number.clone(),
+            role_code: proposer_role_code,
+        }),
+        voter_subjects,
+        VotingEngineKind::Internal,
+        sp_io::hashing::blake2_256(&encoded),
+    )
+    .map_err(|_| sp_runtime::DispatchError::Other("InvalidVotePlan"))?;
     let proposal_id = T::InternalVoteEngine::create_institution_proposal_with_data(
         who,
         institution_code,
         actor_cid_number.to_vec(),
         None,
         Vec::from([actor_cid_number.to_vec()]),
-        crate::MODULE_TAG,
+        vote_plan,
         encoded,
     )?;
     Pallet::<T>::deposit_event(Event::<T>::PlatformPriceChangeProposed {

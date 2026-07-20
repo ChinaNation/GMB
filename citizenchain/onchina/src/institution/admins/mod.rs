@@ -92,6 +92,7 @@ pub(crate) struct InstitutionAssignmentChangeInput {
 #[derive(Debug, Deserialize)]
 pub(crate) struct PrepareInstitutionGovernanceInput {
     pub(crate) cid_number: String,
+    pub(crate) proposer_role_code: String,
     #[serde(default)]
     pub(crate) admins: Vec<InstitutionAdminInput>,
     #[serde(default)]
@@ -607,6 +608,14 @@ pub(crate) async fn prepare_institution_governance(
         }
     };
     let cid_number = input.cid_number.trim();
+    let proposer_role_code = input.proposer_role_code.trim();
+    if proposer_role_code.is_empty() || proposer_role_code.as_bytes().len() > 64 {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "proposer_role_code 长度必须为 1 到 64 字节",
+        );
+    }
     if cid_number != binding.institution_cid_number
         || binding.institution_code != ctx.institution_code
     {
@@ -716,6 +725,7 @@ pub(crate) async fn prepare_institution_governance(
         register_nonce: credential.register_nonce.as_bytes().to_vec(),
         signature,
         actor_cid_number: cid_number.as_bytes().to_vec(),
+        proposer_role_code: proposer_role_code.as_bytes().to_vec(),
         credential_signer_pubkey: signer,
         scope_province_name: province.as_bytes().to_vec(),
         scope_city_name: city.as_bytes().to_vec(),

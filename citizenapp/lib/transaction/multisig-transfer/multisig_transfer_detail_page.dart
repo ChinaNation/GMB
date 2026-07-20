@@ -39,7 +39,7 @@ enum MultisigTransferKind {
   sweep,
 }
 
-/// 转账提案详情页：展示提案信息、投票进度、管理员投票明细及投票操作。
+/// 转账提案详情页：展示提案信息、投票进度、合格选民投票明细及投票操作。
 ///
 /// 通过 [kind] 区分三种转账类提案；不同 kind 读不同 storage、提交不同 extrinsic、
 /// QR 签名显示不同文案。
@@ -121,16 +121,16 @@ class _MultisigTransferDetailPageState
   int _noCount = 0;
   int? _thresholdSnapshot;
 
-  // 管理员列表与投票记录
+  // 提案创建时冻结的合格选民与投票记录。
   List<String> _admins = const [];
   // pubkeyHex → true(赞成) / false(反对) / null(未投票)
   Map<String, bool?> _adminVotes = {};
 
-  // 当前用户可投票的管理员钱包
+  // 当前用户已导入且属于合格选民快照的投票钱包。
   List<WalletProfile> _votableWallets = const [];
   WalletProfile? _selectedVoteWallet;
 
-  // 已提交投票但尚未上链确认的管理员公钥集合
+  // 已提交投票但尚未上链确认的选民公钥集合。
   Set<String> _pendingPubkeys = const {};
   String? _voteNotice;
   bool _voteNoticeIsError = false;
@@ -193,9 +193,10 @@ class _MultisigTransferDetailPageState
 
       // 并行加载提案快照、提案状态、投票计数、提案详情。
       // 多签转账投票资格和进度必须以提案创建时的快照为准，
-      // 不能使用机构当前管理员列表或当前阈值，否则管理员变更后旧提案会显示错误。
+      // 机构路径不能使用当前 admins 或当前岗位任职，个人路径不能使用当前
+      // 管理员集合；否则任职或人员变化后旧提案会显示错误。
       final results = await Future.wait([
-        _proposalService.fetchAdminSnapshot(
+        _proposalService.fetchEligibleVoterSnapshot(
           widget.proposalId,
           widget.institution,
         ),
@@ -210,7 +211,7 @@ class _MultisigTransferDetailPageState
       final status = results[2] as int?;
       final tally = results[3] as ({int yes, int no});
       final detail = results[4];
-      // 管理员投票记录批量读取，避免 43 个管理员产生 43 次 RPC。
+      // 选民投票记录批量读取，避免逐个产生 RPC。
       final votes = await _proposalService.fetchAdminVotesBatch(
         widget.proposalId,
         admins,
@@ -234,7 +235,7 @@ class _MultisigTransferDetailPageState
           pendingSummary.stillPending.map((r) => r.walletPubkey).toSet();
       final pendingNotice = _pendingSummaryNotice(pendingSummary);
 
-      // 筛选出可投票的管理员钱包（未投票且无待确认投票的）
+      // 筛选出可投票的钱包（属于快照、未投票且无待确认投票）。
       final votable = <WalletProfile>[];
       for (final w in widget.adminWallets) {
         var pk = w.pubkeyHex.toLowerCase();
@@ -648,7 +649,7 @@ class _MultisigTransferDetailPageState
         return Uint8List.fromList(_hexDecode(response.body.signatureHex));
       }
 
-      // 所有管理员投票统一走 InternalVote::cast(20.0)。
+      // 机构岗位快照选民和个人多签管理员都统一走 InternalVote::cast(20.0)。
       // 业务 kind 仅用于 QR 展示的文案与 storage 读取。
       final result = await InternalVoteService().submit(
         proposalId: widget.proposalId,
@@ -666,7 +667,7 @@ class _MultisigTransferDetailPageState
           '[MultisigTransferVote] submit 已入块 txHash=${result.txHash} nonce=${result.usedNonce} block=${result.blockHashHex}');
 
       // 服务层已经确认 runtime 投票记录，新流程不再写 pending。
-      // 这里只清除旧版本可能残留的同管理员 pending 记录。
+      // 这里只清除旧版本可能残留的同一投票钱包 pending 记录。
       await PendingVoteStore.instance.remove(
         _proposalTypeKey,
         widget.proposalId,
@@ -682,7 +683,7 @@ class _MultisigTransferDetailPageState
             .toList(growable: false);
         _selectedVoteWallet =
             _votableWallets.isNotEmpty ? _votableWallets.first : null;
-        _voteNotice = '链上已确认该管理员投票。';
+        _voteNotice = '链上已确认该合格选民投票。';
         _voteNoticeIsError = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(

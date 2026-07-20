@@ -91,6 +91,8 @@
   field_label_zh: 节点标识
 - field_key: proposal_id
   field_label_zh: 提案编号
+- field_key: proposer_role_code
+  field_label_zh: 提案发起岗位码
 - field_key: province_code
   field_label_zh: 省级代码
 - field_key: province_name

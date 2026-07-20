@@ -10,8 +10,7 @@ use serde::Serialize;
 use subxt::{dynamic, OnlineClient, PolkadotConfig};
 
 /// votingengine `Proposal<BlockNumber, AccountId>` 解码镜像(BlockNumber=u32 / AccountId=[u8;32])。
-// 部分字段(internal_code/actor_cid_number/execution_account/subject_cid_numbers/citizen_eligible_total)
-// 仅为 SCALE 布局对齐,
+// 部分字段(internal_code/actor_cid_number/execution_account/subject_cid_numbers)仅为 SCALE 布局对齐,
 // LegProposalState 投影暂不读,保留以锁死解码字段序。
 #[allow(dead_code)]
 #[derive(Debug, Decode)]
@@ -32,7 +31,6 @@ pub struct OnChainProposal {
     pub subject_cid_numbers: Vec<Vec<u8>>,
     pub start: u32,
     pub end: u32,
-    pub citizen_eligible_total: u64,
 }
 
 /// 代表机构身份只保存 CID。
@@ -285,7 +283,6 @@ mod tests {
         golden.extend(vec![b"LN001-NRP0G-000000001-2026".to_vec()].encode()); // subject_cid_numbers
         golden.extend(100u32.encode()); // start
         golden.extend(200u32.encode()); // end
-        golden.extend(0u64.encode()); // citizen_eligible_total
 
         let proposal = OnChainProposal::decode(&mut &golden[..]).expect("decode Proposal");
         assert_eq!(proposal.kind, 2);
@@ -346,7 +343,6 @@ mod tests {
             subject_cid_numbers: Vec::new(),
             start: 100,
             end: 200,
-            citizen_eligible_total: 0,
         };
         let representative_meta = OnChainRepresentativeMeta {
             route: OnChainRepresentativeRoute::Sequential(vec![

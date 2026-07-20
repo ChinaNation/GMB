@@ -2,7 +2,7 @@
 
 ## 概述
 
-国家储委会安全基金（SAFETY_FUND_ACCOUNT）的转账通过内部投票治理。仅国家储委会管理员（NRC admin）可发起提案，经多签投票通过后自动执行转账并扣除手续费。
+国家储委会安全基金（SAFETY_FUND_ACCOUNT）的转账通过内部投票治理。仅 NRC 中拥有安全基金转账 `Propose` 权限的岗位有效任职人可发起，经岗位快照选民投票通过后自动执行转账并扣除手续费。
 
 ## 安全基金账户
 
@@ -36,23 +36,23 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
 
 ### 1. 发起提案（propose_safety_fund_transfer，call_index=1）
 
-- **调用者**：国家储委会管理员（机构码 NRC，`is_fixed_governance_code`）
-- **参数**：actor_cid_number、institution_account、beneficiary（收款地址）、amount（金额）、remark（备注）
+- **调用者**：国家储委会中拥有该业务提案权限的岗位有效任职人
+- **参数**：actor_cid_number、proposer_role_code、institution_account、beneficiary（收款地址）、amount（金额）、remark（备注）
 - **校验**：
   1. 金额大于零
-  2. `actor_cid_number` 必须是国家储委会 CID，`institution_account` 必须是该 CID 下的安全基金账户，调用者通过 `InternalAdminProvider::is_institution_admin(NRC, actor_cid_number, origin)` 验证
+  2. `actor_cid_number` 必须是国家储委会 CID，`institution_account` 必须是该 CID 下的安全基金账户；调用者必须对完整 `RoleSubject(actor_cid_number, proposer_role_code)` 具有该业务 `Propose` 权限
   3. InstitutionAsset::can_spend 检查安全基金账户支出权限（NrcSafetyFundTransfer）
   4. **分账户余额预检**：安全基金账户必须覆盖 `amount + ED`，国家储委会费用账户必须覆盖 `fee + ED`
 - **手续费预算**：使用 `calculate_onchain_fee(amount)` 计算，即 `max(amount * 0.1%, 0.1 元)`
 - **操作**：
-  1. 通过 `InternalVoteEngine::create_institution_proposal_with_data` 创建内部提案，并绑定 CID、执行账户、owner/data/meta
+  1. 查询同一业务 `Vote` 权限岗位并构造内部 `VotePlan`，通过 `InternalVoteEngine::create_institution_proposal_with_data` 创建提案，绑定 CID、执行账户、岗位快照、owner/data/meta
   2. 将 `SafetyFundAction` 写入独立存储
   3. 触发 `SafetyFundTransferProposed` 事件
 
 ### 2. 投票
 
-- 管理员统一调用 `InternalVote::cast(proposal_id, approve)`。
-- 投票引擎使用提案创建时锁定的管理员快照和固定 NRC 阈值判定。
+- 提案岗位有效选民统一调用 `InternalVote::cast(proposal_id, approve)`。
+- 投票引擎使用提案创建时锁定的 `EffectiveVoterSnapshot` 和固定 NRC 机构阈值判定；不新增岗位阈值。
 - 达阈值后回调本模块自动执行安全基金转账。
 
 ### 3. 自动执行（try_execute_safety_fund）
@@ -86,7 +86,7 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
 - `with_transaction` 回滚所有状态变更
 - 触发 SafetyFundExecutionFailed 事件
 - 提案保持 `STATUS_PASSED` 并进入 votingengine retry state
-- 快照管理员通过 `VotingEngine::retry_passed_proposal`(pallet 9.4)手动重试
+- 岗位有效选民快照成员通过 `VotingEngine::retry_passed_proposal`（pallet 9.4）手动重试
 - 3 次手动失败或超过 `ExecutionRetryGraceBlocks` 后,投票引擎统一转 `STATUS_EXECUTION_FAILED`
 
 ## 源码位置

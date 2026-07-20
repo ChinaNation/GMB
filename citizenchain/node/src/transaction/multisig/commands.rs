@@ -9,6 +9,7 @@ pub async fn build_multisig_transfer_request(
     app: AppHandle,
     pubkey_hex: String,
     actor_cid_number: String,
+    proposer_role_code: String,
     institution_account: String,
     beneficiary_address: String,
     amount_yuan: f64,
@@ -22,6 +23,7 @@ pub async fn build_multisig_transfer_request(
         super::signing::build_propose_transfer_sign_request(
             &pubkey_hex,
             &actor_cid_number,
+            &proposer_role_code,
             &institution_account,
             &beneficiary_address,
             amount_yuan,
@@ -40,6 +42,7 @@ pub async fn submit_multisig_transfer(
     expected_pubkey_hex: String,
     expected_payload_hash: String,
     actor_cid_number: String,
+    proposer_role_code: String,
     institution_account: String,
     beneficiary_address: String,
     amount_yuan: f64,
@@ -60,6 +63,7 @@ pub async fn submit_multisig_transfer(
             super::account_id::institution_account_from_hex(&institution_account)?;
         let call_data = super::signing::build_transfer_call_data(
             &actor_cid_number,
+            &proposer_role_code,
             &institution_account,
             &beneficiary_bytes,
             amount_fen,
@@ -86,6 +90,7 @@ pub async fn build_multisig_safety_fund_request(
     app: AppHandle,
     pubkey_hex: String,
     actor_cid_number: String,
+    proposer_role_code: String,
     institution_account: String,
     beneficiary_address: String,
     amount_yuan: f64,
@@ -99,6 +104,7 @@ pub async fn build_multisig_safety_fund_request(
         super::signing::build_propose_safety_fund_sign_request(
             &pubkey_hex,
             &actor_cid_number,
+            &proposer_role_code,
             &institution_account,
             &beneficiary_address,
             amount_yuan,
@@ -117,6 +123,7 @@ pub async fn submit_multisig_safety_fund(
     expected_pubkey_hex: String,
     expected_payload_hash: String,
     actor_cid_number: String,
+    proposer_role_code: String,
     institution_account: String,
     beneficiary_address: String,
     amount_yuan: f64,
@@ -132,6 +139,7 @@ pub async fn submit_multisig_safety_fund(
     tauri::async_runtime::spawn_blocking(move || {
         let call_data = super::signing::build_safety_fund_call_data(
             &actor_cid_number,
+            &proposer_role_code,
             &institution_account,
             &beneficiary_address,
             amount_yuan,
@@ -157,6 +165,7 @@ pub async fn build_multisig_sweep_request(
     app: AppHandle,
     pubkey_hex: String,
     actor_cid_number: String,
+    proposer_role_code: String,
     institution_account: String,
     amount_yuan: f64,
 ) -> Result<governance::signing::VoteSignRequestResult, String> {
@@ -168,6 +177,7 @@ pub async fn build_multisig_sweep_request(
         super::signing::build_propose_sweep_sign_request(
             &pubkey_hex,
             &actor_cid_number,
+            &proposer_role_code,
             &institution_account,
             amount_yuan,
         )
@@ -184,6 +194,7 @@ pub async fn submit_multisig_sweep(
     expected_pubkey_hex: String,
     expected_payload_hash: String,
     actor_cid_number: String,
+    proposer_role_code: String,
     institution_account: String,
     amount_yuan: f64,
     sign_nonce: u32,
@@ -197,6 +208,7 @@ pub async fn submit_multisig_sweep(
     tauri::async_runtime::spawn_blocking(move || {
         let call_data = super::signing::build_sweep_call_data(
             &actor_cid_number,
+            &proposer_role_code,
             &institution_account,
             amount_yuan,
         )?;

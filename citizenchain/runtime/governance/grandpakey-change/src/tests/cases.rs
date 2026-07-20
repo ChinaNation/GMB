@@ -9,6 +9,7 @@ fn weak_small_order_new_key_is_rejected() {
             GrandpaKeyChange::propose_replace_grandpa_key(
                 RuntimeOrigin::signed(prc_admin(0)),
                 prc_cid(),
+                committee_role(),
                 identity_public_key()
             ),
             Error::<Test>::InvalidEd25519Key
@@ -27,6 +28,7 @@ fn passed_proposal_executes_and_cleans_up_state() {
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(prc_admin(0)),
             actor_cid_number.clone(),
+            committee_role(),
             new_key,
         ));
         let pid = last_proposal_id();
@@ -78,6 +80,7 @@ fn passed_proposal_can_be_manually_executed_after_pending_change_clears() {
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(prc_admin(0)),
             actor_cid_number.clone(),
+            committee_role(),
             new_key,
         ));
         let pid = last_proposal_id();
@@ -142,6 +145,7 @@ fn votingengine_cancel_passed_proposal_cleans_up_passed_but_invalid_proposal() {
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(prc_admin(0)),
             actor_cid_number.clone(),
+            committee_role(),
             new_key,
         ));
         let pid = last_proposal_id();
@@ -211,6 +215,7 @@ fn votingengine_cancel_passed_proposal_rejects_temporarily_blocked_proposal() {
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(prc_admin(0)),
             actor_cid_number.clone(),
+            committee_role(),
             new_key,
         ));
         let pid = last_proposal_id();
@@ -257,6 +262,7 @@ fn finalized_vote_fatal_fails_when_old_authority_disappeared() {
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(prc_admin(0)),
             actor_cid_number.clone(),
+            committee_role(),
             new_key,
         ));
         let pid = last_proposal_id();
@@ -312,12 +318,14 @@ fn finalized_vote_fatal_fails_when_new_key_collides_after_first_execution() {
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(cb_admin(1, 0)),
             first_actor_cid_number.clone(),
+            committee_role(),
             shared_new_key,
         ));
         let first_pid = last_proposal_id();
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(cb_admin(2, 0)),
             second_actor_cid_number.clone(),
+            committee_role(),
             shared_new_key,
         ));
         let second_pid = last_proposal_id();
@@ -369,6 +377,7 @@ fn propose_rejects_zero_key() {
             GrandpaKeyChange::propose_replace_grandpa_key(
                 RuntimeOrigin::signed(prc_admin(0)),
                 prc_cid(),
+                committee_role(),
                 [0u8; 32],
             ),
             Error::<Test>::NewKeyIsZero
@@ -386,6 +395,7 @@ fn propose_rejects_unchanged_key() {
             GrandpaKeyChange::propose_replace_grandpa_key(
                 RuntimeOrigin::signed(prc_admin(0)),
                 actor_cid_number.clone(),
+                committee_role(),
                 current_key,
             ),
             Error::<Test>::NewKeyUnchanged
@@ -402,6 +412,7 @@ fn propose_rejects_key_owned_by_other_institution() {
             GrandpaKeyChange::propose_replace_grandpa_key(
                 RuntimeOrigin::signed(prc_admin(0)),
                 prc_cid(),
+                committee_role(),
                 nrc_key,
             ),
             Error::<Test>::NewKeyAlreadyUsed
@@ -418,6 +429,7 @@ fn propose_rejects_unauthorized_admin() {
             GrandpaKeyChange::propose_replace_grandpa_key(
                 RuntimeOrigin::signed(outsider),
                 prc_cid(),
+                committee_role(),
                 valid_public_key(80),
             ),
             Error::<Test>::UnauthorizedAdmin
@@ -433,6 +445,7 @@ fn propose_rejects_invalid_institution() {
             GrandpaKeyChange::propose_replace_grandpa_key(
                 RuntimeOrigin::signed(prc_admin(0)),
                 invalid_actor_cid_number,
+                committee_role(),
                 valid_public_key(81),
             ),
             Error::<Test>::InvalidInstitution
@@ -448,6 +461,7 @@ fn execute_rejects_non_passed_proposal() {
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(prc_admin(0)),
             actor_cid_number.clone(),
+            committee_role(),
             new_key,
         ));
         let pid = last_proposal_id();
@@ -475,6 +489,7 @@ fn cancel_rejects_still_executable_proposal() {
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(prc_admin(0)),
             actor_cid_number.clone(),
+            committee_role(),
             new_key,
         ));
         let pid = last_proposal_id();
@@ -510,6 +525,7 @@ fn vote_rejects_unauthorized_admin() {
         assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
             RuntimeOrigin::signed(prc_admin(0)),
             actor_cid_number.clone(),
+            committee_role(),
             new_key,
         ));
         let pid = last_proposal_id();

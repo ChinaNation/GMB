@@ -44,6 +44,8 @@ pub const MODULE_ADDRESS_REGISTRY: &[u8] = b"addr-reg";
 /// 第 6 步原子机构登记模块的预留稳定标签。
 pub const MODULE_INSTITUTION_REGISTRATION: &[u8] = b"ins-reg";
 
+/// 普通机构关闭；受保护创世机构仍由业务模块固定拒绝。
+pub const ACTION_INSTITUTION_CLOSE: u32 = 2;
 pub const ACTION_INSTITUTION_GOVERNANCE: u32 = 3;
 pub const ACTION_RUNTIME_UPGRADE: u32 = 0;
 pub const ACTION_RESOLUTION_ISSUANCE: u32 = 0;
@@ -57,7 +59,9 @@ pub const ACTION_MONITOR_UNFREEZE: u32 = 11;
 pub const ACTION_MONITOR_CONFISCATE: u32 = 12;
 pub const ACTION_MONITOR_FORCE_TRANSFER: u32 = 13;
 pub const ACTION_MONITOR_FORCE_CLOSE: u32 = 14;
+pub const ACTION_ENACT_LAW: u32 = 0;
 pub const ACTION_AMEND_LAW: u32 = 1;
+pub const ACTION_REPEAL_LAW: u32 = 2;
 pub const ACTION_PLATFORM_PRICE: u32 = 5;
 pub const ACTION_REGISTER_VOTING_IDENTITY: u32 = 0;
 pub const ACTION_UPGRADE_CANDIDATE_IDENTITY: u32 = 1;
@@ -124,6 +128,24 @@ pub fn fixed_role_permission_specs(
     cid_number: &[u8],
     role_code: &[u8],
 ) -> Vec<FixedRolePermissionSpec> {
+    // 法律行政签署和三人会签都属于原法律动作的 Vote 权限。LR 是所有机构
+    // 唯一固定岗位；这里只给承担法定签署职责的机构码配置权限，不把权限扩大到
+    // 其它机构的 LR，也不预建尚未依法组成的议员、参议员或委员岗位。
+    if role_code == ROLE_CODE_LEGAL_REPRESENTATIVE
+        && legislation_legal_representative_code(institution_code)
+    {
+        let mut out = Vec::new();
+        for action_code in [ACTION_ENACT_LAW, ACTION_AMEND_LAW, ACTION_REPEAL_LAW] {
+            push_permission(
+                &mut out,
+                MODULE_LEGISLATION_YUAN,
+                action_code,
+                RolePermissionOperation::Vote,
+            );
+        }
+        return out;
+    }
+
     let is_public_fixed = fixed_institution_by_identity(institution_code, cid_number).is_some();
     let is_technology = is_citizenchain_technology_identity(institution_code, cid_number);
     if !is_public_fixed && !is_technology {
@@ -340,6 +362,62 @@ pub fn fixed_role_permission_specs(
     out
 }
 
+/// 需要承担法律行政签署或国家/省级三人会签的机构码。
+fn legislation_legal_representative_code(institution_code: InstitutionCode) -> bool {
+    matches!(
+        institution_code,
+        code if code == *b"PRS\0"
+            || code == *b"NLG\0"
+            || code == *b"NRP\0"
+            || code == *b"NSN\0"
+            || code == *b"NED\0"
+            || code == *b"PGV\0"
+            || code == *b"PLG\0"
+            || code == *b"PRP\0"
+            || code == *b"PSN\0"
+            || code == *b"CGOV"
+    )
+}
+
+/// 立法机构 CID 顶层能力白名单。
+///
+/// 岗位码仍由各机构依法创建并写入权限；这里只回答该机构类型能否拥有权限，不能
+/// 代替 `InstitutionRolePermissions`，也不能让普通 admins 自动取得任何能力。
+pub fn legislation_institution_capability_allows(
+    institution_code: InstitutionCode,
+    module_tag: &[u8],
+    action_code: u32,
+    operation: RolePermissionOperation,
+) -> bool {
+    if module_tag != MODULE_LEGISLATION_YUAN
+        || !matches!(
+            action_code,
+            ACTION_ENACT_LAW | ACTION_AMEND_LAW | ACTION_REPEAL_LAW
+        )
+    {
+        return false;
+    }
+    match operation {
+        RolePermissionOperation::Propose => matches!(
+            institution_code,
+            code if code == *b"NRP\0"
+                || code == *b"NED\0"
+                || code == *b"PRP\0"
+                || code == *b"CSLF"
+                || code == *b"CEDU"
+                || code == *b"CLEG"
+        ),
+        RolePermissionOperation::Vote => {
+            legislation_legal_representative_code(institution_code)
+                || matches!(
+                    institution_code,
+                    code if code == *b"CLEG"
+                        || (code == NJD && action_code == ACTION_AMEND_LAW)
+                )
+        }
+    }
+}
+
 /// 固定创世机构 CID 顶层能力白名单。
 ///
 /// 固定岗位权限必须是本白名单的子集。动态岗位后续需要新增业务时，应先由对应业务步骤
@@ -364,6 +442,9 @@ pub fn fixed_institution_capability_allows(
             .iter()
             .map(|province| province_commissioner_role_code(province.province_code))
             .collect(),
+        _ if legislation_legal_representative_code(institution_code) => {
+            vec![ROLE_CODE_LEGAL_REPRESENTATIVE.to_vec()]
+        }
         _ if is_citizenchain_technology_identity(institution_code, cid_number) => vec![
             ROLE_CODE_LEGAL_REPRESENTATIVE.to_vec(),
             ROLE_CODE_GENESIS_PRODUCT_MANAGER.to_vec(),
@@ -490,6 +571,60 @@ mod tests {
             MODULE_SQUARE_SUBSCRIPTION,
             ACTION_PLATFORM_PRICE,
             RolePermissionOperation::Propose,
+        ));
+    }
+
+    #[test]
+    fn legislation_lr_and_institution_capabilities_are_separate() {
+        let lr = fixed_role_permission_specs(
+            *b"NRP\0",
+            b"LN001-NRP0G-000000001-2026",
+            ROLE_CODE_LEGAL_REPRESENTATIVE,
+        );
+        for action_code in [ACTION_ENACT_LAW, ACTION_AMEND_LAW, ACTION_REPEAL_LAW] {
+            assert!(has(
+                &lr,
+                MODULE_LEGISLATION_YUAN,
+                action_code,
+                RolePermissionOperation::Vote,
+            ));
+            assert!(!has(
+                &lr,
+                MODULE_LEGISLATION_YUAN,
+                action_code,
+                RolePermissionOperation::Propose,
+            ));
+            assert!(legislation_institution_capability_allows(
+                *b"CLEG",
+                MODULE_LEGISLATION_YUAN,
+                action_code,
+                RolePermissionOperation::Propose,
+            ));
+        }
+
+        assert!(!legislation_institution_capability_allows(
+            *b"PRS\0",
+            MODULE_LEGISLATION_YUAN,
+            ACTION_ENACT_LAW,
+            RolePermissionOperation::Propose,
+        ));
+        assert!(legislation_institution_capability_allows(
+            *b"PRS\0",
+            MODULE_LEGISLATION_YUAN,
+            ACTION_ENACT_LAW,
+            RolePermissionOperation::Vote,
+        ));
+        assert!(legislation_institution_capability_allows(
+            NJD,
+            MODULE_LEGISLATION_YUAN,
+            ACTION_AMEND_LAW,
+            RolePermissionOperation::Vote,
+        ));
+        assert!(!legislation_institution_capability_allows(
+            NJD,
+            MODULE_LEGISLATION_YUAN,
+            ACTION_ENACT_LAW,
+            RolePermissionOperation::Vote,
         ));
     }
 }

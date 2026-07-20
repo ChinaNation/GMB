@@ -2,7 +2,7 @@
 //!
 //! 本模块将"机构 GRANDPA 公钥替换"包装成受治理约束的链上流程：
 //! - 仅国家储委会（NRC）与省储委会（PRC）可发起密钥替换提案。
-//! - 仅目标机构内部管理员可参与提案/投票/执行/清理。
+//! - 仅目标机构委员岗位有效任职人可发起和投票，恢复资格来自岗位选民快照。
 //! - 借助 `votingengine` 内部投票达成通过后，调用 `pallet-grandpa::schedule_change` 变更 authority set。
 //! - 新公钥必须通过 ed25519 有效性校验和 small-order 弱公钥拒绝。
 //!
@@ -20,7 +20,10 @@ use scale_info::TypeInfo;
 use sp_consensus_grandpa::AuthorityId as GrandpaAuthorityId;
 use sp_core::ed25519;
 use votingengine::{
-    types::{CidNumber, InstitutionCode, NRC, PRC},
+    types::{
+        AuthorizationSubject, BusinessActionId, CidNumber, InstitutionCode, RoleCode, RoleSubject,
+        VotePlanOf, VotingEngineKind, NRC, PRC,
+    },
     InternalVoteResultCallback, ProposalCancelDecision, ProposalExecutionOutcome,
     PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_PASSED,
 };
@@ -61,7 +64,7 @@ pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
     use sp_std::vec::Vec;
-    use votingengine::{InternalAdminProvider, InternalVoteEngine};
+    use votingengine::InternalVoteEngine;
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config + pallet_grandpa::Config {
@@ -73,6 +76,11 @@ pub mod pallet {
 
         /// 内部投票引擎（返回真实 proposal_id，避免猜测 next_proposal_id）。
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
+
+        /// 机构岗位业务授权真源。
+        type InstitutionRoleAuthorization: entity_primitives::InstitutionRoleAuthorizationQuery<
+            Self::AccountId,
+        >;
 
         type WeightInfo: crate::weights::WeightInfo;
     }
@@ -165,7 +173,7 @@ pub mod pallet {
     pub enum Error<T> {
         /// 机构不属于 NRC 或 PRC。
         InvalidInstitution,
-        /// 调用者不是该机构的内部管理员。
+        /// 调用者没有目标委员岗位有效任职或对应业务权限。
         UnauthorizedAdmin,
         /// 提案动作数据未找到或解码失败。
         ProposalActionNotFound,
@@ -197,6 +205,7 @@ pub mod pallet {
         pub fn propose_replace_grandpa_key(
             origin: OriginFor<T>,
             actor_cid_number: CidNumber,
+            proposer_role_code: RoleCode,
             new_key: [u8; 32],
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -210,11 +219,6 @@ pub mod pallet {
 
             let actual_org =
                 cid_org(actor_cid_number.as_slice()).ok_or(Error::<T>::InvalidInstitution)?;
-            ensure!(
-                Self::is_institution_admin(actual_org, actor_cid_number.as_slice(), &who),
-                Error::<T>::UnauthorizedAdmin
-            );
-
             let old_key = CurrentGrandpaKeys::<T>::get(actor_cid_number.clone())
                 .ok_or(Error::<T>::CurrentGrandpaKeyNotFound)?;
             ensure!(new_key != old_key, Error::<T>::NewKeyUnchanged);
@@ -231,13 +235,19 @@ pub mod pallet {
 
             let mut encoded = sp_std::vec::Vec::from(crate::MODULE_TAG);
             encoded.extend_from_slice(&action.encode());
+            let vote_plan = Self::build_vote_plan(
+                &who,
+                actor_cid_number.as_slice(),
+                proposer_role_code.as_slice(),
+                &encoded,
+            )?;
             let proposal_id = T::InternalVoteEngine::create_institution_proposal_with_data(
                 who.clone(),
                 actual_org,
                 actor_cid_number.to_vec(),
                 None,
                 Vec::from([actor_cid_number.to_vec()]),
-                crate::MODULE_TAG,
+                vote_plan,
                 encoded,
             )?;
 
@@ -258,17 +268,73 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        /// 检查调用者是否为指定机构的内部管理员。
-        fn is_institution_admin(
-            institution_code: InstitutionCode,
-            actor_cid_number: &[u8],
+        fn build_vote_plan(
             who: &T::AccountId,
-        ) -> bool {
-            <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
-                institution_code,
-                actor_cid_number,
-                who,
+            cid_number: &[u8],
+            proposer_role_code: &[u8],
+            encoded: &[u8],
+        ) -> Result<VotePlanOf<T::AccountId>, sp_runtime::DispatchError> {
+            use entity_primitives::{InstitutionRoleAuthorizationQuery, RolePermissionOperation};
+
+            let action_code = entity_primitives::business_action::ACTION_GRANDPA_KEY_CHANGE;
+            let action_id = BusinessActionId {
+                module_tag: crate::MODULE_TAG.to_vec(),
+                action_code,
+            };
+            let proposer = entity_primitives::RoleSubject {
+                cid_number: cid_number.to_vec(),
+                role_code: proposer_role_code.to_vec(),
+            };
+            ensure!(
+                T::InstitutionRoleAuthorization::is_authorized(
+                    who,
+                    &proposer,
+                    &action_id,
+                    RolePermissionOperation::Propose,
+                ),
+                Error::<T>::UnauthorizedAdmin
+            );
+            let voter_subjects = T::InstitutionRoleAuthorization::role_subjects_with_permission(
+                cid_number,
+                &action_id,
+                RolePermissionOperation::Vote,
             )
+            .into_iter()
+            .map(|role| {
+                Ok(AuthorizationSubject::Institution(RoleSubject {
+                    cid_number: CidNumber::try_from(role.cid_number)
+                        .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?,
+                    role_code: RoleCode::try_from(role.role_code)
+                        .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?,
+                }))
+            })
+            .collect::<Result<Vec<_>, sp_runtime::DispatchError>>()?;
+            let owner: frame_support::BoundedVec<
+                u8,
+                frame_support::traits::ConstU32<
+                    { entity_primitives::BUSINESS_MODULE_TAG_MAX_BYTES },
+                >,
+            > = crate::MODULE_TAG
+                .to_vec()
+                .try_into()
+                .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?;
+            VotePlanOf::<T::AccountId>::try_new(
+                BusinessActionId {
+                    module_tag: owner.clone(),
+                    action_code,
+                },
+                owner,
+                AuthorizationSubject::Institution(RoleSubject {
+                    cid_number: CidNumber::try_from(cid_number.to_vec())
+                        .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?,
+                    role_code: RoleCode::try_from(proposer_role_code.to_vec())
+                        .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?,
+                }),
+                voter_subjects,
+                VotingEngineKind::Internal,
+                sp_core::hashing::blake2_256(encoded),
+            )
+            .map_err(|_| votingengine::Error::<T>::InvalidVotePlan.into())
         }
 
         /// 检查 new_key 是否已被其他机构占用（通过反向索引 O(1) 判断）。
@@ -374,7 +440,7 @@ pub mod pallet {
 // 本 Executor 按 `MODULE_TAG` 前缀认领本模块的提案。
 //
 // 失败语义:自动执行失败(如 GRANDPA pending change 未清理)时发
-// `GrandpaKeyExecutionFailed` 事件,提案状态保留 PASSED,任何签名管理员可以通过
+// `GrandpaKeyExecutionFailed` 事件,提案状态保留 PASSED,创建时岗位选民快照成员可以通过
 // `VotingEngine::retry_passed_proposal` 手动重试,或用
 // `VotingEngine::cancel_passed_proposal` 清理确定无法执行的提案。
 pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);

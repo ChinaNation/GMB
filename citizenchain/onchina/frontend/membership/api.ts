@@ -14,6 +14,7 @@ export function getPlatformPrices(auth: AdminAuth): Promise<PlatformPrices> {
 
 export function proposePlatformPrice(
   auth: AdminAuth,
+  proposerRoleCode: string,
   membershipLevel: PlatformMembershipLevel,
   newPriceFen: string,
 ): Promise<ProposePlatformPriceResult> {
@@ -24,6 +25,7 @@ export function proposePlatformPrice(
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
+        proposer_role_code: proposerRoleCode,
         membership_level: membershipLevel,
         new_price_fen: newPriceFen,
       }),

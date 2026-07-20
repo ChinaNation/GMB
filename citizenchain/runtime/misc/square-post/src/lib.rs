@@ -146,6 +146,11 @@ pub mod pallet {
         /// 平台调价只能经统一内部投票引擎创建提案。
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
+        /// 技术公司岗位业务授权真源。
+        type InstitutionRoleAuthorization: entity_primitives::InstitutionRoleAuthorizationQuery<
+            Self::AccountId,
+        >;
+
         #[pallet::constant]
         type MaxSquarePostIdLen: Get<u32>;
         #[pallet::constant]
@@ -527,12 +532,13 @@ pub mod pallet {
         }
 
         /// 发起平台价格调整内部投票。
-        /// 投票资格、管理员快照、阈值、计票和终态推进全部由统一投票引擎处理。
+        /// 投票资格、岗位有效选民快照、机构阈值、计票和终态推进全部由统一投票引擎处理。
         #[pallet::call_index(5)]
         #[pallet::weight(T::WeightInfo::propose_set_platform_price())]
         pub fn propose_set_platform_price(
             origin: OriginFor<T>,
             actor_cid_number: votingengine::types::CidNumber,
+            proposer_role_code: votingengine::types::RoleCode,
             membership_level: MembershipLevel,
             new_price_fen: u128,
         ) -> DispatchResult {
@@ -540,6 +546,7 @@ pub mod pallet {
             crate::proposal::propose_price_change::<T>(
                 who,
                 actor_cid_number,
+                proposer_role_code,
                 membership_level,
                 new_price_fen,
             )

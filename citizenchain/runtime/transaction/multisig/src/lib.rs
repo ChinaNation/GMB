@@ -1,7 +1,7 @@
 //! # 多签资金账户转账模块 (multisig)
 //!
 //! 本模块为所有机构多签账户和个人多签账户提供链上转账治理流程：
-//! - 管理员发起转账提案，经内部投票通过后自动执行转账并扣取手续费。
+//! - 机构由具备目标业务权限的岗位任职人发起，个人多签由管理员发起；统一经内部投票执行。
 //! - 自动执行失败时保留提案状态，可通过 `VotingEngine::retry_passed_proposal` 手动重试。
 //! - 余额在提案创建和执行两个时点双重检查，含手续费和 ED 保留。
 //! - 收款地址不能是转出资金账户自身，也不能是受保护地址(质押地址等)。
@@ -24,7 +24,10 @@ use primitives::account_derive::{RESERVED_NAME_FEE, RESERVED_NAME_MAIN};
 use primitives::cid::china::china_cb::{CHINA_CB, SAFETY_FUND_ACCOUNT};
 use primitives::fee_policy::OnchainFeeCharger;
 use votingengine::{
-    types::{institution_code_from_cid_number, CidNumber, InstitutionCode, NRC, PMUL, PRB},
+    types::{
+        institution_code_from_cid_number, AuthorizationSubject, BusinessActionId, CidNumber,
+        InstitutionCode, RoleCode, RoleSubject, VotePlanOf, VotingEngineKind, NRC, PMUL, PRB,
+    },
     InternalVoteResultCallback, ProposalExecutionOutcome, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL,
     STATUS_PASSED,
 };
@@ -130,6 +133,11 @@ pub mod pallet {
 
         /// 内部投票引擎。
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
+
+        /// 机构岗位业务授权真源；个人多签不经过该接口。
+        type InstitutionRoleAuthorization: entity_primitives::InstitutionRoleAuthorizationQuery<
+            Self::AccountId,
+        >;
 
         /// 资金白名单检查器。
         type InstitutionAsset: primitives::institution_asset::InstitutionAsset<Self::AccountId>;
@@ -312,6 +320,7 @@ pub mod pallet {
         pub fn propose_transfer(
             origin: OriginFor<T>,
             actor_cid_number: Option<CidNumber>,
+            proposer_role_code: Option<RoleCode>,
             funding_account: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
@@ -322,15 +331,16 @@ pub mod pallet {
             ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
             let (institution_code, subject_cid_numbers) =
                 Self::resolve_funding_authority(actor_cid_number.as_ref(), &funding_account)?;
-            ensure!(
-                Self::is_funding_admin(
-                    institution_code,
-                    actor_cid_number.as_ref(),
-                    &funding_account,
-                    &who,
-                ),
-                Error::<T>::UnauthorizedAdmin
-            );
+            if actor_cid_number.is_none() {
+                ensure!(proposer_role_code.is_none(), Error::<T>::UnauthorizedAdmin);
+                ensure!(
+                    <T as votingengine::Config>::InternalAdminProvider::is_personal_admin(
+                        funding_account.clone(),
+                        &who,
+                    ),
+                    Error::<T>::UnauthorizedAdmin
+                );
+            }
             ensure!(
                 <T as Config>::InstitutionAsset::can_spend(
                     &funding_account,
@@ -395,13 +405,23 @@ pub mod pallet {
             encoded.extend_from_slice(&action.encode());
             // 创建提案时同步写入 owner/data/meta，禁止后续跨模块覆写业务数据。
             let proposal_id = if let Some(cid_number) = actor_cid_number.as_ref() {
+                let role_code = proposer_role_code
+                    .as_ref()
+                    .ok_or(Error::<T>::UnauthorizedAdmin)?;
+                let vote_plan = Self::build_institution_vote_plan(
+                    &who,
+                    cid_number.as_slice(),
+                    role_code.as_slice(),
+                    entity_primitives::business_action::ACTION_MULTISIG_TRANSFER,
+                    &encoded,
+                )?;
                 <T as Config>::InternalVoteEngine::create_institution_proposal_with_data(
                     who.clone(),
                     institution_code,
                     cid_number.to_vec(),
                     Some(funding_account.clone()),
                     subject_cid_numbers,
-                    crate::MODULE_TAG,
+                    vote_plan,
                     encoded,
                 )?
             } else {
@@ -435,12 +455,13 @@ pub mod pallet {
         /// 发起国家储委会安全基金转账提案（内部投票）。
         ///
         /// 从安全基金账户（`SAFETY_FUND_ACCOUNT`）向指定收款地址转账。
-        /// 仅国家储委会管理员可发起。
+        /// 仅国家储委会委员岗位有效任职人可发起。
         #[pallet::call_index(1)]
         #[pallet::weight(T::DbWeight::get().reads_writes(4, 2))]
         pub fn propose_safety_fund_transfer(
             origin: OriginFor<T>,
             actor_cid_number: CidNumber,
+            proposer_role_code: RoleCode,
             institution_account: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
@@ -449,7 +470,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
             ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
 
-            // 验证国家储委会管理员
+            // 安全基金业务永久绑定国家储委会及其委员岗位权限。
             ensure!(
                 actor_cid_number == nrc_cid(),
                 Error::<T>::InvalidInstitution
@@ -459,15 +480,6 @@ pub mod pallet {
                 institution_account == expected_safety_fund,
                 Error::<T>::InvalidInstitution
             );
-            ensure!(
-                <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
-                    NRC,
-                    actor_cid_number.as_slice(),
-                    &who,
-                ),
-                Error::<T>::UnauthorizedAdmin
-            );
-
             // 验证安全基金账户余额
             ensure!(
                 <T as Config>::InstitutionAsset::can_spend(
@@ -496,6 +508,14 @@ pub mod pallet {
                 Error::<T>::InsufficientFeeBalance
             );
 
+            let proposal_data = sp_runtime::Vec::from(SAFETY_FUND_OWNER_DATA);
+            let vote_plan = Self::build_institution_vote_plan(
+                &who,
+                actor_cid_number.as_slice(),
+                proposer_role_code.as_slice(),
+                entity_primitives::business_action::ACTION_SAFETY_FUND_TRANSFER,
+                &proposal_data,
+            )?;
             let proposal_id =
                 <T as Config>::InternalVoteEngine::create_institution_proposal_with_data(
                     who.clone(),
@@ -503,8 +523,8 @@ pub mod pallet {
                     actor_cid_number.to_vec(),
                     Some(institution_account.clone()),
                     vec![actor_cid_number.to_vec()],
-                    crate::MODULE_TAG,
-                    sp_runtime::Vec::from(SAFETY_FUND_OWNER_DATA),
+                    vote_plan,
+                    proposal_data,
                 )?;
 
             SafetyFundProposalActions::<T>::insert(
@@ -542,6 +562,7 @@ pub mod pallet {
         pub fn propose_sweep_to_main(
             origin: OriginFor<T>,
             actor_cid_number: CidNumber,
+            proposer_role_code: RoleCode,
             institution_account: T::AccountId,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
@@ -556,15 +577,14 @@ pub mod pallet {
                 institution_account == fee_account,
                 Error::<T>::InvalidInstitution
             );
-            ensure!(
-                <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
-                    institution_code,
-                    actor_cid_number.as_slice(),
-                    &who,
-                ),
-                Error::<T>::UnauthorizedAdmin
-            );
-
+            let proposal_data = sp_runtime::Vec::from(SWEEP_OWNER_DATA);
+            let vote_plan = Self::build_institution_vote_plan(
+                &who,
+                actor_cid_number.as_slice(),
+                proposer_role_code.as_slice(),
+                entity_primitives::business_action::ACTION_FEE_SWEEP_TO_MAIN,
+                &proposal_data,
+            )?;
             let proposal_id =
                 <T as Config>::InternalVoteEngine::create_institution_proposal_with_data(
                     who.clone(),
@@ -572,8 +592,8 @@ pub mod pallet {
                     actor_cid_number.to_vec(),
                     Some(institution_account.clone()),
                     vec![actor_cid_number.to_vec()],
-                    crate::MODULE_TAG,
-                    sp_runtime::Vec::from(SWEEP_OWNER_DATA),
+                    vote_plan,
+                    proposal_data,
                 )?;
 
             SweepProposalActions::<T>::insert(
@@ -649,23 +669,73 @@ pub mod pallet {
             Ok((institution_code, vec![cid_number.to_vec()]))
         }
 
-        fn is_funding_admin(
-            institution_code: InstitutionCode,
-            actor_cid_number: Option<&CidNumber>,
-            funding_account: &T::AccountId,
+        fn build_institution_vote_plan(
             who: &T::AccountId,
-        ) -> bool {
-            if let Some(cid_number) = actor_cid_number {
-                return <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
-                    institution_code,
-                    cid_number.as_slice(),
+            cid_number: &[u8],
+            proposer_role_code: &[u8],
+            action_code: u32,
+            proposal_data: &[u8],
+        ) -> Result<VotePlanOf<T::AccountId>, sp_runtime::DispatchError> {
+            use entity_primitives::{InstitutionRoleAuthorizationQuery, RolePermissionOperation};
+
+            let action_id = BusinessActionId {
+                module_tag: crate::MODULE_TAG.to_vec(),
+                action_code,
+            };
+            let proposer = entity_primitives::RoleSubject {
+                cid_number: cid_number.to_vec(),
+                role_code: proposer_role_code.to_vec(),
+            };
+            ensure!(
+                T::InstitutionRoleAuthorization::is_authorized(
                     who,
-                );
-            }
-            <T as votingengine::Config>::InternalAdminProvider::is_personal_admin(
-                funding_account.clone(),
-                who,
+                    &proposer,
+                    &action_id,
+                    RolePermissionOperation::Propose,
+                ),
+                Error::<T>::UnauthorizedAdmin
+            );
+            let voter_subjects = T::InstitutionRoleAuthorization::role_subjects_with_permission(
+                cid_number,
+                &action_id,
+                RolePermissionOperation::Vote,
             )
+            .into_iter()
+            .map(|role| {
+                Ok(AuthorizationSubject::Institution(RoleSubject {
+                    cid_number: CidNumber::try_from(role.cid_number)
+                        .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?,
+                    role_code: RoleCode::try_from(role.role_code)
+                        .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?,
+                }))
+            })
+            .collect::<Result<Vec<_>, sp_runtime::DispatchError>>()?;
+            let owner: frame_support::BoundedVec<
+                u8,
+                frame_support::traits::ConstU32<
+                    { entity_primitives::BUSINESS_MODULE_TAG_MAX_BYTES },
+                >,
+            > = crate::MODULE_TAG
+                .to_vec()
+                .try_into()
+                .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?;
+            VotePlanOf::<T::AccountId>::try_new(
+                BusinessActionId {
+                    module_tag: owner.clone(),
+                    action_code,
+                },
+                owner,
+                AuthorizationSubject::Institution(RoleSubject {
+                    cid_number: CidNumber::try_from(cid_number.to_vec())
+                        .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?,
+                    role_code: RoleCode::try_from(proposer_role_code.to_vec())
+                        .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?,
+                }),
+                voter_subjects,
+                VotingEngineKind::Internal,
+                sp_io::hashing::blake2_256(proposal_data),
+            )
+            .map_err(|_| votingengine::Error::<T>::InvalidVotePlan.into())
         }
 
         /// 复核内部投票提案与具体资金业务的完整绑定。

@@ -44,7 +44,7 @@ impl ElectionMode {
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct ElectionMeta<OfficeCode> {
     pub mode: ElectionMode,
-    /// 普选固定人口作用域；互选为 None，资格来自机构 admins 快照。
+    /// 普选固定人口作用域；互选为 None，资格来自 VotePlan 岗位任职快照。
     pub population_scope: Option<votingengine::PopulationScope>,
     /// 发起机构 CID；机构码只允许从该 CID 解析，不在载荷或存储中保留第二身份真源。
     pub actor_cid_number: CidNumber,

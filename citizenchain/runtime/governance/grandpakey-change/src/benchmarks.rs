@@ -46,7 +46,15 @@ mod benchmarks {
         let new_key = seeded_public_key(11);
 
         #[extrinsic_call]
-        propose_replace_grandpa_key(RawOrigin::Signed(proposer), actor_cid_number, new_key);
+        propose_replace_grandpa_key(
+            RawOrigin::Signed(proposer),
+            actor_cid_number,
+            primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                .to_vec()
+                .try_into()
+                .expect("benchmark role fits"),
+            new_key,
+        );
 
         assert!(votingengine::Pallet::<T>::get_proposal_data(0).is_some());
     }

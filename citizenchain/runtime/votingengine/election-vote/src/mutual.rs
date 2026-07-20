@@ -1,7 +1,7 @@
 //! 互选入口。
 //!
-//! 互选的选民列表由业务调用方提交，但创建时必须与 admins provider 返回的
-//! 目标机构完整管理员快照等长且逐成员一致，调用方不能删减或夹带账户。
+//! 互选的选民岗位主体由业务模块通过 `VotePlan` 提交；本引擎只从 entity 任职真源
+//! 读取这些岗位当前有效任职并冻结，调用方不能提交账户名单。
 
 use frame_support::pallet_prelude::DispatchResult;
 
@@ -11,6 +11,7 @@ impl<T: Config> Pallet<T> {
     #[allow(clippy::too_many_arguments)]
     pub fn do_create_mutual_election(
         who: T::AccountId,
+        vote_plan: votingengine::types::VotePlanOf<T::AccountId>,
         actor_cid_number: votingengine::types::CidNumber,
         target_cid_number: votingengine::types::CidNumber,
         office_code: frame_support::pallet_prelude::BoundedVec<u8, MaxElectionOfficeCodeOf<T>>,
@@ -19,10 +20,10 @@ impl<T: Config> Pallet<T> {
         term_start: u32,
         term_end: u32,
         candidates: sp_std::vec::Vec<T::AccountId>,
-        voters: sp_std::vec::Vec<T::AccountId>,
     ) -> Result<u64, sp_runtime::DispatchError> {
         Self::do_create_election(
             who,
+            vote_plan,
             crate::types::ElectionMode::Mutual,
             actor_cid_number,
             target_cid_number,
@@ -33,7 +34,6 @@ impl<T: Config> Pallet<T> {
             term_end,
             None,
             candidates,
-            voters,
         )
     }
 

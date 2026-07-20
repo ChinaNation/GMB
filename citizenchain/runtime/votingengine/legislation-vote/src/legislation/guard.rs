@@ -41,20 +41,25 @@ impl<T: Config> Pallet<T> {
             proposal.stage == STAGE_LEG_CONSTITUTION_GUARD,
             Error::<T>::NotInExpectedStage
         );
-        let members =
-            <T as votingengine::Config>::InternalAdminProvider::constitution_guard_members();
+        let meta = pallet::LegislationMetas::<T>::get(proposal_id)
+            .ok_or(Error::<T>::ProposalMetaMissing)?;
+        let guard_subject = meta.guard.ok_or(Error::<T>::NotConstitutionGuard)?;
+        let authorization_subject = AuthorizationSubject::Institution(guard_subject);
+        let members_len = <votingengine::Pallet<T>>::subject_voters_len(
+            proposal_id,
+            authorization_subject.clone(),
+        )
+        .ok_or(Error::<T>::InvalidGuardMembersLen)?;
         ensure!(
-            members.len() == CONSTITUTION_GUARD_MEMBERS as usize,
+            members_len == CONSTITUTION_GUARD_MEMBERS,
             Error::<T>::InvalidGuardMembersLen
         );
-        for (idx, member) in members.iter().enumerate() {
-            ensure!(
-                !members.iter().skip(idx + 1).any(|other| other == member),
-                Error::<T>::InvalidGuardMembersLen
-            );
-        }
         ensure!(
-            members.iter().any(|m| m == &who),
+            <votingengine::Pallet<T>>::is_subject_voter_in_snapshot(
+                proposal_id,
+                authorization_subject,
+                &who,
+            ),
             Error::<T>::NotConstitutionGuard
         );
         let mut signs = pallet::LegGuardSigns::<T>::get(proposal_id);

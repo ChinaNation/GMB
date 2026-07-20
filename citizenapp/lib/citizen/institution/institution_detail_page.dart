@@ -476,7 +476,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     return _entryCard(
       icon: Icons.how_to_vote_outlined,
       title: '发起提案',
-      subtitle: _isCurrentUserAdmin ? '转账 / 管理员更换 / …' : '激活管理员后可发起',
+      subtitle:
+          _isCurrentUserAdmin ? '转账 / 管理员更换 / …（链上按岗位授权）' : '激活机构签名钱包后按岗位授权发起',
       onTap: _openProposalTypes,
     );
   }

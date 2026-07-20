@@ -8,6 +8,7 @@ use frame_support::{
 use frame_system as system;
 use primitives::cid::china::{china_cb::CHINA_CB, china_ch::CHINA_CH};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
+use votingengine::{InstitutionRoleProvider as _, InternalAdminProvider as _};
 use votingengine::{STATUS_PASSED, STATUS_REJECTED};
 
 type Balance = u128;
@@ -116,6 +117,102 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
     }
 }
 
+pub struct TestInstitutionRoleProvider;
+
+fn test_role_code(institution_code: InstitutionCode) -> Option<&'static [u8]> {
+    match institution_code {
+        NRC | PRC => Some(primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER),
+        PRB => Some(primitives::governance_skeleton::ROLE_CODE_DIRECTOR),
+        _ => None,
+    }
+}
+
+fn bounded_test_role(institution_code: InstitutionCode) -> votingengine::types::RoleCode {
+    test_role_code(institution_code)
+        .unwrap_or(primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER)
+        .to_vec()
+        .try_into()
+        .expect("test role fits protocol bound")
+}
+
+impl votingengine::InstitutionRoleProvider<AccountId32> for TestInstitutionRoleProvider {
+    fn is_active_assignment(cid_number: &[u8], who: &AccountId32, role_code: &[u8]) -> bool {
+        Self::active_accounts_for_role(cid_number, role_code).contains(who)
+    }
+
+    fn active_accounts_for_role(cid_number: &[u8], role_code: &[u8]) -> Vec<AccountId32> {
+        let Some(code) = core::str::from_utf8(cid_number)
+            .ok()
+            .and_then(votingengine::types::institution_code_from_cid_number)
+        else {
+            return Vec::new();
+        };
+        if test_role_code(code) != Some(role_code) {
+            return Vec::new();
+        }
+        TestInternalAdminProvider::get_institution_admins(code, cid_number).unwrap_or_default()
+    }
+}
+
+impl entity_primitives::InstitutionRoleAuthorizationQuery<AccountId32>
+    for TestInstitutionRoleProvider
+{
+    fn role_has_permission(
+        role_subject: &entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>,
+        business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
+        _operation: entity_primitives::RolePermissionOperation,
+    ) -> bool {
+        let Some(code) = core::str::from_utf8(role_subject.cid_number.as_slice())
+            .ok()
+            .and_then(votingengine::types::institution_code_from_cid_number)
+        else {
+            return false;
+        };
+        test_role_code(code) == Some(role_subject.role_code.as_slice())
+            && business_action_id.module_tag.as_slice() == crate::MODULE_TAG
+            && business_action_id.action_code
+                == entity_primitives::business_action::ACTION_RESOLUTION_DESTROY
+    }
+
+    fn is_authorized(
+        admin: &AccountId32,
+        role_subject: &entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>,
+        business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
+        operation: entity_primitives::RolePermissionOperation,
+    ) -> bool {
+        Self::role_has_permission(role_subject, business_action_id, operation)
+            && Self::is_active_assignment(
+                role_subject.cid_number.as_slice(),
+                admin,
+                role_subject.role_code.as_slice(),
+            )
+    }
+
+    fn role_subjects_with_permission(
+        cid_number: &[u8],
+        business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
+        operation: entity_primitives::RolePermissionOperation,
+    ) -> Vec<entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>> {
+        let Some(code) = core::str::from_utf8(cid_number)
+            .ok()
+            .and_then(votingengine::types::institution_code_from_cid_number)
+        else {
+            return Vec::new();
+        };
+        let Some(role_code) = test_role_code(code) else {
+            return Vec::new();
+        };
+        let role_subject = entity_primitives::RoleSubject {
+            cid_number: cid_number.to_vec(),
+            role_code: role_code.to_vec(),
+        };
+        Self::role_has_permission(&role_subject, business_action_id, operation)
+            .then_some(role_subject)
+            .into_iter()
+            .collect()
+    }
+}
+
 pub struct TestTimeProvider;
 
 impl frame_support::traits::UnixTime for TestTimeProvider {
@@ -161,6 +258,7 @@ impl votingengine::Config for Test {
 
 impl internal_vote::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionRoleProvider = TestInstitutionRoleProvider;
     type WeightInfo = ();
 }
 
@@ -168,6 +266,7 @@ impl pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
+    type InstitutionRoleAuthorization = TestInstitutionRoleProvider;
     type InstitutionQuery = TestInstitutionQuery;
     type OnchainFeeCharger = TestOnchainFeeCharger;
     type WeightInfo = ();

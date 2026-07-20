@@ -35,14 +35,18 @@ pub use traits::{
     ProtectedSourceChecker, RegistryAuthority, ReservedAccountGuard,
 };
 use votingengine::{
-    types::InstitutionCode, InternalVoteEngine, InternalVoteResultCallback,
-    ProposalExecutionOutcome,
+    types::{
+        AuthorizationSubject, BusinessActionId, CidNumber, InstitutionCode, RoleCode, RoleSubject,
+        VotePlanOf, VotingEngineKind,
+    },
+    InternalVoteEngine, InternalVoteResultCallback, ProposalExecutionOutcome,
 };
 
 pub use entity_primitives::{
     InstitutionAdminAssignment, InstitutionAssignmentSource, InstitutionAssignmentStatus,
     InstitutionGovernanceAction, InstitutionGovernanceProposal, InstitutionGovernanceResult,
-    InstitutionRole, InstitutionRoleMutation, InstitutionRoleStatus, RolePermissionSpec,
+    InstitutionRole, InstitutionRoleAuthorizationQuery, InstitutionRoleMutation,
+    InstitutionRoleStatus, RolePermissionOperation, RolePermissionSpec,
 };
 pub use institution::role::{
     InstitutionAdminAssignmentOf, InstitutionAdminAssignmentsOf, InstitutionRoleOf,
@@ -644,12 +648,12 @@ pub mod pallet {
             )
         }
 
-        /// 本机构管理员发起机构内部治理提案。
+        /// 本机构指定岗位任职人发起机构内部治理提案。
         ///
         /// 本入口只允许治理 `actor_cid_number == cid_number` 的本机构；注册局替
         /// 目标机构登记管理员集合必须走 `register_institution_admins`。
         #[pallet::call_index(8)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::update_institution_info())]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_institution_governance())]
         #[allow(clippy::too_many_arguments)]
         pub fn propose_institution_governance(
             origin: OriginFor<T>,
@@ -658,6 +662,7 @@ pub mod pallet {
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
             actor_cid_number: Vec<u8>,
+            proposer_role_code: RoleCodeOf,
             credential_signer_pubkey: [u8; 32],
             scope_province_name: Vec<u8>,
             scope_city_name: Vec<u8>,
@@ -670,6 +675,7 @@ pub mod pallet {
                 register_nonce,
                 signature,
                 actor_cid_number,
+                proposer_role_code,
                 credential_signer_pubkey,
                 scope_province_name,
                 scope_city_name,
@@ -719,6 +725,7 @@ pub mod pallet {
         pub fn propose_close_private_institution(
             origin: OriginFor<T>,
             actor_cid_number: CidNumberOf<T>,
+            proposer_role_code: RoleCodeOf,
             institution_account: T::AccountId,
             beneficiary: T::AccountId,
             register_nonce: RegisterNonceOf<T>,
@@ -730,6 +737,7 @@ pub mod pallet {
             crate::close::do_propose_institution_close::<T>(
                 who,
                 actor_cid_number,
+                proposer_role_code,
                 institution_account,
                 beneficiary,
                 register_nonce,
@@ -1017,6 +1025,7 @@ pub mod pallet {
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
             actor_cid_number: Vec<u8>,
+            proposer_role_code: RoleCodeOf,
             credential_signer_pubkey: [u8; 32],
             scope_province_name: Vec<u8>,
             scope_city_name: Vec<u8>,
@@ -1068,12 +1077,19 @@ pub mod pallet {
             let mut data = Vec::from(crate::MODULE_TAG);
             data.push(ACTION_GOVERNANCE);
             data.extend_from_slice(&proposal.encode());
+            let vote_plan = Self::build_institution_vote_plan(
+                &who,
+                cid_number.as_slice(),
+                proposer_role_code.as_slice(),
+                entity_primitives::business_action::ACTION_INSTITUTION_GOVERNANCE,
+                &data,
+            )?;
             let proposal_id = if Self::governance_action_replaces_admins(&proposal.action) {
                 T::InternalVoteEngine::create_institution_admin_change_proposal_with_data(
                     who.clone(),
                     info.institution_code,
                     cid_number.to_vec(),
-                    crate::MODULE_TAG,
+                    vote_plan,
                     data,
                 )?
             } else {
@@ -1083,7 +1099,7 @@ pub mod pallet {
                     cid_number.to_vec(),
                     None,
                     Vec::new(),
-                    crate::MODULE_TAG,
+                    vote_plan,
                     data,
                 )?
             };
@@ -1094,6 +1110,78 @@ pub mod pallet {
                 proposer: who,
             });
             Ok(())
+        }
+
+        /// 业务模块唯一构造机构内部投票计划的入口。
+        pub(crate) fn build_institution_vote_plan(
+            who: &T::AccountId,
+            cid_number: &[u8],
+            proposer_role_code: &[u8],
+            action_code: u32,
+            business_data: &[u8],
+        ) -> Result<VotePlanOf<T::AccountId>, sp_runtime::DispatchError> {
+            let business_action_id = BusinessActionId {
+                module_tag: crate::MODULE_TAG.to_vec(),
+                action_code,
+            };
+            let proposer_subject = entity_primitives::RoleSubject {
+                cid_number: cid_number.to_vec(),
+                role_code: proposer_role_code.to_vec(),
+            };
+            ensure!(
+                <Self as InstitutionRoleAuthorizationQuery<T::AccountId>>::is_authorized(
+                    who,
+                    &proposer_subject,
+                    &business_action_id,
+                    RolePermissionOperation::Propose,
+                ),
+                Error::<T>::PermissionDenied
+            );
+            let voter_roles =
+                <Self as InstitutionRoleAuthorizationQuery<T::AccountId>>::role_subjects_with_permission(
+                    cid_number,
+                    &business_action_id,
+                    RolePermissionOperation::Vote,
+                );
+            let owner: BoundedVec<
+                u8,
+                frame_support::traits::ConstU32<
+                    { entity_primitives::BUSINESS_MODULE_TAG_MAX_BYTES },
+                >,
+            > = crate::MODULE_TAG
+                .to_vec()
+                .try_into()
+                .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?;
+            let proposer_cid = CidNumber::try_from(cid_number.to_vec())
+                .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?;
+            let proposer_role = RoleCode::try_from(proposer_role_code.to_vec())
+                .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?;
+            let voter_subjects = voter_roles
+                .into_iter()
+                .map(|role| {
+                    Ok(AuthorizationSubject::Institution(RoleSubject {
+                        cid_number: CidNumber::try_from(role.cid_number)
+                            .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?,
+                        role_code: RoleCode::try_from(role.role_code)
+                            .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?,
+                    }))
+                })
+                .collect::<Result<Vec<_>, sp_runtime::DispatchError>>()?;
+            VotePlanOf::<T::AccountId>::try_new(
+                BusinessActionId {
+                    module_tag: owner.clone(),
+                    action_code,
+                },
+                owner,
+                AuthorizationSubject::Institution(RoleSubject {
+                    cid_number: proposer_cid,
+                    role_code: proposer_role,
+                }),
+                voter_subjects,
+                VotingEngineKind::Internal,
+                sp_io::hashing::blake2_256(business_data),
+            )
+            .map_err(|_| votingengine::Error::<T>::InvalidVotePlan.into())
         }
 
         #[allow(clippy::too_many_arguments)]

@@ -1,8 +1,8 @@
 //! 提案管理员快照与岗位投票人快照。
 //!
-//! 联合提案创建时按 `VotePlan` 锁定每个岗位主体的有效任职账户，再按 CID
-//! 合并去重；投票期间不随后续任职变化。`AdminSnapshot` 只供尚未迁移的其他
-//! Track 与独立个人多签路径使用，不得用于已迁移的联合投票资格判定。
+//! 机构提案创建时按 `VotePlan` 锁定每个岗位主体的有效任职账户，再按 CID
+//! 合并去重；投票期间不随后续任职变化。`AdminSnapshot` 只供独立个人多签路径
+//! 使用，不得用于机构投票资格判定。
 //!
 //! - `is_admin_in_snapshot`:查快照判断某人是否是该提案某机构的管理员
 //! - `snapshot_admins_len`:快照中某机构的管理员数量
@@ -25,6 +25,14 @@ impl<T: pallet::Config> pallet::Pallet<T> {
         VoterSnapshot::<T>::get(proposal_id, subject)
             .map(|voters| voters.iter().any(|account| account == who))
             .unwrap_or(false)
+    }
+
+    /// 查询某个完整岗位主体的冻结选民人数。
+    pub fn subject_voters_len(
+        proposal_id: u64,
+        subject: AuthorizationSubject<CidNumber, crate::types::RoleCode, T::AccountId>,
+    ) -> Option<u32> {
+        VoterSnapshot::<T>::get(proposal_id, subject).map(|voters| voters.len() as u32)
     }
 
     /// 查询同一机构内按账户去重后的有效投票资格。

@@ -19,7 +19,7 @@
 - 个人多签继续由 `personal-admins` 独立管理业务和 storage，但管理员项与机构使用同一个 `Admin` 三字段结构；不使用机构岗位或机构任职关系。
 - 各类管理员的链上管理员集合分别保存在各自 pallet 的 `AdminAccounts`。
 - runtime 当前通过 `RuntimeAdminAccountQuery` 聚合读取各管理员模块；ADR-039 落地后它只能证明人员属于 admins，业务 pallet 还必须通过 entity 解析完整 `RoleSubject` 的权限和有效任职。
-- 注册个人多签和普通注册机构账户的动态阈值由 `votingengine/internal-vote` 的动态阈值表保存；NRC/PRC/PRB/FRG/NJD 使用代码级固定阈值；PRS/NLG/NSN/NRP/NSP/NED 不保存账户级阈值，由每个内部提案按 admins 快照派生严格过半。
+- 注册个人多签和普通注册机构账户的动态阈值由 `votingengine/internal-vote` 的动态阈值表保存；NRC/PRC/PRB/FRG/NJD 使用代码级机构阈值；PRS/NLG/NSN/NRP/NSP/NED 不保存账户级阈值，由每个内部提案按 `VotePlan` 的岗位有效选民快照派生严格过半。任何路径都不建立岗位阈值。
 - 创世机构本体、协议账户、默认法定代表人岗位、固定岗位、固定权限和创世任职由 `runtime/genesis/src/institution/seeder.rs` 唯一写入：既有公权机构写 `public-manage` / `public-admins`，中国公民链技术股份有限公司写 `private-manage` / `private-admins`；不得跨命名空间或从岗位伪造钱包。
 - 旧创世机构/管理员运行期模块已删除，不允许恢复为运行期治理模块或影子真源。
 

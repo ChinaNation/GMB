@@ -12,8 +12,7 @@ use votingengine::CitizenIdentityReader;
 
 use crate::{
     pallet::{
-        Config, ElectionCandidates, ElectionMetaStore, ElectionResults, ElectionTallyStore,
-        MutualVoters, Pallet,
+        Config, ElectionCandidates, ElectionMetaStore, ElectionResults, ElectionTallyStore, Pallet,
     },
     types::{ElectionMeta, ElectionMode, ElectionTally},
     Call,
@@ -54,7 +53,6 @@ fn setup_election<T: Config>(c: u32, mode: ElectionMode) -> (u64, T::AccountId, 
             subject_cid_numbers: Default::default(),
             start: now,
             end: 2u32.saturated_into(),
-            citizen_eligible_total: 1,
         },
     );
     ElectionMetaStore::<T>::insert(
@@ -64,7 +62,7 @@ fn setup_election<T: Config>(c: u32, mode: ElectionMode) -> (u64, T::AccountId, 
             population_scope: (mode == ElectionMode::Popular)
                 .then_some(votingengine::PopulationScope::Country),
             actor_cid_number,
-            target_cid_number,
+            target_cid_number: target_cid_number.clone(),
             office_code: b"benchmark"
                 .to_vec()
                 .try_into()
@@ -79,12 +77,23 @@ fn setup_election<T: Config>(c: u32, mode: ElectionMode) -> (u64, T::AccountId, 
     if mode == ElectionMode::Popular {
         let scope = votingengine::PopulationScope::Country;
         <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(&voter, &scope);
-        let (snapshot_id, _) = votingengine::Pallet::<T>::create_population_snapshot(&scope)
-            .expect("benchmark identity snapshot");
-        votingengine::Pallet::<T>::bind_population_snapshot(proposal_id, snapshot_id)
-            .expect("benchmark proposal snapshot binding");
+        votingengine::Pallet::<T>::create_population_snapshot(proposal_id, &scope)
+            .expect("benchmark proposal population snapshot");
     } else {
-        MutualVoters::<T>::insert(proposal_id, &voter, ());
+        let subject =
+            votingengine::AuthorizationSubject::Institution(entity_primitives::RoleSubject {
+                cid_number: target_cid_number,
+                role_code: b"BENCHMARK_MEMBER"
+                    .to_vec()
+                    .try_into()
+                    .expect("benchmark role code"),
+            });
+        votingengine::Pallet::<T>::snapshot_role_voters(
+            proposal_id,
+            subject,
+            sp_std::vec![voter.clone()],
+        )
+        .expect("benchmark mutual role snapshot");
     }
     ElectionTallyStore::<T>::insert(proposal_id, ElectionTally::default());
     (proposal_id, voter, selected)

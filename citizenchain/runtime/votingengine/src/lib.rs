@@ -1,11 +1,11 @@
 //! # 投票引擎 (votingengine)
 //!
 //! 投票基础设施模块，统一承载四类投票流程：
-//! - **内部投票**（INTERNAL）：目标模型按业务模块绑定的机构岗位主体或个人多签主体投票，
-//!   当前管理员快照实现将在后续步骤替换；赞成 ≥ 阈值提前通过，
+//! - **内部投票**（INTERNAL）：按业务模块绑定的机构岗位主体或个人多签主体投票；
+//!   机构使用岗位有效选民快照，个人多签使用独立管理员快照；赞成 ≥ 阈值提前通过，
 //!   剩余票不足达到阈值提前否决，30 天超时兜底否决。
 
-//! - **联合投票**（JOINT）：国家储委会/省储委会/省储行管理员按票权加权投票，
+//! - **联合投票**（JOINT）：NRC/PRC 委员与 PRB 董事岗位有效选民按机构票权加权投票，
 //!   105 票全票通过直接执行，任一机构反对立即进入联合公投，30 天超时进入联合公投。
 
 //! - **立法机关表决**（LEGISLATION）：由 legislation-vote sub-pallet 承载代表机构表决、
@@ -48,7 +48,7 @@ pub mod traits;
 pub mod types;
 pub mod weights;
 
-pub use citizen_identity::PopulationScope;
+pub use citizen_identity::{PopulationData, PopulationScope};
 pub use pallet::*;
 pub use tracks::*;
 pub use traits::*;
@@ -164,7 +164,7 @@ pub mod pallet {
         type InternalVoteResultCallback: InternalVoteResultCallback;
         type InternalAdminProvider: InternalAdminProvider<Self::AccountId>;
         type InternalAdminsLenProvider: InternalAdminsLenProvider<Self::AccountId>;
-        /// 每个机构最大管理员数量（与 admins 模块 一致），用于管理员快照 BoundedVec。
+        /// 单个资格快照最大账户数；上限与机构 admins 最大人数一致。
         #[pallet::constant]
         type MaxAdminsPerInstitution: Get<u32>;
 
@@ -195,7 +195,7 @@ pub mod pallet {
     ///
     /// 布局:提案主键纯单调 u64 + ProposalDisplayId 展示号 +
     /// ProposalsByCode/Institution/Owner/Year 4 张反向索引,创世直写,无历史回填。
-    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
 
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
@@ -260,10 +260,9 @@ pub mod pallet {
     pub type PendingProposalCleanups<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, PendingCleanupStage, OptionQuery>;
 
-    /// 提案管理员快照：提案创建时锁定各主体管理员名单，投票期间不随链上名单变化。
-    /// 机构主体以 CID 为 key；个人多签主体才以个人多签账户为 key。
-    /// 内部提案只存一条，联合提案存所有参与机构（约105条）。
-    /// 投票时查快照判定资格，保证管理员更换不影响已有提案的投票过程。
+    /// 兼容尚未迁移 Track 与个人多签的管理员快照。
+    /// 已迁移的机构内部/联合提案不得写入或读取本 storage，必须使用
+    /// `VoterSnapshot + EffectiveVoterSnapshot`；个人多签仍以个人账户为 key。
     #[pallet::storage]
     pub type AdminSnapshot<T: Config> = StorageDoubleMap<
         _,
@@ -329,13 +328,17 @@ pub mod pallet {
     pub type ProposalOwner<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, BoundedVec<u8, T::MaxModuleTagLen>, OptionQuery>;
 
-    /// 提案使用的 citizen-identity 人口资格快照。
-    ///
-    /// 分母仍缓存于 Proposal，成员资格唯一通过该 snapshot_id 回到身份模块校验。
+    /// 投票引擎根据 citizen-identity 四级人口数据生成的提案人口快照。
+    /// 身份模块只提供人口数据和历史资格判断，不保存本投票快照。
     #[pallet::storage]
-    #[pallet::getter(fn proposal_population_snapshot_id)]
-    pub type ProposalPopulationSnapshotIds<T: Config> =
-        StorageMap<_, Blake2_128Concat, u64, u64, OptionQuery>;
+    #[pallet::getter(fn proposal_population_snapshot)]
+    pub type ProposalPopulationSnapshots<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        crate::types::ProposalPopulationSnapshot<BlockNumberFor<T>>,
+        OptionQuery,
+    >;
 
     /// 自动执行失败后的可重试状态。
     #[pallet::storage]
@@ -771,7 +774,8 @@ pub mod pallet {
         /// 统一手动执行已通过但自动执行失败的提案。
         ///
         /// 业务模块不得再各自暴露 execute_xxx 重试入口；所有手动执行
-        /// 都必须经过投票引擎校验 PASSED 状态、管理员权限、重试次数和宽限期。
+        /// 都必须经过投票引擎校验 PASSED 状态、机构岗位选民/个人管理员快照、
+        /// 重试次数和宽限期。
         #[pallet::call_index(4)]
         #[pallet::weight(T::WeightInfo::retry_passed_proposal())]
         pub fn retry_passed_proposal(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {

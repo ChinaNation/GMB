@@ -24,7 +24,8 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// 国家储委会安全基金转账提案创建页面。
 ///
 /// source 锁定为 NRC 安全基金账户(`InstitutionAccounts.safetyFundAccount`),
-/// 仅 NRC 管理员可发起,链端调用 `propose_safety_fund_transfer (call_index=1)`。
+/// 仅 NRC 中拥有该业务提案权限的岗位有效任职人可发起，链端调用
+/// `propose_safety_fund_transfer (call_index=1)` 并校验独立岗位码。
 class SafetyFundTransferPage extends StatefulWidget {
   SafetyFundTransferPage({
     super.key,
@@ -49,6 +50,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
   final _beneficiaryController = TextEditingController();
   final _amountController = TextEditingController();
   final _remarkController = TextEditingController();
+  late final TextEditingController _proposerRoleCodeController;
 
   bool _loadingBalance = true;
   bool _submitting = false;
@@ -67,6 +69,9 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
   void initState() {
     super.initState();
     _selectedWallet = widget.adminWallets.first;
+    _proposerRoleCodeController = TextEditingController(
+      text: defaultInstitutionProposerRoleCode(widget.institution),
+    );
     final hex = widget.institution.accounts?.safetyFundAccount;
     if (hex == null) {
       throw StateError(
@@ -83,6 +88,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
     _beneficiaryController.dispose();
     _amountController.dispose();
     _remarkController.dispose();
+    _proposerRoleCodeController.dispose();
     super.dispose();
   }
 
@@ -217,6 +223,13 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
     if (!_validateAddress() || !_validateAmount() || !_validateRemark()) {
       return;
     }
+    final proposerRoleCode = _proposerRoleCodeController.text.trim();
+    if (proposerRoleCode.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请输入提案发起岗位码')),
+      );
+      return;
+    }
 
     final wallet = _selectedWallet;
     final amountYuan = AmountFormat.tryParse(_amountController.text) ?? 0;
@@ -276,6 +289,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
       // 链上 SafetyFundTransferProposed 事件，是业务成功的唯一凭据。
       final result = await service.submitProposeSafetyFund(
         institution: widget.institution,
+        proposerRoleCode: proposerRoleCode,
         beneficiaryAddress: _beneficiaryController.text.trim(),
         amountYuan: amountYuan,
         remark: _remarkController.text,
@@ -286,7 +300,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('提案已创建（#${result.proposalId}），等待管理员投票')),
+        SnackBar(content: Text('提案已创建（#${result.proposalId}），等待岗位选民投票')),
       );
       Navigator.of(context).pop(true);
     } on WalletAuthException catch (e) {
@@ -367,6 +381,19 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
           _buildLabel('发起管理员'),
           const SizedBox(height: 6),
           _buildAdminSelector(),
+          const SizedBox(height: 16),
+          _buildLabel('提案发起岗位码'),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _proposerRoleCodeController,
+            maxLength: 64,
+            decoration: const InputDecoration(
+              hintText: '国家储委会委员岗位码',
+              filled: true,
+              fillColor: AppTheme.surfaceMuted,
+              border: OutlineInputBorder(),
+            ),
+          ),
           const SizedBox(height: 16),
           _buildLabel('转出账户（国家储委会安全基金）'),
           const SizedBox(height: 6),

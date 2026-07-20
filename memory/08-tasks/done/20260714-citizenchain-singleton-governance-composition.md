@@ -50,7 +50,7 @@
 - [x] 删除 `internal-vote` 中 FRG 管理员必须恰好 5 人的错误账户校验；FRG 保持一个机构、一个主账户和 215 名管理员，省域岗位组权限不混入通用投票引擎。
 - [x] `resolution-destroy` 继续在业务模块固定 NRC/PRC/PRB，新增 NJD 拒绝回归；`grandpakey-change` 现有 NRC/PRC 限权复核正确。
 - [x] 第 1 步验证：`internal-vote` 88、`multisig` 24、`resolution-destroy` 15、`grandpakey-change` 17 项测试通过，runtime 整体 `cargo check` 通过。
-- [x] 第 2 步删除首次组成自动写入动态阈值的错误实现；六个国家单例拒绝所有账户级动态阈值写入，一般内部事项在提案创建时按 admins 快照生成 `floor(N/2)+1` 阈值快照。
+- [x] 第 2 步删除首次组成自动写入动态阈值的错误实现；六个国家单例拒绝所有账户级动态阈值写入。该记录原采用 admins 快照；2026-07-19 已由 ADR-039/任务卡 `20260719-institution-role-permission-unify` 彻底替换为按业务 `VotePlan` 的岗位有效选民快照生成 `floor(N/2)+1` 阈值快照，不保留旧授权路径。
 - [x] 2026-07-17 更正：首次有效治理结果只写岗位和任职，admins 必须预先独立登记；NSN/NRP/NED 继续强制法定岗位、人数区间和既有管理员闭环。
 - [x] 第 2 步验证：primitives 66、`internal-vote` 89、`public-admins` 8、`public-manage` 42、runtime 集成 40 项测试通过；runtime 默认特性与 `no_std` 编译通过。
 - [x] 第 3 步：业务执行端不再只凭“提案已通过”放行。多签转账、销毁、GRANDPA 密钥变更、机构/个人生命周期统一绑定 callback scope、`ProposalOwner`、proposal kind/stage、机构码、账户、CID 和业务 action，并在执行前复核当前业务权限。

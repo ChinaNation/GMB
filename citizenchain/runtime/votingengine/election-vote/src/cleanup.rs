@@ -5,7 +5,7 @@
 
 use crate::pallet::{
     ElectionCandidateTallies, ElectionCandidates, ElectionMetaStore, ElectionResults,
-    ElectionTallyStore, ElectionVotesByVoter, MutualVoters,
+    ElectionTallyStore, ElectionVotesByVoter,
 };
 use crate::weights::WeightInfo;
 use frame_support::{traits::Get, weights::Weight};
@@ -23,8 +23,9 @@ impl<T: crate::pallet::Config> votingengine::ElectionCleanupHandler for crate::p
         proposal_id: u64,
         limit: u32,
     ) -> votingengine::CleanupChunkResult {
-        let result = MutualVoters::<T>::clear_prefix(proposal_id, limit, None);
-        (result.unique, result.maybe_cursor.is_some())
+        let _ = (proposal_id, limit);
+        // 互选岗位快照统一由 votingengine 核心 VoterSnapshot 清理阶段处理。
+        (0, false)
     }
 
     fn cleanup_election_tallies_chunk(

@@ -24,7 +24,7 @@ fn create_institution_proposal_with_data_via_engine(
         actor_cid_number.to_vec(),
         None,
         subject_cids_for(&actor_cid_number),
-        module_tag,
+        internal_vote_plan_with_owner(&actor_cid_number, module_tag, b"payload"),
         b"payload".to_vec(),
     )
     .expect("internal proposal with data should be created")

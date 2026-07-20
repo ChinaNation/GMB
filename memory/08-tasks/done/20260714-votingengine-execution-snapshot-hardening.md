@@ -45,7 +45,7 @@
 ## 实施结果
 
 - VotingEngine 将回调错误、`Ignored`、结果应用错误和 Track 终态错误统一纳入有界重试；达到上限后写入 `STATUS_EXECUTION_FAILED` 和 dead-letter，终态副作用由独立队列处理，不再重复业务执行。
-- `citizen-identity` 新增资格 revision、账户不可变资格历史和人口快照元数据；联合公投、立法公投和 Popular 选举统一绑定核心 `ProposalPopulationSnapshotIds`。
+- `citizen-identity` 新增资格 revision、账户不可变资格历史和四级人口数据；联合公投、立法公投和 Popular 选举由投票引擎读取人口真源后，统一生成并保存 `ProposalPopulationSnapshots[proposal_id]`。
 - Popular 选举删除完整选民列表和人数上限；Mutual 选举只接受管理员模块提供并核验的完整 `admins` 快照。
 - `joint-vote` 直属测试增至 10 项，直接覆盖 `cast_admin`、`cast_referendum`、105 票全票、机构否决和 30 天超时转公投。
 - 相关 benchmark 以 `steps=50`、`repeat=20`、WASM compiled 重新生成；runtime 升级执行预算显式叠加 `set_code` 权重。

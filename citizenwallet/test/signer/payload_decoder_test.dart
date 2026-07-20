@@ -229,7 +229,7 @@ void main() {
     });
 
     // Phase 3(2026-04-22)「投票引擎统一入口整改」:
-    // 所有业务 pallet 的 vote_X 已物理删除,所有管理员投票统一走
+    // 所有业务 pallet 的 vote_X 已物理删除，机构岗位选民/个人多签管理员统一走
     // InternalVote::cast(20.0)。
 
     test('decodes internal_vote (pallet=20 call=0) approve=true', () {
@@ -1121,6 +1121,7 @@ void main() {
         0x11,
         0x02,
         ...compactVec(nrcActorCid),
+        ...compactVec('COMMITTEE_MEMBER'),
         ...institutionAccount,
         ...amountBytes,
       ]);
@@ -1161,6 +1162,8 @@ void main() {
         0x00,
         0x01, // Option::Some(actor_cid_number)
         ...compactVec(nrcActorCid),
+        0x01, // Option::Some(proposer_role_code)
+        ...compactVec('COMMITTEE_MEMBER'),
         ...institutionAccount,
         ...beneficiary,
         ...u128LeForTest(BigInt.from(12345)),
@@ -1173,6 +1176,7 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_transfer');
       expect(decoded.fields['actor_cid_number'], nrcActorCid);
+      expect(decoded.fields['proposer_role_code'], 'COMMITTEE_MEMBER');
       expect(decoded.fields['institution_account'],
           ss58FromBytes(institutionAccount));
       expect(decoded.fields['operation_fee_payer'], '$nrcActorCid 的链上费用账户');
@@ -1708,6 +1712,7 @@ void main() {
       final payload = <int>[
         0x1e, 0x01, // PublicManage.propose_close_public_institution
         ...compactVec(registryActorCid),
+        ...compactVec('RLEGAL'),
         ...institutionAccount,
         ...beneficiary,
         (registerNonce.length << 2) & 0xff,
@@ -1749,6 +1754,7 @@ void main() {
         34,
         5,
         ...compactVec(actorCid),
+        ...compactVec('GENESIS_PRODUCT_MANAGER'),
         1,
         ...u128LeForTest(BigInt.from(123456)),
       ];
@@ -1766,6 +1772,7 @@ void main() {
             34,
             5,
             ...compactVec(actorCid),
+            ...compactVec('GENESIS_PRODUCT_MANAGER'),
             level,
             ...u128LeForTest(price),
           ];
@@ -1816,13 +1823,17 @@ void main() {
     }
 
     List<int> appendGovernanceCredentialTail(
-        List<int> payload, String actorCid) {
+      List<int> payload,
+      String actorCid, {
+      bool includeProposerRole = true,
+    }) {
       return <int>[
         ...payload,
         ...compactVec('gov-nonce-001'),
         ...compactU32(64),
         ...List<int>.filled(64, 0x44),
         ...compactVec(actorCid),
+        if (includeProposerRole) ...compactVec('RCHAIR'),
         ...List<int>.generate(32, (i) => 0xA0 + (i & 0x0F)),
         ...compactVec('贵州省'),
         ...compactVec('贵阳市'),
@@ -1947,6 +1958,7 @@ void main() {
           ...buildInstitutionAdminsForGovernance(),
         ],
         registryActorCid,
+        includeProposerRole: false,
       ));
 
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
@@ -2153,6 +2165,8 @@ void main() {
           0x11, 0x00,
           0x01, // institution Some
           ...compactVec(nrcActorCid),
+          0x01, // proposer_role_code Some
+          ...compactVec('COMMITTEE_MEMBER'),
           ...List<int>.filled(32, 0x66), // funding_account
           ...List<int>.filled(32, 0x44), // beneficiary
           ...u128LeForTest(BigInt.from(12345)),
@@ -2222,6 +2236,7 @@ void main() {
     const secondHouseCid = 'ZS001-NLG0H-100000002-2026';
     const executiveCid = 'ZS001-PRS0G-100000003-2026';
     const legislatureCid = 'ZS001-PLG0H-100000004-2026';
+    const proposerRoleCode = 'REPRESENTATIVE';
 
     // 一章一节一条无款的最小章节树。
     List<int> minimalChapters() => [
@@ -2251,6 +2266,7 @@ void main() {
         ...compactVec(firstHouseCid),
         ...compactVec(secondHouseCid),
         ...compactVec(nrcActorCid),
+        ...compactVec(proposerRoleCode),
         ...compactVec(executiveCid),
         0x00, // legislature None
         2, // vote_type = Major(2)
@@ -2270,6 +2286,7 @@ void main() {
       expect(decoded.fields['effective_at'], '5000');
       expect(decoded.fields['houses'], '$firstHouseCid、$secondHouseCid');
       expect(decoded.fields['actor_cid_number'], nrcActorCid);
+      expect(decoded.fields['proposer_role_code'], proposerRoleCode);
       expect(decoded.fields['executive_cid_number'], executiveCid);
     });
 
@@ -2281,6 +2298,7 @@ void main() {
         ...compactU32(1),
         ...compactVec(firstHouseCid),
         ...compactVec(nrcActorCid),
+        ...compactVec(proposerRoleCode),
         ...compactVec(executiveCid),
         0x00,
         0,
@@ -2300,6 +2318,7 @@ void main() {
         ...compactU32(1),
         ...compactVec(firstHouseCid),
         ...compactVec(nrcActorCid),
+        ...compactVec(proposerRoleCode),
         ...compactVec(executiveCid),
         0x00,
         9, // 非法 vote_type
@@ -2316,6 +2335,7 @@ void main() {
         25, 1,
         ...u64Le(42), // law_id
         ...compactVec(nrcActorCid),
+        ...compactVec(proposerRoleCode),
         ...compactVec(executiveCid),
         0x01, ...compactVec(legislatureCid), // legislature Some
         4, // vote_type = Special(4)
@@ -2332,6 +2352,7 @@ void main() {
       expect(decoded.fields['vote_type'], '特别案（强制公投）');
       expect(decoded.fields['effective_at'], '7777');
       expect(decoded.fields['actor_cid_number'], nrcActorCid);
+      expect(decoded.fields['proposer_role_code'], proposerRoleCode);
       expect(decoded.fields['executive_cid_number'], executiveCid);
       expect(decoded.fields['legislature_cid_number'], legislatureCid);
     });
@@ -2341,6 +2362,7 @@ void main() {
         25, 2,
         ...u64Le(7), // law_id
         ...compactVec(nrcActorCid),
+        ...compactVec(proposerRoleCode),
         ...compactVec(executiveCid),
         0x00, // legislature None
         0, // vote_type = Regular(0)
@@ -2351,6 +2373,7 @@ void main() {
       expect(decoded.fields['law_id'], '7');
       expect(decoded.fields['vote_type'], '常规案');
       expect(decoded.fields['actor_cid_number'], nrcActorCid);
+      expect(decoded.fields['proposer_role_code'], proposerRoleCode);
       expect(decoded.fields['executive_cid_number'], executiveCid);
     });
 

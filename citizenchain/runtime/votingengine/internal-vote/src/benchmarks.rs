@@ -21,6 +21,10 @@ fn setup<T: Config>() -> (
     let proposal_id = 0u64;
     let institution: T::AccountId = account("institution", 0, 0);
     let voter: T::AccountId = account("voter", 0, 0);
+    let actor_cid_number: votingengine::types::CidNumber = b"BENCHMARK-CID"
+        .to_vec()
+        .try_into()
+        .expect("benchmark CID fits runtime bound");
     let admins: frame_support::BoundedVec<T::AccountId, T::MaxAdminsPerInstitution> =
         sp_std::vec![voter.clone()]
             .try_into()
@@ -32,17 +36,17 @@ fn setup<T: Config>() -> (
         stage: votingengine::STAGE_INTERNAL,
         status: votingengine::STATUS_VOTING,
         internal_code: Some(primitives::cid::code::PMUL),
-        actor_cid_number: None,
+        actor_cid_number: Some(actor_cid_number.clone()),
         execution_account: Some(institution.clone()),
         subject_cid_numbers: Default::default(),
         start: 0u32.saturated_into(),
         end: 2u32.saturated_into(),
-        citizen_eligible_total: 0,
     };
     Proposals::<T>::insert(proposal_id, proposal.clone());
-    votingengine::pallet::AdminSnapshot::<T>::insert(
+    // 机构业务必须按岗位有效任职快照投票；个人多签才使用 AdminSnapshot。
+    votingengine::pallet::EffectiveVoterSnapshot::<T>::insert(
         proposal_id,
-        votingengine::ProposalSubject::PersonalAccount(institution),
+        votingengine::ProposalSubject::InstitutionCid(actor_cid_number),
         admins,
     );
     InternalThresholdSnapshot::<T>::insert(proposal_id, 1);

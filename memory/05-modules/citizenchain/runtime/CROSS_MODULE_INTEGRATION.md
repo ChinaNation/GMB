@@ -51,10 +51,11 @@
 | 适配器 | 作用 |
 |--------|------|
 | `RuntimeAdminAccountQuery` | 按机构码把管理员查询路由到 `public-admins`、`private-admins`、`personal-admins`；固定治理机构也读 `public-admins` |
-| `RuntimeInstitutionQuery` | 按公权/私权机构生命周期模块聚合机构账户状态和管理员快照，供 `multisig-transfer` 使用 |
-| `RuntimeInternalAdminProvider` | 所有内部投票主体统一委托 `RuntimeAdminAccountQuery` 读取管理员 |
-| `RuntimeInternalAdminsLenProvider` | 所有内部投票主体统一委托 `RuntimeAdminAccountQuery` 读取管理员人数 |
-| `RuntimeCitizenIdentityReader` | 给投票引擎读取投票资格、参选资格和链上人口分母 |
+| `RuntimeInstitutionQuery` | 按公权/私权机构生命周期模块聚合机构账户状态和 admins 人员配置，供 `multisig-transfer` 查询账户上下文；业务授权和机构投票资格不得取自该人员集合 |
+| `RuntimeInternalAdminProvider` | 仅为个人多签管理员快照及尚需人员目录的边界提供查询；机构投票资格不得从此适配器取得 |
+| `RuntimeInternalAdminsLenProvider` | 仅为个人多签或机构级人数辅助提供查询，不是机构岗位投票资格真源 |
+| `RuntimeInstitutionRoleProvider` | 从 entity 读取准确 `CID + 岗位码` 的当前有效任职，供所有机构投票 Track 在建案时冻结资格 |
+| `RuntimeCitizenIdentityReader` | 从 citizen-identity 读取投票资格、参选资格和一致的 `PopulationData`；投票引擎自行生成提案人口快照 |
 | `RuntimeCitizenIdentityAuthority` | 给公民身份模块校验注册局权限和公民钱包签名 |
 | `RuntimeJointVoteResultCallback` | 按模块路由：先查 `resolution-issuance`，再查 `runtime-upgrade` |
 | `OnchainExecutionFeeDistributor` | 将执行期 `NegativeImbalance` 等额转换为 `Credit`，再交给 `OnchainFeeRouter` 做 80/10/10 分账 |

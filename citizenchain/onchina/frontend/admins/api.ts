@@ -84,6 +84,7 @@ export type InstitutionGovernanceAssignmentChangeInput = {
 
 export type PrepareInstitutionGovernanceInput = {
   cid_number: string;
+  proposer_role_code: string;
   admins?: InstitutionGovernanceAdminInput[];
   role_mutations?: InstitutionGovernanceRoleMutationInput[];
   assignment_changes?: InstitutionGovernanceAssignmentChangeInput[];

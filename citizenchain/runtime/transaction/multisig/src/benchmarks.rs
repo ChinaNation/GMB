@@ -3,7 +3,7 @@
 //! 本 benchmark 当前覆盖治理机构路径；个人多签与注册机构账户
 //! 通过相同 `propose_transfer` 入口和查询 trait 接入，职责边界不在本文件复刻。
 //!
-//! 所有管理员投票一律通过 `InternalVote::cast`(20.0)。
+//! 机构岗位选民与个人多签管理员投票一律通过 `InternalVote::cast`(20.0)。
 //! 本文件只保留 `propose_transfer` benchmark;手动重试统一走
 //! `VotingEngine::retry_passed_proposal`,投票与重试 weight 全部归入
 //! votingengine pallet 自身的 benchmark,业务端无需重复覆盖。
@@ -25,6 +25,10 @@ fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
 
 fn prc_main_account<T: Config>() -> T::AccountId {
     decode_account::<T>(CHINA_CB[1].main_account)
+}
+
+fn prc_fee_account<T: Config>() -> T::AccountId {
+    decode_account::<T>(CHINA_CB[1].fee_account)
 }
 
 fn prc_actor_cid() -> votingengine::types::CidNumber {
@@ -55,6 +59,7 @@ mod benchmarks {
     #[benchmark]
     fn propose_transfer() {
         let funding_account = prc_main_account::<T>();
+        let fee_account = prc_fee_account::<T>();
         let actor_cid_number = prc_actor_cid();
         let proposer = prc_admin::<T>(0);
         let beneficiary = beneficiary_account::<T>();
@@ -62,11 +67,19 @@ mod benchmarks {
         let top_up: BalanceOf<T> = 1_000_000u128.saturated_into();
 
         let _ = T::Currency::deposit_creating(&funding_account, top_up);
+        // 机构本金账户只承担本金，链上手续费必须由同 CID 的费用账户承担。
+        let _ = T::Currency::deposit_creating(&fee_account, top_up);
 
         #[extrinsic_call]
         propose_transfer(
             RawOrigin::Signed(proposer.clone()),
             Some(actor_cid_number),
+            Some(
+                primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                    .to_vec()
+                    .try_into()
+                    .expect("benchmark role fits"),
+            ),
             funding_account,
             beneficiary,
             amount,

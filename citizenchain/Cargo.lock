@@ -4815,6 +4815,7 @@ name = "grandpakey-change"
 version = "1.0.0"
 dependencies = [
  "curve25519-dalek",
+ "entity-primitives",
  "frame-benchmarking",
  "frame-support",
  "frame-system",

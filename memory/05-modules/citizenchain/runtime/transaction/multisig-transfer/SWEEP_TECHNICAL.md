@@ -11,7 +11,7 @@ pub struct SweepAction<AccountId, Balance> {
     pub actor_cid_number: CidNumber,       // 机构唯一主键
     pub institution_account: AccountId,    // 实际转出的费用账户
     pub amount: Balance,                   // 划转金额（分）
-    pub proposer: AccountId,               // 签名管理员
+    pub proposer: AccountId,               // 签名岗位任职人
 }
 ```
 
@@ -27,7 +27,7 @@ pub struct SweepAction<AccountId, Balance> {
 
 ## 权限控制
 
-- **发起者**：显式 `actor_cid_number` 对应的 NRC 或 PRB 当前管理员（通过 `InternalAdminProvider::is_institution_admin` 校验）
+- **发起者**：显式 `actor_cid_number + proposer_role_code` 对应、拥有 sweep `Propose` 权限的 NRC 或 PRB 岗位有效任职人
 - **机构码判断**：`resolve_sweep_org(actor_cid_number)` 从 CID 解析机构码，仅允许 NRC 和 PRB
 - 注册账户（个人多签码 PMUL，`is_personal_code`）不在 sweep 范围内
 
@@ -41,14 +41,14 @@ pub struct SweepAction<AccountId, Balance> {
 
 ### 1. propose_sweep_to_main (call_index=2)
 
-1. 接收 `actor_cid_number + institution_account + amount`，校验 CID 属于 NRC/PRB、账户等于该 CID 的费用账户、调用者为该 CID 的管理员
-2. 通过 `InternalVoteEngine::create_institution_proposal_with_data` 创建提案，并绑定 CID、执行账户、owner/data/meta（获取 proposal_id）
+1. 接收 `actor_cid_number + proposer_role_code + institution_account + amount`，校验 CID 属于 NRC/PRB、账户等于该 CID 的费用账户，并按完整岗位主体校验业务提案权限
+2. 查询同一业务 `Vote` 权限岗位、构造 `VotePlan`，通过 `InternalVoteEngine::create_institution_proposal_with_data` 创建提案，并绑定 CID、执行账户、岗位快照、owner/data/meta（获取 proposal_id）
 3. 写入 `SweepProposalActions` 存储
 4. 触发 `SweepToMainProposed` 事件
 
 ### 2. 投票
 
-管理员统一调用 `InternalVote::cast(proposal_id, approve)`。投票引擎使用创建时的管理员快照和固定阈值判定，达阈值后回调本模块自动执行 sweep。
+岗位有效选民统一调用 `InternalVote::cast(proposal_id, approve)`。投票引擎使用创建时的 `EffectiveVoterSnapshot` 和对应机构阈值判定，不建立岗位阈值；达阈值后回调本模块自动执行 sweep。
 
 ### 3. try_execute_sweep（内部方法）
 
@@ -76,7 +76,7 @@ pub struct SweepAction<AccountId, Balance> {
 |------|----------|
 | `InvalidSweepAmount` | 金额为 0 |
 | `InvalidInstitution` | 机构非 NRC/PRB |
-| `UnauthorizedAdmin` | 调用者非管理员 |
+| `UnauthorizedAdmin` | 稳定错误码：调用者不是所提交岗位的有效任职人，或该岗位没有 sweep 提案权限 |
 | `SweepProposalNotFound` | proposal_id 无对应记录 |
 | `SweepProposalNotPassed` | 提案未通过 |
 | `InsufficientFeeReserve` | 余额不足以覆盖划转+手续费+保留 |

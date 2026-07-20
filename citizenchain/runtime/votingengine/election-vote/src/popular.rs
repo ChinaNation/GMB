@@ -11,6 +11,7 @@ impl<T: Config> Pallet<T> {
     #[allow(clippy::too_many_arguments)]
     pub fn do_create_popular_election(
         who: T::AccountId,
+        vote_plan: votingengine::types::VotePlanOf<T::AccountId>,
         actor_cid_number: votingengine::types::CidNumber,
         target_cid_number: votingengine::types::CidNumber,
         office_code: frame_support::pallet_prelude::BoundedVec<u8, MaxElectionOfficeCodeOf<T>>,
@@ -23,6 +24,7 @@ impl<T: Config> Pallet<T> {
     ) -> Result<u64, sp_runtime::DispatchError> {
         Self::do_create_election(
             who,
+            vote_plan,
             crate::types::ElectionMode::Popular,
             actor_cid_number,
             target_cid_number,
@@ -33,7 +35,6 @@ impl<T: Config> Pallet<T> {
             term_end,
             Some(population_scope),
             candidates,
-            sp_std::vec::Vec::new(),
         )
     }
 

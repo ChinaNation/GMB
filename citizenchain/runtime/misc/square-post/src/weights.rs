@@ -39,7 +39,10 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
     }
 
     fn propose_set_platform_price() -> Weight {
-        Weight::from_parts(85_000_000, 0).saturating_add(T::DbWeight::get().reads_writes(4, 5))
+        // 平台调价现按岗位权限构造 VotePlan；正式全调用 benchmark 补齐前，
+        // 以已实测机构提案路径为基线取保守上界。
+        Weight::from_parts(400_000_000, 700_000)
+            .saturating_add(T::DbWeight::get().reads_writes(35, 30))
     }
 
     fn process_one_due() -> Weight {
@@ -69,7 +72,9 @@ impl WeightInfo for () {
     }
 
     fn propose_set_platform_price() -> Weight {
-        Weight::zero()
+        Weight::from_parts(400_000_000, 700_000).saturating_add(
+            frame_support::weights::constants::RocksDbWeight::get().reads_writes(35, 30),
+        )
     }
 
     fn process_one_due() -> Weight {

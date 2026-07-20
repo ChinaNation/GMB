@@ -13,7 +13,7 @@ use frame_support::{
 };
 use frame_system as system;
 use primitives::cid::{
-    china::{china_jy::CHINA_JY, china_lf::CHINA_LF, china_zf::CHINA_ZF},
+    china::{china_jy::CHINA_JY, china_lf::CHINA_LF, china_sf::CHINA_SF, china_zf::CHINA_ZF},
     code::institution_code_from_cid_number,
 };
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
@@ -72,13 +72,13 @@ pub fn actor_cid_number() -> votingengine::types::CidNumber {
     bounded_cid(CHINA_LF[2].cid_number)
 }
 
-pub fn house1() -> votingengine::types::CidNumber {
+pub fn house1_cid() -> votingengine::types::CidNumber {
     bounded_cid(CHINA_LF[2].cid_number)
 }
-pub fn house2() -> votingengine::types::CidNumber {
+pub fn house2_cid() -> votingengine::types::CidNumber {
     bounded_cid(CHINA_LF[1].cid_number)
 }
-pub fn house3() -> votingengine::types::CidNumber {
+pub fn house3_cid() -> votingengine::types::CidNumber {
     bounded_cid(CHINA_JY[0].cid_number)
 }
 /// house1 议员 = 账户 [1..=10];house2 议员 = 账户 [11..=20]。
@@ -100,27 +100,60 @@ pub fn set_guard_member_ids(ids: &[u8]) {
 }
 
 // 签署机构(ADR-027 修订):行政机构 + 立法院(两院级,供院长)。
-pub fn exec_body() -> votingengine::types::CidNumber {
+pub fn exec_body_cid() -> votingengine::types::CidNumber {
     bounded_cid(CHINA_ZF[0].cid_number)
 }
 /// 行政首长(市长/省长/总统)= 行政机构法定代表人。
 pub fn exec_rep() -> AccountId32 {
     AccountId32::new([81u8; 32])
 }
-pub fn leg_body() -> votingengine::types::CidNumber {
+pub fn leg_body_cid() -> votingengine::types::CidNumber {
     bounded_cid(CHINA_LF[0].cid_number)
 }
 /// 立法院院长 = 立法院法定代表人。
 pub fn leg_rep() -> AccountId32 {
     AccountId32::new([71u8; 32])
 }
+pub fn guard_body_cid() -> votingengine::types::CidNumber {
+    bounded_cid(
+        CHINA_SF
+            .iter()
+            .find(|entry| institution_code_from_cid_number(entry.cid_number) == Some(*b"NJD\0"))
+            .expect("NJD exists")
+            .cid_number,
+    )
+}
+
+const REPRESENTATIVE_ROLE: &[u8] = b"REPRESENTATIVE";
+const LR_ROLE: &[u8] = primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE;
+const GUARD_ROLE: &[u8] = primitives::governance_skeleton::ROLE_CODE_CONSTITUTION_GUARD;
+
+fn role_subject(
+    cid_number: votingengine::types::CidNumber,
+    role_code: &[u8],
+) -> crate::types::RepresentativeBody {
+    entity_primitives::RoleSubject {
+        cid_number,
+        role_code: role_code.to_vec().try_into().expect("test role fits"),
+    }
+}
+
+pub fn house1() -> crate::types::RepresentativeBody {
+    role_subject(house1_cid(), REPRESENTATIVE_ROLE)
+}
+pub fn exec_body() -> crate::types::RepresentativeBody {
+    role_subject(exec_body_cid(), LR_ROLE)
+}
+pub fn leg_body() -> crate::types::RepresentativeBody {
+    role_subject(leg_body_cid(), LR_ROLE)
+}
+pub fn guard_body() -> crate::types::RepresentativeBody {
+    role_subject(guard_body_cid(), GUARD_ROLE)
+}
 
 pub struct TestCitizenIdentityReader;
 pub struct TestInternalAdminProvider;
-
-thread_local! {
-    static TEST_POPULATION_SNAPSHOT_ID: RefCell<u64> = const { RefCell::new(0) };
-}
+pub struct TestInstitutionRoleProvider;
 
 impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
     fn can_vote(_who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
@@ -135,19 +168,16 @@ impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityRea
         100
     }
 
-    fn create_population_snapshot(
-        _scope: &votingengine::PopulationScope,
-    ) -> Result<(u64, u64), sp_runtime::DispatchError> {
-        let snapshot_id = TEST_POPULATION_SNAPSHOT_ID.with(|next| {
-            let mut next = next.borrow_mut();
-            let snapshot_id = *next;
-            *next = (*next).saturating_add(1);
-            snapshot_id
-        });
-        Ok((snapshot_id, 100))
+    fn population_data(scope: &votingengine::PopulationScope) -> votingengine::PopulationData {
+        votingengine::PopulationData {
+            scope: scope.clone(),
+            eligible_total: 100,
+            eligibility_revision: 1,
+            eligibility_date: 20_000,
+        }
     }
 
-    fn can_vote_at(_who: &AccountId32, _snapshot_id: u64) -> bool {
+    fn can_vote_at(_who: &AccountId32, _population_data: &votingengine::PopulationData) -> bool {
         true
     }
 }
@@ -163,9 +193,9 @@ impl TestInternalAdminProvider {
         }
         if cid_number == actor_cid_number().as_slice() {
             Some((1u8..=10).map(member).collect())
-        } else if cid_number == house2().as_slice() {
+        } else if cid_number == house2_cid().as_slice() {
             Some((11u8..=20).map(member).collect())
-        } else if cid_number == house3().as_slice() {
+        } else if cid_number == house3_cid().as_slice() {
             Some((1u8..=10).map(member).collect())
         } else {
             None
@@ -194,15 +224,15 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
 
     /// 法定代表人:众议长=house1[member 1] / 参议长=house2[member 11] / 院长=leg_rep / 行政首长=exec_rep。
     fn legal_representative(cid_number: &[u8]) -> Option<AccountId32> {
-        if cid_number == house1().as_slice() {
+        if cid_number == house1_cid().as_slice() {
             Some(member(1))
-        } else if cid_number == house2().as_slice() {
+        } else if cid_number == house2_cid().as_slice() {
             Some(member(11))
-        } else if cid_number == house3().as_slice() {
+        } else if cid_number == house3_cid().as_slice() {
             Some(member(1))
-        } else if cid_number == leg_body().as_slice() {
+        } else if cid_number == leg_body_cid().as_slice() {
             Some(leg_rep())
-        } else if cid_number == exec_body().as_slice() {
+        } else if cid_number == exec_body_cid().as_slice() {
             Some(exec_rep())
         } else {
             None
@@ -211,6 +241,43 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
     /// 护宪大法官默认 7 人 = 账户 [101..=107](测试注入;生产按 NJD admins 的 admin_role 过滤)。
     fn constitution_guard_members() -> sp_runtime::sp_std::vec::Vec<AccountId32> {
         GUARD_MEMBER_IDS.with(|ids| ids.borrow().iter().copied().map(member).collect())
+    }
+}
+
+impl votingengine::InstitutionRoleProvider<AccountId32> for TestInstitutionRoleProvider {
+    fn is_active_assignment(cid_number: &[u8], who: &AccountId32, role_code: &[u8]) -> bool {
+        cid_number == actor_cid_number().as_slice()
+            && role_code == REPRESENTATIVE_ROLE
+            && (1u8..=10).map(member).any(|account| &account == who)
+    }
+
+    fn active_accounts_for_role(cid_number: &[u8], role_code: &[u8]) -> Vec<AccountId32> {
+        if role_code == REPRESENTATIVE_ROLE {
+            if cid_number == house1_cid().as_slice() || cid_number == house3_cid().as_slice() {
+                return (1u8..=10).map(member).collect();
+            }
+            if cid_number == house2_cid().as_slice() {
+                return (11u8..=20).map(member).collect();
+            }
+        }
+        if role_code == LR_ROLE {
+            if cid_number == house1_cid().as_slice() || cid_number == house3_cid().as_slice() {
+                return vec![member(1)];
+            }
+            if cid_number == house2_cid().as_slice() {
+                return vec![member(11)];
+            }
+            if cid_number == leg_body_cid().as_slice() {
+                return vec![leg_rep()];
+            }
+            if cid_number == exec_body_cid().as_slice() {
+                return vec![exec_rep()];
+            }
+        }
+        if role_code == GUARD_ROLE && cid_number == guard_body_cid().as_slice() {
+            return GUARD_MEMBER_IDS.with(|ids| ids.borrow().iter().copied().map(member).collect());
+        }
+        Vec::new()
     }
 }
 
@@ -268,17 +335,18 @@ impl votingengine::Config for Test {
 
 impl internal_vote::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionRoleProvider = TestInstitutionRoleProvider;
     type WeightInfo = ();
 }
 
 impl crate::pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionRoleProvider = TestInstitutionRoleProvider;
     type WeightInfo = ();
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
     set_guard_member_ids(&DEFAULT_GUARD_MEMBER_IDS);
-    TEST_POPULATION_SNAPSHOT_ID.with(|next| *next.borrow_mut() = 0);
     let storage = frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .expect("test storage should build");
@@ -309,7 +377,7 @@ pub fn create_guard(
     bodies: sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumber>,
     rule: RepresentativeVoteRule,
 ) -> u64 {
-    create_inner(proposer, bodies, rule, true)
+    try_create_inner(proposer, bodies, rule, true).expect("proposal created")
 }
 
 fn create_inner(
@@ -318,55 +386,137 @@ fn create_inner(
     rule: RepresentativeVoteRule,
     needs_guard: bool,
 ) -> u64 {
-    // 单院(市)=无 legislature;两院(国/省)=携带立法院。行政签署机构恒携带。
-    let legislature = if bodies.len() >= 2 {
-        Some(leg_body())
-    } else {
-        None
-    };
-    let bounded: RepresentativeBodies = bodies.try_into().expect("representative route bounded");
+    try_create_inner(proposer, bodies, rule, needs_guard).expect("proposal created")
+}
+
+pub fn try_create_guard(
+    proposer: AccountId32,
+    bodies: sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumber>,
+    rule: RepresentativeVoteRule,
+) -> Result<u64, sp_runtime::DispatchError> {
+    try_create_inner(proposer, bodies, rule, true)
+}
+
+fn try_create_inner(
+    proposer: AccountId32,
+    bodies: sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumber>,
+    rule: RepresentativeVoteRule,
+    needs_guard: bool,
+) -> Result<u64, sp_runtime::DispatchError> {
+    let bounded: RepresentativeBodies = bodies
+        .into_iter()
+        .map(|cid| role_subject(cid, REPRESENTATIVE_ROLE))
+        .collect::<Vec<_>>()
+        .try_into()
+        .expect("representative route bounded");
     let route = if bounded.len() == 1 {
         RepresentativeRoute::Single(bounded.first().cloned().expect("single body"))
     } else {
         RepresentativeRoute::Sequential(bounded)
     };
+    let legislation_meta = legislation_meta(&route, rule, needs_guard);
+    let vote_plan = test_vote_plan(&route, legislation_meta.as_ref());
     let pid = Lib::do_create_representative_proposal(
         proposer,
         actor_cid_number(),
+        vote_plan,
         route,
         rule,
         VoteProcedure::Legislation,
         votingengine::types::ProposalSubjectCidNumbers::new(),
-        Some(crate::pallet::LegislationMeta {
-            executive: exec_body(),
-            legislature,
-            needs_guard,
-        }),
-    )
-    .expect("proposal created");
+        legislation_meta,
+    )?;
     let now = System::block_number();
     votingengine::Pallet::<Test>::register_proposal_data(
         pid,
         b"leg-yuan",
         sp_runtime::sp_std::vec![1u8],
         now,
+    )?;
+    Ok(pid)
+}
+
+pub fn legislation_meta(
+    route: &RepresentativeRoute,
+    rule: RepresentativeVoteRule,
+    needs_guard: bool,
+) -> Option<crate::pallet::LegislationMeta> {
+    let executive = (rule != RepresentativeVoteRule::Special).then(exec_body);
+    let mut override_signers = Vec::new();
+    if rule != RepresentativeVoteRule::Special && route.len() >= 2 {
+        override_signers.push(leg_body());
+        for body in route.bodies().into_iter().take(2) {
+            override_signers.push(role_subject(body.cid_number, LR_ROLE));
+        }
+    }
+    Some(crate::pallet::LegislationMeta {
+        executive,
+        override_signers: override_signers.try_into().expect("three signers max"),
+        needs_guard,
+        guard: needs_guard.then(guard_body),
+    })
+}
+
+pub fn test_vote_plan(
+    route: &RepresentativeRoute,
+    meta: Option<&crate::pallet::LegislationMeta>,
+) -> votingengine::VotePlanOf<AccountId32> {
+    test_vote_plan_with_owner(route, meta, b"leg-yuan")
+}
+
+pub fn test_vote_plan_with_owner(
+    route: &RepresentativeRoute,
+    meta: Option<&crate::pallet::LegislationMeta>,
+    module_tag: &[u8],
+) -> votingengine::VotePlanOf<AccountId32> {
+    let owner: frame_support::BoundedVec<
+        u8,
+        ConstU32<{ entity_primitives::BUSINESS_MODULE_TAG_MAX_BYTES }>,
+    > = module_tag.to_vec().try_into().expect("owner fits");
+    let mut voters = route
+        .bodies()
+        .into_iter()
+        .map(votingengine::AuthorizationSubject::Institution)
+        .collect::<Vec<_>>();
+    if let Some(meta) = meta {
+        voters.extend(
+            meta.executive
+                .iter()
+                .chain(meta.override_signers.iter())
+                .chain(meta.guard.iter())
+                .cloned()
+                .map(votingengine::AuthorizationSubject::Institution),
+        );
+    }
+    votingengine::VotePlanOf::try_new(
+        entity_primitives::BusinessActionId {
+            module_tag: owner.clone(),
+            action_code: 0,
+        },
+        owner,
+        votingengine::AuthorizationSubject::Institution(role_subject(
+            actor_cid_number(),
+            REPRESENTATIVE_ROLE,
+        )),
+        voters,
+        votingengine::VotingEngineKind::Legislation,
+        [3u8; 32],
     )
-    .expect("register proposal data");
-    pid
+    .expect("test legislation plan")
 }
 
 /// 单院院序列 [house1]。
 pub fn single_house() -> sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumber> {
-    sp_runtime::sp_std::vec![house1()]
+    sp_runtime::sp_std::vec![house1_cid()]
 }
 /// 两院院序列 [house1, house2]。
 pub fn two_houses() -> sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumber> {
-    sp_runtime::sp_std::vec![house1(), house2()]
+    sp_runtime::sp_std::vec![house1_cid(), house2_cid()]
 }
 
 /// 两个管理员名册重叠的代表机构，用于验证同一钱包按机构席位分别投票。
 pub fn overlapping_bodies() -> sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumber> {
-    sp_runtime::sp_std::vec![house1(), house3()]
+    sp_runtime::sp_std::vec![house1_cid(), house3_cid()]
 }
 
 /// 当前提案状态(从核心读)。

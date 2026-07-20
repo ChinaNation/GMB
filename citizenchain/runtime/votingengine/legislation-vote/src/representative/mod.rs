@@ -4,6 +4,7 @@ pub mod sequential;
 pub mod single;
 pub mod tally;
 use crate::*;
+use votingengine::InstitutionRoleProvider as _;
 
 impl<T: Config> Pallet<T> {
     pub(crate) fn stage_duration() -> frame_system::pallet_prelude::BlockNumberFor<T> {
@@ -38,7 +39,7 @@ impl<T: Config> Pallet<T> {
                     .map_err(|_| Error::<T>::InvalidInstitutionCid)?;
                 Ok(PopulationScope::Province(province_code))
             }
-            code if code == *b"CSLF" || code == *b"CEDU" => {
+            code if code == *b"CSLF" || code == *b"CEDU" || code == *b"CLEG" => {
                 let (province_code, city_code) =
                     primitives::cid::number::cid_scope_codes(actor_cid_number.as_slice())
                         .map_err(|_| Error::<T>::InvalidInstitutionCid)?;
@@ -60,7 +61,7 @@ impl<T: Config> Pallet<T> {
         actor_cid_number: &votingengine::types::CidNumber,
         route: &RepresentativeRoute,
         additional_subjects: ProposalSubjectCidNumbers,
-        additional_institutions: &[votingengine::types::CidNumber],
+        additional_institutions: &[crate::types::RepresentativeBody],
     ) -> Result<ProposalSubjectCidNumbers, DispatchError> {
         let mut raw: sp_runtime::sp_std::vec::Vec<sp_runtime::sp_std::vec::Vec<u8>> =
             additional_subjects
@@ -68,11 +69,11 @@ impl<T: Config> Pallet<T> {
                 .map(|cid| cid.into_inner())
                 .collect();
         raw.push(actor_cid_number.to_vec());
-        for cid_number in route.bodies() {
-            raw.push(cid_number.to_vec());
+        for body in route.bodies() {
+            raw.push(body.cid_number.to_vec());
         }
-        for cid_number in additional_institutions {
-            raw.push(cid_number.to_vec());
+        for subject in additional_institutions {
+            raw.push(subject.cid_number.to_vec());
         }
         <votingengine::Pallet<T>>::bound_subject_cid_numbers(raw)
     }
@@ -80,7 +81,7 @@ impl<T: Config> Pallet<T> {
     /// 校验路线并返回首个表决机构。路线中的机构不得重复。
     pub(crate) fn validate_representative_route(
         route: &RepresentativeRoute,
-    ) -> Result<(InstitutionCode, votingengine::types::CidNumber), DispatchError> {
+    ) -> Result<(InstitutionCode, crate::types::RepresentativeBody), DispatchError> {
         let bodies = route.bodies();
         ensure!(!bodies.is_empty(), Error::<T>::InvalidRepresentativeRoute);
         match route {
@@ -97,12 +98,12 @@ impl<T: Config> Pallet<T> {
             );
         }
         for body in &bodies {
-            Self::institution_code_for_cid(body)?;
+            Self::institution_code_for_cid(&body.cid_number)?;
         }
-        let first_cid_number = bodies[0].clone();
+        let first_body = bodies[0].clone();
         Ok((
-            Self::institution_code_for_cid(&first_cid_number)?,
-            first_cid_number,
+            Self::institution_code_for_cid(&first_body.cid_number)?,
+            first_body,
         ))
     }
 }
@@ -113,20 +114,32 @@ impl<T: Config> Pallet<T> {
     pub fn do_create_representative_proposal(
         who: T::AccountId,
         actor_cid_number: votingengine::types::CidNumber,
+        vote_plan: VotePlanOf<T::AccountId>,
         route: RepresentativeRoute,
         rule: RepresentativeVoteRule,
         procedure: VoteProcedure,
         additional_subjects: ProposalSubjectCidNumbers,
         legislation_meta: Option<pallet::LegislationMeta>,
     ) -> Result<u64, DispatchError> {
-        let (first_code, first_cid_number) = Self::validate_representative_route(&route)?;
+        let (first_code, _first_body) = Self::validate_representative_route(&route)?;
         let actor_code = Self::institution_code_for_cid(&actor_cid_number)?;
         ensure!(
-            <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
-                actor_code,
-                actor_cid_number.as_slice(),
-                &who,
-            ),
+            vote_plan.voting_engine == votingengine::VotingEngineKind::Legislation,
+            votingengine::Error::<T>::InvalidVotePlan
+        );
+        let proposer_role = match &vote_plan.proposer_subject {
+            AuthorizationSubject::Institution(subject) => subject,
+            AuthorizationSubject::PersonalMultisig(_) => {
+                return Err(votingengine::Error::<T>::InvalidVotePlan.into())
+            }
+        };
+        ensure!(
+            proposer_role.cid_number == actor_cid_number
+                && T::InstitutionRoleProvider::is_active_assignment(
+                    actor_cid_number.as_slice(),
+                    &who,
+                    proposer_role.role_code.as_slice(),
+                ),
             votingengine::Error::<T>::NoPermission
         );
         ensure!(
@@ -141,11 +154,36 @@ impl<T: Config> Pallet<T> {
 
         let mut additional_institutions = sp_runtime::sp_std::vec::Vec::new();
         if let Some(meta) = legislation_meta.as_ref() {
-            additional_institutions.push(meta.executive.clone());
-            if let Some(legislature) = meta.legislature.as_ref() {
-                additional_institutions.push(legislature.clone());
+            if let Some(executive) = meta.executive.as_ref() {
+                additional_institutions.push(executive.clone());
             }
+            additional_institutions.extend(meta.override_signers.iter().cloned());
+            additional_institutions.extend(meta.guard.iter().cloned());
         }
+        let mut expected_voters = route
+            .bodies()
+            .into_iter()
+            .map(AuthorizationSubject::Institution)
+            .collect::<sp_runtime::sp_std::vec::Vec<_>>();
+        expected_voters.extend(
+            additional_institutions
+                .iter()
+                .cloned()
+                .map(AuthorizationSubject::Institution),
+        );
+        for (index, subject) in expected_voters.iter().enumerate() {
+            ensure!(
+                !expected_voters[..index].contains(subject),
+                votingengine::Error::<T>::InvalidVotePlan
+            );
+        }
+        ensure!(
+            expected_voters.len() == vote_plan.voter_subjects.len()
+                && expected_voters
+                    .iter()
+                    .all(|subject| vote_plan.voter_subjects.contains(subject)),
+            votingengine::Error::<T>::InvalidVotePlan
+        );
         let subject_cid_numbers = Self::resolve_subject_cid_numbers(
             &actor_cid_number,
             &route,
@@ -165,24 +203,6 @@ impl<T: Config> Pallet<T> {
         let end = now.saturating_add(Self::stage_duration());
 
         with_transaction(|| {
-            // 只有特别案创建人口快照。快照与提案、法律对象及自动投票处于
-            // 同一外层事务，后续任一写入失败都不会留下孤立快照。
-            let (eligible_total, population_snapshot_id) = match population_scope.as_ref() {
-                Some(scope) => {
-                    let (snapshot_id, eligible_total) =
-                        match <votingengine::Pallet<T>>::create_population_snapshot(scope) {
-                            Ok(value) => value,
-                            Err(err) => return TransactionOutcome::Rollback(Err(err)),
-                        };
-                    if eligible_total == 0 {
-                        return TransactionOutcome::Rollback(Err(
-                            Error::<T>::CitizenEligibleTotalNotSet.into(),
-                        ));
-                    }
-                    (eligible_total, Some(snapshot_id))
-                }
-                None => (0, None),
-            };
             let proposal = Proposal {
                 kind: PROPOSAL_KIND_LEGISLATION,
                 stage: STAGE_LEG_REPRESENTATIVE,
@@ -193,7 +213,6 @@ impl<T: Config> Pallet<T> {
                 subject_cid_numbers,
                 start: now,
                 end,
-                citizen_eligible_total: eligible_total,
             };
             let id = match <votingengine::Pallet<T>>::allocate_proposal_id() {
                 Ok(id) => id,
@@ -214,12 +233,41 @@ impl<T: Config> Pallet<T> {
                     return TransactionOutcome::Rollback(Err(err));
                 }
             }
-            if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
-                id,
-                first_code,
-                first_cid_number,
-            ) {
-                return TransactionOutcome::Rollback(Err(err));
+            // 所有代表、签署和护宪岗位都在建案时冻结；后续换届不得改写既有资格。
+            for subject in vote_plan.voter_subjects.iter() {
+                let role_subject = match subject {
+                    AuthorizationSubject::Institution(role_subject) => role_subject,
+                    AuthorizationSubject::PersonalMultisig(_) => {
+                        return TransactionOutcome::Rollback(Err(
+                            votingengine::Error::<T>::InvalidVotePlan.into(),
+                        ))
+                    }
+                };
+                let voters = T::InstitutionRoleProvider::active_accounts_for_role(
+                    role_subject.cid_number.as_slice(),
+                    role_subject.role_code.as_slice(),
+                );
+                if legislation_meta
+                    .as_ref()
+                    .and_then(|meta| meta.guard.as_ref())
+                    == Some(role_subject)
+                {
+                    // 护宪终审是固定七人制；人数错误或账户重复必须在建案冻结资格时失败。
+                    let unique = voters
+                        .iter()
+                        .enumerate()
+                        .all(|(index, voter)| !voters[..index].contains(voter));
+                    if voters.len() != CONSTITUTION_GUARD_MEMBERS as usize || !unique {
+                        return TransactionOutcome::Rollback(Err(
+                            Error::<T>::InvalidGuardMembersLen.into(),
+                        ));
+                    }
+                }
+                if let Err(err) =
+                    <votingengine::Pallet<T>>::snapshot_role_voters(id, subject.clone(), voters)
+                {
+                    return TransactionOutcome::Rollback(Err(err));
+                }
             }
             pallet::RepresentativeMetas::<T>::insert(
                 id,
@@ -234,11 +282,20 @@ impl<T: Config> Pallet<T> {
                 pallet::LegislationMetas::<T>::insert(id, meta);
             }
             Proposals::<T>::insert(id, proposal);
-            if let Some(snapshot_id) = population_snapshot_id {
-                if let Err(err) =
-                    <votingengine::Pallet<T>>::bind_population_snapshot(id, snapshot_id)
-                {
-                    return TransactionOutcome::Rollback(Err(err));
+            if let Err(err) = <votingengine::Pallet<T>>::bind_vote_plan(id, vote_plan) {
+                return TransactionOutcome::Rollback(Err(err));
+            }
+            // 只有特别案创建人口快照。投票引擎读取 citizen-identity 人口数据后
+            // 在本 proposal_id 下生成快照，后续失败由外层事务整体回滚。
+            if let Some(scope) = population_scope.as_ref() {
+                match <votingengine::Pallet<T>>::create_population_snapshot(id, scope) {
+                    Ok(0) => {
+                        return TransactionOutcome::Rollback(Err(
+                            Error::<T>::CitizenEligibleTotalNotSet.into(),
+                        ))
+                    }
+                    Ok(_) => {}
+                    Err(err) => return TransactionOutcome::Rollback(Err(err)),
                 }
             }
             if let Err(err) = <votingengine::Pallet<T>>::schedule_proposal_expiry(id, end) {
@@ -279,19 +336,20 @@ impl<T: Config> Pallet<T> {
         );
         let meta = pallet::RepresentativeMetas::<T>::get(proposal_id)
             .ok_or(Error::<T>::ProposalMetaMissing)?;
-        let institution_cid_number = meta
+        let representative_body = meta
             .route
             .body(meta.current_body)
             .ok_or(Error::<T>::InvalidRepresentativeRoute)?;
+        let representative_subject = AuthorizationSubject::Institution(representative_body);
         let vote_key = (meta.current_body, who.clone());
         ensure!(
             !pallet::RepresentativeVotesByAccount::<T>::contains_key(proposal_id, &vote_key),
             votingengine::Error::<T>::AlreadyVoted
         );
         ensure!(
-            <votingengine::Pallet<T>>::is_admin_in_snapshot(
+            <votingengine::Pallet<T>>::is_subject_voter_in_snapshot(
                 proposal_id,
-                votingengine::ProposalSubject::InstitutionCid(institution_cid_number.clone()),
+                representative_subject.clone(),
                 &who,
             ),
             votingengine::Error::<T>::NoPermission
@@ -314,12 +372,10 @@ impl<T: Config> Pallet<T> {
             approve,
         });
 
-        let admins_len = <votingengine::Pallet<T>>::snapshot_admins_len(
-            proposal_id,
-            votingengine::ProposalSubject::InstitutionCid(institution_cid_number),
-        )
-        .ok_or(votingengine::Error::<T>::MissingAdminSnapshot)?;
-        match representative_decided(meta.rule, admins_len, tally.yes, tally.no) {
+        let voters_len =
+            <votingengine::Pallet<T>>::subject_voters_len(proposal_id, representative_subject)
+                .ok_or(votingengine::Error::<T>::MissingVoterSnapshot)?;
+        match representative_decided(meta.rule, voters_len, tally.yes, tally.no) {
             Some(true) => match meta.route {
                 RepresentativeRoute::Single(_) => {
                     Self::finish_single_representative_vote(proposal_id)
@@ -341,11 +397,11 @@ impl<T: Config> Pallet<T> {
             .ok_or(Error::<T>::ProposalMetaMissing)?;
         let next = meta.current_body.saturating_add(1);
         if (next as usize) < meta.route.len() {
-            let next_cid_number = meta
+            let next_body = meta
                 .route
                 .body(next)
                 .ok_or(Error::<T>::InvalidRepresentativeRoute)?;
-            let next_code = Self::institution_code_for_cid(&next_cid_number)?;
+            let next_code = Self::institution_code_for_cid(&next_body.cid_number)?;
             let now = <frame_system::Pallet<T>>::block_number();
             let end = now.saturating_add(Self::stage_duration());
             with_transaction(|| {
@@ -355,13 +411,6 @@ impl<T: Config> Pallet<T> {
                         m.current_body = next;
                     }
                 });
-                if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
-                    proposal_id,
-                    next_code,
-                    next_cid_number,
-                ) {
-                    return TransactionOutcome::Rollback(Err(err));
-                }
                 let old_end =
                     match Proposals::<T>::try_mutate(
                         proposal_id,
@@ -436,17 +485,16 @@ impl<T: Config> Pallet<T> {
         );
         let meta = pallet::RepresentativeMetas::<T>::get(proposal_id)
             .ok_or(Error::<T>::ProposalMetaMissing)?;
-        let institution_cid_number = meta
+        let representative_body = meta
             .route
             .body(meta.current_body)
             .ok_or(Error::<T>::InvalidRepresentativeRoute)?;
-        let admins_len = <votingengine::Pallet<T>>::snapshot_admins_len(
-            proposal_id,
-            votingengine::ProposalSubject::InstitutionCid(institution_cid_number),
-        )
-        .ok_or(votingengine::Error::<T>::MissingAdminSnapshot)?;
+        let representative_subject = AuthorizationSubject::Institution(representative_body);
+        let voters_len =
+            <votingengine::Pallet<T>>::subject_voters_len(proposal_id, representative_subject)
+                .ok_or(votingengine::Error::<T>::MissingVoterSnapshot)?;
         let tally = pallet::RepresentativeTallies::<T>::get(proposal_id, meta.current_body);
-        if representative_final_passed(meta.rule, admins_len, tally.yes, tally.no) {
+        if representative_final_passed(meta.rule, voters_len, tally.yes, tally.no) {
             match meta.route {
                 RepresentativeRoute::Single(_) => {
                     Self::finish_single_representative_vote(proposal_id)

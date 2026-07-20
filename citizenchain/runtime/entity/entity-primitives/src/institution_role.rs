@@ -327,6 +327,16 @@ pub trait InstitutionRoleAuthorizationQuery<AccountId> {
         business_action_id: &BusinessActionId<Vec<u8>>,
         operation: RolePermissionOperation,
     ) -> bool;
+
+    /// 返回指定 CID 内持有目标业务权限的全部岗位主体。
+    ///
+    /// 实现必须按 `role_code` 确定性排序并去重；调用方仍需将结果限制在
+    /// `VotePlan` 上限内。本查询只解析岗位权限，具体账户任职由投票引擎快照。
+    fn role_subjects_with_permission(
+        cid_number: &[u8],
+        business_action_id: &BusinessActionId<Vec<u8>>,
+        operation: RolePermissionOperation,
+    ) -> Vec<RoleSubject<Vec<u8>, Vec<u8>>>;
 }
 
 impl<AccountId> InstitutionRoleAuthorizationQuery<AccountId> for () {
@@ -345,6 +355,14 @@ impl<AccountId> InstitutionRoleAuthorizationQuery<AccountId> for () {
         _operation: RolePermissionOperation,
     ) -> bool {
         false
+    }
+
+    fn role_subjects_with_permission(
+        _cid_number: &[u8],
+        _business_action_id: &BusinessActionId<Vec<u8>>,
+        _operation: RolePermissionOperation,
+    ) -> Vec<RoleSubject<Vec<u8>, Vec<u8>>> {
+        Vec::new()
     }
 }
 

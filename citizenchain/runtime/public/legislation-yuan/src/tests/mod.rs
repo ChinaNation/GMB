@@ -95,6 +95,11 @@ impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityRea
 }
 
 pub struct TestInternalAdminProvider;
+pub struct TestInstitutionRoleProvider;
+pub struct TestInstitutionRoleAuthorization;
+
+const PROPOSER_ROLE: &[u8] = b"LAW_PROPOSER";
+const VOTER_ROLE: &[u8] = b"LAW_VOTER";
 
 /// legislator() 是测试发起机构 CID 的唯一管理员；其它一律不是。
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
@@ -119,6 +124,82 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         } else {
             None
         }
+    }
+}
+
+impl votingengine::InstitutionRoleProvider<AccountId32> for TestInstitutionRoleProvider {
+    fn is_active_assignment(cid_number: &[u8], who: &AccountId32, role_code: &[u8]) -> bool {
+        *who == legislator()
+            && role_code == PROPOSER_ROLE
+            && [*b"NRP\0", *b"CSLF", *b"CEDU", *b"CLEG"]
+                .into_iter()
+                .any(|code| TestInstitutionCidQuery::cid_matches(code, cid_number))
+    }
+
+    fn active_accounts_for_role(_cid_number: &[u8], _role_code: &[u8]) -> Vec<AccountId32> {
+        vec![legislator()]
+    }
+}
+
+impl entity_primitives::InstitutionRoleAuthorizationQuery<AccountId32>
+    for TestInstitutionRoleAuthorization
+{
+    fn role_has_permission(
+        role_subject: &entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>,
+        action: &entity_primitives::BusinessActionId<Vec<u8>>,
+        operation: entity_primitives::RolePermissionOperation,
+    ) -> bool {
+        action.module_tag == MODULE_TAG
+            && matches!(action.action_code, 0..=2)
+            && operation == entity_primitives::RolePermissionOperation::Vote
+            && (role_subject.role_code == VOTER_ROLE
+                || role_subject.role_code
+                    == primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE
+                || role_subject.role_code
+                    == primitives::governance_skeleton::ROLE_CODE_CONSTITUTION_GUARD)
+    }
+
+    fn is_authorized(
+        admin: &AccountId32,
+        role_subject: &entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>,
+        action: &entity_primitives::BusinessActionId<Vec<u8>>,
+        operation: entity_primitives::RolePermissionOperation,
+    ) -> bool {
+        *admin == legislator()
+            && role_subject.role_code == PROPOSER_ROLE
+            && action.module_tag == MODULE_TAG
+            && matches!(action.action_code, 0..=2)
+            && operation == entity_primitives::RolePermissionOperation::Propose
+    }
+
+    fn role_subjects_with_permission(
+        cid_number: &[u8],
+        action: &entity_primitives::BusinessActionId<Vec<u8>>,
+        operation: entity_primitives::RolePermissionOperation,
+    ) -> Vec<entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>> {
+        if action.module_tag != MODULE_TAG
+            || !matches!(action.action_code, 0..=2)
+            || operation != entity_primitives::RolePermissionOperation::Vote
+        {
+            return Vec::new();
+        }
+        let is_house = [*b"NRP\0", *b"NSN\0", *b"CLEG"]
+            .into_iter()
+            .any(|code| TestInstitutionCidQuery::cid_matches(code, cid_number));
+        if !is_house {
+            return Vec::new();
+        }
+        vec![
+            entity_primitives::RoleSubject {
+                cid_number: cid_number.to_vec(),
+                role_code: VOTER_ROLE.to_vec(),
+            },
+            entity_primitives::RoleSubject {
+                cid_number: cid_number.to_vec(),
+                role_code: primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE
+                    .to_vec(),
+            },
+        ]
     }
 }
 
@@ -211,6 +292,7 @@ impl votingengine::Config for Test {
 
 impl internal_vote::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionRoleProvider = TestInstitutionRoleProvider;
     type WeightInfo = ();
 }
 
@@ -230,6 +312,7 @@ impl crate::pallet::Config for Test {
     // 立法投票引擎单测装配为 ()(NotConfigured);端到端见 legislation-vote 测试。
     type LegislationVoteEngine = ();
     type InstitutionCidQuery = TestInstitutionCidQuery;
+    type InstitutionRoleAuthorization = TestInstitutionRoleAuthorization;
     type MaxTitleLen = MaxTitleLen;
     type MaxTextLen = MaxTextLen;
     type MaxClausesPerArticle = MaxClausesPerArticle;
@@ -328,6 +411,9 @@ pub const EXEC_CODE: InstitutionCode = *b"PRS\0";
 pub fn actor_cid_number() -> votingengine::types::CidNumber {
     TestInstitutionCidQuery::bounded_cid(OWNER_CODE)
 }
+pub fn proposer_role_code() -> votingengine::types::RoleCode {
+    PROPOSER_ROLE.to_vec().try_into().expect("test role fits")
+}
 /// 行政签署机构 CID。
 pub fn executive_cid_number() -> votingengine::types::CidNumber {
     TestInstitutionCidQuery::bounded_cid(EXEC_CODE)
@@ -382,6 +468,7 @@ pub fn enact_summary(
         scope_code,
         houses,
         actor_cid_number,
+        proposer_role_code: proposer_role_code(),
         executive_cid_number,
         legislature_cid_number,
         vote_type,

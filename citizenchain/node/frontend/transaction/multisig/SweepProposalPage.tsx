@@ -25,6 +25,7 @@ export function SweepProposalPage({
     adminWallets.length === 1 ? adminWallets[0] : null
   );
   const [amountYuan, setAmountYuan] = useState('');
+  const [proposerRoleCode, setProposerRoleCode] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -49,6 +50,7 @@ export function SweepProposalPage({
 
   const handleSubmit = async () => {
     if (!selectedWallet) { setFormError('请选择管理员钱包'); return; }
+    if (!proposerRoleCode.trim()) { setFormError('请输入提案发起岗位码'); return; }
     const amount = parseFloat(amountYuan.replace(/,/g, ''));
     if (isNaN(amount) || amount <= 0) { setFormError('金额必须大于 0'); return; }
     setFormError(null);
@@ -57,7 +59,7 @@ export function SweepProposalPage({
     try {
       formValuesRef.current = { amountYuan: amount };
       const result = await api.buildProposeSweepRequest(
-        selectedWallet.pubkeyHex, actorCidNumber, institutionAccount, amount,
+        selectedWallet.pubkeyHex, actorCidNumber, proposerRoleCode.trim(), institutionAccount, amount,
       );
       setSignRequest(result);
       setRequestJson(result.requestJson);
@@ -78,7 +80,7 @@ export function SweepProposalPage({
     try {
       const result = await api.submitProposeSweep(
         req.requestId, wallet.pubkeyHex, req.expectedPayloadHash,
-        actorCidNumber, institutionAccount, formValuesRef.current.amountYuan,
+        actorCidNumber, proposerRoleCode.trim(), institutionAccount, formValuesRef.current.amountYuan,
         req.signNonce, req.signBlockNumber, responseText,
       );
       setTxHash(result.txHash);
@@ -87,7 +89,7 @@ export function SweepProposalPage({
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [actorCidNumber, institutionAccount]);
+  }, [actorCidNumber, proposerRoleCode, institutionAccount]);
 
   return (
     <div className="governance-section">
@@ -121,6 +123,15 @@ export function SweepProposalPage({
           <div className="wallet-form-field">
             <label>转出地址（费用账户）</label>
             <input type="text" value={hexToSs58(institutionAccount)} disabled />
+          </div>
+          <div className="wallet-form-field">
+            <label>提案发起岗位码</label>
+            <input
+              type="text" value={proposerRoleCode}
+              onChange={(e) => setProposerRoleCode(e.target.value)}
+              placeholder="NRC/PRC 填 COMMITTEE_MEMBER，PRB 填 DIRECTOR"
+              maxLength={64} disabled={submitting}
+            />
           </div>
           <div className="wallet-form-field">
             <label>划转金额（元）</label>

@@ -49,8 +49,8 @@ use primitives::count_const::VOTING_DURATION_BLOCKS;
 
 use votingengine::{
     pallet::{Proposals, ProposalsByExpiry},
-    types::{InstitutionCode, ProposalSubjectCidNumbers},
-    InternalAdminProvider, InternalProposalMutexKind, PopulationScope, Proposal,
+    types::{InstitutionCode, ProposalSubjectCidNumbers, VotePlanOf},
+    AuthorizationSubject, InternalProposalMutexKind, PopulationScope, Proposal,
     PROPOSAL_KIND_LEGISLATION, STAGE_LEG_CONSTITUTION_GUARD, STAGE_LEG_OVERRIDE,
     STAGE_LEG_REFERENDUM, STAGE_LEG_REPRESENTATIVE, STAGE_LEG_SIGN, STATUS_PASSED, STATUS_REJECTED,
     STATUS_VOTING,
@@ -115,18 +115,22 @@ pub mod pallet {
         MaxEncodedLen,
     )]
     pub struct LegislationMeta {
-        /// 行政签署机构(总统府/省联邦政府/市政府);其法定代表人=总统/省长/市长。非特别案末段签署。
-        pub executive: votingengine::types::CidNumber,
-        /// 两院级的立法院机构(国家/省立法院);其法定代表人=院长,供三人会签。单院(市)=None。
-        pub legislature: Option<votingengine::types::CidNumber>,
+        /// 行政签署机构的 LR 岗位主体；任职在建案时冻结。
+        pub executive: Option<crate::types::RepresentativeBody>,
+        /// 省级、国家级三人会签的三个 LR 岗位主体；市级和特别案为空。
+        pub override_signers: BoundedVec<crate::types::RepresentativeBody, ConstU32<3>>,
         /// 是否修宪(tier=宪法):为真时,现有流程通过后最后进护宪大法官终审(宪法第21条)。
         pub needs_guard: bool,
+        /// 修宪终审的护宪大法官岗位主体；非修宪为空。
+        pub guard: Option<crate::types::RepresentativeBody>,
     }
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        /// 只提供岗位任职事实；业务权限由调用本引擎的业务模块校验。
+        type InstitutionRoleProvider: votingengine::InstitutionRoleProvider<Self::AccountId>;
         type WeightInfo: crate::weights::WeightInfo;
     }
 
@@ -378,17 +382,19 @@ impl<T: Config> crate::LegislationVoteEngine<T::AccountId> for Pallet<T> {
     fn create_representative_vote(
         who: T::AccountId,
         actor_cid_number: votingengine::types::CidNumber,
+        vote_plan: VotePlanOf<T::AccountId>,
         route: RepresentativeRoute,
         rule: RepresentativeVoteRule,
         subject_cid_numbers: ProposalSubjectCidNumbers,
         module_tag: &[u8],
         data: sp_runtime::sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        let first_cid_number = Self::validate_representative_route(&route)?.1;
+        let first_body = Self::validate_representative_route(&route)?.1;
         with_transaction(|| {
             let id = match Self::do_create_representative_proposal(
                 who.clone(),
                 actor_cid_number,
+                vote_plan,
                 route,
                 rule,
                 VoteProcedure::RepresentativeOnly,
@@ -404,9 +410,9 @@ impl<T: Config> crate::LegislationVoteEngine<T::AccountId> for Pallet<T> {
             {
                 return TransactionOutcome::Rollback(Err(err));
             }
-            if <votingengine::Pallet<T>>::is_admin_in_snapshot(
+            if <votingengine::Pallet<T>>::is_subject_voter_in_snapshot(
                 id,
-                votingengine::ProposalSubject::InstitutionCid(first_cid_number),
+                AuthorizationSubject::Institution(first_body),
                 &who,
             ) {
                 match Self::do_cast_representative_vote(who, id, true) {
@@ -422,6 +428,7 @@ impl<T: Config> crate::LegislationVoteEngine<T::AccountId> for Pallet<T> {
     fn create_legislation_vote(
         who: T::AccountId,
         actor_cid_number: votingengine::types::CidNumber,
+        vote_plan: VotePlanOf<T::AccountId>,
         route: RepresentativeRoute,
         rule: RepresentativeVoteRule,
         procedure: LegislationProcedureConfig,
@@ -429,19 +436,21 @@ impl<T: Config> crate::LegislationVoteEngine<T::AccountId> for Pallet<T> {
         data: sp_runtime::sp_std::vec::Vec<u8>,
         object_data: sp_runtime::sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        let first_cid_number = Self::validate_representative_route(&route)?.1;
+        let first_body = Self::validate_representative_route(&route)?.1;
         with_transaction(|| {
             let id = match Self::do_create_representative_proposal(
                 who.clone(),
                 actor_cid_number,
+                vote_plan,
                 route,
                 rule,
                 VoteProcedure::Legislation,
                 ProposalSubjectCidNumbers::new(),
                 Some(pallet::LegislationMeta {
                     executive: procedure.executive,
-                    legislature: procedure.legislature,
+                    override_signers: procedure.override_signers,
                     needs_guard: procedure.needs_guard,
+                    guard: procedure.guard,
                 }),
             ) {
                 Ok(id) => id,
@@ -462,9 +471,9 @@ impl<T: Config> crate::LegislationVoteEngine<T::AccountId> for Pallet<T> {
             }
             // 发起人若属表决院(国家/省两院:发起院=众议会/教委会)则自动赞成一票;
             // 市行政区 市自治会/市教委会 委员提案时发起人不在表决院(市立法会),不自动投票。
-            if <votingengine::Pallet<T>>::is_admin_in_snapshot(
+            if <votingengine::Pallet<T>>::is_subject_voter_in_snapshot(
                 id,
-                votingengine::ProposalSubject::InstitutionCid(first_cid_number),
+                AuthorizationSubject::Institution(first_body),
                 &who,
             ) {
                 match Self::do_cast_representative_vote(who, id, true) {
@@ -478,10 +487,10 @@ impl<T: Config> crate::LegislationVoteEngine<T::AccountId> for Pallet<T> {
     }
 
     /// 读取某立法提案的强制公投结果 `(eligible, yes, no)`。
-    /// 无公投分母(`citizen_eligible_total==0`,即非特别案)或提案不存在 → `None`。
+    /// 没有提案人口快照(即非特别案)或提案不存在 → `None`。
     /// 公投计票 `LegReferendumTally` 在提案 90 天清理前一直保留,故核心修宪写入(护宪终审同块)时可读到。
     fn referendum_result(proposal_id: u64) -> Option<(u64, u64, u64)> {
-        let eligible = <votingengine::Pallet<T>>::citizen_eligible_total_of(proposal_id)?;
+        let eligible = <votingengine::Pallet<T>>::population_eligible_total_of(proposal_id)?;
         if eligible == 0 {
             return None;
         }

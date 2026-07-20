@@ -28,6 +28,7 @@ export function CreateMultisigTransferPage({
     adminWallets.length === 1 ? adminWallets[0] : null
   );
   const [beneficiary, setBeneficiary] = useState('');
+  const [proposerRoleCode, setProposerRoleCode] = useState('');
   const [amountYuan, setAmountYuan] = useState('');
   const [remark, setRemark] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
@@ -62,6 +63,7 @@ export function CreateMultisigTransferPage({
 
   const validateForm = (): string | null => {
     if (!selectedWallet) return '请选择管理员钱包';
+    if (!proposerRoleCode.trim()) return '请输入提案发起岗位码';
     if (!beneficiary.trim()) return '请输入收款地址';
     const amount = parseFloat(amountYuan.replace(/,/g, ''));
     if (isNaN(amount) || amount < 1.11) return '转账金额不能低于 1.11 元';
@@ -81,7 +83,7 @@ export function CreateMultisigTransferPage({
       formValuesRef.current = { beneficiary: beneficiary.trim(), amountYuan: amount, remark };
 
       const result = await api.buildMultisigTransferRequest(
-        selectedWallet!.pubkeyHex, cidNumber, institutionAccount,
+        selectedWallet!.pubkeyHex, cidNumber, proposerRoleCode.trim(), institutionAccount,
         beneficiary.trim(), amount, remark,
       );
 
@@ -110,7 +112,7 @@ export function CreateMultisigTransferPage({
       const { beneficiary: ben, amountYuan: amt, remark: rmk } = formValuesRef.current;
       const result = await api.submitMultisigTransfer(
         req.requestId, wallet.pubkeyHex, req.expectedPayloadHash,
-        cidNumber, institutionAccount, ben, amt, rmk,
+        cidNumber, proposerRoleCode.trim(), institutionAccount, ben, amt, rmk,
         req.signNonce, req.signBlockNumber, responseText,
       );
       setTxHash(result.txHash);
@@ -119,7 +121,7 @@ export function CreateMultisigTransferPage({
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [cidNumber, institutionAccount]);
+  }, [cidNumber, proposerRoleCode, institutionAccount]);
 
   return (
     <div className="governance-section">
@@ -158,6 +160,16 @@ export function CreateMultisigTransferPage({
           <div className="wallet-form-field">
             <label>转出地址（机构多签）</label>
             <input type="text" value={hexToSs58(institutionAccount)} disabled />
+          </div>
+
+          <div className="wallet-form-field">
+            <label>提案发起岗位码</label>
+            <input
+              type="text" value={proposerRoleCode}
+              onChange={(e) => setProposerRoleCode(e.target.value)}
+              placeholder="填写当前任职且拥有转账提案权限的岗位码"
+              maxLength={64} disabled={submitting}
+            />
           </div>
 
           <div className="wallet-form-field">

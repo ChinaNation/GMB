@@ -1,11 +1,11 @@
 # resolution-destro 技术说明
 
 ## 0. 功能需求
-`resolution-destro` 的功能需求是：为国家储委会、各省储委会、各省储行提供"机构自有资金销毁"治理流程，由机构内部管理员发起和投票，在提案通过后自动或手动执行链上销毁。
+`resolution-destro` 的功能需求是：为国家储委会、各省储委会、各省储行提供“机构自有资金销毁”治理流程，由拥有该业务权限的岗位有效任职人发起、岗位快照选民投票，在提案通过后自动或手动执行链上销毁。
 
 模块必须满足以下要求：
 - 仅允许 NRC、PRC、PRB 发起销毁提案；`actor_cid_number` 是机构唯一身份，`institution_account` 是具体执行账户，链端必须用账户正反索引验证二者归属一致。
-- 仅允许目标机构自己的内部管理员发起提案和参与投票。
+- 发起权限必须按完整 `RoleSubject(actor_cid_number, proposer_role_code)` 校验；投票资格必须来自该业务 `Vote` 权限岗位的有效任职快照，不得由全体 `admins` 派生。
 - 销毁金额必须大于 0，且执行时必须保证机构账户保留最小余额 `ED`。
 - 提案投票通过后，系统应自动尝试执行销毁；若自动执行失败，提案保持 `STATUS_PASSED`，允许后续手动重试执行。
 - 自动执行和手动重试走同一业务绑定：callback scope、owner、内部投票 kind/stage、机构码、机构账户、CID 和销毁 action 必须全部一致；执行时再次确认业务机构仍为 NRC、PRC 或 PRB。
@@ -31,7 +31,7 @@
 ---
 
 ## 2. 上下游关系与 Runtime 接线
-上游常量（机构、管理员、投票时长）：
+上游常量（机构、机构阈值、投票时长）：
 - `/Users/rhett/GMB/citizenchain/runtime/primitives/src/count_const.rs`
   - `NRC_ADMIN_COUNT = 19`
   - `PRC_ADMIN_COUNT = 9`
@@ -46,7 +46,8 @@
   - `Pallet::get_proposal_data`
   - `Pallet::proposals`
 - 状态常量：`STATUS_PASSED`
-- 管理员校验：`InternalAdminProvider::is_institution_admin(institution_code, actor_cid_number, origin)`
+- 岗位授权：`InstitutionRoleAuthorizationQuery::{is_authorized, role_subjects_with_permission}`
+- 投票计划：业务模块构造 `VotePlan`，静态指定 `VotingEngineKind::Internal`
 
 Runtime 接线：
 - `/Users/rhett/GMB/citizenchain/runtime/src/configs/mod.rs`
@@ -65,6 +66,7 @@ pub struct DestroyAction<AccountId, Balance> {
 }
 ```
 - 编码后存入投票引擎 `ProposalData`，通过 `get_proposal_data` 读取并解码。
+- `proposer_role_code` 不进入执行动作；它只用于创建阶段形成不可变的提案主体和 `VotePlan`。
 
 ### 模块标识
 - `MODULE_TAG = b"res-dst"`：存入 ProposalData 的前缀，用于区分不同业务模块，防止跨模块误解码。
@@ -73,7 +75,7 @@ pub struct DestroyAction<AccountId, Balance> {
 无。提案数据、元数据、活跃提案列表均已移至 `votingengine` 统一管控（lib.rs:103 注释说明）。
 
 ### 机构与执行账户
-- `actor_cid_number` 是提案主体和管理员集合的唯一机构主键。
+- `actor_cid_number` 是提案主体的唯一机构主键；业务授权主体还必须包含独立 `proposer_role_code`。
 - `institution_account` 是本次销毁的具体机构账户，不承担机构身份语义。
 - `InstitutionMultisigQuery` 从账户反查 CID 和机构码，创建与执行阶段都必须与显式 `actor_cid_number` 一致；不得从主账户推导机构身份。
 
@@ -81,19 +83,20 @@ pub struct DestroyAction<AccountId, Balance> {
 
 ## 4. 外部接口（Calls）
 ### 4.1 `propose_destroy`（call index = 0）
-入参：`actor_cid_number`, `institution_account`, `amount`
+入参：`actor_cid_number`, `proposer_role_code`, `institution_account`, `amount`
 
 流程：
 1. `ensure_signed`。
 2. 校验 `amount > 0`。
 3. 从 `institution_account` 正反索引读取真实 CID/机构码，校验其属于 NRC、PRC 或 PRB，并与 `actor_cid_number` 一致。
-4. 按 `institution_code + actor_cid_number` 校验发起签名者是该机构当前管理员。
-5. 将 `DestroyAction` 加 `MODULE_TAG` 编码。
-6. 通过 `create_internal_proposal_with_data` 创建内部提案，并在同一事务中写入 owner/data/meta（活跃提案限额由投票引擎统一检查）。
-7. 发 `DestroyProposed` 事件。
+4. 以 `BusinessActionId(res-dst, ACTION_RESOLUTION_DESTROY)` 校验签名者对完整 `RoleSubject(actor_cid_number, proposer_role_code)` 具有 `Propose` 权限。
+5. 查询该 CID 下拥有同一业务 `Vote` 权限的岗位主体，构造不可变内部 `VotePlan`；没有合格投票岗位时拒绝创建。
+6. 将 `DestroyAction` 加 `MODULE_TAG` 编码。
+7. 通过 `create_institution_proposal_with_data` 创建机构内部提案，并在同一事务中写入岗位快照、owner/data/meta（活跃提案限额由投票引擎统一检查）。
+8. 发 `DestroyProposed` 事件。
 
 ### 4.2 投票入口
-本模块不提供独立投票 call。管理员投票统一走:
+本模块不提供独立投票 call。岗位快照选民统一走：
 
 - `InternalVote::cast(proposal_id, approve)`(pallet 20.0)
 
@@ -105,7 +108,7 @@ pub struct DestroyAction<AccountId, Balance> {
 
 - `VotingEngine::retry_passed_proposal(proposal_id)`(pallet 9.4)
 
-签名账户必须是提案快照管理员，权限和重试次数由 `votingengine` 统一校验；仅当提案已 `STATUS_PASSED` 且存在 retry state 时可重试执行。用于"提案已通过但自动执行失败（如余额不足）"后的后续重试。
+签名账户必须属于提案创建时的 `EffectiveVoterSnapshot`，权限和重试次数由 `votingengine` 统一校验；仅当提案已 `STATUS_PASSED` 且存在 retry state 时可重试执行。用于“提案已通过但自动执行失败（如余额不足）”后的后续重试。
 
 ---
 
@@ -126,8 +129,8 @@ pub struct DestroyAction<AccountId, Balance> {
 
 ## 6. 关键安全设计
 1. 权限边界：
-   - 发起/投票需内部管理员身份。
-   - 手动执行必须由提案快照管理员触发，统一走投票引擎 retry 权限校验。
+   - 发起必须具备完整机构岗位主体的业务 `Propose` 权限，投票必须属于业务 `Vote` 岗位有效任职快照。
+   - 手动执行必须由提案岗位有效选民快照成员触发，统一走投票引擎 retry 权限校验。
 
 2. 投票执行解耦：
    - 自动执行错误不回滚已提交投票。
@@ -143,7 +146,7 @@ pub struct DestroyAction<AccountId, Balance> {
    - 创建、自动执行和统一重试都复核 CID、机构码、执行账户、提案 owner/kind/stage/callback scope，不从任一机构账户反推或替代机构身份。
 
 6. 费用账户隔离：
-   - `institution_account` 只销毁本金，执行费只从同一 actor CID 的费用账户收取；管理员钱包没有付款回落路径。
+   - `institution_account` 只销毁本金，执行费只从同一 actor CID 的费用账户收取；岗位任职人的签名钱包没有付款回落路径。
 
 ---
 
@@ -157,7 +160,7 @@ pub struct DestroyAction<AccountId, Balance> {
 错误：
 - `InvalidInstitution`：无效机构
 - `InstitutionCodeMismatch`：机构类型与 institution_code 参数不匹配
-- `UnauthorizedAdmin`：非该机构管理员
+- `UnauthorizedAdmin`：稳定错误码；表示签名人不是所提交岗位的有效任职人，或该完整岗位主体没有销毁提案权限
 - `ZeroAmount`：销毁金额为 0
 - `ProposalActionNotFound`：找不到提案动作数据
 - `ProposalNotPassed`：投票尚未通过
@@ -174,10 +177,7 @@ pub struct DestroyAction<AccountId, Balance> {
 
 注:本模块不暴露独立 execute wrapper extrinsic,手动重试走 `VotingEngine::retry_passed_proposal`(pallet 9.4),权重由投票引擎统一计入。
 
-注意：
-- 当前 `weights.rs` 仍是在旧代码上生成，包含已删除的提案动作、单机构活跃提案、创建块、通过块等 proof 注释。权重数值为过估（安全），但不精确。
-- 2026-04-05 复查时已确认 `resolution-destro` 自身 benchmark 夹具可编译，且不再把 `proposal_id` 写死为 `0`。
-- 若本地直接拿标准 CI WASM 构建的节点跑 benchmark，会因为 runtime blob 不带 benchmarking runtime api 而失败；要重生成正式 `weights.rs`，需要使用带 benchmark api 的 runtime blob（例如专门的 benchmark 构建，而不是默认 CI 运行时产物）。
+2026-07-19 已用当前源码导出的临时 fresh spec 和 benchmark runtime、50 steps / 20 repeats 重新生成正式权重：`239 ms / proof 584308 / 25 reads / 23 writes`。benchmark 脚本显式使用 `spec-genesis`，不读取冻结 chainspec 或裸 WASM 创世。
 
 ---
 
@@ -187,24 +187,24 @@ pub struct DestroyAction<AccountId, Balance> {
 cargo test --offline --manifest-path citizenchain/runtime/governance/resolution-destro/Cargo.toml -- --nocapture
 ```
 
-当前结果：15 passed
+当前结果：16 passed
 
 覆盖重点：
 - NRC/PRC/PRB 三种组织达阈值自动执行销毁
-- 非管理员不能发起/投票
+- 非目标岗位任职人或无该业务权限的岗位不能发起，非岗位快照选民不能投票
 - 零金额拒绝 + 余额不足拒绝
 - ED 保留校验（销毁全部余额被拒）
 - 自动执行失败后手动执行成功
 - 被拒绝提案不阻塞新提案
 - 已执行提案不阻塞新提案
 - 重复投票由投票引擎拒绝
-- 非管理员不能触发投票引擎 retry
+- 非岗位有效选民快照成员不能触发投票引擎 retry
 - 无效机构返回 None
-- mock runtime 已跟进投票引擎新契约：`MaxAdminsPerInstitution` 与 CID 管理员快照 `get_institution_admins`
+- mock runtime 已接入岗位授权查询和机构 `VotePlan`，机构路径不写 `AdminSnapshot`
 
 ---
 
 ## 10. 运维建议
-1. 监控 `DestroyExecutionFailed` 事件,出现后优先补齐机构余额,再由快照管理员调用 `VotingEngine::retry_passed_proposal`(pallet 9.4)。
+1. 监控 `DestroyExecutionFailed` 事件，出现后优先补齐机构余额，再由提案 `EffectiveVoterSnapshot` 成员调用 `VotingEngine::retry_passed_proposal`（pallet 9.4）。
 2. 若 3 次手动执行仍失败，或超过 `ExecutionRetryGraceBlocks` 无人处理，提案会由投票引擎统一转 `STATUS_EXECUTION_FAILED`。
-3. `weights.rs` 须在代码稳定后重新运行 benchmark 以获取精确权重。
+3. 业务或岗位快照读写变化后必须重新运行 benchmark；不得复用本次权重掩盖后续存储变化。

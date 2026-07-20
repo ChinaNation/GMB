@@ -23,6 +23,19 @@ import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_cache
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_models.dart';
 import 'package:citizenapp/votingengine/internal-vote/internal_vote_query_service.dart';
 
+/// 固定治理机构资金业务的默认岗位码；普通机构必须由任职人明确填写动态岗位码。
+String defaultInstitutionProposerRoleCode(InstitutionInfo institution) {
+  switch (institution.orgType) {
+    case OrgType.nrc:
+    case OrgType.prc:
+      return 'COMMITTEE_MEMBER';
+    case OrgType.prb:
+      return 'DIRECTOR';
+    default:
+      return '';
+  }
+}
+
 /// 机构转账提案链上交互服务。
 ///
 /// 负责 extrinsic 编码/提交 和 storage 查询。
@@ -40,7 +53,7 @@ class MultisigTransferService {
 
   /// MultisigTransfer pallet index（runtime pallet_index=17）。
   ///
-  /// 本 pallet 只保留 propose_X(0/1/2)；管理员投票一律走
+  /// 本 pallet 只保留 propose_X(0/1/2)；机构岗位选民/个人多签管理员投票一律走
   /// InternalVote(20).cast(0)，手动重试走 VotingEngine(9).retry_passed_proposal(4)。
   static const _palletIndex = 17;
 
@@ -81,6 +94,7 @@ class MultisigTransferService {
         String blockHashHex,
       })> submitProposeTransfer({
     required InstitutionInfo institution,
+    required String? proposerRoleCode,
     required String beneficiaryAddress,
     required double amountYuan,
     required String remark,
@@ -92,6 +106,9 @@ class MultisigTransferService {
     final actorCidNumber = isPersonalAccountIdentity(institution.cidNumber)
         ? null
         : institution.cidNumber;
+    final normalizedRoleCode = actorCidNumber == null
+        ? null
+        : _requireProposerRoleCode(proposerRoleCode);
     final beneficiaryPubkey =
         _ss58AddressToAccountId(beneficiaryAddress, '收款地址');
     // InstitutionInfo.mainAccount 是 App 内部 AccountId hex，
@@ -99,6 +116,7 @@ class MultisigTransferService {
     final fromPubkey = _accountHexToAccountId(institution.mainAccount, '转出主账户');
     final callData = _buildProposeTransferCall(
       actorCidNumber: actorCidNumber,
+      proposerRoleCode: normalizedRoleCode,
       fundingAccount: institution.mainAccount,
       beneficiaryAddress: beneficiaryAddress,
       amountFen: amountFen,
@@ -136,6 +154,7 @@ class MultisigTransferService {
   Future<({String txHash, int usedNonce, int proposalId, String blockHashHex})>
       submitProposeSafetyFund({
     required InstitutionInfo institution,
+    required String proposerRoleCode,
     required String beneficiaryAddress,
     required double amountYuan,
     required String remark,
@@ -153,6 +172,7 @@ class MultisigTransferService {
         _ss58AddressToAccountId(beneficiaryAddress, '收款地址');
     final callData = _buildProposeSafetyFundCall(
       actorCidNumber: actorCidNumber,
+      proposerRoleCode: _requireProposerRoleCode(proposerRoleCode),
       institutionAccount: safetyFundAccount,
       beneficiaryAddress: beneficiaryAddress,
       amountYuan: amountYuan,
@@ -192,6 +212,7 @@ class MultisigTransferService {
   Future<({String txHash, int usedNonce, int proposalId, String blockHashHex})>
       submitProposeSweep({
     required InstitutionInfo institution,
+    required String proposerRoleCode,
     required double amountYuan,
     required String fromAddress,
     required Uint8List signerPubkey,
@@ -205,6 +226,7 @@ class MultisigTransferService {
     final toPubkey = _accountHexToAccountId(institution.mainAccount, '机构主账户');
     final callData = _buildProposeSweepCall(
       actorCidNumber: institution.cidNumber,
+      proposerRoleCode: _requireProposerRoleCode(proposerRoleCode),
       institutionAccount: feeAccount,
       amountYuan: amountYuan,
     );
@@ -362,15 +384,18 @@ class MultisigTransferService {
     return _proposalQuery.fetchInternalThresholdSnapshot(proposalId);
   }
 
-  /// 查询提案创建时锁定的管理员快照。
+  /// 查询提案创建时锁定的实际投票账户快照。
   ///
-  /// 投票资格由 VotingEngine::AdminSnapshot 判定，详情页展示和
-  /// 可投钱包筛选也应优先使用同一份快照，避免当前管理员列表变化影响旧提案。
-  Future<List<String>> fetchAdminSnapshot(
+  /// 机构按岗位有效任职快照，个人多签按管理员快照；详情页展示和
+  /// 可投钱包筛选必须使用同一份创建时快照。
+  Future<List<String>> fetchEligibleVoterSnapshot(
     int proposalId,
     InstitutionInfo institution,
   ) {
-    return _proposalQuery.fetchAdminSnapshot(proposalId, institution);
+    return _proposalQuery.fetchEligibleVoterSnapshot(
+      proposalId,
+      institution,
+    );
   }
 
   /// 查询提案状态。返回 status（0=voting, 1=passed, 2=rejected），null 表示不存在。
@@ -868,15 +893,15 @@ class MultisigTransferService {
     }
   }
 
-  /// 查询某管理员对某提案的投票记录。null=未投票，true=赞成，false=反对。
+  /// 查询某快照选民对提案的投票记录。null=未投票，true=赞成，false=反对。
   Future<bool?> fetchAdminVote(int proposalId, String pubkeyHex) async {
     return _internalVoteQuery.fetchAdminVote(proposalId, pubkeyHex);
   }
 
-  /// 批量查询某提案下多名管理员的投票记录。
+  /// 批量查询某提案下多名快照选民的投票记录。
   ///
-  /// 转账/多签管理详情页展示全管理员投票时走批量读取，
-  /// 避免 43 名管理员造成 43 次 storage RPC。
+  /// 转账/多签管理详情页展示全部合格选民投票时走批量读取，
+  /// 避免逐个产生 storage RPC。
   Future<Map<String, bool?>> fetchAdminVotesBatch(
     int proposalId,
     Iterable<String> pubkeysHex,
@@ -1033,9 +1058,11 @@ class MultisigTransferService {
   /// 构造 propose_transfer call data。
   ///
   /// 格式：[0x11][0x00][actor_cid_number:Option<CidNumber>]
-  /// [funding_account:AccountId32][beneficiary:AccountId32][amount:u128][remark:Vec<u8>]。
+  /// [proposer_role_code:Option<RoleCode>][funding_account:AccountId32]
+  /// [beneficiary:AccountId32][amount:u128][remark:Vec<u8>]。
   Uint8List _buildProposeTransferCall({
     required String? actorCidNumber,
+    required String? proposerRoleCode,
     required String fundingAccount,
     required String beneficiaryAddress,
     required BigInt amountFen,
@@ -1046,10 +1073,17 @@ class MultisigTransferService {
     output.pushByte(_proposeCallIndex);
 
     if (actorCidNumber == null) {
+      if (proposerRoleCode != null) {
+        throw StateError('个人多签不得携带机构岗位码');
+      }
+      output.pushByte(0);
       output.pushByte(0);
     } else {
+      final roleCode = _requireProposerRoleCode(proposerRoleCode);
       output.pushByte(1);
       _writeCidNumber(output, actorCidNumber);
+      output.pushByte(1);
+      _writeRoleCode(output, roleCode);
     }
     output.write(Uint8List.fromList(institutionAccountId(fundingAccount)));
 
@@ -1073,10 +1107,11 @@ class MultisigTransferService {
 
   /// 构造 propose_sweep_to_main call data。
   ///
-  /// 格式：[0x11][0x02][actor_cid_number:CidNumber]
+  /// 格式：[0x11][0x02][actor_cid_number:CidNumber][proposer_role_code:RoleCode]
   /// [institution_account:AccountId32][amount:u128_le]。
   Uint8List _buildProposeSweepCall({
     required String actorCidNumber,
+    required String proposerRoleCode,
     required String institutionAccount,
     required double amountYuan,
   }) {
@@ -1084,6 +1119,7 @@ class MultisigTransferService {
     output.pushByte(_palletIndex);
     output.pushByte(_proposeSweepCallIndex);
     _writeCidNumber(output, actorCidNumber);
+    _writeRoleCode(output, proposerRoleCode);
     output.write(Uint8List.fromList(institutionAccountId(institutionAccount)));
     final amountFen = BigInt.from((amountYuan * 100).round());
     final amountBytes = Uint8List(16);
@@ -1098,10 +1134,11 @@ class MultisigTransferService {
 
   /// 构造 propose_safety_fund_transfer call data。
   ///
-  /// 格式：[0x11][0x01][actor_cid_number:CidNumber]
+  /// 格式：[0x11][0x01][actor_cid_number:CidNumber][proposer_role_code:RoleCode]
   /// [institution_account:AccountId32][beneficiary:32][amount:u128][remark:Vec<u8>]。
   Uint8List _buildProposeSafetyFundCall({
     required String actorCidNumber,
+    required String proposerRoleCode,
     required String institutionAccount,
     required String beneficiaryAddress,
     required double amountYuan,
@@ -1112,6 +1149,7 @@ class MultisigTransferService {
     output.pushByte(_proposeSafetyFundCallIndex);
 
     _writeCidNumber(output, actorCidNumber);
+    _writeRoleCode(output, proposerRoleCode);
     output.write(Uint8List.fromList(institutionAccountId(institutionAccount)));
 
     // beneficiary: 32 bytes
@@ -1622,6 +1660,22 @@ class MultisigTransferService {
     if (bytes.isEmpty || bytes.length > 32) {
       throw ArgumentError('actor_cid_number 必须为 1..32 字节');
     }
+    output.write(CompactBigIntCodec.codec.encode(BigInt.from(bytes.length)));
+    output.write(Uint8List.fromList(bytes));
+  }
+
+  String _requireProposerRoleCode(String? proposerRoleCode) {
+    final value = proposerRoleCode?.trim() ?? '';
+    final bytes = utf8.encode(value);
+    if (bytes.isEmpty || bytes.length > 64) {
+      throw ArgumentError('proposer_role_code 必须为 1..64 字节');
+    }
+    return value;
+  }
+
+  void _writeRoleCode(ByteOutput output, String proposerRoleCode) {
+    final value = _requireProposerRoleCode(proposerRoleCode);
+    final bytes = utf8.encode(value);
     output.write(CompactBigIntCodec.codec.encode(BigInt.from(bytes.length)));
     output.write(Uint8List.fromList(bytes));
   }

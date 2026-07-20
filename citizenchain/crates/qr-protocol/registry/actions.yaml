@@ -118,6 +118,7 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - proposer_role_code
     - membership_level
     - new_price_fen
 
@@ -298,7 +299,11 @@
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
-    - institution_code
+    - actor_cid_number
+    - proposer_role_code
+    - institution_account
+    - operation_fee_payer
+    - execution_fee_payer
     - amount_yuan
 
 - action_key: propose_replace_grandpa_key
@@ -312,7 +317,8 @@
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
-    - institution
+    - actor_cid_number
+    - proposer_role_code
     - new_key
 
 - action_key: propose_close_public_institution
@@ -326,8 +332,12 @@
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
-    - account
+    - actor_cid_number
+    - proposer_role_code
+    - institution_account
     - beneficiary
+    - credential_issuer_cid_number
+    - credential_signer_pubkey
 
 - action_key: update_public_institution_info
   action_code: 0x1e06
@@ -382,6 +392,7 @@
     - governance_action
     - governance_detail
     - actor_cid_number
+    - proposer_role_code
     - fee_payer
     - credential_signer_pubkey
     - scope_province_name
@@ -418,8 +429,12 @@
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
-    - account
+    - actor_cid_number
+    - proposer_role_code
+    - institution_account
     - beneficiary
+    - credential_issuer_cid_number
+    - credential_signer_pubkey
 
 - action_key: update_private_institution_info
   action_code: 0x1f06
@@ -474,6 +489,7 @@
     - governance_action
     - governance_detail
     - actor_cid_number
+    - proposer_role_code
     - fee_payer
     - credential_signer_pubkey
     - scope_province_name
@@ -598,7 +614,10 @@
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
-    - institution
+    # 机构分支额外输出 actor_cid_number/proposer_role_code/institution_account，
+    # 个人多签分支输出 personal_account；下列是两类载荷共同必有字段。
+    - operation_fee_payer
+    - execution_fee_payer
     - beneficiary
     - amount_yuan
     - remark
@@ -614,6 +633,11 @@
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
+    - actor_cid_number
+    - proposer_role_code
+    - institution_account
+    - operation_fee_payer
+    - execution_fee_payer
     - beneficiary
     - amount_yuan
     - remark
@@ -629,7 +653,11 @@
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
-    - institution
+    - actor_cid_number
+    - proposer_role_code
+    - institution_account
+    - operation_fee_payer
+    - execution_fee_payer
     - amount_yuan
 
 - action_key: register_clearing_bank
@@ -692,7 +720,7 @@
 
 - action_key: joint_vote
   action_code: 0x1500
-  action_label_zh: 联合管理员投票
+  action_label_zh: 联合岗位投票
   kind: chain_call
   qr_kind: sign_request
   pallet: JointVote
@@ -1092,6 +1120,7 @@
     - vote_type
     - scope_code
     - houses
+    - proposer_role_code
     - chapter_count
     - article_count
     - effective_at
@@ -1113,6 +1142,7 @@
     - vote_type
     - scope_code
     - houses
+    - proposer_role_code
     - chapter_count
     - article_count
     - effective_at
@@ -1129,7 +1159,8 @@
   signing_category: chain_tx
   required_fields:
     - law_id
-    - reason
+    - proposer_role_code
+    - vote_type
 
 - action_key: cast_representative_vote
   action_code: 0x1a01

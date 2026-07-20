@@ -13,9 +13,13 @@ class _RawStorageRpc extends ChainRpc {
   _RawStorageRpc(this.value);
 
   final Uint8List value;
+  final List<String> storageKeys = [];
 
   @override
-  Future<Uint8List?> fetchStorage(String storageKeyHex) async => value;
+  Future<Uint8List?> fetchStorage(String storageKeyHex) async {
+    storageKeys.add(storageKeyHex);
+    return value;
+  }
 }
 
 /// 批量解码路径（_decodeProposalData）布局回归。
@@ -226,7 +230,6 @@ void main() {
       4, ...cid(subjectCidNumber), // subject CID Vec len=1
       ...u32Le(10),
       ...u32Le(20),
-      ...u64Le(30),
     ]);
     final decoded = service.debugDecodeProposalMeta(6, raw);
     expect(decoded, isNotNull);
@@ -304,6 +307,48 @@ void main() {
       ),
       isNull,
     );
+  });
+
+  test('机构读取岗位有效选民快照，个人多签读取管理员快照', () async {
+    final raw = Uint8List.fromList([
+      4, // Compact(1)
+      ...List.filled(32, 0x33),
+    ]);
+    final rpc = _RawStorageRpc(raw);
+    final query = ProposalQueryService(chainRpc: rpc);
+    final institution = InstitutionInfo(
+      cidFullName: '测试机构',
+      cidShortName: '测试机构',
+      cidFullNameEn: 'Test Institution',
+      cidShortNameEn: 'TI',
+      cidNumber: 'LN001-CGOVC-000000001-2026',
+      orgType: OrgType.institution,
+      accounts: InstitutionAccounts(
+        mainAccount: '11' * 32,
+        feeAccount: '22' * 32,
+      ),
+    );
+    final personalAccount = 'ab' * 32;
+    final personal = InstitutionInfo(
+      cidFullName: '个人多签',
+      cidShortName: '个人多签',
+      cidFullNameEn: 'Personal Multisig',
+      cidShortNameEn: 'PMUL',
+      cidNumber: 'personal-account:$personalAccount',
+      orgType: OrgType.personalMultisig,
+      personalAccountHex: personalAccount,
+    );
+
+    expect(
+      await query.fetchEligibleVoterSnapshot(7, institution),
+      ['33' * 32],
+    );
+    expect(
+      await query.fetchEligibleVoterSnapshot(7, personal),
+      ['33' * 32],
+    );
+    expect(rpc.storageKeys, hasLength(2));
+    expect(rpc.storageKeys[0], isNot(rpc.storageKeys[1]));
   });
 
   test('公民提案流按默认机构码和订阅机构 CID 合并过滤', () {

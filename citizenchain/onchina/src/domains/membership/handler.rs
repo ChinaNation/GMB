@@ -31,6 +31,7 @@ pub(crate) struct PlatformPriceOutput {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct ProposePlatformPriceInput {
+    proposer_role_code: String,
     membership_level: String,
     /// JSON 使用十进制字符串，避免浏览器数字精度改变链上金额。
     new_price_fen: String,
@@ -172,6 +173,7 @@ pub(crate) async fn propose_platform_price(
     };
     let call = match build_propose_platform_price_call(
         ctx.institution_cid_number.as_str(),
+        input.proposer_role_code.as_str(),
         membership_level,
         new_price_fen,
     ) {

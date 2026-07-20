@@ -284,10 +284,46 @@ impl entity_primitives::InstitutionRoleAuthorizationQuery<AccountId32>
             || (role_subject.cid_number == prc_cid().to_vec() && admin == &prc_admin());
         valid_actor && Self::role_has_permission(role_subject, business_action_id, operation)
     }
+
+    fn role_subjects_with_permission(
+        cid_number: &[u8],
+        business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
+        operation: entity_primitives::RolePermissionOperation,
+    ) -> Vec<entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>> {
+        let role_subject = entity_primitives::RoleSubject {
+            cid_number: cid_number.to_vec(),
+            role_code: primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER.to_vec(),
+        };
+        Self::role_has_permission(&role_subject, business_action_id, operation)
+            .then_some(role_subject)
+            .into_iter()
+            .collect()
+    }
+}
+
+impl votingengine::InstitutionRoleProvider<AccountId32> for TestInstitutionRoleAuthorization {
+    fn is_active_assignment(cid_number: &[u8], who: &AccountId32, role_code: &[u8]) -> bool {
+        role_code == primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+            && [votingengine::types::NRC, votingengine::types::PRC]
+                .into_iter()
+                .any(|code| {
+                    <TestInternalAdminProvider as votingengine::InternalAdminProvider<
+                        AccountId32,
+                    >>::is_institution_admin(code, cid_number, who)
+                })
+    }
+
+    fn active_accounts_for_role(cid_number: &[u8], role_code: &[u8]) -> Vec<AccountId32> {
+        [nrc_admin(), prc_admin()]
+            .into_iter()
+            .filter(|admin| Self::is_active_assignment(cid_number, admin, role_code))
+            .collect()
+    }
 }
 
 impl internal_vote::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionRoleProvider = TestInstitutionRoleAuthorization;
     type WeightInfo = ();
 }
 
@@ -451,7 +487,6 @@ fn insert_engine_proposal_with_stage_and_status(proposal_id: u64, stage: u8, sta
             start: 0u64,
             end: 100u64,
             // 这是 votingengine::Proposal 的固定字段，非 runtime-upgrade 入参。
-            citizen_eligible_total: 10,
         },
     );
 }

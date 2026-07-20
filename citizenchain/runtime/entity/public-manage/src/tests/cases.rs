@@ -58,7 +58,6 @@ fn create_cgov(tag: &str) -> pallet::CidNumberOf<Test> {
     let (created_accounts, _, _, _) =
         crate::institution::accounts::validate_initial_accounts::<Test>(&cid, &protocol_accounts)
             .expect("测试协议账户必须合法");
-    assert_ok!(PublicManage::store_default_legal_representative_role(&cid));
     pallet::Institutions::<Test>::insert(
         &cid,
         crate::InstitutionInfo {
@@ -72,6 +71,8 @@ fn create_cgov(tag: &str) -> pallet::CidNumberOf<Test> {
             created_at: System::block_number(),
         },
     );
+    // 固定岗位权限由机构 CID + 岗位码推导，因此先落机构身份，再创建默认 LR 岗位。
+    assert_ok!(PublicManage::store_default_legal_representative_role(&cid));
     for account in created_accounts {
         pallet::InstitutionAccounts::<Test>::insert(
             &cid,
@@ -103,6 +104,7 @@ fn create_cgov(tag: &str) -> pallet::CidNumberOf<Test> {
 fn create_cgov_with_custom(tag: &str) -> pallet::CidNumberOf<Test> {
     fund_registry_account();
     let cid = create_cgov(tag);
+    grant_close_role(&cid);
     assert_ok!(PublicManage::add_institution_account(
         RuntimeOrigin::signed(creator()),
         cid.clone(),
@@ -584,6 +586,7 @@ fn close_rejects_invalid_credential_and_nonce_replay() {
             PublicManage::propose_close_public_institution(
                 RuntimeOrigin::signed(admin(0)),
                 cid.clone(),
+                b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits"),
                 custom.clone(),
                 beneficiary(),
                 nonce,

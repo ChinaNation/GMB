@@ -67,6 +67,7 @@ const blockStyle = (indent: number): React.CSSProperties => ({
 
 export function LawEditorModal({ open, auth, lawAction, tier, voteType, onClose }: Props) {
   const [title, setTitle] = useState('');
+  const [proposerRoleCode, setProposerRoleCode] = useState('');
   const [titleEn, setTitleEn] = useState('');
   const [effectiveAt, setEffectiveAt] = useState<number>(() => Date.now());
   const [lawId, setLawId] = useState<number | null>(null);
@@ -87,6 +88,7 @@ export function LawEditorModal({ open, auth, lawAction, tier, voteType, onClose 
 
   const buildInput = (): ProposeLawInput => ({
     lawAction,
+    proposerRoleCode: proposerRoleCode.trim(),
     tier,
     scopeCode: 0, // 后端会话派生本节点 scope(2D-2 起后端覆盖),前端占位
     voteType,
@@ -130,6 +132,12 @@ export function LawEditorModal({ open, auth, lawAction, tier, voteType, onClose 
       destroyOnClose
     >
       <Space direction="vertical" style={{ width: '100%' }} size="small">
+        <Input
+          addonBefore="发起岗位码"
+          value={proposerRoleCode}
+          onChange={(e) => setProposerRoleCode(e.target.value)}
+          placeholder="填写当前账户在本机构内具有立法提案权限的岗位码"
+        />
         <Input addonBefore="法律标题" value={title} onChange={(e) => setTitle(e.target.value)} />
         <Input
           addonBefore="英文标题"

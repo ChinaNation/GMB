@@ -372,6 +372,7 @@ fn only_named_account_can_be_closed_and_institution_stays_alive() {
         assert_ok!(PrivateManage::propose_close_private_institution(
             RuntimeOrigin::signed(admin(1)),
             cid_number.clone(),
+            b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits"),
             named_account.clone(),
             beneficiary(),
             register_nonce(b"close-named-nonce"),
@@ -422,6 +423,7 @@ fn rejected_close_is_cleaned_only_by_votingengine_callback() {
         assert_ok!(PrivateManage::propose_close_private_institution(
             RuntimeOrigin::signed(admin(1)),
             cid_number.clone(),
+            b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits"),
             named_account.clone(),
             beneficiary(),
             register_nonce(b"close-rejected-nonce"),
@@ -469,7 +471,8 @@ fn protocol_account_close_is_rejected() {
         assert_noop!(
             PrivateManage::propose_close_private_institution(
                 RuntimeOrigin::signed(admin(1)),
-                cid_number,
+                cid_number.clone(),
+                b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits"),
                 main_account,
                 beneficiary(),
                 register_nonce(b"close-main-nonce"),
@@ -502,6 +505,7 @@ fn account_operation_rejects_actor_cid_mismatch() {
             PrivateManage::propose_close_private_institution(
                 RuntimeOrigin::signed(admin(1)),
                 other_cid,
+                crate::RoleCodeOf::default(),
                 named_account,
                 beneficiary(),
                 register_nonce(b"wrong-actor-nonce"),
@@ -532,7 +536,8 @@ fn non_admin_cannot_start_institution_account_close() {
         assert_noop!(
             PrivateManage::propose_close_private_institution(
                 RuntimeOrigin::signed(admin(8)),
-                cid_number,
+                cid_number.clone(),
+                b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits"),
                 named_account,
                 beneficiary(),
                 register_nonce(b"non-admin-close"),

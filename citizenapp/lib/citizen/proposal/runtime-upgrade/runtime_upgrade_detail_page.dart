@@ -12,6 +12,7 @@ import 'package:citizenapp/citizen/institution/governance_registry.dart';
 import 'package:citizenapp/votingengine/internal-vote/pending_vote_store.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_context.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_detail_local_store.dart';
+import 'package:citizenapp/citizen/shared/proposal/proposal_query_service.dart';
 import 'package:citizenapp/citizen/proposal/runtime-upgrade/runtime_upgrade_service.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
@@ -25,7 +26,7 @@ import 'package:citizenapp/votingengine/internal-vote/proposal_vote_widgets.dart
 /// 协议升级提案详情页。
 ///
 /// 从全链提案页进入时为只读模式；
-/// 从机构详情页进入时，当前机构管理员可直接提交联合投票。
+/// 从机构详情页进入时，当前机构岗位有效选民可直接提交联合投票。
 class RuntimeUpgradeDetailPage extends StatefulWidget {
   const RuntimeUpgradeDetailPage({
     super.key,
@@ -49,6 +50,7 @@ class RuntimeUpgradeDetailPage extends StatefulWidget {
 
 class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   final RuntimeUpgradeService _service = RuntimeUpgradeService();
+  final ProposalQueryService _proposalQueryService = ProposalQueryService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
   final ProposalDetailLocalStore _detailStore =
       ProposalDetailLocalStore.instance;
@@ -70,7 +72,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   List<WalletProfile> _votableWallets = const [];
   WalletProfile? _selectedVoteWallet;
 
-  // 已提交投票但尚未上链确认的管理员公钥集合
+  // 已提交投票但尚未上链确认的岗位选民公钥集合。
   Set<String> _pendingPubkeys = const {};
 
   @override
@@ -95,7 +97,14 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
 
   bool get _allImportedAdminsVoted {
     if (!_isAdmin) return false;
-    for (final wallet in widget.adminWallets) {
+    final eligible = _admins.toSet();
+    final importedEligibleWallets = widget.adminWallets
+        .where(
+          (wallet) => eligible.contains(_normalizeHex(wallet.pubkeyHex)),
+        )
+        .toList(growable: false);
+    if (importedEligibleWallets.isEmpty) return false;
+    for (final wallet in importedEligibleWallets) {
       final pk = _normalizeHex(wallet.pubkeyHex);
       final vote = _adminVotes[pk];
       if (vote == null && !_pendingPubkeys.contains(pk)) return false;
@@ -108,10 +117,10 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     if (!_jointVoteOpen) return '当前提案不在联合投票阶段';
     if (_institutionVote != null) return '本机构已形成最终投票结果';
     if (_votableWallets.isEmpty && _allImportedAdminsVoted) {
-      return '已导入的管理员钱包都已完成投票';
+      return '已导入的岗位选民钱包都已完成投票';
     }
-    if (_votableWallets.isEmpty) return '当前没有可用的管理员钱包';
-    if (_selectedVoteWallet == null) return '请选择用于投票的管理员钱包';
+    if (_votableWallets.isEmpty) return '当前没有可用的岗位选民钱包';
+    if (_selectedVoteWallet == null) return '请选择用于投票的岗位选民钱包';
     return null;
   }
 
@@ -144,8 +153,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
 
       final institution = widget.institution;
       if (institution != null) {
-        futures.add(_adminService.fetchAdmins(
-          AdminAccountIdentity.fromInstitution(institution),
+        futures.add(_proposalQueryService.fetchEligibleVoterSnapshot(
+          widget.proposalId,
+          institution,
         ));
         futures.add(_service.fetchJointVoteByInstitution(
             widget.proposalId, institution.cidNumber));
@@ -168,9 +178,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       Set<String> pendingPubkeys = const {};
 
       if (institution != null) {
-        admins = (results[4] as List<AdminPerson>)
-            .map((admin) => _normalizeHex(admin.admin_account))
-            .toList(growable: false);
+        admins = results[4] as List<String>;
         institutionVote = results[5] as bool?;
         institutionAdminTally = results[6] as ({int yes, int no});
         final adminSet = admins.toSet();
@@ -187,7 +195,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         adminVotes = voteResults;
 
         // 检查待确认投票。联合投票不读 InternalVote，而是读 JointVote
-        // 机构管理员投票记录。
+        // 机构岗位有效选民投票记录。
         final pendingSummary =
             await PendingVoteStore.instance.confirmAllDetailed(
           'runtime_upgrade',
@@ -510,7 +518,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     required String requestPrefix,
     required int action,
   }) async {
-    // 管理员投票统一通过 QR 码签名（citizenwallet 公民钱包）
+    // 岗位有效选民投票统一通过 QR 码签名（CitizenWallet 公民钱包）。
     final qrSigner = QrSigner();
     final request = qrSigner.buildRequest(
       requestId: QrSigner.generateRequestId(prefix: '$requestPrefix-'),
@@ -562,7 +570,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
 
       final pubkey = _normalizeHex(voteWallet.pubkeyHex);
       // 服务层已经确认 runtime JointVote 记录，新流程不再写 pending。
-      // 这里只清除旧版本可能残留的同管理员 pending 记录。
+      // 这里只清除旧版本可能残留的同一投票钱包 pending 记录。
       await PendingVoteStore.instance.remove(
         'runtime_upgrade',
         widget.proposalId,
@@ -619,7 +627,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       builder: (ctx) => AlertDialog(
         title: Text('确认提交$label票'),
         content: Text(
-          '将使用所选管理员钱包直接提交$label票。投票后不可修改。',
+          '将使用所选岗位选民钱包直接提交$label票。投票后不可修改。',
         ),
         actions: [
           TextButton(
@@ -968,7 +976,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
             _buildInfoRow('投票状态', _institutionVoteLabel()),
             const Divider(height: 20),
             Text(
-              '管理员赞成 ${_institutionAdminTally.yes} / $_requiredAdminThreshold',
+              '岗位选民赞成 ${_institutionAdminTally.yes} / $_requiredAdminThreshold',
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -992,11 +1000,11 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '管理员反对 ${_institutionAdminTally.no}',
+                  '岗位选民反对 ${_institutionAdminTally.no}',
                   style: const TextStyle(fontSize: 13, color: AppTheme.danger),
                 ),
                 Text(
-                  '链上当前管理员 ${_admins.length} 人',
+                  '提案岗位快照 ${_admins.length} 人',
                   style: const TextStyle(
                       fontSize: 12, color: AppTheme.textTertiary),
                 ),
@@ -1007,7 +1015,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
             if (_admins.isNotEmpty) ...[
               const SizedBox(height: 8),
               const Text(
-                '本机构管理员直接上链投票，赞成达到阈值会自动形成机构赞成结果；若剩余管理员已不足以达到阈值，链上会自动形成机构反对结果。',
+                '本机构仅提案创建时冻结的岗位有效选民可直接上链投票；赞成达到机构阈值会形成机构赞成结果，剩余选民已不足以达到阈值时会形成机构反对结果。',
                 style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
               ),
             ],
@@ -1027,7 +1035,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           borderRadius: BorderRadius.circular(8),
         ),
         child: const Text(
-          '当前未导入属于本机构的管理员钱包',
+          '当前未导入属于本机构岗位快照的选民钱包',
           style: TextStyle(fontSize: 13, color: AppTheme.warning),
         ),
       );
@@ -1042,7 +1050,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
-          _allImportedAdminsVoted ? '已导入管理员钱包均已完成投票' : '当前没有可用的管理员钱包',
+          _allImportedAdminsVoted ? '已导入岗位选民钱包均已完成投票' : '当前没有可用的岗位选民钱包',
           style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
         ),
       );
@@ -1163,7 +1171,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
 
   Widget? _buildBottomBar() {
     if (_loading || _error != null) return null;
-    // 联合投票阶段：仅管理员显示投票按钮
+    // 联合投票阶段：只有已导入机构钱包的上下文显示按钮，runtime 最终按
+    // 岗位有效选民快照拒绝非合格签名者。
     if (_isAdmin && _jointVoteOpen) {
       return _buildVoteButtons();
     }
@@ -1171,7 +1180,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     if (_jointReferendumOpen) {
       return _buildJointReferendumButtons();
     }
-    // 非投票阶段但是管理员：显示禁用状态的投票按钮
+    // 非投票阶段但存在机构签名钱包上下文：显示禁用状态的投票按钮。
     if (_isAdmin) {
       return _buildVoteButtons();
     }

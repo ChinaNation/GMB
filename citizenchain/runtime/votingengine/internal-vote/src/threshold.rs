@@ -8,12 +8,12 @@ impl<T: Config> Pallet<T> {
     }
 
     pub(crate) fn ensure_threshold_within_snapshot(
-        admins_len: u32,
+        voter_count: u32,
         threshold: u32,
     ) -> DispatchResult {
-        // 普通内部提案仍按账户当前阈值投票，但阈值必须能被本次管理员快照实际达成。
+        // 机构阈值不属于岗位，但必须能被本次按 CID 去重的有效选民快照实际达成。
         ensure!(
-            threshold > 0 && threshold <= admins_len,
+            threshold > 0 && threshold <= voter_count,
             Error::<T>::InvalidThresholdSnapshot
         );
         Ok(())

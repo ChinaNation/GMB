@@ -1,6 +1,7 @@
-//! 内部投票提案创建、管理员快照和互斥登记。
+//! 内部投票提案创建、机构岗位/个人管理员资格快照和互斥登记。
 
 use super::*;
+use votingengine::InstitutionRoleProvider;
 
 impl<T: Config> Pallet<T> {
     /// 创建机构内部提案。机构身份只使用 CID，账户只在确有资产执行时写入。
@@ -10,6 +11,7 @@ impl<T: Config> Pallet<T> {
         actor_cid_number: sp_std::vec::Vec<u8>,
         execution_account: Option<T::AccountId>,
         subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
+        vote_plan: &VotePlanOf<T::AccountId>,
     ) -> Result<u64, DispatchError> {
         Self::do_create_institution_proposal_with_mutex(
             who,
@@ -19,6 +21,7 @@ impl<T: Config> Pallet<T> {
             subject_cid_numbers,
             InternalProposalMutexKind::Regular,
             InternalProposalRole::General,
+            vote_plan,
         )
     }
 
@@ -30,6 +33,7 @@ impl<T: Config> Pallet<T> {
         subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
         mutex_kind: InternalProposalMutexKind,
         role: InternalProposalRole,
+        vote_plan: &VotePlanOf<T::AccountId>,
     ) -> Result<u64, DispatchError> {
         ensure!(
             is_valid_governance_code(&institution_code) && !is_personal_code(&institution_code),
@@ -41,10 +45,7 @@ impl<T: Config> Pallet<T> {
             is_valid_institution_context(institution_code, actor_cid_number.as_slice()),
             votingengine::Error::<T>::InvalidInstitution
         );
-        ensure!(
-            is_institution_admin::<T>(institution_code, actor_cid_number.as_slice(), &who),
-            votingengine::Error::<T>::NoPermission
-        );
+        Self::ensure_institution_vote_plan(&actor_cid_number, &who, vote_plan)?;
 
         let now = <frame_system::Pallet<T>>::block_number();
         let end = now.saturating_add(Self::internal_stage_duration());
@@ -60,7 +61,6 @@ impl<T: Config> Pallet<T> {
             subject_cid_numbers,
             start: now,
             end,
-            citizen_eligible_total: 0,
         };
 
         with_transaction(|| {
@@ -68,25 +68,33 @@ impl<T: Config> Pallet<T> {
                 Ok(id) => id,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
-            if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
-                id,
-                institution_code,
-                actor_cid_number.clone(),
-            ) {
-                return TransactionOutcome::Rollback(Err(err));
+            for subject in vote_plan.voter_subjects.iter() {
+                let role_subject = match subject {
+                    AuthorizationSubject::Institution(role_subject) => role_subject,
+                    AuthorizationSubject::PersonalMultisig(_) => {
+                        return TransactionOutcome::Rollback(Err(
+                            votingengine::Error::<T>::InvalidVotePlan.into(),
+                        ))
+                    }
+                };
+                let voters = T::InstitutionRoleProvider::active_accounts_for_role(
+                    role_subject.cid_number.as_slice(),
+                    role_subject.role_code.as_slice(),
+                );
+                if let Err(err) =
+                    <votingengine::Pallet<T>>::snapshot_role_voters(id, subject.clone(), voters)
+                {
+                    return TransactionOutcome::Rollback(Err(err));
+                }
             }
             let subject = ProposalSubject::InstitutionCid(actor_cid_number.clone());
-            if !<votingengine::Pallet<T>>::is_admin_in_snapshot(id, subject.clone(), &who) {
-                frame_support::defensive!(
-                    "do_create_institution_proposal: proposer is missing from CID admin snapshot"
-                );
-                return TransactionOutcome::Rollback(Err(
-                    votingengine::Error::<T>::NoPermission.into()
-                ));
-            }
-            let snapshot_size = match Self::snapshot_admins_len_or_missing(id, subject) {
-                Ok(size) => size,
-                Err(err) => return TransactionOutcome::Rollback(Err(err)),
+            let snapshot_size = match <votingengine::Pallet<T>>::effective_voters_len(id, subject) {
+                Some(size) => size,
+                None => {
+                    return TransactionOutcome::Rollback(Err(
+                        votingengine::Error::<T>::MissingVoterSnapshot.into(),
+                    ))
+                }
             };
             let threshold =
                 if let Some(fixed_threshold) = fixed_governance_pass_threshold(&institution_code) {
@@ -119,6 +127,46 @@ impl<T: Config> Pallet<T> {
             }
             Self::finish_proposal_create(id, proposal, end, threshold, role)
         })
+    }
+
+    fn ensure_institution_vote_plan(
+        actor_cid_number: &CidNumber,
+        who: &T::AccountId,
+        vote_plan: &VotePlanOf<T::AccountId>,
+    ) -> DispatchResult {
+        ensure!(
+            vote_plan.voting_engine == VotingEngineKind::Internal,
+            votingengine::Error::<T>::InvalidVotePlan
+        );
+        let proposer_role = match &vote_plan.proposer_subject {
+            AuthorizationSubject::Institution(role_subject) => role_subject,
+            AuthorizationSubject::PersonalMultisig(_) => {
+                return Err(votingengine::Error::<T>::InvalidVotePlan.into())
+            }
+        };
+        ensure!(
+            proposer_role.cid_number == *actor_cid_number,
+            votingengine::Error::<T>::InvalidVotePlan
+        );
+        ensure!(
+            T::InstitutionRoleProvider::is_active_assignment(
+                proposer_role.cid_number.as_slice(),
+                who,
+                proposer_role.role_code.as_slice(),
+            ),
+            votingengine::Error::<T>::NoPermission
+        );
+        for subject in vote_plan.voter_subjects.iter() {
+            ensure!(
+                matches!(
+                    subject,
+                    AuthorizationSubject::Institution(role_subject)
+                        if role_subject.cid_number == *actor_cid_number
+                ),
+                votingengine::Error::<T>::InvalidVotePlan
+            );
+        }
+        Ok(())
     }
 
     /// 创建个人多签普通内部提案。
@@ -231,7 +279,6 @@ impl<T: Config> Pallet<T> {
             subject_cid_numbers: ProposalSubjectCidNumbers::default(),
             start: now,
             end,
-            citizen_eligible_total: 0,
         };
 
         with_transaction(|| {
@@ -274,7 +321,6 @@ impl<T: Config> Pallet<T> {
             subject_cid_numbers: ProposalSubjectCidNumbers::default(),
             start: now,
             end,
-            citizen_eligible_total: 0,
         };
 
         with_transaction(|| {
@@ -365,8 +411,27 @@ impl<T: Config> Pallet<T> {
     ) -> Result<u64, DispatchError> {
         let now = <frame_system::Pallet<T>>::block_number();
         <votingengine::Pallet<T>>::register_proposal_data(proposal_id, module_tag, data, now)?;
-        // 发起人签名发起提案后，投票引擎在同一事务自动记一票赞成。
-        Self::do_internal_vote(who, proposal_id, true)?;
+        let proposal =
+            Proposals::<T>::get(proposal_id).ok_or(votingengine::Error::<T>::ProposalNotFound)?;
+        let proposer_can_vote = if let Some(actor_cid_number) = proposal.actor_cid_number {
+            <votingengine::Pallet<T>>::is_effective_voter_in_snapshot(
+                proposal_id,
+                ProposalSubject::InstitutionCid(actor_cid_number),
+                &who,
+            )
+        } else if let Some(personal_account) = proposal.execution_account {
+            <votingengine::Pallet<T>>::is_admin_in_snapshot(
+                proposal_id,
+                ProposalSubject::PersonalAccount(personal_account),
+                &who,
+            )
+        } else {
+            false
+        };
+        // 发起岗位可以只有 Propose 而没有 Vote；只有发起账户也在冻结选民快照中时才自动记首票。
+        if proposer_can_vote {
+            Self::do_internal_vote(who, proposal_id, true)?;
+        }
         Ok(proposal_id)
     }
 }

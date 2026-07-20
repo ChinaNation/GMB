@@ -19,7 +19,7 @@ use crate::{
     Call, RepresentativeRoute, RepresentativeVoteRule, VoteProcedure,
 };
 
-fn insert_proposal<T: Config>(stage: u8, eligible_total: u64) -> u64 {
+fn insert_proposal<T: Config>(stage: u8) -> u64 {
     let proposal_id = 0u64;
     let now = 1u32.saturated_into();
     frame_system::Pallet::<T>::set_block_number(now);
@@ -35,7 +35,6 @@ fn insert_proposal<T: Config>(stage: u8, eligible_total: u64) -> u64 {
             subject_cid_numbers: Default::default(),
             start: now,
             end: 2u32.saturated_into(),
-            citizen_eligible_total: eligible_total,
         },
     );
     proposal_id
@@ -59,28 +58,45 @@ fn national_executive() -> votingengine::CidNumber {
         .expect("national executive CID fits runtime bound")
 }
 
+fn role_subject(
+    cid_number: votingengine::CidNumber,
+    role_code: &[u8],
+) -> crate::types::RepresentativeBody {
+    entity_primitives::RoleSubject {
+        cid_number,
+        role_code: role_code
+            .to_vec()
+            .try_into()
+            .expect("benchmark role code fits"),
+    }
+}
+
 #[benchmarks]
 mod benchmarks {
     use super::*;
 
     #[benchmark]
     fn cast_representative_vote() {
-        let proposal_id = insert_proposal::<T>(votingengine::STAGE_LEG_REPRESENTATIVE, 0);
+        let proposal_id = insert_proposal::<T>(votingengine::STAGE_LEG_REPRESENTATIVE);
         let body = national_legislature(1);
         let voter: T::AccountId = account("representative", 0, 0);
-        let admins = sp_runtime::sp_std::vec![voter.clone()];
-        let bounded: frame_support::BoundedVec<T::AccountId, T::MaxAdminsPerInstitution> = admins
-            .try_into()
-            .expect("legislature admins fit runtime bound");
-        votingengine::pallet::AdminSnapshot::<T>::insert(
+        let role_subject = entity_primitives::RoleSubject {
+            cid_number: body.clone(),
+            role_code: b"BENCHMARK_MEMBER"
+                .to_vec()
+                .try_into()
+                .expect("benchmark role code fits"),
+        };
+        votingengine::Pallet::<T>::snapshot_role_voters(
             proposal_id,
-            votingengine::ProposalSubject::InstitutionCid(body.clone()),
-            bounded,
-        );
+            votingengine::AuthorizationSubject::Institution(role_subject.clone()),
+            sp_runtime::sp_std::vec![voter.clone()],
+        )
+        .expect("representative role snapshot should be created");
         RepresentativeMetas::<T>::insert(
             proposal_id,
             RepresentativeMeta {
-                route: RepresentativeRoute::Single(body),
+                route: RepresentativeRoute::Single(role_subject),
                 current_body: 0,
                 rule: RepresentativeVoteRule::Regular,
                 procedure: VoteProcedure::RepresentativeOnly,
@@ -98,21 +114,19 @@ mod benchmarks {
 
     #[benchmark]
     fn cast_referendum_vote() {
-        let proposal_id = insert_proposal::<T>(votingengine::STAGE_LEG_REFERENDUM, 1);
+        let proposal_id = insert_proposal::<T>(votingengine::STAGE_LEG_REFERENDUM);
         let voter: T::AccountId = account("citizen", 0, 0);
         let scope = votingengine::PopulationScope::Country;
         <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(&voter, &scope);
-        let (snapshot_id, _) =
-            <T as votingengine::Config>::CitizenIdentityReader::create_population_snapshot(&scope)
-                .expect("benchmark population snapshot should be created");
-        votingengine::Pallet::<T>::bind_population_snapshot(proposal_id, snapshot_id)
-            .expect("benchmark proposal should bind population snapshot");
+        votingengine::Pallet::<T>::create_population_snapshot(proposal_id, &scope)
+            .expect("benchmark proposal population snapshot should be created");
         LegislationMetas::<T>::insert(
             proposal_id,
             LegislationMeta {
-                executive: national_legislature(0),
-                legislature: None,
+                executive: None,
+                override_signers: Default::default(),
                 needs_guard: false,
+                guard: None,
             },
         );
 
@@ -127,14 +141,15 @@ mod benchmarks {
 
     #[benchmark]
     fn executive_sign() {
-        let proposal_id = insert_proposal::<T>(votingengine::STAGE_LEG_SIGN, 0);
+        let proposal_id = insert_proposal::<T>(votingengine::STAGE_LEG_SIGN);
         let executive = national_executive();
         LegislationMetas::<T>::insert(
             proposal_id,
             LegislationMeta {
-                executive,
-                legislature: None,
+                executive: Some(role_subject(executive, b"LR")),
+                override_signers: Default::default(),
                 needs_guard: false,
+                guard: None,
             },
         );
 
@@ -149,13 +164,15 @@ mod benchmarks {
 
     #[benchmark]
     fn override_sign() {
-        let proposal_id = insert_proposal::<T>(votingengine::STAGE_LEG_OVERRIDE, 0);
-        let legislature = national_legislature(0);
+        let proposal_id = insert_proposal::<T>(votingengine::STAGE_LEG_OVERRIDE);
         let senate = national_legislature(1);
         let house = national_legislature(2);
-        let bodies: crate::RepresentativeBodies = sp_runtime::sp_std::vec![senate, house]
-            .try_into()
-            .expect("two representative bodies fit bound");
+        let senate_role = role_subject(senate, b"BENCHMARK_MEMBER");
+        let house_role = role_subject(house, b"BENCHMARK_MEMBER");
+        let bodies: crate::RepresentativeBodies =
+            sp_runtime::sp_std::vec![senate_role.clone(), house_role.clone()]
+                .try_into()
+                .expect("two representative bodies fit bound");
         RepresentativeMetas::<T>::insert(
             proposal_id,
             RepresentativeMeta {
@@ -168,9 +185,16 @@ mod benchmarks {
         LegislationMetas::<T>::insert(
             proposal_id,
             LegislationMeta {
-                executive: national_executive(),
-                legislature: Some(legislature.clone()),
+                executive: Some(role_subject(national_executive(), b"LR")),
+                override_signers: sp_runtime::sp_std::vec![
+                    role_subject(national_legislature(0), b"LR"),
+                    role_subject(senate_role.cid_number, b"LR"),
+                    role_subject(house_role.cid_number, b"LR"),
+                ]
+                .try_into()
+                .expect("three override signers fit"),
                 needs_guard: false,
+                guard: None,
             },
         );
         let who: T::AccountId = account("override-signer", 0, 0);
@@ -189,7 +213,7 @@ mod benchmarks {
 
     #[benchmark]
     fn guard_vote() {
-        let proposal_id = insert_proposal::<T>(votingengine::STAGE_LEG_CONSTITUTION_GUARD, 0);
+        let proposal_id = insert_proposal::<T>(votingengine::STAGE_LEG_CONSTITUTION_GUARD);
         let who: T::AccountId = account("constitution-guard", 0, 0);
 
         #[block]

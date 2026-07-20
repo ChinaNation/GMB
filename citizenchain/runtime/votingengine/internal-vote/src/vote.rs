@@ -18,15 +18,29 @@ impl<T: Config> Pallet<T> {
             !InternalVotesByAccount::<T>::contains_key(proposal_id, &who),
             votingengine::Error::<T>::AlreadyVoted
         );
-        let subject = proposal
-            .subject_keys()
-            .into_iter()
-            .next()
-            .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
-        ensure!(
-            <votingengine::Pallet<T>>::is_admin_in_snapshot(proposal_id, subject.clone(), &who),
-            votingengine::Error::<T>::NoPermission
-        );
+        let (eligible, eligible_total) = if let Some(actor_cid_number) = proposal.actor_cid_number {
+            let subject = ProposalSubject::InstitutionCid(actor_cid_number);
+            (
+                <votingengine::Pallet<T>>::is_effective_voter_in_snapshot(
+                    proposal_id,
+                    subject.clone(),
+                    &who,
+                ),
+                <votingengine::Pallet<T>>::effective_voters_len(proposal_id, subject)
+                    .ok_or(votingengine::Error::<T>::MissingVoterSnapshot)?,
+            )
+        } else {
+            let personal_account = proposal
+                .execution_account
+                .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
+            let subject = ProposalSubject::PersonalAccount(personal_account);
+            (
+                <votingengine::Pallet<T>>::is_admin_in_snapshot(proposal_id, subject.clone(), &who),
+                <votingengine::Pallet<T>>::snapshot_admins_len(proposal_id, subject)
+                    .ok_or(votingengine::Error::<T>::MissingAdminSnapshot)?,
+            )
+        };
+        ensure!(eligible, votingengine::Error::<T>::NoPermission);
 
         InternalVotesByAccount::<T>::insert(proposal_id, &who, approve);
         let tally = InternalTallies::<T>::mutate(proposal_id, |tally| {
@@ -49,10 +63,8 @@ impl<T: Config> Pallet<T> {
         if tally.yes >= threshold {
             <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_PASSED)?;
         } else {
-            let admins_len = <votingengine::Pallet<T>>::snapshot_admins_len(proposal_id, subject)
-                .ok_or(votingengine::Error::<T>::MissingAdminSnapshot)?;
             let casted = tally.yes.saturating_add(tally.no);
-            let remaining = admins_len.saturating_sub(casted);
+            let remaining = eligible_total.saturating_sub(casted);
             if tally.yes.saturating_add(remaining) < threshold {
                 <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_REJECTED)?;
             }

@@ -44,6 +44,8 @@ pub struct ProposeInstitutionGovernanceArgs {
     pub register_nonce: Vec<u8>,
     pub signature: Vec<u8>,
     pub actor_cid_number: Vec<u8>,
+    /// 发起人当前任职的机构岗位码；runtime 据此校验业务提案权限。
+    pub proposer_role_code: Vec<u8>,
     pub credential_signer_pubkey: [u8; 32],
     pub scope_province_name: Vec<u8>,
     pub scope_city_name: Vec<u8>,
@@ -96,6 +98,7 @@ pub fn encode_propose_institution_governance(args: &ProposeInstitutionGovernance
     encode_bytes(&mut out, &args.register_nonce);
     encode_bytes(&mut out, &args.signature);
     encode_bytes(&mut out, &args.actor_cid_number);
+    encode_bytes(&mut out, &args.proposer_role_code);
     out.extend_from_slice(&args.credential_signer_pubkey);
     encode_bytes(&mut out, &args.scope_province_name);
     encode_bytes(&mut out, &args.scope_city_name);
@@ -172,6 +175,7 @@ mod tests {
             register_nonce: b"nonce".to_vec(),
             signature: vec![9; 64],
             actor_cid_number: b"LN001-SFAS-0001".to_vec(),
+            proposer_role_code: b"RFINANCE".to_vec(),
             credential_signer_pubkey: [5; 32],
             scope_province_name: "广东省".as_bytes().to_vec(),
             scope_city_name: "广州市".as_bytes().to_vec(),

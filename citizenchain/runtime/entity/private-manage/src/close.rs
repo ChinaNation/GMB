@@ -1,7 +1,8 @@
 //! 私权机构自定义命名账户关闭流程（call_index=1）。
 //!
 //! 机构本身不提供关闭路径；主账户、费用账户及所有制度协议账户永久存在。
-//! 只有 `InstitutionNamed` 可由 `actor_cid_number + institution_account + origin 管理员`
+//! 只有 `InstitutionNamed` 可由 `actor_cid_number + proposer_role_code + institution_account`
+//! 对应的有效岗位任职人
 //! 创建内部提案并在通过后关闭。
 
 extern crate alloc;
@@ -29,12 +30,13 @@ use crate::pallet::{
 use crate::traits::{
     AccountValidator, CidInstitutionVerifier, ProtectedSourceChecker, ReservedAccountGuard,
 };
-use crate::BalanceOf;
+use crate::{BalanceOf, RoleCodeOf};
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn do_propose_institution_close<T: Config>(
     who: T::AccountId,
     actor_cid_number: CidNumberOf<T>,
+    proposer_role_code: RoleCodeOf,
     institution_account: T::AccountId,
     beneficiary: T::AccountId,
     register_nonce: RegisterNonceOf<T>,
@@ -127,13 +129,20 @@ pub(crate) fn do_propose_institution_close<T: Config>(
     let mut data = alloc::vec::Vec::from(crate::MODULE_TAG);
     data.push(ACTION_CLOSE);
     data.extend_from_slice(&action.encode());
+    let vote_plan = Pallet::<T>::build_institution_vote_plan(
+        &who,
+        actor_cid_number.as_slice(),
+        proposer_role_code.as_slice(),
+        entity_primitives::business_action::ACTION_INSTITUTION_CLOSE,
+        &data,
+    )?;
     let proposal_id = T::InternalVoteEngine::create_institution_proposal_with_data(
         who.clone(),
         institution_code,
         actor_cid_number.to_vec(),
         Some(institution_account.clone()),
         alloc::vec![actor_cid_number.to_vec()],
-        crate::MODULE_TAG,
+        vote_plan,
         data,
     )?;
     UsedDeregisterNonce::<T>::insert(nonce_hash, true);

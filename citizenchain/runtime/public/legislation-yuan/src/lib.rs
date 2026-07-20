@@ -36,22 +36,25 @@ pub const MAX_IMMUTABLE_ARTICLES: u32 = 32;
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
-    use entity_primitives::InstitutionCidQuery;
+    use entity_primitives::{
+        BusinessActionId, InstitutionCidQuery, InstitutionRoleAuthorizationQuery,
+        RolePermissionOperation, RoleSubject,
+    };
     use frame_support::pallet_prelude::*;
     use frame_support::traits::Time;
     use frame_system::pallet_prelude::*;
     use legislation_vote::{
-        LegislationProcedureConfig, LegislationVoteEngine, RepresentativeBodies,
-        RepresentativeRoute,
+        types::RepresentativeBody, LegislationProcedureConfig, LegislationVoteEngine,
+        RepresentativeBodies, RepresentativeRoute,
     };
-    use primitives::cid::china::china_lf::CHINA_LF;
+    use primitives::cid::china::{china_lf::CHINA_LF, china_sf::CHINA_SF};
     use primitives::cid::code::InstitutionCode;
     use primitives::constitution::{self, AmendmentScope, CONSTITUTION_CORE_CHAPTER_INDEX};
     use primitives::count_const::IMMUTABLE_CONSTITUTION_ARTICLES;
     use primitives::genesis::GENESIS_LAW_VERSION_LABELS;
     use sp_runtime::sp_std::vec::Vec;
     use sp_runtime::DispatchError;
-    use votingengine::{InternalAdminProvider, ProposalExecutionOutcome};
+    use votingengine::{ProposalExecutionOutcome, VotePlanOf, VotingEngineKind};
 
     // 受 Config 常量约束的有界字符串别名。
     pub type TitleOf<T> = BoundedVec<u8, <T as Config>::MaxTitleLen>;
@@ -270,6 +273,8 @@ pub mod pallet {
         pub houses: Houses,
         /// 实际发起机构。与表决院分离，市教育案等场景不一定等于 houses[0]。
         pub actor_cid_number: votingengine::types::CidNumber,
+        /// 发起账户在发起机构内实际任职的岗位码；管理员身份本身不产生权限。
+        pub proposer_role_code: votingengine::types::RoleCode,
         /// 行政签署机构。
         pub executive_cid_number: votingengine::types::CidNumber,
         /// 两院级三人会签归口立法机构；市级单院必须为空。
@@ -295,6 +300,9 @@ pub mod pallet {
         type InstitutionCidQuery: entity_primitives::InstitutionCidQuery<
             votingengine::types::CidNumber,
         >;
+
+        /// 机构岗位权限、有效任职与 CID 顶层能力的统一查询入口。
+        type InstitutionRoleAuthorization: InstitutionRoleAuthorizationQuery<Self::AccountId>;
 
         #[pallet::constant]
         type MaxTitleLen: Get<u32>;
@@ -549,6 +557,8 @@ pub mod pallet {
         EmptyHouses,
         /// 发起人不是该立法机构的现任议员/委员(admins)
         NotLegislator,
+        /// 表决、签署或护宪阶段没有唯一合法岗位权限主体。
+        InvalidLegislationRole,
         /// 提案机构/表决类型/院结构/签署机构不符合宪法路由(第45/46/75/79/100/106条)
         RoutingMismatch,
         /// 宪法修改的表决类型不合法(只能特别案或重要案)
@@ -633,6 +643,7 @@ pub mod pallet {
             scope_code: u32,
             houses: Houses,
             actor_cid_number: votingengine::types::CidNumber,
+            proposer_role_code: votingengine::types::RoleCode,
             executive_cid_number: votingengine::types::CidNumber,
             legislature_cid_number: Option<votingengine::types::CidNumber>,
             vote_type: VoteType,
@@ -649,7 +660,12 @@ pub mod pallet {
             );
             ensure!(!title.is_empty(), Error::<T>::EmptyTitle);
             ensure!(!chapters.is_empty(), Error::<T>::EmptyChapters);
-            Self::ensure_legislator(&actor_cid_number, &who)?;
+            Self::ensure_legislator(
+                &actor_cid_number,
+                &proposer_role_code,
+                &who,
+                entity_primitives::business_action::ACTION_ENACT_LAW,
+            )?;
             Self::ensure_tier_vote_type(tier, vote_type)?;
             Self::ensure_routing(
                 tier,
@@ -668,6 +684,7 @@ pub mod pallet {
                 scope_code,
                 houses: houses.clone(),
                 actor_cid_number,
+                proposer_role_code,
                 executive_cid_number,
                 legislature_cid_number,
                 vote_type,
@@ -695,6 +712,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             law_id: u64,
             actor_cid_number: votingengine::types::CidNumber,
+            proposer_role_code: votingengine::types::RoleCode,
             executive_cid_number: votingengine::types::CidNumber,
             legislature_cid_number: Option<votingengine::types::CidNumber>,
             vote_type: VoteType,
@@ -716,7 +734,12 @@ pub mod pallet {
                 law.pending_version.is_none(),
                 Error::<T>::AmendmentAlreadyPending
             );
-            Self::ensure_legislator(&actor_cid_number, &who)?;
+            Self::ensure_legislator(
+                &actor_cid_number,
+                &proposer_role_code,
+                &who,
+                entity_primitives::business_action::ACTION_AMEND_LAW,
+            )?;
             Self::ensure_tier_vote_type(law.tier, vote_type)?;
             Self::ensure_routing(
                 law.tier,
@@ -747,6 +770,7 @@ pub mod pallet {
                 scope_code: law.scope_code,
                 houses: law.houses.clone(),
                 actor_cid_number,
+                proposer_role_code,
                 executive_cid_number,
                 legislature_cid_number,
                 vote_type,
@@ -773,6 +797,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             law_id: u64,
             actor_cid_number: votingengine::types::CidNumber,
+            proposer_role_code: votingengine::types::RoleCode,
             executive_cid_number: votingengine::types::CidNumber,
             legislature_cid_number: Option<votingengine::types::CidNumber>,
             vote_type: VoteType,
@@ -787,7 +812,12 @@ pub mod pallet {
                 law.tier != Tier::Constitution,
                 Error::<T>::CannotRepealConstitution
             );
-            Self::ensure_legislator(&actor_cid_number, &who)?;
+            Self::ensure_legislator(
+                &actor_cid_number,
+                &proposer_role_code,
+                &who,
+                entity_primitives::business_action::ACTION_REPEAL_LAW,
+            )?;
             Self::ensure_tier_vote_type(law.tier, vote_type)?;
             Self::ensure_routing(
                 law.tier,
@@ -806,6 +836,7 @@ pub mod pallet {
                 scope_code: law.scope_code,
                 houses: law.houses.clone(),
                 actor_cid_number,
+                proposer_role_code,
                 executive_cid_number,
                 legislature_cid_number,
                 vote_type,
@@ -834,14 +865,24 @@ pub mod pallet {
         /// 但表决院恒为 houses[0]=市立法会,故 auth 校验对 proposer_body 而非 houses[0]。
         fn ensure_legislator(
             actor_cid_number: &votingengine::types::CidNumber,
+            proposer_role_code: &votingengine::types::RoleCode,
             who: &T::AccountId,
+            action_code: u32,
         ) -> DispatchResult {
-            let code = Self::institution_code_for_cid(actor_cid_number)?;
+            let _ = Self::institution_code_for_cid(actor_cid_number)?;
+            let business_action_id = BusinessActionId {
+                module_tag: MODULE_TAG.to_vec(),
+                action_code,
+            };
             ensure!(
-                <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
-                    code,
-                    actor_cid_number.as_slice(),
-                    who
+                T::InstitutionRoleAuthorization::is_authorized(
+                    who,
+                    &RoleSubject {
+                        cid_number: actor_cid_number.to_vec(),
+                        role_code: proposer_role_code.to_vec(),
+                    },
+                    &business_action_id,
+                    RolePermissionOperation::Propose,
                 ),
                 Error::<T>::NotLegislator
             );
@@ -881,6 +922,27 @@ pub mod pallet {
             Ok(parts.r5.into_bytes())
         }
 
+        /// 校验机构属于允许的发起机构码之一，并返回行政区段。
+        fn ensure_route_institution_one_of(
+            cid_number: &votingengine::types::CidNumber,
+            expected_codes: &[InstitutionCode],
+        ) -> Result<Vec<u8>, DispatchError> {
+            ensure!(
+                T::InstitutionCidQuery::cid_exists(cid_number),
+                Error::<T>::RoutingMismatch
+            );
+            let actual = Self::institution_code_for_cid(cid_number)?;
+            ensure!(
+                expected_codes.contains(&actual),
+                Error::<T>::RoutingMismatch
+            );
+            let parts =
+                primitives::cid::number::parse_cid_number_parts_bytes(cid_number.as_slice())
+                    .map_err(|_| Error::<T>::RoutingMismatch)?;
+            ensure!(parts.institution == actual, Error::<T>::RoutingMismatch);
+            Ok(parts.r5.into_bytes())
+        }
+
         /// 路由校验(ADR-027,宪法第45/46/75/79/100/106条)。
         ///
         /// 调用方仍传原有字段，但链端只接受固定的层级×表决类型路由；所有机构账户
@@ -896,32 +958,32 @@ pub mod pallet {
             legislature_cid_number: &Option<votingengine::types::CidNumber>,
         ) -> DispatchResult {
             let education = vote_type.is_education();
-            let (expected_proposer, expected_houses, expected_executive, expected_legislature): (
-                InstitutionCode,
+            let (expected_proposers, expected_houses, expected_executive, expected_legislature): (
+                &[InstitutionCode],
                 &[InstitutionCode],
                 InstitutionCode,
                 Option<InstitutionCode>,
             ) = match (tier, education) {
                 (Tier::Constitution, false) | (Tier::National, false) => (
-                    *b"NRP\0",
+                    &[*b"NRP\0"],
                     &[*b"NRP\0", *b"NSN\0"],
                     *b"PRS\0",
                     Some(*b"NLG\0"),
                 ),
                 (Tier::National, true) => (
-                    *b"NED\0",
+                    &[*b"NED\0"],
                     &[*b"NED\0", *b"NSN\0"],
                     *b"PRS\0",
                     Some(*b"NLG\0"),
                 ),
                 (Tier::Provincial, false) => (
-                    *b"PRP\0",
+                    &[*b"PRP\0"],
                     &[*b"PRP\0", *b"PSN\0"],
                     *b"PGV\0",
                     Some(*b"PLG\0"),
                 ),
-                (Tier::Municipal, false) => (*b"CSLF", &[*b"CLEG"], *b"CGOV", None),
-                (Tier::Municipal, true) => (*b"CEDU", &[*b"CLEG"], *b"CGOV", None),
+                (Tier::Municipal, false) => (&[*b"CSLF", *b"CLEG"], &[*b"CLEG"], *b"CGOV", None),
+                (Tier::Municipal, true) => (&[*b"CEDU", *b"CLEG"], &[*b"CLEG"], *b"CGOV", None),
                 // 省没有省教委会，宪法也不存在教育案路由。
                 _ => return Err(Error::<T>::RoutingMismatch.into()),
             };
@@ -937,7 +999,8 @@ pub mod pallet {
                 ensure!(scope_code == 0, Error::<T>::RoutingMismatch);
             }
 
-            let route_scope = Self::ensure_route_institution(actor_cid_number, expected_proposer)?;
+            let route_scope =
+                Self::ensure_route_institution_one_of(actor_cid_number, expected_proposers)?;
             for (house, expected_code) in houses.iter().zip(expected_houses.iter()) {
                 let scope = Self::ensure_route_institution(house, *expected_code)?;
                 ensure!(
@@ -1142,6 +1205,79 @@ pub mod pallet {
             sp_io::hashing::blake2_256(&chapters.encode())
         }
 
+        fn action_code(action: LawAction) -> u32 {
+            match action {
+                LawAction::Enact => entity_primitives::business_action::ACTION_ENACT_LAW,
+                LawAction::Amend => entity_primitives::business_action::ACTION_AMEND_LAW,
+                LawAction::Repeal => entity_primitives::business_action::ACTION_REPEAL_LAW,
+            }
+        }
+
+        fn bounded_role_subject(
+            cid_number: &[u8],
+            role_code: &[u8],
+        ) -> Result<RepresentativeBody, DispatchError> {
+            Ok(RoleSubject {
+                cid_number: cid_number
+                    .to_vec()
+                    .try_into()
+                    .map_err(|_| Error::<T>::InvalidLegislationRole)?,
+                role_code: role_code
+                    .to_vec()
+                    .try_into()
+                    .map_err(|_| Error::<T>::InvalidLegislationRole)?,
+            })
+        }
+
+        fn business_action(action_code: u32) -> BusinessActionId<Vec<u8>> {
+            BusinessActionId {
+                module_tag: MODULE_TAG.to_vec(),
+                action_code,
+            }
+        }
+
+        /// 每个代表机构阶段必须解析为一个非 LR 表决岗位。岗位码来自 entity 权限真源，
+        /// 不是客户端或投票引擎硬编码；LR 的同动作 Vote 仅用于后续签署阶段。
+        fn representative_vote_subject(
+            cid_number: &votingengine::types::CidNumber,
+            action_code: u32,
+        ) -> Result<RepresentativeBody, DispatchError> {
+            let action = Self::business_action(action_code);
+            let mut subjects = T::InstitutionRoleAuthorization::role_subjects_with_permission(
+                cid_number.as_slice(),
+                &action,
+                RolePermissionOperation::Vote,
+            );
+            subjects.retain(|subject| {
+                subject.role_code.as_slice()
+                    != primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE
+            });
+            ensure!(subjects.len() == 1, Error::<T>::InvalidLegislationRole);
+            let subject = subjects.pop().ok_or(Error::<T>::InvalidLegislationRole)?;
+            Self::bounded_role_subject(&subject.cid_number, &subject.role_code)
+        }
+
+        /// 固定岗位签署主体也必须真实持有 underlying action 的 Vote 权限。
+        fn fixed_vote_subject(
+            cid_number: &[u8],
+            role_code: &[u8],
+            action_code: u32,
+        ) -> Result<RepresentativeBody, DispatchError> {
+            let subject = RoleSubject {
+                cid_number: cid_number.to_vec(),
+                role_code: role_code.to_vec(),
+            };
+            ensure!(
+                T::InstitutionRoleAuthorization::role_has_permission(
+                    &subject,
+                    &Self::business_action(action_code),
+                    RolePermissionOperation::Vote,
+                ),
+                Error::<T>::InvalidLegislationRole
+            );
+            Self::bounded_role_subject(cid_number, role_code)
+        }
+
         /// 编码载荷并调立法投票引擎建提案,返回真实提案 ID。
         /// 代表机构序列由提案携带；单机构与顺序多机构路由均由立法投票引擎执行。
         fn dispatch_to_engine(
@@ -1154,11 +1290,13 @@ pub mod pallet {
             let mut data = sp_runtime::sp_std::vec::Vec::from(MODULE_TAG);
             data.extend_from_slice(&summary.encode());
             let object = chapters.encode();
+            let action_code = Self::action_code(summary.action);
             // 修宪(tier=宪法)走护宪大法官终审(宪法第21条)。
             let needs_guard = summary.tier == Tier::Constitution;
             let bodies: RepresentativeBodies = houses
-                .clone()
-                .into_inner()
+                .iter()
+                .map(|cid| Self::representative_vote_subject(cid, action_code))
+                .collect::<Result<Vec<_>, _>>()?
                 .try_into()
                 .map_err(|_| Error::<T>::VoteEngineCreateFailed)?;
             let route = if bodies.len() == 1 {
@@ -1171,14 +1309,98 @@ pub mod pallet {
             } else {
                 RepresentativeRoute::Sequential(bodies)
             };
-            let procedure = LegislationProcedureConfig {
-                executive: summary.executive_cid_number.clone(),
-                legislature: summary.legislature_cid_number.clone(),
-                needs_guard,
+            // 特别案代表阶段后直接进入公投，再进入护宪终审；不进入行政签署或否决救济。
+            let executive = if vote_type == VoteType::Special {
+                None
+            } else {
+                Some(Self::fixed_vote_subject(
+                    summary.executive_cid_number.as_slice(),
+                    primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE,
+                    action_code,
+                )?)
             };
+            let mut override_signers = Vec::new();
+            if vote_type != VoteType::Special {
+                if let Some(legislature) = summary.legislature_cid_number.as_ref() {
+                    override_signers.push(Self::fixed_vote_subject(
+                        legislature.as_slice(),
+                        primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE,
+                        action_code,
+                    )?);
+                    for house in houses {
+                        override_signers.push(Self::fixed_vote_subject(
+                            house.as_slice(),
+                            primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE,
+                            action_code,
+                        )?);
+                    }
+                }
+            }
+            let override_signers: BoundedVec<RepresentativeBody, ConstU32<3>> = override_signers
+                .try_into()
+                .map_err(|_| Error::<T>::InvalidLegislationRole)?;
+            let guard = if needs_guard {
+                let njd = CHINA_SF
+                    .iter()
+                    .find(|entry| {
+                        votingengine::types::institution_code_from_cid_number(entry.cid_number)
+                            == Some(votingengine::types::NJD)
+                    })
+                    .ok_or(Error::<T>::InvalidLegislationRole)?;
+                Some(Self::fixed_vote_subject(
+                    njd.cid_number.as_bytes(),
+                    primitives::governance_skeleton::ROLE_CODE_CONSTITUTION_GUARD,
+                    action_code,
+                )?)
+            } else {
+                None
+            };
+            let procedure = LegislationProcedureConfig {
+                executive: executive.clone(),
+                override_signers: override_signers.clone(),
+                needs_guard,
+                guard: guard.clone(),
+            };
+
+            let proposer_subject = Self::bounded_role_subject(
+                summary.actor_cid_number.as_slice(),
+                summary.proposer_role_code.as_slice(),
+            )?;
+            let mut voter_subjects = route
+                .bodies()
+                .into_iter()
+                .map(votingengine::types::AuthorizationSubject::Institution)
+                .collect::<Vec<_>>();
+            voter_subjects.extend(
+                executive
+                    .into_iter()
+                    .chain(override_signers.into_iter())
+                    .chain(guard.into_iter())
+                    .map(votingengine::types::AuthorizationSubject::Institution),
+            );
+            let owner: BoundedVec<
+                u8,
+                ConstU32<{ entity_primitives::BUSINESS_MODULE_TAG_MAX_BYTES }>,
+            > = MODULE_TAG
+                .to_vec()
+                .try_into()
+                .map_err(|_| Error::<T>::VoteEngineCreateFailed)?;
+            let vote_plan = VotePlanOf::<T::AccountId>::try_new(
+                BusinessActionId {
+                    module_tag: owner.clone(),
+                    action_code,
+                },
+                owner,
+                votingengine::types::AuthorizationSubject::Institution(proposer_subject),
+                voter_subjects,
+                VotingEngineKind::Legislation,
+                sp_io::hashing::blake2_256(&(data.clone(), object.clone()).encode()),
+            )
+            .map_err(|_| Error::<T>::VoteEngineCreateFailed)?;
             let proposal_id = T::LegislationVoteEngine::create_legislation_vote(
                 who.clone(),
                 summary.actor_cid_number.clone(),
+                vote_plan,
                 route,
                 vote_type.representative_rule(),
                 procedure,

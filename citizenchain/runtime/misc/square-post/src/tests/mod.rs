@@ -125,6 +125,7 @@ impl crate::pallet::Config for Test {
     type TimeProvider = MockTime;
     type InstitutionAccountQuery = MockInstitutionQuery;
     type InternalVoteEngine = ();
+    type InstitutionRoleAuthorization = ();
     type MaxSquarePostIdLen = ConstU32<64>;
     type MaxSquareCidNumberLen = ConstU32<32>;
     type MaxSquareStorageReceiptIdLen = ConstU32<96>;
@@ -133,10 +134,9 @@ impl crate::pallet::Config for Test {
 }
 
 // 平台机构永久固定为创世技术公司，测试与 pallet 共用同一创世常量 CID。
-const PLATFORM_CID: &[u8] =
-    primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY
-        .cid_number
-        .as_bytes();
+const PLATFORM_CID: &[u8] = primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY
+    .cid_number
+    .as_bytes();
 const PLATFORM_PRICE: u128 = 5_999_900;
 
 fn account(byte: u8) -> AccountId32 {
@@ -509,8 +509,8 @@ fn change_plan_prorates_partial_remaining_credit() {
             platform_plan_for(MembershipLevel::Freedom),
             199_900,
         ));
-        let te =
-            crate::subscription::add_calendar_period(now, BillingPeriod::Monthly).expect("calendar");
+        let te = crate::subscription::add_calendar_period(now, BillingPeriod::Monthly)
+            .expect("calendar");
         // 推进到本期中段，剩余权益按时间比例折算。
         let mid = now + (te - now) / 3;
         set_now(mid);
@@ -526,8 +526,8 @@ fn change_plan_prorates_partial_remaining_credit() {
             Balances::free_balance(subscriber_account()),
             balance_before_change - (PLATFORM_PRICE - credit)
         );
-        let base_end =
-            crate::subscription::add_calendar_period(mid, BillingPeriod::Monthly).expect("calendar");
+        let base_end = crate::subscription::add_calendar_period(mid, BillingPeriod::Monthly)
+            .expect("calendar");
         let state = Subscriptions::<Test>::get((subscriber_account(), IssuerKey::Platform))
             .expect("state exists");
         assert_eq!(state.paid_until, base_end);
@@ -556,7 +556,10 @@ fn creator_subscription_renews_at_authorized_price_when_unchanged() {
         let creator_before = Balances::free_balance(creator_account());
         // 价格未变 → 自动续扣当前授权价。
         finalize_at(due);
-        assert_eq!(Balances::free_balance(creator_account()), creator_before + 50);
+        assert_eq!(
+            Balances::free_balance(creator_account()),
+            creator_before + 50
+        );
     });
 }
 
@@ -586,7 +589,10 @@ fn creator_price_change_suspends_renewal_until_reconsent() {
         // 续费挂起、创作者未收款、离调度。
         let state = Subscriptions::<Test>::get(&ck).expect("state exists");
         assert_eq!(state.subscription_status, SubscriptionStatus::Suspended);
-        assert_eq!(state.suspend_reason, Some(crate::SuspendReason::NeedReconsent));
+        assert_eq!(
+            state.suspend_reason,
+            Some(crate::SuspendReason::NeedReconsent)
+        );
         assert_eq!(Balances::free_balance(creator_account()), creator_before);
         assert!(!RenewalIndex::<Test>::contains_key(&ck));
         // 订阅者按新价再签名 → 恢复 Active 并扣新价。
@@ -599,7 +605,10 @@ fn creator_price_change_suspends_renewal_until_reconsent() {
         let resumed = Subscriptions::<Test>::get(&ck).expect("state exists");
         assert_eq!(resumed.subscription_status, SubscriptionStatus::Active);
         assert_eq!(resumed.authorized_price_fen, 75);
-        assert_eq!(Balances::free_balance(creator_account()), creator_before + 75);
+        assert_eq!(
+            Balances::free_balance(creator_account()),
+            creator_before + 75
+        );
         assert!(RenewalIndex::<Test>::contains_key(&ck));
     });
 }
@@ -639,7 +648,10 @@ fn creator_price_change_reconsent_before_lapse_keeps_active_without_charge() {
         assert_eq!(Balances::free_balance(creator_account()), creator_before);
         // 下期按新价自动扣。
         finalize_at(due);
-        assert_eq!(Balances::free_balance(creator_account()), creator_before + 75);
+        assert_eq!(
+            Balances::free_balance(creator_account()),
+            creator_before + 75
+        );
     });
 }
 
@@ -674,7 +686,10 @@ fn creator_loses_membership_pauses_fans_and_resumes() {
         finalize_at(retry);
         let resumed = Subscriptions::<Test>::get(&ck).expect("state exists");
         assert_eq!(resumed.subscription_status, SubscriptionStatus::Active);
-        assert_eq!(Balances::free_balance(creator_account()), creator_before + 50);
+        assert_eq!(
+            Balances::free_balance(creator_account()),
+            creator_before + 50
+        );
     });
 }
 
@@ -706,7 +721,10 @@ fn creator_paused_and_repriced_suspends_for_reconsent_on_return() {
         finalize_at(retry);
         let state = Subscriptions::<Test>::get(&ck).expect("state exists");
         assert_eq!(state.subscription_status, SubscriptionStatus::Suspended);
-        assert_eq!(state.suspend_reason, Some(crate::SuspendReason::NeedReconsent));
+        assert_eq!(
+            state.suspend_reason,
+            Some(crate::SuspendReason::NeedReconsent)
+        );
         assert!(!RenewalIndex::<Test>::contains_key(&ck));
     });
 }
@@ -792,6 +810,10 @@ fn propose_platform_price_rejects_zero_price() {
             SquarePost::propose_set_platform_price(
                 RuntimeOrigin::signed(verified_account()),
                 cid,
+                primitives::cid::china::citizenchain::ROLE_CODE_GENESIS_PRODUCT_MANAGER
+                    .to_vec()
+                    .try_into()
+                    .expect("product manager role fits"),
                 MembershipLevel::Spark,
                 0,
             ),
@@ -809,6 +831,10 @@ fn propose_platform_price_rejects_non_technology_institution() {
             SquarePost::propose_set_platform_price(
                 RuntimeOrigin::signed(verified_account()),
                 cid,
+                primitives::cid::china::citizenchain::ROLE_CODE_GENESIS_PRODUCT_MANAGER
+                    .to_vec()
+                    .try_into()
+                    .expect("product manager role fits"),
                 MembershipLevel::Spark,
                 599_900,
             ),

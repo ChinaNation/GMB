@@ -44,7 +44,6 @@ fn setup_proposal<T: Config>(
         subject_cid_numbers: Default::default(),
         start: 0u32.saturated_into(),
         end: 2u32.saturated_into(),
-        citizen_eligible_total: 100,
     };
     votingengine::pallet::Proposals::<T>::insert(proposal_id, proposal.clone());
     (proposal_id, proposal)
@@ -108,11 +107,8 @@ mod benchmarks {
         let voter: T::AccountId = account("citizen", 0, 0);
         let scope = votingengine::PopulationScope::Country;
         <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(&voter, &scope);
-        let (snapshot_id, _) =
-            <T as votingengine::Config>::CitizenIdentityReader::create_population_snapshot(&scope)
-                .expect("benchmark population snapshot should be created");
-        votingengine::Pallet::<T>::bind_population_snapshot(proposal_id, snapshot_id)
-            .expect("benchmark proposal should bind population snapshot");
+        votingengine::Pallet::<T>::create_population_snapshot(proposal_id, &scope)
+            .expect("benchmark proposal should create population snapshot");
 
         #[extrinsic_call]
         _(RawOrigin::Signed(voter.clone()), proposal_id, true);
@@ -126,6 +122,11 @@ mod benchmarks {
     #[benchmark]
     fn finalize_joint_timeout() {
         let (proposal_id, proposal) = setup_proposal::<T>(votingengine::STAGE_JOINT);
+        votingengine::Pallet::<T>::create_population_snapshot(
+            proposal_id,
+            &votingengine::PopulationScope::Country,
+        )
+        .expect("joint proposal population snapshot");
         frame_system::Pallet::<T>::set_block_number(3u32.saturated_into());
 
         #[block]
@@ -143,6 +144,11 @@ mod benchmarks {
     #[benchmark]
     fn finalize_jointreferendum_timeout() {
         let (proposal_id, proposal) = setup_proposal::<T>(votingengine::STAGE_REFERENDUM);
+        votingengine::Pallet::<T>::create_population_snapshot(
+            proposal_id,
+            &votingengine::PopulationScope::Country,
+        )
+        .expect("joint proposal population snapshot");
         frame_system::Pallet::<T>::set_block_number(3u32.saturated_into());
 
         #[block]

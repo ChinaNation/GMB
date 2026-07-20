@@ -4,18 +4,19 @@
 //! 法律正文、任免职书和预算正文归各自业务模块，不进入投票引擎。
 
 use codec::{Decode, Encode, MaxEncodedLen};
+use entity_primitives::RoleSubject;
 use frame_support::pallet_prelude::{BoundedVec, ConstU32, DecodeWithMemTracking};
 use scale_info::TypeInfo;
 use sp_runtime::sp_std::vec::Vec;
 use sp_runtime::DispatchError;
 use sp_runtime::RuntimeDebug;
-use votingengine::types::{CidNumber, ProposalSubjectCidNumbers};
+use votingengine::types::{CidNumber, ProposalSubjectCidNumbers, RoleCode, VotePlanOf};
 
 /// 单个立法机关表决提案最多串联的代表机构数量。
 pub const MAX_REPRESENTATIVE_BODIES: u32 = votingengine::types::MAX_REPRESENTATIVE_BODIES;
 
 /// 参加表决的机构引用。
-pub type RepresentativeBody = CidNumber;
+pub type RepresentativeBody = RoleSubject<CidNumber, RoleCode>;
 
 /// 顺序表决机构列表。
 pub type RepresentativeBodies = BoundedVec<RepresentativeBody, ConstU32<MAX_REPRESENTATIVE_BODIES>>;
@@ -129,12 +130,14 @@ pub enum VoteProcedure {
     MaxEncodedLen,
 )]
 pub struct LegislationProcedureConfig {
-    /// 行政签署机构。
-    pub executive: RepresentativeBody,
-    /// 省级、国家级三人共同签署所需的上级立法院；市级为 None。
-    pub legislature: Option<RepresentativeBody>,
+    /// 行政机构法定代表人岗位主体。
+    pub executive: Option<RepresentativeBody>,
+    /// 省级、国家级三人会签岗位主体；市级和特别案为空。
+    pub override_signers: BoundedVec<RepresentativeBody, ConstU32<3>>,
     /// 是否在法律程序通过后进入护宪大法官终审。
     pub needs_guard: bool,
+    /// 修宪终审的护宪大法官岗位主体；非修宪为空。
+    pub guard: Option<RepresentativeBody>,
 }
 
 /// 业务模块创建立法机关表决的唯一接口。
@@ -143,6 +146,7 @@ pub trait LegislationVoteEngine<AccountId> {
     fn create_representative_vote(
         who: AccountId,
         actor_cid_number: CidNumber,
+        vote_plan: VotePlanOf<AccountId>,
         route: RepresentativeRoute,
         rule: RepresentativeVoteRule,
         subject_cid_numbers: ProposalSubjectCidNumbers,
@@ -155,6 +159,7 @@ pub trait LegislationVoteEngine<AccountId> {
     fn create_legislation_vote(
         who: AccountId,
         actor_cid_number: CidNumber,
+        vote_plan: VotePlanOf<AccountId>,
         route: RepresentativeRoute,
         rule: RepresentativeVoteRule,
         procedure: LegislationProcedureConfig,
@@ -174,6 +179,7 @@ impl<AccountId> LegislationVoteEngine<AccountId> for () {
     fn create_representative_vote(
         _who: AccountId,
         _actor_cid_number: CidNumber,
+        _vote_plan: VotePlanOf<AccountId>,
         _route: RepresentativeRoute,
         _rule: RepresentativeVoteRule,
         _subject_cid_numbers: ProposalSubjectCidNumbers,
@@ -186,6 +192,7 @@ impl<AccountId> LegislationVoteEngine<AccountId> for () {
     fn create_legislation_vote(
         _who: AccountId,
         _actor_cid_number: CidNumber,
+        _vote_plan: VotePlanOf<AccountId>,
         _route: RepresentativeRoute,
         _rule: RepresentativeVoteRule,
         _procedure: LegislationProcedureConfig,

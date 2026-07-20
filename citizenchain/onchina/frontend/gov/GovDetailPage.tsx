@@ -72,6 +72,7 @@ type SecurityModalState = {
 
 type GovernanceFormValues = {
   admins_text?: string;
+  proposer_role_code: string;
   role_code?: string;
   role_name?: string;
   role_mutation?: 'CREATE' | 'RENAME' | 'DELETE';
@@ -181,6 +182,8 @@ function InstitutionGovernancePanel({
   };
 
   const valuesToGovernancePayload = (values: GovernanceFormValues) => {
+    const proposerRoleCode = values.proposer_role_code.trim();
+    if (!proposerRoleCode) throw new Error('必须填写提案发起岗位码');
     const admins = parseAdminsText(values.admins_text);
     const roleMutations: InstitutionGovernanceRoleMutationInput[] = [];
     const mutation = values.role_mutation;
@@ -201,6 +204,7 @@ function InstitutionGovernancePanel({
     }
     return {
       cid_number: cidNumber,
+      proposer_role_code: proposerRoleCode,
       admins: admins.length ? admins : undefined,
       role_mutations: roleMutations.length ? roleMutations : undefined,
       assignment_changes: parseAssignmentsText(values.assignments_text),
@@ -252,6 +256,13 @@ function InstitutionGovernancePanel({
         description="管理员集合每行填“姓,名,账户”。创建岗位时岗位码由 runtime 生成；岗位权限与初始任职随创建原子提交。法定代表人任命/更换只填公民 CID；解除则清空链上三字段。"
       />
       <Form form={form} layout="vertical" disabled={!canWrite || submitting}>
+        <Form.Item
+          label="提案发起岗位码"
+          name="proposer_role_code"
+          rules={[{ required: true, message: '请输入当前任职且拥有提案权限的岗位码' }]}
+        >
+          <Input placeholder="例如 COMMITTEE_MEMBER；动态岗位填写链上岗位码" maxLength={64} />
+        </Form.Item>
         <Form.Item label="管理员集合" name="admins_text">
           <Input.TextArea
             rows={4}

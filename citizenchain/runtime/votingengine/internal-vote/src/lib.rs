@@ -1,8 +1,9 @@
 //! # 内部投票 pallet (internal-vote)
 //!
-//! 所有机构与个人多签共用的“管理员一人一票”投票程序。
+//! 所有机构与个人多签共用的一人一票程序：机构按岗位有效选民快照，个人多签按
+//! 独立管理员快照。
 //!
-//! 本模块负责内部投票模式准入、机构上下文、管理员快照、计票和终态，不判断
+//! 本模块负责内部投票模式准入、机构上下文、资格快照、计票和终态，不判断
 //! 某个机构能否发起转账、销毁或密钥变更等具体业务。有效准入必须同时通过
 //! 投票引擎的模式校验与调用方业务 pallet 的业务权限校验。
 //!
@@ -37,8 +38,9 @@ use votingengine::{
     pallet::{AdminSnapshot, Proposals},
     types::{
         fixed_governance_pass_threshold, institution_code_from_cid_number, is_personal_code,
-        is_registered_multisig_code, is_valid_governance_code, CidNumber, InstitutionCode,
-        ProposalSubject, ProposalSubjectCidNumbers, FRG, NJD, NRC, PRB, PRC,
+        is_registered_multisig_code, is_valid_governance_code, AuthorizationSubject, CidNumber,
+        InstitutionCode, ProposalSubject, ProposalSubjectCidNumbers, VotePlanOf, VotingEngineKind,
+        FRG, NJD, NRC, PRB, PRC,
     },
     InternalAdminProvider, InternalProposalMutexKind, Proposal, PROPOSAL_KIND_INTERNAL,
     STAGE_INTERNAL, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED,
@@ -92,6 +94,8 @@ pub mod pallet {
     pub trait Config: frame_system::Config + votingengine::Config {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        /// 只读取岗位有效任职；业务权限已由业务 pallet 前置校验。
+        type InstitutionRoleProvider: votingengine::InstitutionRoleProvider<Self::AccountId>;
         type WeightInfo: crate::weights::WeightInfo;
     }
 
@@ -199,18 +203,6 @@ fn is_valid_institution_context(institution_code: InstitutionCode, cid_number: &
             == Some(institution_code)
 }
 
-fn is_institution_admin<T: Config>(
-    institution_code: InstitutionCode,
-    cid_number: &[u8],
-    who: &T::AccountId,
-) -> bool {
-    <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
-        institution_code,
-        cid_number,
-        who,
-    )
-}
-
 fn is_personal_admin<T: Config>(personal_account: T::AccountId, who: &T::AccountId) -> bool {
     <T as votingengine::Config>::InternalAdminProvider::is_personal_admin(personal_account, who)
 }
@@ -235,21 +227,37 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         actor_cid_number: sp_std::vec::Vec<u8>,
         execution_account: Option<T::AccountId>,
         subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
-        module_tag: &[u8],
+        vote_plan: votingengine::types::VotePlanOf<T::AccountId>,
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         with_transaction(|| {
+            if sp_io::hashing::blake2_256(&data) != vote_plan.business_object_hash {
+                return TransactionOutcome::Rollback(Err(
+                    votingengine::Error::<T>::InvalidVotePlan.into(),
+                ));
+            }
             let proposal_id = match Self::do_create_institution_proposal(
                 who.clone(),
                 institution_code,
                 actor_cid_number,
                 execution_account,
                 subject_cid_numbers,
+                &vote_plan,
             ) {
                 Ok(id) => id,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
-            match Self::register_data_and_auto_approve(who, proposal_id, module_tag, data) {
+            if let Err(err) =
+                votingengine::Pallet::<T>::bind_vote_plan(proposal_id, vote_plan.clone())
+            {
+                return TransactionOutcome::Rollback(Err(err));
+            }
+            match Self::register_data_and_auto_approve(
+                who,
+                proposal_id,
+                vote_plan.proposal_owner.as_slice(),
+                data,
+            ) {
                 Ok(id) => TransactionOutcome::Commit(Ok(id)),
                 Err(err) => TransactionOutcome::Rollback(Err(err)),
             }
@@ -279,10 +287,15 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         who: T::AccountId,
         institution_code: InstitutionCode,
         actor_cid_number: sp_std::vec::Vec<u8>,
-        module_tag: &[u8],
+        vote_plan: votingengine::types::VotePlanOf<T::AccountId>,
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         with_transaction(|| {
+            if sp_io::hashing::blake2_256(&data) != vote_plan.business_object_hash {
+                return TransactionOutcome::Rollback(Err(
+                    votingengine::Error::<T>::InvalidVotePlan.into(),
+                ));
+            }
             let proposal_id = match Self::do_create_institution_proposal_with_mutex(
                 who.clone(),
                 institution_code,
@@ -291,11 +304,22 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
                 sp_std::vec::Vec::new(),
                 InternalProposalMutexKind::AdminSetMutationExclusive,
                 InternalProposalRole::InstitutionAdminChange,
+                &vote_plan,
             ) {
                 Ok(id) => id,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
-            match Self::register_data_and_auto_approve(who, proposal_id, module_tag, data) {
+            if let Err(err) =
+                votingengine::Pallet::<T>::bind_vote_plan(proposal_id, vote_plan.clone())
+            {
+                return TransactionOutcome::Rollback(Err(err));
+            }
+            match Self::register_data_and_auto_approve(
+                who,
+                proposal_id,
+                vote_plan.proposal_owner.as_slice(),
+                data,
+            ) {
                 Ok(id) => TransactionOutcome::Commit(Ok(id)),
                 Err(err) => TransactionOutcome::Rollback(Err(err)),
             }
@@ -377,8 +401,8 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         admins_len: u32,
         threshold: u32,
     ) -> DispatchResult {
-        // 直设阈值只针对注册动态多签主体；固定治理机构走代码级阈值，六个国家
-        // 单例按每个提案的 admins 快照计算严格过半，二者都不允许写本 storage。
+        // 直设阈值只针对注册动态多签主体；固定治理机构走代码级机构阈值，六个
+        // 国家单例按每个提案的岗位有效选民快照计算严格过半，均不建立岗位阈值。
         ensure!(
             is_registered_multisig_code(&institution_code)
                 && !primitives::institution_constraints::is_permanent_singleton_code(

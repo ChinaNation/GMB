@@ -85,7 +85,7 @@ fn internal_proposal_must_be_created_by_same_institution_admin() {
                 nrc_cid().to_vec(),
                 None,
                 subject_cids_for(&nrc_cid()),
-                b"test",
+                internal_vote_plan(&nrc_cid(), b"payload"),
                 b"payload".to_vec(),
             ),
             votingengine::Error::<Test>::NoPermission
@@ -98,7 +98,7 @@ fn internal_proposal_must_be_created_by_same_institution_admin() {
                 nrc_cid().to_vec(),
                 None,
                 subject_cids_for(&nrc_cid()),
-                b"test",
+                internal_vote_plan(&nrc_cid(), b"payload"),
                 b"payload".to_vec(),
             ),
             votingengine::Error::<Test>::NoPermission
@@ -130,7 +130,7 @@ fn institution_proposal_rejects_personal_code() {
                 nrc_cid().to_vec(),
                 None,
                 subject_cids_for(&nrc_cid()),
-                b"test",
+                internal_vote_plan(&nrc_cid(), b"payload"),
                 b"payload".to_vec(),
             ),
             Error::<Test>::InvalidInternalCode
@@ -225,13 +225,13 @@ fn institution_proposal_keeps_cid_identity_and_execution_account_separate() {
                 actor_cid_number.to_vec(),
                 Some(execution_account.clone()),
                 subject_cids_for(&actor_cid_number),
-                b"test",
+                internal_vote_plan(&actor_cid_number, b"payload"),
                 b"payload".to_vec(),
             )
             .expect("institution proposal should be created");
 
             assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(3));
-            assert!(VotingEngine::is_admin_in_snapshot(
+            assert!(VotingEngine::is_effective_voter_in_snapshot(
                 proposal_id,
                 ProposalSubject::InstitutionCid(actor_cid_number.clone()),
                 &test_institution_admin(1)
@@ -399,7 +399,7 @@ fn institution_orgs_snapshot_dynamic_active_threshold_by_cid() {
             );
 
             assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(3));
-            assert!(VotingEngine::is_admin_in_snapshot(
+            assert!(VotingEngine::is_effective_voter_in_snapshot(
                 proposal_id,
                 ProposalSubject::InstitutionCid(actor_cid_number),
                 &test_institution_admin(2)
@@ -698,14 +698,8 @@ fn joint_proposal_creates_and_binds_population_snapshot_inline() {
         let proposal_id = try_create_joint_proposal_for(nrc_admin(0), nrc_cid(), 10)
             .expect("joint proposal should create its own snapshot");
         assert_eq!(
-            VotingEngine::proposals(proposal_id)
-                .expect("proposal exists")
-                .citizen_eligible_total,
-            10
-        );
-        assert_eq!(
-            votingengine::ProposalPopulationSnapshotIds::<Test>::get(proposal_id),
-            Some(0)
+            VotingEngine::population_eligible_total_of(proposal_id),
+            Some(10)
         );
     });
 }
@@ -1229,7 +1223,10 @@ fn joint_vote_non_unanimous_moves_to_referendum_immediately_after_one_institutio
             proposal.end,
             proposal.start + primitives::count_const::VOTING_DURATION_BLOCKS as u64
         );
-        assert_eq!(proposal.citizen_eligible_total, 77);
+        assert_eq!(
+            VotingEngine::population_eligible_total_of(proposal_id),
+            Some(77)
+        );
         assert_eq!(joint_vote::JointTallies::<Test>::get(proposal_id).no, 1);
     });
 }
@@ -2320,7 +2317,6 @@ fn internal_vote_rejects_wrong_stage_joint_proposal() {
                 subject_cid_numbers: Default::default(),
                 start: now,
                 end: now + 100,
-                citizen_eligible_total: 0,
             },
         );
 

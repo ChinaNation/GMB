@@ -81,7 +81,7 @@ class _MultisigProposalDetailPageState
   int _noCount = 0;
   int _threshold = 0;
 
-  // 管理员列表与投票记录
+  // 提案创建时冻结的合格选民与投票记录；机构路径来自岗位快照。
   List<String> _admins = const [];
   Map<String, bool?> _adminVotes = {};
 
@@ -130,15 +130,16 @@ class _MultisigProposalDetailPageState
     try {
       final rpc = ChainRpc();
 
-      // step1:并行加载管理员快照、提案状态、投票计数、阈值快照。
-      // 投票资格只能来自创建时快照；缺失或损坏必须失败，禁止回落到当前 admins。
+      // step1:并行加载合格选民快照、提案状态、投票计数、阈值快照。
+      // 机构资格只来自岗位有效选民快照，个人资格来自管理员快照；缺失或损坏
+      // 必须失败，禁止回落到当前 admins。
       debugPrint(
           '[VoteDetail._load] step1: 并行 fetchSnapshot/Status/Tally/Threshold...');
       final thresholdFuture = _proposalService
           .fetchInternalThresholdSnapshot(widget.proposalId)
           .catchError((_) => null);
       final results = await Future.wait([
-        _proposalService.fetchAdminSnapshot(
+        _proposalService.fetchEligibleVoterSnapshot(
           widget.proposalId,
           widget.institution,
         ),
@@ -197,7 +198,7 @@ class _MultisigProposalDetailPageState
       debugPrint(
           '[VoteDetail._load] step3 完成 stillPending.len=${pendingSummary.stillPending.length}');
 
-      // step4:批量查询每位管理员的投票记录，避免按管理员逐条 RPC。
+      // step4:批量查询每位快照选民的投票记录，避免逐条 RPC。
       debugPrint('[VoteDetail._load] step4: 批量查 admin 投票 (${admins.length} 个)');
       final votes = await _proposalService.fetchAdminVotesBatch(
         widget.proposalId,
@@ -571,17 +572,17 @@ class _MultisigProposalDetailPageState
       final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
       final pubkey = _normalizePubkey(wallet.pubkeyHex);
       if (!_admins.contains(pubkey)) {
-        throw StateError('当前钱包不在该提案的管理员快照中，不能投票');
+        throw StateError('当前钱包不在该提案的合格选民快照中，不能投票');
       }
       if (_adminVotes[pubkey] != null) {
-        throw StateError('当前管理员已经投过票');
+        throw StateError('当前合格选民已经投过票');
       }
       if (_pendingPubkeys.contains(pubkey)) {
-        throw StateError('当前管理员已有待确认投票，请稍后刷新');
+        throw StateError('当前合格选民已有待确认投票，请稍后刷新');
       }
       final balance = await ChainRpc().fetchFinalizedBalance(pubkey);
       if (balance <= 0) {
-        throw StateError('当前管理员钱包余额不足，无法支付链上投票手续费');
+        throw StateError('当前投票钱包余额不足，无法支付链上投票手续费');
       }
 
       // 热钱包：先认证，后续用本地签名；冷钱包：走 QR 签名。
@@ -637,7 +638,7 @@ class _MultisigProposalDetailPageState
           '[VoteDetail] submit 已入块 txHash=${result.txHash} nonce=${result.usedNonce} block=${result.blockHashHex}');
 
       // 服务层已经确认 runtime 投票记录，新流程不再写 pending。
-      // 这里只清除旧版本可能残留的同管理员 pending 记录。
+      // 这里只清除旧版本可能残留的同一投票钱包 pending 记录。
       await PendingVoteStore.instance.remove(
         'institution_multisig',
         widget.proposalId,
@@ -653,7 +654,7 @@ class _MultisigProposalDetailPageState
             .toList(growable: false);
         _selectedVoteWallet =
             _votableWallets.isNotEmpty ? _votableWallets.first : null;
-        _voteNotice = '链上已确认该管理员投票。';
+        _voteNotice = '链上已确认该合格选民投票。';
         _voteNoticeIsError = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(

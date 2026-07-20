@@ -26,6 +26,8 @@ pub enum LegislationError {
     EmptyChapters,
     /// 修法/废法缺 law_id。
     MissingLawId,
+    /// 发起岗位码为空或超过链上岗位码上限。
+    InvalidProposerRoleCode,
     /// 提案层级超出本管理员管辖(越权)。
     TierNotAllowedForAdmin,
     /// 提案行政区与本管理员 scope 不一致(越权)。
@@ -41,6 +43,7 @@ impl LegislationError {
             Self::EmptyTitle => "LEGISLATION_EMPTY_TITLE",
             Self::EmptyChapters => "LEGISLATION_EMPTY_CHAPTERS",
             Self::MissingLawId => "LEGISLATION_MISSING_LAW_ID",
+            Self::InvalidProposerRoleCode => "LEGISLATION_INVALID_PROPOSER_ROLE_CODE",
             Self::TierNotAllowedForAdmin => "LEGISLATION_TIER_NOT_ALLOWED",
             Self::ScopeMismatch => "LEGISLATION_SCOPE_MISMATCH",
         }
@@ -98,6 +101,13 @@ pub fn build_propose_law_call(
 ) -> Result<ChainCall, LegislationError> {
     let routing = routing_for(input.tier, vote_type_is_education(input.vote_type))
         .ok_or(LegislationError::UnknownRouting)?;
+    let proposer_role_code = input.proposer_role_code.trim().as_bytes();
+    if proposer_role_code.is_empty()
+        || proposer_role_code.len()
+            > entity_primitives::INSTITUTION_ROLE_CODE_MAX_BYTES as usize
+    {
+        return Err(LegislationError::InvalidProposerRoleCode);
+    }
 
     let actor_cid_number = resolve_institution_cid_number(proposer_code, &resolve_cid_number)?;
     let mut houses = Vec::with_capacity(routing.houses.len());
@@ -121,6 +131,7 @@ pub fn build_propose_law_call(
                 input.scope_code,
                 &houses,
                 &actor_cid_number,
+                proposer_role_code,
                 &executive_cid_number,
                 legislature_ref.map(Vec::as_slice),
                 input.vote_type,
@@ -137,6 +148,7 @@ pub fn build_propose_law_call(
             Ok(encode_propose_amend_law(
                 law_id,
                 &actor_cid_number,
+                proposer_role_code,
                 &executive_cid_number,
                 legislature_ref.map(Vec::as_slice),
                 input.vote_type,
@@ -151,6 +163,7 @@ pub fn build_propose_law_call(
             Ok(encode_propose_repeal_law(
                 law_id,
                 &actor_cid_number,
+                proposer_role_code,
                 &executive_cid_number,
                 legislature_ref.map(Vec::as_slice),
                 input.vote_type,
@@ -191,6 +204,7 @@ mod tests {
     fn enact_input(tier: u8, vote_type: u8) -> ProposeLawInput {
         ProposeLawInput {
             law_action: LawActionInput::Enact,
+            proposer_role_code: "REPRESENTATIVE".to_string(),
             tier,
             scope_code: 0,
             vote_type,

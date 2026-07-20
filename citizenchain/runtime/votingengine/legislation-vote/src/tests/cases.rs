@@ -138,17 +138,20 @@ fn special_population_scope_is_derived_only_from_actor_cid() {
 #[test]
 fn representative_only_finishes_without_law_procedure() {
     new_test_ext().execute_with(|| {
+        let route = crate::RepresentativeRoute::Single(house1());
+        let vote_plan = test_vote_plan_with_owner(&route, None, b"personnel");
         let pid = <Lib as crate::LegislationVoteEngine<AccountId32>>::create_representative_vote(
             member(1),
             actor_cid_number(),
-            crate::RepresentativeRoute::Single(house1()),
+            vote_plan,
+            route,
             RepresentativeVoteRule::Regular,
             votingengine::types::ProposalSubjectCidNumbers::new(),
             b"personnel",
             vec![1],
         )
         .expect("representative-only proposal");
-        assert!(votingengine::ProposalPopulationSnapshotIds::<Test>::get(pid).is_none());
+        assert!(votingengine::ProposalPopulationSnapshots::<Test>::get(pid).is_none());
         // 发起人属于当前机构，创建时已经自动投下第一张赞成票。
         for i in 2u8..=7 {
             assert_ok!(cast(member(i), pid, true));
@@ -164,10 +167,13 @@ fn representative_only_finishes_without_law_procedure() {
 #[test]
 fn representative_only_rejects_special_rule() {
     new_test_ext().execute_with(|| {
+        let route = crate::RepresentativeRoute::Single(house1());
+        let vote_plan = test_vote_plan_with_owner(&route, None, b"personnel");
         let result = <Lib as crate::LegislationVoteEngine<AccountId32>>::create_representative_vote(
             member(1),
             actor_cid_number(),
-            crate::RepresentativeRoute::Single(house1()),
+            vote_plan,
+            route,
             RepresentativeVoteRule::Special,
             votingengine::types::ProposalSubjectCidNumbers::new(),
             b"personnel",
@@ -283,19 +289,19 @@ fn non_member_cannot_vote() {
 #[test]
 fn create_requires_actor_cid_admin_even_when_vote_route_is_valid() {
     new_test_ext().execute_with(|| {
+        let route = crate::RepresentativeRoute::Single(house1());
+        let meta = legislation_meta(&route, RepresentativeVoteRule::Regular, false);
+        let vote_plan = test_vote_plan(&route, meta.as_ref());
         assert_eq!(
             Lib::do_create_representative_proposal(
                 member(50),
                 actor_cid_number(),
-                crate::RepresentativeRoute::Single(house1()),
+                vote_plan,
+                route,
                 RepresentativeVoteRule::Regular,
                 crate::VoteProcedure::Legislation,
                 votingengine::types::ProposalSubjectCidNumbers::new(),
-                Some(crate::pallet::LegislationMeta {
-                    executive: exec_body(),
-                    legislature: None,
-                    needs_guard: false,
-                }),
+                meta,
             ),
             Err(votingengine::Error::<Test>::NoPermission.into())
         );
@@ -437,8 +443,9 @@ fn special_case_advances_to_referendum_then_passes() {
         // 特别案创建时由投票引擎内联生成全国人口快照，分母 100。
         let pid = create(member(1), single_house(), RepresentativeVoteRule::Special);
         assert_eq!(
-            votingengine::ProposalPopulationSnapshotIds::<Test>::get(pid),
-            Some(0)
+            votingengine::ProposalPopulationSnapshots::<Test>::get(pid)
+                .map(|snapshot| snapshot.population_data.eligible_total),
+            Some(100)
         );
         // 全员 10:8 赞成 2 反对 → 内部段通过(≥70%)→ 推进至公投阶段。
         for i in 1u8..=8 {
@@ -587,12 +594,10 @@ fn invalid_guard_member_count_rejected() {
         ];
         for ids in cases {
             set_guard_member_ids(ids);
-            let pid = constitution_amend_to_guard();
             assert_noop!(
-                guard_vote(member(101), pid, true),
+                try_create_guard(member(1), single_house(), RepresentativeVoteRule::Major),
                 Error::<Test>::InvalidGuardMembersLen
             );
-            assert_eq!(status(pid), STATUS_VOTING);
         }
     });
 }
@@ -601,12 +606,10 @@ fn invalid_guard_member_count_rejected() {
 fn duplicate_guard_member_list_rejected() {
     new_test_ext().execute_with(|| {
         set_guard_member_ids(&[101, 102, 103, 104, 105, 106, 106]);
-        let pid = constitution_amend_to_guard();
         assert_noop!(
-            guard_vote(member(101), pid, true),
+            try_create_guard(member(1), single_house(), RepresentativeVoteRule::Major),
             Error::<Test>::InvalidGuardMembersLen
         );
-        assert_eq!(status(pid), STATUS_VOTING);
     });
 }
 

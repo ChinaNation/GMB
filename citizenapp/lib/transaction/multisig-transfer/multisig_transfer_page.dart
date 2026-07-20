@@ -48,6 +48,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
   final _beneficiaryController = TextEditingController();
   final _amountController = TextEditingController();
   final _remarkController = TextEditingController();
+  late final TextEditingController _proposerRoleCodeController;
 
   bool _loadingBalance = true;
   bool _submitting = false;
@@ -69,6 +70,9 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
   void initState() {
     super.initState();
     _selectedWallet = widget.adminWallets.first;
+    _proposerRoleCodeController = TextEditingController(
+      text: defaultInstitutionProposerRoleCode(widget.institution),
+    );
     _fromSs58 = _accountHexToSs58(widget.institution.mainAccount);
     _fetchBalance();
     _amountController.addListener(_onAmountChanged);
@@ -79,6 +83,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
     _beneficiaryController.dispose();
     _amountController.dispose();
     _remarkController.dispose();
+    _proposerRoleCodeController.dispose();
     super.dispose();
   }
 
@@ -225,6 +230,14 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
     if (!_validateAddress() || !_validateAmount() || !_validateRemark()) {
       return;
     }
+    final isPersonal = isPersonalAccountIdentity(widget.institution.cidNumber);
+    final proposerRoleCode = _proposerRoleCodeController.text.trim();
+    if (!isPersonal && proposerRoleCode.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请输入当前任职且拥有转账提案权限的岗位码')),
+      );
+      return;
+    }
 
     final wallet = _selectedWallet;
     final amountYuan = AmountFormat.tryParse(_amountController.text) ?? 0;
@@ -295,6 +308,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
       final service = MultisigTransferService();
       final submitResult = await service.submitProposeTransfer(
         institution: widget.institution,
+        proposerRoleCode: isPersonal ? null : proposerRoleCode,
         beneficiaryAddress: _beneficiaryController.text.trim(),
         amountYuan: amountYuan,
         remark: _remarkController.text,
@@ -443,6 +457,22 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
           const SizedBox(height: 6),
           _buildAdminSelector(),
           const SizedBox(height: 16),
+
+          if (!isPersonalAccountIdentity(widget.institution.cidNumber)) ...[
+            _buildLabel('提案发起岗位码'),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _proposerRoleCodeController,
+              maxLength: 64,
+              decoration: const InputDecoration(
+                hintText: '填写当前任职且拥有本业务提案权限的岗位码',
+                filled: true,
+                fillColor: AppTheme.surfaceMuted,
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
 
           // ──── 转出地址（只读） ────
           _buildLabel('转出地址'),

@@ -11,7 +11,10 @@ use scale_info::TypeInfo;
 use sp_runtime::traits::{CheckedAdd, Zero};
 
 use votingengine::{
-    types::{CidNumber, InstitutionCode, NRC, PRB, PRC},
+    types::{
+        AuthorizationSubject, BusinessActionId, CidNumber, InstitutionCode, RoleCode, RoleSubject,
+        VotePlanOf, VotingEngineKind, NRC, PRB, PRC,
+    },
     InternalVoteResultCallback, ProposalExecutionOutcome, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL,
     STATUS_PASSED,
 };
@@ -47,7 +50,6 @@ pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
     use entity_primitives::InstitutionMultisigQuery;
-    use votingengine::InternalAdminProvider;
     use votingengine::InternalVoteEngine;
 
     #[pallet::config]
@@ -59,6 +61,11 @@ pub mod pallet {
 
         /// 通过统一内部投票引擎创建提案，返回真实 proposal_id。
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
+
+        /// 机构岗位业务授权真源，由 runtime 路由到公权或私权机构目录。
+        type InstitutionRoleAuthorization: entity_primitives::InstitutionRoleAuthorizationQuery<
+            Self::AccountId,
+        >;
 
         /// 机构账户归属的唯一查询出口；真实数据来自 entity 正反索引。
         type InstitutionQuery: entity_primitives::InstitutionMultisigQuery<Self::AccountId>;
@@ -129,6 +136,7 @@ pub mod pallet {
         pub fn propose_destroy(
             origin: OriginFor<T>,
             actor_cid_number: CidNumber,
+            proposer_role_code: RoleCode,
             institution_account: T::AccountId,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
@@ -146,12 +154,6 @@ pub mod pallet {
                     == Some(actor_cid_number.as_slice()),
                 Error::<T>::InstitutionCodeMismatch
             );
-            // 活跃提案数由 votingengine 在 create_internal_proposal 中统一检查
-            ensure!(
-                Self::is_institution_admin(actual_org, actor_cid_number.as_slice(), &who),
-                Error::<T>::UnauthorizedAdmin
-            );
-
             let action = DestroyAction {
                 actor_cid_number: actor_cid_number.clone(),
                 institution_account: institution_account.clone(),
@@ -159,13 +161,19 @@ pub mod pallet {
             };
             let mut encoded = Vec::from(crate::MODULE_TAG);
             encoded.extend_from_slice(&action.encode());
+            let vote_plan = Self::build_vote_plan(
+                &who,
+                actor_cid_number.as_slice(),
+                proposer_role_code.as_slice(),
+                &encoded,
+            )?;
             let proposal_id = T::InternalVoteEngine::create_institution_proposal_with_data(
                 who.clone(),
                 actual_org,
                 actor_cid_number.to_vec(),
                 Some(institution_account.clone()),
                 Vec::from([actor_cid_number.to_vec()]),
-                crate::MODULE_TAG,
+                vote_plan,
                 encoded,
             )?;
 
@@ -183,16 +191,72 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        fn is_institution_admin(
-            institution_code: InstitutionCode,
-            actor_cid_number: &[u8],
+        fn build_vote_plan(
             who: &T::AccountId,
-        ) -> bool {
-            <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
-                institution_code,
-                actor_cid_number,
-                who,
+            cid_number: &[u8],
+            proposer_role_code: &[u8],
+            encoded: &[u8],
+        ) -> Result<VotePlanOf<T::AccountId>, sp_runtime::DispatchError> {
+            use entity_primitives::{InstitutionRoleAuthorizationQuery, RolePermissionOperation};
+
+            let action_id = BusinessActionId {
+                module_tag: crate::MODULE_TAG.to_vec(),
+                action_code: entity_primitives::business_action::ACTION_RESOLUTION_DESTROY,
+            };
+            let proposer = entity_primitives::RoleSubject {
+                cid_number: cid_number.to_vec(),
+                role_code: proposer_role_code.to_vec(),
+            };
+            ensure!(
+                T::InstitutionRoleAuthorization::is_authorized(
+                    who,
+                    &proposer,
+                    &action_id,
+                    RolePermissionOperation::Propose,
+                ),
+                Error::<T>::UnauthorizedAdmin
+            );
+            let voter_subjects = T::InstitutionRoleAuthorization::role_subjects_with_permission(
+                cid_number,
+                &action_id,
+                RolePermissionOperation::Vote,
             )
+            .into_iter()
+            .map(|role| {
+                Ok(AuthorizationSubject::Institution(RoleSubject {
+                    cid_number: CidNumber::try_from(role.cid_number)
+                        .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?,
+                    role_code: RoleCode::try_from(role.role_code)
+                        .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?,
+                }))
+            })
+            .collect::<Result<Vec<_>, sp_runtime::DispatchError>>()?;
+            let owner: frame_support::BoundedVec<
+                u8,
+                frame_support::traits::ConstU32<
+                    { entity_primitives::BUSINESS_MODULE_TAG_MAX_BYTES },
+                >,
+            > = crate::MODULE_TAG
+                .to_vec()
+                .try_into()
+                .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?;
+            VotePlanOf::<T::AccountId>::try_new(
+                BusinessActionId {
+                    module_tag: owner.clone(),
+                    action_code: entity_primitives::business_action::ACTION_RESOLUTION_DESTROY,
+                },
+                owner,
+                AuthorizationSubject::Institution(RoleSubject {
+                    cid_number: CidNumber::try_from(cid_number.to_vec())
+                        .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?,
+                    role_code: RoleCode::try_from(proposer_role_code.to_vec())
+                        .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?,
+                }),
+                voter_subjects,
+                VotingEngineKind::Internal,
+                sp_io::hashing::blake2_256(encoded),
+            )
+            .map_err(|_| votingengine::Error::<T>::InvalidVotePlan.into())
         }
 
         pub(crate) fn try_execute_destroy_from_action(

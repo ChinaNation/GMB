@@ -42,6 +42,7 @@ class SweepToMainPage extends StatefulWidget {
 
 class _SweepToMainPageState extends State<SweepToMainPage> {
   final _amountController = TextEditingController();
+  late final TextEditingController _proposerRoleCodeController;
 
   bool _loadingBalance = true;
   bool _submitting = false;
@@ -61,6 +62,9 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
   void initState() {
     super.initState();
     _selectedWallet = widget.adminWallets.first;
+    _proposerRoleCodeController = TextEditingController(
+      text: defaultInstitutionProposerRoleCode(widget.institution),
+    );
     final feeHex = widget.institution.accounts?.feeAccount;
     if (feeHex == null) {
       throw StateError('治理机构 InstitutionAccounts.feeAccount 为空,无法发起手续费划转');
@@ -76,6 +80,7 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
   @override
   void dispose() {
     _amountController.dispose();
+    _proposerRoleCodeController.dispose();
     super.dispose();
   }
 
@@ -161,6 +166,13 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
     }
 
     if (!_validateAmount()) return;
+    final proposerRoleCode = _proposerRoleCodeController.text.trim();
+    if (proposerRoleCode.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请输入提案发起岗位码')),
+      );
+      return;
+    }
 
     final wallet = _selectedWallet;
     final amountYuan = AmountFormat.tryParse(_amountController.text) ?? 0;
@@ -221,6 +233,7 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
       // 链上 SweepToMainProposed 事件，是业务成功的唯一凭据。
       final result = await service.submitProposeSweep(
         institution: widget.institution,
+        proposerRoleCode: proposerRoleCode,
         amountYuan: amountYuan,
         fromAddress: wallet.address,
         signerPubkey: signerPubkey,
@@ -229,7 +242,7 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('提案已创建（#${result.proposalId}），等待管理员投票')),
+        SnackBar(content: Text('提案已创建（#${result.proposalId}），等待岗位选民投票')),
       );
       Navigator.of(context).pop(true);
     } on WalletAuthException catch (e) {
@@ -310,6 +323,19 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
           _buildLabel('发起管理员'),
           const SizedBox(height: 6),
           _buildAdminSelector(),
+          const SizedBox(height: 16),
+          _buildLabel('提案发起岗位码'),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _proposerRoleCodeController,
+            maxLength: 64,
+            decoration: const InputDecoration(
+              hintText: 'NRC/PRC 委员，PRB 董事；动态机构填写链上岗位码',
+              filled: true,
+              fillColor: AppTheme.surfaceMuted,
+              border: OutlineInputBorder(),
+            ),
+          ),
           const SizedBox(height: 16),
           _buildLabel('转出账户（费用账户）'),
           const SizedBox(height: 6),

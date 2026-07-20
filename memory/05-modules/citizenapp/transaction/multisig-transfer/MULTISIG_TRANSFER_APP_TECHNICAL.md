@@ -27,11 +27,19 @@
 
 页面不得把机构提案费用显示为管理员付款：机构费用账户不足提示“机构费用账户余额不足”；个人提案或实际投票签名者不足才提示“管理员钱包余额不足”。两类普通支出预检都包含“支付后保留 ED”。
 
+## 岗位字段与 SCALE 契约
+
+- 机构普通转账、安全基金转账和费用账户划转页面必须显示独立“提案发起岗位码”输入，UTF-8 长度限制 1..64 字节；岗位码不能从当前管理员身份推断。
+- NRC/PRC 固定委员业务可预填 `COMMITTEE_MEMBER`，PRB 费用划转可预填 `DIRECTOR`；普通注册机构没有固定默认值，必须由用户明确输入本机构已授权岗位码。
+- 个人多签不显示岗位字段，并严格编码 `actor_cid_number=None + proposer_role_code=None`；机构普通转账严格编码两个 `Some`，不保留单边 Some 或旧载荷兼容。
+- 业务模块固定使用内部投票引擎，页面和签名载荷均不得传入“选择投票引擎”参数。
+
 ## 投票进度
 
 详情页优先读取：
 
-- `VotingEngine::AdminSnapshot`
+- 机构提案：`VotingEngine::EffectiveVoterSnapshot[(proposal_id, actor_cid_number)]`
+- 个人多签提案：`VotingEngine::AdminSnapshot[(proposal_id, PersonalAccount)]`
 - `InternalVote::InternalThresholdSnapshot`
 - `InternalVote::InternalTallies`
 - `InternalVote::InternalVotesByAccount`

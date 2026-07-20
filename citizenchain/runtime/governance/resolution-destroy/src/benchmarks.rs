@@ -52,6 +52,10 @@ mod benchmarks {
         propose_destroy(
             RawOrigin::Signed(proposer.clone()),
             prc_cid_number(),
+            primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                .to_vec()
+                .try_into()
+                .expect("benchmark role fits"),
             institution,
             amount,
         );
