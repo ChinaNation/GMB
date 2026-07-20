@@ -27,11 +27,10 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 use sp_core::sr25519::Public as Sr25519Public;
-use sp_runtime::traits::Hash;
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
 pub use traits::{
-    AccountValidator, CidInstitutionVerifier, InstitutionCidQuery, InstitutionMultisigQuery,
-    ProtectedSourceChecker, RegistryAuthority, ReservedAccountGuard,
+    AccountValidator, InstitutionCidQuery, InstitutionMultisigQuery, ProtectedSourceChecker,
+    RegistryAuthority, ReservedAccountGuard,
 };
 use votingengine::{
     types::{
@@ -101,17 +100,11 @@ pub mod pallet {
             Self::AccountId,
             BalanceOf<Self>,
         >;
-        type CidInstitutionVerifier: CidInstitutionVerifier<
-            Self::AccountId,
-            AccountNameOf<Self>,
-            RegisterNonceOf<Self>,
-            RegisterSignatureOf<Self>,
-        >;
         /// 注册局登记授权校验入口。
         ///
-        /// 注册局管理员代创建机构时,origin 是注册局管理员,目标 admins
-        /// 是新机构自己的管理员;二者不能再强制相同。本 trait 负责校验 FRG/CREG
-        /// 对目标 CID 与机构码是否有登记权。
+        /// 注册局管理员代登记/维护机构时,origin 是注册局管理员,目标 admins
+        /// 是目标机构自己的管理员;二者不能再强制相同。本 trait 负责校验 FRG/CREG
+        /// 对目标 CID 与机构码是否有登记权(省/市作用域由目标 CID 直接派生)。
         type RegistryAuthority: RegistryAuthority<Self::AccountId>;
 
         #[pallet::constant]
@@ -123,12 +116,6 @@ pub mod pallet {
         /// 机构全称与机构账户名共用的最大字节长度。
         #[pallet::constant]
         type MaxAccountNameLength: Get<u32>;
-
-        #[pallet::constant]
-        type MaxRegisterNonceLength: Get<u32>;
-
-        #[pallet::constant]
-        type MaxRegisterSignatureLength: Get<u32>;
 
         /// runtime 为单个机构自动生成的协议账户数量上限。
         #[pallet::constant]
@@ -147,8 +134,6 @@ pub mod pallet {
 
     pub type CidNumberOf<T> = BoundedVec<u8, <T as Config>::MaxCidNumberLength>;
     pub type AccountNameOf<T> = BoundedVec<u8, <T as Config>::MaxAccountNameLength>;
-    pub type RegisterNonceOf<T> = BoundedVec<u8, <T as Config>::MaxRegisterNonceLength>;
-    pub type RegisterSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxRegisterSignatureLength>;
     /// 注册凭证里的账户名列表,顺序必须与 CID `registration-info` 返回一致。
     pub type InstitutionAccountNamesOf<T> =
         BoundedVec<AccountNameOf<T>, <T as Config>::MaxInstitutionAccounts>;
@@ -277,17 +262,6 @@ pub mod pallet {
         InstitutionAccountInfoOf<T>,
         OptionQuery,
     >;
-
-    /// 已消费的机构登记 nonce，防止 proof 重放。
-    #[pallet::storage]
-    #[pallet::getter(fn used_register_nonce)]
-    pub type UsedRegisterNonce<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
-
-    /// 已用注销凭证 nonce(防同一注销凭证重放/关多账户)。
-    #[pallet::storage]
-    pub type UsedDeregisterNonce<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
 
     /// 公权机构多签当前进行中的关闭提案 ID（防止并发注销提案）。
     /// 发起 propose_close 时写入，execute_close 成功或执行失败后清除。
@@ -441,8 +415,6 @@ pub mod pallet {
         InvalidBeneficiary,
         /// 资金转出源地址受保护，不允许转出
         ProtectedSource,
-        /// CID 机构登记签名无效
-        InvalidCidInstitutionSignature,
         /// CID ID 重复登记
         CidAlreadyRegistered,
         /// CID ID 为空
@@ -451,12 +423,6 @@ pub mod pallet {
         InvalidCidNumber,
         /// 目标机构不存在。
         InstitutionNotFound,
-        /// 机构登记 nonce 已被使用
-        RegisterNonceAlreadyUsed,
-        /// 机构签发凭证缺签发机构 CID 号。
-        EmptyIssuerCidNumber,
-        /// 机构签发凭证缺业务作用域省名。
-        EmptyScopeProvinceName,
         /// 镇行政区机构必须携带 3 字节 town_code,非镇行政区机构必须为空。
         InvalidTownCode,
         /// 无法将派生地址转换为账户ID
@@ -510,10 +476,6 @@ pub mod pallet {
         CannotCloseProtectedInstitution,
         /// 治理机构(国家储委会/省储委会/省储行)永不可注销关闭
         CannotCloseGovernance,
-        /// 注销凭证验签失败
-        InvalidDeregisterCredential,
-        /// 注销凭证 nonce 已使用(防重放)
-        DeregisterNonceAlreadyUsed,
         /// 机构创建必须至少定义一个岗位。
         InstitutionRolesEmpty,
         /// 机构创建必须至少绑定一条管理员任职。
@@ -618,12 +580,7 @@ pub mod pallet {
             cid_number: CidNumberOf<T>,
             cid_full_name: AccountNameOf<T>,
             cid_short_name: AccountNameOf<T>,
-            register_nonce: RegisterNonceOf<T>,
-            signature: RegisterSignatureOf<T>,
             actor_cid_number: Vec<u8>,
-            credential_signer_pubkey: [u8; 32],
-            scope_province_name: Vec<u8>,
-            scope_city_name: Vec<u8>,
         ) -> DispatchResult {
             let submitter = ensure_signed(origin)?;
             crate::institution::maintain::do_update_institution_info::<T>(
@@ -631,12 +588,7 @@ pub mod pallet {
                 cid_number,
                 cid_full_name,
                 cid_short_name,
-                register_nonce,
-                signature,
                 actor_cid_number,
-                credential_signer_pubkey,
-                scope_province_name,
-                scope_city_name,
             )
         }
 
@@ -648,24 +600,14 @@ pub mod pallet {
             origin: OriginFor<T>,
             cid_number: CidNumberOf<T>,
             account_names: InstitutionAccountNamesOf<T>,
-            register_nonce: RegisterNonceOf<T>,
-            signature: RegisterSignatureOf<T>,
             actor_cid_number: Vec<u8>,
-            credential_signer_pubkey: [u8; 32],
-            scope_province_name: Vec<u8>,
-            scope_city_name: Vec<u8>,
         ) -> DispatchResult {
             let submitter = ensure_signed(origin)?;
             crate::institution::maintain::do_add_institution_account::<T>(
                 submitter,
                 cid_number,
                 account_names,
-                register_nonce,
-                signature,
                 actor_cid_number,
-                credential_signer_pubkey,
-                scope_province_name,
-                scope_city_name,
             )
         }
 
@@ -680,26 +622,16 @@ pub mod pallet {
             origin: OriginFor<T>,
             cid_number: CidNumberOf<T>,
             action: InstitutionGovernanceActionOf<T>,
-            register_nonce: RegisterNonceOf<T>,
-            signature: RegisterSignatureOf<T>,
             actor_cid_number: Vec<u8>,
             proposer_role_code: RoleCodeOf,
-            credential_signer_pubkey: [u8; 32],
-            scope_province_name: Vec<u8>,
-            scope_city_name: Vec<u8>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             Self::do_propose_institution_governance(
                 who,
                 cid_number,
                 action,
-                register_nonce,
-                signature,
                 actor_cid_number,
                 proposer_role_code,
-                credential_signer_pubkey,
-                scope_province_name,
-                scope_city_name,
             )
         }
 
@@ -714,25 +646,10 @@ pub mod pallet {
             origin: OriginFor<T>,
             cid_number: CidNumberOf<T>,
             admins: InstitutionAdminsInputOf<T>,
-            register_nonce: RegisterNonceOf<T>,
-            signature: RegisterSignatureOf<T>,
             actor_cid_number: Vec<u8>,
-            credential_signer_pubkey: [u8; 32],
-            scope_province_name: Vec<u8>,
-            scope_city_name: Vec<u8>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_register_institution_admins(
-                who,
-                cid_number,
-                admins,
-                register_nonce,
-                signature,
-                actor_cid_number,
-                credential_signer_pubkey,
-                scope_province_name,
-                scope_city_name,
-            )
+            Self::do_register_institution_admins(who, cid_number, admins, actor_cid_number)
         }
 
         /// 发起"关闭公权机构多签账户"提案。
@@ -742,17 +659,12 @@ pub mod pallet {
         /// 输入个人地址会返回 `Error::NotInstitutionAccount`。
         #[pallet::call_index(1)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_close_public_institution())]
-        #[allow(clippy::too_many_arguments)]
         pub fn propose_close_public_institution(
             origin: OriginFor<T>,
             actor_cid_number: CidNumberOf<T>,
             proposer_role_code: RoleCodeOf,
             institution_account: T::AccountId,
             beneficiary: T::AccountId,
-            register_nonce: RegisterNonceOf<T>,
-            signature: RegisterSignatureOf<T>,
-            credential_issuer_cid_number: Vec<u8>,
-            credential_signer_pubkey: [u8; 32],
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             crate::close::do_propose_institution_close::<T>(
@@ -761,10 +673,6 @@ pub mod pallet {
                 proposer_role_code,
                 institution_account,
                 beneficiary,
-                register_nonce,
-                signature,
-                credential_issuer_cid_number,
-                credential_signer_pubkey,
             )
         }
 
@@ -897,39 +805,6 @@ pub mod pallet {
             )
         }
 
-        fn validate_governance_signature(
-            who: &T::AccountId,
-            cid_number: &CidNumberOf<T>,
-            governance_payload: &[u8],
-            register_nonce: &RegisterNonceOf<T>,
-            signature: &RegisterSignatureOf<T>,
-            actor_cid_number: &[u8],
-            credential_signer_pubkey: &[u8; 32],
-            scope_province_name: &[u8],
-            scope_city_name: &[u8],
-        ) -> DispatchResult {
-            let signer_pubkey = Self::pubkey_from_accountid(who)?;
-            ensure!(
-                <Sr25519Public as AsRef<[u8; 32]>>::as_ref(&signer_pubkey)
-                    == credential_signer_pubkey,
-                Error::<T>::InvalidCidInstitutionSignature
-            );
-            ensure!(
-                T::CidInstitutionVerifier::verify_institution_governance(
-                    cid_number.as_slice(),
-                    governance_payload,
-                    register_nonce,
-                    signature,
-                    actor_cid_number,
-                    credential_signer_pubkey,
-                    scope_province_name,
-                    scope_city_name,
-                ),
-                Error::<T>::InvalidCidInstitutionSignature
-            );
-            Ok(())
-        }
-
         fn governance_action_replaces_admins(action: &InstitutionGovernanceActionOf<T>) -> bool {
             matches!(
                 action,
@@ -1031,13 +906,8 @@ pub mod pallet {
             who: T::AccountId,
             cid_number: CidNumberOf<T>,
             action: InstitutionGovernanceActionOf<T>,
-            register_nonce: RegisterNonceOf<T>,
-            signature: RegisterSignatureOf<T>,
             actor_cid_number: Vec<u8>,
             proposer_role_code: RoleCodeOf,
-            credential_signer_pubkey: [u8; 32],
-            scope_province_name: Vec<u8>,
-            scope_city_name: Vec<u8>,
         ) -> DispatchResult {
             let action = action.normalize_admin_person_names();
             ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
@@ -1048,6 +918,8 @@ pub mod pallet {
             let info =
                 Institutions::<T>::get(&cid_number).ok_or(Error::<T>::InstitutionNotFound)?;
             Self::ensure_lifecycle_institution_code(&info.institution_code)?;
+            // 授权唯一真源:extrinsic 签名者 `who` 必须是本机构在册管理员。
+            // 岗位码鉴权由随后的 `build_institution_vote_plan`(proposer_role_code)完成。
             ensure!(
                 T::InstitutionAdminQuery::is_institution_admin(
                     info.institution_code,
@@ -1057,23 +929,6 @@ pub mod pallet {
                 Error::<T>::RegistryAuthorityDenied
             );
             Self::ensure_governance_action_valid(&action)?;
-            let action_payload = action.encode();
-            let nonce_hash = <T as frame_system::Config>::Hashing::hash(register_nonce.as_slice());
-            ensure!(
-                !UsedRegisterNonce::<T>::get(nonce_hash),
-                Error::<T>::RegisterNonceAlreadyUsed
-            );
-            Self::validate_governance_signature(
-                &who,
-                &cid_number,
-                &action_payload,
-                &register_nonce,
-                &signature,
-                actor_cid_number.as_slice(),
-                &credential_signer_pubkey,
-                scope_province_name.as_slice(),
-                scope_city_name.as_slice(),
-            )?;
             let proposal = InstitutionGovernanceProposal {
                 institution_code: info.institution_code,
                 cid_number: cid_number.to_vec(),
@@ -1108,7 +963,6 @@ pub mod pallet {
                     data,
                 )?
             };
-            UsedRegisterNonce::<T>::insert(nonce_hash, true);
             Self::deposit_event(Event::<T>::InstitutionGovernanceProposed {
                 proposal_id,
                 cid_number,
@@ -1190,17 +1044,11 @@ pub mod pallet {
             .map_err(|_| votingengine::Error::<T>::InvalidVotePlan.into())
         }
 
-        #[allow(clippy::too_many_arguments)]
         pub(crate) fn do_register_institution_admins(
             who: T::AccountId,
             cid_number: CidNumberOf<T>,
             admins: InstitutionAdminsInputOf<T>,
-            register_nonce: RegisterNonceOf<T>,
-            signature: RegisterSignatureOf<T>,
             actor_cid_number: Vec<u8>,
-            credential_signer_pubkey: [u8; 32],
-            scope_province_name: Vec<u8>,
-            scope_city_name: Vec<u8>,
         ) -> DispatchResult {
             let admins = Self::normalize_institution_admins(admins);
             ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
@@ -1209,40 +1057,18 @@ pub mod pallet {
             Self::ensure_lifecycle_institution_code(&info.institution_code)?;
             let threshold = admins.len() as u32 / 2 + 1;
             Self::ensure_admin_config(&admins, threshold)?;
-            let action = InstitutionGovernanceAction::ReplaceAdmins {
-                admins: admins.iter().cloned().collect(),
-            };
-            let action_payload = action.encode();
-            let nonce_hash = <T as frame_system::Config>::Hashing::hash(register_nonce.as_slice());
+            // 授权唯一真源:extrinsic 签名者 `who` 必须是注册局(actor)机构在册管理员,
+            // 且注册局对目标机构 CID/机构码有登记权(省/市作用域由目标 CID 直接派生)。
             ensure!(
-                !UsedRegisterNonce::<T>::get(nonce_hash),
-                Error::<T>::RegisterNonceAlreadyUsed
-            );
-            Self::validate_governance_signature(
-                &who,
-                &cid_number,
-                &action_payload,
-                &register_nonce,
-                &signature,
-                actor_cid_number.as_slice(),
-                &credential_signer_pubkey,
-                scope_province_name.as_slice(),
-                scope_city_name.as_slice(),
-            )?;
-            ensure!(
-                T::RegistryAuthority::can_register_institution(
+                T::RegistryAuthority::can_register_institution_origin(
                     &who,
                     actor_cid_number.as_slice(),
-                    &credential_signer_pubkey,
                     cid_number.as_slice(),
                     info.institution_code,
-                    scope_province_name.as_slice(),
-                    scope_city_name.as_slice(),
                 ),
                 Error::<T>::RegistryAuthorityDenied
             );
             Self::set_institution_admins(&cid_number, info.institution_code, &admins, threshold)?;
-            UsedRegisterNonce::<T>::insert(nonce_hash, true);
             Self::deposit_event(Event::<T>::InstitutionAdminsRegistered {
                 cid_number,
                 admins_len: admins.len() as u32,
@@ -1348,18 +1174,6 @@ pub mod pallet {
         ) -> Option<InstitutionCode> {
             let registered = AccountRegisteredCid::<T>::get(account)?;
             Institutions::<T>::get(&registered.cid_number).map(|inst| inst.institution_code)
-        }
-
-        /// 把批量 register 入口的 account_names 抽成验签 payload。
-        pub(crate) fn account_names_payload_from_names(
-            account_names: &InstitutionAccountNamesOf<T>,
-        ) -> Result<Vec<Vec<u8>>, DispatchError> {
-            let mut names: Vec<Vec<u8>> = Vec::with_capacity(account_names.len());
-            for account_name in account_names.iter() {
-                ensure!(!account_name.is_empty(), Error::<T>::EmptyAccountName);
-                names.push(account_name.as_slice().to_vec());
-            }
-            Ok(names)
         }
 
         // 投票回调执行体:

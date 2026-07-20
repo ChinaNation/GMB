@@ -446,7 +446,7 @@ class _ProfilePageState extends State<MyTab> {
                   color: AppTheme.warning,
                   size: 22,
                 ),
-                title: '会员',
+                title: '会员｜订阅',
                 onTap: _openMembership,
               ),
             ),

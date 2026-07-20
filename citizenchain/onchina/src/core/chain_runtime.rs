@@ -1,275 +1,26 @@
 use codec::Decode;
 use serde::{Deserialize, Serialize};
-use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
-use std::{
-    collections::BTreeMap,
-    hash::Hasher,
-    sync::{Arc, OnceLock, RwLock},
-};
+use std::{collections::BTreeMap, hash::Hasher, sync::OnceLock};
 use subxt::{dynamic, OnlineClient, PolkadotConfig};
 use twox_hash::XxHash64;
 
 use crate::auth::login::parse_sr25519_pubkey_bytes;
 use crate::*;
 
-// 机构凭证消息统一调用 `primitives::sign`。SCALE 编码下：
-//   [u8; N] / &[u8; N]  →  N 字节，无长度前缀
-//   u8                   →  1 字节
-//   &[u8] / Vec<u8>     →  Compact(N) ++ N 字节，多 1~4 字节长度前缀
-// 任何一个 domain 写成 &[u8] 都会导致 message 与链端不一致 → blake2_256 不同
-// → sr25519 verify 失败 → 链端返回对应的签名错误。
-// 历史教训：INSTITUTION_DOMAIN 曾被错误声明为 &[u8]，导致机构注册签名长期无法通过。
+// 机构操作(登记/创建/治理/自定义账户关闭)统一为「发起管理员钱包直接冷签一笔普通 extrinsic」,
+// 由链端在 origin 处以 `is_institution_admin` 鉴权,OnChina 后端不再签发任何链上凭证。
+// 原注销凭证签发链路(`build_institution_deregistration_credential` 等)连同平台签名钥
+// `ONCHINA_SIGNING_SEED_HEX` / `ONCHAIN_CREDENTIAL_SIGNER_PUBKEY` 已整体删除。
 static CHAIN_GENESIS_HASH: OnceLock<[u8; 32]> = OnceLock::new();
-static SIGNING_KEY_CACHE: OnceLock<RwLock<Option<CachedSigningKey>>> = OnceLock::new();
 const TRUSTED_PRODUCTION_CHAINS: &[TrustedProductionChain] = &[
     // 正式链创世哈希在这里做源码级白名单绑定；新增正式链时只允许在此处追加。
     // TrustedProductionChain { name: "mainnet", genesis_hash_hex: "0x<正式链创世哈希>" },
 ];
 
-struct CachedSigningKey {
-    seed_hex: SensitiveSeed,
-    keypair: Arc<Sr25519Pair>,
-}
-
 #[derive(Debug, Clone, Copy)]
 struct TrustedProductionChain {
     name: &'static str,
     genesis_hash_hex: &'static str,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[allow(dead_code)]
-pub(crate) struct RuntimeSignatureMeta {
-    pub(crate) key_id: String,
-    pub(crate) key_version: String,
-    pub(crate) alg: String,
-}
-
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub(crate) struct RuntimeInstitutionRegistrationCredential {
-    pub(crate) genesis_hash: String,
-    pub(crate) register_nonce: String,
-    pub(crate) actor_cid_number: String,
-    pub(crate) credential_signer_pubkey: String,
-    pub(crate) scope_province_name: String,
-    pub(crate) scope_city_name: String,
-    pub(crate) signature: String,
-    pub(crate) payload_digest: String,
-    pub(crate) meta: RuntimeSignatureMeta,
-}
-
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub(crate) struct RuntimeInstitutionDeregistrationCredential {
-    pub(crate) genesis_hash: String,
-    pub(crate) cid_number: String,
-    pub(crate) account_name: String,
-    pub(crate) target_account: String,
-    pub(crate) deregister_nonce: String,
-    pub(crate) credential_issuer_cid_number: String,
-    pub(crate) credential_signer_pubkey: String,
-    pub(crate) signature: String,
-    pub(crate) payload_digest: String,
-    pub(crate) meta: RuntimeSignatureMeta,
-}
-
-struct RuntimeSigningContext {
-    actor_cid_number: String,
-    credential_signer_pubkey: [u8; 32],
-    credential_signer_pubkey_hex: String,
-    scope_province_name: String,
-    scope_city_name: String,
-}
-
-fn finish_institution_credential(
-    state: &AppState,
-    genesis_hash: [u8; 32],
-    register_nonce: String,
-    signing_ctx: RuntimeSigningContext,
-    payload_digest: [u8; 32],
-) -> Result<RuntimeInstitutionRegistrationCredential, String> {
-    let signature = sign_runtime_digest(state, &payload_digest)?;
-    Ok(RuntimeInstitutionRegistrationCredential {
-        genesis_hash: hex::encode(genesis_hash),
-        register_nonce,
-        actor_cid_number: signing_ctx.actor_cid_number,
-        credential_signer_pubkey: signing_ctx.credential_signer_pubkey_hex,
-        scope_province_name: signing_ctx.scope_province_name,
-        scope_city_name: signing_ctx.scope_city_name,
-        signature,
-        payload_digest: hex::encode(payload_digest),
-        meta: runtime_signature_meta(state),
-    })
-}
-
-/// 签发 call_index=8/9 的机构治理凭证，治理 action 的 SCALE 字节必须进入签名域。
-#[allow(dead_code)]
-pub(crate) fn build_institution_governance_credential(
-    state: &AppState,
-    actor_cid_number: &str,
-    cid_number: &str,
-    governance_payload: &[u8],
-    register_nonce: String,
-    scope_province_name: &str,
-    scope_city_name: &str,
-) -> Result<RuntimeInstitutionRegistrationCredential, String> {
-    if cid_number.trim().is_empty() {
-        return Err("cid_number is required".to_string());
-    }
-    if governance_payload.is_empty() {
-        return Err("governance_payload is required".to_string());
-    }
-    if register_nonce.trim().is_empty() {
-        return Err("register_nonce is required".to_string());
-    }
-    let genesis_hash = resolve_chain_genesis_hash()?;
-    let signing_ctx = runtime_signing_context(
-        actor_cid_number,
-        Some(scope_province_name),
-        Some(scope_city_name),
-    )?;
-    let payload_digest = primitives::sign::institution_governance_message(
-        &genesis_hash,
-        cid_number.trim().as_bytes(),
-        governance_payload,
-        &register_nonce.trim().as_bytes().to_vec(),
-        signing_ctx.actor_cid_number.as_bytes(),
-        &signing_ctx.credential_signer_pubkey,
-        signing_ctx.scope_province_name.as_bytes(),
-        signing_ctx.scope_city_name.as_bytes(),
-    );
-    finish_institution_credential(
-        state,
-        genesis_hash,
-        register_nonce,
-        signing_ctx,
-        payload_digest,
-    )
-}
-
-/// 注销凭证签名 payload 的 blake2_256 摘要(纯函数,便于 golden 测试锁字节)。
-///
-/// **铁律**:元素顺序与 SCALE 类型必须与链端 `verify_institution_deregistration`
-/// (runtime/src/configs/mod.rs,被 public-manage/private-manage close 消费)逐字节一致——
-/// `[u8;32]`/`&[u8;32]` 无长度前缀、`u8` 1 字节、`&[u8]` 带 Compact 长度前缀。
-/// target_account 与 scope 入签名,杜绝换账户/换范围/换机构重放。
-fn deregistration_payload_digest(
-    genesis_hash: &[u8; 32],
-    cid_number: &[u8],
-    account_name: &[u8],
-    target_account: &[u8; 32],
-    deregister_nonce: &[u8],
-    credential_issuer_cid_number: &[u8],
-    credential_signer_pubkey: &[u8; 32],
-) -> [u8; 32] {
-    primitives::sign::institution_account_close_message(
-        genesis_hash,
-        cid_number,
-        account_name,
-        target_account,
-        &deregister_nonce.to_vec(),
-        credential_issuer_cid_number,
-        credential_signer_pubkey,
-    )
-}
-
-/// 签发机构自定义命名账户关闭凭证。
-/// 由注册局管理员动作校验通过后调用；机构管理员持此凭证冷签 propose_close。
-pub(crate) fn build_institution_deregistration_credential(
-    state: &AppState,
-    actor_cid_number: &str,
-    cid_number: &str,
-    account_name: &str,
-    target_account: &[u8; 32],
-    deregister_nonce: String,
-) -> Result<RuntimeInstitutionDeregistrationCredential, String> {
-    if cid_number.trim().is_empty() {
-        return Err("cid_number is required".to_string());
-    }
-    if account_name.trim().is_empty() {
-        return Err("account_name is required".to_string());
-    }
-    if deregister_nonce.trim().is_empty() {
-        return Err("deregister_nonce is required".to_string());
-    }
-    let genesis_hash = resolve_chain_genesis_hash()?;
-    let signing_ctx = runtime_signing_context(actor_cid_number, None, None)?;
-    let payload_digest = deregistration_payload_digest(
-        &genesis_hash,
-        cid_number.trim().as_bytes(),
-        account_name.trim().as_bytes(),
-        target_account,
-        deregister_nonce.trim().as_bytes(),
-        signing_ctx.actor_cid_number.as_bytes(),
-        &signing_ctx.credential_signer_pubkey,
-    );
-    let signature = sign_runtime_digest(state, &payload_digest)?;
-    Ok(RuntimeInstitutionDeregistrationCredential {
-        genesis_hash: hex::encode(genesis_hash),
-        cid_number: cid_number.trim().to_string(),
-        account_name: account_name.trim().to_string(),
-        target_account: format!("0x{}", hex::encode(target_account)),
-        deregister_nonce,
-        credential_issuer_cid_number: signing_ctx.actor_cid_number,
-        credential_signer_pubkey: signing_ctx.credential_signer_pubkey_hex,
-        signature,
-        payload_digest: hex::encode(payload_digest),
-        meta: runtime_signature_meta(state),
-    })
-}
-
-fn runtime_signature_meta(_state: &AppState) -> RuntimeSignatureMeta {
-    // metadata 只用于排查签发来源;链上只信任 payload 中的
-    // actor_cid_number / credential_signer_pubkey。
-    RuntimeSignatureMeta {
-        key_id: "onchina-admins-v1".to_string(),
-        key_version: "v1".to_string(),
-        alg: "sr25519".to_string(),
-    }
-}
-
-fn runtime_signing_context(
-    actor_cid_number: &str,
-    scope_province_override: Option<&str>,
-    scope_city_override: Option<&str>,
-) -> Result<RuntimeSigningContext, String> {
-    let actor_cid_number = actor_cid_number.trim().to_string();
-    if actor_cid_number.is_empty()
-        || actor_cid_number.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
-    {
-        return Err("actor_cid_number is invalid".to_string());
-    }
-    let signer_pubkey_raw = std::env::var("ONCHAIN_CREDENTIAL_SIGNER_PUBKEY")
-        .map_err(|_| "ONCHAIN_CREDENTIAL_SIGNER_PUBKEY not set".to_string())?;
-    let credential_signer_pubkey = parse_sr25519_pubkey_bytes(signer_pubkey_raw.as_str())
-        .ok_or_else(|| {
-            "ONCHAIN_CREDENTIAL_SIGNER_PUBKEY must be a 32-byte sr25519 pubkey hex".to_string()
-        })?;
-    let default_scope_province = std::env::var("ONCHAIN_CREDENTIAL_SCOPE_PROVINCE_NAME")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty());
-    let scope_province_name = scope_province_override
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map(str::to_string)
-        .or(default_scope_province)
-        .ok_or_else(|| "ONCHAIN_CREDENTIAL_SCOPE_PROVINCE_NAME not set".to_string())?;
-    let default_scope_city =
-        std::env::var("ONCHAIN_CREDENTIAL_SCOPE_CITY_NAME").unwrap_or_default();
-    let scope_city_name = scope_city_override
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map(str::to_string)
-        .unwrap_or_else(|| default_scope_city.trim().to_string());
-    Ok(RuntimeSigningContext {
-        actor_cid_number,
-        credential_signer_pubkey,
-        credential_signer_pubkey_hex: format!("0x{}", hex::encode(credential_signer_pubkey)),
-        scope_province_name,
-        scope_city_name,
-    })
 }
 
 fn is_production_mode() -> bool {
@@ -285,29 +36,6 @@ pub(crate) fn normalize_account_pubkey(account_pubkey: &str) -> Option<String> {
     }
     let bytes = parse_sr25519_pubkey_bytes(account_pubkey)?;
     Some(format!("0x{}", hex::encode(bytes)))
-}
-
-fn resolve_chain_genesis_hash() -> Result<[u8; 32], String> {
-    if let Some(cached) = CHAIN_GENESIS_HASH.get() {
-        return Ok(*cached);
-    }
-    // 开发环境允许通过环境变量覆盖，生产环境必须依赖启动时完成的白名单校验结果。
-    if is_production_mode() {
-        return Err(
-            "production genesis hash not initialized: call init_genesis_hash_from_chain() at startup"
-                .to_string(),
-        );
-    }
-    if let Ok(raw) = std::env::var("ONCHAIN_GENESIS_HASH") {
-        let trimmed = raw.trim();
-        if !trimmed.is_empty() {
-            let parsed = parse_hex_hash32(trimmed)
-                .map_err(|_| "ONCHAIN_GENESIS_HASH must be 32-byte hex".to_string())?;
-            let _ = CHAIN_GENESIS_HASH.set(parsed);
-            return Ok(CHAIN_GENESIS_HASH.get().copied().unwrap_or(parsed));
-        }
-    }
-    Err("genesis hash not available: configure ONCHAIN_GENESIS_HASH or call init_genesis_hash_from_chain() at startup".to_string())
 }
 
 /// 返回已经通过启动校验缓存的链创世哈希。
@@ -822,47 +550,6 @@ fn parse_hex_2(raw: &str) -> Result<[u8; 2], String> {
         .as_slice()
         .try_into()
         .map_err(|_| "invalid 2-byte length".to_string())
-}
-
-fn sign_runtime_digest(_state: &AppState, digest: &[u8; 32]) -> Result<String, String> {
-    // OnChina 系统签名密钥直接从环境变量 ONCHINA_SIGNING_SEED_HEX 派生,
-    // AppState 不持有 seed,避免长期密钥进入运行态共享状态。
-    let seed_hex = std::env::var("ONCHINA_SIGNING_SEED_HEX")
-        .map_err(|_| "ONCHINA_SIGNING_SEED_HEX not set".to_string())?;
-    let signing_key = resolve_signing_keypair(seed_hex.as_str())?;
-    let signature = signing_key.sign(digest);
-    Ok(hex::encode(signature.0))
-}
-
-fn resolve_signing_keypair(seed_text: &str) -> Result<Arc<Sr25519Pair>, String> {
-    let cache = SIGNING_KEY_CACHE.get_or_init(|| RwLock::new(None));
-    {
-        let guard = cache
-            .read()
-            .map_err(|_| "signing key cache read lock poisoned".to_string())?;
-        if let Some(cached) = guard.as_ref() {
-            if cached.seed_hex.expose_secret() == seed_text {
-                return Ok(Arc::clone(&cached.keypair));
-            }
-        }
-    }
-
-    let loaded = Arc::new(crate::crypto::sr25519::try_load_signing_key_from_seed(
-        seed_text,
-    )?);
-    let mut guard = cache
-        .write()
-        .map_err(|_| "signing key cache write lock poisoned".to_string())?;
-    if let Some(cached) = guard.as_ref() {
-        if cached.seed_hex.expose_secret() == seed_text {
-            return Ok(Arc::clone(&cached.keypair));
-        }
-    }
-    *guard = Some(CachedSigningKey {
-        seed_hex: SensitiveSeed::new(seed_text.to_string()),
-        keypair: Arc::clone(&loaded),
-    });
-    Ok(loaded)
 }
 
 // 链上管理员集合读取(去中心化鉴权)
@@ -1545,8 +1232,7 @@ pub(crate) async fn fetch_active_admins_onchain(
 #[cfg(test)]
 mod tests {
     use super::{
-        decode_scale_u128, deregistration_payload_digest, is_production_mode, parse_hex_hash32,
-        trusted_production_chain_by_hash,
+        decode_scale_u128, is_production_mode, parse_hex_hash32, trusted_production_chain_by_hash,
     };
 
     #[test]
@@ -1622,32 +1308,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn deregistration_payload_digest_is_byte_locked() {
-        // golden 测试锁死注销凭证 payload 的 SCALE 字节编码。
-        // 该摘要口径必须与链端 verify_institution_deregistration(runtime configs)逐字节一致;
-        // 任何字段类型/顺序漂移都会改变摘要,此断言立即红。
-        let genesis_hash = [0x11u8; 32];
-        let target = [0x22u8; 32];
-        let signer = [0x44u8; 32];
-        let digest = deregistration_payload_digest(
-            &genesis_hash,
-            b"AH001-ZF001-123456789-2026",
-            "主账户".as_bytes(),
-            &target,
-            b"dereg-nonce-1",
-            b"ZS001-GZF0P-249474503-2026",
-            &signer,
-        );
-        // golden 值:GMB/OP_SIGN_DEREGISTER + 上述固定输入的 SCALE 编码 blake2_256。
-        // 已逐字段核对链端 verify_institution_deregistration 的 tuple 类型/顺序一致
-        // (AccountId32=[u8;32]、H256=[u8;32] 均 32 字节无前缀;cid/account_name/nonce/issuer &[u8] 均 Compact 前缀)。
-        assert_eq!(
-            hex::encode(digest),
-            "c7401472664e9555ccfad95ef5088d0927e141c504b93d03dae07a29462334fb",
-            "注销凭证 payload 字节编码漂移(与链端口径不一致)"
-        );
-    }
 
     #[test]
     fn parse_hex_hash32_accepts_prefixed_hash() {

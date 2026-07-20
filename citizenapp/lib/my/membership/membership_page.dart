@@ -200,7 +200,7 @@ class _MembershipPageState extends State<MembershipPage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('会员'),
+        title: const Text('会员｜订阅'),
         centerTitle: true,
         actions: [
           IconButton(

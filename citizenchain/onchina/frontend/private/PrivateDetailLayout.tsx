@@ -57,7 +57,6 @@ import {
 } from './common/api';
 import { searchLegalRepresentativeCitizens } from '../citizens/api';
 import { AccountList } from '../accounts/AccountList';
-import { CreateAccountModal } from '../accounts/CreateAccountModal';
 import { DocsLibrary } from '../docs/DocsLibrary';
 import { notice } from '../utils/notice';
 import { InstitutionDetailNavLayout } from '../core/InstitutionDetailNavLayout';
@@ -82,7 +81,7 @@ interface Props {
   canWrite: boolean;
   loading: boolean;
   onReload: () => void;
-  onDeleteAccount: (accountName: string) => void;
+  /** 机构信息更新(INSTITUTION_UPDATE)走 PASSKEY_COLD_SIGN;账户增删已移交机构工作台。 */
   createScanSignGrant: (
     actionType: AdminActionType,
     payload: unknown,
@@ -179,7 +178,6 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   canWrite,
   loading,
   onReload,
-  onDeleteAccount,
   createScanSignGrant,
   onBack,
   backLabel,
@@ -187,7 +185,6 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   const inst = detail.institution;
   const institutionLabels = useInstitutionCodeLabels();
   const accounts = detail.accounts;
-  const [createAccountOpen, setCreateAccountOpen] = useState(false);
   const [governanceForm] = Form.useForm<GovernanceFormValues>();
   const [governanceSubmitting, setGovernanceSubmitting] = useState(false);
   const { signChain: signGovernanceChain, chainSignModal: governanceChainSignModal } =
@@ -603,7 +600,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
               <Alert
                 type="warning"
                 showIcon
-                message="请先完善机构全称和法定代表人资料,才能新建账户"
+                message="请先完善机构全称和法定代表人资料"
                 style={{ marginBottom: 12 }}
               />
             )}
@@ -844,28 +841,9 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   );
 
   const accountListSection = (
-      <Card
-        type="inner"
-        title={`账户列表(${accounts.length})`}
-        extra={
-          canWrite && (
-            <Button
-              type="primary"
-              disabled={needsCompletion}
-	              title={needsCompletion ? '请先完善机构全称和法定代表人资料' : undefined}
-              onClick={() => setCreateAccountOpen(true)}
-            >
-              + 新建账户
-            </Button>
-          )
-        }
-      >
-        <AccountList
-          accounts={accounts}
-          loading={loading}
-          canDelete={canWrite}
-          onDelete={onDeleteAccount}
-        />
+      // 注册局详情页账户列表只读:能看不能增删,增删归机构自己的工作台。
+      <Card type="inner" title={`账户列表(${accounts.length})`}>
+        <AccountList accounts={accounts} loading={loading} canDelete={false} />
       </Card>
   );
 
@@ -1009,7 +987,6 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                 auth={auth}
                 cidNumber={inst.cid_number}
                 canWrite={canWrite}
-                createScanSignGrant={createScanSignGrant}
               />
             ),
           },
@@ -1019,19 +996,6 @@ export const PrivateDetailLayout: React.FC<Props> = ({
             content: <OperationRecords auth={auth} cidNumber={inst.cid_number} />,
           },
         ]}
-      />
-
-      <CreateAccountModal
-        auth={auth}
-        cidNumber={inst.cid_number}
-        cidFullName={inst.cid_full_name ?? ''}
-        existingAccounts={accounts}
-        open={createAccountOpen}
-        onCancel={() => setCreateAccountOpen(false)}
-        onCreated={() => {
-          setCreateAccountOpen(false);
-          onReload();
-        }}
       />
       {governanceChainSignModal}
     </>

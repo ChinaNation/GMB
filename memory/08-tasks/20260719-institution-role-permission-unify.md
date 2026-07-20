@@ -1,6 +1,6 @@
 # 任务卡：机构岗位权限与投票职责统一
 
-状态：执行中。2026-07-19 已完成第 1 至第 5 步：联合、内部、立法和选举四类投票 Track 均按 `VotePlan` 的岗位有效任职快照判定机构资格，个人多签继续使用独立管理员快照。第 6 至第 8 步尚未完成，不能把投票引擎迁移完成误写为总任务完成。
+状态：执行中。2026-07-19 已完成第 1 至第 6 步和第 7A 只读盘点：联合、内部、立法和选举四类投票 Track 均按 `VotePlan` 的岗位有效任职快照判定机构资格，个人多签继续使用独立管理员快照；旧机构管理员快照入口已经删除。第 7B 以后及第 8 步尚未完成，不能把投票引擎迁移完成误写为总任务完成。
 
 ## 最终需求
 
@@ -15,7 +15,6 @@
 - 除固定岗位外，动态 `role_code` 由 runtime 生成，在机构内唯一、不可修改、删除后永不复用；`role_name` 可依法新增、修改和删除。岗位权限随岗位码固定，改变权限必须删除旧岗位并生成新岗位码。
 - `role_name` 同样在机构内唯一；同名多人属于同一个岗位的多个席位。一个管理员可以担任多个不同岗位，同一岗位内不得重复占席。岗位没有独立阈值，阈值属于机构或业务投票计划。
 - 动态岗位码格式为 `R_<32 位大写十六进制>`。随机材料统一为 `blake2_256(SCALE(GMB_ROLE_V1, cid_number, institution_role_nonce, proposal_id))` 的前 16 字节；调用方不得提交岗位码，`UsedRoleCodes[(cid_number, role_code)]` 永久保留已用记录。
-- 普通机构创建必须原子提交管理员集合、强制 `LR`、至少一个初始治理岗位及其权限、初始任职和初始投票规则，避免“管理员没有权限但机构又没有岗位”的启动死锁。
 - 个人多签使用独立 `AuthorizationSubject::PersonalMultisig`，不混入机构岗位授权模型。
 - 用户已确认技术公司中文全称统一为“中国公民链技术股份有限公司”；CID `GZ018-SFGQ1-201206100-2026`、中英文简称、英文全称、主账户 `0x7a20b8b7b1147abfdb24615222e3c9d77f1ff9a85d2a509fcf51dc89a64d1712`、费用账户 `0x4bc5b8dd3770b1230c79fb8e048f27ae4f4ccf6d6890de0399123a617ccf305f` 和三名创世管理员均不改变。第 4B runtime 路径已取得单独二次确认。
 
@@ -45,8 +44,8 @@
 3. **岗位、权限、任职与生命周期（已完成）**：在 public/private entity 实现岗位权限、动态码生成、永久不复用、岗位增删改名、任职有效性、强制 LR 保护和统一授权查询；关闭无法满足原子初始化要求的旧机构直接创建 call 5。
 4. **创世固定岗位与 NodeGuard**：第 4A 只读盘点并确认完整矩阵；第 4B 固化全部创世岗位及权限，纳入技术公司三个固定岗位，并允许保护机构增加普通动态岗位。
 5. **投票引擎按岗位主体快照（已完成）**：机构投票从全体 admins 快照改为 VotePlan 指定的一个或多个 `RoleSubject` 有效任职账户快照；个人多签保持独立主体。第 5A 完成 joint-vote，第 5B 完成 internal-vote，第 5C 完成 legislation-vote、election-vote 及法律业务入口。
-6. **基础业务模块接入**：新增机构创建业务模块并原子建立 admins、LR、初始治理岗位/权限/任职/投票规则；岗位维护、任职、管理员更换、账户、转账和个人多签全部按业务模块指定引擎接入。
-7. **治理、发行和公共业务接入**：协议升级、GRANDPA、销毁、决议发行、注册、选举、立法等逐模块登记岗位权限和指定投票引擎。
+6. **基础权限路径收口（已完成）**：复核岗位维护、任职、管理员更换、账户关闭、机构转账和个人多签边界；删除投票引擎旧机构管理员快照辅助函数与 provider 接口，确保 `AdminSnapshot` 只服务个人多签。本步不实施机构登记或机构 CRUD。
+7. **剩余治理、发行和公共业务权限收口**：只审计并接入现有协议升级、GRANDPA、销毁、决议发行、选举、立法及已经存在的公共业务入口；机构登记、机构 CRUD 与 OnChina 机构管理不属于本任务。
 8. **全端真实验收与残留清理**：完成 UI/QR、真实 fresh runtime、真实服务和页面验收，删除全部旧管理员授权与旧投票主体口径，回写最终文档。
 
 每一步必须先输出完整技术方案并等待确认；任何涉及 `citizenchain/runtime/` 的步骤还必须列出完整 runtime 路径，取得该步单独二次确认后才能执行。
@@ -71,7 +70,6 @@
 - 每个业务动作只使用其代码静态指定的投票引擎，调用方无法改选；投票引擎不包含业务执行逻辑。
 - 联合投票按 VotePlan 中的岗位主体分别快照和计票，不把参与机构全部 admins 自动纳入。
 - `LR` 永久存在并允许空缺；创世固定岗位不可变；普通动态岗位码在机构内唯一、删除后永不复用，域分隔符精确为 `GMB_ROLE_V1`。
-- 普通机构创建后立即拥有可用的治理岗位、任职和投票规则，不存在临时管理员特权或启动死锁。
 - runtime、Node、OnChina、CitizenApp、CitizenWallet 的 SCALE/QR/字段命名逐字节一致。
 - 完成相关编译、单测、no_std、clippy、fresh 链、NodeGuard、真实 HTTP/页面/签名和投票执行验收；最终无旧模型残留。
 
@@ -85,7 +83,8 @@
 - [x] 第 5A 步：联合投票 VotePlan/岗位快照及协议升级、决议发行接入
 - [x] 第 5B 步：内部投票 VotePlan/岗位快照及现有内部投票业务接入
 - [x] 第 5 步：投票引擎按岗位主体快照
-- [ ] 第 6 步：基础业务模块接入
+- [x] 第 6 步：基础权限路径收口
+- [x] 第 7A 步：剩余业务权限只读盘点
 - [ ] 第 7 步：治理、发行和公共业务接入
 - [ ] 第 8 步：全端真实验收与残留清理
 
@@ -117,7 +116,7 @@
 
 ### 盘点结论
 
-- 第 4B 已把 `InstitutionRolePermissions` 写入当前源码生成的创世态，并把 `RuntimeInstitutionCapabilityPolicy` 改为准确 CID/机构身份的显式白名单；未知组合继续 fail-closed。业务模块仍主要按 `admins` 判断，真正切换由第 5 至第 7 步完成。
+- 第 4B 已把 `InstitutionRolePermissions` 写入当前源码生成的创世态，并把 `RuntimeInstitutionCapabilityPolicy` 改为准确 CID/机构身份的显式白名单；未知组合继续 fail-closed。第 5 至第 6 步已完成现有治理、发行、立法、机构转账和本机构治理入口切换；第 7A 确认仍需迁移的已启用直接写入口只剩 `citizen-identity` 与 `address-registry`。
 - 用户最终确认协议升级与决议发行相同，由 NRC 和 43 个 PRC 的 `COMMITTEE_MEMBER` 共同拥有 `Propose + Vote`；不再采用早期 NRC 单方草案。
 - 决议发行按已确认目标：NRC/PRC `COMMITTEE_MEMBER` 可发起和投票，PRB `DIRECTOR` 只投票。
 - FRG 是一个 CID、215 名 admins、43 个 `PROVINCE_COMMISSIONER_<省码>` 岗位；省级业务只能绑定目标省岗位的 5 人快照，禁止退回全体 admins。机构级动作若未来需要跨省共同决定，必须由业务 `VotePlan` 明确列出参与岗位，不能复用当前 FRG `3/5` 省组阈值代表全机构。
@@ -140,12 +139,12 @@
 | `multisig/0` | 机构普通转账 | 第 5B 已按提案岗位权限发起、岗位有效选民快照投票；个人多签保持独立管理员主体 |
 | `multisig/1` | NRC 安全基金转账 | 第 5B 已按 NRC 提案岗位权限发起、岗位有效选民快照投票 |
 | `multisig/2` | 费用账户划转主账户 | 第 5B 已按 NRC/PRB 提案岗位权限发起、岗位有效选民快照投票 |
-| `onc-iss/10..14` | NRC 冻结、解冻、扣押、强制划转、整币封禁监管 | 已有联合投票入口，但执行逻辑仍有占位，不能视为可用业务 |
+| `onc-iss/10..14` | NRC 冻结、解冻、扣押、强制划转、整币封禁监管 | 只冻结了稳定动作与固定岗位权限；runtime call filter 禁用整个 pallet，当前没有投票提案或终态回调，不能视为可用业务 |
 | `leg-yuan/0,1,2` | 新法、修法、废法；LR 承担行政签署/三人会签，NJD 护宪岗位只参与修宪终审 | 第 5C 已按岗位权限发起并冻结代表、签署、护宪资格 |
 | `sqr-sub/5` | 技术公司平台会员价格调整 | 第 5B 已按产品经理岗位发起、三个固定岗位有效选民快照投票 |
-| `cit-id/0..4,6..8` | 公民投票身份登记、升级、更新、注销及 CID 占号/批量占号/吊销 | 第 4B 新增稳定 tag/常量；第 7 步改为投票业务入口 |
-| `addr-reg/0..4` | 地址库版本、地址名称和完整地址的增删改 | 第 4B 新增稳定 tag/常量；第 7 步改为投票业务入口 |
-| `ins-reg/0` | 原子登记机构、admins、LR、初始治理岗位/权限/任职/规则 | 预留给第 6 步新机构登记业务模块 |
+| `cit-id/0..4,6..8` | 公民投票身份登记、升级、更新、注销及 CID 占号/批量占号/吊销 | 第 7A 确认仍是已启用的直接写入口；第 7B 起按岗位权限和内部投票逐模块迁移 |
+| `addr-reg/0..4` | 地址库版本、地址名称和完整地址的增删改 | 第 7A 确认仍是已启用的直接写入口；在公民身份之后按岗位权限和内部投票迁移 |
+| `ins-reg/0` | 历史冻结的机构登记预留动作 | 当前没有独立业务模块；机构登记、机构 CRUD 与 OnChina 机构管理已明确排除出本任务，不作为第 7 步完成条件 |
 
 ### 固定岗位权限
 
@@ -160,7 +159,7 @@
 | NJD `DEPUTY_CHIEF_JUSTICE`、`JUSTICE` | `pub-mgmt/3 V` |
 | NJD `CONSTITUTION_GUARD` | `pub-mgmt/3 V`；`leg-yuan/1 V`，后者只用于修宪护宪终审 |
 | PRS/NLG/NRP/NSN/NED、PGV/PLG/PRP/PSN、CGOV 的 `LR` | `leg-yuan/0,1,2 V`，仅承担行政签署或国家/省级三人会签，不得发起法律提案 |
-| FRG 每个 `PROVINCE_COMMISSIONER_<省码>` | `pub-mgmt/3 P+V`（仅本省岗位任职治理）；`ins-reg/0 P+V`；`cit-id/0..4,6..8 P+V`；`addr-reg/0..4 P+V`；所有业务必须按目标省码绑定同一个省岗位 |
+| FRG 每个 `PROVINCE_COMMISSIONER_<省码>` | `pub-mgmt/3 P+V`（仅本省岗位任职治理）；`cit-id/0..4,6..8 P+V`；`addr-reg/0..4 P+V`；当前创世还含历史 `ins-reg/0 P+V` 预留，但本任务不建设或接入机构登记模块；实际省级业务必须按目标省码绑定同一个省岗位 |
 | 技术公司 `LR` | `pri-mgmt/3 P+V`；`sqr-sub/5 V` |
 | 技术公司 `GENESIS_PRODUCT_MANAGER` | `pri-mgmt/3 P+V`；`sqr-sub/5 P+V` |
 | 技术公司 `GENESIS_PROGRAMMER` | `pri-mgmt/3 P+V`；`sqr-sub/5 V` |
@@ -232,3 +231,23 @@
 - `votingengine`、联合投票、立法投票、选举投票、决议发行和协议升级正式权重均由当前源码的 fresh benchmark runtime 以 50 steps / 20 repeats 重新生成；联合公投、立法公投和 Popular 选举的权重证明已包含 `ProposalPopulationSnapshots`，Mutual 选举只读取岗位有效选民快照。
 - 验收通过：受影响 runtime crate 共 282 项单测、runtime 全量 47 项、NodeGuard 国家机构组成 9 项和真实 runtime 创世宪法守卫 1 项；runtime-benchmarks、try-runtime、目标 no_std、OnChina 134 项及生产 build、CitizenWallet 97 项、CitizenApp 11 项均通过，`git diff --check` 无格式错误。
 - 当前源码强制重建 WASM/Node 后，以 `CITIZENCHAIN_HEADLESS=1` 和 `citizenchain-fresh --tmp` 启动全新隔离链；RPC 返回 `isSyncing=false`、`peers=0`、runtime `specVersion=2`。最终 block#0/genesis hash 为 `0x23bef606c4e991286dcb2a9b59e4a5e843b8f1e33b8fc400cd71c952e7d4701b`，state root 为 `0x719787bd66d3da8501079b02f93ccd123105279c76cb77bb8e6418a284a1cc7b`；验收节点已正常停止，正式冻结 chainspec 未重烤。
+
+## 第 6 步完成记录（2026-07-19）
+
+- 用户将本步收窄为机构权限路径收口，不新增机构登记 pallet、不实现机构新增/修改/删除、不扩大创世机构保护，也不改 OnChina 机构管理流程。
+- 只读审计确认 public/private 机构治理与自定义账户关闭、机构转账均要求签名账户属于 `admins` 人员名册，并进一步校验准确 `RoleSubject + BusinessActionId + Propose`；机构投票只读取岗位有效任职快照。个人多签继续使用独立管理员快照。
+- 删除 `votingengine::snapshot_institution_admins`、`InternalAdminProvider::get_institution_admins` 及两项旧机构管理员快照测试；同步清理 runtime 生产接线和各 crate 测试 mock。`AdminSnapshot` 不再存在机构写入入口，只服务个人多签。
+- 现状与修改后验证通过：`cargo check -p citizenchain`、`cargo check -p votingengine -p internal-vote --no-default-features`；runtime 全量 47 项通过；votingengine 4、internal-vote 94、public/private manage 各 14、multisig 25、grandpakey-change 17、resolution-destroy 16、legislation-yuan 32、election-vote 13、joint-vote 12、legislation-vote 34，共 275 项相关测试全部通过。
+- 本步未触碰用户同时进行的 OnChina 权限分级改动，未修改 NodeGuard、机构登记、其他创世公权机构、冻结 chainspec、部署或 Git 远端。
+
+## 第 7A 步只读盘点记录（2026-07-19）
+
+- 已正确接入岗位权限和指定投票引擎的正式入口包括：协议升级、决议发行、决议销毁、GRANDPA 密钥更换、public/private 本机构治理与关闭、机构多签三类转账、技术公司平台调价和三类立法业务。其提案入口均校验准确 `RoleSubject + BusinessActionId + Propose`，机构投票均消费岗位有效任职快照；个人多签继续消费个人管理员快照。
+- 当前仍启用且直接写业务状态的权限缺口只有两组：`citizen-identity` 的 8 个 call（0..4、6..8）和 `address-registry` 的 5 个 call（0..4）。两者已有稳定业务动作和 FRG 固定岗位权限，但尚未创建 `VotePlan`、调用投票引擎或实现通过后的业务回调；当前 runtime authority 仍把 `admins` 当作入口权限，FRG 另叠加省专员任职，CREG 仍只有管理员与地域校验。
+- `onchain-issuance` 与 `offchain-transaction` 整个 pallet 均被 `RuntimeCallFilter` 禁用：前者 10 个公开 call 仍是返回空成功的业务壳，后者虽有完整清算代码但当前不可从外部调用。它们的管理员判断不是当前可达业务权限路径，后续启用前必须分别完成业务规则和投票边界设计，不能在本任务中顺手开放。
+- `election-campaign` 没有公开 call 且 `is_enabled() == false`，只是业务骨架；`election-vote` 已支持 Popular 人口数据快照和 Mutual 岗位快照，但不能把投票引擎能力误写成选举业务已经启用。
+- `developer_direct_upgrade` 只在创世阶段 `DeveloperUpgradeEnabled=true` 时允许 NRC 管理员走开发直升，运行期关闭；它不是 `BusinessActionId`，正式协议升级入口已经按 NRC/PRC 委员岗位走联合投票。本任务不把开发期创世通道伪装成岗位业务权限。
+- public/private 机构登记、注册局直接维护、机构账户 CRUD 和 `RegistryAuthority` 仍有管理员/地域校验，但用户已经明确排除出本任务；本步没有修改或扩展这些路径，也没有新增机构登记 pallet。
+- 费用路由中的机构管理员判断只确定机构费用账户能否为当前签名调用付费，不代替业务模块的岗位授权；entity 岗位任职、治理结果落地和候选人校验中的管理员判断属于人员名册结构约束，继续保留。
+- 发现一项无生产读取的旧接口残留：`InternalAdminsLenProvider` 仍挂在 `votingengine::Config`，但 runtime 生产代码没有任何调用；其机构和个人人数方法、runtime 接线及测试 mock 可在后续 runtime 清理步骤一并删除。`election-campaign` 等少量注释仍残留“互选 admins 快照”旧口径，也应同步清理。
+- 本步只修改现有任务卡，没有产生 runtime、Node、OnChina、CitizenApp、CitizenWallet、NodeGuard、chainspec、部署或 Git 远端变更。

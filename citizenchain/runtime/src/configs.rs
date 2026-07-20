@@ -839,7 +839,6 @@ impl primitives::multisig::AccountValidator<AccountId> for RuntimeAccountValidat
 }
 
 pub struct RuntimeReservedAccountGuard;
-pub struct RuntimeCidInstitutionVerifier;
 pub struct RuntimeRegistryAuthority;
 
 pub struct RuntimeProtectedSourceChecker;
@@ -1038,84 +1037,6 @@ impl entity_primitives::RegistryAuthority<AccountId> for RuntimeRegistryAuthorit
 
         false
     }
-
-    fn can_register_institution(
-        registrar: &AccountId,
-        actor_cid_number: &[u8],
-        credential_signer_pubkey: &[u8; 32],
-        target_cid_number: &[u8],
-        target_institution_code: primitives::cid::code::InstitutionCode,
-        scope_province_name: &[u8],
-        scope_city_name: &[u8],
-    ) -> bool {
-        let signer_account = AccountId::new(*credential_signer_pubkey);
-        if registrar != &signer_account {
-            return false;
-        }
-        let Some(actor_code) = cid_institution_code(actor_cid_number) else {
-            return false;
-        };
-        if !RuntimeInstitutionAdminQuery::is_institution_admin(
-            actor_code,
-            actor_cid_number,
-            &signer_account,
-        ) {
-            return false;
-        }
-        let Some(parsed_target_code) = cid_institution_code(target_cid_number) else {
-            return false;
-        };
-        if parsed_target_code != target_institution_code
-            || primitives::cid::code::is_fixed_governance_code(&target_institution_code)
-            || primitives::institution_constraints::is_permanent_singleton_code(
-                &target_institution_code,
-            )
-        {
-            return false;
-        }
-
-        let Ok((target_province_code, target_city_code)) =
-            primitives::cid::number::cid_scope_codes(target_cid_number)
-        else {
-            return false;
-        };
-        let Ok(scope_province_name) = core::str::from_utf8(scope_province_name) else {
-            return false;
-        };
-        let Some(scope_province_code) =
-            primitives::cid::code::province_code_by_name(scope_province_name)
-        else {
-            return false;
-        };
-        if scope_province_code != target_province_code {
-            return false;
-        }
-
-        const CITY_REGISTRY_CODE: primitives::cid::code::InstitutionCode = *b"CREG";
-        if actor_code == admin_primitives::FRG {
-            return is_active_frg_province_commissioner(
-                actor_cid_number,
-                &signer_account,
-                &target_province_code,
-            );
-        }
-
-        if actor_code == CITY_REGISTRY_CODE {
-            if target_institution_code == CITY_REGISTRY_CODE || scope_city_name.is_empty() {
-                return false;
-            }
-            let Ok((issuer_province_code, issuer_city_code)) =
-                primitives::cid::number::cid_scope_codes(actor_cid_number)
-            else {
-                return false;
-            };
-            // CREG 只能登记本市非 CREG 机构;市归属由 CID R5 直接校验。
-            return issuer_province_code == target_province_code
-                && issuer_city_code == target_city_code;
-        }
-
-        false
-    }
 }
 
 pub struct RuntimeAddressAuthority;
@@ -1184,23 +1105,6 @@ impl address_registry::Config for Runtime {
 }
 
 #[cfg(not(feature = "runtime-benchmarks"))]
-fn issuer_admin_public(
-    actor_cid_number: &[u8],
-    signer_pubkey: &[u8; 32],
-) -> Option<sr25519::Public> {
-    let signer_account = AccountId::new(*signer_pubkey);
-    let institution_code = cid_institution_code(actor_cid_number)?;
-    if !RuntimeInstitutionAdminQuery::is_institution_admin(
-        institution_code,
-        actor_cid_number,
-        &signer_account,
-    ) {
-        return None;
-    }
-    Some(sr25519::Public::from_raw(*signer_pubkey))
-}
-
-#[cfg(not(feature = "runtime-benchmarks"))]
 fn sr25519_signature_from_bytes(signature: &[u8]) -> Option<sr25519::Signature> {
     if signature.len() != 64 {
         return None;
@@ -1210,236 +1114,9 @@ fn sr25519_signature_from_bytes(signature: &[u8]) -> Option<sr25519::Signature> 
     Some(sr25519::Signature::from_raw(sig_raw))
 }
 
-impl<AccountName, NonceBytes, SignatureBytes>
-    entity_primitives::CidInstitutionVerifier<AccountId, AccountName, NonceBytes, SignatureBytes>
-    for RuntimeCidInstitutionVerifier
-where
-    AccountName: AsRef<[u8]>,
-    NonceBytes: AsRef<[u8]>,
-    SignatureBytes: AsRef<[u8]>,
-{
-    fn verify_institution_registration(
-        cid_number: &[u8],
-        cid_full_name: &AccountName,
-        cid_short_name: &[u8],
-        account_names: &[Vec<u8>],
-        nonce: &NonceBytes,
-        signature: &SignatureBytes,
-        actor_cid_number: &[u8],
-        credential_signer_pubkey: &[u8; 32],
-        scope_province_name: &[u8],
-        scope_city_name: &[u8],
-        town_code: &[u8],
-    ) -> bool {
-        #[cfg(feature = "runtime-benchmarks")]
-        {
-            let _ = (
-                actor_cid_number,
-                credential_signer_pubkey,
-                scope_province_name,
-                scope_city_name,
-                cid_short_name,
-                town_code,
-            );
-            return !cid_number.is_empty()
-                && !cid_full_name.as_ref().is_empty()
-                && !account_names.is_empty()
-                && !nonce.as_ref().is_empty()
-                && !signature.as_ref().is_empty();
-        }
-
-        #[cfg(not(feature = "runtime-benchmarks"))]
-        {
-            let Some(public) = issuer_admin_public(actor_cid_number, credential_signer_pubkey)
-            else {
-                return false;
-            };
-            let Some(signature) = sr25519_signature_from_bytes(signature.as_ref()) else {
-                return false;
-            };
-
-            // 这里必须和身份注册局 `/registration-info` 的签名 payload 严格一致。
-            // payload 字段(GMB + OP_SIGN_INST 域头由 signing_message 统一拼接):
-            // genesis_hash + cid_number + cid_full_name + cid_short_name + account_names[]
-            // + nonce + 签发机构 + 作用域 + town_code。
-            let msg = primitives::sign::institution_registration_message(
-                &frame_system::Pallet::<Runtime>::block_hash(0),
-                cid_number,
-                cid_full_name.as_ref(),
-                cid_short_name,
-                account_names,
-                nonce,
-                actor_cid_number,
-                credential_signer_pubkey,
-                scope_province_name,
-                scope_city_name,
-                town_code,
-            );
-
-            sr25519_verify(&signature, &msg, &public)
-        }
-    }
-
-    fn verify_institution_creation(
-        cid_number: &[u8],
-        cid_full_name: &AccountName,
-        cid_short_name: &[u8],
-        admins_payload: &[u8],
-        nonce: &NonceBytes,
-        signature: &SignatureBytes,
-        actor_cid_number: &[u8],
-        credential_signer_pubkey: &[u8; 32],
-        scope_province_name: &[u8],
-        scope_city_name: &[u8],
-        town_code: &[u8],
-    ) -> bool {
-        #[cfg(feature = "runtime-benchmarks")]
-        {
-            let _ = (
-                actor_cid_number,
-                credential_signer_pubkey,
-                scope_province_name,
-                scope_city_name,
-                cid_short_name,
-                town_code,
-            );
-            return !cid_number.is_empty()
-                && !cid_full_name.as_ref().is_empty()
-                && !admins_payload.is_empty()
-                && !nonce.as_ref().is_empty()
-                && !signature.as_ref().is_empty();
-        }
-
-        #[cfg(not(feature = "runtime-benchmarks"))]
-        {
-            let Some(public) = issuer_admin_public(actor_cid_number, credential_signer_pubkey)
-            else {
-                return false;
-            };
-            let Some(signature) = sr25519_signature_from_bytes(signature.as_ref()) else {
-                return false;
-            };
-
-            // 最小创建凭证覆盖管理员人员集合，防止冷签前后被替换。
-            let msg = primitives::sign::institution_creation_message(
-                &frame_system::Pallet::<Runtime>::block_hash(0),
-                cid_number,
-                cid_full_name.as_ref(),
-                cid_short_name,
-                admins_payload,
-                nonce,
-                actor_cid_number,
-                credential_signer_pubkey,
-                scope_province_name,
-                scope_city_name,
-                town_code,
-            );
-
-            sr25519_verify(&signature, &msg, &public)
-        }
-    }
-
-    fn verify_institution_governance(
-        cid_number: &[u8],
-        governance_payload: &[u8],
-        nonce: &NonceBytes,
-        signature: &SignatureBytes,
-        actor_cid_number: &[u8],
-        credential_signer_pubkey: &[u8; 32],
-        scope_province_name: &[u8],
-        scope_city_name: &[u8],
-    ) -> bool {
-        #[cfg(feature = "runtime-benchmarks")]
-        {
-            let _ = (
-                actor_cid_number,
-                credential_signer_pubkey,
-                scope_province_name,
-                scope_city_name,
-            );
-            return !cid_number.is_empty()
-                && !governance_payload.is_empty()
-                && !nonce.as_ref().is_empty()
-                && !signature.as_ref().is_empty();
-        }
-
-        #[cfg(not(feature = "runtime-benchmarks"))]
-        {
-            let Some(public) = issuer_admin_public(actor_cid_number, credential_signer_pubkey)
-            else {
-                return false;
-            };
-            let Some(signature) = sr25519_signature_from_bytes(signature.as_ref()) else {
-                return false;
-            };
-
-            let msg = primitives::sign::institution_governance_message(
-                &frame_system::Pallet::<Runtime>::block_hash(0),
-                cid_number,
-                governance_payload,
-                nonce,
-                actor_cid_number,
-                credential_signer_pubkey,
-                scope_province_name,
-                scope_city_name,
-            );
-
-            sr25519_verify(&signature, &msg, &public)
-        }
-    }
-
-    fn verify_institution_account_close(
-        cid_number: &[u8],
-        account_name: &[u8],
-        target_account: &AccountId,
-        nonce: &NonceBytes,
-        signature: &SignatureBytes,
-        credential_issuer_cid_number: &[u8],
-        credential_signer_pubkey: &[u8; 32],
-    ) -> bool {
-        #[cfg(feature = "runtime-benchmarks")]
-        {
-            let _ = (
-                account_name,
-                target_account,
-                credential_issuer_cid_number,
-                credential_signer_pubkey,
-            );
-            return !cid_number.is_empty()
-                && !nonce.as_ref().is_empty()
-                && !signature.as_ref().is_empty();
-        }
-
-        #[cfg(not(feature = "runtime-benchmarks"))]
-        {
-            let Some(public) =
-                issuer_admin_public(credential_issuer_cid_number, credential_signer_pubkey)
-            else {
-                return false;
-            };
-            let Some(signature) = sr25519_signature_from_bytes(signature.as_ref()) else {
-                return false;
-            };
-
-            // 必须与身份注册局注销凭证签发 payload 严格一致。
-            // payload 字段(GMB + OP_SIGN_DEREGISTER 域头由 signing_message 统一拼接):
-            // genesis_hash + cid_number + account_name + target_account
-            // + nonce + 签发机构 + 签发管理员公钥。scope 与 target_account 入签名,
-            // 防换范围/换账户重放。
-            let msg = primitives::sign::institution_account_close_message(
-                &frame_system::Pallet::<Runtime>::block_hash(0),
-                cid_number,
-                account_name,
-                target_account,
-                nonce,
-                credential_issuer_cid_number,
-                credential_signer_pubkey,
-            );
-
-            sr25519_verify(&signature, &msg, &public)
-        }
-    }
-}
+// 机构自定义账户关闭已改为「机构在册管理员直接冷签 propose_close(不含凭证)」,由 pallet
+// 在 origin 处以 `is_institution_admin` 鉴权。原 `RuntimeCidInstitutionVerifier`
+// (注册局审批凭证验签)连同 OnChina 平台签名钥已整体删除。
 
 /// 完整 CID 的顶层业务能力策略：固定创世机构走共享白名单，普通机构仅开放自身治理。
 pub struct RuntimeInstitutionCapabilityPolicy;
@@ -1511,13 +1188,10 @@ impl public_manage::Config for Runtime {
     type InstitutionQuery = RuntimeInstitutionQuery;
     type OnchainFeeCharger =
         onchain::OnchainExecutionFeeCharger<Runtime, Balances, OnchainExecutionFeeDistributor>;
-    type CidInstitutionVerifier = RuntimeCidInstitutionVerifier;
     type RegistryAuthority = RuntimeRegistryAuthority;
     type MaxAdmins = MaxAdminsPerInstitution;
     type MaxCidNumberLength = ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>;
     type MaxAccountNameLength = ConstU32<128>;
-    type MaxRegisterNonceLength = ConstU32<64>;
-    type MaxRegisterSignatureLength = ConstU32<64>;
     type MaxInstitutionAccounts = ConstU32<16>;
     type WeightInfo = public_manage::weights::SubstrateWeight<Runtime>;
 }
@@ -1537,13 +1211,10 @@ impl private_manage::Config for Runtime {
     type InstitutionQuery = RuntimeInstitutionQuery;
     type OnchainFeeCharger =
         onchain::OnchainExecutionFeeCharger<Runtime, Balances, OnchainExecutionFeeDistributor>;
-    type CidInstitutionVerifier = RuntimeCidInstitutionVerifier;
     type RegistryAuthority = RuntimeRegistryAuthority;
     type MaxAdmins = MaxAdminsPerInstitution;
     type MaxCidNumberLength = ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>;
     type MaxAccountNameLength = ConstU32<128>;
-    type MaxRegisterNonceLength = ConstU32<64>;
-    type MaxRegisterSignatureLength = ConstU32<64>;
     type MaxInstitutionAccounts = ConstU32<16>;
     type WeightInfo = private_manage::weights::SubstrateWeight<Runtime>;
 }
@@ -2679,13 +2350,6 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
         who: &AccountId,
     ) -> bool {
         RuntimeInstitutionAdminQuery::is_institution_admin(institution_code, cid_number, who)
-    }
-
-    fn get_institution_admins(
-        institution_code: votingengine::types::InstitutionCode,
-        cid_number: &[u8],
-    ) -> Option<alloc::vec::Vec<AccountId>> {
-        RuntimeInstitutionAdminQuery::institution_admins(institution_code, cid_number)
     }
 
     fn is_pending_personal_admin(personal_account: AccountId, who: &AccountId) -> bool {

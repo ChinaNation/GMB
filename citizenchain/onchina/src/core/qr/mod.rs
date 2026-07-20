@@ -125,13 +125,14 @@ impl SignRequestEnvelope {
     }
 }
 
-/// 登录签名请求 payload 固定为 `system|sys_sig` 的 UTF-8 字节。
-pub fn login_request_body(system: &str, sys_pubkey: &str, sys_sig: &str) -> SignRequestBody {
+/// 登录签名请求 payload 固定为 `system` 的 UTF-8 字节(平台系统签名已删)。
+/// `u` 留空:登录期不知签名者,管理员扫码时用自己的钱包签名,响应 k=2 携带其公钥。
+pub fn login_request_body(system: &str) -> SignRequestBody {
     SignRequestBody {
         action: action_login(),
         sig_alg: 1,
-        pubkey: pubkey_hex_to_b64(sys_pubkey).unwrap_or_default(),
-        payload: URL_SAFE_NO_PAD.encode(format!("{}|{}", system, sys_sig).as_bytes()),
+        pubkey: String::new(),
+        payload: URL_SAFE_NO_PAD.encode(system.as_bytes()),
     }
 }
 

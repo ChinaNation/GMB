@@ -1,9 +1,10 @@
-//! 管理端操作权限三档分级。
+//! 管理端操作权限三档分级(读 / 本地写 / 链上写)。
 //!
-//! 所有链上中国平台操作归入 Session / Passkey / PasskeyColdSign 三档之一,三档之外一律拒绝:
-//! - Session         一般操作:仅需有效会话(会话已是链上已证管理员)。
-//! - Passkey         重要操作:会话 + WebAuthn passkey 断言。
-//! - PasskeyColdSign 特殊操作:会话 + WebAuthn passkey 断言 + 冷钱包扫码签名。
+//! 三档之外一律拒绝;写操作一律 ≥ passkey,不存在只会话的写动作:
+//! - Session         只读查询:仅需有效会话(会话已是链上已证管理员);由 `require_admin_any`
+//!                   保障,不经 AdminActionType(AdminActionType 全是写动作)。
+//! - Passkey         本地写:会话 + WebAuthn passkey 断言;只改 onchina 本地库、不产生 extrinsic。
+//! - PasskeyColdSign 链上写:会话 + passkey + 冷钱包对真实链载荷签名。
 
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -14,11 +15,11 @@ use crate::auth::login::AdminAuthContext;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum AdminOperationAuth {
-    /// 一般操作:仅需有效会话(会话已是链上已证管理员)。
+    /// 只读查询:仅需有效会话(会话已是链上已证管理员)。写动作不属此档。
     Session,
-    /// 重要操作:会话 + WebAuthn passkey 断言。
+    /// 本地写:会话 + WebAuthn passkey 断言;只改 onchina 本地库、不产生 extrinsic。
     Passkey,
-    /// 特殊操作:会话 + WebAuthn passkey 断言 + 冷钱包扫码签名(signer ∈ 本机构链上 Active 集合)。
+    /// 链上写:会话 + passkey + 冷钱包对真实链载荷签名(signer ∈ 本机构链上 Active 集合)。
     PasskeyColdSign,
 }
 
@@ -38,8 +39,6 @@ pub(crate) enum AdminActionType {
     InstitutionUpdate,
     InstitutionCreateAccount,
     InstitutionDeleteAccount,
-    /// 注销机构自定义命名账户；所有协议账户永久存在。
-    InstitutionAccountDeregister,
     InstitutionUploadDocument,
     InstitutionDeleteDocument,
     /// 本节点解除当前机构绑定;解绑后必须重新扫码登录并绑定机构。
@@ -80,7 +79,6 @@ impl AdminActionType {
             Self::InstitutionUpdate => "INSTITUTION_UPDATE",
             Self::InstitutionCreateAccount => "INSTITUTION_CREATE_ACCOUNT",
             Self::InstitutionDeleteAccount => "INSTITUTION_DELETE_ACCOUNT",
-            Self::InstitutionAccountDeregister => "INSTITUTION_ACCOUNT_DEREGISTER",
             Self::InstitutionUploadDocument => "INSTITUTION_UPLOAD_DOCUMENT",
             Self::InstitutionDeleteDocument => "INSTITUTION_DELETE_DOCUMENT",
             Self::NodeBindingUnbind => "NODE_BINDING_UNBIND",
@@ -99,22 +97,27 @@ impl AdminActionType {
     }
 
     /// 动作 → 鉴权档(穷尽 match,新增动作漏标编译失败=默认拒绝)。
+    ///
+    /// 三档 = 读 / 本地写 / 链上写。AdminActionType 全是写动作,故只落 Passkey / PasskeyColdSign
+    /// 两档;只读查询归 Session,由 `require_admin_any` 会话门保障,不经 AdminActionType。
     pub(crate) fn auth_type(&self) -> AdminOperationAuth {
         match self {
-            // 纯本地确认 / 元数据更新 → 仅会话。
-            Self::InstitutionUpdate | Self::InstitutionUploadDocument => {
-                AdminOperationAuth::Session
-            }
-            // 产生链上交易/凭证、改 Active 集合或高危治理 → passkey + 冷签特殊档。
-            Self::InstitutionCreate
+            // 本地写(Passkey):只改 onchina 本地库,不产生 extrinsic。
+            Self::InstitutionUploadDocument
+            | Self::InstitutionDeleteDocument
+            | Self::NodeBindingUnbind
+            // 最终管理员链签就是该角色唯一钱包签名,创建阶段只额外一次 passkey。
+            | Self::CitizenOnchainPush => AdminOperationAuth::Passkey,
+            // 链上写(PasskeyColdSign):产生链上交易/凭证、改 Active 集合或高危治理。
+            // InstitutionUpdate 改 cid_full_name/法人/所属法人(链上注册凭证签名字段=链上单源),
+            //   归链上写;前端本就走冷签。若存在纯本地展示字段,Phase 2/3 再拆出为本地写(Passkey)。
+            Self::InstitutionUpdate
+            | Self::InstitutionCreate
             | Self::InstitutionCreateAccount
             | Self::CreateCityRegistry
             | Self::DeleteCityRegistry
             | Self::InstitutionDeleteAccount
-            | Self::InstitutionAccountDeregister
-            | Self::InstitutionDeleteDocument
-            | Self::NodeBindingUnbind
-            // 立法与表决:全部产生链上交易,归 PasskeyColdSign 特殊档(冷钱包扫码签名)。
+            // 立法与表决:全部产生链上交易。
             | Self::ProposeEnactLaw
             | Self::ProposeAmendLaw
             | Self::ProposeRepealLaw
@@ -125,35 +128,25 @@ impl AdminActionType {
             | Self::GuardVote
             | Self::ProposePersonnel
             | Self::ProposeBudget => AdminOperationAuth::PasskeyColdSign,
-            // 最终管理员链签就是该角色唯一钱包签名，不再额外签安全 grant。
-            Self::CitizenOnchainPush => AdminOperationAuth::Passkey,
         }
-    }
-
-    pub(crate) fn is_session(&self) -> bool {
-        self.auth_type() == AdminOperationAuth::Session
     }
 
     pub(crate) fn is_governance(&self) -> bool {
         matches!(
             self,
-            Self::CreateCityRegistry
-                | Self::DeleteCityRegistry
-                | Self::InstitutionAccountDeregister
-                | Self::NodeBindingUnbind
+            Self::CreateCityRegistry | Self::DeleteCityRegistry | Self::NodeBindingUnbind
         )
     }
 
     /// 是否要求 Tier1 创世注册局治理能力。注册局自身管理(增删下级注册局、更新/换届本档)
-    /// 与自定义账户注销治理归此边界；机构元数据更新与文档上传不在其中——
-    /// 任一辖区管理员可对本辖区机构执行,由 `scope` 限定可见域。与鉴权档正交:不依赖
-    /// auth_type,故动作在档间迁移不改变此权限边界。
+    /// 归此边界；机构元数据更新与文档上传不在其中——任一辖区管理员可对本辖区机构执行,
+    /// 由 `scope` 限定可见域。机构自定义账户增删属机构自管(不经注册局审批),也不在此边界:
+    /// 由机构在册管理员直接冷签 propose_close,链端以 `is_institution_admin` 鉴权。
+    /// 与鉴权档正交:不依赖 auth_type,故动作在档间迁移不改变此权限边界。
     pub(crate) fn requires_governing_capability(&self) -> bool {
         matches!(
             self,
-            Self::CreateCityRegistry
-                | Self::DeleteCityRegistry
-                | Self::InstitutionAccountDeregister
+            Self::CreateCityRegistry | Self::DeleteCityRegistry
         )
     }
 }
@@ -168,7 +161,6 @@ pub(crate) fn parse_action_type(
         "INSTITUTION_UPDATE" => Ok(AdminActionType::InstitutionUpdate),
         "INSTITUTION_CREATE_ACCOUNT" => Ok(AdminActionType::InstitutionCreateAccount),
         "INSTITUTION_DELETE_ACCOUNT" => Ok(AdminActionType::InstitutionDeleteAccount),
-        "INSTITUTION_ACCOUNT_DEREGISTER" => Ok(AdminActionType::InstitutionAccountDeregister),
         "INSTITUTION_UPLOAD_DOCUMENT" => Ok(AdminActionType::InstitutionUploadDocument),
         "INSTITUTION_DELETE_DOCUMENT" => Ok(AdminActionType::InstitutionDeleteDocument),
         "NODE_BINDING_UNBIND" => Ok(AdminActionType::NodeBindingUnbind),
@@ -243,11 +235,10 @@ mod tests {
         // 机构元数据更新与文档上传由发起管理员的 scope 限定本辖区,不要求 Tier1 创世注册局治理能力。
         assert!(!AdminActionType::InstitutionUpdate.requires_governing_capability());
         assert!(!AdminActionType::InstitutionUploadDocument.requires_governing_capability());
-        // 注册局新增/删除下级与自定义账户注销治理仍要求 Tier1 创世注册局治理能力。
+        // 注册局新增/删除下级仍要求 Tier1 创世注册局治理能力。
         assert!(AdminActionType::CreateCityRegistry.requires_governing_capability());
         assert!(AdminActionType::DeleteCityRegistry.requires_governing_capability());
-        assert!(AdminActionType::InstitutionAccountDeregister.requires_governing_capability());
-        // 普通机构特殊操作(建机构/建账户/删账户/删文档)由 scope 收口,不要求治理能力。
+        // 机构自定义账户增删属机构自管(不经注册局审批),不要求治理能力。
         assert!(!AdminActionType::InstitutionCreate.requires_governing_capability());
         assert!(!AdminActionType::InstitutionCreateAccount.requires_governing_capability());
         assert!(!AdminActionType::InstitutionDeleteAccount.requires_governing_capability());

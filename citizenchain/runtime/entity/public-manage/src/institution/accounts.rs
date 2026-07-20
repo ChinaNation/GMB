@@ -1,8 +1,6 @@
 //! 机构账户表相关 helper。
 //!
 //! 此模块负责:
-//! - `account_names_payload_from_names`: 同样的 payload, 但接收机构维护入口
-//!   传来的 BoundedVec<AccountName>。
 //! - `build_required_protocol_accounts`: 根据 CID 制度约束生成强制协议账户。
 //! - `validate_initial_accounts`: 校验 runtime 自动生成的账户列表,派生每个账户
 //!   的链上地址,返回固化的 `CreateInstitutionAccountsOf<T>` + 主账户/
@@ -57,9 +55,6 @@ pub(crate) fn build_required_protocol_accounts<T: Config>(
         .try_into()
         .map_err(|_| Error::<T>::TooManyInstitutionAccounts.into())
 }
-
-// 机构维护入口用的 account_names_payload_from_names 实现保留在
-// lib.rs 内 `Pallet::<T>::account_names_payload_from_names`，此处不重复。
 
 /// 校验机构初始账户列表合法性,派生地址,返回:
 /// - 固化的 `CreateInstitutionAccountsOf<T>`(已派生完地址)

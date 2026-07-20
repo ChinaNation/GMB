@@ -6,13 +6,12 @@
 //!
 //! - `is_admin_in_snapshot`:查快照判断某人是否是该提案某机构的管理员
 //! - `snapshot_admins_len`:快照中某机构的管理员数量
-//! - `snapshot_institution_admins`:从 `InternalAdminProvider` 拉取当前管理员列表写入快照
 //! - `snapshot_role_subjects`:按完整岗位主体写入任职快照和 CID 有效选民快照
 
 use frame_support::pallet_prelude::{BoundedVec, DispatchResult};
 
 use crate::pallet::{self, AdminSnapshot, EffectiveVoterSnapshot, Error, VoterSnapshot};
-use crate::types::{AuthorizationSubject, CidNumber, InstitutionCode, ProposalSubject};
+use crate::types::{AuthorizationSubject, CidNumber, ProposalSubject};
 use crate::InternalAdminProvider;
 
 impl<T: pallet::Config> pallet::Pallet<T> {
@@ -130,26 +129,6 @@ impl<T: pallet::Config> pallet::Pallet<T> {
         Ok(())
     }
 
-    /// 将当前管理员列表写入快照存储。
-    /// 如果管理员数量超过 MaxAdminsPerInstitution,触发 defensive 告警。
-    pub fn snapshot_institution_admins(
-        proposal_id: u64,
-        institution_code: InstitutionCode,
-        cid_number: CidNumber,
-    ) -> DispatchResult {
-        let admins = T::InternalAdminProvider::get_institution_admins(
-            institution_code,
-            cid_number.as_slice(),
-        )
-        .ok_or(Error::<T>::InvalidInstitution)?;
-
-        Self::write_admin_snapshot(
-            proposal_id,
-            ProposalSubject::InstitutionCid(cid_number),
-            admins,
-        )
-    }
-
     /// 将个人多签当前或待注册管理员列表写入快照。
     pub fn snapshot_personal_admins(
         proposal_id: u64,
@@ -184,7 +163,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
             }
             Err(_) => {
                 frame_support::defensive!(
-                    "snapshot_institution_admins: admin list exceeds MaxAdminsPerInstitution, snapshot not written"
+                    "write_admin_snapshot: personal admin list exceeds MaxAdminsPerInstitution, snapshot not written"
                 );
                 Err(Error::<T>::InvalidInstitution.into())
             }

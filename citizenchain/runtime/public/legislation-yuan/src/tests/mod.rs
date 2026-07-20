@@ -112,19 +112,6 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             && TestInstitutionCidQuery::cid_matches(institution_code, cid_number)
             && *who == legislator()
     }
-
-    fn get_institution_admins(
-        institution_code: InstitutionCode,
-        cid_number: &[u8],
-    ) -> Option<Vec<AccountId32>> {
-        if matches!(institution_code, code if code == *b"NRP\0" || code == *b"CSLF" || code == *b"CEDU")
-            && TestInstitutionCidQuery::cid_matches(institution_code, cid_number)
-        {
-            Some(vec![legislator()])
-        } else {
-            None
-        }
-    }
 }
 
 impl votingengine::InstitutionRoleProvider<AccountId32> for TestInstitutionRoleProvider {

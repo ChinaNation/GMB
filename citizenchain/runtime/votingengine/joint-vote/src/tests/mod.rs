@@ -111,13 +111,6 @@ impl InternalAdminProvider<AccountId32> for TestAdminProvider {
             .map(|admins| admins.contains(who))
             .unwrap_or(false)
     }
-
-    fn get_institution_admins(
-        institution_code: votingengine::InstitutionCode,
-        cid_number: &[u8],
-    ) -> Option<Vec<AccountId32>> {
-        Self::institution_admins(institution_code, cid_number)
-    }
 }
 
 impl votingengine::InstitutionRoleProvider<AccountId32> for TestAdminProvider {

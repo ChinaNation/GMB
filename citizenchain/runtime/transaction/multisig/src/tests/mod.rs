@@ -129,13 +129,6 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             .unwrap_or(false)
     }
 
-    fn get_institution_admins(
-        institution_code: InstitutionCode,
-        cid_number: &[u8],
-    ) -> Option<Vec<AccountId32>> {
-        get_institution_admins(institution_code, cid_number)
-    }
-
     fn is_personal_admin(personal_account: AccountId32, who: &AccountId32) -> bool {
         <personal_admins::Pallet<Test> as admin_primitives::AdminAccountQuery<AccountId32>>::is_active_account_admin(
             PMUL,

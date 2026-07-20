@@ -16,7 +16,5 @@ pub(crate) mod qr;
 /// HTTP API 通用响应、分页和健康检查输出模型。
 pub(crate) mod response;
 pub(crate) mod runtime_ops;
-/// 敏感字符串封装,只服务密码学代码短暂读取。
-pub(crate) mod secret;
 /// onchina 内网 API 机构私有 CA TLS(Card 05;rcgen CA 签发 + rustls)。
 pub(crate) mod tls;

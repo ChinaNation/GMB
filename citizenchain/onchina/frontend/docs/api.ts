@@ -1,10 +1,7 @@
 // 机构资料库前端 API。资料上传、下载、删除都归 docs 模块。
 
 import type { AdminAuth } from '../auth/types';
-import {
-  securityGrantSubmitHeaders,
-  type AdminSecurityGrantOutput,
-} from '../admins/securityApi';
+import { passkeySubmitHeaders } from '../admins/securityApi';
 import { adminHeaders, adminRequest } from '../utils/http';
 import type { InstitutionDocument } from '../subjects/api';
 
@@ -28,20 +25,18 @@ export async function listDocuments(
   );
 }
 
-// 上传资料属 PASSKEY_COLD_SIGN 操作:
-// 前端 prepare 的授权 payload 必须与后端 require_admin_security_grant 中的 grant_payload 完全同形,
-// 正式提交再同时携带冷签 grant 与 Passkey assertion,缺一律由后端 fail-closed。
+// 上传资料属本地写(Passkey 档):只改 onchina 本地存储,不上链。
+// 提交只需当前管理员 passkey 断言,由后端 require_admin_security_grant 校验。
 export async function uploadDocument(
   auth: AdminAuth,
   cidNumber: string,
   file: File,
   docType: string,
-  securityGrant: AdminSecurityGrantOutput,
 ): Promise<InstitutionDocument> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('doc_type', docType);
-  const headers = await securityGrantSubmitHeaders(auth, securityGrant);
+  const headers = await passkeySubmitHeaders(auth);
   return adminRequest<InstitutionDocument>(
     `/api/v1/institutions/${encodeURIComponent(cidNumber)}/docs`,
     auth,
@@ -77,9 +72,8 @@ export async function deleteDocument(
   auth: AdminAuth,
   cidNumber: string,
   docId: number,
-  securityGrant: AdminSecurityGrantOutput,
 ): Promise<void> {
-  const headers = await securityGrantSubmitHeaders(auth, securityGrant);
+  const headers = await passkeySubmitHeaders(auth);
   await adminRequest<string>(
     `/api/v1/institutions/${encodeURIComponent(cidNumber)}/docs/${docId}`,
     auth,

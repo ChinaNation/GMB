@@ -18,10 +18,7 @@ use crate::*;
 
 use super::model::*;
 use super::onchain_gate;
-use super::signature::{
-    admin_person_names, build_login_qr_system_signature, extract_domain_from_origin,
-    verify_admin_signature,
-};
+use super::signature::{admin_person_names, extract_domain_from_origin, verify_admin_signature};
 use super::LOGIN_SIGN_REQUEST_TTL_SECONDS;
 
 const LOGIN_QR_SYSTEM: &str = "onchina";
@@ -61,28 +58,12 @@ pub(crate) async fn admin_auth_qr_sign_request(
         LOGIN_QR_SYSTEM,
         expire_at.timestamp()
     );
-    let (sys_pubkey, sys_sig) = match build_login_qr_system_signature(
-        &state,
-        LOGIN_QR_SYSTEM,
-        challenge_id.as_str(),
-        now.timestamp(),
-        expire_at.timestamp(),
-    ) {
-        Ok(v) => v,
-        Err(err) => {
-            warn!(error = %err, "build onchina login qr system signature failed");
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "build login qr signature failed",
-            );
-        }
-    };
+    // 平台系统签名已删:登录二维码不再自证。信任根 = 管理员钱包签名验链上管理员集合(见 complete)。
     let login_qr_payload = serde_json::to_string(&crate::core::qr::SignRequestEnvelope::new(
         challenge_id.clone(),
         now.timestamp(),
         expire_at.timestamp(),
-        crate::core::qr::login_request_body(LOGIN_QR_SYSTEM, &sys_pubkey, &sys_sig),
+        crate::core::qr::login_request_body(LOGIN_QR_SYSTEM),
     ))
     .unwrap_or_default();
 

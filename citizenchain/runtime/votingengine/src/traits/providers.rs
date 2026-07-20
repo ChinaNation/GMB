@@ -46,29 +46,16 @@ impl<AccountId> CitizenIdentityReader<AccountId> for () {
     }
 }
 
-/// 内部管理员动态提供器（可由其他治理模块提供最新管理员集合）。
+/// 内部管理员动态提供器。
 ///
-/// 一致性契约：
-/// - `is_institution_admin(institution_code, cid_number, who) == true` 时，同一链上状态读取到的
-///   `get_institution_admins(institution_code, cid_number)` 必须包含 `who`。
-/// - 个人多签 Pending 版本的权限与管理员列表必须满足同样强一致关系。
-///
-/// 投票引擎会在写入管理员快照后再次校验发起人属于快照；provider 实现若出现
-/// drift，会被视为权限错误并回滚提案创建。
+/// 机构管理员查询只用于业务入口确认签名账户属于机构人员名册；机构投票资格只能来自
+/// `InstitutionRoleProvider` 的岗位有效任职快照。个人多签继续使用独立管理员快照。
 pub trait InternalAdminProvider<AccountId> {
     fn is_institution_admin(
         institution_code: InstitutionCode,
         cid_number: &[u8],
         who: &AccountId,
     ) -> bool;
-
-    /// 获取机构当前管理员列表（用于提案创建时锁定快照）。
-    fn get_institution_admins(
-        _institution_code: InstitutionCode,
-        _cid_number: &[u8],
-    ) -> Option<sp_std::vec::Vec<AccountId>> {
-        None
-    }
 
     /// 查询个人多签管理员权限。
     fn is_personal_admin(_personal_account: AccountId, _who: &AccountId) -> bool {

@@ -34,6 +34,9 @@ pub struct InstitutionAdminArg {
 }
 
 /// `propose_institution_governance` 完整参数。
+///
+/// 机构操作已收敛为「发起管理员钱包直接冷签一笔普通 extrinsic」:call 不再嵌独立凭证
+/// 签名/公钥/nonce/作用域,授权由 runtime 在 origin 处以 `is_institution_admin` + 岗位码校验。
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct ProposeInstitutionGovernanceArgs {
@@ -41,29 +44,22 @@ pub struct ProposeInstitutionGovernanceArgs {
     /// `entity_primitives::InstitutionGovernanceAction` 的 SCALE 字节。
     pub governance_action: Vec<u8>,
     pub institution_code: [u8; 4],
-    pub register_nonce: Vec<u8>,
-    pub signature: Vec<u8>,
     pub actor_cid_number: Vec<u8>,
     /// 发起人当前任职的机构岗位码；runtime 据此校验业务提案权限。
     pub proposer_role_code: Vec<u8>,
-    pub credential_signer_pubkey: [u8; 32],
-    pub scope_province_name: Vec<u8>,
-    pub scope_city_name: Vec<u8>,
 }
 
 /// `register_institution_admins` 完整参数。
+///
+/// 授权由 runtime 在 origin 处以 `can_register_institution_origin` 校验(签名者是注册局
+/// 在册管理员 + 对目标机构有登记权),call 不再嵌独立凭证签名/公钥/nonce/作用域。
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct RegisterInstitutionAdminsArgs {
     pub cid_number: Vec<u8>,
     pub admins: Vec<InstitutionAdminArg>,
     pub institution_code: [u8; 4],
-    pub register_nonce: Vec<u8>,
-    pub signature: Vec<u8>,
     pub actor_cid_number: Vec<u8>,
-    pub credential_signer_pubkey: [u8; 32],
-    pub scope_province_name: Vec<u8>,
-    pub scope_city_name: Vec<u8>,
 }
 
 fn encode_bytes(out: &mut Vec<u8>, value: &[u8]) {
@@ -95,13 +91,8 @@ pub fn encode_propose_institution_governance(args: &ProposeInstitutionGovernance
 
     encode_bytes(&mut out, &args.cid_number);
     out.extend_from_slice(&args.governance_action);
-    encode_bytes(&mut out, &args.register_nonce);
-    encode_bytes(&mut out, &args.signature);
     encode_bytes(&mut out, &args.actor_cid_number);
     encode_bytes(&mut out, &args.proposer_role_code);
-    out.extend_from_slice(&args.credential_signer_pubkey);
-    encode_bytes(&mut out, &args.scope_province_name);
-    encode_bytes(&mut out, &args.scope_city_name);
 
     ChainCall {
         action: chain_action_code(pallet_index, PROPOSE_INSTITUTION_GOVERNANCE_CALL_INDEX),
@@ -117,12 +108,7 @@ pub fn encode_register_institution_admins(args: &RegisterInstitutionAdminsArgs) 
 
     encode_bytes(&mut out, &args.cid_number);
     out.extend(encode_admins_payload(&args.admins));
-    encode_bytes(&mut out, &args.register_nonce);
-    encode_bytes(&mut out, &args.signature);
     encode_bytes(&mut out, &args.actor_cid_number);
-    out.extend_from_slice(&args.credential_signer_pubkey);
-    encode_bytes(&mut out, &args.scope_province_name);
-    encode_bytes(&mut out, &args.scope_city_name);
 
     ChainCall {
         action: chain_action_code(pallet_index, REGISTER_INSTITUTION_ADMINS_CALL_INDEX),
@@ -172,13 +158,8 @@ mod tests {
             cid_number: b"LN001-SFAS-0001".to_vec(),
             governance_action: vec![0, 8, b'A'],
             institution_code: *b"SFAS",
-            register_nonce: b"nonce".to_vec(),
-            signature: vec![9; 64],
             actor_cid_number: b"LN001-SFAS-0001".to_vec(),
             proposer_role_code: b"RFINANCE".to_vec(),
-            credential_signer_pubkey: [5; 32],
-            scope_province_name: "广东省".as_bytes().to_vec(),
-            scope_city_name: "广州市".as_bytes().to_vec(),
         };
         let encoded = encode_propose_institution_governance(&args);
         assert_eq!(&encoded.call_data[..2], &[31, 8]);
@@ -191,12 +172,7 @@ mod tests {
             cid_number: b"LN001-SFAS-0001".to_vec(),
             admins: vec![admin([1; 32], "张", "三"), admin([2; 32], "李", "四")],
             institution_code: *b"SFAS",
-            register_nonce: b"nonce".to_vec(),
-            signature: vec![9; 64],
             actor_cid_number: b"LN001-FRG0-0001".to_vec(),
-            credential_signer_pubkey: [5; 32],
-            scope_province_name: "广东省".as_bytes().to_vec(),
-            scope_city_name: "广州市".as_bytes().to_vec(),
         };
         let encoded = encode_register_institution_admins(&args);
         assert_eq!(&encoded.call_data[..2], &[31, 9]);

@@ -259,148 +259,22 @@ impl<AccountId> InstitutionMultisigQuery<AccountId> for () {
     }
 }
 
-/// CID 机构登记与注销验签抽象。
+// 机构登记/创建/治理/自定义账户关闭已全部收敛为「发起管理员钱包直接冷签一笔普通 extrinsic」,
+// 由 runtime 在 origin 处以 `is_institution_admin` + 岗位码鉴权,不再有任何独立凭证。原
+// `CidInstitutionVerifier`(账户关闭注册局审批凭证验签)连同 OnChina 平台签名钥已整体删除。
+
+/// 注册局登记/维护权限抽象。
 ///
-/// runtime 必须用 `actor_cid_number` 读取 admins 模块的 `admins` 真源，
-/// 确认凭证签名者属于该机构管理员，再验业务 payload 签名。
-pub trait CidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> {
-    /// 校验 CID 机构登记凭证。
-    fn verify_institution_registration(
-        cid_number: &[u8],
-        cid_full_name: &AccountName,
-        cid_short_name: &[u8],
-        account_names: &[Vec<u8>],
-        nonce: &Nonce,
-        signature: &Signature,
-        actor_cid_number: &[u8],
-        credential_signer_pubkey: &[u8; 32],
-        scope_province_name: &[u8],
-        scope_city_name: &[u8],
-        town_code: &[u8],
-    ) -> bool;
-
-    /// 校验机构最小创建凭证。管理员人员集合由同一签名覆盖，防止冷签前后被替换。
-    fn verify_institution_creation(
-        cid_number: &[u8],
-        cid_full_name: &AccountName,
-        cid_short_name: &[u8],
-        admins_payload: &[u8],
-        nonce: &Nonce,
-        signature: &Signature,
-        actor_cid_number: &[u8],
-        credential_signer_pubkey: &[u8; 32],
-        scope_province_name: &[u8],
-        scope_city_name: &[u8],
-        town_code: &[u8],
-    ) -> bool {
-        if admins_payload.is_empty() {
-            return false;
-        }
-        Self::verify_institution_registration(
-            cid_number,
-            cid_full_name,
-            cid_short_name,
-            &[],
-            nonce,
-            signature,
-            actor_cid_number,
-            credential_signer_pubkey,
-            scope_province_name,
-            scope_city_name,
-            town_code,
-        )
-    }
-
-    /// 校验机构成立后的统一治理凭证。
-    fn verify_institution_governance(
-        _cid_number: &[u8],
-        _governance_payload: &[u8],
-        _nonce: &Nonce,
-        _signature: &Signature,
-        _actor_cid_number: &[u8],
-        _credential_signer_pubkey: &[u8; 32],
-        _scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-    ) -> bool {
-        false
-    }
-
-    /// 校验 CID 机构自定义账户关闭凭证。
-    fn verify_institution_account_close(
-        cid_number: &[u8],
-        account_name: &[u8],
-        target_account: &AccountId,
-        nonce: &Nonce,
-        signature: &Signature,
-        credential_issuer_cid_number: &[u8],
-        credential_signer_pubkey: &[u8; 32],
-    ) -> bool;
-}
-
-impl<AccountId, AccountName, Nonce, Signature>
-    CidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> for ()
-{
-    fn verify_institution_registration(
-        _cid_number: &[u8],
-        _cid_full_name: &AccountName,
-        _cid_short_name: &[u8],
-        _account_names: &[Vec<u8>],
-        _nonce: &Nonce,
-        _signature: &Signature,
-        _actor_cid_number: &[u8],
-        _credential_signer_pubkey: &[u8; 32],
-        _scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-        _town_code: &[u8],
-    ) -> bool {
-        false
-    }
-
-    fn verify_institution_account_close(
-        _cid_number: &[u8],
-        _account_name: &[u8],
-        _target_account: &AccountId,
-        _nonce: &Nonce,
-        _signature: &Signature,
-        _credential_issuer_cid_number: &[u8],
-        _credential_signer_pubkey: &[u8; 32],
-    ) -> bool {
-        false
-    }
-}
-
-/// 注册局登记权限抽象。
-///
-/// 新创建机构只认交易 `origin + actor_cid_number`:管理员钱包签最终链交易一次,
-/// runtime 再确认该 `origin` 是 actor 机构的 active admin 且有登记目标机构权限。
-/// 旧的凭证形态仅供改名、增账户、关闭命名账户等尚未收敛的维护 call 使用,不得用于
-/// 新创建机构流程。
+/// 机构登记、改名、增账户、登记管理员集合统一只认交易 `origin + actor_cid_number`:
+/// 发起管理员钱包签这笔链交易一次,runtime 再确认该 `origin` 是 actor(注册局)机构的
+/// active admin 且有对目标机构的登记权(省/市作用域由目标 CID 直接派生,不再取签名参数)。
 pub trait RegistryAuthority<AccountId> {
-    /// 当前 origin 是否可代表 actor CID 创建目标机构。
+    /// 当前 origin 是否可代表 actor CID 登记/维护目标机构。
     fn can_register_institution_origin(
         registrar: &AccountId,
         actor_cid_number: &[u8],
         target_cid_number: &[u8],
         target_institution_code: InstitutionCode,
-    ) -> bool {
-        let _ = (
-            registrar,
-            actor_cid_number,
-            target_cid_number,
-            target_institution_code,
-        );
-        false
-    }
-
-    /// 当前 origin 是否可按签发凭证登记目标机构。
-    fn can_register_institution(
-        registrar: &AccountId,
-        actor_cid_number: &[u8],
-        credential_signer_pubkey: &[u8; 32],
-        target_cid_number: &[u8],
-        target_institution_code: InstitutionCode,
-        scope_province_name: &[u8],
-        scope_city_name: &[u8],
     ) -> bool;
 }
 
@@ -410,18 +284,6 @@ impl<AccountId> RegistryAuthority<AccountId> for () {
         _actor_cid_number: &[u8],
         _target_cid_number: &[u8],
         _target_institution_code: InstitutionCode,
-    ) -> bool {
-        false
-    }
-
-    fn can_register_institution(
-        _registrar: &AccountId,
-        _actor_cid_number: &[u8],
-        _credential_signer_pubkey: &[u8; 32],
-        _target_cid_number: &[u8],
-        _target_institution_code: InstitutionCode,
-        _scope_province_name: &[u8],
-        _scope_city_name: &[u8],
     ) -> bool {
         false
     }

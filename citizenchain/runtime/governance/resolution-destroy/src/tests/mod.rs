@@ -8,7 +8,7 @@ use frame_support::{
 use frame_system as system;
 use primitives::cid::china::{china_cb::CHINA_CB, china_ch::CHINA_CH};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
-use votingengine::{InstitutionRoleProvider as _, InternalAdminProvider as _};
+use votingengine::InstitutionRoleProvider as _;
 use votingengine::{STATUS_PASSED, STATUS_REJECTED};
 
 type Balance = u128;
@@ -88,18 +88,9 @@ impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityRea
 }
 
 pub struct TestInternalAdminProvider;
-impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-    fn is_institution_admin(
-        institution_code: InstitutionCode,
-        cid_number: &[u8],
-        who: &AccountId32,
-    ) -> bool {
-        Self::get_institution_admins(institution_code, cid_number)
-            .map(|admins| admins.contains(who))
-            .unwrap_or(false)
-    }
 
-    fn get_institution_admins(
+impl TestInternalAdminProvider {
+    fn institution_admins(
         institution_code: InstitutionCode,
         cid_number: &[u8],
     ) -> Option<sp_std::vec::Vec<AccountId32>> {
@@ -114,6 +105,18 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
                 .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
             _ => None,
         }
+    }
+}
+
+impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
+    fn is_institution_admin(
+        institution_code: InstitutionCode,
+        cid_number: &[u8],
+        who: &AccountId32,
+    ) -> bool {
+        Self::institution_admins(institution_code, cid_number)
+            .map(|admins| admins.contains(who))
+            .unwrap_or(false)
     }
 }
 
@@ -150,7 +153,7 @@ impl votingengine::InstitutionRoleProvider<AccountId32> for TestInstitutionRoleP
         if test_role_code(code) != Some(role_code) {
             return Vec::new();
         }
-        TestInternalAdminProvider::get_institution_admins(code, cid_number).unwrap_or_default()
+        TestInternalAdminProvider::institution_admins(code, cid_number).unwrap_or_default()
     }
 }
 

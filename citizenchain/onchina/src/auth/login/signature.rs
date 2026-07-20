@@ -5,7 +5,6 @@
 
 use hex::FromHex;
 use schnorrkel::{signing_context, PublicKey as Sr25519PublicKey, Signature as Sr25519Signature};
-use sp_core::Pair;
 
 use crate::*;
 
@@ -52,32 +51,6 @@ pub(crate) fn verify_admin_signature_bytes(
     };
     let ctx = signing_context(b"substrate");
     pubkey.verify(ctx.bytes(message), &signature).is_ok()
-}
-
-pub(super) fn build_login_qr_system_signature(
-    state: &AppState,
-    system: &str,
-    challenge: &str,
-    issued_at: i64,
-    expires_at: i64,
-) -> Result<(String, String), String> {
-    // 登录二维码的"系统签名"由 OnChina 平台系统签名密钥产出。
-    // 它只签平台挑战,不代表任何机构管理员,也不代替管理员冷钱包签名。
-    let main_seed_hex = std::env::var("ONCHINA_SIGNING_SEED_HEX")
-        .map_err(|_| "ONCHINA_SIGNING_SEED_HEX not set".to_string())?;
-    let signer = crate::crypto::sr25519::try_load_signing_key_from_seed(main_seed_hex.as_str())?;
-    let sys_pubkey = format!("0x{}", hex::encode(signer.public().0));
-    let _ = state; // 签名走 env + crypto helper,不取自 state
-    let message = crate::core::qr::build_signature_message(
-        crate::core::qr::QrKind::SignRequest,
-        challenge,
-        Some(system),
-        Some(expires_at),
-        &sys_pubkey,
-    );
-    let _ = issued_at; // 统一签名原文不包含 issued_at
-    let signature = signer.sign(message.as_bytes());
-    Ok((sys_pubkey, format!("0x{}", hex::encode(signature.0))))
 }
 
 /// 解析 Sr25519 公钥，返回统一格式 `0x` + 64 位小写 hex。

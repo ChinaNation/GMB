@@ -2,4 +2,5 @@
 
 export { AccountList } from './AccountList';
 export { CreateAccountModal } from './CreateAccountModal';
+export { AccountManageSection } from './AccountManageSection';
 export type { InstitutionAccount } from './api';

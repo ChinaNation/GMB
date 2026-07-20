@@ -15,34 +15,23 @@ use frame_support::{
 };
 use primitives::institution_asset::{InstitutionAsset, InstitutionAssetAction};
 use primitives::{account_derive::RESERVED_NAME_FEE, fee_policy::OnchainFeeCharger};
-use sp_runtime::{
-    traits::{Hash, Zero},
-    DispatchResult,
-};
+use sp_runtime::{traits::Zero, DispatchResult};
 use votingengine::InternalVoteEngine;
 
 use crate::institution::types::CloseInstitutionAction;
 use crate::pallet::{
     AccountRegisteredCid, CidNumberOf, Config, Error, Event, InstitutionAccounts,
-    InstitutionPendingClose, Pallet, RegisterNonceOf, RegisterSignatureOf, UsedDeregisterNonce,
-    ACTION_CLOSE,
+    InstitutionPendingClose, Pallet, ACTION_CLOSE,
 };
-use crate::traits::{
-    AccountValidator, CidInstitutionVerifier, ProtectedSourceChecker, ReservedAccountGuard,
-};
+use crate::traits::{AccountValidator, ProtectedSourceChecker, ReservedAccountGuard};
 use crate::{BalanceOf, RoleCodeOf};
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn do_propose_institution_close<T: Config>(
     who: T::AccountId,
     actor_cid_number: CidNumberOf<T>,
     proposer_role_code: RoleCodeOf,
     institution_account: T::AccountId,
     beneficiary: T::AccountId,
-    register_nonce: RegisterNonceOf<T>,
-    signature: RegisterSignatureOf<T>,
-    credential_issuer_cid_number: alloc::vec::Vec<u8>,
-    credential_signer_pubkey: [u8; 32],
 ) -> DispatchResult {
     let registered = AccountRegisteredCid::<T>::get(&institution_account)
         .ok_or(Error::<T>::NotInstitutionAccount)?;
@@ -94,23 +83,6 @@ pub(crate) fn do_propose_institution_close<T: Config>(
         Error::<T>::InvalidBeneficiary
     );
 
-    let nonce_hash = <T as frame_system::Config>::Hashing::hash(register_nonce.as_slice());
-    ensure!(
-        !UsedDeregisterNonce::<T>::get(nonce_hash),
-        Error::<T>::DeregisterNonceAlreadyUsed
-    );
-    ensure!(
-        T::CidInstitutionVerifier::verify_institution_account_close(
-            actor_cid_number.as_slice(),
-            registered.account_name.as_slice(),
-            &institution_account,
-            &register_nonce,
-            &signature,
-            credential_issuer_cid_number.as_slice(),
-            &credential_signer_pubkey,
-        ),
-        Error::<T>::InvalidDeregisterCredential
-    );
     ensure!(
         !InstitutionPendingClose::<T>::contains_key(&institution_account),
         Error::<T>::CloseAlreadyPending
@@ -145,7 +117,6 @@ pub(crate) fn do_propose_institution_close<T: Config>(
         vote_plan,
         data,
     )?;
-    UsedDeregisterNonce::<T>::insert(nonce_hash, true);
     InstitutionPendingClose::<T>::insert(&institution_account, proposal_id);
 
     Pallet::<T>::deposit_event(Event::<T>::InstitutionCloseProposed {

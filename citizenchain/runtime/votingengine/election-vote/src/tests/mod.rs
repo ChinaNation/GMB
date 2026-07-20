@@ -156,14 +156,6 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
             && cid_number == organizer_cid_number().as_slice()
             && *who == organizer_admin()
     }
-
-    fn get_institution_admins(
-        institution_code: InstitutionCode,
-        cid_number: &[u8],
-    ) -> Option<Vec<AccountId32>> {
-        (institution_code == TARGET_CODE && cid_number == target_cid_number().as_slice())
-            .then(target_admins)
-    }
 }
 
 impl InstitutionRoleProvider<AccountId32> for TestInstitutionRoleProvider {

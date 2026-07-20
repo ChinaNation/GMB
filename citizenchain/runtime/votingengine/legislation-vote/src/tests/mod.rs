@@ -215,13 +215,6 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             .unwrap_or(false)
     }
 
-    fn get_institution_admins(
-        institution_code: primitives::cid::code::InstitutionCode,
-        cid_number: &[u8],
-    ) -> Option<sp_runtime::sp_std::vec::Vec<AccountId32>> {
-        Self::institution_admins(institution_code, cid_number)
-    }
-
     /// 法定代表人:众议长=house1[member 1] / 参议长=house2[member 11] / 院长=leg_rep / 行政首长=exec_rep。
     fn legal_representative(cid_number: &[u8]) -> Option<AccountId32> {
         if cid_number == house1_cid().as_slice() {

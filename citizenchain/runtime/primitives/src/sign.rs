@@ -5,7 +5,6 @@
 //! 只使用 `GMB || op_tag` 前缀。Dart/TS 镜像必须与本文件和金标向量保持一致。
 
 use crate::core_const::GMB; // 域分隔符(地址派生 + 签名共用),单源在 core_const
-use codec::Encode;
 use sp_core::hashing::blake2_256;
 use sp_std::vec::Vec;
 
@@ -50,9 +49,13 @@ pub const fn qr_chain_action(pallet_index: u8, call_index: u8) -> u16 {
 
 /// 公民档案上链确认。
 pub const OP_SIGN_CITIZEN_IDENTITY: u8 = 0x10;
-/// CID 机构登记。
+/// CID 机构登记(历史 op_tag,已无独立凭证构造入口;仅作为四端 `SIGN_OP_TAGS` 金标
+/// 注册表成员保留,删除会扰动四端字节契约与金标向量)。
 pub const OP_SIGN_INST: u8 = 0x13;
-/// CID 机构/账户注销凭证(注册局签发,链端 close 验签)。
+/// CID 机构/账户注销凭证(历史 op_tag)。注册局审批凭证已删除,机构自定义账户关闭改为
+/// 机构在册管理员直接冷签 `propose_close`(不含凭证),链端在 origin 处以 `is_institution_admin`
+/// 鉴权。本常量已无 message 构造入口,仅作为四端 `SIGN_OP_TAGS` 金标注册表成员保留,
+/// 删除会扰动四端字节契约与金标向量。
 pub const OP_SIGN_DEREGISTER: u8 = 0x14;
 
 /// L3 支付。
@@ -172,117 +175,9 @@ pub fn signing_message(op_tag: u8, scale_payload: &[u8]) -> [u8; 32] {
     blake2_256(&data)
 }
 
-/// CID 机构登记凭证消息唯一构造入口。
-#[allow(clippy::too_many_arguments)]
-pub fn institution_registration_message<Hash: Encode, Nonce: AsRef<[u8]>>(
-    genesis_hash: &Hash,
-    cid_number: &[u8],
-    cid_full_name: &[u8],
-    cid_short_name: &[u8],
-    account_names: &[Vec<u8>],
-    nonce: &Nonce,
-    actor_cid_number: &[u8],
-    credential_signer_pubkey: &[u8; 32],
-    scope_province_name: &[u8],
-    scope_city_name: &[u8],
-    town_code: &[u8],
-) -> [u8; 32] {
-    let payload = (
-        genesis_hash,
-        cid_number,
-        cid_full_name,
-        cid_short_name,
-        account_names,
-        nonce.as_ref(),
-        actor_cid_number,
-        credential_signer_pubkey,
-        scope_province_name,
-        scope_city_name,
-        town_code,
-    );
-    signing_message(OP_SIGN_INST, &payload.encode())
-}
-
-/// CID 机构创建凭证消息唯一构造入口。
-#[allow(clippy::too_many_arguments)]
-pub fn institution_creation_message<Hash: Encode, Nonce: AsRef<[u8]>>(
-    genesis_hash: &Hash,
-    cid_number: &[u8],
-    cid_full_name: &[u8],
-    cid_short_name: &[u8],
-    admins_payload: &[u8],
-    nonce: &Nonce,
-    actor_cid_number: &[u8],
-    credential_signer_pubkey: &[u8; 32],
-    scope_province_name: &[u8],
-    scope_city_name: &[u8],
-    town_code: &[u8],
-) -> [u8; 32] {
-    let payload = (
-        genesis_hash,
-        cid_number,
-        cid_full_name,
-        cid_short_name,
-        admins_payload,
-        nonce.as_ref(),
-        actor_cid_number,
-        credential_signer_pubkey,
-        scope_province_name,
-        scope_city_name,
-        town_code,
-    );
-    signing_message(OP_SIGN_INST, &payload.encode())
-}
-
-/// CID 机构治理凭证消息唯一构造入口。
-///
-/// `governance_payload` 是链上统一治理 action 的 SCALE 字节；调用方不得拆字段
-/// 另造第二套签名材料。
-#[allow(clippy::too_many_arguments)]
-pub fn institution_governance_message<Hash: Encode, Nonce: AsRef<[u8]>>(
-    genesis_hash: &Hash,
-    cid_number: &[u8],
-    governance_payload: &[u8],
-    nonce: &Nonce,
-    actor_cid_number: &[u8],
-    credential_signer_pubkey: &[u8; 32],
-    scope_province_name: &[u8],
-    scope_city_name: &[u8],
-) -> [u8; 32] {
-    let payload = (
-        genesis_hash,
-        cid_number,
-        governance_payload,
-        nonce.as_ref(),
-        actor_cid_number,
-        credential_signer_pubkey,
-        scope_province_name,
-        scope_city_name,
-    );
-    signing_message(OP_SIGN_INST, &payload.encode())
-}
-
-/// CID 机构自定义账户关闭凭证消息唯一构造入口。
-pub fn institution_account_close_message<Hash: Encode, AccountId: Encode, Nonce: AsRef<[u8]>>(
-    genesis_hash: &Hash,
-    cid_number: &[u8],
-    account_name: &[u8],
-    institution_account: &AccountId,
-    nonce: &Nonce,
-    credential_issuer_cid_number: &[u8],
-    credential_signer_pubkey: &[u8; 32],
-) -> [u8; 32] {
-    let payload = (
-        genesis_hash,
-        cid_number,
-        account_name,
-        institution_account,
-        nonce.as_ref(),
-        credential_issuer_cid_number,
-        credential_signer_pubkey,
-    );
-    signing_message(OP_SIGN_DEREGISTER, &payload.encode())
-}
+// 机构登记/创建/治理/账户关闭均已收敛为「发起管理员钱包直接冷签一笔普通 extrinsic」,由 runtime
+// 在 origin 处以 `is_institution_admin` 鉴权,不再有任何独立凭证签名消息。原
+// `institution_account_close_message`(注册局审批凭证)连同 OnChina 平台签名钥已整体删除。
 
 #[cfg(test)]
 mod tests {

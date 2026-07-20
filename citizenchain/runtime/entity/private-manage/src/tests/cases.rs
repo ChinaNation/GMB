@@ -315,12 +315,7 @@ fn update_and_add_account_keep_cid_as_the_target_key() {
             cid_number.clone(),
             account_name("更新后的机构全称".as_bytes()),
             account_name("更新简称".as_bytes()),
-            register_nonce(b"update-nonce"),
-            valid_signature(),
             b"GD001-FRG00-000000001-2026".to_vec(),
-            [7u8; 32],
-            "广东省".as_bytes().to_vec(),
-            "荔湾市".as_bytes().to_vec(),
         ));
         assert_eq!(
             pallet::Institutions::<Test>::get(&cid_number)
@@ -335,12 +330,7 @@ fn update_and_add_account_keep_cid_as_the_target_key() {
             RuntimeOrigin::signed(registrar()),
             cid_number.clone(),
             names,
-            register_nonce(b"add-account-nonce"),
-            valid_signature(),
             b"GD001-FRG00-000000001-2026".to_vec(),
-            [7u8; 32],
-            "广东省".as_bytes().to_vec(),
-            "荔湾市".as_bytes().to_vec(),
         ));
         let named_account = account_of(&cid_number, "专项账户".as_bytes());
         assert_eq!(
@@ -375,10 +365,6 @@ fn only_named_account_can_be_closed_and_institution_stays_alive() {
             b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits"),
             named_account.clone(),
             beneficiary(),
-            register_nonce(b"close-named-nonce"),
-            close_signature(),
-            b"GD001-FRG00-000000001-2026".to_vec(),
-            [7u8; 32],
         ));
         let proposal_id = VotingEngine::next_proposal_id().saturating_sub(1);
         assert_ok!(cast_yes_votes(proposal_id));
@@ -426,10 +412,6 @@ fn rejected_close_is_cleaned_only_by_votingengine_callback() {
             b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits"),
             named_account.clone(),
             beneficiary(),
-            register_nonce(b"close-rejected-nonce"),
-            close_signature(),
-            b"GD001-FRG00-000000001-2026".to_vec(),
-            [7u8; 32],
         ));
         let proposal_id = VotingEngine::next_proposal_id().saturating_sub(1);
         assert_eq!(
@@ -475,10 +457,6 @@ fn protocol_account_close_is_rejected() {
                 b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits"),
                 main_account,
                 beneficiary(),
-                register_nonce(b"close-main-nonce"),
-                close_signature(),
-                b"GD001-FRG00-000000001-2026".to_vec(),
-                [7u8; 32],
             ),
             pallet::Error::<Test>::CannotCloseProtectedInstitution
         );
@@ -508,10 +486,6 @@ fn account_operation_rejects_actor_cid_mismatch() {
                 crate::RoleCodeOf::default(),
                 named_account,
                 beneficiary(),
-                register_nonce(b"wrong-actor-nonce"),
-                close_signature(),
-                b"GD001-FRG00-000000001-2026".to_vec(),
-                [7u8; 32],
             ),
             pallet::Error::<Test>::NotInstitutionAccount
         );
@@ -540,10 +514,6 @@ fn non_admin_cannot_start_institution_account_close() {
                 b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits"),
                 named_account,
                 beneficiary(),
-                register_nonce(b"non-admin-close"),
-                close_signature(),
-                b"GD001-FRG00-000000001-2026".to_vec(),
-                [7u8; 32],
             ),
             pallet::Error::<Test>::PermissionDenied
         );

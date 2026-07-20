@@ -672,48 +672,8 @@ pub(crate) async fn prepare_institution_governance(
         }
     };
     let action_payload = action.encode();
-    let nonce = format!("onchina-governance-{}", Uuid::new_v4());
-    let province = ctx.scope_province_name.clone().unwrap_or_default();
-    let city = ctx.scope_city_name.clone().unwrap_or_default();
-    let credential = match crate::core::chain_runtime::build_institution_governance_credential(
-        &state,
-        cid_number,
-        cid_number,
-        &action_payload,
-        nonce,
-        province.as_str(),
-        city.as_str(),
-    ) {
-        Ok(v) => v,
-        Err(err) => {
-            tracing::error!(error = %err, "build governance credential failed");
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "机构治理凭证签发失败",
-            );
-        }
-    };
-    let signature = match hex::decode(credential.signature.trim_start_matches("0x")) {
-        Ok(v) => v,
-        Err(_) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "治理凭证签名格式错误",
-            )
-        }
-    };
-    let signer = match parse_sr25519_pubkey_bytes(&credential.credential_signer_pubkey) {
-        Some(v) => v,
-        None => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "治理凭证签发公钥格式错误",
-            )
-        }
-    };
+    // 机构治理已收敛为「发起管理员钱包直接冷签这笔 extrinsic」:不再由平台钥签发独立凭证,
+    // 授权由 runtime 在 origin 处以 `is_institution_admin`(本机构管理员)+ 岗位码校验。
     let code = match code_bytes(&inst.institution_code) {
         Ok(v) => v,
         Err(resp) => return resp,
@@ -722,13 +682,8 @@ pub(crate) async fn prepare_institution_governance(
         cid_number: cid_number.as_bytes().to_vec(),
         governance_action: action_payload,
         institution_code: code,
-        register_nonce: credential.register_nonce.as_bytes().to_vec(),
-        signature,
         actor_cid_number: cid_number.as_bytes().to_vec(),
         proposer_role_code: proposer_role_code.as_bytes().to_vec(),
-        credential_signer_pubkey: signer,
-        scope_province_name: province.as_bytes().to_vec(),
-        scope_city_name: city.as_bytes().to_vec(),
     });
     let output = match build_chain_sign_output(
         &state,
@@ -796,56 +751,14 @@ pub(crate) async fn prepare_register_institution_admins(
     }) else {
         return api_error(StatusCode::NOT_FOUND, 1004, "机构不存在");
     };
-    let (admin_args, action_admins) = match parse_admin_inputs(&state, &input.admins) {
+    // 只取 call 载荷用的 admin_args;action_admins(治理 action)原仅用于平台钥凭证签名,已删。
+    let (admin_args, _action_admins) = match parse_admin_inputs(&state, &input.admins) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let action = entity_primitives::InstitutionGovernanceAction::ReplaceAdmins {
-        admins: action_admins,
-    };
-    let action_payload = action.encode();
-    let nonce = format!("onchina-register-admins-{}", Uuid::new_v4());
-    let province = ctx.scope_province_name.clone().unwrap_or_default();
-    let city = ctx.scope_city_name.clone().unwrap_or_default();
-    let credential = match crate::core::chain_runtime::build_institution_governance_credential(
-        &state,
-        binding.institution_cid_number.as_str(),
-        cid_number,
-        &action_payload,
-        nonce,
-        province.as_str(),
-        city.as_str(),
-    ) {
-        Ok(v) => v,
-        Err(err) => {
-            tracing::error!(error = %err, "build register admins credential failed");
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "管理员登记凭证签发失败",
-            );
-        }
-    };
-    let signature = match hex::decode(credential.signature.trim_start_matches("0x")) {
-        Ok(v) => v,
-        Err(_) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "管理员登记凭证签名格式错误",
-            )
-        }
-    };
-    let signer = match parse_sr25519_pubkey_bytes(&credential.credential_signer_pubkey) {
-        Some(v) => v,
-        None => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "管理员登记凭证签发公钥格式错误",
-            )
-        }
-    };
+    // 管理员登记已收敛为「注册局管理员钱包直接冷签这笔 extrinsic」:不再由平台钥签发独立凭证,
+    // 授权由 runtime 在 origin 处以 `can_register_institution_origin`(注册局在册管理员 +
+    // 对目标机构有登记权)校验。
     let code = match code_bytes(&inst.institution_code) {
         Ok(v) => v,
         Err(resp) => return resp,
@@ -854,12 +767,7 @@ pub(crate) async fn prepare_register_institution_admins(
         cid_number: cid_number.as_bytes().to_vec(),
         admins: admin_args,
         institution_code: code,
-        register_nonce: credential.register_nonce.as_bytes().to_vec(),
-        signature,
         actor_cid_number: binding.institution_cid_number.as_bytes().to_vec(),
-        credential_signer_pubkey: signer,
-        scope_province_name: province.as_bytes().to_vec(),
-        scope_city_name: city.as_bytes().to_vec(),
     });
     let output = match build_chain_sign_output(
         &state,

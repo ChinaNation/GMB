@@ -15,7 +15,6 @@ export type AdminActionType =
   | 'INSTITUTION_UPDATE'
   | 'INSTITUTION_CREATE_ACCOUNT'
   | 'INSTITUTION_DELETE_ACCOUNT'
-  | 'INSTITUTION_ACCOUNT_DEREGISTER'
   | 'INSTITUTION_UPLOAD_DOCUMENT'
   | 'INSTITUTION_DELETE_DOCUMENT'
   | 'NODE_BINDING_UNBIND'
@@ -128,6 +127,19 @@ export async function securityGrantSubmitHeaders(
   return {
     ...baseHeaders,
     [SECURITY_GRANT_HEADER]: securityGrant.grant_id,
+    [PASSKEY_ASSERTION_HEADER]: passkeyAssertion,
+  };
+}
+
+// 本地写(Passkey 档)提交头:只需当前管理员本机 passkey 断言,不走 prepare/扫码签名/commit。
+// 后端 require_admin_security_grant 对 Passkey 档只校验 passkey 断言 + 角色,不消费冷签 grant。
+export async function passkeySubmitHeaders(
+  auth: AdminAuth,
+  baseHeaders: Record<string, string> = {},
+): Promise<Record<string, string>> {
+  const passkeyAssertion = await assertPasskey(auth);
+  return {
+    ...baseHeaders,
     [PASSKEY_ASSERTION_HEADER]: passkeyAssertion,
   };
 }

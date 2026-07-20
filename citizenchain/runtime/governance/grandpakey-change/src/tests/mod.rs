@@ -9,8 +9,8 @@ use frame_system as system;
 use primitives::cid::china::china_cb::CHINA_CB;
 use sp_core::{Pair, Void};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
+use votingengine::InstitutionRoleProvider as _;
 use votingengine::STATUS_EXECUTION_FAILED;
-use votingengine::{InstitutionRoleProvider as _, InternalAdminProvider as _};
 
 type Block = frame_system::mocking::MockBlock<Test>;
 
@@ -88,6 +88,26 @@ impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityRea
 
 pub struct TestInternalAdminProvider;
 
+impl TestInternalAdminProvider {
+    fn institution_admins(
+        institution_code: InstitutionCode,
+        cid_number: &[u8],
+    ) -> Option<sp_std::vec::Vec<AccountId32>> {
+        match institution_code {
+            NRC | PRC => CHINA_CB
+                .iter()
+                .find(|node| node.cid_number.as_bytes() == cid_number)
+                .map(|node| {
+                    node.admins
+                        .iter()
+                        .map(|raw| AccountId32::new(*raw))
+                        .collect()
+                }),
+            _ => None,
+        }
+    }
+}
+
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
     fn is_institution_admin(
         institution_code: InstitutionCode,
@@ -103,24 +123,6 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
                 .map(|node| node.admins.iter().any(|admin| *admin == who_raw))
                 .unwrap_or(false),
             _ => false,
-        }
-    }
-
-    fn get_institution_admins(
-        institution_code: InstitutionCode,
-        cid_number: &[u8],
-    ) -> Option<sp_std::vec::Vec<AccountId32>> {
-        match institution_code {
-            NRC | PRC => CHINA_CB
-                .iter()
-                .find(|node| node.cid_number.as_bytes() == cid_number)
-                .map(|node| {
-                    node.admins
-                        .iter()
-                        .map(|raw| AccountId32::new(*raw))
-                        .collect()
-                }),
-            _ => None,
         }
     }
 }
@@ -149,7 +151,7 @@ impl votingengine::InstitutionRoleProvider<AccountId32> for TestInstitutionRoleP
         else {
             return Vec::new();
         };
-        TestInternalAdminProvider::get_institution_admins(code, cid_number).unwrap_or_default()
+        TestInternalAdminProvider::institution_admins(code, cid_number).unwrap_or_default()
     }
 }
 

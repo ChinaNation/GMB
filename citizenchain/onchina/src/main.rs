@@ -35,7 +35,7 @@ mod genesis {
 
 pub(crate) use crate::core::http_security::*;
 pub(crate) use crate::core::response::*;
-pub(crate) use crate::core::{db::Db, secret::SensitiveSeed};
+pub(crate) use crate::core::db::Db;
 pub(crate) use auth::login::{parse_sr25519_pubkey, parse_sr25519_pubkey_bytes, require_admin_any};
 pub(crate) use auth::model::*;
 pub(crate) use cid::model::*;
@@ -2017,15 +2017,9 @@ fn main() {
     disable_core_dumps();
     let command = parse_backend_command();
 
-    // `ONCHINA_SIGNING_SEED_HEX` 是链上中国平台系统签名钥的**可选**配置,
-    // 不是节点/服务启动前提。任何区块链节点都可启动 OnChina;需要签登录 QR 挑战、
-    // 人口快照或机构注册凭证的操作才按需读取它。鉴权真源是链上 Active 管理员集合。
-    if let Ok(seed_hex) = std::env::var("ONCHINA_SIGNING_SEED_HEX") {
-        if !seed_hex.trim().is_empty() {
-            crypto::sr25519::try_load_signing_key_from_seed(seed_hex.as_str())
-                .unwrap_or_else(|e| panic!("invalid ONCHINA_SIGNING_SEED_HEX: {e}"));
-        }
-    }
+    // OnChina 后端不再持有任何链上签名钥:机构操作全部由发起管理员钱包直接冷签,
+    // 鉴权真源是链上 Active 管理员集合。原平台签名钥 `ONCHINA_SIGNING_SEED_HEX`
+    // (仅用于签发注销凭证)已随注销凭证链路整体删除。
     // (Card 05):桌面/小市内嵌私有 PostgreSQL——onchina 自管 initdb/起停,
     // 自拼本机 DATABASE_URL;大市外部托管 PG 时关 ONCHINA_EMBEDDED_PG,直接给 DATABASE_URL。
     let database_url = if core::embedded_pg::is_enabled() {
@@ -2453,10 +2447,6 @@ fn main() {
             .route(
                 "/api/v1/app/institutions/search",
                 get(institution::subjects::chain_multisig_info::app_search_institutions),
-            )
-            .route(
-                "/api/v1/app/institutions/:cid_number/deregistration-info",
-                get(institution::subjects::chain_multisig_info::app_get_institution_deregistration_info),
             )
             .route(
                 "/api/v1/app/institutions/:cid_number",

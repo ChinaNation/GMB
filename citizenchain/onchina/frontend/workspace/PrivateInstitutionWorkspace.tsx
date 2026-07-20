@@ -6,6 +6,7 @@
 import { Empty } from 'antd';
 import type { AdminAuth } from '../auth/types';
 import { OwnInstitutionAdminsView } from '../admins/RegistryAdminsView';
+import { AccountManageSection } from '../accounts/AccountManageSection';
 import { OwnInstitutionInfoPanel } from './judicial/JudicialDisplay';
 import { PlatformPricePanel } from '../membership/PlatformPricePanel';
 import { WorkspaceShell } from './WorkspaceShell';
@@ -15,10 +16,14 @@ export type PrivateInstitutionWorkspaceProps = {
 };
 
 function PrivateOperations({ auth }: PrivateInstitutionWorkspaceProps) {
-  if (auth.workspace?.workspace_modules.includes('platform_membership_price')) {
-    return <PlatformPricePanel auth={auth} />;
-  }
-  return <Empty description="当前机构暂无已开放操作" />;
+  // 账户管理归本机构在册管理员;平台会员定价仅在后端开放该模块时叠加显示。
+  const showPlatformPrice = auth.workspace?.workspace_modules.includes('platform_membership_price');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <AccountManageSection auth={auth} />
+      {showPlatformPrice ? <PlatformPricePanel auth={auth} /> : null}
+    </div>
+  );
 }
 
 function PrivateDisplay({ auth }: PrivateInstitutionWorkspaceProps) {

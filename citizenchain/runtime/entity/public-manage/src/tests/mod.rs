@@ -177,73 +177,10 @@ impl primitives::fee_policy::OnchainFeeCharger<AccountId32, Balance> for TestOnc
     }
 }
 
-/// CID 双层签名 mock:仅当 signature == b"register-ok"
-/// 且 nonce/cid_full_name/account_names/issuer/scope 字段都非空时通过。
-pub struct TestCidInstitutionVerifier;
-impl
-    crate::traits::CidInstitutionVerifier<
-        AccountId32,
-        crate::pallet::AccountNameOf<Test>,
-        crate::pallet::RegisterNonceOf<Test>,
-        crate::pallet::RegisterSignatureOf<Test>,
-    > for TestCidInstitutionVerifier
-{
-    fn verify_institution_registration(
-        cid_number: &[u8],
-        cid_full_name: &crate::pallet::AccountNameOf<Test>,
-        _cid_short_name: &[u8],
-        account_names: &[alloc::vec::Vec<u8>],
-        nonce: &crate::pallet::RegisterNonceOf<Test>,
-        signature: &crate::pallet::RegisterSignatureOf<Test>,
-        _actor_cid_number: &[u8],
-        credential_signer_pubkey: &[u8; 32],
-        scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-        _town_code: &[u8],
-    ) -> bool {
-        // account_names 可为空(改名 update_institution_info 无账户名);
-        // 登记入口自身已在 verifier 前拒空账户名。
-        let _ = account_names;
-        !cid_number.is_empty()
-            && !cid_full_name.is_empty()
-            && !nonce.is_empty()
-            && !scope_province_name.is_empty()
-            && credential_signer_pubkey != &[0u8; 32]
-            && signature.as_slice() == b"register-ok"
-    }
-
-    fn verify_institution_account_close(
-        cid_number: &[u8],
-        _account_name: &[u8],
-        _target_account: &AccountId32,
-        nonce: &crate::pallet::RegisterNonceOf<Test>,
-        signature: &crate::pallet::RegisterSignatureOf<Test>,
-        _credential_issuer_cid_number: &[u8],
-        credential_signer_pubkey: &[u8; 32],
-    ) -> bool {
-        !cid_number.is_empty()
-            && !nonce.is_empty()
-            && credential_signer_pubkey != &[0u8; 32]
-            && signature.as_slice() == b"deregister-ok"
-    }
-}
-
 /// 注册局权限 mock:本测试包只验证 public-manage 的机构登记行为,真实 FRG/CREG
-/// 省市边界由 runtime 配置层测试覆盖。
+/// 省市边界由 runtime 配置层测试覆盖。发起管理员(origin)必须是注册局在册管理员。
 pub struct TestRegistryAuthority;
 impl crate::traits::RegistryAuthority<AccountId32> for TestRegistryAuthority {
-    fn can_register_institution(
-        _registrar: &AccountId32,
-        _actor_cid_number: &[u8],
-        _credential_signer_pubkey: &[u8; 32],
-        target_cid_number: &[u8],
-        _target_institution_code: InstitutionCode,
-        scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-    ) -> bool {
-        !target_cid_number.is_empty() && !scope_province_name.is_empty()
-    }
-
     fn can_register_institution_origin(
         registrar: &AccountId32,
         actor_cid_number: &[u8],
@@ -279,13 +216,6 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         who: &AccountId32,
     ) -> bool {
         PublicAdmins::is_institution_admin(institution_code, cid_number, who)
-    }
-
-    fn get_institution_admins(
-        institution_code: InstitutionCode,
-        cid_number: &[u8],
-    ) -> Option<alloc::vec::Vec<AccountId32>> {
-        PublicAdmins::institution_admins(institution_code, cid_number)
     }
 }
 
@@ -462,7 +392,6 @@ impl pallet::Config for Test {
     type InstitutionAsset = TestInstitutionAsset;
     type InstitutionQuery = TestInstitutionQuery;
     type OnchainFeeCharger = TestOnchainFeeCharger;
-    type CidInstitutionVerifier = TestCidInstitutionVerifier;
     type RegistryAuthority = TestRegistryAuthority;
     type AdminLifecycle = PublicAdmins;
     type SiblingInstitutionQuery = ();
@@ -471,8 +400,6 @@ impl pallet::Config for Test {
     type MaxAdmins = ConstU32<10>;
     type MaxCidNumberLength = ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>;
     type MaxAccountNameLength = ConstU32<128>;
-    type MaxRegisterNonceLength = ConstU32<64>;
-    type MaxRegisterSignatureLength = ConstU32<64>;
     type MaxInstitutionAccounts = ConstU32<8>;
     type WeightInfo = ();
 }
@@ -560,26 +487,6 @@ pub fn account_name(s: &[u8]) -> pallet::AccountNameOf<Test> {
     BoundedVec::try_from(s.to_vec()).expect("account_name fits")
 }
 
-pub fn register_nonce(s: &[u8]) -> pallet::RegisterNonceOf<Test> {
-    BoundedVec::try_from(s.to_vec()).expect("register_nonce fits")
-}
-
-pub fn valid_signature() -> pallet::RegisterSignatureOf<Test> {
-    BoundedVec::try_from(b"register-ok".to_vec()).expect("sig fits")
-}
-
-pub fn invalid_signature() -> pallet::RegisterSignatureOf<Test> {
-    BoundedVec::try_from(b"bad-signature".to_vec()).expect("sig fits")
-}
-
-pub fn signer_pubkey() -> [u8; 32] {
-    [7u8; 32]
-}
-
-pub fn province_name() -> alloc::vec::Vec<u8> {
-    b"liaoning".to_vec()
-}
-
 pub fn account_names_bv(names: &[&[u8]]) -> pallet::InstitutionAccountNamesOf<Test> {
     let v: alloc::vec::Vec<pallet::AccountNameOf<Test>> =
         names.iter().map(|n| account_name(n)).collect();
@@ -610,21 +517,14 @@ pub fn cast_yes_votes(admins: &[AccountId32], n: usize, pid: u64) -> sp_runtime:
     Ok(())
 }
 
-/// 测试用:带一组通过 TestCidInstitutionVerifier 的注销凭证发起关闭。
-/// `nonce_seed` 区分同一测试内多次调用的 nonce,避免 `UsedDeregisterNonce` 冲突。
-pub fn close_with_cred(
+/// 测试用:以指定 actor CID + 管理员发起自定义账户关闭提案(propose_close 已不含凭证,
+/// 由 pallet 在 origin 处以 `is_institution_admin` 鉴权)。
+pub fn propose_named_account_close(
     origin: RuntimeOrigin,
     actor_cid_number: pallet::CidNumberOf<Test>,
     admin_account: AccountId32,
     beneficiary: AccountId32,
-    nonce_seed: u8,
 ) -> sp_runtime::DispatchResult {
-    let nonce: crate::pallet::RegisterNonceOf<Test> =
-        vec![nonce_seed, 0xDE].try_into().expect("nonce fits bound");
-    let signature: crate::pallet::RegisterSignatureOf<Test> = b"deregister-ok"
-        .to_vec()
-        .try_into()
-        .expect("sig fits bound");
     let proposer_role_code: crate::RoleCodeOf =
         b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits");
     PublicManage::propose_close_public_institution(
@@ -633,10 +533,6 @@ pub fn close_with_cred(
         proposer_role_code,
         admin_account,
         beneficiary,
-        nonce,
-        signature,
-        b"ISSUER-CID".to_vec(),
-        [9u8; 32],
     )
 }
 

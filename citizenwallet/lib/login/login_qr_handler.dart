@@ -1,10 +1,7 @@
 // CitizenWallet 公民钱包登录 QR 处理器:解析 QR_V1 登录签名请求、
-// 验证系统签名、构建 QR_V1 签名响应。
+// 构建 QR_V1 签名响应。平台系统签名已删,信任根 = 钱包签名验链上管理员集合。
 
 import 'dart:convert';
-import 'dart:typed_data';
-
-import 'package:sr25519/sr25519.dart' as sr25519;
 
 import 'package:citizenwallet/qr/qr_protocols.dart';
 import 'package:citizenwallet/qr/envelope.dart';
@@ -17,11 +14,11 @@ typedef LoginSignResponseEnvelope = QrEnvelope<SignResponseBody>;
 
 /// 展示用辅助:从登录签名请求中获取人可读系统名。
 String loginSystemDisplayName(LoginSignRequestEnvelope c) {
-  switch (_loginData(c).system.toLowerCase()) {
+  switch (_loginSystem(c).toLowerCase()) {
     case 'onchina':
       return '链上中国平台';
     default:
-      return _loginData(c).system.toUpperCase();
+      return _loginSystem(c).toUpperCase();
   }
 }
 
@@ -52,7 +49,7 @@ LoginSignRequestEnvelope parseLoginSignRequest(String raw) {
   if (now > (env.expiresAt ?? 0) + _maxClockSkewSeconds) {
     throw const LoginQrException('登录二维码已过期');
   }
-  _loginData(QrEnvelope<SignRequestBody>(
+  _loginSystem(QrEnvelope<SignRequestBody>(
     kind: QrKind.signRequest,
     id: env.id,
     issuedAt: env.issuedAt,
@@ -69,30 +66,12 @@ LoginSignRequestEnvelope parseLoginSignRequest(String raw) {
   );
 }
 
-/// 验证系统签名(确认 QR 确实由链上中国平台后端签发)。
-bool verifySystemSignature(LoginSignRequestEnvelope c) {
-  final data = _loginData(c);
-  final message = buildSignatureMessage(
-    kind: QrKind.signRequest,
-    id: c.id!,
-    system: data.system,
-    expiresAt: c.expiresAt,
-    principal: c.body.pubkeyHex,
-  );
-  return _verifySr25519Utf8(
-    pubkeyHex: c.body.pubkeyHex,
-    signatureHex: data.sysSig,
-    message: message,
-  );
-}
-
 /// 构建用户签名消息(CitizenWallet 钱包用自己的私钥签这串)。
 String buildSignMessage(LoginSignRequestEnvelope c, String pubkeyHex) {
-  final data = _loginData(c);
   return buildSignatureMessage(
     kind: QrKind.signResponse,
     id: c.id!,
-    system: data.system,
+    system: _loginSystem(c),
     expiresAt: c.expiresAt,
     principal: pubkeyHex,
   );
@@ -116,57 +95,13 @@ LoginSignResponseEnvelope buildLoginSignResponse({
   );
 }
 // 内部工具
-class _LoginRequestData {
-  const _LoginRequestData({required this.system, required this.sysSig});
-
-  final String system;
-  final String sysSig;
-}
-
-_LoginRequestData _loginData(LoginSignRequestEnvelope c) {
+// 登录 payload 固定为 `system` 的 UTF-8 字节(平台系统签名已删,无 sys_sig)。
+String _loginSystem(LoginSignRequestEnvelope c) {
   final text = utf8.decode(c.body.payloadBytes, allowMalformed: false);
-  final parts = text.split('|');
-  if (parts.length != 2 || parts[0] != 'onchina') {
+  if (text != 'onchina') {
     throw const LoginQrException('登录二维码载荷无效');
   }
-  if (!parts[1].startsWith('0x')) {
-    throw const LoginQrException('登录二维码系统签名无效');
-  }
-  return _LoginRequestData(system: parts[0], sysSig: parts[1]);
-}
-
-bool _verifySr25519Utf8({
-  required String pubkeyHex,
-  required String signatureHex,
-  required String message,
-}) {
-  try {
-    final pubBytes = Uint8List.fromList(_hexToBytes(_normalizeHex(pubkeyHex)));
-    final sigBytes =
-        Uint8List.fromList(_hexToBytes(_normalizeHex(signatureHex)));
-    final msgBytes = Uint8List.fromList(utf8.encode(message));
-    final publicKey = sr25519.PublicKey.newPublicKey(pubBytes);
-    final signature = sr25519.Signature.fromBytes(sigBytes);
-    final (verified, _) =
-        sr25519.Sr25519.verify(publicKey, signature, msgBytes);
-    return verified;
-  } catch (_) {
-    return false;
-  }
-}
-
-String _normalizeHex(String hex) {
-  final h = hex.trim().toLowerCase();
-  return h.startsWith('0x') ? h.substring(2) : h;
-}
-
-List<int> _hexToBytes(String hex) {
-  final h = _normalizeHex(hex);
-  final result = <int>[];
-  for (var i = 0; i < h.length; i += 2) {
-    result.add(int.parse(h.substring(i, i + 2), radix: 16));
-  }
-  return result;
+  return text;
 }
 
 class LoginQrException implements Exception {

@@ -135,25 +135,9 @@ impl Db {
              -- 链上成功后写正式投影;未链上成功不得保留本地业务占用。
              DROP TABLE IF EXISTS pending_institution_registrations;
 
-             CREATE TABLE IF NOT EXISTS institution_deregistrations (
-                id               BIGSERIAL PRIMARY KEY,
-                cid_number       TEXT NOT NULL,
-                account_name     TEXT NOT NULL,
-                target_account   TEXT NOT NULL,
-                deregister_nonce TEXT NOT NULL UNIQUE,
-                signature        TEXT,
-                credential_issuer_cid_number TEXT NOT NULL DEFAULT '',
-                credential_signer_pubkey     TEXT NOT NULL DEFAULT '',
-                status           TEXT NOT NULL DEFAULT 'ISSUED'
-                    CHECK (status IN ('ISSUED', 'ONCHAIN_CLOSED')),
-                issued_by        TEXT NOT NULL,
-                issued_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-                closed_at        TIMESTAMPTZ
-             );
-             CREATE INDEX IF NOT EXISTS idx_inst_dereg_cid
-                ON institution_deregistrations(cid_number, status);
-             CREATE UNIQUE INDEX IF NOT EXISTS idx_inst_dereg_target_active
-                ON institution_deregistrations(lower(target_account)) WHERE status = 'ISSUED';
+             -- 机构自定义账户关闭已改为「机构在册管理员直接冷签 propose_close(不含凭证)」,
+             -- 注册局审批凭证连同 OnChina 平台签名钥已整体删除;不再有本地注销凭证台账。
+             DROP TABLE IF EXISTS institution_deregistrations;
 
              CREATE TABLE IF NOT EXISTS admins (
                 admin_id BIGINT PRIMARY KEY,

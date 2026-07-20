@@ -39,19 +39,6 @@ const ADMIN_SECURITY_GRANT_TTL_SECONDS: i64 = 120;
 pub(crate) const ADMIN_SECURITY_GRANT_HEADER: &str = "x-cid-security-grant";
 
 #[derive(Debug, Deserialize)]
-struct InstitutionDeregisterInput {
-    cid_number: String,
-    account_name: String,
-}
-
-/// 注销动作校验通过后解析出的目标(供 apply 写态 + commit 建凭证)。
-struct DeregisterTarget {
-    cid_number: String,
-    account_name: String,
-    target_hex: String,
-}
-
-#[derive(Debug, Deserialize)]
 pub(crate) struct PrepareAdminActionInput {
     action_type: AdminActionType,
     payload: serde_json::Value,
@@ -375,7 +362,8 @@ pub(crate) async fn commit_admin_action(
     if let Err(resp) = ensure_action_role_allowed(&ctx, &action_type) {
         return resp;
     }
-    if action_type.is_session() || challenge.auth_type == AdminOperationAuth::Session {
+    // 防御:只读档(Session)不产生可 commit 的动作;历史残留 grant 一律拒绝。
+    if challenge.auth_type == AdminOperationAuth::Session {
         return api_error(
             StatusCode::BAD_REQUEST,
             1001,
@@ -418,8 +406,6 @@ pub(crate) async fn commit_admin_action(
     {
         return resp;
     }
-    // 闭包 move 会拿走 action_type,克隆一份供注销动作的 commit 后处理用。
-    let action_type_for_credential = action_type.clone();
     let result = state.db.with_client({
         let ctx = ctx.clone();
         let challenge = challenge.clone();
@@ -476,100 +462,6 @@ pub(crate) async fn commit_admin_action(
         Ok(v) => v,
         Err(err) => return admin_action_error(err),
     };
-    // ── 自定义账户注销动作：apply 已写 ISSUED 行，此处生成凭证并回填签名字段。
-    //    签发失败则删除该无签名 ISSUED 行,保持一致(不留无签名残行)。
-    if action_type_for_credential == AdminActionType::InstitutionAccountDeregister {
-        if let CommitAdminActionOutput::Applied(ref value) = output {
-            let cid_number = value
-                .get("cid_number")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string();
-            let account_name = value
-                .get("account_name")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string();
-            let target_hex = value
-                .get("target_account")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string();
-            let nonce = value
-                .get("deregister_nonce")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string();
-            let drop_issued = |state: &AppState, nonce: String| {
-                let _ = state.db.with_client(move |conn| {
-                    repo::delete_deregistration_by_nonce_conn(conn, &nonce)
-                });
-            };
-            let Some(target_32) = crate::auth::login::parse_sr25519_pubkey_bytes(&target_hex)
-            else {
-                drop_issued(&state, nonce);
-                return admin_action_error("http:internal:target account parse failed".to_string());
-            };
-            let credential_actor_cid_number = match repo::active_node_binding(&state.db) {
-                Ok(Some(binding)) => {
-                    if binding.institution_cid_number.trim().is_empty() {
-                        drop_issued(&state, nonce);
-                        return admin_action_error(
-                            "http:internal:active binding cid_number is required".to_string(),
-                        );
-                    }
-                    binding.institution_cid_number
-                }
-                Ok(None) => {
-                    drop_issued(&state, nonce);
-                    return admin_action_error(
-                        "http:internal:active institution binding is required".to_string(),
-                    );
-                }
-                Err(err) => {
-                    drop_issued(&state, nonce);
-                    return admin_action_error(format!(
-                        "http:internal:query active institution binding failed: {err}"
-                    ));
-                }
-            };
-            let cred = match crate::core::chain_runtime::build_institution_deregistration_credential(
-                &state,
-                &credential_actor_cid_number,
-                &cid_number,
-                &account_name,
-                &target_32,
-                nonce.clone(),
-            ) {
-                Ok(c) => c,
-                Err(err) => {
-                    drop_issued(&state, nonce);
-                    return admin_action_error(format!(
-                        "issue deregistration credential failed: {err}"
-                    ));
-                }
-            };
-            if let Err(err) = state.db.with_client({
-                let nonce = nonce.clone();
-                let signature = cred.signature.clone();
-                let issuer_cid = cred.credential_issuer_cid_number.clone();
-                let signer_pubkey = cred.credential_signer_pubkey.clone();
-                move |conn| {
-                    repo::set_deregistration_credential_conn(
-                        conn,
-                        &nonce,
-                        &signature,
-                        &issuer_cid,
-                        &signer_pubkey,
-                    )
-                }
-            }) {
-                return admin_action_error(format!(
-                    "persist deregistration credential failed: {err}"
-                ));
-            }
-        }
-    }
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -586,9 +478,7 @@ pub(crate) fn require_admin_security_grant(
     target: &str,
     request_payload: Option<&serde_json::Value>,
 ) -> Result<(), axum::response::Response> {
-    if action_type.is_session() {
-        return ensure_action_role_allowed(ctx, &action_type);
-    }
+    // 本地写(Passkey):会话 + passkey 断言 + 角色校验;不再有只会话的写动作。
     if action_type.auth_type() == AdminOperationAuth::Passkey {
         crate::auth::passkey::require_passkey_assertion(state, headers, &ctx.admin_account)?;
         return ensure_action_role_allowed(ctx, &action_type);
@@ -605,13 +495,6 @@ pub(crate) fn consume_admin_security_grant(
     target: &str,
     request_payload: Option<&serde_json::Value>,
 ) -> Result<AdminSecurityGrant, axum::response::Response> {
-    if action_type.is_session() {
-        return Err(api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "security grant is not available for session action",
-        ));
-    }
     // PasskeyColdSign 档:先消费 passkey 断言(fail-closed,绝不降档),再消费冷签 grant。
     crate::auth::passkey::require_passkey_assertion(state, headers, &ctx.admin_account)?;
     if action_type.auth_type() == AdminOperationAuth::Passkey {
@@ -719,20 +602,6 @@ fn preview_action_conn(
                 before_hash,
                 after_hash,
                 target: city_registry.admin_account,
-                auth_type: action_type.auth_type(),
-            })
-        }
-        AdminActionType::InstitutionAccountDeregister => {
-            let target = validate_institution_deregister_conn(conn, ctx, action_type, payload)?;
-            let after = json!({
-                "deregister": true,
-                "cid_number": target.cid_number,
-                "account_name": target.account_name,
-            });
-            Ok(ActionPreview {
-                before_hash: "none".to_string(),
-                after_hash: hash_json(&after),
-                target: target.target_hex.clone(),
                 auth_type: action_type.auth_type(),
             })
         }
@@ -917,59 +786,6 @@ fn validate_create_city_registry_conn(
     Ok((admin_account, family_name, given_name, city, created_by))
 }
 
-/// 机构自定义命名账户注销校验。协议账户永久存在，机构本身没有注销路径。
-fn validate_institution_deregister_conn(
-    conn: &mut Client,
-    ctx: &AdminAuthContext,
-    action_type: &AdminActionType,
-    payload: &serde_json::Value,
-) -> Result<DeregisterTarget, String> {
-    let input: InstitutionDeregisterInput = serde_json::from_value(payload.clone())
-        .map_err(|_| "http:bad_request:invalid deregister payload".to_string())?;
-    let cid_number = input.cid_number.trim().to_string();
-    if cid_number.is_empty() {
-        return Err("http:bad_request:cid_number is required".to_string());
-    }
-    let Some((inst, accounts)) = Db::get_institution_with_accounts_conn(conn, &cid_number)? else {
-        return Err("http:not_found:institution not found".to_string());
-    };
-    // 管辖:发起注册局管理员的可见域必须覆盖该机构所在省/市。
-    let visible = crate::scope::rules::get_visible_scope(ctx);
-    if !visible.includes_province(&inst.province_name)
-        || !visible.includes_city(&inst.city_name)
-        || !visible.includes_town(&inst.town_name)
-    {
-        return Err("http:forbidden:out of admin scope".to_string());
-    }
-    let account_name = match action_type {
-        AdminActionType::InstitutionAccountDeregister => input.account_name.trim().to_string(),
-        _ => return Err("http:bad_request:not a deregister action".to_string()),
-    };
-    let Some(kind) = primitives::account_derive::institution_kind_by_name(
-        cid_number.as_bytes(),
-        account_name.as_bytes(),
-    ) else {
-        return Err("http:bad_request:account_name is required".to_string());
-    };
-    if !kind.is_closable_institution_account() {
-        return Err("http:forbidden:protocol institution account cannot be closed".to_string());
-    }
-    // 账户存在性只按 CID + account_name 查找；链上关闭时由 runtime 再核对账户归属。
-    let _account = accounts
-        .iter()
-        .find(|a| a.account_name == account_name)
-        .ok_or_else(|| "http:not_found:account not found".to_string())?;
-    // target = derive_account(cid, account_name)(与链端 derive_account 同源,= propose_close 所关账户)。
-    let target_hex =
-        crate::institution::accounts::derive::derive_account(&cid_number, &account_name)
-            .ok_or_else(|| "http:internal:derive target account failed".to_string())?;
-    Ok(DeregisterTarget {
-        cid_number,
-        account_name,
-        target_hex,
-    })
-}
-
 fn validate_person_name(name: &str, field: &str) -> Result<String, String> {
     let name = name.trim();
     if name.is_empty() {
@@ -1027,32 +843,6 @@ fn apply_action_conn(
                 serde_json::from_value(challenge.request_payload.clone())
                     .map_err(|_| "http:bad_request:invalid delete payload".to_string())?;
             apply_delete_city_registry_conn(conn, ctx, &input)
-        }
-        AdminActionType::InstitutionAccountDeregister => {
-            let target = validate_institution_deregister_conn(
-                conn,
-                ctx,
-                &action_type,
-                &challenge.request_payload,
-            )?;
-            let nonce = format!("dereg-{}", Uuid::new_v4().simple());
-            // 凭证字段先空占位，commit 层生成签名后原子回填。
-            repo::insert_deregistration_issued_conn(
-                conn,
-                &target.cid_number,
-                &target.account_name,
-                &target.target_hex,
-                &nonce,
-                "",
-                "",
-                ctx.admin_account.as_str(),
-            )?;
-            Ok(json!({
-                "cid_number": target.cid_number,
-                "account_name": target.account_name,
-                "target_account": target.target_hex,
-                "deregister_nonce": nonce,
-            }))
         }
         AdminActionType::NodeBindingUnbind => apply_node_binding_unbind_conn(conn),
         _ => Err(

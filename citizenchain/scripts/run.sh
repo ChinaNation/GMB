@@ -61,13 +61,8 @@ export ONCHINA_ENABLE_TLS=1
 export ONCHINA_TLS_DIR="$HOME/Library/Application Support/gmb.dev/onchina-tls"
 # 公权机构目录只允许从链上投影到本地缓存;开发启动不再打开旧本地生成开关。
 # 链不可达或投影不可读时,链上中国按 fail-closed 不放行平台服务。
-
-# ── dev 平台签名与链上凭证签发配置(本地测试值)──
-# 这些变量只让本地能签登录 QR 挑战和链上凭证;节点启动、平台启动、
-#   以及管理员所属机构判断都不依赖它们。机构归属由管理员冷钱包登录后链上反查并绑定。
-export ONCHINA_SIGNING_SEED_HEX="${ONCHINA_SIGNING_SEED_HEX:-dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd}"
-export ONCHAIN_CREDENTIAL_ISSUER_CID_NUMBER="${ONCHAIN_CREDENTIAL_ISSUER_CID_NUMBER:-ZS001-FRG07-249474503-2026}"
-export ONCHAIN_CREDENTIAL_ISSUER_MAIN_ACCOUNT="${ONCHAIN_CREDENTIAL_ISSUER_MAIN_ACCOUNT:-0x406246b466028ae3cb89f36b70457478eca4ec224b2ad3f2122e5a0a407e642e}"
+# OnChina 后端不再持有任何链上签名钥:机构操作全部由管理员冷钱包直接冷签,
+# 原平台签名钥与注销凭证签发配置已随注销凭证链路整体删除。
 
 echo "==> 使用本地源码构建 runtime WASM，不下载 GitHub CI WASM..."
 echo "    节点启动产物目录: $TARGET_DIR"

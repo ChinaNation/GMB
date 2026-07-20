@@ -109,12 +109,7 @@ fn create_cgov_with_custom(tag: &str) -> pallet::CidNumberOf<Test> {
         RuntimeOrigin::signed(creator()),
         cid.clone(),
         account_names_bv(&[CUSTOM_ACCOUNT_NAME]),
-        register_nonce(format!("{tag}-custom").as_bytes()),
-        valid_signature(),
         b"REGISTRY-CID".to_vec(),
-        signer_pubkey(),
-        province_name(),
-        Vec::new(),
     ));
     assert_ok!(Balances::force_set_balance(
         RuntimeOrigin::root(),
@@ -367,12 +362,7 @@ fn update_info_and_add_account_keep_cid_as_only_entity_key() {
             cid.clone(),
             cid_full_name("更新后的机构全称".as_bytes()),
             cid_short_name("更新简称".as_bytes()),
-            register_nonce(b"rename"),
-            valid_signature(),
             b"REGISTRY-CID".to_vec(),
-            signer_pubkey(),
-            province_name(),
-            Vec::new(),
         ));
         let updated = pallet::Institutions::<Test>::get(&cid).expect("institution remains");
         assert_eq!(
@@ -385,12 +375,7 @@ fn update_info_and_add_account_keep_cid_as_only_entity_key() {
             RuntimeOrigin::signed(creator()),
             cid.clone(),
             account_names_bv(&[added_name]),
-            register_nonce(b"add-account"),
-            valid_signature(),
             b"REGISTRY-CID".to_vec(),
-            signer_pubkey(),
-            province_name(),
-            Vec::new(),
         ));
         let added = account_of(&cid, added_name);
         assert_eq!(
@@ -412,12 +397,7 @@ fn add_account_rejects_protocol_names_and_duplicate_custom_names() {
                 RuntimeOrigin::signed(creator()),
                 cid.clone(),
                 account_names_bv(&[RESERVED_NAME_MAIN]),
-                register_nonce(b"add-main"),
-                valid_signature(),
                 b"REGISTRY-CID".to_vec(),
-                signer_pubkey(),
-                province_name(),
-                Vec::new(),
             ),
             Error::<Test>::ReservedAccountName
         );
@@ -426,12 +406,7 @@ fn add_account_rejects_protocol_names_and_duplicate_custom_names() {
                 RuntimeOrigin::signed(creator()),
                 cid,
                 account_names_bv(&["重复账户".as_bytes(), "重复账户".as_bytes()]),
-                register_nonce(b"add-duplicate"),
-                valid_signature(),
                 b"REGISTRY-CID".to_vec(),
-                signer_pubkey(),
-                province_name(),
-                Vec::new(),
             ),
             Error::<Test>::DuplicateAccountName
         );
@@ -461,22 +436,20 @@ fn close_requires_matching_actor_cid_and_an_institution_admin() {
         let custom = account_of(&cid, CUSTOM_ACCOUNT_NAME);
         let other_cid = generated_cid("close-auth-other", "CGOV");
         assert_noop!(
-            close_with_cred(
+            propose_named_account_close(
                 RuntimeOrigin::signed(admin(0)),
                 other_cid,
                 custom.clone(),
                 beneficiary(),
-                1,
             ),
             Error::<Test>::NotInstitutionAccount
         );
         assert_noop!(
-            close_with_cred(
+            propose_named_account_close(
                 RuntimeOrigin::signed(admin(9)),
                 cid,
                 custom,
                 beneficiary(),
-                2,
             ),
             Error::<Test>::PermissionDenied
         );
@@ -492,12 +465,11 @@ fn protocol_accounts_cannot_be_closed() {
             account_of(&cid, RESERVED_NAME_FEE),
         ] {
             assert_noop!(
-                close_with_cred(
+                propose_named_account_close(
                     RuntimeOrigin::signed(admin(0)),
                     cid.clone(),
                     account,
                     beneficiary(),
-                    3,
                 ),
                 Error::<Test>::CannotCloseProtectedInstitution
             );
@@ -515,12 +487,11 @@ fn approved_close_removes_only_custom_account() {
         let beneficiary_account = beneficiary();
         let admin_balance_before = Balances::free_balance(admin(0));
 
-        assert_ok!(close_with_cred(
+        assert_ok!(propose_named_account_close(
             RuntimeOrigin::signed(admin(0)),
             cid.clone(),
             custom.clone(),
             beneficiary_account.clone(),
-            4,
         ));
         let proposal_id = last_proposal_id();
         assert_ok!(cast_yes_votes(&[admin(1), admin(2)], 2, proposal_id));
@@ -546,12 +517,11 @@ fn rejected_close_is_cleaned_only_by_votingengine_callback() {
         let cid = create_cgov_with_custom("close-rejected");
         let custom = account_of(&cid, CUSTOM_ACCOUNT_NAME);
 
-        assert_ok!(close_with_cred(
+        assert_ok!(propose_named_account_close(
             RuntimeOrigin::signed(admin(0)),
             cid.clone(),
             custom.clone(),
             beneficiary(),
-            5,
         ));
         let proposal_id = last_proposal_id();
         assert_eq!(
@@ -577,41 +547,25 @@ fn rejected_close_is_cleaned_only_by_votingengine_callback() {
 }
 
 #[test]
-fn close_rejects_invalid_credential_and_nonce_replay() {
+fn duplicate_close_proposal_is_rejected_while_pending() {
     new_test_ext().execute_with(|| {
-        let cid = create_cgov_with_custom("close-credential");
+        let cid = create_cgov_with_custom("close-pending");
         let custom = account_of(&cid, CUSTOM_ACCOUNT_NAME);
-        let nonce = register_nonce(b"bad-close");
-        assert_noop!(
-            PublicManage::propose_close_public_institution(
-                RuntimeOrigin::signed(admin(0)),
-                cid.clone(),
-                b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits"),
-                custom.clone(),
-                beneficiary(),
-                nonce,
-                invalid_signature(),
-                b"REGISTRY-CID".to_vec(),
-                signer_pubkey(),
-            ),
-            Error::<Test>::InvalidDeregisterCredential
-        );
-        assert_ok!(close_with_cred(
+        // 首次发起成功后 InstitutionPendingClose 命中,重复发起同账户关闭必须被拒。
+        assert_ok!(propose_named_account_close(
             RuntimeOrigin::signed(admin(0)),
             cid.clone(),
             custom.clone(),
             beneficiary(),
-            5,
         ));
         assert_noop!(
-            close_with_cred(
+            propose_named_account_close(
                 RuntimeOrigin::signed(admin(0)),
                 cid,
                 custom,
                 beneficiary(),
-                5,
             ),
-            Error::<Test>::DeregisterNonceAlreadyUsed
+            Error::<Test>::CloseAlreadyPending
         );
     });
 }

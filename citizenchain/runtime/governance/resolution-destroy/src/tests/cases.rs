@@ -405,7 +405,7 @@ fn duplicate_vote_is_rejected_by_votingengine() {
 }
 
 #[test]
-fn execute_destroy_requires_snapshot_admin() {
+fn execute_destroy_requires_role_voter_snapshot() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
         let account = institution_account(&institution);

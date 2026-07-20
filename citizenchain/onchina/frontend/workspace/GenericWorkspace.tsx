@@ -3,6 +3,7 @@
 import { Empty } from 'antd';
 import type { AdminAuth } from '../auth/types';
 import { OwnInstitutionAdminsView } from '../admins/RegistryAdminsView';
+import { AccountManageSection } from '../accounts/AccountManageSection';
 import { LegislationView } from '../legislation/operator/LegislationView';
 import { OwnInstitutionInfoPanel } from './judicial/JudicialDisplay';
 import { WorkspaceShell } from './WorkspaceShell';
@@ -12,10 +13,13 @@ export type GenericWorkspaceProps = {
 };
 
 function GenericOperations({ auth }: GenericWorkspaceProps) {
-  if (auth.capabilities?.canViewLegislation) {
-    return <LegislationView auth={auth} />;
-  }
-  return <Empty description="暂无可执行操作" />;
+  // 账户管理归本机构在册管理员;立法与表决仅在后端开放能力位时叠加显示。
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <AccountManageSection auth={auth} />
+      {auth.capabilities?.canViewLegislation ? <LegislationView auth={auth} /> : null}
+    </div>
+  );
 }
 
 function GenericDisplay({ auth }: GenericWorkspaceProps) {

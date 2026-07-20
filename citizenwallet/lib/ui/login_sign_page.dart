@@ -45,10 +45,6 @@ class _LoginSignPageState extends State<LoginSignPage> {
   void _parseSignRequest() {
     try {
       final request = parseLoginSignRequest(widget.raw);
-      if (!verifySystemSignature(request)) {
-        setState(() => _error = '系统签名验证失败,二维码可能被篡改');
-        return;
-      }
       if (isLoginSignRequestExpired(request)) {
         setState(() => _error = '登录二维码已过期');
         return;

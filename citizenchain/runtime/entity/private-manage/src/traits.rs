@@ -4,7 +4,6 @@
 //! `crate::traits::*` 的短路径，避免复制定义。
 
 pub use entity_primitives::{
-    AccountValidator, CidInstitutionVerifier, InstitutionCidQuery,
-    InstitutionLegalRepresentativeQuery, InstitutionMultisigQuery, ProtectedSourceChecker,
-    RegistryAuthority, ReservedAccountGuard,
+    AccountValidator, InstitutionCidQuery, InstitutionLegalRepresentativeQuery,
+    InstitutionMultisigQuery, ProtectedSourceChecker, RegistryAuthority, ReservedAccountGuard,
 };

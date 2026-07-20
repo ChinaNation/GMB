@@ -161,10 +161,6 @@ thread_local! {
 thread_local! {
     static INTERNAL_TERMINAL_CLEANUP_SHOULD_FAIL: RefCell<bool> = const { RefCell::new(false) };
 }
-thread_local! {
-    static INSTITUTION_ADMIN_LIST_OVERRIDE: RefCell<Option<Vec<AccountId32>>> = const { RefCell::new(None) };
-}
-
 pub struct TestCitizenIdentityReader;
 pub struct TestJointVoteResultCallback;
 pub struct TestInternalVoteResultCallback;
@@ -252,8 +248,52 @@ fn set_institution_threshold(cid_number: CidNumber, threshold: u32) {
     ActiveInstitutionThresholds::<Test>::insert(cid_number, threshold);
 }
 
-fn set_institution_admin_list_override(admins: Vec<AccountId32>) {
-    INSTITUTION_ADMIN_LIST_OVERRIDE.with(|value| *value.borrow_mut() = Some(admins));
+impl TestInternalAdminProvider {
+    fn institution_admins(
+        institution_code: InstitutionCode,
+        cid_number: &[u8],
+    ) -> Option<sp_std::vec::Vec<AccountId32>> {
+        match institution_code {
+            NRC => CHINA_CB
+                .iter()
+                .take(1)
+                .find(|n| n.cid_number.as_bytes() == cid_number)
+                .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
+            PRC => CHINA_CB
+                .iter()
+                .skip(1)
+                .find(|n| n.cid_number.as_bytes() == cid_number)
+                .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
+            PRB => CHINA_CH
+                .iter()
+                .find(|n| n.cid_number.as_bytes() == cid_number)
+                .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
+            NJD => CHINA_SF
+                .first()
+                .filter(|n| n.cid_number.as_bytes() == cid_number)
+                .map(|_| {
+                    NATIONAL_JUDICIAL_YUAN_ADMINS
+                        .iter()
+                        .copied()
+                        .map(AccountId32::new)
+                        .collect()
+                }),
+            PERMANENT_SINGLETON_CODE if cid_number == permanent_singleton_cid().as_slice() => {
+                Some((0..3).map(permanent_singleton_admin).collect())
+            }
+            PUBLIC_CODE if cid_number == public_cid().as_slice() => Some(sp_std::vec![
+                test_institution_admin(0),
+                test_institution_admin(1),
+                test_institution_admin(2),
+            ]),
+            PRIVATE_CODE if cid_number == private_cid().as_slice() => Some(sp_std::vec![
+                test_institution_admin(0),
+                test_institution_admin(1),
+                test_institution_admin(2),
+            ]),
+            _ => None,
+        }
+    }
 }
 
 impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
@@ -309,58 +349,6 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         }
     }
 
-    fn get_institution_admins(
-        institution_code: InstitutionCode,
-        cid_number: &[u8],
-    ) -> Option<sp_std::vec::Vec<AccountId32>> {
-        match institution_code {
-            NRC => CHINA_CB
-                .iter()
-                .take(1)
-                .find(|n| n.cid_number.as_bytes() == cid_number)
-                .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
-            PRC => CHINA_CB
-                .iter()
-                .skip(1)
-                .find(|n| n.cid_number.as_bytes() == cid_number)
-                .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
-            PRB => CHINA_CH
-                .iter()
-                .find(|n| n.cid_number.as_bytes() == cid_number)
-                .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
-            NJD => CHINA_SF
-                .first()
-                .filter(|n| n.cid_number.as_bytes() == cid_number)
-                .map(|_| {
-                    NATIONAL_JUDICIAL_YUAN_ADMINS
-                        .iter()
-                        .copied()
-                        .map(AccountId32::new)
-                        .collect()
-                }),
-            PERMANENT_SINGLETON_CODE if cid_number == permanent_singleton_cid().as_slice() => {
-                Some((0..3).map(permanent_singleton_admin).collect())
-            }
-            PUBLIC_CODE if cid_number == public_cid().as_slice() => {
-                let override_admins =
-                    INSTITUTION_ADMIN_LIST_OVERRIDE.with(|value| value.borrow().clone());
-                Some(override_admins.unwrap_or_else(|| {
-                    sp_std::vec![
-                        test_institution_admin(0),
-                        test_institution_admin(1),
-                        test_institution_admin(2),
-                    ]
-                }))
-            }
-            PRIVATE_CODE if cid_number == private_cid().as_slice() => Some(sp_std::vec![
-                test_institution_admin(0),
-                test_institution_admin(1),
-                test_institution_admin(2),
-            ]),
-            _ => None,
-        }
-    }
-
     fn is_personal_admin(personal_account: AccountId32, who: &AccountId32) -> bool {
         personal_account == self::personal_account()
             && [personal_admin(0), personal_admin(1), personal_admin(2)]
@@ -409,8 +397,7 @@ impl votingengine::InstitutionRoleProvider<AccountId32> for TestInternalAdminPro
         if role_code != expected_role {
             return Vec::new();
         }
-        <Self as InternalAdminProvider<AccountId32>>::get_institution_admins(code, cid_number)
-            .unwrap_or_default()
+        Self::institution_admins(code, cid_number).unwrap_or_default()
     }
 }
 
@@ -536,7 +523,6 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         INTERNAL_CALLBACK_LOG.with(|log| log.borrow_mut().clear());
         INTERNAL_TERMINAL_CLEANUP_LOG.with(|log| log.borrow_mut().clear());
         INTERNAL_TERMINAL_CLEANUP_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = false);
-        INSTITUTION_ADMIN_LIST_OVERRIDE.with(|value| *value.borrow_mut() = None);
         set_personal_threshold(3);
         set_institution_threshold(public_cid(), 3);
         set_institution_threshold(private_cid(), 3);

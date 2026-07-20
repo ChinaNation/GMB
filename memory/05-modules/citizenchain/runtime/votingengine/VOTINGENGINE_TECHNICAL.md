@@ -202,6 +202,7 @@ legislation-vote/
 
 - `InternalVoteEngine` 的机构创建接口强制接收业务模块构造的 `VotePlan`；创建事务按 plan 中每个 `RoleSubject` 读取有效任职、写入 `VoterSnapshot`，并按 CID 写入去重后的 `EffectiveVoterSnapshot`。机构路径不再写 `AdminSnapshot`。
 - `internal-vote::cast` 对机构提案只读取 `EffectiveVoterSnapshot[(proposal_id, actor_cid_number)]`；个人多签仍读取 `AdminSnapshot[(proposal_id, PersonalAccount)]`。两类主体没有兼容回落。
+- 旧 `snapshot_institution_admins` 与 `InternalAdminProvider::get_institution_admins` 已删除；核心投票引擎不再暴露把机构人员名册写入 `AdminSnapshot` 的入口。机构 `admins` 查询只允许业务模块和 entity 用于确认人员名册归属，不能生成投票资格。
 - 机构阈值继续来自机构固定阈值或机构动态阈值；岗位只决定选民集合，不新增岗位阈值。创建时若机构阈值无法由本次有效岗位快照达到，整笔提案回滚。
 - 手动重试和取消同样按提案主体分流：机构读取有效岗位选民快照，个人多签读取个人管理员快照。
 - 已接入业务为 public/private 本机构治理与关闭、决议销毁、GRANDPA 密钥更换、机构普通转账、NRC 安全基金转账、费用账户划转主账户和技术公司平台调价。每个业务自己校验 `RoleSubject + BusinessActionId + Propose`、枚举拥有 `Vote` 权限的岗位并固定使用内部投票引擎。

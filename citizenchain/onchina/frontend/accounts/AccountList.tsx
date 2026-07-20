@@ -14,8 +14,10 @@ import { tryEncodeSs58 } from '../utils/ss58';
 interface Props {
   accounts: InstitutionAccount[];
   loading: boolean;
+  /** 是否允许在本视图删除自定义账户;注册局详情页传 false 即为只读。 */
   canDelete: boolean;
-  onDelete: (accountName: string) => void;
+  /** 仅可管理视图注入;canDelete=false 的只读视图不需要。 */
+  onDelete?: (accountName: string) => void;
 }
 
 const STATUS_LABEL: Record<MultisigChainStatus, string> = {
@@ -103,7 +105,7 @@ export const AccountList: React.FC<Props> = ({
                 <Popconfirm
                   title={`确认删除账户 "${row.account_name}"?`}
                   description="仅删除身份注册局中的账户名称记录,不触发链上操作"
-                  onConfirm={() => onDelete(row.account_name)}
+                  onConfirm={() => onDelete?.(row.account_name)}
                   okText="删除"
                   okButtonProps={{ danger: true }}
                   cancelText="取消"

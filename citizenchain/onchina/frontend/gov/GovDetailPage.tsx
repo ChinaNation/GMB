@@ -6,11 +6,9 @@ import { Alert, Button, Card, Checkbox, Col, Descriptions, Divider, Form, Input,
 import { EDUCATION_TYPE_LABEL } from '../subjects/labels';
 import { useInstitutionCodeLabels } from '../subjects/institutionLabels';
 import { getInstitution, type InstitutionDetail } from './api';
-import { deleteAccount } from '../accounts/api';
 import type { AdminAuth } from '../auth/types';
 import { AccountList } from '../accounts/AccountList';
 import { notice } from '../utils/notice';
-import { CreateAccountModal } from '../accounts/CreateAccountModal';
 import { PrivateDetailLayout } from '../private/PrivateDetailLayout';
 import { DocsLibrary } from '../docs/DocsLibrary';
 import {
@@ -327,7 +325,6 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
     readCachedInstitutionDetail(detailCacheKey),
   );
   const [loading, setLoading] = useState(false);
-  const [createAccountOpen, setCreateAccountOpen] = useState(false);
 
   const [securityCommitLoading, setSecurityCommitLoading] = useState(false);
   const [securityModal, setSecurityModal] = useState<SecurityModalState | null>(null);
@@ -410,21 +407,6 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
     ? [inst.province_name, inst.city_name, inst.town_name].filter(Boolean).join('/') || '-'
     : '-';
 
-  const onDeleteAccount = async (accountName: string) => {
-    try {
-      const grant = await runScanSignGrant('INSTITUTION_DELETE_ACCOUNT', {
-        target: cidNumber,
-        cid_number: cidNumber,
-        account_name: accountName,
-      });
-      await deleteAccount(auth, cidNumber, accountName, grant);
-      notice.success(`账户 "${accountName}" 已删除`);
-      load();
-    } catch (err) {
-      notice.error(err, '');
-    }
-  };
-
   const renderOfficialDetail = () => {
     if (!inst || !detail || inst.category === 'PRIVATE_INSTITUTION') return null;
 
@@ -485,23 +467,9 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
     );
 
     const accountListSection = (
-      <Card
-        type="inner"
-        title={`账户列表(${accounts.length})`}
-        extra={
-          canWrite && (
-            <Button type="primary" onClick={() => setCreateAccountOpen(true)}>
-              + 新建账户
-            </Button>
-          )
-        }
-      >
-        <AccountList
-          accounts={accounts}
-          loading={loading}
-          canDelete={canWrite}
-          onDelete={onDeleteAccount}
-        />
+      // 注册局详情页账户列表只读:能看不能增删,增删归机构自己的工作台。
+      <Card type="inner" title={`账户列表(${accounts.length})`}>
+        <AccountList accounts={accounts} loading={loading} canDelete={false} />
       </Card>
     );
 
@@ -544,7 +512,6 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
                   auth={auth}
                   cidNumber={inst.cid_number}
                   canWrite={canWrite}
-                  createScanSignGrant={runScanSignGrant}
                 />
               ),
             },
@@ -555,19 +522,6 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
             },
           ]}
           initialActiveKey={initialActiveKey}
-        />
-
-        <CreateAccountModal
-          auth={auth}
-          cidNumber={inst.cid_number}
-          cidFullName={inst.cid_full_name ?? ''}
-          existingAccounts={accounts}
-          open={createAccountOpen}
-          onCancel={() => setCreateAccountOpen(false)}
-          onCreated={() => {
-            setCreateAccountOpen(false);
-            load();
-          }}
         />
       </>
     );
@@ -587,7 +541,6 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
               canWrite={canWrite}
               loading={loading}
               onReload={load}
-              onDeleteAccount={onDeleteAccount}
               createScanSignGrant={runScanSignGrant}
               onBack={onBack}
               backLabel={backLabel}

@@ -1,7 +1,7 @@
 # OnChina 操作三档统一 + 删平台钥 + 冷签改签真实载荷 + 登录 QR 机构字段
 
 - 创建日期：2026-07-19
-- 状态：方案待确认（用户确认后执行；未确认前不写码）
+- 状态：Phase 1+2 完成并全面复查通过。**平台钥彻底删除**(登录自证+机构 call1/6-9 全去凭证→管理员钱包签+链上 CID+岗位验);**账户增删 UI 已移进机构工作区**(`AccountManageSection` 挂 Private/Generic/Judicial workspace,注册局详情页 `canDelete=false` 只读);**残留清扫净**(6 个凭证死 Error 变体 InvalidCidInstitutionSignature/RegisterNonceAlreadyUsed/EmptyIssuerCidNumber/EmptyScopeProvinceName 删除、crypto/sr25519.rs+core/secret.rs 整删、注销 DB DROP、前端死类型清)。验证:cargo test public/private-manage 14+14、onchina 131、cargo check citizenchain+onchina 48.79s、tsc -b 全绿;live code 零残留。剩(另卡):Phase 3 冷签改签真实载荷、Phase 4 岗位码入链校验细化、Phase 5 登录 QR 机构字段。
 - 范围：OnChina 全部管理员操作的鉴权分档与签名实现；登录 QR 与登录签名；平台系统签名钥；CitizenWallet 登录链路
 - 所属模块：Blockchain Agent（OnChina 后端 + runtime）、Mobile Agent（CitizenWallet）
 - 依赖：`memory/08-tasks/20260719-institution-role-permission-unify.md`（ADR-039 岗位码=权限载体）
@@ -95,11 +95,27 @@ citizenwallet/lib/
 - `update_institution`（`subjects/admin.rs`）按写入目标重判并拆分（见归档表）。
 - 验收：无任何写动作停留在 `Session`;新增动作漏标编译失败(穷尽 match 保持)。
 
+### Phase 2 前置发现(登录信任根 + passkey 绑定现状)
+- onchina **每个会话都由钱包签名换取**:两条登录 `handler.rs:320` / `qr_login.rs` 均 `verify_admin_signature`(sr25519)+ `onchain_gate`(链上管理员集合);无 passkey/密码登录路径(passkey 只有 register/assert,不签发会话)。
+- **passkey 绑定已实现且已满足"绑定必须钱包签名"**:`register_begin`/`register_finish`(`passkey/mod.rs`)+ `getPasskeyStatus` + `usePasskeyRegistration`。因会话必自钱包冷签登录,绑定在该会话内完成 = 钱包签名已授权绑定。**这是既有功能,非本卡新增工作**(用户 2026-07-19 仅提示注意)。删平台钥后此不变量保持:登录/绑定信任根 = 钱包签名验链上管理员集合。
+
 ### Phase 2 — 删平台钥(登录自证 + 机构凭证)
 - 删 `build_login_qr_system_signature`、`sign_runtime_digest`、`main.rs` env 加载。
 - 机构注册/创建/治理/注销凭证：摘要(`institution_*_message`)改由**注册局管理员钱包签名**;链上 `verify_institution_*` 口径不变(`is_institution_admin`)。
 - 钱包侧删 `verifySystemSignature` 及调用。
-- 验收：全仓无 `ONCHINA_SIGNING_SEED_HEX` 残留;机构注册/注销链上验签用注册局管理员签名回归通过。
+- 验收：全仓无 `ONCHINA_SIGNING_SEED_HEX` 残留;机构注册/注销链上验签用注册局管理员签名回归通过;passkey 绑定不变量(钱包签名登录会话内绑定)保持。
+
+**Phase 2 实建(设计修正 + 执行结果):**
+
+原"凭证改管理员冷签"方案被验证行不通(钱包无 0x13/0x14 哈希域签名分支,且治理路径会造成同一操作两签)。**改为:去掉机构操作的独立凭证,链上按 extrinsic 签名者的 CID+岗位授权。**
+
+- **2a 登录自证删除**:✅ 已完成(去 `build_login_qr_system_signature` + 登录 QR sys 字段 + 钱包 `verifySystemSignature`)。`cargo check` + `tsc` 通过。
+- **2b 机构操作去凭证 + 删平台钥(runtime)**:✅ **部分完成(2026-07-19,已验证)**——
+  - call 6/7/8/9(改名/加账户/治理/登记管理员):删嵌入凭证 + 平台钥,改管理员钱包签一笔 extrinsic + 链上 `is_institution_admin(who)`(+岗位 call8 proposer_role_code、call9/6/7 FRG省专员)。原凭证证实是"submitter=注册局在册管理员"的冗余,删除不弱化。runtime `verify_institution_registration/creation/governance` + `institution_*_message(除close)` + `can_register_institution`(凭证版)全删,留 `can_register_institution_origin`。onchina 两 builder + `finish_institution_credential` 删。`cargo test public/private-manage/onchina` 全绿;`cargo check` 0.56s 过;安全回归测试改写覆盖保留的 close 验签。
+  - **call 1(账户注销)也已去凭证(2026-07-19 收尾,已验证)**:模型定案——自定义账户增删归**机构自管**(注册局只管注册),协议账户永久不可删(`is_closable_institution_account` 守卫已强制)。故 close 的注册局审批凭证是多余层,删之非弱化(保留 `is_institution_admin(who)`+协议守卫+内部投票+beneficiary)。runtime 删 `verify_institution_account_close`+整个 `CidInstitutionVerifier` trait+`institution_account_close_message`+close 4 凭证参数+`UsedDeregisterNonce`;onchina 删 `sign_runtime_digest`/`build_institution_deregistration_credential`/`runtime_signing_context`/`crypto/sr25519.rs`(整删)/`core/secret.rs`(整删)/`InstitutionAccountDeregister` 动作/注销凭证 DB(DROP TABLE)/main.rs 加载/scripts。前端删死类型 `INSTITUTION_ACCOUNT_DEREGISTER`。**平台钥 live code 零残留;cargo test public/private-manage/onchina 全绿;`cargo check` 10.91s 过;`tsc -b` 0 错。**
+  - 残留常量 `OP_SIGN_INST`/`OP_SIGN_DEREGISTER`:无 message 构造入口,属四端金标向量注册表成员,删需四端同步,保留并注明。
+
+**平台钥彻底删除已达成。** 剩:账户增删 UI 从注册局详情页(`PrivateDetailLayout`/`GovDetailPage`)移进机构自己工作区(`frontend/workspace/PrivateInstitutionWorkspace`),注册局详情页降只读——后端已按 `is_institution_admin` 授权,纯搬 UI。
 
 ### Phase 3 — 冷签改签真实链载荷(一次签名)
 - 删 `signed_payload_text(onchina_admin_governance)` 治理文本冷签;`actions.rs` 冷签 QR 载荷改为真实链载荷(extrinsic SignedPayload 或凭证摘要)。
@@ -165,6 +181,36 @@ citizenwallet/lib/
 - 测试:三档鉴权分支、机构凭证改管理员签回归、冷签一次到位、登录金标向量四端一致、错误岗位码链上拒绝。
 - `memory/` 回写:本卡进度、`qr-protocol-spec.md` 登录字段、与 ADR-039 对接说明。
 - 残留清理:`ONCHINA_SIGNING_SEED_HEX` / `sys_pubkey` / `sys_sig` / `verifySystemSignature` / `signed_payload_text(onchina_admin_governance)` 全删。
+
+## 执行进度
+
+### Phase 1 归档决定(用户已确认 + 前端事实修正)
+- `InstitutionUpdate`:改的是 `cid_full_name`/法人/所属法人(链上注册凭证签名字段=链上单源),且前端本就走冷签 → 归**链上写(PasskeyColdSign)**。纯本地展示字段(若有)在 Phase 2/3 再拆出为本地写。⚠️ 修正:此前误标 Passkey,已改回 PasskeyColdSign;同时修好后端(Session)/前端(冷签)既存不一致(该操作原状前端会抛错)。
+- `InstitutionUploadDocument`:本地写(Passkey)。同样原为后端 Session / 前端冷签不一致,改 Passkey + 前端 passkey 一并修好。
+- `InstitutionDeleteDocument` / `NodeBindingUnbind`:确认降为本地写(Passkey);二者均纯本地(`apply_node_binding_unbind_conn` 只动本地库、删文档只动本地存储)。
+
+### Phase 1 后端已完成(已验证)
+- `onchina/src/auth/operation_auth.rs`:三档语义改为 读/本地写/链上写;`auth_type()`:`InstitutionUploadDocument`(Session→Passkey)、`InstitutionDeleteDocument`、`NodeBindingUnbind`(ColdSign→Passkey)归本地写;`InstitutionUpdate`(Session→PasskeyColdSign)归链上写;删 `is_session()`;保留三档 enum + `operation_auth_has_exactly_three_tiers` 测试。
+- `onchina/src/auth/actions.rs`:删 `is_session()` 三处调用;commit 流程保留对 `challenge.auth_type == Session` 的防御性拒绝;`require_admin_security_grant` 去掉只会话分支,写动作一律 ≥ passkey。
+- 验证:`cargo check -p onchina --tests` 通过;`cargo test -p onchina operation_auth` 4 测试全绿。
+
+### Phase 1 前端已完成(已验证)
+- `admins/securityApi.ts`:新增 `passkeySubmitHeaders(auth)`(本地写档:只带 `X-Passkey-Assertion`,不走 prepare/扫码/commit)。
+- `docs/api.ts`:`uploadDocument`/`deleteDocument` 去掉 `securityGrant` 参数,改 `passkeySubmitHeaders`。
+- `docs/DocsLibrary.tsx`:上传/删除去冷签直接调 api;移除 `createScanSignGrant` prop 及 `AdminActionType/AdminSecurityGrantOutput` import。
+- `private/PrivateDetailLayout.tsx`、`gov/GovDetailPage.tsx`:两处 `<DocsLibrary>` 去掉 `createScanSignGrant` prop(`PrivateDetailLayout` 自身机构更新仍用冷签,prop 保留)。
+- `NodeBindingUnbind`:全仓无前端冷签调用点,后端改档即可,无前端配套。
+- 验证:`tsc -b` EXIT=0;docs 前端无 `createScanSignGrant/securityGrant` 残留。
+
+### Phase 1 收尾:剩余(留 Phase 2/3)
+- `InstitutionUpdate` 链上字段拆分(纯本地展示字段拆出为 Passkey):随 Phase 2/3 链上写通路一并落地。
+
+### Phase 2a 完成(删登录自证,已验证)
+- 后端:删 `login/signature.rs::build_login_qr_system_signature` + `sp_core::Pair` import;`qr_login.rs` 去 sys 生成与 import;`core/qr/mod.rs::login_request_body` 去 sys 参数(`u` 留空、payload 仅 `system`)。
+- 钱包(citizenwallet):`login/login_qr_handler.dart` 删 `verifySystemSignature` + `_verifySr25519Utf8`/hex 工具,`_loginData`→`_loginSystem`(只取 system);`ui/login_sign_page.dart` 删系统签名校验分支。
+- 验证:onchina `cargo check` 0 警告;citizenwallet 登录文件 `flutter analyze` 无问题(全量剩 2 个既存 test 问题,与登录无关)。
+- 信任根不变:登录 = 管理员钱包签名验链上管理员集合(`handler.rs`/`qr_login.rs` `verify_admin_signature` + onchain_gate);passkey 绑定不变量保持。
+- 注:`ONCHINA_SIGNING_SEED_HEX` 仍被机构凭证用(`chain_runtime.rs`),整把删在 2b。
 
 ## 八、验收标准
 - 每个 `AdminActionType` 落入正确档;无写动作停留在 `Session`。

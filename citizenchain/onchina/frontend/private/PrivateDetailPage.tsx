@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Typography } from 'antd';
 import { getInstitution, type InstitutionDetail } from './common/api';
-import { deleteAccount } from '../accounts/api';
 import type { AdminAuth } from '../auth/types';
 import { notice } from '../utils/notice';
 import { PrivateDetailLayout } from './PrivateDetailLayout';
@@ -119,21 +118,6 @@ export const PrivateDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, 
 
   const inst = detail?.institution;
 
-  const onDeleteAccount = async (accountName: string) => {
-    try {
-      const grant = await runScanSignGrant('INSTITUTION_DELETE_ACCOUNT', {
-        target: cidNumber,
-        cid_number: cidNumber,
-        account_name: accountName,
-      });
-      await deleteAccount(auth, cidNumber, accountName, grant);
-      notice.success(`账户 "${accountName}" 已删除`);
-      load();
-    } catch (err) {
-      notice.error(err, '');
-    }
-  };
-
   return (
     <div>
       {loading && !inst && <Typography.Text type="secondary">加载中...</Typography.Text>}
@@ -145,7 +129,6 @@ export const PrivateDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, 
           canWrite={canWrite}
           loading={loading}
           onReload={load}
-          onDeleteAccount={onDeleteAccount}
           createScanSignGrant={runScanSignGrant}
           onBack={onBack}
         />

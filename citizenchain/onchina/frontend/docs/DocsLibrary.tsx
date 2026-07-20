@@ -15,17 +15,12 @@ import {
   uploadDocument,
 } from './api';
 import type { AdminAuth } from '../auth/types';
-import type { AdminActionType, AdminSecurityGrantOutput } from '../admins/securityApi';
 import { notice } from '../utils/notice';
 
 interface Props {
   auth: AdminAuth;
   cidNumber: string;
   canWrite: boolean;
-  createScanSignGrant: (
-    actionType: AdminActionType,
-    payload: unknown,
-  ) => Promise<AdminSecurityGrantOutput>;
 }
 
 function formatFileSize(bytes: number): string {
@@ -46,7 +41,6 @@ export const DocsLibrary: React.FC<Props> = ({
   auth,
   cidNumber,
   canWrite,
-  createScanSignGrant,
 }) => {
   const [docs, setDocs] = useState<InstitutionDocument[]>([]);
   const [loading, setLoading] = useState(false);
@@ -70,15 +64,8 @@ export const DocsLibrary: React.FC<Props> = ({
     if (!rawFile || !rawFile.name) return false;
     setUploading(true);
     try {
-      // 上传资料的冷签授权 payload 必须与后端 grant_payload 完全一致:
-      // target + file_name + doc_type + file_size,否则正式提交会被 hash mismatch 拒绝。
-      const grant = await createScanSignGrant('INSTITUTION_UPLOAD_DOCUMENT', {
-        target: cidNumber,
-        file_name: rawFile.name,
-        doc_type: selectedDocType,
-        file_size: rawFile.size,
-      });
-      await uploadDocument(auth, cidNumber, rawFile, selectedDocType, grant);
+      // 上传资料属本地写(Passkey 档):uploadDocument 内部只带 passkey 断言提交,不走冷签。
+      await uploadDocument(auth, cidNumber, rawFile, selectedDocType);
       notice.success('文件上传成功');
       load();
     } catch (err) {
@@ -99,13 +86,8 @@ export const DocsLibrary: React.FC<Props> = ({
 
   const onDelete = async (doc: InstitutionDocument) => {
     try {
-      // 删除资料同样按后端 grant_payload 逐字段生成授权,不得夹带旧字段或把 doc_id 转字符串。
-      const grant = await createScanSignGrant('INSTITUTION_DELETE_DOCUMENT', {
-        target: cidNumber,
-        doc_id: doc.id,
-        file_name: doc.file_name,
-      });
-      await deleteDocument(auth, cidNumber, doc.id, grant);
+      // 删除资料属本地写(Passkey 档):deleteDocument 内部只带 passkey 断言提交,不走冷签。
+      await deleteDocument(auth, cidNumber, doc.id);
       notice.success('文件已删除');
       load();
     } catch (err) {

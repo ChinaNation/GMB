@@ -326,32 +326,6 @@ fn personal_admin_set_mutation_uses_valid_current_snapshot_threshold() {
 }
 
 #[test]
-fn institution_snapshot_rejects_empty_admin_list() {
-    new_test_ext().execute_with(|| {
-        set_institution_admin_list_override(Vec::new());
-        assert_noop!(
-            VotingEngine::snapshot_institution_admins(0, PUBLIC_CODE, public_cid()),
-            votingengine::Error::<Test>::MissingAdminSnapshot
-        );
-    });
-}
-
-#[test]
-fn institution_snapshot_rejects_duplicate_admin_list() {
-    new_test_ext().execute_with(|| {
-        set_institution_admin_list_override(sp_std::vec![
-            test_institution_admin(0),
-            test_institution_admin(0),
-            test_institution_admin(1),
-        ]);
-        assert_noop!(
-            VotingEngine::snapshot_institution_admins(0, PUBLIC_CODE, public_cid()),
-            votingengine::Error::<Test>::InvalidInstitution
-        );
-    });
-}
-
-#[test]
 fn personal_proposal_snapshots_dynamic_threshold() {
     new_test_ext().execute_with(|| {
         set_personal_threshold(3);

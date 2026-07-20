@@ -172,74 +172,9 @@ impl primitives::fee_policy::OnchainFeeCharger<AccountId32, Balance> for TestOnc
     }
 }
 
-/// 测试凭证只认可固定签名字节，并强制 actor CID 与签名管理员公钥存在。
-pub struct TestCidInstitutionVerifier;
-impl
-    crate::traits::CidInstitutionVerifier<
-        AccountId32,
-        crate::pallet::AccountNameOf<Test>,
-        crate::pallet::RegisterNonceOf<Test>,
-        crate::pallet::RegisterSignatureOf<Test>,
-    > for TestCidInstitutionVerifier
-{
-    fn verify_institution_registration(
-        cid_number: &[u8],
-        cid_full_name: &crate::pallet::AccountNameOf<Test>,
-        _cid_short_name: &[u8],
-        _account_names: &[alloc::vec::Vec<u8>],
-        nonce: &crate::pallet::RegisterNonceOf<Test>,
-        signature: &crate::pallet::RegisterSignatureOf<Test>,
-        actor_cid_number: &[u8],
-        credential_signer_pubkey: &[u8; 32],
-        scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-        _town_code: &[u8],
-    ) -> bool {
-        !cid_number.is_empty()
-            && !cid_full_name.is_empty()
-            && !nonce.is_empty()
-            && !actor_cid_number.is_empty()
-            && credential_signer_pubkey != &[0u8; 32]
-            && !scope_province_name.is_empty()
-            && signature.as_slice() == b"register-ok"
-    }
-
-    fn verify_institution_account_close(
-        cid_number: &[u8],
-        account_name: &[u8],
-        _target_account: &AccountId32,
-        nonce: &crate::pallet::RegisterNonceOf<Test>,
-        signature: &crate::pallet::RegisterSignatureOf<Test>,
-        credential_issuer_cid_number: &[u8],
-        credential_signer_pubkey: &[u8; 32],
-    ) -> bool {
-        !cid_number.is_empty()
-            && !account_name.is_empty()
-            && !nonce.is_empty()
-            && !credential_issuer_cid_number.is_empty()
-            && credential_signer_pubkey != &[0u8; 32]
-            && signature.as_slice() == b"deregister-ok"
-    }
-}
-
 /// 这里只验证 pallet 边界；注册局辖区规则由 runtime 配置层测试负责。
 pub struct TestRegistryAuthority;
 impl crate::traits::RegistryAuthority<AccountId32> for TestRegistryAuthority {
-    fn can_register_institution(
-        _registrar: &AccountId32,
-        actor_cid_number: &[u8],
-        credential_signer_pubkey: &[u8; 32],
-        target_cid_number: &[u8],
-        _target_institution_code: InstitutionCode,
-        scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-    ) -> bool {
-        !actor_cid_number.is_empty()
-            && credential_signer_pubkey != &[0u8; 32]
-            && !target_cid_number.is_empty()
-            && !scope_province_name.is_empty()
-    }
-
     fn can_register_institution_origin(
         registrar_account: &AccountId32,
         actor_cid_number: &[u8],
@@ -276,13 +211,6 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         who: &AccountId32,
     ) -> bool {
         PrivateAdmins::is_institution_admin(institution_code, cid_number, who)
-    }
-
-    fn get_institution_admins(
-        institution_code: InstitutionCode,
-        cid_number: &[u8],
-    ) -> Option<alloc::vec::Vec<AccountId32>> {
-        PrivateAdmins::institution_admins(institution_code, cid_number)
     }
 }
 
@@ -458,13 +386,10 @@ impl pallet::Config for Test {
     type InstitutionAsset = TestInstitutionAsset;
     type InstitutionQuery = TestInstitutionQuery;
     type OnchainFeeCharger = TestOnchainFeeCharger;
-    type CidInstitutionVerifier = TestCidInstitutionVerifier;
     type RegistryAuthority = TestRegistryAuthority;
     type MaxAdmins = ConstU32<10>;
     type MaxCidNumberLength = ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>;
     type MaxAccountNameLength = ConstU32<128>;
-    type MaxRegisterNonceLength = ConstU32<64>;
-    type MaxRegisterSignatureLength = ConstU32<64>;
     type MaxInstitutionAccounts = ConstU32<8>;
     type WeightInfo = ();
 }
@@ -523,18 +448,6 @@ pub fn institution_admins(accounts: &[AccountId32]) -> crate::InstitutionAdminsI
         .collect::<alloc::vec::Vec<_>>()
         .try_into()
         .expect("admins fit")
-}
-
-pub fn register_nonce(value: &[u8]) -> pallet::RegisterNonceOf<Test> {
-    value.to_vec().try_into().expect("nonce 必须受界")
-}
-
-pub fn valid_signature() -> pallet::RegisterSignatureOf<Test> {
-    b"register-ok".to_vec().try_into().expect("签名必须受界")
-}
-
-pub fn close_signature() -> pallet::RegisterSignatureOf<Test> {
-    b"deregister-ok".to_vec().try_into().expect("签名必须受界")
 }
 
 pub fn initial_accounts(items: &[(&[u8], Balance)]) -> pallet::InstitutionInitialAccountsOf<Test> {
@@ -611,12 +524,7 @@ pub fn create_institution(
             RuntimeOrigin::signed(registrar()),
             cid_number.clone(),
             named_accounts.try_into().expect("named accounts fit"),
-            register_nonce(b"post-create-accounts"),
-            valid_signature(),
             b"GD001-FRG00-000000001-2026".to_vec(),
-            [7u8; 32],
-            "广东省".as_bytes().to_vec(),
-            "荔湾市".as_bytes().to_vec(),
         )?;
     }
     for item in accounts.iter().filter(|item| item.amount > 0) {
