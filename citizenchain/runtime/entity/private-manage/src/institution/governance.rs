@@ -75,8 +75,8 @@ impl<T: Config> Pallet<T> {
             institution.institution_code == result.institution_code,
             Error::<T>::InvalidAssignmentResultInstitution
         );
-        let protected_company =
-            primitives::cid::china::citizenchain::is_citizenchain_technology_identity(
+        let protected_foundation =
+            primitives::cid::china::citizenchain::is_citizenchain_foundation_identity(
                 result.institution_code,
                 cid_number.as_slice(),
             );
@@ -187,7 +187,7 @@ impl<T: Config> Pallet<T> {
                     ensure!(
                         !primitives::institution_constraints::is_legal_representative_role(
                             role_code.as_slice()
-                        ) && (!protected_company
+                        ) && (!protected_foundation
                             || primitives::cid::china::citizenchain::fixed_role(
                                 role_code.as_slice()
                             )
@@ -216,7 +216,7 @@ impl<T: Config> Pallet<T> {
                     ensure!(
                         !primitives::institution_constraints::is_legal_representative_role(
                             role_code.as_slice()
-                        ) && (!protected_company
+                        ) && (!protected_foundation
                             || primitives::cid::china::citizenchain::fixed_role(
                                 role_code.as_slice()
                             )
@@ -305,7 +305,7 @@ impl<T: Config> Pallet<T> {
             ) {
                 ensure!(assignments.len() <= 1, Error::<T>::FixedRoleSeatsMismatch);
             }
-            if protected_company {
+            if protected_foundation {
                 if let Some(fixed_role) =
                     primitives::cid::china::citizenchain::fixed_role(role_code.as_slice())
                 {

@@ -37,10 +37,9 @@ use primitives::count_const::VOTING_DURATION_BLOCKS;
 use votingengine::{
     pallet::{AdminSnapshot, Proposals},
     types::{
-        fixed_governance_pass_threshold, institution_code_from_cid_number, is_personal_code,
-        is_registered_multisig_code, is_valid_governance_code, AuthorizationSubject, CidNumber,
-        InstitutionCode, ProposalSubject, ProposalSubjectCidNumbers, VotePlanOf, VotingEngineKind,
-        FRG, NJD, NRC, PRB, PRC,
+        institution_code_from_cid_number, is_personal_code, is_valid_governance_code,
+        AuthorizationSubject, CidNumber, InstitutionCode, ProposalSubject,
+        ProposalSubjectCidNumbers, VotePlanOf, VotingEngineKind,
     },
     InternalAdminProvider, InternalProposalMutexKind, Proposal, PROPOSAL_KIND_INTERNAL,
     STAGE_INTERNAL, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED,
@@ -132,11 +131,6 @@ pub mod pallet {
     pub type PendingPersonalThresholds<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, u32, OptionQuery>;
 
-    /// 机构已激活动态阈值：CID -> threshold。机构码只做规则分类，不参与身份 key。
-    #[pallet::storage]
-    pub type ActiveInstitutionThresholds<T: Config> =
-        StorageMap<_, Blake2_128Concat, CidNumber, u32, OptionQuery>;
-
     /// 个人多签已激活动态阈值：个人多签账户 -> threshold。
     #[pallet::storage]
     pub type ActivePersonalThresholds<T: Config> =
@@ -186,7 +180,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// 内部投票:管理员一人一票。
+        /// 内部投票。个人多签使用管理员账户；机构使用建案时冻结的岗位任职快照。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::cast())]
         pub fn cast(origin: OriginFor<T>, proposal_id: u64, approve: bool) -> DispatchResult {
@@ -211,12 +205,10 @@ fn active_institution_threshold<T: Config>(
     institution_code: InstitutionCode,
     cid_number: &CidNumber,
 ) -> Option<u32> {
-    match institution_code {
-        NRC | PRC | PRB | FRG | NJD => fixed_governance_pass_threshold(&institution_code),
-        c if primitives::institution_constraints::is_permanent_singleton_code(&c) => None,
-        c if is_registered_multisig_code(&c) => ActiveInstitutionThresholds::<T>::get(cid_number),
-        _ => None,
-    }
+    <T as votingengine::Config>::InternalAdminProvider::institution_threshold(
+        institution_code,
+        cid_number.as_slice(),
+    )
 }
 // 业务方法
 // trait 实现
@@ -395,41 +387,12 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         })
     }
 
-    fn register_active_institution_threshold_direct(
-        institution_code: InstitutionCode,
-        cid_number: sp_std::vec::Vec<u8>,
-        admins_len: u32,
-        threshold: u32,
-    ) -> DispatchResult {
-        // 直设阈值只针对注册动态多签主体；固定治理机构走代码级机构阈值，六个
-        // 国家单例按每个提案的岗位有效选民快照计算严格过半，均不建立岗位阈值。
-        ensure!(
-            is_registered_multisig_code(&institution_code)
-                && !primitives::institution_constraints::is_permanent_singleton_code(
-                    &institution_code
-                ),
-            Error::<T>::InvalidInternalCode
-        );
-        let cid_number = CidNumber::try_from(cid_number)
-            .map_err(|_| votingengine::Error::<T>::InvalidInstitution)?;
-        ensure!(
-            is_valid_institution_context(institution_code, cid_number.as_slice()),
-            votingengine::Error::<T>::InvalidInstitution
-        );
-        Self::ensure_dynamic_threshold(admins_len, threshold)?;
-        ActiveInstitutionThresholds::<T>::insert(cid_number, threshold);
-        Ok(())
-    }
-
     fn active_institution_threshold(
         institution_code: InstitutionCode,
         cid_number: &[u8],
     ) -> Option<u32> {
-        if primitives::institution_constraints::is_permanent_singleton_code(&institution_code) {
-            return None;
-        }
         let cid_number = CidNumber::try_from(cid_number.to_vec()).ok()?;
-        ActiveInstitutionThresholds::<T>::get(cid_number)
+        active_institution_threshold::<T>(institution_code, &cid_number)
     }
 
     fn active_personal_threshold(personal_account: T::AccountId) -> Option<u32> {

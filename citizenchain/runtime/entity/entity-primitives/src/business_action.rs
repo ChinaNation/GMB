@@ -11,7 +11,7 @@ use alloc::{vec, vec::Vec};
 use primitives::{
     cid::{
         china::citizenchain::{
-            is_citizenchain_technology_identity, ROLE_CODE_GENESIS_PRODUCT_MANAGER,
+            is_citizenchain_foundation_identity, ROLE_CODE_GENESIS_PRODUCT_MANAGER,
             ROLE_CODE_GENESIS_PROGRAMMER,
         },
         code::{InstitutionCode, FRG, NJD, NRC, PRB, PRC, PROVINCE_CODE_INFOS},
@@ -147,12 +147,12 @@ pub fn fixed_role_permission_specs(
     }
 
     let is_public_fixed = fixed_institution_by_identity(institution_code, cid_number).is_some();
-    let is_technology = is_citizenchain_technology_identity(institution_code, cid_number);
+    let is_technology = is_citizenchain_foundation_identity(institution_code, cid_number);
     if !is_public_fixed && !is_technology {
         return Vec::new();
     }
 
-    // 普通受保护公权机构的 LR 永久为空权限；技术公司 LR 是准确 CID 的独立规格。
+    // 普通受保护公权机构的 LR 永久为空权限；基金会 LR 是准确 CID 的独立规格。
     if role_code == ROLE_CODE_LEGAL_REPRESENTATIVE && !is_technology {
         return Vec::new();
     }
@@ -445,7 +445,7 @@ pub fn fixed_institution_capability_allows(
         _ if legislation_legal_representative_code(institution_code) => {
             vec![ROLE_CODE_LEGAL_REPRESENTATIVE.to_vec()]
         }
-        _ if is_citizenchain_technology_identity(institution_code, cid_number) => vec![
+        _ if is_citizenchain_foundation_identity(institution_code, cid_number) => vec![
             ROLE_CODE_LEGAL_REPRESENTATIVE.to_vec(),
             ROLE_CODE_GENESIS_PRODUCT_MANAGER.to_vec(),
             ROLE_CODE_GENESIS_PROGRAMMER.to_vec(),
@@ -549,15 +549,15 @@ mod tests {
             RolePermissionOperation::Propose,
         ));
 
-        let company = primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY;
+        let foundation = primitives::cid::china::citizenchain::CITIZENCHAIN_FOUNDATION;
         let product = fixed_role_permission_specs(
-            *b"SFGQ",
-            company.cid_number.as_bytes(),
+            *b"SFGY",
+            foundation.cid_number.as_bytes(),
             ROLE_CODE_GENESIS_PRODUCT_MANAGER,
         );
         let programmer = fixed_role_permission_specs(
-            *b"SFGQ",
-            company.cid_number.as_bytes(),
+            *b"SFGY",
+            foundation.cid_number.as_bytes(),
             ROLE_CODE_GENESIS_PROGRAMMER,
         );
         assert!(has(

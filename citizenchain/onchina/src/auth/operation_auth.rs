@@ -144,10 +144,7 @@ impl AdminActionType {
     /// 由机构在册管理员直接冷签 propose_close,链端以 `is_institution_admin` 鉴权。
     /// 与鉴权档正交:不依赖 auth_type,故动作在档间迁移不改变此权限边界。
     pub(crate) fn requires_governing_capability(&self) -> bool {
-        matches!(
-            self,
-            Self::CreateCityRegistry | Self::DeleteCityRegistry
-        )
+        matches!(self, Self::CreateCityRegistry | Self::DeleteCityRegistry)
     }
 }
 

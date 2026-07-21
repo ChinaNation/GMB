@@ -217,6 +217,11 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
     ) -> bool {
         PublicAdmins::is_institution_admin(institution_code, cid_number, who)
     }
+
+    fn institution_threshold(_institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32> {
+        let cid = pallet::CidNumberOf::<Test>::try_from(cid_number.to_vec()).ok()?;
+        pallet::InstitutionGovernanceThresholds::<Test>::get(cid)
+    }
 }
 
 pub struct TestInternalAdminsLenProvider;
@@ -361,13 +366,12 @@ pub fn grant_close_role(cid_number: &pallet::CidNumberOf<Test>) -> crate::RoleCo
 impl public_admins::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
-    type InternalVoteEngine = internal_vote::Pallet<Test>;
+    type CitizenIdentityBinding = ();
 }
 
 impl private_admins::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
-    type InternalVoteEngine = internal_vote::Pallet<Test>;
 }
 
 /// 岗位生命周期单测只验证 entity 约束，允许测试 CID 持有提交的业务动作权限。
@@ -473,10 +477,11 @@ pub fn empty_town_code() -> pallet::AccountNameOf<Test> {
 
 pub fn institution_admins(count: u8) -> crate::InstitutionAdminsInputOf<Test> {
     (0..count)
-        .map(|seed| admin_primitives::Admin {
+        .map(|seed| admin_primitives::PublicAdmin {
             admin_account: admin(seed),
-            family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
-            given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
+            cid_number: Default::default(),
+            family_name: Default::default(),
+            given_name: Default::default(),
         })
         .collect::<alloc::vec::Vec<_>>()
         .try_into()

@@ -212,6 +212,11 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
     ) -> bool {
         PrivateAdmins::is_institution_admin(institution_code, cid_number, who)
     }
+
+    fn institution_threshold(_institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32> {
+        let cid = pallet::CidNumberOf::<Test>::try_from(cid_number.to_vec()).ok()?;
+        pallet::InstitutionGovernanceThresholds::<Test>::get(cid)
+    }
 }
 
 pub struct TestInternalAdminsLenProvider;
@@ -357,7 +362,6 @@ pub fn grant_close_role(cid_number: &pallet::CidNumberOf<Test>) -> crate::RoleCo
 impl private_admins::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
-    type InternalVoteEngine = internal_vote::Pallet<Test>;
 }
 
 /// 岗位生命周期单测只验证 entity 约束，允许测试 CID 持有提交的业务动作权限。
@@ -506,7 +510,8 @@ pub fn create_institution(
         );
     }
     let admins = institution_admins(&target_admins);
-    PrivateManage::set_institution_admins(&cid_number, institution_code, &admins, 2)?;
+    PrivateManage::set_institution_admins(&cid_number, institution_code, &admins)?;
+    pallet::InstitutionGovernanceThresholds::<Test>::insert(&cid_number, 2);
     grant_close_role(&cid_number);
 
     // 创建 call 不再接收账户清单或初始入金。测试若需要关闭命名账户，必须在创建

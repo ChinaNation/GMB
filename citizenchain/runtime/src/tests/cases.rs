@@ -74,24 +74,24 @@ fn protected_genesis_institution_can_add_dynamic_role_without_mutating_fixed_rol
             fixed_code
         ));
 
-        let company = primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY;
-        let company_cid: private_manage::pallet::CidNumberOf<Runtime> = company
+        let foundation = primitives::cid::china::citizenchain::CITIZENCHAIN_FOUNDATION;
+        let foundation_cid: private_manage::pallet::CidNumberOf<Runtime> = foundation
             .cid_number
             .as_bytes()
             .to_vec()
             .try_into()
-            .expect("company CID fits");
-        let company_proposal_id = 9002;
-        let company_dynamic_code = entity_primitives::generate_dynamic_role_code(
-            company_cid.as_slice(),
+            .expect("foundation CID fits");
+        let foundation_proposal_id = 9002;
+        let foundation_dynamic_code = entity_primitives::generate_dynamic_role_code(
+            foundation_cid.as_slice(),
             0,
-            company_proposal_id,
+            foundation_proposal_id,
         );
         assert_ok!(PrivateManage::apply_institution_governance_result(
             entity_primitives::InstitutionGovernanceResult {
-                institution_code: *b"SFGQ",
-                cid_number: company_cid.to_vec(),
-                proposal_id: company_proposal_id,
+                institution_code: *b"SFGY",
+                cid_number: foundation_cid.to_vec(),
+                proposal_id: foundation_proposal_id,
                 role_mutations: vec![InstitutionRoleMutation::Create {
                     role_name: "安全工作人员".as_bytes().to_vec(),
                     term_required: false,
@@ -120,12 +120,12 @@ fn protected_genesis_institution_can_add_dynamic_role_without_mutating_fixed_rol
                 result_source_ref: b"proposal-9002".to_vec(),
             }
         ));
-        let company_dynamic_code: private_manage::RoleCodeOf = company_dynamic_code
+        let foundation_dynamic_code: private_manage::RoleCodeOf = foundation_dynamic_code
             .try_into()
-            .expect("company dynamic role code fits");
+            .expect("foundation dynamic role code fits");
         assert!(private_manage::InstitutionRoles::<Runtime>::contains_key(
-            &company_cid,
-            company_dynamic_code
+            &foundation_cid,
+            foundation_dynamic_code
         ));
     });
 }
@@ -1568,26 +1568,26 @@ fn genesis_public_institutions_full_mint_counts() {
     });
 }
 
-/// 中国公民链技术股份有限公司以私权创世机构写入，三名人员、三岗、法定代表人与阈值同源一致。
+/// 公民链基金会以非营利私权法人创世写入；一名管理员可同时任三个固定岗位。
 #[test]
-fn genesis_citizenchain_technology_is_complete_and_protected() {
+fn genesis_citizenchain_foundation_is_complete_and_protected() {
     new_test_ext().execute_with(|| {
-        let company = primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY;
-        let cid: private_manage::pallet::CidNumberOf<Runtime> = company
+        let foundation = primitives::cid::china::citizenchain::CITIZENCHAIN_FOUNDATION;
+        let cid: private_manage::pallet::CidNumberOf<Runtime> = foundation
             .cid_number
             .as_bytes()
             .to_vec()
             .try_into()
-            .expect("company CID fits");
+            .expect("foundation CID fits");
         let info = private_manage::Institutions::<Runtime>::get(&cid)
-            .expect("citizenchain technology genesis institution exists");
+            .expect("citizenchain foundation genesis institution exists");
         assert_eq!(
             info.cid_full_name.as_slice(),
-            company.cid_full_name.as_bytes()
+            foundation.cid_full_name.as_bytes()
         );
         assert_eq!(
             info.cid_short_name.as_slice(),
-            company.cid_short_name.as_bytes()
+            foundation.cid_short_name.as_bytes()
         );
         assert_eq!(
             info.legal_representative_name
@@ -1608,20 +1608,18 @@ fn genesis_citizenchain_technology_is_complete_and_protected() {
             ))
         );
 
-        let admin_cid: admin_primitives::AdminCidNumber = company
+        let admin_cid: admin_primitives::AdminCidNumber = foundation
             .cid_number
             .as_bytes()
             .to_vec()
             .try_into()
             .expect("admin CID fits");
-        let admins =
-            private_admins::AdminAccounts::<Runtime>::get(admin_cid).expect("company admins exist");
-        assert_eq!(admins.institution_code, *b"SFGQ");
-        assert_eq!(admins.admins.len(), 3);
+        let admins = private_admins::AdminAccounts::<Runtime>::get(admin_cid)
+            .expect("foundation admins exist");
+        assert_eq!(admins.institution_code, *b"SFGY");
+        assert_eq!(admins.admins.len(), 1);
         assert_eq!(admins.admins[0].family_name.as_slice(), "程".as_bytes());
         assert_eq!(admins.admins[0].given_name.as_slice(), "伟".as_bytes());
-        assert_eq!(admins.admins[1].family_name.as_slice(), "管理".as_bytes());
-        assert_eq!(admins.admins[1].given_name.as_slice(), "员".as_bytes());
 
         for (index, fixed_role) in primitives::cid::china::citizenchain::CITIZENCHAIN_FIXED_ROLES
             .iter()
@@ -1633,7 +1631,7 @@ fn genesis_citizenchain_technology_is_complete_and_protected() {
                 .try_into()
                 .expect("fixed role code fits");
             let role = private_manage::InstitutionRoles::<Runtime>::get(&cid, &role_code)
-                .expect("fixed company role exists");
+                .expect("fixed foundation role exists");
             assert_eq!(role.role_name.as_slice(), fixed_role.role_name);
             assert_eq!(
                 role.role_status,
@@ -1645,14 +1643,14 @@ fn genesis_citizenchain_technology_is_complete_and_protected() {
             assert_eq!(
                 assignments[0].admin_account,
                 AccountId::new(
-                    primitives::cid::china::citizenchain::CITIZENCHAIN_GENESIS_ADMINS[index]
+                    primitives::cid::china::citizenchain::CITIZENCHAIN_GENESIS_ASSIGNMENTS[index]
                         .admin_account,
                 )
             );
             let permissions =
                 private_manage::InstitutionRolePermissions::<Runtime>::get(&cid, &role_code);
             let expected = entity_primitives::fixed_role_permission_specs(
-                *b"SFGQ",
+                *b"SFGY",
                 cid.as_slice(),
                 fixed_role.role_code,
             );
@@ -1666,21 +1664,21 @@ fn genesis_citizenchain_technology_is_complete_and_protected() {
             }));
         }
         assert_eq!(
-            internal_vote::ActiveInstitutionThresholds::<Runtime>::get(&cid),
+            private_manage::InstitutionGovernanceThresholds::<Runtime>::get(&cid),
             Some(2)
         );
         assert!(RuntimeReservedAccountGuard::is_reserved(&AccountId::new(
-            company.main_account
+            foundation.main_account
         )));
         assert!(RuntimeReservedAccountGuard::is_reserved(&AccountId::new(
-            company.fee_account
+            foundation.fee_account
         )));
         assert!(!RuntimeInstitutionAsset::can_spend(
-            &AccountId::new(company.fee_account),
+            &AccountId::new(foundation.fee_account),
             InstitutionAssetAction::MultisigTransferExecute
         ));
         assert!(RuntimeInstitutionAsset::can_spend(
-            &AccountId::new(company.fee_account),
+            &AccountId::new(foundation.fee_account),
             InstitutionAssetAction::OffchainFeeSweepExecute
         ));
         assert_eq!(private_manage::Institutions::<Runtime>::iter().count(), 1);
@@ -1712,7 +1710,7 @@ fn genesis_national_singletons_exist_and_member_bodies_are_unconstituted() {
                 Some(AccountId::new(singleton.main_account))
             );
             assert!(public_admins::AdminAccounts::<Runtime>::get(&cid).is_none());
-            assert!(internal_vote::ActiveInstitutionThresholds::<Runtime>::get(&cid).is_none());
+            assert!(public_manage::InstitutionGovernanceThresholds::<Runtime>::get(&cid).is_none());
         }
 
         for spec in primitives::institution_constraints::member_composition_specs() {
@@ -1795,18 +1793,11 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
                 admins: established_admins
                     .iter()
                     .cloned()
-                    .map(|admin_account| admin_primitives::Admin {
+                    .map(|admin_account| admin_primitives::PublicAdmin {
                         admin_account,
-                        family_name: "管理"
-                            .as_bytes()
-                            .to_vec()
-                            .try_into()
-                            .expect("family name fits"),
-                        given_name: "员"
-                            .as_bytes()
-                            .to_vec()
-                            .try_into()
-                            .expect("given name fits"),
+                        cid_number: Default::default(),
+                        family_name: Default::default(),
+                        given_name: Default::default(),
                     })
                     .collect::<Vec<_>>()
                     .try_into()
@@ -1848,9 +1839,9 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
         let account = public_admins::AdminAccounts::<Runtime>::get(&cid_number)
             .expect("admins remain independently registered");
         assert_eq!(account.admins.len() as u32, spec.min_members);
-        assert_eq!(
-            internal_vote::ActiveInstitutionThresholds::<Runtime>::get(&cid_number),
-            None
+        public_manage::InstitutionGovernanceThresholds::<Runtime>::insert(
+            &cid_number,
+            spec.min_members / 2 + 1,
         );
         let vote_plan = votingengine::VotePlanOf::<AccountId>::try_new(
             votingengine::BusinessActionId {
@@ -2055,18 +2046,11 @@ fn national_singletons_without_member_ranges_can_be_composed_once() {
                     admins: admins
                         .iter()
                         .cloned()
-                        .map(|admin_account| admin_primitives::Admin {
+                        .map(|admin_account| admin_primitives::PublicAdmin {
                             admin_account,
-                            family_name: "管理"
-                                .as_bytes()
-                                .to_vec()
-                                .try_into()
-                                .expect("family name fits"),
-                            given_name: "员"
-                                .as_bytes()
-                                .to_vec()
-                                .try_into()
-                                .expect("given name fits"),
+                            cid_number: Default::default(),
+                            family_name: Default::default(),
+                            given_name: Default::default(),
                         })
                         .collect::<Vec<_>>()
                         .try_into()
@@ -2120,10 +2104,7 @@ fn national_singletons_without_member_ranges_can_be_composed_once() {
                     .collect::<Vec<_>>(),
                 admins
             );
-            assert_eq!(
-                internal_vote::ActiveInstitutionThresholds::<Runtime>::get(cid_number),
-                None
-            );
+            public_manage::InstitutionGovernanceThresholds::<Runtime>::insert(&cid_number, 2);
         }
     });
 }
@@ -2600,8 +2581,8 @@ fn runtime_governance_result_router_enforces_fixed_role_seats() {
             replacement
         );
         assert_eq!(
-            internal_vote::ActiveInstitutionThresholds::<Runtime>::get(njd_cid_number),
-            None
+            public_manage::InstitutionGovernanceThresholds::<Runtime>::get(njd_cid_number),
+            Some(primitives::count_const::NJD_INTERNAL_THRESHOLD)
         );
     });
 }

@@ -12,51 +12,71 @@ import {
 } from "../src/chain/subscription";
 import type { Env } from "../src/types";
 
+// 与 runtime 金标 state_platform 逐字节一致（新布局：无 pending_plan，末尾含
+// authorized_price_fen + suspend_reason）。
 const STATE_PLATFORM =
-  "0002000068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c01000000";
+  "00020068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c010000001c8d5b0000000000000000000000000000";
+// 拆分点：status 字节位于 [-36,-34)，authorized_price_fen 位于 [-34,-2)，suspend_reason 位于 [-2)。
+const STATE_PREFIX = STATE_PLATFORM.slice(0, -36);
+const STATE_AUTHORIZED = STATE_PLATFORM.slice(-34, -2);
 
 describe("decodeSubscriptionState", () => {
   it("严格解码平台 Active 状态和链上 paid_until", () => {
     const state = decodeSubscriptionState(hexToBytes(STATE_PLATFORM));
     expect(state).toEqual({
       plan: { kind: "platform", membershipLevel: "spark" },
-      pendingPlan: null,
       startedAt: 1_700_000_000_000,
       lastChargedAt: 1_700_000_000_000,
       lastChargedPriceFen: 5_999_900n,
       paidUntil: 1_702_000_000_000,
       status: "active",
+      authorizedPriceFen: 5_999_900n,
+      suspendReason: null,
     });
   });
 
-  it("解码扣款失败后的 Terminated 状态", () => {
-    const terminated = STATE_PLATFORM.slice(0, -2) + "02";
-    const state = decodeSubscriptionState(hexToBytes(terminated));
-    expect(state?.status).toBe("terminated");
+  it("解码 Terminated 状态", () => {
+    const terminated = STATE_PREFIX + "02" + STATE_AUTHORIZED + "00";
+    expect(decodeSubscriptionState(hexToBytes(terminated)).status).toBe("terminated");
+  });
+
+  it("解码 Suspended（待再签名）与 CreatorPaused 状态", () => {
+    const suspended = STATE_PREFIX + "03" + STATE_AUTHORIZED + "0100";
+    const s = decodeSubscriptionState(hexToBytes(suspended));
+    expect(s.status).toBe("suspended");
+    expect(s.suspendReason).toBe("needReconsent");
+
+    const creatorPaused = STATE_PREFIX + "04" + STATE_AUTHORIZED + "00";
+    const c = decodeSubscriptionState(hexToBytes(creatorPaused));
+    expect(c.status).toBe("creatorPaused");
+    expect(c.suspendReason).toBeNull();
   });
 
   it("解码创作者 tier_id 和自然周期枚举", () => {
     const plan = "0124737570706f7274657201";
     const stateHex =
       plan +
-      "00" +
       "0068e5cf8b010000" +
       "0068e5cf8b010000" +
       "32000000000000000000000000000000" +
       "00fc1a478c010000" +
+      "00" +
+      "32000000000000000000000000000000" +
       "00";
     const state = decodeSubscriptionState(hexToBytes(stateHex));
-    expect(state?.plan).toEqual({
+    expect(state.plan).toEqual({
       kind: "creator",
       tierId: "supporter",
       billingPeriod: "quarterly",
     });
   });
 
-  it("拒绝非法枚举、非法到期时间、截断和尾随字节", () => {
+  it("拒绝非法枚举、截断、尾随字节和非法 suspend_reason", () => {
     expect(() => decodeSubscriptionState(hexToBytes("0003"))).toThrow();
-    expect(() => decodeSubscriptionState(hexToBytes(STATE_PLATFORM.slice(0, -18) + "000000000000000000"))).toThrow();
+    expect(() => decodeSubscriptionState(hexToBytes(STATE_PLATFORM.slice(0, 40)))).toThrow();
     expect(() => decodeSubscriptionState(hexToBytes(STATE_PLATFORM + "00"))).toThrow();
+    // suspend_reason Option 标记非法（02）。
+    expect(() => decodeSubscriptionState(hexToBytes(STATE_PREFIX + "00" + STATE_AUTHORIZED + "02"))).toThrow();
     expect(() => decodeSubscriptionState(new Uint8Array())).toThrow();
   });
 });

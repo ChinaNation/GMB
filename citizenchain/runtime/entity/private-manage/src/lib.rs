@@ -66,7 +66,7 @@ pub mod pallet {
     use crate::weights::WeightInfo;
     // 全新创世直接采用最终布局，不保留历史迁移版本。
     // 开发期无存量链数据；岗位权限、nonce 与永久占用表按最终结构直接以 v2 创世。
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {
@@ -185,11 +185,19 @@ pub mod pallet {
     ///
     /// 只保存全国可见的机构身份事实：名称、机构码、创建块号和法定代表人。
     /// 各类协议账户由 (cid_number, 保留名) 派生且常驻 InstitutionAccounts，不在此重复；
-    /// 管理员集合长期真源在 admins 模块,动态阈值长期真源在 internal-vote,均不在此存快照。
+    /// 管理员集合长期真源在 admins 模块；机构治理阈值由下方
+    /// `InstitutionGovernanceThresholds` 独立保存，均不嵌入机构信息。
     #[pallet::storage]
     #[pallet::getter(fn institution_of)]
     pub type Institutions<T: Config> =
         StorageMap<_, Blake2_128Concat, CidNumberOf<T>, InstitutionInfoOf<T>, OptionQuery>;
+
+    /// 机构治理阈值唯一真源；与 admins 人数、岗位数量分别独立。
+    /// 投票引擎只能在建案时读取并冻结提案快照，不得保存第二份机构阈值。
+    #[pallet::storage]
+    #[pallet::getter(fn institution_governance_threshold)]
+    pub type InstitutionGovernanceThresholds<T: Config> =
+        StorageMap<_, Blake2_128Concat, CidNumberOf<T>, u32, OptionQuery>;
 
     /// 私权机构自己的动态岗位目录。
     #[pallet::storage]
@@ -725,13 +733,10 @@ pub mod pallet {
             Ok(Sr25519Public::from_raw(arr))
         }
 
-        pub(crate) fn ensure_admin_config(
-            admins: &InstitutionAdminsInputOf<T>,
-            threshold: u32,
-        ) -> DispatchResult {
-            ensure!(T::MaxAdmins::get() >= 2, Error::<T>::InvalidRuntimeConfig);
+        pub(crate) fn ensure_admin_config(admins: &InstitutionAdminsInputOf<T>) -> DispatchResult {
+            ensure!(T::MaxAdmins::get() >= 1, Error::<T>::InvalidRuntimeConfig);
             let admins_len = admins.len() as u32;
-            ensure!(admins_len >= 2, Error::<T>::InvalidAdminsLen);
+            ensure!(admins_len >= 1, Error::<T>::InvalidAdminsLen);
             ensure!(
                 admins.iter().all(|admin| !admin.family_name.is_empty()),
                 Error::<T>::InvalidFamilyName
@@ -739,12 +744,6 @@ pub mod pallet {
             ensure!(
                 admins.iter().all(|admin| !admin.given_name.is_empty()),
                 Error::<T>::InvalidGivenName
-            );
-            ensure!(
-                threshold > 0
-                    && threshold <= admins_len
-                    && u64::from(threshold).saturating_mul(2) > u64::from(admins_len),
-                Error::<T>::InvalidThreshold
             );
             // 注册局代创建时，发起人属于注册局 CID；这里仅校验目标机构 admins 集合本身。
             let accounts: Vec<T::AccountId> = admins
@@ -772,7 +771,6 @@ pub mod pallet {
             cid_number: &CidNumberOf<T>,
             institution_code: InstitutionCode,
             admins: &InstitutionAdminsInputOf<T>,
-            threshold: u32,
         ) -> DispatchResult {
             Self::ensure_lifecycle_institution_code(&institution_code)?;
             T::AdminLifecycle::set_institution_admins(
@@ -781,7 +779,6 @@ pub mod pallet {
                 institution_code,
                 AdminAccountKind::PrivateInstitution,
                 admins.iter().cloned().collect(),
-                threshold,
             )
         }
 
@@ -798,23 +795,22 @@ pub mod pallet {
             cid_number: &[u8],
             action: &InstitutionGovernanceActionOf<T>,
         ) -> DispatchResult {
-            let protected_company =
-                primitives::cid::china::citizenchain::is_citizenchain_technology_identity(
+            let protected_foundation =
+                primitives::cid::china::citizenchain::is_citizenchain_foundation_identity(
                     institution_code,
                     cid_number,
                 );
             match action {
                 InstitutionGovernanceAction::ReplaceAdmins { admins } => {
                     ensure!(
-                        !protected_company,
+                        !protected_foundation,
                         Error::<T>::InvalidInstitutionGovernanceAction
                     );
                     let bounded: InstitutionAdminsInputOf<T> = admins
                         .clone()
                         .try_into()
                         .map_err(|_| Error::<T>::TooManyInstitutionAdmins)?;
-                    let threshold = bounded.len() as u32 / 2 + 1;
-                    Self::ensure_admin_config(&bounded, threshold)
+                    Self::ensure_admin_config(&bounded)
                 }
                 InstitutionGovernanceAction::MutateRolesAndAssignments {
                     role_mutations,
@@ -859,8 +855,7 @@ pub mod pallet {
                         .clone()
                         .try_into()
                         .map_err(|_| Error::<T>::TooManyInstitutionAdmins)?;
-                    let threshold = bounded.len() as u32 / 2 + 1;
-                    Self::ensure_admin_config(&bounded, threshold)?;
+                    Self::ensure_admin_config(&bounded)?;
                     for mutation in role_mutations {
                         if let InstitutionRoleMutation::Create { assignments, .. } = mutation {
                             for target in assignments {
@@ -1048,8 +1043,7 @@ pub mod pallet {
             let info =
                 Institutions::<T>::get(&cid_number).ok_or(Error::<T>::InstitutionNotFound)?;
             Self::ensure_lifecycle_institution_code(&info.institution_code)?;
-            let threshold = admins.len() as u32 / 2 + 1;
-            Self::ensure_admin_config(&admins, threshold)?;
+            Self::ensure_admin_config(&admins)?;
             // 授权唯一真源:extrinsic 签名者 `who` 必须是注册局(actor)机构在册管理员,
             // 且注册局对目标机构 CID/机构码有登记权(省/市作用域由目标 CID 直接派生)。
             ensure!(
@@ -1061,7 +1055,7 @@ pub mod pallet {
                 ),
                 Error::<T>::RegistryAuthorityDenied
             );
-            Self::set_institution_admins(&cid_number, info.institution_code, &admins, threshold)?;
+            Self::set_institution_admins(&cid_number, info.institution_code, &admins)?;
             Self::deposit_event(Event::<T>::InstitutionAdminsRegistered {
                 cid_number,
                 admins_len: admins.len() as u32,
@@ -1085,13 +1079,7 @@ pub mod pallet {
                     let bounded: InstitutionAdminsInputOf<T> = admins
                         .try_into()
                         .map_err(|_| Error::<T>::TooManyInstitutionAdmins)?;
-                    let threshold = bounded.len() as u32 / 2 + 1;
-                    Self::set_institution_admins(
-                        &cid_number,
-                        proposal.institution_code,
-                        &bounded,
-                        threshold,
-                    )
+                    Self::set_institution_admins(&cid_number, proposal.institution_code, &bounded)
                 }
                 InstitutionGovernanceAction::MutateRolesAndAssignments {
                     role_mutations,
@@ -1115,13 +1103,11 @@ pub mod pallet {
                     let bounded: InstitutionAdminsInputOf<T> = admins
                         .try_into()
                         .map_err(|_| Error::<T>::TooManyInstitutionAdmins)?;
-                    let threshold = bounded.len() as u32 / 2 + 1;
                     frame_support::storage::with_transaction(|| {
                         if let Err(error) = Self::set_institution_admins(
                             &cid_number,
                             proposal.institution_code,
                             &bounded,
-                            threshold,
                         ) {
                             return frame_support::storage::TransactionOutcome::Rollback(Err(
                                 error,
@@ -1219,10 +1205,8 @@ impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for palle
         let cid_number = Self::lookup_cid(addr)?;
         let admins =
             T::InstitutionAdminQuery::institution_admins(institution_code, cid_number.as_slice())?;
-        let threshold = <T as Config>::InternalVoteEngine::active_institution_threshold(
-            institution_code,
-            cid_number.as_slice(),
-        )?;
+        let cid: pallet::CidNumberOf<T> = cid_number.clone().try_into().ok()?;
+        let threshold = pallet::InstitutionGovernanceThresholds::<T>::get(cid)?;
         let admins_len = admins.len() as u32;
         Some(primitives::multisig::MultisigConfigSnapshot {
             admins,

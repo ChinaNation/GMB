@@ -35,7 +35,7 @@ pub type FamilyName = BoundedVec<u8, ConstU32<ADMIN_PERSON_NAME_MAX_BYTES>>;
 /// 与链上中国公民字段同名的名。
 pub type GivenName = BoundedVec<u8, ConstU32<ADMIN_PERSON_NAME_MAX_BYTES>>;
 
-/// 全仓统一管理员人员记录。
+/// 私权机构与个人多签管理员人员记录。
 ///
 /// `admin_account` 是唯一授权字段；`family_name`、`given_name` 与链上中国公民姓名
 /// 字段逐字对齐，只承载人员姓名。机构岗位和任职由 entity 独立保存，个人多签也复用
@@ -53,6 +53,29 @@ pub type GivenName = BoundedVec<u8, ConstU32<ADMIN_PERSON_NAME_MAX_BYTES>>;
 )]
 pub struct Admin<AccountId> {
     pub admin_account: AccountId,
+    pub family_name: FamilyName,
+    pub given_name: GivenName,
+}
+
+/// 公权机构管理员人员记录。
+///
+/// `cid_number` 是对 `citizen-identity` 公民身份真源的引用；当前创世资料不完整时允许
+/// 为空。姓名同样允许为空，且不得用展示占位值冒充真实公民资料。授权仍只使用
+/// `admin_account`，公民 CID 与姓名都不能直接产生岗位权限。
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Clone,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+    PartialEq,
+    Eq,
+)]
+pub struct PublicAdmin<AccountId> {
+    pub admin_account: AccountId,
+    pub cid_number: AdminCidNumber,
     pub family_name: FamilyName,
     pub given_name: GivenName,
 }
@@ -218,15 +241,14 @@ pub trait AdminAccountLifecycle<AccountId, AdminItem = AccountId> {
 ///
 /// 机构的来源、岗位和任职全部由 entity 表达，因此该接口不接收 `creator`，也不承担
 /// 个人多签的创建语义。公权与私权 entity 只通过本接口原子写入管理员人员集合。
-pub trait InstitutionAdminLifecycle<AccountId> {
-    /// 注册局直设机构的有效管理员人员集合，并同步登记动态投票阈值。
+pub trait InstitutionAdminLifecycle<AccountId, AdminItem = Admin<AccountId>> {
+    /// 注册局或机构治理写入有效管理员人员集合；机构阈值由 entity 独立保存。
     fn set_institution_admins(
         module_tag: &[u8],
         cid_number: Vec<u8>,
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
-        admins: Vec<Admin<AccountId>>,
-        threshold: u32,
+        admins: Vec<AdminItem>,
     ) -> DispatchResult;
 }
 
@@ -246,12 +268,6 @@ pub trait InstitutionAdminQuery<AccountId> {
         institution_code: InstitutionCode,
         cid_number: &[u8],
     ) -> Option<Vec<AccountId>>;
-
-    /// 返回完整管理员人员记录；授权调用方仍必须只比较 `admin_account`。
-    fn institution_admin_records(
-        institution_code: InstitutionCode,
-        cid_number: &[u8],
-    ) -> Option<Vec<Admin<AccountId>>>;
 
     fn institution_admins_len(institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32>;
 }
@@ -282,12 +298,18 @@ impl<AccountId> InstitutionAdminQuery<AccountId> for () {
     ) -> Option<u32> {
         None
     }
+}
 
-    fn institution_admin_records(
-        _institution_code: InstitutionCode,
-        _cid_number: &[u8],
-    ) -> Option<Vec<Admin<AccountId>>> {
-        None
+/// 公权管理员非空公民 CID 与钱包绑定查询。
+///
+/// 实现只能读取 `citizen-identity` 真源；public-admins 不得自行生成或修正公民 CID。
+pub trait CitizenIdentityBindingQuery<AccountId> {
+    fn matches_citizen_account(cid_number: &[u8], account: &AccountId) -> bool;
+}
+
+impl<AccountId> CitizenIdentityBindingQuery<AccountId> for () {
+    fn matches_citizen_account(_cid_number: &[u8], _account: &AccountId) -> bool {
+        false
     }
 }
 
@@ -481,7 +503,7 @@ pub fn expected_fixed_governance_admins_len(
 mod tests {
     use super::*;
 
-    /// 管理员声明序固定为账户、姓、名，机构值只在前面增加机构码。
+    /// 私权管理员声明序固定为账户、姓、名，机构值只在前面增加机构码。
     #[test]
     fn institution_admin_account_field_order_matches_node_guard() {
         use codec::Encode;
@@ -498,6 +520,29 @@ mod tests {
         assert_eq!(
             value.encode(),
             (*b"NRCG", vec![(7u8, admin.family_name, admin.given_name)]).encode()
+        );
+    }
+
+    #[test]
+    fn public_admin_field_order_is_account_cid_family_given() {
+        use codec::Encode;
+
+        let cid_number = AdminCidNumber::truncate_from(b"GZ000-CTZN6-198805200-2026".to_vec());
+        let admin = PublicAdmin {
+            admin_account: 7u8,
+            cid_number: cid_number.clone(),
+            family_name: FamilyName::truncate_from("程".as_bytes().to_vec()),
+            given_name: GivenName::truncate_from("伟".as_bytes().to_vec()),
+        };
+        assert_eq!(
+            admin.encode(),
+            (
+                7u8,
+                cid_number,
+                admin.family_name.clone(),
+                admin.given_name.clone()
+            )
+                .encode()
         );
     }
 

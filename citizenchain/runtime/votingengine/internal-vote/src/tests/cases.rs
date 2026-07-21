@@ -152,11 +152,10 @@ fn governance_internal_proposal_snapshots_fixed_threshold_not_provider() {
 }
 
 #[test]
-fn permanent_singleton_snapshots_strict_majority_without_dynamic_threshold() {
+fn permanent_singleton_reads_entity_threshold_and_freezes_snapshot() {
     new_test_ext().execute_with(|| {
         let actor_cid_number = permanent_singleton_cid();
-        // 即使存在 CID 阈值脏值，永久单例也必须按管理员快照严格过半。
-        ActiveInstitutionThresholds::<Test>::insert(actor_cid_number.clone(), 3);
+        set_institution_threshold(actor_cid_number.clone(), 2);
 
         let proposal_id = create_internal_proposal_via_engine(
             permanent_singleton_admin(0),
@@ -169,16 +168,7 @@ fn permanent_singleton_snapshots_strict_majority_without_dynamic_threshold() {
                 PERMANENT_SINGLETON_CODE,
                 actor_cid_number.as_slice(),
             ),
-            None
-        );
-        assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::register_active_institution_threshold_direct(
-                PERMANENT_SINGLETON_CODE,
-                actor_cid_number.to_vec(),
-                3,
-                2,
-            ),
-            Error::<Test>::InvalidInternalCode
+            Some(2)
         );
     });
 }

@@ -62,7 +62,10 @@ mod benchmarks {
             Pallet::<T>::process_due_subscriptions(3u64, 1);
         }
 
-        assert!(!RenewalSchedule::<T>::contains_key(2u64.to_be_bytes(), &key));
+        assert!(!RenewalSchedule::<T>::contains_key(
+            2u64.to_be_bytes(),
+            &key
+        ));
     }
 
     impl_benchmark_test_suite!(Pallet, crate::tests::new_test_ext(), crate::tests::Test,);

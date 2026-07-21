@@ -148,12 +148,10 @@ function assertPlatformStateMatches(
     }
     return;
   }
-  const pendingMatches =
-    state.pendingPlan?.kind === "platform" &&
-    state.pendingPlan.membershipLevel === requestedLevel;
+  // 换挡即时生效（无 pending）：确认后链上 plan 已是目标档。
   if (
     state.status !== "active" ||
-    (state.plan.membershipLevel !== requestedLevel && !pendingMatches)
+    state.plan.membershipLevel !== requestedLevel
   ) {
     throw new HttpError(409, "subscription_state_not_finalized", "链上平台订阅或换档状态尚未最终确认");
   }
@@ -169,20 +167,17 @@ async function mirrorPlatformState(
   if (state.plan.kind !== "platform") {
     throw new HttpError(409, "subscription_state_not_finalized", "链上平台订阅计划不合法");
   }
-  const pendingMembershipLevel =
-    state.pendingPlan?.kind === "platform" ? state.pendingPlan.membershipLevel : null;
   const lastChargedPriceFen = safePrice(state.lastChargedPriceFen);
   const entitlementLapsedAt = state.status === "active" ? null : state.paidUntil;
   await env.DB.prepare(
     `INSERT INTO square_memberships
-      (owner_account, membership_level, pending_membership_level, started_at,
+      (owner_account, membership_level, started_at,
        last_charged_at, last_charged_price_fen, paid_until, subscription_status,
        finalized_block_number, finalized_block_hash, verified_at,
        entitlement_lapsed_at, last_tx_hash)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(owner_account) DO UPDATE SET
         membership_level = excluded.membership_level,
-        pending_membership_level = excluded.pending_membership_level,
         started_at = excluded.started_at,
         last_charged_at = excluded.last_charged_at,
         last_charged_price_fen = excluded.last_charged_price_fen,
@@ -198,7 +193,6 @@ async function mirrorPlatformState(
     .bind(
       ownerAccount,
       state.plan.membershipLevel,
-      pendingMembershipLevel,
       state.startedAt,
       state.lastChargedAt,
       lastChargedPriceFen,

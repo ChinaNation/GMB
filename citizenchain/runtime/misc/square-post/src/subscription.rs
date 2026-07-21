@@ -327,8 +327,8 @@ impl<T: Config> Pallet<T> {
                 let price = PlatformPrice::<T>::get(membership_level)
                     .ok_or(Error::<T>::PlatformPriceNotSet)?;
                 ensure!(price > 0, Error::<T>::ZeroPrice);
-                // 平台订阅机构永久固定为创世技术公司，CID 单源自创世常量，不读可写存储。
-                let cid = primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY
+                // 平台订阅机构永久固定为公民链基金会，CID 单源自创世常量，不读可写存储。
+                let cid = primitives::cid::china::citizenchain::CITIZENCHAIN_FOUNDATION
                     .cid_number
                     .as_bytes();
                 let payee = T::InstitutionAccountQuery::lookup_institution_account(

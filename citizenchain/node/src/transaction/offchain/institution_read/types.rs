@@ -46,7 +46,7 @@ pub struct AccountWithBalance {
 pub type InstitutionAdminDisplay = crate::admins::management::types::InstitutionAdminInfo;
 
 /// 机构详情 = `PublicManage/PrivateManage::Institutions[cid_number]`(机构最小集)
-/// + 派生的主/费账户余额 + 管理员模块管理员集合 + internal-vote 动态阈值。
+/// + 派生的主/费账户余额 + 管理员模块管理员集合 + entity 机构治理阈值。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstitutionDetail {

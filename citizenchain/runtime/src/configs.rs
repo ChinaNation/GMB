@@ -128,11 +128,11 @@ fn is_cb_fee_account(address: &AccountId) -> bool {
         .any(|n| address == &AccountId::new(n.fee_account))
 }
 
-/// 检查是否为中国公民链技术股份有限公司费用账户。
+/// 检查是否为中国公民链技术发展基金会费用账户。
 fn is_citizenchain_fee_account(address: &AccountId) -> bool {
     address
         == &AccountId::new(
-            primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY.fee_account,
+            primitives::cid::china::citizenchain::CITIZENCHAIN_FOUNDATION.fee_account,
         )
 }
 
@@ -880,7 +880,7 @@ impl primitives::institution_asset::InstitutionAsset<AccountId> for RuntimeInsti
             );
         }
 
-        // 4. 公民链技术公司费用账户：同样只允许手续费归集；必须先于宽泛保留账户匹配。
+        // 4. 公民链基金会费用账户：同样只允许手续费归集；必须先于宽泛保留账户匹配。
         if is_citizenchain_fee_account(source) {
             return matches!(
                 action,
@@ -1337,6 +1337,26 @@ impl citizen_identity::Config for Runtime {
     type WeightInfo = citizen_identity::weights::SubstrateWeight<Runtime>;
 }
 
+/// 公权管理员公民 CID 与钱包绑定校验器。
+///
+/// `citizen-identity` 同时维护 CID→钱包与钱包→身份两条索引；这里只接受两条索引
+/// 完全一致的正常绑定，不在管理员模块复制或修正公民身份数据。
+pub struct RuntimePublicAdminCitizenIdentityBinding;
+
+impl admin_primitives::CitizenIdentityBindingQuery<AccountId>
+    for RuntimePublicAdminCitizenIdentityBinding
+{
+    fn matches_citizen_account(cid_number: &[u8], account: &AccountId) -> bool {
+        let Ok(cid): Result<citizen_identity::CidNumberBound, _> = cid_number.to_vec().try_into()
+        else {
+            return false;
+        };
+        citizen_identity::AccountByCid::<Runtime>::get(&cid).as_ref() == Some(account)
+            && citizen_identity::VotingIdentityByAccount::<Runtime>::get(account)
+                .is_some_and(|identity| identity.cid_number == cid)
+    }
+}
+
 pub struct RuntimeSquarePostCitizenIdentity;
 
 impl square_post::SquarePostCitizenIdentityProvider<AccountId>
@@ -1401,13 +1421,12 @@ parameter_types! {
 impl public_admins::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
-    type InternalVoteEngine = InternalVote;
+    type CitizenIdentityBinding = RuntimePublicAdminCitizenIdentityBinding;
 }
 
 impl private_admins::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
-    type InternalVoteEngine = InternalVote;
 }
 
 impl resolution_destroy::Config for Runtime {
@@ -1641,33 +1660,6 @@ impl admin_primitives::InstitutionAdminQuery<AccountId> for RuntimeInstitutionAd
         cid_number: &[u8],
     ) -> Option<u32> {
         Self::institution_admins(institution_code, cid_number).map(|admins| admins.len() as u32)
-    }
-
-    fn institution_admin_records(
-        institution_code: primitives::cid::code::InstitutionCode,
-        cid_number: &[u8],
-    ) -> Option<Vec<admin_primitives::Admin<AccountId>>> {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return <public_admins::Pallet<Runtime> as admin_primitives::InstitutionAdminQuery<
-                AccountId,
-            >>::institution_admin_records(institution_code, cid_number);
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return <private_admins::Pallet<Runtime> as admin_primitives::InstitutionAdminQuery<
-                AccountId,
-            >>::institution_admin_records(institution_code, cid_number);
-        }
-        if admin_primitives::is_unincorporated_admin_code(&institution_code) {
-            return <public_admins::Pallet<Runtime> as admin_primitives::InstitutionAdminQuery<
-                AccountId,
-            >>::institution_admin_records(institution_code, cid_number)
-            .or_else(|| {
-                <private_admins::Pallet<Runtime> as admin_primitives::InstitutionAdminQuery<
-                    AccountId,
-                >>::institution_admin_records(institution_code, cid_number)
-            });
-        }
-        None
     }
 }
 
@@ -1926,14 +1918,11 @@ fn seed_benchmark_public_admin_account(
     let first_admin = AccountId::new(raw_admins.first().copied().ok_or(())?);
     let admins: public_admins::AdminsOf<Runtime> = raw_admins
         .iter()
-        .map(|raw_admin| admin_primitives::Admin {
+        .map(|raw_admin| admin_primitives::PublicAdmin {
             admin_account: AccountId::new(*raw_admin),
-            family_name: admin_primitives::FamilyName::truncate_from(
-                admin_primitives::DEFAULT_ADMIN_FAMILY_NAME.to_vec(),
-            ),
-            given_name: admin_primitives::GivenName::truncate_from(
-                admin_primitives::DEFAULT_ADMIN_GIVEN_NAME.to_vec(),
-            ),
+            cid_number: Default::default(),
+            family_name: Default::default(),
+            given_name: Default::default(),
         })
         .collect::<Vec<_>>()
         .try_into()
@@ -2304,7 +2293,7 @@ impl election_vote::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxElectionOfficeCodeLen = ConstU32<64>;
     type MaxElectionCandidates = ConstU32<256>;
-    // 互选选民就是目标机构完整 admins 快照，边界必须与管理员真源一致。
+    // 互选选民来自 VotePlan 指定岗位的有效任职快照，不从 admins 推导。
     type InstitutionRoleProvider = RuntimeInstitutionRoleProvider;
     type WeightInfo = election_vote::weights::SubstrateWeight<Runtime>;
 }
@@ -2350,6 +2339,20 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
         who: &AccountId,
     ) -> bool {
         RuntimeInstitutionAdminQuery::is_institution_admin(institution_code, cid_number, who)
+    }
+
+    fn institution_threshold(
+        institution_code: votingengine::types::InstitutionCode,
+        cid_number: &[u8],
+    ) -> Option<u32> {
+        let cid = votingengine::types::CidNumber::try_from(cid_number.to_vec()).ok()?;
+        if admin_primitives::is_public_admin_code(&institution_code) {
+            return public_manage::InstitutionGovernanceThresholds::<Runtime>::get(cid);
+        }
+        if admin_primitives::is_private_admin_code(&institution_code) {
+            return private_manage::InstitutionGovernanceThresholds::<Runtime>::get(cid);
+        }
+        None
     }
 
     fn is_pending_personal_admin(personal_account: AccountId, who: &AccountId) -> bool {

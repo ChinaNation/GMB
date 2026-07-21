@@ -140,13 +140,13 @@ pub mod pallet {
         /// 链上共识挂钟（`pallet_timestamp`）；自动扣款只使用该共识时间源。
         type TimeProvider: UnixTime;
 
-        /// 机构账户查询：平台会员收款方=技术公司费用账户由此派生。
+        /// 机构账户查询：平台会员收款方=公民链基金会费用账户由此派生。
         type InstitutionAccountQuery: entity_primitives::InstitutionMultisigQuery<Self::AccountId>;
 
         /// 平台调价只能经统一内部投票引擎创建提案。
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
-        /// 技术公司岗位业务授权真源。
+        /// 公民链基金会岗位业务授权真源。
         type InstitutionRoleAuthorization: entity_primitives::InstitutionRoleAuthorizationQuery<
             Self::AccountId,
         >;
@@ -192,7 +192,7 @@ pub mod pallet {
     pub type RenewalIndex<T: Config> =
         StorageMap<_, Blake2_128Concat, SubKeyOf<T>, u64, OptionQuery>;
 
-    /// 平台三档价（分）。链上可变真源，由技术公司经治理写入（治理在后续步接入）。
+    /// 平台三档价（分）。链上可变真源，由公民链基金会经治理写入。
     #[pallet::storage]
     pub type PlatformPrice<T: Config> =
         StorageMap<_, Twox64Concat, MembershipLevel, u128, OptionQuery>;
@@ -331,7 +331,7 @@ pub mod pallet {
         PlanIssuerMismatch,
         /// 平台该档价未设置。
         PlatformPriceNotSet,
-        /// 技术公司费用账户不可派生（平台 CID 为创世固定常量，正常不发生，保留 fail-closed）。
+        /// 公民链基金会费用账户不可派生（平台 CID 为创世固定常量，正常不发生，保留 fail-closed）。
         PlatformNotBound,
         /// 创作者不是当前有效平台会员（不能被订阅）。
         CreatorNotPlatformMember,
@@ -349,7 +349,7 @@ pub mod pallet {
         DuplicateTierId,
         DuplicateBillingPeriod,
         TooManyCreatorTiers,
-        /// 平台调价发起 CID 不是已绑定技术公司。
+        /// 平台调价发起 CID 不是公民链基金会。
         NotPlatformInstitution,
         /// CID 无法解析为合法机构码。
         InvalidInstitution,

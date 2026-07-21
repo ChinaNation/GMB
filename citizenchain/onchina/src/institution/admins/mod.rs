@@ -22,7 +22,8 @@ use crate::{
         chain_submit,
         institution_call::{
             encode_propose_institution_governance, encode_register_institution_admins,
-            InstitutionAdminArg, ProposeInstitutionGovernanceArgs, RegisterInstitutionAdminsArgs,
+            InstitutionAdminsPayload, ProposeInstitutionGovernanceArgs,
+            RegisterInstitutionAdminsArgs,
         },
     },
     domains::citizens::{
@@ -45,6 +46,8 @@ pub(crate) const PURPOSE_INSTITUTION_REGISTER_ADMINS: &str = "INSTITUTION_REGIST
 #[derive(Debug, Deserialize)]
 pub(crate) struct InstitutionAdminInput {
     pub(crate) admin_account: String,
+    #[serde(default)]
+    pub(crate) cid_number: Option<String>,
     #[serde(default)]
     pub(crate) family_name: Option<String>,
     #[serde(default)]
@@ -138,15 +141,10 @@ fn code_bytes(institution_code: &str) -> Result<[u8; 4], axum::response::Respons
 fn parse_admin_inputs(
     state: &AppState,
     admins: &[InstitutionAdminInput],
-) -> Result<
-    (
-        Vec<InstitutionAdminArg>,
-        Vec<admin_primitives::Admin<[u8; 32]>>,
-    ),
-    axum::response::Response,
-> {
-    let mut args = Vec::with_capacity(admins.len());
-    let mut action_admins = Vec::with_capacity(admins.len());
+    is_public: bool,
+) -> Result<InstitutionAdminsPayload, axum::response::Response> {
+    let mut public_admins = Vec::with_capacity(admins.len());
+    let mut private_admins = Vec::with_capacity(admins.len());
     let mut seen = std::collections::BTreeSet::new();
     for admin in admins {
         let admin_account =
@@ -168,6 +166,19 @@ fn parse_admin_inputs(
             .db
             .find_citizen_by_wallet(admin.admin_account.trim())
             .map_err(|err| api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, &err))?;
+        let supplied_cid = admin
+            .cid_number
+            .as_deref()
+            .map(str::trim)
+            .filter(|cid| !cid.is_empty());
+        let citizen_cid = supplied_cid
+            .map(str::to_string)
+            .or_else(|| {
+                citizen
+                    .as_ref()
+                    .map(|record| record.cid_number.trim().to_string())
+            })
+            .filter(|cid| !cid.is_empty());
         let family_name = admin
             .family_name
             .as_deref()
@@ -181,7 +192,13 @@ fn parse_admin_inputs(
                     .filter(|name| !name.is_empty())
                     .map(str::to_string)
             })
-            .unwrap_or_else(|| "管理".to_string());
+            .unwrap_or_else(|| {
+                if is_public {
+                    String::new()
+                } else {
+                    "管理".to_string()
+                }
+            });
         let given_name = admin
             .given_name
             .as_deref()
@@ -195,7 +212,13 @@ fn parse_admin_inputs(
                     .filter(|name| !name.is_empty())
                     .map(str::to_string)
             })
-            .unwrap_or_else(|| "员".to_string());
+            .unwrap_or_else(|| {
+                if is_public {
+                    String::new()
+                } else {
+                    "员".to_string()
+                }
+            });
         let family_name: admin_primitives::FamilyName = family_name
             .into_bytes()
             .try_into()
@@ -204,25 +227,69 @@ fn parse_admin_inputs(
             .into_bytes()
             .try_into()
             .map_err(|_| api_error(StatusCode::BAD_REQUEST, 1001, "管理员名过长"))?;
-        args.push(InstitutionAdminArg {
-            admin_account,
-            family_name: family_name.clone(),
-            given_name: given_name.clone(),
-        });
-        action_admins.push(admin_primitives::Admin {
-            admin_account,
-            family_name,
-            given_name,
-        });
+        if is_public {
+            let cid_number: admin_primitives::AdminCidNumber = citizen_cid
+                .unwrap_or_default()
+                .into_bytes()
+                .try_into()
+                .map_err(|_| api_error(StatusCode::BAD_REQUEST, 1001, "公民 CID 过长"))?;
+            public_admins.push(admin_primitives::PublicAdmin {
+                admin_account,
+                cid_number,
+                family_name,
+                given_name,
+            });
+        } else {
+            private_admins.push(admin_primitives::Admin {
+                admin_account,
+                family_name,
+                given_name,
+            });
+        }
     }
-    if action_admins.len() < 2 {
+    if admins.is_empty() {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "机构管理员至少需要 2 人",
+            "机构管理员至少需要 1 人",
         ));
     }
-    Ok((args, action_admins))
+    Ok(if is_public {
+        InstitutionAdminsPayload::Public(public_admins)
+    } else {
+        InstitutionAdminsPayload::Private(private_admins)
+    })
+}
+
+fn encode_governance_action<AdminRecord: Encode>(
+    admins: Option<Vec<AdminRecord>>,
+    role_mutations: Vec<entity_primitives::InstitutionRoleMutation<[u8; 32]>>,
+    assignment_changes: Vec<entity_primitives::InstitutionRoleAssignmentChange<[u8; 32]>>,
+    legal_representative_change: Option<
+        entity_primitives::InstitutionLegalRepresentativeChange<[u8; 32]>,
+    >,
+) -> Vec<u8> {
+    match admins {
+        None => entity_primitives::InstitutionGovernanceAction::<[u8; 32], AdminRecord>::MutateRolesAndAssignments {
+            role_mutations,
+            assignment_changes,
+            legal_representative_change,
+        },
+        Some(admins)
+            if role_mutations.is_empty()
+                && assignment_changes.is_empty()
+                && legal_representative_change.is_none() =>
+        {
+            entity_primitives::InstitutionGovernanceAction::ReplaceAdmins { admins }
+        }
+        Some(admins) => entity_primitives::InstitutionGovernanceAction::ReplaceAdminsAndMutateRoles {
+            admins,
+            role_mutations,
+            assignment_changes,
+            legal_representative_change,
+        },
+    }
+    .encode()
 }
 
 fn parse_permission_operation(
@@ -646,38 +713,45 @@ pub(crate) async fn prepare_institution_governance(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let action = if input.admins.is_empty() {
-        if role_mutations.is_empty() && assignment_changes.is_empty() && legal.is_none() {
-            return api_error(StatusCode::BAD_REQUEST, 1001, "机构治理内容不能为空");
-        }
-        entity_primitives::InstitutionGovernanceAction::MutateRolesAndAssignments {
-            role_mutations,
-            assignment_changes,
-            legal_representative_change: legal,
-        }
-    } else {
-        let (_, admins) = match parse_admin_inputs(&state, &input.admins) {
-            Ok(v) => v,
-            Err(resp) => return resp,
-        };
-        if role_mutations.is_empty() && assignment_changes.is_empty() && legal.is_none() {
-            entity_primitives::InstitutionGovernanceAction::ReplaceAdmins { admins }
-        } else {
-            entity_primitives::InstitutionGovernanceAction::ReplaceAdminsAndMutateRoles {
-                admins,
-                role_mutations,
-                assignment_changes,
-                legal_representative_change: legal,
-            }
-        }
-    };
-    let action_payload = action.encode();
-    // 机构治理已收敛为「发起管理员钱包直接冷签这笔 extrinsic」:不再由平台钥签发独立凭证,
-    // 授权由 runtime 在 origin 处以 `is_institution_admin`(本机构管理员)+ 岗位码校验。
     let code = match code_bytes(&inst.institution_code) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    let is_public = !primitives::cid::code::is_private_legal_code(&code);
+    let parsed_admins = if input.admins.is_empty() {
+        if role_mutations.is_empty() && assignment_changes.is_empty() && legal.is_none() {
+            return api_error(StatusCode::BAD_REQUEST, 1001, "机构治理内容不能为空");
+        }
+        None
+    } else {
+        let admins = match parse_admin_inputs(&state, &input.admins, is_public) {
+            Ok(v) => v,
+            Err(resp) => return resp,
+        };
+        Some(admins)
+    };
+    let action_payload = match parsed_admins {
+        Some(InstitutionAdminsPayload::Public(admins)) => {
+            encode_governance_action(Some(admins), role_mutations, assignment_changes, legal)
+        }
+        Some(InstitutionAdminsPayload::Private(admins)) => {
+            encode_governance_action(Some(admins), role_mutations, assignment_changes, legal)
+        }
+        None if is_public => encode_governance_action::<admin_primitives::PublicAdmin<[u8; 32]>>(
+            None,
+            role_mutations,
+            assignment_changes,
+            legal,
+        ),
+        None => encode_governance_action::<admin_primitives::Admin<[u8; 32]>>(
+            None,
+            role_mutations,
+            assignment_changes,
+            legal,
+        ),
+    };
+    // 机构治理已收敛为「发起管理员钱包直接冷签这笔 extrinsic」:不再由平台钥签发独立凭证,
+    // 授权由 runtime 在 origin 处以 `is_institution_admin`(本机构管理员)+ 岗位码校验。
     let chain = encode_propose_institution_governance(&ProposeInstitutionGovernanceArgs {
         cid_number: cid_number.as_bytes().to_vec(),
         governance_action: action_payload,
@@ -751,21 +825,21 @@ pub(crate) async fn prepare_register_institution_admins(
     }) else {
         return api_error(StatusCode::NOT_FOUND, 1004, "机构不存在");
     };
-    // 只取 call 载荷用的 admin_args;action_admins(治理 action)原仅用于平台钥凭证签名,已删。
-    let (admin_args, _action_admins) = match parse_admin_inputs(&state, &input.admins) {
+    let code = match code_bytes(&inst.institution_code) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let is_public = !primitives::cid::code::is_private_legal_code(&code);
+    let admins = match parse_admin_inputs(&state, &input.admins, is_public) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
     // 管理员登记已收敛为「注册局管理员钱包直接冷签这笔 extrinsic」:不再由平台钥签发独立凭证,
     // 授权由 runtime 在 origin 处以 `can_register_institution_origin`(注册局在册管理员 +
     // 对目标机构有登记权)校验。
-    let code = match code_bytes(&inst.institution_code) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
     let chain = encode_register_institution_admins(&RegisterInstitutionAdminsArgs {
         cid_number: cid_number.as_bytes().to_vec(),
-        admins: admin_args,
+        admins,
         institution_code: code,
         actor_cid_number: binding.institution_cid_number.as_bytes().to_vec(),
     });

@@ -1,6 +1,5 @@
 //! 业务模块创建内部或联合投票提案的统一引擎入口。
 
-use frame_support::dispatch::DispatchResult;
 use sp_runtime::DispatchError;
 
 use crate::types::{InstitutionCode, VotePlanOf};
@@ -137,23 +136,7 @@ pub trait InternalVoteEngine<AccountId> {
         ))
     }
 
-    /// 特权直设动态阈值:绕过注册/变更提案,直接写入已激活动态阈值。
-    ///
-    /// 仅供 admins 模块在"联邦注册局直设市注册局管理员"(Step3 去中心化鉴权)时
-    /// 同步阈值用。实现方必须按严格过半规则校验 `(admins_len, threshold)` 后写入,
-    /// 失败回滚由调用方事务统一处理。默认未配置。
-    fn register_active_institution_threshold_direct(
-        _institution_code: InstitutionCode,
-        _cid_number: sp_std::vec::Vec<u8>,
-        _admins_len: u32,
-        _threshold: u32,
-    ) -> DispatchResult {
-        Err(DispatchError::Other(
-            "RegisterActiveInstitutionThresholdDirectNotConfigured",
-        ))
-    }
-
-    /// 读取机构已激活动态阈值。只用于展示和业务事件，不参与业务模块计票。
+    /// 读取机构治理阈值。实现只能从 entity 真源读取，不得在投票引擎另建阈值状态。
     fn active_institution_threshold(
         _institution_code: InstitutionCode,
         _cid_number: &[u8],

@@ -24,7 +24,7 @@
 - 已完成立法三个超时入口的 `VoteNotExpired` 校验。
 - 已完成自动到期失败提案移出原到期桶的止血处理，并在第三步补齐计数、指数退避和 dead-letter。
 - 已完成立法公投判定切换到 `primitives::constitution::referendum_passed`，并清理重复规则导出和测试引用。
-- 已完成提案待生效阈值按 `proposal_id` 键控；2026-07-15 机构生效阈值进一步统一为 `ActiveInstitutionThresholds[cid_number]`，个人生效阈值为 `ActivePersonalThresholds[personal_account]`。
+- 已完成提案阈值快照按 `proposal_id` 键控；2026-07-20 机构治理阈值最终迁入 public/private entity 的 `InstitutionGovernanceThresholds[cid_number]`，个人生效阈值继续为 `ActivePersonalThresholds[personal_account]`。
 - `cargo test -p legislation-vote -p internal-vote -p votingengine`：通过；最终 `internal-vote` 93、`legislation-vote` 33、`votingengine` 0。
 - `cargo test -p citizenchain`：通过，runtime 40 项测试全部通过。
 - `cargo fmt -p votingengine -p legislation-vote -p internal-vote` 与 `git diff --check`：通过。

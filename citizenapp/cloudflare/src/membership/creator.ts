@@ -432,19 +432,16 @@ async function mirrorCreatorSubscription(
   if (state.plan.kind !== "creator") {
     throw new HttpError(409, "subscription_state_not_finalized", "链上创作者订阅计划不合法");
   }
-  const pending = state.pendingPlan?.kind === "creator" ? state.pendingPlan : null;
   await env.DB.prepare(
     `INSERT INTO square_creator_subscriptions
       (subscriber_account, creator_account, tier_id, billing_period,
-       pending_tier_id, pending_billing_period, started_at, last_charged_at,
+       started_at, last_charged_at,
        last_charged_price_fen, paid_until, subscription_status,
        finalized_block_number, finalized_block_hash, verified_at, last_tx_hash)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(subscriber_account, creator_account) DO UPDATE SET
         tier_id = excluded.tier_id,
         billing_period = excluded.billing_period,
-        pending_tier_id = excluded.pending_tier_id,
-        pending_billing_period = excluded.pending_billing_period,
         started_at = excluded.started_at,
         last_charged_at = excluded.last_charged_at,
         last_charged_price_fen = excluded.last_charged_price_fen,
@@ -461,8 +458,6 @@ async function mirrorCreatorSubscription(
       creatorAccount,
       state.plan.tierId,
       state.plan.billingPeriod,
-      pending?.tierId ?? null,
-      pending?.billingPeriod ?? null,
       state.startedAt,
       state.lastChargedAt,
       safePrice(state.lastChargedPriceFen),
@@ -491,12 +486,9 @@ function assertCreatorStateMatches(
     }
     return;
   }
+  // 换挡即时生效（无 pending）：确认后链上 plan 已是目标档位/周期。
   const currentMatches = state.plan.tierId === tierId && state.plan.billingPeriod === billingPeriod;
-  const pendingMatches =
-    state.pendingPlan?.kind === "creator" &&
-    state.pendingPlan.tierId === tierId &&
-    state.pendingPlan.billingPeriod === billingPeriod;
-  if (state.status !== "active" || (!currentMatches && !pendingMatches)) {
+  if (state.status !== "active" || !currentMatches) {
     throw new HttpError(409, "subscription_state_not_finalized", "链上创作者订阅或换档状态尚未最终确认");
   }
 }

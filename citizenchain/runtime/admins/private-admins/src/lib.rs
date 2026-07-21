@@ -26,13 +26,11 @@ use votingengine::types::InstitutionCode;
 pub use pallet::*;
 
 /// 正式创世只接受统一管理员记录，不保留旧纯账户或单姓名存储迁移。
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
-    use votingengine::InternalVoteEngine;
-
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {
         #[allow(deprecated)]
@@ -40,8 +38,6 @@ pub mod pallet {
 
         #[pallet::constant]
         type MaxAdminsPerInstitution: Get<u32>;
-
-        type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
     }
 
     #[pallet::pallet]
@@ -77,8 +73,8 @@ pub mod pallet {
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn integrity_test() {
             assert!(
-                <T as Config>::MaxAdminsPerInstitution::get() >= 2,
-                "MaxAdminsPerInstitution must be >= 2"
+                <T as Config>::MaxAdminsPerInstitution::get() >= 1,
+                "MaxAdminsPerInstitution must be >= 1"
             );
         }
     }
@@ -95,7 +91,6 @@ pub mod pallet {
             cid_number: AdminCidNumber,
             institution_code: InstitutionCode,
             admins_len: u32,
-            threshold: u32,
             created: bool,
         },
     }
@@ -106,7 +101,6 @@ pub mod pallet {
         InstitutionCodeMismatch,
         InvalidAdminsLen,
         InvalidAdminAccountKind,
-        InvalidThreshold,
         DuplicateAdmin,
         InvalidFamilyName,
         InvalidGivenName,
@@ -133,7 +127,7 @@ pub mod pallet {
                     && can_store_private_admin_code(&institution_code),
                 Error::<T>::InvalidAdminAccountKind
             );
-            ensure!(admins.len() >= 2, Error::<T>::InvalidAdminsLen);
+            ensure!(!admins.is_empty(), Error::<T>::InvalidAdminsLen);
             ensure!(
                 admins.len() <= <T as Config>::MaxAdminsPerInstitution::get() as usize,
                 Error::<T>::InvalidAdminsLen
@@ -155,7 +149,6 @@ pub mod pallet {
             institution_code: InstitutionCode,
             kind: AdminAccountKind,
             admins: Vec<Admin<T::AccountId>>,
-            threshold: u32,
         ) -> DispatchResult {
             let cid_number = Self::bound_cid(cid_number)?;
             let admins = admins
@@ -169,16 +162,6 @@ pub mod pallet {
             let admins_len = bounded.len() as u32;
 
             with_transaction(|| {
-                if let Err(err) =
-                    T::InternalVoteEngine::register_active_institution_threshold_direct(
-                        institution_code,
-                        cid_number.to_vec(),
-                        admins_len,
-                        threshold,
-                    )
-                {
-                    return TransactionOutcome::Rollback(Err(err));
-                }
                 let created = match AdminAccounts::<T>::get(&cid_number) {
                     Some(existing) => {
                         if existing.institution_code != institution_code {
@@ -201,26 +184,23 @@ pub mod pallet {
                     cid_number,
                     institution_code,
                     admins_len,
-                    threshold,
                     created,
                 });
                 TransactionOutcome::Commit(Ok(()))
             })
         }
 
-        /// 创世专用写入口：复用运行期完整校验并同步严格多数阈值，不另建管理员真源。
+        /// 创世专用写入口：复用运行期完整管理员校验，机构阈值由 entity 独立写入。
         pub fn store_genesis_institution_admins(
             cid_number: Vec<u8>,
             institution_code: InstitutionCode,
             admins: Vec<Admin<T::AccountId>>,
-            threshold: u32,
         ) -> DispatchResult {
             Self::do_set_institution_admins(
                 cid_number,
                 institution_code,
                 AdminAccountKind::PrivateInstitution,
                 admins,
-                threshold,
             )
         }
 
@@ -247,9 +227,8 @@ impl<T: pallet::Config> InstitutionAdminLifecycle<T::AccountId> for pallet::Pall
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
         admins: Vec<Admin<T::AccountId>>,
-        threshold: u32,
     ) -> DispatchResult {
-        Self::do_set_institution_admins(cid_number, institution_code, kind, admins, threshold)
+        Self::do_set_institution_admins(cid_number, institution_code, kind, admins)
     }
 }
 
@@ -280,14 +259,6 @@ impl<T: pallet::Config> InstitutionAdminQuery<T::AccountId> for pallet::Pallet<T
                 .map(|admin| admin.admin_account)
                 .collect()
         })
-    }
-
-    fn institution_admin_records(
-        institution_code: InstitutionCode,
-        cid_number: &[u8],
-    ) -> Option<Vec<Admin<T::AccountId>>> {
-        Self::get_institution_admins(institution_code, cid_number)
-            .map(|value| value.admins.into_inner())
     }
 
     fn institution_admins_len(institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32> {

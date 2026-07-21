@@ -72,15 +72,15 @@ class FakeStmt {
       return { meta: { changes: row ? 1 : 0 } };
     }
     if (this.sql.includes("UPDATE square_creator_subscriptions SET tier_id")) {
-      const subscriber = this.args[12] as string;
-      const creator = this.args[13] as string;
+      const subscriber = this.args[10] as string;
+      const creator = this.args[11] as string;
       const row = this.db.rows.get(rowKey(subscriber, creator));
       if (row) {
         row.tier_id = this.args[0] as string;
         row.billing_period = this.args[1] as string;
-        row.paid_until = this.args[7] as number;
-        row.subscription_status = this.args[8] as string;
-        row.verified_at = this.args[11] as number;
+        row.paid_until = this.args[5] as number;
+        row.subscription_status = this.args[6] as string;
+        row.verified_at = this.args[9] as number;
       }
       return { meta: { changes: row ? 1 : 0 } };
     }
@@ -118,12 +118,13 @@ function deps(
 function active(): ChainSubscriptionState {
   return {
     plan: { kind: "creator", tierId: "gold", billingPeriod: "yearly" },
-    pendingPlan: null,
     startedAt: 1_000,
     lastChargedAt: 9_000,
     lastChargedPriceFen: 500n,
     paidUntil: 20_000,
     status: "active",
+    authorizedPriceFen: 500n,
+    suspendReason: null,
   };
 }
 

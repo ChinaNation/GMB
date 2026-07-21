@@ -33,9 +33,9 @@ mod genesis {
     pub const GENESIS_CITIZEN_MAX: u64 = 1_443_497_378;
 }
 
+pub(crate) use crate::core::db::Db;
 pub(crate) use crate::core::http_security::*;
 pub(crate) use crate::core::response::*;
-pub(crate) use crate::core::db::Db;
 pub(crate) use auth::login::{parse_sr25519_pubkey, parse_sr25519_pubkey_bytes, require_admin_any};
 pub(crate) use auth::model::*;
 pub(crate) use cid::model::*;
@@ -2106,10 +2106,7 @@ fn main() {
                 "/api/v1/admin/auth/check",
                 get(auth::login::admin_auth_check),
             )
-            .route(
-                "/api/v1/admin/auth/logout",
-                post(auth::login::admin_logout),
-            )
+            .route("/api/v1/admin/auth/logout", post(auth::login::admin_logout))
             .route(
                 "/api/v1/admin/auth/identify",
                 post(auth::login::admin_auth_identify),
@@ -2225,7 +2222,8 @@ fn main() {
             )
             .route(
                 "/api/v1/private/partnership",
-                get(domains::private::partnership::list).post(domains::private::partnership::create),
+                get(domains::private::partnership::list)
+                    .post(domains::private::partnership::create),
             )
             .route(
                 "/api/v1/private/company",
@@ -2233,7 +2231,8 @@ fn main() {
             )
             .route(
                 "/api/v1/private/corporation",
-                get(domains::private::corporation::list).post(domains::private::corporation::create),
+                get(domains::private::corporation::list)
+                    .post(domains::private::corporation::create),
             )
             .route(
                 "/api/v1/private/welfare",
@@ -2241,7 +2240,8 @@ fn main() {
             )
             .route(
                 "/api/v1/private/association",
-                get(domains::private::association::list).post(domains::private::association::create),
+                get(domains::private::association::list)
+                    .post(domains::private::association::create),
             )
             .route(
                 "/api/v1/institutions/:cid_number/account/create",
@@ -2268,7 +2268,8 @@ fn main() {
             // 机构资料库文档 CRUD
             .route(
                 "/api/v1/institutions/:cid_number/docs",
-                get(domains::docs::handler::list_documents).post(domains::docs::handler::upload_document),
+                get(domains::docs::handler::list_documents)
+                    .post(domains::docs::handler::upload_document),
             )
             .route(
                 "/api/v1/institutions/:cid_number/docs/:doc_id/download",
@@ -2312,7 +2313,7 @@ fn main() {
                 "/api/v1/legislation/proposals/:proposal_id",
                 get(domains::legislation::handler::get_proposal_state),
             )
-            // 技术公司私权工作台：finalized 平台价格查询，以及 CitizenWallet 一次签名、OnChina 回扫提交的调价提案。
+            // 公民链基金会私权工作台：finalized 平台价格查询，以及 CitizenWallet 一次签名、OnChina 回扫提交的调价提案。
             .route(
                 "/api/v1/membership/platform-prices",
                 get(domains::membership::handler::platform_prices),
@@ -2415,7 +2416,10 @@ fn main() {
                 get(domains::citizens::handler::public_identity_search),
             )
             // 机构码→中文标签单源(免登录):前端替代硬编码 INSTITUTION_CODE_LABEL。
-            .route("/api/v1/public/cid/labels", get(cid::admin::public_cid_labels))
+            .route(
+                "/api/v1/public/cid/labels",
+                get(cid::admin::public_cid_labels),
+            )
             // 立法大屏只读看板(免登录):机构由节点绑定确定,不接受请求参数(fail-closed)。
             .route(
                 "/api/public/legislation/display/board",

@@ -103,8 +103,10 @@ void main() {
 
   group('SquarePost finalized storage 解码', () {
     test('严格解码平台订阅真态与时间戳', () {
+      // 与 runtime 金标 state_platform 逐字节一致（新布局：无 pending_plan，
+      // 末尾含 authorized_price_fen + suspend_reason）。
       const stateHex =
-          '0002000068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c01000000';
+          '00020068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c010000001c8d5b0000000000000000000000000000';
       final state = SubscriptionRpc.decodeSubscriptionState(_bytes(stateHex));
       expect(state.plan.kind, 'platform');
       expect(state.plan.membershipLevel, 'spark');
@@ -112,7 +114,28 @@ void main() {
       expect(state.lastChargedPriceFen, BigInt.from(5999900));
       expect(state.paidUntil, 1702000000000);
       expect(state.status, 'active');
+      expect(state.authorizedPriceFen, BigInt.from(5999900));
+      expect(state.suspendReason, isNull);
       expect(state.isEffectiveAt(1701000000000), isTrue);
+    });
+
+    test('解码挂起态（创作者改价待再签名）与创作者暂停态，暂停期无权益', () {
+      // 由 active 向量改：status 字节 00→03、suspend_reason 00→0100（Some(NeedReconsent)）。
+      const suspendedHex =
+          '00020068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c010000031c8d5b000000000000000000000000000100';
+      final suspended = SubscriptionRpc.decodeSubscriptionState(_bytes(suspendedHex));
+      expect(suspended.status, 'suspended');
+      expect(suspended.suspendReason, 'needReconsent');
+      expect(suspended.isEffectiveAt(1701000000000), isFalse);
+
+      // status 字节 00→04（CreatorPaused），suspend_reason 仍 00（None）。
+      const creatorPausedHex =
+          '00020068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c010000041c8d5b0000000000000000000000000000';
+      final creatorPaused =
+          SubscriptionRpc.decodeSubscriptionState(_bytes(creatorPausedHex));
+      expect(creatorPaused.status, 'creatorPaused');
+      expect(creatorPaused.suspendReason, isNull);
+      expect(creatorPaused.isEffectiveAt(1701000000000), isFalse);
     });
 
     test('严格解码创作者链上档位', () {

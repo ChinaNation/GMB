@@ -4,7 +4,6 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
-import 'package:citizenwallet/qr/generated/qr_action_registry.g.dart';
 import 'package:citizenwallet/signer/institution_code.dart';
 import 'package:citizenwallet/signer/payload_decoder.dart';
 import 'package:citizenwallet/signer/role_permission_codec.dart';
@@ -31,6 +30,19 @@ void main() {
   ) =>
       [
         ...adminAccount,
+        ...compactVec(familyName),
+        ...compactVec(givenName),
+      ];
+
+  List<int> publicAdminPerson(
+    List<int> adminAccount,
+    String citizenCidNumber,
+    String familyName,
+    String givenName,
+  ) =>
+      [
+        ...adminAccount,
+        ...compactVec(citizenCidNumber),
         ...compactVec(familyName),
         ...compactVec(givenName),
       ];
@@ -1814,7 +1826,20 @@ void main() {
       }
     });
 
-    List<int> buildInstitutionAdminsForGovernance() {
+    List<int> buildPublicInstitutionAdminsForGovernance() {
+      return <int>[
+        ...compactU32(2),
+        ...publicAdminPerson(
+          List<int>.filled(32, 0x31),
+          'GZ000-CTZN6-198805200-2026',
+          '张',
+          '三',
+        ),
+        ...publicAdminPerson(List<int>.filled(32, 0x32), '', '', ''),
+      ];
+    }
+
+    List<int> buildPrivateInstitutionAdminsForGovernance() {
       return <int>[
         ...compactU32(2),
         ...adminPerson(List<int>.filled(32, 0x31), '张', '三'),
@@ -1822,33 +1847,27 @@ void main() {
       ];
     }
 
-    List<int> appendGovernanceCredentialTail(
+    List<int> appendGovernanceCallTail(
       List<int> payload,
       String actorCid, {
       bool includeProposerRole = true,
     }) {
       return <int>[
         ...payload,
-        ...compactVec('gov-nonce-001'),
-        ...compactU32(64),
-        ...List<int>.filled(64, 0x44),
         ...compactVec(actorCid),
         if (includeProposerRole) ...compactVec('RCHAIR'),
-        ...List<int>.generate(32, (i) => 0xA0 + (i & 0x0F)),
-        ...compactVec('贵州省'),
-        ...compactVec('贵阳市'),
       ];
     }
 
     test('decodes propose_public_institution_governance 替换管理员集合', () {
       const cidNumber = 'GZ001-SFAS1-123456789-2026';
-      final payload = Uint8List.fromList(appendGovernanceCredentialTail(
+      final payload = Uint8List.fromList(appendGovernanceCallTail(
         <int>[
           0x1e,
           0x08,
           ...compactVec(cidNumber),
           0x00, // InstitutionGovernanceAction::ReplaceAdmins
-          ...buildInstitutionAdminsForGovernance(),
+          ...buildPublicInstitutionAdminsForGovernance(),
         ],
         cidNumber,
       ));
@@ -1861,13 +1880,12 @@ void main() {
       expect(decoded.fields['governance_detail'], contains('2 名管理员'));
       expect(decoded.fields['actor_cid_number'], cidNumber);
       expect(decoded.fields['fee_payer'], '$cidNumber 的链上费用账户');
-      expect(decoded.fields['scope_province_name'], '贵州省');
-      expect(decoded.fields['scope_city_name'], '贵阳市');
+      expect(decoded.reviewFields['governance_detail'], contains('资料待完善'));
     });
 
     test('decodes propose_public_institution_governance 解除法定代表人', () {
       const cidNumber = 'GZ001-SFAS1-123456789-2026';
-      final payload = Uint8List.fromList(appendGovernanceCredentialTail(
+      final payload = Uint8List.fromList(appendGovernanceCallTail(
         <int>[
           0x1e,
           0x08,
@@ -1890,7 +1908,7 @@ void main() {
 
     test('decodes 新协议岗位创建及其权限和初始任职', () {
       const cidNumber = 'GZ001-SFAS1-123456789-2026';
-      final payload = Uint8List.fromList(appendGovernanceCredentialTail(
+      final payload = Uint8List.fromList(appendGovernanceCallTail(
         <int>[
           0x1e,
           0x08,
@@ -1928,7 +1946,7 @@ void main() {
 
     test('旧 InstitutionRoleChange 布局必须拒绝解码', () {
       const cidNumber = 'GZ001-SFAS1-123456789-2026';
-      final payload = Uint8List.fromList(appendGovernanceCredentialTail(
+      final payload = Uint8List.fromList(appendGovernanceCallTail(
         <int>[
           0x1e,
           0x08,
@@ -1950,12 +1968,12 @@ void main() {
 
     test('decodes register_private_institution_admins 注册局直接登记管理员', () {
       const cidNumber = 'GD001-COMP1-123456789-2026';
-      final payload = Uint8List.fromList(appendGovernanceCredentialTail(
+      final payload = Uint8List.fromList(appendGovernanceCallTail(
         <int>[
           0x1f,
           0x09,
           ...compactVec(cidNumber),
-          ...buildInstitutionAdminsForGovernance(),
+          ...buildPrivateInstitutionAdminsForGovernance(),
         ],
         registryActorCid,
         includeProposerRole: false,
@@ -1970,8 +1988,28 @@ void main() {
           contains('张三(${ss58FromBytes(List<int>.filled(32, 0x31))})'));
       expect(decoded.fields['actor_cid_number'], registryActorCid);
       expect(decoded.fields['fee_payer'], '$registryActorCid 的链上费用账户');
-      expect(decoded.fields['scope_province_name'], '贵州省');
-      expect(decoded.fields['scope_city_name'], '贵阳市');
+    });
+
+    test('decodes register_public_institution_admins 公民资料允许暂空', () {
+      const cidNumber = 'GZ001-SFAS1-123456789-2026';
+      final payload = Uint8List.fromList(appendGovernanceCallTail(
+        <int>[
+          0x1e,
+          0x09,
+          ...compactVec(cidNumber),
+          ...compactU32(1),
+          ...publicAdminPerson(List<int>.filled(32, 0x41), '', '', ''),
+        ],
+        registryActorCid,
+        includeProposerRole: false,
+      ));
+
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'register_public_institution_admins');
+      expect(decoded.fields['admins_len'], '1');
+      expect(decoded.fields['admins'], contains('"cid_number":""'));
+      expect(decoded.reviewFields['admins'], contains('资料待完善'));
     });
 
     test('decodes current propose_create_personal with regular_threshold field',

@@ -96,12 +96,16 @@ class SquareMembershipPlan {
     required this.dynamicVideoQuality,
     required this.dynamicMaxVideos,
     required this.dynamicMaxVideoSeconds,
+    required this.dynamicMaxVideoBytes,
     required this.articleTitleMinChars,
     required this.articleTitleMaxChars,
     required this.articleBodyMaxChars,
     required this.articleCoverQuality,
     required this.articleImageQuality,
     required this.articleMaxImages,
+    required this.monthlyImages,
+    required this.monthlyVideoSeconds,
+    required this.activeUploads,
   });
 
   final String membershipLevel;
@@ -115,12 +119,33 @@ class SquareMembershipPlan {
   final String dynamicVideoQuality;
   final int dynamicMaxVideos;
   final int dynamicMaxVideoSeconds;
+
+  /// 单个动态视频体积上限（字节）：自由 40MB / 民主 1536MB / 薪火 8GB。
+  final int dynamicMaxVideoBytes;
   final int articleTitleMinChars;
   final int articleTitleMaxChars;
   final int articleBodyMaxChars;
   final String articleCoverQuality;
   final String articleImageQuality;
   final int articleMaxImages;
+
+  /// 订阅周期累计用量额度（每月）：图片张数 / 视频总秒数 / 并发上传数。
+  final int monthlyImages;
+  final int monthlyVideoSeconds;
+  final int activeUploads;
+
+  /// 大文件（>100MB）中转仅薪火可用（后端 relay.ts 强制）。
+  bool get supportsLargeFileRelay => membershipLevel == 'spark';
+
+  /// 提炼展示用短串（卡片与详情页共用，杜绝口径漂移）。
+  String get chatFileSizeLabel => _fileSize(chatFileMaxBytes);
+  String get dynamicImageQualityLabel => _quality(dynamicImageQuality);
+  String get dynamicVideoQualityLabel => _quality(dynamicVideoQuality);
+  String get dynamicVideoDurationLabel => _duration(dynamicMaxVideoSeconds);
+  String get dynamicVideoBytesLabel => _fileSize(dynamicMaxVideoBytes);
+  String get articleImageQualityLabel => _quality(articleImageQuality);
+  String get articleCoverQualityLabel => _quality(articleCoverQuality);
+  String get monthlyVideoDurationLabel => _duration(monthlyVideoSeconds);
 
   String get chatFileLabel => '聊天文件：单个 ≤ ${_fileSize(chatFileMaxBytes)}';
 
@@ -140,7 +165,13 @@ class SquareMembershipPlan {
 
   static String _fileSize(int bytes) {
     const mib = 1024 * 1024;
-    if (bytes >= 1024 * mib) return '${(bytes / (1024 * mib)).round()}GB';
+    if (bytes >= 1024 * mib) {
+      // 非整 GB 保留一位小数，避免 1536MB 被四舍五入成误导性的「2GB」。
+      final gb = bytes / (1024 * mib);
+      return gb == gb.roundToDouble()
+          ? '${gb.round()}GB'
+          : '${gb.toStringAsFixed(1)}GB';
+    }
     return '${(bytes / mib).round()}MB';
   }
 }
@@ -1118,6 +1149,9 @@ class SquareApiClient
     final articleQuota = data['article'] is Map<String, dynamic>
         ? data['article'] as Map<String, dynamic>
         : const <String, dynamic>{};
+    final usageQuota = data['usage'] is Map<String, dynamic>
+        ? data['usage'] as Map<String, dynamic>
+        : const <String, dynamic>{};
     return SquareMembershipPlan(
       membershipLevel: _requireString(data, 'membership_level'),
       displayName: _requireString(data, 'display_name'),
@@ -1128,12 +1162,16 @@ class SquareApiClient
       dynamicVideoQuality: dynamicQuota['video_quality']?.toString() ?? 'sd',
       dynamicMaxVideos: _asInt(dynamicQuota['max_videos']),
       dynamicMaxVideoSeconds: _asInt(dynamicQuota['max_video_seconds']),
+      dynamicMaxVideoBytes: _asInt(dynamicQuota['max_video_bytes']),
       articleTitleMinChars: _asInt(articleQuota['title_min_chars']),
       articleTitleMaxChars: _asInt(articleQuota['title_max_chars']),
       articleBodyMaxChars: _asInt(articleQuota['body_max_chars']),
       articleCoverQuality: articleQuota['cover_quality']?.toString() ?? 'hd',
       articleImageQuality: articleQuota['image_quality']?.toString() ?? 'sd',
       articleMaxImages: _asInt(articleQuota['max_images']),
+      monthlyImages: _asInt(usageQuota['monthly_images']),
+      monthlyVideoSeconds: _asInt(usageQuota['monthly_video_seconds']),
+      activeUploads: _asInt(usageQuota['active_uploads']),
     );
   }
 

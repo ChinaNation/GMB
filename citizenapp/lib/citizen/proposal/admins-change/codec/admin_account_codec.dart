@@ -12,7 +12,10 @@ class AdminAccountCodec {
     required Uint8List data,
     required int institutionKind,
   }) {
-    final decoded = InstitutionRoleStorageCodec.decodeAdmins(data);
+    final decoded = InstitutionRoleStorageCodec.decodeAdmins(
+      data,
+      isPublic: institutionKind == 0,
+    );
     if (decoded == null) return null;
     return AdminAccountState(
       cidNumber: cidNumber,
@@ -58,8 +61,8 @@ class AdminAccountCodec {
       institutionCode: institutionCode,
       kind: kind,
       admins: admins,
-      // runtime 的各管理员 `AdminAccounts` 已不再保存阈值；
-      // 调用方必须从 internal-vote 动态阈值 storage 或治理固定常量补齐。
+      // runtime 的各管理员 `AdminAccounts` 不保存阈值；
+      // 个人多签阈值仍从 internal-vote 的个人阈值 storage 补齐。
       threshold: 0,
       personalCreatorHex: creatorHex,
       personalCreatedAt: createdAt,

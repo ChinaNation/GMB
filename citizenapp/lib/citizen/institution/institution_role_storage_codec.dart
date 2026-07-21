@@ -9,16 +9,25 @@ import 'institution_role_models.dart';
 class InstitutionRoleStorageCodec {
   InstitutionRoleStorageCodec._();
 
-  static InstitutionAdminsStorage? decodeAdmins(Uint8List data) {
+  static InstitutionAdminsStorage? decodeAdmins(
+    Uint8List data, {
+    required bool isPublic,
+  }) {
     var offset = 0;
     // 机构 CID 是 `AdminAccounts` 的 storage key，不在 value 中重复保存。
     // value 唯一布局为 institution_code:[u8;4]
-    // + admins:BoundedVec<(admin_account, family_name, given_name)>。
+    // + admins：公权为 (admin_account, cid_number, family_name, given_name)，
+    // 私权为 (admin_account, family_name, given_name)。
     if (offset + 4 > data.length) return null;
     final code = String.fromCharCodes(
         data.sublist(offset, offset + 4).where((b) => b != 0));
     offset += 4;
-    final decodedAdmins = decodeAdminVector(data, offset);
+    final decodedAdmins = decodeAdminVector(
+      data,
+      offset,
+      includeCitizenCid: isPublic,
+      allowEmptyNames: isPublic,
+    );
     if (decodedAdmins == null) return null;
     final admins = decodedAdmins.$1;
     offset = decodedAdmins.$2;
@@ -32,11 +41,13 @@ class InstitutionRoleStorageCodec {
   /// 从指定偏移严格解码统一管理员集合，并返回下一字段偏移。
   ///
   /// 机构管理员、个人多签管理员和全量管理员扫描必须共用本入口，避免
-  /// 在不同页面复制 SCALE 字段顺序。账户重复、空姓名、畸形 UTF-8 均拒绝。
+  /// 在不同页面复制 SCALE 字段顺序。账户重复与畸形 UTF-8 均拒绝；只有公权姓名可空。
   static (List<AdminPerson>, int)? decodeAdminVector(
     Uint8List data,
-    int offset,
-  ) {
+    int offset, {
+    bool includeCitizenCid = false,
+    bool allowEmptyNames = false,
+  }) {
     final count = _readCompact(data, offset);
     if (count == null) return null;
     offset += count.$2;
@@ -46,10 +57,17 @@ class InstitutionRoleStorageCodec {
       if (offset + 32 > data.length) return null;
       final accountHex = _hex(data.sublist(offset, offset + 32));
       offset += 32;
+      var citizenCid = (<int>[], offset);
+      if (includeCitizenCid) {
+        final decodedCid = _readBytes(data, offset, maxLength: 32);
+        if (decodedCid == null) return null;
+        citizenCid = decodedCid;
+        offset = citizenCid.$2;
+      }
       final familyName = _readBytes(
         data,
         offset,
-        minLength: 1,
+        minLength: allowEmptyNames ? 0 : 1,
         maxLength: 128,
       );
       if (familyName == null) return null;
@@ -57,7 +75,7 @@ class InstitutionRoleStorageCodec {
       final givenName = _readBytes(
         data,
         offset,
-        minLength: 1,
+        minLength: allowEmptyNames ? 0 : 1,
         maxLength: 128,
       );
       if (givenName == null) return null;
@@ -65,6 +83,7 @@ class InstitutionRoleStorageCodec {
       try {
         final admin = AdminPerson(
           admin_account: accountHex,
+          cid_number: utf8.decode(citizenCid.$1),
           family_name: utf8.decode(familyName.$1),
           given_name: utf8.decode(givenName.$1),
         );

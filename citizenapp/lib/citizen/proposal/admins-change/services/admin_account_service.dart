@@ -6,13 +6,12 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:citizenapp/citizen/proposal/admins-change/codec/admin_account_codec.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
-import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
 /// 分类管理员链读门面。
 ///
-/// 机构严格读取 `AdminAccounts[cid_number]` 与
-/// `ActiveInstitutionThresholds[cid_number]`；个人多签严格读取
+/// 机构严格读取 `AdminAccounts[cid_number]` 与对应 entity 的
+/// `InstitutionGovernanceThresholds[cid_number]`；个人多签严格读取
 /// `AdminAccounts[personal_account]` 与 `ActivePersonalThresholds[personal_account]`。
 class AdminAccountService {
   AdminAccountService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
@@ -68,7 +67,7 @@ class AdminAccountService {
           : AdminAccountCodec.decodePersonal(personalAccount, data);
     }
     if (decoded == null) return null;
-    final threshold = await _resolveThreshold(identity, decoded);
+    final threshold = await _resolveThreshold(identity);
     final state = decoded.copyWith(threshold: threshold ?? 0);
     _cache[identity.identityKey] = _AdminAccountCacheEntry(state);
     return state;
@@ -106,32 +105,29 @@ class AdminAccountService {
     _inFlight.remove(key);
   }
 
-  Future<int?> _resolveThreshold(
-    AdminAccountIdentity identity,
-    AdminAccountState state,
-  ) async {
-    final fixed =
-        InstitutionCodeLabel.fixedGovernanceThreshold(state.institutionCode);
-    if (fixed != null) return fixed;
+  Future<int?> _resolveThreshold(AdminAccountIdentity identity) async {
     if (identity.type == AdminAccountIdentityType.institution) {
       return _fetchThresholdStorage(
-        storageName: 'ActiveInstitutionThresholds',
+        palletName: identity.kind == 1 ? 'PrivateManage' : 'PublicManage',
+        storageName: 'InstitutionGovernanceThresholds',
         keyData: AdminAccountIdCodec.scaleBytes(
           utf8.encode(identity.cidNumber!),
         ),
       );
     }
     return _fetchThresholdStorage(
+      palletName: 'InternalVote',
       storageName: 'ActivePersonalThresholds',
       keyData: AdminAccountIdCodec.fromAccountHex(identity.personalAccountHex!),
     );
   }
 
   Future<int?> _fetchThresholdStorage({
+    required String palletName,
     required String storageName,
     required Uint8List keyData,
   }) async {
-    final key = _storageMapKey('InternalVote', storageName, keyData);
+    final key = _storageMapKey(palletName, storageName, keyData);
     final data = await _rpc.fetchStorage(_keyHex(key));
     if (data == null || data.length != 4) return null;
     return ByteData.sublistView(data).getUint32(0, Endian.little);

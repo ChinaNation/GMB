@@ -147,8 +147,10 @@ async function reconcilePlatformCandidates(
   batch: number,
 ): Promise<ReconcileResult> {
   const rows = await env.DB.prepare(
+    // active（可能转挂起）与 suspended/creatorPaused（可能链上恢复为 active）都要复核。
     `SELECT owner_account FROM square_memberships
-      WHERE subscription_status = 'active' AND paid_until <= ?
+      WHERE subscription_status IN ('active', 'suspended', 'creatorPaused')
+        AND paid_until <= ?
       ORDER BY paid_until ASC LIMIT ?`,
   ).bind(point.chainTimestamp, batch).all<{ owner_account: string }>();
   return runBatch(rows.results ?? [], async (row) => {
@@ -169,8 +171,10 @@ async function reconcileCreatorCandidates(
   batch: number,
 ): Promise<ReconcileResult> {
   const rows = await env.DB.prepare(
+    // creatorPaused 在链上会随创作者恢复自动续为 active，必须纳入复核刷新镜像。
     `SELECT subscriber_account, creator_account FROM square_creator_subscriptions
-      WHERE subscription_status = 'active' AND paid_until <= ?
+      WHERE subscription_status IN ('active', 'suspended', 'creatorPaused')
+        AND paid_until <= ?
       ORDER BY paid_until ASC LIMIT ?`,
   ).bind(point.chainTimestamp, batch).all<{
     subscriber_account: string;
@@ -196,23 +200,19 @@ async function applyPlatformState(
   if (!state || state.plan.kind !== "platform") {
     await env.DB.prepare(
       `UPDATE square_memberships SET subscription_status = 'terminated',
-        pending_membership_level = NULL, entitlement_lapsed_at = paid_until,
+        entitlement_lapsed_at = paid_until,
         finalized_block_number = ?, finalized_block_hash = ?, verified_at = ?
         WHERE owner_account = ?`,
     ).bind(point.blockNumber, point.blockHash, point.observedAt, ownerAccount).run();
     return;
   }
-  const pending = state.pendingPlan?.kind === "platform"
-    ? state.pendingPlan.membershipLevel
-    : null;
   await env.DB.prepare(
-    `UPDATE square_memberships SET membership_level = ?, pending_membership_level = ?,
+    `UPDATE square_memberships SET membership_level = ?,
       started_at = ?, last_charged_at = ?, last_charged_price_fen = ?, paid_until = ?,
       subscription_status = ?, finalized_block_number = ?, finalized_block_hash = ?,
       verified_at = ?, entitlement_lapsed_at = ? WHERE owner_account = ?`,
   ).bind(
     state.plan.membershipLevel,
-    pending,
     state.startedAt,
     state.lastChargedAt,
     safePrice(state.lastChargedPriceFen),
@@ -236,7 +236,6 @@ async function applyCreatorState(
   if (!state || state.plan.kind !== "creator") {
     await env.DB.prepare(
       `UPDATE square_creator_subscriptions SET subscription_status = 'terminated',
-        pending_tier_id = NULL, pending_billing_period = NULL,
         finalized_block_number = ?, finalized_block_hash = ?, verified_at = ?
         WHERE subscriber_account = ? AND creator_account = ?`,
     ).bind(
@@ -248,18 +247,15 @@ async function applyCreatorState(
     ).run();
     return;
   }
-  const pending = state.pendingPlan?.kind === "creator" ? state.pendingPlan : null;
   await env.DB.prepare(
     `UPDATE square_creator_subscriptions SET tier_id = ?, billing_period = ?,
-      pending_tier_id = ?, pending_billing_period = ?, started_at = ?,
+      started_at = ?,
       last_charged_at = ?, last_charged_price_fen = ?, paid_until = ?,
       subscription_status = ?, finalized_block_number = ?, finalized_block_hash = ?, verified_at = ?
       WHERE subscriber_account = ? AND creator_account = ?`,
   ).bind(
     state.plan.tierId,
     state.plan.billingPeriod,
-    pending?.tierId ?? null,
-    pending?.billingPeriod ?? null,
     state.startedAt,
     state.lastChargedAt,
     safePrice(state.lastChargedPriceFen),

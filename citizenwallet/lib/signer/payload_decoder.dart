@@ -43,6 +43,7 @@ class DecodedPayload {
 typedef _DecodedAdminPerson = ({
   Uint8List accountBytes,
   String adminAccountHex,
+  String? citizenCidNumber,
   String familyName,
   String givenName,
 });
@@ -297,6 +298,7 @@ class PayloadDecoder {
         if (callIndex == PalletRegistry.proposeInstitutionGovernanceCall) {
           return _decodeProposeInstitutionGovernance(
             bytes,
+            isPublic: isPublic,
             action: isPublic
                 ? 'propose_public_institution_governance'
                 : 'propose_private_institution_governance',
@@ -306,6 +308,7 @@ class PayloadDecoder {
         if (callIndex == PalletRegistry.registerInstitutionAdminsCall) {
           return _decodeRegisterInstitutionAdmins(
             bytes,
+            isPublic: isPublic,
             action: isPublic
                 ? 'register_public_institution_admins'
                 : 'register_private_institution_admins',
@@ -412,7 +415,7 @@ class PayloadDecoder {
         return _decodeAddressRegistryCall(bytes, callIndex);
       }
 
-      // ── SquarePost(34) · 技术公司发起平台会员调价内部投票 ──
+      // ── SquarePost(34) · 公民链基金会发起平台会员调价内部投票 ──
       if (palletIndex == PalletRegistry.squarePostPallet &&
           callIndex == PalletRegistry.proposeSetPlatformPriceCall) {
         return _decodeProposeSetPlatformPrice(bytes);
@@ -892,6 +895,12 @@ class PayloadDecoder {
         .hasMatch(cidNumber);
   }
 
+  /// 公权管理员非空公民 CID 只接受 CTZN 机构码段；完整校验和由 runtime 裁决。
+  static bool _isStructuredCitizenCid(String cidNumber) {
+    return RegExp(r'^[A-Z0-9]{5}-CTZN[A-Z0-9]-[0-9]{9}-[0-9]{4}$')
+        .hasMatch(cidNumber);
+  }
+
   // 清算行管理员解密（非链上交易，二进制前缀域）。
   // 格式：prefix(4B = GMB||0x19) + cid_number(32B,右补零) + pubkey(32B)
   //      + timestamp(8B, u64 LE) + nonce(16B)。旧 48B 槽位不兼容并直接拒绝。
@@ -1041,11 +1050,12 @@ class PayloadDecoder {
   }
 
   // PublicManage(30) / PrivateManage(31) / propose_institution_governance(8)
-  // SCALE: cid_number + InstitutionGovernanceAction + nonce + signature
-  //      + actor_cid_number + proposer_role_code + credential_signer_pubkey
-  //      + scope_province_name + scope_city_name。
+  // SCALE: cid_number + InstitutionGovernanceAction + actor_cid_number
+  //      + proposer_role_code。公权 action 内管理员为 PublicAdmin 四字段，
+  // 私权 action 内管理员保持 Admin 三字段。
   static DecodedPayload? _decodeProposeInstitutionGovernance(
     Uint8List bytes, {
+    required bool isPublic,
     required String action,
     required String entityLabel,
   }) {
@@ -1054,28 +1064,19 @@ class PayloadDecoder {
     if (cidRead == null) return null;
     final cidNumber = cidRead.$1;
     offset = cidRead.$2;
-    final actionRead = _readInstitutionGovernanceAction(bytes, offset);
+    final actionRead = _readInstitutionGovernanceAction(
+      bytes,
+      offset,
+      isPublic: isPublic,
+    );
     if (actionRead == null) return null;
     offset = actionRead.$3;
-    offset = _skipBoundedBytes(bytes, offset); // register_nonce
-    if (offset < 0) return null;
-    offset = _skipBoundedBytes(bytes, offset); // signature
-    if (offset < 0) return null;
     final actorRead = _readCidNumber(bytes, offset);
     if (actorRead == null) return null;
     offset = actorRead.$2;
     final roleRead = _readRoleCode(bytes, offset);
     if (roleRead == null) return null;
     offset = roleRead.$2;
-    if (offset + 32 > bytes.length) return null;
-    final credentialSigner = bytes.sublist(offset, offset + 32);
-    offset += 32;
-    final (scopeProvinceName, afterProvince) = _readUtf8Vec(bytes, offset);
-    if (scopeProvinceName == null || scopeProvinceName.isEmpty) return null;
-    offset = afterProvince;
-    final (scopeCityName, afterCity) = _readUtf8Vec(bytes, offset);
-    if (scopeCityName == null) return null;
-    offset = afterCity;
     if (!_hasValidSigningTail(bytes, offset)) return null;
     return DecodedPayload(
       action: action,
@@ -1090,18 +1091,16 @@ class PayloadDecoder {
           'fee_payer',
           {'actor_cid_number': actorRead.$1},
         ),
-        'credential_signer_pubkey': _bytesToSs58(credentialSigner),
-        'scope_province_name': scopeProvinceName,
-        'scope_city_name': scopeCityName,
       },
     );
   }
 
   // PublicManage(30) / PrivateManage(31) / register_institution_admins(9)
-  // SCALE: cid_number + admins + nonce + signature + actor_cid_number
-  //      + credential_signer_pubkey + scope_province_name + scope_city_name。
+  // SCALE: cid_number + admins + actor_cid_number。公权管理员为四字段，
+  // 私权管理员为三字段；注册局授权由 runtime 对签名 origin 直接校验。
   static DecodedPayload? _decodeRegisterInstitutionAdmins(
     Uint8List bytes, {
+    required bool isPublic,
     required String action,
     required String entityLabel,
   }) {
@@ -1113,28 +1112,16 @@ class PayloadDecoder {
     final adminsRead = _readAdminPersons(
       bytes,
       offset,
-      minCount: 2,
+      isPublic: isPublic,
+      minCount: 1,
       maxCount: 1989,
     );
     if (adminsRead == null) return null;
     final admins = adminsRead.$1;
     offset = adminsRead.$2;
-    offset = _skipBoundedBytes(bytes, offset); // register_nonce
-    if (offset < 0) return null;
-    offset = _skipBoundedBytes(bytes, offset); // signature
-    if (offset < 0) return null;
     final actorRead = _readCidNumber(bytes, offset);
     if (actorRead == null) return null;
     offset = actorRead.$2;
-    if (offset + 32 > bytes.length) return null;
-    final credentialSigner = bytes.sublist(offset, offset + 32);
-    offset += 32;
-    final (scopeProvinceName, afterProvince) = _readUtf8Vec(bytes, offset);
-    if (scopeProvinceName == null || scopeProvinceName.isEmpty) return null;
-    offset = afterProvince;
-    final (scopeCityName, afterCity) = _readUtf8Vec(bytes, offset);
-    if (scopeCityName == null) return null;
-    offset = afterCity;
     if (!_hasValidSigningTail(bytes, offset)) return null;
     return DecodedPayload(
       action: action,
@@ -1148,9 +1135,6 @@ class PayloadDecoder {
           'fee_payer',
           {'actor_cid_number': actorRead.$1},
         ),
-        'credential_signer_pubkey': _bytesToSs58(credentialSigner),
-        'scope_province_name': scopeProvinceName,
-        'scope_city_name': scopeCityName,
       },
       reviewFields: {
         'cid_number': cidNumber,
@@ -1161,9 +1145,6 @@ class PayloadDecoder {
           'fee_payer',
           {'actor_cid_number': actorRead.$1},
         ),
-        'credential_signer_pubkey': _bytesToSs58(credentialSigner),
-        'scope_province_name': scopeProvinceName,
-        'scope_city_name': scopeCityName,
       },
     );
   }
@@ -3282,13 +3263,15 @@ class PayloadDecoder {
     return (role.$1, role.$2);
   }
 
-  /// 严格解码全仓统一的 `Vec<Admin>`。
+  /// 严格解码公权 `Vec<PublicAdmin>` 或私权/个人 `Vec<Admin>`。
   ///
-  /// SCALE 顺序只允许 `admin_account + family_name + given_name`。旧纯账户、
-  /// 旧合并姓名、空姓名、非法 UTF-8 和重复账户全部拒签。
+  /// 公权顺序为 `admin_account + cid_number + family_name + given_name`，身份字段
+  /// 当前允许为空；非空公民 CID 必须具有 CTZN 结构。私权/个人顺序保持
+  /// `admin_account + family_name + given_name`，姓名不得为空。重复账户全部拒签。
   static (List<_DecodedAdminPerson>, int)? _readAdminPersons(
     Uint8List bytes,
     int offset, {
+    bool isPublic = false,
     required int minCount,
     required int maxCount,
   }) {
@@ -3304,15 +3287,36 @@ class PayloadDecoder {
       offset += 32;
       final accountHex = _bytesToLowerHex(accountBytes);
       if (!seen.add(accountHex)) return null;
-      final familyNameRead = _readAdminName(bytes, offset);
+      String? citizenCidNumber;
+      if (isPublic) {
+        final cidRead = _readUtf8Vec(bytes, offset);
+        if (cidRead.$1 == null) return null;
+        citizenCidNumber = cidRead.$1!;
+        if (utf8.encode(citizenCidNumber).length > 32 ||
+            (citizenCidNumber.isNotEmpty &&
+                !_isStructuredCitizenCid(citizenCidNumber))) {
+          return null;
+        }
+        offset = cidRead.$2;
+      }
+      final familyNameRead = _readAdminName(
+        bytes,
+        offset,
+        allowEmpty: isPublic,
+      );
       if (familyNameRead == null) return null;
       offset = familyNameRead.$2;
-      final givenNameRead = _readAdminName(bytes, offset);
+      final givenNameRead = _readAdminName(
+        bytes,
+        offset,
+        allowEmpty: isPublic,
+      );
       if (givenNameRead == null) return null;
       offset = givenNameRead.$2;
       admins.add((
         accountBytes: accountBytes,
         adminAccountHex: accountHex,
+        citizenCidNumber: citizenCidNumber,
         familyName: familyNameRead.$1,
         givenName: givenNameRead.$1,
       ));
@@ -3320,11 +3324,17 @@ class PayloadDecoder {
     return (List<_DecodedAdminPerson>.unmodifiable(admins), offset);
   }
 
-  /// 管理员姓、名各自必须是 1..=128 字节的严格 UTF-8。
-  static (String, int)? _readAdminName(Uint8List bytes, int offset) {
+  /// 管理员姓、名各自最多 128 字节；公权资料当前允许为空。
+  static (String, int)? _readAdminName(
+    Uint8List bytes,
+    int offset, {
+    bool allowEmpty = false,
+  }) {
     if (offset >= bytes.length) return null;
     final (length, lengthSize) = _decodeCompactU32(bytes, offset);
-    if (lengthSize == 0 || length < 1 || length > 128) return null;
+    if (lengthSize == 0 || (!allowEmpty && length < 1) || length > 128) {
+      return null;
+    }
     final start = offset + lengthSize;
     final end = start + length;
     if (end > bytes.length) return null;
@@ -3340,6 +3350,8 @@ class PayloadDecoder {
       for (final admin in admins)
         {
           'admin_account': admin.adminAccountHex,
+          if (admin.citizenCidNumber != null)
+            'cid_number': admin.citizenCidNumber,
           'family_name': admin.familyName,
           'given_name': admin.givenName,
         },
@@ -3347,22 +3359,29 @@ class PayloadDecoder {
   }
 
   static String _adminReviewValue(List<_DecodedAdminPerson> admins) {
-    return admins
-        .map(
-          (admin) =>
-              '${admin.familyName}${admin.givenName}(${_bytesToSs58(admin.accountBytes)})',
-        )
-        .join('、');
+    return admins.map(
+      (admin) {
+        final name = '${admin.familyName}${admin.givenName}';
+        final cid = admin.citizenCidNumber;
+        final profile = [
+          if (name.isNotEmpty) name,
+          if (cid != null && cid.isNotEmpty) cid,
+        ].join(' / ');
+        return '${profile.isEmpty ? '资料待完善' : profile}(${_bytesToSs58(admin.accountBytes)})';
+      },
+    ).join('、');
   }
 
   /// 机构治理共用读取器；对外只返回人数、展示文本和新偏移。
   static (int, String, int)? _readInstitutionAdmins(
     Uint8List bytes,
-    int offset,
-  ) {
+    int offset, {
+    required bool isPublic,
+  }) {
     final read = _readAdminPersons(
       bytes,
       offset,
+      isPublic: isPublic,
       minCount: 0,
       maxCount: 1989,
     );
@@ -3372,13 +3391,14 @@ class PayloadDecoder {
 
   static (String, String, int)? _readInstitutionGovernanceAction(
     Uint8List bytes,
-    int offset,
-  ) {
+    int offset, {
+    required bool isPublic,
+  }) {
     if (offset >= bytes.length) return null;
     final variant = bytes[offset++];
     if (variant == 0) {
-      final admins = _readInstitutionAdmins(bytes, offset);
-      if (admins == null || admins.$1 < 2) return null;
+      final admins = _readInstitutionAdmins(bytes, offset, isPublic: isPublic);
+      if (admins == null || admins.$1 < 1) return null;
       return ('替换管理员集合', '${admins.$1} 名管理员：${admins.$2}', admins.$3);
     }
     if (variant == 1) {
@@ -3387,8 +3407,8 @@ class PayloadDecoder {
       return ('岗位/任职治理', next.$1, next.$2);
     }
     if (variant == 2) {
-      final admins = _readInstitutionAdmins(bytes, offset);
-      if (admins == null || admins.$1 < 2) return null;
+      final admins = _readInstitutionAdmins(bytes, offset, isPublic: isPublic);
+      if (admins == null || admins.$1 < 1) return null;
       final next = _skipRoleGovernance(bytes, admins.$3);
       if (next == null) return null;
       return (

@@ -10,7 +10,7 @@ import { nowMs } from '../shared/time';
 /// 价格、状态和到期时间都来自 finalized `square-post`；BFF 不计算公历。
 
 const MEMBERSHIP_COLUMNS =
-  `m.owner_account, m.membership_level, m.pending_membership_level, m.started_at,
+  `m.owner_account, m.membership_level, m.started_at,
     m.last_charged_at, m.last_charged_price_fen, m.paid_until,
     m.subscription_status, m.finalized_block_number, m.finalized_block_hash,
     m.verified_at, m.entitlement_lapsed_at, m.last_tx_hash,

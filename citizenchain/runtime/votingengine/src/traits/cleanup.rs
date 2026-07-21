@@ -13,15 +13,15 @@ pub type CleanupChunkResult = (u32, bool);
 pub trait InternalCleanupHandler {
     /// 内部提案成功执行后的 mode 侧副作用。
     ///
-    /// internal-vote 在这里激活/删除动态阈值，核心 votingengine 不解析
-    /// 业务数据，也不把阈值职责交回业务模块。
+    /// internal-vote 在这里处理个人多签管理员变更对应的生效阈值；机构阈值
+    /// 唯一真源在 public/private entity，不经过本回调改写。
     fn on_internal_proposal_executed(_proposal_id: u64) -> DispatchResult {
         Ok(())
     }
 
     /// 内部提案进入终态后的 mode 侧清理。
     ///
-    /// 注册被拒绝或执行失败时，internal-vote 用此入口清掉 pending 阈值。
+    /// 个人多签注册/管理员变更被拒绝或执行失败时清理其 pending 阈值。
     fn on_internal_proposal_terminal(_proposal_id: u64, _status: u8) -> DispatchResult {
         Ok(())
     }

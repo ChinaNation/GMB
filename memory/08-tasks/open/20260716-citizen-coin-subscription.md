@@ -1,7 +1,7 @@
 # 任务卡：公民币平台订阅与创作者订阅统一改造
 
 > 状态：执行中
-> 当前步骤：第 5.6 步链端子步 5.6a–5.6e 全部完成（见 18.9~18.13）；下一步 5.7 五端解码同步（客户端 citizenapp/cloudflare/onchina/citizenwallet 按新 SubscriptionState 布局与状态对齐）待出方案确认；随后第 6 步
+> 当前步骤：链端 5.6a–5.6e 完成（18.9~18.13）；5.7 客户端解码同步完成——5.7a citizenapp（19.8）+ 5.7b cloudflare（19.9）；剩治理完整路径集成测试（votingengine 修复后已解锁）与第 6 步跨端真实运行态验收+归档
 > 唯一架构文档：`memory/01-architecture/gmb/subscription-part1-tech.md`
 > 决策记录：`memory/04-decisions/ADR-037-citizen-coin-native-membership.md`
 
@@ -19,7 +19,7 @@
 - 档位价格唯一真源为链上 `PlatformPrice`。
 - 用户在 CitizenApp 对订阅、取消、换档签名。
 - 首次扣款和每次 runtime 自动续费均读取扣款时最新链上价格。
-- 订阅款全额进入技术公司费用账户。
+- 订阅款全额进入公民链基金会费用账户。
 - 平台调价只允许通过统一投票引擎，不得在业务模块内实现投票。
 
 ### 2.2 创作者订阅
@@ -69,7 +69,7 @@
 
 - `Subscriptions`
 - `PlatformPrice`
-- ~~`PlatformCidNumber`~~（第 5.5 步删除：平台订阅机构永久固定为创世技术公司 `CITIZENCHAIN_TECHNOLOGY`，CID 收敛为创世常量单源，不再作为可写存储；详见第 17 节）
+- ~~`PlatformCidNumber`~~（第 5.5 步删除：平台订阅机构永久固定为创世公民链基金会 `CITIZENCHAIN_FOUNDATION`，CID 收敛为创世常量单源，不再作为可写存储；详见第 17 节）
 - `CreatorPlans`
 - `RenewalSchedule`
 - `RenewalIndex`
@@ -80,7 +80,7 @@
 - `citizenchain/runtime/misc/square-post/`：价格、扣款、确定性 UTC 公历、到期调度、最小订阅状态、迁移和平台调价回调。
 - `citizenapp/`：订阅、取消、换套餐热签，finalized 状态读取和真实日期展示；无续费提交。
 - `citizenapp/cloudflare/`：创作者展示资料、finalized 镜像、低频对账和内容权益门禁；无扣款权、无日期计算。
-- `citizenchain/onchina/`：技术公司平台调价治理入口。
+- `citizenchain/onchina/`：公民链基金会平台调价治理入口。
 - `citizenwallet/`：平台调价载荷中文识别、一次签名和响应二维码展示；普通订阅不进入 CitizenWallet。
 - `memory/`：任务、协议、命名、ADR、架构和验收事实真源。
 
@@ -91,7 +91,7 @@
 - [x] 第 3 步：完成 CitizenApp 平台/创作者订阅和换套餐流程。
 - [x] 第 4 步：完成 Cloudflare/D1 finalized 镜像、对账和权益门禁。
 - [x] 第 5 步：完成 OnChina 平台调价、机构工作台隔离与 CitizenWallet 一次签名响应回扫。
-- [x] 第 5.5 步（runtime 二次确认）：平台订阅机构 CID 收敛为创世常量 `CITIZENCHAIN_TECHNOLOGY`，删除 `PlatformCidNumber` 死存储，创世（genesis_build）播种三档默认价；开发期零用户、重新创世模型，不做任何迁移，迁移机制整块直接删除；联动 OnChina 读取端（技术方案见第 17 节，执行记录见 17.8）。
+- [x] 第 5.5 步（runtime 二次确认）：平台订阅机构 CID 收敛为创世常量 `CITIZENCHAIN_FOUNDATION`，删除 `PlatformCidNumber` 死存储，创世（genesis_build）播种三档默认价；开发期零用户、重新创世模型，不做任何迁移，迁移机制整块直接删除；联动 OnChina 读取端（技术方案见第 17 节，执行记录见 17.8）。
 - [ ] 第 5.6 步（runtime 二次确认）：订阅生命周期重构——挂起态（改价未再签名/余额不足）、换挡立即折算（升档扣差、降档延时）、创作者掉会员暂停粉丝续扣可恢复、续费扩容（on_idle 按块权重排空、删 64 固定上限）、补齐治理调价测试（技术方案见第 18 节）。
 - [ ] 第 6 步：完成跨端真实运行态验收、残留总清理和任务归档。
 
@@ -255,7 +255,7 @@
 - 调价提案严格构造 `SquarePost::propose_set_platform_price`，仅调用现有统一内部投票引擎。OnChina 不实现投票资格、计票、推进或执行，也不保存投票表。
 - 链签流程已收口到唯一 core 实现和统一 `POST /api/v1/admin/chain/submit`：OnChina 展示请求二维码，CitizenWallet 只签名一次并显示响应二维码，OnChina 回扫响应后统一验签、dry-run、提交并等待进块；旧公民专属提交 URL 和业务专属提交实现已移除。
 - prepare 与 submit 都重新核对当前节点绑定、准确平台 CID 和链上 active `admins`，防止 prepare 后撤权继续提交。调价外部交易继续经过统一交易收费；投票引擎系统执行不追加签名或外部交易。
-- 唯一二维码 registry 已登记 `propose_set_platform_price` 与中文字段。CitizenWallet 严格显示技术公司 CID、目标档位和新价格，并拒绝未知档位、零价、截断、尾随字节、call/action 不一致及非标准载荷。
+- 唯一二维码 registry 已登记 `propose_set_platform_price` 与中文字段。CitizenWallet 严格显示公民链基金会 CID、目标档位和新价格，并拒绝未知档位、零价、截断、尾随字节、call/action 不一致及非标准载荷。
 - OnChina 140 项测试、CitizenWallet signer 139 项测试、二维码 registry 一致性和单注册表守卫全部通过；前端生产构建和 Dart 静态分析通过。
 - 真实本地验收使用隔离 OnChina 与临时 PostgreSQL 连接真实本地 CitizenChain，完成链投影同步并达到健康状态 UP；未登录访问平台价格、调价提案和统一提交均返回拒绝，旧提交入口已失效。隔离进程与临时数据已停止并清理。
 - 本步骤未修改 `citizenchain/runtime/`，未部署、未写生产数据库、未提交或推送 Git。
@@ -306,15 +306,15 @@
 
 ### 17.1 背景与根因
 
-复核发现：平台订阅收款方派生依赖存储 `PlatformCidNumber` 读取技术公司 CID，但全仓无任何写入方（pallet 无 `genesis_config`、创世 seeder 不写、无 extrinsic、pallet 也不读常量），导致 fresh 部署后平台轨恒 fail-closed（`PlatformNotBound`）；而技术公司本身早在创世就由 `runtime/genesis/src/institution/seeder.rs::insert_citizenchain_technology` 完整播种（身份、主账户、费用账户、3 名管理员、3 个固定岗位）。缺的是「创世常量 → pallet 存储」这根绑定桥。
+复核发现：平台订阅收款方派生依赖存储 `PlatformCidNumber` 读取平台机构 CID，但全仓无任何写入方（pallet 无 `genesis_config`、创世 seeder 不写、无 extrinsic、pallet 也不读常量），导致 fresh 部署后平台轨恒 fail-closed（`PlatformNotBound`）；公民链基金会则由 `runtime/genesis/src/institution/seeder.rs::insert_citizenchain_foundation` 完整播种（身份、主账户、费用账户、一名管理员、三个固定岗位及三条兼任关系）。缺的是「创世常量 → pallet 存储」这根绑定桥。
 
-因技术公司是**永久固定**的平台订阅机构，`PlatformCidNumber` 这层「可写存储」本身就是错误抽象。正确修复是把平台 CID 收敛为**创世常量单源**，而不是补一个可写存储的绑定入口。
+因公民链基金会是**永久固定**的平台订阅机构，`PlatformCidNumber` 这层「可写存储」本身就是错误抽象。正确修复是把平台 CID 收敛为**创世常量单源**，而不是补一个可写存储的绑定入口。
 
 > 部署模型更正（覆盖本卡第 1 节的「禁止重新创世 / StorageVersion 原地升级」约束，仅限本步）：GMB 全系开发期、零用户，本步按**重新创世**落地，**不做任何迁移**。原设想的 v2→v3 迁移已撤销；`square-post` 的整套迁移机制（`migration.rs`、`on_runtime_upgrade` 等 hooks、`MigrationBlocked`、`ensure_subscription_ready` 迁移门禁）在重新创世模型下均为死代码，作为残留**直接删除**。
 
 ### 17.2 目标态
 
-- 平台订阅机构永久等于 `primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY`，与 `runtime/src/configs.rs`、node 治理骨架、onchina 审计同一单源。
+- 平台订阅机构永久等于 `primitives::cid::china::citizenchain::CITIZENCHAIN_FOUNDATION`，与 `runtime/src/configs.rs`、node 治理骨架、onchina 审计同一单源。
 - 平台三档价仍是链上可变真源（仅统一内部投票可改），但在缺省时有确定初值。
 - 删除死存储 `PlatformCidNumber`，零残留，联动更新 OnChina 读取端。
 
@@ -322,8 +322,8 @@
 
 平台 CID 收敛为创世常量（采用直读常量方案，最小 diff，与 configs.rs:134 同口径，pallet 已依赖 `primitives`）：
 
-1. `subscription.rs` `current_price_and_payee` Platform 分支：`PlatformCidNumber::<T>::get().ok_or(PlatformNotBound)` 改为读 `CITIZENCHAIN_TECHNOLOGY.cid_number.as_bytes()`；payee 仍按该 CID + `RESERVED_NAME_FEE` 派生；`PlatformNotBound` 语义收窄为「技术公司费用账户不可派生」（理论不发生，保留 fail-closed）。
-2. `proposal.rs::propose_price_change` 与 `InternalVoteExecutor::on_internal_vote_finalized`：删除 `PlatformCidNumber::get`，平台机构判定改用 `primitives::cid::china::citizenchain::is_citizenchain_technology_identity(code, actor_cid)`（同时校验机构码 SFGQ + 准确 CID，比裸 CID 比对更硬）。
+1. `subscription.rs` `current_price_and_payee` Platform 分支：`PlatformCidNumber::<T>::get().ok_or(PlatformNotBound)` 改为读 `CITIZENCHAIN_FOUNDATION.cid_number.as_bytes()`；payee 仍按该 CID + `RESERVED_NAME_FEE` 派生；`PlatformNotBound` 语义收窄为「公民链基金会费用账户不可派生」（理论不发生，保留 fail-closed）。
+2. `proposal.rs::propose_price_change` 与 `InternalVoteExecutor::on_internal_vote_finalized`：删除 `PlatformCidNumber::get`，平台机构判定改用 `primitives::cid::china::citizenchain::is_citizenchain_foundation_identity(code, actor_cid)`（同时校验机构码 SFGY + 准确 CID，比裸 CID 比对更硬）。
 3. `lib.rs`：删除 `PlatformCidNumber` StorageValue 定义与相关类型引用；更新 `PlatformNotBound` 注释。
 
 平台价格创世播种（重新创世模型，不做迁移）：
@@ -338,7 +338,7 @@
 
 OnChina 读取端联动（删存储的必然连带；不联动会使控制台平台价页 fail-closed）：
 
-8. `onchina/src/core/chain_runtime.rs`：`fetch_platform_membership_snapshot` 不再读 `storage_value_key("SquarePost","PlatformCidNumber")`；`platform_cid_number` 直接取自创世常量 `CITIZENCHAIN_TECHNOLOGY.cid_number`（onchina 已在 `domains/gov/chain_audit.rs` 引用该常量）。`recheck_platform_admin`/`platform_prices` 逻辑不变，仅数据来源改常量。
+8. `onchina/src/core/chain_runtime.rs`：`fetch_platform_membership_snapshot` 不再读 `storage_value_key("SquarePost","PlatformCidNumber")`；`platform_cid_number` 直接取自创世常量 `CITIZENCHAIN_FOUNDATION.cid_number`（onchina 已在 `domains/gov/chain_audit.rs` 引用该常量）。`recheck_platform_admin`/`platform_prices` 逻辑不变，仅数据来源改常量。
 
 测试：
 
@@ -350,7 +350,7 @@ OnChina 读取端联动（删存储的必然连带；不联动会使控制台平
 - `citizenchain/runtime/misc/square-post/src/`：代码 + 中文注释；平台 CID 改读创世常量、删 `PlatformCidNumber` 存储、新增 `genesis_build` 播种三档价、**删除整个 `migration.rs` 与迁移 hooks/`MigrationBlocked`/`ensure_subscription_ready`**。边界——不改订阅状态机、不改 call index、不改 `SubscriptionState` SCALE 布局。
 - `citizenchain/runtime/misc/square-post/src/tests/`：测试；去掉 CID 手工 `put`、删迁移单测、补创世播种回归。
 - `citizenchain/onchina/src/core/`、`citizenchain/onchina/src/domains/membership/`：代码 + 残留清理；平台 CID 读取从存储键改创世常量，控制台平台价页维持 finalized 价格快照读取。
-- `memory/01-architecture/gmb/`、`memory/04-decisions/ADR-037-citizen-coin-native-membership.md`、本任务卡：文档；记录平台 CID 单源=创世技术公司常量、存储契约删 `PlatformCidNumber`、价格创世播种、迁移机制删除。
+- `memory/01-architecture/gmb/`、`memory/04-decisions/ADR-037-citizen-coin-native-membership.md`、本任务卡：文档；记录平台 CID 单源=创世公民链基金会常量、存储契约删 `PlatformCidNumber`、价格创世播种、迁移机制删除。
 
 ### 17.5 不修改范围
 
@@ -361,7 +361,7 @@ OnChina 读取端联动（删存储的必然连带；不联动会使控制台平
 
 ### 17.6 验收
 
-- 重新创世后平台 `subscribe` 不再报 `PlatformNotBound`；收款方正确派生到技术公司费用账户。
+- 重新创世后平台 `subscribe` 不再报 `PlatformNotBound`；收款方正确派生到公民链基金会费用账户。
 - 三档 `PlatformPrice` 创世后确定存在默认值；统一内部投票调价仍生效。
 - 全仓无 `PlatformCidNumber` 读写残留（含 onchina）；`migration.rs`、迁移 hooks、`MigrationBlocked`、`ensure_subscription_ready` 全部删除，无编译引用残留。
 - `square-post` 单元测试、`genesis_build` 播种回归、runtime 全量单测通过；无 try-runtime 迁移校验残留。
@@ -374,7 +374,7 @@ OnChina 读取端联动（删存储的必然连带；不联动会使控制台平
 
 ### 17.8 第 5.5 步执行记录（2026-07-19）
 
-- 平台 CID 收敛为创世常量：`subscription.rs::current_price_and_payee` 与 `proposal.rs`（`propose_price_change` 用 `is_citizenchain_technology_identity`，回调用常量 CID 断言）改读 `CITIZENCHAIN_TECHNOLOGY.cid_number`；`lib.rs` 删除 `PlatformCidNumber` StorageValue；`PlatformNotBound` 语义收窄为「费用账户不可派生」。
+- 平台 CID 收敛为创世常量：`subscription.rs::current_price_and_payee` 与 `proposal.rs`（`propose_price_change` 用 `is_citizenchain_foundation_identity`，回调用常量 CID 断言）改读 `CITIZENCHAIN_FOUNDATION.cid_number`；`lib.rs` 删除 `PlatformCidNumber` StorageValue；`PlatformNotBound` 语义收窄为「费用账户不可派生」。
 - 价格创世播种：`lib.rs` 新增 `#[pallet::genesis_config]` + `#[pallet::genesis_build]`，创世无条件写三档默认价；`square-post` 加 `serde` 依赖。
 - 迁移机制整块删除：删 `migration.rs`；`lib.rs` 删 `on_runtime_upgrade/pre/post_upgrade` 三 hooks、`MigrationBlocked` 存储、`MigrationIncomplete` 错误；`subscription.rs` 删 `ensure_subscription_ready`；`billing.rs` 删四处调用；`RenewalSchedule/RenewalIndex` 一致性不变量保留并移入 `lib.rs` 的 `try_state`。`runtime/src/lib.rs`、`configs.rs` 迁移相关注释同步更新。
 - OnChina 联动：`chain_runtime.rs::fetch_platform_membership_snapshot` 不再读 `PlatformCidNumber` 存储键，`platform_cid_number` 取自创世常量；仅批量读三档 finalized 价；删除随之无用的 `decode_scale_vec_string` 及其测试断言。
@@ -484,8 +484,78 @@ Review 采纳的四项决策 + 出块参数确定后，对 square-post 订阅生
 
 - 续费扩容：`lib.rs` Hooks 删 `on_initialize`/`on_finalize`，改 `on_idle(n, remaining_weight)` 按当块剩余权重排空（`limit = min(remaining/per, backstop)`；`()` 未计量权重时按 backstop 排空，兼容测试）；`weights.rs` `on_initialize(renewals)` → `process_one_due()`（85M+8r/7w）；`configs.rs` `MaxSubscriptionRenewalsPerBlock` `64 → 50_000`；`benchmarking.rs` 加 `process_one_due` 基准（受并行 votingengine 阻断未跑）。
 - 残留清理：`billing.rs` `charge_and_schedule` 删恒真的 `reset_started_at`，`started_at` 恒取 `now`。
-- 治理测试（#3 可测部分）：`propose_platform_price_rejects_zero_price`、`propose_platform_price_rejects_non_technology_institution`（验证 5.5 的 `is_citizenchain_technology_identity` 断言）。**完整「投票通过→执行→改价」路径需 votingengine 集成夹具（测试 runtime impl `votingengine::Config`），当前受并行 votingengine 未提交改动阻断，列为跟进项。**
+- 治理测试（#3 可测部分）：`propose_platform_price_rejects_zero_price`、`propose_platform_price_rejects_non_foundation_institution`（验证 5.5 的 `is_citizenchain_foundation_identity` 断言）。**完整「投票通过→执行→改价」路径需 votingengine 集成夹具（测试 runtime impl `votingengine::Config`），当前受并行 votingengine 未提交改动阻断，列为跟进项。**
 - 测试夹具：`finalize_at` 改调 `on_idle(block, Weight::MAX)`。
 - 验收：`cargo test -p square-post` 23/23 绿；`cargo check -p citizenchain`、`--features try-runtime`、`-p onchina` 通过；`on_initialize`/`on_finalize`/`reset_started_at` 零残留。
 
-**链端子步 5.6a–5.6e 全部完成。** 剩 5.7 五端解码同步（客户端）。
+**链端子步 5.6a–5.6e 全部完成。** 剩 5.7 客户端解码同步。
+
+## 19. 第 5.7 步技术方案：客户端解码同步（等待执行确认）
+
+### 19.1 范围收敛（勘察结论）
+只有 **citizenapp(Dart) + cloudflare(TS)** 解码 `SubscriptionState`；`onchina/citizenwallet` 对其零解码引用（onchina 只读平台价快照，5.5 已改；citizenwallet 只冷签治理）→ 二者无需改。「五端」实为两端。
+
+### 19.2 新 SCALE 布局（金标真源 `subscription_scale_vectors.json`）
+`plan / started_at / last_charged_at / last_charged_price_fen(u128) / paid_until / subscription_status(u8 0-4) / authorized_price_fen(u128，新) / suspend_reason(Option<u8>，新)`；删 `pending_plan`；状态 `3=suspended、4=creatorPaused`；`suspend_reason` 值 `0=needReconsent、1=insufficientBalance`。
+
+### 19.3 A. citizenapp（Dart）
+- `lib/rpc/subscription_rpc.dart`：`ChainSubscriptionState` 删 `pendingPlan`、加 `authorizedPriceFen:BigInt` + `suspendReason:String?`；`decodeSubscriptionState` 删 pending 读、status switch 加 3/4、status 后读 `authorized_price_fen`(u128)+`suspend_reason`(Option)；`isEffectiveAt` 维持 active||cancelled。
+- `lib/my/membership/`（`subscription_service.dart`/`membership_page.dart`）：删 pendingPlan 引用；suspended（提示重新签名/充值）、creatorPaused（创作者暂停恢复中）状态展示；换挡文案改「立即生效」。
+- `test/rpc/subscription_rpc_test.dart`：金标向量按新布局逐字节对齐 + suspended/creatorPaused/authorized/suspend_reason 断言。
+
+### 19.4 B. cloudflare（TS）
+- `src/chain/subscription.ts`：`SubscriptionStatus` 加 `'suspended'|'creatorPaused'`、`STATUS_BY_BYTE` 加 3/4、删 pendingPlan、status 后消费 `authorized_price_fen`(u128)+`suspend_reason`(Option)。
+- `migrations/0001_square_core.sql`：两处 `subscription_status CHECK(... IN)` 加 `'suspended','creatorPaused'`（开发期零用户，直接改建表/重建 D1；核对是否有 `pending_plan` 列需删）。
+- `src/membership/reconcile.ts`：对账候选纳入 `suspended/creatorPaused`（CreatorPaused 链上自动恢复 Active，镜像须刷新，否则暂停订阅镜像永不回 active）。
+- `src/membership/service.ts` 门禁：维持只认 active/cancelled（suspended/creatorPaused 自然拒绝），仅加注释。
+- `test/chain_subscription.test.ts`：金标向量与断言同步。
+
+### 19.5 C. onchina / citizenwallet
+核对确认无 SubscriptionState 解码 → 无改动，仅在执行记录声明。
+
+### 19.6 预计修改目录
+- `citizenapp/lib/rpc/`、`citizenapp/lib/my/membership/`、`citizenapp/test/rpc/`
+- `citizenapp/cloudflare/src/chain/`、`.../membership/`、`.../migrations/`、`.../test/`
+- 本任务卡 5.7 执行记录
+
+### 19.7 不修改 / 验收
+- 不改链端（已完成）、不改 onchina/citizenwallet、不部署、不写生产 D1。
+- citizenapp：`flutter test test/rpc/subscription_rpc_test.dart` 绿 + `flutter analyze` 无问题，金标向量与 runtime 逐字节一致。
+- cloudflare：`npm test`（chain_subscription+membership）绿 + tsc 通过，真实本地 D1 迁移含新状态。
+- 两端 `pending_plan` 零残留。
+- 执行顺序：先 citizenapp（5.7a）验收，再 cloudflare（5.7b）验收。
+
+### 19.8 子步 5.7a 执行记录（citizenapp，2026-07-19）
+
+- `lib/rpc/subscription_rpc.dart`：`ChainSubscriptionState` 删 `pendingPlan`、加 `authorizedPriceFen:BigInt` + `suspendReason:String?`；`decodeSubscriptionState` 删 pending 读、status switch 加 `3→suspended/4→creatorPaused`、status 后读 `authorized_price_fen`(u128) + `suspend_reason`(Option:0→null,1→0=needReconsent/1=insufficientBalance)；`isEffectiveAt` 维持 active||cancelled。
+- `lib/my/membership/membership_page.dart`：横幅状态标签 switch 加 `suspended`（已挂起·待重新签名或充值）、`creatorPaused`（创作者暂停·恢复后自动续）两条（仅此 2 行，未碰同文件并行的价格面板改动）。
+- 测试：`test/rpc/subscription_rpc_test.dart` state 向量对齐 runtime 金标（新布局）+ 新增 suspended/creatorPaused 解码断言；`test/my/creator/creator_api_test.dart`、`test/my/membership/membership_page_test.dart` 的 `ChainSubscriptionState` 构造去 pendingPlan、补两字段。
+- 验收：`flutter analyze`（订阅相关文件）无问题；`flutter test test/rpc/subscription_rpc_test.dart test/my/creator/creator_api_test.dart` 全绿；membership_page_test 状态标签相关用例通过。
+- 已知非本步失败：`membership_page_test` 两条「公民币月价来自链读/兜底名称」断言 `299 公民币/月` 失败——`membership_page.dart` 有并行未提交大改（168+/57-）把价格显示改为「元/月两位小数」但未同步这两条断言；属并行任务遗留，非本步引入，未处理。
+
+### 19.9 子步 5.7b 执行记录（cloudflare，2026-07-19）
+
+- `src/chain/subscription.ts`：`SubscriptionStatus` 加 `suspended/creatorPaused`；新增 `SuspendReason` 类型；`STATUS_BY_BYTE` 加 3/4；`ChainSubscriptionState` 删 `pendingPlan`、加 `authorizedPriceFen:bigint` + `suspendReason:SuspendReason|null`；`decodeSubscriptionState` 删 pending 读、status 后消费 `authorized_price_fen`(u128)+`suspend_reason`(Option:0→null,1→0=needReconsent/1=insufficientBalance)，补截断/非法标记校验。
+- `migrations/0001_square_core.sql`：两处 `subscription_status CHECK` 加 `'suspended','creatorPaused'`；**删除死列** `pending_membership_level`、`pending_tier_id`、`pending_billing_period`（换挡即时生效、无 pending；开发期零用户直接改建表）。
+- `src/membership/reconcile.ts`：平台/创作者对账候选改 `subscription_status IN ('active','suspended','creatorPaused')`（CreatorPaused 链上自动恢复须刷新镜像）；两处 apply 删 pending 列写入。
+- `src/membership/citizen_coin.ts`、`creator.ts`：删 `state.pendingPlan` 幂等判定（换挡即时→确认后 plan 已是目标档）、删镜像 INSERT/UPDATE 的 pending 列；`service.ts` SELECT 去 `pending_membership_level`；`types.ts` `MembershipRow` 去该字段。
+- 测试：`chain_subscription.test.ts` 金标向量对齐 runtime 新布局 + suspended/creatorPaused/terminated/非法 suspend_reason 断言；`membership.test.ts`、`membership_reconcile.test.ts`、`creator_reconcile.test.ts`、`chain_confirm.test.ts` 去 pending 字段并修正因删列而位移的 mock bind 下标。
+- onchina/citizenwallet：grep 确认无 `SubscriptionState` 解码引用 → 无改动。
+- 验收：`npx tsc --noEmit` 通过；`npx vitest run` **26 文件 / 155 测试全绿**；两端源码 `pending*` 零残留。
+
+**5.7（citizenapp + cloudflare）客户端解码同步完成。** 剩：治理完整路径集成测试（votingengine 修复后已解锁）、第 6 步跨端真实运行态验收 + 归档。
+
+### 19.10 第 6 步（可自动化部分）执行记录（2026-07-19）
+
+合并大量并行改动（投票引擎重构/修复、管理员统一、公民链基金会更名）后做全栈一致性验证与残留审计：
+
+- **全栈全绿**：`cargo test -p square-post` 23/23；`cargo check -p square-post --features runtime-benchmarks` 通过（votingengine 修复已解锁，我加的 `process_one_due` 基准有效）；`cargo test -p citizenchain --lib genesis` 14/14（`genesis_build` 播种完好）；cloudflare `vitest run` 26 文件 155 测试全绿 + `tsc` 通过；citizenapp `membership_page_test` 15/15、`subscription_rpc_test`/`creator_api_test` 全绿 + `analyze` 无问题。
+- **残留审计（全仓零命中）**：`BillingKeeper`/`charge_due`/外部 renew、`stripe`/`prepaid`/`usdc` 旧支付、`pending_plan`/`SubscriptionPaymentFailed`/`SubscriptionPlanChangePending`。
+- **架构文档同步**：`memory/01-architecture/gmb/subscription-part1-tech.md` 更新为最终 as-built——状态枚举加 `Suspended/CreatorPaused` + `SuspendReason`、`SubscriptionState` 去 `pending_plan` 加 `authorized_price_fen`/`suspend_reason`；存储去 `PlatformCidNumber`/`MigrationBlocked`（平台 CID＝创世常量）；续费改 `on_idle` 按块权重排空；换套餐改即时折算；失败按原因分流为挂起/暂停/终止。
+- **治理完整路径集成测试**：判定不宜在 square-post 单测搭重型 votingengine mock（Config ~74 关联类型 + 并行改为岗位授权/`VotePlanOf`）；应放 runtime 级集成套件（所有 pallet 真实）——列为跟进项，归属 votingengine 集成套件。
+
+### 尚未完成（需运行环境/跨团队）
+
+- 治理「投票通过→执行→改价」完整集成测试（runtime 级，跟进）。
+- 跨端真实运行态验收（本地链 + Worker/D1 + CitizenApp/CitizenWallet 真机联调）——需人工运行环境，未在本窗口执行。
+- 任务卡归档：待上述真实验收完成后由 `open/` 移入完成态。

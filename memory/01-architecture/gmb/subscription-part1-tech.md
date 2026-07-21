@@ -76,36 +76,47 @@ enum SubscriptionStatus {
     Active = 0,
     Cancelled = 1,
     Terminated = 2,
+    Suspended = 3,
+    CreatorPaused = 4,
+}
+
+enum SuspendReason {
+    NeedReconsent = 0,
+    InsufficientBalance = 1,
 }
 
 struct SubscriptionState {
     plan: SubscriptionPlan,
-    pending_plan: Option<SubscriptionPlan>,
     started_at: u64,
     last_charged_at: u64,
     last_charged_price_fen: u128,
     paid_until: u64,
     subscription_status: SubscriptionStatus,
+    authorized_price_fen: u128,
+    suspend_reason: Option<SuspendReason>,
 }
 ```
 
 所有时间字段均为 unix 毫秒时间戳。字段顺序即固定 SCALE 顺序，Dart、TypeScript、JSON 金标和 runtime 必须逐字节一致。
 
-`Active` 表示授权仍有效并已进入自动续费索引；`Cancelled` 表示用户已签名取消并保留当前已付权益；`Terminated` 表示到期扣款失败或目标套餐失效，自动续费已永久停止。
+- `Active`：授权有效且在续费调度内。
+- `Cancelled`：用户签名取消，保留当前已付权益至 `paid_until`。
+- `Suspended`：暂停续扣、保留粉丝关系、退出调度，等用户动作恢复；`suspend_reason` 说明原因（创作者改价待再签名 / 余额不足待充值再签）。
+- `CreatorPaused`：创作者掉平台会员，粉丝暂停扣费但**仍留调度**，创作者恢复即自动续。
+- `Terminated`：仅显式关闭/清档，不由余额不足或掉会员自动进入。
+- `authorized_price_fen`：订阅者已授权用于自动续费的价格（创作者改价重签检测与换挡折算基准）。
 
 ## 5. Storage
 
 ```rust
 Subscriptions<(AccountId, IssuerKey)> -> SubscriptionState
-PlatformPrice<MembershipLevel> -> u128
-PlatformCidNumber -> Option<CidNumber>
+PlatformPrice<MembershipLevel> -> u128        // 创世 genesis_build 播种，仅内部投票可改
 CreatorPlans<AccountId> -> CreatorTiers
 RenewalSchedule<(due_at_be, AccountId, IssuerKey)> -> ()
 RenewalIndex<(AccountId, IssuerKey)> -> due_at
-MigrationBlocked -> bool
 ```
 
-`RenewalSchedule` 用大端时间戳键保持到期顺序，`RenewalIndex` 保证每个订阅只有一个当前到期项。不保存下次扣款区块、外部续费账户、设备状态、链下扣款密钥或第二份展示套餐。
+平台机构 CID 永久固定为**创世常量**（公民链基金会 `CITIZENCHAIN_FOUNDATION`），不是可写存储；无 `PlatformCidNumber` 存储、无迁移（开发期零用户、重新创世）。`RenewalSchedule` 用大端时间戳键保持到期顺序，`RenewalIndex` 保证每个订阅只有一个当前到期项。不保存下次扣款区块、外部续费账户、设备状态、链下扣款密钥或第二份展示套餐。
 
 ## 6. Call 契约
 
@@ -116,7 +127,7 @@ MigrationBlocked -> bool
 | `2` | `cancel(issuer)` | 订阅者 |
 | `3` | `set_creator_plans(tiers)` | 创作者 |
 | `4` | `change_subscription_plan(issuer, new_plan, expected_price_fen)` | 订阅者 |
-| `5` | `propose_set_platform_price(actor_cid_number, membership_level, new_price_fen)` | 技术公司治理账户 |
+| `5` | `propose_set_platform_price(actor_cid_number, membership_level, new_price_fen)` | 公民链基金会治理岗位任职账户 |
 旧 call、旧 SCALE tag 和旧交易载荷不兼容；不存在外部 `renew` 或周期确认 call。
 
 ## 7. 首次订阅与自动调度
@@ -127,25 +138,24 @@ MigrationBlocked -> bool
 4. runtime 按 UTC 真实公历计算 `paid_until`，写入 `Active`，并把该到期时间登记到调度索引。
 5. CitizenApp 等待交易 finalized 后读取并显示链上 `started_at` 与 `paid_until`；不再提交第二笔确认交易。
 
-平台收款账户从真实 `PlatformCidNumber` 派生。平台 CID 或费用账户缺失时 fail-closed。创作者订阅款全额进入创作者钱包，不能订阅自己，且创作者必须在扣款时拥有有效平台订阅。
+平台收款账户从**创世常量** CID + `RESERVED_NAME_FEE` 派生（公民链基金会费用账户，创世已播种）。创作者订阅款全额进入创作者钱包，不能订阅自己，且创作者必须在扣款时拥有有效平台订阅。
 
 ## 8. runtime 自动续费
 
-1. `on_initialize` 只预留本块最大处理权重；`on_finalize` 在 Timestamp inherent 写入后读取本块共识时间戳。
-2. runtime 从最早到期项开始，处理所有 `due_at <= now` 的 Active 订阅，单块处理量受 `MaxSubscriptionRenewalsPerBlock` 约束。
-3. 每个周期扣款均读取当时最新链上价格，成功后从该周期原到期时间增加一个真实公历周期并更新索引。
+1. 续费在 `on_idle(remaining_weight)` 执行（Timestamp inherent 已于其前写入，可读本块共识时间戳）；不再用 `on_finalize` 固定处理量，也不静态预留最坏权重。
+2. runtime 从最早到期项开始处理 `due_at <= now`，单块处理量按**当块剩余权重**动态排空（`limit = min(remaining/单笔权重, MaxSubscriptionRenewalsPerBlock backstop)`）；超大同刻促发多块分摊。
+3. 每个周期扣款均读取当时最新链上价格；平台治理改价自动按新价续。创作者改价（当前价 ≠ `authorized_price_fen`）则**不自动续**，转 `Suspended(NeedReconsent)` 待订阅者再签名。
 4. 停链期间无法发生状态变更；恢复出块后按到期顺序补扣所有已到期周期，未完成部分在后续区块继续。
-5. 任一周期余额不足、转账失败、平台收款账户失效、创作者资格失效或套餐失效时，写 `Terminated` 并移除调度，不重试。
+5. 续费失败按原因分流（不再一律 `Terminated`）：余额不足 → `Suspended(InsufficientBalance)`（离调度）；创作者掉平台会员 → `CreatorPaused`（留调度、下周期重试、恢复即续）；档位/周期删除 → `Suspended(NeedReconsent)`；公历换算失效等 → `Terminated`。
 
 续费不需要账户再次签名，不依赖 CitizenApp、设备或 Cloudflare 在线，也不存在任何外部续费提交者。
 
-## 9. 扣款失败、取消和换套餐
+## 9. 挂起、取消和换套餐
 
-- 真实转账失败：写 `Terminated`，不延长权益、不重试。
-- 创作者资格失效、档位删除或周期删除：不扣款，停止续费并写 `Terminated`。
-- 取消：写 `Cancelled`，保留已经确认的 `paid_until`，到期前已付权益仍有效。
-- 未到期换套餐：写 `pending_plan`，当前已付周期不变。
-- 已取消或已终止后换套餐：作为新的签名授权，按目标计划当前价格立即扣款并重新进入 `Active` 调度。
+- 挂起恢复：`Suspended` 由订阅者再签名（改价场景）/充值后再签（缺钱场景）恢复，走 `subscribe` 落到首扣路径；`CreatorPaused` 随创作者恢复平台会员在下周期重试时自动续。
+- 取消：写 `Cancelled`，保留已确认的 `paid_until`，到期前已付权益仍有效。
+- 换套餐（`change_subscription_plan`）**立即生效并折算**：剩余权益 `y = 已授权价 × (paid_until−now) ÷ (paid_until−last_charged_at)`；升档补扣 `新价−y`、新周期从现在起算；降档不扣、余额按新档单价折算成延长时长。
+- 再订阅（同计划未过期的 `Cancelled`）：恢复原调度继续扣费，不重扣。
 - 不退款、不补差价、不按日折算。
 
 ## 10. 创作者套餐与平台调价
@@ -217,10 +227,10 @@ MigrationBlocked -> bool
 
 - 所有机构管理员都从链上中国统一入口扫码登录。登录态必须携带节点绑定的准确 `institution_cid_number`，工作台由后端根据准确 CID、机构类型和链上权限下发；前端不得根据机构码猜测工作台。
 - 注册局、私权、司法、立法、其它公权和非法人机构使用不同工作台。私权机构只查看本机构信息、链上 `admins` 和被授权模块，不复用注册局的公民、机构目录或登记页面。
-- 平台会员价格模块是实例级授权：只有当前绑定 CID 与同一 finalized 区块读取的 `PlatformCidNumber` 精确相等时才下发。OnChina 不在 PostgreSQL 保存平台价格或平台 CID 副本。
+- 平台会员价格模块是实例级授权：只有当前绑定 CID 与**创世常量**平台机构 CID（公民链基金会）精确相等时才下发。OnChina 不在 PostgreSQL 保存平台价格或平台 CID 副本。
 - 调价 API 为 `GET /api/v1/membership/platform-prices` 与 `POST /api/v1/membership/platform-prices/propose`。prepare 和 submit 都重新检查节点绑定、准确平台 CID 和链上 active `admins`，任何无法确认都 fail-closed。
 - 所有 OnChina 链交易共用 `POST /api/v1/admin/chain/submit` 与同一 core 提交器。流程固定为：OnChina 展示请求二维码，CitizenWallet 只签名一次并显示响应二维码，OnChina 回扫后验签、dry-run、提交并等待进块。禁止业务模块另建提交 URL、二维码协议或签名流程。
-- 平台调价动作在唯一 QR registry 中为 `propose_set_platform_price`；CitizenWallet 必须中文展示技术公司 CID、目标平台档位和新价格，未知或不完整载荷直接拒签。
+- 平台调价动作在唯一 QR registry 中为 `propose_set_platform_price`；CitizenWallet 必须中文展示公民链基金会 CID、目标平台档位和新价格，未知或不完整载荷直接拒签。
 - `propose_set_platform_price` 只创建统一内部投票提案。资格、计票、推进和终态执行归投票引擎，OnChina 和 SquarePost 不实现第二套投票。
 
 ## 15. 真实验收

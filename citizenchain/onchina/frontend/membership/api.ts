@@ -1,4 +1,4 @@
-// 技术公司平台价格 API；通用 Bearer 请求仍复用 utils/http.ts。
+// 公民链基金会平台价格 API；通用 Bearer 请求仍复用 utils/http.ts。
 
 import type { AdminAuth } from '../auth/types';
 import { adminRequest } from '../utils/http';

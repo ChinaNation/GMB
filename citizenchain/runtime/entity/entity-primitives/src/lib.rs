@@ -72,7 +72,8 @@ pub struct RegisteredInstitution<CidNumber, AccountName> {
 /// 链上只保存全国可见的机构身份事实:`cid_number` 作 storage key 已编码省/市/机构码/法人/盈利;
 /// 镇归属使用统一字段 `town_code`:镇行政区公权机构由注册局创建时写入,当前私权机构写空值;
 /// 主账户/费用账户由 `(cid_number, 保留名)` 派生且常驻 `InstitutionAccounts`,故不在此重复存;
-/// 管理员集合与动态阈值的长期真源在 admins 模块与 internal-vote,亦不在此存快照。
+/// 管理员集合长期真源在 admins 模块；机构治理阈值由对应 public/private entity
+/// 的独立 storage 保存，不嵌入本信息结构，也不由管理员人数推导。
 /// 公权/私权机构名称均以上链字段为准;OnChina 只保留查询缓存。
 #[derive(
     Encode,

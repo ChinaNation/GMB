@@ -3,7 +3,7 @@
 // 三档：freedom 自由 / democracy 民主 / spark 薪火。发帖额度、媒体质量、聊天文件上限均按
 // 所购套餐（membershipPlan(level)）。**价格真源与实际扣款属于链上 `square-post`，真实公历
 // 到期时间由 runtime 根据共识时间戳确定**；本表只定档位与配额，不涉计价。一改此表须同步 App 卡片。
-import { resourceLimit } from '../limits/catalog';
+import { resourceLimit, usageLimits } from '../limits/catalog';
 
 export type MembershipLevel = 'freedom' | 'democracy' | 'spark';
 
@@ -40,6 +40,12 @@ export interface MembershipPlan {
   chat_file_max_bytes: number;
   dynamic: DynamicQuota;
   article: ArticleQuota;
+  /// 订阅周期累计用量额度（每月）。真源 limits/catalog.ts `usageLimits`，会员接口透传展示。
+  usage: {
+    monthly_images: number;
+    monthly_video_seconds: number;
+    active_uploads: number;
+  };
 }
 
 export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
@@ -64,7 +70,8 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
       cover_required: true,
       image_quality: 'sd',
       max_images: 50
-    }
+    },
+    usage: usageLimits.freedom
   },
   democracy: {
     membership_level: 'democracy',
@@ -87,7 +94,8 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
       cover_required: true,
       image_quality: 'hd',
       max_images: 100
-    }
+    },
+    usage: usageLimits.democracy
   },
   spark: {
     membership_level: 'spark',
@@ -110,7 +118,8 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
       cover_required: true,
       image_quality: 'hd',
       max_images: 100
-    }
+    },
+    usage: usageLimits.spark
   }
 };
 

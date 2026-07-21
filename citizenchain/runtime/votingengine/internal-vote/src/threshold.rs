@@ -7,18 +7,6 @@ impl<T: Config> Pallet<T> {
         (VOTING_DURATION_BLOCKS as u64).saturated_into()
     }
 
-    pub(crate) fn ensure_threshold_within_snapshot(
-        voter_count: u32,
-        threshold: u32,
-    ) -> DispatchResult {
-        // 机构阈值不属于岗位，但必须能被本次按 CID 去重的有效选民快照实际达成。
-        ensure!(
-            threshold > 0 && threshold <= voter_count,
-            Error::<T>::InvalidThresholdSnapshot
-        );
-        Ok(())
-    }
-
     pub(crate) fn ensure_all_admin_threshold(admins_len: u32, threshold: u32) -> DispatchResult {
         // 账户链上注册与注销会改变账户生命周期，必须由该账户快照内全体管理员通过。
         ensure!(
@@ -28,13 +16,13 @@ impl<T: Config> Pallet<T> {
         Ok(())
     }
 
-    pub(crate) fn ensure_dynamic_threshold(admins_len: u32, threshold: u32) -> DispatchResult {
-        // 动态阈值只允许严格过半，且不得超过管理员总数；统一用 u64 避免乘法溢出。
-        ensure!(admins_len >= 2, Error::<T>::InvalidDynamicThreshold);
+    pub(crate) fn ensure_dynamic_threshold(voter_count: u32, threshold: u32) -> DispatchResult {
+        // 机构岗位席位与个人管理员都采用严格过半；统一用 u64 避免乘法溢出。
+        ensure!(voter_count >= 2, Error::<T>::InvalidDynamicThreshold);
         ensure!(
             threshold > 0
-                && threshold <= admins_len
-                && u64::from(threshold).saturating_mul(2) > u64::from(admins_len),
+                && threshold <= voter_count
+                && u64::from(threshold).saturating_mul(2) > u64::from(voter_count),
             Error::<T>::InvalidDynamicThreshold
         );
         Ok(())

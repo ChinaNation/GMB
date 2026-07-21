@@ -321,7 +321,10 @@ impl<T: Config> Pallet<T> {
                 Subscriptions::<T>::get(&key).ok_or(Error::<T>::SubscriptionNotFound)?;
             let now = Self::now_ms();
             let (new_price, payee) = Self::current_price_and_payee(&issuer, &new_plan, now)?;
-            ensure!(new_price == expected_price_fen, Error::<T>::SignedPriceChanged);
+            ensure!(
+                new_price == expected_price_fen,
+                Error::<T>::SignedPriceChanged
+            );
 
             // 仅当仍在有效已付周期内（Active/Cancelled 且未到期）才折算剩余权益。
             let credit = if now < state.paid_until
@@ -346,13 +349,22 @@ impl<T: Config> Pallet<T> {
                 // 升档：立即补扣差额，新周期从现在起算。
                 let charge = new_price.saturating_sub(credit);
                 let amount: BalanceOf<T> = charge.saturated_into();
-                T::Currency::transfer(&subscriber, &payee, amount, ExistenceRequirement::KeepAlive)?;
+                T::Currency::transfer(
+                    &subscriber,
+                    &payee,
+                    amount,
+                    ExistenceRequirement::KeepAlive,
+                )?;
                 (charge, base_end)
             } else {
                 // 降档：不扣款，剩余信用按新档单价折算成额外时长叠加（new_price > 0 已由定价保证）。
                 let period_ms = u128::from(base_end.saturating_sub(now));
-                let extra_ms = credit.saturating_sub(new_price).saturating_mul(period_ms) / new_price;
-                (0u128, base_end.saturating_add(extra_ms.saturated_into::<u64>()))
+                let extra_ms =
+                    credit.saturating_sub(new_price).saturating_mul(period_ms) / new_price;
+                (
+                    0u128,
+                    base_end.saturating_add(extra_ms.saturated_into::<u64>()),
+                )
             };
 
             state.plan = new_plan.clone();

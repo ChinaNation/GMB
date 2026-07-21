@@ -133,7 +133,7 @@ SignDecisionStatus.reject = 红色,禁止签名
 
 钱包侧不得再恢复 `matched / mismatched / decodeFailed` 等第三状态。任一 action 未登记、动作缺少中文名、payload 无法解码、字段缺少中文名、普通链交易只携带 32B hash/signing bytes,均返回 `reject` 并禁用签名按钮。
 
-管理员人员载荷只接受 `admin_account + family_name + given_name` 的严格 SCALE 顺序；旧纯账户数组、旧合并姓名、重复账户、空姓名或非法 UTF-8 一律红色拒签。确认页仅在显示时按中文顺序合并姓、名，授权与去重只比较账户。
+管理员人员载荷按目标类型严格分流：公权只接受 `admin_account + cid_number + family_name + given_name`，身份字段当前允许为空、非空 CID 必须为 CTZN 结构；私权机构与个人多签只接受 `admin_account + family_name + given_name` 且姓名非空。旧纯账户、旧合并姓名、非法 UTF-8 和重复账户一律红色拒签。
 
 已落地文件:
 

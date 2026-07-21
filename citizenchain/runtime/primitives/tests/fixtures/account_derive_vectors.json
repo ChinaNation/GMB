@@ -16,16 +16,16 @@
       "source": "china_cb NRC 中华民族联邦共和国公民储备委员会"
     },
     {
-      "address_hex": "7a20b8b7b1147abfdb24615222e3c9d77f1ff9a85d2a509fcf51dc89a64d1712",
-      "cid_number": "GZ018-SFGQ1-201206100-2026",
+      "address_hex": "e86aa3cd794651257dea9b7cad1abc4f0ce05940c1aecccd2ed8dd2fc9907023",
+      "cid_number": "GZ018-SFGYR-201206100-2026",
       "kind": "InstitutionMain",
-      "source": "citizenchain 中国公民链技术股份有限公司主账户"
+      "source": "citizenchain 中国公民链技术发展基金会主账户"
     },
     {
-      "address_hex": "4bc5b8dd3770b1230c79fb8e048f27ae4f4ccf6d6890de0399123a617ccf305f",
-      "cid_number": "GZ018-SFGQ1-201206100-2026",
+      "address_hex": "aa23304c7b663ba25a9d3a2fb1efafdd650ecf2504a2caedc228fe81b46b4333",
+      "cid_number": "GZ018-SFGYR-201206100-2026",
       "kind": "InstitutionFee",
-      "source": "citizenchain 中国公民链技术股份有限公司费用账户"
+      "source": "citizenchain 中国公民链技术发展基金会费用账户"
     },
     {
       "address_hex": "d78abac2e0a7772e72ba663313718e97288377d9ca2ca1467c710058f8b5effa",

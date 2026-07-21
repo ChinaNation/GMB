@@ -92,13 +92,13 @@ impl votingengine::Config for Test {
 
 impl internal_vote::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionRoleProvider = ();
     type WeightInfo = ();
 }
 
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
-    type InternalVoteEngine = internal_vote::Pallet<Test>;
 }
 
 fn new_test_ext() -> sp_io::TestExternalities {
@@ -136,7 +136,6 @@ fn private_admins_normalize_missing_person_name_before_storage() {
             code_bytes("SFLP"),
             AdminAccountKind::PrivateInstitution,
             input,
-            2,
         ));
         let cid =
             AdminCidNumber::try_from(b"GD001-SFLP0-923456789-2026".to_vec()).expect("cid fits");
@@ -155,7 +154,6 @@ fn private_admins_accept_private_codes_and_private_owned_unincorporated_codes() 
             code_bytes("SFLP"),
             AdminAccountKind::PrivateInstitution,
             admins(3),
-            2,
         ));
         let private_key: AdminCidNumber = private_cid.try_into().expect("cid fits");
         let stored = AdminAccounts::<Test>::get(private_key).expect("private admins exist");
@@ -167,7 +165,6 @@ fn private_admins_accept_private_codes_and_private_owned_unincorporated_codes() 
             code_bytes("UNIN"),
             AdminAccountKind::PrivateInstitution,
             admins(2),
-            2,
         ));
     });
 }
@@ -181,7 +178,6 @@ fn private_admins_activate_and_query_active_admins() {
             code_bytes("JSCH"),
             AdminAccountKind::PrivateInstitution,
             admins(3),
-            2,
         ));
 
         assert!(PrivateAdmins::is_institution_admin(
@@ -205,7 +201,6 @@ fn private_admins_reject_public_codes() {
                 code_bytes("PRS"),
                 AdminAccountKind::PrivateInstitution,
                 admins(3),
-                2,
             ),
             Error::<Test>::InvalidAdminAccountKind
         );

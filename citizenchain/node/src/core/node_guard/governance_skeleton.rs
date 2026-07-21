@@ -1,15 +1,15 @@
 //! 固定治理机构的管理员、岗位与任职节点策略（档 A）。
 //!
-//! `PublicAdmins::AdminAccounts` 保存管理员账户与姓、名，`PublicManage` 保存岗位与任职。
-//! 本策略按共享编译期清单校验 89 个公权固定治理机构和中国公民链技术股份有限公司：
+//! `PublicAdmins::AdminAccounts` 保存公权管理员账户及可逐步补齐的公民资料，`PublicManage`
+//! 保存岗位与任职。本策略按共享编译期清单校验 89 个公权固定治理机构和公民链基金会：
 //! 固定岗位目录、席位与权限不允许漂移，具体管理员允许依法原子轮换。任职来源、引用和任期
 //! 属于 runtime 业务合法性，不在原生组织结构守卫中重复解释。
-//! 既有公权机构的法定代表人不是创世必填项；技术公司明确具有法定代表人，守卫只额外
+//! 既有公权机构的法定代表人不是创世必填项；基金会明确具有法定代表人，守卫只额外
 //! 校验其机构信息账户与固定 `LR` 任职一致，不复制公民资料真源。
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use admin_primitives::{Admin, InstitutionAdmins};
+use admin_primitives::{Admin, InstitutionAdmins, PublicAdmin};
 use codec::Decode;
 #[cfg(test)]
 use codec::Encode;
@@ -22,7 +22,7 @@ use entity_primitives::{
 };
 
 use primitives::{
-    cid::china::citizenchain::{CITIZENCHAIN_FIXED_ROLES, CITIZENCHAIN_TECHNOLOGY},
+    cid::china::citizenchain::{CITIZENCHAIN_FIXED_ROLES, CITIZENCHAIN_FOUNDATION},
     cid::code::{FRG, PROVINCE_CODE_INFOS},
     count_const::FRG_PROVINCE_GROUP_ADMIN_COUNT,
     governance_skeleton::{
@@ -46,16 +46,16 @@ struct ExpectedRole {
 fn protected_institutions() -> Vec<FixedInstitution> {
     let mut institutions = fixed_institutions();
     institutions.push(FixedInstitution {
-        code: *b"SFGQ",
-        main_account: CITIZENCHAIN_TECHNOLOGY.main_account,
-        cid_number: CITIZENCHAIN_TECHNOLOGY.cid_number,
-        expected_len: 3,
+        code: *b"SFGY",
+        main_account: CITIZENCHAIN_FOUNDATION.main_account,
+        cid_number: CITIZENCHAIN_FOUNDATION.cid_number,
+        expected_len: 1,
     });
     institutions
 }
 
 fn is_private_protected_cid(cid_number: &[u8]) -> bool {
-    cid_number == CITIZENCHAIN_TECHNOLOGY.cid_number.as_bytes()
+    cid_number == CITIZENCHAIN_FOUNDATION.cid_number.as_bytes()
 }
 
 fn expected_roles(institution: &FixedInstitution) -> Vec<ExpectedRole> {
@@ -248,7 +248,7 @@ pub mod storage_key {
 
     /// 返回 RAW key 对应的受保护创世机构；普通机构治理 key 明确返回 `None`。
     pub fn protected_institution_for_key(key: &[u8]) -> Option<FixedInstitution> {
-        if key == private_institution(super::CITIZENCHAIN_TECHNOLOGY.cid_number.as_bytes()) {
+        if key == private_institution(super::CITIZENCHAIN_FOUNDATION.cid_number.as_bytes()) {
             return protected_institutions()
                 .into_iter()
                 .find(|institution| is_private_protected_cid(institution.cid_number.as_bytes()));
@@ -285,7 +285,8 @@ pub mod storage_key {
 }
 
 /// 节点直接使用共享协议类型解码，避免维护第二份字段顺序和枚举判别值。
-type DecodedInstitutionAdmins = InstitutionAdmins<Vec<Admin<[u8; 32]>>>;
+type DecodedPrivateInstitutionAdmins = InstitutionAdmins<Vec<Admin<[u8; 32]>>>;
+type DecodedPublicInstitutionAdmins = InstitutionAdmins<Vec<PublicAdmin<[u8; 32]>>>;
 type DecodedInstitutionRole = SharedInstitutionRole<Vec<u8>, Vec<u8>, Vec<u8>>;
 type DecodedInstitutionAdminAssignment =
     SharedInstitutionAdminAssignment<Vec<u8>, [u8; 32], Vec<u8>, Vec<u8>>;
@@ -478,7 +479,7 @@ where
         if info.institution_code != institution.code || !legal_representative_fields_valid {
             return Err(GuardError::LegalRepresentativeInfoMissing(institution.code));
         }
-        if info.cid_full_name != CITIZENCHAIN_TECHNOLOGY.cid_full_name.as_bytes() {
+        if info.cid_full_name != CITIZENCHAIN_FOUNDATION.cid_full_name.as_bytes() {
             return Err(GuardError::InstitutionFullNameChanged(institution.code));
         }
         Some(info)
@@ -487,12 +488,42 @@ where
     };
     let raw = read_raw(&storage_key::admin_account(expected_cid))
         .ok_or(GuardError::FixedInstitutionMissing(institution.code))?;
-    let account: DecodedInstitutionAdmins =
-        decode_exact(&raw).map_err(|_| GuardError::AdminAccountDecodeFailed(institution.code))?;
-    if account.institution_code != institution.code {
+    let (stored_code, admin_wallets, invalid_private_name) =
+        if is_private_protected_cid(expected_cid) {
+            let account: DecodedPrivateInstitutionAdmins = decode_exact(&raw)
+                .map_err(|_| GuardError::AdminAccountDecodeFailed(institution.code))?;
+            let invalid_name = account.admins.iter().any(|admin| {
+                admin.family_name.is_empty()
+                    || admin.given_name.is_empty()
+                    || core::str::from_utf8(admin.family_name.as_slice()).is_err()
+                    || core::str::from_utf8(admin.given_name.as_slice()).is_err()
+            });
+            (
+                account.institution_code,
+                account
+                    .admins
+                    .into_iter()
+                    .map(|admin| admin.admin_account)
+                    .collect::<Vec<_>>(),
+                invalid_name,
+            )
+        } else {
+            let account: DecodedPublicInstitutionAdmins = decode_exact(&raw)
+                .map_err(|_| GuardError::AdminAccountDecodeFailed(institution.code))?;
+            (
+                account.institution_code,
+                account
+                    .admins
+                    .into_iter()
+                    .map(|admin| admin.admin_account)
+                    .collect::<Vec<_>>(),
+                false,
+            )
+        };
+    if stored_code != institution.code {
         return Err(GuardError::InstitutionCodeChanged(institution.code));
     }
-    let found = account.admins.len() as u32;
+    let found = admin_wallets.len() as u32;
     if found != institution.expected_len {
         return Err(GuardError::AdminsLenChanged {
             code: institution.code,
@@ -500,20 +531,11 @@ where
             found,
         });
     }
-    if account.admins.iter().any(|admin| {
-        admin.family_name.is_empty()
-            || admin.given_name.is_empty()
-            || core::str::from_utf8(admin.family_name.as_slice()).is_err()
-            || core::str::from_utf8(admin.given_name.as_slice()).is_err()
-    }) {
+    if invalid_private_name {
         return Err(GuardError::InvalidAdminPersonName(institution.code));
     }
-    let admin_set = account
-        .admins
-        .iter()
-        .map(|admin| admin.admin_account)
-        .collect::<BTreeSet<_>>();
-    if admin_set.len() != account.admins.len() {
+    let admin_set = admin_wallets.iter().copied().collect::<BTreeSet<_>>();
+    if admin_set.len() != admin_wallets.len() {
         return Err(GuardError::DuplicateAdminWallet(institution.code));
     }
 
@@ -716,14 +738,29 @@ mod tests {
     }
 
     fn account_bytes(institution: &FixedInstitution, admins: Vec<[u8; 32]>) -> Vec<u8> {
-        DecodedInstitutionAdmins {
+        if is_private_protected_cid(institution.cid_number.as_bytes()) {
+            return DecodedPrivateInstitutionAdmins {
+                institution_code: institution.code,
+                admins: admins
+                    .into_iter()
+                    .map(|admin_account| Admin {
+                        admin_account,
+                        family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
+                        given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
+                    })
+                    .collect(),
+            }
+            .encode();
+        }
+        DecodedPublicInstitutionAdmins {
             institution_code: institution.code,
             admins: admins
                 .into_iter()
-                .map(|admin_account| Admin {
+                .map(|admin_account| PublicAdmin {
                     admin_account,
-                    family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
-                    given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
+                    cid_number: Default::default(),
+                    family_name: Default::default(),
+                    given_name: Default::default(),
                 })
                 .collect(),
         }
@@ -743,8 +780,8 @@ mod tests {
 
     fn private_info_bytes(institution: &FixedInstitution, legal_account: [u8; 32]) -> Vec<u8> {
         DecodedInstitutionInfo {
-            cid_full_name: CITIZENCHAIN_TECHNOLOGY.cid_full_name.as_bytes().to_vec(),
-            cid_short_name: "公民链技术".as_bytes().to_vec(),
+            cid_full_name: CITIZENCHAIN_FOUNDATION.cid_full_name.as_bytes().to_vec(),
+            cid_short_name: CITIZENCHAIN_FOUNDATION.cid_short_name.as_bytes().to_vec(),
             town_code: Vec::new(),
             legal_representative_name: Some("程伟".as_bytes().to_vec()),
             legal_representative_cid_number: Some(
@@ -828,12 +865,20 @@ mod tests {
                     ),
                     permission_bytes(&institution, &role),
                 );
-                let end = offset + role.seats as usize;
-                let assignments = admins[offset..end]
-                    .iter()
-                    .copied()
-                    .map(|admin| assignment(&institution, &role, admin))
-                    .collect::<Vec<_>>();
+                let assignments = if is_private_protected_cid(institution.cid_number.as_bytes()) {
+                    (0..role.seats)
+                        .map(|_| assignment(&institution, &role, admins[0]))
+                        .collect::<Vec<_>>()
+                } else {
+                    let end = offset + role.seats as usize;
+                    let assignments = admins[offset..end]
+                        .iter()
+                        .copied()
+                        .map(|admin| assignment(&institution, &role, admin))
+                        .collect::<Vec<_>>();
+                    offset = end;
+                    assignments
+                };
                 state.insert(
                     storage_key::institution_role_assignments(
                         institution.cid_number.as_bytes(),
@@ -841,9 +886,10 @@ mod tests {
                     ),
                     assignments.encode(),
                 );
-                offset = end;
             }
-            assert_eq!(offset, admins.len());
+            if !is_private_protected_cid(institution.cid_number.as_bytes()) {
+                assert_eq!(offset, admins.len());
+            }
         }
         state
     }
@@ -859,37 +905,37 @@ mod tests {
     }
 
     #[test]
-    fn citizenchain_company_uses_private_storage_and_locks_legal_representative_consistency() {
-        let company = protected_institutions()
+    fn citizenchain_foundation_uses_private_storage_and_allows_one_person_three_roles() {
+        let foundation = protected_institutions()
             .into_iter()
             .find(|institution| is_private_protected_cid(institution.cid_number.as_bytes()))
-            .expect("protected private genesis company");
-        assert!(storage_key::admin_account(company.cid_number.as_bytes())
+            .expect("protected private genesis foundation");
+        assert!(storage_key::admin_account(foundation.cid_number.as_bytes())
             .starts_with(&storage_key::private_admin_accounts_prefix()));
         assert!(storage_key::institution_role(
-            company.cid_number.as_bytes(),
+            foundation.cid_number.as_bytes(),
             primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE,
         )
         .starts_with(&storage_key::private_institution_roles_prefix()));
 
         let mut missing = valid_state();
         missing.remove(&storage_key::private_institution(
-            company.cid_number.as_bytes(),
+            foundation.cid_number.as_bytes(),
         ));
         assert_eq!(
             check_state(&missing),
-            Err(GuardError::LegalRepresentativeInfoMissing(company.code))
+            Err(GuardError::LegalRepresentativeInfoMissing(foundation.code))
         );
 
         let mut mismatched = valid_state();
         mismatched.insert(
-            storage_key::private_institution(company.cid_number.as_bytes()),
-            private_info_bytes(&company, [250u8; 32]),
+            storage_key::private_institution(foundation.cid_number.as_bytes()),
+            private_info_bytes(&foundation, [250u8; 32]),
         );
         assert_eq!(
             check_state(&mismatched),
             Err(GuardError::LegalRepresentativeAssignmentMismatch(
-                company.code
+                foundation.code
             ))
         );
 
@@ -897,39 +943,39 @@ mod tests {
         let mut info: DecodedInstitutionInfo = decode_exact(
             renamed
                 .get(&storage_key::private_institution(
-                    company.cid_number.as_bytes(),
+                    foundation.cid_number.as_bytes(),
                 ))
-                .expect("company institution info exists"),
+                .expect("foundation institution info exists"),
         )
-        .expect("company institution info decodes");
+        .expect("foundation institution info decodes");
         info.cid_full_name = "错误公司全称".as_bytes().to_vec();
         renamed.insert(
-            storage_key::private_institution(company.cid_number.as_bytes()),
+            storage_key::private_institution(foundation.cid_number.as_bytes()),
             info.encode(),
         );
         assert_eq!(
             check_state(&renamed),
-            Err(GuardError::InstitutionFullNameChanged(company.code))
+            Err(GuardError::InstitutionFullNameChanged(foundation.code))
         );
 
-        let lr_role = expected_roles(&company)
+        let lr_role = expected_roles(&foundation)
             .into_iter()
             .find(|role| {
                 role.role_code
                     == primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE
             })
-            .expect("company LR role");
+            .expect("foundation LR role");
         let lr_assignments_key = storage_key::institution_role_assignments(
-            company.cid_number.as_bytes(),
+            foundation.cid_number.as_bytes(),
             &lr_role.role_code,
         );
 
         // LR 岗位永久存在，但允许机构信息三字段与该岗位任职同时清空。
         let mut vacant = valid_state();
-        let info_key = storage_key::private_institution(company.cid_number.as_bytes());
+        let info_key = storage_key::private_institution(foundation.cid_number.as_bytes());
         let mut info: DecodedInstitutionInfo =
-            decode_exact(vacant.get(&info_key).expect("company info exists"))
-                .expect("company info decodes");
+            decode_exact(vacant.get(&info_key).expect("foundation info exists"))
+                .expect("foundation info decodes");
         info.legal_representative_name = None;
         info.legal_representative_cid_number = None;
         info.legal_representative_account = None;
@@ -940,33 +986,22 @@ mod tests {
         );
         assert_eq!(check_state(&vacant), Ok(()));
 
-        // 管理员可以同时担任 LR 与另一个固定岗位；权限仍按两个岗位主体分别取得。
-        let mut overlapping = valid_state();
-        let overlap_account = accounts_for(&company)[1];
-        let mut info: DecodedInstitutionInfo =
-            decode_exact(overlapping.get(&info_key).expect("company info exists"))
-                .expect("company info decodes");
-        info.legal_representative_account = Some(overlap_account);
-        overlapping.insert(info_key, info.encode());
-        overlapping.insert(
-            lr_assignments_key.clone(),
-            vec![assignment(&company, &lr_role, overlap_account)].encode(),
-        );
-        assert_eq!(check_state(&overlapping), Ok(()));
+        // 默认有效状态即是一名管理员同时担任三个固定岗位。
+        assert_eq!(check_state(&valid_state()), Ok(()));
 
         let mut two_representatives = valid_state();
         two_representatives.insert(
             lr_assignments_key,
             vec![
-                assignment(&company, &lr_role, accounts_for(&company)[0]),
-                assignment(&company, &lr_role, accounts_for(&company)[1]),
+                assignment(&foundation, &lr_role, accounts_for(&foundation)[0]),
+                assignment(&foundation, &lr_role, [250u8; 32]),
             ]
             .encode(),
         );
         assert_eq!(
             check_state(&two_representatives),
             Err(GuardError::SeatsChanged {
-                code: company.code,
+                code: foundation.code,
                 role_code: lr_role.role_code,
                 expected: 1,
                 found: 2,
@@ -978,17 +1013,17 @@ mod tests {
     fn institution_admins_layout_is_exact() {
         let institution = fixed_institutions()[0];
         let raw = account_bytes(&institution, accounts_for(&institution));
-        let decoded: DecodedInstitutionAdmins = decode_exact(&raw).expect("layout decodes");
+        let decoded: DecodedPublicInstitutionAdmins = decode_exact(&raw).expect("layout decodes");
         assert_eq!(decoded.institution_code, institution.code);
         assert_eq!(decoded.admins.len() as u32, institution.expected_len);
     }
 
     #[test]
-    fn person_name_changes_do_not_change_authority_but_invalid_names_are_rejected() {
+    fn public_person_identity_fields_can_remain_empty_without_changing_authority() {
         let institution = fixed_institutions()[0];
         let admin_key = storage_key::admin_account(institution.cid_number.as_bytes());
         let mut state = valid_state();
-        let mut account: DecodedInstitutionAdmins =
+        let mut account: DecodedPublicInstitutionAdmins =
             decode_exact(state.get(&admin_key).expect("admin account exists"))
                 .expect("admin account decodes");
         account.admins[0].family_name = "张".as_bytes().to_vec().try_into().expect("name fits");
@@ -996,15 +1031,14 @@ mod tests {
         state.insert(admin_key.clone(), account.encode());
         assert_eq!(check_state(&state), Ok(()));
 
-        let mut account: DecodedInstitutionAdmins =
+        let mut account: DecodedPublicInstitutionAdmins =
             decode_exact(state.get(&admin_key).expect("admin account exists"))
                 .expect("admin account decodes");
         account.admins[0].family_name = Vec::new().try_into().expect("empty name fits");
+        account.admins[0].given_name = Default::default();
+        account.admins[0].cid_number = Default::default();
         state.insert(admin_key, account.encode());
-        assert_eq!(
-            check_state(&state),
-            Err(GuardError::InvalidAdminPersonName(institution.code))
-        );
+        assert_eq!(check_state(&state), Ok(()));
     }
 
     #[test]
@@ -1022,14 +1056,15 @@ mod tests {
         let mut state = valid_state();
         state.insert(
             storage_key::admin_account(institution.cid_number.as_bytes()),
-            DecodedInstitutionAdmins {
+            DecodedPublicInstitutionAdmins {
                 institution_code: *b"BAD\0",
                 admins: accounts_for(&institution)
                     .into_iter()
-                    .map(|admin_account| Admin {
+                    .map(|admin_account| PublicAdmin {
                         admin_account,
-                        family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
-                        given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
+                        cid_number: Default::default(),
+                        family_name: Default::default(),
+                        given_name: Default::default(),
                     })
                     .collect(),
             }
@@ -1180,7 +1215,7 @@ mod tests {
         assignments[0].admin_account = [250u8; 32];
         state.insert(assignments_key, assignments.encode());
 
-        let mut account: DecodedInstitutionAdmins =
+        let mut account: DecodedPublicInstitutionAdmins =
             decode_exact(state.get(&admin_key).expect("admin account exists"))
                 .expect("admin account decodes");
         account.admins[0].admin_account = [250u8; 32];

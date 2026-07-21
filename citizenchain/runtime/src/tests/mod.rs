@@ -120,10 +120,11 @@ fn setup_frg_citizen_identity_admin(
         cid_number.clone(),
         admin_primitives::InstitutionAdmins {
             institution_code: admin_primitives::FRG,
-            admins: vec![admin_primitives::Admin {
+            admins: vec![admin_primitives::PublicAdmin {
                 admin_account: registrar.clone(),
-                family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
-                given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
+                cid_number: Default::default(),
+                family_name: Default::default(),
+                given_name: Default::default(),
             }]
             .try_into()
             .expect("single registrar admin fits"),

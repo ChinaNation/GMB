@@ -259,9 +259,9 @@ impl<T: Config> Pallet<T> {
         )
     }
 
-    /// 创世专用入口：按共享固定目录写入技术公司三个受保护岗位的权限。
+    /// 创世专用入口：按共享固定目录写入公民链基金会三个受保护岗位的权限。
     ///
-    /// 仅准确技术公司 CID 能命中，禁止把相同机构码下的普通公司提升为创世公司。
+    /// 仅准确基金会 CID 能命中，禁止把相同机构码下的普通机构提升为创世基金会。
     pub fn store_genesis_fixed_role_permissions(
         cid_number: &CidNumberOf<T>,
         role_code: &RoleCodeOf,
@@ -269,7 +269,7 @@ impl<T: Config> Pallet<T> {
         let institution =
             Institutions::<T>::get(cid_number).ok_or(Error::<T>::InstitutionNotFound)?;
         ensure!(
-            primitives::cid::china::citizenchain::is_citizenchain_technology_identity(
+            primitives::cid::china::citizenchain::is_citizenchain_foundation_identity(
                 institution.institution_code,
                 cid_number.as_slice(),
             ) && primitives::cid::china::citizenchain::fixed_role(role_code.as_slice()).is_some(),

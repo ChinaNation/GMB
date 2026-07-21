@@ -94,7 +94,7 @@ fn load_fixture() -> serde_json::Value {
 fn china_literal(cid: &str, kind: &str) -> Option<[u8; 32]> {
     use primitives::cid::china::china_cb::{CHINA_CB, NRC_HE_ACCOUNT, SAFETY_FUND_ACCOUNT};
     use primitives::cid::china::china_ch::CHINA_CH;
-    use primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY;
+    use primitives::cid::china::citizenchain::CITIZENCHAIN_FOUNDATION;
 
     match kind {
         "InstitutionMain" => CHINA_CB
@@ -108,8 +108,8 @@ fn china_literal(cid: &str, kind: &str) -> Option<[u8; 32]> {
                     .map(|c| c.main_account)
             })
             .or_else(|| {
-                (CITIZENCHAIN_TECHNOLOGY.cid_number == cid)
-                    .then_some(CITIZENCHAIN_TECHNOLOGY.main_account)
+                (CITIZENCHAIN_FOUNDATION.cid_number == cid)
+                    .then_some(CITIZENCHAIN_FOUNDATION.main_account)
             }),
         "InstitutionFee" => CHINA_CB
             .iter()
@@ -122,8 +122,8 @@ fn china_literal(cid: &str, kind: &str) -> Option<[u8; 32]> {
                     .map(|c| c.fee_account)
             })
             .or_else(|| {
-                (CITIZENCHAIN_TECHNOLOGY.cid_number == cid)
-                    .then_some(CITIZENCHAIN_TECHNOLOGY.fee_account)
+                (CITIZENCHAIN_FOUNDATION.cid_number == cid)
+                    .then_some(CITIZENCHAIN_FOUNDATION.fee_account)
             }),
         "InstitutionStake" => CHINA_CH
             .iter()

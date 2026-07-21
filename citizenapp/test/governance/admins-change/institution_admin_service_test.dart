@@ -53,15 +53,19 @@ void main() {
   Uint8List institutionAdminBytes({
     required String institutionCode,
     required List<int> admin,
+    bool isPublic = false,
+    String cidNumber = '',
     String familyName = '管理',
     String givenName = '员',
   }) {
+    final cidBytes = utf8.encode(cidNumber);
     final familyBytes = utf8.encode(familyName);
     final givenBytes = utf8.encode(givenName);
     return Uint8List.fromList([
       ...codeBytes(institutionCode),
       4,
       ...admin,
+      if (isPublic) ...[cidBytes.length << 2, ...cidBytes],
       familyBytes.length << 2,
       ...familyBytes,
       givenBytes.length << 2,
@@ -90,11 +94,12 @@ void main() {
   }
 
   String thresholdKey({
+    required String palletName,
     required String storageName,
     required Uint8List keyData,
   }) {
     final bytes = <int>[
-      ...Hasher.twoxx128.hashString('InternalVote'),
+      ...Hasher.twoxx128.hashString(palletName),
       ...Hasher.twoxx128.hashString(storageName),
       ...AdminAccountIdCodec.blake2128Concat(keyData),
     ];
@@ -112,7 +117,8 @@ void main() {
       adminKind: 1,
     ))}';
     final thresholdStorageKey = thresholdKey(
-      storageName: 'ActiveInstitutionThresholds',
+      palletName: 'PrivateManage',
+      storageName: 'InstitutionGovernanceThresholds',
       keyData: AdminAccountIdCodec.scaleBytes(utf8.encode(cidNumber)),
     );
     rpc.responses[accountKey] = institutionAdminBytes(
@@ -143,6 +149,7 @@ void main() {
     final accountKey =
         '0x${hexOf(AdminAccountIdCodec.personalAdminStorageKey(accountId))}';
     final thresholdStorageKey = thresholdKey(
+      palletName: 'InternalVote',
       storageName: 'ActivePersonalThresholds',
       keyData: accountId,
     );
@@ -163,7 +170,7 @@ void main() {
     expect(rpc.requestedKeys, [accountKey, thresholdStorageKey]);
   });
 
-  test('FRG/NJD 固定阈值由统一制度规则给出，不读取动态阈值 storage', () async {
+  test('公权机构从 PublicManage 读取机构阈值', () async {
     for (final entry in const {'FRG': 3, 'NJD': 8}.entries) {
       final cidNumber = 'ZS001-${entry.key}00-123456789-2026';
       final rpc = FakeChainRpc();
@@ -182,10 +189,24 @@ void main() {
       rpc.responses[accountKey] = institutionAdminBytes(
         institutionCode: entry.key,
         admin: List<int>.filled(32, 0xee),
+        isPublic: true,
+        cidNumber: 'GZ000-CTZN6-198805200-2026',
+        familyName: '',
+        givenName: '',
       );
+      final thresholdStorageKey = thresholdKey(
+        palletName: 'PublicManage',
+        storageName: 'InstitutionGovernanceThresholds',
+        keyData: AdminAccountIdCodec.scaleBytes(utf8.encode(cidNumber)),
+      );
+      rpc.responses[thresholdStorageKey] =
+          Uint8List.fromList(u32Le(entry.value));
 
       expect((await service.fetchByIdentity(identity))?.threshold, entry.value);
-      expect(rpc.requestedKeys, [accountKey]);
+      final state = await service.fetchByIdentity(identity);
+      expect(state?.admins.single.cid_number, 'GZ000-CTZN6-198805200-2026');
+      expect(state?.admins.single.family_name, isEmpty);
+      expect(rpc.requestedKeys, [accountKey, thresholdStorageKey]);
     }
   });
 
@@ -201,6 +222,7 @@ void main() {
     final accountKey =
         '0x${hexOf(AdminAccountIdCodec.personalAdminStorageKey(accountId))}';
     final thresholdStorageKey = thresholdKey(
+      palletName: 'InternalVote',
       storageName: 'ActivePersonalThresholds',
       keyData: accountId,
     );

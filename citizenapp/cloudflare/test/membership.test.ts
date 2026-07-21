@@ -48,7 +48,6 @@ function membershipRow(overrides: Partial<MembershipRow> = {}): MembershipRow {
   return {
     owner_account: "owner",
     membership_level: "freedom",
-    pending_membership_level: null,
     started_at: 1_000_000,
     last_charged_at: 1_000_000,
     last_charged_price_fen: 100,

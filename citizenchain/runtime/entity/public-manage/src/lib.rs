@@ -16,7 +16,8 @@ pub mod weights;
 mod tests;
 
 use admin_primitives::{
-    is_public_admin_code, Admin, AdminAccountKind, InstitutionAdminLifecycle, InstitutionAdminQuery,
+    is_public_admin_code, AdminAccountKind, InstitutionAdminLifecycle, InstitutionAdminQuery,
+    PublicAdmin,
 };
 use codec::{Decode, Encode};
 use frame_support::{
@@ -34,8 +35,8 @@ pub use traits::{
 };
 use votingengine::{
     types::{
-        fixed_governance_pass_threshold, AuthorizationSubject, BusinessActionId, CidNumber,
-        InstitutionCode, RoleCode, RoleSubject, VotePlanOf, VotingEngineKind,
+        AuthorizationSubject, BusinessActionId, CidNumber, InstitutionCode, RoleCode, RoleSubject,
+        VotePlanOf, VotingEngineKind,
     },
     InternalVoteEngine, InternalVoteResultCallback, ProposalExecutionOutcome,
 };
@@ -65,7 +66,7 @@ pub mod pallet {
     use crate::weights::WeightInfo;
     // 全新创世直接采用最终布局，不保留历史迁移版本。
     // 开发期无存量链数据；岗位权限、nonce 与永久占用表按最终结构直接以 v2 创世。
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {
@@ -78,7 +79,10 @@ pub mod pallet {
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
         /// 公权机构管理员集合写入口。
-        type AdminLifecycle: InstitutionAdminLifecycle<Self::AccountId>;
+        type AdminLifecycle: InstitutionAdminLifecycle<
+            Self::AccountId,
+            PublicAdmin<Self::AccountId>,
+        >;
 
         /// 兄弟机构 CID 查询入口，用于禁止同一 CID 在私权模块重复登记。
         type SiblingInstitutionQuery: InstitutionCidQuery<CidNumberOf<Self>>;
@@ -128,9 +132,15 @@ pub mod pallet {
         BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxAdmins>;
     /// 机构原子初始化使用的管理员人员集合；姓名只展示，账户是唯一授权字段。
     pub type InstitutionAdminsInputOf<T> =
-        BoundedVec<Admin<<T as frame_system::Config>::AccountId>, <T as Config>::MaxAdmins>;
-    pub type InstitutionGovernanceActionOf<T> =
-        InstitutionGovernanceAction<<T as frame_system::Config>::AccountId>;
+        BoundedVec<PublicAdmin<<T as frame_system::Config>::AccountId>, <T as Config>::MaxAdmins>;
+    pub type InstitutionGovernanceActionOf<T> = InstitutionGovernanceAction<
+        <T as frame_system::Config>::AccountId,
+        PublicAdmin<<T as frame_system::Config>::AccountId>,
+    >;
+    pub type InstitutionGovernanceProposalOf<T> = InstitutionGovernanceProposal<
+        <T as frame_system::Config>::AccountId,
+        PublicAdmin<<T as frame_system::Config>::AccountId>,
+    >;
 
     pub type CidNumberOf<T> = BoundedVec<u8, <T as Config>::MaxCidNumberLength>;
     pub type AccountNameOf<T> = BoundedVec<u8, <T as Config>::MaxAccountNameLength>;
@@ -184,13 +194,19 @@ pub mod pallet {
     ///
     /// 只保存全国可见的机构身份事实:名称(仅公权)、机构码与创建块号。
     /// 主账户/费用账户由 (cid_number, 保留名) 派生且常驻 InstitutionAccounts,不在此重复;
-    /// 管理员集合长期真源在 admins 模块；普通注册机构动态阈值在 internal-vote，
-    /// 六个国家单例则在提案创建时按 `VotePlan` 的有效岗位选民快照派生严格过半，
-    /// 均不在此存快照。
+    /// 管理员集合长期真源在 admins 模块；机构治理阈值在本 entity 的
+    /// `InstitutionGovernanceThresholds` 独立保存。投票引擎只在建案时读取岗位任职
+    /// 与机构阈值并冻结提案快照，不回写机构配置。
     #[pallet::storage]
     #[pallet::getter(fn institution_of)]
     pub type Institutions<T: Config> =
         StorageMap<_, Blake2_128Concat, CidNumberOf<T>, InstitutionInfoOf<T>, OptionQuery>;
+
+    /// 机构治理阈值唯一真源；与 admins 人数、岗位数量分别独立。
+    #[pallet::storage]
+    #[pallet::getter(fn institution_governance_threshold)]
+    pub type InstitutionGovernanceThresholds<T: Config> =
+        StorageMap<_, Blake2_128Concat, CidNumberOf<T>, u32, OptionQuery>;
 
     /// 机构岗位目录：同一个 `role_code` 只在本机构 CID 内唯一。
     #[pallet::storage]
@@ -746,27 +762,9 @@ pub mod pallet {
             Ok(Sr25519Public::from_raw(arr))
         }
 
-        pub(crate) fn ensure_admin_config(
-            admins: &InstitutionAdminsInputOf<T>,
-            threshold: u32,
-        ) -> DispatchResult {
-            ensure!(T::MaxAdmins::get() >= 2, Error::<T>::InvalidRuntimeConfig);
-            let admins_len = admins.len() as u32;
-            ensure!(admins_len >= 2, Error::<T>::InvalidAdminsLen);
-            ensure!(
-                admins.iter().all(|admin| !admin.family_name.is_empty()),
-                Error::<T>::InvalidFamilyName
-            );
-            ensure!(
-                admins.iter().all(|admin| !admin.given_name.is_empty()),
-                Error::<T>::InvalidGivenName
-            );
-            ensure!(
-                threshold > 0
-                    && threshold <= admins_len
-                    && u64::from(threshold).saturating_mul(2) > u64::from(admins_len),
-                Error::<T>::InvalidThreshold
-            );
+        pub(crate) fn ensure_admin_config(admins: &InstitutionAdminsInputOf<T>) -> DispatchResult {
+            ensure!(T::MaxAdmins::get() >= 1, Error::<T>::InvalidRuntimeConfig);
+            ensure!(!admins.is_empty(), Error::<T>::InvalidAdminsLen);
             let accounts: Vec<T::AccountId> = admins
                 .iter()
                 .map(|admin| admin.admin_account.clone())
@@ -775,24 +773,10 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 在进入签名、投票和存储流程前统一补齐管理员姓、名默认值。
-        pub(crate) fn normalize_institution_admins(
-            admins: InstitutionAdminsInputOf<T>,
-        ) -> InstitutionAdminsInputOf<T> {
-            InstitutionAdminsInputOf::<T>::truncate_from(
-                admins
-                    .into_inner()
-                    .into_iter()
-                    .map(Admin::normalize_names)
-                    .collect(),
-            )
-        }
-
         pub(crate) fn set_institution_admins(
             cid_number: &CidNumberOf<T>,
             institution_code: InstitutionCode,
             admins: &InstitutionAdminsInputOf<T>,
-            threshold: u32,
         ) -> DispatchResult {
             Self::ensure_lifecycle_institution_code(&institution_code)?;
             T::AdminLifecycle::set_institution_admins(
@@ -801,7 +785,6 @@ pub mod pallet {
                 institution_code,
                 AdminAccountKind::PublicInstitution,
                 admins.iter().cloned().collect(),
-                threshold,
             )
         }
 
@@ -822,8 +805,7 @@ pub mod pallet {
                         .clone()
                         .try_into()
                         .map_err(|_| Error::<T>::TooManyInstitutionAdmins)?;
-                    let threshold = bounded.len() as u32 / 2 + 1;
-                    Self::ensure_admin_config(&bounded, threshold)
+                    Self::ensure_admin_config(&bounded)
                 }
                 InstitutionGovernanceAction::MutateRolesAndAssignments {
                     role_mutations,
@@ -868,8 +850,7 @@ pub mod pallet {
                         .clone()
                         .try_into()
                         .map_err(|_| Error::<T>::TooManyInstitutionAdmins)?;
-                    let threshold = bounded.len() as u32 / 2 + 1;
-                    Self::ensure_admin_config(&bounded, threshold)?;
+                    Self::ensure_admin_config(&bounded)?;
                     for mutation in role_mutations {
                         if let InstitutionRoleMutation::Create { assignments, .. } = mutation {
                             for target in assignments {
@@ -909,7 +890,6 @@ pub mod pallet {
             actor_cid_number: Vec<u8>,
             proposer_role_code: RoleCodeOf,
         ) -> DispatchResult {
-            let action = action.normalize_admin_person_names();
             ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
             ensure!(
                 actor_cid_number.as_slice() == cid_number.as_slice(),
@@ -1050,13 +1030,11 @@ pub mod pallet {
             admins: InstitutionAdminsInputOf<T>,
             actor_cid_number: Vec<u8>,
         ) -> DispatchResult {
-            let admins = Self::normalize_institution_admins(admins);
             ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
             let info =
                 Institutions::<T>::get(&cid_number).ok_or(Error::<T>::InstitutionNotFound)?;
             Self::ensure_lifecycle_institution_code(&info.institution_code)?;
-            let threshold = admins.len() as u32 / 2 + 1;
-            Self::ensure_admin_config(&admins, threshold)?;
+            Self::ensure_admin_config(&admins)?;
             // 授权唯一真源:extrinsic 签名者 `who` 必须是注册局(actor)机构在册管理员,
             // 且注册局对目标机构 CID/机构码有登记权(省/市作用域由目标 CID 直接派生)。
             ensure!(
@@ -1068,7 +1046,7 @@ pub mod pallet {
                 ),
                 Error::<T>::RegistryAuthorityDenied
             );
-            Self::set_institution_admins(&cid_number, info.institution_code, &admins, threshold)?;
+            Self::set_institution_admins(&cid_number, info.institution_code, &admins)?;
             Self::deposit_event(Event::<T>::InstitutionAdminsRegistered {
                 cid_number,
                 admins_len: admins.len() as u32,
@@ -1079,7 +1057,7 @@ pub mod pallet {
 
         pub(crate) fn execute_governance_proposal(
             proposal_id: u64,
-            proposal: InstitutionGovernanceProposal<T::AccountId>,
+            proposal: InstitutionGovernanceProposalOf<T>,
         ) -> DispatchResult {
             let cid_number: CidNumberOf<T> = proposal
                 .cid_number
@@ -1092,13 +1070,7 @@ pub mod pallet {
                     let bounded: InstitutionAdminsInputOf<T> = admins
                         .try_into()
                         .map_err(|_| Error::<T>::TooManyInstitutionAdmins)?;
-                    let threshold = bounded.len() as u32 / 2 + 1;
-                    Self::set_institution_admins(
-                        &cid_number,
-                        proposal.institution_code,
-                        &bounded,
-                        threshold,
-                    )
+                    Self::set_institution_admins(&cid_number, proposal.institution_code, &bounded)
                 }
                 InstitutionGovernanceAction::MutateRolesAndAssignments {
                     role_mutations,
@@ -1122,13 +1094,11 @@ pub mod pallet {
                     let bounded: InstitutionAdminsInputOf<T> = admins
                         .try_into()
                         .map_err(|_| Error::<T>::TooManyInstitutionAdmins)?;
-                    let threshold = bounded.len() as u32 / 2 + 1;
                     frame_support::storage::with_transaction(|| {
                         if let Err(error) = Self::set_institution_admins(
                             &cid_number,
                             proposal.institution_code,
                             &bounded,
-                            threshold,
                         ) {
                             return frame_support::storage::TransactionOutcome::Rollback(Err(
                                 error,
@@ -1227,21 +1197,8 @@ impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for palle
         let admins =
             T::InstitutionAdminQuery::institution_admins(institution_code, cid_number.as_slice())?;
         let admins_len = admins.len() as u32;
-        let permanent_singleton = primitives::institution_constraints::singleton_by_identity(
-            institution_code,
-            cid_number.as_slice(),
-        )
-        .is_some();
-        let threshold = fixed_governance_pass_threshold(&institution_code)
-            // 这里只返回账户信息展示所需的一般内部事项门槛，不建立岗位阈值；
-            // 真正提案仍由 internal-vote 按 `VotePlan` 的岗位有效选民快照计算并固化。
-            .or_else(|| permanent_singleton.then_some(admins_len / 2 + 1))
-            .or_else(|| {
-                <T as Config>::InternalVoteEngine::active_institution_threshold(
-                    institution_code,
-                    cid_number.as_slice(),
-                )
-            })?;
+        let cid: pallet::CidNumberOf<T> = cid_number.clone().try_into().ok()?;
+        let threshold = pallet::InstitutionGovernanceThresholds::<T>::get(cid)?;
         Some(primitives::multisig::MultisigConfigSnapshot {
             admins,
             admins_len,
@@ -1329,7 +1286,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                     return Ok(ProposalExecutionOutcome::Executed);
                 }
                 ACTION_GOVERNANCE => {
-                    let proposal = InstitutionGovernanceProposal::<T::AccountId>::decode(
+                    let proposal = pallet::InstitutionGovernanceProposalOf::<T>::decode(
                         &mut &raw[tag.len() + 1..],
                     )
                     .map_err(|_| pallet::Error::<T>::InvalidInstitutionGovernanceAction)?;

@@ -41,7 +41,7 @@
 - `PublicAdmins/PrivateAdmins::AdminAccounts[cid_number]` 是机构执行授权真源。
 - 管理员唯一字段为 `admins`。
 - 岗位和任职统一以 `(cid_number, role_code)` 组织；2026-07-17 起管理员人员集合独立维护，任职变化不得刷新或覆盖同一 CID 的 `admins`。
-- 机构动态阈值使用 `ActiveInstitutionThresholds[cid_number]`。
+- 机构治理阈值使用 public/private entity 的 `InstitutionGovernanceThresholds[cid_number]`。
 - 个人多签继续使用 `ActivePersonalThresholds[personal_account]`，不得伪造机构 CID。
 
 ### 签名与凭证
@@ -160,7 +160,7 @@
 ### 已完成
 
 - runtime、node、OnChina、CitizenApp、CitizenWallet 已统一机构 CID 主键；机构账户只作为同一 CID 下的具体执行账户，个人多签只使用 `personal_account`。
-- `PublicAdmins/PrivateAdmins::AdminAccounts[cid_number]`、`ActiveInstitutionThresholds[cid_number]`、岗位与任职、提案主体和管理员快照均按 CID；个人管理员与阈值继续按个人账户。
+- `PublicAdmins/PrivateAdmins::AdminAccounts[cid_number]`、`PublicManage/PrivateManage::InstitutionGovernanceThresholds[cid_number]`、岗位与任职、提案主体均按 CID；个人管理员与阈值继续按个人账户。
 - 普通机构、国家储委会、省储行的协议账户集合由 `institution_constraints` 单源确定；协议账户不可关闭，自定义账户可关闭；零初始余额允许，非零低于 ED 拒绝。
 - 删除旧单账户映射、机构主账户身份/授权字段、机构生命周期与重复默认标记；数据库启动代码不保留旧列迁移兼容。
 - 机构账户派生统一命名为 `derive_institution_account`；runtime `MODULE_TAG` 和 owner data 统一为 `multisig`，旧标签只在拒绝测试中作为非法输入出现。

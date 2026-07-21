@@ -66,7 +66,7 @@ async fn audit_one(cid: &str, full: &str, short: &str) -> Result<(), AuditError>
     Ok(())
 }
 
-/// 单轮抽样：覆盖公权派生全域，并固定核验私权创世技术公司。
+/// 单轮抽样：覆盖公权派生全域，并固定核验私权创世公民链基金会。
 async fn sample_audit_once() -> Result<usize, AuditError> {
     let total = primitives::cid::official_derive::public_institution_derived_count();
     let salt = (chrono::Utc::now().timestamp().unsigned_abs() as usize) % total;
@@ -86,11 +86,11 @@ async fn sample_audit_once() -> Result<usize, AuditError> {
     if let Some((cid, (full, short))) = constant_institutions().into_iter().next() {
         expected.push((cid, full, short));
     }
-    let company = primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY;
+    let foundation = primitives::cid::china::citizenchain::CITIZENCHAIN_FOUNDATION;
     expected.push((
-        company.cid_number.to_string(),
-        company.cid_full_name.to_string(),
-        company.cid_short_name.to_string(),
+        foundation.cid_number.to_string(),
+        foundation.cid_full_name.to_string(),
+        foundation.cid_short_name.to_string(),
     ));
     for (cid, full, short) in &expected {
         audit_one(cid, full, short).await?;
@@ -129,11 +129,11 @@ pub(crate) fn startup_sample_audit_blocking() -> Result<(), String> {
 pub(crate) fn full_audit_blocking() -> Result<(), String> {
     let rt = tokio::runtime::Runtime::new().map_err(|e| format!("audit runtime: {e}"))?;
     rt.block_on(async {
-        let company = primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY;
+        let foundation = primitives::cid::china::citizenchain::CITIZENCHAIN_FOUNDATION;
         audit_one(
-            company.cid_number,
-            company.cid_full_name,
-            company.cid_short_name,
+            foundation.cid_number,
+            foundation.cid_full_name,
+            foundation.cid_short_name,
         )
         .await
         .map_err(|error| match error {

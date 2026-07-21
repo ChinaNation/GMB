@@ -72,7 +72,6 @@ class _RecordingSubscriptionService extends SubscriptionService {
           ? null
           : ChainSubscriptionState(
               plan: ChainSubscriptionPlan.platform(level),
-              pendingPlan: null,
               startedAt:
                   source.lastChargedAt == 0 ? now - 1000 : source.lastChargedAt,
               lastChargedAt:
@@ -81,6 +80,8 @@ class _RecordingSubscriptionService extends SubscriptionService {
               paidUntil:
                   source.paidUntil == 0 ? now + 600000 : source.paidUntil,
               status: status,
+              authorizedPriceFen: BigInt.one,
+              suspendReason: null,
             ),
       chainNowMs: now,
       blockHashHex: '0x${List.filled(64, '0').join()}',
@@ -210,7 +211,7 @@ void main() {
     );
 
     expect(find.text('自由会员'), findsOneWidget);
-    expect(find.text('299 公民币/月'), findsOneWidget);
+    expect(find.text('299.00 元'), findsOneWidget);
     expect(find.text('会员状态加载失败'), findsNothing);
   });
 
@@ -266,9 +267,9 @@ void main() {
       prices: const {'freedom': 29900, 'democracy': 99900, 'spark': 199900},
     );
 
-    expect(find.text('299 公民币/月'), findsOneWidget);
-    expect(find.text('999 公民币/月'), findsOneWidget);
-    expect(find.text('1999 公民币/月'), findsOneWidget);
+    expect(find.text('299.00 元'), findsOneWidget);
+    expect(find.text('999.00 元'), findsOneWidget);
+    expect(find.text('1,999.00 元'), findsOneWidget);
   });
 
   testWidgets('链上未设价 → 显示占位且禁止发起订阅', (tester) async {

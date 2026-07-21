@@ -64,8 +64,8 @@ CID 机构的账户名被链端硬翻译成 `InstitutionAccountRole`：
 
 | 类型 | 数量 | 文件 |
 |---|---|---|
-| main_account | 297 | 296 个公权内置机构 + 中国公民链技术股份有限公司（私权创世机构） |
-| fee_account | 297 | 296 个公权内置机构 + 中国公民链技术股份有限公司（私权创世机构） |
+| main_account | 297 | 296 个公权内置机构 + 中国公民链技术发展基金会（私权非营利创世机构） |
+| fee_account | 297 | 296 个公权内置机构 + 中国公民链技术发展基金会（私权非营利创世机构） |
 | stake_account | 43 | china_ch |
 | SAFETY_FUND_ACCOUNT | 1 | china_cb（全局唯一常量） |
 | NRC_HE_ACCOUNT | 1 | china_cb（全局唯一常量） |

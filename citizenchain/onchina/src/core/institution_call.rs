@@ -25,12 +25,11 @@ pub fn institution_manage_pallet_index(institution_code: &[u8; 4]) -> u8 {
     }
 }
 
-/// 机构治理和登记使用的管理员人员记录。
-#[derive(Debug, Clone, Encode)]
-pub struct InstitutionAdminArg {
-    pub admin_account: [u8; 32],
-    pub family_name: admin_primitives::FamilyName,
-    pub given_name: admin_primitives::GivenName,
+/// 公私权管理员拥有不同 SCALE 结构，编码前必须按目标机构类型明确分流。
+#[derive(Debug, Clone)]
+pub enum InstitutionAdminsPayload {
+    Public(Vec<admin_primitives::PublicAdmin<[u8; 32]>>),
+    Private(Vec<admin_primitives::Admin<[u8; 32]>>),
 }
 
 /// `propose_institution_governance` 完整参数。
@@ -57,7 +56,7 @@ pub struct ProposeInstitutionGovernanceArgs {
 #[allow(dead_code)]
 pub struct RegisterInstitutionAdminsArgs {
     pub cid_number: Vec<u8>,
-    pub admins: Vec<InstitutionAdminArg>,
+    pub admins: InstitutionAdminsPayload,
     pub institution_code: [u8; 4],
     pub actor_cid_number: Vec<u8>,
 }
@@ -67,9 +66,13 @@ fn encode_bytes(out: &mut Vec<u8>, value: &[u8]) {
     out.extend_from_slice(value);
 }
 
-/// 构造与 runtime `BoundedVec<Admin>` 完全一致的签名与 call 载荷。
-pub fn encode_admins_payload(admins: &[InstitutionAdminArg]) -> Vec<u8> {
-    admins.encode()
+/// 构造与 runtime 公权 `BoundedVec<PublicAdmin>` 或私权
+/// `BoundedVec<Admin>` 完全一致的签名与 call 载荷。
+pub fn encode_admins_payload(admins: &InstitutionAdminsPayload) -> Vec<u8> {
+    match admins {
+        InstitutionAdminsPayload::Public(admins) => admins.encode(),
+        InstitutionAdminsPayload::Private(admins) => admins.encode(),
+    }
 }
 
 /// QR 链动作码：`(pallet_index << 8) | call_index`。
@@ -120,9 +123,39 @@ pub fn encode_register_institution_admins(args: &RegisterInstitutionAdminsArgs) 
 mod tests {
     use super::*;
 
-    fn admin(admin_account: [u8; 32], family_name: &str, given_name: &str) -> InstitutionAdminArg {
-        InstitutionAdminArg {
+    fn private_admin(
+        admin_account: [u8; 32],
+        family_name: &str,
+        given_name: &str,
+    ) -> admin_primitives::Admin<[u8; 32]> {
+        admin_primitives::Admin {
             admin_account,
+            family_name: family_name
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("family name fits"),
+            given_name: given_name
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("given name fits"),
+        }
+    }
+
+    fn public_admin(
+        admin_account: [u8; 32],
+        cid_number: &str,
+        family_name: &str,
+        given_name: &str,
+    ) -> admin_primitives::PublicAdmin<[u8; 32]> {
+        admin_primitives::PublicAdmin {
+            admin_account,
+            cid_number: cid_number
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("citizen cid fits"),
             family_name: family_name
                 .as_bytes()
                 .to_vec()
@@ -138,7 +171,10 @@ mod tests {
 
     #[test]
     fn admin_payload_encodes_account_family_name_and_given_name() {
-        let admins = vec![admin([1; 32], "张", "三"), admin([2; 32], "管理", "员")];
+        let admins = vec![
+            private_admin([1; 32], "张", "三"),
+            private_admin([2; 32], "管理", "员"),
+        ];
         let expected = admins
             .iter()
             .map(|admin| {
@@ -149,7 +185,30 @@ mod tests {
                 )
             })
             .collect::<Vec<_>>();
-        assert_eq!(encode_admins_payload(&admins), expected.encode());
+        assert_eq!(
+            encode_admins_payload(&InstitutionAdminsPayload::Private(admins)),
+            expected.encode()
+        );
+    }
+
+    #[test]
+    fn public_admin_payload_encodes_account_cid_family_name_and_given_name() {
+        let admins = vec![public_admin([3; 32], "GZ000-CTZN6-198805200-2026", "", "")];
+        let expected = admins
+            .iter()
+            .map(|admin| {
+                (
+                    admin.admin_account,
+                    admin.cid_number.clone(),
+                    admin.family_name.clone(),
+                    admin.given_name.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            encode_admins_payload(&InstitutionAdminsPayload::Public(admins)),
+            expected.encode()
+        );
     }
 
     #[test]
@@ -170,7 +229,10 @@ mod tests {
     fn register_admins_payload_matches_runtime_call_field_order() {
         let args = RegisterInstitutionAdminsArgs {
             cid_number: b"LN001-SFAS-0001".to_vec(),
-            admins: vec![admin([1; 32], "张", "三"), admin([2; 32], "李", "四")],
+            admins: InstitutionAdminsPayload::Private(vec![
+                private_admin([1; 32], "张", "三"),
+                private_admin([2; 32], "李", "四"),
+            ]),
             institution_code: *b"SFAS",
             actor_cid_number: b"LN001-FRG0-0001".to_vec(),
         };

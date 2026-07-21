@@ -21,7 +21,7 @@ pub fn builtin_institution_name_digest() -> [u8; 32] {
     fold_builtin_names(&mut digest, china_ch::CHINA_CH);
     fold_builtin_names(
         &mut digest,
-        core::slice::from_ref(&citizenchain::CITIZENCHAIN_TECHNOLOGY),
+        core::slice::from_ref(&citizenchain::CITIZENCHAIN_FOUNDATION),
     );
     digest
 }
@@ -185,7 +185,7 @@ mod derive_consistency_tests {
         check_arr!(super::china_jc::CHINA_JC, "监察");
         check_arr!(super::china_jy::CHINA_JY, "教育");
         check_arr!(
-            core::slice::from_ref(&super::citizenchain::CITIZENCHAIN_TECHNOLOGY),
+            core::slice::from_ref(&super::citizenchain::CITIZENCHAIN_FOUNDATION),
             "公民链技术"
         );
     }
@@ -210,7 +210,7 @@ mod derive_consistency_tests {
         push_main_fee!(super::china_sf::CHINA_SF);
         push_main_fee!(super::china_jy::CHINA_JY);
         push_main_fee!(core::slice::from_ref(
-            &super::citizenchain::CITIZENCHAIN_TECHNOLOGY,
+            &super::citizenchain::CITIZENCHAIN_FOUNDATION,
         ));
         accounts.extend(
             super::china_ch::CHINA_CH
@@ -284,7 +284,7 @@ mod derive_consistency_tests {
         check_arr!(super::china_cb::CHINA_CB, "储委会");
         check_arr!(super::china_ch::CHINA_CH, "储行");
         check_arr!(
-            core::slice::from_ref(&super::citizenchain::CITIZENCHAIN_TECHNOLOGY),
+            core::slice::from_ref(&super::citizenchain::CITIZENCHAIN_FOUNDATION),
             "公民链技术"
         );
     }

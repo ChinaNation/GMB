@@ -263,7 +263,8 @@ pub struct CreateInstitutionInput {
     /// 合伙类型。private_type=PARTNERSHIP 时必传,其它类型不接收。
     #[serde(default)]
     pub partnership_kind: Option<String>,
-    /// 初始管理员合集；runtime 自动采用严格多数阈值。
+    /// 旧创建输入中的初始管理员集合；公私权按目标类型编码。
+    /// 机构治理阈值不得再由管理员人数推导，恢复创建前须另立方案。
     #[serde(default)]
     pub admins: Vec<CreateInstitutionAdminInput>,
 }

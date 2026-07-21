@@ -1,4 +1,4 @@
-// 业务字段必须与 Rust、TypeScript、SQL 的管理员三字段逐字一致。
+// 业务字段必须与 Rust 管理员结构逐字一致。
 // ignore_for_file: non_constant_identifier_names
 
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
@@ -15,21 +15,27 @@ enum AdminAccountIdentityType { institution, personalAccount }
 class AdminPerson {
   const AdminPerson({
     required this.admin_account,
+    this.cid_number = '',
     required this.family_name,
     required this.given_name,
   });
 
   final String admin_account;
+
+  /// 只有公权机构管理员可引用公民 CID；私权/个人多签固定为空。
+  final String cid_number;
   final String family_name;
   final String given_name;
 
   AdminPerson copyWith({
     String? admin_account,
+    String? cid_number,
     String? family_name,
     String? given_name,
   }) =>
       AdminPerson(
         admin_account: admin_account ?? this.admin_account,
+        cid_number: cid_number ?? this.cid_number,
         family_name: family_name ?? this.family_name,
         given_name: given_name ?? this.given_name,
       );

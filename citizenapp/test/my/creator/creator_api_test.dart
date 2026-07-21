@@ -190,12 +190,13 @@ class _FakeSubscriptionRpc extends SubscriptionRpc {
       FinalizedSubscriptionSnapshot(
         state: ChainSubscriptionState(
           plan: const ChainSubscriptionPlan.platform('freedom'),
-          pendingPlan: null,
           startedAt: 1000,
           lastChargedAt: 1000,
           lastChargedPriceFen: BigInt.one,
           paidUntil: 3000,
           status: 'active',
+          authorizedPriceFen: BigInt.one,
+          suspendReason: null,
         ),
         chainNowMs: 2000,
         blockHashHex: '0x${List.filled(64, '0').join()}',

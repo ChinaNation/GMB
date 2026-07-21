@@ -16,12 +16,12 @@
 - CID 顶层能力封顶岗位可授予的 `RoleBusinessPermission`；权限至少区分 `Propose` 与 `Vote`。岗位权限不可修改，变更权限必须删除旧动态岗位并生成新岗位码。
 - 动态岗位码固定为 `R_<32 位大写十六进制>`，由 runtime 使用 `GMB_ROLE_V1` 域分隔符生成；调用方不得提供，删除后永不复用。动态岗位只允许依法改 `role_name`。
 - 全部机构永久存在唯一可空缺 `LR`，任职只能为 0 或 1；法定代表人三字段必须与 LR 任职原子一致。机构内岗位码和岗位名分别唯一，同名多人属于同一岗位的多个席位；管理员可兼任不同岗位。创世固定岗位码、名和权限不可修改或删除，但创世机构仍可增加普通动态岗位。
-- 普通机构阈值只保存于 `InternalVote::ActiveInstitutionThresholds[cid_number]`。
+- `InstitutionGovernanceThresholds[cid_number]` 是私权机构治理阈值真源，与 admins 钱包数、岗位数分别独立。投票引擎只在建案时读取并冻结提案阈值快照。
 - ADR-039 目标本机构治理、管理员更换、岗位维护和法定代表人任免分别由业务模块登记岗位权限并静态指定投票引擎；不能因为 `actor_cid_number == cid_number` 或属于 admins 就自动取得发起权。
 - 注册局登记管理员同样按注册局 `RoleSubject` 授权；仅属于注册局 admins 必须拒绝。
 - 法定代表人只读取 `InstitutionInfo` 三字段，不在 admins 中保存副本。
-- 中国公民链技术股份有限公司 `GZ018-SFGQ1-201206100-2026` 是受保护私权创世机构：`LR`、`GENESIS_PRODUCT_MANAGER`、`GENESIS_PROGRAMMER` 三岗位的码、名和固定权限不可修改；产品经理、程序员各固定一席，LR 为 0..=1 任职；公司仍可增加普通动态岗位。
-- 技术公司依法换人时必须在同一治理结果中更新对应岗位任职；新任人员尚不在 admins 时再原子更新人员名册，已在 admins 时不得为了换岗伪造无关名册变化。执行使用显式 storage transaction 保证全成或全退；法定代表人账户变化还必须与 `InstitutionInfo` 三字段同步。
+- 非营利法人“中国公民链技术发展基金会” `GZ018-SFGYR-201206100-2026` 是受保护私权创世机构：`LR`、`GENESIS_PRODUCT_MANAGER`、`GENESIS_PROGRAMMER` 三岗位的码、名和固定权限不可修改；三岗各固定一席，由同一程伟钱包分别任职，机构阈值保持 2；基金会仍可增加普通动态岗位。
+- 公民链基金会依法换人时必须在同一治理结果中更新对应岗位任职；新任人员尚不在 admins 时再原子更新人员名册，已在 admins 时不得为了换岗伪造无关名册变化。执行使用显式 storage transaction 保证全成或全退；法定代表人账户变化还必须与 `InstitutionInfo` 三字段同步。
 
 ## 链上入口
 

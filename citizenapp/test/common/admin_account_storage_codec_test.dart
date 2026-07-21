@@ -36,6 +36,19 @@ void main() {
         ...scaleBytes(givenName),
       ];
 
+  List<int> publicAdminBytes(
+    String cidNumber,
+    String familyName,
+    String givenName,
+    List<int> account,
+  ) =>
+      [
+        ...account,
+        ...scaleBytes(cidNumber),
+        ...scaleBytes(familyName),
+        ...scaleBytes(givenName),
+      ];
+
   group('tryDecode', () {
     test('成功解码 PublicInstitution(0 admins)', () {
       final bytes = Uint8List.fromList([
@@ -85,8 +98,8 @@ void main() {
       final bytes = Uint8List.fromList([
         ...codeBytes('CGOV'),
         0x08, // Compact(2)
-        ...adminBytes('张', '三', a1),
-        ...adminBytes('李', '四', a2),
+        ...publicAdminBytes('GZ000-CTZN6-198805200-2026', '', '', a1),
+        ...publicAdminBytes('', '李', '四', a2),
       ]);
       final r = AdminAccountStorageCodec.tryDecode(
         bytes,
@@ -98,6 +111,9 @@ void main() {
         r.admins.map((admin) => admin.admin_account),
         ['44' * 32, '55' * 32],
       );
+      expect(r.admins.first.cid_number, 'GZ000-CTZN6-198805200-2026');
+      expect(r.admins.first.family_name, isEmpty);
+      expect(r.admins.last.cid_number, isEmpty);
     });
 
     test('字节不足返回 null,不抛异常', () {
@@ -121,7 +137,12 @@ void main() {
       final bytes = Uint8List.fromList([
         ...codeBytes('NRC'),
         0x08, // 声明 2 个 admin 但只给 1 个完整管理员的字节。
-        ...adminBytes('管理', '员', List.filled(32, 0xCC)),
+        ...publicAdminBytes(
+          '',
+          '',
+          '',
+          List.filled(32, 0xCC),
+        ),
       ]);
       expect(
         AdminAccountStorageCodec.tryDecode(

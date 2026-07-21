@@ -129,6 +129,17 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             .unwrap_or(false)
     }
 
+    fn institution_threshold(institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32> {
+        primitives::cid::code::fixed_governance_pass_threshold(&institution_code).or_else(|| {
+            INSTITUTION_THRESHOLDS.with(|thresholds| {
+                thresholds
+                    .borrow()
+                    .get(&(institution_code, cid_number.to_vec()))
+                    .copied()
+            })
+        })
+    }
+
     fn is_personal_admin(personal_account: AccountId32, who: &AccountId32) -> bool {
         <personal_admins::Pallet<Test> as admin_primitives::AdminAccountQuery<AccountId32>>::is_active_account_admin(
             PMUL,
@@ -283,6 +294,9 @@ thread_local! {
     static EXTRA_ADMINS: core::cell::RefCell<
         std::collections::BTreeMap<(InstitutionCode, Vec<u8>), Vec<AccountId32>>,
     > = core::cell::RefCell::new(std::collections::BTreeMap::new());
+    static INSTITUTION_THRESHOLDS: core::cell::RefCell<
+        std::collections::BTreeMap<(InstitutionCode, Vec<u8>), u32>,
+    > = core::cell::RefCell::new(std::collections::BTreeMap::new());
     static INSTITUTION_ACCOUNTS: core::cell::RefCell<
         std::collections::BTreeMap<AccountId32, (Vec<u8>, InstitutionCode)>,
     > = core::cell::RefCell::new(std::collections::BTreeMap::new());
@@ -295,6 +309,14 @@ thread_local! {
 fn set_institution_admins(code: InstitutionCode, cid_number: &[u8], admins: Vec<AccountId32>) {
     EXTRA_ADMINS.with(|m| {
         m.borrow_mut().insert((code, cid_number.to_vec()), admins);
+    });
+}
+
+fn set_institution_threshold(code: InstitutionCode, cid_number: &[u8], threshold: u32) {
+    INSTITUTION_THRESHOLDS.with(|thresholds| {
+        thresholds
+            .borrow_mut()
+            .insert((code, cid_number.to_vec()), threshold);
     });
 }
 
@@ -698,7 +720,7 @@ fn insert_active_institution_account(
     );
     let _ = Balances::deposit_creating(&fee_account, 10_000);
     set_institution_admins(PRIVATE_CODE, cid_number.as_slice(), admins.to_vec());
-    internal_vote::ActiveInstitutionThresholds::<Test>::insert(cid_number, 2);
+    set_institution_threshold(PRIVATE_CODE, cid_number.as_slice(), 2);
 }
 
 /// 为固定治理机构登记 CID、账户归属、岗位权限与任职，供 `VotePlan` 建立快照。
@@ -840,6 +862,7 @@ fn new_test_ext() -> sp_io::TestExternalities {
     let mut ext: sp_io::TestExternalities = storage.into();
     ext.execute_with(|| {
         EXTRA_ADMINS.with(|admins| admins.borrow_mut().clear());
+        INSTITUTION_THRESHOLDS.with(|thresholds| thresholds.borrow_mut().clear());
         INSTITUTION_ACCOUNTS.with(|accounts| accounts.borrow_mut().clear());
         INSTITUTION_NAMED_ACCOUNTS.with(|accounts| accounts.borrow_mut().clear());
         // 为储备治理三档注入 sr25519 派生 admin。

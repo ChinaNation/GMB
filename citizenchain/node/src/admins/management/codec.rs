@@ -1,13 +1,21 @@
-use admin_primitives::{Admin, InstitutionAdmins};
+use admin_primitives::{Admin, InstitutionAdmins, PublicAdmin};
 use codec::Decode;
 
 use super::types::{AdminAccountDecoded, AdminDecoded};
 
 /// 解码机构管理员模块的 `InstitutionAdmins`。
 ///
-/// SCALE 布局固定为 `institution_code + admins(admin_account + family_name + given_name)`。
-/// CID 只存在于 storage key，不在 value 中重复保存；岗位、任期和来源另查 entity。
-pub fn decode_admin_account(data: &[u8]) -> Result<AdminAccountDecoded, String> {
+/// 公权布局为 `admin_account + cid_number + family_name + given_name`，私权布局保持
+/// `admin_account + family_name + given_name`。机构 CID 只存在于 storage key；公权记录内
+/// 的 `cid_number` 是管理员公民 CID 引用。岗位、任期和来源另查 entity。
+pub fn decode_admin_account(data: &[u8], is_public: bool) -> Result<AdminAccountDecoded, String> {
+    if is_public {
+        return decode_public_admin_account(data);
+    }
+    decode_private_admin_account(data)
+}
+
+fn decode_private_admin_account(data: &[u8]) -> Result<AdminAccountDecoded, String> {
     type RawInstitutionAdmins = InstitutionAdmins<Vec<Admin<[u8; 32]>>>;
     let mut input = data;
     let decoded = RawInstitutionAdmins::decode(&mut input)
@@ -28,8 +36,38 @@ pub fn decode_admin_account(data: &[u8]) -> Result<AdminAccountDecoded, String> 
             }
             Ok(AdminDecoded {
                 admin_account: hex::encode(admin.admin_account),
+                cid_number: String::new(),
                 family_name,
                 given_name,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    Ok(AdminAccountDecoded {
+        institution_code: decoded.institution_code,
+        admins,
+    })
+}
+
+fn decode_public_admin_account(data: &[u8]) -> Result<AdminAccountDecoded, String> {
+    type RawInstitutionAdmins = InstitutionAdmins<Vec<PublicAdmin<[u8; 32]>>>;
+    let mut input = data;
+    let decoded = RawInstitutionAdmins::decode(&mut input)
+        .map_err(|e| format!("PublicInstitutionAdmins SCALE 解码失败: {e}"))?;
+    if !input.is_empty() {
+        return Err("PublicInstitutionAdmins 存在尾随字节".to_string());
+    }
+    let admins = decoded
+        .admins
+        .into_iter()
+        .map(|admin| {
+            Ok(AdminDecoded {
+                admin_account: hex::encode(admin.admin_account),
+                cid_number: String::from_utf8(admin.cid_number.into_inner())
+                    .map_err(|_| "公权管理员 cid_number 不是 UTF-8".to_string())?,
+                family_name: String::from_utf8(admin.family_name.into_inner())
+                    .map_err(|_| "公权管理员 family_name 不是 UTF-8".to_string())?,
+                given_name: String::from_utf8(admin.given_name.into_inner())
+                    .map_err(|_| "公权管理员 given_name 不是 UTF-8".to_string())?,
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
@@ -69,13 +107,16 @@ mod tests {
     }
 
     #[test]
-    fn institution_admins_decodes_unified_admin_records() {
+    fn public_institution_admins_decode_citizen_identity_fields() {
         use codec::Encode;
         let bytes = InstitutionAdmins {
             institution_code: *b"NRC\0",
             admins: vec![
-                Admin {
+                PublicAdmin {
                     admin_account: [0xaau8; 32],
+                    cid_number: admin_primitives::AdminCidNumber::truncate_from(
+                        b"GZ000-CTZN6-198805200-2026".to_vec(),
+                    ),
                     family_name: admin_primitives::FamilyName::truncate_from(
                         "张".as_bytes().to_vec(),
                     ),
@@ -83,25 +124,24 @@ mod tests {
                         "三".as_bytes().to_vec(),
                     ),
                 },
-                Admin {
+                PublicAdmin {
                     admin_account: [0xbbu8; 32],
-                    family_name: admin_primitives::FamilyName::truncate_from(
-                        "管理".as_bytes().to_vec(),
-                    ),
-                    given_name: admin_primitives::GivenName::truncate_from(
-                        "员".as_bytes().to_vec(),
-                    ),
+                    cid_number: Default::default(),
+                    family_name: Default::default(),
+                    given_name: Default::default(),
                 },
             ],
         }
         .encode();
-        let decoded = decode_admin_account(&bytes).unwrap();
+        let decoded = decode_admin_account(&bytes, true).unwrap();
         assert_eq!(decoded.institution_code, *b"NRC\0");
         assert_eq!(decoded.admins[0].admin_account, "aa".repeat(32));
+        assert_eq!(decoded.admins[0].cid_number, "GZ000-CTZN6-198805200-2026");
         assert_eq!(decoded.admins[0].family_name, "张");
         assert_eq!(decoded.admins[0].given_name, "三");
-        assert_eq!(decoded.admins[1].family_name, "管理");
-        assert_eq!(decoded.admins[1].given_name, "员");
+        assert!(decoded.admins[1].cid_number.is_empty());
+        assert!(decoded.admins[1].family_name.is_empty());
+        assert!(decoded.admins[1].given_name.is_empty());
     }
 
     #[test]
@@ -109,7 +149,7 @@ mod tests {
         use codec::Encode;
 
         let old_layout = (*b"NRC\0", vec![[0xaau8; 32]]).encode();
-        assert!(decode_admin_account(&old_layout).is_err());
+        assert!(decode_admin_account(&old_layout, true).is_err());
 
         let empty_name = InstitutionAdmins {
             institution_code: *b"NRC\0",
@@ -120,7 +160,7 @@ mod tests {
             }],
         }
         .encode();
-        assert!(decode_admin_account(&empty_name).is_err());
+        assert!(decode_admin_account(&empty_name, false).is_err());
     }
 
     #[test]

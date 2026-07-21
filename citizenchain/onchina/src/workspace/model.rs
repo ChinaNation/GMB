@@ -18,7 +18,7 @@ pub(crate) enum WorkspaceKind {
 
 /// 当前准确机构实例可挂载的专属业务模块。
 ///
-/// 类型能力只能决定工作台大类；平台技术公司等唯一机构必须按 CID 实例授权。
+/// 类型能力只能决定工作台大类；公民链基金会等唯一机构必须按 CID 实例授权。
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum WorkspaceModule {

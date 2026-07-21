@@ -93,13 +93,22 @@ impl votingengine::Config for Test {
 
 impl internal_vote::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionRoleProvider = ();
     type WeightInfo = ();
+}
+
+pub struct TestCitizenIdentityBinding;
+
+impl admin_primitives::CitizenIdentityBindingQuery<AccountId32> for TestCitizenIdentityBinding {
+    fn matches_citizen_account(cid_number: &[u8], account: &AccountId32) -> bool {
+        cid_number == b"GZ000-CTZN6-198805200-2026" && account == &self::account(9)
+    }
 }
 
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
-    type InternalVoteEngine = internal_vote::Pallet<Test>;
+    type CitizenIdentityBinding = TestCitizenIdentityBinding;
 }
 
 fn new_test_ext() -> sp_io::TestExternalities {
@@ -116,32 +125,34 @@ fn account(seed: u8) -> AccountId32 {
 }
 
 /// admins 保存显示姓名和授权钱包；岗位、任期、来源等由 entity 管理。
-fn admins(count: u8) -> Vec<Admin<AccountId32>> {
+fn admins(count: u8) -> Vec<PublicAdmin<AccountId32>> {
     (0..count)
-        .map(|seed| Admin {
+        .map(|seed| PublicAdmin {
             admin_account: account(seed),
-            family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
-            given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
+            cid_number: Default::default(),
+            family_name: Default::default(),
+            given_name: Default::default(),
         })
         .collect()
 }
 
-fn indexed_admins(count: u32) -> Vec<Admin<AccountId32>> {
+fn indexed_admins(count: u32) -> Vec<PublicAdmin<AccountId32>> {
     (0..count)
         .map(|index| {
             let mut raw = [0u8; 32];
             raw[..4].copy_from_slice(&index.to_le_bytes());
-            Admin {
+            PublicAdmin {
                 admin_account: AccountId32::new(raw),
-                family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
-                given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
+                cid_number: Default::default(),
+                family_name: Default::default(),
+                given_name: Default::default(),
             }
         })
         .collect()
 }
 
 #[test]
-fn public_admins_normalize_missing_person_name_before_storage() {
+fn public_admins_allow_temporarily_empty_identity_and_name_fields() {
     new_test_ext().execute_with(|| {
         let mut input = admins(3);
         input[0].family_name = Default::default();
@@ -151,13 +162,42 @@ fn public_admins_normalize_missing_person_name_before_storage() {
             code_bytes("CGOV"),
             AdminAccountKind::PublicInstitution,
             input,
-            2,
         ));
         let cid =
             AdminCidNumber::try_from(b"GD001-CGOV0-923456789-2026".to_vec()).expect("cid fits");
         let stored = AdminAccounts::<Test>::get(cid).expect("admins exist");
-        assert_eq!(stored.admins[0].family_name.as_slice(), "管理".as_bytes());
-        assert_eq!(stored.admins[0].given_name.as_slice(), "员".as_bytes());
+        assert!(stored.admins[0].cid_number.is_empty());
+        assert!(stored.admins[0].family_name.is_empty());
+        assert!(stored.admins[0].given_name.is_empty());
+    });
+}
+
+#[test]
+fn public_admin_nonempty_citizen_cid_must_match_citizen_identity_binding() {
+    new_test_ext().execute_with(|| {
+        let mut valid = admins(1);
+        valid[0].admin_account = account(9);
+        valid[0].cid_number = b"GZ000-CTZN6-198805200-2026"
+            .to_vec()
+            .try_into()
+            .expect("citizen cid fits");
+        assert_ok!(PublicAdmins::do_set_institution_admins(
+            b"GD001-CGOV0-823456789-2026".to_vec(),
+            code_bytes("CGOV"),
+            AdminAccountKind::PublicInstitution,
+            valid.clone(),
+        ));
+
+        valid[0].admin_account = account(8);
+        assert_noop!(
+            PublicAdmins::do_set_institution_admins(
+                b"GD001-CGOV0-723456789-2026".to_vec(),
+                code_bytes("CGOV"),
+                AdminAccountKind::PublicInstitution,
+                valid,
+            ),
+            Error::<Test>::CitizenIdentityMismatch
+        );
     });
 }
 
@@ -170,7 +210,6 @@ fn public_admins_accept_public_codes_and_reject_private_codes() {
             code_bytes("CGOV"),
             AdminAccountKind::PublicInstitution,
             admins(3),
-            2,
         ));
         let public_key: AdminCidNumber = public_cid.try_into().expect("cid fits");
         let stored = AdminAccounts::<Test>::get(public_key).expect("public admins exist");
@@ -182,7 +221,6 @@ fn public_admins_accept_public_codes_and_reject_private_codes() {
             code_bytes("UNIN"),
             AdminAccountKind::PublicInstitution,
             admins(2),
-            2,
         ));
 
         assert_noop!(
@@ -191,7 +229,6 @@ fn public_admins_accept_public_codes_and_reject_private_codes() {
                 code_bytes("SFLP"),
                 AdminAccountKind::PublicInstitution,
                 admins(3),
-                2,
             ),
             Error::<Test>::InvalidAdminAccountKind
         );
@@ -207,7 +244,6 @@ fn public_admins_activate_and_query_active_admins() {
             code_bytes("CGOV"),
             AdminAccountKind::PublicInstitution,
             admins(3),
-            2,
         ));
 
         assert!(PublicAdmins::is_institution_admin(
@@ -229,16 +265,12 @@ fn public_admins_fix_size_only_for_full_genesis_identity() {
             .into_iter()
             .find(|institution| institution.code == code_bytes("NRC"))
             .expect("NRC genesis identity");
-        let nrc_threshold =
-            primitives::cid::code::fixed_governance_pass_threshold(&code_bytes("NRC"))
-                .expect("NRC threshold");
         assert_noop!(
             PublicAdmins::do_set_institution_admins(
                 fixed.cid_number.as_bytes().to_vec(),
                 code_bytes("NRC"),
                 AdminAccountKind::PublicInstitution,
                 admins(3),
-                nrc_threshold,
             ),
             Error::<Test>::InvalidAdminsLen
         );
@@ -248,7 +280,6 @@ fn public_admins_fix_size_only_for_full_genesis_identity() {
             code_bytes("NRC"),
             AdminAccountKind::PublicInstitution,
             admins(NRC_ADMIN_COUNT as u8),
-            nrc_threshold,
         ));
 
         // 机构码相同但不是创世 CID 时，不得扩大固定人数保护范围。
@@ -257,13 +288,12 @@ fn public_admins_fix_size_only_for_full_genesis_identity() {
             code_bytes("NRC"),
             AdminAccountKind::PublicInstitution,
             admins(3),
-            nrc_threshold,
         ));
     });
 }
 
 #[test]
-fn permanent_member_body_code_rejects_non_genesis_cid() {
+fn permanent_member_body_protection_is_scoped_to_genesis_cid() {
     new_test_ext().execute_with(|| {
         let spec = primitives::institution_constraints::member_composition_specs()[0];
         assert_noop!(
@@ -272,7 +302,6 @@ fn permanent_member_body_code_rejects_non_genesis_cid() {
                 spec.institution.code,
                 AdminAccountKind::PublicInstitution,
                 indexed_admins(spec.min_members - 1),
-                spec.min_members / 2 + 1,
             ),
             Error::<Test>::InvalidAdminsLen
         );
@@ -281,24 +310,19 @@ fn permanent_member_body_code_rejects_non_genesis_cid() {
             spec.institution.code,
             AdminAccountKind::PublicInstitution,
             indexed_admins(spec.min_members),
-            spec.min_members / 2 + 1,
         ));
-        // 永久单例机构码不能由另一个 CID 占用，避免同一制度身份出现第二真源。
-        assert_noop!(
-            PublicAdmins::do_set_institution_admins(
-                b"LN001-NLG0G-123456789-2026".to_vec(),
-                spec.institution.code,
-                AdminAccountKind::PublicInstitution,
-                admins(3),
-                2,
-            ),
-            internal_vote::Error::<Test>::InvalidInternalCode
-        );
+        // 固定创世身份只保护完整 CID；不得把保护扩大到同机构码的其它机构。
+        assert_ok!(PublicAdmins::do_set_institution_admins(
+            b"LN001-NLG0G-123456789-2026".to_vec(),
+            spec.institution.code,
+            AdminAccountKind::PublicInstitution,
+            admins(3),
+        ));
     });
 }
 
 #[test]
-fn member_body_admins_are_registered_independently_without_dynamic_threshold() {
+fn member_body_admins_are_registered_without_owning_institution_threshold() {
     new_test_ext().execute_with(|| {
         let spec = primitives::institution_constraints::member_composition_specs()[0];
         let members = indexed_admins(spec.min_members);
@@ -307,7 +331,6 @@ fn member_body_admins_are_registered_independently_without_dynamic_threshold() {
             spec.institution.code,
             AdminAccountKind::PublicInstitution,
             members.clone(),
-            spec.min_members / 2 + 1,
         ));
         assert_eq!(
             AdminAccounts::<Test>::get(
@@ -319,26 +342,17 @@ fn member_body_admins_are_registered_independently_without_dynamic_threshold() {
             .to_vec(),
             members
         );
-        assert_eq!(
-            internal_vote::ActiveInstitutionThresholds::<Test>::get(
-                AdminCidNumber::try_from(spec.institution.cid_number.as_bytes().to_vec())
-                    .expect("cid fits")
-            ),
-            None
-        );
     });
 }
 
 #[test]
-fn fixed_governance_admin_update_uses_compile_time_threshold_only() {
+fn fixed_governance_admin_update_only_replaces_people_records() {
     new_test_ext().execute_with(|| {
         let fixed = primitives::governance_skeleton::fixed_institutions()
             .into_iter()
             .find(|institution| institution.code == code_bytes("NRC"))
             .expect("NRC genesis identity");
         let code = fixed.code;
-        let fixed_threshold =
-            primitives::cid::code::fixed_governance_pass_threshold(&code).expect("NRC threshold");
         let cid_number: AdminCidNumber = fixed
             .cid_number
             .as_bytes()
@@ -350,14 +364,14 @@ fn fixed_governance_admin_update_uses_compile_time_threshold_only() {
             code,
             AdminAccountKind::PublicInstitution,
             admins(NRC_ADMIN_COUNT as u8),
-            fixed_threshold,
         ));
 
         let replacement = (40..40 + NRC_ADMIN_COUNT as u8)
-            .map(|seed| Admin {
+            .map(|seed| PublicAdmin {
                 admin_account: account(seed),
-                family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
-                given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
+                cid_number: Default::default(),
+                family_name: Default::default(),
+                given_name: Default::default(),
             })
             .collect::<Vec<_>>();
         assert_ok!(PublicAdmins::do_set_institution_admins(
@@ -365,7 +379,6 @@ fn fixed_governance_admin_update_uses_compile_time_threshold_only() {
             code,
             AdminAccountKind::PublicInstitution,
             replacement.clone(),
-            fixed_threshold,
         ));
 
         assert_eq!(
@@ -374,11 +387,6 @@ fn fixed_governance_admin_update_uses_compile_time_threshold_only() {
                 .admins
                 .to_vec(),
             replacement
-        );
-        // 固定治理阈值来自 institution_code 常量，不创建动态阈值 storage。
-        assert_eq!(
-            internal_vote::ActiveInstitutionThresholds::<Test>::get(cid_number),
-            None
         );
     });
 }

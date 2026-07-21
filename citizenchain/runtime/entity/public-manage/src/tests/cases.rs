@@ -96,8 +96,8 @@ fn create_cgov(tag: &str) -> pallet::CidNumberOf<Test> {
         &cid,
         institution_code,
         &admins,
-        2,
     ));
+    pallet::InstitutionGovernanceThresholds::<Test>::insert(&cid, 2);
     cid
 }
 

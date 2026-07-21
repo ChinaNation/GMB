@@ -113,9 +113,9 @@ pub struct InstitutionGovernanceResult<AccountId> {
 /// `admins` 是机构可任职人员名册；岗位和任职是机构职务事实，岗位权限才是业务
 /// 授权真源。三者可以在同一 action 内原子执行，但任何一方都不能从另一方反向派生。
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo, PartialEq, Eq)]
-pub enum InstitutionGovernanceAction<AccountId> {
+pub enum InstitutionGovernanceAction<AccountId, AdminRecord = Admin<AccountId>> {
     /// 本机构内部投票通过后，完整替换机构 `admins` 真源。
-    ReplaceAdmins { admins: Vec<Admin<AccountId>> },
+    ReplaceAdmins { admins: Vec<AdminRecord> },
     /// 调整岗位定义、岗位任职和法定代表人，不改变机构 `admins`。
     MutateRolesAndAssignments {
         role_mutations: Vec<InstitutionRoleMutation<AccountId>>,
@@ -124,14 +124,14 @@ pub enum InstitutionGovernanceAction<AccountId> {
     },
     /// 同一提案内原子替换管理员并调整岗位/任职。
     ReplaceAdminsAndMutateRoles {
-        admins: Vec<Admin<AccountId>>,
+        admins: Vec<AdminRecord>,
         role_mutations: Vec<InstitutionRoleMutation<AccountId>>,
         assignment_changes: Vec<InstitutionRoleAssignmentChange<AccountId>>,
         legal_representative_change: Option<InstitutionLegalRepresentativeChange<AccountId>>,
     },
 }
 
-impl<AccountId> InstitutionGovernanceAction<AccountId> {
+impl<AccountId> InstitutionGovernanceAction<AccountId, Admin<AccountId>> {
     /// 在签名载荷和投票数据生成前补齐管理员默认姓名，保证提案与最终链上记录一致。
     pub fn normalize_admin_person_names(self) -> Self {
         match self {
@@ -164,11 +164,11 @@ impl<AccountId> InstitutionGovernanceAction<AccountId> {
 
 /// 写入 ProposalData 的机构治理提案载荷。
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo, PartialEq, Eq)]
-pub struct InstitutionGovernanceProposal<AccountId> {
+pub struct InstitutionGovernanceProposal<AccountId, AdminRecord = Admin<AccountId>> {
     pub institution_code: InstitutionCode,
     /// 被治理机构 CID。机构唯一主键只能是 CID，不能用机构账户替代。
     pub cid_number: Vec<u8>,
-    pub action: InstitutionGovernanceAction<AccountId>,
+    pub action: InstitutionGovernanceAction<AccountId, AdminRecord>,
 }
 
 /// 已完成业务结果写入 entity 的唯一跨模块入口。

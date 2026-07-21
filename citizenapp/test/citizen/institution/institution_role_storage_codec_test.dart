@@ -113,7 +113,10 @@ void main() {
       ...bytes('管理'),
       ...bytes('员'),
     ]);
-    final decoded = InstitutionRoleStorageCodec.decodeAdmins(value)!;
+    final decoded = InstitutionRoleStorageCodec.decodeAdmins(
+      value,
+      isPublic: false,
+    )!;
     expect(decoded.institutionCode, 'CGOV');
     expect(decoded.admins, hasLength(2));
     expect(decoded.admins.map((admin) => admin.family_name), ['张', '管理']);
@@ -129,6 +132,7 @@ void main() {
     expect(
       InstitutionRoleStorageCodec.decodeAdmins(
         Uint8List.fromList([...utf8.encode('CGOV'), 4, ...account]),
+        isPublic: false,
       ),
       isNull,
     );
@@ -140,6 +144,7 @@ void main() {
           ...bytes('管理员'),
           ...account,
         ]),
+        isPublic: false,
       ),
       isNull,
     );
@@ -155,9 +160,32 @@ void main() {
           ...bytes('管'),
           ...bytes('员'),
         ]),
+        isPublic: false,
       ),
       isNull,
     );
+  });
+
+  test('公权机构管理员按账户、公民 CID、姓、名解码并允许空资料', () {
+    final value = Uint8List.fromList([
+      ...utf8.encode('NRCG'),
+      4,
+      ...List.filled(32, 3),
+      ...bytes('GZ000-CTZN6-198805200-2026'),
+      ...bytes(''),
+      ...bytes(''),
+    ]);
+    final decoded = InstitutionRoleStorageCodec.decodeAdmins(
+      value,
+      isPublic: true,
+    )!;
+    expect(decoded.admins.single.admin_account, '03' * 32);
+    expect(
+      decoded.admins.single.cid_number,
+      'GZ000-CTZN6-198805200-2026',
+    );
+    expect(decoded.admins.single.family_name, isEmpty);
+    expect(decoded.admins.single.given_name, isEmpty);
   });
 
   test('岗位和任职分别按 entity 布局解码', () {

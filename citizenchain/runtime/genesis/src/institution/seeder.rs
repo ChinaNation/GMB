@@ -25,9 +25,9 @@ use primitives::{
             china_sf::{CHINA_SF, NATIONAL_JUDICIAL_YUAN_ADMINS},
             china_zf::{CHINA_ZF, FEDERAL_REGISTRY_ADMINS},
             citizenchain::{
-                CITIZENCHAIN_GENESIS_ADMINS, CITIZENCHAIN_GOVERNANCE_THRESHOLD,
-                CITIZENCHAIN_TECHNOLOGY, LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER,
-                LEGAL_REPRESENTATIVE_NAME,
+                CITIZENCHAIN_FOUNDATION, CITIZENCHAIN_GENESIS_ADMINS,
+                CITIZENCHAIN_GENESIS_ASSIGNMENTS, CITIZENCHAIN_GOVERNANCE_THRESHOLD,
+                LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER, LEGAL_REPRESENTATIVE_NAME,
             },
         },
         code::{institution_code_from_cid_number, InstitutionCode, FRG, NJD},
@@ -35,10 +35,7 @@ use primitives::{
 };
 use sp_runtime::traits::Zero;
 
-use admin_primitives::{
-    Admin, AdminCidNumber, FamilyName, GivenName, InstitutionAdmins, DEFAULT_ADMIN_FAMILY_NAME,
-    DEFAULT_ADMIN_GIVEN_NAME,
-};
+use admin_primitives::{Admin, AdminCidNumber, InstitutionAdmins, PublicAdmin};
 use public_manage::{
     InstitutionAccountInfo, InstitutionAdminAssignment, InstitutionAssignmentSource,
     InstitutionAssignmentStatus, InstitutionInfo, InstitutionRole, InstitutionRoleStatus,
@@ -67,7 +64,7 @@ type PublicInstitutionAccountInfoOf<T> = InstitutionAccountInfo<
 type PublicRegisteredInstitutionOf<T> =
     RegisteredInstitution<PublicCidNumberOf<T>, PublicAccountNameOf<T>>;
 type PublicAdminsOf<T> = BoundedVec<
-    Admin<<T as frame_system::Config>::AccountId>,
+    PublicAdmin<<T as frame_system::Config>::AccountId>,
     <T as public_admins::Config>::MaxAdminsPerInstitution,
 >;
 type PublicInstitutionAdminsOf<T> = InstitutionAdmins<PublicAdminsOf<T>>;
@@ -342,7 +339,7 @@ fn insert_fixed_admins<T>(
     let mut roles: Vec<public_manage::institution::role::InstitutionRoleOf<T>> = Vec::new();
     let mut assignments: Vec<public_manage::institution::role::InstitutionAdminAssignmentOf<T>> =
         Vec::new();
-    let mut admin_records: Vec<Admin<T::AccountId>> = Vec::new();
+    let mut admin_records: Vec<PublicAdmin<T::AccountId>> = Vec::new();
 
     for (index, raw) in raw_admins.iter().enumerate() {
         let (role_code_raw, role_name_raw) =
@@ -375,18 +372,11 @@ fn insert_fixed_admins<T>(
             .iter()
             .any(|admin| admin.admin_account == admin_account)
         {
-            let family_name: FamilyName = DEFAULT_ADMIN_FAMILY_NAME
-                .to_vec()
-                .try_into()
-                .expect("默认管理员姓不得超过协议上限");
-            let given_name: GivenName = DEFAULT_ADMIN_GIVEN_NAME
-                .to_vec()
-                .try_into()
-                .expect("默认管理员名不得超过协议上限");
-            admin_records.push(Admin {
+            admin_records.push(PublicAdmin {
                 admin_account,
-                family_name,
-                given_name,
+                cid_number: BoundedVec::new(),
+                family_name: BoundedVec::new(),
+                given_name: BoundedVec::new(),
             });
         }
     }
@@ -437,46 +427,54 @@ fn insert_fixed_admins<T>(
         admins,
     };
     public_admins::AdminAccounts::<T>::insert(admin_cid, institution_admins);
+    let threshold = primitives::cid::code::fixed_governance_pass_threshold(&institution_code)
+        .unwrap_or_else(|| panic!("genesis institution: {cid_number} 缺少固定机构阈值"));
+    public_manage::InstitutionGovernanceThresholds::<T>::insert(&cid, threshold);
 }
 
-/// 写入中国公民链技术股份有限公司正式创世状态。
+/// 写入中国公民链技术发展基金会正式创世状态。
 ///
-/// 机构身份、主/费用账户、三名管理员、三个固定岗位、法定代表人三字段和 2/3
+/// 机构身份、主/费用账户、一名管理员、三个固定岗位、法定代表人三字段和 2/3
 /// 内部治理阈值在同一创世构建中完成，任何一项不一致都直接中止创世。
-fn insert_citizenchain_technology<T>()
+fn insert_citizenchain_foundation<T>()
 where
     T: private_manage::Config + private_admins::Config,
 {
-    let company = CITIZENCHAIN_TECHNOLOGY;
-    let parts = primitives::cid::number::parse_cid_number_parts(company.cid_number)
-        .unwrap_or_else(|err| panic!("genesis citizenchain: 公司 CID 非法: {err}"));
+    let foundation = CITIZENCHAIN_FOUNDATION;
+    let parts = primitives::cid::number::parse_cid_number_parts(foundation.cid_number)
+        .unwrap_or_else(|err| panic!("genesis citizenchain: 基金会 CID 非法: {err}"));
     assert_eq!(
-        parts.institution, *b"SFGQ",
-        "genesis citizenchain: 公司必须属于股权公司"
+        parts.institution, *b"SFGY",
+        "genesis citizenchain: 基金会必须属于公益组织"
     );
     assert_eq!(
         CITIZENCHAIN_GENESIS_ADMINS.len(),
+        1,
+        "genesis citizenchain: 必须恰好一名程伟管理员"
+    );
+    assert_eq!(
+        CITIZENCHAIN_GENESIS_ASSIGNMENTS.len(),
         3,
-        "genesis citizenchain: 必须恰好三名管理员"
+        "genesis citizenchain: 必须恰好三条固定岗位任职"
     );
     assert_eq!(
         CITIZENCHAIN_GOVERNANCE_THRESHOLD, 2,
-        "genesis citizenchain: 三名管理员必须采用 2/3 严格多数"
+        "genesis citizenchain: 三个岗位席位必须采用 2/3 严格多数"
     );
 
-    let cid: PrivateCidNumberOf<T> = company
+    let cid: PrivateCidNumberOf<T> = foundation
         .cid_number
         .as_bytes()
         .to_vec()
         .try_into()
-        .unwrap_or_else(|_| panic!("genesis citizenchain: 公司 CID 超过协议上限"));
+        .unwrap_or_else(|_| panic!("genesis citizenchain: 基金会 CID 超过协议上限"));
     let bounded_name = |value: &[u8], label: &str| -> PrivateAccountNameOf<T> {
         value
             .to_vec()
             .try_into()
             .unwrap_or_else(|_| panic!("genesis citizenchain: {label} 超过 MaxAccountNameLength"))
     };
-    let legal_representative = CITIZENCHAIN_GENESIS_ADMINS
+    let legal_representative = CITIZENCHAIN_GENESIS_ASSIGNMENTS
         .iter()
         .find(|admin| {
             admin.role_code == primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE
@@ -500,8 +498,8 @@ where
     private_manage::Institutions::<T>::insert(
         &cid,
         PrivateInstitutionInfoOf::<T> {
-            cid_full_name: bounded_name(company.cid_full_name.as_bytes(), "机构全称"),
-            cid_short_name: bounded_name(company.cid_short_name.as_bytes(), "机构简称"),
+            cid_full_name: bounded_name(foundation.cid_full_name.as_bytes(), "机构全称"),
+            cid_short_name: bounded_name(foundation.cid_short_name.as_bytes(), "机构简称"),
             town_code: BoundedVec::new(),
             legal_representative_name: Some(bounded_name(
                 LEGAL_REPRESENTATIVE_NAME.as_bytes(),
@@ -515,11 +513,11 @@ where
     );
 
     for (account_name, raw_account) in [
-        (RESERVED_NAME_MAIN, company.main_account),
-        (RESERVED_NAME_FEE, company.fee_account),
+        (RESERVED_NAME_MAIN, foundation.main_account),
+        (RESERVED_NAME_FEE, foundation.fee_account),
     ] {
         let account_name = bounded_name(account_name, "协议账户名");
-        let address = decode_account::<T>(&raw_account, "公司协议账户");
+        let address = decode_account::<T>(&raw_account, "基金会协议账户");
         private_manage::InstitutionAccounts::<T>::insert(
             &cid,
             &account_name,
@@ -542,8 +540,8 @@ where
     let mut assignments: Vec<private_manage::institution::role::InstitutionAdminAssignmentOf<T>> =
         Vec::new();
     let mut admins: Vec<Admin<T::AccountId>> = Vec::new();
-    for genesis_admin in CITIZENCHAIN_GENESIS_ADMINS {
-        let role_code: private_manage::institution::role::RoleCodeOf = genesis_admin
+    for genesis_assignment in CITIZENCHAIN_GENESIS_ASSIGNMENTS {
+        let role_code: private_manage::institution::role::RoleCodeOf = genesis_assignment
             .role_code
             .to_vec()
             .try_into()
@@ -551,11 +549,12 @@ where
         roles.push(private_manage::InstitutionRole {
             cid_number: cid.clone(),
             role_code: role_code.clone(),
-            role_name: bounded_name(genesis_admin.role_name, "固定岗位名称"),
+            role_name: bounded_name(genesis_assignment.role_name, "固定岗位名称"),
             term_required: false,
             role_status: private_manage::InstitutionRoleStatus::Active,
         });
-        let admin_account = decode_account::<T>(&genesis_admin.admin_account, "创世管理员");
+        let admin_account =
+            decode_account::<T>(&genesis_assignment.admin_account, "创世任职管理员");
         assignments.push(private_manage::InstitutionAdminAssignment {
             cid_number: cid.clone(),
             admin_account: admin_account.clone(),
@@ -566,8 +565,10 @@ where
             assignment_source_ref: Default::default(),
             assignment_status: private_manage::InstitutionAssignmentStatus::Active,
         });
+    }
+    for genesis_admin in CITIZENCHAIN_GENESIS_ADMINS {
         admins.push(Admin {
-            admin_account,
+            admin_account: decode_account::<T>(&genesis_admin.admin_account, "创世管理员"),
             family_name: genesis_admin
                 .family_name
                 .as_bytes()
@@ -595,13 +596,16 @@ where
         private_manage::Pallet::<T>::store_genesis_fixed_role_permissions(&cid, &role.role_code)
             .expect("genesis citizenchain: 固定岗位权限写入失败");
     }
+    private_manage::InstitutionGovernanceThresholds::<T>::insert(
+        &cid,
+        CITIZENCHAIN_GOVERNANCE_THRESHOLD,
+    );
     private_admins::Pallet::<T>::store_genesis_institution_admins(
-        company.cid_number.as_bytes().to_vec(),
+        foundation.cid_number.as_bytes().to_vec(),
         parts.institution,
         admins,
-        CITIZENCHAIN_GOVERNANCE_THRESHOLD,
     )
-    .expect("genesis citizenchain: 管理员和严格多数阈值写入失败");
+    .expect("genesis citizenchain: 基金会管理员写入失败");
 }
 
 /// 创世写入内置公权机构和创世公职人员。
@@ -732,5 +736,5 @@ where
     build_template_institutions::<T>();
 
     // 私权创世机构单独进入 private-manage/private-admins；不混入 49,593 个公权机构计数。
-    insert_citizenchain_technology::<T>();
+    insert_citizenchain_foundation::<T>();
 }

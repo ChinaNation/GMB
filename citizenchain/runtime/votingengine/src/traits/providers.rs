@@ -57,6 +57,17 @@ pub trait InternalAdminProvider<AccountId> {
         who: &AccountId,
     ) -> bool;
 
+    /// 读取机构治理阈值唯一真源。
+    ///
+    /// 阈值属于机构而不是管理员集合或投票引擎；生产实现必须路由到对应 entity
+    /// 模块，投票引擎只在建案时读取并冻结快照。
+    fn institution_threshold(
+        _institution_code: InstitutionCode,
+        _cid_number: &[u8],
+    ) -> Option<u32> {
+        None
+    }
+
     /// 查询个人多签管理员权限。
     fn is_personal_admin(_personal_account: AccountId, _who: &AccountId) -> bool {
         false

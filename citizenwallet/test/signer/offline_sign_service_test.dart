@@ -140,14 +140,18 @@ void main() {
     });
 
     test('verifyPayload accepts exact SquarePost platform price action', () {
-      const cid = 'GD001-SFGQ0-000000001-2026';
+      const cid = 'GZ018-SFGYR-201206100-2026';
       final cidBytes = cid.codeUnits;
+      const role = 'GENESIS_PRODUCT_MANAGER';
+      final roleBytes = role.codeUnits;
       final price = List<int>.filled(16, 0)..[0] = 100;
       final payloadHex = '0x${_toHex([
             34,
             5,
             cidBytes.length << 2,
             ...cidBytes,
+            roleBytes.length << 2,
+            ...roleBytes,
             2,
             ...price,
           ])}';
@@ -166,8 +170,10 @@ void main() {
 
     test('verifyPayload rejects platform price payload with mismatched action',
         () {
-      const cid = 'GD001-SFGQ0-000000001-2026';
+      const cid = 'GZ018-SFGYR-201206100-2026';
       final cidBytes = cid.codeUnits;
+      const role = 'GENESIS_PRODUCT_MANAGER';
+      final roleBytes = role.codeUnits;
       final price = List<int>.filled(16, 0)..[0] = 100;
       final request = _buildTestRequest(
         requestId: 'offline-platform-price-mismatch',
@@ -177,6 +183,8 @@ void main() {
               5,
               cidBytes.length << 2,
               ...cidBytes,
+              roleBytes.length << 2,
+              ...roleBytes,
               0,
               ...price,
             ])}',
@@ -194,14 +202,14 @@ void main() {
         pubkey: '0x${hotWallet.pubkeyHex}',
         payloadHex:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-        action: QrActions.privateInstitutionCreate,
+        action: QrActions.privateInstitutionGovernance,
       );
 
       final verification = service.verifyPayload(request);
 
       expect(verification.status, SignDecisionStatus.reject);
       expect(verification.canSign, isFalse);
-      expect(verification.actionLabel, '创建私权机构');
+      expect(verification.actionLabel, '发起私权机构治理');
       expect(verification.rejectReason, contains('普通链交易不能只签 32 字节哈希'));
     });
 

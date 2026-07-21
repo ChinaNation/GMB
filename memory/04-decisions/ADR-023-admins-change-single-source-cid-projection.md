@@ -5,7 +5,7 @@
 ## 保留的决策
 
 - 管理员不是独立身份类型，也不拥有第二套管理员 CID。
-- `public-admins`、`private-admins` 保存机构可任职人员集合，每项字段顺序固定为 `admin_account + family_name + given_name`；姓、名只用于展示。
+- `public-admins`、`private-admins` 保存机构可任职人员集合。公权项固定为 `PublicAdmin { admin_account, cid_number, family_name, given_name }`，当前公民 CID、姓、名允许为空，非空 CID 必须引用 `citizen-identity` 的 CID↔钱包唯一绑定；私权项保持 `Admin { admin_account, family_name, given_name }`。
 - 机构信息、岗位定义、岗位权限和岗位任职唯一真源在对应 `entity` pallet。任职目标必须是该机构既有管理员；岗位变化不得反向生成、删除或覆盖 `admins`。
 - 个人多签完全独立，由 `personal-admins` 保存账户和管理员集合。
 - OnChina PostgreSQL 只保存登录、节点绑定和公开机构目录投影，不是管理员资格、岗位、权限或投票资格真源。

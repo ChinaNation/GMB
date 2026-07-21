@@ -13,7 +13,6 @@ const POINT = {
 interface Row {
   owner_account: string;
   membership_level: string;
-  pending_membership_level: string | null;
   paid_until: number;
   subscription_status: string;
   verified_at: number;
@@ -27,7 +26,6 @@ class FakeDb {
     this.rows.set(owner, {
       owner_account: owner,
       membership_level: "freedom",
-      pending_membership_level: null,
       paid_until: paidUntil,
       subscription_status: status,
       verified_at: 1,
@@ -65,22 +63,20 @@ class FakeStmt {
       const row = this.db.rows.get(owner);
       if (row) {
         row.subscription_status = "terminated";
-        row.pending_membership_level = null;
         row.entitlement_lapsed_at = row.paid_until;
         row.verified_at = this.args[2] as number;
       }
       return { meta: { changes: row ? 1 : 0 } };
     }
     if (this.sql.includes("UPDATE square_memberships SET membership_level")) {
-      const owner = this.args[11] as string;
+      const owner = this.args[10] as string;
       const row = this.db.rows.get(owner);
       if (row) {
         row.membership_level = this.args[0] as string;
-        row.pending_membership_level = this.args[1] as string | null;
-        row.paid_until = this.args[5] as number;
-        row.subscription_status = this.args[6] as string;
-        row.verified_at = this.args[9] as number;
-        row.entitlement_lapsed_at = this.args[10] as number | null;
+        row.paid_until = this.args[4] as number;
+        row.subscription_status = this.args[5] as string;
+        row.verified_at = this.args[8] as number;
+        row.entitlement_lapsed_at = this.args[9] as number | null;
       }
       return { meta: { changes: row ? 1 : 0 } };
     }
@@ -116,12 +112,13 @@ function deps(
 function active(level: "freedom" | "democracy" | "spark"): ChainSubscriptionState {
   return {
     plan: { kind: "platform", membershipLevel: level },
-    pendingPlan: null,
     startedAt: 1_000,
     lastChargedAt: 9_000,
     lastChargedPriceFen: 200n,
     paidUntil: 20_000,
     status: "active",
+    authorizedPriceFen: 200n,
+    suspendReason: null,
   };
 }
 

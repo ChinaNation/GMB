@@ -133,8 +133,8 @@ impl crate::pallet::Config for Test {
     type WeightInfo = ();
 }
 
-// 平台机构永久固定为创世技术公司，测试与 pallet 共用同一创世常量 CID。
-const PLATFORM_CID: &[u8] = primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY
+// 平台机构永久固定为公民链基金会，测试与 pallet 共用同一创世常量 CID。
+const PLATFORM_CID: &[u8] = primitives::cid::china::citizenchain::CITIZENCHAIN_FOUNDATION
     .cid_number
     .as_bytes();
 const PLATFORM_PRICE: u128 = 5_999_900;
@@ -794,13 +794,13 @@ fn genesis_build_seeds_default_platform_prices() {
     });
 }
 
-// 平台调价治理：可测的前置校验（零价 / 非技术公司）。完整「投票通过→执行→改价」
+// 平台调价治理：可测的前置校验（零价 / 非基金会）。完整「投票通过→执行→改价」
 // 路径需 votingengine 集成夹具，列为跟进项。
 #[test]
 fn propose_platform_price_rejects_zero_price() {
     new_test_ext().execute_with(|| {
         let cid = votingengine::types::CidNumber::try_from(
-            primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY
+            primitives::cid::china::citizenchain::CITIZENCHAIN_FOUNDATION
                 .cid_number
                 .as_bytes()
                 .to_vec(),
@@ -823,7 +823,7 @@ fn propose_platform_price_rejects_zero_price() {
 }
 
 #[test]
-fn propose_platform_price_rejects_non_technology_institution() {
+fn propose_platform_price_rejects_non_foundation_institution() {
     new_test_ext().execute_with(|| {
         let cid = votingengine::types::CidNumber::try_from(b"GD001-CTZN1-000000001-2026".to_vec())
             .expect("cid fits");

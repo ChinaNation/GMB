@@ -49,9 +49,9 @@ pub(crate) fn propose_price_change<T: Config>(
         .map_err(|_| Error::<T>::InvalidInstitution)?;
     let institution_code = votingengine::types::institution_code_from_cid_number(actor_text)
         .ok_or(Error::<T>::InvalidInstitution)?;
-    // 平台机构永久固定为创世技术公司，直接以创世常量断言（机构码 SFGQ + 准确 CID）。
+    // 平台机构永久固定为公民链基金会，直接以创世常量断言（机构码 SFGY + 准确 CID）。
     ensure!(
-        primitives::cid::china::citizenchain::is_citizenchain_technology_identity(
+        primitives::cid::china::citizenchain::is_citizenchain_foundation_identity(
             institution_code,
             actor_cid_number.as_slice(),
         ),
@@ -174,9 +174,9 @@ where
                 && proposal.status == STATUS_PASSED
                 && proposal.actor_cid_number.as_ref().map(|cid| cid.as_slice())
                     == Some(action.actor_cid_number.as_slice())
-                // 平台机构永久固定为创世技术公司，以创世常量 CID 断言，不读可写存储。
+                // 平台机构永久固定为公民链基金会，以创世常量 CID 断言，不读可写存储。
                 && action.actor_cid_number.as_slice()
-                    == primitives::cid::china::citizenchain::CITIZENCHAIN_TECHNOLOGY
+                    == primitives::cid::china::citizenchain::CITIZENCHAIN_FOUNDATION
                         .cid_number
                         .as_bytes()
                 && proposal.execution_account.is_none(),

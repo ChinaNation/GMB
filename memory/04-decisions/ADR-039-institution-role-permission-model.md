@@ -1,6 +1,6 @@
 # ADR-039：机构 CID 与岗位码权限模型
 
-状态：Accepted（2026-07-19；第 1 至第 4 步和第 5A 步已完成）。
+状态：Accepted（2026-07-20；已完成公私权管理员分型、机构阈值解耦和公民链基金会重新创世；岗位席位记票待下一步）。
 
 ## 背景
 
@@ -36,7 +36,7 @@ RoleSubject = (cid_number, role_code)
 - 投票引擎只负责合格任职账户快照、投票资格、阈值、计票、通过/否决、终态和维护。
 - 投票引擎不读取岗位权限来决定业务是否合法，不解释业务正文，也不执行转账、发行、升级、任免等具体业务。
 - 投票通过后，由已绑定业务模块执行确定性回调；回调不得再次建立投票流程。
-- 机构和个人多签的全部状态变更必须经过指定投票引擎。只读、创世写入、投票引擎内部维护和已通过提案回调除外。
+- 机构和个人多签对自身的内部治理状态变更必须经过指定投票引擎。只读、创世写入、投票引擎内部维护和已通过提案回调除外。注册局为公民或其他机构办理登记属对外行政业务，依其业务规则校验岗位与必要签名，不能误改为注册局机构内部投票。
 
 ### 4. 联合投票
 
@@ -46,7 +46,7 @@ RoleSubject = (cid_number, role_code)
 
 - 所有机构必须永久存在唯一 `LR / 法定代表人` 岗位；岗位允许空缺，但岗位码和岗位名不可修改或删除。
 - `LR` 岗位任职人数只能为 0 或 1；法定代表人姓名、个人 CID、账户三字段必须与 `LR` 任职在同一治理结果中一起设置或一起清空。
-- 所有创世固定岗位的岗位码、岗位名和岗位权限永久固定。目标全称“中国公民链技术股份有限公司”固定包含 `LR`、`GENESIS_PRODUCT_MANAGER`、`GENESIS_PROGRAMMER`；全称代码变更与第 4B 重新创世同批执行。
+- 所有创世固定岗位的岗位码、岗位名和岗位权限永久固定。非营利法人“中国公民链技术发展基金会”固定包含 `LR`、`GENESIS_PRODUCT_MANAGER`、`GENESIS_PROGRAMMER`，并允许同一钱包分别任职三岗。
 - 创世机构可以依法增加、改名和删除普通动态岗位；NodeGuard 只保护固定岗位，不禁止额外动态岗位。
 - 动态岗位码由 runtime 生成，机构内唯一、不可修改，删除后永不复用；调用方不得指定岗位码。
 - 动态岗位码格式：`R_<32 位大写十六进制>`。
@@ -55,6 +55,7 @@ RoleSubject = (cid_number, role_code)
 - `role_name` 在机构内唯一；同名多人必须表达为同一岗位码下的多个任职席位，不能复制成多个同名岗位。动态岗位名可以依法修改；岗位码、岗位权限及固定属性不可修改。
 - 同一管理员可以在同一机构担任多个不同岗位；任职去重边界是“同一岗位内同一账户不得重复占席”，不是“一个账户在机构内只能有一个岗位”。
 - 岗位只定义席位与权限，不保存岗位阈值；投票阈值属于机构/具体投票计划。例如 NRC 是一个 `COMMITTEE_MEMBER` 岗位、19 个任职席位、机构阈值 13。
+- 机构阈值由 public/private entity 按 CID 独立保存，不得从 `admins` 钱包数推导。投票引擎只在建案时消费该阈值并冻结提案快照。
 
 ### 6. 机构创建与个人多签
 
@@ -64,11 +65,11 @@ RoleSubject = (cid_number, role_code)
 
 ## 唯一真源与边界
 
-- admins 人员名册：`runtime/admins`。
+- admins 人员名册：`runtime/admins`。公权使用 `PublicAdmin { admin_account, cid_number, family_name, given_name }`，非空公民 CID 只能引用 `citizen-identity` 的 CID↔钱包绑定；私权机构与个人多签使用 `Admin { admin_account, family_name, given_name }`。
 - 岗位、岗位权限、岗位码 nonce/占用和任职：`runtime/entity`。
 - CID 顶层能力、创世固定岗位与权限：runtime 共享常量与创世规范。
 - 业务动作权限要求、指定投票引擎、VotePlan 和通过后执行：对应业务模块。
-- 快照、票据、阈值、计票和终态：`runtime/votingengine`。
+- 机构治理阈值：`runtime/entity/public-manage` / `private-manage`；提案阈值快照、资格快照、票据、计票和终态：`runtime/votingengine`。
 - 永久固定岗位保护：NodeGuard；不得扩大为一般机构业务授权真源。
 
 ## 后果
@@ -82,12 +83,12 @@ RoleSubject = (cid_number, role_code)
 
 完整动作目录、逐岗位 `Propose/Vote` 固定矩阵、实现记录和验收记录在任务卡 `memory/08-tasks/20260719-institution-role-permission-unify.md` 的“第 4A 步盘点结果与固定矩阵”和“第 4B 步完成记录”。
 
-固定矩阵已经确认并实施：协议升级与决议发行均由 NRC/PRC `COMMITTEE_MEMBER` 发起和投票，两个业务中的 PRB `DIRECTOR` 均只投票；FRG 按准确省专员岗位隔离；技术公司平台调价由 `GENESIS_PRODUCT_MANAGER` 发起、三个固定岗位投票。没有明确固定职责的转账、普通资产发行等能力不授予固定岗位，后续由动态岗位承接。
+固定矩阵已经确认并实施：协议升级与决议发行均由 NRC/PRC `COMMITTEE_MEMBER` 发起和投票，两个业务中的 PRB `DIRECTOR` 均只投票；FRG 按准确省专员岗位隔离；公民链基金会平台调价由 `GENESIS_PRODUCT_MANAGER` 发起、三个固定岗位投票。没有明确固定职责的转账、普通资产发行等能力不授予固定岗位，后续由动态岗位承接。
 
 ## 实施与验收
 
 实施顺序及完整验收以 `memory/08-tasks/20260719-institution-role-permission-unify.md` 为准。2026-07-19 已完成共享授权类型、跨端 SCALE 契约、public/private entity 岗位权限生命周期、创世固定权限、准确 CID 顶层能力和 NodeGuard 固定权限保护。旧机构直接创建 call 5 已永久关闭。
 
-第 5A 步已将联合投票的 `VotePlan` 写入 `ProposalVotePlans`，并按每个 `RoleSubject` 建立 `VoterSnapshot`、按 CID 建立去重后的 `EffectiveVoterSnapshot`。协议升级与决议发行两个业务已在自身模块中校验 NRC/PRC 委员岗位 `Propose` 权限，固定构造 NRC + 43 PRC 委员与 43 PRB 董事的 87 个投票主体，并由联合投票引擎按岗位有效任职快照判定投票资格。同一账户在同一 CID 兼任多岗只形成一票，在不同 CID 任职则可分别投票。
+联合、内部、立法和选举 Track 已按每个 `RoleSubject` 建立 `VoterSnapshot`，并按 CID 建立 `EffectiveVoterSnapshot`。当前的账户去重只是过渡中间态：它无法表达同一人在同机构兼任多个岗位时的多个岗位席位票权。下一步必须把机构票据主体改为 `RoleSubject + admin_account`，同一钱包仍只需一把私钥，但可以为其各个有效岗位分别投票；不降低机构阈值。
 
-第 5A 只完成联合投票及首批两个业务模块的目标切片。`internal-vote`、`legislation-vote`、`election-vote` 以及其他业务模块的岗位主体接入仍属后续步骤，不得将联合投票中已删除的 admins 授权语义作为兼容路径恢复。
+不得恢复 admins 直接授权或机构全体 admins 快照。下一步只改机构岗位席位的快照、票据键与计票语义，个人多签继续保持按管理员账户一人一票。

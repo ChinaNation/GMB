@@ -49,23 +49,30 @@ class ChainSubscriptionPlan {
 class ChainSubscriptionState {
   const ChainSubscriptionState({
     required this.plan,
-    required this.pendingPlan,
     required this.startedAt,
     required this.lastChargedAt,
     required this.lastChargedPriceFen,
     required this.paidUntil,
     required this.status,
+    required this.authorizedPriceFen,
+    required this.suspendReason,
   });
 
   final ChainSubscriptionPlan plan;
-  final ChainSubscriptionPlan? pendingPlan;
   final int startedAt;
   final int lastChargedAt;
   final BigInt lastChargedPriceFen;
   final int paidUntil;
   final String status;
 
-  /// Active 与已签名取消但仍在已付周期内的 Cancelled 都继续提供权益。
+  /// 订阅者已授权用于自动续费的价格；创作者改价后据此提示重新签名。
+  final BigInt authorizedPriceFen;
+
+  /// 挂起原因：`needReconsent` / `insufficientBalance` / `null`（非挂起态）。
+  final String? suspendReason;
+
+  /// Active 与已签名取消但仍在已付周期内的 Cancelled 都继续提供权益；
+  /// suspended / creatorPaused 暂停期无权益。
   bool isEffectiveAt(int chainNowMs) =>
       (status == 'active' || status == 'cancelled') && chainNowMs < paidUntil;
 }
@@ -508,15 +515,6 @@ class SubscriptionRpc {
   static ChainSubscriptionState decodeSubscriptionState(Uint8List data) {
     final reader = _ScaleReader(data);
     final plan = _readPlan(reader);
-    final pendingTag = reader.byte();
-    final ChainSubscriptionPlan? pendingPlan;
-    if (pendingTag == 0) {
-      pendingPlan = null;
-    } else if (pendingTag == 1) {
-      pendingPlan = _readPlan(reader);
-    } else {
-      throw const FormatException('pending_plan Option 枚举不合法');
-    }
     final startedAt = reader.u64();
     final lastChargedAt = reader.u64();
     final lastChargedPriceFen = reader.u128();
@@ -525,20 +523,37 @@ class SubscriptionRpc {
       0 => 'active',
       1 => 'cancelled',
       2 => 'terminated',
+      3 => 'suspended',
+      4 => 'creatorPaused',
       _ => throw const FormatException('subscription_status 枚举不合法'),
     };
+    final authorizedPriceFen = reader.u128();
+    final suspendTag = reader.byte();
+    final String? suspendReason;
+    if (suspendTag == 0) {
+      suspendReason = null;
+    } else if (suspendTag == 1) {
+      suspendReason = switch (reader.byte()) {
+        0 => 'needReconsent',
+        1 => 'insufficientBalance',
+        _ => throw const FormatException('suspend_reason 枚举不合法'),
+      };
+    } else {
+      throw const FormatException('suspend_reason Option 枚举不合法');
+    }
     reader.requireEnd();
     if (paidUntil <= lastChargedAt) {
       throw const FormatException('paid_until 必须晚于最近扣款时间');
     }
     return ChainSubscriptionState(
       plan: plan,
-      pendingPlan: pendingPlan,
       startedAt: startedAt,
       lastChargedAt: lastChargedAt,
       lastChargedPriceFen: lastChargedPriceFen,
       paidUntil: paidUntil,
       status: status,
+      authorizedPriceFen: authorizedPriceFen,
+      suspendReason: suspendReason,
     );
   }
 

@@ -93,7 +93,7 @@ Admin = [admin_account:AccountId32][family_name:Compact<Vec<u8>>][given_name:Com
 - `new_threshold` 是载荷必填字段，端上和链端按同一字节结构构造、解析和签名。
 - `family_name / given_name` 各自为 1..=128 UTF-8 字节；新增时留空分别规范为“管理”、“员”，不从联系人备注或合并姓名拆分生成。
 - 个人多签显示动态阈值输入框，端上前置校验：`threshold * 2 > admins_len && threshold <= admins_len`。
-- 个人多签动态阈值由 `InternalVote.ActivePersonalThresholds[personal_account]` 保存；机构阈值按 CID 使用 `ActiveInstitutionThresholds[cid_number]`，不属于本页面。
+- 个人多签动态阈值由 `InternalVote.ActivePersonalThresholds[personal_account]` 保存；机构阈值按 CID 读取 `PublicManage/PrivateManage.InstitutionGovernanceThresholds[cid_number]`，不属于本页面。
 - QR_V1 只携带 `b.a + b.d`；扫码端从 `b.d` 解码出的展示字段必须与冷钱包 decoder 逐项一致：`institution_code / subject / admins / new_threshold`。
 
 ## 管理员激活
@@ -106,7 +106,7 @@ Admin = [admin_account:AccountId32][family_name:Compact<Vec<u8>>][given_name:Com
 
 ## 管理员与岗位展示
 
-- `AdminAccountService` 对机构和个人多签均严格解码 `admins: Vec<Admin>`，必须完整包含 `admin_account + family_name + given_name`；旧纯账户、合并姓名或尾部多余字节一律拒绝。
+- `AdminAccountService` 按目标严格分流：公权机构解码 `Vec<PublicAdmin>` 四字段，私权机构和个人多签解码 `Vec<Admin>` 三字段；旧纯账户、合并姓名或尾部多余字节一律拒绝。
 - `InstitutionAdminService` 将管理员人员真源与 entity 岗位任职做左连接；授权只比较 `admin_account`，管理员可以没有岗位，同一管理员也可展示多个岗位。
 - 机构管理员列表和公开机构管理员列表统一使用 `/Users/rhett/GMB/citizenapp/lib/citizen/institution/institution_assignment_card.dart`；姓名只在 UI 中按中文顺序合并显示，同时展示账户、岗位、任期、来源和余额。
 - 个人多签仍由独立 `AdminAccount` 布局和个人管理员集合页面处理；`PersonalAdmins.propose_admin_set_change` 是 CitizenApp 唯一保留的管理员集合变更调用，公权/私权机构不得从客户端直接改写管理员集合。
@@ -120,9 +120,9 @@ Admin = [admin_account:AccountId32][family_name:Compact<Vec<u8>>][given_name:Com
 - 通用 `OrgType.multisig` 文案改为“多签账户”，具体“个人多签 / 机构账户”由 admins-change identity 展示。
 - 2026-06-27：管理员更换代码目录已迁到 `lib/citizen/proposal/admins-change/`；测试目录暂保留 `test/governance/admins-change/`，用于覆盖 QR call data、AdminAccounts storage key、非法人显式 kind 路由和激活缓存。
 
-## 2026-07-19 管理员三字段验收
+## 2026-07-19 管理员三字段验收与 2026-07-20 公权四字段更新
 
-- CitizenApp 机构、个人多签的 storage 解码、页面模型、创建/更换 call、本地快照和钱包匹配已统一为 `admin_account + family_name + given_name`。
+- CitizenApp 当前 storage 解码按公权四字段、私权/个人三字段分流；页面模型增加可空 `cid_number`，钱包匹配仍只比较 `admin_account`。
 - `flutter analyze --no-fatal-infos` 无问题；专项 41 项通过；完整 `flutter test` 741 项通过、5 项按既有原生 smoldot 环境条件跳过。
 - 当前源码的隔离 `citizenchain-fresh` 节点启动成功，block#0 为 `0xc1dc759689aed0a8f8361dc3cb0e39c1faf19cfc55c7611b02ccc79ce04524c6`，`stateRoot=0x967155d28abe492052ef4bfd59a1ddbebce8cdaa57d9baaad446028848061a5e`，`isSyncing=false`。
 - 真实 RPC 读取首个 `PublicAdmins::AdminAccounts` 值，解出 9 个管理员，每项均含账户、“管理”、“员”，尾部剩余字节为 0。

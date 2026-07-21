@@ -150,7 +150,7 @@ fn decode_admin_account_state(
     finalized_hash: &str,
 ) -> Result<AdminAccountState, String> {
     let data = decode_hex_storage(hex_data)?;
-    let decoded = codec::decode_admin_account(&data)?;
+    let decoded = codec::decode_admin_account(&data, spec == PUBLIC_ADMINS)?;
     let admins = fetch_role_assignments(
         spec,
         cid_number.as_bytes(),
@@ -360,6 +360,7 @@ fn fetch_role_assignments(
         assignments.sort_by(|left, right| left.role_code.cmp(&right.role_code));
         admins.push(InstitutionAdminInfo {
             admin_account,
+            cid_number: admin.cid_number.clone(),
             family_name: admin.family_name.clone(),
             given_name: admin.given_name.clone(),
             assignments,

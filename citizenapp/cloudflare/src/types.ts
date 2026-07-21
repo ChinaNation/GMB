@@ -129,7 +129,6 @@ export interface ContactCiphertextRow {
 export interface MembershipRow {
   owner_account: string;
   membership_level: string;
-  pending_membership_level: string | null;
   started_at: number;
   last_charged_at: number;
   last_charged_price_fen: number;

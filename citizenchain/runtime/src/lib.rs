@@ -295,7 +295,7 @@ mod runtime {
     #[runtime::pallet_index(9)]
     pub type VotingEngine = votingengine;
 
-    // 内部投票 sub-pallet:管理员一人一票
+    // 内部投票 sub-pallet：个人多签按管理员账户投票；机构按 VotePlan 岗位快照投票。
     #[runtime::pallet_index(20)]
     pub type InternalVote = internal_vote;
 

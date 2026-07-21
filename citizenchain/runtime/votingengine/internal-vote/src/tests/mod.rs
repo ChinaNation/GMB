@@ -1,5 +1,6 @@
 use super::*;
 use core::cell::RefCell;
+use std::collections::BTreeMap;
 
 use frame_support::{
     assert_noop, assert_ok, derive_impl, traits::ConstU32, traits::Hooks, BoundedVec,
@@ -19,7 +20,9 @@ use votingengine::pallet::{
     ProposalsByOwner, ProposalsByYear, ScheduledCleanupHead, ScheduledCleanupTail,
     ScheduledCleanups, YearProposalCounter,
 };
-use votingengine::types::{code_bytes, CidNumber, InstitutionCode, ProposalSubject, NJD, PMUL};
+use votingengine::types::{
+    code_bytes, CidNumber, InstitutionCode, ProposalSubject, NJD, NRC, PMUL, PRB, PRC,
+};
 // 个人多签按账户键测试；公权、私权法人按机构 CID 键测试。
 const PERSONAL_CODE: InstitutionCode = PMUL;
 const PUBLIC_CODE: InstitutionCode = code_bytes("CGOV");
@@ -131,6 +134,10 @@ impl joint_vote::Config for Test {
 
 thread_local! {
     static TEST_POPULATION_COUNT: RefCell<u64> = const { RefCell::new(100) };
+}
+thread_local! {
+    static TEST_INSTITUTION_THRESHOLDS: RefCell<BTreeMap<Vec<u8>, u32>> =
+        RefCell::new(BTreeMap::new());
 }
 thread_local! {
     static TEST_NOW_SECS: RefCell<u64> = const { RefCell::new(DEFAULT_TEST_NOW_SECS) };
@@ -245,7 +252,11 @@ fn set_personal_threshold(threshold: u32) {
 }
 
 fn set_institution_threshold(cid_number: CidNumber, threshold: u32) {
-    ActiveInstitutionThresholds::<Test>::insert(cid_number, threshold);
+    TEST_INSTITUTION_THRESHOLDS.with(|thresholds| {
+        thresholds
+            .borrow_mut()
+            .insert(cid_number.to_vec(), threshold);
+    });
 }
 
 impl TestInternalAdminProvider {
@@ -347,6 +358,10 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
             }
             _ => false,
         }
+    }
+
+    fn institution_threshold(_institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32> {
+        TEST_INSTITUTION_THRESHOLDS.with(|thresholds| thresholds.borrow().get(cid_number).copied())
     }
 
     fn is_personal_admin(personal_account: AccountId32, who: &AccountId32) -> bool {
@@ -515,6 +530,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     let mut ext = sp_io::TestExternalities::new(storage);
     ext.execute_with(|| {
         TEST_POPULATION_COUNT.with(|count| *count.borrow_mut() = 100);
+        TEST_INSTITUTION_THRESHOLDS.with(|thresholds| thresholds.borrow_mut().clear());
         TEST_NOW_SECS.with(|secs| *secs.borrow_mut() = DEFAULT_TEST_NOW_SECS);
         JOINT_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = false);
         JOINT_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = None);
@@ -526,6 +542,11 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         set_personal_threshold(3);
         set_institution_threshold(public_cid(), 3);
         set_institution_threshold(private_cid(), 3);
+        set_institution_threshold(nrc_cid(), primitives::count_const::NRC_INTERNAL_THRESHOLD);
+        set_institution_threshold(prc_cid(), primitives::count_const::PRC_INTERNAL_THRESHOLD);
+        set_institution_threshold(prb_cid(), primitives::count_const::PRB_INTERNAL_THRESHOLD);
+        set_institution_threshold(njd_cid(), primitives::count_const::NJD_INTERNAL_THRESHOLD);
+        set_institution_threshold(permanent_singleton_cid(), 2);
         System::set_block_number(1);
     });
     ext

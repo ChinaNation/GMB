@@ -89,7 +89,7 @@ citizenapp
 
 2026-05-17 阈值显示补充执行记录：
 - 已修复个人/机构多签详情读取管理员主体时错把 `AdminsChange::AdminAccounts` 中 creator 字段解成 threshold 的问题。
-- 个人/机构多签当前账户详情的管理员和阈值已在 2026-07-15 拆成两条唯一真源：机构读取 `PublicAdmins/PrivateAdmins::AdminAccounts[cid_number]` 与 `ActiveInstitutionThresholds[cid_number]`；个人读取 `PersonalAdmins::AdminAccounts[personal_account]` 与 `ActivePersonalThresholds[personal_account]`，不做跨模型回退。
+- 个人/机构多签当前账户详情的管理员和阈值已拆成独立真源：机构读取 `PublicAdmins/PrivateAdmins::AdminAccounts[cid_number]` 与 `PublicManage/PrivateManage::InstitutionGovernanceThresholds[cid_number]`；个人读取 `PersonalAdmins::AdminAccounts[personal_account]` 与 `ActivePersonalThresholds[personal_account]`，不做跨模型回退。
 - 账户详情中的 `threshold` 改为可空；阈值查询不到时 UI 只显示管理员人数，不再显示错位大数字。
 - 已补充个人/机构 storage codec 和 service 测试，覆盖 `AdminsChange::AdminAccounts` 不再携带 threshold 的布局。
 

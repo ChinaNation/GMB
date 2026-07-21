@@ -276,7 +276,8 @@ pub struct VoteSubmitResult {
 
 /// 构建内部投票（`internal_vote`）签名请求。
 ///
-/// 管理员一人一票统一走 `InternalVote::cast`(pallet=20, call=0),
+/// 内部投票统一走 `InternalVote::cast`(pallet=20, call=0)；个人多签按管理员账户，
+/// 机构按 VotePlan 冻结的岗位任职资格。
 /// 由投票引擎按 ProposalData 前缀自动分派到对应 `InternalVoteExecutor`。
 ///
 /// Call 编码: `[0x14][0x00][proposal_id:u64_le][approve:bool]` 共 11 字节。

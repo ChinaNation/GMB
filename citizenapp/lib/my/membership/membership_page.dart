@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:citizenapp/8964/chain/square_chain_service.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
-import 'package:citizenapp/my/creator/creator_money.dart' show fenToYuanLabel;
+import 'package:citizenapp/my/creator/creator_money.dart'
+    show fenToYuanMoneyLabel;
+import 'package:citizenapp/my/membership/membership_detail_page.dart';
 import 'package:citizenapp/my/membership/subscription_service.dart';
 import 'package:citizenapp/rpc/subscription_rpc.dart';
 import 'package:citizenapp/ui/app_theme.dart';
@@ -170,6 +172,30 @@ class _MembershipPageState extends State<MembershipPage>
     }
   }
 
+  /// 打开该档「会员详情页」（完整权益只读展示 + 订阅入口，订阅动作仍走本页 [_handleAction]）。
+  void _openDetail(
+    SquareMembershipPlan plan,
+    int? priceFen,
+    SquareMembershipState state,
+  ) {
+    final action = _actionFor(state, plan.membershipLevel);
+    final label = action != _SubscribeAction.cancel && priceFen == null
+        ? '链上价格未就绪'
+        : _actionLabel(action);
+    final enabled = action == _SubscribeAction.cancel || priceFen != null;
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => MembershipDetailPage(
+          plan: plan,
+          priceFen: priceFen,
+          actionLabel: label,
+          subscribeEnabled: enabled,
+          onSubscribe: () => _handleAction(plan.membershipLevel),
+        ),
+      ),
+    );
+  }
+
   void _animateToPage(int target) {
     final clamped = target.clamp(0, (_cardCount - 1).clamp(0, 99)).toDouble();
     _snapAnim = Tween<double>(begin: _page, end: clamped).animate(
@@ -327,6 +353,7 @@ class _MembershipPageState extends State<MembershipPage>
               priceFen: priceFen,
               busy: _busy,
               onTapAction: () => _handleAction(plan.membershipLevel),
+              onViewDetail: () => _openDetail(plan, priceFen, state),
               elevated: isFront,
             ),
           ),
@@ -375,6 +402,7 @@ class _MembershipTierCard extends StatelessWidget {
     required this.priceFen,
     required this.busy,
     required this.onTapAction,
+    required this.onViewDetail,
     this.elevated = true,
   });
 
@@ -388,6 +416,9 @@ class _MembershipTierCard extends StatelessWidget {
   final bool busy;
 
   final VoidCallback onTapAction;
+
+  /// 点击「查看详细权益」进入该档会员详情页。
+  final VoidCallback onViewDetail;
 
   /// 是否在最上层（决定投影强度）。
   final bool elevated;
@@ -422,7 +453,7 @@ class _MembershipTierCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildHeader(tierColor, onTier, isCurrentTier),
+          _buildHeader(tierColor, onTier, isCurrentTier, priceFen),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
@@ -440,42 +471,70 @@ class _MembershipTierCard extends StatelessWidget {
                             color: tierColor,
                           ),
                           const SizedBox(height: 10),
+                          // 卡片提炼短行（每条 1 行）；完整权益见「查看详细权益」详情页。
                           _ParamLine(
                             icon: Icons.attach_file_outlined,
                             color: tierColor,
-                            text: plan.chatFileLabel,
+                            text:
+                                '聊天文件 每个 ${plan.chatFileSizeLabel}${plan.supportsLargeFileRelay ? ' · 大文件中转' : ''}',
                           ),
                           const SizedBox(height: 8),
                           _ParamLine(
-                            icon: Icons.dynamic_feed_outlined,
+                            icon: Icons.videocam_outlined,
                             color: tierColor,
-                            text: plan.dynamicLabel,
+                            text:
+                                '动态视频 ${plan.dynamicVideoDurationLabel} · ${plan.dynamicVideoQualityLabel}',
+                          ),
+                          const SizedBox(height: 8),
+                          _ParamLine(
+                            icon: Icons.photo_outlined,
+                            color: tierColor,
+                            text:
+                                '动态图片 ${plan.dynamicMaxImages} 张 · ${plan.dynamicImageQualityLabel}',
                           ),
                           const SizedBox(height: 8),
                           _ParamLine(
                             icon: Icons.article_outlined,
                             color: tierColor,
-                            text: plan.articleLabel,
+                            text:
+                                '文章 ${_wanLabel(plan.articleBodyMaxChars)} · ${plan.articleMaxImages} 图',
+                          ),
+                          const SizedBox(height: 8),
+                          _ParamLine(
+                            icon: Icons.cloud_upload_outlined,
+                            color: tierColor,
+                            text:
+                                '每月 图 ${_thousands(plan.monthlyImages)} · 视频 ${plan.monthlyVideoDurationLabel}',
+                          ),
+                          const SizedBox(height: 8),
+                          _ParamLine(
+                            icon: Icons.auto_awesome_outlined,
+                            color: tierColor,
+                            text: '整体画质 ${plan.dynamicImageQualityLabel}',
                           ),
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  // 价格：档色填充标签，公民币月价（链上单源，读不到显示「—」）。
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: tierColor,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _priceLabel(priceFen),
-                      style: TextStyle(
-                        color: onTier,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
+                  const SizedBox(height: 8),
+                  // 查看详细权益：整行可点，进入该档会员详情页。
+                  InkWell(
+                    onTap: onViewDetail,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        children: [
+                          Text(
+                            '查看详细权益',
+                            style: TextStyle(
+                              color: tierColor,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const Spacer(),
+                          Icon(Icons.chevron_right, size: 18, color: tierColor),
+                        ],
                       ),
                     ),
                   ),
@@ -504,59 +563,97 @@ class _MembershipTierCard extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(Color tierColor, Color onTier, bool isCurrentTier) {
+  Widget _buildHeader(
+      Color tierColor, Color onTier, bool isCurrentTier, int? priceFen) {
     return Container(
       color: tierColor,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            '会员订阅',
-            style: TextStyle(
-              color: onTier.withValues(alpha: 0.82),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.4,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '会员订阅',
+                  style: TextStyle(
+                    color: onTier.withValues(alpha: 0.82),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  plan.displayName,
+                  style: TextStyle(
+                    color: onTier,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (isCurrentTier) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: onTier.withAlpha(38),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '当前会员',
+                      style: TextStyle(
+                        color: onTier,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            plan.displayName,
-            style: TextStyle(
-              color: onTier,
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          if (isCurrentTier) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: onTier.withAlpha(38),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                '当前会员',
+          const SizedBox(width: 12),
+          // 价格移至右上角：千分号 + 两位小数 + 元/月（链上单源，读不到显示「—」）。
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                priceFen == null ? '—' : fenToYuanMoneyLabel(priceFen),
                 style: TextStyle(
                   color: onTier,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-            ),
-          ],
+              if (priceFen != null)
+                Text(
+                  '/月',
+                  style: TextStyle(
+                    color: onTier.withValues(alpha: 0.82),
+                    fontSize: 11,
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-/// 本档链上月价 → 展示文案；null=链上未设该档价，显示占位「—」。
-String _priceLabel(int? priceFen) =>
-    priceFen == null ? '—' : '${fenToYuanLabel(priceFen)} 公民币/月';
+/// 整数千分号：1500 → "1,500"。
+String _thousands(int n) =>
+    n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+$)'), (_) => ',');
+
+/// 字数「万」简写：20000 → "2 万字"；非整万回退千分号原值。
+String _wanLabel(int chars) => chars >= 10000 && chars % 10000 == 0
+    ? '${chars ~/ 10000} 万字'
+    : '${_thousands(chars)} 字';
 
 /// 同一业务操作只签一次：新订阅、取消当前订阅、换到另一档分别提交一笔链上交易。
 enum _SubscribeAction { subscribe, change, cancel }
@@ -775,6 +872,8 @@ class _ActiveMembershipBanner extends StatelessWidget {
     final route = switch (state.subscriptionStatus) {
       'cancelled' => '已取消 · 到期终止',
       'terminated' => '扣款失败 · 订阅已终止',
+      'suspended' => '已挂起 · 待重新签名或充值',
+      'creatorPaused' => '创作者暂停 · 恢复后自动续',
       _ => '链上到期自动续费',
     };
     final window =
@@ -886,12 +985,16 @@ const List<SquareMembershipPlan> _fallbackMembershipPlans = [
     dynamicVideoQuality: 'sd',
     dynamicMaxVideos: 1,
     dynamicMaxVideoSeconds: 60,
+    dynamicMaxVideoBytes: 40 * _mib,
     articleTitleMinChars: 10,
     articleTitleMaxChars: 50,
     articleBodyMaxChars: 20000,
     articleCoverQuality: 'hd',
     articleImageQuality: 'sd',
     articleMaxImages: 50,
+    monthlyImages: 300,
+    monthlyVideoSeconds: 1800,
+    activeUploads: 1,
   ),
   SquareMembershipPlan(
     membershipLevel: 'democracy',
@@ -903,12 +1006,16 @@ const List<SquareMembershipPlan> _fallbackMembershipPlans = [
     dynamicVideoQuality: 'hd',
     dynamicMaxVideos: 1,
     dynamicMaxVideoSeconds: 1800,
+    dynamicMaxVideoBytes: 1536 * _mib,
     articleTitleMinChars: 10,
     articleTitleMaxChars: 50,
     articleBodyMaxChars: 30000,
     articleCoverQuality: 'hd',
     articleImageQuality: 'hd',
     articleMaxImages: 100,
+    monthlyImages: 1500,
+    monthlyVideoSeconds: 10800,
+    activeUploads: 2,
   ),
   SquareMembershipPlan(
     membershipLevel: 'spark',
@@ -920,12 +1027,16 @@ const List<SquareMembershipPlan> _fallbackMembershipPlans = [
     dynamicVideoQuality: 'hd',
     dynamicMaxVideos: 1,
     dynamicMaxVideoSeconds: 10800,
+    dynamicMaxVideoBytes: 8192 * _mib,
     articleTitleMinChars: 10,
     articleTitleMaxChars: 50,
     articleBodyMaxChars: 30000,
     articleCoverQuality: 'hd',
     articleImageQuality: 'hd',
     articleMaxImages: 100,
+    monthlyImages: 5000,
+    monthlyVideoSeconds: 108000,
+    activeUploads: 3,
   ),
 ];
 

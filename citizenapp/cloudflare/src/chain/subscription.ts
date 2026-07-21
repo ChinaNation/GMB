@@ -25,7 +25,14 @@ export type SubscriptionIssuer =
   | { kind: "platform" }
   | { kind: "creator"; creatorAccount: string };
 
-export type SubscriptionStatus = "active" | "cancelled" | "terminated";
+export type SubscriptionStatus =
+  | "active"
+  | "cancelled"
+  | "terminated"
+  | "suspended"
+  | "creatorPaused";
+
+export type SuspendReason = "needReconsent" | "insufficientBalance";
 
 export type PlatformLevel = "freedom" | "democracy" | "spark";
 export type BillingPeriod = "monthly" | "quarterly" | "yearly";
@@ -36,12 +43,15 @@ export type ChainSubscriptionPlan =
 
 export interface ChainSubscriptionState {
   plan: ChainSubscriptionPlan;
-  pendingPlan: ChainSubscriptionPlan | null;
   startedAt: number;
   lastChargedAt: number;
   lastChargedPriceFen: bigint;
   paidUntil: number;
   status: SubscriptionStatus;
+  /** 订阅者已授权用于自动续费的价格；创作者改价后据此判定是否需重新签名。 */
+  authorizedPriceFen: bigint;
+  /** 挂起原因；仅 status 为 suspended 时非空。 */
+  suspendReason: SuspendReason | null;
 }
 
 export interface ChainCreatorTier {
@@ -114,6 +124,8 @@ const STATUS_BY_BYTE: Record<number, SubscriptionStatus> = {
   0: "active",
   1: "cancelled",
   2: "terminated",
+  3: "suspended",
+  4: "creatorPaused",
 };
 
 function encodeIssuerKey(issuer: SubscriptionIssuer): Uint8Array {
@@ -210,22 +222,13 @@ function readPlan(
 export function decodeSubscriptionState(
   data: Uint8Array,
 ): ChainSubscriptionState {
-  let decoded = readPlan(data, 0);
+  const decoded = readPlan(data, 0);
   const plan = decoded.value;
   let offset = decoded.offset;
 
-  if (offset >= data.length) throw new RangeError("missing pending plan tag");
-  const pendingTag = data[offset++];
-  let pendingPlan: ChainSubscriptionPlan | null = null;
-  if (pendingTag === 1) {
-    decoded = readPlan(data, offset);
-    pendingPlan = decoded.value;
-    offset = decoded.offset;
-  } else if (pendingTag !== 0) {
-    throw new RangeError("invalid pending plan tag");
-  }
-
-  if (offset + 8 + 8 + 16 + 8 + 1 > data.length) {
+  // started_at(8)+last_charged_at(8)+last_charged_price_fen(16)+paid_until(8)
+  // +status(1)+authorized_price_fen(16)+suspend_reason Option 至少 1 字节。
+  if (offset + 8 + 8 + 16 + 8 + 1 + 16 + 1 > data.length) {
     throw new RangeError("subscription state truncated");
   }
   const startedAt = readU64Le(data, offset);
@@ -240,18 +243,39 @@ export function decodeSubscriptionState(
 
   const status = STATUS_BY_BYTE[data[offset++]];
   if (!status) throw new RangeError("invalid subscription status");
+
+  const authorizedPriceFen = readU128Le(data, offset);
+  offset += 16;
+
+  const suspendTag = data[offset++];
+  let suspendReason: SuspendReason | null = null;
+  if (suspendTag === 1) {
+    if (offset >= data.length) throw new RangeError("missing suspend_reason value");
+    const reasonByte = data[offset++];
+    if (reasonByte === 0) {
+      suspendReason = "needReconsent";
+    } else if (reasonByte === 1) {
+      suspendReason = "insufficientBalance";
+    } else {
+      throw new RangeError("invalid suspend_reason");
+    }
+  } else if (suspendTag !== 0) {
+    throw new RangeError("invalid suspend_reason tag");
+  }
+
   if (offset !== data.length) throw new RangeError("subscription state has trailing bytes");
   if (paidUntil <= lastChargedAt) {
     throw new RangeError("paid_until must be after last_charged_at");
   }
   return {
     plan,
-    pendingPlan,
     startedAt,
     lastChargedAt,
     lastChargedPriceFen,
     paidUntil,
     status,
+    authorizedPriceFen,
+    suspendReason,
   };
 }
 

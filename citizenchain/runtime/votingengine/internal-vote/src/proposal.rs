@@ -97,31 +97,15 @@ impl<T: Config> Pallet<T> {
                 }
             };
             let threshold =
-                if let Some(fixed_threshold) = fixed_governance_pass_threshold(&institution_code) {
-                    fixed_threshold
-                } else if primitives::institution_constraints::is_permanent_singleton_code(
-                    &institution_code,
-                ) {
-                    snapshot_size / 2 + 1
-                } else {
-                    match active_institution_threshold::<T>(institution_code, &actor_cid_number) {
-                        Some(threshold) => threshold,
-                        None => {
-                            return TransactionOutcome::Rollback(Err(
-                                Error::<T>::MissingDynamicThreshold.into(),
-                            ))
-                        }
+                match active_institution_threshold::<T>(institution_code, &actor_cid_number) {
+                    Some(threshold) => threshold,
+                    None => {
+                        return TransactionOutcome::Rollback(Err(
+                            Error::<T>::MissingDynamicThreshold.into(),
+                        ))
                     }
                 };
-            let threshold_check =
-                if primitives::institution_constraints::is_permanent_singleton_code(
-                    &institution_code,
-                ) || is_registered_multisig_code(&institution_code)
-                {
-                    Self::ensure_dynamic_threshold(snapshot_size, threshold)
-                } else {
-                    Self::ensure_threshold_within_snapshot(snapshot_size, threshold)
-                };
+            let threshold_check = Self::ensure_dynamic_threshold(snapshot_size, threshold);
             if let Err(err) = threshold_check {
                 return TransactionOutcome::Rollback(Err(err));
             }

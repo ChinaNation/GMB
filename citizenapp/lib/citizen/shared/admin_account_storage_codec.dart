@@ -38,7 +38,10 @@ class AdminAccountStorageCodec {
   }) {
     try {
       if (kind != kindPersonal) {
-        final decoded = InstitutionRoleStorageCodec.decodeAdmins(bytes);
+        final decoded = InstitutionRoleStorageCodec.decodeAdmins(
+          bytes,
+          isPublic: kind == kindPublicInstitution,
+        );
         if (decoded == null) return null;
         return AdminAccountStorageDecoded(
           institutionCode: decoded.institutionCode,

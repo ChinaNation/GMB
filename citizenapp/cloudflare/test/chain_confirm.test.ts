@@ -456,7 +456,6 @@ class FakeStmt {
       return {
         owner_account: ownerAccount,
         membership_level: "democracy",
-        pending_membership_level: null,
         started_at: Date.now() - 60_000,
         last_charged_at: Date.now() - 60_000,
         last_charged_price_fen: 100,

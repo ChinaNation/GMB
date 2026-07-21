@@ -4,7 +4,7 @@
 // - 本文件只读链上机构身份事实,供清算行流程展示:机构最小集、各账户余额、管理员集合、动态阈值。
 // - 机构最小集真源 `PublicManage/PrivateManage::Institutions[cid_number]` 只存身份字段;
 // - 账户真源为 `InstitutionAccounts[(cid_number, account_name)]`;
-// - 管理员与阈值分别按 CID 读取 `AdminAccounts`、`ActiveInstitutionThresholds`。
+// - 管理员与阈值分别按 CID 读取 admins 与 entity 的机构治理阈值真源。
 // - 清算行节点声明 `OffchainTransaction::ClearingBankNodes` 走 `offchain::endpoint`,
 //   与机构身份只读解耦。
 
@@ -196,13 +196,17 @@ fn fetch_admin_set(
     Ok((state.admins, admins_len))
 }
 
-/// 读取机构内部投票动态阈值。
+/// 读取机构治理阈值。
 ///
-/// 真源 = `InternalVote::ActiveInstitutionThresholds[cid_number]`（Blake2_128Concat Map）；
-/// 机构码只用于业务分类，不参与阈值身份 key，未注册返回 0。
-fn fetch_active_threshold(cid_number: &str, finalized_hash: &str) -> Result<u32, String> {
+/// 真源 = `PublicManage/PrivateManage::InstitutionGovernanceThresholds[cid_number]`；
+/// 投票引擎只消费该值，不保存第二份机构阈值。
+fn fetch_institution_threshold(
+    cid_number: &str,
+    manage_pallet: &str,
+    finalized_hash: &str,
+) -> Result<u32, String> {
     let cid_key = encode_cid_key_data(cid_number)?;
-    let key = storage_keys::map_key("InternalVote", "ActiveInstitutionThresholds", &cid_key);
+    let key = storage_keys::map_key(manage_pallet, "InstitutionGovernanceThresholds", &cid_key);
     let result = rpc_post(
         "state_getStorage",
         Value::Array(vec![
@@ -215,9 +219,9 @@ fn fetch_active_threshold(cid_number: &str, finalized_hash: &str) -> Result<u32,
         Value::String(hex_data) => {
             let clean = hex_data.strip_prefix("0x").unwrap_or(&hex_data);
             let bytes = hex::decode(clean)
-                .map_err(|e| format!("ActiveInstitutionThresholds hex 解码失败:{e}"))?;
+                .map_err(|e| format!("InstitutionGovernanceThresholds hex 解码失败:{e}"))?;
             u32::decode(&mut &bytes[..])
-                .map_err(|e| format!("ActiveInstitutionThresholds SCALE 解码失败:{e}"))
+                .map_err(|e| format!("InstitutionGovernanceThresholds SCALE 解码失败:{e}"))
         }
         _ => Err("state_getStorage 返回格式无效".to_string()),
     }
@@ -242,7 +246,7 @@ fn institution_manage_pallet(cid_number: &str) -> &'static str {
 /// 1. `PublicManage/PrivateManage::Institutions[cid_number]` 取机构身份最小集(按机构码路由 pallet)
 /// 2. `state_getKeysPaged` + `…::InstitutionAccounts[cid_number, *]` 取账户列表
 /// 3. 每个账户的 `System::Account[address].data.free` 取链上余额
-/// 4. 主/费账户由 GMB 协议派生地址定位;管理员集合取管理员 pallet,阈值取 internal-vote
+/// 4. 主/费账户由 GMB 协议派生地址定位；管理员集合取 admins，阈值取 entity
 pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDetail>, String> {
     // (ADR-017):取一次 finalized 快照,机构详情/账户列表/余额/阈值全部钉同一块。
     let finalized_hash = chain_query::fetch_finalized_head()?;
@@ -297,7 +301,7 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
 
     let (admins, admins_len) =
         fetch_admin_set(&inst.institution_code, cid_number, &finalized_hash)?;
-    let threshold = fetch_active_threshold(cid_number, &finalized_hash)?;
+    let threshold = fetch_institution_threshold(cid_number, manage_pallet, &finalized_hash)?;
 
     let cid_full_name = String::from_utf8(inst.cid_full_name.into_inner())
         .map_err(|_| "cid_full_name 非 UTF-8".to_string())?;

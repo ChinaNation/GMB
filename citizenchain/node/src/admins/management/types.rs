@@ -33,9 +33,11 @@ pub struct InstitutionRoleAssignmentInfo {
 pub struct InstitutionAdminInfo {
     /// 管理员钱包账户，hex 不含 0x。
     pub admin_account: String,
-    /// 管理员姓；缺失值由 runtime 统一补为“管理”。
+    /// 公权管理员公民 CID；私权管理员及尚未补齐的公权记录为空。
+    pub cid_number: String,
+    /// 管理员姓；公权记录允许暂时为空。
     pub family_name: String,
-    /// 管理员名；缺失值由 runtime 统一补为“员”。
+    /// 管理员名；公权记录允许暂时为空。
     pub given_name: String,
     pub assignments: Vec<InstitutionRoleAssignmentInfo>,
 }
@@ -63,10 +65,11 @@ pub struct AdminAccountDecoded {
     pub admins: Vec<AdminDecoded>,
 }
 
-/// 从共享 SCALE 类型严格解码出的管理员三字段记录。
+/// 从共享 SCALE 类型严格解码出的管理员统一展示记录。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AdminDecoded {
     pub admin_account: String,
+    pub cid_number: String,
     pub family_name: String,
     pub given_name: String,
 }

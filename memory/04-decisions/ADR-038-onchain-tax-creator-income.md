@@ -18,7 +18,7 @@
 ## 决策（只定机制，不定值）
 
 **1. 独立税务 pallet，与订阅正交；订阅侧全额到账不预扣**
-- `subscription`（ADR-037）扣订阅款后**全额转收款方**（平台→技术公司账户；创作者→创作者钱包），**不扣税、不分账**。
+- `subscription`（ADR-037）扣订阅款后**全额转收款方**（平台→公民链基金会费用账户；创作者→创作者钱包），**不扣税、不分账**。
 - 税务是收款方作为纳税主体的**后置周期义务**，与订阅资金流解耦。
 
 **2. 纳税主体 = CID；税务管辖由 CID 决定**
@@ -66,7 +66,7 @@ IncomeLedger: StorageMap<(taxpayer_cid, tax_period), accrued_income /*分*/>
 
 - **链（重大，重新创世无 migration）**：新税务 pallet（`IncomeLedger`/`TaxAuthorization`/税率与规则可配置 storage/申报期结算执行）；`RuntimeTaxSubjectQuery`（钉稳定 CID 反查，不跑地址 union）；`legislation-yuan` 回调写 `TaxAuthorization`；`InternalVoteResultCallback` 扩 executor；`subscription` 收款成功记 `IncomeLedger` 的接线。
 - **onchina**：`domains/fiscal/` 税务机构设规则入口（`internal-vote` + 冷签 + 能力位绑唯一税务机构 CID）；申报/结算相关 workspace。
-- **Worker/App**：税在链上；创作者/技术公司看应税收入台账与申报状态读链。
+- **Worker/App**：税在链上；创作者/公民链基金会看应税收入台账与申报状态读链。
 
 ## 备选方案
 
