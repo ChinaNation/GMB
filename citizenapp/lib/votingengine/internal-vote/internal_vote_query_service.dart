@@ -2,10 +2,11 @@ import 'dart:typed_data';
 
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:citizenapp/rpc/chain_rpc.dart';
+import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
 
 /// InternalVote 通用查询服务。
 ///
-/// 管理员投票记录属于投票引擎通用状态，不放进具体业务模块，
+/// 内部投票记录属于投票引擎通用状态，不放进具体业务模块，
 /// 避免 proposal 共享层依赖业务 service。
 class InternalVoteQueryService {
   InternalVoteQueryService({ChainRpc? chainRpc})
@@ -15,14 +16,30 @@ class InternalVoteQueryService {
 
   /// 查询某管理员对某提案的投票记录。null=未投票，true=赞成，false=反对。
   Future<bool?> fetchAdminVote(int proposalId, String pubkeyHex) async {
-    final data = await _rpc.fetchStorage(_adminVoteKey(proposalId, pubkeyHex));
+    final data = await _rpc.fetchStorage(_ticketVoteKey(proposalId, pubkeyHex));
+    return _decodeVote(data);
+  }
+
+  /// 查询一张机构岗位票据；CID、岗位码、钱包三者共同确定唯一票。
+  Future<bool?> fetchInstitutionTicketVote(
+    int proposalId,
+    String cidNumber,
+    String voterRoleCode,
+    String pubkeyHex,
+  ) async {
+    final data = await _rpc.fetchStorage(_ticketVoteKey(
+      proposalId,
+      pubkeyHex,
+      cidNumber: cidNumber,
+      voterRoleCode: voterRoleCode,
+    ));
     return _decodeVote(data);
   }
 
   /// 批量查询管理员投票记录。
   ///
   /// 详情页和红点判断不能再按管理员逐条 RPC；这里统一拼好
-  /// `InternalVotesByAccount` storage key 后分块读取。
+  /// `InternalVotesByTicket` 的个人票据 storage key 后分块读取。
   Future<Map<String, bool?>> fetchAdminVotesBatch(
     int proposalId,
     Iterable<String> pubkeysHex,
@@ -31,13 +48,34 @@ class InternalVoteQueryService {
     for (final pubkey in pubkeysHex) {
       final clean = _normalizeHex(pubkey);
       if (clean.isEmpty) continue;
-      keyByPubkey[clean] = _adminVoteKey(proposalId, clean);
+      keyByPubkey[clean] = _ticketVoteKey(proposalId, clean);
     }
     if (keyByPubkey.isEmpty) return const {};
 
     final values = await _rpc.fetchStorageBatchChunked(keyByPubkey.values);
     return {
       for (final entry in keyByPubkey.entries)
+        entry.key: _decodeVote(values[entry.value]),
+    };
+  }
+
+  /// 批量查询完整票据；返回键为 [EligibleVoterTicket.ticketKey]。
+  Future<Map<String, bool?>> fetchTicketVotesBatch(
+    int proposalId,
+    Iterable<EligibleVoterTicket> tickets,
+  ) async {
+    final storageByTicket = <String, String>{};
+    for (final ticket in tickets) {
+      storageByTicket[ticket.ticketKey] = _ticketVoteKey(
+        proposalId,
+        ticket.pubkeyHex,
+        cidNumber: ticket.cidNumber,
+        voterRoleCode: ticket.voterRoleCode,
+      );
+    }
+    final values = await _rpc.fetchStorageBatchChunked(storageByTicket.values);
+    return {
+      for (final entry in storageByTicket.entries)
         entry.key: _decodeVote(values[entry.value]),
     };
   }
@@ -56,7 +94,7 @@ class InternalVoteQueryService {
       for (final pubkey in entry.value) {
         final clean = _normalizeHex(pubkey);
         if (clean.isEmpty) continue;
-        keyToCoord[_adminVoteKey(entry.key, clean)] =
+        keyToCoord[_ticketVoteKey(entry.key, clean)] =
             (pid: entry.key, pk: clean);
       }
     }
@@ -70,13 +108,59 @@ class InternalVoteQueryService {
     return result;
   }
 
-  String _adminVoteKey(int proposalId, String pubkeyHex) {
+  /// 跨提案批量查询完整票据；机构岗位票据和个人票据共用一次分块读取。
+  Future<Map<int, Map<String, bool?>>> fetchTicketVotesForProposals(
+    Map<int, List<EligibleVoterTicket>> ticketsByProposal,
+  ) async {
+    final keyToCoord = <String, ({int pid, String ticketKey})>{};
+    for (final entry in ticketsByProposal.entries) {
+      for (final ticket in entry.value) {
+        final storageKey = _ticketVoteKey(
+          entry.key,
+          ticket.pubkeyHex,
+          cidNumber: ticket.cidNumber,
+          voterRoleCode: ticket.voterRoleCode,
+        );
+        keyToCoord[storageKey] = (
+          pid: entry.key,
+          ticketKey: ticket.ticketKey,
+        );
+      }
+    }
+    if (keyToCoord.isEmpty) return const {};
+    final values = await _rpc.fetchStorageBatchChunked(keyToCoord.keys);
+    final result = <int, Map<String, bool?>>{};
+    keyToCoord.forEach((key, coord) {
+      (result[coord.pid] ??= <String, bool?>{})[coord.ticketKey] =
+          _decodeVote(values[key]);
+    });
+    return result;
+  }
+
+  String _ticketVoteKey(
+    int proposalId,
+    String pubkeyHex, {
+    String? cidNumber,
+    String? voterRoleCode,
+  }) {
     final proposalIdBytes = _u64ToLeBytes(proposalId);
     final accountBytes = _hexDecode(pubkeyHex);
+    final ticketBytes = BytesBuilder(copy: false);
+    if (cidNumber == null && voterRoleCode == null) {
+      ticketBytes.addByte(0); // InternalVoteTicket::Personal
+      ticketBytes.add(accountBytes);
+    } else if (cidNumber != null && voterRoleCode != null) {
+      ticketBytes.addByte(1); // InternalVoteTicket::Institution
+      ticketBytes.add(_encodeBoundedText(cidNumber, 32, 'cid_number'));
+      ticketBytes.add(_encodeBoundedText(voterRoleCode, 64, 'voter_role_code'));
+      ticketBytes.add(accountBytes);
+    } else {
+      throw ArgumentError('机构票据查询必须同时提供 cid_number 和 voter_role_code');
+    }
     final palletHash = Hasher.twoxx128.hashString('InternalVote');
-    final storageHash = Hasher.twoxx128.hashString('InternalVotesByAccount');
+    final storageHash = Hasher.twoxx128.hashString('InternalVotesByTicket');
     final key1 = _blake2128Concat(proposalIdBytes);
-    final key2 = _blake2128Concat(accountBytes);
+    final key2 = _blake2128Concat(ticketBytes.toBytes());
     final fullKey = Uint8List(
       palletHash.length + storageHash.length + key1.length + key2.length,
     );
@@ -95,10 +179,22 @@ class InternalVoteQueryService {
     if (data == null) return null;
     if (data.length != 1 || (data[0] != 0 && data[0] != 1)) {
       throw const FormatException(
-        'InternalVotesByAccount 必须是严格的 SCALE bool',
+        'InternalVotesByTicket 必须是严格的 SCALE bool',
       );
     }
     return data[0] == 1;
+  }
+
+  Uint8List _encodeBoundedText(String value, int maxBytes, String field) {
+    final bytes = Uint8List.fromList(value.codeUnits);
+    if (bytes.isEmpty || bytes.length > maxBytes) {
+      throw ArgumentError('$field 长度不合法');
+    }
+    final length = bytes.length;
+    final prefix = length < 64
+        ? <int>[length << 2]
+        : <int>[(length << 2 | 1) & 0xff, (length << 2 | 1) >> 8];
+    return Uint8List.fromList([...prefix, ...bytes]);
   }
 
   Uint8List _u64ToLeBytes(int value) {

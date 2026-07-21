@@ -17,7 +17,7 @@ impl<T: Config> votingengine::traits::InternalCleanupHandler for Pallet<T> {
         proposal_id: u64,
         limit: u32,
     ) -> votingengine::traits::CleanupChunkResult {
-        let result = InternalVotesByAccount::<T>::clear_prefix(proposal_id, limit, None);
+        let result = InternalVotesByTicket::<T>::clear_prefix(proposal_id, limit, None);
         let has_remaining = result.maybe_cursor.is_some();
         (result.unique, has_remaining)
     }

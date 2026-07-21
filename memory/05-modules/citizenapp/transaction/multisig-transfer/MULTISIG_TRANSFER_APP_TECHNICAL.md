@@ -38,11 +38,11 @@
 
 详情页优先读取：
 
-- 机构提案：`VotingEngine::EffectiveVoterSnapshot[(proposal_id, actor_cid_number)]`
+- 机构提案：按 VotePlan 中每个完整 `RoleSubject` 读取 `VotingEngine::VoterSnapshot`
 - 个人多签提案：`VotingEngine::AdminSnapshot[(proposal_id, PersonalAccount)]`
 - `InternalVote::InternalThresholdSnapshot`
 - `InternalVote::InternalTallies`
-- `InternalVote::InternalVotesByAccount`
+- `InternalVote::InternalVotesByTicket`
 
 进度条使用提案创建时的阈值快照，避免管理员变更后旧提案进度显示错误。
 
@@ -64,12 +64,12 @@
 
 投票提交和确认：
 
-- 投票成功真源是 `InternalVote::InternalVotesByAccount(proposal_id, admin)`，不是 txHash、交易池 watch 或本地 nonce。
-- `InternalVoteService.submit()` 必须等待交易 `inBlock / finalized`，随后回读 `InternalVote::InternalVotesByAccount`，确认该管理员投票已经写入 runtime。
+- 投票成功真源是 `InternalVote::InternalVotesByTicket(proposal_id, ticket)`，不是 txHash、交易池 watch 或本地 nonce。机构 ticket 必须包含 CID、岗位码和钱包。
+- `InternalVoteService.submit()` 必须等待交易 `inBlock / finalized`，随后回读 `InternalVote::InternalVotesByTicket`，确认该岗位票据已经写入 runtime。
 - CitizenApp 不缓存、不预占、不回滚交易 nonce；每次签名前实时读取 runtime `frame_system::Account.nonce`。
 - 新成功流程不再写本地 pending；确认成功后只清理旧残留 pending，并立即把该管理员显示为已投票。
 - `timeout / finalityTimeout / retracted / future / error`：保留本地 pending，并提示用户刷新后以链上投票记录为准。
 - `invalid / dropped / usurped`：先复核链上投票记录；如果仍没有投票记录，清除本地 pending，并提示交易未出块原因。
-- `inBlock / finalized` 只代表交易进块；仍必须以 `InternalVotesByAccount` 回读结果为准。
+- `inBlock / finalized` 只代表交易进块；仍必须以 `InternalVotesByTicket` 回读结果为准。
 - runtime 无投票记录且 pending 超过 20 分钟时，视为本地提交没有形成有效投票，清除 pending 后允许重新提交，避免管理员明细无限显示“投票中”。
 - 服务层完成入块和 runtime 投票记录确认后，按钮 `submitting` 结束；详情页 `_load(showSpinner: false)` 只负责后台同步最新展示状态。

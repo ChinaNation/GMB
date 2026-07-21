@@ -1,7 +1,6 @@
 //! 立法投票 `cast_representative_vote` 等裸 SCALE call-data 编码器（pallet 26）。
 //!
-//! 链端 `legislation-vote` 的 5 个表决/签署 call 形态完全相同——
-//! `(proposal_id: u64, approve: bool)`(lib.rs:317/329/342/355/367)。
+//! 代表机构表决携带 `voter_role_code`；其余签署调用仍为 `(proposal_id, approve)`。
 //! 复用「构造裸 call data → CitizenWallet 一次签名并显示响应二维码
 //! → OnChina 回扫后统一提交」通道。
 //!
@@ -12,6 +11,7 @@
 #![allow(dead_code)]
 
 use crate::core::institution_call::{chain_action_code, ChainCall};
+use codec::Encode;
 
 /// LegislationVote pallet 在 construct_runtime 的索引。
 pub const LEGISLATION_VOTE_PALLET_INDEX: u8 = 26;
@@ -38,8 +38,27 @@ fn encode_vote(call_index: u8, proposal_id: u64, approve: bool) -> ChainCall {
 }
 
 /// 当前代表机构的管理员按其机构席位投票。
-pub fn encode_cast_representative_vote(proposal_id: u64, approve: bool) -> ChainCall {
-    encode_vote(CAST_REPRESENTATIVE_VOTE_CALL_INDEX, proposal_id, approve)
+pub fn encode_cast_representative_vote(
+    proposal_id: u64,
+    voter_role_code: &str,
+    approve: bool,
+) -> ChainCall {
+    let role_code = voter_role_code.trim().as_bytes();
+    assert!(!role_code.is_empty() && role_code.len() <= 64);
+    let mut out = vec![
+        LEGISLATION_VOTE_PALLET_INDEX,
+        CAST_REPRESENTATIVE_VOTE_CALL_INDEX,
+    ];
+    out.extend(proposal_id.to_le_bytes());
+    out.extend(role_code.to_vec().encode());
+    out.push(if approve { 0x01 } else { 0x00 });
+    ChainCall {
+        action: chain_action_code(
+            LEGISLATION_VOTE_PALLET_INDEX,
+            CAST_REPRESENTATIVE_VOTE_CALL_INDEX,
+        ),
+        call_data: out,
+    }
 }
 
 /// 特别案立法公投。
@@ -70,12 +89,13 @@ mod tests {
     /// 代表机构表决编码 = `[26,1]` + `(u64 小端, bool)`；动作码 0x1A01。
     #[test]
     fn cast_representative_vote_matches_codec_golden() {
-        let chain = encode_cast_representative_vote(42, true);
+        let chain = encode_cast_representative_vote(42, "REPRESENTATIVE", true);
         assert_eq!(&chain.call_data[..2], &[26, 1]);
         assert_eq!(chain.action, 0x1A01);
 
         let mut golden = Vec::new();
         golden.extend(42u64.encode());
+        golden.extend(b"REPRESENTATIVE".to_vec().encode());
         golden.extend(true.encode());
         assert_eq!(
             &chain.call_data[2..],
@@ -88,10 +108,6 @@ mod tests {
     #[test]
     fn all_vote_calls_share_shape_and_call_index() {
         let cases = [
-            (
-                encode_cast_representative_vote(1, false),
-                CAST_REPRESENTATIVE_VOTE_CALL_INDEX,
-            ),
             (
                 encode_cast_referendum_vote(2, false),
                 CAST_REFERENDUM_VOTE_CALL_INDEX,
@@ -106,5 +122,12 @@ mod tests {
             assert_eq!(chain.call_data.len(), 2 + 8 + 1); // 前缀 + u64 + bool
             assert_eq!(*chain.call_data.last().unwrap(), 0x00); // approve=false
         }
+        let representative = encode_cast_representative_vote(1, "REPRESENTATIVE", false);
+        assert_eq!(representative.call_data[0], LEGISLATION_VOTE_PALLET_INDEX);
+        assert_eq!(
+            representative.call_data[1],
+            CAST_REPRESENTATIVE_VOTE_CALL_INDEX
+        );
+        assert_eq!(*representative.call_data.last().unwrap(), 0x00);
     }
 }

@@ -388,11 +388,11 @@ class MultisigTransferService {
   ///
   /// 机构按岗位有效任职快照，个人多签按管理员快照；详情页展示和
   /// 可投钱包筛选必须使用同一份创建时快照。
-  Future<List<String>> fetchEligibleVoterSnapshot(
+  Future<List<EligibleVoterTicket>> fetchEligibleVoterTickets(
     int proposalId,
     InstitutionInfo institution,
   ) {
-    return _proposalQuery.fetchEligibleVoterSnapshot(
+    return _proposalQuery.fetchEligibleVoterTickets(
       proposalId,
       institution,
     );
@@ -907,6 +907,13 @@ class MultisigTransferService {
     Iterable<String> pubkeysHex,
   ) {
     return _internalVoteQuery.fetchAdminVotesBatch(proposalId, pubkeysHex);
+  }
+
+  Future<Map<String, bool?>> fetchTicketVotesBatch(
+    int proposalId,
+    Iterable<EligibleVoterTicket> tickets,
+  ) {
+    return _internalVoteQuery.fetchTicketVotesBatch(proposalId, tickets);
   }
 
   /// 查询 NextProposalId（投票引擎全局递增 ID）。

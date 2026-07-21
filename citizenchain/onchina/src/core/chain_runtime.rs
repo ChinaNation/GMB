@@ -854,15 +854,6 @@ pub(crate) fn chain_province_name_by_code(province_code: [u8; 2]) -> Option<Stri
         .map(|info| info.province_name.to_string())
 }
 
-pub(crate) fn storage_key_suffix<const N: usize>(key_bytes: &[u8]) -> Result<[u8; N], String> {
-    if key_bytes.len() < N {
-        return Err("storage key shorter than expected".to_string());
-    }
-    key_bytes[key_bytes.len() - N..]
-        .try_into()
-        .map_err(|_| "storage key suffix decode failed".to_string())
-}
-
 fn contains_admin(decoded: &OnChainAdminAccount, target: &[u8; 32]) -> bool {
     decoded
         .admins

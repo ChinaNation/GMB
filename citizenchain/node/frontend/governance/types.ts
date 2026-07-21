@@ -22,6 +22,7 @@ export type UserVoteStatus = {
   proposalId: number;
   kind: number;
   stage: number;
+  voterRoleCode: string | null;
   internalVote: boolean | null;
   jointVote: boolean | null;
 };
@@ -32,6 +33,8 @@ export type AdminWalletMatch = {
   address: string;
   pubkeyHex: string;
   walletLabel: string;
+  /// 当前机构内可供选择的任职岗位；同一钱包可拥有多个岗位票据。
+  roleAssignments?: InstitutionRoleAssignmentInfo[];
 };
 
 // ── 管理员激活 ──
@@ -186,5 +189,6 @@ export type ProposalFullInfo = MultisigTransferProposalDetails & {
   internalTally: VoteTally | null;
   jointTally: VoteTally | null;
   referendumTally: { yes: number; no: number } | null;
+  voterRoleSubjects: Array<{ cidNumber: string; roleCode: string }>;
   cidFullName: string | null;
 };

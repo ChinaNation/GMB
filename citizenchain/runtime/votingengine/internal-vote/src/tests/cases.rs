@@ -221,9 +221,16 @@ fn institution_proposal_keeps_cid_identity_and_execution_account_separate() {
             .expect("institution proposal should be created");
 
             assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(3));
-            assert!(VotingEngine::is_effective_voter_in_snapshot(
+            let role_subject = AuthorizationSubject::Institution(RoleSubject {
+                cid_number: actor_cid_number.clone(),
+                role_code: test_institution_role(institution_code)
+                    .to_vec()
+                    .try_into()
+                    .expect("测试岗位码合法"),
+            });
+            assert!(VotingEngine::is_subject_voter_in_snapshot(
                 proposal_id,
-                ProposalSubject::InstitutionCid(actor_cid_number.clone()),
+                role_subject,
                 &test_institution_admin(1)
             ));
             let proposal = VotingEngine::proposals(proposal_id).expect("proposal should exist");
@@ -363,9 +370,16 @@ fn institution_orgs_snapshot_dynamic_active_threshold_by_cid() {
             );
 
             assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(3));
-            assert!(VotingEngine::is_effective_voter_in_snapshot(
+            let role_subject = AuthorizationSubject::Institution(RoleSubject {
+                cid_number: actor_cid_number.clone(),
+                role_code: test_institution_role(institution_code)
+                    .to_vec()
+                    .try_into()
+                    .expect("测试岗位码合法"),
+            });
+            assert!(VotingEngine::is_subject_voter_in_snapshot(
                 proposal_id,
-                ProposalSubject::InstitutionCid(actor_cid_number),
+                role_subject,
                 &test_institution_admin(2)
             ));
         }
@@ -1061,7 +1075,7 @@ fn delayed_cleanup_removes_joint_vote_plan_and_role_snapshots() {
                 .is_some()
         );
         assert!(
-            votingengine::EffectiveVoterSnapshot::<Test>::iter_prefix(proposal_id)
+            votingengine::InstitutionTicketCountSnapshot::<Test>::iter_prefix(proposal_id)
                 .next()
                 .is_some()
         );
@@ -1084,7 +1098,7 @@ fn delayed_cleanup_removes_joint_vote_plan_and_role_snapshots() {
             0
         );
         assert_eq!(
-            votingengine::EffectiveVoterSnapshot::<Test>::iter_prefix(proposal_id).count(),
+            votingengine::InstitutionTicketCountSnapshot::<Test>::iter_prefix(proposal_id).count(),
             0
         );
     });
@@ -1757,12 +1771,98 @@ fn internal_vote_public_call_casts_vote() {
             true
         ));
 
-        assert!(InternalVotesByAccount::<Test>::contains_key(
+        let ticket = InternalVoteTicket::Institution(votingengine::InstitutionVoteTicket {
+            role_subject: RoleSubject {
+                cid_number: nrc_cid(),
+                role_code: test_institution_role(NRC)
+                    .to_vec()
+                    .try_into()
+                    .expect("测试岗位码合法"),
+            },
+            voter_account: nrc_admin(0),
+        });
+        assert!(InternalVotesByTicket::<Test>::contains_key(
             proposal_id,
-            &nrc_admin(0)
+            ticket
         ));
         assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 2);
         assert_eq!(InternalTallies::<Test>::get(proposal_id).no, 0);
+    });
+}
+
+#[test]
+fn internal_vote_counts_same_wallet_once_per_role_ticket() {
+    new_test_ext().execute_with(|| {
+        reset_internal_callback_state();
+        // 两个岗位各 3 席，共 6 张票；动态机构阈值必须为严格多数 4。
+        set_institution_threshold(public_cid(), 4);
+        let data = b"multi-role-ticket".to_vec();
+        let owner: BoundedVec<u8, ConstU32<32>> = b"test".to_vec().try_into().unwrap();
+        let primary_role: votingengine::types::RoleCode = b"TEST_ROLE".to_vec().try_into().unwrap();
+        let second_role: votingengine::types::RoleCode =
+            b"TEST_SECOND_ROLE".to_vec().try_into().unwrap();
+        let primary_subject = RoleSubject {
+            cid_number: public_cid(),
+            role_code: primary_role.clone(),
+        };
+        let second_subject = RoleSubject {
+            cid_number: public_cid(),
+            role_code: second_role.clone(),
+        };
+        let vote_plan = votingengine::types::VotePlanOf::try_new(
+            votingengine::types::BusinessActionId {
+                module_tag: owner.clone(),
+                action_code: 0,
+            },
+            owner,
+            AuthorizationSubject::Institution(primary_subject.clone()),
+            vec![
+                AuthorizationSubject::Institution(primary_subject.clone()),
+                AuthorizationSubject::Institution(second_subject.clone()),
+            ],
+            votingengine::types::VotingEngineKind::Internal,
+            sp_io::hashing::blake2_256(&data),
+        )
+        .unwrap();
+        let proposal_id = <InternalVote as InternalVoteEngine<AccountId32>>::
+            create_institution_proposal_with_data(
+                test_institution_admin(0),
+                PUBLIC_CODE,
+                public_cid().to_vec(),
+                None,
+                subject_cids_for(&public_cid()),
+                vote_plan,
+                data,
+            )
+            .unwrap();
+
+        // 建案自动使用主岗位投出第一张票；同一钱包再以第二岗位投第二张票。
+        assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 1);
+        assert_ok!(InternalVote::cast(
+            RuntimeOrigin::signed(test_institution_admin(0)),
+            proposal_id,
+            InternalVoteTicketClaim::InstitutionRole(second_role.clone()),
+            true,
+        ));
+        assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 2);
+        for subject in [primary_subject, second_subject] {
+            assert!(InternalVotesByTicket::<Test>::contains_key(
+                proposal_id,
+                InternalVoteTicket::Institution(votingengine::InstitutionVoteTicket {
+                    role_subject: subject,
+                    voter_account: test_institution_admin(0),
+                })
+            ));
+        }
+        assert_noop!(
+            InternalVote::cast(
+                RuntimeOrigin::signed(test_institution_admin(0)),
+                proposal_id,
+                InternalVoteTicketClaim::InstitutionRole(second_role),
+                true,
+            ),
+            votingengine::Error::<Test>::AlreadyVoted
+        );
     });
 }
 
@@ -1905,9 +2005,19 @@ fn internal_vote_callback_err_defers_execution_without_reverting_vote() {
             STATUS_PASSED
         );
         assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 13);
-        assert!(InternalVotesByAccount::<Test>::contains_key(
+        let ticket = InternalVoteTicket::Institution(votingengine::InstitutionVoteTicket {
+            role_subject: RoleSubject {
+                cid_number: nrc_cid(),
+                role_code: test_institution_role(NRC)
+                    .to_vec()
+                    .try_into()
+                    .expect("测试岗位码合法"),
+            },
+            voter_account: nrc_admin(12),
+        });
+        assert!(InternalVotesByTicket::<Test>::contains_key(
             proposal_id,
-            &nrc_admin(12)
+            ticket
         ));
         let pending = votingengine::pallet::PendingProposalExecutions::<Test>::get(proposal_id)
             .expect("failed callback should remain queued");

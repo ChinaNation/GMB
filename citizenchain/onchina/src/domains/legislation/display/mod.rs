@@ -2,7 +2,7 @@
 //!
 //! 大厅正中大屏免登录只读展示——本节点绑定机构的**议员名册**(链上 Active 管理员)×
 //! **活跃立法提案**(`VotingEngine::ActiveProposalsBySubject`)× **逐席投票**
-//! (`LegislationVote::RepresentativeVotesByAccount`)。机构由节点绑定(`active_node_binding`)确定,
+//! (`LegislationVote::RepresentativeVotesByTicket`)。机构由节点绑定(`active_node_binding`)确定,
 //! **不接受任何请求参数**——大屏只映射本节点自己,越权面为零(fail-closed)。
 //!
 //! 只读投影:计票/阶段/状态判定全归投票引擎,本域只搬运链上事实(复用 `chain_read_proposal`)。

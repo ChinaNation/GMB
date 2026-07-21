@@ -308,7 +308,7 @@ fn joint_proposal_binds_role_plan_and_never_writes_admin_snapshot() {
             CHINA_CB.len() + CHINA_CH.len()
         );
         assert_eq!(
-            votingengine::EffectiveVoterSnapshot::<Test>::iter_prefix(proposal_id).count(),
+            votingengine::InstitutionTicketCountSnapshot::<Test>::iter_prefix(proposal_id).count(),
             CHINA_CB.len() + CHINA_CH.len()
         );
         assert_eq!(
@@ -320,7 +320,7 @@ fn joint_proposal_binds_role_plan_and_never_writes_admin_snapshot() {
 }
 
 #[test]
-fn effective_voter_snapshot_deduplicates_within_cid_but_not_across_cids() {
+fn institution_ticket_count_preserves_same_wallet_in_multiple_roles() {
     new_test_ext().execute_with(|| {
         let proposal_id = 77;
         let account = AccountId32::new([77; 32]);
@@ -342,44 +342,47 @@ fn effective_voter_snapshot_deduplicates_within_cid_but_not_across_cids() {
             )
         };
 
+        let role_a = role(cid_a.clone(), b"ROLE_A");
+        let role_b = role(cid_a.clone(), b"ROLE_B");
+        let role_c = role(cid_b.clone(), b"ROLE_C");
         assert_ok!(VotingEngine::snapshot_role_voters(
             proposal_id,
-            role(cid_a.clone(), b"ROLE_A"),
+            role_a.clone(),
             vec![account.clone(), second]
         ));
         assert_ok!(VotingEngine::snapshot_role_voters(
             proposal_id,
-            role(cid_a.clone(), b"ROLE_B"),
+            role_b.clone(),
             vec![account.clone()]
         ));
         assert_ok!(VotingEngine::snapshot_role_voters(
             proposal_id,
-            role(cid_b.clone(), b"ROLE_C"),
+            role_c.clone(),
             vec![account.clone()]
         ));
 
         assert_eq!(
-            VotingEngine::effective_voters_len(
-                proposal_id,
-                votingengine::types::ProposalSubject::InstitutionCid(cid_a.clone())
-            ),
-            Some(2)
+            VotingEngine::institution_ticket_count(proposal_id, cid_a),
+            Some(3),
+            "同一钱包在同一机构的两个岗位各保留一张票据"
         );
         assert_eq!(
-            VotingEngine::effective_voters_len(
-                proposal_id,
-                votingengine::types::ProposalSubject::InstitutionCid(cid_b.clone())
-            ),
+            VotingEngine::institution_ticket_count(proposal_id, cid_b),
             Some(1)
         );
-        assert!(VotingEngine::is_effective_voter_in_snapshot(
+        assert!(VotingEngine::is_subject_voter_in_snapshot(
             proposal_id,
-            votingengine::types::ProposalSubject::InstitutionCid(cid_a),
+            role_a,
             &account
         ));
-        assert!(VotingEngine::is_effective_voter_in_snapshot(
+        assert!(VotingEngine::is_subject_voter_in_snapshot(
             proposal_id,
-            votingengine::types::ProposalSubject::InstitutionCid(cid_b),
+            role_b,
+            &account
+        ));
+        assert!(VotingEngine::is_subject_voter_in_snapshot(
+            proposal_id,
+            role_c,
             &account
         ));
     });
@@ -399,6 +402,14 @@ fn finalize_institution(
     } else {
         admins.len().saturating_sub(threshold).saturating_add(1)
     };
+    let voter_role_code: votingengine::RoleCode = if institution_code == votingengine::PRB {
+        primitives::governance_skeleton::ROLE_CODE_DIRECTOR
+    } else {
+        primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+    }
+    .to_vec()
+    .try_into()
+    .expect("institution role code should fit");
     for admin in admins.into_iter().take(required) {
         assert_ok!(JointVote::cast_admin(
             RuntimeOrigin::signed(admin),
@@ -407,6 +418,7 @@ fn finalize_institution(
                 .clone()
                 .try_into()
                 .expect("institution CID should fit"),
+            voter_role_code.clone(),
             approve,
         ));
     }

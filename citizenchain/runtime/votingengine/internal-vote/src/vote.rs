@@ -3,7 +3,12 @@
 use super::*;
 
 impl<T: Config> Pallet<T> {
-    pub fn do_internal_vote(who: T::AccountId, proposal_id: u64, approve: bool) -> DispatchResult {
+    pub fn do_internal_vote(
+        who: T::AccountId,
+        proposal_id: u64,
+        ticket_claim: InternalVoteTicketClaim,
+        approve: bool,
+    ) -> DispatchResult {
         let proposal = <votingengine::Pallet<T>>::ensure_open_proposal(proposal_id)?;
 
         ensure!(
@@ -14,35 +19,54 @@ impl<T: Config> Pallet<T> {
             proposal.stage == STAGE_INTERNAL,
             votingengine::Error::<T>::InvalidProposalStage
         );
-        ensure!(
-            !InternalVotesByAccount::<T>::contains_key(proposal_id, &who),
-            votingengine::Error::<T>::AlreadyVoted
-        );
-        let (eligible, eligible_total) = if let Some(actor_cid_number) = proposal.actor_cid_number {
-            let subject = ProposalSubject::InstitutionCid(actor_cid_number);
+        let (ticket, voter_role_code, eligible, eligible_total) = if let Some(actor_cid_number) =
+            proposal.actor_cid_number
+        {
+            let role_code = match ticket_claim {
+                InternalVoteTicketClaim::InstitutionRole(role_code) => role_code,
+                InternalVoteTicketClaim::Personal => {
+                    return Err(votingengine::Error::<T>::NoPermission.into())
+                }
+            };
+            let role_subject = votingengine::types::RoleSubject {
+                cid_number: actor_cid_number.clone(),
+                role_code: role_code.clone(),
+            };
+            let subject = AuthorizationSubject::Institution(role_subject.clone());
             (
-                <votingengine::Pallet<T>>::is_effective_voter_in_snapshot(
-                    proposal_id,
-                    subject.clone(),
-                    &who,
-                ),
-                <votingengine::Pallet<T>>::effective_voters_len(proposal_id, subject)
+                InternalVoteTicket::Institution(InstitutionVoteTicket {
+                    role_subject,
+                    voter_account: who.clone(),
+                }),
+                Some(role_code),
+                <votingengine::Pallet<T>>::is_subject_voter_in_snapshot(proposal_id, subject, &who),
+                <votingengine::Pallet<T>>::institution_ticket_count(proposal_id, actor_cid_number)
                     .ok_or(votingengine::Error::<T>::MissingVoterSnapshot)?,
             )
         } else {
+            ensure!(
+                matches!(ticket_claim, InternalVoteTicketClaim::Personal),
+                votingengine::Error::<T>::NoPermission
+            );
             let personal_account = proposal
                 .execution_account
                 .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
             let subject = ProposalSubject::PersonalAccount(personal_account);
             (
+                InternalVoteTicket::Personal(who.clone()),
+                None,
                 <votingengine::Pallet<T>>::is_admin_in_snapshot(proposal_id, subject.clone(), &who),
                 <votingengine::Pallet<T>>::snapshot_admins_len(proposal_id, subject)
                     .ok_or(votingengine::Error::<T>::MissingAdminSnapshot)?,
             )
         };
         ensure!(eligible, votingengine::Error::<T>::NoPermission);
+        ensure!(
+            !InternalVotesByTicket::<T>::contains_key(proposal_id, &ticket),
+            votingengine::Error::<T>::AlreadyVoted
+        );
 
-        InternalVotesByAccount::<T>::insert(proposal_id, &who, approve);
+        InternalVotesByTicket::<T>::insert(proposal_id, ticket, approve);
         let tally = InternalTallies::<T>::mutate(proposal_id, |tally| {
             if approve {
                 tally.yes = tally.yes.saturating_add(1);
@@ -55,6 +79,7 @@ impl<T: Config> Pallet<T> {
         Self::deposit_event(Event::<T>::InternalVoteCast {
             proposal_id,
             who,
+            voter_role_code,
             approve,
         });
 

@@ -207,7 +207,7 @@ ADR-017 后已无 best 视图余额接口；所有余额读取 finalized(`fetchF
   - `ready / broadcast`：交易进入交易池或已广播
   - `inBlock / finalized`：交易被区块包含或最终化
   - `future / invalid / dropped / usurped / retracted / finalityTimeout / timeout / error`：交易未能按预期确认，业务页面必须停止“投票中”等待态并给出可操作提示；投票类业务必须回读投票引擎 storage，不能用交易 nonce 推断确认
-- 业务层不得把 `txHash` 返回渲染为“投票成功”；链上投票是否生效必须继续读取对应 storage（如 `InternalVote::InternalVotesByAccount`）确认
+- 业务层不得把 `txHash` 返回渲染为“投票成功”；链上投票是否生效必须继续读取对应完整票据 storage（如 `InternalVote::InternalVotesByTicket`）确认
 
 `ChainRpc.submitExtrinsicAndWaitForInBlock(Uint8List encoded, {TxPoolWatchCallback? onWatchEvent})`
 
@@ -288,8 +288,8 @@ Call data 格式：`[pallet_index=2] [call_index=3] [0x00 + dest_32bytes] [compa
 `OnchainRpc` 不再提供 nonce 轮询确认 API。普通转账提交后先写本机 `pending` 流水，交易池 watch 收到 included 后升级为 `inBlock`；`ChainTxMonitor` 只读取 finalized 高度的 `System.Events` 后升级为 `finalized`，禁止使用 best/latest block 作为已确认真源。
 
 > 投票类交易同样不得使用 nonce 推进判定成功。内部投票必须读
-> `InternalVote::InternalVotesByAccount`，联合投票必须读
-> `JointVote::JointVotesByAdmin`。
+> `InternalVote::InternalVotesByTicket`，联合投票必须读
+> `JointVote::JointVotesByTicket`。机构查询键必须包含 CID、岗位码和钱包。
 
 ### 7.5 手续费估算
 

@@ -94,18 +94,21 @@ impl<T: Config> Pallet<T> {
                 let next = if result.maybe_cursor.is_some() {
                     PendingCleanupStage::VoterSnapshots
                 } else {
-                    PendingCleanupStage::EffectiveVoterSnapshots
+                    PendingCleanupStage::InstitutionTicketCounts
                 };
                 (
                     Some(next),
                     db.reads_writes(u64::from(result.loops), u64::from(result.unique)),
                 )
             }
-            PendingCleanupStage::EffectiveVoterSnapshots => {
-                let result =
-                    EffectiveVoterSnapshot::<T>::clear_prefix(proposal_id, cleanup_limit, None);
+            PendingCleanupStage::InstitutionTicketCounts => {
+                let result = InstitutionTicketCountSnapshot::<T>::clear_prefix(
+                    proposal_id,
+                    cleanup_limit,
+                    None,
+                );
                 let next = if result.maybe_cursor.is_some() {
-                    PendingCleanupStage::EffectiveVoterSnapshots
+                    PendingCleanupStage::InstitutionTicketCounts
                 } else {
                     PendingCleanupStage::TrackData
                 };

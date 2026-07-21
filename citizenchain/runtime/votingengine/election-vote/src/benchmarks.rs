@@ -118,7 +118,15 @@ mod benchmarks {
         let (proposal_id, voter, candidate) = setup_election::<T>(c, ElectionMode::Mutual);
 
         #[extrinsic_call]
-        _(RawOrigin::Signed(voter), proposal_id, candidate);
+        _(
+            RawOrigin::Signed(voter),
+            proposal_id,
+            b"BENCHMARK_MEMBER"
+                .to_vec()
+                .try_into()
+                .expect("benchmark role code"),
+            candidate,
+        );
 
         assert!(ElectionResults::<T>::contains_key(proposal_id));
     }

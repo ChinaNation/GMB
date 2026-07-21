@@ -87,8 +87,10 @@ impl<T: Config> Pallet<T> {
                     return TransactionOutcome::Rollback(Err(err));
                 }
             }
-            let subject = ProposalSubject::InstitutionCid(actor_cid_number.clone());
-            let snapshot_size = match <votingengine::Pallet<T>>::effective_voters_len(id, subject) {
+            let snapshot_size = match <votingengine::Pallet<T>>::institution_ticket_count(
+                id,
+                actor_cid_number.clone(),
+            ) {
                 Some(size) => size,
                 None => {
                     return TransactionOutcome::Rollback(Err(
@@ -397,24 +399,33 @@ impl<T: Config> Pallet<T> {
         <votingengine::Pallet<T>>::register_proposal_data(proposal_id, module_tag, data, now)?;
         let proposal =
             Proposals::<T>::get(proposal_id).ok_or(votingengine::Error::<T>::ProposalNotFound)?;
-        let proposer_can_vote = if let Some(actor_cid_number) = proposal.actor_cid_number {
-            <votingengine::Pallet<T>>::is_effective_voter_in_snapshot(
-                proposal_id,
-                ProposalSubject::InstitutionCid(actor_cid_number),
-                &who,
-            )
+        let ticket_claim = if proposal.actor_cid_number.is_some() {
+            let vote_plan = votingengine::ProposalVotePlans::<T>::get(proposal_id)
+                .ok_or(votingengine::Error::<T>::InvalidVotePlan)?;
+            let proposer_role = match vote_plan.proposer_subject {
+                AuthorizationSubject::Institution(role_subject) => role_subject,
+                AuthorizationSubject::PersonalMultisig(_) => {
+                    return Err(votingengine::Error::<T>::InvalidVotePlan.into())
+                }
+            };
+            let subject = AuthorizationSubject::Institution(proposer_role.clone());
+            <votingengine::Pallet<T>>::is_subject_voter_in_snapshot(proposal_id, subject, &who)
+                .then_some(InternalVoteTicketClaim::InstitutionRole(
+                    proposer_role.role_code,
+                ))
         } else if let Some(personal_account) = proposal.execution_account {
             <votingengine::Pallet<T>>::is_admin_in_snapshot(
                 proposal_id,
                 ProposalSubject::PersonalAccount(personal_account),
                 &who,
             )
+            .then_some(InternalVoteTicketClaim::Personal)
         } else {
-            false
+            None
         };
         // 发起岗位可以只有 Propose 而没有 Vote；只有发起账户也在冻结选民快照中时才自动记首票。
-        if proposer_can_vote {
-            Self::do_internal_vote(who, proposal_id, true)?;
+        if let Some(ticket_claim) = ticket_claim {
+            Self::do_internal_vote(who, proposal_id, ticket_claim, true)?;
         }
         Ok(proposal_id)
     }

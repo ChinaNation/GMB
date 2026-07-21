@@ -276,16 +276,17 @@ pub struct VoteSubmitResult {
 
 /// 构建内部投票（`internal_vote`）签名请求。
 ///
-/// 内部投票统一走 `InternalVote::cast`(pallet=20, call=0)；个人多签按管理员账户，
-/// 机构按 VotePlan 冻结的岗位任职资格。
+/// 内部投票统一走 `InternalVote::cast`(pallet=20, call=0)；个人多签使用
+/// `Personal` 票据声明，机构使用 `InstitutionRole(role_code)` 票据声明。
 /// 由投票引擎按 ProposalData 前缀自动分派到对应 `InternalVoteExecutor`。
 ///
-/// Call 编码: `[0x14][0x00][proposal_id:u64_le][approve:bool]` 共 11 字节。
+/// Call 编码: `[0x14][0x00][proposal_id:u64_le][ticket_claim][approve:bool]`。
 ///
 /// 返回 QR 签名请求 JSON + 请求 ID + 预期审阅 payload hash。
 pub fn build_vote_sign_request(
     proposal_id: u64,
     pubkey_hex: &str,
+    voter_role_code: Option<&str>,
     approve: bool,
 ) -> Result<VoteSignRequestResult, String> {
     // 验证公钥格式
@@ -303,11 +304,24 @@ pub fn build_vote_sign_request(
     let genesis_hash = fetch_genesis_hash()?;
     let nonce = fetch_nonce(&pubkey_clean)?;
 
-    // 构建 call data: [pallet=20][call=0][proposal_id: u64_le][approve: bool]
-    let mut call_data = Vec::with_capacity(11);
+    // ticket_claim SCALE：Personal=0；InstitutionRole=1 + RoleCode(BoundedVec)。
+    let mut call_data = Vec::with_capacity(12 + voter_role_code.map(str::len).unwrap_or_default());
     call_data.push(20u8); // InternalVote sub-pallet index
     call_data.push(0u8); // cast call index
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
+    match voter_role_code {
+        Some(role_code) => {
+            if role_code.is_empty()
+                || role_code.len() > entity_primitives::INSTITUTION_ROLE_CODE_MAX_BYTES as usize
+            {
+                return Err("voter_role_code 长度超出链上岗位码范围".to_string());
+            }
+            call_data.push(1u8);
+            call_data.extend_from_slice(&encode_compact_u32(role_code.len() as u32));
+            call_data.extend_from_slice(role_code.as_bytes());
+        }
+        None => call_data.push(0u8),
+    }
     call_data.push(if approve { 1u8 } else { 0u8 });
 
     // 链交易签名材料只能由 runtime 类型构造，避免 node 冷签与热钱包
@@ -372,6 +386,7 @@ pub fn build_joint_vote_sign_request(
     proposal_id: u64,
     pubkey_hex: &str,
     actor_cid_number: &str,
+    voter_role_code: &str,
     approve: bool,
 ) -> Result<VoteSignRequestResult, String> {
     let pubkey_clean = pubkey_hex
@@ -388,18 +403,25 @@ pub fn build_joint_vote_sign_request(
     {
         return Err("actor_cid_number 长度必须在链上 CID_NUMBER_MAX_BYTES 范围内".to_string());
     }
+    if voter_role_code.is_empty()
+        || voter_role_code.len() > entity_primitives::INSTITUTION_ROLE_CODE_MAX_BYTES as usize
+    {
+        return Err("voter_role_code 长度超出链上岗位码范围".to_string());
+    }
 
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
     let nonce = fetch_nonce(&pubkey_clean)?;
 
-    // call data: [pallet=21][call=0][proposal_id:u64_le][actor_cid_number:BoundedVec][approve:bool]
-    let mut call_data = Vec::with_capacity(1 + 1 + 8 + 1 + actor_cid_number.len() + 1);
+    // call data: [21][0][proposal_id][cid_number][voter_role_code][approve]
+    let mut call_data = Vec::with_capacity(14 + actor_cid_number.len() + voter_role_code.len());
     call_data.push(21u8); // JointVote sub-pallet index
     call_data.push(0u8); // cast_admin call index
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
     call_data.extend_from_slice(&encode_compact_u32(actor_cid_number.len() as u32));
     call_data.extend_from_slice(actor_cid_number.as_bytes());
+    call_data.extend_from_slice(&encode_compact_u32(voter_role_code.len() as u32));
+    call_data.extend_from_slice(voter_role_code.as_bytes());
     call_data.push(if approve { 1u8 } else { 0u8 });
 
     let (payload, signing_bytes) =

@@ -25,10 +25,6 @@ fn setup<T: Config>() -> (
         .to_vec()
         .try_into()
         .expect("benchmark CID fits runtime bound");
-    let admins: frame_support::BoundedVec<T::AccountId, T::MaxAdminsPerInstitution> =
-        sp_std::vec![voter.clone()]
-            .try_into()
-            .expect("single benchmark admin fits runtime bound");
     let now = 1u32.saturated_into();
     frame_system::Pallet::<T>::set_block_number(now);
     let proposal = votingengine::Proposal {
@@ -43,12 +39,19 @@ fn setup<T: Config>() -> (
         end: 2u32.saturated_into(),
     };
     Proposals::<T>::insert(proposal_id, proposal.clone());
-    // 机构业务必须按岗位有效任职快照投票；个人多签才使用 AdminSnapshot。
-    votingengine::pallet::EffectiveVoterSnapshot::<T>::insert(
+    let role_subject = votingengine::RoleSubject {
+        cid_number: actor_cid_number.clone(),
+        role_code: b"BENCHMARK_ROLE"
+            .to_vec()
+            .try_into()
+            .expect("benchmark role fits"),
+    };
+    votingengine::Pallet::<T>::snapshot_role_voters(
         proposal_id,
-        votingengine::ProposalSubject::InstitutionCid(actor_cid_number),
-        admins,
-    );
+        votingengine::AuthorizationSubject::Institution(role_subject),
+        sp_std::vec![voter.clone()],
+    )
+    .expect("benchmark role snapshot");
     InternalThresholdSnapshot::<T>::insert(proposal_id, 1);
     (proposal_id, voter, proposal)
 }
@@ -62,7 +65,17 @@ mod benchmarks {
         let (proposal_id, voter, _) = setup::<T>();
 
         #[extrinsic_call]
-        _(RawOrigin::Signed(voter), proposal_id, true);
+        _(
+            RawOrigin::Signed(voter),
+            proposal_id,
+            crate::InternalVoteTicketClaim::InstitutionRole(
+                b"BENCHMARK_ROLE"
+                    .to_vec()
+                    .try_into()
+                    .expect("benchmark role fits"),
+            ),
+            true,
+        );
 
         assert!(votingengine::pallet::PendingProposalExecutions::<T>::contains_key(proposal_id));
     }

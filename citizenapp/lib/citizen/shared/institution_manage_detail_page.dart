@@ -9,16 +9,14 @@ import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.d
 import 'package:citizenapp/citizen/proposal/admins-change/services/institution_admin_service.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/votingengine/internal-vote/internal_vote_service.dart';
-import 'package:citizenapp/votingengine/internal-vote/pending_vote_store.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_context.dart';
-import 'package:citizenapp/rpc/chain_event_subscription.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_detail_local_store.dart';
 import 'package:citizenapp/votingengine/internal-vote/proposal_vote_widgets.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_query_service.dart';
+import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
-import 'package:citizenapp/rpc/transfer_rpc.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/ui/app_theme.dart';
@@ -84,27 +82,17 @@ class _MultisigProposalDetailPageState
   // 提案创建时冻结的合格选民与投票记录；机构路径来自岗位快照。
   List<String> _admins = const [];
   Map<String, bool?> _adminVotes = {};
+  List<EligibleVoterTicket> _voterTickets = const [];
 
   List<WalletProfile> _votableWallets = const [];
   WalletProfile? _selectedVoteWallet;
-  Set<String> _pendingPubkeys = const {};
   String? _voteNotice;
   bool _voteNoticeIsError = false;
-  // 待投票确认期用 finalized 头订阅驱动刷新。
-  ChainEventSubscription? _pendingSub;
-  StreamSubscription<ChainEvent>? _pendingEventSub;
 
   @override
   void initState() {
     super.initState();
     _load();
-  }
-
-  @override
-  void dispose() {
-    _pendingEventSub?.cancel();
-    _pendingSub?.disconnect();
-    super.dispose();
   }
 
   Future<void> _load({bool showSpinner = true}) async {
@@ -113,10 +101,8 @@ class _MultisigProposalDetailPageState
     if (showSpinner) {
       localSnapshot = await _applyLocalSnapshot();
     }
-    if (showSpinner &&
-        localSnapshot?.isFresh(ProposalDetailLocalStore.activeTtl) == true) {
-      return;
-    }
+    // 岗位票据包含 CID + 岗位码，旧的账户级本地详情快照不能作为投票资格真源；
+    // 即使缓存新鲜也继续读取链上 VotePlan/VoterSnapshot。
 
     if (showSpinner && localSnapshot == null) {
       setState(() {
@@ -139,7 +125,7 @@ class _MultisigProposalDetailPageState
           .fetchInternalThresholdSnapshot(widget.proposalId)
           .catchError((_) => null);
       final results = await Future.wait([
-        _proposalService.fetchEligibleVoterSnapshot(
+        _proposalService.fetchEligibleVoterTickets(
           widget.proposalId,
           widget.institution,
         ),
@@ -148,11 +134,14 @@ class _MultisigProposalDetailPageState
         thresholdFuture,
       ]);
 
-      final admins = results[0] as List<String>;
+      final voterTickets = results[0] as List<EligibleVoterTicket>;
+      final admins =
+          voterTickets.map((ticket) => ticket.pubkeyHex).toSet().toList();
       final status = results[1] as int?;
       final tally = results[2] as ({int yes, int no});
       final thresholdSnapshot = results[3] as int?;
-      final threshold = _resolveVoteThreshold(thresholdSnapshot, admins.length);
+      final threshold =
+          _resolveVoteThreshold(thresholdSnapshot, voterTickets.length);
       debugPrint(
           '[VoteDetail._load] step1 完成 admins.len=${admins.length} status=$status yes=${tally.yes} no=${tally.no} threshold=$threshold');
 
@@ -183,37 +172,23 @@ class _MultisigProposalDetailPageState
         }
       }
 
-      // step3:检查待确认投票。nonce 只由 runtime frame_system 管理，
-      // 客户端只清理 pending 记录，不再重置或回滚本地 nonce。
+      // step3:批量查询每张快照票据的投票记录，避免逐条 RPC。
       debugPrint(
-          '[VoteDetail._load] step3: PendingVoteStore.confirmAllDetailed');
-      final pendingSummary = await PendingVoteStore.instance.confirmAllDetailed(
-        'institution_multisig',
+          '[VoteDetail._load] step3: 批量查岗位票据 (${voterTickets.length} 张)');
+      final votes = await _proposalService.fetchTicketVotesBatch(
         widget.proposalId,
-        TransferRpc(),
+        voterTickets,
       );
-      final pendingPks =
-          pendingSummary.stillPending.map((r) => r.walletPubkey).toSet();
-      final pendingNotice = _pendingSummaryNotice(pendingSummary);
-      debugPrint(
-          '[VoteDetail._load] step3 完成 stillPending.len=${pendingSummary.stillPending.length}');
-
-      // step4:批量查询每位快照选民的投票记录，避免逐条 RPC。
-      debugPrint('[VoteDetail._load] step4: 批量查 admin 投票 (${admins.length} 个)');
-      final votes = await _proposalService.fetchAdminVotesBatch(
-        widget.proposalId,
-        admins,
-      );
-      debugPrint('[VoteDetail._load] step4 完成');
+      debugPrint('[VoteDetail._load] step3 完成');
 
       // 筛选可投票钱包
       final votable = <WalletProfile>[];
       for (final w in widget.adminWallets) {
         var pk = w.pubkeyHex.toLowerCase();
         if (pk.startsWith('0x')) pk = pk.substring(2);
-        if (admins.contains(pk) &&
-            votes[pk] == null &&
-            !pendingPks.contains(pk)) {
+        final walletTickets = voterTickets
+            .where((ticket) => _normalizePubkey(ticket.pubkeyHex) == pk);
+        if (walletTickets.any((ticket) => votes[ticket.ticketKey] == null)) {
           votable.add(w);
         }
       }
@@ -229,7 +204,6 @@ class _MultisigProposalDetailPageState
           threshold: threshold,
           admins: admins,
           votes: votes,
-          pendingPks: pendingPks,
           createInfo: createInfo,
           closeInfo: closeInfo,
           institutionCloseInfo: institutionCloseInfo,
@@ -246,19 +220,14 @@ class _MultisigProposalDetailPageState
         _noCount = tally.no;
         _threshold = threshold;
         _adminVotes = votes;
-        _pendingPubkeys = pendingPks;
+        _voterTickets = voterTickets;
         _votableWallets = votable;
         _selectedVoteWallet = votable.isNotEmpty ? votable.first : null;
         _createInfo = createInfo;
         _closeInfo = closeInfo;
         _institutionCloseInfo = institutionCloseInfo;
-        if (pendingNotice != null) {
-          _voteNotice = pendingNotice.$1;
-          _voteNoticeIsError = pendingNotice.$2;
-        }
         _loading = false;
       });
-      _syncPendingPoll(pendingPks.isNotEmpty && status == _statusVoting);
       debugPrint('[VoteDetail._load] 结束');
     } catch (e, st) {
       debugPrint('[VoteDetail._load] catch 异常: $e\n$st');
@@ -280,13 +249,10 @@ class _MultisigProposalDetailPageState
           await _detailStore.read('institution_multisig', widget.proposalId);
       if (snapshot == null || !mounted) return snapshot;
       final admins = snapshot.admins;
-      final pendingPks = snapshot.pendingPubkeys.toSet();
       final votable = <WalletProfile>[];
       for (final w in widget.adminWallets) {
         final pk = _normalizePubkey(w.pubkeyHex);
-        if (admins.contains(pk) &&
-            snapshot.adminVotes[pk] == null &&
-            !pendingPks.contains(pk)) {
+        if (admins.contains(pk) && snapshot.adminVotes[pk] == null) {
           votable.add(w);
         }
       }
@@ -305,7 +271,6 @@ class _MultisigProposalDetailPageState
         _noCount = snapshot.noCount;
         _threshold = snapshot.threshold ?? 0;
         _adminVotes = snapshot.adminVotes;
-        _pendingPubkeys = pendingPks;
         _votableWallets = votable;
         _selectedVoteWallet = votable.isNotEmpty ? votable.first : null;
         _createInfo = createInfo;
@@ -314,8 +279,6 @@ class _MultisigProposalDetailPageState
         _loading = false;
         _error = null;
       });
-      _syncPendingPoll(
-          pendingPks.isNotEmpty && snapshot.status == _statusVoting);
       return snapshot;
     } catch (_) {
       return null;
@@ -328,7 +291,6 @@ class _MultisigProposalDetailPageState
     required int threshold,
     required List<String> admins,
     required Map<String, bool?> votes,
-    required Set<String> pendingPks,
     required personal_models.CreateProposalInfo? createInfo,
     required personal_models.CloseProposalInfo? closeInfo,
     required institution_models.CloseProposalInfo? institutionCloseInfo,
@@ -345,7 +307,7 @@ class _MultisigProposalDetailPageState
       adminVotes: votes.map(
         (key, value) => MapEntry(_normalizePubkey(key), value),
       ),
-      pendingPubkeys: pendingPks.map(_normalizePubkey).toList(growable: false),
+      pendingPubkeys: const [],
       detail: createInfo != null
           ? _createInfoToJson(createInfo)
           : closeInfo != null
@@ -494,45 +456,6 @@ class _MultisigProposalDetailPageState
     return adminsLen;
   }
 
-  (String, bool)? _pendingSummaryNotice(PendingVoteConfirmSummary summary) {
-    if (summary.lost.isNotEmpty) {
-      return ('${summary.lost.length} 笔投票未写入链上投票记录，已清除等待状态，可重新提交。', true);
-    }
-    if (summary.confirmed.isNotEmpty) {
-      return ('${summary.confirmed.length} 笔投票已由链上投票记录确认。', false);
-    }
-    return null;
-  }
-
-  void _syncPendingPoll(bool enabled) {
-    if (!enabled) {
-      _pendingEventSub?.cancel();
-      _pendingEventSub = null;
-      _pendingSub?.disconnect();
-      _pendingSub = null;
-      return;
-    }
-    if (_pendingSub != null) return;
-    // 待投票确认期:订阅 finalized 头,有新最终块才刷新,空闲链零查询。
-    final sub = ChainEventSubscription();
-    _pendingSub = sub;
-    unawaited(_connectPendingSubscription(sub));
-  }
-
-  Future<void> _connectPendingSubscription(ChainEventSubscription sub) async {
-    final connected = await sub.connect();
-    if (!mounted || !identical(_pendingSub, sub) || !connected) {
-      if (identical(_pendingSub, sub)) _pendingSub = null;
-      sub.disconnect();
-      return;
-    }
-    _pendingEventSub = sub.events.listen((event) {
-      if (event.type != ChainEventType.newFinalizedBlock) return;
-      if (!mounted || _loading) return;
-      unawaited(_load(showSpinner: false));
-    });
-  }
-
   // ──── 投票提交 ────
 
   bool get _isCurrentUserAdmin => widget.proposalContext.isAdmin;
@@ -548,11 +471,31 @@ class _MultisigProposalDetailPageState
     for (final w in widget.adminWallets) {
       var pk = w.pubkeyHex.toLowerCase();
       if (pk.startsWith('0x')) pk = pk.substring(2);
-      if (_adminVotes[pk] == null && !_pendingPubkeys.contains(pk)) {
+      final tickets = _voterTickets
+          .where((ticket) => _normalizePubkey(ticket.pubkeyHex) == pk);
+      if (tickets.any((ticket) => _adminVotes[ticket.ticketKey] == null)) {
         return false;
       }
     }
     return true;
+  }
+
+  Future<EligibleVoterTicket?> _selectTicket(
+    List<EligibleVoterTicket> tickets,
+  ) async {
+    if (tickets.length == 1) return tickets.single;
+    return showDialog<EligibleVoterTicket>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('选择本次投票岗位'),
+        children: tickets
+            .map((ticket) => SimpleDialogOption(
+                  onPressed: () => Navigator.pop(dialogContext, ticket),
+                  child: Text(ticket.voterRoleCode ?? '个人多签管理员'),
+                ))
+            .toList(growable: false),
+      ),
+    );
   }
 
   Future<void> _submitVote(bool approve) async {
@@ -571,15 +514,16 @@ class _MultisigProposalDetailPageState
     try {
       final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
       final pubkey = _normalizePubkey(wallet.pubkeyHex);
-      if (!_admins.contains(pubkey)) {
+      final availableTickets = _voterTickets
+          .where((ticket) =>
+              _normalizePubkey(ticket.pubkeyHex) == pubkey &&
+              _adminVotes[ticket.ticketKey] == null)
+          .toList(growable: false);
+      if (availableTickets.isEmpty) {
         throw StateError('当前钱包不在该提案的合格选民快照中，不能投票');
       }
-      if (_adminVotes[pubkey] != null) {
-        throw StateError('当前合格选民已经投过票');
-      }
-      if (_pendingPubkeys.contains(pubkey)) {
-        throw StateError('当前合格选民已有待确认投票，请稍后刷新');
-      }
+      final ticket = await _selectTicket(availableTickets);
+      if (ticket == null) throw StateError('已取消选择投票岗位');
       final balance = await ChainRpc().fetchFinalizedBalance(pubkey);
       if (balance <= 0) {
         throw StateError('当前投票钱包余额不足，无法支付链上投票手续费');
@@ -625,6 +569,8 @@ class _MultisigProposalDetailPageState
       final result = await InternalVoteService().submit(
         proposalId: widget.proposalId,
         approve: approve,
+        actorCidNumber: ticket.cidNumber,
+        voterRoleCode: ticket.voterRoleCode,
         fromAddress: wallet.address,
         signerPubkey: Uint8List.fromList(pubkeyBytes),
         sign: signCallback,
@@ -637,21 +583,15 @@ class _MultisigProposalDetailPageState
       debugPrint(
           '[VoteDetail] submit 已入块 txHash=${result.txHash} nonce=${result.usedNonce} block=${result.blockHashHex}');
 
-      // 服务层已经确认 runtime 投票记录，新流程不再写 pending。
-      // 这里只清除旧版本可能残留的同一投票钱包 pending 记录。
-      await PendingVoteStore.instance.remove(
-        'institution_multisig',
-        widget.proposalId,
-        pubkey,
-      );
-
       if (!mounted) return;
       setState(() {
-        _adminVotes[pubkey] = approve;
-        _pendingPubkeys = _pendingPubkeys.difference({pubkey});
-        _votableWallets = _votableWallets
-            .where((w) => _normalizePubkey(w.pubkeyHex) != pubkey)
-            .toList(growable: false);
+        _adminVotes[ticket.ticketKey] = approve;
+        _votableWallets = _votableWallets.where((w) {
+          final walletPk = _normalizePubkey(w.pubkeyHex);
+          return _voterTickets.any((candidate) =>
+              _normalizePubkey(candidate.pubkeyHex) == walletPk &&
+              _adminVotes[candidate.ticketKey] == null);
+        }).toList(growable: false);
         _selectedVoteWallet =
             _votableWallets.isNotEmpty ? _votableWallets.first : null;
         _voteNotice = '链上已确认该合格选民投票。';
@@ -806,8 +746,9 @@ class _MultisigProposalDetailPageState
           const SizedBox(height: 16),
           ProposalAdminVoteList(
             admins: _admins,
+            voterTickets: _voterTickets,
             adminVotes: _adminVotes,
-            pendingPubkeys: _pendingPubkeys,
+            pendingPubkeys: const {},
           ),
         ],
       ),

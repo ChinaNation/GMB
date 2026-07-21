@@ -1,6 +1,6 @@
 //! # 内部投票 pallet (internal-vote)
 //!
-//! 所有机构与个人多签共用的一人一票程序：机构按岗位有效选民快照，个人多签按
+//! 所有机构与个人多签共用的内部投票程序：机构按岗位票据，个人多签按
 //! 独立管理员快照。
 //!
 //! 本模块负责内部投票模式准入、机构上下文、资格快照、计票和终态，不判断
@@ -11,10 +11,10 @@
 //! 仍归 [`votingengine`] 引擎核心,本 pallet 通过 `Config: votingengine::Config` 直接访问。
 //!
 //! 本 pallet 自有:
-//! - storage:`InternalVotesByAccount` / `InternalTallies` / `InternalThresholdSnapshot`
+//! - storage:`InternalVotesByTicket` / `InternalTallies` / `InternalThresholdSnapshot`
 //! - event:`InternalVoteCast`
 //! - error:`InvalidInternalCode` / `MissingThresholdSnapshot` / `InvalidThresholdSnapshot`
-//! - extrinsic:`cast(proposal_id, approve)`
+//! - extrinsic:`cast(proposal_id, ticket_claim, approve)`
 //! - 业务函数:`do_create_internal_proposal*` / `do_internal_vote` / `do_finalize_internal_timeout`
 //! - trait impl:`InternalVoteEngine`(供业务 pallet 创建提案)
 //! - trait impl:`InternalProposalFinalizer`(votingengine 主 pallet finalize 路径反向调用)
@@ -25,7 +25,7 @@
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
     ensure,
-    pallet_prelude::{BoundedVec, DispatchResult},
+    pallet_prelude::{BoundedVec, DecodeWithMemTracking, DispatchResult},
     storage::{with_transaction, TransactionOutcome},
 };
 use scale_info::TypeInfo;
@@ -38,8 +38,8 @@ use votingengine::{
     pallet::{AdminSnapshot, Proposals},
     types::{
         institution_code_from_cid_number, is_personal_code, is_valid_governance_code,
-        AuthorizationSubject, CidNumber, InstitutionCode, ProposalSubject,
-        ProposalSubjectCidNumbers, VotePlanOf, VotingEngineKind,
+        AuthorizationSubject, CidNumber, InstitutionCode, InstitutionVoteTicket, ProposalSubject,
+        ProposalSubjectCidNumbers, RoleCode, VotePlanOf, VotingEngineKind,
     },
     InternalAdminProvider, InternalProposalMutexKind, Proposal, PROPOSAL_KIND_INTERNAL,
     STAGE_INTERNAL, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED,
@@ -73,6 +73,40 @@ pub enum InternalProposalRole {
     InstitutionAdminChange,
 }
 
+/// 调用方声明本次使用个人管理员票，或某个机构岗位票。
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Clone,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+    PartialEq,
+    Eq,
+)]
+pub enum InternalVoteTicketClaim {
+    Personal,
+    InstitutionRole(RoleCode),
+}
+
+/// 内部投票防重键。个人多签仍是一钱包一票，机构按完整岗位票据记票。
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Clone,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+    PartialEq,
+    Eq,
+)]
+pub enum InternalVoteTicket<AccountId> {
+    Personal(AccountId),
+    Institution(InstitutionVoteTicket<AccountId>),
+}
+
 #[derive(Encode, Decode, Clone, Copy, RuntimeDebug, TypeInfo, MaxEncodedLen, PartialEq, Eq)]
 pub struct PendingPersonalAdminChangeThreshold<AccountId> {
     pub personal_account: AccountId,
@@ -87,7 +121,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
 
     /// 重新创世直接使用最终 proposal_id 键控布局，不保留开发期旧存储迁移。
-    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {
@@ -102,14 +136,14 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
-    /// 内部投票记录:(proposal_id, 管理员公钥) → 赞成/反对。防止同一管理员重复投票。
+    /// 内部投票记录：个人多签按钱包，机构按 CID + 岗位码 + 钱包防重。
     #[pallet::storage]
-    pub type InternalVotesByAccount<T: Config> = StorageDoubleMap<
+    pub type InternalVotesByTicket<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        T::AccountId,
+        InternalVoteTicket<T::AccountId>,
         bool,
         OptionQuery,
     >;
@@ -158,6 +192,8 @@ pub mod pallet {
         InternalVoteCast {
             proposal_id: u64,
             who: T::AccountId,
+            /// 个人多签为 `None`；机构投票记录实际使用的岗位码。
+            voter_role_code: Option<RoleCode>,
             approve: bool,
         },
     }
@@ -183,9 +219,14 @@ pub mod pallet {
         /// 内部投票。个人多签使用管理员账户；机构使用建案时冻结的岗位任职快照。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::cast())]
-        pub fn cast(origin: OriginFor<T>, proposal_id: u64, approve: bool) -> DispatchResult {
+        pub fn cast(
+            origin: OriginFor<T>,
+            proposal_id: u64,
+            ticket_claim: InternalVoteTicketClaim,
+            approve: bool,
+        ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_internal_vote(who, proposal_id, approve)
+            Self::do_internal_vote(who, proposal_id, ticket_claim, approve)
         }
     }
 }

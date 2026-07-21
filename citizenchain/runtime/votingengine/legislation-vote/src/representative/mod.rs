@@ -323,6 +323,7 @@ impl<T: Config> Pallet<T> {
     pub fn do_cast_representative_vote(
         who: T::AccountId,
         proposal_id: u64,
+        voter_role_code: votingengine::types::RoleCode,
         approve: bool,
     ) -> DispatchResult {
         let proposal = <votingengine::Pallet<T>>::ensure_open_proposal(proposal_id)?;
@@ -340,10 +341,18 @@ impl<T: Config> Pallet<T> {
             .route
             .body(meta.current_body)
             .ok_or(Error::<T>::InvalidRepresentativeRoute)?;
-        let representative_subject = AuthorizationSubject::Institution(representative_body);
-        let vote_key = (meta.current_body, who.clone());
         ensure!(
-            !pallet::RepresentativeVotesByAccount::<T>::contains_key(proposal_id, &vote_key),
+            representative_body.role_code == voter_role_code,
+            votingengine::Error::<T>::NoPermission
+        );
+        let representative_subject = AuthorizationSubject::Institution(representative_body.clone());
+        let ticket = votingengine::types::InstitutionVoteTicket {
+            role_subject: representative_body,
+            voter_account: who.clone(),
+        };
+        let vote_key = (meta.current_body, ticket);
+        ensure!(
+            !pallet::RepresentativeVotesByTicket::<T>::contains_key(proposal_id, &vote_key),
             votingengine::Error::<T>::AlreadyVoted
         );
         ensure!(
@@ -355,7 +364,7 @@ impl<T: Config> Pallet<T> {
             votingengine::Error::<T>::NoPermission
         );
 
-        pallet::RepresentativeVotesByAccount::<T>::insert(proposal_id, vote_key, approve);
+        pallet::RepresentativeVotesByTicket::<T>::insert(proposal_id, vote_key, approve);
         let tally =
             pallet::RepresentativeTallies::<T>::mutate(proposal_id, meta.current_body, |t| {
                 if approve {
@@ -369,6 +378,7 @@ impl<T: Config> Pallet<T> {
             proposal_id,
             body_index: meta.current_body,
             who,
+            voter_role_code,
             approve,
         });
 

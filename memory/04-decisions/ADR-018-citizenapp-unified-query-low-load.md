@@ -13,7 +13,7 @@
 
 | 访问模式 | 轻节点表现 | 例子 |
 |---|---|---|
-| **精确整键 `fetchStorage(完整key)`** | ✅ 正常(单 key Merkle 证明) | `ActiveProposalsBySubject[ProposalSubject]`、`InternalVotesByAccount[pid,account]`、`System.Account[account]` 余额 |
+| **精确整键 `fetchStorage(完整key)`** | ✅ 正常(单 key Merkle 证明) | `ActiveProposalsBySubject[ProposalSubject]`、`InternalVotesByTicket[pid,ticket]`、`System.Account[account]` 余额 |
 | **keysPaged 前缀扫描,前缀嵌长 K1(ProposalSubject / blake2+cid)** | ❌ 返回空(证明拉不全,静默空) | `ProposalsByCid[cid_number]`、`InstitutionAccounts[blake2(cid)+cid,...]` |
 | **keysPaged 短前缀(整表 / ≤2B K1)** | ✅ 正常 | `ProposalsByYear[year]`、`ProposalsByCode[institution_code]`(机构码反向索引,见 [[ADR-025]])、`AdminAccounts` 整表 |
 

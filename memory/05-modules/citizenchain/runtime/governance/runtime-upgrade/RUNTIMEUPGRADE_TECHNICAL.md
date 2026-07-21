@@ -115,7 +115,7 @@ Runtime 配置位置：
 - `ProposalMeta`：存放提案创建时间
 - `Proposals`：投票引擎核心提案表（状态、阶段、截止区块等）
 - `ProposalVotePlans`：一次性绑定协议升级动作、提案主体、87 个投票岗位主体、联合引擎和 runtime WASM 对象哈希
-- `VoterSnapshot` / `EffectiveVoterSnapshot`：分别保存岗位有效任职快照和按 CID 合并去重的有效选民快照
+- `VoterSnapshot` / `InstitutionTicketCountSnapshot`：分别保存岗位有效任职快照和按 CID 冻结的岗位席位票据总数
 
 ## 5. 外部接口
 ### 5.1 `propose_runtime_upgrade`（call index = 0）

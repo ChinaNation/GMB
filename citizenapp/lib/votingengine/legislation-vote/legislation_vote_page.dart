@@ -84,10 +84,13 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
       final votable = <WalletProfile>[];
       if (state?.stage == LegStage.representative &&
           representativeMeta != null) {
+        final body = representativeMeta.bodies[representativeMeta.currentBody];
         for (final w in widget.adminWallets) {
           final voted = await _query.fetchRepresentativeVote(
             widget.proposalId,
             representativeMeta.currentBody,
+            body.cidNumber,
+            body.roleCode,
             _normalize(w.pubkeyHex),
           );
           if (voted == null) votable.add(w);
@@ -208,8 +211,13 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
     );
     switch (stage) {
       case LegStage.representative:
+        final meta = _representativeMeta;
+        if (meta == null) {
+          return Future<void>.error(StateError('代表机构表决元数据不存在'));
+        }
         return _vote.castRepresentativeVote(
           proposalId: common.proposalId,
+          voterRoleCode: meta.bodies[meta.currentBody].roleCode,
           approve: common.approve,
           fromAddress: common.fromAddress,
           signerPubkey: common.signerPubkey,

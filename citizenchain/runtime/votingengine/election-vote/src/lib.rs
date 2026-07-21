@@ -83,7 +83,7 @@ pub mod pallet {
     }
 
     /// 重新创世直接使用含人口作用域的最终选举元数据布局。
-    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
@@ -104,14 +104,26 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// 投票记录:proposal_id + voter → candidate。
+    /// 普选投票记录：proposal_id + 公民钱包 → candidate。
     #[pallet::storage]
-    pub type ElectionVotesByVoter<T: Config> = StorageDoubleMap<
+    pub type PopularElectionVotesByVoter<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
         T::AccountId,
+        T::AccountId,
+        OptionQuery,
+    >;
+
+    /// 互选投票记录：proposal_id + (CID + 岗位码 + 钱包) → candidate。
+    #[pallet::storage]
+    pub type MutualElectionVotesByTicket<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        Blake2_128Concat,
+        votingengine::types::InstitutionVoteTicket<T::AccountId>,
         T::AccountId,
         OptionQuery,
     >;
@@ -150,6 +162,8 @@ pub mod pallet {
         ElectionVoteCast {
             proposal_id: u64,
             voter: T::AccountId,
+            /// 普选为 `None`；互选记录实际使用的岗位码。
+            voter_role_code: Option<votingengine::types::RoleCode>,
             candidate: T::AccountId,
         },
         /// 当选结果已生成。
@@ -222,10 +236,11 @@ pub mod pallet {
         pub fn cast_mutual_vote(
             origin: OriginFor<T>,
             proposal_id: u64,
+            voter_role_code: votingengine::types::RoleCode,
             candidate: T::AccountId,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_cast_mutual_vote(who, proposal_id, candidate)
+            Self::do_cast_mutual_vote(who, proposal_id, voter_role_code, candidate)
         }
     }
 
@@ -472,6 +487,7 @@ pub mod pallet {
             who: T::AccountId,
             proposal_id: u64,
             expected_stage: u8,
+            voter_role_code: Option<votingengine::types::RoleCode>,
             candidate: T::AccountId,
         ) -> DispatchResult {
             let proposal = votingengine::Pallet::<T>::ensure_open_proposal(proposal_id)?;
@@ -484,34 +500,51 @@ pub mod pallet {
                 votingengine::Error::<T>::InvalidProposalStage
             );
             ensure!(
-                !ElectionVotesByVoter::<T>::contains_key(proposal_id, &who),
-                votingengine::Error::<T>::AlreadyVoted
+                Self::candidate_exists(proposal_id, &candidate),
+                Error::<T>::CandidateNotInSnapshot
             );
             if expected_stage == votingengine::STAGE_ELECTION_POPULAR {
+                ensure!(voter_role_code.is_none(), Error::<T>::VoterNotInSnapshot);
+                ensure!(
+                    !PopularElectionVotesByVoter::<T>::contains_key(proposal_id, &who),
+                    votingengine::Error::<T>::AlreadyVoted
+                );
                 ensure!(
                     votingengine::Pallet::<T>::can_vote_at_population_snapshot(proposal_id, &who),
                     Error::<T>::VoterNotEligible
                 );
+                PopularElectionVotesByVoter::<T>::insert(proposal_id, &who, &candidate);
             } else {
+                let role_code = voter_role_code
+                    .clone()
+                    .ok_or(Error::<T>::VoterNotInSnapshot)?;
+                let target_cid_number = ElectionMetaStore::<T>::get(proposal_id)
+                    .ok_or(Error::<T>::ElectionMetaMissing)?
+                    .target_cid_number;
+                let role_subject = votingengine::types::RoleSubject {
+                    cid_number: target_cid_number,
+                    role_code,
+                };
                 ensure!(
-                    votingengine::Pallet::<T>::is_effective_voter_in_snapshot(
+                    votingengine::Pallet::<T>::is_subject_voter_in_snapshot(
                         proposal_id,
-                        votingengine::types::ProposalSubject::InstitutionCid(
-                            ElectionMetaStore::<T>::get(proposal_id)
-                                .ok_or(Error::<T>::ElectionMetaMissing)?
-                                .target_cid_number,
+                        votingengine::types::AuthorizationSubject::Institution(
+                            role_subject.clone(),
                         ),
                         &who,
                     ),
                     Error::<T>::VoterNotInSnapshot
                 );
+                let ticket = votingengine::types::InstitutionVoteTicket {
+                    role_subject,
+                    voter_account: who.clone(),
+                };
+                ensure!(
+                    !MutualElectionVotesByTicket::<T>::contains_key(proposal_id, &ticket),
+                    votingengine::Error::<T>::AlreadyVoted
+                );
+                MutualElectionVotesByTicket::<T>::insert(proposal_id, ticket, &candidate);
             }
-            ensure!(
-                Self::candidate_exists(proposal_id, &candidate),
-                Error::<T>::CandidateNotInSnapshot
-            );
-
-            ElectionVotesByVoter::<T>::insert(proposal_id, &who, &candidate);
             ElectionCandidateTallies::<T>::mutate(proposal_id, &candidate, |votes| {
                 *votes = votes.saturating_add(1);
             });
@@ -522,6 +555,7 @@ pub mod pallet {
             Self::deposit_event(Event::<T>::ElectionVoteCast {
                 proposal_id,
                 voter: who,
+                voter_role_code,
                 candidate,
             });
 
@@ -533,11 +567,8 @@ pub mod pallet {
                     .ok_or(Error::<T>::ElectionMetaMissing)?
                     .target_cid_number;
                 u64::from(
-                    votingengine::Pallet::<T>::effective_voters_len(
-                        proposal_id,
-                        votingengine::types::ProposalSubject::InstitutionCid(target),
-                    )
-                    .ok_or(Error::<T>::EmptyVoterSnapshot)?,
+                    votingengine::Pallet::<T>::institution_ticket_count(proposal_id, target)
+                        .ok_or(Error::<T>::EmptyVoterSnapshot)?,
                 )
             };
             if u64::from(tally.casted) >= eligible_total {

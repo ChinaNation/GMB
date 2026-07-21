@@ -206,12 +206,7 @@ impl<T: Config> Pallet<T> {
         let authorized = if proposal.kind == PROPOSAL_KIND_JOINT
             || (proposal.kind == PROPOSAL_KIND_INTERNAL && proposal.actor_cid_number.is_some())
         {
-            let subject = ProposalSubject::InstitutionCid(
-                proposal
-                    .actor_cid_number
-                    .ok_or(Error::<T>::InvalidInstitution)?,
-            );
-            Self::is_effective_voter_in_snapshot(proposal_id, subject, who)
+            Self::is_any_institution_voter_in_snapshot(proposal_id, who)
         } else {
             let subject = proposal
                 .subject_keys()

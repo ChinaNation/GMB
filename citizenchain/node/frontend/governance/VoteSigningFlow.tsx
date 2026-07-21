@@ -11,7 +11,7 @@ type Props = {
   adminWallets: AdminWalletMatch[];
   cidNumber?: string;
   onClose: () => void;
-  onSuccess: (txHash: string) => void;
+  onSuccess: (txHash: string, pubkeyHex: string, voterRoleCode: string | null) => void;
 };
 
 type FlowStep = 'select' | 'qr' | 'submit' | 'done' | 'error';
@@ -24,6 +24,11 @@ export function VoteSigningFlow({
     adminWallets.length === 1 ? adminWallets[0] : null
   );
   const [approve, setApprove] = useState<boolean | null>(null);
+  const [selectedRoleCode, setSelectedRoleCode] = useState<string>(
+    adminWallets.length === 1 && adminWallets[0].roleAssignments?.length === 1
+      ? adminWallets[0].roleAssignments![0].roleCode
+      : '',
+  );
   const [signRequest, setSignRequest] = useState<VoteSignRequestResult | null>(null);
   const [callDataHex, setCallDataHex] = useState('');
   const [requestJson, setRequestJson] = useState('');
@@ -47,17 +52,33 @@ export function VoteSigningFlow({
 
   const generateRequest = useCallback(async () => {
     if (!selectedWallet || approve === null) return;
+    const institutionVote = !!cidNumber;
+    if (institutionVote && !selectedRoleCode) {
+      setError('请选择本次投票使用的岗位');
+      return;
+    }
     try {
       let result: VoteSignRequestResult;
       let cdHex: string;
       // 内部投票(管理员一人一票)统一走 InternalVote::cast(20.0),
       // 联合投票走 JointVote::cast_admin(21.0),由 proposalKind===1 分支决定。
       if (proposalKind === 1 && cidNumber) {
-        result = await api.buildJointVoteRequest(proposalId, selectedWallet.pubkeyHex, cidNumber, approve);
+        result = await api.buildJointVoteRequest(
+          proposalId,
+          selectedWallet.pubkeyHex,
+          cidNumber,
+          selectedRoleCode,
+          approve,
+        );
         cdHex = result.callDataHex;
       } else {
-        result = await api.buildVoteRequest(proposalId, selectedWallet.pubkeyHex, approve);
-        cdHex = result.callDataHex || buildInternalVoteCallDataHex(proposalId, approve);
+        result = await api.buildVoteRequest(
+          proposalId,
+          selectedWallet.pubkeyHex,
+          institutionVote ? selectedRoleCode : null,
+          approve,
+        );
+        cdHex = result.callDataHex;
       }
       setSignRequest(result);
       setCallDataHex(cdHex);
@@ -68,7 +89,7 @@ export function VoteSigningFlow({
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [proposalId, proposalKind, selectedWallet, approve, cidNumber]);
+  }, [proposalId, proposalKind, selectedWallet, selectedRoleCode, approve, cidNumber]);
 
   const handleScanResult = useCallback(async (responseText: string) => {
     const req = signRequestRef.current;
@@ -80,12 +101,16 @@ export function VoteSigningFlow({
       const result = await api.submitVote(req.requestId, wallet.pubkeyHex, req.expectedPayloadHash, cdHex, req.signNonce, req.signBlockNumber, responseText);
       setTxHash(result.txHash);
       setStep('done');
-      onSuccess(result.txHash);
+      onSuccess(
+        result.txHash,
+        selectedWallet?.pubkeyHex ?? '',
+        cidNumber ? selectedRoleCode : null,
+      );
     } catch (e) {
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [onSuccess]);
+  }, [onSuccess, selectedWallet, selectedRoleCode, cidNumber]);
 
   return (
     <div className="vote-signing-overlay">
@@ -100,9 +125,26 @@ export function VoteSigningFlow({
             {adminWallets.length > 1 && (
               <div className="vote-signing-field">
                 <label>选择管理员钱包</label>
-                <select value={selectedWallet?.pubkeyHex || ''} onChange={(e) => setSelectedWallet(adminWallets.find((w) => w.pubkeyHex === e.target.value) || null)}>
+                <select value={selectedWallet?.pubkeyHex || ''} onChange={(e) => {
+                  const wallet = adminWallets.find((w) => w.pubkeyHex === e.target.value) || null;
+                  setSelectedWallet(wallet);
+                  setSelectedRoleCode(wallet?.roleAssignments?.length === 1 ? wallet.roleAssignments[0].roleCode : '');
+                }}>
                   <option value="">请选择…</option>
                   {adminWallets.map((w) => <option key={w.pubkeyHex} value={w.pubkeyHex}>{w.walletLabel || w.address}</option>)}
+                </select>
+              </div>
+            )}
+            {cidNumber && selectedWallet && (
+              <div className="vote-signing-field">
+                <label>使用岗位</label>
+                <select value={selectedRoleCode} onChange={(e) => setSelectedRoleCode(e.target.value)}>
+                  <option value="">请选择…</option>
+                  {(selectedWallet.roleAssignments ?? []).map((assignment) => (
+                    <option key={assignment.roleCode} value={assignment.roleCode}>
+                      {assignment.roleName || assignment.roleCode}（{assignment.roleCode}）
+                    </option>
+                  ))}
                 </select>
               </div>
             )}
@@ -113,7 +155,7 @@ export function VoteSigningFlow({
                 <button className={`vote-dir-btn ${approve === false ? 'selected-no' : ''}`} onClick={() => setApprove(false)}>反对</button>
               </div>
             </div>
-            <button className="vote-signing-confirm" disabled={!selectedWallet || approve === null} onClick={generateRequest}>生成签名请求</button>
+            <button className="vote-signing-confirm" disabled={!selectedWallet || approve === null || (!!cidNumber && !selectedRoleCode)} onClick={generateRequest}>生成签名请求</button>
           </div>
         )}
 
@@ -146,20 +188,4 @@ export function VoteSigningFlow({
       </div>
     </div>
   );
-}
-
-/**
- * 统一投票入口 call 编码:`[0x14][0x00][proposal_id:u64_le][approve:bool]` = 11 bytes。
- *
- * 管理员一人一票一律走 InternalVote::cast(pallet=20, call=0)。
- */
-function buildInternalVoteCallDataHex(proposalId: number, approve: boolean): string {
-  const buf = new ArrayBuffer(11);
-  const view = new DataView(buf);
-  const arr = new Uint8Array(buf);
-  arr[0] = 20; arr[1] = 0; // InternalVote.cast
-  view.setUint32(2, proposalId & 0xFFFFFFFF, true);
-  view.setUint32(6, Math.floor(proposalId / 0x100000000), true);
-  arr[10] = approve ? 1 : 0;
-  return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
 }

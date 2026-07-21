@@ -64,18 +64,20 @@ mod benchmarks {
             .try_into()
             .expect("NRC CID fits runtime bound");
         let voter = decode::<T>(&entry.admins[0]);
-        let voters: frame_support::BoundedVec<_, T::MaxAdminsPerInstitution> = entry
-            .admins
-            .iter()
-            .map(decode::<T>)
-            .collect::<sp_std::vec::Vec<_>>()
-            .try_into()
-            .expect("fixed NRC admins fit runtime bound");
-        votingengine::pallet::EffectiveVoterSnapshot::<T>::insert(
+        let voter_role_code: votingengine::RoleCode =
+            primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                .to_vec()
+                .try_into()
+                .expect("committee role fits");
+        votingengine::Pallet::<T>::snapshot_role_voters(
             proposal_id,
-            votingengine::ProposalSubject::InstitutionCid(actor_cid_number.clone()),
-            voters,
-        );
+            votingengine::AuthorizationSubject::Institution(votingengine::RoleSubject {
+                cid_number: actor_cid_number.clone(),
+                role_code: voter_role_code.clone(),
+            }),
+            entry.admins.iter().map(decode::<T>).collect(),
+        )
+        .expect("NRC role snapshot");
         let threshold = votingengine::fixed_governance_pass_threshold(&votingengine::NRC)
             .expect("NRC threshold");
         JointInstitutionTallies::<T>::insert(
@@ -92,6 +94,7 @@ mod benchmarks {
             RawOrigin::Signed(voter),
             proposal_id,
             actor_cid_number.clone(),
+            voter_role_code,
             true,
         );
 

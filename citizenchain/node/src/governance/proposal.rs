@@ -2,6 +2,7 @@
 
 use crate::shared::proposal_business;
 use codec::Decode;
+use entity_primitives::AuthorizationSubject;
 use primitives::cid::code::InstitutionCode;
 use serde::Serialize;
 
@@ -115,8 +116,18 @@ pub struct ProposalFullInfo {
     pub internal_tally: Option<VoteTally>,
     pub joint_tally: Option<JointVoteTally>,
     pub referendum_tally: Option<ReferendumVoteTally>,
+    /// 提案创建时冻结的机构投票岗位主体；个人多签主体不在此列表中。
+    pub voter_role_subjects: Vec<VoterRoleSubject>,
     /// 关联机构名称（通过 `subject_cid_numbers` 反查）。
     pub cid_full_name: Option<String>,
+}
+
+/// 前端用于过滤可投岗位的最小岗位主体镜像。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VoterRoleSubject {
+    pub cid_number: String,
+    pub role_code: String,
 }
 
 /// 费率提案详情。
@@ -365,6 +376,7 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
     };
 
     let cid_full_name = resolve_cid_full_name_by_subjects(&meta.subject_cid_numbers);
+    let voter_role_subjects = fetch_voter_role_subjects(proposal_id)?;
 
     Ok(ProposalFullInfo {
         meta,
@@ -376,8 +388,36 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
         internal_tally,
         joint_tally,
         referendum_tally,
+        voter_role_subjects,
         cid_full_name,
     })
+}
+
+fn fetch_voter_role_subjects(proposal_id: u64) -> Result<Vec<VoterRoleSubject>, String> {
+    let key = storage_keys::map_key("VotingEngine", "VotePlans", &proposal_id.to_le_bytes());
+    let Some(hex_value) = chain_query::fetch_finalized_storage(&key)? else {
+        return Err(format!("提案 {proposal_id} 缺少 VotingEngine::VotePlans"));
+    };
+    let bytes = hex::decode(hex_value.trim_start_matches("0x"))
+        .map_err(|error| format!("VotePlans hex 解码失败: {error}"))?;
+    let mut input = &bytes[..];
+    let plan = votingengine::types::VotePlanOf::<sp_runtime::AccountId32>::decode(&mut input)
+        .map_err(|error| format!("VotePlans SCALE 解码失败: {error}"))?;
+    if !input.is_empty() {
+        return Err("VotePlans SCALE 存在尾随字节".into());
+    }
+    let mut subjects = Vec::new();
+    for subject in plan.voter_subjects {
+        if let AuthorizationSubject::Institution(role) = subject {
+            subjects.push(VoterRoleSubject {
+                cid_number: String::from_utf8(role.cid_number.into_inner())
+                    .map_err(|_| "VotePlans cid_number 不是 UTF-8".to_string())?,
+                role_code: String::from_utf8(role.role_code.into_inner())
+                    .map_err(|_| "VotePlans role_code 不是 UTF-8".to_string())?,
+            });
+        }
+    }
+    Ok(subjects)
 }
 
 /// 把 [`ProposalAction`] 展开成 `ProposalFullInfo` 的业务详情字段。
@@ -1259,6 +1299,8 @@ pub struct UserVoteStatus {
     pub kind: u8,
     /// 提案当前阶段。
     pub stage: u8,
+    /// 机构岗位票据使用的岗位码；个人多签为 null。
+    pub voter_role_code: Option<String>,
     /// 该用户是否已在内部阶段投票：null=未投票, true=赞成, false=反对。
     pub internal_vote: Option<bool>,
     /// 该用户是否已在联合阶段投票（通过机构）：null=未投票, true=赞成, false=反对。
@@ -1270,31 +1312,51 @@ pub fn fetch_user_vote_status(
     proposal_id: u64,
     pubkey_hex: &str,
     cid_number: Option<&str>,
+    voter_role_code: Option<&str>,
 ) -> Result<UserVoteStatus, String> {
     let meta =
         fetch_proposal_meta(proposal_id)?.ok_or_else(|| format!("提案 {proposal_id} 不存在"))?;
 
     let pubkey_bytes = hex::decode(pubkey_hex).map_err(|e| format!("公钥解码失败: {e}"))?;
 
-    // 查询内部投票状态（InternalVotesByAccount: DoubleMap<u64, AccountId32> → bool）
+    // 查询内部投票状态（个人账户票或 CID + 岗位码 + 钱包票据）。
     let internal_vote = {
+        let ticket_key = match (cid_number, voter_role_code) {
+            (Some(cid), Some(role_code)) => {
+                let mut key = vec![1u8]; // InternalVoteTicket::Institution
+                key.extend_from_slice(&cid_number_key(cid)?);
+                key.extend_from_slice(&encode_compact_u32(role_code.len() as u32));
+                key.extend_from_slice(role_code.as_bytes());
+                key.extend_from_slice(&pubkey_bytes);
+                key
+            }
+            (None, None) => {
+                let mut key = vec![0u8]; // InternalVoteTicket::Personal
+                key.extend_from_slice(&pubkey_bytes);
+                key
+            }
+            _ => return Err("机构投票状态查询必须同时提供 cid_number 和 voter_role_code".into()),
+        };
         let key = storage_keys::double_map_key(
             "InternalVote",
-            "InternalVotesByAccount",
+            "InternalVotesByTicket",
             &proposal_id.to_le_bytes(),
-            &pubkey_bytes,
+            &ticket_key,
         );
         fetch_option_bool(&key)?
     };
 
-    // 查询联合投票状态（JointVotesByAdmin: DoubleMap<u64, (CidNumber, AccountId32)> → bool）。
-    let joint_vote = if meta.kind == 1 && cid_number.is_some() {
+    // 查询联合岗位票据状态（CID + 岗位码 + 钱包）。
+    let joint_vote = if meta.kind == 1 && cid_number.is_some() && voter_role_code.is_some() {
         let cid_number = cid_number.expect("guarded by is_some()");
+        let voter_role_code = voter_role_code.expect("guarded by is_some()");
         let mut composite_key = cid_number_key(cid_number)?;
+        composite_key.extend_from_slice(&encode_compact_u32(voter_role_code.len() as u32));
+        composite_key.extend_from_slice(voter_role_code.as_bytes());
         composite_key.extend_from_slice(&pubkey_bytes);
         let key = storage_keys::double_map_key(
             "JointVote",
-            "JointVotesByAdmin",
+            "JointVotesByTicket",
             &proposal_id.to_le_bytes(),
             &composite_key,
         );
@@ -1307,6 +1369,7 @@ pub fn fetch_user_vote_status(
         proposal_id,
         kind: meta.kind,
         stage: meta.stage,
+        voter_role_code: voter_role_code.map(str::to_string),
         internal_vote,
         joint_vote,
     })

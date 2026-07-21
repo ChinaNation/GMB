@@ -77,7 +77,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
 
     /// 重新创世直接使用代表表决与法律专属元数据分离的最终布局。
-    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
     /// 代表机构表决元数据。所有法律、任免、预算等立法机关表决共用这一份状态。
     #[derive(
@@ -160,15 +160,18 @@ pub mod pallet {
         ValueQuery,
     >;
 
-    /// 代表表决去重：(proposal_id, (body_index, account)) → 赞成/反对。
-    /// `body_index` 允许同一账户在不同机构阶段分别依法投票。
+    /// 代表表决去重：(proposal_id, (body_index, 岗位票据)) → 赞成/反对。
+    /// `body_index` 隔离顺序表决阶段，岗位票据保留 CID + 岗位码 + 钱包三元权限。
     #[pallet::storage]
-    pub type RepresentativeVotesByAccount<T: Config> = StorageDoubleMap<
+    pub type RepresentativeVotesByTicket<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        (u32, T::AccountId),
+        (
+            u32,
+            votingengine::types::InstitutionVoteTicket<T::AccountId>,
+        ),
         bool,
         OptionQuery,
     >;
@@ -227,6 +230,7 @@ pub mod pallet {
             proposal_id: u64,
             body_index: u32,
             who: T::AccountId,
+            voter_role_code: votingengine::types::RoleCode,
             approve: bool,
         },
         /// 当前代表机构通过，推进至下一代表机构。
@@ -308,10 +312,11 @@ pub mod pallet {
         pub fn cast_representative_vote(
             origin: OriginFor<T>,
             proposal_id: u64,
+            voter_role_code: votingengine::types::RoleCode,
             approve: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_cast_representative_vote(who, proposal_id, approve)
+            Self::do_cast_representative_vote(who, proposal_id, voter_role_code, approve)
         }
 
         /// 公民对特别案公投投票(链上公民身份持有者,链上按账户去重计票)。
@@ -412,10 +417,10 @@ impl<T: Config> crate::LegislationVoteEngine<T::AccountId> for Pallet<T> {
             }
             if <votingengine::Pallet<T>>::is_subject_voter_in_snapshot(
                 id,
-                AuthorizationSubject::Institution(first_body),
+                AuthorizationSubject::Institution(first_body.clone()),
                 &who,
             ) {
-                match Self::do_cast_representative_vote(who, id, true) {
+                match Self::do_cast_representative_vote(who, id, first_body.role_code, true) {
                     Ok(()) => TransactionOutcome::Commit(Ok(id)),
                     Err(err) => TransactionOutcome::Rollback(Err(err)),
                 }
@@ -473,10 +478,10 @@ impl<T: Config> crate::LegislationVoteEngine<T::AccountId> for Pallet<T> {
             // 市行政区 市自治会/市教委会 委员提案时发起人不在表决院(市立法会),不自动投票。
             if <votingengine::Pallet<T>>::is_subject_voter_in_snapshot(
                 id,
-                AuthorizationSubject::Institution(first_body),
+                AuthorizationSubject::Institution(first_body.clone()),
                 &who,
             ) {
-                match Self::do_cast_representative_vote(who, id, true) {
+                match Self::do_cast_representative_vote(who, id, first_body.role_code, true) {
                     Ok(()) => TransactionOutcome::Commit(Ok(id)),
                     Err(err) => TransactionOutcome::Rollback(Err(err)),
                 }

@@ -34,11 +34,25 @@ class LegRepresentativeMeta {
 
   final bool sequential;
 
-  /// 按状态机顺序排列的代表机构 CID。
-  final List<String> bodies;
+  /// 按状态机顺序排列的代表机构岗位主体。
+  final List<LegRepresentativeBody> bodies;
   final int currentBody;
   final int rule; // 0常规/1重要/2特别
   final int procedure; // 0代表表决终局/1法律专属程序
+}
+
+/// 代表机构表决路线中的完整岗位主体。
+class LegRepresentativeBody {
+  const LegRepresentativeBody({
+    required this.cidNumber,
+    required this.roleCode,
+  });
+
+  final String cidNumber;
+  final String roleCode;
+
+  @override
+  String toString() => '$cidNumber / $roleCode';
 }
 
 /// 法律专属元数据（LegislationMetas 镜像）。
@@ -119,8 +133,8 @@ class LegislationVoteQueryService {
       final c = _Cursor(data);
       final routeVariant = c.u8();
       final bodies = switch (routeVariant) {
-        0 => [c.cidNumber()],
-        1 => c.vec(c.cidNumber),
+        0 => [c.representativeBody()],
+        1 => c.vec(c.representativeBody),
         _ => throw const FormatException('未知代表机构路线'),
       };
       if (bodies.isEmpty || bodies.length > 4) return null;
@@ -192,22 +206,41 @@ class LegislationVoteQueryService {
     return (yes: _u64(data, 0), no: _u64(data, 8));
   }
 
-  /// 某钱包在指定代表机构席位的投票。
+  /// 某钱包在指定代表机构岗位席位的投票。
   Future<bool?> fetchRepresentativeVote(
-      int proposalId, int bodyIndex, String pubkeyHex) async {
+    int proposalId,
+    int bodyIndex,
+    String cidNumber,
+    String voterRoleCode,
+    String pubkeyHex,
+  ) async {
     final tupleKey = Uint8List.fromList([
       ..._u32Le(bodyIndex),
+      ..._encodeBoundedText(cidNumber, 32, 'cid_number'),
+      ..._encodeBoundedText(voterRoleCode, 64, 'voter_role_code'),
       ..._hexDecode(pubkeyHex),
     ]);
     final key = _doubleMapKey(
       _votePallet,
-      'RepresentativeVotesByAccount',
+      'RepresentativeVotesByTicket',
       _u64Le(proposalId),
       tupleKey,
     );
     final data = await _rpc.fetchStorage('0x${_hex(key)}');
     if (data == null || data.length != 1 || data[0] > 1) return null;
     return data[0] == 1;
+  }
+
+  Uint8List _encodeBoundedText(String value, int maxBytes, String field) {
+    final bytes = utf8.encode(value.trim());
+    if (bytes.isEmpty || bytes.length > maxBytes) {
+      throw ArgumentError('$field 长度不合法');
+    }
+    final length = bytes.length;
+    final prefix = length < 64
+        ? <int>[length << 2]
+        : <int>[(length << 2 | 1) & 0xff, (length << 2 | 1) >> 8];
+    return Uint8List.fromList([...prefix, ...bytes]);
   }
 
   /// 三人会签记录(LegOverrideSigns:BoundedVec<(AccountId,bool)>)。
@@ -364,6 +397,19 @@ class _Cursor {
     }
     return utf8.decode(bytes(length));
   }
+
+  String roleCode() {
+    final length = compact();
+    if (length <= 0 || length > 64) {
+      throw const FormatException('岗位码长度必须为 1..64 字节');
+    }
+    return utf8.decode(bytes(length));
+  }
+
+  LegRepresentativeBody representativeBody() => LegRepresentativeBody(
+        cidNumber: cidNumber(),
+        roleCode: roleCode(),
+      );
 
   List<T> vec<T>(T Function() item) {
     final n = compact();

@@ -9,10 +9,7 @@ use frame_system::RawOrigin;
 use sp_runtime::traits::SaturatedConversion;
 
 use crate::{
-    pallet::{
-        Config, EffectiveVoterSnapshot, PendingProposalExecutions, ProposalExecutionRetryStates,
-        Proposals,
-    },
+    pallet::{Config, PendingProposalExecutions, ProposalExecutionRetryStates, Proposals},
     Call, ExecutionRetryState, Pallet, PendingExecutionState, Proposal, STATUS_PASSED,
     STATUS_VOTING,
 };
@@ -41,16 +38,37 @@ fn setup<T: Config>(status: u8) -> (u64, T::AccountId) {
             end: 0u32.saturated_into(),
         },
     );
-    let admins: frame_support::BoundedVec<T::AccountId, T::MaxAdminsPerInstitution> =
-        sp_std::vec![who.clone()]
+    let role_subject = crate::types::RoleSubject {
+        cid_number: actor_cid_number.clone(),
+        role_code: b"BENCHMARK_ROLE"
+            .to_vec()
             .try_into()
-            .expect("single benchmark admin fits runtime bound");
-    // 机构业务的重试与取消权限来自岗位有效任职快照；个人多签才读取 AdminSnapshot。
-    EffectiveVoterSnapshot::<T>::insert(
+            .expect("benchmark role fits"),
+    };
+    let subject = crate::types::AuthorizationSubject::Institution(role_subject.clone());
+    crate::Pallet::<T>::snapshot_role_voters(
         proposal_id,
-        crate::ProposalSubject::InstitutionCid(actor_cid_number),
-        admins,
-    );
+        subject.clone(),
+        sp_std::vec![who.clone()],
+    )
+    .expect("benchmark role snapshot");
+    let owner: frame_support::BoundedVec<
+        u8,
+        frame_support::traits::ConstU32<{ entity_primitives::BUSINESS_MODULE_TAG_MAX_BYTES }>,
+    > = b"benchmark".to_vec().try_into().expect("benchmark owner");
+    let plan = crate::types::VotePlanOf::try_new(
+        entity_primitives::BusinessActionId {
+            module_tag: owner.clone(),
+            action_code: 0,
+        },
+        owner,
+        subject.clone(),
+        sp_std::vec![subject],
+        crate::types::VotingEngineKind::Internal,
+        [0u8; 32],
+    )
+    .expect("benchmark vote plan");
+    crate::Pallet::<T>::bind_vote_plan(proposal_id, plan).expect("bind benchmark vote plan");
     if status == STATUS_PASSED {
         ProposalExecutionRetryStates::<T>::insert(
             proposal_id,

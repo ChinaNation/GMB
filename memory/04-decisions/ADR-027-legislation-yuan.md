@@ -194,7 +194,7 @@ legislation-vote/src/
 - `VoteProcedure::RepresentativeOnly/Legislation`：表决后直接回业务，或继续法律专属程序。
 - `RepresentativeMetas` 保存路线、当前机构、规则和程序；`LegislationMetas` 只保存法律签署、公投和护宪参数。
 - `RepresentativeTallies[proposal_id][body_index]` 每机构独立计票。
-- `RepresentativeVotesByAccount[proposal_id][(body_index, account)]` 按机构席位去重；同一钱包在多个机构任职时可分别投票。
+- `RepresentativeVotesByTicket[proposal_id][(body_index, InstitutionVoteTicket)]` 按完整机构岗位席位去重；同一钱包在多个代表岗位任职时可分别投票。
 - 终局回调以元组扩展，由法律、任免、预算业务分别按 `ProposalOwner/MODULE_TAG` 认领。
 
 (C) 与存量关系：internal-vote、joint-vote、election-vote 职责不变。任免和预算是业务模块，不得在这些模块或 `legislation-vote` 中保存业务正文、复刻表决流程或新增投票 pallet。
@@ -388,7 +388,7 @@ warp 版本集合连续性全部由节点原生复核。无 body 的 `ApplyChang
   - **法律案**:本轮**全链路实现**——发起(章>节>条>款编辑器 + 冷签 QR)→ 院内/两院表决(一人一票冷签)→ 进度(六阶段 + 计票)。后端 `domains/legislation/{law,chain_read_proposal}`,前端 `legislation/operator/law/`。
   - **任免案 / 预算案**：由各自业务模块保存任免职书或预算正文，通过 `create_representative_vote` 复用代表机构表决。终局按 `ProposalOwner/MODULE_TAG` 路由，不新增 PERSONNEL/BUDGET kind，也不会进入 `LegislationMetas` 或法律回调。
 - **不改宪法(结论性前提)**:法律提案权宪法只给立法机关;政府的**人事任免**由宪法第 100/106 条直授(提交人事任免职书 → 参议会/立法会常规案表决任免),**预算**由《预算法》(普通法)授权——二者走独立提案类型,非法律案。给政府普通立法提案权才需修宪(不必要)。
-- **operator / display 双路由(契合 ADR-030)**：逐席投票读取 `RepresentativeVotesByAccount`，二级键为 `(body_index, account)`；大屏只展示当前代表机构索引的票据，不能把同一钱包在不同机构的票据互相覆盖。
+- **operator / display 双路由(契合 ADR-030)**：逐席投票读取 `RepresentativeVotesByTicket`，二级键为 `(body_index, InstitutionVoteTicket)`；大屏只展示当前代表机构索引的票据，不能把同一钱包在不同岗位或机构的票据互相覆盖。
 - **onchina 职责边界**:只做「组织提案数据 + 扫码冷签 + 提交 extrinsic + 读链展示」,**绝不计票/推进状态机**(全归投票引擎);读路径 scope fail-closed。
 - **后续业务**：任免、预算等业务按实际细则独立增加，只保存业务正文和状态；表决复用现有代表机构框架，终态调用 entity 通用治理结果协议，不新增投票 kind 或投票 pallet。
 

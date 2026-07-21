@@ -1,7 +1,7 @@
 //! 提案 ID 体系(双层 ID 设计,spec_version v1)。
 //!
 //! - **主键 `proposal_id: u64`** 全局纯单调递增,实质无上限(1.84×10¹⁹)。
-//!   所有 storage map(`Proposals` / `ProposalData` / `InternalVotesByAccount` 等)
+//!   所有 storage map(`Proposals` / `ProposalData` / `InternalVotesByTicket` 等)
 //!   都以这个 u64 为主键,跨业务、跨机构、跨年全局唯一不重号。
 //! - **展示号** `(year, seq_in_year)` 单独存于 `ProposalDisplayId[id]`。
 //!   渲染层基于该表拼接 "2026-#000123" 类格式;展示格式想换季度制 / 字母分组

@@ -702,6 +702,7 @@
   signing_category: chain_tx
   required_fields:
     - proposal_id
+    - ticket_claim
     - approve
 
 - action_key: joint_vote
@@ -716,6 +717,8 @@
   signing_category: chain_tx
   required_fields:
     - proposal_id
+    - cid_number
+    - voter_role_code
     - approve
 
 - action_key: cast_referendum
@@ -730,6 +733,7 @@
   signing_category: chain_tx
   required_fields:
     - proposal_id
+    - voter_role_code
     - approve
     - province_name
     - signer_pubkey

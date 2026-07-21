@@ -526,9 +526,15 @@ pub fn stage(pid: u64) -> u8 {
 
 /// 投一票(事务内,因 set_status_and_emit 需在事务中)。
 pub fn cast(who: AccountId32, pid: u64, approve: bool) -> sp_runtime::DispatchResult {
+    let meta = RepresentativeMetas::<Test>::get(pid).expect("representative meta exists");
+    let voter_role_code = meta
+        .route
+        .body(meta.current_body)
+        .expect("current representative body exists")
+        .role_code;
     let result = frame_support::storage::with_transaction(
         || -> frame_support::storage::TransactionOutcome<sp_runtime::DispatchResult> {
-            match Lib::do_cast_representative_vote(who, pid, approve) {
+            match Lib::do_cast_representative_vote(who, pid, voter_role_code, approve) {
                 Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
                 Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
             }
@@ -538,6 +544,16 @@ pub fn cast(who: AccountId32, pid: u64, approve: bool) -> sp_runtime::DispatchRe
         process_current_block();
     }
     result
+}
+
+pub fn representative_ticket(
+    cid_number: votingengine::types::CidNumber,
+    who: AccountId32,
+) -> votingengine::InstitutionVoteTicket<AccountId32> {
+    votingengine::InstitutionVoteTicket {
+        role_subject: role_subject(cid_number, REPRESENTATIVE_ROLE),
+        voter_account: who,
+    }
 }
 
 /// 行政签署(事务内)。

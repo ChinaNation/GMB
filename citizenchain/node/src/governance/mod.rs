@@ -452,6 +452,7 @@ pub async fn build_vote_request(
     app: AppHandle,
     proposal_id: u64,
     pubkey_hex: String,
+    voter_role_code: Option<String>,
     approve: bool,
 ) -> Result<signing::VoteSignRequestResult, String> {
     let status = home::current_status(&app)?;
@@ -459,7 +460,12 @@ pub async fn build_vote_request(
         return Err("节点未运行，无法构建签名请求".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        signing::build_vote_sign_request(proposal_id, &pubkey_hex, approve)
+        signing::build_vote_sign_request(
+            proposal_id,
+            &pubkey_hex,
+            voter_role_code.as_deref(),
+            approve,
+        )
     })
     .await
     .map_err(|e| format!("build vote request task failed: {e}"))?
@@ -472,6 +478,7 @@ pub async fn build_joint_vote_request(
     proposal_id: u64,
     pubkey_hex: String,
     cid_number: String,
+    voter_role_code: String,
     approve: bool,
 ) -> Result<signing::VoteSignRequestResult, String> {
     let status = home::current_status(&app)?;
@@ -479,7 +486,13 @@ pub async fn build_joint_vote_request(
         return Err("节点未运行，无法构建签名请求".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        signing::build_joint_vote_sign_request(proposal_id, &pubkey_hex, &cid_number, approve)
+        signing::build_joint_vote_sign_request(
+            proposal_id,
+            &pubkey_hex,
+            &cid_number,
+            &voter_role_code,
+            approve,
+        )
     })
     .await
     .map_err(|e| format!("build joint vote request task failed: {e}"))?
@@ -527,13 +540,19 @@ pub async fn check_vote_status(
     proposal_id: u64,
     pubkey_hex: String,
     cid_number: Option<String>,
+    voter_role_code: Option<String>,
 ) -> Result<proposal::UserVoteStatus, String> {
     let status = home::current_status(&app)?;
     if !status.running {
         return Err("节点未运行，无法查询投票状态".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        proposal::fetch_user_vote_status(proposal_id, &pubkey_hex, cid_number.as_deref())
+        proposal::fetch_user_vote_status(
+            proposal_id,
+            &pubkey_hex,
+            cid_number.as_deref(),
+            voter_role_code.as_deref(),
+        )
     })
     .await
     .map_err(|e| format!("check vote status task failed: {e}"))?

@@ -268,7 +268,15 @@ fn double_vote_rejected() {
         let pid = create(member(1), single_house(), RepresentativeVoteRule::Regular);
         assert_ok!(cast(member(1), pid, true));
         assert_noop!(
-            Lib::do_cast_representative_vote(member(1), pid, true),
+            Lib::do_cast_representative_vote(
+                member(1),
+                pid,
+                REPRESENTATIVE_ROLE
+                    .to_vec()
+                    .try_into()
+                    .expect("test role fits"),
+                true,
+            ),
             votingengine::Error::<Test>::AlreadyVoted
         );
     });
@@ -280,7 +288,15 @@ fn non_member_cannot_vote() {
         let pid = create(member(1), single_house(), RepresentativeVoteRule::Regular);
         // member(15) 属 house2,不在 house1 快照内。
         assert_noop!(
-            Lib::do_cast_representative_vote(member(15), pid, true),
+            Lib::do_cast_representative_vote(
+                member(15),
+                pid,
+                REPRESENTATIVE_ROLE
+                    .to_vec()
+                    .try_into()
+                    .expect("test role fits"),
+                true,
+            ),
             votingengine::Error::<Test>::NoPermission
         );
     });
@@ -365,10 +381,16 @@ fn same_wallet_can_vote_once_in_each_representative_body() {
         // 同一钱包在第二个机构具有独立席位，不受第一机构去重记录影响。
         assert_ok!(cast(member(1), pid, true));
         assert!(
-            crate::pallet::RepresentativeVotesByAccount::<Test>::contains_key(pid, (0, member(1)))
+            crate::pallet::RepresentativeVotesByTicket::<Test>::contains_key(
+                pid,
+                (0, representative_ticket(house1_cid(), member(1)))
+            )
         );
         assert!(
-            crate::pallet::RepresentativeVotesByAccount::<Test>::contains_key(pid, (1, member(1)))
+            crate::pallet::RepresentativeVotesByTicket::<Test>::contains_key(
+                pid,
+                (1, representative_ticket(house3_cid(), member(1)))
+            )
         );
     });
 }

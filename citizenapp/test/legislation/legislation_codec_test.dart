@@ -123,14 +123,16 @@ void main() {
     expect(label.titleEn, 'Genesis Edition');
   });
 
-  test('RepresentativeMetas 路线只解码机构 CID', () {
+  test('RepresentativeMetas 路线解码完整机构岗位主体', () {
     const firstCid = 'LN001-NLG0G-123456789-2026';
     const secondCid = 'LN001-NSE0G-987654321-2026';
     final raw = Uint8List.fromList([
       0x01, // Sequential
       _c(2),
       ..._s(firstCid),
+      ..._s('HOUSE_MEMBER'),
       ..._s(secondCid),
+      ..._s('SENATOR'),
       ..._u32(1), // current_body
       0x02, // Special rule
       0x01, // Legislation procedure
@@ -138,7 +140,9 @@ void main() {
     final meta = LegislationVoteQueryService.debugDecodeRepresentativeMeta(raw);
     expect(meta, isNotNull);
     expect(meta!.sequential, isTrue);
-    expect(meta.bodies, [firstCid, secondCid]);
+    expect(meta.bodies.map((body) => body.cidNumber), [firstCid, secondCid]);
+    expect(
+        meta.bodies.map((body) => body.roleCode), ['HOUSE_MEMBER', 'SENATOR']);
     expect(meta.currentBody, 1);
     expect(meta.rule, 2);
     expect(meta.procedure, 1);

@@ -51,6 +51,25 @@ class ProposalMeta {
   final ProposalDisplayMeta? displayMeta;
 }
 
+/// 提案创建时冻结的一张投票票据。个人多签没有 CID/岗位码；机构票据三项齐全。
+class EligibleVoterTicket {
+  const EligibleVoterTicket({
+    required this.pubkeyHex,
+    this.cidNumber,
+    this.voterRoleCode,
+  });
+
+  final String pubkeyHex;
+  final String? cidNumber;
+  final String? voterRoleCode;
+
+  bool get isInstitution => cidNumber != null && voterRoleCode != null;
+
+  String get ticketKey => isInstitution
+      ? '${cidNumber!}:${voterRoleCode!}:${pubkeyHex.toLowerCase()}'
+      : 'personal:${pubkeyHex.toLowerCase()}';
+}
+
 /// Runtime upgrade 提案链上数据。
 class RuntimeUpgradeProposalInfo {
   const RuntimeUpgradeProposalInfo({

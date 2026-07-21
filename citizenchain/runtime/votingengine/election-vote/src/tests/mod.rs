@@ -26,7 +26,7 @@ use votingengine::{
 use crate::{
     pallet::{
         ElectionCandidateTallies, ElectionCandidates, ElectionMetaStore, ElectionResults,
-        ElectionTallyStore, ElectionVotesByVoter, Error,
+        ElectionTallyStore, Error, MutualElectionVotesByTicket, PopularElectionVotesByVoter,
     },
     types::ElectionMode,
 };
@@ -369,6 +369,7 @@ fn mutual_election_uses_role_assignment_snapshot() {
             assert_ok!(ElectionVote::cast_mutual_vote(
                 RuntimeOrigin::signed(voter.clone()),
                 proposal_id,
+                TARGET_ROLE.to_vec().try_into().expect("role fits"),
                 admins[0].clone()
             ));
         }
@@ -470,6 +471,7 @@ fn cast_rejects_wrong_voter_candidate_stage_and_duplicate_vote() {
             ElectionVote::cast_mutual_vote(
                 RuntimeOrigin::signed(voters[0].clone()),
                 proposal_id,
+                TARGET_ROLE.to_vec().try_into().expect("role fits"),
                 candidates[0].clone()
             ),
             votingengine::Error::<Test>::InvalidProposalStage
@@ -549,9 +551,16 @@ fn election_cleanup_removes_all_track_storage() {
         assert!(!ElectionMetaStore::<Test>::contains_key(proposal_id));
         assert!(!ElectionCandidates::<Test>::contains_key(proposal_id));
         assert!(!ElectionResults::<Test>::contains_key(proposal_id));
-        assert!(ElectionVotesByVoter::<Test>::iter_prefix(proposal_id)
-            .next()
-            .is_none());
+        assert!(
+            PopularElectionVotesByVoter::<Test>::iter_prefix(proposal_id)
+                .next()
+                .is_none()
+        );
+        assert!(
+            MutualElectionVotesByTicket::<Test>::iter_prefix(proposal_id)
+                .next()
+                .is_none()
+        );
         assert!(ElectionCandidateTallies::<Test>::iter_prefix(proposal_id)
             .next()
             .is_none());

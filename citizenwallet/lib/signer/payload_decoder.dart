@@ -464,11 +464,7 @@ class PayloadDecoder {
       // 特别案人口作用域由投票引擎按 actor CID 推导。
       if (palletIndex == PalletRegistry.legislationVotePallet) {
         if (callIndex == PalletRegistry.castRepresentativeVoteCall) {
-          return _decodeProposalApprove(
-            bytes,
-            action: 'cast_representative_vote',
-            summaryTemplate: '代表机构表决 立法提案 #{id}：{vote}',
-          );
+          return _decodeCastRepresentativeVote(bytes);
         }
         if (callIndex == PalletRegistry.castLegislationReferendumCall) {
           return _decodeCastLegislationReferendum(bytes);
@@ -704,22 +700,36 @@ class PayloadDecoder {
   // 业务 pallet 的 finalize_X / vote_X 全部下线,
   // 冷钱包统一通过 `_decodeInternalVote` 解码一人一票的投票 payload。
   // InternalVote(20) / cast(0)
-  // 格式：[0x14][0x00][proposal_id:u64_le][approve:bool]
+  // 格式：[0x14][0x00][proposal_id:u64_le][ticket_claim][approve:bool]
   //
   // 统一入口:所有业务 pallet(admins/resolution_destroy/grandpa_key/
   // entity_manage/multisig_transfer 五路)的机构岗位选民/个人管理员投票都走 InternalVote::cast(20.0),
   // 冷钱包不按业务 pallet 分路解码投票 payload。
   static DecodedPayload? _decodeInternalVote(Uint8List bytes) {
-    // call_data: 2 + 8 + 1 = 11
-    if (bytes.length < 11 || !_hasValidSigningTail(bytes, 11)) return null;
+    if (bytes.length < 12) return null;
     final proposalId = _readU64Le(bytes, 2);
-    final approve = bytes[10] != 0;
+    var offset = 10;
+    final claim = bytes[offset++];
+    String? voterRoleCode;
+    if (claim == 1) {
+      final roleRead = _readRoleCode(bytes, offset);
+      if (roleRead == null) return null;
+      voterRoleCode = roleRead.$1;
+      offset = roleRead.$2;
+    } else if (claim != 0) {
+      return null;
+    }
+    if (offset >= bytes.length) return null;
+    final approve = bytes[offset++] != 0;
+    if (!_hasValidSigningTail(bytes, offset)) return null;
     final voteText = approve ? '赞成' : '反对';
     return DecodedPayload(
       action: 'internal_vote',
       summary: '内部投票 提案 #$proposalId：$voteText',
       fields: {
         'proposal_id': proposalId.toString(),
+        'ticket_claim': claim == 0 ? 'personal' : 'institution_role',
+        if (voterRoleCode != null) 'voter_role_code': voterRoleCode,
         'approve': approve.toString(),
       },
     );
@@ -783,15 +793,18 @@ class PayloadDecoder {
   }
 
   // JointVote(21) / cast_admin(0)
-  // 格式：[0x15][0x00][proposal_id:u64_le][cid_number:CidNumber][approve:bool]
+  // 格式：[0x15][0x00][proposal_id:u64_le][cid_number][voter_role_code][approve]
   static DecodedPayload? _decodeJointVote(Uint8List bytes) {
     if (bytes.length < 12) return null;
     final proposalId = _readU64Le(bytes, 2);
     final cidRead = _readCidNumber(bytes, 10);
-    if (cidRead == null || cidRead.$2 >= bytes.length) return null;
+    if (cidRead == null) return null;
     final cidNumber = cidRead.$1;
-    final approve = bytes[cidRead.$2] != 0;
-    final callEnd = cidRead.$2 + 1;
+    final roleRead = _readRoleCode(bytes, cidRead.$2);
+    if (roleRead == null || roleRead.$2 >= bytes.length) return null;
+    final voterRoleCode = roleRead.$1;
+    final approve = bytes[roleRead.$2] != 0;
+    final callEnd = roleRead.$2 + 1;
     if (!_hasValidSigningTail(bytes, callEnd)) return null;
     final voteText = approve ? '赞成' : '反对';
 
@@ -801,6 +814,7 @@ class PayloadDecoder {
       fields: {
         'proposal_id': proposalId.toString(),
         'cid_number': cidNumber,
+        'voter_role_code': voterRoleCode,
         'approve': approve.toString(),
       },
     );
@@ -2236,8 +2250,8 @@ class PayloadDecoder {
     );
   }
 
-  // LegislationVote(26) 通用:proposal_id:u64_le + approve:bool。
-  // 代表机构表决(1)/行政签署(3)/三人会签(4)/护宪终审(5) 同形。
+  // LegislationVote(26) 签署类通用:proposal_id:u64_le + approve:bool。
+  // 行政签署(3)/三人会签(4)/护宪终审(5) 同形。
   // SCALE: [26][call][proposal_id:u64_le][approve:bool]
   static DecodedPayload? _decodeProposalApprove(
     Uint8List bytes, {
@@ -2256,6 +2270,28 @@ class PayloadDecoder {
           .replaceAll('{vote}', voteText),
       fields: {
         'proposal_id': proposalId.toString(),
+        'approve': approve.toString(),
+      },
+    );
+  }
+
+  // LegislationVote(26) / cast_representative_vote(1)
+  // SCALE: [26][1][proposal_id:u64_le][voter_role_code:RoleCode][approve]
+  static DecodedPayload? _decodeCastRepresentativeVote(Uint8List bytes) {
+    if (bytes.length < 13) return null;
+    final proposalId = _readU64Le(bytes, 2);
+    final roleRead = _readRoleCode(bytes, 10);
+    if (roleRead == null || roleRead.$2 >= bytes.length) return null;
+    final approve = bytes[roleRead.$2] != 0;
+    final callEnd = roleRead.$2 + 1;
+    if (!_hasValidSigningTail(bytes, callEnd)) return null;
+    final voteText = approve ? '赞成' : '反对';
+    return DecodedPayload(
+      action: 'cast_representative_vote',
+      summary: '代表机构表决 立法提案 #$proposalId：$voteText',
+      fields: {
+        'proposal_id': proposalId.toString(),
+        'voter_role_code': roleRead.$1,
         'approve': approve.toString(),
       },
     );

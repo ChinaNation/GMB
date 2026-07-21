@@ -49,6 +49,7 @@ echo "==> 已导出当前源码 fresh spec: $BENCHMARK_SPEC"
 # 本清单只包含 benchmark 覆盖当前 WeightInfo 的 pallet。
 # 以下模块当前不得自动覆盖:
 # - public_manage/private_manage: benchmark 夹具没有执行完整治理外部调用，不能覆盖正式权重。
+# - citizen_identity:正式权重是手工保守上界，runtime benchmark registry 未注册该 pallet。
 # - personal_manage / offchain_transaction:benchmark 文件为空或未挂载到 runtime registry。
 # - onchain_issuance:业务仍是 stub,正式权重必须等业务实装后生成。
 # - genesis_pallet:无 extrinsic,WeightInfo 为空实现。
@@ -57,7 +58,6 @@ PALLETS=(
     "fullnode_issuance:runtime/issuance/fullnode-issuance/src/weights.rs"
     "citizen_issuance:runtime/issuance/citizen-issuance/src/weights.rs"
     "resolution_issuance:runtime/issuance/resolution-issuance/src/weights.rs"
-    "citizen_identity:runtime/misc/citizen-identity/src/weights.rs"
     "pow_difficulty:runtime/misc/pow-difficulty/src/weights.rs"
     "resolution_destroy:runtime/governance/resolution-destroy/src/weights.rs"
     "grandpakey_change:runtime/governance/grandpakey-change/src/weights.rs"

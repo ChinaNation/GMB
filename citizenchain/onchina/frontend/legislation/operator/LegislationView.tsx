@@ -3,7 +3,7 @@
 // 视觉复用注册局同款 glassCard 毛玻璃卡片,与控制台其它模块一致。
 
 import React, { useState } from 'react';
-import { Button, Card, InputNumber, Space, Tag, message } from 'antd';
+import { Button, Card, Input, InputNumber, Space, Tag, message } from 'antd';
 import type { AdminAuth } from '../../auth/types';
 import { glassCardStyle, glassCardHeadStyle } from '../../core/cardStyles';
 import { LawListTable } from './law/LawListTable';
@@ -50,14 +50,20 @@ function roleTag(auth: AdminAuth): { text: string; color: string } {
 /** 当前代表机构表决；后端再次按机构角色校验。 */
 function RepresentativeVotePanel({ auth }: Props) {
   const [proposalId, setProposalId] = useState<number | null>(null);
+  const [voterRoleCode, setVoterRoleCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const { signChain, chainSignModal } = useChainSign('代表机构表决链交易签名');
 
   const vote = async (approve: boolean) => {
-    if (proposalId === null) return;
+    if (proposalId === null || !voterRoleCode.trim()) return;
     setSubmitting(true);
     try {
-      const prepared = await castRepresentativeVote(auth, proposalId, approve);
+      const prepared = await castRepresentativeVote(
+        auth,
+        proposalId,
+        voterRoleCode.trim(),
+        approve,
+      );
       const signed = await signChain(prepared.request_id, prepared.sign_request);
       const submitted = await submitChainSign(
         auth,
@@ -82,10 +88,16 @@ function RepresentativeVotePanel({ auth }: Props) {
           value={proposalId ?? undefined}
           onChange={(value) => setProposalId(value ?? null)}
         />
+        <Input
+          placeholder="投票岗位码"
+          value={voterRoleCode}
+          onChange={(event) => setVoterRoleCode(event.target.value)}
+          style={{ width: 220 }}
+        />
         <Button
           type="primary"
           loading={submitting}
-          disabled={proposalId === null}
+          disabled={proposalId === null || !voterRoleCode.trim()}
           onClick={() => vote(true)}
         >
           赞成
@@ -93,7 +105,7 @@ function RepresentativeVotePanel({ auth }: Props) {
         <Button
           danger
           loading={submitting}
-          disabled={proposalId === null}
+          disabled={proposalId === null || !voterRoleCode.trim()}
           onClick={() => vote(false)}
         >
           反对

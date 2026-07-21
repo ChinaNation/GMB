@@ -630,6 +630,7 @@ where
         (
             RuntimeCall::InternalVote(internal_vote::pallet::Call::cast {
                 proposal_id: u64::MAX,
+                ticket_claim: internal_vote::InternalVoteTicketClaim::Personal,
                 approve: true,
             }),
             primitives::fee_policy::VOTE_FLAT_FEE,

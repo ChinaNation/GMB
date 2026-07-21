@@ -6,6 +6,8 @@ import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/citizen/institution/governance_registry.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/votingengine/internal-vote/internal_vote_query_service.dart';
+import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
+import 'package:citizenapp/citizen/shared/proposal/proposal_query_service.dart';
 import 'package:citizenapp/citizen/proposal/runtime-upgrade/runtime_upgrade_service.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
@@ -315,12 +317,15 @@ class VoteChecker {
   VoteChecker({
     InternalVoteQueryService? internalVoteService,
     RuntimeUpgradeService? runtimeService,
+    ProposalQueryService? proposalQueryService,
   })  : _internalVoteService =
             internalVoteService ?? InternalVoteQueryService(),
-        _runtimeService = runtimeService ?? RuntimeUpgradeService();
+        _runtimeService = runtimeService ?? RuntimeUpgradeService(),
+        _proposalQueryService = proposalQueryService ?? ProposalQueryService();
 
   final InternalVoteQueryService _internalVoteService;
   final RuntimeUpgradeService _runtimeService;
+  final ProposalQueryService _proposalQueryService;
 
   /// 跨提案批量计算"哪些提案存在本机未投票的管理员钱包"。
   ///
@@ -331,16 +336,30 @@ class VoteChecker {
     final active =
         targets.where((t) => t.status == 0 && t.adminWallets.isNotEmpty);
 
-    final internalByPid = <int, List<String>>{};
-    final jointByPid =
-        <int, ({String actorCidNumber, List<String> pubkeysHex})>{};
+    final internalByPid = <int, List<EligibleVoterTicket>>{};
+    final jointByPid = <int,
+        ({
+      String actorCidNumber,
+      String voterRoleCode,
+      List<String> pubkeysHex
+    })>{};
     for (final t in active) {
       final pubkeys = t.adminWallets.map((w) => w.pubkeyHex).toList();
-      if (t.kind == 0) {
-        internalByPid[t.proposalId] = pubkeys;
+      if (t.kind == 0 && t.institution != null) {
+        final localPubkeys = pubkeys.map(_normalize).toSet();
+        final tickets = await _proposalQueryService.fetchEligibleVoterTickets(
+          t.proposalId,
+          t.institution!,
+        );
+        internalByPid[t.proposalId] = tickets
+            .where((ticket) => localPubkeys.contains(ticket.pubkeyHex))
+            .toList(growable: false);
       } else if (t.kind == 1 && t.institution != null) {
         jointByPid[t.proposalId] = (
           actorCidNumber: t.institution!.cidNumber,
+          voterRoleCode: t.institution!.orgType == OrgType.prb
+              ? 'DIRECTOR'
+              : 'COMMITTEE_MEMBER',
           pubkeysHex: pubkeys,
         );
       }
@@ -348,16 +367,18 @@ class VoteChecker {
 
     final needs = <int>{};
     if (internalByPid.isNotEmpty) {
-      final votes =
-          await _internalVoteService.fetchAdminVotesForProposals(internalByPid);
-      internalByPid.forEach((pid, pubkeys) {
+      final votes = await _internalVoteService
+          .fetchTicketVotesForProposals(internalByPid);
+      internalByPid.forEach((pid, tickets) {
         final m = votes[pid] ?? const <String, bool?>{};
-        if (pubkeys.any((pk) => m[_normalize(pk)] == null)) needs.add(pid);
+        if (tickets.any((ticket) => m[ticket.ticketKey] == null)) {
+          needs.add(pid);
+        }
       });
     }
     if (jointByPid.isNotEmpty) {
       final votes =
-          await _runtimeService.fetchJointAdminVotesForProposals(jointByPid);
+          await _runtimeService.fetchJointTicketVotesForProposals(jointByPid);
       jointByPid.forEach((pid, v) {
         final m = votes[pid] ?? const <String, bool?>{};
         if (v.pubkeysHex.any((pk) => m[_normalize(pk)] == null)) needs.add(pid);

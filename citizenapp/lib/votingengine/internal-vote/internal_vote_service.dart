@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:polkadart/scale_codec.dart' show ByteOutput;
@@ -11,14 +12,14 @@ import 'package:citizenapp/votingengine/internal-vote/internal_vote_query_servic
 /// - 所有业务 pallet(admins_change / resolution_destroy /
 ///   grandpakey_change / institution_multisig / transaction 业务)的
 ///   管理员一人一票一律走
-///   `InternalVote::cast(proposal_id, approve)` 一条路径。
+///   `InternalVote::cast(proposal_id, ticket_claim, approve)` 一条路径。
 /// - 业务 service(InstitutionChainService 等)
 ///   只负责发起提案(propose_X)；执行重试统一走 VotingEngine.retry_passed_proposal,
 ///   投票动作统一
 ///   委托本服务,避免多处构造相同的 call。
 ///
 /// Runtime 位置: `pallet_index=20, call_index=0`(InternalVote sub-pallet)。
-/// Call 编码: `[0x14][0x00][proposal_id:u64_le][approve:bool]` 共 11 字节。
+/// Call 编码: `[0x14][0x00][proposal_id:u64_le][ticket_claim][approve:bool]`。
 class InternalVoteService {
   InternalVoteService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 
@@ -45,12 +46,18 @@ class InternalVoteService {
   Future<({String txHash, int usedNonce, String blockHashHex})> submit({
     required int proposalId,
     required bool approve,
+    String? actorCidNumber,
+    String? voterRoleCode,
     required String fromAddress,
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
-    final callData = buildCallData(proposalId: proposalId, approve: approve);
+    final callData = buildCallData(
+      proposalId: proposalId,
+      voterRoleCode: voterRoleCode,
+      approve: approve,
+    );
     final result = await _signAndSubmit(
       callData: callData,
       fromAddress: fromAddress,
@@ -60,6 +67,8 @@ class InternalVoteService {
     );
     await _confirmRuntimeVote(
       proposalId: proposalId,
+      actorCidNumber: actorCidNumber,
+      voterRoleCode: voterRoleCode,
       approve: approve,
       signerPubkey: signerPubkey,
       blockHashHex: result.blockHashHex,
@@ -69,15 +78,28 @@ class InternalVoteService {
 
   /// 构造 InternalVote::cast call data(对外公开,便于冷钱包/热钱包复用)。
   ///
-  /// 格式: `[0x14][0x00][proposal_id:u64_le][approve:bool]`(pallet=20, call=0)。
+  /// `voterRoleCode == null` 编码个人票据声明 0；机构岗位编码声明 1 + RoleCode。
   static Uint8List buildCallData({
     required int proposalId,
+    String? voterRoleCode,
     required bool approve,
   }) {
     final output = ByteOutput();
     output.pushByte(internalVotePallet);
     output.pushByte(internalVoteCallIndex);
     output.write(_u64ToLeBytes(proposalId));
+    final roleCode = voterRoleCode?.trim();
+    if (roleCode == null || roleCode.isEmpty) {
+      output.pushByte(0); // InternalVoteTicketClaim::Personal
+    } else {
+      final roleBytes = Uint8List.fromList(utf8.encode(roleCode));
+      if (roleBytes.length > 64) {
+        throw ArgumentError('voter_role_code 超过 64 字节');
+      }
+      output.pushByte(1); // InternalVoteTicketClaim::InstitutionRole
+      output.write(_encodeCompact(roleBytes.length));
+      output.write(roleBytes);
+    }
     output.pushByte(approve ? 1 : 0);
     return output.toBytes();
   }
@@ -106,9 +128,11 @@ class InternalVoteService {
   /// 入块后回读 runtime 投票引擎 storage，确认管理员投票已经真正写入。
   ///
   /// 这里是 citizenapp 的投票确认边界。txHash、交易池状态和
-  /// 客户端 pending 记录都不能替代 runtime `InternalVotesByAccount`。
+  /// 客户端 pending 记录都不能替代 runtime `InternalVotesByTicket`。
   Future<void> _confirmRuntimeVote({
     required int proposalId,
+    required String? actorCidNumber,
+    required String? voterRoleCode,
     required bool approve,
     required Uint8List signerPubkey,
     required String blockHashHex,
@@ -116,7 +140,14 @@ class InternalVoteService {
     final pubkeyHex = _hexEncode(signerPubkey);
     final query = InternalVoteQueryService(chainRpc: _rpc);
     for (var attempt = 0; attempt < 6; attempt++) {
-      final chainVote = await query.fetchAdminVote(proposalId, pubkeyHex);
+      final chainVote = actorCidNumber == null
+          ? await query.fetchAdminVote(proposalId, pubkeyHex)
+          : await query.fetchInstitutionTicketVote(
+              proposalId,
+              actorCidNumber,
+              voterRoleCode!,
+              pubkeyHex,
+            );
       if (chainVote == approve) return;
       if (chainVote != null && chainVote != approve) {
         throw StateError('runtime 投票记录与本次投票方向不一致');
@@ -133,6 +164,15 @@ class InternalVoteService {
       throw StateError('runtime 拒绝投票：${failure.description}');
     }
     throw StateError('交易已入块，但 runtime 投票引擎未记录该管理员投票');
+  }
+
+  static Uint8List _encodeCompact(int value) {
+    if (value < 0 || value >= 1 << 14) {
+      throw ArgumentError('岗位码长度超出 SCALE Compact 两字节范围');
+    }
+    if (value < 1 << 6) return Uint8List.fromList([value << 2]);
+    final encoded = (value << 2) | 1;
+    return Uint8List.fromList([encoded & 0xff, encoded >> 8]);
   }
 
   // ──── 内部：编码工具 ────

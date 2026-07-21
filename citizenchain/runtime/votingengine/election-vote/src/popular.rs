@@ -47,6 +47,7 @@ impl<T: Config> Pallet<T> {
             who,
             proposal_id,
             votingengine::STAGE_ELECTION_POPULAR,
+            None,
             candidate,
         )
     }

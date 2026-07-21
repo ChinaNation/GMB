@@ -309,7 +309,7 @@ void main() {
     );
   });
 
-  test('机构读取岗位有效选民快照，个人多签读取管理员快照', () async {
+  test('机构按完整岗位主体读取选民快照，个人多签读取管理员快照', () async {
     final raw = Uint8List.fromList([
       4, // Compact(1)
       ...List.filled(32, 0x33),
@@ -340,7 +340,11 @@ void main() {
     );
 
     expect(
-      await query.fetchEligibleVoterSnapshot(7, institution),
+      await query.fetchRoleVoterSnapshot(
+        7,
+        institution.cidNumber,
+        'COMMITTEE_MEMBER',
+      ),
       ['33' * 32],
     );
     expect(

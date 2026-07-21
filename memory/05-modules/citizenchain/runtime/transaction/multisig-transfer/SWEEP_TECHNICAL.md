@@ -48,7 +48,7 @@ pub struct SweepAction<AccountId, Balance> {
 
 ### 2. 投票
 
-岗位有效选民统一调用 `InternalVote::cast(proposal_id, approve)`。投票引擎使用创建时的 `EffectiveVoterSnapshot` 和对应机构阈值判定，不建立岗位阈值；达阈值后回调本模块自动执行 sweep。
+岗位有效选民统一调用 `InternalVote::cast(proposal_id, InstitutionRole(role_code), approve)`。投票引擎使用创建时对应岗位的 `VoterSnapshot`、完整岗位票据和机构阈值判定，不建立岗位阈值；达阈值后回调本模块自动执行 sweep。
 
 ### 3. try_execute_sweep（内部方法）
 

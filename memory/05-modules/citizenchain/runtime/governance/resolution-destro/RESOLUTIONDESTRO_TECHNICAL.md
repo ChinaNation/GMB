@@ -108,7 +108,7 @@ pub struct DestroyAction<AccountId, Balance> {
 
 - `VotingEngine::retry_passed_proposal(proposal_id)`(pallet 9.4)
 
-签名账户必须属于提案创建时的 `EffectiveVoterSnapshot`，权限和重试次数由 `votingengine` 统一校验；仅当提案已 `STATUS_PASSED` 且存在 retry state 时可重试执行。用于“提案已通过但自动执行失败（如余额不足）”后的后续重试。
+签名账户必须属于提案创建时 VotePlan 任一完整岗位主体的 `VoterSnapshot`，权限和重试次数由 `votingengine` 统一校验；仅当提案已 `STATUS_PASSED` 且存在 retry state 时可重试执行。用于“提案已通过但自动执行失败（如余额不足）”后的后续重试。
 
 ---
 
@@ -205,6 +205,6 @@ cargo test --offline --manifest-path citizenchain/runtime/governance/resolution-
 ---
 
 ## 10. 运维建议
-1. 监控 `DestroyExecutionFailed` 事件，出现后优先补齐机构余额，再由提案 `EffectiveVoterSnapshot` 成员调用 `VotingEngine::retry_passed_proposal`（pallet 9.4）。
+1. 监控 `DestroyExecutionFailed` 事件，出现后优先补齐机构余额，再由提案任一冻结岗位 `VoterSnapshot` 成员调用 `VotingEngine::retry_passed_proposal`（pallet 9.4）。
 2. 若 3 次手动执行仍失败，或超过 `ExecutionRetryGraceBlocks` 无人处理，提案会由投票引擎统一转 `STATUS_EXECUTION_FAILED`。
 3. 业务或岗位快照读写变化后必须重新运行 benchmark；不得复用本次权重掩盖后续存储变化。

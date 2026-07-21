@@ -1,6 +1,6 @@
 # ADR-039：机构 CID 与岗位码权限模型
 
-状态：Accepted（2026-07-20；已完成公私权管理员分型、机构阈值解耦和公民链基金会重新创世；岗位席位记票待下一步）。
+状态：Accepted（2026-07-20；公私权管理员分型、机构阈值解耦、公民链基金会重新创世和岗位席位记票均已实施）。
 
 ## 背景
 
@@ -56,6 +56,8 @@ RoleSubject = (cid_number, role_code)
 - 同一管理员可以在同一机构担任多个不同岗位；任职去重边界是“同一岗位内同一账户不得重复占席”，不是“一个账户在机构内只能有一个岗位”。
 - 岗位只定义席位与权限，不保存岗位阈值；投票阈值属于机构/具体投票计划。例如 NRC 是一个 `COMMITTEE_MEMBER` 岗位、19 个任职席位、机构阈值 13。
 - 机构阈值由 public/private entity 按 CID 独立保存，不得从 `admins` 钱包数推导。投票引擎只在建案时消费该阈值并冻结提案快照。
+- 机构投票票据唯一键是 `InstitutionVoteTicket { role_subject, voter_account }`。同一钱包兼任多个有效投票岗位时，每个岗位各有一张票；同一岗位和钱包组合只能投一次。个人多签仍使用独立的账户票据。
+- `InstitutionTicketCountSnapshot[(proposal_id, cid_number)]` 冻结该机构在本提案中的岗位席位票据总数，只用于可达票数和阈值判定，不建立岗位阈值，也不按钱包去重。
 
 ### 6. 机构创建与个人多签
 
@@ -89,6 +91,6 @@ RoleSubject = (cid_number, role_code)
 
 实施顺序及完整验收以 `memory/08-tasks/20260719-institution-role-permission-unify.md` 为准。2026-07-19 已完成共享授权类型、跨端 SCALE 契约、public/private entity 岗位权限生命周期、创世固定权限、准确 CID 顶层能力和 NodeGuard 固定权限保护。旧机构直接创建 call 5 已永久关闭。
 
-联合、内部、立法和选举 Track 已按每个 `RoleSubject` 建立 `VoterSnapshot`，并按 CID 建立 `EffectiveVoterSnapshot`。当前的账户去重只是过渡中间态：它无法表达同一人在同机构兼任多个岗位时的多个岗位席位票权。下一步必须把机构票据主体改为 `RoleSubject + admin_account`，同一钱包仍只需一把私钥，但可以为其各个有效岗位分别投票；不降低机构阈值。
+联合、内部、立法和互选 Track 均按每个 `RoleSubject` 建立 `VoterSnapshot`，机构票据按 `RoleSubject + admin_account` 分别保存，已删除旧的按 CID 合并钱包快照。同一钱包仍只需一把私钥，但可依法分别行使其每个有效岗位席位；机构阈值未改变。普选和立法公投继续使用 citizen-identity 人口数据生成的提案人口快照，个人多签继续按管理员账户票据记票。
 
-不得恢复 admins 直接授权或机构全体 admins 快照。下一步只改机构岗位席位的快照、票据键与计票语义，个人多签继续保持按管理员账户一人一票。
+不得恢复 admins 直接授权、机构全体 admins 快照、按钱包合并岗位票权或旧账户票 storage。跨端调用必须显式携带岗位码，并以提案冻结的 VotePlan 和 VoterSnapshot 筛选可投岗位。

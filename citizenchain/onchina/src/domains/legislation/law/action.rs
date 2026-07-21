@@ -57,6 +57,7 @@ pub(crate) async fn prepare_propose_law_sign(
 pub(crate) async fn prepare_representative_vote_sign(
     state: &AppState,
     proposal_id: u64,
+    voter_role_code: &str,
     approve: bool,
     actor_pubkey: &str,
     institution_cid_number: &str,
@@ -67,9 +68,10 @@ pub(crate) async fn prepare_representative_vote_sign(
         PURPOSE_LEGISLATION_REPRESENTATIVE_VOTE,
         actor_pubkey,
         institution_cid_number,
-        build_representative_vote_call(proposal_id, approve),
+        build_representative_vote_call(proposal_id, voter_role_code, approve),
         json!({
             "proposal_id": proposal_id,
+            "voter_role_code": voter_role_code,
             "approve": approve,
         }),
     )

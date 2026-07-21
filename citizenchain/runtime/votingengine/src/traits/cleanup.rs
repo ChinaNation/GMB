@@ -8,7 +8,7 @@ pub type CleanupChunkResult = (u32, bool);
 /// internal mode 的 chunked cleanup 入口。
 ///
 /// votingengine 主 crate 维护 `PendingProposalCleanups` 状态机,但 internal mode
-/// 自己的 storage(`InternalVotesByAccount` / `InternalTallies` / `InternalThresholdSnapshot`)
+/// 自己的 storage(`InternalVotesByTicket` / `InternalTallies` / `InternalThresholdSnapshot`)
 /// 住在 sub-pallet,所以清理动作必须通过本 trait 派发。
 pub trait InternalCleanupHandler {
     /// 内部提案成功执行后的 mode 侧副作用。
@@ -26,7 +26,7 @@ pub trait InternalCleanupHandler {
         Ok(())
     }
 
-    /// 分块清理 InternalVotesByAccount。
+    /// 分块清理 InternalVotesByTicket。
     /// 返回 `(removed_this_chunk, has_remaining)`。
     fn cleanup_internal_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
 
@@ -44,7 +44,7 @@ impl InternalCleanupHandler for () {
 
 /// joint mode 的 chunked cleanup 入口。
 ///
-/// joint storage(JointVotesByAdmin / JointInstitutionTallies / JointVotesByInstitution /
+/// joint storage(JointVotesByTicket / JointInstitutionTallies / JointVotesByInstitution /
 /// JointTallies / ReferendumVotesByAccount / ReferendumTallies)
 /// 住在 joint-vote pallet,votingengine 主 crate 通过本 trait 派发清理。
 pub trait JointCleanupHandler {
@@ -77,7 +77,7 @@ impl JointCleanupHandler for () {
 }
 
 /// 立法投票 mode 的 chunked cleanup 入口。
-/// legislation-vote 自有账本（RepresentativeVotesByAccount / RepresentativeTallies /
+/// legislation-vote 自有账本（RepresentativeVotesByTicket / RepresentativeTallies /
 /// LegReferendumVotesByAccount 等）住在 sub-pallet，核心通过本 trait 派发清理。
 pub trait LegislationCleanupHandler {
     fn cleanup_legislation_representative_votes_chunk(

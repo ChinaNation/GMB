@@ -19,6 +19,18 @@ void main() {
         ...bytes(familyName),
         ...bytes(givenName),
       ];
+  List<int> publicAdmin(
+    String citizenCid,
+    String familyName,
+    String givenName,
+    int accountByte,
+  ) =>
+      [
+        ...List.filled(32, accountByte),
+        ...bytes(citizenCid),
+        ...bytes(familyName),
+        ...bytes(givenName),
+      ];
 
   AdminPerson person(String account, String familyName, String givenName) =>
       AdminPerson(
@@ -27,12 +39,12 @@ void main() {
         given_name: givenName,
       );
 
-  test('机构 AdminAccounts 严格解码管理员三字段', () {
+  test('公权机构 AdminAccounts 严格解码管理员四字段', () {
     final value = Uint8List.fromList([
       ...code('CGOV'),
       8,
-      ...admin('张', '三', 1),
-      ...admin('李', '四', 2),
+      ...publicAdmin('GZ000-CTZN6-198805200-2026', '张', '三', 1),
+      ...publicAdmin('', '', '', 2),
     ]);
     final decoded = AdminAccountCodec.decodeInstitution(
       cidNumber: 'CID-1',
@@ -45,6 +57,9 @@ void main() {
     );
     expect(decoded.cidNumber, 'CID-1');
     expect(decoded.isActive, isTrue);
+    expect(decoded.admins.first.cid_number, 'GZ000-CTZN6-198805200-2026');
+    expect(decoded.admins.last.cid_number, isEmpty);
+    expect(decoded.admins.last.family_name, isEmpty);
   });
 
   test('个人多签继续解码独立账户布局', () {

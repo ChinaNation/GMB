@@ -437,6 +437,12 @@ fn resolution_destro_internal_vote_flow_executes_destroy_and_reduces_issuance() 
             assert_ok!(InternalVote::cast(
                 RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].admins[i])),
                 pid,
+                internal_vote::InternalVoteTicketClaim::InstitutionRole(
+                    primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                        .to_vec()
+                        .try_into()
+                        .expect("committee role fits"),
+                ),
                 true,
             ));
         }
@@ -520,6 +526,7 @@ fn runtime_fee_router_covers_free_onchain_vote_institution_and_reject_paths() {
 
         let internal_vote_call = RuntimeCall::InternalVote(internal_vote::pallet::Call::cast {
             proposal_id: 1,
+            ticket_claim: internal_vote::InternalVoteTicketClaim::Personal,
             approve: true,
         });
         let vote_kind =

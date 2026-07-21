@@ -64,8 +64,8 @@ void main() {
 
     test('signParsedRequest should sign normal internal_vote (统一入口)', () async {
       // 所有管理员投票走 InternalVote(20).cast(0)
-      // payload = [0x14][0x00][u64 LE proposal_id=1][bool approve=1] + 扩展尾
-      final payloadHex = _withSigningTailHex('0x1400010000000000000001');
+      // payload = [0x14][0x00][u64 LE proposal_id=1][Personal=0][approve=1] + 扩展尾
+      final payloadHex = _withSigningTailHex('0x140001000000000000000001');
       final request = _buildTestRequest(
         requestId: 'offline-req-test-0001',
         pubkey: '0x${hotWallet.pubkeyHex}',

@@ -20,7 +20,8 @@ use primitives::count_const::{
     JOINT_VOTE_PASS_THRESHOLD, NRC_JOINT_VOTE_WEIGHT, PRB_JOINT_VOTE_WEIGHT, PRC_JOINT_VOTE_WEIGHT,
 };
 
-use votingengine::{types::CidNumber, Proposal};
+use votingengine::types::{CidNumber, InstitutionVoteTicket, RoleCode};
+use votingengine::Proposal;
 
 pub mod jointinternal;
 pub mod jointreferendum;
@@ -87,7 +88,7 @@ pub mod pallet {
 
     /// pallet 自身 StorageVersion。
     /// 全新创世口径:创世即终态布局,storage 版本恒为 v1,不承载历史迁移。
-    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {
@@ -102,14 +103,14 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
-    /// 联合投票内部投票阶段管理员级记录:(proposal_id, (机构, 管理员公钥)) → 赞成/反对。
+    /// 联合投票内部阶段岗位票据记录：CID + 岗位码 + 钱包 → 赞成/反对。
     #[pallet::storage]
-    pub type JointVotesByAdmin<T: Config> = StorageDoubleMap<
+    pub type JointVotesByTicket<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        (CidNumber, T::AccountId),
+        InstitutionVoteTicket<T::AccountId>,
         bool,
         OptionQuery,
     >;
@@ -157,10 +158,11 @@ pub mod pallet {
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// 联合投票中某机构管理员已投出一票。
-        JointAdminVoteCast {
+        JointInstitutionTicketVoteCast {
             proposal_id: u64,
             cid_number: CidNumber,
             who: T::AccountId,
+            voter_role_code: RoleCode,
             approve: bool,
         },
         /// 联合投票中某机构已形成最终结果(赞成/反对)。
@@ -199,10 +201,11 @@ pub mod pallet {
             origin: OriginFor<T>,
             proposal_id: u64,
             cid_number: CidNumber,
+            voter_role_code: RoleCode,
             approve: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_joint_vote(who, proposal_id, cid_number, approve)
+            Self::do_joint_vote(who, proposal_id, cid_number, voter_role_code, approve)
         }
 
         /// 联合公投阶段:链上公民身份持有者按 >50% 严格多数投票。
@@ -338,7 +341,7 @@ impl<T: Config> votingengine::traits::JointCleanupHandler for Pallet<T> {
         proposal_id: u64,
         limit: u32,
     ) -> votingengine::traits::CleanupChunkResult {
-        let result = JointVotesByAdmin::<T>::clear_prefix(proposal_id, limit, None);
+        let result = JointVotesByTicket::<T>::clear_prefix(proposal_id, limit, None);
         (result.unique, result.maybe_cursor.is_some())
     }
     fn cleanup_joint_institution_votes_chunk(

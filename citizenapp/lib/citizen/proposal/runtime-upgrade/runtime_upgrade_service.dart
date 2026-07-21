@@ -42,6 +42,7 @@ class RuntimeUpgradeService {
       submitJointVote({
     required int proposalId,
     required String actorCidNumber,
+    required String voterRoleCode,
     required bool approve,
     required String fromAddress,
     required Uint8List signerPubkey,
@@ -50,6 +51,7 @@ class RuntimeUpgradeService {
     final callData = _buildJointVoteCall(
       proposalId: proposalId,
       actorCidNumber: actorCidNumber,
+      voterRoleCode: voterRoleCode,
       approve: approve,
     );
     final result = await _signAndSubmit(
@@ -61,6 +63,7 @@ class RuntimeUpgradeService {
     await _confirmRuntimeJointVote(
       proposalId: proposalId,
       actorCidNumber: actorCidNumber,
+      voterRoleCode: voterRoleCode,
       approve: approve,
       signerPubkey: signerPubkey,
       blockHashHex: result.blockHashHex,
@@ -156,12 +159,18 @@ class RuntimeUpgradeService {
   }
 
   /// 查询某岗位快照选民在某机构联合投票中的投票记录。
-  Future<bool?> fetchJointAdminVote(
+  Future<bool?> fetchJointTicketVote(
     int proposalId,
     String actorCidNumber,
+    String voterRoleCode,
     String pubkeyHex,
   ) async {
-    final key = _jointAdminVoteKey(proposalId, actorCidNumber, pubkeyHex);
+    final key = _jointTicketVoteKey(
+      proposalId,
+      actorCidNumber,
+      voterRoleCode,
+      pubkeyHex,
+    );
     if (key == null) return null;
     final data = await _rpc.fetchStorage(key);
     return _decodeBoolVote(data);
@@ -169,18 +178,24 @@ class RuntimeUpgradeService {
 
   /// 批量查询联合投票岗位选民记录。
   ///
-  /// 协议升级详情页必须批量读取稳定 storage `JointVotesByAdmin`，不能逐个
+  /// 协议升级详情页必须批量读取稳定 storage `JointVotesByTicket`，不能逐个
   /// 岗位选民发起 RPC；storage 旧名不构成管理员授权语义。
-  Future<Map<String, bool?>> fetchJointAdminVotesBatch(
+  Future<Map<String, bool?>> fetchJointTicketVotesBatch(
     int proposalId,
     String actorCidNumber,
+    String voterRoleCode,
     Iterable<String> pubkeysHex,
   ) async {
     final keyByPubkey = <String, String>{};
     for (final pubkey in pubkeysHex) {
       final clean = _normalizeHex(pubkey);
       if (clean.isEmpty) continue;
-      final key = _jointAdminVoteKey(proposalId, actorCidNumber, clean);
+      final key = _jointTicketVoteKey(
+        proposalId,
+        actorCidNumber,
+        voterRoleCode,
+        clean,
+      );
       if (key == null) continue;
       keyByPubkey[clean] = key;
     }
@@ -197,17 +212,25 @@ class RuntimeUpgradeService {
   ///
   /// (ADR-018 R2):与内部投票同理,广场上多个联合投票提案合并成单次
   /// 分块读取,避免每提案一次 RPC。
-  Future<Map<int, Map<String, bool?>>> fetchJointAdminVotesForProposals(
-    Map<int, ({String actorCidNumber, List<String> pubkeysHex})> byProposal,
+  Future<Map<int, Map<String, bool?>>> fetchJointTicketVotesForProposals(
+    Map<
+            int,
+            ({
+              String actorCidNumber,
+              String voterRoleCode,
+              List<String> pubkeysHex
+            })>
+        byProposal,
   ) async {
     final keyToCoord = <String, ({int pid, String pk})>{};
     for (final entry in byProposal.entries) {
       for (final pubkey in entry.value.pubkeysHex) {
         final clean = _normalizeHex(pubkey);
         if (clean.isEmpty) continue;
-        final key = _jointAdminVoteKey(
+        final key = _jointTicketVoteKey(
           entry.key,
           entry.value.actorCidNumber,
+          entry.value.voterRoleCode,
           clean,
         );
         if (key == null) continue;
@@ -224,9 +247,10 @@ class RuntimeUpgradeService {
     return result;
   }
 
-  String? _jointAdminVoteKey(
+  String? _jointTicketVoteKey(
     int proposalId,
     String actorCidNumber,
+    String voterRoleCode,
     String pubkeyHex,
   ) {
     final accountBytes = Uint8List.fromList(_hexDecode(pubkeyHex));
@@ -234,12 +258,15 @@ class RuntimeUpgradeService {
       return null;
     }
     final cidBytes = _encodeCidNumber(actorCidNumber);
-    final compositeKey = Uint8List(cidBytes.length + accountBytes.length)
-      ..setAll(0, cidBytes)
-      ..setAll(cidBytes.length, accountBytes);
+    final roleBytes = _encodeRoleCode(voterRoleCode);
+    final compositeKey =
+        Uint8List(cidBytes.length + roleBytes.length + accountBytes.length)
+          ..setAll(0, cidBytes)
+          ..setAll(cidBytes.length, roleBytes)
+          ..setAll(cidBytes.length + roleBytes.length, accountBytes);
     final fullKey = _buildDoubleStorageKey(
       'JointVote',
-      'JointVotesByAdmin',
+      'JointVotesByTicket',
       _u64ToLeBytes(proposalId),
       compositeKey,
     );
@@ -369,6 +396,7 @@ class RuntimeUpgradeService {
   Uint8List _buildJointVoteCall({
     required int proposalId,
     required String actorCidNumber,
+    required String voterRoleCode,
     required bool approve,
   }) {
     final output = ByteOutput();
@@ -376,6 +404,7 @@ class RuntimeUpgradeService {
     output.pushByte(_jointVoteCallIndex);
     output.write(_u64ToLeBytes(proposalId));
     output.write(_encodeCidNumber(actorCidNumber));
+    output.write(_encodeRoleCode(voterRoleCode));
     output.pushByte(approve ? 1 : 0);
 
     return output.toBytes();
@@ -409,15 +438,17 @@ class RuntimeUpgradeService {
   Future<void> _confirmRuntimeJointVote({
     required int proposalId,
     required String actorCidNumber,
+    required String voterRoleCode,
     required bool approve,
     required Uint8List signerPubkey,
     required String blockHashHex,
   }) async {
     final pubkeyHex = _hexEncode(signerPubkey);
     for (var attempt = 0; attempt < 6; attempt++) {
-      final chainVote = await fetchJointAdminVote(
+      final chainVote = await fetchJointTicketVote(
         proposalId,
         actorCidNumber,
+        voterRoleCode,
         pubkeyHex,
       );
       if (chainVote == approve) return;
@@ -527,6 +558,18 @@ class RuntimeUpgradeService {
       throw ArgumentError('机构 CID 的 UTF-8 长度必须为 1..32 字节');
     }
     return Uint8List.fromList([(cidBytes.length << 2), ...cidBytes]);
+  }
+
+  Uint8List _encodeRoleCode(String voterRoleCode) {
+    final roleBytes = utf8.encode(voterRoleCode.trim());
+    if (roleBytes.isEmpty || roleBytes.length > 64) {
+      throw ArgumentError('岗位码的 UTF-8 长度必须为 1..64 字节');
+    }
+    final length = roleBytes.length;
+    final prefix = length < 64
+        ? <int>[length << 2]
+        : <int>[(length << 2 | 1) & 0xff, (length << 2 | 1) >> 8];
+    return Uint8List.fromList([...prefix, ...roleBytes]);
   }
 
   /// 解码 SCALE Compact<u32>，返回 (value, bytesConsumed)。

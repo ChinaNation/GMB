@@ -40,12 +40,14 @@ impl<T: Config> Pallet<T> {
     pub fn do_cast_mutual_vote(
         who: T::AccountId,
         proposal_id: u64,
+        voter_role_code: votingengine::types::RoleCode,
         candidate: T::AccountId,
     ) -> DispatchResult {
         Self::do_cast_election_vote(
             who,
             proposal_id,
             votingengine::STAGE_ELECTION_MUTUAL,
+            Some(voter_role_code),
             candidate,
         )
     }

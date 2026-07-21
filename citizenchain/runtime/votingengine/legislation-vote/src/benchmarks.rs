@@ -14,7 +14,7 @@ use crate::{
     pallet::{
         Config, LegGuardSigns, LegOverrideSigns, LegReferendumVotesByAccount, LegislationMeta,
         LegislationMetas, Pallet, RepresentativeMeta, RepresentativeMetas,
-        RepresentativeVotesByAccount,
+        RepresentativeVotesByTicket,
     },
     Call, RepresentativeRoute, RepresentativeVoteRule, VoteProcedure,
 };
@@ -96,7 +96,7 @@ mod benchmarks {
         RepresentativeMetas::<T>::insert(
             proposal_id,
             RepresentativeMeta {
-                route: RepresentativeRoute::Single(role_subject),
+                route: RepresentativeRoute::Single(role_subject.clone()),
                 current_body: 0,
                 rule: RepresentativeVoteRule::Regular,
                 procedure: VoteProcedure::RepresentativeOnly,
@@ -104,11 +104,25 @@ mod benchmarks {
         );
 
         #[extrinsic_call]
-        _(RawOrigin::Signed(voter.clone()), proposal_id, true);
-
-        assert!(RepresentativeVotesByAccount::<T>::contains_key(
+        _(
+            RawOrigin::Signed(voter.clone()),
             proposal_id,
-            (0, voter)
+            b"BENCHMARK_MEMBER"
+                .to_vec()
+                .try_into()
+                .expect("benchmark role code fits"),
+            true,
+        );
+
+        assert!(RepresentativeVotesByTicket::<T>::contains_key(
+            proposal_id,
+            (
+                0,
+                votingengine::InstitutionVoteTicket {
+                    role_subject,
+                    voter_account: voter,
+                }
+            )
         ));
     }
 

@@ -8,7 +8,7 @@ use frame_support::{
 use frame_system as system;
 
 // 引擎核心 storage / 类型 / trait(住在 votingengine 主 crate)。
-// `use super::*` 拉进 internal-vote 自有的 pallet items(Pallet/Event/Error/Config/InternalVotesByAccount/...);
+// `use super::*` 拉进 internal-vote 自有的 pallet items(Pallet/Event/Error/Config/InternalVotesByTicket/...);
 // 这里追加 votingengine 的 storage 与 trait 名,让测试代码用短名引用。
 use primitives::cid::code::PRS;
 use votingengine::pallet::{
@@ -21,7 +21,7 @@ use votingengine::pallet::{
     ScheduledCleanups, YearProposalCounter,
 };
 use votingengine::types::{
-    code_bytes, CidNumber, InstitutionCode, ProposalSubject, NJD, NRC, PMUL, PRB, PRC,
+    code_bytes, CidNumber, InstitutionCode, ProposalSubject, RoleSubject, NJD, NRC, PMUL, PRB, PRC,
 };
 // 个人多签按账户键测试；公权、私权法人按机构 CID 键测试。
 const PERSONAL_CODE: InstitutionCode = PMUL;
@@ -409,7 +409,8 @@ impl votingengine::InstitutionRoleProvider<AccountId32> for TestInternalAdminPro
             return Vec::new();
         };
         let expected_role = test_institution_role(code);
-        if role_code != expected_role {
+        let is_test_second_role = code == PUBLIC_CODE && role_code == b"TEST_SECOND_ROLE";
+        if role_code != expected_role && !is_test_second_role {
             return Vec::new();
         }
         Self::institution_admins(code, cid_number).unwrap_or_default()
@@ -670,7 +671,18 @@ fn submit_joint_vote(
     approve: bool,
 ) -> DispatchResult {
     // 测试 helper 直调底层 do_joint_vote,绕过 extrinsic 签名包装。
-    <joint_vote::Pallet<Test>>::do_joint_vote(who, proposal_id, cid_number, approve)
+    let role_code = if CHINA_CH
+        .iter()
+        .any(|entry| entry.cid_number.as_bytes() == cid_number.as_slice())
+    {
+        primitives::governance_skeleton::ROLE_CODE_DIRECTOR
+    } else {
+        primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+    }
+    .to_vec()
+    .try_into()
+    .expect("测试岗位码合法");
+    <joint_vote::Pallet<Test>>::do_joint_vote(who, proposal_id, cid_number, role_code, approve)
 }
 
 fn set_population_count(eligible_total: u64) {
@@ -888,9 +900,23 @@ fn cast_internal_vote_via_extrinsic(
     approve: bool,
 ) -> DispatchResult {
     // 测试 helper 直调底层 do_internal_vote；保留 extrinsic dispatch 的事务语义。
+    let proposal = VotingEngine::proposals(proposal_id).expect("测试提案存在");
+    let ticket_claim = if let Some(actor_cid_number) = proposal.actor_cid_number {
+        let actor_text = core::str::from_utf8(actor_cid_number.as_slice()).expect("测试 CID 合法");
+        let code = votingengine::types::institution_code_from_cid_number(actor_text)
+            .expect("测试机构码合法");
+        InternalVoteTicketClaim::InstitutionRole(
+            test_institution_role(code)
+                .to_vec()
+                .try_into()
+                .expect("测试岗位码合法"),
+        )
+    } else {
+        InternalVoteTicketClaim::Personal
+    };
     let result = frame_support::storage::with_transaction(
         || -> frame_support::storage::TransactionOutcome<DispatchResult> {
-            match Pallet::<Test>::do_internal_vote(who, proposal_id, approve) {
+            match Pallet::<Test>::do_internal_vote(who, proposal_id, ticket_claim, approve) {
                 Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
                 Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
             }

@@ -183,8 +183,12 @@ fn ensure_title_and_chapters(input: &ProposeLawInput) -> Result<(), LegislationE
 }
 
 /// 组织一次代表机构表决 → 裸 SCALE call-data。
-pub fn build_representative_vote_call(proposal_id: u64, approve: bool) -> ChainCall {
-    encode_cast_representative_vote(proposal_id, approve)
+pub fn build_representative_vote_call(
+    proposal_id: u64,
+    voter_role_code: &str,
+    approve: bool,
+) -> ChainCall {
+    encode_cast_representative_vote(proposal_id, voter_role_code, approve)
 }
 
 #[cfg(test)]
@@ -296,7 +300,7 @@ mod tests {
 
     #[test]
     fn representative_vote_call_targets_legislation_vote_pallet() {
-        let call = build_representative_vote_call(42, true);
+        let call = build_representative_vote_call(42, "REPRESENTATIVE", true);
         assert_eq!(&call.call_data[..2], &[26, 1]); // pallet 26 call 1(cast_representative_vote)
     }
 }

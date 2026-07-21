@@ -64,11 +64,12 @@ export async function proposeLegislation(
 export async function castRepresentativeVote(
   auth: AdminAuth,
   proposalId: number,
+  voterRoleCode: string,
   approve: boolean,
 ): Promise<ChainSignPrepare> {
   return adminRequest<ChainSignPrepare>('/api/v1/legislation/representative-vote', auth, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ proposalId, approve }),
+    body: JSON.stringify({ proposalId, voterRoleCode, approve }),
   });
 }

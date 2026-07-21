@@ -25,15 +25,16 @@ use votingengine::{
     pallet::{Proposals, ProposalsByExpiry},
     types::{
         fixed_governance_pass_threshold, AuthorizationSubject, CidNumber, InstitutionCode,
-        ProposalSubject, ProposalSubjectCidNumbers, VotePlanOf, VotingEngineKind, NRC, PRB, PRC,
+        InstitutionVoteTicket, ProposalSubjectCidNumbers, RoleCode, RoleSubject, VotePlanOf,
+        VotingEngineKind, NRC, PRB, PRC,
     },
     InstitutionRoleProvider, InternalProposalMutexKind, PopulationScope, Proposal,
     PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
 };
 
 use super::pallet::{
-    Config, Error, Event, JointInstitutionTallies, JointTallies, JointVotesByAdmin,
-    JointVotesByInstitution, Pallet,
+    Config, Error, Event, JointInstitutionTallies, JointTallies, JointVotesByInstitution,
+    JointVotesByTicket, Pallet,
 };
 use super::{institution_info, is_joint_unanimous};
 
@@ -189,7 +190,7 @@ impl<T: Config> Pallet<T> {
                 }
             }
 
-            // 按完整岗位主体冻结当前有效任职；同一 CID 的多个岗位会同步合并成去重投票人集合。
+            // 按完整岗位主体冻结当前有效任职；同一钱包担任多个岗位时各形成一张票据。
             for subject in vote_plan.voter_subjects.iter() {
                 let role_subject = match subject {
                     AuthorizationSubject::Institution(role_subject) => role_subject,
@@ -246,6 +247,7 @@ impl<T: Config> Pallet<T> {
         who: T::AccountId,
         proposal_id: u64,
         cid_number: CidNumber,
+        voter_role_code: RoleCode,
         approve: bool,
     ) -> DispatchResult {
         let proposal = <votingengine::Pallet<T>>::ensure_open_proposal(proposal_id)?;
@@ -264,20 +266,28 @@ impl<T: Config> Pallet<T> {
         );
         let (institution_code, _) = institution_profile(cid_number.as_slice())
             .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
+        let role_subject = RoleSubject {
+            cid_number: cid_number.clone(),
+            role_code: voter_role_code.clone(),
+        };
         ensure!(
-            <votingengine::Pallet<T>>::is_effective_voter_in_snapshot(
+            <votingengine::Pallet<T>>::is_subject_voter_in_snapshot(
                 proposal_id,
-                ProposalSubject::InstitutionCid(cid_number.clone()),
+                AuthorizationSubject::Institution(role_subject.clone()),
                 &who,
             ),
             votingengine::Error::<T>::NoPermission
         );
+        let ticket = InstitutionVoteTicket {
+            role_subject,
+            voter_account: who.clone(),
+        };
         ensure!(
-            !JointVotesByAdmin::<T>::contains_key(proposal_id, (cid_number.clone(), who.clone()),),
+            !JointVotesByTicket::<T>::contains_key(proposal_id, &ticket),
             votingengine::Error::<T>::AlreadyVoted
         );
 
-        JointVotesByAdmin::<T>::insert(proposal_id, (cid_number.clone(), who.clone()), approve);
+        JointVotesByTicket::<T>::insert(proposal_id, ticket, approve);
         let tally =
             JointInstitutionTallies::<T>::mutate(proposal_id, cid_number.clone(), |tally| {
                 if approve {
@@ -288,20 +298,19 @@ impl<T: Config> Pallet<T> {
                 *tally
             });
 
-        Self::deposit_event(Event::<T>::JointAdminVoteCast {
+        Self::deposit_event(Event::<T>::JointInstitutionTicketVoteCast {
             proposal_id,
             cid_number: cid_number.clone(),
             who,
+            voter_role_code,
             approve,
         });
 
         let threshold = fixed_governance_pass_threshold(&institution_code)
             .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
-        let voters_len = <votingengine::Pallet<T>>::effective_voters_len(
-            proposal_id,
-            ProposalSubject::InstitutionCid(cid_number.clone()),
-        )
-        .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
+        let voters_len =
+            <votingengine::Pallet<T>>::institution_ticket_count(proposal_id, cid_number.clone())
+                .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
 
         if tally.yes >= threshold {
             return Self::finalize_joint_institution_vote(proposal_id, cid_number, true);

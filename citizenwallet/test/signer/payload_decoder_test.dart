@@ -245,10 +245,11 @@ void main() {
     // InternalVote::cast(20.0)。
 
     test('decodes internal_vote (pallet=20 call=0) approve=true', () {
-      // [0x14, 0x00, u64_le proposal_id=42, bool approve=true]
+      // [0x14, 0x00, u64_le proposal_id=42, Personal=0, bool approve=true]
       final payload = Uint8List.fromList([
         0x14, 0x00,
         42, 0, 0, 0, 0, 0, 0, 0,
+        0, // InternalVoteTicketClaim::Personal
         1, // approve = true
       ]);
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
@@ -273,6 +274,7 @@ void main() {
         0,
         0,
         0,
+        0, // approve = false
       ]);
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded!.action, 'internal_vote');
@@ -281,7 +283,7 @@ void main() {
     });
 
     test('decodes joint_vote (pallet=21 call=0)', () {
-      // JointVote.cast_admin = pallet 21 / call 0，投票席位只用机构 CID 标识。
+      // JointVote.cast_admin = pallet 21 / call 0，投票席位由机构 CID + 岗位码标识。
       final payload = Uint8List.fromList([
         0x15,
         0x00,
@@ -294,6 +296,7 @@ void main() {
         0,
         0,
         ...compactVec(nrcActorCid),
+        ...compactVec('COMMITTEE_MEMBER'),
         0,
       ]);
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
@@ -302,6 +305,7 @@ void main() {
       expect(decoded!.action, 'joint_vote');
       expect(decoded.fields['proposal_id'], '7');
       expect(decoded.fields['cid_number'], nrcActorCid);
+      expect(decoded.fields['voter_role_code'], 'COMMITTEE_MEMBER');
       expect(decoded.fields['approve'], 'false');
       expect(decoded.summary, contains('反对'));
     });
@@ -2428,11 +2432,18 @@ void main() {
     });
 
     test('decodes cast_representative_vote (26.1)', () {
-      final callData = [26, 1, ...u64Le(99), 0x01];
+      final callData = [
+        26,
+        1,
+        ...u64Le(99),
+        ...compactVec('SENATOR'),
+        0x01,
+      ];
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(callData)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cast_representative_vote');
       expect(decoded.fields['proposal_id'], '99');
+      expect(decoded.fields['voter_role_code'], 'SENATOR');
       expect(decoded.fields['approve'], 'true');
     });
 

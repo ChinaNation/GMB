@@ -41,15 +41,26 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
   const cidNumber = resolvedCidNumber;
 
   const fetchVoteStatuses = useCallback(async (
-    pid: number, admins: string[], sid: string | undefined,
+    pid: number, admins: InstitutionDetail['admins'], sid: string | undefined,
+    voterRoleSubjects: ProposalFullInfo['voterRoleSubjects'],
   ) => {
+    const eligibleRoleCodes = new Set(
+      voterRoleSubjects
+        .filter((subject) => subject.cidNumber === sid)
+        .map((subject) => subject.roleCode),
+    );
     const results: Record<string, UserVoteStatus> = {};
     await Promise.all(
-      admins.map(async (pubkey) => {
-        try {
-          const vs = await api.checkVoteStatus(pid, pubkey, sid);
-          results[pubkey.toLowerCase()] = vs;
-        } catch (_) {}
+      admins.flatMap((admin) => {
+        const assignments = admin.assignments.filter((assignment) =>
+          eligibleRoleCodes.has(assignment.roleCode));
+        return assignments.map(async (assignment) => {
+          try {
+            const roleCode = assignment?.roleCode;
+            const vs = await api.checkVoteStatus(pid, admin.adminAccount, sid, roleCode);
+            results[`${admin.adminAccount.toLowerCase()}:${roleCode ?? ''}`] = vs;
+          } catch (_) {}
+        });
       }),
     );
     setVoteStatuses(results);
@@ -59,21 +70,28 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
   const refreshData = useCallback(async (inst?: InstitutionDetail | null, sid?: string) => {
     const curInst = inst ?? institution;
     const curSid = sid ?? cidNumber;
+    let d: ProposalFullInfo | null = null;
     try {
-      const d = await api.getProposalDetail(proposalId);
+      d = await api.getProposalDetail(proposalId);
       setInfo(d);
     } catch (_) {}
-    if (curInst && curSid) {
-      const statuses = await fetchVoteStatuses(proposalId, curInst.admins.map(a => a.adminAccount), curSid);
+    if (curInst && curSid && d) {
+      const statuses = await fetchVoteStatuses(
+        proposalId,
+        curInst.admins,
+        curSid,
+        d.voterRoleSubjects,
+      );
       // 已确认上链的投票或超时的投票，从 pending 中移除
       setPendingVotes((prev) => {
         const next = new Map(prev);
         const now = Date.now();
-        for (const [pk, submittedAt] of prev) {
-          const vs = statuses[pk];
-          const voted = vs && (vs.internalVote != null || vs.jointVote != null);
+        for (const [ticketKey, submittedAt] of prev) {
+          const voteStatus = statuses[ticketKey];
+          const voted = voteStatus &&
+            (voteStatus.internalVote != null || voteStatus.jointVote != null);
           const timedOut = now - submittedAt > PENDING_TIMEOUT_MS;
-          if (voted || timedOut) next.delete(pk);
+          if (voted || timedOut) next.delete(ticketKey);
         }
         return next;
       });
@@ -106,7 +124,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
             wallets = activated.map(a => ({ address: hexToSs58(a.pubkeyHex), pubkeyHex: a.pubkeyHex, walletLabel: '' }));
             setDetectedAdminWallets(wallets);
           }
-          await fetchVoteStatuses(proposalId, inst.admins.map(a => a.adminAccount), sid);
+          await fetchVoteStatuses(proposalId, inst.admins, sid, d.voterRoleSubjects);
         } catch (_) {}
       }
     };
@@ -126,14 +144,15 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
   }, [pendingVotes.size, refreshData]);
 
   // 投票提交成功回调：标记为 pending，关闭弹窗
-  const handleVoteSuccess = useCallback((txHash: string) => {
-    if (votingWallet) {
-      setPendingVotes((prev) => new Map(prev).set(votingWallet.pubkeyHex.toLowerCase(), Date.now()));
+  const handleVoteSuccess = useCallback((txHash: string, pubkeyHex: string, voterRoleCode: string | null) => {
+    if (pubkeyHex) {
+      const ticketKey = `${pubkeyHex.toLowerCase()}:${voterRoleCode ?? ''}`;
+      setPendingVotes((prev) => new Map(prev).set(ticketKey, Date.now()));
     }
     setVotingWallet(null);
     // 立即刷新一次
     refreshData();
-  }, [votingWallet, refreshData]);
+  }, [refreshData]);
 
   if (loading) {
     return <div className="governance-section"><p>加载提案详情…</p></div>;
@@ -246,11 +265,24 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
               const pubkey = admin.adminAccount;
               const pk = pubkey.toLowerCase();
               const myWallet = adminWallets.find(w => w.pubkeyHex.toLowerCase() === pk);
-              const vs = voteStatuses[pk];
-              const voted = meta.kind === 1 ? vs?.jointVote : vs?.internalVote;
-              const hasVoted = voted != null;
-              const isPending = pendingVotes.has(pk);
-              const canVote = myWallet && meta.status === 0 && !hasVoted && !isPending;
+              const eligibleAssignments = admin.assignments.filter((assignment) =>
+                info.voterRoleSubjects.some((subject) =>
+                  subject.cidNumber === cidNumber && subject.roleCode === assignment.roleCode));
+              const assignmentVotes = eligibleAssignments.map((assignment) => {
+                const vs = voteStatuses[`${pk}:${assignment.roleCode}`];
+                return meta.kind === 1 ? vs?.jointVote : vs?.internalVote;
+              });
+              const votedCount = assignmentVotes.filter((vote) => vote != null).length;
+              const hasVoted = eligibleAssignments.length > 0 && votedCount === eligibleAssignments.length;
+              const voted = hasVoted && assignmentVotes.every((vote) => vote === true);
+              const hasPendingTicket = eligibleAssignments.some((assignment) =>
+                pendingVotes.has(`${pk}:${assignment.roleCode}`));
+              const hasAvailableTicket = eligibleAssignments.some((assignment) => {
+                const ticketKey = `${pk}:${assignment.roleCode}`;
+                return voteStatuses[ticketKey]?.internalVote == null &&
+                  voteStatuses[ticketKey]?.jointVote == null && !pendingVotes.has(ticketKey);
+              });
+              const canVote = myWallet && meta.status === 0 && hasAvailableTicket;
 
               return (
                 <InstitutionAssignmentCard
@@ -261,14 +293,21 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
                   className={hasVoted ? (voted ? 'admin-card-voted-yes' : 'admin-card-voted-no') : ''}
                   action={
                     canVote ? (
-                      <button className="vote-button-inline" onClick={() => setVotingWallet(myWallet)}>
+                      <button className="vote-button-inline" onClick={() => setVotingWallet({
+                        ...myWallet,
+                        roleAssignments: eligibleAssignments.filter((assignment) => {
+                          const ticketKey = `${pk}:${assignment.roleCode}`;
+                          return voteStatuses[ticketKey]?.internalVote == null &&
+                            voteStatuses[ticketKey]?.jointVote == null && !pendingVotes.has(ticketKey);
+                        }),
+                      })}>
                         投票
                       </button>
-                    ) : isPending && !hasVoted ? (
+                    ) : hasPendingTicket && !hasVoted ? (
                       <span className="vote-result-tag vote-pending-tag">投票中</span>
                     ) : hasVoted ? (
                       <span className={`vote-result-tag ${voted ? 'vote-yes-tag' : 'vote-no-tag'}`}>
-                        {voted ? '赞成' : '反对'}
+                        {voted ? '全部赞成' : `已投 ${votedCount}/${eligibleAssignments.length}`}
                       </span>
                     ) : (
                       <span className="vote-result-tag vote-none-tag">未投票</span>

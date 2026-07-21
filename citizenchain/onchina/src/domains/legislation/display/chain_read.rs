@@ -1,17 +1,44 @@
 //! 大屏专属链读:本机构活跃提案 ID 列表 + 某提案的逐席院内投票映射。
 //!
-//! 复用 chain_runtime 读链范式(subxt dynamic + 镜像 decode + `storage_key_suffix`)。
+//! 复用 chain_runtime 读链范式(subxt dynamic + 严格镜像 decode)。
 //! - 活跃提案:点查 `VotingEngine::ActiveProposalsBySubject[InstitutionCid(cid_number)]`
 //!   → `BoundedVec<u64>`(与 `Vec<u64>` 同编码)。
-//! - 逐席投票：按 `proposal_id` 迭代 `RepresentativeVotesByAccount`，再按当前代表机构索引过滤。
+//! - 逐席投票：按 `proposal_id` 迭代 `RepresentativeVotesByTicket`，再按当前代表机构索引过滤。
 
 use std::collections::HashMap;
 
 use codec::{Decode, Encode};
 use subxt::{dynamic, OnlineClient, PolkadotConfig};
 
-use crate::core::chain_runtime::storage_key_suffix;
 use crate::core::chain_url;
+
+#[derive(Decode, Encode)]
+struct RoleSubjectMirror {
+    cid_number: Vec<u8>,
+    role_code: Vec<u8>,
+}
+
+#[derive(Decode, Encode)]
+struct InstitutionVoteTicketMirror {
+    role_subject: RoleSubjectMirror,
+    voter_account: [u8; 32],
+}
+
+fn decode_representative_ticket_storage_key(
+    key_bytes: &[u8],
+) -> Result<(u32, InstitutionVoteTicketMirror), String> {
+    // StorageDoubleMap 固定前缀 32；第一键 Blake2_128Concat 为 16+8；
+    // 第二键哈希 16，之后才是 `(body_index, ticket)` 原始 SCALE 编码。
+    let mut input = key_bytes
+        .get(72..)
+        .ok_or_else(|| "representative ticket storage key is too short".to_string())?;
+    let decoded = <(u32, InstitutionVoteTicketMirror)>::decode(&mut input)
+        .map_err(|e| format!("decode RepresentativeVotesByTicket key failed: {e}"))?;
+    if !input.is_empty() {
+        return Err("RepresentativeVotesByTicket key has trailing bytes".to_string());
+    }
+    Ok(decoded)
+}
 
 /// 读取某机构的活跃提案 ID 列表(点查 `ActiveProposalsBySubject`;键不存在=空)。
 ///
@@ -60,7 +87,7 @@ fn proposal_subject_institution_cid_key(cid_number: &str) -> Result<Vec<u8>, Str
 
 /// 读取某提案当前代表机构的逐席投票。
 ///
-/// 二级键是 `(body_index, account)`；同一钱包在多个机构有席位时，每个机构的票据独立保留。
+/// 二级键是 `(body_index, InstitutionVoteTicket)`；同一钱包的多个岗位票据独立保留。
 pub(crate) async fn fetch_representative_ballots(
     proposal_id: u64,
     current_body: u32,
@@ -77,31 +104,28 @@ pub(crate) async fn fetch_representative_ballots(
     // 部分键 = proposal_id(u64);迭代其下所有 (account → bool) 二级键。
     let query = dynamic::storage(
         "LegislationVote",
-        "RepresentativeVotesByAccount",
+        "RepresentativeVotesByTicket",
         vec![dynamic::Value::u128(proposal_id as u128)],
     );
     let mut iter = storage
         .iter(query)
         .await
-        .map_err(|e| format!("iterate RepresentativeVotesByAccount failed: {e}"))?;
+        .map_err(|e| format!("iterate RepresentativeVotesByTicket failed: {e}"))?;
     let mut ballots = HashMap::new();
     while let Some(entry) = iter.next().await {
-        let kv = entry.map_err(|e| format!("read RepresentativeVotesByAccount failed: {e}"))?;
-        // 元组原始键位于尾部 36 字节：body_index(u32 LE) + AccountId32。
-        let key = storage_key_suffix::<36>(&kv.key_bytes)?;
-        let body_index = u32::from_le_bytes(
-            key[..4]
-                .try_into()
-                .map_err(|_| "invalid representative ballot body index".to_string())?,
-        );
+        let kv = entry.map_err(|e| format!("read RepresentativeVotesByTicket failed: {e}"))?;
+        let (body_index, ticket) = decode_representative_ticket_storage_key(&kv.key_bytes)?;
         if body_index != current_body {
             continue;
         }
-        let account = &key[4..];
         let mut raw = kv.value.encoded();
         let approve = bool::decode(&mut raw)
-            .map_err(|e| format!("decode RepresentativeVotesByAccount value failed: {e}"))?;
-        ballots.insert(format!("0x{}", hex::encode(account)), approve);
+            .map_err(|e| format!("decode RepresentativeVotesByTicket value failed: {e}"))?;
+        let _ticket_role_identity = (
+            ticket.role_subject.cid_number,
+            ticket.role_subject.role_code,
+        );
+        ballots.insert(format!("0x{}", hex::encode(ticket.voter_account)), approve);
     }
     Ok(ballots)
 }
@@ -143,5 +167,30 @@ mod tests {
     fn ballot_value_decodes_bool() {
         assert!(bool::decode(&mut &true.encode()[..]).expect("decode true"));
         assert!(!bool::decode(&mut &false.encode()[..]).expect("decode false"));
+    }
+
+    #[test]
+    fn representative_ticket_key_decodes_complete_role_identity() {
+        let encoded_ticket = (
+            2_u32,
+            InstitutionVoteTicketMirror {
+                role_subject: RoleSubjectMirror {
+                    cid_number: b"LN001-NRP0G-000000001-2026".to_vec(),
+                    role_code: b"HOUSE_MEMBER".to_vec(),
+                },
+                voter_account: [7_u8; 32],
+            },
+        )
+            .encode();
+        let mut storage_key = vec![0_u8; 72];
+        storage_key.extend(encoded_ticket);
+        let (body_index, ticket) =
+            decode_representative_ticket_storage_key(&storage_key).expect("decode ticket key");
+        assert_eq!(body_index, 2);
+        assert_eq!(ticket.role_subject.role_code, b"HOUSE_MEMBER");
+        assert_eq!(ticket.voter_account, [7_u8; 32]);
+
+        storage_key.push(0);
+        assert!(decode_representative_ticket_storage_key(&storage_key).is_err());
     }
 }

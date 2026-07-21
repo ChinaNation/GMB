@@ -9,7 +9,6 @@ import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.d
 import 'package:citizenapp/citizen/proposal/admins-change/services/institution_admin_service.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/citizen/institution/governance_registry.dart';
-import 'package:citizenapp/votingengine/internal-vote/pending_vote_store.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_context.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_detail_local_store.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_query_service.dart';
@@ -17,7 +16,6 @@ import 'package:citizenapp/citizen/proposal/runtime-upgrade/runtime_upgrade_serv
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
-import 'package:citizenapp/rpc/transfer_rpc.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -72,9 +70,6 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   List<WalletProfile> _votableWallets = const [];
   WalletProfile? _selectedVoteWallet;
 
-  // 已提交投票但尚未上链确认的岗位选民公钥集合。
-  Set<String> _pendingPubkeys = const {};
-
   @override
   void initState() {
     super.initState();
@@ -84,6 +79,10 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   bool get _isAdmin => widget.proposalContext.isAdmin;
 
   int get _requiredAdminThreshold => widget.institution?.internalThreshold ?? 0;
+
+  String get _voterRoleCode => widget.institution?.orgType == OrgType.prb
+      ? 'DIRECTOR'
+      : 'COMMITTEE_MEMBER';
 
   bool get _jointVoteOpen =>
       (_meta?.status == 0) && (_meta?.stage == 1) && _resolvedStatusCode() == 0;
@@ -107,7 +106,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     for (final wallet in importedEligibleWallets) {
       final pk = _normalizeHex(wallet.pubkeyHex);
       final vote = _adminVotes[pk];
-      if (vote == null && !_pendingPubkeys.contains(pk)) return false;
+      if (vote == null) return false;
     }
     return true;
   }
@@ -153,9 +152,10 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
 
       final institution = widget.institution;
       if (institution != null) {
-        futures.add(_proposalQueryService.fetchEligibleVoterSnapshot(
+        futures.add(_proposalQueryService.fetchRoleVoterSnapshot(
           widget.proposalId,
-          institution,
+          institution.cidNumber,
+          _voterRoleCode,
         ));
         futures.add(_service.fetchJointVoteByInstitution(
             widget.proposalId, institution.cidNumber));
@@ -175,8 +175,6 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       Map<String, bool?> adminVotes = const {};
       List<WalletProfile> votableWallets = const [];
       WalletProfile? selectedVoteWallet = _selectedVoteWallet;
-      Set<String> pendingPubkeys = const {};
-
       if (institution != null) {
         admins = results[4] as List<String>;
         institutionVote = results[5] as bool?;
@@ -187,35 +185,17 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         }).toList(growable: false)
           ..sort((a, b) => a.walletIndex.compareTo(b.walletIndex));
 
-        final voteResults = await _service.fetchJointAdminVotesBatch(
+        final voteResults = await _service.fetchJointTicketVotesBatch(
           widget.proposalId,
           institution.cidNumber,
+          _voterRoleCode,
           admins,
         );
         adminVotes = voteResults;
 
-        // 检查待确认投票。联合投票不读 InternalVote，而是读 JointVote
-        // 机构岗位有效选民投票记录。
-        final pendingSummary =
-            await PendingVoteStore.instance.confirmAllDetailed(
-          'runtime_upgrade',
-          widget.proposalId,
-          TransferRpc(),
-          chainVoteLookup: (record) => _service.fetchJointAdminVote(
-            record.proposalId,
-            institution.cidNumber,
-            record.walletPubkey,
-          ),
-        );
-        for (final confirmed in pendingSummary.confirmed) {
-          adminVotes[confirmed.walletPubkey] = confirmed.approve;
-        }
-        final pendingPks =
-            pendingSummary.stillPending.map((r) => r.walletPubkey).toSet();
-
         votableWallets = matchedAdminWallets.where((wallet) {
           final pk = _normalizeHex(wallet.pubkeyHex);
-          return adminVotes[pk] == null && !pendingPks.contains(pk);
+          return adminVotes[pk] == null;
         }).toList(growable: false)
           ..sort((a, b) => a.walletIndex.compareTo(b.walletIndex));
 
@@ -225,8 +205,6 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           selectedVoteWallet =
               votableWallets.isNotEmpty ? votableWallets.first : null;
         }
-
-        pendingPubkeys = pendingPks;
       }
 
       if (!mounted) return;
@@ -238,7 +216,6 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           referendumTally: referendumTally,
           admins: admins,
           adminVotes: adminVotes,
-          pendingPubkeys: pendingPubkeys,
           institutionVote: institutionVote,
           institutionAdminTally: institutionAdminTally,
         ));
@@ -255,7 +232,6 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         _institutionVote = institutionVote;
         _institutionAdminTally = institutionAdminTally;
         _adminVotes = adminVotes;
-        _pendingPubkeys = pendingPubkeys;
         _votableWallets = votableWallets;
         _selectedVoteWallet = selectedVoteWallet;
         _loading = false;
@@ -279,7 +255,6 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           await _detailStore.read('runtime_upgrade', widget.proposalId);
       if (snapshot == null || !mounted) return snapshot;
       final admins = snapshot.admins;
-      final pendingPks = snapshot.pendingPubkeys.toSet();
       final adminSet = admins.toSet();
       final matchedAdminWallets = widget.adminWallets.where((wallet) {
         return adminSet.contains(_normalizeHex(wallet.pubkeyHex));
@@ -287,7 +262,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         ..sort((a, b) => a.walletIndex.compareTo(b.walletIndex));
       final votableWallets = matchedAdminWallets.where((wallet) {
         final pk = _normalizeHex(wallet.pubkeyHex);
-        return snapshot.adminVotes[pk] == null && !pendingPks.contains(pk);
+        return snapshot.adminVotes[pk] == null;
       }).toList(growable: false)
         ..sort((a, b) => a.walletIndex.compareTo(b.walletIndex));
       setState(() {
@@ -308,7 +283,6 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           no: _toInt(snapshot.extra['institution_no']) ?? 0,
         );
         _adminVotes = snapshot.adminVotes;
-        _pendingPubkeys = pendingPks;
         _votableWallets = votableWallets;
         _selectedVoteWallet =
             votableWallets.isNotEmpty ? votableWallets.first : null;
@@ -328,7 +302,6 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     required ({int yes, int no}) referendumTally,
     required List<String> admins,
     required Map<String, bool?> adminVotes,
-    required Set<String> pendingPubkeys,
     required bool? institutionVote,
     required ({int yes, int no}) institutionAdminTally,
   }) {
@@ -344,7 +317,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       adminVotes: adminVotes.map(
         (key, value) => MapEntry(_normalizeHex(key), value),
       ),
-      pendingPubkeys: pendingPubkeys.map(_normalizeHex).toList(growable: false),
+      pendingPubkeys: const [],
       detail: _proposalInfoToJson(proposalInfo),
       extra: {
         'meta_kind': meta?.kind,
@@ -555,6 +528,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       final result = await _service.submitJointVote(
         proposalId: widget.proposalId,
         actorCidNumber: institution.cidNumber,
+        voterRoleCode: _voterRoleCode,
         approve: approve,
         fromAddress: voteWallet.address,
         signerPubkey: _hexDecode(voteWallet.pubkeyHex),
@@ -569,18 +543,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       );
 
       final pubkey = _normalizeHex(voteWallet.pubkeyHex);
-      // 服务层已经确认 runtime JointVote 记录，新流程不再写 pending。
-      // 这里只清除旧版本可能残留的同一投票钱包 pending 记录。
-      await PendingVoteStore.instance.remove(
-        'runtime_upgrade',
-        widget.proposalId,
-        pubkey,
-      );
-
       if (!mounted) return;
       setState(() {
         _adminVotes = {..._adminVotes, pubkey: approve};
-        _pendingPubkeys = _pendingPubkeys.difference({pubkey});
         _institutionAdminTally = (
           yes: _institutionAdminTally.yes + (approve ? 1 : 0),
           no: _institutionAdminTally.no + (approve ? 0 : 1),

@@ -5,6 +5,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
+import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
 
 // ──── 投票进度组件 ────
 
@@ -94,11 +95,15 @@ class ProposalAdminVoteList extends StatelessWidget {
     required this.admins,
     required this.adminVotes,
     required this.pendingPubkeys,
+    this.voterTickets = const [],
     this.proposerSs58,
   });
 
   /// 合格选民公钥列表（小写 hex，不含 0x）。
   final List<String> admins;
+
+  /// 机构岗位票据；非空时逐票据展示，同一钱包多个岗位各占一行。
+  final List<EligibleVoterTicket> voterTickets;
 
   /// 投票记录：pubkeyHex → true(赞成) / false(反对) / null(未投票)。
   final Map<String, bool?> adminVotes;
@@ -126,7 +131,7 @@ class ProposalAdminVoteList extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
               child: Text(
-                '合格选民投票明细（共 ${admins.length} 人）',
+                '合格投票票据明细（共 ${voterTickets.isEmpty ? admins.length : voterTickets.length} 票）',
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
@@ -135,9 +140,12 @@ class ProposalAdminVoteList extends StatelessWidget {
               ),
             ),
             const Divider(),
-            ...List.generate(admins.length, (index) {
-              final pubkey = admins[index];
-              final vote = adminVotes[pubkey];
+            ...List.generate(
+                voterTickets.isEmpty ? admins.length : voterTickets.length,
+                (index) {
+              final ticket = voterTickets.isEmpty ? null : voterTickets[index];
+              final pubkey = ticket?.pubkeyHex ?? admins[index];
+              final vote = adminVotes[ticket?.ticketKey ?? pubkey];
               final ss58 = _pubkeyToSS58(pubkey);
               final isProposer = proposerSs58 != null && proposerSs58 == ss58;
 
@@ -164,6 +172,16 @@ class ProposalAdminVoteList extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    if (ticket?.voterRoleCode != null) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        ticket!.voterRoleCode!,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppTheme.textTertiary,
+                        ),
+                      ),
+                    ],
                     if (isProposer) ...[
                       const SizedBox(width: 6),
                       Container(
@@ -185,7 +203,10 @@ class ProposalAdminVoteList extends StatelessWidget {
                     ],
                   ],
                 ),
-                trailing: _buildVoteStatusChip(vote, pubkey),
+                trailing: _buildVoteStatusChip(
+                  vote,
+                  ticket?.ticketKey ?? pubkey,
+                ),
               );
             }),
           ],

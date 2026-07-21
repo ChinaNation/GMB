@@ -5,6 +5,8 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
+import 'package:citizenapp/citizen/institution/institution_role_models.dart';
+import 'package:citizenapp/citizen/institution/institution_role_storage_codec.dart';
 import 'package:citizenapp/votingengine/internal-vote/internal_vote_query_service.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
@@ -53,6 +55,19 @@ class ProposalQueryService {
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
     if (data == null) return null;
     return decodeProposalMeta(proposalId, data);
+  }
+
+  /// 查询并严格解码提案绑定的 VotePlan。
+  Future<VotePlan?> fetchVotePlan(int proposalId) async {
+    final key = _buildStorageKey(
+      'VotingEngine',
+      'ProposalVotePlans',
+      _u64ToLeBytes(proposalId),
+    );
+    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    return data == null
+        ? null
+        : InstitutionRoleStorageCodec.decodeVotePlan(data);
   }
 
   /// `VotingEngine::Proposal` SCALE 解码唯一真源。
@@ -173,8 +188,8 @@ class ProposalQueryService {
 
   /// 查询提案创建时锁定的实际投票账户快照。
   ///
-  /// 机构提案只读取按岗位主体合并去重后的 `EffectiveVoterSnapshot`；
-  /// 个人多签才读取 `AdminSnapshot`。禁止在机构快照缺失时回落当前 admins。
+  /// 个人多签读取 `AdminSnapshot`；机构提案必须按完整岗位主体读取
+  /// `VoterSnapshot`。禁止把多个岗位按钱包合并，也禁止回落当前 admins。
   Future<List<String>> fetchEligibleVoterSnapshot(
     int proposalId,
     InstitutionInfo institution,
@@ -182,25 +197,88 @@ class ProposalQueryService {
     if (isPersonalAccountIdentity(institution.cidNumber)) {
       return fetchAdminSnapshot(proposalId, institution);
     }
+    throw StateError('机构提案必须按明确岗位调用 fetchRoleVoterSnapshot');
+  }
+
+  /// 查询一个完整机构岗位主体在提案创建时冻结的任职钱包。
+  Future<List<String>> fetchRoleVoterSnapshot(
+    int proposalId,
+    String cidNumber,
+    String voterRoleCode,
+  ) async {
+    final subject = BytesBuilder(copy: false)
+      ..addByte(0) // AuthorizationSubject::Institution
+      ..add(_encodeBoundedText(cidNumber, 32, 'cid_number'))
+      ..add(_encodeBoundedText(voterRoleCode, 64, 'voter_role_code'));
     final key = _buildDoubleStorageKey(
       'VotingEngine',
-      'EffectiveVoterSnapshot',
+      'VoterSnapshot',
       _u64ToLeBytes(proposalId),
-      proposalSubjectKey(institution),
+      subject.toBytes(),
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
     if (data == null) {
       throw StateError(
-        '提案 $proposalId 缺少 VotingEngine::EffectiveVoterSnapshot',
+        '提案 $proposalId 缺少岗位 $voterRoleCode 的 VoterSnapshot',
       );
     }
     final decoded = decodeAdminSnapshot(data);
     if (decoded == null || decoded.isEmpty) {
       throw const FormatException(
-        'VotingEngine::EffectiveVoterSnapshot SCALE 数据无效',
+        'VotingEngine::VoterSnapshot SCALE 数据无效',
       );
     }
     return decoded;
+  }
+
+  /// 返回提案全部冻结票据；同一钱包在多个岗位中会出现多次，禁止按账户去重。
+  Future<List<EligibleVoterTicket>> fetchEligibleVoterTickets(
+    int proposalId,
+    InstitutionInfo institution,
+  ) async {
+    if (isPersonalAccountIdentity(institution.cidNumber)) {
+      final accounts = await fetchAdminSnapshot(proposalId, institution);
+      return accounts
+          .map((account) => EligibleVoterTicket(pubkeyHex: account))
+          .toList(growable: false);
+    }
+    final plan = await fetchVotePlan(proposalId);
+    if (plan == null) {
+      throw StateError('提案 $proposalId 缺少有效 VotePlan');
+    }
+    final tickets = <EligibleVoterTicket>[];
+    for (final subject in plan.voterSubjects) {
+      final role = subject.roleSubject;
+      if (role == null || role.cidNumber != institution.cidNumber) continue;
+      final accounts = await fetchRoleVoterSnapshot(
+        proposalId,
+        role.cidNumber,
+        role.roleCode,
+      );
+      for (final account in accounts) {
+        tickets.add(EligibleVoterTicket(
+          pubkeyHex: account,
+          cidNumber: role.cidNumber,
+          voterRoleCode: role.roleCode,
+        ));
+      }
+    }
+    if (tickets.isEmpty) {
+      throw StateError('提案 $proposalId 没有当前机构的冻结岗位票据');
+    }
+    return tickets;
+  }
+
+  Uint8List _encodeBoundedText(String value, int maxBytes, String field) {
+    final bytes = utf8.encode(value.trim());
+    if (bytes.isEmpty || bytes.length > maxBytes) {
+      throw ArgumentError('$field 长度不合法');
+    }
+    final length = bytes.length;
+    final prefix = length < 64
+        ? <int>[length << 2]
+        : <int>[(length << 2 | 1) & 0xff, (length << 2 | 1) >> 8];
+    return Uint8List.fromList([...prefix, ...bytes]);
   }
 
   /// 查询某个提案主体当前的活跃提案 ID。
@@ -250,6 +328,13 @@ class ProposalQueryService {
     Iterable<String> pubkeysHex,
   ) {
     return _internalVoteQuery.fetchAdminVotesBatch(proposalId, pubkeysHex);
+  }
+
+  Future<Map<String, bool?>> fetchTicketVotesBatch(
+    int proposalId,
+    Iterable<EligibleVoterTicket> tickets,
+  ) {
+    return _internalVoteQuery.fetchTicketVotesBatch(proposalId, tickets);
   }
 
   Uint8List _buildStorageValueKey(String palletName, String storageName) {

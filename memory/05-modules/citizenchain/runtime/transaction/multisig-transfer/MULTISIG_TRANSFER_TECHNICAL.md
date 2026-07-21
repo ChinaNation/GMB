@@ -148,7 +148,7 @@ pub fn propose_transfer(
 InternalVote::cast(origin, proposal_id, approve)  // pallet 20.0
 ```
 
-投票引擎对机构读取提案创建时的 `EffectiveVoterSnapshot`，对个人多签读取 `AdminSnapshot`，并结合阈值快照做权限、防双投和阈值判定。达到通过阈值后，投票引擎回调本模块的 `InternalVoteExecutor` 自动执行转账。
+投票引擎对机构按 VotePlan 的完整 `RoleSubject` 读取提案创建时的 `VoterSnapshot`，以 CID + 岗位码 + 钱包票据防双投；对个人多签读取 `AdminSnapshot` 并使用个人账户票据。达到通过阈值后，投票引擎回调本模块的 `InternalVoteExecutor` 自动执行转账。
 
 ### 2.3 手动重试 / 取消入口
 
@@ -375,7 +375,7 @@ VOTING → PASSED（待执行） → EXECUTED（已执行，终态）
 ### 8.2 关键差异
 
 - 投票完全复用 `votingengine::internal_vote`，不再有业务 pallet 自己的 vote/finalize 状态机。
-- 幂等保护由投票引擎的 `InternalVotesByAccount` / `AlreadyVoted` 统一提供。
+- 幂等保护由投票引擎的 `InternalVotesByTicket` / `AlreadyVoted` 统一提供。
 - 手动重试、取消、3 次失败终态和 deadline 终态由投票引擎统一处理。
 
 ### 8.3 投票阈值
@@ -392,7 +392,7 @@ VOTING → PASSED（待执行） → EXECUTED（已执行，终态）
 
 | 存储 | 说明 |
 | --- | --- |
-| `InternalVotesByAccount<(proposal_id, AccountId)>` → `bool` | 每位合格选民的投票记录 |
+| `InternalVotesByTicket<(proposal_id, InternalVoteTicket)>` → `bool` | 每张个人或机构岗位票据的投票记录 |
 | `InternalTallies<proposal_id>` → `{ yes: u32, no: u32 }` | 赞成/反对计数 |
 | `Proposals<proposal_id>` → `Proposal` | 提案状态（voting/passed/rejected） |
 

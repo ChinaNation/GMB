@@ -52,7 +52,7 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
 ### 2. 投票
 
 - 提案岗位有效选民统一调用 `InternalVote::cast(proposal_id, approve)`。
-- 投票引擎使用提案创建时锁定的 `EffectiveVoterSnapshot` 和固定 NRC 机构阈值判定；不新增岗位阈值。
+- 投票引擎使用提案创建时锁定的岗位 `VoterSnapshot`、完整岗位票据和固定 NRC 机构阈值判定；不新增岗位阈值。
 - 达阈值后回调本模块自动执行安全基金转账。
 
 ### 3. 自动执行（try_execute_safety_fund）

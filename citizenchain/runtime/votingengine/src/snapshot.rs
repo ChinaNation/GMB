@@ -1,16 +1,18 @@
 //! 提案管理员快照与岗位投票人快照。
 //!
-//! 机构提案创建时按 `VotePlan` 锁定每个岗位主体的有效任职账户，再按 CID
-//! 合并去重；投票期间不随后续任职变化。`AdminSnapshot` 只供独立个人多签路径
+//! 机构提案创建时按 `VotePlan` 锁定每个岗位主体的有效任职账户，并按 CID
+//! 累加岗位票据总数；投票期间不随后续任职变化。`AdminSnapshot` 只供独立个人多签路径
 //! 使用，不得用于机构投票资格判定。
 //!
-//! - `is_admin_in_snapshot`:查快照判断某人是否是该提案某机构的管理员
-//! - `snapshot_admins_len`:快照中某机构的管理员数量
-//! - `snapshot_role_subjects`:按完整岗位主体写入任职快照和 CID 有效选民快照
+//! - `is_admin_in_snapshot`:查个人多签快照判断某账户是否为冻结管理员
+//! - `snapshot_admins_len`:个人多签快照中的管理员数量
+//! - `snapshot_role_voters`:按完整岗位主体写入任职快照和 CID 岗位票据总数
 
 use frame_support::pallet_prelude::{BoundedVec, DispatchResult};
 
-use crate::pallet::{self, AdminSnapshot, EffectiveVoterSnapshot, Error, VoterSnapshot};
+use crate::pallet::{
+    self, AdminSnapshot, Error, InstitutionTicketCountSnapshot, ProposalVotePlans, VoterSnapshot,
+};
 use crate::types::{AuthorizationSubject, CidNumber, ProposalSubject};
 use crate::InternalAdminProvider;
 
@@ -34,26 +36,24 @@ impl<T: pallet::Config> pallet::Pallet<T> {
         VoterSnapshot::<T>::get(proposal_id, subject).map(|voters| voters.len() as u32)
     }
 
-    /// 查询同一机构内按账户去重后的有效投票资格。
-    pub fn is_effective_voter_in_snapshot(
-        proposal_id: u64,
-        subject: ProposalSubject<T::AccountId>,
-        who: &T::AccountId,
-    ) -> bool {
-        EffectiveVoterSnapshot::<T>::get(proposal_id, subject)
-            .map(|voters| voters.iter().any(|account| account == who))
+    /// 查询某机构冻结的岗位票据总数。
+    pub fn institution_ticket_count(proposal_id: u64, cid_number: CidNumber) -> Option<u32> {
+        InstitutionTicketCountSnapshot::<T>::get(proposal_id, cid_number)
+    }
+
+    /// 判断账户是否持有提案任一冻结机构岗位，仅用于重试、取消等非记票权限。
+    pub fn is_any_institution_voter_in_snapshot(proposal_id: u64, who: &T::AccountId) -> bool {
+        ProposalVotePlans::<T>::get(proposal_id)
+            .map(|plan| {
+                plan.voter_subjects.iter().any(|subject| {
+                    matches!(subject, AuthorizationSubject::Institution(_))
+                        && Self::is_subject_voter_in_snapshot(proposal_id, subject.clone(), who)
+                })
+            })
             .unwrap_or(false)
     }
 
-    /// 查询同一机构有效投票人的去重人数。
-    pub fn effective_voters_len(
-        proposal_id: u64,
-        subject: ProposalSubject<T::AccountId>,
-    ) -> Option<u32> {
-        EffectiveVoterSnapshot::<T>::get(proposal_id, subject).map(|voters| voters.len() as u32)
-    }
-
-    /// 冻结一个完整岗位主体的当前有效任职账户，并同步维护机构内去重投票人集合。
+    /// 冻结一个完整岗位主体的当前有效任职账户，并累加该机构的岗位票据总数。
     pub fn snapshot_role_voters(
         proposal_id: u64,
         subject: AuthorizationSubject<CidNumber, crate::types::RoleCode, T::AccountId>,
@@ -73,22 +73,17 @@ impl<T: pallet::Config> pallet::Pallet<T> {
         let bounded = BoundedVec::<T::AccountId, T::MaxAdminsPerInstitution>::try_from(voters)
             .map_err(|_| Error::<T>::InvalidInstitution)?;
 
-        let effective_subject = ProposalSubject::InstitutionCid(institution_cid);
-        let mut effective =
-            EffectiveVoterSnapshot::<T>::get(proposal_id, &effective_subject).unwrap_or_default();
-        for voter in bounded.iter() {
-            if !effective.iter().any(|existing| existing == voter) {
-                effective
-                    .try_push(voter.clone())
-                    .map_err(|_| Error::<T>::InvalidInstitution)?;
-            }
-        }
+        let current = InstitutionTicketCountSnapshot::<T>::get(proposal_id, &institution_cid)
+            .unwrap_or_default();
+        let updated = current
+            .checked_add(bounded.len() as u32)
+            .ok_or(Error::<T>::InvalidInstitution)?;
         VoterSnapshot::<T>::insert(proposal_id, subject, bounded);
-        EffectiveVoterSnapshot::<T>::insert(proposal_id, effective_subject, effective);
+        InstitutionTicketCountSnapshot::<T>::insert(proposal_id, institution_cid, updated);
         Ok(())
     }
 
-    /// 查询快照中某管理员是否在指定机构的管理员名单中。
+    /// 查询账户是否在指定个人多签主体的冻结管理员快照中。
     pub fn is_admin_in_snapshot(
         proposal_id: u64,
         subject: ProposalSubject<T::AccountId>,
@@ -99,7 +94,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
             .unwrap_or(false)
     }
 
-    /// 查询快照中某机构 CID 或个人多签账户的管理员数量。
+    /// 查询指定个人多签主体的冻结管理员数量。
     pub fn snapshot_admins_len(
         proposal_id: u64,
         subject: ProposalSubject<T::AccountId>,

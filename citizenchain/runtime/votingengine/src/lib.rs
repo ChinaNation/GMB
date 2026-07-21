@@ -260,9 +260,9 @@ pub mod pallet {
     pub type PendingProposalCleanups<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, PendingCleanupStage, OptionQuery>;
 
-    /// 兼容尚未迁移 Track 与个人多签的管理员快照。
-    /// 已迁移的机构内部/联合提案不得写入或读取本 storage，必须使用
-    /// `VoterSnapshot + EffectiveVoterSnapshot`；个人多签仍以个人账户为 key。
+    /// 个人多签管理员快照。
+    /// 机构内部/联合提案不得写入或读取本 storage，必须使用岗位投票人快照；
+    /// 个人多签仍以个人账户为 key。
     #[pallet::storage]
     pub type AdminSnapshot<T: Config> = StorageDoubleMap<
         _,
@@ -298,18 +298,18 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// 同一机构内多个投票岗位按账户去重后的有效投票人快照。
+    /// 提案创建时冻结的机构岗位票据总数。
     ///
-    /// 联合投票以 `(proposal_id, CID, account)` 记票，因此同一账户在同一机构担任多个
-    /// 投票岗位也只能产生一票；同一账户在不同 CID 的快照互不影响。
+    /// 数量等于该机构全部投票岗位快照中的有效任职席位之和，不按钱包去重；
+    /// 具体资格始终由 `VoterSnapshot` 中的完整 CID + 岗位码校验。
     #[pallet::storage]
-    pub type EffectiveVoterSnapshot<T: Config> = StorageDoubleMap<
+    pub type InstitutionTicketCountSnapshot<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        ProposalSubject<T::AccountId>,
-        BoundedVec<T::AccountId, T::MaxAdminsPerInstitution>,
+        crate::types::CidNumber,
+        u32,
         OptionQuery,
     >;
 

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:polkadart/scale_codec.dart' show ByteOutput;
@@ -14,7 +15,8 @@ import 'package:citizenapp/votingengine/legislation-vote/legislation_vote_query_
 /// runtime 已记账,txHash 不代表已执行。特别案公投(referendum/snapshot)带 CID
 /// 凭证,另见 legislation_referendum_service。
 ///
-/// Call 格式统一 `[26][call_index][proposal_id:u64_le][approve:bool]`(11 字节)。
+/// 代表机构表决额外携带 `voter_role_code`；其余签署调用保持
+/// `[26][call_index][proposal_id:u64_le][approve:bool]`。
 class LegislationVoteService {
   LegislationVoteService({ChainRpc? chainRpc})
       : _rpc = chainRpc ?? ChainRpc(),
@@ -37,6 +39,7 @@ class LegislationVoteService {
   Future<({String txHash, int usedNonce, String blockHashHex})>
       castRepresentativeVote({
     required int proposalId,
+    required String voterRoleCode,
     required bool approve,
     required String fromAddress,
     required Uint8List signerPubkey,
@@ -49,6 +52,7 @@ class LegislationVoteService {
     final result = await _signAndSubmit(
       callIndex: callCastRepresentativeVote,
       proposalId: proposalId,
+      voterRoleCode: voterRoleCode,
       approve: approve,
       fromAddress: fromAddress,
       signerPubkey: signerPubkey,
@@ -58,6 +62,8 @@ class LegislationVoteService {
     await _confirmRepresentativeVote(
       proposalId,
       bodyIndex,
+      meta.bodies[bodyIndex].cidNumber,
+      voterRoleCode,
       approve,
       signerPubkey,
       result.blockHashHex,
@@ -146,12 +152,25 @@ class LegislationVoteService {
   static Uint8List buildCallData({
     required int callIndex,
     required int proposalId,
+    String? voterRoleCode,
     required bool approve,
   }) {
     final output = ByteOutput();
     output.pushByte(legislationVotePallet);
     output.pushByte(callIndex);
     output.write(_u64ToLeBytes(proposalId));
+    if (callIndex == callCastRepresentativeVote) {
+      final roleBytes = Uint8List.fromList(
+        voterRoleCode == null ? const [] : utf8.encode(voterRoleCode.trim()),
+      );
+      if (roleBytes.isEmpty || roleBytes.length > 64) {
+        throw ArgumentError('代表机构表决必须提供 1..64 字节 voter_role_code');
+      }
+      output.write(_encodeCompact(roleBytes.length));
+      output.write(roleBytes);
+    } else if (voterRoleCode != null) {
+      throw ArgumentError('当前立法签署调用不得携带 voter_role_code');
+    }
     output.pushByte(approve ? 1 : 0);
     return output.toBytes();
   }
@@ -161,6 +180,7 @@ class LegislationVoteService {
   Future<({String txHash, int usedNonce, String blockHashHex})> _signAndSubmit({
     required int callIndex,
     required int proposalId,
+    String? voterRoleCode,
     required bool approve,
     required String fromAddress,
     required Uint8List signerPubkey,
@@ -170,6 +190,7 @@ class LegislationVoteService {
     final callData = buildCallData(
       callIndex: callIndex,
       proposalId: proposalId,
+      voterRoleCode: voterRoleCode,
       approve: approve,
     );
     return SignedExtrinsicBuilder(
@@ -189,6 +210,8 @@ class LegislationVoteService {
   Future<void> _confirmRepresentativeVote(
     int proposalId,
     int bodyIndex,
+    String cidNumber,
+    String voterRoleCode,
     bool approve,
     Uint8List signerPubkey,
     String blockHashHex,
@@ -198,6 +221,8 @@ class LegislationVoteService {
       final vote = await _query.fetchRepresentativeVote(
         proposalId,
         bodyIndex,
+        cidNumber,
+        voterRoleCode,
         pubkeyHex,
       );
       if (vote == approve) return;
@@ -268,6 +293,15 @@ class LegislationVoteService {
     final bytes = Uint8List(8);
     ByteData.sublistView(bytes).setUint64(0, value, Endian.little);
     return bytes;
+  }
+
+  static Uint8List _encodeCompact(int value) {
+    if (value < 0 || value >= 1 << 14) {
+      throw ArgumentError('长度超出 SCALE Compact 两字节范围');
+    }
+    if (value < 1 << 6) return Uint8List.fromList([value << 2]);
+    final encoded = (value << 2) | 1;
+    return Uint8List.fromList([encoded & 0xff, encoded >> 8]);
   }
 
   static String _hexEncode(Uint8List bytes) {

@@ -36,6 +36,7 @@ pub(crate) struct LawListQuery {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CastRepresentativeVoteInput {
     pub proposal_id: u64,
+    pub voter_role_code: String,
     pub approve: bool,
 }
 
@@ -374,6 +375,7 @@ pub(crate) async fn cast_representative_vote(
     match action::prepare_representative_vote_sign(
         &state,
         input.proposal_id,
+        input.voter_role_code.as_str(),
         input.approve,
         ctx.admin_account.as_str(),
         ctx.institution_cid_number.as_str(),

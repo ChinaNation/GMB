@@ -1,6 +1,6 @@
 # 任务卡：机构岗位权限与投票职责统一
 
-状态：执行中。2026-07-20 已完成第 1 至第 6 步、第 7A 只读盘点和“管理员类型/机构阈值/公民链基金会”补充校正。投票引擎已按 `VotePlan` 冻结岗位任职账户，但同一 CID 内仍按钱包去重记票；一人兼任多岗时按岗位席位分别记票属下一步，不能把本补充步误写为总任务完成。
+状态：执行中。2026-07-20 已完成第 1 至第 6B 步和第 7A 只读盘点。投票引擎已按 `VotePlan` 冻结岗位任职账户，并以 CID + 岗位码 + 钱包形成独立机构票据；同一钱包兼任多岗可分别记票且机构阈值不变。总任务仍有第 7 步业务收口和第 8 步最终全端验收，不能把第 6B 完成误写为总任务完成。
 
 ## 最终需求
 
@@ -48,7 +48,7 @@
 5. **投票引擎按岗位主体快照（已完成）**：机构投票从全体 admins 快照改为 VotePlan 指定的一个或多个 `RoleSubject` 有效任职账户快照；个人多签保持独立主体。第 5A 完成 joint-vote，第 5B 完成 internal-vote，第 5C 完成 legislation-vote、election-vote 及法律业务入口。
 6. **基础权限路径收口（已完成）**：复核岗位维护、任职、管理员更换、账户关闭、机构转账和个人多签边界；删除投票引擎旧机构管理员快照辅助函数与 provider 接口，确保 `AdminSnapshot` 只服务个人多签。本步不实施机构登记或机构 CRUD。
 6A. **管理员类型、机构阈值与基金会校正（已完成）**：拆分公权四字段和私权/个人三字段管理员；机构阈值迁入 public/private entity；同一程伟钱包任职基金会三个固定岗位，不改阈值。
-6B. **岗位席位记票（下一步）**：把机构票据唯一键从账户改为岗位任职席位，使同一钱包兼任多个岗位时能使用同一私钥分别行使各岗位票权；不修改机构阈值。
+6B. **岗位席位记票（已完成）**：机构票据唯一键已改为岗位任职席位；同一钱包兼任多个岗位时使用同一私钥分别行使各岗位票权，机构阈值未修改。
 7. **剩余治理、发行和公共业务权限收口**：只审计并接入现有协议升级、GRANDPA、销毁、决议发行、选举、立法及已经存在的公共业务入口；机构登记、机构 CRUD 与 OnChina 机构管理不属于本任务。
 8. **全端真实验收与残留清理**：完成 UI/QR、真实 fresh runtime、真实服务和页面验收，删除全部旧管理员授权与旧投票主体口径，回写最终文档。
 
@@ -89,7 +89,7 @@
 - [x] 第 5 步：投票引擎按岗位主体快照
 - [x] 第 6 步：基础权限路径收口
 - [x] 第 6A 步：公私权管理员分型、机构阈值解耦与公民链基金会重新创世
-- [ ] 第 6B 步：岗位席位记票
+- [x] 第 6B 步：岗位席位记票
 - [x] 第 7A 步：剩余业务权限只读盘点
 - [ ] 第 7 步：治理、发行和公共业务接入
 - [ ] 第 8 步：全端真实验收与残留清理
@@ -205,9 +205,9 @@
 
 ## 第 5A 步完成记录（2026-07-19）
 
-- 共享 `votingengine` storage version 直接提升为 3，新增 `ProposalVotePlans`、按完整 `RoleSubject` 存储的 `VoterSnapshot` 和按 CID 合并去重的 `EffectiveVoterSnapshot`。当前链无正式数据，不保留 migration、旧提案兼容或联合投票双轨 storage。
+- 共享 `votingengine` 当时新增 `ProposalVotePlans` 和按完整 `RoleSubject` 存储的 `VoterSnapshot`，并使用按 CID 合并钱包的过渡快照；第 6B 已删除该过渡结构。当前链无正式数据，不保留 migration、旧提案兼容或联合投票双轨 storage。
 - `JointVoteEngine` 创建接口必须携带 `VotePlan`，旧的裸创建入口已删除。联合引擎要求 proposer 是 plan 中 NRC/PRC 委员主体的有效任职账户，并要求选民主体精确覆盖 NRC + 43 PRC 委员和 43 PRB 董事。
-- 同一账户在同一 CID 兼任多个参与岗位时在 `EffectiveVoterSnapshot` 中去重为一票；同一账户在不同 CID 的有效任职则各有一票。联合投票、手动恢复和清理均使用新快照，已迁移联合提案不写 `AdminSnapshot`。
+- 第 5A 当时同一账户在同一 CID 的多个参与岗位会被过渡快照合并；第 6B 已改为每个 `RoleSubject + admin_account` 一张独立票据。机构联合提案始终不写 `AdminSnapshot`。
 - 协议升级和决议发行均在业务模块前置校验 `RoleSubject(actor_cid_number, COMMITTEE_MEMBER)` 的对应 `Propose` 权限，两者均构造 87 个岗位主体的固定联合 `VotePlan`；PRB `DIRECTOR` 只在 voter subjects 中，不能发起。普通 staff 即使属于 admins，没有委员岗位有效任职与权限时也被拒绝。
 - benchmark fixture 已改为构建真实创世机构、岗位、任职和固定权限，不再用 admins 替代业务授权。正式权重已用当前 benchmark runtime WASM、50 steps / 20 repeats 重新生成：`joint-vote::cast_admin` 为 6 reads / 4 writes；决议发行提案为 368 reads / 280 writes / 1.977 s；协议升级提案为 367 reads / 281 writes / 12.483 s。
 - 验收通过：`internal-vote` 96、`joint-vote` 12、`resolution-issuance` 19、`runtime-upgrade` 20、`votingengine` 4，runtime 全量 47 项单测；四个目标 crate `no_std`、runtime benchmark feature check、`git diff --check` 通过。目标 Clippy 在仅屏蔽已有跨依赖 lint 后以 `-D warnings` 通过，未越界修改旧 lint 所在文件。
@@ -217,7 +217,7 @@
 
 ## 第 5B 步完成记录（2026-07-19）
 
-- `internal-vote` 的机构提案统一保存 `VotePlan`，按完整 `RoleSubject` 生成岗位任职快照并以 `EffectiveVoterSnapshot` 投票、重试、取消和清理；个人多签继续使用独立 `AdminSnapshot`。机构阈值仍读取机构投票规则，不新增岗位阈值，也不按岗位人数另算阈值。
+- `internal-vote` 的机构提案统一保存 `VotePlan`，按完整 `RoleSubject` 生成岗位任职快照；第 6B 后按岗位票据投票，并由任一冻结岗位成员执行重试/取消。个人多签继续使用独立 `AdminSnapshot`。机构阈值仍读取机构投票规则，不新增岗位阈值。
 - public/private 机构治理与关闭、决议销毁、GRANDPA 密钥更换、机构普通转账、NRC 安全基金转账、费用账户划转主账户、公民链基金会平台会员价格调整均新增独立 `proposer_role_code`，由业务模块前置校验 `CID + 岗位码 + BusinessActionId + Propose` 后构造固定内部投票计划。个人多签转账明确编码为无机构 CID、无岗位码，不混入机构授权模型。
 - OnChina、Node、CitizenApp、CitizenWallet 和 QR action registry 已同步同一字段名与 SCALE 顺序；CitizenApp 的内部投票详情和协议升级联合投票详情均按机构/个人主体分别读取岗位有效选民快照或管理员快照，禁止用当前 admins 回算历史提案资格；CitizenWallet 严格拒绝 CID 与岗位码仅出现一项的机构转账载荷。
 - 正式权重基于当前源码 fresh spec、50 steps / 20 repeats 生成：决议销毁提案 `239 ms / proof 584308 / 25 reads / 23 writes`，GRANDPA 密钥更换提案 `244 ms / proof 584308 / 25 reads / 23 writes`，机构转账提案 `289 ms / proof 584308 / 31 reads / 23 writes`；`internal-vote` 和 `votingengine` 权重同步重算。public/private 完整治理及关闭、Square Post 价格调整因现有 benchmark 夹具不能覆盖真实完整调用，采用 `400 ms / proof 700000 / 35 reads / 30 writes` 的独立保守上界，没有用不完整 benchmark 覆盖正式权重。
@@ -265,6 +265,16 @@
 - 私权创世机构已重新定义为 SFGY 非营利法人“中国公民链技术发展基金会”，简称“公民链基金会”，英文全称 `China CitizenChain Technology Development Foundation`，英文简称 `CitizenChain Technology Foundation`。CID 为 `GZ018-SFGYR-201206100-2026`，主/费用账户为 `0xe86aa3cd794651257dea9b7cad1abc4f0ce05940c1aecccd2ed8dd2fc9907023` / `0xaa23304c7b663ba25a9d3a2fb1efafdd650ecf2504a2caedc228fe81b46b4333`，平台会员收款继续指向新费用账户。
 - 基金会的 `PrivateAdmins::AdminAccounts` 只保存一条程伟管理员人员记录；同一钱包 `0xd6d73cfd7d6b7c5692749b7c46fd3fe398f16f84283910dbf15f74472e1e3938` 分别任职 `LR`、`GENESIS_PRODUCT_MANAGER`、`GENESIS_PROGRAMMER` 三个固定岗位，每岗一席，机构阈值保持 2。NodeGuard 保持 89 个公权固定治理机构 + 1 个基金会，共 90 个保护对象。
 - Node、OnChina、CitizenApp 与 CitizenWallet 已按目标 pallet 分流解码公权四字段/私权三字段 SCALE；OnChina 构造登记和机构治理载荷时同样严格分流。CitizenWallet 同步使用 runtime 当前治理/登记 call 布局，不再接受已删除的内层凭证尾字段。公权空身份字段不再被展示占位值伪造，非空公民 CID 必须为 CTZN 结构并最终由 runtime 对照 `citizen-identity` 校验。
-- 当前阶段的明确限制：机构 `VoterSnapshot` 已按岗位建立，但 `EffectiveVoterSnapshot` 仍在同一 CID 内按钱包去重，因此一个钱包兼任基金会三岗时尚不能在阈值 2 下完成岗位席位记票。不降阈值，不复制钱包；第 6B 必须改为岗位席位票据后才能解除该限制。
+- 第 6A 当时仍存在同一 CID 内按钱包合并的过渡限制；第 6B 已解除。基金会程伟同一钱包的三个固定岗位现在形成三张独立票据，在机构阈值 2 不变的前提下可依法分别投票。
 - 代码回归已通过：`entity-primitives` 11、`genesis-pallet` 11、`internal-vote` 94、`public-admins` 10、`private-admins` 6、public/private manage 各 14、OnChina 133、runtime 46、Node 285、`square-post` 23、CitizenWallet 载荷解码 98 + 离线签名服务 9、QR registry 6 项；相关 `no_std`、Node/OnChina 生产编译和 CitizenWallet 全量静态分析通过。
 - 当前源码强制重建 WASM/Node 后以隔离 `citizenchain-fresh --tmp` 真实启动，NodeGuard 自检通过；RPC 返回 block#0 `0x9ad703ec20ed91f693e8077075cc27ffbe0d4f1b9b0e0ee32fb917e52009f6fd`、state root `0xdc532c2cfaa75db4ce38530ee2986c138360da8a8ffa5bbeab36b37b66a9c8b1`、`isSyncing=false`、runtime `specVersion=2`。验收节点已停止并由 `--tmp` 清理；未烘焙正式 chainspec、未部署、未推送。
+
+## 第 6B 步完成记录（2026-07-20）
+
+- 共享 `votingengine` 新增 `InstitutionVoteTicket { role_subject, voter_account }`，岗位有效选民继续按 `VoterSnapshot[(proposal_id, RoleSubject)]` 冻结，机构席位数改由 `InstitutionTicketCountSnapshot[(proposal_id, cid_number)]` 汇总。旧的同 CID 按钱包合并快照和人数 storage 已直接删除，不保留 migration 或双轨兼容。
+- `internal-vote`、`joint-vote`、Mutual `election-vote` 和代表 `legislation-vote` 分别改用完整机构岗位票据账本；个人多签、Popular 选举、联合公投和立法公投仍使用其原本的个人账户票据。机构阈值完全未修改，也没有增加岗位阈值。
+- 同一钱包兼任多个机构或同一机构多个岗位时，每个 `CID + role_code + wallet` 只能投一票，但不同岗位票据互不覆盖。新增内部投票和联合投票测试锁定“同一钱包跨岗位分别记票、同一岗位不得重复投票”。
+- Node、OnChina、CitizenApp、CitizenWallet 与 QR registry 已同步完整岗位码字段、SCALE 顺序、storage key 和签名展示。CitizenApp 删除已无写入方的旧账户级待确认票存储；投票服务必须在入块后按本次完整票据回读 runtime storage，页面不得用钱包级等待状态阻塞该钱包的其他岗位票。
+- 正式权重基于当前 fresh benchmark runtime、50 steps / 20 repeats 重算；脚本中 14 个已注册 benchmark pallet 全部成功。`citizen-identity` 当前未注册 FRAME benchmark，继续使用其现有手工保守权重并从自动列表移除，避免脚本伪报可生成权重。
+- 验收通过：五个投票引擎 crate 共 158 项、runtime 46 项、Node 285 项、OnChina 134 项、CitizenApp 747 项（既有条件跳过 5 项）、CitizenWallet 181 项、QR registry 6 项；CitizenApp/CitizenWallet analyze、Node/OnChina check、Node/OnChina 前端生产构建、runtime-benchmarks、目标 no_std、try-runtime 和 `git diff --check` 均通过。
+- 当前最终源码以 `WASM_BUILD_FROM_SOURCE=1` 重建 normal release Node，并用 `CITIZENCHAIN_HEADLESS=1 citizenchain-fresh --tmp` 启动全新隔离链；NodeGuard 自检通过，RPC 返回 `peers=0`、`isSyncing=false`、runtime `specVersion=2`。block#0/genesis hash 为 `0x21319c02264a559cec31d03cfbb3d0551db2ee354bb2b950a38ecbe0c03dd1a4`，state root 为 `0x69c8bd5e3b9677aa4a8775670e528c4f1d10630861dd32375aeb8411f0aa57e9`；验收节点已正常停止，未重烤正式 chainspec、未部署、未提交或推送 Git。

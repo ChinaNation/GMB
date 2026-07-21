@@ -38,6 +38,18 @@ pub type CidNumber = BoundedVec<u8, ConstU32<{ primitives::core_const::CID_NUMBE
 pub type RoleCode =
     BoundedVec<u8, ConstU32<{ entity_primitives::INSTITUTION_ROLE_CODE_MAX_BYTES }>>;
 
+/// 机构岗位的一张投票票据。
+///
+/// 票权由机构 CID、岗位码和实际签名钱包共同确定；同一钱包担任多个岗位时，
+/// 每个岗位各形成一张独立票据，同一岗位与同一钱包组合只能使用一次。
+#[derive(
+    Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
+)]
+pub struct InstitutionVoteTicket<AccountId> {
+    pub role_subject: RoleSubject<CidNumber, RoleCode>,
+    pub voter_account: AccountId,
+}
+
 /// 投票引擎按提案保存的人口快照。
 ///
 /// 人口数据全部来自 citizen-identity；投票引擎只增加创建区块并冻结为提案历史，
@@ -546,8 +558,8 @@ pub enum PendingCleanupStage {
     AdminSnapshots,
     /// 清理按完整岗位主体冻结的投票人快照。
     VoterSnapshots,
-    /// 清理同一机构内按账户去重后的有效投票人快照。
-    EffectiveVoterSnapshots,
+    /// 清理按机构冻结的岗位票据总数。
+    InstitutionTicketCounts,
     /// 仅派发到提案所属 Track，禁止跨模式空扫所有 sub-pallet。
     TrackData,
     /// 清理大对象存储（ProposalObject + ProposalObjectMeta）。
