@@ -38,7 +38,7 @@ pub mod pallet {
         traits::{Hash, SaturatedConversion},
         DispatchError,
     };
-    use votingengine::{InternalAdminProvider, JointVoteEngine};
+    use votingengine::JointVoteEngine;
 
     pub type ReasonOf<T> = BoundedVec<u8, <T as Config>::MaxReasonLen>;
     pub type CodeOf<T> = BoundedVec<u8, <T as Config>::MaxRuntimeCodeSize>;
@@ -100,7 +100,9 @@ pub mod pallet {
     #[scale_info(skip_type_params(T))]
     pub struct Proposal<T: Config> {
         pub actor_cid_number: votingengine::types::CidNumber,
-        /// 提案发起人（国家储委会或省储委会管理员）
+        /// 提案发起岗位码；与机构 CID、签名钱包共同形成完整授权主体。
+        pub actor_role_code: votingengine::types::RoleCode,
+        /// 提案发起人（国家储委会或省储委会对应岗位的任职管理员）
         pub proposer: T::AccountId,
         /// 升级理由
         pub reason: ReasonOf<T>,
@@ -156,6 +158,7 @@ pub mod pallet {
         RuntimeUpgradeProposed {
             proposal_id: u64,
             actor_cid_number: votingengine::types::CidNumber,
+            actor_role_code: votingengine::types::RoleCode,
             proposer: T::AccountId,
             code_hash: T::Hash,
             pow_params_hash: T::Hash,
@@ -205,6 +208,7 @@ pub mod pallet {
         pub fn propose_runtime_upgrade(
             origin: OriginFor<T>,
             actor_cid_number: votingengine::types::CidNumber,
+            actor_role_code: votingengine::types::RoleCode,
             reason: ReasonOf<T>,
             code: CodeOf<T>,
             new_pow_params: pow_difficulty::PowDifficultyParams,
@@ -224,7 +228,7 @@ pub mod pallet {
             );
             let proposer_role = RoleSubject {
                 cid_number: actor_cid_number.to_vec(),
-                role_code: ROLE_CODE_COMMITTEE_MEMBER.to_vec(),
+                role_code: actor_role_code.to_vec(),
             };
             let business_action = BusinessActionId {
                 module_tag: crate::MODULE_TAG.to_vec(),
@@ -255,6 +259,7 @@ pub mod pallet {
             let pow_params_hash = T::Hashing::hash_of(&new_pow_params);
             let proposal = Proposal::<T> {
                 actor_cid_number: actor_cid_number.clone(),
+                actor_role_code: actor_role_code.clone(),
                 proposer: proposer.clone(),
                 reason,
                 code_hash,
@@ -277,6 +282,7 @@ pub mod pallet {
             Self::deposit_event(Event::<T>::RuntimeUpgradeProposed {
                 proposal_id,
                 actor_cid_number,
+                actor_role_code,
                 proposer,
                 code_hash,
                 pow_params_hash,
@@ -284,7 +290,7 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 开发期快捷通道：仅国家储委会管理员可直接 set_code，不走投票。
+        /// 开发期快捷通道：仅国家储委会委员岗位任职人可直接 set_code，不走投票。
         /// 仅在 genesis_pallet-pallet 的 DeveloperUpgradeEnabled 为 true 时可用。
         /// 链进入运行期后此调用永久失效，升级必须走 propose_runtime_upgrade 联合投票。
         #[pallet::call_index(2)]
@@ -294,6 +300,7 @@ pub mod pallet {
         pub fn developer_direct_upgrade(
             origin: OriginFor<T>,
             actor_cid_number: votingengine::types::CidNumber,
+            actor_role_code: votingengine::types::RoleCode,
             code: CodeOf<T>,
             new_pow_params: pow_difficulty::PowDifficultyParams,
         ) -> DispatchResult {
@@ -306,13 +313,21 @@ pub mod pallet {
                 actor_code == votingengine::types::NRC,
                 Error::<T>::InvalidActorCid
             );
+            let role_subject = RoleSubject {
+                cid_number: actor_cid_number.to_vec(),
+                role_code: actor_role_code.to_vec(),
+            };
             ensure!(
-                <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
-                    actor_code,
-                    actor_cid_number.as_slice(),
+                T::InstitutionRoleAuthorization::is_authorized(
                     &who,
+                    &role_subject,
+                    &BusinessActionId {
+                        module_tag: crate::MODULE_TAG.to_vec(),
+                        action_code: entity_primitives::business_action::ACTION_RUNTIME_UPGRADE,
+                    },
+                    RolePermissionOperation::Propose,
                 ),
-                Error::<T>::UnauthorizedActorAdmin
+                Error::<T>::UnauthorizedActorRole
             );
             ensure!(
                 T::DeveloperUpgradeCheck::is_enabled(),

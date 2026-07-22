@@ -4,7 +4,7 @@
 //!
 //! - **Plain FT(同质化代币,无锚定声明)**:发行人 = CID 注册机构 + personal-admins 个人多签
 //! - 当前公开业务调用尚未实现，由 runtime 统一 `Reject`，不得扣费后空成功。
-//! - **NRC 强制 monitor**:交易以 NRC `actor_cid_number` 表达机构身份,不以主账户代替机构
+//! - **NRC 强制 monitor**:交易显式携带 NRC `actor_cid_number + actor_role_code`，并由任职管理员钱包签名
 //! - **业务 InternalVote / 监管 JointVote**:沿用 unified_voting_entry phase 4 铁律,
 //!   业务 pallet 不暴露 wrapper extrinsic,前端直调 VotingEngine
 //!
@@ -58,12 +58,14 @@ pub const MODULE_TAG: &[u8] = b"onc-iss";
 #[allow(dead_code)]
 pub mod pallet {
     use crate::{types::OnchainAssetMeta, weights::WeightInfo};
-    use entity_primitives::InstitutionMultisigQuery;
+    use entity_primitives::{
+        BusinessActionId, InstitutionMultisigQuery, InstitutionRoleAuthorizationQuery,
+        RolePermissionOperation, RoleSubject,
+    };
     use frame_support::{pallet_prelude::*, traits::Currency};
     use frame_system::ensure_signed;
     use frame_system::pallet_prelude::{BlockNumberFor, OriginFor};
     use sp_std::vec::Vec;
-    use votingengine::InternalAdminProvider;
 
     pub type BalanceOf<T> =
         <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -90,6 +92,9 @@ pub mod pallet {
 
         /// 机构账户归属唯一查询；仅用于校验显式 `actor_cid_number + execution_account`。
         type InstitutionQuery: entity_primitives::InstitutionMultisigQuery<Self::AccountId>;
+
+        /// 机构业务权限唯一查询；同时校验 CID、岗位码、有效任职钱包和动作权限。
+        type InstitutionRoleAuthorization: InstitutionRoleAuthorizationQuery<Self::AccountId>;
 
         /// 资产元数据字符串字段最大长度(name / symbol / description)。
         #[pallet::constant]
@@ -322,6 +327,7 @@ pub mod pallet {
         pub fn propose_issue(
             origin: OriginFor<T>,
             actor_cid_number: votingengine::types::CidNumber,
+            actor_role_code: votingengine::types::RoleCode,
             execution_account: T::AccountId,
             class: crate::types::AssetClass,
             name: BoundedVec<u8, T::MaxAssetNameLen>,
@@ -331,7 +337,13 @@ pub mod pallet {
             initial_supply: BalanceOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::ensure_actor_admin(&who, &actor_cid_number, false)?;
+            Self::ensure_actor_role(
+                &who,
+                &actor_cid_number,
+                actor_role_code.as_slice(),
+                entity_primitives::business_action::ACTION_ONCHAIN_ASSET_ISSUE,
+                false,
+            )?;
             ensure!(
                 T::InstitutionQuery::lookup_cid(&execution_account).as_deref()
                     == Some(actor_cid_number.as_slice()),
@@ -362,12 +374,19 @@ pub mod pallet {
         pub fn propose_mint(
             origin: OriginFor<T>,
             actor_cid_number: votingengine::types::CidNumber,
+            actor_role_code: votingengine::types::RoleCode,
             asset_id: OnchainAssetId,
             to: T::AccountId,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::ensure_actor_admin(&who, &actor_cid_number, false)?;
+            Self::ensure_actor_role(
+                &who,
+                &actor_cid_number,
+                actor_role_code.as_slice(),
+                entity_primitives::business_action::ACTION_ONCHAIN_ASSET_MINT,
+                false,
+            )?;
             let _ = (actor_cid_number, asset_id, to, amount);
             // TODO: implement business logic (任务卡 A)
             Ok(())
@@ -379,12 +398,19 @@ pub mod pallet {
         pub fn propose_burn(
             origin: OriginFor<T>,
             actor_cid_number: votingengine::types::CidNumber,
+            actor_role_code: votingengine::types::RoleCode,
             asset_id: OnchainAssetId,
             from: T::AccountId,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::ensure_actor_admin(&who, &actor_cid_number, false)?;
+            Self::ensure_actor_role(
+                &who,
+                &actor_cid_number,
+                actor_role_code.as_slice(),
+                entity_primitives::business_action::ACTION_ONCHAIN_ASSET_BURN,
+                false,
+            )?;
             let _ = (actor_cid_number, asset_id, from, amount);
             // TODO: implement business logic (任务卡 A)
             Ok(())
@@ -396,10 +422,17 @@ pub mod pallet {
         pub fn propose_close(
             origin: OriginFor<T>,
             actor_cid_number: votingengine::types::CidNumber,
+            actor_role_code: votingengine::types::RoleCode,
             asset_id: OnchainAssetId,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::ensure_actor_admin(&who, &actor_cid_number, false)?;
+            Self::ensure_actor_role(
+                &who,
+                &actor_cid_number,
+                actor_role_code.as_slice(),
+                entity_primitives::business_action::ACTION_ONCHAIN_ASSET_CLOSE,
+                false,
+            )?;
             let _ = (actor_cid_number, asset_id);
             // TODO: implement business logic (任务卡 A)
             Ok(())
@@ -411,13 +444,20 @@ pub mod pallet {
         pub fn propose_transfer(
             origin: OriginFor<T>,
             actor_cid_number: votingengine::types::CidNumber,
+            actor_role_code: votingengine::types::RoleCode,
             asset_id: OnchainAssetId,
             from: T::AccountId,
             to: T::AccountId,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::ensure_actor_admin(&who, &actor_cid_number, false)?;
+            Self::ensure_actor_role(
+                &who,
+                &actor_cid_number,
+                actor_role_code.as_slice(),
+                entity_primitives::business_action::ACTION_ONCHAIN_ASSET_TRANSFER,
+                false,
+            )?;
             let _ = (actor_cid_number, asset_id, from, to, amount);
             // TODO: implement business logic (任务卡 A)
             Ok(())
@@ -431,12 +471,19 @@ pub mod pallet {
         pub fn propose_monitor_freeze(
             origin: OriginFor<T>,
             actor_cid_number: votingengine::types::CidNumber,
+            actor_role_code: votingengine::types::RoleCode,
             asset_id: OnchainAssetId,
             who: T::AccountId,
             reason_hash: [u8; 32],
         ) -> DispatchResult {
             let proposer = ensure_signed(origin)?;
-            Self::ensure_actor_admin(&proposer, &actor_cid_number, true)?;
+            Self::ensure_actor_role(
+                &proposer,
+                &actor_cid_number,
+                actor_role_code.as_slice(),
+                entity_primitives::business_action::ACTION_MONITOR_FREEZE,
+                true,
+            )?;
             let _ = (actor_cid_number, asset_id, who, reason_hash);
             // TODO: implement business logic (任务卡 B)
             //   校验 proposer 对 NRC 委员 RoleSubject 的监管冻结 Propose 权限
@@ -450,12 +497,19 @@ pub mod pallet {
         pub fn propose_monitor_unfreeze(
             origin: OriginFor<T>,
             actor_cid_number: votingengine::types::CidNumber,
+            actor_role_code: votingengine::types::RoleCode,
             asset_id: OnchainAssetId,
             who: T::AccountId,
             reason_hash: [u8; 32],
         ) -> DispatchResult {
             let proposer = ensure_signed(origin)?;
-            Self::ensure_actor_admin(&proposer, &actor_cid_number, true)?;
+            Self::ensure_actor_role(
+                &proposer,
+                &actor_cid_number,
+                actor_role_code.as_slice(),
+                entity_primitives::business_action::ACTION_MONITOR_UNFREEZE,
+                true,
+            )?;
             let _ = (actor_cid_number, asset_id, who, reason_hash);
             // TODO: implement business logic (任务卡 B)
             Ok(())
@@ -467,13 +521,20 @@ pub mod pallet {
         pub fn propose_monitor_confiscate(
             origin: OriginFor<T>,
             actor_cid_number: votingengine::types::CidNumber,
+            actor_role_code: votingengine::types::RoleCode,
             asset_id: OnchainAssetId,
             who: T::AccountId,
             amount: BalanceOf<T>,
             reason_hash: [u8; 32],
         ) -> DispatchResult {
             let proposer = ensure_signed(origin)?;
-            Self::ensure_actor_admin(&proposer, &actor_cid_number, true)?;
+            Self::ensure_actor_role(
+                &proposer,
+                &actor_cid_number,
+                actor_role_code.as_slice(),
+                entity_primitives::business_action::ACTION_MONITOR_CONFISCATE,
+                true,
+            )?;
             let _ = (actor_cid_number, asset_id, who, amount, reason_hash);
             // TODO: implement business logic (任务卡 B)
             Ok(())
@@ -485,6 +546,7 @@ pub mod pallet {
         pub fn propose_monitor_force_transfer(
             origin: OriginFor<T>,
             actor_cid_number: votingengine::types::CidNumber,
+            actor_role_code: votingengine::types::RoleCode,
             asset_id: OnchainAssetId,
             from: T::AccountId,
             to: T::AccountId,
@@ -492,7 +554,13 @@ pub mod pallet {
             reason_hash: [u8; 32],
         ) -> DispatchResult {
             let proposer = ensure_signed(origin)?;
-            Self::ensure_actor_admin(&proposer, &actor_cid_number, true)?;
+            Self::ensure_actor_role(
+                &proposer,
+                &actor_cid_number,
+                actor_role_code.as_slice(),
+                entity_primitives::business_action::ACTION_MONITOR_FORCE_TRANSFER,
+                true,
+            )?;
             let _ = (actor_cid_number, asset_id, from, to, amount, reason_hash);
             // TODO: implement business logic (任务卡 B)
             Ok(())
@@ -504,11 +572,18 @@ pub mod pallet {
         pub fn propose_monitor_force_close(
             origin: OriginFor<T>,
             actor_cid_number: votingengine::types::CidNumber,
+            actor_role_code: votingengine::types::RoleCode,
             asset_id: OnchainAssetId,
             reason_hash: [u8; 32],
         ) -> DispatchResult {
             let proposer = ensure_signed(origin)?;
-            Self::ensure_actor_admin(&proposer, &actor_cid_number, true)?;
+            Self::ensure_actor_role(
+                &proposer,
+                &actor_cid_number,
+                actor_role_code.as_slice(),
+                entity_primitives::business_action::ACTION_MONITOR_FORCE_CLOSE,
+                true,
+            )?;
             let _ = (actor_cid_number, asset_id, reason_hash);
             // TODO: implement business logic (任务卡 B)
             Ok(())
@@ -516,10 +591,12 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        /// 所有机构调用共用的外层授权入口；机构账户没有私钥，只有该 CID 的管理员签名。
-        fn ensure_actor_admin(
+        /// 所有机构调用共用授权入口：CID、岗位码和签名钱包必须同时匹配动作权限。
+        fn ensure_actor_role(
             who: &T::AccountId,
             actor_cid_number: &votingengine::types::CidNumber,
+            actor_role_code: &[u8],
+            action_code: u32,
             nrc_only: bool,
         ) -> DispatchResult {
             let actor_text = core::str::from_utf8(actor_cid_number.as_slice())
@@ -532,10 +609,17 @@ pub mod pallet {
                 Error::<T>::InvalidInstitutionContext
             );
             ensure!(
-                <T as votingengine::Config>::InternalAdminProvider::is_institution_admin(
-                    institution_code,
-                    actor_cid_number.as_slice(),
+                T::InstitutionRoleAuthorization::is_authorized(
                     who,
+                    &RoleSubject {
+                        cid_number: actor_cid_number.to_vec(),
+                        role_code: actor_role_code.to_vec(),
+                    },
+                    &BusinessActionId {
+                        module_tag: crate::MODULE_TAG.to_vec(),
+                        action_code,
+                    },
+                    RolePermissionOperation::Propose,
                 ),
                 Error::<T>::ProposeOriginNotAllowed
             );

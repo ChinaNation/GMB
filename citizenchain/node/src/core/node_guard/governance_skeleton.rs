@@ -467,15 +467,14 @@ where
             .ok_or(GuardError::LegalRepresentativeInfoMissing(institution.code))?;
         let info: DecodedInstitutionInfo = decode_exact(&raw)
             .map_err(|_| GuardError::LegalRepresentativeInfoMissing(institution.code))?;
-        let legal_representative_fields_valid = match (
-            &info.legal_representative_name,
-            &info.legal_representative_cid_number,
-            &info.legal_representative_account,
-        ) {
-            (None, None, None) => true,
-            (Some(name), Some(cid_number), Some(_)) => !name.is_empty() && !cid_number.is_empty(),
-            _ => false,
-        };
+        let legal_representative_fields_valid =
+            info.legal_representative
+                .as_ref()
+                .is_none_or(|representative| {
+                    !representative.family_name.is_empty()
+                        && !representative.given_name.is_empty()
+                        && !representative.cid_number.is_empty()
+                });
         if info.institution_code != institution.code || !legal_representative_fields_valid {
             return Err(GuardError::LegalRepresentativeInfoMissing(institution.code));
         }
@@ -685,7 +684,12 @@ where
         }
     }
     if let Some(info) = private_info {
-        if info.legal_representative_account != legal_representative_assignment {
+        if info
+            .legal_representative
+            .as_ref()
+            .map(|representative| representative.account)
+            != legal_representative_assignment
+        {
             return Err(GuardError::LegalRepresentativeAssignmentMismatch(
                 institution.code,
             ));
@@ -783,13 +787,19 @@ mod tests {
             cid_full_name: CITIZENCHAIN_FOUNDATION.cid_full_name.as_bytes().to_vec(),
             cid_short_name: CITIZENCHAIN_FOUNDATION.cid_short_name.as_bytes().to_vec(),
             town_code: Vec::new(),
-            legal_representative_name: Some("程伟".as_bytes().to_vec()),
-            legal_representative_cid_number: Some(
-                primitives::cid::china::citizenchain::LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER
+            legal_representative: Some(entity_primitives::LegalRepresentative {
+                family_name: primitives::cid::china::citizenchain::LEGAL_REPRESENTATIVE_FAMILY_NAME
                     .as_bytes()
                     .to_vec(),
-            ),
-            legal_representative_account: Some(legal_account),
+                given_name: primitives::cid::china::citizenchain::LEGAL_REPRESENTATIVE_GIVEN_NAME
+                    .as_bytes()
+                    .to_vec(),
+                cid_number:
+                    primitives::cid::china::citizenchain::LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER
+                        .as_bytes()
+                        .to_vec(),
+                account: legal_account,
+            }),
             institution_code: institution.code,
             created_at: 0,
         }
@@ -970,15 +980,13 @@ mod tests {
             &lr_role.role_code,
         );
 
-        // LR 岗位永久存在，但允许机构信息三字段与该岗位任职同时清空。
+        // LR 岗位永久存在，但允许机构法定代表人字段与该岗位任职同时清空。
         let mut vacant = valid_state();
         let info_key = storage_key::private_institution(foundation.cid_number.as_bytes());
         let mut info: DecodedInstitutionInfo =
             decode_exact(vacant.get(&info_key).expect("foundation info exists"))
                 .expect("foundation info decodes");
-        info.legal_representative_name = None;
-        info.legal_representative_cid_number = None;
-        info.legal_representative_account = None;
+        info.legal_representative = None;
         vacant.insert(info_key.clone(), info.encode());
         vacant.insert(
             lr_assignments_key.clone(),

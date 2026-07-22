@@ -5,6 +5,7 @@ import {
   getUserProfileRoute,
   putProfileRoute
 } from '../src/profiles/service';
+import { setFollowNotifyRoute } from '../src/feeds/follows';
 import { readProfileDoc, writeProfileDoc } from '../src/profiles/repository';
 import { profileObjectKey } from '../src/storage/r2_keys';
 import type { CitizenProfileDoc, Env, SessionState } from '../src/types';
@@ -26,6 +27,8 @@ interface FollowSeed {
   owner_account: string;
   followed_account: string;
   created_at?: number;
+  /// 关注即默认开通知（1）；0=对该关注静音。缺省视为 1。
+  notify_enabled?: number;
 }
 
 describe('citizen profile repository', () => {
@@ -329,6 +332,74 @@ describe('GET /v1/square/users/:account/follows', () => {
   }
 });
 
+describe('post notify (is_notifying + PUT .../notify)', () => {
+  it('reports is_notifying true when following with notify enabled (default)', async () => {
+    const env = fakeEnv({
+      follows: [{ owner_account: viewer, followed_account: owner }],
+      session: { token: 'tok', owner_account: viewer }
+    });
+    const body = await readProfile(env);
+    expect(body.profile).toMatchObject({ is_following: true, is_notifying: true });
+  });
+
+  it('reports is_notifying false when following but muted', async () => {
+    const env = fakeEnv({
+      follows: [
+        { owner_account: viewer, followed_account: owner, notify_enabled: 0 }
+      ],
+      session: { token: 'tok', owner_account: viewer }
+    });
+    const body = await readProfile(env);
+    expect(body.profile).toMatchObject({ is_following: true, is_notifying: false });
+  });
+
+  it('reports is_notifying false when not following', async () => {
+    const env = fakeEnv({ follows: [], session: { token: 'tok', owner_account: viewer } });
+    const body = await readProfile(env);
+    expect(body.profile).toMatchObject({ is_following: false, is_notifying: false });
+  });
+
+  it('PUT .../notify accepts a boolean and echoes the new state', async () => {
+    const env = fakeEnv({
+      follows: [{ owner_account: viewer, followed_account: owner }],
+      session: { token: 'tok', owner_account: viewer }
+    });
+    const response = await setFollowNotifyRoute(
+      request(`https://w/v1/square/follows/${owner}/notify`, {
+        method: 'PUT',
+        authToken: 'tok',
+        body: { enabled: false }
+      }),
+      env
+    );
+    const body = (await response.json()) as { ok: boolean; notify_enabled: boolean };
+    expect(body).toMatchObject({ ok: true, notify_enabled: false });
+  });
+
+  it('PUT .../notify rejects a non-boolean enabled', async () => {
+    const env = fakeEnv({ session: { token: 'tok', owner_account: viewer } });
+    await expect(
+      setFollowNotifyRoute(
+        request(`https://w/v1/square/follows/${owner}/notify`, {
+          method: 'PUT',
+          authToken: 'tok',
+          body: { enabled: 'yes' }
+        }),
+        env
+      )
+    ).rejects.toMatchObject({ code: 'invalid_enabled' });
+  });
+
+  async function readProfile(env: Env): Promise<{ profile: Record<string, unknown> }> {
+    const response = await getUserProfileRoute(
+      request(`https://w/v1/square/users/${owner}`, { authToken: 'tok' }),
+      env,
+      owner
+    );
+    return (await response.json()) as { profile: Record<string, unknown> };
+  }
+});
+
 function published(overrides: Partial<PostSeed> & Pick<PostSeed, 'post_id'>): PostSeed {
   return {
     owner_account: owner,
@@ -495,10 +566,14 @@ class FakeStmt {
     if (sql.includes('square_follows') && sql.includes('followed_account = ?') &&
       sql.includes('owner_account = ?')) {
       const b1 = this.binds[1] as string;
-      const hit = this.follows.some(
+      const follow = this.follows.find(
         (f) => f.owner_account === b0 && f.followed_account === b1
       );
-      return (hit ? ({ n: 1 } as T) : null);
+      // isNotifying 读 notify_enabled；isFollowing 读 1 AS n。
+      if (sql.includes('notify_enabled')) {
+        return follow ? ({ notify_enabled: follow.notify_enabled ?? 1 } as T) : null;
+      }
+      return (follow ? ({ n: 1 } as T) : null);
     }
     if (sql.includes('COUNT(*)') && sql.includes('square_follows') &&
       sql.includes('followed_account = ?')) {

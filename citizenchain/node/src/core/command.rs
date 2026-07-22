@@ -228,6 +228,7 @@ pub fn run() -> sc_cli::Result<()> {
             // 固定使用 libp2p 后端（支持 WSS + DCUtR/Relay/AutoNAT），已清理 litep2p 代码路径。
             // 把清算行 CLI 参数透传给 service::new_full
             let clearing_bank_cid_number = cli.clearing_bank_cid_number.clone();
+            let clearing_bank_role_code = cli.clearing_bank_role_code.clone();
             let clearing_bank_password = cli.clearing_bank_password.clone();
             let clearing_reserve_monitor_interval_secs = cli.clearing_reserve_monitor_interval_secs;
             runner.run_node_until_exit(|config| async move {
@@ -236,6 +237,7 @@ pub fn run() -> sc_cli::Result<()> {
                     mining_threads,
                     gpu_device,
                     clearing_bank_cid_number,
+                    clearing_bank_role_code,
                     clearing_bank_password,
                     clearing_reserve_monitor_interval_secs,
                 )

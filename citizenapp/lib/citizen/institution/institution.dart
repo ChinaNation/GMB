@@ -29,7 +29,8 @@ class Institution {
     this.cityCode = '',
     this.townCode = '',
     this.parentCidNumber,
-    this.legalRepresentativeName,
+    this.familyName,
+    this.givenName,
     this.legalRepresentativeCidNumber,
     this.legalRepresentativeAccount,
     this.accountCount = 0,
@@ -59,8 +60,9 @@ class Institution {
   /// 所属上级法人 CID 号(仅非法人 UNIN 机构有值;法人为 null)。
   final String? parentCidNumber;
 
-  /// 法定代表人姓名(公开目录字段,无则 null → 详情页留空)。
-  final String? legalRepresentativeName;
+  /// 法定代表人的姓、名(公开目录字段,无则详情页留空)。
+  final String? familyName;
+  final String? givenName;
   final String? legalRepresentativeCidNumber;
   final String? legalRepresentativeAccount;
 
@@ -122,7 +124,8 @@ class Institution {
         cityCode: cityCode,
         townCode: townCode,
         parentCidNumber: parentCidNumber,
-        legalRepresentativeName: legalRepresentativeName,
+        familyName: familyName,
+        givenName: givenName,
         legalRepresentativeCidNumber: legalRepresentativeCidNumber,
         legalRepresentativeAccount: legalRepresentativeAccount,
         accountCount: accountCount,
@@ -160,7 +163,8 @@ class Institution {
       cityCode: e.cityCode,
       townCode: e.townCode,
       parentCidNumber: e.parentCidNumber,
-      legalRepresentativeName: e.legalRepresentativeName,
+      familyName: e.familyName,
+      givenName: e.givenName,
       legalRepresentativeCidNumber: e.legalRepresentativeCidNumber,
       legalRepresentativeAccount: e.legalRepresentativeAccount,
       accountCount: e.accountCount,

@@ -74,17 +74,23 @@ fn calc_fee(transfer_amount: u128, rate_bp: u32) -> Result<u128, &'static str> {
 pub fn execute_clearing_bank_batch<T: Config>(
     submitter: &T::AccountId,
     actor_cid_number: &[u8],
+    actor_role_code: &[u8],
     institution_account: &T::AccountId,
     batch: &[OffchainBatchItem<T::AccountId, BlockNumberFor<T>>],
 ) -> DispatchResult {
-    // 批次级校验：CID、具体账户和管理员必须同时匹配，不允许从账户回落反推授权主体。
+    // 批次级校验：CID、岗位码、签名钱包和具体账户必须同时匹配。
     bank_check::ensure_institution_account::<T>(
         actor_cid_number,
         institution_account,
         bank_check::ACCOUNT_NAME_MAIN,
     )?;
     ensure!(
-        T::CidAccountQuery::is_institution_admin(actor_cid_number, submitter),
+        T::CidAccountQuery::is_institution_role_authorized(
+            actor_cid_number,
+            actor_role_code,
+            submitter,
+            entity_primitives::business_action::ACTION_OFFCHAIN_SUBMIT_BATCH,
+        ),
         Error::<T>::UnauthorizedAdmin
     );
 

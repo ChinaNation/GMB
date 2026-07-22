@@ -44,6 +44,13 @@ fn nrc_cid_number() -> votingengine::CidNumber {
         .expect("NRC CID fits runtime bound")
 }
 
+fn committee_role_code() -> votingengine::RoleCode {
+    primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+        .to_vec()
+        .try_into()
+        .expect("committee role fits runtime bound")
+}
+
 fn seed_population<T>()
 where
     T: Config + joint_vote::Config,
@@ -70,6 +77,7 @@ mod benchmarks {
             Pallet::<T>::propose_runtime_upgrade(
                 origin,
                 nrc_cid_number(),
+                committee_role_code(),
                 reason,
                 code,
                 pow_difficulty::ActiveParams::<T>::get(),

@@ -21,12 +21,13 @@ pub const MAX_ACCOUNT_NAME_CHARS: usize = 30;
 pub const MAX_ACCOUNT_NAME_BYTES: usize = 128;
 pub const MAX_INSTITUTION_NAME_CHARS: usize = 30;
 pub const MAX_INSTITUTION_NAME_BYTES: usize = 128;
-pub const MAX_LEGAL_REP_NAME_CHARS: usize = 30;
-pub const MAX_LEGAL_REP_NAME_BYTES: usize = 128;
+pub const MAX_PERSON_NAME_CHARS: usize = 30;
+pub const MAX_PERSON_NAME_BYTES: usize = 128;
 pub const MAX_LEGAL_REP_PHOTO_BYTES: u64 = 5 * 1024 * 1024;
 
 pub struct LegalRepresentativeFields {
-    pub legal_representative_name: String,
+    pub family_name: String,
+    pub given_name: String,
     pub cid_number: String,
     pub photo_path: String,
     pub photo_name: String,
@@ -258,21 +259,31 @@ pub fn validate_cid_short_name(cid_short_name: &str) -> Result<String, ServiceEr
 }
 
 pub fn validate_legal_representative_required(
-    name: Option<&str>,
+    family_name: Option<&str>,
+    given_name: Option<&str>,
     cid_number: Option<&str>,
     photo_path: Option<&str>,
     photo_name: Option<&str>,
     photo_mime: Option<&str>,
     photo_size: Option<u64>,
 ) -> Result<LegalRepresentativeFields, ServiceError> {
-    let legal_representative_name = name
+    let family_name = family_name
         .map(str::trim)
         .filter(|v| !v.is_empty())
-        .ok_or(ServiceError::BadInput("法定代表人姓名不能为空"))?;
-    if legal_representative_name.chars().count() > MAX_LEGAL_REP_NAME_CHARS
-        || legal_representative_name.len() > MAX_LEGAL_REP_NAME_BYTES
+        .ok_or(ServiceError::BadInput("法定代表人姓不能为空"))?;
+    if family_name.chars().count() > MAX_PERSON_NAME_CHARS
+        || family_name.len() > MAX_PERSON_NAME_BYTES
     {
-        return Err(ServiceError::BadInput("法定代表人姓名过长"));
+        return Err(ServiceError::BadInput("法定代表人姓过长"));
+    }
+    let given_name = given_name
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or(ServiceError::BadInput("法定代表人名不能为空"))?;
+    if given_name.chars().count() > MAX_PERSON_NAME_CHARS
+        || given_name.len() > MAX_PERSON_NAME_BYTES
+    {
+        return Err(ServiceError::BadInput("法定代表人名过长"));
     }
     let cid_number = cid_number
         .map(str::trim)
@@ -304,7 +315,8 @@ pub fn validate_legal_representative_required(
         .filter(|v| *v > 0 && *v <= MAX_LEGAL_REP_PHOTO_BYTES)
         .ok_or(ServiceError::BadInput("法定代表人证件照大小非法"))?;
     Ok(LegalRepresentativeFields {
-        legal_representative_name: legal_representative_name.to_string(),
+        family_name: family_name.to_string(),
+        given_name: given_name.to_string(),
         cid_number,
         photo_path: photo_path.to_string(),
         photo_name: photo_name.to_string(),

@@ -74,7 +74,7 @@ a = (pallet_index << 8) | call_index
 | `0x0700` | `PersonalManage.propose_create` | `propose_create_personal` | `account_name`, `admins(admin_account + family_name + given_name)`, `admins_len`, `regular_threshold`, `create_threshold`, `amount_yuan` | CitizenApp |
 | `0x0701` | `PersonalManage.propose_close` | `propose_close_personal` | `account`, `beneficiary` | CitizenApp |
 | `0x1d00` | `PersonalAdmins.propose_admin_set_change` | `propose_personal_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | CitizenApp |
-| `0x0800` | `ResolutionIssuance.propose_resolution_issuance` | `propose_resolution_issuance` | `reason`, `amount_yuan`, `allocation_count`, `eligible_total`, `province_name`, `signer_pubkey` | citizenchain node / CitizenApp |
+| `0x0800` | `ResolutionIssuance.propose_issuance` | `propose_issuance` | `actor_cid_number`, `proposer_role_code`, `reason`, `amount_yuan`, `allocation_count`, `eligible_total`, `province_name`, `signer_pubkey` | citizenchain node / CitizenApp |
 | `0x0903` | `VotingEngine.finalize_proposal` | `finalize_proposal` | `proposal_id` | citizenchain node / CitizenApp |
 | `0x0904` | `VotingEngine.retry_passed_proposal` | `retry_passed_proposal` | `proposal_id` | citizenchain node / CitizenApp |
 | `0x0905` | `VotingEngine.cancel_passed_proposal` | `cancel_passed_proposal` | `proposal_id`, `reason` | citizenchain node / CitizenApp |

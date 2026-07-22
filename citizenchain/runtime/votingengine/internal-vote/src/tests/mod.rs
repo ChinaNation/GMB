@@ -111,7 +111,6 @@ impl votingengine::Config for Test {
     type JointVoteResultCallback = TestJointVoteResultCallback;
     type InternalVoteResultCallback = TestInternalVoteResultCallback;
     type InternalAdminProvider = TestInternalAdminProvider;
-    type InternalAdminsLenProvider = ();
     type MaxAdminsPerInstitution = ConstU32<32>;
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();
@@ -892,7 +891,7 @@ fn create_admin_set_mutation_proposal_via_engine(
 
 /// 测试辅助:走公开 `internal_vote` extrinsic 投票。
 ///
-/// 管理员投票只能通过公开 call,
+/// 内部投票只能通过公开 call，
 /// 此函数包裹 `RuntimeOrigin::signed(who)` 让测试代码保持简洁。
 fn cast_internal_vote_via_extrinsic(
     who: AccountId32,

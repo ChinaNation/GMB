@@ -9,6 +9,7 @@ import 'package:local_auth/local_auth.dart';
 import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
+import 'package:citizenapp/8964/profile/widgets/local_identity_avatar.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/my/myid/identity_badge_snapshot_store.dart';
 import 'package:citizenapp/my/creator/creator_page.dart';
@@ -21,7 +22,6 @@ import 'package:citizenapp/security/pin_input_page.dart';
 import 'package:citizenapp/my/user/contact_book_page.dart';
 import 'package:citizenapp/my/user/user_service.dart';
 import 'package:citizenapp/ui/app_theme.dart';
-import 'package:citizenapp/ui/identity_badge.dart';
 import 'package:citizenapp/update/app_update.dart';
 import 'package:citizenapp/update/update_badge.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -261,7 +261,7 @@ class _ProfilePageState extends State<MyTab> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SquareAvatar(
+          LocalIdentityAvatar(
             path: _userProfile.avatarPath,
             size: 84,
             seed: _communicationAddress,
@@ -568,81 +568,6 @@ class _HeaderBackground extends StatelessWidget {
             end: Alignment.bottomCenter,
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _SquareAvatar extends StatelessWidget {
-  const _SquareAvatar({
-    required this.path,
-    required this.size,
-    required this.seed,
-    this.identityLevel,
-    this.membershipLevel,
-    this.membershipActive = false,
-  });
-
-  final String? path;
-  final double size;
-
-  /// 未设头像时按账号稳定选默认头像的种子（默认钱包地址，与用户主页同源）。
-  final String seed;
-
-  /// 徽章信号：颜色=链上身份档、勾=会员匹配身份档。
-  final String? identityLevel;
-  final String? membershipLevel;
-  final bool membershipActive;
-
-  @override
-  Widget build(BuildContext context) {
-    final hasImage = path != null && path!.trim().isNotEmpty;
-    final file = hasImage ? File(path!) : null;
-    final validImage = file != null && file.existsSync();
-    final badgeStyle = identityBadgeStyle(
-      identityLevel: identityLevel,
-      membershipLevel: membershipLevel,
-      membershipActive: membershipActive,
-    );
-
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              color: AppTheme.primary.withAlpha(20),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: validImage
-                  ? Image.file(file, fit: BoxFit.cover)
-                  : Image.asset(
-                      ProfilePresentation.forAccount(seed).avatarAsset,
-                      width: size,
-                      height: size,
-                      fit: BoxFit.cover,
-                    ),
-            ),
-          ),
-          if (badgeStyle != null)
-            Positioned(
-              right: -4,
-              bottom: -4,
-              child: IdentityBadge(
-                style: badgeStyle,
-                tooltip: identityBadgeLabel(
-                  identityLevel: identityLevel,
-                  checked: badgeStyle.checked,
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }

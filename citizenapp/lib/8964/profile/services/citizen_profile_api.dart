@@ -66,6 +66,19 @@ class CitizenProfileApi {
     );
   }
 
+  /// 开/关对某关注的发帖通知（须已关注）。
+  Future<void> setNotify({
+    required SquareSession session,
+    required String followedAccount,
+    required bool enabled,
+  }) {
+    return _client.setNotify(
+      session: session,
+      followedAccount: followedAccount,
+      enabled: enabled,
+    );
+  }
+
   /// 拉取关注/粉丝列表。
   Future<({List<SquareFollowEntry> accounts, int? nextCursor})> fetchFollows(
     String ownerAccount, {

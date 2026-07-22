@@ -510,13 +510,22 @@ fn seed_offchain_minimum_fee_probe(
     };
     item.payer_sig = payer_pair.sign(&item.to_intent().signing_hash()).0;
     let batch = vec![item];
-    let batch_hash =
-        offchain::batch_item::batch_signing_hash(&actor_cid_number, &bank, 1, &batch.encode());
+    let actor_role_code = b"CLEARING_OPERATOR".to_vec();
+    let batch_hash = offchain::batch_item::batch_signing_hash(
+        &actor_cid_number,
+        &actor_role_code,
+        &bank,
+        1,
+        &batch.encode(),
+    );
     let batch_signature = submitter_pair.sign(&batch_hash).0.to_vec();
     let call = RuntimeCall::OffchainTransaction(offchain::pallet::Call::submit_offchain_batch {
         actor_cid_number: actor_cid_number
             .try_into()
             .map_err(|_| "候选 runtime 清算行 CID 超长")?,
+        actor_role_code: actor_role_code
+            .try_into()
+            .map_err(|_| "候选 runtime 清算行岗位码超长")?,
         institution_account: bank.clone(),
         batch_seq: 1,
         batch: batch.try_into().map_err(|_| "候选 runtime 清算批次超长")?,

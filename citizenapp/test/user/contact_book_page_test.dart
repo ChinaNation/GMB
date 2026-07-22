@@ -35,6 +35,7 @@ const _profile = CitizenProfile(
   followers: 2,
   posts: 3,
   isFollowing: false,
+  isNotifying: false,
   updatedAt: 2,
 );
 

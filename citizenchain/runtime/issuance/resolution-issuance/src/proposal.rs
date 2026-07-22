@@ -48,6 +48,7 @@ pub struct RecipientAmount<AccountId, Balance> {
 #[derive(Encode, Decode, Clone, RuntimeDebug, PartialEq, Eq)]
 pub struct IssuanceProposalData<AccountId, Balance> {
     pub actor_cid_number: votingengine::types::CidNumber,
+    pub proposer_role_code: votingengine::types::RoleCode,
     pub proposer: AccountId,
     pub reason: Vec<u8>,
     pub total_amount: Balance,
@@ -80,10 +81,11 @@ impl<T: Config> Pallet<T> {
     /// 决议发行与协议升级使用完全相同的固定联合投票岗位集合。
     fn build_vote_plan(
         actor_cid_number: &votingengine::types::CidNumber,
+        proposer_role_code: &votingengine::types::RoleCode,
         business_object_hash: [u8; 32],
     ) -> Result<votingengine::types::VotePlanOf<T::AccountId>, DispatchError> {
         let proposer_role =
-            Self::bounded_role_subject(actor_cid_number.as_slice(), ROLE_CODE_COMMITTEE_MEMBER)?;
+            Self::bounded_role_subject(actor_cid_number.as_slice(), proposer_role_code.as_slice())?;
         let mut voters = Vec::new();
         for entry in CHINA_CB.iter() {
             voters.push(AuthorizationSubject::Institution(
@@ -122,6 +124,7 @@ impl<T: Config> Pallet<T> {
     pub(crate) fn create_resolution_issuance_proposal(
         proposer: T::AccountId,
         actor_cid_number: votingengine::types::CidNumber,
+        proposer_role_code: votingengine::types::RoleCode,
         reason: ReasonOf<T>,
         total_amount: BalanceOf<T>,
         allocations: AllocationOf<T>,
@@ -140,7 +143,7 @@ impl<T: Config> Pallet<T> {
         );
         let proposer_role = RoleSubject {
             cid_number: actor_cid_number.to_vec(),
-            role_code: ROLE_CODE_COMMITTEE_MEMBER.to_vec(),
+            role_code: proposer_role_code.to_vec(),
         };
         let business_action = BusinessActionId {
             module_tag: crate::MODULE_TAG.to_vec(),
@@ -162,6 +165,7 @@ impl<T: Config> Pallet<T> {
         with_transaction(|| {
             let data = IssuanceProposalData {
                 actor_cid_number: actor_cid_number.clone(),
+                proposer_role_code: proposer_role_code.clone(),
                 proposer: proposer.clone(),
                 reason: reason.to_vec(),
                 total_amount: total_amount.clone(),
@@ -172,7 +176,11 @@ impl<T: Config> Pallet<T> {
             let encoded_hash = T::Hashing::hash(encoded.as_slice());
             let mut business_object_hash = [0u8; 32];
             business_object_hash.copy_from_slice(encoded_hash.as_ref());
-            let vote_plan = match Self::build_vote_plan(&actor_cid_number, business_object_hash) {
+            let vote_plan = match Self::build_vote_plan(
+                &actor_cid_number,
+                &proposer_role_code,
+                business_object_hash,
+            ) {
                 Ok(plan) => plan,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
@@ -197,6 +205,7 @@ impl<T: Config> Pallet<T> {
             Self::deposit_event(Event::<T>::ResolutionIssuanceProposed {
                 proposal_id,
                 actor_cid_number,
+                proposer_role_code,
                 proposer,
                 total_amount,
                 allocation_count: allocations.len() as u32,
@@ -223,7 +232,9 @@ impl<T: Config> Pallet<T> {
         if raw.len() < tag.len() || &raw[..tag.len()] != tag {
             return None;
         }
-        IssuanceProposalData::decode(&mut &raw[tag.len()..]).ok()
+        let mut input = &raw[tag.len()..];
+        let decoded = IssuanceProposalData::decode(&mut input).ok()?;
+        input.is_empty().then_some(decoded)
     }
 
     pub(crate) fn apply_joint_vote_result(

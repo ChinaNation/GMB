@@ -26,13 +26,6 @@ mod platform;
 mod scope;
 mod workspace;
 
-#[cfg(test)]
-mod genesis {
-    // CID 测试编译会加载 citizenchain 的 china_ch 常量测试,
-    // 该测试只需要创世人口常量来校验省储行人口总和。
-    pub const GENESIS_CITIZEN_MAX: u64 = 1_443_497_378;
-}
-
 pub(crate) use crate::core::db::Db;
 pub(crate) use crate::core::http_security::*;
 pub(crate) use crate::core::response::*;
@@ -168,8 +161,8 @@ fn citizen_row_from_record(record: &CitizenRecord) -> CitizenRow {
         id: record.id,
         cid_number: record.cid_number.clone(),
         passport_no: record.passport_no.clone(),
-        citizen_family_name: record.citizen_family_name.clone(),
-        citizen_given_name: record.citizen_given_name.clone(),
+        family_name: record.family_name.clone(),
+        given_name: record.given_name.clone(),
         citizen_sex: record.citizen_sex.clone(),
         citizen_birth_date: record.citizen_birth_date.clone(),
         wallet_address: record.wallet_address.clone(),
@@ -280,9 +273,7 @@ fn institution_row_from_pg_row(
         partnership_kind: row.get(10),
         has_legal_personality: row.get(11),
         parent_cid_number: row.get(12),
-        legal_representative_name: None,
-        legal_representative_cid_number: None,
-        legal_representative_account: None,
+        legal_representative: None,
         legal_representative_photo_path: None,
         legal_representative_photo_name: None,
         legal_representative_photo_mime: None,
@@ -311,8 +302,8 @@ fn institution_from_subject_row(
     let town_code: Option<String> = row.get(18);
     let education_type: Option<String> = row.get(19);
     // 字段顺序必须与 get_institution_with_accounts 的 SELECT 保持一致;
-    // legal_representative_photo_size 是第 26 列,下标为 25,越界会在持有数据库锁时 panic。
-    let legal_representative_photo_size_i64: Option<i64> = row.get(25);
+    // legal_representative_photo_size 是第 27 列,下标为 26,越界会在持有数据库锁时 panic。
+    let legal_representative_photo_size_i64: Option<i64> = row.get(26);
     // 省/市/镇名字按 code 现场从 china.sqlite 派生,DTO 仍带名字,库里不存名字副本(ADR-021)。
     let province_code: String = row.get(6);
     let city_code: Option<String> = row.get(7);
@@ -340,12 +331,26 @@ fn institution_from_subject_row(
         partnership_kind: row.get(10),
         has_legal_personality: row.get(11),
         parent_cid_number: row.get(12),
-        legal_representative_name: row.get(20),
-        legal_representative_cid_number: row.get(21),
-        legal_representative_account: row.get(26),
-        legal_representative_photo_path: row.get(22),
-        legal_representative_photo_name: row.get(23),
-        legal_representative_photo_mime: row.get(24),
+        legal_representative: match (
+            row.get::<_, Option<String>>(20),
+            row.get::<_, Option<String>>(21),
+            row.get::<_, Option<String>>(22),
+            row.get::<_, Option<String>>(27),
+        ) {
+            (Some(family_name), Some(given_name), Some(cid_number), Some(account)) => {
+                Some(crate::institution::subjects::model::LegalRepresentative {
+                    family_name,
+                    given_name,
+                    cid_number,
+                    account,
+                })
+            }
+            (None, None, None, None) => None,
+            _ => return Err("incomplete legal representative projection".to_string()),
+        },
+        legal_representative_photo_path: row.get(23),
+        legal_representative_photo_name: row.get(24),
+        legal_representative_photo_mime: row.get(25),
         legal_representative_photo_size: legal_representative_photo_size_i64
             .and_then(|v| u64::try_from(v).ok()),
         created_by: row.get(13),
@@ -476,7 +481,7 @@ impl Db {
                             s.parent_cid_number, s.created_by, s.created_at,
                             s.cid_full_name, s.cid_short_name,
                             ''::text AS town_name, COALESCE(s.town_code, ''),
-                            s.education_type, s.legal_representative_name, s.legal_representative_cid_number,
+                            s.education_type, s.family_name, s.given_name, s.legal_representative_cid_number,
 	                            s.legal_representative_photo_path, s.legal_representative_photo_name,
 	                            s.legal_representative_photo_mime, s.legal_representative_photo_size,
 	                            s.legal_representative_account
@@ -580,7 +585,7 @@ impl Db {
         .map_err(|e| format!("upsert citizen subject failed: {e}"))?;
         conn.execute(
             "INSERT INTO citizens (
-                cid_number, passport_no, citizen_family_name, citizen_given_name,
+                cid_number, passport_no, family_name, given_name,
                 citizen_sex, citizen_birth_date, province_code, city_code, id,
                 wallet_pubkey, wallet_address, wallet_sig_alg,
                 wallet_verified_at, citizen_status, voting_eligible, passport_valid_from,
@@ -595,8 +600,8 @@ impl Db {
              )
              ON CONFLICT (province_code, cid_number) DO UPDATE SET
                 passport_no = EXCLUDED.passport_no,
-                citizen_family_name = EXCLUDED.citizen_family_name,
-                citizen_given_name = EXCLUDED.citizen_given_name,
+                family_name = EXCLUDED.family_name,
+                given_name = EXCLUDED.given_name,
                 citizen_sex = EXCLUDED.citizen_sex,
                 citizen_birth_date = EXCLUDED.citizen_birth_date,
                 city_code = EXCLUDED.city_code,
@@ -623,8 +628,8 @@ impl Db {
             &[
                 &cid_number,
                 &record.passport_no,
-                &record.citizen_family_name,
-                &record.citizen_given_name,
+                &record.family_name,
+                &record.given_name,
                 &record.citizen_sex,
                 &record.citizen_birth_date,
                 &province_code,
@@ -740,8 +745,8 @@ impl Db {
                 .map_err(|_| "page_size too large".to_string())?;
             let rows = conn
                 .query(
-                    "SELECT COALESCE(c.id, 0), c.cid_number, c.passport_no, c.citizen_family_name,
-                                    c.citizen_given_name, c.citizen_sex, c.citizen_birth_date,
+                    "SELECT COALESCE(c.id, 0), c.cid_number, c.passport_no, c.family_name,
+                                    c.given_name, c.citizen_sex, c.citizen_birth_date,
                                     c.wallet_pubkey, c.wallet_address,
                                     c.wallet_sig_alg, c.wallet_verified_at, c.citizen_status, c.voting_eligible,
                                     c.passport_valid_from, c.passport_valid_until, c.status_updated_at,
@@ -761,9 +766,9 @@ impl Db {
                                     OR
                                     c.cid_number = $3
                                     OR c.passport_no = $3
-                                    OR c.citizen_family_name || c.citizen_given_name = $3
-                                    OR c.citizen_family_name = $3
-                                    OR c.citizen_given_name = $3
+                                    OR c.family_name || c.given_name = $3
+                                    OR c.family_name = $3
+                                    OR c.given_name = $3
                                     OR (c.wallet_pubkey IS NOT NULL AND lower(c.wallet_pubkey) = lower($3))
                                     OR (c.wallet_address IS NOT NULL AND lower(c.wallet_address) = lower($3))
                                )
@@ -905,14 +910,14 @@ impl Db {
                 category, p1,
                 province_code, city_code, town_code, institution_code,
                 education_type, private_type, partnership_kind, has_legal_personality,
-                parent_cid_number, legal_representative_name, legal_representative_cid_number,
+                parent_cid_number, family_name, given_name, legal_representative_cid_number,
                 legal_representative_account,
                 legal_representative_photo_path, legal_representative_photo_name, legal_representative_photo_mime,
                 legal_representative_photo_size, created_by, created_at, updated_at
              ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                 $11, $12, $13, $14, $15, $16, $17, $18,
-                $19, $20, $21, $22, $23, $24, now()
+                $19, $20, $21, $22, $23, $24, $25, now()
              )
              ON CONFLICT (province_code, cid_number) DO UPDATE SET
                 kind = EXCLUDED.kind,
@@ -929,7 +934,8 @@ impl Db {
                 partnership_kind = EXCLUDED.partnership_kind,
                 has_legal_personality = EXCLUDED.has_legal_personality,
                 parent_cid_number = EXCLUDED.parent_cid_number,
-                legal_representative_name = EXCLUDED.legal_representative_name,
+                family_name = EXCLUDED.family_name,
+                given_name = EXCLUDED.given_name,
                 legal_representative_cid_number = EXCLUDED.legal_representative_cid_number,
                 legal_representative_account = EXCLUDED.legal_representative_account,
                 legal_representative_photo_path = EXCLUDED.legal_representative_photo_path,
@@ -954,9 +960,10 @@ impl Db {
                 &inst.partnership_kind,
                 &inst.has_legal_personality,
                 &inst.parent_cid_number,
-                &inst.legal_representative_name,
-                &inst.legal_representative_cid_number,
-                &inst.legal_representative_account,
+                &inst.legal_representative.as_ref().map(|value| value.family_name.as_str()),
+                &inst.legal_representative.as_ref().map(|value| value.given_name.as_str()),
+                &inst.legal_representative.as_ref().map(|value| value.cid_number.as_str()),
+                &inst.legal_representative.as_ref().map(|value| value.account.as_str()),
                 &inst.legal_representative_photo_path,
                 &inst.legal_representative_photo_name,
                 &inst.legal_representative_photo_mime,

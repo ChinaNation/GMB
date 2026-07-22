@@ -1,7 +1,7 @@
 //! Weight functions for `citizen-identity`.
 //!
 //! 当前为手工保守上界。身份写入同时维护资格 revision、不可变历史版本和四级人口计数；
-//! 在专用 benchmark 落地前，按最重换号/迁居路径预留数据库预算。
+//! 在专用 benchmark 落地前，按最重身份资料更新和迁居路径预留数据库预算。
 
 #![cfg_attr(rustfmt, rustfmt_skip)]
 #![allow(unused_parens)]

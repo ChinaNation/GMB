@@ -121,7 +121,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
 
     /// 重新创世直接使用最终 proposal_id 键控布局，不保留开发期旧存储迁移。
-    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {
@@ -204,7 +204,7 @@ pub mod pallet {
         InvalidInternalCode,
         /// 内部投票阈值快照缺失。
         MissingThresholdSnapshot,
-        /// 内部投票阈值与管理员快照人数不匹配。
+        /// 个人多签全员阈值与管理员快照人数不匹配。
         InvalidThresholdSnapshot,
         /// 注册多签动态阈值不满足严格过半规则。
         InvalidDynamicThreshold,

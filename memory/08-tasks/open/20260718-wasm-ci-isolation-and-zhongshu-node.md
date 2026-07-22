@@ -1,6 +1,8 @@
 # 任务卡:WASM CI 改读中枢省节点 + 只允许 WASM CI + 修钱包测试
 
-> 状态:代码已改完,待 ①用户设 GMB_SSH_KEY ②提交推送 3 文件。触发于「控制台提交 WASM CI 失败 + 连带触发钱包 CI」诊断后。
+> 状态：已关闭并被 `20260721-citizen-election-subject-snapshot-unify` 第 2 步取代。2026-07-21 最终确认正式创世前项目版本归零，GitHub WASM workflow 不再查询开发链或临时抬升版本；正式创世后的加一改由公民控制台读取明确目标链后写入源码，因此不再需要为本流程设置 `GMB_SSH_KEY`，也不得按本卡旧待办推送。
+
+以下内容只保留为历史诊断和实施记录，不代表当前有效 CI 或版本规则。
 
 ## 需求(用户三点)
 1. WASM CI 的 SSH 版本校验步改读**中枢省权威节点** `64.181.239.233`(原 `147.224.14.117` 认证被拒 `Permission denied (publickey)`);`GMB_SSH_KEY` 换成控制台里中枢省(node-02)保存的 SSH 私钥;`spec_version` 不足时抬到链上 +1(已有逻辑)。
@@ -21,7 +23,7 @@
 2. **citizenwallet-ci.yml**:删 4 条 `citizenchain/runtime/...` push 路径,钱包 CI 只由钱包自身代码触发,与 citizenchain-ci 既有 ci-path-routing 一致(runtime 只走 wasm CI)。
 3. **钱包测试**(`citizenwallet/test/signer/payload_decoder_test.dart`):断言改为对比 `GeneratedQrActionRegistry.fieldValueForKey(...)`(单源)。**该修复本就在工作区未提交**;本地 `flutter test payload_decoder_test.dart` = 90/90 通过。committed g.dart 的这两个值未变,故只提交此测试文件即可让 CI 绿。
 
-## 待用户/收尾
+## 历史待办（已取消）
 - **GMB_SSH_KEY**(凭据边界,由用户执行):
   `cd /Users/rhett/GMB && bash citizenconsole/keychain.sh get-multiline node-02 SSH_KEY | gh secret set GMB_SSH_KEY`
   (中枢省私钥经管道直入 GitHub secret,不打印;keychain 账户 `node-02:SSH_KEY` / service `GMB Deploy`,均已确认存在)。

@@ -116,8 +116,8 @@ lib/votingengine/
 
 | 业务类型 | 提案入口 | 必填字段 | 发起权限 | 投票入口 |
 | --- | --- | --- | --- | --- |
-| 决议发行 | `propose_resolution_issuance` | `actor_cid_number, reason, total_amount, allocations[]` | NRC/43 PRC `COMMITTEE_MEMBER` 岗位有效任职人 | 联合+公民 |
-| 协议升级 | `propose_runtime_upgrade` | `actor_cid_number, reason, code, new_pow_params` | NRC/43 PRC `COMMITTEE_MEMBER` 岗位有效任职人 | 联合+公民 |
+| 决议发行 | `propose_issuance` | `actor_cid_number, proposer_role_code, reason, total_amount, allocations[]` | NRC/43 PRC `COMMITTEE_MEMBER` 岗位有效任职人 | 联合+公民 |
+| 协议升级 | `propose_runtime_upgrade` | `actor_cid_number, actor_role_code, reason, code, new_pow_params` | NRC/43 PRC `COMMITTEE_MEMBER` 岗位有效任职人 | 联合+公民 |
 | 个人多签管理员集合变更 | `propose_admin_set_change` | `institution_code=PMUL, personal_account, admins[], new_threshold` | 个人多签当前管理员 | 内部 |
 | 决议销毁 | `propose_destroy` | `actor_cid_number, proposer_role_code, institution_account, amount` | 目标 CID 中拥有 `res-dst/0 Propose` 的岗位有效任职人 | 内部 |
 | GRANDPA 密钥更换 | `propose_replace_grandpa_key` | `actor_cid_number, proposer_role_code, institution_account, new_key(32B)` | 目标 CID 中拥有 `gra-key/0 Propose` 的委员岗位有效任职人 | 内部 |
@@ -712,7 +712,7 @@ PersonalAdmins ProposalData 解码、`PersonalAdmins::PersonalAccounts` storage 
 | `multisig-transfer/src/lib.rs` | 机构账户转账复用现有提案/投票/执行流程 |
 | `votingengine/internal-vote/src/lib.rs` | 投票引擎（支持个人多签码 PMUL（`is_personal_code`）/ 机构账户码（`is_institution_code`）动态主体） |
 | `votingengine/src/traits.rs` | `InternalVoteEngine` 语义化接口 |
-| `runtime/src/configs/mod.rs` | `RuntimeInternalAdminProvider` + `RuntimeInternalAdminsLenProvider` |
+| `runtime/src/configs.rs` | `RuntimeInternalAdminProvider`（个人多签快照、机构人员名册边界）+ `RuntimeInstitutionRoleProvider`（机构岗位有效任职快照） |
 
 ## 9. 源码对齐基线
 

@@ -64,9 +64,7 @@ fn create_cgov(tag: &str) -> pallet::CidNumberOf<Test> {
             cid_full_name: cid_full_name("测试公权机构".as_bytes()),
             cid_short_name: cid_short_name("测试机构".as_bytes()),
             town_code: empty_town_code(),
-            legal_representative_name: None,
-            legal_representative_cid_number: None,
-            legal_representative_account: None,
+            legal_representative: None,
             institution_code,
             created_at: System::block_number(),
         },
@@ -110,6 +108,7 @@ fn create_cgov_with_custom(tag: &str) -> pallet::CidNumberOf<Test> {
         cid.clone(),
         account_names_bv(&[CUSTOM_ACCOUNT_NAME]),
         b"REGISTRY-CID".to_vec(),
+        b"REGISTRY-ROLE".to_vec(),
     ));
     assert_ok!(Balances::force_set_balance(
         RuntimeOrigin::root(),
@@ -272,7 +271,7 @@ fn dynamic_role_lifecycle_persists_permissions_and_never_reuses_code() {
 }
 
 #[test]
-fn dynamic_role_name_cannot_duplicate_legal_representative_name() {
+fn dynamic_role_name_cannot_duplicate_fixed_legal_representative_role() {
     new_test_ext().execute_with(|| {
         use entity_primitives::{InstitutionRoleMutation, RolePermissionOperation};
 
@@ -363,6 +362,7 @@ fn update_info_and_add_account_keep_cid_as_only_entity_key() {
             cid_full_name("更新后的机构全称".as_bytes()),
             cid_short_name("更新简称".as_bytes()),
             b"REGISTRY-CID".to_vec(),
+            b"REGISTRY-ROLE".to_vec(),
         ));
         let updated = pallet::Institutions::<Test>::get(&cid).expect("institution remains");
         assert_eq!(
@@ -376,6 +376,7 @@ fn update_info_and_add_account_keep_cid_as_only_entity_key() {
             cid.clone(),
             account_names_bv(&[added_name]),
             b"REGISTRY-CID".to_vec(),
+            b"REGISTRY-ROLE".to_vec(),
         ));
         let added = account_of(&cid, added_name);
         assert_eq!(
@@ -398,6 +399,7 @@ fn add_account_rejects_protocol_names_and_duplicate_custom_names() {
                 cid.clone(),
                 account_names_bv(&[RESERVED_NAME_MAIN]),
                 b"REGISTRY-CID".to_vec(),
+                b"REGISTRY-ROLE".to_vec(),
             ),
             Error::<Test>::ReservedAccountName
         );
@@ -407,6 +409,7 @@ fn add_account_rejects_protocol_names_and_duplicate_custom_names() {
                 cid,
                 account_names_bv(&["重复账户".as_bytes(), "重复账户".as_bytes()]),
                 b"REGISTRY-CID".to_vec(),
+                b"REGISTRY-ROLE".to_vec(),
             ),
             Error::<Test>::DuplicateAccountName
         );

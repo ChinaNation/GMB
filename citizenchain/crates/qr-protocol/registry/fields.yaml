@@ -23,6 +23,8 @@
   field_label_zh: 管理员人数
 - field_key: actor_cid_number
   field_label_zh: 操作机构CID
+- field_key: actor_role_code
+  field_label_zh: 操作岗位码
 - field_key: allocation_count
   field_label_zh: 分配项数
 - field_key: amount_yuan
@@ -103,8 +105,6 @@
   field_label_zh: 原因
 - field_key: register_nonce
   field_label_zh: 登记随机数
-- field_key: registrar_account
-  field_label_zh: 注册局账户
 - field_key: registry_org_code
   field_label_zh: 注册局机构码
 - field_key: regular_threshold
@@ -181,8 +181,6 @@
   field_label_zh: 章数
 - field_key: cid_count
   field_label_zh: CID数量
-- field_key: citizen_full_name
-  field_label_zh: 公民姓名
 - field_key: citizen_sex
   field_label_zh: 公民性别
 - field_key: credential_issuer_cid_number

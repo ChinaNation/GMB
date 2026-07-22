@@ -10,8 +10,9 @@ import 'package:citizenapp/ui/app_theme.dart';
 /// 立法 tab 视图(ADR-028 P3-1)。
 ///
 /// 固定顶部 5 卡(公民宪法整行 + 国家立法院/国家教委会 + 国家众议会/国家参议会)
-/// +「省市立法机构」标签(不滚);下方省竖导航(去关注组)+ 选中省的 省立法院/省众议会/
-/// 省参议会 + 该省全部市立法会。机构卡 → 统一详情页;宪法卡 → 条款项阅读器。
+/// +「省市立法机构」标签(不滚);下方省竖导航(去关注组)+ 选中省的 省立法院/省参议会/
+/// 省众议会 + 该省全部市立法会(按市代码 001、002… 升序)。机构卡 → 统一详情页;
+/// 宪法卡 → 条款项阅读器。
 class LegislationTab extends StatefulWidget {
   const LegislationTab({super.key, this.repository});
 
@@ -52,8 +53,22 @@ const Map<String, _CardIcon> _nationalIcons = {
 };
 
 // 省内立法机构码(省导航右侧内容),按展示顺序。
-const List<String> _provinceCodeOrder = ['PLG', 'PRP', 'PSN', 'CLEG'];
+const List<String> _provinceCodeOrder = ['PLG', 'PSN', 'PRP', 'CLEG'];
 const Set<String> _provinceCodes = {'PLG', 'PRP', 'PSN', 'CLEG'};
+
+/// 省选中后的机构排序：先按 [_provinceCodeOrder]（省立法院→省参议会→省众议会→市立法会），
+/// 同码内（即各市立法会）按市代码 001、002… 升序；省三机构各单条，此键对其无影响。
+/// 抽成顶层函数以便单测。
+@visibleForTesting
+List<Institution> sortProvinceLegislationRows(List<Institution> rows) {
+  return [...rows]..sort((a, b) {
+      final oa = _provinceCodeOrder.indexOf(a.institutionCode);
+      final ob = _provinceCodeOrder.indexOf(b.institutionCode);
+      if (oa != ob) return oa.compareTo(ob);
+      return (int.tryParse(a.cityCode) ?? 0)
+          .compareTo(int.tryParse(b.cityCode) ?? 0);
+    });
+}
 
 class _LegislationTabState extends State<LegislationTab> {
   late final InstitutionRepository _repo =
@@ -96,12 +111,7 @@ class _LegislationTabState extends State<LegislationTab> {
     });
     final rows =
         await _repo.listByProvinceAndCodes(provinceCode, _provinceCodes);
-    final sorted = [...rows]..sort((a, b) {
-        final oa = _provinceCodeOrder.indexOf(a.institutionCode);
-        final ob = _provinceCodeOrder.indexOf(b.institutionCode);
-        if (oa != ob) return oa.compareTo(ob);
-        return a.cidShortNameOrFullName.compareTo(b.cidShortNameOrFullName);
-      });
+    final sorted = sortProvinceLegislationRows(rows);
     if (!mounted || _selectedProvince != provinceCode) return;
     setState(() {
       _provinceContent = sorted;

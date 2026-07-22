@@ -24,7 +24,13 @@ class ProfileKebabMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<ProfileMenuAction>(
-      icon: const Icon(Icons.more_vert),
+      // 背景图明暗不定：三点图标套一枚半透明深色圆形底衬，保证白色图标始终可读。
+      padding: EdgeInsets.zero,
+      icon: CircleAvatar(
+        radius: 18,
+        backgroundColor: Colors.black.withValues(alpha: 0.32),
+        child: const Icon(Icons.more_vert, size: 22, color: Colors.white),
+      ),
       onSelected: (action) {
         switch (action) {
           case ProfileMenuAction.qrCode:

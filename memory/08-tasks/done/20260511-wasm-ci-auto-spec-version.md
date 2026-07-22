@@ -1,5 +1,7 @@
 # 20260511 WASM CI 自动对齐链上 spec_version
 
+> 历史记录：本实现已于 2026-07-21 被正式创世前项目版本归零规则取代。当前 GitHub WASM workflow 按源码版本原样编译，不查询链上版本、不读取 SSH Secret、不临时修改 `spec_version`；正式创世后的加一只允许由公民控制台在本机读取明确目标链后写入并提交源码。以下内容仅记录当时事实。
+
 ## 任务目标
 
 - 修复开发升级使用最新 WASM 时因 `System::SpecVersionNeedsToIncrease` 被链上拒绝的问题。

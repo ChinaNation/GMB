@@ -17,6 +17,16 @@ export type MediaAssetState = 'prepared' | 'uploaded' | 'processing' | 'ready' |
 // 视频冷归档态：live=Stream 可播 / archived=已移入 R2 冷存不可播 / restoring=重订后回灌中。
 export type MediaArchiveState = 'live' | 'archived' | 'restoring';
 
+/// 广场发帖通知扇出队列消息：一条 = 一次发帖事件，或一页续跑（cursor 空=首页）。
+/// author_name 入队时读一次作者展示名、续跑复用，避免每页重读；cursor 为 keyset 续跑游标。
+export interface SquareNotifyJob {
+  author_account: string;
+  author_name: string;
+  content_format: 'normal' | 'article';
+  post_id: string;
+  cursor?: { created_at: number; owner_account: string };
+}
+
 export interface Env {
   DB: D1Database;
   SQUARE_MEDIA: R2Bucket;
@@ -34,6 +44,8 @@ export interface Env {
   FCM_PROJECT?: string;
   FCM_EMAIL?: string;
   FCM_KEY?: string;
+  // 广场发帖通知扇出队列（producer 入队、consumer 分页跨调用推完全部未静音粉丝）。
+  SQUARE_NOTIFY_QUEUE?: Queue<SquareNotifyJob>;
   // Cloudflare 账户由 R2 冷归档、Images、Stream 共用；S3 密钥只用于内部归档读取。
   CF_ACCOUNT_ID?: string;
   R2_ACCESS_ID?: string;
@@ -289,5 +301,7 @@ export interface UserProfileResponse {
   membership_active: boolean;
   counts: UserProfileCounts;
   is_following: boolean;
+  /// 当前登录者是否对该账户开启发帖通知（= 已关注且未静音）；本人视角恒为 false。
+  is_notifying: boolean;
   updated_at: number;
 }

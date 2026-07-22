@@ -26,7 +26,7 @@ use votingengine::types::InstitutionCode;
 pub use pallet::*;
 
 /// 正式创世只接受统一管理员记录，不保留旧纯账户或单姓名存储迁移。
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
 #[frame_support::pallet]
 pub mod pallet {

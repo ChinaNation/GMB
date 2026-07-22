@@ -273,21 +273,6 @@ impl entity_primitives::InstitutionRoleAuthorizationQuery<AccountId32>
     }
 }
 
-pub struct TestInternalAdminsLenProvider;
-impl votingengine::InternalAdminsLenProvider<AccountId32> for TestInternalAdminsLenProvider {
-    fn institution_admins_len(institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32> {
-        get_institution_admins(institution_code, cid_number)
-            .and_then(|admins| u32::try_from(admins.len()).ok())
-    }
-
-    fn personal_admins_len(personal_account: AccountId32) -> Option<u32> {
-        <personal_admins::Pallet<Test> as admin_primitives::AdminAccountQuery<AccountId32>>::active_account_admins_len(
-            PMUL,
-            personal_account,
-        )
-    }
-}
-
 thread_local! {
     static PROTECTED_ACCOUNT: core::cell::RefCell<Option<AccountId32>> = core::cell::RefCell::new(None);
     static DENIED_SPEND_SOURCE: core::cell::RefCell<Option<AccountId32>> = core::cell::RefCell::new(None);
@@ -454,7 +439,6 @@ impl votingengine::Config for Test {
     // 挂上本模块 Executor,3 组业务提案通过后自动走 callback 执行。
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
-    type InternalAdminsLenProvider = TestInternalAdminsLenProvider;
     // 与真实 runtime 一致(1989)。联邦注册局创世内置 215 管理员,mock 上限须覆盖。
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type MaxProposalDataLen = ConstU32<1024>;
@@ -817,8 +801,30 @@ fn cast_transfer_votes_n(
     n: usize,
     pid: u64,
 ) -> frame_support::dispatch::DispatchResult {
+    let proposal =
+        VotingEngine::proposals(pid).ok_or(votingengine::Error::<Test>::ProposalNotFound)?;
+    let ticket_claim = match proposal.actor_cid_number {
+        None => internal_vote::InternalVoteTicketClaim::Personal,
+        Some(actor_cid_number) => {
+            let institution_code = core::str::from_utf8(actor_cid_number.as_slice())
+                .ok()
+                .and_then(votingengine::types::institution_code_from_cid_number)
+                .ok_or(votingengine::Error::<Test>::InvalidInstitution)?;
+            internal_vote::InternalVoteTicketClaim::InstitutionRole(
+                test_role_code(institution_code)
+                    .to_vec()
+                    .try_into()
+                    .expect("test role fits protocol bound"),
+            )
+        }
+    };
     for (admin, _pair) in pairs.iter().take(n) {
-        <internal_vote::Pallet<Test>>::do_internal_vote(admin.clone(), pid, true)?;
+        <internal_vote::Pallet<Test>>::do_internal_vote(
+            admin.clone(),
+            pid,
+            ticket_claim.clone(),
+            true,
+        )?;
         if VotingEngine::proposals(pid)
             .map(|proposal| proposal.status != STATUS_VOTING)
             .unwrap_or(true)

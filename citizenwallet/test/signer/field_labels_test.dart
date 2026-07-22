@@ -35,6 +35,7 @@ void main() {
     test('公民身份上链交易(register_voting_identity)全部 reviewFields key 有中文标签', () {
       const keys = [
         'actor_cid_number',
+        'actor_role_code',
         'cid_number',
         'wallet_account',
         'citizen_age_years',
@@ -58,7 +59,8 @@ void main() {
         'citizen_status',
         'residence',
         'birth_place',
-        'citizen_full_name',
+        'family_name',
+        'given_name',
         'citizen_sex',
       ];
       for (final key in keys) {
@@ -68,13 +70,15 @@ void main() {
 
     test('公民身份字段翻译正确', () {
       expect(fieldLabelText('actor_cid_number'), '操作机构CID');
+      expect(fieldLabelText('actor_role_code'), '操作岗位码');
       expect(fieldLabelText('wallet_account'), '公民钱包账户');
       expect(fieldLabelText('citizen_age_years'), '周岁年龄');
       expect(fieldLabelText('valid_range'), '护照有效期');
       expect(fieldLabelText('citizen_status'), '身份状态');
       expect(fieldLabelText('residence'), '居住地');
       expect(fieldLabelText('birth_place'), '出生地');
-      expect(fieldLabelText('citizen_full_name'), '公民姓名');
+      expect(fieldLabelText('family_name'), '姓');
+      expect(fieldLabelText('given_name'), '名');
       expect(fieldLabelText('citizen_sex'), '公民性别');
     });
 

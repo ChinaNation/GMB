@@ -18,7 +18,8 @@ use crate::auth::login::require_admin_any;
 use crate::auth::operation_auth::AdminActionType;
 use crate::institution::subjects::http::{resolve_created_by, service_error_to_response};
 use crate::institution::subjects::model::{
-    InstitutionDetailOutput, LegalRepresentativePhoto, ParentInstitutionRow, UpdateInstitutionInput,
+    InstitutionDetailOutput, LegalRepresentative, LegalRepresentativePhoto, ParentInstitutionRow,
+    UpdateInstitutionInput,
 };
 use crate::institution::subjects::service::{
     resolve_legal_representative_scope_for_institution, validate_cid_full_name,
@@ -223,7 +224,8 @@ pub(crate) async fn update_institution(
         "cid_number": cid_number.clone(),
         "cid_full_name": input.cid_full_name.clone(),
         "parent_cid_number": input.parent_cid_number.clone(),
-        "legal_representative_name": input.legal_representative_name.clone(),
+        "family_name": input.family_name.clone(),
+        "given_name": input.given_name.clone(),
         "legal_representative_cid_number": input.legal_representative_cid_number.clone(),
         "legal_representative_photo_path": input.legal_representative_photo_path.clone(),
     });
@@ -341,7 +343,8 @@ pub(crate) async fn update_institution(
         existing.parent_cid_number = Some(raw);
     }
     let legal_rep = match validate_legal_representative_required(
-        input.legal_representative_name.as_deref(),
+        input.family_name.as_deref(),
+        input.given_name.as_deref(),
         input.legal_representative_cid_number.as_deref(),
         input.legal_representative_photo_path.as_deref(),
         input.legal_representative_photo_name.as_deref(),
@@ -384,9 +387,12 @@ pub(crate) async fn update_institution(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     };
-    existing.legal_representative_name = Some(legal_rep.legal_representative_name);
-    existing.legal_representative_cid_number = Some(legal_rep.cid_number);
-    existing.legal_representative_account = Some(legal_representative_account);
+    existing.legal_representative = Some(LegalRepresentative {
+        family_name: legal_rep.family_name,
+        given_name: legal_rep.given_name,
+        cid_number: legal_rep.cid_number,
+        account: legal_representative_account,
+    });
     existing.legal_representative_photo_path = Some(legal_rep.photo_path);
     existing.legal_representative_photo_name = Some(legal_rep.photo_name);
     existing.legal_representative_photo_mime = Some(legal_rep.photo_mime);
@@ -406,8 +412,9 @@ pub(crate) async fn update_institution(
             "new_cid_full_name": existing.cid_full_name.clone().unwrap_or_default(),
             "old_parent_cid_number": old_parent_cid_number,
             "parent_cid_number": existing.parent_cid_number.clone().unwrap_or_default(),
-            "legal_representative_name": existing.legal_representative_name.clone().unwrap_or_default(),
-            "legal_representative_cid_number": existing.legal_representative_cid_number.clone().unwrap_or_default(),
+            "family_name": existing.legal_representative.as_ref().map(|value| value.family_name.clone()).unwrap_or_default(),
+            "given_name": existing.legal_representative.as_ref().map(|value| value.given_name.clone()).unwrap_or_default(),
+            "legal_representative_cid_number": existing.legal_representative.as_ref().map(|value| value.cid_number.clone()).unwrap_or_default(),
         }),
     );
     Json(ApiResponse {

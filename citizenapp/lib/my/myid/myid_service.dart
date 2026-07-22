@@ -19,7 +19,7 @@ import 'identity_badge_snapshot_store.dart';
 /// 最靠前的热钱包,与聊天/发动态同源)。默认用户切换即跟随;链上一人一 CID 一账户
 /// 一身份,故不再扫全钱包、不再有多身份冲突。
 enum MyIdTier {
-  /// 默认用户账户链上无投票身份 → 匿名访客，且没有公民身份信息。
+  /// 默认用户账户链上无投票身份 → 访客轻节点（默认匿名，无上链公民身份）。
   visitor,
 
   /// 有 `CitizenIdentity::VotingIdentityByAccount`。
@@ -42,7 +42,8 @@ class MyIdState {
     this.residenceDistrict,
     this.passportValidFrom,
     this.passportValidUntil,
-    this.citizenFullName,
+    this.familyName,
+    this.givenName,
     this.citizenSexLabel,
     this.birthDistrict,
     this.citizenBirthDate,
@@ -66,7 +67,8 @@ class MyIdState {
   final String? passportValidUntil;
 
   // ── 竞选公民专属公开字段 ──
-  final String? citizenFullName;
+  final String? familyName;
+  final String? givenName;
 
   /// 男/女。
   final String? citizenSexLabel;
@@ -212,7 +214,8 @@ class MyIdService {
       residenceDistrict: residence,
       passportValidFrom: _formatDateInt(voting.passportValidFrom),
       passportValidUntil: _formatDateInt(voting.passportValidUntil),
-      citizenFullName: candidate?.fullName,
+      familyName: candidate?.familyName,
+      givenName: candidate?.givenName,
       citizenSexLabel:
           candidate == null ? null : (candidate.sex == 1 ? '女' : '男'),
       birthDistrict: birth,
@@ -318,7 +321,7 @@ class MyIdService {
   }
 
   /// 解码链上 `CandidateIdentity<BlockNumber>`(增量存储,不含 voting 基础字段):
-  /// birth_省/市/镇码 + citizen_full_name + citizen_sex(u8,0男1女)
+  /// birth_省/市/镇码 + family_name + given_name + citizen_sex(u8,0男1女)
   /// + birth_date(u32 YYYYMMDD) + updated_at(u32)。
   _CandidateIdentity? _decodeCandidateIdentity(Uint8List data) {
     try {
@@ -329,8 +332,10 @@ class MyIdService {
       offset = city.nextOffset;
       final town = _readUtf8VecAllowEmpty(data, offset, maxLen: 16);
       offset = town.nextOffset;
-      final name = _readUtf8VecAllowEmpty(data, offset, maxLen: 128);
-      offset = name.nextOffset;
+      final familyName = _readUtf8VecAllowEmpty(data, offset, maxLen: 128);
+      offset = familyName.nextOffset;
+      final givenName = _readUtf8VecAllowEmpty(data, offset, maxLen: 128);
+      offset = givenName.nextOffset;
       if (offset + 1 > data.length) return null;
       final sex = data[offset];
       offset += 1;
@@ -345,7 +350,8 @@ class MyIdService {
         birthProvince: prov.value,
         birthCity: city.value,
         birthTown: town.value,
-        fullName: name.value,
+        familyName: familyName.value,
+        givenName: givenName.value,
         sex: sex,
         birthDate: birthDate,
       );
@@ -504,7 +510,8 @@ class _CandidateIdentity {
     required this.birthProvince,
     required this.birthCity,
     required this.birthTown,
-    required this.fullName,
+    required this.familyName,
+    required this.givenName,
     required this.sex,
     required this.birthDate,
   });
@@ -512,7 +519,8 @@ class _CandidateIdentity {
   final String birthProvince;
   final String birthCity;
   final String birthTown;
-  final String fullName;
+  final String familyName;
+  final String givenName;
   final int sex;
 
   /// 出生日期(YYYYMMDD 整数),竞选身份专属。

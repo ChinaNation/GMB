@@ -52,6 +52,7 @@ pub(crate) enum AddressChainAction {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct AddressChainCallInput {
+    pub(crate) actor_role_code: String,
     pub(crate) action: AddressChainAction,
     #[serde(default)]
     pub(crate) catalog_version: Option<String>,

@@ -286,13 +286,10 @@ fn runtime_version_and_block_types_are_sane() {
     assert_eq!(VERSION.spec_name.as_ref(), "citizenchain");
     assert_eq!(VERSION.impl_name.as_ref(), "citizenchain");
     assert_eq!(VERSION.authoring_version, 0);
-    assert!(
-        VERSION.spec_version >= 1,
-        "spec_version 必须保持正向递增；WASM CI 会在编译产物时按链上版本临时提升"
-    );
+    assert_eq!(VERSION.spec_version, 0);
     assert_eq!(VERSION.impl_version, 0);
     assert_eq!(VERSION.transaction_version, 0);
-    assert_eq!(VERSION.system_version, 1);
+    assert_eq!(VERSION.system_version, 0);
 
     let _opaque_block_id: opaque::BlockId = generic::BlockId::Number(0);
     let _runtime_block_id: BlockId = generic::BlockId::Number(0);
@@ -332,6 +329,10 @@ fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
                 .to_vec()
                 .try_into()
                 .expect("NRC CID fits"),
+            proposer_role_code: primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                .to_vec()
+                .try_into()
+                .expect("committee role fits"),
             proposer: recipient.clone(),
             reason: b"runtime-integration".to_vec(),
             total_amount,
@@ -601,6 +602,10 @@ fn runtime_fee_router_covers_free_onchain_vote_institution_and_reject_paths() {
                     .to_vec()
                     .try_into()
                     .expect("NRC CID fits"),
+                actor_role_code: primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                    .to_vec()
+                    .try_into()
+                    .expect("committee role fits"),
                 asset_id: 1,
                 to: AccountId::new([6u8; 32]),
                 amount: 100,
@@ -625,6 +630,10 @@ fn runtime_fee_router_covers_free_onchain_vote_institution_and_reject_paths() {
                     .to_vec()
                     .try_into()
                     .expect("clearing bank CID fits"),
+                actor_role_code: primitives::governance_skeleton::ROLE_CODE_DIRECTOR
+                    .to_vec()
+                    .try_into()
+                    .expect("director role fits"),
                 institution_account: AccountId::new(clearing_bank.main_account),
                 batch_seq: 1,
                 batch: Default::default(),
@@ -785,7 +794,7 @@ fn multisig_reserved_checker_rejects_stake_and_fee_accounts() {
 }
 
 #[test]
-fn runtime_call_filter_blocks_external_balances_calls() {
+fn runtime_call_filter_blocks_disabled_and_low_level_calls() {
     let stake = AccountId::new(primitives::cid::china::china_ch::CHINA_CH[0].stake_account);
     let dst = AccountId::new([9u8; 32]);
 
@@ -873,6 +882,44 @@ fn runtime_call_filter_blocks_external_balances_calls() {
             remark,
         });
     assert!(RuntimeCallFilter::contains(&allowed_onchain_transfer));
+
+    let disabled_issuance =
+        RuntimeCall::OnchainIssuance(onchain_issuance::pallet::Call::propose_mint {
+            actor_cid_number: CHINA_CB[0]
+                .cid_number
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("NRC CID fits"),
+            actor_role_code: primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                .to_vec()
+                .try_into()
+                .expect("committee role fits"),
+            asset_id: 1,
+            to: AccountId::new([6u8; 32]),
+            amount: 100,
+        });
+    assert!(!RuntimeCallFilter::contains(&disabled_issuance));
+
+    let clearing_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
+    let disabled_offchain =
+        RuntimeCall::OffchainTransaction(offchain::pallet::Call::submit_offchain_batch {
+            actor_cid_number: clearing_bank
+                .cid_number
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("clearing bank CID fits"),
+            actor_role_code: primitives::governance_skeleton::ROLE_CODE_DIRECTOR
+                .to_vec()
+                .try_into()
+                .expect("director role fits"),
+            institution_account: AccountId::new(clearing_bank.main_account),
+            batch_seq: 1,
+            batch: Default::default(),
+            batch_signature: Default::default(),
+        });
+    assert!(!RuntimeCallFilter::contains(&disabled_offchain));
 }
 
 #[test]
@@ -911,6 +958,10 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
                 .to_vec()
                 .try_into()
                 .expect("NRC CID fits"),
+            actor_role_code: primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                .to_vec()
+                .try_into()
+                .expect("committee role fits"),
             proposer,
             reason,
             code_hash,
@@ -999,25 +1050,29 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
 #[test]
 fn runtime_citizen_identity_frg_province_admin_registers_voting_identity() {
     new_test_ext().execute_with(|| {
-        let (_, registrar, actor_cid_number) = setup_frg_citizen_identity_admin(b"43");
+        let (_, registrar, actor_cid_number, actor_role_code) =
+            setup_frg_citizen_identity_admin(b"HU");
         let wallet_pair =
             sr25519::Pair::from_string("//citizen-wallet-1", None).expect("wallet pair");
         let wallet_account = AccountId::new(wallet_pair.public().0);
+        let citizen_cid_number: citizen_identity::CidNumberBound =
+            real_cid_number("RUNTIME-0001", "CTZN", "1")
+                .try_into()
+                .expect("cid number should fit");
         // 占号先行:身份写入前置。
         assert_ok!(CitizenIdentity::occupy_cid(
             RuntimeOrigin::signed(registrar.clone()),
             actor_cid_number.clone(),
-            real_cid_number("RUNTIME-0001", "CTZN", "1")
-                .try_into()
-                .expect("cid number should fit"),
+            actor_role_code.clone(),
+            citizen_cid_number.clone(),
             [7u8; 32],
-            b"43".to_vec().try_into().expect("province should fit"),
+            b"HU".to_vec().try_into().expect("province should fit"),
             b"4301".to_vec().try_into().expect("city should fit"),
         ));
         let payload = build_voting_identity_payload(
             wallet_account.clone(),
             &real_cid_number("RUNTIME-0001", "CTZN", "1"),
-            b"43",
+            b"HU",
             b"4301",
             b"4301001",
         );
@@ -1026,12 +1081,20 @@ fn runtime_citizen_identity_frg_province_admin_registers_voting_identity() {
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(registrar),
             actor_cid_number,
+            actor_role_code,
             payload,
             signature,
         ));
 
         assert!(
-            citizen_identity::VotingIdentityByAccount::<Runtime>::contains_key(&wallet_account)
+            citizen_identity::VotingIdentityByCid::<Runtime>::contains_key(&citizen_cid_number)
+        );
+        assert_eq!(
+            CitizenIdentity::citizen_subject(&wallet_account),
+            Some(citizen_identity::CitizenSubject {
+                cid_number: citizen_cid_number,
+                wallet_account,
+            })
         );
         assert_eq!(citizen_identity::CountryVotingCount::<Runtime>::get(), 1);
     });
@@ -1040,14 +1103,15 @@ fn runtime_citizen_identity_frg_province_admin_registers_voting_identity() {
 #[test]
 fn runtime_citizen_identity_frg_admin_cannot_register_other_province() {
     new_test_ext().execute_with(|| {
-        let (_, registrar, actor_cid_number) = setup_frg_citizen_identity_admin(b"43");
+        let (_, registrar, actor_cid_number, actor_role_code) =
+            setup_frg_citizen_identity_admin(b"HU");
         let wallet_pair =
             sr25519::Pair::from_string("//citizen-wallet-2", None).expect("wallet pair");
         let wallet_account = AccountId::new(wallet_pair.public().0);
         let payload = build_voting_identity_payload(
             wallet_account,
             &real_cid_number("RUNTIME-0002", "CTZN", "1"),
-            b"44",
+            b"GD",
             b"4401",
             b"4401001",
         );
@@ -1057,6 +1121,7 @@ fn runtime_citizen_identity_frg_admin_cannot_register_other_province() {
             CitizenIdentity::register_voting_identity(
                 RuntimeOrigin::signed(registrar),
                 actor_cid_number,
+                actor_role_code,
                 payload,
                 signature,
             ),
@@ -1068,7 +1133,8 @@ fn runtime_citizen_identity_frg_admin_cannot_register_other_province() {
 #[test]
 fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
     new_test_ext().execute_with(|| {
-        let (_, registrar, actor_cid_number) = setup_frg_citizen_identity_admin(b"43");
+        let (_, registrar, actor_cid_number, actor_role_code) =
+            setup_frg_citizen_identity_admin(b"HU");
         let wallet_pair =
             sr25519::Pair::from_string("//citizen-wallet-3", None).expect("wallet pair");
         let wallet_account = AccountId::new(wallet_pair.public().0);
@@ -1076,29 +1142,28 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
         assert_ok!(CitizenIdentity::occupy_cid(
             RuntimeOrigin::signed(registrar.clone()),
             actor_cid_number.clone(),
+            actor_role_code.clone(),
             real_cid_number("RUNTIME-0003", "CTZN", "1")
                 .try_into()
                 .expect("cid number should fit"),
             [7u8; 32],
-            b"43".to_vec().try_into().expect("province should fit"),
+            b"HU".to_vec().try_into().expect("province should fit"),
             b"4301".to_vec().try_into().expect("city should fit"),
         ));
         let voting = build_voting_identity_payload(
             wallet_account.clone(),
             &real_cid_number("RUNTIME-0003", "CTZN", "1"),
-            b"43",
+            b"HU",
             b"4301",
             b"4301001",
         );
         let candidate = citizen_identity::CandidateIdentityPayload {
             voting,
-            birth_province_code: test_area_code(b"43"),
+            birth_province_code: test_area_code(b"HU"),
             birth_city_code: test_area_code(b"4301"),
             birth_town_code: test_area_code(b"4301001"),
-            citizen_full_name: b"Runtime Citizen"
-                .to_vec()
-                .try_into()
-                .expect("citizen name fits"),
+            family_name: b"Runtime".to_vec().try_into().expect("family name fits"),
+            given_name: b"Citizen".to_vec().try_into().expect("given name fits"),
             citizen_sex: citizen_identity::CitizenSex::Male,
             birth_date: 20000101,
         };
@@ -1107,12 +1172,13 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
         assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(registrar),
             actor_cid_number,
+            actor_role_code,
             candidate,
             signature,
         ));
 
         let town_scope = citizen_identity::PopulationScope::Town(
-            test_area_code(b"43"),
+            test_area_code(b"HU"),
             test_area_code(b"4301"),
             test_area_code(b"4301001"),
         );
@@ -1180,7 +1246,8 @@ fn runtime_square_post_campaign_requires_citizen_identity() {
 #[test]
 fn runtime_square_post_campaign_records_chain_cid_for_verified_wallet() {
     new_test_ext().execute_with(|| {
-        let (_, registrar, actor_cid_number) = setup_frg_citizen_identity_admin(b"43");
+        let (_, registrar, actor_cid_number, actor_role_code) =
+            setup_frg_citizen_identity_admin(b"HU");
         let wallet_pair =
             sr25519::Pair::from_string("//square-citizen-wallet", None).expect("wallet pair");
         let wallet_account = AccountId::new(wallet_pair.public().0);
@@ -1189,18 +1256,19 @@ fn runtime_square_post_campaign_records_chain_cid_for_verified_wallet() {
         assert_ok!(CitizenIdentity::occupy_cid(
             RuntimeOrigin::signed(registrar.clone()),
             actor_cid_number.clone(),
+            actor_role_code.clone(),
             cid_number
                 .clone()
                 .try_into()
                 .expect("cid number should fit"),
             [8u8; 32],
-            b"43".to_vec().try_into().expect("province should fit"),
+            b"HU".to_vec().try_into().expect("province should fit"),
             b"4301".to_vec().try_into().expect("city should fit"),
         ));
         let payload = build_voting_identity_payload(
             wallet_account.clone(),
             &cid_number,
-            b"43",
+            b"HU",
             b"4301",
             b"4301001",
         );
@@ -1209,6 +1277,7 @@ fn runtime_square_post_campaign_records_chain_cid_for_verified_wallet() {
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(registrar),
             actor_cid_number,
+            actor_role_code,
             payload,
             signature,
         ));
@@ -1274,7 +1343,7 @@ fn runtime_square_post_fee_kind_uses_onchain_minimum_fee() {
 }
 
 #[test]
-fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
+fn ensure_nrc_admin_and_runtime_admin_directory_paths() {
     new_test_ext().execute_with(|| {
         let nrc_cid: public_manage::pallet::CidNumberOf<Runtime> = CHINA_CB[0]
             .cid_number
@@ -1306,7 +1375,7 @@ fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
 // 的 `close_requires_matching_actor_cid_and_an_institution_admin` 等 pallet 级用例。原
 // 注册局审批凭证验签(`RuntimeCidInstitutionVerifier`)连同 OnChina 平台签名钥已整体删除。
 #[test]
-fn onchain_issuance_requires_actor_cid_admin_and_matching_execution_account() {
+fn onchain_issuance_rejects_admin_without_an_authorized_business_role() {
     new_test_ext().execute_with(|| {
         let nrc = &CHINA_CB[0];
         let actor_cid_number: votingengine::types::CidNumber = nrc
@@ -1317,11 +1386,19 @@ fn onchain_issuance_requires_actor_cid_admin_and_matching_execution_account() {
             .expect("NRC CID fits runtime bound");
         let admin = AccountId::new(nrc.admins[0]);
         let main_account = AccountId::new(nrc.main_account);
+        // 通用资产发行不是 NRC 委员固定权限；即使账户属于 NRC 且执行账户匹配，
+        // 也必须先存在业务模块允许的岗位权限，不能退化为“管理员即可发行”。
+        let committee_role: votingengine::types::RoleCode =
+            primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                .to_vec()
+                .try_into()
+                .expect("committee role fits");
 
         assert_noop!(
             OnchainIssuance::propose_issue(
                 RuntimeOrigin::signed(admin.clone()),
                 actor_cid_number.clone(),
+                committee_role.clone(),
                 AccountId::new([250u8; 32]),
                 onchain_issuance::types::AssetClass::Plain,
                 b"Institution Asset".to_vec().try_into().expect("name fits"),
@@ -1333,23 +1410,27 @@ fn onchain_issuance_requires_actor_cid_admin_and_matching_execution_account() {
                 2,
                 1_000,
             ),
-            onchain_issuance::Error::<Runtime>::InvalidInstitutionContext
+            onchain_issuance::Error::<Runtime>::ProposeOriginNotAllowed
         );
 
-        assert_ok!(OnchainIssuance::propose_issue(
-            RuntimeOrigin::signed(admin),
-            actor_cid_number,
-            main_account,
-            onchain_issuance::types::AssetClass::Plain,
-            b"Institution Asset".to_vec().try_into().expect("name fits"),
-            b"IAS".to_vec().try_into().expect("symbol fits"),
-            b"plain asset"
-                .to_vec()
-                .try_into()
-                .expect("description fits"),
-            2,
-            1_000,
-        ));
+        assert_noop!(
+            OnchainIssuance::propose_issue(
+                RuntimeOrigin::signed(admin),
+                actor_cid_number,
+                committee_role,
+                main_account,
+                onchain_issuance::types::AssetClass::Plain,
+                b"Institution Asset".to_vec().try_into().expect("name fits"),
+                b"IAS".to_vec().try_into().expect("symbol fits"),
+                b"plain asset"
+                    .to_vec()
+                    .try_into()
+                    .expect("description fits"),
+                2,
+                1_000,
+            ),
+            onchain_issuance::Error::<Runtime>::ProposeOriginNotAllowed
+        );
     });
 }
 
@@ -1362,10 +1443,16 @@ fn onchain_issuance_rejects_non_admin_and_non_nrc_monitor_actor() {
             .to_vec()
             .try_into()
             .expect("NRC CID fits runtime bound");
+        let committee_role: votingengine::types::RoleCode =
+            primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                .to_vec()
+                .try_into()
+                .expect("committee role fits");
         assert_noop!(
             OnchainIssuance::propose_mint(
                 RuntimeOrigin::signed(AccountId::new([250u8; 32])),
                 nrc_cid,
+                committee_role,
                 1,
                 AccountId::new([1u8; 32]),
                 1,
@@ -1384,6 +1471,10 @@ fn onchain_issuance_rejects_non_admin_and_non_nrc_monitor_actor() {
             OnchainIssuance::propose_monitor_freeze(
                 RuntimeOrigin::signed(AccountId::new(prc.admins[0])),
                 prc_cid,
+                primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                    .to_vec()
+                    .try_into()
+                    .expect("committee role fits"),
                 1,
                 AccountId::new([1u8; 32]),
                 [7u8; 32],
@@ -1580,6 +1671,16 @@ fn genesis_public_institutions_full_mint_counts() {
 fn genesis_citizenchain_foundation_is_complete_and_protected() {
     new_test_ext().execute_with(|| {
         let foundation = primitives::cid::china::citizenchain::CITIZENCHAIN_FOUNDATION;
+        assert_eq!(foundation.cid_full_name, "公民链技术发展基金会");
+        assert_eq!(foundation.cid_short_name, "公民链基金会");
+        assert_eq!(
+            foundation.cid_full_name_en,
+            "CitizenChain Technology Development Foundation"
+        );
+        assert_eq!(
+            foundation.cid_short_name_en,
+            "CitizenChain Technology Foundation"
+        );
         let cid: private_manage::pallet::CidNumberOf<Runtime> = foundation
             .cid_number
             .as_bytes()
@@ -1596,23 +1697,20 @@ fn genesis_citizenchain_foundation_is_complete_and_protected() {
             info.cid_short_name.as_slice(),
             foundation.cid_short_name.as_bytes()
         );
+        let legal_representative = info
+            .legal_representative
+            .expect("foundation legal representative exists");
+        assert_eq!(legal_representative.family_name.as_slice(), "程".as_bytes());
+        assert_eq!(legal_representative.given_name.as_slice(), "伟".as_bytes());
         assert_eq!(
-            info.legal_representative_name
-                .as_ref()
-                .map(|value| value.as_slice()),
-            Some("程伟".as_bytes())
+            legal_representative.cid_number.as_slice(),
+            "GZ000-CTZN6-198805200-2026".as_bytes()
         );
         assert_eq!(
-            info.legal_representative_cid_number
-                .as_ref()
-                .map(|value| value.as_slice()),
-            Some("GZ000-CTZN6-198805200-2026".as_bytes())
-        );
-        assert_eq!(
-            info.legal_representative_account,
-            Some(AccountId::new(
+            legal_representative.account,
+            AccountId::new(
                 primitives::cid::china::citizenchain::CITIZENCHAIN_GENESIS_ADMINS[0].admin_account,
-            ))
+            )
         );
 
         let admin_cid: admin_primitives::AdminCidNumber = foundation
@@ -1886,7 +1984,7 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
         use entity_primitives::InstitutionMultisigQuery;
         assert_eq!(
             public_manage::Pallet::<Runtime>::lookup_admin_config(&main)
-                .expect("composed singleton exposes current admin snapshot")
+                .expect("composed singleton exposes current institution configuration")
                 .threshold,
             spec.min_members / 2 + 1
         );
@@ -1951,9 +2049,10 @@ fn institution_governance_can_clear_legal_representative_atomically() {
             public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(
                 Some(
                     entity_primitives::InstitutionLegalRepresentativeChange::Set {
-                        legal_representative_name: "法定代表人".as_bytes().to_vec(),
-                        legal_representative_cid_number: b"CITIZEN-LR-001".to_vec(),
-                        legal_representative_account: representative_account.clone(),
+                        family_name: "法定".as_bytes().to_vec(),
+                        given_name: "代表人".as_bytes().to_vec(),
+                        cid_number: b"CITIZEN-LR-001".to_vec(),
+                        account: representative_account.clone(),
                     },
                 ),
                 vec![representative_assignment],
@@ -1961,10 +2060,12 @@ fn institution_governance_can_clear_legal_representative_atomically() {
         );
         let stored =
             public_manage::Institutions::<Runtime>::get(&cid).expect("genesis institution exists");
-        assert!(stored.legal_representative_name.is_some());
+        let stored_representative = stored
+            .legal_representative
+            .expect("legal representative should be stored");
         assert_eq!(
-            stored.legal_representative_account,
-            Some(representative_account.clone())
+            stored_representative.account,
+            representative_account.clone()
         );
 
         assert_ok!(
@@ -1975,9 +2076,7 @@ fn institution_governance_can_clear_legal_representative_atomically() {
         );
         let cleared = public_manage::Institutions::<Runtime>::get(&cid)
             .expect("genesis institution still exists");
-        assert!(cleared.legal_representative_name.is_none());
-        assert!(cleared.legal_representative_cid_number.is_none());
-        assert!(cleared.legal_representative_account.is_none());
+        assert!(cleared.legal_representative.is_none());
 
         let second_account = public_admins::AdminAccounts::<Runtime>::get(&cid)
             .expect("NRC genesis admins remain")
@@ -1997,9 +2096,10 @@ fn institution_governance_can_clear_legal_representative_atomically() {
             public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(
                 Some(
                     entity_primitives::InstitutionLegalRepresentativeChange::Set {
-                        legal_representative_name: "重复法定代表人".as_bytes().to_vec(),
-                        legal_representative_cid_number: b"CITIZEN-LR-002".to_vec(),
-                        legal_representative_account: representative_account,
+                        family_name: "重复法定".as_bytes().to_vec(),
+                        given_name: "代表人".as_bytes().to_vec(),
+                        cid_number: b"CITIZEN-LR-002".to_vec(),
+                        account: representative_account,
                     },
                 ),
                 vec![
@@ -2127,14 +2227,12 @@ fn genesis_fixed_institution_roles_and_assignments_are_complete() {
             raw.as_bytes().to_vec().try_into().expect("fixed cid fits")
         };
 
-        // 法定代表人不是创世必填项。固定机构创世时三字段必须保持全空，
+        // 法定代表人不是创世必填项。固定机构创世时该字段必须保持为空，
         // 不得从管理员首位、机构主账户或其它钱包推导占位值。
         for institution in primitives::governance_skeleton::fixed_institutions() {
             let info = public_manage::Institutions::<Runtime>::get(cid(institution.cid_number))
                 .expect("fixed genesis institution exists");
-            assert!(info.legal_representative_name.is_none());
-            assert!(info.legal_representative_cid_number.is_none());
-            assert!(info.legal_representative_account.is_none());
+            assert!(info.legal_representative.is_none());
         }
 
         // 国家储委会、省储委会统一为“委员”。

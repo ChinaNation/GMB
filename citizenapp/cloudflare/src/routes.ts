@@ -24,7 +24,8 @@ import {
   putChatRelayBlob,
 } from "./chat/relay";
 import { feedRoute } from "./feeds/service";
-import { followRoute, unfollowRoute } from "./feeds/follows";
+import { followRoute, setFollowNotifyRoute, unfollowRoute } from "./feeds/follows";
+import { getNotifyUnreadRoute, markNotifyReadRoute } from "./feeds/notify";
 import { mediaRoute } from "./media/service";
 import { platformSubscriptionConfirmRoute } from "./membership/citizen_coin";
 import { membershipRoute } from "./membership/service";
@@ -187,8 +188,21 @@ export async function routeRequest(
   if (request.method === "POST" && path === "/v1/square/follows") {
     return followRoute(request, env);
   }
+  if (
+    request.method === "PUT" &&
+    path.startsWith("/v1/square/follows/") &&
+    path.endsWith("/notify")
+  ) {
+    return setFollowNotifyRoute(request, env);
+  }
   if (request.method === "DELETE" && path.startsWith("/v1/square/follows/")) {
     return unfollowRoute(request, env);
+  }
+  if (request.method === "GET" && path === "/v1/square/notify/unread") {
+    return getNotifyUnreadRoute(request, env);
+  }
+  if (request.method === "POST" && path === "/v1/square/notify/read") {
+    return markNotifyReadRoute(request, env);
   }
   if (request.method === "POST" && path === "/v1/square/signals") {
     return signalRoute(request, env);

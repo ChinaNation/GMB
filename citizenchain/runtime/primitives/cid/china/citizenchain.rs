@@ -1,4 +1,4 @@
-//! 中国公民链技术发展基金会正式创世常量。
+//! 公民链技术发展基金会正式创世常量。
 //!
 //! 本文件是该私权创世机构身份、协议账户、一名创世管理员和三条固定岗位任职的唯一常量源。
 //! 创世播种与原生节点守卫必须共同读取这里的值，禁止在各模块重复手写。
@@ -20,10 +20,12 @@ pub const ROLE_NAME_GENESIS_PROGRAMMER: &[u8] = "创世程序员".as_bytes();
 
 /// 法定代表人对应的公民 CID；注册局后续直接从链上读取该公民资料。
 pub const LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER: &str = "GZ000-CTZN6-198805200-2026";
-/// 法定代表人链上展示姓名。
-pub const LEGAL_REPRESENTATIVE_NAME: &str = "程伟";
+/// 法定代表人的姓；全仓人员姓名只使用 `family_name` 与 `given_name` 两个字段。
+pub const LEGAL_REPRESENTATIVE_FAMILY_NAME: &str = "程";
+/// 法定代表人的名；禁止恢复合并姓名字段。
+pub const LEGAL_REPRESENTATIVE_GIVEN_NAME: &str = "伟";
 
-/// 中国公民链技术发展基金会内置身份。
+/// 公民链技术发展基金会内置身份。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct ChinaCitizenChain {
     pub cid_full_name: &'static str,
@@ -59,11 +61,11 @@ pub struct CitizenChainFixedRole {
     pub seats: u32,
 }
 
-/// 中国公民链技术发展基金会正式创世身份。
+/// 公民链技术发展基金会正式创世身份。
 pub const CITIZENCHAIN_FOUNDATION: ChinaCitizenChain = ChinaCitizenChain {
-    cid_full_name: "中国公民链技术发展基金会",
+    cid_full_name: "公民链技术发展基金会",
     cid_short_name: "公民链基金会",
-    cid_full_name_en: "China CitizenChain Technology Development Foundation",
+    cid_full_name_en: "CitizenChain Technology Development Foundation",
     cid_short_name_en: "CitizenChain Technology Foundation",
     cid_number: "GZ018-SFGYR-201206100-2026",
     main_account: hex!("e86aa3cd794651257dea9b7cad1abc4f0ce05940c1aecccd2ed8dd2fc9907023"),
@@ -118,7 +120,7 @@ pub const CITIZENCHAIN_FIXED_ROLES: &[CitizenChainFixedRole] = &[
 /// 该机构内部治理固定采用三个岗位任职票中的两票。
 pub const CITIZENCHAIN_GOVERNANCE_THRESHOLD: u32 = 2;
 
-/// 精确判断中国公民链技术发展基金会创世身份，禁止只按通用 `SFGY` 扩大保护范围。
+/// 精确判断公民链技术发展基金会创世身份，禁止只按通用 `SFGY` 扩大保护范围。
 pub fn is_citizenchain_foundation_identity(code: [u8; 4], cid_number: &[u8]) -> bool {
     code == *b"SFGY" && cid_number == CITIZENCHAIN_FOUNDATION.cid_number.as_bytes()
 }

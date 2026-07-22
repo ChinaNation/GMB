@@ -1,4 +1,4 @@
-//! 公民身份与机构管理员资格的只读提供者。
+//! 公民身份、机构人员名册与岗位任职资格的只读提供者。
 
 use crate::types::InstitutionCode;
 
@@ -90,8 +90,9 @@ pub trait InternalAdminProvider<AccountId> {
     }
 
     /// 获取护宪大法官成员集(ADR-027 修订:修宪最终否决,宪法第21条)。
-    /// 护宪大法官归口国家司法院,生产按管理员 `admin_role=护宪大法官` 过滤 NJD admins。
-    /// 立法投票模块要求成员数恰好 7 人,并按 4 名及以上赞成判定修宪终审通过。
+    /// 护宪大法官归口国家司法院，生产读取 NJD `CONSTITUTION_GUARD` 岗位的
+    /// 当前有效任职账户。立法投票模块要求成员数恰好 7 人，并按 4 名及以上
+    /// 赞成判定修宪终审通过。
     fn constitution_guard_members() -> sp_std::vec::Vec<AccountId> {
         sp_std::vec::Vec::new()
     }
@@ -111,27 +112,6 @@ impl<AccountId> InternalAdminProvider<AccountId> for () {
         _who: &AccountId,
     ) -> bool {
         false
-    }
-}
-
-/// 内部管理员总人数提供器。
-/// 联合投票会根据“剩余管理员数是否还能让赞成票达到阈值”来自动判定机构反对。
-pub trait InternalAdminsLenProvider<AccountId> {
-    fn institution_admins_len(institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32>;
-
-    fn personal_admins_len(personal_account: AccountId) -> Option<u32>;
-}
-
-impl<AccountId> InternalAdminsLenProvider<AccountId> for () {
-    fn institution_admins_len(
-        _institution_code: InstitutionCode,
-        _cid_number: &[u8],
-    ) -> Option<u32> {
-        None
-    }
-
-    fn personal_admins_len(_personal_account: AccountId) -> Option<u32> {
-        None
     }
 }
 

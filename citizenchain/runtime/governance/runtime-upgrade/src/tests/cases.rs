@@ -7,6 +7,7 @@ fn joint_proposers_can_propose_runtime_upgrade() {
             RuntimeUpgrade::propose_runtime_upgrade(
                 RuntimeOrigin::signed(outsider()),
                 nrc_cid(),
+                committee_role(),
                 reason_ok(),
                 code_ok(),
                 pow_difficulty::PowDifficultyParams::genesis_default()
@@ -17,6 +18,7 @@ fn joint_proposers_can_propose_runtime_upgrade() {
         assert_ok!(RuntimeUpgrade::propose_runtime_upgrade(
             RuntimeOrigin::signed(nrc_admin()),
             nrc_cid(),
+            committee_role(),
             reason_ok(),
             code_ok(),
             pow_difficulty::PowDifficultyParams::genesis_default()
@@ -25,6 +27,7 @@ fn joint_proposers_can_propose_runtime_upgrade() {
         assert_ok!(RuntimeUpgrade::propose_runtime_upgrade(
             RuntimeOrigin::signed(prc_admin()),
             prc_cid(),
+            committee_role(),
             reason_ok(),
             code_ok(),
             pow_difficulty::PowDifficultyParams::genesis_default()
@@ -69,6 +72,7 @@ fn administrator_without_committee_role_cannot_propose_runtime_upgrade() {
             RuntimeUpgrade::propose_runtime_upgrade(
                 RuntimeOrigin::signed(ordinary_staff_admin()),
                 nrc_cid(),
+                committee_role(),
                 reason_ok(),
                 code_ok(),
                 pow_difficulty::PowDifficultyParams::genesis_default()
@@ -156,6 +160,7 @@ fn approved_upgrade_atomically_stages_versioned_pow_params() {
         assert_ok!(RuntimeUpgrade::propose_runtime_upgrade(
             RuntimeOrigin::signed(nrc_admin()),
             nrc_cid(),
+            committee_role(),
             reason_ok(),
             code_ok(),
             next,
@@ -275,6 +280,7 @@ fn developer_direct_upgrade_allows_nrc_admin_when_enabled() {
         assert_ok!(RuntimeUpgrade::developer_direct_upgrade(
             RuntimeOrigin::signed(nrc_admin()),
             nrc_cid(),
+            committee_role(),
             code_ok(),
             pow_difficulty::PowDifficultyParams::genesis_default(),
         ));
@@ -291,6 +297,7 @@ fn developer_direct_upgrade_fails_when_disabled() {
             RuntimeUpgrade::developer_direct_upgrade(
                 RuntimeOrigin::signed(nrc_admin()),
                 nrc_cid(),
+                committee_role(),
                 code_ok(),
                 pow_difficulty::PowDifficultyParams::genesis_default(),
             ),
@@ -306,6 +313,7 @@ fn developer_direct_upgrade_rejects_prc_admin() {
             RuntimeUpgrade::developer_direct_upgrade(
                 RuntimeOrigin::signed(prc_admin()),
                 nrc_cid(),
+                committee_role(),
                 code_ok(),
                 pow_difficulty::PowDifficultyParams::genesis_default(),
             ),
@@ -321,6 +329,7 @@ fn developer_direct_upgrade_rejects_non_nrc_admin() {
             RuntimeUpgrade::developer_direct_upgrade(
                 RuntimeOrigin::signed(outsider()),
                 nrc_cid(),
+                committee_role(),
                 code_ok(),
                 pow_difficulty::PowDifficultyParams::genesis_default(),
             ),
@@ -337,6 +346,7 @@ fn developer_direct_upgrade_rejects_empty_code() {
             RuntimeUpgrade::developer_direct_upgrade(
                 RuntimeOrigin::signed(nrc_admin()),
                 nrc_cid(),
+                committee_role(),
                 empty_code,
                 pow_difficulty::PowDifficultyParams::genesis_default(),
             ),

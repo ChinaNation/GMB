@@ -23,8 +23,10 @@ use crate::*;
 /// 本地建档不得要求钱包账户;儿童或暂未开户公民同样能先发放电子护照。
 #[derive(Deserialize)]
 pub(crate) struct AdminCreateCitizenInput {
-    pub(crate) citizen_family_name: String,
-    pub(crate) citizen_given_name: String,
+    /// 当前注册局内的任职岗位码；与机构 CID、管理员签名钱包共同构成权限主体。
+    pub(crate) actor_role_code: String,
+    pub(crate) family_name: String,
+    pub(crate) given_name: String,
     pub(crate) citizen_sex: String,
     pub(crate) citizen_birth_date: String,
     pub(crate) province_name: String,
@@ -42,8 +44,8 @@ pub(crate) struct AdminCreateCitizenOutput {
     pub(crate) id: u64,
     pub(crate) cid_number: String,
     pub(crate) passport_no: String,
-    pub(crate) citizen_family_name: String,
-    pub(crate) citizen_given_name: String,
+    pub(crate) family_name: String,
+    pub(crate) given_name: String,
     pub(crate) citizen_sex: String,
     pub(crate) citizen_birth_date: String,
     pub(crate) citizen_status: CitizenStatus,
@@ -63,8 +65,8 @@ pub(crate) struct AdminCreateCitizenOutput {
 /// 建档输入校验产物:两阶段占号流程经会话 JSON 往返(ADR-031 D6)。
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct ValidatedCitizenInput {
-    pub(crate) citizen_family_name: String,
-    pub(crate) citizen_given_name: String,
+    pub(crate) family_name: String,
+    pub(crate) given_name: String,
     pub(crate) citizen_sex: String,
     /// YYYY-MM-DD(已校验)。
     pub(crate) citizen_birth_date: String,
@@ -84,12 +86,12 @@ pub(crate) fn validate_citizen_input(
     ctx: &crate::auth::login::AdminAuthContext,
     input: &AdminCreateCitizenInput,
 ) -> Result<ValidatedCitizenInput, axum::response::Response> {
-    let citizen_family_name =
-        match required_trimmed(&input.citizen_family_name, "citizen_family_name") {
+    let family_name =
+        match required_trimmed(&input.family_name, "family_name") {
             Ok(v) => v,
             Err(resp) => return Err(resp),
         };
-    let citizen_given_name = match required_trimmed(&input.citizen_given_name, "citizen_given_name")
+    let given_name = match required_trimmed(&input.given_name, "given_name")
     {
         Ok(v) => v,
         Err(resp) => return Err(resp),
@@ -180,8 +182,8 @@ pub(crate) fn validate_citizen_input(
     }
 
     Ok(ValidatedCitizenInput {
-        citizen_family_name,
-        citizen_given_name,
+        family_name,
+        given_name,
         citizen_sex,
         citizen_birth_date: citizen_birth_date.format("%Y-%m-%d").to_string(),
         province_name,
@@ -201,8 +203,8 @@ pub(crate) fn citizen_cid_seed(v: &ValidatedCitizenInput) -> String {
     let birth = NaiveDate::parse_from_str(v.citizen_birth_date.as_str(), "%Y-%m-%d")
         .expect("validated birth date");
     local_citizen_cid_seed(
-        &v.citizen_family_name,
-        &v.citizen_given_name,
+        &v.family_name,
+        &v.given_name,
         &v.citizen_sex,
         birth,
         &v.province_code,
@@ -258,8 +260,8 @@ pub(crate) fn persist_citizen_record(
 ) -> Result<CitizenRecord, axum::response::Response> {
     let citizen_birth_date = NaiveDate::parse_from_str(v.citizen_birth_date.as_str(), "%Y-%m-%d")
         .expect("validated birth date");
-    let citizen_family_name = v.citizen_family_name.clone();
-    let citizen_given_name = v.citizen_given_name.clone();
+    let family_name = v.family_name.clone();
+    let given_name = v.given_name.clone();
     let citizen_sex = v.citizen_sex.clone();
     let province_code = v.province_code.clone();
     let city_code = v.city_code.clone();
@@ -303,8 +305,8 @@ pub(crate) fn persist_citizen_record(
         id,
         cid_number: cid_number.clone(),
         passport_no: passport_no.clone(),
-        citizen_family_name: citizen_family_name.clone(),
-        citizen_given_name: citizen_given_name.clone(),
+        family_name: family_name.clone(),
+        given_name: given_name.clone(),
         citizen_sex: citizen_sex.clone(),
         citizen_birth_date: citizen_birth_date.format("%Y-%m-%d").to_string(),
         wallet_pubkey: None,
@@ -357,8 +359,8 @@ pub(crate) fn persist_citizen_record(
         serde_json::json!({
             "cid_number": cid_number,
             "passport_no": passport_no,
-            "citizen_family_name": record.citizen_family_name,
-            "citizen_given_name": record.citizen_given_name,
+            "family_name": record.family_name,
+            "given_name": record.given_name,
             "province_code": province_code,
             "city_code": city_code,
             "town_code": town_code,
@@ -380,8 +382,8 @@ pub(crate) fn create_output_from_record(record: CitizenRecord) -> AdminCreateCit
         id: record.id,
         cid_number: record.cid_number,
         passport_no: record.passport_no,
-        citizen_family_name: record.citizen_family_name,
-        citizen_given_name: record.citizen_given_name,
+        family_name: record.family_name,
+        given_name: record.given_name,
         citizen_sex: record.citizen_sex,
         citizen_birth_date: record.citizen_birth_date,
         citizen_status: record.citizen_status,
@@ -472,8 +474,8 @@ fn resolve_citizen_scope(
 
 #[allow(clippy::too_many_arguments)]
 fn local_citizen_cid_seed(
-    citizen_family_name: &str,
-    citizen_given_name: &str,
+    family_name: &str,
+    given_name: &str,
     citizen_sex: &str,
     citizen_birth_date: NaiveDate,
     province_code: &str,
@@ -488,8 +490,8 @@ fn local_citizen_cid_seed(
     let mut hasher = Sha256::new();
     let birth_date_text = citizen_birth_date.format("%Y-%m-%d").to_string();
     for part in [
-        citizen_family_name,
-        citizen_given_name,
+        family_name,
+        given_name,
         citizen_sex,
         birth_date_text.as_str(),
         province_code,
@@ -546,8 +548,8 @@ fn citizen_archive_hash(record: &CitizenRecord) -> String {
     let value = serde_json::json!({
         "cid_number": record.cid_number,
         "passport_no": record.passport_no,
-        "citizen_family_name": record.citizen_family_name,
-        "citizen_given_name": record.citizen_given_name,
+        "family_name": record.family_name,
+        "given_name": record.given_name,
         "citizen_sex": record.citizen_sex,
         "citizen_birth_date": record.citizen_birth_date,
         "province_code": record.province_code,
@@ -578,8 +580,8 @@ impl Db {
         self.with_client(move |conn| {
             let row = conn
                 .query_opt(
-                    "SELECT COALESCE(id, 0), cid_number, passport_no, citizen_family_name,
-                            citizen_given_name, citizen_sex, citizen_birth_date, wallet_pubkey, wallet_address,
+                    "SELECT COALESCE(id, 0), cid_number, passport_no, family_name,
+                            given_name, citizen_sex, citizen_birth_date, wallet_pubkey, wallet_address,
                             wallet_sig_alg, wallet_verified_at, citizen_status, voting_eligible,
                             passport_valid_from, passport_valid_until, status_updated_at,
                             province_code, city_code, town_code,
@@ -637,8 +639,8 @@ pub(crate) fn citizen_record_from_row(row: &postgres::Row) -> CitizenRecord {
         id: u64::try_from(id).unwrap_or(0),
         cid_number: row.get(1),
         passport_no: row.get(2),
-        citizen_family_name: row.get(3),
-        citizen_given_name: row.get(4),
+        family_name: row.get(3),
+        given_name: row.get(4),
         citizen_sex: row.get(5),
         citizen_birth_date: row.get(6),
         wallet_pubkey: row.get(7),

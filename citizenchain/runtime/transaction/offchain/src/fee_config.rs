@@ -2,7 +2,7 @@
 //!
 //!
 //! - 每个清算行主账户对应一个 `L2FeeRateBp` 费率(单位 bp,范围 1~10)。
-//! - 清算行管理员可提案改费率,**延迟 7 天生效**(防突袭改价,给 L3 换行时间)。
+//! - 清算行有权岗位任职人可提案改费率,**延迟 7 天生效**(防突袭改价,给 L3 换行时间)。
 //! - 全局上限 `MaxL2FeeRateBp` 由联合投票调整(沿用 `votingengine`,
 //!   这里只定义 extrinsic 入口;具体联合投票执行回调另行对接)。
 //! - 在 `on_initialize` 每块扫描一次到期提案并激活(小成本,可优化为 cursor)。
@@ -34,13 +34,14 @@ pub const RATE_CHANGE_DELAY_BLOCKS: u64 = 7 * primitives::pow_const::BLOCKS_PER_
 /// 提案新费率:清算行管理员发起,延迟 `RATE_CHANGE_DELAY_BLOCKS` 后生效。
 ///
 /// 约束:
-/// - `who` 必须是该清算行多签管理员之一(通过 `admins 模块::AdminAccounts` 校验)
+/// - `who` 必须以清算行 CID + 岗位码匹配有效任职和本动作权限
 /// - 目标必须是合法清算行主账户(K1=S/F + Active)
 /// - 新费率在 `[L2_FEE_RATE_BP_MIN, MaxL2FeeRateBp]` 区间
 /// - 同一清算行不允许并行提案(新提案覆盖旧提案)
 pub fn do_propose_l2_fee_rate<T: Config>(
     who: T::AccountId,
     actor_cid_number: &[u8],
+    actor_role_code: &[u8],
     institution_account: T::AccountId,
     new_rate_bp: u32,
 ) -> DispatchResult {
@@ -52,9 +53,14 @@ pub fn do_propose_l2_fee_rate<T: Config>(
     )?;
     bank_check::ensure_can_be_bound::<T>(&institution_account)?;
 
-    // 2. 授权唯一真源是 `AdminAccounts[actor_cid_number].admins`。
+    // 2. 授权唯一真源是 CID、岗位码、有效任职钱包和业务动作权限。
     ensure!(
-        T::CidAccountQuery::is_institution_admin(actor_cid_number, &who),
+        T::CidAccountQuery::is_institution_role_authorized(
+            actor_cid_number,
+            actor_role_code,
+            &who,
+            entity_primitives::business_action::ACTION_OFFCHAIN_PROPOSE_FEE_RATE,
+        ),
         Error::<T>::UnauthorizedAdmin
     );
 

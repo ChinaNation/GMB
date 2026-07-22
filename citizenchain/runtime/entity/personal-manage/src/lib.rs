@@ -59,7 +59,7 @@ pub(crate) type BalanceOf<T> =
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {

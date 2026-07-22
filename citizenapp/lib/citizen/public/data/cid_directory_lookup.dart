@@ -6,14 +6,16 @@ class CidDirectoryInfo {
   const CidDirectoryInfo({
     this.provinceName,
     this.cityName,
-    this.legalRepresentativeName,
+    this.familyName,
+    this.givenName,
     this.legalRepresentativeCidNumber,
     this.legalRepresentativeAccount,
   });
 
   final String? provinceName;
   final String? cityName;
-  final String? legalRepresentativeName;
+  final String? familyName;
+  final String? givenName;
   final String? legalRepresentativeCidNumber;
   final String? legalRepresentativeAccount;
 }
@@ -43,7 +45,8 @@ class CidDirectoryLookup {
     return CidDirectoryInfo(
       provinceName: provinceFullNameByCode(entity.provinceCode),
       cityName: await _repo.cityName(entity.provinceCode, entity.cityCode),
-      legalRepresentativeName: entity.legalRepresentativeName,
+      familyName: entity.familyName,
+      givenName: entity.givenName,
       legalRepresentativeCidNumber: entity.legalRepresentativeCidNumber,
       legalRepresentativeAccount: entity.legalRepresentativeAccount,
     );

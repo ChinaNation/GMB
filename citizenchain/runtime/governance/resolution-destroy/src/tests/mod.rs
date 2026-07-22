@@ -118,6 +118,11 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             .map(|admins| admins.contains(who))
             .unwrap_or(false)
     }
+
+    fn institution_threshold(institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32> {
+        Self::institution_admins(institution_code, cid_number)?;
+        primitives::cid::code::fixed_governance_pass_threshold(&institution_code)
+    }
 }
 
 pub struct TestInstitutionRoleProvider;
@@ -251,7 +256,6 @@ impl votingengine::Config for Test {
     // 挂上本模块 Executor,让提案通过后自动触发销毁执行。
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
-    type InternalAdminsLenProvider = ();
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();
     type TrackHandlers = (InternalVote, ());
@@ -467,9 +471,26 @@ fn last_proposal_id() -> u64 {
 
 /// 测试辅助:走投票引擎公开 `internal_vote` extrinsic 投票(统一入口)。
 fn cast_vote(who: AccountId32, proposal_id: u64, approve: bool) -> DispatchResult {
+    let proposal = VotingEngine::proposals(proposal_id)
+        .ok_or(votingengine::Error::<Test>::ProposalNotFound)?;
+    let actor_cid_number = proposal
+        .actor_cid_number
+        .ok_or(votingengine::Error::<Test>::InvalidInstitution)?;
+    let institution_code = core::str::from_utf8(actor_cid_number.as_slice())
+        .ok()
+        .and_then(votingengine::types::institution_code_from_cid_number)
+        .ok_or(votingengine::Error::<Test>::InvalidInstitution)?;
+    let ticket_claim = internal_vote::InternalVoteTicketClaim::InstitutionRole(bounded_test_role(
+        institution_code,
+    ));
     let result = frame_support::storage::with_transaction(
         || -> frame_support::storage::TransactionOutcome<DispatchResult> {
-            match internal_vote::Pallet::<Test>::do_internal_vote(who, proposal_id, approve) {
+            match internal_vote::Pallet::<Test>::do_internal_vote(
+                who,
+                proposal_id,
+                ticket_claim,
+                approve,
+            ) {
                 Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
                 Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
             }

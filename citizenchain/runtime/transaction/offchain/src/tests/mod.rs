@@ -87,6 +87,13 @@ fn bank_cid() -> crate::InstitutionCidNumber {
     BANK_CID.to_vec().try_into().expect("测试 CID 长度合法")
 }
 
+fn bank_role_code() -> crate::ActorRoleCode {
+    b"CLEARING_OPERATOR"
+        .to_vec()
+        .try_into()
+        .expect("测试岗位码长度合法")
+}
+
 /// Mock `CidAccountQuery`:把 `BANK_MAIN_BYTES` 注册为 K1=S 的主账户，
 /// `BANK_FEE_BYTES` 注册为 K1=S 的费用账户；`bank_admin()` 是 `BANK_CID` 的管理员。
 /// `OTHER_BANK_BYTES` 故意不注册,用于负路径。
@@ -122,8 +129,15 @@ impl crate::bank_check::CidAccountQuery<AccountId32> for MockCid {
         *bytes == BANK_MAIN_BYTES || *bytes == BANK_FEE_BYTES
     }
 
-    fn is_institution_admin(cid_number: &[u8], who: &AccountId32) -> bool {
-        cid_number == BANK_CID && who == &bank_admin()
+    fn is_institution_role_authorized(
+        cid_number: &[u8],
+        role_code: &[u8],
+        who: &AccountId32,
+        _action_code: u32,
+    ) -> bool {
+        cid_number == BANK_CID
+            && role_code == bank_role_code().as_slice()
+            && who == &bank_admin()
     }
 
     /// 测试 mock:测试场景默认 BANK_MAIN 满足资格白名单,负路径单测自行覆盖。

@@ -191,11 +191,13 @@
   kind: chain_call
   qr_kind: sign_request
   pallet: ResolutionIssuance
-  call: propose_resolution_issuance
+  call: propose_issuance
   decoder: propose_issuance
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
+    - actor_cid_number
+    - proposer_role_code
     - reason
     - amount_yuan
     - allocation_count
@@ -254,7 +256,8 @@
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
-    - registrar_account
+    - actor_cid_number
+    - actor_role_code
     - cid_number
     - wallet_account
     - citizen_age_years
@@ -300,6 +303,7 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - actor_role_code
     - proposer_role_code
     - institution_account
     - operation_fee_payer
@@ -336,8 +340,6 @@
     - proposer_role_code
     - institution_account
     - beneficiary
-    - credential_issuer_cid_number
-    - credential_signer_pubkey
 
 - action_key: update_public_institution_info
   action_code: 0x1e06
@@ -354,9 +356,7 @@
     - cid_full_name
     - cid_short_name
     - actor_cid_number
-    - credential_signer_pubkey
-    - scope_province_name
-    - scope_city_name
+    - actor_role_code
 
 - action_key: add_public_institution_account
   action_code: 0x1e07
@@ -373,9 +373,7 @@
     - account_names
     - account_count
     - actor_cid_number
-    - credential_signer_pubkey
-    - scope_province_name
-    - scope_city_name
+    - actor_role_code
 
 - action_key: propose_public_institution_governance
   action_code: 0x1e08
@@ -409,6 +407,7 @@
     - cid_number
     - admins
     - actor_cid_number
+    - actor_role_code
     - fee_payer
 
 - action_key: propose_close_private_institution
@@ -426,8 +425,6 @@
     - proposer_role_code
     - institution_account
     - beneficiary
-    - credential_issuer_cid_number
-    - credential_signer_pubkey
 
 - action_key: update_private_institution_info
   action_code: 0x1f06
@@ -444,9 +441,7 @@
     - cid_full_name
     - cid_short_name
     - actor_cid_number
-    - credential_signer_pubkey
-    - scope_province_name
-    - scope_city_name
+    - actor_role_code
 
 - action_key: add_private_institution_account
   action_code: 0x1f07
@@ -463,9 +458,7 @@
     - account_names
     - account_count
     - actor_cid_number
-    - credential_signer_pubkey
-    - scope_province_name
-    - scope_city_name
+    - actor_role_code
 
 - action_key: propose_private_institution_governance
   action_code: 0x1f08
@@ -499,6 +492,7 @@
     - cid_number
     - admins
     - actor_cid_number
+    - actor_role_code
     - fee_payer
 
 - action_key: set_address_catalog_version
@@ -512,7 +506,8 @@
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
-    - registrar_account
+    - actor_cid_number
+    - actor_role_code
     - catalog_version
     - catalog_hash
 
@@ -527,7 +522,8 @@
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
-    - registrar_account
+    - actor_cid_number
+    - actor_role_code
     - province_code
     - city_code
     - town_code
@@ -545,7 +541,8 @@
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
-    - registrar_account
+    - actor_cid_number
+    - actor_role_code
     - province_code
     - city_code
     - town_code
@@ -562,7 +559,8 @@
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
-    - registrar_account
+    - actor_cid_number
+    - actor_role_code
     - province_code
     - city_code
     - town_code
@@ -581,7 +579,8 @@
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
-    - registrar_account
+    - actor_cid_number
+    - actor_role_code
     - province_code
     - city_code
     - town_code
@@ -657,7 +656,8 @@
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
-    - cid_number
+    - actor_cid_number
+    - actor_role_code
     - peer_id
     - rpc_domain
     - rpc_port
@@ -673,7 +673,8 @@
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
-    - cid_number
+    - actor_cid_number
+    - actor_role_code
     - new_domain
     - new_port
 
@@ -688,7 +689,8 @@
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
-    - cid_number
+    - actor_cid_number
+    - actor_role_code
 
 - action_key: internal_vote
   action_code: 0x1400
@@ -750,6 +752,7 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - actor_role_code
     - identity_level
     - cid_number
     - wallet_account
@@ -758,7 +761,8 @@
     - citizen_status
     - residence
     - birth_place
-    - citizen_full_name
+    - family_name
+    - given_name
     - citizen_sex
 
 - action_key: update_voting_identity
@@ -773,6 +777,7 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - actor_role_code
     - cid_number
     - wallet_account
     - citizen_age_years
@@ -792,6 +797,7 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - actor_role_code
     - identity_level
     - cid_number
     - wallet_account
@@ -800,7 +806,8 @@
     - citizen_status
     - residence
     - birth_place
-    - citizen_full_name
+    - family_name
+    - given_name
     - citizen_sex
 
 - action_key: revoke_identity
@@ -815,6 +822,7 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - actor_role_code
     - cid_number
 
 - action_key: occupy_cid
@@ -829,6 +837,7 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - actor_role_code
     - cid_number
     - province_code
     - city_code
@@ -845,6 +854,7 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - actor_role_code
     - cid_count
     - province_code
     - city_code
@@ -861,6 +871,7 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - actor_role_code
     - cid_number
 
 - action_key: bind_clearing_bank
@@ -928,6 +939,9 @@
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
+    - actor_cid_number
+    - actor_role_code
+    - institution_account
     - new_rate_bp
 
 - action_key: propose_asset_issue
@@ -942,8 +956,8 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - actor_role_code
     - execution_account
-    - asset_id
     - asset_class
     - asset_name
     - asset_symbol
@@ -963,6 +977,7 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - actor_role_code
     - asset_id
     - amount_raw
 
@@ -978,6 +993,7 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - actor_role_code
     - asset_id
     - amount_raw
 
@@ -993,6 +1009,7 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - actor_role_code
     - asset_id
 
 - action_key: propose_asset_transfer
@@ -1007,6 +1024,7 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - actor_role_code
     - asset_id
     - from
     - to
@@ -1024,6 +1042,7 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - actor_role_code
     - asset_id
     - who
     - reason_hash
@@ -1040,6 +1059,7 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - actor_role_code
     - asset_id
     - who
     - reason_hash
@@ -1056,6 +1076,7 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - actor_role_code
     - asset_id
     - who
     - amount_raw
@@ -1073,6 +1094,7 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - actor_role_code
     - asset_id
     - from
     - to
@@ -1091,6 +1113,7 @@
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
+    - actor_role_code
     - asset_id
     - reason_hash
 

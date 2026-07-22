@@ -100,7 +100,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
 
-    pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+    pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
     pub(crate) const FREEDOM_PRICE_FEN: u128 = 199_900;
     pub(crate) const DEMOCRACY_PRICE_FEN: u128 = 599_900;
     pub(crate) const SPARK_PRICE_FEN: u128 = 5_999_900;

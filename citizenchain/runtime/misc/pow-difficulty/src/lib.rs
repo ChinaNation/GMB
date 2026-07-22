@@ -158,7 +158,7 @@ pub mod pallet {
 
     use crate::weights::WeightInfo as PowDifficultyWeightInfo;
 
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
@@ -258,25 +258,6 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        fn on_runtime_upgrade() -> Weight {
-            let onchain = StorageVersion::get::<Pallet<T>>();
-            if onchain >= STORAGE_VERSION {
-                return T::DbWeight::get().reads(1);
-            }
-
-            // 从旧编译期参数模型迁移到链上版本化参数。保留真实当前难度，
-            // 但丢弃无法证明起始高度的旧时间窗口，下一合法块重新建立完整窗口。
-            let current = CurrentDifficulty::<T>::get().max(1);
-            ActiveParams::<T>::put(PowDifficultyParams::genesis_default());
-            CurrentDifficulty::<T>::put(current);
-            PendingParams::<T>::kill();
-            WindowStartBlock::<T>::kill();
-            WindowStartMs::<T>::kill();
-            LastAdjustment::<T>::kill();
-            STORAGE_VERSION.put::<Pallet<T>>();
-            T::DbWeight::get().reads_writes(2, 7)
-        }
-
         /// try-runtime 状态校验：确保 CurrentDifficulty 始终为正数。
         #[cfg(feature = "try-runtime")]
         fn try_state(_n: BlockNumberFor<T>) -> Result<(), sp_runtime::TryRuntimeError> {

@@ -9,7 +9,7 @@
 //! - L2 费率自治(call_index 40/41)
 //! - L3 支付意图签名 / nonce 防重 / 偿付自动保护 / 多签账户登记等配套机制
 //!
-//! 创世即终态布局,`STORAGE_VERSION` 恒为 v1,不做 on_runtime_upgrade migration。
+//! 创世即终态布局，`STORAGE_VERSION` 恒为 0，不做 `on_runtime_upgrade` migration。
 
 pub use pallet::*;
 
@@ -78,9 +78,11 @@ pub type InstitutionCidNumber =
     BoundedVec<u8, sp_core::ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>>;
 /// libp2p PeerId 字段上限。
 pub type ClearingPeerId = BoundedVec<u8, sp_core::ConstU32<64>>;
+/// 机构岗位码上限；岗位码与机构 CID、签名钱包共同构成清算业务权限。
+pub type ActorRoleCode = BoundedVec<u8, sp_core::ConstU32<64>>;
 
 /// 清算行清算 pallet 的存储版本。全新创世口径:创世即终态布局,恒为 v1。
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -331,7 +333,7 @@ pub mod pallet {
         EmptyBatch,
         /// 批次收款行与 `institution_account` 不一致。
         InstitutionMismatch,
-        /// 清算行管理员身份校验未通过。
+        /// 清算行 CID、岗位码、有效任职钱包或动作权限校验未通过。
         UnauthorizedAdmin,
         /// 签名已过期(`expires_at` 小于当前高度)。
         ExpiredIntent,
@@ -463,7 +465,7 @@ pub mod pallet {
         /// **收款方主导清算**模型。
         /// - `actor_cid_number` = 收款方清算行的唯一机构主键
         /// - `institution_account` = **收款方清算行主账户**
-        /// - 提交者 = `actor_cid_number` 的管理员(已解密私钥,自动签)
+        /// - 提交者 = `actor_cid_number + actor_role_code` 的有效岗位任职钱包
         /// - 批次内所有 item 的 `recipient_bank` 必须等于 `institution_account`
         ///   (`payer_bank` 可不同,即同一收款方清算行可一次代收来自不同付款方清算行的多笔)
         /// - 本调用属于链下清算费类别，不另收链上 gas；每个 item 的付款公民
@@ -474,6 +476,7 @@ pub mod pallet {
         /// payer_bank 主账户 Currency,与谁提交批次无关。
         ///
         /// [`actor_cid_number`] 批次归属的机构 CID
+        /// [`actor_role_code`] 提交清算批次的机构岗位码
         /// [`institution_account`] 批次归属的清算行主账户(= **收款方**清算行)
         /// [`batch_seq`] 清算行内单调递增的批次序号(冗余审计字段)
         /// [`batch`] `OffchainBatchItem` 列表(每条带 L3 sr25519 签名 / nonce / 费率)
@@ -483,6 +486,7 @@ pub mod pallet {
         pub fn submit_offchain_batch(
             origin: OriginFor<T>,
             actor_cid_number: crate::InstitutionCidNumber,
+            actor_role_code: crate::ActorRoleCode,
             institution_account: T::AccountId,
             batch_seq: u64,
             batch: BoundedVec<
@@ -499,12 +503,18 @@ pub mod pallet {
                 crate::bank_check::ACCOUNT_NAME_MAIN,
             )?;
             ensure!(
-                T::CidAccountQuery::is_institution_admin(actor_cid_number.as_slice(), &submitter,),
+                T::CidAccountQuery::is_institution_role_authorized(
+                    actor_cid_number.as_slice(),
+                    actor_role_code.as_slice(),
+                    &submitter,
+                    entity_primitives::business_action::ACTION_OFFCHAIN_SUBMIT_BATCH,
+                ),
                 Error::<T>::UnauthorizedAdmin
             );
             Self::verify_batch_signature(
                 &submitter,
                 actor_cid_number.as_slice(),
+                actor_role_code.as_slice(),
                 &institution_account,
                 batch_seq,
                 batch.as_slice(),
@@ -519,6 +529,7 @@ pub mod pallet {
                 match crate::settlement::execute_clearing_bank_batch::<T>(
                     &submitter,
                     actor_cid_number.as_slice(),
+                    actor_role_code.as_slice(),
                     &institution_account,
                     batch.as_slice(),
                 ) {
@@ -538,6 +549,7 @@ pub mod pallet {
         pub fn propose_l2_fee_rate(
             origin: OriginFor<T>,
             actor_cid_number: crate::InstitutionCidNumber,
+            actor_role_code: crate::ActorRoleCode,
             institution_account: T::AccountId,
             new_rate_bp: u32,
         ) -> DispatchResult {
@@ -545,6 +557,7 @@ pub mod pallet {
             crate::fee_config::do_propose_l2_fee_rate::<T>(
                 who,
                 actor_cid_number.as_slice(),
+                actor_role_code.as_slice(),
                 institution_account,
                 new_rate_bp,
             )
@@ -566,23 +579,31 @@ pub mod pallet {
         /// 3. peer_id 格式合法("12D3KooW" 开头 + 长度 ≥ 46 + 纯 ASCII alphanumeric)
         /// 4. rpc_domain 字符集合法(仅小写字母/数字/点/横杠)
         /// 5. actor_cid_number 反查得到已登记的主账户
-        /// 6. 调用方(origin)是该机构的激活管理员之一
+        /// 6. 调用方同时匹配该机构 CID、岗位码、有效任职和本动作权限
         /// 7. 资格白名单:机构必须 (K1=S ∧ JOINT_STOCK) ∨ (K1=F ∧ parent.K1=S.JOINT_STOCK)
         /// 8. actor_cid_number 未已注册节点(切换走 unregister + register)
         /// 9. peer_id 未被另一机构占用
         ///
-        /// 单签即可,不走内部投票(节点声明影响小,损失可逆)。
+        /// 当前 pallet 整体保持禁用；未来启用前必须由业务方案明确指定投票引擎。
         #[pallet::call_index(50)]
         #[pallet::weight(T::WeightInfo::register_clearing_bank())]
         pub fn register_clearing_bank(
             origin: OriginFor<T>,
             actor_cid_number: crate::InstitutionCidNumber,
+            actor_role_code: crate::ActorRoleCode,
             peer_id: crate::ClearingPeerId,
             rpc_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
             rpc_port: u16,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_register_clearing_bank(who, actor_cid_number, peer_id, rpc_domain, rpc_port)
+            Self::do_register_clearing_bank(
+                who,
+                actor_cid_number,
+                actor_role_code,
+                peer_id,
+                rpc_domain,
+                rpc_port,
+            )
         }
 
         /// 更新清算行节点的 RPC 端点(域名 / 端口),PeerId 不变。
@@ -590,7 +611,7 @@ pub mod pallet {
         /// 校验:
         /// 1. origin 是签名账户
         /// 2. actor_cid_number 已注册清算行节点
-        /// 3. 调用方是该机构的激活管理员
+        /// 3. 调用方同时匹配机构 CID、岗位码、有效任职和本动作权限
         /// 4. new_domain / new_port 字段合法
         ///
         /// 不重新校验资格白名单(注册时已校验,后续无需重复)。
@@ -599,11 +620,18 @@ pub mod pallet {
         pub fn update_clearing_bank_endpoint(
             origin: OriginFor<T>,
             actor_cid_number: crate::InstitutionCidNumber,
+            actor_role_code: crate::ActorRoleCode,
             new_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
             new_port: u16,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_update_clearing_bank_endpoint(who, actor_cid_number, new_domain, new_port)
+            Self::do_update_clearing_bank_endpoint(
+                who,
+                actor_cid_number,
+                actor_role_code,
+                new_domain,
+                new_port,
+            )
         }
 
         /// 注销清算行节点声明,机构退出清算网络。
@@ -611,7 +639,7 @@ pub mod pallet {
         /// 校验:
         /// 1. origin 是签名账户
         /// 2. actor_cid_number 已注册清算行节点
-        /// 3. 调用方是该机构的激活管理员
+        /// 3. 调用方同时匹配机构 CID、岗位码、有效任职和本动作权限
         ///
         /// 注销后该机构 cid_number 不再被 citizenapp 显示为可绑定清算行(CID 后端
         /// `app_search_clearing_banks` 过滤会去掉该 cid_number)。
@@ -621,9 +649,10 @@ pub mod pallet {
         pub fn unregister_clearing_bank(
             origin: OriginFor<T>,
             actor_cid_number: crate::InstitutionCidNumber,
+            actor_role_code: crate::ActorRoleCode,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_unregister_clearing_bank(who, actor_cid_number)
+            Self::do_unregister_clearing_bank(who, actor_cid_number, actor_role_code)
         }
     }
 
@@ -648,11 +677,12 @@ pub mod pallet {
         /// 验证清算行管理员对整批 item 的批次级签名。
         ///
         /// L3 签名仍是资金授权的核心,本签名用于约束“哪个清算行管理员提交了
-        /// 哪个 institution + batch_seq + batch_bytes”,与 `LastClearingBatchSeq`
+        /// 哪个 institution + role + batch_seq + batch_bytes”,与 `LastClearingBatchSeq`
         /// 一起防止节点重启后的批次级重放。
         fn verify_batch_signature(
             submitter: &T::AccountId,
             actor_cid_number: &[u8],
+            actor_role_code: &[u8],
             institution_account: &T::AccountId,
             batch_seq: u64,
             batch: &[crate::batch_item::OffchainBatchItem<T::AccountId, BlockNumberFor<T>>],
@@ -664,6 +694,7 @@ pub mod pallet {
             let batch_bytes = batch.encode();
             let message = crate::batch_item::batch_signing_hash(
                 actor_cid_number,
+                actor_role_code,
                 institution_account,
                 batch_seq,
                 &batch_bytes,
@@ -737,6 +768,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     pub(crate) fn do_register_clearing_bank(
         who: T::AccountId,
         actor_cid_number: crate::InstitutionCidNumber,
+        actor_role_code: crate::ActorRoleCode,
         peer_id: crate::ClearingPeerId,
         rpc_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
         rpc_port: u16,
@@ -764,9 +796,14 @@ impl<T: pallet::Config> pallet::Pallet<T> {
             pallet::Error::<T>::ClearingBankAccountNotFound
         );
 
-        // 6. 调用方是该 CID 的管理员
+        // 6. 调用方必须同时匹配该 CID、岗位码、签名钱包和业务动作权限。
         ensure!(
-            T::CidAccountQuery::is_institution_admin(actor_cid_number.as_slice(), &who),
+            T::CidAccountQuery::is_institution_role_authorized(
+                actor_cid_number.as_slice(),
+                actor_role_code.as_slice(),
+                &who,
+                entity_primitives::business_action::ACTION_OFFCHAIN_REGISTER_BANK,
+            ),
             pallet::Error::<T>::UnauthorizedAdmin
         );
 
@@ -814,6 +851,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     pub(crate) fn do_update_clearing_bank_endpoint(
         who: T::AccountId,
         actor_cid_number: crate::InstitutionCidNumber,
+        actor_role_code: crate::ActorRoleCode,
         new_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
         new_port: u16,
     ) -> DispatchResult {
@@ -830,7 +868,12 @@ impl<T: pallet::Config> pallet::Pallet<T> {
             .ok_or(pallet::Error::<T>::ClearingBankNodeNotFound)?;
 
         ensure!(
-            T::CidAccountQuery::is_institution_admin(actor_cid_number.as_slice(), &who),
+            T::CidAccountQuery::is_institution_role_authorized(
+                actor_cid_number.as_slice(),
+                actor_role_code.as_slice(),
+                &who,
+                entity_primitives::business_action::ACTION_OFFCHAIN_UPDATE_BANK_ENDPOINT,
+            ),
             pallet::Error::<T>::UnauthorizedAdmin
         );
 
@@ -851,6 +894,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     pub(crate) fn do_unregister_clearing_bank(
         who: T::AccountId,
         actor_cid_number: crate::InstitutionCidNumber,
+        actor_role_code: crate::ActorRoleCode,
     ) -> DispatchResult {
         use crate::bank_check::CidAccountQuery;
 
@@ -863,7 +907,12 @@ impl<T: pallet::Config> pallet::Pallet<T> {
             .ok_or(pallet::Error::<T>::ClearingBankNodeNotFound)?;
 
         ensure!(
-            T::CidAccountQuery::is_institution_admin(actor_cid_number.as_slice(), &who),
+            T::CidAccountQuery::is_institution_role_authorized(
+                actor_cid_number.as_slice(),
+                actor_role_code.as_slice(),
+                &who,
+                entity_primitives::business_action::ACTION_OFFCHAIN_UNREGISTER_BANK,
+            ),
             pallet::Error::<T>::UnauthorizedAdmin
         );
 

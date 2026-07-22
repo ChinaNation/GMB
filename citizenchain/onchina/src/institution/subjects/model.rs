@@ -98,15 +98,9 @@ pub struct Institution {
     /// 个体经营(SFGT)和无限合伙(SFGP)是独立非法人,不填写本字段。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_cid_number: Option<String>,
-    /// 法定代表人姓名。初始化目录机构允许为空;机构资料编辑保存时必须补齐。
+    /// 法定代表人公开身份；初始化目录机构没有真实任免资料时允许为空。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub legal_representative_name: Option<String>,
-    /// 法定代表人身份ID,必须指向正常状态公民的 cid_number。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub legal_representative_cid_number: Option<String>,
-    /// 法定代表人唯一钱包账户。由注册局公民记录派生，不接受表单另填。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub legal_representative_account: Option<String>,
+    pub legal_representative: Option<LegalRepresentative>,
     /// 法定代表人证件照服务端存储路径。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub legal_representative_photo_path: Option<String>,
@@ -122,6 +116,17 @@ pub struct Institution {
     /// 创建人 pubkey。
     pub created_by: String,
     pub created_at: DateTime<Utc>,
+}
+
+/// 法定代表人公开身份。人的姓名只保存分离的姓、名，不保存拼接姓名。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LegalRepresentative {
+    pub family_name: String,
+    pub given_name: String,
+    /// 必须指向正常状态公民的 cid_number。
+    pub cid_number: String,
+    /// 由注册局公民记录派生，不接受机构表单另填。
+    pub account: String,
 }
 
 impl HasProvinceCity for Institution {
@@ -279,9 +284,11 @@ pub struct UpdateInstitutionInput {
     /// 所属法人 cid_number(仅 F 可设置;S/G 传值会被拒)
     #[serde(default)]
     pub parent_cid_number: Option<String>,
-    /// 法定代表人三项资料在机构编辑保存时必填。
+    /// 法定代表人姓、名、CID 与证件照资料在机构编辑保存时必填。
     #[serde(default)]
-    pub legal_representative_name: Option<String>,
+    pub family_name: Option<String>,
+    #[serde(default)]
+    pub given_name: Option<String>,
     #[serde(default)]
     pub legal_representative_cid_number: Option<String>,
     #[serde(default)]

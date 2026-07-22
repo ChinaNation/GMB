@@ -216,10 +216,20 @@ CREATE TABLE square_follows (
   owner_account TEXT NOT NULL,
   followed_account TEXT NOT NULL,
   created_at INTEGER NOT NULL,
+  notify_enabled INTEGER NOT NULL DEFAULT 1,  -- 关注即默认开发帖通知；0=对该关注静音（仍在关注流，只是不进红点/推送）
   PRIMARY KEY(owner_account, followed_account)
 );
 CREATE INDEX idx_square_follows_followed
   ON square_follows(followed_account, created_at);
+
+-- 发帖通知「已读游标」：双游标分别驱动广场底部 tab 与关注子 tab 两个红点。
+-- 红点数 = 我 notify_enabled=1 的关注在对应游标之后发布的新帖数。
+-- 进广场清 last_seen_square_at、进关注子 tab 清 last_seen_following_at；只进广场不进关注→广场清、关注留。
+CREATE TABLE square_notify_reads (
+  owner_account TEXT NOT NULL PRIMARY KEY,
+  last_seen_square_at INTEGER NOT NULL DEFAULT 0,
+  last_seen_following_at INTEGER NOT NULL DEFAULT 0
+);
 
 CREATE TABLE square_user_signals (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

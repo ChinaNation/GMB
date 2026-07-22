@@ -17,8 +17,9 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 ### 2.1 runtime WASM
 
 - workflow：`.github/workflows/citizenchain-wasm.yml`
-- `push main`:只编译当前源码 WASM 并上传本次 CI artifact,不查询链上 `spec_version`,不读取 RPC/SSH Secret,不连接服务器
-- 手动 `Run workflow`:允许使用 `GMB_SSH_KEY` 查询链上 `spec_version` 并在 CI 工作区临时提升源码版本;不得恢复系统专属 SSH secret
+- 正式升级构建入口仅为公民控制台「CitizenChain WASM → 运行 WASM CI」：控制台读取已配置目标链，先要求 RPC genesis hash 等于本机明确保存的 `CHAIN_GENESIS_HASH`，再要求源码 `spec_version` 等于链上版本，然后在源码和现有测试断言中同步加一、提交并推送 runtime 范围。
+- workflow 按已提交源码原样编译并上传 artifact，不查询链上版本、不读取 RPC/SSH Secret、不连接服务器，也不得在 CI 工作区改写版本；控制台升级构建只额外校验“源码版本 = 目标链版本 + 1”并记录 genesis hash。
+- 从 GitHub 或其他位置手动执行 workflow 属于普通源码构建，不提高版本；正式创世前没有可读取的正式目标链时，控制台升级入口必须停止并保持项目版本 `0`。
 - 主要命中目录：
   - `citizenchain/runtime/**`
   - `.github/workflows/citizenchain-wasm.yml`

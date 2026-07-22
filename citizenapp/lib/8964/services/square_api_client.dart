@@ -961,6 +961,42 @@ class SquareApiClient
     );
   }
 
+  /// 开/关对某关注的发帖通知（通知归属挂在关注关系上；须已关注，未关注 Worker 回 409）。
+  Future<void> setNotify({
+    required SquareSession session,
+    required String followedAccount,
+    required bool enabled,
+  }) async {
+    await _putJson(
+      '/v1/square/follows/${Uri.encodeComponent(followedAccount)}/notify',
+      {'enabled': enabled},
+      session: session,
+    );
+  }
+
+  /// 拉取发帖通知双游标红点计数：广场底部 tab 与关注子 tab 各一。
+  Future<({int squareUnread, int followingUnread})> fetchNotifyUnread({
+    required SquareSession session,
+  }) async {
+    final data = await _getJson('/v1/square/notify/unread', session: session);
+    return (
+      squareUnread: (data['square_unread'] as num?)?.toInt() ?? 0,
+      followingUnread: (data['following_unread'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  /// 推进某作用域的已读游标（`square` 进广场清、`following` 进关注子 tab 清），红点归零。
+  Future<void> markNotifyRead({
+    required SquareSession session,
+    required String scope,
+  }) async {
+    await _postJson(
+      '/v1/square/notify/read',
+      {'scope': scope},
+      session: session,
+    );
+  }
+
   /// 拉取关注/粉丝列表。
   Future<({List<SquareFollowEntry> accounts, int? nextCursor})> fetchFollows({
     required String ownerAccount,

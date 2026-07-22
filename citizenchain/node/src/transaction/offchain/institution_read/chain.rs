@@ -77,13 +77,21 @@ struct OnChainInstitution {
     #[allow(dead_code)]
     town_code: BoundedVec<u8, ConstU32<128>>,
     #[allow(dead_code)]
-    legal_representative_name: Option<BoundedVec<u8, ConstU32<128>>>,
-    #[allow(dead_code)]
-    legal_representative_cid_number: Option<BoundedVec<u8, ConstU32<32>>>,
-    #[allow(dead_code)]
-    legal_representative_account: Option<AccountId32>,
+    legal_representative: Option<OnChainLegalRepresentative>,
     institution_code: InstitutionCode,
     created_at: u32,
+}
+
+#[derive(Decode)]
+struct OnChainLegalRepresentative {
+    #[allow(dead_code)]
+    family_name: BoundedVec<u8, ConstU32<128>>,
+    #[allow(dead_code)]
+    given_name: BoundedVec<u8, ConstU32<128>>,
+    #[allow(dead_code)]
+    cid_number: BoundedVec<u8, ConstU32<32>>,
+    #[allow(dead_code)]
+    account: AccountId32,
 }
 
 /// 链端 `InstitutionAccountInfo<AccountId, Balance, BlockNumber>` 镜像。

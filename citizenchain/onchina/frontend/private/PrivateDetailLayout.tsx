@@ -94,7 +94,8 @@ interface InfoFormValues {
   cid_full_name: string;
   /** 需挂靠的非法人所属法人 cid_number */
   parent_cid_number?: string;
-  legal_representative_name: string;
+  family_name: string;
+  given_name: string;
   legal_representative_cid_number: string;
   legal_representative_photo_path: string;
   legal_representative_photo_name: string;
@@ -211,8 +212,9 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   const needsCompletion =
     !inst.cid_full_name ||
     (requiresParent && !inst.parent_cid_number) ||
-    !inst.legal_representative_name ||
-    !inst.legal_representative_cid_number ||
+    !inst.legal_representative?.family_name ||
+    !inst.legal_representative?.given_name ||
+    !inst.legal_representative?.cid_number ||
     !inst.legal_representative_photo_path;
 
   // ── 需挂靠非法人所属法人搜索 ──
@@ -289,8 +291,9 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     form.setFieldsValue({
       cid_full_name: inst.cid_full_name ?? '',
       parent_cid_number: inst.parent_cid_number ?? undefined,
-      legal_representative_name: inst.legal_representative_name ?? '',
-      legal_representative_cid_number: inst.legal_representative_cid_number ?? '',
+      family_name: inst.legal_representative?.family_name ?? '',
+      given_name: inst.legal_representative?.given_name ?? '',
+      legal_representative_cid_number: inst.legal_representative?.cid_number ?? '',
       legal_representative_photo_path: inst.legal_representative_photo_path ?? '',
       legal_representative_photo_name: inst.legal_representative_photo_name ?? '',
       legal_representative_photo_mime: inst.legal_representative_photo_mime ?? '',
@@ -307,8 +310,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     inst.cid_number,
     inst.cid_full_name,
     inst.parent_cid_number,
-    inst.legal_representative_name,
-    inst.legal_representative_cid_number,
+    inst.legal_representative,
     inst.legal_representative_photo_path,
     governanceForm,
   ]);
@@ -319,8 +321,9 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     form.setFieldsValue({
       cid_full_name: inst.cid_full_name ?? '',
       parent_cid_number: inst.parent_cid_number ?? undefined,
-      legal_representative_name: inst.legal_representative_name ?? '',
-      legal_representative_cid_number: inst.legal_representative_cid_number ?? '',
+      family_name: inst.legal_representative?.family_name ?? '',
+      given_name: inst.legal_representative?.given_name ?? '',
+      legal_representative_cid_number: inst.legal_representative?.cid_number ?? '',
       legal_representative_photo_path: inst.legal_representative_photo_path ?? '',
       legal_representative_photo_name: inst.legal_representative_photo_name ?? '',
       legal_representative_photo_mime: inst.legal_representative_photo_mime ?? '',
@@ -336,8 +339,9 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     form.setFieldsValue({
       cid_full_name: inst.cid_full_name ?? '',
       parent_cid_number: inst.parent_cid_number ?? undefined,
-      legal_representative_name: inst.legal_representative_name ?? '',
-      legal_representative_cid_number: inst.legal_representative_cid_number ?? '',
+      family_name: inst.legal_representative?.family_name ?? '',
+      given_name: inst.legal_representative?.given_name ?? '',
+      legal_representative_cid_number: inst.legal_representative?.cid_number ?? '',
       legal_representative_photo_path: inst.legal_representative_photo_path ?? '',
       legal_representative_photo_name: inst.legal_representative_photo_name ?? '',
       legal_representative_photo_mime: inst.legal_representative_photo_mime ?? '',
@@ -459,14 +463,16 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       notice.error('请选择所属法人机构');
       return;
     }
-    const legalRepresentativeName = values.legal_representative_name?.trim();
+    const familyName = values.family_name?.trim();
+    const givenName = values.given_name?.trim();
     const legalRepresentativeCidNumber = values.legal_representative_cid_number?.trim();
     if (
-      !legalRepresentativeName ||
+      !familyName ||
+      !givenName ||
       !legalRepresentativeCidNumber ||
       !values.legal_representative_photo_path
     ) {
-      notice.error('请完整填写法定代表人姓名、身份ID和证件照');
+      notice.error('请完整填写法定代表人姓、名、身份ID和证件照');
       return;
     }
     // 机构全称变了必须查重通过才能保存。
@@ -479,7 +485,8 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       const input = {
         cid_full_name: cidFullName,
         parent_cid_number: requiresParent ? values.parent_cid_number : undefined,
-        legal_representative_name: legalRepresentativeName,
+        family_name: familyName,
+        given_name: givenName,
         legal_representative_cid_number: legalRepresentativeCidNumber,
         legal_representative_photo_path: values.legal_representative_photo_path,
         legal_representative_photo_name: values.legal_representative_photo_name,
@@ -613,8 +620,9 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                   initialValues={{
                     cid_full_name: inst.cid_full_name ?? '',
                     parent_cid_number: inst.parent_cid_number ?? undefined,
-                    legal_representative_name: inst.legal_representative_name ?? '',
-                    legal_representative_cid_number: inst.legal_representative_cid_number ?? '',
+                    family_name: inst.legal_representative?.family_name ?? '',
+                    given_name: inst.legal_representative?.given_name ?? '',
+                    legal_representative_cid_number: inst.legal_representative?.cid_number ?? '',
                     legal_representative_photo_path: inst.legal_representative_photo_path ?? '',
                     legal_representative_photo_name: inst.legal_representative_photo_name ?? '',
                     legal_representative_photo_mime: inst.legal_representative_photo_mime ?? '',
@@ -704,14 +712,24 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                     </Form.Item>
                   )}
                   <Form.Item
-                    label="法定代表人姓名"
-                    name="legal_representative_name"
+                    label="法定代表人姓"
+                    name="family_name"
                     rules={[
-                      { required: true, message: '请输入法定代表人姓名' },
+                      { required: true, message: '请输入法定代表人姓' },
                       { max: 30, message: '最多 30 个字' },
                     ]}
                   >
-                    <Input placeholder="请输入法定代表人姓名" maxLength={30} />
+                    <Input placeholder="请输入法定代表人姓" maxLength={30} />
+                  </Form.Item>
+                  <Form.Item
+                    label="法定代表人名"
+                    name="given_name"
+                    rules={[
+                      { required: true, message: '请输入法定代表人名' },
+                      { max: 30, message: '最多 30 个字' },
+                    ]}
+                  >
+                    <Input placeholder="请输入法定代表人名" maxLength={30} />
                   </Form.Item>
                   <Form.Item
                     label="法定代表人身份ID"
@@ -819,12 +837,14 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                     </Descriptions.Item>
                   )}
                   <Descriptions.Item label="法定代表人姓名">
-                    {inst.legal_representative_name || <span style={{ color: '#999' }}>(未填写)</span>}
+                    {inst.legal_representative
+                      ? `${inst.legal_representative.family_name}${inst.legal_representative.given_name}`
+                      : <span style={{ color: '#999' }}>(未填写)</span>}
                   </Descriptions.Item>
                   <Descriptions.Item label="法定代表人身份ID">
-                    {inst.legal_representative_cid_number ? (
+                    {inst.legal_representative?.cid_number ? (
                       <Typography.Text style={{ fontSize: 12, wordBreak: 'break-all' }}>
-                        {inst.legal_representative_cid_number}
+                        {inst.legal_representative.cid_number}
                       </Typography.Text>
                     ) : (
                       <span style={{ color: '#999' }}>(未填写)</span>
@@ -904,7 +924,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
         showIcon
         style={{ marginBottom: 16 }}
         message="管理员是人，岗位是职位；本页面只构造链上治理交易，不本地改管理员真源。"
-        description="管理员集合每行填“姓,名,账户”。创建岗位时岗位码由 runtime 生成；岗位权限与初始任职随创建原子提交。法定代表人任命/更换只填公民 CID；解除则清空链上三字段。"
+        description="管理员集合每行填“姓,名,账户”。创建岗位时岗位码由 runtime 生成；岗位权限与初始任职随创建原子提交。法定代表人任命/更换只填公民 CID；解除则清空链上完整法定代表人结构。"
       />
       <Form form={governanceForm} layout="vertical" disabled={!canWrite || governanceSubmitting}>
         <Form.Item
@@ -953,7 +973,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
           <Input placeholder="只填公民 CID；姓名和钱包账户由后端读取公民档案" />
         </Form.Item>
         <Form.Item name="clear_legal_representative" valuePropName="checked">
-          <Checkbox>解除法定代表人并清空链上三字段</Checkbox>
+          <Checkbox>解除法定代表人并清空链上完整法定代表人结构</Checkbox>
         </Form.Item>
         <Button type="primary" loading={governanceSubmitting} disabled={!canWrite} onClick={submitGovernance}>
           发起本机构治理

@@ -1,5 +1,9 @@
 # 任务索引
 
+## 当前执行
+
+- `memory/08-tasks/20260721-citizen-election-subject-snapshot-unify.md`
+
 ## open
 
 - `memory/08-tasks/open/20260507-173627-账户级内部投票管理员模型第0步设计-所有可操作账户使用内部投票-质押账户永不可操作-治理机构账户共.md`
@@ -117,7 +121,6 @@
 - `memory/08-tasks/open/20260703-onchina-nonregistry-admin-cards.md`
 - `memory/08-tasks/open/20260703-onchina-workspace-framework.md`
 - `memory/08-tasks/open/20260704-article44-institution-codes.md`
-- `memory/08-tasks/open/20260704-election-campaign-runtime-skeleton.md`
 - `memory/08-tasks/open/20260704-fix-citizenwallet-ci-analyze.md`
 - `memory/08-tasks/open/20260704-genesis-add-national-institutions.md`
 - `memory/08-tasks/open/20260704-genesis-cache-snapshot.md`

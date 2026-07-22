@@ -156,11 +156,15 @@ export function OwnInstitutionInfoPanel({ auth }: JudicialDisplayProps) {
           <Descriptions.Item label="主账户地址">{accountText(account?.account)}</Descriptions.Item>
           <Descriptions.Item label="主账户状态">{chainStatus}</Descriptions.Item>
           <Descriptions.Item label="账户数量">{detail?.accounts.length ?? '-'}</Descriptions.Item>
-          {inst?.legal_representative_name ? (
-            <Descriptions.Item label="法定代表人">{inst.legal_representative_name}</Descriptions.Item>
+          {inst?.legal_representative ? (
+            <Descriptions.Item label="法定代表人">
+              {`${inst.legal_representative.family_name}${inst.legal_representative.given_name}`}
+            </Descriptions.Item>
           ) : null}
-          {inst?.legal_representative_cid_number ? (
-            <Descriptions.Item label="法定代表人身份ID">{inst.legal_representative_cid_number}</Descriptions.Item>
+          {inst?.legal_representative?.cid_number ? (
+            <Descriptions.Item label="法定代表人身份ID">
+              {inst.legal_representative.cid_number}
+            </Descriptions.Item>
           ) : null}
           {detail?.created_by_family_name || detail?.created_by_given_name ? (
             <Descriptions.Item label="登记管理员">

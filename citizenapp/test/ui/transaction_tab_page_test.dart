@@ -216,4 +216,55 @@ void main() {
     expect(addressField.controller?.text, recipient);
     expect(find.textContaining('钱包可用余额：100'), findsOneWidget);
   });
+
+  testWidgets('交易页下拉刷新重载余额+本地记录且保留连接状态栏', (tester) async {
+    var walletLoads = 0;
+    var recordLoads = 0;
+    final payer = _wallet(
+      index: 1,
+      name: '付款钱包',
+      address: 'wallet_a',
+      pubkeyHex: _walletAPubkey,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: OnchainPaymentPanel(
+          title: '交易',
+          enableDelayedLocalRecordRefresh: false,
+          currentWalletLoader: () async {
+            walletLoads++;
+            return payer;
+          },
+          localRecordsLoader: (_, {limit = 100}) async {
+            recordLoads++;
+            return const [];
+          },
+        ),
+      ),
+    );
+    await _pumpUntilFound(tester, find.textContaining('钱包可用余额：100'));
+
+    // 连接状态栏仍在交易页顶部；下拉刷新组件就位。
+    expect(find.byType(ChainProgressBanner), findsOneWidget);
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+    final walletLoadsAfterInit = walletLoads;
+    final recordLoadsAfterInit = recordLoads;
+    expect(walletLoadsAfterInit, greaterThanOrEqualTo(1));
+    expect(recordLoadsAfterInit, greaterThanOrEqualTo(1));
+
+    // 下拉触发刷新：余额（currentWalletLoader）+ 本地记录（localRecordsLoader）重载。
+    await tester.fling(find.byType(ListView).first, const Offset(0, 300), 1000);
+    for (var i = 0;
+        i < 40 &&
+            (walletLoads <= walletLoadsAfterInit ||
+                recordLoads <= recordLoadsAfterInit);
+        i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(walletLoads, greaterThan(walletLoadsAfterInit));
+    expect(recordLoads, greaterThan(recordLoadsAfterInit));
+  });
 }

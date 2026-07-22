@@ -147,9 +147,10 @@ fn private_legal_representative_role_is_unique_and_allows_zero_or_one_assignment
                     assignments: vec![governance_assignment(admin(1))],
                 }],
                 legal_representative_change: Some(InstitutionLegalRepresentativeChange::Set {
-                    legal_representative_name: "张三".as_bytes().to_vec(),
-                    legal_representative_cid_number: b"CITIZEN-LR-PRIVATE".to_vec(),
-                    legal_representative_account: admin(1),
+                    family_name: "张".as_bytes().to_vec(),
+                    given_name: "三".as_bytes().to_vec(),
+                    cid_number: b"CITIZEN-LR-PRIVATE".to_vec(),
+                    account: admin(1),
                 }),
                 result_source_ref: b"proposal-53".to_vec(),
             }
@@ -179,9 +180,7 @@ fn private_legal_representative_role_is_unique_and_allows_zero_or_one_assignment
         ));
         let institution =
             pallet::Institutions::<Test>::get(&cid_number).expect("private institution remains");
-        assert!(institution.legal_representative_name.is_none());
-        assert!(institution.legal_representative_cid_number.is_none());
-        assert!(institution.legal_representative_account.is_none());
+        assert!(institution.legal_representative.is_none());
     });
 }
 
@@ -316,6 +315,7 @@ fn update_and_add_account_keep_cid_as_the_target_key() {
             account_name("更新后的机构全称".as_bytes()),
             account_name("更新简称".as_bytes()),
             b"GD001-FRG00-000000001-2026".to_vec(),
+            b"REGISTRY-ROLE".to_vec(),
         ));
         assert_eq!(
             pallet::Institutions::<Test>::get(&cid_number)
@@ -331,6 +331,7 @@ fn update_and_add_account_keep_cid_as_the_target_key() {
             cid_number.clone(),
             names,
             b"GD001-FRG00-000000001-2026".to_vec(),
+            b"REGISTRY-ROLE".to_vec(),
         ));
         let named_account = account_of(&cid_number, "专项账户".as_bytes());
         assert_eq!(

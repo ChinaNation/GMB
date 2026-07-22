@@ -20,6 +20,7 @@ class CitizenProfile {
     required this.followers,
     required this.posts,
     required this.isFollowing,
+    required this.isNotifying,
     required this.updatedAt,
   });
 
@@ -44,6 +45,9 @@ class CitizenProfile {
   final int followers;
   final int posts;
   final bool isFollowing;
+
+  /// 当前登录者是否对该账户开启发帖通知（= 已关注且未静音）。本人视角恒为 false。
+  final bool isNotifying;
   final int updatedAt;
 
   /// 本人钱包名是昵称真源，`display_name` 是公开镜像；均缺失时使用本地
@@ -73,6 +77,7 @@ class CitizenProfile {
       followers: _asInt(countsMap['followers']),
       posts: _asInt(countsMap['posts']),
       isFollowing: json['is_following'] == true,
+      isNotifying: json['is_notifying'] == true,
       updatedAt: _asInt(json['updated_at']),
     );
   }
@@ -94,6 +99,7 @@ class CitizenProfile {
           'posts': posts,
         },
         'is_following': isFollowing,
+        'is_notifying': isNotifying,
         'updated_at': updatedAt,
       };
 
@@ -103,6 +109,7 @@ class CitizenProfile {
     Object? avatarObjectKey = _sentinel,
     Object? bannerObjectKey = _sentinel,
     bool? isFollowing,
+    bool? isNotifying,
     int? followers,
     int? updatedAt,
   }) {
@@ -125,6 +132,7 @@ class CitizenProfile {
       followers: followers ?? this.followers,
       posts: posts,
       isFollowing: isFollowing ?? this.isFollowing,
+      isNotifying: isNotifying ?? this.isNotifying,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }

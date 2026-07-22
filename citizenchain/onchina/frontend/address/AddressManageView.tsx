@@ -113,6 +113,7 @@ export const AddressManageView: React.FC<Props> = ({ auth }) => {
     const values = await chainForm.validateFields();
     try {
       const output = await prepareAddressChainCall(auth, {
+        actor_role_code: values.actor_role_code,
         action: values.action as AddressChainAction,
         catalog_version: values.catalog_version,
         catalog_hash: values.catalog_hash,
@@ -194,6 +195,13 @@ export const AddressManageView: React.FC<Props> = ({ auth }) => {
           initialValues={{ action: 'set_address' }}
         >
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(150px, 1fr))', gap: 12 }}>
+            <Form.Item
+              name="actor_role_code"
+              label="任职岗位码"
+              rules={[{ required: true, message: '请输入当前任职岗位码' }]}
+            >
+              <Input placeholder="岗位码" maxLength={64} />
+            </Form.Item>
             <Form.Item name="action" label="动作" rules={[{ required: true }]}>
               <Select
                 options={[

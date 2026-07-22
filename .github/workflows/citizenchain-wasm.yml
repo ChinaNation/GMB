@@ -1,10 +1,23 @@
 name: CitizenChain WASM
 
 on:
-  # 中文注释:WASM CI 只由公民控制台「运行 WASM CI」手动触发(workflow_dispatch)。
-  # 不再随 runtime push 自动跑——runtime 推送时只允许本工作流,不连带触发钱包等其它 CI,
-  # 也避免「push 版(不做版本校验)+ dispatch 版」双跑并发互相取消的竞态。
+  # 中文注释：公民控制台按钮会先在源码中把 spec_version 提高 1，再带目标链版本触发；
+  # 其它手动触发不提高版本。无论入口为何，本 workflow 都只按提交源码原样编译。
   workflow_dispatch:
+    inputs:
+      runtime_upgrade:
+        description: '是否由公民控制台发起 Runtime 升级构建'
+        required: true
+        type: boolean
+        default: false
+      chain_spec_version:
+        description: '升级前目标链 spec_version（仅升级构建填写）'
+        required: false
+        type: string
+      chain_genesis_hash:
+        description: '升级目标链 genesis hash（仅升级构建填写）'
+        required: false
+        type: string
 
 concurrency:
   group: citizenchain-wasm-${{ github.ref }}
@@ -22,6 +35,58 @@ jobs:
       - name: 拉取代码
         uses: actions/checkout@v5
 
+      - name: 校验源码版本与构建用途
+        env:
+          RUNTIME_UPGRADE: ${{ inputs.runtime_upgrade }}
+          CHAIN_SPEC_VERSION: ${{ inputs.chain_spec_version }}
+          CHAIN_GENESIS_HASH: ${{ inputs.chain_genesis_hash }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          runtime_path = Path("citizenchain/runtime/src/lib.rs")
+          text = runtime_path.read_text(encoding="utf-8")
+          matches = re.findall(r"(?m)^\s*spec_version:\s*(\d+)\s*,\s*$", text)
+          if len(matches) != 1:
+              raise SystemExit("runtime/src/lib.rs 必须且只能包含一个 spec_version 字段")
+          source_version = int(matches[0])
+          is_upgrade = os.environ.get("RUNTIME_UPGRADE", "false").lower() == "true"
+          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
+
+          if is_upgrade:
+              chain_text = os.environ.get("CHAIN_SPEC_VERSION", "")
+              genesis_hash = os.environ.get("CHAIN_GENESIS_HASH", "").lower()
+              if not re.fullmatch(r"\d+", chain_text):
+                  raise SystemExit("Runtime 升级构建缺少有效的目标链 spec_version")
+              if not re.fullmatch(r"0x[0-9a-f]{64}", genesis_hash):
+                  raise SystemExit("Runtime 升级构建缺少有效的目标链 genesis hash")
+              chain_version = int(chain_text)
+              if source_version != chain_version + 1:
+                  raise SystemExit(
+                      f"源码 spec_version={source_version}，但目标链 spec_version={chain_version}；"
+                      "升级构建必须严格等于目标链版本 + 1"
+                  )
+              purpose = "公民控制台 Runtime 升级构建"
+              details = (
+                  f"- 目标链 genesis hash：`{genesis_hash}`\n"
+                  f"- 升级前 spec_version：`{chain_version}`\n"
+                  f"- 本次源码 spec_version：`{source_version}`\n"
+              )
+          else:
+              if os.environ.get("CHAIN_SPEC_VERSION") or os.environ.get("CHAIN_GENESIS_HASH"):
+                  raise SystemExit("普通源码构建不得携带升级目标链参数")
+              purpose = "普通源码构建（不自增版本）"
+              details = f"- 源码 spec_version：`{source_version}`\n"
+
+          with summary.open("a", encoding="utf-8") as out:
+              out.write("## CitizenChain WASM 构建来源\n\n")
+              out.write(f"- 构建用途：{purpose}\n")
+              out.write(details)
+              out.write(f"- 源码提交：`{os.environ['GITHUB_SHA']}`\n")
+          PY
+
       - name: 安装 Rust 工具链
         uses: dtolnay/rust-toolchain@1.94.0
         with:
@@ -29,104 +94,18 @@ jobs:
           components: rust-src
 
       - name: 安装系统依赖
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libclang-dev openssh-client
-
-      # 中文注释:以链上 WASM 版本为准做保护性检查——SSH 登入中枢省权威节点读 runtime spec_version,
-      # 源码版本不足时只在 CI 工作区把 spec_version 抬到「链上版本 +1」(不改源码、不提交)。
-      - name: 校验链上 WASM 版本并临时提升源码版本
-        env:
-          GMB_SSH_KEY: ${{ secrets.GMB_SSH_KEY }}
-          GMB_CHAIN_HOST: 64.181.239.233
-          GMB_CHAIN_USER: ubuntu
-          GMB_CHAIN_PORT: "22"
-        run: |
-          set -euo pipefail
-
-          request_payload='{"jsonrpc":"2.0","id":1,"method":"state_getRuntimeVersion","params":[]}'
-          if [ -n "${GMB_SSH_KEY:-}" ]; then
-            ssh_dir="$RUNNER_TEMP/citizenchain-ssh"
-            mkdir -p "$ssh_dir"
-            key_file="$ssh_dir/id_ed25519"
-            known_hosts_file="$ssh_dir/known_hosts"
-            printf '%s\n' "$GMB_SSH_KEY" | tr -d '\r' > "$key_file"
-            chmod 600 "$key_file"
-            ssh-keyscan -p "$GMB_CHAIN_PORT" -H "$GMB_CHAIN_HOST" >> "$known_hosts_file"
-            echo "通过 SSH 查询链上 spec_version: ${GMB_CHAIN_USER}@${GMB_CHAIN_HOST}:${GMB_CHAIN_PORT}"
-            response="$(ssh \
-              -i "$key_file" \
-              -p "$GMB_CHAIN_PORT" \
-              -o BatchMode=yes \
-              -o StrictHostKeyChecking=yes \
-              -o UserKnownHostsFile="$known_hosts_file" \
-              "$GMB_CHAIN_USER@$GMB_CHAIN_HOST" \
-              "curl -sS --fail --max-time 20 -H 'Content-Type: application/json' -d '$request_payload' http://127.0.0.1:9944")"
-          else
-            echo "::error::手动 WASM 发布缺少 GMB_SSH_KEY，无法查询链上 runtime 版本。"
-            exit 1
-          fi
-          printf '%s' "$response" > /tmp/citizenchain-runtime-version.json
-
-          chain_spec_version="$(python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          data = json.loads(Path("/tmp/citizenchain-runtime-version.json").read_text())
-          if "error" in data:
-              raise SystemExit(f"state_getRuntimeVersion 返回错误: {data['error']}")
-          result = data.get("result") or {}
-          version = result.get("specVersion", result.get("spec_version"))
-          if version is None:
-              raise SystemExit("state_getRuntimeVersion 响应缺少 specVersion")
-          print(int(version))
-          PY
-          )"
-          export CHAIN_SPEC_VERSION="$chain_spec_version"
-
-          python3 - <<'PY'
-          import os
-          import re
-          from pathlib import Path
-
-          chain_spec_version = int(os.environ["CHAIN_SPEC_VERSION"])
-          runtime_path = Path("citizenchain/runtime/src/lib.rs")
-          text = runtime_path.read_text()
-          match = re.search(r"(?m)^(\s*spec_version:\s*)(\d+)(\s*,)", text)
-          if not match:
-              raise SystemExit("未找到 runtime/src/lib.rs 中的 spec_version")
-
-          source_spec_version = int(match.group(2))
-          build_spec_version = source_spec_version
-          if source_spec_version <= chain_spec_version:
-              build_spec_version = chain_spec_version + 1
-              text = text[:match.start(2)] + str(build_spec_version) + text[match.end(2):]
-              runtime_path.write_text(text)
-
-          print(f"链上 spec_version: {chain_spec_version}")
-          print(f"源码 spec_version: {source_spec_version}")
-          print(f"本次编译 spec_version: {build_spec_version}")
-
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
-              env.write(f"CITIZENCHAIN_CHAIN_SPEC_VERSION={chain_spec_version}\n")
-              env.write(f"CITIZENCHAIN_SOURCE_SPEC_VERSION={source_spec_version}\n")
-              env.write(f"CITIZENCHAIN_BUILD_SPEC_VERSION={build_spec_version}\n")
-
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
-              summary.write("## CitizenChain WASM 版本检查\n\n")
-              summary.write(f"- 链上 spec_version: `{chain_spec_version}`\n")
-              summary.write(f"- 源码 spec_version: `{source_spec_version}`\n")
-              summary.write(f"- 本次编译 spec_version: `{build_spec_version}`\n")
-          PY
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libclang-dev
 
       # WASM 是后续本地启动和桌面打包的基础产物,手动运行上传本次 CI 产物。
       - name: 清理旧版 WASM artifact
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api repos/${{ github.repository }}/actions/artifacts \
+          gh api "repos/${{ github.repository }}/actions/artifacts" \
             --jq '.artifacts[] | select(.name == "citizenchain-wasm") | .id' \
           | while read -r id; do
               echo "删除旧 artifact: $id"
-              gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$id || true
+              gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id" || true
             done
 
       - name: 删除全部旧编译产物

@@ -15,12 +15,12 @@
 - ADR-039 目标授权主体是 `RoleSubject(cid_number, role_code)`。岗位、岗位权限、任职、`InstitutionRoleNonce` 和永久 `UsedRoleCodes` 归本模块；任职只能引用既有管理员。
 - CID 顶层能力封顶岗位可授予的 `RoleBusinessPermission`；权限至少区分 `Propose` 与 `Vote`。岗位权限不可修改，变更权限必须删除旧动态岗位并生成新岗位码。
 - 动态岗位码固定为 `R_<32 位大写十六进制>`，由 runtime 使用 `GMB_ROLE_V1` 域分隔符生成；调用方不得提供，删除后永不复用。动态岗位只允许依法改 `role_name`。
-- 全部机构永久存在唯一可空缺 `LR`，任职只能为 0 或 1；法定代表人三字段必须与 LR 任职原子一致。机构内岗位码和岗位名分别唯一，同名多人属于同一岗位的多个席位；管理员可兼任不同岗位。创世固定岗位码、名和权限不可修改或删除，但创世机构仍可增加普通动态岗位。
+- 全部机构永久存在唯一可空缺 `LR`，任职只能为 0 或 1；法定代表人原子结构必须与 LR 任职一致。机构内岗位码和岗位名分别唯一，同名多人属于同一岗位的多个席位；管理员可兼任不同岗位。创世固定岗位码、名和权限不可修改或删除，但创世机构仍可增加普通动态岗位。
 - `InstitutionGovernanceThresholds[cid_number]` 是私权机构治理阈值真源，与 admins 钱包数、岗位数分别独立。投票引擎只在建案时读取并冻结提案阈值快照。
 - ADR-039 目标本机构治理、管理员更换、岗位维护和法定代表人任免分别由业务模块登记岗位权限并静态指定投票引擎；不能因为 `actor_cid_number == cid_number` 或属于 admins 就自动取得发起权。
 - 注册局登记管理员同样按注册局 `RoleSubject` 授权；仅属于注册局 admins 必须拒绝。
 - 法定代表人只读取 `InstitutionInfo` 三字段，不在 admins 中保存副本。
-- 非营利法人“中国公民链技术发展基金会” `GZ018-SFGYR-201206100-2026` 是受保护私权创世机构：`LR`、`GENESIS_PRODUCT_MANAGER`、`GENESIS_PROGRAMMER` 三岗位的码、名和固定权限不可修改；三岗各固定一席，由同一程伟钱包分别任职，机构阈值保持 2；基金会仍可增加普通动态岗位。
+- 非营利法人“公民链技术发展基金会” `GZ018-SFGYR-201206100-2026` 是受保护私权创世机构：`LR`、`GENESIS_PRODUCT_MANAGER`、`GENESIS_PROGRAMMER` 三岗位的码、名和固定权限不可修改；三岗各固定一席，由同一程伟钱包分别任职，机构阈值保持 2；基金会仍可增加普通动态岗位。
 - 公民链基金会依法换人时必须在同一治理结果中更新对应岗位任职；新任人员尚不在 admins 时再原子更新人员名册，已在 admins 时不得为了换岗伪造无关名册变化。执行使用显式 storage transaction 保证全成或全退；法定代表人账户变化还必须与 `InstitutionInfo` 三字段同步。
 
 ## 链上入口
@@ -28,7 +28,7 @@
 - call 5 已永久关闭并从 metadata/QR/钱包解码移除。普通机构创建由第 6 步的新业务模块原子提交 admins、完整零余额协议账户、强制 LR、至少一个初始治理岗位及固定权限、初始任职和初始投票规则；不得恢复旧直接创建载荷。
 - `update_institution_info`（call 6）：注册局管理员更新目标机构名称。
 - `add_institution_account`（call 7）：注册局管理员给目标 CID 新增自定义账户。
-- `propose_institution_governance`（call 8）：本机构指定岗位任职人发起内部治理提案；SCALE 在 `actor_cid_number` 后固定编码独立 `proposer_role_code`。入口校验完整 `RoleSubject + pri-mgmt/3 + Propose`，再按同一 CID 拥有 `Vote` 权限的岗位构造内部 `VotePlan`。通过后可原子替换 `admins`、变更动态岗位/任职、整体设置或清空法定代表人三字段；岗位任职来源必须是 `InstitutionGovernance`，不得伪装成普选、互选或任命结果。
+- `propose_institution_governance`（call 8）：本机构指定岗位任职人发起内部治理提案；SCALE 在 `actor_cid_number` 后固定编码独立 `proposer_role_code`。入口校验完整 `RoleSubject + pri-mgmt/3 + Propose`，再按同一 CID 拥有 `Vote` 权限的岗位构造内部 `VotePlan`。通过后可原子替换 `admins`、变更动态岗位/任职、整体设置或清空法定代表人结构；岗位任职来源必须是 `InstitutionGovernance`，不得伪装成普选、互选或任命结果。
 - `register_institution_admins`（call 9）：注册局管理员按注册局授权直接完整替换目标机构 `admins`，用于注册局管理路径，不改岗位任职。
 - `propose_close_private_institution`（call 1）：严格使用 `actor_cid_number + proposer_role_code + institution_account + origin`；只有拥有 `pri-mgmt/2 + Propose` 的有效岗位任职人可发起，投票主体来自拥有对应 `Vote` 权限的岗位，并校验账户属于该 CID 且为自定义账户。
 - `apply_institution_governance_result` 是内部回调。call 0、call 4 与 call 5 永久留洞，不复用、

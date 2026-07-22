@@ -147,6 +147,8 @@ pub struct FeeRateProposalDetail {
 #[serde(rename_all = "camelCase")]
 pub struct ResolutionIssuanceDetail {
     pub proposal_id: u64,
+    pub actor_cid_number: String,
+    pub proposer_role_code: String,
     pub proposer_hex: String,
     pub reason: String,
     pub total_amount_fen: String,
@@ -860,7 +862,8 @@ fn decode_resolution_issuance_action(
     proposal_id: u64,
     data: &[u8],
 ) -> Option<ResolutionIssuanceDetail> {
-    // SCALE 布局：MODULE_TAG("res-iss":7) + proposer(32) + reason(Compact+bytes) + total_amount(u128:16)
+    // SCALE 布局：MODULE_TAG("res-iss":7) + actor_cid_number + proposer_role_code
+    //            + proposer(32) + reason(Compact+bytes) + total_amount(u128:16)
     //            + allocations(Compact<count> + N × (recipient(32) + amount(u128:16)))
     let tag = TAG_RESOLUTION_ISSUANCE;
     if data.len() < tag.len() || &data[..tag.len()] != tag {
@@ -869,7 +872,10 @@ fn decode_resolution_issuance_action(
     let mut offset = tag.len();
 
     // actor_cid_number: CidNumber
-    let _actor_cid_number = decode_cid_number(data, &mut offset)?;
+    let actor_cid_number = decode_cid_number(data, &mut offset)?;
+
+    // proposer_role_code: RoleCode
+    let proposer_role_code = decode_role_code(data, &mut offset)?;
 
     // proposer: [u8;32]
     if offset + 32 > data.len() {
@@ -913,8 +919,14 @@ fn decode_resolution_issuance_action(
         });
     }
 
+    if offset != data.len() {
+        return None;
+    }
+
     Some(ResolutionIssuanceDetail {
         proposal_id,
+        actor_cid_number,
+        proposer_role_code,
         proposer_hex,
         reason,
         total_amount_fen: total_amount.to_string(),
@@ -1042,6 +1054,19 @@ fn decode_cid_number(data: &[u8], offset: &mut usize) -> Option<String> {
     let cid = core::str::from_utf8(&data[*offset..end]).ok()?.to_string();
     *offset = end;
     Some(cid)
+}
+
+/// 从当前位置解码 SCALE `RoleCode`，并推进 offset。
+fn decode_role_code(data: &[u8], offset: &mut usize) -> Option<String> {
+    let (len, len_len) = read_compact_u32(data, *offset).ok()?;
+    *offset = offset.checked_add(len_len)?;
+    let end = offset.checked_add(len as usize)?;
+    if end > data.len() {
+        return None;
+    }
+    let role_code = core::str::from_utf8(&data[*offset..end]).ok()?.to_string();
+    *offset = end;
+    Some(role_code)
 }
 
 fn decode_subject_cid_numbers(data: &[u8], offset: usize) -> Option<(Vec<String>, usize)> {
@@ -1467,6 +1492,8 @@ mod format_summary_tests {
     fn format_issuance_summary_shows_count_and_amount() {
         let d = ResolutionIssuanceDetail {
             proposal_id: 3,
+            actor_cid_number: String::new(),
+            proposer_role_code: String::new(),
             proposer_hex: String::new(),
             reason: "春节福利".to_string(),
             total_amount_fen: "100000".to_string(), // 1000 元
@@ -1484,6 +1511,32 @@ mod format_summary_tests {
         assert_eq!(
             format_issuance_summary(&d),
             "决议发行 1000.00 元（2条分配）：春节福利"
+        );
+    }
+
+    #[test]
+    fn decode_resolution_issuance_action_requires_explicit_role_code() {
+        let mut data = Vec::from(TAG_RESOLUTION_ISSUANCE);
+        data.extend_from_slice(&compact_bytes_for_test(b"LN001-NRC0G-944805165-2026"));
+        data.extend_from_slice(&compact_bytes_for_test(b"COMMITTEE_MEMBER"));
+        data.extend_from_slice(&[7u8; 32]);
+        data.extend_from_slice(&compact_bytes_for_test("救灾发行".as_bytes()));
+        data.extend_from_slice(&100_000u128.to_le_bytes());
+        data.extend_from_slice(&encode_compact_u32(1));
+        data.extend_from_slice(&[8u8; 32]);
+        data.extend_from_slice(&100_000u128.to_le_bytes());
+
+        let detail = decode_resolution_issuance_action(11, &data)
+            .expect("explicit institution role layout should decode");
+        assert_eq!(detail.actor_cid_number, "LN001-NRC0G-944805165-2026");
+        assert_eq!(detail.proposer_role_code, "COMMITTEE_MEMBER");
+        assert_eq!(detail.reason, "救灾发行");
+        assert_eq!(detail.allocations.len(), 1);
+
+        data.push(0);
+        assert!(
+            decode_resolution_issuance_action(11, &data).is_none(),
+            "trailing legacy fields must be rejected"
         );
     }
 

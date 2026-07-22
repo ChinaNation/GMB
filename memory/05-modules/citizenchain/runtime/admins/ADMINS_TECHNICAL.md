@@ -21,7 +21,7 @@
 - 各类管理员的链上管理员集合分别保存在各自 pallet 的 `AdminAccounts`。
 - runtime 当前通过 `RuntimeAdminAccountQuery` 聚合读取各管理员模块；ADR-039 落地后它只能证明人员属于 admins，业务 pallet 还必须通过 entity 解析完整 `RoleSubject` 的权限和有效任职。
 - 机构治理阈值由 public/private entity 的 `InstitutionGovernanceThresholds[cid_number]` 独立保存，与 admins 人数、岗位数解耦；admins pallet 不接收阈值。个人多签继续使用 `internal-vote::ActivePersonalThresholds[personal_account]`。任何路径都不建立岗位阈值。
-- 创世机构本体、协议账户、机构阈值、默认法定代表人岗位、固定岗位、固定权限和创世任职由 `runtime/genesis/src/institution/seeder.rs` 唯一写入：既有公权机构写 `public-manage` / `public-admins`，中国公民链技术发展基金会写 `private-manage` / `private-admins`；不得跨命名空间或从岗位伪造钱包。
+- 创世机构本体、协议账户、机构阈值、默认法定代表人岗位、固定岗位、固定权限和创世任职由 `runtime/genesis/src/institution/seeder.rs` 唯一写入：既有公权机构写 `public-manage` / `public-admins`，公民链技术发展基金会写 `private-manage` / `private-admins`；不得跨命名空间或从岗位伪造钱包。
 - 旧创世机构/管理员运行期模块已删除，不允许恢复为运行期治理模块或影子真源。
 
 ## 管理员集合目标字段

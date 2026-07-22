@@ -128,7 +128,7 @@ fn is_cb_fee_account(address: &AccountId) -> bool {
         .any(|n| address == &AccountId::new(n.fee_account))
 }
 
-/// 检查是否为中国公民链技术发展基金会费用账户。
+/// 检查是否为公民链技术发展基金会费用账户。
 fn is_citizenchain_fee_account(address: &AccountId) -> bool {
     address
         == &AccountId::new(
@@ -159,9 +159,10 @@ impl Contains<RuntimeCall> for RuntimeCallFilter {
             // 任何外部 extrinsic 直接打到 pallet_assets 全部不入块,
             // 这是用户代币治理唯一入口铁律的链端兜底。
             RuntimeCall::Assets(_) => false,
-            // 未启用模块:onchain-issuance(ADR-011 用户代币,当前为空壳,任务卡 A/B 实装前)
-            // 与 offchain-transaction(链下清算行,业务未启用)一律 reject 外部 extrinsic,
-            // 保留 pallet 与 storage;日后启用只需删除对应分支并走一次 setCode,无需重新创世。
+            // 未启用模块:onchain-issuance(ADR-011 用户代币,当前为空壳)与
+            // offchain-transaction(链下清算行,业务未启用)一律 reject 外部 extrinsic。
+            // 后续启用必须另行确认完整业务规则、岗位权限和指定投票引擎，并通过
+            // runtime 升级删除对应分支；不能只解除过滤就宣称业务可用。
             RuntimeCall::OnchainIssuance(_) => false,
             RuntimeCall::OffchainTransaction(_) => false,
             _ => true,
@@ -953,44 +954,30 @@ fn cid_institution_code(cid_number: &[u8]) -> Option<primitives::cid::code::Inst
     primitives::cid::code::institution_code_from_cid_number(text.trim())
 }
 
-/// 联邦注册局省专员权限只认 entity 中的有效岗位任职。
-///
-/// `admins` 只回答“是否为联邦注册局管理员”，省级业务边界由
-/// `PROVINCE_COMMISSIONER_<省码>` 岗位确定，不再读取独立省级管理员表。
-fn is_active_frg_province_commissioner(
-    frg_cid_number: &[u8],
-    admin: &AccountId,
-    province_code: &[u8],
-) -> bool {
-    if province_code.len() != 2
-        || cid_institution_code(frg_cid_number) != Some(primitives::cid::code::FRG)
-    {
-        return false;
-    }
-    let mut code = [0_u8; 2];
-    code.copy_from_slice(province_code);
-    let role_code = primitives::governance_skeleton::province_commissioner_role_code(code);
-    <public_manage::Pallet<Runtime> as InstitutionRoleQuery<AccountId>>::is_active_assignment(
-        frg_cid_number,
-        admin,
-        role_code.as_slice(),
-    )
-}
-
 impl entity_primitives::RegistryAuthority<AccountId> for RuntimeRegistryAuthority {
     fn can_register_institution_origin(
         registrar: &AccountId,
         actor_cid_number: &[u8],
+        actor_role_code: &[u8],
         target_cid_number: &[u8],
         target_institution_code: primitives::cid::code::InstitutionCode,
     ) -> bool {
         let Some(actor_code) = cid_institution_code(actor_cid_number) else {
             return false;
         };
-        if !RuntimeInstitutionAdminQuery::is_institution_admin(
-            actor_code,
-            actor_cid_number,
+        let role_subject = entity_primitives::RoleSubject {
+            cid_number: actor_cid_number.to_vec(),
+            role_code: actor_role_code.to_vec(),
+        };
+        if !RuntimeInstitutionRoleAuthorization::is_authorized(
             registrar,
+            &role_subject,
+            &entity_primitives::BusinessActionId {
+                module_tag: entity_primitives::business_action::MODULE_INSTITUTION_REGISTRATION
+                    .to_vec(),
+                action_code: entity_primitives::business_action::ACTION_REGISTER_INSTITUTION,
+            },
+            RolePermissionOperation::Propose,
         ) {
             return false;
         }
@@ -1014,11 +1001,10 @@ impl entity_primitives::RegistryAuthority<AccountId> for RuntimeRegistryAuthorit
 
         const CITY_REGISTRY_CODE: primitives::cid::code::InstitutionCode = *b"CREG";
         if actor_code == admin_primitives::FRG {
-            return is_active_frg_province_commissioner(
-                actor_cid_number,
-                registrar,
-                &target_province_code,
+            let expected = primitives::governance_skeleton::province_commissioner_role_code(
+                target_province_code,
             );
+            return actor_role_code == expected.as_slice();
         }
 
         if actor_code == CITY_REGISTRY_CODE {
@@ -1042,24 +1028,42 @@ impl entity_primitives::RegistryAuthority<AccountId> for RuntimeRegistryAuthorit
 pub struct RuntimeAddressAuthority;
 
 impl address_registry::AddressUpdateAuthority<AccountId> for RuntimeAddressAuthority {
-    fn can_update_catalog(who: &AccountId, actor_cid_number: &[u8]) -> bool {
+    fn can_update_catalog(
+        who: &AccountId,
+        actor_cid_number: &[u8],
+        actor_role_code: &[u8],
+        action_code: u32,
+    ) -> bool {
         let Ok(actor_text) = core::str::from_utf8(actor_cid_number) else {
             return false;
         };
-        primitives::cid::code::institution_code_from_cid_number(actor_text)
-            == Some(primitives::cid::code::FRG)
-            && RuntimeInstitutionAdminQuery::is_institution_admin(
-                primitives::cid::code::FRG,
-                actor_cid_number,
-                who,
-            )
+        if primitives::cid::code::institution_code_from_cid_number(actor_text)
+            != Some(primitives::cid::code::FRG)
+        {
+            return false;
+        }
+        let role_subject = entity_primitives::RoleSubject {
+            cid_number: actor_cid_number.to_vec(),
+            role_code: actor_role_code.to_vec(),
+        };
+        RuntimeInstitutionRoleAuthorization::is_authorized(
+            who,
+            &role_subject,
+            &entity_primitives::BusinessActionId {
+                module_tag: entity_primitives::business_action::MODULE_ADDRESS_REGISTRY.to_vec(),
+                action_code,
+            },
+            RolePermissionOperation::Propose,
+        )
     }
 
     fn can_update_address(
         who: &AccountId,
         actor_cid_number: &[u8],
+        actor_role_code: &[u8],
         province_code: &[u8],
         city_code: &[u8],
+        action_code: u32,
     ) -> bool {
         if province_code.is_empty() || city_code.is_empty() {
             return false;
@@ -1071,12 +1075,31 @@ impl address_registry::AddressUpdateAuthority<AccountId> for RuntimeAddressAutho
         else {
             return false;
         };
-        if !RuntimeInstitutionAdminQuery::is_institution_admin(actor_code, actor_cid_number, who) {
+        let role_subject = entity_primitives::RoleSubject {
+            cid_number: actor_cid_number.to_vec(),
+            role_code: actor_role_code.to_vec(),
+        };
+        if !RuntimeInstitutionRoleAuthorization::is_authorized(
+            who,
+            &role_subject,
+            &entity_primitives::BusinessActionId {
+                module_tag: entity_primitives::business_action::MODULE_ADDRESS_REGISTRY.to_vec(),
+                action_code,
+            },
+            RolePermissionOperation::Propose,
+        ) {
             return false;
         }
 
         if actor_code == primitives::cid::code::FRG {
-            return is_active_frg_province_commissioner(actor_cid_number, who, province_code);
+            if province_code.len() != 2 {
+                return false;
+            }
+            let mut code = [0_u8; 2];
+            code.copy_from_slice(province_code);
+            return actor_role_code
+                == primitives::governance_skeleton::province_commissioner_role_code(code)
+                    .as_slice();
         }
 
         const CITY_REGISTRY_CODE: primitives::cid::code::InstitutionCode = *b"CREG";
@@ -1114,9 +1137,8 @@ fn sr25519_signature_from_bytes(signature: &[u8]) -> Option<sr25519::Signature> 
     Some(sr25519::Signature::from_raw(sig_raw))
 }
 
-// 机构自定义账户关闭已改为「机构在册管理员直接冷签 propose_close(不含凭证)」,由 pallet
-// 在 origin 处以 `is_institution_admin` 鉴权。原 `RuntimeCidInstitutionVerifier`
-// (注册局审批凭证验签)连同 OnChina 平台签名钥已整体删除。
+// 机构自定义账户关闭由签名钱包提交明确 CID 与岗位码；业务 pallet 通过统一岗位授权
+// 查询同时校验管理员名册、有效任职和 BusinessActionId，不保留独立审批凭证。
 
 /// 完整 CID 的顶层业务能力策略：固定创世机构走共享白名单，普通机构仅开放自身治理。
 pub struct RuntimeInstitutionCapabilityPolicy;
@@ -1255,9 +1277,11 @@ impl
     fn can_manage_voting_identity(
         registrar: &AccountId,
         actor_cid_number: &[u8],
+        actor_role_code: &[u8],
         residence_province_code: &[u8],
         residence_city_code: &[u8],
         _level: citizen_identity::CitizenIdentityLevel,
+        action_code: u32,
     ) -> bool {
         if residence_province_code.is_empty() || residence_city_code.is_empty() {
             return false;
@@ -1269,20 +1293,32 @@ impl
         else {
             return false;
         };
-        if !RuntimeInstitutionAdminQuery::is_institution_admin(
-            actor_code,
-            actor_cid_number,
+        let role_subject = entity_primitives::RoleSubject {
+            cid_number: actor_cid_number.to_vec(),
+            role_code: actor_role_code.to_vec(),
+        };
+        let business_action_id = entity_primitives::BusinessActionId {
+            module_tag: entity_primitives::business_action::MODULE_CITIZEN_IDENTITY.to_vec(),
+            action_code,
+        };
+        if !RuntimeInstitutionRoleAuthorization::is_authorized(
             registrar,
+            &role_subject,
+            &business_action_id,
+            RolePermissionOperation::Propose,
         ) {
             return false;
         }
 
         if actor_code == primitives::cid::code::FRG {
-            return is_active_frg_province_commissioner(
-                actor_cid_number,
-                registrar,
-                residence_province_code,
-            );
+            let mut province = [0_u8; 2];
+            if residence_province_code.len() != province.len() {
+                return false;
+            }
+            province.copy_from_slice(residence_province_code);
+            return actor_role_code
+                == primitives::governance_skeleton::province_commissioner_role_code(province)
+                    .as_slice();
         }
 
         const CITY_REGISTRY_CODE: primitives::cid::code::InstitutionCode = *b"CREG";
@@ -1339,7 +1375,7 @@ impl citizen_identity::Config for Runtime {
 
 /// 公权管理员公民 CID 与钱包绑定校验器。
 ///
-/// `citizen-identity` 同时维护 CID→钱包与钱包→身份两条索引；这里只接受两条索引
+/// `citizen-identity` 同时维护 CID→钱包与钱包→CID 两条索引；这里只接受两条索引
 /// 完全一致的正常绑定，不在管理员模块复制或修正公民身份数据。
 pub struct RuntimePublicAdminCitizenIdentityBinding;
 
@@ -1351,9 +1387,8 @@ impl admin_primitives::CitizenIdentityBindingQuery<AccountId>
         else {
             return false;
         };
-        citizen_identity::AccountByCid::<Runtime>::get(&cid).as_ref() == Some(account)
-            && citizen_identity::VotingIdentityByAccount::<Runtime>::get(account)
-                .is_some_and(|identity| identity.cid_number == cid)
+        citizen_identity::Pallet::<Runtime>::citizen_subject(account)
+            .is_some_and(|subject| subject.cid_number == cid)
     }
 }
 
@@ -1363,15 +1398,8 @@ impl square_post::SquarePostCitizenIdentityProvider<AccountId>
     for RuntimeSquarePostCitizenIdentity
 {
     fn cid_number(owner_account: &AccountId) -> Option<Vec<u8>> {
-        citizen_identity::VotingIdentityByAccount::<Runtime>::get(owner_account).and_then(
-            |identity| {
-                if identity.citizen_status == citizen_identity::CitizenStatus::Normal {
-                    Some(identity.cid_number.to_vec())
-                } else {
-                    None
-                }
-            },
-        )
+        citizen_identity::Pallet::<Runtime>::citizen_subject(owner_account)
+            .map(|subject| subject.cid_number.to_vec())
     }
 }
 
@@ -1866,14 +1894,24 @@ impl offchain::bank_check::CidAccountQuery<AccountId> for MultisigCidAccountQuer
         RuntimeInstitutionQuery::account_exists(addr)
     }
 
-    fn is_institution_admin(cid_number: &[u8], who: &AccountId) -> bool {
-        let Some(institution_code) = core::str::from_utf8(cid_number)
-            .ok()
-            .and_then(primitives::cid::code::institution_code_from_cid_number)
-        else {
-            return false;
-        };
-        RuntimeInstitutionAdminQuery::is_institution_admin(institution_code, cid_number, who)
+    fn is_institution_role_authorized(
+        cid_number: &[u8],
+        role_code: &[u8],
+        who: &AccountId,
+        action_code: u32,
+    ) -> bool {
+        RuntimeInstitutionRoleAuthorization::is_authorized(
+            who,
+            &entity_primitives::RoleSubject {
+                cid_number: cid_number.to_vec(),
+                role_code: role_code.to_vec(),
+            },
+            &entity_primitives::BusinessActionId {
+                module_tag: entity_primitives::business_action::MODULE_OFFCHAIN.to_vec(),
+                action_code,
+            },
+            RolePermissionOperation::Propose,
+        )
     }
 
     /// 清算行资格由身份注册局 eligible-search 负责筛选。
@@ -2260,7 +2298,6 @@ impl votingengine::Config for Runtime {
         square_post::InternalVoteExecutor<Runtime>,
     );
     type InternalAdminProvider = RuntimeInternalAdminProvider;
-    type InternalAdminsLenProvider = RuntimeInternalAdminsLenProvider;
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
     type TimeProvider = pallet_timestamp::Pallet<Runtime>;
     type WeightInfo = votingengine::weights::SubstrateWeight<Runtime>;
@@ -2396,24 +2433,6 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
                 .cid_number
                 .as_bytes(),
             primitives::governance_skeleton::ROLE_CODE_CONSTITUTION_GUARD,
-        )
-    }
-}
-
-pub struct RuntimeInternalAdminsLenProvider;
-
-impl votingengine::InternalAdminsLenProvider<AccountId> for RuntimeInternalAdminsLenProvider {
-    fn institution_admins_len(
-        institution_code: votingengine::types::InstitutionCode,
-        cid_number: &[u8],
-    ) -> Option<u32> {
-        RuntimeInstitutionAdminQuery::institution_admins_len(institution_code, cid_number)
-    }
-
-    fn personal_admins_len(personal_account: AccountId) -> Option<u32> {
-        RuntimeAdminAccountQuery::active_account_admins_len(
-            votingengine::types::PMUL,
-            personal_account,
         )
     }
 }
@@ -2570,20 +2589,21 @@ impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityRe
     #[cfg(feature = "runtime-benchmarks")]
     fn benchmark_seed_identity(who: &AccountId, scope: &citizen_identity::PopulationScope) {
         use citizen_identity::{
-            CandidateIdentity, CandidateIdentityByAccount, CitizenStatus, CountryVotingCount,
-            NextEligibilityRevision, VotingEligibilityVersion, VotingEligibilityVersionCount,
-            VotingEligibilityVersions, VotingIdentity, VotingIdentityByAccount,
+            CandidateIdentity, CandidateIdentityByCid, CidByWalletAccount, CidRecord,
+            CidRecordStatus, CitizenStatus, CountryVotingCount, NextEligibilityRevision,
+            VotingEligibilityVersion, VotingEligibilityVersionCount, VotingEligibilityVersions,
+            VotingIdentity, VotingIdentityByCid, WalletAccountByCid,
         };
 
         // citizen-identity 按 timestamp 校验护照窗口；benchmark externalities 的
         // 创世时间为 0，先推进到稳定的 2027 年时间点。
         pallet_timestamp::Pallet::<Runtime>::set_timestamp(1_800_000_000_000);
         let now = frame_system::Pallet::<Runtime>::block_number();
+        let cid_number: citizen_identity::CidNumberBound = b"benchmark-citizen"
+            .to_vec()
+            .try_into()
+            .expect("bounded CID");
         let identity = VotingIdentity {
-            cid_number: b"benchmark-citizen"
-                .to_vec()
-                .try_into()
-                .expect("bounded CID"),
             passport_valid_from: 19700101,
             passport_valid_until: 29991231,
             citizen_status: CitizenStatus::Normal,
@@ -2593,10 +2613,10 @@ impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityRe
             updated_at: now,
         };
         let revision = NextEligibilityRevision::<Runtime>::get().saturating_add(1);
-        let version_index = VotingEligibilityVersionCount::<Runtime>::get(who);
+        let version_index = VotingEligibilityVersionCount::<Runtime>::get(&cid_number);
         if version_index > 0 {
             VotingEligibilityVersions::<Runtime>::mutate(
-                who,
+                &cid_number,
                 version_index.saturating_sub(1),
                 |version| {
                     if let Some(version) = version {
@@ -2606,7 +2626,7 @@ impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityRe
             );
         }
         VotingEligibilityVersions::<Runtime>::insert(
-            who,
+            &cid_number,
             version_index,
             VotingEligibilityVersion {
                 identity: identity.clone(),
@@ -2614,16 +2634,40 @@ impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityRe
                 valid_until_revision: None,
             },
         );
-        VotingEligibilityVersionCount::<Runtime>::insert(who, version_index.saturating_add(1));
+        VotingEligibilityVersionCount::<Runtime>::insert(
+            &cid_number,
+            version_index.saturating_add(1),
+        );
         NextEligibilityRevision::<Runtime>::put(revision);
-        VotingIdentityByAccount::<Runtime>::insert(who, identity);
-        CandidateIdentityByAccount::<Runtime>::insert(
-            who,
+        VotingIdentityByCid::<Runtime>::insert(&cid_number, identity);
+        WalletAccountByCid::<Runtime>::insert(&cid_number, who);
+        CidByWalletAccount::<Runtime>::insert(who, &cid_number);
+        citizen_identity::CidRegistry::<Runtime>::insert(
+            &cid_number,
+            CidRecord {
+                registrar_cid_number: b"benchmark-registrar"
+                    .to_vec()
+                    .try_into()
+                    .expect("bounded registrar CID"),
+                commitment: [0u8; 32],
+                residence_province_code: Default::default(),
+                residence_city_code: Default::default(),
+                status: CidRecordStatus::Active,
+                registered_at: now,
+                revoked_at: None,
+            },
+        );
+        CandidateIdentityByCid::<Runtime>::insert(
+            &cid_number,
             CandidateIdentity {
                 birth_province_code: Default::default(),
                 birth_city_code: Default::default(),
                 birth_town_code: Default::default(),
-                citizen_full_name: b"benchmark".to_vec().try_into().expect("bounded name"),
+                family_name: b"benchmark"
+                    .to_vec()
+                    .try_into()
+                    .expect("bounded family name"),
+                given_name: b"citizen".to_vec().try_into().expect("bounded given name"),
                 citizen_sex: citizen_identity::CitizenSex::Male,
                 birth_date: 20000101,
                 updated_at: now,
@@ -2712,6 +2756,7 @@ impl onchain_issuance::pallet::Config for Runtime {
     /// 不走原生 extrinsic(已被 RuntimeCallFilter 拦截)。
     type Assets = Assets;
     type InstitutionQuery = RuntimeInstitutionQuery;
+    type InstitutionRoleAuthorization = RuntimeInstitutionRoleAuthorization;
     type MaxAssetNameLen = OnchainAssetMaxNameLen;
     type MaxAssetSymbolLen = OnchainAssetMaxSymbolLen;
     type MaxAssetDescriptionLen = OnchainAssetMaxDescriptionLen;

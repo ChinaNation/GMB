@@ -64,11 +64,12 @@ type Props = {
 
 type OnchainForm = {
   wallet_account: string;
+  actor_role_code: string;
   identity_level: CitizenOnchainIdentityLevel;
 };
 
-function makeCitizenName(row: Pick<CitizenRow, 'citizen_family_name' | 'citizen_given_name'>) {
-  return `${row.citizen_family_name ?? ''}${row.citizen_given_name ?? ''}`.trim() || '-';
+function makeCitizenName(row: Pick<CitizenRow, 'family_name' | 'given_name'>) {
+  return `${row.family_name ?? ''}${row.given_name ?? ''}`.trim() || '-';
 }
 
 function formatDate(value?: string) {
@@ -192,6 +193,7 @@ export function CitizenDetailPage({
         auth,
         current.cid_number,
         values.wallet_account.trim(),
+        values.actor_role_code.trim(),
         values.identity_level,
       );
       setPrepared(output);
@@ -215,12 +217,18 @@ export function CitizenDetailPage({
       notice.warning('请先选择身份类型');
       return;
     }
+    const actorRoleCode = values.actor_role_code?.trim();
+    if (!actorRoleCode) {
+      notice.warning('请先输入注册局岗位码');
+      return;
+    }
     setCompleteLoading(true);
     try {
       const output = await completeCitizenOnchainSignature(
         auth,
         current.cid_number,
         walletAccount,
+        actorRoleCode,
         identityLevel,
         raw,
       );
@@ -253,14 +261,23 @@ export function CitizenDetailPage({
   const revokeOnchain = async () => {
     const values = form.getFieldsValue();
     const walletAccount = values.wallet_account?.trim();
+    const actorRoleCode = values.actor_role_code?.trim();
     if (!walletAccount) {
       notice.warning('请先录入钱包账户');
+      return;
+    }
+    if (!actorRoleCode) {
+      notice.warning('请先填写当前任职岗位码');
       return;
     }
     setChainSubmitting(true);
     try {
       // 吊销同样只做一次 Passkey 和一次最终链签。
-      const prep = await prepareCitizenRevoke(auth, current.cid_number, walletAccount);
+      const prep = await prepareCitizenRevoke(
+        auth,
+        current.cid_number,
+        actorRoleCode,
+      );
       const signed = await signChain(prep.request_id, prep.sign_request);
       const submitted = await submitChainSign(
         auth,
@@ -373,6 +390,7 @@ export function CitizenDetailPage({
             layout="inline"
             initialValues={{
               wallet_account: current.wallet_address ?? '',
+              actor_role_code: '',
               identity_level: 'voting',
             }}
             style={{ rowGap: 12 }}
@@ -388,6 +406,17 @@ export function CitizenDetailPage({
                   { value: 'voting', label: '投票身份' },
                   { value: 'candidate', label: '参选身份' },
                 ]}
+              />
+            </Form.Item>
+            <Form.Item
+              name="actor_role_code"
+              rules={[{ required: canPushOnchain, message: '请输入注册局岗位码' }]}
+              style={{ minWidth: 260, marginBottom: 0 }}
+            >
+              <Input
+                placeholder="注册局岗位码"
+                disabled={!canPushOnchain || prepareLoading || completeLoading}
+                allowClear
               />
             </Form.Item>
             <Form.Item

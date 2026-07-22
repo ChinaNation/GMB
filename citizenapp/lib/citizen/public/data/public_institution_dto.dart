@@ -16,7 +16,8 @@ class PublicInstitutionDto {
     this.townCode = '',
     this.parentCidNumber,
     this.hasLegalPersonality,
-    this.legalRepresentativeName,
+    this.familyName,
+    this.givenName,
     this.legalRepresentativeCidNumber,
     this.legalRepresentativeAccount,
     this.customAccountNames = const [],
@@ -39,14 +40,17 @@ class PublicInstitutionDto {
   final String? parentCidNumber;
   final bool? hasLegalPersonality;
 
-  /// 法定代表人姓名；当前链快照没有该字段时为 null。
-  final String? legalRepresentativeName;
+  /// 法定代表人的姓、名；当前链快照没有任免信息时为 null。
+  final String? familyName;
+  final String? givenName;
   final String? legalRepresentativeCidNumber;
   final String? legalRepresentativeAccount;
   final int accountCount;
   final List<String> customAccountNames;
 
   static PublicInstitutionDto fromJson(Map<String, dynamic> json) {
+    final legalRepresentative =
+        json['legal_representative'] as Map<String, dynamic>?;
     return PublicInstitutionDto(
       cidNumber: json['cid_number'] as String,
       cidFullName: json['cid_full_name'] as String?,
@@ -60,11 +64,12 @@ class PublicInstitutionDto {
       institutionCode: json['institution_code'] as String? ?? '',
       parentCidNumber: json['parent_cid_number'] as String?,
       hasLegalPersonality: json['has_legal_personality'] as bool?,
-      legalRepresentativeName: json['legal_representative_name'] as String?,
+      familyName: legalRepresentative?['family_name'] as String?,
+      givenName: legalRepresentative?['given_name'] as String?,
       legalRepresentativeCidNumber:
-          json['legal_representative_cid_number'] as String?,
+          legalRepresentative?['cid_number'] as String?,
       legalRepresentativeAccount:
-          json['legal_representative_account'] as String?,
+          legalRepresentative?['account'] as String?,
       accountCount: (json['account_count'] as num?)?.toInt() ?? 0,
       customAccountNames:
           (json['custom_account_names'] as List<dynamic>? ?? const [])
@@ -89,7 +94,8 @@ class PublicInstitutionDto {
       ..institutionCode = institutionCode
       ..parentCidNumber = parentCidNumber
       ..hasLegalPersonality = hasLegalPersonality
-      ..legalRepresentativeName = legalRepresentativeName
+      ..familyName = familyName
+      ..givenName = givenName
       ..legalRepresentativeCidNumber = legalRepresentativeCidNumber
       ..legalRepresentativeAccount = legalRepresentativeAccount
       ..accountCount = accountCount

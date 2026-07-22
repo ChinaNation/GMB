@@ -88,7 +88,7 @@ pub mod pallet {
 
     /// pallet 自身 StorageVersion。
     /// 全新创世口径:创世即终态布局,storage 版本恒为 v1,不承载历史迁移。
-    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {

@@ -184,11 +184,13 @@ impl crate::traits::RegistryAuthority<AccountId32> for TestRegistryAuthority {
     fn can_register_institution_origin(
         registrar: &AccountId32,
         actor_cid_number: &[u8],
+        actor_role_code: &[u8],
         target_cid_number: &[u8],
         _target_institution_code: InstitutionCode,
     ) -> bool {
         registrar == &creator()
             && actor_cid_number == b"REGISTRY-CID"
+            && actor_role_code == b"REGISTRY-ROLE"
             && !target_cid_number.is_empty()
     }
 }
@@ -224,16 +226,6 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
     }
 }
 
-pub struct TestInternalAdminsLenProvider;
-impl votingengine::InternalAdminsLenProvider<AccountId32> for TestInternalAdminsLenProvider {
-    fn institution_admins_len(institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32> {
-        PublicAdmins::institution_admins_len(institution_code, cid_number)
-    }
-    fn personal_admins_len(_personal_account: AccountId32) -> Option<u32> {
-        None
-    }
-}
-
 pub struct TestTimeProvider;
 impl frame_support::traits::UnixTime for TestTimeProvider {
     fn now() -> core::time::Duration {
@@ -261,7 +253,6 @@ impl votingengine::Config for Test {
     // 接 public-manage 的 InternalVoteExecutor (lib.rs 末尾导出)
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
-    type InternalAdminsLenProvider = TestInternalAdminsLenProvider;
     // 公权机构多签上限=1989(同真实 runtime);全链创世测试含联邦注册局 215 管理员,须覆盖。
     // 个人多签上限是另一项 MaxPersonalAccountAdmins=64,不受此影响。
     type MaxAdminsPerInstitution = ConstU32<1989>;
@@ -505,7 +496,17 @@ pub fn last_proposal_id() -> u64 {
 pub fn cast_yes_votes(admins: &[AccountId32], n: usize, pid: u64) -> sp_runtime::DispatchResult {
     use votingengine::STATUS_VOTING;
     for who in admins.iter().take(n) {
-        <internal_vote::Pallet<Test>>::do_internal_vote(who.clone(), pid, true)?;
+        <internal_vote::Pallet<Test>>::do_internal_vote(
+            who.clone(),
+            pid,
+            internal_vote::InternalVoteTicketClaim::InstitutionRole(
+                b"TEST_CLOSE_ROLE"
+                    .to_vec()
+                    .try_into()
+                    .expect("test close role fits"),
+            ),
+            true,
+        )?;
         if VotingEngine::proposals(pid)
             .map(|p| p.status != STATUS_VOTING)
             .unwrap_or(true)
@@ -522,8 +523,7 @@ pub fn cast_yes_votes(admins: &[AccountId32], n: usize, pid: u64) -> sp_runtime:
     Ok(())
 }
 
-/// 测试用:以指定 actor CID + 管理员发起自定义账户关闭提案(propose_close 已不含凭证,
-/// 由 pallet 在 origin 处以 `is_institution_admin` 鉴权)。
+/// 测试用:以指定 actor CID + 岗位码 + 任职管理员钱包发起自定义账户关闭提案。
 pub fn propose_named_account_close(
     origin: RuntimeOrigin,
     actor_cid_number: pallet::CidNumberOf<Test>,

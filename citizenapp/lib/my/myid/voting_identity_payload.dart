@@ -37,7 +37,8 @@ class VotingIdentityConsentPayload {
     this.birthProvinceCode,
     this.birthCityCode,
     this.birthTownCode,
-    this.citizenFullName,
+    this.familyName,
+    this.givenName,
     this.citizenSexLabel,
     this.birthDate,
   });
@@ -66,7 +67,8 @@ class VotingIdentityConsentPayload {
   final String? birthProvinceCode;
   final String? birthCityCode;
   final String? birthTownCode;
-  final String? citizenFullName;
+  final String? familyName;
+  final String? givenName;
   final String? citizenSexLabel;
 
   /// 出生日期(YYYYMMDD 整数),仅竞选身份携带。
@@ -101,7 +103,7 @@ class VotingIdentityConsentPayload {
             '$birthProvinceCode / $birthCityCode / $birthTownCode',
           ),
           ('出生日期', birthDate == null ? '' : _formatDateInt(birthDate!)),
-          ('公民姓名', citizenFullName ?? ''),
+          ('公民姓名', '${familyName ?? ''}${givenName ?? ''}'),
           ('公民性别', citizenSexLabel ?? ''),
         ],
       ];
@@ -129,10 +131,14 @@ class VotingIdentityConsentPayload {
         _readUtf8Vec(bytes, offset, maxLen: 16);
     if (birthTownCode == null) return null;
     offset = afterBirthTown;
-    final (citizenFullName, afterFullName) =
+    final (familyName, afterFamilyName) =
         _readUtf8Vec(bytes, offset, maxLen: 128);
-    if (citizenFullName == null) return null;
-    offset = afterFullName;
+    if (familyName == null) return null;
+    offset = afterFamilyName;
+    final (givenName, afterGivenName) =
+        _readUtf8Vec(bytes, offset, maxLen: 128);
+    if (givenName == null) return null;
+    offset = afterGivenName;
     if (offset >= bytes.length) return null;
     final sex = bytes[offset];
     offset += 1;
@@ -165,7 +171,8 @@ class VotingIdentityConsentPayload {
       birthProvinceCode: birthProvinceCode,
       birthCityCode: birthCityCode,
       birthTownCode: birthTownCode,
-      citizenFullName: citizenFullName,
+      familyName: familyName,
+      givenName: givenName,
       citizenSexLabel: sexLabel,
       birthDate: birthDate,
     );

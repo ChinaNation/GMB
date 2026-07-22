@@ -43,6 +43,7 @@ class UserProfilePage extends StatefulWidget {
     this.cache,
     this.sessionProvider,
     this.onOpenDirectChat,
+    this.viewerAccountLoader,
   });
 
   /// 主页身份 = 默认热钱包地址。
@@ -50,6 +51,10 @@ class UserProfilePage extends StatefulWidget {
 
   /// 本人主页（可编辑资料）还是他人主页。
   final bool isSelf;
+
+  /// 当前浏览者账户加载器（测试可注入）；默认取本机默认热钱包地址。
+  /// 用于判定「他人视角看的其实是自己账户」时把动作按钮置灰。
+  final Future<String?> Function()? viewerAccountLoader;
 
   /// 首屏可选注入的资料（缓存或上层已拉到的）。
   final CitizenProfile? initialProfile;
@@ -85,6 +90,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
   /// 留空 → 由后端 display_name 兜底。
   String _walletName = '';
 
+  /// 「他人视角」下看的是不是自己账户；true → 关注/私信/通知/订阅按钮置灰不可点。
+  bool _isOwnAccount = false;
+
   @override
   void initState() {
     super.initState();
@@ -94,6 +102,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     _directChat = widget.onOpenDirectChat ?? openDirectChat;
     _profile = widget.initialProfile;
     _loadWalletName();
+    _resolveOwnAccount();
     _load();
   }
 
@@ -108,6 +117,23 @@ class _UserProfilePageState extends State<UserProfilePage> {
       }
     } on Exception {
       // 钱包名兜底失败不影响主页展示，静默忽略。
+    }
+  }
+
+  /// 判定「他人视角看的其实是自己账户」：浏览者默认钱包地址 == 本页 ownerAccount。
+  /// 本人视角（isSelf）按钮本就隐藏，无需判定；判定失败按非本人处理，不阻塞主页。
+  Future<void> _resolveOwnAccount() async {
+    if (widget.isSelf) return;
+    final loadViewer = widget.viewerAccountLoader ??
+        () async => (await WalletManager().getDefaultWallet())?.address;
+    try {
+      final viewer = (await loadViewer())?.trim() ?? '';
+      if (!mounted) return;
+      if (viewer.isNotEmpty && viewer == widget.ownerAccount) {
+        setState(() => _isOwnAccount = true);
+      }
+    } on Exception {
+      // 判定失败按非本人处理。
     }
   }
 
@@ -159,6 +185,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
     setState(() {
       _profile = current.copyWith(
         isFollowing: !wasFollowing,
+        // 关注即默认开通知，取关即无通知；与 Worker（关注写入默认 notify_enabled=1、
+        // 取关删记录）保持一致，铃铛态随关注态即时联动。
+        isNotifying: !wasFollowing,
         followers: nextFollowers,
       );
     });
@@ -174,6 +203,38 @@ class _UserProfilePageState extends State<UserProfilePage> {
           followedAccount: widget.ownerAccount,
         );
       }
+    } on Exception {
+      if (!mounted) return;
+      setState(() => _profile = current); // 失败回滚。
+      _snack('操作失败，请重试');
+    }
+  }
+
+  /// 开/关该用户的发帖通知（红点+声音）。通知归属挂在关注关系上：未关注先提示去关注；
+  /// 关注后铃铛按用户静音/取消静音，静音不影响其内容在关注流展示。
+  Future<void> _toggleNotify() async {
+    final current = _profile;
+    if (current == null) return;
+    if (!current.isFollowing) {
+      _snack('请先关注 TA 再开启通知');
+      return;
+    }
+    final session = _session ?? await _ensureSession();
+    if (session == null) {
+      _snack('请先在「我的 → 我的钱包」创建热钱包');
+      return;
+    }
+    final wasNotifying = current.isNotifying;
+    // 乐观更新。
+    setState(() {
+      _profile = current.copyWith(isNotifying: !wasNotifying);
+    });
+    try {
+      await _api.setNotify(
+        session: session,
+        followedAccount: widget.ownerAccount,
+        enabled: !wasNotifying,
+      );
     } on Exception {
       if (!mounted) return;
       setState(() => _profile = current); // 失败回滚。
@@ -444,6 +505,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 elevation: 0,
                 leading: IconButton(
                   icon: const Icon(Icons.arrow_back),
+                  // 背景图明暗不定：加半透明深色圆形底衬保证白色返回箭头始终可读。
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black.withValues(alpha: 0.32),
+                    foregroundColor: Colors.white,
+                  ),
                   onPressed: () => Navigator.of(context).maybePop(),
                 ),
                 actions: [
@@ -472,7 +538,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       actions: ProfileActionIcons(
                         isSelf: widget.isSelf,
                         isFollowing: _profile?.isFollowing ?? false,
-                        onSubscribe: () => _stub('订阅动态'),
+                        isNotifying: _profile?.isNotifying ?? false,
+                        // 他人视角看的是自己账户时置灰（不能关注/私信/通知自己）。
+                        enabled: !_isOwnAccount,
+                        onNotify: _toggleNotify,
                         onChat: _openChatWithUser,
                         onToggleFollow: _toggleFollow,
                       ),
@@ -481,6 +550,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                           ? null
                           : CreatorSubscribeButton(
                               creatorAccount: widget.ownerAccount,
+                              enabled: !_isOwnAccount,
                             ),
                     ),
                   ),

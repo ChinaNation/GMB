@@ -27,6 +27,14 @@ Future<void> openDirectChat(
     );
     return;
   }
+  // 不能和自己发起聊天：所有私信入口的最后一道防线（广场主页/通讯录都走此收口）。
+  if (peerAddress.trim() == sender) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('不能和自己发起聊天')),
+    );
+    return;
+  }
   final runtime = ChatRuntime();
   final conversationId = ChatRuntime.directConversationId(sender, peerAddress);
   if (!context.mounted) return;

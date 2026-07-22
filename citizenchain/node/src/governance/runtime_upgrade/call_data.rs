@@ -5,6 +5,7 @@ const RUNTIME_UPGRADE_PALLET_INDEX: u8 = 12;
 const PROPOSE_RUNTIME_UPGRADE_CALL_INDEX: u8 = 0;
 const DEVELOPER_DIRECT_UPGRADE_CALL_INDEX: u8 = 2;
 const MAX_WASM_BYTES: usize = 5 * 1_048_576;
+const COMMITTEE_ROLE_CODE: &[u8] = b"COMMITTEE_MEMBER";
 
 /// 读取并校验 Runtime WASM 文件。
 pub(crate) fn read_wasm(wasm_path: &str) -> Result<(Vec<u8>, f64), String> {
@@ -21,8 +22,8 @@ pub(crate) fn read_wasm(wasm_path: &str) -> Result<(Vec<u8>, f64), String> {
 
 /// 构建开发期直接升级 call_data。
 ///
-/// 开发直升也是国家储委会机构操作，载荷必须显式携带 `actor_cid_number`；
-/// 管理员只负责签名，链上费用由该 CID 的费用账户承担。
+/// 开发直升也是国家储委会机构操作，载荷必须显式携带
+/// `actor_cid_number + COMMITTEE_MEMBER`；任职管理员钱包负责签名。
 pub(crate) fn developer_direct_upgrade(
     actor_cid_number: &str,
     wasm_code: &[u8],
@@ -40,6 +41,8 @@ pub(crate) fn developer_direct_upgrade(
     call_data.push(DEVELOPER_DIRECT_UPGRADE_CALL_INDEX);
     call_data.extend_from_slice(&encode_compact_u32(actor_cid_number.len() as u32));
     call_data.extend_from_slice(actor_cid_number.as_bytes());
+    call_data.extend_from_slice(&encode_compact_u32(COMMITTEE_ROLE_CODE.len() as u32));
+    call_data.extend_from_slice(COMMITTEE_ROLE_CODE);
     call_data.extend_from_slice(&wasm_len_compact);
     call_data.extend_from_slice(wasm_code);
     call_data.extend_from_slice(&pow_params.encode());
@@ -83,6 +86,8 @@ pub(crate) fn propose_runtime_upgrade(
     call_data.push(PROPOSE_RUNTIME_UPGRADE_CALL_INDEX);
     call_data.extend_from_slice(&encode_compact_u32(actor_cid_number.len() as u32));
     call_data.extend_from_slice(actor_cid_number.as_bytes());
+    call_data.extend_from_slice(&encode_compact_u32(COMMITTEE_ROLE_CODE.len() as u32));
+    call_data.extend_from_slice(COMMITTEE_ROLE_CODE);
     call_data.extend_from_slice(&reason_compact);
     call_data.extend_from_slice(reason_bytes);
     call_data.extend_from_slice(&wasm_compact);

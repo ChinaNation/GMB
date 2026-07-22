@@ -45,7 +45,7 @@ citizenchain/onchina/frontend/
 - 公权机构、公安局和私权机构列表必须展示连续序号。
 - 机构详情页身份字段统一显示为 `身份ID`。
 - 公民列表和详情页身份字段统一显示为 `身份CID`;护照号字段显示为 `护照号`。
-- 公民列表姓名由 `citizen_family_name + citizen_given_name` 组合展示;新增弹窗必须拆成“姓”和“名”两个必填输入框。
+- 公民列表姓名由 `family_name + given_name` 组合展示；新增弹窗必须拆成“姓”和“名”两个必填输入框。所有人员模型统一使用这两个字段，不保存拼接姓名或带主体前缀的别名。
 - 机构详情页不得展示 `SubjectProperty 类型` 或机构链上状态。
 - 账户链上状态只允许在机构账户列表展示。
 - 扫码确认页左侧分类名必须是中文，右侧内容必须是用户能核对的值。
@@ -60,7 +60,7 @@ citizenchain/onchina/frontend/
 - 旧机构直接创建流程已关闭：共享创建弹窗当前只保留资料录入布局，按钮固定禁用并说明必须原子提交 LR、初始治理岗位、不可变权限、初始任职和投票规则；前端不得调用旧 API、生成旧签名二维码或提交 `0x1e05/0x1f05`。
 - 第 6 步接入新机构创建业务时，表单必须在同一业务载荷中收集机构资料、至少两个 admins、至少一个初始治理岗位及其权限和任职、初始投票规则；动态岗位码仍由 runtime 生成，前端不得手填或预生成。
 - 所有 `PASSKEY_COLD_SIGN` 正式业务提交必须同时携带冷签 grant 和 Passkey assertion。创建机构、创建/删除账户、公民身份上链等可直接使用 `admins/securityApi.ts::createColdSignSubmitHeaders`；已由组件先取得 grant 的资料上传/删除、机构详情更新等必须使用 `securityGrantSubmitHeaders`。业务模块禁止手写 `x-cid-security-grant` 或只提交 grant 不提交 Passkey assertion。
-- 机构资料上传、资料删除、机构详情更新的扫码授权 payload 必须与后端 `grant_payload` 逐字段同形；资料上传使用 `target/file_name/doc_type/file_size`，资料删除使用 `target/doc_id/file_name`，机构详情更新使用 `target/cid_number/cid_full_name/parent_cid_number/legal_representative_name/legal_representative_cid_number/legal_representative_photo_path`。
+- 机构资料上传、资料删除、机构详情更新的扫码授权 payload 必须与后端 `grant_payload` 逐字段同形；资料上传使用 `target/file_name/doc_type/file_size`，资料删除使用 `target/doc_id/file_name`，机构详情更新使用 `target/cid_number/cid_full_name/parent_cid_number/family_name/given_name/legal_representative_cid_number/legal_representative_photo_path`。
 - 每个机构必须存在唯一 `LR / 法定代表人` 岗位且允许空缺；前端不得要求用户手填 LR 岗位码，也不得把“管理员”当成统一岗位名。
 - 股份公司等私权机构只有所有最小必填字段及至少两个不重复管理员钱包均合法时才启用生成按钮。协会 `SFAS` 必须显式选择盈利或非盈利，前端不得固定为非盈利。
 - 公民详情页负责链上身份上链:未满 16 周岁、无选举资格或档案非正常时禁用推送;推送时必须先选择“投票身份”或“参选身份”,再录入钱包账户、生成目标公民钱包签名二维码,验签后展示注册局管理员链上交易二维码。
@@ -113,7 +113,7 @@ passkey 客户端在调用 `navigator.credentials.create/get` 前必须检查 `w
 - 动态岗位创建不得显示或提交岗位码；runtime 按 `GMB_ROLE_V1` 和链上 nonce 生成。发起既有业务提案时，页面必须独立显示并提交当前任职的 `proposer_role_code`，不得把“治理中创建/改名的目标岗位”和“本次提案发起岗位”混成一个字段。
 
 2026-07-19 第 5B：公权/私权机构治理页面新增必填“提案发起岗位码”，平台调价页面同样独立提交 `proposer_role_code`（公民链基金会可预填 `GENESIS_PRODUCT_MANAGER`）。业务模块固定选择内部投票引擎，前端不得提供引擎选择器；管理员登录成功本身不代表拥有任何业务发起权限。
-- 法定代表人任命/更换只填公民 CID；后端从公民档案读取姓名和钱包账户。解除法定代表人使用“解除法定代表人并清空链上三字段”复选框，前端禁止和公民 CID 同时提交。
+- 法定代表人任命/更换只填公民 CID；后端从公民档案读取 `family_name/given_name/account`。解除法定代表人使用“解除法定代表人并清空链上公开结构”复选框，前端禁止和公民 CID 同时提交。
 
 CitizenApp 不承担管理员登录 QR 职责。前端文案不得引导用户使用 CitizenApp 处理管理员登录签名请求。
 

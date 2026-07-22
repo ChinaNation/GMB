@@ -92,6 +92,11 @@ mod benchmarks {
         AllowedRecipients::<T>::put(recipients);
         VotingProposalCount::<T>::put(0u32);
         let actor_cid_number = nrc_cid_number();
+        let proposer_role_code: votingengine::types::RoleCode =
+            primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+                .to_vec()
+                .try_into()
+                .expect("committee role code must fit");
         let scope = votingengine::PopulationScope::Country;
         let citizen: T::AccountId = frame_benchmarking::account("resolution-citizen", 0, 0);
         <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(
@@ -106,6 +111,7 @@ mod benchmarks {
             Pallet::<T>::propose_issuance(
                 origin,
                 actor_cid_number,
+                proposer_role_code,
                 reason,
                 total_amount,
                 allocations,

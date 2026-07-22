@@ -7,7 +7,11 @@ import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 enum SquareFeedKind {
   recommended('推荐', 'recommended'),
   following('关注', 'following'),
-  campaign('竞选', 'campaign');
+  campaign('竞选', 'campaign'),
+  // 内容型分类：服务端仍取推荐流（workerValue=recommended），前端按内容形态/媒体类型过滤。
+  article('文章', 'recommended'),
+  photos('照片', 'recommended'),
+  videos('视频', 'recommended');
 
   const SquareFeedKind(this.label, this.workerValue);
 

@@ -508,8 +508,9 @@ class PublicInstitutionEntity {
   String? parentCidNumber;
   bool? hasLegalPersonality;
 
-  /// 法定代表人姓名(公开目录字段,来自 CID subjects.legal_representative_name);无则 null → 留空。
-  String? legalRepresentativeName;
+  /// 法定代表人的姓、名；无任免资料时均为空。
+  String? familyName;
+  String? givenName;
 
   /// 法定代表人唯一公民 CID；与姓名、账户同时存在或同时为空。
   String? legalRepresentativeCidNumber;

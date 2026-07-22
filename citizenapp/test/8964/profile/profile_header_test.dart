@@ -267,16 +267,63 @@ void main() {
     expect(chatTitle, '轻节点');
   });
 
-  testWidgets('other profile subscribe icon shows a stub for now',
-      (tester) async {
-    await tester
-        .pumpWidget(_wrap(isSelf: false, api: FakeProfileApi(sampleProfile())));
+  testWidgets('从他人视角看的是自己账户时私信按钮置灰不触发', (tester) async {
+    String? peer;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UserProfilePage(
+          ownerAccount: kOwner,
+          isSelf: false,
+          api: FakeProfileApi(sampleProfile(displayName: '轻节点')),
+          cache: FakeProfileCache(),
+          sessionProvider: FakeSessionProvider(fakeSession()),
+          // 浏览者账户 == 主页账户 = 他人视角看自己 → 按钮应置灰。
+          viewerAccountLoader: () async => kOwner,
+          onOpenDirectChat: (context, {required peerAddress, required title}) {
+            peer = peerAddress;
+            return Future<void>.value();
+          },
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
 
+    // 按钮仍显示（保留他人视角版式）但禁用：点了不触发私信。
+    expect(find.byIcon(Icons.chat_bubble_outline), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.chat_bubble_outline));
+    await tester.pumpAndSettle();
+    expect(peer, isNull);
+  });
+
+  testWidgets('other profile bell prompts to follow first when not following',
+      (tester) async {
+    final api = FakeProfileApi(sampleProfile(following: false));
+    await tester.pumpWidget(_wrap(isSelf: false, api: api));
+    await tester.pumpAndSettle();
+
+    // 未关注时铃铛为空心；点它提示先关注（通知归属挂在关注关系上），不发通知请求。
     await tester.tap(find.byIcon(Icons.notifications_outlined));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('订阅动态'), findsOneWidget);
+    expect(find.textContaining('请先关注'), findsOneWidget);
+    expect(api.notifyCalls, 0);
+  });
+
+  testWidgets('other profile bell mutes notify when following and notifying',
+      (tester) async {
+    final api = FakeProfileApi(sampleProfile(following: true, notifying: true));
+    await tester.pumpWidget(_wrap(isSelf: false, api: api));
+    await tester.pumpAndSettle();
+
+    // 已关注且开通知：铃铛为实心 active；点它静音（enabled=false）。
+    expect(find.byIcon(Icons.notifications_active), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.notifications_active));
+    await tester.pumpAndSettle();
+
+    expect(api.notifyCalls, 1);
+    expect(api.lastNotifyEnabled, isFalse);
+    // 乐观更新后铃铛转为空心。
+    expect(find.byIcon(Icons.notifications_outlined), findsOneWidget);
   });
 
   testWidgets('kebab QR code opens the user QR page', (tester) async {

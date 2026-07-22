@@ -19,6 +19,7 @@ import { nowMs } from '../shared/time';
 import { sanitizeOwnerAccount } from '../storage/r2_keys';
 import { loadMediaAssets } from '../uploads/service';
 import { requireActiveMembership } from '../membership/service';
+import { readProfileDoc } from '../profiles/repository';
 import { assertMembershipLevel, membershipPlan } from '../membership/plans';
 import { assertIdentityCanPublishCategory, assertManifestQuota } from '../uploads/quota';
 import { fetchChainIdentityState } from '../chain/identity';
@@ -205,6 +206,22 @@ export async function confirmPublishedPost(
       createdAt
     )
     .run();
+
+  // 发帖通知扇出：读作者展示名一次并入队；队列消费者分页跨调用推给全部未静音粉丝。
+  // 入队失败只 log、绝不回滚已发布的帖子（链上已 finalized、D1 已镜像）。
+  try {
+    const authorDoc = await readProfileDoc(env, upload.owner_account);
+    await env.SQUARE_NOTIFY_QUEUE?.send({
+      author_account: upload.owner_account,
+      author_name: authorDoc?.display_name ?? '',
+      content_format: contentFormat,
+      post_id: upload.post_id,
+    });
+  } catch (error) {
+    console.error(
+      `[square-notify] enqueue failed for ${upload.post_id}: ${error instanceof Error ? error.message : error}`,
+    );
+  }
 
   return {
     post_id: upload.post_id,

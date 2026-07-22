@@ -7,8 +7,8 @@ use twox_hash::XxHash64;
 use crate::auth::login::parse_sr25519_pubkey_bytes;
 use crate::*;
 
-// 机构操作(登记/创建/治理/自定义账户关闭)统一为「发起管理员钱包直接冷签一笔普通 extrinsic」,
-// 由链端在 origin 处以 `is_institution_admin` 鉴权,OnChina 后端不再签发任何链上凭证。
+// 机构操作(登记/创建/治理/自定义账户关闭)统一为「任职管理员钱包直接冷签一笔普通 extrinsic」,
+// 由链端在 origin 处按机构 CID、岗位码和管理员钱包三者鉴权，OnChina 后端不签发链上凭证。
 // 原注销凭证签发链路(`build_institution_deregistration_credential` 等)连同平台签名钥
 // `ONCHINA_SIGNING_SEED_HEX` / `ONCHAIN_CREDENTIAL_SIGNER_PUBKEY` 已整体删除。
 static CHAIN_GENESIS_HASH: OnceLock<[u8; 32]> = OnceLock::new();
@@ -890,10 +890,16 @@ pub(crate) struct OnChainInstitution {
     pub(crate) cid_full_name: Vec<u8>,
     pub(crate) cid_short_name: Vec<u8>,
     pub(crate) town_code: Vec<u8>,
-    pub(crate) legal_representative_name: Option<Vec<u8>>,
-    pub(crate) legal_representative_cid_number: Option<Vec<u8>>,
-    pub(crate) legal_representative_account: Option<[u8; 32]>,
+    pub(crate) legal_representative: Option<OnChainLegalRepresentative>,
     pub(crate) institution_code: [u8; 4],
+}
+
+/// 链上法定代表人公开信息；人的姓名字段全仓只使用姓、名。
+pub(crate) struct OnChainLegalRepresentative {
+    pub(crate) family_name: Vec<u8>,
+    pub(crate) given_name: Vec<u8>,
+    pub(crate) cid_number: Vec<u8>,
+    pub(crate) account: [u8; 32],
 }
 
 /// 链上公权机构账户投影。真源为 `PublicManage::InstitutionAccounts`。
@@ -909,11 +915,29 @@ struct RawInstitutionInfo {
     cid_full_name: Vec<u8>,
     cid_short_name: Vec<u8>,
     town_code: Vec<u8>,
-    legal_representative_name: Option<Vec<u8>>,
-    legal_representative_cid_number: Option<Vec<u8>>,
-    legal_representative_account: Option<[u8; 32]>,
+    legal_representative: Option<RawLegalRepresentative>,
     institution_code: [u8; 4],
     _created_at: u32,
+}
+
+/// 与 entity-primitives `LegalRepresentative` 字段序一致的最小解码结构。
+#[derive(codec::Decode)]
+struct RawLegalRepresentative {
+    family_name: Vec<u8>,
+    given_name: Vec<u8>,
+    cid_number: Vec<u8>,
+    account: [u8; 32],
+}
+
+fn project_legal_representative(
+    value: Option<RawLegalRepresentative>,
+) -> Option<OnChainLegalRepresentative> {
+    value.map(|value| OnChainLegalRepresentative {
+        family_name: value.family_name,
+        given_name: value.given_name,
+        cid_number: value.cid_number,
+        account: value.account,
+    })
 }
 
 /// 与 public-manage `InstitutionAccountInfo<AccountId, Balance, BlockNumber>` 字段序一致。
@@ -957,9 +981,7 @@ pub(crate) async fn institution_lookup(
             cid_full_name: info.cid_full_name,
             cid_short_name: info.cid_short_name,
             town_code: info.town_code,
-            legal_representative_name: info.legal_representative_name,
-            legal_representative_cid_number: info.legal_representative_cid_number,
-            legal_representative_account: info.legal_representative_account,
+            legal_representative: project_legal_representative(info.legal_representative),
             institution_code: info.institution_code,
         }));
     }
@@ -1002,9 +1024,7 @@ pub(crate) async fn for_each_chain_institution(
                 cid_full_name: info.cid_full_name,
                 cid_short_name: info.cid_short_name,
                 town_code: info.town_code,
-                legal_representative_name: info.legal_representative_name,
-                legal_representative_cid_number: info.legal_representative_cid_number,
-                legal_representative_account: info.legal_representative_account,
+                legal_representative: project_legal_representative(info.legal_representative),
                 institution_code: info.institution_code,
             },
         );

@@ -19,7 +19,7 @@
 - 所有机构主身份字段仍然只允许使用 `cid_number`。
 - `F + JY` 必须保留,继续作为非法人教育机构/法人教育机构分支的 CID 生成依据。
 - 学校内部部门不得作为新增弹窗手动选项。
-- 禁止新增第二套法定代表人身份 ID 字段；所有机构统一使用链上 `legal_representative_cid_number`，并指向公民唯一 `cid_number`。
+- 禁止新增第二套法定代表人身份 ID 字段；所有机构统一使用链上 `legal_representative.cid_number`，并指向公民唯一 `cid_number`。
 
 ## 预计修改目录
 

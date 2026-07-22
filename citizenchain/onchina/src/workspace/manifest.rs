@@ -258,7 +258,7 @@ mod tests {
     fn private_legal_institution_gets_own_private_workspace() {
         let workspace = build_institution_workspace(
             "SFGQ",
-            Some("技术公司"),
+            Some("示例私权机构"),
             crate::platform::capability::capabilities_for("SFGQ"),
             vec![WorkspaceModule::PlatformMembershipPrice],
         );

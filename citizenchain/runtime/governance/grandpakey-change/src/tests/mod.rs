@@ -125,6 +125,11 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             _ => false,
         }
     }
+
+    fn institution_threshold(institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32> {
+        Self::institution_admins(institution_code, cid_number)?;
+        primitives::cid::code::fixed_governance_pass_threshold(&institution_code)
+    }
 }
 
 pub struct TestInstitutionRoleProvider;
@@ -233,7 +238,6 @@ impl votingengine::Config for Test {
     type JointVoteResultCallback = ();
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
-    type InternalAdminsLenProvider = ();
     type MaxAdminsPerInstitution = ConstU32<32>;
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();
@@ -358,7 +362,12 @@ fn last_proposal_id() -> u64 {
 fn cast_vote(who: AccountId32, proposal_id: u64, approve: bool) -> DispatchResult {
     frame_support::storage::with_transaction(
         || -> frame_support::storage::TransactionOutcome<DispatchResult> {
-            match internal_vote::Pallet::<Test>::do_internal_vote(who, proposal_id, approve) {
+            match internal_vote::Pallet::<Test>::do_internal_vote(
+                who,
+                proposal_id,
+                internal_vote::InternalVoteTicketClaim::InstitutionRole(committee_role()),
+                approve,
+            ) {
                 Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
                 Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
             }

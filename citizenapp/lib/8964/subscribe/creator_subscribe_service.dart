@@ -48,13 +48,18 @@ class CreatorSubscribeService {
   }) async {
     await _retryPendingMirrors(subscriberAddress);
     return _rpc.fetchSubscriptionSnapshot(
-        subscriberAddress: subscriberAddress,
-        creatorAddress: creatorAddress,
-      );
+      subscriberAddress: subscriberAddress,
+      creatorAddress: creatorAddress,
+    );
   }
 
   Future<List<ChainCreatorTier>> fetchCreatorPlans(String creatorAddress) =>
       _rpc.fetchCreatorPlans(creatorAddress);
+
+  /// 读某账户的平台会员 finalized 快照（creatorAddress 省略=平台 IssuerKey）。
+  /// 供他人主页订阅按钮判定被查看创作者本人平台会员是否仍有效（订阅按钮门禁）。
+  Future<FinalizedSubscriptionSnapshot> fetchPlatformSnapshot(String address) =>
+      _rpc.fetchSubscriptionSnapshot(subscriberAddress: address);
 
   /// 订阅创作者某档某周期（priceFen=该档该周期价，分）。
   Future<void> subscribe({
@@ -272,7 +277,8 @@ class CreatorSubscribeService {
     final pending = await _readList(_pendingKey(ownerAccount));
     pending.removeWhere((item) => item['tx_hash'] == proof['tx_hash']);
     pending.add(proof);
-    await (await _prefs).setString(_pendingKey(ownerAccount), jsonEncode(pending));
+    await (await _prefs)
+        .setString(_pendingKey(ownerAccount), jsonEncode(pending));
 
     final historyKey = 'subscription_tx_history:$ownerAccount';
     final history = await _readList(historyKey);
@@ -282,8 +288,7 @@ class CreatorSubscribeService {
     await (await _prefs).setString(historyKey, jsonEncode(history));
   }
 
-  Future<void> _removePendingProof(
-      String ownerAccount, String txHash) async {
+  Future<void> _removePendingProof(String ownerAccount, String txHash) async {
     final pending = await _readList(_pendingKey(ownerAccount));
     pending.removeWhere((item) => item['tx_hash'] == txHash);
     final prefs = await _prefs;

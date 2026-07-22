@@ -9,6 +9,7 @@ fn only_authorized_admin_can_propose() {
             ResolutionIssuance::propose_issuance(
                 RuntimeOrigin::signed(AccountId32::new([2u8; 32])),
                 actor_cid_number(),
+                committee_role_code(),
                 reason_ok(),
                 4300,
                 allocations_ok(4300)
@@ -25,6 +26,24 @@ fn administrator_without_committee_role_cannot_propose() {
             ResolutionIssuance::propose_issuance(
                 RuntimeOrigin::signed(AccountId32::new([4u8; 32])),
                 actor_cid_number(),
+                committee_role_code(),
+                reason_ok(),
+                4300,
+                allocations_ok(4300)
+            ),
+            pallet::Error::<Test>::UnauthorizedActorRole
+        );
+    });
+}
+
+#[test]
+fn authorized_admin_cannot_replace_committee_role_with_another_role() {
+    new_test_ext().execute_with(|| {
+        assert_noop!(
+            ResolutionIssuance::propose_issuance(
+                RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+                actor_cid_number(),
+                director_role_code(),
                 reason_ok(),
                 4300,
                 allocations_ok(4300)
@@ -45,6 +64,7 @@ fn authorized_admin_cannot_supply_invalid_actor_cid() {
             ResolutionIssuance::propose_issuance(
                 RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
                 invalid_actor_cid,
+                committee_role_code(),
                 reason_ok(),
                 4300,
                 allocations_ok(4300)
@@ -66,6 +86,7 @@ fn reject_invalid_allocation_count() {
             ResolutionIssuance::propose_issuance(
                 RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
                 actor_cid_number(),
+                committee_role_code(),
                 reason_ok(),
                 1000,
                 alloc
@@ -81,6 +102,7 @@ fn approved_callback_executes_issuance() {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             actor_cid_number(),
+            committee_role_code(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -91,6 +113,16 @@ fn approved_callback_executes_issuance() {
             plan.business_action_id.action_code,
             entity_primitives::business_action::ACTION_RESOLUTION_ISSUANCE
         );
+        assert!(matches!(
+            &plan.proposer_subject,
+            entity_primitives::AuthorizationSubject::Institution(role)
+                if role.cid_number == actor_cid_number()
+                    && role.role_code == committee_role_code()
+        ));
+        let proposal_data = ResolutionIssuance::load_proposal_data(100)
+            .expect("resolution issuance proposal data must decode");
+        assert_eq!(proposal_data.actor_cid_number, actor_cid_number());
+        assert_eq!(proposal_data.proposer_role_code, committee_role_code());
         assert_eq!(plan.voter_subjects.len(), 87);
         assert_eq!(
             plan.voter_subjects
@@ -126,6 +158,7 @@ fn approved_referendum_callback_executes_issuance() {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             actor_cid_number(),
+            committee_role_code(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -149,6 +182,7 @@ fn callback_rejects_non_finalizable_engine_status() {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             actor_cid_number(),
+            committee_role_code(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -171,6 +205,7 @@ fn callback_requires_votingengine_scope() {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             actor_cid_number(),
+            committee_role_code(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -192,6 +227,7 @@ fn second_callback_after_executed_is_rejected() {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             actor_cid_number(),
+            committee_role_code(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -220,6 +256,7 @@ fn rejected_callback_does_not_issue() {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             actor_cid_number(),
+            committee_role_code(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -239,6 +276,7 @@ fn callback_rejects_corrupted_reason_with_reason_too_long() {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             actor_cid_number(),
+            committee_role_code(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -248,6 +286,7 @@ fn callback_rejects_corrupted_reason_with_reason_too_long() {
             100,
             crate::proposal::IssuanceProposalData {
                 actor_cid_number: actor_cid_number(),
+                proposer_role_code: committee_role_code(),
                 proposer: AccountId32::new([1u8; 32]),
                 reason: vec![b'x'; 129],
                 total_amount: 4300,
@@ -271,6 +310,7 @@ fn clear_executed_does_not_allow_replay() {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             actor_cid_number(),
+            committee_role_code(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -302,6 +342,7 @@ fn pause_blocks_approved_execution() {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             actor_cid_number(),
+            committee_role_code(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -327,6 +368,7 @@ fn set_allowed_recipients_rejected_when_voting_exists() {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             actor_cid_number(),
+            committee_role_code(),
             reason_ok(),
             4300,
             allocations_ok(4300)
@@ -347,6 +389,7 @@ fn issuance_event_comes_from_unified_pallet() {
         assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             actor_cid_number(),
+            committee_role_code(),
             reason_ok(),
             4300,
             allocations_ok(4300)

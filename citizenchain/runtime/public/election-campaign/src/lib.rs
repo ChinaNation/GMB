@@ -13,7 +13,8 @@
 //! - 不实现普选/互选的具体规则。
 //!
 //! 资格边界：普选由 `citizen-identity` 提供人口作用域和资格校验，
-//! 互选由对应 admins provider 提供机构管理员快照；本业务壳不得自行维护第二份资格真源。
+//! 互选由业务模块指定目标机构岗位，投票引擎读取该岗位的有效任职账户并冻结快照；
+//! 本业务壳不得自行维护第二份资格真源。
 
 pub use pallet::*;
 
@@ -101,7 +102,7 @@ pub struct CampaignMeta<OfficeCode> {
 pub mod pallet {
     use frame_support::pallet_prelude::*;
 
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
     #[pallet::config]
     pub trait Config: frame_system::Config {}

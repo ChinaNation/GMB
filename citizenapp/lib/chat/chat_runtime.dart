@@ -228,6 +228,9 @@ class ChatRuntime {
     return wallet?.address;
   }
 
+  /// 点击「广场发帖」推送时发信号（转发自设备推送服务），供 AppShell 切到广场 tab。
+  Stream<void> get squarePostOpens => _pushService.squarePostOpens;
+
   /// 页面、轮询、WebSocket 和发送入口共享的唯一就绪入口。
   Future<void> ensureReady(String ownerAccount) async {
     final account = await _readOwner(expectedOwnerAccount: ownerAccount);
@@ -563,8 +566,7 @@ class ChatRuntime {
       sendMemberAttachment: _guardedDeviceSender(context),
       uploadRelayMedia: _relayUploader(context),
       saveLocalAttachment: _copySentAttachmentToCache,
-      recordPendingMember: (attachmentId, member) =>
-          _store.recordOutgoingMedia(
+      recordPendingMember: (attachmentId, member) => _store.recordOutgoingMedia(
         attachmentId: attachmentId,
         recipientAccount: member,
         conversationId: groupId,
@@ -797,8 +799,8 @@ class ChatRuntime {
         sourcePath: path,
         byteSize: media.byteSize,
       ),
-      deletePending: (media) =>
-          _store.deleteOutgoingMedia(media.attachmentId, media.recipientAccount),
+      deletePending: (media) => _store.deleteOutgoingMedia(
+          media.attachmentId, media.recipientAccount),
     );
   }
 

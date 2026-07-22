@@ -67,6 +67,28 @@ pub struct RegisteredInstitution<CidNumber, AccountName> {
     pub account_name: AccountName,
 }
 
+/// 机构当前法定代表人的公开人员信息。
+///
+/// 人的姓名在全仓只使用 `family_name`、`given_name`；“法定代表人”语义由外层
+/// `legal_representative` 字段表达，不再另造合并姓名或带身份前缀的姓名字段。
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Clone,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+    PartialEq,
+    Eq,
+)]
+pub struct LegalRepresentative<AccountName, CidNumber, AccountId> {
+    pub family_name: AccountName,
+    pub given_name: AccountName,
+    pub cid_number: CidNumber,
+    pub account: AccountId,
+}
+
 /// 机构信息(链上最小集)。
 ///
 /// 链上只保存全国可见的机构身份事实:`cid_number` 作 storage key 已编码省/市/机构码/法人/盈利;
@@ -93,12 +115,8 @@ pub struct InstitutionInfo<BlockNumber, AccountName, CidNumber, AccountId> {
     pub cid_short_name: AccountName,
     /// 所属镇代码。非镇行政区机构与当前私权机构写空值;镇行政区公权机构由注册局创建时写入。
     pub town_code: AccountName,
-    /// 法定代表人公开姓名。创世没有真实任免资料时为 None。
-    pub legal_representative_name: Option<AccountName>,
-    /// 法定代表人唯一公民 CID。必须与姓名、账户同时存在或同时为空。
-    pub legal_representative_cid_number: Option<CidNumber>,
-    /// 法定代表人唯一钱包账户。不得从机构管理员首位账户回退生成。
-    pub legal_representative_account: Option<AccountId>,
+    /// 法定代表人公开人员信息。创世没有真实任免资料时为 None。
+    pub legal_representative: Option<LegalRepresentative<AccountName, CidNumber, AccountId>>,
     /// 管理员更换/路由使用的机构码:机构账户只能是公权/私权法人机构码。
     pub institution_code: InstitutionCode,
     /// 机构注册创建区块号。
@@ -260,20 +278,20 @@ impl<AccountId> InstitutionMultisigQuery<AccountId> for () {
     }
 }
 
-// 机构登记/创建/治理/自定义账户关闭已全部收敛为「发起管理员钱包直接冷签一笔普通 extrinsic」,
-// 由 runtime 在 origin 处以 `is_institution_admin` + 岗位码鉴权,不再有任何独立凭证。原
+// 机构登记/创建/治理/自定义账户关闭已全部收敛为「任职管理员钱包直接冷签一笔普通 extrinsic」,
+// 由 runtime 在 origin 处按机构 CID + 岗位码 + 管理员钱包鉴权，不再有任何独立凭证。原
 // `CidInstitutionVerifier`(账户关闭注册局审批凭证验签)连同 OnChina 平台签名钥已整体删除。
 
 /// 注册局登记/维护权限抽象。
 ///
-/// 机构登记、改名、增账户、登记管理员集合统一只认交易 `origin + actor_cid_number`:
-/// 发起管理员钱包签这笔链交易一次,runtime 再确认该 `origin` 是 actor(注册局)机构的
-/// active admin 且有对目标机构的登记权(省/市作用域由目标 CID 直接派生,不再取签名参数)。
+/// 机构登记、改名、增账户、登记管理员集合统一只认交易
+/// `origin + actor_cid_number + actor_role_code`。管理员身份本身不产生业务权限。
 pub trait RegistryAuthority<AccountId> {
     /// 当前 origin 是否可代表 actor CID 登记/维护目标机构。
     fn can_register_institution_origin(
         registrar: &AccountId,
         actor_cid_number: &[u8],
+        actor_role_code: &[u8],
         target_cid_number: &[u8],
         target_institution_code: InstitutionCode,
     ) -> bool;
@@ -283,6 +301,7 @@ impl<AccountId> RegistryAuthority<AccountId> for () {
     fn can_register_institution_origin(
         _registrar: &AccountId,
         _actor_cid_number: &[u8],
+        _actor_role_code: &[u8],
         _target_cid_number: &[u8],
         _target_institution_code: InstitutionCode,
     ) -> bool {
@@ -302,9 +321,12 @@ mod scale_contract_tests {
             cid_full_name: b"full".to_vec(),
             cid_short_name: b"short".to_vec(),
             town_code: b"001".to_vec(),
-            legal_representative_name: Some(b"representative".to_vec()),
-            legal_representative_cid_number: Some(b"citizen-cid".to_vec()),
-            legal_representative_account: Some([9u8; 32]),
+            legal_representative: Some(LegalRepresentative {
+                family_name: b"family".to_vec(),
+                given_name: b"given".to_vec(),
+                cid_number: b"citizen-cid".to_vec(),
+                account: [9u8; 32],
+            }),
             institution_code: *b"NRCG",
             created_at: 7u32,
         };
@@ -314,9 +336,12 @@ mod scale_contract_tests {
                 b"full".to_vec(),
                 b"short".to_vec(),
                 b"001".to_vec(),
-                Some(b"representative".to_vec()),
-                Some(b"citizen-cid".to_vec()),
-                Some([9u8; 32]),
+                Some((
+                    b"family".to_vec(),
+                    b"given".to_vec(),
+                    b"citizen-cid".to_vec(),
+                    [9u8; 32],
+                )),
                 *b"NRCG",
                 7u32,
             )

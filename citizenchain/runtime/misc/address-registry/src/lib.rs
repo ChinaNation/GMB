@@ -10,32 +10,48 @@ pub use pallet::*;
 /// 地址变更发起注册局的机构唯一 CID。
 pub type ActorCidNumber =
     frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<32>>;
+pub type ActorRoleCode =
+    frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>>;
 
 /// 地址更新权限抽象。
 ///
 /// FRG/CREG 的省市授权规则由 runtime 统一实现,本 pallet 不直接依赖
 /// public-admins/public-manage 的 storage,避免地址模块复制注册局权限细节。
 pub trait AddressUpdateAuthority<AccountId> {
-    fn can_update_catalog(who: &AccountId, actor_cid_number: &[u8]) -> bool;
+    fn can_update_catalog(
+        who: &AccountId,
+        actor_cid_number: &[u8],
+        actor_role_code: &[u8],
+        action_code: u32,
+    ) -> bool;
 
     fn can_update_address(
         who: &AccountId,
         actor_cid_number: &[u8],
+        actor_role_code: &[u8],
         province_code: &[u8],
         city_code: &[u8],
+        action_code: u32,
     ) -> bool;
 }
 
 impl<AccountId> AddressUpdateAuthority<AccountId> for () {
-    fn can_update_catalog(_who: &AccountId, _actor_cid_number: &[u8]) -> bool {
+    fn can_update_catalog(
+        _who: &AccountId,
+        _actor_cid_number: &[u8],
+        _actor_role_code: &[u8],
+        _action_code: u32,
+    ) -> bool {
         false
     }
 
     fn can_update_address(
         _who: &AccountId,
         _actor_cid_number: &[u8],
+        _actor_role_code: &[u8],
         _province_code: &[u8],
         _city_code: &[u8],
+        _action_code: u32,
     ) -> bool {
         false
     }
@@ -43,13 +59,13 @@ impl<AccountId> AddressUpdateAuthority<AccountId> for () {
 
 #[frame_support::pallet]
 pub mod pallet {
-    use super::{ActorCidNumber, AddressUpdateAuthority};
+    use super::{ActorCidNumber, ActorRoleCode, AddressUpdateAuthority};
     use frame_support::{ensure, pallet_prelude::*};
     use frame_system::pallet_prelude::*;
     use sp_runtime::traits::Hash;
     use sp_std::vec::Vec;
 
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
     pub type CodeOf<T> = BoundedVec<u8, <T as Config>::MaxCodeLen>;
     pub type VersionOf<T> = BoundedVec<u8, <T as Config>::MaxVersionLen>;
@@ -199,13 +215,19 @@ pub mod pallet {
         pub fn set_catalog_version(
             origin: OriginFor<T>,
             actor_cid_number: ActorCidNumber,
+            actor_role_code: ActorRoleCode,
             catalog_version: Vec<u8>,
             catalog_hash: T::Hash,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             let catalog_version = Self::bounded_version(catalog_version)?;
             ensure!(
-                T::AddressAuthority::can_update_catalog(&who, actor_cid_number.as_slice()),
+                T::AddressAuthority::can_update_catalog(
+                    &who,
+                    actor_cid_number.as_slice(),
+                    actor_role_code.as_slice(),
+                    0,
+                ),
                 Error::<T>::Unauthorized
             );
 
@@ -225,6 +247,7 @@ pub mod pallet {
         pub fn set_address_name(
             origin: OriginFor<T>,
             actor_cid_number: ActorCidNumber,
+            actor_role_code: ActorRoleCode,
             province_code: Vec<u8>,
             city_code: Vec<u8>,
             town_code: Vec<u8>,
@@ -238,8 +261,10 @@ pub mod pallet {
             Self::ensure_authority(
                 &who,
                 actor_cid_number.as_slice(),
+                actor_role_code.as_slice(),
                 &province_code,
                 &city_code,
+                1,
             )?;
 
             let key = (
@@ -277,6 +302,7 @@ pub mod pallet {
         pub fn remove_address_name(
             origin: OriginFor<T>,
             actor_cid_number: ActorCidNumber,
+            actor_role_code: ActorRoleCode,
             province_code: Vec<u8>,
             city_code: Vec<u8>,
             town_code: Vec<u8>,
@@ -288,8 +314,10 @@ pub mod pallet {
             Self::ensure_authority(
                 &who,
                 actor_cid_number.as_slice(),
+                actor_role_code.as_slice(),
                 &province_code,
                 &city_code,
+                2,
             )?;
 
             let key = (
@@ -319,6 +347,7 @@ pub mod pallet {
         pub fn set_address(
             origin: OriginFor<T>,
             actor_cid_number: ActorCidNumber,
+            actor_role_code: ActorRoleCode,
             province_code: Vec<u8>,
             city_code: Vec<u8>,
             town_code: Vec<u8>,
@@ -335,7 +364,14 @@ pub mod pallet {
                 address_local_no,
                 address_detail,
             )?;
-            Self::ensure_authority(&who, actor_cid_number.as_slice(), &key.0, &key.1)?;
+            Self::ensure_authority(
+                &who,
+                actor_cid_number.as_slice(),
+                actor_role_code.as_slice(),
+                &key.0,
+                &key.1,
+                3,
+            )?;
 
             let address_version = AddressVersions::<T>::get(&key).saturating_add(1);
             let address_hash = T::Hashing::hash_of(&(b"address".as_slice(), &key, address_version));
@@ -362,6 +398,7 @@ pub mod pallet {
         pub fn remove_address(
             origin: OriginFor<T>,
             actor_cid_number: ActorCidNumber,
+            actor_role_code: ActorRoleCode,
             province_code: Vec<u8>,
             city_code: Vec<u8>,
             town_code: Vec<u8>,
@@ -378,7 +415,14 @@ pub mod pallet {
                 address_local_no,
                 address_detail,
             )?;
-            Self::ensure_authority(&who, actor_cid_number.as_slice(), &key.0, &key.1)?;
+            Self::ensure_authority(
+                &who,
+                actor_cid_number.as_slice(),
+                actor_role_code.as_slice(),
+                &key.0,
+                &key.1,
+                4,
+            )?;
 
             let address_version = AddressVersions::<T>::get(&key).saturating_add(1);
             AddressVersions::<T>::insert(&key, address_version);
@@ -402,15 +446,19 @@ pub mod pallet {
         fn ensure_authority(
             who: &T::AccountId,
             actor_cid_number: &[u8],
+            actor_role_code: &[u8],
             province_code: &[u8],
             city_code: &[u8],
+            action_code: u32,
         ) -> DispatchResult {
             ensure!(
                 T::AddressAuthority::can_update_address(
                     who,
                     actor_cid_number,
+                    actor_role_code,
                     province_code,
-                    city_code
+                    city_code,
+                    action_code,
                 ),
                 Error::<T>::Unauthorized
             );

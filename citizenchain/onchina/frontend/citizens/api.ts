@@ -21,8 +21,8 @@ export type CitizenRow = {
   id: number;
   cid_number: string;
   passport_no: string;
-  citizen_family_name: string;
-  citizen_given_name: string;
+  family_name: string;
+  given_name: string;
   citizen_sex: CitizenSex;
   citizen_birth_date: string;
   wallet_address?: string | null;
@@ -60,8 +60,9 @@ export type PageResult<T> = {
 
 /** 建档占号请求 DTO,字段与后端 validate_citizen_input 对齐。 */
 export type CreateCitizenInput = {
-  citizen_family_name: string;
-  citizen_given_name: string;
+  actor_role_code: string;
+  family_name: string;
+  given_name: string;
   citizen_sex: CitizenSex;
   citizen_birth_date: string;
   province_name: string;
@@ -78,8 +79,8 @@ export type CreateCitizenResult = {
   id: number;
   cid_number: string;
   passport_no: string;
-  citizen_family_name: string;
-  citizen_given_name: string;
+  family_name: string;
+  given_name: string;
   citizen_sex: CitizenSex;
   citizen_birth_date: string;
   citizen_status: CitizenState;
@@ -98,6 +99,7 @@ export type CreateCitizenResult = {
 
 export type PrepareCitizenOnchainResult = {
   cid_number: string;
+  actor_role_code: string;
   identity_level: CitizenOnchainIdentityLevel;
   wallet_address: string;
   wallet_pubkey: string;
@@ -111,6 +113,7 @@ export type PrepareCitizenOnchainResult = {
 export type CompleteCitizenOnchainResult = {
   request_id: string;
   cid_number: string;
+  actor_role_code: string;
   identity_level: CitizenOnchainIdentityLevel;
   wallet_address: string;
   chain_action: number;
@@ -224,7 +227,7 @@ export async function prepareCitizenOccupy(
 export async function prepareCitizenRevoke(
   auth: AdminAuth,
   cidNumber: string,
-  walletAccount: string,
+  actorRoleCode: string,
 ): Promise<PrepareCitizenRevokeResult> {
   const assertion = await assertPasskey(auth);
   const headers = { ...jsonAdminHeaders(auth), [PASSKEY_ASSERTION_HEADER]: assertion };
@@ -233,7 +236,7 @@ export async function prepareCitizenRevoke(
     {
       method: 'POST',
       headers,
-      body: JSON.stringify({ wallet_account: walletAccount }),
+      body: JSON.stringify({ actor_role_code: actorRoleCode }),
     },
   );
 }
@@ -242,6 +245,7 @@ export async function prepareCitizenOnchainSignature(
   auth: AdminAuth,
   cidNumber: string,
   walletAccount: string,
+  actorRoleCode: string,
   identityLevel: CitizenOnchainIdentityLevel,
 ): Promise<PrepareCitizenOnchainResult> {
   // 一次业务操作只在创建时消费一次 Passkey；后续回执由短期操作会话关联。
@@ -252,7 +256,11 @@ export async function prepareCitizenOnchainSignature(
     {
       method: 'POST',
       headers,
-      body: JSON.stringify({ wallet_account: walletAccount, identity_level: identityLevel }),
+      body: JSON.stringify({
+        wallet_account: walletAccount,
+        actor_role_code: actorRoleCode,
+        identity_level: identityLevel,
+      }),
     },
   );
 }
@@ -261,6 +269,7 @@ export async function completeCitizenOnchainSignature(
   auth: AdminAuth,
   cidNumber: string,
   walletAccount: string,
+  actorRoleCode: string,
   identityLevel: CitizenOnchainIdentityLevel,
   signResponse: string,
 ): Promise<CompleteCitizenOnchainResult> {
@@ -272,6 +281,7 @@ export async function completeCitizenOnchainSignature(
       headers,
       body: JSON.stringify({
         wallet_account: walletAccount,
+        actor_role_code: actorRoleCode,
         identity_level: identityLevel,
         sign_response: signResponse,
       }),

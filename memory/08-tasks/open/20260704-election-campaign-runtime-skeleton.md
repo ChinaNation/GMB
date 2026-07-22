@@ -1,10 +1,12 @@
-# election-campaign 接入 runtime 骨架
+# 通用选举业务壳任务已关闭
+
+状态：已关闭并由 `memory/08-tasks/20260721-citizen-election-subject-snapshot-unify.md` 取代。
 
 ## 任务需求
 
-用户确认 `election-campaign` 是选举业务模块，负责“什么机构能选举、怎么选举”等业务规则；`election-vote` 是选举投票模块，投票核心流程必须留在 `election-vote`。当前只做最简单骨架，不做具体选举。
+本任务曾建立无具体规则的通用选举业务壳。2026-07-21 最终确认改为：每一种公权选举业务都在 `runtime/public/` 下新增自己的业务模块，具体业务模块就是规则真源；`election-vote` 继续只负责投票流程。因此该通用业务壳不改名、不扩展，后续按新任务第 7 步删除。
 
-## 范围
+## 历史范围
 
 - 新增 `citizenchain/runtime/public/election-campaign` crate。
 - 将 `ElectionCampaign` 接入 runtime metadata。
@@ -21,9 +23,8 @@
 - 不写入 `public-admins`、`private-admins` 或法定代表人。
 - 不实现选举法、同票、补选、递补、重选规则。
 
-## 验收
+## 关闭结论
 
-- `ElectionCampaign` 以 pallet index `34` 出现在 runtime。
-- `election-campaign` 无真实可调用 extrinsic。
-- `ElectionVote` 创建入口被 RuntimeCallFilter 拦截，投票入口继续保留。
-- 相关文档说明业务壳和投票模块的职责边界。
+- 现有骨架没有真实可调用 extrinsic，也没有承载任何具体选举规则。
+- 后续删除 crate、runtime 接线和错误文档；原 pallet index 保持空缺，本次不复用。
+- 未来具体选举业务模块调用 `election-vote` 的内部接口创建提案，并在结果通过后自行复核和写回 entity 任职。

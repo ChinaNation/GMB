@@ -107,6 +107,9 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
   LightClientStatusSnapshot? _chainProgress;
   String? _chainProgressError;
 
+  /// 下拉刷新进行中：驱动连接状态栏 busy（触发轻节点连接即时重探）。
+  bool _refreshing = false;
+
   /// 本地链上转账记录（用于状态行显示）。
   List<LocalTxEntity> _localTxRecords = [];
 
@@ -262,6 +265,17 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
   Future<void> _reloadWalletAndLocalRecords() async {
     await _reloadWallet();
     await _loadLocalRecords();
+  }
+
+  /// 下拉刷新：余额 + 本地交易记录重载；`_refreshing` 驱动连接状态栏 busy →
+  /// 触发轻节点连接即时重探（ChainProgressBanner 内部 `_loadProgress`）。
+  Future<void> _onPullRefresh() async {
+    if (mounted) setState(() => _refreshing = true);
+    try {
+      await _reloadWalletAndLocalRecords();
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
   }
 
   Future<void> _openWalletTab() async {
@@ -805,40 +819,44 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
               ),
             ),
             Expanded(
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                children: [
-                  ChainProgressBanner(
-                    onProgressChanged: _handleChainProgressChanged,
-                    onErrorChanged: _handleChainProgressErrorChanged,
-                  ),
-                  if (widget.extraEntriesBuilder != null)
-                    ...widget.extraEntriesBuilder!(context, _currentWallet),
-                  if (_currentWallet == null && !_loadingWallet)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Container(
-                        decoration: AppTheme.cardDecoration(),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('未检测到钱包，无法执行链上签名与交易广播'),
-                              const SizedBox(height: 8),
-                              FilledButton(
-                                onPressed: _openWalletTab,
-                                child: const Text('去创建/导入钱包'),
-                              ),
-                            ],
+              child: RefreshIndicator(
+                onRefresh: _onPullRefresh,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    ChainProgressBanner(
+                      busy: _refreshing,
+                      onProgressChanged: _handleChainProgressChanged,
+                      onErrorChanged: _handleChainProgressErrorChanged,
+                    ),
+                    if (widget.extraEntriesBuilder != null)
+                      ...widget.extraEntriesBuilder!(context, _currentWallet),
+                    if (_currentWallet == null && !_loadingWallet)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Container(
+                          decoration: AppTheme.cardDecoration(),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('未检测到钱包，无法执行链上签名与交易广播'),
+                                const SizedBox(height: 8),
+                                FilledButton(
+                                  onPressed: _openWalletTab,
+                                  child: const Text('去创建/导入钱包'),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  _buildSubmitCard(),
-                  const SizedBox(height: 24),
-                ],
+                    _buildSubmitCard(),
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
             ),
           ],

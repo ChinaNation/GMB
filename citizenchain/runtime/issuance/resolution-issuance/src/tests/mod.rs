@@ -308,7 +308,6 @@ impl votingengine::Config for Test {
     type JointVoteResultCallback = ();
     type InternalVoteResultCallback = ();
     type InternalAdminProvider = TestInternalAdminProvider;
-    type InternalAdminsLenProvider = ();
     type MaxAdminsPerInstitution = ConstU32<32>;
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();
@@ -436,6 +435,20 @@ fn actor_cid_number() -> votingengine::types::CidNumber {
         .to_vec()
         .try_into()
         .expect("NRC CID should fit")
+}
+
+fn committee_role_code() -> votingengine::types::RoleCode {
+    primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+        .to_vec()
+        .try_into()
+        .expect("committee role code should fit")
+}
+
+fn director_role_code() -> votingengine::types::RoleCode {
+    primitives::governance_skeleton::ROLE_CODE_DIRECTOR
+        .to_vec()
+        .try_into()
+        .expect("director role code should fit")
 }
 
 fn reserve_council_accounts() -> Vec<AccountId32> {

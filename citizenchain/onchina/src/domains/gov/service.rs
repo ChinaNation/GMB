@@ -53,7 +53,8 @@ struct ChainInstitutionProjection {
     town_code: String,
     institution_code: String,
     education_type: Option<String>,
-    legal_representative_name: Option<String>,
+    family_name: Option<String>,
+    given_name: Option<String>,
     legal_representative_cid_number: Option<String>,
     legal_representative_account: Option<String>,
 }
@@ -299,29 +300,22 @@ fn parse_chain_institution(
             "chain non-town institution {cid_number} has town_code"
         ));
     }
-    let legal_representative_name = info
-        .legal_representative_name
-        .map(String::from_utf8)
-        .transpose()
-        .map_err(|_| {
-            format!("chain institution {cid_number} legal_representative_name must be utf-8")
-        })?;
-    let legal_representative_cid_number = info
-        .legal_representative_cid_number
-        .map(String::from_utf8)
-        .transpose()
-        .map_err(|_| {
-            format!("chain institution {cid_number} legal_representative_cid_number must be utf-8")
-        })?;
-    let legal_representative_account = info.legal_representative_account.map(hex::encode);
-    let legal_field_count = usize::from(legal_representative_name.is_some())
-        + usize::from(legal_representative_cid_number.is_some())
-        + usize::from(legal_representative_account.is_some());
-    if legal_field_count != 0 && legal_field_count != 3 {
-        return Err(format!(
-            "chain institution {cid_number} legal representative fields must be all present or all absent"
-        ));
-    }
+    let (family_name, given_name, legal_representative_cid_number, legal_representative_account) =
+        match info.legal_representative {
+            Some(value) => (
+                Some(String::from_utf8(value.family_name).map_err(|_| {
+                    format!("chain institution {cid_number} family_name must be utf-8")
+                })?),
+                Some(String::from_utf8(value.given_name).map_err(|_| {
+                    format!("chain institution {cid_number} given_name must be utf-8")
+                })?),
+                Some(String::from_utf8(value.cid_number).map_err(|_| {
+                    format!("chain institution {cid_number} legal representative cid must be utf-8")
+                })?),
+                Some(hex::encode(value.account)),
+            ),
+            None => (None, None, None, None),
+        };
     Ok(ChainInstitutionProjection {
         cid_full_name: String::from_utf8(info.cid_full_name)
             .map_err(|_| format!("chain institution {cid_number} cid_full_name must be utf-8"))?,
@@ -334,7 +328,8 @@ fn parse_chain_institution(
         town_code,
         institution_code: parts.institution_code_text,
         education_type: education_type_for_code(&code_from_storage).map(str::to_string),
-        legal_representative_name,
+        family_name,
+        given_name,
         legal_representative_cid_number,
         legal_representative_account,
         cid_number,
@@ -608,9 +603,13 @@ fn upsert_institution_chunk(
         .iter()
         .map(|item| item.education_type.clone())
         .collect::<Vec<_>>();
-    let legal_representative_names = chunk
+    let family_names = chunk
         .iter()
-        .map(|item| item.legal_representative_name.clone())
+        .map(|item| item.family_name.clone())
+        .collect::<Vec<_>>();
+    let given_names = chunk
+        .iter()
+        .map(|item| item.given_name.clone())
         .collect::<Vec<_>>();
     let legal_representative_cid_numbers = chunk
         .iter()
@@ -641,7 +640,7 @@ fn upsert_institution_chunk(
                 category, p1,
                 province_code, city_code, town_code, institution_code,
                 education_type, private_type, partnership_kind, has_legal_personality,
-                parent_cid_number, legal_representative_name,
+                parent_cid_number, family_name, given_name,
                 legal_representative_cid_number, legal_representative_account,
                 created_by, updated_by, created_at, updated_at,
                 institution_source_type
@@ -651,18 +650,18 @@ fn upsert_institution_chunk(
                 category, p1,
                 province_code, COALESCE(city_code, ''), COALESCE(town_code, ''), institution_code,
                 education_type, NULL::text, NULL::text, NULL::boolean,
-                NULL::text, legal_representative_name,
+                NULL::text, family_name, given_name,
                 legal_representative_cid_number, legal_representative_account,
                 'CHAIN', 'CHAIN', now(), now(),
                 'CHAIN'
              FROM unnest(
                 $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
                 $6::text[], $7::text[], $8::text[], $9::text[], $10::text[],
-                $11::text[], $12::text[], $13::text[]
+                $11::text[], $12::text[], $13::text[], $14::text[]
              ) AS u(
                 cid_number, cid_full_name, cid_short_name, category, p1,
                 institution_code, province_code, city_code, town_code,
-                education_type, legal_representative_name,
+                education_type, family_name, given_name,
                 legal_representative_cid_number, legal_representative_account
              )
              ON CONFLICT (province_code, cid_number) DO UPDATE SET
@@ -679,7 +678,8 @@ fn upsert_institution_chunk(
                 partnership_kind = EXCLUDED.partnership_kind,
                 has_legal_personality = EXCLUDED.has_legal_personality,
                 parent_cid_number = EXCLUDED.parent_cid_number,
-                legal_representative_name = EXCLUDED.legal_representative_name,
+                family_name = EXCLUDED.family_name,
+                given_name = EXCLUDED.given_name,
                 legal_representative_cid_number = EXCLUDED.legal_representative_cid_number,
                 legal_representative_account = EXCLUDED.legal_representative_account,
                 updated_by = 'CHAIN',
@@ -694,7 +694,8 @@ fn upsert_institution_chunk(
                 OR subjects.town_code IS DISTINCT FROM EXCLUDED.town_code
                 OR subjects.institution_code IS DISTINCT FROM EXCLUDED.institution_code
                 OR subjects.education_type IS DISTINCT FROM EXCLUDED.education_type
-                OR subjects.legal_representative_name IS DISTINCT FROM EXCLUDED.legal_representative_name
+                OR subjects.family_name IS DISTINCT FROM EXCLUDED.family_name
+                OR subjects.given_name IS DISTINCT FROM EXCLUDED.given_name
                 OR subjects.legal_representative_cid_number IS DISTINCT FROM EXCLUDED.legal_representative_cid_number
                 OR subjects.legal_representative_account IS DISTINCT FROM EXCLUDED.legal_representative_account
                 OR subjects.institution_source_type IS DISTINCT FROM EXCLUDED.institution_source_type",
@@ -709,7 +710,8 @@ fn upsert_institution_chunk(
                 &city_codes,
                 &town_codes,
                 &education_types,
-                &legal_representative_names,
+                &family_names,
+                &given_names,
                 &legal_representative_cid_numbers,
                 &legal_representative_accounts,
             ],

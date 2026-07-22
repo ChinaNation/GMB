@@ -119,6 +119,39 @@ export async function isFollowing(
   return row !== null;
 }
 
+/// 当前登录者是否对目标账户开启发帖通知（= 已关注且未静音）。未登录/自看返回 false。
+export async function isNotifying(
+  env: Env,
+  viewerAccount: string | null,
+  targetAccount: string
+): Promise<boolean> {
+  if (!viewerAccount || viewerAccount === targetAccount) {
+    return false;
+  }
+  const row = await env.DB.prepare(
+    'SELECT notify_enabled FROM square_follows WHERE owner_account = ? AND followed_account = ? LIMIT 1'
+  )
+    .bind(viewerAccount, targetAccount)
+    .first<{ notify_enabled: number }>();
+  return row?.notify_enabled === 1;
+}
+
+/// 设置对某关注的发帖通知开关；仅对已存在的关注生效，返回是否命中一条关注记录。
+/// 未关注（0 命中）时上层据此提示「先关注」，通知归属永远挂在关注关系上。
+export async function setFollowNotify(
+  env: Env,
+  ownerAccount: string,
+  followedAccount: string,
+  enabled: boolean
+): Promise<boolean> {
+  const result = await env.DB.prepare(
+    'UPDATE square_follows SET notify_enabled = ? WHERE owner_account = ? AND followed_account = ?'
+  )
+    .bind(enabled ? 1 : 0, ownerAccount, followedAccount)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
+}
+
 /// 按作者分页拉取已发布帖子；category 过滤 all/normal/campaign，contentFormat 过滤
 /// all/normal/article（帖子 Tab 传 normal 排除文章，文章 Tab 传 article），
 /// cursor 为上一页最后一条 created_at（keyset 游标）。

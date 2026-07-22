@@ -40,7 +40,7 @@ void main() {
     expect(state.errorMessage, '请先创建钱包');
   });
 
-  test('默认用户账户链上无投票身份时为匿名访客', () async {
+  test('默认用户账户链上无投票身份时为访客轻节点', () async {
     final state = await buildService(voting: null).getState();
     expect(state.tier, MyIdTier.visitor);
     expect(state.votingAccount, isNull);
@@ -70,7 +70,8 @@ void main() {
     expect(state.residenceDistrict, contains('N(0755)'));
     expect(state.residenceDistrict, contains('N(001)'));
     // 投票公民无候选专属字段。
-    expect(state.citizenFullName, isNull);
+    expect(state.familyName, isNull);
+    expect(state.givenName, isNull);
     expect(state.birthDistrict, isNull);
   });
 
@@ -89,13 +90,15 @@ void main() {
         province: 'GD',
         city: '0020',
         town: '005',
-        fullName: '陈明',
+        familyName: '陈',
+        givenName: '明',
         sex: 0,
       ),
     ).getState();
 
     expect(state.tier, MyIdTier.candidate);
-    expect(state.citizenFullName, '陈明');
+    expect(state.familyName, '陈');
+    expect(state.givenName, '明');
     expect(state.citizenSexLabel, '男');
     expect(state.birthDistrict, contains('N(0020)'));
     expect(state.citizenBirthDate, '2000-01-31');
@@ -195,7 +198,8 @@ Uint8List _encodeCandidate({
   required String province,
   required String city,
   required String town,
-  required String fullName,
+  required String familyName,
+  required String givenName,
   required int sex,
   int birthDate = 20000131,
   int updatedAt = 1,
@@ -204,7 +208,8 @@ Uint8List _encodeCandidate({
     ..._vec(province),
     ..._vec(city),
     ..._vec(town),
-    ..._vec(fullName),
+    ..._vec(familyName),
+    ..._vec(givenName),
     sex,
     ..._u32(birthDate),
     ..._u32(updatedAt),

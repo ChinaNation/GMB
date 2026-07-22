@@ -163,7 +163,6 @@ pub mod pallet {
         /// `STATUS_PASSED` / `STATUS_REJECTED` 时广播到每个成员。
         type InternalVoteResultCallback: InternalVoteResultCallback;
         type InternalAdminProvider: InternalAdminProvider<Self::AccountId>;
-        type InternalAdminsLenProvider: InternalAdminsLenProvider<Self::AccountId>;
         /// 单个资格快照最大账户数；上限与机构 admins 最大人数一致。
         #[pallet::constant]
         type MaxAdminsPerInstitution: Get<u32>;
@@ -195,7 +194,7 @@ pub mod pallet {
     ///
     /// 布局:提案主键纯单调 u64 + ProposalDisplayId 展示号 +
     /// ProposalsByCode/Institution/Owner/Year 4 张反向索引,创世直写,无历史回填。
-    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
@@ -614,7 +613,7 @@ pub mod pallet {
         InvalidProposalStage,
         /// 提案状态不允许当前操作（例如已终结的提案不可投票）。
         InvalidProposalStatus,
-        /// 内部投票管理员快照缺失。
+        /// 个人多签管理员快照缺失。
         MissingAdminSnapshot,
         /// 投票计划尚未绑定或对应岗位投票人快照为空。
         MissingVoterSnapshot,

@@ -16,6 +16,7 @@ class CreatorSubscribeButton extends StatefulWidget {
   const CreatorSubscribeButton({
     super.key,
     required this.creatorAccount,
+    this.enabled = true,
     CreatorApi? api,
     CreatorSubscribeService? service,
     SquareSessionProvider? sessionProvider,
@@ -24,6 +25,9 @@ class CreatorSubscribeButton extends StatefulWidget {
         _sessionProvider = sessionProvider;
 
   final String creatorAccount;
+
+  /// false=置灰不可点（以他人视角看自己时，订阅自己无意义）。
+  final bool enabled;
   final CreatorApi? _api;
   final CreatorSubscribeService? _service;
   final SquareSessionProvider? _sessionProvider;
@@ -43,6 +47,9 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
   bool _busy = false;
   CreatorPlan? _plan;
   FinalizedSubscriptionSnapshot? _snapshot;
+
+  /// 被查看创作者本人的平台会员 finalized 快照；仅其有效时才显示订阅按钮。
+  FinalizedSubscriptionSnapshot? _ownerPlatform;
 
   @override
   void initState() {
@@ -68,6 +75,8 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
           subscriberAddress: session.ownerAccount,
           creatorAddress: widget.creatorAccount,
         ),
+        // 被查看创作者本人平台会员真态：读失败 → 整个 _load 落 catch → 按钮隐藏（fail-closed）。
+        _service.fetchPlatformSnapshot(widget.creatorAccount),
       ]);
       final displayPlan = results[0] as CreatorPlan?;
       final chainTiers = results[1] as List<ChainCreatorTier>;
@@ -79,6 +88,7 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
           chainTiers: chainTiers,
         );
         _snapshot = results[2] as FinalizedSubscriptionSnapshot;
+        _ownerPlatform = results[3] as FinalizedSubscriptionSnapshot;
         _loading = false;
       });
     } on Exception {
@@ -88,10 +98,18 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
 
   @override
   Widget build(BuildContext context) {
-    // 未开档 / 加载中不显示，避免空按钮。
-    if (_loading || _plan == null || _plan!.tiers.isEmpty) {
+    final ownerPlatformActive =
+        _ownerPlatform?.state?.isEffectiveAt(_ownerPlatform!.chainNowMs) ==
+            true;
+    // 双条件 fail-closed：有档 且 创作者本人平台会员有效，才显示订阅按钮。
+    // 未开档 / 加载中 / 创作者平台会员过期或缺失 / 快照读失败 一律隐藏，绝不诱导无效订阅。
+    if (_loading ||
+        _plan == null ||
+        _plan!.tiers.isEmpty ||
+        !ownerPlatformActive) {
       return const SizedBox.shrink();
     }
+    final actionable = widget.enabled && !_busy;
     final subscribed = _snapshot?.state?.status == 'active';
     if (subscribed) {
       return Wrap(
@@ -99,12 +117,12 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
         runSpacing: 8,
         children: [
           FilledButton.icon(
-            onPressed: _busy ? null : _openPicker,
+            onPressed: actionable ? _openPicker : null,
             icon: const Icon(Icons.swap_horiz, size: 18),
             label: const Text('更换会员档'),
           ),
           OutlinedButton.icon(
-            onPressed: _busy ? null : _cancel,
+            onPressed: actionable ? _cancel : null,
             icon: const Icon(Icons.cancel_outlined, size: 18),
             label: const Text('取消订阅'),
           ),
@@ -112,7 +130,7 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
       );
     }
     return FilledButton.icon(
-      onPressed: _busy ? null : _openPicker,
+      onPressed: actionable ? _openPicker : null,
       icon: const Icon(Icons.workspace_premium_outlined, size: 18),
       label: const Text('订阅 TA'),
     );

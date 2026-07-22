@@ -174,7 +174,6 @@ impl votingengine::Config for Test {
     type JointVoteResultCallback = TestJointCallback;
     type InternalVoteResultCallback = ();
     type InternalAdminProvider = TestAdminProvider;
-    type InternalAdminsLenProvider = ();
     type MaxAdminsPerInstitution = ConstU32<32>;
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();

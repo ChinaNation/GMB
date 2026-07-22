@@ -16,7 +16,6 @@ import 'package:citizenapp/ui/widgets/shimmer_loading.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/my/util/screenshot_guard.dart';
 import 'package:citizenapp/ui/app_theme.dart';
-import 'package:citizenapp/ui/widgets/chain_progress_banner.dart';
 import 'package:citizenapp/my/myid/myid_service.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/pages/create_wallet_flow.dart';
@@ -608,11 +607,7 @@ class _WalletTabState extends State<WalletTab> {
           final defaultWalletIndex = defaultUserWalletIndex(wallets);
           return Column(
             children: [
-              if (!_isSelectionMode)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: ChainProgressBanner(busy: _balanceRefreshing),
-                ),
+              // 连接状态栏已移除：轻节点连接状态统一由「交易」tab 顶部那条承担，避免重复。
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: _refreshBalancesFromChain,

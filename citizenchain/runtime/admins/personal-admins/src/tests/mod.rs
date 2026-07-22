@@ -92,20 +92,6 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
     }
 }
 
-pub struct TestInternalAdminsLenProvider;
-impl votingengine::InternalAdminsLenProvider<AccountId32> for TestInternalAdminsLenProvider {
-    fn institution_admins_len(
-        _institution_code: InstitutionCode,
-        _cid_number: &[u8],
-    ) -> Option<u32> {
-        None
-    }
-
-    fn personal_admins_len(personal_account: AccountId32) -> Option<u32> {
-        PersonalAdmins::active_account_admins_len(PMUL, personal_account)
-    }
-}
-
 pub struct TestTimeProvider;
 impl UnixTime for TestTimeProvider {
     fn now() -> core::time::Duration {
@@ -130,7 +116,6 @@ impl votingengine::Config for Test {
     type JointVoteResultCallback = ();
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
-    type InternalAdminsLenProvider = TestInternalAdminsLenProvider;
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type MaxProposalDataLen = ConstU32<1024>;
     type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
@@ -149,6 +134,7 @@ impl votingengine::Config for Test {
 
 impl internal_vote::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionRoleProvider = ();
     type WeightInfo = ();
 }
 
@@ -239,6 +225,7 @@ fn propose_admin_set_change_updates_personal_admins_and_threshold() {
         assert_ok!(internal_vote::Pallet::<Test>::do_internal_vote(
             admin(1),
             proposal_id,
+            internal_vote::InternalVoteTicketClaim::Personal,
             true
         ));
         // 通过判定只入队；管理员集合更新由维护管线异步执行。

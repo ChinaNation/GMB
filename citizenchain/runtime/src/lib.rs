@@ -84,11 +84,11 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     // square-post。
     // square-post 订阅采用 runtime 真实公历时间戳协议：只执行扣款、最小状态和时间戳比较；
     // 平台三档价由创世播种，平台机构 CID 为创世固定常量，开发期零用户不设迁移。
-    spec_version: 2,
+    spec_version: 0,
     impl_version: 0,
     apis: apis::RUNTIME_API_VERSIONS,
     transaction_version: 0,
-    system_version: 1,
+    system_version: 0,
 };
 
 pub const BLOCK_HASH_COUNT: BlockNumber = primitives::core_const::BLOCK_HASH_COUNT;

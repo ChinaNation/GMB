@@ -24,12 +24,12 @@ runtime/genesis/src/institution/
 
 - 岗位协议常量来自 `primitives::governance_skeleton`，钱包来自既有 `CHINA_*` 常量；
 - 构建前断言固定钱包数量等于席位总数，且固定岗位钱包不得重复；
-- 全部机构必须写入唯一 `LR / 法定代表人` 岗位；岗位可以没有任职，公开法定代表人三字段可全空，不得从管理员首位、机构主账户或其它钱包推导；
+- 全部机构必须写入唯一 `LR / 法定代表人` 岗位；岗位可以没有任职，公开 `legal_representative` 结构可为 `None`，不得从管理员首位、机构主账户或其它钱包推导；
 - 后续依法任命法定代表人属于 entity 运行期流程，不属于 genesis 职责。
 
-私权创世机构“中国公民链技术发展基金会”是 SFGY 非营利法人，也是唯一在创世明确携带法定代表人的例外：
+私权创世机构“公民链技术发展基金会”是 SFGY 非营利法人，也是唯一在创世明确携带法定代表人的例外：
 
-- 基金会简称“公民链基金会”，英文全称 `China CitizenChain Technology Development Foundation`，英文简称 `CitizenChain Technology Foundation`；CID `GZ018-SFGYR-201206100-2026`，主账户 `0xe86aa3cd794651257dea9b7cad1abc4f0ce05940c1aecccd2ed8dd2fc9907023`，费用账户 `0xaa23304c7b663ba25a9d3a2fb1efafdd650ecf2504a2caedc228fe81b46b4333`；
+- 基金会简称“公民链基金会”，英文全称 `CitizenChain Technology Development Foundation`，英文简称 `CitizenChain Technology Foundation`；CID `GZ018-SFGYR-201206100-2026`，主账户 `0xe86aa3cd794651257dea9b7cad1abc4f0ce05940c1aecccd2ed8dd2fc9907023`，费用账户 `0xaa23304c7b663ba25a9d3a2fb1efafdd650ecf2504a2caedc228fe81b46b4333`；
 - 法定代表人为程伟，公民 CID 引用 `GZ000-CTZN6-198805200-2026`，法定代表人账户 `0xd6d73cfd7d6b7c5692749b7c46fd3fe398f16f84283910dbf15f74472e1e3938`；创世不伪造第二份公民记录，后续由对应注册局依法从链上公民真源核验；
 - 只创建一条程伟管理员人员记录 `Admin { admin_account, family_name, given_name }`；同一钱包分别任职 `LR / 法定代表人`、`GENESIS_PRODUCT_MANAGER / 创世产品经理`、`GENESIS_PROGRAMMER / 创世程序员`，每岗一席。三岗的岗位码、岗位名和岗位权限永久固定，但基金会仍可增加普通动态岗位；
 - `PrivateAdmins::AdminAccounts`、三项 `PrivateManage` 岗位/任职和 `PrivateManage::InstitutionGovernanceThresholds[cid_number] = 2` 在同一创世构建中写入。阈值 2 是机构阈值，不与唯一管理员钱包数量绑定；

@@ -80,7 +80,7 @@ citizenchain/onchina/src/
 
 - 公民由注册局管理员在 OnChina 当前办理城市下一次交易录入,不再由前端手填 `cid_number`。
 - 联邦注册局管理员必须先选择分管省内城市后才能录入公民;市注册局管理员直接锁定本市。
-- 公民姓名拆为 `citizen_family_name` 和 `citizen_given_name`;展示姓名时由前端按中文顺序组合,数据库不保留姓名单字段。
+- 公民姓名统一为 `family_name` 和 `given_name`；展示姓名时由前端按中文顺序组合，数据库不保留拼接姓名或带 `citizen_` 前缀的别名列。
 - 公民身份 CID 由 `src/cid/generator.rs` 生成,机构代码固定为 `CTZN`,个人码 R5 市段固定为 `000`。
 - 护照号由 `src/domains/citizens/passport_no.rs` 生成,OnChina 自持完整算法。
 - 创建公民不得要求 `wallet_account`;未成年人或暂未开户公民可以先建立本地电子护照档案。
@@ -146,11 +146,11 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 `INSTITUTION_CREATE` 旧扫码授权链路当前不允许进入 prepare/submit；创建 handler 在鉴权后固定返回 501，不能生成安全 grant、链签会话或旧 call data。第 6 步启用新业务时必须重新登记完整原子载荷和权限主体，不能沿用本段已删除字段集。
 
-`PASSKEY_COLD_SIGN` 正式提交的安全门统一在 `auth/actions.rs::require_admin_security_grant`：先消费 `X-Passkey-Assertion`，再消费 `x-cid-security-grant`，任一缺失、过期、归属不匹配或 payload hash 不匹配都 fail-closed，不允许降级为 SESSION 或只验冷签 grant。机构资料上传、资料删除、机构详情更新等链下写操作虽然不直接提交链交易，也必须按各自后端 `grant_payload` 逐字段绑定授权：上传资料为 `target/file_name/doc_type/file_size`，删除资料为 `target/doc_id/file_name`，机构详情更新为 `target/cid_number/cid_full_name/parent_cid_number/legal_representative_name/legal_representative_cid_number/legal_representative_photo_path`。
+`PASSKEY_COLD_SIGN` 正式提交的安全门统一在 `auth/actions.rs::require_admin_security_grant`：先消费 `X-Passkey-Assertion`，再消费 `x-cid-security-grant`，任一缺失、过期、归属不匹配或 payload hash 不匹配都 fail-closed，不允许降级为 SESSION 或只验冷签 grant。机构资料上传、资料删除、机构详情更新等链下写操作虽然不直接提交链交易，也必须按各自后端 `grant_payload` 逐字段绑定授权：上传资料为 `target/file_name/doc_type/file_size`，删除资料为 `target/doc_id/file_name`，机构详情更新为 `target/cid_number/cid_full_name/parent_cid_number/family_name/given_name/legal_representative_cid_number/legal_representative_photo_path`。
 
 机构管理员列表 API 联合读取链上 `admins(admin_account + family_name + given_name)` 人员集合与 entity 岗位、`InstitutionRolePermissions` 和有效任职。`institution/admins/chain_roles.rs` 负责公权/私权岗位路由、任职合并和 FRG 省专员范围解析；管理员即使没有岗位也必须保留人员行，姓名只展示。本地联系方式、照片和 Passkey 不得成为管理员资格或岗位真源；业务授权必须由完整 `RoleSubject + BusinessActionId + operation` 查询，不按账户或前端标签推断。
 
-链上机构唯一查询先读取 `PublicManage::Institutions[cid_number]`，未命中再读取 `PrivateManage::Institutions[cid_number]`，不建立本地分流真源；公私权 CID 不重复由 runtime 与 NodeGuard 的链上不变式保证。创世公权目录全量投影仍精确为 49,593 个机构和 99,231 个协议账户；非营利法人“中国公民链技术发展基金会” `GZ018-SFGYR-201206100-2026` 属私权创世机构，只参加独立私权存在性审计，不冒充公权目录行，也不增加公权投影计数。启动抽样当前覆盖 32 个派生公权机构、1 个公权常量机构和该基金会，共 34 项。
+链上机构唯一查询先读取 `PublicManage::Institutions[cid_number]`，未命中再读取 `PrivateManage::Institutions[cid_number]`，不建立本地分流真源；公私权 CID 不重复由 runtime 与 NodeGuard 的链上不变式保证。创世公权目录全量投影仍精确为 49,593 个机构和 99,231 个协议账户；非营利法人“公民链技术发展基金会” `GZ018-SFGYR-201206100-2026` 属私权创世机构，只参加独立私权存在性审计，不冒充公权目录行，也不增加公权投影计数。启动抽样当前覆盖 32 个派生公权机构、1 个公权常量机构和该基金会，共 34 项。
 
 链上管理员解码必须按 pallet 分流：`PublicAdmins` 为 `admin_account + cid_number + family_name + given_name`，`PrivateAdmins` 为 `admin_account + family_name + given_name`。公权的公民 CID/姓/名允许空；非空 CID 的最终绑定由 runtime 向 `citizen-identity` 校验，OnChina 本地公民库只能用于输入补全和展示，不能变成链上授权真源。
 

@@ -66,18 +66,22 @@ class ChatPushService {
       StreamController<String>.broadcast();
   final StreamController<ChatPushToken> _tokenController =
       StreamController<ChatPushToken>.broadcast();
+  // 点击「广场发帖」推送（kind='square_post'）时发一个信号，供 AppShell 切到广场 tab。
+  final StreamController<void> _squareOpenController =
+      StreamController<void>.broadcast();
   StreamSubscription<RemoteMessage>? _messageSubscription;
   StreamSubscription<RemoteMessage>? _openedSubscription;
   StreamSubscription<String>? _tokenSubscription;
 
   Stream<String> get wakeSenders => _wakeController.stream;
   Stream<ChatPushToken> get tokenChanges => _tokenController.stream;
+  Stream<void> get squarePostOpens => _squareOpenController.stream;
 
   Future<ChatPushToken> initialize() async {
     final token = await readToken(requestPermission: true);
     _messageSubscription ??= FirebaseMessaging.onMessage.listen(_handleMessage);
     _openedSubscription ??=
-        FirebaseMessaging.onMessageOpenedApp.listen(_handleMessage);
+        FirebaseMessaging.onMessageOpenedApp.listen(_handleOpenedMessage);
     _tokenSubscription ??= FirebaseMessaging.instance.onTokenRefresh.listen(
       (_) async {
         try {
@@ -88,7 +92,7 @@ class ChatPushService {
       },
     );
     final initial = await FirebaseMessaging.instance.getInitialMessage();
-    if (initial != null) _handleMessage(initial);
+    if (initial != null) _handleOpenedMessage(initial);
     return token;
   }
 
@@ -136,6 +140,15 @@ class ChatPushService {
     if (sender != null) _wakeController.add(sender);
   }
 
+  /// 点击/冷启动打开的推送：广场发帖推送 → 发切广场信号；其余按聊天唤醒处理。
+  void _handleOpenedMessage(RemoteMessage message) {
+    if (message.data['kind'] == 'square_post') {
+      _squareOpenController.add(null);
+      return;
+    }
+    _handleMessage(message);
+  }
+
   /// 推送正文只能识别无内容唤醒，不接受消息或附件字段。
   static String? wakeSenderFromData(Map<String, dynamic> data) {
     if (data['kind'] != 'chat_wake' || data.length != 2) return null;
@@ -149,5 +162,6 @@ class ChatPushService {
     await _tokenSubscription?.cancel();
     await _wakeController.close();
     await _tokenController.close();
+    await _squareOpenController.close();
   }
 }

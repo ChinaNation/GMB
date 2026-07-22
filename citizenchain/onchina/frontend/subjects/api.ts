@@ -62,15 +62,17 @@ export interface Institution {
   has_legal_personality?: boolean | null;
   /** 从属关系引用:需挂靠的 F 指向所属法人。 */
   parent_cid_number?: string | null;
-  /** 法定代表人资料。初始化目录机构可为空;编辑保存时必填。 */
-  legal_representative_name?: string | null;
-  legal_representative_cid_number?: string | null;
+  /** 法定代表人公开身份。初始化目录机构可为空；姓名只使用姓、名。 */
+  legal_representative?: {
+    family_name: string;
+    given_name: string;
+    cid_number: string;
+    account: string;
+  } | null;
   legal_representative_photo_path?: string | null;
   legal_representative_photo_name?: string | null;
   legal_representative_photo_mime?: string | null;
   legal_representative_photo_size?: number | null;
-  /** 法定代表人派生账户(链上)。 */
-  legal_representative_account?: string | null;
   /** 机构链投影状态。 */
   chain_status?: string | null;
   /** 机构上链交易哈希。 */
@@ -276,7 +278,8 @@ export interface UpdateInstitutionInput {
   cid_short_name?: string | null;
   /** 所属法人 cid_number(仅 F;传空串后端会拒) */
   parent_cid_number?: string;
-  legal_representative_name?: string;
+  family_name?: string;
+  given_name?: string;
   legal_representative_cid_number?: string;
   legal_representative_photo_path?: string;
   legal_representative_photo_name?: string;

@@ -50,6 +50,7 @@ SquarePost samplePost({
 CitizenProfile sampleProfile({
   bool certified = true,
   bool following = false,
+  bool notifying = false,
   String displayName = '轻节点',
   String bio = '链上公民',
   String owner = kOwner,
@@ -76,6 +77,7 @@ CitizenProfile sampleProfile({
     followers: 128,
     posts: 36,
     isFollowing: following,
+    isNotifying: notifying,
     updatedAt: 1,
   );
 }
@@ -97,6 +99,8 @@ class FakeProfileApi extends CitizenProfileApi {
   int calls = 0;
   int followCalls = 0;
   int unfollowCalls = 0;
+  int notifyCalls = 0;
+  bool? lastNotifyEnabled;
   Map<String, String?>? lastUpdate;
 
   @override
@@ -147,6 +151,19 @@ class FakeProfileApi extends CitizenProfileApi {
     unfollowCalls++;
     if (throwOnFollow) {
       throw const SquareApiException('unfollow failed');
+    }
+  }
+
+  @override
+  Future<void> setNotify({
+    required SquareSession session,
+    required String followedAccount,
+    required bool enabled,
+  }) async {
+    notifyCalls++;
+    lastNotifyEnabled = enabled;
+    if (throwOnFollow) {
+      throw const SquareApiException('notify failed');
     }
   }
 

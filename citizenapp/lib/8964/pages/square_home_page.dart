@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/pages/square_article_detail_page.dart';
@@ -10,13 +12,11 @@ import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/8964/services/square_identity_state.dart';
-import 'package:citizenapp/8964/widgets/square_empty_state.dart';
 import 'package:citizenapp/8964/widgets/square_feed_tabs.dart';
 import 'package:citizenapp/8964/widgets/square_article_card.dart';
 import 'package:citizenapp/8964/widgets/square_post_card.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/ui/app_theme.dart';
-import 'package:citizenapp/ui/identity_badge.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 typedef SquareMembershipLoader = Future<SquareMembershipState?> Function();
@@ -30,6 +30,9 @@ class SquareHomePage extends StatefulWidget {
     this.seedPosts = const <SquarePost>[],
     this.smoldotClientManager,
     this.membershipLoader,
+    this.onSquareUnreadChanged,
+    this.selectedTab,
+    this.tabIndex = 0,
   });
 
   final SquareIdentityService identityService;
@@ -38,6 +41,13 @@ class SquareHomePage extends StatefulWidget {
   final List<SquarePost> seedPosts;
   final SmoldotClientManager? smoldotClientManager;
   final SquareMembershipLoader? membershipLoader;
+
+  /// 广场底部 tab 红点计数回调（上抛给 AppShell 挂 Badge）。
+  final ValueChanged<int>? onSquareUnreadChanged;
+
+  /// 底部导航当前活动 tab 广播；值 == [tabIndex] 时视为「进广场」，清广场红点。
+  final ValueNotifier<int>? selectedTab;
+  final int tabIndex;
 
   @override
   State<SquareHomePage> createState() => _SquareHomePageState();
@@ -54,10 +64,7 @@ class _SquareHomePageState extends State<SquareHomePage> {
   String? _identityAddress;
   String? _identityWalletName;
 
-  /// 顶栏徽章的会员信号（勾），随身份一起加载；best-effort。
   final SquareApiClient _squareApi = SquareApiClient();
-  SquareMembershipState? _membership;
-  int? _browseLeft;
 
   /// 最近一次 feed 加载的 session token，供卡片头像鉴权头复用。
   String? _feedSessionToken;
@@ -65,6 +72,13 @@ class _SquareHomePageState extends State<SquareHomePage> {
 
   /// 同一次 operational 状态下，同一默认钱包只触发一次真实链刷新。
   String? _operationalIdentityAccount;
+
+  /// 关注子 tab 红点数（服务端 following_unread）。广场底部 tab 数经回调上抛。
+  int _followingUnread = 0;
+
+  /// 发帖通知红点轮询；仅生产真实数据源下开启，测试注入 fake feedSource 时跳过不触网。
+  static const Duration _notifyPollInterval = Duration(seconds: 45);
+  Timer? _notifyTimer;
 
   @override
   void initState() {
@@ -81,6 +95,16 @@ class _SquareHomePageState extends State<SquareHomePage> {
     _smoldotClientManager.healthStatusListenable
         .addListener(_onChainHealthChanged);
     _onChainHealthChanged();
+    // 发帖通知红点：仅生产真实数据源下开启（fake feedSource 的测试不触网）。
+    if (_feedSource is SquareApiClient) {
+      widget.selectedTab?.addListener(_onSelectedTabChanged);
+      // 落地即广场活动：清广场游标 + 首拉。
+      unawaited(_onSquareActivated());
+      _notifyTimer = Timer.periodic(
+        _notifyPollInterval,
+        (_) => unawaited(_refreshNotify()),
+      );
+    }
   }
 
   @override
@@ -88,7 +112,70 @@ class _SquareHomePageState extends State<SquareHomePage> {
     WalletManager.walletsRevision.removeListener(_onWalletsChanged);
     _smoldotClientManager.healthStatusListenable
         .removeListener(_onChainHealthChanged);
+    _notifyTimer?.cancel();
+    widget.selectedTab?.removeListener(_onSelectedTabChanged);
     super.dispose();
+  }
+
+  /// 底部导航切到广场（值 == tabIndex）→ 清广场红点。
+  void _onSelectedTabChanged() {
+    if (widget.selectedTab?.value == widget.tabIndex) {
+      unawaited(_onSquareActivated());
+    }
+  }
+
+  Future<SquareSession?> _notifySession() async {
+    try {
+      return await SquareSessionProvider.instance.ensureSession();
+    } on Exception {
+      return null;
+    }
+  }
+
+  /// 拉双游标红点：广场数经回调上抛底部 tab，关注数留本地驱动关注子 tab 徽章。
+  Future<void> _refreshNotify() async {
+    if (_feedSource is! SquareApiClient) return;
+    final session = await _notifySession();
+    if (session == null) return;
+    try {
+      final counts = await _squareApi.fetchNotifyUnread(session: session);
+      if (!mounted) return;
+      widget.onSquareUnreadChanged?.call(counts.squareUnread);
+      if (counts.followingUnread != _followingUnread) {
+        setState(() => _followingUnread = counts.followingUnread);
+      }
+    } on Exception {
+      // 红点拉取失败静默：不影响广场浏览。
+    }
+  }
+
+  /// 进广场：清广场游标 → 底部红点归零，随后回拉（关注游标不动，关注红点保留）。
+  Future<void> _onSquareActivated() async {
+    if (_feedSource is! SquareApiClient) return;
+    final session = await _notifySession();
+    if (session == null) return;
+    try {
+      await _squareApi.markNotifyRead(session: session, scope: 'square');
+      if (mounted) widget.onSquareUnreadChanged?.call(0);
+    } on Exception {
+      // 清读失败静默；下次轮询以服务端为准。
+    }
+    await _refreshNotify();
+  }
+
+  /// 进关注子 tab：清关注游标 → 关注红点归零。
+  Future<void> _onFollowingActivated() async {
+    if (_feedSource is! SquareApiClient) return;
+    if (mounted && _followingUnread != 0) {
+      setState(() => _followingUnread = 0);
+    }
+    final session = await _notifySession();
+    if (session == null) return;
+    try {
+      await _squareApi.markNotifyRead(session: session, scope: 'following');
+    } on Exception {
+      // 清读失败静默；本地已归零，下次轮询以服务端为准。
+    }
   }
 
   Future<SquareIdentityState> _loadIdentity({
@@ -99,8 +186,6 @@ class _SquareHomePageState extends State<SquareHomePage> {
     );
     _identityAddress = identity.ownerAccount;
     _identityWalletName = identity.walletName;
-    // 会员购买态（徽章勾）非阻塞加载：身份图标先渲染，勾稍后补上。
-    unawaited(_refreshMembership());
     return identity;
   }
 
@@ -137,6 +222,7 @@ class _SquareHomePageState extends State<SquareHomePage> {
     }
   }
 
+  /// 拉取会员购买态，仅供发布门禁（`_openCompose`）判定；不再驱动任何 UI。
   Future<SquareMembershipState?> _refreshMembership() async {
     try {
       final loader = widget.membershipLoader;
@@ -149,10 +235,8 @@ class _SquareHomePageState extends State<SquareHomePage> {
                   ? _squareApi.fetchMembership(session)
                   : null;
             }();
-      if (mounted) setState(() => _membership = membership);
       return membership;
     } on Exception {
-      // 会员拉取失败不影响顶栏身份显示（无勾）。
       return null;
     }
   }
@@ -234,118 +318,105 @@ class _SquareHomePageState extends State<SquareHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            '广场',
-                            style: TextStyle(
-                              color: AppTheme.textPrimary,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _browseLeft == null ? '推荐' : '今日剩余 $_browseLeft 条',
-                            style: const TextStyle(
-                              color: AppTheme.textSecondary,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    FutureBuilder<SquareIdentityState>(
-                      future: _identityFuture,
-                      builder: (context, snapshot) {
-                        final identity = snapshot.data;
-                        final badge = identityBadgeStyle(
-                          identityLevel: identity?.identityLevel,
-                          membershipLevel: _membership?.membershipLevel,
-                          membershipActive: _membership?.active ?? false,
-                        );
-                        return Tooltip(
-                          message: identity?.accountLabel ?? '当前钱包',
-                          child: IconButton.outlined(
-                            onPressed: () {},
-                            icon: badge != null
-                                ? IdentityBadge(style: badge, size: 22)
-                                : const Icon(Icons.account_circle_outlined),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(width: 8),
-                    Tooltip(
-                      message: '发布动态',
-                      child: IconButton.filled(
-                        onPressed: _openCompose,
-                        icon: const Icon(Icons.edit_rounded),
-                      ),
-                    ),
-                  ],
+    return Scaffold(
+      // 发布=右下角正圆悬浮 primary FAB（endFloat=底部导航「我的」tab 上方）。
+      floatingActionButton: FloatingActionButton(
+        shape: const CircleBorder(),
+        onPressed: _openCompose,
+        tooltip: '发布动态',
+        backgroundColor: AppTheme.primary,
+        foregroundColor: Colors.white,
+        child: const Icon(Icons.edit_rounded),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // 头像入口已删（进自己主页只走「我的-背景图」），分类栏上移到顶部省空间。
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: SizedBox(
+                width: double.infinity,
+                child: SquareFeedTabs(
+                  selected: _selectedFeed,
+                  followingUnread: _followingUnread,
+                  onChanged: (feed) {
+                    setState(() {
+                      _selectedFeed = feed;
+                      _feedFuture = _loadFeed();
+                    });
+                    // 进关注子 tab → 清关注红点。
+                    if (feed == SquareFeedKind.following) {
+                      unawaited(_onFollowingActivated());
+                    }
+                  },
                 ),
-                const SizedBox(height: 14),
-                SizedBox(
-                  width: double.infinity,
-                  child: SquareFeedTabs(
-                    selected: _selectedFeed,
-                    onChanged: (feed) {
-                      setState(() {
-                        _selectedFeed = feed;
-                        _feedFuture = _loadFeed();
-                      });
+              ),
+            ),
+            Expanded(
+              child: Stack(
+                children: [
+                  // 页面中央若隐若现的坦克水印（= 广场 tab 图标）：常驻背景、不拦触摸，
+                  // 动态卡片浮于其上；无动态时只见水印，取代原空态图标+文字。
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Center(
+                        child: Opacity(
+                          opacity: 0.05,
+                          child: ImageFiltered(
+                            imageFilter:
+                                ui.ImageFilter.blur(sigmaX: 2.2, sigmaY: 2.2),
+                            child: SvgPicture.asset(
+                              'assets/icons/tank.svg',
+                              key: const ValueKey<String>(
+                                'square-tank-watermark',
+                              ),
+                              width: 220,
+                              height: 220,
+                              colorFilter: const ColorFilter.mode(
+                                AppTheme.primary,
+                                BlendMode.srcIn,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  FutureBuilder<List<SquarePost>>(
+                    future: _feedFuture,
+                    builder: (context, snapshot) {
+                      final posts = _composeFeed(
+                        snapshot.data ?? const <SquarePost>[],
+                      );
+                      if (snapshot.connectionState != ConnectionState.done &&
+                          posts.isEmpty) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      // Session 已不再以链上账户或余额作门禁；广场加载失败统一按当前
+                      // 接口语义处理，不保留已删除门禁的专用错误分支。
+                      final errorMessage =
+                          snapshot.hasError ? '广场内容加载失败' : null;
+                      return RefreshIndicator(
+                        onRefresh: _refreshFeed,
+                        child: _FeedBody(
+                          posts: posts,
+                          errorMessage: errorMessage,
+                          onOpenPost: (post) => _openDetail(post),
+                          onOpenAuthor: _openAuthor,
+                          mediaUrlOf: _squareApi.mediaUrl,
+                          avatarHeaders: _feedSessionToken == null
+                              ? null
+                              : {'authorization': 'Bearer $_feedSessionToken'},
+                        ),
+                      );
                     },
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: FutureBuilder<List<SquarePost>>(
-              future: _feedFuture,
-              builder: (context, snapshot) {
-                final posts = _filterPosts([
-                  ..._localPosts,
-                  ...(snapshot.data ?? const <SquarePost>[]),
-                  ...widget.seedPosts,
-                ]);
-                if (snapshot.connectionState != ConnectionState.done &&
-                    posts.isEmpty) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                // Session 已不再以链上账户或余额作门禁；广场加载失败统一按当前
-                // 接口语义处理，不保留已删除门禁的专用错误分支。
-                final errorMessage = snapshot.hasError ? '广场内容加载失败' : null;
-                return RefreshIndicator(
-                  onRefresh: _refreshFeed,
-                  child: _FeedBody(
-                    feedKind: _selectedFeed,
-                    posts: posts,
-                    errorMessage: errorMessage,
-                    onOpenPost: (post) => _openDetail(post),
-                    onOpenAuthor: _openAuthor,
-                    mediaUrlOf: _squareApi.mediaUrl,
-                    avatarHeaders: _feedSessionToken == null
-                        ? null
-                        : {'authorization': 'Bearer $_feedSessionToken'},
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -364,10 +435,6 @@ class _SquareHomePageState extends State<SquareHomePage> {
     );
     // 存 session token 供 feed 卡片头像 Image.network 带鉴权头（读任意作者头像同域可读）。
     _feedSessionToken = session?.sessionToken;
-    final source = _feedSource;
-    if (mounted && source is SquareApiClient) {
-      setState(() => _browseLeft = source.lastBrowseState?.browseLeft);
-    }
     return posts;
   }
 
@@ -377,23 +444,48 @@ class _SquareHomePageState extends State<SquareHomePage> {
     await next;
   }
 
-  List<SquarePost> _filterPosts(List<SquarePost> posts) {
+  /// 按当前 feed 组装最终列表。[serverPosts] 是 `_loadFeed` 已按所选 feed 从
+  /// Worker 拉回的结果。关注流由服务端 `square_posts JOIN square_follows` 过滤，
+  /// 直接渲染服务端结果——本地草稿与种子帖不属于关注流，只在其余分类混入。
+  List<SquarePost> _composeFeed(List<SquarePost> serverPosts) {
+    final merged = [..._localPosts, ...serverPosts, ...widget.seedPosts];
     switch (_selectedFeed) {
       case SquareFeedKind.recommended:
-        return posts;
+        return merged;
       case SquareFeedKind.following:
-        return const <SquarePost>[];
+        return serverPosts;
       case SquareFeedKind.campaign:
-        return posts
+        return merged
             .where((post) => post.postCategory == SquarePostCategory.campaign)
+            .toList(growable: false);
+      case SquareFeedKind.article:
+        return merged
+            .where(
+                (post) => post.contentFormat == SquarePostContentFormat.article)
+            .toList(growable: false);
+      case SquareFeedKind.photos:
+        // 照片=普通图文帖且含图无视频（文章归文章档、视频归视频档，不重复出现）。
+        return merged
+            .where((post) =>
+                post.contentFormat == SquarePostContentFormat.normal &&
+                _hasMedia(post, SquareMediaKind.image) &&
+                !_hasMedia(post, SquareMediaKind.video))
+            .toList(growable: false);
+      case SquareFeedKind.videos:
+        return merged
+            .where((post) =>
+                post.contentFormat == SquarePostContentFormat.normal &&
+                _hasMedia(post, SquareMediaKind.video))
             .toList(growable: false);
     }
   }
+
+  static bool _hasMedia(SquarePost post, SquareMediaKind kind) =>
+      post.mediaItems.any((media) => media.mediaKind == kind);
 }
 
 class _FeedBody extends StatelessWidget {
   const _FeedBody({
-    required this.feedKind,
     required this.posts,
     required this.errorMessage,
     required this.onOpenPost,
@@ -402,7 +494,6 @@ class _FeedBody extends StatelessWidget {
     required this.avatarHeaders,
   });
 
-  final SquareFeedKind feedKind;
   final List<SquarePost> posts;
   final String? errorMessage;
   final ValueChanged<SquarePost> onOpenPost;
@@ -422,29 +513,23 @@ class _FeedBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (posts.isEmpty) {
-      return SquareEmptyState(
-        icon: _emptyIcon,
-        title: _emptyTitle,
-        message: _emptyMessage,
+      // 空态不再展示图标+文字，仅保留可下拉刷新的空滚动区，让底层坦克水印透出；
+      // 有错误时顶部仍显示错误横幅。
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+        children: [
+          if (errorMessage != null) _errorBanner(errorMessage!),
+        ],
       );
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+      // 底部留白给右下角发布 FAB，避免盖住末条动态的互动区。
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 88),
       itemBuilder: (context, index) {
         if (index == 0 && errorMessage != null) {
-          return Container(
-            padding: const EdgeInsets.all(12),
-            decoration: AppTheme.bannerDecoration(AppTheme.warning),
-            child: Text(
-              errorMessage!,
-              style: const TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 13,
-                height: 1.35,
-              ),
-            ),
-          );
+          return _errorBanner(errorMessage!);
         }
         final postIndex = errorMessage == null ? index : index - 1;
         final post = posts[postIndex];
@@ -472,36 +557,18 @@ class _FeedBody extends StatelessWidget {
     );
   }
 
-  IconData get _emptyIcon {
-    switch (feedKind) {
-      case SquareFeedKind.recommended:
-        return Icons.explore_outlined;
-      case SquareFeedKind.following:
-        return Icons.people_alt_outlined;
-      case SquareFeedKind.campaign:
-        return Icons.campaign_outlined;
-    }
-  }
-
-  String get _emptyTitle {
-    switch (feedKind) {
-      case SquareFeedKind.recommended:
-        return '暂无推荐动态';
-      case SquareFeedKind.following:
-        return '暂无关注动态';
-      case SquareFeedKind.campaign:
-        return '暂无竞选动态';
-    }
-  }
-
-  String get _emptyMessage {
-    switch (feedKind) {
-      case SquareFeedKind.recommended:
-        return '新的图文和视频动态会出现在这里。';
-      case SquareFeedKind.following:
-        return '关注的钱包账户发布内容后会显示在这里。';
-      case SquareFeedKind.campaign:
-        return '认证公民发布的竞选内容会显示在这里。';
-    }
+  Widget _errorBanner(String message) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: AppTheme.bannerDecoration(AppTheme.warning),
+      child: Text(
+        message,
+        style: const TextStyle(
+          color: AppTheme.textPrimary,
+          fontSize: 13,
+          height: 1.35,
+        ),
+      ),
+    );
   }
 }

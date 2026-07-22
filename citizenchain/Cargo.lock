@@ -32,7 +32,7 @@ dependencies = [
 
 [[package]]
 name = "address-registry"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -51,7 +51,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "admin-primitives"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "frame-support",
  "parity-scale-codec",
@@ -1289,7 +1289,7 @@ dependencies = [
 
 [[package]]
 name = "blockchain-test-harness"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "chain-signing",
  "clap",
@@ -1629,7 +1629,7 @@ dependencies = [
 
 [[package]]
 name = "chain-signing"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "citizenchain",
  "frame-metadata-hash-extension",
@@ -1691,7 +1691,7 @@ dependencies = [
 
 [[package]]
 name = "citizen-identity"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -1706,7 +1706,7 @@ dependencies = [
 
 [[package]]
 name = "citizen-issuance"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "citizen-identity",
  "frame-benchmarking",
@@ -1722,7 +1722,7 @@ dependencies = [
 
 [[package]]
 name = "citizenchain"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "address-registry",
  "admin-primitives",
@@ -3367,7 +3367,7 @@ checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
 
 [[package]]
 name = "election-campaign"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -3380,7 +3380,7 @@ dependencies = [
 
 [[package]]
 name = "election-vote"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "entity-primitives",
  "frame-benchmarking",
@@ -3464,7 +3464,7 @@ dependencies = [
 
 [[package]]
 name = "entity-primitives"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "admin-primitives",
  "frame-support",
@@ -4273,7 +4273,7 @@ checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 
 [[package]]
 name = "fullnode-issuance"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -4579,7 +4579,7 @@ dependencies = [
 
 [[package]]
 name = "genesis-pallet"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "admin-primitives",
  "frame-support",
@@ -4812,7 +4812,7 @@ dependencies = [
 
 [[package]]
 name = "grandpakey-change"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "curve25519-dalek",
  "entity-primitives",
@@ -5734,7 +5734,7 @@ dependencies = [
 
 [[package]]
 name = "internal-vote"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -5979,7 +5979,7 @@ dependencies = [
 
 [[package]]
 name = "joint-vote"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -6265,7 +6265,7 @@ checksum = "09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2"
 
 [[package]]
 name = "legislation-vote"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "entity-primitives",
  "frame-benchmarking",
@@ -6282,7 +6282,7 @@ dependencies = [
 
 [[package]]
 name = "legislation-yuan"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "entity-primitives",
  "frame-support",
@@ -7619,7 +7619,7 @@ checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
 
 [[package]]
 name = "multisig"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "admin-primitives",
  "entity-primitives",
@@ -7804,7 +7804,7 @@ checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
 
 [[package]]
 name = "node"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "admin-primitives",
  "async-channel 1.9.0",
@@ -8282,8 +8282,9 @@ dependencies = [
 
 [[package]]
 name = "offchain"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
+ "entity-primitives",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -8335,7 +8336,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "onchain"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -8353,7 +8354,7 @@ dependencies = [
 
 [[package]]
 name = "onchain-issuance"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "entity-primitives",
  "frame-benchmarking",
@@ -8374,7 +8375,7 @@ dependencies = [
 
 [[package]]
 name = "onchina"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "admin-primitives",
  "aes-gcm",
@@ -9030,7 +9031,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "personal-admins"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "admin-primitives",
  "frame-benchmarking",
@@ -9049,7 +9050,7 @@ dependencies = [
 
 [[package]]
 name = "personal-manage"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "admin-primitives",
  "frame-benchmarking",
@@ -9912,7 +9913,7 @@ dependencies = [
 
 [[package]]
 name = "pow-difficulty"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -10000,7 +10001,7 @@ dependencies = [
 
 [[package]]
 name = "primitives"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "frame-support",
  "hex-literal",
@@ -10031,7 +10032,7 @@ dependencies = [
 
 [[package]]
 name = "private-admins"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "admin-primitives",
  "entity-primitives",
@@ -10049,7 +10050,7 @@ dependencies = [
 
 [[package]]
 name = "private-manage"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "admin-primitives",
  "entity-primitives",
@@ -10350,7 +10351,7 @@ dependencies = [
 
 [[package]]
 name = "provincialbank-interest"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -10367,7 +10368,7 @@ dependencies = [
 
 [[package]]
 name = "public-admins"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "admin-primitives",
  "entity-primitives",
@@ -10385,7 +10386,7 @@ dependencies = [
 
 [[package]]
 name = "public-manage"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "admin-primitives",
  "entity-primitives",
@@ -10432,7 +10433,7 @@ dependencies = [
 
 [[package]]
 name = "qr-protocol"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -11006,7 +11007,7 @@ dependencies = [
 
 [[package]]
 name = "resolution-destroy"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "entity-primitives",
  "frame-benchmarking",
@@ -11025,7 +11026,7 @@ dependencies = [
 
 [[package]]
 name = "resolution-issuance"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "entity-primitives",
  "frame-benchmarking",
@@ -11178,7 +11179,7 @@ dependencies = [
 
 [[package]]
 name = "runtime-upgrade"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "entity-primitives",
  "frame-benchmarking",
@@ -14358,7 +14359,7 @@ dependencies = [
 
 [[package]]
 name = "square-post"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "entity-primitives",
  "frame-benchmarking",
@@ -16512,7 +16513,7 @@ checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 
 [[package]]
 name = "votingengine"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "citizen-identity",
  "entity-primitives",

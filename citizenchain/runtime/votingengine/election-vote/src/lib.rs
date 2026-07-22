@@ -83,7 +83,7 @@ pub mod pallet {
     }
 
     /// 重新创世直接使用含人口作用域的最终选举元数据布局。
-    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
@@ -178,7 +178,7 @@ pub mod pallet {
         EmptyOfficeCode,
         /// 候选人快照为空。
         EmptyCandidateSnapshot,
-        /// 互选管理员快照为空。
+        /// 互选岗位有效选民快照为空。
         EmptyVoterSnapshot,
         /// 候选人数量超过上限。
         TooManyCandidates,

@@ -270,7 +270,8 @@ class PublicInstitutionBundleLoader {
         old.institutionCode == dto.institutionCode &&
         old.parentCidNumber == dto.parentCidNumber &&
         old.hasLegalPersonality == dto.hasLegalPersonality &&
-        old.legalRepresentativeName == dto.legalRepresentativeName &&
+        old.familyName == dto.familyName &&
+        old.givenName == dto.givenName &&
         old.legalRepresentativeCidNumber == dto.legalRepresentativeCidNumber &&
         old.legalRepresentativeAccount == dto.legalRepresentativeAccount &&
         old.accountCount == dto.accountCount &&

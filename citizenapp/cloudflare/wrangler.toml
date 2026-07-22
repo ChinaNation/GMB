@@ -41,6 +41,16 @@ class_name = "ChatRealtimeObject"
 tag = "v1"
 new_sqlite_classes = ["ChatRealtimeObject"]
 
+# 广场发帖通知扇出队列：producer 入队一条发帖事件，consumer 分页跨调用把全部未静音粉丝推完。
+[[queues.producers]]
+binding = "SQUARE_NOTIFY_QUEUE"
+queue = "square-notify-fanout"
+
+[[queues.consumers]]
+queue = "square-notify-fanout"
+max_batch_size = 10
+max_retries = 3
+
 # 退订视频冷归档扫描：每日一次（UTC 03:00）。是否真正归档由 ARCHIVE_ENABLED 开关控制。
 [triggers]
 crons = ["*/5 * * * *", "0 3 * * *"]
@@ -119,6 +129,15 @@ preview_id = "91133becebc24f27bf10a00cb001f27e"
 name = "CHAT_REALTIME"
 class_name = "ChatRealtimeObject"
 
+[[env.staging.queues.producers]]
+binding = "SQUARE_NOTIFY_QUEUE"
+queue = "square-notify-fanout-staging"
+
+[[env.staging.queues.consumers]]
+queue = "square-notify-fanout-staging"
+max_batch_size = 10
+max_retries = 3
+
 [env.staging.triggers]
 crons = ["*/5 * * * *", "0 3 * * *"]
 
@@ -184,6 +203,15 @@ preview_id = "b72bbbcb36d240acb317fdaf79ce46f4"
 [[env.production.durable_objects.bindings]]
 name = "CHAT_REALTIME"
 class_name = "ChatRealtimeObject"
+
+[[env.production.queues.producers]]
+binding = "SQUARE_NOTIFY_QUEUE"
+queue = "square-notify-fanout-production"
+
+[[env.production.queues.consumers]]
+queue = "square-notify-fanout-production"
+max_batch_size = 10
+max_retries = 3
 
 [env.production.triggers]
 crons = ["*/5 * * * *", "0 3 * * *"]

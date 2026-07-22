@@ -54,6 +54,95 @@ async function sendDeviceWake(
   return sendFcmWake(env, device.push_token, payload);
 }
 
+/// 单台设备的推送目标（provider + token）；广场扇出按批查出后逐台发送。
+export interface PushDevice {
+  push_provider: PushProvider;
+  push_token: string;
+}
+
+interface SquarePostAlert {
+  title: string;
+  body: string;
+  post_id: string;
+}
+
+/// 广场发帖可见推送：与 chat_wake 静默唤醒共用 APNS-JWT / FCM-OAuth 传输，仅 payload
+/// 为可见通知（横幅+声音）。帖子是公开内容，含作者名；data.kind='square_post' 供客户端
+/// 点击导航，绝不触发聊天重连（客户端 chat_wake 判定要求恰好 2 字段，此处天然不匹配）。
+export async function sendSquarePostAlert(
+  env: Env,
+  device: PushDevice,
+  alert: SquarePostAlert,
+): Promise<boolean> {
+  if (device.push_provider === 'apns') {
+    return sendApnsAlert(env, device.push_token, alert);
+  }
+  return sendFcmAlert(env, device.push_token, alert);
+}
+
+async function sendApnsAlert(
+  env: Env,
+  token: string,
+  alert: SquarePostAlert,
+): Promise<boolean> {
+  if (!env.APNS_KEY || !env.APNS_KID || !env.APNS_TEAM || !env.APNS_TOPIC) {
+    return false;
+  }
+  const jwt = await createApnsJwt(env);
+  const host = env.APNS_ENV === 'sandbox' ? 'api.sandbox.push.apple.com' : 'api.push.apple.com';
+  const response = await fetch(`https://${host}/3/device/${encodeURIComponent(token)}`, {
+    method: 'POST',
+    headers: {
+      authorization: `bearer ${jwt}`,
+      'apns-push-type': 'alert',
+      'apns-priority': '10',
+      'apns-topic': env.APNS_TOPIC,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      aps: { alert: { title: alert.title, body: alert.body }, sound: 'default' },
+      kind: 'square_post',
+      post_id: alert.post_id,
+    }),
+  });
+  return response.ok;
+}
+
+async function sendFcmAlert(
+  env: Env,
+  token: string,
+  alert: SquarePostAlert,
+): Promise<boolean> {
+  if (!env.FCM_PROJECT || !env.FCM_EMAIL || !env.FCM_KEY) {
+    return false;
+  }
+  const accessToken = await createFcmAccessToken(env);
+  const response = await fetch(
+    `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(env.FCM_PROJECT)}/messages:send`,
+    {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: {
+          token,
+          notification: { title: alert.title, body: alert.body },
+          data: { kind: 'square_post', post_id: alert.post_id },
+          // Android 8+ 用 App 侧预建的高优先级渠道 'square_posts' 保证横幅+声音；
+          // channel_id 必须与 MainActivity 创建的渠道一致，否则声音由系统默认渠道决定。
+          android: {
+            priority: 'high',
+            notification: { sound: 'default', channel_id: 'square_posts' },
+          },
+        },
+      }),
+    },
+  );
+  return response.ok;
+}
+
 async function sendApnsWake(
   env: Env,
   token: string,

@@ -136,7 +136,8 @@ export function buildInstitutionUpdateSecurityPayload(
     cid_number: cidNumber,
     cid_full_name: input.cid_full_name ?? null,
     parent_cid_number: input.parent_cid_number ?? null,
-    legal_representative_name: input.legal_representative_name ?? null,
+    family_name: input.family_name ?? null,
+    given_name: input.given_name ?? null,
     legal_representative_cid_number: input.legal_representative_cid_number ?? null,
     legal_representative_photo_path: input.legal_representative_photo_path ?? null,
   };

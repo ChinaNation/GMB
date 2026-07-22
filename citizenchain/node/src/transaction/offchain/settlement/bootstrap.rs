@@ -28,6 +28,7 @@ use super::submitter::{PoolBatchSubmitter, TxPool};
 /// 地址无效或组件启动失败,返回 `None`,普通 PoW + GRANDPA 节点继续运行。
 pub(crate) fn start_from_cli(
     clearing_bank_cid_number: Option<&str>,
+    clearing_bank_role_code: Option<&str>,
     clearing_bank_password: Option<&str>,
     reserve_monitor_interval_secs: Option<u64>,
     base_path: &Path,
@@ -46,6 +47,13 @@ pub(crate) fn start_from_cli(
             log::warn!("[ClearingBank] --clearing-bank-cid-number 格式无效:{e},清算行组件不启动");
             return None;
         }
+    };
+    let Some(actor_role_code) = clearing_bank_role_code
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && value.len() <= 64)
+    else {
+        log::warn!("[ClearingBank] 缺少有效 --clearing-bank-role-code,清算行组件不启动");
+        return None;
     };
     let institution_account = AccountId32::new(
         AccountKind::InstitutionMain {
@@ -84,6 +92,7 @@ pub(crate) fn start_from_cli(
     let components = match start_clearing_bank_components(
         base_path,
         actor_cid_number.as_bytes().to_vec(),
+        actor_role_code.as_bytes().to_vec(),
         institution_account.clone(),
         password,
         signer,

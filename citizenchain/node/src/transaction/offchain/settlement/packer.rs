@@ -85,7 +85,7 @@ pub trait BatchSigner: Send + Sync {
     fn sign_batch(&self, message: &[u8]) -> Result<[u8; 64], String>;
 }
 
-/// Extrinsic 提交器。负责把 `(actor_cid_number, institution_account, batch_seq, batch_bytes, sig)` 转成
+/// Extrinsic 提交器。负责把 `(actor_cid_number, actor_role_code, institution_account, batch_seq, batch_bytes, sig)` 转成
 /// `offchain::Call::submit_offchain_batch` extrinsic 并提
 /// 交到节点的 `TransactionPool`。
 ///
@@ -95,6 +95,7 @@ pub trait BatchSubmitter: Send + Sync {
     fn submit(
         &self,
         actor_cid_number: Vec<u8>,
+        actor_role_code: Vec<u8>,
         institution_account: AccountId32,
         batch_seq: u64,
         batch_bytes: Vec<u8>,
@@ -119,6 +120,7 @@ impl BatchSubmitter for NoopBatchSubmitter {
     fn submit(
         &self,
         _actor_cid_number: Vec<u8>,
+        _actor_role_code: Vec<u8>,
         _institution_account: AccountId32,
         _batch_seq: u64,
         _batch_bytes: Vec<u8>,
@@ -134,6 +136,7 @@ impl BatchSubmitter for NoopBatchSubmitter {
 pub struct OffchainPacker {
     ledger: Arc<OffchainLedger>,
     actor_cid_number: Vec<u8>,
+    actor_role_code: Vec<u8>,
     institution_account: AccountId32,
     signer: Arc<dyn BatchSigner>,
     submitter: Arc<dyn BatchSubmitter>,
@@ -148,6 +151,7 @@ impl OffchainPacker {
     pub fn new(
         ledger: Arc<OffchainLedger>,
         actor_cid_number: Vec<u8>,
+        actor_role_code: Vec<u8>,
         institution_account: AccountId32,
         signer: Arc<dyn BatchSigner>,
         submitter: Arc<dyn BatchSubmitter>,
@@ -155,6 +159,7 @@ impl OffchainPacker {
         Self::new_with_initial_seq(
             ledger,
             actor_cid_number,
+            actor_role_code,
             institution_account,
             signer,
             submitter,
@@ -166,6 +171,7 @@ impl OffchainPacker {
     pub fn new_with_initial_seq(
         ledger: Arc<OffchainLedger>,
         actor_cid_number: Vec<u8>,
+        actor_role_code: Vec<u8>,
         institution_account: AccountId32,
         signer: Arc<dyn BatchSigner>,
         submitter: Arc<dyn BatchSubmitter>,
@@ -174,6 +180,7 @@ impl OffchainPacker {
         Self {
             ledger,
             actor_cid_number,
+            actor_role_code,
             institution_account,
             signer,
             submitter,
@@ -219,6 +226,7 @@ impl OffchainPacker {
         let batch_bytes = batch.encode();
         let message = batch_signing_message(
             &self.actor_cid_number,
+            &self.actor_role_code,
             &self.institution_account,
             batch_seq,
             &batch_bytes,
@@ -233,6 +241,7 @@ impl OffchainPacker {
 
         match self.submitter.submit(
             self.actor_cid_number.clone(),
+            self.actor_role_code.clone(),
             self.institution_account.clone(),
             batch_seq,
             batch_bytes,
@@ -271,19 +280,24 @@ impl OffchainPacker {
 // ---------------- 纯函数工具 ----------------
 
 /// 构造清算行批次签名消息(唯一原语):
-/// `signing_message(OP_SIGN_OFFCHAIN_BATCH, SCALE(actor_cid_number) || institution_account || batch_seq_le || batch_bytes)`。
+/// `signing_message(OP_SIGN_OFFCHAIN_BATCH, SCALE(actor_cid_number) || SCALE(actor_role_code)
+/// || institution_account || batch_seq_le || batch_bytes)`。
 ///
 /// 链上 `submit_offchain_batch` 会校验 batch_signature,必须与本函数产生的消息
 /// **逐字节一致**(runtime `batch_signing_hash` 用同一原语 + 同序 scale_payload)。
 /// CID 按 SCALE 字节序列编码；账户按 32 字节编码，与 runtime 唯一原语逐字节对齐。
 pub fn batch_signing_message(
     actor_cid_number: &[u8],
+    actor_role_code: &[u8],
     institution_account: &AccountId32,
     batch_seq: u64,
     batch_bytes: &[u8],
 ) -> [u8; 32] {
-    let mut scale_payload = Vec::with_capacity(actor_cid_number.len() + 32 + 8 + batch_bytes.len());
+    let mut scale_payload = Vec::with_capacity(
+        actor_cid_number.len() + actor_role_code.len() + 32 + 8 + batch_bytes.len(),
+    );
     scale_payload.extend_from_slice(&actor_cid_number.encode());
+    scale_payload.extend_from_slice(&actor_role_code.encode());
     scale_payload.extend_from_slice(institution_account.as_ref());
     scale_payload.extend_from_slice(&batch_seq.to_le_bytes());
     scale_payload.extend_from_slice(batch_bytes);
@@ -305,6 +319,10 @@ mod tests {
 
     fn cid() -> Vec<u8> {
         b"GD001-SCB05-000000001-2026".to_vec()
+    }
+
+    fn role_code() -> Vec<u8> {
+        b"CLEARING_OPERATOR".to_vec()
     }
 
     fn mk_ledger() -> Arc<OffchainLedger> {
@@ -337,7 +355,7 @@ mod tests {
     }
 
     struct MockSubmitter {
-        calls: Mutex<Vec<(Vec<u8>, AccountId32, u64, Vec<u8>, [u8; 64])>>,
+        calls: Mutex<Vec<(Vec<u8>, Vec<u8>, AccountId32, u64, Vec<u8>, [u8; 64])>>,
         reply: Mutex<Result<H256, String>>,
     }
 
@@ -345,6 +363,7 @@ mod tests {
         fn submit(
             &self,
             actor_cid_number: Vec<u8>,
+            actor_role_code: Vec<u8>,
             institution_account: AccountId32,
             batch_seq: u64,
             batch_bytes: Vec<u8>,
@@ -352,6 +371,7 @@ mod tests {
         ) -> Result<H256, String> {
             self.calls.lock().unwrap().push((
                 actor_cid_number,
+                actor_role_code,
                 institution_account,
                 batch_seq,
                 batch_bytes,
@@ -377,6 +397,7 @@ mod tests {
         let packer = OffchainPacker::new(
             mk_ledger(),
             cid(),
+            role_code(),
             acc(0xAA),
             Arc::new(NoopBatchSigner),
             Arc::new(NoopBatchSubmitter),
@@ -391,6 +412,7 @@ mod tests {
         let packer = OffchainPacker::new(
             ledger.clone(),
             cid(),
+            role_code(),
             acc(0xAA),
             Arc::new(NoopBatchSigner),
             Arc::new(NoopBatchSubmitter),
@@ -417,6 +439,7 @@ mod tests {
         let packer = OffchainPacker::new(
             ledger.clone(),
             cid(),
+            role_code(),
             acc(0xAA),
             signer.clone(),
             submitter.clone(),
@@ -432,9 +455,10 @@ mod tests {
         let calls = submitter.calls.lock().unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, cid());
-        assert_eq!(calls[0].1, acc(0xAA));
-        assert_eq!(calls[0].2, 1);
-        assert_eq!(calls[0].4, [7u8; 64]);
+        assert_eq!(calls[0].1, role_code());
+        assert_eq!(calls[0].2, acc(0xAA));
+        assert_eq!(calls[0].3, 1);
+        assert_eq!(calls[0].5, [7u8; 64]);
     }
 
     #[tokio::test]
@@ -451,6 +475,7 @@ mod tests {
         let packer = OffchainPacker::new_with_initial_seq(
             ledger,
             cid(),
+            role_code(),
             acc(0xAA),
             signer,
             submitter.clone(),
@@ -462,7 +487,7 @@ mod tests {
             Some(H256::repeat_byte(0xEE))
         );
         let calls = submitter.calls.lock().unwrap();
-        assert_eq!(calls[0].2, 42);
+        assert_eq!(calls[0].3, 42);
     }
 
     #[tokio::test]
@@ -476,7 +501,14 @@ mod tests {
         let signer = Arc::new(MockSigner {
             reply: Ok([1u8; 64]),
         });
-        let packer = OffchainPacker::new(ledger.clone(), cid(), acc(0xAA), signer, submitter);
+        let packer = OffchainPacker::new(
+            ledger.clone(),
+            cid(),
+            role_code(),
+            acc(0xAA),
+            signer,
+            submitter,
+        );
 
         let r = packer.pack_and_submit(200).await;
         assert!(r.is_err());
@@ -488,17 +520,25 @@ mod tests {
     fn batch_signing_message_is_deterministic() {
         let inst = acc(0xAA);
         let bytes = vec![1u8, 2, 3, 4];
-        let h1 = batch_signing_message(&cid(), &inst, 42, &bytes);
-        let h2 = batch_signing_message(&cid(), &inst, 42, &bytes);
+        let h1 = batch_signing_message(&cid(), &role_code(), &inst, 42, &bytes);
+        let h2 = batch_signing_message(&cid(), &role_code(), &inst, 42, &bytes);
         assert_eq!(h1, h2);
 
         // 改任意输入都影响哈希
-        let h3 = batch_signing_message(&cid(), &inst, 43, &bytes);
+        let h3 = batch_signing_message(&cid(), &role_code(), &inst, 43, &bytes);
         assert_ne!(h1, h3);
-        let h4 = batch_signing_message(&cid(), &acc(0xAB), 42, &bytes);
+        let h4 = batch_signing_message(&cid(), &role_code(), &acc(0xAB), 42, &bytes);
         assert_ne!(h1, h4);
-        let h5 = batch_signing_message(b"GD001-SCB05-000000002-2026", &inst, 42, &bytes);
+        let h5 = batch_signing_message(
+            b"GD001-SCB05-000000002-2026",
+            &role_code(),
+            &inst,
+            42,
+            &bytes,
+        );
         assert_ne!(h1, h5);
+        let h6 = batch_signing_message(&cid(), b"OTHER_ROLE", &inst, 42, &bytes);
+        assert_ne!(h1, h6);
     }
 
     #[test]

@@ -80,13 +80,14 @@ pub enum InstitutionRoleMutation<AccountId> {
 /// 三个字段只能整体设置或整体清空；没有“只改姓名/CID/账户”或使用管理员首位回退的路径。
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo, PartialEq, Eq)]
 pub enum InstitutionLegalRepresentativeChange<AccountId> {
-    /// 任命或更换法定代表人，三个公开字段必须同时写入。
+    /// 任命或更换法定代表人，完整公开人员字段必须同时写入。
     Set {
-        legal_representative_name: Vec<u8>,
-        legal_representative_cid_number: Vec<u8>,
-        legal_representative_account: AccountId,
+        family_name: Vec<u8>,
+        given_name: Vec<u8>,
+        cid_number: Vec<u8>,
+        account: AccountId,
     },
-    /// 解除当前法定代表人，三个公开字段必须同时清空。
+    /// 解除当前法定代表人，完整公开人员字段必须同时清空。
     Clear,
 }
 

@@ -5,7 +5,7 @@
 - CID 不保存原始实名数据
 - CitizenChain 不保存普通公民的原始实名档案和非公开隐私信息
 - 依法公开的机构法定代表人、机构岗位任职和竞选公开资料可以上链；不得因公开职务身份而附带公开护照号、出生日期、住址等私密档案
-- 机构法定代表人任免生效后，必须将 `legal_representative_name`、`legal_representative_cid_number`、`legal_representative_account` 作为公开机构信息上链
+- 机构法定代表人任免生效后，必须将 `legal_representative: Option<{ family_name, given_name, cid_number, account }>` 作为一个原子公开机构信息上链；人的姓名不得保存拼接字段或另造前缀别名
 - 创世没有真实法定代表人资料时不得填充假数据，不得把首位管理员默认为法定代表人；依赖法定代表人的业务在任命完成前必须拒绝执行
 - permit 必须短期有效
 - CitizenApp 私密聊天消息、会话和附件只能保存在通信双方设备，禁止写入 Cloudflare D1、R2、KV 或 Durable Object Storage。

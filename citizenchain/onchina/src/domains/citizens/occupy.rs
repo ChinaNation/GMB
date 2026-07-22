@@ -28,6 +28,7 @@ use crate::domains::citizens::admin_entry::{
 };
 use crate::domains::citizens::chain_identity::{
     active_registry_cid_number, ensure_registry_admin, same_pubkey_hex,
+    validate_actor_role_code,
 };
 use crate::*;
 
@@ -206,9 +207,10 @@ fn append_bounded(out: &mut Vec<u8>, bytes: &[u8]) {
     out.extend_from_slice(bytes);
 }
 
-/// occupy_cid(actor_cid_number, cid_number, commitment, province_code, city_code)
+/// occupy_cid(actor_cid_number, actor_role_code, cid_number, commitment, province_code, city_code)
 fn encode_occupy_cid_call(
     actor_cid_number: &str,
+    actor_role_code: &str,
     cid_number: &str,
     commitment: &[u8; 32],
     province_code: &str,
@@ -218,6 +220,7 @@ fn encode_occupy_cid_call(
     out.push(CITIZEN_IDENTITY_PALLET_INDEX);
     out.push(OCCUPY_CID_CALL_INDEX);
     append_bounded(&mut out, actor_cid_number.as_bytes());
+    append_bounded(&mut out, actor_role_code.as_bytes());
     append_bounded(&mut out, cid_number.as_bytes());
     out.extend_from_slice(commitment);
     append_bounded(&mut out, province_code.as_bytes());
@@ -225,12 +228,17 @@ fn encode_occupy_cid_call(
     out
 }
 
-/// revoke_cid(actor_cid_number, cid_number)
-fn encode_revoke_cid_call(actor_cid_number: &str, cid_number: &str) -> Vec<u8> {
+/// revoke_cid(actor_cid_number, actor_role_code, cid_number)
+fn encode_revoke_cid_call(
+    actor_cid_number: &str,
+    actor_role_code: &str,
+    cid_number: &str,
+) -> Vec<u8> {
     let mut out = Vec::new();
     out.push(CITIZEN_IDENTITY_PALLET_INDEX);
     out.push(REVOKE_CID_CALL_INDEX);
     append_bounded(&mut out, actor_cid_number.as_bytes());
+    append_bounded(&mut out, actor_role_code.as_bytes());
     append_bounded(&mut out, cid_number.as_bytes());
     out
 }
@@ -270,6 +278,11 @@ pub(crate) struct PrepareCitizenRevokeOutput {
     pub(crate) expires_at: i64,
 }
 
+#[derive(Deserialize)]
+pub(crate) struct PrepareCitizenRevokeInput {
+    pub(crate) actor_role_code: String,
+}
+
 // ──── handlers ────
 
 /// 建档占号 prepare:占号先行,本接口不落任何档案。
@@ -285,6 +298,10 @@ pub(crate) async fn prepare_citizen_occupy(
     if let Err(resp) = ensure_registry_admin(&ctx) {
         return resp;
     }
+    let actor_role_code = match validate_actor_role_code(input.actor_role_code.as_str()) {
+        Ok(value) => value,
+        Err(resp) => return resp,
+    };
     let validated = match validate_citizen_input(&ctx, &input) {
         Ok(v) => v,
         Err(resp) => return resp,
@@ -334,6 +351,7 @@ pub(crate) async fn prepare_citizen_occupy(
     };
     let call = encode_occupy_cid_call(
         &actor_cid_number,
+        actor_role_code.as_str(),
         cid_number.as_str(),
         &commitment,
         validated.province_code.as_str(),
@@ -380,6 +398,7 @@ pub(crate) async fn prepare_citizen_occupy(
             "validated": validated,
             "cid_number": cid_number,
             "commitment": hex::encode(commitment),
+            "actor_role_code": actor_role_code,
         }),
         expires_at,
         consumed_at: None,
@@ -419,6 +438,7 @@ pub(crate) async fn prepare_citizen_revoke(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(cid_number): Path<String>,
+    Json(input): Json<PrepareCitizenRevokeInput>,
 ) -> impl IntoResponse {
     let ctx = match require_admin_any(&state, &headers) {
         Ok(v) => v,
@@ -427,7 +447,15 @@ pub(crate) async fn prepare_citizen_revoke(
     if let Err(resp) = ensure_registry_admin(&ctx) {
         return resp;
     }
-    let grant_payload = serde_json::json!({ "cid_number": cid_number, "op": "revoke" });
+    let actor_role_code = match validate_actor_role_code(input.actor_role_code.as_str()) {
+        Ok(value) => value,
+        Err(resp) => return resp,
+    };
+    let grant_payload = serde_json::json!({
+        "cid_number": cid_number,
+        "actor_role_code": actor_role_code,
+        "op": "revoke",
+    });
     if let Err(resp) = require_admin_security_grant(
         &state,
         &headers,
@@ -450,7 +478,11 @@ pub(crate) async fn prepare_citizen_revoke(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let call = encode_revoke_cid_call(&actor_cid_number, cid_number.as_str());
+    let call = encode_revoke_cid_call(
+        &actor_cid_number,
+        actor_role_code.as_str(),
+        cid_number.as_str(),
+    );
     let prepared = match chain_submit::prepare_signing(&call, ctx.admin_account.as_str()).await {
         Ok(v) => v,
         Err(err) => {
@@ -487,7 +519,10 @@ pub(crate) async fn prepare_citizen_revoke(
         call_data: call,
         nonce: prepared.nonce,
         signing_hash: prepared.signing_hash_hex.clone(),
-        context: serde_json::json!({ "cid_number": cid_number }),
+        context: serde_json::json!({
+            "cid_number": cid_number,
+            "actor_role_code": actor_role_code,
+        }),
         expires_at,
         consumed_at: None,
     };

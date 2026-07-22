@@ -171,13 +171,14 @@ pub fn start_node_in_process(
 
                 // 在 tokio runtime 中启动节点服务。
                 // UI 启动路径暂不支持清算行角色,
-                // 全部透传 None(bank / password / reserve_monitor_interval);生产用户
+                // 全部透传 None(bank CID / role / password / reserve interval);生产用户
                 // 通过 CLI 的 `--clearing-bank` 进入无 UI 模式启动清算行节点。
                 tokio_runtime.block_on(async {
                     match crate::core::service::new_full(
                         config,
                         mining_threads,
                         gpu_device,
+                        None,
                         None,
                         None,
                         None,

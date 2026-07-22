@@ -952,8 +952,7 @@ class PayloadDecoder {
   }
 
   // PublicManage(30) / PrivateManage(31) / update_institution_info(6)
-  // SCALE: cid_number + cid_full_name + cid_short_name + register_nonce + signature
-  //      + actor_cid_number + credential_signer_pubkey + scope_province_name + scope_city_name。
+  // SCALE: cid_number + cid_full_name + cid_short_name + actor_cid_number + actor_role_code。
   static DecodedPayload? _decodeUpdateInstitutionInfo(
     Uint8List bytes, {
     required String action,
@@ -972,22 +971,12 @@ class PayloadDecoder {
     if (shortNameRead == null || shortNameRead.$1.isEmpty) return null;
     final cidShortName = shortNameRead.$1;
     offset = shortNameRead.$2;
-    offset = _skipBoundedBytes(bytes, offset); // register_nonce
-    if (offset < 0) return null;
-    offset = _skipBoundedBytes(bytes, offset); // signature
-    if (offset < 0) return null;
     final actorRead = _readCidNumber(bytes, offset);
     if (actorRead == null) return null;
     offset = actorRead.$2;
-    if (offset + 32 > bytes.length) return null;
-    final credentialSigner = bytes.sublist(offset, offset + 32);
-    offset += 32;
-    final (scopeProvinceName, afterProvince) = _readUtf8Vec(bytes, offset);
-    if (scopeProvinceName == null || scopeProvinceName.isEmpty) return null;
-    offset = afterProvince;
-    final (scopeCityName, afterCity) = _readUtf8Vec(bytes, offset);
-    if (scopeCityName == null) return null;
-    offset = afterCity;
+    final roleRead = _readRoleCode(bytes, offset);
+    if (roleRead == null) return null;
+    offset = roleRead.$2;
     if (!_hasValidSigningTail(bytes, offset)) return null;
     return DecodedPayload(
       action: action,
@@ -997,16 +986,13 @@ class PayloadDecoder {
         'cid_full_name': cidFullName,
         'cid_short_name': cidShortName,
         'actor_cid_number': actorRead.$1,
-        'credential_signer_pubkey': _bytesToSs58(credentialSigner),
-        'scope_province_name': scopeProvinceName,
-        'scope_city_name': scopeCityName,
+        'actor_role_code': roleRead.$1,
       },
     );
   }
 
   // PublicManage(30) / PrivateManage(31) / add_institution_account(7)
-  // SCALE: cid_number + account_names:Vec<BoundedVec<u8>> + register_nonce + signature
-  //      + actor_cid_number + credential_signer_pubkey + scope_province_name + scope_city_name。
+  // SCALE: cid_number + account_names:Vec<BoundedVec<u8>> + actor_cid_number + actor_role_code。
   static DecodedPayload? _decodeAddInstitutionAccount(
     Uint8List bytes, {
     required String action,
@@ -1031,22 +1017,12 @@ class PayloadDecoder {
       accountNames.add(accountNameRead.$1);
       offset = accountNameRead.$2;
     }
-    offset = _skipBoundedBytes(bytes, offset); // register_nonce
-    if (offset < 0) return null;
-    offset = _skipBoundedBytes(bytes, offset); // signature
-    if (offset < 0) return null;
     final actorRead = _readCidNumber(bytes, offset);
     if (actorRead == null) return null;
     offset = actorRead.$2;
-    if (offset + 32 > bytes.length) return null;
-    final credentialSigner = bytes.sublist(offset, offset + 32);
-    offset += 32;
-    final (scopeProvinceName, afterProvince) = _readUtf8Vec(bytes, offset);
-    if (scopeProvinceName == null || scopeProvinceName.isEmpty) return null;
-    offset = afterProvince;
-    final (scopeCityName, afterCity) = _readUtf8Vec(bytes, offset);
-    if (scopeCityName == null) return null;
-    offset = afterCity;
+    final roleRead = _readRoleCode(bytes, offset);
+    if (roleRead == null) return null;
+    offset = roleRead.$2;
     if (!_hasValidSigningTail(bytes, offset)) return null;
     return DecodedPayload(
       action: action,
@@ -1056,9 +1032,7 @@ class PayloadDecoder {
         'account_names': accountNames.join('、'),
         'account_count': accountCount.toString(),
         'actor_cid_number': actorRead.$1,
-        'credential_signer_pubkey': _bytesToSs58(credentialSigner),
-        'scope_province_name': scopeProvinceName,
-        'scope_city_name': scopeCityName,
+        'actor_role_code': roleRead.$1,
       },
     );
   }
@@ -1110,8 +1084,8 @@ class PayloadDecoder {
   }
 
   // PublicManage(30) / PrivateManage(31) / register_institution_admins(9)
-  // SCALE: cid_number + admins + actor_cid_number。公权管理员为四字段，
-  // 私权管理员为三字段；注册局授权由 runtime 对签名 origin 直接校验。
+  // SCALE: cid_number + admins + actor_cid_number + actor_role_code。
+  // 公权管理员为四字段，私权管理员为三字段。
   static DecodedPayload? _decodeRegisterInstitutionAdmins(
     Uint8List bytes, {
     required bool isPublic,
@@ -1136,6 +1110,9 @@ class PayloadDecoder {
     final actorRead = _readCidNumber(bytes, offset);
     if (actorRead == null) return null;
     offset = actorRead.$2;
+    final roleRead = _readRoleCode(bytes, offset);
+    if (roleRead == null) return null;
+    offset = roleRead.$2;
     if (!_hasValidSigningTail(bytes, offset)) return null;
     return DecodedPayload(
       action: action,
@@ -1145,6 +1122,7 @@ class PayloadDecoder {
         'admins_len': admins.length.toString(),
         'admins': _adminMachineValue(admins),
         'actor_cid_number': actorRead.$1,
+        'actor_role_code': roleRead.$1,
         'fee_payer': _reviewValue(
           'fee_payer',
           {'actor_cid_number': actorRead.$1},
@@ -1155,6 +1133,7 @@ class PayloadDecoder {
         'admins_len': admins.length.toString(),
         'admins': _adminReviewValue(admins),
         'actor_cid_number': actorRead.$1,
+        'actor_role_code': roleRead.$1,
         'fee_payer': _reviewValue(
           'fee_payer',
           {'actor_cid_number': actorRead.$1},
@@ -1169,6 +1148,7 @@ class PayloadDecoder {
   //   pub fn propose_issuance(
   //     origin,
   //     actor_cid_number: CidNumber,
+  //     proposer_role_code: RoleCode,
   //     reason: ReasonOf<T>,                  // BoundedVec<u8>
   //     total_amount: BalanceOf<T>,           // u128 LE
   //     allocations: AllocationOf<T>,
@@ -1184,6 +1164,10 @@ class PayloadDecoder {
     if (actorRead == null) return null;
     final actorCidNumber = actorRead.$1;
     offset = actorRead.$2;
+
+    final roleRead = _readRoleCode(bytes, offset);
+    if (roleRead == null) return null;
+    offset = roleRead.$2;
 
     // reason: Vec<u8>
     final (reasonLen, reasonLenSize) = _decodeCompactU32(bytes, offset);
@@ -1219,6 +1203,7 @@ class PayloadDecoder {
       summary: '决议发行 $amountYuan GMB（$allocLen 项分配）',
       fields: {
         'actor_cid_number': actorCidNumber,
+        'proposer_role_code': roleRead.$1,
         'reason': reason,
         'amount_yuan': '$amountYuan GMB',
         'allocation_count': allocLen.toString(),
@@ -1227,13 +1212,16 @@ class PayloadDecoder {
   }
 
   // OnchainIssuance(23) / propose_issue(0)
-  // SCALE:actor_cid_number + execution_account + AssetClass + name + symbol
+  // SCALE:actor_cid_number + actor_role_code + execution_account + AssetClass + name + symbol
   //   + description + decimals:u8 + initial_supply:u128。
   static DecodedPayload? _decodeProposeAssetIssue(Uint8List bytes) {
     var offset = 2;
     final actorRead = _readCidNumber(bytes, offset);
     if (actorRead == null) return null;
     offset = actorRead.$2;
+    final roleRead = _readRoleCode(bytes, offset);
+    if (roleRead == null) return null;
+    offset = roleRead.$2;
     if (offset + 32 + 1 > bytes.length) return null;
     final executionAccount = _bytesToSs58(
       Uint8List.fromList(bytes.sublist(offset, offset + 32)),
@@ -1269,6 +1257,7 @@ class PayloadDecoder {
           '发行资产 ${nameRead.$1}（${symbolRead.$1}），初始供应 ${_formatRawAssetAmount(initialSupply, decimals)}',
       fields: <String, String>{
         'actor_cid_number': actorRead.$1,
+        'actor_role_code': roleRead.$1,
         'execution_account': executionAccount,
         'asset_class': assetClass,
         'asset_name': nameRead.$1,
@@ -1283,7 +1272,7 @@ class PayloadDecoder {
   // OnchainIssuance(23) / propose_mint(1)
   // SCALE:actor_cid_number + asset_id:u32 + to:AccountId32 + amount:u128。
   static DecodedPayload? _decodeProposeAssetMint(Uint8List bytes) {
-    final header = _readOnchainAssetHeader(bytes);
+    final header = _readOnchainAssetHeader(bytes, withActorRole: true);
     if (header == null) return null;
     var offset = header.next;
     if (offset + 32 + 16 > bytes.length) return null;
@@ -1300,6 +1289,7 @@ class PayloadDecoder {
           '资产 #${header.assetId} 增发 ${amount.toString()} raw 到 ${_truncateAddress(to)}',
       fields: {
         'actor_cid_number': header.actorCidNumber,
+        'actor_role_code': header.actorRoleCode!,
         'asset_id': header.assetId.toString(),
         'to': to,
         'amount_raw': amount.toString(),
@@ -1310,7 +1300,7 @@ class PayloadDecoder {
   // OnchainIssuance(23) / propose_burn(2)
   // SCALE:actor_cid_number + asset_id:u32 + from:AccountId32 + amount:u128。
   static DecodedPayload? _decodeProposeAssetBurn(Uint8List bytes) {
-    final header = _readOnchainAssetHeader(bytes);
+    final header = _readOnchainAssetHeader(bytes, withActorRole: true);
     if (header == null) return null;
     var offset = header.next;
     if (offset + 32 + 16 > bytes.length) return null;
@@ -1327,6 +1317,7 @@ class PayloadDecoder {
           '资产 #${header.assetId} 从 ${_truncateAddress(from)} 销毁 ${amount.toString()} raw',
       fields: {
         'actor_cid_number': header.actorCidNumber,
+        'actor_role_code': header.actorRoleCode!,
         'asset_id': header.assetId.toString(),
         'from': from,
         'amount_raw': amount.toString(),
@@ -1337,7 +1328,7 @@ class PayloadDecoder {
   // OnchainIssuance(23) / propose_close(3)
   // SCALE:actor_cid_number + asset_id:u32。
   static DecodedPayload? _decodeProposeAssetClose(Uint8List bytes) {
-    final header = _readOnchainAssetHeader(bytes);
+    final header = _readOnchainAssetHeader(bytes, withActorRole: true);
     if (header == null || !_hasValidSigningTail(bytes, header.next)) {
       return null;
     }
@@ -1346,6 +1337,7 @@ class PayloadDecoder {
       summary: '关闭资产 #${header.assetId}',
       fields: {
         'actor_cid_number': header.actorCidNumber,
+        'actor_role_code': header.actorRoleCode!,
         'asset_id': header.assetId.toString(),
       },
     );
@@ -1354,7 +1346,7 @@ class PayloadDecoder {
   // OnchainIssuance(23) / propose_transfer(4)
   // SCALE:actor_cid_number + asset_id:u32 + from + to + amount:u128。
   static DecodedPayload? _decodeProposeAssetTransfer(Uint8List bytes) {
-    final header = _readOnchainAssetHeader(bytes);
+    final header = _readOnchainAssetHeader(bytes, withActorRole: true);
     if (header == null) return null;
     var offset = header.next;
     if (offset + 32 + 32 + 16 > bytes.length) return null;
@@ -1375,6 +1367,7 @@ class PayloadDecoder {
           '资产 #${header.assetId} 划转 ${amount.toString()} raw：${_truncateAddress(from)} → ${_truncateAddress(to)}',
       fields: {
         'actor_cid_number': header.actorCidNumber,
+        'actor_role_code': header.actorRoleCode!,
         'asset_id': header.assetId.toString(),
         'from': from,
         'to': to,
@@ -1384,12 +1377,12 @@ class PayloadDecoder {
   }
 
   // OnchainIssuance(23) / propose_monitor_freeze(10) / unfreeze(11)
-  // SCALE:actor_cid_number + asset_id:u32 + who:AccountId32 + reason_hash:[u8;32]。
+  // SCALE:actor_cid_number + actor_role_code + asset_id:u32 + who:AccountId32 + reason_hash:[u8;32]。
   static DecodedPayload? _decodeProposeMonitorFreeze(
     Uint8List bytes, {
     required bool unfreeze,
   }) {
-    final header = _readOnchainAssetHeader(bytes);
+    final header = _readOnchainAssetHeader(bytes, withActorRole: true);
     if (header == null) return null;
     var offset = header.next;
     if (offset + 32 + 32 > bytes.length) return null;
@@ -1407,6 +1400,7 @@ class PayloadDecoder {
           '${unfreeze ? '解冻' : '冻结'}资产 #${header.assetId} 持仓 ${_truncateAddress(who)}',
       fields: {
         'actor_cid_number': header.actorCidNumber,
+        'actor_role_code': header.actorRoleCode!,
         'asset_id': header.assetId.toString(),
         'who': who,
         'reason_hash': reasonHash,
@@ -1415,9 +1409,9 @@ class PayloadDecoder {
   }
 
   // OnchainIssuance(23) / propose_monitor_confiscate(12)
-  // SCALE:actor_cid_number + asset_id:u32 + who + amount:u128 + reason_hash。
+  // SCALE:actor_cid_number + actor_role_code + asset_id:u32 + who + amount:u128 + reason_hash。
   static DecodedPayload? _decodeProposeMonitorConfiscate(Uint8List bytes) {
-    final header = _readOnchainAssetHeader(bytes);
+    final header = _readOnchainAssetHeader(bytes, withActorRole: true);
     if (header == null) return null;
     var offset = header.next;
     if (offset + 32 + 16 + 32 > bytes.length) return null;
@@ -1437,6 +1431,7 @@ class PayloadDecoder {
           '监管扣押资产 #${header.assetId} ${amount.toString()} raw（${_truncateAddress(who)}）',
       fields: {
         'actor_cid_number': header.actorCidNumber,
+        'actor_role_code': header.actorRoleCode!,
         'asset_id': header.assetId.toString(),
         'who': who,
         'amount_raw': amount.toString(),
@@ -1446,9 +1441,9 @@ class PayloadDecoder {
   }
 
   // OnchainIssuance(23) / propose_monitor_force_transfer(13)
-  // SCALE:actor_cid_number + asset_id:u32 + from + to + amount:u128 + reason_hash。
+  // SCALE:actor_cid_number + actor_role_code + asset_id:u32 + from + to + amount:u128 + reason_hash。
   static DecodedPayload? _decodeProposeMonitorForceTransfer(Uint8List bytes) {
-    final header = _readOnchainAssetHeader(bytes);
+    final header = _readOnchainAssetHeader(bytes, withActorRole: true);
     if (header == null) return null;
     var offset = header.next;
     if (offset + 32 + 32 + 16 + 32 > bytes.length) return null;
@@ -1472,6 +1467,7 @@ class PayloadDecoder {
           '监管划转资产 #${header.assetId} ${amount.toString()} raw：${_truncateAddress(from)} → ${_truncateAddress(to)}',
       fields: {
         'actor_cid_number': header.actorCidNumber,
+        'actor_role_code': header.actorRoleCode!,
         'asset_id': header.assetId.toString(),
         'from': from,
         'to': to,
@@ -1482,9 +1478,9 @@ class PayloadDecoder {
   }
 
   // OnchainIssuance(23) / propose_monitor_force_close(14)
-  // SCALE:actor_cid_number + asset_id:u32 + reason_hash:[u8;32]。
+  // SCALE:actor_cid_number + actor_role_code + asset_id:u32 + reason_hash:[u8;32]。
   static DecodedPayload? _decodeProposeMonitorForceClose(Uint8List bytes) {
-    final header = _readOnchainAssetHeader(bytes);
+    final header = _readOnchainAssetHeader(bytes, withActorRole: true);
     if (header == null) return null;
     var offset = header.next;
     if (offset + 32 > bytes.length) return null;
@@ -1497,21 +1493,35 @@ class PayloadDecoder {
       summary: '监管封禁资产 #${header.assetId}',
       fields: {
         'actor_cid_number': header.actorCidNumber,
+        'actor_role_code': header.actorRoleCode!,
         'asset_id': header.assetId.toString(),
         'reason_hash': reasonHash,
       },
     );
   }
 
-  static ({String actorCidNumber, int assetId, int next})?
-      _readOnchainAssetHeader(Uint8List bytes) {
+  static ({String actorCidNumber, String? actorRoleCode, int assetId, int next})?
+      _readOnchainAssetHeader(
+    Uint8List bytes, {
+    bool withActorRole = false,
+  }) {
     final actorRead = _readCidNumber(bytes, 2);
-    if (actorRead == null || actorRead.$2 + 4 > bytes.length) return null;
-    final assetId = _readU32Le(bytes, actorRead.$2);
+    if (actorRead == null) return null;
+    var offset = actorRead.$2;
+    String? actorRoleCode;
+    if (withActorRole) {
+      final roleRead = _readRoleCode(bytes, offset);
+      if (roleRead == null) return null;
+      actorRoleCode = roleRead.$1;
+      offset = roleRead.$2;
+    }
+    if (offset + 4 > bytes.length) return null;
+    final assetId = _readU32Le(bytes, offset);
     return (
       actorCidNumber: actorRead.$1,
+      actorRoleCode: actorRoleCode,
       assetId: assetId,
-      next: actorRead.$2 + 4,
+      next: offset + 4,
     );
   }
 
@@ -1592,9 +1602,7 @@ class PayloadDecoder {
 
   // PublicManage(30) / PrivateManage(31) / propose_close_*_institution(1)
   /// 机构自定义账户关闭提案。
-  /// SCALE:actor_cid_number + proposer_role_code + institution_account + beneficiary + register_nonce
-  ///   + signature + credential_issuer_cid_number + credential_signer_pubkey。
-  /// 外层授权只认 actor CID + proposer role；注册局凭证不构成第二套交易授权。
+  /// SCALE:actor_cid_number + proposer_role_code + institution_account + beneficiary。
   static DecodedPayload? _decodeProposeCloseInstitution(
     Uint8List bytes, {
     required String action,
@@ -1613,16 +1621,6 @@ class PayloadDecoder {
     offset += 32;
     final beneficiaryId = bytes.sublist(offset, offset + 32);
     offset += 32;
-    offset = _skipBoundedBytes(bytes, offset); // register_nonce
-    if (offset < 0) return null;
-    offset = _skipBoundedBytes(bytes, offset); // signature
-    if (offset < 0) return null;
-    final credentialIssuerRead = _readCidNumber(bytes, offset);
-    if (credentialIssuerRead == null) return null;
-    offset = credentialIssuerRead.$2;
-    if (offset + 32 > bytes.length) return null;
-    final credentialSigner = bytes.sublist(offset, offset + 32);
-    offset += 32;
     if (!_hasValidSigningTail(bytes, offset)) return null;
     final account = Keyring().encodeAddress(accountId.toList(), _ss58Prefix);
     final beneficiary =
@@ -1636,8 +1634,6 @@ class PayloadDecoder {
         'proposer_role_code': roleRead.$1,
         'institution_account': account,
         'beneficiary': beneficiary,
-        'credential_issuer_cid_number': credentialIssuerRead.$1,
-        'credential_signer_pubkey': _bytesToSs58(credentialSigner),
       },
     );
   }
@@ -2342,7 +2338,8 @@ class PayloadDecoder {
   }
 
   // CitizenIdentity(10) / register_voting_identity(0)
-  // SCALE: [10][0][actor_cid_number:CidNumber][VotingIdentityPayload][citizen_signature:Vec]。
+  // SCALE: [10][0][actor_cid_number:CidNumber][actor_role_code:RoleCode]
+  //        [VotingIdentityPayload][citizen_signature:Vec]。
   static DecodedPayload? _decodeRegisterVotingIdentity(Uint8List bytes) {
     return _decodeVotingIdentityCall(
       bytes,
@@ -2368,6 +2365,9 @@ class PayloadDecoder {
     final actorRead = _readCidNumber(bytes, offset);
     if (actorRead == null) return null;
     offset = actorRead.$2;
+    final roleRead = _readRoleCode(bytes, offset);
+    if (roleRead == null) return null;
+    offset = roleRead.$2;
     final payload = _readVotingIdentityPayload(bytes, offset);
     if (payload == null) return null;
     offset = payload.next;
@@ -2384,18 +2384,21 @@ class PayloadDecoder {
       summary: '$summaryPrefix：${payload.cidNumber}',
       fields: <String, String>{
         'actor_cid_number': actorRead.$1,
+        'actor_role_code': roleRead.$1,
         ...payload.fields,
         'citizen_signature_len': signatureLen.toString(),
       },
       reviewFields: <String, String>{
         'actor_cid_number': actorRead.$1,
+        'actor_role_code': roleRead.$1,
         ...payload.reviewFields,
       },
     );
   }
 
   // CitizenIdentity(10) / upgrade_to_candidate_identity(1)
-  // SCALE: [10][1][actor_cid_number:CidNumber][CandidateIdentityPayload][citizen_signature:Vec]。
+  // SCALE: [10][1][actor_cid_number:CidNumber][actor_role_code:RoleCode]
+  //        [CandidateIdentityPayload][citizen_signature:Vec]。
   static DecodedPayload? _decodeUpgradeToCandidateIdentity(Uint8List bytes) {
     return _decodeCandidateIdentityCall(
       bytes,
@@ -2421,6 +2424,9 @@ class PayloadDecoder {
     final actorRead = _readCidNumber(bytes, offset);
     if (actorRead == null) return null;
     offset = actorRead.$2;
+    final roleRead = _readRoleCode(bytes, offset);
+    if (roleRead == null) return null;
+    offset = roleRead.$2;
     final payload = _readCandidateIdentityPayload(bytes, offset);
     if (payload == null) return null;
     offset = payload.next;
@@ -2437,35 +2443,40 @@ class PayloadDecoder {
       summary: '$summaryPrefix：${payload.cidNumber}',
       fields: <String, String>{
         'actor_cid_number': actorRead.$1,
+        'actor_role_code': roleRead.$1,
         ...payload.fields,
         'citizen_signature_len': signatureLen.toString(),
       },
       reviewFields: <String, String>{
         'actor_cid_number': actorRead.$1,
+        'actor_role_code': roleRead.$1,
         ...payload.reviewFields,
       },
     );
   }
 
   // CitizenIdentity(10) / revoke_identity(4)
-  // SCALE:actor_cid_number + 被吊销的公民 cid_number。
+  // SCALE:actor_cid_number + actor_role_code + 被吊销的公民 cid_number。
   static DecodedPayload? _decodeRevokeIdentity(Uint8List bytes) {
     final actorRead = _readCidNumber(bytes, 2);
     if (actorRead == null) return null;
-    final cidRead = _readCidNumber(bytes, actorRead.$2);
+    final roleRead = _readRoleCode(bytes, actorRead.$2);
+    if (roleRead == null) return null;
+    final cidRead = _readCidNumber(bytes, roleRead.$2);
     if (cidRead == null || !_hasCallDataEnd(bytes, cidRead.$2)) return null;
     return DecodedPayload(
       action: 'revoke_identity',
       summary: '吊销公民链上身份：${cidRead.$1}',
       fields: {
         'actor_cid_number': actorRead.$1,
+        'actor_role_code': roleRead.$1,
         'cid_number': cidRead.$1,
       },
     );
   }
 
   // CitizenIdentity(10) / occupy_cid(6) · 注册局建档占号(注册局签名)。
-  // SCALE: [10][6][actor_cid_number:CidNumber][cid_number:CidNumber]
+  // SCALE: [10][6][actor_cid_number:CidNumber][actor_role_code:RoleCode][cid_number:CidNumber]
   //        [commitment:[u8;32]][residence_province_code:Vec<u8>]
   //        [residence_city_code:Vec<u8>]
   // 逐字节对齐 onchina occupy.rs::encode_occupy_cid_call。
@@ -2474,6 +2485,9 @@ class PayloadDecoder {
     final actorRead = _readCidNumber(bytes, offset);
     if (actorRead == null) return null;
     offset = actorRead.$2;
+    final roleRead = _readRoleCode(bytes, offset);
+    if (roleRead == null) return null;
+    offset = roleRead.$2;
     final cidRead = _readCidNumber(bytes, offset);
     if (cidRead == null) return null;
     final cidNumber = cidRead.$1;
@@ -2502,6 +2516,7 @@ class PayloadDecoder {
       summary: '注册局占号(登记 CID 号):$cidNumber',
       fields: <String, String>{
         'actor_cid_number': actorRead.$1,
+        'actor_role_code': roleRead.$1,
         'cid_number': cidNumber,
         'commitment': _bytesToLowerHex(commitment),
         'residence_province_code': provinceCode,
@@ -2509,6 +2524,7 @@ class PayloadDecoder {
       },
       reviewFields: <String, String>{
         'actor_cid_number': actorRead.$1,
+        'actor_role_code': roleRead.$1,
         'cid_number': cidNumber,
         'residence': '$provinceCode / $cityCode',
       },
@@ -2516,12 +2532,16 @@ class PayloadDecoder {
   }
 
   // CitizenIdentity(10) / occupy_cids_batch(7)
-  // SCALE:actor_cid_number + Vec<{cid_number, commitment}> + province_code + city_code。
+  // SCALE:actor_cid_number + actor_role_code + Vec<{cid_number, commitment}>
+  // + province_code + city_code。
   static DecodedPayload? _decodeOccupyCidsBatch(Uint8List bytes) {
     var offset = 2;
     final actorRead = _readCidNumber(bytes, offset);
     if (actorRead == null) return null;
     offset = actorRead.$2;
+    final roleRead = _readRoleCode(bytes, offset);
+    if (roleRead == null) return null;
+    offset = roleRead.$2;
     final (itemCount, countSize) = _decodeCompactU32(bytes, offset);
     if (countSize == 0 || itemCount == 0) return null;
     offset += countSize;
@@ -2552,6 +2572,7 @@ class PayloadDecoder {
       summary: '注册局批量占用 $itemCount 个 CID',
       fields: {
         'actor_cid_number': actorRead.$1,
+        'actor_role_code': roleRead.$1,
         'cid_number': cidNumbers.join('、'),
         'cid_count': itemCount.toString(),
         'residence_province_code': provinceCode,
@@ -2559,6 +2580,7 @@ class PayloadDecoder {
       },
       reviewFields: {
         'actor_cid_number': actorRead.$1,
+        'actor_role_code': roleRead.$1,
         'cid_number': cidNumbers.join('、'),
         'cid_count': itemCount.toString(),
         'residence': '$provinceCode / $cityCode',
@@ -2567,13 +2589,16 @@ class PayloadDecoder {
   }
 
   // CitizenIdentity(10) / revoke_cid(8) · 注册局吊销 CID 号(注册局签名)。
-  // SCALE: [10][8][actor_cid_number:CidNumber][cid_number:CidNumber]
+  // SCALE: [10][8][actor_cid_number:CidNumber][actor_role_code:RoleCode][cid_number:CidNumber]
   // 逐字节对齐 onchina occupy.rs::encode_revoke_cid_call。
   static DecodedPayload? _decodeRevokeCid(Uint8List bytes) {
     var offset = 2;
     final actorRead = _readCidNumber(bytes, offset);
     if (actorRead == null) return null;
     offset = actorRead.$2;
+    final roleRead = _readRoleCode(bytes, offset);
+    if (roleRead == null) return null;
+    offset = roleRead.$2;
     final cidRead = _readCidNumber(bytes, offset);
     if (cidRead == null) return null;
     final cidNumber = cidRead.$1;
@@ -2585,10 +2610,12 @@ class PayloadDecoder {
       summary: '注册局吊销 CID 号:$cidNumber',
       fields: <String, String>{
         'actor_cid_number': actorRead.$1,
+        'actor_role_code': roleRead.$1,
         'cid_number': cidNumber,
       },
       reviewFields: <String, String>{
         'actor_cid_number': actorRead.$1,
+        'actor_role_code': roleRead.$1,
         'cid_number': cidNumber,
       },
     );
@@ -2713,13 +2740,16 @@ class PayloadDecoder {
       return null;
     }
     offset = afterBirthTown;
-    final (citizenFullName, afterFullName) = _readUtf8Vec(bytes, offset);
-    if (citizenFullName == null ||
-        citizenFullName.isEmpty ||
-        citizenFullName.length > 128) {
+    final (familyName, afterFamilyName) = _readUtf8Vec(bytes, offset);
+    if (familyName == null || familyName.isEmpty || familyName.length > 128) {
       return null;
     }
-    offset = afterFullName;
+    offset = afterFamilyName;
+    final (givenName, afterGivenName) = _readUtf8Vec(bytes, offset);
+    if (givenName == null || givenName.isEmpty || givenName.length > 128) {
+      return null;
+    }
+    offset = afterGivenName;
     if (offset >= bytes.length) return null;
     final sex = bytes[offset];
     offset += 1;
@@ -2746,7 +2776,8 @@ class PayloadDecoder {
         'birth_province_code': birthProvinceCode,
         'birth_city_code': birthCityCode,
         'birth_town_code': birthTownCode,
-        'citizen_full_name': citizenFullName,
+        'family_name': familyName,
+        'given_name': givenName,
         'citizen_sex': sex.toString(),
         'birth_date': birthDate.toString(),
       },
@@ -2754,7 +2785,8 @@ class PayloadDecoder {
         'identity_level': '参选身份',
         ...voting.reviewFields,
         'birth_place': birthPlace,
-        'citizen_full_name': citizenFullName,
+        'family_name': familyName,
+        'given_name': givenName,
         'citizen_sex': sexLabel,
         'birth_date': _formatDateInt(birthDate),
       },
@@ -2828,12 +2860,15 @@ class PayloadDecoder {
   }
 
   // OffchainTransaction(19) / register_clearing_bank(50)
-  // 格式：[19][50][actor_cid_number][peer_id][rpc_domain][u16 rpc_port]
+  // 格式：[19][50][actor_cid_number][actor_role_code][peer_id][rpc_domain][u16 rpc_port]
   static DecodedPayload? _decodeRegisterClearingBank(Uint8List bytes) {
     var offset = 2;
     final actorRead = _readCidNumber(bytes, offset);
     if (actorRead == null) return null;
     offset = actorRead.$2;
+    final roleRead = _readRoleCode(bytes, offset);
+    if (roleRead == null) return null;
+    offset = roleRead.$2;
     final (peerId, peerNext) = _readUtf8Vec(bytes, offset);
     if (peerId == null) return null;
     offset = peerNext;
@@ -2849,6 +2884,7 @@ class PayloadDecoder {
       summary: '声明清算行节点 ${actorRead.$1} @ $rpcDomain:$rpcPort',
       fields: {
         'actor_cid_number': actorRead.$1,
+        'actor_role_code': roleRead.$1,
         'peer_id': peerId,
         'rpc_domain': rpcDomain,
         'rpc_port': rpcPort.toString(),
@@ -2857,12 +2893,15 @@ class PayloadDecoder {
   }
 
   // OffchainTransaction(19) / update_clearing_bank_endpoint(51)
-  // 格式：[19][51][actor_cid_number][new_domain][u16 new_port]
+  // 格式：[19][51][actor_cid_number][actor_role_code][new_domain][u16 new_port]
   static DecodedPayload? _decodeUpdateClearingBankEndpoint(Uint8List bytes) {
     var offset = 2;
     final actorRead = _readCidNumber(bytes, offset);
     if (actorRead == null) return null;
     offset = actorRead.$2;
+    final roleRead = _readRoleCode(bytes, offset);
+    if (roleRead == null) return null;
+    offset = roleRead.$2;
     final (newDomain, domainNext) = _readUtf8Vec(bytes, offset);
     if (newDomain == null) return null;
     offset = domainNext;
@@ -2875,6 +2914,7 @@ class PayloadDecoder {
       summary: '更新清算行 ${actorRead.$1} 端点 → $newDomain:$newPort',
       fields: {
         'actor_cid_number': actorRead.$1,
+        'actor_role_code': roleRead.$1,
         'new_domain': newDomain,
         'new_port': newPort.toString(),
       },
@@ -2882,10 +2922,12 @@ class PayloadDecoder {
   }
 
   // OffchainTransaction(19) / unregister_clearing_bank(52)
-  // 格式：[19][52][actor_cid_number]
+  // 格式：[19][52][actor_cid_number][actor_role_code]
   static DecodedPayload? _decodeUnregisterClearingBank(Uint8List bytes) {
     final actorRead = _readCidNumber(bytes, 2);
-    if (actorRead == null || !_hasValidSigningTail(bytes, actorRead.$2)) {
+    if (actorRead == null) return null;
+    final roleRead = _readRoleCode(bytes, actorRead.$2);
+    if (roleRead == null || !_hasValidSigningTail(bytes, roleRead.$2)) {
       return null;
     }
     return DecodedPayload(
@@ -2893,16 +2935,20 @@ class PayloadDecoder {
       summary: '注销清算行节点 ${actorRead.$1}',
       fields: {
         'actor_cid_number': actorRead.$1,
+        'actor_role_code': roleRead.$1,
       },
     );
   }
 
   // OffchainTransaction(19) / propose_l2_fee_rate(40)
-  // SCALE:actor_cid_number + institution_account + new_rate_bp:u32。
+  // SCALE:actor_cid_number + actor_role_code + institution_account + new_rate_bp:u32。
   static DecodedPayload? _decodeProposeL2FeeRate(Uint8List bytes) {
     final actorRead = _readCidNumber(bytes, 2);
     if (actorRead == null) return null;
     var offset = actorRead.$2;
+    final roleRead = _readRoleCode(bytes, offset);
+    if (roleRead == null) return null;
+    offset = roleRead.$2;
     if (offset + 32 + 4 > bytes.length) return null;
     final institutionAccount = bytes.sublist(offset, offset + 32);
     offset += 32;
@@ -2914,14 +2960,14 @@ class PayloadDecoder {
       summary: '清算行 ${actorRead.$1} 提案调整链下费率为 $newRateBp BP',
       fields: {
         'actor_cid_number': actorRead.$1,
+        'actor_role_code': roleRead.$1,
         'institution_account': _bytesToSs58(institutionAccount),
         'new_rate_bp': newRateBp.toString(),
       },
     );
   }
 
-  // AddressRegistry(33) / call 0..=4。所有调用以 actor CID 开头，
-  // 注册局管理员只通过外层 origin 授权，地址业务字段随后按 runtime 顺序解码。
+  // AddressRegistry(33) / call 0..=4。所有调用以 actor CID + 岗位码开头。
   static DecodedPayload? _decodeAddressRegistryCall(
     Uint8List bytes,
     int callIndex,
@@ -2930,6 +2976,9 @@ class PayloadDecoder {
     final actorRead = _readCidNumber(bytes, offset);
     if (actorRead == null) return null;
     offset = actorRead.$2;
+    final roleRead = _readRoleCode(bytes, offset);
+    if (roleRead == null) return null;
+    offset = roleRead.$2;
     if (callIndex == PalletRegistry.setAddressCatalogVersionCall) {
       final (catalogVersion, afterVersion) = _readUtf8Vec(bytes, offset);
       if (catalogVersion == null || catalogVersion.isEmpty) return null;
@@ -2943,6 +2992,7 @@ class PayloadDecoder {
         summary: '设置地址库版本 $catalogVersion',
         fields: {
           'actor_cid_number': actorRead.$1,
+          'actor_role_code': roleRead.$1,
           'catalog_version': catalogVersion,
           'catalog_hash': _bytesToLowerHex(catalogHash),
         },
@@ -2978,6 +3028,7 @@ class PayloadDecoder {
     if (fieldNames == null) return null;
     final fields = <String, String>{
       'actor_cid_number': actorRead.$1,
+      'actor_role_code': roleRead.$1,
     };
     for (final fieldName in fieldNames) {
       final (value, next) = _readUtf8Vec(bytes, offset);
@@ -3613,9 +3664,12 @@ class PayloadDecoder {
       return ('含法定代表人解除', offset);
     }
     if (variant != 0) return null;
-    final name = _readUtf8Vec(bytes, offset);
-    if (name.$1 == null || name.$1!.isEmpty) return null;
-    offset = name.$2;
+    final familyName = _readUtf8Vec(bytes, offset);
+    if (familyName.$1 == null || familyName.$1!.isEmpty) return null;
+    offset = familyName.$2;
+    final givenName = _readUtf8Vec(bytes, offset);
+    if (givenName.$1 == null || givenName.$1!.isEmpty) return null;
+    offset = givenName.$2;
     final cid = _readCidNumber(bytes, offset);
     if (cid == null) return null;
     offset = cid.$2;

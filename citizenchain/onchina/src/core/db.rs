@@ -105,6 +105,7 @@ impl Db {
                  operation_id TEXT PRIMARY KEY,
                  admin_account TEXT NOT NULL,
                  institution_code TEXT NOT NULL,
+                 actor_role_code TEXT NOT NULL,
                  cid_number TEXT NOT NULL,
                  wallet_pubkey TEXT NOT NULL,
                  wallet_address TEXT NOT NULL,
@@ -115,6 +116,11 @@ impl Db {
              );
              CREATE INDEX IF NOT EXISTS idx_citizen_onchain_operations_expiry
                  ON citizen_onchain_operations(expires_at);
+             ALTER TABLE citizen_onchain_operations
+                 ADD COLUMN IF NOT EXISTS actor_role_code TEXT NOT NULL DEFAULT '';
+             DELETE FROM citizen_onchain_operations WHERE actor_role_code = '';
+             ALTER TABLE citizen_onchain_operations
+                 ALTER COLUMN actor_role_code DROP DEFAULT;
 
              CREATE TABLE IF NOT EXISTS chain_sign_sessions (
                 request_id   TEXT PRIMARY KEY,
@@ -410,7 +416,8 @@ impl Db {
                 partnership_kind TEXT,
                 has_legal_personality BOOLEAN,
                 parent_cid_number TEXT,
-                legal_representative_name TEXT,
+                family_name TEXT,
+                given_name TEXT,
                 legal_representative_cid_number TEXT,
                 legal_representative_photo_path TEXT,
                 legal_representative_photo_name TEXT,
@@ -458,8 +465,8 @@ impl Db {
              CREATE TABLE IF NOT EXISTS citizens (
                 cid_number TEXT NOT NULL,
                 passport_no TEXT NOT NULL DEFAULT '',
-                citizen_family_name TEXT NOT NULL DEFAULT '',
-                citizen_given_name TEXT NOT NULL DEFAULT '',
+                family_name TEXT NOT NULL DEFAULT '',
+                given_name TEXT NOT NULL DEFAULT '',
                 citizen_sex TEXT NOT NULL DEFAULT '',
                 citizen_birth_date TEXT NOT NULL DEFAULT '',
                 province_code TEXT NOT NULL,
@@ -654,8 +661,8 @@ impl Db {
         conn.batch_execute(
             "ALTER TABLE citizens
                 ADD COLUMN IF NOT EXISTS passport_no TEXT NOT NULL DEFAULT '',
-                ADD COLUMN IF NOT EXISTS citizen_family_name TEXT NOT NULL DEFAULT '',
-                ADD COLUMN IF NOT EXISTS citizen_given_name TEXT NOT NULL DEFAULT '',
+                ADD COLUMN IF NOT EXISTS family_name TEXT NOT NULL DEFAULT '',
+                ADD COLUMN IF NOT EXISTS given_name TEXT NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS citizen_sex TEXT NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS citizen_birth_date TEXT NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS wallet_sig_alg TEXT,
@@ -705,8 +712,8 @@ impl Db {
                     ELSE COALESCE(NULLIF(wallet_sig_alg, ''), 'sr25519')
                  END,
                  passport_no = COALESCE(passport_no, ''),
-                 citizen_family_name = COALESCE(citizen_family_name, ''),
-                 citizen_given_name = COALESCE(citizen_given_name, ''),
+                 family_name = COALESCE(family_name, ''),
+                 given_name = COALESCE(given_name, ''),
                  citizen_sex = COALESCE(citizen_sex, ''),
                  citizen_birth_date = COALESCE(citizen_birth_date, ''),
                  town_code = COALESCE(NULLIF(town_code, ''), NULLIF(residence_town_code, ''), ''),
@@ -769,9 +776,10 @@ impl Db {
                 )
             })?;
 
-        // 旧法定代表人字段不保留兼容或双轨数据，启动时先删除再建立唯一目标字段。
+        // 人的姓名字段只保留 family_name / given_name；不兼容合并姓名列。
         conn.batch_execute(
             "ALTER TABLE subjects
+                DROP COLUMN IF EXISTS legal_representative_name,
                 DROP COLUMN IF EXISTS legal_rep_name,
                 DROP COLUMN IF EXISTS legal_rep_cid_number,
                 DROP COLUMN IF EXISTS legal_rep_photo_path,
@@ -779,7 +787,8 @@ impl Db {
                 DROP COLUMN IF EXISTS legal_rep_photo_mime,
                 DROP COLUMN IF EXISTS legal_rep_photo_size;
              ALTER TABLE subjects
-                ADD COLUMN IF NOT EXISTS legal_representative_name TEXT,
+                ADD COLUMN IF NOT EXISTS family_name TEXT,
+                ADD COLUMN IF NOT EXISTS given_name TEXT,
                 ADD COLUMN IF NOT EXISTS legal_representative_cid_number TEXT,
                 ADD COLUMN IF NOT EXISTS legal_representative_photo_path TEXT,
                 ADD COLUMN IF NOT EXISTS legal_representative_photo_name TEXT,
@@ -976,7 +985,8 @@ impl Db {
         for column in [
             "cid_full_name",
             "cid_short_name",
-            "legal_representative_name",
+            "family_name",
+            "given_name",
             "legal_representative_cid_number",
             "legal_representative_photo_path",
             "legal_representative_photo_name",
@@ -990,6 +1000,7 @@ impl Db {
             Self::ensure_column_state(conn, "subjects", column, true)?;
         }
         Self::ensure_column_state(conn, "subjects", "name", false)?;
+        Self::ensure_column_state(conn, "subjects", "legal_representative_name", false)?;
         // 行政区名字已收口 china.sqlite,subjects 必须无名字副本列。
         for column in ["province_name", "city_name", "town_name"] {
             Self::ensure_column_state(conn, "subjects", column, false)?;
@@ -1016,8 +1027,8 @@ impl Db {
         }
         for column in [
             "passport_no",
-            "citizen_family_name",
-            "citizen_given_name",
+            "family_name",
+            "given_name",
             "citizen_sex",
             "citizen_birth_date",
             "wallet_sig_alg",

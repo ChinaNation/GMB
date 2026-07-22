@@ -251,7 +251,7 @@ function InstitutionGovernancePanel({
         showIcon
         style={{ marginBottom: 16 }}
         message="管理员是人，岗位是职位；本页面只构造链上治理交易，不本地改管理员真源。"
-        description="管理员集合每行填“姓,名,账户”。创建岗位时岗位码由 runtime 生成；岗位权限与初始任职随创建原子提交。法定代表人任命/更换只填公民 CID；解除则清空链上三字段。"
+        description="管理员集合每行填“姓,名,账户”。创建岗位时岗位码由 runtime 生成；岗位权限与初始任职随创建原子提交。法定代表人任命/更换只填公民 CID；解除则清空链上完整法定代表人结构。"
       />
       <Form form={form} layout="vertical" disabled={!canWrite || submitting}>
         <Form.Item
@@ -303,7 +303,7 @@ function InstitutionGovernancePanel({
           <Input placeholder="只填公民 CID；姓名和钱包账户由后端读取公民档案" />
         </Form.Item>
         <Form.Item name="clear_legal_representative" valuePropName="checked">
-          <Checkbox>解除法定代表人并清空链上三字段</Checkbox>
+          <Checkbox>解除法定代表人并清空链上完整法定代表人结构</Checkbox>
         </Form.Item>
         <Space wrap>
           <Button type="primary" loading={submitting} disabled={!canWrite} onClick={onProposeGovernance}>
@@ -443,12 +443,14 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
                 </Tag>
               </Descriptions.Item>
               <Descriptions.Item label="法定代表人姓名">
-                {inst.legal_representative_name || <span style={{ color: '#999' }}>(未填写)</span>}
+                {inst.legal_representative
+                  ? `${inst.legal_representative.family_name}${inst.legal_representative.given_name}`
+                  : <span style={{ color: '#999' }}>(未填写)</span>}
               </Descriptions.Item>
               <Descriptions.Item label="法定代表人身份ID">
-                {inst.legal_representative_cid_number ? (
+                {inst.legal_representative?.cid_number ? (
                   <Typography.Text style={{ fontSize: 12, wordBreak: 'break-all' }}>
-                    {inst.legal_representative_cid_number}
+                    {inst.legal_representative.cid_number}
                   </Typography.Text>
                 ) : (
                   <span style={{ color: '#999' }}>(未填写)</span>

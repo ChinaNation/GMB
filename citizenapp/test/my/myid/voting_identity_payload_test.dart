@@ -59,7 +59,8 @@ Uint8List buildCandidatePayload() {
   pushVec('11');
   pushVec('01');
   pushVec('002');
-  pushVec('测试公民');
+  pushVec('测');
+  pushVec('试公民');
   out.add(1);
   // birth_date: u32 YYYYMMDD(LE),20000131。
   const birthDate = 20000131;
@@ -113,7 +114,8 @@ void main() {
       expect(decoded.birthProvinceCode, '11');
       expect(decoded.birthCityCode, '01');
       expect(decoded.birthTownCode, '002');
-      expect(decoded.citizenFullName, '测试公民');
+      expect(decoded.familyName, '测');
+      expect(decoded.givenName, '试公民');
       expect(decoded.citizenSexLabel, '女');
       expect(decoded.birthDate, 20000131);
 

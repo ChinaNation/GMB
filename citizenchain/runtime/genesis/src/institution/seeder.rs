@@ -27,7 +27,8 @@ use primitives::{
             citizenchain::{
                 CITIZENCHAIN_FOUNDATION, CITIZENCHAIN_GENESIS_ADMINS,
                 CITIZENCHAIN_GENESIS_ASSIGNMENTS, CITIZENCHAIN_GOVERNANCE_THRESHOLD,
-                LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER, LEGAL_REPRESENTATIVE_NAME,
+                LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER,
+                LEGAL_REPRESENTATIVE_FAMILY_NAME, LEGAL_REPRESENTATIVE_GIVEN_NAME,
             },
         },
         code::{institution_code_from_cid_number, InstitutionCode, FRG, NJD},
@@ -39,7 +40,7 @@ use admin_primitives::{Admin, AdminCidNumber, InstitutionAdmins, PublicAdmin};
 use public_manage::{
     InstitutionAccountInfo, InstitutionAdminAssignment, InstitutionAssignmentSource,
     InstitutionAssignmentStatus, InstitutionInfo, InstitutionRole, InstitutionRoleStatus,
-    RegisteredInstitution, RESERVED_NAME_FEE as PUBLIC_RESERVED_NAME_FEE,
+    LegalRepresentative, RegisteredInstitution, RESERVED_NAME_FEE as PUBLIC_RESERVED_NAME_FEE,
     RESERVED_NAME_MAIN as PUBLIC_RESERVED_NAME_MAIN,
 };
 
@@ -179,11 +180,9 @@ fn insert_derived_public_institution<T: public_manage::Config>(
             cid_full_name: bounded_name(cid_full_name),
             cid_short_name: bounded_name(cid_short_name),
             town_code: BoundedVec::new(),
-            // 法定代表人不是创世必填项：创世三字段全空，后续依法任命时原子写入。
+            // 法定代表人不是创世必填项：创世字段为空，后续依法任命时原子写入。
             // 禁止用首位管理员、机构主账户或其它钱包占位。
-            legal_representative_name: None,
-            legal_representative_cid_number: None,
-            legal_representative_account: None,
+            legal_representative: None,
             institution_code: parts.institution,
             created_at: BlockNumberFor::<T>::default(),
         },
@@ -272,10 +271,8 @@ fn insert_public_institution<T: public_manage::Config>(
             cid_full_name: bounded_static_name::<T>(cid_full_name, "cid_full_name", cid_number),
             cid_short_name: bounded_static_name::<T>(cid_short_name, "cid_short_name", cid_number),
             town_code: BoundedVec::new(),
-            // 固定创世机构同样允许尚未任命法定代表人；三字段必须保持全空。
-            legal_representative_name: None,
-            legal_representative_cid_number: None,
-            legal_representative_account: None,
+            // 固定创世机构同样允许尚未任命法定代表人；字段必须保持为空。
+            legal_representative: None,
             institution_code,
             created_at: BlockNumberFor::<T>::default(),
         },
@@ -432,9 +429,9 @@ fn insert_fixed_admins<T>(
     public_manage::InstitutionGovernanceThresholds::<T>::insert(&cid, threshold);
 }
 
-/// 写入中国公民链技术发展基金会正式创世状态。
+/// 写入公民链技术发展基金会正式创世状态。
 ///
-/// 机构身份、主/费用账户、一名管理员、三个固定岗位、法定代表人三字段和 2/3
+/// 机构身份、主/费用账户、一名管理员、三个固定岗位、完整法定代表人结构和 2/3
 /// 内部治理阈值在同一创世构建中完成，任何一项不一致都直接中止创世。
 fn insert_citizenchain_foundation<T>()
 where
@@ -501,12 +498,18 @@ where
             cid_full_name: bounded_name(foundation.cid_full_name.as_bytes(), "机构全称"),
             cid_short_name: bounded_name(foundation.cid_short_name.as_bytes(), "机构简称"),
             town_code: BoundedVec::new(),
-            legal_representative_name: Some(bounded_name(
-                LEGAL_REPRESENTATIVE_NAME.as_bytes(),
-                "法定代表人姓名",
-            )),
-            legal_representative_cid_number: Some(legal_representative_cid),
-            legal_representative_account: Some(legal_representative_account.clone()),
+            legal_representative: Some(LegalRepresentative {
+                family_name: bounded_name(
+                    LEGAL_REPRESENTATIVE_FAMILY_NAME.as_bytes(),
+                    "法定代表人姓",
+                ),
+                given_name: bounded_name(
+                    LEGAL_REPRESENTATIVE_GIVEN_NAME.as_bytes(),
+                    "法定代表人名",
+                ),
+                cid_number: legal_representative_cid,
+                account: legal_representative_account.clone(),
+            }),
             institution_code: parts.institution,
             created_at: BlockNumberFor::<T>::default(),
         },

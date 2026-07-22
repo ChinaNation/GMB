@@ -188,7 +188,7 @@ fn parse_admin_inputs(
             .or_else(|| {
                 citizen
                     .as_ref()
-                    .map(|record| record.citizen_family_name.trim())
+                    .map(|record| record.family_name.trim())
                     .filter(|name| !name.is_empty())
                     .map(str::to_string)
             })
@@ -208,7 +208,7 @@ fn parse_admin_inputs(
             .or_else(|| {
                 citizen
                     .as_ref()
-                    .map(|record| record.citizen_given_name.trim())
+                    .map(|record| record.given_name.trim())
                     .filter(|name| !name.is_empty())
                     .map(str::to_string)
             })
@@ -570,23 +570,21 @@ fn legal_representative_change(
             "法定代表人钱包公钥格式错误",
         )
     })?;
-    let name = format!(
-        "{}{}",
-        record.citizen_family_name.trim(),
-        record.citizen_given_name.trim()
-    );
-    if name.trim().is_empty() {
+    let family_name = record.family_name.trim();
+    let given_name = record.given_name.trim();
+    if family_name.is_empty() || given_name.is_empty() {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "法定代表人姓名为空",
+            "法定代表人姓或名为空",
         ));
     }
     Ok(Some(
         entity_primitives::InstitutionLegalRepresentativeChange::Set {
-            legal_representative_name: name.as_bytes().to_vec(),
-            legal_representative_cid_number: cid_number.as_bytes().to_vec(),
-            legal_representative_account: account,
+            family_name: family_name.as_bytes().to_vec(),
+            given_name: given_name.as_bytes().to_vec(),
+            cid_number: cid_number.as_bytes().to_vec(),
+            account,
         },
     ))
 }

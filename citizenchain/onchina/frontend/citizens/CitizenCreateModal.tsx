@@ -36,8 +36,9 @@ interface Props {
 const DATE_FORMAT = 'YYYY-MM-DD';
 
 interface FormValues {
-  citizen_family_name: string;
-  citizen_given_name: string;
+  actor_role_code: string;
+  family_name: string;
+  given_name: string;
   citizen_sex: CitizenSex;
   citizen_birth_date: Dayjs;
   town_code: string;
@@ -153,8 +154,9 @@ export function CitizenCreateModal({
       return;
     }
     const payload: CreateCitizenInput = {
-      citizen_family_name: trimRequired(values.citizen_family_name),
-      citizen_given_name: trimRequired(values.citizen_given_name),
+      actor_role_code: trimRequired(values.actor_role_code),
+      family_name: trimRequired(values.family_name),
+      given_name: trimRequired(values.given_name),
       citizen_sex: values.citizen_sex,
       citizen_birth_date: values.citizen_birth_date.format(DATE_FORMAT),
       province_name: provinceName!,
@@ -227,17 +229,24 @@ export function CitizenCreateModal({
         onFinish={onSubmit}
         initialValues={{ voting_eligible: true }}
       >
+        <Form.Item
+          label="注册局岗位码"
+          name="actor_role_code"
+          rules={[{ required: true, message: '请输入当前任职岗位码' }]}
+        >
+          <Input placeholder="岗位码" allowClear maxLength={64} />
+        </Form.Item>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 16 }}>
           <Form.Item
             label="姓"
-            name="citizen_family_name"
+            name="family_name"
             rules={[{ required: true, message: '请输入姓' }]}
           >
             <Input placeholder="姓" allowClear />
           </Form.Item>
           <Form.Item
             label="名"
-            name="citizen_given_name"
+            name="given_name"
             rules={[{ required: true, message: '请输入名' }]}
           >
             <Input placeholder="名" allowClear />

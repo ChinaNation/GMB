@@ -36,7 +36,6 @@ enum CitizenStatus {
 
 #[derive(Clone, Debug, Decode, Eq, PartialEq)]
 struct VotingIdentity {
-    cid_number: Vec<u8>,
     _passport_valid_from: u32,
     _passport_valid_until: u32,
     _citizen_status: CitizenStatus,
@@ -135,12 +134,24 @@ pub mod storage_key {
         blake2_map_raw(CITIZEN_ISSUANCE_PALLET, b"PendingAccountRewarded", account)
     }
 
-    pub fn voting_identity(account: &[u8; 32]) -> Vec<u8> {
-        blake2_map_raw(CITIZEN_IDENTITY_PALLET, b"VotingIdentityByAccount", account)
+    pub fn voting_identity(cid: &[u8]) -> Vec<u8> {
+        blake2_map_raw(
+            CITIZEN_IDENTITY_PALLET,
+            b"VotingIdentityByCid",
+            &cid.encode(),
+        )
     }
 
-    pub fn account_by_cid(cid: &[u8]) -> Vec<u8> {
-        blake2_map_raw(CITIZEN_IDENTITY_PALLET, b"AccountByCid", &cid.encode())
+    pub fn wallet_account_by_cid(cid: &[u8]) -> Vec<u8> {
+        blake2_map_raw(
+            CITIZEN_IDENTITY_PALLET,
+            b"WalletAccountByCid",
+            &cid.encode(),
+        )
+    }
+
+    pub fn cid_by_wallet_account(account: &[u8; 32]) -> Vec<u8> {
+        blake2_map_raw(CITIZEN_IDENTITY_PALLET, b"CidByWalletAccount", account)
     }
 }
 
@@ -271,19 +282,22 @@ where
             return Err(GuardError::PendingQueueNotCleared);
         }
 
-        let voting_key = storage_key::voting_identity(&pending.who);
+        let cid_number: Vec<u8> = pre(&storage_key::cid_by_wallet_account(&pending.who))
+            .ok_or(GuardError::IdentityReverseIndexMismatch)
+            .and_then(|raw| decode_exact(&raw, "CidByWalletAccount"))?;
+        if blake2_256(&cid_number) != pending.cid_number_hash {
+            return Err(GuardError::IdentityHashMismatch);
+        }
+        let voting_key = storage_key::voting_identity(&cid_number);
         if parent(&voting_key).is_some() {
             return Err(GuardError::IdentityAlreadyExisted);
         }
-        let identity: VotingIdentity = pre(&voting_key)
+        let _identity: VotingIdentity = pre(&voting_key)
             .ok_or(GuardError::FirstIdentityMissing)
-            .and_then(|raw| decode_exact(&raw, "VotingIdentityByAccount"))?;
-        if blake2_256(&identity.cid_number) != pending.cid_number_hash {
-            return Err(GuardError::IdentityHashMismatch);
-        }
-        let reverse: [u8; 32] = pre(&storage_key::account_by_cid(&identity.cid_number))
+            .and_then(|raw| decode_exact(&raw, "VotingIdentityByCid"))?;
+        let reverse: [u8; 32] = pre(&storage_key::wallet_account_by_cid(&cid_number))
             .ok_or(GuardError::IdentityReverseIndexMismatch)
-            .and_then(|raw| decode_exact(&raw, "AccountByCid"))?;
+            .and_then(|raw| decode_exact(&raw, "WalletAccountByCid"))?;
         if reverse != pending.who {
             return Err(GuardError::IdentityReverseIndexMismatch);
         }
@@ -398,9 +412,8 @@ mod tests {
         assert_eq!(pending.encode(), ([7u8; 32], [8u8; 32]).encode());
     }
 
-    fn voting_identity(cid: &[u8]) -> Vec<u8> {
+    fn voting_identity() -> Vec<u8> {
         (
-            cid.to_vec(),
             20260101u32,
             20360101u32,
             CitizenStatus::Normal,
@@ -437,19 +450,19 @@ mod tests {
         );
         put(&mut pre, storage_key::pending_identity(&hash), ());
         put(&mut pre, storage_key::pending_account(&account), ());
-        pre.insert(
-            storage_key::voting_identity(&account),
-            voting_identity(&cid),
+        pre.insert(storage_key::voting_identity(&cid), voting_identity());
+        put(&mut pre, storage_key::wallet_account_by_cid(&cid), account);
+        put(
+            &mut pre,
+            storage_key::cid_by_wallet_account(&account),
+            cid.clone(),
         );
-        put(&mut pre, storage_key::account_by_cid(&cid), account);
         put(&mut post, storage_key::rewarded_count(), 1u64);
         put(&mut post, storage_key::identity_claimed(&hash), ());
         put(&mut post, storage_key::account_rewarded(&account), ());
-        post.insert(
-            storage_key::voting_identity(&account),
-            voting_identity(&cid),
-        );
-        put(&mut post, storage_key::account_by_cid(&cid), account);
+        post.insert(storage_key::voting_identity(&cid), voting_identity());
+        put(&mut post, storage_key::wallet_account_by_cid(&cid), account);
+        put(&mut post, storage_key::cid_by_wallet_account(&account), cid);
         let pre_delta = pre
             .iter()
             .map(|(key, value)| (key.clone(), Some(value.clone())))
@@ -541,7 +554,7 @@ mod tests {
         let mut bad_reverse = pre.clone();
         put(
             &mut bad_reverse,
-            storage_key::account_by_cid(&cid),
+            storage_key::wallet_account_by_cid(&cid),
             [9u8; 32],
         );
         assert_eq!(
@@ -607,11 +620,9 @@ mod tests {
 
     #[test]
     fn malicious_identity_claim_and_unknown_delta_are_rejected() {
-        let (mut parent, pre, post, pre_delta, post_delta, account) = valid_transition();
-        parent.insert(
-            storage_key::voting_identity(&account),
-            voting_identity(b"GD001-CTZN1-OLD"),
-        );
+        let (mut parent, pre, post, pre_delta, post_delta, _) = valid_transition();
+        let cid = b"GD001-CTZN1-TEST".to_vec();
+        parent.insert(storage_key::voting_identity(&cid), voting_identity());
         assert_eq!(
             check_transition(
                 2,
@@ -626,9 +637,10 @@ mod tests {
         );
 
         let (parent, mut pre, post, pre_delta, post_delta, account) = valid_transition();
-        pre.insert(
-            storage_key::voting_identity(&account),
-            voting_identity(b"GD001-CTZN1-TAMPERED"),
+        put(
+            &mut pre,
+            storage_key::cid_by_wallet_account(&account),
+            b"GD001-CTZN1-TAMPERED".to_vec(),
         );
         assert_eq!(
             check_transition(

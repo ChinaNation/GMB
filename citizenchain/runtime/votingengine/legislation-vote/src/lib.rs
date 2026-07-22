@@ -1,8 +1,8 @@
 //! # 立法投票 pallet (legislation-vote)
 //!
 //! 立法机构专属投票模式(ADR-027,公民宪法第45/46条)。投票引擎「头等模式」:
-//! `PROPOSAL_KIND_LEGISLATION`,共享核心 `votingengine`(Proposals/AdminSnapshot/状态机/
-//! 公投快照验签/清理/反向索引),只本地保管计票账本。内部/联合/选举投票
+//! `PROPOSAL_KIND_LEGISLATION`,共享核心 `votingengine`(Proposals/VotePlan/VoterSnapshot/
+//! 状态机/公投快照验签/清理/反向索引),只本地保管计票账本。内部/联合/选举投票
 //! sub-pallet 逻辑零改动。
 //!
 //! 阶段(ADR-027,当前五类提案 + 特别案公投 + 行政签署/三人会签/护宪终审):
@@ -12,8 +12,9 @@
 //!   市行政区无救济(否决=否决/30天超时=通过);省行政区/国家否决或超时 → 会签。
 //! - `STAGE_LEG_OVERRIDE` 三人会签(省行政区/国家):立法院院长 + 参议长 + 众议长,全签=生效/任一否决或超时=否决。
 //!
-//! 计票口径:按现任议员/委员管理员快照总数算参与率/赞成率(`votingengine::types`
-//! 的立法阈值纯函数),投票期满 finalize 统一判定;结果已确定时可提前决。
+//! 计票口径:按建案时冻结的议员/委员岗位席位票据总数计算参与率和赞成率
+//! (`votingengine::types` 的立法阈值纯函数)；投票期满 finalize 统一判定，
+//! 结果已确定时可提前决。
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -77,7 +78,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
 
     /// 重新创世直接使用代表表决与法律专属元数据分离的最终布局。
-    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
     /// 代表机构表决元数据。所有法律、任免、预算等立法机关表决共用这一份状态。
     #[derive(

@@ -71,6 +71,10 @@ pub(crate) fn build_address_chain_call(
     {
         return Err("actor_cid_number is invalid".to_string());
     }
+    let actor_role_code = input.actor_role_code.trim();
+    if actor_role_code.is_empty() || actor_role_code.len() > 64 {
+        return Err("actor_role_code is invalid".to_string());
+    }
     let mut out = Vec::new();
     out.push(ADDRESS_REGISTRY_PALLET_INDEX);
     let call_index = match input.action {
@@ -82,6 +86,7 @@ pub(crate) fn build_address_chain_call(
     };
     out.push(call_index);
     push_vec(&mut out, actor_cid_number.as_bytes());
+    push_vec(&mut out, actor_role_code.as_bytes());
 
     match input.action {
         AddressChainAction::SetCatalogVersion => {

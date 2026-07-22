@@ -9,13 +9,13 @@
 1. 控制台配置管理员**公钥**;点协议升级弹**二维码→公民钱包扫码签名**(冷签,同节点软件)。
 2. **开发期直升**(`developer_direct_upgrade`);链进**运行期后此功能下线**(读链 `DeveloperUpgradeEnabled`,false 即隐藏/禁用)。
 3. 协议升级=**仅 runtime 升级**,不做别的。
-4. 签名带 **NRC(国储会)CID**;**仅国储会管理员**可直升 runtime。
+4. 签名载荷带 **NRC(国储会)CID + COMMITTEE_MEMBER 岗位码**；只有该岗位的任职管理员钱包可直升 runtime。
 5. WASM **两个条件都必须**:GitHub 上**最新** + **CI 成功**。
 
 ## 机制(节点 as-built,必须逐字节对齐钱包解码器 + 节点 Rust)
-- 源:`citizenchain/node/src/governance/runtime_upgrade/{signing,commands,call_data}.rs` + `governance/signing.rs`;pallet `runtime/governance/runtime-upgrade`(`developer_direct_upgrade` call_index=2,`DeveloperUpgradeOrigin`=NRC 管理员,`DeveloperUpgradeCheck::is_enabled()` 关则永久失效)。
+- 源:`citizenchain/node/src/governance/runtime_upgrade/{signing,commands,call_data}.rs` + `governance/signing.rs`;pallet `runtime/governance/runtime-upgrade`(`developer_direct_upgrade` call_index=2，显式携带 NRC CID 和委员岗位码，`DeveloperUpgradeCheck::is_enabled()` 关则永久失效)。
 - 前端仅 `invoke('build_developer_upgrade_request')` / `invoke('submit_developer_upgrade')`(`node/frontend/governance/runtime-upgrade/api.ts`)。
-- QR:`developer_direct_upgrade(cid, wasm, pow_params)` SCALE call → `build_signing_payloads(call, genesis, nonce, spec, tx)` → **WASM 过大是 QR_V1 唯一 hash-only 例外**,QR `body.payload` 发 `signing_bytes`(sr25519 实际签名输入,>256B 为 blake2_256)→ `QrSignRequest{proto,kind,id,expires_at,body{action=chain_action_code(call),sig_alg:1,pubkey(b64),payload(b64)}}`;`expected_payload_hash=sha256(payload_for_qr)`;`immortal` 签块。
+- QR:`developer_direct_upgrade(cid, COMMITTEE_MEMBER, wasm, pow_params)` SCALE call → `build_signing_payloads(call, genesis, nonce, spec, tx)` → **WASM 过大是 QR_V1 唯一 hash-only 例外**,QR `body.payload` 发 `signing_bytes`(sr25519 实际签名输入,>256B 为 blake2_256)→ `QrSignRequest{proto,kind,id,expires_at,body{action=chain_action_code(call),sig_alg:1,pubkey(b64),payload(b64)}}`;`expected_payload_hash=sha256(payload_for_qr)`;`immortal` 签块。
 - CI 产物:GitHub Actions artifact `citizenchain-wasm`(`.compact.compressed.wasm`),`citizenchain-wasm.yml`,retention 30d。
 
 ## 移植风险(最高优先级)

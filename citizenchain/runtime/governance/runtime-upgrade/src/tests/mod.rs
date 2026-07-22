@@ -233,7 +233,6 @@ impl votingengine::Config for Test {
     type JointVoteResultCallback = ();
     type InternalVoteResultCallback = ();
     type InternalAdminProvider = TestInternalAdminProvider;
-    type InternalAdminsLenProvider = ();
     type MaxAdminsPerInstitution = ConstU32<32>;
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();
@@ -420,6 +419,13 @@ fn prc_cid() -> votingengine::types::CidNumber {
         .expect("PRC CID fits runtime bound")
 }
 
+fn committee_role() -> votingengine::types::RoleCode {
+    primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
+        .to_vec()
+        .try_into()
+        .expect("committee role fits runtime bound")
+}
+
 fn reason_ok() -> pallet::ReasonOf<Test> {
     b"upgrade reason"
         .to_vec()
@@ -449,6 +455,7 @@ fn propose_ok() {
     assert_ok!(RuntimeUpgrade::propose_runtime_upgrade(
         RuntimeOrigin::signed(nrc_admin()),
         nrc_cid(),
+        committee_role(),
         reason_ok(),
         code_ok(),
         pow_difficulty::PowDifficultyParams::genesis_default()

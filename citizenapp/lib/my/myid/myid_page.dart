@@ -7,9 +7,9 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 电子护照页。
 ///
-/// 页面始终展示匿名访客、投票身份、竞选身份三张卡。只有默认用户当前身份对应的
+/// 页面始终展示访客轻节点、投票身份、竞选身份三张卡。只有默认用户当前身份对应的
 /// 卡片排在首位、标记“当前身份”并展示真实链上值；非当前公民卡只展示该身份涉及
-/// 的字段名称，不能重复泄露当前用户数据。链读取失败时不静默降级成匿名访客。
+/// 的字段名称，不能重复泄露当前用户数据。链读取失败时不静默降级成访客轻节点。
 class MyIdPage extends StatefulWidget {
   const MyIdPage({super.key, this.myIdService});
 
@@ -54,7 +54,7 @@ class _MyIdPageState extends State<MyIdPage> {
       nextState = await _myIdService.getState();
     } on Exception catch (error) {
       // Service 正常会把链错误收口为 queryFailed；这里兜住依赖异常，仍不能把
-      // 未知错误误认成匿名访客。
+      // 未知错误误认成访客轻节点。
       nextState = MyIdState(
         tier: MyIdTier.visitor,
         status: MyIdStatus.queryFailed,
@@ -150,7 +150,7 @@ class _MyIdPageState extends State<MyIdPage> {
         mono: true,
       ),
       _PassportField(
-        label: '公民身份 CID 号',
+        label: '公民CID号',
         value: showValues ? _displayValue(_state.cidNumber) : null,
         mono: true,
       ),
@@ -163,7 +163,7 @@ class _MyIdPageState extends State<MyIdPage> {
         value: showValues ? _statusText(_state.status) : null,
       ),
       _PassportField(
-        label: '投票身份有效期',
+        label: '身份有效期',
         value: showValues ? _validityText() : null,
       ),
     ];
@@ -171,7 +171,9 @@ class _MyIdPageState extends State<MyIdPage> {
       fields.addAll(<_PassportField>[
         _PassportField(
           label: '公民姓名',
-          value: showValues ? _displayValue(_state.citizenFullName) : null,
+          value: showValues
+              ? _displayValue('${_state.familyName ?? ''}${_state.givenName ?? ''}')
+              : null,
         ),
         _PassportField(
           label: '性别',
@@ -248,9 +250,9 @@ class _PassportIdentityCard extends StatelessWidget {
   final List<_PassportField> fields;
 
   String get _title => switch (tier) {
-        MyIdTier.visitor => '匿名访客',
-        MyIdTier.voting => '公民 · 投票身份',
-        MyIdTier.candidate => '公民 · 竞选身份',
+        MyIdTier.visitor => '访客轻节点',
+        MyIdTier.voting => '公民身份 · 投票',
+        MyIdTier.candidate => '公民身份 · 竞选',
       };
 
   Color get _color => switch (tier) {
@@ -304,9 +306,13 @@ class _PassportIdentityCard extends StatelessWidget {
                       tooltip: _title,
                     ),
                     const SizedBox(width: 12),
-                    Expanded(
+                    // Flexible（非 Expanded）让标题只占内容宽度，匿名标签紧贴“访客轻节点”右侧，
+                    // 而不是被撑到卡片最右端；标题过长时仍走省略号避免溢出。
+                    Flexible(
                       child: Text(
                         _title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 18,
                           height: 1.2,
@@ -315,24 +321,16 @@ class _PassportIdentityCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                    // 访客轻节点默认匿名，用一枚小标签直接点明，替代原“没有公民身份信息”整段空态。
+                    if (tier == MyIdTier.visitor) ...[
+                      const SizedBox(width: 8),
+                      _AnonymousTag(color: _color),
+                    ],
                   ],
                 ),
               ),
-              if (tier == MyIdTier.visitor)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 28),
-                  child: Text(
-                    '没有公民身份信息',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 18,
-                      height: 1.4,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                )
-              else ...[
+              // 访客轻节点无上链字段：删去空态整块后卡片只保留标题行，高度自然收缩。
+              if (tier != MyIdTier.visitor) ...[
                 const SizedBox(height: 14),
                 for (var index = 0; index < fields.length; index++) ...[
                   _PassportFieldRow(
@@ -366,6 +364,42 @@ class _PassportIdentityCard extends StatelessWidget {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 访客轻节点的“匿名”提示标签：小圆角药丸 + 隐私图标，沿用所在卡片的身份色。
+class _AnonymousTag extends StatelessWidget {
+  const _AnonymousTag({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey<String>('passport-anonymous-tag'),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withAlpha(20),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withAlpha(64)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.visibility_off_outlined, size: 12, color: color),
+          const SizedBox(width: 3),
+          Text(
+            '匿名',
+            style: TextStyle(
+              fontSize: 11,
+              height: 1.2,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
         ],
       ),
     );

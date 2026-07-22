@@ -51,12 +51,14 @@ impl CitizenOnchainIdentityLevel {
 #[derive(Deserialize)]
 pub(crate) struct PrepareCitizenOnchainInput {
     pub(crate) wallet_account: String,
+    pub(crate) actor_role_code: String,
     pub(crate) identity_level: CitizenOnchainIdentityLevel,
 }
 
 #[derive(Serialize)]
 pub(crate) struct PrepareCitizenOnchainOutput {
     pub(crate) cid_number: String,
+    pub(crate) actor_role_code: String,
     pub(crate) identity_level: CitizenOnchainIdentityLevel,
     pub(crate) wallet_address: String,
     pub(crate) wallet_pubkey: String,
@@ -70,6 +72,7 @@ pub(crate) struct PrepareCitizenOnchainOutput {
 #[derive(Deserialize)]
 pub(crate) struct CompleteCitizenOnchainInput {
     pub(crate) wallet_account: String,
+    pub(crate) actor_role_code: String,
     pub(crate) identity_level: CitizenOnchainIdentityLevel,
     pub(crate) sign_response: String,
 }
@@ -78,6 +81,7 @@ pub(crate) struct CompleteCitizenOnchainInput {
 pub(crate) struct CompleteCitizenOnchainOutput {
     pub(crate) request_id: String,
     pub(crate) cid_number: String,
+    pub(crate) actor_role_code: String,
     pub(crate) identity_level: CitizenOnchainIdentityLevel,
     pub(crate) wallet_address: String,
     pub(crate) chain_action: u16,
@@ -109,6 +113,10 @@ pub(crate) async fn prepare_citizen_onchain_signature(
     }
     let wallet = match resolve_wallet_account(input.wallet_account.as_str()) {
         Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let actor_role_code = match validate_actor_role_code(input.actor_role_code.as_str()) {
+        Ok(value) => value,
         Err(resp) => return resp,
     };
     let record = match state.db.find_citizen_by_cid(cid_number.as_str()) {
@@ -147,6 +155,7 @@ pub(crate) async fn prepare_citizen_onchain_signature(
         operation_id: request_id,
         admin_account: ctx.admin_account,
         institution_code: ctx.institution_code,
+        actor_role_code: actor_role_code.clone(),
         cid_number: record.cid_number.clone(),
         wallet_pubkey: wallet.pubkey.clone(),
         wallet_address: wallet.address.clone(),
@@ -168,6 +177,7 @@ pub(crate) async fn prepare_citizen_onchain_signature(
         message: "ok".to_string(),
         data: PrepareCitizenOnchainOutput {
             cid_number: record.cid_number,
+            actor_role_code,
             identity_level: payload.identity_level,
             wallet_address: wallet.address,
             wallet_pubkey: wallet.pubkey,
@@ -196,6 +206,10 @@ pub(crate) async fn complete_citizen_onchain_signature(
     }
     let wallet = match resolve_wallet_account(input.wallet_account.as_str()) {
         Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let actor_role_code = match validate_actor_role_code(input.actor_role_code.as_str()) {
+        Ok(value) => value,
         Err(resp) => return resp,
     };
     let record = match state.db.find_citizen_by_cid(cid_number.as_str()) {
@@ -246,6 +260,7 @@ pub(crate) async fn complete_citizen_onchain_signature(
     };
     if operation.admin_account != ctx.admin_account
         || operation.institution_code != ctx.institution_code
+        || operation.actor_role_code != actor_role_code
         || operation.cid_number != cid_number
         || operation.wallet_pubkey != wallet.pubkey
         || operation.wallet_address != wallet.address
@@ -298,6 +313,7 @@ pub(crate) async fn complete_citizen_onchain_signature(
     let call = encode_citizen_identity_call(
         payload.identity_level,
         &actor_cid_number,
+        actor_role_code.as_str(),
         &payload.payload_bytes,
         &signature_bytes,
     );
@@ -344,6 +360,7 @@ pub(crate) async fn complete_citizen_onchain_signature(
         context: serde_json::json!({
             "cid_number": record.cid_number,
             "identity_level": payload.identity_level.as_str(),
+            "actor_role_code": actor_role_code.clone(),
             "wallet_pubkey": wallet.pubkey,
             "wallet_address": wallet.address,
         }),
@@ -361,6 +378,7 @@ pub(crate) async fn complete_citizen_onchain_signature(
         data: CompleteCitizenOnchainOutput {
             request_id,
             cid_number: record.cid_number,
+            actor_role_code,
             identity_level: payload.identity_level,
             wallet_address: wallet.address,
             chain_action: action,
@@ -377,6 +395,7 @@ struct CitizenOnchainOperation {
     operation_id: String,
     admin_account: String,
     institution_code: String,
+    actor_role_code: String,
     cid_number: String,
     wallet_pubkey: String,
     wallet_address: String,
@@ -399,13 +418,14 @@ impl Db {
             .map_err(|e| format!("delete expired citizen onchain operations failed: {e}"))?;
             conn.execute(
                 "INSERT INTO citizen_onchain_operations
-                 (operation_id, admin_account, institution_code, cid_number, wallet_pubkey,
-                  wallet_address, identity_level, payload_hex, expires_at)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+                 (operation_id, admin_account, institution_code, actor_role_code, cid_number,
+                  wallet_pubkey, wallet_address, identity_level, payload_hex, expires_at)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
                 &[
                     &operation.operation_id,
                     &operation.admin_account,
                     &operation.institution_code,
+                    &operation.actor_role_code,
                     &operation.cid_number,
                     &operation.wallet_pubkey,
                     &operation.wallet_address,
@@ -426,8 +446,8 @@ impl Db {
         let operation_id = operation_id.to_string();
         self.with_client(move |conn| {
             let row = conn.query_opt(
-                "SELECT operation_id, admin_account, institution_code, cid_number, wallet_pubkey,
-                        wallet_address, identity_level, payload_hex, expires_at
+                "SELECT operation_id, admin_account, institution_code, actor_role_code, cid_number,
+                        wallet_pubkey, wallet_address, identity_level, payload_hex, expires_at
                  FROM citizen_onchain_operations
                  WHERE operation_id = $1 AND citizen_signed_at IS NULL AND expires_at >= now()",
                 &[&operation_id],
@@ -436,12 +456,13 @@ impl Db {
                 operation_id: row.get(0),
                 admin_account: row.get(1),
                 institution_code: row.get(2),
-                cid_number: row.get(3),
-                wallet_pubkey: row.get(4),
-                wallet_address: row.get(5),
-                identity_level: row.get(6),
-                payload_hex: row.get(7),
-                expires_at: row.get(8),
+                actor_role_code: row.get(3),
+                cid_number: row.get(4),
+                wallet_pubkey: row.get(5),
+                wallet_address: row.get(6),
+                identity_level: row.get(7),
+                payload_hex: row.get(8),
+                expires_at: row.get(9),
             }))
         })
     }
@@ -470,8 +491,8 @@ impl Db {
         self.with_client(move |conn| {
             let row = conn
                 .query_opt(
-                    "SELECT COALESCE(id, 0), cid_number, passport_no, citizen_family_name,
-                            citizen_given_name, citizen_sex, citizen_birth_date, wallet_pubkey, wallet_address,
+                    "SELECT COALESCE(id, 0), cid_number, passport_no, family_name,
+                            given_name, citizen_sex, citizen_birth_date, wallet_pubkey, wallet_address,
                             wallet_sig_alg, wallet_verified_at, citizen_status, voting_eligible,
                             passport_valid_from, passport_valid_until, status_updated_at,
                             province_code, city_code, town_code,
@@ -657,16 +678,17 @@ fn build_citizen_identity_payload(
         16,
         "birth_town_code",
     )?;
-    let citizen_full_name = format!(
-        "{}{}",
-        record.citizen_family_name.trim(),
-        record.citizen_given_name.trim()
-    );
     append_bounded_bytes(
         &mut payload.payload_bytes,
-        citizen_full_name.as_bytes(),
+        record.family_name.trim().as_bytes(),
         128,
-        "citizen_full_name",
+        "family_name",
+    )?;
+    append_bounded_bytes(
+        &mut payload.payload_bytes,
+        record.given_name.trim().as_bytes(),
+        128,
+        "given_name",
     )?;
     let sex = match record.citizen_sex.trim().to_ascii_uppercase().as_str() {
         "MALE" => 0,
@@ -786,6 +808,7 @@ pub(crate) fn active_registry_cid_number(
 fn encode_citizen_identity_call(
     identity_level: CitizenOnchainIdentityLevel,
     actor_cid_number: &str,
+    actor_role_code: &str,
     payload_bytes: &[u8],
     citizen_signature: &[u8; 64],
 ) -> Vec<u8> {
@@ -794,8 +817,22 @@ fn encode_citizen_identity_call(
     out.push(identity_level.call_index());
     out.extend(Compact(actor_cid_number.len() as u32).encode());
     out.extend_from_slice(actor_cid_number.as_bytes());
+    out.extend(Compact(actor_role_code.len() as u32).encode());
+    out.extend_from_slice(actor_role_code.as_bytes());
     out.extend_from_slice(payload_bytes);
     out.extend(Compact(citizen_signature.len() as u32).encode());
     out.extend_from_slice(citizen_signature);
     out
+}
+
+pub(crate) fn validate_actor_role_code(value: &str) -> Result<String, axum::response::Response> {
+    let value = value.trim();
+    if value.is_empty() || value.len() > 64 {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "注册局岗位码不能为空且不得超过64字节",
+        ));
+    }
+    Ok(value.to_string())
 }

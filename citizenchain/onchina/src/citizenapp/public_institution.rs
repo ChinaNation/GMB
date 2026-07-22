@@ -68,7 +68,7 @@ fn parse_category(value: &str) -> InstitutionCategory {
 ///
 /// 安全红线：显式不含创建管理员姓、名、角色，也不含 private_type / partnership_kind。
 /// 新增字段前必须确认其可公开。
-/// 已确认可公开:法定代表人姓名、CID 和钱包账户属于机构公开信息；三字段无任免时均不下发。
+/// 已确认可公开:法定代表人的姓、名、CID 和钱包账户属于机构公开信息；无任免时不下发。
 #[derive(Debug, Serialize)]
 pub(crate) struct PublicInstitutionRow {
     pub cid_number: String,
@@ -88,13 +88,10 @@ pub(crate) struct PublicInstitutionRow {
     pub institution_code: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub has_legal_personality: Option<bool>,
-    /// 法定代表人姓名(公开目录字段)。来自 subjects.legal_representative_name;无则不下发。
+    /// 法定代表人公开身份；人的姓名只下发分离的姓、名。
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub legal_representative_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub legal_representative_cid_number: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub legal_representative_account: Option<String>,
+    pub legal_representative:
+        Option<crate::institution::subjects::model::LegalRepresentative>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_cid_number: Option<String>,
     pub account_count: usize,
@@ -106,9 +103,26 @@ pub(crate) struct PublicInstitutionRow {
 impl PublicInstitutionRow {
     /// 从目录查询行映射公开行(只取白名单列;custom_account_names 后续批量补)。
     /// **按列名取**(非裸位置索引):SELECT 增删列不会错位/panic。
-    fn from_pg_row(row: &postgres::Row) -> Self {
+    fn from_pg_row(row: &postgres::Row) -> Result<Self, String> {
         let account_count = row.get::<_, i64>("account_count").max(0) as usize;
-        Self {
+        let legal_representative = match (
+            row.get::<_, Option<String>>("family_name"),
+            row.get::<_, Option<String>>("given_name"),
+            row.get::<_, Option<String>>("legal_representative_cid_number"),
+            row.get::<_, Option<String>>("legal_representative_account"),
+        ) {
+            (Some(family_name), Some(given_name), Some(cid_number), Some(account)) => Some(
+                crate::institution::subjects::model::LegalRepresentative {
+                    family_name,
+                    given_name,
+                    cid_number,
+                    account,
+                },
+            ),
+            (None, None, None, None) => None,
+            _ => return Err("incomplete public legal representative projection".to_string()),
+        };
+        Ok(Self {
             cid_number: row.get("cid_number"),
             cid_full_name: row.get("cid_full_name"),
             cid_short_name: row.get("cid_short_name"),
@@ -120,13 +134,11 @@ impl PublicInstitutionRow {
             institution_code: row.get("institution_code"),
             parent_cid_number: row.get("parent_cid_number"),
             has_legal_personality: row.get("has_legal_personality"),
-            legal_representative_name: row.get("legal_representative_name"),
-            legal_representative_cid_number: row.get("legal_representative_cid_number"),
-            legal_representative_account: row.get("legal_representative_account"),
+            legal_representative,
             account_count,
             custom_account_names: Vec::new(),
             created_at: row.get("created_at"),
-        }
+        })
     }
 }
 
@@ -345,7 +357,7 @@ fn query_public_institutions(
                 s.institution_code, s.parent_cid_number, s.has_legal_personality,
                 (SELECT COUNT(*) FROM accounts a
                    WHERE a.province_code = s.province_code AND a.cid_number = s.cid_number) AS account_count,
-	                s.created_at, s.legal_representative_name,
+	                s.created_at, s.family_name, s.given_name,
 	                s.legal_representative_cid_number, s.legal_representative_account
 	         {GOV_FROM_WHERE}
 	           AND ($3::text IS NULL OR s.cid_number > $3)
@@ -359,8 +371,10 @@ fn query_public_institutions(
                 &[&province_code, &city_code, &after_cid, &limit],
             )
             .map_err(|e| format!("public institution keyset query failed: {e}"))?;
-        let mut items: Vec<PublicInstitutionRow> =
-            rows.iter().map(PublicInstitutionRow::from_pg_row).collect();
+        let mut items: Vec<PublicInstitutionRow> = rows
+            .iter()
+            .map(PublicInstitutionRow::from_pg_row)
+            .collect::<Result<_, _>>()?;
         let has_more = items.len() > page_size;
         if has_more {
             items.truncate(page_size);
@@ -451,9 +465,14 @@ mod tests {
             town_code: String::new(),
             institution_code: "PGV".to_string(),
             has_legal_personality: Some(true),
-            legal_representative_name: Some("张三".to_string()),
-            legal_representative_cid_number: Some("110000CTZN1000000001".to_string()),
-            legal_representative_account: Some("11".repeat(32)),
+            legal_representative: Some(
+                crate::institution::subjects::model::LegalRepresentative {
+                    family_name: "张".to_string(),
+                    given_name: "三".to_string(),
+                    cid_number: "110000CTZN1000000001".to_string(),
+                    account: "11".repeat(32),
+                },
+            ),
             parent_cid_number: None,
             account_count: 2,
             custom_account_names: vec!["业务专户A".to_string()],
@@ -474,10 +493,11 @@ mod tests {
         assert!(json.contains("业务专户A"));
         assert!(json.contains("安徽省人民政府"));
         // 法定代表人姓名属已确认可公开的目录字段,必须随公开行下发。
-        assert!(json.contains("legal_representative_name"));
-        assert!(json.contains("legal_representative_cid_number"));
-        assert!(json.contains("legal_representative_account"));
-        assert!(json.contains("张三"));
+        assert!(json.contains("legal_representative"));
+        assert!(json.contains("family_name"));
+        assert!(json.contains("given_name"));
+        assert!(json.contains("张"));
+        assert!(json.contains("三"));
     }
 
     #[test]

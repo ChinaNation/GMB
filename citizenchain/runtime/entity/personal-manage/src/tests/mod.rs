@@ -183,20 +183,6 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
     }
 }
 
-pub struct TestInternalAdminsLenProvider;
-impl votingengine::InternalAdminsLenProvider<AccountId32> for TestInternalAdminsLenProvider {
-    fn institution_admins_len(
-        _institution_code: InstitutionCode,
-        _cid_number: &[u8],
-    ) -> Option<u32> {
-        None
-    }
-
-    fn personal_admins_len(personal_account: AccountId32) -> Option<u32> {
-        personal_admins::Pallet::<Test>::active_account_admins_len(PMUL, personal_account)
-    }
-}
-
 pub struct TestTimeProvider;
 impl frame_support::traits::UnixTime for TestTimeProvider {
     fn now() -> core::time::Duration {
@@ -226,7 +212,6 @@ impl votingengine::Config for Test {
         personal_admins::InternalVoteExecutor<Test>,
     );
     type InternalAdminProvider = TestInternalAdminProvider;
-    type InternalAdminsLenProvider = TestInternalAdminsLenProvider;
     // 机构多签上限=1989(同真实 runtime);全链创世测试含联邦注册局 215 管理员,须覆盖。
     // 个人多签上限是另一项 MaxPersonalAccountAdmins=64,不受此影响。
     type MaxAdminsPerInstitution = ConstU32<1989>;
@@ -247,6 +232,7 @@ impl votingengine::Config for Test {
 
 impl internal_vote::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionRoleProvider = ();
     type WeightInfo = ();
 }
 
@@ -346,7 +332,12 @@ pub fn last_proposal_id() -> u64 {
 pub fn cast_yes_votes(admins: &[AccountId32], n: usize, pid: u64) -> sp_runtime::DispatchResult {
     use votingengine::STATUS_VOTING;
     for who in admins.iter().take(n) {
-        <internal_vote::Pallet<Test>>::do_internal_vote(who.clone(), pid, true)?;
+        <internal_vote::Pallet<Test>>::do_internal_vote(
+            who.clone(),
+            pid,
+            internal_vote::InternalVoteTicketClaim::Personal,
+            true,
+        )?;
         if VotingEngine::proposals(pid)
             .map(|p| p.status != STATUS_VOTING)
             .unwrap_or(true)
@@ -367,7 +358,12 @@ pub fn cast_yes_votes(admins: &[AccountId32], n: usize, pid: u64) -> sp_runtime:
 pub fn cast_no_votes(admins: &[AccountId32], n: usize, pid: u64) -> sp_runtime::DispatchResult {
     use votingengine::STATUS_VOTING;
     for who in admins.iter().take(n) {
-        <internal_vote::Pallet<Test>>::do_internal_vote(who.clone(), pid, false)?;
+        <internal_vote::Pallet<Test>>::do_internal_vote(
+            who.clone(),
+            pid,
+            internal_vote::InternalVoteTicketClaim::Personal,
+            false,
+        )?;
         if VotingEngine::proposals(pid)
             .map(|p| p.status != STATUS_VOTING)
             .unwrap_or(true)

@@ -18,7 +18,13 @@ use sp_runtime::RuntimeDebug;
 
 pub type CidNumberBound = BoundedVec<u8, ConstU32<32>>;
 pub type AreaCodeBound = BoundedVec<u8, ConstU32<16>>;
-pub type CitizenNameBound = BoundedVec<u8, ConstU32<128>>;
+pub type RoleCodeBound = BoundedVec<u8, ConstU32<64>>;
+/// 公民姓、名各自的最大字节数；与管理员人员姓名字段保持一致。
+pub const PERSON_NAME_MAX_BYTES: u32 = 128;
+/// 姓。结构本身已经限定公民语义，字段和类型都不再重复增加 `citizen_` 前缀。
+pub type FamilyName = BoundedVec<u8, ConstU32<PERSON_NAME_MAX_BYTES>>;
+/// 名。与 `family_name` 分开保存，不生成或存储合并姓名。
+pub type GivenName = BoundedVec<u8, ConstU32<PERSON_NAME_MAX_BYTES>>;
 pub const MIN_ONCHAIN_CITIZEN_AGE_YEARS: u8 = 16;
 /// 批量占号单笔上限。
 pub const MAX_CID_OCCUPY_BATCH: u32 = 10_000;
@@ -166,6 +172,29 @@ pub enum CitizenIdentityLevel {
     Candidate = 2,
 }
 
+/// 公民授权主体。
+///
+/// 公民 CID 与钱包账户必须同时匹配 `citizen-identity` 的有效双向绑定：CID 证明
+/// 公民身份和权益，钱包账户证明本次操作的签名身份，任何一项都不能单独授权。
+/// 本结构只在读取时构造，不作为新的身份或权限 Storage。
+#[derive(
+    Clone,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Eq,
+    PartialEq,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+)]
+pub struct CitizenSubject<AccountId> {
+    /// 公民 CID 号；由本模块保存的有效身份提供，消费方不得自行生成或修改。
+    pub cid_number: CidNumberBound,
+    /// 公民钱包账户；用于验证签名，并与 `cid_number` 共同确认公民主体。
+    pub wallet_account: AccountId,
+}
+
 #[derive(
     Clone,
     Encode,
@@ -201,11 +230,19 @@ pub struct VotingIdentityPayload<AccountId> {
     MaxEncodedLen,
 )]
 pub struct CandidateIdentityPayload<AccountId> {
+    /// 公民的完整投票身份载荷；竞选身份必须建立在有效投票身份之上。
     pub voting: VotingIdentityPayload<AccountId>,
+    /// 出生省级行政区代码；表示出生地，不表示当前居住地。
     pub birth_province_code: AreaCodeBound,
+    /// 出生市级行政区代码；表示出生地，不表示当前居住地。
     pub birth_city_code: AreaCodeBound,
+    /// 出生镇级行政区代码；表示出生地，不表示当前居住地。
     pub birth_town_code: AreaCodeBound,
-    pub citizen_full_name: CitizenNameBound,
+    /// 姓；直接使用公民身份真源中的 `family_name`，不生成合并姓名。
+    pub family_name: FamilyName,
+    /// 名；直接使用公民身份真源中的 `given_name`，不生成合并姓名。
+    pub given_name: GivenName,
+    /// 公民性别；用于竞选资格校验和竞选信息展示。
     pub citizen_sex: CitizenSex,
     /// 出生日期(YYYYMMDD 整数)。仅竞选身份携带,写入后不可修改;
     /// 链上凭此实时计算竞选公民年龄(见 `candidate_age`)。
@@ -224,7 +261,6 @@ pub struct CandidateIdentityPayload<AccountId> {
     MaxEncodedLen,
 )]
 pub struct VotingIdentity<BlockNumber> {
-    pub cid_number: CidNumberBound,
     pub passport_valid_from: u32,
     pub passport_valid_until: u32,
     pub citizen_status: CitizenStatus,
@@ -246,13 +282,21 @@ pub struct VotingIdentity<BlockNumber> {
     MaxEncodedLen,
 )]
 pub struct CandidateIdentity<BlockNumber> {
+    /// 生成该竞选身份时采用的出生省级行政区代码。
     pub birth_province_code: AreaCodeBound,
+    /// 生成该竞选身份时采用的出生市级行政区代码。
     pub birth_city_code: AreaCodeBound,
+    /// 生成该竞选身份时采用的出生镇级行政区代码。
     pub birth_town_code: AreaCodeBound,
-    pub citizen_full_name: CitizenNameBound,
+    /// 生成该竞选身份时采用的姓。
+    pub family_name: FamilyName,
+    /// 生成该竞选身份时采用的名。
+    pub given_name: GivenName,
+    /// 生成该竞选身份时采用的公民性别。
     pub citizen_sex: CitizenSex,
     /// 出生日期(YYYYMMDD 整数),写一次即锁定,后续更新不得变更。
     pub birth_date: u32,
+    /// 最近一次写入或更新该竞选身份的区块号；不代表现实世界时间。
     pub updated_at: BlockNumber,
 }
 
@@ -320,9 +364,11 @@ pub trait CitizenIdentityAuthority<AccountId, Signature> {
     fn can_manage_voting_identity(
         registrar: &AccountId,
         actor_cid_number: &[u8],
+        actor_role_code: &[u8],
         residence_province_code: &[u8],
         residence_city_code: &[u8],
         level: CitizenIdentityLevel,
+        action_code: u32,
     ) -> bool;
 
     fn verify_citizen_signature(
@@ -336,9 +382,11 @@ impl<AccountId, Signature> CitizenIdentityAuthority<AccountId, Signature> for ()
     fn can_manage_voting_identity(
         _registrar: &AccountId,
         _actor_cid_number: &[u8],
+        _actor_role_code: &[u8],
         _residence_province_code: &[u8],
         _residence_city_code: &[u8],
         _level: CitizenIdentityLevel,
+        _action_code: u32,
     ) -> bool {
         false
     }
@@ -367,6 +415,8 @@ pub trait OnVotingIdentityRegisteredWeight {
 impl OnVotingIdentityRegisteredWeight for () {}
 
 pub trait CitizenIdentityProvider<AccountId> {
+    /// 读取经过 CID 状态和 CID↔钱包双向绑定校验的完整公民主体。
+    fn citizen_subject(who: &AccountId) -> Option<CitizenSubject<AccountId>>;
     fn can_vote(who: &AccountId, scope: &PopulationScope) -> bool;
     fn can_be_candidate(who: &AccountId, scope: &PopulationScope) -> bool;
     fn population_count(scope: &PopulationScope) -> u64;
@@ -375,6 +425,10 @@ pub trait CitizenIdentityProvider<AccountId> {
 }
 
 impl<AccountId> CitizenIdentityProvider<AccountId> for () {
+    fn citizen_subject(_who: &AccountId) -> Option<CitizenSubject<AccountId>> {
+        None
+    }
+
     fn can_vote(_who: &AccountId, _scope: &PopulationScope) -> bool {
         false
     }
@@ -409,7 +463,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
 
     /// 创世链直接采用当前存储结构，不保留历史迁移或兼容分支。
-    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
     pub type SignatureOf<T> = BoundedVec<u8, <T as Config>::MaxCitizenSignatureLength>;
 
@@ -437,26 +491,34 @@ pub mod pallet {
     pub struct Pallet<T>(_);
 
     #[pallet::storage]
-    pub type VotingIdentityByAccount<T: Config> = StorageMap<
+    /// 永久公民 CID 到投票身份。CID 是身份主键，钱包不参与身份寻址。
+    pub type VotingIdentityByCid<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
-        T::AccountId,
+        CidNumberBound,
         VotingIdentity<BlockNumberFor<T>>,
         OptionQuery,
     >;
 
+    /// 永久公民 CID 到竞选身份。更换签名钱包不会搬迁竞选资料。
     #[pallet::storage]
-    pub type CandidateIdentityByAccount<T: Config> = StorageMap<
+    pub type CandidateIdentityByCid<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
-        T::AccountId,
+        CidNumberBound,
         CandidateIdentity<BlockNumberFor<T>>,
         OptionQuery,
     >;
 
+    /// 永久公民 CID 当前绑定的唯一签名钱包。
     #[pallet::storage]
-    pub type AccountByCid<T: Config> =
+    pub type WalletAccountByCid<T: Config> =
         StorageMap<_, Blake2_128Concat, CidNumberBound, T::AccountId, OptionQuery>;
+
+    /// 当前签名钱包反向绑定的永久公民 CID；与 `WalletAccountByCid` 必须闭环。
+    #[pallet::storage]
+    pub type CidByWalletAccount<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, CidNumberBound, OptionQuery>;
 
     /// CID 占号登记表:发号全局唯一的链上真源(占号先行,墓碑不删除)。
     #[pallet::storage]
@@ -487,17 +549,17 @@ pub mod pallet {
     #[pallet::storage]
     pub type NextEligibilityRevision<T> = StorageValue<_, u64, ValueQuery>;
 
-    /// 单账户历史版本数量；版本索引为 0..count，支持按 revision 有界二分。
+    /// 单个永久 CID 的历史版本数量；版本索引为 0..count，支持按 revision 有界二分。
     #[pallet::storage]
     pub type VotingEligibilityVersionCount<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, u64, ValueQuery>;
+        StorageMap<_, Blake2_128Concat, CidNumberBound, u64, ValueQuery>;
 
-    /// 单账户不可变投票资格历史：(账户, 版本序号) → 资格区间。
+    /// 永久 CID 的不可变投票资格历史：(CID, 版本序号) → 资格区间。
     #[pallet::storage]
     pub type VotingEligibilityVersions<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
-        T::AccountId,
+        CidNumberBound,
         Blake2_128Concat,
         u64,
         VotingEligibilityVersion<BlockNumberFor<T>>,
@@ -541,7 +603,8 @@ pub mod pallet {
         EmptyCidNumber,
         EmptyResidenceScope,
         EmptyBirthScope,
-        EmptyCitizenName,
+        EmptyFamilyName,
+        EmptyGivenName,
         /// 出生日期非法(非 YYYYMMDD 或无法计算年龄)。
         InvalidBirthDate,
         /// 出生日期写入后不可修改,更新竞选身份时不得变更。
@@ -551,7 +614,12 @@ pub mod pallet {
         UnauthorizedRegistrar,
         InvalidCitizenSignature,
         UnderVotingAge,
-        CidAlreadyRegisteredToAnotherAccount,
+        /// 该永久 CID 已经建立投票身份；登记入口不得兼作更新入口。
+        VotingIdentityAlreadyExists,
+        /// CID 与入参钱包不符合当前双向绑定。
+        CidWalletBindingMismatch,
+        /// 入参钱包已经绑定另一个永久 CID。
+        WalletAlreadyBoundToAnotherCid,
         CidNotFound,
         VotingIdentityNotFound,
         CidAlreadyOccupied,
@@ -559,7 +627,7 @@ pub mod pallet {
         CidAlreadyRevoked,
         /// 身份资格修订号达到 u64 上限。
         EligibilityRevisionOverflow,
-        /// 单账户身份历史版本数达到 u64 上限。
+        /// 单个永久 CID 的身份历史版本数达到 u64 上限。
         EligibilityVersionOverflow,
     }
 
@@ -573,6 +641,7 @@ pub mod pallet {
         pub fn register_voting_identity(
             origin: OriginFor<T>,
             actor_cid_number: CidNumberBound,
+            actor_role_code: RoleCodeBound,
             payload: VotingIdentityPayload<T::AccountId>,
             citizen_signature: SignatureOf<T>,
         ) -> DispatchResult {
@@ -581,38 +650,34 @@ pub mod pallet {
             Self::ensure_authorized(
                 &registrar,
                 actor_cid_number.as_slice(),
+                actor_role_code.as_slice(),
                 &payload,
                 CitizenIdentityLevel::Voting,
+                0,
             )?;
             Self::ensure_citizen_signature(
                 &payload.wallet_account,
                 &payload.encode(),
                 &citizen_signature,
             )?;
-            Self::ensure_cid_available(&payload.cid_number, &payload.wallet_account)?;
             Self::ensure_cid_occupied_active(&payload.cid_number)?;
+            ensure!(
+                !VotingIdentityByCid::<T>::contains_key(&payload.cid_number),
+                Error::<T>::VotingIdentityAlreadyExists
+            );
+            Self::ensure_wallet_binding_available(&payload.cid_number, &payload.wallet_account)?;
 
-            let old = VotingIdentityByAccount::<T>::get(&payload.wallet_account);
-            let first_identity = old.is_none();
             let identity = Self::identity_from_payload(&payload);
-            Self::replace_voting_identity(payload.wallet_account.clone(), identity, old)?;
-            AccountByCid::<T>::insert(&payload.cid_number, &payload.wallet_account);
-
-            if first_identity {
-                T::OnVotingIdentityRegistered::on_voting_identity_registered(
-                    &payload.wallet_account,
-                    payload.cid_number.as_slice(),
-                );
-                Self::deposit_event(Event::<T>::VotingIdentityRegistered {
-                    wallet_account: payload.wallet_account,
-                    cid_number: payload.cid_number,
-                });
-            } else {
-                Self::deposit_event(Event::<T>::VotingIdentityUpdated {
-                    wallet_account: payload.wallet_account,
-                    cid_number: payload.cid_number,
-                });
-            }
+            Self::replace_voting_identity(payload.cid_number.clone(), identity, None)?;
+            Self::bind_wallet_account(&payload.cid_number, &payload.wallet_account);
+            T::OnVotingIdentityRegistered::on_voting_identity_registered(
+                &payload.wallet_account,
+                payload.cid_number.as_slice(),
+            );
+            Self::deposit_event(Event::<T>::VotingIdentityRegistered {
+                wallet_account: payload.wallet_account,
+                cid_number: payload.cid_number,
+            });
             Ok(())
         }
 
@@ -621,6 +686,7 @@ pub mod pallet {
         pub fn upgrade_to_candidate_identity(
             origin: OriginFor<T>,
             actor_cid_number: CidNumberBound,
+            actor_role_code: RoleCodeBound,
             payload: CandidateIdentityPayload<T::AccountId>,
             citizen_signature: SignatureOf<T>,
         ) -> DispatchResult {
@@ -629,30 +695,36 @@ pub mod pallet {
             Self::ensure_authorized(
                 &registrar,
                 actor_cid_number.as_slice(),
+                actor_role_code.as_slice(),
                 &payload.voting,
                 CitizenIdentityLevel::Candidate,
+                1,
             )?;
             Self::ensure_citizen_signature(
                 &payload.voting.wallet_account,
                 &payload.encode(),
                 &citizen_signature,
             )?;
-            Self::ensure_cid_available(&payload.voting.cid_number, &payload.voting.wallet_account)?;
             Self::ensure_cid_occupied_active(&payload.voting.cid_number)?;
-
-            Self::ensure_birth_date_immutable(&payload.voting.wallet_account, payload.birth_date)?;
-
-            let old = VotingIdentityByAccount::<T>::get(&payload.voting.wallet_account);
-            let identity = Self::identity_from_payload(&payload.voting);
-            Self::replace_voting_identity(payload.voting.wallet_account.clone(), identity, old)?;
-            AccountByCid::<T>::insert(&payload.voting.cid_number, &payload.voting.wallet_account);
-            CandidateIdentityByAccount::<T>::insert(
+            Self::ensure_wallet_binding_available(
+                &payload.voting.cid_number,
                 &payload.voting.wallet_account,
+            )?;
+
+            Self::ensure_birth_date_immutable(&payload.voting.cid_number, payload.birth_date)?;
+
+            let old = VotingIdentityByCid::<T>::get(&payload.voting.cid_number);
+            let identity = Self::identity_from_payload(&payload.voting);
+            Self::replace_voting_identity(payload.voting.cid_number.clone(), identity, old)?;
+            Self::bind_wallet_account(&payload.voting.cid_number, &payload.voting.wallet_account);
+            CandidateIdentityByCid::<T>::insert(
+                &payload.voting.cid_number,
                 CandidateIdentity {
                     birth_province_code: payload.birth_province_code,
                     birth_city_code: payload.birth_city_code,
                     birth_town_code: payload.birth_town_code,
-                    citizen_full_name: payload.citizen_full_name,
+                    family_name: payload.family_name,
+                    given_name: payload.given_name,
                     citizen_sex: payload.citizen_sex,
                     birth_date: payload.birth_date,
                     updated_at: frame_system::Pallet::<T>::block_number(),
@@ -670,6 +742,7 @@ pub mod pallet {
         pub fn update_voting_identity(
             origin: OriginFor<T>,
             actor_cid_number: CidNumberBound,
+            actor_role_code: RoleCodeBound,
             payload: VotingIdentityPayload<T::AccountId>,
             citizen_signature: SignatureOf<T>,
         ) -> DispatchResult {
@@ -678,22 +751,23 @@ pub mod pallet {
             Self::ensure_authorized(
                 &registrar,
                 actor_cid_number.as_slice(),
+                actor_role_code.as_slice(),
                 &payload,
                 CitizenIdentityLevel::Voting,
+                2,
             )?;
             Self::ensure_citizen_signature(
                 &payload.wallet_account,
                 &payload.encode(),
                 &citizen_signature,
             )?;
-            Self::ensure_cid_available(&payload.cid_number, &payload.wallet_account)?;
             Self::ensure_cid_occupied_active(&payload.cid_number)?;
+            Self::ensure_current_wallet_binding(&payload.cid_number, &payload.wallet_account)?;
 
-            let old = VotingIdentityByAccount::<T>::get(&payload.wallet_account)
+            let old = VotingIdentityByCid::<T>::get(&payload.cid_number)
                 .ok_or(Error::<T>::VotingIdentityNotFound)?;
             let identity = Self::identity_from_payload(&payload);
-            Self::replace_voting_identity(payload.wallet_account.clone(), identity, Some(old))?;
-            AccountByCid::<T>::insert(&payload.cid_number, &payload.wallet_account);
+            Self::replace_voting_identity(payload.cid_number.clone(), identity, Some(old))?;
             Self::deposit_event(Event::<T>::VotingIdentityUpdated {
                 wallet_account: payload.wallet_account,
                 cid_number: payload.cid_number,
@@ -706,6 +780,7 @@ pub mod pallet {
         pub fn update_candidate_identity(
             origin: OriginFor<T>,
             actor_cid_number: CidNumberBound,
+            actor_role_code: RoleCodeBound,
             payload: CandidateIdentityPayload<T::AccountId>,
             citizen_signature: SignatureOf<T>,
         ) -> DispatchResult {
@@ -714,40 +789,41 @@ pub mod pallet {
             Self::ensure_authorized(
                 &registrar,
                 actor_cid_number.as_slice(),
+                actor_role_code.as_slice(),
                 &payload.voting,
                 CitizenIdentityLevel::Candidate,
+                3,
             )?;
             Self::ensure_citizen_signature(
                 &payload.voting.wallet_account,
                 &payload.encode(),
                 &citizen_signature,
             )?;
-            Self::ensure_cid_available(&payload.voting.cid_number, &payload.voting.wallet_account)?;
             Self::ensure_cid_occupied_active(&payload.voting.cid_number)?;
+            Self::ensure_current_wallet_binding(
+                &payload.voting.cid_number,
+                &payload.voting.wallet_account,
+            )?;
 
-            Self::ensure_birth_date_immutable(&payload.voting.wallet_account, payload.birth_date)?;
+            Self::ensure_birth_date_immutable(&payload.voting.cid_number, payload.birth_date)?;
 
-            let old = VotingIdentityByAccount::<T>::get(&payload.voting.wallet_account)
+            let old = VotingIdentityByCid::<T>::get(&payload.voting.cid_number)
                 .ok_or(Error::<T>::VotingIdentityNotFound)?;
             let identity = Self::identity_from_payload(&payload.voting);
-            Self::replace_voting_identity(
-                payload.voting.wallet_account.clone(),
-                identity,
-                Some(old),
-            )?;
-            CandidateIdentityByAccount::<T>::insert(
-                &payload.voting.wallet_account,
+            Self::replace_voting_identity(payload.voting.cid_number.clone(), identity, Some(old))?;
+            CandidateIdentityByCid::<T>::insert(
+                &payload.voting.cid_number,
                 CandidateIdentity {
                     birth_province_code: payload.birth_province_code,
                     birth_city_code: payload.birth_city_code,
                     birth_town_code: payload.birth_town_code,
-                    citizen_full_name: payload.citizen_full_name,
+                    family_name: payload.family_name,
+                    given_name: payload.given_name,
                     citizen_sex: payload.citizen_sex,
                     birth_date: payload.birth_date,
                     updated_at: frame_system::Pallet::<T>::block_number(),
                 },
             );
-            AccountByCid::<T>::insert(&payload.voting.cid_number, &payload.voting.wallet_account);
             Self::deposit_event(Event::<T>::CandidateIdentityUpdated {
                 wallet_account: payload.voting.wallet_account,
                 cid_number: payload.voting.cid_number,
@@ -760,18 +836,21 @@ pub mod pallet {
         pub fn revoke_identity(
             origin: OriginFor<T>,
             actor_cid_number: CidNumberBound,
+            actor_role_code: RoleCodeBound,
             cid_number: CidNumberBound,
         ) -> DispatchResult {
             let registrar = ensure_signed(origin)?;
             ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
-            let account = AccountByCid::<T>::get(&cid_number).ok_or(Error::<T>::CidNotFound)?;
-            let old = VotingIdentityByAccount::<T>::get(&account)
+            let account =
+                WalletAccountByCid::<T>::get(&cid_number).ok_or(Error::<T>::CidNotFound)?;
+            let old = VotingIdentityByCid::<T>::get(&cid_number)
                 .ok_or(Error::<T>::VotingIdentityNotFound)?;
             Self::ensure_authorized(
                 &registrar,
                 actor_cid_number.as_slice(),
+                actor_role_code.as_slice(),
                 &VotingIdentityPayload {
-                    cid_number: old.cid_number.clone(),
+                    cid_number: cid_number.clone(),
                     wallet_account: account.clone(),
                     citizen_age_years: MIN_ONCHAIN_CITIZEN_AGE_YEARS,
                     passport_valid_from: old.passport_valid_from,
@@ -782,13 +861,14 @@ pub mod pallet {
                     residence_town_code: old.residence_town_code.clone(),
                 },
                 CitizenIdentityLevel::Voting,
+                4,
             )?;
 
             let mut revoked = old.clone();
             revoked.citizen_status = CitizenStatus::Revoked;
             revoked.updated_at = frame_system::Pallet::<T>::block_number();
-            Self::replace_voting_identity(account.clone(), revoked, Some(old))?;
-            CandidateIdentityByAccount::<T>::remove(&account);
+            Self::replace_voting_identity(cid_number.clone(), revoked, Some(old))?;
+            CandidateIdentityByCid::<T>::remove(&cid_number);
             // 身份吊销联动登记表墓碑,保证发号真源与身份状态一致。
             Self::tombstone_cid_record(&cid_number);
             Self::deposit_event(Event::<T>::CitizenIdentityRevoked {
@@ -807,6 +887,7 @@ pub mod pallet {
         pub fn occupy_cid(
             origin: OriginFor<T>,
             actor_cid_number: CidNumberBound,
+            actor_role_code: RoleCodeBound,
             cid_number: CidNumberBound,
             commitment: [u8; 32],
             residence_province_code: AreaCodeBound,
@@ -821,9 +902,11 @@ pub mod pallet {
                 T::CitizenIdentityAuthority::can_manage_voting_identity(
                     &registrar,
                     actor_cid_number.as_slice(),
+                    actor_role_code.as_slice(),
                     residence_province_code.as_slice(),
                     residence_city_code.as_slice(),
                     CitizenIdentityLevel::Voting,
+                    6,
                 ),
                 Error::<T>::UnauthorizedRegistrar
             );
@@ -843,6 +926,7 @@ pub mod pallet {
         pub fn occupy_cids_batch(
             origin: OriginFor<T>,
             actor_cid_number: CidNumberBound,
+            actor_role_code: RoleCodeBound,
             items: CidOccupyItemsBound,
             residence_province_code: AreaCodeBound,
             residence_city_code: AreaCodeBound,
@@ -857,9 +941,11 @@ pub mod pallet {
                 T::CitizenIdentityAuthority::can_manage_voting_identity(
                     &registrar,
                     actor_cid_number.as_slice(),
+                    actor_role_code.as_slice(),
                     residence_province_code.as_slice(),
                     residence_city_code.as_slice(),
                     CitizenIdentityLevel::Voting,
+                    7,
                 ),
                 Error::<T>::UnauthorizedRegistrar
             );
@@ -882,6 +968,7 @@ pub mod pallet {
         pub fn revoke_cid(
             origin: OriginFor<T>,
             actor_cid_number: CidNumberBound,
+            actor_role_code: RoleCodeBound,
             cid_number: CidNumberBound,
         ) -> DispatchResult {
             let registrar = ensure_signed(origin)?;
@@ -894,15 +981,17 @@ pub mod pallet {
                 T::CitizenIdentityAuthority::can_manage_voting_identity(
                     &registrar,
                     actor_cid_number.as_slice(),
+                    actor_role_code.as_slice(),
                     rec.residence_province_code.as_slice(),
                     rec.residence_city_code.as_slice(),
                     CitizenIdentityLevel::Voting,
+                    8,
                 ),
                 Error::<T>::UnauthorizedRegistrar
             );
             Self::tombstone_cid_record(&cid_number);
-            if let Some(account) = AccountByCid::<T>::get(&cid_number) {
-                Self::revoke_bound_identity(&account)?;
+            if WalletAccountByCid::<T>::contains_key(&cid_number) {
+                Self::revoke_bound_identity(&cid_number)?;
             }
             Self::deposit_event(Event::<T>::CidRevoked { cid_number });
             Ok(())
@@ -987,14 +1076,14 @@ pub mod pallet {
         }
 
         /// 吊销已绑定的链上身份:状态置 Revoked、退出人口分母、移除参选档案。
-        fn revoke_bound_identity(account: &T::AccountId) -> DispatchResult {
-            if let Some(old) = VotingIdentityByAccount::<T>::get(account) {
+        fn revoke_bound_identity(cid_number: &CidNumberBound) -> DispatchResult {
+            if let Some(old) = VotingIdentityByCid::<T>::get(cid_number) {
                 if old.citizen_status != CitizenStatus::Revoked {
                     let mut revoked = old.clone();
                     revoked.citizen_status = CitizenStatus::Revoked;
                     revoked.updated_at = frame_system::Pallet::<T>::block_number();
-                    Self::replace_voting_identity(account.clone(), revoked, Some(old))?;
-                    CandidateIdentityByAccount::<T>::remove(account);
+                    Self::replace_voting_identity(cid_number.clone(), revoked, Some(old))?;
+                    CandidateIdentityByCid::<T>::remove(cid_number);
                 }
             }
             Ok(())
@@ -1031,10 +1120,8 @@ pub mod pallet {
                     && !payload.birth_town_code.is_empty(),
                 Error::<T>::EmptyBirthScope
             );
-            ensure!(
-                !payload.citizen_full_name.is_empty(),
-                Error::<T>::EmptyCitizenName
-            );
+            ensure!(!payload.family_name.is_empty(), Error::<T>::EmptyFamilyName);
+            ensure!(!payload.given_name.is_empty(), Error::<T>::EmptyGivenName);
             ensure!(
                 Self::is_plausible_yyyymmdd(payload.birth_date),
                 Error::<T>::InvalidBirthDate
@@ -1052,16 +1139,20 @@ pub mod pallet {
         fn ensure_authorized(
             registrar: &T::AccountId,
             actor_cid_number: &[u8],
+            actor_role_code: &[u8],
             payload: &VotingIdentityPayload<T::AccountId>,
             level: CitizenIdentityLevel,
+            action_code: u32,
         ) -> DispatchResult {
             ensure!(
                 T::CitizenIdentityAuthority::can_manage_voting_identity(
                     registrar,
                     actor_cid_number,
+                    actor_role_code,
                     payload.residence_province_code.as_slice(),
                     payload.residence_city_code.as_slice(),
                     level,
+                    action_code,
                 ),
                 Error::<T>::UnauthorizedRegistrar
             );
@@ -1084,24 +1175,45 @@ pub mod pallet {
             Ok(())
         }
 
-        fn ensure_cid_available(
+        /// 初次登记或候选升级时校验 CID↔钱包双向绑定没有指向另一主体。
+        fn ensure_wallet_binding_available(
             cid_number: &CidNumberBound,
             account: &T::AccountId,
         ) -> DispatchResult {
-            if let Some(existing) = AccountByCid::<T>::get(cid_number) {
+            if let Some(existing) = WalletAccountByCid::<T>::get(cid_number) {
+                ensure!(existing == *account, Error::<T>::CidWalletBindingMismatch);
+            }
+            if let Some(existing) = CidByWalletAccount::<T>::get(account) {
                 ensure!(
-                    existing == *account,
-                    Error::<T>::CidAlreadyRegisteredToAnotherAccount
+                    existing == *cid_number,
+                    Error::<T>::WalletAlreadyBoundToAnotherCid
                 );
             }
             Ok(())
+        }
+
+        /// 身份资料更新只能使用该永久 CID 当前绑定的钱包；CID 主键和钱包绑定都不属于本入口可变字段。
+        fn ensure_current_wallet_binding(
+            cid_number: &CidNumberBound,
+            account: &T::AccountId,
+        ) -> DispatchResult {
+            ensure!(
+                WalletAccountByCid::<T>::get(cid_number).as_ref() == Some(account)
+                    && CidByWalletAccount::<T>::get(account).as_ref() == Some(cid_number),
+                Error::<T>::CidWalletBindingMismatch
+            );
+            Ok(())
+        }
+
+        fn bind_wallet_account(cid_number: &CidNumberBound, account: &T::AccountId) {
+            WalletAccountByCid::<T>::insert(cid_number, account);
+            CidByWalletAccount::<T>::insert(account, cid_number);
         }
 
         fn identity_from_payload(
             payload: &VotingIdentityPayload<T::AccountId>,
         ) -> VotingIdentity<BlockNumberFor<T>> {
             VotingIdentity {
-                cid_number: payload.cid_number.clone(),
                 passport_valid_from: payload.passport_valid_from,
                 passport_valid_until: payload.passport_valid_until,
                 citizen_status: payload.citizen_status,
@@ -1153,17 +1265,21 @@ pub mod pallet {
             Some((today - birth_date) / 10_000)
         }
 
-        /// 读取某账户竞选身份的出生日期并计算当前周岁;无竞选身份返回 `None`。
+        /// 读取某当前钱包所绑定永久 CID 的竞选身份并计算周岁；无有效主体返回 `None`。
         /// 出生日期是链上公开信息,任何调用方可据此实时计算竞选公民年龄。
         pub fn candidate_age(account: &T::AccountId) -> Option<u32> {
-            let identity = CandidateIdentityByAccount::<T>::get(account)?;
+            let subject = Self::citizen_subject(account)?;
+            let identity = CandidateIdentityByCid::<T>::get(subject.cid_number)?;
             Self::age_from_birth_date(identity.birth_date)
         }
 
         /// 出生日期写一次即锁定:已存在竞选身份时,入参出生日期必须与链上一致,
         /// 否则拒绝(防止升级/更新竞选身份时篡改出生日期)。
-        fn ensure_birth_date_immutable(account: &T::AccountId, incoming: u32) -> DispatchResult {
-            if let Some(existing) = CandidateIdentityByAccount::<T>::get(account) {
+        fn ensure_birth_date_immutable(
+            cid_number: &CidNumberBound,
+            incoming: u32,
+        ) -> DispatchResult {
+            if let Some(existing) = CandidateIdentityByCid::<T>::get(cid_number) {
                 ensure!(
                     existing.birth_date == incoming,
                     Error::<T>::BirthDateImmutable
@@ -1189,26 +1305,21 @@ pub mod pallet {
         }
 
         fn replace_voting_identity(
-            account: T::AccountId,
+            cid_number: CidNumberBound,
             next: VotingIdentity<BlockNumberFor<T>>,
             old: Option<VotingIdentity<BlockNumberFor<T>>>,
         ) -> DispatchResult {
             let revision = NextEligibilityRevision::<T>::get()
                 .checked_add(1)
                 .ok_or(Error::<T>::EligibilityRevisionOverflow)?;
-            let version_count = VotingEligibilityVersionCount::<T>::get(&account);
+            let version_count = VotingEligibilityVersionCount::<T>::get(&cid_number);
             if let Some(old_identity) = old {
                 if Self::identity_counts_as_voter(&old_identity) {
                     Self::decrement_scope_counts(&old_identity);
                 }
-                if old_identity.cid_number != next.cid_number {
-                    AccountByCid::<T>::remove(&old_identity.cid_number);
-                    // 换号 = 旧号退役:登记表墓碑,永不复用。
-                    Self::tombstone_cid_record(&old_identity.cid_number);
-                }
                 if version_count > 0 {
                     VotingEligibilityVersions::<T>::mutate(
-                        &account,
+                        &cid_number,
                         version_count.saturating_sub(1),
                         |version| {
                             if let Some(version) = version {
@@ -1225,7 +1336,7 @@ pub mod pallet {
                 .checked_add(1)
                 .ok_or(Error::<T>::EligibilityVersionOverflow)?;
             VotingEligibilityVersions::<T>::insert(
-                &account,
+                &cid_number,
                 version_count,
                 VotingEligibilityVersion {
                     identity: next.clone(),
@@ -1233,9 +1344,9 @@ pub mod pallet {
                     valid_until_revision: None,
                 },
             );
-            VotingEligibilityVersionCount::<T>::insert(&account, next_version_count);
+            VotingEligibilityVersionCount::<T>::insert(&cid_number, next_version_count);
             NextEligibilityRevision::<T>::put(revision);
-            VotingIdentityByAccount::<T>::insert(account, next);
+            VotingIdentityByCid::<T>::insert(cid_number, next);
             Ok(())
         }
 
@@ -1312,6 +1423,29 @@ pub mod pallet {
             }
         }
 
+        /// 从身份 Storage 构造完整公民主体。
+        ///
+        /// 钱包反向 CID、CID 正向钱包、CID 身份和 CID 登记状态必须同时一致；身份或
+        /// CID 已吊销、任一方向绑定缺失或错配都返回 `None`，不得退化为裸钱包授权。
+        pub fn citizen_subject(who: &T::AccountId) -> Option<CitizenSubject<T::AccountId>> {
+            let cid_number = CidByWalletAccount::<T>::get(who)?;
+            if WalletAccountByCid::<T>::get(&cid_number).as_ref() != Some(who) {
+                return None;
+            }
+            let identity = VotingIdentityByCid::<T>::get(&cid_number)?;
+            if identity.citizen_status != CitizenStatus::Normal {
+                return None;
+            }
+            let record = CidRegistry::<T>::get(&cid_number)?;
+            if record.status != CidRecordStatus::Active {
+                return None;
+            }
+            Some(CitizenSubject {
+                cid_number,
+                wallet_account: who.clone(),
+            })
+        }
+
         /// 返回投票引擎生成提案快照所需的同源人口数据。
         ///
         /// 本函数只读取 citizen-identity 自有的四级人口计数、资格 revision 和日期，
@@ -1325,12 +1459,12 @@ pub mod pallet {
             }
         }
 
-        /// 按快照 revision 二分定位账户当时的身份版本。
+        /// 按快照 revision 二分定位永久 CID 当时的身份版本。
         fn identity_at_revision(
-            who: &T::AccountId,
+            cid_number: &CidNumberBound,
             revision: u64,
         ) -> Option<VotingIdentity<BlockNumberFor<T>>> {
-            let count = VotingEligibilityVersionCount::<T>::get(who);
+            let count = VotingEligibilityVersionCount::<T>::get(cid_number);
             if count == 0 {
                 return None;
             }
@@ -1338,7 +1472,7 @@ pub mod pallet {
             let mut high = count;
             while low < high {
                 let mid = low.saturating_add(high.saturating_sub(low) / 2);
-                let version = VotingEligibilityVersions::<T>::get(who, mid)?;
+                let version = VotingEligibilityVersions::<T>::get(cid_number, mid)?;
                 if version.valid_from_revision <= revision {
                     low = mid.saturating_add(1);
                 } else {
@@ -1348,7 +1482,7 @@ pub mod pallet {
             if low == 0 {
                 return None;
             }
-            let version = VotingEligibilityVersions::<T>::get(who, low.saturating_sub(1))?;
+            let version = VotingEligibilityVersions::<T>::get(cid_number, low.saturating_sub(1))?;
             if version
                 .valid_until_revision
                 .map(|until| revision >= until)
@@ -1364,8 +1498,15 @@ pub mod pallet {
             who: &T::AccountId,
             population_data: &PopulationData,
         ) -> bool {
+            // 历史资格跟随永久 CID；钱包只负责当前交易签名和 CID 反向解析。
+            let Some(cid_number) = CidByWalletAccount::<T>::get(who) else {
+                return false;
+            };
+            if WalletAccountByCid::<T>::get(&cid_number).as_ref() != Some(who) {
+                return false;
+            }
             let Some(identity) =
-                Self::identity_at_revision(who, population_data.eligibility_revision)
+                Self::identity_at_revision(&cid_number, population_data.eligibility_revision)
             else {
                 return false;
             };
@@ -1376,10 +1517,17 @@ pub mod pallet {
     }
 
     impl<T: Config> crate::CitizenIdentityProvider<T::AccountId> for Pallet<T> {
+        fn citizen_subject(who: &T::AccountId) -> Option<CitizenSubject<T::AccountId>> {
+            Pallet::<T>::citizen_subject(who)
+        }
+
         // 消费端全量校验:身份存在(注册时已锁定 CID↔钱包一对一并验公民签名)、
         // 状态 NORMAL、护照有效期窗口内、居住地在作用域内。
         fn can_vote(who: &T::AccountId, scope: &PopulationScope) -> bool {
-            VotingIdentityByAccount::<T>::get(who)
+            let Some(subject) = Pallet::<T>::citizen_subject(who) else {
+                return false;
+            };
+            VotingIdentityByCid::<T>::get(subject.cid_number)
                 .map(|identity| {
                     Self::identity_counts_as_voter(&identity)
                         && Self::passport_window_valid(&identity)
@@ -1392,7 +1540,7 @@ pub mod pallet {
             if !Self::can_vote(who, scope) {
                 return false;
             }
-            CandidateIdentityByAccount::<T>::contains_key(who)
+            CidByWalletAccount::<T>::get(who).is_some_and(CandidateIdentityByCid::<T>::contains_key)
         }
 
         fn population_count(scope: &PopulationScope) -> u64 {

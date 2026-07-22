@@ -2,9 +2,7 @@
 //! (`do_add_institution_account`)。
 //!
 //! 链是机构信息唯一真源(ADR-031);创世只铸定初始集,今后改名/加账户走交易。
-//! 授权唯一真源 = 链上管理员注册表:发起管理员钱包直接冷签这笔普通 extrinsic,
-//! runtime 在 origin 处以 `RegistryAuthority::can_register_institution_origin`
-//! 确认 `submitter` 是注册局(actor)机构在册管理员且对目标机构有登记权;
+//! 授权唯一真源 = 注册局机构 CID + 岗位码 + 任职管理员钱包；管理员身份本身不授权。
 //! 省/市作用域由目标 CID 直接派生,不再嵌独立凭证/签名/nonce。
 //! 机构码/CID/省市码物理编码在 CID 里,改不了也不给参数。防重放由 extrinsic 账户 nonce 承担。
 
@@ -32,6 +30,7 @@ pub(crate) fn do_update_institution_info<T: pallet::Config>(
     cid_full_name: AccountNameOf<T>,
     cid_short_name: AccountNameOf<T>,
     actor_cid_number: Vec<u8>,
+    actor_role_code: Vec<u8>,
 ) -> DispatchResult {
     ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
     ensure!(!cid_full_name.is_empty(), Error::<T>::EmptyAccountName);
@@ -43,6 +42,7 @@ pub(crate) fn do_update_institution_info<T: pallet::Config>(
         T::RegistryAuthority::can_register_institution_origin(
             &submitter,
             actor_cid_number.as_slice(),
+            actor_role_code.as_slice(),
             cid_number.as_slice(),
             info.institution_code,
         ),
@@ -71,6 +71,7 @@ pub(crate) fn do_add_institution_account<T: pallet::Config>(
     cid_number: CidNumberOf<T>,
     account_names: InstitutionAccountNamesOf<T>,
     actor_cid_number: Vec<u8>,
+    actor_role_code: Vec<u8>,
 ) -> DispatchResult {
     ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
     ensure!(!account_names.is_empty(), Error::<T>::MissingMainAccount);
@@ -81,6 +82,7 @@ pub(crate) fn do_add_institution_account<T: pallet::Config>(
         T::RegistryAuthority::can_register_institution_origin(
             &submitter,
             actor_cid_number.as_slice(),
+            actor_role_code.as_slice(),
             cid_number.as_slice(),
             info.institution_code,
         ),

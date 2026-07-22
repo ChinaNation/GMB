@@ -178,11 +178,13 @@ impl crate::traits::RegistryAuthority<AccountId32> for TestRegistryAuthority {
     fn can_register_institution_origin(
         registrar_account: &AccountId32,
         actor_cid_number: &[u8],
+        actor_role_code: &[u8],
         target_cid_number: &[u8],
         _target_institution_code: InstitutionCode,
     ) -> bool {
         registrar_account == &registrar()
             && actor_cid_number == b"GD001-FRG00-000000001-2026"
+            && actor_role_code == b"REGISTRY-ROLE"
             && !target_cid_number.is_empty()
     }
 }
@@ -219,17 +221,6 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
     }
 }
 
-pub struct TestInternalAdminsLenProvider;
-impl votingengine::InternalAdminsLenProvider<AccountId32> for TestInternalAdminsLenProvider {
-    fn institution_admins_len(institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32> {
-        PrivateAdmins::institution_admins_len(institution_code, cid_number)
-    }
-
-    fn personal_admins_len(_personal_account: AccountId32) -> Option<u32> {
-        None
-    }
-}
-
 pub struct TestTimeProvider;
 impl frame_support::traits::UnixTime for TestTimeProvider {
     fn now() -> core::time::Duration {
@@ -254,7 +245,6 @@ impl votingengine::Config for Test {
     type JointVoteResultCallback = ();
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
-    type InternalAdminsLenProvider = TestInternalAdminsLenProvider;
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type MaxProposalDataLen = ConstU32<2048>;
     type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
@@ -484,9 +474,7 @@ pub fn create_institution(
             cid_full_name: account_name("测试私权机构".as_bytes()),
             cid_short_name: account_name("测试机构".as_bytes()),
             town_code: BoundedVec::new(),
-            legal_representative_name: None,
-            legal_representative_cid_number: None,
-            legal_representative_account: None,
+            legal_representative: None,
             institution_code,
             created_at: System::block_number(),
         },
@@ -530,6 +518,7 @@ pub fn create_institution(
             cid_number.clone(),
             named_accounts.try_into().expect("named accounts fit"),
             b"GD001-FRG00-000000001-2026".to_vec(),
+            b"REGISTRY-ROLE".to_vec(),
         )?;
     }
     for item in accounts.iter().filter(|item| item.amount > 0) {
@@ -547,7 +536,17 @@ pub fn account_of(cid_number: &pallet::CidNumberOf<Test>, name: &[u8]) -> Accoun
 
 pub fn cast_yes_votes(proposal_id: u64) -> sp_runtime::DispatchResult {
     // 创建提案时发起人 admin(1) 已由引擎自动投赞成票，只需第二名管理员补票。
-    <internal_vote::Pallet<Test>>::do_internal_vote(admin(2), proposal_id, true)?;
+    <internal_vote::Pallet<Test>>::do_internal_vote(
+        admin(2),
+        proposal_id,
+        internal_vote::InternalVoteTicketClaim::InstitutionRole(
+            b"TEST_CLOSE_ROLE"
+                .to_vec()
+                .try_into()
+                .expect("test close role fits"),
+        ),
+        true,
+    )?;
     <VotingEngine as Hooks<u64>>::on_initialize(System::block_number());
     Ok(())
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -327,7 +329,9 @@ class _AppShellState extends State<AppShell> {
   final ChatRuntime _chatRuntime = ChatRuntime();
   int _currentIndex = 0;
   int _pendingVoteCount = 0;
+  int _squareNotifyCount = 0;
   bool _isRooted = false;
+  StreamSubscription<void>? _squareOpenSub;
 
   @override
   void initState() {
@@ -336,11 +340,42 @@ class _AppShellState extends State<AppShell> {
     _checkRootStatus();
     // 启动后异步检查正式 Release 更新，只更新设置页状态，不阻塞主界面进入。
     _updateController.check();
+    _prewarmPushRegistration();
+    // 点击「广场发帖」推送 → 切到广场 tab（广场页在 selectedTab==0 时会清广场红点）。
+    _squareOpenSub =
+        _chatRuntime.squarePostOpens.listen((_) => _openSquareTab());
+  }
+
+  void _openSquareTab() {
+    if (!mounted || _currentIndex == 0) return;
+    _selectedTab.value = 0;
+    setState(() => _currentIndex = 0);
+  }
+
+  /// 首帧后台预热：注册设备推送 token（广场发帖推送与聊天共用同一台设备 token），
+  /// 让从不打开聊天 tab 的用户也能收到广场推送。首帧后跑、不阻塞启动 UI；失败静默——
+  /// 后台推送注册绝不能拖垮主流程，用户进聊天 tab 时仍会重试注册。
+  void _prewarmPushRegistration() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_registerPushDeviceInBackground());
+    });
+  }
+
+  Future<void> _registerPushDeviceInBackground() async {
+    try {
+      final owner = await _chatRuntime.readOwnerAccount();
+      if (owner == null || owner.isEmpty) return;
+      await _chatRuntime.ensureReady(owner);
+    } on Object catch (error) {
+      // 设备/网络/native 任何失败都容忍：预热注册是尽力而为的后台任务。
+      debugPrint('push device prewarm skipped: $error');
+    }
   }
 
   @override
   void dispose() {
     _updateController.removeListener(_handleUpdateStateChanged);
+    unawaited(_squareOpenSub?.cancel());
     _selectedTab.dispose();
     super.dispose();
   }
@@ -365,6 +400,18 @@ class _AppShellState extends State<AppShell> {
     }
   });
 
+  /// 广场落地页（index 0）：发帖通知红点数经回调上抛到底部 tab；selectedTab
+  /// 广播让广场在被切回时清广场红点（进广场清广场、关注红点另在关注子 tab 清）。
+  late final Widget _squarePage = SquareTab(
+    selectedTab: _selectedTab,
+    tabIndex: 0,
+    onSquareUnreadChanged: (count) {
+      if (mounted && count != _squareNotifyCount) {
+        setState(() => _squareNotifyCount = count);
+      }
+    },
+  );
+
   /// 顶层 tab 懒建缓存：仅访问过的 index 建真页并由 IndexedStack 保活，未访问
   /// 的用占位，避免「打开即全建」把 42k 行政区同步 / Chat runtime / 广场拉流等
   /// 全拖到启动。落地页广场(0)启动即建，其余点到才建。
@@ -374,7 +421,7 @@ class _AppShellState extends State<AppShell> {
   Widget _buildTab(int index) {
     switch (index) {
       case 0:
-        return const SquareTab();
+        return _squarePage;
       case 1:
         return _citizenPage;
       case 2:
@@ -460,22 +507,36 @@ class _AppShellState extends State<AppShell> {
           },
           destinations: [
             NavigationDestination(
-              icon: SvgPicture.asset(
-                'assets/icons/tank.svg',
-                width: 26,
-                height: 26,
-                colorFilter: const ColorFilter.mode(
-                  AppTheme.textTertiary,
-                  BlendMode.srcIn,
+              icon: Badge(
+                isLabelVisible: _squareNotifyCount > 0,
+                label: Text(
+                  _squareNotifyCount > 99 ? '99+' : '$_squareNotifyCount',
+                  style: const TextStyle(fontSize: 10),
+                ),
+                child: SvgPicture.asset(
+                  'assets/icons/tank.svg',
+                  width: 26,
+                  height: 26,
+                  colorFilter: const ColorFilter.mode(
+                    AppTheme.textTertiary,
+                    BlendMode.srcIn,
+                  ),
                 ),
               ),
-              selectedIcon: SvgPicture.asset(
-                'assets/icons/tank.svg',
-                width: 26,
-                height: 26,
-                colorFilter: const ColorFilter.mode(
-                  AppTheme.primary,
-                  BlendMode.srcIn,
+              selectedIcon: Badge(
+                isLabelVisible: _squareNotifyCount > 0,
+                label: Text(
+                  _squareNotifyCount > 99 ? '99+' : '$_squareNotifyCount',
+                  style: const TextStyle(fontSize: 10),
+                ),
+                child: SvgPicture.asset(
+                  'assets/icons/tank.svg',
+                  width: 26,
+                  height: 26,
+                  colorFilter: const ColorFilter.mode(
+                    AppTheme.primary,
+                    BlendMode.srcIn,
+                  ),
                 ),
               ),
               label: '广场',

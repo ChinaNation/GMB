@@ -23,7 +23,8 @@ const MyIdState _candidateState = MyIdState(
   residenceDistrict: '中枢省 · 固市 · 和平镇',
   passportValidFrom: '2026-07-15',
   passportValidUntil: '2036-07-14',
-  citizenFullName: '张三',
+  familyName: '张',
+  givenName: '三',
   citizenSexLabel: '男',
   birthDistrict: '中枢省 · 固市 · 和平镇',
   citizenBirthDate: '1992-05-18',
@@ -56,10 +57,18 @@ void main() {
   testWidgets('三张身份卡始终存在且旧访客文案彻底删除', (tester) async {
     await pumpPage(tester, const MyIdState(tier: MyIdTier.visitor));
 
-    expect(find.text('匿名访客'), findsOneWidget);
-    expect(find.text('公民 · 投票身份'), findsOneWidget);
-    expect(find.text('公民 · 竞选身份'), findsOneWidget);
-    expect(find.text('没有公民身份信息'), findsOneWidget);
+    expect(find.text('访客轻节点'), findsOneWidget);
+    expect(find.text('公民身份 · 投票'), findsOneWidget);
+    expect(find.text('公民身份 · 竞选'), findsOneWidget);
+    // 旧文案零残留
+    expect(find.text('匿名访客'), findsNothing);
+    expect(find.text('公民 · 投票身份'), findsNothing);
+    expect(find.text('公民 · 竞选身份'), findsNothing);
+    expect(find.text('没有公民身份信息'), findsNothing);
+    // 访客卡改用“匿名”小标签替代整段空态
+    expect(find.byKey(const ValueKey<String>('passport-anonymous-tag')),
+        findsOneWidget);
+    expect(find.text('匿名'), findsOneWidget);
   });
 
   testWidgets('访客当前卡排第一且公民卡只显示字段名称', (tester) async {
@@ -148,9 +157,9 @@ void main() {
     expect(find.text('链上身份读取失败'), findsOneWidget);
     expect(find.text('重试'), findsOneWidget);
     expect(find.text('当前身份'), findsNothing);
-    expect(find.text('匿名访客'), findsOneWidget);
-    expect(find.text('公民 · 投票身份'), findsOneWidget);
-    expect(find.text('公民 · 竞选身份'), findsOneWidget);
+    expect(find.text('访客轻节点'), findsOneWidget);
+    expect(find.text('公民身份 · 投票'), findsOneWidget);
+    expect(find.text('公民身份 · 竞选'), findsOneWidget);
     expect(find.text('—'), findsNothing);
   });
 
@@ -166,7 +175,10 @@ void main() {
     expect(find.text('请先创建钱包'), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('current-identity-visitor')),
         findsOneWidget);
-    expect(find.text('没有公民身份信息'), findsOneWidget);
+    // 空态文案已删，访客卡改以“匿名”小标签呈现
+    expect(find.text('没有公民身份信息'), findsNothing);
+    expect(find.byKey(const ValueKey<String>('passport-anonymous-tag')),
+        findsOneWidget);
   });
 
   testWidgets('过期和吊销只改变当前卡状态，不改变身份排序', (tester) async {
@@ -199,7 +211,8 @@ void main() {
         residenceDistrict: '中枢省 · 很长的城市名称 · 很长的乡镇名称',
         passportValidFrom: '2026-07-15',
         passportValidUntil: '2036-07-14',
-        citizenFullName: '这是一个用于验证窄屏自动换行的较长公民姓名',
+        familyName: '这是一个用于验证窄屏自动换行的较长公民',
+        givenName: '姓名',
         citizenSexLabel: '男',
         birthDistrict: '中枢省 · 很长的出生城市名称 · 很长的出生乡镇名称',
         citizenBirthDate: '1992-05-18',
@@ -208,7 +221,7 @@ void main() {
     );
 
     expect(tester.takeException(), isNull);
-    expect(find.text('公民 · 竞选身份'), findsOneWidget);
+    expect(find.text('公民身份 · 竞选'), findsOneWidget);
   });
 
   testWidgets('默认用户身份变化后重新排序且只保留一个当前标记', (tester) async {

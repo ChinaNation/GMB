@@ -36,6 +36,7 @@ export type AddressChainAction =
   | 'remove_address';
 
 export type AddressChainCallInput = {
+  actor_role_code: string;
   action: AddressChainAction;
   catalog_version?: string;
   catalog_hash?: string;

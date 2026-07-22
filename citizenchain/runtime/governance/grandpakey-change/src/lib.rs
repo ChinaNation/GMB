@@ -36,7 +36,7 @@ pub use pallet::*;
 mod benchmarks;
 pub mod weights;
 
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
 #[derive(
     Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,

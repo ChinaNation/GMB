@@ -32,7 +32,7 @@ use crate::pallet::{
 };
 
 enum LegalRepresentativeTarget<T: Config> {
-    Set(AccountNameOf<T>, CidNumberOf<T>, T::AccountId),
+    Set(AccountNameOf<T>, AccountNameOf<T>, CidNumberOf<T>, T::AccountId),
     Clear,
 }
 
@@ -373,28 +373,33 @@ impl<T: Config> Pallet<T> {
             .map(|change| {
                 match change {
                     InstitutionLegalRepresentativeChange::Set {
-                        legal_representative_name,
-                        legal_representative_cid_number,
-                        legal_representative_account,
+                        family_name,
+                        given_name,
+                        cid_number,
+                        account,
                     } => {
                         ensure!(
-                            !legal_representative_name.is_empty(),
+                            !family_name.is_empty() && !given_name.is_empty(),
                             Error::<T>::EmptyLegalRepresentativeName
                         );
                         ensure!(
-                            !legal_representative_cid_number.is_empty(),
+                            !cid_number.is_empty(),
                             Error::<T>::EmptyLegalRepresentativeCidNumber
                         );
-                        let name: AccountNameOf<T> = legal_representative_name
+                        let family_name: AccountNameOf<T> = family_name
                             .try_into()
                             .map_err(|_| Error::<T>::EmptyLegalRepresentativeName)?;
-                        let citizen_cid: CidNumberOf<T> = legal_representative_cid_number
+                        let given_name: AccountNameOf<T> = given_name
+                            .try_into()
+                            .map_err(|_| Error::<T>::EmptyLegalRepresentativeName)?;
+                        let citizen_cid: CidNumberOf<T> = cid_number
                             .try_into()
                             .map_err(|_| Error::<T>::EmptyLegalRepresentativeCidNumber)?;
                         Ok::<_, sp_runtime::DispatchError>(LegalRepresentativeTarget::<T>::Set(
-                            name,
+                            family_name,
+                            given_name,
                             citizen_cid,
-                            legal_representative_account,
+                            account,
                         ))
                     }
                     // 解除法定代表人只清空 InstitutionInfo 三字段，不影响 LR 岗位本身。
@@ -405,9 +410,12 @@ impl<T: Config> Pallet<T> {
             })
             .transpose()?;
         let legal_representative_account = match &legal_representative_change {
-            Some(LegalRepresentativeTarget::Set(_, _, account)) => Some(account.clone()),
+            Some(LegalRepresentativeTarget::Set(_, _, _, account)) => Some(account.clone()),
             Some(LegalRepresentativeTarget::Clear) => None,
-            None => institution.legal_representative_account.clone(),
+            None => institution
+                .legal_representative
+                .as_ref()
+                .map(|representative| representative.account.clone()),
         };
         let legal_role_code: RoleCodeOf =
             primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE
@@ -468,15 +476,22 @@ impl<T: Config> Pallet<T> {
                 Institutions::<T>::mutate(&cid_number, |maybe| {
                     if let Some(info) = maybe {
                         match change {
-                            LegalRepresentativeTarget::Set(name, citizen_cid, account) => {
-                                info.legal_representative_name = Some(name);
-                                info.legal_representative_cid_number = Some(citizen_cid);
-                                info.legal_representative_account = Some(account);
+                            LegalRepresentativeTarget::Set(
+                                family_name,
+                                given_name,
+                                citizen_cid,
+                                account,
+                            ) => {
+                                info.legal_representative =
+                                    Some(entity_primitives::LegalRepresentative {
+                                        family_name,
+                                        given_name,
+                                        cid_number: citizen_cid,
+                                        account,
+                                    });
                             }
                             LegalRepresentativeTarget::Clear => {
-                                info.legal_representative_name = None;
-                                info.legal_representative_cid_number = None;
-                                info.legal_representative_account = None;
+                                info.legal_representative = None;
                             }
                         }
                     }

@@ -36,8 +36,13 @@ pub trait CidAccountQuery<AccountId> {
     fn find_account(cid_number: &[u8], account_name: &[u8]) -> Option<AccountId>;
     /// 该地址是否存在于机构账户正反索引中。
     fn account_exists(addr: &AccountId) -> bool;
-    /// `who` 是否属于 `AdminAccounts[cid_number].admins`。
-    fn is_institution_admin(cid_number: &[u8], who: &AccountId) -> bool;
+    /// CID、岗位码、签名钱包是否同时拥有指定清算业务动作的发起权限。
+    fn is_institution_role_authorized(
+        cid_number: &[u8],
+        role_code: &[u8],
+        who: &AccountId,
+        action_code: u32,
+    ) -> bool;
     /// 清算行资格白名单判定。
     ///
     /// 身份注册局在 eligible-search / registration-info 入口负责判断"私法人股份公司
@@ -52,7 +57,7 @@ pub trait CidAccountQuery<AccountId> {
     fn is_registered_clearing_node(bank: &AccountId) -> bool;
 }
 
-/// 测试用 no-op 默认实现:一律返回未登记 / 未激活 / 无管理员权限 / 不合资格 / 未声明节点。
+/// 测试用 no-op 默认实现:一律返回未登记 / 未激活 / 无岗位权限 / 不合资格 / 未声明节点。
 impl<AccountId> CidAccountQuery<AccountId> for () {
     fn account_info(_addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)> {
         None
@@ -63,7 +68,12 @@ impl<AccountId> CidAccountQuery<AccountId> for () {
     fn account_exists(_addr: &AccountId) -> bool {
         false
     }
-    fn is_institution_admin(_cid_number: &[u8], _who: &AccountId) -> bool {
+    fn is_institution_role_authorized(
+        _cid_number: &[u8],
+        _role_code: &[u8],
+        _who: &AccountId,
+        _action_code: u32,
+    ) -> bool {
         false
     }
     fn is_clearing_bank_eligible(_addr: &AccountId) -> bool {

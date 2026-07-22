@@ -68,6 +68,7 @@ pub struct OffchainComponents {
 ///
 /// [`base_path`]  节点数据根目录(下挂 `offchain_step1/ledger.enc`)。
 /// [`actor_cid_number`] 本清算行机构唯一主键。
+/// [`actor_role_code`] 提交批次的机构岗位码。
 /// [`institution_account`] 本清算行**主账户**,用于 `EventListener` 过滤与本行相关
 ///                的链上事件,以及 packer 批次 signing message 拼接。
 /// [`password`]   节点启动时用于 AES-256-GCM 风格加密 ledger 的对称密钥字符串
@@ -82,6 +83,7 @@ pub struct OffchainComponents {
 pub fn start_clearing_bank_components(
     base_path: &Path,
     actor_cid_number: Vec<u8>,
+    actor_role_code: Vec<u8>,
     institution_account: AccountId32,
     password: &str,
     signer: Arc<dyn BatchSigner>,
@@ -97,6 +99,7 @@ pub fn start_clearing_bank_components(
     let packer = Arc::new(OffchainPacker::new_with_initial_seq(
         ledger.clone(),
         actor_cid_number,
+        actor_role_code,
         institution_account.clone(),
         signer.clone(),
         submitter,
@@ -187,6 +190,7 @@ mod tests {
 pub fn start_clearing_bank_components_with_noop(
     base_path: &Path,
     actor_cid_number: Vec<u8>,
+    actor_role_code: Vec<u8>,
     institution_account: AccountId32,
     password: &str,
     client: Arc<crate::core::service::FullClient>,
@@ -194,6 +198,7 @@ pub fn start_clearing_bank_components_with_noop(
     start_clearing_bank_components(
         base_path,
         actor_cid_number,
+        actor_role_code,
         institution_account,
         password,
         Arc::new(NoopBatchSigner),

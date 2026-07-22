@@ -619,7 +619,12 @@ fn non_admin_cannot_propose_or_vote() {
         let pid = last_proposal_id();
         let stranger = AccountId32::new([0xEE; 32]);
         assert!(matches!(
-            <internal_vote::Pallet<Test>>::do_internal_vote(stranger, pid, true),
+            <internal_vote::Pallet<Test>>::do_internal_vote(
+                stranger,
+                pid,
+                internal_vote::InternalVoteTicketClaim::Personal,
+                true,
+            ),
             Err(DispatchError::Module(_))
         ));
     });

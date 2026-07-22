@@ -18,7 +18,7 @@
 > 5. **法定代表人**是机构公开信息，不要求等同或从属于管理员集合；姓名、CID、钱包账户由 entity 的 `InstitutionInfo` 保存，立法签署只读取该唯一真源。
 > 6. **命名统一**(全工程):市公民立法委员会/市立法会、国家公民教育委员会/国家教委会、市公民教育委员会/市教委会、市公民自治委员会/市自治会、镇公民自治委员会/镇自治会;宪法全称首次出现用全称、其后简称。
 > 7. **条号更正**:创世正文中五类表决出处为**第45/46条**;教育类提案见第75/79条;国家/省签署与三人会签见第100/106条;不再引用旧条号口径。
-> **进度**：签署与会签状态机保持不变。2026-07-13 已删除 admins 中旧法定代表人副本、setter 和首位管理员回退，签署人账户统一从 public/private entity `InstitutionInfo.legal_representative_account` 查询；姓名与 CID 同属该机构公开信息。其它历史实施与验收记录见对应任务卡。
+> **进度**：签署与会签状态机保持不变。已删除 admins 中旧法定代表人副本、setter 和首位管理员回退；签署人账户统一从 public/private entity `InstitutionInfo.legal_representative.account` 查询，姓、名与 CID 同属该原子公开结构。其它历史实施与验收记录见对应任务卡。
 
 ## 背景
 
@@ -173,7 +173,7 @@ LawVersion {
 (A) 复用核心 crate(`votingengine`)共享基础设施(`Config: votingengine::Config`,零拷贝):
 
 - 提案生命周期:`Proposals` / `NextProposalId` / `ProposalData` / `ProposalOwner` / `ProposalMeta` / 状态机(`finalize_proposal` / `set_status_and_emit` / `mark_proposal_passed_at`)。
-- 管理员快照:`AdminSnapshot`(提案创建时锁定立法机构现任 admins,即现任议员/委员名册——不另建名册)。
+- 代表岗位快照：按 `VotePlan` 指定的完整 `RoleSubject(CID + 岗位码)`，在提案创建时把 entity 当前有效任职冻结进 `VoterSnapshot`；不得从机构 admins 人员名册生成立法投票资格。
 - 公投基础:`PopulationSnapshotVerifier` 人口快照验签 trait + `CidEligibility` 资格 trait。
 - 到期清理、反向索引(`ProposalsByCid / ByOwner / ByYear`)、互斥锁、ID 生成。
 

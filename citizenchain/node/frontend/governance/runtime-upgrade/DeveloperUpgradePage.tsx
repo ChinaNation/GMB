@@ -1,4 +1,4 @@
-// 开发期直升页：国家储委会任意已激活管理员签名后直接提交 developer_direct_upgrade。
+// 开发期直升页：国家储委会委员岗位的已激活任职管理员签名后提交 developer_direct_upgrade。
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { sanitizeError } from '../../tauri';

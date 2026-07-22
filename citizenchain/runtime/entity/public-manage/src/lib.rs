@@ -46,6 +46,7 @@ pub use entity_primitives::{
     InstitutionGovernanceAction, InstitutionGovernanceProposal, InstitutionGovernanceResult,
     InstitutionRole, InstitutionRoleAuthorizationQuery, InstitutionRoleMutation,
     InstitutionRoleStatus, RolePermissionOperation, RolePermissionSpec,
+    LegalRepresentative,
 };
 pub use institution::role::{
     InstitutionAdminAssignmentOf, InstitutionAdminAssignmentsOf, InstitutionRoleOf,
@@ -66,7 +67,7 @@ pub mod pallet {
     use crate::weights::WeightInfo;
     // 全新创世直接采用最终布局，不保留历史迁移版本。
     // 开发期无存量链数据；岗位权限、nonce 与永久占用表按最终结构直接以 v2 创世。
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {
@@ -597,6 +598,7 @@ pub mod pallet {
             cid_full_name: AccountNameOf<T>,
             cid_short_name: AccountNameOf<T>,
             actor_cid_number: Vec<u8>,
+            actor_role_code: Vec<u8>,
         ) -> DispatchResult {
             let submitter = ensure_signed(origin)?;
             crate::institution::maintain::do_update_institution_info::<T>(
@@ -605,6 +607,7 @@ pub mod pallet {
                 cid_full_name,
                 cid_short_name,
                 actor_cid_number,
+                actor_role_code,
             )
         }
 
@@ -617,6 +620,7 @@ pub mod pallet {
             cid_number: CidNumberOf<T>,
             account_names: InstitutionAccountNamesOf<T>,
             actor_cid_number: Vec<u8>,
+            actor_role_code: Vec<u8>,
         ) -> DispatchResult {
             let submitter = ensure_signed(origin)?;
             crate::institution::maintain::do_add_institution_account::<T>(
@@ -624,6 +628,7 @@ pub mod pallet {
                 cid_number,
                 account_names,
                 actor_cid_number,
+                actor_role_code,
             )
         }
 
@@ -663,9 +668,16 @@ pub mod pallet {
             cid_number: CidNumberOf<T>,
             admins: InstitutionAdminsInputOf<T>,
             actor_cid_number: Vec<u8>,
+            actor_role_code: Vec<u8>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_register_institution_admins(who, cid_number, admins, actor_cid_number)
+            Self::do_register_institution_admins(
+                who,
+                cid_number,
+                admins,
+                actor_cid_number,
+                actor_role_code,
+            )
         }
 
         /// 发起"关闭公权机构多签账户"提案。
@@ -898,16 +910,8 @@ pub mod pallet {
             let info =
                 Institutions::<T>::get(&cid_number).ok_or(Error::<T>::InstitutionNotFound)?;
             Self::ensure_lifecycle_institution_code(&info.institution_code)?;
-            // 授权唯一真源:extrinsic 签名者 `who` 必须是本机构在册管理员。
-            // 岗位码鉴权由随后的 `build_institution_vote_plan`(proposer_role_code)完成。
-            ensure!(
-                T::InstitutionAdminQuery::is_institution_admin(
-                    info.institution_code,
-                    cid_number.as_slice(),
-                    &who,
-                ),
-                Error::<T>::RegistryAuthorityDenied
-            );
+            // `build_institution_vote_plan` 一次校验 CID、岗位码、任职钱包和业务权限；
+            // 禁止在业务入口把管理员名册成员身份单独当成授权。
             Self::ensure_governance_action_valid(&action)?;
             let proposal = InstitutionGovernanceProposal {
                 institution_code: info.institution_code,
@@ -1029,6 +1033,7 @@ pub mod pallet {
             cid_number: CidNumberOf<T>,
             admins: InstitutionAdminsInputOf<T>,
             actor_cid_number: Vec<u8>,
+            actor_role_code: Vec<u8>,
         ) -> DispatchResult {
             ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
             let info =
@@ -1041,6 +1046,7 @@ pub mod pallet {
                 T::RegistryAuthority::can_register_institution_origin(
                     &who,
                     actor_cid_number.as_slice(),
+                    actor_role_code.as_slice(),
                     cid_number.as_slice(),
                     info.institution_code,
                 ),
@@ -1227,7 +1233,9 @@ impl<T: pallet::Config> traits::InstitutionLegalRepresentativeQuery<T::AccountId
 {
     fn legal_representative(cid_number: &[u8]) -> Option<T::AccountId> {
         let cid_number = pallet::CidNumberOf::<T>::try_from(cid_number.to_vec()).ok()?;
-        pallet::Institutions::<T>::get(cid_number)?.legal_representative_account
+        pallet::Institutions::<T>::get(cid_number)?
+            .legal_representative
+            .map(|representative| representative.account)
     }
 }
 

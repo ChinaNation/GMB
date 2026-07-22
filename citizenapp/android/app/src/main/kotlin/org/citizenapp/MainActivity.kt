@@ -1,6 +1,8 @@
 package org.citizenapp
 
 import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -28,8 +30,15 @@ class MainActivity : FlutterFragmentActivity() {
     private val notificationPermissionRequestCode = 170517
     private var pendingNotificationPermissionResult: MethodChannel.Result? = null
 
+    companion object {
+        // 与 Cloudflare Worker FCM payload 的 android.notification.channel_id 一致。
+        private const val SQUARE_POST_CHANNEL_ID = "square_posts"
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        ensureSquarePostNotificationChannel()
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, securityChannelName)
             .setMethodCallHandler { call, result ->
@@ -189,6 +198,24 @@ class MainActivity : FlutterFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /// 广场发帖通知渠道（Android 8+）：高优先级=横幅+系统提示音。FCM payload 的
+    /// channel_id='square_posts' 命中此渠道；不建则声音由系统默认渠道决定（可能无声）。
+    private fun ensureSquarePostNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = getSystemService(NotificationManager::class.java) ?: return
+        if (manager.getNotificationChannel(SQUARE_POST_CHANNEL_ID) != null) return
+        val channel = NotificationChannel(
+            SQUARE_POST_CHANNEL_ID,
+            "广场动态",
+            NotificationManager.IMPORTANCE_HIGH,
+        ).apply {
+            description = "关注的人发布新动态/文章时通知"
+            enableVibration(true)
+            // IMPORTANCE_HIGH 渠道默认带系统提示音，不覆盖 sound 即用默认铃声。
+        }
+        manager.createNotificationChannel(channel)
     }
 
     private fun isNotificationPermissionGranted(): Boolean {

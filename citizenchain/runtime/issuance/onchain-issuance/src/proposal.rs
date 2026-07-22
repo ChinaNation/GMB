@@ -5,13 +5,13 @@
 //!
 //! ## propose origin 校验铁律(ADR-011 v2 第 5.4 / 5.6 节)
 //!
-//! - **业务 5 ACTION**(OAIS/OAMT/OABN/OACL/OATR):propose 入口
-//!   `ensure!(proposer ∈ AdminAccounts[actor_cid_number].admins)`
-//! - **监管 5 ACTION**(OMFZ/OMUF/OMCF/OMFT/OMFC):propose 入口
-//!   `ensure!(actor_cid_number == NRC && proposer ∈ AdminAccounts[actor_cid_number].admins)`
+//! - **业务 5 ACTION**(OAIS/OAMT/OABN/OACL/OATR):propose 入口校验
+//!   `actor_cid_number + actor_role_code + proposer` 的完整岗位权限
+//! - **监管 5 ACTION**(OMFZ/OMUF/OMCF/OMFT/OMFC):propose 入口固定校验
+//!   `NRC + COMMITTEE_MEMBER + proposer` 的完整岗位权限
 //!
-//! VotingEngine 自身的 cast 阶段已校验 admin 投票,但 propose 阶段额外 ensure
-//! 防止任意账户消耗 storage 提案位 / 占用投票引擎额度。
+//! VotingEngine 自身在 cast 阶段校验冻结岗位主体，propose 阶段仍须前置校验完整岗位权限，
+//! 防止任意账户消耗 storage 提案位或占用投票引擎额度。
 //!
 //! ## metadata 永久不可改铁律(ADR-011 v2 第 5.7 节)
 //!
@@ -24,7 +24,7 @@ use frame_support::pallet_prelude::*;
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 use sp_std::vec::Vec;
-// 业务 ACTION(走 InternalVote,机构 admin / personal admin 多签内部执行)
+// 业务 ACTION(走 InternalVote，机构岗位或个人多签主体内部执行)
 pub const ACTION_ONCHAIN_ASSET_ISSUE: [u8; 4] = *b"OAIS";
 pub const ACTION_ONCHAIN_ASSET_MINT: [u8; 4] = *b"OAMT";
 pub const ACTION_ONCHAIN_ASSET_BURN: [u8; 4] = *b"OABN";

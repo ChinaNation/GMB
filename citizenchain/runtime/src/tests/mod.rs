@@ -1,12 +1,14 @@
 #![cfg(test)]
 
 extern crate alloc;
+use admin_primitives::InstitutionAdminQuery;
 use alloc::vec::Vec;
 
 use super::*;
 use crate::configs::is_nrc_admin;
 use crate::configs::*;
 use crate::ResolutionDestroy;
+use entity_primitives::InstitutionRoleAuthorizationQuery;
 use frame_support::traits::{Contains, Currency, EnsureOrigin, FindAuthor};
 use frame_support::{assert_noop, assert_ok};
 use primitives::cid::china::china_cb::CHINA_CB;
@@ -98,6 +100,7 @@ fn setup_frg_citizen_identity_admin(
     sr25519::Pair,
     AccountId,
     public_manage::pallet::CidNumberOf<Runtime>,
+    public_manage::RoleCodeOf,
 ) {
     let registrar_pair =
         sr25519::Pair::from_string("//frg-citizen-identity-admin", None).expect("registrar pair");
@@ -160,9 +163,7 @@ fn setup_frg_citizen_identity_admin(
                 .try_into()
                 .expect("short name fits"),
             town_code: Default::default(),
-            legal_representative_name: None,
-            legal_representative_cid_number: None,
-            legal_representative_account: None,
+            legal_representative: None,
             institution_code: admin_primitives::FRG,
             created_at: 0,
         },
@@ -193,6 +194,7 @@ fn setup_frg_citizen_identity_admin(
             cid_number: cid_number.clone(),
             admin_account: registrar.clone(),
             role_code: role_code.clone(),
+            // 测试链时间已设置为 2026-07-02；固定任职从第 1 天起永久有效。
             term_start: 1,
             term_end: u32::MAX,
             assignment_source: entity_primitives::InstitutionAssignmentSource::Genesis,
@@ -203,10 +205,105 @@ fn setup_frg_citizen_identity_admin(
         .expect("assignment fits");
     public_manage::InstitutionRoleAssignments::<Runtime>::insert(
         cid_number.clone(),
-        role_code,
+        role_code.clone(),
         assignments,
     );
-    (registrar_pair, registrar, cid_number)
+    let permission_specs = entity_primitives::fixed_role_permission_specs(
+        admin_primitives::FRG,
+        cid_number.as_slice(),
+        role_code.as_slice(),
+    );
+    let permissions: public_manage::RolePermissionsOf<Runtime> = permission_specs
+        .into_iter()
+        .map(|spec| entity_primitives::RoleBusinessPermission {
+            role_subject: entity_primitives::RoleSubject {
+                cid_number: cid_number.clone(),
+                role_code: role_code.clone(),
+            },
+            business_action_id: entity_primitives::BusinessActionId {
+                module_tag: spec
+                    .module_tag
+                    .to_vec()
+                    .try_into()
+                    .expect("module tag fits"),
+                action_code: spec.action_code,
+            },
+            operation: spec.operation,
+        })
+        .collect::<Vec<_>>()
+        .try_into()
+        .expect("fixed permissions fit");
+    public_manage::InstitutionRolePermissions::<Runtime>::insert(
+        cid_number.clone(),
+        role_code.clone(),
+        permissions,
+    );
+    assert!(
+        RuntimeInstitutionAdminQuery::is_institution_admin(
+            admin_primitives::FRG,
+            cid_number.as_slice(),
+            &registrar,
+        ),
+        "FRG 测试管理员必须存在于目标机构 admins"
+    );
+    assert!(
+        <public_manage::Pallet<Runtime> as entity_primitives::InstitutionRoleQuery<AccountId>>::is_active_assignment(
+            cid_number.as_slice(),
+            &registrar,
+            role_code.as_slice(),
+        ),
+        "FRG 省专员测试任职必须在测试链日期有效"
+    );
+    let role_subject = entity_primitives::RoleSubject {
+        cid_number: cid_number.to_vec(),
+        role_code: role_code.to_vec(),
+    };
+    let business_action = entity_primitives::BusinessActionId {
+        module_tag: entity_primitives::business_action::MODULE_CITIZEN_IDENTITY.to_vec(),
+        action_code: entity_primitives::business_action::ACTION_OCCUPY_CID,
+    };
+    let stored_permissions =
+        public_manage::InstitutionRolePermissions::<Runtime>::get(&cid_number, &role_code);
+    assert!(
+        stored_permissions.iter().any(|permission| {
+            permission.role_subject.cid_number.as_slice() == cid_number.as_slice()
+                && permission.role_subject.role_code.as_slice() == role_code.as_slice()
+                && permission.business_action_id.module_tag.as_slice()
+                    == entity_primitives::business_action::MODULE_CITIZEN_IDENTITY
+                && permission.business_action_id.action_code
+                    == entity_primitives::business_action::ACTION_OCCUPY_CID
+                && permission.operation == entity_primitives::RolePermissionOperation::Propose
+        }),
+        "FRG 省专员测试权限存储必须包含公民 CID 占号提案权限"
+    );
+    assert!(
+        <RuntimeInstitutionCapabilityPolicy as entity_primitives::InstitutionCapabilityPolicy>::allows(
+            cid_number.as_slice(),
+            &business_action,
+            entity_primitives::RolePermissionOperation::Propose,
+        ),
+        "FRG 必须拥有公民 CID 占号顶层能力"
+    );
+    assert!(
+        <public_manage::Pallet<Runtime> as entity_primitives::InstitutionRoleAuthorizationQuery<
+            AccountId,
+        >>::role_has_permission(
+            &role_subject,
+            &business_action,
+            entity_primitives::RolePermissionOperation::Propose,
+        ),
+        "FRG 省专员岗位必须登记公民 CID 占号权限"
+    );
+    assert!(
+        RuntimeInstitutionRoleAuthorization::is_authorized(
+            &registrar,
+            &role_subject,
+            &business_action,
+            entity_primitives::RolePermissionOperation::Propose,
+        ),
+        "FRG 省专员测试主体必须拥有公民 CID 占号权限"
+    );
+    (registrar_pair, registrar, cid_number, role_code)
 }
 
 fn stake_account() -> AccountId {

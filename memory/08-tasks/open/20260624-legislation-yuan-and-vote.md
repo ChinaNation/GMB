@@ -46,13 +46,13 @@
 - **所有 `votingengine::Config` 实现(runtime + 各 pallet 测试 mock 约 12 处)补 3 个关联类型;mock 一律装 `()`**(机械)。
 
 ### 2b. 新 sub-pallet `votingengine/legislation-vote`(pallet_index=28)
-- `Config: votingengine::Config`,复用核心 Proposals/allocate_proposal_id/AdminSnapshot/snapshot_institution_admins/schedule_proposal_expiry/set_status_and_emit/register_proposal_data/CitizenIdentityReader。
+- `Config: votingengine::Config`，复用核心提案状态机、`VotePlan`、岗位有效任职快照、人口数据读取、到期调度和执行回调；立法代表资格不得从机构 admins 人员名册生成。
 - 本地账本：`RepresentativeMetas`、`LegislationMetas`、`RepresentativeTallies`、`RepresentativeVotesByAccount` 和公投账本；人口快照只绑定到 votingengine 核心提案。
 - 三模式:单院(市)/ 两院顺序(众→参;教委会→参议会)/ 特别案(内部全过→强制公投)。
 - extrinsics：`cast_representative_vote` / `cast_referendum_vote`。特别案创建时由引擎按
   actor CID 推导作用域并在同一事务内创建、绑定人口快照；已删除的 call 0 永久留洞。
 - trait impl:`LegislationVoteEngine`(create)、`LegislationProposalFinalizer`、`LegislationCleanupHandler`。
-- 五类阈值按 AdminSnapshot 现任 admins 总数算,投票期满 finalize 统一计票(赞成已不可能达标时可提前否决)。
+- 五类立法规则按 `VotePlan` 冻结的代表岗位席位和法定比例计票；人口公投分母只消费 citizen-identity 的人口数据并由投票引擎生成提案快照。投票期满统一 finalize，赞成已不可能达标时可提前否决。
 
 ### 2c. 院结构=提案携带(用户拍板)
 - `create_legislation_vote` 接收强类型 `RepresentativeRoute` 与法律专属程序参数；`Law` / `LawProposalSummary` 保留业务院组成字段。

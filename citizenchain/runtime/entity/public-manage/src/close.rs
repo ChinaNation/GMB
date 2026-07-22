@@ -7,7 +7,6 @@
 
 extern crate alloc;
 
-use admin_primitives::InstitutionAdminQuery;
 use codec::Encode;
 use frame_support::{
     ensure,
@@ -56,14 +55,6 @@ pub(crate) fn do_propose_institution_close<T: Config>(
 
     let institution_code = Pallet::<T>::resolve_institution_code_for_account(&institution_account)
         .ok_or(Error::<T>::AccountNotFound)?;
-    ensure!(
-        T::InstitutionAdminQuery::is_institution_admin(
-            institution_code,
-            actor_cid_number.as_slice(),
-            &who,
-        ),
-        Error::<T>::PermissionDenied
-    );
     ensure!(
         !T::ProtectedSourceChecker::is_protected(&institution_account)
             && T::InstitutionAsset::can_spend(

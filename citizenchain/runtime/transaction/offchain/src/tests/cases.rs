@@ -145,6 +145,7 @@ fn sign_batch(
     use sp_core::crypto::Pair as _;
     let message = crate::batch_item::batch_signing_hash(
         BANK_CID,
+        bank_role_code().as_slice(),
         institution_account,
         batch_seq,
         &batch.encode(),
@@ -208,6 +209,7 @@ fn submit_batch_rejects_non_admin() {
             OffchainTx::submit_offchain_batch(
                 RuntimeOrigin::signed(alice.clone()),
                 bank_cid(),
+                bank_role_code(),
                 bank_main(),
                 1,
                 batch.clone(),
@@ -267,6 +269,7 @@ fn submit_batch_rejects_invalid_batch_signature() {
             OffchainTx::submit_offchain_batch(
                 RuntimeOrigin::signed(bank_admin()),
                 bank_cid(),
+                bank_role_code(),
                 bank_main(),
                 1,
                 batch,
@@ -325,6 +328,7 @@ fn submit_batch_rejects_wrong_batch_seq() {
             OffchainTx::submit_offchain_batch(
                 RuntimeOrigin::signed(bank_admin()),
                 bank_cid(),
+                bank_role_code(),
                 bank_main(),
                 2,
                 batch.clone(),
@@ -394,6 +398,7 @@ fn submit_batch_same_bank_end_to_end() {
         assert_ok!(OffchainTx::submit_offchain_batch(
             RuntimeOrigin::signed(bank_admin()),
             bank_cid(),
+            bank_role_code(),
             bank_main(),
             1,
             batch.clone(),
@@ -471,6 +476,7 @@ fn submit_batch_same_bank_end_to_end() {
             OffchainTx::submit_offchain_batch(
                 RuntimeOrigin::signed(bank_admin()),
                 bank_cid(),
+                bank_role_code(),
                 bank_main(),
                 2,
                 replay_batch.clone(),
@@ -531,6 +537,7 @@ fn submit_batch_rejects_user_bank_mismatch() {
             OffchainTx::submit_offchain_batch(
                 RuntimeOrigin::signed(bank_admin()),
                 bank_cid(),
+                bank_role_code(),
                 bank_main(),
                 1,
                 batch.clone(),
@@ -593,6 +600,7 @@ fn submit_batch_expired_intent_rejected() {
             OffchainTx::submit_offchain_batch(
                 RuntimeOrigin::signed(bank_admin()),
                 bank_cid(),
+                bank_role_code(),
                 bank_main(),
                 1,
                 batch.clone(),

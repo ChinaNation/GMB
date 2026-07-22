@@ -396,6 +396,8 @@ pub fn new_full(
     gpu_device: Option<usize>,
     // 清算行机构 CID(None=本节点不做清算行角色)
     clearing_bank_cid_number: Option<String>,
+    // 清算批次提交岗位码；必须与 CID 和签名钱包任职同时匹配
+    clearing_bank_role_code: Option<String>,
     // 解锁 `offchain::settlement::keystore` 的密码
     clearing_bank_password: Option<String>,
     // offchain::settlement::reserve 对账周期(秒),None=默认 300,Some(0)=关闭
@@ -519,6 +521,7 @@ pub fn new_full(
     // 清算行启动细节归入 `transaction::offchain::settlement::bootstrap`,service.rs 只做节点通用接线。
     let clearing_rpc_impl = crate::transaction::offchain::settlement::bootstrap::start_from_cli(
         clearing_bank_cid_number.as_deref(),
+        clearing_bank_role_code.as_deref(),
         clearing_bank_password.as_deref(),
         clearing_reserve_monitor_interval_secs,
         config.base_path.path(),

@@ -48,7 +48,7 @@ pub mod weights;
 /// 管理员集合变更提案使用本标识，避免两个模块误认领同一提案。
 pub const MODULE_TAG: &[u8] = b"per-admin";
 
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
 #[frame_support::pallet]
 pub mod pallet {

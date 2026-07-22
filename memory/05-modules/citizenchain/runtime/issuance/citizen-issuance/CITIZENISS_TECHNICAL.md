@@ -69,7 +69,7 @@ finalize，`src/weights.rs` 由 Substrate benchmark CLI 重新生成；当前测
 
 - 创世只能包含 FRAME 规范空状态：存储版本 0、两个计数的精确零值；
 - 父状态不得残留待发队列，finalize 前队列必须连续且不超过本块 extrinsic 数；
-- 身份必须首次出现，CID 哈希及 `AccountByCid` 反向索引必须一致；
+- 身份必须首次以 `VotingIdentityByCid` 出现，CID 哈希、`WalletAccountByCid` 与 `CidByWalletAccount` 必须双向一致；
 - 永久和临时双重防重、人数边界、档位金额必须逐项一致；
 - finalize 后队列必须清空，永久标记和累计数必须精确推进；
 - 未登记的 `CitizenIssuance` key 变化、收款账户变化或总发行变化一律 fail-closed。

@@ -39,10 +39,11 @@ home/
 4. 桌面端数据目录由 `shared/security.rs` 统一解析：正式版默认使用 `~/Library/Application Support/gmb`，开发版默认使用 `~/Library/Application Support/gmb.dev`；节点 `base-path` 直接指向该目录，因此正式版区块库为 `~/Library/Application Support/gmb/chains/citizenchain/db/full`，开发版区块库为 `~/Library/Application Support/gmb.dev/chains/citizenchain/db/full`
 
 WASM CI 版本规则：
-- `citizenchain-wasm.yml` 在 push 自动 CI 中只编译当前源码，不查询链上版本、不读取密钥
-- 只有 GitHub 手动 `Run workflow` 才使用 `GMB_SSH_KEY` 通过 SSH 登录链服务器，在服务器本机访问 `http://127.0.0.1:9944` 查询 `state_getRuntimeVersion.specVersion`
-- 如果源码 `spec_version` 小于或等于链上版本，CI 只在本次工作区临时改为 `链上版本 + 1` 后编译 WASM artifact
-- CI 不自动提交 `spec_version` 回 `main`，源码版本仍由开发者按真实 runtime 变更维护
+- 正式创世前项目自身 runtime 版本固定为 `0`；没有已配置且可连接的正式目标链时，公民控制台「运行 WASM CI」直接停止，不得为临时测试链或空目标生成升级版本。
+- 正式创世后的升级构建只能从公民控制台「CitizenChain WASM → 运行 WASM CI」进入：控制台读取充值发币页明确配置的正式目标链 `NODE_WS`，并要求 RPC 实际 genesis hash 与协议升级区保存的 `CHAIN_GENESIS_HASH` 完全相等；未保存正式链指纹时一律视为尚无正式目标链。
+- 创世哈希匹配后，源码 `spec_version` 还必须与链上版本严格相等，控制台才把源码及其现有精确测试断言同步提高到 `链上版本 + 1`，随后只提交、推送 runtime 范围并触发 `citizenchain-wasm.yml`；目标链不可达、链指纹不匹配或版本漂移时 fail-closed。
+- `citizenchain-wasm.yml` 始终按已提交源码原样编译，不查询链、不连接服务器、不读取 SSH/RPC Secret，也不临时改写版本；从 GitHub 或其他位置手动触发时只做普通源码构建，不提高 `spec_version`。
+- CI 会校验控制台升级构建满足“源码版本 = 目标链版本 + 1”，并在任务摘要记录构建用途、目标 genesis hash、升级前/后版本与源码提交 SHA。
 - 生成的 `citizenchain-wasm` artifact 只用于显式的开发升级、下载脚本或链上 `System.set_code` 流程；本地启动脚本不下载、不内置该 artifact
 - 三端桌面安装包 CI 不再由 WASM CI 自动触发，也不再下载/内置最新 WASM；现有链要使用最新 runtime 仍必须走 runtime 升级
 - GitHub workflow 只保留 CI 与正式 Release，不再持有固定服务器清单或批量部署入口。Linux 服务器部署统一从本机 `citizenconsole/` 控制台选择44个权威节点之一，下载当前提交已成功 CI 的 `公民链-Linux-amd.deb`，逐节点写入匹配的身份/GRANDPA 密钥并部署；不会清除 `/opt/citizenchain/data` 区块库。

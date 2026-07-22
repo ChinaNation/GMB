@@ -120,7 +120,7 @@ Runtime 配置位置：
 ## 5. 外部接口
 ### 5.1 `propose_runtime_upgrade`（call index = 0）
 流程：
-1. 校验 `ProposeOrigin`（`EnsureJointProposer`），再用 `InstitutionRoleAuthorization` 校验签名账户对 `RoleSubject(actor_cid_number, COMMITTEE_MEMBER)` 拥有协议升级 `Propose` 权限。
+1. 载荷显式接收 `actor_cid_number + actor_role_code`；校验 `ProposeOrigin`（`EnsureJointProposer`），再用 `InstitutionRoleAuthorization` 校验签名账户对该完整 `RoleSubject` 拥有协议升级 `Propose` 权限。当前顶层能力只允许 NRC/PRC `COMMITTEE_MEMBER`。
 2. 校验 `reason` 与 `code` 非空，并校验 `new_pow_params` 的参数/算法版本合法。
 3. 计算 `code_hash`、当前 `ActiveParams` hash 与新 PoW 参数 hash，构造摘要 `Proposal`
    并加 `MODULE_TAG` 序列化。
@@ -129,7 +129,7 @@ Runtime 配置位置：
 6. 发出 `RuntimeUpgradeProposed` 事件。
 
 边界：
-- 该接口接收 `origin / reason / code / new_pow_params`。
+- 该接口接收 `origin / actor_cid_number / actor_role_code / reason / code / new_pow_params`；摘要与事件同时记录机构 CID、岗位码和签名钱包。
 - PoW 参数只能随 runtime code 一起表决；`CurrentDifficulty` 不进入提案参数，仍由算法推进。
 - 人口快照、联合签名、投票资格、计票与终态推进均由投票引擎内部流程负责。
 
@@ -153,13 +153,13 @@ Runtime 配置位置：
 
 ### 5.3 `developer_direct_upgrade`（call index = 2）
 说明：
-- 开发期快捷通道：仅国家储委会管理员直接 `set_code`，不走联合投票。
+- 开发期快捷通道：仅国家储委会委员岗位的任职管理员直接 `set_code`，不走联合投票。
 - 仅在 `genesis-pallet` 的 `DeveloperUpgradeEnabled` 为 `true` 时可用。
 - 链进入运行期后此调用永久失效，升级必须走 `propose_runtime_upgrade` 联合投票。
 
 流程：
-1. 交易载荷显式携带 `actor_cid_number`，不得用主账户或本地登录态代替机构身份。
-2. 校验 `DeveloperUpgradeOrigin` 后，要求 actor CID 的机构码为 NRC，且外层签名者属于 `AdminAccounts[actor_cid_number].admins`。
+1. 交易载荷显式携带 `actor_cid_number + actor_role_code`，不得用主账户或本地登录态代替机构岗位身份。
+2. 校验 `DeveloperUpgradeOrigin` 后，要求 actor CID 的机构码为 NRC，并按完整 CID、岗位码和外层签名钱包校验协议升级 `Propose` 权限；当前只允许 `COMMITTEE_MEMBER`。
 3. 校验 `DeveloperUpgradeCheck::is_enabled()`，关闭则拒绝（`DeveloperUpgradeDisabled`）。
 4. 校验 `code` 非空。
 5. 计算 `code_hash`，调用 `RuntimeCodeExecutor::execute_runtime_code`，同样原子暂存 PoW 参数并写审计。
@@ -171,8 +171,10 @@ Runtime 配置位置：
 
 版本要求：
 - `developer_direct_upgrade` 最终通过 `System.set_code` 写入新 runtime code，系统会拒绝 `spec_version` 小于或等于链上当前版本的 WASM，错误表现为 `System::SpecVersionNeedsToIncrease`
-- WASM push 自动 CI 不查询链上版本；只有手动 `Run workflow` 才使用 `GMB_SSH_KEY` 登录服务器后访问本机 `127.0.0.1:9944` 读取链上 `state_getRuntimeVersion.specVersion`，源码版本不足时只在 CI 工作区临时提升到 `链上版本 + 1` 再编译 artifact
-- CI 不把临时提升后的 `spec_version` 自动提交回仓库；源码中的版本号仍用于记录开发者认可的 runtime 版本基线
+- 正式创世前项目自身 runtime 版本固定为 `0`；没有已配置且可连接的正式目标链时，公民控制台「运行 WASM CI」直接停止。
+- 正式创世后，只有公民控制台「运行 WASM CI」负责读取明确配置的目标链；RPC 实际 genesis hash 必须先与本机保存的 `CHAIN_GENESIS_HASH` 完全相等，源码版本再与链上版本严格相等，才把源码 `spec_version` 及现有版本测试断言同步提高到 `链上版本 + 1`。缺少正式链指纹、链指纹不匹配或版本漂移都必须停止，禁止覆盖。
+- 控制台提交并推送变更后才触发 WASM workflow。CI 只验证源码版本恰好等于目标链版本加一并按源码原样编译；CI 不查询服务器、不读取 SSH/RPC Secret、不临时改写或回写版本。
+- 其他位置执行 WASM workflow 属于普通源码构建，不增加任何 runtime 版本字段；`impl_version`、`authoring_version`、`transaction_version`、`system_version` 也不随「运行 WASM CI」机械增加。
 
 ### 5.4 投票引擎状态协同
 

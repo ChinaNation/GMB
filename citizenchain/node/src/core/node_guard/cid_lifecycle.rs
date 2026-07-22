@@ -61,6 +61,24 @@ enum CitizenCidStatus {
     Revoked,
 }
 
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
+enum CitizenStatus {
+    Normal,
+    Revoked,
+}
+
+/// 公民投票身份以永久 CID 为主键；钱包仅通过独立双向索引表达当前签名绑定。
+#[derive(Clone, Debug, Decode, Eq, PartialEq)]
+struct CitizenVotingIdentity {
+    _passport_valid_from: u32,
+    _passport_valid_until: u32,
+    _citizen_status: CitizenStatus,
+    _residence_province_code: Vec<u8>,
+    _residence_city_code: Vec<u8>,
+    _residence_town_code: Vec<u8>,
+    _updated_at: u32,
+}
+
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 struct CitizenCidRecord {
     registrar_cid_number: Vec<u8>,
@@ -77,11 +95,17 @@ struct InstitutionRecord {
     cid_full_name: Vec<u8>,
     cid_short_name: Vec<u8>,
     town_code: Vec<u8>,
-    legal_representative_name: Option<Vec<u8>>,
-    legal_representative_cid_number: Option<Vec<u8>>,
-    legal_representative_account: Option<[u8; 32]>,
+    legal_representative: Option<InstitutionLegalRepresentative>,
     institution_code: InstitutionCode,
     created_at: u32,
+}
+
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+struct InstitutionLegalRepresentative {
+    family_name: Vec<u8>,
+    given_name: Vec<u8>,
+    cid_number: Vec<u8>,
+    account: [u8; 32],
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -125,6 +149,10 @@ pub enum GuardError {
     CitizenCidIdentityChanged,
     CitizenCidStatusInvalid,
     CitizenCidRevocationHeightInvalid,
+    CitizenIdentityDeleted,
+    CitizenIdentityWithoutCid,
+    CitizenWalletBindingMissing,
+    CitizenWalletBindingMismatch,
     GenesisInstitutionDeleted,
     GenesisInstitutionChanged,
     InstitutionIdentityChanged,
@@ -170,6 +198,34 @@ pub mod storage_key {
         storage_prefix(CITIZEN_IDENTITY_PALLET, b"CidRegistry")
     }
 
+    pub fn citizen_registry(cid: &[u8]) -> Vec<u8> {
+        map_vec(CITIZEN_IDENTITY_PALLET, b"CidRegistry", cid)
+    }
+
+    pub fn voting_identity_prefix() -> Vec<u8> {
+        storage_prefix(CITIZEN_IDENTITY_PALLET, b"VotingIdentityByCid")
+    }
+
+    pub fn voting_identity(cid: &[u8]) -> Vec<u8> {
+        map_vec(CITIZEN_IDENTITY_PALLET, b"VotingIdentityByCid", cid)
+    }
+
+    pub fn wallet_account_by_cid_prefix() -> Vec<u8> {
+        storage_prefix(CITIZEN_IDENTITY_PALLET, b"WalletAccountByCid")
+    }
+
+    pub fn wallet_account_by_cid(cid: &[u8]) -> Vec<u8> {
+        map_vec(CITIZEN_IDENTITY_PALLET, b"WalletAccountByCid", cid)
+    }
+
+    pub fn cid_by_wallet_account_prefix() -> Vec<u8> {
+        storage_prefix(CITIZEN_IDENTITY_PALLET, b"CidByWalletAccount")
+    }
+
+    pub fn cid_by_wallet_account(account: &[u8; 32]) -> Vec<u8> {
+        map_account(CITIZEN_IDENTITY_PALLET, b"CidByWalletAccount", account)
+    }
+
     pub fn institution_prefix(namespace: Namespace) -> Vec<u8> {
         storage_prefix(namespace.pallet(), b"Institutions")
     }
@@ -198,6 +254,9 @@ pub mod storage_key {
     pub fn enumerated_prefixes() -> Vec<Vec<u8>> {
         vec![
             citizen_registry_prefix(),
+            voting_identity_prefix(),
+            wallet_account_by_cid_prefix(),
+            cid_by_wallet_account_prefix(),
             institution_prefix(Namespace::Public),
             institution_prefix(Namespace::Private),
             institution_account_prefix(Namespace::Public),
@@ -443,15 +502,13 @@ fn validate_institution_record(
     if validate_cid_namespace(cid, namespace)? != record.institution_code {
         return Err(GuardError::InstitutionIdentityChanged);
     }
-    let representative_fields = [
-        record.legal_representative_name.is_some(),
-        record.legal_representative_cid_number.is_some(),
-        record.legal_representative_account.is_some(),
-    ];
-    if representative_fields.iter().any(|value| *value)
-        && !representative_fields.iter().all(|value| *value)
-    {
-        return Err(GuardError::InstitutionLegalRepresentativeInvalid);
+    if let Some(representative) = &record.legal_representative {
+        if representative.family_name.is_empty()
+            || representative.given_name.is_empty()
+            || representative.cid_number.is_empty()
+        {
+            return Err(GuardError::InstitutionLegalRepresentativeInvalid);
+        }
     }
     Ok(())
 }
@@ -549,6 +606,31 @@ fn check_citizen_transition(
     }
 }
 
+fn validate_citizen_identity_binding<F>(cid: &[u8], read: &F) -> Result<(), GuardError>
+where
+    F: Fn(&[u8]) -> Option<Vec<u8>>,
+{
+    let registry_raw =
+        read(&storage_key::citizen_registry(cid)).ok_or(GuardError::CitizenIdentityWithoutCid)?;
+    let registry: CitizenCidRecord = decode_exact(&registry_raw, "CidRegistry")?;
+    validate_citizen_record(cid, &registry, None)?;
+
+    let identity_raw =
+        read(&storage_key::voting_identity(cid)).ok_or(GuardError::CitizenIdentityDeleted)?;
+    let _: CitizenVotingIdentity = decode_exact(&identity_raw, "VotingIdentityByCid")?;
+
+    let account_raw = read(&storage_key::wallet_account_by_cid(cid))
+        .ok_or(GuardError::CitizenWalletBindingMissing)?;
+    let account: [u8; 32] = decode_exact(&account_raw, "WalletAccountByCid")?;
+    let reverse_raw = read(&storage_key::cid_by_wallet_account(&account))
+        .ok_or(GuardError::CitizenWalletBindingMissing)?;
+    let reverse_cid: Vec<u8> = decode_exact(&reverse_raw, "CidByWalletAccount")?;
+    if reverse_cid != cid {
+        return Err(GuardError::CitizenWalletBindingMismatch);
+    }
+    Ok(())
+}
+
 /// 普通区块只对本块触及的 CID、机构和账户执行单调性与正反索引校验。
 pub fn check_transition<FParent, FPost>(
     block: u32,
@@ -565,6 +647,48 @@ where
     for key in delta.keys().filter(|key| key.starts_with(&citizen_prefix)) {
         let cid = parse_vec_map_key(key, &citizen_prefix, "CidRegistry")?;
         check_citizen_transition(block, &cid, parent(key), post(key))?;
+    }
+
+    let identity_prefix = storage_key::voting_identity_prefix();
+    let forward_prefix = storage_key::wallet_account_by_cid_prefix();
+    let reverse_prefix = storage_key::cid_by_wallet_account_prefix();
+    let mut touched_citizens = BTreeSet::<Vec<u8>>::new();
+    for key in delta.keys() {
+        if key.starts_with(&identity_prefix) {
+            let cid = parse_vec_map_key(key, &identity_prefix, "VotingIdentityByCid")?;
+            if post(key).is_none() {
+                return Err(GuardError::CitizenIdentityDeleted);
+            }
+            touched_citizens.insert(cid);
+        }
+        if key.starts_with(&forward_prefix) {
+            let cid = parse_vec_map_key(key, &forward_prefix, "WalletAccountByCid")?;
+            touched_citizens.insert(cid);
+        }
+        if key.starts_with(&reverse_prefix) {
+            let account = parse_account_map_key(key, &reverse_prefix, "CidByWalletAccount")?;
+            if let Some(raw) = post(key) {
+                let cid: Vec<u8> = decode_exact(&raw, "CidByWalletAccount")?;
+                let forward_raw = post(&storage_key::wallet_account_by_cid(&cid))
+                    .ok_or(GuardError::CitizenWalletBindingMissing)?;
+                let forward: [u8; 32] = decode_exact(&forward_raw, "WalletAccountByCid")?;
+                if forward != account {
+                    return Err(GuardError::CitizenWalletBindingMismatch);
+                }
+                touched_citizens.insert(cid);
+            } else if let Some(raw) = parent(key) {
+                let cid: Vec<u8> = decode_exact(&raw, "CidByWalletAccount")?;
+                if post(&storage_key::wallet_account_by_cid(&cid)).is_some_and(|raw| {
+                    decode_exact::<[u8; 32]>(&raw, "WalletAccountByCid") == Ok(account)
+                }) {
+                    return Err(GuardError::CitizenWalletBindingMismatch);
+                }
+                touched_citizens.insert(cid);
+            }
+        }
+    }
+    for cid in touched_citizens {
+        validate_citizen_identity_binding(&cid, &post)?;
     }
 
     let mut touched_institutions = BTreeSet::<(u8, Vec<u8>)>::new();
@@ -721,6 +845,34 @@ where
         let cid = parse_vec_map_key(key, &citizen_prefix, "CidRegistry")?;
         let record: CitizenCidRecord = decode_exact(&raw, "CidRegistry")?;
         validate_citizen_record(&cid, &record, None)?;
+    }
+
+    let identity_prefix = storage_key::voting_identity_prefix();
+    for key in keys.iter().filter(|key| key.starts_with(&identity_prefix)) {
+        let Some(_) = read(key) else { continue };
+        let cid = parse_vec_map_key(key, &identity_prefix, "VotingIdentityByCid")?;
+        validate_citizen_identity_binding(&cid, read)?;
+    }
+
+    let forward_prefix = storage_key::wallet_account_by_cid_prefix();
+    for key in keys.iter().filter(|key| key.starts_with(&forward_prefix)) {
+        let Some(_) = read(key) else { continue };
+        let cid = parse_vec_map_key(key, &forward_prefix, "WalletAccountByCid")?;
+        validate_citizen_identity_binding(&cid, read)?;
+    }
+
+    let reverse_prefix = storage_key::cid_by_wallet_account_prefix();
+    for key in keys.iter().filter(|key| key.starts_with(&reverse_prefix)) {
+        let Some(raw) = read(key) else { continue };
+        let account = parse_account_map_key(key, &reverse_prefix, "CidByWalletAccount")?;
+        let cid: Vec<u8> = decode_exact(&raw, "CidByWalletAccount")?;
+        let forward_raw = read(&storage_key::wallet_account_by_cid(&cid))
+            .ok_or(GuardError::CitizenWalletBindingMissing)?;
+        let forward: [u8; 32] = decode_exact(&forward_raw, "WalletAccountByCid")?;
+        if forward != account {
+            return Err(GuardError::CitizenWalletBindingMismatch);
+        }
+        validate_citizen_identity_binding(&cid, read)?;
     }
 
     let mut occupied_public = BTreeSet::new();
@@ -942,12 +1094,63 @@ mod tests {
             cid_full_name: b"ordinary company".to_vec(),
             cid_short_name: b"company".to_vec(),
             town_code: Vec::new(),
-            legal_representative_name: None,
-            legal_representative_cid_number: None,
-            legal_representative_account: None,
+            legal_representative: None,
             institution_code: *b"SFGQ",
             created_at: 10,
         }
+    }
+
+    fn citizen_cid_number(tag: &str) -> Vec<u8> {
+        primitives::cid::generator::generate_cid_number(
+            primitives::cid::generator::GenerateCidNumberInput {
+                account_pubkey: tag,
+                p1: "1",
+                province_code: "GD",
+                province_name: "广东省",
+                city_code: "001",
+                city_name: "荔湾市",
+                year: "2026",
+                institution: "CTZN",
+            },
+        )
+        .expect("valid citizen CID")
+        .into_bytes()
+    }
+
+    fn citizen_state(cid: &[u8], account: [u8; 32]) -> BTreeMap<Vec<u8>, Vec<u8>> {
+        BTreeMap::from([
+            (
+                storage_key::citizen_registry(cid),
+                CitizenCidRecord {
+                    registrar_cid_number: b"registrar".to_vec(),
+                    commitment: [3u8; 32],
+                    residence_province_code: b"GD".to_vec(),
+                    residence_city_code: b"001".to_vec(),
+                    status: CitizenCidStatus::Active,
+                    registered_at: 1,
+                    revoked_at: None,
+                }
+                .encode(),
+            ),
+            (
+                storage_key::voting_identity(cid),
+                (
+                    20260101u32,
+                    20360101u32,
+                    CitizenStatus::Normal,
+                    b"GD".to_vec(),
+                    b"001".to_vec(),
+                    Vec::<u8>::new(),
+                    1u32,
+                )
+                    .encode(),
+            ),
+            (storage_key::wallet_account_by_cid(cid), account.encode()),
+            (
+                storage_key::cid_by_wallet_account(&account),
+                cid.to_vec().encode(),
+            ),
+        ])
     }
 
     #[test]
@@ -1017,6 +1220,65 @@ mod tests {
                 &reference,
             ),
             Err(GuardError::GenesisInstitutionDeleted)
+        );
+    }
+
+    #[test]
+    fn citizen_identity_uses_permanent_cid_and_current_wallet_binding() {
+        let cid = citizen_cid_number("citizen-guard");
+        let account = [7u8; 32];
+        let post = citizen_state(&cid, account);
+        let delta = post
+            .iter()
+            .map(|(key, value)| (key.clone(), Some(value.clone())))
+            .collect();
+        assert_eq!(
+            check_transition(
+                1,
+                &delta,
+                |_| None,
+                |key| post.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
+            Ok(())
+        );
+
+        let identity_key = storage_key::voting_identity(&cid);
+        let deletion = BTreeMap::from([(identity_key.clone(), None)]);
+        let mut without_identity = post.clone();
+        without_identity.remove(&identity_key);
+        assert_eq!(
+            check_transition(
+                2,
+                &deletion,
+                |key| post.get(key).cloned(),
+                |key| without_identity.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
+            Err(GuardError::CitizenIdentityDeleted)
+        );
+
+        let reverse_key = storage_key::cid_by_wallet_account(&account);
+        let mut wrong_reverse = post.clone();
+        wrong_reverse.insert(
+            reverse_key.clone(),
+            citizen_cid_number("another-citizen").encode(),
+        );
+        let mismatch = BTreeMap::from([(
+            reverse_key,
+            wrong_reverse
+                .get(&storage_key::cid_by_wallet_account(&account))
+                .cloned(),
+        )]);
+        assert_eq!(
+            check_transition(
+                2,
+                &mismatch,
+                |key| post.get(key).cloned(),
+                |key| wrong_reverse.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
+            Err(GuardError::CitizenWalletBindingMissing)
         );
     }
 }

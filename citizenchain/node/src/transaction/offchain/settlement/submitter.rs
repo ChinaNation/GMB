@@ -68,6 +68,7 @@ impl BatchSubmitter for PoolBatchSubmitter {
     fn submit(
         &self,
         actor_cid_number: Vec<u8>,
+        actor_role_code: Vec<u8>,
         institution_account: AccountId32,
         batch_seq: u64,
         batch_bytes: Vec<u8>,
@@ -80,6 +81,9 @@ impl BatchSubmitter for PoolBatchSubmitter {
         let actor_cid_number: offchain::InstitutionCidNumber = actor_cid_number
             .try_into()
             .map_err(|_| "actor_cid_number 超出 CID_NUMBER_MAX_BYTES".to_string())?;
+        let actor_role_code: offchain::ActorRoleCode = actor_role_code
+            .try_into()
+            .map_err(|_| "actor_role_code 超出 64 字节".to_string())?;
         let sig_bounded = encode_bounded_sig::<runtime::Runtime>(&batch_signature)?;
 
         // 3. 构造 BoundedVec<OffchainBatchItem, MaxBatchSize>
@@ -89,6 +93,7 @@ impl BatchSubmitter for PoolBatchSubmitter {
         let call = runtime::RuntimeCall::OffchainTransaction(
             offchain::pallet::Call::submit_offchain_batch {
                 actor_cid_number: actor_cid_number.clone(),
+                actor_role_code,
                 institution_account: institution_account.clone(),
                 batch_seq,
                 batch: batch_bounded,

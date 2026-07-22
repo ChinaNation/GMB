@@ -20,8 +20,8 @@ import { notice } from '../utils/notice';
 
 const CITIZEN_PAGE_SIZE = 50;
 
-function makeCitizenName(row: Pick<CitizenRow, 'citizen_family_name' | 'citizen_given_name'>) {
-  return `${row.citizen_family_name ?? ''}${row.citizen_given_name ?? ''}`.trim() || '-';
+function makeCitizenName(row: Pick<CitizenRow, 'family_name' | 'given_name'>) {
+  return `${row.family_name ?? ''}${row.given_name ?? ''}`.trim() || '-';
 }
 
 function makeCenteredTitle(center: ReactNode, back?: () => void) {

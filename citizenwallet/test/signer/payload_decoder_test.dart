@@ -189,7 +189,8 @@ void main() {
         ...compactVec('43'),
         ...compactVec('0100'),
         ...compactVec('002'),
-        ...compactVec('测试公民'),
+        ...compactVec('测'),
+        ...compactVec('试公民'),
         1, // CitizenSex::Female
         // CandidateIdentityPayload 的末字段为 u32 LE YYYYMMDD。
         ...u32Le(20260630),
@@ -347,6 +348,7 @@ void main() {
             0x17,
             callIndex,
             ...compactVec(registryActorCid),
+            ...compactVec('ASSET_OPERATOR'),
             ...u32Le(assetId),
           ];
 
@@ -368,6 +370,7 @@ void main() {
           0x17,
           0x00,
           ...compactVec(registryActorCid),
+          ...compactVec('ASSET_OPERATOR'),
           ...executionAccount,
           0, // AssetClass::Plain
           ...compactVec('公民测试资产'),
@@ -383,6 +386,7 @@ void main() {
         expect(decoded, isNotNull);
         expect(decoded!.action, 'propose_asset_issue');
         expect(decoded.fields['actor_cid_number'], registryActorCid);
+        expect(decoded.fields['actor_role_code'], 'ASSET_OPERATOR');
         expect(
           decoded.fields['execution_account'],
           ss58FromBytes(executionAccount),
@@ -465,6 +469,7 @@ void main() {
           expect(decoded, isNotNull, reason: item.action);
           expect(decoded!.action, item.action);
           expect(decoded.fields['actor_cid_number'], registryActorCid);
+          expect(decoded.fields['actor_role_code'], 'ASSET_OPERATOR');
           for (final field in item.expected.entries) {
             expect(decoded.fields[field.key], field.value, reason: item.action);
           }
@@ -552,6 +557,7 @@ void main() {
           expect(decoded, isNotNull, reason: item.action);
           expect(decoded!.action, item.action);
           expect(decoded.fields['actor_cid_number'], registryActorCid);
+          expect(decoded.fields['actor_role_code'], 'ASSET_OPERATOR');
           expect(decoded.fields['reason_hash'], '0x${hexLower(reasonHash)}');
           for (final field in item.expected.entries) {
             expect(decoded.fields[field.key], field.value, reason: item.action);
@@ -567,6 +573,7 @@ void main() {
           0x17,
           0,
           ...compactVec(registryActorCid),
+          ...compactVec('ASSET_OPERATOR'),
           ...executionAccount,
           0,
           ...compactVec('资产'),
@@ -578,7 +585,10 @@ void main() {
         final truncated = validIssue.sublist(0, validIssue.length - 1);
         final trailing = [...validIssue, 0xff];
         final invalidClass = [...validIssue]
-          ..[2 + compactVec(registryActorCid).length + 32] = 2;
+          ..[2 +
+              compactVec(registryActorCid).length +
+              compactVec('ASSET_OPERATOR').length +
+              32] = 2;
         final accountIdOnly = <int>[
           0x17,
           0,
@@ -629,7 +639,8 @@ void main() {
       expect(decoded.fields['wallet_account'], ss58FromBytes(wallet));
       expect(decoded.reviewFields['identity_level'], '参选身份');
       expect(decoded.reviewFields['birth_place'], '43 / 0100 / 002');
-      expect(decoded.reviewFields['citizen_full_name'], '测试公民');
+      expect(decoded.reviewFields['family_name'], '测');
+      expect(decoded.reviewFields['given_name'], '试公民');
       expect(decoded.reviewFields['citizen_sex'], '女');
       expect(decoded.fields['birth_date'], '20260630');
       expect(decoded.reviewFields['birth_date'], '2026-06-30');
@@ -642,6 +653,7 @@ void main() {
         0x0a,
         0x00,
         ...compactVec(registryActorCid),
+        ...compactVec('REGISTRAR'),
         ...payload,
         ...compactU32(64),
         ...List<int>.filled(64, 0xaa),
@@ -663,6 +675,7 @@ void main() {
         0x0a,
         0x00,
         ...compactVec(registryActorCid),
+        ...compactVec('REGISTRAR'),
         ...payload,
         ...compactU32(64),
         ...List<int>.filled(64, 0xaa),
@@ -682,6 +695,7 @@ void main() {
         0x0a,
         0x01,
         ...compactVec(registryActorCid),
+        ...compactVec('REGISTRAR'),
         ...payload,
         ...compactU32(64),
         ...List<int>.filled(64, 0xaa),
@@ -694,7 +708,8 @@ void main() {
       expect(decoded.fields['actor_cid_number'], registryActorCid);
       expect(decoded.fields['wallet_account'], ss58FromBytes(wallet));
       expect(decoded.reviewFields['identity_level'], '参选身份');
-      expect(decoded.reviewFields['citizen_full_name'], '测试公民');
+      expect(decoded.reviewFields['family_name'], '测');
+      expect(decoded.reviewFields['given_name'], '试公民');
       expect(decoded.fields['birth_date'], '20260630');
       expect(decoded.reviewFields['birth_date'], '2026-06-30');
     });
@@ -706,6 +721,7 @@ void main() {
         0x0a,
         0x02,
         ...compactVec(registryActorCid),
+        ...compactVec('REGISTRAR'),
         ...citizenIdentityPayloadForTest(wallet),
         ...compactU32(64),
         ...List<int>.filled(64, 0xaa),
@@ -714,6 +730,7 @@ void main() {
         0x0a,
         0x03,
         ...compactVec(registryActorCid),
+        ...compactVec('REGISTRAR'),
         ...candidateIdentityPayloadForTest(wallet),
         ...compactU32(64),
         ...List<int>.filled(64, 0xbb),
@@ -722,6 +739,7 @@ void main() {
         0x0a,
         0x04,
         ...compactVec(registryActorCid),
+        ...compactVec('REGISTRAR'),
         ...compactVec('CTZN-430100-0001'),
       ];
       expect(
@@ -745,6 +763,7 @@ void main() {
         0x0a,
         0x06,
         ...compactVec(registryActorCid),
+        ...compactVec('REGISTRAR'),
         ...compactVec('CTZN-430100-0001'),
         ...commitment,
         ...compactVec('43'),
@@ -768,6 +787,7 @@ void main() {
         0x0a,
         0x06,
         ...compactVec(registryActorCid),
+        ...compactVec('REGISTRAR'),
         ...compactVec('CTZN-430100-0001'),
         ...commitment,
         ...compactVec('43'),
@@ -789,6 +809,7 @@ void main() {
         0x0a,
         0x08,
         ...compactVec(registryActorCid),
+        ...compactVec('REGISTRAR'),
         ...compactVec('CTZN-430100-0001'),
       ];
 
@@ -806,6 +827,7 @@ void main() {
         0x0a,
         0x08,
         ...compactVec(registryActorCid),
+        ...compactVec('REGISTRAR'),
         ...compactVec('CTZN-430100-0001'),
       ];
 
@@ -822,6 +844,7 @@ void main() {
         0x0a,
         0x07,
         ...compactVec(registryActorCid),
+        ...compactVec('REGISTRAR'),
         ...compactU32(2),
         ...compactVec('CTZN-430100-0001'),
         ...List<int>.filled(32, 0x11),
@@ -972,6 +995,7 @@ void main() {
         19,
         50,
         ...compactVec(cidNumber),
+        ...compactVec('CLEARING_OPERATOR'),
         ...compactVec(peerId),
         ...compactVec(domain),
         ...u16Le(9944),
@@ -994,6 +1018,7 @@ void main() {
         19,
         51,
         ...compactVec(cidNumber),
+        ...compactVec('CLEARING_OPERATOR'),
         ...compactVec(domain),
         ...u16Le(443),
       ]);
@@ -1013,6 +1038,7 @@ void main() {
         19,
         52,
         ...compactVec(cidNumber),
+        ...compactVec('CLEARING_OPERATOR'),
       ]);
 
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
@@ -1029,6 +1055,7 @@ void main() {
         19,
         40,
         ...compactVec(nrcActorCid),
+        ...compactVec('CLEARING_OPERATOR'),
         ...institutionAccount,
         ...u32Le(35),
       ];
@@ -1048,6 +1075,7 @@ void main() {
         33,
         0,
         ...compactVec(registryActorCid),
+        ...compactVec('REGISTRAR'),
         ...compactVec('2026.07'),
         ...catalogHash,
       ];
@@ -1055,6 +1083,7 @@ void main() {
         33,
         3,
         ...compactVec(registryActorCid),
+        ...compactVec('REGISTRAR'),
         ...compactVec('GD'),
         ...compactVec('001'),
         ...compactVec('001001'),
@@ -1716,13 +1745,7 @@ void main() {
     });
 
     test('decodes public institution close action', () {
-      // 机构注销 propose_close(30.1) 携带注册局签发的注销凭证:
-      // actor_cid_number + institution_account + beneficiary + register_nonce
-      // + signature + credential_issuer_cid_number + credential_signer_pubkey。
-      final registerNonce = utf8.encode('reg-nonce-001');
-      final signature = List<int>.filled(64, 0xDD);
-      const credentialIssuerCid = 'CN000-GZF0A-000000001-2026';
-      final credentialSigner = List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
+      // 机构关闭提案只携带机构 CID、岗位码、机构账户和受益账户。
       final institutionAccount = List<int>.filled(32, 0x11);
       final beneficiary = List<int>.filled(32, 0x22);
       final payload = <int>[
@@ -1731,12 +1754,6 @@ void main() {
         ...compactVec('RLEGAL'),
         ...institutionAccount,
         ...beneficiary,
-        (registerNonce.length << 2) & 0xff,
-        ...registerNonce,
-        0x01, 0x01,
-        ...signature,
-        ...compactVec(credentialIssuerCid),
-        ...credentialSigner,
       ];
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
@@ -1745,10 +1762,6 @@ void main() {
       expect(decoded.fields['institution_account'],
           ss58FromBytes(institutionAccount));
       expect(decoded.fields['beneficiary'], ss58FromBytes(beneficiary));
-      expect(
-          decoded.fields['credential_issuer_cid_number'], credentialIssuerCid);
-      expect(decoded.fields['credential_signer_pubkey'],
-          ss58FromBytes(credentialSigner));
     });
 
     test('rejects unknown out-of-range pallet index', () {
@@ -1853,13 +1866,12 @@ void main() {
 
     List<int> appendGovernanceCallTail(
       List<int> payload,
-      String actorCid, {
-      bool includeProposerRole = true,
-    }) {
+      String actorCid,
+    ) {
       return <int>[
         ...payload,
         ...compactVec(actorCid),
-        if (includeProposerRole) ...compactVec('RCHAIR'),
+        ...compactVec('RCHAIR'),
       ];
     }
 
@@ -1980,7 +1992,6 @@ void main() {
           ...buildPrivateInstitutionAdminsForGovernance(),
         ],
         registryActorCid,
-        includeProposerRole: false,
       ));
 
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
@@ -2005,7 +2016,6 @@ void main() {
           ...publicAdminPerson(List<int>.filled(32, 0x41), '', '', ''),
         ],
         registryActorCid,
-        includeProposerRole: false,
       ));
 
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
@@ -2183,6 +2193,7 @@ void main() {
       final payload = Uint8List.fromList([
         0x08, 0x00, // pallet=8 call=0
         ...compactVec(nrcActorCid),
+        ...compactVec('COMMITTEE_MEMBER'),
         (reason.length << 2) & 0xff,
         ...reason,
         ...totalLe,
@@ -2195,9 +2206,24 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_issuance');
       expect(decoded.fields['actor_cid_number'], nrcActorCid);
+      expect(decoded.fields['proposer_role_code'], 'COMMITTEE_MEMBER');
       expect(decoded.fields['reason'], '紧急救灾');
       expect(decoded.fields['allocation_count'], '2');
       expect(decoded.fields.containsKey('eligible_total'), isFalse);
+    });
+
+    test('rejects propose_issuance without proposer_role_code', () {
+      final reason = utf8.encode('旧载荷');
+      final payload = Uint8List.fromList([
+        0x08, 0x00,
+        ...compactVec(nrcActorCid),
+        (reason.length << 2) & 0xff,
+        ...reason,
+        ...List<int>.filled(16, 0),
+        0x00,
+      ]);
+
+      expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
     // 签名扩展尾校验(2026-06-10):真实 QR payload_hex = call_data + 扩展尾。
     // 历史 bug:84080b6a 把多个分支改成"严格到尾"却没算扩展尾,

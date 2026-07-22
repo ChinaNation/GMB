@@ -23,6 +23,7 @@ import {
   countUserStats,
   defaultProfileDoc,
   isFollowing,
+  isNotifying,
   listAuthorPosts,
   listFollows,
   readProfileDoc,
@@ -62,13 +63,15 @@ async function buildProfileResponse(
 ): Promise<UserProfileResponse> {
   // 认证真源=链上身份（VotingIdentity/CandidateIdentity），不再依赖发帖投影。
   // 会员购买（membership）另取自 D1，公开下发以支撑徽章「勾」。
-  const [doc, counts, identity, membership, following] = await Promise.all([
-    readProfileDoc(env, ownerAccount),
-    countUserStats(env, ownerAccount),
-    fetchChainIdentityStateCached(env, ownerAccount),
-    getMembership(env, ownerAccount),
-    isFollowing(env, viewerAccount, ownerAccount)
-  ]);
+  const [doc, counts, identity, membership, following, notifying] =
+    await Promise.all([
+      readProfileDoc(env, ownerAccount),
+      countUserStats(env, ownerAccount),
+      fetchChainIdentityStateCached(env, ownerAccount),
+      getMembership(env, ownerAccount),
+      isFollowing(env, viewerAccount, ownerAccount),
+      isNotifying(env, viewerAccount, ownerAccount)
+    ]);
 
   const profile = doc ?? defaultProfileDoc(ownerAccount);
   const membershipLevel = (membership?.membership_level ?? null) as MembershipLevel | null;
@@ -85,6 +88,7 @@ async function buildProfileResponse(
     membership_active: membership ? subscriptionIsActive(membership) : false,
     counts,
     is_following: following,
+    is_notifying: notifying,
     updated_at: profile.updated_at
   };
 }

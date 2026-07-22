@@ -23,9 +23,12 @@ export interface InstitutionInfoDetail {
   partnership_kind?: string | null;
   has_legal_personality?: boolean | null;
   parent_cid_number?: string | null;
-  legal_representative_name?: string | null;
-  legal_representative_cid_number?: string | null;
-  legal_representative_account?: string | null;
+  legal_representative?: {
+    family_name: string;
+    given_name: string;
+    cid_number: string;
+    account: string;
+  } | null;
 }
 
 async function publicAppRequest<T>(path: string): Promise<T> {

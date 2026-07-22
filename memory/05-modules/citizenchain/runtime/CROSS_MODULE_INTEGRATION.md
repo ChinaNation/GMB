@@ -13,7 +13,7 @@
 | `grandpakey-change` | `frame_system`, `votingengine`（通过 InternalVoteEngine） |
 | `resolution-issuance` | `frame_system`, `votingengine`（通过 JointVoteEngine）, `pallet_balances`（通过 Currency） |
 | `runtime-upgrade` | `frame_system`, `votingengine`（通过 JointVoteEngine） |
-| `election-campaign` | `frame_system`（当前仅 runtime metadata 骨架；后续通过 election-vote 创建选举投票） |
+| `election-campaign` | 开发期无规则骨架，已决定删除；未来具体选举业务模块各自依赖 `election-vote` 内部接口 |
 | `entity-primitives` | 无 storage；定义实体生命周期共用 trait |
 | `public-manage` | `frame_system`, `votingengine`（通过 InternalVoteEngine）, `admin-primitives`（通过 lifecycle/query trait）, `entity-primitives` |
 | `private-manage` | `frame_system`, `votingengine`（通过 InternalVoteEngine）, `admin-primitives`（通过 lifecycle/query trait）, `entity-primitives` |
@@ -30,7 +30,7 @@
 | `InternalVoteEngine` | `votingengine` | `votingengine::Pallet<Runtime>` | `public-manage`, `private-manage`, `personal-manage`, `multisig-transfer`, `public-admins`, `private-admins`, `personal-admins`, `resolution-destro`, `grandpakey-change`, `offchain-transaction` |
 | `JointVoteEngine` | `votingengine` | `votingengine::Pallet<Runtime>` | `resolution-issuance`, `runtime-upgrade` |
 | `InternalAdminProvider` | `votingengine` | `RuntimeInternalAdminProvider` | `votingengine` (Config 注入) |
-| `InternalAdminsLenProvider` | `votingengine` | `RuntimeInternalAdminsLenProvider` | `votingengine` (Config 注入) |
+| `InstitutionRoleProvider` | `votingengine` | `RuntimeInstitutionRoleProvider` | `votingengine`, `joint-vote`, `election-vote`, `legislation-vote` |
 | `InstitutionAsset` | `institution-asset` | `RuntimeInstitutionAsset` | `public-manage`, `private-manage`, `personal-manage`, `multisig-transfer`, `offchain-transaction` |
 | `NrcAccountProvider` | `onchain-transaction` | `RuntimeNrcAccountProvider` | `onchain-transaction` (OnchainFeeRouter) |
 | `SafetyFundAccountProvider` | `onchain-transaction` | `RuntimeSafetyFundAccountProvider` | `onchain-transaction` (OnchainFeeRouter) |
@@ -53,7 +53,6 @@
 | `RuntimeAdminAccountQuery` | 按机构码把管理员查询路由到 `public-admins`、`private-admins`、`personal-admins`；固定治理机构也读 `public-admins` |
 | `RuntimeInstitutionQuery` | 按公权/私权机构生命周期模块聚合机构账户状态和 admins 人员配置，供 `multisig-transfer` 查询账户上下文；业务授权和机构投票资格不得取自该人员集合 |
 | `RuntimeInternalAdminProvider` | 仅为个人多签管理员快照及尚需人员目录的边界提供查询；机构投票资格不得从此适配器取得 |
-| `RuntimeInternalAdminsLenProvider` | 仅为个人多签或机构级人数辅助提供查询，不是机构岗位投票资格真源 |
 | `RuntimeInstitutionRoleProvider` | 从 entity 读取准确 `CID + 岗位码` 的当前有效任职，供所有机构投票 Track 在建案时冻结资格 |
 | `RuntimeCitizenIdentityReader` | 从 citizen-identity 读取投票资格、参选资格和一致的 `PopulationData`；投票引擎自行生成提案人口快照 |
 | `RuntimeCitizenIdentityAuthority` | 给公民身份模块校验注册局权限和公民钱包签名 |
@@ -64,9 +63,9 @@
 
 ## 选举业务与投票边界
 
-`election-campaign` 是公权选举业务壳，负责后续承载“什么机构能组织什么职位选举、普选/互选如何选择、候选人和选民快照从哪里生成、结果写回哪个业务真源”等规则。
+无具体规则的通用 `election-campaign` 已决定删除。未来每一种公权选举业务在 `runtime/public/` 下建立独立模块，并由该模块定义本机构发起岗位、目标 `role_code`、普选/互选、候选条件、选民范围、席位、任期和结果写回。
 
-`election-vote` 是选举投票模块，负责选举投票提案、投票去重、计票、超时结算、结果快照和清理。`ElectionVote::create_popular_election` 与 `ElectionVote::create_mutual_election` 外部入口已删除；runtime 只保留 `cast_popular_vote` 和 `cast_mutual_vote` 作为投票动作。结果快照必须由 `election-campaign` 复核业务规则后才能形成 entity 任职结果。
+`election-vote` 是选举投票模块，负责选举投票提案、投票去重、计票、超时结算、结果快照和清理。底层创建外部入口已删除；runtime 只保留投票动作。结果快照必须由创建提案的具体选举业务模块复核后才能形成 entity 任职结果。机构只能发起本机构岗位选举，最终只绑定 `actor_cid_number + role_code`。
 
 ## 交易费用流
 
@@ -74,7 +73,7 @@
 用户交易 -> pallet-transaction-payment
   -> OnchainChargeAdapter
     -> RuntimeFeeRouter (一次返回 FeeRoute，费用类别和确切付款账户不可分离)
-       -> 机构操作：actor CID + admins 授权 + 唯一费用账户，任一失败即 Reject
+       -> 机构操作：actor CID + 人员名册归属 + 岗位业务授权 + 唯一费用账户，任一失败即 Reject
        -> 实际投票：Vote，固定由投票签名者支付
        -> 普通用户/Fullnode：Onchain，由签名者支付
        -> 未分类/未开放：Reject，不存在默认分支或付款方回落

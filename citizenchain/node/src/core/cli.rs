@@ -24,6 +24,10 @@ pub struct Cli {
     #[arg(long, value_name = "CID_NUMBER")]
     pub clearing_bank_cid_number: Option<String>,
 
+    /// 清算批次提交岗位码；必须与清算行 CID 和已解锁签名钱包的有效任职一致。
+    #[arg(long, value_name = "ROLE_CODE")]
+    pub clearing_bank_role_code: Option<String>,
+
     /// 解锁 `offchain::settlement::keystore` 里清算行
     /// 管理员 sr25519 私钥的密码。不提供时签名密钥保持 `None`,节点只保留
     /// 查询 RPC;扫码提交需要生成 L2 ACK 签名,packer 上链也需要批次签名,

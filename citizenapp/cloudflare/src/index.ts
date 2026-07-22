@@ -1,6 +1,7 @@
-import type { Env } from './types';
+import type { Env, SquareNotifyJob } from './types';
 import { errorResponse } from './shared/http';
 import { routeRequest } from './routes';
+import { fanOutPage } from './feeds/notify_fanout';
 import { runVideoArchiveSweep } from './membership/archive';
 import { reconcileSubscriptions } from './membership/reconcile';
 import { applyCors, cleanupSecurityState } from './security/request_guard';
@@ -36,5 +37,23 @@ export default {
           `[scheduled-cleanup] failed: ${error instanceof Error ? error.message : error}`
         );
       }));
+  },
+
+  // 广场发帖通知扇出：每条消息 = 一次发帖或一页续跑；fanOutPage 满页会把下一页续跑入队。
+  // 单条成功 ack、失败 retry（最多 max_retries），不因一条拖垮整批。
+  async queue(batch: MessageBatch<SquareNotifyJob>, env: Env): Promise<void> {
+    await Promise.all(
+      batch.messages.map(async (message) => {
+        try {
+          await fanOutPage(env, message.body);
+          message.ack();
+        } catch (error) {
+          console.error(
+            `[square-notify] fanout failed: ${error instanceof Error ? error.message : error}`,
+          );
+          message.retry();
+        }
+      }),
+    );
   }
 };

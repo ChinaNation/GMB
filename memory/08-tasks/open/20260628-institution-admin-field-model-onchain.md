@@ -41,11 +41,9 @@
 
 | 字段 | 中文注释 |
 |---|---|
-| `legal_representative_name` | 法定代表人公开姓名 |
-| `legal_representative_cid_number` | 法定代表人唯一公民 CID |
-| `legal_representative_account` | 法定代表人唯一钱包账户 |
+| `legal_representative` | 法定代表人原子可选结构；固定包含 `family_name`、`given_name`、`cid_number`、`account` |
 
-目标结构废弃 `legal_rep_name` 和 `legal_rep_cid_number`，全仓统一使用 `legal_representative_*`。法定代表人照片、联系方式和原始身份档案不上链。
+全仓人员姓名统一使用 `family_name`、`given_name`；法定代表人不保存拼接姓名或拆散的可选字段。法定代表人照片、联系方式和原始身份档案不上链。
 
 ### 机构岗位
 
@@ -133,15 +131,15 @@ Admin { admin_account, family_name, given_name }
 
 ## 第二步执行记录
 
-- [x] `InstitutionInfo` 新增 `legal_representative_name`、`legal_representative_cid_number`、`legal_representative_account`，公权与私权机构使用同一字段顺序。
-- [x] 运行期机构创建强制三字段非空，并将三字段纳入 call index 5 注册局签名域；原 call index 2 登记凭证保持自身现行字段契约，不建立兼容分支。
-- [x] 法定代表人不是创世必填项；创世阶段三字段允许全部为 `None`，不准备法代资料常量，
+- [x] `InstitutionInfo` 新增原子 `legal_representative: Option<LegalRepresentative>`，嵌套结构固定为 `family_name + given_name + cid_number + account`，公权与私权机构使用同一字段顺序。
+- [x] 运行期机构创建将完整法定代表人结构纳入注册局岗位签名域，不建立旧字段兼容分支。
+- [x] 法定代表人不是创世必填项；创世阶段整个结构允许为 `None`，不准备法代资料常量，
   不从 `admins[0]`、机构主账户或其它现有钱包推导占位值。后续依法任命时再原子写入三字段。
 - [x] 删除 `public-admins`、`private-admins` 中法定代表人 storage、setter、getter 和个人多签占位实现；立法签署改为读取 entity 唯一真源。
 - [x] 对齐 node、OnChina、CitizenApp、公民钱包的 SCALE 解码、DTO、数据库字段、签名构造和公开展示字段。
 - [x] 删除目标代码中的 `legal_rep_*` 旧命名；OnChina 仅保留启动时删除旧数据库列的清理 SQL，不读取或兼容旧列。
 - [x] 验证：runtime 相关 148 项单元测试通过；node CID 生命周期守卫 14 项测试通过；OnChina 131 项测试通过；OnChina 前端构建通过；CitizenApp 目标 10 项测试通过；CitizenWallet 69 项测试通过；node、runtime、OnChina 编译通过。
-- [x] 真实运行态：使用当前源码重建 WASM 并启动 `citizenchain-fresh`，节点守卫与 RPC 正常；RPC 读取 NRC `InstitutionInfo` 确认法定代表人三字段全部为 `None`。临时 PostgreSQL 完成 49,593 个机构和 99,186 个账户的真实链投影，旧 `legal_rep_*` 列为 0；真实 HTTP 接口返回三字段，前端首页返回 200。验收后已停止进程并删除临时数据库。
+- [x] 历史运行态：当时使用源码重建 WASM 并启动 `citizenchain-fresh`，节点守卫与 RPC 正常；该次验收采用过时的法定代表人分裂字段布局，仅作为历史执行记录，当前结构必须以原子 `legal_representative` 为准。
 - [x] 整 runtime lib 测试被仓库既有 `runtime_upgrade::Proposal` 测试缺少 `expected_pow_params_hash/new_pow_params` 阻断，该错误不属于本步骤，未越界修改。
 
 ## 第三步执行记录
@@ -160,7 +158,7 @@ Admin { admin_account, family_name, given_name }
 - [x] Node Guard 当前按 `InstitutionAdmins`（storage key 为 CID，value 为机构码与姓名/钱包人员集合）共享类型校验；
   删除旧 `AdminProfile`、creator/时间字段和不存在的 FRG 虚拟省组规则。FRG 省专员席位仍由 entity 任职真源表达。
 - [x] runtime 新增创世逐项验收，核对固定岗位席位、`Genesis` 来源及每个常量钱包账户；公权/私权 entity、admins、multisig 和 runtime 测试已恢复编译并通过目标测试。
-- [x] 创世模块已拆分为 `institution/mod.rs + fixed_roles.rs + seeder.rs`；构建前断言钱包数量等于席位总数、固定钱包无重复，创世法定代表人三字段保持全空。
+- [x] 创世模块已拆分为 `institution/mod.rs + fixed_roles.rs + seeder.rs`；构建前断言钱包数量等于席位总数、固定钱包无重复，创世法定代表人结构保持 `None`。
 - [x] 第三步创世收口验收：补齐 `no_std` 的 `alloc::vec` 宏导入；固定岗位映射 4 项、管理员 SCALE 契约 2 项、协议清单 4 项、真实 runtime 创世 1 项测试通过，runtime/node 全目标编译通过。
 - [x] 第三步真实运行态：使用当前源码 production WASM 启动 `citizenchain-fresh` headless 临时节点，NodeGuard 通过、RPC 正常、block#0 可查询；创世哈希为 `0x1a3de5fdfdf75f37480b1964d7339ec7a7d38cd0716abf672dbf3ae7a4ed257e`，验收后节点正常退出。
 - [x] Node Guard 已接入 `PublicManage::InstitutionRoles` 与 `InstitutionRoleAssignments`：固定机构岗位目录、NJD 7/1/2/5、FRG 43×5、任职状态/任期及任职钱包与 `admins` 集合一致性均纳入启动、普通区块、`:code` 和完整状态导入校验。
@@ -245,7 +243,7 @@ Admin { admin_account, family_name, given_name }
 ## 完成标准
 
 - runtime 中不再存在机构管理员 `AdminProfile` 内嵌布局。
-- 已任命法定代表人的机构都有可查询的链上三字段；尚未任命的创世机构没有占位值或 `admins[0]` 回退值。
+- 已任命法定代表人的机构都有可查询的链上原子结构；尚未任命的创世机构没有占位值或 `admins[0]` 回退值。
 - 机构岗位和机构管理员任职关系有唯一 entity 真源；具体业务权限由对应业务模块硬规则判定。
 - `admins` 只保存管理员账户、姓、名三字段集合；授权只认账户。
 - 一个管理员可在多个机构任职，一个机构可有多个管理员。

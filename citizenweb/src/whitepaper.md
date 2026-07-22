@@ -400,7 +400,7 @@ GMB/
 
 ## 4.4.链上中国<br><span class="whitepaper-heading-en">4.4. OnChina</span>
 
-* 链上中国是公民链节点内置的本地治理与注册平台，不是独立信任根；管理员权限以链上 active admins 为准，平台只负责登录鉴权、业务录入、待签交易生成、链上读取和本地档案保存；<br><span class="whitepaper-en">OnChina is the local governance and registration platform embedded in the CitizenChain node. It is not an independent trust root; administrator authority comes from on-chain active admins. The platform handles login authentication, business entry, unsigned transaction generation, on-chain reads, and local record storage.</span>
+* 链上中国是公民链节点内置的本地治理与注册平台，不是独立信任根；链上 admins 只确认管理员人员身份和登录资格，具体业务权限必须同时匹配机构 CID、岗位码、有效任职和签名钱包。平台只负责登录鉴权、业务录入、待签交易生成、链上读取和本地档案保存。<br><span class="whitepaper-en">OnChina is the local governance and registration platform embedded in the CitizenChain node, not an independent trust root. On-chain admins establish only administrator identity and login eligibility; a business permission must also match the institution CID, role code, active assignment, and signing wallet. The platform handles login authentication, business entry, unsigned transaction generation, on-chain reads, and local record storage.</span>
 * 链上中国承接公民档案、公权机构、私权机构、教育机构、注册局管理员、法律文库和立法入口；涉及投票、计票、选举结果和立法状态推进的流程仍由链上投票引擎负责。<br><span class="whitepaper-en">OnChina handles citizen records, public institutions, private institutions, education institutions, registry administrators, legal library, and legislation entry points. Voting, tallying, election results, and legislative state progression remain the responsibility of the on-chain voting engine.</span>
 
 ****
@@ -419,7 +419,7 @@ GMB/
 ### 5.2.1.内部投票<br><span class="whitepaper-heading-en">5.2.1. internal-vote</span>
 
 * 内部投票用于机构和多签账户的内部治理，例如管理员更换、账户关闭、机构内部资金划转和其他仅影响本主体的事项。<br><span class="whitepaper-en">Internal voting is used for the internal governance of institutions and multisig accounts, including administrator changes, account closure, internal fund transfers, and other matters affecting only the subject itself.</span>
-* 内部投票以当前 active admins 为授权基础，创建提案时锁定管理员快照和阈值快照；动态阈值必须严格过半且不得超过管理员人数，固定治理机构按链上固定阈值执行。<br><span class="whitepaper-en">Internal voting is authorized by the current active admins. When a proposal is created, the administrator snapshot and threshold snapshot are locked. Dynamic thresholds must be strictly more than half and may not exceed the administrator count, while fixed governance institutions use fixed on-chain thresholds.</span>
+* 机构内部投票由业务模块按准确的机构 CID、岗位码和业务动作校验发起权限，并由投票引擎冻结 `VotePlan` 指定岗位的有效任职账户；每个 `CID + 岗位码 + 钱包` 形成独立票据，阈值读取机构在 entity 中保存的治理阈值。个人多签继续使用独立管理员快照和个人阈值，两类主体不得互相回落。<br><span class="whitepaper-en">For institutional internal voting, the business module verifies proposal authority against the exact institution CID, role code, and business action, while the voting engine freezes the active assignments of the roles specified by the VotePlan. Each CID, role code, and wallet combination forms an independent ticket, and the threshold comes from the institution's governance threshold stored by the entity module. Personal multisig voting continues to use its separate administrator snapshot and personal threshold, with no fallback between the two subject types.</span>
 * 内部投票不处理业务本身的生命周期写入；通过后由投票引擎回调对应 owner 模块执行，失败重试、取消和终态清理仍归投票引擎。<br><span class="whitepaper-en">Internal voting does not write the business lifecycle itself. After approval, the voting engine calls back the corresponding owner module for execution, while retries, cancellation, and terminal cleanup remain inside the voting engine.</span>
 
 ### 5.2.2.联合投票<br><span class="whitepaper-heading-en">5.2.2. joint-vote</span>
@@ -436,7 +436,7 @@ GMB/
 
 ### 5.2.4.选举投票<br><span class="whitepaper-heading-en">5.2.4. election-vote</span>
 
-* 选举投票面向公职人员产生机制，目标是支持公民普选和公权机构成员互选两类场景；普选按链上公民身份快照确定选民范围，互选按对应机构成员快照确定选民范围。<br><span class="whitepaper-en">Election voting serves the mechanism for selecting public officials. Its goal is to support both general citizen elections and mutual elections among members of public-authority institutions. General elections use on-chain citizen-identity snapshots to determine the electorate, while mutual elections use snapshots of the corresponding institution's members.</span>
+* 选举投票面向公职人员产生机制，支持公民普选和公权机构岗位互选两类场景；普选由投票引擎读取 citizen-identity 的人口数据生成提案快照，互选只冻结 `VotePlan` 指定 `RoleSubject` 的有效任职账户。<br><span class="whitepaper-en">Election voting serves the mechanism for selecting public officials and supports both general citizen elections and mutual elections among institutional roles. For a general election, the voting engine reads population data from citizen-identity and creates the proposal snapshot; for a mutual election, it freezes only the active assignment accounts of the RoleSubjects specified by the VotePlan.</span>
 * 投票资格和人口范围由 `citizen-identity` 与投票引擎快照共同确认，选举模块只读取链上授权身份、账户和必要哈希，不接收链下身份凭证。<br><span class="whitepaper-en">Eligibility and population scope are confirmed jointly by `citizen-identity` and voting-engine snapshots. The election module reads only authorized on-chain identities, accounts, and necessary hashes; it does not accept off-chain identity credentials.</span>
 * 选举模块当前作为选举投票规则与结果快照的链上基础，后续候选人登记、职位规则、届期衔接和结果写回，应继续围绕投票引擎扩展，避免业务模块各自实现选举逻辑。<br><span class="whitepaper-en">The election module currently serves as the on-chain foundation for election-vote rules and result snapshots. Candidate registration, office rules, term transitions, and result write-back should continue to expand around the voting engine, avoiding separate election logic in business modules.</span>
 
@@ -446,17 +446,17 @@ GMB/
 ```
 | 模块 | 适用事项 | 规则重点 | 业务模块边界 |
 |:---:|:-------:|:--------:|:-----------:|
-| 内部投票 | 机构和多签账户内部治理 | 管理员快照 + 阈值快照 | 不自建投票流程，只接收执行回调 |
+| 内部投票 | 机构和个人多签内部治理 | 机构岗位票据 + 机构阈值；个人管理员快照 + 个人阈值 | 不自建投票流程，只接收执行回调 |
 | 联合投票 | 国家储委会、省储委会、省储行共同治理 | 105 票机构联合投票 + 联合公投 | 不传人口快照或计票材料 |
 | 立法投票 | 法律制定、修改、废止 | 宪法表决类型、两院顺序、行政签署、公投 | 立法院只保存法律数据和版本 |
-| 选举投票 | 公职人员普选和互选 | 公民身份快照或机构成员快照 | 不与联合公投混写，不接收链下身份凭证 |
+| 选举投票 | 公职人员普选和互选 | 投票引擎人口快照或指定岗位任职快照 | 不与联合公投混写，不接收链下身份凭证 |
 ```
 
 <span class="whitepaper-en">English voting module boundary table:</span>
 ```
 | Module | Applicable Matters | Rule Focus | Business-Module Boundary |
 |:------:|:------------------:|:----------:|:------------------------:|
-| Internal voting | Internal governance of institutions and multisig accounts | Administrator snapshot plus threshold snapshot | Does not build its own voting flow; receives execution callbacks only |
+| Internal voting | Internal governance of institutions and personal multisig accounts | Institutional role tickets plus institution threshold; personal administrator snapshot plus personal threshold | Does not build its own voting flow; receives execution callbacks only |
 | Joint voting | Joint governance of NRC, PRCs, and PRBs | 105-vote institutional stage plus joint referendum | Does not pass population snapshots or tally materials |
 | Legislative voting | Enacting, amending, and repealing laws | Constitutional vote types, bicameral order, executive signing, and referendum | The legislature stores law data and versions only |
 | Election voting | General and mutual elections for public office | Citizen-identity snapshots or institution-member snapshots | Must not mix with joint referendum and must not accept off-chain credentials |
@@ -497,7 +497,7 @@ VOTING → PASSED → EXECUTED
 
 ## 5.4.管理员模组<br><span class="whitepaper-heading-en">5.4. admins</span>
 
-* 管理员模组只维护管理员集合这个授权真源，不承担机构创建、机构注销、公民档案或投票计票；管理员变更一律围绕 active admins、内部投票和注册局登记边界展开。<br><span class="whitepaper-en">The admins module group maintains only the administrator set as the authorization source of truth. It does not handle institution creation, institution closure, citizen records, or vote tallying. Administrator changes are built around active admins, internal voting, and registry boundaries.</span>
+* 管理员模组只维护管理员人员名册，不产生机构业务权限，也不承担机构创建、机构注销、公民档案或投票计票；机构岗位、岗位权限和有效任职由 entity 模组保存，个人多签管理员权限仍由 personal-admins 保存。<br><span class="whitepaper-en">The admins modules maintain only administrator personnel directories and do not create institutional business permissions or handle institution creation, institution closure, citizen records, or vote tallying. Institutional roles, role permissions, and active assignments are stored by the entity modules, while personal multisig administrator authority remains in personal-admins.</span>
 * 创世机构的初始管理员在创世状态写入；运行期非创世机构由注册局创建机构时提交初始管理员集合，之后由该机构按自己的规则更换管理员。<br><span class="whitepaper-en">Initial administrators of genesis institutions are written in genesis state. During runtime, non-genesis institutions receive their initial administrator set when the registry creates the institution, and later change administrators under their own rules.</span>
 
 ### 5.4.1.个人多签管理员<br><span class="whitepaper-heading-en">5.4.1. personal-admins</span>
@@ -513,7 +513,7 @@ VOTING → PASSED → EXECUTED
 ### 5.4.3.公权机构管理员<br><span class="whitepaper-heading-en">5.4.3. public-admins</span>
 
 * 公权机构管理员模块保存公权机构管理员集合，包括注册局、法院、立法机构、教育机构和其他政府类机构的 active admins。<br><span class="whitepaper-en">The public-institution admins module stores administrator sets for public-authority institutions, including registries, courts, legislatures, education institutions, and other government institutions.</span>
-* 联邦注册局按省级 5 人组治理，市注册局和其他公权机构按本机构管理员集合自治；公权机构管理员变更不得绕过投票引擎，也不得把注册局操作员身份恢复成独立授权真源。<br><span class="whitepaper-en">The Federal Registry is governed by provincial five-person groups, while city registries and other public institutions govern themselves through their own administrator sets. Public-institution administrator changes must not bypass the voting engine or restore registry-operator identity as an independent authorization source.</span>
+* 联邦注册局按省级专员岗位隔离业务范围，市注册局和其他公权机构同样按机构 CID、岗位码和有效任职执行具体业务；机构自身管理员变更使用业务模块指定的投票引擎，注册局为外部公民或机构办理登记业务不得被错误追加成注册局内部投票。<br><span class="whitepaper-en">The Federal Registry separates business scope by provincial specialist roles, and City Registries and other public institutions likewise execute business actions through the exact institution CID, role code, and active assignment. Changes to an institution's own administrators use the voting engine selected by that business module, while registry services performed for external citizens or institutions must not be incorrectly turned into an internal Registry vote.</span>
 
 ## 5.5.公权业务模组<br><span class="whitepaper-heading-en">5.5. public</span>
 
@@ -548,7 +548,7 @@ VOTING → PASSED → EXECUTED
 ### 5.6.3.公权机构<br><span class="whitepaper-heading-en">5.6.3. public-manage</span>
 
 * 公权机构包括联邦注册局、市注册局、法院、立法机构、教育机构和其他政府类机构，创世机构由创世写入，运行期机构由有权限的注册局登记。<br><span class="whitepaper-en">Public institutions include the Federal Registry, City Registries, courts, legislatures, education institutions, and other government institutions. Genesis institutions are written at genesis, while runtime institutions are registered by authorized registries.</span>
-* 联邦注册局通过省级5人组账户在所辖省份内登记机构，市注册局在本市范围内登记机构；实体模块负责链上机构生命周期，管理员模块负责 active admins，链上中国负责注册局录入和交易生成。<br><span class="whitepaper-en">The Federal Registry registers institutions within its governed provinces through provincial five-person group accounts, and City Registries register institutions within their own city. Entity modules handle on-chain institution lifecycle, admins modules handle active admins, and OnChina handles registry data entry and transaction generation.</span>
+* 联邦注册局由对应省专员岗位的任职管理员在所辖省份内登记机构，市注册局由本市有权岗位任职管理员在本市范围内登记机构；实体模块负责链上机构生命周期和岗位任职，管理员模块只维护人员名册，链上中国负责注册局录入和交易生成。<br><span class="whitepaper-en">The Federal Registry registers institutions within a province through administrators actively assigned to that province's specialist role, while a City Registry acts within its city through administrators assigned to the authorized city role. Entity modules handle on-chain institution lifecycle and role assignments, admins modules maintain only personnel directories, and OnChina handles registry data entry and transaction generation.</span>
 
 ## 5.7.发行模组<br><span class="whitepaper-heading-en">5.7. issuance</span>
 
@@ -634,7 +634,7 @@ VOTING → PASSED → EXECUTED
 ## 6.2.治理机构<br><span class="whitepaper-heading-en">6.2. Governance Institutions</span>
 
 * 国家储委会、省储委会和省储行属于创世治理机构，创世时写入机构、账户和初始管理员；国家储委会与省储委会承担 GRANDPA 最终性投票，省储行承担永久质押和省级储备银行治理。<br><span class="whitepaper-en">The National Reserve Committee, Provincial Reserve Committees, and Provincial Reserve Banks are genesis governance institutions. Their institutions, accounts, and initial administrators are written at genesis. The National and Provincial Reserve Committees participate in GRANDPA finality voting, while Provincial Reserve Banks carry permanent staking and provincial reserve-bank governance.</span>
-* 治理机构节点应以归档全节点形态运行，保存完整链数据并参与节点引导；其治理动作仍以链上 active admins、内部投票、联合投票和对应治理模块为准。<br><span class="whitepaper-en">Governance institution nodes should run as archive full nodes, store complete chain data, and participate in node bootstrapping. Their governance actions are still governed by on-chain active admins, internal voting, joint voting, and the corresponding governance modules.</span>
+* 治理机构节点应以归档全节点形态运行，保存完整链数据并参与节点引导；治理动作必须由准确机构岗位的任职钱包发起，并使用业务模块指定的内部投票、联合投票或其他投票引擎。<br><span class="whitepaper-en">Governance institution nodes should run as archive full nodes, store complete chain data, and participate in node bootstrapping. Governance actions must be proposed by the assignment wallet of the exact institutional role and use the internal, joint, or other voting engine selected by the business module.</span>
 * 国家储委会、省储委会、省储行属于节点桌面端治理范围，不作为普通链上中国网页登录主体；链上中国主要服务注册局和被授权的业务机构管理员。<br><span class="whitepaper-en">The National Reserve Committee, Provincial Reserve Committees, and Provincial Reserve Banks belong to the node-desktop governance scope and are not ordinary OnChina web-console login subjects. OnChina mainly serves registries and authorized business-institution administrators.</span>
 
 ## 6.3.链下清算行<br><span class="whitepaper-heading-en">6.3. Off-Chain Clearing Banks</span>
@@ -649,7 +649,7 @@ VOTING → PASSED → EXECUTED
 ## 7.1.链上中国简介<br><span class="whitepaper-heading-en">7.1. OnChina Overview</span>
 
 * 链上中国是公民链节点内置的本地治理与注册平台，可在节点设置页手动打开或关闭，健康检查通过后供浏览器访问；它不是独立信任根。<br><span class="whitepaper-en">OnChina is the local governance and registration platform embedded in CitizenChain nodes. It can be manually enabled or disabled from the node settings page and becomes available in the browser after health checks pass. It is not an independent trust root.</span>
-* 管理员权限以链上 active admins 为唯一真源，链上中国只负责扫码登录、权限读取、业务录入、待签交易生成、链上查询、本地档案和审计日志。<br><span class="whitepaper-en">Administrator authority comes solely from on-chain active admins. OnChina is responsible only for QR-code login, permission reads, business entry, unsigned transaction generation, chain queries, local records, and audit logs.</span>
+* 链上 admins 是管理员人员身份和登录资格真源，机构业务权限唯一由机构 CID、岗位码、有效任职和签名钱包共同成立；链上中国只负责扫码登录、权限读取、业务录入、待签交易生成、链上查询、本地档案和审计日志。<br><span class="whitepaper-en">On-chain admins are the source of truth for administrator identity and login eligibility, while institutional business authority exists only when the institution CID, role code, active assignment, and signing wallet all match. OnChina is responsible only for QR-code login, permission reads, business entry, unsigned transaction generation, chain queries, local records, and audit logs.</span>
 * 链上中国不托管钱包私钥，本地使用 PostgreSQL 保存业务明细；链上只接收必要账户、签名、状态、哈希、身份字段和交易载荷，不接收完整实名档案。<br><span class="whitepaper-en">OnChina does not custody wallet private keys and uses local PostgreSQL for business details. The chain receives only necessary accounts, signatures, statuses, hashes, identity fields, and transaction payloads, not complete real-name records.</span>
 
 ## 7.2.注册局<br><span class="whitepaper-heading-en">7.2. Registry</span>
@@ -667,7 +667,7 @@ VOTING → PASSED → EXECUTED
 ## 7.4.链上选举<br><span class="whitepaper-heading-en">7.4. On-Chain Elections</span>
 
 * 链上中国为链上选举提供业务协同：维护公民居住地、出生地、护照状态和链上身份提交记录，为投票引擎读取人口与资格快照提供基础。<br><span class="whitepaper-en">OnChina provides business coordination for on-chain elections by maintaining citizen residence, birthplace, passport status, and on-chain identity-submission records, forming the basis for the voting engine to read population and eligibility snapshots.</span>
-* 链上选举面向两类方向：公民普选读取链上公民身份快照，公权机构成员互选读取对应机构成员快照；最终投票、计票和结果不可篡改由选举投票模块承担。<br><span class="whitepaper-en">On-chain elections have two directions: general elections read on-chain citizen-identity snapshots, and mutual elections among public-institution members read snapshots of the corresponding institution's members. Final voting, tallying, and tamper-proof results are handled by the election-vote module.</span>
+* 链上选举面向两类方向：公民普选由投票引擎读取 citizen-identity 人口数据生成提案快照，公权机构互选冻结 `VotePlan` 指定岗位的有效任职账户；最终投票、计票和结果不可篡改由选举投票模块承担。<br><span class="whitepaper-en">On-chain elections have two directions: for general elections the voting engine reads citizen-identity population data and creates the proposal snapshot, while mutual elections among public institutions freeze active assignment accounts for the roles specified by the VotePlan. Final voting, tallying, and tamper-proof results are handled by the election-vote module.</span>
 * 选举业务仍按公民宪法、链上身份和投票引擎边界逐步完善；链上中国负责组织材料和生成交易，不作为独立计票系统。<br><span class="whitepaper-en">Election business will continue to be improved according to the Citizen Constitution, on-chain identity, and voting-engine boundaries. OnChina organizes materials and generates transactions, but is not an independent tallying system.</span>
 
 ****
