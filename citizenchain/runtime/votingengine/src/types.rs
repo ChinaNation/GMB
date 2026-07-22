@@ -50,6 +50,18 @@ pub struct InstitutionVoteTicket<AccountId> {
     pub voter_account: AccountId,
 }
 
+/// 公民公投的一张完整票据。
+///
+/// Storage 必须按 `(proposal_id, cid_number)` 去重；票据值保存投票时
+/// 的完整 CID + 签名钱包主体，防止同一永久 CID 更换钱包后重复投票。
+#[derive(
+    Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
+)]
+pub struct CitizenReferendumTicket<AccountId> {
+    pub voter_subject: citizen_identity::CitizenSubject<AccountId>,
+    pub approve: bool,
+}
+
 /// 投票引擎按提案保存的人口快照。
 ///
 /// 人口数据全部来自 citizen-identity；投票引擎只增加创建区块并冻结为提案历史，

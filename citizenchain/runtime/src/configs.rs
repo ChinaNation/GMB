@@ -1362,6 +1362,38 @@ impl
             sr25519_verify(&signature, &msg, &public)
         }
     }
+
+    #[cfg(feature = "runtime-benchmarks")]
+    fn benchmark_authority() -> Option<(
+        AccountId,
+        citizen_identity::CidNumberBound,
+        citizen_identity::RoleCodeBound,
+        citizen_identity::AreaCodeBound,
+        citizen_identity::AreaCodeBound,
+    )> {
+        // 基准 externalities 使用 fresh spec-genesis；这里选择 FRG 首个省专员岗位，
+        // 不伪造“管理员即有权”的旁路。计时区间内仍由正式岗位权限目录完成授权。
+        let province = primitives::cid::code::PROVINCE_CODE_INFOS
+            .first()?
+            .province_code;
+        let registrar =
+            AccountId::new(*primitives::cid::china::china_zf::FEDERAL_REGISTRY_ADMINS.first()?);
+        let institution = primitives::governance_skeleton::federal_registry_institution();
+        Some((
+            registrar,
+            institution.cid_number.as_bytes().to_vec().try_into().ok()?,
+            primitives::governance_skeleton::province_commissioner_role_code(province)
+                .try_into()
+                .ok()?,
+            province.to_vec().try_into().ok()?,
+            b"ZS01".to_vec().try_into().ok()?,
+        ))
+    }
+
+    #[cfg(feature = "runtime-benchmarks")]
+    fn benchmark_set_timestamp(timestamp_millis: u64) {
+        pallet_timestamp::Pallet::<Runtime>::set_timestamp(timestamp_millis);
+    }
 }
 
 impl citizen_identity::Config for Runtime {
@@ -1370,6 +1402,10 @@ impl citizen_identity::Config for Runtime {
     type CitizenIdentityAuthority = RuntimeCitizenIdentityAuthority;
     type OnVotingIdentityRegistered = CitizenIssuance;
     type TimeProvider = crate::Timestamp;
+    type MaxPopulationDaysPerBlock = ConstU32<366>;
+    type MaxPopulationTransitionsPerBlock = ConstU32<2_048>;
+    type MaxPopulationMaintenanceWeightPerBlock =
+        citizen_identity::PopulationMaintenanceWeightFraction<Runtime, 8>;
     type WeightInfo = citizen_identity::weights::SubstrateWeight<Runtime>;
 }
 
@@ -1598,7 +1634,7 @@ impl entity_primitives::InstitutionCidQuery<votingengine::types::CidNumber>
 /// 通用机构治理结果路由适配器。
 ///
 /// 已完成自身业务校验的任免/治理模块可用它按机构码选择 entity 模组；
-/// `election-vote` 不使用本适配器，选举结果必须先回到 election-campaign 复核。
+/// `election-vote` 不使用本适配器，选举结果必须先回到创建提案的具体选举业务模块复核。
 pub struct RuntimeInstitutionGovernanceResultHandler;
 
 impl entity_primitives::InstitutionGovernanceResultHandler<AccountId>
@@ -2328,14 +2364,11 @@ impl joint_vote::Config for Runtime {
 
 impl election_vote::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    type MaxElectionOfficeCodeLen = ConstU32<64>;
     type MaxElectionCandidates = ConstU32<256>;
     // 互选选民来自 VotePlan 指定岗位的有效任职快照，不从 admins 推导。
     type InstitutionRoleProvider = RuntimeInstitutionRoleProvider;
     type WeightInfo = election_vote::weights::SubstrateWeight<Runtime>;
 }
-
-impl election_campaign::Config for Runtime {}
 
 impl legislation_vote::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
@@ -2554,36 +2587,45 @@ impl votingengine::InstitutionRoleProvider<AccountId> for RuntimeInstitutionRole
 pub struct RuntimeCitizenIdentityReader;
 
 impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityReader {
-    fn can_vote(who: &AccountId, scope: &citizen_identity::PopulationScope) -> bool {
+    fn citizen_subject(who: &AccountId) -> Option<citizen_identity::CitizenSubject<AccountId>> {
         <citizen_identity::Pallet<Runtime> as citizen_identity::CitizenIdentityProvider<
             AccountId,
-        >>::can_vote(who, scope)
+        >>::citizen_subject(who)
     }
 
-    fn can_be_candidate(who: &AccountId, scope: &citizen_identity::PopulationScope) -> bool {
+    fn voting_subject(
+        who: &AccountId,
+        scope: &citizen_identity::PopulationScope,
+    ) -> Option<citizen_identity::CitizenSubject<AccountId>> {
         <citizen_identity::Pallet<Runtime> as citizen_identity::CitizenIdentityProvider<
             AccountId,
-        >>::can_be_candidate(who, scope)
+        >>::voting_subject(who, scope)
     }
 
-    fn population_count(scope: &citizen_identity::PopulationScope) -> u64 {
+    fn candidate_subject(
+        who: &AccountId,
+        scope: &citizen_identity::PopulationScope,
+    ) -> Option<citizen_identity::CitizenSubject<AccountId>> {
         <citizen_identity::Pallet<Runtime> as citizen_identity::CitizenIdentityProvider<
             AccountId,
-        >>::population_count(scope)
+        >>::candidate_subject(who, scope)
     }
 
     fn population_data(
         scope: &citizen_identity::PopulationScope,
-    ) -> citizen_identity::PopulationData {
+    ) -> Option<citizen_identity::PopulationData> {
         <citizen_identity::Pallet<Runtime> as citizen_identity::CitizenIdentityProvider<
             AccountId,
         >>::population_data(scope)
     }
 
-    fn can_vote_at(who: &AccountId, population_data: &citizen_identity::PopulationData) -> bool {
+    fn voting_subject_at(
+        who: &AccountId,
+        population_data: &citizen_identity::PopulationData,
+    ) -> Option<citizen_identity::CitizenSubject<AccountId>> {
         <citizen_identity::Pallet<Runtime> as citizen_identity::CitizenIdentityProvider<
             AccountId,
-        >>::can_vote_at(who, population_data)
+        >>::voting_subject_at(who, population_data)
     }
 
     #[cfg(feature = "runtime-benchmarks")]
@@ -2591,15 +2633,17 @@ impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityRe
         use citizen_identity::{
             CandidateIdentity, CandidateIdentityByCid, CidByWalletAccount, CidRecord,
             CidRecordStatus, CitizenStatus, CountryVotingCount, NextEligibilityRevision,
-            VotingEligibilityVersion, VotingEligibilityVersionCount, VotingEligibilityVersions,
-            VotingIdentity, VotingIdentityByCid, WalletAccountByCid,
+            PopulationReadyDate, VotingEligibilityVersion, VotingEligibilityVersionCount,
+            VotingEligibilityVersions, VotingIdentity, VotingIdentityByCid, WalletAccountByCid,
         };
 
         // citizen-identity 按 timestamp 校验护照窗口；benchmark externalities 的
         // 创世时间为 0，先推进到稳定的 2027 年时间点。
         pallet_timestamp::Pallet::<Runtime>::set_timestamp(1_800_000_000_000);
+        PopulationReadyDate::<Runtime>::put(citizen_identity::Pallet::<Runtime>::current_date_int());
         let now = frame_system::Pallet::<Runtime>::block_number();
-        let cid_number: citizen_identity::CidNumberBound = b"benchmark-citizen"
+        // 每个 benchmark 账户必须得到不同的公民 CID，防止多候选夹具互相覆盖。
+        let cid_number: citizen_identity::CidNumberBound = sp_io::hashing::blake2_256(who.as_ref())
             .to_vec()
             .try_into()
             .expect("bounded CID");

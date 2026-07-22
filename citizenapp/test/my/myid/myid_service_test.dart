@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/citizen/public/data/admin_division_store.dart';
 import 'package:citizenapp/my/myid/identity_badge_snapshot_store.dart';
 import 'package:citizenapp/my/myid/myid_service.dart';
@@ -18,6 +19,8 @@ void main() {
     Uint8List? voting,
     Uint8List? candidate,
     bool chainThrows = false,
+    bool mismatchWallet = false,
+    int cidStatus = 0,
     DateTime? now,
   }) {
     return MyIdService(
@@ -26,6 +29,8 @@ void main() {
         voting: voting,
         candidate: candidate,
         throws: chainThrows,
+        mismatchWallet: mismatchWallet,
+        cidStatus: cidStatus,
       ),
       divisionStore: _FakeDivisionStore(),
       badgeSnapshotStore: _FakeBadgeStore(),
@@ -50,7 +55,6 @@ void main() {
   test('有投票身份、无候选身份时为投票公民并解出全部字段', () async {
     final state = await buildService(
       voting: _encodeVoting(
-        cid: 'GD-CTZN1-8F3A2B',
         from: 20260101,
         until: 20310101,
         status: 0,
@@ -78,7 +82,6 @@ void main() {
   test('同时有候选身份时为竞选公民并解出姓名/性别/出生地', () async {
     final state = await buildService(
       voting: _encodeVoting(
-        cid: 'GD-CTZN1-8F3A2B',
         from: 20260101,
         until: 20310101,
         status: 0,
@@ -106,7 +109,6 @@ void main() {
 
   test('护照未生效/已过期/已吊销状态派生正确', () async {
     Uint8List voting({required int status}) => _encodeVoting(
-          cid: 'GD-CTZN1-8F3A2B',
           from: 20260101,
           until: 20310101,
           status: status,
@@ -136,10 +138,27 @@ void main() {
     expect(state.errorMessage, '链上身份读取失败');
   });
 
+  test('反向钱包错配或 CID 已吊销时不承认公民身份', () async {
+    final voting = _encodeVoting(
+      from: 20260101,
+      until: 20310101,
+      status: 0,
+      province: 'GD',
+      city: '0755',
+      town: '001',
+    );
+
+    final mismatch =
+        await buildService(voting: voting, mismatchWallet: true).getState();
+    final revoked = await buildService(voting: voting, cidStatus: 1).getState();
+
+    expect(mismatch.tier, MyIdTier.visitor);
+    expect(revoked.tier, MyIdTier.visitor);
+  });
+
   test('空居住镇码不会把公民误判为访客', () async {
     final state = await buildService(
       voting: _encodeVoting(
-        cid: 'GD-CTZN1-8F3A2B',
         from: 20260101,
         until: 20310101,
         status: 0,
@@ -173,7 +192,6 @@ List<int> _u32(int v) =>
     [v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff];
 
 Uint8List _encodeVoting({
-  required String cid,
   required int from,
   required int until,
   required int status,
@@ -183,7 +201,6 @@ Uint8List _encodeVoting({
   int updatedAt = 1,
 }) {
   return Uint8List.fromList([
-    ..._vec(cid),
     ..._u32(from),
     ..._u32(until),
     status,
@@ -238,21 +255,56 @@ class _FakeWalletManager extends WalletManager {
 }
 
 class _FakeChainRpc extends ChainRpc {
-  _FakeChainRpc({this.voting, this.candidate, this.throws = false});
+  _FakeChainRpc({
+    this.voting,
+    this.candidate,
+    this.throws = false,
+    this.mismatchWallet = false,
+    this.cidStatus = 0,
+  });
   final Uint8List? voting;
   final Uint8List? candidate;
   final bool throws;
+  static const String cidNumber = 'GD-CTZN1-8F3A2B';
+  final bool mismatchWallet;
+  final int cidStatus;
+  int _readIndex = 0;
 
   @override
-  Future<Map<String, Uint8List?>> fetchStorageBatch(
-    List<String> storageKeyHexList, {
-    bool forceFresh = false,
-  }) async {
+  Future<({Uint8List blockHash, int blockNumber})>
+      fetchFinalizedBlock() async => (blockHash: Uint8List(32), blockNumber: 1);
+
+  @override
+  Future<Uint8List?> fetchStorageAtBlock(
+    String storageKeyHex,
+    String blockHashHex,
+  ) async {
     if (throws) throw StateError('smoldot 未就绪');
-    final map = <String, Uint8List?>{};
-    if (storageKeyHexList.isNotEmpty) map[storageKeyHexList[0]] = voting;
-    if (storageKeyHexList.length > 1) map[storageKeyHexList[1]] = candidate;
-    return map;
+    final current = _readIndex++;
+    if (current == 0) {
+      return voting == null ? null : Uint8List.fromList(_vec(cidNumber));
+    }
+    if (current == 1) {
+      final accountId = Uint8List.fromList(
+        Keyring().decodeAddress(_validAddress),
+      );
+      if (mismatchWallet) accountId[0] ^= 0xff;
+      return accountId;
+    }
+    if (current == 2) {
+      return Uint8List.fromList([
+        ..._vec('FEDERAL_REGISTRY-CID'),
+        ...List<int>.filled(32, 7),
+        ..._vec('GD'),
+        ..._vec('0755'),
+        cidStatus,
+        ..._u32(1),
+        0,
+      ]);
+    }
+    if (current == 3) return voting;
+    if (current == 4) return candidate;
+    throw StateError('读取次数超出身份闭环');
   }
 }
 

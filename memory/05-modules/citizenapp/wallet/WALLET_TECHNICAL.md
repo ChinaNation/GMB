@@ -239,7 +239,7 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 
 ### 5.3 其他 SharedPreferences（尚未迁移）
 
-- 电子护照不再使用 `cid.bind.*` 或 `myid.*` 本地身份缓存；链上身份以 finalized `CitizenIdentity::VotingIdentityByAccount` 为准。
+- 电子护照不再使用 `cid.bind.*` 或 `myid.*` 本地身份缓存；按默认热钱包读 finalized `CidByWalletAccount`，再闭环校验 `CidRegistry` Active、`WalletAccountByCid` 反向绑定和 CID 主键身份。
 
 ### 5.4 钱包详情页布局 `WalletDetailPage`
 

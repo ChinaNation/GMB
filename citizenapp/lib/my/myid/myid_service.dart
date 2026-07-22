@@ -1,9 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:polkadart/polkadart.dart' show Hasher;
-import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-
 import 'package:citizenapp/citizen/public/data/admin_division_store.dart';
 import 'package:citizenapp/citizen/public/data/area_path_formatter.dart';
 import 'package:citizenapp/citizen/public/data/isar_admin_division_store.dart';
@@ -12,6 +9,7 @@ import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 import 'identity_badge_snapshot_store.dart';
+import 'citizen_identity_chain_reader.dart';
 
 /// 电子护照身份档。
 ///
@@ -22,10 +20,10 @@ enum MyIdTier {
   /// 默认用户账户链上无投票身份 → 访客轻节点（默认匿名，无上链公民身份）。
   visitor,
 
-  /// 有 `CitizenIdentity::VotingIdentityByAccount`。
+  /// 钱包与永久 CID 双向绑定闭环完整，且存在 `VotingIdentityByCid`。
   voting,
 
-  /// 在投票公民之上再有 `CitizenIdentity::CandidateIdentityByAccount`(公开姓名/性别/出生地)。
+  /// 在投票公民之上再有 `CandidateIdentityByCid` 对应的竞选身份。
   candidate,
 }
 
@@ -95,18 +93,20 @@ class MyIdService {
     ChainRpc? chainRpc,
     AdminDivisionStore? divisionStore,
     IdentityBadgeSnapshotStore? badgeSnapshotStore,
+    CitizenIdentityChainReader? identityChainReader,
     DateTime Function()? nowProvider,
   })  : _walletManager = walletManager ?? WalletManager(),
-        _chainRpc = chainRpc ?? ChainRpc(),
         _divisionStore = divisionStore ?? IsarAdminDivisionStore(),
         _badgeSnapshotStore =
             badgeSnapshotStore ?? IdentityBadgeSnapshotStore(),
+        _identityChainReader = identityChainReader ??
+            CitizenIdentityChainReader(chainRpc: chainRpc),
         _nowProvider = nowProvider ?? _beijingNow;
 
   final WalletManager _walletManager;
-  final ChainRpc _chainRpc;
   final AdminDivisionStore _divisionStore;
   final IdentityBadgeSnapshotStore _badgeSnapshotStore;
+  final CitizenIdentityChainReader _identityChainReader;
   final DateTime Function() _nowProvider;
 
   /// 链上护照有效期窗口按 UTC+8 判定(与 runtime `can_vote` 口径一致),
@@ -117,8 +117,8 @@ class MyIdService {
   /// 读取默认用户的电子护照状态。
   ///
   /// 只读默认用户那一个账户的链上 finalized 身份:
-  /// 无 `VotingIdentityByAccount` → 访客;有 → 投票公民,再有
-  /// `CandidateIdentityByAccount` → 竞选公民。
+  /// 钱包反查永久 CID 后，必须同时满足 CID Active、CID↔钱包双向绑定和
+  /// `VotingIdentityByCid` 存在；再有 `CandidateIdentityByCid` 才是竞选公民。
   Future<MyIdState> getState() async {
     WalletProfile? wallet;
     try {
@@ -136,26 +136,9 @@ class MyIdService {
       return const MyIdState(tier: MyIdTier.visitor, errorMessage: '请先创建钱包');
     }
 
-    final Uint8List accountId;
+    CitizenIdentityChainSnapshot? chainIdentity;
     try {
-      accountId = Uint8List.fromList(_keyring.decodeAddress(wallet.address));
-    } catch (e) {
-      debugPrint('myid decode default wallet address failed: $e');
-      return const MyIdState(
-        tier: MyIdTier.visitor,
-        status: MyIdStatus.queryFailed,
-        errorMessage: '默认用户地址无效',
-      );
-    }
-
-    final votingKey =
-        '0x${_hexEncode(_storageMapKey('CitizenIdentity', 'VotingIdentityByAccount', accountId))}';
-    final candidateKey =
-        '0x${_hexEncode(_storageMapKey('CitizenIdentity', 'CandidateIdentityByAccount', accountId))}';
-
-    Map<String, Uint8List?> rows;
-    try {
-      rows = await _chainRpc.fetchStorageBatch([votingKey, candidateKey]);
+      chainIdentity = await _identityChainReader.readByWallet(wallet.address);
     } catch (e) {
       debugPrint('myid chain identity query failed: $e');
       // 链读失败不静默降级访客、不覆盖徽章快照,交由 UI 提示重试。
@@ -166,13 +149,12 @@ class MyIdService {
       );
     }
 
-    final votingRaw = rows[votingKey];
-    if (votingRaw == null) {
+    if (chainIdentity == null) {
       await _persistBadgeSnapshot(wallet.address, 'visitor');
       return const MyIdState(tier: MyIdTier.visitor);
     }
 
-    final voting = _decodeVotingIdentity(votingRaw);
+    final voting = _decodeVotingIdentity(chainIdentity.votingIdentity);
     if (voting == null) {
       // 有记录但解不开 = 数据异常,不静默当访客。
       return const MyIdState(
@@ -189,7 +171,7 @@ class MyIdService {
       voting.resTown,
     );
 
-    final candidateRaw = rows[candidateKey];
+    final candidateRaw = chainIdentity.candidateIdentity;
     final candidate =
         candidateRaw == null ? null : _decodeCandidateIdentity(candidateRaw);
     final tier = candidate != null ? MyIdTier.candidate : MyIdTier.voting;
@@ -210,7 +192,7 @@ class MyIdService {
       tier: tier,
       status: status,
       votingAccount: wallet.address,
-      cidNumber: voting.cidNumber,
+      cidNumber: chainIdentity.cidNumber,
       residenceDistrict: residence,
       passportValidFrom: _formatDateInt(voting.passportValidFrom),
       passportValidUntil: _formatDateInt(voting.passportValidUntil),
@@ -275,13 +257,11 @@ class MyIdService {
 
   /// 解码链上 `VotingIdentity<BlockNumber>`,字段序与
   /// `citizenchain/runtime/misc/citizen-identity/src/lib.rs` 逐字节一致:
-  /// cid_number + valid_from(u32) + valid_until(u32) + status(u8)
-  /// + residence_省/市/镇码 + updated_at(u32)。
+  /// valid_from(u32) + valid_until(u32) + status(u8) + residence_省/市/镇码
+  /// + updated_at(u32)。永久 CID 只存在于 storage key，不在值中重复保存。
   _VotingIdentity? _decodeVotingIdentity(Uint8List data) {
     try {
       var offset = 0;
-      final cid = _readUtf8Vec(data, offset, maxLen: 32);
-      offset = cid.nextOffset;
       if (offset + 4 + 4 + 1 > data.length) return null;
       final validFrom = _readU32Le(data, offset);
       offset += 4;
@@ -307,7 +287,6 @@ class MyIdService {
       // updated_at(BlockNumber=u32):只校验尾部存在,展示不使用。
       if (offset + 4 > data.length) return null;
       return _VotingIdentity(
-        cidNumber: cid.value,
         passportValidFrom: validFrom,
         passportValidUntil: validUntil,
         citizenStatus: status,
@@ -358,49 +337,6 @@ class MyIdService {
     } catch (_) {
       return null;
     }
-  }
-
-  static final Keyring _keyring = Keyring();
-
-  static Uint8List _storageMapKey(
-    String palletName,
-    String storageName,
-    Uint8List keyData,
-  ) {
-    final palletHash = Hasher.twoxx128.hashString(palletName);
-    final storageHash = Hasher.twoxx128.hashString(storageName);
-    final keyHash = _blake2128Concat(keyData);
-    final result =
-        Uint8List(palletHash.length + storageHash.length + keyHash.length);
-    var offset = 0;
-    result.setAll(offset, palletHash);
-    offset += palletHash.length;
-    result.setAll(offset, storageHash);
-    offset += storageHash.length;
-    result.setAll(offset, keyHash);
-    return result;
-  }
-
-  static Uint8List _blake2128Concat(Uint8List data) {
-    final hash = Hasher.blake2b128.hash(data);
-    final result = Uint8List(hash.length + data.length);
-    result.setAll(0, hash);
-    result.setAll(hash.length, data);
-    return result;
-  }
-
-  /// 读 `BoundedVec<u8>`(Compact 长度 + 字节),内容必须非空;空/超长抛异常。
-  /// 仅 cid_number 用(空 cid = 无效身份信号)。
-  static ({String value, int nextOffset}) _readUtf8Vec(
-    Uint8List data,
-    int offset, {
-    required int maxLen,
-  }) {
-    final result = _readUtf8VecAllowEmpty(data, offset, maxLen: maxLen);
-    if (result.value.trim().isEmpty) {
-      throw const FormatException('BoundedVec 内容为空');
-    }
-    return result;
   }
 
   /// 读 `BoundedVec<u8>`,允许空(长度 0 返回空串)。区划码/姓名用。
@@ -480,14 +416,10 @@ class MyIdService {
         '${month.toString().padLeft(2, '0')}-'
         '${day.toString().padLeft(2, '0')}';
   }
-
-  static String _hexEncode(List<int> bytes) =>
-      bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 }
 
 class _VotingIdentity {
   const _VotingIdentity({
-    required this.cidNumber,
     required this.passportValidFrom,
     required this.passportValidUntil,
     required this.citizenStatus,
@@ -496,7 +428,6 @@ class _VotingIdentity {
     required this.resTown,
   });
 
-  final String cidNumber;
   final int passportValidFrom;
   final int passportValidUntil;
   final _CitizenStatus citizenStatus;

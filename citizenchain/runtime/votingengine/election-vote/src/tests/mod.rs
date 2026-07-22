@@ -13,8 +13,8 @@ use frame_support::{
 };
 use frame_system as system;
 use primitives::cid::{
-    china::{china_lf::CHINA_LF, china_zf::CHINA_ZF},
-    code::{institution_code_from_cid_number, InstitutionCode, FRG, NLG},
+    china::china_lf::CHINA_LF,
+    code::{institution_code_from_cid_number, InstitutionCode, NLG},
 };
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 use votingengine::{
@@ -26,7 +26,7 @@ use votingengine::{
 use crate::{
     pallet::{
         ElectionCandidateTallies, ElectionCandidates, ElectionMetaStore, ElectionResults,
-        ElectionTallyStore, Error, MutualElectionVotesByTicket, PopularElectionVotesByVoter,
+        ElectionTallyStore, Error, MutualElectionVotesByTicket, PopularElectionVotesByCid,
     },
     types::ElectionMode,
 };
@@ -67,8 +67,7 @@ impl system::Config for Test {
     type Lookup = IdentityLookup<Self::AccountId>;
 }
 
-const ORGANIZER_CODE: InstitutionCode = FRG;
-const TARGET_CODE: InstitutionCode = NLG;
+const INSTITUTION_CODE: InstitutionCode = NLG;
 
 fn account(id: u8) -> AccountId32 {
     AccountId32::new([id; 32])
@@ -78,28 +77,16 @@ fn organizer_admin() -> AccountId32 {
     account(2)
 }
 
-fn organizer_cid_number() -> votingengine::types::CidNumber {
-    CHINA_ZF
-        .iter()
-        .find(|entry| institution_code_from_cid_number(entry.cid_number) == Some(ORGANIZER_CODE))
-        .expect("federal registry CID should exist")
-        .cid_number
-        .as_bytes()
-        .to_vec()
-        .try_into()
-        .expect("organizer CID should fit")
-}
-
-fn target_cid_number() -> votingengine::types::CidNumber {
+fn institution_cid_number() -> votingengine::types::CidNumber {
     CHINA_LF
         .iter()
-        .find(|entry| institution_code_from_cid_number(entry.cid_number) == Some(TARGET_CODE))
+        .find(|entry| institution_code_from_cid_number(entry.cid_number) == Some(INSTITUTION_CODE))
         .expect("national legislature CID should exist")
         .cid_number
         .as_bytes()
         .to_vec()
         .try_into()
-        .expect("target CID should fit")
+        .expect("institution CID should fit")
 }
 
 fn target_admins() -> Vec<AccountId32> {
@@ -108,6 +95,7 @@ fn target_admins() -> Vec<AccountId32> {
 
 thread_local! {
     static POPULATION_COUNT: RefCell<u64> = const { RefCell::new(3) };
+    static POPULATION_READY: RefCell<bool> = const { RefCell::new(true) };
 }
 
 pub struct TestCitizenIdentityReader;
@@ -116,33 +104,64 @@ pub struct TestInstitutionRoleProvider;
 
 const ORGANIZER_ROLE: &[u8] = b"ORGANIZER";
 const TARGET_ROLE: &[u8] = b"MEMBER";
+const SECOND_VOTER_ROLE: &[u8] = b"SECOND_MEMBER";
+const ELECTED_ROLE: &[u8] = b"SPEAKER";
 
 impl CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
-    fn can_vote(who: &AccountId32, _scope: &PopulationScope) -> bool {
-        *who != account(250)
+    fn citizen_subject(who: &AccountId32) -> Option<votingengine::CitizenSubject<AccountId32>> {
+        (*who != account(251)).then(|| test_citizen_subject(who))
     }
 
-    fn can_be_candidate(who: &AccountId32, _scope: &PopulationScope) -> bool {
-        *who != account(251)
+    fn voting_subject(
+        who: &AccountId32,
+        _scope: &PopulationScope,
+    ) -> Option<votingengine::CitizenSubject<AccountId32>> {
+        (*who != account(250)).then(|| test_citizen_subject(who))
     }
 
-    fn population_count(_scope: &PopulationScope) -> u64 {
-        POPULATION_COUNT.with(|count| *count.borrow())
+    fn candidate_subject(
+        who: &AccountId32,
+        _scope: &PopulationScope,
+    ) -> Option<votingengine::CitizenSubject<AccountId32>> {
+        (*who != account(251)).then(|| test_citizen_subject(who))
     }
 
-    fn population_data(scope: &PopulationScope) -> votingengine::PopulationData {
-        votingengine::PopulationData {
+    fn population_data(scope: &PopulationScope) -> Option<votingengine::PopulationData> {
+        if !POPULATION_READY.with(|ready| *ready.borrow()) {
+            return None;
+        }
+        Some(votingengine::PopulationData {
             scope: scope.clone(),
             eligible_total: POPULATION_COUNT.with(|count| *count.borrow()),
             eligibility_revision: 1,
             eligibility_date: 20_000,
-        }
+        })
     }
 
-    fn can_vote_at(who: &AccountId32, population_data: &votingengine::PopulationData) -> bool {
-        (0..population_data.eligible_total)
+    fn voting_subject_at(
+        who: &AccountId32,
+        population_data: &votingengine::PopulationData,
+    ) -> Option<votingengine::CitizenSubject<AccountId32>> {
+        ((0..population_data.eligible_total)
             .map(|offset| account(21u8.saturating_add(offset as u8)))
             .any(|voter| &voter == who)
+            || *who == account(29))
+        .then(|| test_citizen_subject(who))
+    }
+}
+
+fn test_citizen_subject(who: &AccountId32) -> votingengine::CitizenSubject<AccountId32> {
+    let permanent_account = if *who == account(29) {
+        account(21)
+    } else {
+        who.clone()
+    };
+    votingengine::CitizenSubject {
+        cid_number: <AccountId32 as AsRef<[u8]>>::as_ref(&permanent_account)
+            .to_vec()
+            .try_into()
+            .expect("account fits CID"),
+        wallet_account: who.clone(),
     }
 }
 
@@ -152,23 +171,27 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         cid_number: &[u8],
         who: &AccountId32,
     ) -> bool {
-        institution_code == ORGANIZER_CODE
-            && cid_number == organizer_cid_number().as_slice()
+        institution_code == INSTITUTION_CODE
+            && cid_number == institution_cid_number().as_slice()
             && *who == organizer_admin()
     }
 }
 
 impl InstitutionRoleProvider<AccountId32> for TestInstitutionRoleProvider {
     fn is_active_assignment(cid_number: &[u8], who: &AccountId32, role_code: &[u8]) -> bool {
-        cid_number == organizer_cid_number().as_slice()
+        cid_number == institution_cid_number().as_slice()
             && who == &organizer_admin()
             && role_code == ORGANIZER_ROLE
     }
 
     fn active_accounts_for_role(cid_number: &[u8], role_code: &[u8]) -> Vec<AccountId32> {
-        if cid_number == target_cid_number().as_slice() && role_code == TARGET_ROLE {
+        if cid_number == institution_cid_number().as_slice() && role_code == TARGET_ROLE {
             target_admins()
-        } else if cid_number == organizer_cid_number().as_slice() && role_code == ORGANIZER_ROLE {
+        } else if cid_number == institution_cid_number().as_slice()
+            && role_code == SECOND_VOTER_ROLE
+        {
+            vec![target_admins()[0].clone()]
+        } else if cid_number == institution_cid_number().as_slice() && role_code == ORGANIZER_ROLE {
             vec![organizer_admin()]
         } else {
             Vec::new()
@@ -219,7 +242,6 @@ impl votingengine::Config for Test {
 
 impl crate::pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
-    type MaxElectionOfficeCodeLen = ConstU32<32>;
     type MaxElectionCandidates = ConstU32<8>;
     type InstitutionRoleProvider = TestInstitutionRoleProvider;
     type WeightInfo = ();
@@ -227,6 +249,7 @@ impl crate::pallet::Config for Test {
 
 fn new_test_ext() -> sp_io::TestExternalities {
     POPULATION_COUNT.with(|count| *count.borrow_mut() = 3);
+    POPULATION_READY.with(|ready| *ready.borrow_mut() = true);
     let storage = frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .expect("test storage should build");
@@ -235,27 +258,31 @@ fn new_test_ext() -> sp_io::TestExternalities {
     ext
 }
 
-fn office_code() -> crate::pallet::ElectionOfficeCodeOf<Test> {
-    b"speaker".to_vec().try_into().expect("bounded office code")
+fn elected_role_code() -> votingengine::types::RoleCode {
+    ELECTED_ROLE.to_vec().try_into().expect("role fits")
+}
+
+fn candidate(id: u8) -> votingengine::CitizenSubject<AccountId32> {
+    test_citizen_subject(&account(id))
 }
 
 fn vote_plan(mutual: bool) -> votingengine::types::VotePlanOf<AccountId32> {
     let owner: frame_support::BoundedVec<
         u8,
         ConstU32<{ entity_primitives::BUSINESS_MODULE_TAG_MAX_BYTES }>,
-    > = b"election-campaign"
+    > = b"test-election-business"
         .to_vec()
         .try_into()
         .expect("owner fits");
     let proposer =
         votingengine::AuthorizationSubject::Institution(entity_primitives::RoleSubject {
-            cid_number: organizer_cid_number(),
+            cid_number: institution_cid_number(),
             role_code: ORGANIZER_ROLE.to_vec().try_into().expect("role fits"),
         });
     let voters = mutual
         .then(|| {
             votingengine::AuthorizationSubject::Institution(entity_primitives::RoleSubject {
-                cid_number: target_cid_number(),
+                cid_number: institution_cid_number(),
                 role_code: TARGET_ROLE.to_vec().try_into().expect("role fits"),
             })
         })
@@ -275,14 +302,25 @@ fn vote_plan(mutual: bool) -> votingengine::types::VotePlanOf<AccountId32> {
     .expect("election plan valid")
 }
 
-fn create_popular(candidates: Vec<AccountId32>) -> u64 {
+fn multi_role_vote_plan() -> votingengine::types::VotePlanOf<AccountId32> {
+    let mut plan = vote_plan(true);
+    plan.voter_subjects
+        .try_push(votingengine::AuthorizationSubject::Institution(
+            entity_primitives::RoleSubject {
+                cid_number: institution_cid_number(),
+                role_code: SECOND_VOTER_ROLE.to_vec().try_into().expect("role fits"),
+            },
+        ))
+        .expect("second role fits vote plan");
+    plan
+}
+
+fn create_popular(candidates: Vec<votingengine::CitizenSubject<AccountId32>>) -> u64 {
     ElectionVote::do_create_popular_election(
         organizer_admin(),
         vote_plan(false),
-        organizer_cid_number(),
-        target_cid_number(),
-        office_code(),
-        7,
+        institution_cid_number(),
+        elected_role_code(),
         1,
         10,
         20,
@@ -293,18 +331,15 @@ fn create_popular(candidates: Vec<AccountId32>) -> u64 {
 }
 
 fn create_mutual() -> u64 {
-    let admins = target_admins();
     ElectionVote::do_create_mutual_election(
         organizer_admin(),
         vote_plan(true),
-        organizer_cid_number(),
-        target_cid_number(),
-        office_code(),
-        8,
+        institution_cid_number(),
+        elected_role_code(),
         1,
         10,
         20,
-        vec![admins[0].clone(), admins[1].clone()],
+        vec![candidate(11), candidate(12)],
     )
     .expect("mutual election should be created")
 }
@@ -312,7 +347,7 @@ fn create_mutual() -> u64 {
 #[test]
 fn popular_election_uses_population_snapshot_and_generates_result() {
     new_test_ext().execute_with(|| {
-        let candidates = vec![account(11), account(12)];
+        let candidates = vec![candidate(11), candidate(12)];
         let voters = vec![account(21), account(22), account(23)];
         let proposal_id = create_popular(candidates.clone());
 
@@ -350,7 +385,7 @@ fn popular_election_uses_population_snapshot_and_generates_result() {
             Some(3)
         );
         let winners = ElectionResults::<Test>::get(proposal_id).unwrap();
-        assert_eq!(winners[0].account, candidates[0]);
+        assert_eq!(winners[0].candidate_subject, candidates[0]);
         assert_eq!(winners[0].votes, 2);
         assert_eq!(
             ElectionVote::on_election_vote_finalized(proposal_id, true),
@@ -369,12 +404,14 @@ fn mutual_election_uses_role_assignment_snapshot() {
                 RuntimeOrigin::signed(voter.clone()),
                 proposal_id,
                 TARGET_ROLE.to_vec().try_into().expect("role fits"),
-                admins[0].clone()
+                candidate(11)
             ));
         }
 
         let meta = ElectionMetaStore::<Test>::get(proposal_id).unwrap();
         assert_eq!(meta.mode, ElectionMode::Mutual);
+        assert_eq!(meta.actor_cid_number, institution_cid_number());
+        assert_eq!(meta.role_code, elected_role_code());
         assert_eq!(
             votingengine::pallet::Proposals::<Test>::get(proposal_id)
                 .unwrap()
@@ -385,21 +422,18 @@ fn mutual_election_uses_role_assignment_snapshot() {
 }
 
 #[test]
-fn creation_rejects_vote_plan_for_wrong_target_role() {
+fn creation_rejects_vote_plan_without_mutual_voter_role() {
     new_test_ext().execute_with(|| {
-        let admins = target_admins();
         assert_noop!(
             ElectionVote::do_create_mutual_election(
                 organizer_admin(),
                 vote_plan(false),
-                organizer_cid_number(),
-                target_cid_number(),
-                office_code(),
-                8,
+                institution_cid_number(),
+                elected_role_code(),
                 1,
                 10,
                 20,
-                vec![admins[0].clone()],
+                vec![candidate(11)],
             ),
             Error::<Test>::InvalidVotePlan
         );
@@ -407,37 +441,37 @@ fn creation_rejects_vote_plan_for_wrong_target_role() {
 }
 
 #[test]
-fn popular_creation_rejects_ineligible_accounts_and_bad_shape() {
+fn popular_creation_rejects_invalid_candidate_subject_and_bad_shape() {
     new_test_ext().execute_with(|| {
+        let invalid_subject = votingengine::CitizenSubject {
+            cid_number: candidate(12).cid_number,
+            wallet_account: account(251),
+        };
         assert_noop!(
             ElectionVote::do_create_popular_election(
                 organizer_admin(),
                 vote_plan(false),
-                organizer_cid_number(),
-                target_cid_number(),
-                office_code(),
-                7,
+                institution_cid_number(),
+                elected_role_code(),
                 1,
                 10,
                 20,
                 PopulationScope::Country,
-                vec![account(11), account(251)]
+                vec![candidate(11), invalid_subject]
             ),
-            Error::<Test>::CandidateNotEligible
+            Error::<Test>::CandidateSubjectInvalid
         );
         assert_noop!(
             ElectionVote::do_create_popular_election(
                 account(9),
                 vote_plan(false),
-                organizer_cid_number(),
-                target_cid_number(),
-                office_code(),
-                7,
+                institution_cid_number(),
+                elected_role_code(),
                 1,
                 10,
                 20,
                 PopulationScope::Country,
-                vec![account(11), account(12)]
+                vec![candidate(11), candidate(12)]
             ),
             Error::<Test>::NotOrganizerAdmin
         );
@@ -445,9 +479,35 @@ fn popular_creation_rejects_ineligible_accounts_and_bad_shape() {
 }
 
 #[test]
+fn popular_creation_rejects_population_data_that_is_not_ready() {
+    new_test_ext().execute_with(|| {
+        POPULATION_READY.with(|ready| *ready.borrow_mut() = false);
+        assert_noop!(
+            ElectionVote::do_create_popular_election(
+                organizer_admin(),
+                vote_plan(false),
+                institution_cid_number(),
+                elected_role_code(),
+                1,
+                10,
+                20,
+                PopulationScope::Country,
+                vec![candidate(11), candidate(12)]
+            ),
+            votingengine::Error::<Test>::PopulationDataNotReady
+        );
+        assert_eq!(votingengine::Proposals::<Test>::iter().count(), 0);
+        assert_eq!(
+            votingengine::ProposalPopulationSnapshots::<Test>::iter().count(),
+            0
+        );
+    });
+}
+
+#[test]
 fn cast_rejects_wrong_voter_candidate_stage_and_duplicate_vote() {
     new_test_ext().execute_with(|| {
-        let candidates = vec![account(11), account(12)];
+        let candidates = vec![candidate(11), candidate(12)];
         let voters = vec![account(21), account(22), account(23)];
         let proposal_id = create_popular(candidates.clone());
         assert_noop!(
@@ -462,7 +522,7 @@ fn cast_rejects_wrong_voter_candidate_stage_and_duplicate_vote() {
             ElectionVote::cast_popular_vote(
                 RuntimeOrigin::signed(voters[0].clone()),
                 proposal_id,
-                account(99)
+                candidate(99)
             ),
             Error::<Test>::CandidateNotInSnapshot
         );
@@ -492,9 +552,102 @@ fn cast_rejects_wrong_voter_candidate_stage_and_duplicate_vote() {
 }
 
 #[test]
+fn same_citizen_cid_cannot_vote_twice_after_wallet_replacement() {
+    new_test_ext().execute_with(|| {
+        let proposal_id = create_popular(vec![candidate(11), candidate(12)]);
+        let original_wallet = account(21);
+        let replacement_wallet = account(29);
+        let voter_subject = test_citizen_subject(&original_wallet);
+
+        assert_ok!(ElectionVote::cast_popular_vote(
+            RuntimeOrigin::signed(original_wallet),
+            proposal_id,
+            candidate(11),
+        ));
+        let ticket = PopularElectionVotesByCid::<Test>::get(proposal_id, &voter_subject.cid_number)
+            .expect("complete popular election ticket is stored");
+        assert_eq!(ticket.voter_subject, voter_subject);
+        assert_eq!(ticket.candidate_subject, candidate(11));
+
+        assert_noop!(
+            ElectionVote::cast_popular_vote(
+                RuntimeOrigin::signed(replacement_wallet),
+                proposal_id,
+                candidate(11),
+            ),
+            votingengine::Error::<Test>::AlreadyVoted
+        );
+    });
+}
+
+#[test]
+fn candidate_snapshot_rejects_duplicate_permanent_cid() {
+    new_test_ext().execute_with(|| {
+        let duplicate_cid_subject = votingengine::CitizenSubject {
+            cid_number: candidate(11).cid_number,
+            wallet_account: account(12),
+        };
+        assert_noop!(
+            ElectionVote::do_create_popular_election(
+                organizer_admin(),
+                vote_plan(false),
+                institution_cid_number(),
+                elected_role_code(),
+                1,
+                10,
+                20,
+                PopulationScope::Country,
+                vec![candidate(11), duplicate_cid_subject],
+            ),
+            Error::<Test>::DuplicateCandidateCid
+        );
+    });
+}
+
+#[test]
+fn same_admin_can_vote_once_for_each_frozen_institution_role() {
+    new_test_ext().execute_with(|| {
+        let proposal_id = ElectionVote::do_create_mutual_election(
+            organizer_admin(),
+            multi_role_vote_plan(),
+            institution_cid_number(),
+            elected_role_code(),
+            1,
+            10,
+            20,
+            vec![candidate(11), candidate(12)],
+        )
+        .expect("multi-role mutual election should be created");
+        let voter = target_admins()[0].clone();
+
+        assert_ok!(ElectionVote::cast_mutual_vote(
+            RuntimeOrigin::signed(voter.clone()),
+            proposal_id,
+            TARGET_ROLE.to_vec().try_into().expect("role fits"),
+            candidate(11),
+        ));
+        assert_ok!(ElectionVote::cast_mutual_vote(
+            RuntimeOrigin::signed(voter),
+            proposal_id,
+            SECOND_VOTER_ROLE.to_vec().try_into().expect("role fits"),
+            candidate(11),
+        ));
+
+        assert_eq!(
+            MutualElectionVotesByTicket::<Test>::iter_prefix(proposal_id).count(),
+            2
+        );
+        assert_eq!(
+            ElectionCandidateTallies::<Test>::get(proposal_id, candidate(11)),
+            2
+        );
+    });
+}
+
+#[test]
 fn timeout_is_rejected_before_expiry_then_finalizes_no_vote_election() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_popular(vec![account(11), account(12)]);
+        let proposal_id = create_popular(vec![candidate(11), candidate(12)]);
         let proposal = votingengine::pallet::Proposals::<Test>::get(proposal_id).unwrap();
         assert_noop!(
             ElectionVote::finalize_election_popular_timeout(&proposal, proposal_id),
@@ -517,7 +670,7 @@ fn timeout_is_rejected_before_expiry_then_finalizes_no_vote_election() {
 #[test]
 fn election_cleanup_removes_all_track_storage() {
     new_test_ext().execute_with(|| {
-        let candidates = vec![account(11), account(12)];
+        let candidates = vec![candidate(11), candidate(12)];
         let voters = vec![account(21), account(22), account(23)];
         let proposal_id = create_popular(candidates.clone());
         assert_ok!(ElectionVote::cast_popular_vote(
@@ -550,11 +703,9 @@ fn election_cleanup_removes_all_track_storage() {
         assert!(!ElectionMetaStore::<Test>::contains_key(proposal_id));
         assert!(!ElectionCandidates::<Test>::contains_key(proposal_id));
         assert!(!ElectionResults::<Test>::contains_key(proposal_id));
-        assert!(
-            PopularElectionVotesByVoter::<Test>::iter_prefix(proposal_id)
-                .next()
-                .is_none()
-        );
+        assert!(PopularElectionVotesByCid::<Test>::iter_prefix(proposal_id)
+            .next()
+            .is_none());
         assert!(
             MutualElectionVotesByTicket::<Test>::iter_prefix(proposal_id)
                 .next()
@@ -574,7 +725,7 @@ fn result_callback_fails_closed_for_incomplete_or_foreign_result() {
             ElectionVote::on_election_vote_finalized(999, true),
             Ok(ProposalExecutionOutcome::Ignored)
         );
-        let proposal_id = create_popular(vec![account(11), account(12)]);
+        let proposal_id = create_popular(vec![candidate(11), candidate(12)]);
         assert_eq!(
             ElectionVote::on_election_vote_finalized(proposal_id, true),
             Ok(ProposalExecutionOutcome::FatalFailed)

@@ -13,7 +13,6 @@
 | `grandpakey-change` | `frame_system`, `votingengine`（通过 InternalVoteEngine） |
 | `resolution-issuance` | `frame_system`, `votingengine`（通过 JointVoteEngine）, `pallet_balances`（通过 Currency） |
 | `runtime-upgrade` | `frame_system`, `votingengine`（通过 JointVoteEngine） |
-| `election-campaign` | 开发期无规则骨架，已决定删除；未来具体选举业务模块各自依赖 `election-vote` 内部接口 |
 | `entity-primitives` | 无 storage；定义实体生命周期共用 trait |
 | `public-manage` | `frame_system`, `votingengine`（通过 InternalVoteEngine）, `admin-primitives`（通过 lifecycle/query trait）, `entity-primitives` |
 | `private-manage` | `frame_system`, `votingengine`（通过 InternalVoteEngine）, `admin-primitives`（通过 lifecycle/query trait）, `entity-primitives` |
@@ -63,7 +62,7 @@
 
 ## 选举业务与投票边界
 
-无具体规则的通用 `election-campaign` 已决定删除。未来每一种公权选举业务在 `runtime/public/` 下建立独立模块，并由该模块定义本机构发起岗位、目标 `role_code`、普选/互选、候选条件、选民范围、席位、任期和结果写回。
+无具体规则的开发期通用选举业务壳已经删除，原 pallet index 32 永久留空。未来每一种公权选举业务在 `runtime/public/` 下建立独立模块，并由该模块定义本机构发起岗位、目标 `role_code`、普选/互选、候选条件、选民范围、席位、任期和结果写回。
 
 `election-vote` 是选举投票模块，负责选举投票提案、投票去重、计票、超时结算、结果快照和清理。底层创建外部入口已删除；runtime 只保留投票动作。结果快照必须由创建提案的具体选举业务模块复核后才能形成 entity 任职结果。机构只能发起本机构岗位选举，最终只绑定 `actor_cid_number + role_code`。
 

@@ -22,11 +22,12 @@ void main() {
         PalletRegistry.resolutionIssuancePallet,
         PalletRegistry.offchainTransactionPallet,
         PalletRegistry.citizenIdentityPallet,
+        PalletRegistry.electionVotePallet,
         PalletRegistry.onchainIssuancePallet,
         PalletRegistry.addressRegistryPallet,
         PalletRegistry.squarePostPallet,
       };
-      expect(pallets.length, 16);
+      expect(pallets.length, 17);
     });
 
     test('投票引擎 sub-pallet call_index', () {
@@ -37,6 +38,9 @@ void main() {
       expect(PalletRegistry.jointVotePallet, 21);
       expect(PalletRegistry.jointVoteCall, 0);
       expect(PalletRegistry.castReferendumCall, 1);
+      expect(PalletRegistry.electionVotePallet, 22);
+      expect(PalletRegistry.castPopularVoteCall, 2);
+      expect(PalletRegistry.castMutualVoteCall, 3);
       expect(PalletRegistry.finalizeProposalCall, 3);
     });
 

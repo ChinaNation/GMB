@@ -657,14 +657,14 @@ fn joint_proposal_must_be_created_by_nrc_or_prc_admin() {
         );
 
         // 省储委会管理员可以创建联合提案
-        set_population_count(10);
+        set_population_data(10);
         assert_ok!(try_create_joint_proposal_for(prc_admin(0), prc_cid(), 10,));
 
         // 国家储委会管理员可以创建联合提案
         // 使用独立外部状态验证另一类合法发起人，避免两个联合提案争用同一组治理锁。
     });
     new_test_ext().execute_with(|| {
-        set_population_count(10);
+        set_population_data(10);
         assert_ok!(try_create_joint_proposal_for(nrc_admin(0), nrc_cid(), 10,));
     });
 }
@@ -672,7 +672,7 @@ fn joint_proposal_must_be_created_by_nrc_or_prc_admin() {
 #[test]
 fn joint_proposal_creates_and_binds_population_snapshot_inline() {
     new_test_ext().execute_with(|| {
-        set_population_count(10);
+        set_population_data(10);
         let proposal_id = try_create_joint_proposal_for(nrc_admin(0), nrc_cid(), 10)
             .expect("joint proposal should create its own snapshot");
         assert_eq!(
@@ -685,7 +685,7 @@ fn joint_proposal_creates_and_binds_population_snapshot_inline() {
 #[test]
 fn joint_proposal_with_empty_population_rolls_back() {
     new_test_ext().execute_with(|| {
-        set_population_count(0);
+        set_population_data(0);
         assert_noop!(
             try_create_joint_proposal_for(nrc_admin(0), nrc_cid(), 0,),
             joint_vote::Error::<Test>::CitizenEligibleTotalNotSet
@@ -832,9 +832,9 @@ fn joint_referendum_allows_eligible_account() {
             true
         ));
         assert_eq!(joint_vote::ReferendumTallies::<Test>::get(0).yes, 1);
-        assert!(joint_vote::ReferendumVotesByAccount::<Test>::contains_key(
+        assert!(joint_vote::ReferendumVotesByCid::<Test>::contains_key(
             0,
-            nrc_admin(0)
+            test_citizen_subject(&nrc_admin(0)).cid_number
         ));
     });
 }
@@ -898,9 +898,9 @@ fn joint_referendum_rejects_votes_beyond_population_snapshot_denominator() {
             <joint_vote::Pallet<Test>>::do_jointreferendum_vote(nrc_admin(0), 0, true),
             joint_vote::Error::<Test>::ReferendumSnapshotExhausted
         );
-        assert!(!joint_vote::ReferendumVotesByAccount::<Test>::contains_key(
+        assert!(!joint_vote::ReferendumVotesByCid::<Test>::contains_key(
             0,
-            nrc_admin(0)
+            test_citizen_subject(&nrc_admin(0)).cid_number
         ));
     });
 }
@@ -954,9 +954,9 @@ fn joint_referendum_timeout_auto_registers_cleanup_and_clears_referendum_votes()
             0,
             true
         ));
-        assert!(joint_vote::ReferendumVotesByAccount::<Test>::contains_key(
+        assert!(joint_vote::ReferendumVotesByCid::<Test>::contains_key(
             0,
-            nrc_admin(0)
+            test_citizen_subject(&nrc_admin(0)).cid_number
         ));
 
         System::set_block_number(6);
@@ -968,9 +968,9 @@ fn joint_referendum_timeout_auto_registers_cleanup_and_clears_referendum_votes()
                 .status,
             STATUS_REJECTED
         );
-        assert!(joint_vote::ReferendumVotesByAccount::<Test>::contains_key(
+        assert!(joint_vote::ReferendumVotesByCid::<Test>::contains_key(
             0,
-            nrc_admin(0)
+            test_citizen_subject(&nrc_admin(0)).cid_number
         ));
 
         let retention = 90u64 * primitives::pow_const::BLOCKS_PER_DAY;
@@ -979,9 +979,9 @@ fn joint_referendum_timeout_auto_registers_cleanup_and_clears_referendum_votes()
             System::set_block_number(cleanup_block + i);
             <VotingEngine as Hooks<u64>>::on_initialize(cleanup_block + i);
         }
-        assert!(!joint_vote::ReferendumVotesByAccount::<Test>::contains_key(
+        assert!(!joint_vote::ReferendumVotesByCid::<Test>::contains_key(
             0,
-            nrc_admin(0)
+            test_citizen_subject(&nrc_admin(0)).cid_number
         ));
     });
 }
@@ -1044,9 +1044,9 @@ fn delayed_cleanup_cleans_referendum_votes_after_retention() {
 
         let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
         assert_eq!(proposal.status, STATUS_EXECUTED);
-        assert!(joint_vote::ReferendumVotesByAccount::<Test>::contains_key(
+        assert!(joint_vote::ReferendumVotesByCid::<Test>::contains_key(
             0,
-            nrc_admin(0)
+            test_citizen_subject(&nrc_admin(0)).cid_number
         ));
 
         let retention = 90u64 * primitives::pow_const::BLOCKS_PER_DAY;
@@ -1055,9 +1055,9 @@ fn delayed_cleanup_cleans_referendum_votes_after_retention() {
             System::set_block_number(cleanup_block + i);
             <VotingEngine as Hooks<u64>>::on_initialize(cleanup_block + i);
         }
-        assert!(!joint_vote::ReferendumVotesByAccount::<Test>::contains_key(
+        assert!(!joint_vote::ReferendumVotesByCid::<Test>::contains_key(
             0,
-            nrc_admin(0)
+            test_citizen_subject(&nrc_admin(0)).cid_number
         ));
     });
 }
@@ -1318,7 +1318,15 @@ fn joint_vote_callback_failure_defers_execution_without_reverting_vote_result() 
 fn joint_vote_callback_failure_does_not_cleanup_referendum_votes() {
     new_test_ext().execute_with(|| {
         insert_joint_referendum_proposal(0, 10, 100);
-        joint_vote::ReferendumVotesByAccount::<Test>::insert(0, nrc_admin(0), true);
+        let voter_subject = test_citizen_subject(&nrc_admin(0));
+        joint_vote::ReferendumVotesByCid::<Test>::insert(
+            0,
+            voter_subject.cid_number.clone(),
+            votingengine::CitizenReferendumTicket {
+                voter_subject,
+                approve: true,
+            },
+        );
         set_joint_callback_should_fail(true);
 
         assert_ok!(VotingEngine::set_status_and_emit(0, STATUS_PASSED));
@@ -1329,9 +1337,9 @@ fn joint_vote_callback_failure_does_not_cleanup_referendum_votes() {
                 .status,
             STATUS_PASSED
         );
-        assert!(joint_vote::ReferendumVotesByAccount::<Test>::contains_key(
+        assert!(joint_vote::ReferendumVotesByCid::<Test>::contains_key(
             0,
-            nrc_admin(0)
+            test_citizen_subject(&nrc_admin(0)).cid_number
         ));
     });
 }
@@ -1712,7 +1720,15 @@ fn delayed_cleanup_chunks_cleanup_across_blocks() {
         joint_vote::JointVotesByInstitution::<Test>::insert(proposal_id, prc_cid(), true);
         joint_vote::JointVotesByInstitution::<Test>::insert(proposal_id, prb_cid(), true);
         for account in referendum_accounts.iter() {
-            joint_vote::ReferendumVotesByAccount::<Test>::insert(proposal_id, account, true);
+            let voter_subject = test_citizen_subject(account);
+            joint_vote::ReferendumVotesByCid::<Test>::insert(
+                proposal_id,
+                voter_subject.cid_number.clone(),
+                votingengine::CitizenReferendumTicket {
+                    voter_subject,
+                    approve: true,
+                },
+            );
         }
 
         // 投票通过后由 callback 返回 Executed，终态会注册 90 天后清理。
@@ -1740,9 +1756,9 @@ fn delayed_cleanup_chunks_cleanup_across_blocks() {
 
         assert!(PendingProposalCleanups::<Test>::get(proposal_id).is_none());
         for account in referendum_accounts.iter() {
-            assert!(!joint_vote::ReferendumVotesByAccount::<Test>::contains_key(
+            assert!(!joint_vote::ReferendumVotesByCid::<Test>::contains_key(
                 proposal_id,
-                account
+                test_citizen_subject(account).cid_number
             ));
         }
     });

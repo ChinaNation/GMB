@@ -45,7 +45,7 @@ impl InternalCleanupHandler for () {
 /// joint mode 的 chunked cleanup 入口。
 ///
 /// joint storage(JointVotesByTicket / JointInstitutionTallies / JointVotesByInstitution /
-/// JointTallies / ReferendumVotesByAccount / ReferendumTallies)
+/// JointTallies / ReferendumVotesByCid / ReferendumTallies)
 /// 住在 joint-vote pallet,votingengine 主 crate 通过本 trait 派发清理。
 pub trait JointCleanupHandler {
     fn cleanup_joint_admin_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
@@ -78,7 +78,7 @@ impl JointCleanupHandler for () {
 
 /// 立法投票 mode 的 chunked cleanup 入口。
 /// legislation-vote 自有账本（RepresentativeVotesByTicket / RepresentativeTallies /
-/// LegReferendumVotesByAccount 等）住在 sub-pallet，核心通过本 trait 派发清理。
+/// LegReferendumVotesByCid 等）住在 sub-pallet，核心通过本 trait 派发清理。
 pub trait LegislationCleanupHandler {
     fn cleanup_legislation_representative_votes_chunk(
         proposal_id: u64,

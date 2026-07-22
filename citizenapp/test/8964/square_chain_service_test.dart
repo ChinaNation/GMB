@@ -6,6 +6,7 @@ import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec;
 
 import 'package:citizenapp/8964/chain/square_chain_service.dart';
 import 'package:citizenapp/8964/models/square_models.dart';
+import 'package:citizenapp/my/myid/citizen_identity_chain_reader.dart';
 
 void main() {
   test('publish_post call_data 与 runtime 下标和字段顺序一致', () {
@@ -48,32 +49,70 @@ void main() {
     );
   });
 
-  test('只把 Normal 公民身份解码为认证 CID', () {
+  test('只把护照有效且状态正常的投票身份视为有效', () {
     final normal = _votingIdentityBytes(
-      cidNumber: 'CN001-CTZN-000000001-2026',
       citizenStatus: 0,
     );
     final revoked = _votingIdentityBytes(
-      cidNumber: 'CN001-CTZN-000000001-2026',
       citizenStatus: 1,
     );
 
     expect(
-      SquareChainService.decodeNormalCitizenCidNumber(normal),
-      'CN001-CTZN-000000001-2026',
+      SquareChainService.votingIdentityIsActive(normal, today: 20260722),
+      isTrue,
     );
-    expect(SquareChainService.decodeNormalCitizenCidNumber(revoked), isNull);
+    expect(
+      SquareChainService.votingIdentityIsActive(normal, today: 20400101),
+      isFalse,
+    );
+    expect(
+      SquareChainService.votingIdentityIsActive(revoked, today: 20260722),
+      isFalse,
+    );
+    expect(
+      SquareChainService.votingIdentityIsActive(
+        Uint8List.sublistView(normal, 0, 9),
+        today: 20260722,
+      ),
+      isFalse,
+    );
+  });
+
+  test('广场身份使用永久 CID 闭环快照而不是旧 Account-keyed storage', () async {
+    final service = SquareChainService(
+      identityChainReader: _FakeIdentityReader(
+        CitizenIdentityChainSnapshot(
+          cidNumber: 'CN001-CTZN-000000001-2026',
+          walletAccountId: Uint8List(32),
+          votingIdentity: _votingIdentityBytes(citizenStatus: 0),
+          candidateIdentity: _candidateIdentityBytes(),
+        ),
+      ),
+    );
+
+    final identity = await service.fetchIdentity('ignored-in-reader');
+    expect(identity.cidNumber, 'CN001-CTZN-000000001-2026');
+    expect(identity.identityLevel, 'candidate');
   });
 }
 
+Uint8List _candidateIdentityBytes() {
+  final out = BytesBuilder();
+  for (final value in ['CN', '001', '0001', '陈', '明']) {
+    final bytes = utf8.encode(value);
+    out.add(CompactBigIntCodec.codec.encode(BigInt.from(bytes.length)));
+    out.add(bytes);
+  }
+  out.add([0]);
+  out.add(_u32(20000131));
+  out.add(_u32(88));
+  return out.toBytes();
+}
+
 Uint8List _votingIdentityBytes({
-  required String cidNumber,
   required int citizenStatus,
 }) {
   final out = BytesBuilder();
-  final cidBytes = utf8.encode(cidNumber);
-  out.add(CompactBigIntCodec.codec.encode(BigInt.from(cidBytes.length)));
-  out.add(cidBytes);
   out.add(_u32(20260101));
   out.add(_u32(20360101));
   out.add([citizenStatus]);
@@ -84,6 +123,17 @@ Uint8List _votingIdentityBytes({
   }
   out.add(_u32(88));
   return out.toBytes();
+}
+
+class _FakeIdentityReader extends CitizenIdentityChainReader {
+  _FakeIdentityReader(this.snapshot);
+
+  final CitizenIdentityChainSnapshot? snapshot;
+
+  @override
+  Future<CitizenIdentityChainSnapshot?> readByWallet(
+          String walletAddress) async =>
+      snapshot;
 }
 
 List<int> _u32(int value) {

@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'package:citizenapp/ui/app_theme.dart';
 
-/// 选举 tab 视图(ADR-028 P2 占位)。
+/// 公权选举 tab 未开放视图。
 ///
-/// 选举 = 电选各机构管理员/法定代表人的活动视图(按行政层级),走 election-vote
-/// 选举投票引擎(P8/P10,链端 `election-vote` 当前空骨架)。本期仅占位空态,不接任何链路。
+/// `election-vote` 已具备通用投票、快照、计票和结果能力，但具体候选条件、目标岗位、
+/// 席位、任期和结果写回必须由对应公权选举业务模块提供。具体模块落地前不开放假入口。
 class ElectionTab extends StatelessWidget {
   const ElectionTab({super.key});
 
@@ -26,7 +26,7 @@ class ElectionTab extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                     color: AppTheme.textSecondary)),
             SizedBox(height: 8),
-            Text('按行政层级电选机构管理员/法定代表人 功能开发中',
+            Text('具体公权选举业务模块尚未接入，当前不开放选举入口',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, color: AppTheme.textTertiary)),
           ],

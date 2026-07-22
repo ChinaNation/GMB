@@ -72,6 +72,9 @@ impl pallet_balances::Config for Test {
 
 parameter_types! {
     pub const MaxCitizenSignatureLength: u32 = 64;
+    pub const MaxPopulationDaysPerBlock: u32 = 366;
+    pub const MaxPopulationTransitionsPerBlock: u32 = 2_048;
+    pub MaxPopulationMaintenanceWeightPerBlock: frame_support::weights::Weight = frame_support::weights::Weight::MAX;
 }
 
 /// 集成测试只验证模块衔接，授权与签名规则在 runtime 配置单测覆盖。
@@ -82,14 +85,18 @@ impl CitizenIdentityAuthority<u64, citizen_identity::pallet::SignatureOf<Test>>
     fn can_manage_voting_identity(
         registrar: &u64,
         actor_cid_number: &[u8],
+        actor_role_code: &[u8],
         residence_province_code: &[u8],
         residence_city_code: &[u8],
         _level: CitizenIdentityLevel,
+        action_code: u32,
     ) -> bool {
         *registrar == 100
             && actor_cid_number == registrar_cid_number().as_slice()
+            && actor_role_code == registrar_role_code().as_slice()
             && residence_province_code == b"43"
             && residence_city_code == b"4301"
+            && matches!(action_code, 0 | 2 | 6)
     }
 
     fn verify_citizen_signature(
@@ -115,6 +122,9 @@ impl citizen_identity::Config for Test {
     type CitizenIdentityAuthority = TestCitizenIdentityAuthority;
     type OnVotingIdentityRegistered = CitizenIssuance;
     type TimeProvider = FixedTime;
+    type MaxPopulationDaysPerBlock = MaxPopulationDaysPerBlock;
+    type MaxPopulationTransitionsPerBlock = MaxPopulationTransitionsPerBlock;
+    type MaxPopulationMaintenanceWeightPerBlock = MaxPopulationMaintenanceWeightPerBlock;
     type WeightInfo = ();
 }
 
@@ -131,6 +141,7 @@ fn new_test_ext() -> sp_io::TestExternalities {
     let mut ext = sp_io::TestExternalities::new(storage);
     ext.execute_with(|| {
         System::set_block_number(10);
+        citizen_identity::PopulationReadyDate::<Test>::put(20260702);
     });
     ext
 }
@@ -163,11 +174,20 @@ fn registrar_cid_number() -> CidNumberBound {
         .expect("registrar cid number should fit")
 }
 
+/// 测试管理员只有任职注册局省专员岗位后才能执行占号和身份登记。
+fn registrar_role_code() -> citizen_identity::RoleCodeBound {
+    b"PROVINCE_COMMISSIONER_43"
+        .to_vec()
+        .try_into()
+        .expect("registrar role code should fit")
+}
+
 /// 占号先行:身份写入前必须先占号(注册局 CID + 管理员 100,作用域 43/4301)。
 fn occupy_tag(tag: &str) {
     assert_ok!(CitizenIdentity::occupy_cid(
         RuntimeOrigin::signed(100),
         registrar_cid_number(),
+        registrar_role_code(),
         citizen_cid_number(tag)
             .try_into()
             .expect("cid number should fit"),
@@ -210,6 +230,7 @@ fn register_voting_identity_triggers_reward_issuance() {
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
+            registrar_role_code(),
             payload(1, cid_number),
             valid_signature(),
         ));
@@ -230,19 +251,22 @@ fn updating_existing_identity_does_not_issue_second_reward() {
     new_test_ext().execute_with(|| {
         // 占号先行:身份写入前置。
         occupy_tag("0001");
-        occupy_tag("0002");
 
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
+            registrar_role_code(),
             payload(1, &citizen_cid_number("0001")),
             valid_signature(),
         ));
         CitizenIssuance::on_finalize(System::block_number());
-        assert_ok!(CitizenIdentity::register_voting_identity(
+        let mut updated = payload(1, &citizen_cid_number("0001"));
+        updated.passport_valid_until = 20370630;
+        assert_ok!(CitizenIdentity::update_voting_identity(
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
-            payload(1, &citizen_cid_number("0002")),
+            registrar_role_code(),
+            updated,
             valid_signature(),
         ));
         CitizenIssuance::on_finalize(System::block_number());
@@ -252,11 +276,6 @@ fn updating_existing_identity_does_not_issue_second_reward() {
         assert!(
             citizen_issuance::IdentityRewardClaimed::<Test>::contains_key(
                 <Test as frame_system::Config>::Hashing::hash(&citizen_cid_number("0001"))
-            )
-        );
-        assert!(
-            !citizen_issuance::IdentityRewardClaimed::<Test>::contains_key(
-                <Test as frame_system::Config>::Hashing::hash(&citizen_cid_number("0002"))
             )
         );
     });
@@ -273,6 +292,7 @@ fn max_reward_cap_is_applied_from_identity_callback() {
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
+            registrar_role_code(),
             payload(1, &citizen_cid_number("CAP")),
             valid_signature(),
         ));

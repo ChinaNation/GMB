@@ -1,6 +1,6 @@
 # 任务卡：公民主体、选举快照与字段统一
 
-状态：执行中。2026-07-21 已完成第 1 至第 3 步及第 3 步跨端补充收口；后续人口与投票引擎步骤尚未执行。
+状态：已完成。2026-07-22 第 1 至第 9 步全部完成。
 
 ## 最终需求
 
@@ -112,12 +112,12 @@ ElectionMeta {
 - [x] 第 1 步：架构、字段和版本规则冻结
 - [x] 第 2 步：项目版本全面归零
 - [x] 第 3 步：公民身份姓名与主体规范化
-- [ ] 第 4 步：四级有效人口数据
-- [ ] 第 5 步：投票引擎公民主体快照接口
-- [ ] 第 6 步：选举投票模型收口
-- [ ] 第 7 步：删除通用选举业务壳
-- [ ] 第 8 步：全端协议统一
-- [ ] 第 9 步：权重、文档、残留与真实验收
+- [x] 第 4 步：四级有效人口数据
+- [x] 第 5 步：投票引擎公民主体快照接口
+- [x] 第 6 步：选举投票模型收口
+- [x] 第 7 步：删除通用选举业务壳
+- [x] 第 8 步：全端协议统一
+- [x] 第 9 步：权重、文档、残留与真实验收
 
 ## 第 1 步完成记录（2026-07-21）
 
@@ -172,3 +172,70 @@ ElectionMeta {
 - 全 runtime 机构业务入口复查发现的最后一处偏差已经收口：`resolution-issuance::propose_issuance` 显式接收 `proposer_role_code`，权限校验、`VotePlan.proposer_subject`、业务数据和事件均保存 CID + 岗位码 + 签名钱包主体；无岗位码旧载荷直接拒绝。决议发行的 NRC/PRC 委员发起与 NRC/PRC 委员、43 PRB 董事投票规则未改变。
 - 强制从当前源码重编译 release WASM 与 Node 后，以 `citizenchain-fresh --tmp` 启动全新隔离链完成真实运行态验收：RPC 返回 `peers=0`、`isSyncing=false`，`authoring/spec/impl/transaction/system/state` 六项项目 Runtime 版本均为 `0`，metadata 二进制为 217,659 字节。block #0 / genesis hash 为 `0xea6bf4639f6f810f87f299a07fc38d5665839e8bfd60c785dde9c3e687fa58d0`，state root 为 `0x7fc3e650d6651a7b4a1af9e60629dab2aff305abbac367f55ba18628d5b29a7e`；验收节点已正常停止，临时数据由 `--tmp` 清理。
 - 未修改投票引擎人口快照或有效人口分母；这两项仍分别属于第 4 至第 6 步。未生成正式 chainspec，未部署、提交、推送或触发 GitHub CI。
+
+## 第 4 步完成记录（2026-07-22）
+
+- `citizen-identity` 已成为全国、省、市、镇四级有效人口的唯一真源。最终分母只统计永久 CID 有效、CID↔钱包双向绑定完整、身份状态正常、护照在判定日期有效且居住作用域匹配的公民；未生效、已过期、已吊销或迁移离开作用域的身份不再计入。
+- 新增 `PopulationReadyDate` 及按日期、顺序号存储的护照生效/失效转换队列。`on_idle` 每块最多推进 366 个日期、处理 2,048 个转换项，并受最大区块权重 `1/8` 的独立预算限制。某日未完整处理时不发布部分分母，也不接受会改变人口的身份写入。
+- 护照有效区间为闭区间：`valid_from` 当日加入，`valid_until` 当日仍有效，下一自然日退出。日期采用严格公历校验，覆盖大小月、闰年、跨年和时间倒退故障。身份修订号使旧转换项自动失效，不会重复加减人口。
+- 人口 provider 已收口为 `population_data(scope) -> Option<PopulationData>`；只有当前 UTC+8 日期全部就绪且无维护故障时才返回数据。裸 `population_count()` 接口已删除，投票引擎建立人口快照时如果真源未就绪，以 `PopulationDataNotReady` 原子回滚，不会遗留提案或快照。
+- 不可恢复故障记录覆盖日期倒退、计数溢出/下溢和转换队列缺损；故障后身份人口变更与新快照统一 fail-closed。本步没有在 `citizen-identity` 生成提案快照，没有复制公民名单，也没有修改具体业务模块的投票规则。
+- 验证通过：`citizen-identity` 36 项、`election-vote` 14 项、`citizen-issuance` 14 项单元测试与 5 项集成测试、runtime 46 项及受影响投票/业务 crate 测试；全 workspace 测试目标编译；`citizen-identity --no-default-features`、runtime benchmark/try-runtime、runtime `wasm32v1-none --no-default-features` 和当前源码 release Node 构建。
+- 从当前源码嵌入 WASM 后，以 `citizenchain-fresh --tmp` 启动全新隔离链完成真实运行态验收：RPC 返回 `peers=0`、`isSyncing=false`，`authoring/spec/impl/transaction/system/state` 六项项目 Runtime 版本均为 `0`，metadata 二进制为 219,646 字节。block #0 / genesis hash 为 `0x1eee16b152f0e8e50a84bf38a3ccda8f91458bcc8d843ac51640818c1dfeb560`，state root 为 `0x94374f3eea81371fb810889ecaf22ceb740b6d0029ccd27986cd8b42c63a1dc6`；验收节点已停止，临时数据由 `--tmp` 清理。
+- 项目 runtime、storage 和程序包版本保持为 0/`0.0.0`，未新增 migration、兼容分支或双读；未修改 OnChina、CitizenApp、CitizenWallet 或 QR 协议，未生成正式 chainspec，未部署、提交、推送或触发 GitHub CI。
+
+## 第 5 步完成记录（2026-07-22）
+
+- `CitizenIdentityProvider` 已删除只返回 bool 的 `can_vote`、`can_be_candidate`、`can_vote_at`，统一改为 `voting_subject`、`candidate_subject`、`voting_subject_at`，成功时返回 `CitizenSubject { cid_number, wallet_account }`，任何 CID、钱包、身份、护照、作用域或历史 revision 错配均 fail-closed。
+- 联合公投与立法公投票据已从 `(proposal_id, wallet_account)` 收口为 `(proposal_id, cid_number)`，票据值保存完整公民主体和票值；同一永久 CID 更换绑定钱包后仍不能重复投票。事件同步输出完整主体，不再把裸钱包表达为公民投票身份。
+- 人口快照边界未扩大：`ProposalPopulationSnapshots` 仍只保存作用域、有效人口总数、资格 revision、判定日期和创建区块，不保存全量公民名单。`citizen-identity` 继续是人口与身份数据唯一真源，投票引擎只在提案内消费并冻结。
+- `election-vote` 本步只完成新主体 provider 的临时接线，没有提前修改选举模型。现存 `target_cid_number`、`office_code`、`rule_id`、裸钱包候选快照和 Popular 票据已复查确认，统一留给第 6 步一次性删除或替换。
+- 验证通过：`citizen-identity` 36 项、`election-vote` 14 项、`internal-vote` 95 项、`joint-vote` 13 项、`legislation-vote` 35 项、runtime 46 项，以及受影响机构、治理、发行、立法和转账模块测试；全 workspace 测试目标编译通过。
+- `citizen-identity --no-default-features`、runtime benchmark/try-runtime、runtime `wasm32v1-none --no-default-features`、第 5 步文件定向 rustfmt、`git diff --check` 和当前源码 release Node 构建通过。全仓 `cargo fmt --check` 仍会报告本步范围外的既有格式差异，本步没有越界格式化这些文件。
+- 从当前源码嵌入 WASM 后，以 `citizenchain-fresh --tmp` 启动全新隔离链完成真实运行态验收：RPC 返回 `peers=0`、`isSyncing=false`，`authoring/spec/impl/transaction/system/state` 六项项目 Runtime 版本均为 `0`，metadata 二进制为 220,197 字节。block #0 / genesis hash 为 `0x69b4a0025356d050004cff3ef176167a6520b59c9086c9ac6b9a45c4b9e9c0e6`，state root 为 `0x0b066c3567ed25c15cfa96b7d249b6235df4746a253144db21c87dfd2ed2333e`；验收节点已停止，端口已释放，临时数据由 `--tmp` 清理。
+- 项目 runtime、storage 和程序包版本保持为 0/`0.0.0`，未新增 migration、兼容分支或双读；未修改 OnChina、CitizenApp、CitizenWallet 或 QR 协议，未生成正式 chainspec，未部署、提交、推送或触发 GitHub CI。
+
+## 第 6 步完成记录（2026-07-22）
+
+- `ElectionMeta` 已删除 `target_cid_number`、`office_code`、`rule_id`，最终只保存 `mode + population_scope + actor_cid_number + role_code + seat_count + term_start + term_end`。发起机构就是拟任职机构，内部机构码只从唯一 actor CID 推导，互选 VotePlan 的全部岗位选民主体也必须属于该 CID。
+- `ElectionCandidates`、`ElectionCandidateTallies` 和 `ElectionResults` 已从裸钱包改为完整 `CitizenSubject`；当选结果项保存 `candidate_subject + votes + seat_index`。候选快照按永久 CID 去重，并通过新增的只读 `CitizenIdentityReader::citizen_subject` 校验 CID↔钱包真源闭环。
+- 普选票据已改为 `PopularElectionVotesByCid[proposal_id][cid_number] -> { voter_subject, candidate_subject }`；同一永久 CID 更换绑定钱包后不能再投第二票。互选继续按完整 `InstitutionVoteTicket { cid_number, role_code, voter_account }` 去重，票据值改为完整候选主体。
+- 同一管理员担任同一机构多个岗位时，每个冻结的“机构 CID + 岗位码 + 钱包”票据仍可各投一票；同一岗位票据不能重复使用。未新增岗位阈值，也未修改机构阈值。
+- 通用引擎不再要求互选候选人同时属于选民岗位。具体候选条件、选举规则和结果写回继续由未来 `runtime/public/*-election` 业务模块负责；引擎只校验业务模块交付的完整公民主体来自 citizen-identity，不直接任职。
+- `ElectionCreated` 事件改为输出唯一 `actor_cid_number + role_code`；投票事件输出完整公民主体或机构岗位票据以及完整候选主体。清理逻辑、benchmark 夹具和权重 storage 名已同步；第 9 步正式重算前，proof 上界已按新 MaxEncodedLen 保守提高，未继续使用偏小旧值。
+- 验证通过：`election-vote` 17 项、votingengine 4 项、runtime 46 项；全 workspace 测试目标、两个目标 crate `no_std`、runtime 普通/benchmark/try-runtime、runtime `wasm32v1-none --no-default-features`、定向 rustfmt 和 `git diff --check` 全部通过。
+- 从当前源码嵌入 WASM 后，以 `citizenchain-fresh --tmp` 启动全新隔离链完成真实运行态验收：RPC 返回 `peers=0`、`isSyncing=false`，`authoring/spec/impl/transaction/system/state` 六项项目 Runtime 版本均为 `0`，metadata 二进制为 220,398 字节。block #0 / genesis hash 为 `0x285ca7f4ab0f24771baff6a6fc10141ee281fbbd6ce1a8f9dcd1d7676501a41b`，state root 为 `0x27ecdc5b73ce195df4bdfe6c05fe68ef0b682c58751f5f145868a69a1f4672bd`；验收节点已停止，端口已释放，临时数据由 `--tmp` 清理。
+- `election-vote` 中三个错误字段及旧钱包票据名已清零；全仓只剩第 7 步将整体删除的 `runtime/public/election-campaign` 壳仍含这些字段。项目 runtime、storage 和程序包版本保持为 0/`0.0.0`，未新增 migration、兼容分支或双读；未修改客户端、QR 或 OnChina，未生成正式 chainspec，未部署、提交、推送或触发 GitHub CI。
+
+## 第 7 步完成记录（2026-07-22）
+
+- 开发期无具体规则的通用选举业务 crate 已从 `runtime/public/` 物理删除；workspace 成员、Runtime 依赖、`std`/benchmark/try-runtime feature、Config 实现和 `construct_runtime` 接线全部删除，`Cargo.lock` 不再包含该包。
+- 原 pallet index 32 已从 Runtime metadata 移除并永久留空，不在本任务复用。`election-vote` 仍只负责选举投票、计票和结果快照；注释与测试业务标签均改为“创建提案的具体选举业务模块”，没有保留旧模块名、模块标识或错误变体。
+- 已删除错误模块文档；旧骨架任务卡移动到 `memory/08-tasks/done/` 并明确标记为退役删除。有效架构、跨模块边界、投票引擎文档、白皮书及节点内置生成文档已同步，未来每一种公权选举必须建立自己的独立业务模块并定义规则。
+- 验证通过：`election-vote` 17 项、runtime 46 项；全 workspace 测试目标编译；`election-vote --no-default-features`、runtime 普通/benchmark/try-runtime、runtime `wasm32v1-none --no-default-features`、release Node 构建及 `git diff --check` 全部通过。
+- 从当前源码嵌入 WASM 后，以无头 `citizenchain-fresh --tmp` 启动全新隔离链完成真实运行态验收：RPC 返回 `peers=0`、`isSyncing=false`，`authoring/spec/impl/transaction/system/state` 六项项目 Runtime 版本均为 `0`，metadata 二进制为 220,247 字节。block #0 / genesis hash 为 `0x9dd176890773edfbd5ef543a5710e2115d05cdf6dd36c91cc230eb53feab5fbe`，state root 为 `0x0757b0cd5b1923328bd10ac9ab26e86ee6fd6363677799281e7dceda389327bb`；metadata 不含已删除壳的模块标识、业务标签或错误名，验收节点已停止且临时数据由 `--tmp` 清理。
+- 节点前端生产构建通过，并通过本地 Vite preview 的真实页面验收：白皮书正确渲染“具体公权选举业务模块 / Specific Public Election Business Modules”，不再显示旧通用模块名或旧集中式规则表述；验收服务和浏览器标签均已关闭。
+- 项目 runtime、storage 和程序包版本保持为 0/`0.0.0`，未新增 migration、兼容分支、双读、正式 chainspec 或具体选举业务模块；未修改 OnChina、CitizenApp、CitizenWallet 或 QR 协议，未部署、提交、推送或触发 GitHub CI。
+
+## 第 8 步完成记录（2026-07-22）
+
+- CitizenApp 的“我的身份”和广场身份统一通过永久 CID 闭环读取：同一 finalized 区块内依次校验 `CidByWalletAccount`、Active `CidRegistry`、`WalletAccountByCid` 反向绑定和 CID 主键身份；CID 只作 storage key，不再从身份值重复解码。截断、尾随、状态矛盾或钱包错配全部 fail-closed。
+- Cloudflare 身份投影采用同一 finalized head 的五项读取与同一 SCALE 布局，护照有效期按 UTC+8 判定；竞选身份只使用 `family_name`、`given_name`，不保留合并姓名或带公民前缀的姓名字段。
+- QR 唯一注册表新增 `ElectionVote.cast_popular_vote = 0x1602` 与 `cast_mutual_vote = 0x1603`，两端生成表已同步。CitizenWallet 按最终 call data 严格展示 `proposal_id + cid_number + wallet_account`，互选另展示 `voter_role_code`，旧裸钱包、截断 CID 和尾随载荷一律拒签。
+- CitizenApp 未虚构通用选举业务入口；“选举”和“发起选举”继续禁用，并明确只有未来具体公权选举业务模块接入后才能开放。OnChina 仅清理数据库启动期旧列兼容语句，保持注册局管理员与公民双签、机构登记和权限业务流程不变。
+- 验证通过：CitizenApp 全量 763 项通过、5 项跳过并通过静态分析；Cloudflare 29 个测试文件 172 项与类型检查通过；CitizenWallet 全量 185 项与静态分析通过；QR registry 6 项一致性/仓库守卫测试、OnChina 后端 134 项和前端生产构建通过；`git diff --check` 通过。
+- 真实验收使用临时 PostgreSQL 初始化 OnChina 最终 schema，确认 `family_name`、`given_name`、护照有效期和行政区字段存在，7 个旧列为 0；生产前端经 Vite preview 真实渲染管理员扫码登录页。临时数据库和服务均已停止，临时数据已移入系统废纸篓。
+- 当前 release Node 的 fresh 与既有链启动均在节点护宪守卫基准派生处报 `LawDecodeFailed`；同源码定向测试 `real_runtime_genesis_satisfies_full_constitution_guard` 通过。该问题不来自第 8 步客户端、QR 或 OnChina 改动，本步未绕过护宪守卫，留在第 9 步从当前源码、嵌入 WASM 与节点解码结构三方做真实收口。
+- 第 8 步没有修改任何 `citizenchain/runtime/` 文件，项目 runtime、storage 和程序包版本继续保持 0/`0.0.0`；未新增 migration、兼容分支、具体选举业务模块、正式 chainspec，未部署、提交、推送或触发 GitHub CI。
+
+## 第 9 步完成记录（2026-07-22）
+
+- `citizen-identity` 新增正式 FRAME benchmark，覆盖投票身份注册、升级竞选身份、更新投票/竞选身份、吊销身份、单个/批量 CID 占号、CID 吊销和四条人口维护路径；批量占号按 `1..=10,000` 线性计费。benchmark 使用真实创世注册局机构、专员岗位、任职和权限目录，不增加“管理员即有权”的旁路。
+- runtime benchmark registry 已登记 `citizen_identity`。`scripts/benchmark.sh` 每次强制从当前源码构建 WASM，使用当前源码导出的临时 fresh spec，并在退出时清理临时文件，避免冻结旧 WASM 或旧 storage 布局污染测量。
+- 使用 FRAME Benchmark CLI 53.0.0、50 steps、20 repeats，正式重算 `citizen-identity`、核心 `votingengine`、`joint-vote`、`legislation-vote`、`election-vote` 五组生产权重。人口维护权重采用完整生产路径的可组合安全上界；组合时允许重复计入固定开销，但不得低估链上最重路径。
+- 第 8 步的 `LawDecodeFailed` 已定位为 macOS 桌面模式没有采用命令行 fresh chain 参数，并非护宪守卫或 runtime 法律数据错误。节点验收统一显式设置 `CITIZENCHAIN_HEADLESS=1`；新增回归测试直接物化 fresh genesis、解码 Law(0)、派生不可变参考并执行完整护宪校验，当前源码嵌入 WASM 时通过，未削弱或绕过守卫。
+- 编译与 runtime 验证通过：`citizen-identity`、runtime、Node 的 `runtime-benchmarks` 编译通过；`citizen-identity` 36 项、runtime 46 项、`election-vote` 17 项、`joint-vote` 13 项、`legislation-vote` 35 项、核心 `votingengine` 4 项及 doc tests 全部通过；强制当前源码 WASM 的 release Node 构建通过。
+- 全端最终回归通过：CitizenApp 763 项通过、5 项跳过且静态分析无问题；CitizenWallet 185 项及静态分析通过；Cloudflare 29 个测试文件 172 项及类型检查通过；OnChina 后端 134 项、前端生产构建通过；QR registry 6 项通过。第 8 步已用临时 PostgreSQL、真实 HTTP 与页面完成最终 schema 和双签流程验收，本步未修改 OnChina schema 或业务逻辑，并再次通过生产 bundle 的真实 preview：`HTTP 200`、标题“链上中国平台”、废弃姓名字段为 0；服务已停止。
+- 最终 release Node 以 `CITIZENCHAIN_HEADLESS=1 citizenchain-fresh --tmp` 真实启动，RPC 返回 block `#0`、`peers=0`、`isSyncing=false`，`authoring/spec/impl/transaction/system/state` 六项项目版本均为 `0`，metadata 二进制 220,247 字节。genesis hash 为 `0x4bd7e3f65f5ad4788e6ac8917abce9b0683f0c93d286766a7512854084ff0dd9`，state root 为 `0xd15b1a20d972f0cc5f64aa9a08a09f6793fe51886f9445c6dc953c0f9d438f7b`；验收节点已停止。bootnode 报告既有部署链 genesis 不同，符合本任务未发布正式统一 chainspec 的边界。
+- 全部本地项目包版本为 `0.0.0`，runtime 数字版本和全部项目 pallet storage version 为 0；`node/vendor` 的第三方 GRANDPA 路径依赖版本不属于项目升级计数。有效代码、生成物和现行架构文档中旧姓名字段、旧选举元数据字段、通用选举业务壳、旧裸钱包票据及错误版本注释已清理；历史完成任务卡只保留明确的历史事实。
+- 本任务没有生成正式 chainspec，没有部署、提交、推送或触发 GitHub CI；所有临时 Node、页面和 benchmark 资源均已停止或清理。第 9 步为本任务最后一步，不再输出后续实现步骤。

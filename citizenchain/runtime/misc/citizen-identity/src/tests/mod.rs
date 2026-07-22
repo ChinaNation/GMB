@@ -32,7 +32,7 @@ fn cid_record_scale_contract_matches_node_guard() {
             .encode()
     );
 }
-use frame_support::{assert_noop, assert_ok, derive_impl, parameter_types};
+use frame_support::{assert_noop, assert_ok, derive_impl, parameter_types, traits::Hooks};
 use frame_system as system;
 use sp_runtime::{traits::IdentityLookup, BuildStorage};
 
@@ -70,6 +70,9 @@ impl system::Config for Test {
 
 parameter_types! {
     pub const MaxCitizenSignatureLength: u32 = 64;
+    pub const MaxPopulationDaysPerBlock: u32 = 366;
+    pub const MaxPopulationTransitionsPerBlock: u32 = 2;
+    pub MaxPopulationMaintenanceWeightPerBlock: frame_support::weights::Weight = frame_support::weights::Weight::MAX;
 }
 
 /// 固定链上时间:2026-07-02 00:00 UTC(UTC+8 为 2026-07-02 08:00,
@@ -77,8 +80,24 @@ parameter_types! {
 pub struct FixedTime;
 impl frame_support::traits::UnixTime for FixedTime {
     fn now() -> core::time::Duration {
-        core::time::Duration::from_secs(1_782_950_400)
+        TEST_TIME_SECS.with(|value| core::time::Duration::from_secs(value.get()))
     }
+}
+
+std::thread_local! {
+    static TEST_TIME_SECS: core::cell::Cell<u64> = const { core::cell::Cell::new(1_782_950_400) };
+}
+
+fn set_day_offset(days: i64) {
+    TEST_TIME_SECS.with(|value| {
+        let delta = days.unsigned_abs().saturating_mul(86_400);
+        let timestamp = if days >= 0 {
+            1_782_950_400u64.saturating_add(delta)
+        } else {
+            1_782_950_400u64.saturating_sub(delta)
+        };
+        value.set(timestamp);
+    });
 }
 
 pub struct TestCitizenIdentityAuthority;
@@ -114,6 +133,9 @@ impl Config for Test {
     type CitizenIdentityAuthority = TestCitizenIdentityAuthority;
     type OnVotingIdentityRegistered = ();
     type TimeProvider = FixedTime;
+    type MaxPopulationDaysPerBlock = MaxPopulationDaysPerBlock;
+    type MaxPopulationTransitionsPerBlock = MaxPopulationTransitionsPerBlock;
+    type MaxPopulationMaintenanceWeightPerBlock = MaxPopulationMaintenanceWeightPerBlock;
     type WeightInfo = ();
 }
 
@@ -122,7 +144,11 @@ fn new_test_ext() -> sp_io::TestExternalities {
         .build_storage()
         .expect("frame system genesis storage should build");
     let mut ext = sp_io::TestExternalities::new(storage);
-    ext.execute_with(|| System::set_block_number(10));
+    set_day_offset(0);
+    ext.execute_with(|| {
+        System::set_block_number(10);
+        PopulationReadyDate::<Test>::put(20260702);
+    });
     ext
 }
 
@@ -278,7 +304,7 @@ fn register_voting_identity_stores_identity_and_counts_scope() {
         );
         assert_eq!(CountryVotingCount::<Test>::get(), 1);
         assert_eq!(ProvinceVotingCount::<Test>::get(code(b"43")), 1);
-        assert!(CitizenIdentity::can_vote(&1, &town_scope()));
+        assert!(CitizenIdentity::voting_subject(&1, &town_scope()).is_some());
     });
 }
 
@@ -366,8 +392,8 @@ fn candidate_identity_requires_full_profile_and_enables_candidate_reader() {
         assert!(CandidateIdentityByCid::<Test>::contains_key(cid(
             &citizen_cid_number("CANDIDATE")
         )));
-        assert!(CitizenIdentity::can_vote(&1, &town_scope()));
-        assert!(CitizenIdentity::can_be_candidate(&1, &town_scope()));
+        assert!(CitizenIdentity::voting_subject(&1, &town_scope()).is_some());
+        assert!(CitizenIdentity::candidate_subject(&1, &town_scope()).is_some());
     });
 }
 
@@ -395,7 +421,7 @@ fn citizen_subject_requires_active_bidirectional_cid_wallet_binding() {
         // 反向绑定与钱包存储键不一致时 fail-closed，不能只凭裸钱包形成主体。
         WalletAccountByCid::<Test>::insert(cid(&cid_number), 2);
         assert_eq!(CitizenIdentity::citizen_subject(&1), None);
-        assert!(!CitizenIdentity::can_vote(&1, &town_scope()));
+        assert!(CitizenIdentity::voting_subject(&1, &town_scope()).is_none());
     });
 }
 
@@ -456,7 +482,7 @@ fn candidate_identity_requires_family_name_and_given_name_separately() {
 }
 
 #[test]
-fn revoke_identity_marks_status_and_removes_population_count() {
+fn revoke_identity_marks_status_and_removes_effective_population() {
     new_test_ext().execute_with(|| {
         // 占号先行:身份写入前置。
         occupy_tag("REVOKE");
@@ -482,7 +508,7 @@ fn revoke_identity_marks_status_and_removes_population_count() {
             &citizen_cid_number("REVOKE")
         )));
         assert_eq!(CountryVotingCount::<Test>::get(), 0);
-        assert!(!CitizenIdentity::can_vote(&1, &town_scope()));
+        assert!(CitizenIdentity::voting_subject(&1, &town_scope()).is_none());
     });
 }
 
@@ -500,14 +526,16 @@ fn population_data_reads_current_scope_count() {
             valid_signature(),
         ));
 
-        let population_data = CitizenIdentity::governance_population_data(&town_scope());
+        let population_data = CitizenIdentity::governance_population_data(&town_scope())
+            .expect("current population should be ready");
         assert_eq!(population_data.eligible_total, 1);
         assert_eq!(population_data.eligibility_revision, 1);
         assert_eq!(population_data.eligibility_date, 20260702);
-        assert!(CitizenIdentity::can_vote_at_population_data(
-            &1,
-            &population_data
-        ));
+        let voter_subject =
+            CitizenIdentity::voting_subject_at_population_data(&1, &population_data)
+                .expect("snapshot eligibility should return the complete citizen subject");
+        assert_eq!(voter_subject.cid_number, citizen_cid_number("0001"));
+        assert_eq!(voter_subject.wallet_account, 1);
     });
 }
 
@@ -523,12 +551,12 @@ fn population_data_revision_freezes_membership_before_identity_update() {
             valid_signature(),
         ));
 
-        let old_population_data = CitizenIdentity::governance_population_data(&town_scope());
+        let old_population_data = CitizenIdentity::governance_population_data(&town_scope())
+            .expect("old population should be ready");
         assert_eq!(old_population_data.eligible_total, 1);
-        assert!(CitizenIdentity::can_vote_at_population_data(
-            &1,
-            &old_population_data
-        ));
+        assert!(
+            CitizenIdentity::voting_subject_at_population_data(&1, &old_population_data).is_some()
+        );
 
         // 同一账户迁往另一乡镇后，旧提案仍按创建时身份判断；新提案使用新身份。
         let mut moved = voting_payload(1, &citizen_cid_number("SNAPSHOT-OLD"));
@@ -541,16 +569,15 @@ fn population_data_revision_freezes_membership_before_identity_update() {
             valid_signature(),
         ));
 
-        assert!(CitizenIdentity::can_vote_at_population_data(
-            &1,
-            &old_population_data
-        ));
-        let new_population_data = CitizenIdentity::governance_population_data(&town_scope());
+        assert!(
+            CitizenIdentity::voting_subject_at_population_data(&1, &old_population_data).is_some()
+        );
+        let new_population_data = CitizenIdentity::governance_population_data(&town_scope())
+            .expect("new population should be ready");
         assert_eq!(new_population_data.eligible_total, 0);
-        assert!(!CitizenIdentity::can_vote_at_population_data(
-            &1,
-            &new_population_data
-        ));
+        assert!(
+            CitizenIdentity::voting_subject_at_population_data(&1, &new_population_data).is_none()
+        );
     });
 }
 
@@ -571,7 +598,7 @@ fn invalid_citizen_code_is_rejected() {
 }
 
 #[test]
-fn expired_passport_cannot_vote_but_still_counts_in_population() {
+fn expired_passport_cannot_vote_and_is_excluded_from_population() {
     new_test_ext().execute_with(|| {
         // 占号先行:身份写入前置。
         occupy_tag("EXPIRED");
@@ -588,11 +615,9 @@ fn expired_passport_cannot_vote_but_still_counts_in_population() {
             valid_signature(),
         ));
 
-        // 计数器按状态增量维护,护照过期不减分母(设计约束,见 lib.rs 注释)。
-        assert_eq!(CountryVotingCount::<Test>::get(), 1);
-        // 但投票资格被护照有效期窗口实时拦截。
-        assert!(!CitizenIdentity::can_vote(&1, &town_scope()));
-        assert!(!CitizenIdentity::can_be_candidate(&1, &town_scope()));
+        assert_eq!(CountryVotingCount::<Test>::get(), 0);
+        assert!(CitizenIdentity::voting_subject(&1, &town_scope()).is_none());
+        assert!(CitizenIdentity::candidate_subject(&1, &town_scope()).is_none());
     });
 }
 
@@ -614,7 +639,184 @@ fn not_yet_valid_passport_cannot_vote() {
             valid_signature(),
         ));
 
-        assert!(!CitizenIdentity::can_vote(&1, &town_scope()));
+        assert_eq!(CountryVotingCount::<Test>::get(), 0);
+        assert_eq!(PopulationTransitionCountByDate::<Test>::get(20300101), 1);
+        assert!(CitizenIdentity::voting_subject(&1, &town_scope()).is_none());
+    });
+}
+
+#[test]
+fn first_population_date_must_initialize_before_identity_write() {
+    new_test_ext().execute_with(|| {
+        PopulationReadyDate::<Test>::kill();
+        occupy_tag("BOOTSTRAP");
+        assert_noop!(
+            CitizenIdentity::register_voting_identity(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                voting_payload(1, &citizen_cid_number("BOOTSTRAP")),
+                valid_signature(),
+            ),
+            Error::<Test>::PopulationDataNotReady
+        );
+
+        CitizenIdentity::on_idle(System::block_number(), frame_support::weights::Weight::MAX);
+        assert_eq!(PopulationReadyDate::<Test>::get(), 20260702);
+        assert_ok!(CitizenIdentity::register_voting_identity(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            voting_payload(1, &citizen_cid_number("BOOTSTRAP")),
+            valid_signature(),
+        ));
+    });
+}
+
+#[test]
+fn passport_activates_on_valid_from_and_deactivates_after_valid_until() {
+    new_test_ext().execute_with(|| {
+        occupy_tag("ONE-DAY");
+        let mut payload = voting_payload(1, &citizen_cid_number("ONE-DAY"));
+        payload.passport_valid_from = 20260703;
+        payload.passport_valid_until = 20260703;
+        assert_ok!(CitizenIdentity::register_voting_identity(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            payload,
+            valid_signature(),
+        ));
+        assert_eq!(CountryVotingCount::<Test>::get(), 0);
+
+        set_day_offset(1);
+        assert!(CitizenIdentity::governance_population_data(&PopulationScope::Country).is_none());
+        CitizenIdentity::on_idle(System::block_number(), frame_support::weights::Weight::MAX);
+        assert_eq!(PopulationReadyDate::<Test>::get(), 20260703);
+        assert_eq!(CountryVotingCount::<Test>::get(), 1);
+        assert_eq!(
+            CitizenIdentity::governance_population_data(&PopulationScope::Country)
+                .expect("activation date should be ready")
+                .eligibility_date,
+            20260703
+        );
+
+        set_day_offset(2);
+        CitizenIdentity::on_idle(System::block_number(), frame_support::weights::Weight::MAX);
+        assert_eq!(PopulationReadyDate::<Test>::get(), 20260704);
+        assert_eq!(CountryVotingCount::<Test>::get(), 0);
+    });
+}
+
+#[test]
+fn population_transition_limit_hides_partial_day_and_blocks_identity_changes() {
+    new_test_ext().execute_with(|| {
+        for (wallet, tag) in [(1, "BATCH-1"), (2, "BATCH-2"), (3, "BATCH-3")] {
+            occupy_tag(tag);
+            let mut payload = voting_payload(wallet, &citizen_cid_number(tag));
+            payload.passport_valid_from = 20260703;
+            payload.passport_valid_until = 20300101;
+            assert_ok!(CitizenIdentity::register_voting_identity(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                payload,
+                valid_signature(),
+            ));
+        }
+
+        set_day_offset(1);
+        CitizenIdentity::on_idle(System::block_number(), frame_support::weights::Weight::MAX);
+        assert_eq!(PopulationReadyDate::<Test>::get(), 20260702);
+        assert_eq!(PopulationTransitionCursorByDate::<Test>::get(20260703), 2);
+        assert_eq!(CountryVotingCount::<Test>::get(), 2);
+        assert!(CitizenIdentity::governance_population_data(&PopulationScope::Country).is_none());
+
+        let mut update = voting_payload(1, &citizen_cid_number("BATCH-1"));
+        update.passport_valid_from = 20260703;
+        update.passport_valid_until = 20310101;
+        assert_noop!(
+            CitizenIdentity::update_voting_identity(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                update,
+                valid_signature(),
+            ),
+            Error::<Test>::PopulationDataNotReady
+        );
+
+        CitizenIdentity::on_idle(System::block_number(), frame_support::weights::Weight::MAX);
+        assert_eq!(PopulationReadyDate::<Test>::get(), 20260703);
+        assert_eq!(CountryVotingCount::<Test>::get(), 3);
+        assert!(CitizenIdentity::governance_population_data(&PopulationScope::Country).is_some());
+    });
+}
+
+#[test]
+fn identity_update_invalidates_old_population_transitions_by_revision() {
+    new_test_ext().execute_with(|| {
+        occupy_tag("RESCHEDULE");
+        let mut first = voting_payload(1, &citizen_cid_number("RESCHEDULE"));
+        first.passport_valid_from = 20260703;
+        first.passport_valid_until = 20260703;
+        assert_ok!(CitizenIdentity::register_voting_identity(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            first,
+            valid_signature(),
+        ));
+
+        let mut replacement = voting_payload(1, &citizen_cid_number("RESCHEDULE"));
+        replacement.passport_valid_from = 20260704;
+        replacement.passport_valid_until = 20260705;
+        assert_ok!(CitizenIdentity::update_voting_identity(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            replacement,
+            valid_signature(),
+        ));
+
+        set_day_offset(1);
+        CitizenIdentity::on_idle(System::block_number(), frame_support::weights::Weight::MAX);
+        assert_eq!(CountryVotingCount::<Test>::get(), 0);
+        set_day_offset(2);
+        CitizenIdentity::on_idle(System::block_number(), frame_support::weights::Weight::MAX);
+        assert_eq!(PopulationReadyDate::<Test>::get(), 20260704);
+        assert_eq!(CountryVotingCount::<Test>::get(), 1);
+    });
+}
+
+#[test]
+fn strict_calendar_validation_handles_months_leap_years_and_year_boundary() {
+    new_test_ext().execute_with(|| {
+        assert!(CitizenIdentity::is_plausible_yyyymmdd(20240229));
+        assert!(!CitizenIdentity::is_plausible_yyyymmdd(20230229));
+        assert!(!CitizenIdentity::is_plausible_yyyymmdd(20260431));
+        assert_eq!(
+            CitizenIdentity::next_calendar_date(20240229),
+            Some(20240301)
+        );
+        assert_eq!(
+            CitizenIdentity::next_calendar_date(20261231),
+            Some(20270101)
+        );
+        assert_eq!(CitizenIdentity::next_calendar_date(99991231), None);
+    });
+}
+
+#[test]
+fn population_faults_closed_when_chain_date_moves_backwards() {
+    new_test_ext().execute_with(|| {
+        set_day_offset(-1);
+        CitizenIdentity::on_idle(System::block_number(), frame_support::weights::Weight::MAX);
+        assert_eq!(
+            PopulationMaintenanceFault::<Test>::get(),
+            Some(PopulationFault::DateMovedBackwards)
+        );
+        assert!(CitizenIdentity::governance_population_data(&PopulationScope::Country).is_none());
     });
 }
 

@@ -14,10 +14,10 @@ use crate::types::ElectionWinner;
 
 /// 纯函数：从候选人顺序快照和票数中选出席位。
 pub(crate) fn select_winners<AccountId: Clone + PartialEq>(
-    candidates: &[(AccountId, u32)],
+    candidates: &[(votingengine::CitizenSubject<AccountId>, u32)],
     seat_count: u16,
 ) -> Result<Vec<ElectionWinner<AccountId>>, ()> {
-    let mut remaining: Vec<(AccountId, u32)> = candidates.to_vec();
+    let mut remaining: Vec<(votingengine::CitizenSubject<AccountId>, u32)> = candidates.to_vec();
     let mut winners: Vec<ElectionWinner<AccountId>> = Vec::new();
 
     let mut seat_index = 0u16;
@@ -41,9 +41,9 @@ pub(crate) fn select_winners<AccountId: Clone + PartialEq>(
 
         let tied_count = tied.len() as u16;
         for (offset, idx) in tied.into_iter().enumerate() {
-            let (account, votes) = remaining.remove(idx - offset);
+            let (candidate_subject, votes) = remaining.remove(idx - offset);
             winners.push(ElectionWinner {
-                account,
+                candidate_subject,
                 votes,
                 seat_index: seat_index + offset as u16,
             });
@@ -61,12 +61,12 @@ impl<T: Config> Pallet<T> {
         let candidates =
             ElectionCandidates::<T>::get(proposal_id).ok_or(Error::<T>::EmptyCandidateSnapshot)?;
 
-        let candidate_votes: Vec<(T::AccountId, u32)> = candidates
+        let candidate_votes: Vec<(votingengine::CitizenSubject<T::AccountId>, u32)> = candidates
             .iter()
             .cloned()
-            .map(|candidate| {
-                let votes = ElectionCandidateTallies::<T>::get(proposal_id, &candidate);
-                (candidate, votes)
+            .map(|candidate_subject| {
+                let votes = ElectionCandidateTallies::<T>::get(proposal_id, &candidate_subject);
+                (candidate_subject, votes)
             })
             .collect();
 
@@ -96,16 +96,25 @@ impl<T: Config> Pallet<T> {
 mod tests {
     use super::*;
 
+    fn subject(id: u8) -> votingengine::CitizenSubject<u8> {
+        votingengine::CitizenSubject {
+            cid_number: vec![id].try_into().expect("test CID fits"),
+            wallet_account: id,
+        }
+    }
+
     #[test]
     fn selects_top_seats_without_tie() {
-        let winners = select_winners(&[(1u8, 9), (2, 5), (3, 7)], 2).expect("unique winners");
-        assert_eq!(winners[0].account, 1);
-        assert_eq!(winners[1].account, 3);
+        let winners = select_winners(&[(subject(1), 9), (subject(2), 5), (subject(3), 7)], 2)
+            .expect("unique winners");
+        assert_eq!(winners[0].candidate_subject, subject(1));
+        assert_eq!(winners[1].candidate_subject, subject(3));
     }
 
     #[test]
     fn accepts_tie_that_fits_remaining_seats() {
-        let winners = select_winners(&[(1u8, 9), (2, 9), (3, 1)], 2).expect("tie fits");
+        let winners = select_winners(&[(subject(1), 9), (subject(2), 9), (subject(3), 1)], 2)
+            .expect("tie fits");
         assert_eq!(winners.len(), 2);
         assert_eq!(winners[0].seat_index, 0);
         assert_eq!(winners[1].seat_index, 1);
@@ -113,6 +122,6 @@ mod tests {
 
     #[test]
     fn rejects_tie_that_crosses_seat_boundary() {
-        assert!(select_winners(&[(1u8, 9), (2, 8), (3, 8)], 2).is_err());
+        assert!(select_winners(&[(subject(1), 9), (subject(2), 8), (subject(3), 8)], 2).is_err());
     }
 }

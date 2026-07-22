@@ -5,7 +5,7 @@
 
 use crate::pallet::{
     ElectionCandidateTallies, ElectionCandidates, ElectionMetaStore, ElectionResults,
-    ElectionTallyStore, MutualElectionVotesByTicket, PopularElectionVotesByVoter,
+    ElectionTallyStore, MutualElectionVotesByTicket, PopularElectionVotesByCid,
 };
 use crate::weights::WeightInfo;
 use frame_support::{traits::Get, weights::Weight};
@@ -15,7 +15,7 @@ impl<T: crate::pallet::Config> votingengine::ElectionCleanupHandler for crate::p
         proposal_id: u64,
         limit: u32,
     ) -> votingengine::CleanupChunkResult {
-        let popular = PopularElectionVotesByVoter::<T>::clear_prefix(proposal_id, limit, None);
+        let popular = PopularElectionVotesByCid::<T>::clear_prefix(proposal_id, limit, None);
         if popular.maybe_cursor.is_some() || popular.unique >= limit {
             return (popular.unique, true);
         }

@@ -5,7 +5,8 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// 广场身份状态。
 ///
 /// `owner_account` 固定使用当前钱包账户；`cid_number` 只能从链上
-/// `CitizenIdentity::VotingIdentityByAccount` 读取，App 不允许自行传入链上交易。
+/// 通过 `CidByWalletAccount`、`WalletAccountByCid`、Active `CidRegistry` 和
+/// `VotingIdentityByCid` 闭环读取，App 不允许自行传入链上身份。
 class SquareIdentityState {
   const SquareIdentityState({
     required this.ownerAccount,

@@ -80,7 +80,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     // 当前 runtime 采用统一模块命名：
     // genesis-pallet / public-admins / private-admins / personal-admins /
     // public-manage / private-manage / personal-manage / votingengine /
-    // multisig-transfer / offchain-transaction / onchain-transaction / institution-asset /
+    // multisig / offchain / onchain /
     // square-post。
     // square-post 订阅采用 runtime 真实公历时间戳协议：只执行扣款、最小状态和时间戳比较；
     // 平台三档价由创世播种，平台机构 CID 为创世固定常量，开发期零用户不设迁移。
@@ -372,9 +372,7 @@ mod runtime {
     #[runtime::pallet_index(26)]
     pub type LegislationVote = legislation_vote;
 
-    // 公权选举业务模块骨架:只承载选举业务规则位置;投票流程归 election-vote。
-    #[runtime::pallet_index(32)]
-    pub type Campaign = election_campaign;
+    // pallet index 32 永久留空，不复用已删除的开发期通用选举业务壳编号。
 
     // 公权机构管理员模块：含创世写入的固定治理机构运行期管理员治理。
     #[runtime::pallet_index(27)]

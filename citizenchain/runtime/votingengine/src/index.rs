@@ -1,4 +1,4 @@
-//! 反向索引(spec_version v1)。
+//! 提案反向索引。
 //!
 //! 链上 4 张反向索引让客户端按"分类"O(分类内规模)迭代提案,不用扫全表:
 //! - **`ProposalsByCode[institution_code][id]`** — 按 CID 机构码(固定治理档 / PMUL / 公权法人 / 私权法人)反查

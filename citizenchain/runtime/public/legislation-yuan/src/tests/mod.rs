@@ -81,16 +81,18 @@ pub const OWNER_CODE: InstitutionCode = *b"NRP\0";
 
 pub struct TestCitizenIdentityReader;
 impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
-    fn can_vote(_who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
-        false
+    fn voting_subject(
+        _who: &AccountId32,
+        _scope: &votingengine::PopulationScope,
+    ) -> Option<votingengine::CitizenSubject<AccountId32>> {
+        None
     }
 
-    fn can_be_candidate(_who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
-        false
-    }
-
-    fn population_count(_scope: &votingengine::PopulationScope) -> u64 {
-        100
+    fn candidate_subject(
+        _who: &AccountId32,
+        _scope: &votingengine::PopulationScope,
+    ) -> Option<votingengine::CitizenSubject<AccountId32>> {
+        None
     }
 }
 

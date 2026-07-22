@@ -28,7 +28,12 @@
 - `WalletAccountByCid`：永久公民 CID 到当前唯一签名钱包。
 - `CidByWalletAccount`：当前签名钱包到永久公民 CID；必须与 `WalletAccountByCid` 严格闭环。
 - `CountryVotingCount` / `ProvinceVotingCount` / `CityVotingCount` / `TownVotingCount`：按作用域维护就绪日期内状态正常且护照有效的投票人口。
-- 人口日期变化计划与处理游标：有界处理护照生效、到期、吊销和迁居产生的人口变化；当天尚未就绪时拒绝提供新提案人口数据。
+- `PopulationReadyDate`：四级人口已经完整推进至的 UTC+8 日期；`0` 只表示全新创世尚未完成首次 `on_idle` 初始化。
+- `PopulationTransitionCountByDate` / `PopulationTransitionCursorByDate` / `PopulationTransitions`：
+  按日期和顺序号有界处理护照生效、到期；转换项只保存永久 CID、身份 revision 和
+  `Activate/Deactivate`，身份更新后的旧 revision 项自动失效。
+- `PopulationMaintenanceFault`：日期倒退、非法就绪日期、计数溢出/下溢或队列不完整时
+  写入故障状态；本模块不提供管理员清除入口，故障后身份人口变更与新快照均 fail-closed。
 - `NextEligibilityRevision`：全局单调资格修订号，区分同一区块内多次身份写入。
 - `VotingEligibilityVersionCount` / `VotingEligibilityVersions`：每个永久 CID 的不可变投票身份版本历史。
 - `CountryVotingCount` 等人口计数与身份版本历史共同组成 `PopulationData` 的唯一真源；本模块没有 `PopulationSnapshots`、`NextSnapshotId` 或 proposal 绑定 storage。
@@ -48,12 +53,14 @@
 投票引擎通过 `CitizenIdentityProvider` 读取链上状态：
 
 - `citizen_subject(account)`：返回经过 CID↔钱包双向绑定、正常身份状态和 Active CID 校验的完整 `CitizenSubject`；本接口已落地，消费端不得从裸钱包自行拼接主体。
-- 第 5、6 步将把投票引擎资格和票据接口切换到完整 `CitizenSubject`，不能只返回 bool 后让投票模块以裸钱包写票。
+- `voting_subject(account, scope)` 和 `candidate_subject(account, scope)` 分别返回当前有效的完整投票/竞选公民主体；不再只返回 bool。
 - 投票资格：由当前钱包解析永久 CID，再按双向绑定、状态、护照日期和作用域解析完整公民主体。
 - 参选资格：在完整投票资格基础上校验参选身份必填字段并返回完整公民主体。
 - `candidate_age(account)`：读取参选身份 `birth_date` 并按链上当前日期（UTC+8）实时计算周岁；无参选身份、时间戳未初始化或出生日期落在未来返回 `None`（fail-closed）。任何调用方可据链上公开的出生日期计算竞选公民年龄。
-- `population_data(scope)`：返回作用域、当前人口分母、资格 revision 和 UTC+8 护照判定日期；这些字段必须在一次读取中保持一致。
-- `can_vote_at(who, population_data)`：由当前钱包解析永久 CID，按 revision 二分定位该 CID 在提案创建时的身份版本，再校验状态、护照日期和作用域。
+- `population_data(scope)`：只有人口日期与当前 UTC+8 日期一致且没有维护故障时返回
+  `Some(PopulationData)`；否则返回 `None`。已删除 provider 的裸 `population_count()`，
+  消费端不能绕过日期完整性直接读取部分计数。
+- `voting_subject_at(who, population_data)`：由当前签名钱包解析永久 CID，按 revision 二分定位该 CID 在提案创建时的身份版本，校验状态、护照日期和作用域后返回完整主体。历史资格跟随永久 CID，钱包只证明当前交易签名。
 
 投票引擎收到 `PopulationData` 后自行写入 `ProposalPopulationSnapshots[proposal_id]`。提案清理只删除投票引擎快照；身份历史继续作为身份审计记录保留。
 
@@ -63,7 +70,12 @@
 
 - 提案创建后的人口增长、迁居、资料更新或撤销不会改变既有提案的成员资格；新提案读取更新后的 revision 和分母。
 - 快照查询复杂度与单个永久 CID 的身份变更次数相关，为 `O(log versions)`，不遍历行政区全部公民。
-- 最终人口计数器必须同时满足状态正常和护照在就绪日期有效。护照生效与到期通过有界日期变化计划维护；人口尚未推进到快照判定日期时必须拒绝建案。当前只按状态计数的开发期实现不是正式创世口径。
+- 最终人口计数器同时满足永久 CID Active、CID↔钱包绑定完整、状态正常、护照在就绪
+  日期有效和居住作用域匹配。护照生效与到期由 `on_idle` 在剩余权重内推进；每块最多
+  366 个日期、2,048 个转换项，并受最大区块权重 1/8 的独立预算约束。某日只处理一部分
+  时 `population_data` 返回 `None`，身份人口变更也暂停，不会发布部分分母。
+- 护照有效区间为闭区间：`valid_from` 当日加入，`valid_until` 当日仍有效，下一自然日
+  退出。日期使用严格公历校验，覆盖大小月、闰年和跨年；`99991231` 不再安排后继日期。
 
 ## 发行回调
 
@@ -92,3 +104,9 @@
 - `cargo test -p citizenchain`
 
 2026-07-21 第 3 步最终验收：`citizen-identity` 30 项、runtime 46 项、NodeGuard 公民发行 8 项和 CID 生命周期 3 项测试通过；`no_std`、`wasm32v1-none`、runtime benchmark/try-runtime 和 Rust 1.94.0 固定工具链 release Node 构建通过。当前源码 `citizenchain-fresh --tmp` 真实启动成功，block #0 为 `0x45144d74a7af61bb25cc08a803a19af1cdc946b007d22c774ce3acdeeebd7db4`，state root 为 `0xe916b283c7cd017aa87d2bfda2b835298195d2cbfc53c19536d0fddeae9874ea`，`peers=0`、`isSyncing=false`，runtime 六项项目版本均为 `0`，metadata 二进制 215,796 字节；节点已停止，未生成正式 chainspec。
+
+2026-07-22 第 4 步最终验收：`citizen-identity` 36 项、`election-vote` 14 项、`citizen-issuance` 14 项单元测试与 5 项集成测试、runtime 46 项及受影响投票/业务 crate 测试通过；全 workspace 测试目标、`no_std`、`wasm32v1-none`、runtime benchmark/try-runtime 和当前源码 release Node 构建通过。当前源码 `citizenchain-fresh --tmp` 真实启动成功，block #0 为 `0x1eee16b152f0e8e50a84bf38a3ccda8f91458bcc8d843ac51640818c1dfeb560`，state root 为 `0x94374f3eea81371fb810889ecaf22ceb740b6d0029ccd27986cd8b42c63a1dc6`，`peers=0`、`isSyncing=false`，runtime 六项项目版本均为 `0`，metadata 二进制 219,646 字节；节点已停止，未生成正式 chainspec。
+
+2026-07-22 第 5 步最终验收：公民投票、竞选和历史快照资格接口已经统一返回完整 `CitizenSubject`，联合公投和立法公投按永久 CID 去重并保存完整票据。`citizen-identity` 36 项、五个投票 crate、runtime 46 项及受影响业务模块测试通过；全 workspace 测试目标、`no_std`、`wasm32v1-none`、runtime benchmark/try-runtime 和当前源码 release Node 构建通过。当前源码 `citizenchain-fresh --tmp` 真实启动成功，block #0 为 `0x69b4a0025356d050004cff3ef176167a6520b59c9086c9ac6b9a45c4b9e9c0e6`，state root 为 `0x0b066c3567ed25c15cfa96b7d249b6235df4746a253144db21c87dfd2ed2333e`，`peers=0`、`isSyncing=false`，runtime 六项项目版本均为 `0`，metadata 二进制 220,197 字节；节点已停止，未生成正式 chainspec。
+
+2026-07-22 第 9 步正式 benchmark 与最终验收：新增 12 条 FRAME benchmark，覆盖四类身份写入、身份吊销、CID 单个/批量占号与吊销、四类人口维护路径；批量范围为 `1..=10,000`。权限夹具使用真实创世联邦注册局专员岗位、任职和权限目录，计时区间不绕过正式授权。人口维护使用完整生产路径的可组合安全上界，组合调用允许重复计入固定开销以确保不低估。CLI 53.0.0、50 steps、20 repeats 已生成正式生产权重；`citizen-identity` 36 项与 runtime 46 项测试、三层 benchmark 编译和当前源码 release Node 构建通过。最终 fresh 节点 block #0 为 `0x4bd7e3f65f5ad4788e6ac8917abce9b0683f0c93d286766a7512854084ff0dd9`，state root 为 `0xd15b1a20d972f0cc5f64aa9a08a09f6793fe51886f9445c6dc953c0f9d438f7b`，runtime 六项项目版本均为 `0`，metadata 二进制 220,247 字节；节点已停止。

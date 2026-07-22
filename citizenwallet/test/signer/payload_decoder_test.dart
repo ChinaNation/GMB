@@ -338,6 +338,68 @@ void main() {
       expect(decoded, isNull);
     });
 
+    test('decodes ElectionVote 公民普选完整候选主体 (22.2)', () {
+      final candidateWallet = List<int>.generate(32, (index) => index + 1);
+      final payload = Uint8List.fromList([
+        0x16,
+        0x02,
+        ...u64Le(101),
+        ...compactVec('GD-CTZN1-8F3A2B'),
+        ...candidateWallet,
+      ]);
+
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'cast_popular_vote');
+      expect(decoded.fields['proposal_id'], '101');
+      expect(decoded.fields['cid_number'], 'GD-CTZN1-8F3A2B');
+      expect(decoded.fields['wallet_account'], ss58FromBytes(candidateWallet));
+    });
+
+    test('decodes ElectionVote 机构岗位互选完整候选主体 (22.3)', () {
+      final candidateWallet = List<int>.filled(32, 0x35);
+      final payload = Uint8List.fromList([
+        0x16,
+        0x03,
+        ...u64Le(102),
+        ...compactVec('COMMITTEE_MEMBER'),
+        ...compactVec('GD-CTZN1-8F3A2B'),
+        ...candidateWallet,
+      ]);
+
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'cast_mutual_vote');
+      expect(decoded.fields['proposal_id'], '102');
+      expect(decoded.fields['voter_role_code'], 'COMMITTEE_MEMBER');
+      expect(decoded.fields['cid_number'], 'GD-CTZN1-8F3A2B');
+      expect(decoded.fields['wallet_account'], ss58FromBytes(candidateWallet));
+    });
+
+    test('ElectionVote 拒绝旧裸钱包候选、CID 截断和尾随字段', () {
+      final wallet = List<int>.filled(32, 0x22);
+      final oldWalletOnly = Uint8List.fromList([
+        0x16,
+        0x02,
+        ...u64Le(103),
+        ...wallet,
+      ]);
+      final trailing = Uint8List.fromList([
+        0x16,
+        0x02,
+        ...u64Le(103),
+        ...compactVec('GD-CTZN1-8F3A2B'),
+        ...wallet,
+        0,
+      ]);
+
+      expect(
+          PayloadDecoder.decode(hexOf(withSigningTail(oldWalletOnly))), isNull);
+      expect(PayloadDecoder.decode(hexOf(withSigningTail(trailing))), isNull);
+    });
+
     group('OnchainIssuance(23) strict SCALE decode', () {
       final executionAccount = List<int>.generate(32, (i) => i + 1);
       final fromAccount = List<int>.filled(32, 0x31);
@@ -584,11 +646,10 @@ void main() {
         ];
         final truncated = validIssue.sublist(0, validIssue.length - 1);
         final trailing = [...validIssue, 0xff];
-        final invalidClass = [...validIssue]
-          ..[2 +
-              compactVec(registryActorCid).length +
-              compactVec('ASSET_OPERATOR').length +
-              32] = 2;
+        final invalidClass = [...validIssue]..[2 +
+            compactVec(registryActorCid).length +
+            compactVec('ASSET_OPERATOR').length +
+            32] = 2;
         final accountIdOnly = <int>[
           0x17,
           0,
@@ -2215,7 +2276,8 @@ void main() {
     test('rejects propose_issuance without proposer_role_code', () {
       final reason = utf8.encode('旧载荷');
       final payload = Uint8List.fromList([
-        0x08, 0x00,
+        0x08,
+        0x00,
         ...compactVec(nrcActorCid),
         (reason.length << 2) & 0xff,
         ...reason,

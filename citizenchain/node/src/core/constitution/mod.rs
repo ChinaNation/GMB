@@ -1725,6 +1725,35 @@ mod tests {
     }
 
     #[test]
+    fn fresh_chain_spec_genesis_satisfies_full_constitution_guard() {
+        use sp_runtime::BuildStorage;
+
+        if citizenchain::WASM_BINARY.is_none() {
+            eprintln!("跳过 fresh chainspec 护宪验收：当前测试构建未嵌入 WASM_BINARY");
+            return;
+        }
+        let storage = crate::core::chain_spec::fresh_genesis_config()
+            .expect("应能构建当前源码 fresh chainspec")
+            .build_storage()
+            .expect("fresh chainspec 应能物化创世状态");
+        let top = storage.top;
+        let read = |key: &[u8]| top.get(key).cloned();
+        let law_bytes = top
+            .get(&storage_key::law(CONSTITUTION_LAW_ID))
+            .expect("fresh chainspec 应含 Law(0)");
+        decode_law_head(law_bytes).unwrap_or_else(|error| {
+            panic!(
+                "fresh chainspec Law(0) 解码失败: {error:?}; len={}; bytes={}",
+                law_bytes.len(),
+                hex::encode(law_bytes)
+            )
+        });
+        let reference =
+            ImmutableReference::from_raw_reader(&read).expect("fresh chainspec 应能派生护宪基准");
+        assert_eq!(check_immutable_articles(&read, &reference), Ok(()));
+    }
+
+    #[test]
     fn effective_version_uses_explicit_pointer() {
         // Effective 和 Pending 都只读显式 effective_version;新法尚无生效版时返回错误。
         assert_eq!(

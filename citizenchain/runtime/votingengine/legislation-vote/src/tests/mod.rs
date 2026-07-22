@@ -156,29 +156,52 @@ pub struct TestInternalAdminProvider;
 pub struct TestInstitutionRoleProvider;
 
 impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
-    fn can_vote(_who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
-        true
+    fn voting_subject(
+        who: &AccountId32,
+        _scope: &votingengine::PopulationScope,
+    ) -> Option<votingengine::CitizenSubject<AccountId32>> {
+        Some(test_citizen_subject(who))
     }
 
-    fn can_be_candidate(_who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
-        true
+    fn candidate_subject(
+        who: &AccountId32,
+        _scope: &votingengine::PopulationScope,
+    ) -> Option<votingengine::CitizenSubject<AccountId32>> {
+        Some(test_citizen_subject(who))
     }
 
-    fn population_count(_scope: &votingengine::PopulationScope) -> u64 {
-        100
-    }
-
-    fn population_data(scope: &votingengine::PopulationScope) -> votingengine::PopulationData {
-        votingengine::PopulationData {
+    fn population_data(
+        scope: &votingengine::PopulationScope,
+    ) -> Option<votingengine::PopulationData> {
+        Some(votingengine::PopulationData {
             scope: scope.clone(),
             eligible_total: 100,
             eligibility_revision: 1,
             eligibility_date: 20_000,
-        }
+        })
     }
 
-    fn can_vote_at(_who: &AccountId32, _population_data: &votingengine::PopulationData) -> bool {
-        true
+    fn voting_subject_at(
+        who: &AccountId32,
+        _population_data: &votingengine::PopulationData,
+    ) -> Option<votingengine::CitizenSubject<AccountId32>> {
+        Some(test_citizen_subject(who))
+    }
+}
+
+/// 账户 201 模拟账户 100 更换后的新钱包，两者共用同一永久 CID。
+fn test_citizen_subject(who: &AccountId32) -> votingengine::CitizenSubject<AccountId32> {
+    let cid_source = if who == &member(201) {
+        member(100)
+    } else {
+        who.clone()
+    };
+    votingengine::CitizenSubject {
+        cid_number: <AccountId32 as AsRef<[u8]>>::as_ref(&cid_source)
+            .to_vec()
+            .try_into()
+            .expect("account fits CID"),
+        wallet_account: who.clone(),
     }
 }
 

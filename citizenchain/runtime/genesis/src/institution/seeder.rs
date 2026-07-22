@@ -27,8 +27,8 @@ use primitives::{
             citizenchain::{
                 CITIZENCHAIN_FOUNDATION, CITIZENCHAIN_GENESIS_ADMINS,
                 CITIZENCHAIN_GENESIS_ASSIGNMENTS, CITIZENCHAIN_GOVERNANCE_THRESHOLD,
-                LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER,
-                LEGAL_REPRESENTATIVE_FAMILY_NAME, LEGAL_REPRESENTATIVE_GIVEN_NAME,
+                LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER, LEGAL_REPRESENTATIVE_FAMILY_NAME,
+                LEGAL_REPRESENTATIVE_GIVEN_NAME,
             },
         },
         code::{institution_code_from_cid_number, InstitutionCode, FRG, NJD},

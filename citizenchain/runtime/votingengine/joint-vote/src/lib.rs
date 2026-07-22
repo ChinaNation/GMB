@@ -137,15 +137,17 @@ pub mod pallet {
     pub type JointTallies<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, votingengine::VoteCountU32, ValueQuery>;
 
-    /// 联合公投记录:(proposal_id, 公民钱包账户) → 赞成/反对。
+    /// 联合公投票据：`(proposal_id, 永久公民 CID) → 完整公民主体 + 票值`。
+    ///
+    /// 按 CID 而不是钱包去重，保证公民更换绑定钱包后仍只能投一票。
     #[pallet::storage]
-    pub type ReferendumVotesByAccount<T: Config> = StorageDoubleMap<
+    pub type ReferendumVotesByCid<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        T::AccountId,
-        bool,
+        CidNumber,
+        votingengine::CitizenReferendumTicket<T::AccountId>,
         OptionQuery,
     >;
 
@@ -174,7 +176,7 @@ pub mod pallet {
         /// 联合公投已投出一票。
         ReferendumVoteCast {
             proposal_id: u64,
-            who: T::AccountId,
+            voter_subject: votingengine::CitizenSubject<T::AccountId>,
             approve: bool,
         },
     }
@@ -362,7 +364,7 @@ impl<T: Config> votingengine::traits::JointCleanupHandler for Pallet<T> {
         proposal_id: u64,
         limit: u32,
     ) -> votingengine::traits::CleanupChunkResult {
-        let result = ReferendumVotesByAccount::<T>::clear_prefix(proposal_id, limit, None);
+        let result = ReferendumVotesByCid::<T>::clear_prefix(proposal_id, limit, None);
         (result.unique, result.maybe_cursor.is_some())
     }
 

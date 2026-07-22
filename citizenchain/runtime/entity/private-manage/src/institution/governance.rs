@@ -31,7 +31,12 @@ use crate::pallet::{
 };
 
 enum LegalRepresentativeTarget<T: Config> {
-    Set(AccountNameOf<T>, AccountNameOf<T>, CidNumberOf<T>, T::AccountId),
+    Set(
+        AccountNameOf<T>,
+        AccountNameOf<T>,
+        CidNumberOf<T>,
+        T::AccountId,
+    ),
     Clear,
 }
 

@@ -27,8 +27,7 @@ use crate::domains::citizens::admin_entry::{
     AdminCreateCitizenOutput, ValidatedCitizenInput,
 };
 use crate::domains::citizens::chain_identity::{
-    active_registry_cid_number, ensure_registry_admin, same_pubkey_hex,
-    validate_actor_role_code,
+    active_registry_cid_number, ensure_registry_admin, same_pubkey_hex, validate_actor_role_code,
 };
 use crate::*;
 

@@ -1,6 +1,6 @@
 # QR_V1 Action Registry
 
-- 更新日期:2026-07-19
+- 更新日期:2026-07-22
 - 状态:人类可读登记表;代码真源为 `citizenchain/crates/qr-protocol/registry/*`
 - 范围:`k=1` 签名请求的 `b.a` 数字动作码
 - 依赖:
@@ -83,6 +83,8 @@ a = (pallet_index << 8) | call_index
 | `0x0c02` | `RuntimeUpgrade.developer_direct_upgrade` | `developer_direct_upgrade` | `wasm_hash` | citizenchain node / CitizenApp |
 | `0x0d00` | `ResolutionDestro.propose_destroy` | `propose_destroy` | `actor_cid_number`, `proposer_role_code`, `institution_account`, `amount_yuan` | CitizenApp |
 | `0x0f00` | `GrandpaKeyChange.propose_replace_grandpa_key` | `propose_replace_grandpa_key` | `actor_cid_number`, `proposer_role_code`, `new_key` | citizenchain node |
+| `0x1602` | `ElectionVote.cast_popular_vote` | `cast_popular_vote` | `proposal_id`, `cid_number`, `wallet_account` | 未来具体公权选举业务模块 / CitizenApp |
+| `0x1603` | `ElectionVote.cast_mutual_vote` | `cast_mutual_vote` | `proposal_id`, `voter_role_code`, `cid_number`, `wallet_account` | 未来具体公权选举业务模块 / CitizenApp |
 | `0x1e01` | `PublicManage.propose_close_public_institution` | `propose_close_public_institution` | `actor_cid_number`, `proposer_role_code`, `institution_account`, `beneficiary`, `credential_issuer_cid_number`, `credential_signer_pubkey` | CitizenApp |
 | `0x1e06` | `PublicManage.update_institution_info` | `update_public_institution_info` | `cid_number`, `cid_full_name`, `cid_short_name`, `actor_cid_number`, `credential_signer_pubkey`, `scope_*` | OnChina（注册局登记管理） |
 | `0x1e07` | `PublicManage.add_institution_account` | `add_public_institution_account` | `cid_number`, `account_names`, `account_count`, `actor_cid_number`, `credential_signer_pubkey`, `scope_*` | OnChina（注册局登记管理） |
@@ -112,6 +114,8 @@ a = (pallet_index << 8) | call_index
 | `0x1400` | `InternalVote.cast` | `internal_vote` | `proposal_id`, `approve` | citizenchain node / CitizenApp |
 | `0x1500` | `JointVote.cast_admin` | `joint_vote` | `proposal_id`, `approve` | citizenchain node / CitizenApp |
 | `0x1501` | `JointVote.cast_referendum` | `cast_referendum` | `proposal_id`, `approve`, `province_name`, `signer_pubkey` | CitizenApp |
+| `0x1602` | `ElectionVote.cast_popular_vote` | `cast_popular_vote` | `proposal_id`, `cid_number`, `wallet_account` | CitizenApp |
+| `0x1603` | `ElectionVote.cast_mutual_vote` | `cast_mutual_vote` | `proposal_id`, `voter_role_code`, `cid_number`, `wallet_account` | CitizenApp |
 
 ## 3. 扫码端展示规则
 

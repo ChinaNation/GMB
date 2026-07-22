@@ -30,7 +30,8 @@ impl<T: Config> Pallet<T> {
             !ProposalPopulationSnapshots::<T>::contains_key(proposal_id),
             Error::<T>::InvalidProposalStatus
         );
-        let population_data = T::CitizenIdentityReader::population_data(scope);
+        let population_data = T::CitizenIdentityReader::population_data(scope)
+            .ok_or(Error::<T>::PopulationDataNotReady)?;
         let eligible_total = population_data.eligible_total;
         ProposalPopulationSnapshots::<T>::insert(
             proposal_id,
@@ -42,11 +43,14 @@ impl<T: Config> Pallet<T> {
         Ok(eligible_total)
     }
 
-    /// 按投票引擎保存的提案人口快照校验建案时公民资格。
-    pub fn can_vote_at_population_snapshot(proposal_id: u64, who: &T::AccountId) -> bool {
-        ProposalPopulationSnapshots::<T>::get(proposal_id)
-            .map(|snapshot| T::CitizenIdentityReader::can_vote_at(who, &snapshot.population_data))
-            .unwrap_or(false)
+    /// 按投票引擎保存的提案人口快照返回建案时完整公民主体。
+    pub fn voting_subject_at_population_snapshot(
+        proposal_id: u64,
+        who: &T::AccountId,
+    ) -> Option<citizen_identity::CitizenSubject<T::AccountId>> {
+        ProposalPopulationSnapshots::<T>::get(proposal_id).and_then(|snapshot| {
+            T::CitizenIdentityReader::voting_subject_at(who, &snapshot.population_data)
+        })
     }
 
     /// 读取提案人口快照的公投选民总数；没有人口快照时返回 `None`。

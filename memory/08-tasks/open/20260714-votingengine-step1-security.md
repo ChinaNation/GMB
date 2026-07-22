@@ -45,7 +45,7 @@
 
 ## 保持 fail-closed 的边界
 
-- `election-campaign` 的职位、发起机构、任期和选举法规则仍无仓库内权威真源，因此真实创建和任职写入继续保持 fail-closed，未猜测开放。
+- 开发期通用选举业务壳已在后续任务中删除，原 pallet index 32 永久留空。具体职位、发起机构、任期和选举法规则仍必须由未来对应的独立选举业务模块提供；在具体模块实现前，真实创建和任职写入继续保持 fail-closed。
 - 仓库尚无本次目标硬件和链配置生成的 benchmark CLI 产物；本次已完成 `runtime-benchmarks` 特性编译与 `set_code` 最重上界止血，但不能把手工权重宣称为真实 benchmark。主网上线门禁必须生成并审核实测权重。
 - 后续任务卡 `20260714-votingengine-structure-tracks-benchmark` 已完成四个超限生产文件的物理拆分；核心 `lib.rs` 785 行、traits 门面 16 行、internal `lib.rs` 496 行、legislation `lib.rs` 572 行。剩余门禁为创世 v1 与迁移残留清理、公平清理、Track 参数化和真实 benchmark。
 - 未修改或覆盖工作区内 citizenapp、deploy 与其它任务卡的既有用户改动；未执行 git push、PR 或远端 CI/CD。

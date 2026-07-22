@@ -85,6 +85,8 @@ class QrActions {
   static const int internalVote = 0x1400;
   static const int jointVote = 0x1500;
   static const int castReferendum = 0x1501;
+  static const int castPopularVote = 0x1602;
+  static const int castMutualVote = 0x1603;
   // 立法(LegislationYuan=25=0x19 发起类节点端;LegislationVote=26=0x1a 投票/签署类)。
   static const int legislationEnact = 0x1900;
   static const int legislationAmend = 0x1901;

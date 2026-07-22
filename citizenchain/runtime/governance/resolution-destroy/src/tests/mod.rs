@@ -74,16 +74,28 @@ impl pallet_balances::Config for Test {
 
 pub struct TestCitizenIdentityReader;
 impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
-    fn can_vote(_who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
-        true
+    fn voting_subject(
+        who: &AccountId32,
+        _scope: &votingengine::PopulationScope,
+    ) -> Option<votingengine::CitizenSubject<AccountId32>> {
+        Some(test_citizen_subject(who))
     }
 
-    fn can_be_candidate(_who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
-        true
+    fn candidate_subject(
+        who: &AccountId32,
+        _scope: &votingengine::PopulationScope,
+    ) -> Option<votingengine::CitizenSubject<AccountId32>> {
+        Some(test_citizen_subject(who))
     }
+}
 
-    fn population_count(_scope: &votingengine::PopulationScope) -> u64 {
-        100
+fn test_citizen_subject(who: &AccountId32) -> votingengine::CitizenSubject<AccountId32> {
+    votingengine::CitizenSubject {
+        cid_number: <AccountId32 as AsRef<[u8]>>::as_ref(who)
+            .to_vec()
+            .try_into()
+            .expect("account fits CID"),
+        wallet_account: who.clone(),
     }
 }
 

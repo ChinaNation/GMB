@@ -61,7 +61,7 @@
   [5.4.3. 公权机构管理员](#543公权机构管理员)
   [5.5. 公权业务模组](#55公权业务模组)
   [5.5.1. 立法院模块](#551立法院模块)
-  [5.5.2. 选举模块](#552选举模块)
+  [5.5.2. 具体公权选举业务模块](#552具体公权选举业务模块)
   [5.6. 实体模组](#56实体模组)
   [5.6.1. 个人多签](#561个人多签)
   [5.6.2. 私权机构](#562私权机构)
@@ -437,8 +437,8 @@ GMB/
 ### 5.2.4.选举投票<br><span class="whitepaper-heading-en">5.2.4. election-vote</span>
 
 * 选举投票面向公职人员产生机制，支持公民普选和公权机构岗位互选两类场景；普选由投票引擎读取 citizen-identity 的人口数据生成提案快照，互选只冻结 `VotePlan` 指定 `RoleSubject` 的有效任职账户。<br><span class="whitepaper-en">Election voting serves the mechanism for selecting public officials and supports both general citizen elections and mutual elections among institutional roles. For a general election, the voting engine reads population data from citizen-identity and creates the proposal snapshot; for a mutual election, it freezes only the active assignment accounts of the RoleSubjects specified by the VotePlan.</span>
-* 投票资格和人口范围由 `citizen-identity` 与投票引擎快照共同确认，选举模块只读取链上授权身份、账户和必要哈希，不接收链下身份凭证。<br><span class="whitepaper-en">Eligibility and population scope are confirmed jointly by `citizen-identity` and voting-engine snapshots. The election module reads only authorized on-chain identities, accounts, and necessary hashes; it does not accept off-chain identity credentials.</span>
-* 选举模块当前作为选举投票规则与结果快照的链上基础，后续候选人登记、职位规则、届期衔接和结果写回，应继续围绕投票引擎扩展，避免业务模块各自实现选举逻辑。<br><span class="whitepaper-en">The election module currently serves as the on-chain foundation for election-vote rules and result snapshots. Candidate registration, office rules, term transitions, and result write-back should continue to expand around the voting engine, avoiding separate election logic in business modules.</span>
+* 投票资格和人口范围由 `citizen-identity` 与投票引擎快照共同确认；选举投票引擎只读取链上授权主体和规范化人口数据，不接收链下身份凭证。<br><span class="whitepaper-en">Eligibility and population scope are confirmed jointly by `citizen-identity` and voting-engine snapshots. The election-vote engine reads only authorized on-chain subjects and normalized population data; it does not accept off-chain identity credentials.</span>
+* 选举投票引擎只负责候选冻结、票据、计票和不可变结果快照，不解释具体候选资格、目标岗位、席位、任期或结果写回规则；这些规则必须由每一种独立的公权选举业务模块定义。<br><span class="whitepaper-en">The election-vote engine is responsible only for candidate freezing, vote tickets, tallying, and immutable result snapshots. It does not interpret candidate eligibility, target roles, seats, terms, or result write-back rules; each independent public-election business module must define those rules.</span>
 
 <img src="./assets/whitepaper-reserve-architecture.png" alt="储委会体系架构图" width="1000">
 
@@ -525,11 +525,11 @@ VOTING → PASSED → EXECUTED
 * 立法院模块不复刻立法投票规则；修法、废止、新法制定等提案进入立法投票模块，由投票引擎完成阶段推进和结果确认。<br><span class="whitepaper-en">The legislature module does not replicate legislative voting rules. Proposals to amend, repeal, or enact laws enter the legislative-vote module, where the voting engine handles stage progression and result confirmation.</span>
 * 公民宪法不可修改条款在链端强制保护，任何立法入口都不能绕开该保护写入非法版本。<br><span class="whitepaper-en">Immutable clauses of the Citizen Constitution are protected by hard on-chain guards, and no legislative entry point may bypass that protection to write an invalid version.</span>
 
-### 5.5.2.选举模块<br><span class="whitepaper-heading-en">5.5.2. election-campaign</span>
+### 5.5.2.具体公权选举业务模块<br><span class="whitepaper-heading-en">5.5.2. Specific Public Election Business Modules</span>
 
-* 选举模块定位为公职人员选举的业务入口，面向候选人登记、职位规则、选民范围、届期衔接和结果公示等业务材料组织。<br><span class="whitepaper-en">The election module is positioned as the business entry for public-office elections, organizing materials such as candidate registration, office rules, electorate scope, term transition, and result publication.</span>
-* 选举模块不是独立治理系统；它与选举投票模块分工明确，业务入口准备选举材料，选举投票模块负责链上投票、快照、计票和结果不可篡改。<br><span class="whitepaper-en">The election module is not an independent governance system. It is clearly separated from the election-vote module: the business entry prepares election materials, while the election-vote module handles on-chain voting, snapshots, tallying, and tamper-proof results.</span>
-* 当前仓库已具备选举投票的链端基础，后续选举业务壳应按公民宪法和投票引擎边界逐步完善，不在业务模块中另写投票逻辑。<br><span class="whitepaper-en">The repository already contains the on-chain foundation for election voting. The future election business shell should be expanded according to the Citizen Constitution and voting-engine boundaries, without writing separate voting logic inside business modules.</span>
+* 不设承载所有选举规则的通用选举业务模块。每一种公权选举都在公权业务目录建立自己的独立业务模块，并由该模块定义候选资格、目标岗位、选民范围、席位、任期和结果写回规则。<br><span class="whitepaper-en">There is no generic business module that centralizes every election rule. Each public-authority election has its own public-business module, which defines candidate eligibility, the target role, electorate scope, seats, terms, and result write-back rules.</span>
+* 具体选举业务模块不是独立投票系统；它只准备和复核业务材料，并调用选举投票引擎。链上投票、人口与选民快照、计票、通过或否决判定及不可变结果快照统一归选举投票引擎。<br><span class="whitepaper-en">A specific election business module is not an independent voting system. It only prepares and reviews business materials and invokes the election-vote engine. On-chain voting, population and electorate snapshots, tallying, pass-or-reject decisions, and immutable result snapshots all belong to the election-vote engine.</span>
+* 当前仓库具备选举投票引擎，但尚未实现具体公权选举业务模块；因此不存在可绕过具体选举规则直接创建真实选举或写回任职的通用入口。<br><span class="whitepaper-en">The repository currently contains the election-vote engine but no specific public-authority election business module. Therefore, no generic entry can bypass concrete election rules to create a real election or write an appointment result.</span>
 
 ## 5.6.实体模组<br><span class="whitepaper-heading-en">5.6. entity</span>
 

@@ -45,8 +45,7 @@ pub use entity_primitives::{
     InstitutionAdminAssignment, InstitutionAssignmentSource, InstitutionAssignmentStatus,
     InstitutionGovernanceAction, InstitutionGovernanceProposal, InstitutionGovernanceResult,
     InstitutionRole, InstitutionRoleAuthorizationQuery, InstitutionRoleMutation,
-    InstitutionRoleStatus, RolePermissionOperation, RolePermissionSpec,
-    LegalRepresentative,
+    InstitutionRoleStatus, LegalRepresentative, RolePermissionOperation, RolePermissionSpec,
 };
 pub use institution::role::{
     InstitutionAdminAssignmentOf, InstitutionAdminAssignmentsOf, InstitutionRoleOf,

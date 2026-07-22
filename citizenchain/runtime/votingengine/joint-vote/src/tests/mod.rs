@@ -1,7 +1,7 @@
 use super::*;
 use votingengine::PopulationScope;
 
-use frame_support::{assert_ok, derive_impl, traits::ConstU32, traits::Hooks};
+use frame_support::{assert_noop, assert_ok, derive_impl, traits::ConstU32, traits::Hooks};
 use frame_system as system;
 use primitives::cid::china::{china_cb::CHINA_CB, china_ch::CHINA_CH};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
@@ -55,29 +55,36 @@ impl frame_support::traits::UnixTime for TestTimeProvider {
 
 pub struct TestCitizenIdentityReader;
 impl CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
-    fn can_vote(who: &AccountId32, _scope: &PopulationScope) -> bool {
-        referendum_voters().contains(who)
+    fn voting_subject(
+        who: &AccountId32,
+        _scope: &PopulationScope,
+    ) -> Option<votingengine::CitizenSubject<AccountId32>> {
+        referendum_subject(who)
     }
 
-    fn can_be_candidate(who: &AccountId32, scope: &PopulationScope) -> bool {
-        Self::can_vote(who, scope)
+    fn candidate_subject(
+        who: &AccountId32,
+        _scope: &PopulationScope,
+    ) -> Option<votingengine::CitizenSubject<AccountId32>> {
+        referendum_subject(who)
     }
 
-    fn population_count(_scope: &PopulationScope) -> u64 {
-        referendum_voters().len() as u64
-    }
-
-    fn population_data(scope: &PopulationScope) -> votingengine::PopulationData {
-        votingengine::PopulationData {
+    fn population_data(scope: &PopulationScope) -> Option<votingengine::PopulationData> {
+        Some(votingengine::PopulationData {
             scope: scope.clone(),
             eligible_total: referendum_voters().len() as u64,
             eligibility_revision: 7,
             eligibility_date: 20_000,
-        }
+        })
     }
 
-    fn can_vote_at(who: &AccountId32, population_data: &votingengine::PopulationData) -> bool {
-        population_data.eligibility_revision == 7 && referendum_voters().contains(who)
+    fn voting_subject_at(
+        who: &AccountId32,
+        population_data: &votingengine::PopulationData,
+    ) -> Option<votingengine::CitizenSubject<AccountId32>> {
+        (population_data.eligibility_revision == 7)
+            .then(|| referendum_subject(who))
+            .flatten()
     }
 }
 
@@ -203,6 +210,27 @@ fn referendum_voters() -> [AccountId32; 3] {
         AccountId32::new([202; 32]),
         AccountId32::new([203; 32]),
     ]
+}
+
+fn replacement_wallet() -> AccountId32 {
+    AccountId32::new([205; 32])
+}
+
+/// 更换钱包只更改签名账户；永久公民 CID 不变。
+fn referendum_subject(who: &AccountId32) -> Option<votingengine::CitizenSubject<AccountId32>> {
+    let voters = referendum_voters();
+    let cid_source = if who == &replacement_wallet() {
+        &voters[0]
+    } else {
+        voters.iter().find(|voter| *voter == who)?
+    };
+    Some(votingengine::CitizenSubject {
+        cid_number: <AccountId32 as AsRef<[u8]>>::as_ref(cid_source)
+            .to_vec()
+            .try_into()
+            .expect("account fits CID"),
+        wallet_account: who.clone(),
+    })
 }
 
 fn nrc_admin() -> AccountId32 {
@@ -544,9 +572,43 @@ fn newly_added_voter_cannot_enter_existing_snapshot() {
             true,
         )
         .is_err());
-        assert!(!ReferendumVotesByAccount::<Test>::contains_key(
+        let post_snapshot_cid: votingengine::types::CidNumber =
+            vec![204; 32].try_into().expect("account fits CID");
+        assert!(!ReferendumVotesByCid::<Test>::contains_key(
             proposal_id,
-            AccountId32::new([204; 32]),
+            post_snapshot_cid,
         ));
+    });
+}
+
+#[test]
+fn same_citizen_cid_cannot_vote_twice_after_wallet_replacement() {
+    new_test_ext().execute_with(|| {
+        let proposal_id = create_joint_proposal();
+        let cid_number = CHINA_CB[1].cid_number.as_bytes().to_vec();
+        finalize_institution(proposal_id, votingengine::PRC, cid_number, false);
+
+        let first_wallet = referendum_voters()[0].clone();
+        assert_ok!(JointVote::cast_referendum(
+            RuntimeOrigin::signed(first_wallet.clone()),
+            proposal_id,
+            true,
+        ));
+        assert_noop!(
+            JointVote::cast_referendum(
+                RuntimeOrigin::signed(replacement_wallet()),
+                proposal_id,
+                false,
+            ),
+            votingengine::Error::<Test>::AlreadyVoted
+        );
+
+        let subject = referendum_subject(&first_wallet).expect("first voter is eligible");
+        let ticket = ReferendumVotesByCid::<Test>::get(proposal_id, &subject.cid_number)
+            .expect("complete citizen referendum ticket should exist");
+        assert_eq!(ticket.voter_subject, subject);
+        assert!(ticket.approve);
+        assert_eq!(ReferendumTallies::<Test>::get(proposal_id).yes, 1);
+        assert_eq!(ReferendumTallies::<Test>::get(proposal_id).no, 0);
     });
 }

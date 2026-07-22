@@ -18,7 +18,14 @@ use crate::{
     Call,
 };
 
-fn setup_election<T: Config>(c: u32, mode: ElectionMode) -> (u64, T::AccountId, T::AccountId) {
+fn setup_election<T: Config>(
+    c: u32,
+    mode: ElectionMode,
+) -> (
+    u64,
+    T::AccountId,
+    votingengine::CitizenSubject<T::AccountId>,
+) {
     let proposal_id = 0u64;
     let voter: T::AccountId = account("voter", 0, 0);
     let actor_cid_number: votingengine::CidNumber = primitives::cid::china::china_cb::CHINA_CB[0]
@@ -27,16 +34,25 @@ fn setup_election<T: Config>(c: u32, mode: ElectionMode) -> (u64, T::AccountId, 
         .to_vec()
         .try_into()
         .expect("NRC CID fits runtime bound");
-    let target_cid_number: votingengine::CidNumber = primitives::cid::china::china_lf::CHINA_LF[0]
-        .cid_number
-        .as_bytes()
-        .to_vec()
-        .try_into()
-        .expect("legislature CID fits runtime bound");
-    let candidates: sp_std::vec::Vec<T::AccountId> =
+    let scope = votingengine::PopulationScope::Country;
+    let candidate_accounts: sp_std::vec::Vec<T::AccountId> =
         (0..c).map(|index| account("candidate", index, 0)).collect();
+    let candidates: sp_std::vec::Vec<votingengine::CitizenSubject<T::AccountId>> =
+        candidate_accounts
+            .iter()
+            .map(|candidate| {
+                <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(
+                    candidate, &scope,
+                );
+                <T as votingengine::Config>::CitizenIdentityReader::citizen_subject(candidate)
+                    .expect("benchmark candidate has a complete citizen subject")
+            })
+            .collect();
     let selected = candidates[0].clone();
-    let bounded: frame_support::BoundedVec<T::AccountId, T::MaxElectionCandidates> = candidates
+    let bounded: frame_support::BoundedVec<
+        votingengine::CitizenSubject<T::AccountId>,
+        T::MaxElectionCandidates,
+    > = candidates
         .try_into()
         .expect("runtime candidate bound covers benchmark range");
     let now = 1u32.saturated_into();
@@ -61,13 +77,11 @@ fn setup_election<T: Config>(c: u32, mode: ElectionMode) -> (u64, T::AccountId, 
             mode,
             population_scope: (mode == ElectionMode::Popular)
                 .then_some(votingengine::PopulationScope::Country),
-            actor_cid_number,
-            target_cid_number: target_cid_number.clone(),
-            office_code: b"benchmark"
+            actor_cid_number: actor_cid_number.clone(),
+            role_code: b"BENCHMARK_TARGET"
                 .to_vec()
                 .try_into()
-                .expect("bounded office code"),
-            rule_id: 0,
+                .expect("benchmark target role code"),
             seat_count: 1,
             term_start: 0,
             term_end: 1,
@@ -75,14 +89,23 @@ fn setup_election<T: Config>(c: u32, mode: ElectionMode) -> (u64, T::AccountId, 
     );
     ElectionCandidates::<T>::insert(proposal_id, bounded);
     if mode == ElectionMode::Popular {
-        let scope = votingengine::PopulationScope::Country;
         <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(&voter, &scope);
-        votingengine::Pallet::<T>::create_population_snapshot(proposal_id, &scope)
-            .expect("benchmark proposal population snapshot");
+        let mut population_data =
+            <T as votingengine::Config>::CitizenIdentityReader::population_data(&scope)
+                .expect("benchmark population data is ready");
+        // 本用例只压测最后一票终结路径；候选身份不属于本场选民分母。
+        population_data.eligible_total = 1;
+        votingengine::ProposalPopulationSnapshots::<T>::insert(
+            proposal_id,
+            votingengine::ProposalPopulationSnapshot {
+                population_data,
+                created_at: now,
+            },
+        );
     } else {
         let subject =
             votingengine::AuthorizationSubject::Institution(entity_primitives::RoleSubject {
-                cid_number: target_cid_number,
+                cid_number: actor_cid_number,
                 role_code: b"BENCHMARK_MEMBER"
                     .to_vec()
                     .try_into()

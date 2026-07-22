@@ -5,7 +5,7 @@
 
 use frame_support::pallet_prelude::DispatchResult;
 
-use crate::pallet::{Config, MaxElectionOfficeCodeOf, Pallet};
+use crate::pallet::{CitizenSubjectOf, Config, Pallet};
 
 impl<T: Config> Pallet<T> {
     #[allow(clippy::too_many_arguments)]
@@ -13,22 +13,18 @@ impl<T: Config> Pallet<T> {
         who: T::AccountId,
         vote_plan: votingengine::types::VotePlanOf<T::AccountId>,
         actor_cid_number: votingengine::types::CidNumber,
-        target_cid_number: votingengine::types::CidNumber,
-        office_code: frame_support::pallet_prelude::BoundedVec<u8, MaxElectionOfficeCodeOf<T>>,
-        rule_id: u32,
+        role_code: votingengine::types::RoleCode,
         seat_count: u16,
         term_start: u32,
         term_end: u32,
-        candidates: sp_std::vec::Vec<T::AccountId>,
+        candidates: sp_std::vec::Vec<CitizenSubjectOf<T>>,
     ) -> Result<u64, sp_runtime::DispatchError> {
         Self::do_create_election(
             who,
             vote_plan,
             crate::types::ElectionMode::Mutual,
             actor_cid_number,
-            target_cid_number,
-            office_code,
-            rule_id,
+            role_code,
             seat_count,
             term_start,
             term_end,
@@ -41,14 +37,14 @@ impl<T: Config> Pallet<T> {
         who: T::AccountId,
         proposal_id: u64,
         voter_role_code: votingengine::types::RoleCode,
-        candidate: T::AccountId,
+        candidate_subject: CitizenSubjectOf<T>,
     ) -> DispatchResult {
         Self::do_cast_election_vote(
             who,
             proposal_id,
             votingengine::STAGE_ELECTION_MUTUAL,
             Some(voter_role_code),
-            candidate,
+            candidate_subject,
         )
     }
 }

@@ -85,6 +85,15 @@ class PalletRegistry {
 
   // call_index 2 永久留洞：联合提案创建时由引擎内联生成全国人口快照。
 
+  // ---- ElectionVote sub-pallet (22) · 普选/互选投票 ----
+  static const int electionVotePallet = 22;
+
+  /// `cast_popular_vote(proposal_id, candidate_subject)`。
+  static const int castPopularVoteCall = 2;
+
+  /// `cast_mutual_vote(proposal_id, voter_role_code, candidate_subject)`。
+  static const int castMutualVoteCall = 3;
+
   // ---- 业务 pallet:仅承载提案创建入口 ----
   //
   // 投票统一走 `InternalVote(20).cast(0)`,手动重试/取消统一走

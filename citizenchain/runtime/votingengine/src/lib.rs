@@ -48,7 +48,7 @@ pub mod traits;
 pub mod types;
 pub mod weights;
 
-pub use citizen_identity::{PopulationData, PopulationScope};
+pub use citizen_identity::{CitizenSubject, PopulationData, PopulationScope};
 pub use pallet::*;
 pub use tracks::*;
 pub use traits::*;
@@ -492,7 +492,7 @@ pub mod pallet {
         ValueQuery,
     >;
 
-    // ──── 双层 ID 与反向索引(spec_version v1) ────
+    // ──── 双层 ID 与反向索引 ────
 
     /// 提案展示号:`proposal_id → (year, seq_in_year)`。
     ///
@@ -669,6 +669,8 @@ pub mod pallet {
         ProposalCancellationNotAllowed,
         /// 终态提案的延迟清理队列连续多个目标区块已满，必须回滚终态写入。
         CleanupQueueSequenceExhausted,
+        /// citizen-identity 尚未把四级有效人口完整推进到当前 UTC+8 日期。
+        PopulationDataNotReady,
     }
 
     #[pallet::hooks]

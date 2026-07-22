@@ -190,6 +190,16 @@ class PayloadDecoder {
         }
       }
 
+      // ── ElectionVote sub-pallet (22) · 公民普选/机构岗位互选 ──
+      if (palletIndex == PalletRegistry.electionVotePallet) {
+        if (callIndex == PalletRegistry.castPopularVoteCall) {
+          return _decodeCastPopularVote(bytes);
+        }
+        if (callIndex == PalletRegistry.castMutualVoteCall) {
+          return _decodeCastMutualVote(bytes);
+        }
+      }
+
       // ── VotingEngine(9) · 引擎核心生命周期 extrinsic ──
       // 仅承载 finalize_proposal / retry_passed_proposal / cancel_passed_proposal。
       if (palletIndex == PalletRegistry.votingEnginePallet) {
@@ -836,6 +846,60 @@ class PayloadDecoder {
         'approve': approve.toString(),
       },
     );
+  }
+
+  // ElectionVote(22) / cast_popular_vote(2)
+  // SCALE:[22][2][proposal_id:u64][candidate_subject(cid_number+wallet_account)]。
+  static DecodedPayload? _decodeCastPopularVote(Uint8List bytes) {
+    if (bytes.length < 43) return null;
+    final proposalId = _readU64Le(bytes, 2);
+    final candidate = _readCitizenSubject(bytes, 10);
+    if (candidate == null || !_hasValidSigningTail(bytes, candidate.$3)) {
+      return null;
+    }
+    return DecodedPayload(
+      action: 'cast_popular_vote',
+      summary: '公民普选 提案 #$proposalId：投给 ${candidate.$1}',
+      fields: {
+        'proposal_id': proposalId.toString(),
+        'cid_number': candidate.$1,
+        'wallet_account': candidate.$2,
+      },
+    );
+  }
+
+  // ElectionVote(22) / cast_mutual_vote(3)
+  // SCALE:[22][3][proposal_id:u64][voter_role_code][candidate_subject]。
+  static DecodedPayload? _decodeCastMutualVote(Uint8List bytes) {
+    if (bytes.length < 44) return null;
+    final proposalId = _readU64Le(bytes, 2);
+    final role = _readRoleCode(bytes, 10);
+    if (role == null) return null;
+    final candidate = _readCitizenSubject(bytes, role.$2);
+    if (candidate == null || !_hasValidSigningTail(bytes, candidate.$3)) {
+      return null;
+    }
+    return DecodedPayload(
+      action: 'cast_mutual_vote',
+      summary: '机构岗位互选 提案 #$proposalId：${role.$1} 席位投给 ${candidate.$1}',
+      fields: {
+        'proposal_id': proposalId.toString(),
+        'voter_role_code': role.$1,
+        'cid_number': candidate.$1,
+        'wallet_account': candidate.$2,
+      },
+    );
+  }
+
+  /// 严格读取 `CitizenSubject { cid_number, wallet_account }`。
+  static (String, String, int)? _readCitizenSubject(
+    Uint8List bytes,
+    int offset,
+  ) {
+    final cid = _readCidNumber(bytes, offset);
+    if (cid == null || cid.$2 + 32 > bytes.length) return null;
+    final walletBytes = Uint8List.fromList(bytes.sublist(cid.$2, cid.$2 + 32));
+    return (cid.$1, _bytesToSs58(walletBytes), cid.$2 + 32);
   }
 
   // 协议升级 RuntimeUpgrade(12) / propose_runtime_upgrade(0) / developer_direct_upgrade(2)
@@ -1500,8 +1564,12 @@ class PayloadDecoder {
     );
   }
 
-  static ({String actorCidNumber, String? actorRoleCode, int assetId, int next})?
-      _readOnchainAssetHeader(
+  static ({
+    String actorCidNumber,
+    String? actorRoleCode,
+    int assetId,
+    int next
+  })? _readOnchainAssetHeader(
     Uint8List bytes, {
     bool withActorRole = false,
   }) {

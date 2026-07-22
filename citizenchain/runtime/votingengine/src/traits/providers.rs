@@ -5,25 +5,35 @@ use crate::types::InstitutionCode;
 /// 公民身份只读接口。投票引擎只能读链上公民身份模块的资格和人口数，
 /// 不再接收注册局链下签发的人口快照或投票凭证。
 pub trait CitizenIdentityReader<AccountId> {
-    fn can_vote(who: &AccountId, scope: &citizen_identity::PopulationScope) -> bool;
-    fn can_be_candidate(who: &AccountId, scope: &citizen_identity::PopulationScope) -> bool;
-    fn population_count(scope: &citizen_identity::PopulationScope) -> u64;
+    /// 读取 CID↔钱包双向绑定、身份状态和 CID 状态全部有效的完整公民主体。
+    fn citizen_subject(_who: &AccountId) -> Option<citizen_identity::CitizenSubject<AccountId>> {
+        None
+    }
 
-    /// 读取投票引擎生成快照所需的四级人口数据；不得在身份模块中创建投票快照。
+    fn voting_subject(
+        who: &AccountId,
+        scope: &citizen_identity::PopulationScope,
+    ) -> Option<citizen_identity::CitizenSubject<AccountId>>;
+    fn candidate_subject(
+        who: &AccountId,
+        scope: &citizen_identity::PopulationScope,
+    ) -> Option<citizen_identity::CitizenSubject<AccountId>>;
+
+    /// 读取投票引擎生成快照所需的四级人口数据；日期未完整推进时必须返回 `None`。
+    /// 身份模块不得创建、保存或绑定任何投票快照。
     fn population_data(
         scope: &citizen_identity::PopulationScope,
-    ) -> citizen_identity::PopulationData {
-        citizen_identity::PopulationData {
-            scope: scope.clone(),
-            eligible_total: 0,
-            eligibility_revision: 0,
-            eligibility_date: 0,
-        }
+    ) -> Option<citizen_identity::PopulationData> {
+        let _ = scope;
+        None
     }
 
     /// 按投票引擎冻结的人口数据验证账户在建案时是否具备投票资格。
-    fn can_vote_at(_who: &AccountId, _population_data: &citizen_identity::PopulationData) -> bool {
-        false
+    fn voting_subject_at(
+        _who: &AccountId,
+        _population_data: &citizen_identity::PopulationData,
+    ) -> Option<citizen_identity::CitizenSubject<AccountId>> {
+        None
     }
 
     /// FRAME benchmark 专用：写入一个同时具备投票和参选资格的账户，
@@ -33,16 +43,18 @@ pub trait CitizenIdentityReader<AccountId> {
 }
 
 impl<AccountId> CitizenIdentityReader<AccountId> for () {
-    fn can_vote(_who: &AccountId, _scope: &citizen_identity::PopulationScope) -> bool {
-        false
+    fn voting_subject(
+        _who: &AccountId,
+        _scope: &citizen_identity::PopulationScope,
+    ) -> Option<citizen_identity::CitizenSubject<AccountId>> {
+        None
     }
 
-    fn can_be_candidate(_who: &AccountId, _scope: &citizen_identity::PopulationScope) -> bool {
-        false
-    }
-
-    fn population_count(_scope: &citizen_identity::PopulationScope) -> u64 {
-        0
+    fn candidate_subject(
+        _who: &AccountId,
+        _scope: &citizen_identity::PopulationScope,
+    ) -> Option<citizen_identity::CitizenSubject<AccountId>> {
+        None
     }
 }
 

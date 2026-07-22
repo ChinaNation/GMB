@@ -28,8 +28,7 @@ impl<T: Config> votingengine::traits::LegislationCleanupHandler for Pallet<T> {
         proposal_id: u64,
         limit: u32,
     ) -> votingengine::traits::CleanupChunkResult {
-        let result =
-            pallet::LegReferendumVotesByAccount::<T>::clear_prefix(proposal_id, limit, None);
+        let result = pallet::LegReferendumVotesByCid::<T>::clear_prefix(proposal_id, limit, None);
         (
             result.unique,
             crate::cleanup::has_more(result.maybe_cursor.is_some()),

@@ -86,13 +86,11 @@ pub(crate) fn validate_citizen_input(
     ctx: &crate::auth::login::AdminAuthContext,
     input: &AdminCreateCitizenInput,
 ) -> Result<ValidatedCitizenInput, axum::response::Response> {
-    let family_name =
-        match required_trimmed(&input.family_name, "family_name") {
-            Ok(v) => v,
-            Err(resp) => return Err(resp),
-        };
-    let given_name = match required_trimmed(&input.given_name, "given_name")
-    {
+    let family_name = match required_trimmed(&input.family_name, "family_name") {
+        Ok(v) => v,
+        Err(resp) => return Err(resp),
+    };
+    let given_name = match required_trimmed(&input.given_name, "given_name") {
         Ok(v) => v,
         Err(resp) => return Err(resp),
     };

@@ -10,11 +10,11 @@ use frame_support::{ensure, pallet_prelude::DispatchResult};
 
 use votingengine::{Proposal, PROPOSAL_KIND_JOINT, STATUS_PASSED};
 
-use super::pallet::{Config, Error, Event, Pallet, ReferendumTallies, ReferendumVotesByAccount};
+use super::pallet::{Config, Error, Event, Pallet, ReferendumTallies, ReferendumVotesByCid};
 use super::{is_jointreferendum_vote_passed, is_jointreferendum_vote_rejected};
 
 impl<T: Config> Pallet<T> {
-    /// 联合公投:直接读取链上公民身份资格,链上按账户去重计票。
+    /// 联合公投：按快照返回的完整公民主体验证，并按永久 CID 去重。
     pub fn do_jointreferendum_vote(
         who: T::AccountId,
         proposal_id: u64,
@@ -33,13 +33,13 @@ impl<T: Config> Pallet<T> {
         let eligible_total = <votingengine::Pallet<T>>::population_eligible_total_of(proposal_id)
             .ok_or(Error::<T>::CitizenEligibleTotalNotSet)?;
         ensure!(eligible_total > 0, Error::<T>::CitizenEligibleTotalNotSet);
-        ensure!(
-            <votingengine::Pallet<T>>::can_vote_at_population_snapshot(proposal_id, &who),
-            Error::<T>::CitizenNotEligible
-        );
+        let voter_subject =
+            <votingengine::Pallet<T>>::voting_subject_at_population_snapshot(proposal_id, &who)
+                .ok_or(Error::<T>::CitizenNotEligible)?;
+        let voter_cid_number = voter_subject.cid_number.clone();
 
         ensure!(
-            !ReferendumVotesByAccount::<T>::contains_key(proposal_id, &who),
+            !ReferendumVotesByCid::<T>::contains_key(proposal_id, &voter_cid_number),
             votingengine::Error::<T>::AlreadyVoted
         );
         let current_tally = ReferendumTallies::<T>::get(proposal_id);
@@ -48,7 +48,14 @@ impl<T: Config> Pallet<T> {
             Error::<T>::ReferendumSnapshotExhausted
         );
 
-        ReferendumVotesByAccount::<T>::insert(proposal_id, &who, approve);
+        ReferendumVotesByCid::<T>::insert(
+            proposal_id,
+            voter_cid_number,
+            votingengine::CitizenReferendumTicket {
+                voter_subject: voter_subject.clone(),
+                approve,
+            },
+        );
         let tally = ReferendumTallies::<T>::mutate(proposal_id, |tally| {
             if approve {
                 tally.yes = tally.yes.saturating_add(1);
@@ -60,7 +67,7 @@ impl<T: Config> Pallet<T> {
 
         Self::deposit_event(Event::<T>::ReferendumVoteCast {
             proposal_id,
-            who,
+            voter_subject,
             approve,
         });
 

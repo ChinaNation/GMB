@@ -8,6 +8,8 @@
 extern crate alloc;
 
 pub use pallet::*;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarks;
 pub mod weights;
 
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
@@ -15,6 +17,8 @@ use frame_support::pallet_prelude::ConstU32;
 use frame_support::BoundedVec;
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
+
+use core::marker::PhantomData;
 
 pub type CidNumberBound = BoundedVec<u8, ConstU32<32>>;
 pub type AreaCodeBound = BoundedVec<u8, ConstU32<16>>;
@@ -28,6 +32,26 @@ pub type GivenName = BoundedVec<u8, ConstU32<PERSON_NAME_MAX_BYTES>>;
 pub const MIN_ONCHAIN_CITIZEN_AGE_YEARS: u8 = 16;
 /// 批量占号单笔上限。
 pub const MAX_CID_OCCUPY_BATCH: u32 = 10_000;
+
+/// 从 Runtime 最大区块权重派生公民人口日期维护的独立预算。
+///
+/// 日期推进只使用 `on_idle` 的剩余权重，并进一步受本预算、每日转换数量和推进天数
+/// 三重上限约束，避免集中到期的人口变化挤占业务交易。
+pub struct PopulationMaintenanceWeightFraction<T, const DIVISOR: u64>(PhantomData<T>);
+
+impl<T: frame_system::Config, const DIVISOR: u64>
+    frame_support::traits::Get<frame_support::weights::Weight>
+    for PopulationMaintenanceWeightFraction<T, DIVISOR>
+{
+    fn get() -> frame_support::weights::Weight {
+        let divisor = DIVISOR.max(1);
+        let max = <T as frame_system::Config>::BlockWeights::get().max_block;
+        frame_support::weights::Weight::from_parts(
+            max.ref_time() / divisor,
+            max.proof_size() / divisor,
+        )
+    }
+}
 
 /// CID 占号登记状态:吊销走墓碑,存储项永不删除、号码永不复用。
 #[derive(
@@ -339,6 +363,73 @@ pub struct PopulationData {
     pub eligibility_date: u32,
 }
 
+/// 护照日期变化对四级有效人口的影响。
+#[derive(
+    Clone,
+    Copy,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Eq,
+    PartialEq,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+)]
+#[repr(u8)]
+pub enum PopulationTransitionKind {
+    /// 护照从本日开始生效，满足其他身份条件时加入四级人口。
+    Activate = 0,
+    /// 护照有效期已于前一日结束，满足同一身份 revision 时退出四级人口。
+    Deactivate = 1,
+}
+
+/// 单个永久 CID 的日期人口转换项。
+///
+/// 只保存 CID、身份 revision 和转换种类；钱包、姓名、居住地和身份全文继续从
+/// `citizen-identity` 唯一真源读取，不在日期队列重复保存。
+#[derive(
+    Clone,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Eq,
+    PartialEq,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+)]
+pub struct PopulationTransition {
+    pub cid_number: CidNumberBound,
+    pub eligibility_revision: u64,
+    pub transition_kind: PopulationTransitionKind,
+}
+
+/// 四级人口维护发现的不可恢复不变量错误。
+///
+/// 一旦写入故障状态，人口读取和身份人口变更全部 fail-closed；本模块不提供管理员
+/// 清除入口，防止绕过链上人口真源。
+#[derive(
+    Clone,
+    Copy,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Eq,
+    PartialEq,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+)]
+#[repr(u8)]
+pub enum PopulationFault {
+    DateMovedBackwards = 0,
+    InvalidReadyDate = 1,
+    CounterOverflow = 2,
+    CounterUnderflow = 3,
+    MissingTransition = 4,
+}
+
 /// 单个账户的一段不可变投票资格历史。
 ///
 /// 全局 revision 区分同一区块内的多次身份写入；`valid_until_revision` 为开区间上界。
@@ -376,6 +467,25 @@ pub trait CitizenIdentityAuthority<AccountId, Signature> {
         payload: &[u8],
         signature: &Signature,
     ) -> bool;
+
+    /// 为 FRAME benchmark 返回一组真实注册局岗位授权主体。
+    ///
+    /// 具体 runtime 必须从其正式创世机构、岗位和任职目录选择主体；benchmark
+    /// 只在计时区间外准备夹具，计时区间内仍走与生产一致的岗位授权读取。
+    #[cfg(feature = "runtime-benchmarks")]
+    fn benchmark_authority() -> Option<(
+        AccountId,
+        CidNumberBound,
+        RoleCodeBound,
+        AreaCodeBound,
+        AreaCodeBound,
+    )> {
+        None
+    }
+
+    /// 调整 benchmark externalities 的链上时间；仅用于覆盖人口日期推进路径。
+    #[cfg(feature = "runtime-benchmarks")]
+    fn benchmark_set_timestamp(_timestamp_millis: u64) {}
 }
 
 impl<AccountId, Signature> CitizenIdentityAuthority<AccountId, Signature> for () {
@@ -417,11 +527,23 @@ impl OnVotingIdentityRegisteredWeight for () {}
 pub trait CitizenIdentityProvider<AccountId> {
     /// 读取经过 CID 状态和 CID↔钱包双向绑定校验的完整公民主体。
     fn citizen_subject(who: &AccountId) -> Option<CitizenSubject<AccountId>>;
-    fn can_vote(who: &AccountId, scope: &PopulationScope) -> bool;
-    fn can_be_candidate(who: &AccountId, scope: &PopulationScope) -> bool;
-    fn population_count(scope: &PopulationScope) -> u64;
-    fn population_data(scope: &PopulationScope) -> PopulationData;
-    fn can_vote_at(who: &AccountId, population_data: &PopulationData) -> bool;
+    /// 返回当前日期在指定作用域内有效的完整投票公民主体。
+    fn voting_subject(
+        who: &AccountId,
+        scope: &PopulationScope,
+    ) -> Option<CitizenSubject<AccountId>>;
+    /// 返回当前日期在指定作用域内有效的完整竞选公民主体。
+    fn candidate_subject(
+        who: &AccountId,
+        scope: &PopulationScope,
+    ) -> Option<CitizenSubject<AccountId>>;
+    /// 只在四级人口已经完整推进到当前 UTC+8 日期时返回数据。
+    fn population_data(scope: &PopulationScope) -> Option<PopulationData>;
+    /// 按投票引擎冻结的人口数据返回完整投票公民主体。
+    fn voting_subject_at(
+        who: &AccountId,
+        population_data: &PopulationData,
+    ) -> Option<CitizenSubject<AccountId>>;
 }
 
 impl<AccountId> CitizenIdentityProvider<AccountId> for () {
@@ -429,29 +551,29 @@ impl<AccountId> CitizenIdentityProvider<AccountId> for () {
         None
     }
 
-    fn can_vote(_who: &AccountId, _scope: &PopulationScope) -> bool {
-        false
+    fn voting_subject(
+        _who: &AccountId,
+        _scope: &PopulationScope,
+    ) -> Option<CitizenSubject<AccountId>> {
+        None
     }
 
-    fn can_be_candidate(_who: &AccountId, _scope: &PopulationScope) -> bool {
-        false
+    fn candidate_subject(
+        _who: &AccountId,
+        _scope: &PopulationScope,
+    ) -> Option<CitizenSubject<AccountId>> {
+        None
     }
 
-    fn population_count(_scope: &PopulationScope) -> u64 {
-        0
+    fn population_data(_scope: &PopulationScope) -> Option<PopulationData> {
+        None
     }
 
-    fn population_data(scope: &PopulationScope) -> PopulationData {
-        PopulationData {
-            scope: scope.clone(),
-            eligible_total: 0,
-            eligibility_revision: 0,
-            eligibility_date: 0,
-        }
-    }
-
-    fn can_vote_at(_who: &AccountId, _population_data: &PopulationData) -> bool {
-        false
+    fn voting_subject_at(
+        _who: &AccountId,
+        _population_data: &PopulationData,
+    ) -> Option<CitizenSubject<AccountId>> {
+        None
     }
 }
 
@@ -482,6 +604,17 @@ pub mod pallet {
 
         /// 链上时间源(pallet-timestamp),用于投票时校验护照有效期窗口。
         type TimeProvider: frame_support::traits::UnixTime;
+
+        /// 单个区块最多推进的自然日数量；空日期同样受此上限保护。
+        #[pallet::constant]
+        type MaxPopulationDaysPerBlock: Get<u32>;
+
+        /// 单个区块最多处理的护照生效或到期转换项数量。
+        #[pallet::constant]
+        type MaxPopulationTransitionsPerBlock: Get<u32>;
+
+        /// 人口日期维护在单个区块内可使用的独立最大权重。
+        type MaxPopulationMaintenanceWeightPerBlock: Get<frame_support::weights::Weight>;
 
         type WeightInfo: crate::weights::WeightInfo;
     }
@@ -545,6 +678,36 @@ pub mod pallet {
         ValueQuery,
     >;
 
+    /// 四级人口计数已经完整推进至的 UTC+8 日期；`0` 表示尚未初始化。
+    #[pallet::storage]
+    pub type PopulationReadyDate<T> = StorageValue<_, u32, ValueQuery>;
+
+    /// 指定日期已经登记的转换项数量，同时作为该日期下一个顺序号。
+    #[pallet::storage]
+    pub type PopulationTransitionCountByDate<T> =
+        StorageMap<_, Blake2_128Concat, u32, u64, ValueQuery>;
+
+    /// 指定日期尚未处理的第一个转换项顺序号。
+    #[pallet::storage]
+    pub type PopulationTransitionCursorByDate<T> =
+        StorageMap<_, Blake2_128Concat, u32, u64, ValueQuery>;
+
+    /// `(UTC+8 日期, 日期内顺序号)` 到人口转换项。
+    #[pallet::storage]
+    pub type PopulationTransitions<T> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        u32,
+        Blake2_128Concat,
+        u64,
+        PopulationTransition,
+        OptionQuery,
+    >;
+
+    /// 人口维护故障；存在时身份人口变更和新人口快照均永久 fail-closed。
+    #[pallet::storage]
+    pub type PopulationMaintenanceFault<T> = StorageValue<_, PopulationFault, OptionQuery>;
+
     /// 全局身份资格修订号。每次投票身份写入严格递增，用于冻结同区块交易顺序。
     #[pallet::storage]
     pub type NextEligibilityRevision<T> = StorageValue<_, u64, ValueQuery>;
@@ -596,6 +759,15 @@ pub mod pallet {
         CidRevoked {
             cid_number: CidNumberBound,
         },
+        /// 四级人口已经完整推进至该 UTC+8 日期。
+        PopulationDateReady {
+            eligibility_date: u32,
+        },
+        /// 日期推进发现计数或日期不变量损坏，人口读取随即 fail-closed。
+        PopulationMaintenanceFaulted {
+            eligibility_date: u32,
+            fault: PopulationFault,
+        },
     }
 
     #[pallet::error]
@@ -629,6 +801,27 @@ pub mod pallet {
         EligibilityRevisionOverflow,
         /// 单个永久 CID 的身份历史版本数达到 u64 上限。
         EligibilityVersionOverflow,
+        /// 四级人口尚未完整推进到当前 UTC+8 日期。
+        PopulationDataNotReady,
+        /// 四级人口维护已经进入故障状态。
+        PopulationMaintenanceFaulted,
+        /// 指定日期的转换项顺序号达到 u64 上限。
+        PopulationTransitionOverflow,
+        /// 四级人口计数加法溢出。
+        PopulationCounterOverflow,
+        /// 四级人口计数减法下溢，说明人口不变量已经损坏。
+        PopulationCounterUnderflow,
+    }
+
+    #[pallet::hooks]
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        /// Timestamp inherent 已在 `on_idle` 前写入；人口日期只在剩余权重内有界推进。
+        fn on_idle(
+            _n: BlockNumberFor<T>,
+            remaining_weight: frame_support::weights::Weight,
+        ) -> frame_support::weights::Weight {
+            Self::process_population_maintenance(remaining_weight)
+        }
     }
 
     #[pallet::call]
@@ -989,10 +1182,10 @@ pub mod pallet {
                 ),
                 Error::<T>::UnauthorizedRegistrar
             );
-            Self::tombstone_cid_record(&cid_number);
             if WalletAccountByCid::<T>::contains_key(&cid_number) {
                 Self::revoke_bound_identity(&cid_number)?;
             }
+            Self::tombstone_cid_record(&cid_number);
             Self::deposit_event(Event::<T>::CidRevoked { cid_number });
             Ok(())
         }
@@ -1100,7 +1293,9 @@ pub mod pallet {
                 Error::<T>::EmptyResidenceScope
             );
             ensure!(
-                payload.passport_valid_from <= payload.passport_valid_until,
+                Self::is_plausible_yyyymmdd(payload.passport_valid_from)
+                    && Self::is_plausible_yyyymmdd(payload.passport_valid_until)
+                    && payload.passport_valid_from <= payload.passport_valid_until,
                 Error::<T>::InvalidDateRange
             );
             ensure!(
@@ -1224,9 +1419,7 @@ pub mod pallet {
             }
         }
 
-        // 人口计数器只按状态增量维护(链上没有"护照到期"事件,无法按时间自动
-        // 减计数),护照过期公民在注册局更新状态前仍计入分母;投票资格由
-        // `can_vote` 的护照有效期窗口实时拦截。
+        /// 身份状态基础校验；人口分母还必须同时满足护照日期、CID 和钱包绑定规则。
         fn identity_counts_as_voter(identity: &VotingIdentity<BlockNumberFor<T>>) -> bool {
             identity.citizen_status == CitizenStatus::Normal
         }
@@ -1245,13 +1438,41 @@ pub mod pallet {
             (year as u32) * 10_000 + month * 100 + day
         }
 
-        /// 校验 YYYYMMDD 整数的基本合法性(年 1900–9999、月 1–12、日 1–31)。
-        /// 只做粗校验(不判每月天数),精确到期由业务与前端展示层负责。
+        /// 严格校验 YYYYMMDD 公历日期（年 1900–9999，含大小月和闰年）。
         pub fn is_plausible_yyyymmdd(date: u32) -> bool {
             let year = date / 10_000;
             let month = (date / 100) % 100;
             let day = date % 100;
-            (1900..=9999).contains(&year) && (1..=12).contains(&month) && (1..=31).contains(&day)
+            if !(1900..=9999).contains(&year) || !(1..=12).contains(&month) || day == 0 {
+                return false;
+            }
+            let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+            let days_in_month = match month {
+                2 if leap => 29,
+                2 => 28,
+                4 | 6 | 9 | 11 => 30,
+                _ => 31,
+            };
+            day <= days_in_month
+        }
+
+        /// 返回严格公历日期的下一自然日；`99991231` 没有可表示后继日。
+        pub fn next_calendar_date(date: u32) -> Option<u32> {
+            if !Self::is_plausible_yyyymmdd(date) || date == 99_991_231 {
+                return None;
+            }
+            let year = date / 10_000;
+            let month = (date / 100) % 100;
+            let candidate = if Self::is_plausible_yyyymmdd(date.saturating_add(1)) {
+                date.saturating_add(1)
+            } else if month == 12 {
+                year.checked_add(1)?.checked_mul(10_000)?.checked_add(101)?
+            } else {
+                year.checked_mul(10_000)?
+                    .checked_add(month.checked_add(1)?.checked_mul(100)?)?
+                    .checked_add(1)?
+            };
+            Self::is_plausible_yyyymmdd(candidate).then_some(candidate)
         }
 
         /// 由出生日期(YYYYMMDD)与链上当前日期(UTC+8)计算周岁。
@@ -1304,18 +1525,61 @@ pub mod pallet {
                 && date <= identity.passport_valid_until
         }
 
+        /// 身份人口变更只能在四级人口已经完整推进至当前日期且没有故障时执行。
+        fn ensure_population_ready() -> Result<u32, DispatchError> {
+            ensure!(
+                PopulationMaintenanceFault::<T>::get().is_none(),
+                Error::<T>::PopulationMaintenanceFaulted
+            );
+            let current_date = Self::current_date_int();
+            ensure!(current_date != 0, Error::<T>::PopulationDataNotReady);
+            ensure!(
+                PopulationReadyDate::<T>::get() == current_date,
+                Error::<T>::PopulationDataNotReady
+            );
+            Ok(current_date)
+        }
+
+        /// 当前永久 CID 与钱包必须形成唯一双向闭环。
+        fn cid_wallet_binding_complete(cid_number: &CidNumberBound) -> bool {
+            WalletAccountByCid::<T>::get(cid_number).is_some_and(|account| {
+                CidByWalletAccount::<T>::get(&account).as_ref() == Some(cid_number)
+            })
+        }
+
+        /// 身份是否属于指定日期的四级有效人口。
+        fn identity_eligible_on(identity: &VotingIdentity<BlockNumberFor<T>>, date: u32) -> bool {
+            Self::identity_counts_as_voter(identity)
+                && Self::passport_window_valid_on(identity, date)
+        }
+
         fn replace_voting_identity(
             cid_number: CidNumberBound,
             next: VotingIdentity<BlockNumberFor<T>>,
             old: Option<VotingIdentity<BlockNumberFor<T>>>,
+        ) -> DispatchResult {
+            let ready_date = Self::ensure_population_ready()?;
+            frame_support::storage::with_transaction(|| {
+                match Self::do_replace_voting_identity(cid_number, next, old, ready_date) {
+                    Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
+                    Err(err) => frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+                }
+            })
+        }
+
+        fn do_replace_voting_identity(
+            cid_number: CidNumberBound,
+            next: VotingIdentity<BlockNumberFor<T>>,
+            old: Option<VotingIdentity<BlockNumberFor<T>>>,
+            ready_date: u32,
         ) -> DispatchResult {
             let revision = NextEligibilityRevision::<T>::get()
                 .checked_add(1)
                 .ok_or(Error::<T>::EligibilityRevisionOverflow)?;
             let version_count = VotingEligibilityVersionCount::<T>::get(&cid_number);
             if let Some(old_identity) = old {
-                if Self::identity_counts_as_voter(&old_identity) {
-                    Self::decrement_scope_counts(&old_identity);
+                if Self::identity_eligible_on(&old_identity, ready_date) {
+                    Self::decrement_scope_counts(&old_identity)?;
                 }
                 if version_count > 0 {
                     VotingEligibilityVersions::<T>::mutate(
@@ -1329,8 +1593,8 @@ pub mod pallet {
                     );
                 }
             }
-            if Self::identity_counts_as_voter(&next) {
-                Self::increment_scope_counts(&next);
+            if Self::identity_eligible_on(&next, ready_date) {
+                Self::increment_scope_counts(&next)?;
             }
             let next_version_count = version_count
                 .checked_add(1)
@@ -1346,52 +1610,267 @@ pub mod pallet {
             );
             VotingEligibilityVersionCount::<T>::insert(&cid_number, next_version_count);
             NextEligibilityRevision::<T>::put(revision);
-            VotingIdentityByCid::<T>::insert(cid_number, next);
+            VotingIdentityByCid::<T>::insert(&cid_number, &next);
+            Self::schedule_identity_transitions(&cid_number, &next, revision, ready_date)?;
             Ok(())
         }
 
-        fn increment_scope_counts(identity: &VotingIdentity<BlockNumberFor<T>>) {
-            CountryVotingCount::<T>::mutate(|v| *v = v.saturating_add(1));
-            ProvinceVotingCount::<T>::mutate(identity.residence_province_code.clone(), |v| {
-                *v = v.saturating_add(1)
-            });
-            CityVotingCount::<T>::mutate(
-                (
-                    identity.residence_province_code.clone(),
-                    identity.residence_city_code.clone(),
-                ),
-                |v| *v = v.saturating_add(1),
-            );
-            TownVotingCount::<T>::mutate(
-                (
-                    identity.residence_province_code.clone(),
-                    identity.residence_city_code.clone(),
-                    identity.residence_town_code.clone(),
-                ),
-                |v| *v = v.saturating_add(1),
-            );
+        fn schedule_identity_transitions(
+            cid_number: &CidNumberBound,
+            identity: &VotingIdentity<BlockNumberFor<T>>,
+            revision: u64,
+            ready_date: u32,
+        ) -> DispatchResult {
+            if identity.citizen_status != CitizenStatus::Normal {
+                return Ok(());
+            }
+            if identity.passport_valid_from > ready_date {
+                Self::append_population_transition(
+                    identity.passport_valid_from,
+                    PopulationTransition {
+                        cid_number: cid_number.clone(),
+                        eligibility_revision: revision,
+                        transition_kind: PopulationTransitionKind::Activate,
+                    },
+                )?;
+            }
+            if let Some(deactivate_date) = Self::next_calendar_date(identity.passport_valid_until) {
+                if deactivate_date > ready_date {
+                    Self::append_population_transition(
+                        deactivate_date,
+                        PopulationTransition {
+                            cid_number: cid_number.clone(),
+                            eligibility_revision: revision,
+                            transition_kind: PopulationTransitionKind::Deactivate,
+                        },
+                    )?;
+                }
+            }
+            Ok(())
         }
 
-        fn decrement_scope_counts(identity: &VotingIdentity<BlockNumberFor<T>>) {
-            CountryVotingCount::<T>::mutate(|v| *v = v.saturating_sub(1));
-            ProvinceVotingCount::<T>::mutate(identity.residence_province_code.clone(), |v| {
-                *v = v.saturating_sub(1)
-            });
-            CityVotingCount::<T>::mutate(
-                (
-                    identity.residence_province_code.clone(),
-                    identity.residence_city_code.clone(),
-                ),
-                |v| *v = v.saturating_sub(1),
+        fn append_population_transition(
+            date: u32,
+            transition: PopulationTransition,
+        ) -> DispatchResult {
+            let index = PopulationTransitionCountByDate::<T>::get(date);
+            let next = index
+                .checked_add(1)
+                .ok_or(Error::<T>::PopulationTransitionOverflow)?;
+            PopulationTransitions::<T>::insert(date, index, transition);
+            PopulationTransitionCountByDate::<T>::insert(date, next);
+            Ok(())
+        }
+
+        fn increment_scope_counts(identity: &VotingIdentity<BlockNumberFor<T>>) -> DispatchResult {
+            Self::write_adjusted_scope_counts(identity, true).map_err(|fault| match fault {
+                PopulationFault::CounterOverflow => Error::<T>::PopulationCounterOverflow.into(),
+                _ => Error::<T>::PopulationCounterUnderflow.into(),
+            })
+        }
+
+        fn decrement_scope_counts(identity: &VotingIdentity<BlockNumberFor<T>>) -> DispatchResult {
+            Self::write_adjusted_scope_counts(identity, false).map_err(|fault| match fault {
+                PopulationFault::CounterUnderflow => Error::<T>::PopulationCounterUnderflow.into(),
+                _ => Error::<T>::PopulationCounterOverflow.into(),
+            })
+        }
+
+        /// 先读取并验证四级结果，再一次性写入，避免中途溢出留下部分更新。
+        fn write_adjusted_scope_counts(
+            identity: &VotingIdentity<BlockNumberFor<T>>,
+            increment: bool,
+        ) -> Result<(), PopulationFault> {
+            let province_key = identity.residence_province_code.clone();
+            let city_key = (
+                identity.residence_province_code.clone(),
+                identity.residence_city_code.clone(),
             );
-            TownVotingCount::<T>::mutate(
-                (
-                    identity.residence_province_code.clone(),
-                    identity.residence_city_code.clone(),
-                    identity.residence_town_code.clone(),
-                ),
-                |v| *v = v.saturating_sub(1),
+            let town_key = (
+                identity.residence_province_code.clone(),
+                identity.residence_city_code.clone(),
+                identity.residence_town_code.clone(),
             );
+            let adjust = |value: u64| {
+                if increment {
+                    value.checked_add(1).ok_or(PopulationFault::CounterOverflow)
+                } else {
+                    value
+                        .checked_sub(1)
+                        .ok_or(PopulationFault::CounterUnderflow)
+                }
+            };
+            let country = adjust(CountryVotingCount::<T>::get())?;
+            let province = adjust(ProvinceVotingCount::<T>::get(&province_key))?;
+            let city = adjust(CityVotingCount::<T>::get(&city_key))?;
+            let town = adjust(TownVotingCount::<T>::get(&town_key))?;
+            CountryVotingCount::<T>::put(country);
+            ProvinceVotingCount::<T>::insert(province_key, province);
+            CityVotingCount::<T>::insert(city_key, city);
+            TownVotingCount::<T>::insert(town_key, town);
+            Ok(())
+        }
+
+        fn current_identity_revision(cid_number: &CidNumberBound) -> Option<u64> {
+            let count = VotingEligibilityVersionCount::<T>::get(cid_number);
+            if count == 0 {
+                return None;
+            }
+            VotingEligibilityVersions::<T>::get(cid_number, count.checked_sub(1)?)
+                .map(|version| version.valid_from_revision)
+        }
+
+        fn process_population_transition(
+            date: u32,
+            transition: &PopulationTransition,
+        ) -> Result<(), PopulationFault> {
+            if Self::current_identity_revision(&transition.cid_number)
+                != Some(transition.eligibility_revision)
+            {
+                // 身份已更新或吊销，旧任务自然失效。
+                return Ok(());
+            }
+            let identity = VotingIdentityByCid::<T>::get(&transition.cid_number)
+                .ok_or(PopulationFault::MissingTransition)?;
+            let active_cid = CidRegistry::<T>::get(&transition.cid_number)
+                .is_some_and(|record| record.status == CidRecordStatus::Active);
+            if !active_cid || !Self::cid_wallet_binding_complete(&transition.cid_number) {
+                return Err(PopulationFault::MissingTransition);
+            }
+            match transition.transition_kind {
+                PopulationTransitionKind::Activate => {
+                    if identity.citizen_status == CitizenStatus::Normal
+                        && identity.passport_valid_from == date
+                        && Self::passport_window_valid_on(&identity, date)
+                    {
+                        Self::write_adjusted_scope_counts(&identity, true)?;
+                    }
+                }
+                PopulationTransitionKind::Deactivate => {
+                    if identity.citizen_status == CitizenStatus::Normal
+                        && Self::next_calendar_date(identity.passport_valid_until) == Some(date)
+                    {
+                        Self::write_adjusted_scope_counts(&identity, false)?;
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        fn record_population_fault(date: u32, fault: PopulationFault) {
+            if PopulationMaintenanceFault::<T>::get().is_none() {
+                PopulationMaintenanceFault::<T>::put(fault);
+                Self::deposit_event(Event::<T>::PopulationMaintenanceFaulted {
+                    eligibility_date: date,
+                    fault,
+                });
+            }
+        }
+
+        /// 在当块剩余权重和独立预算内推进四级人口日期。
+        pub fn process_population_maintenance(
+            remaining_weight: frame_support::weights::Weight,
+        ) -> frame_support::weights::Weight {
+            let configured = T::MaxPopulationMaintenanceWeightPerBlock::get();
+            let max_weight = frame_support::weights::Weight::from_parts(
+                remaining_weight.ref_time().min(configured.ref_time()),
+                remaining_weight.proof_size().min(configured.proof_size()),
+            );
+            let base_weight = T::WeightInfo::population_maintenance_base();
+            if base_weight.any_gt(max_weight) {
+                return frame_support::weights::Weight::zero();
+            }
+            let mut used = base_weight;
+            if PopulationMaintenanceFault::<T>::get().is_some() {
+                return used;
+            }
+            let current_date = Self::current_date_int();
+            if current_date == 0 {
+                return used;
+            }
+
+            let mut ready_date = PopulationReadyDate::<T>::get();
+            if ready_date == 0 {
+                let initialize_weight = T::WeightInfo::initialize_population_date();
+                if used.saturating_add(initialize_weight).any_gt(max_weight) {
+                    return used;
+                }
+                PopulationReadyDate::<T>::put(current_date);
+                Self::deposit_event(Event::<T>::PopulationDateReady {
+                    eligibility_date: current_date,
+                });
+                return used.saturating_add(initialize_weight);
+            }
+            if !Self::is_plausible_yyyymmdd(ready_date) {
+                Self::record_population_fault(ready_date, PopulationFault::InvalidReadyDate);
+                return used;
+            }
+            if ready_date > current_date {
+                Self::record_population_fault(current_date, PopulationFault::DateMovedBackwards);
+                return used;
+            }
+
+            let max_days = T::MaxPopulationDaysPerBlock::get();
+            let max_transitions = T::MaxPopulationTransitionsPerBlock::get();
+            let mut processed_days = 0u32;
+            let mut processed_transitions = 0u32;
+            let mut last_completed_date = None;
+
+            'dates: while ready_date < current_date && processed_days < max_days {
+                let Some(date) = Self::next_calendar_date(ready_date) else {
+                    Self::record_population_fault(ready_date, PopulationFault::InvalidReadyDate);
+                    break;
+                };
+                let day_weight = T::WeightInfo::advance_population_day();
+                if used.saturating_add(day_weight).any_gt(max_weight) {
+                    break;
+                }
+                used = used.saturating_add(day_weight);
+
+                let transition_count = PopulationTransitionCountByDate::<T>::get(date);
+                let mut cursor = PopulationTransitionCursorByDate::<T>::get(date);
+                if cursor > transition_count {
+                    Self::record_population_fault(date, PopulationFault::MissingTransition);
+                    break;
+                }
+                while cursor < transition_count {
+                    if processed_transitions >= max_transitions {
+                        break 'dates;
+                    }
+                    let transition_weight = T::WeightInfo::process_population_transition();
+                    if used.saturating_add(transition_weight).any_gt(max_weight) {
+                        break 'dates;
+                    }
+                    let Some(transition) = PopulationTransitions::<T>::get(date, cursor) else {
+                        Self::record_population_fault(date, PopulationFault::MissingTransition);
+                        return used;
+                    };
+                    if let Err(fault) = Self::process_population_transition(date, &transition) {
+                        Self::record_population_fault(date, fault);
+                        return used.saturating_add(transition_weight);
+                    }
+                    PopulationTransitions::<T>::remove(date, cursor);
+                    cursor = cursor.saturating_add(1);
+                    PopulationTransitionCursorByDate::<T>::insert(date, cursor);
+                    processed_transitions = processed_transitions.saturating_add(1);
+                    used = used.saturating_add(transition_weight);
+                }
+                if cursor < transition_count {
+                    break;
+                }
+
+                PopulationTransitionCountByDate::<T>::remove(date);
+                PopulationTransitionCursorByDate::<T>::remove(date);
+                PopulationReadyDate::<T>::put(date);
+                ready_date = date;
+                processed_days = processed_days.saturating_add(1);
+                last_completed_date = Some(date);
+            }
+
+            if let Some(eligibility_date) = last_completed_date {
+                Self::deposit_event(Event::<T>::PopulationDateReady { eligibility_date });
+            }
+            used
         }
 
         fn scope_matches(
@@ -1450,13 +1929,20 @@ pub mod pallet {
         ///
         /// 本函数只读取 citizen-identity 自有的四级人口计数、资格 revision 和日期，
         /// 不创建、保存或释放任何投票快照。
-        pub fn governance_population_data(scope: &PopulationScope) -> PopulationData {
-            PopulationData {
+        pub fn governance_population_data(scope: &PopulationScope) -> Option<PopulationData> {
+            if PopulationMaintenanceFault::<T>::get().is_some() {
+                return None;
+            }
+            let current_date = Self::current_date_int();
+            if current_date == 0 || PopulationReadyDate::<T>::get() != current_date {
+                return None;
+            }
+            Some(PopulationData {
                 scope: scope.clone(),
                 eligible_total: Self::population_count_for_scope(scope),
                 eligibility_revision: NextEligibilityRevision::<T>::get(),
-                eligibility_date: Self::current_date_int(),
-            }
+                eligibility_date: current_date,
+            })
         }
 
         /// 按快照 revision 二分定位永久 CID 当时的身份版本。
@@ -1494,25 +1980,24 @@ pub mod pallet {
         }
 
         /// 使用 citizen-identity 自有历史验证账户在投票引擎快照时点是否具备资格。
-        pub fn can_vote_at_population_data(
+        pub fn voting_subject_at_population_data(
             who: &T::AccountId,
             population_data: &PopulationData,
-        ) -> bool {
+        ) -> Option<CitizenSubject<T::AccountId>> {
             // 历史资格跟随永久 CID；钱包只负责当前交易签名和 CID 反向解析。
-            let Some(cid_number) = CidByWalletAccount::<T>::get(who) else {
-                return false;
-            };
+            let cid_number = CidByWalletAccount::<T>::get(who)?;
             if WalletAccountByCid::<T>::get(&cid_number).as_ref() != Some(who) {
-                return false;
+                return None;
             }
-            let Some(identity) =
-                Self::identity_at_revision(&cid_number, population_data.eligibility_revision)
-            else {
-                return false;
-            };
-            Self::identity_counts_as_voter(&identity)
+            let identity =
+                Self::identity_at_revision(&cid_number, population_data.eligibility_revision)?;
+            (Self::identity_counts_as_voter(&identity)
                 && Self::passport_window_valid_on(&identity, population_data.eligibility_date)
-                && Self::scope_matches(&identity, &population_data.scope)
+                && Self::scope_matches(&identity, &population_data.scope))
+            .then(|| CitizenSubject {
+                cid_number,
+                wallet_account: who.clone(),
+            })
         }
     }
 
@@ -1523,36 +2008,36 @@ pub mod pallet {
 
         // 消费端全量校验:身份存在(注册时已锁定 CID↔钱包一对一并验公民签名)、
         // 状态 NORMAL、护照有效期窗口内、居住地在作用域内。
-        fn can_vote(who: &T::AccountId, scope: &PopulationScope) -> bool {
-            let Some(subject) = Pallet::<T>::citizen_subject(who) else {
-                return false;
-            };
-            VotingIdentityByCid::<T>::get(subject.cid_number)
-                .map(|identity| {
-                    Self::identity_counts_as_voter(&identity)
-                        && Self::passport_window_valid(&identity)
-                        && Self::scope_matches(&identity, scope)
-                })
-                .unwrap_or(false)
+        fn voting_subject(
+            who: &T::AccountId,
+            scope: &PopulationScope,
+        ) -> Option<CitizenSubject<T::AccountId>> {
+            let subject = Pallet::<T>::citizen_subject(who)?;
+            VotingIdentityByCid::<T>::get(&subject.cid_number).and_then(|identity| {
+                (Self::identity_counts_as_voter(&identity)
+                    && Self::passport_window_valid(&identity)
+                    && Self::scope_matches(&identity, scope))
+                .then_some(subject)
+            })
         }
 
-        fn can_be_candidate(who: &T::AccountId, scope: &PopulationScope) -> bool {
-            if !Self::can_vote(who, scope) {
-                return false;
-            }
-            CidByWalletAccount::<T>::get(who).is_some_and(CandidateIdentityByCid::<T>::contains_key)
+        fn candidate_subject(
+            who: &T::AccountId,
+            scope: &PopulationScope,
+        ) -> Option<CitizenSubject<T::AccountId>> {
+            let subject = Self::voting_subject(who, scope)?;
+            CandidateIdentityByCid::<T>::contains_key(&subject.cid_number).then_some(subject)
         }
 
-        fn population_count(scope: &PopulationScope) -> u64 {
-            Self::population_count_for_scope(scope)
-        }
-
-        fn population_data(scope: &PopulationScope) -> PopulationData {
+        fn population_data(scope: &PopulationScope) -> Option<PopulationData> {
             Self::governance_population_data(scope)
         }
 
-        fn can_vote_at(who: &T::AccountId, population_data: &PopulationData) -> bool {
-            Self::can_vote_at_population_data(who, population_data)
+        fn voting_subject_at(
+            who: &T::AccountId,
+            population_data: &PopulationData,
+        ) -> Option<CitizenSubject<T::AccountId>> {
+            Self::voting_subject_at_population_data(who, population_data)
         }
     }
 }

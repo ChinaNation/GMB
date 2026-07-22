@@ -6,7 +6,10 @@
 
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
-use votingengine::types::CidNumber;
+use votingengine::{
+    types::{CidNumber, InstitutionVoteTicket, RoleCode},
+    CitizenSubject,
+};
 
 /// 选举模式：普选或机构内部互选。
 #[derive(
@@ -37,26 +40,46 @@ impl ElectionMode {
     }
 }
 
-/// 创建选举时固化的职位快照。
+/// 创建选举时固化的机构岗位快照。
 ///
-/// `office_code` 是业务模块给出的职位编码，例如总统、参议员、
-/// 院长等；本 pallet 只保存快照，不解释职位规则。
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-pub struct ElectionMeta<OfficeCode> {
+/// 发起机构就是拟任职机构，岗位只使用 entity 已有的 `role_code`；具体选举规则由
+/// `runtime/public/` 下的业务模块定义，不在投票引擎另造职位编码或规则编号。
+#[derive(
+    Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
+)]
+pub struct ElectionMeta {
     pub mode: ElectionMode,
     /// 普选固定人口作用域；互选为 None，资格来自 VotePlan 岗位任职快照。
     pub population_scope: Option<votingengine::PopulationScope>,
-    /// 发起机构 CID；机构码只允许从该 CID 解析，不在载荷或存储中保留第二身份真源。
+    /// 发起和拟任职机构的唯一 CID；不得再保存第二个目标机构 CID。
     pub actor_cid_number: CidNumber,
-    /// 任职目标机构 CID。
-    pub target_cid_number: CidNumber,
-    pub office_code: OfficeCode,
-    pub rule_id: u32,
+    /// 当选后拟任职的 entity 真实岗位码。
+    pub role_code: RoleCode,
     pub seat_count: u16,
     /// 任期开始日（自纪元起天数），与 entity 任职字段单位一致。
     pub term_start: u32,
     /// 任期结束日（自纪元起天数），与 entity 任职字段单位一致。
     pub term_end: u32,
+}
+
+/// 普选票据：永久 CID 负责去重，值同时冻结完整选民和候选公民主体。
+#[derive(
+    Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
+)]
+pub struct PopularElectionVote<AccountId> {
+    pub voter_subject: CitizenSubject<AccountId>,
+    pub candidate_subject: CitizenSubject<AccountId>,
+}
+
+/// 选举事件中的完整选民证据。
+#[derive(
+    Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
+)]
+pub enum ElectionVoter<AccountId> {
+    /// 普选公民主体。
+    Citizen(CitizenSubject<AccountId>),
+    /// 互选机构岗位票据。
+    Institution(InstitutionVoteTicket<AccountId>),
 }
 
 /// 选举计票汇总。
@@ -66,9 +89,11 @@ pub struct ElectionTally {
 }
 
 /// 当选结果项。
-#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
+)]
 pub struct ElectionWinner<AccountId> {
-    pub account: AccountId,
+    pub candidate_subject: CitizenSubject<AccountId>,
     pub votes: u32,
     pub seat_index: u16,
 }

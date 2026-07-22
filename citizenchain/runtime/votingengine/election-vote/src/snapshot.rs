@@ -5,32 +5,53 @@
 
 use frame_support::{ensure, pallet_prelude::*};
 use sp_runtime::DispatchError;
+use votingengine::CitizenIdentityReader;
 
-use crate::pallet::{Config, ElectionCandidates, Error, MaxElectionCandidatesOf, Pallet};
+use crate::pallet::{
+    CitizenSubjectOf, Config, ElectionCandidates, Error, MaxElectionCandidatesOf, Pallet,
+};
 
 impl<T: Config> Pallet<T> {
-    pub(crate) fn ensure_unique_accounts(accounts: &[T::AccountId]) -> DispatchResult {
-        for i in 0..accounts.len() {
-            for j in i.saturating_add(1)..accounts.len() {
-                ensure!(accounts[i] != accounts[j], Error::<T>::DuplicateAccount);
+    pub(crate) fn ensure_unique_candidate_cids(
+        candidates: &[CitizenSubjectOf<T>],
+    ) -> DispatchResult {
+        for i in 0..candidates.len() {
+            for j in i.saturating_add(1)..candidates.len() {
+                ensure!(
+                    candidates[i].cid_number != candidates[j].cid_number,
+                    Error::<T>::DuplicateCandidateCid
+                );
             }
         }
         Ok(())
     }
 
     pub(crate) fn bounded_candidates(
-        candidates: sp_std::vec::Vec<T::AccountId>,
-    ) -> Result<BoundedVec<T::AccountId, MaxElectionCandidatesOf<T>>, DispatchError> {
+        candidates: sp_std::vec::Vec<CitizenSubjectOf<T>>,
+    ) -> Result<BoundedVec<CitizenSubjectOf<T>, MaxElectionCandidatesOf<T>>, DispatchError> {
         ensure!(!candidates.is_empty(), Error::<T>::EmptyCandidateSnapshot);
-        Self::ensure_unique_accounts(&candidates)?;
+        Self::ensure_unique_candidate_cids(&candidates)?;
+        ensure!(
+            candidates.iter().all(|candidate| {
+                <T as votingengine::Config>::CitizenIdentityReader::citizen_subject(
+                    &candidate.wallet_account,
+                )
+                .as_ref()
+                    == Some(candidate)
+            }),
+            Error::<T>::CandidateSubjectInvalid
+        );
         candidates
             .try_into()
             .map_err(|_| Error::<T>::TooManyCandidates.into())
     }
 
-    pub(crate) fn candidate_exists(proposal_id: u64, candidate: &T::AccountId) -> bool {
+    pub(crate) fn candidate_exists(
+        proposal_id: u64,
+        candidate_subject: &CitizenSubjectOf<T>,
+    ) -> bool {
         ElectionCandidates::<T>::get(proposal_id)
-            .map(|items| items.iter().any(|item| item == candidate))
+            .map(|items| items.iter().any(|item| item == candidate_subject))
             .unwrap_or(false)
     }
 }

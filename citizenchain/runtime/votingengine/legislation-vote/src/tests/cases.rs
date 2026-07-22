@@ -514,12 +514,43 @@ fn legislation_referendum_rejects_votes_beyond_population_snapshot_denominator()
             Error::<Test>::ReferendumSnapshotExhausted
         );
         assert!(
-            !crate::pallet::LegReferendumVotesByAccount::<Test>::contains_key(pid, member(100))
+            !crate::pallet::LegReferendumVotesByCid::<Test>::contains_key(
+                pid,
+                test_citizen_subject(&member(100)).cid_number,
+            )
         );
     });
 }
 
-/// 公投投一票:新链路按投票账户去重,资格由 CitizenIdentityReader 判断。
+#[test]
+fn legislation_referendum_deduplicates_permanent_cid_after_wallet_replacement() {
+    new_test_ext().execute_with(|| {
+        let pid = create(member(1), single_house(), RepresentativeVoteRule::Special);
+        for i in 1u8..=8 {
+            assert_ok!(cast(member(i), pid, true));
+        }
+        for i in 9u8..=10 {
+            assert_ok!(cast(member(i), pid, false));
+        }
+        assert_eq!(stage(pid), STAGE_LEG_REFERENDUM);
+
+        assert_ok!(Lib::do_cast_referendum_vote(member(100), pid, true));
+        assert_noop!(
+            Lib::do_cast_referendum_vote(member(201), pid, false),
+            votingengine::Error::<Test>::AlreadyVoted
+        );
+
+        let subject = test_citizen_subject(&member(100));
+        let ticket = crate::pallet::LegReferendumVotesByCid::<Test>::get(pid, &subject.cid_number)
+            .expect("complete citizen referendum ticket should exist");
+        assert_eq!(ticket.voter_subject, subject);
+        assert!(ticket.approve);
+        assert_eq!(crate::pallet::LegReferendumTally::<Test>::get(pid).yes, 1);
+        assert_eq!(crate::pallet::LegReferendumTally::<Test>::get(pid).no, 0);
+    });
+}
+
+/// 公投投一票：资格由 CitizenIdentityReader 返回完整主体，票据按 CID 去重。
 fn cast_referendum(pid: u64, seed: u64, approve: bool) {
     frame_support::storage::with_transaction(
         || -> frame_support::storage::TransactionOutcome<sp_runtime::DispatchResult> {

@@ -135,9 +135,7 @@ impl crate::bank_check::CidAccountQuery<AccountId32> for MockCid {
         who: &AccountId32,
         _action_code: u32,
     ) -> bool {
-        cid_number == BANK_CID
-            && role_code == bank_role_code().as_slice()
-            && who == &bank_admin()
+        cid_number == BANK_CID && role_code == bank_role_code().as_slice() && who == &bank_admin()
     }
 
     /// 测试 mock:测试场景默认 BANK_MAIN 满足资格白名单,负路径单测自行覆盖。

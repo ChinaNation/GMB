@@ -182,15 +182,17 @@ pub mod pallet {
     pub type LegReferendumTally<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, votingengine::VoteCountU64, ValueQuery>;
 
-    /// 公投去重:(proposal_id, 公民钱包账户) → 赞成/反对。
+    /// 立法公投票据：`(proposal_id, 永久公民 CID) → 完整公民主体 + 票值`。
+    ///
+    /// 按 CID 而不是钱包去重，保证公民更换绑定钱包后仍只能投一票。
     #[pallet::storage]
-    pub type LegReferendumVotesByAccount<T: Config> = StorageDoubleMap<
+    pub type LegReferendumVotesByCid<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        T::AccountId,
-        bool,
+        votingengine::types::CidNumber,
+        votingengine::CitizenReferendumTicket<T::AccountId>,
         OptionQuery,
     >;
 
@@ -244,7 +246,7 @@ pub mod pallet {
         /// 一张公投票已投出。
         LegislationReferendumVoteCast {
             proposal_id: u64,
-            who: T::AccountId,
+            voter_subject: votingengine::CitizenSubject<T::AccountId>,
             approve: bool,
         },
         /// 内部全过(非特别案),推进至行政签署阶段。
@@ -320,7 +322,7 @@ pub mod pallet {
             Self::do_cast_representative_vote(who, proposal_id, voter_role_code, approve)
         }
 
-        /// 公民对特别案公投投票(链上公民身份持有者,链上按账户去重计票)。
+        /// 公民对特别案公投投票（校验完整公民主体，并按永久 CID 去重计票）。
         #[pallet::call_index(2)]
         #[pallet::weight(<T as Config>::WeightInfo::cast_referendum_vote())]
         pub fn cast_referendum_vote(

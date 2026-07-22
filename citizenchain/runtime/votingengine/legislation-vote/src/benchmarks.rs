@@ -12,7 +12,7 @@ use votingengine::CitizenIdentityReader;
 
 use crate::{
     pallet::{
-        Config, LegGuardSigns, LegOverrideSigns, LegReferendumVotesByAccount, LegislationMeta,
+        Config, LegGuardSigns, LegOverrideSigns, LegReferendumVotesByCid, LegislationMeta,
         LegislationMetas, Pallet, RepresentativeMeta, RepresentativeMetas,
         RepresentativeVotesByTicket,
     },
@@ -132,6 +132,9 @@ mod benchmarks {
         let voter: T::AccountId = account("citizen", 0, 0);
         let scope = votingengine::PopulationScope::Country;
         <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(&voter, &scope);
+        let voter_subject =
+            <T as votingengine::Config>::CitizenIdentityReader::voting_subject(&voter, &scope)
+                .expect("benchmark citizen subject should exist");
         votingengine::Pallet::<T>::create_population_snapshot(proposal_id, &scope)
             .expect("benchmark proposal population snapshot should be created");
         LegislationMetas::<T>::insert(
@@ -147,9 +150,9 @@ mod benchmarks {
         #[extrinsic_call]
         _(RawOrigin::Signed(voter.clone()), proposal_id, true);
 
-        assert!(LegReferendumVotesByAccount::<T>::contains_key(
+        assert!(LegReferendumVotesByCid::<T>::contains_key(
             proposal_id,
-            voter
+            voter_subject.cid_number
         ));
     }
 

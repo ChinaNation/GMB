@@ -90,8 +90,7 @@ pub(crate) struct PublicInstitutionRow {
     pub has_legal_personality: Option<bool>,
     /// 法定代表人公开身份；人的姓名只下发分离的姓、名。
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub legal_representative:
-        Option<crate::institution::subjects::model::LegalRepresentative>,
+    pub legal_representative: Option<crate::institution::subjects::model::LegalRepresentative>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_cid_number: Option<String>,
     pub account_count: usize,
@@ -111,14 +110,14 @@ impl PublicInstitutionRow {
             row.get::<_, Option<String>>("legal_representative_cid_number"),
             row.get::<_, Option<String>>("legal_representative_account"),
         ) {
-            (Some(family_name), Some(given_name), Some(cid_number), Some(account)) => Some(
-                crate::institution::subjects::model::LegalRepresentative {
+            (Some(family_name), Some(given_name), Some(cid_number), Some(account)) => {
+                Some(crate::institution::subjects::model::LegalRepresentative {
                     family_name,
                     given_name,
                     cid_number,
                     account,
-                },
-            ),
+                })
+            }
             (None, None, None, None) => None,
             _ => return Err("incomplete public legal representative projection".to_string()),
         };
@@ -465,14 +464,12 @@ mod tests {
             town_code: String::new(),
             institution_code: "PGV".to_string(),
             has_legal_personality: Some(true),
-            legal_representative: Some(
-                crate::institution::subjects::model::LegalRepresentative {
-                    family_name: "张".to_string(),
-                    given_name: "三".to_string(),
-                    cid_number: "110000CTZN1000000001".to_string(),
-                    account: "11".repeat(32),
-                },
-            ),
+            legal_representative: Some(crate::institution::subjects::model::LegalRepresentative {
+                family_name: "张".to_string(),
+                given_name: "三".to_string(),
+                cid_number: "110000CTZN1000000001".to_string(),
+                account: "11".repeat(32),
+            }),
             parent_cid_number: None,
             account_count: 2,
             custom_account_names: vec!["业务专户A".to_string()],

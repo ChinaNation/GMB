@@ -1,4 +1,4 @@
-//! 提案 ID 体系(双层 ID 设计,spec_version v1)。
+//! 提案 ID 体系（双层 ID 设计）。
 //!
 //! - **主键 `proposal_id: u64`** 全局纯单调递增,实质无上限(1.84×10¹⁹)。
 //!   所有 storage map(`Proposals` / `ProposalData` / `InternalVotesByTicket` 等)

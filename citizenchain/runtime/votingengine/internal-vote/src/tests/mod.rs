@@ -436,29 +436,46 @@ impl frame_support::traits::UnixTime for TestTimeProvider {
     }
 }
 impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
-    fn can_vote(who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
-        who == &nrc_admin(0)
+    fn voting_subject(
+        who: &AccountId32,
+        _scope: &votingengine::PopulationScope,
+    ) -> Option<votingengine::CitizenSubject<AccountId32>> {
+        (who == &nrc_admin(0)).then(|| test_citizen_subject(who))
     }
 
-    fn can_be_candidate(who: &AccountId32, scope: &votingengine::PopulationScope) -> bool {
-        Self::can_vote(who, scope)
+    fn candidate_subject(
+        who: &AccountId32,
+        _scope: &votingengine::PopulationScope,
+    ) -> Option<votingengine::CitizenSubject<AccountId32>> {
+        (who == &nrc_admin(0)).then(|| test_citizen_subject(who))
     }
 
-    fn population_count(_scope: &votingengine::PopulationScope) -> u64 {
-        TEST_POPULATION_COUNT.with(|count| *count.borrow())
-    }
-
-    fn population_data(scope: &votingengine::PopulationScope) -> votingengine::PopulationData {
-        votingengine::PopulationData {
+    fn population_data(
+        scope: &votingengine::PopulationScope,
+    ) -> Option<votingengine::PopulationData> {
+        Some(votingengine::PopulationData {
             scope: scope.clone(),
             eligible_total: TEST_POPULATION_COUNT.with(|count| *count.borrow()),
             eligibility_revision: 1,
             eligibility_date: 20_000,
-        }
+        })
     }
 
-    fn can_vote_at(who: &AccountId32, _population_data: &votingengine::PopulationData) -> bool {
-        who == &nrc_admin(0)
+    fn voting_subject_at(
+        who: &AccountId32,
+        _population_data: &votingengine::PopulationData,
+    ) -> Option<votingengine::CitizenSubject<AccountId32>> {
+        (who == &nrc_admin(0)).then(|| test_citizen_subject(who))
+    }
+}
+
+fn test_citizen_subject(who: &AccountId32) -> votingengine::CitizenSubject<AccountId32> {
+    votingengine::CitizenSubject {
+        cid_number: <AccountId32 as AsRef<[u8]>>::as_ref(who)
+            .to_vec()
+            .try_into()
+            .expect("account fits CID"),
+        wallet_account: who.clone(),
     }
 }
 
@@ -684,7 +701,7 @@ fn submit_joint_vote(
     <joint_vote::Pallet<Test>>::do_joint_vote(who, proposal_id, cid_number, role_code, approve)
 }
 
-fn set_population_count(eligible_total: u64) {
+fn set_population_data(eligible_total: u64) {
     TEST_POPULATION_COUNT.with(|count| *count.borrow_mut() = eligible_total);
 }
 
@@ -702,7 +719,7 @@ fn try_create_joint_proposal_for(
     actor_cid_number: CidNumber,
     eligible_total: u64,
 ) -> Result<u64, DispatchError> {
-    set_population_count(eligible_total);
+    set_population_data(eligible_total);
     let data = b"joint-test".to_vec();
     let hash = <Test as frame_system::Config>::Hashing::hash(data.as_slice());
     let mut business_object_hash = [0u8; 32];

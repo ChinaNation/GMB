@@ -100,6 +100,8 @@ class QrActions {
   static const int internalVote = 0x1400;
   static const int jointVote = 0x1500;
   static const int castReferendum = 0x1501;
+  static const int castPopularVote = 0x1602;
+  static const int castMutualVote = 0x1603;
 
   // 链上资产 OnchainIssuance(23 = 0x17)。动作码与 runtime call_index 一一对应。
   static const int proposeAssetIssue = 0x1700;

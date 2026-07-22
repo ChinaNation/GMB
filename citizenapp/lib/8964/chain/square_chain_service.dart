@@ -4,9 +4,9 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart/scale_codec.dart' show ByteOutput, CompactBigIntCodec;
-import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:citizenapp/8964/models/square_models.dart';
+import 'package:citizenapp/my/myid/citizen_identity_chain_reader.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/signed_extrinsic_builder.dart';
 import 'package:citizenapp/rpc/subscription_rpc.dart' show SubscriptionRpc;
@@ -38,9 +38,15 @@ abstract class SquarePostChainPublisher {
 }
 
 class SquareChainService implements SquarePostChainPublisher {
-  SquareChainService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
+  SquareChainService({
+    ChainRpc? chainRpc,
+    CitizenIdentityChainReader? identityChainReader,
+  })  : _rpc = chainRpc ?? ChainRpc(),
+        _identityChainReader = identityChainReader ??
+            CitizenIdentityChainReader(chainRpc: chainRpc);
 
   final ChainRpc _rpc;
+  final CitizenIdentityChainReader _identityChainReader;
 
   static const int palletIndex = 34;
   static const int publishPostCallIndex = 0;
@@ -92,15 +98,11 @@ class SquareChainService implements SquarePostChainPublisher {
   }
 
   Future<String?> fetchNormalCitizenCidNumber(String ownerAccount) async {
-    final accountId = Uint8List.fromList(Keyring().decodeAddress(ownerAccount));
-    final key = storageMapKey(
-      'CitizenIdentity',
-      'VotingIdentityByAccount',
-      accountId,
-    );
-    final data = await _rpc.fetchStorage('0x${hexEncode(key)}');
-    if (data == null) return null;
-    return decodeNormalCitizenCidNumber(data);
+    final identity = await _identityChainReader.readByWallet(ownerAccount);
+    if (identity == null || !votingIdentityIsActive(identity.votingIdentity)) {
+      return null;
+    }
+    return identity.cidNumber;
   }
 
   /// 读链上身份档：有效投票身份的 cid + 是否竞选公民。
@@ -108,20 +110,14 @@ class SquareChainService implements SquarePostChainPublisher {
   Future<({String? cidNumber, String identityLevel})> fetchIdentity(
     String ownerAccount,
   ) async {
-    final cid = await fetchNormalCitizenCidNumber(ownerAccount);
-    if (cid == null) {
+    final identity = await _identityChainReader.readByWallet(ownerAccount);
+    if (identity == null || !votingIdentityIsActive(identity.votingIdentity)) {
       return (cidNumber: null, identityLevel: 'visitor');
     }
-    final accountId = Uint8List.fromList(Keyring().decodeAddress(ownerAccount));
-    final candKey = storageMapKey(
-      'CitizenIdentity',
-      'CandidateIdentityByAccount',
-      accountId,
-    );
-    final candData = await _rpc.fetchStorage('0x${hexEncode(candKey)}');
     return (
-      cidNumber: cid,
-      identityLevel: candData != null ? 'candidate' : 'voting',
+      cidNumber: identity.cidNumber,
+      identityLevel:
+          identity.candidateIdentity != null ? 'candidate' : 'voting',
     );
   }
 
@@ -222,41 +218,25 @@ class SquareChainService implements SquarePostChainPublisher {
   }
 
   @visibleForTesting
-  static String? decodeNormalCitizenCidNumber(Uint8List data) {
+  static bool votingIdentityIsActive(Uint8List data, {int? today}) {
     try {
+      if (!CitizenIdentityChainReader.votingIdentityLayoutIsValid(data)) {
+        return false;
+      }
       var offset = 0;
-      final cid = readCompactBytes(data, offset);
-      offset = cid.nextOffset;
-      if (offset + 4 + 4 + 1 > data.length) return null;
-      offset += 4; // passport_valid_from
-      offset += 4; // passport_valid_until
+      final validFrom = _readU32Le(data, offset);
+      offset += 4;
+      final validUntil = _readU32Le(data, offset);
+      offset += 4;
       final citizenStatus = data[offset];
-      if (citizenStatus != 0) return null;
-      final cidText = utf8.decode(cid.value, allowMalformed: false).trim();
-      return cidText.isEmpty ? null : cidText;
+      if (citizenStatus != 0) return false;
+      final beijingNow = DateTime.now().toUtc().add(const Duration(hours: 8));
+      final currentDate = today ??
+          beijingNow.year * 10000 + beijingNow.month * 100 + beijingNow.day;
+      return currentDate >= validFrom && currentDate <= validUntil;
     } catch (_) {
-      return null;
+      return false;
     }
-  }
-
-  @visibleForTesting
-  static Uint8List storageMapKey(
-    String palletName,
-    String storageName,
-    Uint8List keyData,
-  ) {
-    final palletHash = Hasher.twoxx128.hashString(palletName);
-    final storageHash = Hasher.twoxx128.hashString(storageName);
-    final keyHash = blake2128Concat(keyData);
-    final result =
-        Uint8List(palletHash.length + storageHash.length + keyHash.length);
-    var offset = 0;
-    result.setAll(offset, palletHash);
-    offset += palletHash.length;
-    result.setAll(offset, storageHash);
-    offset += storageHash.length;
-    result.setAll(offset, keyHash);
-    return result;
   }
 
   static void writeCompactBytes(ByteOutput output, Uint8List bytes) {
@@ -264,57 +244,11 @@ class SquareChainService implements SquarePostChainPublisher {
     output.write(bytes);
   }
 
-  static ({Uint8List value, int nextOffset}) readCompactBytes(
-    Uint8List data,
-    int offset,
-  ) {
-    final (length, lengthSize) = readCompactU32(data, offset);
-    final start = offset + lengthSize;
-    final end = start + length;
-    if (end > data.length) {
-      throw const FormatException('Compact bytes 长度越界');
-    }
-    return (
-      value: Uint8List.fromList(data.sublist(start, end)),
-      nextOffset: end
-    );
-  }
-
-  static (int, int) readCompactU32(Uint8List data, int offset) {
-    if (offset >= data.length) {
-      throw const FormatException('Compact<u32> offset 越界');
-    }
-    final first = data[offset];
-    final mode = first & 0x03;
-    if (mode == 0) return (first >> 2, 1);
-    if (mode == 1) {
-      if (offset + 1 >= data.length) {
-        throw const FormatException('Compact<u32> mode1 长度不足');
-      }
-      return ((first >> 2) | (data[offset + 1] << 6), 2);
-    }
-    if (mode == 2) {
-      if (offset + 3 >= data.length) {
-        throw const FormatException('Compact<u32> mode2 长度不足');
-      }
-      return (
-        (first >> 2) |
-            (data[offset + 1] << 6) |
-            (data[offset + 2] << 14) |
-            (data[offset + 3] << 22),
-        4,
-      );
-    }
-    throw const FormatException('Compact<u32> big-integer 模式暂不支持');
-  }
-
-  static Uint8List blake2128Concat(Uint8List data) {
-    final hash = Hasher.blake2b128.hash(data);
-    final result = Uint8List(hash.length + data.length);
-    result.setAll(0, hash);
-    result.setAll(hash.length, data);
-    return result;
-  }
+  static int _readU32Le(Uint8List data, int offset) =>
+      data[offset] |
+      (data[offset + 1] << 8) |
+      (data[offset + 2] << 16) |
+      (data[offset + 3] << 24);
 
   static Uint8List u64LittleEndian(int value) {
     if (value < 0) throw ArgumentError('u64 不能为负数');

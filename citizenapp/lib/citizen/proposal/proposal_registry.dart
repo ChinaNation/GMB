@@ -229,8 +229,8 @@ class ProposalCapabilityRegistry {
     ProposalCapability(
       kind: ProposalKind.election,
       enabled: false,
-      pallet: 'ElectionVote',
-      call: 'pending',
+      pallet: '具体公权选举业务模块尚未接入',
+      call: '未开放',
       voteEngine: 'ElectionVote',
       allows: (_) => false,
     ),

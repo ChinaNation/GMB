@@ -670,7 +670,6 @@ impl Db {
                 ADD COLUMN IF NOT EXISTS passport_valid_from TEXT NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS passport_valid_until TEXT NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS town_code TEXT,
-                ADD COLUMN IF NOT EXISTS residence_town_code TEXT,
                 ADD COLUMN IF NOT EXISTS birth_province_code TEXT,
                 ADD COLUMN IF NOT EXISTS birth_city_code TEXT,
                 ADD COLUMN IF NOT EXISTS birth_town_code TEXT,
@@ -681,19 +680,6 @@ impl Db {
                 ADD COLUMN IF NOT EXISTS created_by TEXT NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS updated_by TEXT,
                 ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
-             ALTER TABLE citizens
-                DROP CONSTRAINT IF EXISTS citizens_election_scope_level_check,
-                DROP CONSTRAINT IF EXISTS citizens_bind_status_check;
-             ALTER TABLE citizens
-                DROP COLUMN IF EXISTS valid_from,
-                DROP COLUMN IF EXISTS valid_until,
-                DROP COLUMN IF EXISTS election_scope_level,
-                DROP COLUMN IF EXISTS bind_status,
-                DROP COLUMN IF EXISTS bound_at,
-                DROP COLUMN IF EXISTS bound_by,
-                DROP COLUMN IF EXISTS citizen_full_name,
-                DROP COLUMN IF EXISTS residence_province_code,
-                DROP COLUMN IF EXISTS residence_city_code;
              ALTER TABLE citizens
                 ALTER COLUMN wallet_pubkey DROP NOT NULL,
                 ALTER COLUMN wallet_address DROP NOT NULL,
@@ -716,7 +702,7 @@ impl Db {
                  given_name = COALESCE(given_name, ''),
                  citizen_sex = COALESCE(citizen_sex, ''),
                  citizen_birth_date = COALESCE(citizen_birth_date, ''),
-                 town_code = COALESCE(NULLIF(town_code, ''), NULLIF(residence_town_code, ''), ''),
+                 town_code = COALESCE(town_code, ''),
                  passport_valid_from = COALESCE(passport_valid_from, ''),
                  passport_valid_until = COALESCE(passport_valid_until, ''),
                  updated_at = COALESCE(updated_at, created_at, now());
@@ -726,9 +712,7 @@ impl Db {
                 ALTER COLUMN birth_province_code SET NOT NULL,
                 ALTER COLUMN birth_city_code SET NOT NULL,
                 ALTER COLUMN birth_town_code SET DEFAULT '',
-                ALTER COLUMN birth_town_code SET NOT NULL;
-             ALTER TABLE citizens
-                DROP COLUMN IF EXISTS residence_town_code;",
+                ALTER COLUMN birth_town_code SET NOT NULL;",
         )
         .map_err(|e| {
             format!(
@@ -1043,20 +1027,6 @@ impl Db {
             "updated_at",
         ] {
             Self::ensure_column_state(conn, "citizens", column, true)?;
-        }
-        for column in [
-            "valid_from",
-            "valid_until",
-            "election_scope_level",
-            "bind_status",
-            "bound_at",
-            "bound_by",
-            "citizen_full_name",
-            "residence_province_code",
-            "residence_city_code",
-            "residence_town_code",
-        ] {
-            Self::ensure_column_state(conn, "citizens", column, false)?;
         }
         for column in [
             "cid_number",

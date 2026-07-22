@@ -10,8 +10,7 @@ pub use pallet::*;
 /// 地址变更发起注册局的机构唯一 CID。
 pub type ActorCidNumber =
     frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<32>>;
-pub type ActorRoleCode =
-    frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>>;
+pub type ActorRoleCode = frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>>;
 
 /// 地址更新权限抽象。
 ///

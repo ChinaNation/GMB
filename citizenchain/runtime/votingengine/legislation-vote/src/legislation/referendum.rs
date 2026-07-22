@@ -58,7 +58,7 @@ impl<T: Config> Pallet<T> {
 }
 
 impl<T: Config> Pallet<T> {
-    /// 公投投票:读取链上公民身份资格 + 按账户去重计票(期满计票,本入口不提前判定)。
+    /// 公投投票：读取快照时完整公民主体并按永久 CID 去重（期满计票）。
     pub fn do_cast_referendum_vote(
         who: T::AccountId,
         proposal_id: u64,
@@ -76,12 +76,12 @@ impl<T: Config> Pallet<T> {
         let eligible_total = <votingengine::Pallet<T>>::population_eligible_total_of(proposal_id)
             .ok_or(Error::<T>::CitizenEligibleTotalNotSet)?;
         ensure!(eligible_total > 0, Error::<T>::CitizenEligibleTotalNotSet);
+        let voter_subject =
+            <votingengine::Pallet<T>>::voting_subject_at_population_snapshot(proposal_id, &who)
+                .ok_or(Error::<T>::CitizenNotEligible)?;
+        let voter_cid_number = voter_subject.cid_number.clone();
         ensure!(
-            <votingengine::Pallet<T>>::can_vote_at_population_snapshot(proposal_id, &who),
-            Error::<T>::CitizenNotEligible
-        );
-        ensure!(
-            !pallet::LegReferendumVotesByAccount::<T>::contains_key(proposal_id, &who),
+            !pallet::LegReferendumVotesByCid::<T>::contains_key(proposal_id, &voter_cid_number,),
             votingengine::Error::<T>::AlreadyVoted
         );
         let current_tally = pallet::LegReferendumTally::<T>::get(proposal_id);
@@ -90,7 +90,14 @@ impl<T: Config> Pallet<T> {
             Error::<T>::ReferendumSnapshotExhausted
         );
 
-        pallet::LegReferendumVotesByAccount::<T>::insert(proposal_id, &who, approve);
+        pallet::LegReferendumVotesByCid::<T>::insert(
+            proposal_id,
+            voter_cid_number,
+            votingengine::CitizenReferendumTicket {
+                voter_subject: voter_subject.clone(),
+                approve,
+            },
+        );
         pallet::LegReferendumTally::<T>::mutate(proposal_id, |t| {
             if approve {
                 t.yes = t.yes.saturating_add(1);
@@ -100,7 +107,7 @@ impl<T: Config> Pallet<T> {
         });
         Self::deposit_event(pallet::Event::<T>::LegislationReferendumVoteCast {
             proposal_id,
-            who,
+            voter_subject,
             approve,
         });
         Ok(())

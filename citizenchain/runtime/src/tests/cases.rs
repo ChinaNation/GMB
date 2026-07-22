@@ -1182,16 +1182,16 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
             test_area_code(b"4301"),
             test_area_code(b"4301001"),
         );
-        assert!(RuntimeCitizenIdentityReader::can_vote(
-            &wallet_account,
-            &town_scope
-        ));
-        assert!(RuntimeCitizenIdentityReader::can_be_candidate(
-            &wallet_account,
-            &town_scope
-        ));
+        assert!(
+            RuntimeCitizenIdentityReader::voting_subject(&wallet_account, &town_scope).is_some()
+        );
+        assert!(
+            RuntimeCitizenIdentityReader::candidate_subject(&wallet_account, &town_scope).is_some()
+        );
         assert_eq!(
-            RuntimeCitizenIdentityReader::population_count(&town_scope),
+            RuntimeCitizenIdentityReader::population_data(&town_scope)
+                .expect("runtime population data should be ready")
+                .eligible_total,
             1
         );
     });

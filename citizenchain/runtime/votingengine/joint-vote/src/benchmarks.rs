@@ -10,7 +10,7 @@ use sp_runtime::traits::SaturatedConversion;
 use votingengine::CitizenIdentityReader;
 
 use crate::pallet::{
-    Config, JointInstitutionTallies, JointVotesByInstitution, Pallet, ReferendumVotesByAccount,
+    Config, JointInstitutionTallies, JointVotesByInstitution, Pallet, ReferendumVotesByCid,
 };
 use crate::Call;
 
@@ -110,21 +110,29 @@ mod benchmarks {
         let voter: T::AccountId = account("citizen", 0, 0);
         let scope = votingengine::PopulationScope::Country;
         <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(&voter, &scope);
+        let voter_subject =
+            <T as votingengine::Config>::CitizenIdentityReader::voting_subject(&voter, &scope)
+                .expect("benchmark citizen subject should exist");
         votingengine::Pallet::<T>::create_population_snapshot(proposal_id, &scope)
             .expect("benchmark proposal should create population snapshot");
 
         #[extrinsic_call]
         _(RawOrigin::Signed(voter.clone()), proposal_id, true);
 
-        assert!(ReferendumVotesByAccount::<T>::contains_key(
+        assert!(ReferendumVotesByCid::<T>::contains_key(
             proposal_id,
-            voter
+            voter_subject.cid_number
         ));
     }
 
     #[benchmark]
     fn finalize_joint_timeout() {
         let (proposal_id, proposal) = setup_proposal::<T>(votingengine::STAGE_JOINT);
+        let population_seed: T::AccountId = account("population", 0, 0);
+        <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(
+            &population_seed,
+            &votingengine::PopulationScope::Country,
+        );
         votingengine::Pallet::<T>::create_population_snapshot(
             proposal_id,
             &votingengine::PopulationScope::Country,
@@ -147,6 +155,11 @@ mod benchmarks {
     #[benchmark]
     fn finalize_jointreferendum_timeout() {
         let (proposal_id, proposal) = setup_proposal::<T>(votingengine::STAGE_REFERENDUM);
+        let population_seed: T::AccountId = account("population", 0, 0);
+        <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(
+            &population_seed,
+            &votingengine::PopulationScope::Country,
+        );
         votingengine::Pallet::<T>::create_population_snapshot(
             proposal_id,
             &votingengine::PopulationScope::Country,
