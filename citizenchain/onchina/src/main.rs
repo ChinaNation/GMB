@@ -1061,59 +1061,6 @@ impl Db {
         Ok(())
     }
 
-    pub(crate) fn upsert_institution_account_row(
-        &self,
-        account: &crate::institution::subjects::InstitutionAccount,
-    ) -> Result<(), String> {
-        let account = account.clone();
-        self.with_client(move |conn| {
-            Self::upsert_target_account_row(conn, &account)?;
-            Ok(())
-        })
-    }
-
-    fn upsert_target_account_row(
-        conn: &mut postgres::Client,
-        account: &crate::institution::subjects::InstitutionAccount,
-    ) -> Result<(), String> {
-        let scope_row = conn
-            .query_opt(
-                "SELECT province_code, city_code FROM ids WHERE cid_number = $1",
-                &[&account.cid_number],
-            )
-            .map_err(|e| format!("query id scope for account failed: {e}"))?;
-        let (fallback_p, fallback_c) = Self::scope_codes_from_cid(account.cid_number.as_str());
-        let (province_code, city_code): (String, Option<String>) = match scope_row {
-            Some(row) => (row.get(0), row.get(1)),
-            None => (fallback_p, fallback_c),
-        };
-        Self::delete_target_rows_outside_scope(
-            conn,
-            "accounts",
-            account.cid_number.as_str(),
-            province_code.as_str(),
-        )?;
-        conn.execute(
-            "INSERT INTO accounts (
-                cid_number, province_code, city_code, account_name, account, created_at
-             ) VALUES ($1, $2, $3, $4, $5, $6)
-             ON CONFLICT (province_code, cid_number, account_name) DO UPDATE SET
-                city_code = EXCLUDED.city_code,
-                account = EXCLUDED.account,
-                created_at = EXCLUDED.created_at",
-            &[
-                &account.cid_number,
-                &province_code,
-                &city_code,
-                &account.account_name,
-                &account.account,
-                &account.created_at,
-            ],
-        )
-        .map_err(|e| format!("upsert accounts failed: {e}"))?;
-        Ok(())
-    }
-
     fn scope_codes_from_cid(cid_number: &str) -> (String, Option<String>) {
         let Some(r5) = cid_number.split('-').next() else {
             return ("ZS".to_string(), None);
@@ -1129,24 +1076,6 @@ impl Db {
             Some(c_part.to_string())
         };
         (province_code, city_code)
-    }
-
-    pub(crate) fn delete_institution_account_row(
-        &self,
-        cid_number: &str,
-        account_name: &str,
-    ) -> Result<(), String> {
-        let cid_number = cid_number.to_string();
-        let account_name = account_name.to_string();
-        self.with_client(move |conn| {
-            conn.execute(
-                "DELETE FROM accounts
-                 WHERE cid_number = $1 AND account_name = $2",
-                &[&cid_number, &account_name],
-            )
-            .map_err(|e| format!("delete accounts failed: {e}"))?;
-            Ok(())
-        })
     }
 
     // 删除所有不合规 CID 号在各号承载表里的行。判定唯一标准 =
@@ -2200,12 +2129,12 @@ fn main() {
             // - GET  /api/v1/institutions/check-cid-full-name             — cid_full_name 查重
             // - POST /api/v1/institutions/create                          — 已关闭；新原子创建业务落地前返回 501
             // - POST /api/v1/private/<type>                              — 六类私权机构专属生成入口
-            // - POST /api/v1/institutions/:cid_number/account/create         — 只登记账户名称,不上链
+            // - POST /api/v1/institutions/:cid_number/account/create         — 发起「新增账户」内部投票提案(冷签)
             // - GET  /api/v1/institutions/list                            — 公权/教育按 scope 过滤的机构列表
             // - GET  /api/v1/private/<type>                              — 六类私权机构专属列表入口
             // - GET  /api/v1/institutions/:cid_number                        — 机构详情
-            // - GET  /api/v1/institutions/:cid_number/accounts               — 账户列表
-            // - DELETE /api/v1/institutions/:cid_number/account/:account_name — 删除未上链/已注销新增账户
+            // - GET  /api/v1/institutions/:cid_number/accounts               — 账户列表(链上真源)
+            // - DELETE /api/v1/institutions/:cid_number/account/:account_name — 发起「关闭账户」内部投票提案(冷签,带岗位码 Json body)
             .route(
                 "/api/v1/institutions/check-cid-full-name",
                 get(institution::subjects::admin::check_cid_full_name),

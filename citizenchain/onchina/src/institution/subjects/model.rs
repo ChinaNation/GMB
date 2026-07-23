@@ -315,13 +315,16 @@ pub struct LegalRepresentativePhoto {
 #[derive(Debug, Deserialize)]
 pub struct CreateAccountInput {
     pub account_name: String,
+    /// 发起人当前任职的机构岗位码;runtime 据此在 origin 处校验发起提案权限。
+    pub proposer_role_code: String,
 }
 
-#[derive(Debug, Serialize)]
-pub struct CreateAccountOutput {
-    pub cid_number: String,
-    pub account_name: String,
-    pub account: Option<String>,
+/// 关闭机构自定义账户提案的请求体。DELETE 也带 Json body 传岗位码,
+/// 与新增账户一致由 runtime 在 origin 处以 `is_institution_admin` + 岗位码校验。
+#[derive(Debug, Deserialize)]
+pub struct DeleteAccountInput {
+    /// 发起人当前任职的机构岗位码。
+    pub proposer_role_code: String,
 }
 
 /// /api/v1/institutions/list 的列表过滤维度(查询参数,不是存储 category)。

@@ -200,7 +200,8 @@ pub(crate) async fn app_list_accounts(
     if cid_number.is_empty() {
         return api_error(StatusCode::BAD_REQUEST, 1001, "cid_number is required");
     }
-    let Some((inst, accounts)) = (match state.db.get_institution_with_accounts(&cid_number) {
+    // 机构展示名仍取本地 subjects 投影;账户明细从链上真源(InstitutionAccounts)读取。
+    let Some((inst, _)) = (match state.db.get_institution_with_accounts(&cid_number) {
         Ok(v) => v,
         Err(err) => {
             tracing::error!(error = %err, "query institution accounts failed");
@@ -213,15 +214,30 @@ pub(crate) async fn app_list_accounts(
     }) else {
         return api_error(StatusCode::NOT_FOUND, 1004, "institution not found");
     };
-    let accounts = accounts
+    let code = match crate::institution::admins::code_bytes(&inst.institution_code) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let chain_accounts =
+        match crate::core::chain_runtime::institution_accounts_lookup(&code, &cid_number).await {
+            Ok(v) => v,
+            Err(err) => {
+                tracing::error!(error = %err, "read chain institution accounts failed");
+                return api_error(StatusCode::BAD_GATEWAY, 1004, "accounts query failed");
+            }
+        };
+    let accounts = chain_accounts
         .iter()
-        .map(|account| AppAccountEntry {
-            account_name: account.account_name.clone(),
-            account: account.account.clone(),
-            account_kind: institution_account_kind_label(&cid_number, &account.account_name)
-                .expect("persisted institution account name is non-empty"),
-            can_close: institution_account_kind_label(&cid_number, &account.account_name)
-                == Some("named"),
+        .map(|account| {
+            let account_name = String::from_utf8_lossy(&account.account_name).into_owned();
+            let kind =
+                institution_account_kind_label(&cid_number, &account_name).unwrap_or("named");
+            AppAccountEntry {
+                account: Some(hex::encode(account.account)),
+                account_kind: kind,
+                can_close: kind == "named",
+                account_name,
+            }
         })
         .collect::<Vec<_>>();
     Json(ApiResponse {

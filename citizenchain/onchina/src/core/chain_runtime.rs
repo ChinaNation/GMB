@@ -1083,6 +1083,65 @@ pub(crate) async fn for_each_chain_institution_account(
     Ok(count)
 }
 
+/// 按机构 CID 前缀读取该机构在链上的全部账户(协议 + 自定义)。
+///
+/// 真源 = `PublicManage/PrivateManage::InstitutionAccounts` DoubleMap,首键 = cid_number。
+/// 按机构码选 pallet(私法人 → PrivateManage / 其余 → PublicManage),对首键做前缀迭代;
+/// 键解码沿用 `for_each_chain_institution_account`:48 头(32 存储前缀 + 16 blake2_128(cid))
+/// → decode cid → 跳过 16 blake2_128(account_name) → decode account_name。
+pub(crate) async fn institution_accounts_lookup(
+    institution_code: &[u8; 4],
+    cid_number: &str,
+) -> Result<Vec<OnChainInstitutionAccount>, String> {
+    let pallet = if primitives::cid::code::is_private_legal_code(institution_code) {
+        "PrivateManage"
+    } else {
+        "PublicManage"
+    };
+    let ws_url = super::chain_url::chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("connect chain ws for institution accounts failed: {e}"))?;
+    let storage = client
+        .storage()
+        .at_latest()
+        .await
+        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
+    // 前缀迭代:首键锁定本机构 cid,只返回该机构名下账户。
+    let query = dynamic::storage(
+        pallet,
+        "InstitutionAccounts",
+        vec![dynamic::Value::from_bytes(cid_number.as_bytes())],
+    );
+    let mut iter = storage
+        .iter(query)
+        .await
+        .map_err(|e| format!("iterate institution accounts failed: {e}"))?;
+    let mut out = Vec::new();
+    while let Some(item) = iter.next().await {
+        let kv = item.map_err(|e| format!("read institution account entry failed: {e}"))?;
+        // 键 = 32 存储前缀 + 16 blake2_128(cid) + SCALE(cid) + 16 blake2_128(name) + SCALE(name)。
+        let mut suffix = &kv.key_bytes[48..];
+        let cid: Vec<u8> = codec::Decode::decode(&mut suffix)
+            .map_err(|e| format!("decode institution account cid key failed: {e}"))?;
+        if suffix.len() < 16 {
+            return Err("institution account key missing account_name hash suffix".to_string());
+        }
+        suffix = &suffix[16..];
+        let account_name: Vec<u8> = codec::Decode::decode(&mut suffix)
+            .map_err(|e| format!("decode institution account name key failed: {e}"))?;
+        let mut raw = kv.value.encoded();
+        let info = RawInstitutionAccountInfo::decode(&mut raw)
+            .map_err(|e| format!("decode institution account info failed: {e}"))?;
+        out.push(OnChainInstitutionAccount {
+            cid_number: cid,
+            account_name,
+            account: info.address,
+        });
+    }
+    Ok(out)
+}
+
 /// 链上 CID 占号登记查询结果(发号预查与幂等续用识别用,字段最小化)。
 pub(crate) struct OnChainCidRecord {
     pub(crate) commitment: [u8; 32],

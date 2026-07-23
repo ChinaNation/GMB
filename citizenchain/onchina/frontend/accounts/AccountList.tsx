@@ -91,7 +91,8 @@ export const AccountList: React.FC<Props> = ({
           title: '创建时间',
           dataIndex: 'created_at',
           width: 170,
-          render: (v: string) => new Date(v).toLocaleString('zh-CN'),
+          // 账户读侧为链上真源,链上无创建时间戳:空值显示 '-',不再回退成 1970。
+          render: (v: string | null) => (v ? new Date(v).toLocaleString('zh-CN') : '-'),
         },
         {
           title: '操作',
@@ -103,10 +104,10 @@ export const AccountList: React.FC<Props> = ({
             const deleteCell =
               canDeleteRow ? (
                 <Popconfirm
-                  title={`确认删除账户 "${row.account_name}"?`}
-                  description="仅删除身份注册局中的账户名称记录,不触发链上操作"
+                  title={`确认发起关闭账户 "${row.account_name}" 提案?`}
+                  description="发起本机构「关闭账户」内部投票提案,通过后才在链上生效"
                   onConfirm={() => onDelete?.(row.account_name)}
-                  okText="删除"
+                  okText="发起提案"
                   okButtonProps={{ danger: true }}
                   cancelText="取消"
                 >

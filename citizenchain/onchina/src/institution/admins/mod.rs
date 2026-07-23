@@ -124,7 +124,7 @@ pub(crate) struct PrepareInstitutionChainOutput {
     pub(crate) expires_at: i64,
 }
 
-fn code_bytes(institution_code: &str) -> Result<[u8; 4], axum::response::Response> {
+pub(crate) fn code_bytes(institution_code: &str) -> Result<[u8; 4], axum::response::Response> {
     let raw = institution_code.trim().as_bytes();
     if raw.is_empty() || raw.len() > 4 {
         return Err(api_error(
@@ -234,14 +234,14 @@ fn parse_admin_inputs(
                 .try_into()
                 .map_err(|_| api_error(StatusCode::BAD_REQUEST, 1001, "公民 CID 过长"))?;
             public_admins.push(admin_primitives::PublicAdmin {
-                admin_account,
+                account_id: admin_account,
                 cid_number,
                 family_name,
                 given_name,
             });
         } else {
             private_admins.push(admin_primitives::Admin {
-                admin_account,
+                account_id: admin_account,
                 family_name,
                 given_name,
             });
@@ -329,7 +329,7 @@ fn assignment_targets(
             ));
         }
         out.push(entity_primitives::InstitutionAssignmentTarget {
-            admin_account,
+            account_id: admin_account,
             term_start: target.term_start,
             term_end: target.term_end,
             assignment_source:
@@ -584,12 +584,12 @@ fn legal_representative_change(
             family_name: family_name.as_bytes().to_vec(),
             given_name: given_name.as_bytes().to_vec(),
             cid_number: cid_number.as_bytes().to_vec(),
-            account,
+            account_id: account,
         },
     ))
 }
 
-async fn build_chain_sign_output(
+pub(crate) async fn build_chain_sign_output(
     state: &AppState,
     actor_pubkey: &str,
     cid_number: &str,

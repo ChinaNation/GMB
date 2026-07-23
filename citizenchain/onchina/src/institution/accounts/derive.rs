@@ -63,8 +63,16 @@ pub(crate) fn reserved_account_names() -> [String; 6] {
 /// - `"清算账户"` → `OP_CLEARING`(preimage 不含 account_name)
 /// - 其他非空 → `OP_NAME`(preimage 追加 account_name 字节)
 pub fn derive_account(cid_number: &str, account_name: &str) -> Option<String> {
+    derive_account_bytes(cid_number, account_name).map(hex::encode)
+}
+
+/// 按 `account_name` 路由并派生机构账户地址的 32 字节 `AccountId`(唯一真源同上)。
+///
+/// 返回 `None` 当 `account_name` 为空串(与链端 `EmptyAccountName` 对齐)。
+/// 关闭账户提案需要账户与主账户的裸 32 字节 AccountId(SCALE 无长度前缀),用本函数取。
+pub(crate) fn derive_account_bytes(cid_number: &str, account_name: &str) -> Option<[u8; 32]> {
     account_derive::institution_kind_by_name(cid_number.as_bytes(), account_name.as_bytes())
-        .map(|kind| hex::encode(kind.derive(SS58_FORMAT)))
+        .map(|kind| kind.derive(SS58_FORMAT))
 }
 
 #[cfg(test)]

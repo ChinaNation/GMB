@@ -15,7 +15,7 @@ pub(crate) mod unincorporated_org;
 #[allow(unused_imports)]
 pub use model::{
     account_key_from_string, account_key_to_string, is_education_school_type, AccountKey,
-    CreateAccountInput, CreateAccountOutput, CreateInstitutionInput, Institution,
+    CreateAccountInput, CreateInstitutionInput, DeleteAccountInput, Institution,
     InstitutionAccount, InstitutionDetailOutput, InstitutionDocument, InstitutionListFilter,
     InstitutionListRow, LegalRepresentativePhoto, ParentInstitutionRow, UpdateInstitutionInput,
     EDUCATION_COMMITTEE_TYPES, EDUCATION_SCHOOL_TYPES, EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE,

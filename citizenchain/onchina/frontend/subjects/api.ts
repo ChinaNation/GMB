@@ -95,15 +95,16 @@ export interface InstitutionAccount {
   cid_number: string;
   account_name: string;
   account: string | null;
-  account_kind: 'main' | 'fee' | 'stake' | 'safety_fund' | 'he' | 'named';
+  account_kind: 'main' | 'fee' | 'stake' | 'safety_fund' | 'he' | 'clearing' | 'named';
   can_close: boolean;
   can_delete: boolean;
   chain_status: MultisigChainStatus;
   chain_synced_at?: string | null;
   chain_tx_hash: string | null;
   chain_block_number: number | null;
+  // 账户读侧已切链上真源:链上无创建人/创建时间字段,一律为空。
   created_by: string;
-  created_at: string;
+  created_at: string | null;
 }
 
 export interface InstitutionListRow {

@@ -15,6 +15,12 @@ pub const PROPOSE_INSTITUTION_GOVERNANCE_CALL_INDEX: u8 = 8;
 /// 注册局登记机构管理员集合 call index。
 #[allow(dead_code)]
 pub const REGISTER_INSTITUTION_ADMINS_CALL_INDEX: u8 = 9;
+/// 发起「新增机构自定义账户」提案 call index(公私权同为 7)。
+#[allow(dead_code)]
+pub const PROPOSE_ADD_INSTITUTION_ACCOUNT_CALL_INDEX: u8 = 7;
+/// 发起「关闭机构自定义账户」提案 call index(公私权同为 1)。
+#[allow(dead_code)]
+pub const PROPOSE_CLOSE_INSTITUTION_CALL_INDEX: u8 = 1;
 
 /// 按机构码派生机构管理目标 pallet。
 pub fn institution_manage_pallet_index(institution_code: &[u8; 4]) -> u8 {
@@ -59,6 +65,38 @@ pub struct RegisterInstitutionAdminsArgs {
     pub admins: InstitutionAdminsPayload,
     pub institution_code: [u8; 4],
     pub actor_cid_number: Vec<u8>,
+}
+
+/// `propose_add_institution_account` 完整参数(runtime call index 7)。
+///
+/// 机构本机构任职人发起「新增自定义命名账户」内部投票提案。授权由 runtime 在 origin 处以
+/// `is_institution_admin`(本机构管理员)+ `proposer_role_code` 岗位码校验;call 不嵌独立
+/// 凭证/签名/公钥/nonce。`institution_code` 只用于本端选 pallet(公 30 / 私 31),不进 call。
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct ProposeAddInstitutionAccountArgs {
+    pub cid_number: Vec<u8>,
+    /// 待新增账户名列表;字节与链端 `BoundedVec<AccountNameOf, MaxInstitutionAccounts>` 对齐。
+    pub account_names: Vec<Vec<u8>>,
+    pub institution_code: [u8; 4],
+    pub proposer_role_code: Vec<u8>,
+}
+
+/// `propose_close_*_institution` 完整参数(runtime call index 1)。
+///
+/// 机构本机构任职人发起「关闭自定义命名账户」内部投票提案。关闭执行时余额扫入
+/// `beneficiary_account_id`(本端固定填本机构主账户),费用从费用账户扣。授权同上由 runtime
+/// 在 origin 处以 `is_institution_admin` + `proposer_role_code` 岗位码校验。
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct ProposeCloseInstitutionArgs {
+    pub actor_cid_number: Vec<u8>,
+    pub proposer_role_code: Vec<u8>,
+    /// 待关闭账户的链上多签地址(32 字节 AccountId)。
+    pub institution_account_id: [u8; 32],
+    /// 关闭后余额受益账户(32 字节 AccountId,本端固定为本机构主账户)。
+    pub beneficiary_account_id: [u8; 32],
+    pub institution_code: [u8; 4],
 }
 
 fn encode_bytes(out: &mut Vec<u8>, value: &[u8]) {
@@ -119,6 +157,48 @@ pub fn encode_register_institution_admins(args: &RegisterInstitutionAdminsArgs) 
     }
 }
 
+/// 编码「新增机构自定义账户」提案调用。字段顺序与 runtime call index 7 完全一致:
+/// `cid_number` → `account_names: Vec<Vec<u8>>` → `proposer_role_code`。
+#[allow(dead_code)]
+pub fn encode_propose_add_institution_account(
+    args: &ProposeAddInstitutionAccountArgs,
+) -> ChainCall {
+    let pallet_index = institution_manage_pallet_index(&args.institution_code);
+    let mut out = vec![pallet_index, PROPOSE_ADD_INSTITUTION_ACCOUNT_CALL_INDEX];
+
+    encode_bytes(&mut out, &args.cid_number);
+    // BoundedVec<AccountNameOf, _> 与 Vec<Vec<u8>> 的 SCALE 一致:Compact(个数) ++ 逐个 (Compact(长度) ++ 字节)。
+    out.extend(Compact(args.account_names.len() as u32).encode());
+    for name in &args.account_names {
+        encode_bytes(&mut out, name);
+    }
+    encode_bytes(&mut out, &args.proposer_role_code);
+
+    ChainCall {
+        action: chain_action_code(pallet_index, PROPOSE_ADD_INSTITUTION_ACCOUNT_CALL_INDEX),
+        call_data: out,
+    }
+}
+
+/// 编码「关闭机构自定义账户」提案调用。字段顺序与 runtime call index 1 完全一致:
+/// `actor_cid_number` → `proposer_role_code` → `institution_account_id` → `beneficiary_account_id`。
+/// 两个 AccountId 均为 32 字节定长数组(SCALE 无长度前缀)。
+#[allow(dead_code)]
+pub fn encode_propose_close_institution(args: &ProposeCloseInstitutionArgs) -> ChainCall {
+    let pallet_index = institution_manage_pallet_index(&args.institution_code);
+    let mut out = vec![pallet_index, PROPOSE_CLOSE_INSTITUTION_CALL_INDEX];
+
+    encode_bytes(&mut out, &args.actor_cid_number);
+    encode_bytes(&mut out, &args.proposer_role_code);
+    out.extend_from_slice(&args.institution_account_id);
+    out.extend_from_slice(&args.beneficiary_account_id);
+
+    ChainCall {
+        action: chain_action_code(pallet_index, PROPOSE_CLOSE_INSTITUTION_CALL_INDEX),
+        call_data: out,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -129,7 +209,7 @@ mod tests {
         given_name: &str,
     ) -> admin_primitives::Admin<[u8; 32]> {
         admin_primitives::Admin {
-            admin_account,
+            account_id: admin_account,
             family_name: family_name
                 .as_bytes()
                 .to_vec()
@@ -150,7 +230,7 @@ mod tests {
         given_name: &str,
     ) -> admin_primitives::PublicAdmin<[u8; 32]> {
         admin_primitives::PublicAdmin {
-            admin_account,
+            account_id: admin_account,
             cid_number: cid_number
                 .as_bytes()
                 .to_vec()
@@ -179,7 +259,7 @@ mod tests {
             .iter()
             .map(|admin| {
                 (
-                    admin.admin_account,
+                    admin.account_id,
                     admin.family_name.clone(),
                     admin.given_name.clone(),
                 )
@@ -198,7 +278,7 @@ mod tests {
             .iter()
             .map(|admin| {
                 (
-                    admin.admin_account,
+                    admin.account_id,
                     admin.cid_number.clone(),
                     admin.family_name.clone(),
                     admin.given_name.clone(),
@@ -239,5 +319,72 @@ mod tests {
         let encoded = encode_register_institution_admins(&args);
         assert_eq!(&encoded.call_data[..2], &[31, 9]);
         assert_eq!(encoded.action, 0x1f09);
+    }
+
+    #[test]
+    fn add_account_payload_matches_runtime_call_field_order() {
+        // CFIN(市财政)= 公权码 → PublicManage(30)。
+        let args = ProposeAddInstitutionAccountArgs {
+            cid_number: b"LN001-CFIN-0001".to_vec(),
+            account_names: vec![
+                "专项账户".as_bytes().to_vec(),
+                "结算账户".as_bytes().to_vec(),
+            ],
+            institution_code: *b"CFIN",
+            proposer_role_code: b"RFINANCE".to_vec(),
+        };
+        let encoded = encode_propose_add_institution_account(&args);
+        assert_eq!(&encoded.call_data[..2], &[30, 7]);
+        assert_eq!(encoded.action, 0x1e07);
+        // 逐字节金标:pallet/call ++ SCALE(cid) ++ SCALE(Vec<Vec<u8>>) ++ SCALE(role)。
+        let mut expected = vec![30u8, 7u8];
+        expected.extend(args.cid_number.encode());
+        expected.extend(args.account_names.encode());
+        expected.extend(args.proposer_role_code.encode());
+        assert_eq!(encoded.call_data, expected);
+    }
+
+    #[test]
+    fn close_institution_payload_matches_runtime_call_field_order() {
+        // CFIN(市财政)= 公权码 → PublicManage(30)。
+        let args = ProposeCloseInstitutionArgs {
+            actor_cid_number: b"LN001-CFIN-0001".to_vec(),
+            proposer_role_code: b"RFINANCE".to_vec(),
+            institution_account_id: [7u8; 32],
+            beneficiary_account_id: [9u8; 32],
+            institution_code: *b"CFIN",
+        };
+        let encoded = encode_propose_close_institution(&args);
+        assert_eq!(&encoded.call_data[..2], &[30, 1]);
+        assert_eq!(encoded.action, 0x1e01);
+        // 逐字节金标:pallet/call ++ SCALE(actor_cid) ++ SCALE(role) ++ 32B ++ 32B(AccountId 无长度前缀)。
+        let mut expected = vec![30u8, 1u8];
+        expected.extend(args.actor_cid_number.encode());
+        expected.extend(args.proposer_role_code.encode());
+        expected.extend_from_slice(&args.institution_account_id);
+        expected.extend_from_slice(&args.beneficiary_account_id);
+        assert_eq!(encoded.call_data, expected);
+    }
+
+    #[test]
+    fn private_institution_routes_add_and_close_to_pallet_31() {
+        // SFAS = 私权码(见 primitives::cid::code::is_private_legal_code)→ PrivateManage(31)。
+        let add = encode_propose_add_institution_account(&ProposeAddInstitutionAccountArgs {
+            cid_number: b"LN001-SFAS-0001".to_vec(),
+            account_names: vec![b"payroll".to_vec()],
+            institution_code: *b"SFAS",
+            proposer_role_code: b"ROWNER".to_vec(),
+        });
+        assert_eq!(&add.call_data[..2], &[31, 7]);
+        assert_eq!(add.action, 0x1f07);
+        let close = encode_propose_close_institution(&ProposeCloseInstitutionArgs {
+            actor_cid_number: b"LN001-SFAS-0001".to_vec(),
+            proposer_role_code: b"ROWNER".to_vec(),
+            institution_account_id: [1u8; 32],
+            beneficiary_account_id: [2u8; 32],
+            institution_code: *b"SFAS",
+        });
+        assert_eq!(&close.call_data[..2], &[31, 1]);
+        assert_eq!(close.action, 0x1f01);
     }
 }

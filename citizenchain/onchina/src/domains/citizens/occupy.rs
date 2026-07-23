@@ -803,9 +803,11 @@ pub(crate) async fn submit_chain_sign(
             }
         }
         crate::institution::admins::PURPOSE_INSTITUTION_GOVERNANCE
-        | crate::institution::admins::PURPOSE_INSTITUTION_REGISTER_ADMINS => {
-            // 机构治理与注册局登记管理员的最终真源在链上。提交成功后仅记录审计；
-            // OnChina 读侧继续通过链上 admins / roles / assignments 读取。
+        | crate::institution::admins::PURPOSE_INSTITUTION_REGISTER_ADMINS
+        | crate::institution::accounts::handler::PURPOSE_INSTITUTION_ADD_ACCOUNT
+        | crate::institution::accounts::handler::PURPOSE_INSTITUTION_CLOSE_ACCOUNT => {
+            // 机构治理、注册局登记管理员、机构自定义账户增/删提案的最终真源都在链上。
+            // 提交成功后仅记录审计；OnChina 读侧继续通过链上 admins / roles / accounts 读取。
         }
         crate::domains::membership::PURPOSE_PLATFORM_PRICE_PROPOSAL => {
             // 平台价格与内部投票提案的唯一真源均在链上；提交成功后不保存本地价格副本。
