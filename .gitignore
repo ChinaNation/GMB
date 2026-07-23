@@ -5,19 +5,8 @@ citizenchain/target
 # 根目录 scripts 是本机私密脚本区；各产品/模块自己的 scripts 目录允许进 Git。
 /scripts/
 
-# 部署控制台源码可追踪；本机编译产物、运行日志和任何私密材料必须精确忽略。
-/citizenconsole/.runtime/
-/citizenconsole/.env
-/citizenconsole/.env.*
-/citizenconsole/secrets/
-/citizenconsole/**/*.pem
-/citizenconsole/**/*.key
-/citizenconsole/**/*.p12
-/citizenconsole/**/*.pfx
-/citizenconsole/**/*.jks
-/citizenconsole/**/*.keystore
-/citizenconsole/.dev.vars
-/citizenconsole/.dev.vars.*
+# 公民控制台是本机私有运维工具（管理部署、Keychain 密钥、Touch ID），整目录不进 Git、不推 GitHub。
+/citizenconsole/
 target/
 citizenchain/citizenui/target/
 citizenchain/citizenui/desktop/src-tauri/binaries/
