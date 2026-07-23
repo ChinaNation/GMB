@@ -112,6 +112,12 @@ pub mod pallet {
         /// 测试可用 `()` 的默认空实现(一律返回未登记)。
         type CidAccountQuery: crate::bank_check::CidAccountQuery<Self::AccountId>;
 
+        /// 批次上链对累计手续费收一次链上交易费的执行器(与 multisig 同一条 80/10/10 分账路径)。
+        type OnchainFeeCharger: primitives::fee_policy::OnchainFeeCharger<
+            Self::AccountId,
+            <Self::Currency as Currency<Self::AccountId>>::Balance,
+        >;
+
         type WeightInfo: crate::weights::WeightInfo;
     }
 
@@ -124,15 +130,15 @@ pub mod pallet {
 
     // ================== Storage(清算行 L2 体系) ==================
 
-    /// L3 用户绑定的清算行主账户。
+    /// L3 用户绑定的清算行 **CID**(机构唯一永久主键)。
     ///
     /// 一个 L3 同时只能绑定一家清算行;切换清算行需先把 `DepositBalance` 清零。
     #[pallet::storage]
     #[pallet::getter(fn user_bank)]
     pub type UserBank<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, T::AccountId, OptionQuery>;
+        StorageMap<_, Blake2_128Concat, T::AccountId, crate::InstitutionCidNumber, OptionQuery>;
 
-    /// `(清算行主账户, L3)` → 该 L3 在该清算行的存款余额(分)。
+    /// `(清算行 CID, L3)` → 该 L3 在该清算行的存款余额(分)。
     ///
     /// 权威账本;清算行节点本地 ledger 只是缓存,最终以链上值为准。
     #[pallet::storage]
@@ -140,21 +146,21 @@ pub mod pallet {
     pub type DepositBalance<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
-        T::AccountId,
+        crate::InstitutionCidNumber,
         Blake2_128Concat,
         T::AccountId,
         u128,
         ValueQuery,
     >;
 
-    /// 清算行主账户 → 该清算行所有 L3 存款的总额(冗余,偿付对账用)。
+    /// 清算行 CID → 该清算行所有 L3 存款的总额(冗余,偿付对账用)。
     ///
-    /// 不变式:`BankTotalDeposits[bank] == Σ DepositBalance[bank][*]`。
-    /// 偿付能力要求:`Currency::free_balance(bank) >= BankTotalDeposits[bank]`。
+    /// 不变式:`BankTotalDeposits[cid] == Σ DepositBalance[cid][*]`。
+    /// 偿付能力要求:`Currency::free_balance(cid 派生账户) >= BankTotalDeposits[cid]`。
     #[pallet::storage]
     #[pallet::getter(fn bank_total_deposits)]
     pub type BankTotalDeposits<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, u128, ValueQuery>;
+        StorageMap<_, Blake2_128Concat, crate::InstitutionCidNumber, u128, ValueQuery>;
 
     /// L3 的单调递增支付 nonce(防 L3 签名被重放)。settlement 批次 `execute`
     /// 时通过 `nonce::consume_nonce` 校验并更新。
@@ -168,14 +174,19 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn l2_fee_rate_bp)]
     pub type L2FeeRateBp<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, u32, ValueQuery>;
+        StorageMap<_, Blake2_128Concat, crate::InstitutionCidNumber, u32, ValueQuery>;
 
     /// 清算行**待生效**的费率提案。`on_initialize` 到达 `effective_at` 后
     /// 把 `(bank, new_rate_bp)` 搬到 `L2FeeRateBp` 并清除本条。
     #[pallet::storage]
     #[pallet::getter(fn l2_fee_rate_proposed)]
-    pub type L2FeeRateProposed<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, (u32, BlockNumberFor<T>), OptionQuery>;
+    pub type L2FeeRateProposed<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        crate::InstitutionCidNumber,
+        (u32, BlockNumberFor<T>),
+        OptionQuery,
+    >;
 
     /// 全局费率上限(bp),由联合投票调整。默认 0 → runtime `fee_config` 兜底
     /// 到 `L2_FEE_RATE_BP_MAX`(10 bp = 0.1%)。
@@ -210,7 +221,7 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn last_clearing_batch_seq)]
     pub type LastClearingBatchSeq<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, u64, ValueQuery>;
+        StorageMap<_, Blake2_128Concat, crate::InstitutionCidNumber, u64, ValueQuery>;
 
     /// 清算行节点声明 storage。
     ///
@@ -246,52 +257,55 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// L3 绑定清算行(绑定即开户,无预存)。
+        /// L3 绑定清算行(绑定即开户,无预存;身份主键=CID)。
         BankBound {
             user: T::AccountId,
-            bank: T::AccountId,
+            bank_cid: crate::InstitutionCidNumber,
         },
-        /// L3 充值到清算行主账户。
+        /// L3 充值到清算行(资金落 CID 派生主账户)。
         Deposited {
             user: T::AccountId,
-            bank: T::AccountId,
+            bank_cid: crate::InstitutionCidNumber,
             amount: u128,
         },
-        /// L3 从清算行主账户提现。
+        /// L3 从清算行提现。
         Withdrawn {
             user: T::AccountId,
-            bank: T::AccountId,
+            bank_cid: crate::InstitutionCidNumber,
             amount: u128,
         },
         /// L3 切换清算行(前置:旧清算行余额已清零)。
         BankSwitched {
             user: T::AccountId,
-            old_bank: T::AccountId,
-            new_bank: T::AccountId,
+            old_bank_cid: crate::InstitutionCidNumber,
+            new_bank_cid: crate::InstitutionCidNumber,
         },
         /// 清算行管理员提交了费率变更提案,延迟到 `effective_at` 生效。
         L2FeeRateProposed {
-            bank: T::AccountId,
+            bank_cid: crate::InstitutionCidNumber,
             new_rate_bp: u32,
             effective_at: BlockNumberFor<T>,
         },
         /// 费率提案到期自动激活。
-        L2FeeRateActivated { bank: T::AccountId, rate_bp: u32 },
+        L2FeeRateActivated {
+            bank_cid: crate::InstitutionCidNumber,
+            rate_bp: u32,
+        },
         /// 全局费率上限更新(联合投票)。
         MaxL2FeeRateUpdated { new_max: u32 },
         /// 单笔扫码支付已在链上最终清算。
         PaymentSettled {
             tx_id: T::Hash,
             payer: T::AccountId,
-            payer_bank: T::AccountId,
+            payer_bank_cid: crate::InstitutionCidNumber,
             recipient: T::AccountId,
-            recipient_bank: T::AccountId,
+            recipient_bank_cid: crate::InstitutionCidNumber,
             transfer_amount: u128,
             fee_amount: u128,
         },
         /// 一次清算行批次落账汇总。
         ClearingBankBatchSettled {
-            bank: T::AccountId,
+            bank_cid: crate::InstitutionCidNumber,
             submitter: T::AccountId,
             item_count: u32,
             total_debit: u128,
@@ -367,6 +381,8 @@ pub mod pallet {
         FeeAccountNameTooLong,
         /// 清算行未创建配套的 "费用账户",无法清算手续费。
         FeeAccountNotFound,
+        /// 清算行 CID 未派生"清算账户"(非 SFGF,或注册未同步创建),L2 资金无落点。
+        ClearingAccountNotFound,
         /// L3 当前已绑定其他清算行,需先 switch_bank。
         AlreadyHasBank,
         /// L3 尚未绑定任何清算行。
@@ -387,6 +403,8 @@ pub mod pallet {
         DepositForbidden,
         /// institution-asset 拒绝了本笔提现动作。
         WithdrawForbidden,
+        /// institution-asset 拒绝从清算账户扣款(非扫码清算/提现的动作,如管理员多签转账)。
+        ClearingDebitForbidden,
         /// L3 nonce 自增溢出(极小概率,仅防御性错误)。
         L3NonceOverflow,
         /// L3 提交的 nonce 不等于 `链上 nonce + 1`(重放或不同步)。
@@ -415,6 +433,8 @@ pub mod pallet {
         PeerIdAlreadyRegistered,
         /// bank_check:该机构未声明清算行节点(尚未加入清算网络)。
         ClearingBankNotRegisteredAsNode,
+        /// 批次累计手续费的链上交易费从费用账户扣款失败(余额不足),整批拒绝(fail-closed)。
+        ClearingBatchOnchainFeeUnpaid,
     }
 
     // ================== Calls ==================
@@ -425,15 +445,15 @@ pub mod pallet {
         ///
         /// 约束:
         /// - 未绑定其他清算行
-        /// - `bank_main_account` 必须是 K1=S/F 私权机构 + 多签 Active + 主账户
+        /// - `bank_cid` 必须是 K1=S/F 私权机构 + 资格 + 已声明清算行节点
         #[pallet::call_index(30)]
         #[pallet::weight(T::WeightInfo::bind_clearing_bank())]
         pub fn bind_clearing_bank(
             origin: OriginFor<T>,
-            bank_main_account: T::AccountId,
+            bank_cid: crate::InstitutionCidNumber,
         ) -> DispatchResult {
             let user = ensure_signed(origin)?;
-            crate::deposit::do_bind_clearing_bank::<T>(user, bank_main_account)
+            crate::deposit::do_bind_clearing_bank::<T>(user, bank_cid)
         }
 
         /// L3 从自持链上账户充值到绑定的清算行主账户。`amount` 单位分。
@@ -455,9 +475,12 @@ pub mod pallet {
         /// L3 切换清算行。前置:当前清算行余额必须为 0。
         #[pallet::call_index(33)]
         #[pallet::weight(T::WeightInfo::switch_bank())]
-        pub fn switch_bank(origin: OriginFor<T>, new_bank: T::AccountId) -> DispatchResult {
+        pub fn switch_bank(
+            origin: OriginFor<T>,
+            new_bank_cid: crate::InstitutionCidNumber,
+        ) -> DispatchResult {
             let user = ensure_signed(origin)?;
-            crate::deposit::do_switch_bank::<T>(user, new_bank)
+            crate::deposit::do_switch_bank::<T>(user, new_bank_cid)
         }
 
         /// 清算行批次上链(清算行 L2 体系唯一上链路径)。
@@ -466,14 +489,14 @@ pub mod pallet {
         /// - `actor_cid_number` = 收款方清算行的唯一机构主键
         /// - `institution_account` = **收款方清算行主账户**
         /// - 提交者 = `actor_cid_number + actor_role_code` 的有效岗位任职钱包
-        /// - 批次内所有 item 的 `recipient_bank` 必须等于 `institution_account`
-        ///   (`payer_bank` 可不同,即同一收款方清算行可一次代收来自不同付款方清算行的多笔)
+        /// - 批次内所有 item 的 `recipient_bank_cid` 必须等于 `actor_cid_number`
+        ///   (`payer_bank_cid` 可不同,即同一收款方清算行可一次代收来自不同付款方清算行的多笔)
         /// - 本调用属于链下清算费类别，不另收链上 gas；每个 item 的付款公民
         ///   从其 L2 存款支付 `fee_amount`，手续费进入收款方清算行费用账户
         ///
         /// 安全模型:链上验签的核心是 L3 用户对 PaymentIntent 的 sr25519 签名,
-        /// PaymentIntent 内含 payer_bank 字段;链上凭 L3 签名授权 mutate
-        /// payer_bank 主账户 Currency,与谁提交批次无关。
+        /// PaymentIntent 内含 payer_bank_cid 字段;链上凭 L3 签名授权 mutate
+        /// 付款方清算账户 Currency,与谁提交批次无关。
         ///
         /// [`actor_cid_number`] 批次归属的机构 CID
         /// [`actor_role_code`] 提交清算批次的机构岗位码
@@ -521,20 +544,20 @@ pub mod pallet {
                 &batch_signature,
             )?;
             ensure!(
-                batch_seq == LastClearingBatchSeq::<T>::get(&institution_account).saturating_add(1),
+                batch_seq == LastClearingBatchSeq::<T>::get(&actor_cid_number).saturating_add(1),
                 Error::<T>::InvalidBatchSeq
             );
 
             with_transaction(|| {
                 match crate::settlement::execute_clearing_bank_batch::<T>(
                     &submitter,
-                    actor_cid_number.as_slice(),
+                    &actor_cid_number,
                     actor_role_code.as_slice(),
                     &institution_account,
                     batch.as_slice(),
                 ) {
                     Ok(()) => {
-                        LastClearingBatchSeq::<T>::insert(&institution_account, batch_seq);
+                        LastClearingBatchSeq::<T>::insert(&actor_cid_number, batch_seq);
                         TransactionOutcome::Commit(Ok(()))
                     }
                     Err(e) => TransactionOutcome::Rollback(Err(e)),
@@ -556,7 +579,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
             crate::fee_config::do_propose_l2_fee_rate::<T>(
                 who,
-                actor_cid_number.as_slice(),
+                &actor_cid_number,
                 actor_role_code.as_slice(),
                 institution_account,
                 new_rate_bp,
@@ -719,9 +742,11 @@ pub mod pallet {
 }
 
 impl<T: pallet::Config> pallet::Pallet<T> {
-    /// 反查清算行主账户对应的费用账户(辅助 ops / off-chain ledger)。
-    pub fn fee_account_of(bank_main: &T::AccountId) -> Result<T::AccountId, pallet::Error<T>> {
-        crate::bank_check::fee_account_of::<T>(bank_main)
+    /// 反查清算行 CID 对应的费用账户(辅助 ops / off-chain ledger)。
+    pub fn fee_account_of(
+        bank_cid: &crate::InstitutionCidNumber,
+    ) -> Result<T::AccountId, pallet::Error<T>> {
+        crate::bank_check::fee_account_of::<T>(bank_cid.as_slice())
     }
 
     // ============= 清算行节点声明实现 =============

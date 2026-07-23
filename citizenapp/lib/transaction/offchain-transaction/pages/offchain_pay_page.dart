@@ -1,8 +1,8 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/transaction/offchain-transaction/rpc/offchain_clearing_rpc.dart';
 import 'package:citizenapp/transaction/offchain-transaction/models/payment_intent.dart';
@@ -71,10 +71,9 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
   String _errorMessage = '';
 
   // 预取:付款方绑定的清算行主账户 SS58
-  String? _payerBankSs58;
+  String? _payerBankCid;
   // 预取:QR 收款方 cid_number 解析出的清算行主账户 hex
-  String? _recipientBankHex;
-  String? _recipientBankSs58;
+  String? _recipientBankCid;
   // 预取:费率
   int _rateBp = 0;
   int _minFeeFen = 1;
@@ -119,18 +118,12 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
         _setError('收款方清算行未在链上声明节点,无法付款');
         return;
       }
-      _recipientBankHex = hexFromAccountId(
-        deriveInstitutionMainAccountId(widget.recipientBankCidNumber),
-      );
-
-      _payerBankSs58 = payerBank;
-      _recipientBankSs58 = Keyring().encodeAddress(
-        hexToBytes(_ensure0x(_recipientBankHex!)).toList(),
-        2027,
-      );
+      // 身份主键=CID:付款方 CID 来自 queryUserBank,收款方 CID 来自扫码入参。
+      _payerBankCid = payerBank;
+      _recipientBankCid = widget.recipientBankCidNumber;
 
       // 3. 费率按收款方清算行计算;同行 / 跨行都由收款方清算行拿 fee 并付 gas。
-      final rate = await _nodeRpc.queryFeeRate(_recipientBankSs58!);
+      final rate = await _nodeRpc.queryFeeRate(_recipientBankCid!);
       if (rate.rateBp <= 0) {
         _setError('清算行费率未配置(rate_bp=${rate.rateBp}),请联系清算行运维');
         return;
@@ -202,15 +195,16 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
         throw Exception('钱包公钥长度异常:${payer.length}');
       }
       final recipient = _decodeAccount(widget.toAddress);
-      final payerBankBytes = _ss58ToBytes(_payerBankSs58!);
-      final recipientBankBytes = hexToBytes(_ensure0x(_recipientBankHex!));
+      final payerBankCidBytes = Uint8List.fromList(utf8.encode(_payerBankCid!));
+      final recipientBankCidBytes =
+          Uint8List.fromList(utf8.encode(_recipientBankCid!));
 
       final intent = NodePaymentIntent(
         txId: NodePaymentIntent.randomTxId(),
         payer: payer,
-        payerBank: payerBankBytes,
+        payerBankCid: payerBankCidBytes,
         recipient: recipient,
-        recipientBank: recipientBankBytes,
+        recipientBankCid: recipientBankCidBytes,
         amount: amountFen,
         fee: feeFen,
         nonce: BigInt.from(nonce),
@@ -337,12 +331,12 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _kv('收款方地址', widget.toAddress),
-          if (_payerBankSs58 != null) _kv('付款方清算行', _payerBankSs58!),
+          if (_payerBankCid != null) _kv('付款方清算行', _payerBankCid!),
           _kv('收款方清算行', widget.recipientBankCidNumber),
-          if (_payerBankSs58 != null && _recipientBankSs58 != null)
+          if (_payerBankCid != null && _recipientBankCid != null)
             _kv(
               '清算类型',
-              _payerBankSs58 == _recipientBankSs58 ? '同行' : '跨行',
+              _payerBankCid == _recipientBankCid ? '同行' : '跨行',
             ),
           if (widget.memo != null && widget.memo!.isNotEmpty)
             _kv('备注', widget.memo!),
@@ -405,8 +399,6 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
     }
     return Uint8List.fromList(bytes);
   }
-
-  String _ensure0x(String hex) => hex.startsWith('0x') ? hex : '0x$hex';
 
   /// 热钱包 / 冷钱包统一签名入口。
   ///

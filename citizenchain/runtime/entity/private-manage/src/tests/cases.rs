@@ -1,6 +1,6 @@
 use super::*;
 use frame_support::traits::GetCallName;
-use frame_support::{assert_noop, assert_ok, BoundedVec};
+use frame_support::{assert_noop, assert_ok};
 use votingengine::{types::code_bytes, InternalVoteEngine as _};
 
 #[test]
@@ -324,21 +324,206 @@ fn update_and_add_account_keep_cid_as_the_target_key() {
             account_name("更新简称".as_bytes())
         );
 
-        let names = BoundedVec::try_from(alloc::vec![account_name("专项账户".as_bytes())])
-            .expect("账户名列表必须受界");
-        assert_ok!(PrivateManage::add_institution_account(
-            RuntimeOrigin::signed(registrar()),
+        // 新增账户改为本机构提案 → 内部投票通过 → finalizer 落库。
+        assert_ok!(propose_add_custom_account(
+            RuntimeOrigin::signed(admin(1)),
             cid_number.clone(),
-            names,
-            b"GD001-FRG00-000000001-2026".to_vec(),
-            b"REGISTRY-ROLE".to_vec(),
+            &["专项账户".as_bytes()],
         ));
+        let proposal_id = VotingEngine::next_proposal_id().saturating_sub(1);
+        assert_ok!(cast_yes_votes(proposal_id));
         let named_account = account_of(&cid_number, "专项账户".as_bytes());
         assert_eq!(
             pallet::AccountRegisteredCid::<Test>::get(named_account)
                 .map(|item| (item.cid_number, item.account_name)),
             Some((cid_number, account_name("专项账户".as_bytes())))
         );
+    });
+}
+
+#[test]
+fn add_account_proposal_then_vote_inserts_account() {
+    new_test_ext().execute_with(|| {
+        let cid_number = generated_cid("private-add-vote", "SFLP");
+        assert_ok!(create_institution(
+            cid_number.clone(),
+            code_bytes("SFLP"),
+            initial_accounts(&[
+                (crate::RESERVED_NAME_MAIN, 0),
+                (crate::RESERVED_NAME_FEE, 0)
+            ]),
+        ));
+        let new_name = "投票新增账户".as_bytes();
+        assert!(!pallet::InstitutionAccounts::<Test>::contains_key(
+            &cid_number,
+            account_name(new_name),
+        ));
+
+        assert_ok!(propose_add_custom_account(
+            RuntimeOrigin::signed(admin(1)),
+            cid_number.clone(),
+            &[new_name],
+        ));
+        let proposal_id = VotingEngine::next_proposal_id().saturating_sub(1);
+        // 发起后 Pending 命中,尚未落库。
+        assert_eq!(
+            pallet::InstitutionPendingAdd::<Test>::get(&cid_number),
+            Some(proposal_id)
+        );
+        assert!(!pallet::InstitutionAccounts::<Test>::contains_key(
+            &cid_number,
+            account_name(new_name),
+        ));
+
+        assert_ok!(cast_yes_votes(proposal_id));
+
+        // 通过后账户落库、反向索引写入、Pending 清除。
+        let added = account_of(&cid_number, new_name);
+        assert_eq!(
+            pallet::AccountRegisteredCid::<Test>::get(&added)
+                .map(|item| item.cid_number),
+            Some(cid_number.clone())
+        );
+        assert!(!pallet::InstitutionPendingAdd::<Test>::contains_key(
+            &cid_number
+        ));
+    });
+}
+
+#[test]
+fn add_account_requires_institution_admin_and_role() {
+    new_test_ext().execute_with(|| {
+        let cid_number = generated_cid("private-add-auth", "SFLP");
+        assert_ok!(create_institution(
+            cid_number.clone(),
+            code_bytes("SFLP"),
+            initial_accounts(&[
+                (crate::RESERVED_NAME_MAIN, 0),
+                (crate::RESERVED_NAME_FEE, 0)
+            ]),
+        ));
+        // 非本机构管理员钱包发起 → build_institution_vote_plan 授权失败。
+        assert_noop!(
+            propose_add_custom_account(
+                RuntimeOrigin::signed(admin(9)),
+                cid_number.clone(),
+                &["越权账户".as_bytes()],
+            ),
+            pallet::Error::<Test>::PermissionDenied
+        );
+        // 不存在的机构 → InstitutionNotFound。
+        let ghost = generated_cid("private-add-ghost", "SFLP");
+        assert_noop!(
+            propose_add_custom_account(
+                RuntimeOrigin::signed(admin(1)),
+                ghost,
+                &["幽灵账户".as_bytes()],
+            ),
+            pallet::Error::<Test>::InstitutionNotFound
+        );
+    });
+}
+
+#[test]
+fn add_account_rejects_protocol_names_and_duplicate_custom_names() {
+    new_test_ext().execute_with(|| {
+        let cid_number = generated_cid("private-add-invalid", "SFLP");
+        assert_ok!(create_institution(
+            cid_number.clone(),
+            code_bytes("SFLP"),
+            initial_accounts(&[
+                (crate::RESERVED_NAME_MAIN, 0),
+                (crate::RESERVED_NAME_FEE, 0)
+            ]),
+        ));
+        // 保留名/重复名在发起阶段即被派生校验链拒绝,不写 Pending、不建提案。
+        assert_noop!(
+            propose_add_custom_account(
+                RuntimeOrigin::signed(admin(1)),
+                cid_number.clone(),
+                &[crate::RESERVED_NAME_MAIN],
+            ),
+            pallet::Error::<Test>::ReservedAccountName
+        );
+        assert_noop!(
+            propose_add_custom_account(
+                RuntimeOrigin::signed(admin(1)),
+                cid_number,
+                &["重复账户".as_bytes(), "重复账户".as_bytes()],
+            ),
+            pallet::Error::<Test>::DuplicateAccountName
+        );
+    });
+}
+
+#[test]
+fn duplicate_add_proposal_is_rejected_while_pending() {
+    new_test_ext().execute_with(|| {
+        let cid_number = generated_cid("private-add-pending", "SFLP");
+        assert_ok!(create_institution(
+            cid_number.clone(),
+            code_bytes("SFLP"),
+            initial_accounts(&[
+                (crate::RESERVED_NAME_MAIN, 0),
+                (crate::RESERVED_NAME_FEE, 0)
+            ]),
+        ));
+        // 首次发起成功后 InstitutionPendingAdd 命中,同机构重复发起新增必须被拒。
+        assert_ok!(propose_add_custom_account(
+            RuntimeOrigin::signed(admin(1)),
+            cid_number.clone(),
+            &["账户甲".as_bytes()],
+        ));
+        assert_noop!(
+            propose_add_custom_account(
+                RuntimeOrigin::signed(admin(1)),
+                cid_number,
+                &["账户乙".as_bytes()],
+            ),
+            pallet::Error::<Test>::AddAlreadyPending
+        );
+    });
+}
+
+#[test]
+fn rejected_add_is_cleaned_only_by_votingengine_callback() {
+    new_test_ext().execute_with(|| {
+        let cid_number = generated_cid("private-add-rejected", "SFLP");
+        assert_ok!(create_institution(
+            cid_number.clone(),
+            code_bytes("SFLP"),
+            initial_accounts(&[
+                (crate::RESERVED_NAME_MAIN, 0),
+                (crate::RESERVED_NAME_FEE, 0)
+            ]),
+        ));
+        let new_name = "被否新增账户".as_bytes();
+        assert_ok!(propose_add_custom_account(
+            RuntimeOrigin::signed(admin(1)),
+            cid_number.clone(),
+            &[new_name],
+        ));
+        let proposal_id = VotingEngine::next_proposal_id().saturating_sub(1);
+        assert_eq!(
+            pallet::InstitutionPendingAdd::<Test>::get(&cid_number),
+            Some(proposal_id)
+        );
+
+        assert_eq!(
+            <crate::InternalVoteExecutor<Test> as votingengine::InternalVoteResultCallback>::on_internal_vote_finalized(
+                proposal_id,
+                false,
+            ),
+            Ok(votingengine::ProposalExecutionOutcome::Executed)
+        );
+        // 否决由投票引擎回调清 Pending,账户不落库。
+        assert!(!pallet::InstitutionPendingAdd::<Test>::contains_key(
+            &cid_number
+        ));
+        assert!(!pallet::InstitutionAccounts::<Test>::contains_key(
+            &cid_number,
+            account_name(new_name),
+        ));
     });
 }
 

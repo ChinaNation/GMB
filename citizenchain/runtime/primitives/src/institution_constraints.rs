@@ -15,7 +15,7 @@ use crate::cid::china::{
     china_jc::CHINA_JC, china_jy::CHINA_JY, china_lf::CHINA_LF, china_zf::CHINA_ZF,
 };
 use crate::cid::code::{
-    institution_code_from_cid_number, InstitutionCode, NED, NLG, NRC, NRP, NSN, NSP, PRB, PRS,
+    institution_code_from_cid_number, InstitutionCode, NED, NLG, NRC, NRP, NSN, NSP, PRB, PRS, SFGF,
 };
 
 /// 所有机构共同强制的协议账户。
@@ -39,6 +39,16 @@ pub const PRB_PROTOCOL_ACCOUNT_KINDS: &[InstitutionProtocolAccountKind] = &[
     InstitutionProtocolAccountKind::Stake,
 ];
 
+/// 私法人股份公司(SFGF)强制协议账户。
+///
+/// 股份公司是清算行资格机构:在主账户、费用账户之外多一个「清算账户」,
+/// 承载扫码支付 L2 清算资金。注册局创建 SFGF 时自动派生并登记该账户。
+pub const CORPORATION_PROTOCOL_ACCOUNT_KINDS: &[InstitutionProtocolAccountKind] = &[
+    InstitutionProtocolAccountKind::Main,
+    InstitutionProtocolAccountKind::Fee,
+    InstitutionProtocolAccountKind::Clearing,
+];
+
 /// 返回机构必须完整拥有的协议账户集合。
 ///
 /// CID 与机构码必须互相匹配；不匹配时返回 `None`，调用方不得自行回落到普通机构规则。
@@ -52,6 +62,7 @@ pub fn required_protocol_account_kinds(
     Some(match code {
         NRC => NRC_PROTOCOL_ACCOUNT_KINDS,
         PRB => PRB_PROTOCOL_ACCOUNT_KINDS,
+        SFGF => CORPORATION_PROTOCOL_ACCOUNT_KINDS,
         _ => COMMON_PROTOCOL_ACCOUNT_KINDS,
     })
 }

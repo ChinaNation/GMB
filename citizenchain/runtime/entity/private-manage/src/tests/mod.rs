@@ -514,24 +514,34 @@ pub fn create_institution(
     pallet::InstitutionGovernanceThresholds::<Test>::insert(&cid_number, 2);
     grant_close_role(&cid_number);
 
-    // 创建 call 不再接收账户清单或初始入金。测试若需要关闭命名账户，必须在创建
-    // 完成后走正式的新增账户入口；余额注入只用于构造后续操作场景。
-    let named_accounts = accounts
-        .iter()
-        .filter(|item| {
-            item.account_name.as_slice() != crate::RESERVED_NAME_MAIN
-                && item.account_name.as_slice() != crate::RESERVED_NAME_FEE
-        })
-        .map(|item| item.account_name.clone())
-        .collect::<alloc::vec::Vec<_>>();
-    if !named_accounts.is_empty() {
-        PrivateManage::add_institution_account(
-            RuntimeOrigin::signed(registrar()),
-            cid_number.clone(),
-            named_accounts.try_into().expect("named accounts fit"),
-            b"GD001-FRG00-000000001-2026".to_vec(),
-            b"REGISTRY-ROLE".to_vec(),
-        )?;
+    // 创建 call 不再接收账户清单或初始入金。新增账户已改为机构自身提案+内部投票流程;
+    // 测试 setup 直接落库命名账户,不再依赖新增账户投票路径(新增流程由 cases.rs 的
+    // add_account_* 用例独立覆盖);余额注入只用于构造后续操作场景。
+    for item in accounts.iter().filter(|item| {
+        item.account_name.as_slice() != crate::RESERVED_NAME_MAIN
+            && item.account_name.as_slice() != crate::RESERVED_NAME_FEE
+    }) {
+        let (address, _) = PrivateManage::derive_institution_account(
+            cid_number.as_slice(),
+            item.account_name.as_slice(),
+        )
+        .expect("命名账户必须可派生");
+        pallet::InstitutionAccounts::<Test>::insert(
+            &cid_number,
+            &item.account_name,
+            crate::InstitutionAccountInfo {
+                address: address.clone(),
+                initial_balance: 0,
+                created_at: System::block_number(),
+            },
+        );
+        pallet::AccountRegisteredCid::<Test>::insert(
+            &address,
+            crate::RegisteredInstitution {
+                cid_number: cid_number.clone(),
+                account_name: item.account_name.clone(),
+            },
+        );
     }
     for item in accounts.iter().filter(|item| item.amount > 0) {
         let address = account_of(&cid_number, item.account_name.as_slice());
@@ -544,6 +554,29 @@ pub fn account_of(cid_number: &pallet::CidNumberOf<Test>, name: &[u8]) -> Accoun
     PrivateManage::derive_institution_account(cid_number.as_slice(), name)
         .expect("机构账户必须可派生")
         .0
+}
+
+/// 测试用:以本机构任职管理员钱包 + `TEST_CLOSE_ROLE` 岗位发起新增账户提案。
+/// 新增与关闭复用同一账户生命周期能力(`ACTION_INSTITUTION_CLOSE`),故同岗位即可提案。
+pub fn propose_add_custom_account(
+    origin: RuntimeOrigin,
+    cid_number: pallet::CidNumberOf<Test>,
+    names: &[&[u8]],
+) -> sp_runtime::DispatchResult {
+    let proposer_role_code: crate::RoleCodeOf =
+        b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits");
+    let account_names = names
+        .iter()
+        .map(|name| account_name(name))
+        .collect::<alloc::vec::Vec<_>>()
+        .try_into()
+        .expect("account names fit");
+    PrivateManage::propose_add_institution_account(
+        origin,
+        cid_number,
+        account_names,
+        proposer_role_code,
+    )
 }
 
 pub fn cast_yes_votes(proposal_id: u64) -> sp_runtime::DispatchResult {

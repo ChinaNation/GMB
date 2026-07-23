@@ -24,22 +24,17 @@ pub enum InstitutionAssetAction {
     MultisigTransferExecute,
     /// 多签账户关闭执行:把 `main_account` 的余额整体转出。
     MultisigCloseExecute,
-    /// 链下清算批次执行:允许普通付款账户作为批次 source。
-    OffchainBatchDebit,
     /// 省储行手续费账户归集:从 `fee_account` 划回机构主账户。
     OffchainFeeSweepExecute,
     /// 国家储委会安全基金转账:从 `SAFETY_FUND_ACCOUNT` 向指定收款地址转账。
     NrcSafetyFundTransfer,
     // ========== 清算行(L2)体系动作 ==========
-    /// L3 用户向清算行主账户充值。source 为 L3 自持账户。
+    /// L3 用户向清算行清算账户充值。source 为 L3 自持账户。
     L3DepositIn,
-    /// 清算行主账户向 L3 自持账户提现。source 为清算行主账户。
+    /// 清算账户向 L3 自持账户提现。source 为清算账户。
     L3WithdrawOut,
-    /// 清算行主账户在扫码清算时扣款。source 为清算行主账户。
+    /// 清算账户在扫码清算时扣款(本金 + 手续费)。source 为清算账户。
     L2ClearingDebit,
-    /// 清算行费用账户收手续费。source 为清算行主账户(转出),
-    /// 接收方为清算行费用账户。
-    L2FeeCollect,
 }
 
 /// 机构账户资金白名单检查器。
@@ -67,13 +62,11 @@ mod tests {
             InstitutionAssetAction::InstitutionCreateFunding,
             InstitutionAssetAction::MultisigTransferExecute,
             InstitutionAssetAction::MultisigCloseExecute,
-            InstitutionAssetAction::OffchainBatchDebit,
             InstitutionAssetAction::OffchainFeeSweepExecute,
             InstitutionAssetAction::NrcSafetyFundTransfer,
             InstitutionAssetAction::L3DepositIn,
             InstitutionAssetAction::L3WithdrawOut,
             InstitutionAssetAction::L2ClearingDebit,
-            InstitutionAssetAction::L2FeeCollect,
         ] {
             assert!(<() as InstitutionAsset<[u8; 32]>>::can_spend(
                 &account, action

@@ -5,7 +5,8 @@
 // citizenchain primitives::core_const::derive_account 字节对齐:
 //   preimage = b"GMB" || op_tag || ss58.to_le_bytes() || payload
 //   OP_MAIN(0x00)/OP_FEE(0x01)/OP_SAFETY(0x03)/OP_HE(0x04): payload = cid_number
-//   OP_INSTITUTION(0x06): payload = cid_number || account_name
+//   OP_CLEARING(0x06): payload = cid_number
+//   OP_NAME(0x07): payload = cid_number || account_name
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -78,13 +79,13 @@ void main() {
     });
   });
 
-  group('自定义账户 OP_INSTITUTION(0x06)', () {
+  group('自定义账户 OP_NAME(0x07)', () {
     test('payload 追加 account_name,与手工构造一致', () {
       const name = '业务专户A';
       final expected = Hasher.blake2b256.hash(
         Uint8List.fromList(<int>[
           ...utf8.encode('GMB'),
-          0x06,
+          0x07,
           2027 & 0xFF,
           (2027 >> 8) & 0xFF,
           ...utf8.encode(nrcCid),

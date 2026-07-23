@@ -474,7 +474,7 @@ class AdminDivisionEntity {
 /// 公权机构目录本地完整缓存(ADR-018 §九 混合模式)。
 ///
 /// 数据来自发布期数据包(基线)+ CID 公开接口增量同步;UI 永远读本表,
-/// 省/市/机构导航零链读零现查。主/费账户本地派生不入库,仅自定义账户名(op_tag=0x06)
+/// 省/市/机构导航零链读零现查。主/费账户本地派生不入库,仅自定义账户名(op_tag=0x07)
 /// 入 [customAccountNames](绝大多数机构为空)。
 @collection
 class PublicInstitutionEntity {
@@ -519,7 +519,7 @@ class PublicInstitutionEntity {
   String? legalRepresentativeAccount;
   late int accountCount;
 
-  /// 自定义账户名(op_tag=0x06);主/费可本地派生不入库。空占绝大多数。
+  /// 自定义账户名(op_tag=0x07);主/费可本地派生不入库。空占绝大多数。
   List<String> customAccountNames = const [];
 
   /// 该省目录同步版本戳(增量比对/排错用)。

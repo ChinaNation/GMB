@@ -36,100 +36,111 @@ pub enum OffchainChainEvent {
     /// `offchain::Event::Deposited`
     Deposited {
         user: AccountId32,
-        bank: AccountId32,
+        bank_cid: Vec<u8>,
         amount: u128,
     },
     /// `offchain::Event::Withdrawn`
     Withdrawn {
         user: AccountId32,
-        bank: AccountId32,
+        bank_cid: Vec<u8>,
         amount: u128,
     },
     /// `offchain::Event::PaymentSettled`
     PaymentSettled {
         tx_id: H256,
         payer: AccountId32,
-        payer_bank: AccountId32,
+        payer_bank_cid: Vec<u8>,
         recipient: AccountId32,
-        recipient_bank: AccountId32,
+        recipient_bank_cid: Vec<u8>,
         amount: u128,
         fee: u128,
     },
     /// 账户绑定 / 切换(仅日志)
     BankBound {
         user: AccountId32,
-        bank: AccountId32,
+        bank_cid: Vec<u8>,
     },
     BankSwitched {
         user: AccountId32,
-        old_bank: AccountId32,
-        new_bank: AccountId32,
+        old_bank_cid: Vec<u8>,
+        new_bank_cid: Vec<u8>,
     },
 }
 
 /// 事件分发器:把解码后的链上事件喂给本地 ledger。
 pub struct EventListener {
     ledger: Arc<OffchainLedger>,
-    /// 本节点负责的清算行主账户(用于过滤:只处理与本清算行相关的事件)。
-    my_bank: AccountId32,
+    /// 本节点负责的清算行 CID(用于过滤:只处理与本清算行相关的事件)。
+    my_bank_cid: Vec<u8>,
 }
 
 impl EventListener {
-    pub fn new(ledger: Arc<OffchainLedger>, my_bank: AccountId32) -> Self {
-        Self { ledger, my_bank }
+    pub fn new(ledger: Arc<OffchainLedger>, my_bank_cid: Vec<u8>) -> Self {
+        Self {
+            ledger,
+            my_bank_cid,
+        }
     }
 
     /// 单条事件处理入口。
     pub fn handle(&self, ev: OffchainChainEvent) {
         match ev {
-            OffchainChainEvent::Deposited { user, bank, amount } => {
-                if bank == self.my_bank {
+            OffchainChainEvent::Deposited {
+                user,
+                bank_cid,
+                amount,
+            } => {
+                if bank_cid == self.my_bank_cid {
                     self.ledger.on_deposited(&user, amount);
                 }
             }
-            OffchainChainEvent::Withdrawn { user, bank, amount } => {
-                if bank == self.my_bank {
+            OffchainChainEvent::Withdrawn {
+                user,
+                bank_cid,
+                amount,
+            } => {
+                if bank_cid == self.my_bank_cid {
                     self.ledger.on_withdrawn(&user, amount);
                 }
             }
             OffchainChainEvent::PaymentSettled {
                 tx_id,
                 payer,
-                payer_bank,
+                payer_bank_cid,
                 recipient,
-                recipient_bank,
+                recipient_bank_cid,
                 amount,
                 fee,
             } => {
                 // 付款方 / 收款方任意一方在本清算行就要处理(跨行时只动其中一侧)。
-                // ledger.on_payment_settled 内部用 `my_bank` 过滤,避免跨行 ghost
+                // ledger.on_payment_settled 内部用 `my_bank_cid` 过滤,避免跨行 ghost
                 // account。
-                if payer_bank == self.my_bank || recipient_bank == self.my_bank {
+                if payer_bank_cid == self.my_bank_cid || recipient_bank_cid == self.my_bank_cid {
                     self.ledger.on_payment_settled(
                         tx_id,
                         &payer,
-                        &payer_bank,
+                        &payer_bank_cid,
                         &recipient,
-                        &recipient_bank,
-                        &self.my_bank,
+                        &recipient_bank_cid,
+                        &self.my_bank_cid,
                         amount,
                         fee,
                     );
                 }
             }
-            OffchainChainEvent::BankBound { user, bank } => {
-                if bank == self.my_bank {
+            OffchainChainEvent::BankBound { user, bank_cid } => {
+                if bank_cid == self.my_bank_cid {
                     log::info!("[OffchainListener] 新 L3 绑定本清算行:user={user:?}");
                 }
             }
             OffchainChainEvent::BankSwitched {
                 user,
-                old_bank,
-                new_bank,
+                old_bank_cid,
+                new_bank_cid,
             } => {
-                if old_bank == self.my_bank {
+                if old_bank_cid == self.my_bank_cid {
                     log::info!("[OffchainListener] L3 从本清算行切走:user={user:?}");
-                } else if new_bank == self.my_bank {
+                } else if new_bank_cid == self.my_bank_cid {
                     log::info!("[OffchainListener] L3 切到本清算行:user={user:?}");
                 }
             }
@@ -194,40 +205,55 @@ pub fn convert_event(ev: runtime::RuntimeEvent) -> Option<OffchainChainEvent> {
     use offchain::pallet::Event as OffchainEvent;
     match ev {
         runtime::RuntimeEvent::OffchainTransaction(inner) => match inner {
-            OffchainEvent::Deposited { user, bank, amount } => {
-                Some(OffchainChainEvent::Deposited { user, bank, amount })
-            }
-            OffchainEvent::Withdrawn { user, bank, amount } => {
-                Some(OffchainChainEvent::Withdrawn { user, bank, amount })
-            }
+            OffchainEvent::Deposited {
+                user,
+                bank_cid,
+                amount,
+            } => Some(OffchainChainEvent::Deposited {
+                user,
+                bank_cid: bank_cid.into_inner(),
+                amount,
+            }),
+            OffchainEvent::Withdrawn {
+                user,
+                bank_cid,
+                amount,
+            } => Some(OffchainChainEvent::Withdrawn {
+                user,
+                bank_cid: bank_cid.into_inner(),
+                amount,
+            }),
             OffchainEvent::PaymentSettled {
                 tx_id,
                 payer,
-                payer_bank,
+                payer_bank_cid,
                 recipient,
-                recipient_bank,
+                recipient_bank_cid,
                 transfer_amount,
                 fee_amount,
             } => Some(OffchainChainEvent::PaymentSettled {
                 tx_id,
                 payer,
-                payer_bank,
+                payer_bank_cid: payer_bank_cid.into_inner(),
                 recipient,
-                recipient_bank,
+                recipient_bank_cid: recipient_bank_cid.into_inner(),
                 amount: transfer_amount,
                 fee: fee_amount,
             }),
-            OffchainEvent::BankBound { user, bank } => {
-                Some(OffchainChainEvent::BankBound { user, bank })
+            OffchainEvent::BankBound { user, bank_cid } => {
+                Some(OffchainChainEvent::BankBound {
+                    user,
+                    bank_cid: bank_cid.into_inner(),
+                })
             }
             OffchainEvent::BankSwitched {
                 user,
-                old_bank,
-                new_bank,
+                old_bank_cid,
+                new_bank_cid,
             } => Some(OffchainChainEvent::BankSwitched {
                 user,
-                old_bank,
-                new_bank,
+                old_bank_cid: old_bank_cid.into_inner(),
+                new_bank_cid: new_bank_cid.into_inner(),
             }),
             // 其他 offchain_transaction 事件(费率治理、批次级别等)
             // 与本地 ledger 同步无关,忽略。
@@ -242,10 +268,10 @@ mod tests {
     use super::*;
     use std::fs;
 
-    fn mk() -> (Arc<OffchainLedger>, AccountId32) {
+    fn mk() -> (Arc<OffchainLedger>, Vec<u8>) {
         let tmp = std::env::temp_dir().join("offchain_event_test");
         let _ = fs::remove_dir_all(&tmp);
-        let bank = AccountId32::new([0xAA; 32]);
+        let bank: Vec<u8> = b"ZS001-PRB08-233384677-2026".to_vec();
         (Arc::new(OffchainLedger::new(&tmp)), bank)
     }
 
@@ -256,7 +282,7 @@ mod tests {
         let user = AccountId32::new([1u8; 32]);
         listener.handle(OffchainChainEvent::Deposited {
             user: user.clone(),
-            bank: bank.clone(),
+            bank_cid: bank.clone(),
             amount: 500,
         });
         assert_eq!(ledger.available_balance(&user), 500);
@@ -266,11 +292,11 @@ mod tests {
     fn deposited_event_ignored_for_other_bank() {
         let (ledger, bank) = mk();
         let listener = EventListener::new(ledger.clone(), bank);
-        let other_bank = AccountId32::new([0xBB; 32]);
+        let other_bank: Vec<u8> = b"AH001-PRB0X-111111111-2026".to_vec();
         let user = AccountId32::new([1u8; 32]);
         listener.handle(OffchainChainEvent::Deposited {
             user: user.clone(),
-            bank: other_bank,
+            bank_cid: other_bank,
             amount: 500,
         });
         assert_eq!(ledger.available_balance(&user), 0);
@@ -283,12 +309,12 @@ mod tests {
         let user = AccountId32::new([2u8; 32]);
         listener.handle(OffchainChainEvent::Deposited {
             user: user.clone(),
-            bank: bank.clone(),
+            bank_cid: bank.clone(),
             amount: 1000,
         });
         listener.handle(OffchainChainEvent::Withdrawn {
             user: user.clone(),
-            bank,
+            bank_cid: bank,
             amount: 300,
         });
         assert_eq!(ledger.available_balance(&user), 700);
@@ -303,16 +329,16 @@ mod tests {
     #[test]
     fn convert_event_deposited() {
         let user = AccountId32::new([1u8; 32]);
-        let bank = AccountId32::new([0xAA; 32]);
+        let bank: Vec<u8> = b"ZS001-PRB08-233384677-2026".to_vec();
         let ev = runtime::RuntimeEvent::OffchainTransaction(PalletEvent::Deposited {
             user: user.clone(),
-            bank: bank.clone(),
+            bank_cid: bank.clone().try_into().unwrap(),
             amount: 100,
         });
         match convert_event(ev) {
             Some(OffchainChainEvent::Deposited {
                 user: u,
-                bank: b,
+                bank_cid: b,
                 amount,
             }) => {
                 assert_eq!(u, user);
@@ -328,16 +354,16 @@ mod tests {
         // runtime pallet 字段 `transfer_amount` / `fee_amount` 要映射到 node 侧
         // 简化结构 `amount` / `fee`,顺序和语义都不能丢。
         let payer = AccountId32::new([1u8; 32]);
-        let payer_bank = AccountId32::new([0xA1; 32]);
+        let payer_bank: Vec<u8> = b"GD001-PRB0T-239565809-2026".to_vec();
         let recipient = AccountId32::new([2u8; 32]);
-        let recipient_bank = AccountId32::new([0xA2; 32]);
+        let recipient_bank: Vec<u8> = b"AH001-PRB0X-111111111-2026".to_vec();
         let tx_id = H256::repeat_byte(7);
         let ev = runtime::RuntimeEvent::OffchainTransaction(PalletEvent::PaymentSettled {
             tx_id,
             payer: payer.clone(),
-            payer_bank: payer_bank.clone(),
+            payer_bank_cid: payer_bank.clone().try_into().unwrap(),
             recipient: recipient.clone(),
-            recipient_bank: recipient_bank.clone(),
+            recipient_bank_cid: recipient_bank.clone().try_into().unwrap(),
             transfer_amount: 9_800,
             fee_amount: 200,
         });
@@ -345,9 +371,9 @@ mod tests {
             Some(OffchainChainEvent::PaymentSettled {
                 tx_id: t,
                 payer: p,
-                payer_bank: pb,
+                payer_bank_cid: pb,
                 recipient: r,
-                recipient_bank: rb,
+                recipient_bank_cid: rb,
                 amount,
                 fee,
             }) => {

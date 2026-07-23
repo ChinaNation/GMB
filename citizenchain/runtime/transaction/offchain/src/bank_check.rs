@@ -24,6 +24,8 @@ pub const CID_R5_SEPARATOR_INDEX: usize = 5;
 pub const ACCOUNT_NAME_MAIN: &[u8] = primitives::account_derive::RESERVED_NAME_MAIN;
 /// 清算行"费用账户"名称。
 pub const ACCOUNT_NAME_FEE: &[u8] = primitives::account_derive::RESERVED_NAME_FEE;
+/// 清算行"清算账户"名称(承载 L2 存款准备金,充值/提现/结算/偿付的唯一资金池)。
+pub const ACCOUNT_NAME_CLEARING: &[u8] = primitives::account_derive::RESERVED_NAME_CLEARING;
 // 机构登记表查询抽象
 /// 机构登记表查询抽象。
 ///
@@ -96,7 +98,7 @@ fn subject_property_is_private_institution(cid_bytes: &[u8]) -> bool {
 // 对外 API
 /// 严格校验:某地址可作为"清算行主账户"被 L3 绑定。
 ///
-/// 6 重校验,任一失败即拒绝:
+/// 7 重校验,任一失败即拒绝:
 /// 1. 在链上 `AccountRegisteredCid` 有机构登记
 /// 2. `account_name` 段等于 "主账户"
 /// 3. K1 ∈ {S, F}(字节级主体属性判定)
@@ -105,36 +107,38 @@ fn subject_property_is_private_institution(cid_bytes: &[u8]) -> bool {
 ///    `CidAccountQuery::is_clearing_bank_eligible` 只确认该 CID 机构账户已 Active
 /// 6. **节点已声明**:`cid_number ∈ ClearingBankNodes`,确保该机构已加入清算网络
 ///    (用户不能绑定到"机构合法但未声明清算行节点"的机构)
-pub fn ensure_can_be_bound<T: Config>(addr: &T::AccountId) -> Result<(), Error<T>> {
-    let (cid_bytes, account_name_bytes) =
-        T::CidAccountQuery::account_info(addr).ok_or(Error::<T>::NotRegisteredClearingBank)?;
-
+/// 7. **清算账户已派生**(S2-②):L2 资金落点必须存在,把清算行资格在资金层收紧到 SFGF
+pub fn ensure_can_be_bound<T: Config>(cid_number: &[u8]) -> Result<(), Error<T>> {
+    // 1. K1 主体属性:私法人/非法人(S/F),直接对 CID 字节判定。
     ensure!(
-        account_name_bytes.as_slice() == ACCOUNT_NAME_MAIN,
-        Error::<T>::NotMainAccount
-    );
-
-    ensure!(
-        subject_property_is_private_institution(cid_bytes.as_slice()),
+        subject_property_is_private_institution(cid_number),
         Error::<T>::NotPrivateInstitution
     );
 
+    // 2. 由 CID 解析主账户,复用既有(按地址)的资格/节点校验。
+    let main = T::CidAccountQuery::find_account(cid_number, ACCOUNT_NAME_MAIN)
+        .ok_or(Error::<T>::NotRegisteredClearingBank)?;
+
     ensure!(
-        T::CidAccountQuery::account_exists(addr),
+        T::CidAccountQuery::account_exists(&main),
         Error::<T>::ClearingBankAccountNotFound
     );
 
-    // 第 5 重:资格白名单(S-JOINT_STOCK / F-parent.S.JOINT_STOCK)
+    // 3. 资格白名单(S-JOINT_STOCK / F-parent.S.JOINT_STOCK)。
     ensure!(
-        T::CidAccountQuery::is_clearing_bank_eligible(addr),
+        T::CidAccountQuery::is_clearing_bank_eligible(&main),
         Error::<T>::NotEligibleForClearingBank
     );
 
-    // 第 6 重:必须已声明清算行节点
+    // 4. 必须已声明清算行节点。
     ensure!(
-        T::CidAccountQuery::is_registered_clearing_node(addr),
+        T::CidAccountQuery::is_registered_clearing_node(&main),
         Error::<T>::ClearingBankNotRegisteredAsNode
     );
+
+    // 5. (S2-②)必须已派生清算账户 —— L2 资金落点。等价于把清算行资格在资金层
+    //    收紧到 SFGF,避免用户绑定成功却在首次充值时才失败。
+    let _clearing = clearing_account_of::<T>(cid_number)?;
 
     Ok(())
 }
@@ -167,19 +171,25 @@ pub fn ensure_institution_account<T: Config>(
     Ok(())
 }
 
-/// 反查"清算行费用账户"地址(由 `settlement.rs` 使用)。
+/// 由清算行 CID 反查其"费用账户"地址(由 `settlement.rs` 使用)。
 ///
-/// 流程:
-/// 1. 由主账户反查得到 `cid_number`
-/// 2. 用 `(cid_number, "费用账户")` 查询费用账户
-///
-/// 若清算行注册时未同步创建费用账户,返回 `FeeAccountNotFound`。
-pub fn fee_account_of<T: Config>(main_addr: &T::AccountId) -> Result<T::AccountId, Error<T>> {
-    let (cid_bytes, _) =
-        T::CidAccountQuery::account_info(main_addr).ok_or(Error::<T>::NotRegisteredClearingBank)?;
-
-    T::CidAccountQuery::find_account(cid_bytes.as_slice(), ACCOUNT_NAME_FEE)
+/// 用 `(cid_number, "费用账户")` 直接查询;清算行注册时未同步创建费用账户则返回
+/// `FeeAccountNotFound`。
+pub fn fee_account_of<T: Config>(cid_number: &[u8]) -> Result<T::AccountId, Error<T>> {
+    T::CidAccountQuery::find_account(cid_number, ACCOUNT_NAME_FEE)
         .ok_or(Error::<T>::FeeAccountNotFound)
+}
+
+/// 由清算行 CID 反查其**清算账户**地址 —— L2 充值/提现/结算/偿付的唯一资金落点。
+///
+/// 主账户(`ACCOUNT_NAME_MAIN`)是机构身份锚,只在 `ensure_can_be_bound` /
+/// `ensure_institution_account` 内按名解析,不再作为资金落点,故无独立取址原语。
+///
+/// 清算账户仅私法人股份公司(SFGF)注册时派生(约束表 `CORPORATION_PROTOCOL_ACCOUNT_KINDS`);
+/// 未派生返回 `ClearingAccountNotFound`。
+pub fn clearing_account_of<T: Config>(cid_number: &[u8]) -> Result<T::AccountId, Error<T>> {
+    T::CidAccountQuery::find_account(cid_number, ACCOUNT_NAME_CLEARING)
+        .ok_or(Error::<T>::ClearingAccountNotFound)
 }
 
 /// 判定某地址是"清算行的任一已登记账户"。

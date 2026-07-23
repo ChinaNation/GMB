@@ -38,18 +38,20 @@ class NodePaymentIntent {
   NodePaymentIntent({
     required this.txId,
     required this.payer,
-    required this.payerBank,
+    required this.payerBankCid,
     required this.recipient,
-    required this.recipientBank,
+    required this.recipientBankCid,
     required this.amount,
     required this.fee,
     required this.nonce,
     required this.expiresAt,
   })  : assert(txId.length == 32, 'tx_id 必须 32 字节'),
         assert(payer.length == 32, 'payer 必须 32 字节'),
-        assert(payerBank.length == 32, 'payer_bank 必须 32 字节'),
+        assert(payerBankCid.isNotEmpty && payerBankCid.length <= 32,
+            'payer_bank_cid 长度必须 1..32'),
         assert(recipient.length == 32, 'recipient 必须 32 字节'),
-        assert(recipientBank.length == 32, 'recipient_bank 必须 32 字节'),
+        assert(recipientBankCid.isNotEmpty && recipientBankCid.length <= 32,
+            'recipient_bank_cid 长度必须 1..32'),
         assert(amount >= BigInt.zero, 'amount 不得为负'),
         assert(fee >= BigInt.zero, 'fee 不得为负'),
         assert(nonce >= BigInt.zero, 'nonce 不得为负'),
@@ -58,29 +60,41 @@ class NodePaymentIntent {
 
   final Uint8List txId;
   final Uint8List payer;
-  final Uint8List payerBank;
+  /// 付款方绑定清算行 CID(机构唯一永久主键);SCALE = Compact(len)||bytes。
+  final Uint8List payerBankCid;
   final Uint8List recipient;
-  final Uint8List recipientBank;
+  /// 收款方绑定清算行 CID。
+  final Uint8List recipientBankCid;
   final BigInt amount;
   final BigInt fee;
   final BigInt nonce;
   final int expiresAt;
 
-  /// SCALE 编码(定长 204 字节)。
+  /// SCALE 编码(变长:bank 字段为 CID = Compact(len)||bytes,与 runtime
+  /// `InstitutionCidNumber = BoundedVec<u8>` 逐字节等价)。
   Uint8List scaleEncode() {
+    // 运行时强制 CID 长度不变量:assert 在 release 被裁剪,而 CID 来自扫码原始输入,
+    // 编码进签名前必须显式校验,不能只靠调用方前置检查兜底。
+    if (payerBankCid.isEmpty || payerBankCid.length > 32) {
+      throw ArgumentError('payerBankCid 长度须 1..=32,实际 ${payerBankCid.length}');
+    }
+    if (recipientBankCid.isEmpty || recipientBankCid.length > 32) {
+      throw ArgumentError(
+          'recipientBankCid 长度须 1..=32,实际 ${recipientBankCid.length}');
+    }
     final out = BytesBuilder(copy: false);
     out.add(txId);
     out.add(payer);
-    out.add(payerBank);
+    out.add(_compactU32(payerBankCid.length));
+    out.add(payerBankCid);
     out.add(recipient);
-    out.add(recipientBank);
+    out.add(_compactU32(recipientBankCid.length));
+    out.add(recipientBankCid);
     out.add(_u128Le(amount));
     out.add(_u128Le(fee));
     out.add(_u64Le(nonce));
     out.add(_u32Le(BigInt.from(expiresAt)));
-    final bytes = out.toBytes();
-    assert(bytes.length == 204, 'SCALE 编码长度必须 204,实际 ${bytes.length}');
-    return bytes;
+    return out.toBytes();
   }
 
   /// 待签名哈希:`blake2_256(GMB || OP_SIGN_L3_PAY(0x15) || scaleEncode())`。
@@ -127,6 +141,22 @@ class NodePaymentIntent {
     final minFen = BigInt.from(minFeeFen);
     return rounded >= minFen ? rounded : minFen;
   }
+}
+
+/// SCALE `Compact<u32>` 编码。CID 长度 < 64 → 单字节 `(n<<2)`。
+Uint8List _compactU32(int n) {
+  if (n < 0) throw ArgumentError('长度不得为负:$n');
+  if (n <= 0x3F) {
+    return Uint8List.fromList([n << 2]);
+  } else if (n <= 0x3FFF) {
+    final v = (n << 2) | 0x01;
+    return Uint8List.fromList([v & 0xFF, (v >> 8) & 0xFF]);
+  } else if (n <= 0x3FFFFFFF) {
+    final v = (n << 2) | 0x02;
+    return Uint8List.fromList(
+        [v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF, (v >> 24) & 0xFF]);
+  }
+  throw ArgumentError('长度过大,超出单/双/四字节 Compact:$n');
 }
 
 Uint8List _u32Le(BigInt v) {

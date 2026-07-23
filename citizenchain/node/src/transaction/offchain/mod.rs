@@ -69,8 +69,8 @@ pub struct OffchainComponents {
 /// [`base_path`]  节点数据根目录(下挂 `offchain_step1/ledger.enc`)。
 /// [`actor_cid_number`] 本清算行机构唯一主键。
 /// [`actor_role_code`] 提交批次的机构岗位码。
-/// [`institution_account`] 本清算行**主账户**,用于 `EventListener` 过滤与本行相关
-///                的链上事件,以及 packer 批次 signing message 拼接。
+/// [`institution_account`] 本清算行**主账户**(身份锚),用于 packer 批次 signing
+///                message 拼接与发 extrinsic;`EventListener` 事件过滤按 CID(actor_cid_number)。
 /// [`password`]   节点启动时用于 AES-256-GCM 风格加密 ledger 的对称密钥字符串
 ///                (目前实现为 blake2b_256(password) XOR 流 + HMAC,见 `ledger.rs`)。
 /// [`signer`]     批次签名器。未接入时传 `NoopBatchSigner`;接入后
@@ -93,22 +93,20 @@ pub fn start_clearing_bank_components(
     let ledger = Arc::new(OffchainLedger::new(base_path));
     // 若磁盘有上次加密持久化的 ledger,尝试恢复;首次启动(文件不存在)返回 Ok(0)。
     ledger.load_from_disk(password)?;
-    let initial_batch_seq = read_last_clearing_batch_seq(client.as_ref(), &institution_account)
+    // 节点自身身份 = 清算行 CID(actor_cid_number,来自节点配置);主账户仅用于发 extrinsic / 偿付监控。
+    let initial_batch_seq = read_last_clearing_batch_seq(client.as_ref(), &actor_cid_number)
         .map_err(|e| format!("读取 LastClearingBatchSeq 失败:{e}"))?;
 
     let packer = Arc::new(OffchainPacker::new_with_initial_seq(
         ledger.clone(),
-        actor_cid_number,
+        actor_cid_number.clone(),
         actor_role_code,
         institution_account.clone(),
         signer.clone(),
         submitter,
         initial_batch_seq,
     ));
-    let event_listener = Arc::new(EventListener::new(
-        ledger.clone(),
-        institution_account.clone(),
-    ));
+    let event_listener = Arc::new(EventListener::new(ledger.clone(), actor_cid_number.clone()));
     let reserve_monitor = Arc::new(ReserveMonitor::new(
         ledger.clone(),
         institution_account.clone(),
@@ -117,7 +115,7 @@ pub fn start_clearing_bank_components(
     let rpc_impl = Arc::new(OffchainClearingRpcImpl::new(
         ledger.clone(),
         client,
-        institution_account,
+        actor_cid_number,
         signer,
     ));
 
@@ -133,8 +131,9 @@ pub fn start_clearing_bank_components(
 const PALLET_NAME: &[u8] = b"OffchainTransaction";
 
 /// 构造 `LastClearingBatchSeq[bank]` 的 storage key。
-fn last_clearing_batch_seq_key(bank: &AccountId32) -> StorageKey {
-    let encoded = bank.encode();
+fn last_clearing_batch_seq_key(bank_cid: &[u8]) -> StorageKey {
+    // CID 键 = InstitutionCidNumber(BoundedVec<u8>),SCALE = Compact(len) || bytes。
+    let encoded = bank_cid.encode();
     let mut k = Vec::with_capacity(16 + 16 + 16 + encoded.len());
     k.extend_from_slice(&sp_io::hashing::twox_128(PALLET_NAME));
     k.extend_from_slice(&sp_io::hashing::twox_128(b"LastClearingBatchSeq"));
@@ -146,11 +145,11 @@ fn last_clearing_batch_seq_key(bank: &AccountId32) -> StorageKey {
 /// 读取链上已成功落账的最新 batch_seq。storage 不存在时按 `ValueQuery` 映射为 0。
 fn read_last_clearing_batch_seq(
     client: &crate::core::service::FullClient,
-    bank: &AccountId32,
+    bank_cid: &[u8],
 ) -> Result<u64, String> {
     let best = client.info().best_hash;
     let raw = client
-        .storage(best, &last_clearing_batch_seq_key(bank))
+        .storage(best, &last_clearing_batch_seq_key(bank_cid))
         .map_err(|e| format!("storage 读取失败:{e}"))?;
     match raw {
         Some(data) => u64::decode(&mut &data.0[..]).map_err(|e| format!("u64 解码失败:{e}")),
@@ -168,7 +167,7 @@ mod tests {
 
     #[test]
     fn last_clearing_batch_seq_key_layout_stable() {
-        let bank = acc(0xAA);
+        let bank: Vec<u8> = b"ZS001-PRB08-233384677-2026".to_vec();
         let encoded = bank.encode();
         let key = last_clearing_batch_seq_key(&bank);
         assert_eq!(key.0.len(), 16 + 16 + 16 + encoded.len());

@@ -103,13 +103,9 @@ fn create_cgov_with_custom(tag: &str) -> pallet::CidNumberOf<Test> {
     fund_registry_account();
     let cid = create_cgov(tag);
     grant_close_role(&cid);
-    assert_ok!(PublicManage::add_institution_account(
-        RuntimeOrigin::signed(creator()),
-        cid.clone(),
-        account_names_bv(&[CUSTOM_ACCOUNT_NAME]),
-        b"REGISTRY-CID".to_vec(),
-        b"REGISTRY-ROLE".to_vec(),
-    ));
+    // 新增账户已改为机构自身提案+投票流程;关闭账户测试的 setup 直接落库一个自定义账户,
+    // 不再依赖新增账户投票路径(新增流程本身由本文件的 add_account_* 用例覆盖)。
+    insert_custom_account(&cid, CUSTOM_ACCOUNT_NAME);
     assert_ok!(Balances::force_set_balance(
         RuntimeOrigin::root(),
         account_of(&cid, CUSTOM_ACCOUNT_NAME),
@@ -356,6 +352,7 @@ fn account_of(cid: &pallet::CidNumberOf<Test>, name: &[u8]) -> AccountId32 {
 fn update_info_and_add_account_keep_cid_as_only_entity_key() {
     new_test_ext().execute_with(|| {
         let cid = create_cgov_with_custom("maintain-cid");
+        // 改名仍由注册局直写。
         assert_ok!(PublicManage::update_institution_info(
             RuntimeOrigin::signed(creator()),
             cid.clone(),
@@ -370,14 +367,15 @@ fn update_info_and_add_account_keep_cid_as_only_entity_key() {
             "更新后的机构全称".as_bytes()
         );
 
+        // 新增账户改为本机构提案 → 内部投票通过 → finalizer 落库。
         let added_name = "新增账户".as_bytes();
-        assert_ok!(PublicManage::add_institution_account(
-            RuntimeOrigin::signed(creator()),
+        assert_ok!(propose_add_custom_account(
+            RuntimeOrigin::signed(admin(0)),
             cid.clone(),
-            account_names_bv(&[added_name]),
-            b"REGISTRY-CID".to_vec(),
-            b"REGISTRY-ROLE".to_vec(),
+            &[added_name],
         ));
+        let proposal_id = last_proposal_id();
+        assert_ok!(cast_yes_votes(&[admin(1), admin(2)], 2, proposal_id));
         let added = account_of(&cid, added_name);
         assert_eq!(
             pallet::AccountRegisteredCid::<Test>::get(&added)
@@ -392,27 +390,148 @@ fn update_info_and_add_account_keep_cid_as_only_entity_key() {
 #[test]
 fn add_account_rejects_protocol_names_and_duplicate_custom_names() {
     new_test_ext().execute_with(|| {
+        // 保留名/重复名在发起阶段即被派生校验链拒绝,不写 Pending、不建提案。
         let cid = create_cgov_with_custom("add-invalid");
         assert_noop!(
-            PublicManage::add_institution_account(
-                RuntimeOrigin::signed(creator()),
+            propose_add_custom_account(
+                RuntimeOrigin::signed(admin(0)),
                 cid.clone(),
-                account_names_bv(&[RESERVED_NAME_MAIN]),
-                b"REGISTRY-CID".to_vec(),
-                b"REGISTRY-ROLE".to_vec(),
+                &[RESERVED_NAME_MAIN],
             ),
             Error::<Test>::ReservedAccountName
         );
         assert_noop!(
-            PublicManage::add_institution_account(
-                RuntimeOrigin::signed(creator()),
+            propose_add_custom_account(
+                RuntimeOrigin::signed(admin(0)),
                 cid,
-                account_names_bv(&["重复账户".as_bytes(), "重复账户".as_bytes()]),
-                b"REGISTRY-CID".to_vec(),
-                b"REGISTRY-ROLE".to_vec(),
+                &["重复账户".as_bytes(), "重复账户".as_bytes()],
             ),
             Error::<Test>::DuplicateAccountName
         );
+    });
+}
+
+#[test]
+fn add_account_proposal_then_vote_inserts_account() {
+    new_test_ext().execute_with(|| {
+        let cid = create_cgov("add-vote");
+        grant_close_role(&cid);
+        let new_name = "投票新增账户".as_bytes();
+        assert!(!pallet::InstitutionAccounts::<Test>::contains_key(
+            &cid,
+            account_name(new_name),
+        ));
+
+        assert_ok!(propose_add_custom_account(
+            RuntimeOrigin::signed(admin(0)),
+            cid.clone(),
+            &[new_name],
+        ));
+        let proposal_id = last_proposal_id();
+        // 发起后 Pending 命中,尚未落库。
+        assert_eq!(
+            pallet::InstitutionPendingAdd::<Test>::get(&cid),
+            Some(proposal_id)
+        );
+        assert!(!pallet::InstitutionAccounts::<Test>::contains_key(
+            &cid,
+            account_name(new_name),
+        ));
+
+        assert_ok!(cast_yes_votes(&[admin(1), admin(2)], 2, proposal_id));
+
+        // 通过后账户落库、反向索引写入、Pending 清除。
+        let added = account_of(&cid, new_name);
+        assert_eq!(
+            pallet::AccountRegisteredCid::<Test>::get(&added)
+                .expect("new reverse index")
+                .cid_number,
+            cid
+        );
+        assert_eq!(Balances::free_balance(&added), 0);
+        assert!(!pallet::InstitutionPendingAdd::<Test>::contains_key(&cid));
+    });
+}
+
+#[test]
+fn add_account_requires_institution_admin_and_role() {
+    new_test_ext().execute_with(|| {
+        let cid = create_cgov("add-auth");
+        grant_close_role(&cid);
+        // 非本机构管理员钱包发起 → build_institution_vote_plan 授权失败。
+        assert_noop!(
+            propose_add_custom_account(
+                RuntimeOrigin::signed(admin(9)),
+                cid.clone(),
+                &["越权账户".as_bytes()],
+            ),
+            Error::<Test>::PermissionDenied
+        );
+        // 不存在的机构 → InstitutionNotFound。
+        let ghost = generated_cid("add-auth-ghost", "CGOV");
+        assert_noop!(
+            propose_add_custom_account(
+                RuntimeOrigin::signed(admin(0)),
+                ghost,
+                &["幽灵账户".as_bytes()],
+            ),
+            Error::<Test>::InstitutionNotFound
+        );
+    });
+}
+
+#[test]
+fn duplicate_add_proposal_is_rejected_while_pending() {
+    new_test_ext().execute_with(|| {
+        let cid = create_cgov("add-pending");
+        grant_close_role(&cid);
+        // 首次发起成功后 InstitutionPendingAdd 命中,同机构重复发起新增必须被拒。
+        assert_ok!(propose_add_custom_account(
+            RuntimeOrigin::signed(admin(0)),
+            cid.clone(),
+            &["账户甲".as_bytes()],
+        ));
+        assert_noop!(
+            propose_add_custom_account(
+                RuntimeOrigin::signed(admin(0)),
+                cid,
+                &["账户乙".as_bytes()],
+            ),
+            Error::<Test>::AddAlreadyPending
+        );
+    });
+}
+
+#[test]
+fn rejected_add_is_cleaned_only_by_votingengine_callback() {
+    new_test_ext().execute_with(|| {
+        let cid = create_cgov("add-rejected");
+        grant_close_role(&cid);
+        let new_name = "被否新增账户".as_bytes();
+        assert_ok!(propose_add_custom_account(
+            RuntimeOrigin::signed(admin(0)),
+            cid.clone(),
+            &[new_name],
+        ));
+        let proposal_id = last_proposal_id();
+        assert_eq!(
+            pallet::InstitutionPendingAdd::<Test>::get(&cid),
+            Some(proposal_id)
+        );
+
+        assert_eq!(
+            <crate::InternalVoteExecutor<Test> as votingengine::InternalVoteResultCallback>::on_internal_vote_finalized(
+                proposal_id,
+                false,
+            ),
+            Ok(votingengine::ProposalExecutionOutcome::Executed)
+        );
+        // 否决由投票引擎回调清 Pending,账户不落库。
+        assert!(!pallet::InstitutionPendingAdd::<Test>::contains_key(&cid));
+        assert!(!pallet::InstitutionAccounts::<Test>::contains_key(
+            &cid,
+            account_name(new_name),
+        ));
     });
 }
 

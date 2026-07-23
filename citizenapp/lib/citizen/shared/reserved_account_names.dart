@@ -19,23 +19,28 @@ const String kReservedNameSafetyFund = '安全基金';
 /// 两和基金（制度专属，禁止自定义）。
 const String kReservedNameHe = '两和基金';
 
-/// 全部 5 个受限保留名。
+/// 清算账户（私法人股份公司专属，禁止自定义）。
+const String kReservedNameClearing = '清算账户';
+
+/// 全部 6 个受限保留名。
 const List<String> kReservedAccountNames = <String>[
   kReservedNameMain,
   kReservedNameFee,
   kReservedNameStake,
   kReservedNameSafetyFund,
   kReservedNameHe,
+  kReservedNameClearing,
 ];
 
 /// 制度专属「禁止注册」名（质押/安全/两和）。主/费不在此列（强制默认账户语义）。
 ///
-/// 与链端 `account_derive::is_forbidden_account_name` 字节对齐：只判 3 名，
+/// 与链端 `account_derive::is_forbidden_account_name` 字节对齐：只判 4 名，
 /// **不 trim**（trim 仅允许在 UI 输入层，绝不进派生/校验）。
 bool isForbiddenAccountName(String name) {
   return name == kReservedNameStake ||
       name == kReservedNameSafetyFund ||
-      name == kReservedNameHe;
+      name == kReservedNameHe ||
+      name == kReservedNameClearing;
 }
 
 /// 注册策略（非派生）：自定义名是否可注册。空/主/费/制度专属 一律拒绝。

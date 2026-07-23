@@ -46,11 +46,17 @@
       "source": "china_ch[0] stake_account 中枢省公民储备银行 永久质押"
     },
     {
+      "address_hex": "4b4a69b727df3569edbbac593b69b4f9ef38a7538b651f9e696e868e043134b5",
+      "cid_number": "GD018-SFGF0-201206100-2026",
+      "kind": "InstitutionClearing",
+      "source": "self-authored: SFGF 股份公司 清算账户(address 由 Rust ACCOUNT_DERIVE_UPDATE 回填)"
+    },
+    {
       "account_name": "工资账户",
-      "address_hex": "4a5b09fa91399eb1fcd33ee9b2d0e703732aa2d629199558ee269d8d163dde3b",
+      "address_hex": "2577fee2462d89f8d904e2f4b8c646894e10cbc122d91d3cef22a4f695937bfc",
       "cid_number": "LN001-NRC0G-944805165-2026",
       "kind": "InstitutionNamed",
-      "source": "self-authored: NRC cid + 自定义命名账户(address 由 Rust 回填)"
+      "source": "self-authored: NRC cid + 自定义命名账户(address 由 Rust 回填, op_tag 0x07)"
     },
     {
       "account_name": "我的多签",

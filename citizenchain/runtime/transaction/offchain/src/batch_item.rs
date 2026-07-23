@@ -20,12 +20,12 @@ pub struct PaymentIntent<AccountId, BlockNumber> {
     pub tx_id: H256,
     /// 付款方 L3 公钥(L3 的 AccountId,同链上地址)。
     pub payer: AccountId,
-    /// 付款方绑定的清算行**主账户**地址。
-    pub payer_bank: AccountId,
+    /// 付款方绑定的清算行 **CID**(机构唯一永久主键;账户由 CID 派生查询)。
+    pub payer_bank_cid: crate::InstitutionCidNumber,
     /// 收款方 L3 公钥。
     pub recipient: AccountId,
-    /// 收款方绑定的清算行**主账户**地址。
-    pub recipient_bank: AccountId,
+    /// 收款方绑定的清算行 **CID**。
+    pub recipient_bank_cid: crate::InstitutionCidNumber,
     /// 转账金额(分)。
     pub amount: u128,
     /// 本笔手续费(分),按收款方清算行费率计算。
@@ -89,9 +89,11 @@ pub fn batch_signing_hash<AccountId: Encode>(
 pub struct OffchainBatchItem<AccountId, BlockNumber> {
     pub tx_id: H256,
     pub payer: AccountId,
-    pub payer_bank: AccountId,
+    /// 付款方绑定的清算行 **CID**(机构唯一永久主键)。
+    pub payer_bank_cid: crate::InstitutionCidNumber,
     pub recipient: AccountId,
-    pub recipient_bank: AccountId,
+    /// 收款方绑定的清算行 **CID**。
+    pub recipient_bank_cid: crate::InstitutionCidNumber,
     pub transfer_amount: u128,
     pub fee_amount: u128,
     /// L3 sr25519 签名(64 字节)。
@@ -108,9 +110,9 @@ impl<AccountId: Clone + Encode, BlockNumber: Clone + Encode>
         PaymentIntent {
             tx_id: self.tx_id,
             payer: self.payer.clone(),
-            payer_bank: self.payer_bank.clone(),
+            payer_bank_cid: self.payer_bank_cid.clone(),
             recipient: self.recipient.clone(),
-            recipient_bank: self.recipient_bank.clone(),
+            recipient_bank_cid: self.recipient_bank_cid.clone(),
             amount: self.transfer_amount,
             fee: self.fee_amount,
             nonce: self.payer_nonce,
@@ -128,14 +130,18 @@ mod tests {
         AccountId32::new([b; 32])
     }
 
+    fn cid(s: &str) -> crate::InstitutionCidNumber {
+        s.as_bytes().to_vec().try_into().expect("cid 长度须 <= 32")
+    }
+
     #[test]
     fn signing_hash_is_deterministic() {
         let intent = PaymentIntent::<AccountId32, u32> {
             tx_id: H256::repeat_byte(9),
             payer: acc(1),
-            payer_bank: acc(2),
+            payer_bank_cid: cid("BANK-A"),
             recipient: acc(3),
-            recipient_bank: acc(2),
+            recipient_bank_cid: cid("BANK-A"),
             amount: 10_000,
             fee: 5,
             nonce: 1,
@@ -151,9 +157,9 @@ mod tests {
         let base = PaymentIntent::<AccountId32, u32> {
             tx_id: H256::repeat_byte(9),
             payer: acc(1),
-            payer_bank: acc(2),
+            payer_bank_cid: cid("BANK-A"),
             recipient: acc(3),
-            recipient_bank: acc(2),
+            recipient_bank_cid: cid("BANK-A"),
             amount: 10_000,
             fee: 5,
             nonce: 1,
@@ -171,13 +177,13 @@ mod tests {
     // 字节一致。citizenapp 端 `test/trade/payment_intent_golden_test.dart` 写入
     // **相同的 fixture + 相同的期望 hex**,任一端实现漂移 → 两端 CI 同时红。
     //
-    // 布局(固定 204 字节,详见 batch_item.rs 结构注释):
-    //   tx_id(32) || payer(32) || payer_bank(32) || recipient(32) ||
-    //   recipient_bank(32) || amount(u128 LE,16) || fee(u128 LE,16) ||
+    // 布局(变长,payer_bank_cid/recipient_bank_cid = Compact(len)||bytes CID):
+    //   tx_id(32) || payer(32) || payer_bank_cid(变长) || recipient(32) ||
+    //   recipient_bank_cid(变长) || amount(u128 LE,16) || fee(u128 LE,16) ||
     //   nonce(u64 LE,8) || expires_at(u32 LE,4)
     //
-    // 签名域 = 4B 域头 `GMB(3B) || OP_SIGN_L3_PAY(0x15)` || encoded(204)
-    // → blake2_256 = 32 字节。
+    // 签名域 = 4B 域头 `GMB(3B) || OP_SIGN_L3_PAY(0x15)` || encoded
+    // → blake2_256 = 32 字节。CID 变长故无固定总长;金标锁 hash 而非长度。
 
     /// 把 `&[u8]` 转 hex(无 `0x` 前缀,小写),测试断言格式。
     fn hex_lower(bytes: &[u8]) -> sp_std::vec::Vec<u8> {
@@ -200,74 +206,45 @@ mod tests {
     /// / nonce 1 / expires_at 100。
     #[test]
     fn golden_fixture1_simple_same_bank() {
+        // 同行:payer/recipient 绑同一清算行 CID。signing_hash 是跨语言字节锁,
+        // Dart `payment_intent_golden_test.dart` 用同一 CID fixture + 同一期望 hex。
         let intent = PaymentIntent::<AccountId32, u32> {
             tx_id: H256::zero(),
             payer: acc(1),
-            payer_bank: acc(2),
+            payer_bank_cid: cid("LN001-NRC0G-944805165-2026"),
             recipient: acc(3),
-            recipient_bank: acc(2),
+            recipient_bank_cid: cid("LN001-NRC0G-944805165-2026"),
             amount: 10_000,
             fee: 5,
             nonce: 1,
             expires_at: 100,
         };
-        let encoded = intent.encode();
-        assert_eq!(encoded.len(), 204);
-        assert_hex_eq(
-            "fixture1 encoded",
-            &encoded,
-            "\
-0000000000000000000000000000000000000000000000000000000000000000\
-0101010101010101010101010101010101010101010101010101010101010101\
-0202020202020202020202020202020202020202020202020202020202020202\
-0303030303030303030303030303030303030303030303030303030303030303\
-0202020202020202020202020202020202020202020202020202020202020202\
-10270000000000000000000000000000\
-05000000000000000000000000000000\
-0100000000000000\
-64000000",
-        );
         assert_hex_eq(
             "fixture1 signing_hash",
             &intent.signing_hash(),
-            "19c26c228363e18a119c0a11323bf54a21f9285ce205918f1311f9fa283b63e3",
+            "4c0c52528976ee38e101769c27ee57a0e30e18939503271fb12a59b58df886fe",
         );
     }
 
     /// Fixture 2:跨行 + 大金额 + 大 nonce + 大 expires_at。锁字节序与字段位置。
     #[test]
     fn golden_fixture2_cross_bank_big_values() {
+        // 跨行 + 极值:payer/recipient 绑不同清算行 CID。
         let intent = PaymentIntent::<AccountId32, u32> {
             tx_id: H256::repeat_byte(0xFF),
             payer: acc(0x11),
-            payer_bank: acc(0xAA),
+            payer_bank_cid: cid("GD001-SFGF0-201206100-2026"),
             recipient: acc(0x22),
-            recipient_bank: acc(0xBB),
+            recipient_bank_cid: cid("AH001-SFGF0-111111111-2026"),
             amount: u128::MAX,
             fee: u128::MAX,
             nonce: u64::MAX,
             expires_at: u32::MAX,
         };
-        let encoded = intent.encode();
-        assert_eq!(encoded.len(), 204);
-        assert_hex_eq(
-            "fixture2 encoded",
-            &encoded,
-            "\
-ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\
-1111111111111111111111111111111111111111111111111111111111111111\
-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\
-2222222222222222222222222222222222222222222222222222222222222222\
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\
-ffffffffffffffffffffffffffffffff\
-ffffffffffffffffffffffffffffffff\
-ffffffffffffffff\
-ffffffff",
-        );
         assert_hex_eq(
             "fixture2 signing_hash",
             &intent.signing_hash(),
-            "5329809c9803906ae2141be93a3b1cd49bc89adb16a88ca9763fab864df30e90",
+            "38ba8205abb84ec9121b65c3ee618626972710063e8e6c48cec29b1121460e72",
         );
     }
 
@@ -281,34 +258,18 @@ ffffffff",
         let intent = PaymentIntent::<AccountId32, u32> {
             tx_id: H256::from(tx_bytes),
             payer: acc(0x55),
-            payer_bank: acc(0x77),
+            payer_bank_cid: cid("BJ001-SFGF0-222222222-2026"),
             recipient: acc(0x66),
-            recipient_bank: acc(0x77),
+            recipient_bank_cid: cid("BJ001-SFGF0-222222222-2026"),
             amount: 0,
             fee: 0,
             nonce: 0,
             expires_at: 0,
         };
-        let encoded = intent.encode();
-        assert_eq!(encoded.len(), 204);
-        assert_hex_eq(
-            "fixture3 encoded",
-            &encoded,
-            "\
-000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\
-5555555555555555555555555555555555555555555555555555555555555555\
-7777777777777777777777777777777777777777777777777777777777777777\
-6666666666666666666666666666666666666666666666666666666666666666\
-7777777777777777777777777777777777777777777777777777777777777777\
-00000000000000000000000000000000\
-00000000000000000000000000000000\
-0000000000000000\
-00000000",
-        );
         assert_hex_eq(
             "fixture3 signing_hash",
             &intent.signing_hash(),
-            "c7fac179287401a2e0f3cb03f60dbf202d7ec48967d8407cd8f96daddcd287bf",
+            "62405346ffba9e0a4b9d785cf399bfdfcdc1033270dbc8a7b4cbc9ba4e052c9f",
         );
     }
 }

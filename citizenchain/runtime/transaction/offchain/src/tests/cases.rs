@@ -12,26 +12,26 @@ fn bind_deposit_withdraw_full_cycle() {
         // 1. 绑定清算行
         assert_ok!(OffchainTx::bind_clearing_bank(
             RuntimeOrigin::signed(alice.clone()),
-            bank_main()
+            bank_cid()
         ));
-        assert_eq!(UserBank::<Test>::get(&alice), Some(bank_main()));
-        assert_eq!(DepositBalance::<Test>::get(bank_main(), &alice), 0);
+        assert_eq!(UserBank::<Test>::get(&alice), Some(bank_cid()));
+        assert_eq!(DepositBalance::<Test>::get(bank_cid(), &alice), 0);
 
         // 2. 充值 10_000 分
         assert_ok!(OffchainTx::deposit(
             RuntimeOrigin::signed(alice.clone()),
             10_000
         ));
-        assert_eq!(DepositBalance::<Test>::get(bank_main(), &alice), 10_000);
-        assert_eq!(BankTotalDeposits::<Test>::get(bank_main()), 10_000);
+        assert_eq!(DepositBalance::<Test>::get(bank_cid(), &alice), 10_000);
+        assert_eq!(BankTotalDeposits::<Test>::get(bank_cid()), 10_000);
 
         // 3. 提现 3_000
         assert_ok!(OffchainTx::withdraw(
             RuntimeOrigin::signed(alice.clone()),
             3_000
         ));
-        assert_eq!(DepositBalance::<Test>::get(bank_main(), &alice), 7_000);
-        assert_eq!(BankTotalDeposits::<Test>::get(bank_main()), 7_000);
+        assert_eq!(DepositBalance::<Test>::get(bank_cid(), &alice), 7_000);
+        assert_eq!(BankTotalDeposits::<Test>::get(bank_cid()), 7_000);
 
         // 4. 提现过量应拒绝
         assert_noop!(
@@ -47,10 +47,10 @@ fn double_bind_rejected() {
         let (alice, _) = new_l3_user(&[1u8; 32], 1_000_000);
         assert_ok!(OffchainTx::bind_clearing_bank(
             RuntimeOrigin::signed(alice.clone()),
-            bank_main()
+            bank_cid()
         ));
         assert_noop!(
-            OffchainTx::bind_clearing_bank(RuntimeOrigin::signed(alice.clone()), bank_main()),
+            OffchainTx::bind_clearing_bank(RuntimeOrigin::signed(alice.clone()), bank_cid()),
             Error::<Test>::AlreadyHasBank
         );
     });
@@ -60,9 +60,10 @@ fn double_bind_rejected() {
 fn bind_rejects_unregistered_bank() {
     new_test_ext().execute_with(|| {
         let (alice, _) = new_l3_user(&[1u8; 32], 1_000_000);
-        let ghost = AccountId32::new(OTHER_BANK_BYTES);
+        let ghost_cid: crate::InstitutionCidNumber =
+            b"ZZ999-SCB00-999999999-2026".to_vec().try_into().unwrap();
         assert_noop!(
-            OffchainTx::bind_clearing_bank(RuntimeOrigin::signed(alice.clone()), ghost),
+            OffchainTx::bind_clearing_bank(RuntimeOrigin::signed(alice.clone()), ghost_cid),
             Error::<Test>::NotRegisteredClearingBank
         );
     });
@@ -74,7 +75,7 @@ fn switch_requires_zero_balance() {
         let (alice, _) = new_l3_user(&[1u8; 32], 1_000_000);
         assert_ok!(OffchainTx::bind_clearing_bank(
             RuntimeOrigin::signed(alice.clone()),
-            bank_main()
+            bank_cid()
         ));
         assert_ok!(OffchainTx::deposit(
             RuntimeOrigin::signed(alice.clone()),
@@ -82,7 +83,7 @@ fn switch_requires_zero_balance() {
         ));
         // 余额 > 0,不能切换
         assert_noop!(
-            OffchainTx::switch_bank(RuntimeOrigin::signed(alice.clone()), bank_main()),
+            OffchainTx::switch_bank(RuntimeOrigin::signed(alice.clone()), bank_cid()),
             Error::<Test>::NewBankSameAsCurrent
         );
         // 切换到同一家也应被拒(NewBankSameAsCurrent 优先于 MustClearBalanceFirst)
@@ -99,7 +100,7 @@ fn switch_after_withdraw_all_works() {
         let (alice, _) = new_l3_user(&[1u8; 32], 1_000_000);
         assert_ok!(OffchainTx::bind_clearing_bank(
             RuntimeOrigin::signed(alice.clone()),
-            bank_main()
+            bank_cid()
         ));
         assert_ok!(OffchainTx::deposit(
             RuntimeOrigin::signed(alice.clone()),
@@ -109,10 +110,10 @@ fn switch_after_withdraw_all_works() {
             RuntimeOrigin::signed(alice.clone()),
             10_000
         ));
-        assert_eq!(DepositBalance::<Test>::get(bank_main(), &alice), 0);
+        assert_eq!(DepositBalance::<Test>::get(bank_cid(), &alice), 0);
         // 零余额但切到同家仍被 NewBankSameAsCurrent 拒绝 —— 行为正确。
         assert_noop!(
-            OffchainTx::switch_bank(RuntimeOrigin::signed(alice.clone()), bank_main()),
+            OffchainTx::switch_bank(RuntimeOrigin::signed(alice.clone()), bank_cid()),
             Error::<Test>::NewBankSameAsCurrent
         );
     });
@@ -120,8 +121,8 @@ fn switch_after_withdraw_all_works() {
 
 // ─── 测试:submit_offchain_batch ────────────────────────────────────────
 
-fn seed_fee_rate(bank: &AccountId32, bp: u32) {
-    L2FeeRateBp::<Test>::insert(bank, bp);
+fn seed_fee_rate(bank_cid: &crate::InstitutionCidNumber, bp: u32) {
+    L2FeeRateBp::<Test>::insert(bank_cid, bp);
 }
 
 /// 用 `pair` 对 `PaymentIntent::signing_hash` 签名,返回 64 字节数组。
@@ -161,11 +162,11 @@ fn sign_batch(
 #[test]
 fn submit_batch_rejects_non_admin() {
     new_test_ext().execute_with(|| {
-        seed_fee_rate(&bank_main(), 5);
+        seed_fee_rate(&bank_cid(), 5);
         let (alice, alice_pair) = new_l3_user(&[1u8; 32], 1_000_000);
         assert_ok!(OffchainTx::bind_clearing_bank(
             RuntimeOrigin::signed(alice.clone()),
-            bank_main()
+            bank_cid()
         ));
         assert_ok!(OffchainTx::deposit(
             RuntimeOrigin::signed(alice.clone()),
@@ -175,15 +176,15 @@ fn submit_batch_rejects_non_admin() {
         let (bob, _) = new_l3_user(&[2u8; 32], 1_000_000);
         assert_ok!(OffchainTx::bind_clearing_bank(
             RuntimeOrigin::signed(bob.clone()),
-            bank_main()
+            bank_cid()
         ));
 
         let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
             tx_id: H256::repeat_byte(7),
             payer: alice.clone(),
-            payer_bank: bank_main(),
+            payer_bank_cid: bank_cid(),
             recipient: bob.clone(),
-            recipient_bank: bank_main(),
+            recipient_bank_cid: bank_cid(),
             amount: 10_000,
             fee: 5,
             nonce: 1,
@@ -193,9 +194,9 @@ fn submit_batch_rejects_non_admin() {
         let item = OffchainBatchItem::<AccountId32, u64> {
             tx_id: intent.tx_id,
             payer: intent.payer.clone(),
-            payer_bank: intent.payer_bank.clone(),
+            payer_bank_cid: intent.payer_bank_cid.clone(),
             recipient: intent.recipient.clone(),
-            recipient_bank: intent.recipient_bank.clone(),
+            recipient_bank_cid: intent.recipient_bank_cid.clone(),
             transfer_amount: intent.amount,
             fee_amount: intent.fee,
             payer_sig: sig,
@@ -223,16 +224,16 @@ fn submit_batch_rejects_non_admin() {
 #[test]
 fn submit_batch_rejects_invalid_batch_signature() {
     new_test_ext().execute_with(|| {
-        seed_fee_rate(&bank_main(), 5);
+        seed_fee_rate(&bank_cid(), 5);
         let (alice, alice_pair) = new_l3_user(&[1u8; 32], 1_000_000);
         let (bob, _) = new_l3_user(&[2u8; 32], 1_000_000);
         assert_ok!(OffchainTx::bind_clearing_bank(
             RuntimeOrigin::signed(alice.clone()),
-            bank_main()
+            bank_cid()
         ));
         assert_ok!(OffchainTx::bind_clearing_bank(
             RuntimeOrigin::signed(bob.clone()),
-            bank_main()
+            bank_cid()
         ));
         assert_ok!(OffchainTx::deposit(
             RuntimeOrigin::signed(alice.clone()),
@@ -242,9 +243,9 @@ fn submit_batch_rejects_invalid_batch_signature() {
         let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
             tx_id: H256::repeat_byte(0x31),
             payer: alice.clone(),
-            payer_bank: bank_main(),
+            payer_bank_cid: bank_cid(),
             recipient: bob.clone(),
-            recipient_bank: bank_main(),
+            recipient_bank_cid: bank_cid(),
             amount: 10_000,
             fee: 5,
             nonce: 1,
@@ -253,9 +254,9 @@ fn submit_batch_rejects_invalid_batch_signature() {
         let item = OffchainBatchItem::<AccountId32, u64> {
             tx_id: intent.tx_id,
             payer: intent.payer.clone(),
-            payer_bank: intent.payer_bank.clone(),
+            payer_bank_cid: intent.payer_bank_cid.clone(),
             recipient: intent.recipient.clone(),
-            recipient_bank: intent.recipient_bank.clone(),
+            recipient_bank_cid: intent.recipient_bank_cid.clone(),
             transfer_amount: intent.amount,
             fee_amount: intent.fee,
             payer_sig: sign_intent(&alice_pair, &intent),
@@ -283,16 +284,16 @@ fn submit_batch_rejects_invalid_batch_signature() {
 #[test]
 fn submit_batch_rejects_wrong_batch_seq() {
     new_test_ext().execute_with(|| {
-        seed_fee_rate(&bank_main(), 5);
+        seed_fee_rate(&bank_cid(), 5);
         let (alice, alice_pair) = new_l3_user(&[1u8; 32], 1_000_000);
         let (bob, _) = new_l3_user(&[2u8; 32], 1_000_000);
         assert_ok!(OffchainTx::bind_clearing_bank(
             RuntimeOrigin::signed(alice.clone()),
-            bank_main()
+            bank_cid()
         ));
         assert_ok!(OffchainTx::bind_clearing_bank(
             RuntimeOrigin::signed(bob.clone()),
-            bank_main()
+            bank_cid()
         ));
         assert_ok!(OffchainTx::deposit(
             RuntimeOrigin::signed(alice.clone()),
@@ -302,9 +303,9 @@ fn submit_batch_rejects_wrong_batch_seq() {
         let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
             tx_id: H256::repeat_byte(0x32),
             payer: alice.clone(),
-            payer_bank: bank_main(),
+            payer_bank_cid: bank_cid(),
             recipient: bob.clone(),
-            recipient_bank: bank_main(),
+            recipient_bank_cid: bank_cid(),
             amount: 10_000,
             fee: 5,
             nonce: 1,
@@ -313,9 +314,9 @@ fn submit_batch_rejects_wrong_batch_seq() {
         let item = OffchainBatchItem::<AccountId32, u64> {
             tx_id: intent.tx_id,
             payer: intent.payer.clone(),
-            payer_bank: intent.payer_bank.clone(),
+            payer_bank_cid: intent.payer_bank_cid.clone(),
             recipient: intent.recipient.clone(),
-            recipient_bank: intent.recipient_bank.clone(),
+            recipient_bank_cid: intent.recipient_bank_cid.clone(),
             transfer_amount: intent.amount,
             fee_amount: intent.fee,
             payer_sig: sign_intent(&alice_pair, &intent),
@@ -342,18 +343,18 @@ fn submit_batch_rejects_wrong_batch_seq() {
 #[test]
 fn submit_batch_same_bank_end_to_end() {
     new_test_ext().execute_with(|| {
-        seed_fee_rate(&bank_main(), 5); // 5 bp = 0.05%
+        seed_fee_rate(&bank_cid(), 5); // 5 bp = 0.05%
 
         let (alice, alice_pair) = new_l3_user(&[1u8; 32], 2_000_000);
         let (bob, _) = new_l3_user(&[2u8; 32], 1_000_000);
 
         assert_ok!(OffchainTx::bind_clearing_bank(
             RuntimeOrigin::signed(alice.clone()),
-            bank_main()
+            bank_cid()
         ));
         assert_ok!(OffchainTx::bind_clearing_bank(
             RuntimeOrigin::signed(bob.clone()),
-            bank_main()
+            bank_cid()
         ));
         assert_ok!(OffchainTx::deposit(
             RuntimeOrigin::signed(alice.clone()),
@@ -367,9 +368,9 @@ fn submit_batch_same_bank_end_to_end() {
         let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
             tx_id: H256::repeat_byte(0x42),
             payer: alice.clone(),
-            payer_bank: bank_main(),
+            payer_bank_cid: bank_cid(),
             recipient: bob.clone(),
-            recipient_bank: bank_main(),
+            recipient_bank_cid: bank_cid(),
             amount: transfer_amount,
             fee: expected_fee,
             nonce: 1,
@@ -379,9 +380,9 @@ fn submit_batch_same_bank_end_to_end() {
         let item = OffchainBatchItem::<AccountId32, u64> {
             tx_id: intent.tx_id,
             payer: intent.payer.clone(),
-            payer_bank: intent.payer_bank.clone(),
+            payer_bank_cid: intent.payer_bank_cid.clone(),
             recipient: intent.recipient.clone(),
-            recipient_bank: intent.recipient_bank.clone(),
+            recipient_bank_cid: intent.recipient_bank_cid.clone(),
             transfer_amount,
             fee_amount: expected_fee,
             payer_sig: sig,
@@ -391,8 +392,9 @@ fn submit_batch_same_bank_end_to_end() {
         let batch: BoundedVec<_, _> = sp_std::vec![item].try_into().unwrap();
 
         // 由管理员提交
-        let bank_total_before = BankTotalDeposits::<Test>::get(bank_main());
+        let bank_total_before = BankTotalDeposits::<Test>::get(bank_cid());
         let fee_account_before = Balances::free_balance(&bank_fee());
+        let bank_clearing_balance_before = Balances::free_balance(&bank_clearing());
         let bank_main_balance_before = Balances::free_balance(&bank_main());
 
         assert_ok!(OffchainTx::submit_offchain_batch(
@@ -407,32 +409,39 @@ fn submit_batch_same_bank_end_to_end() {
 
         // 付款方 DepositBalance 扣 (transfer + fee)
         assert_eq!(
-            DepositBalance::<Test>::get(bank_main(), &alice),
+            DepositBalance::<Test>::get(bank_cid(), &alice),
             1_000_000 - (transfer_amount + expected_fee)
         );
         // 收款方 DepositBalance 加 transfer
         assert_eq!(
-            DepositBalance::<Test>::get(bank_main(), &bob),
+            DepositBalance::<Test>::get(bank_cid(), &bob),
             transfer_amount
         );
         // 同行场景:BankTotalDeposits 下降 fee(fee 流出到 fee_account)
         assert_eq!(
-            BankTotalDeposits::<Test>::get(bank_main()),
+            BankTotalDeposits::<Test>::get(bank_cid()),
             bank_total_before - expected_fee
         );
-        // 清算行主账户 Balances 减 fee(转到 fee_account)
+        // 清算账户 Balances 减 fee(转到 fee_account);主账户身份锚不受影响。
         assert_eq!(
-            Balances::free_balance(&bank_main()),
-            bank_main_balance_before - expected_fee
+            Balances::free_balance(&bank_clearing()),
+            bank_clearing_balance_before - expected_fee
         );
         assert_eq!(
+            Balances::free_balance(&bank_main()),
+            bank_main_balance_before
+        );
+        // 费用账户先收本批手续费,再为这批手续费收益支付一次链上费(Step 3)。
+        // 本批累计手续费 = 单笔 fee = 5 → 链上费 max(round(5×0.1%),10) = 10 FEN。
+        let onchain_fee = primitives::fee_policy::calculate_onchain_fee(expected_fee);
+        assert_eq!(
             Balances::free_balance(&bank_fee()),
-            fee_account_before + expected_fee
+            fee_account_before + expected_fee - onchain_fee
         );
         // nonce 已消费
         assert_eq!(L3PaymentNonce::<Test>::get(&alice), 1);
         // 批次序号只在 settlement 成功后推进。
-        assert_eq!(LastClearingBatchSeq::<Test>::get(bank_main()), 1);
+        assert_eq!(LastClearingBatchSeq::<Test>::get(bank_cid()), 1);
 
         // 事件断言:最后几条里应有 PaymentSettled + ClearingBankBatchSettled
         let events = frame_system::Pallet::<Test>::events();
@@ -462,9 +471,9 @@ fn submit_batch_same_bank_end_to_end() {
         let replay_item = OffchainBatchItem::<AccountId32, u64> {
             tx_id: replay_intent.tx_id,
             payer: replay_intent.payer.clone(),
-            payer_bank: replay_intent.payer_bank.clone(),
+            payer_bank_cid: replay_intent.payer_bank_cid.clone(),
             recipient: replay_intent.recipient.clone(),
-            recipient_bank: replay_intent.recipient_bank.clone(),
+            recipient_bank_cid: replay_intent.recipient_bank_cid.clone(),
             transfer_amount,
             fee_amount: expected_fee,
             payer_sig: replay_sig,
@@ -488,32 +497,104 @@ fn submit_batch_same_bank_end_to_end() {
 }
 
 #[test]
+fn batch_rejected_when_fee_account_cannot_pay_onchain_fee() {
+    new_test_ext().execute_with(|| {
+        seed_fee_rate(&bank_cid(), 5);
+        // 费用账户清零:本批手续费入账后仍不足以支付链上费(10 FEN)→ 整批 fail-closed。
+        Balances::make_free_balance_be(&bank_fee(), 0);
+
+        let (alice, alice_pair) = new_l3_user(&[1u8; 32], 2_000_000);
+        let (bob, _) = new_l3_user(&[2u8; 32], 1_000_000);
+        assert_ok!(OffchainTx::bind_clearing_bank(
+            RuntimeOrigin::signed(alice.clone()),
+            bank_cid()
+        ));
+        assert_ok!(OffchainTx::bind_clearing_bank(
+            RuntimeOrigin::signed(bob.clone()),
+            bank_cid()
+        ));
+        assert_ok!(OffchainTx::deposit(
+            RuntimeOrigin::signed(alice.clone()),
+            1_000_000
+        ));
+
+        let transfer_amount = 10_000u128;
+        let expected_fee = 5u128;
+        let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
+            tx_id: H256::repeat_byte(0x51),
+            payer: alice.clone(),
+            payer_bank_cid: bank_cid(),
+            recipient: bob.clone(),
+            recipient_bank_cid: bank_cid(),
+            amount: transfer_amount,
+            fee: expected_fee,
+            nonce: 1,
+            expires_at: 100,
+        };
+        let sig = sign_intent(&alice_pair, &intent);
+        let item = OffchainBatchItem::<AccountId32, u64> {
+            tx_id: intent.tx_id,
+            payer: intent.payer.clone(),
+            payer_bank_cid: intent.payer_bank_cid.clone(),
+            recipient: intent.recipient.clone(),
+            recipient_bank_cid: intent.recipient_bank_cid.clone(),
+            transfer_amount,
+            fee_amount: expected_fee,
+            payer_sig: sig,
+            payer_nonce: intent.nonce,
+            expires_at: intent.expires_at,
+        };
+        let batch: BoundedVec<_, _> = sp_std::vec![item].try_into().unwrap();
+
+        // 链上费从费用账户扣款失败 → 整批拒绝并回滚(账本/总存款/nonce/批次序号均无变化)。
+        assert_noop!(
+            OffchainTx::submit_offchain_batch(
+                RuntimeOrigin::signed(bank_admin()),
+                bank_cid(),
+                bank_role_code(),
+                bank_main(),
+                1,
+                batch.clone(),
+                sign_batch(&bank_main(), 1, &batch)
+            ),
+            Error::<Test>::ClearingBatchOnchainFeeUnpaid
+        );
+        assert_eq!(DepositBalance::<Test>::get(bank_cid(), &alice), 1_000_000);
+        assert_eq!(BankTotalDeposits::<Test>::get(bank_cid()), 1_000_000);
+        assert_eq!(LastClearingBatchSeq::<Test>::get(bank_cid()), 0);
+        assert_eq!(L3PaymentNonce::<Test>::get(&alice), 0);
+    });
+}
+
+#[test]
 fn submit_batch_rejects_user_bank_mismatch() {
     new_test_ext().execute_with(|| {
-        seed_fee_rate(&bank_main(), 5);
+        seed_fee_rate(&bank_cid(), 5);
         let (alice, alice_pair) = new_l3_user(&[1u8; 32], 1_000_000);
         let (bob, _) = new_l3_user(&[2u8; 32], 1_000_000);
         assert_ok!(OffchainTx::bind_clearing_bank(
             RuntimeOrigin::signed(alice.clone()),
-            bank_main()
+            bank_cid()
         ));
         assert_ok!(OffchainTx::bind_clearing_bank(
             RuntimeOrigin::signed(bob.clone()),
-            bank_main()
+            bank_cid()
         ));
         assert_ok!(OffchainTx::deposit(
             RuntimeOrigin::signed(alice.clone()),
             100_000
         ));
         // 直接制造链上绑定与 item 声明不一致的状态,验证 settlement 会早拒。
-        UserBank::<Test>::insert(&bob, AccountId32::new(OTHER_BANK_BYTES));
+        let other_bank_cid: crate::InstitutionCidNumber =
+            b"OT999-SCB00-000000000-2026".to_vec().try_into().unwrap();
+        UserBank::<Test>::insert(&bob, other_bank_cid);
 
         let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
             tx_id: H256::repeat_byte(0x33),
             payer: alice.clone(),
-            payer_bank: bank_main(),
+            payer_bank_cid: bank_cid(),
             recipient: bob.clone(),
-            recipient_bank: bank_main(),
+            recipient_bank_cid: bank_cid(),
             amount: 10_000,
             fee: 5,
             nonce: 1,
@@ -522,9 +603,9 @@ fn submit_batch_rejects_user_bank_mismatch() {
         let item = OffchainBatchItem::<AccountId32, u64> {
             tx_id: intent.tx_id,
             payer: intent.payer.clone(),
-            payer_bank: intent.payer_bank.clone(),
+            payer_bank_cid: intent.payer_bank_cid.clone(),
             recipient: intent.recipient.clone(),
-            recipient_bank: intent.recipient_bank.clone(),
+            recipient_bank_cid: intent.recipient_bank_cid.clone(),
             transfer_amount: intent.amount,
             fee_amount: intent.fee,
             payer_sig: sign_intent(&alice_pair, &intent),
@@ -551,16 +632,16 @@ fn submit_batch_rejects_user_bank_mismatch() {
 #[test]
 fn submit_batch_expired_intent_rejected() {
     new_test_ext().execute_with(|| {
-        seed_fee_rate(&bank_main(), 5);
+        seed_fee_rate(&bank_cid(), 5);
         let (alice, alice_pair) = new_l3_user(&[1u8; 32], 1_000_000);
         let (bob, _) = new_l3_user(&[2u8; 32], 1_000_000);
         assert_ok!(OffchainTx::bind_clearing_bank(
             RuntimeOrigin::signed(alice.clone()),
-            bank_main()
+            bank_cid()
         ));
         assert_ok!(OffchainTx::bind_clearing_bank(
             RuntimeOrigin::signed(bob.clone()),
-            bank_main()
+            bank_cid()
         ));
         assert_ok!(OffchainTx::deposit(
             RuntimeOrigin::signed(alice.clone()),
@@ -573,9 +654,9 @@ fn submit_batch_expired_intent_rejected() {
         let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
             tx_id: H256::repeat_byte(9),
             payer: alice.clone(),
-            payer_bank: bank_main(),
+            payer_bank_cid: bank_cid(),
             recipient: bob.clone(),
-            recipient_bank: bank_main(),
+            recipient_bank_cid: bank_cid(),
             amount: 10_000,
             fee: 5,
             nonce: 1,
@@ -585,9 +666,9 @@ fn submit_batch_expired_intent_rejected() {
         let item = OffchainBatchItem::<AccountId32, u64> {
             tx_id: intent.tx_id,
             payer: intent.payer.clone(),
-            payer_bank: intent.payer_bank.clone(),
+            payer_bank_cid: intent.payer_bank_cid.clone(),
             recipient: intent.recipient.clone(),
-            recipient_bank: intent.recipient_bank.clone(),
+            recipient_bank_cid: intent.recipient_bank_cid.clone(),
             transfer_amount: intent.amount,
             fee_amount: intent.fee,
             payer_sig: sig,
@@ -608,6 +689,264 @@ fn submit_batch_expired_intent_rejected() {
             ),
             Error::<Test>::ExpiredIntent
         );
+    });
+}
+
+// ─── 测试:跨行结算 + 偿付护栏 ─────────────────────────────────────────────
+
+#[test]
+fn submit_batch_cross_bank_end_to_end() {
+    new_test_ext().execute_with(|| {
+        // 费率按收款方清算行(BANK)取。
+        seed_fee_rate(&bank_cid(), 5); // 5 bp
+
+        // 付款方 alice 绑第二家清算行 BANK2 并向其清算账户充值;收款方 bob 绑本行 BANK。
+        let (alice, alice_pair) = new_l3_user(&[1u8; 32], 2_000_000);
+        let (bob, _) = new_l3_user(&[2u8; 32], 1_000_000);
+        assert_ok!(OffchainTx::bind_clearing_bank(
+            RuntimeOrigin::signed(alice.clone()),
+            bank2_cid()
+        ));
+        assert_ok!(OffchainTx::bind_clearing_bank(
+            RuntimeOrigin::signed(bob.clone()),
+            bank_cid()
+        ));
+        assert_ok!(OffchainTx::deposit(
+            RuntimeOrigin::signed(alice.clone()),
+            1_000_000
+        ));
+
+        let transfer_amount = 10_000u128;
+        let expected_fee = 5u128;
+        let onchain_fee = primitives::fee_policy::calculate_onchain_fee(expected_fee);
+
+        let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
+            tx_id: H256::repeat_byte(0x71),
+            payer: alice.clone(),
+            payer_bank_cid: bank2_cid(),
+            recipient: bob.clone(),
+            recipient_bank_cid: bank_cid(),
+            amount: transfer_amount,
+            fee: expected_fee,
+            nonce: 1,
+            expires_at: 100,
+        };
+        let sig = sign_intent(&alice_pair, &intent);
+        let item = OffchainBatchItem::<AccountId32, u64> {
+            tx_id: intent.tx_id,
+            payer: intent.payer.clone(),
+            payer_bank_cid: intent.payer_bank_cid.clone(),
+            recipient: intent.recipient.clone(),
+            recipient_bank_cid: intent.recipient_bank_cid.clone(),
+            transfer_amount,
+            fee_amount: expected_fee,
+            payer_sig: sig,
+            payer_nonce: intent.nonce,
+            expires_at: intent.expires_at,
+        };
+        let batch: BoundedVec<_, _> = sp_std::vec![item].try_into().unwrap();
+
+        // settlement 前基线(充值后):付款方行 BANK2 / 收款方行 BANK。
+        let payer_deposit_before = DepositBalance::<Test>::get(bank2_cid(), &alice);
+        let bank2_total_before = BankTotalDeposits::<Test>::get(bank2_cid());
+        let bank_total_before = BankTotalDeposits::<Test>::get(bank_cid());
+        let payer_clearing_before = Balances::free_balance(&bank2_clearing());
+        let recipient_clearing_before = Balances::free_balance(&bank_clearing());
+        let recipient_fee_before = Balances::free_balance(&bank_fee());
+
+        // 批次提交给收款方清算行 BANK(收款方主导清算),由 BANK 管理员签名。
+        assert_ok!(OffchainTx::submit_offchain_batch(
+            RuntimeOrigin::signed(bank_admin()),
+            bank_cid(),
+            bank_role_code(),
+            bank_main(),
+            1,
+            batch.clone(),
+            sign_batch(&bank_main(), 1, &batch)
+        ));
+
+        // 账本:付款方行(BANK2)扣 本金+fee;收款方行(BANK)加 本金。
+        assert_eq!(
+            DepositBalance::<Test>::get(bank2_cid(), &alice),
+            payer_deposit_before - (transfer_amount + expected_fee)
+        );
+        assert_eq!(
+            DepositBalance::<Test>::get(bank_cid(), &bob),
+            transfer_amount
+        );
+        assert_eq!(
+            BankTotalDeposits::<Test>::get(bank2_cid()),
+            bank2_total_before - (transfer_amount + expected_fee)
+        );
+        assert_eq!(
+            BankTotalDeposits::<Test>::get(bank_cid()),
+            bank_total_before + transfer_amount
+        );
+
+        // 资金:付款方清算账户流出 本金+fee;收款方清算账户收本金;收款方费用账户收 fee 再付链上费。
+        assert_eq!(
+            Balances::free_balance(&bank2_clearing()),
+            payer_clearing_before - (transfer_amount + expected_fee)
+        );
+        assert_eq!(
+            Balances::free_balance(&bank_clearing()),
+            recipient_clearing_before + transfer_amount
+        );
+        assert_eq!(
+            Balances::free_balance(&bank_fee()),
+            recipient_fee_before + expected_fee - onchain_fee
+        );
+        // 跨行 fee 落收款方费用账户,付款方费用账户(BANK2)不参与。
+        assert_eq!(Balances::free_balance(&bank2_fee()), 1_000_000);
+
+        assert_eq!(L3PaymentNonce::<Test>::get(&alice), 1);
+        // 批次序号按 actor(收款方 BANK)推进。
+        assert_eq!(LastClearingBatchSeq::<Test>::get(bank_cid()), 1);
+
+        let events = frame_system::Pallet::<Test>::events();
+        let names: sp_std::vec::Vec<_> = events.iter().map(|r| format!("{:?}", r.event)).collect();
+        assert!(
+            names.iter().any(|s| s.contains("PaymentSettled")),
+            "missing PaymentSettled; got {:?}",
+            names
+        );
+    });
+}
+
+#[test]
+fn submit_batch_rejected_when_solvency_breached() {
+    new_test_ext().execute_with(|| {
+        seed_fee_rate(&bank_cid(), 5);
+        let (alice, alice_pair) = new_l3_user(&[1u8; 32], 2_000_000);
+        let (bob, _) = new_l3_user(&[2u8; 32], 1_000_000);
+        assert_ok!(OffchainTx::bind_clearing_bank(
+            RuntimeOrigin::signed(alice.clone()),
+            bank_cid()
+        ));
+        assert_ok!(OffchainTx::bind_clearing_bank(
+            RuntimeOrigin::signed(bob.clone()),
+            bank_cid()
+        ));
+        assert_ok!(OffchainTx::deposit(
+            RuntimeOrigin::signed(alice.clone()),
+            1_000_000
+        ));
+
+        // 同行 debit = fee = 5;总存款 = 1_000_000。把清算账户压到 (总存款 + fee - 1),
+        // 扣款后 = 总存款 - 1 < 总存款 → 触发 SolvencyProtected(全额准备金护栏)。
+        let total_deposits = BankTotalDeposits::<Test>::get(bank_cid());
+        assert_eq!(total_deposits, 1_000_000);
+        Balances::make_free_balance_be(&bank_clearing(), total_deposits + 5 - 1);
+
+        let transfer_amount = 10_000u128;
+        let expected_fee = 5u128;
+        let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
+            tx_id: H256::repeat_byte(0x72),
+            payer: alice.clone(),
+            payer_bank_cid: bank_cid(),
+            recipient: bob.clone(),
+            recipient_bank_cid: bank_cid(),
+            amount: transfer_amount,
+            fee: expected_fee,
+            nonce: 1,
+            expires_at: 100,
+        };
+        let sig = sign_intent(&alice_pair, &intent);
+        let item = OffchainBatchItem::<AccountId32, u64> {
+            tx_id: intent.tx_id,
+            payer: intent.payer.clone(),
+            payer_bank_cid: intent.payer_bank_cid.clone(),
+            recipient: intent.recipient.clone(),
+            recipient_bank_cid: intent.recipient_bank_cid.clone(),
+            transfer_amount,
+            fee_amount: expected_fee,
+            payer_sig: sig,
+            payer_nonce: intent.nonce,
+            expires_at: intent.expires_at,
+        };
+        let batch: BoundedVec<_, _> = sp_std::vec![item].try_into().unwrap();
+
+        assert_noop!(
+            OffchainTx::submit_offchain_batch(
+                RuntimeOrigin::signed(bank_admin()),
+                bank_cid(),
+                bank_role_code(),
+                bank_main(),
+                1,
+                batch.clone(),
+                sign_batch(&bank_main(), 1, &batch)
+            ),
+            Error::<Test>::SolvencyProtected
+        );
+        // 整批回滚:账本 / 总存款 / nonce / 批次序号均无变化。
+        assert_eq!(DepositBalance::<Test>::get(bank_cid(), &alice), 1_000_000);
+        assert_eq!(BankTotalDeposits::<Test>::get(bank_cid()), 1_000_000);
+        assert_eq!(LastClearingBatchSeq::<Test>::get(bank_cid()), 0);
+        assert_eq!(L3PaymentNonce::<Test>::get(&alice), 0);
+    });
+}
+
+#[test]
+fn submit_batch_solvency_boundary_exact_pass() {
+    new_test_ext().execute_with(|| {
+        seed_fee_rate(&bank_cid(), 5);
+        let (alice, alice_pair) = new_l3_user(&[1u8; 32], 2_000_000);
+        let (bob, _) = new_l3_user(&[2u8; 32], 1_000_000);
+        assert_ok!(OffchainTx::bind_clearing_bank(
+            RuntimeOrigin::signed(alice.clone()),
+            bank_cid()
+        ));
+        assert_ok!(OffchainTx::bind_clearing_bank(
+            RuntimeOrigin::signed(bob.clone()),
+            bank_cid()
+        ));
+        assert_ok!(OffchainTx::deposit(
+            RuntimeOrigin::signed(alice.clone()),
+            1_000_000
+        ));
+
+        // 边界:清算账户 = 总存款 + fee → 扣 fee 后恰好 == 总存款,`>=` 通过。
+        let total_deposits = BankTotalDeposits::<Test>::get(bank_cid());
+        Balances::make_free_balance_be(&bank_clearing(), total_deposits + 5);
+
+        let transfer_amount = 10_000u128;
+        let expected_fee = 5u128;
+        let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
+            tx_id: H256::repeat_byte(0x73),
+            payer: alice.clone(),
+            payer_bank_cid: bank_cid(),
+            recipient: bob.clone(),
+            recipient_bank_cid: bank_cid(),
+            amount: transfer_amount,
+            fee: expected_fee,
+            nonce: 1,
+            expires_at: 100,
+        };
+        let sig = sign_intent(&alice_pair, &intent);
+        let item = OffchainBatchItem::<AccountId32, u64> {
+            tx_id: intent.tx_id,
+            payer: intent.payer.clone(),
+            payer_bank_cid: intent.payer_bank_cid.clone(),
+            recipient: intent.recipient.clone(),
+            recipient_bank_cid: intent.recipient_bank_cid.clone(),
+            transfer_amount,
+            fee_amount: expected_fee,
+            payer_sig: sig,
+            payer_nonce: intent.nonce,
+            expires_at: intent.expires_at,
+        };
+        let batch: BoundedVec<_, _> = sp_std::vec![item].try_into().unwrap();
+
+        assert_ok!(OffchainTx::submit_offchain_batch(
+            RuntimeOrigin::signed(bank_admin()),
+            bank_cid(),
+            bank_role_code(),
+            bank_main(),
+            1,
+            batch.clone(),
+            sign_batch(&bank_main(), 1, &batch)
+        ));
+        assert_eq!(LastClearingBatchSeq::<Test>::get(bank_cid()), 1);
     });
 }
 

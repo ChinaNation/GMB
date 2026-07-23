@@ -94,7 +94,7 @@ pub(crate) struct PublicInstitutionRow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_cid_number: Option<String>,
     pub account_count: usize,
-    /// 自定义账户名(op_tag=0x06)。主/费可本地派生不带;绝大多数机构为空。
+    /// 自定义账户名(op_tag=0x07)。主/费可本地派生不带;绝大多数机构为空。
     pub custom_account_names: Vec<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -413,7 +413,7 @@ fn scope_version_and_count(
     })
 }
 
-/// 批量查机构自定义账户名(op_tag=0x06,即非 5 保留名)。空列表短路。
+/// 批量查机构自定义账户名(op_tag=0x07,即非 6 保留名)。空列表短路。
 fn custom_account_names_for(
     state: &AppState,
     province_code: &str,

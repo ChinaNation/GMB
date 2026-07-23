@@ -7,6 +7,7 @@ pub const MODULE_TAG: &[u8] = b"pri-mgmt";
 pub use pallet::*;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
+pub mod add;
 pub mod close;
 pub mod institution;
 pub mod traits;
@@ -52,8 +53,8 @@ pub use institution::role::{
     InstitutionRolesOf, ModuleTagOf, RoleCodeOf, RolePermissionsOf,
 };
 pub use institution::types::{
-    CloseInstitutionAction, CreateInstitutionAccount, InstitutionAccountInfo, InstitutionInfo,
-    InstitutionInitialAccount, RegisteredInstitution,
+    AddInstitutionAccountAction, CloseInstitutionAction, CreateInstitutionAccount,
+    InstitutionAccountInfo, InstitutionInfo, InstitutionInitialAccount, RegisteredInstitution,
 };
 pub use primitives::account_derive::{AccountKind, RESERVED_NAME_FEE, RESERVED_NAME_MAIN};
 
@@ -279,6 +280,15 @@ pub mod pallet {
     pub type InstitutionPendingClose<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, u64, OptionQuery>;
 
+    /// 私权机构当前进行中的新增账户提案 ID（防止并发新增提案）。
+    /// 与关闭账户的 `InstitutionPendingClose` 对称,但新增账户在落库前无账户地址可作键,
+    /// 故按机构 CID 号锁定:同一机构同一时刻只允许一笔进行中的新增账户提案。
+    /// 发起 propose_add 时写入,执行成功、否决或执行失败终态后清除。
+    #[pallet::storage]
+    #[pallet::getter(fn institution_pending_add)]
+    pub type InstitutionPendingAdd<T: Config> =
+        StorageMap<_, Blake2_128Concat, CidNumberOf<T>, u64, OptionQuery>;
+
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
         pub _phantom: core::marker::PhantomData<T>,
@@ -371,12 +381,23 @@ pub mod pallet {
             cid_short_name: AccountNameOf<T>,
             submitter: T::AccountId,
         },
-        /// 已给存量机构新增账户。
+        /// 机构新增账户提案已发起,后续由内部投票引擎计票和回调执行。
+        InstitutionAccountAddProposed {
+            proposal_id: u64,
+            cid_number: CidNumberOf<T>,
+            proposer: T::AccountId,
+        },
+        /// 已给存量机构新增账户(投票通过,finalizer 落库)。
         InstitutionAccountAdded {
             cid_number: CidNumberOf<T>,
             account_name: AccountNameOf<T>,
             account: T::AccountId,
             submitter: T::AccountId,
+        },
+        /// 机构新增账户执行失败。
+        InstitutionAddAccountExecutionFailed {
+            proposal_id: u64,
+            cid_number: CidNumberOf<T>,
         },
     }
 
@@ -467,6 +488,8 @@ pub mod pallet {
         FeeWithdrawFailed,
         /// 该自定义账户已有进行中的关闭提案，不允许重复发起
         CloseAlreadyPending,
+        /// 该机构已有进行中的新增账户提案，不允许重复发起
+        AddAlreadyPending,
         /// 账户名占用当前机构不允许拥有的协议账户名，或试图把协议名当作自定义账户名
         ReservedAccountName,
         /// sr25519 签名长度必须恰好为 64 字节
@@ -547,6 +570,9 @@ pub mod pallet {
     /// ACTION = 1 永久保留空位,不复用。
     pub const ACTION_CLOSE: u8 = 2;
     pub const ACTION_GOVERNANCE: u8 = 3;
+    /// 新增账户提案:仅用于 ProposalData 内部 finalizer 路由,与投票授权用的
+    /// BusinessActionId(复用 `ACTION_INSTITUTION_CLOSE` 账户生命周期能力)相互正交。
+    pub const ACTION_ADD_ACCOUNT: u8 = 4;
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
@@ -581,24 +607,25 @@ pub mod pallet {
             )
         }
 
-        /// 给已存在机构新增账户(新账户名 → 确定性派生地址 → 上链)。
+        /// 发起"给已存在机构新增自定义命名账户"提案。
+        ///
+        /// 与关闭账户完全对称:授权改为本机构自身(`build_institution_vote_plan` 校验
+        /// 管理员名册 + 有效任职 + 岗位业务权限),发起时派生+校验并冻结进提案载荷,
+        /// 内部投票通过后由 `add::execute_institution_add_account_with_finalizer` 落库。
         #[pallet::call_index(7)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::add_institution_account())]
-        #[allow(clippy::too_many_arguments)]
-        pub fn add_institution_account(
+        pub fn propose_add_institution_account(
             origin: OriginFor<T>,
             cid_number: CidNumberOf<T>,
             account_names: InstitutionAccountNamesOf<T>,
-            actor_cid_number: Vec<u8>,
-            actor_role_code: Vec<u8>,
+            proposer_role_code: RoleCodeOf,
         ) -> DispatchResult {
-            let submitter = ensure_signed(origin)?;
-            crate::institution::maintain::do_add_institution_account::<T>(
-                submitter,
+            let who = ensure_signed(origin)?;
+            crate::add::do_propose_add_institution_account::<T>(
+                who,
                 cid_number,
                 account_names,
-                actor_cid_number,
-                actor_role_code,
+                proposer_role_code,
             )
         }
 
@@ -1247,14 +1274,14 @@ impl<T: pallet::Config> traits::InstitutionLegalRepresentativeQuery<T::AccountId
     }
 }
 
-// ──── 投票终态回调:把已通过的机构关闭提案落地到链上 ────
+// ──── 投票终态回调:把已通过的机构账户新增/关闭提案落地到链上 ────
 //
 // 投票统一由投票引擎承担,提案通过(或否决)经
 // [`votingengine::InternalVoteResultCallback`] 广播回来。
-// 本 Executor(机构侧):
-// - 按 `MODULE_TAG + ACTION_CLOSE` 前缀认领机构关闭提案;
-// - `approved = true` → 分派到 `close::execute_institution_close_with_finalizer`;
-// - `approved = false` → 清理 InstitutionPendingClose,释放地址占用。
+// 本 Executor(机构侧)按 `MODULE_TAG + ACTION 字节` 认领机构管理提案:
+// - `ACTION_ADD_ACCOUNT` + approved → 分派到 `add::execute_institution_add_account_with_finalizer`;
+// - `ACTION_CLOSE` + approved → 分派到 `close::execute_institution_close_with_finalizer`;
+// - `approved = false` → 清理对应 Pending(新增按 CID、关闭按账户),释放占用。
 // (ACTION_CREATE_PERSONAL 在 personal-manage::InternalVoteExecutor)
 pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
 
@@ -1276,6 +1303,33 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
 
         if approved {
             match action_byte {
+                ACTION_ADD_ACCOUNT => {
+                    let action = AddInstitutionAccountAction::<
+                        T::AccountId,
+                        CidNumberOf<T>,
+                        AccountNameOf<T>,
+                    >::decode(&mut &raw[tag.len() + 1..])
+                    .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+                    let exec_result = with_transaction(|| {
+                        match crate::add::execute_institution_add_account_with_finalizer::<T>(
+                            proposal_id,
+                            &action,
+                        ) {
+                            Ok(()) => TransactionOutcome::Commit(Ok(())),
+                            Err(e) => TransactionOutcome::Rollback(Err(e)),
+                        }
+                    });
+                    if exec_result.is_err() {
+                        pallet::Pallet::<T>::deposit_event(
+                            pallet::Event::<T>::InstitutionAddAccountExecutionFailed {
+                                proposal_id,
+                                cid_number: action.actor_cid_number,
+                            },
+                        );
+                        return Ok(ProposalExecutionOutcome::RetryableFailed);
+                    }
+                    return Ok(ProposalExecutionOutcome::Executed);
+                }
                 ACTION_CLOSE => {
                     let action = CloseInstitutionAction::<T::AccountId, CidNumberOf<T>>::decode(
                         &mut &raw[tag.len() + 1..],
@@ -1324,8 +1378,17 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                 _ => return Ok(ProposalExecutionOutcome::Ignored),
             }
         } else {
-            // 否决:清理关闭 Pending 记录释放地址锁定。
-            if action_byte == ACTION_CLOSE {
+            // 否决:清理对应 Pending 记录,释放占用(新增按 CID、关闭按账户)。
+            if action_byte == ACTION_ADD_ACCOUNT {
+                if let Ok(action) = AddInstitutionAccountAction::<
+                    T::AccountId,
+                    CidNumberOf<T>,
+                    AccountNameOf<T>,
+                >::decode(&mut &raw[tag.len() + 1..])
+                {
+                    InstitutionPendingAdd::<T>::remove(&action.actor_cid_number);
+                }
+            } else if action_byte == ACTION_CLOSE {
                 if let Ok(action) = CloseInstitutionAction::<T::AccountId, CidNumberOf<T>>::decode(
                     &mut &raw[tag.len() + 1..],
                 ) {
@@ -1346,7 +1409,15 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
             raw.len() > tag.len(),
             pallet::Error::<T>::ProposalActionNotFound
         );
-        if raw[tag.len()] == ACTION_CLOSE {
+        if raw[tag.len()] == ACTION_ADD_ACCOUNT {
+            let action = AddInstitutionAccountAction::<
+                T::AccountId,
+                CidNumberOf<T>,
+                AccountNameOf<T>,
+            >::decode(&mut &raw[tag.len() + 1..])
+            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+            InstitutionPendingAdd::<T>::remove(&action.actor_cid_number);
+        } else if raw[tag.len()] == ACTION_CLOSE {
             let action = CloseInstitutionAction::<T::AccountId, CidNumberOf<T>>::decode(
                 &mut &raw[tag.len() + 1..],
             )

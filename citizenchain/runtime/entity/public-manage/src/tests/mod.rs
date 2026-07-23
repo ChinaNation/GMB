@@ -553,6 +553,43 @@ pub fn propose_named_account_close(
     )
 }
 
+/// 测试用:以本机构任职管理员钱包 + `TEST_CLOSE_ROLE` 岗位发起新增账户提案。
+/// 新增与关闭复用同一账户生命周期能力(`ACTION_INSTITUTION_CLOSE`),故同岗位即可提案。
+pub fn propose_add_custom_account(
+    origin: RuntimeOrigin,
+    cid_number: pallet::CidNumberOf<Test>,
+    names: &[&[u8]],
+) -> sp_runtime::DispatchResult {
+    let proposer_role_code: crate::RoleCodeOf =
+        b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits");
+    PublicManage::propose_add_institution_account(origin, cid_number, account_names_bv(names), proposer_role_code)
+}
+
+/// 测试 setup:直接把一个自定义命名账户写入双索引,等价于新增账户投票通过后的落库结果。
+/// 关闭账户等测试无需先跑一整轮新增投票即可获得可关闭的自定义账户。
+pub fn insert_custom_account(cid_number: &pallet::CidNumberOf<Test>, name: &[u8]) -> AccountId32 {
+    let stored_name = account_name(name);
+    let (address, _) = PublicManage::derive_institution_account(cid_number.as_slice(), name)
+        .expect("custom account derives");
+    pallet::InstitutionAccounts::<Test>::insert(
+        cid_number,
+        &stored_name,
+        crate::InstitutionAccountInfo {
+            address: address.clone(),
+            initial_balance: 0,
+            created_at: System::block_number(),
+        },
+    );
+    pallet::AccountRegisteredCid::<Test>::insert(
+        &address,
+        crate::RegisteredInstitution {
+            cid_number: cid_number.clone(),
+            account_name: stored_name,
+        },
+    );
+    address
+}
+
 pub fn new_test_ext() -> sp_io::TestExternalities {
     let storage = frame_system::GenesisConfig::<Test>::default()
         .build_storage()

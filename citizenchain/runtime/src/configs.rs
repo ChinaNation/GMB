@@ -146,6 +146,19 @@ fn is_reserved_main_account(address: &AccountId) -> bool {
     primitives::cid::china::china_zb::is_reserved_main_account(&addr)
 }
 
+/// 是否为某私法人股份公司（SFGF）的【清算账户】（承载 L2 用户存款准备金）。
+///
+/// 清算账户是运行期动态注册的私权机构账户，不在任何创世保留表内，故用私法人反查
+/// 索引 `private_manage::AccountRegisteredCid` 按 `account_name == "清算账户"` 判定。
+/// 清算行已确认是私法人（SFGF），只查 private_manage。
+fn is_clearing_account(address: &AccountId) -> bool {
+    private_manage::AccountRegisteredCid::<Runtime>::get(address)
+        .map(|info| {
+            info.account_name.as_slice() == primitives::account_derive::RESERVED_NAME_CLEARING
+        })
+        .unwrap_or(false)
+}
+
 pub struct RuntimeCallFilter;
 
 impl Contains<RuntimeCall> for RuntimeCallFilter {
@@ -433,9 +446,6 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                 public_manage::pallet::Call::update_institution_info {
                     actor_cid_number, ..
                 }
-                | public_manage::pallet::Call::add_institution_account {
-                    actor_cid_number, ..
-                }
                 | public_manage::pallet::Call::propose_institution_governance {
                     actor_cid_number,
                     ..
@@ -444,6 +454,13 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                     actor_cid_number, ..
                 },
             ) => institution_onchain_route(who, actor_cid_number.as_slice()),
+            // 新增账户已改为本机构自身提案：交易费从本机构(cid_number)费用账户扣取,
+            // 与 propose_institution_governance 等机构自身发起的操作同口径。
+            RuntimeCall::PublicManage(
+                public_manage::pallet::Call::propose_add_institution_account {
+                    cid_number, ..
+                },
+            ) => institution_onchain_route(who, cid_number.as_slice()),
             RuntimeCall::PublicManage(
                 public_manage::pallet::Call::propose_close_public_institution {
                     actor_cid_number,
@@ -459,9 +476,6 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                 private_manage::pallet::Call::update_institution_info {
                     actor_cid_number, ..
                 }
-                | private_manage::pallet::Call::add_institution_account {
-                    actor_cid_number, ..
-                }
                 | private_manage::pallet::Call::propose_institution_governance {
                     actor_cid_number,
                     ..
@@ -470,6 +484,13 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                     actor_cid_number, ..
                 },
             ) => institution_onchain_route(who, actor_cid_number.as_slice()),
+            // 新增账户已改为本机构自身提案：交易费从本机构(cid_number)费用账户扣取,
+            // 与 propose_institution_governance 等机构自身发起的操作同口径。
+            RuntimeCall::PrivateManage(
+                private_manage::pallet::Call::propose_add_institution_account {
+                    cid_number, ..
+                },
+            ) => institution_onchain_route(who, cid_number.as_slice()),
             RuntimeCall::PrivateManage(
                 private_manage::pallet::Call::propose_close_private_institution {
                     actor_cid_number,
@@ -907,7 +928,18 @@ impl primitives::institution_asset::InstitutionAsset<AccountId> for RuntimeInsti
             );
         }
 
-        // 6. 普通账户：全放行
+        // 7. 清算行【清算账户】：装用户 L2 存款准备金。只准扫码清算扣款与用户提现；
+        //    管理员经 multisig-transfer / 关闭 / 机构注资一律拒绝，堵死挪用池子。
+        //    清算行主账户不命中此谓词，仍走普通账户放行（银行自有营运资金照常可动）。
+        if is_clearing_account(source) {
+            return matches!(
+                action,
+                primitives::institution_asset::InstitutionAssetAction::L2ClearingDebit
+                    | primitives::institution_asset::InstitutionAssetAction::L3WithdrawOut
+            );
+        }
+
+        // 8. 普通账户：全放行
         true
     }
 }
@@ -942,6 +974,12 @@ impl primitives::multisig::ReservedAccountGuard<AccountId> for RuntimeReservedAc
 
         // 禁止占用储委会费用账户（44 个机构）。
         if is_cb_fee_account(account) {
+            return true;
+        }
+
+        // 禁止占用任一 SFGF 清算账户地址（承载 L2 用户存款准备金）。
+        // 按名注册已由 account_derive::is_forbidden_account_name 挡下，此处补地址级保护。
+        if is_clearing_account(account) {
             return true;
         }
 
@@ -1978,6 +2016,8 @@ impl offchain::Config for Runtime {
     type MaxBatchSignatureLength = ConstU32<128>;
     type InstitutionAsset = RuntimeInstitutionAsset;
     type CidAccountQuery = MultisigCidAccountQuery;
+    type OnchainFeeCharger =
+        onchain::OnchainExecutionFeeCharger<Runtime, Balances, OnchainExecutionFeeDistributor>;
     type WeightInfo = offchain::weights::SubstrateWeight<Runtime>;
 }
 

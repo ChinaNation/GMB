@@ -1497,7 +1497,7 @@ fn stake_account_is_completely_blocked() {
     ));
     assert!(!RuntimeInstitutionAsset::can_spend(
         &account,
-        InstitutionAssetAction::OffchainBatchDebit
+        InstitutionAssetAction::L2ClearingDebit
     ));
     assert!(!RuntimeInstitutionAsset::can_spend(
         &account,
@@ -1518,7 +1518,7 @@ fn reserved_multisig_only_allows_transfer_and_close() {
     ));
     assert!(!RuntimeInstitutionAsset::can_spend(
         &account,
-        InstitutionAssetAction::OffchainBatchDebit
+        InstitutionAssetAction::L2ClearingDebit
     ));
     assert!(!RuntimeInstitutionAsset::can_spend(
         &account,
@@ -1539,7 +1539,7 @@ fn reserved_fee_account_only_allows_fee_sweep() {
     ));
     assert!(!RuntimeInstitutionAsset::can_spend(
         &account,
-        InstitutionAssetAction::OffchainBatchDebit
+        InstitutionAssetAction::L2ClearingDebit
     ));
     assert!(RuntimeInstitutionAsset::can_spend(
         &account,
@@ -1549,23 +1549,69 @@ fn reserved_fee_account_only_allows_fee_sweep() {
 
 #[test]
 fn ordinary_account_allows_all_actions() {
-    let account = ordinary_account();
-    assert!(RuntimeInstitutionAsset::can_spend(
-        &account,
-        InstitutionAssetAction::MultisigTransferExecute
-    ));
-    assert!(RuntimeInstitutionAsset::can_spend(
-        &account,
-        InstitutionAssetAction::MultisigCloseExecute
-    ));
-    assert!(RuntimeInstitutionAsset::can_spend(
-        &account,
-        InstitutionAssetAction::OffchainBatchDebit
-    ));
-    assert!(RuntimeInstitutionAsset::can_spend(
-        &account,
-        InstitutionAssetAction::OffchainFeeSweepExecute
-    ));
+    // 普通账户不命中任何保留/清算谓词,一路放行;is_clearing_account 读 storage,
+    // 需在 externalities 内运行。
+    new_test_ext().execute_with(|| {
+        let account = ordinary_account();
+        assert!(RuntimeInstitutionAsset::can_spend(
+            &account,
+            InstitutionAssetAction::MultisigTransferExecute
+        ));
+        assert!(RuntimeInstitutionAsset::can_spend(
+            &account,
+            InstitutionAssetAction::MultisigCloseExecute
+        ));
+        assert!(RuntimeInstitutionAsset::can_spend(
+            &account,
+            InstitutionAssetAction::L2ClearingDebit
+        ));
+        assert!(RuntimeInstitutionAsset::can_spend(
+            &account,
+            InstitutionAssetAction::OffchainFeeSweepExecute
+        ));
+    });
+}
+
+// 簇 3b:清算账户资金白名单 + 防占号(Step 2)
+#[test]
+fn clearing_account_only_allows_debit_and_withdraw() {
+    new_test_ext().execute_with(|| {
+        register_clearing_account();
+        let account = clearing_account();
+        // 放行:扫码清算扣款 + 用户提现。
+        assert!(RuntimeInstitutionAsset::can_spend(
+            &account,
+            InstitutionAssetAction::L2ClearingDebit
+        ));
+        assert!(RuntimeInstitutionAsset::can_spend(
+            &account,
+            InstitutionAssetAction::L3WithdrawOut
+        ));
+        // 拒绝(漏洞回归):管理员经多签转账 / 关闭 / 机构注资挪用用户存款准备金。
+        assert!(!RuntimeInstitutionAsset::can_spend(
+            &account,
+            InstitutionAssetAction::MultisigTransferExecute
+        ));
+        assert!(!RuntimeInstitutionAsset::can_spend(
+            &account,
+            InstitutionAssetAction::MultisigCloseExecute
+        ));
+        assert!(!RuntimeInstitutionAsset::can_spend(
+            &account,
+            InstitutionAssetAction::InstitutionCreateFunding
+        ));
+    });
+}
+
+#[test]
+fn clearing_account_is_reserved_against_squatting() {
+    new_test_ext().execute_with(|| {
+        register_clearing_account();
+        // 清算账户地址被保留,任何自定义账户注册不得占用。
+        assert!(RuntimeReservedAccountGuard::is_reserved(&clearing_account()));
+        // 未登记的普通地址不被保留。
+        assert!(!RuntimeReservedAccountGuard::is_reserved(&ordinary_account()));
+    });
 }
 
 // ── 创世直铸全量断言(ADR-031 卡3 验收)──

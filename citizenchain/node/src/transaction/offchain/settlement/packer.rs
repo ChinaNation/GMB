@@ -46,9 +46,11 @@ pub const PACK_BLOCK_THRESHOLD: u64 = 10;
 pub struct NodeBatchItem {
     pub tx_id: H256,
     pub payer: AccountId32,
-    pub payer_bank: AccountId32,
+    /// 付款方绑定清算行 CID(SCALE 与 runtime `InstitutionCidNumber` = BoundedVec<u8> 等价)。
+    pub payer_bank_cid: Vec<u8>,
     pub recipient: AccountId32,
-    pub recipient_bank: AccountId32,
+    /// 收款方绑定清算行 CID。
+    pub recipient_bank_cid: Vec<u8>,
     pub transfer_amount: u128,
     pub fee_amount: u128,
     pub payer_sig: [u8; 64],
@@ -61,9 +63,9 @@ impl From<PendingPayment> for NodeBatchItem {
         Self {
             tx_id: p.tx_id,
             payer: p.payer,
-            payer_bank: p.payer_bank,
+            payer_bank_cid: p.payer_bank_cid,
             recipient: p.recipient,
-            recipient_bank: p.recipient_bank,
+            recipient_bank_cid: p.recipient_bank_cid,
             transfer_amount: p.amount,
             fee_amount: p.fee,
             payer_sig: p.payer_sig,
@@ -337,9 +339,9 @@ mod tests {
         inner.pending.push(PendingPayment {
             tx_id: H256::repeat_byte(tx_byte),
             payer: payer.clone(),
-            payer_bank: acc(0xAA),
+            payer_bank_cid: b"ZS001-PRB08-233384677-2026".to_vec(),
             recipient: acc(9),
-            recipient_bank: acc(0xAA),
+            recipient_bank_cid: b"ZS001-PRB08-233384677-2026".to_vec(),
             amount: 1000,
             fee: 1,
             nonce: 1,
@@ -546,9 +548,9 @@ mod tests {
         let item = NodeBatchItem {
             tx_id: H256::repeat_byte(5),
             payer: acc(1),
-            payer_bank: acc(2),
+            payer_bank_cid: b"GD001-PRB0T-239565809-2026".to_vec(),
             recipient: acc(3),
-            recipient_bank: acc(4),
+            recipient_bank_cid: b"AH001-PRB0X-111111111-2026".to_vec(),
             transfer_amount: 10_000,
             fee_amount: 5,
             payer_sig: [9u8; 64],
@@ -556,8 +558,9 @@ mod tests {
             expires_at: 100,
         };
         let bytes = item.encode();
-        // Expected layout: 32 + 32 + 32 + 32 + 32 + 16 + 16 + 64 + 8 + 4 = 268
-        assert_eq!(bytes.len(), 268);
+        // 变长布局:bank 字段为 CID = Compact(len)||bytes(两个 CID 各 26 字节 → 各 27)。
+        // 32(tx)+32(payer)+(1+26)+32(recipient)+(1+26)+16+16+64+8+4 = 258。
+        assert_eq!(bytes.len(), 32 + 32 + (1 + 26) + 32 + (1 + 26) + 16 + 16 + 64 + 8 + 4);
 
         let decoded: NodeBatchItem = NodeBatchItem::decode(&mut &bytes[..]).unwrap();
         assert_eq!(decoded, item);

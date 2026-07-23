@@ -86,8 +86,9 @@ pub mod storage_key {
         prefix(OFFCHAIN_MAX_RATE)
     }
 
-    pub fn rate(bank: &AccountId32) -> Vec<u8> {
-        let encoded = bank.encode();
+    pub fn rate(bank_cid: &[u8]) -> Vec<u8> {
+        // CID 键 = InstitutionCidNumber(BoundedVec<u8>),SCALE = Compact(len) || bytes。
+        let encoded = bank_cid.to_vec().encode();
         [rate_prefix(), blake2_128(&encoded).to_vec(), encoded].concat()
     }
 
@@ -112,21 +113,33 @@ pub mod storage_key {
         map_key(OFFCHAIN_PALLET, b"UserBank", &account.encode())
     }
 
-    pub fn deposit(bank: &AccountId32, account: &AccountId32) -> Vec<u8> {
+    pub fn deposit(bank_cid: &[u8], account: &AccountId32) -> Vec<u8> {
+        // 一级键 = 清算行 CID(InstitutionCidNumber = BoundedVec<u8>),
+        // SCALE = Compact(len) || bytes,与 runtime StorageDoubleMap 键逐字节等价。
         double_map_key(
             OFFCHAIN_PALLET,
             b"DepositBalance",
-            &bank.encode(),
+            &bank_cid.to_vec().encode(),
             &account.encode(),
         )
     }
 
-    pub fn bank_total(bank: &AccountId32) -> Vec<u8> {
-        map_key(OFFCHAIN_PALLET, b"BankTotalDeposits", &bank.encode())
+    pub fn bank_total(bank_cid: &[u8]) -> Vec<u8> {
+        // 键 = 清算行 CID(Compact(len) || bytes)。
+        map_key(
+            OFFCHAIN_PALLET,
+            b"BankTotalDeposits",
+            &bank_cid.to_vec().encode(),
+        )
     }
 
-    pub fn last_batch(bank: &AccountId32) -> Vec<u8> {
-        map_key(OFFCHAIN_PALLET, b"LastClearingBatchSeq", &bank.encode())
+    pub fn last_batch(bank_cid: &[u8]) -> Vec<u8> {
+        // 键 = 清算行 CID(Compact(len) || bytes)。
+        map_key(
+            OFFCHAIN_PALLET,
+            b"LastClearingBatchSeq",
+            &bank_cid.to_vec().encode(),
+        )
     }
 
     pub fn relevant_prefixes() -> [Vec<u8>; 2] {
@@ -266,7 +279,7 @@ where
 
     for record in &events {
         let RuntimeEvent::OffchainTransaction(offchain::pallet::Event::PaymentSettled {
-            recipient_bank,
+            recipient_bank_cid,
             transfer_amount,
             fee_amount,
             ..
@@ -274,7 +287,7 @@ where
         else {
             continue;
         };
-        let raw = read_post(&storage_key::rate(recipient_bank))
+        let raw = read_post(&storage_key::rate(recipient_bank_cid.as_slice()))
             .ok_or("链下清算结果缺少收款方清算行费率")?;
         let rate: u32 = decode_exact(&raw, "OffchainTransaction::L2FeeRateBp")?;
         check_rate_value(rate)?;
@@ -384,7 +397,7 @@ fn overlay_account(
 fn seed_offchain_minimum_fee_probe(
     overlay: &mut OverlayedChanges<BlakeTwo256>,
     submitter_pair: &sr25519::Pair,
-) -> Result<(RuntimeCall, AccountId32), String> {
+) -> Result<(RuntimeCall, AccountId32, Vec<u8>), String> {
     let actor_cid_number = primitives::cid::generator::generate_cid_number(
         primitives::cid::generator::GenerateCidNumberInput {
             account_pubkey: "node-guard-offchain-bank",
@@ -400,14 +413,19 @@ fn seed_offchain_minimum_fee_probe(
     .map_err(|error| format!("构造候选 runtime 清算行 CID 失败:{error}"))?
     .into_bytes();
     let submitter = chain_signing::account_id_from_public(submitter_pair.public());
+    // 供返回:候选 runtime settlement 后 LastClearingBatchSeq 按 CID 键读取。
+    let cid_bytes = actor_cid_number.clone();
     let bank = AccountId32::new([0xB1; 32]);
     let bank_raw: [u8; 32] = bank.clone().into();
     let fee_account = AccountId32::new([0xF1; 32]);
+    // 清算账户:Step 2 起 L2 资金落点(充值/提现/结算/偿付);主账户仅身份锚。
+    let clearing_account = AccountId32::new([0xC2; 32]);
     let payer_pair = sr25519::Pair::from_seed(&[0xB2; 32]);
     let payer = chain_signing::account_id_from_public(payer_pair.public());
     let recipient = AccountId32::new([0xC1; 32]);
     let main_name = primitives::account_derive::RESERVED_NAME_MAIN;
     let fee_name = primitives::account_derive::RESERVED_NAME_FEE;
+    let clearing_name = primitives::account_derive::RESERVED_NAME_CLEARING;
 
     let registered = |name: &[u8]| entity_primitives::RegisteredInstitution {
         cid_number: actor_cid_number.clone(),
@@ -434,6 +452,16 @@ fn seed_offchain_minimum_fee_probe(
         storage_key::private_reverse(&fee_account),
         Some(registered(fee_name).encode()),
     );
+    // 清算账户正反登记:settlement/deposit/solvency 经 `clearing_account_of(cid)`
+    // → `find_account(cid, "清算账户")` 解析资金落点,未登记会 ClearingAccountNotFound。
+    overlay.set_storage(
+        storage_key::private_account(&actor_cid_number, clearing_name),
+        Some(institution_account(clearing_account.clone()).encode()),
+    );
+    overlay.set_storage(
+        storage_key::private_reverse(&clearing_account),
+        Some(registered(clearing_name).encode()),
+    );
     overlay.set_storage(
         storage_key::private_admins(&actor_cid_number),
         Some(
@@ -452,11 +480,28 @@ fn seed_offchain_minimum_fee_probe(
             .encode(),
         ),
     );
-    overlay.set_storage(storage_key::user_bank(&payer), Some(bank.encode()));
-    overlay.set_storage(storage_key::user_bank(&recipient), Some(bank.encode()));
-    overlay.set_storage(storage_key::deposit(&bank, &payer), Some(2u128.encode()));
-    overlay.set_storage(storage_key::bank_total(&bank), Some(2u128.encode()));
-    overlay.set_storage(storage_key::rate(&bank), Some(10u32.encode()));
+    // 身份主键=CID:UserBank 的值是清算行 CID;DepositBalance/BankTotalDeposits/
+    // L2FeeRateBp 的键是 CID(Compact(len)||bytes,与 runtime BoundedVec<u8> 键逐字节等价)。
+    overlay.set_storage(
+        storage_key::user_bank(&payer),
+        Some(actor_cid_number.encode()),
+    );
+    overlay.set_storage(
+        storage_key::user_bank(&recipient),
+        Some(actor_cid_number.encode()),
+    );
+    overlay.set_storage(
+        storage_key::deposit(&actor_cid_number, &payer),
+        Some(2u128.encode()),
+    );
+    overlay.set_storage(
+        storage_key::bank_total(&actor_cid_number),
+        Some(2u128.encode()),
+    );
+    overlay.set_storage(
+        storage_key::rate(&actor_cid_number),
+        Some(10u32.encode()),
+    );
     overlay.set_storage(
         fullnode_issuance::storage_key::system_account(&bank_raw),
         Some(
@@ -485,8 +530,29 @@ fn seed_offchain_minimum_fee_probe(
                 providers: 1,
                 sufficients: 0,
                 data: MAccountData {
-                    // 费用账户必须先达到链上账户存在最低余额；本探针只验证本次新增 1 分。
-                    free: primitives::core_const::ACCOUNT_EXISTENTIAL_DEPOSIT,
+                    // 费用账户:先收本批 L2 手续费,再为该批收益付一次链上费(Step 3)。
+                    // 给足额度确保链上费扣款成功;80/10/10 分账落点由候选 runtime 基态提供。
+                    free: 1_000_000,
+                    reserved: 0,
+                    frozen: 0,
+                    flags: BALANCES_NEW_ACCOUNT_FLAGS,
+                },
+            }
+            .encode(),
+        ),
+    );
+    // 清算账户:L2 资金落点。结算从这里转出手续费,偿付预检读它的余额;给足额度。
+    let clearing_raw: [u8; 32] = clearing_account.clone().into();
+    overlay.set_storage(
+        fullnode_issuance::storage_key::system_account(&clearing_raw),
+        Some(
+            MAccountInfo {
+                nonce: 0,
+                consumers: 0,
+                providers: 1,
+                sufficients: 0,
+                data: MAccountData {
+                    free: 1_000_000,
                     reserved: 0,
                     frozen: 0,
                     flags: BALANCES_NEW_ACCOUNT_FLAGS,
@@ -496,12 +562,20 @@ fn seed_offchain_minimum_fee_probe(
         ),
     );
 
+    // item 的 CID 字段填真实清算行 CID(同行探针:付款方=收款方=本行),而非空
+    // Default —— 否则与 UserBank/DepositBalance/rate 的 CID 键对不上,settlement 早拒。
     let mut item = offchain::batch_item::OffchainBatchItem::<AccountId32, u32> {
         tx_id: sp_core::H256::repeat_byte(0xD1),
         payer,
-        payer_bank: bank.clone(),
+        payer_bank_cid: actor_cid_number
+            .clone()
+            .try_into()
+            .map_err(|_| "候选 runtime 清算行 CID 超长")?,
         recipient,
-        recipient_bank: bank.clone(),
+        recipient_bank_cid: actor_cid_number
+            .clone()
+            .try_into()
+            .map_err(|_| "候选 runtime 清算行 CID 超长")?,
         transfer_amount: 1,
         fee_amount: primitives::fee_policy::OFFCHAIN_MIN_FEE,
         payer_sig: [0u8; 64],
@@ -533,7 +607,7 @@ fn seed_offchain_minimum_fee_probe(
             .try_into()
             .map_err(|_| "候选 runtime 清算批次签名超长")?,
     });
-    Ok((call, bank))
+    Ok((call, bank, cid_bytes))
 }
 
 /// 在候选 WASM 生效前执行固定费用行为探针。
@@ -678,7 +752,8 @@ where
 
     // 用同一候选 WASM 真实走完整清算批次，1 分交易在 0.1% 费率下必须收取最低 1 分。
     // 成功写入批次序号同时证明公式校验、L3 签名、批次签名和资金落账均已通过。
-    let (offchain_call, bank) = seed_offchain_minimum_fee_probe(&mut overlay, &payer_pair)?;
+    let (offchain_call, _bank, bank_cid) =
+        seed_offchain_minimum_fee_probe(&mut overlay, &payer_pair)?;
     let xt = chain_signing::build_signed_extrinsic_with_pair(
         offchain_call,
         genesis_hash,
@@ -711,7 +786,7 @@ where
         }
     }
     let last_batch_raw = overlay
-        .storage(&storage_key::last_batch(&bank))
+        .storage(&storage_key::last_batch(&bank_cid))
         .flatten()
         .ok_or("候选 runtime 未完成链下最低手续费清算探针")?;
     let last_batch: u64 = decode_exact(last_batch_raw, "候选 LastClearingBatchSeq")?;
@@ -794,15 +869,18 @@ mod tests {
 
     #[test]
     fn actual_offchain_settlement_uses_recipient_rate_and_one_fen_minimum() {
-        let bank = AccountId32::new([3u8; 32]);
+        let bank: Vec<u8> = b"ZS001-PRB08-233384677-2026".to_vec();
         let events: Vec<EventRecord<RuntimeEvent, sp_core::H256>> = vec![EventRecord {
             phase: Phase::ApplyExtrinsic(0),
             event: RuntimeEvent::OffchainTransaction(offchain::pallet::Event::PaymentSettled {
                 tx_id: sp_core::H256::repeat_byte(4),
                 payer: AccountId32::new([5u8; 32]),
-                payer_bank: AccountId32::new([6u8; 32]),
+                payer_bank_cid: b"GD001-PRB0T-239565809-2026"
+                    .to_vec()
+                    .try_into()
+                    .unwrap(),
                 recipient: AccountId32::new([7u8; 32]),
-                recipient_bank: bank.clone(),
+                recipient_bank_cid: bank.clone().try_into().unwrap(),
                 transfer_amount: 1,
                 fee_amount: 1,
             }),
@@ -826,9 +904,12 @@ mod tests {
             event: RuntimeEvent::OffchainTransaction(offchain::pallet::Event::PaymentSettled {
                 tx_id: sp_core::H256::repeat_byte(4),
                 payer: AccountId32::new([5u8; 32]),
-                payer_bank: AccountId32::new([6u8; 32]),
+                payer_bank_cid: b"GD001-PRB0T-239565809-2026"
+                    .to_vec()
+                    .try_into()
+                    .unwrap(),
                 recipient: AccountId32::new([7u8; 32]),
-                recipient_bank: bank,
+                recipient_bank_cid: bank.try_into().unwrap(),
                 transfer_amount: 1,
                 fee_amount: 2,
             }),
@@ -844,5 +925,33 @@ mod tests {
             }
         })
         .is_err());
+    }
+
+    /// 字节锁:清算体系 CID 存储键必须 = twox_128(pallet) || twox_128(item)
+    /// || blake2_128(SCALE(cid)) || SCALE(cid),其中 SCALE(cid) = Compact(len)||bytes
+    /// (与 runtime `StorageMap<_, Blake2_128Concat, InstitutionCidNumber, _>` 逐字节一致)。
+    /// 若回退成旧的定长 32B 账户编码(节点会静默读空),本测试必红。
+    #[test]
+    fn cid_storage_keys_use_compact_len_prefix() {
+        let cid: Vec<u8> = b"AH001-SCB05-000000002-2026".to_vec();
+        let encoded = cid.encode(); // Compact(26)=0x68 || 26 bytes
+        assert_eq!(encoded[0], 0x68, "26<<2 = 0x68 单字节 compact 前缀");
+        assert_eq!(&encoded[1..], &cid[..]);
+
+        let mut want = Vec::new();
+        want.extend_from_slice(&sp_io::hashing::twox_128(b"OffchainTransaction"));
+        want.extend_from_slice(&sp_io::hashing::twox_128(b"LastClearingBatchSeq"));
+        want.extend_from_slice(&sp_io::hashing::blake2_128(&encoded));
+        want.extend_from_slice(&encoded);
+        assert_eq!(storage_key::last_batch(&cid), want);
+
+        // BankTotalDeposits 键尾同为 Compact(len)||bytes CID。
+        assert!(storage_key::bank_total(&cid).ends_with(&encoded));
+
+        // DepositBalance 双 map:一级 CID 段(变长)必现于键内,证明非定长 32B 账户编码。
+        let acc = AccountId32::new([0x09; 32]);
+        assert!(storage_key::deposit(&cid, &acc)
+            .windows(encoded.len())
+            .any(|w| w == encoded.as_slice()));
     }
 }

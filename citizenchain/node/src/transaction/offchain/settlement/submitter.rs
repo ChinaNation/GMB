@@ -196,19 +196,27 @@ where
 {
     let converted: Vec<_> = items
         .into_iter()
-        .map(|it| OffchainBatchItem {
-            tx_id: it.tx_id,
-            payer: it.payer.into(),
-            payer_bank: it.payer_bank.into(),
-            recipient: it.recipient.into(),
-            recipient_bank: it.recipient_bank.into(),
-            transfer_amount: it.transfer_amount,
-            fee_amount: it.fee_amount,
-            payer_sig: it.payer_sig,
-            payer_nonce: it.payer_nonce,
-            expires_at: it.expires_at.into(),
+        .map(|it| {
+            Ok(OffchainBatchItem {
+                tx_id: it.tx_id,
+                payer: it.payer.into(),
+                payer_bank_cid: it
+                    .payer_bank_cid
+                    .try_into()
+                    .map_err(|_| "payer_bank_cid 超长".to_string())?,
+                recipient: it.recipient.into(),
+                recipient_bank_cid: it
+                    .recipient_bank_cid
+                    .try_into()
+                    .map_err(|_| "recipient_bank_cid 超长".to_string())?,
+                transfer_amount: it.transfer_amount,
+                fee_amount: it.fee_amount,
+                payer_sig: it.payer_sig,
+                payer_nonce: it.payer_nonce,
+                expires_at: it.expires_at.into(),
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>, String>>()?;
     converted
         .try_into()
         .map_err(|_| "batch 超出 MaxBatchSize".to_string())
@@ -249,9 +257,9 @@ mod tests {
         OffchainBatchItem {
             tx_id: H256::repeat_byte(seed),
             payer: AccountId32::new([seed; 32]),
-            payer_bank: AccountId32::new([0xAA; 32]),
+            payer_bank_cid: b"GD001-PRB0T-239565809-2026".to_vec().try_into().unwrap(),
             recipient: AccountId32::new([seed.wrapping_add(1); 32]),
-            recipient_bank: AccountId32::new([0xBB; 32]),
+            recipient_bank_cid: b"AH001-PRB0X-111111111-2026".to_vec().try_into().unwrap(),
             transfer_amount: 1_000,
             fee_amount: 1,
             payer_sig: [0u8; 64],

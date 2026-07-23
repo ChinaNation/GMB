@@ -40,23 +40,23 @@ pub const RATE_CHANGE_DELAY_BLOCKS: u64 = 7 * primitives::pow_const::BLOCKS_PER_
 /// - 同一清算行不允许并行提案(新提案覆盖旧提案)
 pub fn do_propose_l2_fee_rate<T: Config>(
     who: T::AccountId,
-    actor_cid_number: &[u8],
+    actor_cid_number: &crate::InstitutionCidNumber,
     actor_role_code: &[u8],
     institution_account: T::AccountId,
     new_rate_bp: u32,
 ) -> DispatchResult {
     // 1. CID 与本次操作的清算行主账户必须严格对应。
     bank_check::ensure_institution_account::<T>(
-        actor_cid_number,
+        actor_cid_number.as_slice(),
         &institution_account,
         bank_check::ACCOUNT_NAME_MAIN,
     )?;
-    bank_check::ensure_can_be_bound::<T>(&institution_account)?;
+    bank_check::ensure_can_be_bound::<T>(actor_cid_number.as_slice())?;
 
     // 2. 授权唯一真源是 CID、岗位码、有效任职钱包和业务动作权限。
     ensure!(
         T::CidAccountQuery::is_institution_role_authorized(
-            actor_cid_number,
+            actor_cid_number.as_slice(),
             actor_role_code,
             &who,
             entity_primitives::business_action::ACTION_OFFCHAIN_PROPOSE_FEE_RATE,
@@ -76,9 +76,9 @@ pub fn do_propose_l2_fee_rate<T: Config>(
     let delay: BlockNumberFor<T> = RATE_CHANGE_DELAY_BLOCKS.saturated_into();
     let effective_at = now.saturating_add(delay);
 
-    L2FeeRateProposed::<T>::insert(&institution_account, (new_rate_bp, effective_at));
+    L2FeeRateProposed::<T>::insert(actor_cid_number, (new_rate_bp, effective_at));
     Pallet::<T>::deposit_event(Event::<T>::L2FeeRateProposed {
-        bank: institution_account,
+        bank_cid: actor_cid_number.clone(),
         new_rate_bp,
         effective_at,
     });
@@ -104,7 +104,7 @@ mod delay_tests {
 pub fn activate_pending_rates<T: Config>(now: BlockNumberFor<T>) -> Weight {
     let db = T::DbWeight::get();
     let mut consumed = Weight::zero();
-    let mut to_activate: Vec<(T::AccountId, u32)> = Vec::new();
+    let mut to_activate: Vec<(crate::InstitutionCidNumber, u32)> = Vec::new();
 
     for (bank, (rate, effective_at)) in L2FeeRateProposed::<T>::iter() {
         consumed = consumed.saturating_add(db.reads(1));
@@ -117,7 +117,7 @@ pub fn activate_pending_rates<T: Config>(now: BlockNumberFor<T>) -> Weight {
         L2FeeRateBp::<T>::insert(&bank, rate);
         L2FeeRateProposed::<T>::remove(&bank);
         Pallet::<T>::deposit_event(Event::<T>::L2FeeRateActivated {
-            bank,
+            bank_cid: bank,
             rate_bp: rate,
         });
         consumed = consumed.saturating_add(db.reads_writes(0, 3));
@@ -141,6 +141,6 @@ pub fn do_set_max_l2_fee_rate<T: Config>(new_max: u32) -> DispatchResult {
 }
 
 /// 查询清算行当前生效费率。未配置时返回 0(调用方自己决定是否用全局默认)。
-pub fn current_rate_bp<T: Config>(bank_main: &T::AccountId) -> u32 {
-    L2FeeRateBp::<T>::get(bank_main)
+pub fn current_rate_bp<T: Config>(bank_cid: &crate::InstitutionCidNumber) -> u32 {
+    L2FeeRateBp::<T>::get(bank_cid)
 }

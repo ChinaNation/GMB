@@ -323,4 +323,30 @@ fn ordinary_account() -> AccountId {
     AccountId::new([99u8; 32])
 }
 
+/// L2 清算账户 fixture 地址(资金白名单 / 防占号用例)。
+fn clearing_account() -> AccountId {
+    AccountId::new([0xC1u8; 32])
+}
+
+/// 在 `private_manage` 反向索引把 `clearing_account()` 登记为某 SFGF 的「清算账户」。
+/// 读写 storage,必须在 `execute_with` 内调用。
+fn register_clearing_account() {
+    let cid_number: private_manage::CidNumberOf<Runtime> = b"GD001-SCB05-000000002-2026"
+        .to_vec()
+        .try_into()
+        .expect("测试 CID 长度合法");
+    let account_name: private_manage::AccountNameOf<Runtime> = "清算账户"
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("清算账户名长度合法");
+    private_manage::AccountRegisteredCid::<Runtime>::insert(
+        clearing_account(),
+        entity_primitives::RegisteredInstitution {
+            cid_number,
+            account_name,
+        },
+    );
+}
+
 mod cases;

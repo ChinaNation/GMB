@@ -325,6 +325,9 @@ pub const NED: InstitutionCode = *b"NED\0";
 /// 个人多签账户,不发 CID 号。
 pub const PMUL: InstitutionCode = *b"PMUL";
 
+/// 私法人股份公司(清算行资格机构)。
+pub const SFGF: InstitutionCode = *b"SFGF";
+
 /// 全部 104 个机构码信息,按 A-I 九组排列。
 pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 104] = [
     // A 国家码单体(38,3 位,公法人,非盈利)

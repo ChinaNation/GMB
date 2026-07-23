@@ -67,6 +67,10 @@ fn derive_vector(v: &serde_json::Value) -> [u8; 32] {
             cid_number: cid.expect("缺 cid_number").as_bytes(),
         }
         .derive(SS58_FORMAT),
+        "InstitutionClearing" => AccountKind::InstitutionClearing {
+            cid_number: cid.expect("缺 cid_number").as_bytes(),
+        }
+        .derive(SS58_FORMAT),
         "InstitutionNamed" => AccountKind::InstitutionNamed {
             cid_number: cid.expect("缺 cid_number").as_bytes(),
             account_name: name.expect("缺 account_name").as_bytes(),

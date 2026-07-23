@@ -51,9 +51,11 @@ impl L3AccountState {
 pub struct PendingPayment {
     pub tx_id: H256,
     pub payer: AccountId32,
-    pub payer_bank: AccountId32,
+    /// 付款方绑定清算行 CID(机构唯一永久主键)。
+    pub payer_bank_cid: Vec<u8>,
     pub recipient: AccountId32,
-    pub recipient_bank: AccountId32,
+    /// 收款方绑定清算行 CID。
+    pub recipient_bank_cid: Vec<u8>,
     pub amount: u128,
     pub fee: u128,
     pub nonce: u64,
@@ -79,9 +81,11 @@ pub struct PendingPayment {
 pub struct NodePaymentIntent {
     pub tx_id: H256,
     pub payer: AccountId32,
-    pub payer_bank: AccountId32,
+    /// 付款方绑定清算行 CID(SCALE 与 runtime `InstitutionCidNumber` = BoundedVec<u8> 等价)。
+    pub payer_bank_cid: Vec<u8>,
     pub recipient: AccountId32,
-    pub recipient_bank: AccountId32,
+    /// 收款方绑定清算行 CID。
+    pub recipient_bank_cid: Vec<u8>,
     pub amount: u128,
     pub fee: u128,
     pub nonce: u64,
@@ -203,26 +207,26 @@ impl OffchainLedger {
 
     /// 同步 `PaymentSettled` 事件:把 pending 落地到 confirmed。
     ///
-    /// 传入 `(payer_bank, recipient_bank)` 与**本清算行** `my_bank`,只对
+    /// 传入 `(payer_bank_cid, recipient_bank_cid)` 与**本清算行** `my_bank_cid`,只对
     /// 属于本行的一侧动账(避免给不在本行的对手方新建 ghost 账户使
-    /// `confirmed_sum_snapshot` 与链上 `BankTotalDeposits[my_bank]` 虚高):
-    /// - `payer_bank == my_bank`:扣 payer(pending_debit / confirmed)
-    /// - `recipient_bank == my_bank`:加 recipient(pending_credit / confirmed)
+    /// `confirmed_sum_snapshot` 与链上 `BankTotalDeposits[my_bank_cid]` 虚高):
+    /// - `payer_bank_cid == my_bank_cid`:扣 payer(pending_debit / confirmed)
+    /// - `recipient_bank_cid == my_bank_cid`:加 recipient(pending_credit / confirmed)
     /// - 两者皆同(同行):两侧都动
-    /// - 两者皆不同(跨行但 my_bank 是第三方清算行):`listener.handle` 不会
+    /// - 两者皆不同(跨行但 my_bank_cid 是第三方清算行):`listener.handle` 不会
     ///   进来调用本方法(上游已过滤);兜底:不动任何账户
     ///
     /// `tx_id` 仍从本地 pending 列表和 `accepted_tx_ids` 中清除(即使本行不是
-    /// payer_bank,也可能是 citizenapp 误路由的 accept_payment,留着会导致 pending
+    /// payer_bank_cid,也可能是 citizenapp 误路由的 accept_payment,留着会导致 pending
     /// 永远不消)。
     pub fn on_payment_settled(
         &self,
         tx_id: H256,
         payer: &AccountId32,
-        payer_bank: &AccountId32,
+        payer_bank_cid: &[u8],
         recipient: &AccountId32,
-        recipient_bank: &AccountId32,
-        my_bank: &AccountId32,
+        recipient_bank_cid: &[u8],
+        my_bank_cid: &[u8],
         amount: u128,
         fee: u128,
     ) {
@@ -230,14 +234,14 @@ impl OffchainLedger {
         let total = amount.saturating_add(fee);
 
         // 付款方属于本行:扣 pending_debit + confirmed
-        if payer_bank == my_bank {
+        if payer_bank_cid == my_bank_cid {
             if let Some(state) = ledger.accounts.get_mut(payer) {
                 state.pending_debit = state.pending_debit.saturating_sub(total);
                 state.confirmed = state.confirmed.saturating_sub(total);
             }
         }
         // 收款方属于本行:清 pending_credit + 加 confirmed(新建或已有)
-        if recipient_bank == my_bank {
+        if recipient_bank_cid == my_bank_cid {
             if let Some(state) = ledger.accounts.get_mut(recipient) {
                 state.pending_credit = state.pending_credit.saturating_sub(amount);
                 state.confirmed = state.confirmed.saturating_add(amount);
@@ -369,7 +373,7 @@ impl OffchainLedger {
         l2_ack_sig_provider: [u8; 64],
         accepted_at: u64,
     ) -> Result<(H256, [u8; 64]), String> {
-        let my_bank = intent.payer_bank.clone();
+        let my_bank = intent.payer_bank_cid.clone();
         self.accept_payment_with_chain_state(
             intent,
             payer_sig,
@@ -385,10 +389,10 @@ impl OffchainLedger {
     /// 接收支付意图并允许 RPC 层注入链上余额 / nonce。
     ///
     ///
-    /// - 本行付款(`intent.payer_bank == my_bank`)继续走本地 `accounts` 缓存,保持
+    /// - 本行付款(`intent.payer_bank_cid == my_bank_cid`)继续走本地 `accounts` 缓存,保持
     ///   已有充值/提现/同行扫码的行为。
-    /// - 跨行收款(`intent.recipient_bank == my_bank && intent.payer_bank != my_bank`)
-    ///   不创建付款方本地账户,而是使用链上 `DepositBalance[payer_bank][payer]`
+    /// - 跨行收款(`intent.recipient_bank_cid == my_bank_cid && intent.payer_bank_cid != my_bank_cid`)
+    ///   不创建付款方本地账户,而是使用链上 `DepositBalance[payer_bank_cid][payer]`
     ///   与 `L3PaymentNonce[payer]`,再叠加本节点已接受未上链 pending 做早拒。
     /// - 这样收款方清算节点可以主导跨行批次,同时不会污染本地主账对账快照。
     pub fn accept_payment_with_chain_state(
@@ -398,7 +402,7 @@ impl OffchainLedger {
         current_block: Option<u32>,
         l2_ack_sig_provider: [u8; 64],
         accepted_at: u64,
-        my_bank: &AccountId32,
+        my_bank: &[u8],
         chain_confirmed: Option<u128>,
         chain_nonce: Option<u64>,
     ) -> Result<(H256, [u8; 64]), String> {
@@ -429,7 +433,7 @@ impl OffchainLedger {
         }
 
         let total_debit = intent.amount.saturating_add(intent.fee);
-        if intent.payer_bank == *my_bank {
+        if intent.payer_bank_cid.as_slice() == my_bank {
             let state = ledger.accounts.entry(intent.payer.clone()).or_default();
             let expected_nonce = state.cached_nonce.saturating_add(1);
             if intent.nonce != expected_nonce {
@@ -449,7 +453,7 @@ impl OffchainLedger {
             // 本行付款才更新本地账户缓存;跨行收款方节点不能生成付款方 ghost 账户。
             state.pending_debit = state.pending_debit.saturating_add(total_debit);
             state.cached_nonce = intent.nonce;
-        } else if intent.recipient_bank == *my_bank {
+        } else if intent.recipient_bank_cid.as_slice() == my_bank {
             let base_nonce = chain_nonce.unwrap_or(0);
             let local_max_nonce = ledger
                 .pending
@@ -489,9 +493,9 @@ impl OffchainLedger {
         ledger.pending.push(PendingPayment {
             tx_id: intent.tx_id,
             payer: intent.payer.clone(),
-            payer_bank: intent.payer_bank.clone(),
+            payer_bank_cid: intent.payer_bank_cid.clone(),
             recipient: intent.recipient.clone(),
-            recipient_bank: intent.recipient_bank.clone(),
+            recipient_bank_cid: intent.recipient_bank_cid.clone(),
             amount: intent.amount,
             fee: intent.fee,
             nonce: intent.nonce,
@@ -549,16 +553,16 @@ mod tests {
     fn signed_intent(
         pair: &sr25519::Pair,
         tx_id: u8,
-        payer_bank: AccountId32,
-        recipient_bank: AccountId32,
+        payer_bank_cid: Vec<u8>,
+        recipient_bank_cid: Vec<u8>,
         nonce: u64,
     ) -> (NodePaymentIntent, [u8; 64]) {
         let intent = NodePaymentIntent {
             tx_id: H256::repeat_byte(tx_id),
             payer: AccountId32::new(pair.public().0),
-            payer_bank,
+            payer_bank_cid,
             recipient: acc(0x22),
-            recipient_bank,
+            recipient_bank_cid,
             amount: 99,
             fee: 1,
             nonce,
@@ -610,7 +614,7 @@ mod tests {
         let tmp = std::env::temp_dir().join("offchain_ledger_settled_same_bank_test");
         let _ = fs::remove_dir_all(&tmp);
         let ledger = OffchainLedger::new(&tmp);
-        let my_bank = acc(0xAA);
+        let my_bank: Vec<u8> = b"ZS001-PRB08-233384677-2026".to_vec();
         ledger.on_deposited(&acc(1), 1000);
         // 模拟本地扣款 pending_debit
         {
@@ -643,8 +647,8 @@ mod tests {
         let tmp = std::env::temp_dir().join("offchain_ledger_settled_cross_payer_test");
         let _ = fs::remove_dir_all(&tmp);
         let ledger = OffchainLedger::new(&tmp);
-        let my_bank = acc(0xAA);
-        let other_bank = acc(0xBB);
+        let my_bank: Vec<u8> = b"ZS001-PRB08-233384677-2026".to_vec();
+        let other_bank: Vec<u8> = b"AH001-PRB0X-111111111-2026".to_vec();
         ledger.on_deposited(&acc(1), 1000);
         {
             let mut inner = ledger.inner.write().unwrap();
@@ -678,8 +682,8 @@ mod tests {
         let tmp = std::env::temp_dir().join("offchain_ledger_settled_cross_recipient_test");
         let _ = fs::remove_dir_all(&tmp);
         let ledger = OffchainLedger::new(&tmp);
-        let my_bank = acc(0xAA);
-        let other_bank = acc(0xBB);
+        let my_bank: Vec<u8> = b"ZS001-PRB08-233384677-2026".to_vec();
+        let other_bank: Vec<u8> = b"AH001-PRB0X-111111111-2026".to_vec();
         // 付款方 A 在 other_bank,但 A 在本行 ledger 里也有历史状态(不该被错扣)
         ledger.on_deposited(&acc(1), 500); // 本行里 A 的旧余额(比如用户曾经绑过我们)
         ledger.on_payment_settled(
@@ -704,7 +708,7 @@ mod tests {
         let tmp = std::env::temp_dir().join("offchain_ledger_sum_invariant_test");
         let _ = fs::remove_dir_all(&tmp);
         let ledger = OffchainLedger::new(&tmp);
-        let my_bank = acc(0xAA);
+        let my_bank: Vec<u8> = b"ZS001-PRB08-233384677-2026".to_vec();
         ledger.on_deposited(&acc(1), 1000);
         {
             let mut inner = ledger.inner.write().unwrap();
@@ -734,8 +738,8 @@ mod tests {
         let ledger = OffchainLedger::new(&tmp);
         let pair = <sr25519::Pair as Pair>::from_seed(&[0x42u8; 32]);
         let payer = AccountId32::new(pair.public().0);
-        let payer_bank = acc(0xAA);
-        let recipient_bank = acc(0xBB);
+        let payer_bank: Vec<u8> = b"GD001-PRB0T-239565809-2026".to_vec();
+        let recipient_bank: Vec<u8> = b"AH001-PRB0X-111111111-2026".to_vec();
 
         let (intent1, sig1) =
             signed_intent(&pair, 0x11, payer_bank.clone(), recipient_bank.clone(), 1);
@@ -769,8 +773,8 @@ mod tests {
         let _ = fs::remove_dir_all(&tmp);
         let ledger = OffchainLedger::new(&tmp);
         let pair = <sr25519::Pair as Pair>::from_seed(&[0x43u8; 32]);
-        let payer_bank = acc(0xAA);
-        let recipient_bank = acc(0xBB);
+        let payer_bank: Vec<u8> = b"GD001-PRB0T-239565809-2026".to_vec();
+        let recipient_bank: Vec<u8> = b"AH001-PRB0X-111111111-2026".to_vec();
 
         let (intent1, sig1) =
             signed_intent(&pair, 0x21, payer_bank.clone(), recipient_bank.clone(), 1);

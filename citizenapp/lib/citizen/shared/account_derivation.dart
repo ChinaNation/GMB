@@ -39,8 +39,11 @@ const int kOpHe = 0x04;
 /// 个人多签账户 · payload = creator(32B) || account_name。
 const int kOpPersonal = 0x05;
 
+/// 清算账户(私法人股份公司专属)· payload = cid_number。
+const int kOpClearing = 0x06;
+
 /// CID 机构自定义命名账户 · payload = cid_number || account_name。
-const int kOpName = 0x06;
+const int kOpName = 0x07;
 
 const String _domain = 'GMB';
 
@@ -104,6 +107,19 @@ Uint8List deriveInstitutionFeeAccountId(
       ss58Prefix: ss58Prefix,
     );
 
+/// 机构清算账户 id(OP_CLEARING,payload = cid_number,不含名字)。
+///
+/// 仅私法人股份公司(SFGF)自动拥有;地址派生与主/费同构,不参与自定义命名。
+Uint8List deriveInstitutionClearingAccountId(
+  String cidNumber, {
+  int ss58Prefix = kGmbSs58Prefix,
+}) =>
+    deriveAccountId(
+      opTag: kOpClearing,
+      payload: utf8.encode(cidNumber),
+      ss58Prefix: ss58Prefix,
+    );
+
 /// 机构自定义命名账户 id(OP_NAME,payload = cid_number || account_name)。
 ///
 /// 字节对齐链端:account_name 取原始字节不 trim;空名/主/费/制度专属名一律拒绝
@@ -141,6 +157,7 @@ Uint8List deriveInstitutionAccountIdByName(
     kReservedNameStake => (kOpStake, false),
     kReservedNameSafetyFund => (kOpSafetyFund, false),
     kReservedNameHe => (kOpHe, false),
+    kReservedNameClearing => (kOpClearing, false),
     _ => (kOpName, true),
   };
   final payload = <int>[

@@ -12,7 +12,8 @@ pub const OP_STAKE: u8 = 0x02; // 永久质押 · input: cid_number
 pub const OP_SAFETY: u8 = 0x03; // 安全基金 · input: cid_number
 pub const OP_HE: u8 = 0x04; // 两和基金 · input: cid_number
 pub const OP_PERSONAL: u8 = 0x05; // 个人多签账户 · input: creator_32 || account_name
-pub const OP_NAME: u8 = 0x06; // CID 机构自定义命名账户 · input: cid_number || account_name
+pub const OP_CLEARING: u8 = 0x06; // 清算账户(私法人股份公司专属) · input: cid_number
+pub const OP_NAME: u8 = 0x07; // CID 机构自定义命名账户 · input: cid_number || account_name
 
 /// 机构账户受限保留名唯一字面源。
 pub const RESERVED_NAME_MAIN_STR: &str = "主账户";
@@ -20,20 +21,23 @@ pub const RESERVED_NAME_FEE_STR: &str = "费用账户";
 pub const RESERVED_NAME_STAKE_STR: &str = "永久质押";
 pub const RESERVED_NAME_SAFETYFUND_STR: &str = "安全基金";
 pub const RESERVED_NAME_HE_STR: &str = "两和基金";
+pub const RESERVED_NAME_CLEARING_STR: &str = "清算账户";
 
 pub const RESERVED_NAME_MAIN: &[u8] = RESERVED_NAME_MAIN_STR.as_bytes();
 pub const RESERVED_NAME_FEE: &[u8] = RESERVED_NAME_FEE_STR.as_bytes();
 pub const RESERVED_NAME_STAKE: &[u8] = RESERVED_NAME_STAKE_STR.as_bytes();
 pub const RESERVED_NAME_SAFETYFUND: &[u8] = RESERVED_NAME_SAFETYFUND_STR.as_bytes();
 pub const RESERVED_NAME_HE: &[u8] = RESERVED_NAME_HE_STR.as_bytes();
+pub const RESERVED_NAME_CLEARING: &[u8] = RESERVED_NAME_CLEARING_STR.as_bytes();
 
 /// 全部受限保留名。
-pub const RESERVED_ACCOUNT_NAMES: [&[u8]; 5] = [
+pub const RESERVED_ACCOUNT_NAMES: [&[u8]; 6] = [
     RESERVED_NAME_MAIN,
     RESERVED_NAME_FEE,
     RESERVED_NAME_STAKE,
     RESERVED_NAME_SAFETYFUND,
     RESERVED_NAME_HE,
+    RESERVED_NAME_CLEARING,
 ];
 
 /// 机构协议账户类别。
@@ -47,11 +51,16 @@ pub enum InstitutionProtocolAccountKind {
     Stake,
     SafetyFund,
     He,
+    /// 清算账户:仅私法人股份公司(SFGF)自动拥有,承载扫码支付 L2 清算资金。
+    Clearing,
 }
 
 /// 是否为禁止注册的制度专属保留名。
 pub fn is_forbidden_account_name(name: &[u8]) -> bool {
-    name == RESERVED_NAME_STAKE || name == RESERVED_NAME_SAFETYFUND || name == RESERVED_NAME_HE
+    name == RESERVED_NAME_STAKE
+        || name == RESERVED_NAME_SAFETYFUND
+        || name == RESERVED_NAME_HE
+        || name == RESERVED_NAME_CLEARING
 }
 
 /// op_tag 与 payload schema 的唯一映射。
@@ -70,6 +79,9 @@ pub enum AccountKind<'a> {
         cid_number: &'a [u8],
     },
     InstitutionHe {
+        cid_number: &'a [u8],
+    },
+    InstitutionClearing {
         cid_number: &'a [u8],
     },
     InstitutionNamed {
@@ -91,6 +103,7 @@ impl<'a> AccountKind<'a> {
             AccountKind::InstitutionStake { .. } => OP_STAKE,
             AccountKind::InstitutionSafetyFund { .. } => OP_SAFETY,
             AccountKind::InstitutionHe { .. } => OP_HE,
+            AccountKind::InstitutionClearing { .. } => OP_CLEARING,
             AccountKind::InstitutionNamed { .. } => OP_NAME,
             AccountKind::Personal { .. } => OP_PERSONAL,
         }
@@ -106,6 +119,9 @@ impl<'a> AccountKind<'a> {
                 Some(InstitutionProtocolAccountKind::SafetyFund)
             }
             AccountKind::InstitutionHe { .. } => Some(InstitutionProtocolAccountKind::He),
+            AccountKind::InstitutionClearing { .. } => {
+                Some(InstitutionProtocolAccountKind::Clearing)
+            }
             AccountKind::InstitutionNamed { .. } | AccountKind::Personal { .. } => None,
         }
     }
@@ -122,7 +138,8 @@ impl<'a> AccountKind<'a> {
             | AccountKind::InstitutionFee { cid_number }
             | AccountKind::InstitutionStake { cid_number }
             | AccountKind::InstitutionSafetyFund { cid_number }
-            | AccountKind::InstitutionHe { cid_number } => cid_number.to_vec(),
+            | AccountKind::InstitutionHe { cid_number }
+            | AccountKind::InstitutionClearing { cid_number } => cid_number.to_vec(),
             AccountKind::InstitutionNamed {
                 cid_number,
                 account_name,
@@ -167,6 +184,7 @@ pub const fn institution_protocol_account_name(
         InstitutionProtocolAccountKind::Stake => RESERVED_NAME_STAKE,
         InstitutionProtocolAccountKind::SafetyFund => RESERVED_NAME_SAFETYFUND,
         InstitutionProtocolAccountKind::He => RESERVED_NAME_HE,
+        InstitutionProtocolAccountKind::Clearing => RESERVED_NAME_CLEARING,
     }
 }
 
@@ -186,6 +204,9 @@ pub fn institution_protocol_kind_by_name(name: &[u8]) -> Option<InstitutionProto
     }
     if name == RESERVED_NAME_HE {
         return Some(InstitutionProtocolAccountKind::He);
+    }
+    if name == RESERVED_NAME_CLEARING {
+        return Some(InstitutionProtocolAccountKind::Clearing);
     }
     None
 }
@@ -212,6 +233,9 @@ pub fn institution_kind_by_name<'a>(
     }
     if name == RESERVED_NAME_HE {
         return Some(AccountKind::InstitutionHe { cid_number });
+    }
+    if name == RESERVED_NAME_CLEARING {
+        return Some(AccountKind::InstitutionClearing { cid_number });
     }
     Some(AccountKind::InstitutionNamed {
         cid_number,

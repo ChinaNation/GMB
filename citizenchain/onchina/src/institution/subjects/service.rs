@@ -166,6 +166,7 @@ pub fn institution_account_kind_label(
             "safety_fund"
         }
         Some(primitives::account_derive::InstitutionProtocolAccountKind::He) => "he",
+        Some(primitives::account_derive::InstitutionProtocolAccountKind::Clearing) => "clearing",
         None => "named",
     })
 }

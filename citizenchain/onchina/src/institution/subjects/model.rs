@@ -171,6 +171,9 @@ impl Serialize for InstitutionAccount {
                 "safety_fund"
             }
             Some(primitives::account_derive::InstitutionProtocolAccountKind::He) => "he",
+            Some(primitives::account_derive::InstitutionProtocolAccountKind::Clearing) => {
+                "clearing"
+            }
             None => "named",
         };
         let can_close = kind.is_closable_institution_account();

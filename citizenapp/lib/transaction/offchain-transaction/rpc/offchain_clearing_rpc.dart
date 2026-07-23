@@ -42,7 +42,8 @@ class OffchainClearingBankRpc {
 
   /// 查询 L3 当前绑定的清算行主账户 SS58 地址,未绑定返回 `null`。
   ///
-  /// 对应节点侧 `UserBank[user]` storage。扫码付款前调用以确定 `payer_bank`。
+  /// 对应节点侧 `UserBank[user]` storage。返回该用户绑定清算行的 **CID 文本**
+  /// (机构唯一永久主键);扫码付款前调用以确定 `payer_bank_cid` / `recipient_bank_cid`。
   Future<String?> queryUserBank(String userAccountId) async {
     final result = await _callRpc('offchain_queryUserBank', [userAccountId]);
     if (result == null) return null;
@@ -56,9 +57,8 @@ class OffchainClearingBankRpc {
   /// `minFeeFen` 是节点侧常量下限(当前 1 分)。调用方据此本地预计算 `fee_amount`:
   /// `fee = max(round(amount * rateBp / 10000), minFeeFen)`,四舍五入规则与
   /// runtime `fee_config::calc_fee` 对齐(余数 ≥ 5000 进位)。
-  Future<({int rateBp, int minFeeFen})> queryFeeRate(
-      String bankAccountId) async {
-    final result = await _callRpc('offchain_queryFeeRate', [bankAccountId]);
+  Future<({int rateBp, int minFeeFen})> queryFeeRate(String bankCid) async {
+    final result = await _callRpc('offchain_queryFeeRate', [bankCid]);
     if (result is! Map) {
       throw Exception('offchain_queryFeeRate 返回类型异常:$result');
     }
