@@ -18,7 +18,7 @@ enum QrSignErrorCode {
   expired,
   mismatchedRequest,
   mismatchedAccount,
-  mismatchedPubkey,
+  mismatchedSignerPublicKey,
   mismatchedPayloadHash,
   invalidSignature,
 }
@@ -52,7 +52,7 @@ class QrSigner {
   /// 构造 QR_V1 签名请求。
   SignRequestEnvelope buildRequest({
     required String requestId,
-    required String pubkey,
+    required String signerPublicKey,
     required String payloadHex,
     required int action,
     int? nowEpochSeconds,
@@ -60,7 +60,7 @@ class QrSigner {
   }) {
     final now = nowEpochSeconds ?? _now();
     _validateRequestId(requestId);
-    _validateHexField(pubkey, 'pubkey');
+    _validateHexField(signerPublicKey, 'signer_public_key');
     _validateHexField(payloadHex, 'payload');
     return QrEnvelope<SignRequestBody>(
       kind: QrKind.signRequest,
@@ -69,7 +69,7 @@ class QrSigner {
       expiresAt: now + ttlSeconds,
       body: SignRequestBody.fromHex(
         action: action,
-        pubkeyHex: pubkey,
+        signerPublicKeyHex: signerPublicKey,
         payloadHex: payloadHex,
       ),
     );
@@ -91,7 +91,7 @@ class QrSigner {
       issuedAt: request.issuedAt,
       expiresAt: request.expiresAt,
       body: SignResponseBody.fromHex(
-        pubkeyHex: request.body.pubkeyHex,
+        signerPublicKeyHex: request.body.signerPublicKeyHex,
         signatureHex: signatureHex,
       ),
     );
@@ -120,11 +120,11 @@ class QrSigner {
   }
 
   /// 解析签名响应。QR_V1 响应不再携带 payload hash,生成端必须用 request id
-  /// 找回本地 session 中的 action/payload/pubkey 后验签。
+  /// 找回本地 session 中的 action、payload 和 signer_public_key 后验签。
   SignResponseEnvelope parseResponse(
     String raw, {
     required String expectedRequestId,
-    String? expectedPubkey,
+    String? expectedSignerPublicKey,
     String? expectedPayloadHash,
     String? expectedPayloadHex,
     int? expectedAction,
@@ -147,10 +147,11 @@ class QrSigner {
         '签名响应 id 与请求不一致',
       );
     }
-    if (expectedPubkey != null &&
-        _normalizeHex(body.pubkeyHex) != _normalizeHex(expectedPubkey)) {
+    if (expectedSignerPublicKey != null &&
+        _normalizeHex(body.signerPublicKeyHex) !=
+            _normalizeHex(expectedSignerPublicKey)) {
       throw const QrSignException(
-        QrSignErrorCode.mismatchedPubkey,
+        QrSignErrorCode.mismatchedSignerPublicKey,
         '签名响应公钥与当前选中钱包不一致',
       );
     }
@@ -169,7 +170,7 @@ class QrSigner {
         action: expectedAction ?? 0,
       );
       if (!verifySr25519Signature(
-        pubkeyHex: body.pubkeyHex,
+        signerPublicKeyHex: body.signerPublicKeyHex,
         signatureHex: body.signatureHex,
         message: message,
       )) {
@@ -195,12 +196,12 @@ class QrSigner {
   }
 
   static bool verifySr25519Signature({
-    required String pubkeyHex,
+    required String signerPublicKeyHex,
     required String signatureHex,
     required Uint8List message,
   }) {
     try {
-      final pubBytes = Uint8List.fromList(_hexToBytes(pubkeyHex));
+      final pubBytes = Uint8List.fromList(_hexToBytes(signerPublicKeyHex));
       final sigBytes = Uint8List.fromList(_hexToBytes(signatureHex));
       final publicKey = sr25519.PublicKey.newPublicKey(pubBytes);
       final signature = sr25519.Signature.fromBytes(sigBytes);

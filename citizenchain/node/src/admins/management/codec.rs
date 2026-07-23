@@ -1,13 +1,13 @@
-use admin_primitives::{Admin, InstitutionAdmins, PublicAdmin};
+use admin_primitives::{Admin, InstitutionAdmins};
 use codec::Decode;
 
 use super::types::{AdminDecoded, InstitutionAdminsDecoded};
 
 /// 解码机构管理员模块的 `InstitutionAdmins`。
 ///
-/// 公权布局为 `account_id + cid_number + family_name + given_name`，私权布局保持
-/// `account_id + family_name + given_name`。机构 CID 只存在于 storage key；公权记录内
-/// 的 `cid_number` 是管理员公民 CID 引用。岗位、任期和来源另查 entity。
+/// 公权、私权机构统一采用 `account_id + cid_number + family_name + given_name`。
+/// 机构 CID 只存在于 storage key；记录内的 `cid_number` 是管理员公民 CID 引用。
+/// 岗位、任期和来源另查 entity。
 pub fn decode_institution_admins(
     data: &[u8],
     is_public: bool,
@@ -30,6 +30,8 @@ fn decode_private_institution_admins(data: &[u8]) -> Result<InstitutionAdminsDec
         .admins
         .into_iter()
         .map(|admin| {
+            let cid_number = String::from_utf8(admin.cid_number.into_inner())
+                .map_err(|_| "管理员 cid_number 不是 UTF-8".to_string())?;
             let family_name = String::from_utf8(admin.family_name.into_inner())
                 .map_err(|_| "管理员 family_name 不是 UTF-8".to_string())?;
             let given_name = String::from_utf8(admin.given_name.into_inner())
@@ -39,7 +41,7 @@ fn decode_private_institution_admins(data: &[u8]) -> Result<InstitutionAdminsDec
             }
             Ok(AdminDecoded {
                 account_id: format!("0x{}", hex::encode(admin.account_id)),
-                cid_number: String::new(),
+                cid_number,
                 family_name,
                 given_name,
             })
@@ -52,7 +54,7 @@ fn decode_private_institution_admins(data: &[u8]) -> Result<InstitutionAdminsDec
 }
 
 fn decode_public_institution_admins(data: &[u8]) -> Result<InstitutionAdminsDecoded, String> {
-    type RawInstitutionAdmins = InstitutionAdmins<Vec<PublicAdmin<[u8; 32]>>>;
+    type RawInstitutionAdmins = InstitutionAdmins<Vec<Admin<[u8; 32]>>>;
     let mut input = data;
     let decoded = RawInstitutionAdmins::decode(&mut input)
         .map_err(|e| format!("PublicInstitutionAdmins SCALE 解码失败: {e}"))?;
@@ -115,7 +117,7 @@ mod tests {
         let bytes = InstitutionAdmins {
             institution_code: *b"NRC\0",
             admins: vec![
-                PublicAdmin {
+                Admin {
                     account_id: [0xaau8; 32],
                     cid_number: admin_primitives::AdminCidNumber::truncate_from(
                         b"GZ000-CTZN6-198805200-2026".to_vec(),
@@ -127,7 +129,7 @@ mod tests {
                         "三".as_bytes().to_vec(),
                     ),
                 },
-                PublicAdmin {
+                Admin {
                     account_id: [0xbbu8; 32],
                     cid_number: Default::default(),
                     family_name: Default::default(),
@@ -161,12 +163,37 @@ mod tests {
             institution_code: *b"NRC\0",
             admins: vec![Admin {
                 account_id: [0xaau8; 32],
+                cid_number: Default::default(),
                 family_name: admin_primitives::FamilyName::truncate_from(Vec::new()),
                 given_name: admin_primitives::GivenName::truncate_from("员".as_bytes().to_vec()),
             }],
         }
         .encode();
         assert!(decode_institution_admins(&empty_name, false).is_err());
+    }
+
+    #[test]
+    fn private_institution_admins_preserve_citizen_cid() {
+        use codec::Encode;
+
+        let bytes = InstitutionAdmins {
+            institution_code: *b"SFGY",
+            admins: vec![Admin {
+                account_id: [0x24u8; 32],
+                cid_number: admin_primitives::AdminCidNumber::truncate_from(
+                    b"GZ000-CTZN6-198805200-2026".to_vec(),
+                ),
+                family_name: admin_primitives::FamilyName::truncate_from("程".as_bytes().to_vec()),
+                given_name: admin_primitives::GivenName::truncate_from("伟".as_bytes().to_vec()),
+            }],
+        }
+        .encode();
+
+        let decoded = decode_institution_admins(&bytes, false).unwrap();
+        assert_eq!(decoded.institution_code, *b"SFGY");
+        assert_eq!(decoded.admins[0].cid_number, "GZ000-CTZN6-198805200-2026");
+        assert_eq!(decoded.admins[0].family_name, "程");
+        assert_eq!(decoded.admins[0].given_name, "伟");
     }
 
     #[test]

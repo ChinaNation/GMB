@@ -1,21 +1,29 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/pages/create_wallet_flow.dart';
 import 'package:citizenapp/wallet/pages/create_wallet_onboarding_page.dart';
 
-/// 应用级账户门禁：公民 App 的唯一账户是钱包账户，必须至少有 1 个热钱包。
+/// 应用级账户门禁：公民 App 的唯一账户是钱包账户，必须至少有 1 个**有效热钱包**。
 ///
-/// 三态：检查中（与应用锁检查同款极简 loading）→ 无热钱包（含仅有冷钱包）
-/// → 强制创建页；有热钱包 → 放行 [child]。只在冷启动判定一次，使用中删光
-/// 钱包不做即时踢回。
+/// 三态：检查中（与应用锁检查同款极简 loading）→ 无有效热钱包 → 强制初始化页
+/// （可创建新钱包或用助记词恢复）；有有效热钱包 → 放行 [child]。
+///
+/// 「有效」由 [WalletManager.isUsableHotWallet] 单源判定：热钱包 + accountId 规范
+/// + ss58 与 accountId 一致 + 严档种子条目存在。**冷钱包与半残钱包一律不作为依据**
+/// ——只判 null 会让「行还在、身份字段为空」的半残钱包畅通过闸（fail-open）。
+///
+/// 冷启动判定一次；此后监听 [WalletManager.walletsRevision]，运行期删光钱包
+/// 即时踢回初始化页。
 class WalletGate extends StatefulWidget {
   const WalletGate({super.key, required this.child, this.defaultWalletLoader});
 
   final Widget child;
 
-  /// 默认钱包加载器，测试注入用；默认 [WalletManager.getDefaultWallet]
-  /// （列表最靠前的热钱包，无热钱包返回 null）。
+  /// 有效热钱包加载器，测试注入用；默认 [WalletManager.getValidDefaultWallet]
+  /// （列表最靠前的**有效**热钱包，没有则返回 null）。
   final Future<WalletProfile?> Function()? defaultWalletLoader;
 
   @override
@@ -31,14 +39,25 @@ class _WalletGateState extends State<WalletGate> {
   @override
   void initState() {
     super.initState();
+    WalletManager.walletsRevision.addListener(_onWalletsChanged);
     _check();
+  }
+
+  @override
+  void dispose() {
+    WalletManager.walletsRevision.removeListener(_onWalletsChanged);
+    super.dispose();
+  }
+
+  Future<WalletProfile?> _loadValidWallet() {
+    final loader =
+        widget.defaultWalletLoader ?? WalletManager().getValidDefaultWallet;
+    return loader();
   }
 
   Future<void> _check() async {
     try {
-      final loader =
-          widget.defaultWalletLoader ?? WalletManager().getDefaultWallet;
-      final wallet = await loader();
+      final wallet = await _loadValidWallet();
       if (!mounted) return;
       setState(() {
         _status = wallet == null ? _GateStatus.needsWallet : _GateStatus.ready;
@@ -49,6 +68,31 @@ class _WalletGateState extends State<WalletGate> {
       if (!mounted) return;
       setState(() => _error = walletLocalStoreErrorMessage(e));
     }
+  }
+
+  /// 运行期钱包增删（我的 → 钱包列表）后重判。
+  /// 只在已放行状态下才需要重判——其余状态本就没进 App。
+  void _onWalletsChanged() {
+    if (!mounted || _status != _GateStatus.ready) return;
+    unawaited(_kickOutIfNoValidWallet());
+  }
+
+  Future<void> _kickOutIfNoValidWallet() async {
+    WalletProfile? wallet;
+    try {
+      wallet = await _loadValidWallet();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = walletLocalStoreErrorMessage(e));
+      return;
+    }
+    if (!mounted || wallet != null) return;
+    // 踢回前必须清空 AppShell 内已 push 的页面栈：删钱包这个动作本身就发生在
+    // 深层页面（我的 → 钱包列表），不清栈的话初始化页会被旧页面盖住，
+    // 用户看上去仍留在 App 里。
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    if (!mounted) return;
+    setState(() => _status = _GateStatus.needsWallet);
   }
 
   void _retry() {

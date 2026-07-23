@@ -4,23 +4,18 @@ use std::collections::BTreeMap;
 
 use crate::auth::repo;
 use crate::core::chain_runtime;
-use crate::crypto::pubkey::same_admin_account;
+use crate::crypto::pubkey::same_account_id;
 use crate::institution::subjects::http::resolve_created_by;
 use crate::institution::subjects::model::InstitutionDetailOutput;
 use crate::*;
 
-fn balance_lookup_key(account: &str) -> String {
-    let trimmed = account.trim();
-    trimmed
-        .strip_prefix("0x")
-        .or_else(|| trimmed.strip_prefix("0X"))
-        .unwrap_or(trimmed)
-        .to_ascii_lowercase()
+fn balance_lookup_key(account_id: &str) -> String {
+    crate::crypto::pubkey::normalize_account_id(account_id).unwrap_or_default()
 }
 
-fn balance_fen(balances: &BTreeMap<String, Option<String>>, account: &str) -> Option<String> {
+fn balance_fen(balances: &BTreeMap<String, Option<String>>, account_id: &str) -> Option<String> {
     balances
-        .get(balance_lookup_key(account).as_str())
+        .get(balance_lookup_key(account_id).as_str())
         .cloned()
         .flatten()
 }
@@ -83,17 +78,19 @@ pub(crate) async fn list_federal_registry_admins(
         };
     let now = Utc::now();
     let tier1_code = chain_runtime::TIER1_REGISTRY_CODE.to_string();
-    let balance_accounts = province_groups
+    let balance_account_ids = province_groups
         .iter()
         .flat_map(|group| {
             group
                 .assignments
                 .iter()
-                .map(|assignment| assignment.account_hex.clone())
+                .map(|assignment| assignment.account_id.clone())
         })
         .collect::<Vec<_>>();
-    let balance_by_account = match chain_runtime::fetch_account_balances_onchain(&balance_accounts)
-        .await
+    let balance_by_account_id = match chain_runtime::fetch_account_balances_onchain(
+        &balance_account_ids,
+    )
+    .await
     {
         Ok(v) => v,
         Err(err) => {
@@ -102,14 +99,14 @@ pub(crate) async fn list_federal_registry_admins(
         }
     };
     let result = state.db.with_client(move |conn| {
-        let mut rows = Vec::with_capacity(balance_accounts.len());
+        let mut rows = Vec::with_capacity(balance_account_ids.len());
         for group in &province_groups {
             let province_name = group.province_name.clone();
             let _province_code = group.province_code;
             for assignment in &group.assignments {
-                let account = &assignment.account_hex;
+                let account_id = &assignment.account_id;
                 // 缓存缺失即按链上姓、名补一条 built_in 行，保证有本地 id 供换届定位。
-                let admin = match repo::get_admin_by_account_conn(conn, account)? {
+                let admin = match repo::get_admin_by_account_id_conn(conn, account_id)? {
                     Some(mut admin) => {
                         admin.family_name = assignment.family_name.clone();
                         admin.given_name = assignment.given_name.clone();
@@ -119,25 +116,26 @@ pub(crate) async fn list_federal_registry_admins(
                     None => {
                         let row = AdminUser {
                             id: repo::next_admin_id_conn(conn)?,
-                            admin_account: account.clone(),
+                            account_id: account_id.clone(),
                             family_name: assignment.family_name.clone(),
                             given_name: assignment.given_name.clone(),
                             institution_code: tier1_code.clone(),
                             built_in: true,
-                            created_by: "SYSTEM".to_string(),
+                            // 链上同步没有独立创建人；以该管理员自身账户作为可验证来源锚点。
+                            creator_account_id: account_id.clone(),
                             created_at: now,
                             updated_at: None,
                             city_name: String::new(),
                         };
                         repo::upsert_admin_conn(conn, &row)?;
-                        repo::get_admin_by_account_conn(conn, account)?
+                        repo::get_admin_by_account_id_conn(conn, account_id)?
                             .ok_or_else(|| "federal admin cache backfill lost".to_string())?
                     }
                 };
                 rows.push(FederalRegistryAdminRow {
                     id: admin.id,
                     province_name: province_name.clone(),
-                    admin_account: admin.admin_account,
+                    account_id: admin.account_id,
                     family_name: assignment.family_name.clone(),
                     given_name: assignment.given_name.clone(),
                     role_code: assignment.role_code.clone(),
@@ -148,7 +146,7 @@ pub(crate) async fn list_federal_registry_admins(
                     assignment_source: assignment.assignment_source,
                     assignment_source_label: assignment.assignment_source_label.clone(),
                     assignment_source_ref: assignment.assignment_source_ref.clone(),
-                    balance_fen: balance_fen(&balance_by_account, account),
+                    balance_fen: balance_fen(&balance_by_account_id, account_id),
                     built_in: admin.built_in,
                     created_at: admin.created_at,
                     updated_at: admin.updated_at,
@@ -221,20 +219,23 @@ pub(crate) async fn list_own_institution_admins(
             }
         };
     // 列表展示也做一次链上 active 复查,避免后台清退窗口内的失效管理员继续读取。
-    if !chain_assignments.iter().any(|assignment| {
-        same_admin_account(assignment.account_hex.as_str(), ctx.admin_account.as_str())
-    }) {
+    if !chain_assignments
+        .iter()
+        .any(|assignment| same_account_id(assignment.account_id.as_str(), ctx.account_id.as_str()))
+    {
         return api_error(StatusCode::FORBIDDEN, 2002, "not an on-chain admin");
     }
-    let actor_account = ctx.admin_account.clone();
+    let actor_account_id = ctx.account_id.clone();
     let institution_code = ctx.institution_code.clone();
     let cid_short_name = ctx.cid_short_name.clone();
-    let balance_accounts = chain_assignments
+    let balance_account_ids = chain_assignments
         .iter()
-        .map(|assignment| assignment.account_hex.clone())
+        .map(|assignment| assignment.account_id.clone())
         .collect::<Vec<_>>();
-    let balance_by_account = match chain_runtime::fetch_account_balances_onchain(&balance_accounts)
-        .await
+    let balance_by_account_id = match chain_runtime::fetch_account_balances_onchain(
+        &balance_account_ids,
+    )
+    .await
     {
         Ok(v) => v,
         Err(err) => {
@@ -246,10 +247,10 @@ pub(crate) async fn list_own_institution_admins(
         let mut rows = Vec::with_capacity(chain_assignments.len());
         for assignment in chain_assignments {
             let is_self =
-                same_admin_account(assignment.account_hex.as_str(), actor_account.as_str());
-            let balance = balance_fen(&balance_by_account, assignment.account_hex.as_str());
+                same_account_id(assignment.account_id.as_str(), actor_account_id.as_str());
+            let balance = balance_fen(&balance_by_account_id, assignment.account_id.as_str());
             rows.push(OwnInstitutionAdminRow {
-                admin_account: assignment.account_hex,
+                account_id: assignment.account_id,
                 family_name: assignment.family_name,
                 given_name: assignment.given_name,
                 role_code: assignment.role_code,
@@ -326,17 +327,17 @@ pub(crate) async fn get_own_institution(
     }) else {
         return api_error(StatusCode::NOT_FOUND, 1004, "institution not found");
     };
-    let (created_by_family_name, created_by_given_name, created_by_role) =
-        resolve_created_by(&state, &inst.created_by);
+    let (creator_family_name, creator_given_name, creator_institution_code) =
+        resolve_created_by(&state, inst.creator_account_id.as_deref().unwrap_or(""));
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
         data: InstitutionDetailOutput {
             institution: inst,
             accounts,
-            created_by_family_name,
-            created_by_given_name,
-            created_by_role,
+            creator_family_name,
+            creator_given_name,
+            creator_institution_code,
         },
     })
     .into_response()

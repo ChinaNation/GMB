@@ -18,8 +18,13 @@ void main() {
       );
       final envelopes = GroupFanout.fanOut(
         wire: wire,
-        recipientAccounts: const ['acctB', 'acctC', 'acctD'],
-        senderAccount: 'acctA',
+        recipientAccountIds: const [
+          '0x4444444444444444444444444444444444444444444444444444444444444444',
+          'acctC',
+          'acctD'
+        ],
+        senderAccountId:
+            '0x3333333333333333333333333333333333333333333333333333333333333333',
         senderDeviceId: 'devA',
         messageId: 'msg-1',
         nowMillis: 1000,
@@ -28,13 +33,18 @@ void main() {
 
       expect(envelopes.length, 3);
       expect(
-        envelopes.map((e) => e.recipientAccount).toList(),
-        ['acctB', 'acctC', 'acctD'],
+        envelopes.map((e) => e.recipientAccountId).toList(),
+        [
+          '0x4444444444444444444444444444444444444444444444444444444444444444',
+          'acctC',
+          'acctD'
+        ],
       );
       // 同一份密文。
       for (final envelope in envelopes) {
         expect(envelope.mlsWireMessage, const [1, 2, 3, 4]);
-        expect(envelope.senderAccount, 'acctA');
+        expect(envelope.senderAccountId,
+            '0x3333333333333333333333333333333333333333333333333333333333333333');
         expect(envelope.conversationId, 'grp:acctA:n1');
       }
       // envelope_id 唯一。
@@ -51,8 +61,9 @@ void main() {
       );
       final envelopes = GroupFanout.fanOut(
         wire: wire,
-        recipientAccounts: const [],
-        senderAccount: 'acctA',
+        recipientAccountIds: const [],
+        senderAccountId:
+            '0x3333333333333333333333333333333333333333333333333333333333333333',
         senderDeviceId: 'devA',
         messageId: 'msg-2',
         nowMillis: 1,
@@ -65,8 +76,8 @@ void main() {
   group('GroupMembership 上限/权限', () {
     test('建群人数达上限通过、超限拒', () {
       expect(
-        () => GroupMembership.ensureCanCreate(
-            inviteeCount: kMaxGroupMembers - 1),
+        () =>
+            GroupMembership.ensureCanCreate(inviteeCount: kMaxGroupMembers - 1),
         returnsNormally,
       );
       expect(
@@ -95,12 +106,20 @@ void main() {
     test('仅 admin 可加/删', () {
       expect(
         () => GroupMembership.ensureAdmin(
-            adminSet: {'acctA'}, actorAccount: 'acctA'),
+            adminSet: {
+              '0x3333333333333333333333333333333333333333333333333333333333333333'
+            },
+            actorAccountId:
+                '0x3333333333333333333333333333333333333333333333333333333333333333'),
         returnsNormally,
       );
       expect(
         () => GroupMembership.ensureAdmin(
-            adminSet: {'acctA'}, actorAccount: 'acctB'),
+            adminSet: {
+              '0x3333333333333333333333333333333333333333333333333333333333333333'
+            },
+            actorAccountId:
+                '0x4444444444444444444444444444444444444444444444444444444444444444'),
         throwsA(isA<GroupMembershipException>()),
       );
     });
@@ -118,11 +137,11 @@ void main() {
             conversationId: groupId,
             messageKind: MlsMessageKind.application,
           );
-      ChatEnvelope envelopeFor(int messageEpoch) => commitWire(messageEpoch)
-          .toEnvelope(
+      ChatEnvelope envelopeFor(int messageEpoch) =>
+          commitWire(messageEpoch).toEnvelope(
             envelopeId: 'e$messageEpoch',
-            senderAccount: 'acctS',
-            recipientAccount: 'acctR',
+            senderAccountId: 'acctS',
+            recipientAccountId: 'acctR',
             senderDeviceId: 'devS',
             createdAtMillis: 0,
             ttlMillis: 0,

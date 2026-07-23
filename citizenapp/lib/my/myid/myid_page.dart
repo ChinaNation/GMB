@@ -146,7 +146,7 @@ class _MyIdPageState extends State<MyIdPage> {
     final fields = <_PassportField>[
       _PassportField(
         label: '投票账户',
-        value: showValues ? _shortAddress(_state.votingAccount) : null,
+        value: showValues ? _shortAddress(_state.votingAccountId) : null,
         mono: true,
       ),
       _PassportField(
@@ -172,7 +172,8 @@ class _MyIdPageState extends State<MyIdPage> {
         _PassportField(
           label: '公民姓名',
           value: showValues
-              ? _displayValue('${_state.familyName ?? ''}${_state.givenName ?? ''}')
+              ? _displayValue(
+                  '${_state.familyName ?? ''}${_state.givenName ?? ''}')
               : null,
         ),
         _PassportField(

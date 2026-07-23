@@ -148,19 +148,19 @@ async function reconcilePlatformCandidates(
 ): Promise<ReconcileResult> {
   const rows = await env.DB.prepare(
     // active（可能转挂起）与 suspended/creatorPaused（可能链上恢复为 active）都要复核。
-    `SELECT owner_account FROM square_memberships
+    `SELECT account_id FROM square_memberships
       WHERE subscription_status IN ('active', 'suspended', 'creatorPaused')
         AND paid_until <= ?
       ORDER BY paid_until ASC LIMIT ?`,
-  ).bind(point.chainTimestamp, batch).all<{ owner_account: string }>();
+  ).bind(point.chainTimestamp, batch).all<{ account_id: string }>();
   return runBatch(rows.results ?? [], async (row) => {
     const state = await deps.readSubscriptionAtBlock(
       env,
-      row.owner_account,
+      row.account_id,
       { kind: "platform" },
       point.blockHash,
     );
-    await applyPlatformState(env, row.owner_account, state, point);
+    await applyPlatformState(env, row.account_id, state, point);
   });
 }
 
@@ -172,28 +172,28 @@ async function reconcileCreatorCandidates(
 ): Promise<ReconcileResult> {
   const rows = await env.DB.prepare(
     // creatorPaused 在链上会随创作者恢复自动续为 active，必须纳入复核刷新镜像。
-    `SELECT subscriber_account, creator_account FROM square_creator_subscriptions
+    `SELECT subscriber_account_id, creator_account_id FROM square_creator_subscriptions
       WHERE subscription_status IN ('active', 'suspended', 'creatorPaused')
         AND paid_until <= ?
       ORDER BY paid_until ASC LIMIT ?`,
   ).bind(point.chainTimestamp, batch).all<{
-    subscriber_account: string;
-    creator_account: string;
+    subscriber_account_id: string;
+    creator_account_id: string;
   }>();
   return runBatch(rows.results ?? [], async (row) => {
     const state = await deps.readSubscriptionAtBlock(
       env,
-      row.subscriber_account,
-      { kind: "creator", creatorAccount: row.creator_account },
+      row.subscriber_account_id,
+      { kind: "creator", creatorAccountId: row.creator_account_id },
       point.blockHash,
     );
-    await applyCreatorState(env, row.subscriber_account, row.creator_account, state, point);
+    await applyCreatorState(env, row.subscriber_account_id, row.creator_account_id, state, point);
   });
 }
 
 async function applyPlatformState(
   env: Env,
-  ownerAccount: string,
+  accountId: string,
   state: ChainSubscriptionState | null,
   point: FinalizedPoint,
 ): Promise<void> {
@@ -202,15 +202,15 @@ async function applyPlatformState(
       `UPDATE square_memberships SET subscription_status = 'terminated',
         entitlement_lapsed_at = paid_until,
         finalized_block_number = ?, finalized_block_hash = ?, verified_at = ?
-        WHERE owner_account = ?`,
-    ).bind(point.blockNumber, point.blockHash, point.observedAt, ownerAccount).run();
+        WHERE account_id = ?`,
+    ).bind(point.blockNumber, point.blockHash, point.observedAt, accountId).run();
     return;
   }
   await env.DB.prepare(
     `UPDATE square_memberships SET membership_level = ?,
       started_at = ?, last_charged_at = ?, last_charged_price_fen = ?, paid_until = ?,
       subscription_status = ?, finalized_block_number = ?, finalized_block_hash = ?,
-      verified_at = ?, entitlement_lapsed_at = ? WHERE owner_account = ?`,
+      verified_at = ?, entitlement_lapsed_at = ? WHERE account_id = ?`,
   ).bind(
     state.plan.membershipLevel,
     state.startedAt,
@@ -222,14 +222,14 @@ async function applyPlatformState(
     point.blockHash,
     point.observedAt,
     state.status === "active" ? null : state.paidUntil,
-    ownerAccount,
+    accountId,
   ).run();
 }
 
 async function applyCreatorState(
   env: Env,
-  subscriberAccount: string,
-  creatorAccount: string,
+  subscriberAccountId: string,
+  creatorAccountId: string,
   state: ChainSubscriptionState | null,
   point: FinalizedPoint,
 ): Promise<void> {
@@ -237,13 +237,13 @@ async function applyCreatorState(
     await env.DB.prepare(
       `UPDATE square_creator_subscriptions SET subscription_status = 'terminated',
         finalized_block_number = ?, finalized_block_hash = ?, verified_at = ?
-        WHERE subscriber_account = ? AND creator_account = ?`,
+        WHERE subscriber_account_id = ? AND creator_account_id = ?`,
     ).bind(
       point.blockNumber,
       point.blockHash,
       point.observedAt,
-      subscriberAccount,
-      creatorAccount,
+      subscriberAccountId,
+      creatorAccountId,
     ).run();
     return;
   }
@@ -252,7 +252,7 @@ async function applyCreatorState(
       started_at = ?,
       last_charged_at = ?, last_charged_price_fen = ?, paid_until = ?,
       subscription_status = ?, finalized_block_number = ?, finalized_block_hash = ?, verified_at = ?
-      WHERE subscriber_account = ? AND creator_account = ?`,
+      WHERE subscriber_account_id = ? AND creator_account_id = ?`,
   ).bind(
     state.plan.tierId,
     state.plan.billingPeriod,
@@ -264,8 +264,8 @@ async function applyCreatorState(
     point.blockNumber,
     point.blockHash,
     point.observedAt,
-    subscriberAccount,
-    creatorAccount,
+    subscriberAccountId,
+    creatorAccountId,
   ).run();
 }
 

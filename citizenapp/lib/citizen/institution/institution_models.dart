@@ -3,13 +3,13 @@ import 'dart:typed_data';
 /// 公权/私权机构 关闭机构多签账户提案详情（从链上 ProposalData 解码）。
 ///
 /// 链上 SCALE 布局（`pub-mgmt`/`pri-mgmt` + ACTION_CLOSE = 2 前缀之后）：
-///   actor_cid_number + institution_account: AccountId32(32)
+///   actor_cid_number + institution_account_id: AccountId32(32)
 ///   + beneficiary: AccountId32(32) + proposer: AccountId32(32)
 class CloseProposalInfo {
   const CloseProposalInfo({
     required this.proposalId,
     required this.actorCidNumber,
-    required this.institutionAccount,
+    required this.institutionAccountId,
     required this.beneficiary,
     required this.proposer,
     this.status,
@@ -19,7 +19,7 @@ class CloseProposalInfo {
   final String actorCidNumber;
 
   /// 多签账户公钥 hex（32 字节，不含 0x 前缀）。
-  final String institutionAccount;
+  final String institutionAccountId;
 
   /// 受益人 SS58 地址。
   final String beneficiary;
@@ -32,7 +32,7 @@ class CloseProposalInfo {
 
   /// 机构多签 AccountId32。
   Uint8List get institutionBytes {
-    final addrBytes = _hexDecode(institutionAccount);
+    final addrBytes = _hexDecode(institutionAccountId);
     return Uint8List.fromList(addrBytes);
   }
 
@@ -40,7 +40,7 @@ class CloseProposalInfo {
     return CloseProposalInfo(
       proposalId: proposalId,
       actorCidNumber: actorCidNumber,
-      institutionAccount: institutionAccount,
+      institutionAccountId: institutionAccountId,
       beneficiary: beneficiary,
       proposer: proposer,
       status: newStatus,

@@ -47,7 +47,7 @@ fn build_hashed_payload_request(
         body: SignRequestBody {
             action: chain_action_code(call_data)?,
             sig_alg: 1,
-            pubkey: public_key_b64(signer_public_key_bytes)?,
+            signer_public_key: public_key_b64(signer_public_key_bytes)?,
             payload: payload_b64(&payload_for_qr),
         },
     };

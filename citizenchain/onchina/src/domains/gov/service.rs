@@ -56,7 +56,7 @@ struct ChainInstitutionProjection {
     family_name: Option<String>,
     given_name: Option<String>,
     legal_representative_cid_number: Option<String>,
-    legal_representative_account: Option<String>,
+    legal_representative_account_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -65,7 +65,7 @@ struct ChainAccountProjection {
     province_code: String,
     city_code: Option<String>,
     account_name: String,
-    account: String,
+    account_id: String,
 }
 
 /// 当前链上投影版本。HTTP 列表接口只把它作为缓存游标回传,不再表达本地生成目录版本。
@@ -300,7 +300,7 @@ fn parse_chain_institution(
             "chain non-town institution {cid_number} has town_code"
         ));
     }
-    let (family_name, given_name, legal_representative_cid_number, legal_representative_account) =
+    let (family_name, given_name, legal_representative_cid_number, legal_representative_account_id) =
         match info.legal_representative {
             Some(value) => (
                 Some(String::from_utf8(value.family_name).map_err(|_| {
@@ -312,7 +312,7 @@ fn parse_chain_institution(
                 Some(String::from_utf8(value.cid_number).map_err(|_| {
                     format!("chain institution {cid_number} legal representative cid must be utf-8")
                 })?),
-                Some(hex::encode(value.account)),
+                Some(format!("0x{}", hex::encode(value.account_id))),
             ),
             None => (None, None, None, None),
         };
@@ -331,7 +331,7 @@ fn parse_chain_institution(
         family_name,
         given_name,
         legal_representative_cid_number,
-        legal_representative_account,
+        legal_representative_account_id,
         cid_number,
     })
 }
@@ -354,7 +354,7 @@ fn parse_chain_account(
         province_code: province_code.clone(),
         city_code: city_code.clone(),
         account_name,
-        account: hex::encode(item.account),
+        account_id: format!("0x{}", hex::encode(item.account_id)),
     })
 }
 
@@ -617,7 +617,7 @@ fn upsert_institution_chunk(
         .collect::<Vec<_>>();
     let legal_representative_accounts = chunk
         .iter()
-        .map(|item| item.legal_representative_account.clone())
+        .map(|item| item.legal_representative_account_id.clone())
         .collect::<Vec<_>>();
     tx.execute(
         "INSERT INTO ids (cid_number, kind, province_code, city_code)
@@ -641,8 +641,8 @@ fn upsert_institution_chunk(
                 province_code, city_code, town_code, institution_code,
                 education_type, private_type, partnership_kind, has_legal_personality,
                 parent_cid_number, family_name, given_name,
-                legal_representative_cid_number, legal_representative_account,
-                created_by, updated_by, created_at, updated_at,
+                legal_representative_cid_number, legal_representative_account_id,
+                creator_account_id, updater_account_id, created_at, updated_at,
                 institution_source_type
              )
              SELECT
@@ -651,8 +651,8 @@ fn upsert_institution_chunk(
                 province_code, COALESCE(city_code, ''), COALESCE(town_code, ''), institution_code,
                 education_type, NULL::text, NULL::text, NULL::boolean,
                 NULL::text, family_name, given_name,
-                legal_representative_cid_number, legal_representative_account,
-                'CHAIN', 'CHAIN', now(), now(),
+                legal_representative_cid_number, legal_representative_account_id,
+                NULL::text, NULL::text, now(), now(),
                 'CHAIN'
              FROM unnest(
                 $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
@@ -662,7 +662,7 @@ fn upsert_institution_chunk(
                 cid_number, cid_full_name, cid_short_name, category, p1,
                 institution_code, province_code, city_code, town_code,
                 education_type, family_name, given_name,
-                legal_representative_cid_number, legal_representative_account
+                legal_representative_cid_number, legal_representative_account_id
              )
              ON CONFLICT (province_code, cid_number) DO UPDATE SET
                 kind = EXCLUDED.kind,
@@ -681,8 +681,8 @@ fn upsert_institution_chunk(
                 family_name = EXCLUDED.family_name,
                 given_name = EXCLUDED.given_name,
                 legal_representative_cid_number = EXCLUDED.legal_representative_cid_number,
-                legal_representative_account = EXCLUDED.legal_representative_account,
-                updated_by = 'CHAIN',
+                legal_representative_account_id = EXCLUDED.legal_representative_account_id,
+                updater_account_id = NULL,
                 updated_at = now(),
                 institution_source_type = EXCLUDED.institution_source_type
              WHERE subjects.kind IS DISTINCT FROM EXCLUDED.kind
@@ -697,7 +697,7 @@ fn upsert_institution_chunk(
                 OR subjects.family_name IS DISTINCT FROM EXCLUDED.family_name
                 OR subjects.given_name IS DISTINCT FROM EXCLUDED.given_name
                 OR subjects.legal_representative_cid_number IS DISTINCT FROM EXCLUDED.legal_representative_cid_number
-                OR subjects.legal_representative_account IS DISTINCT FROM EXCLUDED.legal_representative_account
+                OR subjects.legal_representative_account_id IS DISTINCT FROM EXCLUDED.legal_representative_account_id
                 OR subjects.institution_source_type IS DISTINCT FROM EXCLUDED.institution_source_type",
             &[
                 &cids,
@@ -782,20 +782,20 @@ fn upsert_account_chunk(
         .collect::<Vec<_>>();
     let accounts = chunk
         .iter()
-        .map(|item| Some(item.account.clone()))
+        .map(|item| Some(item.account_id.clone()))
         .collect::<Vec<Option<String>>>();
     tx.execute(
         "INSERT INTO accounts (
-            cid_number, province_code, city_code, account_name, account, created_at
+            cid_number, province_code, city_code, account_name, account_id, created_at
          )
-         SELECT cid_number, province_code, city_code, account_name, account, now()
+         SELECT cid_number, province_code, city_code, account_name, account_id, now()
          FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[])
-              AS u(cid_number, province_code, city_code, account_name, account)
+              AS u(cid_number, province_code, city_code, account_name, account_id)
          ON CONFLICT (province_code, cid_number, account_name) DO UPDATE SET
             city_code = EXCLUDED.city_code,
-            account = EXCLUDED.account
+            account_id = EXCLUDED.account_id
          WHERE accounts.city_code IS DISTINCT FROM EXCLUDED.city_code
-            OR accounts.account IS DISTINCT FROM EXCLUDED.account",
+            OR accounts.account_id IS DISTINCT FROM EXCLUDED.account_id",
         &[
             &cids,
             &province_codes,

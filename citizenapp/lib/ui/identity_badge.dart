@@ -162,5 +162,7 @@ class _RosetteBadgePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RosetteBadgePainter old) =>
-      old.color != color || old.checked != checked || old.checkColor != checkColor;
+      old.color != color ||
+      old.checked != checked ||
+      old.checkColor != checkColor;
 }

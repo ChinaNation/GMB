@@ -333,13 +333,14 @@ impl<T: Config> InstitutionRoleQuery<T::AccountId> for Pallet<T> {
         let Some(institution) = Institutions::<T>::get(&cid_number) else {
             return false;
         };
-        if !T::InstitutionAdminQuery::is_institution_admin(
+        // 把调用者钱包解析为名册规范账户（运行期按 CID 绑定、否则 account_id）；None = 非该机构管理员。
+        let Some(canonical) = T::InstitutionAdminQuery::resolve_admin_account(
             institution.institution_code,
             cid_number.as_slice(),
             admin,
-        ) {
+        ) else {
             return false;
-        }
+        };
         let Some(role) = InstitutionRoles::<T>::get(&cid_number, &role_code) else {
             return false;
         };
@@ -349,7 +350,7 @@ impl<T: Config> InstitutionRoleQuery<T::AccountId> for Pallet<T> {
         InstitutionRoleAssignments::<T>::get(&cid_number, role_code)
             .into_iter()
             .any(|assignment| {
-                &assignment.account_id == admin
+                assignment.account_id == canonical
                     && Pallet::<T>::is_assignment_effective(&role, &assignment)
             })
     }
@@ -452,14 +453,8 @@ impl<T: Config> InstitutionRoleAuthorizationQuery<T::AccountId> for Pallet<T> {
         let Ok(cid_number) = CidNumberOf::<T>::try_from(role_subject.cid_number.clone()) else {
             return false;
         };
-        let Some(institution) = Institutions::<T>::get(&cid_number) else {
-            return false;
-        };
-        T::InstitutionAdminQuery::is_institution_admin(
-            institution.institution_code,
-            cid_number.as_slice(),
-            admin,
-        ) && <Self as InstitutionRoleQuery<T::AccountId>>::is_active_assignment(
+        // 名册成员校验已并入 is_active_assignment 内的 resolve_admin_account，不再单独调 is_institution_admin。
+        <Self as InstitutionRoleQuery<T::AccountId>>::is_active_assignment(
             cid_number.as_slice(),
             admin,
             role_subject.role_code.as_slice(),

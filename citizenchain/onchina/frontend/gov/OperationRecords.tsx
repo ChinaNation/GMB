@@ -18,8 +18,8 @@ import { tryEncodeSs58 } from '../utils/ss58';
 type AuditLogEntry = {
   seq: number;
   action: string;
-  actor_account: string;
-  target_account?: string | null;
+  actor_account_id: string;
+  target_cid?: string | null;
   /** 结构化事实字段(后端 append_audit_log 只存事实);旧文本行/异常值回退 string */
   detail: Record<string, unknown> | string;
   created_at: string;
@@ -86,7 +86,6 @@ const AUDIT_DETAIL_KEY_LABEL: Record<string, string> = {
   status: '状态',
   reason: '原因',
   updates: '更新条数',
-  wallet_replaced: '更换投票账户数',
   releases: '解除绑定数',
   unmatched_bindings: '未匹配绑定数',
   unmatched_releases: '未匹配解除数',
@@ -184,7 +183,7 @@ export const OperationRecords: React.FC<Props> = ({ auth, cidNumber }) => {
           },
           {
             title: '操作者账户',
-            dataIndex: 'actor_account',
+            dataIndex: 'actor_account_id',
             width: 240,
             // 账户给人看时优先转 SS58;完整显示不截断,允许换行。
             render: (v: string) => (

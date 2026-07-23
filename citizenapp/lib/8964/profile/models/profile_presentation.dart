@@ -4,13 +4,13 @@
 /// 身份或权限判断。同一账户在不同页面、设备和重启后得到相同结果。
 class ProfilePresentation {
   const ProfilePresentation._({
-    required this.ownerAccount,
+    required this.accountId,
     required this.fallbackName,
     required this.avatarAsset,
     required this.bannerAsset,
   });
 
-  final String ownerAccount;
+  final String accountId;
   final String fallbackName;
   final String avatarAsset;
   final String bannerAsset;
@@ -76,8 +76,8 @@ class ProfilePresentation {
     'assets/profile_defaults/couleur-tomatoes-10368988_1280.jpg',
   ];
 
-  factory ProfilePresentation.forAccount(String ownerAccount) {
-    final account = ownerAccount.trim();
+  factory ProfilePresentation.forAccount(String accountId) {
+    final account = accountId.trim();
     // 空账户只用于页面尚未加载钱包时的稳定占位，不代表真实用户。
     final seed = account.isEmpty ? 'citizenapp-default-profile' : account;
     final namePrefix = _stableHash(seed, 0x4e414d45) % _namePrefixes.length;
@@ -88,7 +88,7 @@ class ProfilePresentation {
       bannerIndex = (bannerIndex + 1) % assets.length;
     }
     return ProfilePresentation._(
-      ownerAccount: account,
+      accountId: account,
       fallbackName: '${_namePrefixes[namePrefix]}${_nameSuffixes[nameSuffix]}',
       avatarAsset: assets[avatarIndex],
       bannerAsset: assets[bannerIndex],
@@ -108,11 +108,11 @@ class ProfilePresentation {
   }
 
   bool _isAccountDerived(String candidate) {
-    if (ownerAccount.isEmpty) return false;
-    if (candidate == ownerAccount) return true;
-    if (ownerAccount.length <= 12) return false;
-    final prefix = ownerAccount.substring(0, 6);
-    final suffix = ownerAccount.substring(ownerAccount.length - 6);
+    if (accountId.isEmpty) return false;
+    if (candidate == accountId) return true;
+    if (accountId.length <= 12) return false;
+    final prefix = accountId.substring(0, 6);
+    final suffix = accountId.substring(accountId.length - 6);
     return candidate == '$prefix...$suffix' || candidate == '$prefix…$suffix';
   }
 

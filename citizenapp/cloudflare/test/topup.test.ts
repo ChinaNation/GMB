@@ -12,7 +12,7 @@ const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a
 const USDC_TESTNET = '0x036cbd53842c5426634e7929541ec2318f3dcf7e';
 const RECV = `0x${'ab'.repeat(20)}`;
 const PAYER = `0x${'cd'.repeat(20)}`;
-const GMB_ADDRESS = 'gmbwalletaddressabcdefghijklmnop';
+const ACCOUNT_ID = `0x${'77'.repeat(32)}`;
 const TX_HASH = `0x${'11'.repeat(32)}`;
 const GMB_TX_HASH = `0x${'22'.repeat(32)}`;
 
@@ -145,7 +145,7 @@ function submit(env: Env): Promise<Response> {
       body: JSON.stringify({
         token: 'USDC',
         package_id: 'pkg_15',
-        gmb_address: GMB_ADDRESS,
+        account_id: ACCOUNT_ID,
         evm_tx_hash: TX_HASH,
         payer_address: PAYER,
       }),
@@ -220,7 +220,7 @@ interface Row {
   payer_address: string | null;
   recv_address: string;
   pay_amount: string;
-  gmb_address: string;
+  account_id: string;
   coin_fen: string;
   package_id: string;
   status: string;
@@ -268,7 +268,7 @@ class FakeStmt {
 
   async run(): Promise<{ meta: { changes: number } }> {
     if (this.sql.includes('INSERT OR IGNORE INTO topup_orders')) {
-      const [orderId, chainId, token, tokenContract, txHash, payer, recv, payAmount, gmbAddress, coinFen, packageId, confirmedAt] =
+      const [orderId, chainId, token, tokenContract, txHash, payer, recv, payAmount, accountId, coinFen, packageId, confirmedAt] =
         this.args as [string, number, string, string, string, string | null, string, string, string, string, string, number];
       // 幂等唯一键 (chain_id, evm_tx_hash)。
       for (const row of this.db.rows.values()) {
@@ -283,7 +283,7 @@ class FakeStmt {
         payer_address: payer,
         recv_address: recv,
         pay_amount: payAmount,
-        gmb_address: gmbAddress,
+        account_id: accountId,
         coin_fen: coinFen,
         package_id: packageId,
         status: 'pending',

@@ -14,7 +14,7 @@ void main() {
       signer = QrSigner();
       request = signer.buildRequest(
         requestId: 'tx-test-12345678901234',
-        pubkey:
+        signerPublicKey:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         payloadHex: '0x01020304',
         action: QrActions.transferWithRemark,
@@ -28,7 +28,7 @@ void main() {
           home: QrSignSessionPage(
             request: request,
             requestJson: requestJson,
-            expectedPubkey: request.body.pubkeyHex,
+            expectedSignerPublicKey: request.body.signerPublicKeyHex,
           ),
         ),
       );
@@ -54,7 +54,7 @@ void main() {
                     builder: (_) => QrSignSessionPage(
                       request: request,
                       requestJson: requestJson,
-                      expectedPubkey: request.body.pubkeyHex,
+                      expectedSignerPublicKey: request.body.signerPublicKeyHex,
                     ),
                   ),
                 );
@@ -78,7 +78,7 @@ void main() {
         (tester) async {
       final expiredRequest = signer.buildRequest(
         requestId: 'tx-expired-12345678901',
-        pubkey:
+        signerPublicKey:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         payloadHex: '0x01020304',
         action: QrActions.transferWithRemark,
@@ -91,7 +91,7 @@ void main() {
           home: QrSignSessionPage(
             request: expiredRequest,
             requestJson: expiredJson,
-            expectedPubkey: expiredRequest.body.pubkeyHex,
+            expectedSignerPublicKey: expiredRequest.body.signerPublicKeyHex,
           ),
         ),
       );

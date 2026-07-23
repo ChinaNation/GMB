@@ -21,11 +21,11 @@ class AdminSetDiffCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final current = {
       for (final admin in currentAdmins)
-        AdminAccountIdCodec.normalizeHex(admin.admin_account): admin,
+        AdminAccountIdCodec.requireAccountId(admin.account_id): admin,
     };
     final next = {
       for (final admin in admins)
-        AdminAccountIdCodec.normalizeHex(admin.admin_account): admin,
+        AdminAccountIdCodec.requireAccountId(admin.account_id): admin,
     };
     final added = next.entries
         .where((entry) => !current.containsKey(entry.key))
@@ -78,8 +78,8 @@ class AdminSetDiffCard extends StatelessWidget {
             dense: true,
             title: Text('${admin.family_name}${admin.given_name}'),
             subtitle: Text(
-              '${ss58FromHex(admin.admin_account)}\n'
-              '余额：${AmountFormat.formatThousands(balances[AdminAccountIdCodec.normalizeHex(admin.admin_account)])} 元',
+              '${ss58FromAccountIdText(admin.account_id)}\n'
+              '余额：${AmountFormat.formatThousands(balances[AdminAccountIdCodec.requireAccountId(admin.account_id)])} 元',
             ),
           ),
           const SizedBox(height: 6),

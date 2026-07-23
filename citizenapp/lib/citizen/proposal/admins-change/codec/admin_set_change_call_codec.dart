@@ -37,11 +37,16 @@ class PersonalAdminsChangeCallCodec {
     output.write(accountId);
     output.write(CompactBigIntCodec.codec.encode(BigInt.from(admins.length)));
     for (final admin in admins) {
-      final bytes = AdminAccountIdCodec.hexDecode(admin.admin_account);
+      final bytes = AdminAccountIdCodec.fromAccountIdText(admin.account_id);
       if (bytes.length != 32) {
         throw ArgumentError('管理员公钥必须为 32 字节');
       }
       output.write(bytes);
+      // 统一 Admin 恒带公民 CID（个人多签为空 → Compact(0)）。
+      final cidBytes = utf8.encode(admin.cid_number);
+      output
+          .write(CompactBigIntCodec.codec.encode(BigInt.from(cidBytes.length)));
+      output.write(Uint8List.fromList(cidBytes));
       _writeName(output, admin.family_name, 'family_name');
       _writeName(output, admin.given_name, 'given_name');
     }

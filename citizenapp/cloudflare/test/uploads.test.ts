@@ -26,7 +26,7 @@ describe('upload validation', () => {
     const input = {
       uploadId: 'squ_test',
       postId: 'sqp_test',
-      ownerAccount: 'gmb_owner',
+      accountId: '0x8888888888888888888888888888888888888888888888888888888888888888',
       manifestHash: '11'.repeat(32)
     };
 

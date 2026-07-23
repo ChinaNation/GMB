@@ -2,7 +2,8 @@
 
 任务需求：
 在账户派生单源新增一类机构协议账户「清算账户」，op_tag = 0x06；原「自定义命名账户」由 0x06 改到 0x07。
-私法人股份公司（机构码 SFGF）注册时，除主账户、费用账户外，自动多派生并登记一个清算账户。
+清算行资格机构注册时，除主账户、费用账户外，自动多派生并登记一个清算账户。
+**资格唯二（2026-07-23 定稿）**：`SFGF` 私法人股份公司本身，以及**父级机构码为 `SFGF` 的 `UNIN` 非法人组织**（股份公司的非法人分支机构，如银行分支行）；其余机构一律无清算账户。单源 `primitives::institution_constraints::required_protocol_account_kinds(code, cid, parent_cid)`。
 五端（链端权威源 / onchina-CID / CitizenApp-Dart 两文件）逐字节对齐，定死进创世 WASM。
 
 所属模块：

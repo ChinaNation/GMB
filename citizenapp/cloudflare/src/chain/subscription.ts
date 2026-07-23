@@ -5,7 +5,7 @@ import { resourceLimit } from "../limits/catalog";
 import { bytesToHex, hexToBytes } from "../shared/signing_message";
 import {
   concat,
-  decodeOwnerAccount,
+  decodeAccountId,
   storageMapKey,
   storageValueKey,
 } from "./storage_key";
@@ -23,7 +23,7 @@ import {
 
 export type SubscriptionIssuer =
   | { kind: "platform" }
-  | { kind: "creator"; creatorAccount: string };
+  | { kind: "creator"; creatorAccountId: string };
 
 export type SubscriptionStatus =
   | "active"
@@ -65,14 +65,14 @@ export type SubscriptionBusinessAction =
   | { kind: "platform_change"; membershipLevel: PlatformLevel }
   | {
       kind: "creator_subscribe";
-      creatorAccount: string;
+      creatorAccountId: string;
       tierId: string;
       billingPeriod: BillingPeriod;
     }
-  | { kind: "creator_cancel"; creatorAccount: string }
+  | { kind: "creator_cancel"; creatorAccountId: string }
   | {
       kind: "creator_change";
-      creatorAccount: string;
+      creatorAccountId: string;
       tierId: string;
       billingPeriod: BillingPeriod;
     }
@@ -94,7 +94,7 @@ export interface VerifiedFinalizedTransaction {
 }
 
 interface TransactionConfirmationRow {
-  owner_account: string;
+  account_id: string;
   block_hash: string;
   block_number: number;
   extrinsic_index: number;
@@ -134,26 +134,26 @@ function encodeIssuerKey(issuer: SubscriptionIssuer): Uint8Array {
   }
   return concat([
     new Uint8Array([CREATOR_ISSUER_TAG]),
-    decodeOwnerAccount(issuer.creatorAccount),
+    decodeAccountId(issuer.creatorAccountId),
   ]);
 }
 
 export function buildSubscriptionKey(
-  subscriberAccount: string,
+  subscriberAccountId: string,
   issuer: SubscriptionIssuer,
 ): Uint8Array {
   return storageMapKey(
     "SquarePost",
     "Subscriptions",
-    concat([decodeOwnerAccount(subscriberAccount), encodeIssuerKey(issuer)]),
+    concat([decodeAccountId(subscriberAccountId), encodeIssuerKey(issuer)]),
   );
 }
 
-export function buildCreatorPlansKey(creatorAccount: string): Uint8Array {
+export function buildCreatorPlansKey(creatorAccountId: string): Uint8Array {
   return storageMapKey(
     "SquarePost",
     "CreatorPlans",
-    decodeOwnerAccount(creatorAccount),
+    decodeAccountId(creatorAccountId),
   );
 }
 
@@ -332,10 +332,10 @@ function readCompactCount(
 
 export async function readSubscription(
   env: Env,
-  subscriberAccount: string,
+  subscriberAccountId: string,
   issuer: SubscriptionIssuer,
 ): Promise<ChainSubscriptionState | null> {
-  const key = buildSubscriptionKey(subscriberAccount, issuer);
+  const key = buildSubscriptionKey(subscriberAccountId, issuer);
   const hex = await fetchFinalizedChainStorage(env, `0x${bytesToHex(key)}`);
   return hex ? decodeSubscriptionState(hexToBytes(hex)) : null;
 }
@@ -343,27 +343,27 @@ export async function readSubscription(
 /** 在指定 finalized 区块读取订阅，确保交易证明、状态和链时间属于同一状态快照。 */
 export async function readSubscriptionAtBlock(
   env: Env,
-  subscriberAccount: string,
+  subscriberAccountId: string,
   issuer: SubscriptionIssuer,
   blockHash: string,
 ): Promise<ChainSubscriptionState | null> {
-  const key = buildSubscriptionKey(subscriberAccount, issuer);
+  const key = buildSubscriptionKey(subscriberAccountId, issuer);
   const hex = await fetchChainStorage(env, `0x${bytesToHex(key)}`, blockHash);
   return hex ? decodeSubscriptionState(hexToBytes(hex)) : null;
 }
 
 export function readPlatformSubscription(
   env: Env,
-  subscriberAccount: string,
+  subscriberAccountId: string,
 ): Promise<ChainSubscriptionState | null> {
-  return readSubscription(env, subscriberAccount, { kind: "platform" });
+  return readSubscription(env, subscriberAccountId, { kind: "platform" });
 }
 
 export async function readCreatorPlans(
   env: Env,
-  creatorAccount: string,
+  creatorAccountId: string,
 ): Promise<ChainCreatorTier[]> {
-  const key = buildCreatorPlansKey(creatorAccount);
+  const key = buildCreatorPlansKey(creatorAccountId);
   const hex = await fetchFinalizedChainStorage(env, `0x${bytesToHex(key)}`);
   return hex ? decodeCreatorPlans(hexToBytes(hex)) : [];
 }
@@ -372,10 +372,10 @@ export async function readCreatorPlans(
 /** 在指定 finalized 区块读取创作者付款档位，展示字段不得进入该链上结构。 */
 export async function readCreatorPlansAtBlock(
   env: Env,
-  creatorAccount: string,
+  creatorAccountId: string,
   blockHash: string,
 ): Promise<ChainCreatorTier[]> {
-  const key = buildCreatorPlansKey(creatorAccount);
+  const key = buildCreatorPlansKey(creatorAccountId);
   const hex = await fetchChainStorage(env, `0x${bytesToHex(key)}`, blockHash);
   return hex ? decodeCreatorPlans(hexToBytes(hex)) : [];
 }
@@ -404,7 +404,7 @@ export async function readChainTimestampAtBlock(
  */
 export async function verifyFinalizedSubscriptionTransaction(
   env: Env,
-  ownerAccount: string,
+  accountId: string,
   expectedAction: SubscriptionBusinessAction,
   proof: FinalizedTransactionProofInput,
 ): Promise<VerifiedFinalizedTransaction> {
@@ -421,8 +421,8 @@ export async function verifyFinalizedSubscriptionTransaction(
   }
 
   const decoded = decodeSignedSubscriptionExtrinsic(encoded);
-  if (!equalBytes(decoded.signerAccount, decodeOwnerAccount(ownerAccount))) {
-    throw new HttpError(403, "subscription_tx_owner_mismatch", "交易签名账户与登录钱包不一致");
+  if (!equalBytes(decoded.signerAccountId, decodeAccountId(accountId))) {
+    throw new HttpError(403, "subscription_tx_account_mismatch", "交易签名账户与登录钱包不一致");
   }
   if (!businessActionsEqual(decoded.action, expectedAction)) {
     throw new HttpError(409, "subscription_tx_action_mismatch", "链上交易与镜像业务操作不一致");
@@ -465,7 +465,7 @@ export async function verifyFinalizedSubscriptionTransaction(
  */
 export async function bindFinalizedTransactionConfirmation(
   env: Env,
-  ownerAccount: string,
+  accountId: string,
   transaction: VerifiedFinalizedTransaction,
   requestHash: string,
   confirmedAt: number,
@@ -475,13 +475,13 @@ export async function bindFinalizedTransactionConfirmation(
   }
   await env.DB.prepare(
     `INSERT OR IGNORE INTO chain_transaction_confirmations
-      (tx_hash, owner_account, block_hash, block_number, extrinsic_index, action_kind,
+      (tx_hash, account_id, block_hash, block_number, extrinsic_index, action_kind,
        request_hash, chain_timestamp, confirmed_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       transaction.txHash,
-      ownerAccount,
+      accountId,
       transaction.blockHash,
       transaction.blockNumber,
       transaction.extrinsicIndex,
@@ -492,7 +492,7 @@ export async function bindFinalizedTransactionConfirmation(
     )
     .run();
   const saved = await env.DB.prepare(
-    `SELECT owner_account, block_hash, block_number, extrinsic_index, action_kind,
+    `SELECT account_id, block_hash, block_number, extrinsic_index, action_kind,
         request_hash, chain_timestamp
       FROM chain_transaction_confirmations WHERE tx_hash = ?`,
   )
@@ -500,7 +500,7 @@ export async function bindFinalizedTransactionConfirmation(
     .first<TransactionConfirmationRow>();
   if (
     !saved ||
-    saved.owner_account !== ownerAccount ||
+    saved.account_id !== accountId ||
     saved.block_hash !== transaction.blockHash ||
     saved.block_number !== transaction.blockNumber ||
     saved.extrinsic_index !== transaction.extrinsicIndex ||
@@ -538,7 +538,7 @@ export async function updateChainClock(
 }
 
 function decodeSignedSubscriptionExtrinsic(encoded: Uint8Array): {
-  signerAccount: Uint8Array;
+  signerAccountId: Uint8Array;
   action: SubscriptionBusinessAction;
 } {
   const outerLength = readCompactUnsigned(encoded, 0);
@@ -552,7 +552,7 @@ function decodeSignedSubscriptionExtrinsic(encoded: Uint8Array): {
   if (encoded[offset++] !== 0x84 || encoded[offset++] !== 0x00) {
     throw new HttpError(400, "invalid_signed_extrinsic", "只接受账户签名的目标版本交易");
   }
-  const signerAccount = sliceExact(encoded, offset, 32);
+  const signerAccountId = sliceExact(encoded, offset, 32);
   offset += 32;
   if (encoded[offset++] !== 0x01) {
     throw new HttpError(400, "invalid_signed_extrinsic", "订阅交易签名类型不合法");
@@ -568,7 +568,7 @@ function decodeSignedSubscriptionExtrinsic(encoded: Uint8Array): {
   if (decodedCall.offset !== encoded.length) {
     throw new HttpError(400, "invalid_signed_extrinsic", "订阅交易含有尾随字节");
   }
-  return { signerAccount, action: decodedCall.action };
+  return { signerAccountId, action: decodedCall.action };
 }
 
 function decodeSubscriptionCall(
@@ -593,7 +593,7 @@ function decodeSubscriptionCall(
     return issuer.kind === "platform"
       ? { action: { kind: "platform_cancel" }, offset }
       : {
-          action: { kind: "creator_cancel", creatorAccount: issuer.creatorAccount },
+          action: { kind: "creator_cancel", creatorAccountId: issuer.creatorAccountId },
           offset,
         };
   }
@@ -614,7 +614,7 @@ function decodeSubscriptionCall(
     return {
       action: {
         kind: callIndex === 1 ? "creator_subscribe" : "creator_change",
-        creatorAccount: issuer.creatorAccount,
+        creatorAccountId: issuer.creatorAccountId,
         tierId: decodedPlan.tierId,
         billingPeriod: decodedPlan.billingPeriod,
       },
@@ -629,14 +629,14 @@ function decodeCallIssuer(
   offset: number,
 ):
   | { kind: "platform"; offset: number }
-  | { kind: "creator"; creatorAccount: string; offset: number } {
+  | { kind: "creator"; creatorAccountId: string; offset: number } {
   const tag = data[offset++];
   if (tag === PLATFORM_ISSUER_TAG) return { kind: "platform", offset };
   if (tag !== CREATOR_ISSUER_TAG) {
     throw new HttpError(400, "invalid_subscription_call", "订阅收款主体不合法");
   }
   const account = sliceExact(data, offset, 32);
-  return { kind: "creator", creatorAccount: `0x${bytesToHex(account)}`, offset: offset + 32 };
+  return { kind: "creator", creatorAccountId: `0x${bytesToHex(account)}`, offset: offset + 32 };
 }
 
 function decodeCallPlan(
@@ -785,14 +785,14 @@ function businessActionsEqual(
     return actual.membershipLevel === expected.membershipLevel;
   }
   if (actual.kind === "creator_cancel" && expected.kind === "creator_cancel") {
-    return accountHex(expected.creatorAccount) === actual.creatorAccount;
+    return accountHex(expected.creatorAccountId) === actual.creatorAccountId;
   }
   if (
     (actual.kind === "creator_subscribe" || actual.kind === "creator_change") &&
     (expected.kind === "creator_subscribe" || expected.kind === "creator_change")
   ) {
     return (
-      accountHex(expected.creatorAccount) === actual.creatorAccount &&
+      accountHex(expected.creatorAccountId) === actual.creatorAccountId &&
       actual.tierId === expected.tierId &&
       actual.billingPeriod === expected.billingPeriod
     );
@@ -815,7 +815,7 @@ function creatorTiersEqual(actual: ChainCreatorTier[], expected: ChainCreatorTie
 }
 
 function accountHex(account: string): string {
-  return `0x${bytesToHex(decodeOwnerAccount(account))}`;
+  return `0x${bytesToHex(decodeAccountId(account))}`;
 }
 
 function strictUtf8(value: Uint8Array): string {

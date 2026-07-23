@@ -1,11 +1,11 @@
 // 链交易冷签 hook(ADR-031 D6/D7)。
 // 占号 / 吊销 / 身份上链的 prepare 都返回 { request_id, sign_request }:
 // 本 hook 弹出管理员 CitizenWallet 请求二维码，扫描签名响应并解析
-// { signer_pubkey, signature }，再由 OnChina 统一组装提交。CitizenWallet 只签名一次并展示响应二维码。
+// { signer_public_key, signature }，再由 OnChina 统一组装提交。CitizenWallet 只签名一次并展示响应二维码。
 //
 // 用法:
 //   const { signChain, chainSignModal } = useChainSign();
-//   const { signer_pubkey, signature } = await signChain(request_id, sign_request);
+//   const { signer_public_key, signature } = await signChain(request_id, sign_request);
 //   ...在 JSX 末尾渲染 {chainSignModal}
 
 import { useCallback, useState, type ReactNode } from 'react';
@@ -15,7 +15,7 @@ import { CitizenSignatureModal } from './CitizenSignatureModal';
 import { notice } from '../utils/notice';
 import { adminHeaders, request } from '../utils/http';
 
-export type ChainSignResult = { signer_pubkey: string; signature: string };
+export type ChainSignResult = { signer_public_key: string; signature: string };
 
 /** 所有 OnChina 链交易 prepare 接口共用的最小返回结构。 */
 export type ChainSignPrepare = { request_id: string; sign_request: string };
@@ -39,7 +39,7 @@ export type ChainSubmitResult<TCitizen = unknown> = {
 export async function submitChainSign<TCitizen = unknown>(
   auth: AdminAuth,
   requestId: string,
-  signerPubkey: string,
+  signer_public_key: string,
   signature: string,
 ): Promise<ChainSubmitResult<TCitizen>> {
   return request<ChainSubmitResult<TCitizen>>('/api/v1/admin/chain/submit', {
@@ -50,7 +50,7 @@ export async function submitChainSign<TCitizen = unknown>(
     },
     body: JSON.stringify({
       request_id: requestId,
-      signer_pubkey: signerPubkey,
+      signer_public_key,
       signature,
     }),
   });
@@ -64,7 +64,7 @@ type PendingChainSign = {
 };
 
 export interface UseChainSignResult {
-  /** 展示 sign_request 二维码，扫描 CitizenWallet 响应并解析 signer_pubkey / signature。 */
+  /** 展示 sign_request 二维码，扫描 CitizenWallet 响应并解析 signer_public_key / signature。 */
   signChain: (requestId: string, signRequest: string) => Promise<ChainSignResult>;
   /** 需在组件 JSX 中渲染的扫码签名弹窗。 */
   chainSignModal: ReactNode;
@@ -91,10 +91,10 @@ export function useChainSign(title = '管理员公民钱包签名'): UseChainSig
         if (signed.challenge_id !== pending.requestId) {
           throw new Error('签名响应与当前请求不匹配');
         }
-        if (!signed.signer_pubkey) {
-          throw new Error('签名响应缺少 signer_pubkey');
+        if (!signed.signer_public_key) {
+          throw new Error('签名响应缺少 signer_public_key');
         }
-        pending.resolve({ signer_pubkey: signed.signer_pubkey, signature: signed.signature });
+        pending.resolve({ signer_public_key: signed.signer_public_key, signature: signed.signature });
         setPending(null);
       } catch (err) {
         pending.reject(err);

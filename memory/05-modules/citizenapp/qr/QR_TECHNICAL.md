@@ -73,7 +73,7 @@ CitizenApp 扫描 `k=2` 签名响应:
 
 任何新增扫码签名场景必须先登记 action,再复用这些入口。
 
-管理员人员字段的协议顺序固定为 `admin_account + family_name + given_name`。CitizenApp 构造个人多签创建、个人管理员更换或机构相关链交易时，必须把三个字段完整写入 `review_payload`；CitizenWallet 只在确认页合并显示姓名，不按姓名授权。同一次业务操作只生成一个签名请求并接收一个签名响应，不叠加第二次确认签名。
+管理员人员字段的协议顺序固定为 `account_id + family_name + given_name`。CitizenApp 构造个人多签创建、个人管理员更换或机构相关链交易时，必须把三个字段完整写入 `review_payload`；CitizenWallet 只在确认页合并显示姓名，不按姓名授权。同一次业务操作只生成一个签名请求并接收一个签名响应，不叠加第二次确认签名。
 
 ## 6. 测试要求
 
@@ -82,4 +82,5 @@ CitizenApp 扫描 `k=2` 签名响应:
 - `test/signer/qr_signer_test.dart`
 - 钱包码相关 widget/page 测试
 
-测试必须覆盖:短字段往返、未知 `k/a` 拒绝、签名响应 id/pubkey 错配拒绝、链 payload 大于 256 字节哈希签名。
+测试必须覆盖：短字段往返、未知 `k/a` 拒绝、签名响应
+`request_id / signer_public_key` 错配拒绝、链 payload 大于 256 字节哈希签名。

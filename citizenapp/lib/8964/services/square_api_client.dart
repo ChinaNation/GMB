@@ -25,13 +25,13 @@ class SquareApiException implements Exception {
 class SquareSession {
   const SquareSession({
     required this.sessionToken,
-    required this.ownerAccount,
+    required this.accountId,
     required this.expiresAt,
     this.signRequest,
   });
 
   final String sessionToken;
-  final String ownerAccount;
+  final String accountId;
   final int expiresAt;
   final SquareDeviceSigner? signRequest;
 
@@ -394,15 +394,15 @@ class SquareApiClient
   Uri get baseUri => Uri.parse(baseUrl);
 
   Future<SquareSession> ensureSession({
-    required String ownerAccount,
+    required String accountId,
     required SquareLoginSigner signLoginPayload,
     Future<void> Function()? onDeviceNotRegistered,
   }) async {
-    final cached = _sessions[ownerAccount];
+    final cached = _sessions[accountId];
     if (cached != null && cached.isUsable) return cached;
 
     try {
-      return await _establishSession(ownerAccount, signLoginPayload);
+      return await _establishSession(accountId, signLoginPayload);
     } on SquareApiException catch (e) {
       // 设备子钥未注册（首次 / 换机 / 重装）→ 懒注册后重试一次。
       if (e.errorCode != 'device_not_registered' ||
@@ -410,16 +410,16 @@ class SquareApiClient
         rethrow;
       }
       await onDeviceNotRegistered();
-      return _establishSession(ownerAccount, signLoginPayload);
+      return _establishSession(accountId, signLoginPayload);
     }
   }
 
   Future<SquareSession> _establishSession(
-    String ownerAccount,
+    String accountId,
     SquareLoginSigner signLoginPayload,
   ) async {
     final challenge = await _postJson('/v1/square/auth/challenge', {
-      'owner_account': ownerAccount,
+      'account_id': accountId,
     });
     final signingPayloadHex = challenge['signing_payload_hex'];
     final challengeId = challenge['challenge_id'];
@@ -436,7 +436,7 @@ class SquareApiClient
     final signature = await signLoginPayload(loginMessage);
     final session = await _postJson('/v1/square/auth/session', {
       'challenge_id': challengeId,
-      'owner_account': ownerAccount,
+      'account_id': accountId,
       'signature': signature,
     });
     final token = session['session_token'];
@@ -447,26 +447,26 @@ class SquareApiClient
 
     final next = SquareSession(
       sessionToken: token,
-      ownerAccount: ownerAccount,
+      accountId: accountId,
       expiresAt: expiresAt,
       signRequest: signLoginPayload,
     );
-    _sessions[ownerAccount] = next;
+    _sessions[accountId] = next;
     return next;
   }
 
   /// 清除某账户的本地会话缓存（注销后调用，配合 Worker 端会话失效实现零残留）。
-  void clearSession(String ownerAccount) {
-    _sessions.remove(ownerAccount);
+  void clearSession(String accountId) {
+    _sessions.remove(accountId);
   }
 
   /// 注销账户：硬删除该用户在 Cloudflare 的全部数据（链上数据不受影响）。
   Future<void> deleteAccount({
-    required String ownerAccount,
+    required String accountId,
     required SquareActionSigner signAction,
   }) {
     return _consumeAccountAction(
-      ownerAccount: ownerAccount,
+      accountId: accountId,
       challengePath: '/v1/square/account/delete/challenge',
       confirmPath: '/v1/square/account/delete',
       signAction: signAction,
@@ -476,13 +476,13 @@ class SquareApiClient
   /// 账户敏感动作签名往返：取挑战 → 客户端**钉死** op_tag 重算摘要并签 → 提交确认。
   /// 绝不采信服务端下发的 op_tag（固定 [kOpSignSquareAction]），防被诱导跨域签名。
   Future<void> _consumeAccountAction({
-    required String ownerAccount,
+    required String accountId,
     required String challengePath,
     required String confirmPath,
     required SquareActionSigner signAction,
   }) async {
     final challenge = await _postJson(challengePath, {
-      'owner_account': ownerAccount,
+      'account_id': accountId,
     });
     final signingPayloadHex = challenge['signing_payload_hex'];
     final challengeId = challenge['challenge_id'];
@@ -495,7 +495,7 @@ class SquareApiClient
     );
     final signature = await signAction(message);
     await _postJson(confirmPath, {
-      'owner_account': ownerAccount,
+      'account_id': accountId,
       'challenge_id': challengeId,
       'signature': signature,
     });
@@ -505,15 +505,15 @@ class SquareApiClient
   /// [buildDeviceBindingSigningMessage]（op_tag 摘要）签名，后端验签后落库。
   /// 此后登录挑战改由子钥静默签名。
   Future<void> registerDeviceSubkey({
-    required String ownerAccount,
-    required String p256PubkeyHex,
+    required String accountId,
+    required String p256PublicKeyHex,
     required int issuedAt,
     required String bindingSignatureHex,
     String? turnstileToken,
   }) async {
     await _postJson('/v1/square/auth/device/register', {
-      'owner_account': ownerAccount,
-      'p256_pubkey': p256PubkeyHex,
+      'account_id': accountId,
+      'p256_public_key': p256PublicKeyHex,
       'issued_at': issuedAt,
       'binding_signature': bindingSignatureHex,
       if (turnstileToken != null) 'turnstile_token': turnstileToken,
@@ -555,7 +555,7 @@ class SquareApiClient
 
   /// 平台会员订阅/取消上链后回执镜像（best-effort，链上已是真源，失败不阻塞）。
   /// 带 [level]=订阅确认（镜像 active）；缺 [level]=取消确认（镜像 cancelled）。
-  /// owner 由 Worker 从 session 派生，客户端不上传。
+  /// accountId 由 Worker 从 session 派生，客户端不上传。
   Future<void> confirmPlatformSubscription({
     required SquareSession session,
     required String txHash,
@@ -607,7 +607,7 @@ class SquareApiClient
     );
   }
 
-  /// 幂等写入一条通讯录密文；owner 只能由 Worker 从 session 派生。
+  /// 幂等写入一条通讯录密文；accountId 只能由 Worker 从 session 派生。
   Future<void> putEncryptedContact({
     required SquareSession session,
     required SquareEncryptedContact contact,
@@ -795,11 +795,11 @@ class SquareApiClient
 
   /// 拉取某账户的用户主页资料（公开可读；带 session 时附带 is_following）。
   Future<CitizenProfile> fetchUserProfile({
-    required String ownerAccount,
+    required String accountId,
     SquareSession? session,
   }) async {
     final data = await _getJson(
-      '/v1/square/users/${Uri.encodeComponent(ownerAccount)}',
+      '/v1/square/users/${Uri.encodeComponent(accountId)}',
       session: session,
     );
     final profile = data['profile'];
@@ -811,7 +811,7 @@ class SquareApiClient
 
   /// 按作者分页拉帖。[category]/[contentFormat] 为空表示不过滤；[cursor] 为上一页 nextCursor。
   Future<({List<SquarePost> posts, int? nextCursor})> fetchAuthorPosts({
-    required String ownerAccount,
+    required String accountId,
     SquarePostCategory? category,
     SquarePostContentFormat? contentFormat,
     int limit = 20,
@@ -832,7 +832,7 @@ class SquareApiClient
         .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
         .join('&');
     final data = await _getJson(
-      '/v1/square/users/${Uri.encodeComponent(ownerAccount)}/posts?$query',
+      '/v1/square/users/${Uri.encodeComponent(accountId)}/posts?$query',
       session: session,
     );
     final posts = data['posts'];
@@ -912,7 +912,7 @@ class SquareApiClient
     }
   }
 
-  /// 更新本人公开资料（仅传要改的字段；owner 由 Worker 从 session 派生）。
+  /// 更新本人公开资料（仅传要改的字段；accountId 由 Worker 从 session 派生）。
   Future<CitizenProfile> updateProfile({
     required SquareSession session,
     String? displayName,
@@ -938,14 +938,14 @@ class SquareApiClient
     return CitizenProfile.fromJson(profile);
   }
 
-  /// 关注一个账户（写接口带 session；owner 由 Worker 从 session 派生）。
+  /// 关注一个账户（写接口带 session；accountId 由 Worker 从 session 派生）。
   Future<void> followUser({
     required SquareSession session,
-    required String followedAccount,
+    required String followedAccountId,
   }) async {
     await _postJson(
       '/v1/square/follows',
-      {'followed_account': followedAccount},
+      {'followed_account_id': followedAccountId},
       session: session,
     );
   }
@@ -953,10 +953,10 @@ class SquareApiClient
   /// 取消关注一个账户。
   Future<void> unfollowUser({
     required SquareSession session,
-    required String followedAccount,
+    required String followedAccountId,
   }) async {
     await _deleteJson(
-      '/v1/square/follows/${Uri.encodeComponent(followedAccount)}',
+      '/v1/square/follows/${Uri.encodeComponent(followedAccountId)}',
       session: session,
     );
   }
@@ -964,11 +964,11 @@ class SquareApiClient
   /// 开/关对某关注的发帖通知（通知归属挂在关注关系上；须已关注，未关注 Worker 回 409）。
   Future<void> setNotify({
     required SquareSession session,
-    required String followedAccount,
+    required String followedAccountId,
     required bool enabled,
   }) async {
     await _putJson(
-      '/v1/square/follows/${Uri.encodeComponent(followedAccount)}/notify',
+      '/v1/square/follows/${Uri.encodeComponent(followedAccountId)}/notify',
       {'enabled': enabled},
       session: session,
     );
@@ -999,7 +999,7 @@ class SquareApiClient
 
   /// 拉取关注/粉丝列表。
   Future<({List<SquareFollowEntry> accounts, int? nextCursor})> fetchFollows({
-    required String ownerAccount,
+    required String accountId,
     required String type,
     int limit = 20,
     int? cursor,
@@ -1013,7 +1013,7 @@ class SquareApiClient
         .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
         .join('&');
     final data = await _getJson(
-      '/v1/square/users/${Uri.encodeComponent(ownerAccount)}/follows?$query',
+      '/v1/square/users/${Uri.encodeComponent(accountId)}/follows?$query',
       session: session,
     );
     final accounts = data['accounts'];
@@ -1216,7 +1216,7 @@ class SquareApiClient
     return SquarePost(
       postId: _requireString(data, 'post_id'),
       author: SquareAuthor(
-        ownerAccount: _requireString(data, 'owner_account'),
+        accountId: _requireString(data, 'account_id'),
         cidNumber: data['cid_number']?.toString(),
         // 昵称与头像来自作者 profile.json（Worker feed 按去重作者回填）；缺失时
         // Flutter 按作者账户稳定选择本地默认昵称和照片，绝不把账户当昵称。

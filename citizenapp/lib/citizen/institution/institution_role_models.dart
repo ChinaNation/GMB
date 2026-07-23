@@ -1,4 +1,4 @@
-// 业务字段必须与链上管理员任职的 `admin_account` 逐字一致。
+// 业务字段必须与链上管理员任职的 `account_id` 逐字一致。
 // ignore_for_file: non_constant_identifier_names
 
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
@@ -46,13 +46,13 @@ class RoleBusinessPermission {
 /// 两个字段只允许存在其一；构造器固定分支，避免调用方混合主体。
 class AuthorizationSubject {
   const AuthorizationSubject.institution(this.roleSubject)
-      : personalAccountHex = null;
+      : personalAccountId = null;
 
-  const AuthorizationSubject.personalMultisig(this.personalAccountHex)
+  const AuthorizationSubject.personalMultisig(this.personalAccountId)
       : roleSubject = null;
 
   final RoleSubject? roleSubject;
-  final String? personalAccountHex;
+  final String? personalAccountId;
 
   bool get isInstitution => roleSubject != null;
 }
@@ -118,7 +118,7 @@ class InstitutionRole {
 class InstitutionAdminAssignment {
   const InstitutionAdminAssignment({
     required this.cidNumber,
-    required this.admin_account,
+    required this.account_id,
     required this.roleCode,
     required this.termStart,
     required this.termEnd,
@@ -130,7 +130,7 @@ class InstitutionAdminAssignment {
   });
 
   final String cidNumber;
-  final String admin_account;
+  final String account_id;
   final String roleCode;
   final String roleName;
   final bool termRequired;
@@ -152,7 +152,7 @@ class InstitutionAdminAssignment {
   InstitutionAdminAssignment withRole(InstitutionRole role) =>
       InstitutionAdminAssignment(
         cidNumber: cidNumber,
-        admin_account: admin_account,
+        account_id: account_id,
         roleCode: roleCode,
         roleName: role.roleName,
         termRequired: role.termRequired,

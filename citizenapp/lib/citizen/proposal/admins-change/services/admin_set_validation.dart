@@ -18,7 +18,7 @@ class AdminSetValidation {
 
   static AdminSetValidationResult validate({
     required AdminAccountState account,
-    required String proposerPubkeyHex,
+    required String proposerAccountId,
     required List<AdminPerson> admins,
     required int newThreshold,
   }) {
@@ -28,21 +28,21 @@ class AdminSetValidation {
     if (account.kind != 2 || account.institutionCode != 'PMUL') {
       throw StateError('机构管理员由 entity 任职结果管理；本流程只允许个人多签');
     }
-    final proposer = _normalizePubkey(proposerPubkeyHex);
-    if (!account.admins.any((admin) => admin.admin_account == proposer)) {
+    final proposer = _requireAccountId(proposerAccountId);
+    if (!account.admins.any((admin) => admin.account_id == proposer)) {
       throw StateError('当前签名钱包不是该主体管理员');
     }
     final normalized = admins
         .map(
           (admin) => AdminPerson(
-            admin_account: _normalizePubkey(admin.admin_account),
+            account_id: _requireAccountId(admin.account_id),
             family_name: _normalizeName(admin.family_name, '管理', '姓'),
             given_name: _normalizeName(admin.given_name, '员', '名'),
           ),
         )
         .toList(growable: false);
     _validateCount(account.kind, account.institutionCode, normalized.length);
-    final nextAccounts = normalized.map((admin) => admin.admin_account).toSet();
+    final nextAccounts = normalized.map((admin) => admin.account_id).toSet();
     if (nextAccounts.length != normalized.length) {
       throw StateError('新管理员列表存在重复公钥');
     }
@@ -59,12 +59,8 @@ class AdminSetValidation {
     return (adminsLen ~/ 2) + 1;
   }
 
-  static String _normalizePubkey(String value) {
-    final clean = AdminAccountIdCodec.normalizeHex(value);
-    if (clean.length != 64 || !RegExp(r'^[0-9a-f]+$').hasMatch(clean)) {
-      throw FormatException('管理员公钥必须为 64 位 hex', value);
-    }
-    return clean;
+  static String _requireAccountId(String value) {
+    return AdminAccountIdCodec.requireAccountId(value);
   }
 
   static String _normalizeName(String value, String fallback, String label) {
@@ -78,10 +74,10 @@ class AdminSetValidation {
   static bool _sameAdmins(List<AdminPerson> left, List<AdminPerson> right) {
     if (left.length != right.length) return false;
     final leftByAccount = {
-      for (final admin in left) admin.admin_account: admin,
+      for (final admin in left) admin.account_id: admin,
     };
     for (final admin in right) {
-      final current = leftByAccount[admin.admin_account];
+      final current = leftByAccount[admin.account_id];
       if (current == null ||
           current.family_name != admin.family_name ||
           current.given_name != admin.given_name) {

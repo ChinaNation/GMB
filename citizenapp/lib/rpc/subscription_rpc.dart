@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart/scale_codec.dart' show ByteOutput;
-import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'chain_rpc.dart';
 import 'signed_extrinsic_builder.dart';
@@ -141,148 +140,146 @@ class SubscriptionRpc {
       };
 
   Future<FinalizedSubscriptionTransaction> subscribePlatform({
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required String level,
     required BigInt expectedPriceFen,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) =>
-          _submitFinalized(
-            callData: buildSubscribePlatformCall(
-              membershipLevelByte(level),
-              expectedPriceFen,
-            ),
-            fromAddress: fromAddress,
-            signerPubkey: signerPubkey,
-            sign: sign,
-            onWatchEvent: onWatchEvent,
-          );
+      _submitFinalized(
+        callData: buildSubscribePlatformCall(
+          membershipLevelByte(level),
+          expectedPriceFen,
+        ),
+        fromSs58Address: fromSs58Address,
+        signerPublicKey: signerPublicKey,
+        sign: sign,
+        onWatchEvent: onWatchEvent,
+      );
 
   Future<FinalizedSubscriptionTransaction> subscribeCreator({
-    required String fromAddress,
-    required Uint8List signerPubkey,
-    required String creatorAddress,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
+    required String creatorAccountId,
     required String tierId,
     required String billingPeriod,
     required BigInt expectedPriceFen,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) =>
-          _submitFinalized(
-            callData: buildSubscribeCreatorCall(
-              Uint8List.fromList(Keyring().decodeAddress(creatorAddress)),
-              tierId,
-              billingPeriod,
-              expectedPriceFen,
-            ),
-            fromAddress: fromAddress,
-            signerPubkey: signerPubkey,
-            sign: sign,
-            onWatchEvent: onWatchEvent,
-          );
+      _submitFinalized(
+        callData: buildSubscribeCreatorCall(
+          accountIdBytes(creatorAccountId),
+          tierId,
+          billingPeriod,
+          expectedPriceFen,
+        ),
+        fromSs58Address: fromSs58Address,
+        signerPublicKey: signerPublicKey,
+        sign: sign,
+        onWatchEvent: onWatchEvent,
+      );
 
   Future<FinalizedSubscriptionTransaction> cancelPlatform({
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) =>
       _submitFinalized(
         callData: buildCancelPlatformCall(),
-        fromAddress: fromAddress,
-        signerPubkey: signerPubkey,
+        fromSs58Address: fromSs58Address,
+        signerPublicKey: signerPublicKey,
         sign: sign,
         onWatchEvent: onWatchEvent,
       );
 
   Future<FinalizedSubscriptionTransaction> cancelCreator({
-    required String fromAddress,
-    required Uint8List signerPubkey,
-    required String creatorAddress,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
+    required String creatorAccountId,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) =>
       _submitFinalized(
         callData: buildCancelCreatorCall(
-          Uint8List.fromList(Keyring().decodeAddress(creatorAddress)),
+          accountIdBytes(creatorAccountId),
         ),
-        fromAddress: fromAddress,
-        signerPubkey: signerPubkey,
+        fromSs58Address: fromSs58Address,
+        signerPublicKey: signerPublicKey,
         sign: sign,
         onWatchEvent: onWatchEvent,
       );
 
   Future<FinalizedSubscriptionTransaction> changePlatformPlan({
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required String level,
     required BigInt expectedPriceFen,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) =>
-          _submitFinalized(
-            callData: buildChangePlatformPlanCall(
-              membershipLevelByte(level),
-              expectedPriceFen,
-            ),
-            fromAddress: fromAddress,
-            signerPubkey: signerPubkey,
-            sign: sign,
-            onWatchEvent: onWatchEvent,
-          );
+      _submitFinalized(
+        callData: buildChangePlatformPlanCall(
+          membershipLevelByte(level),
+          expectedPriceFen,
+        ),
+        fromSs58Address: fromSs58Address,
+        signerPublicKey: signerPublicKey,
+        sign: sign,
+        onWatchEvent: onWatchEvent,
+      );
 
   Future<FinalizedSubscriptionTransaction> changeCreatorPlan({
-    required String fromAddress,
-    required Uint8List signerPubkey,
-    required String creatorAddress,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
+    required String creatorAccountId,
     required String tierId,
     required String billingPeriod,
     required BigInt expectedPriceFen,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) =>
-          _submitFinalized(
-            callData: buildChangeCreatorPlanCall(
-              Uint8List.fromList(Keyring().decodeAddress(creatorAddress)),
-              tierId,
-              billingPeriod,
-              expectedPriceFen,
-            ),
-            fromAddress: fromAddress,
-            signerPubkey: signerPubkey,
-            sign: sign,
-            onWatchEvent: onWatchEvent,
-          );
+      _submitFinalized(
+        callData: buildChangeCreatorPlanCall(
+          accountIdBytes(creatorAccountId),
+          tierId,
+          billingPeriod,
+          expectedPriceFen,
+        ),
+        fromSs58Address: fromSs58Address,
+        signerPublicKey: signerPublicKey,
+        sign: sign,
+        onWatchEvent: onWatchEvent,
+      );
 
   /// 创作者一次签名覆盖链上付款档位；Cloudflare 保存展示字段时不得再索要业务签名。
   Future<FinalizedSubscriptionTransaction> setCreatorPlans({
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required List<CreatorTierInput> tiers,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) =>
-          _submitFinalized(
-            callData: buildSetCreatorPlansCall(tiers),
-            fromAddress: fromAddress,
-            signerPubkey: signerPubkey,
-            sign: sign,
-            onWatchEvent: onWatchEvent,
-          );
+      _submitFinalized(
+        callData: buildSetCreatorPlansCall(tiers),
+        fromSs58Address: fromSs58Address,
+        signerPublicKey: signerPublicKey,
+        sign: sign,
+        onWatchEvent: onWatchEvent,
+      );
 
   /// 在同一个 finalized 区块读取订阅真态与 `Timestamp.Now`。
   Future<FinalizedSubscriptionSnapshot> fetchSubscriptionSnapshot({
-    required String subscriberAddress,
-    String? creatorAddress,
+    required String subscriberAccountId,
+    String? creatorAccountId,
   }) async {
     final block = await _rpc.fetchFinalizedBlock();
     final blockHashHex = '0x${_hex(block.blockHash)}';
     final subscriptionKey = buildSubscriptionStorageKey(
-      Uint8List.fromList(Keyring().decodeAddress(subscriberAddress)),
-      creatorAddress == null
-          ? null
-          : Uint8List.fromList(Keyring().decodeAddress(creatorAddress)),
+      accountIdBytes(subscriberAccountId),
+      creatorAccountId == null ? null : accountIdBytes(creatorAccountId),
     );
     final timestampKey = buildStorageValueKey('Timestamp', 'Now');
     final values = await Future.wait([
@@ -302,8 +299,8 @@ class SubscriptionRpc {
 
   /// 读取创作者 finalized 链上付款档位；名称等展示字段不在这里出现。
   Future<List<ChainCreatorTier>> fetchCreatorPlans(
-      String creatorAddress) async {
-    final account = Uint8List.fromList(Keyring().decodeAddress(creatorAddress));
+      String creatorAccountId) async {
+    final account = accountIdBytes(creatorAccountId);
     final key = buildCreatorPlansStorageKey(account);
     final data = await _rpc.fetchStorage('0x${_hex(key)}');
     return data == null ? const <ChainCreatorTier>[] : decodeCreatorPlans(data);
@@ -311,8 +308,8 @@ class SubscriptionRpc {
 
   Future<FinalizedSubscriptionTransaction> _submitFinalized({
     required Uint8List callData,
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
@@ -322,8 +319,8 @@ class SubscriptionRpc {
       logLabel: 'SubscriptionRpc',
     ).signAndSubmitInBlock(
       callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       sign: sign,
       onTrace: (trace) => signedTrace = trace,
       onWatchEvent: onWatchEvent,
@@ -354,7 +351,7 @@ class SubscriptionRpc {
   }
 
   static Uint8List buildSubscribeCreatorCall(
-    Uint8List creatorAccount,
+    Uint8List creatorAccountId,
     String tierId,
     String billingPeriod,
     BigInt expectedPriceFen,
@@ -362,7 +359,7 @@ class SubscriptionRpc {
     final output = _call(_subscribeCallIndex);
     _writeCreatorIssuerAndPlan(
       output,
-      creatorAccount,
+      creatorAccountId,
       tierId,
       billingPeriod,
     );
@@ -373,10 +370,10 @@ class SubscriptionRpc {
   static Uint8List buildCancelPlatformCall() =>
       (_call(_cancelCallIndex)..pushByte(_issuerPlatformTag)).toBytes();
 
-  static Uint8List buildCancelCreatorCall(Uint8List creatorAccount) =>
+  static Uint8List buildCancelCreatorCall(Uint8List creatorAccountId) =>
       (_call(_cancelCallIndex)
             ..pushByte(_issuerCreatorTag)
-            ..write(_account32(creatorAccount)))
+            ..write(_account32(creatorAccountId)))
           .toBytes();
 
   static Uint8List buildChangePlatformPlanCall(
@@ -391,7 +388,7 @@ class SubscriptionRpc {
           .toBytes();
 
   static Uint8List buildChangeCreatorPlanCall(
-    Uint8List creatorAccount,
+    Uint8List creatorAccountId,
     String tierId,
     String billingPeriod,
     BigInt expectedPriceFen,
@@ -399,7 +396,7 @@ class SubscriptionRpc {
     final output = _call(_changePlanCallIndex);
     _writeCreatorIssuerAndPlan(
       output,
-      creatorAccount,
+      creatorAccountId,
       tierId,
       billingPeriod,
     );
@@ -427,21 +424,33 @@ class SubscriptionRpc {
 
   static void _writeCreatorIssuerAndPlan(
     ByteOutput output,
-    Uint8List creatorAccount,
+    Uint8List creatorAccountId,
     String tierId,
     String billingPeriod,
   ) {
     output
       ..pushByte(_issuerCreatorTag)
-      ..write(_account32(creatorAccount))
+      ..write(_account32(creatorAccountId))
       ..pushByte(_planCreatorTag);
     _writeBytes(output, Uint8List.fromList(tierId.codeUnits));
     output.pushByte(billingPeriodByte(billingPeriod));
   }
 
   static Uint8List _account32(Uint8List value) {
-    if (value.length != 32) throw ArgumentError('账户公钥必须为 32 字节');
+    if (value.length != 32) throw ArgumentError('AccountId 必须为 32 字节');
     return value;
+  }
+
+  /// 链账户只接受 ADR-040 的规范文本，不在授权或 storage key 路径兼容 SS58。
+  @visibleForTesting
+  static Uint8List accountIdBytes(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw ArgumentError('account_id 必须为小写 0x + 64 位十六进制');
+    }
+    return Uint8List.fromList([
+      for (var index = 2; index < accountId.length; index += 2)
+        int.parse(accountId.substring(index, index + 2), radix: 16),
+    ]);
   }
 
   static void _writeBytes(ByteOutput output, Uint8List value) {
@@ -476,21 +485,22 @@ class SubscriptionRpc {
   /// `Subscriptions[(subscriber, issuer)]` 的 Blake2_128Concat 单键布局。
   @visibleForTesting
   static Uint8List buildSubscriptionStorageKey(
-    Uint8List subscriberAccount,
-    Uint8List? creatorAccount,
+    Uint8List subscriberAccountId,
+    Uint8List? creatorAccountId,
   ) {
     final raw = BytesBuilder(copy: false)
-      ..add(_account32(subscriberAccount))
+      ..add(_account32(subscriberAccountId))
       ..addByte(
-          creatorAccount == null ? _issuerPlatformTag : _issuerCreatorTag);
-    if (creatorAccount != null) raw.add(_account32(creatorAccount));
+          creatorAccountId == null ? _issuerPlatformTag : _issuerCreatorTag);
+    if (creatorAccountId != null) raw.add(_account32(creatorAccountId));
     return _storageMapKey('SquarePost', 'Subscriptions', raw.takeBytes());
   }
 
   /// `CreatorPlans[creator]` 的 Blake2_128Concat 单键布局。
   @visibleForTesting
-  static Uint8List buildCreatorPlansStorageKey(Uint8List creatorAccount) =>
-      _storageMapKey('SquarePost', 'CreatorPlans', _account32(creatorAccount));
+  static Uint8List buildCreatorPlansStorageKey(Uint8List creatorAccountId) =>
+      _storageMapKey(
+          'SquarePost', 'CreatorPlans', _account32(creatorAccountId));
 
   @visibleForTesting
   static Uint8List buildStorageValueKey(String pallet, String storage) =>

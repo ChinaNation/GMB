@@ -37,7 +37,7 @@ function AppInner() {
 
   useEffect(() => {
     setCidMeta(null);
-  }, [auth?.admin_account, auth?.institution_code]);
+  }, [auth?.account_id, auth?.institution_code]);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,7 +50,7 @@ function AppInner() {
         const checked = await checkAdminAuth(auth);
         const refreshedAuth: AdminAuth = {
           ...auth,
-          admin_account: checked.admin_account,
+          account_id: checked.account_id,
           institution_cid_number: checked.institution_cid_number,
           institution_code: checked.institution_code,
           admin_level: checked.admin_level ?? null,
@@ -98,7 +98,7 @@ function AppInner() {
     return () => {
       cancelled = true;
     };
-  }, [auth?.admin_account, auth?.institution_code]);
+  }, [auth?.account_id, auth?.institution_code]);
 
   const headerAdminIdentity = resolveHeaderAdminIdentity(auth);
 

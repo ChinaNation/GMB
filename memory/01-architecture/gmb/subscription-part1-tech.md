@@ -163,7 +163,7 @@ RenewalIndex<(AccountId, IssuerKey)> -> due_at
 - `set_creator_plans` 覆盖式写入创作者自己的链上付款字段。
 - 新订阅和下一次真实续费读取最新价格；当前已付周期不变。
 - 创作者在 CitizenApp 同一次业务提交中填写档位标识、名称和周期价格，并只签名一次 `set_creator_plans` 交易；finalized 后 App 把交易哈希、区块哈希和完整已签名 extrinsic 连同展示资料提交给 Cloudflare，Worker 严格复核交易包含关系和同一区块链上状态后保存镜像。
-- Cloudflare 展示资料必须引用 finalized 的 `creator_account + tier_id`，不得保存第二份扣款真源价格；finalized 后的镜像只用 Bearer 会话和链读复核，不生成设备请求签名。边缘保存失败只能重试镜像 HTTP，不得再次签名或重复提交链上交易。
+- Cloudflare 展示资料必须引用 finalized 的 `creator_account_id + tier_id`，不得保存第二份扣款真源价格；finalized 后的镜像只用 Bearer 会话和链读复核，不生成设备请求签名。边缘保存失败只能重试镜像 HTTP，不得再次签名或重复提交链上交易。
 - `propose_set_platform_price` 只调用统一内部投票引擎；人口快照、资格、计票和状态推进不进入业务 pallet。
 
 ## 11. 信任边界
@@ -172,8 +172,8 @@ RenewalIndex<(AccountId, IssuerKey)> -> due_at
 
 ## 12. Cloudflare/D1
 
-- 钱包账户是所有镜像的业务主键；平台订阅主键为 `owner_account`，创作者档位主键为 `(creator_account, tier_id)`，创作者订阅主键为 `(subscriber_account, creator_account)`。
-- confirm 请求固定携带 `tx_hash`、`block_hash`、`signed_extrinsic_hex` 和业务动作；订阅或换档携带目标档位，创作者订阅同时携带 `creator_account`、`tier_id`、`billing_period`，创作者套餐保存同时携带展示档位数组。
+- 钱包账户是所有镜像的业务主键；平台订阅主键为 `account_id`，创作者档位主键为 `(creator_account_id, tier_id)`，创作者订阅主键为 `(subscriber_account_id, creator_account_id)`。
+- confirm 请求固定携带 `tx_hash`、`block_hash`、`signed_extrinsic_hex` 和业务动作；订阅或换档携带目标档位，创作者订阅同时携带 `creator_account_id`、`tier_id`、`billing_period`，创作者套餐保存同时携带展示档位数组。
 - Worker 重新计算 extrinsic 哈希，严格解码签名者、pallet/call index 与 SCALE 参数，校验签名者等于 Bearer 会话钱包、指定区块属于 finalized 主链且确实包含该完整 extrinsic，再读取同一区块 `Timestamp.Now`、`Subscriptions` 或 `CreatorPlans`。请求中的价格、状态和期限从不作为真源。
 - `chain_transaction_confirmations` 将一笔 finalized 交易首次绑定到钱包、区块、extrinsic 序号、动作和规范化请求哈希；完全相同的 HTTP 重试幂等成功，同一交易换钱包、换动作或换展示资料一律冲突拒绝。
 - `square_memberships` 和 `square_creator_subscriptions` 镜像完整链上状态、finalized 锚点及最近一次交易哈希；`last_charged_price_fen` 只是已发生扣款的审计镜像，不能作为下一次扣款价格真源。

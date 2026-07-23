@@ -38,7 +38,7 @@ export async function checkCidFullName(
   );
 }
 
-// 创建教育机构只返回最终链交易签名请求；管理员钱包签名由表单统一处理一次。
+// 创建教育机构只返回最终链交易签名请求；管理员使用签名钱包签名由表单统一处理一次。
 export async function createInstitution(
   auth: AdminAuth,
   input: CreateInstitutionInput,

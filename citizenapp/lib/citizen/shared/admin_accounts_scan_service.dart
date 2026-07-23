@@ -20,17 +20,17 @@ import 'package:citizenapp/rpc/smoldot_client.dart';
 class ScannedAdminAccount {
   const ScannedAdminAccount({
     this.cidNumber,
-    this.personalAccountHex,
+    this.personalAccountId,
     required this.institutionCode,
     required this.kind,
     required this.admins,
-  }) : assert((cidNumber == null) != (personalAccountHex == null));
+  }) : assert((cidNumber == null) != (personalAccountId == null));
 
   /// 机构管理员表的唯一主键。
   final String? cidNumber;
 
   /// 个人多签管理员表的唯一主键。
-  final String? personalAccountHex;
+  final String? personalAccountId;
 
   /// 4 字节机构码字符串（"NRC"/"PRC"/"PRB"/"PMUL"/"CGOV" 等）。
   final String institutionCode;
@@ -38,7 +38,7 @@ class ScannedAdminAccount {
   /// 管理员账户类型(0=Public,1=Private,2=Personal)。
   final int kind;
 
-  /// 完整管理员人员集合；账户是小写 hex，姓、名只用于展示。
+  /// 完整管理员人员集合；账户使用规范 AccountId，姓、名只用于展示。
   final List<AdminPerson> admins;
 }
 
@@ -155,14 +155,14 @@ class AdminAccountsScanService {
         if (decoded == null) continue;
         final keyBytes = _hexDecode(keyHex);
         if (kind == AdminAccountStorageCodec.kindPersonal) {
-          final accountId =
+          final accountIdBytes =
               AdminAccountStorageCodec.extractPersonalAccountFromKey(keyBytes);
+          if (accountIdBytes == null) continue;
+          final accountId =
+              AdminAccountStorageCodec.accountIdText(accountIdBytes);
           if (accountId == null) continue;
-          final accountHex =
-              AdminAccountStorageCodec.accountHexFromAccountId(accountId);
-          if (accountHex == null) continue;
           accounts.add(ScannedAdminAccount(
-            personalAccountHex: accountHex,
+            personalAccountId: accountId,
             institutionCode: decoded.institutionCode,
             kind: decoded.kind,
             admins: decoded.admins,
@@ -190,10 +190,10 @@ class AdminAccountsScanService {
   }
 
   /// 纯函数:从扫描结果里筛出"我的"账户(指定 kind,可选机构码白名单,
-  /// 且管理员集合含本地任一钱包公钥)。供个人多签发现复用,便于单测。
+  /// 且管理员集合含本地任一钱包账户 ID)。供个人多签发现复用,便于单测。
   static List<ScannedAdminAccount> filterMine(
     AdminAccountsScanResult scan, {
-    required Set<String> myPubkeysHex,
+    required Set<String> myAccountIds,
     int? kind,
     Set<int>? kinds,
     Set<String>? codeWhitelist,
@@ -206,7 +206,7 @@ class AdminAccountsScanService {
               (codeWhitelist == null ||
                   codeWhitelist.contains(a.institutionCode)) &&
               a.admins.any(
-                (admin) => myPubkeysHex.contains(admin.admin_account),
+                (admin) => myAccountIds.contains(admin.account_id),
               ),
         )
         .toList(growable: false);

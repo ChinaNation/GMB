@@ -69,6 +69,18 @@ pub trait InternalAdminProvider<AccountId> {
         who: &AccountId,
     ) -> bool;
 
+    /// 把机构岗位投票人钱包解析为名册**规范账户**（快照键），实现「换绑不掉权」。
+    ///
+    /// 默认 = 按账户（保持现状语义，测试 mock 直接继承）；生产实现 override 走 CID 解析：
+    /// 运行期该管理员若带公民 CID，则只认该 CID 当前绑定的钱包，换绑后新钱包解析到同一
+    /// 规范账户、旧钱包返回 `None`。返回 `None` 表示 caller 不是该机构当前管理员 → 拒。
+    fn resolve_institution_voter(_cid_number: &[u8], caller: &AccountId) -> Option<AccountId>
+    where
+        AccountId: Clone,
+    {
+        Some(caller.clone())
+    }
+
     /// 读取机构治理阈值唯一真源。
     ///
     /// 阈值属于机构而不是管理员集合或投票引擎；生产实现必须路由到对应 entity

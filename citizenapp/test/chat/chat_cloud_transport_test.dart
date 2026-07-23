@@ -13,8 +13,9 @@ void main() {
   test('未配置服务时密文保留在发送设备队列', () async {
     final envelope = _sampleEnvelope();
     final transport = ChatCloudTransport(
-      ownerAccount: 'alice-wallet',
-      ownerDeviceId: 'alice-phone',
+      accountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      localDeviceId: 'alice-phone',
     );
 
     final result = await transport.sendEncryptedEnvelope(
@@ -35,11 +36,12 @@ void main() {
       expect(body.keys, {
         'envelope_id',
         'sender_device_id',
-        'recipient_account',
+        'recipient_account_id',
         'recipient_device_id',
         'envelope',
       });
-      expect(body['recipient_account'], 'bob-wallet');
+      expect(body['recipient_account_id'],
+          '0x2222222222222222222222222222222222222222222222222222222222222222');
       return _json({'ok': true, 'delivery_state': 'sent'});
     });
 
@@ -77,7 +79,7 @@ void main() {
     });
 
     await transport.registerDevice(
-      devicePublicKeyHex: 'aabb',
+      devicePublicKey: 'aabb',
       pushProvider: 'fcm',
       pushToken: 'fcm-token-1234567890',
       bindingSignature: '0xsig',
@@ -93,9 +95,11 @@ void main() {
     });
 
     final package = await transport.consumeKeyPackage(
-      ownerAccount: 'bob-wallet',
+      accountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       keyPackageId: 'kp-bob',
-      requesterAccount: 'alice-wallet',
+      requesterAccountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
     );
 
     expect(package.keyPackageBytes, [1, 2, 3]);
@@ -111,7 +115,8 @@ void main() {
     });
 
     final sent = await transport.sendSignal(
-      recipientAccount: 'bob-wallet',
+      recipientAccountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       signal: const {'kind': 'offer'},
     );
 
@@ -124,8 +129,9 @@ ChatCloudTransport _transport(
   Future<http.Response> Function(http.Request request) handler,
 ) {
   return ChatCloudTransport(
-    ownerAccount: 'alice-wallet',
-    ownerDeviceId: 'alice-phone',
+    accountId:
+        '0x1111111111111111111111111111111111111111111111111111111111111111',
+    localDeviceId: 'alice-phone',
     serviceBaseUrl: Uri.parse('https://worker.example'),
     sessionToken: 'session-token',
     httpClient: MockClient(handler),
@@ -136,8 +142,10 @@ ChatEnvelope _sampleEnvelope() => ChatEnvelope(
       protocolVersion: 1,
       envelopeId: 'env-1',
       conversationId: 'dm:alice:bob',
-      senderAccount: 'alice-wallet',
-      recipientAccount: 'bob-wallet',
+      senderAccountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      recipientAccountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       senderDeviceId: 'alice-phone',
       mlsWireMessage: [1, 2, 3],
       createdAtMillis: Int64(1),
@@ -146,9 +154,10 @@ ChatEnvelope _sampleEnvelope() => ChatEnvelope(
     );
 
 Map<String, dynamic> _keyPackageJson() => {
-      'owner_account': 'bob-wallet',
+      'account_id':
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       'device_id': 'bob-phone',
-      'device_public_key_hex': 'aabb',
+      'device_public_key': 'aabb',
       'key_package_id': 'kp-bob',
       'key_package': base64Url.encode([1, 2, 3]).replaceAll('=', ''),
       'cipher_suite': 'MLS_128',

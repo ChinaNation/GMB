@@ -17,10 +17,10 @@ import { resourceLimit } from '../limits/catalog';
 const PROFILE_SCHEMA = 'citizenapp.square.profile.v1' as const;
 
 /// 空资料包默认值。首次访问、从未编辑的账户返回此结构，展示名/签名交由客户端兜底。
-export function defaultProfileDoc(ownerAccount: string): CitizenProfileDoc {
+export function defaultProfileDoc(accountId: string): CitizenProfileDoc {
   return {
     schema: PROFILE_SCHEMA,
-    owner_account: ownerAccount,
+    account_id: accountId,
     display_name: '',
     bio: '',
     avatar_object_key: null,
@@ -34,9 +34,9 @@ export function defaultProfileDoc(ownerAccount: string): CitizenProfileDoc {
 /// 读取 R2 公开资料包；对象不存在或 schema 不合法时返回 null（由调用方决定是否回落默认值）。
 export async function readProfileDoc(
   env: Env,
-  ownerAccount: string
+  accountId: string
 ): Promise<CitizenProfileDoc | null> {
-  const object = await env.SQUARE_MEDIA.get(profileObjectKey(ownerAccount));
+  const object = await env.SQUARE_MEDIA.get(profileObjectKey(accountId));
   if (!object) {
     return null;
   }
@@ -51,7 +51,7 @@ export async function readProfileDoc(
     }
     return {
       schema: PROFILE_SCHEMA,
-      owner_account: ownerAccount,
+      account_id: accountId,
       display_name: typeof parsed.display_name === 'string' ? parsed.display_name : '',
       bio: typeof parsed.bio === 'string' ? parsed.bio : '',
       avatar_object_key: nullableString(parsed.avatar_object_key),
@@ -65,7 +65,7 @@ export async function readProfileDoc(
   }
 }
 
-/// 写入 R2 公开资料包。owner_account 由调用方从 session 派生，不接受客户端伪造。
+/// 写入 R2 公开资料包。account_id 由调用方从 session 派生，不接受客户端伪造。
 export async function writeProfileDoc(env: Env, doc: CitizenProfileDoc): Promise<void> {
   const bytes = new TextEncoder().encode(JSON.stringify(doc));
   const ticket = await validateUploadBytes({
@@ -73,29 +73,29 @@ export async function writeProfileDoc(env: Env, doc: CitizenProfileDoc): Promise
     bytes,
     content_type: 'application/json',
   });
-  await putR2Object(env, profileObjectKey(doc.owner_account), bytes, ticket);
+  await putR2Object(env, profileObjectKey(doc.account_id), bytes, ticket);
 }
 
 /// 主页三项计数，全部走 D1 实时聚合。
 export async function countUserStats(
   env: Env,
-  ownerAccount: string
+  accountId: string
 ): Promise<UserProfileCounts> {
   const [following, followers, posts] = await Promise.all([
     countScalar(
       env,
-      'SELECT COUNT(*) AS n FROM square_follows WHERE owner_account = ?',
-      ownerAccount
+      'SELECT COUNT(*) AS n FROM square_follows WHERE account_id = ?',
+      accountId
     ),
     countScalar(
       env,
-      'SELECT COUNT(*) AS n FROM square_follows WHERE followed_account = ?',
-      ownerAccount
+      'SELECT COUNT(*) AS n FROM square_follows WHERE followed_account_id = ?',
+      accountId
     ),
     countScalar(
       env,
-      "SELECT COUNT(*) AS n FROM square_posts WHERE owner_account = ? AND post_state = 'published'",
-      ownerAccount
+      "SELECT COUNT(*) AS n FROM square_posts WHERE account_id = ? AND post_state = 'published'",
+      accountId
     )
   ]);
   return { following, followers, posts };
@@ -105,16 +105,16 @@ export async function countUserStats(
 /// 当前登录者是否已关注目标账户。未登录 viewer 传 null，直接返回 false。
 export async function isFollowing(
   env: Env,
-  viewerAccount: string | null,
-  targetAccount: string
+  viewerAccountId: string | null,
+  targetAccountId: string
 ): Promise<boolean> {
-  if (!viewerAccount || viewerAccount === targetAccount) {
+  if (!viewerAccountId || viewerAccountId === targetAccountId) {
     return false;
   }
   const row = await env.DB.prepare(
-    'SELECT 1 AS n FROM square_follows WHERE owner_account = ? AND followed_account = ? LIMIT 1'
+    'SELECT 1 AS n FROM square_follows WHERE account_id = ? AND followed_account_id = ? LIMIT 1'
   )
-    .bind(viewerAccount, targetAccount)
+    .bind(viewerAccountId, targetAccountId)
     .first<{ n: number }>();
   return row !== null;
 }
@@ -122,16 +122,16 @@ export async function isFollowing(
 /// 当前登录者是否对目标账户开启发帖通知（= 已关注且未静音）。未登录/自看返回 false。
 export async function isNotifying(
   env: Env,
-  viewerAccount: string | null,
-  targetAccount: string
+  viewerAccountId: string | null,
+  targetAccountId: string
 ): Promise<boolean> {
-  if (!viewerAccount || viewerAccount === targetAccount) {
+  if (!viewerAccountId || viewerAccountId === targetAccountId) {
     return false;
   }
   const row = await env.DB.prepare(
-    'SELECT notify_enabled FROM square_follows WHERE owner_account = ? AND followed_account = ? LIMIT 1'
+    'SELECT notify_enabled FROM square_follows WHERE account_id = ? AND followed_account_id = ? LIMIT 1'
   )
-    .bind(viewerAccount, targetAccount)
+    .bind(viewerAccountId, targetAccountId)
     .first<{ notify_enabled: number }>();
   return row?.notify_enabled === 1;
 }
@@ -140,14 +140,14 @@ export async function isNotifying(
 /// 未关注（0 命中）时上层据此提示「先关注」，通知归属永远挂在关注关系上。
 export async function setFollowNotify(
   env: Env,
-  ownerAccount: string,
-  followedAccount: string,
+  accountId: string,
+  followedAccountId: string,
   enabled: boolean
 ): Promise<boolean> {
   const result = await env.DB.prepare(
-    'UPDATE square_follows SET notify_enabled = ? WHERE owner_account = ? AND followed_account = ?'
+    'UPDATE square_follows SET notify_enabled = ? WHERE account_id = ? AND followed_account_id = ?'
   )
-    .bind(enabled ? 1 : 0, ownerAccount, followedAccount)
+    .bind(enabled ? 1 : 0, accountId, followedAccountId)
     .run();
   return (result.meta.changes ?? 0) > 0;
 }
@@ -157,15 +157,15 @@ export async function setFollowNotify(
 /// cursor 为上一页最后一条 created_at（keyset 游标）。
 export async function listAuthorPosts(
   env: Env,
-  ownerAccount: string,
+  accountId: string,
   category: AuthorPostCategory,
   contentFormat: AuthorContentFormat,
   limit: number,
   cursor: number | null
 ): Promise<SquarePostFeedItem[]> {
   const boundedLimit = Math.min(Math.max(limit, 1), 50);
-  const conditions = ["owner_account = ?", "post_state = 'published'"];
-  const binds: Array<string | number> = [ownerAccount];
+  const conditions = ["account_id = ?", "post_state = 'published'"];
+  const binds: Array<string | number> = [accountId];
   if (category !== 'all') {
     conditions.push('post_category = ?');
     binds.push(category);
@@ -181,7 +181,7 @@ export async function listAuthorPosts(
   binds.push(boundedLimit);
 
   const result = await env.DB.prepare(
-    `SELECT post_id, owner_account, cid_number, post_category, content_format, title,
+    `SELECT post_id, account_id, cid_number, post_category, content_format, title,
         text, content_hash, storage_receipt_id, chain_block, created_at, post_state
       FROM square_posts
       WHERE ${conditions.join(' AND ')}
@@ -194,11 +194,11 @@ export async function listAuthorPosts(
   const rows = result.results ?? [];
   // 作者主页所有帖子同一作者：去重后仅读一次链上身份+会员，回填作者徽章信号。
   const [signals, items] = await Promise.all([
-    resolveAuthorSignals(env, [ownerAccount]),
+    resolveAuthorSignals(env, [accountId]),
     Promise.all(rows.map((row) => buildFeedPostItem(env, row)))
   ]);
   return items.map((item) => {
-    const signal = signals.get(item.owner_account);
+    const signal = signals.get(item.account_id);
     return {
       ...item,
       identity_level: signal?.identity_level ?? 'visitor',
@@ -211,7 +211,7 @@ export async function listAuthorPosts(
 }
 
 export interface FollowEntry {
-  owner_account: string;
+  account_id: string;
   created_at: number;
 }
 
@@ -225,8 +225,8 @@ export async function listFollows(
   cursor: number | null
 ): Promise<FollowEntry[]> {
   const boundedLimit = Math.min(Math.max(limit, 1), 50);
-  const selectCol = type === 'following' ? 'followed_account' : 'owner_account';
-  const whereCol = type === 'following' ? 'owner_account' : 'followed_account';
+  const selectCol = type === 'following' ? 'followed_account_id' : 'account_id';
+  const whereCol = type === 'following' ? 'account_id' : 'followed_account_id';
   const binds: Array<string | number> = [account];
   let cursorClause = '';
   if (cursor !== null) {
@@ -236,7 +236,7 @@ export async function listFollows(
   binds.push(boundedLimit);
 
   const result = await env.DB.prepare(
-    `SELECT ${selectCol} AS owner_account, created_at
+    `SELECT ${selectCol} AS account_id, created_at
       FROM square_follows
       WHERE ${whereCol} = ?${cursorClause}
       ORDER BY created_at DESC

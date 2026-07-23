@@ -125,7 +125,7 @@ class AttestationService {
   String _buildPayload(WalletProfile wallet) {
     final policy = walletServicePolicy(wallet);
     return '{'
-        '"pubkey":"${wallet.pubkeyHex}",'
+        '"public_key":"${wallet.accountId}",'
         '"alg":"${wallet.alg}",'
         '"ss58":${wallet.ss58},'
         '"policy":"$policy",'
@@ -186,7 +186,7 @@ class AttestationService {
 
   String _signChallengeLocally(String challenge, WalletProfile wallet) {
     // MVP placeholder signature flow: keep API shape fixed, replace with real sr25519 signing later.
-    final seed = '$challenge|${wallet.pubkeyHex}|${wallet.address}';
+    final seed = '$challenge|${wallet.accountId}|${wallet.ss58Address}';
     final hash =
         seed.codeUnits.fold<int>(0, (acc, e) => (acc * 131 + e) & 0x7fffffff);
     return 'sig_${hash.toRadixString(16)}';

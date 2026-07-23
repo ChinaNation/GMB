@@ -26,14 +26,16 @@ void main() {
     final aliceStore = MlsStateStore(Directory('${root.path}/alice'));
     final bobStore = MlsStateStore(Directory('${root.path}/bob'));
     const alice = ChatDevice(
-      ownerAccount: 'alice-wallet',
+      accountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
       deviceId: 'alice-phone',
-      devicePublicKeyHex: 'aabbcc',
+      devicePublicKey: 'aabbcc',
     );
     const bob = ChatDevice(
-      ownerAccount: 'bob-wallet',
+      accountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       deviceId: 'bob-phone',
-      devicePublicKeyHex: 'ddeeff',
+      devicePublicKey: 'ddeeff',
     );
     final bobCrypto = NativeMlsCrypto(identity: bob, stateStore: bobStore);
     final bobKeyPackage = await bobCrypto.createKeyPackage(bob);
@@ -43,7 +45,8 @@ void main() {
     );
     final first = await aliceCrypto.encrypt(
       conversationId: 'conv-alice-bob',
-      recipientAccount: 'bob-wallet',
+      recipientAccountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       recipientKeyPackage: bobKeyPackage,
       plaintext: utf8.encode('第一条消息'),
     );
@@ -62,7 +65,8 @@ void main() {
     );
     final second = await aliceAfterRestart.encrypt(
       conversationId: 'conv-alice-bob',
-      recipientAccount: 'bob-wallet',
+      recipientAccountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       plaintext: utf8.encode('重启后的第二条消息'),
     );
     expect(second.createdNewSession, isFalse);
@@ -76,14 +80,16 @@ void main() {
     final root = await Directory.systemTemp.createTemp('gmb-chat-direct-');
     addTearDown(() => root.delete(recursive: true));
     const alice = ChatDevice(
-      ownerAccount: 'alice-wallet',
+      accountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
       deviceId: 'alice-phone',
-      devicePublicKeyHex: 'aabbcc',
+      devicePublicKey: 'aabbcc',
     );
     const bob = ChatDevice(
-      ownerAccount: 'bob-wallet',
+      accountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       deviceId: 'bob-phone',
-      devicePublicKeyHex: 'ddeeff',
+      devicePublicKey: 'ddeeff',
     );
     final aliceCrypto = NativeMlsCrypto(
       identity: alice,
@@ -110,8 +116,10 @@ void main() {
 
     await senderFlow.sendText(
       conversationId: 'conv-direct',
-      senderAccount: 'alice-wallet',
-      recipientAccount: 'bob-wallet',
+      senderAccountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      recipientAccountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       senderDeviceId: 'alice-phone',
       recipientKeyPackage: keyPackage,
       text: '瞬时直达',

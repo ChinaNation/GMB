@@ -36,7 +36,7 @@ use primitives::{
 };
 use sp_runtime::traits::Zero;
 
-use admin_primitives::{Admin, AdminCidNumber, InstitutionAdmins, PublicAdmin};
+use admin_primitives::{Admin, AdminCidNumber, InstitutionAdmins};
 use public_manage::{
     InstitutionAccountInfo, InstitutionAdminAssignment, InstitutionAssignmentSource,
     InstitutionAssignmentStatus, InstitutionInfo, InstitutionRole, InstitutionRoleStatus,
@@ -65,7 +65,7 @@ type PublicInstitutionAccountInfoOf<T> = InstitutionAccountInfo<
 type PublicRegisteredInstitutionOf<T> =
     RegisteredInstitution<PublicCidNumberOf<T>, PublicAccountNameOf<T>>;
 type PublicAdminsOf<T> = BoundedVec<
-    PublicAdmin<<T as frame_system::Config>::AccountId>,
+    Admin<<T as frame_system::Config>::AccountId>,
     <T as public_admins::Config>::MaxAdminsPerInstitution,
 >;
 type PublicInstitutionAdminsOf<T> = InstitutionAdmins<PublicAdminsOf<T>>;
@@ -205,9 +205,11 @@ fn insert_derived_public_institution<T: public_manage::Config>(
     }
     .derive(primitives::core_const::SS58_FORMAT);
     let institution_code = parts.institution;
+    // 创世不铸非法人组织(UNIN)，无父级可传。
     let required = primitives::institution_constraints::required_protocol_account_kinds(
         institution_code,
         cid_bytes,
+        None,
     )
     .expect("创世派生机构 CID 与机构码必须一致");
     for kind in required {
@@ -295,9 +297,11 @@ fn insert_public_institution<T: public_manage::Config>(
         bounded_account_name::<T>(RESERVED_NAME_FEE, "费用账户名", cid_number),
         decode_account::<T>(&fee_account, "费用账户"),
     );
+    // 创世不铸非法人组织(UNIN)，无父级可传。
     let required = primitives::institution_constraints::required_protocol_account_kinds(
         institution_code,
         cid_number.as_bytes(),
+        None,
     )
     .expect("固定机构 CID 与机构码必须一致");
     for kind in required {
@@ -336,7 +340,7 @@ fn insert_fixed_admins<T>(
     let mut roles: Vec<public_manage::institution::role::InstitutionRoleOf<T>> = Vec::new();
     let mut assignments: Vec<public_manage::institution::role::InstitutionAdminAssignmentOf<T>> =
         Vec::new();
-    let mut admin_records: Vec<PublicAdmin<T::AccountId>> = Vec::new();
+    let mut admin_records: Vec<Admin<T::AccountId>> = Vec::new();
 
     for (index, raw) in raw_admins.iter().enumerate() {
         let (role_code_raw, role_name_raw) =
@@ -369,7 +373,7 @@ fn insert_fixed_admins<T>(
             .iter()
             .any(|admin| admin.account_id == account_id)
         {
-            admin_records.push(PublicAdmin {
+            admin_records.push(Admin {
                 account_id,
                 cid_number: BoundedVec::new(),
                 family_name: BoundedVec::new(),
@@ -571,6 +575,13 @@ where
     for genesis_admin in CITIZENCHAIN_GENESIS_ADMINS {
         admins.push(Admin {
             account_id: decode_account::<T>(&genesis_admin.account_id, "创世管理员"),
+            // 机构管理员统一保存四字段；这里复用法定代表人真源中的同一公民 CID，
+            // 禁止在管理员记录中留空或另造第二个身份。
+            cid_number: LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("genesis citizenchain: 管理员公民 CID 超过协议上限"),
             family_name: genesis_admin
                 .family_name
                 .as_bytes()

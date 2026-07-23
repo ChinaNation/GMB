@@ -9,12 +9,12 @@ vi.mock('../src/storage/presigned', () => ({
   signR2GetUrl: vi.fn(async () => 'https://r2.test/archive.mp4'),
 }));
 import type { Env } from '../src/types';
-import { restoreOwnerVideos, runVideoArchiveSweep } from '../src/membership/archive';
+import { restoreAccountVideos, runVideoArchiveSweep } from '../src/membership/archive';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 interface FakeMembership {
-  owner_account: string;
+  account_id: string;
   subscription_status: string;
   entitlement_lapsed_at: number | null;
 }
@@ -22,7 +22,7 @@ interface FakeMembership {
 interface FakeVideo {
   upload_id: string;
   media_index: number;
-  owner_account: string;
+  account_id: string;
   media_kind: 'video' | 'image';
   provider: string;
   provider_asset_id: string;
@@ -42,10 +42,10 @@ class FakeStmt {
   }
 
   async all<T>(): Promise<{ results: T[] }> {
-    if (this.sql.includes('SELECT DISTINCT m.owner_account')) {
+    if (this.sql.includes('SELECT DISTINCT m.account_id')) {
       const cutoff = this.args[0] as number;
       const limit = this.args[1] as number;
-      const owners = [
+      const accountIds = [
         ...new Set(
           this.db.memberships
             .filter(
@@ -56,21 +56,21 @@ class FakeStmt {
                   m.subscription_status === 'terminated') &&
                 this.db.videos.some(
                   (v) =>
-                    v.owner_account === m.owner_account &&
+                    v.account_id === m.account_id &&
                     v.media_kind === 'video' &&
                     v.archive_state === 'live'
                 )
             )
-            .map((m) => m.owner_account)
+            .map((m) => m.account_id)
         )
       ].slice(0, limit);
-      return { results: owners.map((owner_account) => ({ owner_account })) as T[] };
+      return { results: accountIds.map((account_id) => ({ account_id })) as T[] };
     }
     if (this.sql.includes('FROM square_media_assets') && this.sql.includes('archive_state = ?')) {
-      const owner = this.args[0] as string;
+      const accountId = this.args[0] as string;
       const state = this.args[1] as string;
       const rows = this.db.videos.filter(
-        (v) => v.owner_account === owner && v.media_kind === 'video' && v.archive_state === state
+        (v) => v.account_id === accountId && v.media_kind === 'video' && v.archive_state === state
       );
       return { results: rows as unknown as T[] };
     }
@@ -156,7 +156,7 @@ function video(overrides: Partial<FakeVideo> = {}): FakeVideo {
   return {
     upload_id: 'squ_1',
     media_index: 0,
-    owner_account: 'owner_1',
+    account_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
     media_kind: 'video',
     provider: 'cloudflare_stream',
     provider_asset_id: 'str_uid_1',
@@ -188,7 +188,7 @@ describe('video cold archive', () => {
   it('archives live video of an account lapsed past the threshold', async () => {
     const db = new FakeDb();
     db.memberships.push({
-      owner_account: 'owner_1',
+      account_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
       subscription_status: 'cancelled',
       entitlement_lapsed_at: Date.now() - 100 * DAY_MS
     });
@@ -196,15 +196,15 @@ describe('video cold archive', () => {
 
     const result = await runVideoArchiveSweep(env(db));
 
-    expect(result).toEqual({ owners: 1, archived: 1 });
+    expect(result).toEqual({ account_count: 1, archived: 1 });
     expect(db.videos[0].archive_state).toBe('archived');
-    expect(db.videos[0].r2_archive_key).toBe('archive/owner_1/str_uid_1.mp4');
+    expect(db.videos[0].r2_archive_key).toBe(`archive/${'33'.repeat(32)}/str_uid_1.mp4`);
   });
 
   it('skips accounts that have not lapsed 90 days yet', async () => {
     const db = new FakeDb();
     db.memberships.push({
-      owner_account: 'owner_1',
+      account_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
       subscription_status: 'cancelled',
       entitlement_lapsed_at: Date.now() - 10 * DAY_MS
     });
@@ -212,14 +212,14 @@ describe('video cold archive', () => {
 
     const result = await runVideoArchiveSweep(env(db));
 
-    expect(result).toEqual({ owners: 0, archived: 0 });
+    expect(result).toEqual({ account_count: 0, archived: 0 });
     expect(db.videos[0].archive_state).toBe('live');
   });
 
   it('does nothing when the feature flag is off', async () => {
     const db = new FakeDb();
     db.memberships.push({
-      owner_account: 'owner_1',
+      account_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
       subscription_status: 'cancelled',
       entitlement_lapsed_at: Date.now() - 100 * DAY_MS
     });
@@ -227,21 +227,21 @@ describe('video cold archive', () => {
 
     const result = await runVideoArchiveSweep(env(db, { ARCHIVE_ENABLED: '0' }));
 
-    expect(result).toEqual({ owners: 0, archived: 0 });
+    expect(result).toEqual({ account_count: 0, archived: 0 });
     expect(db.videos[0].archive_state).toBe('live');
   });
 
   it('restores an archived video into processing until Stream webhook confirms ready', async () => {
     const db = new FakeDb();
     db.videos.push(
-      video({ archive_state: 'archived', r2_archive_key: 'archive/owner_1/str_uid_1.mp4' })
+      video({ archive_state: 'archived', r2_archive_key: `archive/${'33'.repeat(32)}/str_uid_1.mp4` })
     );
 
-    const result = await restoreOwnerVideos(env(db), 'owner_1');
+    const result = await restoreAccountVideos(env(db), '0x3333333333333333333333333333333333333333333333333333333333333333');
 
     expect(result).toEqual({ restored: 1 });
     expect(db.videos[0].archive_state).toBe('restoring');
     expect(db.videos[0].provider_asset_id).toBe('str_uid_restored');
-    expect(db.videos[0].r2_archive_key).toBe('archive/owner_1/str_uid_1.mp4');
+    expect(db.videos[0].r2_archive_key).toBe(`archive/${'33'.repeat(32)}/str_uid_1.mp4`);
   });
 });

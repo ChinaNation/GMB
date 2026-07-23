@@ -41,8 +41,8 @@ class LegislationVoteService {
     required int proposalId,
     required String voterRoleCode,
     required bool approve,
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
@@ -54,8 +54,8 @@ class LegislationVoteService {
       proposalId: proposalId,
       voterRoleCode: voterRoleCode,
       approve: approve,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       sign: sign,
       onWatchEvent: onWatchEvent,
     );
@@ -65,7 +65,7 @@ class LegislationVoteService {
       meta.bodies[bodyIndex].cidNumber,
       voterRoleCode,
       approve,
-      signerPubkey,
+      signerPublicKey,
       result.blockHashHex,
     );
     return result;
@@ -75,8 +75,8 @@ class LegislationVoteService {
   Future<({String txHash, int usedNonce, String blockHashHex})> executiveSign({
     required int proposalId,
     required bool approve,
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
@@ -84,8 +84,8 @@ class LegislationVoteService {
       callIndex: callExecutiveSign,
       proposalId: proposalId,
       approve: approve,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       sign: sign,
       onWatchEvent: onWatchEvent,
     );
@@ -98,8 +98,8 @@ class LegislationVoteService {
   Future<({String txHash, int usedNonce, String blockHashHex})> overrideSign({
     required int proposalId,
     required bool approve,
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
@@ -107,14 +107,14 @@ class LegislationVoteService {
       callIndex: callOverrideSign,
       proposalId: proposalId,
       approve: approve,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       sign: sign,
       onWatchEvent: onWatchEvent,
     );
     await _confirmSignRecorded(
       proposalId,
-      signerPubkey,
+      signerPublicKey,
       result.blockHashHex,
       _query.fetchOverrideSigns,
     );
@@ -125,8 +125,8 @@ class LegislationVoteService {
   Future<({String txHash, int usedNonce, String blockHashHex})> guardVote({
     required int proposalId,
     required bool approve,
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
@@ -134,14 +134,14 @@ class LegislationVoteService {
       callIndex: callGuardVote,
       proposalId: proposalId,
       approve: approve,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       sign: sign,
       onWatchEvent: onWatchEvent,
     );
     await _confirmSignRecorded(
       proposalId,
-      signerPubkey,
+      signerPublicKey,
       result.blockHashHex,
       _query.fetchGuardSigns,
     );
@@ -182,8 +182,8 @@ class LegislationVoteService {
     required int proposalId,
     String? voterRoleCode,
     required bool approve,
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) {
@@ -198,8 +198,8 @@ class LegislationVoteService {
       logLabel: 'LegislationVote',
     ).signAndSubmitInBlock(
       callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       sign: sign,
       onWatchEvent: onWatchEvent,
     );
@@ -213,17 +213,17 @@ class LegislationVoteService {
     String cidNumber,
     String voterRoleCode,
     bool approve,
-    Uint8List signerPubkey,
+    Uint8List signerPublicKey,
     String blockHashHex,
   ) async {
-    final pubkeyHex = _hexEncode(signerPubkey);
+    final publicKey = _hexEncode(signerPublicKey);
     for (var attempt = 0; attempt < 6; attempt++) {
       final vote = await _query.fetchRepresentativeVote(
         proposalId,
         bodyIndex,
         cidNumber,
         voterRoleCode,
-        pubkeyHex,
+        publicKey,
       );
       if (vote == approve) return;
       if (vote != null && vote != approve) {
@@ -238,14 +238,14 @@ class LegislationVoteService {
 
   Future<void> _confirmSignRecorded(
     int proposalId,
-    Uint8List signerPubkey,
+    Uint8List signerPublicKey,
     String blockHashHex,
-    Future<List<({String pubkeyHex, bool approve})>> Function(int) fetchSigns,
+    Future<List<({String accountId, bool approve})>> Function(int) fetchSigns,
   ) async {
-    final pubkeyHex = _hexEncode(signerPubkey);
+    final accountId = '0x${_hexEncode(signerPublicKey)}';
     for (var attempt = 0; attempt < 6; attempt++) {
       final signs = await fetchSigns(proposalId);
-      if (signs.any((s) => s.pubkeyHex == pubkeyHex)) return;
+      if (signs.any((s) => s.accountId == accountId)) return;
       // 终审/会签可能一签即终态清账;若提案已离开该阶段也算成功。
       final state = await _query.fetchProposalState(proposalId);
       if (state != null && state.status != LegProposalStatus.voting) return;

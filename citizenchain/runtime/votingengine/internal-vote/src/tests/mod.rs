@@ -167,6 +167,17 @@ thread_local! {
 thread_local! {
     static INTERNAL_TERMINAL_CLEANUP_SHOULD_FAIL: RefCell<bool> = const { RefCell::new(false) };
 }
+// 换绑模拟：(名册规范账户, 该身份当前绑定的钱包)。
+// None = 未换绑 → 投票人解析恒按账户（与生产创世期/无 CID 管理员语义一致）。
+thread_local! {
+    static REBIND: RefCell<Option<(AccountId32, AccountId32)>> = const { RefCell::new(None) };
+}
+
+/// 模拟某名册规范账户的公民 CID 换绑到新钱包：新钱包解析到该规范账户，旧钱包掉权。
+pub fn set_rebind(canonical: AccountId32, current_wallet: AccountId32) {
+    REBIND.with(|cell| *cell.borrow_mut() = Some((canonical, current_wallet)));
+}
+
 pub struct TestCitizenIdentityReader;
 pub struct TestJointVoteResultCallback;
 pub struct TestInternalVoteResultCallback;
@@ -357,6 +368,18 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
             }
             _ => false,
         }
+    }
+
+    /// 换绑感知的投票人解析：未设 REBIND 时恒按账户（现状语义，故现有用例不受影响）。
+    fn resolve_institution_voter(_cid_number: &[u8], caller: &AccountId32) -> Option<AccountId32> {
+        REBIND.with(|cell| match cell.borrow().as_ref() {
+            // 新钱包 → 解析到名册规范账户（换绑不掉权）
+            Some((canonical, current)) if caller == current => Some(canonical.clone()),
+            // 旧钱包（= 规范账户本身）→ CID 已不绑定它 → 掉权
+            Some((canonical, _)) if caller == canonical => None,
+            // 其余管理员按账户
+            _ => Some(caller.clone()),
+        })
     }
 
     fn institution_threshold(_institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32> {
@@ -556,6 +579,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         INTERNAL_CALLBACK_LOG.with(|log| log.borrow_mut().clear());
         INTERNAL_TERMINAL_CLEANUP_LOG.with(|log| log.borrow_mut().clear());
         INTERNAL_TERMINAL_CLEANUP_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = false);
+        REBIND.with(|cell| *cell.borrow_mut() = None); // 默认未换绑 → 投票人解析按账户
         set_personal_threshold(3);
         set_institution_threshold(public_cid(), 3);
         set_institution_threshold(private_cid(), 3);

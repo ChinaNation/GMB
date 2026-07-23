@@ -13,6 +13,22 @@
 
 > 实现以本文 + ADR-022 为准,旧路线不再适用。
 
+## 当前账户与本地存储模型
+
+- `AccountId` 是 CitizenWallet 内的钱包身份、Isar 唯一索引、重复检查和签名目标核验
+  真源；Dart 使用 `accountId`，文本固定为小写 `0x` 加 64 位十六进制。
+- `ss58Address` 只用于页面展示、用户二维码和扫码输入输出，不作为授权、去重或
+  持久化身份主键。
+- `signerPublicKey` 只表示真实签名公钥。当前 sr25519 的 `AccountId32` 直接取该公钥
+  32 字节，因此登录和离线签名可做字节等值核验；不得据此把字段重新混称为
+  `pubkeyHex` 或裸 `address`。
+- `WalletProfileEntity` 最终字段保存 `accountId + ss58Address + ss58Prefix` 及钱包
+  展示元数据，不重复保存同一 32 字节值的公钥别名。
+- 当前尚未正式创世，CitizenWallet 只打开最终 Isar schema。旧 Isar 业务库删除重建，
+  不执行 migration，不读取旧 `address` / `pubkeyHex` 字段。
+- Secure Storage、Android Keystore、iOS Keychain 中的 seed、助记词密文、PIN
+  派生材料和私钥保护材料不属于 Isar 业务数据，业务库重建不得删除或改写它们。
+
 ## CI 与发布边界
 
 - `citizenwallet-ci.yml` 的 push 自动 CI 只执行索引同步、Flutter 依赖安装、`flutter analyze`、`flutter test` 和 Debug APK 检查构建。

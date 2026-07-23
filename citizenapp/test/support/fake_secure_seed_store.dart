@@ -50,6 +50,11 @@ class FakeSecureSeedStore implements SecureSeedStore {
     return seeds[walletIndex];
   }
 
+  /// 存在性判定：对齐真实现只探密文 blob 的语义 —— **不计入 [readSeedCount]**
+  /// （它不是一次 seed 读取），也不受 KEK 失效 / 用户取消标记影响。
+  @override
+  Future<bool> hasSeed(int walletIndex) async => seeds.containsKey(walletIndex);
+
   @override
   Future<void> deleteSeed(int walletIndex) async {
     seeds.remove(walletIndex);

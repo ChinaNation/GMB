@@ -190,7 +190,7 @@ export function CitizensView() {
     },
     {
       title: '投票账户',
-      dataIndex: 'wallet_address',
+      dataIndex: 'ss58_address',
       align: 'center',
       render: (v: string | null | undefined) => v || '-',
     },

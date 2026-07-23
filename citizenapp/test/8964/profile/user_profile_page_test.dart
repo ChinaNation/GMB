@@ -7,7 +7,7 @@ import 'fake_profile.dart';
 
 Widget _wrap({required bool isSelf}) => MaterialApp(
       home: UserProfilePage(
-        ownerAccount: kOwner,
+        accountId: kOwner,
         isSelf: isSelf,
         api: FakeProfileApi(sampleProfile()),
         cache: FakeProfileCache(),

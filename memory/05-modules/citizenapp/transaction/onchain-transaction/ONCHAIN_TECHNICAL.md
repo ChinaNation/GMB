@@ -38,7 +38,7 @@ citizenapp/lib/transaction/shared/
 
 ## 3. 关键流程
 
-1. `OnchainPaymentPanel` 收集 `toAddress / amount / remark / symbol`；`OnchainPaymentPage` 只是独立链上支付路由包装
+1. `OnchainPaymentPanel` 收集 `toSs58Address / amount / remark / symbol`；`OnchainPaymentPage` 只是独立链上支付路由包装
 2. 页面校验 SS58 前缀、金额、finalized 余额、ED 和预估手续费
    - 左侧 `ContactBookPage` 始终读取“我的钱包”默认用户的通讯录；它与右侧当前付款钱包相互独立
    - 从通讯录返回的联系人 `address` 已经是 SS58，页面只填入收款栏，不做 AccountId hex 转换，也不改变当前付款钱包
@@ -70,7 +70,7 @@ citizenapp/lib/transaction/shared/
 
 普通链上支付提交成功后写入 `LocalTxEntity`：
 
-- `recordKey = walletPubkeyHex:pending:txHash`
+- `recordKey = accountId:pending:txHash`
 - `type = transfer`
 - `status = pending`
 - `source = local_submit`
@@ -83,14 +83,15 @@ citizenapp/lib/transaction/shared/
 
 `LocalTxStore` 留在 `lib/transaction/shared/`，因为它服务于交易记录展示，不属于 onchain 支付目录私有实现。
 
-链上流水由 `lib/rpc/chain_tx_monitor.dart` 解析区块 `System.Events` 写入；newHeads 命中或未确认区块补扫命中时先写 `inBlock`，finalized 命中后升级为 `finalized`。区块事件记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`，pending 记录只用于本机提交后的即时展示和匹配合并；普通转账本机写入统一走 `LocalTxStore.upsertLocalSubmitTransfer()`，区块事件先到时也合并为同一条。
+链上流水由 `lib/rpc/chain_tx_monitor.dart` 解析区块 `System.Events` 写入；newHeads 命中或未确认区块补扫命中时先写 `inBlock`，finalized 命中后升级为 `finalized`。区块事件记录唯一键为 `accountId:blockHash:eventIndex`，pending 记录只用于本机提交后的即时展示和匹配合并；普通转账本机写入统一走 `LocalTxStore.upsertLocalSubmitTransfer()`，区块事件先到时也合并为同一条。
 
 交易页 `OnchainPaymentPanel` 中 `签名交易` 下方的 `已提交 / 已出块 / 已确认 / 失败` 状态行只统计当前交易钱包自己发起的链上转出记录：
 
-- 查询条件按当前钱包 `walletPubkeyHex` 读取本地流水。
+- 查询条件按当前钱包 `accountId` 读取本地流水。
 - 展示前继续过滤 `type == transfer` 且 `amountDeltaFen < 0`。
 - 收入记录不进入交易页状态行；完整收支流水只在 `我的 -> 我的钱包 -> 钱包详情` 及完整交易记录页展示。
-- 右上角切换交易钱包后，页面必须先清空旧钱包状态，再按新钱包 `walletPubkeyHex` 重新加载本机转出记录；异步查询返回时还要校验查询发起时的钱包 pubkey，避免旧查询结果覆盖新钱包状态。
+- 右上角切换交易钱包后，页面必须先清空旧钱包状态，再按新钱包 `accountId`
+  重新加载本机转出记录；异步查询返回时还要校验查询发起时的 AccountId，避免旧查询结果覆盖新钱包状态。
 - 右上角钱包只选择本次付款钱包；左上角通讯录不读取 `_currentWallet`，始终由通讯录模块按默认用户加载联系人。付款钱包、通讯录所属用户和联系人收款账户是三个独立语义。
 
 ## 6. 签名边界

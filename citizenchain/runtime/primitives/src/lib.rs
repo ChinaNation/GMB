@@ -5,6 +5,7 @@
 extern crate alloc;
 
 pub mod account_derive; // 账户地址派生
+pub mod admin_policy; // 管理员要素强制策略 Runtime API(节点升级守卫用)
 #[path = "../cid/mod.rs"]
 pub mod cid; // CID 常量与号码协议
 pub mod citizen_const; // 公民发行常量

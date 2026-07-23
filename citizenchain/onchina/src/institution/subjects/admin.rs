@@ -370,7 +370,7 @@ pub(crate) async fn update_institution(
         &existing,
         parent_for_legal_representative_scope.as_ref(),
     );
-    let legal_representative_account = match state.db.legal_representative_account_in_scope(
+    let legal_representative_account_id = match state.db.legal_representative_account_in_scope(
         legal_rep.cid_number.as_str(),
         &legal_representative_scope,
     ) {
@@ -391,7 +391,7 @@ pub(crate) async fn update_institution(
         family_name: legal_rep.family_name,
         given_name: legal_rep.given_name,
         cid_number: legal_rep.cid_number,
-        account: legal_representative_account,
+        account_id: legal_representative_account_id,
     });
     existing.legal_representative_photo_path = Some(legal_rep.photo_path);
     existing.legal_representative_photo_name = Some(legal_rep.photo_name);
@@ -404,7 +404,7 @@ pub(crate) async fn update_institution(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "INSTITUTION_UPDATE",
-        &ctx.admin_account,
+        &ctx.account_id,
         Some(cid_number.clone()),
         serde_json::json!({
             "cid_number": cid_number.clone(),
@@ -623,17 +623,17 @@ pub(crate) async fn get_institution(
     {
         return api_error(StatusCode::FORBIDDEN, 1003, "out of admin scope");
     }
-    let (created_by_family_name, created_by_given_name, created_by_role) =
-        resolve_created_by(&state, &inst.created_by);
+    let (creator_family_name, creator_given_name, creator_institution_code) =
+        resolve_created_by(&state, inst.creator_account_id.as_deref().unwrap_or(""));
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
         data: InstitutionDetailOutput {
             institution: inst,
             accounts,
-            created_by_family_name,
-            created_by_given_name,
-            created_by_role,
+            creator_family_name,
+            creator_given_name,
+            creator_institution_code,
         },
     })
     .into_response()
@@ -674,17 +674,17 @@ pub(crate) async fn get_federal_registry(
     }) else {
         return api_error(StatusCode::NOT_FOUND, 1004, "federal registry not found");
     };
-    let (created_by_family_name, created_by_given_name, created_by_role) =
-        resolve_created_by(&state, &inst.created_by);
+    let (creator_family_name, creator_given_name, creator_institution_code) =
+        resolve_created_by(&state, inst.creator_account_id.as_deref().unwrap_or(""));
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
         data: InstitutionDetailOutput {
             institution: inst,
             accounts,
-            created_by_family_name,
-            created_by_given_name,
-            created_by_role,
+            creator_family_name,
+            creator_given_name,
+            creator_institution_code,
         },
     })
     .into_response()

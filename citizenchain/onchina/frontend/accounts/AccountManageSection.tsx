@@ -3,7 +3,7 @@
 //
 // 数据源:cid_number/全称用 getOwnInstitution(基于激活节点绑定,不接受前端传 cid_number);
 // 账户列表读侧已切链上真源,改调 /accounts(后端链读)。增删都不再本地直写,而是发起本机构
-// 内部投票提案:由发起管理员钱包冷签一笔普通 extrinsic,授权由 runtime 在 origin 处以
+// 内部投票提案:由发起管理员使用签名钱包冷签一笔普通 extrinsic,授权由 runtime 在 origin 处以
 // is_institution_admin + 岗位码(proposer_role_code)校验,机构内部投票通过后才生效。
 // 协议账户(主/费用/两和基金/安全基金/永久质押/清算)由后端 can_delete=false 标记,
 // AccountList 据此自动隐藏删除按钮。
@@ -70,7 +70,7 @@ export function AccountManageSection({ auth }: AccountManageSectionProps) {
     try {
       const prepared = await deleteAccount(auth, cidNumber, accountName, roleCode);
       const signed = await signChain(prepared.request_id, prepared.sign_request);
-      await submitChainSign(auth, prepared.request_id, signed.signer_pubkey, signed.signature);
+      await submitChainSign(auth, prepared.request_id, signed.signer_public_key, signed.signature);
       notice.success(`账户 "${accountName}" 关闭提案已提交,机构内部投票通过后生效`);
       reload();
     } catch (err) {

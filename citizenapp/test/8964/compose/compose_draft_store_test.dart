@@ -6,10 +6,11 @@ import 'package:citizenapp/8964/models/square_models.dart';
 
 import '../../support/isar_test_env.dart';
 
-SquareComposeDraft _draft(String id, int updatedAt, {String owner = 'owner'}) =>
+SquareComposeDraft _draft(String id, int updatedAt,
+        {String accountId = 'accountId'}) =>
     SquareComposeDraft(
       draftId: id,
-      ownerAccount: owner,
+      accountId: accountId,
       contentFormat: SquarePostContentFormat.normal,
       postCategory: SquarePostCategory.normal,
       text: '内容 $id',
@@ -27,17 +28,24 @@ void main() {
     await store.save(_draft('a', 1000));
     await store.save(_draft('b', 3000));
     await store.save(_draft('c', 2000));
-    await store.save(_draft('x', 9999, owner: 'other'));
+    await store.save(_draft('x', 9999,
+        accountId:
+            '0x9999999999999999999999999999999999999999999999999999999999999999'));
 
-    final drafts = await store.list('owner');
+    final drafts = await store.list('accountId');
     expect(drafts.map((d) => d.draftId).toList(), ['b', 'c', 'a']);
-    expect(drafts.every((d) => d.ownerAccount == 'owner'), isTrue);
+    expect(drafts.every((d) => d.accountId == 'accountId'), isTrue);
   });
 
   test('同 draftId 再存为覆盖，不新增', () async {
-    await store.save(_draft('s', 1000, owner: 'ownerU'));
-    await store.save(_draft('s', 5000, owner: 'ownerU'));
-    final drafts = await store.list('ownerU');
+    await store.save(_draft('s', 1000,
+        accountId:
+            '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'));
+    await store.save(_draft('s', 5000,
+        accountId:
+            '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'));
+    final drafts = await store.list(
+        '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
     expect(drafts.length, 1);
     expect(drafts.single.updatedAtMillis, 5000);
   });

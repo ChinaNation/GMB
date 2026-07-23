@@ -94,6 +94,7 @@ class AppTheme {
       ],
     );
   }
+
   // 状态提示装饰（用于 banner / 提示条）
   static BoxDecoration bannerDecoration(Color color) {
     return BoxDecoration(
@@ -102,6 +103,7 @@ class AppTheme {
       border: Border.all(color: color.withAlpha(60)),
     );
   }
+
   // ThemeData
   static ThemeData get darkTheme {
     return ThemeData(

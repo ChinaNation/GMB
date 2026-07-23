@@ -38,7 +38,7 @@ class InstitutionProposalSummary {
 /// 统一机构链态读服务接口(可注入 fake 单测)。
 abstract interface class InstitutionChainState {
   /// 批量余额(hex→元);精确整键 + ChainReadCache。
-  Future<Map<String, double>> balances(List<String> pubkeyHexes);
+  Future<Map<String, double>> balances(List<String> accountIds);
 
   /// 完整管理员人员集合左连接岗位任职；无岗位管理员仍保留。
   Future<List<InstitutionAdminView>> adminViews(Institution institution);
@@ -62,9 +62,9 @@ class LiveInstitutionChainState implements InstitutionChainState {
   final MultisigTransferProposalFeed _feed;
 
   @override
-  Future<Map<String, double>> balances(List<String> pubkeyHexes) {
-    if (pubkeyHexes.isEmpty) return Future.value(const {});
-    return _chainRpc.fetchFinalizedBalances(pubkeyHexes);
+  Future<Map<String, double>> balances(List<String> accountIds) {
+    if (accountIds.isEmpty) return Future.value(const {});
+    return _chainRpc.fetchFinalizedBalances(accountIds);
   }
 
   @override

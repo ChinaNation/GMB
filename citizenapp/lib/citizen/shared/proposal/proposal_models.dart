@@ -26,7 +26,7 @@ class ProposalMeta {
     required this.status,
     this.internalCode,
     this.actorCidNumber,
-    this.executionAccount,
+    this.executionAccountId,
     this.subjectCidNumbers = const [],
     this.displayMeta,
   });
@@ -40,8 +40,8 @@ class ProposalMeta {
   /// 链上 Proposal.actor_cid_number，发起机构身份唯一真源。
   final String? actorCidNumber;
 
-  /// 链上 Proposal.execution_account，仅表示具体资产账户或个人多签执行账户。
-  final Uint8List? executionAccount;
+  /// 链上 Proposal.execution_account_id，仅表示具体资产账户或个人多签执行账户。
+  final Uint8List? executionAccountId;
 
   /// 链上 Proposal.subject_cid_numbers，仅表示受影响机构，不替代发起机构 CID。
   final List<String> subjectCidNumbers;
@@ -54,20 +54,20 @@ class ProposalMeta {
 /// 提案创建时冻结的一张投票票据。个人多签没有 CID/岗位码；机构票据三项齐全。
 class EligibleVoterTicket {
   const EligibleVoterTicket({
-    required this.pubkeyHex,
+    required this.voterAccountId,
     this.cidNumber,
     this.voterRoleCode,
   });
 
-  final String pubkeyHex;
+  final String voterAccountId;
   final String? cidNumber;
   final String? voterRoleCode;
 
   bool get isInstitution => cidNumber != null && voterRoleCode != null;
 
   String get ticketKey => isInstitution
-      ? '${cidNumber!}:${voterRoleCode!}:${pubkeyHex.toLowerCase()}'
-      : 'personal:${pubkeyHex.toLowerCase()}';
+      ? '${cidNumber!}:${voterRoleCode!}:${voterAccountId.toLowerCase()}'
+      : 'personal:${voterAccountId.toLowerCase()}';
 }
 
 /// Runtime upgrade 提案链上数据。

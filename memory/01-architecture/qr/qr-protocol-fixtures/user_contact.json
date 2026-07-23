@@ -2,7 +2,7 @@
   "p": "QR_V1",
   "k": 3,
   "b": {
-    "address": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+    "ss58_address": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
     "contact_name": "张三"
   }
 }

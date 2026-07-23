@@ -123,13 +123,13 @@ pub fn build_decrypt_admin_request(
     }
     let signer_public_key_bytes = hex::decode(signer_public_key.trim_start_matches("0x"))
         .map_err(|e| format!("公钥解码失败:{e}"))?;
-    let pubkey_arr: [u8; 32] = signer_public_key_bytes
+    let signer_public_key_array: [u8; 32] = signer_public_key_bytes
         .as_slice()
         .try_into()
         .map_err(|_| "公钥长度必须为 32 字节".to_string())?;
 
     let timestamp = now_secs();
-    let payload = build_challenge_payload(&pubkey_arr, cid_number, timestamp)
+    let payload = build_challenge_payload(&signer_public_key_array, cid_number, timestamp)
         .ok_or_else(|| "cid_number 超出解密签名协议范围".to_string())?;
     let payload_hex = format!("0x{}", hex::encode(&payload));
     let payload_hash = sha256_hash_public(&payload);
@@ -145,7 +145,7 @@ pub fn build_decrypt_admin_request(
         body: SignRequestBody {
             action: primitives::sign::QR_ACTION_DECRYPT_ADMIN,
             sig_alg: 1,
-            pubkey: public_key_b64(&signer_public_key_bytes)?,
+            signer_public_key: public_key_b64(&signer_public_key_bytes)?,
             payload: payload_b64(&payload),
         },
     };
@@ -209,7 +209,7 @@ pub fn verify_and_decrypt_admin(
 
     let signer_public_key =
         crate::shared::validation::normalize_public_key(&input.signer_public_key)?;
-    if response.body.pubkey != signer_public_key {
+    if response.body.signer_public_key != signer_public_key {
         return Err("公钥不匹配".to_string());
     }
 
@@ -345,7 +345,7 @@ mod tests {
     }
 
     #[test]
-    fn challenge_payload_pubkey_position() {
+    fn challenge_payload_signer_public_key_position() {
         let p = build_challenge_payload(&[0xCC; 32], "AH001-FCB0P-123456789-2026", 0)
             .expect("valid payload");
         assert_eq!(
@@ -361,7 +361,7 @@ mod tests {
     }
 
     #[test]
-    fn build_decrypt_admin_request_rejects_short_pubkey() {
+    fn build_decrypt_admin_request_rejects_short_signer_public_key() {
         let err = build_decrypt_admin_request("0xAA", "AH001-SCB0V-123456789-2026").unwrap_err();
         assert!(err.contains("公钥格式"));
     }

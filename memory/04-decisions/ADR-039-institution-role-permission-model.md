@@ -67,7 +67,7 @@ RoleSubject = (cid_number, role_code)
 
 ## 唯一真源与边界
 
-- admins 人员名册：`runtime/admins`。公权使用 `PublicAdmin { account_id, cid_number, family_name, given_name }`，非空公民 CID 只能引用 `citizen-identity` 的 `AccountIdByCid` / `CidByAccountId` 双向绑定；私权机构与个人多签使用 `Admin { account_id, family_name, given_name }`。
+- admins 人员名册：`runtime/admins`。公权、私权机构统一使用 `Admin { account_id, cid_number, family_name, given_name }`，非空公民 CID 只能引用 `citizen-identity` 的 `AccountIdByCid` / `CidByAccountId` 双向绑定。个人多签复用同一 SCALE 结构，但不属于机构管理员并按个人多签规则处理字段完整性。
 - 岗位、岗位权限、岗位码 nonce/占用和任职：`runtime/entity`。
 - CID 顶层能力、创世固定岗位与权限：runtime 共享常量与创世规范。
 - 业务动作权限要求、指定投票引擎、VotePlan 和通过后执行：对应业务模块。

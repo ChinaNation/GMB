@@ -3,11 +3,11 @@ import { createLoginChallenge, createSession } from '../src/auth/service';
 import { hexToBytes, signingMessage } from '../src/shared/signing_message';
 import type { Env } from '../src/types';
 
-const OWNER = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
+const ACCOUNT_ID = '0x1111111111111111111111111111111111111111111111111111111111111111';
 
 interface ChallengeRow {
   challenge_id: string;
-  owner_account: string;
+  account_id: string;
   signing_payload: string;
   expires_at: number;
   used_at: number | null;
@@ -24,7 +24,7 @@ class AuthStmt {
     if (this.sql.includes('INSERT INTO square_login_challenges')) {
       this.db.challenges.set(this.binds[0] as string, {
         challenge_id: this.binds[0] as string,
-        owner_account: this.binds[1] as string,
+        account_id: this.binds[1] as string,
         signing_payload: this.binds[2] as string,
         expires_at: this.binds[3] as number,
         used_at: null
@@ -41,7 +41,7 @@ class AuthStmt {
     }
     if (this.sql.includes('FROM square_device_subkeys')) {
       const pubkey = this.db.subkeys.get(this.binds[0] as string);
-      return pubkey ? ({ p256_pubkey: pubkey } as T) : null;
+      return pubkey ? ({ p256_public_key: pubkey } as T) : null;
     }
     return null;
   }
@@ -99,7 +99,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
       ['sign', 'verify']
     );
     const pubHex = toHex(await crypto.subtle.exportKey('raw', keyPair.publicKey));
-    db.subkeys.set(OWNER, pubHex);
+    db.subkeys.set(ACCOUNT_ID, pubHex);
     return { db, kv, env, keyPair };
   }
 
@@ -125,7 +125,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     vi.stubGlobal('fetch', fetchSpy);
 
     const challenge = await jsonBody(
-      await createLoginChallenge(req('/v1/square/auth/challenge', { owner_account: OWNER }), env)
+      await createLoginChallenge(req('/v1/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
     );
     expect(challenge.op_tag).toBe(0x1b);
     expect(typeof challenge.signing_payload_hex).toBe('string');
@@ -140,7 +140,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     const session = await jsonBody(
       await createSession(
         req('/v1/square/auth/session', {
-          owner_account: OWNER,
+          account_id: ACCOUNT_ID,
           challenge_id: challenge.challenge_id,
           signature
         }),
@@ -155,14 +155,14 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
   it('rejects a signature over the wrong message', async () => {
     const { env, keyPair } = await setup();
     const challenge = await jsonBody(
-      await createLoginChallenge(req('/v1/square/auth/challenge', { owner_account: OWNER }), env)
+      await createLoginChallenge(req('/v1/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
     );
     // 对错误 payload 签名 → 摘要不符 → 拒。
     const badSignature = await signChallenge(keyPair, 0x1b, '00'.repeat(8));
     await expect(
       createSession(
         req('/v1/square/auth/session', {
-          owner_account: OWNER,
+          account_id: ACCOUNT_ID,
           challenge_id: challenge.challenge_id,
           signature: badSignature
         }),

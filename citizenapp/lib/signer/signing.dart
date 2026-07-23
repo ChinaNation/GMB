@@ -78,7 +78,7 @@ const int kBinaryPrefixLen = 4;
 const int kAdminCidSlotLength = 32;
 
 /// 管理员原始签名载荷中的固定字段长度。
-const int kAdminPubkeyLength = 32;
+const int kSignerPublicKeyLength = 32;
 const int kAdminNonceLength = 16;
 
 /// 签名域分隔符 GMB(3 字节 ASCII),单源对齐 core_const::GMB。
@@ -97,12 +97,12 @@ Uint8List binaryDomainPrefix(int opTag) {
 ///
 /// 布局唯一镜像 runtime `primitives::sign::activate_admin_payload`：
 /// `GMB || 0x18 || cid_number(32B 右补零) || institution_code(4B) || kind(1B)
-/// || admin_pubkey(32B) || timestamp_le(8B) || nonce(16B)`。
+/// || signer_public_key(32B) || timestamp_le(8B) || nonce(16B)`。
 Uint8List activateAdminPayload({
   required String cidNumber,
   required List<int> institutionCode,
   required int kind,
-  required List<int> adminPubkey,
+  required List<int> signerPublicKey,
   required int timestamp,
   required List<int> nonce,
 }) {
@@ -119,9 +119,9 @@ Uint8List activateAdminPayload({
       ...institutionCode,
       kind,
       ..._requireFixedBytes(
-        adminPubkey,
-        kAdminPubkeyLength,
-        'adminPubkey',
+        signerPublicKey,
+        kSignerPublicKeyLength,
+        'signerPublicKey',
       ),
     ],
     timestamp: timestamp,
@@ -132,11 +132,11 @@ Uint8List activateAdminPayload({
 /// 构造机构管理员解密原始签名载荷。
 ///
 /// 布局唯一镜像 runtime `primitives::sign::decrypt_admin_payload`：
-/// `GMB || 0x19 || cid_number(32B 右补零) || admin_pubkey(32B)
+/// `GMB || 0x19 || cid_number(32B 右补零) || signer_public_key(32B)
 /// || timestamp_le(8B) || nonce(16B)`。
 Uint8List decryptAdminPayload({
   required String cidNumber,
-  required List<int> adminPubkey,
+  required List<int> signerPublicKey,
   required int timestamp,
   required List<int> nonce,
 }) {
@@ -144,9 +144,9 @@ Uint8List decryptAdminPayload({
     opTag: kOpSignDecrypt,
     cidNumber: cidNumber,
     fixedFields: _requireFixedBytes(
-      adminPubkey,
-      kAdminPubkeyLength,
-      'adminPubkey',
+      signerPublicKey,
+      kSignerPublicKeyLength,
+      'signerPublicKey',
     ),
     timestamp: timestamp,
     nonce: nonce,

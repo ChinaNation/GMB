@@ -61,11 +61,11 @@ class ClearingBankCandidate {
   }
 
   /// 机构账户由链统一派生规则确定。
-  String get mainAccountHex =>
-      hexFromAccountId(deriveInstitutionMainAccountId(cidNumber));
+  String get mainAccountId =>
+      accountIdText(deriveInstitutionMainAccountId(cidNumber));
 
-  String get feeAccountHex =>
-      hexFromAccountId(deriveInstitutionFeeAccountId(cidNumber));
+  String get feeAccountId =>
+      accountIdText(deriveInstitutionFeeAccountId(cidNumber));
 }
 
 /// CitizenApp 清算行目录服务。

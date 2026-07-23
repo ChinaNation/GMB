@@ -49,12 +49,12 @@ void main() {
     const channel = MethodChannel('org.citizenapp/device_subkey');
     late List<MethodCall> calls;
     late DeviceSubkey subkey;
-    String? pubkeyReturn;
+    String? publicKeyReturn;
     late String signReturnDerHex;
 
     setUp(() {
       calls = <MethodCall>[];
-      pubkeyReturn = '04${'00' * 64}';
+      publicKeyReturn = '04${'00' * 64}';
       signReturnDerHex = bytesToHex(
         Uint8List.fromList([0x30, 0x06, 0x02, 0x01, 0x01, 0x02, 0x01, 0x02]),
       );
@@ -63,7 +63,7 @@ void main() {
         calls.add(call);
         switch (call.method) {
           case 'publicKey':
-            return pubkeyReturn;
+            return publicKeyReturn;
           case 'sign':
             return signReturnDerHex;
           case 'delete':
@@ -79,13 +79,13 @@ void main() {
           .setMockMethodCallHandler(channel, null);
     });
 
-    test('publicKeyHex returns native pubkey', () async {
+    test('publicKeyHex returns native publicKey', () async {
       expect(await subkey.publicKeyHex(1), '04${'00' * 64}');
       expect(calls.single.arguments['walletIndex'], 1);
     });
 
     test('publicKeyHex throws when native returns null', () async {
-      pubkeyReturn = null;
+      publicKeyReturn = null;
       await expectLater(
         () => subkey.publicKeyHex(1),
         throwsA(isA<DeviceSubkeyException>()),

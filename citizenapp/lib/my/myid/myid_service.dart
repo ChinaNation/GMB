@@ -35,7 +35,7 @@ class MyIdState {
   const MyIdState({
     required this.tier,
     this.status,
-    this.votingAccount,
+    this.votingAccountId,
     this.cidNumber,
     this.residenceDistrict,
     this.passportValidFrom,
@@ -54,7 +54,7 @@ class MyIdState {
   final MyIdStatus? status;
 
   /// 链上投票绑定账户 = 默认用户钱包地址(SS58)。访客不显示,为 null。
-  final String? votingAccount;
+  final String? votingAccountId;
   final String? cidNumber;
 
   /// 预 join 的居住选区「省·市·镇」(service 层查字典拼好,UI 直接展示)。
@@ -138,7 +138,8 @@ class MyIdService {
 
     CitizenIdentityChainSnapshot? chainIdentity;
     try {
-      chainIdentity = await _identityChainReader.readByWallet(wallet.address);
+      chainIdentity =
+          await _identityChainReader.readByAccountId(wallet.accountId);
     } catch (e) {
       debugPrint('myid chain identity query failed: $e');
       // 链读失败不静默降级访客、不覆盖徽章快照,交由 UI 提示重试。
@@ -150,7 +151,7 @@ class MyIdService {
     }
 
     if (chainIdentity == null) {
-      await _persistBadgeSnapshot(wallet.address, 'visitor');
+      await _persistBadgeSnapshot(wallet.accountId, 'visitor');
       return const MyIdState(tier: MyIdTier.visitor);
     }
 
@@ -176,7 +177,7 @@ class MyIdService {
         candidateRaw == null ? null : _decodeCandidateIdentity(candidateRaw);
     final tier = candidate != null ? MyIdTier.candidate : MyIdTier.voting;
     await _persistBadgeSnapshot(
-      wallet.address,
+      wallet.accountId,
       tier == MyIdTier.candidate ? 'candidate' : 'voting',
     );
 
@@ -191,7 +192,7 @@ class MyIdService {
     return MyIdState(
       tier: tier,
       status: status,
-      votingAccount: wallet.address,
+      votingAccountId: wallet.accountId,
       cidNumber: chainIdentity.cidNumber,
       residenceDistrict: residence,
       passportValidFrom: _formatDateInt(voting.passportValidFrom),
@@ -233,10 +234,10 @@ class MyIdService {
   }
 
   /// 写默认用户的身份徽章快照,供非链页面(个人页/广场)展示,不作权限依据。
-  Future<void> _persistBadgeSnapshot(String walletAccount, String level) async {
+  Future<void> _persistBadgeSnapshot(String accountId, String level) async {
     try {
       await _badgeSnapshotStore.write(
-        walletAccount: walletAccount,
+        accountId: accountId,
         identityLevel: level,
       );
     } catch (e) {

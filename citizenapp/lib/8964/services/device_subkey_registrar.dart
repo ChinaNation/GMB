@@ -29,19 +29,19 @@ class DeviceSubkeyRegistrar {
 
   Future<void> register({
     required int walletIndex,
-    required String ownerAccount,
+    required String accountId,
     required DeviceBindingSigner signBinding,
     int? issuedAtMillis,
   }) async {
-    final pubkey = await _subkey.publicKeyHex(walletIndex);
+    final publicKey = await _subkey.publicKeyHex(walletIndex);
     final issuedAt = issuedAtMillis ?? DateTime.now().millisecondsSinceEpoch;
     final message =
-        buildDeviceBindingSigningMessage(ownerAccount, pubkey, issuedAt);
+        buildDeviceBindingSigningMessage(accountId, publicKey, issuedAt);
     final signatureHex = await signBinding(message);
     final turnstileToken = await _turnstileToken?.call();
     await _api.registerDeviceSubkey(
-      ownerAccount: ownerAccount,
-      p256PubkeyHex: pubkey,
+      accountId: accountId,
+      p256PublicKeyHex: publicKey,
       issuedAt: issuedAt,
       bindingSignatureHex: signatureHex,
       turnstileToken: turnstileToken,

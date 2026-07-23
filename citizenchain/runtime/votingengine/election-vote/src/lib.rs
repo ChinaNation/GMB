@@ -492,19 +492,23 @@ pub mod pallet {
                     cid_number: actor_cid_number,
                     role_code,
                 };
+                let subject =
+                    votingengine::types::AuthorizationSubject::Institution(role_subject.clone());
                 ensure!(
                     votingengine::Pallet::<T>::is_subject_voter_in_snapshot(
                         proposal_id,
-                        votingengine::types::AuthorizationSubject::Institution(
-                            role_subject.clone(),
-                        ),
+                        subject.clone(),
                         &who,
                     ),
                     Error::<T>::VoterNotInSnapshot
                 );
+                // 票据按【规范账户】防重：换绑前后归并为同一张票，杜绝新旧钱包各投一票。
+                let voter_account_id =
+                    votingengine::Pallet::<T>::resolve_subject_voter(&subject, &who)
+                        .unwrap_or_else(|| who.clone());
                 let ticket = votingengine::types::InstitutionVoteTicket {
                     role_subject,
-                    voter_account_id: who.clone(),
+                    voter_account_id,
                 };
                 ensure!(
                     !MutualElectionVotesByTicket::<T>::contains_key(proposal_id, &ticket),

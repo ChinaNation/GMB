@@ -69,7 +69,7 @@ class CreatorService {
     if (session == null) return CreatorPageData.gated();
 
     final membership = await _subscriptionRpc.fetchSubscriptionSnapshot(
-      subscriberAddress: session.ownerAccount,
+      subscriberAccountId: session.accountId,
     );
     if (membership.state?.isEffectiveAt(membership.chainNowMs) != true) {
       return CreatorPageData.gated();
@@ -82,14 +82,14 @@ class CreatorService {
       // Cloudflare 只补展示名与统计；瞬时不可用时仍允许按链上真态进入页面。
       _api.fetchMyPlan(session).catchError((_) => null),
       _api.fetchOverview(session).catchError((_) => CreatorOverview.zero),
-      _subscriptionRpc.fetchCreatorPlans(session.ownerAccount),
+      _subscriptionRpc.fetchCreatorPlans(session.accountId),
     ]);
     final displayPlan = results[0] as CreatorPlan?;
     final overview = results[1] as CreatorOverview;
     final chainTiers = results[2] as List<ChainCreatorTier>;
     return CreatorPageData.active(
       plan: mergeCreatorPlanWithChain(
-        creatorAccount: session.ownerAccount,
+        creatorAccountId: session.accountId,
         displayPlan: displayPlan,
         chainTiers: chainTiers,
       ),
@@ -110,19 +110,19 @@ class CreatorService {
     if (session == null) {
       throw const CreatorException('会话不可用，请稍后重试');
     }
-    if (session.ownerAccount != wallet.address) {
+    if (session.accountId != wallet.accountId) {
       throw const CreatorException('当前会话与默认热钱包不一致，请重新登录');
     }
     try {
       final membership = await _subscriptionRpc.fetchSubscriptionSnapshot(
-        subscriberAddress: wallet.address,
+        subscriberAccountId: wallet.accountId,
       );
       if (membership.state?.isEffectiveAt(membership.chainNowMs) != true) {
         throw const CreatorException('需要当前有效的平台会员才能设置创作者会员档');
       }
       final result = await _subscriptionRpc.setCreatorPlans(
-        fromAddress: wallet.address,
-        signerPubkey: Uint8List.fromList(hexToBytes(wallet.pubkeyHex)),
+        fromSs58Address: wallet.ss58Address,
+        signerPublicKey: Uint8List.fromList(hexToBytes(wallet.accountId)),
         tiers: tiers
             .map(
               (tier) => CreatorTierInput(
@@ -142,7 +142,7 @@ class CreatorService {
       );
       return _completeFinalizedSave(
         session: session,
-        ownerAccount: wallet.address,
+        accountId: wallet.accountId,
         txHash: result.txHash,
         blockHashHex: result.blockHashHex,
         signedExtrinsicHex: result.signedExtrinsicHex,
@@ -160,8 +160,8 @@ class CreatorService {
     }
   }
 
-  String _pendingMirrorKey(String ownerAccount) =>
-      'creator_plan_mirror_pending:$ownerAccount';
+  String _pendingMirrorKey(String accountId) =>
+      'creator_plan_mirror_pending:$accountId';
 
   Future<SharedPreferences> get _prefs async {
     final preferences = _preferences;
@@ -170,7 +170,7 @@ class CreatorService {
   }
 
   Future<void> _writePendingMirror({
-    required String ownerAccount,
+    required String accountId,
     required String txHash,
     required String blockHashHex,
     required String signedExtrinsicHex,
@@ -178,7 +178,7 @@ class CreatorService {
   }) async {
     final prefs = await _prefs;
     final saved = await prefs.setString(
-      _pendingMirrorKey(ownerAccount),
+      _pendingMirrorKey(accountId),
       jsonEncode({
         'tx_hash': txHash,
         'block_hash': blockHashHex,
@@ -189,15 +189,15 @@ class CreatorService {
     if (!saved) throw StateError('无法保存创作者展示镜像重试记录');
   }
 
-  Future<void> _clearPendingMirror(String ownerAccount) async {
+  Future<void> _clearPendingMirror(String accountId) async {
     final prefs = await _prefs;
-    await prefs.remove(_pendingMirrorKey(ownerAccount));
+    await prefs.remove(_pendingMirrorKey(accountId));
   }
 
   Future<void> _retryPendingMirror(SquareSession session) async {
     try {
       final prefs = await _prefs;
-      final raw = prefs.getString(_pendingMirrorKey(session.ownerAccount));
+      final raw = prefs.getString(_pendingMirrorKey(session.accountId));
       if (raw == null) return;
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) return;
@@ -222,7 +222,7 @@ class CreatorService {
         signedExtrinsicHex: signedExtrinsicHex,
         tiers: tiers,
       );
-      await prefs.remove(_pendingMirrorKey(session.ownerAccount));
+      await prefs.remove(_pendingMirrorKey(session.accountId));
     } on Exception {
       // 保留待同步记录；页面仍以 finalized 链上价格为真源，不阻断创作者功能。
     }
@@ -231,26 +231,26 @@ class CreatorService {
   /// 进入本方法时链上业务已经 finalized；之后任何边缘或本地缓存失败都不得要求用户重签。
   Future<CreatorPlan> _completeFinalizedSave({
     required SquareSession session,
-    required String ownerAccount,
+    required String accountId,
     required String txHash,
     required String blockHashHex,
     required String signedExtrinsicHex,
     required List<CreatorTier> tiers,
   }) async {
     final localPlan = CreatorPlan(
-      creatorAccount: ownerAccount,
+      creatorAccountId: accountId,
       tiers: tiers,
       updatedAt: 0,
     );
     try {
       await _appendLocalTransaction(
-        ownerAccount: ownerAccount,
+        accountId: accountId,
         txHash: txHash,
         blockHashHex: blockHashHex,
         signedExtrinsicHex: signedExtrinsicHex,
       );
       await _writePendingMirror(
-        ownerAccount: ownerAccount,
+        accountId: accountId,
         txHash: txHash,
         blockHashHex: blockHashHex,
         signedExtrinsicHex: signedExtrinsicHex,
@@ -269,15 +269,15 @@ class CreatorService {
         signedExtrinsicHex: signedExtrinsicHex,
         tiers: tiers,
       );
-      await _clearPendingMirror(ownerAccount);
+      await _clearPendingMirror(accountId);
     } on Exception {
       // 保留待同步记录；下次进入创作者页只重试 HTTP。
     }
 
     try {
-      final chainTiers = await _subscriptionRpc.fetchCreatorPlans(ownerAccount);
+      final chainTiers = await _subscriptionRpc.fetchCreatorPlans(accountId);
       return mergeCreatorPlanWithChain(
-        creatorAccount: ownerAccount,
+        creatorAccountId: accountId,
         displayPlan: displayPlan,
         chainTiers: chainTiers,
       );
@@ -288,13 +288,13 @@ class CreatorService {
 
   /// 本地按钱包账户保留有限条 finalized 交易证明；Cloudflare 成功后也不删除链上交易记录。
   Future<void> _appendLocalTransaction({
-    required String ownerAccount,
+    required String accountId,
     required String txHash,
     required String blockHashHex,
     required String signedExtrinsicHex,
   }) async {
     final prefs = await _prefs;
-    final key = 'subscription_tx_history:$ownerAccount';
+    final key = 'subscription_tx_history:$accountId';
     final raw = prefs.getString(key);
     final history = <Map<String, dynamic>>[];
     if (raw != null) {

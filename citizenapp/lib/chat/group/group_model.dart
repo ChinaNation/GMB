@@ -22,11 +22,11 @@ enum GroupMemberRole {
 /// 群成员镜像(账户 + 角色)。
 class GroupMember {
   const GroupMember({
-    required this.account,
+    required this.accountId,
     this.role = GroupMemberRole.member,
   });
 
-  final String account;
+  final String accountId;
   final GroupMemberRole role;
 
   bool get isAdmin => role == GroupMemberRole.admin;
@@ -37,7 +37,7 @@ class ChatGroup {
   const ChatGroup({
     required this.groupId,
     required this.name,
-    required this.creatorAccount,
+    required this.creatorAccountId,
     required this.epoch,
     required this.roster,
     this.leftLocally = false,
@@ -46,7 +46,7 @@ class ChatGroup {
   /// 群 ID = conversation_id,形如 `grp:<creator>:<nonce>`。
   final String groupId;
   final String name;
-  final String creatorAccount;
+  final String creatorAccountId;
 
   /// MLS 当前 epoch 的本地镜像(UI/调试用)。
   final int epoch;
@@ -60,10 +60,10 @@ class ChatGroup {
   /// admin 账户集合。
   Set<String> get adminSet => roster
       .where((member) => member.isAdmin)
-      .map((member) => member.account)
+      .map((member) => member.accountId)
       .toSet();
 
   /// 全体成员账户(去重)。
-  List<String> get memberAccounts =>
-      roster.map((member) => member.account).toList(growable: false);
+  List<String> get memberAccountIds =>
+      roster.map((member) => member.accountId).toList(growable: false);
 }

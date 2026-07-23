@@ -9,6 +9,8 @@ import { useAuth } from '../hooks/useAuth';
 import { writeStoredAuth } from '../utils/storedAuth';
 import { parseSignedLoginPayload } from '../utils/parseSignedPayload';
 import { CitizenSignaturePanel } from '../core/CitizenSignaturePanel';
+import { parseQrEnvelope } from '../core/citizenQr';
+import type { UserContactBody } from '../core/citizenQr';
 import type { AdminAuth } from './types';
 import type { AdminIdentifyResult, AdminQrSignRequestResult, NodeBindingRequired } from './api';
 import {
@@ -73,6 +75,7 @@ export function LoginView() {
   const { auth, setAuth } = useAuth();
   const [pendingQrLogin, setPendingQrLogin] = useState<AdminQrSignRequestResult | null>(null);
   const [pendingBinding, setPendingBinding] = useState<NodeBindingRequired | null>(null);
+  const [contactName, setContactName] = useState('');
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [challengeLoading, setChallengeLoading] = useState(false);
   const [scanSubmitting, setScanSubmitting] = useState(false);
@@ -81,7 +84,7 @@ export function LoginView() {
   const finishLogin = useCallback((accessToken: string, admin: AdminIdentifyResult) => {
     const nextAuth: AdminAuth = {
       access_token: accessToken,
-      admin_account: admin.admin_account,
+      account_id: admin.account_id,
       institution_cid_number: admin.institution_cid_number,
       institution_code: admin.institution_code,
       admin_level: admin.admin_level ?? null,
@@ -99,31 +102,45 @@ export function LoginView() {
     setPendingQrLogin(null);
     setPendingBinding(null);
     setSelectedCandidateId('');
+    setContactName('');
     notice.success('登录成功');
   }, [setAuth]);
 
-  const onCreateQrLogin = async () => {
+  const onScanIdentity = useCallback(async (raw: string) => {
     setChallengeLoading(true);
     try {
+      const userCode = parseQrEnvelope(raw);
+      if (userCode.kind !== 'user_contact') {
+        throw new Error(`必须扫描 QR_V1 用户码，当前类型为 ${userCode.kind}`);
+      }
+      const body = userCode.body as UserContactBody;
       const sessionId = createSessionId();
       const origin = window.location.origin;
       const challenge = await createAdminQrSignRequest({
+        identity_qr: raw,
         origin,
         session_id: sessionId,
       });
+      setContactName(body.contact_name);
       setPendingQrLogin(challenge);
-      notice.success('登录二维码已生成');
+      notice.success('已生成该管理员专用登录二维码');
     } catch (err) {
-      notice.error(err, '生成登录二维码失败');
+      notice.error(err, '用户码读取失败');
+      setContactName('');
       setPendingQrLogin(null);
     } finally {
       setChallengeLoading(false);
     }
+  }, []);
+
+  const resetIdentityScan = () => {
+    setPendingQrLogin(null);
+    setContactName('');
   };
 
   const onCompleteSignedLogin = useCallback(async (raw: string) => {
     if (!pendingQrLogin) {
-      notice.error('请先生成登录二维码');
+      notice.error('请先重新扫描管理员用户码');
       return;
     }
     setScanSubmitting(true);
@@ -131,9 +148,8 @@ export function LoginView() {
       const payload = parseSignedLoginPayload(raw, pendingQrLogin.challenge_id);
       const completion = await completeAdminQrLogin({
         challenge_id: payload.challenge_id,
-        session_id: payload.session_id || pendingQrLogin.session_id,
-        admin_account: payload.admin_account,
-        signer_pubkey: payload.signer_pubkey,
+        session_id: pendingQrLogin.session_id,
+        signer_public_key: payload.signer_public_key,
         signature: payload.signature,
       });
       if (completion.status === 'BINDING_REQUIRED' && completion.binding) {
@@ -194,8 +210,9 @@ export function LoginView() {
         if (cancelled) return;
         if (status.status === 'PENDING') return;
         if (status.status === 'EXPIRED') {
-          notice.warning('二维码已过期，请重新生成');
+          notice.warning('二维码已过期，请重新扫描管理员用户码');
           setPendingQrLogin(null);
+          setContactName('');
           return;
         }
         if (status.status === 'SUCCESS' && status.access_token && status.admin) {
@@ -254,7 +271,7 @@ export function LoginView() {
           管理员扫码登录
         </Typography.Title>
         <Typography.Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>
-          使用公民钱包扫描登录二维码并回扫签名响应
+          先读取管理员用户码，再由对应公民钱包签名登录
         </Typography.Text>
       </div>
 
@@ -262,21 +279,27 @@ export function LoginView() {
       <div style={{ padding: '32px 36px 36px' }}>
         <OrganizationCaNotice />
         <CitizenSignaturePanel
-          qrTitle="登录二维码"
+          qrTitle={pendingQrLogin ? '定向登录二维码' : '登录请求'}
           qrValue={pendingQrLogin?.login_qr_payload}
           qrPlaceholderValue="ONCHINA_LOGIN_PENDING"
           qrHint={
             pendingQrLogin
-              ? `有效期至 ${new Date(pendingQrLogin.expire_at * 1000).toLocaleTimeString()}`
-              : '请点击按钮生成二维码'
+              ? `${contactName} · 有效期至 ${new Date(pendingQrLogin.expire_at * 1000).toLocaleTimeString()}`
+              : '扫描管理员用户码后生成，仅对应钱包可以签名'
           }
-          scannerHint="开启摄像头扫描公民钱包生成的签名响应二维码"
-          primaryActionText={pendingQrLogin ? '重新生成' : '生成二维码'}
+          scannerTitle={pendingQrLogin ? '签名响应' : '管理员用户码'}
+          scannerHint={
+            pendingQrLogin
+              ? '扫描公民钱包生成的签名响应二维码'
+              : '只读取 QR_V1 用户码中的钱包地址；联系人名称仅用于本页显示'
+          }
+          primaryActionText={pendingQrLogin ? '重新扫描用户码' : undefined}
           primaryActionLoading={challengeLoading}
-          onPrimaryAction={onCreateQrLogin}
-          scannerDisabled={!pendingQrLogin || scanSubmitting}
-          scannerLoading={scanSubmitting}
-          onDetected={onCompleteSignedLogin}
+          onPrimaryAction={resetIdentityScan}
+          scannerButtonText={pendingQrLogin ? '扫描签名响应' : '扫描管理员用户码'}
+          scannerDisabled={challengeLoading || scanSubmitting}
+          scannerLoading={challengeLoading || scanSubmitting}
+          onDetected={pendingQrLogin ? onCompleteSignedLogin : onScanIdentity}
           onScannerError={(msg) => notice.error(msg)}
         />
         <Modal

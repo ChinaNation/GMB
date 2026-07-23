@@ -7,17 +7,18 @@ import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:citizenwallet/qr/bodies/sign_request_body.dart';
 import 'package:citizenwallet/qr/envelope.dart';
 import 'package:citizenwallet/qr/qr_protocols.dart';
+import 'package:citizenwallet/login/login_qr_handler.dart';
 import 'package:citizenwallet/signer/qr_signer.dart';
 
 void main() {
   late QrSigner signer;
-  late String testPubkeyHex;
+  late String testSignerPublicKeyHex;
 
   setUp(() {
     signer = QrSigner();
     final pair = Keyring.sr25519.fromSeed(Uint8List(32));
     pair.ss58Format = 2027;
-    testPubkeyHex =
+    testSignerPublicKeyHex =
         '0x${pair.bytes().map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
   });
 
@@ -50,7 +51,7 @@ void main() {
         'e': now + 90,
         'b': SignRequestBody.fromHex(
           action: QrActions.transferWithRemark,
-          pubkeyHex: testPubkeyHex,
+          signerPublicKeyHex: testSignerPublicKeyHex,
           payloadHex: '0x0102',
         ).toJson(),
       };
@@ -64,7 +65,7 @@ void main() {
       expect(parsed.kind, QrKind.signRequest);
       expect(parsed.id, 'test-valid-req-id-0001');
       expect(parsed.body.action, QrActions.transferWithRemark);
-      expect(parsed.body.pubkeyHex, testPubkeyHex);
+      expect(parsed.body.signerPublicKeyHex, testSignerPublicKeyHex);
       expect(parsed.body.payloadHex, '0x0102');
     });
 
@@ -129,6 +130,25 @@ void main() {
         throwsA(isA<QrSignException>()),
       );
     });
+
+    test('构造请求拒绝非规范签名公钥文本', () {
+      expect(
+        () => SignRequestBody.fromHex(
+          action: QrActions.login,
+          signerPublicKeyHex: testSignerPublicKeyHex.toUpperCase(),
+          payloadHex: '0x0102',
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => SignRequestBody.fromHex(
+          action: QrActions.login,
+          signerPublicKeyHex: testSignerPublicKeyHex.substring(2),
+          payloadHex: '0x0102',
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('QrSigner.buildResponse', () {
@@ -141,7 +161,7 @@ void main() {
         expiresAt: now + 90,
         body: SignRequestBody.fromHex(
           action: QrActions.login,
-          pubkeyHex: testPubkeyHex,
+          signerPublicKeyHex: testSignerPublicKeyHex,
           payloadHex: '0x01020304',
         ),
       );
@@ -153,7 +173,7 @@ void main() {
 
       expect(response.kind, QrKind.signResponse);
       expect(response.id, request.id);
-      expect(response.body.pubkeyHex, testPubkeyHex);
+      expect(response.body.signerPublicKeyHex, testSignerPublicKeyHex);
       expect(response.body.signatureHex, '0x${'aa' * 64}');
 
       final json = jsonDecode(response.toRawJson()) as Map<String, dynamic>;
@@ -162,6 +182,45 @@ void main() {
       expect(json['b']['u'], isA<String>());
       expect(json['b']['s'], isA<String>());
       expect(json['b'].containsKey('payload_hash'), isFalse);
+    });
+  });
+
+  group('登录请求目标钱包', () {
+    test('只允许 b.u 指定的同一钱包', () {
+      final request = QrEnvelope<SignRequestBody>(
+        kind: QrKind.signRequest,
+        id: 'targeted-login-request',
+        issuedAt: null,
+        expiresAt: DateTime.now().millisecondsSinceEpoch ~/ 1000 + 90,
+        body: SignRequestBody.fromHex(
+          action: QrActions.login,
+          signerPublicKeyHex: testSignerPublicKeyHex,
+          payloadHex: '0x6f6e6368696e61',
+        ),
+      );
+
+      expect(
+        loginRequestTargetsAccountId(request, testSignerPublicKeyHex),
+        isTrue,
+      );
+      expect(
+        loginRequestTargetsAccountId(request, '0x${'22' * 32}'),
+        isFalse,
+      );
+      expect(
+        loginRequestTargetsAccountId(
+          request,
+          testSignerPublicKeyHex.toUpperCase(),
+        ),
+        isFalse,
+      );
+      expect(
+        loginRequestTargetsAccountId(
+          request,
+          testSignerPublicKeyHex.substring(2),
+        ),
+        isFalse,
+      );
     });
   });
 
@@ -183,13 +242,28 @@ void main() {
       expect(h.startsWith('0x'), isTrue);
       expect(h.length, 66);
     });
+
+    test('拒绝非规范 payload hex', () {
+      expect(
+        () => QrSigner.computePayloadHash('0102'),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => QrSigner.computePayloadHash('0X0102'),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => QrSigner.computePayloadHash('0xAA'),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('QrSigner.signingBytesFor', () {
     test('公民签名确认使用 GMB OP_SIGN_CITIZEN_IDENTITY 哈希域', () {
       final body = SignRequestBody.fromHex(
         action: QrActions.citizenIdentity,
-        pubkeyHex: testPubkeyHex,
+        signerPublicKeyHex: testSignerPublicKeyHex,
         payloadHex: '0x01020304',
       );
       final input = Uint8List.fromList([0x47, 0x4d, 0x42, 0x10, 1, 2, 3, 4]);
@@ -210,14 +284,14 @@ void main() {
       final pair = Keyring.sr25519.fromSeed(Uint8List(32));
       final message = Uint8List.fromList([1, 2, 3, 4]);
       final signature = pair.sign(message);
-      final pubHex =
+      final signerPublicKey =
           '0x${pair.bytes().map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
       final sigHex =
           '0x${signature.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
 
       expect(
         QrSigner.verifySr25519Signature(
-          pubkeyHex: pubHex,
+          signerPublicKeyHex: signerPublicKey,
           signatureHex: sigHex,
           message: message,
         ),
@@ -228,7 +302,7 @@ void main() {
     test('无效签名验证失败', () {
       expect(
         QrSigner.verifySr25519Signature(
-          pubkeyHex: '0x${'00' * 32}',
+          signerPublicKeyHex: '0x${'00' * 32}',
           signatureHex: '0x${'ff' * 64}',
           message: Uint8List.fromList([1, 2, 3, 4]),
         ),

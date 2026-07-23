@@ -10,10 +10,10 @@ package gmb.chat.v1;
 
 message ChatRoute {
   uint32 protocol_version = 1;
-  string peer_account = 2;
+  string peer_account_id = 2;
   string route_display_name = 3;
   string device_id = 4;
-  string device_public_key_hex = 5;
+  string device_public_key = 5;
   string safety_number = 6;
   string nearby_peer_hint = 7;
   uint64 created_at_millis = 8;
@@ -30,8 +30,8 @@ message ChatEnvelope {
   uint32 protocol_version = 1;
   string envelope_id = 2;
   string conversation_id = 3;
-  string sender_account = 4;
-  string recipient_account = 5;
+  string sender_account_id = 4;
+  string recipient_account_id = 5;
   string sender_device_id = 6;
   bytes mls_wire_message = 7;
   bytes encrypted_metadata = 8;
@@ -43,9 +43,9 @@ message ChatEnvelope {
 
 message ChatKeyPackage {
   uint32 protocol_version = 1;
-  string owner_account = 2;
+  string account_id = 2;
   string device_id = 3;
-  string device_public_key_hex = 4;
+  string device_public_key = 4;
   string key_package_id = 5;
   bytes key_package = 6;
   string cipher_suite = 7;
@@ -54,9 +54,9 @@ message ChatKeyPackage {
 }
 
 message PublishChatKeyPackageRequest {
-  string owner_account = 1;
+  string account_id = 1;
   string device_id = 2;
-  string device_public_key_hex = 3;
+  string device_public_key = 3;
   string key_package_id = 4;
   bytes key_package = 5;
   string cipher_suite = 6;
@@ -65,13 +65,13 @@ message PublishChatKeyPackageRequest {
 }
 
 message FetchChatKeyPackagesRequest {
-  string owner_account = 1;
-  string requester_account = 2;
+  string account_id = 1;
+  string requester_account_id = 2;
   uint32 limit = 3;
 }
 
 message ConsumeChatKeyPackageRequest {
-  string owner_account = 1;
+  string account_id = 1;
   string key_package_id = 2;
-  string requester_account = 3;
+  string requester_account_id = 3;
 }

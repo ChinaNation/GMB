@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blake2AsU8a, encodeAddress } from "@polkadot/util-crypto";
+import { blake2AsU8a } from "@polkadot/util-crypto";
 import { bytesToHex, hexToBytes } from "../src/shared/signing_message";
 import { storageValueKey } from "../src/chain/storage_key";
 import {
@@ -11,6 +11,10 @@ import {
   verifyFinalizedSubscriptionTransaction,
 } from "../src/chain/subscription";
 import type { Env } from "../src/types";
+
+function accountId(bytes: Uint8Array): string {
+  return `0x${bytesToHex(bytes)}`;
+}
 
 // 与 runtime 金标 state_platform 逐字节一致（新布局：无 pending_plan，末尾含
 // authorized_price_fen + suspend_reason）。
@@ -106,9 +110,8 @@ describe("decodeCreatorPlans", () => {
 
 describe("buildSubscriptionKey", () => {
   it("平台键保持 Blake2_128Concat 单键布局", () => {
-    const account = encodeAddress(
+    const account = accountId(
       Uint8Array.from(Array.from({ length: 32 }, (_, index) => index + 1)),
-      2027,
     );
     const key = buildSubscriptionKey(account, { kind: "platform" });
     const prefix = storageValueKey("SquarePost", "Subscriptions");
@@ -118,18 +121,18 @@ describe("buildSubscriptionKey", () => {
   });
 
   it("创作者键包含收款账户", () => {
-    const subscriber = encodeAddress(new Uint8Array(32).fill(2), 2027);
-    const creator = encodeAddress(new Uint8Array(32).fill(9), 2027);
+    const subscriber = accountId(new Uint8Array(32).fill(2));
+    const creator = accountId(new Uint8Array(32).fill(9));
     const key = buildSubscriptionKey(subscriber, {
       kind: "creator",
-      creatorAccount: creator,
+      creatorAccountId: creator,
     });
     expect(key.length).toBe(113);
     expect(key[key.length - 33]).toBe(0x01);
   });
 
   it("CreatorPlans 键使用创作者账户作为 Blake2_128Concat 单键", () => {
-    const creator = encodeAddress(new Uint8Array(32).fill(7), 2027);
+    const creator = accountId(new Uint8Array(32).fill(7));
     const key = buildCreatorPlansKey(creator);
     const prefix = storageValueKey("SquarePost", "CreatorPlans");
     expect(Array.from(key.slice(0, 32))).toEqual(Array.from(prefix));
@@ -140,7 +143,7 @@ describe("buildSubscriptionKey", () => {
 describe("finalized 订阅交易证明", () => {
   it("校验交易哈希、签名账户、调用参数、区块包含关系和 finalized 主链", async () => {
     const signer = new Uint8Array(32).fill(7);
-    const owner = encodeAddress(signer, 2027);
+    const signerAccountId = accountId(signer);
     const call = Uint8Array.from([34, 1, 0, 0, 2, ...new Uint8Array(16).fill(1)]);
     const signed = signedExtrinsic(signer, call);
     const signedHex = `0x${bytesToHex(signed)}`;
@@ -151,7 +154,7 @@ describe("finalized 订阅交易证明", () => {
     try {
       await expect(verifyFinalizedSubscriptionTransaction(
         rpcEnv(),
-        owner,
+        signerAccountId,
         { kind: "platform_subscribe", membershipLevel: "spark" },
         { txHash, blockHash, signedExtrinsicHex: signedHex },
       )).resolves.toMatchObject({
@@ -174,7 +177,7 @@ describe("finalized 订阅交易证明", () => {
     );
     await expect(verifyFinalizedSubscriptionTransaction(
       rpcEnv(),
-      encodeAddress(signer, 2027),
+      accountId(signer),
       { kind: "platform_subscribe", membershipLevel: "freedom" },
       {
         txHash: `0x${bytesToHex(blake2AsU8a(signed, 256))}`,
@@ -195,17 +198,18 @@ describe("finalized 订阅交易证明", () => {
       chainTimestamp: 1000,
       action: { kind: "platform_cancel" as const },
     };
-    await bindFinalizedTransactionConfirmation(env, "owner", transaction, "a".repeat(64), 2000);
+    const account = `0x${"33".repeat(32)}`;
+    await bindFinalizedTransactionConfirmation(env, account, transaction, "a".repeat(64), 2000);
     await expect(bindFinalizedTransactionConfirmation(
       env,
-      "owner",
+      account,
       transaction,
       "a".repeat(64),
       3000,
     )).resolves.toBeUndefined();
     await expect(bindFinalizedTransactionConfirmation(
       env,
-      "owner",
+      account,
       transaction,
       "b".repeat(64),
       3000,
@@ -225,7 +229,7 @@ class ProofStmt {
   async run(): Promise<{ meta: { changes: number } }> {
     if (this.sql.includes("INSERT OR IGNORE") && !this.db.row) {
       this.db.row = {
-        owner_account: this.args[1],
+        account_id: this.args[1],
         block_hash: this.args[2],
         block_number: this.args[3],
         extrinsic_index: this.args[4],

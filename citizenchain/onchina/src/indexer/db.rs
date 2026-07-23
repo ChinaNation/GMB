@@ -9,8 +9,8 @@ pub(crate) struct TxRecordInsert {
     pub extrinsic_index: Option<i16>,
     pub event_index: i16,
     pub tx_type: &'static str,
-    pub from_address: Option<String>,
-    pub to_address: Option<String>,
+    pub sender_account_id: Option<String>,
+    pub recipient_account_id: Option<String>,
     pub amount_fen: i64,
     pub fee_fen: Option<i64>,
     pub block_timestamp: Option<DateTime<Utc>>,
@@ -37,15 +37,15 @@ pub(crate) fn insert_block_records(
 
     for r in records {
         tx.execute(
-            "INSERT INTO tx_records(block_number, extrinsic_index, event_index, tx_type, from_address, to_address, amount_fen, fee_fen, block_timestamp)
+            "INSERT INTO tx_records(block_number, extrinsic_index, event_index, tx_type, sender_account_id, recipient_account_id, amount_fen, fee_fen, block_timestamp)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             &[
                 &r.block_number,
                 &r.extrinsic_index,
                 &r.event_index,
                 &r.tx_type,
-                &r.from_address,
-                &r.to_address,
+                &r.sender_account_id,
+                &r.recipient_account_id,
                 &r.amount_fen,
                 &r.fee_fen,
                 &r.block_timestamp,
@@ -64,10 +64,10 @@ pub(crate) fn insert_block_records(
     Ok(())
 }
 
-/// 查询某地址的交易记录（游标分页）。
+/// 查询某账户的交易记录（游标分页）。
 pub(crate) fn query_tx_records(
     conn: &mut Client,
-    address: &str,
+    account_id: &str,
     before_id: Option<i64>,
     tx_type_filter: Option<&str>,
     limit: i64,
@@ -75,8 +75,8 @@ pub(crate) fn query_tx_records(
     // 动态构建 SQL 以支持可选的 tx_type 筛选
     let mut sql = String::from(
         "SELECT id, block_number, extrinsic_index, event_index, tx_type, \
-         from_address, to_address, amount_fen, fee_fen, block_timestamp \
-         FROM tx_records WHERE (from_address=$1 OR to_address=$1)",
+         sender_account_id, recipient_account_id, amount_fen, fee_fen, block_timestamp \
+         FROM tx_records WHERE (sender_account_id=$1 OR recipient_account_id=$1)",
     );
     let mut param_idx = 2u32;
 
@@ -108,7 +108,7 @@ pub(crate) fn query_tx_records(
 
     // 构建参数列表
     let mut params: Vec<Box<dyn postgres::types::ToSql + Sync>> = Vec::new();
-    params.push(Box::new(address.to_string()));
+    params.push(Box::new(account_id.to_string()));
     if let Some(bid) = before_id {
         params.push(Box::new(bid));
     }
@@ -132,8 +132,8 @@ pub(crate) fn query_tx_records(
             extrinsic_index: row.get(2),
             event_index: row.get(3),
             tx_type: row.get(4),
-            from_address: row.get(5),
-            to_address: row.get(6),
+            sender_account_id: row.get(5),
+            recipient_account_id: row.get(6),
             amount_fen: row.get(7),
             fee_fen: row.get(8),
             block_timestamp: row.get(9),
@@ -148,8 +148,8 @@ pub(crate) struct TxRecordRow {
     pub extrinsic_index: Option<i16>,
     pub event_index: i16,
     pub tx_type: String,
-    pub from_address: Option<String>,
-    pub to_address: Option<String>,
+    pub sender_account_id: Option<String>,
+    pub recipient_account_id: Option<String>,
     pub amount_fen: i64,
     pub fee_fen: Option<i64>,
     pub block_timestamp: Option<DateTime<Utc>>,

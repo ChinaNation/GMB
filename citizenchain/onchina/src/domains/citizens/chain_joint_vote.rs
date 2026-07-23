@@ -13,30 +13,32 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::core::chain_runtime::normalize_account_pubkey;
+use crate::core::chain_runtime::normalize_account_id;
 use crate::*;
 
 #[derive(Deserialize)]
 pub(crate) struct AppVotersCountQuery {
-    pub(crate) who: Option<String>,
-    pub(crate) account_pubkey: Option<String>,
+    pub(crate) account_id: String,
 }
 
 #[derive(Serialize)]
 struct AppVotersCountOutput {
     eligible_total: u64,
-    who: String,
+    account_id: String,
 }
 
-/// `GET /api/v1/app/voters/count?account_pubkey=<hex>`
+/// `GET /api/v1/app/voters/count?account_id=0x...`
 pub(crate) async fn app_voters_count(
     State(state): State<AppState>,
     headers: HeaderMap,
     Query(query): Query<AppVotersCountQuery>,
 ) -> impl IntoResponse {
-    let who_raw = query.account_pubkey.or(query.who).unwrap_or_default();
-    let Some(who) = normalize_account_pubkey(who_raw.as_str()) else {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "account_pubkey is required");
+    let Some(account_id) = normalize_account_id(query.account_id.as_str()) else {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "account_id must be lowercase 0x plus 64 hexadecimal characters",
+        );
     };
 
     let eligible_total = match state.db.with_client(|conn| {
@@ -67,7 +69,7 @@ pub(crate) async fn app_voters_count(
         &state,
         "APP_VOTERS_COUNT",
         "app",
-        Some(who.clone()),
+        Some(account_id.clone()),
         serde_json::json!({
             "eligible_total": eligible_total,
             "actor_ip": actor_ip_from_headers(&headers),
@@ -79,7 +81,7 @@ pub(crate) async fn app_voters_count(
         message: "ok".to_string(),
         data: AppVotersCountOutput {
             eligible_total,
-            who,
+            account_id,
         },
     })
     .into_response()

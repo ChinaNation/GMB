@@ -101,9 +101,9 @@ class PersonalProposalHistoryService {
   ///    因为提案一旦终态(passed/executed/rejected)就从 active 列表移除,
   ///    本机 Isar 永远停在 voting 状态,UI 卡片显示"投票中"是假数据。
   Future<List<PersonalAccountProposalView>> fetchAll(
-    String personalAccountHex,
+    String personalAccountId,
   ) async {
-    final activeIds = await _safeFetchActiveProposalIds(personalAccountHex);
+    final activeIds = await _safeFetchActiveProposalIds(personalAccountId);
 
     // 链可达性正向探针:只有确认链已同步可达时,才允许把「链上查不到」判为幽灵
     // 并清理本机记录;离线/未同步一律保留本机 Isar 历史(容错回退→仅返回 Isar)。
@@ -111,14 +111,14 @@ class PersonalProposalHistoryService {
 
     // Step 1: 链上活跃提案逐个同步到 Isar(防止其他设备发起的提案在本机无记录)。
     for (final pid in activeIds) {
-      await _syncActiveProposalToIsar(personalAccountHex, pid);
+      await _syncActiveProposalToIsar(personalAccountId, pid);
     }
 
     // Step 2: 重查本机 Isar 中 status='voting' 的 entity,即使它们已不在 active 列表
     // (提案终态后就从 active 列表移除,但本机 entity 还停在 voting)。
-    await _refreshLocalVotingEntities(personalAccountHex, chainReachable);
+    await _refreshLocalVotingEntities(personalAccountId, chainReachable);
 
-    return _readAllFromIsar(personalAccountHex);
+    return _readAllFromIsar(personalAccountId);
   }
 
   /// 判断本机是否存在“创建提案仍是 voting，但链上 Proposals[id] 从未存在”的快照。
@@ -126,7 +126,7 @@ class PersonalProposalHistoryService {
   /// 这类记录通常来自旧版本把 txHash 当成功后提前落库；它不是
   /// 正常注销历史，列表页可据此删除本地幽灵多签。
   Future<bool> hasUnchainedVotingCreateProposal(
-    String personalAccountHex,
+    String personalAccountId,
   ) async {
     try {
       // 离线/未同步无法确认提案是否真在链上,一律不判幽灵,避免误删本机记录。
@@ -134,7 +134,7 @@ class PersonalProposalHistoryService {
       final entities = await WalletIsar.instance.read((isar) {
         return isar.personalAccountProposalEntitys
             .filter()
-            .personalAccountEqualTo(personalAccountHex)
+            .personalAccountIdEqualTo(personalAccountId)
             .actionEqualTo(PersonalProposalAction.create)
             .statusEqualTo(PersonalProposalStatus.voting)
             .findAll();
@@ -155,14 +155,14 @@ class PersonalProposalHistoryService {
   /// 链上仍 voting 则只刷新 yesVotes/noVotes;链上 storage 不存在(已被 90 天清理)
   /// 也只刷新 vote tally(取现有值)— 不强制覆盖为终态,等本机其他渠道写入历史。
   Future<void> _refreshLocalVotingEntities(
-    String personalAccountHex,
+    String personalAccountId,
     bool chainReachable,
   ) async {
     try {
       final votingEntities = await WalletIsar.instance.read((isar) {
         return isar.personalAccountProposalEntitys
             .filter()
-            .personalAccountEqualTo(personalAccountHex)
+            .personalAccountIdEqualTo(personalAccountId)
             .statusEqualTo(PersonalProposalStatus.voting)
             .findAll();
       });
@@ -176,7 +176,7 @@ class PersonalProposalHistoryService {
             // 离线/未同步则保留本机记录,避免误删待投票提案(数据丢失)。
             if (chainReachable && e.action == PersonalProposalAction.create) {
               await _deleteProposalEntity(
-                personalAccountHex: personalAccountHex,
+                personalAccountId: personalAccountId,
                 proposalId: e.proposalId,
               );
             }
@@ -184,7 +184,7 @@ class PersonalProposalHistoryService {
           }
           final tally = await _proposalService.fetchVoteTally(e.proposalId);
           await recordOrUpdate(
-            personalAccountHex: personalAccountHex,
+            personalAccountId: personalAccountId,
             proposalId: e.proposalId,
             action: e.action,
             status: mapChainStatus(chainStatus),
@@ -201,13 +201,13 @@ class PersonalProposalHistoryService {
   }
 
   Future<void> _deleteProposalEntity({
-    required String personalAccountHex,
+    required String personalAccountId,
     required int proposalId,
   }) async {
     await WalletIsar.instance.writeTxn((isar) async {
       await isar.personalAccountProposalEntitys
           .filter()
-          .personalAccountEqualTo(personalAccountHex)
+          .personalAccountIdEqualTo(personalAccountId)
           .proposalIdEqualTo(proposalId)
           .deleteAll();
     });
@@ -217,7 +217,7 @@ class PersonalProposalHistoryService {
   ///
   /// [snapshot] 若非空将以 JSON 形式持久化(转账金额 / beneficiary / account_name 等)。
   Future<void> recordOrUpdate({
-    required String personalAccountHex,
+    required String personalAccountId,
     required int proposalId,
     required String action,
     required String status,
@@ -230,14 +230,14 @@ class PersonalProposalHistoryService {
     await WalletIsar.instance.writeTxn((isar) async {
       final existing = await isar.personalAccountProposalEntitys
           .filter()
-          .personalAccountEqualTo(personalAccountHex)
+          .personalAccountIdEqualTo(personalAccountId)
           .proposalIdEqualTo(proposalId)
           .findFirst();
 
       final isFinal = status != PersonalProposalStatus.voting;
 
       final entity = existing ?? PersonalAccountProposalEntity()
-        ..personalAccount = personalAccountHex
+        ..personalAccountId = personalAccountId
         ..proposalId = proposalId
         ..createdAtMillis = existing?.createdAtMillis ?? now;
 
@@ -260,11 +260,11 @@ class PersonalProposalHistoryService {
   // ──── 内部 ─────────────────────────────────────────────
 
   Future<List<int>> _safeFetchActiveProposalIds(
-    String personalAccountHex,
+    String personalAccountId,
   ) async {
     try {
       return _proposalService.fetchActivePersonalProposalIds(
-        personalAccountHex,
+        personalAccountId,
       );
     } catch (_) {
       return const [];
@@ -272,7 +272,7 @@ class PersonalProposalHistoryService {
   }
 
   Future<void> _syncActiveProposalToIsar(
-    String personalAccountHex,
+    String personalAccountId,
     int proposalId,
   ) async {
     try {
@@ -284,7 +284,7 @@ class PersonalProposalHistoryService {
       final existing = await WalletIsar.instance.read((isar) {
         return isar.personalAccountProposalEntitys
             .filter()
-            .personalAccountEqualTo(personalAccountHex)
+            .personalAccountIdEqualTo(personalAccountId)
             .proposalIdEqualTo(proposalId)
             .findFirst();
       });
@@ -300,7 +300,7 @@ class PersonalProposalHistoryService {
       }
 
       await recordOrUpdate(
-        personalAccountHex: personalAccountHex,
+        personalAccountId: personalAccountId,
         proposalId: proposalId,
         action: action!,
         status: statusStr,
@@ -385,13 +385,13 @@ class PersonalProposalHistoryService {
   }
 
   Future<List<PersonalAccountProposalView>> _readAllFromIsar(
-    String personalAccountHex,
+    String personalAccountId,
   ) async {
     try {
       final entities = await WalletIsar.instance.read((isar) {
         return isar.personalAccountProposalEntitys
             .filter()
-            .personalAccountEqualTo(personalAccountHex)
+            .personalAccountIdEqualTo(personalAccountId)
             .sortByCreatedAtMillisDesc()
             .findAll();
       });

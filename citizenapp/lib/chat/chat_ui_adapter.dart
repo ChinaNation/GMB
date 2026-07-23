@@ -15,7 +15,7 @@ typedef ChatMediaPathResolver = String? Function(ChatContent content);
 /// [resolveLocalMediaPath] 查本机缓存路径,未到达则留空 source 由 UI 占位。
 Message storedMessageToChatMessage(
   ChatStoredMessage message, {
-  required String ownerAccount,
+  required String accountId,
   ChatMediaPathResolver? resolveLocalMediaPath,
 }) {
   final createdAt = DateTime.fromMillisecondsSinceEpoch(
@@ -31,7 +31,7 @@ Message storedMessageToChatMessage(
   final metadata = <String, dynamic>{
     'conversation_id': message.conversationId,
     'direction': message.direction,
-    'is_mine': message.senderAccount == ownerAccount,
+    'is_mine': message.senderAccountId == accountId,
     'message_kind': message.messageKind.name,
   };
 
@@ -41,7 +41,7 @@ Message storedMessageToChatMessage(
       ChatMediaLimits.exceedsForKind(content.kind, content.byteSize ?? 0)) {
     return Message.text(
       id: message.envelopeId,
-      authorId: message.senderAccount,
+      authorId: message.senderAccountId,
       createdAt: createdAt,
       sentAt: sentAt,
       deliveredAt: deliveredAt,
@@ -56,7 +56,7 @@ Message storedMessageToChatMessage(
     case ChatMessageKind.text:
       return Message.text(
         id: message.envelopeId,
-        authorId: message.senderAccount,
+        authorId: message.senderAccountId,
         createdAt: createdAt,
         sentAt: sentAt,
         deliveredAt: deliveredAt,
@@ -68,7 +68,7 @@ Message storedMessageToChatMessage(
     case ChatMessageKind.image:
       return Message.image(
         id: message.envelopeId,
-        authorId: message.senderAccount,
+        authorId: message.senderAccountId,
         createdAt: createdAt,
         sentAt: sentAt,
         deliveredAt: deliveredAt,
@@ -89,7 +89,7 @@ Message storedMessageToChatMessage(
     case ChatMessageKind.video:
       return Message.video(
         id: message.envelopeId,
-        authorId: message.senderAccount,
+        authorId: message.senderAccountId,
         createdAt: createdAt,
         sentAt: sentAt,
         deliveredAt: deliveredAt,
@@ -111,7 +111,7 @@ Message storedMessageToChatMessage(
     case ChatMessageKind.file:
       return Message.file(
         id: message.envelopeId,
-        authorId: message.senderAccount,
+        authorId: message.senderAccountId,
         createdAt: createdAt,
         sentAt: sentAt,
         deliveredAt: deliveredAt,
@@ -132,7 +132,7 @@ Message storedMessageToChatMessage(
       // Fluent 3D PNG(无气泡大图);id 未内置(对端资产旧/缺)时降级为占位。
       return Message.custom(
         id: message.envelopeId,
-        authorId: message.senderAccount,
+        authorId: message.senderAccountId,
         createdAt: createdAt,
         sentAt: sentAt,
         deliveredAt: deliveredAt,
@@ -150,14 +150,14 @@ Message storedMessageToChatMessage(
 /// 把本地消息列表转换为聊天 UI controller 的初始列表。
 List<Message> storedMessagesToChatMessages(
   List<ChatStoredMessage> messages, {
-  required String ownerAccount,
+  required String accountId,
   ChatMediaPathResolver? resolveLocalMediaPath,
 }) {
   return messages
       .map(
         (message) => storedMessageToChatMessage(
           message,
-          ownerAccount: ownerAccount,
+          accountId: accountId,
           resolveLocalMediaPath: resolveLocalMediaPath,
         ),
       )

@@ -1,6 +1,6 @@
 import { bytesToHex, hexToBytes } from "../shared/signing_message";
 import type { Env } from "../types";
-import { decodeOwnerAccount, storageMapKey } from "./storage_key";
+import { decodeAccountId, storageMapKey } from "./storage_key";
 import { nowMs } from "../shared/time";
 import { putKvJson } from "../limits/storage";
 import { fetchChainStorage, fetchFinalizedHead } from "./rpc";
@@ -10,7 +10,7 @@ import { fetchChainStorage, fetchFinalizedHead } from "./rpc";
 export type IdentityLevel = "visitor" | "voting" | "candidate";
 
 export interface ChainIdentityState {
-  owner_account: string;
+  account_id: string;
   identity_level: IdentityLevel;
   has_voting_identity: boolean;
   has_candidate_identity: boolean;
@@ -31,9 +31,9 @@ interface CandidateIdentity {
 /// 身份读取的 KV 短缓存 TTL（秒）。护照有效期按「日」判定，当天内结果稳定。
 const IDENTITY_CACHE_TTL_SECONDS = 45;
 
-function visitorIdentityState(ownerAccount: string): ChainIdentityState {
+function visitorIdentityState(accountId: string): ChainIdentityState {
   return {
-    owner_account: ownerAccount,
+    account_id: accountId,
     identity_level: "visitor",
     has_voting_identity: false,
     has_candidate_identity: false,
@@ -48,9 +48,9 @@ function visitorIdentityState(ownerAccount: string): ChainIdentityState {
 /// 命中缓存直接返回；未命中读链并回写 KV；读链失败软降级为访客（未认证），不抛错。
 export async function fetchChainIdentityStateCached(
   env: Env,
-  ownerAccount: string,
+  accountId: string,
 ): Promise<ChainIdentityState> {
-  const cacheKey = `square_identity:${ownerAccount}`;
+  const cacheKey = `square_identity:${accountId}`;
   try {
     const cached = await env.SQUARE_CACHE.get(cacheKey);
     if (cached) {
@@ -60,7 +60,7 @@ export async function fetchChainIdentityStateCached(
     // 缓存读失败忽略，继续读链。
   }
   try {
-    const state = await fetchChainIdentityState(env, ownerAccount);
+    const state = await fetchChainIdentityState(env, accountId);
     try {
       await putKvJson(env, cacheKey, state, "identity_cache", {
         expirationTtl: IDENTITY_CACHE_TTL_SECONDS,
@@ -71,21 +71,21 @@ export async function fetchChainIdentityStateCached(
     return state;
   } catch {
     // 链上 RPC 未配置/超时/失败：软降级为访客，展示未认证，不阻塞主页。
-    return visitorIdentityState(ownerAccount);
+    return visitorIdentityState(accountId);
   }
 }
 
 export async function fetchChainIdentityState(
   env: Env,
-  ownerAccount: string,
+  accountId: string,
 ): Promise<ChainIdentityState> {
-  const accountId = decodeOwnerAccount(ownerAccount);
+  const accountIdBytes = decodeAccountId(accountId);
   // 同一次身份判断的五项 storage 必须锚定同一个 finalized 区块，禁止混读 best head。
   const finalizedHead = await fetchFinalizedHead(env);
   const cidByWalletKey = storageMapKey(
     "CitizenIdentity",
     "CidByWalletAccount",
-    accountId,
+    accountIdBytes,
   );
   const cidHex = await fetchChainStorage(
     env,
@@ -93,7 +93,7 @@ export async function fetchChainIdentityState(
     finalizedHead,
   );
   const cidNumber = cidHex ? decodeCidNumber(hexToBytes(cidHex)) : null;
-  if (!cidNumber) return visitorIdentityState(ownerAccount);
+  if (!cidNumber) return visitorIdentityState(accountId);
 
   const cidScale = encodeBoundedBytes(new TextEncoder().encode(cidNumber));
   const walletByCidKey = storageMapKey(
@@ -127,10 +127,10 @@ export async function fetchChainIdentityState(
   const cidRecord = cidRecordHex ? hexToBytes(cidRecordHex) : null;
   if (
     !walletBinding ||
-    !sameBytes(walletBinding, accountId) ||
+    !sameBytes(walletBinding, accountIdBytes) ||
     !cidRecordIsActive(cidRecord)
   ) {
-    return visitorIdentityState(ownerAccount);
+    return visitorIdentityState(accountId);
   }
 
   const votingIdentity = votingHex
@@ -150,7 +150,7 @@ export async function fetchChainIdentityState(
       : "visitor";
 
   return {
-    owner_account: ownerAccount,
+    account_id: accountId,
     identity_level: identityLevel,
     has_voting_identity: hasVotingIdentity,
     has_candidate_identity: hasCandidateIdentity,

@@ -25,7 +25,8 @@ export type CitizenRow = {
   given_name: string;
   citizen_sex: CitizenSex;
   citizen_birth_date: string;
-  wallet_address?: string | null;
+  account_id?: string | null;
+  ss58_address?: string | null;
   citizen_status: CitizenState;
   voting_eligible: boolean;
   vote_status: CitizenState;
@@ -85,7 +86,8 @@ export type CreateCitizenResult = {
   citizen_birth_date: string;
   citizen_status: CitizenState;
   voting_eligible: boolean;
-  wallet_address?: string | null;
+  account_id?: string | null;
+  ss58_address?: string | null;
   passport_valid_from: string;
   passport_valid_until: string;
   province_code: string;
@@ -101,8 +103,8 @@ export type PrepareCitizenOnchainResult = {
   cid_number: string;
   actor_role_code: string;
   identity_level: CitizenOnchainIdentityLevel;
-  wallet_address: string;
-  wallet_pubkey: string;
+  account_id: string;
+  ss58_address: string;
   citizen_age_years: number;
   payload_hex: string;
   sign_request: string;
@@ -115,7 +117,8 @@ export type CompleteCitizenOnchainResult = {
   cid_number: string;
   actor_role_code: string;
   identity_level: CitizenOnchainIdentityLevel;
-  wallet_address: string;
+  account_id: string;
+  ss58_address: string;
   chain_action: number;
   call_data_hex: string;
   citizen_signature: string;
@@ -133,7 +136,7 @@ export type CitizenDocument = {
   document_type: CitizenDocumentType;
   file_size: number;
   file_hash: string;
-  uploaded_by: string;
+  uploader_account_id: string;
   uploaded_at: string;
 };
 
@@ -244,7 +247,7 @@ export async function prepareCitizenRevoke(
 export async function prepareCitizenOnchainSignature(
   auth: AdminAuth,
   cidNumber: string,
-  walletAccount: string,
+  account_id: string,
   actorRoleCode: string,
   identityLevel: CitizenOnchainIdentityLevel,
 ): Promise<PrepareCitizenOnchainResult> {
@@ -257,7 +260,7 @@ export async function prepareCitizenOnchainSignature(
       method: 'POST',
       headers,
       body: JSON.stringify({
-        wallet_account: walletAccount,
+        account_id,
         actor_role_code: actorRoleCode,
         identity_level: identityLevel,
       }),
@@ -268,7 +271,7 @@ export async function prepareCitizenOnchainSignature(
 export async function completeCitizenOnchainSignature(
   auth: AdminAuth,
   cidNumber: string,
-  walletAccount: string,
+  account_id: string,
   actorRoleCode: string,
   identityLevel: CitizenOnchainIdentityLevel,
   signResponse: string,
@@ -280,7 +283,7 @@ export async function completeCitizenOnchainSignature(
       method: 'POST',
       headers,
       body: JSON.stringify({
-        wallet_account: walletAccount,
+        account_id,
         actor_role_code: actorRoleCode,
         identity_level: identityLevel,
         sign_response: signResponse,

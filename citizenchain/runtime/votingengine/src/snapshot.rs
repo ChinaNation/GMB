@@ -17,15 +17,43 @@ use crate::types::{AuthorizationSubject, CidNumber, ProposalSubject};
 use crate::InternalAdminProvider;
 
 impl<T: pallet::Config> pallet::Pallet<T> {
+    /// 把投票人钱包解析为名册规范账户（= 快照键）。
+    ///
+    /// 机构主体走 `resolve_institution_voter`：运行期该管理员若带公民 CID，只认该 CID 当前
+    /// 绑定的钱包（换绑后新钱包解析到同一规范账户，旧钱包得 `None`）；创世期或无 CID 管理员
+    /// 按 account_id。个人多签无 CID 身份，账户即身份，恒按账户。
+    ///
+    /// **必须传入原始投票人钱包**：绝不可对已解析的规范账户二次解析（运行期换绑后
+    /// `resolve(旧规范账户)` 为 `None`，二次解析会误杀合法投票人）。
+    pub fn resolve_subject_voter(
+        subject: &AuthorizationSubject<CidNumber, crate::types::RoleCode, T::AccountId>,
+        who: &T::AccountId,
+    ) -> Option<T::AccountId> {
+        match subject {
+            AuthorizationSubject::Institution(role_subject) => {
+                T::InternalAdminProvider::resolve_institution_voter(
+                    role_subject.cid_number.as_slice(),
+                    who,
+                )
+            }
+            AuthorizationSubject::PersonalMultisig(_) => Some(who.clone()),
+        }
+    }
+
     /// 查询某完整岗位主体冻结的投票人名单。
     pub fn is_subject_voter_in_snapshot(
         proposal_id: u64,
         subject: AuthorizationSubject<CidNumber, crate::types::RoleCode, T::AccountId>,
         who: &T::AccountId,
     ) -> bool {
-        VoterSnapshot::<T>::get(proposal_id, subject)
-            .map(|voters| voters.iter().any(|account| account == who))
-            .unwrap_or(false)
+        let Some(voters) = VoterSnapshot::<T>::get(proposal_id, &subject) else {
+            return false;
+        };
+        // 解析原始钱包 → 规范账户；None = 运行期已非当前管理员（含换绑后的旧钱包）→ 拒。
+        let Some(canonical) = Self::resolve_subject_voter(&subject, who) else {
+            return false;
+        };
+        voters.iter().any(|account| account == &canonical)
     }
 
     /// 查询某个完整岗位主体的冻结选民人数。

@@ -1,5 +1,5 @@
 import { HttpError } from "../shared/http";
-import { assertOwnerAccount } from "../shared/ids";
+import { assertAccountId } from "../shared/ids";
 
 const DEVICE_ID_PATTERN = /^[A-Za-z0-9_.:-]{3,128}$/;
 const KEY_PACKAGE_ID_PATTERN = /^[A-Za-z0-9_.:-]{3,160}$/;
@@ -7,12 +7,12 @@ const ENVELOPE_ID_PATTERN = /^[A-Za-z0-9_.:-]{3,220}$/;
 const HEX_PATTERN = /^[0-9a-f]+$/;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]*$/;
 
-export function assertChatAccount(
+export function assertChatAccountId(
   value: unknown,
-  code = "invalid_chat_account",
+  code = "invalid_chat_account_id",
 ): string {
   try {
-    return assertOwnerAccount(value);
+    return assertAccountId(value);
   } catch {
     throw new HttpError(400, code, "聊天钱包账户格式不合法");
   }
@@ -33,11 +33,10 @@ export function assertDevicePublicKeyHex(value: unknown): string {
       "Chat 设备公钥格式不合法",
     );
   }
-  const normalized = value.toLowerCase();
   if (
-    normalized.length < 2 ||
-    normalized.length > 512 ||
-    normalized.length % 2 !== 0
+    value.length < 2 ||
+    value.length > 512 ||
+    value.length % 2 !== 0
   ) {
     throw new HttpError(
       400,
@@ -45,14 +44,14 @@ export function assertDevicePublicKeyHex(value: unknown): string {
       "Chat 设备公钥长度不合法",
     );
   }
-  if (!HEX_PATTERN.test(normalized)) {
+  if (!HEX_PATTERN.test(value)) {
     throw new HttpError(
       400,
       "invalid_device_public_key",
       "Chat 设备公钥必须是小写 hex",
     );
   }
-  return normalized;
+  return value;
 }
 
 export function assertKeyPackageId(value: unknown): string {

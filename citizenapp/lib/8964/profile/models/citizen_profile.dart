@@ -6,7 +6,7 @@ import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 /// App 侧只读展示，写入走 `PUT /v1/square/profile`。
 class CitizenProfile {
   const CitizenProfile({
-    required this.ownerAccount,
+    required this.accountId,
     required this.displayName,
     required this.bio,
     required this.avatarObjectKey,
@@ -24,7 +24,7 @@ class CitizenProfile {
     required this.updatedAt,
   });
 
-  final String ownerAccount;
+  final String accountId;
   final String displayName;
   final String bio;
   final String? avatarObjectKey;
@@ -53,7 +53,7 @@ class CitizenProfile {
   /// 本人钱包名是昵称真源，`display_name` 是公开镜像；均缺失时使用本地
   /// 稳定默认昵称，绝不把完整或截断账户当昵称。
   String resolvedDisplayName(String fallback) {
-    return ProfilePresentation.forAccount(ownerAccount).resolveDisplayName(
+    return ProfilePresentation.forAccount(accountId).resolveDisplayName(
       walletName: fallback,
       publicName: displayName,
     );
@@ -63,7 +63,7 @@ class CitizenProfile {
     final counts = json['counts'];
     final countsMap = counts is Map<String, dynamic> ? counts : const {};
     return CitizenProfile(
-      ownerAccount: _asString(json['owner_account']),
+      accountId: _asString(json['account_id']),
       displayName: _asString(json['display_name']),
       bio: _asString(json['bio']),
       avatarObjectKey: _asNullableString(json['avatar_object_key']),
@@ -83,7 +83,7 @@ class CitizenProfile {
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'owner_account': ownerAccount,
+        'account_id': accountId,
         'display_name': displayName,
         'bio': bio,
         'avatar_object_key': avatarObjectKey,
@@ -114,7 +114,7 @@ class CitizenProfile {
     int? updatedAt,
   }) {
     return CitizenProfile(
-      ownerAccount: ownerAccount,
+      accountId: accountId,
       displayName: displayName ?? this.displayName,
       bio: bio ?? this.bio,
       avatarObjectKey: identical(avatarObjectKey, _sentinel)
@@ -141,16 +141,16 @@ class CitizenProfile {
 /// 关注/粉丝列表的一行（对应 Worker follows 列表项）。
 class SquareFollowEntry {
   const SquareFollowEntry({
-    required this.ownerAccount,
+    required this.accountId,
     required this.createdAt,
   });
 
-  final String ownerAccount;
+  final String accountId;
   final int createdAt;
 
   factory SquareFollowEntry.fromJson(Map<String, dynamic> json) {
     return SquareFollowEntry(
-      ownerAccount: _asString(json['owner_account']),
+      accountId: _asString(json['account_id']),
       createdAt: _asInt(json['created_at']),
     );
   }

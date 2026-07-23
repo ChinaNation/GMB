@@ -10,7 +10,7 @@ import 'package:citizenapp/8964/models/square_models.dart';
 class SquareComposeDraft {
   const SquareComposeDraft({
     required this.draftId,
-    required this.ownerAccount,
+    required this.accountId,
     required this.contentFormat,
     required this.postCategory,
     this.title,
@@ -21,7 +21,7 @@ class SquareComposeDraft {
   });
 
   final String draftId;
-  final String ownerAccount;
+  final String accountId;
   final SquarePostContentFormat contentFormat;
   final SquarePostCategory postCategory;
   final String? title;
@@ -34,9 +34,7 @@ class SquareComposeDraft {
   bool get isCampaign => postCategory == SquarePostCategory.campaign;
 
   bool get isEmpty =>
-      text.trim().isEmpty &&
-      media.isEmpty &&
-      (title?.trim().isEmpty ?? true);
+      text.trim().isEmpty && media.isEmpty && (title?.trim().isEmpty ?? true);
 
   /// 卡片类型标签：文章 / 图片动态 / 视频动态（竞选加前缀）。
   String get typeLabel {
@@ -64,7 +62,7 @@ class SquareComposeDraft {
   }) {
     return SquareComposeDraft(
       draftId: draftId,
-      ownerAccount: ownerAccount,
+      accountId: accountId,
       contentFormat: contentFormat,
       postCategory: postCategory,
       title: title,
@@ -77,7 +75,7 @@ class SquareComposeDraft {
 
   Map<String, Object?> toJson() => {
         'draft_id': draftId,
-        'owner_account': ownerAccount,
+        'account_id': accountId,
         'content_format': contentFormat.workerValue,
         'post_category': postCategory.workerValue,
         if (title != null) 'title': title,
@@ -105,7 +103,7 @@ class SquareComposeDraft {
     final rawBlocks = json['content_blocks'];
     return SquareComposeDraft(
       draftId: json['draft_id']?.toString() ?? '',
-      ownerAccount: json['owner_account']?.toString() ?? '',
+      accountId: json['account_id']?.toString() ?? '',
       contentFormat: json['content_format'] == 'article'
           ? SquarePostContentFormat.article
           : SquarePostContentFormat.normal,

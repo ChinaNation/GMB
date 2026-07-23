@@ -97,7 +97,14 @@ class TopupConfig {
 
 /// 订单状态:pending=待支付 / paid=已支付 / exception=异常;
 /// confirming/notFound 是轮询过渡响应,不是台账业务态。
-enum TopupOrderStatus { confirming, pending, paid, exception, notFound, unknown }
+enum TopupOrderStatus {
+  confirming,
+  pending,
+  paid,
+  exception,
+  notFound,
+  unknown
+}
 
 TopupOrderStatus topupOrderStatusFrom(String? raw) {
   switch (raw) {

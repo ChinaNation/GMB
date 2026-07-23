@@ -8,21 +8,21 @@ import 'package:citizenapp/signer/signing.dart' as signing;
 /// CitizenWallet 均不得参与此流程。
 class ChatDeviceBinding {
   const ChatDeviceBinding({
-    required this.ownerAccount,
+    required this.accountId,
     required this.deviceId,
-    required this.devicePublicKeyHex,
+    required this.devicePublicKey,
     required this.expiresAt,
     required this.nonce,
   });
 
   /// 当前 Worker session 对应的钱包账户。
-  final String ownerAccount;
+  final String accountId;
 
   /// 本机 MLS 设备 ID。
   final String deviceId;
 
   /// 本机 MLS 设备签名公钥。
-  final String devicePublicKeyHex;
+  final String devicePublicKey;
 
   /// 绑定凭证过期时间；Worker 按毫秒时间戳校验。
   final DateTime expiresAt;
@@ -33,9 +33,9 @@ class ChatDeviceBinding {
   /// 与 Worker `buildChatDeviceBindingMessage` 逐字节一致的 32 字节摘要。
   Uint8List signingMessage() {
     final payload = <int>[
-      ...signing.scaleString(ownerAccount),
+      ...signing.scaleString(accountId),
       ...signing.scaleString(deviceId),
-      ...signing.scaleString(devicePublicKeyHex),
+      ...signing.scaleString(devicePublicKey),
       ...signing.u64Le(expiresAt.toUtc().millisecondsSinceEpoch),
       ...signing.scaleString(nonce),
     ];

@@ -6,40 +6,40 @@ import { sendSquarePostAlert, type PushDevice } from '../chat/push';
 const FANOUT_PAGE = 100;
 
 interface FollowerRow {
-  owner_account: string;
+  account_id: string;
   created_at: number;
 }
 
 /// 扇出一页：拉一页「未静音粉丝」，取其未过期设备，逐台发可见推送；满页则续跑入队。
-/// 分页按 (created_at, owner_account) keyset，避免多设备粉丝跨页错位（先分页粉丝，再取设备）。
+/// 分页按 (created_at, account_id) keyset，避免多设备粉丝跨页错位（先分页粉丝，再取设备）。
 export async function fanOutPage(
   env: Env,
   job: SquareNotifyJob,
   pageSize: number = FANOUT_PAGE,
 ): Promise<void> {
   const cursorAt = job.cursor?.created_at ?? 0;
-  const cursorAccount = job.cursor?.owner_account ?? '';
+  const cursorAccountId = job.cursor?.account_id ?? '';
 
   const followers = await env.DB.prepare(
-    `SELECT owner_account, created_at
+    `SELECT account_id, created_at
        FROM square_follows
-      WHERE followed_account = ?
+      WHERE followed_account_id = ?
         AND notify_enabled = 1
-        AND (created_at, owner_account) > (?, ?)
-      ORDER BY created_at ASC, owner_account ASC
+        AND (created_at, account_id) > (?, ?)
+      ORDER BY created_at ASC, account_id ASC
       LIMIT ?`,
   )
-    .bind(job.author_account, cursorAt, cursorAccount, pageSize)
+    .bind(job.author_account_id, cursorAt, cursorAccountId, pageSize)
     .all<FollowerRow>();
   const rows = followers.results ?? [];
   if (rows.length === 0) return;
 
-  const accounts = rows.map((row) => row.owner_account);
+  const accounts = rows.map((row) => row.account_id);
   const placeholders = accounts.map(() => '?').join(',');
   const devices = await env.DB.prepare(
     `SELECT push_provider, push_token
        FROM chat_devices
-      WHERE owner_account IN (${placeholders})
+      WHERE account_id IN (${placeholders})
         AND expires_at > ?`,
   )
     .bind(...accounts, nowMs())
@@ -57,7 +57,7 @@ export async function fanOutPage(
     const last = rows[rows.length - 1];
     await env.SQUARE_NOTIFY_QUEUE?.send({
       ...job,
-      cursor: { created_at: last.created_at, owner_account: last.owner_account },
+      cursor: { created_at: last.created_at, account_id: last.account_id },
     });
   }
 }

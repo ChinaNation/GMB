@@ -363,9 +363,9 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _registerPushDeviceInBackground() async {
     try {
-      final owner = await _chatRuntime.readOwnerAccount();
-      if (owner == null || owner.isEmpty) return;
-      await _chatRuntime.ensureReady(owner);
+      final accountId = await _chatRuntime.readAccountId();
+      if (accountId == null || accountId.isEmpty) return;
+      await _chatRuntime.ensureReady(accountId);
     } on Object catch (error) {
       // 设备/网络/native 任何失败都容忍：预热注册是尽力而为的后台任务。
       debugPrint('push device prewarm skipped: $error');

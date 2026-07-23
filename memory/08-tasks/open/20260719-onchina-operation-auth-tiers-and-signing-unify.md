@@ -206,7 +206,7 @@ citizenwallet/lib/
 - `InstitutionUpdate` 链上字段拆分(纯本地展示字段拆出为 Passkey):随 Phase 2/3 链上写通路一并落地。
 
 ### Phase 2a 完成(删登录自证,已验证)
-- 后端:删 `login/signature.rs::build_login_qr_system_signature` + `sp_core::Pair` import;`qr_login.rs` 去 sys 生成与 import;`core/qr/mod.rs::login_request_body` 去 sys 参数(`u` 留空、payload 仅 `system`)。
+- 后端已删除平台系统签名；后续登录流程进一步收口为先扫描 `k=3 user_contact` 确定目标账户，再生成 `u` 非空且指向该账户的定向登录请求，payload 仅为 `system=onchina`。
 - 钱包(citizenwallet):`login/login_qr_handler.dart` 删 `verifySystemSignature` + `_verifySr25519Utf8`/hex 工具,`_loginData`→`_loginSystem`(只取 system);`ui/login_sign_page.dart` 删系统签名校验分支。
 - 验证:onchina `cargo check` 0 警告;citizenwallet 登录文件 `flutter analyze` 无问题(全量剩 2 个既存 test 问题,与登录无关)。
 - 信任根不变:登录 = 管理员钱包签名验链上管理员集合(`handler.rs`/`qr_login.rs` `verify_admin_signature` + onchain_gate);passkey 绑定不变量保持。

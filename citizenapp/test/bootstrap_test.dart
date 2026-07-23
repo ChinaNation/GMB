@@ -18,8 +18,8 @@ Future<void> seedHotWallet() async {
       ..walletName = '钱包1'
       ..walletIcon = 'wallet'
       ..balance = 0
-      ..address = 'bootstrap-test-address'
-      ..pubkeyHex = 'ab' * 32
+      ..ss58Address = 'bootstrap-test-address'
+      ..accountId = 'ab' * 32
       ..alg = 'sr25519'
       ..ss58 = 2027
       ..createdAtMillis = 0
@@ -132,8 +132,9 @@ void main() {
     // 则跳过此全量启动冒烟,真机/集成构建照跑(首启权限引导用例不依赖 native,仍跑)。
     // testWidgets 的 skip 仅接受 bool。连活链的全量启动冒烟默认跳过(离线会 hang 到超时);
     // 本地设 RUN_BOOTSTRAP_CHAIN_SMOKE=1 且 libsmoldot native 可用时才跑,由集成 / APK 测试覆盖。
-  }, skip: Platform.environment['RUN_BOOTSTRAP_CHAIN_SMOKE'] == null ||
-      smoldotNativeSkipReason() != null);
+  },
+      skip: Platform.environment['RUN_BOOTSTRAP_CHAIN_SMOKE'] == null ||
+          smoldotNativeSkipReason() != null);
 
   testWidgets('no wallet: bootstraps into forced create-wallet page',
       (tester) async {

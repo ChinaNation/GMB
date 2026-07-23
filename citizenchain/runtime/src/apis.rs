@@ -303,6 +303,17 @@ impl_runtime_apis! {
         }
     }
 
+    impl primitives::admin_policy::AdminPolicyApi<Block> for Runtime {
+        fn personal_multisig_cid_mandated() -> bool {
+            // 死规则:个人多签永不强制公民 CID。若未来错误地翻真,节点升级守卫拒绝该候选。
+            admin_primitives::required_admin_elements(
+                admin_primitives::AdminAccountKind::PersonalMultisig,
+                false,
+            )
+            .cid
+        }
+    }
+
     impl sp_genesis_builder::GenesisBuilder<Block> for Runtime {
         fn build_state(config: Vec<u8>) -> sp_genesis_builder::Result {
             build_state::<RuntimeGenesisConfig>(config)

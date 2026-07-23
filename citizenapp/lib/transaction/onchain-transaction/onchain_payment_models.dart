@@ -19,13 +19,13 @@ class OnchainPaymentException implements Exception {
 
 class OnchainPaymentDraft {
   const OnchainPaymentDraft({
-    required this.toAddress,
+    required this.toSs58Address,
     required this.amount,
     required this.symbol,
     required this.remark,
   });
 
-  final String toAddress;
+  final String toSs58Address;
   final double amount;
   final String symbol;
   final String remark;

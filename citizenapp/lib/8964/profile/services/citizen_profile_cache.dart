@@ -15,11 +15,11 @@ class CitizenProfileCache {
   // bump 前缀作废旧缓存，避免旧形状读出空（见 feedback-dto-field-rename）。
   static const String _keyPrefix = 'square.profile.cache.v2.';
 
-  String _cacheKey(String ownerAccount) => '$_keyPrefix$ownerAccount';
+  String _cacheKey(String accountId) => '$_keyPrefix$accountId';
 
-  Future<CitizenProfile?> read(String ownerAccount) async {
+  Future<CitizenProfile?> read(String accountId) async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_cacheKey(ownerAccount));
+    final raw = prefs.getString(_cacheKey(accountId));
     if (raw == null || raw.trim().isEmpty) {
       return null;
     }
@@ -37,13 +37,13 @@ class CitizenProfileCache {
   Future<void> write(CitizenProfile profile) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
-      _cacheKey(profile.ownerAccount),
+      _cacheKey(profile.accountId),
       jsonEncode(profile.toJson()),
     );
   }
 
-  Future<void> clear(String ownerAccount) async {
+  Future<void> clear(String accountId) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_cacheKey(ownerAccount));
+    await prefs.remove(_cacheKey(accountId));
   }
 }

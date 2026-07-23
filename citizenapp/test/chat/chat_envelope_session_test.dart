@@ -27,8 +27,10 @@ void main() {
     final restored = imMlsWireMessageFromEnvelope(
       wire.toEnvelope(
         envelopeId: 'env-formal',
-        senderAccount: 'alice-wallet',
-        recipientAccount: 'bob-wallet',
+        senderAccountId:
+            '0x1111111111111111111111111111111111111111111111111111111111111111',
+        recipientAccountId:
+            '0x2222222222222222222222222222222222222222222222222222222222222222',
         senderDeviceId: 'alice-phone',
         createdAtMillis: 1,
         ttlMillis: 60000,
@@ -54,8 +56,10 @@ void main() {
 
     await flow.sendText(
       conversationId: 'conv-alice-bob',
-      senderAccount: 'alice-wallet',
-      recipientAccount: 'bob-wallet',
+      senderAccountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      recipientAccountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       senderDeviceId: 'alice-phone',
       recipientKeyPackage: _dummyKeyPackage(),
       text: 'hello bob',
@@ -64,7 +68,10 @@ void main() {
     final queued = await store.readQueuedEnvelopes();
     expect(queued, hasLength(2));
     expect(
-        queued.every((item) => item.recipientAccount == 'bob-wallet'), isTrue);
+        queued.every((item) =>
+            item.recipientAccountId ==
+            '0x2222222222222222222222222222222222222222222222222222222222222222'),
+        isTrue);
     for (final item in queued) {
       await store.markOutgoingDelivery(
         envelopeId: item.envelopeId,
@@ -88,8 +95,10 @@ void main() {
       ratchetTreeBytes: [0x02],
     ).toEnvelope(
       envelopeId: 'env-welcome',
-      senderAccount: 'alice-wallet',
-      recipientAccount: 'bob-wallet',
+      senderAccountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      recipientAccountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       senderDeviceId: 'alice-phone',
       createdAtMillis: 1,
       ttlMillis: 60000,
@@ -101,8 +110,10 @@ void main() {
       messageKind: MlsMessageKind.application,
     ).toEnvelope(
       envelopeId: 'env-app',
-      senderAccount: 'alice-wallet',
-      recipientAccount: 'bob-wallet',
+      senderAccountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      recipientAccountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       senderDeviceId: 'alice-phone',
       createdAtMillis: 2,
       ttlMillis: 60000,
@@ -143,8 +154,10 @@ void main() {
 
     await flow.sendMedia(
       conversationId: 'conv-attachment',
-      senderAccount: 'alice-wallet',
-      recipientAccount: 'bob-wallet',
+      senderAccountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      recipientAccountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       senderDeviceId: 'alice-phone',
       recipientKeyPackage: _dummyKeyPackage(),
       media: ChatMediaDraft(
@@ -155,7 +168,7 @@ void main() {
         byteSize: 4,
       ),
       sendDeviceAttachment: ({
-        required recipientAccount,
+        required recipientAccountId,
         required conversationId,
         required attachmentId,
         required fileName,
@@ -219,8 +232,10 @@ void main() {
     await expectLater(
       flow.sendMedia(
         conversationId: 'conv-oversize',
-        senderAccount: 'alice-wallet',
-        recipientAccount: 'bob-wallet',
+        senderAccountId:
+            '0x1111111111111111111111111111111111111111111111111111111111111111',
+        recipientAccountId:
+            '0x2222222222222222222222222222222222222222222222222222222222222222',
         senderDeviceId: 'alice-phone',
         recipientKeyPackage: _dummyKeyPackage(),
         // byteSize 超出自由档 10MB 上限;门控看 byteSize 字段,发前即拦,不触碰源文件。
@@ -232,7 +247,7 @@ void main() {
           byteSize: ChatMediaLimits.maxBytesForLevel('freedom') + 1,
         ),
         sendDeviceAttachment: ({
-          required recipientAccount,
+          required recipientAccountId,
           required conversationId,
           required attachmentId,
           required fileName,
@@ -269,8 +284,10 @@ void main() {
     await expectLater(
       flow.sendMedia(
         conversationId: 'conv-no-keypackage',
-        senderAccount: 'alice-wallet',
-        recipientAccount: 'bob-wallet',
+        senderAccountId:
+            '0x1111111111111111111111111111111111111111111111111111111111111111',
+        recipientAccountId:
+            '0x2222222222222222222222222222222222222222222222222222222222222222',
         senderDeviceId: 'alice-phone',
         media: ChatMediaDraft(
           kind: ChatMessageKind.image,
@@ -280,7 +297,7 @@ void main() {
           byteSize: 3,
         ),
         sendDeviceAttachment: ({
-          required recipientAccount,
+          required recipientAccountId,
           required conversationId,
           required attachmentId,
           required fileName,
@@ -315,8 +332,10 @@ void main() {
 
     await flow.sendMedia(
       conversationId: 'conv-online',
-      senderAccount: 'alice-wallet',
-      recipientAccount: 'bob-wallet',
+      senderAccountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      recipientAccountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       senderDeviceId: 'alice-phone',
       recipientKeyPackage: _dummyKeyPackage(),
       media: ChatMediaDraft(
@@ -328,7 +347,7 @@ void main() {
       ),
       // sendDeviceAttachment 成功(对方在线)。
       sendDeviceAttachment: ({
-        required recipientAccount,
+        required recipientAccountId,
         required conversationId,
         required attachmentId,
         required fileName,
@@ -367,8 +386,10 @@ void main() {
     // 该异常:控制消息已成立,字节留待上线补发。
     final results = await flow.sendMedia(
       conversationId: 'conv-offline',
-      senderAccount: 'alice-wallet',
-      recipientAccount: 'bob-wallet',
+      senderAccountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      recipientAccountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       senderDeviceId: 'alice-phone',
       recipientKeyPackage: _dummyKeyPackage(),
       media: ChatMediaDraft(
@@ -379,7 +400,7 @@ void main() {
         byteSize: 4,
       ),
       sendDeviceAttachment: ({
-        required recipientAccount,
+        required recipientAccountId,
         required conversationId,
         required attachmentId,
         required fileName,
@@ -571,7 +592,7 @@ class _FakeMlsCrypto implements MlsCrypto {
   @override
   Future<MlsOutboundMessage> encrypt({
     required String conversationId,
-    required String recipientAccount,
+    required String recipientAccountId,
     MlsKeyPackage? recipientKeyPackage,
     required List<int> plaintext,
   }) async {
@@ -632,9 +653,10 @@ class _FakeMlsCrypto implements MlsCrypto {
 }
 
 MlsKeyPackage _dummyKeyPackage() => const MlsKeyPackage(
-      ownerAccount: 'bob-wallet',
+      accountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       deviceId: 'bob-phone',
-      devicePublicKeyHex: 'aabb',
+      devicePublicKey: 'aabb',
       keyPackageId: 'kp-bob',
       keyPackageBytes: [1],
       cipherSuite: 'MLS_128',

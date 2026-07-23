@@ -51,7 +51,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
   Future<void> _loadBalance() async {
     try {
       final rpc = OffchainClearingBankRpc(widget.wssUrl!);
-      final v = await rpc.queryBalance(widget.wallet.address);
+      final v = await rpc.queryBalance(widget.wallet.ss58Address);
       if (!mounted) return;
       setState(() => _balanceFen = v);
     } catch (e) {
@@ -144,16 +144,16 @@ class _WithdrawPageState extends State<WithdrawPage> {
 
     setState(() => _submitting = true);
     try {
-      final pubkeyBytes = _hexToBytes(wallet.pubkeyHex);
-      if (pubkeyBytes.length != 32) {
+      final publicKeyBytes = _hexToBytes(wallet.accountId);
+      if (publicKeyBytes.length != 32) {
         throw Exception('钱包公钥必须是 32 字节');
       }
       final walletManager = WalletManager();
 
       final rpc = OnchainClearingBankRpc();
       final result = await rpc.withdraw(
-        fromAddress: wallet.address,
-        signerPubkey: Uint8List.fromList(pubkeyBytes),
+        fromSs58Address: wallet.ss58Address,
+        signerPublicKey: Uint8List.fromList(publicKeyBytes),
         amountFen: amountFen,
         sign: (payload) =>
             walletManager.signWithWallet(wallet.walletIndex, payload),

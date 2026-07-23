@@ -26,17 +26,16 @@ class SquareAccountDeletionService {
 
   /// [signAction] 对 signing_message(0x1D) 摘要用 sr25519 主钥签名（弹生物识别）。
   Future<void> deleteAccount({
-    required String ownerAccount,
+    required String accountId,
     required int walletIndex,
     required SquareActionSigner signAction,
   }) async {
     // 1. 服务端硬删（失败上抛 → 本地一律不动，UI/数据保持一致）。
-    await _api.deleteAccount(
-        ownerAccount: ownerAccount, signAction: signAction);
+    await _api.deleteAccount(accountId: accountId, signAction: signAction);
     // 2. 服务端确认后清本地，做到零残留。
-    await _profileCache.clear(ownerAccount);
-    _api.clearSession(ownerAccount);
-    await _chatStore.clearAllForOwner(ownerAccount);
+    await _profileCache.clear(accountId);
+    _api.clearSession(accountId);
+    await _chatStore.clearAllForAccount(accountId);
     // 服务端 square_device_subkeys 已 purge，删本机原生子钥迫使下次干净重注册。
     await _deviceSubkey.delete(walletIndex);
   }

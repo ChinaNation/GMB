@@ -19,10 +19,10 @@ class WalletProfileEntity {
   late String walletName;
 
   @Index(unique: true, replace: true)
-  late String address;
+  late String accountId;
 
   @Index(unique: true, replace: true)
-  late String pubkeyHex;
+  late String ss58Address;
 
   late String alg;
   late int ss58Prefix;
@@ -94,7 +94,7 @@ class WalletIsar {
       return opening;
     }
 
-    final task = _openAndMigrate();
+    final task = _openFinalSchema();
     _opening = task;
     try {
       final opened = await task;
@@ -105,7 +105,8 @@ class WalletIsar {
     }
   }
 
-  Future<Isar> _openAndMigrate() async {
+  /// 只打开创世前最终 schema；旧业务库直接删除重建，不执行 migration。
+  Future<Isar> _openFinalSchema() async {
     await ensureTestCoreInitialized();
     final dir = await _resolveDirectory();
     final schemas = [

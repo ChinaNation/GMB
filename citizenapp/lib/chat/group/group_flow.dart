@@ -22,20 +22,20 @@ import 'group_membership.dart';
 import 'group_model.dart';
 
 /// 群 ID 形如 `grp:<creator>:<nonce>`;创建者账户可从中还原(账户内无 `:`)。
-String creatorAccountFromGroupId(String groupId) {
+String creatorAccountIdFromGroupId(String groupId) {
   final parts = groupId.split(':');
   return parts.length >= 2 ? parts[1] : '';
 }
 
 /// 生成群 ID(创建者账户 + 随机 nonce)。
-String newGroupId(String creatorAccount) {
-  return 'grp:$creatorAccount:${_nonce()}';
+String newGroupId(String creatorAccountId) {
+  return 'grp:$creatorAccountId:${_nonce()}';
 }
 
 /// 登记/清除某成员的待投递群媒体(离线补发按成员;键 attachmentId+成员)。
 typedef GroupMemberMediaRecorder = Future<void> Function(
   String attachmentId,
-  String memberAccount,
+  String memberAccountId,
 );
 
 class ChatGroupFlow {
@@ -43,30 +43,30 @@ class ChatGroupFlow {
     required MlsGroupCrypto crypto,
     required ChatStore store,
     required ChatEnvelopeDeliverer deliverer,
-    required String ownerAccount,
-    required String ownerDeviceId,
+    required String accountId,
+    required String localDeviceId,
     this.defaultTtlMillis = 30 * 24 * 60 * 60 * 1000,
   })  : _crypto = crypto,
         _store = store,
         _deliverer = deliverer,
-        _ownerAccount = ownerAccount,
-        _ownerDeviceId = ownerDeviceId;
+        _accountId = accountId,
+        _localDeviceId = localDeviceId;
 
   final MlsGroupCrypto _crypto;
   final ChatStore _store;
   final ChatEnvelopeDeliverer _deliverer;
 
   /// 本机聊天账户与设备 ID(入站处理判定自身、代提交退群移除的 fanout 发送者）。
-  final String _ownerAccount;
-  final String _ownerDeviceId;
+  final String _accountId;
+  final String _localDeviceId;
   final int defaultTtlMillis;
 
   /// 建群:创建者为唯一成员(admin),可选带初始邀请。
   Future<ChatGroup> createGroup({
     required String groupId,
     required String name,
-    required String ownerAccount,
-    required String ownerDeviceId,
+    required String accountId,
+    required String localDeviceId,
     List<MlsKeyPackage> invitees = const [],
   }) async {
     GroupMembership.ensureCanCreate(inviteeCount: invitees.length);
@@ -74,22 +74,22 @@ class ChatGroupFlow {
     await _store.upsertGroupShell(
       groupId: groupId,
       groupName: name,
-      creatorAccount: ownerAccount,
-      ownerAccount: ownerAccount,
+      creatorAccountId: accountId,
+      accountId: accountId,
       epoch: created.epoch,
     );
     await _store.reconcileGroupRoster(
       groupId: groupId,
-      members: {ownerAccount: GroupMemberRole.admin},
+      members: {accountId: GroupMemberRole.admin},
       epoch: created.epoch,
     );
     if (invitees.isNotEmpty) {
       await _addMembersInternal(
         groupId: groupId,
-        actorAccount: ownerAccount,
-        actorDeviceId: ownerDeviceId,
-        creatorAccount: ownerAccount,
-        existingAccounts: [ownerAccount],
+        actorAccountId: accountId,
+        actorDeviceId: localDeviceId,
+        creatorAccountId: accountId,
+        existingAccounts: [accountId],
         invitees: invitees,
       );
     }
@@ -100,32 +100,32 @@ class ChatGroupFlow {
   /// 加人(仅 admin)。
   Future<void> addMembers({
     required String groupId,
-    required String actorAccount,
+    required String actorAccountId,
     required String actorDeviceId,
     required List<MlsKeyPackage> invitees,
   }) async {
     final group = await _requireGroup(groupId);
     GroupMembership.ensureAdmin(
-        adminSet: group.adminSet, actorAccount: actorAccount);
+        adminSet: group.adminSet, actorAccountId: actorAccountId);
     GroupMembership.ensureCanAdd(
       currentCount: group.roster.length,
       addingCount: invitees.length,
     );
     await _addMembersInternal(
       groupId: groupId,
-      actorAccount: actorAccount,
+      actorAccountId: actorAccountId,
       actorDeviceId: actorDeviceId,
-      creatorAccount: group.creatorAccount,
-      existingAccounts: group.memberAccounts,
+      creatorAccountId: group.creatorAccountId,
+      existingAccounts: group.memberAccountIds,
       invitees: invitees,
     );
   }
 
   Future<void> _addMembersInternal({
     required String groupId,
-    required String actorAccount,
+    required String actorAccountId,
     required String actorDeviceId,
-    required String creatorAccount,
+    required String creatorAccountId,
     required List<String> existingAccounts,
     required List<MlsKeyPackage> invitees,
   }) async {
@@ -134,15 +134,15 @@ class ChatGroupFlow {
 
     // Welcome → 全部新人;Commit → 现有成员(减自己)。
     final inviteeAccounts = accountsFromMemberIdentities(
-      invitees.map((keyPackage) => keyPackage.ownerAccount),
-      excludeAccount: actorAccount,
+      invitees.map((keyPackage) => keyPackage.accountId),
+      excludeAccount: actorAccountId,
     );
     final welcome = bundle.welcome;
     if (welcome != null && inviteeAccounts.isNotEmpty) {
       await _fanoutHandshake(
         wire: welcome,
         recipients: inviteeAccounts,
-        senderAccount: actorAccount,
+        senderAccountId: actorAccountId,
         senderDeviceId: actorDeviceId,
         groupId: groupId,
         nowMillis: nowMillis,
@@ -150,50 +150,50 @@ class ChatGroupFlow {
       );
     }
     final commitRecipients =
-        existingAccounts.where((account) => account != actorAccount).toList();
+        existingAccounts.where((account) => account != actorAccountId).toList();
     if (commitRecipients.isNotEmpty) {
       await _fanoutHandshake(
         wire: bundle.commit,
         recipients: commitRecipients,
-        senderAccount: actorAccount,
+        senderAccountId: actorAccountId,
         senderDeviceId: actorDeviceId,
         groupId: groupId,
         nowMillis: nowMillis,
         tag: 'commit',
       );
     }
-    await _reconcileFromChain(groupId, creatorAccount);
+    await _reconcileFromChain(groupId, creatorAccountId);
   }
 
   /// 删人(仅 admin,按账户)。
   Future<void> removeMembers({
     required String groupId,
-    required String actorAccount,
+    required String actorAccountId,
     required String actorDeviceId,
     required List<String> targetAccounts,
   }) async {
     final group = await _requireGroup(groupId);
     GroupMembership.ensureAdmin(
-        adminSet: group.adminSet, actorAccount: actorAccount);
+        adminSet: group.adminSet, actorAccountId: actorAccountId);
     final bundle = await _crypto.removeMembers(groupId, targetAccounts);
     final nowMillis = DateTime.now().millisecondsSinceEpoch;
 
     // Commit → 剩余成员 + 被删者(镜像此刻仍含被删者),都减自己。
-    final recipients = group.memberAccounts
-        .where((account) => account != actorAccount)
+    final recipients = group.memberAccountIds
+        .where((account) => account != actorAccountId)
         .toList();
     if (recipients.isNotEmpty) {
       await _fanoutHandshake(
         wire: bundle.commit,
         recipients: recipients,
-        senderAccount: actorAccount,
+        senderAccountId: actorAccountId,
         senderDeviceId: actorDeviceId,
         groupId: groupId,
         nowMillis: nowMillis,
         tag: 'commit',
       );
     }
-    await _reconcileFromChain(groupId, group.creatorAccount);
+    await _reconcileFromChain(groupId, group.creatorAccountId);
   }
 
   /// 退群:先发退群请求(群 admin 收到后自动 removeMembers 重钥,保证后向保密),
@@ -214,7 +214,7 @@ class ChatGroupFlow {
   Future<void> renameGroup(String groupId, String name) async {
     final group = await _requireGroup(groupId);
     GroupMembership.ensureAdmin(
-        adminSet: group.adminSet, actorAccount: _ownerAccount);
+        adminSet: group.adminSet, actorAccountId: _accountId);
     await _store.renameGroup(groupId, name);
     await sendGroupControl(groupId, GroupControl.rename(name));
   }
@@ -222,8 +222,8 @@ class ChatGroupFlow {
   /// 广播群控制消息(改名/退群请求):走 E2E application 扇出,**不落聊天消息行**。
   Future<void> sendGroupControl(String groupId, GroupControl control) async {
     final group = await _requireGroup(groupId);
-    final recipients = group.memberAccounts
-        .where((account) => account != _ownerAccount)
+    final recipients = group.memberAccountIds
+        .where((account) => account != _accountId)
         .toList();
     if (recipients.isEmpty) {
       return;
@@ -235,8 +235,8 @@ class ChatGroupFlow {
     await _fanoutHandshake(
       wire: wire,
       recipients: recipients,
-      senderAccount: _ownerAccount,
-      senderDeviceId: _ownerDeviceId,
+      senderAccountId: _accountId,
+      senderDeviceId: _localDeviceId,
       groupId: groupId,
       nowMillis: DateTime.now().millisecondsSinceEpoch,
       tag: 'ctrl',
@@ -246,13 +246,13 @@ class ChatGroupFlow {
   /// 群发文本:单次加密 → 扇 N 信封 → 1 条逻辑消息 + N 出站队列。
   Future<List<ChatDeliveryResult>> sendGroupText({
     required String groupId,
-    required String senderAccount,
+    required String senderAccountId,
     required String senderDeviceId,
     required String text,
   }) {
     return _sendGroupUserMessage(
       groupId: groupId,
-      senderAccount: senderAccount,
+      senderAccountId: senderAccountId,
       senderDeviceId: senderDeviceId,
       messageKind: ChatMessageKind.text,
       payload: ChatPayloadCodec.encode(ChatContent.text(text)),
@@ -262,14 +262,14 @@ class ChatGroupFlow {
   /// 群发内置贴纸(零字节,收端本地渲染;复用群发用户消息编排)。
   Future<List<ChatDeliveryResult>> sendGroupSticker({
     required String groupId,
-    required String senderAccount,
+    required String senderAccountId,
     required String senderDeviceId,
     required String packId,
     required String stickerId,
   }) {
     return _sendGroupUserMessage(
       groupId: groupId,
-      senderAccount: senderAccount,
+      senderAccountId: senderAccountId,
       senderDeviceId: senderDeviceId,
       messageKind: ChatMessageKind.sticker,
       payload: ChatPayloadCodec.encode(
@@ -282,7 +282,7 @@ class ChatGroupFlow {
   /// **≤100MB 对每个成员逐个 WebRTC 直传**(口径 A,离线按成员补发)。四门按己档强制。
   Future<List<ChatDeliveryResult>> sendGroupMedia({
     required String groupId,
-    required String senderAccount,
+    required String senderAccountId,
     required String senderDeviceId,
     required ChatMediaDraft media,
     required ChatAttachmentDeviceSender sendMemberAttachment,
@@ -317,8 +317,8 @@ class ChatGroupFlow {
         attachmentId: attachmentId,
         media: media,
         // 群删时机:全部收件人(减自己)ack 后删,避免首个 ack 即删。
-        recipientCount: group.memberAccounts
-            .where((account) => account != senderAccount)
+        recipientCount: group.memberAccountIds
+            .where((account) => account != senderAccountId)
             .length,
       );
     }
@@ -343,7 +343,7 @@ class ChatGroupFlow {
     // 控制消息单次加密扇 N + 落 1 逻辑媒体消息(复用共用编排)。
     final results = await _sendGroupUserMessage(
       groupId: groupId,
-      senderAccount: senderAccount,
+      senderAccountId: senderAccountId,
       senderDeviceId: senderDeviceId,
       messageKind: media.kind,
       payload: payload,
@@ -362,12 +362,12 @@ class ChatGroupFlow {
     }
     // ≤100MB:对每个成员逐个 WebRTC 直传(离线按成员留 pending 补发)。
     final members =
-        group.memberAccounts.where((account) => account != senderAccount);
+        group.memberAccountIds.where((account) => account != senderAccountId);
     for (final member in members) {
       await recordPendingMember?.call(attachmentId, member);
       try {
         await sendMemberAttachment(
-          recipientAccount: member,
+          recipientAccountId: member,
           conversationId: groupId,
           attachmentId: attachmentId,
           fileName: media.fileName,
@@ -386,7 +386,7 @@ class ChatGroupFlow {
   /// 群发用户消息(文本/贴纸)共用编排:单次加密 → 扇 N → 1 逻辑消息 + N 出站队列。
   Future<List<ChatDeliveryResult>> _sendGroupUserMessage({
     required String groupId,
-    required String senderAccount,
+    required String senderAccountId,
     required String senderDeviceId,
     required ChatMessageKind messageKind,
     required String payload,
@@ -396,15 +396,16 @@ class ChatGroupFlow {
       throw StateError('已退出该群，无法发送');
     }
     final nowMillis = DateTime.now().millisecondsSinceEpoch;
-    final wire = await _crypto.groupCreateMessage(groupId, utf8.encode(payload));
-    final recipients = group.memberAccounts
-        .where((account) => account != senderAccount)
+    final wire =
+        await _crypto.groupCreateMessage(groupId, utf8.encode(payload));
+    final recipients = group.memberAccountIds
+        .where((account) => account != senderAccountId)
         .toList();
     final messageId = '$groupId-msg-$nowMillis-${_nonce()}';
     final envelopes = GroupFanout.fanOut(
       wire: wire,
-      recipientAccounts: recipients,
-      senderAccount: senderAccount,
+      recipientAccountIds: recipients,
+      senderAccountId: senderAccountId,
       senderDeviceId: senderDeviceId,
       messageId: messageId,
       nowMillis: nowMillis,
@@ -412,7 +413,7 @@ class ChatGroupFlow {
     );
     await _store.saveOutgoingGroupMessage(
       groupId: groupId,
-      senderAccount: senderAccount,
+      senderAccountId: senderAccountId,
       senderDeviceId: senderDeviceId,
       logicalEnvelopeId: messageId,
       messageKind: messageKind,
@@ -490,14 +491,14 @@ class ChatGroupFlow {
     if (!result.isApplied) {
       return; // out_of_order 已缓冲;stale 丢弃。
     }
-    final creator = creatorAccountFromGroupId(result.groupId);
+    final creator = creatorAccountIdFromGroupId(result.groupId);
     switch (result.kind) {
       case GroupInboundKind.welcome:
         await _store.upsertGroupShell(
           groupId: result.groupId,
           groupName: '群聊',
-          creatorAccount: creator,
-          ownerAccount: envelope.recipientAccount,
+          creatorAccountId: creator,
+          accountId: envelope.recipientAccountId,
           epoch: result.groupEpoch,
         );
         await _reconcileRosterFrom(result, creator);
@@ -545,46 +546,47 @@ class ChatGroupFlow {
           return;
         }
         // 仅本机是 admin 时代提交移除退群者;其余成员忽略,靠 admin 的 Commit 收敛。
-        if (group.adminSet.contains(_ownerAccount)) {
+        if (group.adminSet.contains(_accountId)) {
           await removeMembers(
             groupId: groupId,
-            actorAccount: _ownerAccount,
-            actorDeviceId: _ownerDeviceId,
-            targetAccounts: [envelope.senderAccount],
+            actorAccountId: _accountId,
+            actorDeviceId: _localDeviceId,
+            targetAccounts: [envelope.senderAccountId],
           );
         }
     }
   }
 
-  Future<void> _reconcileFromChain(String groupId, String creatorAccount) async {
+  Future<void> _reconcileFromChain(
+      String groupId, String creatorAccountId) async {
     final state = await _crypto.groupState(groupId);
     await _store.reconcileGroupRoster(
       groupId: groupId,
-      members: _rolesFor(state.memberIdentities, creatorAccount),
+      members: _rolesFor(state.memberIdentities, creatorAccountId),
       epoch: state.epoch,
     );
   }
 
   Future<void> _reconcileRosterFrom(
     GroupInbound result,
-    String creatorAccount,
+    String creatorAccountId,
   ) async {
     final identities = result.memberIdentities ?? const [];
     await _store.reconcileGroupRoster(
       groupId: result.groupId,
-      members: _rolesFor(identities, creatorAccount),
+      members: _rolesFor(identities, creatorAccountId),
       epoch: result.groupEpoch,
     );
   }
 
   Map<String, GroupMemberRole> _rolesFor(
     Iterable<String> identities,
-    String creatorAccount,
+    String creatorAccountId,
   ) {
     final accounts = accountsFromMemberIdentities(identities);
     return {
       for (final account in accounts)
-        account: account == creatorAccount
+        account: account == creatorAccountId
             ? GroupMemberRole.admin
             : GroupMemberRole.member,
     };
@@ -593,7 +595,7 @@ class ChatGroupFlow {
   Future<void> _fanoutHandshake({
     required MlsWireMessage wire,
     required List<String> recipients,
-    required String senderAccount,
+    required String senderAccountId,
     required String senderDeviceId,
     required String groupId,
     required int nowMillis,
@@ -602,8 +604,8 @@ class ChatGroupFlow {
     final messageId = '$groupId-$tag-$nowMillis-${_nonce()}';
     final envelopes = GroupFanout.fanOut(
       wire: wire,
-      recipientAccounts: recipients,
-      senderAccount: senderAccount,
+      recipientAccountIds: recipients,
+      senderAccountId: senderAccountId,
       senderDeviceId: senderDeviceId,
       messageId: messageId,
       nowMillis: nowMillis,

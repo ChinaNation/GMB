@@ -53,7 +53,7 @@ export async function topupPendingRoute(request: Request, env: Env): Promise<Res
       payer_address: row.payer_address,
       recv_address: row.recv_address,
       pay_amount: row.pay_amount,
-      gmb_address: row.gmb_address,
+      account_id: row.account_id,
       coin_fen: row.coin_fen,
       package_id: row.package_id,
       confirmed_at: row.confirmed_at,

@@ -22,23 +22,23 @@ export interface AuthorSignals {
 /// 并发读；会员用一条 IN() 批量读。与主页 buildProfileResponse 的单作者路径同源，口径一致。
 export async function resolveAuthorSignals(
   env: Env,
-  ownerAccounts: string[]
+  accountIds: string[]
 ): Promise<Map<string, AuthorSignals>> {
-  const distinct = [...new Set(ownerAccounts)];
+  const distinct = [...new Set(accountIds)];
   const map = new Map<string, AuthorSignals>();
   if (distinct.length === 0) {
     return map;
   }
   const [identities, membershipMap, profiles] = await Promise.all([
-    Promise.all(distinct.map((owner) => fetchChainIdentityStateCached(env, owner))),
+    Promise.all(distinct.map((accountId) => fetchChainIdentityStateCached(env, accountId))),
     batchMemberships(env, distinct),
     // 去重作者的 profile.json 并行读；缺失（未建资料）软降级为空名 + 无头像。
-    Promise.all(distinct.map((owner) => readProfileDoc(env, owner).catch(() => null)))
+    Promise.all(distinct.map((accountId) => readProfileDoc(env, accountId).catch(() => null)))
   ]);
-  distinct.forEach((owner, index) => {
-    const membership = membershipMap.get(owner);
+  distinct.forEach((accountId, index) => {
+    const membership = membershipMap.get(accountId);
     const profile = profiles[index];
-    map.set(owner, {
+    map.set(accountId, {
       identity_level: identities[index].identity_level,
       membership_level: (membership?.membership_level ?? null) as MembershipLevel | null,
       membership_active: membership ? subscriptionIsActive(membership) : false,

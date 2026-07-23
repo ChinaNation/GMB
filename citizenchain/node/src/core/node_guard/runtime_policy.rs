@@ -485,6 +485,7 @@ fn seed_offchain_minimum_fee_probe(
                 institution_code: *b"SFGQ",
                 admins: vec![admin_primitives::Admin {
                     account_id: submitter,
+                    cid_number: Default::default(),
                     family_name: admin_primitives::FamilyName::truncate_from(
                         admin_primitives::DEFAULT_ADMIN_FAMILY_NAME.to_vec(),
                     ),
@@ -699,6 +700,26 @@ where
         "Core_initialize_block",
         &next_header.encode(),
     )?;
+
+    // 节点二进制级死规则:个人多签禁强制公民 CID。候选 runtime 必须暴露 `AdminPolicyApi`
+    // 且 `personal_multisig_cid_mandated() == false`;返回 true(强制)或缺失该 API(下方
+    // `?` 传播 Err)一律判 KnownBad,防 runtime 升级把个人多签 CID 改成强制或移除守卫。
+    let cid_mandated_raw = call_candidate(
+        backend,
+        &mut overlay,
+        &executor,
+        &runtime_code,
+        parent_hash,
+        "AdminPolicyApi_personal_multisig_cid_mandated",
+        &[],
+    )?;
+    let cid_mandated: bool = decode_exact(
+        &cid_mandated_raw,
+        "候选 AdminPolicyApi 个人多签 CID 强制策略",
+    )?;
+    if cid_mandated {
+        return Err("候选 runtime 违规强制个人多签提供公民 CID(禁强制死规则)".to_string());
+    }
 
     let probes = [
         (

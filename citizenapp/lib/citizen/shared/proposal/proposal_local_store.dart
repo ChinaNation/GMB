@@ -171,7 +171,7 @@ class LocalProposalSummary {
     required this.updatedAtMillis,
     this.internalCode,
     this.actorCidNumber,
-    this.executionAccountHex,
+    this.executionAccountId,
     this.subjectCidNumbers = const [],
     this.displayYear,
     this.displaySeqInYear,
@@ -185,7 +185,7 @@ class LocalProposalSummary {
   final int status;
   final String? internalCode;
   final String? actorCidNumber;
-  final String? executionAccountHex;
+  final String? executionAccountId;
   final List<String> subjectCidNumbers;
   final int? displayYear;
   final int? displaySeqInYear;
@@ -213,7 +213,7 @@ class LocalProposalSummary {
         status: status,
         internalCode: internalCode,
         actorCidNumber: actorCidNumber,
-        executionAccount: _hexToBytes(executionAccountHex),
+        executionAccountId: _hexToBytes(executionAccountId),
         subjectCidNumbers: subjectCidNumbers,
         displayMeta: displayMeta,
       );
@@ -300,7 +300,7 @@ class LocalProposalSummary {
       status: meta.status,
       internalCode: meta.internalCode,
       actorCidNumber: meta.actorCidNumber,
-      executionAccountHex: _bytesToHex(meta.executionAccount),
+      executionAccountId: _bytesToHex(meta.executionAccountId),
       subjectCidNumbers: meta.subjectCidNumbers,
       displayYear: meta.displayMeta?.year,
       displaySeqInYear: meta.displayMeta?.seqInYear,
@@ -321,7 +321,7 @@ class LocalProposalSummary {
         'status': status,
         'internal_code': internalCode,
         'actor_cid_number': actorCidNumber,
-        'execution_account_hex': executionAccountHex,
+        'execution_account_id': executionAccountId,
         'subject_cid_numbers': subjectCidNumbers,
         'display_year': displayYear,
         'display_seq_in_year': displaySeqInYear,
@@ -366,8 +366,7 @@ class LocalProposalSummary {
         status: status,
         internalCode: _toNullableString(decoded['internal_code']),
         actorCidNumber: _toNullableString(decoded['actor_cid_number']),
-        executionAccountHex:
-            _toNullableString(decoded['execution_account_hex']),
+        executionAccountId: _toNullableString(decoded['execution_account_id']),
         subjectCidNumbers: _toStringList(decoded['subject_cid_numbers']),
         displayYear: _toInt(decoded['display_year']),
         displaySeqInYear: _toInt(decoded['display_seq_in_year']),
@@ -416,17 +415,20 @@ String _kindLabel(int kind) {
 
 String? _bytesToHex(Uint8List? bytes) {
   if (bytes == null) return null;
+  if (bytes.length != 32) {
+    throw const FormatException('execution_account_id 必须为 32 字节');
+  }
   final buffer = StringBuffer();
   for (final byte in bytes) {
     buffer.write(byte.toRadixString(16).padLeft(2, '0'));
   }
-  return buffer.toString();
+  return '0x$buffer';
 }
 
 Uint8List? _hexToBytes(String? hex) {
   if (hex == null || hex.isEmpty) return null;
-  final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
-  if (clean.length.isOdd) return null;
+  if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(hex)) return null;
+  final clean = hex.substring(2);
   final result = Uint8List(clean.length ~/ 2);
   for (var i = 0; i < result.length; i++) {
     final value = int.tryParse(

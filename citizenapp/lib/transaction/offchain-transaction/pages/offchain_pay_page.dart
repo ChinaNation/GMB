@@ -33,7 +33,7 @@ class OffchainClearingPayPage extends StatefulWidget {
   const OffchainClearingPayPage({
     super.key,
     required this.wallet,
-    required this.toAddress,
+    required this.toSs58Address,
     required this.recipientBankCidNumber,
     required this.clearingNodeWssUrl,
     this.initialAmountYuan,
@@ -43,8 +43,8 @@ class OffchainClearingPayPage extends StatefulWidget {
   /// 付款方当前钱包(仅支持热钱包)。
   final WalletProfile wallet;
 
-  /// 商户 QR `UserTransferBody.address` 收款方地址(SS58 或 0x hex pubkey)。
-  final String toAddress;
+  /// 商户 QR `UserTransferBody.ss58Address` 收款方 SS58 展示地址。
+  final String toSs58Address;
 
   /// 商户 QR `UserTransferBody.bank` 收款方清算行 `cid_number`。
   final String recipientBankCidNumber;
@@ -105,7 +105,7 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
   Future<void> _loadPrerequisites() async {
     try {
       // 1. 付款方绑定的清算行
-      final payerBank = await _nodeRpc.queryUserBank(widget.wallet.address);
+      final payerBank = await _nodeRpc.queryUserBank(widget.wallet.ss58Address);
       if (payerBank == null || payerBank.isEmpty) {
         _setError('您尚未绑定清算行,请先返回"选择/绑定清算行"完成绑定');
         return;
@@ -187,14 +187,14 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
     setState(() => _state = _PageState.submitting);
     try {
       // 6. nonce
-      final nonce = await _nodeRpc.queryNextNonce(widget.wallet.address);
+      final nonce = await _nodeRpc.queryNextNonce(widget.wallet.ss58Address);
 
       // 7. 构造 intent
-      final payer = hexToBytes(widget.wallet.pubkeyHex);
+      final payer = hexToBytes(widget.wallet.accountId);
       if (payer.length != 32) {
         throw Exception('钱包公钥长度异常:${payer.length}');
       }
-      final recipient = _decodeAccount(widget.toAddress);
+      final recipient = _decodeAccount(widget.toSs58Address);
       final payerBankCidBytes = Uint8List.fromList(utf8.encode(_payerBankCid!));
       final recipientBankCidBytes =
           Uint8List.fromList(utf8.encode(_recipientBankCid!));
@@ -330,7 +330,7 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _kv('收款方地址', widget.toAddress),
+          _kv('收款方地址', widget.toSs58Address),
           if (_payerBankCid != null) _kv('付款方清算行', _payerBankCid!),
           _kv('收款方清算行', widget.recipientBankCidNumber),
           if (_payerBankCid != null && _recipientBankCid != null)
@@ -432,7 +432,7 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
     return neg ? '-$s' : s;
   }
 
-  /// QR 里的 `toAddress` 是用户展示/扫码边界，只允许 SS58。
+  /// QR 里的 `toSs58Address` 是用户展示/扫码边界，只允许 SS58。
   Uint8List _decodeAccount(String address) {
     return _ss58ToBytes(address.trim());
   }

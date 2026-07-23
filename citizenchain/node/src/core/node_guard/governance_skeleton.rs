@@ -9,7 +9,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use admin_primitives::{Admin, InstitutionAdmins, PublicAdmin};
+use admin_primitives::{Admin, InstitutionAdmins};
 use codec::Decode;
 #[cfg(test)]
 use codec::Encode;
@@ -286,7 +286,7 @@ pub mod storage_key {
 
 /// 节点直接使用共享协议类型解码，避免维护第二份字段顺序和枚举判别值。
 type DecodedPrivateInstitutionAdmins = InstitutionAdmins<Vec<Admin<[u8; 32]>>>;
-type DecodedPublicInstitutionAdmins = InstitutionAdmins<Vec<PublicAdmin<[u8; 32]>>>;
+type DecodedPublicInstitutionAdmins = InstitutionAdmins<Vec<Admin<[u8; 32]>>>;
 type DecodedInstitutionRole = SharedInstitutionRole<Vec<u8>, Vec<u8>, Vec<u8>>;
 type DecodedInstitutionAdminAssignment =
     SharedInstitutionAdminAssignment<Vec<u8>, [u8; 32], Vec<u8>, Vec<u8>>;
@@ -749,6 +749,8 @@ mod tests {
                     .into_iter()
                     .map(|account_id| Admin {
                         account_id,
+                        // Phase 1: 公民 CID 与创世一致留空。
+                        cid_number: Default::default(),
                         family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
                         given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
                     })
@@ -760,7 +762,7 @@ mod tests {
             institution_code: institution.code,
             admins: admins
                 .into_iter()
-                .map(|account_id| PublicAdmin {
+                .map(|account_id| Admin {
                     account_id,
                     cid_number: Default::default(),
                     family_name: Default::default(),
@@ -1066,7 +1068,7 @@ mod tests {
                 institution_code: *b"BAD\0",
                 admins: accounts_for(&institution)
                     .into_iter()
-                    .map(|account_id| PublicAdmin {
+                    .map(|account_id| Admin {
                         account_id,
                         cid_number: Default::default(),
                         family_name: Default::default(),

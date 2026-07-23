@@ -7,7 +7,7 @@ use axum::http::StatusCode;
 
 use crate::auth::login::AdminAuthContext;
 use crate::auth::repo;
-use crate::crypto::pubkey::normalize_admin_account;
+use crate::crypto::pubkey::normalize_account_id;
 use crate::institution::subjects::model::Institution;
 use crate::institution::subjects::service::ServiceError;
 use crate::{api_error, AppState};
@@ -52,13 +52,13 @@ pub(crate) fn ensure_institution_visible_to_admin(
 
 pub(crate) fn resolve_created_by(
     state: &AppState,
-    created_by: &str,
+    creator_account_id: &str,
 ) -> (Option<String>, Option<String>, Option<String>) {
-    let Some(norm) = normalize_admin_account(created_by) else {
+    let Some(norm) = normalize_account_id(creator_account_id) else {
         return (None, None, None);
     };
     let result = state.db.with_client(move |conn| {
-        let Some(admin) = repo::get_admin_by_account_conn(conn, norm.as_str())? else {
+        let Some(admin) = repo::get_admin_by_account_id_conn(conn, norm.as_str())? else {
             return Ok((None, None, None));
         };
         let institution_code = admin.institution_code.clone();

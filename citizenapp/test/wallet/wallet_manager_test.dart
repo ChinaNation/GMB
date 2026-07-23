@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
@@ -14,6 +15,9 @@ const _mnemonicA =
 const _mnemonicB =
     'abandon abandon abandon abandon abandon abandon abandon abandon '
     'abandon abandon abandon about';
+
+String _coldSs58(int byte) =>
+    Keyring().encodeAddress(List<int>.filled(32, byte), 2027);
 
 class _MemoryBlobStore implements VaultBlobStore {
   final Map<String, String> values = <String, String>{};
@@ -118,8 +122,7 @@ void main() {
       expect(await manager.getDefaultWallet(), isNull);
 
       await manager.importColdWallet(
-        address:
-            '0x2222222222222222222222222222222222222222222222222222222222222222',
+        ss58Address: _coldSs58(0x22),
       );
       expect(await manager.getDefaultWallet(), isNull);
 
@@ -148,7 +151,7 @@ void main() {
 
     Future<void> failingRegistrar({
       required int walletIndex,
-      required String ownerAccount,
+      required String accountId,
       required Future<String> Function(Uint8List bindingMessage) signBinding,
     }) async {
       throw Exception('设备子钥注册失败：网络不可用');
@@ -177,19 +180,19 @@ void main() {
     });
 
     test('createWallet 注册成功 → 落库并用主钥对绑定证明签名', () async {
-      String? seenOwner;
+      String? seenAccountId;
       WalletManager.subkeyRegistrar = ({
         required int walletIndex,
-        required String ownerAccount,
+        required String accountId,
         required Future<String> Function(Uint8List bindingMessage) signBinding,
       }) async {
-        seenOwner = ownerAccount;
+        seenAccountId = accountId;
         final signature = await signBinding(Uint8List(32));
         expect(signature.startsWith('0x'), isTrue);
       };
       final manager = WalletManager();
       final created = await manager.createWallet();
-      expect(seenOwner, created.profile.address);
+      expect(seenAccountId, created.profile.accountId);
       expect((await manager.getWallets()).length, 1);
       expect(fakeStore.seeds[created.profile.walletIndex], isNotNull);
     });
@@ -282,18 +285,15 @@ void main() {
               .having((e) => e.message, 'message', contains('不一致')),
         ),
       );
-      // pubkey 校验在 deleteSeed/putSeed 之前，错误 seed 不落库。
+      // publicKey 校验在 deleteSeed/putSeed 之前，错误 seed 不落库。
       expect(fakeStore.putSeedCount, 0);
     });
   });
 
   group('WalletManager — 冷钱包', () {
-    const coldPubkeyHex =
-        '0x1111111111111111111111111111111111111111111111111111111111111111';
-
-    test('importColdWallet 只存公钥，seed 金库无条目', () async {
+    test('importColdWallet 只存公开账户资料，seed 金库无条目', () async {
       final manager = WalletManager();
-      final cold = await manager.importColdWallet(address: coldPubkeyHex);
+      final cold = await manager.importColdWallet(ss58Address: _coldSs58(0x11));
       expect(cold.signMode, 'external');
       expect(fakeStore.seeds.containsKey(cold.walletIndex), isFalse);
       expect(fakeStore.mnemonics.containsKey(cold.walletIndex), isFalse);
@@ -301,7 +301,7 @@ void main() {
 
     test('deleteWallet 冷钱包不影响 seed 金库', () async {
       final manager = WalletManager();
-      final cold = await manager.importColdWallet(address: coldPubkeyHex);
+      final cold = await manager.importColdWallet(ss58Address: _coldSs58(0x11));
       await manager.deleteWallet(cold.walletIndex);
       final wallets = await manager.getWallets();
       expect(wallets.where((w) => w.walletIndex == cold.walletIndex), isEmpty);

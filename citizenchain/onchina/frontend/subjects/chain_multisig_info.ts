@@ -27,7 +27,7 @@ export interface InstitutionInfoDetail {
     family_name: string;
     given_name: string;
     cid_number: string;
-    account: string;
+    account_id: string;
   } | null;
 }
 

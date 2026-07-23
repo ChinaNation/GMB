@@ -6,7 +6,7 @@
 
 - 单群成员 ≤ **1989**(发送端 + 建群/加人 Dart 拦 + Rust `group_add_members` 硬拦,双守)。
 - 文本 / 贴纸 / emoji / 缩略图 **始终 E2E 零存储**;媒体按会员分级(见 §11)。
-- 加密 = OpenMLS 群(**单次加密**),投递 = **发送端扇出 N 信封**(同一密文,N 个 `recipient_account`),服务端只瞬时中转、零存储不变。
+- 加密 = OpenMLS 群(**单次加密**),投递 = **发送端扇出 N 信封**(同一密文,N 个 `recipient_account_id`),服务端只瞬时中转、零存储不变。
 - 成员变更走 MLS **Commit/Welcome**(前向/后向保密由 MLS 保证)。
 - 名册以 **MLS 群成员为唯一真源**,Isar 为镜像,每次 Commit 后对账。
 - 门禁沿用会话签发时的**链上活账户校验**,不放宽;不动 citizenchain;开发期零用户 → Isar 群 schema 直接重建,无迁移/兼容。
@@ -17,7 +17,7 @@
 发送端 A                              Cloudflare(零存储)          每个成员设备
 sendGroupText
  └ group_create_message(1 次加密) ── N×ChatEnvelope ──▶ relay/wake ──▶ group_process
-      同一份密文,N 个 recipient_account                              └ 解密 application
+      同一份密文,N 个 recipient_account_id                              └ 解密 application
 
 建群/加人
  └ group_add_members([kp…])
@@ -29,12 +29,12 @@ sendGroupText
       └ Commit  ── 扇给剩余成员 + 被删者 ──▶ 剩余:重钥;被删者:自身 leaf 移除→群失活
 ```
 
-投递复用既有事实:`chat_cloud_transport.dart` 从 `envelope.recipientAccount` 取收件人 → `cloudflare/src/chat/service.ts:submitChatEnvelope` 按此 `relayChatPayload`+`sendChatWake`,不解析密文。群消息即"同一 `mls_wire_message` 封 N 个不同 `recipient_account` 的信封",逐个走**现有** `sendEncryptedEnvelope`,**阶段 1-2 服务端零改**。
+投递复用既有事实:`chat_cloud_transport.dart` 从 `envelope.recipientAccountId` 取收件人 → `cloudflare/src/chat/service.ts:submitChatEnvelope` 按此 `relayChatPayload`+`sendChatWake`,不解析密文。群消息即"同一 `mls_wire_message` 封 N 个不同 `recipient_account_id` 的信封",逐个走**现有** `sendEncryptedEnvelope`,**阶段 1-2 服务端零改**。
 
 ## 2. 协议与路由(无 proto 改动)
 
 - **不新增 wire kind**:复用 `MlsWireMessageKind` 的 `WELCOME`/`APPLICATION`。Commit 也是 MLS protocol message,发送时按 `application` 标签封装;收端由 Rust `group_process` 依 `MlsMessageBodyIn` 重新判别 welcome/commit/application,envelope 标签仅供 Dart 参考,不参与正确性判定。
-- **群 ID**:`group_id = "grp:<creatorAccount>:<nonce16>"`,即 `conversation_id`,全成员一致(经 Welcome 里的 `GroupId` 分发)。
+- **群 ID**:`group_id = "grp:<creatorAccountId>:<nonce16>"`,即 `conversation_id`,全成员一致(经 Welcome 里的 `GroupId` 分发)。
 - **群 vs 私聊路由**:`conversation_id` 前缀 `grp:` → 群路径(`ChatGroupFlow`);`dm:` → 现有 1:1 路径。同时 `ChatConversationEntity.conversationKind` 持久化便于列表渲染。
 
 ## 3. Rust FFI(`rust/src/chat_mls.rs` 扩展)
@@ -45,7 +45,7 @@ sendGroupText
 
 | FFI `gmb_chat_mls_*` | Request | Response |
 |---|---|---|
-| `group_create` | `{state_store_dir, owner_account, device_id, group_id}` | `{group_id, epoch}` |
+| `group_create` | `{state_store_dir, account_id, device_id, group_id}` | `{group_id, epoch}` |
 | `group_add_members` | `{…, group_id, key_packages_hex:[…]}` | `{group_id, epoch, commit_wire_hex, welcome_wire_hex, ratchet_tree_hex}` |
 | `group_remove_members` | `{…, group_id, member_identities:["acct:dev",…]}` | `{group_id, epoch, commit_wire_hex, removed_identities:[…]}` |
 | `group_create_message` | `{…, group_id, plaintext_hex}` | `{group_id, epoch, application_wire_hex}` |
@@ -135,7 +135,7 @@ application 若因群已推进而 stale(密钥已 ratchet 掉)→ 标"需重发"
 ## 8. Isar 实体(开发期直接重建)
 
 ```dart
-ChatGroupEntity           { groupId(唯一), groupName, creatorAccount, ownerAccount(索引),
+ChatGroupEntity           { groupId(唯一), groupName, creatorAccountId, accountId(索引),
                             epoch, memberCount, leftLocally, createdAtMillis, updatedAtMillis }
 ChatGroupMemberEntity     { groupId(索引), memberAccount, role(admin|member), joinedAtMillis }
 ChatGroupPendingCommitEntity { groupId(索引), messageEpoch(索引), envelopeBytesHex, createdAtMillis }
@@ -152,7 +152,7 @@ ChatConversationEntity 加 : conversationKind = "dm" | "group"
 
 ## 10. 扇出与投递
 
-单密文 → `group_fanout` 生成 N 个 `ChatEnvelope`(逐个换 `recipient_account`)→ `ChatFlow.deliverWithTransport` 逐个投递;transport 按 envelope 内 `recipient_account` 路由;离线成员由 `sendChatWake` 唤醒 + 发送端队列重试(复用 1:1 队列)。阶段1 串行发,背压/批量降级留阶段2。
+单密文 → `group_fanout` 生成 N 个 `ChatEnvelope`(逐个换 `recipient_account_id`)→ `ChatFlow.deliverWithTransport` 逐个投递;transport 按 envelope 内 `recipient_account_id` 路由;离线成员由 `sendChatWake` 唤醒 + 发送端队列重试(复用 1:1 队列)。阶段1 串行发,背压/批量降级留阶段2。
 
 ## 11. 大媒体中转(>100MB,已落地 · 口径见 [[project_chat_media_tiered_relay_2026_07_15]])
 
@@ -192,7 +192,7 @@ ChatConversationEntity 加 : conversationKind = "dm" | "group"
 
 **阶段2 已完成(2026-07-16):协议缺口 + UI。**
 
-- **UI**(`group/ui/`):`open_group_chat.dart`(复用 `chat_page`,`onSendText→sendGroupText`,文本+emoji)、`group_create_page.dart`(通讯录 `UserContactService.getContacts` 多选 + 群名 → `createGroup` → 开群)、`group_manage_page.dart`(名册 + 加/删仅 admin + 改群名 + 退群 + `pickContacts` 弹层)。`chat_tab.dart`:新建群入口 sliver + 群会话行(👥 前缀 + 群头像 + 点开 `openGroupChat` + **长按 `GroupManagePage`**)。`flutter analyze lib/chat` 0、全量 `test/chat` 142 绿。
+- **UI**(`group/ui/`):`open_group_chat.dart`(复用 `chat_page`,`onSendText→sendGroupText`,文本+emoji)、`group_create_page.dart`(通讯录 `UserContactService.getContacts` 多选 + 群名 → `createGroup` → 开群;**最少选 2 人**,1 人应走「发私信」,未满 2 人时「已选 N」后缀提示「至少 2 人」并禁用创建)、`group_manage_page.dart`(名册 + 加/删仅 admin + 改群名 + 退群 + `pickContacts` 弹层)。`chat_tab.dart`:建群入口已于 2026-07-23 顶栏改造中迁入**右上角加号菜单「发群聊」**(原「新建群聊」sliver 卡片整块删除,原位改为搜索框) + 群会话行(👥 前缀 + 群头像 + 点开 `openGroupChat` + **长按 `GroupManagePage`**)。`flutter analyze lib/chat` 0、全量 `test/chat` 142 绿。
 - **收尾进展(2026-07-16)**:① **群消息 sender 归属已落地**——`chat_page` 加 `isGroup`,`resolveUser` 群里按 `senderAccount` 经 `ProfilePresentation.forAccount` 出真名,群 text builder 用 flyer `SimpleTextMessage.topWidget` 挂 `Username`(连续同发送者只首条显名);② **群贴纸已落地**——`group_flow.sendGroupSticker`(抽 `_sendGroupUserMessage` 与文本共用)+ `runtime.sendGroupSticker` + `open_group_chat` 接线。`test/chat` 143 绿、analyze 0。
 - **群媒体发送已落地(2026-07-16)**:
   - **地基**:`ChatOutgoingMediaEntity` 键改 **`pendingKey=attachmentId|recipient`**(群里一份媒体 N 成员 N 行);`MediaResend` 在途去重键 + 删按 (媒体,成员) 复合(`inFlightKey`);`deleteOutgoingMedia(attachmentId, recipient)`。
@@ -202,7 +202,7 @@ ChatConversationEntity 加 : conversationKind = "dm" | "group"
   - **测试**:`test/chat/group` 群媒体扇出(≤100MB per-member 数=成员数、>100MB 中转一次不走 WebRTC)+ `chat_store` 群媒体复合键 + `media_resend` 复合去重;全量 `test/chat` **146 绿**、analyze 0。
 - **sender 归属已全类型一致(2026-07-16)**:文本 + **图片/视频/文件/贴纸** 群里入站消息均在气泡上方显发送者名(`_mediaAligned` 加 `senderId/groupStatus`,按 `widget.isGroup` 门控,连续同发送者只首条;1:1 不变)。
 - **验收补测已落地(2026-07-16)**:
-  - **权限门控 widget 测**(`group_manage_page_test`):admin 见添加/移除/改群名、非 admin 只见退群;`GroupManagePage.ownerAccount` 注入 seam + fake store 覆写 `readGroup`(避 Isar 真异步在 widget 测不 settle)。
+  - **权限门控 widget 测**(`group_manage_page_test`):admin 见添加/移除/改群名、非 admin 只见退群;`GroupManagePage.accountId` 注入 seam + fake store 覆写 `readGroup`(避 Isar 真异步在 widget 测不 settle)。
   - **Worker relay vitest**(`relay.test.ts`):init 薪火+尺寸门 + recipient_count、ack 达数归零删 R2+KV;3 绿。
   - **顺带修真 bug**:relay 路由(init/blob/ack)此前未在 `limits/catalog` 注册,生产 `assertKnownRoute` 会 404;补 `chat_relay`(1kb)/`chat_relay_blob`(5200MiB,供 blob PUT 大体积)+ 路由表。全量 worker vitest 168 绿、`test/chat` 148 绿。
 - **仍待补(验收)**:`group_create_page`/`chat_tab` 群入口 widget 测(需 fake ChatRuntime/contacts);**真机 E2E**(多设备群文本/媒体、relay 上传下载、recipient_count 删、加删退后向保密)。
@@ -212,7 +212,7 @@ ChatConversationEntity 加 : conversationKind = "dm" | "group"
 - **群控制载荷**(`group/group_control.dart`,不改 proto、不进 `ChatMessageKind`):`t=gmb.chat.ctrl`,`op=rename|leave_request`;收端 `group_flow` 先判别——是控制则处理、**绝不当聊天消息显示**,非控制退化为普通消息(`tryDecode` 对坏数据/未知 op 返回 null,不误吞用户文本)。
 - **群名传播**:创建者/admin `renameGroup` → 本机改 + 广播 `rename`;成员收到 `rename` → 更新群名(补 Welcome 不带名的缺口)。
 - **退群自动重钥**:`leaveGroup` = 发 `leave_request` + 本机标 `leftLocally`;群 **admin** 收到 `leave_request` → 自动 `removeMembers([leaver])` 产 Commit 重钥,**补齐阶段1"退群仅本机停发"的密码学后向保密**。
-- **存储**:`ChatConversationPreview.conversationKind` 透出(列表区分群/私聊);`ChatStore.renameGroup`;`ChatGroupFlow` 构造加 `ownerAccount/ownerDeviceId`(入站判自身/代提交移除)。
+- **存储**:`ChatConversationPreview.conversationKind` 透出(列表区分群/私聊);`ChatStore.renameGroup`;`ChatGroupFlow` 构造加 `accountId/accountDeviceId`(入站判自身/代提交移除)。
 - **测试**:`test/chat/group/` 13 绿(含控制载荷编解码退化、admin 收 leave_request 自动移除、rename 同步群名)。`flutter analyze lib/chat` 0。
 - **UI 待做(阶段2 第 2 段)**:建群页 / 成员管理页 / 群聊页(chat_page 群适配 + sender 归属)+ chat_tab 新建群入口与群会话行。
 

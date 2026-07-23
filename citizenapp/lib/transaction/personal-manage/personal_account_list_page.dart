@@ -80,7 +80,7 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
       final personals = await isar.personalAccountEntitys.where().findAll();
       final statuses = await PersonalMultisigLocalState.readStatuses(
         isar,
-        personals.map((p) => p.account),
+        personals.map((p) => p.accountId),
       );
       return (personals: personals, statuses: statuses);
     });
@@ -107,14 +107,14 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
       final personals = await isar.personalAccountEntitys.where().findAll();
       final statuses = await PersonalMultisigLocalState.readStatusSnapshots(
         isar,
-        personals.map((p) => p.account),
+        personals.map((p) => p.accountId),
       );
       return (personals: personals, statuses: statuses);
     });
 
-    final filter = personalAccounts?.map(_normalizeHex).toSet();
+    final filter = personalAccounts?.map(_requireAccountId).toSet();
     final targets = snapshot.personals.where((item) {
-      final address = _normalizeHex(item.account);
+      final address = _requireAccountId(item.accountId);
       if (filter != null && !filter.contains(address)) return false;
       return force || _shouldRefreshStatus(snapshot.statuses[address]);
     }).toList(growable: false);
@@ -141,7 +141,7 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
     Map<String, AccountInfo?> infos;
     try {
       infos = await _personalManageService.fetchPersonalAccountsBatch(
-        personals.map((p) => p.account),
+        personals.map((p) => p.accountId),
       );
     } catch (_) {
       // 批量查链失败时保留本地旧状态，不能把网络失败写成已注销。
@@ -150,11 +150,11 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
 
     for (final personal in personals) {
       try {
-        final info = infos[_normalizeHex(personal.account)];
+        final info = infos[_requireAccountId(personal.accountId)];
         if (info == null &&
             await _personalProposalHistoryService
-                .hasUnchainedVotingCreateProposal(personal.account)) {
-          await _deletePersonalGhost(personal.account);
+                .hasUnchainedVotingCreateProposal(personal.accountId)) {
+          await _deletePersonalGhost(personal.accountId);
           continue;
         }
         final status = info == null
@@ -165,22 +165,22 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
         await WalletIsar.instance.writeTxn((isar) async {
           await PersonalMultisigLocalState.putStatusInTxn(
             isar,
-            personal.account,
+            personal.accountId,
             status,
           );
           if (info == null) {
             await PersonalMultisigLocalState.deleteDetailInTxn(
               isar,
-              personal.account,
+              personal.accountId,
             );
           } else {
             final previousDetail = await PersonalMultisigLocalState.readDetail(
               isar,
-              personal.account,
+              personal.accountId,
             );
             await PersonalMultisigLocalState.putDetailInTxn(
               isar,
-              personal.account,
+              personal.accountId,
               MultisigLocalDetailSnapshot(
                 status: status,
                 admins: info.admins,
@@ -200,25 +200,25 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
     }
   }
 
-  Future<void> _deletePersonalGhost(String personalAccountHex) async {
+  Future<void> _deletePersonalGhost(String personalAccountId) async {
     await WalletIsar.instance.writeTxn((isar) async {
       // 旧版本曾在 txHash 返回后提前写入本地多签；若链上没有账户
       // 且创建提案也不存在，说明它从未上链，不能展示为“已注销”。
       await isar.personalAccountEntitys
           .where()
-          .accountEqualTo(personalAccountHex)
+          .accountIdEqualTo(_requireAccountId(personalAccountId))
           .deleteAll();
       await isar.personalAccountProposalEntitys
           .filter()
-          .personalAccountEqualTo(personalAccountHex)
+          .personalAccountIdEqualTo(personalAccountId)
           .deleteAll();
       await PersonalMultisigLocalState.deleteStatusInTxn(
         isar,
-        personalAccountHex,
+        personalAccountId,
       );
       await PersonalMultisigLocalState.deleteDetailInTxn(
         isar,
-        personalAccountHex,
+        personalAccountId,
       );
     });
   }
@@ -226,8 +226,8 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
   Future<({bool anyChanged, bool completed})> _runBackgroundDiscovery() async {
     if (_scanning) return (anyChanged: false, completed: false);
 
-    final myPubkeys = await _currentWalletPubkeys();
-    if (myPubkeys.isEmpty) return (anyChanged: false, completed: true);
+    final myAccountIds = await _currentWalletAccountIds();
+    if (myAccountIds.isEmpty) return (anyChanged: false, completed: true);
 
     setState(() {
       _scanning = true;
@@ -249,7 +249,7 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
       );
       final stats = await _discoveryService.processScanned(
         scan,
-        myPubkeys: myPubkeys,
+        myAccountIds: myAccountIds,
       );
       anyChanged = stats.newlyAdded > 0 || stats.orphansRemoved > 0;
       completed = !stats.partialFailure;
@@ -303,7 +303,7 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
   }
 
   void _onCardTap(PersonalAccountEntity item) {
-    final localStatus = _statuses[_normalizeHex(item.account)];
+    final localStatus = _statuses[_requireAccountId(item.accountId)];
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -311,21 +311,23 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
           institution: InstitutionInfo(
             cidFullName: item.accountName,
             cidShortName: item.accountName,
-            cidFullNameEn: 'Personal Multisig ${item.account.substring(0, 8)}',
-            cidShortNameEn: 'Personal Multisig ${item.account.substring(0, 8)}',
-            cidNumber: 'personal-account:${item.account}',
+            cidFullNameEn:
+                'Personal Multisig ${item.accountId.substring(0, 8)}',
+            cidShortNameEn:
+                'Personal Multisig ${item.accountId.substring(0, 8)}',
+            cidNumber: 'personal-account:${item.accountId}',
             orgType: OrgType.personalMultisig,
-            personalAccountHex: item.account,
+            personalAccountId: item.accountId,
           ),
           initialLocalStatus: localStatus,
-          initialAdminPubkeys: item.matchedAdminPubkeys,
+          initialAdminAccountIds: item.matchedAdminAccountIds,
         ),
       ),
     ).then((_) {
       if (!mounted) return;
       unawaited(_refreshKnownStatuses(
         force: true,
-        personalAccounts: {item.account},
+        personalAccounts: {item.accountId},
       ));
     });
   }
@@ -434,13 +436,13 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
   }
 
   Widget _buildCard(PersonalAccountEntity item) {
-    final ss58 = _accountAddressLabel(item.account);
-    final localStatus = _statuses[_normalizeHex(item.account)];
+    final ss58 = _accountAddressLabel(item.accountId);
+    final localStatus = _statuses[_requireAccountId(item.accountId)];
     final isClosed = localStatus == PersonalMultisigLocalState.statusClosed;
     final subtitleParts = <String>[
       _truncateAddress(ss58),
       if (item.discoveredViaAdmin)
-        '我作为 ${item.matchedAdminPubkeys.length} 位管理员之一参与',
+        '我作为 ${item.matchedAdminAccountIds.length} 位管理员之一参与',
     ];
     return Card(
       elevation: 0,
@@ -571,19 +573,21 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
     return '${address.substring(0, 6)}...${address.substring(address.length - 6)}';
   }
 
-  String _normalizeHex(String hex) {
-    final h = hex.startsWith('0x') ? hex.substring(2) : hex;
-    return h.toLowerCase();
+  String _requireAccountId(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+    }
+    return accountId;
   }
 
-  Future<Set<String>> _currentWalletPubkeys() async {
+  Future<Set<String>> _currentWalletAccountIds() async {
     final wallets = await WalletManager().getWallets();
-    return wallets.map((wallet) => _normalizeHex(wallet.pubkeyHex)).toSet();
+    return wallets.map((wallet) => wallet.accountId).toSet();
   }
 
   Future<String> _currentWalletFingerprint() async {
-    final pubkeys = (await _currentWalletPubkeys()).toList()..sort();
-    return pubkeys.join('|');
+    final accountIds = (await _currentWalletAccountIds()).toList()..sort();
+    return accountIds.join('|');
   }
 
   Future<String?> _readDiscoveryWalletFingerprint() {

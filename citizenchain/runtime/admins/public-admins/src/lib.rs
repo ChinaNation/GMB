@@ -18,8 +18,9 @@ use frame_system::pallet_prelude::*;
 use sp_std::collections::btree_set::BTreeSet;
 
 use admin_primitives::{
-    can_store_public_admin_code, AdminAccountKind, AdminCidNumber, CitizenIdentityBindingQuery,
-    InstitutionAdminLifecycle, InstitutionAdminQuery, InstitutionAdmins, PublicAdmin,
+    can_store_public_admin_code, Admin, AdminAccountKind, AdminCidNumber, ChainPhaseCheck,
+    CitizenIdentityBindingQuery, InstitutionAdminLifecycle, InstitutionAdminQuery,
+    InstitutionAdmins,
 };
 use votingengine::types::InstitutionCode;
 
@@ -41,6 +42,9 @@ pub mod pallet {
 
         /// 公权管理员非空公民 CID 必须匹配 citizen-identity 的唯一账户绑定。
         type CitizenIdentityBinding: CitizenIdentityBindingQuery<Self::AccountId>;
+
+        /// 运行期强制门控(由 genesis-pallet 相位注入);仅 Operation 期强制四要素完整。
+        type ChainPhase: admin_primitives::ChainPhaseCheck;
     }
 
     #[pallet::pallet]
@@ -48,7 +52,7 @@ pub mod pallet {
     pub struct Pallet<T>(_);
 
     pub type AdminsOf<T> = BoundedVec<
-        PublicAdmin<<T as frame_system::Config>::AccountId>,
+        Admin<<T as frame_system::Config>::AccountId>,
         <T as Config>::MaxAdminsPerInstitution,
     >;
     pub type InstitutionAdminsOf<T> = InstitutionAdmins<AdminsOf<T>>;
@@ -108,10 +112,12 @@ pub mod pallet {
         DuplicateAdmin,
         InvalidCitizenCid,
         CitizenIdentityMismatch,
+        /// 运行期(Operation)公权管理员缺少必填要素(cid/姓/名)。
+        IncompleteAdminFields,
     }
 
     impl<T: Config> Pallet<T> {
-        fn ensure_unique_admins(admins: &[PublicAdmin<T::AccountId>]) -> DispatchResult {
+        fn ensure_unique_admins(admins: &[Admin<T::AccountId>]) -> DispatchResult {
             let mut seen = BTreeSet::new();
             let mut seen_cids = BTreeSet::new();
             for admin in admins {
@@ -145,7 +151,7 @@ pub mod pallet {
             kind: AdminAccountKind,
             institution_code: InstitutionCode,
             cid_number: &[u8],
-            admins: &[PublicAdmin<T::AccountId>],
+            admins: &[Admin<T::AccountId>],
         ) -> DispatchResult {
             ensure!(
                 kind == AdminAccountKind::PublicInstitution
@@ -180,6 +186,17 @@ pub mod pallet {
                     }
                 },
             }
+            // 运行期(Operation):公权机构所有管理员四要素完整;Genesis 放行=允许空。
+            // 校验原始字段(本 pallet 不 normalize,无默认值掩盖问题)。
+            if T::ChainPhase::is_operation() {
+                let req = admin_primitives::required_admin_elements(
+                    AdminAccountKind::PublicInstitution,
+                    false,
+                );
+                for admin in admins {
+                    ensure!(admin.satisfies(req), Error::<T>::IncompleteAdminFields);
+                }
+            }
             Self::ensure_unique_admins(admins)
         }
 
@@ -197,7 +214,7 @@ pub mod pallet {
             cid_number: Vec<u8>,
             institution_code: InstitutionCode,
             kind: AdminAccountKind,
-            admins: Vec<PublicAdmin<T::AccountId>>,
+            admins: Vec<Admin<T::AccountId>>,
         ) -> DispatchResult {
             let cid_number = Self::bound_cid(cid_number)?;
             Self::validate_admin_set(kind, institution_code, cid_number.as_slice(), &admins)?;
@@ -260,7 +277,7 @@ pub mod pallet {
     }
 }
 
-impl<T: pallet::Config> InstitutionAdminLifecycle<T::AccountId, PublicAdmin<T::AccountId>>
+impl<T: pallet::Config> InstitutionAdminLifecycle<T::AccountId, Admin<T::AccountId>>
     for pallet::Pallet<T>
 {
     fn set_institution_admins(
@@ -268,7 +285,7 @@ impl<T: pallet::Config> InstitutionAdminLifecycle<T::AccountId, PublicAdmin<T::A
         cid_number: Vec<u8>,
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
-        admins: Vec<PublicAdmin<T::AccountId>>,
+        admins: Vec<Admin<T::AccountId>>,
     ) -> DispatchResult {
         Self::do_set_institution_admins(cid_number, institution_code, kind, admins)
     }
@@ -284,9 +301,33 @@ impl<T: pallet::Config> InstitutionAdminQuery<T::AccountId> for pallet::Pallet<T
         cid_number: &[u8],
         who: &T::AccountId,
     ) -> bool {
+        // 名册成员判断按 account_id（供枚举/投票快照使用）。调用者门的 CID 解析走
+        // `resolve_admin_account`，二者语义不同，不可互相替换。
         Self::get_institution_admins(institution_code, cid_number)
             .map(|value| value.admins.iter().any(|admin| &admin.account_id == who))
             .unwrap_or(false)
+    }
+
+    fn resolve_admin_account(
+        institution_code: InstitutionCode,
+        cid_number: &[u8],
+        caller: &T::AccountId,
+    ) -> Option<T::AccountId> {
+        let value = Self::get_institution_admins(institution_code, cid_number)?;
+        let operation = T::ChainPhase::is_operation();
+        value.admins.iter().find_map(|admin| {
+            let matched = if operation && !admin.cid_number.is_empty() {
+                // 运行期 + 有 CID：身份锚定，只认该 CID 当前绑定的钱包（无 account_id 回退，旧钱包掉权）。
+                T::CitizenIdentityBinding::matches_citizen_account(
+                    admin.cid_number.as_slice(),
+                    caller,
+                )
+            } else {
+                // 创世期，或无 CID 管理员：钱包锚定（现状）。
+                &admin.account_id == caller
+            };
+            matched.then(|| admin.account_id.clone())
+        })
     }
 
     fn institution_admins(

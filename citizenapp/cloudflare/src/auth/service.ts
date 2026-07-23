@@ -1,6 +1,6 @@
 import type { Env, LoginChallengeRow, SessionState } from '../types';
 import { HttpError, jsonResponse, parsePositiveInt, readJson } from '../shared/http';
-import { assertOwnerAccount, createId } from '../shared/ids';
+import { assertAccountId, createId } from '../shared/ids';
 import { nowMs, secondsFromNow } from '../shared/time';
 import { putKvJson } from '../limits/storage';
 import { sha256Hex } from '../shared/hash';
@@ -23,33 +23,33 @@ import {
 } from '../shared/signing_message';
 
 interface ChallengeRequest {
-  owner_account?: unknown;
+  account_id?: unknown;
 }
 
 interface SessionRequest {
   challenge_id?: unknown;
-  owner_account?: unknown;
+  account_id?: unknown;
   signature?: unknown;
 }
 
 interface DeviceRegisterRequest {
-  owner_account?: unknown;
-  p256_pubkey?: unknown;
+  account_id?: unknown;
+  p256_public_key?: unknown;
   issued_at?: unknown;
   binding_signature?: unknown;
   turnstile_token?: unknown;
 }
 
-/// 登录挑战的 SCALE payload：`owner ‖ challenge_id ‖ expires_at`。
+/// 登录挑战的 SCALE payload：`account_id ‖ challenge_id ‖ expires_at`。
 /// 被签消息 = signing_message(OP_SIGN_SQUARE_LOGIN, payload)，由客户端重算摘要后
 /// 用 P-256 设备子钥签名。worker 单侧编码 payload，客户端只 hash+sign，杜绝字段漂移。
 function buildLoginScalePayload(
-  ownerAccount: string,
+  accountId: string,
   challengeId: string,
   expiresAt: number
 ): Uint8Array {
   return concatBytes(
-    scaleString(ownerAccount),
+    scaleString(accountId),
     scaleString(challengeId),
     u64Le(expiresAt)
   );
@@ -57,31 +57,31 @@ function buildLoginScalePayload(
 
 export async function createLoginChallenge(request: Request, env: Env): Promise<Response> {
   const body = await readJson<ChallengeRequest>(request);
-  let ownerAccount: string;
+  let accountId: string;
   try {
-    ownerAccount = assertOwnerAccount(body.owner_account);
+    accountId = assertAccountId(body.account_id);
   } catch {
-    throw new HttpError(400, 'invalid_owner_account', '钱包账户格式不合法');
+    throw new HttpError(400, 'invalid_account_id', '钱包账户格式不合法');
   }
 
   const challengeId = createId('sqc');
   const expiresAt = secondsFromNow(300);
   const signingPayloadHex = bytesToHex(
-    buildLoginScalePayload(ownerAccount, challengeId, expiresAt)
+    buildLoginScalePayload(accountId, challengeId, expiresAt)
   );
 
   await env.DB.prepare(
     `INSERT INTO square_login_challenges
-      (challenge_id, owner_account, signing_payload, expires_at, used_at)
+      (challenge_id, account_id, signing_payload, expires_at, used_at)
       VALUES (?, ?, ?, ?, NULL)`
   )
-    .bind(challengeId, ownerAccount, signingPayloadHex, expiresAt)
+    .bind(challengeId, accountId, signingPayloadHex, expiresAt)
     .run();
 
   return jsonResponse({
     ok: true,
     challenge_id: challengeId,
-    owner_account: ownerAccount,
+    account_id: accountId,
     op_tag: OP_SIGN_SQUARE_LOGIN,
     signing_payload_hex: signingPayloadHex,
     expires_at: expiresAt
@@ -94,22 +94,22 @@ export async function createSession(request: Request, env: Env): Promise<Respons
     throw new HttpError(400, 'invalid_session_request', '登录请求缺少挑战或签名');
   }
 
-  let ownerAccount: string;
+  let accountId: string;
   try {
-    ownerAccount = assertOwnerAccount(body.owner_account);
+    accountId = assertAccountId(body.account_id);
   } catch {
-    throw new HttpError(400, 'invalid_owner_account', '钱包账户格式不合法');
+    throw new HttpError(400, 'invalid_account_id', '钱包账户格式不合法');
   }
 
   const challenge = await env.DB.prepare(
-    `SELECT challenge_id, owner_account, signing_payload, expires_at, used_at
+    `SELECT challenge_id, account_id, signing_payload, expires_at, used_at
       FROM square_login_challenges
       WHERE challenge_id = ?`
   )
     .bind(body.challenge_id)
     .first<LoginChallengeRow>();
 
-  if (!challenge || challenge.owner_account !== ownerAccount) {
+  if (!challenge || challenge.account_id !== accountId) {
     throw new HttpError(401, 'invalid_challenge', '钱包登录挑战不存在');
   }
   if (challenge.used_at !== null) {
@@ -121,10 +121,10 @@ export async function createSession(request: Request, env: Env): Promise<Respons
 
   // 后台握手用 P-256 设备子钥（硬件、静默）验签 signing_message(OP_SIGN_SQUARE_LOGIN)。
   const subkey = await env.DB.prepare(
-    `SELECT p256_pubkey FROM square_device_subkeys WHERE owner_account = ?`
+    `SELECT p256_public_key FROM square_device_subkeys WHERE account_id = ?`
   )
-    .bind(ownerAccount)
-    .first<{ p256_pubkey: string }>();
+    .bind(accountId)
+    .first<{ p256_public_key: string }>();
   if (!subkey) {
     throw new HttpError(401, 'device_not_registered', '设备子钥未注册，请先注册设备子钥');
   }
@@ -135,7 +135,7 @@ export async function createSession(request: Request, env: Env): Promise<Respons
   const isValid = await verifyP256Signature(
     loginMessage,
     body.signature,
-    subkey.p256_pubkey
+    subkey.p256_public_key
   );
   if (!isValid) {
     throw new HttpError(401, 'invalid_signature', '设备子钥签名校验失败');
@@ -146,8 +146,8 @@ export async function createSession(request: Request, env: Env): Promise<Respons
   const sessionTtlSeconds = parsePositiveInt(env.SESSION_TTL_SECONDS, 86_400);
   const sessionToken = createId('sqs');
   const session: SessionState = {
-    owner_account: ownerAccount,
-    device_key_hash: await sha256Hex(subkey.p256_pubkey),
+    account_id: accountId,
+    device_key_hash: await sha256Hex(subkey.p256_public_key),
     created_at: nowMs(),
     expires_at: secondsFromNow(sessionTtlSeconds)
   };
@@ -159,30 +159,30 @@ export async function createSession(request: Request, env: Env): Promise<Respons
     expirationTtl: sessionTtlSeconds
   });
   // 记入「账户→token」索引，使注销可定向失效该账户全部会话（零残留）。
-  await indexSessionToken(env, ownerAccount, sessionToken, sessionTtlSeconds);
+  await indexSessionToken(env, accountId, sessionToken, sessionTtlSeconds);
 
   return jsonResponse({
     ok: true,
     session_token: sessionToken,
-    owner_account: ownerAccount,
+    account_id: accountId,
     expires_at: session.expires_at
   });
 }
 
 /// 注册 P-256 设备子钥：客户端用 sr25519 主钥对
-/// `signing_message(OP_SIGN_SQUARE_DEVICE_BIND, owner ‖ p256_pubkey ‖ issued_at)`
+/// `signing_message(OP_SIGN_SQUARE_DEVICE_BIND, account_id ‖ p256_public_key ‖ issued_at)`
 /// 签名做绑定证明；后端复用 sr25519 验签确认子钥归属，落库（一账户一活跃子钥，
 /// 重注册覆盖 = 换机/轮换）。此后登录挑战改由该子钥静默签名。
 export async function registerDeviceSubkey(request: Request, env: Env): Promise<Response> {
   const body = await readJson<DeviceRegisterRequest>(request);
   await verifyTurnstile(request, env, body.turnstile_token);
-  let ownerAccount: string;
+  let accountId: string;
   try {
-    ownerAccount = assertOwnerAccount(body.owner_account);
+    accountId = assertAccountId(body.account_id);
   } catch {
-    throw new HttpError(400, 'invalid_owner_account', '钱包账户格式不合法');
+    throw new HttpError(400, 'invalid_account_id', '钱包账户格式不合法');
   }
-  const p256Pubkey = assertP256PublicKeyHex(body.p256_pubkey);
+  const p256PublicKey = assertP256PublicKeyHex(body.p256_public_key);
   if (typeof body.issued_at !== 'number' || !Number.isFinite(body.issued_at)) {
     throw new HttpError(400, 'invalid_issued_at', '设备绑定时间戳不合法');
   }
@@ -191,14 +191,14 @@ export async function registerDeviceSubkey(request: Request, env: Env): Promise<
   }
 
   const bindingMessage = buildDeviceBindingSigningMessage({
-    owner_account: ownerAccount,
-    p256_pubkey: p256Pubkey,
+    account_id: accountId,
+    p256_public_key: p256PublicKey,
     issued_at: body.issued_at
   });
   const isValid = await verifyWalletSignature(
     bindingMessage,
     body.binding_signature,
-    ownerAccount
+    accountId
   );
   if (!isValid) {
     throw new HttpError(401, 'invalid_binding_signature', '设备绑定签名校验失败');
@@ -207,15 +207,15 @@ export async function registerDeviceSubkey(request: Request, env: Env): Promise<
   const now = nowMs();
   await env.DB.prepare(
     `INSERT INTO square_device_subkeys
-      (owner_account, p256_pubkey, issued_at, created_at, updated_at)
+      (account_id, p256_public_key, issued_at, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(owner_account) DO UPDATE SET
-        p256_pubkey = excluded.p256_pubkey,
+      ON CONFLICT(account_id) DO UPDATE SET
+        p256_public_key = excluded.p256_public_key,
         issued_at = excluded.issued_at,
         updated_at = excluded.updated_at`
   )
-    .bind(ownerAccount, p256Pubkey, body.issued_at, now, now)
+    .bind(accountId, p256PublicKey, body.issued_at, now, now)
     .run();
 
-  return jsonResponse({ ok: true, owner_account: ownerAccount });
+  return jsonResponse({ ok: true, account_id: accountId });
 }

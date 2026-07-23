@@ -83,7 +83,7 @@ void main() {
       identityChainReader: _FakeIdentityReader(
         CitizenIdentityChainSnapshot(
           cidNumber: 'CN001-CTZN-000000001-2026',
-          walletAccountId: Uint8List(32),
+          accountId: Uint8List(32),
           votingIdentity: _votingIdentityBytes(citizenStatus: 0),
           candidateIdentity: _candidateIdentityBytes(),
         ),
@@ -131,8 +131,8 @@ class _FakeIdentityReader extends CitizenIdentityChainReader {
   final CitizenIdentityChainSnapshot? snapshot;
 
   @override
-  Future<CitizenIdentityChainSnapshot?> readByWallet(
-          String walletAddress) async =>
+  Future<CitizenIdentityChainSnapshot?> readByAccountId(
+          String ss58Address) async =>
       snapshot;
 }
 

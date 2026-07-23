@@ -60,8 +60,7 @@ class AppLockService {
         return false;
       }
 
-      final lockUntil =
-          DateTime.now().add(lockDuration).millisecondsSinceEpoch;
+      final lockUntil = DateTime.now().add(lockDuration).millisecondsSinceEpoch;
       await _secure.write(key: _keyLockUntil, value: lockUntil.toString());
     }
 
@@ -80,6 +79,7 @@ class AppLockService {
     final hash = await _secure.read(key: _keyPinHash);
     return hash != null && hash.isNotEmpty;
   }
+
   // 锁定状态
   static Future<bool> isLocked() async {
     final lockUntilStr = await _secure.read(key: _keyLockUntil);
@@ -115,6 +115,7 @@ class AppLockService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
   }
+
   // 内部工具
   static String _generateSalt() {
     final random = Random.secure();

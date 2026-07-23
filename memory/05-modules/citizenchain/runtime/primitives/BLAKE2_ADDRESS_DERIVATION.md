@@ -27,7 +27,7 @@ address = BLAKE2-256(
 | `0x03` | `OP_SAFETY` | 国家储委会安全基金账户（仅 NRC） | `cid_number`（国家储委会） | `scripts/multisig.py` |
 | `0x04` | `OP_HE` | 国家储委会两和基金账户（仅 NRC） | `cid_number`（国家储委会） | `scripts/multisig.py` |
 | `0x05` | `OP_PERSONAL` | 个人多签 | `creator_32 || name` | 链上 `derive_personal_account` |
-| `0x06` | `OP_CLEARING` | **仅私法人股份公司（SFGF）清算账户**（扫码支付 L2 清算资金） | `cid_number` | 链上 `derive_institution_account(cid_number, Clearing)` |
+| `0x06` | `OP_CLEARING` | **清算行资格机构清算账户**（扫码支付 L2 清算资金）：`SFGF` 私法人股份公司，以及父级机构码为 `SFGF` 的 `UNIN` 非法人分支机构 | `cid_number` | 链上 `derive_institution_account(cid_number, Clearing)` |
 | `0x07` | `OP_NAME` | **仅 CID 机构的自定义命名账户**（临时/工资/运营...） | `cid_number || account_name` | 链上 `derive_institution_account(cid_number, Named(account_name))` |
 
 #### OP_MAIN / OP_FEE / OP_CLEARING / OP_NAME 的语义分工
@@ -36,7 +36,7 @@ CID 机构的账户名被链端硬翻译成 `InstitutionAccountRole`：
 
 - `"主账户"` → `Role::Main` → `OP_MAIN`（preimage 不含 name）
 - `"费用账户"` → `Role::Fee` → `OP_FEE`（preimage 不含 name）
-- `"清算账户"` → `Role::Clearing` → `OP_CLEARING`（preimage 不含 name；仅 SFGF 私法人股份公司自动拥有）
+- `"清算账户"` → `Role::Clearing` → `OP_CLEARING`（preimage 不含 name；仅清算行资格机构自动拥有 = `SFGF` 股份公司 + 父级为 `SFGF` 的 `UNIN` 非法人分支机构，单源 `primitives::institution_constraints::required_protocol_account_kinds`）
 - 其他非空 account_name → `Role::Named(account_name)` → `OP_NAME`（preimage 含 account_name）
 
 保留名 `"主账户"` / `"费用账户"` 不允许作为 `Role::Named` 的自定义参数（链端返回 `ReservedAccountName` 错误）。这样保证同一角色在"宪法机构"和"CID 登记机构"之间**派生公式完全一致**。

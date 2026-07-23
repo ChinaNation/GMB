@@ -28,10 +28,10 @@ export async function signalRoute(request: Request, env: Env): Promise<Response>
   const weight = signalWeights[body.signal_type];
   await env.DB.prepare(
     `INSERT INTO square_user_signals
-      (owner_account, post_id, signal_type, weight, created_at)
+      (account_id, post_id, signal_type, weight, created_at)
       VALUES (?, ?, ?, ?, ?)`
   )
-    .bind(session.owner_account, body.post_id, body.signal_type, weight, nowMs())
+    .bind(session.account_id, body.post_id, body.signal_type, weight, nowMs())
     .run();
 
   return jsonResponse({

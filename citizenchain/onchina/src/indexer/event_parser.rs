@@ -4,7 +4,6 @@
 //! 转换为 `TxRecordInsert` 写入数据库。
 
 use chrono::{DateTime, TimeZone, Utc};
-use sp_core::crypto::Ss58Codec;
 use subxt::events::{EventDetails, Phase};
 use subxt::ext::scale_value::{At, Composite, Value};
 use subxt::PolkadotConfig;
@@ -12,13 +11,9 @@ use tracing::warn;
 
 use super::db::TxRecordInsert;
 
-/// citizenchain 的 SS58 地址前缀。
-const SS58_PREFIX: u16 = 2027;
-
-/// 将 32 字节 AccountId 编码为 SS58 地址。
-fn account_to_ss58(bytes: &[u8; 32]) -> String {
-    sp_core::sr25519::Public::from_raw(*bytes)
-        .to_ss58check_with_version(sp_core::crypto::Ss58AddressFormat::custom(SS58_PREFIX))
+/// 将链上 32 字节 AccountId 规范化为全仓唯一账户标识。
+fn account_id_text(bytes: &[u8; 32]) -> String {
+    format!("0x{}", hex::encode(bytes))
 }
 
 /// 从 subxt scale_value::Value 提取 32 字节 AccountId。
@@ -119,8 +114,8 @@ fn match_event(
                 extrinsic_index,
                 event_index: 0,
                 tx_type: "transfer",
-                from_address: Some(account_to_ss58(&from)),
-                to_address: Some(account_to_ss58(&to)),
+                sender_account_id: Some(account_id_text(&from)),
+                recipient_account_id: Some(account_id_text(&to)),
                 amount_fen: balance_to_i64(amount),
                 fee_fen: None,
                 block_timestamp: block_ts,
@@ -134,8 +129,8 @@ fn match_event(
                 extrinsic_index,
                 event_index: 0,
                 tx_type: "fee_withdraw",
-                from_address: Some(account_to_ss58(&who)),
-                to_address: None,
+                sender_account_id: Some(account_id_text(&who)),
+                recipient_account_id: None,
                 amount_fen: balance_to_i64(amount),
                 fee_fen: None,
                 block_timestamp: block_ts,
@@ -149,8 +144,8 @@ fn match_event(
                 extrinsic_index,
                 event_index: 0,
                 tx_type: "fee_deposit",
-                from_address: None,
-                to_address: Some(account_to_ss58(&who)),
+                sender_account_id: None,
+                recipient_account_id: Some(account_id_text(&who)),
                 amount_fen: balance_to_i64(amount),
                 fee_fen: None,
                 block_timestamp: block_ts,
@@ -166,8 +161,8 @@ fn match_event(
                 extrinsic_index,
                 event_index: 0,
                 tx_type: "block_reward",
-                from_address: None,
-                to_address: Some(account_to_ss58(&wallet)),
+                sender_account_id: None,
+                recipient_account_id: Some(account_id_text(&wallet)),
                 amount_fen: balance_to_i64(amount),
                 fee_fen: None,
                 block_timestamp: block_ts,
@@ -183,8 +178,8 @@ fn match_event(
                 extrinsic_index,
                 event_index: 0,
                 tx_type: "bank_interest",
-                from_address: None,
-                to_address: Some(account_to_ss58(&account)),
+                sender_account_id: None,
+                recipient_account_id: Some(account_id_text(&account)),
                 amount_fen: balance_to_i64(amount),
                 fee_fen: None,
                 block_timestamp: block_ts,
@@ -199,8 +194,8 @@ fn match_event(
                 extrinsic_index,
                 event_index: 0,
                 tx_type: "gov_issuance",
-                from_address: None,
-                to_address: None,
+                sender_account_id: None,
+                recipient_account_id: None,
                 amount_fen: balance_to_i64(total),
                 fee_fen: None,
                 block_timestamp: block_ts,
@@ -216,8 +211,8 @@ fn match_event(
                 extrinsic_index,
                 event_index: 0,
                 tx_type: "lightnode_reward",
-                from_address: None,
-                to_address: Some(account_to_ss58(&who)),
+                sender_account_id: None,
+                recipient_account_id: Some(account_id_text(&who)),
                 amount_fen: balance_to_i64(reward),
                 fee_fen: None,
                 block_timestamp: block_ts,
@@ -234,8 +229,8 @@ fn match_event(
                 extrinsic_index,
                 event_index: 0,
                 tx_type: "proposal_transfer",
-                from_address: None,
-                to_address: Some(account_to_ss58(&beneficiary)),
+                sender_account_id: None,
+                recipient_account_id: Some(account_id_text(&beneficiary)),
                 amount_fen: balance_to_i64(amount),
                 fee_fen: fee.map(balance_to_i64),
                 block_timestamp: block_ts,
@@ -255,8 +250,8 @@ fn match_event(
                 extrinsic_index,
                 event_index: 0,
                 tx_type: "institution_multisig_create",
-                from_address: Some(account_to_ss58(&creator)),
-                to_address: Some(account_to_ss58(&multisig)),
+                sender_account_id: Some(account_id_text(&creator)),
+                recipient_account_id: Some(account_id_text(&multisig)),
                 amount_fen: balance_to_i64(amount),
                 fee_fen: fee.map(balance_to_i64),
                 block_timestamp: block_ts,
@@ -272,8 +267,8 @@ fn match_event(
                 extrinsic_index,
                 event_index: 0,
                 tx_type: "institution_multisig_close",
-                from_address: Some(account_to_ss58(&multisig)),
-                to_address: Some(account_to_ss58(&beneficiary)),
+                sender_account_id: Some(account_id_text(&multisig)),
+                recipient_account_id: Some(account_id_text(&beneficiary)),
                 amount_fen: balance_to_i64(amount),
                 fee_fen: fee.map(balance_to_i64),
                 block_timestamp: block_ts,
@@ -288,8 +283,8 @@ fn match_event(
                 extrinsic_index,
                 event_index: 0,
                 tx_type: "fund_destroy",
-                from_address: None,
-                to_address: None,
+                sender_account_id: None,
+                recipient_account_id: None,
                 amount_fen: balance_to_i64(amount),
                 fee_fen: None,
                 block_timestamp: block_ts,

@@ -82,7 +82,8 @@ ArticleManifestParts buildArticleManifest({
         if (text.trim().isNotEmpty) textParts.add(text.trim());
       case ArticleDraftImage(:final draft):
         mediaDrafts.add(draft);
-        contentBlocks.add({'t': 'image', 'media_index': mediaDrafts.length - 1});
+        contentBlocks
+            .add({'t': 'image', 'media_index': mediaDrafts.length - 1});
     }
   }
   return ArticleManifestParts(

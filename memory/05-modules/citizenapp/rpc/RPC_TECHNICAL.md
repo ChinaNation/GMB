@@ -156,9 +156,9 @@ lib/rpc/
 
 ### 6.1 余额查询
 
-`ChainRpc.fetchFinalizedBalance(String pubkeyHex) → Future<double>`
+`ChainRpc.fetchFinalizedBalance(String accountId) → Future<double>`
 
-1. 将 `pubkeyHex` 转为 32 字节 AccountId
+1. 将 `accountId` 转为 32 字节 AccountId
 2. 构造 `System.Account` storage key（见 6.5）
 3. 轻节点模式通过 `smoldot_get_finalized_system_account_async` 异步走 finalized storage proof 读取
 4. 解码 SCALE 编码的 `AccountInfo`，提取 `free` 余额
@@ -351,18 +351,20 @@ citizenchain 使用自定义 `OnchainChargeAdapter`，标准 `payment_queryInfo`
 
 ### 8.2 批量余额查询（已实现）
 
-当前实现：`ChainRpc.fetchFinalizedBalances(List<String> pubkeyHexList)`
+当前实现：`ChainRpc.fetchFinalizedBalances(List<String> accountIds)`
 
-新增 `ChainRpc.fetchFinalizedBalances(List<String> pubkeyHexList) → Future<Map<String, double>>`：
+新增 `ChainRpc.fetchFinalizedBalances(List<String> accountIds) → Future<Map<String, double>>`：
 
 ```text
-1. 对每个 pubkeyHex 构建 System.Account storage key：
+1. 对每个 accountId 构建 System.Account storage key：
    key = SYSTEM_ACCOUNT_PREFIX + blake2b_128(accountId) + accountId
 2. 调用 fetchStorageBatch(allKeys)(平名即 finalized) — 一次 finalized storage proof 请求
 3. 对每个返回值：从 SCALE 字节 offset 16 读 u128 LE → ÷100 → yuan
 ```
 
-`wallet_page.dart` 的 `_refreshBalancesFromChain()` 已改为一次调用 `fetchFinalizedBalances(allPubkeys)`，并在轻节点不可用时向用户展示统一错误文案，而不是把失败静默吞成 0 余额。
+`wallet_page.dart` 的 `_refreshBalancesFromChain()` 已改为一次调用
+`fetchFinalizedBalances(accountIds)`，并在轻节点不可用时向用户展示统一错误文案，
+而不是把失败静默吞成 0 余额。
 
 ADR-017 后 `fetchBalances()`(best 批量)已删除；批量余额走 `fetchFinalizedBalances()`。
 
@@ -392,7 +394,7 @@ finalized head 到达
 
 - 不补扫导入前历史；删除钱包时删除本地流水和同步游标，再次导入从新的导入时刻重新记录。
 - 收入写入正数 `amountDeltaFen`，支出写入负数 `amountDeltaFen`；业务方向由金额正负号推导，不保存 `direction`。
-- `type` 只保存业务类型；区块事件记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`，本机提交记录唯一键为 `walletPubkeyHex:pending:txHash`；写入时还要按同钱包、同区块、同发送方、同接收方、同转账本金做语义去重，防止 newHeads/finalized 重复处理同一事件。
+- `type` 只保存业务类型；区块事件记录唯一键为 `accountId:blockHash:eventIndex`，本机提交记录唯一键为 `accountId:pending:txHash`；写入时还要按同钱包、同区块、同发送方、同接收方、同转账本金做语义去重，防止 newHeads/finalized 重复处理同一事件。
 - finalized 补同步只能使用 `currentVerifiedFinalizedBlockNumber/currentVerifiedFinalizedBlockHash`，不能使用普通订阅 finalized 或 `bestBlockNumber/bestBlockHash` 升级为 `finalized`；best 只允许用于补扫未确认区块并写入 `inBlock`。
 - finalized 单轮最多补齐 120 个区块；未确认区块单轮最多补扫 32 个区块；若 `WalletIsar` 正在处理前台读写或本地库 busy，本轮直接让路并安排短延迟重试。
 - 读取区块事件仍需要节点网络和处理器参与响应 RPC，因此 App 不做全历史扫描，避免增加全节点和手机端负担。

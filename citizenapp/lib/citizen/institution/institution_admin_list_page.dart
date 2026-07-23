@@ -22,8 +22,8 @@ class AdminListPage extends StatefulWidget {
     required this.institution,
     required this.accountIdentity,
     required this.admins,
-    required this.importedColdPubkeys,
-    required this.activatedPubkeys,
+    required this.importedColdAccountIds,
+    required this.activatedAccountIds,
     required this.badgeColor,
     this.onActivated,
   });
@@ -34,11 +34,11 @@ class AdminListPage extends StatefulWidget {
   /// 机构管理员人员视图；同一管理员的多个岗位归在同一人员行。
   final List<InstitutionAdminView> admins;
 
-  /// 用户已导入的冷钱包公钥集合（小写 hex，不含 0x）。
-  final Set<String> importedColdPubkeys;
+  /// 用户已导入冷钱包的规范 AccountId 集合。
+  final Set<String> importedColdAccountIds;
 
-  /// 已激活的管理员公钥集合（小写 hex）。
-  final Set<String> activatedPubkeys;
+  /// 已激活管理员的规范 AccountId 集合。
+  final Set<String> activatedAccountIds;
   final Color badgeColor;
 
   /// 激活成功后的回调（通知父页面刷新）。
@@ -49,13 +49,13 @@ class AdminListPage extends StatefulWidget {
 }
 
 class _AdminListPageState extends State<AdminListPage> {
-  late Set<String> _activatedPubkeys;
+  late Set<String> _activatedAccountIds;
   Map<String, double> _balanceByAccount = const {};
 
   @override
   void initState() {
     super.initState();
-    _activatedPubkeys = Set.of(widget.activatedPubkeys);
+    _activatedAccountIds = Set.of(widget.activatedAccountIds);
     unawaited(_loadBalances());
   }
 
@@ -68,16 +68,15 @@ class _AdminListPageState extends State<AdminListPage> {
   }
 
   static String _balanceKey(String account) {
-    final trimmed = account.trim();
-    return (trimmed.startsWith('0x') || trimmed.startsWith('0X')
-            ? trimmed.substring(2)
-            : trimmed)
-        .toLowerCase();
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(account)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+    }
+    return account;
   }
 
   Future<void> _loadBalances() async {
     final accounts = {
-      for (final view in widget.admins) _balanceKey(view.admin.admin_account),
+      for (final view in widget.admins) _balanceKey(view.admin.account_id),
     }.where((account) => account.isNotEmpty).toList(growable: false);
     if (accounts.isEmpty) {
       if (mounted) setState(() => _balanceByAccount = const {});
@@ -93,9 +92,9 @@ class _AdminListPageState extends State<AdminListPage> {
     }
   }
 
-  void _onAdminActivated(String pubkeyHex) {
+  void _onAdminActivated(String accountId) {
     setState(() {
-      _activatedPubkeys.add(pubkeyHex);
+      _activatedAccountIds.add(accountId);
     });
     widget.onActivated?.call();
   }
@@ -141,9 +140,10 @@ class _AdminListPageState extends State<AdminListPage> {
           else
             ...List.generate(widget.admins.length, (index) {
               final adminView = widget.admins[index];
-              final pubkey = adminView.admin.admin_account;
-              final isImported = widget.importedColdPubkeys.contains(pubkey);
-              final isActivated = _activatedPubkeys.contains(pubkey);
+              final accountId = adminView.admin.account_id;
+              final isImported =
+                  widget.importedColdAccountIds.contains(accountId);
+              final isActivated = _activatedAccountIds.contains(accountId);
               return _AdminTile(
                 index: index + 1,
                 adminView: adminView,
@@ -151,8 +151,8 @@ class _AdminListPageState extends State<AdminListPage> {
                 isActivated: isActivated,
                 institution: widget.institution,
                 accountIdentity: widget.accountIdentity,
-                onActivated: () => _onAdminActivated(pubkey),
-                balanceYuan: _balanceByAccount[_balanceKey(pubkey)],
+                onActivated: () => _onAdminActivated(accountId),
+                balanceYuan: _balanceByAccount[_balanceKey(accountId)],
               );
             }),
         ],
@@ -219,10 +219,10 @@ class _AdminTile extends StatelessWidget {
 
   final InstitutionAdminView adminView;
 
-  /// 管理员账户(小写 hex);激活/匹配仍按账户。
-  String get pubkeyHex => adminView.admin.admin_account;
+  /// 管理员规范 AccountId；激活和匹配只按账户 ID。
+  String get accountId => adminView.admin.account_id;
 
-  /// 用户是否已导入此公钥的冷钱包。
+  /// 用户是否已导入此账户 ID 的冷钱包。
   final bool isImported;
 
   /// 此管理员是否已激活。
@@ -236,8 +236,7 @@ class _AdminTile extends StatelessWidget {
     // 检查是否为冷钱包（热钱包不允许激活）
     final wallets = await WalletManager().getWallets();
     final wallet = wallets.where((w) {
-      final pk = w.pubkeyHex.toLowerCase().replaceFirst('0x', '');
-      return pk == pubkeyHex;
+      return w.accountId == accountId;
     }).firstOrNull;
 
     if (wallet == null) {
@@ -259,7 +258,7 @@ class _AdminTile extends StatelessWidget {
     // 构建激活签名请求
     final activationService = ActivationService();
     final (:request, :json) = activationService.buildActivationRequest(
-      pubkeyHex: pubkeyHex,
+      accountId: accountId,
       identity: accountIdentity,
     );
 
@@ -271,7 +270,7 @@ class _AdminTile extends StatelessWidget {
         builder: (_) => QrSignSessionPage(
           request: request,
           requestJson: json,
-          expectedPubkey: pubkeyHex,
+          expectedSignerPublicKey: accountId,
         ),
       ),
     );
@@ -281,7 +280,7 @@ class _AdminTile extends StatelessWidget {
     // 验证并存储激活记录
     try {
       await activationService.activateViaQr(
-        pubkeyHex: pubkeyHex,
+        accountId: accountId,
         identity: accountIdentity,
         response: response,
       );

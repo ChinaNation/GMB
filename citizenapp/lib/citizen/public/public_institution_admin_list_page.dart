@@ -52,7 +52,7 @@ class _PublicInstitutionAdminListPageState
 
   Future<void> _loadBalances() async {
     final accounts = {
-      for (final view in widget.admins) _balanceKey(view.admin.admin_account),
+      for (final view in widget.admins) _balanceKey(view.admin.account_id),
     }.where((account) => account.isNotEmpty).toList(growable: false);
     if (accounts.isEmpty) {
       if (mounted) setState(() => _balanceByAccount = const {});
@@ -93,7 +93,7 @@ class _PublicInstitutionAdminListPageState
                   adminView: adminView,
                   index: i + 1,
                   balanceYuan: _balanceByAccount[
-                      _balanceKey(adminView.admin.admin_account)],
+                      _balanceKey(adminView.admin.account_id)],
                 );
               },
             ),

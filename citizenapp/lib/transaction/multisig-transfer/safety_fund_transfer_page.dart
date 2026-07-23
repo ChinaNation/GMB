@@ -23,7 +23,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 国家储委会安全基金转账提案创建页面。
 ///
-/// source 锁定为 NRC 安全基金账户(`InstitutionAccounts.safetyFundAccount`),
+/// source 锁定为 NRC 安全基金账户(`InstitutionAccounts.safetyFundAccountId`),
 /// 仅 NRC 中拥有该业务提案权限的岗位有效任职人可发起，链端调用
 /// `propose_safety_fund_transfer (call_index=1)` 并校验独立岗位码。
 class SafetyFundTransferPage extends StatefulWidget {
@@ -61,7 +61,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
   LightClientStatusSnapshot? _chainProgress;
   String? _chainProgressError;
 
-  late final String _safetyFundAccountHex;
+  late final String _safetyFundAccountId;
   late final String _fromSs58;
   late WalletProfile _selectedWallet;
 
@@ -72,13 +72,13 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
     _proposerRoleCodeController = TextEditingController(
       text: defaultInstitutionProposerRoleCode(widget.institution),
     );
-    final hex = widget.institution.accounts?.safetyFundAccount;
+    final hex = widget.institution.accounts?.safetyFundAccountId;
     if (hex == null) {
       throw StateError(
-          '国家储委会 InstitutionAccounts.safetyFundAccount 为空,无法发起安全基金转账');
+          '国家储委会 InstitutionAccounts.safetyFundAccountId 为空,无法发起安全基金转账');
     }
-    _safetyFundAccountHex = hex;
-    _fromSs58 = _accountHexToSs58(_safetyFundAccountHex);
+    _safetyFundAccountId = hex;
+    _fromSs58 = _accountIdToSs58(_safetyFundAccountId);
     _fetchBalance();
     _amountController.addListener(_onAmountChanged);
   }
@@ -92,14 +92,14 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
     super.dispose();
   }
 
-  String _accountHexToSs58(String hex) {
+  String _accountIdToSs58(String hex) {
     final bytes = _hexToBytes(hex);
     return Keyring().encodeAddress(Uint8List.fromList(bytes), 2027);
   }
 
   Future<void> _fetchBalance() async {
     final store = AccountBalanceSnapshotStore.instance;
-    final local = await store.read(_safetyFundAccountHex);
+    final local = await store.read(_safetyFundAccountId);
     if (local != null && mounted) {
       setState(() {
         _availableBalance = local.balanceYuan;
@@ -109,10 +109,10 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
     }
     try {
       final balance =
-          await ChainRpc().fetchFinalizedBalance(_safetyFundAccountHex);
+          await ChainRpc().fetchFinalizedBalance(_safetyFundAccountId);
       try {
         await store.put(
-          accountHex: _safetyFundAccountHex,
+          accountId: _safetyFundAccountId,
           balanceYuan: balance,
         );
       } catch (_) {
@@ -153,7 +153,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
     );
     if (result == null || !mounted) return;
     setState(() {
-      _beneficiaryController.text = result.toAddress;
+      _beneficiaryController.text = result.toSs58Address;
     });
   }
 
@@ -171,7 +171,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
     }
     final beneficiaryBytes = Keyring().decodeAddress(address);
     final safetyFundBytes =
-        Uint8List.fromList(_hexToBytes(_safetyFundAccountHex));
+        Uint8List.fromList(_hexToBytes(_safetyFundAccountId));
     if (_bytesEqual(beneficiaryBytes, safetyFundBytes)) {
       setState(() => _addressError = '收款地址不能与安全基金账户相同');
       return false;
@@ -235,7 +235,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
     final amountYuan = AmountFormat.tryParse(_amountController.text) ?? 0;
     final balanceBlockedReason =
         await MultisigTransferBalanceGuard.checkInstitutionFeeAccountBalance(
-      feeAccountHex: widget.institution.accounts!.feeAccount,
+      feeAccountId: widget.institution.accounts!.feeAccountId,
       actionLabel: '发起安全基金转账提案',
       additionalDebitYuan: TransferRpc.estimateTransferFeeYuan(amountYuan),
     );
@@ -263,7 +263,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
         final qrSigner = QrSigner();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'propose-safety-'),
-          pubkey: '0x${wallet.pubkeyHex}',
+          signerPublicKey: wallet.accountId,
           payloadHex: '0x${_toHex(payload)}',
           action: QrActions.safetyFundTransfer,
         );
@@ -275,14 +275,14 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
             builder: (_) => QrSignSessionPage(
                 request: request,
                 requestJson: requestJson,
-                expectedPubkey: '0x${wallet.pubkeyHex}'),
+                expectedSignerPublicKey: wallet.accountId),
           ),
         );
         if (response == null) throw Exception('签名已取消');
         return Uint8List.fromList(_hexToBytes(response.body.signatureHex));
       }
 
-      final signerPubkey = Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));
+      final signerPublicKey = Uint8List.fromList(_hexToBytes(wallet.accountId));
 
       final service = MultisigTransferService();
       // 提案类交易等真正入块并核对事件后才返回，proposalId 来自
@@ -293,8 +293,8 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
         beneficiaryAddress: _beneficiaryController.text.trim(),
         amountYuan: amountYuan,
         remark: _remarkController.text,
-        fromAddress: wallet.address,
-        signerPubkey: signerPubkey,
+        fromSs58Address: wallet.ss58Address,
+        signerPublicKey: signerPublicKey,
         sign: signCallback,
       );
 
@@ -580,7 +580,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                _truncateAddress(wallets.first.address),
+                _truncateAddress(wallets.first.ss58Address),
                 style: const TextStyle(
                   fontSize: 13,
                   fontFamily: 'monospace',
@@ -615,7 +615,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      _truncateAddress(w.address),
+                      _truncateAddress(w.ss58Address),
                       style: const TextStyle(
                         fontSize: 13,
                         fontFamily: 'monospace',

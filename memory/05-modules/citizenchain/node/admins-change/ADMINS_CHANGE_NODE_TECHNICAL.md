@@ -4,7 +4,7 @@
 
 ## 模块定位
 
-Node 桌面端只负责按 pallet 分流读取管理员事实、展示人员资料和岗位任职、激活本机管理员账户。公权记录为 `account_id + cid_number + family_name + given_name`，私权记录为 `account_id + family_name + given_name`。Node 不提供机构管理员集合直接变更入口；机构岗位或任职变化由 `entity` 独立更新，不得派生或覆盖 `admins`。
+Node 桌面端只负责按 pallet 分流读取管理员事实、展示人员资料和岗位任职、激活本机管理员账户。所有机构记录统一为 `account_id + cid_number + family_name + given_name`。Node 不提供机构管理员集合直接变更入口；机构岗位或任职变化由 `entity` 独立更新，不得派生或覆盖 `admins`。
 
 个人多签管理员属于 CitizenApp 的独立个人多签业务，不进入本模块。
 
@@ -37,13 +37,13 @@ citizenchain/node/frontend/admins/
 
 机构管理员展示必须在同一个 finalized block hash 上联合读取：
 
-1. 从 `PublicAdmins` 或 `PrivateAdmins::AdminAccounts` 读取机构码和管理员集合；storage key 的 CID 是机构 CID，公权 value 中的 `cid_number` 是该管理员的公民 CID 引用，私权 value 不保存公民 CID。
+1. 从 `PublicAdmins` 或 `PrivateAdmins::AdminAccounts` 读取机构码和管理员集合；storage key 的 CID 是机构 CID，两类 value 中的 `cid_number` 都是该管理员的公民 CID 引用。
 2. 从对应 `PublicManage` 或 `PrivateManage::InstitutionRoles` 读取有效岗位。
 3. 从对应 `InstitutionRoleAssignments` 读取有效任职。
 4. 按管理员账户聚合全部有效岗位任职；同一账户在同一机构只显示一张卡片。
 5. 管理员允许没有岗位，此时保留管理员人员记录并返回空 `assignments`；只有有效任职引用不存在或停用岗位时才返回链上状态不一致错误。
 
-Node 分别使用 `InstitutionAdmins<Vec<PublicAdmin<[u8; 32]>>>` 和 `InstitutionAdmins<Vec<Admin<[u8; 32]>>>` 精确 SCALE 解码，拒绝尾随字节、旧纯账户数组、重复账户和非法 UTF-8，不保留旧布局兼容。公权公民 CID/姓/名当前允许为空，私权姓名必须非空。
+Node 对公权、私权统一使用 `InstitutionAdmins<Vec<Admin<[u8; 32]>>>` 精确 SCALE 解码，拒绝尾随字节、旧纯账户数组、旧三字段、重复账户和非法 UTF-8，不保留旧布局兼容。
 
 非法人机构不能只凭机构码猜测公权或私权归属；按账户同时探测两个 admins 模块，以真实命中的模块确定 entity 路由。同一账户若同时命中两个模块，直接拒绝。
 

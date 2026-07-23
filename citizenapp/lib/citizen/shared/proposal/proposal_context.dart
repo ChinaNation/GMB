@@ -106,12 +106,12 @@ class ProposalContextResolver {
 
   /// 解析用户与指定提案的关系。
   ///
-  /// [actorCidNumber] 是机构身份唯一真源；[executionAccount] 只用于个人多签
+  /// [actorCidNumber] 是机构身份唯一真源；[executionAccountId] 只用于个人多签
   /// 或具体账户展示，不能反向覆盖已有 actor CID。
   /// [knownInstitution] 如果调用方已知机构信息（如从机构页面进入），直接传入跳过反查。
   Future<ProposalContext> resolve({
     String? actorCidNumber,
-    List<int>? executionAccount,
+    List<int>? executionAccountId,
     String? internalCode,
     InstitutionInfo? knownInstitution,
   }) async {
@@ -126,15 +126,15 @@ class ProposalContextResolver {
       institution = knownInstitution?.cidNumber == actorCid
           ? knownInstitution
           : findInstitutionByCidNumber(actorCid);
-    } else if (code == 'PMUL' && executionAccount != null) {
+    } else if (code == 'PMUL' && executionAccountId != null) {
       // 个人多签没有 CID，且只有 PMUL 才允许 execution account 成为主体。
-      final executionAccountHex = _hexFromBytes(executionAccount);
+      final executionAccountIdText = _hexFromBytes(executionAccountId);
       final knownPersonalAccount = knownInstitution == null
           ? null
-          : personalAccountHexFromIdentity(knownInstitution.cidNumber);
-      institution = knownPersonalAccount == executionAccountHex
+          : personalAccountIdFromIdentity(knownInstitution.cidNumber);
+      institution = knownPersonalAccount == executionAccountIdText
           ? knownInstitution
-          : personalMultisigFromAccountId(executionAccount);
+          : personalMultisigFromAccountId(executionAccountId);
     }
 
     // 匹配管理员钱包（通过激活状态判断）。
@@ -170,14 +170,14 @@ class ProposalContextResolver {
     for (final activated in activatedAdmins) {
       WalletProfile? wallet;
       for (final w in wallets) {
-        if (_normalize(w.pubkeyHex) == activated.pubkeyHex) {
+        if (_requireAccountId(w.accountId) == activated.accountId) {
           wallet = w;
           break;
         }
       }
       if (wallet != null &&
           !matchedWallets.any(
-            (w) => _normalize(w.pubkeyHex) == activated.pubkeyHex,
+            (w) => _requireAccountId(w.accountId) == activated.accountId,
           )) {
         matchedWallets.add(wallet);
       }
@@ -195,7 +195,7 @@ class ProposalContextResolver {
   ///
   /// 返回 Map<提案索引, ProposalContext>，与传入列表一一对应。
   Future<List<ProposalContext>> resolveBatch(List<String?> actorCidNumbers,
-      {List<List<int>?>? executionAccounts,
+      {List<List<int>?>? executionAccountIds,
       List<String?>? internalCodeList,
       Map<String, InstitutionInfo> knownInstitutionsByCidNumber =
           const {}}) async {
@@ -208,9 +208,9 @@ class ProposalContextResolver {
 
     for (var i = 0; i < actorCidNumbers.length; i++) {
       final actorCidNumber = actorCidNumbers[i];
-      final executionAccount =
-          executionAccounts != null && i < executionAccounts.length
-              ? executionAccounts[i]
+      final executionAccountId =
+          executionAccountIds != null && i < executionAccountIds.length
+              ? executionAccountIds[i]
               : null;
       final internalCode =
           internalCodeList != null && i < internalCodeList.length
@@ -223,8 +223,8 @@ class ProposalContextResolver {
       if (actorCid != null && actorCid.isNotEmpty) {
         institution =
             knownInstitutions[actorCid] ?? findInstitutionByCidNumber(actorCid);
-      } else if (code == 'PMUL' && executionAccount != null) {
-        institution = personalMultisigFromAccountId(executionAccount);
+      } else if (code == 'PMUL' && executionAccountId != null) {
+        institution = personalMultisigFromAccountId(executionAccountId);
       }
 
       if (institution == null) {
@@ -258,9 +258,9 @@ class ProposalContextResolver {
       final matchedWallets = <WalletProfile>[];
       for (final activated in activatedAdmins) {
         for (final w in wallets) {
-          if (_normalize(w.pubkeyHex) == activated.pubkeyHex &&
+          if (_requireAccountId(w.accountId) == activated.accountId &&
               !matchedWallets.any(
-                (m) => _normalize(m.pubkeyHex) == activated.pubkeyHex,
+                (m) => _requireAccountId(m.accountId) == activated.accountId,
               )) {
             matchedWallets.add(w);
           }
@@ -295,9 +295,11 @@ class ProposalContextResolver {
     return _wallets!;
   }
 
-  static String _normalize(String hex) {
-    final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
-    return clean.toLowerCase();
+  static String _requireAccountId(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+    }
+    return accountId;
   }
 
   static String _hexFromBytes(List<int> bytes) {
@@ -305,7 +307,7 @@ class ProposalContextResolver {
     for (final byte in bytes) {
       buffer.write(byte.toRadixString(16).padLeft(2, '0'));
     }
-    return buffer.toString();
+    return '0x$buffer';
   }
 }
 
@@ -341,18 +343,18 @@ class VoteChecker {
         ({
       String actorCidNumber,
       String voterRoleCode,
-      List<String> pubkeysHex
+      List<String> accountIds
     })>{};
     for (final t in active) {
-      final pubkeys = t.adminWallets.map((w) => w.pubkeyHex).toList();
+      final accountIds = t.adminWallets.map((w) => w.accountId).toList();
       if (t.kind == 0 && t.institution != null) {
-        final localPubkeys = pubkeys.map(_normalize).toSet();
+        final localAccountIds = accountIds.map(_requireAccountId).toSet();
         final tickets = await _proposalQueryService.fetchEligibleVoterTickets(
           t.proposalId,
           t.institution!,
         );
         internalByPid[t.proposalId] = tickets
-            .where((ticket) => localPubkeys.contains(ticket.pubkeyHex))
+            .where((ticket) => localAccountIds.contains(ticket.voterAccountId))
             .toList(growable: false);
       } else if (t.kind == 1 && t.institution != null) {
         jointByPid[t.proposalId] = (
@@ -360,7 +362,7 @@ class VoteChecker {
           voterRoleCode: t.institution!.orgType == OrgType.prb
               ? 'DIRECTOR'
               : 'COMMITTEE_MEMBER',
-          pubkeysHex: pubkeys,
+          accountIds: accountIds,
         );
       }
     }
@@ -381,15 +383,21 @@ class VoteChecker {
           await _runtimeService.fetchJointTicketVotesForProposals(jointByPid);
       jointByPid.forEach((pid, v) {
         final m = votes[pid] ?? const <String, bool?>{};
-        if (v.pubkeysHex.any((pk) => m[_normalize(pk)] == null)) needs.add(pid);
+        if (v.accountIds.any(
+          (accountId) => m[_requireAccountId(accountId)] == null,
+        )) {
+          needs.add(pid);
+        }
       });
     }
     return needs;
   }
 
-  static String _normalize(String hex) {
-    final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
-    return clean.toLowerCase();
+  static String _requireAccountId(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+    }
+    return accountId;
   }
 }
 

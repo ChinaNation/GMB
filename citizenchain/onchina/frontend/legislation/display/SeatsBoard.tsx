@@ -68,7 +68,7 @@ export function SeatsBoard({ seats, approvedCount, rejectedCount, pendingCount }
           const s = VOTE_STYLE[voteKey(seat.vote)];
           return (
             <div
-              key={seat.adminAccount}
+              key={seat.account_id}
               style={{
                 border: `1px solid ${s.border}`,
                 borderLeft: `5px solid ${s.border}`,

@@ -192,7 +192,9 @@ class OfflineSignService {
       );
     }
 
-    if (_normalizeHex(wallet.pubkeyHex) != _normalizeHex(body.pubkeyHex)) {
+    // 当前 sr25519 的 AccountId32 与 signer public key 字节相同；请求 getter
+    // 已输出规范 AccountId 文本，因此这里只允许完全相等，不做兼容归一化。
+    if (wallet.accountId != body.signerPublicKeyHex) {
       throw const OfflineSignException(
         OfflineSignErrorCode.walletMismatch,
         '签名请求中的公钥与当前钱包不一致',
@@ -240,12 +242,4 @@ class OfflineSignService {
     }
     return buffer.toString();
   }
-}
-
-String _normalizeHex(String input) {
-  final trimmed = input.trim();
-  if (trimmed.startsWith('0x') || trimmed.startsWith('0X')) {
-    return trimmed.substring(2).toLowerCase();
-  }
-  return trimmed.toLowerCase();
 }

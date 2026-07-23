@@ -4,7 +4,7 @@
   "i": "tx_01HXYZ4VQK8NRPM2G7FJD9TBC3",
   "e": 1712650600,
   "b": {
-    "address": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+    "ss58_address": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
     "recipient_name": "张三",
     "amount": "100.50",
     "symbol": "GMB",

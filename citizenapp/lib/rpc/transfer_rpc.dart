@@ -26,24 +26,24 @@ class TransferRpc {
 
   /// 执行 OnchainTransaction::transfer_with_remark 转账。
   ///
-  /// [fromAddress] 发送方 SS58 地址
-  /// [signerPubkey] 发送方公钥 32 字节
-  /// [toAddress] 接收方 SS58 地址
+  /// [fromSs58Address] 发送方 SS58 地址
+  /// [signerPublicKey] 发送方公钥 32 字节
+  /// [toSs58Address] 接收方 SS58 地址
   /// [amountYuan] 转账金额（元），内部转为分
   /// [remark] 转账备注，按 UTF-8 字节编码并随交易事件上链
   /// [sign] 签名回调：接收签名载荷字节，返回 64 字节 sr25519 签名
   ///
   /// 返回交易哈希 hex（含 0x 前缀）和提交时使用的 nonce。
   Future<({String txHash, int usedNonce})> transferWithRemark({
-    required String fromAddress,
-    required Uint8List signerPubkey,
-    required String toAddress,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
+    required String toSs58Address,
     required double amountYuan,
     required String remark,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
-    final destAccountId = Keyring().decodeAddress(toAddress);
+    final destAccountId = Keyring().decodeAddress(toSs58Address);
     final amountFen = BigInt.from((amountYuan * 100).round());
     final remarkBytes = Uint8List.fromList(utf8.encode(remark));
     final callData =
@@ -53,8 +53,8 @@ class TransferRpc {
       logLabel: 'TransferRpc',
     ).signAndSubmit(
       callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       sign: sign,
       onWatchEvent: onWatchEvent,
     );

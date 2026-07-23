@@ -244,6 +244,16 @@ pub trait InstitutionCidQuery<CidNumber> {
 pub trait InstitutionLegalRepresentativeQuery<AccountId> {
     /// 按机构唯一 CID 读取当前已任命的法定代表人账户。
     fn legal_representative(cid_number: &[u8]) -> Option<AccountId>;
+
+    /// 按机构唯一 CID 读取法定代表人的**公民 CID**。
+    ///
+    /// 分层强制下私权只有 LR 岗四要素完整，且强制落点是本记录（非 admins 名册的
+    /// `Admin.cid_number`）。授权/投票的身份解析在名册 cid 为空时回落到此值，
+    /// 使 LR 同样享受「换绑不掉权」，无需在名册侧新增强制或复制数据。
+    /// 默认 `None`：不提供该事实的实现（测试桩等）退回按 `account_id` 解析。
+    fn legal_representative_cid(_cid_number: &[u8]) -> Option<Vec<u8>> {
+        None
+    }
 }
 
 impl<CidNumber> InstitutionCidQuery<CidNumber> for () {

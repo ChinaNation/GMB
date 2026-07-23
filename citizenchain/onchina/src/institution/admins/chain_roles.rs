@@ -27,7 +27,7 @@ struct RawInstitutionRole {
 #[derive(Debug, Decode)]
 struct RawInstitutionAssignment {
     cid_number: Vec<u8>,
-    admin_account: [u8; 32],
+    account_id: [u8; 32],
     role_code: Vec<u8>,
     term_start: u32,
     term_end: u32,
@@ -39,7 +39,7 @@ struct RawInstitutionAssignment {
 /// 管理员人员记录和一条可选有效任职的联合投影。
 #[derive(Debug, Clone)]
 pub(crate) struct InstitutionAssignmentView {
-    pub(crate) account_hex: String,
+    pub(crate) account_id: String,
     pub(crate) family_name: String,
     pub(crate) given_name: String,
     pub(crate) role_code: String,
@@ -172,7 +172,7 @@ fn merge_active_assignments(
     let current_day = current_utc_day()?;
     let mut views = Vec::new();
     for assignment in assignments {
-        if !active_admins.contains_key(&assignment.admin_account) {
+        if !active_admins.contains_key(&assignment.account_id) {
             continue;
         }
         let Some(role) = active_roles.get(&assignment.role_code) else {
@@ -184,9 +184,9 @@ fn merge_active_assignments(
             continue;
         }
         views.push(InstitutionAssignmentView {
-            account_hex: format!("0x{}", hex::encode(assignment.admin_account)),
-            family_name: active_admins[&assignment.admin_account].0.clone(),
-            given_name: active_admins[&assignment.admin_account].1.clone(),
+            account_id: format!("0x{}", hex::encode(assignment.account_id)),
+            family_name: active_admins[&assignment.account_id].0.clone(),
+            given_name: active_admins[&assignment.account_id].1.clone(),
             role_code: String::from_utf8_lossy(&assignment.role_code).to_string(),
             role_name: String::from_utf8_lossy(&role.role_name).to_string(),
             term_required: role.term_required,
@@ -202,7 +202,7 @@ fn merge_active_assignments(
     views.sort_by(|left, right| {
         left.role_code
             .cmp(&right.role_code)
-            .then(left.account_hex.cmp(&right.account_hex))
+            .then(left.account_id.cmp(&right.account_id))
     });
     Ok(views)
 }
@@ -218,7 +218,7 @@ pub(crate) async fn fetch_active_assignments_onchain(
     let active_admins: HashMap<[u8; 32], (String, String)> = admins
         .iter()
         .map(|admin| {
-            crate::auth::login::parse_sr25519_pubkey_bytes(&admin.admin_account)
+            crate::auth::login::parse_account_id_bytes(&admin.account_id)
                 .map(|account| {
                     (
                         account,
@@ -243,14 +243,14 @@ pub(crate) async fn fetch_active_assignments_onchain(
         }
         let covered = views
             .iter()
-            .filter_map(|view| crate::auth::login::parse_sr25519_pubkey_bytes(&view.account_hex))
+            .filter_map(|view| crate::auth::login::parse_account_id_bytes(&view.account_id))
             .collect::<HashSet<_>>();
-        for (admin_account, (family_name, given_name)) in &active_admins {
-            if covered.contains(admin_account) {
+        for (account_id, (family_name, given_name)) in &active_admins {
+            if covered.contains(account_id) {
                 continue;
             }
             views.push(InstitutionAssignmentView {
-                account_hex: format!("0x{}", hex::encode(admin_account)),
+                account_id: format!("0x{}", hex::encode(account_id)),
                 family_name: family_name.clone(),
                 given_name: given_name.clone(),
                 role_code: String::new(),
@@ -264,8 +264,8 @@ pub(crate) async fn fetch_active_assignments_onchain(
             });
         }
         views.sort_by(|left, right| {
-            left.account_hex
-                .cmp(&right.account_hex)
+            left.account_id
+                .cmp(&right.account_id)
                 .then(left.role_code.cmp(&right.role_code))
         });
         return Ok(Some(views));
@@ -273,10 +273,10 @@ pub(crate) async fn fetch_active_assignments_onchain(
     Err("institution roles not found in matching entity pallet".to_string())
 }
 
-/// 查找某个联邦注册局管理员钱包当前担任专员的省码。
+/// 查找某个联邦注册局管理员账户当前担任专员的省码。
 pub(crate) async fn fetch_frg_province_codes_for_admin(
     cid_number: &[u8],
-    admin_account: [u8; 32],
+    account_id: [u8; 32],
 ) -> Result<Vec<[u8; 2]>, String> {
     let (roles, assignments) =
         read_roles_and_assignments(cid_number, AdminPallet::PublicAdmins).await?;
@@ -289,7 +289,7 @@ pub(crate) async fn fetch_frg_province_codes_for_admin(
     let assigned_codes: HashSet<Vec<u8>> = assignments
         .into_iter()
         .filter(|assignment| {
-            assignment.admin_account == admin_account
+            assignment.account_id == account_id
                 && active_roles
                     .get(&assignment.role_code)
                     .is_some_and(|role| assignment_is_effective(role, assignment, current_day))
@@ -310,7 +310,7 @@ pub(crate) async fn fetch_frg_province_codes_for_admin(
         .collect())
 }
 
-/// 从 FRG entity 任职真源取指定省专员岗位的有效管理员钱包。
+/// 从 FRG entity 任职真源取指定省专员岗位的有效管理员账户 ID。
 pub(crate) async fn fetch_frg_admins_for_province(
     cid_number: &[u8],
     province_code: [u8; 2],
@@ -331,7 +331,7 @@ pub(crate) async fn fetch_frg_admins_for_province(
             assignment.role_code == expected
                 && assignment_is_effective(&role, assignment, current_day)
         })
-        .map(|assignment| assignment.admin_account)
+        .map(|assignment| assignment.account_id)
         .collect())
 }
 
@@ -394,7 +394,7 @@ mod scale_contract_tests {
         };
         let mut assignment = RawInstitutionAssignment {
             cid_number: b"CID".to_vec(),
-            admin_account: [1; 32],
+            account_id: [1; 32],
             role_code: b"ROLE".to_vec(),
             term_start: 10,
             term_end: 20,

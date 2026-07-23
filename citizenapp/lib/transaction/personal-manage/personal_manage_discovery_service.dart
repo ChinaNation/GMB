@@ -6,7 +6,6 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:isar_community/isar.dart';
-import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/citizen/shared/admin_account_storage_codec.dart';
 import 'package:citizenapp/citizen/shared/admin_accounts_scan_service.dart';
 import 'package:citizenapp/isar/app_isar.dart';
@@ -53,22 +52,22 @@ class PersonalManageDiscoveryService {
   /// 处理一次共享扫描结果:筛出我的个人多签 → 批量反查发起人/账户名 → upsert Isar + 孤儿校验。
   Future<PersonalManageDiscoveryStats> processScanned(
     AdminAccountsScanResult scan, {
-    required Set<String> myPubkeys,
+    required Set<String> myAccountIds,
   }) async {
     final start = DateTime.now();
 
     final mine = AdminAccountsScanService.filterMine(
       scan,
-      myPubkeysHex: myPubkeys,
+      myAccountIds: myAccountIds,
       kind: AdminAccountStorageCodec.kindPersonal,
       codeWhitelist: const {'PMUL'},
     );
 
     // 批量反查发起人/账户名(PersonalAccounts 精确整键)。
-    Map<String, ({String creatorAccountHex, String accountName})?> metas;
+    Map<String, ({String creatorAccountId, String accountName})?> metas;
     try {
       metas = await _personalManage.fetchPersonalMetasBatch(
-        mine.map((a) => a.personalAccountHex!),
+        mine.map((a) => a.personalAccountId!),
       );
     } catch (e) {
       debugPrint('[PersonalManageDiscovery] 批量反查个人多签元数据失败: $e');
@@ -87,17 +86,17 @@ class PersonalManageDiscoveryService {
     var newlyAdded = 0;
 
     for (final acc in mine) {
-      final personalAccountHex = acc.personalAccountHex!;
-      final meta = metas[personalAccountHex];
+      final personalAccountId = acc.personalAccountId!;
+      final meta = metas[personalAccountId];
       if (meta == null) continue;
-      scannedAccounts.add(personalAccountHex);
+      scannedAccounts.add(personalAccountId);
       final added = await _upsertPersonal(
-        accountHex: personalAccountHex,
+        accountId: personalAccountId,
         name: meta.accountName,
-        creatorAccountHex: meta.creatorAccountHex,
-        matchedAdmins: acc.admins
-            .map((admin) => admin.admin_account)
-            .where(myPubkeys.contains)
+        creatorAccountId: meta.creatorAccountId,
+        matchedAdminAccountIds: acc.admins
+            .map((admin) => admin.account_id)
+            .where(myAccountIds.contains)
             .toList(growable: false),
       );
       if (added) newlyAdded++;
@@ -116,48 +115,43 @@ class PersonalManageDiscoveryService {
   }
 
   Future<bool> _upsertPersonal({
-    required String accountHex,
+    required String accountId,
     required String name,
-    required String creatorAccountHex,
-    required List<String> matchedAdmins,
+    required String creatorAccountId,
+    required List<String> matchedAdminAccountIds,
   }) async {
-    String creatorSs58;
-    try {
-      creatorSs58 = Keyring().encodeAddress(
-          Uint8List.fromList(_hexDecode(creatorAccountHex)), 2027);
-    } catch (_) {
-      creatorSs58 = '';
-    }
+    final normalizedCreatorAccountId = _requireAccountId(creatorAccountId);
+    final personalAccountId = _requireAccountId(accountId);
 
     return WalletIsar.instance.writeTxn((isar) async {
       final exists = await isar.personalAccountEntitys
           .filter()
-          .accountEqualTo(accountHex)
+          .accountIdEqualTo(personalAccountId)
           .findFirst();
 
       if (exists != null) {
         if (!exists.discoveredViaAdmin) return false;
-        exists.matchedAdminPubkeys = matchedAdmins;
+        exists.matchedAdminAccountIds = matchedAdminAccountIds;
         await isar.personalAccountEntitys.put(exists);
         await PersonalMultisigLocalState.putStatusInTxn(
           isar,
-          accountHex,
+          accountId,
           PersonalMultisigLocalState.statusActive,
         );
         return false;
       }
 
       final entity = PersonalAccountEntity()
-        ..account = accountHex
+        ..accountId = personalAccountId
         ..accountName = name
-        ..creatorAddress = creatorSs58
+        ..creatorAccountId = normalizedCreatorAccountId
         ..addedAtMillis = DateTime.now().millisecondsSinceEpoch
         ..discoveredViaAdmin = true
-        ..matchedAdminPubkeys = matchedAdmins;
+        ..matchedAdminAccountIds = matchedAdminAccountIds;
       await isar.personalAccountEntitys.put(entity);
       await PersonalMultisigLocalState.putStatusInTxn(
         isar,
-        accountHex,
+        accountId,
         PersonalMultisigLocalState.statusActive,
       );
       return true;
@@ -172,12 +166,12 @@ class PersonalManageDiscoveryService {
           .discoveredViaAdminEqualTo(true)
           .findAll();
       for (final p in stalePersonals) {
-        if (!scannedAccounts.contains(p.account)) {
+        if (!scannedAccounts.contains(_requireAccountId(p.accountId))) {
           // 链上注销后仍保留本地账户入口，只把状态标成已注销；
           // 用户在详情页点“删除”时才真正清空本机数据。
           await PersonalMultisigLocalState.putStatusInTxn(
             isar,
-            p.account,
+            p.accountId,
             PersonalMultisigLocalState.statusClosed,
           );
           closed++;
@@ -187,12 +181,10 @@ class PersonalManageDiscoveryService {
     return closed;
   }
 
-  Uint8List _hexDecode(String hex) {
-    final h = hex.startsWith('0x') ? hex.substring(2) : hex;
-    final bytes = Uint8List(h.length ~/ 2);
-    for (var i = 0; i < bytes.length; i++) {
-      bytes[i] = int.parse(h.substring(i * 2, i * 2 + 2), radix: 16);
+  String _requireAccountId(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
     }
-    return bytes;
+    return accountId;
   }
 }

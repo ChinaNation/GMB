@@ -5,7 +5,7 @@
 
 use crate::{
     api_error,
-    core::qr::{bytes_to_b64, pubkey_hex_to_b64, QR_V1},
+    core::qr::{bytes_to_b64, public_key_hex_to_b64, QR_V1},
 };
 use axum::http::StatusCode;
 
@@ -13,7 +13,7 @@ pub(crate) fn build_sign_request(
     request_id: &str,
     issued_at: i64,
     expires_at: i64,
-    actor_pubkey: &str,
+    actor_public_key: &str,
     payload_text: &str,
     action: u16,
 ) -> Result<String, axum::response::Response> {
@@ -21,7 +21,7 @@ pub(crate) fn build_sign_request(
         request_id,
         issued_at,
         expires_at,
-        actor_pubkey,
+        actor_public_key,
         payload_text.as_bytes(),
         action,
     )
@@ -35,15 +35,15 @@ pub(crate) fn build_sign_request_bytes(
     request_id: &str,
     _issued_at: i64,
     expires_at: i64,
-    actor_pubkey: &str,
+    actor_public_key: &str,
     payload_bytes: &[u8],
     action: u16,
 ) -> Result<String, axum::response::Response> {
-    let Some(pubkey_b64) = pubkey_hex_to_b64(actor_pubkey) else {
+    let Some(public_key_b64) = public_key_hex_to_b64(actor_public_key) else {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "actor pubkey must be 32-byte hex",
+            "actor_public_key must be lowercase 0x plus 64 hexadecimal characters",
         ));
     };
     let sign_request = serde_json::json!({
@@ -54,7 +54,7 @@ pub(crate) fn build_sign_request_bytes(
         "b": {
             "a": action,
             "g": 1,
-            "u": pubkey_b64,
+            "u": public_key_b64,
             "d": bytes_to_b64(payload_bytes),
         }
     });

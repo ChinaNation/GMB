@@ -6,21 +6,24 @@ void main() {
     test('accepts wallet account as chat account without wallet private key',
         () {
       const identity = ChatDevice(
-        ownerAccount: 'alice-wallet',
+        accountId:
+            '0x1111111111111111111111111111111111111111111111111111111111111111',
         deviceId: 'alice-phone',
-        devicePublicKeyHex: '0xaabbcc',
+        devicePublicKey: '0xaabbcc',
       );
 
       expect(identity.validate(), isNull);
-      expect(identity.ownerAccount, 'alice-wallet');
+      expect(identity.accountId,
+          '0x1111111111111111111111111111111111111111111111111111111111111111');
       expect(identity.deviceId, 'alice-phone');
     });
 
     test('rejects invalid device public key hex', () {
       const identity = ChatDevice(
-        ownerAccount: 'alice-wallet',
+        accountId:
+            '0x1111111111111111111111111111111111111111111111111111111111111111',
         deviceId: 'alice-phone',
-        devicePublicKeyHex: 'xyz',
+        devicePublicKey: 'xyz',
       );
 
       expect(identity.validate(), contains('hex'));

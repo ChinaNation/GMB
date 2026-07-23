@@ -22,10 +22,10 @@ class WalletProfileEntity {
   late double balance;
 
   @Index(unique: true, replace: true)
-  late String address;
+  late String accountId;
 
   @Index(unique: true, replace: true)
-  late String pubkeyHex;
+  late String ss58Address;
 
   late String alg;
   late int ss58;
@@ -36,9 +36,7 @@ class WalletProfileEntity {
   late String signMode;
 
   /// 用户拖拽排序后的稳定顺序。
-  /// 数值越小越靠前；旧用户首次启动时通过 SharedPreferences flag 一次性
-  /// 按 walletIndex 升序填充，保证升级无感（不丢原有顺序）。
-  /// 排序时优先按 sortOrder 升序，相同则回退 walletIndex 兜底（保持稳定）。
+  /// 数值越小越靠前；排序时优先按 sortOrder 升序，相同则按 walletIndex 兜底。
   int sortOrder = 0;
 }
 
@@ -55,26 +53,12 @@ class AdminGroupCacheEntity {
   Id id = Isar.autoIncrement;
 
   @Index(unique: true, replace: true)
-  late String pubkeyHex;
+  late String accountId;
 
   late String adminGroupName;
 
   @Index()
   late int updatedAt;
-}
-
-@collection
-class ObservedAccountEntity {
-  Id id = Isar.autoIncrement;
-
-  @Index(unique: true, replace: true)
-  late String accountId;
-
-  late String accountLabel;
-  late String publicKey;
-  late String address;
-  double? balance;
-  late String source;
 }
 
 @collection
@@ -141,7 +125,8 @@ class MultisigLocalDetailSnapshot {
         'admins': admins
             .map(
               (admin) => {
-                'admin_account': admin.admin_account,
+                'account_id': admin.account_id,
+                'cid_number': admin.cid_number,
                 'family_name': admin.family_name,
                 'given_name': admin.given_name,
               },
@@ -165,21 +150,25 @@ class MultisigLocalDetailSnapshot {
       final accounts = <String>{};
       for (final item in adminRaw) {
         if (item is! Map) return null;
-        final account = item['admin_account'];
+        final account = item['account_id'];
+        final cidNumber = item['cid_number'];
         final familyName = item['family_name'];
         final givenName = item['given_name'];
         if (account is! String ||
+            cidNumber is! String ||
             familyName is! String ||
             givenName is! String ||
             account.isEmpty ||
             familyName.isEmpty ||
             givenName.isEmpty ||
-            !accounts.add(account.toLowerCase())) {
+            !RegExp(r'^0x[0-9a-f]{64}$').hasMatch(account) ||
+            !accounts.add(account)) {
           return null;
         }
         admins.add(
           AdminPerson(
-            admin_account: account.toLowerCase(),
+            account_id: account,
+            cid_number: cidNumber,
             family_name: familyName,
             given_name: givenName,
           ),
@@ -227,31 +216,32 @@ class PersonalMultisigLocalState {
   static const statusActive = 'active';
   static const statusClosed = 'closed';
 
-  static String statusKey(String personalAccountHex) =>
-      'personal_account_status:${_normalizeHex(personalAccountHex)}';
+  static String statusKey(String personalAccountId) =>
+      'personal_account_status:${_requireAccountId(personalAccountId)}';
 
-  static String detailKey(String personalAccountHex) =>
-      'personal_account_detail:${_normalizeHex(personalAccountHex)}';
+  static String detailKey(String personalAccountId) =>
+      'personal_account_detail:${_requireAccountId(personalAccountId)}';
 
   static Future<Map<String, String>> readStatuses(
     Isar isar,
-    Iterable<String> personalAccountsHex,
+    Iterable<String> personalAccountIds,
   ) async {
-    final snapshots = await readStatusSnapshots(isar, personalAccountsHex);
+    final snapshots = await readStatusSnapshots(isar, personalAccountIds);
     return snapshots.map((key, value) => MapEntry(key, value.status));
   }
 
   static Future<Map<String, MultisigLocalStatusSnapshot>> readStatusSnapshots(
     Isar isar,
-    Iterable<String> personalAccountsHex,
+    Iterable<String> personalAccountIds,
   ) async {
     final result = <String, MultisigLocalStatusSnapshot>{};
-    for (final address in personalAccountsHex) {
-      final normalized = _normalizeHex(address);
-      final entity = await isar.appKvEntitys.getByKey(statusKey(normalized));
+    for (final accountId in personalAccountIds) {
+      final normalizedAccountId = _requireAccountId(accountId);
+      final entity =
+          await isar.appKvEntitys.getByKey(statusKey(normalizedAccountId));
       final status = entity?.stringValue;
       if (status != null && status.isNotEmpty) {
-        result[normalized] = MultisigLocalStatusSnapshot(
+        result[normalizedAccountId] = MultisigLocalStatusSnapshot(
           status: status,
           lastSyncAtMillis: entity?.intValue,
         );
@@ -262,20 +252,20 @@ class PersonalMultisigLocalState {
 
   static Future<MultisigLocalDetailSnapshot?> readDetail(
     Isar isar,
-    String personalAccountHex,
+    String personalAccountId,
   ) async {
     final entity =
-        await isar.appKvEntitys.getByKey(detailKey(personalAccountHex));
+        await isar.appKvEntitys.getByKey(detailKey(personalAccountId));
     return MultisigLocalDetailSnapshot.fromJsonString(entity?.stringValue);
   }
 
   /// 写入个人多签详情快照；调用方必须处在 Isar writeTxn 内。
   static Future<void> putDetailInTxn(
     Isar isar,
-    String personalAccountHex,
+    String personalAccountId,
     MultisigLocalDetailSnapshot snapshot,
   ) async {
-    final key = detailKey(personalAccountHex);
+    final key = detailKey(personalAccountId);
     final entity = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();
     entity
       ..key = key
@@ -289,10 +279,10 @@ class PersonalMultisigLocalState {
   /// 写入个人多签本地状态；调用方必须处在 Isar writeTxn 内。
   static Future<void> putStatusInTxn(
     Isar isar,
-    String personalAccountHex,
+    String personalAccountId,
     String status,
   ) async {
-    final key = statusKey(personalAccountHex);
+    final key = statusKey(personalAccountId);
     final entity = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();
     entity
       ..key = key
@@ -304,28 +294,30 @@ class PersonalMultisigLocalState {
   /// 删除个人多签本地状态；调用方必须处在 Isar writeTxn 内。
   static Future<void> deleteStatusInTxn(
     Isar isar,
-    String personalAccountHex,
+    String personalAccountId,
   ) async {
     await isar.appKvEntitys
         .where()
-        .keyEqualTo(statusKey(personalAccountHex))
+        .keyEqualTo(statusKey(personalAccountId))
         .deleteAll();
   }
 
   /// 删除个人多签详情快照；调用方必须处在 Isar writeTxn 内。
   static Future<void> deleteDetailInTxn(
     Isar isar,
-    String personalAccountHex,
+    String personalAccountId,
   ) async {
     await isar.appKvEntitys
         .where()
-        .keyEqualTo(detailKey(personalAccountHex))
+        .keyEqualTo(detailKey(personalAccountId))
         .deleteAll();
   }
 
-  static String _normalizeHex(String hex) {
-    final h = hex.startsWith('0x') ? hex.substring(2) : hex;
-    return h.toLowerCase();
+  static String _requireAccountId(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+    }
+    return accountId;
   }
 }
 
@@ -334,15 +326,15 @@ class PersonalMultisigLocalState {
 class PersonalAccountEntity {
   Id id = Isar.autoIncrement;
 
-  /// 多签账户公钥 hex（32 字节，不含 0x 前缀）。
+  /// 个人多签规范 AccountId。
   @Index(unique: true, replace: true)
-  late String account;
+  late String accountId;
 
   /// 个人多签账户名称。
   late String accountName;
 
-  /// 创建人 SS58 地址。
-  late String creatorAddress;
+  /// 创建人账户 ID，小写 `0x` 加 64 位十六进制。
+  late String creatorAccountId;
 
   /// 添加时间戳（毫秒）。
   @Index()
@@ -353,9 +345,9 @@ class PersonalAccountEntity {
   @Index()
   bool discoveredViaAdmin = false;
 
-  /// 本钱包持有的 admin 公钥列表(快照,UI 显示"我作为 N 位管理员之一参与")。
+  /// 本钱包持有的管理员 AccountId 列表(快照,UI 显示"我作为 N 位管理员之一参与")。
   /// 仅在 discoveredViaAdmin=true 时填充;false 时空列表。
-  List<String> matchedAdminPubkeys = const [];
+  List<String> matchedAdminAccountIds = const [];
 }
 
 /// 个人多签提案历史快照（本地持久化）。
@@ -371,9 +363,9 @@ class PersonalAccountEntity {
 class PersonalAccountProposalEntity {
   Id id = Isar.autoIncrement;
 
-  /// 多签账户公钥 hex(32 字节,不含 0x 前缀)。复合索引 key 之一。
+  /// 个人多签规范 AccountId；复合索引键之一。
   @Index(composite: [CompositeIndex('proposalId')], unique: true, replace: true)
-  late String personalAccount;
+  late String personalAccountId;
 
   /// 链上提案 ID。
   late int proposalId;
@@ -408,9 +400,9 @@ class PersonalAccountProposalEntity {
 class InstitutionEntity {
   Id id = Isar.autoIncrement;
 
-  /// 多签账户公钥 hex（32 字节，不含 0x 前缀），唯一标识。
+  /// 多签账户 AccountId（小写 `0x` + 64 位十六进制），唯一标识。
   @Index(unique: true, replace: true)
-  late String account;
+  late String accountId;
 
   /// CID 标识（UTF-8 字符串）。
   late String cidNumber;
@@ -429,10 +421,6 @@ class InstitutionEntity {
   /// 反向校验只会删除 true 的 entity,false 的永不被自动清理。
   @Index()
   bool discoveredViaAdmin = false;
-
-  /// 本钱包持有的 admin 公钥列表(快照,UI 显示"我作为 N 位管理员之一参与")。
-  /// 仅在 discoveredViaAdmin=true 时填充;false 时空列表。
-  List<String> matchedAdminPubkeys = const [];
 }
 
 /// 行政区字典实体(ADR-021 行政区唯一真源)。
@@ -516,7 +504,7 @@ class PublicInstitutionEntity {
   String? legalRepresentativeCidNumber;
 
   /// 法定代表人唯一钱包账户。
-  String? legalRepresentativeAccount;
+  String? legalRepresentativeAccountId;
   late int accountCount;
 
   /// 自定义账户名(op_tag=0x07);主/费可本地派生不入库。空占绝大多数。
@@ -530,19 +518,19 @@ class PublicInstitutionEntity {
 
 /// 公权机构订阅("关注"分组)。
 ///
-/// 按钱包公钥隔离的纯本地决策表;[subscriptionKey] = `pubkeyHex|cidNumber`
+/// 按账户 ID 隔离的纯本地决策表；[subscriptionKey] = `accountId|cidNumber`
 /// 复合唯一,只有订阅的机构才纳入动态刷新集(详情页卡C),目录浏览不依赖本表。
 @collection
 class PublicInstitutionSubscriptionEntity {
   Id id = Isar.autoIncrement;
 
-  /// 复合唯一键:`walletPubkeyHex|cidNumber`。
+  /// 复合唯一键：`subscriberAccountId|cidNumber`。
   @Index(unique: true, replace: true)
   late String subscriptionKey;
 
-  /// 订阅者钱包公钥(查"我的关注"用)。
+  /// 订阅者账户 ID（查“我的关注”用）。
   @Index()
-  late String walletPubkeyHex;
+  late String subscriberAccountId;
 
   late String cidNumber;
   late int subscribedAtMillis;
@@ -562,11 +550,11 @@ class ChatConversationEntity {
 
   /// 本机钱包聊天账户。
   @Index()
-  late String ownerAccount;
+  late String accountId;
 
   /// 对方钱包聊天账户。
   @Index()
-  late String peerAccount;
+  late String peerAccountId;
 
   late String title;
   late String lastMessage;
@@ -596,11 +584,11 @@ class ChatMessageEntity {
   late String conversationId;
 
   @Index()
-  late String ownerAccount;
+  late String accountId;
 
   late String direction;
-  late String senderAccount;
-  late String recipientAccount;
+  late String senderAccountId;
+  late String recipientAccountId;
   late String senderDeviceId;
   late String messageKind;
   late String mlsMessageKind;
@@ -626,7 +614,7 @@ class ChatOutboundQueueEntity {
   @Index()
   late String conversationId;
 
-  late String recipientAccount;
+  late String recipientAccountId;
   late String envelopeBytesHex;
   late String deliveryState;
   late int attemptCount;
@@ -647,7 +635,7 @@ class ChatOutboundQueueEntity {
 class ChatOutgoingMediaEntity {
   Id id = Isar.autoIncrement;
 
-  /// 唯一键 = "<attachmentId>|<recipientAccount>"。群里同一媒体发 N 成员需 N 行,
+  /// 唯一键 = "<attachmentId>|<recipientAccountId>"。群里同一媒体发 N 成员需 N 行,
   /// 故不再以 attachmentId 单键唯一。
   @Index(unique: true, replace: true)
   late String pendingKey;
@@ -656,7 +644,7 @@ class ChatOutgoingMediaEntity {
   late String attachmentId;
 
   @Index()
-  late String recipientAccount;
+  late String recipientAccountId;
 
   late String conversationId;
   late String fileName;
@@ -700,12 +688,12 @@ class ChatRouteCacheEntity {
 
   /// 对方钱包聊天账户，也是公民币收款账户。
   @Index(unique: true, replace: true)
-  late String peerAccount;
+  late String peerAccountId;
 
   /// Chat 路由显示名，只用于联系人路由列表，不承载机构全称或简称。
   late String routeDisplayName;
   late String deviceId;
-  late String devicePublicKeyHex;
+  late String devicePublicKey;
   late String safetyNumber;
   String? nearbyPeerHint;
   String? note;
@@ -723,11 +711,11 @@ class ChatGroupEntity {
   late String groupId;
 
   late String groupName;
-  late String creatorAccount;
+  late String creatorAccountId;
 
   /// 本机钱包聊天账户。
   @Index()
-  late String ownerAccount;
+  late String accountId;
 
   /// MLS 当前 epoch 的本地镜像。
   late int epoch;
@@ -745,14 +733,14 @@ class ChatGroupEntity {
 class ChatGroupMemberEntity {
   Id id = Isar.autoIncrement;
 
-  /// 唯一键 = "<groupId>|<memberAccount>"。
+  /// 唯一键 = "<groupId>|<memberAccountId>"。
   @Index(unique: true, replace: true)
   late String memberKey;
 
   @Index()
   late String groupId;
 
-  late String memberAccount;
+  late String memberAccountId;
 
   /// 角色:admin | member。
   late String role;
@@ -785,19 +773,19 @@ class LocalTxEntity {
 
   /// 单条钱包流水唯一键。
   ///
-  /// 钱包账户由 walletPubkeyHex 唯一，流水记录由 recordKey 唯一。
-  /// 区块事件记录使用 `walletPubkeyHex:blockHash:eventIndex`，本机提交记录
-  /// 使用 `walletPubkeyHex:pending:txHash`，避免把 txHash 误当成单条流水唯一性。
+  /// 钱包对应的链账户由 accountId 唯一，流水记录由 recordKey 唯一。
+  /// 区块事件记录使用 `accountId:blockHash:eventIndex`，本机提交记录
+  /// 使用 `accountId:pending:txHash`，避免把 txHash 误当成单条流水唯一性。
   @Index(unique: true, replace: true)
   late String recordKey;
 
   /// 所属钱包地址（SS58）。
   @Index()
-  late String walletAddress;
+  late String ss58Address;
 
-  /// 所属钱包公钥 hex（32 字节，不含 0x）。
+  /// 所属链账户 ID（小写 `0x` 加 64 位十六进制）。
   @Index()
-  late String walletPubkeyHex;
+  late String accountId;
 
   /// 业务类型：transfer / fee / reward / interest / issuance / burn / multisig_transfer。
   late String type;
@@ -814,10 +802,10 @@ class LocalTxEntity {
   String? feeFen;
 
   /// 对方地址；余额增加时是来源，余额减少时是去向。
-  String? counterpartyAddress;
+  String? counterpartySs58Address;
 
-  String? fromAddress;
-  String? toAddress;
+  String? fromSs58Address;
+  String? toSs58Address;
 
   /// 转账备注，来自 OnchainTransaction::TransferWithRemark 事件或本机提交草稿。
   String? remark;
@@ -866,10 +854,10 @@ class LocalTxEntity {
 class WalletTxSyncCursorEntity {
   Id id = Isar.autoIncrement;
 
-  late String walletAddress;
+  late String ss58Address;
 
   @Index(unique: true, replace: true)
-  late String walletPubkeyHex;
+  late String accountId;
 
   late int trackingStartBlock;
   late int lastSyncedBlock;
@@ -1021,7 +1009,6 @@ class WalletIsar {
       WalletProfileEntitySchema,
       WalletSettingsEntitySchema,
       AdminGroupCacheEntitySchema,
-      ObservedAccountEntitySchema,
       LoginReplayEntitySchema,
       AppKvEntitySchema,
       InstitutionEntitySchema,
@@ -1043,7 +1030,16 @@ class WalletIsar {
       WalletTxSyncCursorEntitySchema,
     ];
     final isar = await Isar.open(schemas, name: 'citizenapp', directory: dir);
-    await WalletIsarMigration.ensureMigrated(isar);
+    final settings = await isar.walletSettingsEntitys.get(0);
+    if (settings == null) {
+      await isar.writeTxn(() async {
+        await isar.walletSettingsEntitys.put(
+          WalletSettingsEntity()
+            ..id = 0
+            ..updatedAtMillis = DateTime.now().millisecondsSinceEpoch,
+        );
+      });
+    }
     return isar;
   }
 
@@ -1173,86 +1169,5 @@ class WalletIsar {
       }
     }
     return null;
-  }
-}
-
-class WalletIsarMigration {
-  static const String _kSchemaVersion = 'wallet.data.schema.version';
-
-  /// 当前 schema 版本。开发阶段直接覆盖，不做增量迁移。
-  static const int currentSchemaVersion = 8;
-
-  static Future<void> ensureMigrated(Isar isar) async {
-    await _ensureSettingsRow(isar);
-    final version = await _schemaVersion(isar);
-    if (version >= currentSchemaVersion) {
-      return;
-    }
-    await isar.writeTxn(() async {
-      if (version < 3) {
-        // 三段交易状态上线前的本机流水可能已经把 best block
-        // 误标为 finalized，且 newHeads/finalized 去重规则不完整。旧记录
-        // 不作为账本真源，升级到 v3 时直接清空，从当前本机时刻重新记录。
-        await isar.localTxEntitys.clear();
-        await isar.walletTxSyncCursorEntitys.clear();
-      }
-      if (version < 4) {
-        // MultisigInstitutionEntity 改名为 InstitutionEntity（collection
-        // 名变更），旧 collection 数据仅为本地缓存，丢弃后由反向索引重新发现即可，
-        // 无需数据迁移。这里清空新 collection 兜底，避免新旧叠加出现脏数据。
-        await isar.institutionEntitys.clear();
-      }
-      if (version < 7) {
-        // ADR-021 行政区唯一真源:公权机构目录从「存行政区名字」
-        // 改为「只存 province/city/town code」，名字由 AdminDivisionEntity 字典
-        // join。公权目录是只读派生数据(无用户数据),旧 name-keyed 行直接清空,
-        // 首启从 assets 数据包(已带 code)全量重灌;字典表同步清空待 bundle 重灌。
-        await isar.publicInstitutionEntitys.clear();
-        await isar.adminDivisionEntitys.clear();
-      }
-      if (version < 8) {
-        // 2026-06-23:修复公权机构市卡片显示 001;`AdminDivisionEntity`
-        // 的 `divisionName`(市名)字段在 bf187d53「统一命名修复」才加入,该提交之前的
-        // build 灌进 Isar 的字典 divisionName 为空 → cityNameMap 查到空名 → 市名回退
-        // code(001)。而省版本游标(storedProvVers)判定"内容没变"会跳过重灌
-        // (ensureSynced reconciled=0),旧空名永久残留,覆盖安装不清 Isar 也救不了。
-        // 强制清空字典表:ensureSynced 见 divisionCount=0(hasData=false)即全量重灌带
-        // 市名的新数据。与 [[feedback-dto-field-rename-bump-cache-version]] 同根
-        // (改数据结构必 bump 强制刷新版本)。bundle 自身的省级 ver 增量仍照常工作。
-        await isar.adminDivisionEntitys.clear();
-      }
-      // schema version 以 key 为唯一真源；重复迁移时必须原地更新，
-      // 不能新建同 key 行，否则 Isar 唯一索引会报错。
-      final entity =
-          await isar.appKvEntitys.getByKey(_kSchemaVersion) ?? AppKvEntity();
-      entity
-        ..key = _kSchemaVersion
-        ..intValue = currentSchemaVersion
-        ..boolValue = null
-        ..stringValue = null;
-      await isar.appKvEntitys.put(entity);
-    });
-  }
-
-  static Future<int> _schemaVersion(Isar isar) async {
-    final row = await isar.appKvEntitys
-        .filter()
-        .keyEqualTo(_kSchemaVersion)
-        .findFirst();
-    return row?.intValue ?? 0;
-  }
-
-  static Future<void> _ensureSettingsRow(Isar isar) async {
-    final settings = await isar.walletSettingsEntitys.get(0);
-    if (settings != null) {
-      return;
-    }
-    await isar.writeTxn(() async {
-      await isar.walletSettingsEntitys.put(
-        WalletSettingsEntity()
-          ..id = 0
-          ..updatedAtMillis = DateTime.now().millisecondsSinceEpoch,
-      );
-    });
   }
 }

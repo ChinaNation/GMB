@@ -16,8 +16,10 @@ class _EmptyStore extends ChatStore {
 Widget _host({ChatSendTextCallback? onSendText}) => MaterialApp(
       home: ChatPage(
         conversationId: 'conv-emoji',
-        ownerAccount: 'alice-wallet',
-        peerUserId: 'bob-wallet',
+        accountId:
+            '0x1111111111111111111111111111111111111111111111111111111111111111',
+        peerUserId:
+            '0x2222222222222222222222222222222222222222222222222222222222222222',
         title: 'Bob',
         store: _EmptyStore(),
         onSync: () async => 0,

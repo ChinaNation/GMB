@@ -2,7 +2,7 @@
 //
 // 金标 fixture 由 Rust 切片导出(canonical 真源
 // citizenchain/runtime/primitives/tests/fixtures/account_derive_vectors.json
-// 的副本),逐条断言 Dart 镜像派生 == address_hex,防止 Dart 与链端漂移。
+// 的副本),逐条断言 Dart 镜像派生 == account_id,防止 Dart 与链端漂移。
 //
 // fixture 用 GMB 域生成,本测试证明 Dart 派生地址与链端逐字节一致。
 //
@@ -40,13 +40,13 @@ void main() {
 
     for (final v in vectors) {
       final kind = v['kind'] as String;
-      final expectedHex = v['address_hex'] as String;
+      final expectedHex = v['account_id'] as String;
       final label =
           v['account_name'] != null ? '$kind / ${v['account_name']}' : kind;
 
       test('$label → $expectedHex', () {
         final actual = _deriveForVector(v, ss58);
-        expect(hexFromAccountId(actual), expectedHex);
+        expect(accountIdText(actual), expectedHex);
       });
     }
   });
@@ -95,7 +95,7 @@ Uint8List _deriveForVector(Map<String, dynamic> v, int ss58) {
         ss58Prefix: ss58,
       );
     case 'Personal':
-      final creator = _hexToBytes(v['creator_hex'] as String);
+      final creator = _hexToBytes(v['creator_account_id'] as String);
       return deriveAccountId(
         opTag: kOpPersonal,
         payload: <int>[...creator, ...utf8.encode(v['account_name'] as String)],

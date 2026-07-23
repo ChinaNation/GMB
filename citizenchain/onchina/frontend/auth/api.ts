@@ -8,7 +8,7 @@ import type { InstitutionWorkspace } from '../workspace/types';
 
 export type AdminAuthCheck = {
   ok: boolean;
-  admin_account: string;
+  account_id: string;
   institution_cid_number: string;
   institution_code: string;
   admin_level?: string | null;
@@ -23,7 +23,7 @@ export type AdminAuthCheck = {
 };
 
 export type AdminIdentifyResult = {
-  admin_account: string;
+  account_id: string;
   institution_cid_number: string;
   institution_code: string;
   admin_level?: string | null;
@@ -37,16 +37,6 @@ export type AdminIdentifyResult = {
   cid_short_name?: string | null;
 };
 
-export type AdminChallengeResult = {
-  challenge_id: string;
-  challenge_payload: string;
-  origin: string;
-  domain: string;
-  session_id: string;
-  nonce: string;
-  expire_at: number;
-};
-
 export type AdminQrSignRequestResult = {
   challenge_id: string;
   challenge_payload: string;
@@ -54,7 +44,6 @@ export type AdminQrSignRequestResult = {
   origin: string;
   domain: string;
   session_id: string;
-  nonce: string;
   expire_at: number;
 };
 
@@ -79,7 +68,7 @@ export type AdminInstitutionCandidate = {
 
 export type NodeBindingRequired = {
   binding_challenge_id: string;
-  admin_account: string;
+  account_id: string;
   candidates: AdminInstitutionCandidate[];
 };
 
@@ -99,27 +88,8 @@ export type AdminQrLoginStatus = {
   admin?: AdminIdentifyResult;
 };
 
-export async function identifyAdmin(identityQr: string): Promise<AdminIdentifyResult> {
-  return request<AdminIdentifyResult>('/api/v1/admin/auth/identify', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ identity_qr: identityQr }),
-  });
-}
-
-export async function createAdminChallenge(input: {
-  admin_account: string;
-  origin: string;
-  session_id: string;
-}): Promise<AdminChallengeResult> {
-  return request<AdminChallengeResult>('/api/v1/admin/auth/challenge', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(input),
-  });
-}
-
 export async function createAdminQrSignRequest(input: {
+  identity_qr: string;
   origin: string;
   session_id: string;
 }): Promise<AdminQrSignRequestResult> {
@@ -143,8 +113,7 @@ export async function queryAdminQrLoginResult(
 export async function completeAdminQrLogin(input: {
   challenge_id: string;
   session_id?: string;
-  admin_account: string;
-  signer_pubkey?: string;
+  signer_public_key: string;
   signature: string;
 }): Promise<AdminLoginCompleteResult> {
   return request<AdminLoginCompleteResult>('/api/v1/admin/auth/qr/complete', {
@@ -159,21 +128,6 @@ export async function confirmNodeBinding(input: {
   candidate_id: string;
 }): Promise<AdminVerifyResult> {
   return request<AdminVerifyResult>('/api/v1/admin/auth/node-binding/confirm', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(input),
-  });
-}
-
-export async function verifyAdminChallenge(input: {
-  challenge_id: string;
-  origin: string;
-  domain: string;
-  session_id: string;
-  nonce: string;
-  signature: string;
-}): Promise<AdminVerifyResult> {
-  return request<AdminVerifyResult>('/api/v1/admin/auth/verify', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),

@@ -6,9 +6,9 @@
 const String _transferSelector = 'a9059cbb';
 
 /// 构造 ERC-20 transfer 的 0x calldata。
-/// [toAddress] 收款 EVM 地址(0x+40hex);[amount] 稳定币最小单位数额。
-String encodeErc20Transfer(String toAddress, BigInt amount) {
-  final to = toAddress.trim().toLowerCase().replaceFirst('0x', '');
+/// [toEvmAddress] 收款 EVM 地址（0x + 40 位 hex）；[amount] 为稳定币最小单位数额。
+String encodeErc20Transfer(String toEvmAddress, BigInt amount) {
+  final to = toEvmAddress.trim().toLowerCase().replaceFirst('0x', '');
   if (!RegExp(r'^[0-9a-f]{40}$').hasMatch(to)) {
     throw ArgumentError('收款地址不是合法 EVM 地址');
   }

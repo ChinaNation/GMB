@@ -326,6 +326,7 @@ pub fn admins_vec(count: u8) -> pallet::AdminsOf<Test> {
 pub fn admin_record(account_id: AccountId32) -> admin_primitives::Admin<AccountId32> {
     admin_primitives::Admin {
         account_id,
+        cid_number: Default::default(),
         family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
         given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
     }

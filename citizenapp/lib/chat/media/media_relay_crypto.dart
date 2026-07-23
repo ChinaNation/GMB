@@ -121,8 +121,8 @@ class MediaRelayCrypto {
         if (header.length < _frameHeaderBytes) {
           throw const FormatException('中转密文帧头截断');
         }
-        final frameLen =
-            ByteData.sublistView(Uint8List.fromList(header)).getUint32(0, Endian.big);
+        final frameLen = ByteData.sublistView(Uint8List.fromList(header))
+            .getUint32(0, Endian.big);
         await source.setPosition(pos + _frameHeaderBytes);
         final frame = await source.read(frameLen);
         if (frame.length < frameLen) {

@@ -34,21 +34,21 @@ interface PlatformConfirmBody {
 export interface PlatformSubscriptionConfirmDeps {
   verifyTransaction: (
     env: Env,
-    ownerAccount: string,
+    accountId: string,
     expectedAction: SubscriptionBusinessAction,
     proof: FinalizedTransactionProofInput,
   ) => Promise<VerifiedFinalizedTransaction>;
   readSubscriptionAtBlock: (
     env: Env,
-    ownerAccount: string,
+    accountId: string,
     blockHash: string,
   ) => Promise<ChainSubscriptionState | null>;
 }
 
 const defaultConfirmDeps: PlatformSubscriptionConfirmDeps = {
   verifyTransaction: verifyFinalizedSubscriptionTransaction,
-  readSubscriptionAtBlock: (env, ownerAccount, blockHash) =>
-    readSubscriptionAtBlock(env, ownerAccount, { kind: "platform" }, blockHash),
+  readSubscriptionAtBlock: (env, accountId, blockHash) =>
+    readSubscriptionAtBlock(env, accountId, { kind: "platform" }, blockHash),
 };
 
 /** POST /v1/square/membership/confirm —— finalized 平台订阅镜像（严格幂等）。 */
@@ -66,13 +66,13 @@ export async function platformSubscriptionConfirmRoute(
   const proof = transactionProof(body);
   const transaction = await deps.verifyTransaction(
     env,
-    session.owner_account,
+    session.account_id,
     expectedAction,
     proof,
   );
   const state = await deps.readSubscriptionAtBlock(
     env,
-    session.owner_account,
+    session.account_id,
     transaction.blockHash,
   );
   assertPlatformStateMatches(state, action, membershipLevel);
@@ -83,7 +83,7 @@ export async function platformSubscriptionConfirmRoute(
   );
   await bindFinalizedTransactionConfirmation(
     env,
-    session.owner_account,
+    session.account_id,
     transaction,
     requestHash,
     confirmedAt,
@@ -94,7 +94,7 @@ export async function platformSubscriptionConfirmRoute(
     blockHash: transaction.blockHash,
     observedAt: confirmedAt,
   });
-  await mirrorPlatformState(env, session.owner_account, state!, transaction, confirmedAt);
+  await mirrorPlatformState(env, session.account_id, state!, transaction, confirmedAt);
   return jsonResponse({
     ok: true,
     subscription_status: state!.status,
@@ -159,7 +159,7 @@ function assertPlatformStateMatches(
 
 async function mirrorPlatformState(
   env: Env,
-  ownerAccount: string,
+  accountId: string,
   state: ChainSubscriptionState,
   transaction: VerifiedFinalizedTransaction,
   verifiedAt: number,
@@ -171,12 +171,12 @@ async function mirrorPlatformState(
   const entitlementLapsedAt = state.status === "active" ? null : state.paidUntil;
   await env.DB.prepare(
     `INSERT INTO square_memberships
-      (owner_account, membership_level, started_at,
+      (account_id, membership_level, started_at,
        last_charged_at, last_charged_price_fen, paid_until, subscription_status,
        finalized_block_number, finalized_block_hash, verified_at,
        entitlement_lapsed_at, last_tx_hash)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(owner_account) DO UPDATE SET
+      ON CONFLICT(account_id) DO UPDATE SET
         membership_level = excluded.membership_level,
         started_at = excluded.started_at,
         last_charged_at = excluded.last_charged_at,
@@ -191,7 +191,7 @@ async function mirrorPlatformState(
       WHERE excluded.finalized_block_number >= square_memberships.finalized_block_number`,
   )
     .bind(
-      ownerAccount,
+      accountId,
       state.plan.membershipLevel,
       state.startedAt,
       state.lastChargedAt,

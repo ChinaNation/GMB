@@ -1,7 +1,7 @@
 # QR_V1 统一二维码协议规范
 
 - 版本:`QR_V1`
-- 更新日期:2026-07-19
+- 更新日期:2026-07-23
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
 - 范围:全仓库所有“生成二维码 -> 扫码识别 -> 签名/确认 -> 签名响应验签”的二维码流程
 
@@ -11,7 +11,7 @@
 2. 唯一 envelope 字段:`p/k/i/e/b`。不得恢复 `proto/kind/id/issued_at/expires_at/body` 作为线上 QR 字段。
 3. 唯一签名请求字段:`a/g/u/d`。业务场景放在 `a`,扫码流向放在 `k`。
 4. 唯一签名响应字段:`u/s`。签名响应不携带 payload、payload hash、签名时间或展示字段。
-5. 唯一验签真源:生成方按 `i` 找回本地 session 中的 action、payload、公钥和过期时间后验签。
+5. 唯一验签真源:生成方按 `i` 找回本地 session 中的 action、payload、`signer_public_key` 和过期时间后验签。
 6. 唯一展示真源:扫码端必须由 `a + d(review_payload)` 本地解码展示;QR 不携带 `display`、`summary`、`fields`。
 7. 固定码不出现时效字段:`i/e` 直接不存在,不是 `null`、`0` 或空串。
 8. 不兼容旧字段。解析器遇到旧字段、别名字段、未知字段必须报错。
@@ -74,7 +74,7 @@
 |---|---|---|---|
 | `a` | int | 是 | 业务动作码,见 `qr-action-registry.md` |
 | `g` | int | 是 | 签名算法码,当前只允许 `1 = sr25519` |
-| `u` | string | 是 | 期望签名者 32 字节公钥,base64url 无填充 |
+| `u` | string | 是 | 压缩传输键；内部唯一语义名为 `signer_public_key`，值是期望签名者 32 字节公钥的 base64url 无填充编码 |
 | `d` | string | 是 | `review_payload` 原始字节,base64url 无填充;除 Runtime 升级 hash-only 外,必须可被扫码端完整解码和中文展示 |
 
 `review_payload` 与签名字节必须分离:
@@ -94,6 +94,12 @@
 | OnChina 管理员治理文本载荷 | `a = 3` | 签 payload 原文 |
 | 管理员激活 / 解密 | `a = 5/6` | 签二进制 payload 原文 |
 | Runtime 升级哈希签名 | `a = 7` 或已登记 RuntimeUpgrade hash-only action | `d` 允许是 32B signing bytes,签该 32B;这是 QR_V1 唯一 hash-only 例外 |
+
+OnChina 登录生成 `a=1` 前必须先扫描完整 `k=3 user_contact` 用户码，从
+`b.ss58_address` 派生唯一目标 `account_id` 并通过链上管理员前置校验。随后 `k=1`
+请求的 `b.u` 必须编码该账户的 32 字节公钥，`b.d` 固定为 UTF-8 `onchina`；不得生成
+空 `b.u`，不得允许扫码钱包自行选择其它账户。登录响应仍使用 `k=2`，其 `b.u` 必须与
+请求目标和数据库目标账户一致。
 
 链交易生成方不得手写拼接 `call_data/era/nonce/tip/additional_signed` 或 signed extrinsic。citizenchain node、CitizenApp 热钱包、OnChina 和其它链交易生成方必须统一使用当前 runtime 类型构造 `TxExtension`、`SignedPayload` 和 `UncheckedExtrinsic`；QR `b.d` 放入完整 `review_payload`，实际签名输入单独按 `SignedPayload::using_encoded` 计算。
 
@@ -116,7 +122,7 @@
 
 | 字段 | 类型 | 必填 | 注释 |
 |---|---|---|---|
-| `u` | string | 是 | 实际签名者 32 字节公钥,base64url 无填充 |
+| `u` | string | 是 | 压缩传输键；内部唯一语义名为 `signer_public_key`，值是实际签名者 32 字节公钥的 base64url 无填充编码 |
 | `s` | string | 是 | 64 字节 sr25519 签名,base64url 无填充 |
 
 生成方验签必须使用本地 session:
@@ -125,7 +131,7 @@
 2. `k == 2`
 3. `i == 本地请求 id`
 4. `e` 未过期
-5. `b.u == 本地 expected pubkey`
+5. `b.u == 本地 expected signer_public_key`
 6. 按本地 session 重新计算 payload hash,必须等于生成请求时保存的 `expected_payload_hash`
 7. 按本地 session 的 `a + payload` 计算签名字节后验证 `b.s`
 
@@ -140,7 +146,7 @@
   "p": "QR_V1",
   "k": 3,
   "b": {
-    "address": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+    "ss58_address": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
     "contact_name": "张三"
   }
 }
@@ -148,7 +154,7 @@
 
 | 字段 | 类型 | 必填 | 注释 |
 |---|---|---|---|
-| `address` | string | 是 | SS58 钱包地址 |
+| `ss58_address` | string | 是 | 仅用于展示和扫码输入的 SS58 地址，不作为授权主键 |
 | `contact_name` | string | 是 | 联系人名,允许空串仅在 UI 层兜底 |
 
 ## 7. k=4 user_transfer
@@ -162,7 +168,7 @@
   "i": "pay_01HXYZ4VQK8NRPM2G7FJD9TBC3",
   "e": 1780000000,
   "b": {
-    "address": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+    "ss58_address": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
     "recipient_name": "张三",
     "amount": "100.50",
     "symbol": "GMB",
@@ -174,7 +180,7 @@
 
 | 字段 | 类型 | 必填 | 注释 |
 |---|---|---|---|
-| `address` | string | 是 | 收款方 SS58 钱包地址 |
+| `ss58_address` | string | 是 | 收款方 SS58 展示地址，不作为授权主键 |
 | `recipient_name` | string | 是 | 收款方显示名,允许空串 |
 | `amount` | string | 是 | 建议金额,字符串避免浮点精度,空串表示付款方输入 |
 | `symbol` | string | 是 | 币种,当前 `GMB` |

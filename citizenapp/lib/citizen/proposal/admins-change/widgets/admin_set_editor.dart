@@ -92,7 +92,7 @@ class _AdminSetEditorState extends State<AdminSetEditor> {
             children: [
               Text('${index + 1}'),
               const SizedBox(width: 8),
-              Expanded(child: Text(ss58FromHex(admin.admin_account))),
+              Expanded(child: Text(ss58FromAccountIdText(admin.account_id))),
               IconButton(
                 padding: EdgeInsets.zero,
                 tooltip: '移除',
@@ -105,14 +105,14 @@ class _AdminSetEditorState extends State<AdminSetEditor> {
             ],
           ),
           Text(
-            '余额：${AmountFormat.formatThousands(widget.balances[AdminAccountIdCodec.normalizeHex(admin.admin_account)])} 元',
+            '余额：${AmountFormat.formatThousands(widget.balances[AdminAccountIdCodec.requireAccountId(admin.account_id)])} 元',
           ),
           const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
                 child: TextFormField(
-                  key: ValueKey('${admin.admin_account}-$index-family'),
+                  key: ValueKey('${admin.account_id}-$index-family'),
                   initialValue: admin.family_name,
                   decoration: const InputDecoration(labelText: '姓'),
                   onChanged: (value) => _updateName(
@@ -124,7 +124,7 @@ class _AdminSetEditorState extends State<AdminSetEditor> {
               const SizedBox(width: 8),
               Expanded(
                 child: TextFormField(
-                  key: ValueKey('${admin.admin_account}-$index-given'),
+                  key: ValueKey('${admin.account_id}-$index-given'),
                   initialValue: admin.given_name,
                   decoration: const InputDecoration(labelText: '名'),
                   onChanged: (value) => _updateName(
@@ -148,15 +148,15 @@ class _AdminSetEditorState extends State<AdminSetEditor> {
   }
 
   void _add() {
-    final clean = AdminAccountIdCodec.normalizeHex(_accountController.text);
+    final clean = AdminAccountIdCodec.requireAccountId(_accountController.text);
     if (clean.length != 64 ||
-        widget.admins.any((admin) => admin.admin_account == clean)) {
+        widget.admins.any((admin) => admin.account_id == clean)) {
       return;
     }
     widget.onChanged([
       ...widget.admins,
       AdminPerson(
-        admin_account: clean,
+        account_id: clean,
         family_name: _familyNameController.text.trim().isEmpty
             ? '管理'
             : _familyNameController.text.trim(),

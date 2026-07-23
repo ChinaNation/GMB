@@ -13,7 +13,7 @@ class GroupManagePage extends StatefulWidget {
     required this.groupId,
     this.runtime,
     this.store,
-    this.ownerAccount,
+    this.accountId,
   });
 
   final String groupId;
@@ -21,7 +21,7 @@ class GroupManagePage extends StatefulWidget {
   final ChatStore? store;
 
   /// 本机账户;测试可注入以设定"我是谁"验 admin 门控。生产为 null → 取默认钱包。
-  final String? ownerAccount;
+  final String? accountId;
 
   @override
   State<GroupManagePage> createState() => _GroupManagePageState();
@@ -45,8 +45,8 @@ class _GroupManagePageState extends State<GroupManagePage> {
 
   Future<void> _load() async {
     try {
-      final me = widget.ownerAccount ??
-          (await WalletManager().getDefaultWallet())?.address ??
+      final me = widget.accountId ??
+          (await WalletManager().getDefaultWallet())?.accountId ??
           '';
       final group = await _store.readGroup(widget.groupId);
       if (!mounted) return;
@@ -106,13 +106,13 @@ class _GroupManagePageState extends State<GroupManagePage> {
       ),
     );
     if (name != null && name.isNotEmpty) {
-      await _run(() =>
-          _runtime.renameGroup(groupId: widget.groupId, name: name));
+      await _run(
+          () => _runtime.renameGroup(groupId: widget.groupId, name: name));
     }
   }
 
   Future<void> _addMembers() async {
-    final existing = _group?.memberAccounts.toSet() ?? <String>{};
+    final existing = _group?.memberAccountIds.toSet() ?? <String>{};
     final selected = await _pickContacts(existing);
     if (selected != null && selected.isNotEmpty) {
       await _run(() => _runtime.addGroupMembers(
@@ -154,7 +154,7 @@ class _GroupManagePageState extends State<GroupManagePage> {
       contacts = const <UserContact>[];
     }
     final selectable =
-        contacts.where((c) => !exclude.contains(c.address)).toList();
+        contacts.where((c) => !exclude.contains(c.accountId)).toList();
     if (!mounted) return null;
     final chosen = <String>{};
     return showDialog<List<String>>(
@@ -171,17 +171,17 @@ class _GroupManagePageState extends State<GroupManagePage> {
                     children: [
                       for (final contact in selectable)
                         CheckboxListTile(
-                          value: chosen.contains(contact.address),
+                          value: chosen.contains(contact.accountId),
                           onChanged: (value) => setLocal(() {
                             if (value ?? false) {
-                              chosen.add(contact.address);
+                              chosen.add(contact.accountId);
                             } else {
-                              chosen.remove(contact.address);
+                              chosen.remove(contact.accountId);
                             }
                           }),
                           title: Text(
                             contact.contactName.isEmpty
-                                ? _short(contact.address)
+                                ? _short(contact.accountId)
                                 : contact.contactName,
                           ),
                         ),
@@ -257,30 +257,31 @@ class _GroupManagePageState extends State<GroupManagePage> {
                             ListTile(
                               leading: CircleAvatar(
                                 child: Text(
-                                  member.account.isEmpty
+                                  member.accountId.isEmpty
                                       ? '?'
-                                      : member.account.substring(0, 1),
+                                      : member.accountId.substring(0, 1),
                                 ),
                               ),
-                              title: Text(_short(member.account)),
+                              title: Text(_short(member.accountId)),
                               subtitle:
                                   member.isAdmin ? const Text('管理员') : null,
                               trailing: (_isAdmin &&
-                                      member.account != _myAccount &&
-                                      member.account != group.creatorAccount)
+                                      member.accountId != _myAccount &&
+                                      member.accountId !=
+                                          group.creatorAccountId)
                                   ? IconButton(
                                       tooltip: '移除',
                                       icon: const Icon(
                                           Icons.remove_circle_outline),
                                       onPressed: _busy
                                           ? null
-                                          : () => _run(() =>
-                                              _runtime.removeGroupMembers(
-                                                groupId: widget.groupId,
-                                                targetAccounts: [
-                                                  member.account
-                                                ],
-                                              )),
+                                          : () => _run(
+                                              () => _runtime.removeGroupMembers(
+                                                    groupId: widget.groupId,
+                                                    targetAccounts: [
+                                                      member.accountId
+                                                    ],
+                                                  )),
                                     )
                                   : null,
                             ),

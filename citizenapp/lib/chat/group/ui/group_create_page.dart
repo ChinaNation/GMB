@@ -57,8 +57,9 @@ class _GroupCreatePageState extends State<GroupCreatePage> {
     }
   }
 
+  /// 发群聊最少 2 人(1 人应走「发私信」),群名非空方可创建。
   bool get _canCreate =>
-      _nameController.text.trim().isNotEmpty && _selected.isNotEmpty;
+      _nameController.text.trim().isNotEmpty && _selected.length >= 2;
 
   Future<void> _create() async {
     if (!_canCreate || _creating) return;
@@ -125,7 +126,12 @@ class _GroupCreatePageState extends State<GroupCreatePage> {
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                       const Spacer(),
-                      Text('已选 ${_selected.length}'),
+                      // 未满 2 人时提示门槛,满足后只显示已选人数。
+                      Text(
+                        _selected.length < 2
+                            ? '已选 ${_selected.length}·至少 2 人'
+                            : '已选 ${_selected.length}',
+                      ),
                     ],
                   ),
                 ),
@@ -134,7 +140,8 @@ class _GroupCreatePageState extends State<GroupCreatePage> {
                     padding: const EdgeInsets.all(16),
                     child: Text(
                       _error!,
-                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                      style:
+                          TextStyle(color: Theme.of(context).colorScheme.error),
                     ),
                   ),
                 Expanded(
@@ -144,23 +151,24 @@ class _GroupCreatePageState extends State<GroupCreatePage> {
                           itemCount: _contacts.length,
                           itemBuilder: (context, index) {
                             final contact = _contacts[index];
-                            final checked = _selected.contains(contact.address);
+                            final checked =
+                                _selected.contains(contact.accountId);
                             return CheckboxListTile(
                               value: checked,
                               onChanged: (value) => setState(() {
                                 if (value ?? false) {
-                                  _selected.add(contact.address);
+                                  _selected.add(contact.accountId);
                                 } else {
-                                  _selected.remove(contact.address);
+                                  _selected.remove(contact.accountId);
                                 }
                               }),
                               title: Text(
                                 contact.contactName.isEmpty
-                                    ? _short(contact.address)
+                                    ? _short(contact.accountId)
                                     : contact.contactName,
                               ),
                               subtitle: Text(
-                                _short(contact.address),
+                                _short(contact.accountId),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),

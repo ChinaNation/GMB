@@ -78,7 +78,7 @@ function adminListCacheKey(
     'cid:admin-list',
     ADMIN_LIST_CACHE_VERSION,
     kind,
-    auth.admin_account,
+    auth.account_id,
     auth.institution_code,
     normalizeScopeProvinceName(auth.scope_province_name) || 'NO_PROVINCE_SCOPE',
     auth.scope_city_name || 'NO_CITY_SCOPE',
@@ -150,7 +150,7 @@ export function OwnInstitutionAdminsView({ layout = 'table' }: OwnInstitutionAdm
   }, [auth?.access_token]);
 
   const passkeyAction = (row: OwnInstitutionAdminRow) => {
-    const isSelf = row.is_self || sameHexAccount(row.admin_account, auth?.admin_account);
+    const isSelf = row.is_self || sameHexAccount(row.account_id, auth?.account_id);
     if (!isSelf) return null;
     const button = (
       <Button size="small" icon={<KeyOutlined />} loading={passkeyBusy} onClick={doRegisterPasskey}>
@@ -190,7 +190,7 @@ export function OwnInstitutionAdminsView({ layout = 'table' }: OwnInstitutionAdm
             >
               {rows.map((row, index) => (
                 <InstitutionAssignmentCard
-                  key={row.admin_account}
+                  key={row.account_id}
                   assignment={row}
                   index={index + 1}
                   action={passkeyAction(row)}
@@ -202,7 +202,7 @@ export function OwnInstitutionAdminsView({ layout = 'table' }: OwnInstitutionAdm
         </Spin>
       ) : (
         <Table<OwnInstitutionAdminRow>
-          rowKey={(row) => row.admin_account}
+          rowKey={(row) => row.account_id}
           loading={loading}
           dataSource={rows}
           pagination={false}
@@ -368,11 +368,11 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
       if (!selectedFederalRegistry) {
         let target: FederalRegistryAdminRow | null = null;
         if (isTier1Registry(auth.institution_code)) {
-          target = rows.find((r) => sameHexAccount(r.admin_account, auth.admin_account)) || null;
+          target = rows.find((r) => sameHexAccount(r.account_id, auth.account_id)) || null;
         } else if (isSubordinateRegistry(auth.institution_code)) {
-          const me = ops.find((o) => sameHexAccount(o.admin_account, auth.admin_account));
+          const me = ops.find((o) => sameHexAccount(o.account_id, auth.account_id));
           if (me) {
-            target = rows.find((r) => sameHexAccount(r.admin_account, me.created_by)) || null;
+            target = rows.find((r) => sameHexAccount(r.account_id, me.creator_account_id)) || null;
           }
         }
         if (!cancelled && target) setSelectedFederalRegistry(target);
@@ -401,7 +401,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
       return;
     }
     const selectedKey = selectedFederalRegistry
-      ? `${selectedFederalRegistry.province_name}:${selectedFederalRegistry.admin_account}`
+      ? `${selectedFederalRegistry.province_name}:${selectedFederalRegistry.account_id}`
       : `${provinceForCities}:auth-scope`;
     const isRealProvinceSwitch = lastSelectedFederalRegistryKey.current !== null
       && lastSelectedFederalRegistryKey.current !== selectedKey;
@@ -435,7 +435,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedFederalRegistry?.admin_account, auth?.access_token, auth?.scope_province_name]);
+  }, [selectedFederalRegistry?.account_id, auth?.access_token, auth?.scope_province_name]);
 
   // ── 联邦注册局机构详情:进入联邦注册局 tab 时加载一次(scope-bypass) ──
   useEffect(() => {
@@ -503,12 +503,12 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
       if (signed.challenge_id !== adminActionModal.actionId) {
         throw new Error('签名响应与当前请求不匹配');
       }
-      if (!signed.signer_pubkey) {
-        throw new Error('签名响应缺少 signer_pubkey');
+      if (!signed.signer_public_key) {
+        throw new Error('签名响应缺少 signer_public_key');
       }
       const result = await commitAdminAction(auth, {
         action_id: adminActionModal.actionId,
-        signer_pubkey: signed.signer_pubkey,
+        signer_public_key: signed.signer_public_key,
         signature: signed.signature,
         payload_hash: adminActionModal.payloadHash,
       });
@@ -547,9 +547,9 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
       notice.error(`本市市注册局管理员已满 ${MAX_CITY_REGISTRY_ADMINS_PER_CITY} 人，不能继续新增`);
       return;
     }
-    let admin_account: string;
+    let account_id: string;
     try {
-      admin_account = decodeSs58(inputAddr);
+      account_id = decodeSs58(inputAddr);
     } catch (err) {
       notice.error(err, '');
       return;
@@ -557,7 +557,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
     setAddCityRegistryLoading(true);
     try {
       const created = await runSecuredAction<CityRegistryAdminRow>('CREATE_SUBORDINATE_REGISTRY', {
-        admin_account,
+        account_id,
         family_name,
         given_name,
         city_name: city,
@@ -566,7 +566,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
       addCityRegistryForm.resetFields();
       setAddCityRegistryOpen(false);
       setCityRegistryAdmins((prev) => {
-        const rest = prev.filter((item) => item.admin_account !== created.admin_account);
+        const rest = prev.filter((item) => item.account_id !== created.account_id);
         return [created, ...rest];
       });
       await refreshCityRegistryAdmins();

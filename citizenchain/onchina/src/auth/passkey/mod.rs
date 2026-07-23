@@ -30,7 +30,7 @@ const ASSERTION_TTL_SECONDS: i64 = 120;
 /// X-Passkey-Assertion 头:携一次性断言令牌,Passkey / PasskeyColdSign 档提交时消费。
 pub(crate) const PASSKEY_ASSERTION_HEADER: &str = "x-passkey-assertion";
 
-/// 管理员 passkey user handle 的 uuid v5 命名空间(由 admin_account 稳定派生,不入库)。
+/// 管理员 passkey user handle 的 uuid v5 命名空间(由 account_id 稳定派生,不入库)。
 const PASSKEY_USER_NS: Uuid = Uuid::from_bytes([
     0x6f, 0x6e, 0x63, 0x68, 0x69, 0x6e, 0x61, 0x70, 0x61, 0x73, 0x6b, 0x65, 0x79, 0x75, 0x69, 0x64,
 ]);
@@ -54,8 +54,8 @@ fn build_webauthn() -> Result<Webauthn, String> {
     build_webauthn_from(rp_id.trim(), origin.trim())
 }
 
-fn admin_user_uuid(admin_account: &str) -> Uuid {
-    Uuid::new_v5(&PASSKEY_USER_NS, admin_account.to_lowercase().as_bytes())
+fn admin_user_uuid(account_id: &str) -> Uuid {
+    Uuid::new_v5(&PASSKEY_USER_NS, account_id.as_bytes())
 }
 
 #[derive(Serialize)]
@@ -126,12 +126,12 @@ pub(crate) async fn register_begin(
             return passkey_config_error();
         }
     };
-    let admin_account = ctx.admin_account.clone();
-    let user_uuid = admin_user_uuid(&admin_account);
+    let account_id = ctx.account_id.clone();
+    let user_uuid = admin_user_uuid(&account_id);
     let now = Utc::now();
     let result = state.db.with_client(move |conn| {
         store::cleanup_passkey_state_conn(conn, now)?;
-        let existing = store::list_credentials_for_admin_conn(conn, admin_account.as_str())?;
+        let existing = store::list_credentials_for_admin_conn(conn, account_id.as_str())?;
         let exclude = existing
             .iter()
             .map(|p| p.cred_id().clone())
@@ -139,8 +139,8 @@ pub(crate) async fn register_begin(
         let (ccr, reg_state) = webauthn
             .start_passkey_registration(
                 user_uuid,
-                admin_account.as_str(),
-                admin_account.as_str(),
+                account_id.as_str(),
+                account_id.as_str(),
                 if exclude.is_empty() {
                     None
                 } else {
@@ -154,7 +154,7 @@ pub(crate) async fn register_begin(
         store::insert_ceremony_conn(
             conn,
             ceremony_id.as_str(),
-            admin_account.as_str(),
+            account_id.as_str(),
             "REG",
             &state_json,
             now + Duration::seconds(CEREMONY_TTL_SECONDS),
@@ -192,13 +192,13 @@ pub(crate) async fn register_finish(
             return passkey_config_error();
         }
     };
-    let admin_account = ctx.admin_account.clone();
+    let account_id = ctx.account_id.clone();
     let now = Utc::now();
     let result = state.db.with_client(move |conn| {
         let Some(state_json) = store::take_ceremony_conn(
             conn,
             input.ceremony_id.as_str(),
-            admin_account.as_str(),
+            account_id.as_str(),
             "REG",
             now,
         )?
@@ -211,12 +211,7 @@ pub(crate) async fn register_finish(
             .finish_passkey_registration(&input.credential, &reg_state)
             .map_err(|e| format!("http:bad_request:passkey registration verify failed: {e}"))?;
         let credential_id = hex::encode(passkey.cred_id().as_ref());
-        store::insert_credential_conn(
-            conn,
-            credential_id.as_str(),
-            admin_account.as_str(),
-            &passkey,
-        )?;
+        store::insert_credential_conn(conn, credential_id.as_str(), account_id.as_str(), &passkey)?;
         Ok(())
     });
     match result {
@@ -246,11 +241,11 @@ pub(crate) async fn assert_begin(
             return passkey_config_error();
         }
     };
-    let admin_account = ctx.admin_account.clone();
+    let account_id = ctx.account_id.clone();
     let now = Utc::now();
     let result = state.db.with_client(move |conn| {
         store::cleanup_passkey_state_conn(conn, now)?;
-        let passkeys = store::list_credentials_for_admin_conn(conn, admin_account.as_str())?;
+        let passkeys = store::list_credentials_for_admin_conn(conn, account_id.as_str())?;
         if passkeys.is_empty() {
             return Err("http:forbidden:no passkey registered".to_string());
         }
@@ -263,7 +258,7 @@ pub(crate) async fn assert_begin(
         store::insert_ceremony_conn(
             conn,
             ceremony_id.as_str(),
-            admin_account.as_str(),
+            account_id.as_str(),
             "AUTH",
             &state_json,
             now + Duration::seconds(CEREMONY_TTL_SECONDS),
@@ -301,13 +296,13 @@ pub(crate) async fn assert_finish(
             return passkey_config_error();
         }
     };
-    let admin_account = ctx.admin_account.clone();
+    let account_id = ctx.account_id.clone();
     let now = Utc::now();
     let result = state.db.with_client(move |conn| {
         let Some(state_json) = store::take_ceremony_conn(
             conn,
             input.ceremony_id.as_str(),
-            admin_account.as_str(),
+            account_id.as_str(),
             "AUTH",
             now,
         )?
@@ -321,8 +316,7 @@ pub(crate) async fn assert_finish(
             .map_err(|e| format!("http:forbidden:passkey authentication verify failed: {e}"))?;
         // counter 递增 / backup 状态变化时回写匹配凭证(webauthn-rs 已做 counter 回退安全校验)。
         if auth_result.needs_update() {
-            let mut passkeys =
-                store::list_credentials_for_admin_conn(conn, admin_account.as_str())?;
+            let mut passkeys = store::list_credentials_for_admin_conn(conn, account_id.as_str())?;
             for passkey in passkeys.iter_mut() {
                 if passkey.update_credential(&auth_result) == Some(true) {
                     let credential_id = hex::encode(passkey.cred_id().as_ref());
@@ -332,12 +326,7 @@ pub(crate) async fn assert_finish(
         }
         let assertion_id = format!("pk-assert-{}", Uuid::new_v4());
         let expire_at = now + Duration::seconds(ASSERTION_TTL_SECONDS);
-        store::insert_assertion_conn(
-            conn,
-            assertion_id.as_str(),
-            admin_account.as_str(),
-            expire_at,
-        )?;
+        store::insert_assertion_conn(conn, assertion_id.as_str(), account_id.as_str(), expire_at)?;
         Ok((assertion_id, expire_at.timestamp()))
     });
     match result {
@@ -363,10 +352,10 @@ pub(crate) async fn passkey_status(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let admin_account = ctx.admin_account.clone();
+    let account_id = ctx.account_id.clone();
     let result = state
         .db
-        .with_client(move |conn| store::admin_has_credential_conn(conn, admin_account.as_str()));
+        .with_client(move |conn| store::admin_has_credential_conn(conn, account_id.as_str()));
     match result {
         Ok(registered) => Json(ApiResponse {
             code: 0,
@@ -387,7 +376,7 @@ pub(crate) async fn passkey_status(
 pub(crate) fn require_passkey_assertion(
     state: &AppState,
     headers: &HeaderMap,
-    admin_account: &str,
+    account_id: &str,
 ) -> Result<(), Response> {
     // RP 未配置(部署缺 env / 非安全上下文)→ 直接拒,不放行。
     if let Err(err) = build_webauthn() {
@@ -401,12 +390,12 @@ pub(crate) fn require_passkey_assertion(
         .filter(|v| !v.is_empty())
         .ok_or_else(|| api_error(StatusCode::FORBIDDEN, 2003, "passkey assertion required"))?
         .to_string();
-    let admin_account = admin_account.to_string();
+    let account_id = account_id.to_string();
     let now = Utc::now();
     let consumed = state
         .db
         .with_client(move |conn| {
-            store::consume_assertion_conn(conn, assertion_id.as_str(), admin_account.as_str(), now)
+            store::consume_assertion_conn(conn, assertion_id.as_str(), account_id.as_str(), now)
         })
         .map_err(|err| {
             let message = format!("passkey assertion check failed: {err}");
@@ -427,11 +416,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn admin_user_uuid_is_stable_and_case_insensitive() {
-        let a = admin_user_uuid("0xABCD");
-        let b = admin_user_uuid("0xabcd");
-        assert_eq!(a, b, "user handle 必须大小写无关稳定");
-        let c = admin_user_uuid("0xbeef");
+    fn admin_user_uuid_is_stable_for_canonical_account_id() {
+        let account_id = "0x1111111111111111111111111111111111111111111111111111111111111111";
+        let a = admin_user_uuid(account_id);
+        let b = admin_user_uuid(account_id);
+        assert_eq!(a, b, "相同规范账户 ID 的 user handle 必须稳定");
+        let c =
+            admin_user_uuid("0x2222222222222222222222222222222222222222222222222222222222222222");
         assert_ne!(a, c, "不同账户 user handle 必须不同");
     }
 

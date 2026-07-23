@@ -63,6 +63,7 @@ void main() {
   }) =>
       [
         ...account,
+        0, // 空公民 CID（统一 Admin 恒带 cid，Compact(0)）
         ...compactVec(familyName),
         ...compactVec(givenName),
       ];
@@ -73,7 +74,7 @@ void main() {
     String givenName = '员',
   }) =>
       AdminPerson(
-        admin_account: hexOf(account),
+        account_id: '0x${hexOf(account)}',
         family_name: familyName,
         given_name: givenName,
       );
@@ -199,7 +200,7 @@ void main() {
       expect(decoded, isA<CreateProposalInfo>());
       final info = decoded as CreateProposalInfo;
       expect(info.proposalId, 7);
-      expect(info.account, '33' * 32);
+      expect(info.accountId, '0x${'33' * 32}');
       expect(info.amountFen, BigInt.from(111));
       expect(info.feeFen, BigInt.from(10));
     });
@@ -207,15 +208,15 @@ void main() {
     test('fetchPersonalAccount reads PersonalManage current storage', () async {
       final rpc = FakeChainRpc();
       final service = PersonalManageService(chainRpc: rpc);
-      final address = '22' * 32;
+      final accountId = '0x${'22' * 32}';
       final personalKey =
-          '0x${hexOf(PersonalManageStorageCodec.personalAccountsKey(address))}';
+          '0x${hexOf(PersonalManageStorageCodec.personalAccountsKey(accountId))}';
       final adminKey = '0x${hexOf(PersonalManageStorageCodec.adminAccountKey(
-        PersonalManageStorageCodec.accountIdFromAccountHex(address),
+        PersonalManageStorageCodec.accountIdBytes(accountId),
       ))}';
       final thresholdKey =
           '0x${hexOf(PersonalManageStorageCodec.activePersonalThresholdKey(
-        PersonalManageStorageCodec.accountIdFromAccountHex(address),
+        PersonalManageStorageCodec.accountIdBytes(accountId),
       ))}';
       rpc.responses[personalKey] = personalAccountBytes();
       rpc.responses[adminKey] = adminAccountBytes(
@@ -224,12 +225,12 @@ void main() {
       );
       rpc.responses[thresholdKey] = Uint8List.fromList(u32Le(2));
 
-      final info = await service.fetchPersonalAccount(address);
+      final info = await service.fetchPersonalAccount(accountId);
 
       expect(info, isNotNull);
       expect(
-        info!.admins.map((admin) => admin.admin_account),
-        ['cc' * 32, 'dd' * 32],
+        info!.admins.map((admin) => admin.account_id),
+        ['0x${'cc' * 32}', '0x${'dd' * 32}'],
       );
       expect(info.threshold, 2);
       expect(info.status, MultisigStatus.active);
@@ -240,53 +241,54 @@ void main() {
         () async {
       final rpc = FakeChainRpc();
       final service = PersonalManageService(chainRpc: rpc);
-      final firstAddress = '22' * 32;
-      final secondAddress = '33' * 32;
-      String personalKey(String address) =>
-          '0x${hexOf(PersonalManageStorageCodec.personalAccountsKey(address))}';
-      String adminKey(String address) =>
+      final firstAccountId = '0x${'22' * 32}';
+      final secondAccountId = '0x${'33' * 32}';
+      String personalKey(String accountId) =>
+          '0x${hexOf(PersonalManageStorageCodec.personalAccountsKey(accountId))}';
+      String adminKey(String accountId) =>
           '0x${hexOf(PersonalManageStorageCodec.adminAccountKey(
-            PersonalManageStorageCodec.accountIdFromAccountHex(address),
+            PersonalManageStorageCodec.accountIdBytes(accountId),
           ))}';
-      String thresholdKey(String address) =>
+      String thresholdKey(String accountId) =>
           '0x${hexOf(PersonalManageStorageCodec.activePersonalThresholdKey(
-            PersonalManageStorageCodec.accountIdFromAccountHex(address),
+            PersonalManageStorageCodec.accountIdBytes(accountId),
           ))}';
 
-      rpc.responses[personalKey(firstAddress)] = personalAccountBytes();
-      rpc.responses[personalKey(secondAddress)] = personalAccountBytes();
-      rpc.responses[adminKey(firstAddress)] = adminAccountBytes(
+      rpc.responses[personalKey(firstAccountId)] = personalAccountBytes();
+      rpc.responses[personalKey(secondAccountId)] = personalAccountBytes();
+      rpc.responses[adminKey(firstAccountId)] = adminAccountBytes(
         admin1: List<int>.filled(32, 0xaa),
         admin2: List<int>.filled(32, 0xbb),
       );
-      rpc.responses[adminKey(secondAddress)] = adminAccountBytes(
+      rpc.responses[adminKey(secondAccountId)] = adminAccountBytes(
         admin1: List<int>.filled(32, 0xcc),
         admin2: List<int>.filled(32, 0xdd),
       );
-      rpc.responses[thresholdKey(firstAddress)] = Uint8List.fromList(u32Le(2));
+      rpc.responses[thresholdKey(firstAccountId)] =
+          Uint8List.fromList(u32Le(2));
 
       final infos = await service.fetchPersonalAccountsBatch([
-        firstAddress,
-        secondAddress,
+        firstAccountId,
+        secondAccountId,
       ]);
 
       expect(
-        infos[firstAddress]!.admins.map((admin) => admin.admin_account),
-        ['aa' * 32, 'bb' * 32],
+        infos[firstAccountId]!.admins.map((admin) => admin.account_id),
+        ['0x${'aa' * 32}', '0x${'bb' * 32}'],
       );
       expect(
-        infos[secondAddress]!.admins.map((admin) => admin.admin_account),
-        ['cc' * 32, 'dd' * 32],
+        infos[secondAccountId]!.admins.map((admin) => admin.account_id),
+        ['0x${'cc' * 32}', '0x${'dd' * 32}'],
       );
-      expect(infos[firstAddress]!.threshold, 2);
-      expect(infos[secondAddress]!.threshold, isNull);
+      expect(infos[firstAccountId]!.threshold, 2);
+      expect(infos[secondAccountId]!.threshold, isNull);
       expect(rpc.requestedKeys, [
-        personalKey(firstAddress),
-        adminKey(firstAddress),
-        personalKey(secondAddress),
-        adminKey(secondAddress),
-        thresholdKey(firstAddress),
-        thresholdKey(secondAddress),
+        personalKey(firstAccountId),
+        adminKey(firstAccountId),
+        personalKey(secondAccountId),
+        adminKey(secondAccountId),
+        thresholdKey(firstAccountId),
+        thresholdKey(secondAccountId),
       ]);
     });
 

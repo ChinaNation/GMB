@@ -40,10 +40,11 @@ class _PettyWalletPageState extends State<PettyWalletPage> {
 
   Future<void> _loadBalance() async {
     try {
-      final fen =
-          await OffchainClearingBankRpc(widget.wssUrl).queryBalance(widget.wallet.address);
+      final fen = await OffchainClearingBankRpc(widget.wssUrl)
+          .queryBalance(widget.wallet.ss58Address);
       if (!mounted) return;
-      setState(() => _balanceText = '¥${AmountFormat.formatThousands(fen / 100.0)}');
+      setState(
+          () => _balanceText = '¥${AmountFormat.formatThousands(fen / 100.0)}');
     } catch (_) {
       if (!mounted) return;
       setState(() => _balanceText = '节点不可达');
@@ -77,8 +78,8 @@ class _PettyWalletPageState extends State<PettyWalletPage> {
                           color: AppTheme.primaryDark)),
                   const SizedBox(height: 4),
                   const Text('零钱包余额（链下清算行）',
-                      style:
-                          TextStyle(fontSize: 12, color: AppTheme.textTertiary)),
+                      style: TextStyle(
+                          fontSize: 12, color: AppTheme.textTertiary)),
                 ],
               ),
             ),
@@ -114,7 +115,8 @@ class _PettyWalletPageState extends State<PettyWalletPage> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => WithdrawPage(wallet: widget.wallet, wssUrl: widget.wssUrl),
+        builder: (_) =>
+            WithdrawPage(wallet: widget.wallet, wssUrl: widget.wssUrl),
       ),
     );
     await _loadBalance();

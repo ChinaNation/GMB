@@ -7,8 +7,8 @@ import 'package:citizenapp/isar/app_isar.dart';
 /// 广场草稿箱存储契约（便于测试注入）。
 abstract class SquareComposeDraftRepository {
   Future<void> save(SquareComposeDraft draft);
-  Future<List<SquareComposeDraft>> list(String ownerAccount);
-  Future<void> delete(String ownerAccount, String draftId);
+  Future<List<SquareComposeDraft>> list(String accountId);
+  Future<void> delete(String accountId, String draftId);
 }
 
 /// 多草稿本地持久化：复用 AppKvEntity KV，key 前缀 + intValue=updated_at 排序。
@@ -21,15 +21,15 @@ class SquareComposeDraftStore implements SquareComposeDraftRepository {
   static const String _prefix = 'square.compose.draft.';
   static const int maxPerOwner = 100;
 
-  static String _key(String owner, String draftId) =>
-      '$_prefix$owner.$draftId';
-  static String _ownerPrefix(String owner) => '$_prefix$owner.';
+  static String _key(String accountId, String draftId) =>
+      '$_prefix$accountId.$draftId';
+  static String _accountPrefix(String accountId) => '$_prefix$accountId.';
 
   @override
   Future<void> save(SquareComposeDraft draft) async {
     final overflowIds = <String>[];
     await WalletIsar.instance.writeTxn((isar) async {
-      final key = _key(draft.ownerAccount, draft.draftId);
+      final key = _key(draft.accountId, draft.draftId);
       final entity = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();
       entity
         ..key = key
@@ -40,7 +40,7 @@ class SquareComposeDraftStore implements SquareComposeDraftRepository {
       // 上限淘汰最旧：intValue=updated_at 升序（最旧在前），删超额部分。
       final all = await isar.appKvEntitys
           .filter()
-          .keyStartsWith(_ownerPrefix(draft.ownerAccount))
+          .keyStartsWith(_accountPrefix(draft.accountId))
           .findAll();
       if (all.length > maxPerOwner) {
         all.sort((a, b) => (a.intValue ?? 0).compareTo(b.intValue ?? 0));
@@ -58,11 +58,11 @@ class SquareComposeDraftStore implements SquareComposeDraftRepository {
   }
 
   @override
-  Future<List<SquareComposeDraft>> list(String ownerAccount) {
+  Future<List<SquareComposeDraft>> list(String accountId) {
     return WalletIsar.instance.read((isar) async {
       final entities = await isar.appKvEntitys
           .filter()
-          .keyStartsWith(_ownerPrefix(ownerAccount))
+          .keyStartsWith(_accountPrefix(accountId))
           .findAll();
       final drafts = entities
           .map((e) => SquareComposeDraft.fromJsonString(e.stringValue))
@@ -75,10 +75,9 @@ class SquareComposeDraftStore implements SquareComposeDraftRepository {
   }
 
   @override
-  Future<void> delete(String ownerAccount, String draftId) async {
+  Future<void> delete(String accountId, String draftId) async {
     await WalletIsar.instance.writeTxn((isar) async {
-      final entity =
-          await isar.appKvEntitys.getByKey(_key(ownerAccount, draftId));
+      final entity = await isar.appKvEntitys.getByKey(_key(accountId, draftId));
       if (entity != null) await isar.appKvEntitys.delete(entity.id);
     });
     await ComposeDraftMedia.deleteDir(draftId);

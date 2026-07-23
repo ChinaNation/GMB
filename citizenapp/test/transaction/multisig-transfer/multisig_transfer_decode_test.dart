@@ -54,7 +54,7 @@ void main() {
       List<int>.generate(8, (i) => (value >> (i * 8)) & 0xff);
 
   Uint8List institutionPayload({
-    required List<int> institutionAccount,
+    required List<int> institutionAccountId,
     required List<int> beneficiary,
     required BigInt amountFen,
     required String remark,
@@ -68,7 +68,7 @@ void main() {
       0x01, // actor_cid_number: Some
       ...compactU32(actorCidBytes.length),
       ...actorCidBytes,
-      ...institutionAccount,
+      ...institutionAccountId,
       ...beneficiary,
       ...u128Le(amountFen),
       ...compactU32(remarkBytes.length),
@@ -86,12 +86,12 @@ void main() {
   final service = MultisigTransferService();
 
   test('机构 propose_transfer 当前 SCALE payload 的短备注必须可解码', () {
-    final institutionAccount = List<int>.filled(32, 0x11);
+    final institutionAccountId = List<int>.filled(32, 0x11);
     final beneficiary = List<int>.filled(32, 0x22);
     final decoded = service.debugDecodeProposalData(
       0,
       institutionPayload(
-        institutionAccount: institutionAccount,
+        institutionAccountId: institutionAccountId,
         beneficiary: beneficiary,
         amountFen: BigInt.from(10000000),
         remark: '转账测试',
@@ -101,7 +101,7 @@ void main() {
 
     expect(decoded, isNotNull, reason: '短备注机构提案必须进入提案列表和详情页');
     expect(decoded!.actorCidNumber, 'LN001-CGOVC-000000001-2026');
-    expect(decoded.institutionAccount, institutionAccount);
+    expect(decoded.institutionAccountId, institutionAccountId);
     expect(decoded.amountFen, BigInt.from(10000000)); // 100,000.00 元
     expect(decoded.remark, '转账测试');
     expect(
@@ -114,7 +114,7 @@ void main() {
     final decoded = service.debugDecodeProposalData(
       1,
       institutionPayload(
-        institutionAccount: List<int>.filled(32, 0x11),
+        institutionAccountId: List<int>.filled(32, 0x11),
         beneficiary: List<int>.filled(32, 0x22),
         amountFen: BigInt.zero,
         remark: '',
@@ -129,7 +129,7 @@ void main() {
 
   test('截断 payload(不足下限)返回 null', () {
     final full = institutionPayload(
-      institutionAccount: List<int>.filled(32, 0x11),
+      institutionAccountId: List<int>.filled(32, 0x11),
       beneficiary: List<int>.filled(32, 0x22),
       amountFen: BigInt.zero,
       remark: '',
@@ -152,12 +152,12 @@ void main() {
 
   test('SafetyFundAction 严格解码 actor CID、机构账户和 proposer', () async {
     const actorCidNumber = 'LN001-NRC0G-944805165-2026';
-    final institutionAccount = List<int>.filled(32, 0x41);
+    final institutionAccountId = List<int>.filled(32, 0x41);
     final proposer = List<int>.filled(32, 0x43);
     final remark = utf8.encode('安全基金');
     final raw = Uint8List.fromList([
       ...cid(actorCidNumber),
-      ...institutionAccount,
+      ...institutionAccountId,
       ...List<int>.filled(32, 0x42),
       ...u128Le(BigInt.from(500)),
       ...compactU32(remark.length),
@@ -170,7 +170,7 @@ void main() {
 
     expect(decoded, isNotNull);
     expect(decoded!.actorCidNumber, actorCidNumber);
-    expect(decoded.institutionAccount, institutionAccount);
+    expect(decoded.institutionAccountId, institutionAccountId);
     expect(decoded.amountFen, BigInt.from(500));
     expect(
       decoded.proposer,
@@ -188,11 +188,11 @@ void main() {
 
   test('SweepAction 完整消费 proposer，尾随字节必须拒绝', () async {
     const actorCidNumber = 'ZS001-PRB08-233384677-2026';
-    final institutionAccount = List<int>.filled(32, 0x51);
+    final institutionAccountId = List<int>.filled(32, 0x51);
     final proposer = List<int>.filled(32, 0x52);
     final raw = Uint8List.fromList([
       ...cid(actorCidNumber),
-      ...institutionAccount,
+      ...institutionAccountId,
       ...u128Le(BigInt.from(800)),
       ...proposer,
     ]);
@@ -202,7 +202,7 @@ void main() {
 
     expect(decoded, isNotNull);
     expect(decoded!.actorCidNumber, actorCidNumber);
-    expect(decoded.institutionAccount, institutionAccount);
+    expect(decoded.institutionAccountId, institutionAccountId);
     expect(decoded.amountFen, BigInt.from(800));
     expect(
       decoded.proposer,
@@ -221,12 +221,12 @@ void main() {
   test('VotingEngine Proposal 元数据严格按 CID 主体完整解码', () {
     const actorCidNumber = 'LN001-CGOVC-000000001-2026';
     const subjectCidNumber = 'LN001-CGOVC-000000002-2026';
-    final executionAccount = List<int>.filled(32, 0x61);
+    final executionAccountId = List<int>.filled(32, 0x61);
     final raw = Uint8List.fromList([
       0, 0, 0, // kind / stage / status
       1, ...utf8.encode('CGOV'), // internal_code Some
       1, ...cid(actorCidNumber), // actor CID Some
-      1, ...executionAccount, // execution account Some
+      1, ...executionAccountId, // execution account Some
       4, ...cid(subjectCidNumber), // subject CID Vec len=1
       ...u32Le(10),
       ...u32Le(20),
@@ -234,7 +234,7 @@ void main() {
     final decoded = service.debugDecodeProposalMeta(6, raw);
     expect(decoded, isNotNull);
     expect(decoded!.actorCidNumber, actorCidNumber);
-    expect(decoded.executionAccount, executionAccount);
+    expect(decoded.executionAccountId, executionAccountId);
     expect(decoded.subjectCidNumbers, [subjectCidNumber]);
 
     expect(
@@ -255,8 +255,8 @@ void main() {
       cidNumber: institutionCidNumber,
       orgType: OrgType.institution,
       accounts: InstitutionAccounts(
-        mainAccount: '11' * 32,
-        feeAccount: '22' * 32,
+        mainAccountId: '0x${'11' * 32}',
+        feeAccountId: '0x${'22' * 32}',
       ),
     );
     final institutionKey = ProposalQueryService.proposalSubjectKey(institution);
@@ -264,7 +264,7 @@ void main() {
     expect(institutionKey[1], utf8.encode(institutionCidNumber).length << 2);
     expect(utf8.decode(institutionKey.sublist(2)), institutionCidNumber);
 
-    final personalAccount = 'ab' * 32;
+    final personalAccount = '0x${'ab' * 32}';
     final personal = InstitutionInfo(
       cidFullName: '个人多签',
       cidShortName: '个人多签',
@@ -272,7 +272,7 @@ void main() {
       cidShortNameEn: 'PMUL',
       cidNumber: 'personal-account:$personalAccount',
       orgType: OrgType.personalMultisig,
-      personalAccountHex: personalAccount,
+      personalAccountId: personalAccount,
     );
     final personalKey = ProposalQueryService.proposalSubjectKey(personal);
     expect(personalKey, Uint8List.fromList([1, ...List.filled(32, 0xab)]));
@@ -286,7 +286,7 @@ void main() {
     ]);
     expect(
       ProposalQueryService.decodeAdminSnapshot(adminsRaw),
-      ['11' * 32, '22' * 32],
+      ['0x${'11' * 32}', '0x${'22' * 32}'],
     );
     expect(
       ProposalQueryService.decodeAdminSnapshot(
@@ -324,11 +324,11 @@ void main() {
       cidNumber: 'LN001-CGOVC-000000001-2026',
       orgType: OrgType.institution,
       accounts: InstitutionAccounts(
-        mainAccount: '11' * 32,
-        feeAccount: '22' * 32,
+        mainAccountId: '0x${'11' * 32}',
+        feeAccountId: '0x${'22' * 32}',
       ),
     );
-    final personalAccount = 'ab' * 32;
+    final personalAccount = '0x${'ab' * 32}';
     final personal = InstitutionInfo(
       cidFullName: '个人多签',
       cidShortName: '个人多签',
@@ -336,7 +336,7 @@ void main() {
       cidShortNameEn: 'PMUL',
       cidNumber: 'personal-account:$personalAccount',
       orgType: OrgType.personalMultisig,
-      personalAccountHex: personalAccount,
+      personalAccountId: personalAccount,
     );
 
     expect(
@@ -345,11 +345,11 @@ void main() {
         institution.cidNumber,
         'COMMITTEE_MEMBER',
       ),
-      ['33' * 32],
+      ['0x${'33' * 32}'],
     );
     expect(
       await query.fetchEligibleVoterSnapshot(7, personal),
-      ['33' * 32],
+      ['0x${'33' * 32}'],
     );
     expect(rpc.storageKeys, hasLength(2));
     expect(rpc.storageKeys[0], isNot(rpc.storageKeys[1]));
@@ -375,7 +375,7 @@ void main() {
           internalCode: code,
           actorCidNumber:
               subjectCidNumbers.isEmpty ? null : subjectCidNumbers.first,
-          executionAccount: institution,
+          executionAccountId: institution,
           subjectCidNumbers: subjectCidNumbers,
         ),
       );

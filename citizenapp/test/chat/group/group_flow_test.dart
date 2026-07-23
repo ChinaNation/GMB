@@ -18,18 +18,18 @@ import '../../support/isar_test_env.dart';
 
 /// 内存态 fake:模拟 MLS 群语义(roster + epoch),不做真加密。
 class _FakeGroupCrypto implements MlsGroupCrypto {
-  _FakeGroupCrypto({required this.ownerAccount, required this.ownerDeviceId});
+  _FakeGroupCrypto({required this.accountId, required this.localDeviceId});
 
-  final String ownerAccount;
-  final String ownerDeviceId;
+  final String accountId;
+  final String localDeviceId;
   final Map<String, List<String>> _roster = {};
   final Map<String, int> _epoch = {};
 
-  String get _ownerIdentity => '$ownerAccount:$ownerDeviceId';
+  String get _localIdentity => '$accountId:$localDeviceId';
 
   @override
   Future<GroupCreated> createGroup(String groupId) async {
-    _roster[groupId] = [_ownerIdentity];
+    _roster[groupId] = [_localIdentity];
     _epoch[groupId] = 0;
     return GroupCreated(groupId: groupId, epoch: 0);
   }
@@ -41,7 +41,7 @@ class _FakeGroupCrypto implements MlsGroupCrypto {
   ) async {
     final roster = _roster[groupId]!;
     for (final keyPackage in keyPackages) {
-      roster.add('${keyPackage.ownerAccount}:${keyPackage.deviceId}');
+      roster.add('${keyPackage.accountId}:${keyPackage.deviceId}');
     }
     _epoch[groupId] = (_epoch[groupId] ?? 0) + 1;
     return GroupCommitBundle(
@@ -55,17 +55,17 @@ class _FakeGroupCrypto implements MlsGroupCrypto {
   @override
   Future<GroupCommitBundle> removeMembers(
     String groupId,
-    List<String> memberAccounts,
+    List<String> memberAccountIds,
   ) async {
     final roster = _roster[groupId]!;
     roster.removeWhere(
-        (identity) => memberAccounts.contains(identity.split(':').first));
+        (identity) => memberAccountIds.contains(identity.split(':').first));
     _epoch[groupId] = (_epoch[groupId] ?? 0) + 1;
     return GroupCommitBundle(
       groupId: groupId,
       epoch: _epoch[groupId]!,
       commit: _wire(groupId, 'commit'),
-      removedAccounts: memberAccounts,
+      removedAccounts: memberAccountIds,
     );
   }
 
@@ -133,7 +133,7 @@ Future<ChatDeliveryResult> _okDeliverer(
     );
 
 MlsKeyPackage _keyPackage(String account, String device) => MlsKeyPackage(
-      ownerAccount: account,
+      accountId: account,
       deviceId: device,
       keyPackageId: 'kp-$account',
       keyPackageBytes: const [1, 2],
@@ -147,7 +147,10 @@ void main() {
 
   test('建群→发文本→收文本→删人 全链路(fake 密码学 + 真 Isar)', () async {
     final store = ChatStore();
-    final crypto = _FakeGroupCrypto(ownerAccount: 'acctA', ownerDeviceId: 'devA');
+    final crypto = _FakeGroupCrypto(
+        accountId:
+            '0x3333333333333333333333333333333333333333333333333333333333333333',
+        localDeviceId: 'devA');
     final delivered = <ChatEnvelope>[];
     Future<ChatDeliveryResult> deliverer(
       ChatEnvelope envelope,
@@ -161,13 +164,13 @@ void main() {
       );
     }
 
-    final flow =
-        ChatGroupFlow(
+    final flow = ChatGroupFlow(
       crypto: crypto,
       store: store,
       deliverer: deliverer,
-      ownerAccount: 'acctA',
-      ownerDeviceId: 'devA',
+      accountId:
+          '0x3333333333333333333333333333333333333333333333333333333333333333',
+      localDeviceId: 'devA',
     );
     const groupId = 'grp:acctA:testnonce';
 
@@ -175,30 +178,47 @@ void main() {
     final group = await flow.createGroup(
       groupId: groupId,
       name: '测试群',
-      ownerAccount: 'acctA',
-      ownerDeviceId: 'devA',
-      invitees: [_keyPackage('acctB', 'devB'), _keyPackage('acctC', 'devC')],
+      accountId:
+          '0x3333333333333333333333333333333333333333333333333333333333333333',
+      localDeviceId: 'devA',
+      invitees: [
+        _keyPackage(
+            '0x4444444444444444444444444444444444444444444444444444444444444444',
+            'devB'),
+        _keyPackage('acctC', 'devC')
+      ],
     );
-    expect(group.memberAccounts.toSet(), {'acctA', 'acctB', 'acctC'});
-    expect(group.adminSet, {'acctA'});
+    expect(group.memberAccountIds.toSet(), {
+      '0x3333333333333333333333333333333333333333333333333333333333333333',
+      '0x4444444444444444444444444444444444444444444444444444444444444444',
+      'acctC'
+    });
+    expect(group.adminSet,
+        {'0x3333333333333333333333333333333333333333333333333333333333333333'});
     // Welcome 扇给 B、C(建群时无其他现有成员,无 Commit 扇出)。
-    expect(delivered.map((e) => e.recipientAccount).toSet(), {'acctB', 'acctC'});
+    expect(delivered.map((e) => e.recipientAccountId).toSet(), {
+      '0x4444444444444444444444444444444444444444444444444444444444444444',
+      'acctC'
+    });
 
     // 群发文本 → 扇给 B、C,落 1 条逻辑消息。
     delivered.clear();
     final results = await flow.sendGroupText(
       groupId: groupId,
-      senderAccount: 'acctA',
+      senderAccountId:
+          '0x3333333333333333333333333333333333333333333333333333333333333333',
       senderDeviceId: 'devA',
       text: '大家好',
     );
     expect(results.length, 2);
-    expect(delivered.map((e) => e.recipientAccount).toSet(), {'acctB', 'acctC'});
+    expect(delivered.map((e) => e.recipientAccountId).toSet(), {
+      '0x4444444444444444444444444444444444444444444444444444444444444444',
+      'acctC'
+    });
     // 同一份密文扇 2 封。
     expect(delivered[0].mlsWireMessage, delivered[1].mlsWireMessage);
     final afterSend = await store.readMessages(groupId);
-    final outgoing =
-        afterSend.where((m) => m.direction == 'outgoing').toList();
+    final outgoing = afterSend.where((m) => m.direction == 'outgoing').toList();
     expect(outgoing.length, 1);
     expect(outgoing.single.plaintext, contains('大家好'));
 
@@ -212,8 +232,10 @@ void main() {
     );
     final inbound = inboundWire.toEnvelope(
       envelopeId: 'in-1',
-      senderAccount: 'acctB',
-      recipientAccount: 'acctA',
+      senderAccountId:
+          '0x4444444444444444444444444444444444444444444444444444444444444444',
+      recipientAccountId:
+          '0x3333333333333333333333333333333333333333333333333333333333333333',
       senderDeviceId: 'devB',
       createdAtMillis: 100,
       ttlMillis: 60,
@@ -229,18 +251,28 @@ void main() {
     delivered.clear();
     await flow.removeMembers(
       groupId: groupId,
-      actorAccount: 'acctA',
+      actorAccountId:
+          '0x3333333333333333333333333333333333333333333333333333333333333333',
       actorDeviceId: 'devA',
       targetAccounts: ['acctC'],
     );
     final afterRemove = await store.readGroup(groupId);
-    expect(afterRemove!.memberAccounts.toSet(), {'acctA', 'acctB'});
-    expect(delivered.map((e) => e.recipientAccount).toSet(), {'acctB', 'acctC'});
+    expect(afterRemove!.memberAccountIds.toSet(), {
+      '0x3333333333333333333333333333333333333333333333333333333333333333',
+      '0x4444444444444444444444444444444444444444444444444444444444444444'
+    });
+    expect(delivered.map((e) => e.recipientAccountId).toSet(), {
+      '0x4444444444444444444444444444444444444444444444444444444444444444',
+      'acctC'
+    });
   });
 
   test('非 admin 加人被拒', () async {
     final store = ChatStore();
-    final crypto = _FakeGroupCrypto(ownerAccount: 'acctA', ownerDeviceId: 'devA');
+    final crypto = _FakeGroupCrypto(
+        accountId:
+            '0x3333333333333333333333333333333333333333333333333333333333333333',
+        localDeviceId: 'devA');
     Future<ChatDeliveryResult> deliverer(
       ChatEnvelope envelope,
       List<int> bytes,
@@ -250,27 +282,33 @@ void main() {
           transportType: ChatTransportType.cloudflare,
           state: ChatMessageDeliveryState.sent,
         );
-    final flow =
-        ChatGroupFlow(
+    final flow = ChatGroupFlow(
       crypto: crypto,
       store: store,
       deliverer: deliverer,
-      ownerAccount: 'acctA',
-      ownerDeviceId: 'devA',
+      accountId:
+          '0x3333333333333333333333333333333333333333333333333333333333333333',
+      localDeviceId: 'devA',
     );
     const groupId = 'grp:acctA:n';
     await flow.createGroup(
       groupId: groupId,
       name: 'g',
-      ownerAccount: 'acctA',
-      ownerDeviceId: 'devA',
-      invitees: [_keyPackage('acctB', 'devB')],
+      accountId:
+          '0x3333333333333333333333333333333333333333333333333333333333333333',
+      localDeviceId: 'devA',
+      invitees: [
+        _keyPackage(
+            '0x4444444444444444444444444444444444444444444444444444444444444444',
+            'devB')
+      ],
     );
 
     await expectLater(
       flow.addMembers(
         groupId: groupId,
-        actorAccount: 'acctB', // 非 admin
+        actorAccountId:
+            '0x4444444444444444444444444444444444444444444444444444444444444444', // 非 admin
         actorDeviceId: 'devB',
         invitees: [_keyPackage('acctD', 'devD')],
       ),
@@ -280,7 +318,10 @@ void main() {
 
   test('admin 收到 leave_request → 自动移除退群者(后向保密)', () async {
     final store = ChatStore();
-    final crypto = _FakeGroupCrypto(ownerAccount: 'acctA', ownerDeviceId: 'devA');
+    final crypto = _FakeGroupCrypto(
+        accountId:
+            '0x3333333333333333333333333333333333333333333333333333333333333333',
+        localDeviceId: 'devA');
     final flow = ChatGroupFlow(
       crypto: crypto,
       store: store,
@@ -289,16 +330,23 @@ void main() {
         transportType: ChatTransportType.cloudflare,
         state: ChatMessageDeliveryState.sent,
       ),
-      ownerAccount: 'acctA',
-      ownerDeviceId: 'devA',
+      accountId:
+          '0x3333333333333333333333333333333333333333333333333333333333333333',
+      localDeviceId: 'devA',
     );
     const groupId = 'grp:acctA:n';
     await flow.createGroup(
       groupId: groupId,
       name: 'g',
-      ownerAccount: 'acctA',
-      ownerDeviceId: 'devA',
-      invitees: [_keyPackage('acctB', 'devB'), _keyPackage('acctC', 'devC')],
+      accountId:
+          '0x3333333333333333333333333333333333333333333333333333333333333333',
+      localDeviceId: 'devA',
+      invitees: [
+        _keyPackage(
+            '0x4444444444444444444444444444444444444444444444444444444444444444',
+            'devB'),
+        _keyPackage('acctC', 'devC')
+      ],
     );
 
     // acctB 发来退群请求(fake groupProcess 回显 wire 明文)。
@@ -311,20 +359,28 @@ void main() {
     );
     final envelope = wire.toEnvelope(
       envelopeId: 'lr-1',
-      senderAccount: 'acctB',
-      recipientAccount: 'acctA',
+      senderAccountId:
+          '0x4444444444444444444444444444444444444444444444444444444444444444',
+      recipientAccountId:
+          '0x3333333333333333333333333333333333333333333333333333333333333333',
       senderDeviceId: 'devB',
       createdAtMillis: 1,
       ttlMillis: 60,
     );
     await flow.processIncomingGroupEnvelope(envelope.writeToBuffer());
     final group = await store.readGroup(groupId);
-    expect(group!.memberAccounts.toSet(), {'acctA', 'acctC'}); // B 被移除
+    expect(group!.memberAccountIds.toSet(), {
+      '0x3333333333333333333333333333333333333333333333333333333333333333',
+      'acctC'
+    }); // B 被移除
   });
 
   test('收到 rename → 群名更新(非 admin 收端也同步)', () async {
     final store = ChatStore();
-    final crypto = _FakeGroupCrypto(ownerAccount: 'acctB', ownerDeviceId: 'devB');
+    final crypto = _FakeGroupCrypto(
+        accountId:
+            '0x4444444444444444444444444444444444444444444444444444444444444444',
+        localDeviceId: 'devB');
     final flow = ChatGroupFlow(
       crypto: crypto,
       store: store,
@@ -333,15 +389,18 @@ void main() {
         transportType: ChatTransportType.cloudflare,
         state: ChatMessageDeliveryState.sent,
       ),
-      ownerAccount: 'acctB',
-      ownerDeviceId: 'devB',
+      accountId:
+          '0x4444444444444444444444444444444444444444444444444444444444444444',
+      localDeviceId: 'devB',
     );
     const groupId = 'grp:acctA:n2';
     await store.upsertGroupShell(
       groupId: groupId,
       groupName: '旧名',
-      creatorAccount: 'acctA',
-      ownerAccount: 'acctB',
+      creatorAccountId:
+          '0x3333333333333333333333333333333333333333333333333333333333333333',
+      accountId:
+          '0x4444444444444444444444444444444444444444444444444444444444444444',
       epoch: 1,
     );
 
@@ -354,8 +413,10 @@ void main() {
     );
     final envelope = wire.toEnvelope(
       envelopeId: 'rn-1',
-      senderAccount: 'acctA',
-      recipientAccount: 'acctB',
+      senderAccountId:
+          '0x3333333333333333333333333333333333333333333333333333333333333333',
+      recipientAccountId:
+          '0x4444444444444444444444444444444444444444444444444444444444444444',
       senderDeviceId: 'devA',
       createdAtMillis: 1,
       ttlMillis: 60,
@@ -367,7 +428,10 @@ void main() {
 
   test('群发贴纸:落 sticker 消息 + 扇出', () async {
     final store = ChatStore();
-    final crypto = _FakeGroupCrypto(ownerAccount: 'acctA', ownerDeviceId: 'devA');
+    final crypto = _FakeGroupCrypto(
+        accountId:
+            '0x3333333333333333333333333333333333333333333333333333333333333333',
+        localDeviceId: 'devA');
     final delivered = <ChatEnvelope>[];
     final flow = ChatGroupFlow(
       crypto: crypto,
@@ -380,27 +444,35 @@ void main() {
           state: ChatMessageDeliveryState.sent,
         );
       },
-      ownerAccount: 'acctA',
-      ownerDeviceId: 'devA',
+      accountId:
+          '0x3333333333333333333333333333333333333333333333333333333333333333',
+      localDeviceId: 'devA',
     );
     const groupId = 'grp:acctA:ns';
     await flow.createGroup(
       groupId: groupId,
       name: 'g',
-      ownerAccount: 'acctA',
-      ownerDeviceId: 'devA',
-      invitees: [_keyPackage('acctB', 'devB')],
+      accountId:
+          '0x3333333333333333333333333333333333333333333333333333333333333333',
+      localDeviceId: 'devA',
+      invitees: [
+        _keyPackage(
+            '0x4444444444444444444444444444444444444444444444444444444444444444',
+            'devB')
+      ],
     );
 
     delivered.clear();
     await flow.sendGroupSticker(
       groupId: groupId,
-      senderAccount: 'acctA',
+      senderAccountId:
+          '0x3333333333333333333333333333333333333333333333333333333333333333',
       senderDeviceId: 'devA',
       packId: 'fluent3d',
       stickerId: 'grinning_face',
     );
-    expect(delivered.map((e) => e.recipientAccount).toSet(), {'acctB'});
+    expect(delivered.map((e) => e.recipientAccountId).toSet(),
+        {'0x4444444444444444444444444444444444444444444444444444444444444444'});
     final messages = await store.readMessages(groupId);
     final sticker =
         messages.firstWhere((m) => m.messageKind == ChatMessageKind.sticker);
@@ -412,21 +484,30 @@ void main() {
     tearDown(() => ChatMediaLimits.applyMembershipLevel(null));
 
     Future<ChatGroupFlow> buildGroup(ChatStore store) async {
-      final crypto =
-          _FakeGroupCrypto(ownerAccount: 'acctA', ownerDeviceId: 'devA');
+      final crypto = _FakeGroupCrypto(
+          accountId:
+              '0x3333333333333333333333333333333333333333333333333333333333333333',
+          localDeviceId: 'devA');
       final flow = ChatGroupFlow(
         crypto: crypto,
         store: store,
         deliverer: _okDeliverer,
-        ownerAccount: 'acctA',
-        ownerDeviceId: 'devA',
+        accountId:
+            '0x3333333333333333333333333333333333333333333333333333333333333333',
+        localDeviceId: 'devA',
       );
       await flow.createGroup(
         groupId: 'grp:acctA:nm',
         name: 'g',
-        ownerAccount: 'acctA',
-        ownerDeviceId: 'devA',
-        invitees: [_keyPackage('acctB', 'devB'), _keyPackage('acctC', 'devC')],
+        accountId:
+            '0x3333333333333333333333333333333333333333333333333333333333333333',
+        localDeviceId: 'devA',
+        invitees: [
+          _keyPackage(
+              '0x4444444444444444444444444444444444444444444444444444444444444444',
+              'devB'),
+          _keyPackage('acctC', 'devC')
+        ],
       );
       return flow;
     }
@@ -440,11 +521,12 @@ void main() {
 
       await flow.sendGroupMedia(
         groupId: 'grp:acctA:nm',
-        senderAccount: 'acctA',
+        senderAccountId:
+            '0x3333333333333333333333333333333333333333333333333333333333333333',
         senderDeviceId: 'devA',
         media: _mediaDraft(50 * 1024 * 1024),
         sendMemberAttachment: ({
-          required recipientAccount,
+          required recipientAccountId,
           required conversationId,
           required attachmentId,
           required fileName,
@@ -452,7 +534,7 @@ void main() {
           required sourcePath,
           required byteSize,
         }) async {
-          webrtcTo.add(recipientAccount);
+          webrtcTo.add(recipientAccountId);
         },
         uploadRelayMedia: ({
           required conversationId,
@@ -469,9 +551,15 @@ void main() {
         markMemberDelivered: (attachmentId, member) async {},
       );
 
-      expect(webrtcTo.toSet(), {'acctB', 'acctC'}); // 每成员各一次
+      expect(webrtcTo.toSet(), {
+        '0x4444444444444444444444444444444444444444444444444444444444444444',
+        'acctC'
+      }); // 每成员各一次
       expect(relayUploads, 0);
-      expect(pending.toSet(), {'acctB', 'acctC'});
+      expect(pending.toSet(), {
+        '0x4444444444444444444444444444444444444444444444444444444444444444',
+        'acctC'
+      });
     });
 
     test('>100MB → 中转一次上传,不走 WebRTC', () async {
@@ -482,11 +570,12 @@ void main() {
 
       await flow.sendGroupMedia(
         groupId: 'grp:acctA:nm',
-        senderAccount: 'acctA',
+        senderAccountId:
+            '0x3333333333333333333333333333333333333333333333333333333333333333',
         senderDeviceId: 'devA',
         media: _mediaDraft(200 * 1024 * 1024),
         sendMemberAttachment: ({
-          required recipientAccount,
+          required recipientAccountId,
           required conversationId,
           required attachmentId,
           required fileName,
@@ -494,7 +583,7 @@ void main() {
           required sourcePath,
           required byteSize,
         }) async {
-          webrtcTo.add(recipientAccount);
+          webrtcTo.add(recipientAccountId);
         },
         uploadRelayMedia: ({
           required conversationId,

@@ -94,7 +94,7 @@ class ProposalAdminVoteList extends StatelessWidget {
     super.key,
     required this.admins,
     required this.adminVotes,
-    required this.pendingPubkeys,
+    required this.pendingPublicKeys,
     this.voterTickets = const [],
     this.proposerSs58,
   });
@@ -105,11 +105,11 @@ class ProposalAdminVoteList extends StatelessWidget {
   /// 机构岗位票据；非空时逐票据展示，同一钱包多个岗位各占一行。
   final List<EligibleVoterTicket> voterTickets;
 
-  /// 投票记录：pubkeyHex → true(赞成) / false(反对) / null(未投票)。
+  /// 投票记录：publicKey → true(赞成) / false(反对) / null(未投票)。
   final Map<String, bool?> adminVotes;
 
   /// 已提交但尚未上链确认的选民公钥集合。
-  final Set<String> pendingPubkeys;
+  final Set<String> pendingPublicKeys;
 
   /// 发起人的 SS58 地址（可选，用于显示"发起人"徽章）。
   final String? proposerSs58;
@@ -144,9 +144,9 @@ class ProposalAdminVoteList extends StatelessWidget {
                 voterTickets.isEmpty ? admins.length : voterTickets.length,
                 (index) {
               final ticket = voterTickets.isEmpty ? null : voterTickets[index];
-              final pubkey = ticket?.pubkeyHex ?? admins[index];
-              final vote = adminVotes[ticket?.ticketKey ?? pubkey];
-              final ss58 = _pubkeyToSS58(pubkey);
+              final accountId = ticket?.voterAccountId ?? admins[index];
+              final vote = adminVotes[ticket?.ticketKey ?? accountId];
+              final ss58 = _publicKeyToSS58(accountId);
               final isProposer = proposerSs58 != null && proposerSs58 == ss58;
 
               return ListTile(
@@ -205,7 +205,7 @@ class ProposalAdminVoteList extends StatelessWidget {
                 ),
                 trailing: _buildVoteStatusChip(
                   vote,
-                  ticket?.ticketKey ?? pubkey,
+                  ticket?.ticketKey ?? accountId,
                 ),
               );
             }),
@@ -215,7 +215,7 @@ class ProposalAdminVoteList extends StatelessWidget {
     );
   }
 
-  Widget _buildVoteStatusChip(bool? vote, String pubkey) {
+  Widget _buildVoteStatusChip(bool? vote, String publicKey) {
     if (vote == true) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -248,7 +248,7 @@ class ProposalAdminVoteList extends StatelessWidget {
           ),
         ),
       );
-    } else if (pendingPubkeys.contains(pubkey)) {
+    } else if (pendingPublicKeys.contains(publicKey)) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(
@@ -371,7 +371,7 @@ class ProposalVoteActions extends StatelessWidget {
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                _truncateWalletAddress(w.address),
+                                _truncateWalletAddress(w.ss58Address),
                                 style: const TextStyle(
                                   fontSize: 13,
                                   fontFamily: 'monospace',
@@ -565,8 +565,8 @@ class ProposalStatusBadge extends StatelessWidget {
 
 // ──── 共享工具 ────
 
-String _pubkeyToSS58(String pubkeyHex) {
-  final hex = pubkeyHex.startsWith('0x') ? pubkeyHex.substring(2) : pubkeyHex;
+String _publicKeyToSS58(String publicKey) {
+  final hex = publicKey.startsWith('0x') ? publicKey.substring(2) : publicKey;
   final bytes = _hexDecode(hex);
   return Keyring().encodeAddress(bytes, 2027);
 }

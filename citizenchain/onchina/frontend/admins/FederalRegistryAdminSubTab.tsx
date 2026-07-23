@@ -78,7 +78,7 @@ export function FederalRegistryAdminSubTab({
       title: '操作',
       width: 100,
       align: 'center',
-      render: (_value, row) => sameHexAccount(row.admin_account, auth?.admin_account) ? (
+      render: (_value, row) => sameHexAccount(row.account_id, auth?.account_id) ? (
         <Badge dot={passkeyRegistered === false} size="small">
           <Button
             size="small"
@@ -108,7 +108,7 @@ export function FederalRegistryAdminSubTab({
         )}
       >
         <Table<FederalRegistryAdminRow>
-          rowKey={(row) => `${row.id}-${row.admin_account}-${row.role_code}`}
+          rowKey={(row) => `${row.id}-${row.account_id}-${row.role_code}`}
           loading={federalRegistryAdminsLoading}
           dataSource={displayedFederalRegistryAdmins}
           pagination={{

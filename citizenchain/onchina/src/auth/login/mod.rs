@@ -1,6 +1,6 @@
 //! 链上中国平台管理员登录认证模块。
 //!
-//! 对外通过 `admins::login::...` 暴露;内部按模型、普通登录、扫码登录、鉴权守卫、
+//! 对外暴露管理员会话与扫码登录；内部按模型、扫码登录、鉴权守卫、
 //! 签名工具拆分,避免认证链路继续集中在单个超大文件。
 
 mod guards;
@@ -14,8 +14,8 @@ const LOGIN_SIGN_REQUEST_TTL_SECONDS: i64 = 90;
 
 pub(crate) use guards::require_admin_any;
 pub(crate) use handler::{
-    admin_auth_challenge, admin_auth_check, admin_auth_confirm_node_binding, admin_auth_identify,
-    admin_auth_verify, admin_logout, require_admin_session_middleware,
+    admin_auth_check, admin_auth_confirm_node_binding, admin_logout,
+    require_admin_session_middleware,
 };
 pub(crate) use model::{
     AdminAuthContext, AdminInstitutionCandidate, AdminSession, LoginSignRequest,
@@ -26,4 +26,4 @@ pub(crate) use qr_login::{
     admin_auth_qr_complete, admin_auth_qr_result, admin_auth_qr_sign_request,
 };
 pub(crate) use signature::verify_admin_signature;
-pub(crate) use signature::{admin_person_names, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes};
+pub(crate) use signature::{admin_person_names, parse_account_id_bytes};

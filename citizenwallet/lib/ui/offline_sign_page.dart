@@ -505,7 +505,10 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _detailRow('请求 ID', request.id ?? ''),
-              _detailRow('签名公钥', _truncate(request.body.pubkeyHex)),
+              _detailRow(
+                '签名公钥',
+                _truncate(request.body.signerPublicKeyHex),
+              ),
             ],
           ),
         ),
@@ -611,7 +614,10 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
           child: Column(
             children: [
               _detailRow('请求 ID', response.id ?? ''),
-              _detailRow('签名公钥', _truncate(response.body.pubkeyHex)),
+              _detailRow(
+                '签名公钥',
+                _truncate(response.body.signerPublicKeyHex),
+              ),
             ],
           ),
         ),

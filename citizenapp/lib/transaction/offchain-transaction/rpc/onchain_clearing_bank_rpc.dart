@@ -31,22 +31,22 @@ class OnchainClearingBankRpc {
 
   // ──────────── 公开接口:4 个新 extrinsic ────────────
 
-  /// `bind_clearing_bank(bank_main_account)`:L3 绑定清算行(绑定即开户,无预存)。
+  /// `bind_clearing_bank(bank_main_account_id)`:L3 绑定清算行(绑定即开户,无预存)。
   ///
-  /// [fromAddress]      L3 用户 SS58 地址
-  /// [signerPubkey]     L3 用户公钥(32 字节)
-  /// [bankMainAccount]  目标清算行**主账户**地址(32 字节,从 CID API 拿到 hex 后解码)
+  /// [fromSs58Address]      L3 用户 SS58 地址
+  /// [signerPublicKey]     L3 用户公钥(32 字节)
+  /// [bankMainAccountId]  目标清算行**主账户**地址(32 字节,从 CID API 拿到 hex 后解码)
   /// [sign]             签名回调
   Future<({String txHash, int usedNonce})> bindClearingBank({
-    required String fromAddress,
-    required Uint8List signerPubkey,
-    required Uint8List bankMainAccount,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
+    required Uint8List bankMainAccountId,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) {
-    final callData = _buildBindClearingBankCall(bankMainAccount);
+    final callData = _buildBindClearingBankCall(bankMainAccountId);
     return _submitExtrinsic(
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       callData: callData,
       sign: sign,
     );
@@ -56,15 +56,15 @@ class OnchainClearingBankRpc {
   ///
   /// [amountFen] 充值金额(分,u128 范围内的正整数)。
   Future<({String txHash, int usedNonce})> deposit({
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required BigInt amountFen,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) {
     final callData = _buildAmountOnlyCall(_depositCallIndex, amountFen);
     return _submitExtrinsic(
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       callData: callData,
       sign: sign,
     );
@@ -72,15 +72,15 @@ class OnchainClearingBankRpc {
 
   /// `withdraw(amount)`:清算行主账户 → L3 自持账户提现。
   Future<({String txHash, int usedNonce})> withdraw({
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required BigInt amountFen,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) {
     final callData = _buildAmountOnlyCall(_withdrawCallIndex, amountFen);
     return _submitExtrinsic(
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       callData: callData,
       sign: sign,
     );
@@ -88,8 +88,8 @@ class OnchainClearingBankRpc {
 
   /// `switch_bank(new_bank)`:切换清算行(前置:旧清算行余额必须为 0)。
   Future<({String txHash, int usedNonce})> switchBank({
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Uint8List newBankMainAccount,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) {
@@ -98,8 +98,8 @@ class OnchainClearingBankRpc {
       newBankMainAccount,
     );
     return _submitExtrinsic(
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       callData: callData,
       sign: sign,
     );
@@ -110,8 +110,8 @@ class OnchainClearingBankRpc {
   /// `bind_clearing_bank` 与 `switch_bank` 都是接受单个 AccountId 参数,统一编码。
   ///
   /// 格式:`[pallet_index=19] [call_index] [account_id: [u8;32]]`。
-  Uint8List _buildBindClearingBankCall(Uint8List bankMainAccount) {
-    return _buildAccountIdCall(_bindClearingBankCallIndex, bankMainAccount);
+  Uint8List _buildBindClearingBankCall(Uint8List bankMainAccountId) {
+    return _buildAccountIdCall(_bindClearingBankCallIndex, bankMainAccountId);
   }
 
   Uint8List _buildAccountIdCall(int callIndex, Uint8List accountId) {
@@ -144,8 +144,8 @@ class OnchainClearingBankRpc {
   ///
   /// 失败时由统一构造器回滚 nonce，与其他 extrinsic 行为一致。
   Future<({String txHash, int usedNonce})> _submitExtrinsic({
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Uint8List callData,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
@@ -154,8 +154,8 @@ class OnchainClearingBankRpc {
       logLabel: 'OnchainClearingBank',
     ).signAndSubmit(
       callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       sign: sign,
     );
   }

@@ -12,7 +12,7 @@ import 'package:citizenapp/signer/signing.dart';
 
 void main() {
   group('QrSigner QR_V1', () {
-    const pubkey =
+    const signerPublicKey =
         '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     const payload = '0x01020304';
     final signature = '0x${'bb' * 64}';
@@ -25,7 +25,7 @@ void main() {
       final requestId = longId('req-onchain');
       final request = signer.buildRequest(
         requestId: requestId,
-        pubkey: pubkey,
+        signerPublicKey: signerPublicKey,
         payloadHex: payload,
         action: QrActions.transferWithRemark,
       );
@@ -46,7 +46,7 @@ void main() {
       expect(parsed.kind, QrKind.signRequest);
       expect(parsed.id, requestId);
       expect(parsed.body.action, QrActions.transferWithRemark);
-      expect(parsed.body.pubkeyHex, pubkey);
+      expect(parsed.body.signerPublicKeyHex, signerPublicKey);
       expect(parsed.body.payloadHex, payload);
     });
 
@@ -55,7 +55,7 @@ void main() {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final body = SignRequestBody.fromHex(
         action: QrActions.login,
-        pubkeyHex: pubkey,
+        signerPublicKeyHex: signerPublicKey,
         payloadHex: payload,
       ).toJson()
         ..remove('a');
@@ -78,7 +78,7 @@ void main() {
       final requestId = longId('req-expired');
       final expired = signer.buildRequest(
         requestId: requestId,
-        pubkey: pubkey,
+        signerPublicKey: signerPublicKey,
         payloadHex: payload,
         action: QrActions.login,
         nowEpochSeconds: now - 200,
@@ -106,7 +106,7 @@ void main() {
         issuedAt: null,
         expiresAt: now + 90,
         body: SignResponseBody.fromHex(
-          pubkeyHex: pubkey,
+          signerPublicKeyHex: signerPublicKey,
           signatureHex: signature,
         ),
       );
@@ -115,10 +115,10 @@ void main() {
       final parsed = signer.parseResponse(
         encoded,
         expectedRequestId: requestId,
-        expectedPubkey: pubkey,
+        expectedSignerPublicKey: signerPublicKey,
       );
       expect(parsed.id, requestId);
-      expect(parsed.body.pubkeyHex, pubkey);
+      expect(parsed.body.signerPublicKeyHex, signerPublicKey);
       expect(parsed.body.signatureHex, signature);
       final json = jsonDecode(encoded) as Map<String, dynamic>;
       expect(json['b'].containsKey('payload_hash'), isFalse);
@@ -134,7 +134,7 @@ void main() {
         issuedAt: null,
         expiresAt: now + 90,
         body: SignResponseBody.fromHex(
-          pubkeyHex: pubkey,
+          signerPublicKeyHex: signerPublicKey,
           signatureHex: signature,
         ),
       );
@@ -164,7 +164,7 @@ void main() {
         issuedAt: null,
         expiresAt: now + 90,
         body: SignResponseBody.fromHex(
-          pubkeyHex: pubkey,
+          signerPublicKeyHex: signerPublicKey,
           signatureHex: signature,
         ),
       );

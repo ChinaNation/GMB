@@ -60,7 +60,7 @@ interface FormValues {
   /** 需挂靠的非法人必填;个体经营/无限合伙不接受所属法人。 */
   parent_cid_number?: string;
   admins: {
-    admin_account: string;
+    account_id: string;
     family_name?: string;
     given_name?: string;
   }[];
@@ -240,8 +240,8 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       cid_short_name: defaultCollectName ? '' : undefined,
       parent_cid_number: undefined,
       admins: [
-        { admin_account: '', family_name: '管理', given_name: '员' },
-        { admin_account: '', family_name: '管理', given_name: '员' },
+        { account_id: '', family_name: '管理', given_name: '员' },
+        { account_id: '', family_name: '管理', given_name: '员' },
       ],
     });
   }, [open, category, privateType, lockedProvinceName, lockedCityName]);
@@ -472,12 +472,12 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       : values.institution.trim();
     const admins = (values.admins ?? [])
       .map((admin) => ({
-        admin_account: admin.admin_account.trim(),
+        account_id: admin.account_id.trim(),
         family_name: (admin.family_name ?? '').trim() || '管理',
         given_name: (admin.given_name ?? '').trim() || '员',
       }))
-      .filter((admin) => admin.admin_account);
-    const uniqueAdminCount = new Set(admins.map((admin) => admin.admin_account)).size;
+      .filter((admin) => admin.account_id);
+    const uniqueAdminCount = new Set(admins.map((admin) => admin.account_id)).size;
     if (uniqueAdminCount < 2) {
       notice.warning('请至少填写 2 名初始管理员');
       return;
@@ -513,7 +513,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       await submitChainSign(
         auth,
         result.request_id,
-        signed.signer_pubkey,
+        signed.signer_public_key,
         signed.signature,
       );
       if (isPrivate && privateType) {
@@ -811,10 +811,16 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
                   <Col span={11}>
                     <Form.Item
                       label={index === 0 ? '管理员账户' : undefined}
-                      name={[field.name, 'admin_account']}
-                      rules={[{ required: true, message: '请输入管理员账户' }]}
+                      name={[field.name, 'account_id']}
+                      rules={[
+                        { required: true, message: '请输入管理员账户 ID' },
+                        {
+                          pattern: /^0x[0-9a-f]{64}$/,
+                          message: '账户 ID 必须是小写 0x 加 64 位十六进制',
+                        },
+                      ]}
                     >
-                      <Input placeholder="0x 公钥或 SS58 地址" />
+                      <Input placeholder="小写 0x + 64 位十六进制" />
                     </Form.Item>
                   </Col>
                   <Col span={3}>
@@ -830,7 +836,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
               ))}
               <Button
                 icon={<PlusOutlined />}
-                onClick={() => add({ admin_account: '', family_name: '管理', given_name: '员' })}
+                onClick={() => add({ account_id: '', family_name: '管理', given_name: '员' })}
               >
                 添加管理员
               </Button>

@@ -107,7 +107,7 @@ export function LawEditorModal({ open, auth, lawAction, tier, voteType, onClose 
       const submitted = await submitChainSign(
         auth,
         prepared.request_id,
-        signed.signer_pubkey,
+        signed.signer_public_key,
         signed.signature,
       );
       message.success(`立法提案交易已提交：${submitted.tx_hash}`);

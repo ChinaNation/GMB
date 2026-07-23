@@ -1383,12 +1383,12 @@ class SmoldotClientManager {
   }
 
   /// 原生读取账户下一个可用 nonce（必须完整同步）。
-  Future<int?> getAccountNextIndex(String accountIdHex) async {
+  Future<int?> getAccountNextIndex(String accountId) async {
     await ensureSynced();
     _ensureReady();
     await _waitForPeer();
     return _withRetry(
-        'getAccountNextIndex', () => _chain!.getAccountNextIndex(accountIdHex));
+        'getAccountNextIndex', () => _chain!.getAccountNextIndex(accountId));
   }
 
   // `getBlockExtrinsics` 无上层调用方:上层钱包流水走区块事件监听,不逐块
@@ -1408,21 +1408,21 @@ class SmoldotClientManager {
 
   /// 原生读取 `System.Account` 快照（必须完整同步）。
   Future<SystemAccountSnapshot?> getSystemAccountSnapshot(
-      String accountIdHex) async {
+      String accountId) async {
     await ensureSynced();
     _ensureReady();
     return _withRetry(
-        'getSystemAccount', () => _chain!.getSystemAccount(accountIdHex));
+        'getSystemAccount', () => _chain!.getSystemAccount(accountId));
   }
 
   /// 原生读取 finalized 块上的 `System.Account` 快照（必须完整同步）。
   Future<SystemAccountSnapshot?> getFinalizedSystemAccountSnapshot(
-      String accountIdHex) async {
+      String accountId) async {
     await ensureSynced();
     _ensureReady();
     // 金额展示统一走 finalized storage proof，避免 best 头余额先行变动。
     return _withRetry('getFinalizedSystemAccount',
-        () => _chain!.getFinalizedSystemAccount(accountIdHex));
+        () => _chain!.getFinalizedSystemAccount(accountId));
   }
 
   /// 原生读取单个 storage value hex（必须完整同步）。

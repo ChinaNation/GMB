@@ -73,7 +73,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
     _proposerRoleCodeController = TextEditingController(
       text: defaultInstitutionProposerRoleCode(widget.institution),
     );
-    _fromSs58 = _accountHexToSs58(widget.institution.mainAccount);
+    _fromSs58 = _accountIdToSs58(widget.institution.mainAccountId);
     _fetchBalance();
     _amountController.addListener(_onAmountChanged);
   }
@@ -87,14 +87,14 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
     super.dispose();
   }
 
-  String _accountHexToSs58(String hex) {
+  String _accountIdToSs58(String hex) {
     final bytes = _hexToBytes(hex);
     return Keyring().encodeAddress(Uint8List.fromList(bytes), 2027);
   }
 
   Future<void> _fetchBalance() async {
     final store = AccountBalanceSnapshotStore.instance;
-    final local = await store.read(widget.institution.mainAccount);
+    final local = await store.read(widget.institution.mainAccountId);
     if (local != null && mounted) {
       setState(() {
         _availableBalance = local.balanceYuan;
@@ -107,7 +107,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
       final balance = await service.fetchInstitutionBalance(widget.institution);
       try {
         await store.put(
-          accountHex: widget.institution.mainAccount,
+          accountId: widget.institution.mainAccountId,
           balanceYuan: balance,
         );
       } catch (e) {
@@ -154,7 +154,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
     );
     if (result == null || !mounted) return;
     setState(() {
-      _beneficiaryController.text = result.toAddress;
+      _beneficiaryController.text = result.toSs58Address;
     });
   }
 
@@ -173,7 +173,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
     // 检查是否与机构地址相同
     final beneficiaryBytes = Keyring().decodeAddress(address);
     final institutionBytes =
-        Uint8List.fromList(_hexToBytes(widget.institution.mainAccount));
+        Uint8List.fromList(_hexToBytes(widget.institution.mainAccountId));
     if (_bytesEqual(beneficiaryBytes, institutionBytes)) {
       setState(() => _addressError = '收款地址不能与机构地址相同');
       return false;
@@ -250,7 +250,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
             actionLabel: '发起个人多签转账提案',
           )
         : await MultisigTransferBalanceGuard.checkInstitutionFeeAccountBalance(
-            feeAccountHex: accounts.feeAccount,
+            feeAccountId: accounts.feeAccountId,
             actionLabel: '发起机构多签转账提案',
             additionalDebitYuan:
                 TransferRpc.estimateTransferFeeYuan(amountYuan),
@@ -284,7 +284,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
         final qrSigner = QrSigner();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'propose-'),
-          pubkey: '0x${wallet.pubkeyHex}',
+          signerPublicKey: wallet.accountId,
           payloadHex: '0x${_toHex(payload)}',
           action: QrActions.multisigTransfer,
         );
@@ -296,14 +296,14 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
             builder: (_) => QrSignSessionPage(
                 request: request,
                 requestJson: requestJson,
-                expectedPubkey: '0x${wallet.pubkeyHex}'),
+                expectedSignerPublicKey: wallet.accountId),
           ),
         );
         if (response == null) throw Exception('签名已取消');
         return Uint8List.fromList(_hexToBytes(response.body.signatureHex));
       }
 
-      final signerPubkey = Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));
+      final signerPublicKey = Uint8List.fromList(_hexToBytes(wallet.accountId));
 
       final service = MultisigTransferService();
       final submitResult = await service.submitProposeTransfer(
@@ -312,8 +312,8 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
         beneficiaryAddress: _beneficiaryController.text.trim(),
         amountYuan: amountYuan,
         remark: _remarkController.text,
-        fromAddress: wallet.address,
-        signerPubkey: signerPubkey,
+        fromSs58Address: wallet.ss58Address,
+        signerPublicKey: signerPublicKey,
         sign: signCallback,
       );
 
@@ -363,17 +363,19 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
       if (!isPersonalAccountIdentity(widget.institution.cidNumber)) {
         return;
       }
-      final personalAccountHex = widget.institution.personalAccountHex;
+      final personalAccountId = widget.institution.personalAccountId;
       final personal = await WalletIsar.instance.read((isar) {
         return isar.personalAccountEntitys
             .filter()
-            .accountEqualTo(personalAccountHex)
+            .accountIdEqualTo(
+              '0x${personalAccountId.toLowerCase().replaceFirst('0x', '')}',
+            )
             .findFirst();
       });
       if (personal == null) return;
 
       await PersonalProposalHistoryService().recordOrUpdate(
-        personalAccountHex: personalAccountHex,
+        personalAccountId: personalAccountId,
         proposalId: proposalId,
         action: PersonalProposalAction.transfer,
         status: PersonalProposalStatus.voting,
@@ -676,7 +678,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                _truncateAddress(wallets.first.address),
+                _truncateAddress(wallets.first.ss58Address),
                 style: const TextStyle(
                   fontSize: 13,
                   fontFamily: 'monospace',
@@ -712,7 +714,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      _truncateAddress(w.address),
+                      _truncateAddress(w.ss58Address),
                       style: const TextStyle(
                         fontSize: 13,
                         fontFamily: 'monospace',

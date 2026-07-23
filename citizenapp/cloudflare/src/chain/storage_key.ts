@@ -1,16 +1,12 @@
-import { blake2AsU8a, decodeAddress, xxhashAsU8a } from '@polkadot/util-crypto';
-import { HttpError } from '../shared/http';
+import { blake2AsU8a, xxhashAsU8a } from '@polkadot/util-crypto';
+import { accountIdBytes } from '../shared/ids';
 
-/// 链上 storage 读取的共用底座：SS58 地址解码 + `Blake2_128Concat` map storage key 拼装。
+/// 链上 storage 读取的共用底座：规范 AccountId 解码 + `Blake2_128Concat` map key 拼装。
 /// 由链身份和其他明确需要读取 storage map 的业务共用，避免各自复制。
 
-/** SS58 钱包地址 → 32 字节 AccountId；格式不合法抛 400。 */
-export function decodeOwnerAccount(ownerAccount: string): Uint8Array {
-  try {
-    return decodeAddress(ownerAccount);
-  } catch {
-    throw new HttpError(400, 'invalid_owner_account', '钱包账户地址不合法');
-  }
+/** 小写 `0x` + 64 位 hex AccountId → 32 字节；不接受 SS58 或宽松格式。 */
+export function decodeAccountId(accountId: string): Uint8Array {
+  return accountIdBytes(accountId);
 }
 
 /**

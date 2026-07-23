@@ -38,8 +38,8 @@ Future<WalletCreationResult> runCreateWalletFlow(
 }) async {
   final created = await WalletManager().createWallet(wordCount: wordCount);
   unawaited(ChainTxMonitor.instance.initBaselineBalance(
-    created.profile.address,
-    created.profile.pubkeyHex,
+    created.profile.ss58Address,
+    created.profile.accountId,
   ));
   if (!context.mounted) {
     return created;

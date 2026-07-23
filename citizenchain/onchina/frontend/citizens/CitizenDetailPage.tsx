@@ -63,7 +63,7 @@ type Props = {
 };
 
 type OnchainForm = {
-  wallet_account: string;
+  account_id: string;
   actor_role_code: string;
   identity_level: CitizenOnchainIdentityLevel;
 };
@@ -178,8 +178,8 @@ export function CitizenDetailPage({
     loadDocuments();
   }, [loadDocuments]);
 
-  const updateWalletAddress = (walletAddress: string) => {
-    const next = { ...current, wallet_address: walletAddress };
+  const updateCitizenAccount = (account_id: string, ss58_address: string) => {
+    const next = { ...current, account_id: account_id, ss58_address: ss58_address };
     setCurrent(next);
     onUpdated(next);
   };
@@ -192,7 +192,7 @@ export function CitizenDetailPage({
       const output = await prepareCitizenOnchainSignature(
         auth,
         current.cid_number,
-        values.wallet_account.trim(),
+        values.account_id.trim(),
         values.actor_role_code.trim(),
         values.identity_level,
       );
@@ -207,9 +207,9 @@ export function CitizenDetailPage({
 
   const completeOnchainSignature = async (raw: string) => {
     const values = form.getFieldsValue();
-    const walletAccount = values.wallet_account?.trim();
-    if (!walletAccount) {
-      notice.warning('请先录入钱包账户');
+    const account_id = values.account_id?.trim();
+    if (!account_id) {
+      notice.warning('请先录入账户 ID');
       return;
     }
     const identityLevel = values.identity_level;
@@ -227,7 +227,7 @@ export function CitizenDetailPage({
       const output = await completeCitizenOnchainSignature(
         auth,
         current.cid_number,
-        walletAccount,
+        account_id,
         actorRoleCode,
         identityLevel,
         raw,
@@ -241,13 +241,12 @@ export function CitizenDetailPage({
         const submitted = await submitChainSign(
           auth,
           output.request_id,
-          signed.signer_pubkey,
+          signed.signer_public_key,
           signed.signature,
         );
         notice.success(`公民身份已上链,交易哈希：${submitted.tx_hash}`);
         // 钱包绑定只在链交易最终确认后反映到页面，避免未上链先显示已绑定。
-        onUpdated({ ...current, wallet_address: output.wallet_address });
-        updateWalletAddress(output.wallet_address);
+        updateCitizenAccount(output.account_id, output.ss58_address);
       } finally {
         setChainSubmitting(false);
       }
@@ -260,10 +259,10 @@ export function CitizenDetailPage({
 
   const revokeOnchain = async () => {
     const values = form.getFieldsValue();
-    const walletAccount = values.wallet_account?.trim();
+    const account_id = values.account_id?.trim();
     const actorRoleCode = values.actor_role_code?.trim();
-    if (!walletAccount) {
-      notice.warning('请先录入钱包账户');
+    if (!account_id) {
+      notice.warning('请先录入账户 ID');
       return;
     }
     if (!actorRoleCode) {
@@ -282,7 +281,7 @@ export function CitizenDetailPage({
       const submitted = await submitChainSign(
         auth,
         prep.request_id,
-        signed.signer_pubkey,
+        signed.signer_public_key,
         signed.signature,
       );
       notice.success(`公民身份已吊销,交易哈希：${submitted.tx_hash}`);
@@ -355,7 +354,7 @@ export function CitizenDetailPage({
           <Descriptions.Item label="性别">{sexText(current.citizen_sex)}</Descriptions.Item>
           <Descriptions.Item label="出生日期">{formatDate(current.citizen_birth_date)}</Descriptions.Item>
           <Descriptions.Item label="年龄">{typeof ageYears === 'number' ? `${ageYears}周岁` : '-'}</Descriptions.Item>
-          <Descriptions.Item label="投票账户">{current.wallet_address || '-'}</Descriptions.Item>
+          <Descriptions.Item label="投票账户">{current.ss58_address || '-'}</Descriptions.Item>
           <Descriptions.Item label="选举权利">{current.voting_eligible ? '有' : '无'}</Descriptions.Item>
           <Descriptions.Item label="公民状态">{statusTag(current.citizen_status)}</Descriptions.Item>
           <Descriptions.Item label="投票身份状态">{statusText(current.identity_status)}</Descriptions.Item>
@@ -389,7 +388,7 @@ export function CitizenDetailPage({
             form={form}
             layout="inline"
             initialValues={{
-              wallet_account: current.wallet_address ?? '',
+              account_id: current.account_id ?? '',
               actor_role_code: '',
               identity_level: 'voting',
             }}
@@ -420,13 +419,13 @@ export function CitizenDetailPage({
               />
             </Form.Item>
             <Form.Item
-              name="wallet_account"
-              rules={[{ required: canPushOnchain, message: '请输入钱包账户' }]}
+              name="account_id"
+              rules={[{ required: canPushOnchain, message: '请输入账户 ID' }]}
               style={{ minWidth: 460, marginBottom: 0 }}
             >
               <Input
                 prefix={<WalletOutlined />}
-                placeholder="推送链上身份时录入公民钱包账户"
+                placeholder="推送链上身份时录入公民账户 ID"
                 disabled={!canPushOnchain || prepareLoading || completeLoading}
                 allowClear
               />
@@ -518,7 +517,7 @@ export function CitizenDetailPage({
             },
             {
               title: '上传人',
-              dataIndex: 'uploaded_by',
+              dataIndex: 'uploader_account_id',
               ellipsis: true,
             },
             {
@@ -560,8 +559,8 @@ export function CitizenDetailPage({
       <ScanAccountModal
         open={scanOpen}
         onClose={() => setScanOpen(false)}
-        onResolved={(address) => {
-          form.setFieldsValue({ wallet_account: address });
+        onResolved={(account_id) => {
+          form.setFieldsValue({ account_id: account_id });
           setScanOpen(false);
         }}
       />

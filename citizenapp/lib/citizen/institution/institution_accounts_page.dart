@@ -8,7 +8,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 
 /// 统一机构「全部账户」页(ADR-028 决策 2)——替代公权/治理两套账户页。
 ///
-/// 账户行由 [institutionAccountRows] 统一构造(固定治理档用 china 固定
+/// 账户行由 [institutionAccountIdRows] 统一构造(固定治理档用 china 固定
 /// 账户、普通机构本地派生);余额经统一链态服务批量补(ADR-018 R2 精确整键批量)。
 class InstitutionAccountsPage extends StatefulWidget {
   const InstitutionAccountsPage({
@@ -27,7 +27,7 @@ class InstitutionAccountsPage extends StatefulWidget {
 
 class _InstitutionAccountsPageState extends State<InstitutionAccountsPage> {
   late List<InstitutionAccountRow> _rows =
-      institutionAccountRows(widget.institution);
+      institutionAccountIdRows(widget.institution);
   bool _balanceLoading = true;
 
   @override
@@ -39,11 +39,11 @@ class _InstitutionAccountsPageState extends State<InstitutionAccountsPage> {
   Future<void> _loadBalances() async {
     try {
       final balances = await widget.chainState
-          .balances(_rows.map((r) => r.accountHex).toList());
+          .balances(_rows.map((r) => r.accountId).toList());
       if (!mounted) return;
       setState(() {
         _rows = _rows
-            .map((r) => r.withBalance(balances[r.accountHex]))
+            .map((r) => r.withBalance(balances[r.accountId]))
             .toList(growable: false);
         _balanceLoading = false;
       });
@@ -116,7 +116,7 @@ class _AccountCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          Text(row.addressSs58,
+          Text(row.ss58Address,
               style: const TextStyle(
                   fontSize: 11.5, color: AppTheme.textTertiary)),
         ],

@@ -8,7 +8,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 const MyIdState _votingState = MyIdState(
   tier: MyIdTier.voting,
   status: MyIdStatus.normal,
-  votingAccount: 'w5BekTimvtfYZvFpkDzy7ypqUntPgTbjRFCt9weR8vMgf7o8E',
+  votingAccountId: 'w5BekTimvtfYZvFpkDzy7ypqUntPgTbjRFCt9weR8vMgf7o8E',
   cidNumber: 'CID-2026-0715',
   residenceDistrict: '中枢省 · 固市 · 和平镇',
   passportValidFrom: '2026-07-15',
@@ -18,7 +18,7 @@ const MyIdState _votingState = MyIdState(
 const MyIdState _candidateState = MyIdState(
   tier: MyIdTier.candidate,
   status: MyIdStatus.normal,
-  votingAccount: 'w5BekTimvtfYZvFpkDzy7ypqUntPgTbjRFCt9weR8vMgf7o8E',
+  votingAccountId: 'w5BekTimvtfYZvFpkDzy7ypqUntPgTbjRFCt9weR8vMgf7o8E',
   cidNumber: 'CID-2026-0715',
   residenceDistrict: '中枢省 · 固市 · 和平镇',
   passportValidFrom: '2026-07-15',
@@ -187,7 +187,7 @@ void main() {
       const MyIdState(
         tier: MyIdTier.voting,
         status: MyIdStatus.expired,
-        votingAccount: 'w5BekTimvtfYZvFpkDzy7ypqUntPgTbjRFCt9weR8vMgf7o8E',
+        votingAccountId: 'w5BekTimvtfYZvFpkDzy7ypqUntPgTbjRFCt9weR8vMgf7o8E',
         cidNumber: 'CID-2026-0715',
         residenceDistrict: '中枢省 · 固市 · 和平镇',
         passportValidFrom: '2020-01-01',
@@ -206,7 +206,7 @@ void main() {
       const MyIdState(
         tier: MyIdTier.candidate,
         status: MyIdStatus.normal,
-        votingAccount: 'w5BekTimvtfYZvFpkDzy7ypqUntPgTbjRFCt9weR8vMgf7o8E',
+        votingAccountId: 'w5BekTimvtfYZvFpkDzy7ypqUntPgTbjRFCt9weR8vMgf7o8E',
         cidNumber: 'CID-VERY-LONG-2026-0715-EXAMPLE',
         residenceDistrict: '中枢省 · 很长的城市名称 · 很长的乡镇名称',
         passportValidFrom: '2026-07-15',

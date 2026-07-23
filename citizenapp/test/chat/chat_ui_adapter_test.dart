@@ -19,8 +19,12 @@ ChatStoredMessage _stored({
     envelopeId: envelopeId,
     conversationId: 'dm:alice:bob',
     direction: direction,
-    senderAccount: outgoing ? 'alice-wallet' : 'bob-wallet',
-    recipientAccount: outgoing ? 'bob-wallet' : 'alice-wallet',
+    senderAccountId: outgoing
+        ? '0x1111111111111111111111111111111111111111111111111111111111111111'
+        : '0x2222222222222222222222222222222222222222222222222222222222222222',
+    recipientAccountId: outgoing
+        ? '0x2222222222222222222222222222222222222222222222222222222222222222'
+        : '0x1111111111111111111111111111111111111111111111111111111111111111',
     messageKind: kind,
     deliveryState: state,
     createdAtMillis: 1000,
@@ -36,7 +40,8 @@ void main() {
         kind: ChatMessageKind.text,
         plaintext: ChatPayloadCodec.encode(ChatContent.text('hello')),
       ),
-      ownerAccount: 'alice-wallet',
+      accountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
     ) as TextMessage;
     expect(outgoing.text, 'hello');
     expect(outgoing.status, MessageStatus.sent);
@@ -51,7 +56,8 @@ void main() {
         state: ChatMessageDeliveryState.receivedByDevice,
         plaintext: ChatPayloadCodec.encode(ChatContent.text('hi')),
       ),
-      ownerAccount: 'alice-wallet',
+      accountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
     ) as TextMessage;
     expect(incoming.text, 'hi');
     expect(incoming.status, MessageStatus.delivered);
@@ -78,7 +84,8 @@ void main() {
         kind: ChatMessageKind.image,
         plaintext: payload,
       ),
-      ownerAccount: 'alice-wallet',
+      accountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
       resolveLocalMediaPath: (c) =>
           c.attachmentId == 'att-1' ? '/cache/p.jpg' : null,
     ) as ImageMessage;
@@ -111,7 +118,8 @@ void main() {
         kind: ChatMessageKind.image,
         plaintext: payload,
       ),
-      ownerAccount: 'alice-wallet',
+      accountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
       resolveLocalMediaPath: (_) => null,
     ) as ImageMessage;
     expect(msg.source, '');
@@ -138,7 +146,8 @@ void main() {
         kind: ChatMessageKind.video,
         plaintext: payload,
       ),
-      ownerAccount: 'alice-wallet',
+      accountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
       resolveLocalMediaPath: (_) => '/cache/clip.mp4',
     ) as VideoMessage;
     expect(msg.name, 'clip.mp4');
@@ -173,7 +182,8 @@ void main() {
         kind: ChatMessageKind.file,
         plaintext: payload,
       ),
-      ownerAccount: 'alice-wallet',
+      accountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
       resolveLocalMediaPath: (_) => '/cache/doc.pdf',
     ) as FileMessage;
     expect(msg.name, 'doc.pdf');
@@ -192,7 +202,8 @@ void main() {
         kind: ChatMessageKind.sticker,
         plaintext: payload,
       ),
-      ownerAccount: 'alice-wallet',
+      accountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
     ) as CustomMessage;
     // 贴纸走 Message.custom,由 chat_page 的 customMessageBuilder 按 id 渲染;
     // id 只经 metadata 携带,不占正文文本。
@@ -217,7 +228,8 @@ void main() {
         kind: ChatMessageKind.image,
         plaintext: payload,
       ),
-      ownerAccount: 'alice-wallet',
+      accountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
       resolveLocalMediaPath: (_) {
         resolverCalled = true;
         return '/cache/big.jpg';

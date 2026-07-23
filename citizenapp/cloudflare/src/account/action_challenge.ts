@@ -19,19 +19,19 @@ export type SignedAction = 'delete_account';
 
 const ACTION_CHALLENGE_TTL_SECONDS = 300;
 
-/// 动作签名 SCALE payload：`action ‖ owner ‖ challenge_id [‖ context] ‖ expires_at`。
+/// 动作签名 SCALE payload：`action ‖ account_id ‖ challenge_id [‖ context] ‖ expires_at`。
 /// action 编入正文 → 登录/其它动作的签名无法被重放成本动作；[context] 若存在则插在
 /// challenge_id 与 expires_at 之间。被签消息 = signing_message(OP_SIGN_SQUARE_ACTION, payload)。
 function buildActionScalePayload(
   action: SignedAction,
-  ownerAccount: string,
+  accountId: string,
   challengeId: string,
   expiresAt: number,
   context?: string
 ): Uint8Array {
   return concatBytes(
     scaleString(action),
-    scaleString(ownerAccount),
+    scaleString(accountId),
     scaleString(challengeId),
     ...(context === undefined ? [] : [scaleString(context)]),
     u64Le(expiresAt)
@@ -49,29 +49,29 @@ export interface IssuedActionChallenge {
 /// SCALE payload 的 hex，动作编入其中）。
 export async function issueActionChallenge(
   env: Env,
-  ownerAccount: string,
+  accountId: string,
   action: SignedAction,
   context?: string
 ): Promise<IssuedActionChallenge> {
   const challengeId = createId('sqa');
   const expiresAt = secondsFromNow(ACTION_CHALLENGE_TTL_SECONDS);
   const signingPayloadHex = bytesToHex(
-    buildActionScalePayload(action, ownerAccount, challengeId, expiresAt, context)
+    buildActionScalePayload(action, accountId, challengeId, expiresAt, context)
   );
 
   await env.DB.prepare(
     `INSERT INTO square_login_challenges
-      (challenge_id, owner_account, signing_payload, expires_at, used_at)
+      (challenge_id, account_id, signing_payload, expires_at, used_at)
       VALUES (?, ?, ?, ?, NULL)`
   )
-    .bind(challengeId, ownerAccount, signingPayloadHex, expiresAt)
+    .bind(challengeId, accountId, signingPayloadHex, expiresAt)
     .run();
 
   return { challengeId, opTag: OP_SIGN_SQUARE_ACTION, signingPayloadHex, expiresAt };
 }
 
 export interface ActionSignatureInput {
-  ownerAccount: string;
+  accountId: string;
   action: SignedAction;
   challengeId: string;
   signature: string;
@@ -87,14 +87,14 @@ export async function consumeActionSignature(
   input: ActionSignatureInput
 ): Promise<void> {
   const challenge = await env.DB.prepare(
-    `SELECT challenge_id, owner_account, signing_payload, expires_at, used_at
+    `SELECT challenge_id, account_id, signing_payload, expires_at, used_at
       FROM square_login_challenges
       WHERE challenge_id = ?`
   )
     .bind(input.challengeId)
     .first<LoginChallengeRow>();
 
-  if (!challenge || challenge.owner_account !== input.ownerAccount) {
+  if (!challenge || challenge.account_id !== input.accountId) {
     throw new HttpError(401, 'invalid_challenge', '签名挑战不存在');
   }
   if (challenge.used_at !== null) {
@@ -108,7 +108,7 @@ export async function consumeActionSignature(
   const expectedPayloadHex = bytesToHex(
     buildActionScalePayload(
       input.action,
-      challenge.owner_account,
+      challenge.account_id,
       challenge.challenge_id,
       challenge.expires_at,
       input.context
@@ -122,7 +122,7 @@ export async function consumeActionSignature(
     OP_SIGN_SQUARE_ACTION,
     hexToBytes(challenge.signing_payload)
   );
-  const isValid = await verifyWalletSignature(message, input.signature, input.ownerAccount);
+  const isValid = await verifyWalletSignature(message, input.signature, input.accountId);
   if (!isValid) {
     throw new HttpError(401, 'invalid_signature', '钱包签名校验失败');
   }

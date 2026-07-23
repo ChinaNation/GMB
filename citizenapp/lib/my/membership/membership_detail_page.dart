@@ -41,8 +41,7 @@ class MembershipDetailPage extends StatelessWidget {
           const SizedBox(height: 16),
           _section(tierColor, Icons.chat_bubble_outline, '聊天', [
             _row('单文件上限', '每个 ${plan.chatFileSizeLabel}'),
-            _row('大文件中转（>100MB）',
-                plan.supportsLargeFileRelay ? '支持' : '不支持'),
+            _row('大文件中转（>100MB）', plan.supportsLargeFileRelay ? '支持' : '不支持'),
           ]),
           const SizedBox(height: 12),
           _section(tierColor, Icons.dynamic_feed_outlined, '动态', [

@@ -5,50 +5,65 @@ import 'package:citizenwallet/qr/envelope.dart';
 
 class SignResponseBody implements QrBody {
   const SignResponseBody({
-    required this.signerPubkey,
+    required this.signerPublicKey,
     required this.signature,
   });
 
   /// 签名者公钥 `u`:32 字节 base64url 无填充。
-  final String signerPubkey;
+  final String signerPublicKey;
 
   /// 签名 `s`:64 字节 sr25519 signature base64url 无填充。
   final String signature;
 
-  Uint8List get pubkeyBytes => _b64ToBytes(signerPubkey, 'u');
+  Uint8List get signerPublicKeyBytes => _b64ToBytes(signerPublicKey, 'u');
 
   Uint8List get signatureBytes => _b64ToBytes(signature, 's');
 
-  String get pubkeyHex => '0x${_toHex(pubkeyBytes)}';
+  String get signerPublicKeyHex => '0x${_toHex(signerPublicKeyBytes)}';
 
   String get signatureHex => '0x${_toHex(signatureBytes)}';
 
   @override
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'u': signerPubkey,
+        'u': signerPublicKey,
         's': signature,
       };
 
   static SignResponseBody fromJson(Map<String, dynamic> data) {
-    final signerPubkey = data['u'];
+    final signerPublicKey = data['u'];
     final signature = data['s'];
-    if (signerPubkey is! String ||
-        _b64ToBytes(signerPubkey, 'u').length != 32) {
+    if (signerPublicKey is! String ||
+        _b64ToBytes(signerPublicKey, 'u').length != 32) {
       throw const FormatException('签名响应 u 必须为 32 字节 base64url');
     }
     if (signature is! String || _b64ToBytes(signature, 's').length != 64) {
       throw const FormatException('签名响应 s 必须为 64 字节 base64url');
     }
-    return SignResponseBody(signerPubkey: signerPubkey, signature: signature);
+    return SignResponseBody(
+      signerPublicKey: signerPublicKey,
+      signature: signature,
+    );
   }
 
   static SignResponseBody fromHex({
-    required String pubkeyHex,
+    required String signerPublicKeyHex,
     required String signatureHex,
   }) {
     return SignResponseBody(
-      signerPubkey: _b64NoPad(_hexToBytes(pubkeyHex)),
-      signature: _b64NoPad(_hexToBytes(signatureHex)),
+      signerPublicKey: _b64NoPad(
+        _strictHexBytes(
+          signerPublicKeyHex,
+          field: 'signer_public_key',
+          expectedBytes: 32,
+        ),
+      ),
+      signature: _b64NoPad(
+        _strictHexBytes(
+          signatureHex,
+          field: 'signature',
+          expectedBytes: 64,
+        ),
+      ),
     );
   }
 }
@@ -66,18 +81,29 @@ Uint8List _b64ToBytes(String input, String field) {
   }
 }
 
-List<int> _hexToBytes(String input) {
-  final text = input.startsWith('0x') || input.startsWith('0X')
-      ? input.substring(2)
-      : input;
-  if (text.isEmpty || text.length.isOdd) {
-    throw const FormatException('hex 必须为偶数字节');
+List<int> _strictHexBytes(
+  String input, {
+  required String field,
+  required int expectedBytes,
+}) {
+  if (!input.startsWith('0x')) {
+    throw FormatException('$field 必须以小写 0x 开头');
   }
-  return List<int>.generate(
+  final text = input.substring(2);
+  if (text.isEmpty ||
+      text.length.isOdd ||
+      !RegExp(r'^[0-9a-f]+$').hasMatch(text)) {
+    throw FormatException('$field 必须是小写偶数字节十六进制');
+  }
+  final bytes = List<int>.generate(
     text.length ~/ 2,
     (i) => int.parse(text.substring(i * 2, i * 2 + 2), radix: 16),
     growable: false,
   );
+  if (bytes.length != expectedBytes) {
+    throw FormatException('$field 必须是 $expectedBytes 字节');
+  }
+  return bytes;
 }
 
 String _toHex(List<int> bytes) {

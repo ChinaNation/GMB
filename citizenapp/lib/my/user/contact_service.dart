@@ -6,7 +6,6 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 import 'package:isar_community/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
@@ -17,25 +16,29 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// 本模型只保存联系人账户与当前用户自己的私人联系人名称。
 class UserContact {
   const UserContact({
-    required this.address,
+    required this.accountId,
+    required this.ss58Address,
     required this.contactName,
     required this.createdAt,
     required this.updatedAt,
   });
 
-  final String address;
+  final String accountId;
+  final String ss58Address;
   final String contactName;
   final int createdAt;
   final int updatedAt;
 
   UserContact copyWith({
-    String? address,
+    String? accountId,
+    String? ss58Address,
     String? contactName,
     int? createdAt,
     int? updatedAt,
   }) {
     return UserContact(
-      address: address ?? this.address,
+      accountId: accountId ?? this.accountId,
+      ss58Address: ss58Address ?? this.ss58Address,
       contactName: contactName ?? this.contactName,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -43,17 +46,24 @@ class UserContact {
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'address': address,
+        'account_id': accountId,
+        'ss58_address': ss58Address,
         'contact_name': contactName,
         'created_at': createdAt,
         'updated_at': updatedAt,
       };
 
   factory UserContact.fromJson(Map<String, dynamic> json) {
-    final address = json['address']?.toString().trim() ?? '';
+    final accountId = json['account_id']?.toString() ?? '';
+    final ss58Address = json['ss58_address']?.toString().trim() ?? '';
     final contactName = json['contact_name']?.toString().trim() ?? '';
-    if (address.isEmpty || contactName.isEmpty) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId) ||
+        ss58Address.isEmpty ||
+        contactName.isEmpty) {
       throw const FormatException('通讯录地址或联系人名称为空');
+    }
+    if (UserContactService.accountIdFromSs58(ss58Address) != accountId) {
+      throw const FormatException('通讯录 account_id 与 ss58_address 不匹配');
     }
     final createdAt = _asInt(json['created_at']);
     final updatedAt = _asInt(json['updated_at']);
@@ -61,7 +71,8 @@ class UserContact {
       throw const FormatException('通讯录时间戳不合法');
     }
     return UserContact(
-      address: UserContactService.normalizeAddress(address),
+      accountId: accountId,
+      ss58Address: UserContactService.normalizeSs58Address(ss58Address),
       contactName: contactName,
       createdAt: createdAt,
       updatedAt: updatedAt,
@@ -102,28 +113,32 @@ class ContactSyncState {
 /// 联系人端到端加密器。AES-GCM 保护内容与完整性，HMAC 生成不透明 contact_id；
 /// 两把钥匙均由 WalletManager 从 seed 域隔离派生，本类永远接触不到 seed。
 class ContactCryptor {
-  ContactCryptor({required this.ownerAccount, required this.keys});
+  ContactCryptor({required this.accountId, required this.keys});
 
   static const String schema = 'citizenapp.contacts.v1';
-  final String ownerAccount;
+  final String accountId;
   final ContactKeyMaterial keys;
   final AesGcm _aes = AesGcm.with256bits();
   final Hmac _hmac = Hmac.sha256();
 
-  Future<String> contactId(String address) async {
+  Future<String> contactId(String accountId) async {
     final mac = await _hmac.calculateMac(
-      utf8.encode(UserContactService.normalizeAddress(address)),
+      utf8.encode(UserContactService.requireAccountId(accountId)),
       secretKey: SecretKey(keys.indexKey),
     );
     return _hex(mac.bytes);
   }
 
   Future<SquareEncryptedContact> encrypt(UserContact contact) async {
-    final id = await contactId(contact.address);
+    final id = await contactId(contact.accountId);
     final clear = utf8.encode(jsonEncode(<String, Object?>{
       'schema': schema,
-      'owner_account': ownerAccount,
-      ...contact.toJson(),
+      'account_id': accountId,
+      'contact_account_id': contact.accountId,
+      'ss58_address': contact.ss58Address,
+      'contact_name': contact.contactName,
+      'created_at': contact.createdAt,
+      'updated_at': contact.updatedAt,
     }));
     final nonce = _randomBytes(12);
     final box = await _aes.encrypt(
@@ -155,11 +170,14 @@ class ContactCryptor {
       final decoded = jsonDecode(utf8.decode(clear));
       if (decoded is! Map<String, dynamic> ||
           decoded['schema'] != schema ||
-          decoded['owner_account'] != ownerAccount) {
+          decoded['account_id'] != accountId) {
         throw const FormatException('通讯录密文归属或版本不匹配');
       }
-      final contact = UserContact.fromJson(decoded);
-      if (await contactId(contact.address) != record.contactId) {
+      final contact = UserContact.fromJson(<String, dynamic>{
+        ...decoded,
+        'account_id': decoded['contact_account_id'],
+      });
+      if (await contactId(contact.accountId) != record.contactId) {
         throw const FormatException('通讯录密文索引不匹配');
       }
       return contact;
@@ -168,10 +186,10 @@ class ContactCryptor {
     }
   }
 
-  List<int> _aad(String id) => utf8.encode('$schema|$ownerAccount|$id');
+  List<int> _aad(String id) => utf8.encode('$schema|$accountId|$id');
 }
 
-/// 本地优先的加密通讯录服务。Isar 保存按 owner 隔离的可用缓存与待同步操作；
+/// 本地优先的加密通讯录服务。Isar 保存按 accountId 隔离的可用缓存与待同步操作；
 /// Cloudflare 只接收 [SquareEncryptedContact]，网络失败不会阻塞本地增删改。
 class UserContactService {
   UserContactService({
@@ -184,7 +202,6 @@ class UserContactService {
         _apiClient = apiClient ?? SquareApiClient(),
         _autoSync = autoSync;
 
-  static const String legacyPreferencesKey = 'user.contacts.items.v2';
   static const int _ss58Prefix = 2027;
   static const String _contactsPrefix = 'contacts:';
   static const String _pendingPrefix = 'contact_pending_ops:';
@@ -202,43 +219,43 @@ class UserContactService {
 
   /// 通讯录只属于“我的钱包”中的默认热钱包，调用方不得用交易付款钱包覆盖。
   Future<List<UserContact>> getContacts() async {
-    final owner = (await _requireDefaultWallet()).address;
-    return _getContacts(owner);
+    final accountId = (await _requireDefaultWallet()).accountId;
+    return _getContacts(accountId);
   }
 
-  Future<List<UserContact>> _getContacts(String owner) async {
-    await _migrateLegacyContacts(owner);
-    return _readContacts(owner);
+  Future<List<UserContact>> _getContacts(String accountId) async {
+    return _readContacts(accountId);
   }
 
   /// 返回通讯录当前所属的默认用户账户，供扫码页做“不能添加自己”校验。
-  Future<String> getOwnerAccount() async =>
-      (await _requireDefaultWallet()).address;
+  Future<String> getAccountId() async =>
+      (await _requireDefaultWallet()).accountId;
 
   Future<ContactImportResult> addContact({
-    required String address,
+    required String ss58Address,
     required String contactName,
   }) async {
     final wallet = await _requireDefaultWallet();
-    final owner = wallet.address;
-    await _migrateLegacyContacts(owner);
-    final normalizedAddress = normalizeAddress(address);
+    final currentAccountId = wallet.accountId;
+    final normalizedSs58Address = normalizeSs58Address(ss58Address);
+    final accountId = accountIdFromSs58(normalizedSs58Address);
     final normalizedName = contactName.trim();
     if (normalizedName.isEmpty) {
       throw const FormatException('联系人名称为空');
     }
-    if (normalizedAddress == owner) {
+    if (accountId == wallet.accountId) {
       throw const FormatException('不能把自己加入通讯录');
     }
 
-    final contacts = (await _readContacts(owner)).toList(growable: true);
-    final index =
-        contacts.indexWhere((item) => item.address == normalizedAddress);
+    final contacts =
+        (await _readContacts(currentAccountId)).toList(growable: true);
+    final index = contacts.indexWhere((item) => item.accountId == accountId);
     final created = index < 0;
     final now = _nextTimestamp(created ? 0 : contacts[index].updatedAt);
     final contact = created
         ? UserContact(
-            address: normalizedAddress,
+            accountId: accountId,
+            ss58Address: normalizedSs58Address,
             contactName: normalizedName,
             createdAt: now,
             updatedAt: now,
@@ -250,9 +267,9 @@ class UserContactService {
       contacts[index] = contact;
     }
     await _writeContactsAndPending(
-      owner,
+      currentAccountId,
       contacts,
-      _PendingContactOp.upsert(contact.address, contact.updatedAt),
+      _PendingContactOp.upsert(contact.accountId, contact.updatedAt),
     );
     if (_autoSync) {
       unawaited(_syncWallet(wallet));
@@ -261,19 +278,19 @@ class UserContactService {
   }
 
   Future<List<UserContact>> renameContact(
-    String address,
+    String contactAccountId,
     String contactName,
   ) async {
     final wallet = await _requireDefaultWallet();
-    final owner = wallet.address;
-    final normalizedAddress = normalizeAddress(address);
+    final accountId = wallet.accountId;
+    final normalizedContactAccountId = requireAccountId(contactAccountId);
     final normalizedName = contactName.trim();
     if (normalizedName.isEmpty) {
       throw const FormatException('联系人名称不能为空');
     }
-    final contacts = (await _getContacts(owner)).toList(growable: true);
-    final index =
-        contacts.indexWhere((item) => item.address == normalizedAddress);
+    final contacts = (await _getContacts(accountId)).toList(growable: true);
+    final index = contacts
+        .indexWhere((item) => item.accountId == normalizedContactAccountId);
     if (index < 0) {
       throw Exception('未找到联系人');
     }
@@ -282,10 +299,10 @@ class UserContactService {
       updatedAt: _nextTimestamp(contacts[index].updatedAt),
     );
     await _writeContactsAndPending(
-      owner,
+      accountId,
       contacts,
       _PendingContactOp.upsert(
-        contacts[index].address,
+        contacts[index].accountId,
         contacts[index].updatedAt,
       ),
     );
@@ -295,18 +312,18 @@ class UserContactService {
     return _sorted(contacts);
   }
 
-  Future<List<UserContact>> deleteContact(String address) async {
+  Future<List<UserContact>> deleteContact(String contactAccountId) async {
     final wallet = await _requireDefaultWallet();
-    final owner = wallet.address;
-    final normalizedAddress = normalizeAddress(address);
-    final contacts = (await _getContacts(owner))
-        .where((item) => item.address != normalizedAddress)
+    final accountId = wallet.accountId;
+    final normalizedContactAccountId = requireAccountId(contactAccountId);
+    final contacts = (await _getContacts(accountId))
+        .where((item) => item.accountId != normalizedContactAccountId)
         .toList(growable: false);
     await _writeContactsAndPending(
-      owner,
+      accountId,
       contacts,
       _PendingContactOp.delete(
-        normalizedAddress,
+        normalizedContactAccountId,
         _nextTimestamp(),
       ),
     );
@@ -325,19 +342,18 @@ class UserContactService {
   }
 
   Future<List<UserContact>> _syncWallet(WalletProfile wallet) async {
-    final owner = wallet.address;
-    await _migrateLegacyContacts(owner);
-    await _setSyncState(owner, ContactSyncPhase.syncing);
+    final accountId = wallet.accountId;
+    await _setSyncState(accountId, ContactSyncPhase.syncing);
     try {
       final keys = await _walletManager.ensureContactKeyMaterial(
         walletIndex: wallet.walletIndex,
-        ownerAccount: owner,
+        accountId: accountId,
       );
       final session = await _sessionProvider.ensureSession();
-      if (session == null || session.ownerAccount != owner) {
+      if (session == null || session.accountId != accountId) {
         throw const SquareApiException('通讯录云同步需要默认热钱包会话');
       }
-      final cryptor = ContactCryptor(ownerAccount: owner, keys: keys);
+      final cryptor = ContactCryptor(accountId: accountId, keys: keys);
       final cloudRecords = <SquareEncryptedContact>[];
       String? cursor;
       do {
@@ -349,64 +365,64 @@ class UserContactService {
         cursor = page.nextCursor;
       } while (cursor != null);
 
-      final pending = await _readPending(owner);
-      final pendingAddresses = pending.map((item) => item.address).toSet();
-      final local = await _readContacts(owner);
+      final pending = await _readPending(accountId);
+      final pendingAccountIds = pending.map((item) => item.accountId).toSet();
+      final local = await _readContacts(accountId);
       final merged = <String, UserContact>{};
       final localByContactId = <String, UserContact>{};
       for (final contact in local) {
-        localByContactId[await cryptor.contactId(contact.address)] = contact;
+        localByContactId[await cryptor.contactId(contact.accountId)] = contact;
       }
       for (final record in cloudRecords) {
         try {
           final contact = await cryptor.decrypt(record);
-          if (!pendingAddresses.contains(contact.address)) {
-            merged[contact.address] = contact;
+          if (!pendingAccountIds.contains(contact.accountId)) {
+            merged[contact.accountId] = contact;
           }
         } on FormatException {
           // 单条损坏不应让整个通讯录不可用，也不能覆盖同 ID 的本地有效缓存。
           final cached = localByContactId[record.contactId];
-          if (cached != null) merged[cached.address] = cached;
+          if (cached != null) merged[cached.accountId] = cached;
         }
       }
       for (final contact in local) {
-        if (pendingAddresses.contains(contact.address)) {
-          merged[contact.address] = contact;
+        if (pendingAccountIds.contains(contact.accountId)) {
+          merged[contact.accountId] = contact;
         }
       }
-      await _writeContacts(owner, merged.values.toList(growable: false));
+      await _writeContacts(accountId, merged.values.toList(growable: false));
 
       for (final op in List<_PendingContactOp>.from(pending)) {
         if (op.action == _PendingAction.delete) {
           await _apiClient.deleteEncryptedContact(
             session: session,
-            contactId: await cryptor.contactId(op.address),
+            contactId: await cryptor.contactId(op.accountId),
           );
         } else {
-          final contact = merged[op.address];
+          final contact = merged[op.accountId];
           if (contact == null) continue;
           await _apiClient.putEncryptedContact(
             session: session,
             contact: await cryptor.encrypt(contact),
           );
         }
-        await _removePending(owner, op);
+        await _removePending(accountId, op);
       }
-      final result = await _readContacts(owner);
-      await _setSyncState(owner, ContactSyncPhase.synced);
+      final result = await _readContacts(accountId);
+      await _setSyncState(accountId, ContactSyncPhase.synced);
       return result;
     } on Exception catch (error) {
-      final pending = await _readPending(owner);
+      final pending = await _readPending(accountId);
       final phase =
           pending.isEmpty ? ContactSyncPhase.offline : ContactSyncPhase.failed;
-      await _setSyncState(owner, phase, message: error.toString());
-      return _readContacts(owner);
+      await _setSyncState(accountId, phase, message: error.toString());
+      return _readContacts(accountId);
     }
   }
 
   Future<ContactSyncState> readSyncState() async {
-    final owner = (await _requireDefaultWallet()).address;
-    final raw = await _readKv('$_syncPrefix$owner');
+    final accountId = (await _requireDefaultWallet()).accountId;
+    final raw = await _readKv('$_syncPrefix$accountId');
     if (raw == null) {
       return const ContactSyncState(phase: ContactSyncPhase.idle);
     }
@@ -434,51 +450,8 @@ class UserContactService {
     return wallet;
   }
 
-  Future<void> _migrateLegacyContacts(String owner) async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(legacyPreferencesKey);
-    if (raw == null) return;
-    final migrated = <UserContact>[];
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is List) {
-        for (final item in decoded.whereType<Map<String, dynamic>>()) {
-          final address = item['address']?.toString().trim() ?? '';
-          final localName = item['local_nickname']?.toString().trim() ?? '';
-          final sourceName = item['source_nickname']?.toString().trim() ?? '';
-          final name = localName.isNotEmpty ? localName : sourceName;
-          if (address.isEmpty || name.isEmpty) continue;
-          // 历史版本允许 0 时间戳；迁移时一次性收口为 Worker 可接受的正整数，
-          // 不保留旧格式兼容分支。
-          final rawCreatedAt = _asInt(item['added_at']);
-          final rawUpdatedAt = _asInt(item['updated_at']);
-          final createdAt = rawCreatedAt > 0 ? rawCreatedAt : _nextTimestamp();
-          final updatedAt = rawUpdatedAt > 0
-              ? rawUpdatedAt.clamp(createdAt, 0x7fffffffffffffff).toInt()
-              : createdAt;
-          migrated.add(UserContact(
-            address: normalizeAddress(address),
-            contactName: name,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
-          ));
-        }
-      }
-      if (migrated.isNotEmpty) {
-        final pending = migrated
-            .map((item) =>
-                _PendingContactOp.upsert(item.address, item.updatedAt))
-            .toList(growable: false);
-        await _writeSnapshot(owner, migrated, pending);
-      }
-    } finally {
-      // 无论旧载荷是否合法都只处理一次；不保留双轨读取或损坏旧数据死循环。
-      await prefs.remove(legacyPreferencesKey);
-    }
-  }
-
-  Future<List<UserContact>> _readContacts(String owner) async {
-    final raw = await _readKv('$_contactsPrefix$owner');
+  Future<List<UserContact>> _readContacts(String accountId) async {
+    final raw = await _readKv('$_contactsPrefix$accountId');
     if (raw == null || raw.isEmpty) return const <UserContact>[];
     try {
       final decoded = jsonDecode(raw);
@@ -492,8 +465,8 @@ class UserContactService {
     }
   }
 
-  Future<List<_PendingContactOp>> _readPending(String owner) async {
-    final raw = await _readKv('$_pendingPrefix$owner');
+  Future<List<_PendingContactOp>> _readPending(String accountId) async {
+    final raw = await _readKv('$_pendingPrefix$accountId');
     if (raw == null || raw.isEmpty) return const <_PendingContactOp>[];
     try {
       final decoded = jsonDecode(raw);
@@ -508,59 +481,61 @@ class UserContactService {
   }
 
   Future<void> _writeContactsAndPending(
-    String owner,
+    String accountId,
     List<UserContact> contacts,
     _PendingContactOp next,
   ) async {
-    final pending = (await _readPending(owner)).toList(growable: true)
-      ..removeWhere((item) => item.address == next.address)
+    final pending = (await _readPending(accountId)).toList(growable: true)
+      ..removeWhere((item) => item.accountId == next.accountId)
       ..add(next);
-    await _writeSnapshot(owner, contacts, pending);
-    await _setSyncState(owner, ContactSyncPhase.pending);
+    await _writeSnapshot(accountId, contacts, pending);
+    await _setSyncState(accountId, ContactSyncPhase.pending);
   }
 
-  Future<void> _removePending(String owner, _PendingContactOp completed) async {
-    final pending = (await _readPending(owner))
+  Future<void> _removePending(
+      String accountId, _PendingContactOp completed) async {
+    final pending = (await _readPending(accountId))
         .where((item) =>
-            item.address != completed.address ||
+            item.accountId != completed.accountId ||
             item.updatedAt > completed.updatedAt)
         .toList(growable: false);
-    await _writePending(owner, pending);
+    await _writePending(accountId, pending);
   }
 
   Future<void> _writeSnapshot(
-    String owner,
+    String accountId,
     List<UserContact> contacts,
     List<_PendingContactOp> pending,
   ) {
     return WalletIsar.instance.writeTxn((isar) async {
       await _putKvInTxn(
         isar,
-        '$_contactsPrefix$owner',
+        '$_contactsPrefix$accountId',
         jsonEncode(_sorted(contacts).map((item) => item.toJson()).toList()),
       );
       await _putKvInTxn(
         isar,
-        '$_pendingPrefix$owner',
+        '$_pendingPrefix$accountId',
         jsonEncode(pending.map((item) => item.toJson()).toList()),
       );
     });
   }
 
-  Future<void> _writeContacts(String owner, List<UserContact> contacts) =>
+  Future<void> _writeContacts(String accountId, List<UserContact> contacts) =>
       _writeKv(
-        '$_contactsPrefix$owner',
+        '$_contactsPrefix$accountId',
         jsonEncode(_sorted(contacts).map((item) => item.toJson()).toList()),
       );
 
-  Future<void> _writePending(String owner, List<_PendingContactOp> pending) =>
+  Future<void> _writePending(
+          String accountId, List<_PendingContactOp> pending) =>
       _writeKv(
-        '$_pendingPrefix$owner',
+        '$_pendingPrefix$accountId',
         jsonEncode(pending.map((item) => item.toJson()).toList()),
       );
 
   Future<void> _setSyncState(
-    String owner,
+    String accountId,
     ContactSyncPhase phase, {
     String? message,
   }) async {
@@ -571,7 +546,7 @@ class UserContactService {
     );
     syncState.value = state;
     await _writeKv(
-      '$_syncPrefix$owner',
+      '$_syncPrefix$accountId',
       jsonEncode(<String, Object?>{
         'phase': phase.name,
         'updated_at': state.updatedAt,
@@ -595,7 +570,7 @@ class UserContactService {
     await isar.appKvEntitys.put(row);
   }
 
-  static String normalizeAddress(String input) {
+  static String normalizeSs58Address(String input) {
     final trimmed = input.trim();
     if (trimmed.isEmpty) throw const FormatException('地址为空');
     try {
@@ -611,6 +586,19 @@ class UserContactService {
       throw const FormatException('联系人地址格式无效');
     }
   }
+
+  static String accountIdFromSs58(String ss58Address) {
+    final normalized = normalizeSs58Address(ss58Address);
+    final bytes = Keyring().decodeAddress(normalized);
+    return '0x${_hex(bytes)}';
+  }
+
+  static String requireAccountId(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+    }
+    return accountId;
+  }
 }
 
 enum _PendingAction { upsert, delete }
@@ -618,31 +606,31 @@ enum _PendingAction { upsert, delete }
 class _PendingContactOp {
   const _PendingContactOp({
     required this.action,
-    required this.address,
+    required this.accountId,
     required this.updatedAt,
   });
 
-  factory _PendingContactOp.upsert(String address, int updatedAt) =>
+  factory _PendingContactOp.upsert(String accountId, int updatedAt) =>
       _PendingContactOp(
         action: _PendingAction.upsert,
-        address: address,
+        accountId: accountId,
         updatedAt: updatedAt,
       );
 
-  factory _PendingContactOp.delete(String address, int updatedAt) =>
+  factory _PendingContactOp.delete(String accountId, int updatedAt) =>
       _PendingContactOp(
         action: _PendingAction.delete,
-        address: address,
+        accountId: accountId,
         updatedAt: updatedAt,
       );
 
   final _PendingAction action;
-  final String address;
+  final String accountId;
   final int updatedAt;
 
   Map<String, Object?> toJson() => <String, Object?>{
         'action': action.name,
-        'address': address,
+        'account_id': accountId,
         'updated_at': updatedAt,
       };
 
@@ -652,8 +640,8 @@ class _PendingContactOp {
         : _PendingAction.upsert;
     return _PendingContactOp(
       action: action,
-      address: UserContactService.normalizeAddress(
-        json['address']?.toString() ?? '',
+      accountId: UserContactService.requireAccountId(
+        json['account_id']?.toString() ?? '',
       ),
       updatedAt: _asInt(json['updated_at']),
     );

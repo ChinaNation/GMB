@@ -93,9 +93,8 @@ class SquarePostCard extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               flex: 3,
-              child: caption.isEmpty
-                  ? const SizedBox.shrink()
-                  : _caption(caption),
+              child:
+                  caption.isEmpty ? const SizedBox.shrink() : _caption(caption),
             ),
           ],
         ),

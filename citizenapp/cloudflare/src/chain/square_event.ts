@@ -1,16 +1,12 @@
-import { encodeAddress } from '@polkadot/util-crypto';
 import { scaleString, scaleCompact, bytesToHex, hexToBytes } from '../shared/signing_message';
 import type { PostCategory } from '../types';
 
 // 与统一协议 P-CHAIN-SQUARE-001 固定索引一致；发布确认只接受该 pallet 事件。
 const squarePostPalletIndex = 34;
 const squarePostPublishedEventIndex = 0;
-const citizenSs58Prefix = 2027;
-
 export interface SquarePostPublishedEvent {
   post_id: string;
-  owner_account: string;
-  owner_account_hex: string;
+  account_id: string;
   cid_number: string | null;
   post_category: PostCategory;
   content_hash: string;
@@ -65,7 +61,7 @@ export function decodeSquarePostPublishedEventPayload(
   const postId = readCompactBytes(data, cursor);
   cursor = postId.nextOffset;
   if (cursor + 32 > data.length) return null;
-  const ownerBytes = data.slice(cursor, cursor + 32);
+  const accountIdBytes = data.slice(cursor, cursor + 32);
   cursor += 32;
 
   if (cursor >= data.length) return null;
@@ -97,8 +93,7 @@ export function decodeSquarePostPublishedEventPayload(
 
   return {
     post_id: utf8(postId.value),
-    owner_account: encodeAddress(ownerBytes, citizenSs58Prefix),
-    owner_account_hex: `0x${bytesToHex(ownerBytes)}`,
+    account_id: `0x${bytesToHex(accountIdBytes)}`,
     cid_number: cidNumber,
     post_category: postCategory,
     content_hash: contentHash,

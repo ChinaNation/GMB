@@ -52,7 +52,7 @@ class _PersonalProposalListSectionState
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final list = await _service.fetchAll(widget.institution.personalAccountHex);
+    final list = await _service.fetchAll(widget.institution.personalAccountId);
     if (!mounted) return;
     setState(() {
       _loading = false;

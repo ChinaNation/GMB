@@ -35,11 +35,12 @@ pub type FamilyName = BoundedVec<u8, ConstU32<ADMIN_PERSON_NAME_MAX_BYTES>>;
 /// 与链上中国公民字段同名的名。
 pub type GivenName = BoundedVec<u8, ConstU32<ADMIN_PERSON_NAME_MAX_BYTES>>;
 
-/// 私权机构与个人多签管理员人员记录。
+/// 机构与个人多签管理员人员记录（公权/私权/个人多签统一复用）。
 ///
-/// `account_id` 是唯一授权字段；`family_name`、`given_name` 与链上中国公民姓名
-/// 字段逐字对齐，只承载人员姓名。机构岗位和任职由 entity 独立保存，个人多签也复用
-/// 本结构，不再保存纯账户管理员数组。
+/// `cid_number` 引用 citizen-identity 真源;当前仅承载身份、不参与授权（授权仍按 `account_id`）。
+/// 字段完整性按(机构类型, 是否 LR 岗)分层要求，由 `required_admin_elements` 单源 +
+/// `ChainPhaseCheck` 期段门控：创世期允许空、运行期(Operation)强制。
+/// `family_name`、`given_name` 与链上中国公民姓名字段逐字对齐。机构岗位和任职由 entity 独立保存。
 #[derive(
     Encode,
     Decode,
@@ -53,28 +54,8 @@ pub type GivenName = BoundedVec<u8, ConstU32<ADMIN_PERSON_NAME_MAX_BYTES>>;
 )]
 pub struct Admin<AccountId> {
     pub account_id: AccountId,
-    pub family_name: FamilyName,
-    pub given_name: GivenName,
-}
-
-/// 公权机构管理员人员记录。
-///
-/// `cid_number` 是对 `citizen-identity` 公民身份真源的引用；当前创世资料不完整时允许
-/// 为空。姓名同样允许为空，且不得用展示占位值冒充真实公民资料。授权仍只使用
-/// `account_id`，公民 CID 与姓名都不能直接产生岗位权限。
-#[derive(
-    Encode,
-    Decode,
-    DecodeWithMemTracking,
-    Clone,
-    RuntimeDebug,
-    TypeInfo,
-    MaxEncodedLen,
-    PartialEq,
-    Eq,
-)]
-pub struct PublicAdmin<AccountId> {
-    pub account_id: AccountId,
+    /// 管理员本人公民 CID（引用 citizen-identity 真源）。当前不参与授权；
+    /// 是否必填按 `required_admin_elements` 分层、`ChainPhaseCheck` 期段门控。个人多签恒空。
     pub cid_number: AdminCidNumber,
     pub family_name: FamilyName,
     pub given_name: GivenName,
@@ -90,6 +71,14 @@ impl<AccountId> Admin<AccountId> {
             self.given_name = GivenName::truncate_from(DEFAULT_ADMIN_GIVEN_NAME.to_vec());
         }
         self
+    }
+
+    /// 按必填要素校验本管理员**原始**字段是否齐全。
+    /// 须在 `normalize_names` 之前调用，避免默认“管理/员”掩盖真正的空值。
+    pub fn satisfies(&self, req: RequiredAdminElements) -> bool {
+        (!req.cid || !self.cid_number.is_empty())
+            && (!req.family || !self.family_name.is_empty())
+            && (!req.given || !self.given_name.is_empty())
     }
 }
 
@@ -116,6 +105,73 @@ pub enum AdminAccountKind {
     PrivateInstitution,
     /// 个人多签管理员。
     PersonalMultisig,
+}
+
+/// 某管理员按(机构类型, 是否 LR 岗)必须完整提供哪些要素。account_id 恒必填,不在此表。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RequiredAdminElements {
+    pub cid: bool,
+    pub family: bool,
+    pub given: bool,
+}
+
+/// 分层强制单源真值表（= 运行期 Operation 的必填要素；account_id 恒必填不在表内）。
+///
+/// 门控在调用侧:仅 `ChainPhaseCheck::is_operation() == true` 时按本表强制;
+/// Genesis（创世/开发期）一律放行=允许空。一次 runtime 升级把 Phase 翻 Operation
+/// 即全域启用强制,无专属迁移。
+///   - `PublicInstitution`            => 全 true（公权:所有管理员四要素完整）
+///   - `PrivateInstitution` & LR 岗    => 全 true（私权:仅法定代表人岗四要素完整）
+///   - `PrivateInstitution` & 非 LR 岗 => 全 false（仅 account_id）
+///   - `PersonalMultisig`             => 全 false 【死规则,永不可翻真;个人多签禁强制姓/名/CID】
+///
+/// LR 岗判定单源:`role_code == primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE`
+/// (`b"LR"`),由持岗位任职上下文的 entity 层计算 `is_lr_role` 传入。
+pub fn required_admin_elements(kind: AdminAccountKind, is_lr_role: bool) -> RequiredAdminElements {
+    match kind {
+        // 公权:所有管理员四要素完整。
+        AdminAccountKind::PublicInstitution => RequiredAdminElements {
+            cid: true,
+            family: true,
+            given: true,
+        },
+        // 私权:仅法定代表人(LR)岗四要素完整。
+        AdminAccountKind::PrivateInstitution if is_lr_role => RequiredAdminElements {
+            cid: true,
+            family: true,
+            given: true,
+        },
+        // 私权非 LR 岗:仅 account_id。
+        AdminAccountKind::PrivateInstitution => RequiredAdminElements {
+            cid: false,
+            family: false,
+            given: false,
+        },
+        // 个人多签:仅 account_id;cid 永 false【死规则,节点守卫锁死禁强制】。
+        AdminAccountKind::PersonalMultisig => RequiredAdminElements {
+            cid: false,
+            family: false,
+            given: false,
+        },
+    }
+}
+
+/// 运行期强制门控注入。链进入 Operation 期后 `required_admin_elements` 才生效。
+///
+/// 由 runtime 用 genesis-pallet 的 `Phase` 实现注入(仿 `DeveloperUpgradeCheck` 范式)。
+/// 定义在 admin-primitives 而非 genesis-pallet:后者反向依赖各 admin/entity pallet,
+/// 定义于此可让 public-admins/private-manage 在 Config 约束引用而不成环。
+pub trait ChainPhaseCheck {
+    /// 链是否已进入运行期(Operation)。Genesis 返回 false。
+    fn is_operation() -> bool;
+}
+
+/// 测试 no-op 默认:恒 Genesis(放行),供不关心相位的单测 mock 直接用 `()`。
+/// 生产 runtime 必显式注入 `GenesisPallet`,不用本默认。
+impl ChainPhaseCheck for () {
+    fn is_operation() -> bool {
+        false
+    }
 }
 
 /// 个人多签管理员集合生命周期。
@@ -270,6 +326,21 @@ pub trait InstitutionAdminQuery<AccountId> {
     ) -> Option<Vec<AccountId>>;
 
     fn institution_admins_len(institution_code: InstitutionCode, cid_number: &[u8]) -> Option<u32>;
+
+    /// 把调用者钱包解析为名册中的**规范账户**(canonical `account_id`，即快照键)。
+    /// - 运行期(Operation)对**有 CID** 的管理员：按 citizen-identity 绑定解析
+    ///   (`matches_citizen_account(cid, caller)`)，换绑钱包后新钱包解析到同一 canonical、
+    ///   旧钱包不再匹配 →「换绑不掉权」；
+    /// - 创世期，或**无 CID** 的管理员(私权非 LR / 个人多签)：按 `account_id` 直配；
+    /// - 返回 `None` 表示 caller 不是该机构管理员。
+    ///
+    /// 授权链路统一先经本方法解析，再用返回的 canonical 匹配名册与任职，`account_id`
+    /// 由此降为签名快照、CID 成授权锚点(相位门控与 Phase 2 字段强制同一开关)。
+    fn resolve_admin_account(
+        institution_code: InstitutionCode,
+        cid_number: &[u8],
+        caller: &AccountId,
+    ) -> Option<AccountId>;
 }
 
 impl<AccountId> InstitutionAdminQuery<AccountId> for () {
@@ -296,6 +367,14 @@ impl<AccountId> InstitutionAdminQuery<AccountId> for () {
         _institution_code: InstitutionCode,
         _cid_number: &[u8],
     ) -> Option<u32> {
+        None
+    }
+
+    fn resolve_admin_account(
+        _institution_code: InstitutionCode,
+        _cid_number: &[u8],
+        _caller: &AccountId,
+    ) -> Option<AccountId> {
         None
     }
 }
@@ -503,13 +582,14 @@ pub fn expected_fixed_governance_admins_len(
 mod tests {
     use super::*;
 
-    /// 私权管理员声明序固定为账户、姓、名，机构值只在前面增加机构码。
+    /// 管理员声明序固定为账户、CID、姓、名，机构值只在前面增加机构码。
     #[test]
     fn institution_assignment_account_id_field_order_matches_node_guard() {
         use codec::Encode;
 
         let admin = Admin {
             account_id: 7u8,
+            cid_number: AdminCidNumber::default(),
             family_name: FamilyName::truncate_from("张".as_bytes().to_vec()),
             given_name: GivenName::truncate_from("三".as_bytes().to_vec()),
         };
@@ -519,16 +599,25 @@ mod tests {
         };
         assert_eq!(
             value.encode(),
-            (*b"NRCG", vec![(7u8, admin.family_name, admin.given_name)]).encode()
+            (
+                *b"NRCG",
+                vec![(
+                    7u8,
+                    admin.cid_number,
+                    admin.family_name,
+                    admin.given_name
+                )]
+            )
+                .encode()
         );
     }
 
     #[test]
-    fn public_admin_field_order_is_account_cid_family_given() {
+    fn admin_field_order_is_account_cid_family_given() {
         use codec::Encode;
 
         let cid_number = AdminCidNumber::truncate_from(b"GZ000-CTZN6-198805200-2026".to_vec());
-        let admin = PublicAdmin {
+        let admin = Admin {
             account_id: 7u8,
             cid_number: cid_number.clone(),
             family_name: FamilyName::truncate_from("程".as_bytes().to_vec()),
@@ -550,11 +639,69 @@ mod tests {
     fn missing_person_name_uses_management_default() {
         let admin = Admin {
             account_id: 1u8,
+            cid_number: AdminCidNumber::default(),
             family_name: FamilyName::default(),
             given_name: GivenName::default(),
         }
         .normalize_names();
         assert_eq!(admin.family_name.as_slice(), "管理".as_bytes());
         assert_eq!(admin.given_name.as_slice(), "员".as_bytes());
+    }
+
+    /// 运行期真值表:公权全强制、私权 LR 岗全强制、私权非 LR/个人多签仅 account_id。
+    #[test]
+    fn required_admin_elements_operation_truth_table() {
+        let public = required_admin_elements(AdminAccountKind::PublicInstitution, false);
+        assert!(public.cid && public.family && public.given);
+
+        let private_lr = required_admin_elements(AdminAccountKind::PrivateInstitution, true);
+        assert!(private_lr.cid && private_lr.family && private_lr.given);
+
+        let private_other = required_admin_elements(AdminAccountKind::PrivateInstitution, false);
+        assert!(!private_other.cid && !private_other.family && !private_other.given);
+
+        let personal = required_admin_elements(AdminAccountKind::PersonalMultisig, false);
+        assert!(!personal.cid && !personal.family && !personal.given);
+    }
+
+    /// 死规则:个人多签 cid 无论是否 LR 均不强制（节点守卫据此锁死）。
+    #[test]
+    fn personal_multisig_cid_never_required() {
+        for is_lr in [true, false] {
+            assert!(!required_admin_elements(AdminAccountKind::PersonalMultisig, is_lr).cid);
+        }
+    }
+
+    /// `satisfies` 按必填要素校验原始字段:必填项为空即不满足,全不必填则恒满足。
+    #[test]
+    fn admin_satisfies_by_required_elements() {
+        let empty = Admin {
+            account_id: 1u8,
+            cid_number: AdminCidNumber::default(),
+            family_name: FamilyName::default(),
+            given_name: GivenName::default(),
+        };
+        // 全不必填 → 恒满足（私权非 LR / 个人多签）。
+        assert!(empty.satisfies(RequiredAdminElements {
+            cid: false,
+            family: false,
+            given: false,
+        }));
+        // 公权真值表要求四要素完整 → 空字段不满足。
+        assert!(!empty.satisfies(required_admin_elements(
+            AdminAccountKind::PublicInstitution,
+            false,
+        )));
+
+        let full = Admin {
+            account_id: 1u8,
+            cid_number: AdminCidNumber::truncate_from(b"GZ000-CTZN6-198805200-2026".to_vec()),
+            family_name: FamilyName::truncate_from("张".as_bytes().to_vec()),
+            given_name: GivenName::truncate_from("三".as_bytes().to_vec()),
+        };
+        assert!(full.satisfies(required_admin_elements(
+            AdminAccountKind::PublicInstitution,
+            false,
+        )));
     }
 }

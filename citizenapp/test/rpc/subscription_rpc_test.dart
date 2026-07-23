@@ -13,10 +13,34 @@ Uint8List _bytes(String hex) => Uint8List.fromList([
 
 void main() {
   final creator = Uint8List(32)..fillRange(0, 32, 2);
-  const creatorHex =
+  const creatorAccountHex =
       '0202020202020202020202020202020202020202020202020202020202020202';
 
   group('SquarePost 订阅 SCALE', () {
+    test('AccountId 文本只接受小写 0x + 64 位十六进制', () {
+      const accountId = '0x$creatorAccountHex';
+      expect(
+        _hex(SubscriptionRpc.accountIdBytes(accountId)),
+        creatorAccountHex,
+      );
+      expect(
+        () => SubscriptionRpc.accountIdBytes(creatorAccountHex),
+        throwsArgumentError,
+      );
+      expect(
+        () => SubscriptionRpc.accountIdBytes(
+          '0xABABABABABABABABABABABABABABABAB'
+          'ABABABABABABABABABABABABABABABAB',
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => SubscriptionRpc.accountIdBytes(
+            '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY'),
+        throwsArgumentError,
+      );
+    });
+
     test('平台订阅携带当前签名价', () {
       final call = SubscriptionRpc.buildSubscribePlatformCall(
         SubscriptionRpc.membershipLevelByte('spark'),
@@ -37,7 +61,7 @@ void main() {
       );
       expect(
         _hex(call),
-        '220101${creatorHex}0124737570706f7274657200'
+        '220101${creatorAccountHex}0124737570706f7274657200'
         '32000000000000000000000000000000',
       );
     });
@@ -77,7 +101,7 @@ void main() {
           'yearly',
           BigInt.from(500),
         )),
-        '220401${creatorHex}0124737570706f7274657202'
+        '220401${creatorAccountHex}0124737570706f7274657202'
         'f4010000000000000000000000000000',
       );
     });
@@ -123,7 +147,8 @@ void main() {
       // 由 active 向量改：status 字节 00→03、suspend_reason 00→0100（Some(NeedReconsent)）。
       const suspendedHex =
           '00020068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c010000031c8d5b000000000000000000000000000100';
-      final suspended = SubscriptionRpc.decodeSubscriptionState(_bytes(suspendedHex));
+      final suspended =
+          SubscriptionRpc.decodeSubscriptionState(_bytes(suspendedHex));
       expect(suspended.status, 'suspended');
       expect(suspended.suspendReason, 'needReconsent');
       expect(suspended.isEffectiveAt(1701000000000), isFalse);

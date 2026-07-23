@@ -61,8 +61,8 @@ class SquareComposeSigners {
     required String requestPrefix,
   }) async {
     final walletIndex = identity.walletIndex;
-    final pubkeyHex = identity.pubkeyHex;
-    if (walletIndex == null || pubkeyHex == null) {
+    final accountId = identity.accountId;
+    if (walletIndex == null || accountId.isEmpty) {
       throw const SquarePublishException('当前钱包信息不完整');
     }
     final hotWallet = hotWalletManager;
@@ -73,7 +73,7 @@ class SquareComposeSigners {
     final qrSigner = QrSigner();
     final request = qrSigner.buildRequest(
       requestId: QrSigner.generateRequestId(prefix: requestPrefix),
-      pubkey: '0x$pubkeyHex',
+      signerPublicKey: accountId,
       payloadHex: '0x${_hexEncode(payload)}',
       action: action,
     );
@@ -85,7 +85,7 @@ class SquareComposeSigners {
         builder: (_) => QrSignSessionPage(
           request: request,
           requestJson: requestJson,
-          expectedPubkey: '0x$pubkeyHex',
+          expectedSignerPublicKey: accountId,
         ),
       ),
     );

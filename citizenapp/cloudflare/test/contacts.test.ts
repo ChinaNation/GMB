@@ -8,8 +8,8 @@ import {
 } from '../src/shared/signing_message';
 import type { ContactCiphertextRow, Env, SessionState } from '../src/types';
 
-const OWNER_A = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
-const OWNER_B = '5FHneW46xGXgs5mUiveU4sbTyGBzmst4ZCq1E3YK9zR3t3dK';
+const ACCOUNT_ID_A = '0x1111111111111111111111111111111111111111111111111111111111111111';
+const ACCOUNT_ID_B = '0x2222222222222222222222222222222222222222222222222222222222222222';
 const CONTACT_A = '01'.repeat(32);
 const CONTACT_B = '02'.repeat(32);
 const CONTACT_C = '03'.repeat(32);
@@ -29,17 +29,17 @@ describe('端到端加密通讯录 API', () => {
     ).rejects.toMatchObject({ code: 'device_time_invalid' });
   });
 
-  it('按 Session owner 隔离 CRUD，且 D1 不出现联系人账户或名称明文', async () => {
+  it('按 Session accountId 隔离 CRUD，且 D1 不出现联系人账户或名称明文', async () => {
     const context = await buildContext();
     const secretContactAccount = '5ContactAccountMustNeverEnterCloudflare';
     const secretContactName = '绝不能进入 Cloudflare 的私人名称';
-    const aPayload = cipherPayload('owner-a', 300);
-    const bPayload = cipherPayload('owner-b', 400);
+    const aPayload = cipherPayload('accountId-a', 300);
+    const bPayload = cipherPayload('accountId-b', 400);
 
     await expect(
       call(context, context.accountA, 'PUT', `/v1/square/contacts/${CONTACT_A}`, {
         ...aPayload,
-        contact_account: secretContactAccount,
+        contact_account_id: secretContactAccount,
         contact_name: secretContactName
       })
     ).rejects.toMatchObject({ code: 'invalid_contact_request' });
@@ -57,7 +57,7 @@ describe('端到端加密通讯录 API', () => {
     const stored = [...context.db.contacts.values()];
     expect(stored).toHaveLength(2);
     expect(Object.keys(stored[0]).sort()).toEqual([
-      'ciphertext', 'contact_id', 'mac', 'nonce', 'owner_account', 'updated_at'
+      'account_id', 'ciphertext', 'contact_id', 'mac', 'nonce', 'updated_at'
     ]);
     expect(JSON.stringify(stored)).not.toContain(secretContactAccount);
     expect(JSON.stringify(stored)).not.toContain(secretContactName);
@@ -140,7 +140,7 @@ describe('端到端加密通讯录 API', () => {
 });
 
 interface TestAccount {
-  owner: string;
+  accountId: string;
   token: string;
   keyPair: CryptoKeyPair;
 }
@@ -156,8 +156,8 @@ interface TestContext {
 async function buildContext(): Promise<TestContext> {
   const db = new ContactDb();
   const kv = new FakeKv();
-  const accountA = await registerAccount(db, kv, OWNER_A, 'token-a');
-  const accountB = await registerAccount(db, kv, OWNER_B, 'token-b');
+  const accountA = await registerAccount(db, kv, ACCOUNT_ID_A, 'token-a');
+  const accountB = await registerAccount(db, kv, ACCOUNT_ID_B, 'token-b');
   return {
     env: {
       DB: db,
@@ -174,7 +174,7 @@ async function buildContext(): Promise<TestContext> {
 async function registerAccount(
   db: ContactDb,
   kv: FakeKv,
-  owner: string,
+  accountId: string,
   token: string
 ): Promise<TestAccount> {
   const keyPair = await crypto.subtle.generateKey(
@@ -183,14 +183,14 @@ async function registerAccount(
     ['sign', 'verify']
   );
   const pubkey = toHex(await crypto.subtle.exportKey('raw', keyPair.publicKey));
-  db.subkeys.set(owner, pubkey);
+  db.subkeys.set(accountId, pubkey);
   kv.store.set(`square_session:${token}`, {
-    owner_account: owner,
+    account_id: accountId,
     device_key_hash: await sha256Hex(pubkey),
     created_at: Date.now(),
     expires_at: Date.now() + 60_000
   } satisfies SessionState);
-  return { owner, token, keyPair };
+  return { accountId, token, keyPair };
 }
 
 async function call(
@@ -293,19 +293,19 @@ class ContactStmt {
       this.db.rateWindows.set(rateKey, count);
       return { request_count: count, expires_at: this.binds[1] as number } as T;
     }
-    if (this.sql.includes('SELECT p256_pubkey FROM square_device_subkeys')) {
+    if (this.sql.includes('SELECT p256_public_key FROM square_device_subkeys')) {
       const pubkey = this.db.subkeys.get(this.binds[0] as string);
-      return pubkey ? ({ p256_pubkey: pubkey } as T) : null;
+      return pubkey ? ({ p256_public_key: pubkey } as T) : null;
     }
     return null;
   }
 
   async all<T>(): Promise<{ results: T[] }> {
     if (!this.sql.includes('FROM square_contacts')) return { results: [] };
-    const owner = this.binds[0] as string;
+    const accountId = this.binds[0] as string;
     const limit = this.binds[this.binds.length - 1] as number;
     let rows = [...this.db.contacts.values()]
-      .filter((row) => row.owner_account === owner)
+      .filter((row) => row.account_id === accountId)
       .sort((left, right) =>
         right.updated_at - left.updated_at || right.contact_id.localeCompare(left.contact_id));
     if (this.sql.includes('updated_at < ?')) {
@@ -327,14 +327,14 @@ class ContactStmt {
     }
     if (this.sql.includes('INSERT INTO square_contacts')) {
       const row: ContactCiphertextRow = {
-        owner_account: this.binds[0] as string,
+        account_id: this.binds[0] as string,
         contact_id: this.binds[1] as string,
         ciphertext: this.binds[2] as string,
         nonce: this.binds[3] as string,
         mac: this.binds[4] as string,
         updated_at: this.binds[5] as number
       };
-      const key = `${row.owner_account}:${row.contact_id}`;
+      const key = `${row.account_id}:${row.contact_id}`;
       const existing = this.db.contacts.get(key);
       if (!existing || row.updated_at >= existing.updated_at) {
         this.db.contacts.set(key, row);

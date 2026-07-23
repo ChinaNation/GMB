@@ -20,7 +20,8 @@ void main() {
     });
 
     test('非法地址抛错', () {
-      expect(() => encodeErc20Transfer('0x1234', BigInt.one), throwsArgumentError);
+      expect(
+          () => encodeErc20Transfer('0x1234', BigInt.one), throwsArgumentError);
     });
 
     test('负数金额抛错', () {
@@ -37,10 +38,22 @@ void main() {
         'network': 'testnet',
         'recv_address': '0x${'cd' * 20}',
         'rails': [
-          {'token': 'USDC', 'chain_id': 84532, 'token_contract': '0x${'11' * 20}', 'token_decimals': 6, 'label': 'USDC · Base Sepolia'},
+          {
+            'token': 'USDC',
+            'chain_id': 84532,
+            'token_contract': '0x${'11' * 20}',
+            'token_decimals': 6,
+            'label': 'USDC · Base Sepolia'
+          },
         ],
         'packages': [
-          {'package_id': 'pkg_15', 'pay_display': '15', 'pay_amount': '15000000', 'coin_display': '10,000.00', 'coin_fen': '1000000'},
+          {
+            'package_id': 'pkg_15',
+            'pay_display': '15',
+            'pay_amount': '15000000',
+            'coin_display': '10,000.00',
+            'coin_fen': '1000000'
+          },
         ],
       });
       expect(config.rails.single.chainId, 84532);
@@ -57,7 +70,13 @@ void main() {
       final api = apiWith(MockClient((request) async {
         expect(request.url.path, '/api/v1/square/topup/config');
         return http.Response(
-          jsonEncode({'ok': true, 'network': 'testnet', 'recv_address': '0x${'cd' * 20}', 'rails': [], 'packages': []}),
+          jsonEncode({
+            'ok': true,
+            'network': 'testnet',
+            'recv_address': '0x${'cd' * 20}',
+            'rails': [],
+            'packages': []
+          }),
           200,
         );
       }));
@@ -68,20 +87,28 @@ void main() {
     test('submit 已确认 → pending(待支付)', () async {
       final api = apiWith(MockClient((request) async {
         expect(request.method, 'POST');
-        return http.Response(jsonEncode({'ok': true, 'status': 'pending', 'order_id': 'top_x'}), 200);
+        return http.Response(
+            jsonEncode({'ok': true, 'status': 'pending', 'order_id': 'top_x'}),
+            200);
       }));
       final result = await api.submit(
-        token: 'USDC', packageId: 'pkg_15', gmbAddress: 'gmbaddr', evmTxHash: '0x${'11' * 32}',
+        token: 'USDC',
+        packageId: 'pkg_15',
+        accountId: 'gmbaddr',
+        evmTxHash: '0x${'11' * 32}',
       );
       expect(result.status, TopupOrderStatus.pending);
       expect(result.orderId, 'top_x');
     });
 
     test('submit 未确认 → confirming', () async {
-      final api = apiWith(MockClient((request) async =>
-          http.Response(jsonEncode({'ok': true, 'status': 'confirming'}), 200)));
+      final api = apiWith(MockClient((request) async => http.Response(
+          jsonEncode({'ok': true, 'status': 'confirming'}), 200)));
       final result = await api.submit(
-        token: 'USDT', packageId: 'pkg_1400', gmbAddress: 'gmbaddr', evmTxHash: '0x${'22' * 32}',
+        token: 'USDT',
+        packageId: 'pkg_1400',
+        accountId: 'gmbaddr',
+        evmTxHash: '0x${'22' * 32}',
       );
       expect(result.status, TopupOrderStatus.confirming);
     });
@@ -91,19 +118,29 @@ void main() {
         expect(request.url.query, contains('chain_id=84532'));
         return http.Response(jsonEncode({'ok': true, 'status': 'paid'}), 200);
       }));
-      final status = await api.status(chainId: 84532, evmTxHash: '0x${'11' * 32}');
+      final status =
+          await api.status(chainId: 84532, evmTxHash: '0x${'11' * 32}');
       expect(status, TopupOrderStatus.paid);
     });
 
     test('非 2xx 抛 TopupApiException 带 error_code', () async {
       final api = apiWith(MockClient((request) async => http.Response(
-            jsonEncode({'ok': false, 'error_code': 'topup_payment_invalid', 'message': '未确认到有效到账'}),
+            jsonEncode({
+              'ok': false,
+              'error_code': 'topup_payment_invalid',
+              'message': '未确认到有效到账'
+            }),
             400,
             headers: {'content-type': 'application/json; charset=utf-8'},
           )));
       expect(
-        () => api.submit(token: 'USDC', packageId: 'pkg_15', gmbAddress: 'g', evmTxHash: '0x${'11' * 32}'),
-        throwsA(isA<TopupApiException>().having((e) => e.errorCode, 'errorCode', 'topup_payment_invalid')),
+        () => api.submit(
+            token: 'USDC',
+            packageId: 'pkg_15',
+            accountId: 'g',
+            evmTxHash: '0x${'11' * 32}'),
+        throwsA(isA<TopupApiException>()
+            .having((e) => e.errorCode, 'errorCode', 'topup_payment_invalid')),
       );
     });
   });

@@ -30,7 +30,7 @@ impl Db {
             let rows = conn
                 .query(
                     "SELECT id, cid_number, file_name, doc_type, file_size, file_path,
-                            uploaded_by, uploaded_at
+                            uploader_account_id, uploaded_at
                      FROM docs
                      WHERE cid_number = $1
                      ORDER BY uploaded_at DESC, id DESC",
@@ -48,7 +48,7 @@ impl Db {
                         doc_type: row.get(3),
                         file_size: u64::try_from(file_size).unwrap_or(0),
                         file_path: row.get(5),
-                        uploaded_by: row.get(6),
+                        uploader_account_id: row.get(6),
                         uploaded_at: row.get(7),
                     })
                 })
@@ -66,7 +66,7 @@ impl Db {
                 .query_one(
                     "INSERT INTO docs (
                         cid_number, province_code, city_code, file_name, doc_type, file_size,
-                        file_path, uploaded_by, uploaded_at
+                        file_path, uploader_account_id, uploaded_at
                      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                      RETURNING id",
                     &[
@@ -77,7 +77,7 @@ impl Db {
                         &doc.doc_type,
                         &file_size,
                         &doc.file_path,
-                        &doc.uploaded_by,
+                        &doc.uploader_account_id,
                         &doc.uploaded_at,
                     ],
                 )
@@ -101,7 +101,7 @@ impl Db {
             let row = conn
                 .query_opt(
                     "SELECT id, cid_number, file_name, doc_type, file_size, file_path,
-                            uploaded_by, uploaded_at
+                            uploader_account_id, uploaded_at
                      FROM docs
                      WHERE cid_number = $1 AND id = $2",
                     &[&cid_number, &doc_id],
@@ -117,7 +117,7 @@ impl Db {
                     doc_type: row.get(3),
                     file_size: u64::try_from(file_size).unwrap_or(0),
                     file_path: row.get(5),
-                    uploaded_by: row.get(6),
+                    uploader_account_id: row.get(6),
                     uploaded_at: row.get(7),
                 }
             }))
@@ -293,7 +293,7 @@ pub(crate) async fn upload_document(
         doc_type,
         file_size: file_data.len() as u64,
         file_path: stored_path,
-        uploaded_by: ctx.admin_account.clone(),
+        uploader_account_id: ctx.account_id.clone(),
         uploaded_at: Utc::now(),
     };
     let doc = match state.db.insert_document(&doc) {
@@ -310,7 +310,7 @@ pub(crate) async fn upload_document(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "INSTITUTION_DOCUMENT_UPLOAD",
-        &ctx.admin_account,
+        &ctx.account_id,
         Some(cid_number.clone()),
         serde_json::json!({
             "cid_number": cid_number.clone(),
@@ -372,7 +372,7 @@ pub(crate) async fn download_document(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "INSTITUTION_DOCUMENT_DOWNLOAD",
-        &ctx.admin_account,
+        &ctx.account_id,
         Some(cid_number.clone()),
         serde_json::json!({
             "cid_number": cid_number.clone(),
@@ -470,7 +470,7 @@ pub(crate) async fn delete_document(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "INSTITUTION_DOCUMENT_DELETE",
-        &ctx.admin_account,
+        &ctx.account_id,
         Some(cid_number.clone()),
         serde_json::json!({
             "cid_number": cid_number.clone(),

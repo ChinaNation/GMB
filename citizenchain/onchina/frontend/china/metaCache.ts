@@ -22,7 +22,7 @@ interface CachedPayload<T> {
 
 interface InstitutionRowsCachePayload {
   version: string;
-  admin_account: string;
+  account_id: string;
   institution_code: string;
   province_name: string;
   city_name: string;
@@ -55,7 +55,7 @@ function writeCache<T>(key: string, version: string, data: T) {
 }
 
 function cidMetaCacheKey(auth: AdminAuth): string {
-  return ['cid:meta', CID_META_CACHE_VERSION, auth.admin_account, auth.institution_code].join(':');
+  return ['cid:meta', CID_META_CACHE_VERSION, auth.account_id, auth.institution_code].join(':');
 }
 
 function cidCitiesCacheKey(province_name: string): string {
@@ -111,7 +111,7 @@ export function officialInstitutionCacheKey(auth: AdminAuth, province_name: stri
   return [
     'cid:official-institutions',
     OFFICIAL_INSTITUTION_CACHE_VERSION,
-    auth.admin_account,
+    auth.account_id,
     auth.institution_code,
     scopeProvince,
     scopeCity,
@@ -162,7 +162,7 @@ export function writeCachedOfficialInstitutionRows(
       key,
       JSON.stringify({
         version: OFFICIAL_INSTITUTION_CACHE_VERSION,
-        admin_account: auth.admin_account,
+        account_id: auth.account_id,
         institution_code: auth.institution_code,
         province_name: auth.scope_province_name ||  province_name,
         city_name: auth.scope_city_name || city_name || 'ALL',
@@ -181,7 +181,7 @@ export function educationCommitteeCacheKey(auth: AdminAuth, province_name: strin
   return [
     'cid:education-committees',
     EDUCATION_COMMITTEE_CACHE_VERSION,
-    auth.admin_account,
+    auth.account_id,
     auth.institution_code,
     scopeProvince,
     scopeCity,
@@ -224,7 +224,7 @@ export function writeCachedEducationCommitteeRows(
       key,
       JSON.stringify({
         version: EDUCATION_COMMITTEE_CACHE_VERSION,
-        admin_account: auth.admin_account,
+        account_id: auth.account_id,
         institution_code: auth.institution_code,
         province_name: auth.scope_province_name ||  province_name,
         city_name: auth.scope_city_name ||  city_name,
@@ -241,7 +241,7 @@ export function institutionDetailCacheKey(auth: AdminAuth, cidNumber: string): s
   return [
     'cid:institution-detail',
     INSTITUTION_DETAIL_CACHE_VERSION,
-    auth.admin_account,
+    auth.account_id,
     auth.institution_code,
     cidNumber,
   ].join(':');

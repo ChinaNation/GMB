@@ -19,12 +19,12 @@ void main() {
 
     for (final mnemonic in testMnemonics) {
       test(
-          'fromSeed and fromMnemonic produce same pubkey for: "${mnemonic.substring(0, 30)}..."',
+          'fromSeed and fromMnemonic produce same publicKey for: "${mnemonic.substring(0, 30)}..."',
           () async {
         // 路径 A：fromMnemonic（polkadart_keyring 内部完整派生）。
         final pairFromMnemonic = await Keyring.sr25519.fromMnemonic(mnemonic);
         pairFromMnemonic.ss58Format = 2027;
-        final pubkeyFromMnemonic =
+        final publicKeyFromMnemonic =
             pairFromMnemonic.bytes().toList(growable: false);
         final addressFromMnemonic = pairFromMnemonic.address;
 
@@ -36,11 +36,11 @@ void main() {
         final pairFromSeed =
             Keyring.sr25519.fromSeed(Uint8List.fromList(miniSecret));
         pairFromSeed.ss58Format = 2027;
-        final pubkeyFromSeed = pairFromSeed.bytes().toList(growable: false);
+        final publicKeyFromSeed = pairFromSeed.bytes().toList(growable: false);
         final addressFromSeed = pairFromSeed.address;
 
         // 验证两条路径产出一致。
-        expect(pubkeyFromSeed, equals(pubkeyFromMnemonic));
+        expect(publicKeyFromSeed, equals(publicKeyFromMnemonic));
         expect(addressFromSeed, equals(addressFromMnemonic));
         expect(miniSecret.length, 32);
       });

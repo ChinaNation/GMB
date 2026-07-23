@@ -36,8 +36,7 @@ class _AdminAccountDetailPageState extends State<AdminAccountDetailPage> {
 
   Future<void> _loadBalances() async {
     final accounts = {
-      for (final admin in widget.account.admins)
-        _balanceKey(admin.admin_account),
+      for (final admin in widget.account.admins) _balanceKey(admin.account_id),
     }.where((account) => account.isNotEmpty).toList(growable: false);
     if (accounts.isEmpty) return;
     try {
@@ -65,8 +64,8 @@ class _AdminAccountDetailPageState extends State<AdminAccountDetailPage> {
                 '${widget.account.admins[i].given_name}',
               ),
               subtitle: Text(
-                '${ss58FromHex(widget.account.admins[i].admin_account)}\n'
-                '余额：${AmountFormat.formatThousands(_balanceByAccount[_balanceKey(widget.account.admins[i].admin_account)])} 元',
+                '${ss58FromAccountIdText(widget.account.admins[i].account_id)}\n'
+                '余额：${AmountFormat.formatThousands(_balanceByAccount[_balanceKey(widget.account.admins[i].account_id)])} 元',
               ),
             ),
             const SizedBox(height: 8),

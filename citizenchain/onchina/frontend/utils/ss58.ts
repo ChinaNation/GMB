@@ -1,8 +1,8 @@
 // SS58 地址编/解码工具
 //
 // CitizenChain 的 SS58 prefix 固定为 2027（runtime/primitives/src/core_const.rs）。
-// 所有展示给用户的"账户"统一用 SS58 字符串；提交到链 / 后端的字段用 32 字节
-// hex 公钥。两者通过本文件提供的 encode/decode 互转。
+// 所有面向用户的地址展示统一使用 SS58；提交到链或后端的账户字段统一使用
+// 小写 `0x` 加 64 位十六进制的 account_id。两者通过本文件提供的编解码函数互转。
 //
 // 编码格式（substrate SS58）：
 //   payload  = prefix_bytes ++ pubkey_32
@@ -114,13 +114,13 @@ function ss58Checksum(payload: Uint8Array): Uint8Array {
   return blake2b(buf, { dkLen: 64 });
 }
 
-/// 把 32 字节 hex 公钥编码成 SS58 地址。
-/// `hexPubkey` 接受 `0x` 前缀或裸 hex；不区分大小写。
-export function encodeSs58(hexPubkey: string, prefix: number = CITIZENCHAIN_SS58_PREFIX): string {
-  const cleaned = hexPubkey.trim().replace(/^0x/i, '').toLowerCase();
-  if (!/^[0-9a-f]{64}$/.test(cleaned)) {
-    throw new Error('公钥必须是 32 字节 hex');
+/// 把规范 account_id 编码成 SS58 展示地址。
+export function encodeSs58(account_id: string, prefix: number = CITIZENCHAIN_SS58_PREFIX): string {
+  account_id = account_id.trim();
+  if (!/^0x[0-9a-f]{64}$/.test(account_id)) {
+    throw new Error('账户 ID 必须是小写 0x 加 64 位十六进制');
   }
+  const cleaned = account_id.slice(2);
   const pubkey = new Uint8Array(32);
   for (let i = 0; i < 32; i++) {
     pubkey[i] = parseInt(cleaned.substr(i * 2, 2), 16);
@@ -137,7 +137,7 @@ export function encodeSs58(hexPubkey: string, prefix: number = CITIZENCHAIN_SS58
   return encodeBase58(full);
 }
 
-/// 把 SS58 地址解码回 32 字节 hex 公钥（带 `0x` 前缀，小写）。
+/// 把 SS58 地址解码回规范 account_id。
 /// 同时校验 prefix 与校验和；任何不通过即抛错。
 export function decodeSs58(address: string, expectedPrefix: number = CITIZENCHAIN_SS58_PREFIX): string {
   const data = decodeBase58(address.trim());
@@ -164,12 +164,12 @@ export function decodeSs58(address: string, expectedPrefix: number = CITIZENCHAI
   return `0x${hex}`;
 }
 
-/// 安全版本：失败时返回原始 hex（用于无法保证输入正确性的展示场景）。
-export function tryEncodeSs58(hexPubkey: string | null | undefined): string {
-  if (!hexPubkey) return '-';
+/// 安全版本：失败时返回原始值（用于无法保证输入正确性的展示场景）。
+export function tryEncodeSs58(account_id: string | null | undefined): string {
+  if (!account_id) return '-';
   try {
-    return encodeSs58(hexPubkey);
+    return encodeSs58(account_id);
   } catch {
-    return hexPubkey;
+    return account_id;
   }
 }

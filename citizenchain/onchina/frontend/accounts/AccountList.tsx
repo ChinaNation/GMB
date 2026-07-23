@@ -56,7 +56,7 @@ export const AccountList: React.FC<Props> = ({
         { title: '账户名称', dataIndex: 'account_name', width: 200 },
         {
           title: '账户地址',
-          dataIndex: 'account',
+          dataIndex: 'account_id',
           // SS58 地址完整显示不截断(地址是给人核对的),小号等宽字体允许换行
           render: (v: string | null) => {
             if (!v) return '-';

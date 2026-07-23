@@ -9,14 +9,14 @@ LocalTxEntity _record({
 }) {
   return LocalTxEntity()
     ..recordKey = 'pub:0xblock:1'
-    ..walletAddress = 'wallet_addr'
-    ..walletPubkeyHex = 'pub'
+    ..ss58Address = 'wallet_addr'
+    ..accountId = 'pub'
     ..type = 'transfer'
     ..amountDeltaFen = '120'
     ..transferAmountFen = '120'
-    ..counterpartyAddress = 'from_addr'
-    ..fromAddress = 'from_addr'
-    ..toAddress = 'wallet_addr'
+    ..counterpartySs58Address = 'from_addr'
+    ..fromSs58Address = 'from_addr'
+    ..toSs58Address = 'wallet_addr'
     ..status = status
     ..source = 'chain_event'
     ..blockNumber = 10

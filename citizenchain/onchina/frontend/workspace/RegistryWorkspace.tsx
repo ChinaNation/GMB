@@ -92,7 +92,7 @@ export function RegistryWorkspace({
     setHasInitializedView(false);
     setActiveView('citizens');
     setViewResetToken((v) => v + 1);
-  }, [auth.admin_account, auth.institution_code]);
+  }, [auth.account_id, auth.institution_code]);
 
   useEffect(() => {
     if (!auth.institution_code) return;

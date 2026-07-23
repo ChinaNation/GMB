@@ -13,8 +13,8 @@ class ClearingBankBindingSnapshot {
     required this.cidNumber,
     required this.cidFullName,
     required this.cidShortName,
-    required this.mainAccount,
-    required this.feeAccount,
+    required this.mainAccountId,
+    required this.feeAccountId,
     required this.peerId,
     required this.rpcDomain,
     required this.rpcPort,
@@ -25,8 +25,8 @@ class ClearingBankBindingSnapshot {
   final String cidNumber;
   final String cidFullName;
   final String cidShortName;
-  final String mainAccount;
-  final String feeAccount;
+  final String mainAccountId;
+  final String feeAccountId;
   final String peerId;
   final String rpcDomain;
   final int rpcPort;
@@ -50,8 +50,8 @@ class ClearingBankBindingSnapshot {
         'cid_number': cidNumber,
         'cid_full_name': cidFullName,
         'cid_short_name': cidShortName,
-        'main_account': mainAccount,
-        'fee_account': feeAccount,
+        'main_account_id': mainAccountId,
+        'fee_account_id': feeAccountId,
         'peer_id': peerId,
         'rpc_domain': rpcDomain,
         'rpc_port': rpcPort,
@@ -64,8 +64,8 @@ class ClearingBankBindingSnapshot {
       cidNumber: (json['cid_number'] as String?) ?? '',
       cidFullName: (json['cid_full_name'] as String?) ?? '',
       cidShortName: (json['cid_short_name'] as String?) ?? '',
-      mainAccount: (json['main_account'] as String?) ?? '',
-      feeAccount: (json['fee_account'] as String?) ?? '',
+      mainAccountId: (json['main_account_id'] as String?) ?? '',
+      feeAccountId: (json['fee_account_id'] as String?) ?? '',
       peerId: (json['peer_id'] as String?) ?? '',
       rpcDomain: (json['rpc_domain'] as String?) ?? '',
       rpcPort: (json['rpc_port'] as num?)?.toInt() ?? 0,
@@ -111,8 +111,8 @@ class ClearingBankPrefs {
       final json = jsonDecode(raw) as Map<String, dynamic>;
       final snapshot = ClearingBankBindingSnapshot.fromJson(json);
       if (snapshot.cidNumber.isEmpty ||
-          snapshot.mainAccount.isEmpty ||
-          snapshot.feeAccount.isEmpty ||
+          snapshot.mainAccountId.isEmpty ||
+          snapshot.feeAccountId.isEmpty ||
           snapshot.rpcDomain.isEmpty ||
           snapshot.rpcPort <= 0) {
         return null;

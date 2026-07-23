@@ -69,16 +69,16 @@ class DeviceSubkey {
 
 /// 设备绑定证明消息（客户端）。**必须与 worker `buildDeviceBindingSigningMessage`
 /// 逐字节一致**：sr25519 主钥对
-/// `signing_message(OP_SIGN_SQUARE_DEVICE_BIND, owner ‖ p256_pubkey ‖ issued_at)`
+/// `signing_message(OP_SIGN_SQUARE_DEVICE_BIND, accountId ‖ p256_publicKey ‖ issued_at)`
 /// 签名，证明该 P-256 子钥属于此钱包。返回 32 字节摘要。
 Uint8List buildDeviceBindingSigningMessage(
-  String ownerAccount,
-  String p256PubkeyHex,
+  String accountId,
+  String p256PublicKeyHex,
   int issuedAt,
 ) {
   final scalePayload = <int>[
-    ...scaleString(ownerAccount),
-    ...scaleString(p256PubkeyHex),
+    ...scaleString(accountId),
+    ...scaleString(p256PublicKeyHex),
     ...u64Le(issuedAt),
   ];
   return signingMessage(

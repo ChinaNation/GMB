@@ -24,10 +24,10 @@ export 'chat_envelope.pbenum.dart';
 class ChatRoute extends $pb.GeneratedMessage {
   factory ChatRoute({
     $core.int? protocolVersion,
-    $core.String? peerAccount,
+    $core.String? peerAccountId,
     $core.String? routeDisplayName,
     $core.String? deviceId,
-    $core.String? devicePublicKeyHex,
+    $core.String? devicePublicKey,
     $core.String? safetyNumber,
     $core.String? nearbyPeerHint,
     $fixnum.Int64? createdAtMillis,
@@ -35,11 +35,10 @@ class ChatRoute extends $pb.GeneratedMessage {
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
-    if (peerAccount != null) result.peerAccount = peerAccount;
+    if (peerAccountId != null) result.peerAccountId = peerAccountId;
     if (routeDisplayName != null) result.routeDisplayName = routeDisplayName;
     if (deviceId != null) result.deviceId = deviceId;
-    if (devicePublicKeyHex != null)
-      result.devicePublicKeyHex = devicePublicKeyHex;
+    if (devicePublicKey != null) result.devicePublicKey = devicePublicKey;
     if (safetyNumber != null) result.safetyNumber = safetyNumber;
     if (nearbyPeerHint != null) result.nearbyPeerHint = nearbyPeerHint;
     if (createdAtMillis != null) result.createdAtMillis = createdAtMillis;
@@ -62,10 +61,10 @@ class ChatRoute extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
         fieldType: $pb.PbFieldType.OU3)
-    ..aOS(2, _omitFieldNames ? '' : 'peerAccount')
+    ..aOS(2, _omitFieldNames ? '' : 'peerAccountId')
     ..aOS(3, _omitFieldNames ? '' : 'routeDisplayName')
     ..aOS(4, _omitFieldNames ? '' : 'deviceId')
-    ..aOS(5, _omitFieldNames ? '' : 'devicePublicKeyHex')
+    ..aOS(5, _omitFieldNames ? '' : 'devicePublicKey')
     ..aOS(6, _omitFieldNames ? '' : 'safetyNumber')
     ..aOS(7, _omitFieldNames ? '' : 'nearbyPeerHint')
     ..a<$fixnum.Int64>(
@@ -104,13 +103,13 @@ class ChatRoute extends $pb.GeneratedMessage {
   void clearProtocolVersion() => $_clearField(1);
 
   @$pb.TagNumber(2)
-  $core.String get peerAccount => $_getSZ(1);
+  $core.String get peerAccountId => $_getSZ(1);
   @$pb.TagNumber(2)
-  set peerAccount($core.String value) => $_setString(1, value);
+  set peerAccountId($core.String value) => $_setString(1, value);
   @$pb.TagNumber(2)
-  $core.bool hasPeerAccount() => $_has(1);
+  $core.bool hasPeerAccountId() => $_has(1);
   @$pb.TagNumber(2)
-  void clearPeerAccount() => $_clearField(2);
+  void clearPeerAccountId() => $_clearField(2);
 
   @$pb.TagNumber(3)
   $core.String get routeDisplayName => $_getSZ(2);
@@ -131,13 +130,13 @@ class ChatRoute extends $pb.GeneratedMessage {
   void clearDeviceId() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $core.String get devicePublicKeyHex => $_getSZ(4);
+  $core.String get devicePublicKey => $_getSZ(4);
   @$pb.TagNumber(5)
-  set devicePublicKeyHex($core.String value) => $_setString(4, value);
+  set devicePublicKey($core.String value) => $_setString(4, value);
   @$pb.TagNumber(5)
-  $core.bool hasDevicePublicKeyHex() => $_has(4);
+  $core.bool hasDevicePublicKey() => $_has(4);
   @$pb.TagNumber(5)
-  void clearDevicePublicKeyHex() => $_clearField(5);
+  void clearDevicePublicKey() => $_clearField(5);
 
   @$pb.TagNumber(6)
   $core.String get safetyNumber => $_getSZ(5);
@@ -181,8 +180,8 @@ class ChatEnvelope extends $pb.GeneratedMessage {
     $core.int? protocolVersion,
     $core.String? envelopeId,
     $core.String? conversationId,
-    $core.String? senderAccount,
-    $core.String? recipientAccount,
+    $core.String? senderAccountId,
+    $core.String? recipientAccountId,
     $core.String? senderDeviceId,
     $core.List<$core.int>? mlsWireMessage,
     $core.List<$core.int>? encryptedMetadata,
@@ -195,8 +194,9 @@ class ChatEnvelope extends $pb.GeneratedMessage {
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
     if (envelopeId != null) result.envelopeId = envelopeId;
     if (conversationId != null) result.conversationId = conversationId;
-    if (senderAccount != null) result.senderAccount = senderAccount;
-    if (recipientAccount != null) result.recipientAccount = recipientAccount;
+    if (senderAccountId != null) result.senderAccountId = senderAccountId;
+    if (recipientAccountId != null)
+      result.recipientAccountId = recipientAccountId;
     if (senderDeviceId != null) result.senderDeviceId = senderDeviceId;
     if (mlsWireMessage != null) result.mlsWireMessage = mlsWireMessage;
     if (encryptedMetadata != null) result.encryptedMetadata = encryptedMetadata;
@@ -224,8 +224,8 @@ class ChatEnvelope extends $pb.GeneratedMessage {
         fieldType: $pb.PbFieldType.OU3)
     ..aOS(2, _omitFieldNames ? '' : 'envelopeId')
     ..aOS(3, _omitFieldNames ? '' : 'conversationId')
-    ..aOS(4, _omitFieldNames ? '' : 'senderAccount')
-    ..aOS(5, _omitFieldNames ? '' : 'recipientAccount')
+    ..aOS(4, _omitFieldNames ? '' : 'senderAccountId')
+    ..aOS(5, _omitFieldNames ? '' : 'recipientAccountId')
     ..aOS(6, _omitFieldNames ? '' : 'senderDeviceId')
     ..a<$core.List<$core.int>>(
         7, _omitFieldNames ? '' : 'mlsWireMessage', $pb.PbFieldType.OY)
@@ -290,22 +290,22 @@ class ChatEnvelope extends $pb.GeneratedMessage {
   void clearConversationId() => $_clearField(3);
 
   @$pb.TagNumber(4)
-  $core.String get senderAccount => $_getSZ(3);
+  $core.String get senderAccountId => $_getSZ(3);
   @$pb.TagNumber(4)
-  set senderAccount($core.String value) => $_setString(3, value);
+  set senderAccountId($core.String value) => $_setString(3, value);
   @$pb.TagNumber(4)
-  $core.bool hasSenderAccount() => $_has(3);
+  $core.bool hasSenderAccountId() => $_has(3);
   @$pb.TagNumber(4)
-  void clearSenderAccount() => $_clearField(4);
+  void clearSenderAccountId() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $core.String get recipientAccount => $_getSZ(4);
+  $core.String get recipientAccountId => $_getSZ(4);
   @$pb.TagNumber(5)
-  set recipientAccount($core.String value) => $_setString(4, value);
+  set recipientAccountId($core.String value) => $_setString(4, value);
   @$pb.TagNumber(5)
-  $core.bool hasRecipientAccount() => $_has(4);
+  $core.bool hasRecipientAccountId() => $_has(4);
   @$pb.TagNumber(5)
-  void clearRecipientAccount() => $_clearField(5);
+  void clearRecipientAccountId() => $_clearField(5);
 
   @$pb.TagNumber(6)
   $core.String get senderDeviceId => $_getSZ(5);
@@ -374,9 +374,9 @@ class ChatEnvelope extends $pb.GeneratedMessage {
 class ChatKeyPackage extends $pb.GeneratedMessage {
   factory ChatKeyPackage({
     $core.int? protocolVersion,
-    $core.String? ownerAccount,
+    $core.String? accountId,
     $core.String? deviceId,
-    $core.String? devicePublicKeyHex,
+    $core.String? devicePublicKey,
     $core.String? keyPackageId,
     $core.List<$core.int>? keyPackage,
     $core.String? cipherSuite,
@@ -385,10 +385,9 @@ class ChatKeyPackage extends $pb.GeneratedMessage {
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
-    if (ownerAccount != null) result.ownerAccount = ownerAccount;
+    if (accountId != null) result.accountId = accountId;
     if (deviceId != null) result.deviceId = deviceId;
-    if (devicePublicKeyHex != null)
-      result.devicePublicKeyHex = devicePublicKeyHex;
+    if (devicePublicKey != null) result.devicePublicKey = devicePublicKey;
     if (keyPackageId != null) result.keyPackageId = keyPackageId;
     if (keyPackage != null) result.keyPackage = keyPackage;
     if (cipherSuite != null) result.cipherSuite = cipherSuite;
@@ -412,9 +411,9 @@ class ChatKeyPackage extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
         fieldType: $pb.PbFieldType.OU3)
-    ..aOS(2, _omitFieldNames ? '' : 'ownerAccount')
+    ..aOS(2, _omitFieldNames ? '' : 'accountId')
     ..aOS(3, _omitFieldNames ? '' : 'deviceId')
-    ..aOS(4, _omitFieldNames ? '' : 'devicePublicKeyHex')
+    ..aOS(4, _omitFieldNames ? '' : 'devicePublicKey')
     ..aOS(5, _omitFieldNames ? '' : 'keyPackageId')
     ..a<$core.List<$core.int>>(
         6, _omitFieldNames ? '' : 'keyPackage', $pb.PbFieldType.OY)
@@ -456,13 +455,13 @@ class ChatKeyPackage extends $pb.GeneratedMessage {
   void clearProtocolVersion() => $_clearField(1);
 
   @$pb.TagNumber(2)
-  $core.String get ownerAccount => $_getSZ(1);
+  $core.String get accountId => $_getSZ(1);
   @$pb.TagNumber(2)
-  set ownerAccount($core.String value) => $_setString(1, value);
+  set accountId($core.String value) => $_setString(1, value);
   @$pb.TagNumber(2)
-  $core.bool hasOwnerAccount() => $_has(1);
+  $core.bool hasAccountId() => $_has(1);
   @$pb.TagNumber(2)
-  void clearOwnerAccount() => $_clearField(2);
+  void clearAccountId() => $_clearField(2);
 
   @$pb.TagNumber(3)
   $core.String get deviceId => $_getSZ(2);
@@ -474,13 +473,13 @@ class ChatKeyPackage extends $pb.GeneratedMessage {
   void clearDeviceId() => $_clearField(3);
 
   @$pb.TagNumber(4)
-  $core.String get devicePublicKeyHex => $_getSZ(3);
+  $core.String get devicePublicKey => $_getSZ(3);
   @$pb.TagNumber(4)
-  set devicePublicKeyHex($core.String value) => $_setString(3, value);
+  set devicePublicKey($core.String value) => $_setString(3, value);
   @$pb.TagNumber(4)
-  $core.bool hasDevicePublicKeyHex() => $_has(3);
+  $core.bool hasDevicePublicKey() => $_has(3);
   @$pb.TagNumber(4)
-  void clearDevicePublicKeyHex() => $_clearField(4);
+  void clearDevicePublicKey() => $_clearField(4);
 
   @$pb.TagNumber(5)
   $core.String get keyPackageId => $_getSZ(4);
@@ -530,9 +529,9 @@ class ChatKeyPackage extends $pb.GeneratedMessage {
 
 class PublishChatKeyPackageRequest extends $pb.GeneratedMessage {
   factory PublishChatKeyPackageRequest({
-    $core.String? ownerAccount,
+    $core.String? accountId,
     $core.String? deviceId,
-    $core.String? devicePublicKeyHex,
+    $core.String? devicePublicKey,
     $core.String? keyPackageId,
     $core.List<$core.int>? keyPackage,
     $core.String? cipherSuite,
@@ -540,10 +539,9 @@ class PublishChatKeyPackageRequest extends $pb.GeneratedMessage {
     $fixnum.Int64? expiresAtMillis,
   }) {
     final result = create();
-    if (ownerAccount != null) result.ownerAccount = ownerAccount;
+    if (accountId != null) result.accountId = accountId;
     if (deviceId != null) result.deviceId = deviceId;
-    if (devicePublicKeyHex != null)
-      result.devicePublicKeyHex = devicePublicKeyHex;
+    if (devicePublicKey != null) result.devicePublicKey = devicePublicKey;
     if (keyPackageId != null) result.keyPackageId = keyPackageId;
     if (keyPackage != null) result.keyPackage = keyPackage;
     if (cipherSuite != null) result.cipherSuite = cipherSuite;
@@ -565,9 +563,9 @@ class PublishChatKeyPackageRequest extends $pb.GeneratedMessage {
       _omitMessageNames ? '' : 'PublishChatKeyPackageRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.chat.v1'),
       createEmptyInstance: create)
-    ..aOS(1, _omitFieldNames ? '' : 'ownerAccount')
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
     ..aOS(2, _omitFieldNames ? '' : 'deviceId')
-    ..aOS(3, _omitFieldNames ? '' : 'devicePublicKeyHex')
+    ..aOS(3, _omitFieldNames ? '' : 'devicePublicKey')
     ..aOS(4, _omitFieldNames ? '' : 'keyPackageId')
     ..a<$core.List<$core.int>>(
         5, _omitFieldNames ? '' : 'keyPackage', $pb.PbFieldType.OY)
@@ -603,13 +601,13 @@ class PublishChatKeyPackageRequest extends $pb.GeneratedMessage {
   static PublishChatKeyPackageRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
-  $core.String get ownerAccount => $_getSZ(0);
+  $core.String get accountId => $_getSZ(0);
   @$pb.TagNumber(1)
-  set ownerAccount($core.String value) => $_setString(0, value);
+  set accountId($core.String value) => $_setString(0, value);
   @$pb.TagNumber(1)
-  $core.bool hasOwnerAccount() => $_has(0);
+  $core.bool hasAccountId() => $_has(0);
   @$pb.TagNumber(1)
-  void clearOwnerAccount() => $_clearField(1);
+  void clearAccountId() => $_clearField(1);
 
   @$pb.TagNumber(2)
   $core.String get deviceId => $_getSZ(1);
@@ -621,13 +619,13 @@ class PublishChatKeyPackageRequest extends $pb.GeneratedMessage {
   void clearDeviceId() => $_clearField(2);
 
   @$pb.TagNumber(3)
-  $core.String get devicePublicKeyHex => $_getSZ(2);
+  $core.String get devicePublicKey => $_getSZ(2);
   @$pb.TagNumber(3)
-  set devicePublicKeyHex($core.String value) => $_setString(2, value);
+  set devicePublicKey($core.String value) => $_setString(2, value);
   @$pb.TagNumber(3)
-  $core.bool hasDevicePublicKeyHex() => $_has(2);
+  $core.bool hasDevicePublicKey() => $_has(2);
   @$pb.TagNumber(3)
-  void clearDevicePublicKeyHex() => $_clearField(3);
+  void clearDevicePublicKey() => $_clearField(3);
 
   @$pb.TagNumber(4)
   $core.String get keyPackageId => $_getSZ(3);
@@ -677,13 +675,14 @@ class PublishChatKeyPackageRequest extends $pb.GeneratedMessage {
 
 class FetchChatKeyPackagesRequest extends $pb.GeneratedMessage {
   factory FetchChatKeyPackagesRequest({
-    $core.String? ownerAccount,
-    $core.String? requesterAccount,
+    $core.String? accountId,
+    $core.String? requesterAccountId,
     $core.int? limit,
   }) {
     final result = create();
-    if (ownerAccount != null) result.ownerAccount = ownerAccount;
-    if (requesterAccount != null) result.requesterAccount = requesterAccount;
+    if (accountId != null) result.accountId = accountId;
+    if (requesterAccountId != null)
+      result.requesterAccountId = requesterAccountId;
     if (limit != null) result.limit = limit;
     return result;
   }
@@ -701,8 +700,8 @@ class FetchChatKeyPackagesRequest extends $pb.GeneratedMessage {
       _omitMessageNames ? '' : 'FetchChatKeyPackagesRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.chat.v1'),
       createEmptyInstance: create)
-    ..aOS(1, _omitFieldNames ? '' : 'ownerAccount')
-    ..aOS(2, _omitFieldNames ? '' : 'requesterAccount')
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..aOS(2, _omitFieldNames ? '' : 'requesterAccountId')
     ..aI(3, _omitFieldNames ? '' : 'limit', fieldType: $pb.PbFieldType.OU3)
     ..hasRequiredFields = false;
 
@@ -729,22 +728,22 @@ class FetchChatKeyPackagesRequest extends $pb.GeneratedMessage {
   static FetchChatKeyPackagesRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
-  $core.String get ownerAccount => $_getSZ(0);
+  $core.String get accountId => $_getSZ(0);
   @$pb.TagNumber(1)
-  set ownerAccount($core.String value) => $_setString(0, value);
+  set accountId($core.String value) => $_setString(0, value);
   @$pb.TagNumber(1)
-  $core.bool hasOwnerAccount() => $_has(0);
+  $core.bool hasAccountId() => $_has(0);
   @$pb.TagNumber(1)
-  void clearOwnerAccount() => $_clearField(1);
+  void clearAccountId() => $_clearField(1);
 
   @$pb.TagNumber(2)
-  $core.String get requesterAccount => $_getSZ(1);
+  $core.String get requesterAccountId => $_getSZ(1);
   @$pb.TagNumber(2)
-  set requesterAccount($core.String value) => $_setString(1, value);
+  set requesterAccountId($core.String value) => $_setString(1, value);
   @$pb.TagNumber(2)
-  $core.bool hasRequesterAccount() => $_has(1);
+  $core.bool hasRequesterAccountId() => $_has(1);
   @$pb.TagNumber(2)
-  void clearRequesterAccount() => $_clearField(2);
+  void clearRequesterAccountId() => $_clearField(2);
 
   @$pb.TagNumber(3)
   $core.int get limit => $_getIZ(2);
@@ -758,14 +757,15 @@ class FetchChatKeyPackagesRequest extends $pb.GeneratedMessage {
 
 class ConsumeChatKeyPackageRequest extends $pb.GeneratedMessage {
   factory ConsumeChatKeyPackageRequest({
-    $core.String? ownerAccount,
+    $core.String? accountId,
     $core.String? keyPackageId,
-    $core.String? requesterAccount,
+    $core.String? requesterAccountId,
   }) {
     final result = create();
-    if (ownerAccount != null) result.ownerAccount = ownerAccount;
+    if (accountId != null) result.accountId = accountId;
     if (keyPackageId != null) result.keyPackageId = keyPackageId;
-    if (requesterAccount != null) result.requesterAccount = requesterAccount;
+    if (requesterAccountId != null)
+      result.requesterAccountId = requesterAccountId;
     return result;
   }
 
@@ -782,9 +782,9 @@ class ConsumeChatKeyPackageRequest extends $pb.GeneratedMessage {
       _omitMessageNames ? '' : 'ConsumeChatKeyPackageRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.chat.v1'),
       createEmptyInstance: create)
-    ..aOS(1, _omitFieldNames ? '' : 'ownerAccount')
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
     ..aOS(2, _omitFieldNames ? '' : 'keyPackageId')
-    ..aOS(3, _omitFieldNames ? '' : 'requesterAccount')
+    ..aOS(3, _omitFieldNames ? '' : 'requesterAccountId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -810,13 +810,13 @@ class ConsumeChatKeyPackageRequest extends $pb.GeneratedMessage {
   static ConsumeChatKeyPackageRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
-  $core.String get ownerAccount => $_getSZ(0);
+  $core.String get accountId => $_getSZ(0);
   @$pb.TagNumber(1)
-  set ownerAccount($core.String value) => $_setString(0, value);
+  set accountId($core.String value) => $_setString(0, value);
   @$pb.TagNumber(1)
-  $core.bool hasOwnerAccount() => $_has(0);
+  $core.bool hasAccountId() => $_has(0);
   @$pb.TagNumber(1)
-  void clearOwnerAccount() => $_clearField(1);
+  void clearAccountId() => $_clearField(1);
 
   @$pb.TagNumber(2)
   $core.String get keyPackageId => $_getSZ(1);
@@ -828,13 +828,13 @@ class ConsumeChatKeyPackageRequest extends $pb.GeneratedMessage {
   void clearKeyPackageId() => $_clearField(2);
 
   @$pb.TagNumber(3)
-  $core.String get requesterAccount => $_getSZ(2);
+  $core.String get requesterAccountId => $_getSZ(2);
   @$pb.TagNumber(3)
-  set requesterAccount($core.String value) => $_setString(2, value);
+  set requesterAccountId($core.String value) => $_setString(2, value);
   @$pb.TagNumber(3)
-  $core.bool hasRequesterAccount() => $_has(2);
+  $core.bool hasRequesterAccountId() => $_has(2);
   @$pb.TagNumber(3)
-  void clearRequesterAccount() => $_clearField(3);
+  void clearRequesterAccountId() => $_clearField(3);
 }
 
 const $core.bool _omitFieldNames =

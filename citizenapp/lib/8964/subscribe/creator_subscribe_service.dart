@@ -43,41 +43,42 @@ class CreatorSubscribeService {
   final SharedPreferences? _preferences;
 
   Future<FinalizedSubscriptionSnapshot> fetchFinalizedState({
-    required String subscriberAddress,
-    required String creatorAddress,
+    required String subscriberAccountId,
+    required String creatorAccountId,
   }) async {
-    await _retryPendingMirrors(subscriberAddress);
+    await _retryPendingMirrors(subscriberAccountId);
     return _rpc.fetchSubscriptionSnapshot(
-      subscriberAddress: subscriberAddress,
-      creatorAddress: creatorAddress,
+      subscriberAccountId: subscriberAccountId,
+      creatorAccountId: creatorAccountId,
     );
   }
 
-  Future<List<ChainCreatorTier>> fetchCreatorPlans(String creatorAddress) =>
-      _rpc.fetchCreatorPlans(creatorAddress);
+  Future<List<ChainCreatorTier>> fetchCreatorPlans(String creatorAccountId) =>
+      _rpc.fetchCreatorPlans(creatorAccountId);
 
-  /// 读某账户的平台会员 finalized 快照（creatorAddress 省略=平台 IssuerKey）。
+  /// 读某账户的平台会员 finalized 快照（不传创作者主体即平台 IssuerKey）。
   /// 供他人主页订阅按钮判定被查看创作者本人平台会员是否仍有效（订阅按钮门禁）。
-  Future<FinalizedSubscriptionSnapshot> fetchPlatformSnapshot(String address) =>
-      _rpc.fetchSubscriptionSnapshot(subscriberAddress: address);
+  Future<FinalizedSubscriptionSnapshot> fetchPlatformSnapshot(
+          String accountId) =>
+      _rpc.fetchSubscriptionSnapshot(subscriberAccountId: accountId);
 
   /// 订阅创作者某档某周期（priceFen=该档该周期价，分）。
   Future<void> subscribe({
-    required String creatorAddress,
+    required String creatorAccountId,
     required String tierId,
     required String period,
     required int priceFen,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
     final wallet = await _requireHotWallet();
-    if (wallet.address == creatorAddress) {
+    if (wallet.accountId == creatorAccountId) {
       throw const CreatorSubscribeException('不能订阅自己');
     }
     try {
       final result = await _rpc.subscribeCreator(
-        fromAddress: wallet.address,
-        signerPubkey: Uint8List.fromList(hexToBytes(wallet.pubkeyHex)),
-        creatorAddress: creatorAddress,
+        fromSs58Address: wallet.ss58Address,
+        signerPublicKey: Uint8List.fromList(hexToBytes(wallet.accountId)),
+        creatorAccountId: creatorAccountId,
         tierId: tierId,
         billingPeriod: period,
         expectedPriceFen: BigInt.from(priceFen),
@@ -85,12 +86,12 @@ class CreatorSubscribeService {
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
-        ownerAccount: wallet.address,
+        accountId: wallet.accountId,
         txHash: result.txHash,
         blockHashHex: result.blockHashHex,
         signedExtrinsicHex: result.signedExtrinsicHex,
         action: 'subscribe',
-        creatorAddress: creatorAddress,
+        creatorAccountId: creatorAccountId,
         tierId: tierId,
         billingPeriod: period,
       );
@@ -105,25 +106,25 @@ class CreatorSubscribeService {
 
   /// 取消对某创作者的订阅（撤销按月扣款授权）。
   Future<void> cancel({
-    required String creatorAddress,
+    required String creatorAccountId,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
     final wallet = await _requireHotWallet();
     try {
       final result = await _rpc.cancelCreator(
-        fromAddress: wallet.address,
-        signerPubkey: Uint8List.fromList(hexToBytes(wallet.pubkeyHex)),
-        creatorAddress: creatorAddress,
+        fromSs58Address: wallet.ss58Address,
+        signerPublicKey: Uint8List.fromList(hexToBytes(wallet.accountId)),
+        creatorAccountId: creatorAccountId,
         sign: (payload) => _wallet.signWithWallet(wallet.walletIndex, payload),
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
-        ownerAccount: wallet.address,
+        accountId: wallet.accountId,
         txHash: result.txHash,
         blockHashHex: result.blockHashHex,
         signedExtrinsicHex: result.signedExtrinsicHex,
         action: 'cancel',
-        creatorAddress: creatorAddress,
+        creatorAccountId: creatorAccountId,
       );
     } on SecureSeedException catch (e) {
       throw CreatorSubscribeException(seedSignErrorMessage(e));
@@ -136,21 +137,21 @@ class CreatorSubscribeService {
 
   /// 更换创作者档位或周期；同一换档业务只提交这一笔账户签名交易。
   Future<void> changePlan({
-    required String creatorAddress,
+    required String creatorAccountId,
     required String tierId,
     required String period,
     required int priceFen,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
     final wallet = await _requireHotWallet();
-    if (wallet.address == creatorAddress) {
+    if (wallet.accountId == creatorAccountId) {
       throw const CreatorSubscribeException('不能订阅自己');
     }
     try {
       final result = await _rpc.changeCreatorPlan(
-        fromAddress: wallet.address,
-        signerPubkey: Uint8List.fromList(hexToBytes(wallet.pubkeyHex)),
-        creatorAddress: creatorAddress,
+        fromSs58Address: wallet.ss58Address,
+        signerPublicKey: Uint8List.fromList(hexToBytes(wallet.accountId)),
+        creatorAccountId: creatorAccountId,
         tierId: tierId,
         billingPeriod: period,
         expectedPriceFen: BigInt.from(priceFen),
@@ -158,12 +159,12 @@ class CreatorSubscribeService {
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
-        ownerAccount: wallet.address,
+        accountId: wallet.accountId,
         txHash: result.txHash,
         blockHashHex: result.blockHashHex,
         signedExtrinsicHex: result.signedExtrinsicHex,
         action: 'change',
-        creatorAddress: creatorAddress,
+        creatorAccountId: creatorAccountId,
         tierId: tierId,
         billingPeriod: period,
       );
@@ -190,17 +191,17 @@ class CreatorSubscribeService {
     return SharedPreferences.getInstance();
   }
 
-  String _pendingKey(String ownerAccount) =>
-      'creator_subscription_mirror_pending:$ownerAccount';
+  String _pendingKey(String accountId) =>
+      'creator_subscription_mirror_pending:$accountId';
 
   /// finalized 回执按钱包账户持久化；HTTP 失败只重放同一交易证明，不要求第二次签名。
   Future<void> _confirm({
-    required String ownerAccount,
+    required String accountId,
     required String txHash,
     required String blockHashHex,
     required String signedExtrinsicHex,
     required String action,
-    required String creatorAddress,
+    required String creatorAccountId,
     String? tierId,
     String? billingPeriod,
   }) async {
@@ -209,50 +210,50 @@ class CreatorSubscribeService {
       'block_hash': blockHashHex,
       'signed_extrinsic_hex': signedExtrinsicHex,
       'action': action,
-      'creator_account': creatorAddress,
+      'creator_account_id': creatorAccountId,
       if (tierId != null) 'tier_id': tierId,
       if (billingPeriod != null) 'billing_period': billingPeriod,
     };
     try {
-      await _storeLocalProof(ownerAccount, proof);
+      await _storeLocalProof(accountId, proof);
     } on Exception {
       // 链上已 finalized；本地缓存异常不得转化为重新签名。
     }
     try {
       final session = await _session.ensureSession();
-      if (session == null || session.ownerAccount != ownerAccount) return;
+      if (session == null || session.accountId != accountId) return;
       await _api.confirmCreatorSubscription(
         session: session,
         txHash: txHash,
         blockHashHex: blockHashHex,
         signedExtrinsicHex: signedExtrinsicHex,
         action: action,
-        creatorAccount: creatorAddress,
+        creatorAccountId: creatorAccountId,
         tierId: tierId,
         billingPeriod: billingPeriod,
       );
-      await _removePendingProof(ownerAccount, txHash);
+      await _removePendingProof(accountId, txHash);
     } on Exception {
       // 保留证明，下次进入创作者订阅页仅重试 HTTP。
     }
   }
 
-  Future<void> _retryPendingMirrors(String ownerAccount) async {
+  Future<void> _retryPendingMirrors(String accountId) async {
     try {
       final session = await _session.ensureSession();
-      if (session == null || session.ownerAccount != ownerAccount) return;
-      final pending = await _readList(_pendingKey(ownerAccount));
+      if (session == null || session.accountId != accountId) return;
+      final pending = await _readList(_pendingKey(accountId));
       for (final proof in List<Map<String, dynamic>>.from(pending)) {
         final txHash = proof['tx_hash'];
         final blockHashHex = proof['block_hash'];
         final signedExtrinsicHex = proof['signed_extrinsic_hex'];
         final action = proof['action'];
-        final creatorAccount = proof['creator_account'];
+        final creatorAccountId = proof['creator_account_id'];
         if (txHash is! String ||
             blockHashHex is! String ||
             signedExtrinsicHex is! String ||
             action is! String ||
-            creatorAccount is! String) {
+            creatorAccountId is! String) {
           continue;
         }
         await _api.confirmCreatorSubscription(
@@ -261,11 +262,11 @@ class CreatorSubscribeService {
           blockHashHex: blockHashHex,
           signedExtrinsicHex: signedExtrinsicHex,
           action: action,
-          creatorAccount: creatorAccount,
+          creatorAccountId: creatorAccountId,
           tierId: proof['tier_id'] as String?,
           billingPeriod: proof['billing_period'] as String?,
         );
-        await _removePendingProof(ownerAccount, txHash);
+        await _removePendingProof(accountId, txHash);
       }
     } on Exception {
       // Cloudflare 不可用不影响链上自动续费，证明继续保留。
@@ -273,14 +274,13 @@ class CreatorSubscribeService {
   }
 
   Future<void> _storeLocalProof(
-      String ownerAccount, Map<String, dynamic> proof) async {
-    final pending = await _readList(_pendingKey(ownerAccount));
+      String accountId, Map<String, dynamic> proof) async {
+    final pending = await _readList(_pendingKey(accountId));
     pending.removeWhere((item) => item['tx_hash'] == proof['tx_hash']);
     pending.add(proof);
-    await (await _prefs)
-        .setString(_pendingKey(ownerAccount), jsonEncode(pending));
+    await (await _prefs).setString(_pendingKey(accountId), jsonEncode(pending));
 
-    final historyKey = 'subscription_tx_history:$ownerAccount';
+    final historyKey = 'subscription_tx_history:$accountId';
     final history = await _readList(historyKey);
     history.removeWhere((item) => item['tx_hash'] == proof['tx_hash']);
     history.add(proof);
@@ -288,14 +288,14 @@ class CreatorSubscribeService {
     await (await _prefs).setString(historyKey, jsonEncode(history));
   }
 
-  Future<void> _removePendingProof(String ownerAccount, String txHash) async {
-    final pending = await _readList(_pendingKey(ownerAccount));
+  Future<void> _removePendingProof(String accountId, String txHash) async {
+    final pending = await _readList(_pendingKey(accountId));
     pending.removeWhere((item) => item['tx_hash'] == txHash);
     final prefs = await _prefs;
     if (pending.isEmpty) {
-      await prefs.remove(_pendingKey(ownerAccount));
+      await prefs.remove(_pendingKey(accountId));
     } else {
-      await prefs.setString(_pendingKey(ownerAccount), jsonEncode(pending));
+      await prefs.setString(_pendingKey(accountId), jsonEncode(pending));
     }
   }
 

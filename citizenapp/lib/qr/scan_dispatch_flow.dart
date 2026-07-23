@@ -14,7 +14,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// 交易 tab「扫一扫」统一入口：扫码 → 按协议分派。
 ///
 /// - 收款 / 链下支付码 → 现有链下支付流程（用交易页选的 [paymentWallet]）。
-/// - 广场账户动作 signRequest → 签名响应方（用 QR `u` 对应的 owner 钱包，与付款钱包无关）。
+/// - 广场账户动作 signRequest → 签名响应方（用 QR `u` 对应的 accountId 钱包，与付款钱包无关）。
 /// - 未来其它类型只需在此加分支。
 Future<void> openScanDispatchFlow({
   required BuildContext context,
@@ -161,7 +161,7 @@ Future<bool?> _showActionConfirm(
     builder: (dialogContext) => AlertDialog(
       title: const Text('确认签名'),
       content: Text(
-        '账户：${_shortAddress(prep.wallet.address)}\n'
+        '账户：${_shortAddress(prep.wallet.ss58Address)}\n'
         '动作：${prep.actionLabel}\n'
         '$fieldLines\n\n'
         '确认后将用本机钱包对此操作签名。',

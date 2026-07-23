@@ -362,6 +362,9 @@ pub fn grant_close_role(cid_number: &pallet::CidNumberOf<Test>) -> crate::RoleCo
 impl private_admins::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
+    type ChainPhase = TestChainPhase; // 复用 Phase 2 可切换相位 mock
+    type CitizenIdentityBinding = TestCitizenBinding;
+    type LegalRepresentativeQuery = PrivateManage; // 读 InstitutionInfo.legal_representative
 }
 
 /// 岗位生命周期单测只验证 entity 约束，允许测试 CID 持有提交的业务动作权限。
@@ -376,10 +379,49 @@ impl entity_primitives::InstitutionCapabilityPolicy for TestInstitutionCapabilit
     }
 }
 
+thread_local! {
+    /// 测试相位开关;默认 Genesis(false),每个测试经 new_test_ext 复位。
+    static IS_OPERATION: core::cell::Cell<bool> = core::cell::Cell::new(false);
+    /// 换绑测试用:某 CID 当前绑定的钱包(再次 bind 即换绑)。
+    static CID_WALLET: core::cell::RefCell<Option<(alloc::vec::Vec<u8>, AccountId32)>> =
+        core::cell::RefCell::new(None);
+}
+
+/// 可切换的相位 mock:Genesis(默认)放行、Operation 强制 LR 岗四要素完整。
+pub struct TestChainPhase;
+impl admin_primitives::ChainPhaseCheck for TestChainPhase {
+    fn is_operation() -> bool {
+        IS_OPERATION.with(|cell| cell.get())
+    }
+}
+
+/// 可换绑的 citizen-identity 绑定 mock:某 CID 只绑定一个钱包,可改绑以模拟换绑。
+pub struct TestCitizenBinding;
+impl admin_primitives::CitizenIdentityBindingQuery<AccountId32> for TestCitizenBinding {
+    fn matches_citizen_account(cid_number: &[u8], account: &AccountId32) -> bool {
+        CID_WALLET.with(|cell| {
+            cell.borrow()
+                .as_ref()
+                .map(|(cid, wallet)| cid.as_slice() == cid_number && wallet == account)
+                .unwrap_or(false)
+        })
+    }
+}
+
+pub fn set_operation_phase(is_operation: bool) {
+    IS_OPERATION.with(|cell| cell.set(is_operation));
+}
+
+/// 把某 CID 绑定到某钱包(再次调用即换绑,旧钱包随即失去该 CID 的授权)。
+pub fn bind_cid(cid_number: &[u8], wallet: AccountId32) {
+    CID_WALLET.with(|cell| *cell.borrow_mut() = Some((cid_number.to_vec(), wallet)));
+}
+
 impl pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
+    type ChainPhase = TestChainPhase;
     type AdminLifecycle = PrivateAdmins;
     type SiblingInstitutionQuery = ();
     type InstitutionAdminQuery = PrivateAdmins;
@@ -446,6 +488,7 @@ pub fn institution_admins(accounts: &[AccountId32]) -> crate::InstitutionAdminsI
         .cloned()
         .map(|account_id| admin_primitives::Admin {
             account_id,
+            cid_number: Default::default(),
             family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
             given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
         })
@@ -472,11 +515,12 @@ pub fn create_institution(
     accounts: pallet::InstitutionInitialAccountsOf<Test>,
 ) -> sp_runtime::DispatchResult {
     let target_admins = [admin(1), admin(2)];
+    // 测试机构均非 UNIN，无父级可传。
     let protocol_accounts =
-        crate::institution::accounts::build_required_protocol_accounts::<Test>(&cid_number)?;
+        crate::institution::accounts::build_required_protocol_accounts::<Test>(&cid_number, None)?;
     let (created_accounts, _, _, _) = crate::institution::accounts::validate_initial_accounts::<
         Test,
-    >(&cid_number, &protocol_accounts)?;
+    >(&cid_number, &protocol_accounts, None)?;
     PrivateManage::store_default_legal_representative_role(&cid_number)?;
     pallet::Institutions::<Test>::insert(
         &cid_number,
@@ -595,6 +639,8 @@ pub fn cast_yes_votes(proposal_id: u64) -> sp_runtime::DispatchResult {
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
+    set_operation_phase(false); // 每个测试默认 Genesis 期。
+    CID_WALLET.with(|cell| *cell.borrow_mut() = None); // 清空换绑状态
     let mut storage = frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .expect("测试存储必须构建成功");

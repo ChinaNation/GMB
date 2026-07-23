@@ -98,6 +98,9 @@ impl internal_vote::Config for Test {
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
+    type ChainPhase = (); // 恒 Genesis（测试默认）
+    type CitizenIdentityBinding = (); // 恒不绑定（() 实现返回 false）
+    type LegalRepresentativeQuery = (); // 恒无 LR（() 实现返回 None）
 }
 
 fn new_test_ext() -> sp_io::TestExternalities {
@@ -118,6 +121,7 @@ fn admins(count: u8) -> Vec<Admin<AccountId32>> {
     (0..count)
         .map(|seed| Admin {
             account_id: account(seed),
+            cid_number: Default::default(),
             family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
             given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
         })

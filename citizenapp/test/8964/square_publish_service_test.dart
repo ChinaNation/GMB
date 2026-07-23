@@ -171,11 +171,12 @@ void main() {
 
 SquareIdentityState _identity({required String? cidNumber}) {
   return SquareIdentityState(
-    ownerAccount: 'gmb_test_owner_account',
+    accountId:
+        '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     walletName: '测试钱包',
     cidNumber: cidNumber,
     walletIndex: 1,
-    pubkeyHex: 'aa' * 32,
+    ss58Address: 'gmb_test_signer_ss58_address',
     isHotWallet: true,
   );
 }
@@ -199,7 +200,7 @@ class _FakeUploader implements SquareContentUploader {
 
   @override
   Future<SquarePreparedContent> preparePostContent({
-    required String ownerAccount,
+    required String accountId,
     required SquarePostCategory postCategory,
     required String text,
     required List<SquareLocalMediaDraft> mediaDrafts,
@@ -215,7 +216,8 @@ class _FakeUploader implements SquareContentUploader {
     return SquarePreparedContent(
       session: const SquareSession(
         sessionToken: 'sqs_test',
-        ownerAccount: 'gmb_test_owner_account',
+        accountId:
+            '0x9999999999999999999999999999999999999999999999999999999999999999',
         expiresAt: 1800000000000,
       ),
       preparedUpload: const SquarePreparedUpload(
@@ -283,7 +285,7 @@ class _FakePublicationConfirmer implements SquarePublicationConfirmer {
     order?.add('confirm');
     return SquarePost(
       postId: postId,
-      author: SquareAuthor(ownerAccount: session.ownerAccount),
+      author: SquareAuthor(accountId: session.accountId),
       postCategory: SquarePostCategory.normal,
       text: '普通动态',
       createdAt: DateTime.fromMillisecondsSinceEpoch(1800000000000),
@@ -321,8 +323,8 @@ class _FakeChainPublisher implements SquarePostChainPublisher {
 
   @override
   Future<SquareChainPublishedResult> publishPost({
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required String postId,
     required SquarePostCategory postCategory,
     required String contentHashHex,
@@ -359,7 +361,7 @@ class _FakeBalanceReader implements SquarePublishBalanceReader {
   final double balanceYuan;
 
   @override
-  Future<double> fetchFreshFinalizedBalanceYuan(String pubkeyHex) async {
+  Future<double> fetchFreshFinalizedBalanceYuan(String publicKey) async {
     order.add('balance');
     return balanceYuan;
   }

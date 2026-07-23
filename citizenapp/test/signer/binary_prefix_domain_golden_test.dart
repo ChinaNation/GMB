@@ -64,7 +64,7 @@ void main() {
         cidNumber: inputs['cid_number'] as String,
         institutionCode: _hexToBytes(inputs['institution_code_hex'] as String),
         kind: inputs['kind'] as int,
-        adminPubkey: _hexToBytes(inputs['pubkey_hex'] as String),
+        signerPublicKey: _hexToBytes(inputs['signer_public_key_hex'] as String),
         timestamp: inputs['timestamp'] as int,
         nonce: _hexToBytes(inputs['nonce_hex'] as String),
       );
@@ -77,7 +77,7 @@ void main() {
       final inputs = v['sample_inputs'] as Map<String, dynamic>;
       final payload = decryptAdminPayload(
         cidNumber: inputs['cid_number'] as String,
-        adminPubkey: _hexToBytes(inputs['pubkey_hex'] as String),
+        signerPublicKey: _hexToBytes(inputs['signer_public_key_hex'] as String),
         timestamp: inputs['timestamp'] as int,
         nonce: _hexToBytes(inputs['nonce_hex'] as String),
       );

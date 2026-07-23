@@ -10,7 +10,7 @@
 
 ## 当前有效边界
 
-- 机构管理员人员真源归 `public-admins` / `private-admins`：公权使用 `PublicAdmin { admin_account, cid_number, family_name, given_name }`，非空公民 CID 由 `citizen-identity` 唯一真源校验钱包绑定；私权使用 `Admin { admin_account, family_name, given_name }`。管理员账户本身不直接拥有机构业务权限。
+- 机构管理员人员真源归 `public-admins` / `private-admins`：公权、私权统一使用 `Admin { account_id, cid_number, family_name, given_name }`，非空公民 CID 由 `citizen-identity` 唯一真源校验账户绑定。管理员账户本身不直接拥有机构业务权限。
 - 机构岗位和管理员任职真源归 `entity`，与 admins 独立；管理员可以无岗位，岗位可以空缺。
 - 机构的主账户、费用账户和其它业务账户共享机构层有效管理员与岗位任职事实；具体账户能执行什么操作，由对应业务模块硬规则决定。
 - 固定创世机构岗位定义与法定席位受治理骨架保护，任职可以依法轮换；岗位任职不得反向生成或覆盖管理员钱包集合。

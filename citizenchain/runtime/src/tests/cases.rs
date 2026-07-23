@@ -683,6 +683,7 @@ fn runtime_fee_router_treats_proposals_as_operations_not_votes() {
             .into_iter()
             .map(|account_id| admin_primitives::Admin {
                 account_id,
+                cid_number: Default::default(),
                 family_name: admin_primitives::FamilyName::truncate_from(
                     "管理".as_bytes().to_vec(),
                 ),
@@ -1771,6 +1772,10 @@ fn genesis_citizenchain_foundation_is_complete_and_protected() {
             .expect("foundation admins exist");
         assert_eq!(admins.institution_code, *b"SFGY");
         assert_eq!(admins.admins.len(), 1);
+        assert_eq!(
+            admins.admins[0].cid_number.as_slice(),
+            "GZ000-CTZN6-198805200-2026".as_bytes()
+        );
         assert_eq!(admins.admins[0].family_name.as_slice(), "程".as_bytes());
         assert_eq!(admins.admins[0].given_name.as_slice(), "伟".as_bytes());
 
@@ -1946,7 +1951,7 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
                 admins: established_admins
                     .iter()
                     .cloned()
-                    .map(|account_id| admin_primitives::PublicAdmin {
+                    .map(|account_id| admin_primitives::Admin {
                         account_id,
                         cid_number: Default::default(),
                         family_name: Default::default(),
@@ -2201,7 +2206,7 @@ fn national_singletons_without_member_ranges_can_be_composed_once() {
                     admins: admins
                         .iter()
                         .cloned()
-                        .map(|account_id| admin_primitives::PublicAdmin {
+                        .map(|account_id| admin_primitives::Admin {
                             account_id,
                             cid_number: Default::default(),
                             family_name: Default::default(),

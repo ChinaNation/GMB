@@ -113,8 +113,9 @@ pub struct Institution {
     /// 法定代表人证件照大小(字节)。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub legal_representative_photo_size: Option<u64>,
-    /// 创建人 pubkey。
-    pub created_by: String,
+    /// 创建人账户 ID；链上创世投影没有独立创建人时为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub creator_account_id: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -126,7 +127,7 @@ pub struct LegalRepresentative {
     /// 必须指向正常状态公民的 cid_number。
     pub cid_number: String,
     /// 由注册局公民记录派生，不接受机构表单另填。
-    pub account: String,
+    pub account_id: String,
 }
 
 impl HasProvinceCity for Institution {
@@ -145,9 +146,9 @@ pub struct InstitutionAccount {
     pub cid_number: String,
     /// 账户名称,**进链的 name 字段**。同 cid_number 下必须唯一。
     pub account_name: String,
-    /// 链上派生的多签账户(hex, 不含 0x 前缀)。上链成功后填入。
-    pub account: Option<String>,
-    pub created_by: String,
+    /// 链上派生的规范账户 ID。上链成功后填入。
+    pub account_id: Option<String>,
+    pub creator_account_id: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -180,11 +181,11 @@ impl Serialize for InstitutionAccount {
         let mut state = serializer.serialize_struct("InstitutionAccount", 8)?;
         state.serialize_field("cid_number", &self.cid_number)?;
         state.serialize_field("account_name", &self.account_name)?;
-        state.serialize_field("account", &self.account)?;
+        state.serialize_field("account_id", &self.account_id)?;
         state.serialize_field("account_kind", account_kind)?;
         state.serialize_field("can_close", &can_close)?;
         state.serialize_field("can_delete", &can_close)?;
-        state.serialize_field("created_by", &self.created_by)?;
+        state.serialize_field("creator_account_id", &self.creator_account_id)?;
         state.serialize_field("created_at", &self.created_at)?;
         state.end()
     }
@@ -221,8 +222,8 @@ pub struct InstitutionDocument {
     pub file_size: u64,
     /// 服务端存储路径(相对于 data/documents/)。
     pub file_path: String,
-    /// 上传人 pubkey。
-    pub uploaded_by: String,
+    /// 上传人账户 ID。
+    pub uploader_account_id: String,
     pub uploaded_at: DateTime<Utc>,
 }
 
@@ -240,8 +241,8 @@ pub struct CreateInstitutionAdminInput {
     /// 管理员名；缺失时先查公民资料，仍缺失则使用“员”。
     #[serde(default)]
     pub given_name: Option<String>,
-    /// 机构初始管理员钱包账户。
-    pub admin_account: String,
+    /// 机构初始管理员账户 ID。
+    pub account_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -390,13 +391,13 @@ pub struct InstitutionListRow {
     pub created_at: DateTime<Utc>,
     /// 创建该机构的登录管理员姓；与管理员记录字段同名，不保存合并姓名。
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_by_family_name: Option<String>,
+    pub creator_family_name: Option<String>,
     /// 创建该机构的登录管理员名；页面展示时再与姓合并。
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_by_given_name: Option<String>,
+    pub creator_given_name: Option<String>,
     /// 创建者角色:"FEDERAL_REGISTRY" / "CITY_REGISTRY" / None
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_by_role: Option<String>,
+    pub creator_institution_code: Option<String>,
 }
 
 /// 法人机构搜索结果项(用于 F 详情页"所属法人"选择器)
@@ -423,13 +424,13 @@ pub struct ParentInstitutionRow {
 pub struct InstitutionDetailOutput {
     pub institution: Institution,
     pub accounts: Vec<InstitutionAccount>,
-    /// 创建该机构的登录管理员姓(按 created_by 账户反查 admins)
+    /// 创建该机构的登录管理员姓(按 creator_account_id 账户反查 admins)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_by_family_name: Option<String>,
-    /// 创建该机构的登录管理员名(按 created_by 账户反查 admins)
+    pub creator_family_name: Option<String>,
+    /// 创建该机构的登录管理员名(按 creator_account_id 账户反查 admins)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_by_given_name: Option<String>,
+    pub creator_given_name: Option<String>,
     /// 创建者角色:"FEDERAL_REGISTRY" / "CITY_REGISTRY"
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_by_role: Option<String>,
+    pub creator_institution_code: Option<String>,
 }

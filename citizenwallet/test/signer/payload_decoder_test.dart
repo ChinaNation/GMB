@@ -26,20 +26,9 @@ void main() {
   List<int> adminPerson(
     List<int> adminAccount,
     String familyName,
-    String givenName,
-  ) =>
-      [
-        ...adminAccount,
-        ...compactVec(familyName),
-        ...compactVec(givenName),
-      ];
-
-  List<int> publicAdminPerson(
-    List<int> adminAccount,
-    String citizenCidNumber,
-    String familyName,
-    String givenName,
-  ) =>
+    String givenName, {
+    String citizenCidNumber = '',
+  }) =>
       [
         ...adminAccount,
         ...compactVec(citizenCidNumber),
@@ -207,16 +196,6 @@ void main() {
 
   String ss58FromBytes(List<int> bytes) => Keyring().encodeAddress(bytes, 2027);
 
-  String ss58FromHex(String value) {
-    final clean = value.startsWith('0x') ? value.substring(2) : value;
-    final bytes = List<int>.generate(
-      clean.length ~/ 2,
-      (i) => int.parse(clean.substring(i * 2, i * 2 + 2), radix: 16),
-      growable: false,
-    );
-    return ss58FromBytes(bytes);
-  }
-
   group('PayloadDecoder', () {
     test('decodes transfer_with_remark (pallet=4 call=0)', () {
       final dest = Keyring.sr25519.fromSeed(Uint8List(32));
@@ -237,7 +216,10 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.action, 'transfer');
       expect(decoded.fields['amount_yuan'], '234.00 GMB');
-      expect(decoded.fields['to'], dest.address);
+      expect(
+        decoded.fields['recipient_account_id'],
+        '0x${hexLower(destBytes)}',
+      );
       expect(decoded.fields['remark'], remark);
     });
 
@@ -354,7 +336,10 @@ void main() {
       expect(decoded!.action, 'cast_popular_vote');
       expect(decoded.fields['proposal_id'], '101');
       expect(decoded.fields['cid_number'], 'GD-CTZN1-8F3A2B');
-      expect(decoded.fields['wallet_account'], ss58FromBytes(candidateWallet));
+      expect(
+        decoded.fields['account_id'],
+        '0x${hexLower(candidateWallet)}',
+      );
     });
 
     test('decodes ElectionVote 机构岗位互选完整候选主体 (22.3)', () {
@@ -375,7 +360,10 @@ void main() {
       expect(decoded.fields['proposal_id'], '102');
       expect(decoded.fields['voter_role_code'], 'COMMITTEE_MEMBER');
       expect(decoded.fields['cid_number'], 'GD-CTZN1-8F3A2B');
-      expect(decoded.fields['wallet_account'], ss58FromBytes(candidateWallet));
+      expect(
+        decoded.fields['account_id'],
+        '0x${hexLower(candidateWallet)}',
+      );
     });
 
     test('ElectionVote 拒绝旧裸钱包候选、CID 截断和尾随字段', () {
@@ -450,8 +438,8 @@ void main() {
         expect(decoded.fields['actor_cid_number'], registryActorCid);
         expect(decoded.fields['actor_role_code'], 'ASSET_OPERATOR');
         expect(
-          decoded.fields['execution_account'],
-          ss58FromBytes(executionAccount),
+          decoded.fields['execution_account_id'],
+          '0x${hexLower(executionAccount)}',
         );
         expect(decoded.fields['asset_class'], 'Plain');
         expect(decoded.fields['asset_name'], '公民测试资产');
@@ -482,7 +470,7 @@ void main() {
             qrAction: QrActions.proposeAssetMint,
             expected: {
               'asset_id': '7',
-              'to': ss58FromBytes(toAccount),
+              'recipient_account_id': '0x${hexLower(toAccount)}',
               'amount_raw': '101',
             },
           ),
@@ -496,7 +484,7 @@ void main() {
             qrAction: QrActions.proposeAssetBurn,
             expected: {
               'asset_id': '8',
-              'from': ss58FromBytes(fromAccount),
+              'sender_account_id': '0x${hexLower(fromAccount)}',
               'amount_raw': '202',
             },
           ),
@@ -517,8 +505,8 @@ void main() {
             qrAction: QrActions.proposeAssetTransfer,
             expected: {
               'asset_id': '10',
-              'from': ss58FromBytes(fromAccount),
-              'to': ss58FromBytes(toAccount),
+              'sender_account_id': '0x${hexLower(fromAccount)}',
+              'recipient_account_id': '0x${hexLower(toAccount)}',
               'amount_raw': '303',
             },
           ),
@@ -556,7 +544,7 @@ void main() {
             qrAction: QrActions.proposeMonitorFreeze,
             expected: {
               'asset_id': '11',
-              'who': ss58FromBytes(toAccount),
+              'account_id': '0x${hexLower(toAccount)}',
             },
           ),
           (
@@ -569,7 +557,7 @@ void main() {
             qrAction: QrActions.proposeMonitorUnfreeze,
             expected: {
               'asset_id': '12',
-              'who': ss58FromBytes(toAccount),
+              'account_id': '0x${hexLower(toAccount)}',
             },
           ),
           (
@@ -583,7 +571,7 @@ void main() {
             qrAction: QrActions.proposeMonitorConfiscate,
             expected: {
               'asset_id': '13',
-              'who': ss58FromBytes(toAccount),
+              'account_id': '0x${hexLower(toAccount)}',
               'amount_raw': '404',
             },
           ),
@@ -599,8 +587,8 @@ void main() {
             qrAction: QrActions.proposeMonitorForceTransfer,
             expected: {
               'asset_id': '14',
-              'from': ss58FromBytes(fromAccount),
-              'to': ss58FromBytes(toAccount),
+              'sender_account_id': '0x${hexLower(fromAccount)}',
+              'recipient_account_id': '0x${hexLower(toAccount)}',
               'amount_raw': '505',
             },
           ),
@@ -684,7 +672,7 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.action, 'citizen_identity');
       expect(decoded.fields['cid_number'], 'CTZN-430100-0001');
-      expect(decoded.fields['wallet_account'], ss58FromBytes(wallet));
+      expect(decoded.fields['account_id'], '0x${hexLower(wallet)}');
       expect(decoded.fields['citizen_age_years'], '18');
       expect(decoded.reviewFields['residence'], '43 / 0100 / 001');
     });
@@ -697,7 +685,7 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.action, 'citizen_candidate_identity');
       expect(decoded.fields['cid_number'], 'CTZN-430100-0001');
-      expect(decoded.fields['wallet_account'], ss58FromBytes(wallet));
+      expect(decoded.fields['account_id'], '0x${hexLower(wallet)}');
       expect(decoded.reviewFields['identity_level'], '参选身份');
       expect(decoded.reviewFields['birth_place'], '43 / 0100 / 002');
       expect(decoded.reviewFields['family_name'], '测');
@@ -725,7 +713,7 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.action, 'register_voting_identity');
       expect(decoded.fields['actor_cid_number'], registryActorCid);
-      expect(decoded.fields['wallet_account'], ss58FromBytes(wallet));
+      expect(decoded.fields['account_id'], '0x${hexLower(wallet)}');
       expect(decoded.summary, contains('CTZN-430100-0001'));
     });
 
@@ -767,7 +755,7 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.action, 'upgrade_to_candidate_identity');
       expect(decoded.fields['actor_cid_number'], registryActorCid);
-      expect(decoded.fields['wallet_account'], ss58FromBytes(wallet));
+      expect(decoded.fields['account_id'], '0x${hexLower(wallet)}');
       expect(decoded.reviewFields['identity_level'], '参选身份');
       expect(decoded.reviewFields['family_name'], '测');
       expect(decoded.reviewFields['given_name'], '试公民');
@@ -979,7 +967,7 @@ void main() {
         'action_id': 'admin-action-test',
         'action_type': 'PASSKEY_REGISTER',
         'actor_cid_number': actorCidNumber,
-        'actor_pubkey': actor,
+        'actor_public_key': actor,
         'actor_province_name': '广东省',
         'target': target,
         'request_hash': '0x${List.filled(32, '33').join()}',
@@ -995,8 +983,8 @@ void main() {
       expect(decoded.fields['action_type'], '更新 Passkey');
       expect(decoded.reviewFields['actor_cid_number'], actorCidNumber);
       expect(decoded.reviewFields['actor_province_name'], '广东省');
-      expect(decoded.reviewFields['actor_pubkey'], ss58FromHex(actor));
-      expect(decoded.reviewFields['target'], ss58FromHex(target));
+      expect(decoded.reviewFields['actor_public_key'], actor);
+      expect(decoded.reviewFields['target'], target);
       expect(decoded.reviewFields.containsKey('payload_hash'), isFalse);
     });
 
@@ -1017,7 +1005,7 @@ void main() {
           'action_id': 'admin-action-${entry.key}',
           'action_type': entry.key,
           'actor_cid_number': actorCidNumber,
-          'actor_pubkey': actor,
+          'actor_public_key': actor,
           'actor_province_name': '广东省',
           'target': target,
           'request_hash': '0x${List.filled(32, '33').join()}',
@@ -1038,7 +1026,7 @@ void main() {
         'domain': 'onchina_admin_governance',
         'qr_proto': 'QR_V1',
         'action_type': 'CREATE_ADMIN',
-        'actor_pubkey': '0x${List.filled(32, '11').join()}',
+        'actor_public_key': '0x${List.filled(32, '11').join()}',
         'actor_province_name': '广东省',
         'target': '0x${List.filled(32, '22').join()}',
         'before_hash': 'none',
@@ -1046,6 +1034,46 @@ void main() {
       });
 
       expect(PayloadDecoder.decode(hexOf(utf8.encode(payload))), isNull);
+    });
+
+    test('decodes clearing bank binding and switching with institution CID',
+        () {
+      const currentBankCid = 'AH001-SCB0N-202605010-2026';
+      const newBankCid = 'GD001-SCB0N-202605011-2026';
+      final bind = PayloadDecoder.decode(
+        hexOf(withSigningTail([
+          19,
+          30,
+          ...compactVec(currentBankCid),
+        ])),
+      );
+      final switching = PayloadDecoder.decode(
+        hexOf(withSigningTail([
+          19,
+          33,
+          ...compactVec(newBankCid),
+        ])),
+      );
+
+      expect(bind?.action, 'bind_clearing_bank');
+      expect(bind?.fields, {'bank_cid_number': currentBankCid});
+      expect(switching?.action, 'switch_clearing_bank');
+      expect(switching?.fields, {'new_bank_cid_number': newBankCid});
+    });
+
+    test('decodes clearing bank deposit and withdrawal without bank account',
+        () {
+      final deposit = PayloadDecoder.decode(
+        hexOf(withSigningTail([19, 31, ...compactU32(12345)])),
+      );
+      final withdrawal = PayloadDecoder.decode(
+        hexOf(withSigningTail([19, 32, ...compactU32(500)])),
+      );
+
+      expect(deposit?.action, 'deposit_clearing_bank');
+      expect(deposit?.fields, {'amount_yuan': '123.45 GMB'});
+      expect(withdrawal?.action, 'withdraw_clearing_bank');
+      expect(withdrawal?.fields, {'amount_yuan': '5.00 GMB'});
     });
 
     test('decodes clearing bank register node call', () {
@@ -1124,8 +1152,8 @@ void main() {
       expect(decoded?.action, 'propose_l2_fee_rate');
       expect(decoded?.fields['actor_cid_number'], nrcActorCid);
       expect(
-        decoded?.fields['institution_account'],
-        ss58FromBytes(institutionAccount),
+        decoded?.fields['institution_account_id'],
+        '0x${hexLower(institutionAccount)}',
       );
       expect(decoded?.fields['new_rate_bp'], '35');
     });
@@ -1237,10 +1265,18 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_sweep_to_main');
       expect(decoded.fields['actor_cid_number'], nrcActorCid);
-      expect(decoded.fields['institution_account'],
-          ss58FromBytes(institutionAccount));
-      expect(decoded.fields['operation_fee_payer'], '$nrcActorCid 的链上费用账户');
-      expect(decoded.fields['execution_fee_payer'], '$nrcActorCid 的链上费用账户');
+      expect(
+        decoded.fields['institution_account_id'],
+        '0x${hexLower(institutionAccount)}',
+      );
+      expect(
+        decoded.fields['operation_fee_payer_description'],
+        '$nrcActorCid 的链上费用账户',
+      );
+      expect(
+        decoded.fields['execution_fee_payer_description'],
+        '$nrcActorCid 的链上费用账户',
+      );
       expect(decoded.fields['amount_yuan'], '100.00 GMB');
     });
 
@@ -1283,10 +1319,18 @@ void main() {
       expect(decoded!.action, 'propose_transfer');
       expect(decoded.fields['actor_cid_number'], nrcActorCid);
       expect(decoded.fields['proposer_role_code'], 'COMMITTEE_MEMBER');
-      expect(decoded.fields['institution_account'],
-          ss58FromBytes(institutionAccount));
-      expect(decoded.fields['operation_fee_payer'], '$nrcActorCid 的链上费用账户');
-      expect(decoded.fields['execution_fee_payer'], '$nrcActorCid 的链上费用账户');
+      expect(
+        decoded.fields['institution_account_id'],
+        '0x${hexLower(institutionAccount)}',
+      );
+      expect(
+        decoded.fields['operation_fee_payer_description'],
+        '$nrcActorCid 的链上费用账户',
+      );
+      expect(
+        decoded.fields['execution_fee_payer_description'],
+        '$nrcActorCid 的链上费用账户',
+      );
       expect(decoded.fields['amount_yuan'], '123.45 GMB');
       expect(decoded.fields['remark'], 'test');
     });
@@ -1446,17 +1490,19 @@ void main() {
         expect(decoded!.action, item.$6);
         expect(decoded.fields['institution_code'],
             InstitutionCode.codeLabel(item.$3));
-        expect(decoded.fields['account'], '0x${hexLower(account)}');
+        expect(decoded.fields['account_id'], '0x${hexLower(account)}');
         expect(
           jsonDecode(decoded.fields['admins']!) as List<dynamic>,
           [
             {
-              'admin_account': '0x${hexLower(adminAccounts[0])}',
+              'account_id': '0x${hexLower(adminAccounts[0])}',
+              'cid_number': '',
               'family_name': '张',
               'given_name': '三',
             },
             {
-              'admin_account': '0x${hexLower(adminAccounts[1])}',
+              'account_id': '0x${hexLower(adminAccounts[1])}',
+              'cid_number': '',
               'family_name': '管理',
               'given_name': '员',
             },
@@ -1564,7 +1610,7 @@ void main() {
       expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
 
-    test('rejects propose_admin_set_change duplicate admin_account', () {
+    test('rejects propose_admin_set_change duplicate account_id', () {
       final account = List<int>.filled(32, 0x80);
       final duplicate = List<int>.filled(32, 0x11);
       final payload = <int>[
@@ -1589,6 +1635,7 @@ void main() {
         ...account,
         ...compactU32(2),
         ...List<int>.filled(32, 0x11),
+        ...compactVec(''),
         ...compactU32(1),
         0xff,
         ...compactVec('三'),
@@ -1619,14 +1666,14 @@ void main() {
         ...cidBytes,
         ...List<int>.filled(32 - cidBytes.length, 0),
       ];
-      final pubkey = List<int>.filled(32, 0xaa);
+      final signerPublicKey = List<int>.filled(32, 0xaa);
       final payload = Uint8List.fromList([
         // ADR-026 Phase 2 二进制前缀 GMB || 0x18。
         0x47, 0x4D, 0x42, 0x18,
         ...cidSlot,
         ...InstitutionCode.codeBytes('CGOV'),
         0x00, // kind = PublicInstitution
-        ...pubkey,
+        ...signerPublicKey,
         1, 0, 0, 0, 0, 0, 0, 0, // timestamp u64 LE
         ...List<int>.filled(16, 0),
       ]);
@@ -1637,10 +1684,16 @@ void main() {
       expect(decoded!.action, 'activate_admin_account');
       expect(decoded.fields['cid_number'], cidNumber);
       expect(decoded.fields['institution_code'], 'CGOV');
-      expect(decoded.fields['admin_pubkey'], ss58FromBytes(pubkey));
-      expect(decoded.fields.containsKey('account'), isFalse);
+      expect(
+        decoded.fields['signer_public_key'],
+        '0x${hexLower(signerPublicKey)}',
+      );
+      expect(decoded.fields.containsKey('account_id'), isFalse);
       expect(decoded.reviewFields['cid_number'], cidNumber);
-      expect(decoded.reviewFields['admin_pubkey'], ss58FromBytes(pubkey));
+      expect(
+        decoded.reviewFields['signer_public_key'],
+        '0x${hexLower(signerPublicKey)}',
+      );
     });
 
     test('rejects legacy account-shaped admin activation payload', () {
@@ -1820,9 +1873,14 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_close_public_institution');
       expect(decoded.fields['actor_cid_number'], registryActorCid);
-      expect(decoded.fields['institution_account'],
-          ss58FromBytes(institutionAccount));
-      expect(decoded.fields['beneficiary'], ss58FromBytes(beneficiary));
+      expect(
+        decoded.fields['institution_account_id'],
+        '0x${hexLower(institutionAccount)}',
+      );
+      expect(
+        decoded.fields['beneficiary_account_id'],
+        '0x${hexLower(beneficiary)}',
+      );
     });
 
     test('rejects unknown out-of-range pallet index', () {
@@ -1887,7 +1945,10 @@ void main() {
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_close_personal');
-      expect(decoded.fields.keys.toList(), ['account', 'beneficiary']);
+      expect(
+        decoded.fields.keys.toList(),
+        ['account_id', 'beneficiary_account_id'],
+      );
     });
     // 协议升级 propose_runtime_upgrade / developer_direct_upgrade 的 SCALE decoder 已删
     // (call_data 含 600KB+ WASM,塞不进 QR;server 在 QR 里只放 32 字节 blake2
@@ -1907,20 +1968,25 @@ void main() {
     List<int> buildPublicInstitutionAdminsForGovernance() {
       return <int>[
         ...compactU32(2),
-        ...publicAdminPerson(
+        ...adminPerson(
           List<int>.filled(32, 0x31),
-          'GZ000-CTZN6-198805200-2026',
           '张',
           '三',
+          citizenCidNumber: 'GZ000-CTZN6-198805200-2026',
         ),
-        ...publicAdminPerson(List<int>.filled(32, 0x32), '', '', ''),
+        ...adminPerson(List<int>.filled(32, 0x32), '', ''),
       ];
     }
 
     List<int> buildPrivateInstitutionAdminsForGovernance() {
       return <int>[
         ...compactU32(2),
-        ...adminPerson(List<int>.filled(32, 0x31), '张', '三'),
+        ...adminPerson(
+          List<int>.filled(32, 0x31),
+          '张',
+          '三',
+          citizenCidNumber: 'GZ000-CTZN6-198805200-2026',
+        ),
         ...adminPerson(List<int>.filled(32, 0x32), '李', '四'),
       ];
     }
@@ -1956,7 +2022,10 @@ void main() {
       expect(decoded.fields['governance_action'], '替换管理员集合');
       expect(decoded.fields['governance_detail'], contains('2 名管理员'));
       expect(decoded.fields['actor_cid_number'], cidNumber);
-      expect(decoded.fields['fee_payer'], '$cidNumber 的链上费用账户');
+      expect(
+        decoded.fields['fee_payer_description'],
+        '$cidNumber 的链上费用账户',
+      );
       expect(decoded.reviewFields['governance_detail'], contains('资料待完善'));
     });
 
@@ -2060,10 +2129,18 @@ void main() {
       expect(decoded!.action, 'register_private_institution_admins');
       expect(decoded.fields['cid_number'], cidNumber);
       expect(decoded.fields['admins_len'], '2');
-      expect(decoded.reviewFields['admins'],
-          contains('张三(${ss58FromBytes(List<int>.filled(32, 0x31))})'));
+      expect(
+        decoded.reviewFields['admins'],
+        contains(
+          '张三 / GZ000-CTZN6-198805200-2026'
+          '(${ss58FromBytes(List<int>.filled(32, 0x31))})',
+        ),
+      );
       expect(decoded.fields['actor_cid_number'], registryActorCid);
-      expect(decoded.fields['fee_payer'], '$registryActorCid 的链上费用账户');
+      expect(
+        decoded.fields['fee_payer_description'],
+        '$registryActorCid 的链上费用账户',
+      );
     });
 
     test('decodes register_public_institution_admins 公民资料允许暂空', () {
@@ -2074,7 +2151,7 @@ void main() {
           0x09,
           ...compactVec(cidNumber),
           ...compactU32(1),
-          ...publicAdminPerson(List<int>.filled(32, 0x41), '', '', ''),
+          ...adminPerson(List<int>.filled(32, 0x41), '', ''),
         ],
         registryActorCid,
       ));
@@ -2297,7 +2374,7 @@ void main() {
           ...compactVec(nrcActorCid),
           0x01, // proposer_role_code Some
           ...compactVec('COMMITTEE_MEMBER'),
-          ...List<int>.filled(32, 0x66), // funding_account
+          ...List<int>.filled(32, 0x66), // funding_account_id
           ...List<int>.filled(32, 0x44), // beneficiary
           ...u128LeForTest(BigInt.from(12345)),
           0x00, // remark 空 Vec
@@ -2310,8 +2387,8 @@ void main() {
       expect(decoded!.action, 'propose_transfer');
       expect(decoded.fields['actor_cid_number'], nrcActorCid);
       expect(
-        decoded.fields['institution_account'],
-        ss58FromBytes(List<int>.filled(32, 0x66)),
+        decoded.fields['institution_account_id'],
+        '0x${hexLower(List<int>.filled(32, 0x66))}',
       );
       expect(decoded.fields['amount_yuan'], '123.45 GMB');
       expect(decoded.fields['remark'], '');
@@ -2592,7 +2669,7 @@ void main() {
       // institution_code = "NRC"(fixture sample),kind=0 与 NRC 固定治理码匹配。
       expect(decoded.fields['institution_code'], isNotEmpty);
       expect(decoded.fields['cid_number'], inputs['cid_number']);
-      expect(decoded.fields.containsKey('account'), isFalse);
+      expect(decoded.fields.containsKey('account_id'), isFalse);
     });
 
     test('DECRYPT fixture payload → decode 解出 decrypt_admin + cid_number', () {

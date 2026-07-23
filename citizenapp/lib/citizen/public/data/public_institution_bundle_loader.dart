@@ -273,7 +273,7 @@ class PublicInstitutionBundleLoader {
         old.familyName == dto.familyName &&
         old.givenName == dto.givenName &&
         old.legalRepresentativeCidNumber == dto.legalRepresentativeCidNumber &&
-        old.legalRepresentativeAccount == dto.legalRepresentativeAccount &&
+        old.legalRepresentativeAccountId == dto.legalRepresentativeAccountId &&
         old.accountCount == dto.accountCount &&
         _sameStringList(old.customAccountNames, dto.customAccountNames);
   }

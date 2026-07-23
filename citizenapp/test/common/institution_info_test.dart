@@ -5,17 +5,17 @@ import 'package:citizenapp/citizen/institution/governance_registry.dart';
 
 void main() {
   test('机构 CID 与具体账户分离，账户操作显式编码 AccountId', () {
-    final mainAccount = 'aa' * 32;
-    final id = institutionAccountId(mainAccount);
+    final mainAccountId = '0x${'aa' * 32}';
+    final id = accountIdBytes(mainAccountId);
 
     expect(id.length, 32);
     expect(id, List<int>.filled(32, 0xaa));
   });
 
   test('注册机构以 CID 为身份，主/费账户只作为其账户集合', () {
-    final address = '11' * 32;
+    final address = '0x${'11' * 32}';
     const cidNumber = 'GD001-CGOV0-123456789-2026';
-    final id = institutionAccountId(address);
+    final id = accountIdBytes(address);
 
     expect(id.length, 32);
     expect(id, List<int>.filled(32, 0x11));
@@ -28,18 +28,18 @@ void main() {
       orgType: OrgType.institution,
       adminAccountCode: 'CGOV',
       accounts: InstitutionAccounts(
-        mainAccount: address,
-        feeAccount: '12' * 32,
+        mainAccountId: address,
+        feeAccountId: '0x${'12' * 32}',
       ),
     );
     expect(institution.cidNumber, cidNumber);
-    expect(institution.mainAccount, address);
+    expect(institution.mainAccountId, address);
     expect(institution.isRegisteredInstitution, isTrue);
   });
 
   test('个人多签身份编码为个人多签 AccountId', () {
-    final address = '22' * 32;
-    final id = institutionAccountId(address);
+    final address = '0x${'22' * 32}';
+    final id = accountIdBytes(address);
 
     expect(id.length, 32);
     expect(id, List<int>.filled(32, 0x22));
@@ -57,8 +57,8 @@ void main() {
           orgType: OrgType.institution,
           adminAccountCode: code,
           accounts: InstitutionAccounts(
-            mainAccount: '31' * 32,
-            feeAccount: '32' * 32,
+            mainAccountId: '0x${'31' * 32}',
+            feeAccountId: '0x${'32' * 32}',
           ),
         );
 
@@ -89,10 +89,10 @@ void main() {
         accounts: personal
             ? null
             : InstitutionAccounts(
-                mainAccount: account,
-                feeAccount: 'fe' * 32,
+                mainAccountId: account,
+                feeAccountId: '0x${'fe' * 32}',
               ),
-        personalAccountHex: personal ? account : null,
+        personalAccountId: personal ? account : null,
       );
     }
 
@@ -106,7 +106,7 @@ void main() {
       final subject = ProposalSubject.fromInstitution(
         institution: info(
           code: 'NRC',
-          account: '33' * 32,
+          account: '0x${'33' * 32}',
           orgType: OrgType.nrc,
           cidNumber: 'LN001-NRC0G-944805165-2026',
         ),
@@ -114,7 +114,7 @@ void main() {
       );
       final result = kinds(subject);
       expect(subject.cidNumber, 'LN001-NRC0G-944805165-2026');
-      expect(subject.personalAccountHex, isNull);
+      expect(subject.personalAccountId, isNull);
       expect(result, contains(ProposalKind.transfer));
       expect(result, contains(ProposalKind.feeTransfer));
       expect(result, contains(ProposalKind.safetyFundTransfer));
@@ -125,12 +125,12 @@ void main() {
 
     test('city registry is public institution, not governance', () {
       final subject = ProposalSubject.fromInstitution(
-        institution: info(code: 'CREG', account: '44' * 32),
+        institution: info(code: 'CREG', account: '0x${'44' * 32}'),
         institutionCode: 'CREG',
       );
       final result = kinds(subject);
       expect(subject.cidNumber, 'GD001-CREG0-123456789-2026');
-      expect(subject.personalAccountHex, isNull);
+      expect(subject.personalAccountId, isNull);
       expect(result, contains(ProposalKind.transfer));
       expect(result, isNot(contains(ProposalKind.adminsChange)));
       expect(result, isNot(contains(ProposalKind.feeTransfer)));
@@ -140,12 +140,12 @@ void main() {
     test('private institution gets only generic active-account capabilities',
         () {
       final subject = ProposalSubject.fromInstitution(
-        institution: info(code: 'SFGQ', account: '55' * 32),
+        institution: info(code: 'SFGQ', account: '0x${'55' * 32}'),
         institutionCode: 'SFGQ',
       );
       final result = kinds(subject);
       expect(subject.cidNumber, 'GD001-SFGQ0-123456789-2026');
-      expect(subject.personalAccountHex, isNull);
+      expect(subject.personalAccountId, isNull);
       expect(result, contains(ProposalKind.transfer));
       expect(result, isNot(contains(ProposalKind.adminsChange)));
       expect(result, isNot(contains(ProposalKind.resolutionIssuance)));
@@ -163,14 +163,14 @@ void main() {
       );
       final result = kinds(subject);
       expect(subject.cidNumber, isNull);
-      expect(subject.personalAccountHex, account);
+      expect(subject.personalAccountId, account);
       expect(result, contains(ProposalKind.transfer));
       expect(result, contains(ProposalKind.adminsChange));
     });
 
     test('unincorporated code does not auto-enable admins change', () {
       final subject = ProposalSubject.fromInstitution(
-        institution: info(code: 'UNIN', account: '66' * 32),
+        institution: info(code: 'UNIN', account: '0x${'66' * 32}'),
         institutionCode: 'UNIN',
       );
       final result = kinds(subject);

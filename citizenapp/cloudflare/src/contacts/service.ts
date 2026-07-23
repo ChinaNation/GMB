@@ -24,7 +24,7 @@ interface ContactCursor {
   contactId: string;
 }
 
-/// GET /v1/square/contacts —— owner 只从 Session 派生，按更新时间和不透明 ID 稳定分页。
+/// GET /v1/square/contacts —— account_id 只从 Session 派生，按更新时间和不透明 ID 稳定分页。
 export async function listContactsRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   const url = new URL(request.url);
@@ -33,7 +33,7 @@ export async function listContactsRoute(request: Request, env: Env): Promise<Res
     MAX_PAGE_SIZE
   );
   const cursor = parseCursor(url.searchParams.get('cursor'));
-  const binds: Array<string | number> = [session.owner_account];
+  const binds: Array<string | number> = [session.account_id];
   let cursorClause = '';
   if (cursor) {
     cursorClause = ' AND (updated_at < ? OR (updated_at = ? AND contact_id < ?))';
@@ -42,9 +42,9 @@ export async function listContactsRoute(request: Request, env: Env): Promise<Res
   // 多取一条只用于判断是否还有下一页，不向客户端泄露额外记录。
   binds.push(limit + 1);
   const result = await env.DB.prepare(
-    `SELECT owner_account, contact_id, ciphertext, nonce, mac, updated_at
+    `SELECT account_id, contact_id, ciphertext, nonce, mac, updated_at
       FROM square_contacts
-      WHERE owner_account = ?${cursorClause}
+      WHERE account_id = ?${cursorClause}
       ORDER BY updated_at DESC, contact_id DESC
       LIMIT ?`
   ).bind(...binds).all<ContactCiphertextRow>();
@@ -94,16 +94,16 @@ export async function putContactRoute(
 
   const result = await env.DB.prepare(
     `INSERT INTO square_contacts
-      (owner_account, contact_id, ciphertext, nonce, mac, updated_at)
+      (account_id, contact_id, ciphertext, nonce, mac, updated_at)
       VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT(owner_account, contact_id) DO UPDATE SET
+      ON CONFLICT(account_id, contact_id) DO UPDATE SET
         ciphertext = excluded.ciphertext,
         nonce = excluded.nonce,
         mac = excluded.mac,
         updated_at = excluded.updated_at
       WHERE excluded.updated_at >= square_contacts.updated_at`
   ).bind(
-    session.owner_account,
+    session.account_id,
     contactId,
     ciphertext,
     nonce,
@@ -128,8 +128,8 @@ export async function deleteContactRoute(
   const session = await requireSession(request, env);
   const contactId = parseContactId(contactIdRaw);
   const result = await env.DB.prepare(
-    'DELETE FROM square_contacts WHERE owner_account = ? AND contact_id = ?'
-  ).bind(session.owner_account, contactId).run();
+    'DELETE FROM square_contacts WHERE account_id = ? AND contact_id = ?'
+  ).bind(session.account_id, contactId).run();
 
   return jsonResponse({
     ok: true,
@@ -157,7 +157,7 @@ function assertContactRequest(value: unknown): ContactCiphertextRequest {
   }
   const fields = Object.keys(value);
   if (fields.some((field) => !CONTACT_BODY_FIELDS.has(field))) {
-    // 明文账户、名称以及客户端自报 owner 一律拒绝，避免它们进入 Worker 业务处理链。
+    // 明文账户、名称以及客户端自报 account_id 一律拒绝，避免它们进入 Worker 业务处理链。
     throw new HttpError(400, 'invalid_contact_request', '通讯录接口只接受密文字段');
   }
   return value as ContactCiphertextRequest;
@@ -216,8 +216,8 @@ function formatCursor(updatedAt: number, contactId: string): string {
   return `${updatedAt}.${contactId}`;
 }
 
-function publicContactRow(row: ContactCiphertextRow): Omit<ContactCiphertextRow, 'owner_account'> {
-  // owner_account 只用于服务端隔离，响应不重复下发，降低客户端误信自报 owner 的风险。
+function publicContactRow(row: ContactCiphertextRow): Omit<ContactCiphertextRow, 'account_id'> {
+  // account_id 只用于服务端隔离，响应不重复下发，降低客户端误信自报账户的风险。
   return {
     contact_id: row.contact_id,
     ciphertext: row.ciphertext,

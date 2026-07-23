@@ -172,8 +172,7 @@ class _PinInputPageState extends State<PinInputPage> {
           barrierDismissible: false,
           builder: (_) => AlertDialog(
             title: const Text('数据已清空'),
-            content:
-                const Text('连续多次验证错误，应用数据已全部清空。请重新启动应用。'),
+            content: const Text('连续多次验证错误，应用数据已全部清空。请重新启动应用。'),
             actions: [
               TextButton(
                 onPressed: () => SystemNavigator.pop(),

@@ -51,7 +51,9 @@ pub enum InstitutionProtocolAccountKind {
     Stake,
     SafetyFund,
     He,
-    /// 清算账户:仅私法人股份公司(SFGF)自动拥有,承载扫码支付 L2 清算资金。
+    /// 清算账户:仅清算行资格机构自动拥有,承载扫码支付 L2 清算资金。
+    /// 资格唯二 = `SFGF` 私法人股份公司,以及父级机构码为 `SFGF` 的 `UNIN`
+    /// 非法人分支机构;单源 `institution_constraints::required_protocol_account_kinds`。
     Clearing,
 }
 

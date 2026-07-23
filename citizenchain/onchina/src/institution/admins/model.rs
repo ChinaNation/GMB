@@ -4,9 +4,9 @@
 //! 本模型只承接链下私密档案(部门/联系方式/证件照/passkey 绑定等)
 //! 落库到 `institution_admins` 省级分区表。管理员资格只从链上 CID-key `admins` 读取。
 //!
-//! 复合 key = (province_code, cid_number, admin_account):
+//! 复合 key = (province_code, cid_number, account_id):
 //! - cid_number:管理员所属机构身份 ID;
-//! - admin_account:进链的管理员钱包账户。
+//! - account_id:进链的管理员账户 ID。
 
 #![allow(dead_code)]
 
@@ -25,8 +25,8 @@ pub struct InstitutionAdmin {
     /// 市代码。市级及以下机构填写;省/国家级机构可空。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub city_code: Option<String>,
-    /// 进链的管理员钱包账户。
-    pub admin_account: String,
+    /// 进链的管理员账户 ID。
+    pub account_id: String,
     /// 链上管理员姓。
     pub family_name: String,
     /// 链上管理员名。
@@ -67,9 +67,9 @@ pub struct InstitutionAdmin {
     /// 链下资料最近更新时间。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub admin_updated_at: Option<DateTime<Utc>>,
-    /// 创建人 pubkey。
+    /// 创建人账户 ID。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub created_by: Option<String>,
+    pub creator_account_id: Option<String>,
     /// 操作日志 ID(链下操作审计追溯)。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub operation_log_id: Option<String>,

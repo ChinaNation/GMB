@@ -4,7 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/identity_badge.dart';
 
-IdentityBadgeStyle _style(String? identity, String? membership, {bool active = true}) {
+IdentityBadgeStyle _style(String? identity, String? membership,
+    {bool active = true}) {
   return identityBadgeStyle(
     identityLevel: identity,
     membershipLevel: membership,
@@ -15,7 +16,8 @@ IdentityBadgeStyle _style(String? identity, String? membership, {bool active = t
 void main() {
   group('identityBadgeStyle 底色 = 身份档', () {
     test('竞选=红 / 投票=蓝 / 访客(空或 visitor)=橙', () {
-      expect(_style('candidate', 'candidate').color, AppTheme.identityCandidate);
+      expect(
+          _style('candidate', 'candidate').color, AppTheme.identityCandidate);
       expect(_style('voting', 'voting').color, AppTheme.identityVoting);
       expect(_style('visitor', 'visitor').color, AppTheme.identityVisitor);
       expect(_style(null, 'visitor').color, AppTheme.identityVisitor);

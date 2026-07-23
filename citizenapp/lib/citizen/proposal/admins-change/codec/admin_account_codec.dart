@@ -12,10 +12,7 @@ class AdminAccountCodec {
     required Uint8List data,
     required int institutionKind,
   }) {
-    final decoded = InstitutionRoleStorageCodec.decodeAdmins(
-      data,
-      isPublic: institutionKind == 0,
-    );
+    final decoded = InstitutionRoleStorageCodec.decodeAdmins(data);
     if (decoded == null) return null;
     return AdminAccountState(
       cidNumber: cidNumber,
@@ -47,8 +44,8 @@ class AdminAccountCodec {
     final admins = decodedAdmins.$1;
     offset = decodedAdmins.$2;
     if (offset + 32 + 4 + 4 + 1 != data.length) return null;
-    final creatorHex =
-        AdminAccountIdCodec.hexEncode(data.sublist(offset, offset + 32));
+    final creatorAccountId =
+        '0x${AdminAccountIdCodec.hexEncode(data.sublist(offset, offset + 32))}';
     offset += 32;
     final createdAt = _readU32(data, offset);
     offset += 4;
@@ -57,14 +54,14 @@ class AdminAccountCodec {
     final status = data[offset];
     if (status > 2) return null;
     return AdminAccountState(
-      personalAccountHex: AdminAccountIdCodec.hexEncode(personalAccount),
+      personalAccountId: '0x${AdminAccountIdCodec.hexEncode(personalAccount)}',
       institutionCode: institutionCode,
       kind: kind,
       admins: admins,
       // runtime 的各管理员 `AdminAccounts` 不保存阈值；
       // 个人多签阈值仍从 internal-vote 的个人阈值 storage 补齐。
       threshold: 0,
-      personalCreatorHex: creatorHex,
+      personalCreatorAccountId: creatorAccountId,
       personalCreatedAt: createdAt,
       personalUpdatedAt: updatedAt,
       personalStatus: status,

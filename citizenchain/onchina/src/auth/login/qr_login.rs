@@ -13,7 +13,7 @@ use tracing::warn;
 use uuid::Uuid;
 
 use crate::auth::repo;
-use crate::crypto::pubkey::same_admin_account;
+use crate::crypto::pubkey::same_account_id;
 use crate::*;
 
 use super::model::*;
@@ -41,14 +41,26 @@ pub(crate) async fn admin_auth_qr_sign_request(
     if derived_domain.is_empty() {
         return api_error(StatusCode::BAD_REQUEST, 1001, "domain is required");
     }
+    let account_id = match crate::core::qr::parse_user_contact_account_id(&input.identity_qr) {
+        Ok(value) => value,
+        Err(error) => {
+            let message =
+                format!("identity_qr must be a complete QR_V1 user_contact code: {error}");
+            return api_error(StatusCode::BAD_REQUEST, 1001, &message);
+        }
+    };
+    let account_id = match onchain_gate::validate_login_account(&account_id).await {
+        Ok(value) => value,
+        Err(error) => return onchain_gate::gate_error_response(error),
+    };
 
     let now = Utc::now();
     let expire_at = now + Duration::seconds(LOGIN_SIGN_REQUEST_TTL_SECONDS);
     let challenge_id = Uuid::new_v4().to_string();
     // challenge_text:客户端生成 k=2 登录签名响应时的原文(与 CitizenWallet 端的
     // buildSignatureMessage(kind=signResponse, ...) 拼接规则保持一致)。
-    // 注意 <principal> 位置由客户端签名时填入自己的 pubkey,后端验证时同样
-    // 以客户端 pubkey 为 principal 重新拼接。这里保存的 challenge_text 仅作
+    // 注意 <principal> 位置由客户端签名时填入 signer_public_key，后端验证时同样
+    // 以 signer_public_key 为 principal 重新拼接。这里保存的 challenge_text 仅作
     // 回放保护用的唯一 token,实际验证在 admin_auth_qr_complete 中重建。
     let challenge_text = format!(
         "{}|{}|{}|{}|{}|",
@@ -58,12 +70,19 @@ pub(crate) async fn admin_auth_qr_sign_request(
         LOGIN_QR_SYSTEM,
         expire_at.timestamp()
     );
-    // 平台系统签名已删:登录二维码不再自证。信任根 = 管理员钱包签名验链上管理员集合(见 complete)。
+    // 用户码先确定目标账户，b.u 必须携带该账户的 32 字节公钥；钱包不得任选账户签名。
+    let login_body = match crate::core::qr::login_request_body(LOGIN_QR_SYSTEM, &account_id) {
+        Ok(value) => value,
+        Err(error) => {
+            let message = format!("build targeted login request failed: {error}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, &message);
+        }
+    };
     let login_qr_payload = serde_json::to_string(&crate::core::qr::SignRequestEnvelope::new(
         challenge_id.clone(),
         now.timestamp(),
         expire_at.timestamp(),
-        crate::core::qr::login_request_body(LOGIN_QR_SYSTEM),
+        login_body,
     ))
     .unwrap_or_default();
 
@@ -71,7 +90,7 @@ pub(crate) async fn admin_auth_qr_sign_request(
         &state.db,
         &LoginSignRequest {
             challenge_id: challenge_id.clone(),
-            admin_account: String::new(),
+            account_id,
             challenge_text: challenge_text.clone(),
             challenge_token: String::new(),
             qr_aud: String::new(),
@@ -110,25 +129,28 @@ pub(crate) async fn admin_auth_qr_complete(
     Json(input): Json<AdminQrCompleteInput>,
 ) -> impl IntoResponse {
     if input.challenge_id.trim().is_empty()
-        || input.admin_account.trim().is_empty()
+        || input.signer_public_key.trim().is_empty()
         || input.signature.trim().is_empty()
     {
         return api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "challenge_id, admin_account, signature are required",
+            "challenge_id, signer_public_key, signature are required",
         );
     }
 
     let now = Utc::now();
     let challenge_id = input.challenge_id.trim().to_string();
     let client_session_id = input.session_id.clone();
-    let login_pubkey_raw = input.admin_account.trim().to_string();
-    let signer_pubkey = input
-        .signer_pubkey
-        .as_ref()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty());
+    let Some(signer_public_key) =
+        crate::crypto::pubkey::normalize_account_id(input.signer_public_key.as_str())
+    else {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "signer_public_key must be lowercase 0x plus 64 hexadecimal characters",
+        );
+    };
     let signature = input.signature.trim().to_string();
     let result = state.db.with_client(move |conn| {
         repo::cleanup_login_state_conn(conn, now)?;
@@ -149,20 +171,11 @@ pub(crate) async fn admin_auth_qr_complete(
         }
         let session_id = challenge.session_id.clone();
         let challenge_expire_at = challenge.expire_at.timestamp();
-        let verify_pubkey = signer_pubkey
-            .clone()
-            .unwrap_or_else(|| login_pubkey_raw.clone());
-        let login_pubkey = repo::resolve_admin_account_key_conn(conn, login_pubkey_raw.as_str())?
-            .or_else(|| {
-                signer_pubkey.as_ref().and_then(|spk| {
-                    repo::resolve_admin_account_key_conn(conn, spk)
-                        .ok()
-                        .flatten()
-                })
-            })
-            .unwrap_or_else(|| login_pubkey_raw.clone());
-        if !same_admin_account(login_pubkey.as_str(), verify_pubkey.as_str()) {
-            return Err("http:forbidden:signer_pubkey must match admin_account".to_string());
+        let verify_public_key = signer_public_key.clone();
+        if !same_account_id(challenge.account_id.as_str(), verify_public_key.as_str()) {
+            return Err(
+                "http:forbidden:signer_public_key must match targeted account_id".to_string(),
+            );
         }
         // 重建完整签名原文,与 CitizenWallet 端 k=2 登录签名响应规则一致。
         let verify_message = crate::core::qr::build_signature_message(
@@ -170,25 +183,25 @@ pub(crate) async fn admin_auth_qr_complete(
             challenge_id.as_str(),
             Some(LOGIN_QR_SYSTEM),
             Some(challenge_expire_at),
-            &verify_pubkey,
+            &verify_public_key,
         );
-        if !verify_admin_signature(&verify_pubkey, &verify_message, signature.as_str()) {
+        if !verify_admin_signature(&verify_public_key, &verify_message, signature.as_str()) {
             warn!(
                 request = %challenge_id,
-                admin_account = %login_pubkey_raw,
-                signer_pubkey = %verify_pubkey,
+                account_id = %challenge.account_id,
+                signer_public_key = %verify_public_key,
                 "qr login signature verify failed"
             );
             return Err("http:unprocessable:login signature verify failed".to_string());
         }
-        // membership 真源切到链上集合(见 onchain_gate),此处只消费挑战并回已验签 pubkey。
+        // 响应只证明持有目标账户私钥，禁止用响应字段改写挑战绑定账户。
         challenge.consumed = true;
-        challenge.admin_account = login_pubkey.clone();
+        let verified_account_id = challenge.account_id.clone();
         repo::update_login_sign_request_conn(conn, &challenge)?;
-        Ok((session_id, login_pubkey))
+        Ok((session_id, verified_account_id))
     });
 
-    let (session_id, verified_pubkey) = match result {
+    let (session_id, verified_account_id) = match result {
         Ok(v) => v,
         Err(err) if err == "http:not_found:sign request not found" => {
             return api_error(StatusCode::NOT_FOUND, 1004, "sign request not found");
@@ -202,11 +215,11 @@ pub(crate) async fn admin_auth_qr_complete(
         Err(err) if err == "http:gone:sign request expired" => {
             return api_error(StatusCode::GONE, 1007, "sign request expired");
         }
-        Err(err) if err == "http:forbidden:signer_pubkey must match admin_account" => {
+        Err(err) if err == "http:forbidden:signer_public_key must match targeted account_id" => {
             return api_error(
                 StatusCode::FORBIDDEN,
                 1003,
-                "signer_pubkey must match admin_account",
+                "signer_public_key must match targeted account_id",
             );
         }
         Err(err) if err == "http:unprocessable:login signature verify failed" => {
@@ -224,7 +237,9 @@ pub(crate) async fn admin_auth_qr_complete(
 
     // 链上集合鉴权;未绑定节点时返回候选机构,由浏览器二次确认后再签发会话。
     let outcome =
-        match onchain_gate::issue_session_after_onchain_gate(&state, &verified_pubkey, now).await {
+        match onchain_gate::issue_session_after_onchain_gate(&state, &verified_account_id, now)
+            .await
+        {
             Ok(v) => v,
             Err(err) => return onchain_gate::gate_error_response(err),
         };
@@ -256,7 +271,7 @@ pub(crate) async fn admin_auth_qr_complete(
         session_id,
         access_token: access_token.clone(),
         expire_at,
-        admin_account: output.admin_account.clone(),
+        account_id: output.account_id.clone(),
         institution_code: output.institution_code.clone(),
         created_at: now,
     };
@@ -343,19 +358,19 @@ pub(crate) async fn admin_auth_qr_result(
                 return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
             }
         };
-        let admin = match repo::get_admin_by_account(&state.db, &result.admin_account) {
+        let admin = match repo::get_admin_by_account_id(&state.db, &result.account_id) {
             Ok(v) => v,
             Err(err) => {
                 let message = format!("query admin failed: {err}");
                 return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
             }
         };
-        let admin_account_for_scope = result.admin_account.clone();
+        let scope_account_id = result.account_id.clone();
         let institution_code_for_scope = result.institution_code.clone();
         let (province, scope_city_name, scope_town_name) = match state.db.with_client(move |conn| {
             repo::derive_admin_scope_conn(
                 conn,
-                admin_account_for_scope.as_str(),
+                scope_account_id.as_str(),
                 institution_code_for_scope.as_str(),
             )
         }) {
@@ -397,7 +412,7 @@ pub(crate) async fn admin_auth_qr_result(
                 access_token: Some(result.access_token.clone()),
                 expire_at: Some(result.expire_at.timestamp()),
                 admin: Some(AdminIdentifyOutput {
-                    admin_account: result.admin_account.clone(),
+                    account_id: result.account_id.clone(),
                     institution_cid_number,
                     institution_code: result.institution_code.clone(),
                     admin_level: crate::core::chain_runtime::admin_level_label_for(

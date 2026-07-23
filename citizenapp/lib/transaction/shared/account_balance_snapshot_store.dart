@@ -16,39 +16,39 @@ class AccountBalanceSnapshotStore {
   static const Duration displayTtl = Duration(seconds: 45);
   static const String _prefix = 'chain.account.balance.';
 
-  Future<AccountBalanceSnapshot?> read(String accountHex) {
+  Future<AccountBalanceSnapshot?> read(String accountId) {
     return WalletIsar.instance.read((isar) async {
-      final entity = await isar.appKvEntitys.getByKey(key(accountHex));
+      final entity = await isar.appKvEntitys.getByKey(key(accountId));
       return AccountBalanceSnapshot.fromJsonString(entity?.stringValue);
     });
   }
 
   Future<AccountBalanceSnapshot?> readFresh(
-    String accountHex, {
+    String accountId, {
     Duration ttl = displayTtl,
   }) async {
-    final snapshot = await read(accountHex);
+    final snapshot = await read(accountId);
     if (snapshot == null || !snapshot.isFresh(ttl)) return null;
     return snapshot;
   }
 
   Future<void> put({
-    required String accountHex,
+    required String accountId,
     required double balanceYuan,
     String source = 'chain',
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final snapshot = AccountBalanceSnapshot(
-      accountHex: _normalizeHex(accountHex),
+      accountId: _requireAccountId(accountId),
       balanceYuan: balanceYuan,
       updatedAtMillis: now,
       source: source,
     );
     await WalletIsar.instance.writeTxn((isar) async {
       final entity =
-          await isar.appKvEntitys.getByKey(key(accountHex)) ?? AppKvEntity();
+          await isar.appKvEntitys.getByKey(key(accountId)) ?? AppKvEntity();
       entity
-        ..key = key(accountHex)
+        ..key = key(accountId)
         ..stringValue = jsonEncode(snapshot.toJson())
         ..intValue = now
         ..boolValue = null;
@@ -57,35 +57,37 @@ class AccountBalanceSnapshotStore {
   }
 
   Future<double?> fetchForDisplay({
-    required String accountHex,
+    required String accountId,
     required Future<double> Function() fetchChainBalance,
     Duration ttl = displayTtl,
   }) async {
-    final local = await readFresh(accountHex, ttl: ttl);
+    final local = await readFresh(accountId, ttl: ttl);
     if (local != null) return local.balanceYuan;
     final balance = await fetchChainBalance();
-    await put(accountHex: accountHex, balanceYuan: balance);
+    await put(accountId: accountId, balanceYuan: balance);
     return balance;
   }
 
-  static String key(String accountHex) =>
-      '$_prefix${_normalizeHex(accountHex)}';
+  static String key(String accountId) =>
+      '$_prefix${_requireAccountId(accountId)}';
 
-  static String _normalizeHex(String hex) {
-    final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
-    return clean.toLowerCase();
+  static String _requireAccountId(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+    }
+    return accountId;
   }
 }
 
 class AccountBalanceSnapshot {
   const AccountBalanceSnapshot({
-    required this.accountHex,
+    required this.accountId,
     required this.balanceYuan,
     required this.updatedAtMillis,
     required this.source,
   });
 
-  final String accountHex;
+  final String accountId;
   final double balanceYuan;
   final int updatedAtMillis;
   final String source;
@@ -96,7 +98,7 @@ class AccountBalanceSnapshot {
   }
 
   Map<String, Object?> toJson() => {
-        'account_hex': accountHex,
+        'account_id': accountId,
         'balance_yuan': balanceYuan,
         'updated_at_millis': updatedAtMillis,
         'source': source,
@@ -107,18 +109,18 @@ class AccountBalanceSnapshot {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) return null;
-      final accountHex = decoded['account_hex']?.toString();
+      final accountId = decoded['account_id']?.toString();
       final balance = _toDouble(decoded['balance_yuan']);
       final updatedAtMillis = _toInt(decoded['updated_at_millis']);
       final source = decoded['source']?.toString() ?? 'chain';
-      if (accountHex == null ||
-          accountHex.isEmpty ||
+      if (accountId == null ||
+          !RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId) ||
           balance == null ||
           updatedAtMillis == null) {
         return null;
       }
       return AccountBalanceSnapshot(
-        accountHex: accountHex,
+        accountId: accountId,
         balanceYuan: balance,
         updatedAtMillis: updatedAtMillis,
         source: source,

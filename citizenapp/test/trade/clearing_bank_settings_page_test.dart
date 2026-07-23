@@ -20,8 +20,9 @@ void main() {
     walletName: '测试钱包',
     walletIcon: 'wallet',
     balance: 0.0,
-    address: '5DummyAddress',
-    pubkeyHex: '0x00',
+    ss58Address: '5DummyAddress',
+    accountId:
+        '0x0000000000000000000000000000000000000000000000000000000000000000',
     alg: 'sr25519',
     ss58: 2027,
     createdAtMillis: 0,

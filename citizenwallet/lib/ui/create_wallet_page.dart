@@ -266,7 +266,7 @@ class _CreateWalletPageState extends State<CreateWalletPage>
               ),
               const SizedBox(height: 12),
               Text(
-                result.profile.address,
+                result.profile.ss58Address,
                 style: const TextStyle(
                   fontSize: 12,
                   color: AppTheme.textSecondary,

@@ -346,9 +346,13 @@ impl<T: Config> Pallet<T> {
             votingengine::Error::<T>::NoPermission
         );
         let representative_subject = AuthorizationSubject::Institution(representative_body.clone());
+        // 票据按【规范账户】防重：换绑前后归并为同一张票，杜绝新旧钱包各投一票。
+        let voter_account_id =
+            <votingengine::Pallet<T>>::resolve_subject_voter(&representative_subject, &who)
+                .unwrap_or_else(|| who.clone());
         let ticket = votingengine::types::InstitutionVoteTicket {
             role_subject: representative_body,
-            voter_account_id: who.clone(),
+            voter_account_id,
         };
         let vote_key = (meta.current_body, ticket);
         ensure!(

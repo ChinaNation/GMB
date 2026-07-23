@@ -67,11 +67,11 @@ fn build_active_proposal_view(
     let seats: Vec<SeatView> = roster
         .iter()
         .map(|p| SeatView {
-            admin_account: p.account_hex.clone(),
+            account_id: p.account_id.clone(),
             // 管理员链上不保存公民姓名；席位展示只使用钱包和机构岗位。
             name: String::new(),
             role_name: p.role_name.clone(),
-            vote: ballots.get(&p.account_hex).copied(),
+            vote: ballots.get(&p.account_id).copied(),
         })
         .collect();
     let approved_count = seats.iter().filter(|s| s.vote == Some(true)).count() as u32;
@@ -91,9 +91,9 @@ mod tests {
     use super::*;
     use crate::domains::legislation::chain_read_proposal::VoteTally;
 
-    fn profile(hex_tail: &str, _name: &str) -> InstitutionAssignmentView {
+    fn profile(hex_digit: &str, _name: &str) -> InstitutionAssignmentView {
         InstitutionAssignmentView {
-            account_hex: format!("0x{hex_tail}"),
+            account_id: format!("0x{}", hex_digit.repeat(64)),
             family_name: "管理".to_string(),
             given_name: "员".to_string(),
             role_code: "MEMBER".to_string(),
@@ -127,14 +127,16 @@ mod tests {
 
     #[test]
     fn seats_left_join_ballots_and_count_by_vote() {
-        let roster = vec![
-            profile("aa", "甲"),
-            profile("bb", "乙"),
-            profile("cc", "丙"),
-        ];
+        let roster = vec![profile("a", "甲"), profile("b", "乙"), profile("c", "丙")];
         let mut ballots = HashMap::new();
-        ballots.insert("0xaa".to_string(), true);
-        ballots.insert("0xbb".to_string(), false);
+        ballots.insert(
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            true,
+        );
+        ballots.insert(
+            "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+            false,
+        );
         // 丙(0xcc)未投。
 
         let view = build_active_proposal_view(sample_state(), &roster, &ballots);

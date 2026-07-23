@@ -19,7 +19,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 治理机构手续费划转提案创建页面。
 ///
-/// source 锁定为机构 `feeAccount`,destination 固定为机构 `mainAccount`,
+/// source 锁定为机构 `feeAccountId`,destination 固定为机构 `mainAccountId`,
 /// 链端调用 `propose_sweep_to_main (call_index=2)`,无 beneficiary/remark 入参。
 class SweepToMainPage extends StatefulWidget {
   const SweepToMainPage({
@@ -52,8 +52,8 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
   LightClientStatusSnapshot? _chainProgress;
   String? _chainProgressError;
 
-  late final String _feeAccountHex;
-  late final String _mainAccountHex;
+  late final String _feeAccountId;
+  late final String _mainAccountId;
   late final String _fromSs58;
   late final String _toSs58;
   late WalletProfile _selectedWallet;
@@ -65,14 +65,14 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
     _proposerRoleCodeController = TextEditingController(
       text: defaultInstitutionProposerRoleCode(widget.institution),
     );
-    final feeHex = widget.institution.accounts?.feeAccount;
+    final feeHex = widget.institution.accounts?.feeAccountId;
     if (feeHex == null) {
-      throw StateError('治理机构 InstitutionAccounts.feeAccount 为空,无法发起手续费划转');
+      throw StateError('治理机构 InstitutionAccounts.feeAccountId 为空,无法发起手续费划转');
     }
-    _feeAccountHex = feeHex;
-    _mainAccountHex = widget.institution.mainAccount;
-    _fromSs58 = _accountHexToSs58(_feeAccountHex);
-    _toSs58 = _accountHexToSs58(_mainAccountHex);
+    _feeAccountId = feeHex;
+    _mainAccountId = widget.institution.mainAccountId;
+    _fromSs58 = _accountIdToSs58(_feeAccountId);
+    _toSs58 = _accountIdToSs58(_mainAccountId);
     _fetchBalance();
     _amountController.addListener(_onAmountChanged);
   }
@@ -84,14 +84,14 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
     super.dispose();
   }
 
-  String _accountHexToSs58(String hex) {
+  String _accountIdToSs58(String hex) {
     final bytes = _hexToBytes(hex);
     return Keyring().encodeAddress(Uint8List.fromList(bytes), 2027);
   }
 
   Future<void> _fetchBalance() async {
     final store = AccountBalanceSnapshotStore.instance;
-    final local = await store.read(_feeAccountHex);
+    final local = await store.read(_feeAccountId);
     if (local != null && mounted) {
       setState(() {
         _availableBalance = local.balanceYuan;
@@ -100,10 +100,10 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
       if (local.isFresh(AccountBalanceSnapshotStore.displayTtl)) return;
     }
     try {
-      final balance = await ChainRpc().fetchFinalizedBalance(_feeAccountHex);
+      final balance = await ChainRpc().fetchFinalizedBalance(_feeAccountId);
       try {
         await store.put(
-          accountHex: _feeAccountHex,
+          accountId: _feeAccountId,
           balanceYuan: balance,
         );
       } catch (_) {
@@ -178,7 +178,7 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
     final amountYuan = AmountFormat.tryParse(_amountController.text) ?? 0;
     final balanceBlockedReason =
         await MultisigTransferBalanceGuard.checkInstitutionFeeAccountBalance(
-      feeAccountHex: _feeAccountHex,
+      feeAccountId: _feeAccountId,
       actionLabel: '发起手续费划转提案',
       additionalDebitYuan:
           amountYuan + TransferRpc.estimateTransferFeeYuan(amountYuan),
@@ -207,7 +207,7 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
         final qrSigner = QrSigner();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'propose-sweep-'),
-          pubkey: '0x${wallet.pubkeyHex}',
+          signerPublicKey: wallet.accountId,
           payloadHex: '0x${_toHex(payload)}',
           action: QrActions.sweepToMain,
         );
@@ -219,14 +219,14 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
             builder: (_) => QrSignSessionPage(
                 request: request,
                 requestJson: requestJson,
-                expectedPubkey: '0x${wallet.pubkeyHex}'),
+                expectedSignerPublicKey: wallet.accountId),
           ),
         );
         if (response == null) throw Exception('签名已取消');
         return Uint8List.fromList(_hexToBytes(response.body.signatureHex));
       }
 
-      final signerPubkey = Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));
+      final signerPublicKey = Uint8List.fromList(_hexToBytes(wallet.accountId));
 
       final service = MultisigTransferService();
       // 提案类交易等真正入块并核对事件后才返回，proposalId 来自
@@ -235,8 +235,8 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
         institution: widget.institution,
         proposerRoleCode: proposerRoleCode,
         amountYuan: amountYuan,
-        fromAddress: wallet.address,
-        signerPubkey: signerPubkey,
+        fromSs58Address: wallet.ss58Address,
+        signerPublicKey: signerPublicKey,
         sign: signCallback,
       );
 
@@ -463,7 +463,7 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                _truncateAddress(wallets.first.address),
+                _truncateAddress(wallets.first.ss58Address),
                 style: const TextStyle(
                   fontSize: 13,
                   fontFamily: 'monospace',
@@ -498,7 +498,7 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      _truncateAddress(w.address),
+                      _truncateAddress(w.ss58Address),
                       style: const TextStyle(
                         fontSize: 13,
                         fontFamily: 'monospace',

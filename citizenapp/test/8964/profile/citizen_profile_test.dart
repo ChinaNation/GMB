@@ -22,7 +22,7 @@ Map<String, dynamic> _profileJson({
   int posts = 36,
 }) {
   return <String, dynamic>{
-    'owner_account': _owner,
+    'account_id': _owner,
     'display_name': displayName,
     'bio': '链上公民',
     'avatar_object_key': 'profile/$_owner/avatar',
@@ -49,7 +49,7 @@ http.Response _ok(Map<String, dynamic> body) => http.Response(
 // 测试用固定假签名占位，MockClient 不校验签名头。
 SquareSession _session() => SquareSession(
       sessionToken: 'tok',
-      ownerAccount: _owner,
+      accountId: _owner,
       expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
       signRequest: (_) async => 'test-device-signature',
     );
@@ -61,7 +61,7 @@ void main() {
         _profileJson(isFollowing: true),
       );
 
-      expect(profile.ownerAccount, _owner);
+      expect(profile.accountId, _owner);
       expect(profile.isCertified, isTrue);
       expect(profile.cidNumber, 'CN001-CTZN-000000001-2026');
       expect(profile.isFollowing, isTrue);
@@ -100,7 +100,7 @@ void main() {
     });
 
     test('SquareAuthor never falls back to its wallet account', () {
-      const author = SquareAuthor(ownerAccount: _owner, displayName: '');
+      const author = SquareAuthor(accountId: _owner, displayName: '');
       expect(author.title, ProfilePresentation.forAccount(_owner).fallbackName);
       expect(author.title, isNot(_owner));
     });
@@ -152,8 +152,8 @@ void main() {
         return _ok({'ok': true, 'profile': _profileJson(isFollowing: true)});
       }));
 
-      final profile = await client.fetchUserProfile(
-          ownerAccount: _owner, session: _session());
+      final profile =
+          await client.fetchUserProfile(accountId: _owner, session: _session());
 
       expect(authHeader, 'Bearer tok');
       expect(profile.isFollowing, isTrue);
@@ -170,7 +170,7 @@ void main() {
           'posts': [
             {
               'post_id': 'c1',
-              'owner_account': _owner,
+              'account_id': _owner,
               'post_category': 'campaign',
               'text': '竞选宣言',
               'created_at': 300,
@@ -181,7 +181,7 @@ void main() {
       }));
 
       final page = await client.fetchAuthorPosts(
-        ownerAccount: _owner,
+        accountId: _owner,
         category: SquarePostCategory.campaign,
         limit: 2,
       );
@@ -202,7 +202,7 @@ void main() {
           'posts': [
             {
               'post_id': 'a1',
-              'owner_account': _owner,
+              'account_id': _owner,
               'post_category': 'normal',
               'content_format': 'article',
               'title': '我的文章',
@@ -214,7 +214,7 @@ void main() {
         });
       }));
 
-      final page = await client.fetchAuthorPosts(ownerAccount: _owner);
+      final page = await client.fetchAuthorPosts(accountId: _owner);
       final post = page.posts.single;
 
       expect(post.contentFormat, SquarePostContentFormat.article);
@@ -229,7 +229,7 @@ void main() {
       }));
 
       await client.fetchAuthorPosts(
-        ownerAccount: _owner,
+        accountId: _owner,
         contentFormat: SquarePostContentFormat.article,
       );
 

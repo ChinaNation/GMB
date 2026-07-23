@@ -31,14 +31,14 @@ class MultisigTransferBalanceGuard {
   ///
   /// 管理员钱包只签名，不能作为机构费用账户不足时的回退付款方。
   static Future<String?> checkInstitutionFeeAccountBalance({
-    required String feeAccountHex,
+    required String feeAccountId,
     required String actionLabel,
     double additionalDebitYuan = 0,
     ChainRpc? chainRpc,
   }) async {
     final rpc = chainRpc ?? ChainRpc();
     final balanceYuan =
-        await rpc.fetchFinalizedBalance(feeAccountHex, forceFresh: true);
+        await rpc.fetchFinalizedBalance(feeAccountId, forceFresh: true);
     final additionalDebitFen = BigInt.from((additionalDebitYuan * 100).round());
     final requiredYuan = institutionFeeAccountRequiredYuan(
       additionalDebitYuan: additionalDebitYuan,
@@ -63,7 +63,7 @@ class MultisigTransferBalanceGuard {
     final rpc = chainRpc ?? ChainRpc();
     // (ADR-018 卡⑤)：转账前余额守卫必须读最新 finalized 余额,旁路缓存。
     final balanceYuan =
-        await rpc.fetchFinalizedBalance(wallet.pubkeyHex, forceFresh: true);
+        await rpc.fetchFinalizedBalance(wallet.accountId, forceFresh: true);
     final edYuan = MultisigCreateAmountRules.fenToYuan(
       MultisigCreateAmountRules.existentialDepositFen,
     );

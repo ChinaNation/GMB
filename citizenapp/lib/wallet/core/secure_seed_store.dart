@@ -26,6 +26,13 @@ abstract interface class SecureSeedStore {
   /// - 条目不存在 → 返回 `null`。
   Future<String?> readSeed(int walletIndex);
 
+  /// 指定钱包的 seed 条目**是否存在**——只探密文 blob，**不解密、不触发认证**。
+  ///
+  /// 严档 seed 是纯生物档，真解密会弹生物识别；门控只需排除「有壳无钥」
+  /// （钱包行在、密钥没了）的钱包，故用静默存在性判定，避免每次冷启动弹指纹。
+  /// 后端不可用时抛 [SecureStoreUnavailable]，由上层走错误态而非判死。
+  Future<bool> hasSeed(int walletIndex);
+
   /// 删除指定钱包的 seed 条目，连带释放其 keystore key。
   ///
   /// 自愈重派生前必须先删失效条目，`putSeed` 才会生成全新的有效 key。

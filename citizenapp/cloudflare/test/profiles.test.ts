@@ -10,12 +10,12 @@ import { readProfileDoc, writeProfileDoc } from '../src/profiles/repository';
 import { profileObjectKey } from '../src/storage/r2_keys';
 import type { CitizenProfileDoc, Env, SessionState } from '../src/types';
 
-const owner = '5GrwvaEF5zXb26Fz9rcQpDWS7u4m6DXb6T6TQvF9j5uQ8g6U';
-const viewer = '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty';
+const accountId = '0x1111111111111111111111111111111111111111111111111111111111111111';
+const viewer = '0x2222222222222222222222222222222222222222222222222222222222222222';
 
 interface PostSeed {
   post_id: string;
-  owner_account: string;
+  account_id: string;
   cid_number: string | null;
   post_category: 'normal' | 'campaign';
   content_format: 'normal' | 'article';
@@ -24,8 +24,8 @@ interface PostSeed {
 }
 
 interface FollowSeed {
-  owner_account: string;
-  followed_account: string;
+  account_id: string;
+  followed_account_id: string;
   created_at?: number;
   /// 关注即默认开通知（1）；0=对该关注静音。缺省视为 1。
   notify_enabled?: number;
@@ -36,10 +36,10 @@ describe('citizen profile repository', () => {
     const env = fakeEnv();
     const doc: CitizenProfileDoc = {
       schema: 'citizenapp.square.profile.v1',
-      owner_account: owner,
+      account_id: accountId,
       display_name: '轻节点',
       bio: '链上公民',
-      avatar_object_key: `profile/${owner}/avatar`,
+      avatar_object_key: `profile/${accountId.slice(2)}/avatar`,
       avatar_content_hash: '0xabc',
       banner_object_key: null,
       banner_content_hash: null,
@@ -47,22 +47,22 @@ describe('citizen profile repository', () => {
     };
 
     await writeProfileDoc(env, doc);
-    const loaded = await readProfileDoc(env, owner);
+    const loaded = await readProfileDoc(env, accountId);
 
     expect(loaded).toMatchObject({
       display_name: '轻节点',
       bio: '链上公民',
-      avatar_object_key: `profile/${owner}/avatar`,
+      avatar_object_key: `profile/${accountId.slice(2)}/avatar`,
       updated_at: 123
     });
   });
 
   it('returns null for a missing or schema-invalid profile', async () => {
     const env = fakeEnv();
-    expect(await readProfileDoc(env, owner)).toBeNull();
+    expect(await readProfileDoc(env, accountId)).toBeNull();
 
-    await env.SQUARE_MEDIA.put(profileObjectKey(owner), JSON.stringify({ schema: 'wrong' }));
-    expect(await readProfileDoc(env, owner)).toBeNull();
+    await env.SQUARE_MEDIA.put(profileObjectKey(accountId), JSON.stringify({ schema: 'wrong' }));
+    expect(await readProfileDoc(env, accountId)).toBeNull();
   });
 });
 
@@ -78,22 +78,22 @@ describe('GET /v1/square/users/:account', () => {
       // 购买了民主会员且有效 → 徽章带勾（会员与身份解耦，勾只看会员是否有效）。
       membership: { membership_level: 'democracy' },
       follows: [
-        { owner_account: owner, followed_account: 'a______________1' },
-        { owner_account: owner, followed_account: 'a______________2' },
-        { owner_account: viewer, followed_account: owner }
+        { account_id: accountId, followed_account_id: '0x4444444444444444444444444444444444444444444444444444444444444444' },
+        { account_id: accountId, followed_account_id: '0x5555555555555555555555555555555555555555555555555555555555555555' },
+        { account_id: viewer, followed_account_id: accountId }
       ],
-      session: { token: 'tok', owner_account: viewer }
+      session: { token: 'tok', account_id: viewer }
     });
 
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${owner}`, { authToken: 'tok' }),
+      request(`https://w/v1/square/users/${accountId}`, { authToken: 'tok' }),
       env,
-      owner
+      accountId
     );
     const body = (await response.json()) as { profile: Record<string, unknown> };
 
     expect(body.profile).toMatchObject({
-      owner_account: owner,
+      account_id: accountId,
       is_certified: true,
       identity_level: 'voting',
       membership_level: 'democracy',
@@ -111,9 +111,9 @@ describe('GET /v1/square/users/:account', () => {
       membership: { membership_level: 'freedom' }
     });
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${owner}`, { authToken: 'tok' }),
+      request(`https://w/v1/square/users/${accountId}`, { authToken: 'tok' }),
       env,
-      owner
+      accountId
     );
     const body = (await response.json()) as { profile: Record<string, unknown> };
     expect(body.profile).toMatchObject({
@@ -129,9 +129,9 @@ describe('GET /v1/square/users/:account', () => {
       membership: { membership_level: 'democracy', subscription_status: 'cancelled' }
     });
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${owner}`, { authToken: 'tok' }),
+      request(`https://w/v1/square/users/${accountId}`, { authToken: 'tok' }),
       env,
-      owner
+      accountId
     );
     const body = (await response.json()) as { profile: Record<string, unknown> };
     expect(body.profile).toMatchObject({
@@ -146,9 +146,9 @@ describe('GET /v1/square/users/:account', () => {
       identity: { identity_level: 'candidate', cid_number: 'CN001-CTZN-000000009-2026' }
     });
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${owner}`, { authToken: 'tok' }),
+      request(`https://w/v1/square/users/${accountId}`, { authToken: 'tok' }),
       env,
-      owner
+      accountId
     );
     const body = (await response.json()) as { profile: Record<string, unknown> };
 
@@ -163,9 +163,9 @@ describe('GET /v1/square/users/:account', () => {
     // 无身份桩 + 未配 RPC → 软降级为访客（未认证），不因链上不可用而报错。
     const env = fakeEnv({ posts: [], follows: [] });
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${owner}`, { authToken: 'tok' }),
+      request(`https://w/v1/square/users/${accountId}`, { authToken: 'tok' }),
       env,
-      owner
+      accountId
     );
     const body = (await response.json()) as { profile: Record<string, unknown> };
 
@@ -180,8 +180,8 @@ describe('GET /v1/square/users/:account', () => {
 });
 
 describe('PUT /v1/square/profile', () => {
-  it('persists display_name and bio for the session owner', async () => {
-    const env = fakeEnv({ session: { token: 'tok', owner_account: owner } });
+  it('persists display_name and bio for the session accountId', async () => {
+    const env = fakeEnv({ session: { token: 'tok', account_id: accountId } });
     const response = await putProfileRoute(
       request('https://w/v1/square/profile', {
         method: 'PUT',
@@ -194,11 +194,11 @@ describe('PUT /v1/square/profile', () => {
 
     expect(body.profile.display_name).toBe('轻节点');
     expect(body.profile.bio).toBe('个性签名');
-    expect(await readProfileDoc(env, owner)).toMatchObject({ display_name: '轻节点' });
+    expect(await readProfileDoc(env, accountId)).toMatchObject({ display_name: '轻节点' });
   });
 
-  it('rejects an avatar key outside the owner profile directory', async () => {
-    const env = fakeEnv({ session: { token: 'tok', owner_account: owner } });
+  it('rejects an avatar key outside the accountId profile directory', async () => {
+    const env = fakeEnv({ session: { token: 'tok', account_id: accountId } });
     await expect(
       putProfileRoute(
         request('https://w/v1/square/profile', {
@@ -211,14 +211,14 @@ describe('PUT /v1/square/profile', () => {
     ).rejects.toMatchObject({ code: 'invalid_asset_key' });
   });
 
-  it('rejects a non-fixed avatar key inside the owner profile directory', async () => {
-    const env = fakeEnv({ session: { token: 'tok', owner_account: owner } });
+  it('rejects a non-fixed avatar key inside the accountId profile directory', async () => {
+    const env = fakeEnv({ session: { token: 'tok', account_id: accountId } });
     await expect(
       putProfileRoute(
         request('https://w/v1/square/profile', {
           method: 'PUT',
           authToken: 'tok',
-          body: { avatar_object_key: `profile/${owner}/avatar_extra` }
+          body: { avatar_object_key: `profile/${accountId.slice(2)}/avatar_extra` }
         }),
         env
       )
@@ -226,7 +226,7 @@ describe('PUT /v1/square/profile', () => {
   });
 
   it('rejects a display_name over the length limit', async () => {
-    const env = fakeEnv({ session: { token: 'tok', owner_account: owner } });
+    const env = fakeEnv({ session: { token: 'tok', account_id: accountId } });
     await expect(
       putProfileRoute(
         request('https://w/v1/square/profile', {
@@ -282,9 +282,9 @@ describe('GET /v1/square/users/:account/posts', () => {
     query: string
   ): Promise<{ posts: Array<{ post_id: string }>; next_cursor: number | null }> {
     const response = await getUserPostsRoute(
-      request(`https://w/v1/square/users/${owner}/posts?${query}`, { authToken: 'tok' }),
+      request(`https://w/v1/square/users/${accountId}/posts?${query}`, { authToken: 'tok' }),
       env,
-      owner
+      accountId
     );
     return (await response.json()) as {
       posts: Array<{ post_id: string }>;
@@ -297,36 +297,36 @@ describe('GET /v1/square/users/:account/follows', () => {
   it('lists following and followers ordered by recency', async () => {
     const env = fakeEnv({
       follows: [
-        { owner_account: owner, followed_account: 'a______________1', created_at: 100 },
-        { owner_account: owner, followed_account: 'a______________2', created_at: 200 },
-        { owner_account: 'a______________3', followed_account: owner, created_at: 300 }
+        { account_id: accountId, followed_account_id: '0x4444444444444444444444444444444444444444444444444444444444444444', created_at: 100 },
+        { account_id: accountId, followed_account_id: '0x5555555555555555555555555555555555555555555555555555555555555555', created_at: 200 },
+        { account_id: '0x6666666666666666666666666666666666666666666666666666666666666666', followed_account_id: accountId, created_at: 300 }
       ]
     });
 
     const following = await readFollows(env, 'type=following');
-    expect(following.accounts.map((a) => a.owner_account)).toEqual([
-      'a______________2',
-      'a______________1'
+    expect(following.accounts.map((a) => a.account_id)).toEqual([
+      '0x5555555555555555555555555555555555555555555555555555555555555555',
+      '0x4444444444444444444444444444444444444444444444444444444444444444'
     ]);
 
     const followers = await readFollows(env, 'type=followers');
-    expect(followers.accounts.map((a) => a.owner_account)).toEqual(['a______________3']);
+    expect(followers.accounts.map((a) => a.account_id)).toEqual(['0x6666666666666666666666666666666666666666666666666666666666666666']);
   });
 
   async function readFollows(
     env: Env,
     query: string
   ): Promise<{
-    accounts: Array<{ owner_account: string; created_at: number }>;
+    accounts: Array<{ account_id: string; created_at: number }>;
     next_cursor: number | null;
   }> {
     const response = await getUserFollowsRoute(
-      request(`https://w/v1/square/users/${owner}/follows?${query}`, { authToken: 'tok' }),
+      request(`https://w/v1/square/users/${accountId}/follows?${query}`, { authToken: 'tok' }),
       env,
-      owner
+      accountId
     );
     return (await response.json()) as {
-      accounts: Array<{ owner_account: string; created_at: number }>;
+      accounts: Array<{ account_id: string; created_at: number }>;
       next_cursor: number | null;
     };
   }
@@ -335,8 +335,8 @@ describe('GET /v1/square/users/:account/follows', () => {
 describe('post notify (is_notifying + PUT .../notify)', () => {
   it('reports is_notifying true when following with notify enabled (default)', async () => {
     const env = fakeEnv({
-      follows: [{ owner_account: viewer, followed_account: owner }],
-      session: { token: 'tok', owner_account: viewer }
+      follows: [{ account_id: viewer, followed_account_id: accountId }],
+      session: { token: 'tok', account_id: viewer }
     });
     const body = await readProfile(env);
     expect(body.profile).toMatchObject({ is_following: true, is_notifying: true });
@@ -345,27 +345,27 @@ describe('post notify (is_notifying + PUT .../notify)', () => {
   it('reports is_notifying false when following but muted', async () => {
     const env = fakeEnv({
       follows: [
-        { owner_account: viewer, followed_account: owner, notify_enabled: 0 }
+        { account_id: viewer, followed_account_id: accountId, notify_enabled: 0 }
       ],
-      session: { token: 'tok', owner_account: viewer }
+      session: { token: 'tok', account_id: viewer }
     });
     const body = await readProfile(env);
     expect(body.profile).toMatchObject({ is_following: true, is_notifying: false });
   });
 
   it('reports is_notifying false when not following', async () => {
-    const env = fakeEnv({ follows: [], session: { token: 'tok', owner_account: viewer } });
+    const env = fakeEnv({ follows: [], session: { token: 'tok', account_id: viewer } });
     const body = await readProfile(env);
     expect(body.profile).toMatchObject({ is_following: false, is_notifying: false });
   });
 
   it('PUT .../notify accepts a boolean and echoes the new state', async () => {
     const env = fakeEnv({
-      follows: [{ owner_account: viewer, followed_account: owner }],
-      session: { token: 'tok', owner_account: viewer }
+      follows: [{ account_id: viewer, followed_account_id: accountId }],
+      session: { token: 'tok', account_id: viewer }
     });
     const response = await setFollowNotifyRoute(
-      request(`https://w/v1/square/follows/${owner}/notify`, {
+      request(`https://w/v1/square/follows/${accountId}/notify`, {
         method: 'PUT',
         authToken: 'tok',
         body: { enabled: false }
@@ -377,10 +377,10 @@ describe('post notify (is_notifying + PUT .../notify)', () => {
   });
 
   it('PUT .../notify rejects a non-boolean enabled', async () => {
-    const env = fakeEnv({ session: { token: 'tok', owner_account: viewer } });
+    const env = fakeEnv({ session: { token: 'tok', account_id: viewer } });
     await expect(
       setFollowNotifyRoute(
-        request(`https://w/v1/square/follows/${owner}/notify`, {
+        request(`https://w/v1/square/follows/${accountId}/notify`, {
           method: 'PUT',
           authToken: 'tok',
           body: { enabled: 'yes' }
@@ -392,9 +392,9 @@ describe('post notify (is_notifying + PUT .../notify)', () => {
 
   async function readProfile(env: Env): Promise<{ profile: Record<string, unknown> }> {
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${owner}`, { authToken: 'tok' }),
+      request(`https://w/v1/square/users/${accountId}`, { authToken: 'tok' }),
       env,
-      owner
+      accountId
     );
     return (await response.json()) as { profile: Record<string, unknown> };
   }
@@ -402,7 +402,7 @@ describe('post notify (is_notifying + PUT .../notify)', () => {
 
 function published(overrides: Partial<PostSeed> & Pick<PostSeed, 'post_id'>): PostSeed {
   return {
-    owner_account: owner,
+    account_id: accountId,
     cid_number: null,
     post_category: 'normal',
     content_format: 'normal',
@@ -415,10 +415,10 @@ function published(overrides: Partial<PostSeed> & Pick<PostSeed, 'post_id'>): Po
 interface FakeEnvOptions {
   posts?: PostSeed[];
   follows?: FollowSeed[];
-  session?: { token: string; owner_account: string };
-  /// 预置 owner 的链上身份（写进 SQUARE_CACHE 命中缓存版身份读取）；缺省=未配置→软降级为访客。
+  session?: { token: string; account_id: string };
+  /// 预置 accountId 的链上身份（写进 SQUARE_CACHE 命中缓存版身份读取）；缺省=未配置→软降级为访客。
   identity?: { identity_level: 'visitor' | 'voting' | 'candidate'; cid_number?: string | null };
-  /// 预置 owner 的会员购买（对应 D1 square_memberships 一行）；缺省=未购买（无行）。
+  /// 预置 accountId 的会员购买（对应 D1 square_memberships 一行）；缺省=未购买（无行）。
   membership?: {
     membership_level: 'freedom' | 'democracy' | 'spark';
     subscription_status?: string;
@@ -432,7 +432,7 @@ function fakeEnv(options: FakeEnvOptions = {}): Env {
   const kv = new Map<string, unknown>();
   if (!options.session) {
     const defaultSession: SessionState = {
-      owner_account: viewer,
+      account_id: viewer,
       device_key_hash: 'a'.repeat(64),
       created_at: 0,
       expires_at: Date.now() + 60_000
@@ -441,7 +441,7 @@ function fakeEnv(options: FakeEnvOptions = {}): Env {
   }
   if (options.session) {
     const session: SessionState = {
-      owner_account: options.session.owner_account,
+      account_id: options.session.account_id,
       device_key_hash: 'a'.repeat(64),
       created_at: 0,
       expires_at: Date.now() + 60_000
@@ -451,9 +451,9 @@ function fakeEnv(options: FakeEnvOptions = {}): Env {
   if (options.identity) {
     const level = options.identity.identity_level;
     kv.set(
-      `square_identity:${owner}`,
+      `square_identity:${accountId}`,
       JSON.stringify({
-        owner_account: owner,
+        account_id: accountId,
         identity_level: level,
         has_voting_identity: level !== 'visitor',
         has_candidate_identity: level === 'candidate',
@@ -465,7 +465,7 @@ function fakeEnv(options: FakeEnvOptions = {}): Env {
 
   const membershipRow = options.membership
     ? {
-        owner_account: owner,
+        account_id: accountId,
         membership_level: options.membership.membership_level,
         subscription_status: options.membership.subscription_status ?? 'active',
         paid_until: options.membership.paid_until ?? Date.now() + 60_000,
@@ -560,14 +560,18 @@ class FakeStmt {
 
     if (sql.includes('square_memberships')) {
       const m = this.membership;
-      return m && m.owner_account === b0 ? (m as T) : null;
+      return m && m.account_id === b0 ? (m as T) : null;
     }
 
-    if (sql.includes('square_follows') && sql.includes('followed_account = ?') &&
-      sql.includes('owner_account = ?')) {
+    if (sql.includes('COUNT(*)') && sql.includes('square_follows') &&
+      sql.includes('followed_account_id = ?')) {
+      return { n: this.follows.filter((f) => f.followed_account_id === b0).length } as T;
+    }
+    if (sql.includes('square_follows') && sql.includes('followed_account_id = ?') &&
+      sql.includes('account_id = ?')) {
       const b1 = this.binds[1] as string;
       const follow = this.follows.find(
-        (f) => f.owner_account === b0 && f.followed_account === b1
+        (f) => f.account_id === b0 && f.followed_account_id === b1
       );
       // isNotifying 读 notify_enabled；isFollowing 读 1 AS n。
       if (sql.includes('notify_enabled')) {
@@ -575,17 +579,13 @@ class FakeStmt {
       }
       return (follow ? ({ n: 1 } as T) : null);
     }
-    if (sql.includes('COUNT(*)') && sql.includes('square_follows') &&
-      sql.includes('followed_account = ?')) {
-      return { n: this.follows.filter((f) => f.followed_account === b0).length } as T;
-    }
     if (sql.includes('COUNT(*)') && sql.includes('square_follows')) {
-      return { n: this.follows.filter((f) => f.owner_account === b0).length } as T;
+      return { n: this.follows.filter((f) => f.account_id === b0).length } as T;
     }
     if (sql.includes('COUNT(*)') && sql.includes('square_posts')) {
       return {
         n: this.posts.filter(
-          (p) => p.owner_account === b0 && p.post_state === 'published'
+          (p) => p.account_id === b0 && p.post_state === 'published'
         ).length
       } as T;
     }
@@ -593,7 +593,7 @@ class FakeStmt {
       const row = this.posts
         .filter(
           (p) =>
-            p.owner_account === b0 &&
+            p.account_id === b0 &&
             p.post_state === 'published' &&
             p.cid_number !== null
         )
@@ -608,7 +608,7 @@ class FakeStmt {
 
   async all<T>(): Promise<{ results: T[] }> {
     if (this.sql.includes('FROM square_follows')) {
-      const isFollowing = this.sql.includes('followed_account AS owner_account');
+      const isFollowing = this.sql.includes('followed_account_id AS account_id');
       let fi = 0;
       const account = this.binds[fi++] as string;
       const cursor = this.sql.includes('created_at < ?')
@@ -617,10 +617,10 @@ class FakeStmt {
       const limit = this.binds[fi++] as number;
       const rows = this.follows
         .filter((f) =>
-          isFollowing ? f.owner_account === account : f.followed_account === account
+          isFollowing ? f.account_id === account : f.followed_account_id === account
         )
         .map((f) => ({
-          owner_account: isFollowing ? f.followed_account : f.owner_account,
+          account_id: isFollowing ? f.followed_account_id : f.account_id,
           created_at: f.created_at ?? 0
         }))
         .filter((r) => (cursor !== null ? r.created_at < cursor : true))
@@ -630,7 +630,7 @@ class FakeStmt {
     }
 
     let i = 0;
-    const ownerAccount = this.binds[i++] as string;
+    const accountId = this.binds[i++] as string;
     const category = this.sql.includes('post_category = ?')
       ? (this.binds[i++] as string)
       : null;
@@ -643,7 +643,7 @@ class FakeStmt {
     const limit = this.binds[i++] as number;
 
     const results = this.posts
-      .filter((p) => p.owner_account === ownerAccount && p.post_state === 'published')
+      .filter((p) => p.account_id === accountId && p.post_state === 'published')
       .filter((p) => (category ? p.post_category === category : true))
       .filter((p) => (contentFormat ? p.content_format === contentFormat : true))
       .filter((p) => (cursor !== null ? p.created_at < cursor : true))

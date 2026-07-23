@@ -11,8 +11,9 @@ void main() {
     walletName: '我的钱包',
     walletIcon: 'wallet',
     balance: 0.0,
-    address: '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty',
-    pubkeyHex: '0x00',
+    ss58Address: '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty',
+    accountId:
+        '0x0000000000000000000000000000000000000000000000000000000000000000',
     alg: 'sr25519',
     ss58: 2027,
     createdAtMillis: 0,
@@ -41,7 +42,7 @@ void main() {
     expect(find.text('我的钱包'), findsOneWidget);
     // 短地址规则:前 8 + ... + 后 6
     final shortAddr =
-        '${wallet.address.substring(0, 8)}...${wallet.address.substring(wallet.address.length - 6)}';
+        '${wallet.ss58Address.substring(0, 8)}...${wallet.ss58Address.substring(wallet.ss58Address.length - 6)}';
     expect(find.text(shortAddr), findsOneWidget);
   });
 

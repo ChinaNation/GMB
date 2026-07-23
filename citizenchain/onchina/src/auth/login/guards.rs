@@ -73,7 +73,7 @@ pub(super) fn admin_auth(
             return Err("http:unauthorized:invalid access token".to_string());
         }
 
-        let admin = repo::get_admin_by_account_conn(conn, &session.admin_account)?
+        let admin = repo::get_admin_by_account_id_conn(conn, &session.account_id)?
             .ok_or_else(|| "http:forbidden:admin not found".to_string())?;
         if admin.institution_code != session.institution_code {
             conn.execute("DELETE FROM admin_sessions WHERE token = $1", &[&token])
@@ -88,7 +88,7 @@ pub(super) fn admin_auth(
 
         // 省/市/镇作用域:与登录签发(onchain_gate)共用 derive_admin_scope_conn 单一来源,口径一致。
         let (scope_province_name, scope_city_name, scope_town_name) =
-            repo::derive_admin_scope_conn(conn, &admin.admin_account, &admin.institution_code)?;
+            repo::derive_admin_scope_conn(conn, &admin.account_id, &admin.institution_code)?;
 
         // 全国级机构(NATIONAL,联邦注册局除外)无省维度;其余(含 FRG)必须有省作用域。
         let national_no_province = !is_frg && admin_level.as_deref() == Some("NATIONAL");
@@ -110,7 +110,7 @@ pub(super) fn admin_auth(
             scope_city_name.as_deref(),
         )?;
         Ok(AdminAuthContext {
-            admin_account: admin.admin_account,
+            account_id: admin.account_id,
             institution_cid_number: binding.institution_cid_number,
             institution_code,
             admin_level,

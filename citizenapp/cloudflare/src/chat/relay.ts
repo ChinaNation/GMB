@@ -34,8 +34,8 @@ function requireRelayBucket(env: Env): R2Bucket {
 }
 
 /// 仅薪火会员(有效订阅)可上传大文件。
-async function requireSpark(env: Env, ownerAccount: string): Promise<void> {
-  const membership = await getMembership(env, ownerAccount);
+async function requireSpark(env: Env, accountId: string): Promise<void> {
+  const membership = await getMembership(env, accountId);
   if (
     !membership ||
     !subscriptionIsActive(membership) ||
@@ -67,7 +67,7 @@ function assertObjectKey(raw: string): string {
 export async function initChatRelay(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   requireRelayBucket(env);
-  await requireSpark(env, session.owner_account);
+  await requireSpark(env, session.account_id);
   const body = await readJson<InitRelayBody>(request);
   const byteSize =
     typeof body.byte_size === 'number' ? body.byte_size : Number(body.byte_size);
@@ -89,7 +89,7 @@ export async function putChatRelayBlob(
 ): Promise<Response> {
   const session = await requireSession(request, env);
   const bucket = requireRelayBucket(env);
-  await requireSpark(env, session.owner_account);
+  await requireSpark(env, session.account_id);
   const objectKey = assertObjectKey(objectKeyRaw);
   if (!request.body) {
     throw new HttpError(400, 'relay_body_missing', '缺少上传内容');
@@ -101,7 +101,7 @@ export async function putChatRelayBlob(
   await bucket.put(objectKey, request.body, {
     httpMetadata: { contentType: 'application/octet-stream' },
     customMetadata: {
-      owner: session.owner_account,
+      account_id: session.account_id,
       expires_at: String(Date.now() + RELAY_TTL_MS),
     },
   });

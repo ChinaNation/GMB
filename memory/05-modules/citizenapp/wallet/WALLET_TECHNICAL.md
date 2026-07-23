@@ -64,9 +64,9 @@ lib/
   - 冷钱包：仅存公钥与地址到 Isar（不写 secure storage）
   - seed 读取时强制生物识别/设备密码验证（`_authenticateIfSupported()`）
   - 钱包元数据写入 Isar
-- `Isar/wallet_isar.dart`
-  - Isar 集合定义与启动迁移
-  - 开发阶段直接覆盖，schema 版本 `v2`
+- `lib/isar/app_isar.dart`
+  - Isar 最终集合定义与数据库打开
+  - 当前尚未正式创世，业务库直接删除重建，不保存本地 schema 版本、不执行 migration
   - 提供 `WalletIsar.instance.read()` / `WalletIsar.instance.writeTxn()` 作为全 App 业务读写唯一入口；余额刷新、交易流水同步、多签扫描、钱包导入等并发读写必须排队执行
   - `LocalTxEntity` 保存本机钱包进入 App 后的余额变化流水；`WalletTxSyncCursorEntity` 保存每个钱包的同步起点和最新同步高度
 - `wallet_secure_keys.dart`
@@ -85,13 +85,13 @@ lib/
 
 - `wallet_page.dart`
   - 钱包列表（带热/冷标识）、长按拖拽排序、创建、导入、删除、激活、地址复制
-  - 钱包列表只允许把链上唯一 `identity_wallet_account` 对应的钱包标为“身份钱包”，不得按多个钱包分别认证
+  - 钱包列表只允许把链上唯一 `voting_account_id` 对应的钱包标为“身份钱包”，不得按多个钱包分别认证
   - 热钱包创建/导入（`CreateWalletPage` / `ImportWalletPage`）
   - 冷钱包创建/导入（`CreateColdWalletPage` / `ImportColdWalletPage`），导入冷钱包页标题右侧提供扫码图标，复用 `QrScanPage(raw)` 识别钱包二维码并只回填账户地址/公钥输入框
   - 余额显示与刷新（通过 `lib/rpc/ChainRpc.fetchFinalizedBalance()` / `fetchFinalizedBalances()` 直连节点）
   - 钱包详情页（`WalletDetailPage`）：余额卡片（含钱包名称）、二维码（含下载按钮）、地址、交易记录入口+最近记录
 - `transaction_history_page.dart`
-  - 交易记录列表页（`TransactionHistoryPage`）：按 `walletPubkeyHex` 过滤，显示业务类型、带正负号的余额变化、对方地址、时间、状态
+  - 交易记录列表页（`TransactionHistoryPage`）：按 `accountId` 过滤，显示业务类型、带正负号的余额变化、对方地址、时间、状态
   - 交易记录详情页（`TransactionDetailPage`）：显示余额变化、转账金额、手续费、发送方、接收方、对方地址、区块/事件定位、txHash、来源、状态与失败原因
 
 ### 3.4 `widgets`
@@ -135,18 +135,21 @@ lib/
 
 ### 4.4 导入冷钱包
 
-1. 接受 SS58 地址或 0x/64 hex 公钥
+1. 只接受 SS58 展示地址，不接受 AccountId 或裸公钥代替地址
 2. 页面可点击顶部扫码图标，调用摄像头识别当前钱包二维码
-3. 扫码结果仅提取 `user_contact.body.address`、`user_transfer.body.address`、`gmb://account/<address>`、裸 SS58 地址，或当前输入框已支持的 0x/64 hex 公钥
+3. 扫码结果仅提取 `user_contact.body.ss58_address`、
+   `user_transfer.body.ss58_address`、`gmb://account/<ss58_address>` 或裸 SS58 地址
 4. 扫码后只回填输入框，不自动执行导入
-5. 导入时解码公钥（SS58 走 `Keyring().decodeAddress()`；hex 走严格 32 字节解析）
+5. 导入时通过 `Keyring().decodeAddress()` 解码 SS58，得到 32 字节后生成规范 AccountId
 6. 仅写 Isar（`signMode: 'external'`），不写 secure storage
 
 ### 4.5 余额查询
 
 1. 页面 `initState` 和下拉刷新触发 `_refreshBalancesFromChain()`
 2. 页面先通过 `_loadWallets()` 读取一次本地钱包列表，再把同一份列表传给余额刷新，避免首屏加载和余额刷新并发读取 Isar
-3. 一次收集所有本地钱包公钥，调用 `ChainRpc.fetchFinalizedBalances(pubkeys)` 批量读取 finalized 块上的 `System.Account`
+3. 一次收集所有本地钱包 AccountId，调用
+   `ChainRpc.fetchFinalizedBalances(accountIds)` 批量读取 finalized 块上的
+   `System.Account`
 4. 轻节点先等待同步完成；若轻节点未初始化、同步失败或链路降级，直接向上抛出真实错误
 5. 批量解码 SCALE 编码的 `AccountInfo.free` 余额（分），转换为元；钱包详情链上余额卡使用 `fetchFinalizedTotalBalance()` 显示 `free + reserved`
 6. 若余额有变化，通过统一写队列更新 Isar 中的 `WalletProfileEntity.balance`
@@ -156,11 +159,11 @@ lib/
 ### 4.5.1 钱包交易流水同步
 
 1. 钱包新建或导入到本机后，`ChainTxMonitor` 为该钱包建立 `WalletTxSyncCursorEntity`，finalized 补同步起点为当前 finalized 区块；不查询、不补录导入前历史。
-2. 钱包页加载本地钱包后按 `walletPubkeyHex` 注册监听；监听 newHeads 时先把当前区块命中的 `OnchainTransaction::TransferWithRemark` 写成 `inBlock`，启动、重连和 finalized 后还会补扫 `finalized+1..best` 的未确认区块，避免错过 newHeads 的收款记录；监听 finalizedHeads 时按游标补同步并升级为 `finalized`。
+2. 钱包页加载本地钱包后按 `accountId` 注册监听；监听 newHeads 时先把当前区块命中的 `OnchainTransaction::TransferWithRemark` 写成 `inBlock`，启动、重连和 finalized 后还会补扫 `finalized+1..best` 的未确认区块，避免错过 newHeads 的收款记录；监听 finalizedHeads 时按游标补同步并升级为 `finalized`。
 3. 命中本机钱包的事件写入 `LocalTxEntity`：收入保存正数 `amountDeltaFen`，支出保存负数 `amountDeltaFen`；普通链上转账备注写入 `remark`；不再单独保存 `direction`。
 4. 业务类型只写入 `type`，例如 `transfer / fee / reward / interest / issuance / burn / multisig_transfer`；列表方向由金额正负号推导。
-5. 区块事件记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`；本机提交后的 pending 记录唯一键为 `walletPubkeyHex:pending:txHash`，写入时按同钱包、同区块、同发送方、同接收方、同转账本金合并本机提交记录和重复区块事件，避免重复显示。
-6. 删除钱包时同步删除该 `walletPubkeyHex` 下的 `LocalTxEntity` 和 `WalletTxSyncCursorEntity`；再次导入同一链上账户也从新的本机导入时刻重新记录。
+5. 区块事件记录唯一键为 `accountId:blockHash:eventIndex`；本机提交后的 pending 记录唯一键为 `accountId:pending:txHash`，写入时按同钱包、同区块、同发送方、同接收方、同转账本金合并本机提交记录和重复区块事件，避免重复显示。
+6. 删除钱包时同步删除该 `accountId` 下的 `LocalTxEntity` 和 `WalletTxSyncCursorEntity`；再次导入同一链上账户也从新的本机导入时刻重新记录。
 7. 流水同步遇到本地 Isar/MDBX 繁忙时直接让路到下一轮，不和钱包列表、余额刷新、治理页面抢写锁。
 8. 交易页 `签名交易` 下方的四个状态只统计当前交易钱包的转出记录；钱包详情页和完整交易记录页才展示该钱包全部收支流水。
 
@@ -180,22 +183,30 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 
 ### 4.7 链上支付签名（由 onchain 调用）
 
-- **热钱包**：`WalletManager.signWithWallet()` 签名回调注入 `OnchainPaymentService`（seed 不出 WalletManager）；签名前必须重新派生本地公钥，并校验其与当前 `WalletProfile.pubkeyHex` 完全一致，不一致直接拒绝签名
-- **冷钱包**：构造 `QR_V1 k=1` 签名请求 → 导航到 `QrSignSessionPage` → 展示请求二维码 → 用户用 CitizenWallet 离线设备扫码签名（离线端按 `a+d` 独立解码 payload）→ 扫描 `k=2` 签名响应二维码 → `QrSigner.parseResponse()` 校验 `request_id + pubkey + signature` → 签名回调注入
+- **热钱包**：`WalletManager.signWithWallet()` 签名回调注入 `OnchainPaymentService`
+  （seed 不出 WalletManager）；签名前必须重新派生本地公钥，并校验其转换得到的
+  AccountId 与当前 `WalletProfile.accountId` 完全一致，不一致直接拒绝签名。
+- **冷钱包**：构造 `QR_V1 k=1` 签名请求 → 导航到 `QrSignSessionPage` → 展示请求二维码
+  → 用户用 CitizenWallet 离线设备扫码签名（离线端按 `a+d` 独立解码 payload）→
+  扫描 `k=2` 签名响应二维码 → `QrSigner.parseResponse()` 校验
+  `request_id + signer_public_key + signature` → 签名回调注入。
 
 `OnchainPaymentService.submitTransfer()` 接受 `sign` 回调参数，由 UI 层根据 `signMode` 提供不同实现。
 
 ### 4.8 治理提案/投票签名（由 governance + signer 调用，规划）
 
 1. 治理模块按业务类型组装提案/投票字段。
-2. 钱包模块输出当前激活钱包上下文（`address/pubkeyHex/alg/ss58`）。
+2. 钱包模块输出当前激活钱包上下文
+   （`accountId / ss58Address / alg / ss58`）。
 3. 根据 `signMode` 分流：
    - `local`：`WalletManager.signWithWallet()`（seed 不出类）。
    - `external`：调用 `QrSigner` 发起外部签名会话。
 4. 回传签名结果给治理模块提交链上交易。
 5. 选择了哪个管理员钱包，就必须由同一钱包完成签名：
-   - 热钱包：`walletIndex` 对应的 seed 派生公钥必须等于页面选中的 `pubkeyHex`
-   - 冷钱包：签名响应中的 `pubkey` 必须等于页面选中的 `pubkeyHex`
+   - 热钱包：`walletIndex` 对应 seed 派生公钥转换出的 AccountId 必须等于页面选中的
+     `accountId`
+   - 冷钱包：签名响应中的 `signerPublicKey` 转换出的 AccountId 必须等于页面选中的
+     `accountId`
 6. 联合公投和立法特别案不再存在独立人口快照签名；钱包只签业务提案，runtime
    使用同一笔提案的标准外层签名管理员和 `actor_cid_number` 完成授权，并在事务内
    创建快照。钱包不得恢复快照 action、call 常量或两步签名会话。
@@ -210,20 +221,18 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 
 ### 5.2 业务层（Isar）
 
-集合定义（`Isar/wallet_isar.dart`）：
+集合定义（`lib/isar/app_isar.dart`）：
 
 - `WalletProfileEntity`
-  - `walletIndex, walletName, walletIcon, balance, address, pubkeyHex, alg, ss58, createdAtMillis, source, signMode, sortOrder`
+  - `walletIndex, walletName, walletIcon, balance, accountId, ss58Address, alg, ss58, createdAtMillis, source, signMode, sortOrder`
 - `WalletSettingsEntity`
   - `activeWalletIndex, updatedAtMillis`
 - `LocalTxEntity`
-  - `recordKey, walletAddress, walletPubkeyHex, type, amountDeltaFen, transferAmountFen, feeFen, counterpartyAddress, fromAddress, toAddress, remark, status, source, txHash, blockNumber, blockHash, eventIndex, extrinsicIndex, usedNonce, confirmedAtMillis, failureReason, createdAtMillis`
+  - `recordKey, ss58Address, accountId, type, amountDeltaFen, transferAmountFen, feeFen, counterpartySs58Address, fromSs58Address, toSs58Address, remark, status, source, txHash, blockNumber, blockHash, eventIndex, extrinsicIndex, usedNonce, confirmedAtMillis, failureReason, createdAtMillis`
 - `WalletTxSyncCursorEntity`
-  - `walletAddress, walletPubkeyHex, trackingStartBlock, lastSyncedBlock, createdAtMillis, updatedAtMillis`
+  - `ss58Address, accountId, trackingStartBlock, lastSyncedBlock, createdAtMillis, updatedAtMillis`
 - `AdminGroupCacheEntity`
-  - `pubkeyHex, adminGroupName, updatedAt`
-- `ObservedAccountEntity`
-  - `accountId, accountLabel, publicKey, address, balance, source`
+  - `accountId, adminGroupName, updatedAt`
 - `LoginReplayEntity`
   - `requestId, expiresAt`
 - `AppKvEntity`
@@ -237,16 +246,17 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 - `WalletManager.createWallet()` / `importWallet()` / `importColdWallet()` 的钱包元数据写入和当前钱包切换在同一事务内完成，避免钱包索引重复、激活钱包丢失或嵌套事务。
 - 钱包页展示错误时，本地 Isar/MDBX 错误统一提示为本地钱包数据库繁忙，不再显示为轻节点或区块链连接失败。
 
-### 5.3 其他 SharedPreferences（尚未迁移）
+### 5.3 其他 SharedPreferences
 
-- 电子护照不再使用 `cid.bind.*` 或 `myid.*` 本地身份缓存；按默认热钱包读 finalized `CidByWalletAccount`，再闭环校验 `CidRegistry` Active、`WalletAccountByCid` 反向绑定和 CID 主键身份。
+- 电子护照不再使用 `cid.bind.*` 或 `myid.*` 本地身份缓存；按默认热钱包读 finalized `CidByAccountId`，再闭环校验 `CidRegistry` Active、`AccountIdByCid` 反向绑定和 CID 主键身份。
 
 ### 5.4 钱包详情页布局 `WalletDetailPage`
 
 页面元素（自上而下）：
 
 1. 余额卡片：左上角钱包名称（可点击编辑），居中余额数字+元+GMB
-2. 二维码：`QR_V1 kind=user_contact`，`body.address` 为当前钱包 SS58 地址，下载按钮浮在二维码正中间（半透明圆形背景）
+2. 二维码：`QR_V1 kind=user_contact`，`body.ss58_address` 为当前钱包 SS58 地址，
+   下载按钮浮在二维码正中间（半透明圆形背景）
 3. 冷钱包离线签名入口由 CitizenWallet 承担；CitizenApp 钱包详情页不承载 `QrOfflineSignPage`
 4. 地址+复制：地址居中两行显示，复制图标在右侧
 5. 交易记录标题行：左侧"交易记录"，右侧箭头，点击进入完整交易记录列表
@@ -254,7 +264,7 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 
 ### 5.5 交易记录数据来源
 
-钱包详情页和交易记录页面直接复用 `LocalTxStore`（Isar `LocalTxEntity`），按 `walletPubkeyHex` 过滤。
+钱包详情页和交易记录页面直接复用 `LocalTxStore`（Isar `LocalTxEntity`），按 `accountId` 过滤。
 
 - 本机提交普通转账成功后通过 `LocalTxStore.upsertLocalSubmitTransfer()` 写入 `source=local_submit / status=pending` 记录，用于立即反馈支出；如果区块事件已经先写入，则合并手续费、txHash、nonce 和备注，不新增第二条
 - 交易池 included 回调先把本机提交记录升级为 `status=inBlock`；newHeads 命中收入或支出事件时写入 `source=chain_event / status=inBlock`；启动、重连和 finalized 后会补扫 finalized 之后的未确认区块，补齐错过实时订阅的 `inBlock` 流水
@@ -262,18 +272,23 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 - 钱包详情页展示最近 5 条，点击"交易记录"标题或右侧箭头进入完整列表，点击单条进入该笔交易详情
 - `txHash` 只作为本机 pending 提交标识；单条链上流水的唯一定位以 `recordKey` 为准
 
-## 6. 迁移与清理策略
+## 6. 数据重建策略
 
-当前 schema：`wallet.data.schema.version = 3`。
-
-开发阶段直接覆盖，不做增量迁移。v3 会清空旧 `LocalTxEntity` 和 `WalletTxSyncCursorEntity`，丢弃此前错误流水和游标；启动时确保 settings 行存在并更新 schema 版本标记。
+当前尚未正式创世，CitizenApp 只打开最终 Isar schema，并在空库中创建唯一的
+`WalletSettingsEntity(id=0)`。旧 Isar 业务库直接删除重建，不保存
+`wallet.data.schema.version`，不执行 collection 清理 migration，也不读取旧字段。
+secure storage、Keychain/Keystore、助记词、seed、私钥和生物识别保护材料不属于
+业务库，严禁随 Isar 删除。
 
 ## 7. 安全边界
 
 - seed 不写入 Isar/Postgres/日志
 - **seed 不出 WalletManager**：所有签名操作通过 `signWithWallet()` / `signUtf8WithWallet()` 完成，seed 仅在方法内短暂存在，签名后立即清零
-- 通讯录只从热钱包 seed 派生 `citizenapp.contacts.v1/encryption` 与 `citizenapp.contacts.v1/index` 两把 32 字节 HKDF-SHA256 域隔离密钥；salt 固定为 `SHA256(owner_account)`。业务层只能读取派生后的 `ContactKeyMaterial`，不能接触 seed，也不能用通讯录密钥签名或恢复钱包。
-- 新建/导入热钱包时预派生通讯录密钥并写入系统安全存储；历史热钱包首次进入通讯录时读取一次硬件金库并派生。删除钱包必须同时删除派生密钥及该 `owner_account` 的联系人缓存、待同步操作和同步状态。
+- 通讯录只从热钱包 seed 派生 `citizenapp.contacts.v1/encryption` 与
+  `citizenapp.contacts.v1/index` 两把 32 字节 HKDF-SHA256 域隔离密钥；salt 固定为
+  `SHA256(account_id)`。业务层只能读取派生后的 `ContactKeyMaterial`，不能接触 seed，
+  也不能用通讯录密钥签名或恢复钱包。
+- 新建/导入热钱包时预派生通讯录密钥并写入系统安全存储；历史热钱包首次进入通讯录时读取一次硬件金库并派生。删除钱包必须同时删除派生密钥及该 `account_id` 的联系人缓存、待同步操作和同步状态。
 - 助记词不持久化，仅创建时一次性展示
 - 冷钱包不在本机保存任何密钥材料
 - 本机签名在本地完成，私钥材料不出端
@@ -293,7 +308,8 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
   - `deleteWallet / setActiveWallet`
   - `signWithWallet(walletIndex, payload)` — 热钱包 sr25519 签名（seed 不出类）
   - `signUtf8WithWallet(walletIndex, message)` — 热钱包 UTF-8 签名（返回 `WalletSignResult`）
-  - `ensureContactKeyMaterial(walletIndex, ownerAccount)` — 返回通讯录域隔离加密钥和索引钥，必要时从硬件金库一次性派生
+  - `ensureContactKeyMaterial(walletIndex, accountId)` — 返回通讯录域隔离加密钥和索引钥，
+    必要时从硬件金库一次性派生
   - ~~`getLatestWalletSecret / getWalletSecretByIndex`~~ — 已弃用
 - `ChainRpc`（`lib/rpc/chain_rpc.dart`）
   - `fetchFinalizedBalance` / `fetchFinalizedBalances` / `fetchFinalizedTotalBalance` — 直连节点查询 finalized 链上余额
@@ -335,8 +351,8 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 
 | 字段 | 说明 |
 | --- | --- |
-| `address` | SS58 地址（当前链 `ss58 = 2027`） |
-| `pubkeyHex` | 64 hex（不含 `0x` 前缀） |
+| `ss58Address` | SS58 展示地址（当前链 `ss58 = 2027`） |
+| `accountId` | 小写 `0x` + 64 位十六进制 AccountId |
 | `alg` | 固定 `sr25519` |
 | `ss58` | 地址格式版本（当前 2027） |
 | `source` | `created/imported` |

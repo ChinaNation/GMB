@@ -16,7 +16,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   useIsolatedIsar();
 
-  const personalAccount = '11223344556677889900aabbccddeeff'
+  const personalAccount = '0x11223344556677889900aabbccddeeff'
       'ffeeddccbbaa00998877665544332211';
 
   test('无 entity → 返回 null', () async {
@@ -27,7 +27,7 @@ void main() {
   test('仅有 executed/rejected entity → 不命中,返回 null', () async {
     final service = PersonalProposalHistoryService();
     await service.recordOrUpdate(
-      personalAccountHex: personalAccount,
+      personalAccountId: personalAccount,
       proposalId: 5,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.executed,
@@ -35,7 +35,7 @@ void main() {
       noVotes: 0,
     );
     await service.recordOrUpdate(
-      personalAccountHex: personalAccount,
+      personalAccountId: personalAccount,
       proposalId: 6,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.rejected,
@@ -50,7 +50,7 @@ void main() {
   test('voting 状态的 create entity 命中,返回 proposalId', () async {
     final service = PersonalProposalHistoryService();
     await service.recordOrUpdate(
-      personalAccountHex: personalAccount,
+      personalAccountId: personalAccount,
       proposalId: 99,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.voting,
@@ -65,7 +65,7 @@ void main() {
   test('voting 但 action != create(如 transfer)不命中', () async {
     final service = PersonalProposalHistoryService();
     await service.recordOrUpdate(
-      personalAccountHex: personalAccount,
+      personalAccountId: personalAccount,
       proposalId: 200,
       action: PersonalProposalAction.transfer,
       status: PersonalProposalStatus.voting,
@@ -79,10 +79,10 @@ void main() {
 
   test('其他多签账户的 entity 不命中(filter 按地址过滤)', () async {
     final service = PersonalProposalHistoryService();
-    const otherAddress =
-        'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
+    const otherAccountId =
+        '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
     await service.recordOrUpdate(
-      personalAccountHex: otherAddress,
+      personalAccountId: otherAccountId,
       proposalId: 77,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.voting,
@@ -92,6 +92,6 @@ void main() {
 
     final lookup = PersonalPendingCreateLookup();
     expect(await lookup.findActiveCreate(personalAccount), isNull);
-    expect(await lookup.findActiveCreate(otherAddress), 77);
+    expect(await lookup.findActiveCreate(otherAccountId), 77);
   });
 }

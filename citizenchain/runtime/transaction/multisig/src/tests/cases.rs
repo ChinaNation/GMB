@@ -131,6 +131,7 @@ fn personal_account_transfer_executes_when_internal_vote_reaches_threshold() {
             .into_iter()
             .map(|account_id| admin_primitives::Admin {
                 account_id,
+                cid_number: Default::default(),
                 family_name: Default::default(),
                 given_name: Default::default(),
             })

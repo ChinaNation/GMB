@@ -2,9 +2,9 @@ import type { ReactNode } from 'react';
 import { Descriptions, Typography } from 'antd';
 import { tryEncodeSs58 } from '../utils/ss58';
 
-/** 管理员钱包与机构岗位的一条任职关系；姓名按链上管理员记录的两个字段投影。 */
+/** 管理员账户与机构岗位的一条任职关系；姓名按链上管理员记录的两个字段投影。 */
 export type InstitutionAssignmentLike = {
-  admin_account: string;
+  account_id: string;
   family_name?: string | null;
   given_name?: string | null;
   province_name?: string | null;
@@ -59,7 +59,7 @@ function Field({ label, value, trailing }: { label: string; value: string; trail
 export function InstitutionAssignmentCard({ assignment, index, action, status, actionPlacement = 'top' }: Props) {
   const topAction = actionPlacement === 'top' ? action ?? status : status;
   const balanceAction = actionPlacement === 'balance-row' ? action : null;
-  const accountText = assignment.admin_account ? tryEncodeSs58(assignment.admin_account) : '';
+  const accountText = assignment.account_id ? tryEncodeSs58(assignment.account_id) : '';
   return <div style={{ display: 'grid', gap: 8, minWidth: 0, padding: 12, borderRadius: 8, border: '1px solid rgba(148, 163, 184, 0.28)', background: 'rgba(15, 23, 42, 0.92)' }}>
     <div style={{ display: 'flex', minHeight: 28, alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
       {index != null ? <span style={{ color: '#bfdbfe', fontWeight: 700 }}>{index}</span> : <span />}
@@ -77,7 +77,7 @@ export function InstitutionAssignmentCard({ assignment, index, action, status, a
 }
 
 export function InstitutionAssignmentDetails({ assignment, areaLabel, areaValue }: { assignment: InstitutionAssignmentLike; areaLabel?: string; areaValue?: string | null }) {
-  const ss58 = assignment.admin_account ? tryEncodeSs58(assignment.admin_account) : '';
+  const ss58 = assignment.account_id ? tryEncodeSs58(assignment.account_id) : '';
   return <Descriptions column={1} size="small" bordered>
     {areaLabel ? <Descriptions.Item label={areaLabel}>{areaValue || '-'}</Descriptions.Item> : null}
     <Descriptions.Item label="姓名">{assignmentDisplayLabel(assignment) || '-'}</Descriptions.Item>
@@ -87,7 +87,7 @@ export function InstitutionAssignmentDetails({ assignment, areaLabel, areaValue 
     <Descriptions.Item label="任职来源">{assignment.assignment_source_label || '-'}</Descriptions.Item>
     <Descriptions.Item label="来源引用">{assignment.assignment_source_ref || '-'}</Descriptions.Item>
     <Descriptions.Item label="管理员账户">{ss58 ? <Typography.Text style={{ wordBreak: 'break-all' }}>{ss58}</Typography.Text> : '-'}</Descriptions.Item>
-    <Descriptions.Item label="账户 Hex">{assignment.admin_account || '-'}</Descriptions.Item>
+    <Descriptions.Item label="账户 Hex">{assignment.account_id || '-'}</Descriptions.Item>
     <Descriptions.Item label="余额">{formatAdminBalanceFen(assignment.balance_fen) || '-'}</Descriptions.Item>
     {assignment.institution_code ? <Descriptions.Item label="机构码">{assignment.institution_code}</Descriptions.Item> : null}
   </Descriptions>;

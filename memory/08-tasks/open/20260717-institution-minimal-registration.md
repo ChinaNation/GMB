@@ -11,7 +11,7 @@
 
 机构唯一主键继续使用 `cid_number`，但管理员和岗位必须彻底分离：
 
-- 管理员是人，机构和个人多签统一使用字段名 `admins`；公权项为 `PublicAdmin { admin_account, cid_number, family_name, given_name }`，私权和个人多签项为 `Admin { admin_account, family_name, given_name }`。
+- 管理员是人，机构和个人多签统一使用字段名 `admins`；公权、私权机构和个人多签项统一为 `Admin { account_id, cid_number, family_name, given_name }`。
 - `admin_account` 是钱包账户；机构业务授权还必须同时满足机构 CID、岗位码、有效任职和岗位业务权限，管理员账户本身没有业务权限。
 - 公权管理员的公民 CID、姓、名当前允许为空；非空 CID 必须由 `citizen-identity` 唯一真源确认 CID↔钱包绑定。私权管理员姓名保持非空展示字段。
 - 机构管理员集合至少一人；机构治理阈值由 entity 独立保存，不得按管理员人数、岗位数或席位数推导。
@@ -81,7 +81,7 @@
 
 ## 第1步验收标准
 
-- [x] `admins` 按公权四字段、私权/个人三字段分流；账户本身不直接拥有机构业务权限。
+- [x] `admins` 统一四字段 SCALE 布局；账户本身不直接拥有机构业务权限。
 - [x] 机构管理员集合至少一人；机构治理阈值与管理员人数独立。
 - [x] 没有任何岗位任职的管理员仍保留人员记录，但没有机构业务权限。
 - [x] 岗位新增或清空任职不会改变管理员集合。
@@ -162,15 +162,15 @@
 - 2026-07-17：修复 OnChina 新增机构正式提交“创建机构失败”：原因是前端只提交 `x-cid-security-grant`，未提交后端 `PASSKEY_COLD_SIGN` 安全门要求的 `X-Passkey-Assertion`。统一新增 `createColdSignSubmitHeaders/securityGrantSubmitHeaders` 正式提交入口，创建机构、创建/删除账户、公民身份上链、机构资料上传/删除、机构详情更新均改为同时携带冷签 grant 与 Passkey assertion；资料和详情更新的授权 payload 已按后端 `grant_payload` 逐字段同形清理，删除业务模块手写半套安全头残留。
 - 2026-07-17：修复 OnChina 新增机构“双钱包签名”模型错误：创建机构不再生成 `INSTITUTION_CREATE` 安全动作、不再使用 `a=8 institution_create_credential`、不再携带 `register_nonce/signature/credential_signer_pubkey/scope_*` 内层凭证；后端只生成最终链交易签名会话，管理员钱包签一次后直接提交统一链交易 submit。
 - 2026-07-18：正式创世前最终协议取代旧迁移方案：删除 `public-admins` / `private-admins` 历史存储翻译，不保留纯账户、单姓名或双轨布局。
-- 2026-07-18：当时完成三字段 `Admin` 统一；2026-07-20 公权部分已被 `PublicAdmin` 四字段目标彻底取代，私权、个人多签和私权创世基金会继续使用三字段 `Admin`。
+- 后续最终状态：公权、私权机构和个人多签全部统一为四字段 `Admin`，旧三字段和 `PublicAdmin` 类型均已删除。
 - 2026-07-18：第1步验证通过：runtime 及 9 个相关 crate 生产编译、`runtime-benchmarks` 编译、127 项专项单测、格式化与 diff 检查全部通过；runtime 中旧合并姓名字段、旧管理员类型和历史迁移代码残留为 0。
-- 2026-07-18：当时的 Node 三字段验收已由 2026-07-20 公权四字段/私权三字段分流实现取代；管理员允许没有岗位，但只有有效岗位任职和岗位业务权限才能构成机构授权。
+- 后续最终状态：Node 按统一四字段布局验收；管理员允许没有岗位，但只有有效岗位任职和岗位业务权限才能构成机构授权。
 - 2026-07-18：第2步验证通过：`cargo check -p node`、Node 280 项测试、Node 前端 TypeScript 与 Vite 生产构建、旧管理员结构 / 纯账户布局 / 合并姓名字段 / DTO 泛化账户字段残留检查全部通过。当前源码强制重建 WASM 后，隔离 `citizenchain-fresh` 真实启动成功，block#0 `0xc1dc759689aed0a8f8361dc3cb0e39c1faf19cfc55c7611b02ccc79ce04524c6`、`stateRoot=0x967155d28abe492052ef4bfd59a1ddbebce8cdaa57d9baaad446028848061a5e`、`isSyncing=false`；节点已停止并清理临时数据，本步未烘焙正式 chainspec 或切换正式数据。
-- 2026-07-19：OnChina 当时完成三字段跨端验收；2026-07-20 公权链上部分已改为四字段 `PublicAdmin`，私权仍为三字段 `Admin`，业务授权改按完整岗位主体校验。
+- 后续最终状态：OnChina 对公权、私权统一使用四字段 `Admin`，业务授权按完整岗位主体校验。
 - 2026-07-19：第3步验证通过：OnChina 137 项测试、后端生产编译、前端 TypeScript/Vite 生产构建和旧字段残留检查通过。隔离 fresh 节点 block#0 为 `0xc1dc759689aed0a8f8361dc3cb0e39c1faf19cfc55c7611b02ccc79ce04524c6`、`stateRoot=0x967155d28abe492052ef4bfd59a1ddbebce8cdaa57d9baaad446028848061a5e`、`isSyncing=false`；临时 PostgreSQL 实测旧合并姓名列为 0，并验证旧单列重启后被直接删除、默认落为“管理”“员”。链投影 49,593 个机构、99,231 个账户，健康接口和首页正常。所有验收进程已停止，临时数据已移入废纸篓；未烘焙正式 chainspec、未切换正式节点数据。
-- 2026-07-19：CitizenApp 当时完成三字段验收；2026-07-20 已按目标 pallet 分流公权四字段与私权/个人三字段解码，公权身份资料为空时不再伪造展示值。
+- 后续最终状态：CitizenApp 对公权、私权和个人多签统一使用四字段解码，空身份资料不再伪造展示值。
 - 2026-07-19：第4步的旧公权三字段 fresh 验收只保留为历史记录，不再代表当前存储布局；当前 fresh 链必须以四字段 `PublicAdmin` 重新验收。
-- 2026-07-19：第5步统一 QR 三字段结论的公权部分已被 2026-07-20 四字段协议取代；CitizenWallet 当前按公权 `PublicAdmin`、私权/个人 `Admin` 分流严格解码。
+- 后续最终状态：CitizenWallet 按统一四字段 `Admin` 严格解码，拒绝旧三字段。
 - 2026-07-20：CitizenWallet 已按实际 runtime call 布局分流解码公权/私权机构治理和注册局登记；公权身份字段允许暂空，非空 CID 只接受 CTZN 结构，旧内层凭证字段不再属于这两个 call。
 - 2026-07-19：CitizenWallet 同一已扫描请求只允许一次密钥调用：签名进行中或已生成响应二维码时拒绝重复触发；同一次业务操作不叠加姓名确认签名或其它第二签名。统一 action registry 已重新生成 CitizenApp/CitizenWallet 两端产物，个人多签创建的必显字段补齐 `admins`。
 - 2026-07-19：第5步验证通过：`qr-protocol` 6 项一致性/守卫测试、CitizenWallet `flutter analyze`、179 项全量测试、Android arm64 debug 构建、CitizenApp `flutter analyze` 及 QR/签名 53 项测试全部通过。Pixel 8a 真机安装后 `org.citizenwallet/.MainActivity` 真实启动、进程存活并渲染“还没有钱包”首屏；设备无钱包，未创建测试私钥、未伪造扫码签名或链交易。Android 16 同时报告现有 Flutter/插件原生库未满足 16 KB 页面对齐，关闭系统提示后应用正常渲染；该独立发布风险留待正式创世前阻塞审计处理。

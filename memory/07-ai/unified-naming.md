@@ -133,7 +133,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 已用岗位码 | `UsedRoleCodes` | runtime entity storage | 永久记录机构内已经生成过的岗位码；岗位删除后仍保留占用记录 |
 | 任职来源 | `assignment_source` | runtime entity / API / 跨端 | 创世、注册局、普选、互选、提名任免或本机构内部治理 |
 | 任职来源记录 | `assignment_source_ref` | runtime entity / API / 跨端 | 对应的选举、投票、登记或任免记录 ID |
-| 管理员集合 | `admins` | runtime admins / 跨端 | 公权为 `PublicAdmin { admin_account, cid_number, family_name, given_name }`，私权/个人为 `Admin { admin_account, family_name, given_name }`；账户本身没有机构业务权限 |
+| 管理员集合 | `admins` | runtime admins / 跨端 | 公权、私权机构和个人多签统一使用 `Admin { account_id, cid_number, family_name, given_name }` SCALE 字段顺序；账户本身没有机构业务权限 |
 | 机构治理动作 | `InstitutionGovernanceAction` | runtime entity / OnChina / CitizenWallet | 本机构内部治理载荷，原子表达管理员集合、岗位任职和法定代表人目标变更 |
 | 解除法定代表人 | `clear_legal_representative` | OnChina API / frontend | 机构治理请求中清空整个链上法定代表人结构的布尔开关，不得和 `legal_representative_cid_number` 同时提交 |
 

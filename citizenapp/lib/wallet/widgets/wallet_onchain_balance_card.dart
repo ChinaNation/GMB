@@ -56,7 +56,7 @@ class WalletOnchainBalanceCardState extends State<WalletOnchainBalanceCard> {
     });
     try {
       final total =
-          await _chainRpc.fetchFinalizedTotalBalance(widget.wallet.pubkeyHex);
+          await _chainRpc.fetchFinalizedTotalBalance(widget.wallet.accountId);
       if (!mounted) return;
       setState(() {
         _balance = total;

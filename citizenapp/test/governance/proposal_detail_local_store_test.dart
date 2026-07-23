@@ -18,7 +18,7 @@ void main() {
       threshold: 6,
       admins: const ['aa', 'bb'],
       adminVotes: const {'aa': true, 'bb': null},
-      pendingPubkeys: const ['bb'],
+      pendingPublicKeys: const ['bb'],
       detail: const {
         'kind': 'transfer',
         'amount_fen': '12300',
@@ -38,17 +38,18 @@ void main() {
   });
 
   test('账户余额快照只作为展示缓存读取', () async {
+    final accountId = '0x${'ab' * 32}';
     await AccountBalanceSnapshotStore.instance.put(
-      accountHex: '0xABCDEF',
+      accountId: accountId,
       balanceYuan: 12.34,
     );
 
     final loaded = await AccountBalanceSnapshotStore.instance.readFresh(
-      'abcdef',
+      accountId,
     );
 
     expect(loaded, isNotNull);
-    expect(loaded!.accountHex, 'abcdef');
+    expect(loaded!.accountId, accountId);
     expect(loaded.balanceYuan, 12.34);
   });
 }

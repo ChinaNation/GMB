@@ -9,14 +9,14 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct AdminUser {
     pub(crate) id: u64,
-    pub(crate) admin_account: String,
+    pub(crate) account_id: String,
     pub(crate) family_name: String,
     pub(crate) given_name: String,
     /// 所属机构码(3/4 字符文本,如 FRG/CREG/NLG)。
     pub(crate) institution_code: String,
     /// 初始联邦注册局管理员由代码内置,不可删除;代码以外新增管理员为 false。
     pub(crate) built_in: bool,
-    pub(crate) created_by: String,
+    pub(crate) creator_account_id: String,
     pub(crate) created_at: DateTime<Utc>,
     #[serde(default)]
     pub(crate) updated_at: Option<DateTime<Utc>>,
@@ -28,16 +28,16 @@ pub(crate) struct AdminUser {
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct CityRegistryAdminRow {
     pub(crate) id: u64,
-    pub(crate) admin_account: String,
+    pub(crate) account_id: String,
     pub(crate) family_name: String,
     pub(crate) given_name: String,
     /// 链上 finalized free 余额(分);查询失败或账户不存在时为空。
     pub(crate) balance_fen: Option<String>,
     pub(crate) institution_code: String,
     pub(crate) built_in: bool,
-    pub(crate) created_by: String,
-    pub(crate) created_by_family_name: String,
-    pub(crate) created_by_given_name: String,
+    pub(crate) creator_account_id: String,
+    pub(crate) creator_family_name: String,
+    pub(crate) creator_given_name: String,
     pub(crate) created_at: DateTime<Utc>,
     pub(crate) city_name: String,
 }
@@ -56,7 +56,7 @@ pub(crate) struct CityRegistryAdminListOutput {
 pub(crate) struct FederalRegistryAdminRow {
     pub(crate) id: u64,
     pub(crate) province_name: String,
-    pub(crate) admin_account: String,
+    pub(crate) account_id: String,
     pub(crate) family_name: String,
     pub(crate) given_name: String,
     pub(crate) role_code: String,
@@ -78,7 +78,7 @@ pub(crate) struct FederalRegistryAdminRow {
 
 #[derive(Serialize)]
 pub(crate) struct OwnInstitutionAdminRow {
-    pub(crate) admin_account: String,
+    pub(crate) account_id: String,
     pub(crate) family_name: String,
     pub(crate) given_name: String,
     pub(crate) role_code: String,
@@ -103,16 +103,16 @@ pub(crate) struct OwnInstitutionAdminListOutput {
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct CreateCityRegistryAdminInput {
-    pub(crate) admin_account: String,
+    pub(crate) account_id: String,
     pub(crate) family_name: String,
     pub(crate) given_name: String,
-    /// CityRegistry 所属的市，必填，且必须属于 created_by 对应联邦注册局管理员的省份（不可为省辖市）
+    /// CityRegistry 所属的市，必填，且必须属于 creator_account_id 对应联邦注册局管理员的省份（不可为省辖市）
     pub(crate) city_name: String,
     /// 可选：指定该 city_registry 归属的联邦注册局管理员账户。
     /// FederalRegistry 调用时若指定则必须等于自己账户，否则 403。
     /// 不指定则默认为调用者自身。
     #[serde(default)]
-    pub(crate) created_by: Option<String>,
+    pub(crate) creator_account_id: Option<String>,
 }
 
 #[derive(Deserialize)]

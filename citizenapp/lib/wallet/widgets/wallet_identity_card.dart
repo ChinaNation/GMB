@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:citizenapp/8964/profile/user_qr_page.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
-import 'package:citizenapp/wallet/widgets/wallet_qr_dialog.dart';
 
 /// 钱包身份卡(钱包详情页第 2 张卡)。
 ///
@@ -13,7 +13,7 @@ import 'package:citizenapp/wallet/widgets/wallet_qr_dialog.dart';
 /// - 钱包名可点击进入编辑态;提交(回车 / onTapOutside)时通过 [onNameChanged]
 ///   回调让外层落盘。空字符串或与现值相同则回滚不报错,由编辑态自行处理。
 /// - 地址点击复制并弹 SnackBar,展示规则为短地址 `前 8...后 6`。
-/// - 右侧 QR 小图标弹出 WalletQrDialog,内容为 QR_V1 `k=3` 用户联系码。
+/// - 右侧 QR 小图标进入全 App 唯一 [UserQrPage],内容为 QR_V1 `k=3` 用户联系码。
 /// - 编辑态 TextField 字体/光标/下划线改黑色系,避开 Material TextField 默认
 ///   白底导致白字看不见的问题。展示态保持白色不变。
 class WalletIdentityCard extends StatefulWidget {
@@ -57,7 +57,7 @@ class _WalletIdentityCardState extends State<WalletIdentityCard> {
 
   /// 短地址:前 8 位 + ... + 后 6 位。地址过短时按原样返回。
   String get _shortAddress {
-    final addr = widget.wallet.address;
+    final addr = widget.wallet.ss58Address;
     if (addr.length <= 14) return addr;
     return '${addr.substring(0, 8)}...${addr.substring(addr.length - 6)}';
   }
@@ -91,7 +91,7 @@ class _WalletIdentityCardState extends State<WalletIdentityCard> {
 
   /// 复制钱包地址并弹 SnackBar。
   void _copyAddress() {
-    Clipboard.setData(ClipboardData(text: widget.wallet.address));
+    Clipboard.setData(ClipboardData(text: widget.wallet.ss58Address));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('钱包地址已复制')),
     );
@@ -193,12 +193,15 @@ class _WalletIdentityCardState extends State<WalletIdentityCard> {
               ],
             ),
           ),
-          // 右:QR 小图标 36x36,点击弹大二维码。
+          // 右:QR 小图标 36x36,点击进入全 App 唯一用户二维码页。
           GestureDetector(
-            onTap: () => WalletQrDialog.show(
-              context,
-              wallet: widget.wallet,
-              walletName: _walletName,
+            onTap: () => Navigator.of(context).push<void>(
+              MaterialPageRoute<void>(
+                builder: (_) => UserQrPage(
+                  accountId: widget.wallet.accountId,
+                  contactName: _walletName,
+                ),
+              ),
             ),
             child: Container(
               width: 36,

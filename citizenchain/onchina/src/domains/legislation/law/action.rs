@@ -31,7 +31,7 @@ pub(crate) async fn prepare_propose_law_sign(
     state: &AppState,
     input: &ProposeLawInput,
     proposer_code: [u8; 4],
-    actor_pubkey: &str,
+    actor_public_key: &str,
     institution_cid_number: &str,
     resolve_cid_number: impl Fn(&[u8; 4]) -> Option<String>,
 ) -> Result<LegislationSignOutput, Response> {
@@ -41,7 +41,7 @@ pub(crate) async fn prepare_propose_law_sign(
         state,
         "leg-propose",
         PURPOSE_LEGISLATION_PROPOSE,
-        actor_pubkey,
+        actor_public_key,
         institution_cid_number,
         chain,
         json!({
@@ -59,14 +59,14 @@ pub(crate) async fn prepare_representative_vote_sign(
     proposal_id: u64,
     voter_role_code: &str,
     approve: bool,
-    actor_pubkey: &str,
+    actor_public_key: &str,
     institution_cid_number: &str,
 ) -> Result<LegislationSignOutput, Response> {
     prepare_legislation_sign(
         state,
         "leg-representative-vote",
         PURPOSE_LEGISLATION_REPRESENTATIVE_VOTE,
-        actor_pubkey,
+        actor_public_key,
         institution_cid_number,
         build_representative_vote_call(proposal_id, voter_role_code, approve),
         json!({
@@ -83,12 +83,12 @@ async fn prepare_legislation_sign(
     state: &AppState,
     request_prefix: &str,
     purpose: &str,
-    actor_pubkey: &str,
+    actor_public_key: &str,
     institution_cid_number: &str,
     chain: ChainCall,
     operation_context: Value,
 ) -> Result<LegislationSignOutput, Response> {
-    let prepared = crate::core::chain_submit::prepare_signing(&chain.call_data, actor_pubkey)
+    let prepared = crate::core::chain_submit::prepare_signing(&chain.call_data, actor_public_key)
         .await
         .map_err(|error| {
             tracing::error!(error = %error, purpose, "prepare legislation signing failed");
@@ -105,14 +105,14 @@ async fn prepare_legislation_sign(
         request_id.as_str(),
         issued_at.timestamp(),
         expires_at.timestamp(),
-        actor_pubkey,
+        actor_public_key,
         &prepared.payload,
         chain.action,
     )?;
     let session = ChainSignSession {
         request_id: request_id.clone(),
         purpose: purpose.to_string(),
-        actor_pubkey: actor_pubkey.to_string(),
+        actor_public_key: actor_public_key.to_string(),
         call_data: chain.call_data,
         nonce: prepared.nonce,
         signing_hash: prepared.signing_hash_hex,

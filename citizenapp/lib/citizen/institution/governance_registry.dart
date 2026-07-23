@@ -2,7 +2,7 @@
 ///
 ///
 /// - 通用类型 `InstitutionInfo` / `InstitutionAccounts` / `OrgType` + 身份编码工具
-///   `institutionAccountId` 等在
+///   `accountIdBytes` 等在
 ///   `lib/citizen/shared/institution_info.dart`。
 /// - 联合投票只使用国家储委会/省储委会/省储行三类储备治理机构。
 /// - `kFixedGovernanceInstitutions` 保存不进入治理 tab 的其它固定治理机构账户。
@@ -37,9 +37,9 @@ InstitutionInfo? findInstitutionByCidNumber(String cidNumber) {
 /// execution account、主账户或管理员钱包回落反推身份。
 InstitutionInfo? personalMultisigFromAccountId(List<int> accountIdBytes) {
   if (accountIdBytes.length != 32) return null;
-  final account = _hexEncode(accountIdBytes);
-  final cidFullName = '个人多签 ${account.substring(0, 8)}';
-  final cidFullNameEn = 'Personal Multisig ${account.substring(0, 8)}';
+  final account = '0x${_hexEncode(accountIdBytes)}';
+  final cidFullName = '个人多签 ${account.substring(2, 10)}';
+  final cidFullNameEn = 'Personal Multisig ${account.substring(2, 10)}';
   return InstitutionInfo(
     cidFullName: cidFullName,
     cidShortName: cidFullName,
@@ -47,7 +47,7 @@ InstitutionInfo? personalMultisigFromAccountId(List<int> accountIdBytes) {
     cidShortNameEn: cidFullNameEn,
     cidNumber: 'personal-account:$account',
     orgType: OrgType.personalMultisig,
-    personalAccountHex: account,
+    personalAccountId: account,
   );
 }
 

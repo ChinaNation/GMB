@@ -4,11 +4,10 @@ use std::{collections::BTreeMap, hash::Hasher, sync::OnceLock};
 use subxt::{dynamic, OnlineClient, PolkadotConfig};
 use twox_hash::XxHash64;
 
-use crate::auth::login::parse_sr25519_pubkey_bytes;
-use crate::*;
+use crate::auth::login::parse_account_id_bytes;
 
-// 机构操作(登记/创建/治理/自定义账户关闭)统一为「任职管理员钱包直接冷签一笔普通 extrinsic」,
-// 由链端在 origin 处按机构 CID、岗位码和管理员钱包三者鉴权，OnChina 后端不签发链上凭证。
+// 机构操作(登记/创建/治理/自定义账户关闭)统一为「任职管理员使用签名钱包直接冷签一笔普通 extrinsic」,
+// 由链端在 origin 处按机构 CID、岗位码和管理员账户 ID 三者鉴权，OnChina 后端不签发链上凭证。
 // 原注销凭证签发链路(`build_institution_deregistration_credential` 等)连同平台签名钥
 // `ONCHINA_SIGNING_SEED_HEX` / `ONCHAIN_CREDENTIAL_SIGNER_PUBKEY` 已整体删除。
 static CHAIN_GENESIS_HASH: OnceLock<[u8; 32]> = OnceLock::new();
@@ -30,12 +29,8 @@ fn is_production_mode() -> bool {
         .unwrap_or(false)
 }
 
-pub(crate) fn normalize_account_pubkey(account_pubkey: &str) -> Option<String> {
-    if let Some(hex_pubkey) = parse_sr25519_pubkey(account_pubkey) {
-        return Some(hex_pubkey);
-    }
-    let bytes = parse_sr25519_pubkey_bytes(account_pubkey)?;
-    Some(format!("0x{}", hex::encode(bytes)))
+pub(crate) fn normalize_account_id(account_id: &str) -> Option<String> {
+    crate::crypto::pubkey::normalize_account_id(account_id)
 }
 
 /// 返回已经通过启动校验缓存的链创世哈希。
@@ -222,15 +217,6 @@ pub(crate) async fn fetch_finalized_anchor() -> Result<ChainFinalizedAnchor, Str
     })
 }
 
-fn clean_account_hex_key(account_hex: &str) -> String {
-    let trimmed = account_hex.trim();
-    trimmed
-        .strip_prefix("0x")
-        .or_else(|| trimmed.strip_prefix("0X"))
-        .unwrap_or(trimmed)
-        .to_ascii_lowercase()
-}
-
 fn twox_128(input: &[u8]) -> [u8; 16] {
     let mut h0 = XxHash64::with_seed(0);
     h0.write(input);
@@ -394,20 +380,22 @@ fn decode_account_free_balance_fen(storage_hex: &str) -> Result<Option<String>, 
     Ok(Some(u128::from_le_bytes(free).to_string()))
 }
 
-/// 批量读取账户 finalized free 余额,返回 key 为不带 0x 的小写 hex。
+/// 批量读取账户 finalized free 余额，返回 key 为规范 `account_id`。
 ///
 /// 管理员卡片只展示链上真实余额;查询失败或账户不存在时返回 None,
 /// 由 UI 保留“余额”标签但不渲染余额值。0 余额是有效值,必须返回 Some("0")。
 pub(crate) async fn fetch_account_balances_onchain(
-    account_hexes: &[String],
+    account_ids: &[String],
 ) -> Result<BTreeMap<String, Option<String>>, String> {
     let mut result = BTreeMap::new();
     let mut unique_accounts: BTreeMap<String, [u8; 32]> = BTreeMap::new();
-    for raw in account_hexes {
-        let key = clean_account_hex_key(raw);
-        result.entry(key.clone()).or_insert(None);
-        if let Some(account) = parse_sr25519_pubkey_bytes(raw) {
-            unique_accounts.insert(key, account);
+    for account_id in account_ids {
+        let Some(account_id) = normalize_account_id(account_id) else {
+            continue;
+        };
+        result.entry(account_id.clone()).or_insert(None);
+        if let Some(account_bytes) = parse_account_id_bytes(&account_id) {
+            unique_accounts.insert(account_id, account_bytes);
         }
     }
     if unique_accounts.is_empty() {
@@ -421,9 +409,9 @@ pub(crate) async fn fetch_account_balances_onchain(
     let requests = unique_accounts
         .iter()
         .enumerate()
-        .map(|(index, (account_hex, account_id))| {
+        .map(|(index, (account_key, account_id))| {
             let id = (index + 1) as u64;
-            id_to_account.insert(id, account_hex.clone());
+            id_to_account.insert(id, account_key.clone());
             serde_json::json!({
                 "id": id,
                 "jsonrpc": "2.0",
@@ -448,11 +436,11 @@ pub(crate) async fn fetch_account_balances_onchain(
         .map_err(|e| format!("decode chain http rpc account balance response failed: {e}"))?;
 
     for item in payload {
-        let Some(account_hex) = id_to_account.get(&item.id) else {
+        let Some(account_id) = id_to_account.get(&item.id) else {
             continue;
         };
         if item.error.is_some() {
-            result.insert(account_hex.clone(), None);
+            result.insert(account_id.clone(), None);
             continue;
         }
         let balance = match item.result {
@@ -462,7 +450,7 @@ pub(crate) async fn fetch_account_balances_onchain(
             }
             Some(_) => None,
         };
-        result.insert(account_hex.clone(), balance);
+        result.insert(account_id.clone(), balance);
     }
     Ok(result)
 }
@@ -572,7 +560,7 @@ pub(crate) const PERSONAL_MULTISIG_LOGIN_UNSUPPORTED: &str =
 
 /// 公私权管理员解码后统一为只读视图；原始 SCALE 布局仍直接复用 runtime 共享类型。
 struct OnChainAdminRecord {
-    admin_account: [u8; 32],
+    account_id: [u8; 32],
     cid_number: Vec<u8>,
     family_name: Vec<u8>,
     given_name: Vec<u8>,
@@ -586,7 +574,7 @@ struct OnChainAdminAccount {
 /// 提供给 OnChina 鉴权、目录和页面的链上管理员人员记录。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OnChainAdmin {
-    pub(crate) admin_account: String,
+    pub(crate) account_id: String,
     pub(crate) cid_number: String,
     pub(crate) family_name: String,
     pub(crate) given_name: String,
@@ -599,15 +587,14 @@ fn decode_onchain_admin_account(
     let mut input = raw;
     let (institution_code, admins): ([u8; 4], Vec<OnChainAdminRecord>) = match pallet {
         AdminPallet::PublicAdmins => {
-            type Raw =
-                admin_primitives::InstitutionAdmins<Vec<admin_primitives::PublicAdmin<[u8; 32]>>>;
+            type Raw = admin_primitives::InstitutionAdmins<Vec<admin_primitives::Admin<[u8; 32]>>>;
             let decoded = Raw::decode(&mut input)
                 .map_err(|e| format!("decode PublicInstitutionAdmins failed: {e}"))?;
             let admins = decoded
                 .admins
                 .into_iter()
                 .map(|admin| OnChainAdminRecord {
-                    admin_account: admin.account_id,
+                    account_id: admin.account_id,
                     cid_number: admin.cid_number.into_inner(),
                     family_name: admin.family_name.into_inner(),
                     given_name: admin.given_name.into_inner(),
@@ -623,8 +610,8 @@ fn decode_onchain_admin_account(
                 .admins
                 .into_iter()
                 .map(|admin| OnChainAdminRecord {
-                    admin_account: admin.account_id,
-                    cid_number: Vec::new(),
+                    account_id: admin.account_id,
+                    cid_number: admin.cid_number.into_inner(),
                     family_name: admin.family_name.into_inner(),
                     given_name: admin.given_name.into_inner(),
                 })
@@ -637,8 +624,8 @@ fn decode_onchain_admin_account(
     }
     let mut seen = std::collections::BTreeSet::new();
     for admin in &admins {
-        if !seen.insert(admin.admin_account) {
-            return Err("InstitutionAdmins contains duplicate admin_account".to_string());
+        if !seen.insert(admin.account_id) {
+            return Err("InstitutionAdmins contains duplicate account_id".to_string());
         }
         if pallet == AdminPallet::PrivateAdmins
             && (admin.family_name.is_empty() || admin.given_name.is_empty())
@@ -858,7 +845,7 @@ fn contains_admin(decoded: &OnChainAdminAccount, target: &[u8; 32]) -> bool {
     decoded
         .admins
         .iter()
-        .any(|admin| &admin.admin_account == target)
+        .any(|admin| &admin.account_id == target)
 }
 
 /// 解出 `Blake2_128Concat<CidNumber>` storage key 中的 CID。
@@ -899,14 +886,14 @@ pub(crate) struct OnChainLegalRepresentative {
     pub(crate) family_name: Vec<u8>,
     pub(crate) given_name: Vec<u8>,
     pub(crate) cid_number: Vec<u8>,
-    pub(crate) account: [u8; 32],
+    pub(crate) account_id: [u8; 32],
 }
 
 /// 链上公权机构账户投影。真源为 `PublicManage::InstitutionAccounts`。
 pub(crate) struct OnChainInstitutionAccount {
     pub(crate) cid_number: Vec<u8>,
     pub(crate) account_name: Vec<u8>,
-    pub(crate) account: [u8; 32],
+    pub(crate) account_id: [u8; 32],
 }
 
 /// 与 public-manage `InstitutionInfo` 字段序一致的最小解码结构。
@@ -926,7 +913,7 @@ struct RawLegalRepresentative {
     family_name: Vec<u8>,
     given_name: Vec<u8>,
     cid_number: Vec<u8>,
-    account: [u8; 32],
+    account_id: [u8; 32],
 }
 
 fn project_legal_representative(
@@ -936,7 +923,7 @@ fn project_legal_representative(
         family_name: value.family_name,
         given_name: value.given_name,
         cid_number: value.cid_number,
-        account: value.account,
+        account_id: value.account_id,
     })
 }
 
@@ -1076,7 +1063,7 @@ pub(crate) async fn for_each_chain_institution_account(
         f(OnChainInstitutionAccount {
             cid_number,
             account_name,
-            account: info.address,
+            account_id: info.address,
         });
         count += 1;
     }
@@ -1136,7 +1123,7 @@ pub(crate) async fn institution_accounts_lookup(
         out.push(OnChainInstitutionAccount {
             cid_number: cid,
             account_name,
-            account: info.address,
+            account_id: info.address,
         });
     }
     Ok(out)
@@ -1197,10 +1184,11 @@ pub(crate) async fn cid_registry_lookup(
 }
 
 pub(crate) async fn find_active_admin_memberships(
-    verified_pubkey: &str,
+    verified_account_id: &str,
 ) -> Result<Vec<ActiveAdminMembership>, String> {
-    let target = parse_sr25519_pubkey_bytes(verified_pubkey)
-        .ok_or_else(|| "verified_pubkey must be a 32-byte account hex".to_string())?;
+    let target = parse_account_id_bytes(verified_account_id).ok_or_else(|| {
+        "verified_account_id must be lowercase 0x plus 64 hexadecimal characters".to_string()
+    })?;
     let ws_url = super::chain_url::chain_ws_url()?;
     let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
         .await
@@ -1283,7 +1271,7 @@ pub(crate) async fn find_active_admin_memberships(
     Ok(memberships)
 }
 
-/// 读取本节点机构的链上管理员人员集合；授权方只使用 `admin_account`。
+/// 读取本节点机构的链上管理员人员集合；授权方只使用 `account_id`。
 ///
 /// 按候选 pallet 顺序探测 `<Pallet>::AdminAccounts[cid_number]`，命中首个集合即返回。
 ///
@@ -1336,13 +1324,13 @@ pub(crate) async fn fetch_active_admins_onchain(
                     province_code,
                 )
                 .await?;
-            admin_records.retain(|admin| province_admins.contains(&admin.admin_account));
+            admin_records.retain(|admin| province_admins.contains(&admin.account_id));
         }
         let admins = admin_records
             .into_iter()
             .map(|admin| {
                 Ok(OnChainAdmin {
-                    admin_account: format!("0x{}", hex::encode(admin.admin_account)),
+                    account_id: format!("0x{}", hex::encode(admin.account_id)),
                     cid_number: String::from_utf8(admin.cid_number)
                         .map_err(|_| "on-chain cid_number is not UTF-8".to_string())?,
                     family_name: String::from_utf8(admin.family_name)
@@ -1381,7 +1369,7 @@ mod tests {
 
         let bytes = admin_primitives::InstitutionAdmins {
             institution_code: *b"CREG",
-            admins: vec![admin_primitives::PublicAdmin {
+            admins: vec![admin_primitives::Admin {
                 account_id: [0x42u8; 32],
                 cid_number: "GZ000-CTZN6-198805200-2026"
                     .as_bytes()
@@ -1397,7 +1385,7 @@ mod tests {
             .expect("public institution admin account must decode unified layout");
         assert_eq!(decoded.institution_code, *b"CREG");
         assert_eq!(decoded.admins.len(), 1);
-        assert_eq!(decoded.admins[0].admin_account, [0x42; 32]);
+        assert_eq!(decoded.admins[0].account_id, [0x42; 32]);
 
         let old_layout = (*b"CREG", vec![[0x42u8; 32]]).encode();
         assert!(
@@ -1407,13 +1395,18 @@ mod tests {
     }
 
     #[test]
-    fn private_institution_admin_account_keeps_three_field_layout() {
+    fn private_institution_admin_account_decodes_unified_layout() {
         use codec::Encode;
 
         let bytes = admin_primitives::InstitutionAdmins {
             institution_code: *b"SFGY",
             admins: vec![admin_primitives::Admin {
                 account_id: [0x24u8; 32],
+                cid_number: "GZ000-CTZN6-198805200-2026"
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .expect("citizen cid fits"),
                 family_name: "程"
                     .as_bytes()
                     .to_vec()
@@ -1428,11 +1421,15 @@ mod tests {
         }
         .encode();
         let decoded =
-            super::decode_onchain_admin_account(&bytes, super::AdminPallet::PrivateAdmins)
-                .expect("private institution admin account must keep three-field layout");
+            super::decode_onchain_admin_account(&bytes, super::AdminPallet::PrivateAdmins).expect(
+                "private institution admin account must decode unified account/cid/name layout",
+            );
         assert_eq!(decoded.institution_code, *b"SFGY");
-        assert_eq!(decoded.admins[0].admin_account, [0x24; 32]);
-        assert!(decoded.admins[0].cid_number.is_empty());
+        assert_eq!(decoded.admins[0].account_id, [0x24; 32]);
+        assert_eq!(
+            decoded.admins[0].cid_number,
+            "GZ000-CTZN6-198805200-2026".as_bytes()
+        );
         assert_eq!(decoded.admins[0].family_name, "程".as_bytes());
         assert_eq!(decoded.admins[0].given_name, "伟".as_bytes());
     }

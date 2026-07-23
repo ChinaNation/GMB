@@ -52,7 +52,7 @@ class PersonalAdminListPage extends StatefulWidget {
     required this.multisigStatus,
     required this.admins,
     required this.adminWallets,
-    this.creatorPubkeyHex,
+    this.creatorAccountId,
   });
 
   /// 多签元信息(名称 / 多签账户 / cidNumber 等)。
@@ -61,14 +61,14 @@ class PersonalAdminListPage extends StatefulWidget {
   /// 多签当前状态(Pending / Active)。
   final MultisigStatus multisigStatus;
 
-  /// 完整管理员人员集合；权限和投票匹配只使用 `admin_account`。
+  /// 完整管理员人员集合；权限和投票匹配只使用 `account_id`。
   final List<AdminPerson> admins;
 
   /// 用户本地能签名的 admin 钱包子集(由调用方过滤好)。
   final List<WalletProfile> adminWallets;
 
-  /// 创建人公钥(小写 hex,无 0x 前缀)。req 3 未实现时只有创建者本机已知。
-  final String? creatorPubkeyHex;
+  /// 创建人规范 AccountId。req 3 未实现时只有创建者本机已知。
+  final String? creatorAccountId;
 
   @override
   State<PersonalAdminListPage> createState() => _PersonalAdminListPageState();
@@ -110,7 +110,7 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
       }
 
       final pid = await _lookup.findActiveCreate(
-        widget.institution.personalAccountHex,
+        widget.institution.personalAccountId,
       );
 
       // 仅查本钱包持有的 admin 投票状态(其他人投票状态对 UI 无意义,节省 RPC)。
@@ -119,7 +119,7 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
         // 本机可能导入多个管理员钱包，用批量 storage 查询避免逐钱包 RPC。
         votes.addAll(await _proposalService.fetchAdminVotesBatch(
           pid,
-          widget.adminWallets.map((wallet) => wallet.pubkeyHex),
+          widget.adminWallets.map((wallet) => wallet.accountId),
         ));
       }
 
@@ -138,26 +138,24 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
     }
   }
 
-  _ActivateButtonState _resolveButtonState(String adminPubkeyHex) {
+  _ActivateButtonState _resolveButtonState(String adminAccountId) {
     // 多签已激活 → 全部隐藏
     if (widget.multisigStatus != MultisigStatus.pending) {
       return _ActivateButtonState.hidden;
     }
     // 创建者 → 隐藏(创建即同意)
-    if (widget.creatorPubkeyHex != null &&
-        widget.creatorPubkeyHex!.toLowerCase() == adminPubkeyHex) {
+    if (widget.creatorAccountId != null &&
+        widget.creatorAccountId!.toLowerCase() == adminAccountId) {
       return _ActivateButtonState.hidden;
     }
     // 非本钱包持有的 admin → 隐藏(本机不能代签)
     final isLocalWallet = widget.adminWallets.any((w) {
-      var pk = w.pubkeyHex.toLowerCase();
-      if (pk.startsWith('0x')) pk = pk.substring(2);
-      return pk == adminPubkeyHex;
+      return w.accountId == adminAccountId;
     });
     if (!isLocalWallet) return _ActivateButtonState.hidden;
     // 找不到活跃创建提案(异常态)→ 不显示按钮
     if (_proposalId == null) return _ActivateButtonState.hidden;
-    final vote = _votes[adminPubkeyHex];
+    final vote = _votes[adminAccountId];
     if (vote == null) return _ActivateButtonState.ready;
     return vote
         ? _ActivateButtonState.alreadyApproved
@@ -301,11 +299,11 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
       child: Column(
         children: List.generate(widget.admins.length, (index) {
           final admin = widget.admins[index];
-          final pubkey = admin.admin_account.toLowerCase();
-          final ss58 = _pubkeyToSS58(pubkey);
-          final isCreator = widget.creatorPubkeyHex != null &&
-              widget.creatorPubkeyHex!.toLowerCase() == pubkey;
-          final state = _resolveButtonState(pubkey);
+          final accountId = admin.account_id;
+          final ss58 = _accountIdToSs58(accountId);
+          final isCreator = widget.creatorAccountId != null &&
+              widget.creatorAccountId!.toLowerCase() == accountId;
+          final state = _resolveButtonState(accountId);
           return Column(
             children: [
               if (index > 0) const Divider(height: 1),
@@ -365,14 +363,16 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
     }
   }
 
-  /// 把 32 字节 pubkey hex 编码为 GMB SS58 地址(prefix=2027),并做两端截断
+  /// 把规范 AccountId 编码为 GMB SS58 地址(prefix=2027),并做两端截断
   /// 以适配 monospace 11 字号的 ListTile title 行宽。
   ///
-  /// 编码失败(理论上不会发生,数据来自链上 storage)兜底返回原始 hex,避免崩溃。
-  String _pubkeyToSS58(String pubkeyHex) {
+  /// 编码失败(理论上不会发生,数据来自链上 storage)兜底返回原 AccountId。
+  String _accountIdToSs58(String accountId) {
     try {
-      final hex =
-          pubkeyHex.startsWith('0x') ? pubkeyHex.substring(2) : pubkeyHex;
+      if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+        throw const FormatException('account_id 格式错误');
+      }
+      final hex = accountId.substring(2);
       final bytes = Uint8List(hex.length ~/ 2);
       for (var i = 0; i < bytes.length; i++) {
         bytes[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
@@ -381,7 +381,7 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
       if (ss58.length <= 24) return ss58;
       return '${ss58.substring(0, 12)}…${ss58.substring(ss58.length - 8)}';
     } catch (_) {
-      return pubkeyHex;
+      return accountId;
     }
   }
 }

@@ -15,7 +15,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 class CreatorSubscribeButton extends StatefulWidget {
   const CreatorSubscribeButton({
     super.key,
-    required this.creatorAccount,
+    required this.creatorAccountId,
     this.enabled = true,
     CreatorApi? api,
     CreatorSubscribeService? service,
@@ -24,7 +24,7 @@ class CreatorSubscribeButton extends StatefulWidget {
         _service = service,
         _sessionProvider = sessionProvider;
 
-  final String creatorAccount;
+  final String creatorAccountId;
 
   /// false=置灰不可点（以他人视角看自己时，订阅自己无意义）。
   final bool enabled;
@@ -49,7 +49,7 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
   FinalizedSubscriptionSnapshot? _snapshot;
 
   /// 被查看创作者本人的平台会员 finalized 快照；仅其有效时才显示订阅按钮。
-  FinalizedSubscriptionSnapshot? _ownerPlatform;
+  FinalizedSubscriptionSnapshot? _creatorPlatform;
 
   @override
   void initState() {
@@ -68,27 +68,27 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
       final results = await Future.wait<Object?>([
         // Cloudflare 只补档位名称；不可用时仍按 finalized 链上档位订阅。
         _api
-            .fetchPlanOf(session, widget.creatorAccount)
+            .fetchPlanOf(session, widget.creatorAccountId)
             .catchError((_) => null),
-        _service.fetchCreatorPlans(widget.creatorAccount),
+        _service.fetchCreatorPlans(widget.creatorAccountId),
         _service.fetchFinalizedState(
-          subscriberAddress: session.ownerAccount,
-          creatorAddress: widget.creatorAccount,
+          subscriberAccountId: session.accountId,
+          creatorAccountId: widget.creatorAccountId,
         ),
         // 被查看创作者本人平台会员真态：读失败 → 整个 _load 落 catch → 按钮隐藏（fail-closed）。
-        _service.fetchPlatformSnapshot(widget.creatorAccount),
+        _service.fetchPlatformSnapshot(widget.creatorAccountId),
       ]);
       final displayPlan = results[0] as CreatorPlan?;
       final chainTiers = results[1] as List<ChainCreatorTier>;
       if (!mounted) return;
       setState(() {
         _plan = mergeCreatorPlanWithChain(
-          creatorAccount: widget.creatorAccount,
+          creatorAccountId: widget.creatorAccountId,
           displayPlan: displayPlan,
           chainTiers: chainTiers,
         );
         _snapshot = results[2] as FinalizedSubscriptionSnapshot;
-        _ownerPlatform = results[3] as FinalizedSubscriptionSnapshot;
+        _creatorPlatform = results[3] as FinalizedSubscriptionSnapshot;
         _loading = false;
       });
     } on Exception {
@@ -98,15 +98,15 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
 
   @override
   Widget build(BuildContext context) {
-    final ownerPlatformActive =
-        _ownerPlatform?.state?.isEffectiveAt(_ownerPlatform!.chainNowMs) ==
+    final creatorPlatformActive =
+        _creatorPlatform?.state?.isEffectiveAt(_creatorPlatform!.chainNowMs) ==
             true;
     // 双条件 fail-closed：有档 且 创作者本人平台会员有效，才显示订阅按钮。
     // 未开档 / 加载中 / 创作者平台会员过期或缺失 / 快照读失败 一律隐藏，绝不诱导无效订阅。
     if (_loading ||
         _plan == null ||
         _plan!.tiers.isEmpty ||
-        !ownerPlatformActive) {
+        !creatorPlatformActive) {
       return const SizedBox.shrink();
     }
     final actionable = widget.enabled && !_busy;
@@ -153,13 +153,13 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
     await _run(
       () => shouldChange
           ? _service.changePlan(
-              creatorAddress: widget.creatorAccount,
+              creatorAccountId: widget.creatorAccountId,
               tierId: selection.tierId,
               period: selection.period.key,
               priceFen: selection.priceFen,
             )
           : _service.subscribe(
-              creatorAddress: widget.creatorAccount,
+              creatorAccountId: widget.creatorAccountId,
               tierId: selection.tierId,
               period: selection.period.key,
               priceFen: selection.priceFen,
@@ -187,7 +187,8 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    await _run(() => _service.cancel(creatorAddress: widget.creatorAccount));
+    await _run(
+        () => _service.cancel(creatorAccountId: widget.creatorAccountId));
   }
 
   Future<void> _run(Future<void> Function() action) async {

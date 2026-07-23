@@ -11,12 +11,12 @@ use crate::core::db::Db;
 use crate::institution::admins::model::InstitutionAdmin;
 use crate::scope::{filter_by_scope, rules::VisibleScope};
 
-const SELECT_COLUMNS: &str = "cid_number, province_code, city_code, admin_account,
+const SELECT_COLUMNS: &str = "cid_number, province_code, city_code, account_id,
     family_name, given_name,
     admin_department, admin_job, admin_contact_phone, admin_contact_email,
     admin_photo_path, admin_photo_name, admin_photo_mime, admin_photo_size,
     admin_passkey_credential_id, admin_source_id, admin_status,
-    admin_updated_at, created_by, operation_log_id, created_at";
+    admin_updated_at, creator_account_id, operation_log_id, created_at";
 
 fn row_to_admin(row: &postgres::Row) -> InstitutionAdmin {
     let province_code: String = row.get(1);
@@ -29,7 +29,7 @@ fn row_to_admin(row: &postgres::Row) -> InstitutionAdmin {
         cid_number: row.get(0),
         province_code,
         city_code,
-        admin_account: row.get(3),
+        account_id: row.get(3),
         family_name: row.get(4),
         given_name: row.get(5),
         admin_department: row.get(6),
@@ -44,7 +44,7 @@ fn row_to_admin(row: &postgres::Row) -> InstitutionAdmin {
         admin_source_id: row.get(15),
         admin_status: row.get(16),
         admin_updated_at: row.get(17),
-        created_by: row.get(18),
+        creator_account_id: row.get(18),
         operation_log_id: row.get(19),
         created_at: row.get(20),
         province_name,
@@ -59,17 +59,17 @@ pub(crate) fn upsert_institution_admin(db: &Db, admin: &InstitutionAdmin) -> Res
         let photo_size = admin.admin_photo_size.and_then(|v| i64::try_from(v).ok());
         conn.execute(
             "INSERT INTO institution_admins (
-                cid_number, province_code, city_code, admin_account,
+                cid_number, province_code, city_code, account_id,
                 family_name, given_name,
                 admin_department, admin_job, admin_contact_phone, admin_contact_email,
                 admin_photo_path, admin_photo_name, admin_photo_mime, admin_photo_size,
                 admin_passkey_credential_id, admin_source_id, admin_status,
-                admin_updated_at, created_by, operation_log_id
+                admin_updated_at, creator_account_id, operation_log_id
              ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
                 $15, $16, $17, $18, $19, $20
              )
-             ON CONFLICT (province_code, cid_number, admin_account) DO UPDATE SET
+             ON CONFLICT (province_code, cid_number, account_id) DO UPDATE SET
                 city_code = EXCLUDED.city_code,
                 family_name = EXCLUDED.family_name,
                 given_name = EXCLUDED.given_name,
@@ -85,13 +85,13 @@ pub(crate) fn upsert_institution_admin(db: &Db, admin: &InstitutionAdmin) -> Res
                 admin_source_id = EXCLUDED.admin_source_id,
                 admin_status = EXCLUDED.admin_status,
                 admin_updated_at = EXCLUDED.admin_updated_at,
-                created_by = EXCLUDED.created_by,
+                creator_account_id = EXCLUDED.creator_account_id,
                 operation_log_id = EXCLUDED.operation_log_id",
             &[
                 &admin.cid_number,
                 &admin.province_code,
                 &admin.city_code,
-                &admin.admin_account,
+                &admin.account_id,
                 &admin.family_name,
                 &admin.given_name,
                 &admin.admin_department,
@@ -106,7 +106,7 @@ pub(crate) fn upsert_institution_admin(db: &Db, admin: &InstitutionAdmin) -> Res
                 &admin.admin_source_id,
                 &admin.admin_status,
                 &admin.admin_updated_at,
-                &admin.created_by,
+                &admin.creator_account_id,
                 &admin.operation_log_id,
             ],
         )
@@ -126,7 +126,7 @@ pub(crate) fn list_institution_admins_by_cid(
             "SELECT {SELECT_COLUMNS}
              FROM institution_admins
              WHERE cid_number = $1
-             ORDER BY admin_account ASC"
+             ORDER BY account_id ASC"
         );
         let rows = conn
             .query(sql.as_str(), &[&cid_number])
@@ -144,7 +144,7 @@ pub(crate) fn list_institution_admins_by_cid_conn(
         "SELECT {SELECT_COLUMNS}
          FROM institution_admins
          WHERE cid_number = $1
-         ORDER BY admin_account ASC"
+         ORDER BY account_id ASC"
     );
     let rows = conn
         .query(sql.as_str(), &[&cid_number.trim()])
@@ -152,23 +152,23 @@ pub(crate) fn list_institution_admins_by_cid_conn(
     Ok(rows.iter().map(row_to_admin).collect())
 }
 
-/// 按 (cid_number, admin_account) 取单条管理员链下资料。
+/// 按 (cid_number, account_id) 取单条管理员链下资料。
 pub(crate) fn get_institution_admin(
     db: &Db,
     cid_number: &str,
-    admin_account: &str,
+    account_id: &str,
 ) -> Result<Option<InstitutionAdmin>, String> {
     let cid_number = cid_number.trim().to_string();
-    let admin_account = admin_account.trim().to_string();
+    let account_id = account_id.trim().to_string();
     db.with_client(move |conn| {
         let sql = format!(
             "SELECT {SELECT_COLUMNS}
              FROM institution_admins
-             WHERE cid_number = $1 AND admin_account = $2
+             WHERE cid_number = $1 AND account_id = $2
              LIMIT 1"
         );
         let row = conn
-            .query_opt(sql.as_str(), &[&cid_number, &admin_account])
+            .query_opt(sql.as_str(), &[&cid_number, &account_id])
             .map_err(|e| format!("get institution admin failed: {e}"))?;
         Ok(row.as_ref().map(row_to_admin))
     })
@@ -179,17 +179,17 @@ pub(crate) fn delete_institution_admin(
     db: &Db,
     province_code: &str,
     cid_number: &str,
-    admin_account: &str,
+    account_id: &str,
 ) -> Result<bool, String> {
     let province_code = province_code.trim().to_string();
     let cid_number = cid_number.trim().to_string();
-    let admin_account = admin_account.trim().to_string();
+    let account_id = account_id.trim().to_string();
     db.with_client(move |conn| {
         let affected = conn
             .execute(
                 "DELETE FROM institution_admins
-                 WHERE province_code = $1 AND cid_number = $2 AND admin_account = $3",
-                &[&province_code, &cid_number, &admin_account],
+                 WHERE province_code = $1 AND cid_number = $2 AND account_id = $3",
+                &[&province_code, &cid_number, &account_id],
             )
             .map_err(|e| format!("delete institution admin failed: {e}"))?;
         Ok(affected > 0)

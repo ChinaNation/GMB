@@ -68,7 +68,7 @@ export function PlatformPricePanel({ auth }: { auth: AdminAuth }) {
       const submitted = await submitChainSign(
         auth,
         result.request_id,
-        signed.signer_pubkey,
+        signed.signer_public_key,
         signed.signature,
       );
       notice.success(`调价提案交易已提交：${submitted.tx_hash}`);

@@ -63,19 +63,37 @@ Uint8List deriveAccountId({
   return Hasher.blake2b256.hash(Uint8List.fromList(input));
 }
 
-/// account id → 小写 hex(64 字符,无 0x 前缀),与链上 storage key / 注册表口径一致。
-String hexFromAccountId(Uint8List id) =>
-    id.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+/// 把 32 字节 AccountId 编码为全仓统一文本格式。
+String accountIdText(Uint8List id) {
+  if (id.length != 32) {
+    throw ArgumentError('AccountId 必须为 32 字节');
+  }
+  return '0x${id.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+}
 
 /// account id → SS58(默认 prefix=2027),仅供展示。
 String ss58FromAccountId(Uint8List id, {int ss58Prefix = kGmbSs58Prefix}) =>
     Keyring().encodeAddress(id, ss58Prefix);
 
-/// hex(小写/大写、带或不带 0x,64 字符)→ SS58(默认 prefix=2027),仅供展示。
-/// 便于把余额接口/存储解出的账户 hex 直接转成展示地址,是 hex→SS58 的唯一便捷入口。
-String ss58FromHex(String hex, {int ss58Prefix = kGmbSs58Prefix}) {
-  final h =
-      hex.startsWith('0x') || hex.startsWith('0X') ? hex.substring(2) : hex;
+/// AccountId 文本规范形式（ADR-040）：小写 `0x` + 64 位十六进制。
+///
+/// 全 App 唯一的 account_id 格式判定入口。**只用于账户**：区块哈希、交易哈希、
+/// stateRoot、文件 sha256 虽然同为 32 字节 hex，语义不同，不得复用本校验器
+/// （异语义共用等于制造假单源）。
+final RegExp _accountIdPattern = RegExp(r'^0x[0-9a-f]{64}$');
+
+/// 判定 [value] 是否为规范 AccountId 文本。
+bool isAccountIdText(String value) => _accountIdPattern.hasMatch(value);
+
+/// 规范 AccountId 文本 → SS58（默认 prefix=2027），仅供展示。
+String ss58FromAccountIdText(
+  String accountId, {
+  int ss58Prefix = kGmbSs58Prefix,
+}) {
+  if (!isAccountIdText(accountId)) {
+    throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+  }
+  final h = accountId.substring(2);
   final bytes = Uint8List(h.length ~/ 2);
   for (var i = 0; i < bytes.length; i++) {
     bytes[i] = int.parse(h.substring(i * 2, i * 2 + 2), radix: 16);
@@ -176,16 +194,16 @@ Uint8List deriveInstitutionAccountIdByName(
 /// 个人多签账户派生(OP_PERSONAL),返回 SS58。归位自原
 /// `personal-manage/personal_account_derive.dart`,行为不变。
 String derivePersonalAccountSs58({
-  required Uint8List creatorPubkey,
+  required Uint8List creatorAccountId,
   required String accountName,
   int ss58Prefix = kGmbSs58Prefix,
 }) {
-  if (creatorPubkey.length != 32) {
-    throw ArgumentError('creator pubkey 必须为 32 字节');
+  if (creatorAccountId.length != 32) {
+    throw ArgumentError('creator account_id 必须为 32 字节');
   }
   final id = deriveAccountId(
     opTag: kOpPersonal,
-    payload: <int>[...creatorPubkey, ...utf8.encode(accountName)],
+    payload: <int>[...creatorAccountId, ...utf8.encode(accountName)],
     ss58Prefix: ss58Prefix,
   );
   return ss58FromAccountId(id, ss58Prefix: ss58Prefix);

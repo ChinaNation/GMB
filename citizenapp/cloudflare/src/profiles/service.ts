@@ -12,7 +12,7 @@ import {
   readJson,
   requireSession
 } from '../shared/http';
-import { assertOwnerAccount } from '../shared/ids';
+import { assertAccountId } from '../shared/ids';
 import { nowMs } from '../shared/time';
 import { fetchChainIdentityStateCached } from '../chain/identity';
 import { getMembership, subscriptionIsActive } from '../membership/service';
@@ -49,34 +49,34 @@ export async function getUserProfileRoute(
   env: Env,
   accountRaw: string
 ): Promise<Response> {
-  const ownerAccount = parseAccount(accountRaw);
+  const accountId = parseAccountId(accountRaw);
   const viewer = await requireSession(request, env);
-  const profile = await buildProfileResponse(env, ownerAccount, viewer.owner_account);
+  const profile = await buildProfileResponse(env, accountId, viewer.account_id);
   return jsonResponse({ ok: true, profile });
 }
 
 /// GET 与 PUT 共用同一份主页响应装配：profile 文档 + 计数 + 认证 + is_following。
 async function buildProfileResponse(
   env: Env,
-  ownerAccount: string,
-  viewerAccount: string | null
+  accountId: string,
+  viewerAccountId: string | null
 ): Promise<UserProfileResponse> {
   // 认证真源=链上身份（VotingIdentity/CandidateIdentity），不再依赖发帖投影。
   // 会员购买（membership）另取自 D1，公开下发以支撑徽章「勾」。
   const [doc, counts, identity, membership, following, notifying] =
     await Promise.all([
-      readProfileDoc(env, ownerAccount),
-      countUserStats(env, ownerAccount),
-      fetchChainIdentityStateCached(env, ownerAccount),
-      getMembership(env, ownerAccount),
-      isFollowing(env, viewerAccount, ownerAccount),
-      isNotifying(env, viewerAccount, ownerAccount)
+      readProfileDoc(env, accountId),
+      countUserStats(env, accountId),
+      fetchChainIdentityStateCached(env, accountId),
+      getMembership(env, accountId),
+      isFollowing(env, viewerAccountId, accountId),
+      isNotifying(env, viewerAccountId, accountId)
     ]);
 
-  const profile = doc ?? defaultProfileDoc(ownerAccount);
+  const profile = doc ?? defaultProfileDoc(accountId);
   const membershipLevel = (membership?.membership_level ?? null) as MembershipLevel | null;
   return {
-    owner_account: ownerAccount,
+    account_id: accountId,
     display_name: profile.display_name,
     bio: profile.bio,
     avatar_object_key: profile.avatar_object_key,
@@ -99,9 +99,9 @@ export async function getUserPostsRoute(
   env: Env,
   accountRaw: string
 ): Promise<Response> {
-  const ownerAccount = parseAccount(accountRaw);
+  const accountId = parseAccountId(accountRaw);
   const viewer = await requireSession(request, env);
-  const before = await getBrowseState(env, viewer.owner_account);
+  const before = await getBrowseState(env, viewer.account_id);
   const url = new URL(request.url);
   const category = parseCategory(url.searchParams.get('category'));
   const contentFormat = parseContentFormat(url.searchParams.get('content_format'));
@@ -113,7 +113,7 @@ export async function getUserPostsRoute(
 
   const posts = await listAuthorPosts(
     env,
-    ownerAccount,
+    accountId,
     category,
     contentFormat,
     limit,
@@ -121,11 +121,11 @@ export async function getUserPostsRoute(
   );
   const nextCursor =
     posts.length >= limit ? posts[posts.length - 1]?.created_at ?? null : null;
-  const browse = await addBrowseCount(env, viewer.owner_account, before, posts.length);
+  const browse = await addBrowseCount(env, viewer.account_id, before, posts.length);
 
   return jsonResponse({
     ok: true,
-    owner_account: ownerAccount,
+    account_id: accountId,
     category,
     content_format: contentFormat,
     posts,
@@ -140,7 +140,7 @@ export async function getUserFollowsRoute(
   env: Env,
   accountRaw: string
 ): Promise<Response> {
-  const ownerAccount = parseAccount(accountRaw);
+  const accountId = parseAccountId(accountRaw);
   await requireSession(request, env);
   const url = new URL(request.url);
   const type = url.searchParams.get('type') === 'followers' ? 'followers' : 'following';
@@ -150,24 +150,24 @@ export async function getUserFollowsRoute(
   );
   const cursor = parseCursor(url.searchParams.get('cursor'));
 
-  const accounts = await listFollows(env, ownerAccount, type, limit, cursor);
+  const accounts = await listFollows(env, accountId, type, limit, cursor);
   const nextCursor =
     accounts.length >= limit ? accounts[accounts.length - 1]?.created_at ?? null : null;
 
   return jsonResponse({ ok: true, type, accounts, next_cursor: nextCursor });
 }
 
-/// PUT /v1/square/profile —— 仅本人可写；owner 从 session 派生。
+/// PUT /v1/square/profile —— 仅本人可写；account_id 从 session 派生。
 export async function putProfileRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   const body = await readJson<ProfileUpdateRequest>(request);
-  const existing = (await readProfileDoc(env, session.owner_account)) ??
-    defaultProfileDoc(session.owner_account);
+  const existing = (await readProfileDoc(env, session.account_id)) ??
+    defaultProfileDoc(session.account_id);
 
-  const assetPrefix = profileAssetPrefix(session.owner_account);
+  const assetPrefix = profileAssetPrefix(session.account_id);
   const next: CitizenProfileDoc = {
     schema: 'citizenapp.square.profile.v1',
-    owner_account: session.owner_account,
+    account_id: session.account_id,
     display_name: normalizeText(body.display_name, existing.display_name, DISPLAY_NAME_MAX),
     bio: normalizeText(body.bio, existing.bio, BIO_MAX),
     avatar_object_key: normalizeAssetKey(
@@ -187,15 +187,15 @@ export async function putProfileRoute(request: Request, env: Env): Promise<Respo
 
   await writeProfileDoc(env, next);
   // 返回与 GET 一致的完整主页响应（本人视角 is_following=false），让客户端单一解析。
-  const profile = await buildProfileResponse(env, session.owner_account, session.owner_account);
+  const profile = await buildProfileResponse(env, session.account_id, session.account_id);
   return jsonResponse({ ok: true, profile });
 }
 
-function parseAccount(accountRaw: string): string {
+function parseAccountId(accountRaw: string): string {
   try {
-    return assertOwnerAccount(decodeURIComponent(accountRaw));
+    return assertAccountId(decodeURIComponent(accountRaw));
   } catch {
-    throw new HttpError(400, 'invalid_owner_account', '钱包账户格式不合法');
+    throw new HttpError(400, 'invalid_account_id', '钱包账户格式不合法');
   }
 }
 

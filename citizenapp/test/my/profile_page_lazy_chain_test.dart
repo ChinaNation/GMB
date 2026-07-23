@@ -42,9 +42,9 @@ void main() {
       walletName: '测试钱包',
       walletIcon: '',
       balance: 0,
-      address: 'wallet_profile_test',
-      pubkeyHex:
-          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      ss58Address: 'wallet_profile_test',
+      accountId:
+          '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       alg: 'sr25519',
       ss58: 2027,
       createdAtMillis: 1,
@@ -52,7 +52,7 @@ void main() {
       signMode: 'local',
     );
     await snapshotStore.write(
-      walletAccount: wallet.address,
+      accountId: wallet.accountId,
       identityLevel: 'candidate',
     );
 

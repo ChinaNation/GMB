@@ -11,7 +11,8 @@ import 'package:citizenapp/8964/services/square_api_client.dart';
 // 缺失即抛「设备请求签名器缺失」。测试用固定假签名占位；MockClient 不校验签名头。
 SquareSession _session() => SquareSession(
       sessionToken: 'sqs_test',
-      ownerAccount: 'owner',
+      accountId:
+          '0x8888888888888888888888888888888888888888888888888888888888888888',
       expiresAt: 1800000000000,
       signRequest: (_) async => 'test-device-signature',
     );
@@ -30,10 +31,10 @@ void main() {
             "posts": [
               {
                 "post_id": "sqp_001",
-                "owner_account": "owner_001",
+                "account_id": "0x0101010101010101010101010101010101010101010101010101010101010101",
                 "cid_number": "CN001-CTZN-000000001-2026",
                 "display_name": "林正华",
-                "avatar_object_key": "profile/owner_001/avatar",
+                "avatar_object_key": "profile/1111111111111111111111111111111111111111111111111111111111111111/avatar",
                 "post_category": "campaign",
                 "text": "竞选动态",
                 "content_hash": "0x1111",
@@ -70,7 +71,8 @@ void main() {
     expect(posts.first.author.cidNumber, 'CN001-CTZN-000000001-2026');
     // 真数据：作者展示名与头像键随 feed 回传并解析。
     expect(posts.first.author.displayName, '林正华');
-    expect(posts.first.author.avatarObjectKey, 'profile/owner_001/avatar');
+    expect(posts.first.author.avatarObjectKey,
+        'profile/1111111111111111111111111111111111111111111111111111111111111111/avatar');
     expect(posts.first.chainBlock, 88);
     expect(posts.first.mediaItems.single.mediaKind, SquareMediaKind.image);
     expect(posts.first.mediaItems.single.url,
@@ -114,7 +116,7 @@ void main() {
             'storage_receipt_id': 'sqr_test',
             'expires_at': 1800000000000,
             'estimated_bytes': 1024,
-            'manifest_object_key': 'square/owner/posts/sqp/manifest.json',
+            'manifest_object_key': 'square/accountId/posts/sqp/manifest.json',
             'manifest_upload_url': 'https://r2.test/manifest',
             'media_items': [
               {

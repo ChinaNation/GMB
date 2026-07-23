@@ -47,10 +47,13 @@ pub trait CidAccountQuery<AccountId> {
     ) -> bool;
     /// 清算行资格白名单判定。
     ///
-    /// 身份注册局在 eligible-search / registration-info 入口负责判断"私法人股份公司
-    /// 或其下属非法人"资格;链上不再保存机构类型和所属法人元数据。
+    /// 资格唯二:`SFGF` 私法人股份公司本身,以及**父级机构码为 `SFGF` 的 `UNIN`
+    /// 非法人组织**(股份公司的非法人分支机构)。其余机构一律无资格。
     ///
-    /// 实现层只确认地址属于已登记的 CID 机构账户,保持 bank_check 解耦。
+    /// 链上不保存机构类型和所属法人元数据,故本方法只确认地址属于已登记的 CID
+    /// 机构账户;**真正的硬约束是「清算账户已派生」**(见 `ensure_can_be_bound` 第 7 条)
+    /// —— 清算账户只对上述唯二资格机构派生,单源
+    /// `primitives::institution_constraints::required_protocol_account_kinds`。
     fn is_clearing_bank_eligible(addr: &AccountId) -> bool;
     /// 节点是否已声明为清算行节点。
     ///
@@ -107,7 +110,9 @@ fn subject_property_is_private_institution(cid_bytes: &[u8]) -> bool {
 ///    `CidAccountQuery::is_clearing_bank_eligible` 只确认该 CID 机构账户已 Active
 /// 6. **节点已声明**:`cid_number ∈ ClearingBankNodes`,确保该机构已加入清算网络
 ///    (用户不能绑定到"机构合法但未声明清算行节点"的机构)
-/// 7. **清算账户已派生**(S2-②):L2 资金落点必须存在,把清算行资格在资金层收紧到 SFGF
+/// 7. **清算账户已派生**(S2-②):L2 资金落点必须存在。这是资格的**硬约束点** ——
+///    清算账户只对 `SFGF` 股份公司、以及父级为 `SFGF` 的 `UNIN` 非法人分支机构派生
+///    (单源 `primitives::institution_constraints::required_protocol_account_kinds`)
 pub fn ensure_can_be_bound<T: Config>(cid_number: &[u8]) -> Result<(), Error<T>> {
     // 1. K1 主体属性:私法人/非法人(S/F),直接对 CID 字节判定。
     ensure!(
@@ -124,7 +129,8 @@ pub fn ensure_can_be_bound<T: Config>(cid_number: &[u8]) -> Result<(), Error<T>>
         Error::<T>::ClearingBankAccountNotFound
     );
 
-    // 3. 资格白名单(S-JOINT_STOCK / F-parent.S.JOINT_STOCK)。
+    // 3. 资格白名单(SFGF 股份公司 / 父级为 SFGF 的 UNIN 非法人分支);
+    //    链上只确认机构账户已登记,资格的硬约束在第 5 步「清算账户已派生」。
     ensure!(
         T::CidAccountQuery::is_clearing_bank_eligible(&main),
         Error::<T>::NotEligibleForClearingBank
@@ -136,8 +142,9 @@ pub fn ensure_can_be_bound<T: Config>(cid_number: &[u8]) -> Result<(), Error<T>>
         Error::<T>::ClearingBankNotRegisteredAsNode
     );
 
-    // 5. (S2-②)必须已派生清算账户 —— L2 资金落点。等价于把清算行资格在资金层
-    //    收紧到 SFGF,避免用户绑定成功却在首次充值时才失败。
+    // 5. (S2-②)必须已派生清算账户 —— L2 资金落点。这是资格在资金层的硬约束:
+    //    清算账户只对 SFGF 股份公司、以及父级为 SFGF 的 UNIN 非法人分支机构派生,
+    //    在此拦下可避免用户绑定成功却在首次充值时才失败。
     let _clearing = clearing_account_of::<T>(cid_number)?;
 
     Ok(())

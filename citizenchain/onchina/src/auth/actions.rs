@@ -17,7 +17,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::auth::action_sign::{
-    hash_json, payload_hash_for_text, signed_payload_text, verify_citizen_wallet_signature,
+    hash_json, payload_hash_for_text, signed_payload_text, verify_account_signature,
     AdminSignedPayload, ADMIN_ACTION_TTL_SECONDS,
 };
 use crate::auth::city_registry_admins::{
@@ -32,7 +32,7 @@ use crate::auth::operation_auth::{
 use crate::auth::repo;
 use crate::auth::security_model::{AdminActionChallenge, AdminSecurityGrant};
 use crate::core::qr::build_sign_request;
-use crate::crypto::pubkey::{normalize_admin_account, same_admin_account};
+use crate::crypto::pubkey::{normalize_account_id, same_account_id};
 use crate::*;
 
 const ADMIN_SECURITY_GRANT_TTL_SECONDS: i64 = 120;
@@ -49,7 +49,7 @@ pub(crate) struct CommitAdminActionInput {
     action_id: String,
     /// 冷钱包扫码签名(PasskeyColdSign 档必填;Session 动作不走 commit)。
     #[serde(default)]
-    signer_pubkey: Option<String>,
+    signer_public_key: Option<String>,
     #[serde(default)]
     signature: Option<String>,
     #[serde(default)]
@@ -132,10 +132,10 @@ pub(crate) fn actor_cid_number_for_context(
 }
 
 /// 校验账号 ∈ 本机构链上 Active 管理员集合(冷签 step-up 与替换目标校验共用)。
-async fn ensure_pubkey_on_chain_admin(
+async fn ensure_account_id_on_chain_admin(
     db: &Db,
     actor_cid_number: &str,
-    account_pubkey: &str,
+    account_id: &str,
     message: &'static str,
 ) -> Result<(), axum::response::Response> {
     use crate::core::chain_runtime;
@@ -181,11 +181,11 @@ async fn ensure_pubkey_on_chain_admin(
             api_error(StatusCode::BAD_GATEWAY, 5002, "chain unreachable")
         })?
         .ok_or_else(|| api_error(StatusCode::FORBIDDEN, 2002, "not an on-chain admin"))?;
-    let normalized = chain_runtime::normalize_account_pubkey(account_pubkey)
+    let normalized = chain_runtime::normalize_account_id(account_id)
         .ok_or_else(|| api_error(StatusCode::FORBIDDEN, 2002, message))?;
     if !onchain
         .iter()
-        .any(|admin| same_admin_account(&admin.admin_account, normalized.as_str()))
+        .any(|admin| same_account_id(&admin.account_id, normalized.as_str()))
     {
         return Err(api_error(StatusCode::FORBIDDEN, 2002, message));
     }
@@ -196,9 +196,15 @@ async fn ensure_pubkey_on_chain_admin(
 async fn ensure_signer_on_chain_admin(
     db: &Db,
     actor_cid_number: &str,
-    signer_pubkey: &str,
+    signer_public_key: &str,
 ) -> Result<(), axum::response::Response> {
-    ensure_pubkey_on_chain_admin(db, actor_cid_number, signer_pubkey, "not an on-chain admin").await
+    ensure_account_id_on_chain_admin(
+        db,
+        actor_cid_number,
+        signer_public_key,
+        "not an on-chain admin",
+    )
+    .await
 }
 
 pub(crate) async fn prepare_admin_action(
@@ -245,7 +251,7 @@ pub(crate) async fn prepare_admin_action(
                 qr_proto: crate::core::qr::QR_V1,
                 action_id: action_id.as_str(),
                 action_type: input.action_type.as_str(),
-                actor_pubkey: ctx.admin_account.as_str(),
+                actor_public_key: ctx.account_id.as_str(),
                 actor_cid_number: actor_cid_number.as_str(),
                 actor_province_name: province.as_str(),
                 target: preview.target.as_str(),
@@ -259,7 +265,7 @@ pub(crate) async fn prepare_admin_action(
                 action_id.as_str(),
                 now.timestamp(),
                 expires_at.timestamp(),
-                ctx.admin_account.as_str(),
+                ctx.account_id.as_str(),
                 payload_text.as_str(),
                 crate::core::qr::action_onchina_admin(),
             ) {
@@ -273,7 +279,7 @@ pub(crate) async fn prepare_admin_action(
     let challenge = AdminActionChallenge {
         action_id: action_id.clone(),
         action_type: input.action_type.as_str().to_string(),
-        actor_account: ctx.admin_account.clone(),
+        actor_account_id: ctx.account_id.clone(),
         actor_institution_code: ctx.institution_code.clone(),
         actor_cid_number: actor_cid_number.clone(),
         actor_province_name: province,
@@ -321,10 +327,10 @@ pub(crate) async fn commit_admin_action(
     let now = Utc::now();
     let challenge = match state.db.with_client({
         let action_id = input.action_id.clone();
-        let actor_account = ctx.admin_account.clone();
+        let actor_account_id = ctx.account_id.clone();
         move |conn| {
             repo::cleanup_security_state_conn(conn, now)?;
-            repo::get_action_challenge_conn(conn, action_id.as_str(), actor_account.as_str())
+            repo::get_action_challenge_conn(conn, action_id.as_str(), actor_account_id.as_str())
         }
     }) {
         Ok(Some(v)) => v,
@@ -341,7 +347,7 @@ pub(crate) async fn commit_admin_action(
             "admin action expired",
         );
     }
-    if !same_admin_account(challenge.actor_account.as_str(), ctx.admin_account.as_str()) {
+    if !same_account_id(challenge.actor_account_id.as_str(), ctx.account_id.as_str()) {
         return api_error(StatusCode::FORBIDDEN, 1003, "admin action owner mismatch");
     }
     let actor_cid_number = match actor_cid_number_for_context(&state.db, &ctx) {
@@ -379,9 +385,15 @@ pub(crate) async fn commit_admin_action(
     }
     // ── 冷签 step-up:冷钱包扫码签名 + signer ∈ 本机构链上 Active 集合。
     //    所有可 commit 动作(Session 已在上方拒绝)一律走此校验。
-    let signer_pubkey = match input.signer_pubkey.as_deref() {
+    let signer_public_key = match input.signer_public_key.as_deref() {
         Some(v) => v,
-        None => return api_error(StatusCode::BAD_REQUEST, 1001, "signer_pubkey is required"),
+        None => {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "signer_public_key is required",
+            )
+        }
     };
     let signature = match input.signature.as_deref() {
         Some(v) => v,
@@ -391,9 +403,9 @@ pub(crate) async fn commit_admin_action(
         Some(v) => v,
         None => return api_error(StatusCode::BAD_REQUEST, 1001, "payload_hash is required"),
     };
-    if let Err(resp) = verify_citizen_wallet_signature(
-        ctx.admin_account.as_str(),
-        signer_pubkey,
+    if let Err(resp) = verify_account_signature(
+        ctx.account_id.as_str(),
+        signer_public_key,
         signature,
         payload_hash,
         challenge.payload_hash.as_str(),
@@ -402,7 +414,7 @@ pub(crate) async fn commit_admin_action(
         return resp;
     }
     if let Err(resp) =
-        ensure_signer_on_chain_admin(&state.db, &actor_cid_number, signer_pubkey).await
+        ensure_signer_on_chain_admin(&state.db, &actor_cid_number, signer_public_key).await
     {
         return resp;
     }
@@ -414,7 +426,7 @@ pub(crate) async fn commit_admin_action(
             let mut current = repo::get_action_challenge_conn(
                 conn,
                 challenge.action_id.as_str(),
-                ctx.admin_account.as_str(),
+                ctx.account_id.as_str(),
             )?
             .ok_or_else(|| "http:not_found:admin action not found".to_string())?;
             if current.consumed || now > current.expires_at {
@@ -432,7 +444,7 @@ pub(crate) async fn commit_admin_action(
                 let grant = AdminSecurityGrant {
                     grant_id: grant_id.clone(),
                     action_type: action_type.as_str().to_string(),
-                    actor_account: ctx.admin_account.clone(),
+                    actor_account_id: ctx.account_id.clone(),
                     actor_institution_code: ctx.institution_code.clone(),
                     actor_cid_number: current.actor_cid_number.clone(),
                     actor_province_name: ctx.scope_province_name.clone().unwrap_or_default(),
@@ -480,7 +492,7 @@ pub(crate) fn require_admin_security_grant(
 ) -> Result<(), axum::response::Response> {
     // 本地写(Passkey):会话 + passkey 断言 + 角色校验;不再有只会话的写动作。
     if action_type.auth_type() == AdminOperationAuth::Passkey {
-        crate::auth::passkey::require_passkey_assertion(state, headers, &ctx.admin_account)?;
+        crate::auth::passkey::require_passkey_assertion(state, headers, &ctx.account_id)?;
         return ensure_action_role_allowed(ctx, &action_type);
     }
     consume_admin_security_grant(state, headers, ctx, action_type, target, request_payload)
@@ -496,7 +508,7 @@ pub(crate) fn consume_admin_security_grant(
     request_payload: Option<&serde_json::Value>,
 ) -> Result<AdminSecurityGrant, axum::response::Response> {
     // PasskeyColdSign 档:先消费 passkey 断言(fail-closed,绝不降档),再消费冷签 grant。
-    crate::auth::passkey::require_passkey_assertion(state, headers, &ctx.admin_account)?;
+    crate::auth::passkey::require_passkey_assertion(state, headers, &ctx.account_id)?;
     if action_type.auth_type() == AdminOperationAuth::Passkey {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
@@ -519,7 +531,7 @@ pub(crate) fn consume_admin_security_grant(
     let result = state.db.with_client(move |conn| {
         repo::cleanup_security_state_conn(conn, now)?;
         let Some(mut grant) =
-            repo::get_security_grant_conn(conn, grant_id.as_str(), ctx.admin_account.as_str())?
+            repo::get_security_grant_conn(conn, grant_id.as_str(), ctx.account_id.as_str())?
         else {
             return Err("http:forbidden:security grant not found".to_string());
         };
@@ -532,7 +544,7 @@ pub(crate) fn consume_admin_security_grant(
         if grant.auth_type != action_type.auth_type() {
             return Err("http:forbidden:security grant auth type mismatch".to_string());
         }
-        if !same_admin_account(grant.actor_account.as_str(), ctx.admin_account.as_str())
+        if !same_account_id(grant.actor_account_id.as_str(), ctx.account_id.as_str())
             || grant.actor_institution_code != ctx.institution_code
             || grant.actor_cid_number != actor_cid_number
         {
@@ -572,21 +584,21 @@ fn preview_action_conn(
         AdminActionType::CreateCityRegistry => {
             let input: CreateCityRegistryAdminInput = serde_json::from_value(payload.clone())
                 .map_err(|_| "http:bad_request:invalid create payload".to_string())?;
-            let (admin_account, family_name, given_name, city, created_by) =
+            let (account_id, family_name, given_name, city, creator_account_id) =
                 validate_create_city_registry_conn(conn, ctx, &input)?;
             let after = json!({
                 "institution_code": "CREG",
-                "admin_account": admin_account,
+                "account_id": account_id,
                 "family_name": family_name,
                 "given_name": given_name,
                 "city_name": city,
-                "created_by": created_by,
+                "creator_account_id": creator_account_id,
             });
             let after_hash = hash_json(&after);
             Ok(ActionPreview {
                 before_hash: "none".to_string(),
                 after_hash: after_hash.clone(),
-                target: admin_account.clone(),
+                target: account_id.clone(),
                 auth_type: action_type.auth_type(),
             })
         }
@@ -595,13 +607,14 @@ fn preview_action_conn(
                 .map_err(|_| "http:bad_request:invalid delete payload".to_string())?;
             let city_registry = require_manageable_city_registry_conn(conn, ctx, input.id)?;
             let before = city_registry_row_from_user_conn(conn, &city_registry)?;
-            let after = json!({ "deleted": true, "id": input.id, "admin_account": city_registry.admin_account });
+            let after =
+                json!({ "deleted": true, "id": input.id, "account_id": city_registry.account_id });
             let before_hash = hash_serialized(&before);
             let after_hash = hash_json(&after);
             Ok(ActionPreview {
                 before_hash,
                 after_hash,
-                target: city_registry.admin_account,
+                target: city_registry.account_id,
                 auth_type: action_type.auth_type(),
             })
         }
@@ -681,24 +694,24 @@ fn precheck_institution_create_scope(
             "http:bad_request:institution admins must contain at least two accounts".to_string(),
         );
     }
-    let mut normalized_accounts: Vec<String> = Vec::with_capacity(admins.len());
+    let mut normalized_account_ids: Vec<String> = Vec::with_capacity(admins.len());
     for item in admins {
         let raw = item
-            .get("admin_account")
+            .get("account_id")
             .and_then(|v| v.as_str())
             .map(str::trim)
             .filter(|v| !v.is_empty())
-            .ok_or_else(|| "http:bad_request:admin_account is required".to_string())?;
-        let Some(normalized) = normalize_admin_account(raw) else {
-            return Err("http:bad_request:admin_account format invalid".to_string());
+            .ok_or_else(|| "http:bad_request:account_id is required".to_string())?;
+        let Some(normalized) = normalize_account_id(raw) else {
+            return Err("http:bad_request:account_id format invalid".to_string());
         };
-        if normalized_accounts
+        if normalized_account_ids
             .iter()
-            .any(|account| account.eq_ignore_ascii_case(normalized.as_str()))
+            .any(|account| same_account_id(account, normalized.as_str()))
         {
-            return Err("http:bad_request:duplicate admin_account".to_string());
+            return Err("http:bad_request:duplicate account_id".to_string());
         }
-        normalized_accounts.push(normalized);
+        normalized_account_ids.push(normalized);
     }
     Ok(())
 }
@@ -746,18 +759,18 @@ fn validate_create_city_registry_conn(
     ctx: &AdminAuthContext,
     input: &CreateCityRegistryAdminInput,
 ) -> Result<(String, String, String, String, String), String> {
-    let Some(admin_account) = normalize_admin_account(input.admin_account.as_str()) else {
-        return Err("http:bad_request:admin_account format invalid".to_string());
+    let Some(account_id) = normalize_account_id(input.account_id.as_str()) else {
+        return Err("http:bad_request:account_id format invalid".to_string());
     };
     let family_name = validate_person_name(input.family_name.as_str(), "family_name")?;
     let given_name = validate_person_name(input.given_name.as_str(), "given_name")?;
-    let created_by = match input.created_by.as_deref().map(str::trim) {
-        None | Some("") => ctx.admin_account.clone(),
+    let creator_account_id = match input.creator_account_id.as_deref().map(str::trim) {
+        None | Some("") => ctx.account_id.clone(),
         Some(raw) => {
-            let Some(normalized) = normalize_admin_account(raw) else {
-                return Err("http:bad_request:created_by format invalid".to_string());
+            let Some(normalized) = normalize_account_id(raw) else {
+                return Err("http:bad_request:creator_account_id format invalid".to_string());
             };
-            if !same_admin_account(normalized.as_str(), ctx.admin_account.as_str()) {
+            if !same_account_id(normalized.as_str(), ctx.account_id.as_str()) {
                 return Err(
                     "http:forbidden:FederalRegistry can only create city registry admins under itself"
                         .to_string(),
@@ -766,11 +779,8 @@ fn validate_create_city_registry_conn(
             normalized
         }
     };
-    if let Some(existing) = repo::resolve_admin_account_key_conn(conn, admin_account.as_str())? {
-        let institution_code = repo::get_admin_by_account_conn(conn, existing.as_str())?
-            .map(|v| v.institution_code)
-            .unwrap_or_else(|| "CREG".to_string());
-        return Err(duplicate_admin_account_error(&institution_code));
+    if let Some(existing) = repo::get_admin_by_account_id_conn(conn, account_id.as_str())? {
+        return Err(duplicate_admin_account_error(&existing.institution_code));
     }
     let province_name = ctx
         .scope_province_name
@@ -783,7 +793,13 @@ fn validate_create_city_registry_conn(
     {
         return Err("http:conflict:city admin city limit reached".to_string());
     }
-    Ok((admin_account, family_name, given_name, city, created_by))
+    Ok((
+        account_id,
+        family_name,
+        given_name,
+        city,
+        creator_account_id,
+    ))
 }
 
 fn validate_person_name(name: &str, field: &str) -> Result<String, String> {
@@ -899,17 +915,17 @@ fn apply_create_city_registry_conn(
     ctx: &AdminAuthContext,
     input: &CreateCityRegistryAdminInput,
 ) -> Result<serde_json::Value, String> {
-    let (admin_account, family_name, given_name, city, created_by) =
+    let (account_id, family_name, given_name, city, creator_account_id) =
         validate_create_city_registry_conn(conn, ctx, input)?;
     let now = Utc::now();
     let row = AdminUser {
         id: repo::next_admin_id_conn(conn)?,
-        admin_account: admin_account.clone(),
+        account_id: account_id.clone(),
         family_name,
         given_name,
         institution_code: "CREG".to_string(),
         built_in: false,
-        created_by,
+        creator_account_id,
         created_at: now,
         updated_at: Some(now),
         city_name: city,
@@ -925,14 +941,11 @@ fn apply_delete_city_registry_conn(
     input: &CityRegistryIdPayload,
 ) -> Result<serde_json::Value, String> {
     let city_registry = require_manageable_city_registry_conn(conn, ctx, input.id)?;
-    let admin_account = city_registry.admin_account.clone();
-    repo::delete_admin_runtime_state_conn(conn, admin_account.as_str())?;
-    conn.execute(
-        "DELETE FROM admins WHERE lower(admin_account) = lower($1)",
-        &[&admin_account],
-    )
-    .map_err(|e| format!("delete city admin failed: {e}"))?;
-    Ok(json!({ "deleted": true, "admin_account": admin_account }))
+    let account_id = city_registry.account_id.clone();
+    repo::delete_admin_runtime_state_conn(conn, account_id.as_str())?;
+    conn.execute("DELETE FROM admins WHERE account_id = $1", &[&account_id])
+        .map_err(|e| format!("delete city admin failed: {e}"))?;
+    Ok(json!({ "deleted": true, "account_id": account_id }))
 }
 
 fn hash_serialized<T: Serialize>(value: &T) -> String {
@@ -951,9 +964,9 @@ fn normalize_security_target(target: &str) -> String {
 
 fn duplicate_admin_account_error(institution_code: &str) -> String {
     if crate::core::chain_runtime::is_tier1_registry(institution_code) {
-        "http:conflict:admin admin_account already exists as federal admin"
+        "http:conflict:admin account_id already exists as federal admin"
     } else {
-        "http:conflict:admin admin_account already exists as city admin"
+        "http:conflict:admin account_id already exists as city admin"
     }
     .to_string()
 }

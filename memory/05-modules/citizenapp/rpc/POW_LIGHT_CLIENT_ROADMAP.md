@@ -62,12 +62,12 @@
 方案：在 Dart 层构建所有钱包的 System.Account storage key，用 `fetchStorageBatch()`(平名即 finalized) 一次查完。
 
 实现路径：
-- `chain_rpc.dart` 新增 `fetchFinalizedBalances(List<String> pubkeyHexList)`：
+- `chain_rpc.dart` 新增 `fetchFinalizedBalances(List<String> accountIds)`：
   1. 构建 storage key：常量 prefix `26aa394eea5630e07c48ae0c9558cef7b99d880ec681799c0cf30e8886371da9` + `blake2b_128(accountId) + accountId`
   2. 调用 `fetchStorageBatch(allKeys)`(平名即 finalized) — 一次 finalized storage proof 请求
   3. 从返回的 SCALE 字节 offset 16 读 u128 little-endian 解码余额，除以 100 得 yuan
   - blake2b_128 用 polkadart 已有的 `Hasher.blake2b128`
-- `wallet_page.dart` 的 `_refreshBalancesFromChain()` 改为收集所有 pubkeyHex 后一次调用 `fetchFinalizedBalances()`
+- `wallet_page.dart` 的 `_refreshBalancesFromChain()` 改为收集所有 accountId 后一次调用 `fetchFinalizedBalances()`
 - Rust / Dart FFI 已补 finalized storage 与 finalized System.Account 导出
 
 效果：N 次网络往返变 1 次。

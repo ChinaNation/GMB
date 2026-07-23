@@ -6,12 +6,12 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/my/myid/voting_identity_payload.dart';
 
 /// 按 onchina `build_voting_identity_payload` 的字节布局构造夹具:
-/// compact(len)+cid || pubkey(32) || age(1) || valid_from(u32le) ||
+/// compact(len)+cid || publicKey(32) || age(1) || valid_from(u32le) ||
 /// valid_until(u32le) || status(1) || compact+province || compact+city ||
 /// compact+town。长度均 < 64,compact 恒为单字节 len<<2。
 Uint8List buildPayload({
   String cidNumber = 'BJ110198512345678',
-  int? pubkeyByte,
+  int? publicKeyByte,
   int age = 22,
   int validFrom = 20260101,
   int validUntil = 20360101,
@@ -37,7 +37,7 @@ Uint8List buildPayload({
   }
 
   pushVec(cidNumber);
-  out.addAll(List.filled(32, pubkeyByte ?? 0xaa));
+  out.addAll(List.filled(32, publicKeyByte ?? 0xaa));
   out.add(age);
   pushU32Le(validFrom);
   pushU32Le(validUntil);
@@ -81,9 +81,9 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.identityLevel, CitizenIdentityConsentLevel.voting);
       expect(decoded.cidNumber, 'BJ110198512345678');
-      expect(decoded.walletPubkeyHex, '0x${'aa' * 32}');
+      expect(decoded.accountId, '0x${'aa' * 32}');
       expect(
-        decoded.walletAddress,
+        decoded.ss58Address,
         Keyring().encodeAddress(List.filled(32, 0xaa), 2027),
       );
       expect(decoded.ageYears, 22);

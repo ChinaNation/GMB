@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::auth::login::{require_admin_any, AdminAuthContext};
 use crate::auth::repo;
 use crate::core::chain_runtime::{self, PlatformMembershipSnapshot};
-use crate::crypto::pubkey::same_admin_account;
+use crate::crypto::pubkey::same_account_id;
 use crate::*;
 
 use super::chain_call::{
@@ -98,7 +98,7 @@ pub(crate) async fn recheck_platform_admin(
         .ok_or_else(|| api_error(StatusCode::FORBIDDEN, 2002, "institution admins missing"))?;
     if !admins
         .iter()
-        .any(|admin| same_admin_account(&admin.admin_account, ctx.admin_account.as_str()))
+        .any(|admin| same_account_id(&admin.account_id, ctx.account_id.as_str()))
     {
         return Err(api_error(
             StatusCode::FORBIDDEN,
@@ -181,7 +181,7 @@ pub(crate) async fn propose_platform_price(
         Err(message) => return api_error(StatusCode::BAD_REQUEST, 1001, message.as_str()),
     };
     let prepared =
-        match crate::core::chain_submit::prepare_signing(&call, ctx.admin_account.as_str()).await {
+        match crate::core::chain_submit::prepare_signing(&call, ctx.account_id.as_str()).await {
             Ok(value) => value,
             Err(err) => {
                 tracing::error!(error = %err, "prepare platform price signing failed");
@@ -199,7 +199,7 @@ pub(crate) async fn propose_platform_price(
         request_id.as_str(),
         now.timestamp(),
         expires_at.timestamp(),
-        ctx.admin_account.as_str(),
+        ctx.account_id.as_str(),
         &prepared.payload,
         PROPOSE_PLATFORM_PRICE_ACTION,
     ) {
@@ -209,7 +209,7 @@ pub(crate) async fn propose_platform_price(
     let session = crate::domains::citizens::occupy::ChainSignSession {
         request_id: request_id.clone(),
         purpose: super::PURPOSE_PLATFORM_PRICE_PROPOSAL.to_string(),
-        actor_pubkey: ctx.admin_account.clone(),
+        actor_public_key: ctx.account_id.clone(),
         call_data: call,
         nonce: prepared.nonce,
         signing_hash: prepared.signing_hash_hex,

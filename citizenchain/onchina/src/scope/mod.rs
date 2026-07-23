@@ -15,7 +15,7 @@
 //!
 //! 详细规则见 `rules.rs` 的 `VisibleScope`。
 //!
-//! 本目录只保留范围规则;HTTP handler、pubkey 工具归属对应业务模块。
+//! 本目录只保留范围规则；HTTP handler、账户与公钥工具归属对应业务模块。
 
 #![allow(dead_code, unused_imports)]
 

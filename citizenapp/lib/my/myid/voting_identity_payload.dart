@@ -25,8 +25,8 @@ class VotingIdentityConsentPayload {
   const VotingIdentityConsentPayload({
     required this.identityLevel,
     required this.cidNumber,
-    required this.walletPubkeyHex,
-    required this.walletAddress,
+    required this.accountId,
+    required this.ss58Address,
     required this.ageYears,
     required this.validFrom,
     required this.validUntil,
@@ -47,10 +47,10 @@ class VotingIdentityConsentPayload {
   final String cidNumber;
 
   /// 0x 小写 hex,32 字节公民钱包公钥。
-  final String walletPubkeyHex;
+  final String accountId;
 
   /// SS58(prefix=2027)展示地址。
-  final String walletAddress;
+  final String ss58Address;
 
   final int ageYears;
 
@@ -89,7 +89,7 @@ class VotingIdentityConsentPayload {
   List<(String, String)> get reviewEntries => [
         ('身份类型', isCandidate ? '参选身份' : '投票身份'),
         ('CID编号', cidNumber),
-        ('公民钱包账户', walletAddress),
+        ('公民钱包账户', ss58Address),
         ('周岁年龄', '$ageYears周岁'),
         (
           '护照有效期',
@@ -159,8 +159,8 @@ class VotingIdentityConsentPayload {
     return VotingIdentityConsentPayload(
       identityLevel: CitizenIdentityConsentLevel.candidate,
       cidNumber: base.cidNumber,
-      walletPubkeyHex: base.walletPubkeyHex,
-      walletAddress: base.walletAddress,
+      accountId: base.accountId,
+      ss58Address: base.ss58Address,
       ageYears: base.ageYears,
       validFrom: base.validFrom,
       validUntil: base.validUntil,
@@ -222,9 +222,8 @@ class VotingIdentityConsentPayload {
       payload: VotingIdentityConsentPayload(
         identityLevel: CitizenIdentityConsentLevel.voting,
         cidNumber: cidNumber,
-        walletPubkeyHex: _bytesToLowerHex(walletBytes),
-        walletAddress:
-            Keyring().encodeAddress(walletBytes.toList(), _ss58Prefix),
+        accountId: _bytesToLowerHex(walletBytes),
+        ss58Address: Keyring().encodeAddress(walletBytes.toList(), _ss58Prefix),
         ageYears: age,
         validFrom: validFrom,
         validUntil: validUntil,

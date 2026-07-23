@@ -25,8 +25,8 @@ class SquareChainPublishedResult {
 
 abstract class SquarePostChainPublisher {
   Future<SquareChainPublishedResult> publishPost({
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required String postId,
     required SquarePostCategory postCategory,
     required String contentHashHex,
@@ -55,8 +55,8 @@ class SquareChainService implements SquarePostChainPublisher {
 
   @override
   Future<SquareChainPublishedResult> publishPost({
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required String postId,
     required SquarePostCategory postCategory,
     required String contentHashHex,
@@ -77,8 +77,8 @@ class SquareChainService implements SquarePostChainPublisher {
       logLabel: 'SquareChainService',
     ).signAndSubmitInBlock(
       callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       sign: sign,
       onWatchEvent: onWatchEvent,
     );
@@ -97,8 +97,8 @@ class SquareChainService implements SquarePostChainPublisher {
     );
   }
 
-  Future<String?> fetchNormalCitizenCidNumber(String ownerAccount) async {
-    final identity = await _identityChainReader.readByWallet(ownerAccount);
+  Future<String?> fetchNormalCitizenCidNumber(String accountId) async {
+    final identity = await _identityChainReader.readByAccountId(accountId);
     if (identity == null || !votingIdentityIsActive(identity.votingIdentity)) {
       return null;
     }
@@ -108,9 +108,9 @@ class SquareChainService implements SquarePostChainPublisher {
   /// 读链上身份档：有效投票身份的 cid + 是否竞选公民。
   /// identityLevel = visitor（无有效投票身份）/ voting / candidate（另有候选记录）。
   Future<({String? cidNumber, String identityLevel})> fetchIdentity(
-    String ownerAccount,
+    String accountId,
   ) async {
-    final identity = await _identityChainReader.readByWallet(ownerAccount);
+    final identity = await _identityChainReader.readByAccountId(accountId);
     if (identity == null || !votingIdentityIsActive(identity.votingIdentity)) {
       return (cidNumber: null, identityLevel: 'visitor');
     }

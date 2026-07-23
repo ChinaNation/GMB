@@ -120,9 +120,8 @@ class _SquareArticleDetailPageState extends State<SquareArticleDetailPage> {
   List<Widget> _buildBody(List<SquareMediaItem> media) {
     final blocks = post.contentBlocks;
     if (blocks.isEmpty) {
-      final bodyImages = media.length > 1
-          ? media.sublist(1)
-          : const <SquareMediaItem>[];
+      final bodyImages =
+          media.length > 1 ? media.sublist(1) : const <SquareMediaItem>[];
       return [
         if (post.text.trim().isNotEmpty) _bodyText(post.text.trim()),
         for (final image in bodyImages)
@@ -137,7 +136,9 @@ class _SquareArticleDetailPageState extends State<SquareArticleDetailPage> {
         case ArticleImageBlock(:final mediaIndex):
           if (mediaIndex >= 0 && mediaIndex < media.length) {
             final item = media[mediaIndex];
-            if (item.url.isNotEmpty) widgets.add(_bodyImage(item, landscape: true));
+            if (item.url.isNotEmpty) {
+              widgets.add(_bodyImage(item, landscape: true));
+            }
           }
       }
     }
@@ -233,7 +234,7 @@ class _SquareArticleDetailPageState extends State<SquareArticleDetailPage> {
       if (session == null) {
         throw const SquareApiException('请先选择默认热钱包');
       }
-      if (session.ownerAccount != post.author.ownerAccount) {
+      if (session.accountId != post.author.accountId) {
         throw const SquareApiException('只能删除本人文章');
       }
       await _api.deletePost(session: session, postId: post.postId);

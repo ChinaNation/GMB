@@ -76,18 +76,18 @@ function parseObjectKeys(row: PreparedUploadRow): string[] {
 export async function createStorageReceiptId(input: {
   uploadId: string;
   postId: string;
-  ownerAccount: string;
+  accountId: string;
   manifestHash: string;
 }): Promise<string> {
   // 回执必须在 prepare 阶段固定下来，App 才能先把同一回执写入链上发布索引。
   return `sqr_${await sha256Hex(
-    `${input.uploadId}:${input.postId}:${input.ownerAccount}:${input.manifestHash}`
+    `${input.uploadId}:${input.postId}:${input.accountId}:${input.manifestHash}`
   )}`;
 }
 
 async function getPreparedUpload(env: Env, uploadId: string): Promise<PreparedUploadRow> {
   const upload = await env.DB.prepare(
-    `SELECT upload_id, post_id, owner_account, post_category, manifest_hash, content_hash,
+    `SELECT upload_id, post_id, account_id, post_category, manifest_hash, content_hash,
         storage_receipt_id, estimated_bytes, object_keys_json, status, expires_at, created_at, completed_at
       FROM square_uploads
       WHERE upload_id = ?`
@@ -115,11 +115,11 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
 
   // 发帖分类权限按身份档（竞选内容须竞选身份）；只有竞选帖才读链身份，普通帖免 RPC。
   if (postCategory === 'campaign') {
-    const identity = await fetchChainIdentityState(env, session.owner_account);
+    const identity = await fetchChainIdentityState(env, session.account_id);
     assertIdentityCanPublishCategory(identity.identity_level, postCategory);
   }
   // 会员权益和统一资源表共同约束声明；客户端提供的数据只用于申请，不是最终凭据。
-  const membership = await requireActiveMembership(env, session.owner_account);
+  const membership = await requireActiveMembership(env, session.account_id);
   const membershipLevel = normalizeMembershipLevel(membership.membership_level);
   const plan = membershipPlan(membershipLevel);
   assertDeclaredContentQuota({
@@ -140,11 +140,11 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
   const hasVideo = mediaItems.some((item) => item.media_kind === 'video');
   const expiresSeconds = hasVideo ? 3600 : parsePositiveInt(env.UPLOAD_TTL_SECONDS, 900);
   const expiresAt = secondsFromNow(expiresSeconds);
-  const objectKeyPlan = buildObjectKeyPlan(session.owner_account, postId);
+  const objectKeyPlan = buildObjectKeyPlan(session.account_id, postId);
   const storageReceiptId = await createStorageReceiptId({
     uploadId,
     postId,
-    ownerAccount: session.owner_account,
+    accountId: session.account_id,
     manifestHash
   });
 
@@ -165,7 +165,7 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
   await reserveUploadUsage({
     env,
     upload_id: uploadId,
-    owner_account: session.owner_account,
+    account_id: session.account_id,
     membership_level: membershipLevel,
     membership,
     byte_size: estimatedBytes,
@@ -177,7 +177,7 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
   let mediaUploads: Awaited<ReturnType<typeof createProviderUpload>>[] = [];
   try {
     mediaUploads = await Promise.all(mediaItems.map((item, index) => createProviderUpload(env, {
-      ownerAccount: session.owner_account,
+      accountId: session.account_id,
       uploadId,
       postId,
       mediaIndex: index,
@@ -197,13 +197,13 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
     await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO square_uploads
-        (upload_id, post_id, owner_account, post_category, manifest_hash, content_hash,
+        (upload_id, post_id, account_id, post_category, manifest_hash, content_hash,
           storage_receipt_id, estimated_bytes, object_keys_json, status, expires_at, created_at, completed_at)
         VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, 'prepared', ?, ?, NULL)`
     ).bind(
       uploadId,
       postId,
-      session.owner_account,
+      session.account_id,
       postCategory,
       manifestHash,
       storageReceiptId,
@@ -216,7 +216,7 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
       const item = mediaItems[index];
       return env.DB.prepare(
         `INSERT INTO square_media_assets
-          (upload_id, post_id, owner_account, media_index, media_kind, provider,
+          (upload_id, post_id, account_id, media_index, media_kind, provider,
             provider_asset_id, upload_method, resource_key, content_type, byte_size, asset_state,
             declared_duration_seconds, duration_seconds, width, height, error_code,
             created_at, updated_at, ready_at, archive_state, archived_at, r2_archive_key)
@@ -225,7 +225,7 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
       ).bind(
         uploadId,
         postId,
-        session.owner_account,
+        session.account_id,
         index,
         item.media_kind === 'video' ? 'video' : 'image',
         asset.provider,
@@ -282,7 +282,7 @@ export async function putManifest(request: Request, env: Env): Promise<Response>
   const upload = await getPreparedUpload(env, uploadId);
   const objectKeys = parseObjectKeys(upload);
   const objectKey = objectKeys.find((key) => key.endsWith('/manifest.json'));
-  if (upload.owner_account !== session.owner_account || !objectKey) {
+  if (upload.account_id !== session.account_id || !objectKey) {
     throw new HttpError(403, 'upload_object_forbidden', '无权写入该上传对象');
   }
   const bytes = await readLimitedBytes(request, 'square_manifest', true);
@@ -311,7 +311,7 @@ export async function putMediaAsset(request: Request, env: Env): Promise<Respons
   }
 
   const asset = await loadMediaAsset(env, uploadId, mediaIndex);
-  if (asset.owner_account !== session.owner_account) {
+  if (asset.account_id !== session.account_id) {
     throw new HttpError(403, 'upload_media_forbidden', '无权写入该媒体资产');
   }
   if (asset.media_kind !== 'image' || asset.upload_method !== 'worker') {
@@ -335,7 +335,7 @@ export async function putMediaAsset(request: Request, env: Env): Promise<Respons
   let uploaded: { provider_asset_id: string };
   try {
     uploaded = await uploadImageAsset(env, {
-      ownerAccount: asset.owner_account,
+      accountId: asset.account_id,
       uploadId: asset.upload_id,
       postId: asset.post_id,
       mediaIndex: asset.media_index,
@@ -385,8 +385,8 @@ export async function completeUpload(request: Request, env: Env): Promise<Respon
   const contentHash = body.content_hash.toLowerCase();
 
   const upload = await getPreparedUpload(env, body.upload_id);
-  if (upload.owner_account !== session.owner_account) {
-    throw new HttpError(403, 'upload_owner_mismatch', '无权完成该上传任务');
+  if (upload.account_id !== session.account_id) {
+    throw new HttpError(403, 'upload_account_mismatch', '无权完成该上传任务');
   }
   if (upload.status !== 'prepared') {
     throw new HttpError(409, 'upload_already_completed', '上传任务已完成');
@@ -436,7 +436,7 @@ export async function completeUpload(request: Request, env: Env): Promise<Respon
   if (manifestObjectHash !== manifestHash) {
     throw new HttpError(409, 'manifest_object_hash_mismatch', 'R2 manifest 内容与 manifest_hash 不一致');
   }
-  const membership = await requireActiveMembership(env, upload.owner_account);
+  const membership = await requireActiveMembership(env, upload.account_id);
   const membershipLevel = normalizeMembershipLevel(membership.membership_level);
   await assertManifestQuota({
     membershipLevel,
@@ -555,7 +555,7 @@ function mediaResource(
 
 async function loadMediaAsset(env: Env, uploadId: string, mediaIndex: number): Promise<MediaAssetRow> {
   const asset = await env.DB.prepare(
-    `SELECT upload_id, post_id, owner_account, media_index, media_kind, provider,
+    `SELECT upload_id, post_id, account_id, media_index, media_kind, provider,
         provider_asset_id, upload_method, resource_key, content_type, byte_size, asset_state,
         declared_duration_seconds, duration_seconds, width, height, error_code,
         created_at, updated_at, ready_at, archive_state, archived_at, r2_archive_key
@@ -572,7 +572,7 @@ async function loadMediaAsset(env: Env, uploadId: string, mediaIndex: number): P
 
 export async function loadMediaAssets(env: Env, uploadId: string): Promise<MediaAssetRow[]> {
   const result = await env.DB.prepare(
-    `SELECT upload_id, post_id, owner_account, media_index, media_kind, provider,
+    `SELECT upload_id, post_id, account_id, media_index, media_kind, provider,
         provider_asset_id, upload_method, resource_key, content_type, byte_size, asset_state,
         declared_duration_seconds, duration_seconds, width, height, error_code,
         created_at, updated_at, ready_at, archive_state, archived_at, r2_archive_key
@@ -587,7 +587,7 @@ export async function loadMediaAssets(env: Env, uploadId: string): Promise<Media
 
 async function loadMediaAssetByProvider(env: Env, providerAssetId: string): Promise<MediaAssetRow | null> {
   return env.DB.prepare(
-    `SELECT upload_id, post_id, owner_account, media_index, media_kind, provider,
+    `SELECT upload_id, post_id, account_id, media_index, media_kind, provider,
       provider_asset_id, upload_method, resource_key, content_type, byte_size, asset_state,
       declared_duration_seconds, duration_seconds, width, height, error_code,
       created_at, updated_at, ready_at, archive_state, archived_at, r2_archive_key
@@ -662,7 +662,7 @@ function videoLimitError(asset: MediaAssetRow): string | null {
 /** 定时硬删除未完成的上传、R2 manifest 和提供商草稿，释放 Stream 预占分钟。 */
 export async function cleanupExpiredUploads(env: Env): Promise<{ deleted: number }> {
   const result = await env.DB.prepare(
-    `SELECT upload_id, post_id, owner_account, post_category, manifest_hash, content_hash,
+    `SELECT upload_id, post_id, account_id, post_category, manifest_hash, content_hash,
         storage_receipt_id, estimated_bytes, object_keys_json, status, expires_at, created_at, completed_at
       FROM square_uploads WHERE status = 'prepared' AND expires_at <= ? LIMIT 100`
   ).bind(nowMs()).all<PreparedUploadRow>();

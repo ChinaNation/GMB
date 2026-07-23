@@ -14,12 +14,12 @@ import 'package:citizenapp/wallet/pages/wallet_page.dart';
 void main() {
   group('extractColdWalletImportAddress', () {
     const address = 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT';
-    const pubkey =
+    const publicKey =
         '0x1111111111111111111111111111111111111111111111111111111111111111';
 
     test('从当前钱包二维码 user_contact 提取地址', () {
       const raw =
-          '{"p":"QR_V1","k":3,"b":{"address":"$address","contact_name":"测试钱包"}}';
+          '{"p":"QR_V1","k":3,"b":{"ss58_address":"$address","contact_name":"测试钱包"}}';
 
       expect(extractColdWalletImportAddress(raw), address);
     });
@@ -28,8 +28,8 @@ void main() {
       expect(extractColdWalletImportAddress('gmb://account/$address'), address);
     });
 
-    test('允许当前导入框支持的 0x 公钥二维码', () {
-      expect(extractColdWalletImportAddress(pubkey), pubkey);
+    test('拒绝把 AccountId 当成冷钱包展示地址导入', () {
+      expect(extractColdWalletImportAddress(publicKey), isNull);
     });
 
     test('非钱包地址二维码返回 null', () {
@@ -48,8 +48,8 @@ void main() {
       walletName: walletName,
       walletIcon: 'wallet',
       balance: balance,
-      address: 'addr_$walletIndex',
-      pubkeyHex: 'pub_$walletIndex',
+      ss58Address: 'addr_$walletIndex',
+      accountId: '0x${walletIndex.toRadixString(16).padLeft(64, '0')}',
       alg: 'sr25519',
       ss58: 2027,
       createdAtMillis: 0,

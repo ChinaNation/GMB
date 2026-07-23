@@ -10,7 +10,7 @@ describe('Cloudflare media assets', () => {
 
   it('routes image bytes through the bounded Worker upload endpoint', async () => {
     const plan = await createProviderUpload({} as Env, {
-      ownerAccount: 'owner',
+      accountId: '0x9999999999999999999999999999999999999999999999999999999999999999',
       uploadId: 'squ_dev',
       postId: 'sqp_dev',
       mediaIndex: 0,
@@ -45,7 +45,7 @@ describe('Cloudflare media assets', () => {
     );
 
     const plan = await createProviderUpload(prodEnv(), {
-      ownerAccount: 'owner',
+      accountId: '0x9999999999999999999999999999999999999999999999999999999999999999',
       uploadId: 'squ_stream',
       postId: 'sqp_stream',
       mediaIndex: 0,

@@ -1,7 +1,7 @@
 //! 公民电子护照记录与查询 DTO。
 //!
 //! 公民由注册局先录入本地档案:创建成功即写入身份 CID 与护照号。
-//! 钱包账户只在链上身份推送时绑定,并由该钱包签名确认。
+//! 链账户只在链上身份推送时绑定，并由该账户签名确认。
 //! 本模块不再保留旧绑定态或旧选举范围字段;选举/被选举范围由业务投票规则
 //! 结合出生地、居住地行政区计算。
 
@@ -17,8 +17,8 @@ pub(crate) enum CitizenStatus {
 
 /// 公民电子护照记录。
 ///
-/// 钱包字段为链上推送阶段的可选绑定信息;本地新增儿童或无钱包公民时保持为空。
-/// 已绑定后数据库内部保存 `wallet_pubkey` 供验签和索引使用,前端/公开 DTO 只展示 `wallet_address`。
+/// `account_id` 是链上推送阶段的可选绑定信息；本地新增儿童或未绑定链账户的公民
+/// 保持为空。数据库只保存规范化账户 ID，SS58 地址仅在返回展示数据时派生。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CitizenRecord {
     pub(crate) id: u64,
@@ -29,12 +29,8 @@ pub(crate) struct CitizenRecord {
     pub(crate) citizen_sex: String,
     pub(crate) citizen_birth_date: String,
     #[serde(default)]
-    pub(crate) wallet_pubkey: Option<String>,
-    #[serde(default)]
-    pub(crate) wallet_address: Option<String>,
-    #[serde(default)]
-    pub(crate) wallet_sig_alg: Option<String>,
-    pub(crate) wallet_verified_at: Option<DateTime<Utc>>,
+    pub(crate) account_id: Option<String>,
+    pub(crate) account_verified_at: Option<DateTime<Utc>>,
     pub(crate) citizen_status: CitizenStatus,
     #[serde(default)]
     pub(crate) voting_eligible: bool,
@@ -56,10 +52,10 @@ pub(crate) struct CitizenRecord {
     pub(crate) onchain_block_number: Option<i64>,
     #[serde(default)]
     pub(crate) onchain_at: Option<DateTime<Utc>>,
-    pub(crate) created_by: String,
+    pub(crate) creator_account_id: String,
     pub(crate) created_at: DateTime<Utc>,
     #[serde(default)]
-    pub(crate) updated_by: Option<String>,
+    pub(crate) updater_account_id: Option<String>,
     pub(crate) updated_at: DateTime<Utc>,
 }
 
@@ -112,14 +108,14 @@ pub(crate) struct CitizensQuery {
 #[derive(Deserialize)]
 pub(crate) struct PublicIdentitySearchQuery {
     pub(crate) identity_code: Option<String>,
-    pub(crate) wallet_pubkey: Option<String>,
+    pub(crate) account_id: Option<String>,
 }
 
 #[derive(Serialize)]
 pub(crate) struct PublicIdentitySearchOutput {
     pub(crate) found: bool,
     pub(crate) identity_code: Option<String>,
-    pub(crate) wallet_pubkey: Option<String>,
+    pub(crate) account_id: Option<String>,
 }
 
 pub(crate) const CITIZEN_DOCUMENT_TYPES: [&str; 4] =
@@ -137,7 +133,7 @@ pub(crate) struct CitizenDocument {
     pub(crate) document_type: String,
     pub(crate) file_size: u64,
     pub(crate) file_hash: String,
-    pub(crate) uploaded_by: String,
+    pub(crate) uploader_account_id: String,
     pub(crate) uploaded_at: DateTime<Utc>,
 }
 
@@ -150,7 +146,8 @@ pub(crate) struct CitizenRow {
     pub(crate) given_name: String,
     pub(crate) citizen_sex: String,
     pub(crate) citizen_birth_date: String,
-    pub(crate) wallet_address: Option<String>,
+    pub(crate) account_id: Option<String>,
+    pub(crate) ss58_address: Option<String>,
     pub(crate) citizen_status: CitizenStatus,
     pub(crate) voting_eligible: bool,
     pub(crate) vote_status: CitizenStatus,
@@ -191,10 +188,8 @@ mod tests {
             given_name: "试公民".to_string(),
             citizen_sex: "FEMALE".to_string(),
             citizen_birth_date: "2000-01-01".to_string(),
-            wallet_pubkey: Some("0xabc".to_string()),
-            wallet_address: Some("5F-test".to_string()),
-            wallet_sig_alg: Some("sr25519".to_string()),
-            wallet_verified_at: Some(now),
+            account_id: Some(format!("0x{}", "ab".repeat(32))),
+            account_verified_at: Some(now),
             citizen_status: CitizenStatus::Normal,
             voting_eligible: true,
             passport_valid_from: "2026-05-24".to_string(),
@@ -210,9 +205,9 @@ mod tests {
             onchain_tx_hash: None,
             onchain_block_number: None,
             onchain_at: None,
-            created_by: "admin".to_string(),
+            creator_account_id: "admin".to_string(),
             created_at: now,
-            updated_by: None,
+            updater_account_id: None,
             updated_at: now,
         }
     }

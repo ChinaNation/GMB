@@ -35,7 +35,7 @@ Future<void> proceedOffchainPayment({
     MaterialPageRoute(
       builder: (_) => OffchainClearingPayPage(
         wallet: wallet,
-        toAddress: result.toAddress,
+        toSs58Address: result.toSs58Address,
         recipientBankCidNumber: result.bank!,
         clearingNodeWssUrl: endpoint.wssUrl,
         initialAmountYuan: result.amount,

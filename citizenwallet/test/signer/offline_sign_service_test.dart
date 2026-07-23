@@ -32,7 +32,7 @@ String _withSigningTailHex(String callDataHex) {
 
 SignRequestEnvelope _buildTestRequest({
   required String requestId,
-  required String pubkey,
+  required String signerPublicKey,
   required String payloadHex,
   required int action,
 }) {
@@ -44,7 +44,7 @@ SignRequestEnvelope _buildTestRequest({
     expiresAt: now + 90,
     body: SignRequestBody.fromHex(
       action: action,
-      pubkeyHex: pubkey,
+      signerPublicKeyHex: signerPublicKey,
       payloadHex: payloadHex,
     ),
   );
@@ -68,7 +68,7 @@ void main() {
       final payloadHex = _withSigningTailHex('0x140001000000000000000001');
       final request = _buildTestRequest(
         requestId: 'offline-req-test-0001',
-        pubkey: '0x${hotWallet.pubkeyHex}',
+        signerPublicKey: hotWallet.accountId,
         payloadHex: payloadHex,
         action: QrActions.internalVote,
       );
@@ -82,10 +82,13 @@ void main() {
 
       expect(walletManager.signCallCount, 1);
       expect(response.id, request.id);
-      expect(response.body.pubkeyHex, '0x${hotWallet.pubkeyHex}');
+      expect(
+        response.body.signerPublicKeyHex,
+        hotWallet.accountId,
+      );
       expect(
         _verifySr25519(
-          pubkeyHex: response.body.pubkeyHex,
+          signerPublicKeyHex: response.body.signerPublicKeyHex,
           message: Uint8List.fromList(payloadBytes),
           signatureHex: response.body.signatureHex,
         ),
@@ -98,7 +101,7 @@ void main() {
       final payloadHex = _withSigningTailHex('0x1400070000000000000001');
       final request = _buildTestRequest(
         requestId: 'offline-req-test-action-mismatch',
-        pubkey: '0x${hotWallet.pubkeyHex}',
+        signerPublicKey: hotWallet.accountId,
         payloadHex: payloadHex,
         action: QrActions.jointVote,
       );
@@ -124,7 +127,7 @@ void main() {
       // beneficiary 32B, amount u128_le, remark 空 Vec。
       final request = _buildTestRequest(
         requestId: 'offline-req-test-known',
-        pubkey: '0x${hotWallet.pubkeyHex}',
+        signerPublicKey: hotWallet.accountId,
         // call_data: [04][00][dest 32B][u128_le(1)][Vec(0)] → 0.01 GMB
         payloadHex: _withSigningTailHex(
             '0x0400aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0100000000000000000000000000000000'),
@@ -157,7 +160,7 @@ void main() {
           ])}';
       final request = _buildTestRequest(
         requestId: 'offline-platform-price',
-        pubkey: '0x${hotWallet.pubkeyHex}',
+        signerPublicKey: hotWallet.accountId,
         payloadHex: payloadHex,
         action: QrActions.proposeSetPlatformPrice,
       );
@@ -177,7 +180,7 @@ void main() {
       final price = List<int>.filled(16, 0)..[0] = 100;
       final request = _buildTestRequest(
         requestId: 'offline-platform-price-mismatch',
-        pubkey: '0x${hotWallet.pubkeyHex}',
+        signerPublicKey: hotWallet.accountId,
         payloadHex: '0x${_toHex([
               34,
               5,
@@ -199,7 +202,7 @@ void main() {
     test('verifyPayload 拒绝普通链交易 32 字节 hash-only payload', () {
       final request = _buildTestRequest(
         requestId: 'offline-req-test-hash-only-reject',
-        pubkey: '0x${hotWallet.pubkeyHex}',
+        signerPublicKey: hotWallet.accountId,
         payloadHex:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         action: QrActions.privateInstitutionGovernance,
@@ -216,7 +219,7 @@ void main() {
     test('verifyPayload 拒绝未登记 action', () {
       final request = _buildTestRequest(
         requestId: 'offline-req-test-unknown-action',
-        pubkey: '0x${hotWallet.pubkeyHex}',
+        signerPublicKey: hotWallet.accountId,
         payloadHex: _withSigningTailHex('0x1400010000000000000001'),
         action: 0x7fff,
       );
@@ -231,7 +234,7 @@ void main() {
     test('verifyPayload 识别广场动作中文名但钱包端拒绝签名', () {
       final request = _buildTestRequest(
         requestId: 'offline-req-test-square-action',
-        pubkey: '0x${hotWallet.pubkeyHex}',
+        signerPublicKey: hotWallet.accountId,
         payloadHex: '0x01020304',
         action: QrActions.squareAccountAction,
       );
@@ -244,10 +247,10 @@ void main() {
       expect(verification.rejectReason, contains('签名载荷无法解码'));
     });
 
-    test('signParsedRequest should reject wrong pubkey', () async {
+    test('signParsedRequest should reject wrong signer public key', () async {
       final request = _buildTestRequest(
         requestId: 'offline-req-test-0002',
-        pubkey:
+        signerPublicKey:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         payloadHex: '0x0102',
         action: QrActions.login,
@@ -271,12 +274,14 @@ void main() {
 }
 
 bool _verifySr25519({
-  required String pubkeyHex,
+  required String signerPublicKeyHex,
   required Uint8List message,
   required String signatureHex,
 }) {
   try {
-    final publicKey = sr25519.PublicKey.newPublicKey(_hexToBytes(pubkeyHex));
+    final publicKey = sr25519.PublicKey.newPublicKey(
+      _hexToBytes(signerPublicKeyHex),
+    );
     final signature = sr25519.Signature.fromBytes(
       Uint8List.fromList(_hexToBytes(signatureHex)),
     );
@@ -330,14 +335,14 @@ class _FakeWalletManager extends WalletManager {
     final miniSecret = await CryptoScheme.miniSecretFromEntropy(entropy);
     final pair = Keyring.sr25519.fromSeed(Uint8List.fromList(miniSecret));
     pair.ss58Format = _ss58;
-    final pubkeyHex = _toHex(pair.bytes().toList(growable: false));
+    final accountId = '0x${_toHex(pair.bytes().toList(growable: false))}';
 
     _hotFixture = _WalletFixture(
       profile: WalletProfile(
         walletIndex: 1,
         walletName: '离线测试热钱包',
-        address: pair.address,
-        pubkeyHex: pubkeyHex,
+        accountId: accountId,
+        ss58Address: pair.address,
         alg: 'sr25519',
         ss58Prefix: _ss58,
         createdAtMillis: DateTime.now().millisecondsSinceEpoch,

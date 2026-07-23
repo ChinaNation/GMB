@@ -127,16 +127,16 @@ class PublicInstitutionRepository {
   }
 
   // ── 订阅("关注")──
-  Future<void> subscribe(String walletPubkeyHex, String cidNumber) =>
-      store.subscribe(walletPubkeyHex, cidNumber);
-  Future<void> unsubscribe(String walletPubkeyHex, String cidNumber) =>
-      store.unsubscribe(walletPubkeyHex, cidNumber);
-  Future<bool> isSubscribed(String walletPubkeyHex, String cidNumber) =>
-      store.isSubscribed(walletPubkeyHex, cidNumber);
+  Future<void> subscribe(String accountId, String cidNumber) =>
+      store.subscribe(accountId, cidNumber);
+  Future<void> unsubscribe(String accountId, String cidNumber) =>
+      store.unsubscribe(accountId, cidNumber);
+  Future<bool> isSubscribed(String accountId, String cidNumber) =>
+      store.isSubscribed(accountId, cidNumber);
   Future<List<PublicInstitutionEntity>> listSubscribed(
-    String walletPubkeyHex,
+    String accountId,
   ) =>
-      store.listSubscribed(walletPubkeyHex);
+      store.listSubscribed(accountId);
 
   /// 后台导入/对账内置创世快照包。返回机构部分是否发生写入。
   /// 非阻塞调用方:UI 先读本地缓存再调本方法。

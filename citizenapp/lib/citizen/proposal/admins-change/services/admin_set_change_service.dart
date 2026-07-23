@@ -15,20 +15,21 @@ class AdminsChangeService {
 
   Uint8List buildCallData({
     required AdminAccountState account,
-    required String proposerPubkeyHex,
+    required String proposerAccountId,
     required List<AdminPerson> admins,
     required int newThreshold,
   }) {
     final normalized = AdminSetValidation.validate(
       account: account,
-      proposerPubkeyHex: proposerPubkeyHex,
+      proposerAccountId: proposerAccountId,
       admins: admins,
       newThreshold: newThreshold,
     );
     return PersonalAdminsChangeCallCodec.build(
       institutionCode: account.institutionCode,
       adminKind: account.kind,
-      accountId: AdminAccountIdCodec.fromHex(account.personalAccountHex!),
+      accountId:
+          AdminAccountIdCodec.fromAccountIdText(account.personalAccountId!),
       admins: normalized.admins,
       newThreshold: normalized.threshold,
     );
@@ -38,14 +39,14 @@ class AdminsChangeService {
     required AdminAccountState account,
     required List<AdminPerson> admins,
     required int newThreshold,
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
     final callData = buildCallData(
       account: account,
-      proposerPubkeyHex: AdminAccountIdCodec.hexEncode(signerPubkey),
+      proposerAccountId: '0x${AdminAccountIdCodec.hexEncode(signerPublicKey)}',
       admins: admins,
       newThreshold: newThreshold,
     );
@@ -54,8 +55,8 @@ class AdminsChangeService {
       logLabel: 'AdminsChange',
     ).signAndSubmit(
       callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       sign: sign,
       onWatchEvent: onWatchEvent,
     );

@@ -132,9 +132,6 @@ pub(crate) fn build_cors_layer() -> CorsLayer {
                 HeaderName::from_static("x-chain-nonce"),
                 HeaderName::from_static("x-chain-timestamp"),
                 HeaderName::from_static("x-chain-signature"),
-                HeaderName::from_static("x-wallet-pubkey"),
-                HeaderName::from_static("x-wallet-signature"),
-                HeaderName::from_static("x-wallet-signature-message"),
             ]);
     }
 
@@ -178,9 +175,6 @@ pub(crate) fn build_cors_layer() -> CorsLayer {
             HeaderName::from_static("x-chain-nonce"),
             HeaderName::from_static("x-chain-timestamp"),
             HeaderName::from_static("x-chain-signature"),
-            HeaderName::from_static("x-wallet-pubkey"),
-            HeaderName::from_static("x-wallet-signature"),
-            HeaderName::from_static("x-wallet-signature-message"),
             HeaderName::from_static("x-cid-security-grant"),
             HeaderName::from_static("x-passkey-assertion"),
         ])
@@ -254,7 +248,7 @@ pub(crate) fn require_public_search_auth(
 }
 
 // chain pull 端点(multisig_info / joint_vote / vote_eligibility)的安全模型是
-// "返回签名凭证只对请求者 account_pubkey 有效",不需要请求侧 HMAC。
+// "返回签名凭证只对请求者 account_id 有效",不需要请求侧 HMAC。
 
 pub(crate) fn env_flag_enabled(key: &str) -> bool {
     std::env::var(key)

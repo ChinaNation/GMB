@@ -175,6 +175,7 @@ fn admins(items: &[AccountId32]) -> pallet::AdminsOf<Test> {
             .cloned()
             .map(|account_id| admin_primitives::Admin {
                 account_id,
+                cid_number: Default::default(),
                 family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
                 given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
             })

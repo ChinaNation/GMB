@@ -13,7 +13,7 @@ class SignedExtrinsicTrace {
     required this.payloadBytes,
     required this.signature,
     required this.encoded,
-    required this.signerPubkey,
+    required this.signerPublicKey,
     required this.genesisHash,
     required this.runtimeVersion,
     required this.registry,
@@ -26,7 +26,7 @@ class SignedExtrinsicTrace {
   final Uint8List payloadBytes;
   final Uint8List signature;
   final Uint8List encoded;
-  final Uint8List signerPubkey;
+  final Uint8List signerPublicKey;
   final Uint8List genesisHash;
   final dynamic runtimeVersion;
   final dynamic registry;
@@ -58,8 +58,8 @@ class SignedExtrinsicBuilder {
 
   Future<({String txHash, int usedNonce})> signAndSubmit({
     required Uint8List callData,
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Future<Uint8List> Function(Uint8List payload) sign,
     void Function(SignedExtrinsicTrace trace)? onTrace,
     TxPoolWatchCallback? onWatchEvent,
@@ -73,7 +73,7 @@ class SignedExtrinsicBuilder {
     debugPrint('[$_logLabel] 步骤3: 并行获取 runtimeVersion/runtime nonce...');
     final results = await Future.wait([
       _rpc.fetchRuntimeVersion(),
-      _rpc.fetchNonce(fromAddress),
+      _rpc.fetchNonce(fromSs58Address),
     ]);
     final runtimeVersion = results[0] as dynamic;
     final nonce = results[1] as int;
@@ -96,7 +96,7 @@ class SignedExtrinsicBuilder {
     debugPrint('[$_logLabel] 步骤6: 编码 immortal extrinsic...');
     final extrinsicPayload = buildImmortalExtrinsicPayload(
       callData: callData,
-      signerPubkey: signerPubkey,
+      signerPublicKey: signerPublicKey,
       signature: signature,
       nonce: nonce,
     );
@@ -109,7 +109,7 @@ class SignedExtrinsicBuilder {
         payloadBytes: payloadBytes,
         signature: signature,
         encoded: encoded,
-        signerPubkey: signerPubkey,
+        signerPublicKey: signerPublicKey,
         genesisHash: genesisHash,
         runtimeVersion: runtimeVersion,
         registry: registry,
@@ -141,8 +141,8 @@ class SignedExtrinsicBuilder {
   Future<({String txHash, int usedNonce, String blockHashHex})>
       signAndSubmitInBlock({
     required Uint8List callData,
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Future<Uint8List> Function(Uint8List payload) sign,
     void Function(SignedExtrinsicTrace trace)? onTrace,
     TxPoolWatchCallback? onWatchEvent,
@@ -157,7 +157,7 @@ class SignedExtrinsicBuilder {
     debugPrint('[$_logLabel] 步骤3: 并行获取 runtimeVersion/runtime nonce...');
     final results = await Future.wait([
       _rpc.fetchRuntimeVersion(),
-      _rpc.fetchNonce(fromAddress),
+      _rpc.fetchNonce(fromSs58Address),
     ]);
     final runtimeVersion = results[0] as dynamic;
     final nonce = results[1] as int;
@@ -180,7 +180,7 @@ class SignedExtrinsicBuilder {
     debugPrint('[$_logLabel] 步骤6: 编码 immortal extrinsic...');
     final extrinsicPayload = buildImmortalExtrinsicPayload(
       callData: callData,
-      signerPubkey: signerPubkey,
+      signerPublicKey: signerPublicKey,
       signature: signature,
       nonce: nonce,
     );
@@ -193,7 +193,7 @@ class SignedExtrinsicBuilder {
         payloadBytes: payloadBytes,
         signature: signature,
         encoded: encoded,
-        signerPubkey: signerPubkey,
+        signerPublicKey: signerPublicKey,
         genesisHash: genesisHash,
         runtimeVersion: runtimeVersion,
         registry: registry,
@@ -249,12 +249,12 @@ class SignedExtrinsicBuilder {
   @visibleForTesting
   static ExtrinsicPayload buildImmortalExtrinsicPayload({
     required Uint8List callData,
-    required Uint8List signerPubkey,
+    required Uint8List signerPublicKey,
     required Uint8List signature,
     required int nonce,
   }) {
     return ExtrinsicPayload(
-      signer: signerPubkey,
+      signer: signerPublicKey,
       method: callData,
       signature: signature,
       eraPeriod: immortalEraPeriod,

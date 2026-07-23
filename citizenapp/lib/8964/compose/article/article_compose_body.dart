@@ -180,7 +180,9 @@ class SquareArticleComposeBodyState extends State<SquareArticleComposeBody>
           rebuilt.add(_newTextBlock(block['text']?.toString() ?? ''));
         } else if (block['t'] == 'image' && block['media_index'] is int) {
           final i = block['media_index'] as int;
-          if (i >= 0 && i < media.length) rebuilt.add(_ImageEditBlock(media[i]));
+          if (i >= 0 && i < media.length) {
+            rebuilt.add(_ImageEditBlock(media[i]));
+          }
         }
       }
     } else {
@@ -220,8 +222,8 @@ class SquareArticleComposeBodyState extends State<SquareArticleComposeBody>
     final persist = widget.persistMedia;
     if (persist != null) draft = await persist(draft);
     if (!mounted) return;
-    var index = _blocks.indexWhere(
-        (b) => b is _TextEditBlock && b.focus.hasFocus);
+    var index =
+        _blocks.indexWhere((b) => b is _TextEditBlock && b.focus.hasFocus);
     if (index < 0) index = _blocks.length - 1;
     final newText = _newTextBlock();
     setState(() {
@@ -285,9 +287,12 @@ class SquareArticleComposeBodyState extends State<SquareArticleComposeBody>
                       style: const TextStyle(
                           color: AppTheme.textTertiary, fontSize: 11)),
                   const SizedBox(width: 8),
-                  _CoverThumb(cover: _cover, onPick: _pickCover, onRemove: () {
-                    setState(() => _cover = null);
-                  }),
+                  _CoverThumb(
+                      cover: _cover,
+                      onPick: _pickCover,
+                      onRemove: () {
+                        setState(() => _cover = null);
+                      }),
                 ],
               ),
               const SizedBox(height: 8),
@@ -308,8 +313,8 @@ class SquareArticleComposeBodyState extends State<SquareArticleComposeBody>
                     label: const Text('插入'),
                     style: OutlinedButton.styleFrom(
                       visualDensity: VisualDensity.compact,
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 4),
                     ),
                   ),
                 ],
@@ -406,7 +411,8 @@ class _CoverThumb extends StatelessWidget {
               child: const CircleAvatar(
                 radius: 8,
                 backgroundColor: AppTheme.surfaceCard,
-                child: Icon(Icons.close, size: 12, color: AppTheme.textSecondary),
+                child:
+                    Icon(Icons.close, size: 12, color: AppTheme.textSecondary),
               ),
             ),
           ),

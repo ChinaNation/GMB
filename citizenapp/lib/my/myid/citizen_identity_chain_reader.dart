@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:polkadart/polkadart.dart' show Hasher;
-import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
@@ -13,13 +12,13 @@ import 'package:citizenapp/rpc/chain_rpc.dart';
 class CitizenIdentityChainSnapshot {
   const CitizenIdentityChainSnapshot({
     required this.cidNumber,
-    required this.walletAccountId,
+    required this.accountId,
     required this.votingIdentity,
     this.candidateIdentity,
   });
 
   final String cidNumber;
-  final Uint8List walletAccountId;
+  final Uint8List accountId;
   final Uint8List votingIdentity;
   final Uint8List? candidateIdentity;
 }
@@ -31,38 +30,42 @@ class CitizenIdentityChainReader {
 
   final ChainRpc _chainRpc;
 
-  /// 按钱包读取完整身份闭环。
+  /// 按规范账户 ID 读取完整身份闭环。
   ///
-  /// 顺序固定为：`CidByWalletAccount` → `CidRegistry` Active →
-  /// `WalletAccountByCid` 反向一致 → `VotingIdentityByCid`；竞选身份再从
+  /// 顺序固定为：`CidByAccountId` → `CidRegistry` Active →
+  /// `AccountIdByCid` 反向一致 → `VotingIdentityByCid`；竞选身份再从
   /// `CandidateIdentityByCid` 读取。任何缺失、吊销或错配都返回 `null`。
-  Future<CitizenIdentityChainSnapshot?> readByWallet(
-    String walletAddress,
+  Future<CitizenIdentityChainSnapshot?> readByAccountId(
+    String accountIdText,
   ) async {
-    final accountId =
-        Uint8List.fromList(Keyring().decodeAddress(walletAddress));
-    if (accountId.length != 32) return null;
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountIdText)) {
+      throw const FormatException('account_id 必须是小写 0x 加 64 位十六进制');
+    }
+    final accountId = Uint8List.fromList([
+      for (var i = 2; i < accountIdText.length; i += 2)
+        int.parse(accountIdText.substring(i, i + 2), radix: 16),
+    ]);
 
     // 同一次身份判断必须锚定同一个 finalized 区块，避免 CID 映射与身份值跨块混读。
     final finalized = await _chainRpc.fetchFinalizedBlock();
     final finalizedHash = hexEncode(finalized.blockHash);
 
-    final cidByWalletKey = storageMapKey(
+    final cidByAccountIdKey = storageMapKey(
       'CitizenIdentity',
-      'CidByWalletAccount',
+      'CidByAccountId',
       accountId,
     );
     final cidRaw = await _chainRpc.fetchStorageAtBlock(
-      hexEncode(cidByWalletKey),
+      hexEncode(cidByAccountIdKey),
       finalizedHash,
     );
     final cidNumber = decodeCidNumber(cidRaw);
     if (cidNumber == null) return null;
 
     final cidScale = encodeBoundedBytes(utf8.encode(cidNumber));
-    final walletByCidKey = storageMapKey(
+    final accountIdByCidKey = storageMapKey(
       'CitizenIdentity',
-      'WalletAccountByCid',
+      'AccountIdByCid',
       cidScale,
     );
     final cidRegistryKey = storageMapKey(
@@ -81,7 +84,7 @@ class CitizenIdentityChainReader {
       cidScale,
     );
     final keys = <String>[
-      hexEncode(walletByCidKey),
+      hexEncode(accountIdByCidKey),
       hexEncode(cidRegistryKey),
       hexEncode(votingKey),
       hexEncode(candidateKey),
@@ -89,13 +92,13 @@ class CitizenIdentityChainReader {
     final rows = await Future.wait(
       keys.map((key) => _chainRpc.fetchStorageAtBlock(key, finalizedHash)),
     );
-    final boundWallet = rows[0];
+    final boundAccountId = rows[0];
     final cidRecord = rows[1];
     final votingIdentity = rows[2];
     final candidateIdentity = rows[3];
-    if (boundWallet == null ||
-        boundWallet.length != accountId.length ||
-        !_sameBytes(boundWallet, accountId) ||
+    if (boundAccountId == null ||
+        boundAccountId.length != accountId.length ||
+        !_sameBytes(boundAccountId, accountId) ||
         !cidRecordIsActive(cidRecord) ||
         votingIdentity == null ||
         !votingIdentityLayoutIsValid(votingIdentity)) {
@@ -104,7 +107,7 @@ class CitizenIdentityChainReader {
 
     return CitizenIdentityChainSnapshot(
       cidNumber: cidNumber,
-      walletAccountId: accountId,
+      accountId: accountId,
       votingIdentity: votingIdentity,
       candidateIdentity: candidateIdentity != null &&
               candidateIdentityLayoutIsValid(candidateIdentity)

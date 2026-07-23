@@ -12,7 +12,7 @@ use crate::auth::operation_auth::AdminOperationAuth;
 pub(crate) struct AdminActionChallenge {
     pub(crate) action_id: String,
     pub(crate) action_type: String,
-    pub(crate) actor_account: String,
+    pub(crate) actor_account_id: String,
     pub(crate) actor_institution_code: String,
     pub(crate) actor_cid_number: String,
     pub(crate) actor_province_name: String,
@@ -35,7 +35,7 @@ pub(crate) struct AdminActionChallenge {
 pub(crate) struct AdminSecurityGrant {
     pub(crate) grant_id: String,
     pub(crate) action_type: String,
-    pub(crate) actor_account: String,
+    pub(crate) actor_account_id: String,
     pub(crate) actor_institution_code: String,
     pub(crate) actor_cid_number: String,
     pub(crate) actor_province_name: String,
@@ -60,7 +60,8 @@ mod tests {
         let challenge = AdminActionChallenge {
             action_id: "action-1".to_string(),
             action_type: "INSTITUTION_CREATE_ACCOUNT".to_string(),
-            actor_account: "0x11".to_string(),
+            actor_account_id: "0x1111111111111111111111111111111111111111111111111111111111111111"
+                .to_string(),
             actor_institution_code: "FRG".to_string(),
             actor_cid_number: "LN001-FRG0G-000000001-2026".to_string(),
             actor_province_name: String::new(),

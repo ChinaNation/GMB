@@ -19,7 +19,7 @@ class PublicInstitutionDto {
     this.familyName,
     this.givenName,
     this.legalRepresentativeCidNumber,
-    this.legalRepresentativeAccount,
+    this.legalRepresentativeAccountId,
     this.customAccountNames = const [],
   });
 
@@ -44,7 +44,7 @@ class PublicInstitutionDto {
   final String? familyName;
   final String? givenName;
   final String? legalRepresentativeCidNumber;
-  final String? legalRepresentativeAccount;
+  final String? legalRepresentativeAccountId;
   final int accountCount;
   final List<String> customAccountNames;
 
@@ -68,8 +68,7 @@ class PublicInstitutionDto {
       givenName: legalRepresentative?['given_name'] as String?,
       legalRepresentativeCidNumber:
           legalRepresentative?['cid_number'] as String?,
-      legalRepresentativeAccount:
-          legalRepresentative?['account'] as String?,
+      legalRepresentativeAccountId: legalRepresentative?['account'] as String?,
       accountCount: (json['account_count'] as num?)?.toInt() ?? 0,
       customAccountNames:
           (json['custom_account_names'] as List<dynamic>? ?? const [])
@@ -97,7 +96,7 @@ class PublicInstitutionDto {
       ..familyName = familyName
       ..givenName = givenName
       ..legalRepresentativeCidNumber = legalRepresentativeCidNumber
-      ..legalRepresentativeAccount = legalRepresentativeAccount
+      ..legalRepresentativeAccountId = legalRepresentativeAccountId
       ..accountCount = accountCount
       ..customAccountNames = customAccountNames
       ..catalogVersion = catalogVersion

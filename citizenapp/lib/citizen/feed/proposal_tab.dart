@@ -208,7 +208,7 @@ class _ProposalViewState extends State<ProposalTab> {
     final subscribedInstitutions = activeWallet == null
         ? <Institution>[]
         : await _institutionRepo
-            .listSubscribed(activeWallet.pubkeyHex)
+            .listSubscribed(activeWallet.accountId)
             .catchError((_) => <Institution>[]);
 
     final known = <String, InstitutionInfo>{};
@@ -246,12 +246,12 @@ class _ProposalViewState extends State<ProposalTab> {
   InstitutionInfo _institutionInfoFromInstitution(Institution inst) {
     final govInfo = _institutionRepo.governanceInfo(inst.cidNumber);
     if (govInfo != null) return govInfo;
-    final rows = institutionAccountRows(inst);
+    final rows = institutionAccountIdRows(inst);
     if (rows.length < 2) {
       throw StateError('机构账户集合缺少主账户或费用账户: ${inst.cidNumber}');
     }
-    final main = rows.first.accountHex;
-    final fee = rows[1].accountHex;
+    final main = rows.first.accountId;
+    final fee = rows[1].accountId;
     return InstitutionInfo(
       cidFullName: inst.cidFullName,
       cidShortName: inst.cidShortNameOrFullName,
@@ -259,7 +259,7 @@ class _ProposalViewState extends State<ProposalTab> {
       cidShortNameEn: inst.cidShortNameOrFullName,
       cidNumber: inst.cidNumber,
       orgType: inst.orgType,
-      accounts: InstitutionAccounts(mainAccount: main, feeAccount: fee),
+      accounts: InstitutionAccounts(mainAccountId: main, feeAccountId: fee),
       adminAccountCode: inst.institutionCode,
     );
   }
@@ -377,8 +377,8 @@ class _ProposalViewState extends State<ProposalTab> {
     // 批量解析提案上下文
     final contexts = await _contextResolver.resolveBatch(
       proposals.map((p) => p.meta.actorCidNumber).toList(),
-      executionAccounts:
-          proposals.map((p) => p.meta.executionAccount?.toList()).toList(),
+      executionAccountIds:
+          proposals.map((p) => p.meta.executionAccountId?.toList()).toList(),
       internalCodeList: proposals.map((p) => p.meta.internalCode).toList(),
       knownInstitutionsByCidNumber: knownInstitutionsByCidNumber,
     );
@@ -748,7 +748,7 @@ class _ProposalViewState extends State<ProposalTab> {
       final proposal = proposals.first;
       final contexts = await _contextResolver.resolveBatch(
         [proposal.meta.actorCidNumber],
-        executionAccounts: [proposal.meta.executionAccount?.toList()],
+        executionAccountIds: [proposal.meta.executionAccountId?.toList()],
         internalCodeList: [proposal.meta.internalCode],
         knownInstitutionsByCidNumber: _knownInstitutionsByCidNumber,
       );

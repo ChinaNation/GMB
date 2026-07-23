@@ -405,7 +405,7 @@ pub async fn build_activate_admin_request(
         body: signing::SignRequestBody {
             action: primitives::sign::QR_ACTION_ACTIVATE_ADMIN,
             sig_alg: 1,
-            pubkey: signing::public_key_b64(&public_key_bytes)?,
+            signer_public_key: signing::public_key_b64(&public_key_bytes)?,
             payload: signing::payload_b64(&payload),
         },
     };
@@ -486,12 +486,12 @@ pub async fn verify_activate_admin(
         return Err("提交参数公钥与本地激活 session 不匹配".to_string());
     }
 
-    // 二维码协议字段名 `pubkey` 属于 QR_V1；第 3 步只规范化其值，不改协议键。
+    // QR_V1 压缩键仍为 `u`；内部语义字段统一为 `signer_public_key`。
     let response_public_key = response
         .body
-        .pubkey
+        .signer_public_key
         .strip_prefix("0x")
-        .unwrap_or(&response.body.pubkey)
+        .unwrap_or(&response.body.signer_public_key)
         .to_ascii_lowercase();
     if format!("0x{response_public_key}") != signer_public_key {
         return Err("公钥不匹配".to_string());

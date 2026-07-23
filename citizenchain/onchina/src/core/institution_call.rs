@@ -31,16 +31,16 @@ pub fn institution_manage_pallet_index(institution_code: &[u8; 4]) -> u8 {
     }
 }
 
-/// 公私权管理员拥有不同 SCALE 结构，编码前必须按目标机构类型明确分流。
+/// 公私权管理员现统一 `Admin` 结构；仍按目标机构类型分流到公权/私权 pallet。
 #[derive(Debug, Clone)]
 pub enum InstitutionAdminsPayload {
-    Public(Vec<admin_primitives::PublicAdmin<[u8; 32]>>),
+    Public(Vec<admin_primitives::Admin<[u8; 32]>>),
     Private(Vec<admin_primitives::Admin<[u8; 32]>>),
 }
 
 /// `propose_institution_governance` 完整参数。
 ///
-/// 机构操作已收敛为「发起管理员钱包直接冷签一笔普通 extrinsic」:call 不再嵌独立凭证
+/// 机构操作已收敛为「发起管理员使用签名钱包直接冷签一笔普通 extrinsic」:call 不再嵌独立凭证
 /// 签名/公钥/nonce/作用域,授权由 runtime 在 origin 处以 `is_institution_admin` + 岗位码校验。
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -104,7 +104,7 @@ fn encode_bytes(out: &mut Vec<u8>, value: &[u8]) {
     out.extend_from_slice(value);
 }
 
-/// 构造与 runtime 公权 `BoundedVec<PublicAdmin>` 或私权
+/// 构造与 runtime 公权 `BoundedVec<Admin>` 或私权
 /// `BoundedVec<Admin>` 完全一致的签名与 call 载荷。
 pub fn encode_admins_payload(admins: &InstitutionAdminsPayload) -> Vec<u8> {
     match admins {
@@ -204,12 +204,14 @@ mod tests {
     use super::*;
 
     fn private_admin(
-        admin_account: [u8; 32],
+        account_id: [u8; 32],
         family_name: &str,
         given_name: &str,
     ) -> admin_primitives::Admin<[u8; 32]> {
         admin_primitives::Admin {
-            account_id: admin_account,
+            account_id: account_id,
+            // Phase 1: 私权/个人多签管理员公民 CID 预留空。
+            cid_number: Default::default(),
             family_name: family_name
                 .as_bytes()
                 .to_vec()
@@ -224,13 +226,13 @@ mod tests {
     }
 
     fn public_admin(
-        admin_account: [u8; 32],
+        account_id: [u8; 32],
         cid_number: &str,
         family_name: &str,
         given_name: &str,
-    ) -> admin_primitives::PublicAdmin<[u8; 32]> {
-        admin_primitives::PublicAdmin {
-            account_id: admin_account,
+    ) -> admin_primitives::Admin<[u8; 32]> {
+        admin_primitives::Admin {
+            account_id: account_id,
             cid_number: cid_number
                 .as_bytes()
                 .to_vec()
@@ -250,7 +252,7 @@ mod tests {
     }
 
     #[test]
-    fn admin_payload_encodes_account_family_name_and_given_name() {
+    fn admin_payload_encodes_account_cid_family_name_and_given_name() {
         let admins = vec![
             private_admin([1; 32], "张", "三"),
             private_admin([2; 32], "管理", "员"),
@@ -260,6 +262,7 @@ mod tests {
             .map(|admin| {
                 (
                     admin.account_id,
+                    admin.cid_number.clone(),
                     admin.family_name.clone(),
                     admin.given_name.clone(),
                 )

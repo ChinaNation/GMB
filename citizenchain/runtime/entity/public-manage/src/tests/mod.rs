@@ -366,15 +366,55 @@ pub fn grant_close_role(cid_number: &pallet::CidNumberOf<Test>) -> crate::RoleCo
     role_code
 }
 
+thread_local! {
+    static IS_OPERATION: core::cell::Cell<bool> = core::cell::Cell::new(false);
+    static CID_WALLET: core::cell::RefCell<Option<(alloc::vec::Vec<u8>, AccountId32)>> =
+        core::cell::RefCell::new(None);
+}
+
+/// 可切换相位 mock：默认 Genesis，测试可切 Operation。
+pub struct TestChainPhase;
+impl admin_primitives::ChainPhaseCheck for TestChainPhase {
+    fn is_operation() -> bool {
+        IS_OPERATION.with(|cell| cell.get())
+    }
+}
+
+/// 可换绑的 citizen-identity 绑定 mock：某 CID 当前只绑定一个钱包，可改绑以模拟换绑。
+pub struct TestCitizenBinding;
+impl admin_primitives::CitizenIdentityBindingQuery<AccountId32> for TestCitizenBinding {
+    fn matches_citizen_account(cid_number: &[u8], account: &AccountId32) -> bool {
+        CID_WALLET.with(|cell| {
+            cell.borrow()
+                .as_ref()
+                .map(|(cid, wallet)| cid.as_slice() == cid_number && wallet == account)
+                .unwrap_or(false)
+        })
+    }
+}
+
+pub fn set_operation_phase(is_operation: bool) {
+    IS_OPERATION.with(|cell| cell.set(is_operation));
+}
+
+/// 把某 CID 绑定到某钱包（再次调用即换绑，旧钱包随即失去该 CID 的授权）。
+pub fn bind_cid(cid_number: &[u8], wallet: AccountId32) {
+    CID_WALLET.with(|cell| *cell.borrow_mut() = Some((cid_number.to_vec(), wallet)));
+}
+
 impl public_admins::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
-    type CitizenIdentityBinding = ();
+    type CitizenIdentityBinding = TestCitizenBinding;
+    type ChainPhase = TestChainPhase;
 }
 
 impl private_admins::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
+    type ChainPhase = ();
+    type CitizenIdentityBinding = ();
+    type LegalRepresentativeQuery = ();
 }
 
 /// 岗位生命周期单测只验证 entity 约束，允许测试 CID 持有提交的业务动作权限。
@@ -480,7 +520,7 @@ pub fn empty_town_code() -> pallet::AccountNameOf<Test> {
 
 pub fn institution_admins(count: u8) -> crate::InstitutionAdminsInputOf<Test> {
     (0..count)
-        .map(|seed| admin_primitives::PublicAdmin {
+        .map(|seed| admin_primitives::Admin {
             account_id: admin(seed),
             cid_number: Default::default(),
             family_name: Default::default(),
@@ -596,6 +636,8 @@ pub fn insert_custom_account(cid_number: &pallet::CidNumberOf<Test>, name: &[u8]
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
+    set_operation_phase(false); // 每个测试默认 Genesis 期
+    CID_WALLET.with(|cell| *cell.borrow_mut() = None); // 清空换绑状态
     let storage = frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .expect("test storage should build");

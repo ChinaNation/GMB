@@ -28,8 +28,10 @@ ChatStoredMessage _stickerStored(
       envelopeId: 'env-$stickerId',
       conversationId: 'conv-st',
       direction: 'incoming',
-      senderAccount: 'bob-wallet',
-      recipientAccount: 'alice-wallet',
+      senderAccountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      recipientAccountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
       messageKind: ChatMessageKind.sticker,
       deliveryState: ChatMessageDeliveryState.receivedByDevice,
       createdAtMillis: 1000,
@@ -45,8 +47,10 @@ Widget _host({
     MaterialApp(
       home: ChatPage(
         conversationId: 'conv-st',
-        ownerAccount: 'alice-wallet',
-        peerUserId: 'bob-wallet',
+        accountId:
+            '0x1111111111111111111111111111111111111111111111111111111111111111',
+        peerUserId:
+            '0x2222222222222222222222222222222222222222222222222222222222222222',
         title: 'Bob',
         store: store,
         onSync: () async => 0,

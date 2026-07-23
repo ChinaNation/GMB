@@ -19,7 +19,7 @@ class _FakeApi extends SquareApiClient {
 
   @override
   Future<void> deleteAccount({
-    required String ownerAccount,
+    required String accountId,
     required SquareActionSigner signAction,
   }) async {
     deleteCalled = true;
@@ -29,7 +29,7 @@ class _FakeApi extends SquareApiClient {
   }
 
   @override
-  void clearSession(String ownerAccount) {
+  void clearSession(String accountId) {
     sessionCleared = true;
   }
 }
@@ -38,7 +38,7 @@ class _FakeCache extends CitizenProfileCache {
   _FakeCache() : super();
   bool cleared = false;
   @override
-  Future<void> clear(String ownerAccount) async {
+  Future<void> clear(String accountId) async {
     cleared = true;
   }
 }
@@ -54,7 +54,7 @@ class _FakeSubkey extends DeviceSubkey {
 class _FakeChatStore extends ChatStore {
   bool cleared = false;
   @override
-  Future<void> clearAllForOwner(String ownerAccount) async {
+  Future<void> clearAllForAccount(String accountId) async {
     cleared = true;
   }
 }
@@ -73,7 +73,7 @@ void main() {
     );
 
     await service.deleteAccount(
-      ownerAccount: _owner,
+      accountId: _owner,
       walletIndex: 3,
       signAction: (_) async => '0xSIG',
     );
@@ -100,7 +100,7 @@ void main() {
 
     await expectLater(
       service.deleteAccount(
-        ownerAccount: _owner,
+        accountId: _owner,
         walletIndex: 3,
         signAction: (_) async => '0xSIG',
       ),

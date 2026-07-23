@@ -11,8 +11,8 @@ const POINT = {
 };
 
 interface Row {
-  subscriber_account: string;
-  creator_account: string;
+  subscriber_account_id: string;
+  creator_account_id: string;
   tier_id: string;
   billing_period: string;
   paid_until: number;
@@ -26,8 +26,8 @@ class FakeDb {
   rows = new Map<string, Row>();
   seed(subscriber: string, creator: string, paidUntil: number): void {
     this.rows.set(rowKey(subscriber, creator), {
-      subscriber_account: subscriber,
-      creator_account: creator,
+      subscriber_account_id: subscriber,
+      creator_account_id: creator,
       tier_id: "old",
       billing_period: "monthly",
       paid_until: paidUntil,
@@ -44,15 +44,15 @@ class FakeStmt {
   bind(...args: unknown[]): FakeStmt { this.args = args; return this; }
 
   async all<T>(): Promise<{ results: T[] }> {
-    if (this.sql.includes("SELECT subscriber_account, creator_account")) {
+    if (this.sql.includes("SELECT subscriber_account_id, creator_account_id")) {
       const [chainTimestamp, limit] = this.args as [number, number];
       const results = [...this.db.rows.values()]
         .filter((row) => row.subscription_status === "active" && row.paid_until <= chainTimestamp)
         .sort((a, b) => a.paid_until - b.paid_until)
         .slice(0, limit)
         .map((row) => ({
-          subscriber_account: row.subscriber_account,
-          creator_account: row.creator_account,
+          subscriber_account_id: row.subscriber_account_id,
+          creator_account_id: row.creator_account_id,
         }));
       return { results: results as unknown as T[] };
     }
@@ -107,7 +107,7 @@ function deps(
   return {
     finalizedPoint: async () => POINT,
     readSubscriptionAtBlock: async (_env, subscriber, issuer) => {
-      const creator = issuer.kind === "creator" ? issuer.creatorAccount : "";
+      const creator = issuer.kind === "creator" ? issuer.creatorAccountId : "";
       const key = rowKey(subscriber, creator);
       if (fail.has(key)) throw new Error("chain failed");
       return states[key] ?? null;

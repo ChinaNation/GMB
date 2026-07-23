@@ -212,13 +212,13 @@ class LegislationVoteQueryService {
     int bodyIndex,
     String cidNumber,
     String voterRoleCode,
-    String pubkeyHex,
+    String publicKey,
   ) async {
     final tupleKey = Uint8List.fromList([
       ..._u32Le(bodyIndex),
       ..._encodeBoundedText(cidNumber, 32, 'cid_number'),
       ..._encodeBoundedText(voterRoleCode, 64, 'voter_role_code'),
-      ..._hexDecode(pubkeyHex),
+      ..._hexDecode(publicKey),
     ]);
     final key = _doubleMapKey(
       _votePallet,
@@ -244,18 +244,18 @@ class LegislationVoteQueryService {
   }
 
   /// 三人会签记录(LegOverrideSigns:BoundedVec<(AccountId,bool)>)。
-  Future<List<({String pubkeyHex, bool approve})>> fetchOverrideSigns(
+  Future<List<({String accountId, bool approve})>> fetchOverrideSigns(
       int proposalId) {
     return _fetchSigns('LegOverrideSigns', proposalId);
   }
 
   /// 护宪大法官终审记录(LegGuardSigns:BoundedVec<(AccountId,bool)>)。
-  Future<List<({String pubkeyHex, bool approve})>> fetchGuardSigns(
+  Future<List<({String accountId, bool approve})>> fetchGuardSigns(
       int proposalId) {
     return _fetchSigns('LegGuardSigns', proposalId);
   }
 
-  Future<List<({String pubkeyHex, bool approve})>> _fetchSigns(
+  Future<List<({String accountId, bool approve})>> _fetchSigns(
     String storage,
     int proposalId,
   ) async {
@@ -265,10 +265,10 @@ class LegislationVoteQueryService {
     try {
       final c = _Cursor(data);
       final signs = c.vec(() {
-        final pubkeyHex = _hex(c.bytes(32));
+        final accountId = '0x${_hex(c.bytes(32))}';
         final approveTag = c.u8();
         if (approveTag > 1) throw const FormatException('签署 bool 非法');
-        return (pubkeyHex: pubkeyHex, approve: approveTag == 1);
+        return (accountId: accountId, approve: approveTag == 1);
       });
       return c.isDone ? signs : const [];
     } on Object {

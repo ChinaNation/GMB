@@ -164,5 +164,14 @@ impl<T: pallet::Config> DeveloperUpgradeCheck for pallet::Pallet<T> {
     }
 }
 
+// ─── ChainPhaseCheck 实现 ───────────────────────────────────────────────────
+// 供 admin/entity 层读运行期强制门控:管理员字段强制仅在 Operation 期生效。
+// trait 定义在 admin-primitives(本 pallet 反向依赖各 admin/entity pallet,不能定义于此)。
+impl<T: pallet::Config> admin_primitives::ChainPhaseCheck for pallet::Pallet<T> {
+    fn is_operation() -> bool {
+        pallet::Phase::<T>::get() == pallet::ChainPhase::Operation
+    }
+}
+
 #[cfg(test)]
 mod tests;

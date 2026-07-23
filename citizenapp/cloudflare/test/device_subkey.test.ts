@@ -22,23 +22,23 @@ function toHex(buf: ArrayBuffer): string {
 // 设备绑定是唯一「客户端 + Worker 双侧各自 SCALE 编码」的流，须逐字节对齐。
 // 该 golden hex 必须与 App 端 test/signer/device_binding_golden_test.dart 完全一致。
 const DEVICE_BIND_INPUT = {
-  owner_account: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
-  p256_pubkey: '04' + 'ab'.repeat(64),
+  account_id: '0x1111111111111111111111111111111111111111111111111111111111111111',
+  p256_public_key: '04' + 'ab'.repeat(64),
   issued_at: 1_700_000_000_000
 };
 const DEVICE_BIND_GOLDEN_HEX =
-  'e9e25da7159f23e174b3c1cfc214ab41c4ea6fa413844e0e89656e8d24166c31';
+  '0089e293c8ef5c4d7bb5820e18dcb0bdac4eb374eaf6675c1bc2e53e50c3b960';
 
 describe('buildDeviceBindingSigningMessage', () => {
-  it('is signing_message(OP_SIGN_SQUARE_DEVICE_BIND, owner ‖ pubkey ‖ issued_at)', () => {
+  it('is signing_message(OP_SIGN_SQUARE_DEVICE_BIND, accountId ‖ pubkey ‖ issued_at)', () => {
     const message = buildDeviceBindingSigningMessage(DEVICE_BIND_INPUT);
     expect(message.length).toBe(32);
-    // 字段顺序锁：owner → p256_pubkey → issued_at。
+    // 字段顺序锁：accountId → p256_public_key → issued_at。
     const expected = signingMessage(
       OP_SIGN_SQUARE_DEVICE_BIND,
       concatBytes(
-        scaleString(DEVICE_BIND_INPUT.owner_account),
-        scaleString(DEVICE_BIND_INPUT.p256_pubkey),
+        scaleString(DEVICE_BIND_INPUT.account_id),
+        scaleString(DEVICE_BIND_INPUT.p256_public_key),
         u64Le(DEVICE_BIND_INPUT.issued_at)
       )
     );
@@ -53,9 +53,11 @@ describe('buildDeviceBindingSigningMessage', () => {
 });
 
 describe('assertP256PublicKeyHex', () => {
-  it('accepts a 65-byte uncompressed point and strips 0x', () => {
+  it('accepts only the canonical lowercase unprefixed 65-byte point', () => {
     const hex = '04' + 'a'.repeat(128);
-    expect(assertP256PublicKeyHex('0x' + hex.toUpperCase())).toBe(hex);
+    expect(assertP256PublicKeyHex(hex)).toBe(hex);
+    expect(() => assertP256PublicKeyHex('0x' + hex)).toThrow();
+    expect(() => assertP256PublicKeyHex(hex.toUpperCase())).toThrow();
   });
 
   it('rejects wrong length or prefix', () => {
@@ -83,8 +85,8 @@ describe('verifyP256Signature', () => {
     );
 
     expect(await verifyP256Signature(message, sigHex, pubHex)).toBe(true);
-    // 0x 前缀两端都接受
-    expect(await verifyP256Signature(message, '0x' + sigHex, '0x' + pubHex)).toBe(true);
+    // 带 0x 前缀不是设备子钥协议的规范格式，必须拒绝。
+    expect(await verifyP256Signature(message, '0x' + sigHex, '0x' + pubHex)).toBe(false);
     // 篡改 message → 拒
     const tampered = signingMessage(0x1b, scaleString('login-challenge-x'));
     expect(await verifyP256Signature(tampered, sigHex, pubHex)).toBe(false);

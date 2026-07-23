@@ -8,12 +8,12 @@ import 'package:citizenapp/ui/app_theme.dart';
 class TransactionHistoryPage extends StatefulWidget {
   const TransactionHistoryPage({
     super.key,
-    required this.walletAddress,
-    required this.walletPubkeyHex,
+    required this.ss58Address,
+    required this.accountId,
   });
 
-  final String walletAddress;
-  final String walletPubkeyHex;
+  final String ss58Address;
+  final String accountId;
 
   @override
   State<TransactionHistoryPage> createState() => _TransactionHistoryPageState();
@@ -55,8 +55,8 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
       _error = null;
     });
     try {
-      final records = await LocalTxStore.queryByWalletPubkey(
-        widget.walletPubkeyHex,
+      final records = await LocalTxStore.queryByAccountId(
+        widget.accountId,
         limit: _pageSize,
         offset: 0,
       );
@@ -79,8 +79,8 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
     if (_loadingMore || !_hasMore || _records.isEmpty) return;
     setState(() => _loadingMore = true);
     try {
-      final records = await LocalTxStore.queryByWalletPubkey(
-        widget.walletPubkeyHex,
+      final records = await LocalTxStore.queryByAccountId(
+        widget.accountId,
         limit: _pageSize,
         offset: _records.length,
       );
@@ -301,7 +301,7 @@ class LocalTxRecordTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final label = _businessTypeLabel(record.type);
     final counterpartyPrefix = _isExpense ? '去向' : '来自';
-    final counterparty = _shortAddress(record.counterpartyAddress);
+    final counterparty = _shortAddress(record.counterpartySs58Address);
     final timeStr =
         _formatMillis(record.confirmedAtMillis ?? record.createdAtMillis);
 
@@ -477,25 +477,25 @@ class LocalTxRecordDetailPage extends StatelessWidget {
               label: '手续费',
               value: _formatFen(record.feeFen!),
             ),
-          if (record.fromAddress != null)
+          if (record.fromSs58Address != null)
             _buildRow(
               context,
               label: '来源地址',
-              value: record.fromAddress!,
+              value: record.fromSs58Address!,
               copyable: true,
             ),
-          if (record.toAddress != null)
+          if (record.toSs58Address != null)
             _buildRow(
               context,
               label: '去向地址',
-              value: record.toAddress!,
+              value: record.toSs58Address!,
               copyable: true,
             ),
-          if (record.counterpartyAddress != null)
+          if (record.counterpartySs58Address != null)
             _buildRow(
               context,
               label: '对方地址',
-              value: record.counterpartyAddress!,
+              value: record.counterpartySs58Address!,
               copyable: true,
             ),
           if (record.remark != null && record.remark!.isNotEmpty)

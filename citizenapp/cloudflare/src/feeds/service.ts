@@ -15,10 +15,10 @@ export async function feedRoute(
 ): Promise<Response> {
   const url = new URL(request.url);
   const session = await requireSession(request, env);
-  const before = await getBrowseState(env, session.owner_account);
+  const before = await getBrowseState(env, session.account_id);
   const limit = Math.min(parseLimit(url), assertBrowseAvailable(before));
-  const posts = await listFeedPosts(env, feedKind, session.owner_account, limit);
-  const browse = await addBrowseCount(env, session.owner_account, before, posts.length);
+  const posts = await listFeedPosts(env, feedKind, session.account_id, limit);
+  const browse = await addBrowseCount(env, session.account_id, before, posts.length);
 
   return jsonResponse({
     ok: true,

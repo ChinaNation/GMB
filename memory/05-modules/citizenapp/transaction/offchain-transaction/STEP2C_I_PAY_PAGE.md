@@ -103,9 +103,9 @@ UI(ready):
   5. node.queryNextNonce(user)
   6. intent = NodePaymentIntent{
        tx_id = Random.secure 32B,
-       payer = wallet.pubkeyHex,
+       payer = wallet.accountId,
        payer_bank = ss58ToBytes(payer_bank),
-       recipient = _decodeAccount(qr.toAddress),    // 统一解析为 32B AccountId
+       recipient = _decodeAccount(qr.toSs58Address),    // 统一解析为 32B AccountId
        recipient_bank = hexToBytes(recipient_bank_hex),
        amount = amount_fen,
        fee = calcFeeFen(amount, rate_bp, min_fee_fen),

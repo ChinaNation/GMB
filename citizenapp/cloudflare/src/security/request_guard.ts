@@ -103,7 +103,7 @@ export async function guardRequest(request: Request, env: Env, path: string): Pr
   }
 
   const session = await sessionOrNull(request, env);
-  const rateKey = session ? `owner:${session.owner_account}` : `ip:${ipKey}`;
+  const rateKey = session ? `account_id:${session.account_id}` : `ip:${ipKey}`;
   const rate = routeRate(path, request.method);
   await enforceRateLimit(env, `${rate.key}:${rateKey}`, rate.limit, rate.seconds);
 
@@ -173,10 +173,10 @@ async function requireDeviceProof(
   }
 
   const subkey = await env.DB.prepare(
-    'SELECT p256_pubkey FROM square_device_subkeys WHERE owner_account = ?'
-  ).bind(session.owner_account).first<{ p256_pubkey: string }>();
+    'SELECT p256_public_key FROM square_device_subkeys WHERE account_id = ?'
+  ).bind(session.account_id).first<{ p256_public_key: string }>();
   if (!subkey) throw new HttpError(401, 'device_not_registered', '设备子钥未注册');
-  const deviceKeyHash = await sha256Hex(subkey.p256_pubkey);
+  const deviceKeyHash = await sha256Hex(subkey.p256_public_key);
   if (deviceKeyHash !== session.device_key_hash) {
     throw new HttpError(401, 'device_key_changed', '设备密钥已更换，请重新登录');
   }
@@ -196,15 +196,15 @@ async function requireDeviceProof(
     tokenHash
   ].join('\n');
   const message = signingMessage(OP_SIGN_SQUARE_LOGIN, scaleString(canonical));
-  if (!(await verifyP256Signature(message, signature, subkey.p256_pubkey))) {
+  if (!(await verifyP256Signature(message, signature, subkey.p256_public_key))) {
     throw new HttpError(401, 'device_signature_invalid', '设备请求签名校验失败');
   }
 
-  const nonceHash = await sha256Hex(`${session.owner_account}:${nonce}`);
+  const nonceHash = await sha256Hex(`${session.account_id}:${nonce}`);
   const inserted = await env.DB.prepare(
     `INSERT OR IGNORE INTO square_request_nonces
-      (nonce_hash, owner_account, expires_at, created_at) VALUES (?, ?, ?, ?)`
-  ).bind(nonceHash, session.owner_account, nowMs() + REQUEST_NONCE_TTL_MS, nowMs()).run();
+      (nonce_hash, account_id, expires_at, created_at) VALUES (?, ?, ?, ?)`
+  ).bind(nonceHash, session.account_id, nowMs() + REQUEST_NONCE_TTL_MS, nowMs()).run();
   if ((inserted.meta?.changes ?? 0) !== 1) {
     throw new HttpError(409, 'device_request_replayed', '设备请求已被使用');
   }

@@ -166,9 +166,9 @@ class ChainRpc {
   /// 通过原生 runtime call 读取当前 nonce，并把该值交给 signed extrinsic。
   Future<int> fetchNonce(String ss58Address) async {
     // 轻节点模式先在 Dart 侧解出 accountId，再交给原生 runtime call，避免继续依赖 legacy `system_accountNextIndex`。
-    final accountIdHex = '0x${_hexEncode(_keyring.decodeAddress(ss58Address))}';
+    final accountId = '0x${_hexEncode(_keyring.decodeAddress(ss58Address))}';
     final result =
-        await SmoldotClientManager.instance.getAccountNextIndex(accountIdHex);
+        await SmoldotClientManager.instance.getAccountNextIndex(accountId);
     if (result == null) {
       throw StateError('smoldot 轻节点尚未提供 accountNextIndex');
     }
@@ -759,12 +759,12 @@ class ChainRpc {
   /// 与原 getFinalizedSystemAccountSnapshot().freeYuan 等价。[forceFresh] 旁路缓存
   /// (转账前余额守卫用,确保拿到最新 finalized 状态)。
   Future<double> fetchFinalizedBalance(
-    String pubkeyHex, {
+    String publicKey, {
     bool forceFresh = false,
   }) async {
     final balances =
-        await fetchFinalizedBalances([pubkeyHex], forceFresh: forceFresh);
-    return balances[pubkeyHex] ?? 0.0;
+        await fetchFinalizedBalances([publicKey], forceFresh: forceFresh);
+    return balances[publicKey] ?? 0.0;
   }
 
   /// 查询链上真实余额 = free + reserved,best 视图。
@@ -777,9 +777,9 @@ class ChainRpc {
   ///   当前只暴露 freeFen 字段的限制。
   /// - 账户不存在或数据不完整均返回 0.0。
   /// 查询 finalized 块上的真实余额 = free + reserved。
-  Future<double> fetchFinalizedTotalBalance(String pubkeyHex) async {
+  Future<double> fetchFinalizedTotalBalance(String publicKey) async {
     final accountId = _hexDecode(
-        pubkeyHex.startsWith('0x') ? pubkeyHex.substring(2) : pubkeyHex);
+        publicKey.startsWith('0x') ? publicKey.substring(2) : publicKey);
     final blake2 = Hasher.blake2b128.hash(accountId);
     final fullKey = Uint8List(
         _systemAccountPrefix.length + blake2.length + accountId.length);
@@ -823,22 +823,22 @@ class ChainRpc {
   static final Uint8List _systemAccountPrefix = _hexDecode(
       '26aa394eea5630e07c48ae0c9558cef7b99d880ec681799c0cf30e8886371da9');
 
-  /// 批量查询多个账户在 best 视图上的链上余额，返回 pubkeyHex → yuan 的映射。
+  /// 批量查询多个账户在 best 视图上的链上余额，返回 publicKey → yuan 的映射。
   ///
   /// 一次 storage proof 请求查询所有账户，比逐个调用 [fetchBalance] 更高效。
   /// 账户不存在时对应值为 0.0。
   /// 批量查询多个账户在 finalized 块上的链上余额。
   Future<Map<String, double>> fetchFinalizedBalances(
-    List<String> pubkeyHexList, {
+    List<String> publicKeyList, {
     bool forceFresh = false,
   }) async {
-    if (pubkeyHexList.isEmpty) return {};
+    if (publicKeyList.isEmpty) return {};
 
-    final keyToPubkey = <String, String>{};
+    final keyToPublicKey = <String, String>{};
     final storageKeys = <String>[];
-    for (final pubkeyHex in pubkeyHexList) {
+    for (final publicKey in publicKeyList) {
       final accountId = _hexDecode(
-          pubkeyHex.startsWith('0x') ? pubkeyHex.substring(2) : pubkeyHex);
+          publicKey.startsWith('0x') ? publicKey.substring(2) : publicKey);
       final blake2 = Hasher.blake2b128.hash(accountId);
       final fullKey = Uint8List(
           _systemAccountPrefix.length + blake2.length + accountId.length);
@@ -847,14 +847,14 @@ class ChainRpc {
       fullKey.setAll(_systemAccountPrefix.length + blake2.length, accountId);
       final keyHex = '0x${_hexEncode(fullKey)}';
       storageKeys.add(keyHex);
-      keyToPubkey[keyHex] = pubkeyHex;
+      keyToPublicKey[keyHex] = publicKey;
     }
 
     final batchResult =
         await fetchStorageBatch(storageKeys, forceFresh: forceFresh);
 
     final balances = <String, double>{};
-    for (final entry in keyToPubkey.entries) {
+    for (final entry in keyToPublicKey.entries) {
       final data = batchResult[entry.key];
       balances[entry.value] = _decodeBalanceFromAccountData(data);
     }

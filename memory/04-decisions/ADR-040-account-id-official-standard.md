@@ -37,7 +37,7 @@ Polkadot SDK 的运行时身份模型以 `AccountId` 表示账户，以公钥完
 
 ```text
 Admin { account_id, family_name, given_name }
-PublicAdmin { account_id, cid_number, family_name, given_name }
+Admin { account_id, cid_number, family_name, given_name }
 CitizenSubject { cid_number, account_id }
 VotingIdentityPayload { cid_number, account_id, ... }
 InstitutionAdminAssignment { cid_number, account_id, role_code, ... }
@@ -69,7 +69,8 @@ CidByAccountId[account_id] -> cid_number
 - 第 1 步已冻结全仓命名、格式和无兼容原则。
 - 第 2 步已完成 runtime 结构、存储、事件、权限入口及其直接 SCALE 消费者统一；正式创世前版本与 StorageVersion 保持 `0`。
 - 第 3 步已完成 Node、桌面直接消费者和 `chain-signing` 共享 crate 统一：账户、公钥和 SS58 已分层，跨进程账户与公钥严格使用小写 `0x` 加 64 位十六进制，签名流程先验公钥再比较账户，奖励账户 RPC 与本地非密钥缓存已按最终命名重建且没有兼容入口。
-- OnChina、QR、CitizenApp、CitizenWallet、Cloudflare、控制台和其余全仓文档按任务卡后续步骤继续实施；对应步骤完成前的旧名称只用于定位待删除实现，不构成允许新增旧字段的例外。
+- 第 4 步已完成 OnChina 后端、前端、PostgreSQL 最终 schema、HTTP/JSON、登录与授权上下文统一，并删除重建本地 PostgreSQL 业务数据库。经单独二次确认，已使用当前 Runtime WASM 启动隔离 fresh chain，真实完成 PostgreSQL、HTTPS OnChina、链投影、账户格式、登录验签和管理员链上门禁验收；验收后数据库再次清空重建且全部服务已停止。
+- 第 5 步 QR 协议与生成物完整技术方案已写入任务卡，待确认后实施。CitizenApp、CitizenWallet、Cloudflare、控制台和其余全仓文档按任务卡后续步骤继续实施；对应步骤完成前的旧名称只用于定位待删除实现，不构成允许新增旧字段的例外。
 
 ## 备选方案
 

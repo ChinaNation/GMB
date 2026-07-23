@@ -7,13 +7,13 @@
       "op_tag": "0x18",
       "prefix_hex": "474d4218",
       "total_len": 97,
-      "layout": "prefix(4) || cid_number(32,right-zero-padded) || institution_code(4) || kind(1) || admin_pubkey(32) || timestamp_le(8) || nonce(16)",
+      "layout": "prefix(4) || cid_number(32,right-zero-padded) || institution_code(4) || kind(1) || signer_public_key(32) || timestamp_le(8) || nonce(16)",
       "sample_inputs": {
         "cid_number": "LN001-NRC0G-944805165-2026",
         "institution_code": "NRC",
         "institution_code_hex": "4e524300",
         "kind": 0,
-        "pubkey_hex": "2222222222222222222222222222222222222222222222222222222222222222",
+        "signer_public_key_hex": "2222222222222222222222222222222222222222222222222222222222222222",
         "timestamp": 1700000000,
         "nonce_hex": "00000000000000000000000000000000"
       },
@@ -24,11 +24,11 @@
       "op_tag": "0x19",
       "prefix_hex": "474d4219",
       "total_len": 92,
-      "layout": "prefix(4) || cid_number(32,right-zero-padded) || pubkey(32) || timestamp_le(8) || nonce(16)",
+      "layout": "prefix(4) || cid_number(32,right-zero-padded) || signer_public_key(32) || timestamp_le(8) || nonce(16)",
       "sample_inputs": {
         "cid_number": "AH001-SCB0V-123456789-2026",
         "cid_number_padded_hex": "41483030312d53434230562d3132333435363738392d32303236000000000000",
-        "pubkey_hex": "3333333333333333333333333333333333333333333333333333333333333333",
+        "signer_public_key_hex": "3333333333333333333333333333333333333333333333333333333333333333",
         "timestamp": 1700000000,
         "nonce_hex": "00000000000000000000000000000000"
       },

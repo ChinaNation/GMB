@@ -328,6 +328,10 @@ pub const PMUL: InstitutionCode = *b"PMUL";
 /// 私法人股份公司(清算行资格机构)。
 pub const SFGF: InstitutionCode = *b"SFGF";
 
+/// 非法人组织。唯一必挂法人父级(盈利策略 `InheritParent`)的机构码;
+/// 父级为 `SFGF` 时即股份公司的非法人分支机构,同样具备清算行资格。
+pub const UNIN: InstitutionCode = *b"UNIN";
+
 /// 全部 104 个机构码信息,按 A-I 九组排列。
 pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 104] = [
     // A 国家码单体(38,3 位,公法人,非盈利)

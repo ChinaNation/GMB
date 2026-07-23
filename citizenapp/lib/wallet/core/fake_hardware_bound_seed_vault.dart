@@ -42,6 +42,10 @@ class FakeHardwareBoundSeedVault implements SecureSeedStore {
   }
 
   @override
+  Future<bool> hasSeed(int walletIndex) async =>
+      _seeds.containsKey(walletIndex);
+
+  @override
   Future<void> deleteSeed(int walletIndex) async {
     _seeds.remove(walletIndex);
   }

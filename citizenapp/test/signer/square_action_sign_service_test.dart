@@ -10,7 +10,9 @@ import 'package:citizenapp/signer/signing.dart';
 import 'package:citizenapp/signer/square_action_sign_service.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-const _owner = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
+const _accountId =
+    '0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d';
+const _signerSs58Address = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
 final Uint8List _pubBytes =
     Uint8List.fromList(List.generate(32, (i) => (i + 7) & 0xff));
 final String _pubHex =
@@ -18,7 +20,7 @@ final String _pubHex =
 
 Uint8List _payloadBytes() => Uint8List.fromList(<int>[
       ...scaleString('cancel_membership'),
-      ...scaleString(_owner),
+      ...scaleString(_accountId),
       ...scaleString('sqa_1'),
       ...u64Le(1700000000000),
     ]);
@@ -31,7 +33,7 @@ String _signRequestRaw({int action = QrActions.squareAccountAction}) {
   return signer.encodeRequest(
     signer.buildRequest(
       requestId: QrSigner.generateRequestId(prefix: 'sq-'),
-      pubkey: '0x$_pubHex',
+      signerPublicKey: '0x$_pubHex',
       payloadHex: '0x${_hex(_payloadBytes())}',
       action: action,
     ),
@@ -39,14 +41,14 @@ String _signRequestRaw({int action = QrActions.squareAccountAction}) {
 }
 
 WalletProfile _wallet(
-    {required String pubkeyHex, String signMode = 'local', int index = 3}) {
+    {required String publicKey, String signMode = 'local', int index = 3}) {
   return WalletProfile(
     walletIndex: index,
     walletName: 'w',
     walletIcon: '',
     balance: 0,
-    address: _owner,
-    pubkeyHex: pubkeyHex,
+    ss58Address: _signerSs58Address,
+    accountId: publicKey,
     alg: 'sr25519',
     ss58: 2027,
     createdAtMillis: 0,
@@ -77,9 +79,10 @@ class _FakeWalletManager extends WalletManager {
 void main() {
   final service = SquareActionSignService();
 
-  test('prepare resolves owner wallet by QR u pubkey + decodes action',
+  test(
+      'prepare resolves accountId wallet by QR u signer public key + decodes action',
       () async {
-    final wm = _FakeWalletManager([_wallet(pubkeyHex: _pubHex)]);
+    final wm = _FakeWalletManager([_wallet(publicKey: '0x$_pubHex')]);
     final prep = await service.prepare(_signRequestRaw(), wm);
     expect(prep.wallet.walletIndex, 3);
     expect(prep.actionLabel, '广场账户动作签名');
@@ -89,7 +92,7 @@ void main() {
   });
 
   test('prepare rejects unknown action before signing', () async {
-    final wm = _FakeWalletManager([_wallet(pubkeyHex: _pubHex)]);
+    final wm = _FakeWalletManager([_wallet(publicKey: '0x$_pubHex')]);
     await expectLater(
       service.prepare(_signRequestRaw(action: 0x7fff), wm),
       throwsA(
@@ -110,7 +113,7 @@ void main() {
 
   test('prepare rejects registered but unsupported action before signing',
       () async {
-    final wm = _FakeWalletManager([_wallet(pubkeyHex: _pubHex)]);
+    final wm = _FakeWalletManager([_wallet(publicKey: '0x$_pubHex')]);
     await expectLater(
       service.prepare(_signRequestRaw(action: QrActions.login), wm),
       throwsA(
@@ -130,7 +133,7 @@ void main() {
   });
 
   test('prepare throws accountNotLocal when no wallet matches u', () async {
-    final wm = _FakeWalletManager([_wallet(pubkeyHex: 'aa' * 32)]);
+    final wm = _FakeWalletManager([_wallet(publicKey: '0x${'aa' * 32}')]);
     await expectLater(
       service.prepare(_signRequestRaw(), wm),
       throwsA(
@@ -144,8 +147,8 @@ void main() {
   });
 
   test('prepare rejects cold wallet', () async {
-    final wm =
-        _FakeWalletManager([_wallet(pubkeyHex: _pubHex, signMode: 'external')]);
+    final wm = _FakeWalletManager(
+        [_wallet(publicKey: '0x$_pubHex', signMode: 'external')]);
     await expectLater(
       service.prepare(_signRequestRaw(), wm),
       throwsA(
@@ -159,14 +162,14 @@ void main() {
   });
 
   test(
-      'sign signs signing_message(0x1D) with owner wallet and builds signResponse',
+      'sign signs signing_message(0x1D) with accountId wallet and builds signResponse',
       () async {
-    final wm = _FakeWalletManager([_wallet(pubkeyHex: _pubHex)]);
+    final wm = _FakeWalletManager([_wallet(publicKey: '0x$_pubHex')]);
     final prep = await service.prepare(_signRequestRaw(), wm);
 
     final responseJson = await service.sign(prep, wm);
 
-    // 用 owner 钱包（index 3）对 signing_message(0x1D, payload) 签名。
+    // 用 accountId 钱包（index 3）对 signing_message(0x1D, payload) 签名。
     expect(wm.signedIndex, 3);
     final expected = signingMessage(
         opTag: kOpSignSquareAction, scalePayload: _payloadBytes());

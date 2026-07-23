@@ -2,25 +2,30 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:saver_gallery/saver_gallery.dart';
 
 import 'package:citizenapp/qr/bodies/user_contact_body.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/qr/envelope.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
-/// 用户名片二维码：展示某用户的钱包账户 + 昵称，扫描可加通讯录。
-/// 主页 ⋮ 菜单「二维码」进入，展示当前主页用户（本人或他人）的名片码。
+/// 全 App 唯一用户二维码：同一张 `QR_V1 k=3`（userContact）名片码 = 钱包账户 + 昵称。
+///
+/// 扫码结果由**扫描模式**决定：contact 模式 = 加入通讯录；transfer / dispatch 模式 =
+/// 按收款人进入转账。因此全 App 不再生成第二份二维码。
+/// 入口：主页 ⋮ 菜单「二维码」（本人或他人）、钱包身份卡 QR 图标、聊天页「收付款」。
 class UserQrPage extends StatefulWidget {
   const UserQrPage({
     super.key,
     required this.contactName,
-    required this.address,
+    required this.accountId,
   });
 
   final String contactName;
-  final String address;
+  final String accountId;
 
   @override
   State<UserQrPage> createState() => _UserQrPageState();
@@ -30,16 +35,27 @@ class _UserQrPageState extends State<UserQrPage> {
   final GlobalKey _qrKey = GlobalKey();
   bool _saving = false;
 
+  /// 展示态 SS58 地址（accountId 为授权真源，ss58 仅用于展示与二维码载荷）。
+  String get _ss58Address => ss58FromAccountIdText(widget.accountId);
+
   String get _qrData => QrEnvelope<UserContactBody>(
         kind: QrKind.userContact,
         id: null,
         issuedAt: null,
         expiresAt: null,
         body: UserContactBody(
-          address: widget.address,
+          ss58Address: _ss58Address,
           contactName: widget.contactName,
         ),
       ).toRawJson();
+
+  /// 复制地址到剪贴板（并入原钱包收款弹窗的能力）。
+  void _copyAddress() {
+    Clipboard.setData(ClipboardData(text: _ss58Address));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('钱包地址已复制')),
+    );
+  }
 
   Future<void> _saveQr() async {
     if (_saving) return;
@@ -134,23 +150,44 @@ class _UserQrPageState extends State<UserQrPage> {
             ],
           ),
           const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              widget.address,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppTheme.textTertiary,
-                height: 1.5,
+          // 地址居中显示，复制图标浮右不抢中心。
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 48),
+                child: GestureDetector(
+                  onTap: _copyAddress,
+                  child: Text(
+                    _ss58Address,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.textTertiary,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
               ),
-            ),
+              Positioned(
+                right: 16,
+                child: IconButton(
+                  icon: const Icon(Icons.copy, size: 16),
+                  color: AppTheme.textTertiary,
+                  tooltip: '复制地址',
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 24, minHeight: 24),
+                  onPressed: _copyAddress,
+                ),
+              ),
+            ],
           ),
           const Spacer(),
           const Padding(
             padding: EdgeInsets.only(bottom: 32),
             child: Text(
-              '其他用户扫描此二维码可添加通讯录',
+              '扫描此二维码可加为联系人，或向其转账',
               style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
             ),
           ),

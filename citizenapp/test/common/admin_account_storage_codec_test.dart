@@ -32,6 +32,7 @@ void main() {
   ) =>
       [
         ...account,
+        ...scaleBytes(''), // 空公民 CID（统一 Admin 恒带 cid，Compact(0)）
         ...scaleBytes(familyName),
         ...scaleBytes(givenName),
       ];
@@ -87,8 +88,8 @@ void main() {
       expect(r.institutionCode, 'PMUL');
       expect(r.kind, AdminAccountStorageCodec.kindPersonal);
       expect(
-        r.admins.map((admin) => admin.admin_account),
-        ['11' * 32, '22' * 32, '33' * 32],
+        r.admins.map((admin) => admin.account_id),
+        ['0x${'11' * 32}', '0x${'22' * 32}', '0x${'33' * 32}'],
       );
     });
 
@@ -108,8 +109,8 @@ void main() {
       expect(r.institutionCode, 'CGOV');
       expect(r.kind, AdminAccountStorageCodec.kindPublicInstitution);
       expect(
-        r.admins.map((admin) => admin.admin_account),
-        ['44' * 32, '55' * 32],
+        r.admins.map((admin) => admin.account_id),
+        ['0x${'44' * 32}', '0x${'55' * 32}'],
       );
       expect(r.admins.first.cid_number, 'GZ000-CTZN6-198805200-2026');
       expect(r.admins.first.family_name, isEmpty);
@@ -198,8 +199,8 @@ void main() {
       final accountId =
           AdminAccountStorageCodec.extractPersonalAccountFromKey(key)!;
       expect(
-        AdminAccountStorageCodec.accountHexFromAccountId(accountId),
-        '000102030405060708090a0b0c0d0e0f'
+        AdminAccountStorageCodec.accountIdText(accountId),
+        '0x000102030405060708090a0b0c0d0e0f'
         '101112131415161718191a1b1c1d1e1f',
       );
     });
@@ -214,7 +215,7 @@ void main() {
         isNull,
       );
       expect(
-        AdminAccountStorageCodec.accountHexFromAccountId(Uint8List(31)),
+        AdminAccountStorageCodec.accountIdText(Uint8List(31)),
         isNull,
       );
     });

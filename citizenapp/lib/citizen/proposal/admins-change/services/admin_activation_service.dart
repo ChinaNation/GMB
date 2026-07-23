@@ -14,15 +14,15 @@ import 'package:citizenapp/signer/signing.dart';
 /// 管理员激活记录。
 class ActivatedAdmin {
   const ActivatedAdmin({
-    required this.pubkeyHex,
+    required this.accountId,
     required this.cidNumber,
     required this.institutionCode,
     required this.kind,
     required this.activatedAtMs,
   });
 
-  /// 管理员公钥 hex（不含 0x，小写）。
-  final String pubkeyHex;
+  /// 管理员账户 ID（小写 `0x` 加 64 位十六进制）。
+  final String accountId;
 
   /// 机构唯一主键；管理员激活不再绑定任一机构账户。
   final String cidNumber;
@@ -37,7 +37,7 @@ class ActivatedAdmin {
   final int activatedAtMs;
 
   Map<String, dynamic> toJson() => {
-        'pubkey_hex': pubkeyHex,
+        'account_id': accountId,
         'cid_number': cidNumber,
         'institution_code': institutionCode,
         'kind': kind,
@@ -45,7 +45,7 @@ class ActivatedAdmin {
       };
 
   factory ActivatedAdmin.fromJson(Map<String, dynamic> json) => ActivatedAdmin(
-        pubkeyHex: json['pubkey_hex'] as String,
+        accountId: json['account_id'] as String,
         cidNumber: json['cid_number'] as String,
         institutionCode: json['institution_code'] as String,
         kind: json['kind'] as int,
@@ -57,7 +57,7 @@ class ActivatedAdmin {
 ///
 /// 用户在管理员列表页点击"激活"→ 展示签名请求 QR →
 /// 持有私钥的外部设备扫码签名 → QrSignSessionPage 校验签名响应 →
-/// 本服务复核链上管理员账户和签名公钥 → 写入本地存储。
+/// 本服务复核链上管理员账户和签名账户 ID → 写入本地存储。
 class ActivationService {
   ActivationService({
     InstitutionAdminService? adminService,
@@ -66,7 +66,7 @@ class ActivationService {
   final InstitutionAdminService _adminService;
 
   /// 只保存 CID 语义的当前激活记录；不读取旧账户主键记录。
-  static const _storageKey = 'activated_institution_admins_v1';
+  static const _storageKey = 'activated_institution_admins';
 
   /// AccountId 级管理员激活 payload 4 字节二进制前缀 = GMB || 0x18。
   ///
@@ -105,11 +105,12 @@ class ActivationService {
     // 链上交叉校验
     try {
       final chainAdmins = await _adminService.fetchAdmins(identity);
-      final validPubkeys =
-          chainAdmins.map((admin) => admin.admin_account).toSet();
+      final validAccountIds =
+          chainAdmins.map((admin) => admin.account_id).toSet();
       final before = all.length;
       all.removeWhere(
-        (a) => a.cidNumber == cidNumber && !validPubkeys.contains(a.pubkeyHex),
+        (a) =>
+            a.cidNumber == cidNumber && !validAccountIds.contains(a.accountId),
       );
       if (all.length != before) {
         await _saveAll(all);
@@ -121,13 +122,15 @@ class ActivationService {
     }
   }
 
-  /// 检查指定公钥是否已激活。
+  /// 检查指定账户 ID 是否已激活。
   Future<bool> isActivated(
-      String pubkeyHex, AdminAccountIdentity identity) async {
-    final pk = _normalize(pubkeyHex);
+      String accountId, AdminAccountIdentity identity) async {
+    final normalizedAccountId = _normalize(accountId);
     final cidNumber = _requireInstitutionCid(identity);
     final all = await loadAll();
-    return all.any((a) => a.pubkeyHex == pk && a.cidNumber == cidNumber);
+    return all.any(
+      (a) => a.accountId == normalizedAccountId && a.cidNumber == cidNumber,
+    );
   }
 
   // QR 激活流程
@@ -135,20 +138,20 @@ class ActivationService {
   ///
   /// 返回 (SignRequestEnvelope, requestJson),直接传给 QrSignSessionPage。
   ({SignRequestEnvelope request, String json}) buildActivationRequest({
-    required String pubkeyHex,
+    required String accountId,
     required AdminAccountIdentity identity,
   }) {
     _requireInstitutionCid(identity);
-    final pk = _normalize(pubkeyHex);
+    final normalizedAccountId = _normalize(accountId);
 
-    final payload = _buildActivatePayload(identity, pk);
+    final payload = _buildActivatePayload(identity, normalizedAccountId);
     final payloadHex = '0x${_bytesToHex(payload)}';
 
     final signer = QrSigner();
     final requestId = QrSigner.generateRequestId(prefix: 'act-');
     final request = signer.buildRequest(
       requestId: requestId,
-      pubkey: '0x$pk',
+      signerPublicKey: normalizedAccountId,
       payloadHex: payloadHex,
       action: QrActions.activateAdmin,
     );
@@ -159,33 +162,33 @@ class ActivationService {
 
   /// 通过 QR 签名响应完成激活。
   ///
-  /// [pubkeyHex] 管理员公钥。
+  /// [accountId] 管理员账户 ID。
   /// [identity] 管理员账户。
   /// [response] 从 QrSignSessionPage 获取的签名响应。
   Future<ActivatedAdmin> activateViaQr({
-    required String pubkeyHex,
+    required String accountId,
     required AdminAccountIdentity identity,
     required SignResponseEnvelope response,
   }) async {
     final cidNumber = _requireInstitutionCid(identity);
-    final pk = _normalize(pubkeyHex);
+    final normalizedAccountId = _normalize(accountId);
 
     // 验证签名者与目标管理员一致
-    final responsePk = _normalize(response.body.pubkeyHex);
-    if (responsePk != pk) {
-      throw Exception('签名公钥与管理员公钥不一致');
+    final responsePk = _normalize(response.body.signerPublicKeyHex);
+    if (responsePk != normalizedAccountId) {
+      throw Exception('签名账户 ID 与管理员账户 ID 不一致');
     }
 
     // 验证是链上管理员
     final admins = await _adminService.fetchAdmins(identity);
-    if (!admins.any((admin) => admin.admin_account == pk)) {
-      throw Exception('该公钥不在此管理员账户的链上管理员列表中');
+    if (!admins.any((admin) => admin.account_id == normalizedAccountId)) {
+      throw Exception('该账户 ID 不在此管理员账户的链上管理员列表中');
     }
 
     // 写入本地存储
     final now = DateTime.now().millisecondsSinceEpoch;
     final activation = ActivatedAdmin(
-      pubkeyHex: pk,
+      accountId: normalizedAccountId,
       cidNumber: cidNumber,
       institutionCode: identity.institutionCode,
       kind: identity.kind,
@@ -194,7 +197,9 @@ class ActivationService {
 
     var all = await loadAll();
     // 去重
-    all.removeWhere((a) => a.pubkeyHex == pk && a.cidNumber == cidNumber);
+    all.removeWhere(
+      (a) => a.accountId == normalizedAccountId && a.cidNumber == cidNumber,
+    );
     all.add(activation);
     await _saveAll(all);
 
@@ -204,25 +209,27 @@ class ActivationService {
   // 取消激活
   /// 取消激活。
   Future<void> deactivate(
-      String pubkeyHex, AdminAccountIdentity identity) async {
-    final pk = _normalize(pubkeyHex);
+      String accountId, AdminAccountIdentity identity) async {
+    final normalizedAccountId = _normalize(accountId);
     final cidNumber = _requireInstitutionCid(identity);
     var all = await loadAll();
-    all.removeWhere((a) => a.pubkeyHex == pk && a.cidNumber == cidNumber);
+    all.removeWhere(
+      (a) => a.accountId == normalizedAccountId && a.cidNumber == cidNumber,
+    );
     await _saveAll(all);
   }
 
   // 内部方法
   Uint8List _buildActivatePayload(
-      AdminAccountIdentity identity, String pubkeyHex) {
-    final pubkey = _hexToBytes(pubkeyHex);
+      AdminAccountIdentity identity, String accountId) {
+    final signerPublicKey = _hexToBytes(accountId);
     final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final random = Random.secure();
     return activateAdminPayload(
       cidNumber: _requireInstitutionCid(identity),
       institutionCode: InstitutionCodeLabel.codeBytes(identity.institutionCode),
       kind: identity.kind,
-      adminPubkey: pubkey,
+      signerPublicKey: signerPublicKey,
       timestamp: timestamp,
       nonce: List<int>.generate(
         kAdminNonceLength,
@@ -245,9 +252,11 @@ class ActivationService {
     await prefs.setString(_storageKey, raw);
   }
 
-  static String _normalize(String hex) {
-    final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
-    return clean.toLowerCase();
+  static String _normalize(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+    }
+    return accountId;
   }
 
   static Uint8List _hexToBytes(String hex) {

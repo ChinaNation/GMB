@@ -1,6 +1,6 @@
 import type { Env, MediaAssetRow } from '../types';
 import { nowMs } from '../shared/time';
-import { sanitizeOwnerAccount } from '../storage/r2_keys';
+import { accountIdPathSegment } from '../storage/r2_keys';
 import { signR2GetUrl } from '../storage/presigned';
 import {
   copyStreamFromUrl,
@@ -17,12 +17,12 @@ import { putR2Stream } from '../limits/storage';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_LAPSE_DAYS = 90; // 退订满 3 个月
-const MAX_OWNERS_PER_SWEEP = 20; // 单次 Cron 限流，防 Worker 超时
+const MAX_ACCOUNTS_PER_SWEEP = 20; // 单次 Cron 限流，防 Worker 超时
 const MAX_VIDEOS_PER_SWEEP = 100;
 const RESTORE_MAX_DURATION_SECONDS = resourceLimit('square_video_spark').max_seconds!;
 const ARCHIVE_READ_URL_TTL_SECONDS = 3600;
 
-const MEDIA_COLUMNS = `upload_id, post_id, owner_account, media_index, media_kind, provider,
+const MEDIA_COLUMNS = `upload_id, post_id, account_id, media_index, media_kind, provider,
   provider_asset_id, upload_method, resource_key, content_type, byte_size, asset_state,
   declared_duration_seconds, duration_seconds, width, height,
   error_code, created_at, updated_at, ready_at, archive_state, archived_at, r2_archive_key`;
@@ -36,33 +36,33 @@ function lapseDays(env: Env): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_LAPSE_DAYS;
 }
 
-/// R2 冷存对象键：archive/{owner}/{stream_uid}.mp4。
-export function archiveObjectKey(ownerAccount: string, uid: string): string {
-  return `archive/${sanitizeOwnerAccount(ownerAccount)}/${uid}.mp4`;
+/// R2 冷存对象键：archive/{account_id_hex}/{stream_uid}.mp4。
+export function archiveObjectKey(accountId: string, uid: string): string {
+  return `archive/${accountIdPathSegment(accountId)}/${uid}.mp4`;
 }
 
 /// Cron 入口：扫描退订满 N 月的账户，冷归档其仍在播的视频。返回处理统计。
-export async function runVideoArchiveSweep(env: Env): Promise<{ owners: number; archived: number }> {
+export async function runVideoArchiveSweep(env: Env): Promise<{ account_count: number; archived: number }> {
   if (!videoArchiveEnabled(env)) {
-    return { owners: 0, archived: 0 };
+    return { account_count: 0, archived: 0 };
   }
   const cutoff = nowMs() - lapseDays(env) * DAY_MS;
-  const owners = await selectLapsedOwners(env, cutoff, MAX_OWNERS_PER_SWEEP);
+  const accountIds = await selectLapsedAccountIds(env, cutoff, MAX_ACCOUNTS_PER_SWEEP);
   let archived = 0;
-  for (const owner of owners) {
+  for (const accountId of accountIds) {
     if (archived >= MAX_VIDEOS_PER_SWEEP) break;
-    const videos = await selectVideoAssets(env, owner, 'live');
+    const videos = await selectVideoAssets(env, accountId, 'live');
     for (const video of videos) {
       if (archived >= MAX_VIDEOS_PER_SWEEP) break;
       if (await archiveVideoAsset(env, video)) archived += 1;
     }
   }
-  return { owners: owners.length, archived };
+  return { account_count: accountIds.length, archived };
 }
 
-/// 重订解冻：把该 owner 已归档的视频回灌 Stream。由会员订阅重新生效时触发。
-export async function restoreOwnerVideos(env: Env, ownerAccount: string): Promise<{ restored: number }> {
-  const videos = await selectVideoAssets(env, ownerAccount, 'archived');
+/// 重订解冻：把该 AccountId 已归档的视频回灌 Stream。由会员订阅重新生效时触发。
+export async function restoreAccountVideos(env: Env, accountId: string): Promise<{ restored: number }> {
+  const videos = await selectVideoAssets(env, accountId, 'archived');
   let restored = 0;
   for (const video of videos) {
     if (await restoreVideoAsset(env, video)) restored += 1;
@@ -70,11 +70,11 @@ export async function restoreOwnerVideos(env: Env, ownerAccount: string): Promis
   return { restored };
 }
 
-async function selectLapsedOwners(env: Env, cutoff: number, limit: number): Promise<string[]> {
+async function selectLapsedAccountIds(env: Env, cutoff: number, limit: number): Promise<string[]> {
   const result = await env.DB.prepare(
-    `SELECT DISTINCT m.owner_account
+    `SELECT DISTINCT m.account_id
       FROM square_memberships m
-      JOIN square_media_assets a ON a.owner_account = m.owner_account
+      JOIN square_media_assets a ON a.account_id = m.account_id
       WHERE m.entitlement_lapsed_at IS NOT NULL
         AND m.entitlement_lapsed_at <= ?
         AND m.subscription_status IN ('cancelled', 'terminated')
@@ -83,20 +83,20 @@ async function selectLapsedOwners(env: Env, cutoff: number, limit: number): Prom
       LIMIT ?`
   )
     .bind(cutoff, limit)
-    .all<{ owner_account: string }>();
-  return (result.results ?? []).map((row) => row.owner_account);
+    .all<{ account_id: string }>();
+  return (result.results ?? []).map((row) => row.account_id);
 }
 
 async function selectVideoAssets(
   env: Env,
-  ownerAccount: string,
+  accountId: string,
   archiveState: 'live' | 'archived'
 ): Promise<MediaAssetRow[]> {
   const result = await env.DB.prepare(
     `SELECT ${MEDIA_COLUMNS} FROM square_media_assets
-      WHERE owner_account = ? AND media_kind = 'video' AND archive_state = ?`
+      WHERE account_id = ? AND media_kind = 'video' AND archive_state = ?`
   )
-    .bind(ownerAccount, archiveState)
+    .bind(accountId, archiveState)
     .all<MediaAssetRow>();
   return result.results ?? [];
 }
@@ -105,7 +105,7 @@ async function archiveVideoAsset(env: Env, video: MediaAssetRow): Promise<boolea
   if (video.media_kind !== 'video' || video.archive_state !== 'live') return false;
   if (video.provider !== 'cloudflare_stream') return false;
   const uid = video.provider_asset_id;
-  const r2Key = archiveObjectKey(video.owner_account, uid);
+  const r2Key = archiveObjectKey(video.account_id, uid);
   try {
     // 1) Stream 导出编码版 MP4（无冷层）。仍在生成则本轮跳过，下次扫描再归档。
     const mp4Url = await createStreamDownloadUrl(env, uid);

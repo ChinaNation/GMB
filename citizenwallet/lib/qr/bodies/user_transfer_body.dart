@@ -2,7 +2,7 @@ import 'package:citizenwallet/qr/envelope.dart';
 
 class UserTransferBody implements QrBody {
   const UserTransferBody({
-    required this.address,
+    required this.ss58Address,
     required this.recipientName,
     required this.amount,
     required this.symbol,
@@ -10,7 +10,7 @@ class UserTransferBody implements QrBody {
     required this.bank,
   });
 
-  final String address;
+  final String ss58Address;
   final String recipientName;
   final String amount;
   final String symbol;
@@ -19,7 +19,7 @@ class UserTransferBody implements QrBody {
 
   @override
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'address': address,
+        'ss58_address': ss58Address,
         'recipient_name': recipientName,
         'amount': amount,
         'symbol': symbol,
@@ -28,14 +28,14 @@ class UserTransferBody implements QrBody {
       };
 
   static UserTransferBody fromJson(Map<String, dynamic> data) {
-    final address = data['address'];
+    final ss58Address = data['ss58_address'];
     final recipientName = data['recipient_name'];
     final amount = data['amount'];
     final symbol = data['symbol'];
     final memo = data['memo'];
     final bank = data['bank'];
-    if (address is! String || address.isEmpty) {
-      throw const FormatException('user_transfer.address 必填');
+    if (ss58Address is! String || ss58Address.isEmpty) {
+      throw const FormatException('user_transfer.ss58_address 必填');
     }
     if (recipientName is! String ||
         amount is! String ||
@@ -46,7 +46,7 @@ class UserTransferBody implements QrBody {
           'user_transfer 的 recipient_name/amount/symbol/memo/bank 必须为字符串');
     }
     return UserTransferBody(
-      address: address,
+      ss58Address: ss58Address,
       recipientName: recipientName,
       amount: amount,
       symbol: symbol,

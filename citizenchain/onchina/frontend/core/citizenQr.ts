@@ -28,23 +28,23 @@ export function isFixedKind(kind: QrKind): boolean {
 export interface SignRequestBody {
   action: number;
   sig_alg: 1;
-  pubkey: string;
+  signer_public_key: string;
   payload: string;
   payload_hex: string;
 }
 
 export interface SignResponseBody {
-  pubkey: string;
+  signer_public_key: string;
   signature: string;
 }
 
 export interface UserContactBody {
-  address: string;
+  ss58_address: string;
   contact_name: string;
 }
 
 export interface UserTransferBody {
-  address: string;
+  ss58_address: string;
   recipient_name: string;
   amount: string;
   symbol: string;
@@ -90,6 +90,18 @@ function requireInt(obj: Record<string, unknown>, key: string): number {
   return v;
 }
 
+function requireExactKeys(
+  obj: Record<string, unknown>,
+  allowedKeys: readonly string[],
+  field: string,
+): void {
+  const allowed = new Set(allowedKeys);
+  const unknown = Object.keys(obj).filter((key) => !allowed.has(key));
+  if (unknown.length > 0) {
+    throw new QrParseError(`${field} 包含未知字段: ${unknown.join(',')}`);
+  }
+}
+
 function requireCompactB64(obj: Record<string, unknown>, key: string): string {
   const v = requireString(obj, key);
   if (!/^[A-Za-z0-9_-]+$/.test(v)) {
@@ -130,6 +142,7 @@ function b64ToPayloadHex(value: string): string {
 }
 
 function parseSignRequestBody(b: Record<string, unknown>): SignRequestBody {
+  requireExactKeys(b, ['a', 'g', 'u', 'd'], 'b');
   const action = requireInt(b, 'a');
   const sigAlg = requireInt(b, 'g');
   if (sigAlg !== 1) throw new QrParseError('b.g 必须为 1(sr25519)');
@@ -138,30 +151,37 @@ function parseSignRequestBody(b: Record<string, unknown>): SignRequestBody {
   return {
     action,
     sig_alg: 1,
-    pubkey: b64ToHex(u, 32, 'b.u'),
+    signer_public_key: b64ToHex(u, 32, 'b.u'),
     payload: d,
     payload_hex: b64ToPayloadHex(d),
   };
 }
 
 function parseSignResponseBody(b: Record<string, unknown>): SignResponseBody {
+  requireExactKeys(b, ['u', 's'], 'b');
   const u = requireCompactB64(b, 'u');
   const s = requireCompactB64(b, 's');
   return {
-    pubkey: b64ToHex(u, 32, 'b.u'),
+    signer_public_key: b64ToHex(u, 32, 'b.u'),
     signature: b64ToHex(s, 64, 'b.s'),
   };
 }
 
 function parseUserContactBody(b: Record<string, unknown>): UserContactBody {
+  requireExactKeys(b, ['ss58_address', 'contact_name'], 'b');
   return {
-    address: requireString(b, 'address'),
+    ss58_address: requireString(b, 'ss58_address'),
     contact_name: requireString(b, 'contact_name'),
   };
 }
 
 function parseUserTransferBody(b: Record<string, unknown>): UserTransferBody {
-  const address = requireString(b, 'address');
+  requireExactKeys(
+    b,
+    ['ss58_address', 'recipient_name', 'amount', 'symbol', 'memo', 'bank'],
+    'b',
+  );
+  const ss58Address = requireString(b, 'ss58_address');
   const recipientName = b['recipient_name'];
   const amount = b['amount'];
   const symbol = b['symbol'];
@@ -176,7 +196,14 @@ function parseUserTransferBody(b: Record<string, unknown>): UserTransferBody {
   ) {
     throw new QrParseError('user_transfer 的 recipient_name/amount/symbol/memo/bank 必须为字符串');
   }
-  return { address, recipient_name: recipientName, amount, symbol, memo, bank };
+  return {
+    ss58_address: ss58Address,
+    recipient_name: recipientName,
+    amount,
+    symbol,
+    memo,
+    bank,
+  };
 }
 
 export function parseQrEnvelope(raw: string | Record<string, unknown>): QrEnvelope {
@@ -195,6 +222,7 @@ export function parseQrEnvelope(raw: string | Record<string, unknown>): QrEnvelo
   const code = requireInt(data, 'k');
   const kind = CODE_TO_KIND[code];
   if (!kind) throw new QrParseError(`未知 k: ${code}`);
+  requireExactKeys(data, isFixedKind(kind) ? ['p', 'k', 'b'] : ['p', 'k', 'i', 'e', 'b'], 'QR');
 
   let id: string | undefined;
   let expiresAt: number | undefined;

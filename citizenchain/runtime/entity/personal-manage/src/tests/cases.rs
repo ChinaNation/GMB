@@ -85,6 +85,39 @@ fn overwrite_create_proposal_fee(pid: u64, fee: Balance) {
 
 // ─── 1. propose_create:写 Pending + reserve fee + 发事件 ─────────────
 
+/// 死规则:个人多签管理员**不强制**提供公民 CID(cid 空也能创建);姓名空则由
+/// `normalize_names` 自动填默认。与节点守卫 `AdminPolicyApi` 呼应,链端锁死禁强制。
+#[test]
+fn propose_create_does_not_mandate_personal_multisig_cid() {
+    new_test_ext().execute_with(|| {
+        let c = setup_creator_balance();
+        // cid / 姓 / 名 全空——个人多签禁强制这些字段。
+        let admins: pallet::AdminsOf<Test> = (0..3u8)
+            .map(admin)
+            .map(|account_id| admin_primitives::Admin {
+                account_id,
+                cid_number: Default::default(),
+                family_name: Default::default(),
+                given_name: Default::default(),
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .expect("admins fit");
+        let name = account_name(b"no-cid-personal");
+        let dq = proposed_account(&c, b"no-cid-personal");
+
+        // 空 cid + 空姓名不应被拒。
+        assert_ok!(PersonalManage::propose_create(
+            RuntimeOrigin::signed(c.clone()),
+            name,
+            admins,
+            2,
+            CREATE_AMOUNT,
+        ));
+        assert!(pallet::PersonalAccounts::<Test>::contains_key(&dq));
+    });
+}
+
 #[test]
 fn propose_create_writes_pending_and_reserves_fee() {
     new_test_ext().execute_with(|| {

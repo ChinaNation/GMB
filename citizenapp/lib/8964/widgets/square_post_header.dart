@@ -49,7 +49,7 @@ class SquarePostHeader extends StatelessWidget {
             child: Row(
               children: [
                 ProfileAvatar(
-                  seed: author.ownerAccount,
+                  seed: author.accountId,
                   size: 40,
                   imageUrl: avatarUrl,
                   imageHeaders: avatarHeaders,

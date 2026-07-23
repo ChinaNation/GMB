@@ -93,7 +93,7 @@ class _MembershipPageState extends State<MembershipPage>
       final _MembershipViewData data;
       if (session == null) {
         data = const _MembershipViewData(
-          ownerAccount: '',
+          accountId: '',
           state: null,
           prices: <String, int>{},
         );
@@ -109,13 +109,13 @@ class _MembershipPageState extends State<MembershipPage>
           _chainService
               .fetchAllPlatformPrices()
               .catchError((_) => const <String, int>{}),
-          _subscriptionService.fetchFinalizedState(session.ownerAccount),
+          _subscriptionService.fetchFinalizedState(session.accountId),
         ]);
         final mirror = results[0] as SquareMembershipState;
         final prices = results[1] as Map<String, int>;
         final snapshot = results[2] as FinalizedSubscriptionSnapshot;
         data = _MembershipViewData(
-          ownerAccount: session.ownerAccount,
+          accountId: session.accountId,
           state: _stateFromFinalized(mirror, snapshot),
           prices: prices,
         );
@@ -381,12 +381,12 @@ class _MembershipPageState extends State<MembershipPage>
 
 class _MembershipViewData {
   const _MembershipViewData({
-    required this.ownerAccount,
+    required this.accountId,
     required this.state,
     required this.prices,
   });
 
-  final String ownerAccount;
+  final String accountId;
   final SquareMembershipState? state;
 
   /// 各档链上月价（分，公民币）；缺档表示链上未设该档价，卡片显示占位「—」。

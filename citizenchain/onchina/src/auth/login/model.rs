@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct LoginSignRequest {
     pub(crate) challenge_id: String,
-    pub(crate) admin_account: String,
+    /// 用户码确定的唯一目标账户；签名请求创建后禁止再由响应方改写。
+    pub(crate) account_id: String,
     pub(crate) challenge_text: String,
     pub(crate) challenge_token: String,
     pub(crate) qr_aud: String,
@@ -26,7 +27,7 @@ pub(crate) struct LoginSignRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct AdminSession {
     pub(crate) token: String,
-    pub(crate) admin_account: String,
+    pub(crate) account_id: String,
     pub(crate) institution_code: String,
     /// 会话签发时命中的链上机构候选。每次鉴权必须与节点当前绑定严格一致。
     pub(crate) candidate_id: String,
@@ -57,7 +58,7 @@ pub(crate) struct NodeInstitutionBinding {
     pub(crate) institution_code: String,
     pub(crate) institution_cid_number: String,
     pub(crate) frg_province_code: Option<String>,
-    pub(crate) bound_admin_pubkey: String,
+    pub(crate) bound_account_id: String,
     pub(crate) bound_at: DateTime<Utc>,
     pub(crate) status: String,
 }
@@ -65,7 +66,7 @@ pub(crate) struct NodeInstitutionBinding {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct NodeBindingChallenge {
     pub(crate) binding_challenge_id: String,
-    pub(crate) admin_account: String,
+    pub(crate) account_id: String,
     pub(crate) candidates: Vec<AdminInstitutionCandidate>,
     pub(crate) expire_at: DateTime<Utc>,
     pub(crate) consumed: bool,
@@ -76,14 +77,14 @@ pub(crate) struct QrLoginResultRecord {
     pub(crate) session_id: String,
     pub(crate) access_token: String,
     pub(crate) expire_at: DateTime<Utc>,
-    pub(crate) admin_account: String,
+    pub(crate) account_id: String,
     pub(crate) institution_code: String,
     pub(crate) created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct AdminAuthContext {
-    pub(crate) admin_account: String,
+    pub(crate) account_id: String,
     /// 当前会话绑定的准确机构 CID；机构码只负责分类，不能代替机构唯一身份。
     pub(crate) institution_cid_number: String,
     /// 所属机构码(3/4 字符文本,前端据此渲染工作台入口与能力)。
@@ -104,7 +105,7 @@ pub(crate) struct AdminAuthContext {
 #[derive(Serialize)]
 pub(crate) struct AdminAuthOutput {
     pub(crate) ok: bool,
-    pub(crate) admin_account: String,
+    pub(crate) account_id: String,
     pub(crate) institution_cid_number: String,
     pub(crate) institution_code: String,
     pub(crate) admin_level: Option<String>,
@@ -120,14 +121,9 @@ pub(crate) struct AdminAuthOutput {
     pub(crate) cid_short_name: Option<String>,
 }
 
-#[derive(Deserialize)]
-pub(crate) struct AdminIdentifyInput {
-    pub(crate) identity_qr: String,
-}
-
 #[derive(Serialize)]
 pub(crate) struct AdminIdentifyOutput {
-    pub(crate) admin_account: String,
+    pub(crate) account_id: String,
     /// 扫码登录成功后由节点激活绑定派生，禁止浏览器自报。
     pub(crate) institution_cid_number: String,
     pub(crate) institution_code: String,
@@ -145,26 +141,9 @@ pub(crate) struct AdminIdentifyOutput {
 }
 
 #[derive(Deserialize)]
-pub(crate) struct AdminChallengeInput {
-    pub(crate) admin_account: String,
-    pub(crate) origin: Option<String>,
-    pub(crate) domain: Option<String>,
-    pub(crate) session_id: Option<String>,
-}
-
-#[derive(Serialize)]
-pub(crate) struct AdminChallengeOutput {
-    pub(crate) challenge_id: String,
-    pub(crate) challenge_payload: String,
-    pub(crate) origin: String,
-    pub(crate) domain: String,
-    pub(crate) session_id: String,
-    pub(crate) nonce: String,
-    pub(crate) expire_at: i64,
-}
-
-#[derive(Deserialize)]
 pub(crate) struct AdminQrSignRequestInput {
+    /// 管理员先出示的完整 QR_V1/k=3 用户码；后端只从中读取 b.ss58_address。
+    pub(crate) identity_qr: String,
     pub(crate) origin: Option<String>,
     pub(crate) domain: Option<String>,
     pub(crate) session_id: Option<String>,
@@ -183,18 +162,14 @@ pub(crate) struct AdminQrSignRequestOutput {
 
 #[derive(Deserialize)]
 pub(crate) struct AdminQrCompleteInput {
-    #[serde(alias = "request_id", alias = "challenge")]
     pub(crate) challenge_id: String,
     pub(crate) session_id: Option<String>,
-    pub(crate) admin_account: String,
-    #[serde(default, alias = "pubkey", alias = "public_key")]
-    pub(crate) signer_pubkey: Option<String>,
+    pub(crate) signer_public_key: String,
     pub(crate) signature: String,
 }
 
 #[derive(Deserialize)]
 pub(crate) struct AdminQrResultQuery {
-    #[serde(alias = "challenge")]
     pub(crate) challenge_id: String,
     pub(crate) session_id: String,
 }
@@ -217,7 +192,7 @@ pub(crate) struct NodeBindingConfirmInput {
 #[derive(Serialize)]
 pub(crate) struct NodeBindingRequiredOutput {
     pub(crate) binding_challenge_id: String,
-    pub(crate) admin_account: String,
+    pub(crate) account_id: String,
     pub(crate) candidates: Vec<AdminInstitutionCandidate>,
 }
 
@@ -228,16 +203,6 @@ pub(crate) struct AdminLoginCompleteOutput {
     pub(crate) expire_at: Option<i64>,
     pub(crate) admin: Option<AdminIdentifyOutput>,
     pub(crate) binding: Option<NodeBindingRequiredOutput>,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct AdminVerifyInput {
-    pub(crate) challenge_id: String,
-    pub(crate) origin: String,
-    pub(crate) domain: Option<String>,
-    pub(crate) session_id: String,
-    pub(crate) nonce: String,
-    pub(crate) signature: String,
 }
 
 #[derive(Serialize)]

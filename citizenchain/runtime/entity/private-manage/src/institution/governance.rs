@@ -5,7 +5,7 @@
 
 extern crate alloc;
 
-use admin_primitives::InstitutionAdminQuery as _;
+use admin_primitives::{ChainPhaseCheck as _, InstitutionAdminQuery as _};
 use alloc::{collections::BTreeMap, vec::Vec};
 use entity_primitives::{
     InstitutionAdminAssignment, InstitutionAssignmentSource, InstitutionAssignmentStatus,
@@ -342,14 +342,23 @@ impl<T: Config> Pallet<T> {
                         cid_number,
                         account_id,
                     } => {
-                        ensure!(
-                            !family_name.is_empty() && !given_name.is_empty(),
-                            Error::<T>::EmptyLegalRepresentativeName
-                        );
-                        ensure!(
-                            !cid_number.is_empty(),
-                            Error::<T>::EmptyLegalRepresentativeCidNumber
-                        );
+                        // 运行期(Operation):LR 岗四要素完整(单源自 required_admin_elements
+                        // 的私权 LR 岗真值);Genesis 放行=允许空。一次 runtime 升级即启用。
+                        if T::ChainPhase::is_operation() {
+                            let req = admin_primitives::required_admin_elements(
+                                admin_primitives::AdminAccountKind::PrivateInstitution,
+                                true, // LR 岗
+                            );
+                            ensure!(
+                                (!req.family || !family_name.is_empty())
+                                    && (!req.given || !given_name.is_empty()),
+                                Error::<T>::EmptyLegalRepresentativeName
+                            );
+                            ensure!(
+                                !req.cid || !cid_number.is_empty(),
+                                Error::<T>::EmptyLegalRepresentativeCidNumber
+                            );
+                        }
                         let family_name: AccountNameOf<T> = family_name
                             .try_into()
                             .map_err(|_| Error::<T>::EmptyLegalRepresentativeName)?;

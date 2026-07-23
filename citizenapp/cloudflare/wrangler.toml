@@ -1,11 +1,11 @@
 name = "citizenapp-square-api"
 main = "src/index.ts"
-compatibility_date = "2026-07-08"
+compatibility_date = "2026-07-23"
 workers_dev = false
 preview_urls = false
 stream = { binding = "STREAM" }
 
-# 远端部署前必须把 database_id / kv id 替换为 Cloudflare 实际资源 ID。
+# 根环境的零值 database_id / KV id 仅用于本地开发；远端必须显式选择 staging 或 production。
 # Cloudflare API token、R2 冷归档访问密钥、Stream webhook secret 不得写入本文件。
 # 用户资料、清单和图片不取得 R2 写入授权；R2 密钥只允许服务端内部冷归档使用。
 # CHAIN_URL 与两项 CHAIN_ID / CHAIN_SECRET 服务令牌必须分别使用 wrangler secret 配置，禁止写入 vars 或仓库。
@@ -157,6 +157,13 @@ STREAM_URL = "https://customer-e3w478wvlbq2nl3g.cloudflarestream.com"
 MEDIA_TTL_SECONDS = "300"
 WEB_ORIGIN = "https://www.crcfrcn.com"
 TURNSTILE_SITEKEY = "0x4AAAAAAD0GQRiB2O3a0DYJ"
+TOPUP_NETWORK = "testnet"
+TOPUP_RECV_ADDRESS = ""
+TOPUP_BASE_RPC_URL = ""
+TOPUP_ARBITRUM_RPC_URL = ""
+TOPUP_USDC_CONTRACT = ""
+TOPUP_USDT_CONTRACT = ""
+TOPUP_MIN_CONFIRMATIONS = "0"
 BOOT_TTL_SECONDS = "300"
 CHAIN_GENESIS_HASH = "0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9"
 CHAIN_STATE_ROOT = "0x99b4cb3031baa5e87536a22190dc81bf6bf49d3678c0abae86a312268506fe09"
@@ -233,6 +240,9 @@ R2_BUCKET = "citizenapp-square-media"
 TOPUP_NETWORK = "mainnet"
 TOPUP_RECV_ADDRESS = "0x5ce9b56b9d1812a7cf29841e21756f09ca7d223b"
 TOPUP_BASE_RPC_URL = "https://mainnet.base.org"
+TOPUP_ARBITRUM_RPC_URL = ""
+TOPUP_USDC_CONTRACT = ""
+TOPUP_USDT_CONTRACT = ""
 TOPUP_MIN_CONFIRMATIONS = "0"
 IMAGES_URL = "https://imagedelivery.net/UOEmEDe-GxX_DiS70z3GIg"
 STREAM_URL = "https://customer-e3w478wvlbq2nl3g.cloudflarestream.com"

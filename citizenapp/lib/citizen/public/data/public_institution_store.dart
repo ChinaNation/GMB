@@ -78,16 +78,16 @@ abstract interface class PublicInstitutionStore {
 
   // ── 订阅("关注")——按钱包公钥隔离 ──
 
-  Future<void> subscribe(String walletPubkeyHex, String cidNumber);
+  Future<void> subscribe(String accountId, String cidNumber);
 
-  Future<void> unsubscribe(String walletPubkeyHex, String cidNumber);
+  Future<void> unsubscribe(String accountId, String cidNumber);
 
-  Future<bool> isSubscribed(String walletPubkeyHex, String cidNumber);
+  Future<bool> isSubscribed(String accountId, String cidNumber);
 
   /// 我订阅的机构(关注分组),跨省扁平。
-  Future<List<PublicInstitutionEntity>> listSubscribed(String walletPubkeyHex);
+  Future<List<PublicInstitutionEntity>> listSubscribed(String accountId);
 }
 
-/// 订阅复合唯一键:`pubkeyHex|cidNumber`。
-String subscriptionKeyOf(String walletPubkeyHex, String cidNumber) =>
-    '$walletPubkeyHex|$cidNumber';
+/// 订阅复合唯一键:`publicKey|cidNumber`。
+String subscriptionKeyOf(String accountId, String cidNumber) =>
+    '$accountId|$cidNumber';

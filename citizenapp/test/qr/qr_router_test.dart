@@ -21,7 +21,7 @@ void main() {
         'e': 1090,
         'b': SignRequestBody.fromHex(
           action: QrActions.login,
-          pubkeyHex:
+          signerPublicKeyHex:
               '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           payloadHex: '0x6369647c736967',
         ).toJson(),
@@ -38,7 +38,7 @@ void main() {
         'i': 'tx-0123456789abcdef',
         'e': 1600,
         'b': {
-          'address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+          'ss58_address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
           'recipient_name': '张三',
           'amount': '100.50',
           'symbol': 'GMB',
@@ -55,7 +55,7 @@ void main() {
         'p': QrProtocol.v1,
         'k': QrKind.userContact.code,
         'b': {
-          'address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+          'ss58_address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
           'contact_name': '张三',
         },
       });
@@ -71,7 +71,7 @@ void main() {
         'e': 1090,
         'b': SignRequestBody.fromHex(
           action: QrActions.transferWithRemark,
-          pubkeyHex:
+          signerPublicKeyHex:
               '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           payloadHex: '0xccdd',
         ).toJson(),

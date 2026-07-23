@@ -10,7 +10,7 @@ import { adminHeaders, request } from '../utils/http';
 export type FederalRegistryAdminRow = {
   id: number;
   province_name: string;
-  admin_account: string;
+  account_id: string;
   family_name: string;
   given_name: string;
   role_code: string;
@@ -29,7 +29,7 @@ export type FederalRegistryAdminRow = {
 };
 
 export type OwnInstitutionAdminRow = {
-  admin_account: string;
+  account_id: string;
   family_name: string;
   given_name: string;
   role_code: string;
@@ -51,7 +51,7 @@ export type OwnInstitutionAdminListOutput = {
 };
 
 export type InstitutionGovernanceAdminInput = {
-  admin_account: string;
+  account_id: string;
   family_name: string;
   given_name: string;
 };
@@ -72,7 +72,7 @@ export type InstitutionGovernanceRoleMutationInput = {
 };
 
 export type InstitutionGovernanceAssignmentTargetInput = {
-  admin_account: string;
+  account_id: string;
   term_start: number;
   term_end: number;
 };

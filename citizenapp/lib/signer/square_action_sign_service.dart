@@ -41,8 +41,8 @@ class SquareActionSignPrep {
 
 /// 广场账户动作「签名响应方」（官网无私钥，CitizenApp 扫一扫代签）。
 ///
-/// 流程：扫 signRequest → 解析/两色解码 → 按 QR `u` 定位 owner 钱包（拒本机没有/冷钱包）
-/// → 用户核对动作 → **owner 主钥**对 signing_message(0x1D) 签名（生物识别）→ 出 signResponse。
+/// 流程：扫 signRequest → 解析/两色解码 → 按 QR `u` 定位 accountId 钱包（拒本机没有/冷钱包）
+/// → 用户核对动作 → **accountId 主钥**对 signing_message(0x1D) 签名（生物识别）→ 出 signResponse。
 class SquareActionSignService {
   SquareActionSignService({QrSigner? signer}) : _signer = signer ?? QrSigner();
 
@@ -80,8 +80,10 @@ class SquareActionSignService {
         '签名内容无法完整中文展示，已拒绝签名',
       );
     }
-    final wallet =
-        await _resolveWalletByPubkey(walletManager, body.pubkeyBytes);
+    final wallet = await _resolveWalletBySignerPublicKey(
+      walletManager,
+      body.signerPublicKeyBytes,
+    );
     if (wallet == null) {
       throw const SquareActionSignException(
         SquareActionSignError.accountNotLocal,
@@ -118,13 +120,13 @@ class SquareActionSignService {
     return _signer.encodeResponse(response);
   }
 
-  Future<WalletProfile?> _resolveWalletByPubkey(
+  Future<WalletProfile?> _resolveWalletBySignerPublicKey(
     WalletManager walletManager,
-    Uint8List pubkey,
+    Uint8List signerPublicKey,
   ) async {
-    final target = bytesToHex(pubkey);
+    final target = bytesToHex(signerPublicKey);
     for (final wallet in await walletManager.getWallets()) {
-      if (_normalizeHex(wallet.pubkeyHex) == target) {
+      if (_normalizeHex(wallet.accountId) == target) {
         return wallet;
       }
     }

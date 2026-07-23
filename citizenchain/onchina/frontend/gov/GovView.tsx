@@ -62,7 +62,7 @@ export const GovView: React.FC<Props> = ({ auth, cidMeta, resetToken = 0 }) => {
     setCreateOpen(false);
     setSearchInput('');
     setCommittedSearch('');
-  }, [auth.admin_account, resetToken]);
+  }, [auth.account_id, resetToken]);
 
   const provinces = cidMeta?.provinces || [];
   const lockedProvinceName = scope.lockedProvinceName;

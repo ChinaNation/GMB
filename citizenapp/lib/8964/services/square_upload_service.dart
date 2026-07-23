@@ -51,7 +51,7 @@ class SquarePreparedContent {
 
 abstract class SquareContentUploader {
   Future<SquarePreparedContent> preparePostContent({
-    required String ownerAccount,
+    required String accountId,
     required SquarePostCategory postCategory,
     required String text,
     required List<SquareLocalMediaDraft> mediaDrafts,
@@ -76,7 +76,7 @@ class SquareUploadService implements SquareContentUploader {
 
   @override
   Future<SquarePreparedContent> preparePostContent({
-    required String ownerAccount,
+    required String accountId,
     required SquarePostCategory postCategory,
     required String text,
     required List<SquareLocalMediaDraft> mediaDrafts,
@@ -92,7 +92,7 @@ class SquareUploadService implements SquareContentUploader {
 
     onStage?.call(SquarePublishStage.signingIn);
     final session = await _api.ensureSession(
-      ownerAccount: ownerAccount,
+      accountId: accountId,
       signLoginPayload: signLoginPayload,
     );
 
@@ -114,7 +114,7 @@ class SquareUploadService implements SquareContentUploader {
     final trimmedTitle = title?.trim() ?? '';
     final manifestBytes = _canonicalJsonBytes({
       'schema': 'citizenapp.square.post.v1',
-      'owner_account': ownerAccount,
+      'account_id': accountId,
       'post_category': postCategory.workerValue,
       // 普通帖不写 content_format/title，保持旧 manifest 形状；文章才带。
       if (contentFormat != SquarePostContentFormat.normal)

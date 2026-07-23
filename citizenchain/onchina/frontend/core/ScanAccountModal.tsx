@@ -1,5 +1,5 @@
-// 通用"扫码识别账户"弹窗。调用摄像头扫描 QR_V1 用户码,
-// 从中提取 body.address(SS58)回填。供密钥管理 / 新增市注册局机构管理员等场景复用。
+// 通用“扫码识别账户”弹窗。扫描 QR_V1 用户码后把 body.address(SS58)
+// 立即转换成规范 account_id，再回填给业务表单。
 // 使用统一的 BarcodeDetector 方案(cameraScanner.ts),与登录和扫码签名场景一致。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -12,7 +12,7 @@ import { CID_MODAL_Z_INDEX } from './modalStack';
 export function ScanAccountModal(props: {
   open: boolean;
   onClose: () => void;
-  onResolved: (ss58Address: string) => void;
+  onResolved: (account_id: string) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -50,8 +50,9 @@ export function ScanAccountModal(props: {
             setError('用户码未携带 address 字段');
             return;
           }
+          let account_id: string;
           try {
-            decodeSs58(addr);
+            account_id = decodeSs58(addr);
           } catch (e) {
             setError(e instanceof Error ? e.message : 'SS58 校验失败');
             return;
@@ -61,7 +62,7 @@ export function ScanAccountModal(props: {
             cleanupRef.current();
             cleanupRef.current = null;
           }
-          props.onResolved(addr);
+          props.onResolved(account_id);
         } catch (e) {
           if (e instanceof QrParseError) {
             setError(e.message);

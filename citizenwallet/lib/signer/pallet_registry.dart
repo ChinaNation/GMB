@@ -163,7 +163,7 @@ class PalletRegistry {
   // call_index 5..=9 / 15+ 留洞不复用(永久 ABI)。
   // 业务调用走 propose_X(InternalVote),监管调用走 propose_monitor_X(JointVote)。
   // 十个调用都以 actor_cid_number 开头；仅 propose_issue 紧随
-  // execution_account，机构身份不得从该账户反推。
+  // execution_account_id，机构身份不得从该账户反推。
   // 投票/重试/取消统一走 InternalVote(20)/JointVote(21)/VotingEngine(9.4/9.5)。
   static const int onchainIssuancePallet = 23;
   // 业务 propose

@@ -17,20 +17,26 @@ class _FakeStore extends ChatStore {
 ChatGroup _group() => const ChatGroup(
       groupId: 'grp:acctA:n',
       name: '测试群',
-      creatorAccount: 'acctA',
+      creatorAccountId:
+          '0x3333333333333333333333333333333333333333333333333333333333333333',
       epoch: 1,
       roster: [
-        GroupMember(account: 'acctA', role: GroupMemberRole.admin),
-        GroupMember(account: 'acctB'),
+        GroupMember(
+            accountId:
+                '0x3333333333333333333333333333333333333333333333333333333333333333',
+            role: GroupMemberRole.admin),
+        GroupMember(
+            accountId:
+                '0x4444444444444444444444444444444444444444444444444444444444444444'),
       ],
     );
 
-Future<void> _pump(WidgetTester tester, String ownerAccount) async {
+Future<void> _pump(WidgetTester tester, String accountId) async {
   await tester.pumpWidget(MaterialApp(
     home: GroupManagePage(
       groupId: 'grp:acctA:n',
       store: _FakeStore(_group()),
-      ownerAccount: ownerAccount,
+      accountId: accountId,
     ),
   ));
   await tester.pumpAndSettle();
@@ -38,7 +44,8 @@ Future<void> _pump(WidgetTester tester, String ownerAccount) async {
 
 void main() {
   testWidgets('admin 可见 添加 / 移除 / 改群名', (tester) async {
-    await _pump(tester, 'acctA');
+    await _pump(tester,
+        '0x3333333333333333333333333333333333333333333333333333333333333333');
     expect(find.text('添加'), findsOneWidget);
     expect(find.byIcon(Icons.remove_circle_outline), findsWidgets); // 可移除 acctB
     expect(find.byIcon(Icons.edit_outlined), findsOneWidget); // 改群名
@@ -46,7 +53,8 @@ void main() {
   });
 
   testWidgets('非 admin 无 添加 / 移除 / 改群名,但可退群', (tester) async {
-    await _pump(tester, 'acctB');
+    await _pump(tester,
+        '0x4444444444444444444444444444444444444444444444444444444444444444');
     expect(find.text('添加'), findsNothing);
     expect(find.byIcon(Icons.remove_circle_outline), findsNothing);
     expect(find.byIcon(Icons.edit_outlined), findsNothing);

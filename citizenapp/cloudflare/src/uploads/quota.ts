@@ -18,7 +18,7 @@ interface ManifestQuotaInput {
   membershipLevel: MembershipLevel;
   plan: MembershipPlan;
   upload: {
-    owner_account: string;
+    account_id: string;
     post_category: PostCategory;
   };
   manifestText: string;
@@ -27,7 +27,7 @@ interface ManifestQuotaInput {
 
 interface SquareManifest {
   schema?: unknown;
-  owner_account?: unknown;
+  account_id?: unknown;
   post_category?: unknown;
   content_format?: unknown;
   title?: unknown;
@@ -82,8 +82,8 @@ export async function assertManifestQuota(input: ManifestQuotaInput): Promise<vo
   if (manifest.schema !== 'citizenapp.square.post.v1') {
     throw new HttpError(400, 'invalid_manifest_schema', 'manifest schema 不合法');
   }
-  if (manifest.owner_account !== input.upload.owner_account) {
-    throw new HttpError(409, 'manifest_owner_mismatch', 'manifest owner_account 与上传任务不一致');
+  if (manifest.account_id !== input.upload.account_id) {
+    throw new HttpError(409, 'manifest_account_mismatch', 'manifest account_id 与上传任务不一致');
   }
   if (manifest.post_category !== input.upload.post_category) {
     throw new HttpError(409, 'manifest_post_category_mismatch', 'manifest post_category 与上传任务不一致');

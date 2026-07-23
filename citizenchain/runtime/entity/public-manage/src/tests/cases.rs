@@ -52,12 +52,14 @@ fn fund_registry_account() {
 fn create_cgov(tag: &str) -> pallet::CidNumberOf<Test> {
     let cid = generated_cid(tag, "CGOV");
     let institution_code = code_bytes("CGOV");
+    // 测试机构均非 UNIN，无父级可传。
     let protocol_accounts =
-        crate::institution::accounts::build_required_protocol_accounts::<Test>(&cid)
+        crate::institution::accounts::build_required_protocol_accounts::<Test>(&cid, None)
             .expect("测试协议账户必须可构造");
-    let (created_accounts, _, _, _) =
-        crate::institution::accounts::validate_initial_accounts::<Test>(&cid, &protocol_accounts)
-            .expect("测试协议账户必须合法");
+    let (created_accounts, _, _, _) = crate::institution::accounts::validate_initial_accounts::<
+        Test,
+    >(&cid, &protocol_accounts, None)
+    .expect("测试协议账户必须合法");
     pallet::Institutions::<Test>::insert(
         &cid,
         crate::InstitutionInfo {
@@ -263,6 +265,100 @@ fn dynamic_role_lifecycle_persists_permissions_and_never_reuses_code() {
                 first_code.as_slice(),
             )
         );
+    });
+}
+
+#[test]
+fn operation_phase_authorizes_by_cid_and_survives_wallet_rebind() {
+    new_test_ext().execute_with(|| {
+        use entity_primitives::{
+            InstitutionRoleAuthorizationQuery, InstitutionRoleMutation, RolePermissionOperation,
+            RoleSubject,
+        };
+
+        let cid = create_cgov("cid-rebind");
+        let institution_code = code_bytes("CGOV");
+        let action = entity_primitives::BusinessActionId {
+            module_tag: b"pub-mgmt".to_vec(),
+            action_code: 3,
+        };
+
+        // 用带合法 CTZN CID 的名册覆盖：admin(0) 携 CID（先绑定 OLD 让 Phase 2 seed 校验通过），
+        // admin(1)/admin(2) 无 CID（对照无 CID 语义）。
+        let citizen_cid = b"GZ000-CTZN6-198805200-2026".to_vec();
+        bind_cid(&citizen_cid, admin(0));
+        let admins: crate::InstitutionAdminsInputOf<Test> = vec![
+            admin_primitives::Admin {
+                account_id: admin(0),
+                cid_number: citizen_cid.clone().try_into().expect("cid fits"),
+                family_name: "张".as_bytes().to_vec().try_into().expect("family fits"),
+                given_name: "三".as_bytes().to_vec().try_into().expect("given fits"),
+            },
+            admin_primitives::Admin {
+                account_id: admin(1),
+                cid_number: Default::default(),
+                family_name: Default::default(),
+                given_name: Default::default(),
+            },
+            admin_primitives::Admin {
+                account_id: admin(2),
+                cid_number: Default::default(),
+                family_name: Default::default(),
+                given_name: Default::default(),
+            },
+        ]
+        .try_into()
+        .expect("admins fit");
+        assert_ok!(PublicManage::set_institution_admins(
+            &cid,
+            institution_code,
+            &admins,
+        ));
+
+        // 建动态岗位，给 admin(0)（有 CID）与 admin(1)（无 CID）任职。
+        let role_code = entity_primitives::generate_dynamic_role_code(cid.as_slice(), 0, 42);
+        assert_ok!(PublicManage::apply_institution_governance_result(
+            entity_primitives::InstitutionGovernanceResult {
+                institution_code,
+                cid_number: cid.to_vec(),
+                proposal_id: 42,
+                role_mutations: vec![InstitutionRoleMutation::Create {
+                    role_name: "业务负责人".as_bytes().to_vec(),
+                    term_required: false,
+                    permissions: vec![governance_permission(RolePermissionOperation::Propose)],
+                    assignments: vec![
+                        governance_assignment(admin(0), 0, 0),
+                        governance_assignment(admin(1), 0, 0),
+                    ],
+                }],
+                assignment_changes: vec![],
+                legal_representative_change: None,
+                result_source_ref: b"proposal-rebind".to_vec(),
+            }
+        ));
+        let subject = RoleSubject {
+            cid_number: cid.to_vec(),
+            role_code: role_code.clone(),
+        };
+        let authorized = |who: &AccountId32| {
+            <PublicManage as InstitutionRoleAuthorizationQuery<AccountId32>>::is_authorized(
+                who,
+                &subject,
+                &action,
+                RolePermissionOperation::Propose,
+            )
+        };
+
+        // 创世期：按 account_id 授权。
+        assert!(authorized(&admin(0)));
+        assert!(!authorized(&admin(5))); // 非名册钱包
+
+        // 运行期：admin(0) 换绑到新钱包 admin(5)。
+        set_operation_phase(true);
+        bind_cid(&citizen_cid, admin(5));
+        assert!(authorized(&admin(5))); // 换绑不掉权：新钱包解析到同一名册账户
+        assert!(!authorized(&admin(0))); // 旧钱包掉权：CID 已不绑定它
+        assert!(authorized(&admin(1))); // 无 CID 管理员运行期仍按 account_id
     });
 }
 

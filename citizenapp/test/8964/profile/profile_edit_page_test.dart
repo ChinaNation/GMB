@@ -9,7 +9,7 @@ import 'fake_profile.dart';
 Widget _wrap(FakeProfileApi api, {SquareSessionProvider? sessionProvider}) {
   return MaterialApp(
     home: CitizenProfileEditPage(
-      ownerAccount: kOwner,
+      accountId: kOwner,
       initialProfile: sampleProfile(displayName: '旧名', bio: '旧签名'),
       api: api,
       sessionProvider: sessionProvider ?? FakeSessionProvider(fakeSession()),

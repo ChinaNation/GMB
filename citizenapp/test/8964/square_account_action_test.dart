@@ -22,7 +22,7 @@ void main() {
       baseUrl: 'https://square.test',
       httpClient: MockClient((request) async {
         if (request.url.path == '/v1/square/account/delete/challenge') {
-          expect(jsonDecode(request.body)['owner_account'], _owner);
+          expect(jsonDecode(request.body)['account_id'], _owner);
           return http.Response(
             jsonEncode({
               'ok': true,
@@ -43,7 +43,7 @@ void main() {
     );
 
     await client.deleteAccount(
-      ownerAccount: _owner,
+      accountId: _owner,
       signAction: (message) async {
         signedMessage = message;
         return '0xSIG';
@@ -61,7 +61,7 @@ void main() {
       ),
     );
     expect(confirmBody, {
-      'owner_account': _owner,
+      'account_id': _owner,
       'challenge_id': 'sqa_1',
       'signature': '0xSIG',
     });
@@ -77,7 +77,7 @@ void main() {
     );
 
     await expectLater(
-      client.deleteAccount(ownerAccount: _owner, signAction: (_) async => '0x'),
+      client.deleteAccount(accountId: _owner, signAction: (_) async => '0x'),
       throwsA(isA<SquareApiException>()),
     );
   });

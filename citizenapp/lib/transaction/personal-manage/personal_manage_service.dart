@@ -54,15 +54,15 @@ class PersonalManageService {
         String txHash,
         int usedNonce,
         int proposalId,
-        String accountHex,
+        String accountId,
         String blockHashHex,
       })> submitProposeCreatePersonal({
     required Uint8List accountName,
     required List<AdminPerson> admins,
     required int regularThreshold,
     required BigInt amountFen,
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
     final callData = buildProposeCreatePersonalCallData(
@@ -73,8 +73,8 @@ class PersonalManageService {
     );
     final submitResult = await _signAndSubmitInBlock(
       callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       sign: sign,
     );
     final event = await _confirmPersonalAccountProposedEvent(
@@ -83,13 +83,13 @@ class PersonalManageService {
       admins: admins,
       regularThreshold: regularThreshold,
       amountFen: amountFen,
-      proposerPubkey: signerPubkey,
+      proposerPublicKey: signerPublicKey,
     );
     return (
       txHash: submitResult.txHash,
       usedNonce: submitResult.usedNonce,
       proposalId: event.proposalId,
-      accountHex: event.accountHex,
+      accountId: event.accountId,
       blockHashHex: submitResult.blockHashHex,
     );
   }
@@ -115,11 +115,11 @@ class PersonalManageService {
     }
     final seen = <String>{};
     for (final admin in admins) {
-      final pubkey = AdminAccountIdCodec.hexDecode(admin.admin_account);
-      if (pubkey.length != 32) {
+      final publicKey = AdminAccountIdCodec.fromAccountIdText(admin.account_id);
+      if (publicKey.length != 32) {
         throw ArgumentError('admins 每项必须为 32 字节');
       }
-      final hex = _hexEncode(pubkey);
+      final hex = _hexEncode(publicKey);
       if (!seen.add(hex)) {
         throw ArgumentError('admins 不允许重复');
       }
@@ -139,10 +139,15 @@ class PersonalManageService {
         CompactBigIntCodec.codec.encode(BigInt.from(accountName.length)));
     output.write(accountName);
 
-    // admins: BoundedVec<Admin(admin_account + family_name + given_name)>
+    // admins: BoundedVec<Admin(account_id + cid_number + family_name + given_name)>
     output.write(CompactBigIntCodec.codec.encode(BigInt.from(admins.length)));
     for (final admin in admins) {
-      output.write(AdminAccountIdCodec.hexDecode(admin.admin_account));
+      output.write(AdminAccountIdCodec.fromAccountIdText(admin.account_id));
+      // 统一 Admin 恒带公民 CID（个人多签为空 → Compact(0)）。
+      final cidBytes = utf8.encode(admin.cid_number);
+      output
+          .write(CompactBigIntCodec.codec.encode(BigInt.from(cidBytes.length)));
+      output.write(Uint8List.fromList(cidBytes));
       _writeAdminName(output, admin.family_name);
       _writeAdminName(output, admin.given_name);
     }
@@ -173,8 +178,8 @@ class PersonalManageService {
   Future<({String txHash, int usedNonce})> submitProposeClosePersonal({
     required String account,
     required String beneficiaryAddress,
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
     final output = ByteOutput();
@@ -185,8 +190,8 @@ class PersonalManageService {
     output.write(beneficiaryId);
     return _signAndSubmit(
       callData: output.toBytes(),
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       sign: sign,
     );
   }
@@ -195,12 +200,12 @@ class PersonalManageService {
   ///
   /// 返回以入参地址原样为键的 map;未注册或解码失败的地址值为 null。
   /// 个人多签发现的唯一反查入口(ADR-018 R2:多 key 一律批量,杜绝循环内逐条)。
-  Future<Map<String, ({String creatorAccountHex, String accountName})?>>
+  Future<Map<String, ({String creatorAccountId, String accountName})?>>
       fetchPersonalMetasBatch(
-    Iterable<String> personalAccountHexList, {
+    Iterable<String> personalAccountIdList, {
     int chunkSize = 100,
   }) async {
-    final addresses = personalAccountHexList
+    final addresses = personalAccountIdList
         .where((address) => address.isNotEmpty)
         .toSet()
         .toList(growable: false);
@@ -217,8 +222,7 @@ class PersonalManageService {
       chunkSize: chunkSize,
     );
 
-    final result =
-        <String, ({String creatorAccountHex, String accountName})?>{};
+    final result = <String, ({String creatorAccountId, String accountName})?>{};
     for (final entry in storageKeyByAccount.entries) {
       final data = values[entry.value];
       final meta = data == null
@@ -227,7 +231,7 @@ class PersonalManageService {
       result[entry.key] = meta == null
           ? null
           : (
-              creatorAccountHex: meta.creatorHex,
+              creatorAccountId: meta.creatorAccountId,
               accountName:
                   PersonalManageStorageCodec.accountNameText(meta.accountName),
             );
@@ -237,24 +241,24 @@ class PersonalManageService {
 
   /// 查询个人多签账户信息。
   Future<AccountInfo?> fetchPersonalAccount(
-    String accountHex,
+    String accountId,
   ) async {
     final key = PersonalManageStorageCodec.personalAccountsKey(
-      accountHex,
+      accountId,
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
     if (data == null) return null;
     final personal = PersonalManageStorageCodec.decodePersonalAccount(data);
     if (personal == null) return null;
-    final accountId = PersonalManageStorageCodec.accountIdFromAccountHex(
-      accountHex,
+    final accountIdBytes = PersonalManageStorageCodec.accountIdBytes(
+      accountId,
     );
-    final adminKey = PersonalManageStorageCodec.adminAccountKey(accountId);
+    final adminKey = PersonalManageStorageCodec.adminAccountKey(accountIdBytes);
     final adminData = await _rpc.fetchStorage('0x${_hexEncode(adminKey)}');
     if (adminData == null) return null;
     final admin = PersonalManageStorageCodec.decodeAdminAccount(adminData);
     if (admin == null) return null;
-    final threshold = await _fetchActivePersonalThreshold(accountId);
+    final threshold = await _fetchActivePersonalThreshold(accountIdBytes);
     return AccountInfo(
       adminsLen: admin.adminsLen,
       threshold: threshold,
@@ -268,12 +272,12 @@ class PersonalManageService {
   /// 多签列表页不能对每个账户逐个调用 [fetchPersonalAccount]。
   /// 这里按 storage 依赖分阶段批量读取：先读账户与管理员主体，再批量读动态阈值。
   Future<Map<String, AccountInfo?>> fetchPersonalAccountsBatch(
-    Iterable<String> accountHexList, {
+    Iterable<String> accountIdList, {
     int chunkSize = 100,
   }) async {
-    final addresses = accountHexList
-        .map(_normalizeHex)
-        .where((address) => address.isNotEmpty)
+    final addresses = accountIdList
+        .map(_requireAccountId)
+        .where((accountId) => accountId.isNotEmpty)
         .toSet()
         .toList(growable: false);
     if (addresses.isEmpty) return {};
@@ -284,7 +288,7 @@ class PersonalManageService {
     final firstRoundKeys = <String>[];
 
     for (final address in addresses) {
-      final accountId = PersonalManageStorageCodec.accountIdFromAccountHex(
+      final accountId = PersonalManageStorageCodec.accountIdBytes(
         address,
       );
       final personalKey =
@@ -398,8 +402,8 @@ class PersonalManageService {
     if (data.length != 32 + 32 + 16 + 16) return null;
     var offset = 0;
 
-    final account =
-        _hexEncode(Uint8List.fromList(data.sublist(offset, offset + 32)));
+    final accountId =
+        '0x${_hexEncode(Uint8List.fromList(data.sublist(offset, offset + 32)))}';
     offset += 32;
 
     final proposerBytes = data.sublist(offset, offset + 32);
@@ -414,8 +418,8 @@ class PersonalManageService {
 
     return CreateProposalInfo(
       proposalId: proposalId,
-      account: account,
-      proposer: proposerSs58,
+      accountId: accountId,
+      proposerSs58Address: proposerSs58,
       amountFen: amountFen,
       feeFen: feeFen,
     );
@@ -428,8 +432,8 @@ class PersonalManageService {
     if (data.length != 32 + 32 + 32) return null;
     var offset = 0;
 
-    final account =
-        _hexEncode(Uint8List.fromList(data.sublist(offset, offset + 32)));
+    final accountId =
+        '0x${_hexEncode(Uint8List.fromList(data.sublist(offset, offset + 32)))}';
     offset += 32;
 
     final beneficiaryBytes = data.sublist(offset, offset + 32);
@@ -443,20 +447,20 @@ class PersonalManageService {
 
     return CloseProposalInfo(
       proposalId: proposalId,
-      account: account,
-      beneficiary: beneficiarySs58,
-      proposer: proposerSs58,
+      accountId: accountId,
+      beneficiarySs58Address: beneficiarySs58,
+      proposerSs58Address: proposerSs58,
     );
   }
 
-  Future<({int proposalId, String accountHex})>
+  Future<({int proposalId, String accountId})>
       _confirmPersonalAccountProposedEvent({
     required String blockHashHex,
     required Uint8List accountName,
     required List<AdminPerson> admins,
     required int regularThreshold,
     required BigInt amountFen,
-    required Uint8List proposerPubkey,
+    required Uint8List proposerPublicKey,
   }) async {
     final events = await _rpc.fetchSystemEventsAtBlock(blockHashHex);
     if (events == null || events.isEmpty) {
@@ -472,7 +476,7 @@ class PersonalManageService {
       admins: admins,
       regularThreshold: regularThreshold,
       amountFen: amountFen,
-      proposerPubkey: proposerPubkey,
+      proposerPublicKey: proposerPublicKey,
     );
     if (found == null) {
       throw StateError(
@@ -482,13 +486,13 @@ class PersonalManageService {
     return found;
   }
 
-  ({int proposalId, String accountHex})? _findPersonalAccountProposedEvent(
+  ({int proposalId, String accountId})? _findPersonalAccountProposedEvent(
     Uint8List data, {
     required Uint8List accountName,
     required List<AdminPerson> admins,
     required int regularThreshold,
     required BigInt amountFen,
-    required Uint8List proposerPubkey,
+    required Uint8List proposerPublicKey,
   }) {
     final (_, countSize) = _decodeCompact(data, 0);
     if (countSize <= 0) return null;
@@ -518,7 +522,7 @@ class PersonalManageService {
             admins: admins,
             regularThreshold: regularThreshold,
             amountFen: amountFen,
-            proposerPubkey: proposerPubkey,
+            proposerPublicKey: proposerPublicKey,
           );
           if (decoded != null) return decoded;
         }
@@ -529,14 +533,14 @@ class PersonalManageService {
     return null;
   }
 
-  ({int proposalId, String accountHex})? _decodePersonalAccountProposedEvent(
+  ({int proposalId, String accountId})? _decodePersonalAccountProposedEvent(
     Uint8List data,
     int offset, {
     required Uint8List accountName,
     required List<AdminPerson> admins,
     required int regularThreshold,
     required BigInt amountFen,
-    required Uint8List proposerPubkey,
+    required Uint8List proposerPublicKey,
   }) {
     try {
       var pos = offset;
@@ -562,7 +566,7 @@ class PersonalManageService {
       pos += 4;
       final eventAmount = _readU128Le(data.sublist(pos, pos + 16));
 
-      final matches = _bytesEqual(proposer, proposerPubkey) &&
+      final matches = _bytesEqual(proposer, proposerPublicKey) &&
           _bytesEqual(nameRead.bytes, accountName) &&
           eventAdminsLen == admins.length &&
           eventThreshold == regularThreshold &&
@@ -571,7 +575,7 @@ class PersonalManageService {
       if (!matches) return null;
       return (
         proposalId: proposalId,
-        accountHex: _hexEncode(account),
+        accountId: _hexEncode(account),
       );
     } catch (_) {
       return null;
@@ -580,8 +584,8 @@ class PersonalManageService {
 
   Future<({String txHash, int usedNonce})> _signAndSubmit({
     required Uint8List callData,
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
     return SignedExtrinsicBuilder(
@@ -589,8 +593,8 @@ class PersonalManageService {
       logLabel: 'PersonalManage',
     ).signAndSubmit(
       callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       sign: sign,
     );
   }
@@ -598,8 +602,8 @@ class PersonalManageService {
   Future<({String txHash, int usedNonce, String blockHashHex})>
       _signAndSubmitInBlock({
     required Uint8List callData,
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
     return SignedExtrinsicBuilder(
@@ -607,8 +611,8 @@ class PersonalManageService {
       logLabel: 'PersonalManage',
     ).signAndSubmitInBlock(
       callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       sign: sign,
     );
   }
@@ -686,7 +690,7 @@ class PersonalManageService {
   ) {
     if (left.length != right.length) return false;
     for (var i = 0; i < left.length; i++) {
-      if (left[i].admin_account != right[i].admin_account ||
+      if (left[i].account_id != right[i].account_id ||
           left[i].family_name != right[i].family_name ||
           left[i].given_name != right[i].given_name) {
         return false;
@@ -740,9 +744,11 @@ class PersonalManageService {
     return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 
-  static String _normalizeHex(String hex) {
-    final h = hex.startsWith('0x') ? hex.substring(2) : hex;
-    return h.toLowerCase();
+  static String _requireAccountId(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+    }
+    return accountId;
   }
 
   Uint8List _hexDecode(String hex) {

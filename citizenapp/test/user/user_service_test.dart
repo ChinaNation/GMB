@@ -13,18 +13,18 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import '../support/isar_test_env.dart';
 
 const _owner = 'w5BekTimvtfYZvFpkDzy7ypqUntPgTbjRFCt9weR8vMgf7o8E';
+final _accountId = UserContactService.accountIdFromSs58(_owner);
 const _contactA = 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT';
-const _contactB = 'w5BdS7eTPBdtPHq22ViUGARtNnHUszX9A7f4369bufEtoejq6';
 
 class _FakeWalletManager extends WalletManager {
   @override
-  Future<WalletProfile?> getDefaultWallet() async => const WalletProfile(
+  Future<WalletProfile?> getDefaultWallet() async => WalletProfile(
         walletIndex: 1,
         walletName: '默认钱包',
         walletIcon: '',
         balance: 0,
-        address: _owner,
-        pubkeyHex: '',
+        ss58Address: _owner,
+        accountId: _accountId,
         alg: 'sr25519',
         ss58: 2027,
         createdAtMillis: 1,
@@ -35,7 +35,7 @@ class _FakeWalletManager extends WalletManager {
   @override
   Future<ContactKeyMaterial> ensureContactKeyMaterial({
     required int walletIndex,
-    required String ownerAccount,
+    required String accountId,
   }) async =>
       ContactKeyMaterial(
         encryptionKey: Uint8List.fromList(List<int>.filled(32, 7)),
@@ -47,7 +47,7 @@ class _FakeSessionProvider extends SquareSessionProvider {
   @override
   Future<SquareSession?> ensureSession() async => SquareSession(
         sessionToken: 'token',
-        ownerAccount: _owner,
+        accountId: _accountId,
         expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
       );
 }
@@ -120,16 +120,18 @@ void main() {
     test('字段收口后支持添加与修改名称', () async {
       final service = createService();
       final created = await service.addContact(
-        address: _contactA,
+        ss58Address: _contactA,
         contactName: '轻节点A',
       );
       expect(created.created, isTrue);
       expect(created.contact.contactName, '轻节点A');
 
-      final renamed = await service.renameContact(_contactA, '张三');
+      final renamed =
+          await service.renameContact(created.contact.accountId, '张三');
       expect(renamed.single.contactName, '张三');
       expect(renamed.single.toJson().keys.toSet(), <String>{
-        'address',
+        'account_id',
+        'ss58_address',
         'contact_name',
         'created_at',
         'updated_at',
@@ -140,64 +142,23 @@ void main() {
       final service = createService();
       await expectLater(
         service.addContact(
-          address: _owner,
+          ss58Address: _owner,
           contactName: '自己',
         ),
         throwsA(isA<FormatException>()),
       );
     });
 
-    test('旧 SharedPreferences v2 只迁移一次并删除旧键', () async {
-      SharedPreferences.setMockInitialValues(<String, Object>{
-        UserContactService.legacyPreferencesKey: jsonEncode([
-          {
-            'address': _contactB,
-            'source_nickname': '公开旧名',
-            'local_nickname': '私人名称',
-            'added_at': 10,
-            'updated_at': 20,
-          }
-        ]),
-      });
-      final service = createService();
-      final migrated = await service.getContacts();
-      expect(migrated.single.contactName, '私人名称');
-      final prefs = await SharedPreferences.getInstance();
-      expect(
-        prefs.containsKey(UserContactService.legacyPreferencesKey),
-        isFalse,
-      );
-    });
-
-    test('旧通讯录零时间戳迁移为云端可接受的正整数', () async {
-      SharedPreferences.setMockInitialValues(<String, Object>{
-        UserContactService.legacyPreferencesKey: jsonEncode([
-          {
-            'address': _contactA,
-            'source_nickname': '旧联系人',
-            'added_at': 0,
-            'updated_at': 0,
-          }
-        ]),
-      });
-      final service = createService();
-      final migrated = await service.getContacts();
-      expect(migrated.single.createdAt, greaterThan(0));
-      expect(
-        migrated.single.updatedAt,
-        greaterThanOrEqualTo(migrated.single.createdAt),
-      );
-    });
-
     test('AES-GCM 可跨设备解密且篡改 MAC 后失败', () async {
       final keys = await _FakeWalletManager().ensureContactKeyMaterial(
         walletIndex: 1,
-        ownerAccount: _owner,
+        accountId: _accountId,
       );
-      final deviceA = ContactCryptor(ownerAccount: _owner, keys: keys);
-      final deviceB = ContactCryptor(ownerAccount: _owner, keys: keys);
-      const contact = UserContact(
-        address: _contactA,
+      final deviceA = ContactCryptor(accountId: _accountId, keys: keys);
+      final deviceB = ContactCryptor(accountId: _accountId, keys: keys);
+      final contact = UserContact(
+        accountId: UserContactService.accountIdFromSs58(_contactA),
+        ss58Address: _contactA,
         contactName: '张三',
         createdAt: 1,
         updatedAt: 2,
@@ -223,7 +184,7 @@ void main() {
         apiClient: api,
         autoSync: false,
       );
-      await service.addContact(address: _contactA, contactName: '张三');
+      await service.addContact(ss58Address: _contactA, contactName: '张三');
       await service.sync();
 
       final envelope = api.cloud.values.single;

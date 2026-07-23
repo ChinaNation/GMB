@@ -48,7 +48,7 @@ export const AddressManageView: React.FC<Props> = ({ auth }) => {
     setItems([]);
     setSelectedName(null);
     setCallData('');
-  }, [auth.admin_account]);
+  }, [auth.account_id]);
 
   const scopeReady = useMemo(
     () => Boolean(scope.province_code && scope.city_code && scope.town_code),

@@ -10,14 +10,14 @@ import 'package:citizenapp/my/user/contact_service.dart';
 /// 扫码结果：收款码预填数据。
 class QrScanTransferResult {
   const QrScanTransferResult({
-    required this.toAddress,
+    required this.toSs58Address,
     this.amount,
     this.symbol,
     this.memo,
     this.bank,
   });
 
-  final String toAddress;
+  final String toSs58Address;
   final String? amount;
   final String? symbol;
   final String? memo;
@@ -158,9 +158,13 @@ class _QrScanPageState extends State<QrScanPage> {
           if (!mounted) return;
           _popPage(raw);
         case QrScanMode.dispatch:
-          // 统一扫一扫:收款/裸地址→支付结果;signRequest→原始串交调用方签名
+          // 统一扫一扫:收款/名片/裸地址→支付结果;signRequest→原始串交调用方签名
           if (result.type == QrRouteType.userTransfer) {
             _handleTransfer(result);
+          } else if (result.type == QrRouteType.userContact) {
+            // 扫一扫扫到用户名片码 = 按收款人进入转账;
+            // 加好友走 contact 模式扫同一张码,按扫描场景分流,不再生成第二份码。
+            _handleContactAsRecipient(result);
           } else if (result.type == QrRouteType.legacyAddress) {
             _handleLegacyAddress(result.extractedAddress!);
           } else if (result.type == QrRouteType.signRequest) {
@@ -209,7 +213,7 @@ class _QrScanPageState extends State<QrScanPage> {
     }
     final body = result.envelope!.body as UserTransferBody;
     _popPage(QrScanTransferResult(
-      toAddress: body.address,
+      toSs58Address: body.ss58Address,
       amount: body.amount.isEmpty ? null : body.amount,
       symbol: body.symbol.isEmpty ? null : body.symbol,
       memo: body.memo.isEmpty ? null : body.memo,
@@ -220,7 +224,7 @@ class _QrScanPageState extends State<QrScanPage> {
   void _handleContactAsRecipient(QrRouteResult result) {
     if (!mounted) return;
     final body = result.envelope!.body as UserContactBody;
-    _popPage(QrScanTransferResult(toAddress: body.address));
+    _popPage(QrScanTransferResult(toSs58Address: body.ss58Address));
   }
 
   // 裸地址（向后兼容）
@@ -228,7 +232,7 @@ class _QrScanPageState extends State<QrScanPage> {
     if (!mounted) {
       return;
     }
-    _popPage(QrScanTransferResult(toAddress: address));
+    _popPage(QrScanTransferResult(toSs58Address: address));
   }
 
   // 收款码 → 添加通讯录
@@ -254,7 +258,7 @@ class _QrScanPageState extends State<QrScanPage> {
         return;
       }
       final contactResult = await _contactService.addContact(
-        address: body.address,
+        ss58Address: body.ss58Address,
         contactName: name,
       );
       if (!mounted) return;
@@ -292,7 +296,7 @@ class _QrScanPageState extends State<QrScanPage> {
     try {
       final body = result.envelope!.body as UserContactBody;
       final addResult = await _contactService.addContact(
-        address: body.address,
+        ss58Address: body.ss58Address,
         contactName: body.contactName,
       );
       if (!mounted) return;

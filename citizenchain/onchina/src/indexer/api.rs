@@ -1,4 +1,4 @@
-//! Indexer API 路由：提供钱包交易记录查询接口。
+//! Indexer API 路由：按规范账户 ID 查询交易记录。
 
 use axum::{
     extract::{Path, Query, State},
@@ -25,8 +25,8 @@ struct TxRecordOutput {
     block_number: i64,
     tx_type: String,
     direction: &'static str,
-    from_address: Option<String>,
-    to_address: Option<String>,
+    sender_account_id: Option<String>,
+    recipient_account_id: Option<String>,
     amount_yuan: f64,
     fee_yuan: Option<f64>,
     block_timestamp: Option<String>,
@@ -38,16 +38,19 @@ struct TxListOutput {
     has_more: bool,
 }
 
-/// GET /api/v1/app/wallet/:address/transactions
-pub(crate) async fn wallet_transactions(
+/// GET /api/v1/app/accounts/:account_id/transactions
+pub(crate) async fn account_transactions(
     State(state): State<AppState>,
-    Path(address): Path<String>,
+    Path(account_id): Path<String>,
     Query(query): Query<TxQuery>,
 ) -> impl IntoResponse {
-    let address = address.trim().to_string();
-    if address.is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "address is required");
-    }
+    let Some(account_id) = crate::crypto::pubkey::normalize_account_id(&account_id) else {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "account_id must be lowercase 0x plus 64 hexadecimal characters",
+        );
+    };
 
     let limit = query.limit.unwrap_or(20).max(1).min(100);
     // 多查一条以判断 has_more
@@ -56,7 +59,7 @@ pub(crate) async fn wallet_transactions(
     let result = state.db.with_client(|conn| {
         db::query_tx_records(
             conn,
-            &address,
+            &account_id,
             query.before_id,
             query.tx_type.as_deref(),
             fetch_limit,
@@ -81,15 +84,18 @@ pub(crate) async fn wallet_transactions(
     let records: Vec<TxRecordOutput> = rows_to_return
         .iter()
         .map(|r| {
-            let direction =
-                determine_direction(&address, r.from_address.as_deref(), r.to_address.as_deref());
+            let direction = determine_direction(
+                &account_id,
+                r.sender_account_id.as_deref(),
+                r.recipient_account_id.as_deref(),
+            );
             TxRecordOutput {
                 id: r.id,
                 block_number: r.block_number,
                 tx_type: r.tx_type.clone(),
                 direction,
-                from_address: r.from_address.clone(),
-                to_address: r.to_address.clone(),
+                sender_account_id: r.sender_account_id.clone(),
+                recipient_account_id: r.recipient_account_id.clone(),
                 amount_yuan: r.amount_fen as f64 / 100.0,
                 fee_yuan: r.fee_fen.map(|f| f as f64 / 100.0),
                 block_timestamp: r.block_timestamp.map(|ts| ts.to_rfc3339()),
@@ -106,10 +112,10 @@ pub(crate) async fn wallet_transactions(
 }
 
 /// 判断交易方向：out = 我是付款方，in = 我是收款方。
-fn determine_direction(my_address: &str, from: Option<&str>, to: Option<&str>) -> &'static str {
-    if from.is_some_and(|f| f == my_address) {
+fn determine_direction(my_account_id: &str, from: Option<&str>, to: Option<&str>) -> &'static str {
+    if from.is_some_and(|f| f == my_account_id) {
         "out"
-    } else if to.is_some_and(|t| t == my_address) {
+    } else if to.is_some_and(|t| t == my_account_id) {
         "in"
     } else {
         // 无 from/to 的系统事件（如 gov_issuance 汇总事件）

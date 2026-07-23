@@ -104,13 +104,32 @@ impl admin_primitives::CitizenIdentityBindingQuery<AccountId32> for TestCitizenI
     }
 }
 
+thread_local! {
+    /// 测试相位开关;默认 Genesis(false),每个测试经 new_test_ext 复位。
+    static IS_OPERATION: core::cell::Cell<bool> = core::cell::Cell::new(false);
+}
+
+/// 可切换的相位 mock:Genesis(默认)放行、Operation 强制。
+pub struct TestChainPhase;
+impl admin_primitives::ChainPhaseCheck for TestChainPhase {
+    fn is_operation() -> bool {
+        IS_OPERATION.with(|cell| cell.get())
+    }
+}
+
+fn set_operation_phase(is_operation: bool) {
+    IS_OPERATION.with(|cell| cell.set(is_operation));
+}
+
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type CitizenIdentityBinding = TestCitizenIdentityBinding;
+    type ChainPhase = TestChainPhase;
 }
 
 fn new_test_ext() -> sp_io::TestExternalities {
+    set_operation_phase(false); // 每个测试默认 Genesis 期。
     let storage = frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .expect("test storage should build");
@@ -124,9 +143,9 @@ fn account(seed: u8) -> AccountId32 {
 }
 
 /// admins 保存显示姓名和授权账户；岗位、任期、来源等由 entity 管理。
-fn admins(count: u8) -> Vec<PublicAdmin<AccountId32>> {
+fn admins(count: u8) -> Vec<Admin<AccountId32>> {
     (0..count)
-        .map(|seed| PublicAdmin {
+        .map(|seed| Admin {
             account_id: account(seed),
             cid_number: Default::default(),
             family_name: Default::default(),
@@ -135,12 +154,12 @@ fn admins(count: u8) -> Vec<PublicAdmin<AccountId32>> {
         .collect()
 }
 
-fn indexed_admins(count: u32) -> Vec<PublicAdmin<AccountId32>> {
+fn indexed_admins(count: u32) -> Vec<Admin<AccountId32>> {
     (0..count)
         .map(|index| {
             let mut raw = [0u8; 32];
             raw[..4].copy_from_slice(&index.to_le_bytes());
-            PublicAdmin {
+            Admin {
                 account_id: AccountId32::new(raw),
                 cid_number: Default::default(),
                 family_name: Default::default(),
@@ -168,6 +187,38 @@ fn public_admins_allow_temporarily_empty_identity_and_name_fields() {
         assert!(stored.admins[0].cid_number.is_empty());
         assert!(stored.admins[0].family_name.is_empty());
         assert!(stored.admins[0].given_name.is_empty());
+    });
+}
+
+#[test]
+fn operation_phase_requires_complete_public_admin_fields() {
+    new_test_ext().execute_with(|| {
+        set_operation_phase(true);
+        // 运行期:空 cid/姓名 → 拒。
+        assert_noop!(
+            PublicAdmins::do_set_institution_admins(
+                b"GD001-CGOV0-923456789-2026".to_vec(),
+                code_bytes("CGOV"),
+                AdminAccountKind::PublicInstitution,
+                admins(1),
+            ),
+            Error::<Test>::IncompleteAdminFields
+        );
+        // 运行期:四要素齐全 + citizen-identity 绑定匹配 → Ok。
+        let mut complete = admins(1);
+        complete[0].account_id = account(9);
+        complete[0].cid_number = b"GZ000-CTZN6-198805200-2026"
+            .to_vec()
+            .try_into()
+            .expect("cid fits");
+        complete[0].family_name = "张".as_bytes().to_vec().try_into().expect("family fits");
+        complete[0].given_name = "三".as_bytes().to_vec().try_into().expect("given fits");
+        assert_ok!(PublicAdmins::do_set_institution_admins(
+            b"GD001-CGOV0-923456789-2026".to_vec(),
+            code_bytes("CGOV"),
+            AdminAccountKind::PublicInstitution,
+            complete,
+        ));
     });
 }
 
@@ -366,7 +417,7 @@ fn fixed_governance_admin_update_only_replaces_people_records() {
         ));
 
         let replacement = (40..40 + NRC_ADMIN_COUNT as u8)
-            .map(|seed| PublicAdmin {
+            .map(|seed| Admin {
                 account_id: account(seed),
                 cid_number: Default::default(),
                 family_name: Default::default(),

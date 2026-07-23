@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use crate::{
     actor_ip_from_headers, api_error,
-    auth::{login::parse_sr25519_pubkey_bytes, repo as auth_repo},
+    auth::{login::parse_account_id_bytes, repo as auth_repo},
     core::{
         chain_submit,
         institution_call::{
@@ -45,7 +45,7 @@ pub(crate) const PURPOSE_INSTITUTION_REGISTER_ADMINS: &str = "INSTITUTION_REGIST
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct InstitutionAdminInput {
-    pub(crate) admin_account: String,
+    pub(crate) account_id: String,
     #[serde(default)]
     pub(crate) cid_number: Option<String>,
     #[serde(default)]
@@ -78,7 +78,7 @@ pub(crate) struct InstitutionRoleMutationInput {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct InstitutionAssignmentTargetInput {
-    pub(crate) admin_account: String,
+    pub(crate) account_id: String,
     #[serde(default)]
     pub(crate) term_start: u32,
     #[serde(default)]
@@ -147,15 +147,14 @@ fn parse_admin_inputs(
     let mut private_admins = Vec::with_capacity(admins.len());
     let mut seen = std::collections::BTreeSet::new();
     for admin in admins {
-        let admin_account =
-            parse_sr25519_pubkey_bytes(admin.admin_account.trim()).ok_or_else(|| {
-                api_error(
-                    StatusCode::BAD_REQUEST,
-                    1001,
-                    "管理员账户必须是 sr25519 公钥或 SS58 地址",
-                )
-            })?;
-        if !seen.insert(admin_account) {
+        let account_id = parse_account_id_bytes(admin.account_id.trim()).ok_or_else(|| {
+            api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "account_id 必须是小写 0x 加 64 位十六进制",
+            )
+        })?;
+        if !seen.insert(account_id) {
             return Err(api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
@@ -164,7 +163,7 @@ fn parse_admin_inputs(
         }
         let citizen = state
             .db
-            .find_citizen_by_wallet(admin.admin_account.trim())
+            .find_citizen_by_account_id(admin.account_id.trim())
             .map_err(|err| api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, &err))?;
         let supplied_cid = admin
             .cid_number
@@ -233,15 +232,16 @@ fn parse_admin_inputs(
                 .into_bytes()
                 .try_into()
                 .map_err(|_| api_error(StatusCode::BAD_REQUEST, 1001, "公民 CID 过长"))?;
-            public_admins.push(admin_primitives::PublicAdmin {
-                account_id: admin_account,
+            public_admins.push(admin_primitives::Admin {
+                account_id: account_id,
                 cid_number,
                 family_name,
                 given_name,
             });
         } else {
             private_admins.push(admin_primitives::Admin {
-                account_id: admin_account,
+                account_id: account_id,
+                cid_number: Default::default(),
                 family_name,
                 given_name,
             });
@@ -313,15 +313,14 @@ fn assignment_targets(
     let mut seen_accounts = std::collections::BTreeSet::new();
     let mut out = Vec::with_capacity(input.len());
     for target in input {
-        let admin_account =
-            parse_sr25519_pubkey_bytes(target.admin_account.trim()).ok_or_else(|| {
-                api_error(
-                    StatusCode::BAD_REQUEST,
-                    1001,
-                    "任职管理员账户必须是 sr25519 公钥或 SS58 地址",
-                )
-            })?;
-        if !seen_accounts.insert(admin_account) {
+        let account_id = parse_account_id_bytes(target.account_id.trim()).ok_or_else(|| {
+            api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "任职 account_id 必须是小写 0x 加 64 位十六进制",
+            )
+        })?;
+        if !seen_accounts.insert(account_id) {
             return Err(api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
@@ -329,7 +328,7 @@ fn assignment_targets(
             ));
         }
         out.push(entity_primitives::InstitutionAssignmentTarget {
-            account_id: admin_account,
+            account_id: account_id,
             term_start: target.term_start,
             term_end: target.term_end,
             assignment_source:
@@ -556,18 +555,18 @@ fn legal_representative_change(
             ));
         }
     };
-    let Some(wallet_pubkey) = record.wallet_pubkey.as_deref() else {
+    let Some(account_id) = record.account_id.as_deref() else {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "法定代表人公民未绑定钱包",
+            "法定代表人公民未绑定链账户",
         ));
     };
-    let account = parse_sr25519_pubkey_bytes(wallet_pubkey).ok_or_else(|| {
+    let account_id_bytes = parse_account_id_bytes(account_id).ok_or_else(|| {
         api_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             1004,
-            "法定代表人钱包公钥格式错误",
+            "法定代表人 account_id 格式错误",
         )
     })?;
     let family_name = record.family_name.trim();
@@ -584,21 +583,21 @@ fn legal_representative_change(
             family_name: family_name.as_bytes().to_vec(),
             given_name: given_name.as_bytes().to_vec(),
             cid_number: cid_number.as_bytes().to_vec(),
-            account_id: account,
+            account_id: account_id_bytes,
         },
     ))
 }
 
 pub(crate) async fn build_chain_sign_output(
     state: &AppState,
-    actor_pubkey: &str,
+    actor_public_key: &str,
     cid_number: &str,
     purpose: &'static str,
     call_data: Vec<u8>,
     chain_action: u16,
     context: serde_json::Value,
 ) -> Result<PrepareInstitutionChainOutput, axum::response::Response> {
-    let prepared = chain_submit::prepare_signing(&call_data, actor_pubkey)
+    let prepared = chain_submit::prepare_signing(&call_data, actor_public_key)
         .await
         .map_err(|err| {
             tracing::error!(error = %err, "prepare institution governance signing failed");
@@ -615,14 +614,14 @@ pub(crate) async fn build_chain_sign_output(
         request_id.as_str(),
         issued_at.timestamp(),
         expires_at.timestamp(),
-        actor_pubkey,
+        actor_public_key,
         &prepared.payload,
         chain_action,
     )?;
     let session = ChainSignSession {
         request_id: request_id.clone(),
         purpose: purpose.to_string(),
-        actor_pubkey: actor_pubkey.to_string(),
+        actor_public_key: actor_public_key.to_string(),
         call_data: call_data.clone(),
         nonce: prepared.nonce,
         signing_hash: prepared.signing_hash_hex,
@@ -735,7 +734,7 @@ pub(crate) async fn prepare_institution_governance(
         Some(InstitutionAdminsPayload::Private(admins)) => {
             encode_governance_action(Some(admins), role_mutations, assignment_changes, legal)
         }
-        None if is_public => encode_governance_action::<admin_primitives::PublicAdmin<[u8; 32]>>(
+        None if is_public => encode_governance_action::<admin_primitives::Admin<[u8; 32]>>(
             None,
             role_mutations,
             assignment_changes,
@@ -748,7 +747,7 @@ pub(crate) async fn prepare_institution_governance(
             legal,
         ),
     };
-    // 机构治理已收敛为「发起管理员钱包直接冷签这笔 extrinsic」:不再由平台钥签发独立凭证,
+    // 机构治理已收敛为「发起管理员使用签名钱包直接冷签这笔 extrinsic」:不再由平台钥签发独立凭证,
     // 授权由 runtime 在 origin 处以 `is_institution_admin`(本机构管理员)+ 岗位码校验。
     let chain = encode_propose_institution_governance(&ProposeInstitutionGovernanceArgs {
         cid_number: cid_number.as_bytes().to_vec(),
@@ -759,7 +758,7 @@ pub(crate) async fn prepare_institution_governance(
     });
     let output = match build_chain_sign_output(
         &state,
-        ctx.admin_account.as_str(),
+        ctx.account_id.as_str(),
         cid_number,
         PURPOSE_INSTITUTION_GOVERNANCE,
         chain.call_data,
@@ -774,7 +773,7 @@ pub(crate) async fn prepare_institution_governance(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "INSTITUTION_GOVERNANCE_PREPARE",
-        &ctx.admin_account,
+        &ctx.account_id,
         Some(cid_number.to_string()),
         serde_json::json!({ "cid_number": cid_number, "actor_ip": actor_ip_from_headers(&headers) }),
     );
@@ -832,7 +831,7 @@ pub(crate) async fn prepare_register_institution_admins(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    // 管理员登记已收敛为「注册局管理员钱包直接冷签这笔 extrinsic」:不再由平台钥签发独立凭证,
+    // 管理员登记已收敛为「注册局管理员使用签名钱包直接冷签这笔 extrinsic」:不再由平台钥签发独立凭证,
     // 授权由 runtime 在 origin 处以 `can_register_institution_origin`(注册局在册管理员 +
     // 对目标机构有登记权)校验。
     let chain = encode_register_institution_admins(&RegisterInstitutionAdminsArgs {
@@ -843,7 +842,7 @@ pub(crate) async fn prepare_register_institution_admins(
     });
     let output = match build_chain_sign_output(
         &state,
-        ctx.admin_account.as_str(),
+        ctx.account_id.as_str(),
         cid_number,
         PURPOSE_INSTITUTION_REGISTER_ADMINS,
         chain.call_data,
@@ -862,7 +861,7 @@ pub(crate) async fn prepare_register_institution_admins(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "INSTITUTION_REGISTER_ADMINS_PREPARE",
-        &ctx.admin_account,
+        &ctx.account_id,
         Some(cid_number.to_string()),
         serde_json::json!({ "cid_number": cid_number, "actor_ip": actor_ip_from_headers(&headers) }),
     );

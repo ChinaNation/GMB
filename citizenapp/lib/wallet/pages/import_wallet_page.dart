@@ -33,8 +33,8 @@ class _ImportWalletPageState extends State<ImportWalletPage> {
       final profile =
           await WalletManager().importWallet(_mnemonicController.text);
       unawaited(ChainTxMonitor.instance.initBaselineBalance(
-        profile.address,
-        profile.pubkeyHex,
+        profile.ss58Address,
+        profile.accountId,
       ));
       _mnemonicController.clear();
       if (!mounted) {

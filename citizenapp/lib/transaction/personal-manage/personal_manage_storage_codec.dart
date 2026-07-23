@@ -12,13 +12,13 @@ import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 /// 管理员真源在 `PersonalAdmins::AdminAccounts`，动态阈值真源在 `InternalVote`。
 class PersonalManageAccountSnapshot {
   const PersonalManageAccountSnapshot({
-    required this.creatorHex,
+    required this.creatorAccountId,
     required this.accountName,
     required this.createdAt,
     required this.statusByte,
   });
 
-  final String creatorHex;
+  final String creatorAccountId;
   final Uint8List accountName;
   final int createdAt;
   final int statusByte;
@@ -41,20 +41,19 @@ class PersonalManageAdminSnapshot {
 class PersonalManageStorageCodec {
   PersonalManageStorageCodec._();
 
-  static Uint8List personalAccountsKey(String personalAccountHex) {
+  static Uint8List personalAccountsKey(String personalAccountId) {
     return storageMapKey(
       'PersonalManage',
       'PersonalAccounts',
-      hexDecode(personalAccountHex),
+      accountIdBytes(personalAccountId),
     );
   }
 
-  static Uint8List accountIdFromAccountHex(String accountHex) {
-    final account = hexDecode(accountHex);
-    if (account.length != 32) {
-      throw ArgumentError('account hex 必须为 32 字节');
+  static Uint8List accountIdBytes(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
     }
-    return account;
+    return hexDecode(accountId);
   }
 
   static Uint8List adminAccountKey(Uint8List accountId) {
@@ -74,7 +73,8 @@ class PersonalManageStorageCodec {
   ) {
     if (data.length < 32 + 1 + 4 + 1) return null;
     var offset = 0;
-    final creatorHex = hexEncode(data.sublist(offset, offset + 32));
+    final creatorAccountId =
+        '0x${hexEncode(data.sublist(offset, offset + 32))}';
     offset += 32;
     final accountName = readBoundedBytes(data, offset);
     if (accountName == null) return null;
@@ -84,7 +84,7 @@ class PersonalManageStorageCodec {
     offset += 4;
     final statusByte = data[offset];
     return PersonalManageAccountSnapshot(
-      creatorHex: creatorHex,
+      creatorAccountId: creatorAccountId,
       accountName: accountName.value,
       createdAt: createdAt,
       statusByte: statusByte,

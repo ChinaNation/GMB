@@ -46,7 +46,7 @@ describe("平台与创作者统一订阅门禁", () => {
 
 function membershipRow(overrides: Partial<MembershipRow> = {}): MembershipRow {
   return {
-    owner_account: "owner",
+    account_id: "0x9999999999999999999999999999999999999999999999999999999999999999",
     membership_level: "freedom",
     started_at: 1_000_000,
     last_charged_at: 1_000_000,

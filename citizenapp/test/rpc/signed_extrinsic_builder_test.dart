@@ -29,7 +29,7 @@ void main() {
     test('builds extrinsic payload with immortal era', () {
       final extrinsic = SignedExtrinsicBuilder.buildImmortalExtrinsicPayload(
         callData: Uint8List.fromList([0x16, 0x00]),
-        signerPubkey: Uint8List(32),
+        signerPublicKey: Uint8List(32),
         signature: Uint8List(64),
         nonce: 3,
       );

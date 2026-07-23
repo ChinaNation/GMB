@@ -11,22 +11,29 @@ import 'fake_profile.dart';
 void main() {
   const session = SquareSession(
     sessionToken: 'test-session',
-    ownerAccount: 'viewer',
+    accountId:
+        '0x6666666666666666666666666666666666666666666666666666666666666666',
     expiresAt: 9999999999999,
   );
   testWidgets('renders follow entries as rows', (tester) async {
     final api = FakeProfileApi(
       sampleProfile(),
       follows: const [
-        SquareFollowEntry(ownerAccount: 'a______________1', createdAt: 200),
-        SquareFollowEntry(ownerAccount: 'a______________2', createdAt: 100),
+        SquareFollowEntry(
+            accountId:
+                '0x0101010101010101010101010101010101010101010101010101010101010101',
+            createdAt: 200),
+        SquareFollowEntry(
+            accountId:
+                '0x0202020202020202020202020202020202020202020202020202020202020202',
+            createdAt: 100),
       ],
       throwOnProfile: true,
     );
     await tester.pumpWidget(
       MaterialApp(
         home: FollowsListPage(
-          ownerAccount: kOwner,
+          accountId: kOwner,
           type: FollowsType.following,
           session: session,
           api: api,
@@ -38,18 +45,20 @@ void main() {
     expect(find.byType(ListTile), findsNWidgets(2));
     expect(find.text('关注'), findsOneWidget);
     expect(
-      find.text(
-          ProfilePresentation.forAccount('a______________1').fallbackName),
+      find.text(ProfilePresentation.forAccount(
+              '0x0101010101010101010101010101010101010101010101010101010101010101')
+          .fallbackName),
       findsOneWidget,
     );
-    expect(find.textContaining('a_____'), findsNWidgets(2));
+    expect(find.text('0x0101...010101'), findsOneWidget);
+    expect(find.text('0x0202...020202'), findsOneWidget);
   });
 
   testWidgets('shows empty state when there are no followers', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: FollowsListPage(
-          ownerAccount: kOwner,
+          accountId: kOwner,
           type: FollowsType.followers,
           session: session,
           api: FakeProfileApi(sampleProfile()),

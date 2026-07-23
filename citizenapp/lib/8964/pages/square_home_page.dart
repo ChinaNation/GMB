@@ -184,7 +184,7 @@ class _SquareHomePageState extends State<SquareHomePage> {
     final identity = await widget.identityService.loadCurrent(
       readLiveChain: readLiveChain,
     );
-    _identityAddress = identity.ownerAccount;
+    _identityAddress = identity.accountId;
     _identityWalletName = identity.walletName;
     return identity;
   }
@@ -204,11 +204,11 @@ class _SquareHomePageState extends State<SquareHomePage> {
         _smoldotClientManager.healthStatus != ChainHealthStatus.operational) {
       return;
     }
-    final walletAccount = wallet?.address.trim() ?? '';
-    if (walletAccount.isEmpty || _operationalIdentityAccount == walletAccount) {
+    final accountId = wallet?.accountId ?? '';
+    if (accountId.isEmpty || _operationalIdentityAccount == accountId) {
       return;
     }
-    _operationalIdentityAccount = walletAccount;
+    _operationalIdentityAccount = accountId;
     final future = _loadIdentity(readLiveChain: true);
     // setState 回调必须返回 void；赋值表达式会返回 Future，Flutter 会把它判定为
     // 异步 setState 并抛异常，因此改成语句块明确只做同步状态赋值。
@@ -248,7 +248,7 @@ class _SquareHomePageState extends State<SquareHomePage> {
     final manager = widget.identityService.walletManager ?? WalletManager();
     final wallet = await manager.getDefaultWallet();
     if (!mounted) return;
-    if ((wallet?.address ?? '') == (_identityAddress ?? '') &&
+    if ((wallet?.accountId ?? '') == (_identityAddress ?? '') &&
         wallet?.walletName == _identityWalletName) {
       return;
     }
@@ -280,16 +280,16 @@ class _SquareHomePageState extends State<SquareHomePage> {
     await _refreshFeed();
   }
 
-  Future<void> _openAuthor(String ownerAccount) async {
-    if (ownerAccount.isEmpty) return;
+  Future<void> _openAuthor(String accountId) async {
+    if (accountId.isEmpty) return;
     final identity = await _identityFuture;
     if (!mounted) return;
-    final isSelf = identity.ownerAccount.isNotEmpty &&
-        identity.ownerAccount == ownerAccount;
+    final isSelf =
+        identity.accountId.isNotEmpty && identity.accountId == accountId;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => UserProfilePage(
-          ownerAccount: ownerAccount,
+          accountId: accountId,
           isSelf: isSelf,
         ),
       ),
@@ -539,7 +539,7 @@ class _FeedBody extends StatelessWidget {
           return SquareArticleCard(
             post: post,
             onTap: () => onOpenPost(post),
-            onAuthorTap: () => onOpenAuthor(post.author.ownerAccount),
+            onAuthorTap: () => onOpenAuthor(post.author.accountId),
             avatarUrl: avatarUrl,
             avatarHeaders: avatarHeaders,
           );
@@ -547,7 +547,7 @@ class _FeedBody extends StatelessWidget {
         return SquarePostCard(
           post: post,
           onTap: () => onOpenPost(post),
-          onAuthorTap: () => onOpenAuthor(post.author.ownerAccount),
+          onAuthorTap: () => onOpenAuthor(post.author.accountId),
           avatarUrl: avatarUrl,
           avatarHeaders: avatarHeaders,
         );

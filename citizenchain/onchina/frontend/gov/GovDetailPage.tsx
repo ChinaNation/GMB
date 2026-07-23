@@ -92,7 +92,7 @@ function parseAdminsText(text?: string): InstitutionGovernanceAdminInput[] {
       if (!familyName || !givenName || !account) {
         throw new Error('管理员集合每行格式必须是：姓,名,账户');
       }
-      return { admin_account: account, family_name: familyName, given_name: givenName };
+      return { account_id: account, family_name: familyName, given_name: givenName };
     });
 }
 
@@ -115,7 +115,7 @@ function parseInitialAssignments(text?: string) {
     if (!account || !Number.isInteger(termStart) || !Number.isInteger(termEnd) || termStart < 0 || termEnd < 0) {
       throw new Error('初始任职每行格式必须是：管理员账户,任期开始,任期结束');
     }
-    return { admin_account: account, term_start: termStart, term_end: termEnd };
+    return { account_id: account, term_start: termStart, term_end: termEnd };
   });
 }
 
@@ -136,7 +136,7 @@ function parseAssignmentsText(text?: string): InstitutionGovernanceAssignmentCha
       throw new Error('任期必须是非负整数日序');
     }
     const row = byRole.get(roleCode) ?? { role_code: roleCode, assignments: [] };
-    row.assignments.push({ admin_account: account, term_start: termStart, term_end: termEnd });
+    row.assignments.push({ account_id: account, term_start: termStart, term_end: termEnd });
     byRole.set(roleCode, row);
   }
   return Array.from(byRole.values());
@@ -172,7 +172,7 @@ function InstitutionGovernancePanel({
     const output = await submitChainSign(
       auth,
       requestId,
-      signed.signer_pubkey,
+      signed.signer_public_key,
       signed.signature,
     );
     notice.success(`链交易已提交：${output.tx_hash}`);
@@ -300,7 +300,7 @@ function InstitutionGovernancePanel({
           <Input.TextArea rows={4} placeholder={'RABCD,w5...,0,0'} />
         </Form.Item>
         <Form.Item label="法定代表人公民 CID" name="legal_representative_cid_number">
-          <Input placeholder="只填公民 CID；姓名和钱包账户由后端读取公民档案" />
+          <Input placeholder="只填公民 CID；姓名和账户 ID由后端读取公民档案" />
         </Form.Item>
         <Form.Item name="clear_legal_representative" valuePropName="checked">
           <Checkbox>解除法定代表人并清空链上完整法定代表人结构</Checkbox>
@@ -381,12 +381,12 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
       if (signed.challenge_id !== securityModal.actionId) {
         throw new Error('签名响应与当前请求不匹配');
       }
-      if (!signed.signer_pubkey) {
-        throw new Error('签名响应缺少 signer_pubkey');
+      if (!signed.signer_public_key) {
+        throw new Error('签名响应缺少 signer_public_key');
       }
       const grant = await commitAdminAction<AdminSecurityGrantOutput>(auth, {
         action_id: securityModal.actionId,
-        signer_pubkey: signed.signer_pubkey,
+        signer_public_key: signed.signer_public_key,
         signature: signed.signature,
         payload_hash: securityModal.payloadHash,
       });

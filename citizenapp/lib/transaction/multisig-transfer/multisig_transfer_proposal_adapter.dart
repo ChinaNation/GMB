@@ -268,7 +268,7 @@ class MultisigTransferProposalFeed {
   }
 
   static String _balanceKey(InstitutionInfo institution) {
-    return '${institution.cidNumber}:${institution.mainAccount}';
+    return '${institution.cidNumber}:${institution.mainAccountId}';
   }
 }
 

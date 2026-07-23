@@ -2,7 +2,7 @@
 //!
 //! 公民由注册局管理员在办理市先录入本地档案。请求只提交公民档案字段;
 //! 身份 CID、护照号、护照有效期由服务端确定性生成并落库。
-//! 钱包账户留到链上身份推送阶段录入,并由该钱包签名确认。
+//! 链账户留到链上身份推送阶段录入，并由该账户签名确认。
 
 use axum::http::{HeaderMap, StatusCode};
 use chrono::{NaiveDate, Utc};
@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::cid::{generate_cid_number, GenerateCidInput};
-use crate::crypto::pubkey::{pubkey_hex_to_ss58, ss58_to_pubkey_hex};
+use crate::crypto::pubkey::{account_id_to_ss58, normalize_account_id};
 use crate::domains::citizens::passport_no::{
     generate_passport_no_with_retry, is_voting_age_at, passport_valid_from, passport_valid_until,
     passport_validity_years,
@@ -20,7 +20,7 @@ use crate::*;
 /// 直接录入公民请求 DTO。
 ///
 /// 居住省市由当前注册局办理上下文校验,前端只负责回传当前选择。
-/// 本地建档不得要求钱包账户;儿童或暂未开户公民同样能先发放电子护照。
+/// 本地建档不得要求链账户；儿童或暂未开户公民同样能先发放电子护照。
 #[derive(Deserialize)]
 pub(crate) struct AdminCreateCitizenInput {
     /// 当前注册局内的任职岗位码；与机构 CID、管理员签名钱包共同构成权限主体。
@@ -50,7 +50,8 @@ pub(crate) struct AdminCreateCitizenOutput {
     pub(crate) citizen_birth_date: String,
     pub(crate) citizen_status: CitizenStatus,
     pub(crate) voting_eligible: bool,
-    pub(crate) wallet_address: Option<String>,
+    pub(crate) account_id: Option<String>,
+    pub(crate) ss58_address: Option<String>,
     pub(crate) passport_valid_from: String,
     pub(crate) passport_valid_until: String,
     pub(crate) province_code: String,
@@ -226,7 +227,7 @@ pub(crate) fn generate_citizen_cid_candidate(
         format!("{seed}|n{nonce}")
     };
     let cid_number = generate_cid_number(GenerateCidInput {
-        account_pubkey: seeded.as_str(),
+        account_id: seeded.as_str(),
         p1: "1",
         province_name: v.province_name.as_str(),
         city_name: v.city_name.as_str(),
@@ -250,7 +251,7 @@ pub(crate) fn generate_citizen_cid_candidate(
 pub(crate) fn persist_citizen_record(
     state: &AppState,
     headers: &HeaderMap,
-    admin_account: &str,
+    account_id: &str,
     v: &ValidatedCitizenInput,
     cid_number: &str,
     onchain_tx_hash: &str,
@@ -307,10 +308,8 @@ pub(crate) fn persist_citizen_record(
         given_name: given_name.clone(),
         citizen_sex: citizen_sex.clone(),
         citizen_birth_date: citizen_birth_date.format("%Y-%m-%d").to_string(),
-        wallet_pubkey: None,
-        wallet_address: None,
-        wallet_sig_alg: None,
-        wallet_verified_at: None,
+        account_id: None,
+        account_verified_at: None,
         citizen_status: CitizenStatus::Normal,
         voting_eligible: v.voting_eligible,
         passport_valid_from: valid_from.clone(),
@@ -326,9 +325,9 @@ pub(crate) fn persist_citizen_record(
         onchain_tx_hash: Some(onchain_tx_hash.to_string()),
         onchain_block_number: onchain_block_number.map(|n| n as i64),
         onchain_at: Some(now),
-        created_by: admin_account.to_string(),
+        creator_account_id: account_id.to_string(),
         created_at: now,
-        updated_by: None,
+        updater_account_id: None,
         updated_at: now,
     };
     record.archive_hash = Some(citizen_archive_hash(&record));
@@ -352,7 +351,7 @@ pub(crate) fn persist_citizen_record(
     crate::core::runtime_ops::append_audit_log(
         state,
         "CITIZEN_CREATE",
-        admin_account,
+        account_id,
         Some(cid_number.clone()),
         serde_json::json!({
             "cid_number": cid_number,
@@ -386,7 +385,8 @@ pub(crate) fn create_output_from_record(record: CitizenRecord) -> AdminCreateCit
         citizen_birth_date: record.citizen_birth_date,
         citizen_status: record.citizen_status,
         voting_eligible: record.voting_eligible,
-        wallet_address: record.wallet_address,
+        ss58_address: record.account_id.as_deref().and_then(account_id_to_ss58),
+        account_id: record.account_id,
         passport_valid_from: record.passport_valid_from,
         passport_valid_until: record.passport_valid_until,
         province_code: record.province_code,
@@ -399,9 +399,9 @@ pub(crate) fn create_output_from_record(record: CitizenRecord) -> AdminCreateCit
     }
 }
 
-pub(crate) struct ResolvedWallet {
-    pub(crate) address: String,
-    pub(crate) pubkey: String,
+pub(crate) struct ResolvedCitizenAccount {
+    pub(crate) account_id: String,
+    pub(crate) ss58_address: String,
 }
 
 fn required_trimmed(value: &str, field: &str) -> Result<String, axum::response::Response> {
@@ -483,7 +483,7 @@ fn local_citizen_cid_seed(
     birth_city_code: &str,
     birth_town_code: &str,
 ) -> String {
-    // 本地建档阶段没有钱包账户,因此 CID 种子只能来自档案自身的稳定字段。
+    // 本地建档阶段没有账户 ID,因此 CID 种子只能来自档案自身的稳定字段。
     // 钱包绑定属于后续链上身份推送,不得回头改变本地身份号。
     let mut hasher = Sha256::new();
     let birth_date_text = citizen_birth_date.format("%Y-%m-%d").to_string();
@@ -505,41 +505,35 @@ fn local_citizen_cid_seed(
     format!("citizen-local-0x{}", hex::encode(hasher.finalize()))
 }
 
-pub(crate) fn resolve_wallet_account(
-    account: &str,
-) -> Result<ResolvedWallet, axum::response::Response> {
-    let account = account.trim();
-    if account.is_empty() {
+pub(crate) fn resolve_citizen_account(
+    account_id: &str,
+) -> Result<ResolvedCitizenAccount, axum::response::Response> {
+    let account_id = account_id.trim();
+    if account_id.is_empty() {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "wallet_account 不能为空",
+            "account_id 不能为空",
         ));
     }
-    if let Some(pubkey) = ss58_to_pubkey_hex(account) {
-        let address = pubkey_hex_to_ss58(&pubkey).unwrap_or_else(|| account.to_string());
-        return Ok(ResolvedWallet { address, pubkey });
-    }
-    let Some(pubkey) = normalize_pubkey_hex(account) else {
+    let Some(account_id) = normalize_account_id(account_id) else {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "wallet_account 不是合法 SS58 地址或 0x 公钥",
+            "account_id 必须是小写 0x 加 64 位十六进制",
         ));
     };
-    let Some(address) = pubkey_hex_to_ss58(&pubkey) else {
+    let Some(ss58_address) = account_id_to_ss58(&account_id) else {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "wallet_account 无法推导地址",
+            "account_id 无法派生 SS58 展示地址",
         ));
     };
-    Ok(ResolvedWallet { address, pubkey })
-}
-
-fn normalize_pubkey_hex(pubkey: &str) -> Option<String> {
-    let bytes = parse_sr25519_pubkey_bytes(pubkey)?;
-    Some(format!("0x{}", hex::encode(bytes)))
+    Ok(ResolvedCitizenAccount {
+        account_id,
+        ss58_address,
+    })
 }
 
 fn citizen_archive_hash(record: &CitizenRecord) -> String {
@@ -566,32 +560,31 @@ fn citizen_archive_hash(record: &CitizenRecord) -> String {
 }
 
 impl Db {
-    /// 按钱包公钥查公民档案。仅已完成钱包绑定/链上推送准备的公民会命中本查询。
-    pub(crate) fn find_citizen_by_wallet(
+    /// 按账户 ID 查公民档案。仅已完成账户绑定的公民会命中本查询。
+    pub(crate) fn find_citizen_by_account_id(
         &self,
-        wallet_pubkey: &str,
+        account_id: &str,
     ) -> Result<Option<CitizenRecord>, String> {
-        let wallet_pubkey = wallet_pubkey.trim().to_string();
-        if wallet_pubkey.is_empty() {
+        let account_id = account_id.trim().to_string();
+        if account_id.is_empty() {
             return Ok(None);
         }
         self.with_client(move |conn| {
             let row = conn
                 .query_opt(
                     "SELECT COALESCE(id, 0), cid_number, passport_no, family_name,
-                            given_name, citizen_sex, citizen_birth_date, wallet_pubkey, wallet_address,
-                            wallet_sig_alg, wallet_verified_at, citizen_status, voting_eligible,
+                            given_name, citizen_sex, citizen_birth_date, account_id,
+                            account_verified_at, citizen_status, voting_eligible,
                             passport_valid_from, passport_valid_until, status_updated_at,
                             province_code, city_code, town_code,
                             birth_province_code, birth_city_code, birth_town_code,
                             archive_hash, onchain_tx_hash, onchain_block_number, onchain_at,
-                            created_by, created_at, updated_by, updated_at
+                            creator_account_id, created_at, updater_account_id, updated_at
                      FROM citizens
-                     WHERE wallet_pubkey IS NOT NULL
-                       AND lower(wallet_pubkey) = lower($1)
+                     WHERE account_id = $1
                      ORDER BY created_at DESC
                      LIMIT 1",
-                    &[&wallet_pubkey],
+                    &[&account_id],
                 )
                 .map_err(|e| format!("query citizen failed: {e}"))?;
             Ok(row.as_ref().map(citizen_record_from_row))
@@ -641,28 +634,26 @@ pub(crate) fn citizen_record_from_row(row: &postgres::Row) -> CitizenRecord {
         given_name: row.get(4),
         citizen_sex: row.get(5),
         citizen_birth_date: row.get(6),
-        wallet_pubkey: row.get(7),
-        wallet_address: row.get(8),
-        wallet_sig_alg: row.get(9),
-        wallet_verified_at: row.get(10),
-        citizen_status: citizen_status_from_db(row.get::<_, String>(11).as_str()),
-        voting_eligible: row.get(12),
-        passport_valid_from: row.get(13),
-        passport_valid_until: row.get(14),
-        status_updated_at: row.get(15),
-        province_code: row.get(16),
-        city_code: row.get(17),
-        town_code: row.get(18),
-        birth_province_code: row.get(19),
-        birth_city_code: row.get(20),
-        birth_town_code: row.get(21),
-        archive_hash: row.get(22),
-        onchain_tx_hash: row.get(23),
-        onchain_block_number: row.get(24),
-        onchain_at: row.get(25),
-        created_by: row.get(26),
-        created_at: row.get(27),
-        updated_by: row.get(28),
-        updated_at: row.get(29),
+        account_id: row.get(7),
+        account_verified_at: row.get(8),
+        citizen_status: citizen_status_from_db(row.get::<_, String>(9).as_str()),
+        voting_eligible: row.get(10),
+        passport_valid_from: row.get(11),
+        passport_valid_until: row.get(12),
+        status_updated_at: row.get(13),
+        province_code: row.get(14),
+        city_code: row.get(15),
+        town_code: row.get(16),
+        birth_province_code: row.get(17),
+        birth_city_code: row.get(18),
+        birth_town_code: row.get(19),
+        archive_hash: row.get(20),
+        onchain_tx_hash: row.get(21),
+        onchain_block_number: row.get(22),
+        onchain_at: row.get(23),
+        creator_account_id: row.get(24),
+        created_at: row.get(25),
+        updater_account_id: row.get(26),
+        updated_at: row.get(27),
     }
 }

@@ -27,6 +27,20 @@ bool isLoginSignRequestExpired(LoginSignRequestEnvelope c) {
   return now > (c.expiresAt ?? 0);
 }
 
+/// 登录请求的签名公钥必须与当前选中钱包 AccountId 完全一致。
+///
+/// 当前 sr25519 账户的 AccountId32 直接取签名公钥 32 字节；双方文本都必须已经是
+/// 小写 `0x` 加 64 位十六进制，不在安全边界内做补前缀、大小写转换或 trim。
+bool loginRequestTargetsAccountId(
+  LoginSignRequestEnvelope request,
+  String accountId,
+) {
+  if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+    return false;
+  }
+  return request.body.signerPublicKeyHex == accountId;
+}
+
 const _maxClockSkewSeconds = 30;
 
 /// 解析登录签名请求 envelope。
@@ -67,20 +81,23 @@ LoginSignRequestEnvelope parseLoginSignRequest(String raw) {
 }
 
 /// 构建用户签名消息(CitizenWallet 钱包用自己的私钥签这串)。
-String buildSignMessage(LoginSignRequestEnvelope c, String pubkeyHex) {
+String buildSignMessage(
+  LoginSignRequestEnvelope c,
+  String signerPublicKey,
+) {
   return buildSignatureMessage(
     kind: QrKind.signResponse,
     id: c.id!,
     system: _loginSystem(c),
     expiresAt: c.expiresAt,
-    principal: pubkeyHex,
+    principal: signerPublicKey,
   );
 }
 
 /// 从签名结果构建 QR_V1 k=2 登录签名响应 envelope。
 LoginSignResponseEnvelope buildLoginSignResponse({
   required LoginSignRequestEnvelope request,
-  required String pubkeyHex,
+  required String signerPublicKey,
   required String signatureHex,
 }) {
   return QrEnvelope<SignResponseBody>(
@@ -89,11 +106,12 @@ LoginSignResponseEnvelope buildLoginSignResponse({
     issuedAt: request.issuedAt,
     expiresAt: request.expiresAt,
     body: SignResponseBody.fromHex(
-      pubkeyHex: pubkeyHex,
+      signerPublicKeyHex: signerPublicKey,
       signatureHex: signatureHex,
     ),
   );
 }
+
 // 内部工具
 // 登录 payload 固定为 `system` 的 UTF-8 字节(平台系统签名已删,无 sys_sig)。
 String _loginSystem(LoginSignRequestEnvelope c) {

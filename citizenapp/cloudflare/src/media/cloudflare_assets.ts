@@ -3,7 +3,7 @@ import { HttpError } from '../shared/http';
 import { LimitTicket } from '../limits/upload';
 
 export interface ProviderUploadInput {
-  ownerAccount: string;
+  accountId: string;
   uploadId: string;
   postId: string;
   mediaIndex: number;
@@ -120,7 +120,7 @@ export async function uploadImageAsset(
   form.set(
     'metadata',
     JSON.stringify({
-      owner_account: input.ownerAccount,
+      account_id: input.accountId,
       upload_id: input.uploadId,
       post_id: input.postId,
       media_index: input.mediaIndex
@@ -151,7 +151,7 @@ async function createStreamTusUpload(env: Env, input: ProviderUploadInput): Prom
         authorization: `Bearer ${config.apiToken}`,
         'tus-resumable': '1.0.0',
         'upload-length': String(input.byteSize),
-        'upload-creator': input.ownerAccount,
+        'upload-creator': input.accountId,
         'upload-metadata': uploadMetadata({
           maxDurationSeconds: String(input.maxDurationSeconds),
           requiresignedurls: null,

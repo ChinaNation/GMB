@@ -4,13 +4,13 @@ import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.d
 /// PersonalAdmins 创建个人多签提案详情（从链上 ProposalData 解码）。
 ///
 /// 链上 SCALE 布局（`per-mgmt` + ACTION_CREATE=0 之后）：
-///   account: AccountId32(32) + proposer: AccountId32(32)
+///   account_id: AccountId32(32) + proposer_account_id: AccountId32(32)
 ///   + amount: u128(16) + fee: u128(16)。
 class CreateProposalInfo {
   const CreateProposalInfo({
     required this.proposalId,
-    required this.account,
-    required this.proposer,
+    required this.accountId,
+    required this.proposerSs58Address,
     required this.amountFen,
     required this.feeFen,
     this.status,
@@ -18,11 +18,11 @@ class CreateProposalInfo {
 
   final int proposalId;
 
-  /// 个人多签账户公钥 hex（32 字节，不含 0x 前缀）。
-  final String account;
+  /// 个人多签账户 ID（小写 `0x` + 64 位 hex）。
+  final String accountId;
 
   /// 发起人 SS58 地址。
-  final String proposer;
+  final String proposerSs58Address;
 
   /// 初始资金（分）。
   final BigInt amountFen;
@@ -38,14 +38,14 @@ class CreateProposalInfo {
 
   /// 个人多签治理 AccountId。
   Uint8List get institutionBytes {
-    return Uint8List.fromList(_hexDecode(account));
+    return _accountIdBytes(accountId);
   }
 
   CreateProposalInfo copyWithStatus(int? newStatus) {
     return CreateProposalInfo(
       proposalId: proposalId,
-      account: account,
-      proposer: proposer,
+      accountId: accountId,
+      proposerSs58Address: proposerSs58Address,
       amountFen: amountFen,
       feeFen: feeFen,
       status: newStatus,
@@ -56,42 +56,42 @@ class CreateProposalInfo {
 /// PersonalAdmins 关闭个人多签提案详情（从链上 ProposalData 解码）。
 ///
 /// 链上 SCALE 布局（`per-mgmt` + ACTION_CLOSE=1 之后）：
-///   account: AccountId32(32) + beneficiary: AccountId32(32)
-///   + proposer: AccountId32(32)。
+///   account_id: AccountId32(32) + beneficiary_account_id: AccountId32(32)
+///   + proposer_account_id: AccountId32(32)。
 class CloseProposalInfo {
   const CloseProposalInfo({
     required this.proposalId,
-    required this.account,
-    required this.beneficiary,
-    required this.proposer,
+    required this.accountId,
+    required this.beneficiarySs58Address,
+    required this.proposerSs58Address,
     this.status,
   });
 
   final int proposalId;
 
-  /// 个人多签账户公钥 hex（32 字节，不含 0x 前缀）。
-  final String account;
+  /// 个人多签账户 ID（小写 `0x` + 64 位 hex）。
+  final String accountId;
 
   /// 受益人 SS58 地址。
-  final String beneficiary;
+  final String beneficiarySs58Address;
 
   /// 发起人 SS58 地址。
-  final String proposer;
+  final String proposerSs58Address;
 
   /// 0=voting, 1=passed, 2=rejected, null=unknown。
   final int? status;
 
   /// 个人多签治理 AccountId。
   Uint8List get institutionBytes {
-    return Uint8List.fromList(_hexDecode(account));
+    return _accountIdBytes(accountId);
   }
 
   CloseProposalInfo copyWithStatus(int? newStatus) {
     return CloseProposalInfo(
       proposalId: proposalId,
-      account: account,
-      beneficiary: beneficiary,
-      proposer: proposer,
+      accountId: accountId,
+      beneficiarySs58Address: beneficiarySs58Address,
+      proposerSs58Address: proposerSs58Address,
       status: newStatus,
     );
   }
@@ -120,14 +120,17 @@ class AccountInfo {
   final int adminsLen;
   final int? threshold;
 
-  /// 完整管理员人员集合；授权只比较 `admin_account`。
+  /// 完整管理员人员集合；授权只比较 `account_id`。
   final List<AdminPerson> admins;
 
   final MultisigStatus status;
 }
 
-Uint8List _hexDecode(String hex) {
-  final h = hex.startsWith('0x') ? hex.substring(2) : hex;
+Uint8List _accountIdBytes(String accountId) {
+  if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+    throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+  }
+  final h = accountId.substring(2);
   final result = Uint8List(h.length ~/ 2);
   for (var i = 0; i < result.length; i++) {
     result[i] = int.parse(h.substring(i * 2, i * 2 + 2), radix: 16);

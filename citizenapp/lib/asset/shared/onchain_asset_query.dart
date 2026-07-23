@@ -1,10 +1,10 @@
 // OnchainIssuance 资产查询模型与严格 SCALE 解码。
 //
 // 链端唯一布局：
-// - OnchainAssetMeta = actor_cid_number + execution_account + class + decimals + state
-// - AssetIssued = asset_id + actor_cid_number + execution_account
+// - OnchainAssetMeta = actor_cid_number + execution_account_id + class + decimals + state
+// - AssetIssued = asset_id + actor_cid_number + execution_account_id
 //
-// actor_cid_number 是发行机构身份唯一真源；execution_account 只承担该资产的
+// actor_cid_number 是发行机构身份唯一真源；execution_account_id 只承担该资产的
 // 链上执行，不得作为机构身份、管理员或权限查询 key。
 
 import 'dart:convert';
@@ -44,11 +44,11 @@ class OnchainAssetMeta {
   OnchainAssetMeta({
     required this.assetId,
     required this.actorCidNumber,
-    required Uint8List executionAccount,
+    required Uint8List executionAccountId,
     required this.assetClass,
     required this.decimals,
     required this.state,
-  }) : executionAccount = Uint8List.fromList(executionAccount);
+  }) : executionAccountId = Uint8List.fromList(executionAccountId);
 
   /// storage key `Assets[asset_id]`，不是 OnchainAssetMeta value 的内嵌字段。
   final int assetId;
@@ -57,7 +57,7 @@ class OnchainAssetMeta {
   final String actorCidNumber;
 
   /// 资产执行账户 AccountId32；只承担资产执行，不表示机构身份。
-  final Uint8List executionAccount;
+  final Uint8List executionAccountId;
 
   final OnchainAssetClass assetClass;
   final int decimals;
@@ -68,12 +68,12 @@ class OnchainAssetIssued {
   OnchainAssetIssued({
     required this.assetId,
     required this.actorCidNumber,
-    required Uint8List executionAccount,
-  }) : executionAccount = Uint8List.fromList(executionAccount);
+    required Uint8List executionAccountId,
+  }) : executionAccountId = Uint8List.fromList(executionAccountId);
 
   final int assetId;
   final String actorCidNumber;
-  final Uint8List executionAccount;
+  final Uint8List executionAccountId;
 }
 
 /// runtime storage/event 的局部 SCALE 镜像。
@@ -93,7 +93,7 @@ class OnchainAssetScaleCodec {
     _ensureAssetId(assetId);
     final reader = _ScaleReader(scale);
     final actorCidNumber = reader.readCidNumber();
-    final executionAccount = reader.readBytes(_accountIdLength);
+    final executionAccountId = reader.readBytes(_accountIdLength);
     final assetClass = switch (reader.readU8()) {
       0 => OnchainAssetClass.plain,
       1 => OnchainAssetClass.pegged,
@@ -108,7 +108,7 @@ class OnchainAssetScaleCodec {
     return OnchainAssetMeta(
       assetId: assetId,
       actorCidNumber: actorCidNumber,
-      executionAccount: executionAccount,
+      executionAccountId: executionAccountId,
       assetClass: assetClass,
       decimals: decimals,
       state: state,
@@ -119,12 +119,12 @@ class OnchainAssetScaleCodec {
     final reader = _ScaleReader(scale);
     final assetId = reader.readU32();
     final actorCidNumber = reader.readCidNumber();
-    final executionAccount = reader.readBytes(_accountIdLength);
+    final executionAccountId = reader.readBytes(_accountIdLength);
     reader.ensureFinished('AssetIssued');
     return OnchainAssetIssued(
       assetId: assetId,
       actorCidNumber: actorCidNumber,
-      executionAccount: executionAccount,
+      executionAccountId: executionAccountId,
     );
   }
 

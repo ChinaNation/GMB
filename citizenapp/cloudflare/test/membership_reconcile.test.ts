@@ -11,7 +11,7 @@ const POINT = {
 };
 
 interface Row {
-  owner_account: string;
+  account_id: string;
   membership_level: string;
   paid_until: number;
   subscription_status: string;
@@ -22,9 +22,9 @@ interface Row {
 class FakeDb {
   rows = new Map<string, Row>();
 
-  seed(owner: string, paidUntil: number, status = "active"): void {
-    this.rows.set(owner, {
-      owner_account: owner,
+  seed(accountId: string, paidUntil: number, status = "active"): void {
+    this.rows.set(accountId, {
+      account_id: accountId,
       membership_level: "freedom",
       paid_until: paidUntil,
       subscription_status: status,
@@ -44,13 +44,13 @@ class FakeStmt {
   bind(...args: unknown[]): FakeStmt { this.args = args; return this; }
 
   async all<T>(): Promise<{ results: T[] }> {
-    if (this.sql.includes("SELECT owner_account FROM square_memberships")) {
+    if (this.sql.includes("SELECT account_id FROM square_memberships")) {
       const [chainTimestamp, limit] = this.args as [number, number];
       const results = [...this.db.rows.values()]
         .filter((row) => row.subscription_status === "active" && row.paid_until <= chainTimestamp)
         .sort((a, b) => a.paid_until - b.paid_until)
         .slice(0, limit)
-        .map((row) => ({ owner_account: row.owner_account }));
+        .map((row) => ({ account_id: row.account_id }));
       return { results: results as T[] };
     }
     return { results: [] };
@@ -59,8 +59,8 @@ class FakeStmt {
   async run(): Promise<{ meta: { changes: number } }> {
     if (this.sql.includes("INSERT INTO chain_clock")) return { meta: { changes: 1 } };
     if (this.sql.includes("subscription_status = 'terminated'")) {
-      const owner = this.args[3] as string;
-      const row = this.db.rows.get(owner);
+      const accountId = this.args[3] as string;
+      const row = this.db.rows.get(accountId);
       if (row) {
         row.subscription_status = "terminated";
         row.entitlement_lapsed_at = row.paid_until;
@@ -69,8 +69,8 @@ class FakeStmt {
       return { meta: { changes: row ? 1 : 0 } };
     }
     if (this.sql.includes("UPDATE square_memberships SET membership_level")) {
-      const owner = this.args[10] as string;
-      const row = this.db.rows.get(owner);
+      const accountId = this.args[10] as string;
+      const row = this.db.rows.get(accountId);
       if (row) {
         row.membership_level = this.args[0] as string;
         row.paid_until = this.args[4] as number;

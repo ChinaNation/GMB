@@ -33,6 +33,7 @@ void main() {
   ) =>
       [
         ...account,
+        0, // 个人多签管理员没有公民 CID，但统一 Admin 仍保留空字段。
         ...compactVec(familyName),
         ...compactVec(givenName),
       ];
@@ -40,7 +41,7 @@ void main() {
   group('PersonalManageStorageCodec', () {
     test('builds personal account id', () {
       final personal =
-          PersonalManageStorageCodec.accountIdFromAccountHex('11' * 32);
+          PersonalManageStorageCodec.accountIdBytes('0x${'11' * 32}');
 
       expect(personal.length, 32);
       expect(personal, List<int>.filled(32, 0x11));
@@ -55,7 +56,7 @@ void main() {
       ]);
 
       final decoded = PersonalManageStorageCodec.decodePersonalAccount(data)!;
-      expect(decoded.creatorHex, '66' * 32);
+      expect(decoded.creatorAccountId, '0x${'66' * 32}');
       expect(utf8.decode(decoded.accountName), '家庭基金');
       expect(decoded.createdAt, 101);
       expect(decoded.statusByte, 1);
@@ -82,8 +83,8 @@ void main() {
       expect(decoded.institutionCode, 'PMUL');
       expect(decoded.adminsLen, 2);
       expect(
-        decoded.admins.map((admin) => admin.admin_account),
-        ['aa' * 32, 'bb' * 32],
+        decoded.admins.map((admin) => admin.account_id),
+        ['0x${'aa' * 32}', '0x${'bb' * 32}'],
       );
       expect(decoded.admins.map((admin) => admin.family_name), ['张', '李']);
       expect(decoded.admins.map((admin) => admin.given_name), ['三', '四']);

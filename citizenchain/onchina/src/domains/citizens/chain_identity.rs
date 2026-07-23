@@ -1,7 +1,7 @@
 //! 公民身份上链准备 handler。
 //!
-//! 本模块只处理公民钱包签名与 `citizen-identity` call data 构造。
-//! 本地建档不要求钱包;只有注册局准备推送链上投票身份时才录入钱包并验签。
+//! 本模块只处理公民账户签名与 `citizen-identity` call data 构造。
+//! 本地建档不要求链账户；注册局准备推送链上身份时才绑定账户并验签。
 
 use axum::{
     extract::{Path, State},
@@ -15,8 +15,9 @@ use serde::{Deserialize, Serialize};
 use sp_core::{sr25519, Pair};
 use uuid::Uuid;
 
+use crate::crypto::pubkey::same_account_id;
 use crate::domains::citizens::admin_entry::{
-    citizen_record_from_row, resolve_wallet_account, ResolvedWallet,
+    citizen_record_from_row, resolve_citizen_account, ResolvedCitizenAccount,
 };
 use crate::*;
 
@@ -50,7 +51,7 @@ impl CitizenOnchainIdentityLevel {
 
 #[derive(Deserialize)]
 pub(crate) struct PrepareCitizenOnchainInput {
-    pub(crate) wallet_account: String,
+    pub(crate) account_id: String,
     pub(crate) actor_role_code: String,
     pub(crate) identity_level: CitizenOnchainIdentityLevel,
 }
@@ -60,8 +61,8 @@ pub(crate) struct PrepareCitizenOnchainOutput {
     pub(crate) cid_number: String,
     pub(crate) actor_role_code: String,
     pub(crate) identity_level: CitizenOnchainIdentityLevel,
-    pub(crate) wallet_address: String,
-    pub(crate) wallet_pubkey: String,
+    pub(crate) account_id: String,
+    pub(crate) ss58_address: String,
     pub(crate) citizen_age_years: u8,
     pub(crate) payload_hex: String,
     pub(crate) sign_request: String,
@@ -71,7 +72,7 @@ pub(crate) struct PrepareCitizenOnchainOutput {
 
 #[derive(Deserialize)]
 pub(crate) struct CompleteCitizenOnchainInput {
-    pub(crate) wallet_account: String,
+    pub(crate) account_id: String,
     pub(crate) actor_role_code: String,
     pub(crate) identity_level: CitizenOnchainIdentityLevel,
     pub(crate) sign_response: String,
@@ -83,7 +84,8 @@ pub(crate) struct CompleteCitizenOnchainOutput {
     pub(crate) cid_number: String,
     pub(crate) actor_role_code: String,
     pub(crate) identity_level: CitizenOnchainIdentityLevel,
-    pub(crate) wallet_address: String,
+    pub(crate) account_id: String,
+    pub(crate) ss58_address: String,
     pub(crate) chain_action: u16,
     pub(crate) call_data_hex: String,
     pub(crate) citizen_signature: String,
@@ -104,14 +106,12 @@ pub(crate) async fn prepare_citizen_onchain_signature(
         return resp;
     }
     // 整个业务操作只消费这一次 Passkey；后续公民回签通过 operation_id 绑定。
-    if let Err(resp) = crate::auth::passkey::require_passkey_assertion(
-        &state,
-        &headers,
-        ctx.admin_account.as_str(),
-    ) {
+    if let Err(resp) =
+        crate::auth::passkey::require_passkey_assertion(&state, &headers, ctx.account_id.as_str())
+    {
         return resp;
     }
-    let wallet = match resolve_wallet_account(input.wallet_account.as_str()) {
+    let citizen_account = match resolve_citizen_account(input.account_id.as_str()) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -130,13 +130,14 @@ pub(crate) async fn prepare_citizen_onchain_signature(
     if let Err(resp) = ensure_record_in_admin_scope(&ctx, &record) {
         return resp;
     }
-    if let Err(resp) = ensure_wallet_available(&state, &record, &wallet) {
+    if let Err(resp) = ensure_account_available(&state, &record, &citizen_account) {
         return resp;
     }
-    let payload = match build_citizen_identity_payload(&record, &wallet, input.identity_level) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
+    let payload =
+        match build_citizen_identity_payload(&record, &citizen_account, input.identity_level) {
+            Ok(v) => v,
+            Err(resp) => return resp,
+        };
     let issued_at = Utc::now();
     let expires_at = issued_at + Duration::seconds(180);
     let request_id = format!("citizen-identity-{}", Uuid::new_v4());
@@ -144,7 +145,7 @@ pub(crate) async fn prepare_citizen_onchain_signature(
         request_id.as_str(),
         issued_at.timestamp(),
         expires_at.timestamp(),
-        wallet.pubkey.as_str(),
+        citizen_account.account_id.as_str(),
         &payload.payload_bytes,
         crate::core::qr::action_citizen_identity(),
     ) {
@@ -153,12 +154,11 @@ pub(crate) async fn prepare_citizen_onchain_signature(
     };
     let operation = CitizenOnchainOperation {
         operation_id: request_id,
-        admin_account: ctx.admin_account,
+        registrar_account_id: ctx.account_id,
         institution_code: ctx.institution_code,
         actor_role_code: actor_role_code.clone(),
         cid_number: record.cid_number.clone(),
-        wallet_pubkey: wallet.pubkey.clone(),
-        wallet_address: wallet.address.clone(),
+        citizen_account_id: citizen_account.account_id.clone(),
         identity_level: payload.identity_level.as_str().to_string(),
         payload_hex: hex::encode(&payload.payload_bytes),
         expires_at,
@@ -179,8 +179,8 @@ pub(crate) async fn prepare_citizen_onchain_signature(
             cid_number: record.cid_number,
             actor_role_code,
             identity_level: payload.identity_level,
-            wallet_address: wallet.address,
-            wallet_pubkey: wallet.pubkey,
+            account_id: citizen_account.account_id,
+            ss58_address: citizen_account.ss58_address,
             citizen_age_years: payload.citizen_age_years,
             payload_hex: format!("0x{}", hex::encode(payload.payload_bytes)),
             sign_request,
@@ -204,7 +204,7 @@ pub(crate) async fn complete_citizen_onchain_signature(
     if let Err(resp) = ensure_registry_admin(&ctx) {
         return resp;
     }
-    let wallet = match resolve_wallet_account(input.wallet_account.as_str()) {
+    let citizen_account = match resolve_citizen_account(input.account_id.as_str()) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -223,13 +223,14 @@ pub(crate) async fn complete_citizen_onchain_signature(
     if let Err(resp) = ensure_record_in_admin_scope(&ctx, &record) {
         return resp;
     }
-    if let Err(resp) = ensure_wallet_available(&state, &record, &wallet) {
+    if let Err(resp) = ensure_account_available(&state, &record, &citizen_account) {
         return resp;
     }
-    let payload = match build_citizen_identity_payload(&record, &wallet, input.identity_level) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
+    let payload =
+        match build_citizen_identity_payload(&record, &citizen_account, input.identity_level) {
+            Ok(v) => v,
+            Err(resp) => return resp,
+        };
     let sign_response = match crate::core::qr::parse_sign_response(input.sign_response.as_str()) {
         Ok(v) => v,
         Err(err) => {
@@ -258,12 +259,11 @@ pub(crate) async fn complete_citizen_onchain_signature(
             );
         }
     };
-    if operation.admin_account != ctx.admin_account
+    if operation.registrar_account_id != ctx.account_id
         || operation.institution_code != ctx.institution_code
         || operation.actor_role_code != actor_role_code
         || operation.cid_number != cid_number
-        || operation.wallet_pubkey != wallet.pubkey
-        || operation.wallet_address != wallet.address
+        || operation.citizen_account_id != citizen_account.account_id
         || operation.identity_level != input.identity_level.as_str()
         || operation.payload_hex != hex::encode(&payload.payload_bytes)
     {
@@ -273,13 +273,16 @@ pub(crate) async fn complete_citizen_onchain_signature(
             "公民签名响应与当前业务操作不一致",
         );
     }
-    let signer_pubkey = sign_response.body.pubkey;
-    if !same_pubkey_hex(signer_pubkey.as_str(), wallet.pubkey.as_str()) {
+    let signer_public_key = sign_response.body.signer_public_key;
+    if !same_account_id(
+        signer_public_key.as_str(),
+        citizen_account.account_id.as_str(),
+    ) {
         return api_error(StatusCode::FORBIDDEN, 1003, "签名钱包与录入钱包不一致");
     }
     let citizen_signature = sign_response.body.signature;
     if !verify_citizen_identity_signature(
-        wallet.pubkey.as_str(),
+        citizen_account.account_id.as_str(),
         &payload.payload_bytes,
         citizen_signature.as_str(),
     ) {
@@ -325,7 +328,7 @@ pub(crate) async fn complete_citizen_onchain_signature(
     // CitizenWallet 只签名一次并显示响应二维码；OnChina 回扫后经
     // /api/v1/admin/chain/submit 统一组装和提交。
     let prepared =
-        match crate::core::chain_submit::prepare_signing(&call, ctx.admin_account.as_str()).await {
+        match crate::core::chain_submit::prepare_signing(&call, ctx.account_id.as_str()).await {
             Ok(v) => v,
             Err(err) => {
                 tracing::error!(error = %err, "prepare identity push signing failed");
@@ -343,7 +346,7 @@ pub(crate) async fn complete_citizen_onchain_signature(
         request_id.as_str(),
         issued_at.timestamp(),
         expires_at.timestamp(),
-        ctx.admin_account.as_str(),
+        ctx.account_id.as_str(),
         &prepared.payload,
         action,
     ) {
@@ -353,7 +356,7 @@ pub(crate) async fn complete_citizen_onchain_signature(
     let session = crate::domains::citizens::occupy::ChainSignSession {
         request_id: request_id.clone(),
         purpose: crate::domains::citizens::occupy::PURPOSE_CITIZEN_IDENTITY_PUSH.to_string(),
-        actor_pubkey: ctx.admin_account.clone(),
+        actor_public_key: ctx.account_id.clone(),
         call_data: call.clone(),
         nonce: prepared.nonce,
         signing_hash: prepared.signing_hash_hex.clone(),
@@ -361,8 +364,8 @@ pub(crate) async fn complete_citizen_onchain_signature(
             "cid_number": record.cid_number,
             "identity_level": payload.identity_level.as_str(),
             "actor_role_code": actor_role_code.clone(),
-            "wallet_pubkey": wallet.pubkey,
-            "wallet_address": wallet.address,
+            "citizen_account_id": citizen_account.account_id,
+            "ss58_address": citizen_account.ss58_address,
         }),
         expires_at,
         consumed_at: None,
@@ -380,7 +383,8 @@ pub(crate) async fn complete_citizen_onchain_signature(
             cid_number: record.cid_number,
             actor_role_code,
             identity_level: payload.identity_level,
-            wallet_address: wallet.address,
+            account_id: citizen_account.account_id,
+            ss58_address: citizen_account.ss58_address,
             chain_action: action,
             call_data_hex: format!("0x{}", hex::encode(call)),
             citizen_signature,
@@ -393,12 +397,11 @@ pub(crate) async fn complete_citizen_onchain_signature(
 #[derive(Clone)]
 struct CitizenOnchainOperation {
     operation_id: String,
-    admin_account: String,
+    registrar_account_id: String,
     institution_code: String,
     actor_role_code: String,
     cid_number: String,
-    wallet_pubkey: String,
-    wallet_address: String,
+    citizen_account_id: String,
     identity_level: String,
     payload_hex: String,
     expires_at: chrono::DateTime<Utc>,
@@ -418,17 +421,16 @@ impl Db {
             .map_err(|e| format!("delete expired citizen onchain operations failed: {e}"))?;
             conn.execute(
                 "INSERT INTO citizen_onchain_operations
-                 (operation_id, admin_account, institution_code, actor_role_code, cid_number,
-                  wallet_pubkey, wallet_address, identity_level, payload_hex, expires_at)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+                 (operation_id, registrar_account_id, institution_code, actor_role_code, cid_number,
+                  citizen_account_id, identity_level, payload_hex, expires_at)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
                 &[
                     &operation.operation_id,
-                    &operation.admin_account,
+                    &operation.registrar_account_id,
                     &operation.institution_code,
                     &operation.actor_role_code,
                     &operation.cid_number,
-                    &operation.wallet_pubkey,
-                    &operation.wallet_address,
+                    &operation.citizen_account_id,
                     &operation.identity_level,
                     &operation.payload_hex,
                     &operation.expires_at,
@@ -445,24 +447,25 @@ impl Db {
     ) -> Result<Option<CitizenOnchainOperation>, String> {
         let operation_id = operation_id.to_string();
         self.with_client(move |conn| {
-            let row = conn.query_opt(
-                "SELECT operation_id, admin_account, institution_code, actor_role_code, cid_number,
-                        wallet_pubkey, wallet_address, identity_level, payload_hex, expires_at
+            let row = conn
+                .query_opt(
+                    "SELECT operation_id, registrar_account_id, institution_code, actor_role_code,
+                        cid_number, citizen_account_id, identity_level, payload_hex, expires_at
                  FROM citizen_onchain_operations
                  WHERE operation_id = $1 AND citizen_signed_at IS NULL AND expires_at >= now()",
-                &[&operation_id],
-            ).map_err(|e| format!("query citizen onchain operation failed: {e}"))?;
+                    &[&operation_id],
+                )
+                .map_err(|e| format!("query citizen onchain operation failed: {e}"))?;
             Ok(row.map(|row| CitizenOnchainOperation {
                 operation_id: row.get(0),
-                admin_account: row.get(1),
+                registrar_account_id: row.get(1),
                 institution_code: row.get(2),
                 actor_role_code: row.get(3),
                 cid_number: row.get(4),
-                wallet_pubkey: row.get(5),
-                wallet_address: row.get(6),
-                identity_level: row.get(7),
-                payload_hex: row.get(8),
-                expires_at: row.get(9),
+                citizen_account_id: row.get(5),
+                identity_level: row.get(6),
+                payload_hex: row.get(7),
+                expires_at: row.get(8),
             }))
         })
     }
@@ -492,13 +495,13 @@ impl Db {
             let row = conn
                 .query_opt(
                     "SELECT COALESCE(id, 0), cid_number, passport_no, family_name,
-                            given_name, citizen_sex, citizen_birth_date, wallet_pubkey, wallet_address,
-                            wallet_sig_alg, wallet_verified_at, citizen_status, voting_eligible,
+                            given_name, citizen_sex, citizen_birth_date, account_id,
+                            account_verified_at, citizen_status, voting_eligible,
                             passport_valid_from, passport_valid_until, status_updated_at,
                             province_code, city_code, town_code,
                             birth_province_code, birth_city_code, birth_town_code,
                             archive_hash, onchain_tx_hash, onchain_block_number, onchain_at,
-                            created_by, created_at, updated_by, updated_at
+                            creator_account_id, created_at, updater_account_id, updated_at
                      FROM citizens
                      WHERE cid_number = $1
                      ORDER BY created_at DESC
@@ -560,33 +563,36 @@ fn ensure_record_in_admin_scope(
     Ok(())
 }
 
-fn ensure_wallet_available(
+fn ensure_account_available(
     state: &AppState,
     record: &CitizenRecord,
-    wallet: &ResolvedWallet,
+    citizen_account: &ResolvedCitizenAccount,
 ) -> Result<(), axum::response::Response> {
-    if let Some(existing) = record.wallet_pubkey.as_deref() {
-        if !same_pubkey_hex(existing, wallet.pubkey.as_str()) {
+    if let Some(existing) = record.account_id.as_deref() {
+        if !same_account_id(existing, citizen_account.account_id.as_str()) {
             return Err(api_error(
                 StatusCode::CONFLICT,
                 1005,
-                "该公民已绑定其他钱包账户",
+                "该公民已绑定其他链账户",
             ));
         }
     }
-    match state.db.find_citizen_by_wallet(wallet.pubkey.as_str()) {
+    match state
+        .db
+        .find_citizen_by_account_id(citizen_account.account_id.as_str())
+    {
         Ok(Some(existing)) if existing.cid_number != record.cid_number => Err(api_error(
             StatusCode::CONFLICT,
             1005,
-            "该钱包账户已绑定其他公民档案",
+            "该链账户已绑定其他公民档案",
         )),
         Ok(_) => Ok(()),
         Err(err) => {
-            tracing::error!(error = %err, "query citizen wallet duplicate failed");
+            tracing::error!(error = %err, "query citizen account duplicate failed");
             Err(api_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 1004,
-                "钱包账户查重失败",
+                "链账户查重失败",
             ))
         }
     }
@@ -594,7 +600,7 @@ fn ensure_wallet_available(
 
 fn build_voting_identity_payload(
     record: &CitizenRecord,
-    wallet: &ResolvedWallet,
+    citizen_account: &ResolvedCitizenAccount,
 ) -> Result<CitizenIdentityPayloadBytes, axum::response::Response> {
     if record.citizen_status != CitizenStatus::Normal
         || record.computed_identity_status() != CitizenStatus::Normal
@@ -622,15 +628,15 @@ fn build_voting_identity_payload(
             "未满16周岁不能推送链上身份",
         ));
     }
-    let wallet_account = parse_sr25519_pubkey_bytes(wallet.pubkey.as_str())
-        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, 1001, "钱包账户不是 32 字节公钥"))?;
+    let account_id = parse_account_id_bytes(citizen_account.account_id.as_str())
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, 1001, "account_id 格式错误"))?;
     let valid_from = passport_date_u32(record.passport_valid_from.as_str(), "passport_valid_from")?;
     let valid_until =
         passport_date_u32(record.passport_valid_until.as_str(), "passport_valid_until")?;
 
     let mut out = Vec::new();
     append_bounded_bytes(&mut out, record.cid_number.as_bytes(), 32, "cid_number")?;
-    out.extend_from_slice(&wallet_account);
+    out.extend_from_slice(&account_id);
     out.push(age);
     out.extend(valid_from.to_le_bytes());
     out.extend(valid_until.to_le_bytes());
@@ -652,10 +658,10 @@ fn build_voting_identity_payload(
 
 fn build_citizen_identity_payload(
     record: &CitizenRecord,
-    wallet: &ResolvedWallet,
+    citizen_account: &ResolvedCitizenAccount,
     identity_level: CitizenOnchainIdentityLevel,
 ) -> Result<CitizenIdentityPayloadBytes, axum::response::Response> {
-    let mut payload = build_voting_identity_payload(record, wallet)?;
+    let mut payload = build_voting_identity_payload(record, citizen_account)?;
     if identity_level == CitizenOnchainIdentityLevel::Voting {
         return Ok(payload);
     }
@@ -746,11 +752,11 @@ fn citizen_age_years(today: NaiveDate, birth_date: NaiveDate) -> u8 {
 }
 
 fn verify_citizen_identity_signature(
-    wallet_pubkey: &str,
+    citizen_account_id: &str,
     payload: &[u8],
     signature_hex: &str,
 ) -> bool {
-    let Some(pubkey) = parse_sr25519_pubkey_bytes(wallet_pubkey) else {
+    let Some(account_id_bytes) = parse_account_id_bytes(citizen_account_id) else {
         return false;
     };
     let Some(signature) = parse_signature_bytes(signature_hex) else {
@@ -758,7 +764,7 @@ fn verify_citizen_identity_signature(
     };
     let message =
         primitives::sign::signing_message(primitives::sign::OP_SIGN_CITIZEN_IDENTITY, payload);
-    let public = sr25519::Public::from_raw(pubkey);
+    let public = sr25519::Public::from_raw(account_id_bytes);
     let signature = sr25519::Signature::from_raw(signature);
     sr25519::Pair::verify(&signature, &message, &public)
 }
@@ -766,17 +772,6 @@ fn verify_citizen_identity_signature(
 fn parse_signature_bytes(signature_hex: &str) -> Option<[u8; 64]> {
     let raw = hex::decode(signature_hex.trim_start_matches("0x")).ok()?;
     raw.try_into().ok()
-}
-
-pub(crate) fn same_pubkey_hex(left: &str, right: &str) -> bool {
-    normalize_prefixed_hex(left).eq_ignore_ascii_case(normalize_prefixed_hex(right))
-}
-
-fn normalize_prefixed_hex(value: &str) -> &str {
-    value
-        .strip_prefix("0x")
-        .or_else(|| value.strip_prefix("0X"))
-        .unwrap_or(value)
 }
 
 pub(crate) fn active_registry_cid_number(

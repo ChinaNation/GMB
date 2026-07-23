@@ -58,13 +58,16 @@ class CitizenIdentitySignService {
     if (decoded == null) {
       throw const CitizenIdentitySignException('签名内容无法完整中文展示，已拒绝签名');
     }
-    final requestPubkey = _normalizeHex(request.body.pubkeyHex);
-    if (_normalizeHex(decoded.walletPubkeyHex) != requestPubkey) {
+    final requestPublicKey = _normalizeHex(request.body.signerPublicKeyHex);
+    if (_normalizeHex(decoded.accountId) != requestPublicKey) {
       throw const CitizenIdentitySignException('身份载荷钱包与签名请求不一致');
     }
     final wallet = requiredWallet ??
-        await _resolveWallet(walletManager, request.body.pubkeyBytes);
-    if (wallet == null || _normalizeHex(wallet.pubkeyHex) != requestPubkey) {
+        await _resolveWallet(
+          walletManager,
+          request.body.signerPublicKeyBytes,
+        );
+    if (wallet == null || _normalizeHex(wallet.accountId) != requestPublicKey) {
       throw const CitizenIdentitySignException('此签名请求的账户不在本机');
     }
     if (wallet.isColdWallet) {
@@ -96,11 +99,11 @@ class CitizenIdentitySignService {
 
   Future<WalletProfile?> _resolveWallet(
     WalletManager walletManager,
-    Uint8List pubkey,
+    Uint8List signerPublicKey,
   ) async {
-    final target = bytesToHex(pubkey);
+    final target = bytesToHex(signerPublicKey);
     for (final wallet in await walletManager.getWallets()) {
-      if (_normalizeHex(wallet.pubkeyHex) == target) return wallet;
+      if (_normalizeHex(wallet.accountId) == target) return wallet;
     }
     return null;
   }

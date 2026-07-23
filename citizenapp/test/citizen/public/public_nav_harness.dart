@@ -50,7 +50,7 @@ PublicInstitutionDto seedDto(
 Future<PublicInstitutionRepository> buildSeededRepo({
   required List<String> provinceOrder,
   required List<PublicInstitutionDto> institutions,
-  Map<String, String>? subscriptions, // pubkey -> cid
+  Map<String, String>? subscriptions, // publicKey -> cid
   Map<String, String>? cityNames, // "<pcode>|<ccode>" -> name
   Map<String, String>? townNames, // "<pcode>|<ccode>|<tcode>" -> name
 }) async {

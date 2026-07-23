@@ -8,18 +8,24 @@
 ## 数据分层
 ```
 链上 citizenchain   发帖索引/哈希/回执、交易                        ← 不动
-R2   (Worker)        profile/{owner}/profile.json + 头像/背景对象     = 唯一公开资料源
+R2   (Worker)        profile/{account_id_hex}/profile.json + 头像/背景对象 = 唯一公开资料源
 D1   (Worker)        square_posts / square_follows / 计数聚合
 本地 (App assets)    profile_defaults 只提供稳定展示兜底；不成为公开资料真源
 本地 (SharedPrefs)   仅离线缓存 + 草稿；旧本地头像/背景迁移到 R2 后清空
 ```
 
 ## Worker 接口（详见 unified-protocols P-API-CITIZENAPP-002）
-- `GET /v1/square/users/:account`：profile + 计数 + 认证 + is_following（公开可读，带 session 反映登录者视角）。
-- `GET /v1/square/users/:account/posts?category=&limit=&cursor=`：按作者分页（all/normal/campaign）。
-- `GET /v1/square/users/:account/follows?type=following|followers`：关注/粉丝列表分页。
+- `GET /v1/square/users/:account_id`：profile + 计数 + 认证 + is_following（公开可读，带 session 反映登录者视角）。
+- `GET /v1/square/users/:account_id/posts?category=&limit=&cursor=`：按作者分页（all/normal/campaign）。
+- `GET /v1/square/users/:account_id/follows?type=following|followers`：关注/粉丝列表分页。
 - `PUT /v1/square/profile`：本人写 display_name/bio/头像背景 key（返回与 GET 同构）。
-- `POST /v1/square/profile/assets/prepare` + `PUT /v1/square/profile/assets`：每个账户固定使用 `profile/{owner}/avatar` 与 `profile/{owner}/banner` 两个对象键，并由同域 Worker 校验实际字节、MIME、图片文件头、尺寸与 sha256 后覆盖写 R2；头像 512KiB/1024×1024，背景 1536KiB/1920×720，并发上传也不可能增加对象数。内容不上链。
+- `POST /v1/square/profile/assets/prepare` + `PUT /v1/square/profile/assets`：
+  每个账户固定使用 `profile/{account_id_hex}/avatar` 与
+  `profile/{account_id_hex}/banner` 两个对象键，并由同域 Worker 校验实际字节、MIME、
+  图片文件头、尺寸与 sha256 后覆盖写 R2；头像 512KiB/1024×1024，背景
+  1536KiB/1920×720，并发上传也不可能增加对象数。内容不上链。
+  `account_id_hex` 固定为严格规范 `account_id` 去掉 `0x` 后的 64 位小写十六进制，
+  不接受 SS58、大小写归一或任意字符串清洗。
 - `GET /v1/square/media/<object_key>`：必须携带钱包 Bearer session，只允许读取固定头像/背景键；`Image.network` 使用 session header，服务端不要求该只读图片请求附加 P-256 签名。
 - 关注/取关复用已有 `POST/DELETE /v1/square/follows`。
 
@@ -48,7 +54,8 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
   - **草稿箱** `compose/drafts/`：全类型（图/视频/文章及竞选）本地持久化。`compose_draft.dart`（模型+JSON，
     含文章 content_blocks + 持久媒体路径）、`compose_draft_media.dart`（picker 临时文件选中即复制到
     `{appDocs}/square_drafts/{draftId}/`）、`compose_draft_store.dart`（AppKvEntity 前缀
-    `square.compose.draft.{owner}.{draftId}`、按 updated_at 新→旧、**上限 100 淘汰最旧**）、`drafts_page.dart`
+    `square.compose.draft.{account_id_hex}.{draftId}`、按 updated_at 新→旧、
+    **上限 100 淘汰最旧**）、`drafts_page.dart`
     （缩略卡、右滑删除、点击恢复）。行为：**持续防抖自动保存**（编辑中 800ms + 退出/取消 flush，空内容不存/删）、
     发布成功删草稿、发布失败保留可重发。壳持 `_draftId`、向 body 注入 `persistMedia`/`onChanged`，body 加
     `snapshot()/restore()`。旧"每人一条失败恢复草稿"（`storage/square_draft_store.dart` +

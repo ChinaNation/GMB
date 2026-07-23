@@ -7,20 +7,12 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 class AdminAccountIdCodec {
   AdminAccountIdCodec._();
 
-  static Uint8List fromAccountHex(String accountHex) {
-    final account = hexDecode(accountHex);
+  static Uint8List fromAccountIdText(String accountId) {
+    final account = _decodeAccountId(accountId);
     if (account.length != 32) {
       throw ArgumentError('账户公钥必须为 32 字节');
     }
     return account;
-  }
-
-  static Uint8List fromHex(String accountHex) {
-    final bytes = hexDecode(accountHex);
-    if (bytes.length != 32) {
-      throw ArgumentError('accountId 必须为 32 字节');
-    }
-    return bytes;
   }
 
   static Uint8List institutionAdminStorageKey(
@@ -85,8 +77,11 @@ class AdminAccountIdCodec {
   static String hexEncode(Iterable<int> bytes) =>
       bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
-  static Uint8List hexDecode(String hex) {
-    final clean = normalizeHex(hex);
+  static Uint8List _decodeAccountId(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+    }
+    final clean = accountId.substring(2);
     final out = Uint8List(clean.length ~/ 2);
     for (var i = 0; i < out.length; i++) {
       out[i] = int.parse(clean.substring(i * 2, i * 2 + 2), radix: 16);
@@ -94,10 +89,10 @@ class AdminAccountIdCodec {
     return out;
   }
 
-  static String normalizeHex(String hex) {
-    final clean = hex.trim();
-    return clean.startsWith('0x')
-        ? clean.substring(2).toLowerCase()
-        : clean.toLowerCase();
+  static String requireAccountId(String hex) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(hex)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+    }
+    return hex;
   }
 }

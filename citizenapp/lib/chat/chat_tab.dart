@@ -3,40 +3,77 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
+import '../8964/profile/user_qr_page.dart';
+import '../my/user/contact_book_page.dart';
+import '../qr/scan_dispatch_flow.dart';
 import '../ui/app_theme.dart';
 import '../wallet/core/wallet_manager.dart';
 import 'chat_page.dart';
 import 'chat_runtime.dart';
 import 'chat_models.dart';
+import 'chat_search_page.dart';
 import 'group/ui/group_create_page.dart';
 import 'group/ui/group_manage_page.dart';
 import 'group/ui/open_group_chat.dart';
 import 'storage/chat_store.dart';
 
 typedef ChatSendTextFactory = ChatSendTextCallback? Function(
-  String peerAccount,
+  String peerAccountId,
   String conversationId,
 );
-typedef ChatSyncFactory = ChatSyncCallback? Function(String peerAccount);
+typedef ChatSyncFactory = ChatSyncCallback? Function(String peerAccountId);
 typedef ChatSendMediaFactory = ChatSendMediaCallback? Function(
-  String peerAccount,
+  String peerAccountId,
   String conversationId,
 );
 typedef ChatDownloadAttachmentFactory = ChatDownloadAttachmentCallback?
     Function(
-  String peerAccount,
+  String peerAccountId,
 );
+
+/// 聊天页加号菜单 5 个动作的可注入入口。
+///
+/// 默认全为 null，各动作走真实实现；测试整体替换后即可断言路由，
+/// 而不会真的拉起相机、建群页或通讯录（它们会触发 Isar / ChatRuntime / 相机）。
+class ChatEntryOpeners {
+  const ChatEntryOpeners({
+    this.openScan,
+    this.openReceivePay,
+    this.openSendMessage,
+    this.openCreateGroup,
+    this.openAddFriend,
+  });
+
+  /// 扫一扫 = 交易·扫一扫统一分派（扫到用户二维码按收款人进入转账）。
+  final ChatEntryOpener? openScan;
+
+  /// 收付款 = 展示本人唯一用户二维码。
+  final ChatEntryOpener? openReceivePay;
+
+  /// 发私信 = 通讯录单选后直开私聊。
+  final ChatEntryOpener? openSendMessage;
+
+  /// 发群聊 = 通讯录多选（≥2 人）建群。
+  final ChatEntryOpener? openCreateGroup;
+
+  /// 加好友 = 扫对方二维码写入本人通讯录。
+  final ChatEntryOpener? openAddFriend;
+}
+
+/// 加号菜单单个动作的入口签名；默认钱包等依赖一律由真实实现内部解析，
+/// 注入替身时不触碰 WalletManager / Isar / 相机。
+typedef ChatEntryOpener = Future<void> Function(BuildContext context);
 
 /// 公民“聊天”Tab。
 ///
-/// 聊天页只展示会话列表。联系人添加、联系人详情和转账入口统一归属
-/// “我的通讯录”；互联网瞬时转发和近场传输由 Chat 运行态自动处理。
+/// 顶部为搜索框（进入 [ChatSearchPage]），右上角加号弹出 5 个入口：
+/// 扫一扫 / 收付款 / 发私信 / 发群聊 / 加好友。会话列表在其下方。
 class ChatTab extends StatefulWidget {
   ChatTab({
     super.key,
     ChatStore? store,
     WalletManager? walletManager,
-    this.ownerAccount,
+    this.accountId,
     this.sendTextFactory,
     this.sendMediaFactory,
     this.downloadAttachmentFactory,
@@ -44,12 +81,13 @@ class ChatTab extends StatefulWidget {
     this.runtime,
     this.selectedTab,
     this.tabIndex = 2,
+    this.openers,
   })  : store = store ?? ChatStore(),
         walletManager = walletManager ?? WalletManager();
 
   final ChatStore store;
   final WalletManager walletManager;
-  final String? ownerAccount;
+  final String? accountId;
   final ChatSendTextFactory? sendTextFactory;
   final ChatSendMediaFactory? sendMediaFactory;
   final ChatDownloadAttachmentFactory? downloadAttachmentFactory;
@@ -57,6 +95,9 @@ class ChatTab extends StatefulWidget {
   final ChatRuntime? runtime;
   final ValueListenable<int>? selectedTab;
   final int tabIndex;
+
+  /// 加号菜单动作入口；仅测试注入，正式运行为 null 走真实实现。
+  final ChatEntryOpeners? openers;
 
   @override
   State<ChatTab> createState() => _ChatTabState();
@@ -68,7 +109,7 @@ class _ChatTabState extends State<ChatTab> {
   static const _backoffPollInterval = Duration(seconds: 30);
 
   List<ChatConversationPreview> _conversations = const [];
-  String _ownerAccount = '';
+  String _accountId = '';
   bool _loading = true;
   bool _polling = false;
   bool _realtimeConnecting = false;
@@ -104,7 +145,7 @@ class _ChatTabState extends State<ChatTab> {
     WidgetsBinding.instance.addObserver(_lifecycleObserver);
     widget.selectedTab?.addListener(_onSelectedTabChanged);
     // 本页常驻 IndexedStack；切换默认用户钱包（= 切换聊天身份）后经
-    // walletsRevision 广播重载，会话列表 owner 立即切到新默认用户，
+    // walletsRevision 广播重载，会话列表 accountId 立即切到新默认用户，
     // 不再等 App 退后台回前台。
     WalletManager.walletsRevision.addListener(_onWalletsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _requestCoordinate());
@@ -155,10 +196,10 @@ class _ChatTabState extends State<ChatTab> {
   Future<void> _onWalletsChanged() async {
     // 先廉价比对(纯 Isar 读):默认聊天身份没变的钱包操作(重命名/导入
     // 未置顶钱包)不触发发送队列重试,避免整页转圈与无谓网络请求。
-    final address = await _readOwnerAccount();
-    if (!mounted || address == _ownerAccount) return;
-    if (_ownerAccount.isNotEmpty) {
-      widget.runtime?.invalidateOwner(_ownerAccount);
+    final address = await _readAccountId();
+    if (!mounted || address == _accountId) return;
+    if (_accountId.isNotEmpty) {
+      widget.runtime?.invalidateAccount(_accountId);
     }
     _pauseSync();
     _requestCoordinate();
@@ -178,7 +219,7 @@ class _ChatTabState extends State<ChatTab> {
       _error = null;
     });
     try {
-      final activeWallet = widget.ownerAccount ?? await _readOwnerAccount();
+      final activeWallet = widget.accountId ?? await _readAccountId();
       if (!_isActive) {
         return;
       }
@@ -186,14 +227,14 @@ class _ChatTabState extends State<ChatTab> {
         await _retryOutgoingSilently();
       }
       final conversations = await widget.store.readConversationPreviews(
-        ownerAccount: activeWallet.isEmpty ? null : activeWallet,
+        accountId: activeWallet.isEmpty ? null : activeWallet,
       );
       if (!mounted || !_isActive || generation != _reloadGeneration) {
         return;
       }
       setState(() {
         _conversations = conversations;
-        _ownerAccount = activeWallet;
+        _accountId = activeWallet;
       });
       _configurePolling(activeWallet);
     } catch (error) {
@@ -260,12 +301,12 @@ class _ChatTabState extends State<ChatTab> {
           if (_isActive &&
               mounted &&
               widget.runtime != null &&
-              _ownerAccount.isNotEmpty) {
+              _accountId.isNotEmpty) {
             _schedulePoll(_backoffPollInterval);
           }
         },
       );
-      if (!mounted || !_isActive || _ownerAccount != activeWallet) {
+      if (!mounted || !_isActive || _accountId != activeWallet) {
         await stop?.call();
         return false;
       }
@@ -282,15 +323,15 @@ class _ChatTabState extends State<ChatTab> {
     }
   }
 
-  Future<void> _syncAndRefresh(String ownerAccount) async {
+  Future<void> _syncAndRefresh(String accountId) async {
     if (!_isActive) {
       return;
     }
     await _retryOutgoingSilently();
     final conversations = await widget.store.readConversationPreviews(
-      ownerAccount: ownerAccount,
+      accountId: accountId,
     );
-    if (mounted && _ownerAccount == ownerAccount) {
+    if (mounted && _accountId == accountId) {
       setState(() {
         _conversations = conversations;
       });
@@ -324,7 +365,7 @@ class _ChatTabState extends State<ChatTab> {
     if (!mounted ||
         !_isActive ||
         widget.runtime == null ||
-        _ownerAccount.isEmpty) {
+        _accountId.isEmpty) {
       return;
     }
     if (_stopRealtime != null) {
@@ -339,7 +380,7 @@ class _ChatTabState extends State<ChatTab> {
     try {
       ok = await _retryOutgoingSilently();
       final conversations = await widget.store.readConversationPreviews(
-        ownerAccount: _ownerAccount,
+        accountId: _accountId,
       );
       if (mounted) {
         setState(() {
@@ -353,22 +394,22 @@ class _ChatTabState extends State<ChatTab> {
     if (_isActive &&
         mounted &&
         widget.runtime != null &&
-        _ownerAccount.isNotEmpty) {
-      if (ok && await _startRealtime(_ownerAccount)) {
+        _accountId.isNotEmpty) {
+      if (ok && await _startRealtime(_accountId)) {
         return;
       }
       _schedulePoll(ok ? _normalPollInterval : _backoffPollInterval);
     }
   }
 
-  Future<String> _readOwnerAccount() async {
-    final runtimeAddress = await widget.runtime?.readOwnerAccount();
+  Future<String> _readAccountId() async {
+    final runtimeAddress = await widget.runtime?.readAccountId();
     if (runtimeAddress != null && runtimeAddress.isNotEmpty) {
       return runtimeAddress;
     }
     // 身份统一取默认用户钱包（列表中最靠前的热钱包）。
     final wallet = await widget.walletManager.getDefaultWallet();
-    return wallet?.address ?? '';
+    return wallet?.accountId ?? '';
   }
 
   Future<void> _deleteLocalConversation(String conversationId) {
@@ -409,7 +450,7 @@ class _ChatTabState extends State<ChatTab> {
   }
 
   void _openConversation(ChatConversationPreview preview) {
-    if (_ownerAccount.isEmpty) {
+    if (_accountId.isEmpty) {
       setState(() {
         _error = '请先在「我的 → 我的钱包」创建热钱包';
       });
@@ -427,8 +468,10 @@ class _ChatTabState extends State<ChatTab> {
   }
 
   void _openCreateGroup() {
-    if (_ownerAccount.isEmpty) {
-      setState(() => _error = '请先在「我的 → 我的钱包」创建热钱包');
+    if (!_requireAccount()) return;
+    final opener = widget.openers?.openCreateGroup;
+    if (opener != null) {
+      unawaited(opener(context));
       return;
     }
     Navigator.of(context)
@@ -436,6 +479,108 @@ class _ChatTabState extends State<ChatTab> {
           MaterialPageRoute<void>(builder: (_) => const GroupCreatePage()),
         )
         .then((_) => _reload());
+  }
+
+  /// 没有热钱包时统一提示并拦截；聊天与收付款都依赖默认热钱包账户。
+  bool _requireAccount() {
+    if (_accountId.isEmpty) {
+      setState(() => _error = '请先在「我的 → 我的钱包」创建热钱包');
+      return false;
+    }
+    return true;
+  }
+
+  /// 加号菜单动作分派。
+  Future<void> _onEntryAction(_ChatEntryAction action) async {
+    switch (action) {
+      case _ChatEntryAction.scan:
+        await _openScan();
+      case _ChatEntryAction.receivePay:
+        await _openReceivePay();
+      case _ChatEntryAction.sendMessage:
+        await _openSendMessage();
+      case _ChatEntryAction.createGroup:
+        _openCreateGroup();
+      case _ChatEntryAction.addFriend:
+        await _openAddFriend();
+    }
+  }
+
+  /// 扫一扫 = 交易·扫一扫统一分派；扫到用户二维码按收款人进入转账。
+  Future<void> _openScan() async {
+    final opener = widget.openers?.openScan;
+    if (opener != null) {
+      await opener(context);
+      return;
+    }
+    final wallet = await widget.walletManager.getDefaultWallet();
+    if (!mounted) return;
+    await openScanDispatchFlow(context: context, paymentWallet: wallet);
+  }
+
+  /// 收付款 = 展示本人唯一用户二维码，他人扫码后按收款人向我转账。
+  Future<void> _openReceivePay() async {
+    if (!_requireAccount()) return;
+    final opener = widget.openers?.openReceivePay;
+    if (opener != null) {
+      await opener(context);
+      return;
+    }
+    final wallet = await widget.walletManager.getDefaultWallet();
+    if (!mounted) return;
+    if (wallet == null) {
+      setState(() => _error = '请先在「我的 → 我的钱包」创建热钱包');
+      return;
+    }
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => UserQrPage(
+          accountId: wallet.accountId,
+          contactName: wallet.walletName,
+        ),
+      ),
+    );
+  }
+
+  /// 发私信 = 通讯录单选，点联系人直接开私聊。
+  Future<void> _openSendMessage() async {
+    if (!_requireAccount()) return;
+    final opener = widget.openers?.openSendMessage;
+    if (opener != null) {
+      await opener(context);
+      return;
+    }
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            const ContactBookPage(mode: ContactPickMode.pickForMessage),
+      ),
+    );
+    if (!mounted) return;
+    await _reload();
+  }
+
+  /// 加好友 = 扫对方二维码写入本人密文通讯录。
+  Future<void> _openAddFriend() async {
+    if (!_requireAccount()) return;
+    final opener = widget.openers?.openAddFriend;
+    if (opener != null) {
+      await opener(context);
+      return;
+    }
+    await scanAndAddContact(context, selfAccountId: _accountId);
+  }
+
+  /// 搜索 = 进入独立搜索页；透传 store 与账户，避免搜索页重复解析依赖。
+  Future<void> _openSearch() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ChatSearchPage(
+          store: widget.store,
+          accountId: _accountId,
+        ),
+      ),
+    );
   }
 
   void _openGroupManage(ChatConversationPreview preview) {
@@ -454,36 +599,36 @@ class _ChatTabState extends State<ChatTab> {
           MaterialPageRoute<void>(
             builder: (context) => ChatPage(
               conversationId: preview.conversationId,
-              ownerAccount: _ownerAccount,
-              peerUserId: preview.peerAccount,
+              accountId: _accountId,
+              peerUserId: preview.peerAccountId,
               title: preview.title,
               store: widget.store,
               onSendText: widget.sendTextFactory?.call(
-                    preview.peerAccount,
+                    preview.peerAccountId,
                     preview.conversationId,
                   ) ??
                   (widget.runtime == null
                       ? null
                       : (text) => widget.runtime!.sendText(
-                            peerAccount: preview.peerAccount,
+                            peerAccountId: preview.peerAccountId,
                             conversationId: preview.conversationId,
                             text: text,
                           )),
               onSendMedia: widget.sendMediaFactory?.call(
-                    preview.peerAccount,
+                    preview.peerAccountId,
                     preview.conversationId,
                   ) ??
                   (widget.runtime == null
                       ? null
                       : (media) => widget.runtime!.sendMedia(
-                            peerAccount: preview.peerAccount,
+                            peerAccountId: preview.peerAccountId,
                             conversationId: preview.conversationId,
                             media: media,
                           )),
               onSendSticker: widget.runtime == null
                   ? null
                   : (packId, stickerId) => widget.runtime!.sendSticker(
-                        peerAccount: preview.peerAccount,
+                        peerAccountId: preview.peerAccountId,
                         conversationId: preview.conversationId,
                         packId: packId,
                         stickerId: stickerId,
@@ -505,7 +650,7 @@ class _ChatTabState extends State<ChatTab> {
                         clearByteSize: clearByteSize,
                       ),
               onDownloadAttachment: widget.downloadAttachmentFactory?.call(
-                    preview.peerAccount,
+                    preview.peerAccountId,
                   ) ??
                   (widget.runtime == null
                       ? null
@@ -517,7 +662,7 @@ class _ChatTabState extends State<ChatTab> {
                             conversationId: conversationId,
                             controlPlaintext: controlPlaintext,
                           )),
-              onSync: widget.syncFactory?.call(preview.peerAccount) ??
+              onSync: widget.syncFactory?.call(preview.peerAccountId) ??
                   (widget.runtime == null
                       ? null
                       : () => widget.runtime!.retryOutgoing()),
@@ -540,22 +685,22 @@ class _ChatTabState extends State<ChatTab> {
           onRefresh: () => _reload(syncFirst: true),
           child: CustomScrollView(
             slivers: [
-              const SliverToBoxAdapter(child: _ChatHeader()),
+              SliverToBoxAdapter(child: _ChatHeader(onAction: _onEntryAction)),
               if (_error != null)
                 SliverToBoxAdapter(child: _ErrorBanner(message: _error!)),
-              if (!_loading && _ownerAccount.isNotEmpty)
+              if (!_loading && _accountId.isNotEmpty)
                 SliverToBoxAdapter(
-                  child: _NewGroupEntry(onTap: _openCreateGroup),
+                  child: _SearchEntry(onTap: () => unawaited(_openSearch())),
                 ),
               if (_loading)
                 const SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(child: CircularProgressIndicator()),
                 )
-              else if (_ownerAccount.isEmpty)
+              else if (_accountId.isEmpty)
                 const SliverFillRemaining(
                   hasScrollBody: false,
-                  child: _NoOwner(),
+                  child: _NoAccount(),
                 )
               else if (_conversations.isNotEmpty)
                 SliverList.builder(
@@ -604,16 +749,21 @@ class _ChatTabLifecycleObserver extends WidgetsBindingObserver {
   }
 }
 
+/// 加号菜单的 5 个动作。
+enum _ChatEntryAction { scan, receivePay, sendMessage, createGroup, addFriend }
+
 class _ChatHeader extends StatelessWidget {
-  const _ChatHeader();
+  const _ChatHeader({required this.onAction});
+
+  final ValueChanged<_ChatEntryAction> onAction;
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(20, 18, 20, 12),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
       child: Row(
         children: [
-          Expanded(
+          const Expanded(
             child: Text(
               '聊天',
               style: TextStyle(
@@ -623,7 +773,34 @@ class _ChatHeader extends StatelessWidget {
               ),
             ),
           ),
-          Icon(Icons.search_rounded, color: AppTheme.textSecondary),
+          // 用 PopupMenuButton 自带的锚定弹出，避免手算右上角坐标。
+          PopupMenuButton<_ChatEntryAction>(
+            tooltip: '新建',
+            icon: const Icon(Icons.add_rounded, color: AppTheme.textSecondary),
+            onSelected: onAction,
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: _ChatEntryAction.scan,
+                child: Text('扫一扫'),
+              ),
+              PopupMenuItem(
+                value: _ChatEntryAction.receivePay,
+                child: Text('收付款'),
+              ),
+              PopupMenuItem(
+                value: _ChatEntryAction.sendMessage,
+                child: Text('发私信'),
+              ),
+              PopupMenuItem(
+                value: _ChatEntryAction.createGroup,
+                child: Text('发群聊'),
+              ),
+              PopupMenuItem(
+                value: _ChatEntryAction.addFriend,
+                child: Text('加好友'),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -646,7 +823,7 @@ class _ConversationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final subtitle = preview.lastMessage.trim().isEmpty
-        ? preview.peerAccount
+        ? preview.peerAccountId
         : preview.lastMessage.trim();
     return Dismissible(
       key: ValueKey('chat-conversation-${preview.conversationId}'),
@@ -669,8 +846,9 @@ class _ConversationTile extends StatelessWidget {
   }
 }
 
-class _NewGroupEntry extends StatelessWidget {
-  const _NewGroupEntry({required this.onTap});
+/// 顶部搜索入口：点击进入 [ChatSearchPage]（会话 / 联系人 / 聊天记录）。
+class _SearchEntry extends StatelessWidget {
+  const _SearchEntry({required this.onTap});
 
   final VoidCallback onTap;
 
@@ -685,12 +863,19 @@ class _NewGroupEntry extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           onTap: onTap,
           child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
-                Icon(Icons.group_add_outlined),
-                SizedBox(width: 12),
-                Text('新建群聊'),
+                Icon(
+                  Icons.search_rounded,
+                  size: 20,
+                  color: AppTheme.textTertiary,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  '搜索',
+                  style: TextStyle(color: AppTheme.textTertiary, fontSize: 15),
+                ),
               ],
             ),
           ),
@@ -845,8 +1030,8 @@ class _ErrorBanner extends StatelessWidget {
   }
 }
 
-class _NoOwner extends StatelessWidget {
-  const _NoOwner();
+class _NoAccount extends StatelessWidget {
+  const _NoAccount();
 
   @override
   Widget build(BuildContext context) {

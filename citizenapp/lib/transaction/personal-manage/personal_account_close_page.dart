@@ -58,7 +58,7 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
   void initState() {
     super.initState();
     _selectedWallet = widget.adminWallets.first;
-    _accountSs58 = _hexToSs58(widget.institution.personalAccountHex);
+    _accountSs58 = _hexToSs58(widget.institution.personalAccountId);
     _fetchBalance();
   }
 
@@ -70,7 +70,7 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
 
   Future<void> _fetchBalance() async {
     final store = AccountBalanceSnapshotStore.instance;
-    final local = await store.read(widget.institution.personalAccountHex);
+    final local = await store.read(widget.institution.personalAccountId);
     if (local != null && mounted) {
       setState(() {
         _availableBalance = local.balanceYuan;
@@ -80,10 +80,10 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
     }
     try {
       final balance = await ChainRpc()
-          .fetchFinalizedBalance(widget.institution.personalAccountHex);
+          .fetchFinalizedBalance(widget.institution.personalAccountId);
       try {
         await store.put(
-          accountHex: widget.institution.personalAccountHex,
+          accountId: widget.institution.personalAccountId,
           balanceYuan: balance,
         );
       } catch (_) {
@@ -162,7 +162,7 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
 
     try {
       final wallet = _selectedWallet;
-      final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
+      final publicKeyBytes = _hexDecode(wallet.accountId);
 
       // 热钱包:先认证(生物/密码),后续 signCallback 用本地 seed 签名;
       // 冷钱包:走 QR 签名(扫码 → citizenwallet 设备签 → 扫回签名)。
@@ -181,7 +181,7 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
         final qrSigner = QrSigner();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'close-dq-'),
-          pubkey: '0x${wallet.pubkeyHex}',
+          signerPublicKey: wallet.accountId,
           payloadHex: '0x${_toHex(payload)}',
           action: QrActions.personalClose,
         );
@@ -193,7 +193,7 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
             builder: (_) => QrSignSessionPage(
                 request: request,
                 requestJson: requestJson,
-                expectedPubkey: '0x${wallet.pubkeyHex}'),
+                expectedSignerPublicKey: wallet.accountId),
           ),
         );
         if (response == null) throw Exception('签名已取消');
@@ -205,16 +205,16 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
           await ProposalQueryService().fetchNextProposalId();
 
       final result = await _manageService.submitProposeClosePersonal(
-        account: widget.institution.personalAccountHex,
+        account: widget.institution.personalAccountId,
         beneficiaryAddress: beneficiary,
-        fromAddress: wallet.address,
-        signerPubkey: Uint8List.fromList(pubkeyBytes),
+        fromSs58Address: wallet.ss58Address,
+        signerPublicKey: Uint8List.fromList(publicKeyBytes),
         sign: signCallback,
       );
 
       // 写入 Isar `PersonalAccountProposalEntity`,详情页提案列表才能显示。
       await PersonalProposalHistoryService().recordOrUpdate(
-        personalAccountHex: widget.institution.personalAccountHex,
+        personalAccountId: widget.institution.personalAccountId,
         proposalId: predictedProposalId,
         action: PersonalProposalAction.close,
         status: PersonalProposalStatus.voting,
@@ -401,7 +401,7 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
                   );
                   if (result == null || !mounted) return;
                   setState(() {
-                    _beneficiaryController.text = result.toAddress;
+                    _beneficiaryController.text = result.toSs58Address;
                   });
                 },
               ),
@@ -418,7 +418,7 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
                 return DropdownMenuItem(
                   value: w,
                   child: Text(
-                    '${w.walletName} (${_truncateAddress(w.address)})',
+                    '${w.walletName} (${_truncateAddress(w.ss58Address)})',
                     style: const TextStyle(fontSize: 13),
                   ),
                 );

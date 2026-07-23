@@ -46,7 +46,7 @@
 2026-06-26 管理员更换交易口径：
 
 - citizenapp 只为个人多签生产 `PersonalAdmins(29.0)` 管理员更换交易；公权/私权机构管理员由机构治理和注册局登记流程维护，不得复用个人多签入口。
-- 个人多签管理员更换载荷固定为 `institution_code / account_id / admins / new_threshold`，其中每个管理员按 `admin_account + family_name + given_name` 编码。
+- 个人多签管理员更换载荷固定为 `institution_code / account_id / admins / new_threshold`，其中每个管理员按 `account_id + family_name + given_name` 编码。
 - citizenwallet 公民钱包只解析上述新载荷；缺少 `new_threshold` 或尾部有多余字节的旧/错载荷直接拒绝。
 - 个人多签人数至少为 2，动态阈值必须严格过半；冷钱包必须校验 `institution_code=PMUL` 与 `PersonalAdmins(29.0)` 完全匹配。
 - 同一次更换只允许一次最终交易签名；姓名确认不形成第二次签名。

@@ -99,13 +99,13 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     final eligible = _admins.toSet();
     final importedEligibleWallets = widget.adminWallets
         .where(
-          (wallet) => eligible.contains(_normalizeHex(wallet.pubkeyHex)),
+          (wallet) => eligible.contains(_requireAccountId(wallet.accountId)),
         )
         .toList(growable: false);
     if (importedEligibleWallets.isEmpty) return false;
     for (final wallet in importedEligibleWallets) {
-      final pk = _normalizeHex(wallet.pubkeyHex);
-      final vote = _adminVotes[pk];
+      final accountId = _requireAccountId(wallet.accountId);
+      final vote = _adminVotes[accountId];
       if (vote == null) return false;
     }
     return true;
@@ -181,7 +181,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         institutionAdminTally = results[6] as ({int yes, int no});
         final adminSet = admins.toSet();
         final matchedAdminWallets = widget.adminWallets.where((wallet) {
-          return adminSet.contains(_normalizeHex(wallet.pubkeyHex));
+          return adminSet.contains(_requireAccountId(wallet.accountId));
         }).toList(growable: false)
           ..sort((a, b) => a.walletIndex.compareTo(b.walletIndex));
 
@@ -194,8 +194,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         adminVotes = voteResults;
 
         votableWallets = matchedAdminWallets.where((wallet) {
-          final pk = _normalizeHex(wallet.pubkeyHex);
-          return adminVotes[pk] == null;
+          final accountId = _requireAccountId(wallet.accountId);
+          return adminVotes[accountId] == null;
         }).toList(growable: false)
           ..sort((a, b) => a.walletIndex.compareTo(b.walletIndex));
 
@@ -257,12 +257,12 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       final admins = snapshot.admins;
       final adminSet = admins.toSet();
       final matchedAdminWallets = widget.adminWallets.where((wallet) {
-        return adminSet.contains(_normalizeHex(wallet.pubkeyHex));
+        return adminSet.contains(_requireAccountId(wallet.accountId));
       }).toList(growable: false)
         ..sort((a, b) => a.walletIndex.compareTo(b.walletIndex));
       final votableWallets = matchedAdminWallets.where((wallet) {
-        final pk = _normalizeHex(wallet.pubkeyHex);
-        return snapshot.adminVotes[pk] == null;
+        final accountId = _requireAccountId(wallet.accountId);
+        return snapshot.adminVotes[accountId] == null;
       }).toList(growable: false)
         ..sort((a, b) => a.walletIndex.compareTo(b.walletIndex));
       setState(() {
@@ -313,11 +313,11 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       yesCount: jointTally.yes,
       noCount: jointTally.no,
       threshold: _requiredAdminThreshold,
-      admins: admins.map(_normalizeHex).toList(growable: false),
+      admins: admins.map(_requireAccountId).toList(growable: false),
       adminVotes: adminVotes.map(
-        (key, value) => MapEntry(_normalizeHex(key), value),
+        (key, value) => MapEntry(_requireAccountId(key), value),
       ),
-      pendingPubkeys: const [],
+      pendingPublicKeys: const [],
       detail: _proposalInfoToJson(proposalInfo),
       extra: {
         'meta_kind': meta?.kind,
@@ -326,9 +326,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         'meta_internal_code': meta?.internalCode,
         'meta_subject_cid_numbers': meta?.subjectCidNumbers,
         'meta_actor_cid_number': meta?.actorCidNumber,
-        'meta_execution_account_hex': meta?.executionAccount == null
+        'meta_execution_account_id': meta?.executionAccountId == null
             ? null
-            : _toHex(meta!.executionAccount!),
+            : _accountIdText(meta!.executionAccountId!),
         'joint_yes': jointTally.yes,
         'joint_no': jointTally.no,
         'referendum_yes': referendumTally.yes,
@@ -406,8 +406,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     final stage = _toInt(snapshot.extra['meta_stage']);
     final status = _toInt(snapshot.extra['meta_status']);
     if (kind == null || stage == null || status == null) return null;
-    final executionAccountHex =
-        snapshot.extra['meta_execution_account_hex']?.toString();
+    final executionAccountId =
+        snapshot.extra['meta_execution_account_id']?.toString();
     return ProposalMeta(
       proposalId: snapshot.proposalId,
       kind: kind,
@@ -417,10 +417,10 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       actorCidNumber: snapshot.extra['meta_actor_cid_number']?.toString(),
       subjectCidNumbers:
           _toStringList(snapshot.extra['meta_subject_cid_numbers']),
-      executionAccount:
-          executionAccountHex == null || executionAccountHex.isEmpty
+      executionAccountId:
+          executionAccountId == null || executionAccountId.isEmpty
               ? null
-              : Uint8List.fromList(_hexDecode(executionAccountHex)),
+              : _accountIdBytes(executionAccountId),
     );
   }
 
@@ -445,10 +445,11 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     return null;
   }
 
-  String _normalizeHex(String hex) {
-    return hex.startsWith('0x')
-        ? hex.substring(2).toLowerCase()
-        : hex.toLowerCase();
+  String _requireAccountId(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+    }
+    return accountId;
   }
 
   Uint8List _hexDecode(String hex) {
@@ -471,6 +472,18 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     return buffer.toString();
   }
 
+  String _accountIdText(List<int> bytes) {
+    if (bytes.length != 32) {
+      throw const FormatException('execution_account_id 必须为 32 字节');
+    }
+    return '0x${_toHex(bytes)}';
+  }
+
+  Uint8List _accountIdBytes(String accountId) {
+    _requireAccountId(accountId);
+    return _hexDecode(accountId);
+  }
+
   String _truncateAddress(String address) {
     if (address.length <= 14) return address;
     return '${address.substring(0, 6)}...${address.substring(address.length - 6)}';
@@ -481,8 +494,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     return '${address.substring(0, 8)}...${address.substring(address.length - 8)}';
   }
 
-  String _pubkeyToSs58(String pubkeyHex) {
-    return Keyring().encodeAddress(_hexDecode(pubkeyHex), 2027);
+  String _publicKeyToSs58(String publicKey) {
+    return Keyring().encodeAddress(_hexDecode(publicKey), 2027);
   }
 
   Future<Uint8List> _signPayloadWithWallet({
@@ -495,7 +508,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     final qrSigner = QrSigner();
     final request = qrSigner.buildRequest(
       requestId: QrSigner.generateRequestId(prefix: '$requestPrefix-'),
-      pubkey: '0x${wallet.pubkeyHex}',
+      signerPublicKey: wallet.accountId,
       payloadHex: '0x${_toHex(payload)}',
       action: action,
     );
@@ -507,7 +520,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         builder: (_) => QrSignSessionPage(
           request: request,
           requestJson: requestJson,
-          expectedPubkey: '0x${wallet.pubkeyHex}',
+          expectedSignerPublicKey: wallet.accountId,
         ),
       ),
     );
@@ -530,8 +543,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         actorCidNumber: institution.cidNumber,
         voterRoleCode: _voterRoleCode,
         approve: approve,
-        fromAddress: voteWallet.address,
-        signerPubkey: _hexDecode(voteWallet.pubkeyHex),
+        fromSs58Address: voteWallet.ss58Address,
+        signerPublicKey: _hexDecode(voteWallet.accountId),
         sign: (payload) {
           return _signPayloadWithWallet(
             wallet: voteWallet,
@@ -542,16 +555,16 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         },
       );
 
-      final pubkey = _normalizeHex(voteWallet.pubkeyHex);
+      final accountId = _requireAccountId(voteWallet.accountId);
       if (!mounted) return;
       setState(() {
-        _adminVotes = {..._adminVotes, pubkey: approve};
+        _adminVotes = {..._adminVotes, accountId: approve};
         _institutionAdminTally = (
           yes: _institutionAdminTally.yes + (approve ? 1 : 0),
           no: _institutionAdminTally.no + (approve ? 0 : 1),
         );
         _votableWallets = _votableWallets
-            .where((w) => _normalizeHex(w.pubkeyHex) != pubkey)
+            .where((w) => _requireAccountId(w.accountId) != accountId)
             .toList(growable: false);
         _selectedVoteWallet =
             _votableWallets.isNotEmpty ? _votableWallets.first : null;
@@ -1026,11 +1039,11 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       return ListTile(
         contentPadding: EdgeInsets.zero,
         title: Text(
-          _truncateWalletAddress(wallet.address),
+          _truncateWalletAddress(wallet.ss58Address),
           style: const TextStyle(fontSize: 13),
         ),
         subtitle: Text(
-          _pubkeyToSs58(wallet.pubkeyHex),
+          _publicKeyToSs58(wallet.accountId),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontSize: 11, color: AppTheme.textTertiary),
@@ -1058,7 +1071,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                 children: [
                   Expanded(
                     child: Text(
-                      _truncateWalletAddress(wallet.address),
+                      _truncateWalletAddress(wallet.ss58Address),
                       style: const TextStyle(fontSize: 13),
                       overflow: TextOverflow.ellipsis,
                     ),

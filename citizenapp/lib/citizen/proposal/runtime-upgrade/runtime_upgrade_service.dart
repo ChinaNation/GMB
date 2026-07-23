@@ -44,8 +44,8 @@ class RuntimeUpgradeService {
     required String actorCidNumber,
     required String voterRoleCode,
     required bool approve,
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
     final callData = _buildJointVoteCall(
@@ -56,8 +56,8 @@ class RuntimeUpgradeService {
     );
     final result = await _signAndSubmit(
       callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       sign: sign,
     );
     await _confirmRuntimeJointVote(
@@ -65,7 +65,7 @@ class RuntimeUpgradeService {
       actorCidNumber: actorCidNumber,
       voterRoleCode: voterRoleCode,
       approve: approve,
-      signerPubkey: signerPubkey,
+      signerPublicKey: signerPublicKey,
       blockHashHex: result.blockHashHex,
     );
     return result;
@@ -163,13 +163,13 @@ class RuntimeUpgradeService {
     int proposalId,
     String actorCidNumber,
     String voterRoleCode,
-    String pubkeyHex,
+    String publicKey,
   ) async {
     final key = _jointTicketVoteKey(
       proposalId,
       actorCidNumber,
       voterRoleCode,
-      pubkeyHex,
+      publicKey,
     );
     if (key == null) return null;
     final data = await _rpc.fetchStorage(key);
@@ -184,31 +184,30 @@ class RuntimeUpgradeService {
     int proposalId,
     String actorCidNumber,
     String voterRoleCode,
-    Iterable<String> pubkeysHex,
+    Iterable<String> accountIds,
   ) async {
-    final keyByPubkey = <String, String>{};
-    for (final pubkey in pubkeysHex) {
-      final clean = _normalizeHex(pubkey);
-      if (clean.isEmpty) continue;
+    final keyByAccountId = <String, String>{};
+    for (final accountId in accountIds) {
+      final normalizedAccountId = _requireAccountId(accountId);
       final key = _jointTicketVoteKey(
         proposalId,
         actorCidNumber,
         voterRoleCode,
-        clean,
+        normalizedAccountId,
       );
       if (key == null) continue;
-      keyByPubkey[clean] = key;
+      keyByAccountId[normalizedAccountId] = key;
     }
-    if (keyByPubkey.isEmpty) return const {};
-    final values = await _rpc.fetchStorageBatchChunked(keyByPubkey.values);
+    if (keyByAccountId.isEmpty) return const {};
+    final values = await _rpc.fetchStorageBatchChunked(keyByAccountId.values);
     return {
-      for (final entry in keyByPubkey.entries)
+      for (final entry in keyByAccountId.entries)
         entry.key: _decodeBoolVote(values[entry.value]),
     };
   }
 
-  /// 跨提案批量查询联合投票:输入 `{proposalId: (机构 CID, [pubkeyHex])}`,
-  /// 一次链查返回 `{proposalId: {pubkey: vote?}}`。
+  /// 跨提案批量查询联合投票：输入 `{proposalId: (机构 CID, [account_id])}`，
+  /// 一次链查返回 `{proposalId: {account_id: vote?}}`。
   ///
   /// (ADR-018 R2):与内部投票同理,广场上多个联合投票提案合并成单次
   /// 分块读取,避免每提案一次 RPC。
@@ -218,30 +217,32 @@ class RuntimeUpgradeService {
             ({
               String actorCidNumber,
               String voterRoleCode,
-              List<String> pubkeysHex
+              List<String> accountIds
             })>
         byProposal,
   ) async {
-    final keyToCoord = <String, ({int pid, String pk})>{};
+    final keyToCoord = <String, ({int pid, String accountId})>{};
     for (final entry in byProposal.entries) {
-      for (final pubkey in entry.value.pubkeysHex) {
-        final clean = _normalizeHex(pubkey);
-        if (clean.isEmpty) continue;
+      for (final accountId in entry.value.accountIds) {
+        final normalizedAccountId = _requireAccountId(accountId);
         final key = _jointTicketVoteKey(
           entry.key,
           entry.value.actorCidNumber,
           entry.value.voterRoleCode,
-          clean,
+          normalizedAccountId,
         );
         if (key == null) continue;
-        keyToCoord[key] = (pid: entry.key, pk: clean);
+        keyToCoord[key] = (
+          pid: entry.key,
+          accountId: normalizedAccountId,
+        );
       }
     }
     if (keyToCoord.isEmpty) return const {};
     final values = await _rpc.fetchStorageBatchChunked(keyToCoord.keys);
     final result = <int, Map<String, bool?>>{};
     keyToCoord.forEach((key, coord) {
-      (result[coord.pid] ??= <String, bool?>{})[coord.pk] =
+      (result[coord.pid] ??= <String, bool?>{})[coord.accountId] =
           _decodeBoolVote(values[key]);
     });
     return result;
@@ -251,9 +252,10 @@ class RuntimeUpgradeService {
     int proposalId,
     String actorCidNumber,
     String voterRoleCode,
-    String pubkeyHex,
+    String accountId,
   ) {
-    final accountBytes = Uint8List.fromList(_hexDecode(pubkeyHex));
+    final accountBytes =
+        Uint8List.fromList(_hexDecode(_requireAccountId(accountId)));
     if (accountBytes.length != 32) {
       return null;
     }
@@ -415,8 +417,8 @@ class RuntimeUpgradeService {
   /// 返回交易哈希、runtime nonce 和入块哈希。
   Future<({String txHash, int usedNonce, String blockHashHex})> _signAndSubmit({
     required Uint8List callData,
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
     return SignedExtrinsicBuilder(
@@ -424,8 +426,8 @@ class RuntimeUpgradeService {
       logLabel: 'ProtocolUpgrade',
     ).signAndSubmitInBlock(
       callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       sign: sign,
       onTrace: (trace) {
         debugPrint(
@@ -440,16 +442,16 @@ class RuntimeUpgradeService {
     required String actorCidNumber,
     required String voterRoleCode,
     required bool approve,
-    required Uint8List signerPubkey,
+    required Uint8List signerPublicKey,
     required String blockHashHex,
   }) async {
-    final pubkeyHex = _hexEncode(signerPubkey);
+    final publicKey = _hexEncode(signerPublicKey);
     for (var attempt = 0; attempt < 6; attempt++) {
       final chainVote = await fetchJointTicketVote(
         proposalId,
         actorCidNumber,
         voterRoleCode,
-        pubkeyHex,
+        publicKey,
       );
       if (chainVote == approve) return;
       if (chainVote != null && chainVote != approve) {
@@ -615,6 +617,13 @@ class RuntimeUpgradeService {
   static String _normalizeHex(String hex) {
     final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
     return clean.toLowerCase();
+  }
+
+  static String _requireAccountId(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+    }
+    return accountId;
   }
 
   // ──── 内部：哈希（直接使用 polkadart Hasher）────

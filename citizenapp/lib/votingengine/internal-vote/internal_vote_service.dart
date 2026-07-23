@@ -48,8 +48,8 @@ class InternalVoteService {
     required bool approve,
     String? actorCidNumber,
     String? voterRoleCode,
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
@@ -60,8 +60,8 @@ class InternalVoteService {
     );
     final result = await _signAndSubmit(
       callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       sign: sign,
       onWatchEvent: onWatchEvent,
     );
@@ -70,7 +70,7 @@ class InternalVoteService {
       actorCidNumber: actorCidNumber,
       voterRoleCode: voterRoleCode,
       approve: approve,
-      signerPubkey: signerPubkey,
+      signerPublicKey: signerPublicKey,
       blockHashHex: result.blockHashHex,
     );
     return result;
@@ -108,8 +108,8 @@ class InternalVoteService {
 
   Future<({String txHash, int usedNonce, String blockHashHex})> _signAndSubmit({
     required Uint8List callData,
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
@@ -118,8 +118,8 @@ class InternalVoteService {
       logLabel: 'InternalVote',
     ).signAndSubmitInBlock(
       callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
+      fromSs58Address: fromSs58Address,
+      signerPublicKey: signerPublicKey,
       sign: sign,
       onWatchEvent: onWatchEvent,
     );
@@ -134,19 +134,19 @@ class InternalVoteService {
     required String? actorCidNumber,
     required String? voterRoleCode,
     required bool approve,
-    required Uint8List signerPubkey,
+    required Uint8List signerPublicKey,
     required String blockHashHex,
   }) async {
-    final pubkeyHex = _hexEncode(signerPubkey);
+    final publicKey = _hexEncode(signerPublicKey);
     final query = InternalVoteQueryService(chainRpc: _rpc);
     for (var attempt = 0; attempt < 6; attempt++) {
       final chainVote = actorCidNumber == null
-          ? await query.fetchAdminVote(proposalId, pubkeyHex)
+          ? await query.fetchAdminVote(proposalId, publicKey)
           : await query.fetchInstitutionTicketVote(
               proposalId,
               actorCidNumber,
               voterRoleCode!,
-              pubkeyHex,
+              publicKey,
             );
       if (chainVote == approve) return;
       if (chainVote != null && chainVote != approve) {

@@ -6,20 +6,20 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 typedef DirectChatOpener = Future<void> Function(
   BuildContext context, {
-  required String peerAddress,
+  required String peerAccountId,
   required String title,
 });
 
-/// 打开与某钱包地址的一对一聊天。
+/// 打开与目标账户的一对一聊天。
 ///
-/// sender = 默认热钱包地址（空则引导创建热钱包）。广场用户主页「消息」与联系人详情
+/// 发起方使用默认热钱包的 AccountId（空则引导创建热钱包）。广场用户主页「消息」与联系人详情
 /// 「消息」共用此入口，复用现有 Chat 运行态，避免重复拼装。
 Future<void> openDirectChat(
   BuildContext context, {
-  required String peerAddress,
+  required String peerAccountId,
   required String title,
 }) async {
-  final sender = (await WalletManager().getDefaultWallet())?.address ?? '';
+  final sender = (await WalletManager().getDefaultWallet())?.accountId ?? '';
   if (sender.isEmpty) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -28,7 +28,7 @@ Future<void> openDirectChat(
     return;
   }
   // 不能和自己发起聊天：所有私信入口的最后一道防线（广场主页/通讯录都走此收口）。
-  if (peerAddress.trim() == sender) {
+  if (peerAccountId.trim() == sender) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('不能和自己发起聊天')),
@@ -36,27 +36,28 @@ Future<void> openDirectChat(
     return;
   }
   final runtime = ChatRuntime();
-  final conversationId = ChatRuntime.directConversationId(sender, peerAddress);
+  final conversationId =
+      ChatRuntime.directConversationId(sender, peerAccountId);
   if (!context.mounted) return;
   await Navigator.of(context).push<void>(
     MaterialPageRoute(
       builder: (_) => ChatPage(
         conversationId: conversationId,
-        ownerAccount: sender,
-        peerUserId: peerAddress,
+        accountId: sender,
+        peerUserId: peerAccountId,
         title: title,
         onSendText: (text) => runtime.sendText(
-          peerAccount: peerAddress,
+          peerAccountId: peerAccountId,
           conversationId: conversationId,
           text: text,
         ),
         onSendMedia: (media) => runtime.sendMedia(
-          peerAccount: peerAddress,
+          peerAccountId: peerAccountId,
           conversationId: conversationId,
           media: media,
         ),
         onSendSticker: (packId, stickerId) => runtime.sendSticker(
-          peerAccount: peerAddress,
+          peerAccountId: peerAccountId,
           conversationId: conversationId,
           packId: packId,
           stickerId: stickerId,

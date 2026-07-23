@@ -42,7 +42,7 @@ class InstitutionDetailPage extends StatefulWidget {
     required this.cidNumber,
     required this.repository,
     this.chainState,
-    this.walletPubkeyProvider,
+    this.accountIdProvider,
   });
 
   final String cidNumber;
@@ -51,8 +51,8 @@ class InstitutionDetailPage extends StatefulWidget {
   /// 链态读服务(余额/管理员/提案);测试注入,默认 Live。
   final InstitutionChainState? chainState;
 
-  /// 活动钱包公钥(订阅 + 是否管理员);测试注入,默认 WalletManager。
-  final Future<String?> Function()? walletPubkeyProvider;
+  /// 活动钱包AccountId(订阅 + 是否管理员);测试注入,默认 WalletManager。
+  final Future<String?> Function()? accountIdProvider;
 
   @override
   State<InstitutionDetailPage> createState() => _InstitutionDetailPageState();
@@ -83,7 +83,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   bool _loading = true;
 
-  String? _activePubkey;
+  String? _activeAccountId;
   bool _subscribed = false;
 
   List<InstitutionAccountRow> _accounts = const [];
@@ -97,8 +97,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   // 治理路径专用(管理员角色 / 激活 / 富提案列表)。
   List<WalletProfile> _adminWallets = const [];
   bool _isCurrentUserAdmin = false;
-  Set<String> _importedColdPubkeys = const {};
-  Set<String> _activatedPubkeys = const {};
+  Set<String> _importedColdAccountIds = const {};
+  Set<String> _activatedAccountIds = const {};
   List<LocalProposalSummary> _govProposals = const [];
   Map<int, ProposalWithDetail> _govProposalDetailsById = const {};
 
@@ -122,15 +122,15 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     _load();
   }
 
-  Future<String?> _resolvePubkey() async {
-    final provider = widget.walletPubkeyProvider;
+  Future<String?> _resolveAccountId() async {
+    final provider = widget.accountIdProvider;
     if (provider != null) return provider();
-    return (await _walletManager.getWallet())?.pubkeyHex;
+    return (await _walletManager.getWallet())?.accountId;
   }
 
   Future<void> _load() async {
     final inst = await widget.repository.getByCid(widget.cidNumber);
-    final pubkey = await _resolvePubkey();
+    final accountId = await _resolveAccountId();
     if (!mounted) return;
     if (inst == null) {
       setState(() => _loading = false);
@@ -140,17 +140,17 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     // 由目录 CID 派生主体。是否能发起某类提案交给 ProposalCapabilityRegistry。
     final govInfo = widget.repository.governanceInfo(inst.cidNumber) ??
         _infoFromInstitution(inst);
-    final subscribed = pubkey == null
+    final subscribed = accountId == null
         ? false
-        : await widget.repository.isSubscribed(pubkey, inst.cidNumber);
+        : await widget.repository.isSubscribed(accountId, inst.cidNumber);
     final areaPath = await widget.repository.institutionAreaPath(inst);
     if (!mounted) return;
     setState(() {
       _inst = inst;
       _govInfo = govInfo;
-      _activePubkey = pubkey;
+      _activeAccountId = accountId;
       _subscribed = subscribed;
-      _accounts = institutionAccountRows(inst);
+      _accounts = institutionAccountIdRows(inst);
       _areaPath = areaPath;
       _loading = false;
     });
@@ -160,12 +160,12 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   /// 为非治理注册机构从 Institution 派生 InstitutionInfo。
   /// CID 始终是机构主键，主/费账户只进入具体账户操作。
   InstitutionInfo _infoFromInstitution(Institution inst) {
-    final rows = institutionAccountRows(inst);
+    final rows = institutionAccountIdRows(inst);
     if (rows.length < 2) {
       throw StateError('机构账户集合缺少主账户或费用账户: ${inst.cidNumber}');
     }
-    final main = rows.first.accountHex;
-    final fee = rows[1].accountHex;
+    final main = rows.first.accountId;
+    final fee = rows[1].accountId;
     return InstitutionInfo(
       cidFullName: inst.cidFullName,
       cidShortName: inst.cidShortNameOrFullName,
@@ -173,7 +173,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       cidShortNameEn: inst.cidShortNameOrFullName,
       cidNumber: inst.cidNumber,
       orgType: inst.orgType,
-      accounts: InstitutionAccounts(mainAccount: main, feeAccount: fee),
+      accounts: InstitutionAccounts(mainAccountId: main, feeAccountId: fee),
       adminAccountCode: inst.institutionCode,
     );
   }
@@ -183,7 +183,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     if (inst == null) return;
 
     // 主账户余额(批量接口查一条)。
-    final mainHex = _accounts.isNotEmpty ? _accounts.first.accountHex : '';
+    final mainHex = _accounts.isNotEmpty ? _accounts.first.accountId : '';
     try {
       final balances = await _chainState.balances([mainHex]);
       if (mounted) {
@@ -225,11 +225,11 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       ]);
       final adminViews = results[0] as List<InstitutionAdminView>;
       final adminAccounts = adminViews
-          .map((view) => view.admin.admin_account)
+          .map((view) => view.admin.account_id)
           .toList(growable: false);
       final ctx = results[1] as ProposalContext;
       final activated = results[2] as List<ActivatedAdmin>;
-      final coldPubkeys = await _loadImportedColdPubkeys(adminAccounts);
+      final coldAccountIds = await _loadImportedColdAccountIds(adminAccounts);
       if (ctx.isAdmin) {
         ProposalContextResolver.markInstitutionAdmin(
           _inst?.cidNumber ?? govInfo.cidNumber,
@@ -244,8 +244,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         }
         _govInfo = ctx.institution ?? govInfo;
         _adminWallets = ctx.adminWallets;
-        _importedColdPubkeys = coldPubkeys;
-        _activatedPubkeys = activated.map((a) => a.pubkeyHex).toSet();
+        _importedColdAccountIds = coldAccountIds;
+        _activatedAccountIds = activated.map((a) => a.accountId).toSet();
         _isCurrentUserAdmin = ctx.isAdmin;
       });
     } catch (_) {
@@ -253,21 +253,23 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     }
   }
 
-  Future<Set<String>> _loadImportedColdPubkeys(List<String> admins) async {
-    final coldPubkeys = <String>{};
+  Future<Set<String>> _loadImportedColdAccountIds(
+    List<String> adminAccountIds,
+  ) async {
+    final coldAccountIds = <String>{};
     try {
       final allWallets = await _walletManager.getWallets();
       for (final w in allWallets) {
         if (w.isColdWallet) {
-          var pk = w.pubkeyHex.toLowerCase();
-          if (pk.startsWith('0x')) pk = pk.substring(2);
-          if (admins.contains(pk)) coldPubkeys.add(pk);
+          if (adminAccountIds.contains(w.accountId)) {
+            coldAccountIds.add(w.accountId);
+          }
         }
       }
     } on Exception {
       // 本地钱包库异常不影响展示。
     }
-    return coldPubkeys;
+    return coldAccountIds;
   }
 
   Future<void> _loadGovernanceProposals({bool force = false}) async {
@@ -320,12 +322,12 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   Future<void> _toggleSubscribe() async {
     final inst = _inst;
-    final pubkey = _activePubkey;
-    if (inst == null || pubkey == null) return;
+    final accountId = _activeAccountId;
+    if (inst == null || accountId == null) return;
     if (_subscribed) {
-      await widget.repository.unsubscribe(pubkey, inst.cidNumber);
+      await widget.repository.unsubscribe(accountId, inst.cidNumber);
     } else {
-      await widget.repository.subscribe(pubkey, inst.cidNumber);
+      await widget.repository.subscribe(accountId, inst.cidNumber);
     }
     if (!mounted) return;
     setState(() => _subscribed = !_subscribed);
@@ -342,7 +344,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
         actions: [
-          if (inst != null && _activePubkey != null)
+          if (inst != null && _activeAccountId != null)
             IconButton(
               tooltip: _subscribed ? '取消关注' : '订阅关注',
               icon: Icon(
@@ -391,7 +393,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   // ──── ① 机构信息卡(全称/身份ID/主账户/余额/法代/所属地;非法人 +所属上级法人)────
 
   Widget _infoCard(Institution inst) {
-    final mainSs58 = _accounts.isNotEmpty ? _accounts.first.addressSs58 : '—';
+    final mainSs58 = _accounts.isNotEmpty ? _accounts.first.ss58Address : '—';
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.surfaceCard,
@@ -564,8 +566,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           institution: govInfo,
           accountIdentity: identity,
           admins: _adminViews,
-          importedColdPubkeys: _importedColdPubkeys,
-          activatedPubkeys: _activatedPubkeys,
+          importedColdAccountIds: _importedColdAccountIds,
+          activatedAccountIds: _activatedAccountIds,
           badgeColor: AppTheme.primary,
           onActivated: () {
             _adminService.clearCache(identity);

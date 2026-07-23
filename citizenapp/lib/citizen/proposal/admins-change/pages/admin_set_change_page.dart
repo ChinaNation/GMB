@@ -166,7 +166,7 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
 
   Future<void> _loadBalances(List<AdminPerson> admins) async {
     final accounts = {
-      for (final admin in admins) _balanceKey(admin.admin_account),
+      for (final admin in admins) _balanceKey(admin.account_id),
     }.where((account) => account.isNotEmpty).toList(growable: false);
     if (accounts.isEmpty) {
       if (mounted) setState(() => _balanceByAccount = const {});
@@ -233,13 +233,13 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
       final newThreshold = _readNewThreshold(account);
       final validated = AdminSetValidation.validate(
         account: account,
-        proposerPubkeyHex: wallet.pubkeyHex,
+        proposerAccountId: wallet.accountId,
         admins: _admins,
         newThreshold: newThreshold,
       );
       final callData = _changeService.buildCallData(
         account: account,
-        proposerPubkeyHex: wallet.pubkeyHex,
+        proposerAccountId: wallet.accountId,
         admins: validated.admins,
         newThreshold: validated.threshold,
       );
@@ -254,7 +254,7 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
         final qrSigner = QrSigner();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'admin-change-'),
-          pubkey: '0x${wallet.pubkeyHex}',
+          signerPublicKey: wallet.accountId,
           payloadHex: '0x${AdminAccountIdCodec.hexEncode(payload)}',
           action: QrActions.chain(callData[0], callData[1]),
         );
@@ -263,23 +263,25 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
             builder: (_) => QrSignSessionPage(
               request: request,
               requestJson: qrSigner.encodeRequest(request),
-              expectedPubkey: '0x${wallet.pubkeyHex}',
+              expectedSignerPublicKey: wallet.accountId,
             ),
           ),
         );
         if (response == null) throw Exception('签名已取消');
-        return AdminAccountIdCodec.hexDecode(response.body.signatureHex);
+        return AdminAccountIdCodec.fromAccountIdText(
+            response.body.signatureHex);
       }
 
       final result = await _changeService.submit(
         account: account,
         admins: validated.admins,
         newThreshold: validated.threshold,
-        fromAddress: wallet.address,
-        signerPubkey: AdminAccountIdCodec.hexDecode(wallet.pubkeyHex),
+        fromSs58Address: wallet.ss58Address,
+        signerPublicKey:
+            AdminAccountIdCodec.fromAccountIdText(wallet.accountId),
         sign: signCallback,
       );
-      _accountService.clearPersonalAccountCache(account.personalAccountHex!);
+      _accountService.clearPersonalAccountCache(account.personalAccountId!);
       _accountService.clearCache(widget.accountIdentity);
       if (!mounted) return;
       await Navigator.of(context).push(

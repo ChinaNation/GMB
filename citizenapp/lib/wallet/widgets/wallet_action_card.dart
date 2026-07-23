@@ -52,7 +52,7 @@ class WalletActionCardState extends State<WalletActionCard> {
     try {
       final balance = await OffchainClearingBankRpc(
         binding.wssUrl,
-      ).queryBalance(widget.wallet.address);
+      ).queryBalance(widget.wallet.ss58Address);
       if (!mounted) return;
       setState(() => _balanceText = _fenToYuan(balance));
     } catch (_) {
@@ -100,7 +100,7 @@ class WalletActionCardState extends State<WalletActionCard> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => OnchainTopupPage(gmbAddress: widget.wallet.address),
+        builder: (_) => OnchainTopupPage(accountId: widget.wallet.accountId),
       ),
     );
     await refresh();

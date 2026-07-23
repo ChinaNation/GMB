@@ -17,7 +17,7 @@ pub mod weights;
 mod tests;
 
 use admin_primitives::{
-    is_private_admin_code, Admin, AdminAccountKind, InstitutionAdminLifecycle,
+    is_private_admin_code, Admin, AdminAccountKind, ChainPhaseCheck, InstitutionAdminLifecycle,
     InstitutionAdminQuery,
 };
 use codec::{Decode, Encode};
@@ -108,6 +108,9 @@ pub mod pallet {
         /// 是目标机构自己的管理员;二者不能再强制相同。本 trait 负责校验 FRG/CREG
         /// 对目标 CID 与机构码是否有登记权(省/市作用域由目标 CID 直接派生)。
         type RegistryAuthority: RegistryAuthority<Self::AccountId>;
+
+        /// 运行期强制门控(由 genesis-pallet 相位注入);仅 Operation 期强制 LR 岗四要素完整。
+        type ChainPhase: ChainPhaseCheck;
 
         #[pallet::constant]
         type MaxAdmins: Get<u32>;
@@ -1271,6 +1274,13 @@ impl<T: pallet::Config> traits::InstitutionLegalRepresentativeQuery<T::AccountId
         pallet::Institutions::<T>::get(cid_number)?
             .legal_representative
             .map(|representative| representative.account_id)
+    }
+
+    fn legal_representative_cid(cid_number: &[u8]) -> Option<Vec<u8>> {
+        let cid_number = pallet::CidNumberOf::<T>::try_from(cid_number.to_vec()).ok()?;
+        pallet::Institutions::<T>::get(cid_number)?
+            .legal_representative
+            .map(|representative| representative.cid_number.to_vec())
     }
 }
 

@@ -10,24 +10,17 @@ class InstitutionRoleStorageCodec {
   InstitutionRoleStorageCodec._();
 
   static InstitutionAdminsStorage? decodeAdmins(
-    Uint8List data, {
-    required bool isPublic,
-  }) {
+    Uint8List data,
+  ) {
     var offset = 0;
     // 机构 CID 是 `AdminAccounts` 的 storage key，不在 value 中重复保存。
-    // value 唯一布局为 institution_code:[u8;4]
-    // + admins：公权为 (admin_account, cid_number, family_name, given_name)，
-    // 私权为 (admin_account, family_name, given_name)。
+    // value 唯一布局为 institution_code:[u8;4] + admins：统一 Admin
+    // (account_id, cid_number, family_name, given_name)，公私权同构。
     if (offset + 4 > data.length) return null;
     final code = String.fromCharCodes(
         data.sublist(offset, offset + 4).where((b) => b != 0));
     offset += 4;
-    final decodedAdmins = decodeAdminVector(
-      data,
-      offset,
-      includeCitizenCid: isPublic,
-      allowEmptyNames: isPublic,
-    );
+    final decodedAdmins = decodeAdminVector(data, offset);
     if (decodedAdmins == null) return null;
     final admins = decodedAdmins.$1;
     offset = decodedAdmins.$2;
@@ -41,12 +34,16 @@ class InstitutionRoleStorageCodec {
   /// 从指定偏移严格解码统一管理员集合，并返回下一字段偏移。
   ///
   /// 机构管理员、个人多签管理员和全量管理员扫描必须共用本入口，避免
-  /// 在不同页面复制 SCALE 字段顺序。账户重复与畸形 UTF-8 均拒绝；只有公权姓名可空。
+  /// 在不同页面复制 SCALE 字段顺序。账户重复与畸形 UTF-8 均拒绝。
+  ///
+  /// 统一 `Admin` 后每条恒为 (account_id, cid_number, family_name, given_name)，
+  /// 故默认 `includeCitizenCid=true`；姓名由链端 `normalize_names` 填默认（个人多签空
+  /// cid），`allowEmptyNames=true` 只作宽松兜底，不会误拒链上数据。
   static (List<AdminPerson>, int)? decodeAdminVector(
     Uint8List data,
     int offset, {
-    bool includeCitizenCid = false,
-    bool allowEmptyNames = false,
+    bool includeCitizenCid = true,
+    bool allowEmptyNames = true,
   }) {
     final count = _readCompact(data, offset);
     if (count == null) return null;
@@ -55,7 +52,7 @@ class InstitutionRoleStorageCodec {
     final accounts = <String>{};
     for (var i = 0; i < count.$1; i++) {
       if (offset + 32 > data.length) return null;
-      final accountHex = _hex(data.sublist(offset, offset + 32));
+      final accountId = '0x${_hex(data.sublist(offset, offset + 32))}';
       offset += 32;
       var citizenCid = (<int>[], offset);
       if (includeCitizenCid) {
@@ -82,12 +79,12 @@ class InstitutionRoleStorageCodec {
       offset = givenName.$2;
       try {
         final admin = AdminPerson(
-          admin_account: accountHex,
+          account_id: accountId,
           cid_number: utf8.decode(citizenCid.$1),
           family_name: utf8.decode(familyName.$1),
           given_name: utf8.decode(givenName.$1),
         );
-        if (!accounts.add(admin.admin_account)) return null;
+        if (!accounts.add(admin.account_id)) return null;
         admins.add(admin);
       } on FormatException {
         return null;
@@ -161,7 +158,7 @@ class InstitutionRoleStorageCodec {
       try {
         out.add(InstitutionAdminAssignment(
           cidNumber: utf8.decode(cid.$1),
-          admin_account: account,
+          account_id: account,
           roleCode: utf8.decode(code.$1),
           termStart: termStart,
           termEnd: termEnd,
@@ -245,9 +242,9 @@ class InstitutionRoleStorageCodec {
   static VotePlan? decodeVotePlan(Uint8List data) {
     final action = _decodeBusinessActionIdAt(data, 0);
     if (action == null) return null;
-    final owner = _readUtf8(data, action.$2, minLength: 1, maxLength: 32);
-    if (owner == null || owner.$1 != action.$1.moduleTag) return null;
-    final proposer = _decodeAuthorizationSubjectAt(data, owner.$2);
+    final accountId = _readUtf8(data, action.$2, minLength: 1, maxLength: 32);
+    if (accountId == null || accountId.$1 != action.$1.moduleTag) return null;
+    final proposer = _decodeAuthorizationSubjectAt(data, accountId.$2);
     if (proposer == null) return null;
     final count = _readCompact(data, proposer.$2);
     if (count == null || count.$1 < 1 || count.$1 > 256) return null;
@@ -260,7 +257,7 @@ class InstitutionRoleStorageCodec {
       offset = voter.$2;
       final key = voter.$1.isInstitution
           ? 'i:${voter.$1.roleSubject!.cidNumber}:${voter.$1.roleSubject!.roleCode}'
-          : 'p:${voter.$1.personalAccountHex}';
+          : 'p:${voter.$1.personalAccountId}';
       if (!voterKeys.add(key)) return null;
       voters.add(voter.$1);
     }
@@ -275,13 +272,13 @@ class InstitutionRoleStorageCodec {
     } else {
       if (voters.length != 1 ||
           voters.single.isInstitution ||
-          voters.single.personalAccountHex != proposer.$1.personalAccountHex) {
+          voters.single.personalAccountId != proposer.$1.personalAccountId) {
         return null;
       }
     }
     return VotePlan(
       businessActionId: action.$1,
-      proposalOwner: owner.$1,
+      proposalOwner: accountId.$1,
       proposerSubject: proposer.$1,
       voterSubjects: List.unmodifiable(voters),
       votingEngine: VotingEngineKind.values[engine],

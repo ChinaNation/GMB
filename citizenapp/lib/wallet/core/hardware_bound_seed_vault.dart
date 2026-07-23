@@ -55,7 +55,8 @@ class HardwareBoundSeedVault implements SecureSeedStore {
   final MethodChannel _channel;
   final VaultBlobStore _blobStore;
 
-  static String _seedBlobKey(int walletIndex) => 'wallet_seed_env_v1_$walletIndex';
+  static String _seedBlobKey(int walletIndex) =>
+      'wallet_seed_env_v1_$walletIndex';
   static String _recoveryBlobKey(int walletIndex) =>
       'wallet_recovery_env_v1_$walletIndex';
 
@@ -65,7 +66,9 @@ class HardwareBoundSeedVault implements SecureSeedStore {
       final res = await _channel.invokeMapMethod<String, dynamic>('authStatus');
       // 方案 A：创建热钱包要求已录入强生物识别（严档 seed 是纯生物档）。
       final biometric = res?['strongBiometricEnrolled'] == true;
-      return biometric ? SecureAuthStatus.available : SecureAuthStatus.noDeviceLock;
+      return biometric
+          ? SecureAuthStatus.available
+          : SecureAuthStatus.noDeviceLock;
     } on PlatformException {
       return SecureAuthStatus.unsupported;
     } on MissingPluginException {
@@ -80,6 +83,16 @@ class HardwareBoundSeedVault implements SecureSeedStore {
   @override
   Future<String?> readSeed(int walletIndex) =>
       _read(_tierStrict, _seedBlobKey(walletIndex), walletIndex);
+
+  /// 只读密文 blob 判存在，**不调 `decrypt`**——因此不触发生物识别。
+  @override
+  Future<bool> hasSeed(int walletIndex) async {
+    try {
+      return await _blobStore.read(_seedBlobKey(walletIndex)) != null;
+    } on PlatformException catch (e) {
+      throw SecureStoreUnavailable(e.message ?? e.code);
+    }
+  }
 
   @override
   Future<void> deleteSeed(int walletIndex) =>
@@ -105,7 +118,8 @@ class HardwareBoundSeedVault implements SecureSeedStore {
   ) async {
     final String blob;
     try {
-      final result = await _channel.invokeMethod<String>('encrypt', <String, dynamic>{
+      final result =
+          await _channel.invokeMethod<String>('encrypt', <String, dynamic>{
         'tier': tier,
         'walletIndex': walletIndex,
         'plaintext': plaintext,

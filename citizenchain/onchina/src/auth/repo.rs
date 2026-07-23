@@ -18,12 +18,12 @@ fn admin_from_row(row: &postgres::Row) -> Result<AdminUser, String> {
     let id: i64 = row.get(0);
     Ok(AdminUser {
         id: u64::try_from(id).unwrap_or(0),
-        admin_account: row.get(1),
+        account_id: row.get(1),
         family_name: row.get(2),
         given_name: row.get(3),
         institution_code: row.get(4),
         built_in: row.get(5),
-        created_by: row.get(6),
+        creator_account_id: row.get(6),
         created_at: row.get(7),
         updated_at: row.get(8),
         city_name: row.get(9),
@@ -37,13 +37,13 @@ fn binding_from_row(row: &postgres::Row) -> Result<NodeInstitutionBinding, Strin
         institution_code: row.get(2),
         institution_cid_number: row.get(3),
         frg_province_code: row.get(4),
-        bound_admin_pubkey: row.get(5),
+        bound_account_id: row.get(5),
         bound_at: row.get(6),
         status: row.get(7),
     })
 }
 
-// Tier1 创世注册局管理员「全走链读」：管理员钱包来自 FRG AdminAccounts，
+// Tier1 创世注册局管理员「全走链读」：管理员账户 ID 来自 FRG AdminAccounts，
 // 省维度只来自 InstitutionRoleAssignments；本地不得建立权限缓存。
 
 pub(crate) fn get_admin_by_id_and_registry_org_conn(
@@ -54,7 +54,7 @@ pub(crate) fn get_admin_by_id_and_registry_org_conn(
     let id = id as i64;
     let row = conn
         .query_opt(
-            "SELECT admin_id, admin_account, family_name, given_name, institution_code, built_in, created_by, created_at, updated_at, city_name
+            "SELECT admin_id, account_id, family_name, given_name, institution_code, built_in, creator_account_id, created_at, updated_at, city_name
              FROM admins
              WHERE admin_id = $1 AND institution_code = $2",
             &[&id, &institution_code],
@@ -85,7 +85,7 @@ pub(crate) fn list_city_registry_admins_by_scope_conn(
             .map_err(|e| format!("count city registry admins by city failed: {e}"))?;
         let rows = conn
             .query(
-                "SELECT admin_id, admin_account, family_name, given_name, institution_code, built_in, created_by, created_at, updated_at, city_name
+                "SELECT admin_id, account_id, family_name, given_name, institution_code, built_in, creator_account_id, created_at, updated_at, city_name
                  FROM admins
                  WHERE institution_code = $1 AND city_name = $2
                  ORDER BY admin_id DESC
@@ -103,7 +103,7 @@ pub(crate) fn list_city_registry_admins_by_scope_conn(
             .map_err(|e| format!("count city registry admins failed: {e}"))?;
         let rows = conn
             .query(
-                "SELECT admin_id, admin_account, family_name, given_name, institution_code, built_in, created_by, created_at, updated_at, city_name
+                "SELECT admin_id, account_id, family_name, given_name, institution_code, built_in, creator_account_id, created_at, updated_at, city_name
                  FROM admins
                  WHERE institution_code = $1
                  ORDER BY admin_id DESC
@@ -137,40 +137,27 @@ pub(crate) fn count_city_registry_admins_by_city_conn(
     Ok(usize::try_from(count).unwrap_or(0))
 }
 
-pub(crate) fn get_admin_by_account(
+pub(crate) fn get_admin_by_account_id(
     db: &Db,
-    admin_account: &str,
+    account_id: &str,
 ) -> Result<Option<AdminUser>, String> {
-    let admin_account = admin_account.trim().to_string();
-    db.with_client(move |conn| get_admin_by_account_conn(conn, admin_account.as_str()))
+    let account_id = account_id.trim().to_string();
+    db.with_client(move |conn| get_admin_by_account_id_conn(conn, account_id.as_str()))
 }
 
-pub(crate) fn get_admin_by_account_conn(
+pub(crate) fn get_admin_by_account_id_conn(
     conn: &mut Client,
-    admin_account: &str,
+    account_id: &str,
 ) -> Result<Option<AdminUser>, String> {
     let row = conn
         .query_opt(
-            "SELECT admin_id, admin_account, family_name, given_name, institution_code, built_in, created_by, created_at, updated_at, city_name
+            "SELECT admin_id, account_id, family_name, given_name, institution_code, built_in, creator_account_id, created_at, updated_at, city_name
              FROM admins
-             WHERE lower(admin_account) = lower($1)",
-            &[&admin_account],
+             WHERE account_id = $1",
+            &[&account_id],
         )
         .map_err(|e| format!("query admin by account failed: {e}"))?;
     row.as_ref().map(admin_from_row).transpose()
-}
-
-pub(crate) fn resolve_admin_account_key_conn(
-    conn: &mut Client,
-    candidate: &str,
-) -> Result<Option<String>, String> {
-    let row = conn
-        .query_opt(
-            "SELECT admin_account FROM admins WHERE lower(admin_account) = lower($1)",
-            &[&candidate],
-        )
-        .map_err(|e| format!("query admin_account key failed: {e}"))?;
-    Ok(row.map(|r| r.get(0)))
 }
 
 /// 派生管理员的省/市/镇作用域。登录签发与会话重建共用此唯一入口：
@@ -178,10 +165,10 @@ pub(crate) fn resolve_admin_account_key_conn(
 /// 其它机构按绑定 CID 的机构行政区投影解析。绑定缺失或机构不一致一律失败关闭。
 pub(crate) fn derive_admin_scope_conn(
     conn: &mut Client,
-    admin_account: &str,
+    account_id: &str,
     institution_code: &str,
 ) -> Result<(Option<String>, Option<String>, Option<String>), String> {
-    let Some(admin) = get_admin_by_account_conn(conn, admin_account)? else {
+    let Some(admin) = get_admin_by_account_id_conn(conn, account_id)? else {
         return Err("admin not found while deriving authorization scope".to_string());
     };
     if admin.institution_code != institution_code {
@@ -438,7 +425,7 @@ pub(crate) fn get_active_node_binding_conn(
     let row = conn
         .query_opt(
             "SELECT binding_id, candidate_id, institution_code, institution_cid_number,
-                    frg_province_code, bound_admin_pubkey, bound_at, status
+                    frg_province_code, bound_account_id, bound_at, status
              FROM node_institution_bindings
              WHERE status = 'ACTIVE'
              ORDER BY bound_at DESC
@@ -477,7 +464,7 @@ pub(crate) fn upsert_active_node_binding_conn(
     conn.execute(
         "INSERT INTO node_institution_bindings (
             binding_id, candidate_id, institution_code, institution_cid_number,
-            frg_province_code, bound_admin_pubkey, bound_at, status
+            frg_province_code, bound_account_id, bound_at, status
          )
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
         &[
@@ -486,7 +473,7 @@ pub(crate) fn upsert_active_node_binding_conn(
             &binding.institution_code,
             &binding.institution_cid_number,
             &binding.frg_province_code,
-            &binding.bound_admin_pubkey,
+            &binding.bound_account_id,
             &binding.bound_at,
             &binding.status,
         ],
@@ -520,17 +507,17 @@ pub(crate) fn insert_node_binding_challenge_conn(
         .map_err(|e| format!("encode node binding challenge failed: {e}"))?;
     conn.execute(
         "INSERT INTO node_binding_challenges(
-            binding_challenge_id, admin_account, expires_at, consumed, payload
+            binding_challenge_id, account_id, expires_at, consumed, payload
          )
          VALUES ($1,$2,$3,$4,$5)
          ON CONFLICT (binding_challenge_id) DO UPDATE SET
-            admin_account = EXCLUDED.admin_account,
+            account_id = EXCLUDED.account_id,
             expires_at = EXCLUDED.expires_at,
             consumed = EXCLUDED.consumed,
             payload = EXCLUDED.payload",
         &[
             &challenge.binding_challenge_id,
-            &challenge.admin_account,
+            &challenge.account_id,
             &challenge.expire_at,
             &challenge.consumed,
             &payload,
@@ -596,30 +583,30 @@ pub(crate) fn next_admin_id_conn(conn: &mut Client) -> Result<u64, String> {
     Ok(u64::try_from(id).unwrap_or(1))
 }
 
-/// 写入 / 更新本地管理员缓存行(`admin_account` 为冲突键,幂等)。
+/// 写入 / 更新本地管理员缓存行(`account_id` 为冲突键,幂等)。
 ///
 /// 管理员成员资格与节点机构归属以链上 active 集合 + 本节点 active binding 为准。
 /// 本函数只维护 `admins` 登录元数据缓存本身。
 pub(crate) fn upsert_admin_conn(conn: &mut Client, admin: &AdminUser) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO admins(admin_id, admin_account, family_name, given_name, institution_code, built_in, created_by, created_at, updated_at, city_name)
+        "INSERT INTO admins(admin_id, account_id, family_name, given_name, institution_code, built_in, creator_account_id, created_at, updated_at, city_name)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT (admin_account) DO UPDATE SET
+         ON CONFLICT (account_id) DO UPDATE SET
             family_name = EXCLUDED.family_name,
             given_name = EXCLUDED.given_name,
             institution_code = EXCLUDED.institution_code,
             built_in = EXCLUDED.built_in,
-            created_by = EXCLUDED.created_by,
+            creator_account_id = EXCLUDED.creator_account_id,
             updated_at = EXCLUDED.updated_at,
             city_name = EXCLUDED.city_name",
         &[
             &(admin.id as i64),
-            &admin.admin_account,
+            &admin.account_id,
             &admin.family_name,
             &admin.given_name,
             &admin.institution_code,
             &admin.built_in,
-            &admin.created_by,
+            &admin.creator_account_id,
             &admin.created_at,
             &admin.updated_at,
             &admin.city_name,
@@ -631,21 +618,21 @@ pub(crate) fn upsert_admin_conn(conn: &mut Client, admin: &AdminUser) -> Result<
 
 pub(crate) fn delete_admin_runtime_state_conn(
     conn: &mut Client,
-    admin_account: &str,
+    account_id: &str,
 ) -> Result<(), String> {
     conn.execute(
-        "DELETE FROM admin_sessions WHERE lower(admin_account) = lower($1)",
-        &[&admin_account],
+        "DELETE FROM admin_sessions WHERE account_id = $1",
+        &[&account_id],
     )
     .map_err(|e| format!("delete admin sessions failed: {e}"))?;
     conn.execute(
-        "DELETE FROM admin_action_challenges WHERE lower(actor_account) = lower($1)",
-        &[&admin_account],
+        "DELETE FROM admin_action_challenges WHERE actor_account_id = $1",
+        &[&account_id],
     )
     .map_err(|e| format!("delete admin action challenges failed: {e}"))?;
     conn.execute(
-        "DELETE FROM admin_security_grants WHERE lower(actor_account) = lower($1)",
-        &[&admin_account],
+        "DELETE FROM admin_security_grants WHERE actor_account_id = $1",
+        &[&account_id],
     )
     .map_err(|e| format!("delete admin security grants failed: {e}"))?;
     Ok(())
@@ -686,18 +673,18 @@ pub(crate) fn insert_action_challenge(
     })
 }
 
-/// 按 action_id 取挑战,同时以 actor_account 做先验隔离——只能读自己发起的挑战。
+/// 按 action_id 取挑战,同时以 actor_account_id 做先验隔离——只能读自己发起的挑战。
 /// 非本人 action_id 直接当作不存在(返回 None),不在 DB 层暴露他人挑战。
 pub(crate) fn get_action_challenge_conn(
     conn: &mut Client,
     action_id: &str,
-    actor_account: &str,
+    actor_account_id: &str,
 ) -> Result<Option<AdminActionChallenge>, String> {
     let row = conn
         .query_opt(
             "SELECT payload FROM admin_action_challenges
-             WHERE action_id = $1 AND lower(actor_account) = lower($2)",
-            &[&action_id, &actor_account],
+             WHERE action_id = $1 AND actor_account_id = $2",
+            &[&action_id, &actor_account_id],
         )
         .map_err(|e| format!("query action challenge failed: {e}"))?;
     row.map(|r| serde_json::from_value::<AdminActionChallenge>(r.get(0)))
@@ -712,17 +699,17 @@ pub(crate) fn upsert_action_challenge_conn(
     let payload = serde_json::to_value(challenge)
         .map_err(|e| format!("encode action challenge failed: {e}"))?;
     conn.execute(
-        "INSERT INTO admin_action_challenges(action_id, actor_account, action_type, expires_at, consumed, payload)
+        "INSERT INTO admin_action_challenges(action_id, actor_account_id, action_type, expires_at, consumed, payload)
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (action_id) DO UPDATE SET
-            actor_account = EXCLUDED.actor_account,
+            actor_account_id = EXCLUDED.actor_account_id,
             action_type = EXCLUDED.action_type,
             expires_at = EXCLUDED.expires_at,
             consumed = EXCLUDED.consumed,
             payload = EXCLUDED.payload",
         &[
             &challenge.action_id,
-            &challenge.actor_account,
+            &challenge.actor_account_id,
             &challenge.action_type,
             &challenge.expires_at,
             &challenge.consumed,
@@ -740,17 +727,17 @@ pub(crate) fn insert_security_grant_conn(
     let payload =
         serde_json::to_value(grant).map_err(|e| format!("encode security grant failed: {e}"))?;
     conn.execute(
-        "INSERT INTO admin_security_grants(grant_id, actor_account, action_type, expires_at, consumed, payload)
+        "INSERT INTO admin_security_grants(grant_id, actor_account_id, action_type, expires_at, consumed, payload)
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (grant_id) DO UPDATE SET
-            actor_account = EXCLUDED.actor_account,
+            actor_account_id = EXCLUDED.actor_account_id,
             action_type = EXCLUDED.action_type,
             expires_at = EXCLUDED.expires_at,
             consumed = EXCLUDED.consumed,
             payload = EXCLUDED.payload",
         &[
             &grant.grant_id,
-            &grant.actor_account,
+            &grant.actor_account_id,
             &grant.action_type,
             &grant.expires_at,
             &grant.consumed,
@@ -761,18 +748,18 @@ pub(crate) fn insert_security_grant_conn(
     Ok(())
 }
 
-/// 按 grant_id 取冷签授权,同时以 actor_account 做先验隔离——只能读自己持有的授权。
+/// 按 grant_id 取冷签授权,同时以 actor_account_id 做先验隔离——只能读自己持有的授权。
 /// 非本人 grant_id 直接当作不存在(返回 None),不在 DB 层暴露他人授权。
 pub(crate) fn get_security_grant_conn(
     conn: &mut Client,
     grant_id: &str,
-    actor_account: &str,
+    actor_account_id: &str,
 ) -> Result<Option<AdminSecurityGrant>, String> {
     let row = conn
         .query_opt(
             "SELECT payload FROM admin_security_grants
-             WHERE grant_id = $1 AND lower(actor_account) = lower($2)",
-            &[&grant_id, &actor_account],
+             WHERE grant_id = $1 AND actor_account_id = $2",
+            &[&grant_id, &actor_account_id],
         )
         .map_err(|e| format!("query security grant failed: {e}"))?;
     row.map(|r| serde_json::from_value::<AdminSecurityGrant>(r.get(0)))
@@ -837,18 +824,18 @@ pub(crate) fn insert_login_sign_request(
         let payload = serde_json::to_value(&challenge)
             .map_err(|e| format!("encode login sign request failed: {e}"))?;
         conn.execute(
-            "INSERT INTO admin_login_sign_requests(challenge_id, session_id, admin_account, expires_at, consumed, payload)
+            "INSERT INTO admin_login_sign_requests(challenge_id, session_id, account_id, expires_at, consumed, payload)
              VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT (challenge_id) DO UPDATE SET
                 session_id = EXCLUDED.session_id,
-                admin_account = EXCLUDED.admin_account,
+                account_id = EXCLUDED.account_id,
                 expires_at = EXCLUDED.expires_at,
                 consumed = EXCLUDED.consumed,
                 payload = EXCLUDED.payload",
             &[
                 &challenge.challenge_id,
                 &challenge.session_id,
-                &challenge.admin_account,
+                &challenge.account_id,
                 &challenge.expire_at,
                 &challenge.consumed,
                 &payload,
@@ -887,11 +874,11 @@ pub(crate) fn update_login_sign_request_conn(
         .map_err(|e| format!("encode login sign request failed: {e}"))?;
     conn.execute(
         "UPDATE admin_login_sign_requests
-         SET admin_account = $2, expires_at = $3, consumed = $4, payload = $5
+         SET account_id = $2, expires_at = $3, consumed = $4, payload = $5
          WHERE challenge_id = $1",
         &[
             &challenge.challenge_id,
-            &challenge.admin_account,
+            &challenge.account_id,
             &challenge.expire_at,
             &challenge.consumed,
             &payload,
@@ -913,10 +900,10 @@ pub(crate) fn insert_admin_session_conn(
     let payload =
         serde_json::to_value(session).map_err(|e| format!("encode admin session failed: {e}"))?;
     conn.execute(
-        "INSERT INTO admin_sessions(token, admin_account, institution_code, candidate_id, expires_at, last_active_at, payload)
+        "INSERT INTO admin_sessions(token, account_id, institution_code, candidate_id, expires_at, last_active_at, payload)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (token) DO UPDATE SET
-            admin_account = EXCLUDED.admin_account,
+            account_id = EXCLUDED.account_id,
             institution_code = EXCLUDED.institution_code,
             candidate_id = EXCLUDED.candidate_id,
             expires_at = EXCLUDED.expires_at,
@@ -924,7 +911,7 @@ pub(crate) fn insert_admin_session_conn(
             payload = EXCLUDED.payload",
         &[
             &session.token,
-            &session.admin_account,
+            &session.account_id,
             &session.institution_code,
             &session.candidate_id,
             &session.expire_at,
@@ -985,13 +972,13 @@ pub(crate) fn cleanup_admin_sessions_conn(
 }
 
 /// 列出某机构当前有会话的去重管理员账户(链上集合复查用)。
-pub(crate) fn list_session_admin_accounts_conn(
+pub(crate) fn list_session_admin_account_ids_conn(
     conn: &mut Client,
     institution_code: &str,
 ) -> Result<Vec<String>, String> {
     let rows = conn
         .query(
-            "SELECT DISTINCT admin_account FROM admin_sessions WHERE institution_code = $1",
+            "SELECT DISTINCT account_id FROM admin_sessions WHERE institution_code = $1",
             &[&institution_code],
         )
         .map_err(|e| format!("list session admin accounts failed: {e}"))?;
@@ -999,13 +986,13 @@ pub(crate) fn list_session_admin_accounts_conn(
 }
 
 /// 清退某管理员账户的全部会话,返回删除行数(链上移除后即时失效用)。
-pub(crate) fn delete_admin_sessions_for_account_conn(
+pub(crate) fn delete_admin_sessions_for_account_id_conn(
     conn: &mut Client,
-    admin_account: &str,
+    account_id: &str,
 ) -> Result<u64, String> {
     conn.execute(
-        "DELETE FROM admin_sessions WHERE lower(admin_account) = lower($1)",
-        &[&admin_account],
+        "DELETE FROM admin_sessions WHERE account_id = $1",
+        &[&account_id],
     )
     .map_err(|e| format!("delete admin sessions for account failed: {e}"))
 }

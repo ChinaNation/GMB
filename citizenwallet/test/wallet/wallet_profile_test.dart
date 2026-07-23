@@ -10,8 +10,8 @@ void main() {
       return WalletProfile(
         walletIndex: 1,
         walletName: '测试钱包',
-        address: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
-        pubkeyHex: 'aabbccdd' * 8,
+        accountId: '0x${'aabbccdd' * 8}',
+        ss58Address: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
         alg: 'sr25519',
         ss58Prefix: 2027,
         createdAtMillis: 1000000,

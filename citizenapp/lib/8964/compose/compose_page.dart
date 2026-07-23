@@ -99,20 +99,20 @@ class _SquareComposePageState extends State<SquareComposePage> {
 
   /// 快照当前内容存草稿；空内容不存（已存过则删除）。
   Future<void> _saveDraft() async {
-    final owner = _identity?.ownerAccount;
-    if (owner == null || owner.isEmpty) return;
+    final accountId = _identity?.accountId;
+    if (accountId == null || accountId.isEmpty) return;
     final snapshot = _activeBody?.snapshot();
     if (snapshot == null) return;
     if (snapshot.isEmpty) {
       if (_draftSaved) {
-        await _draftStore.delete(owner, _draftId);
+        await _draftStore.delete(accountId, _draftId);
         _draftSaved = false;
       }
       return;
     }
     await _draftStore.save(SquareComposeDraft(
       draftId: _draftId,
-      ownerAccount: owner,
+      accountId: accountId,
       contentFormat: _type.contentFormat,
       postCategory: _type.category,
       title: snapshot.title,
@@ -132,9 +132,9 @@ class _SquareComposePageState extends State<SquareComposePage> {
   }
 
   Future<void> _deleteCurrentDraft() async {
-    final owner = _identity?.ownerAccount;
-    if (owner == null || !_draftSaved) return;
-    await _draftStore.delete(owner, _draftId);
+    final accountId = _identity?.accountId;
+    if (accountId == null || !_draftSaved) return;
+    await _draftStore.delete(accountId, _draftId);
     _draftSaved = false;
   }
 
@@ -146,10 +146,11 @@ class _SquareComposePageState extends State<SquareComposePage> {
           future: _identityFuture,
           builder: (context, snapshot) {
             final identity =
-                snapshot.data ?? const SquareIdentityState(ownerAccount: '');
+                snapshot.data ?? const SquareIdentityState(accountId: '');
             final canCampaign = identity.isCandidate;
             // 无竞选身份时把竞选类降级，避免非竞选身份用户停留在竞选档。
-            final effectiveType = _type.degradedIfNotCampaignEligible(canCampaign);
+            final effectiveType =
+                _type.degradedIfNotCampaignEligible(canCampaign);
             if (effectiveType != _type) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted) setState(() => _type = effectiveType);
@@ -206,15 +207,15 @@ class _SquareComposePageState extends State<SquareComposePage> {
   }
 
   Future<void> _openDrafts() async {
-    final owner = _identity?.ownerAccount;
-    if (owner == null || owner.isEmpty) return;
+    final accountId = _identity?.accountId;
+    if (accountId == null || accountId.isEmpty) return;
     // 先把当前内容落盘，避免进草稿箱丢失。
     _autosaveTimer?.cancel();
     await _saveDraft();
     if (!mounted) return;
     final selected = await Navigator.of(context).push<SquareComposeDraft>(
       MaterialPageRoute<SquareComposeDraft>(
-        builder: (_) => DraftsPage(ownerAccount: owner, store: _draftStore),
+        builder: (_) => DraftsPage(accountId: accountId, store: _draftStore),
       ),
     );
     if (selected == null || !mounted) return;
@@ -323,15 +324,15 @@ class _TopBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(8, 6, 12, 6),
       child: Row(
         children: [
-          TextButton(onPressed: publishing ? null : onCancel, child: const Text('取消')),
+          TextButton(
+              onPressed: publishing ? null : onCancel, child: const Text('取消')),
           const Spacer(),
-          TextButton(onPressed: publishing ? null : onDrafts, child: const Text('草稿')),
+          TextButton(
+              onPressed: publishing ? null : onDrafts, child: const Text('草稿')),
           const SizedBox(width: 4),
           FilledButton(
             onPressed: onPublish,
-            child: publishing
-                ? Text(stageLabel)
-                : const Text('发布'),
+            child: publishing ? Text(stageLabel) : const Text('发布'),
           ),
         ],
       ),

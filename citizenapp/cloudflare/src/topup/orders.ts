@@ -1,7 +1,7 @@
 import type { Env } from '../types';
 import { HttpError, jsonResponse } from '../shared/http';
 import { readJson } from '../shared/http';
-import { createId, assertOwnerAccount } from '../shared/ids';
+import { createId, assertAccountId as requireCanonicalAccountId } from '../shared/ids';
 import { nowMs } from '../shared/time';
 import {
   findPackage,
@@ -32,7 +32,7 @@ export interface TopupOrderRow {
   payer_address: string | null;
   recv_address: string;
   pay_amount: string;
-  gmb_address: string;
+  account_id: string;
   coin_fen: string;
   package_id: string;
   status: TopupOrderStatus;
@@ -50,7 +50,7 @@ export function statusLabel(status: TopupOrderStatus): string {
 interface SubmitBody {
   token?: unknown;
   package_id?: unknown;
-  gmb_address?: unknown;
+  account_id?: unknown;
   evm_tx_hash?: unknown;
   payer_address?: unknown;
 }
@@ -91,7 +91,7 @@ export async function topupSubmitRoute(request: Request, env: Env): Promise<Resp
   if (!pkg) {
     throw new HttpError(400, 'topup_package_invalid', '充值套餐不存在');
   }
-  const gmbAddress = assertGmbAddress(body.gmb_address);
+  const accountId = requireTopupAccountId(body.account_id);
   const txHash = typeof body.evm_tx_hash === 'string' ? body.evm_tx_hash.trim().toLowerCase() : '';
   if (!isEvmTxHash(txHash)) {
     throw new HttpError(400, 'topup_txhash_invalid', 'EVM 交易哈希不合法');
@@ -103,7 +103,7 @@ export async function topupSubmitRoute(request: Request, env: Env): Promise<Resp
   // 幂等前置:同链同 txHash 已入账 → 直接回状态(校验收款人一致,防冒领他人付款)。
   const existing = await findOrderByTx(env, rail.chain_id, txHash);
   if (existing) {
-    if (existing.gmb_address !== gmbAddress) {
+    if (existing.account_id !== accountId) {
       throw new HttpError(409, 'topup_txhash_claimed', '该链上付款已绑定其它钱包');
     }
     return jsonResponse({ ok: true, status: existing.status, status_label: statusLabel(existing.status), order_id: existing.order_id });
@@ -130,7 +130,7 @@ export async function topupSubmitRoute(request: Request, env: Env): Promise<Resp
   const inserted = await env.DB.prepare(
     `INSERT OR IGNORE INTO topup_orders
       (order_id, chain_id, token, token_contract, evm_tx_hash, payer_address, recv_address,
-       pay_amount, gmb_address, coin_fen, package_id, status, confirmed_at)
+       pay_amount, account_id, coin_fen, package_id, status, confirmed_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`
   )
     .bind(
@@ -142,7 +142,7 @@ export async function topupSubmitRoute(request: Request, env: Env): Promise<Resp
       outcome.payer,
       topupRecvAddress(env),
       pkg.pay_amount,
-      gmbAddress,
+      accountId,
       pkg.coin_fen,
       pkg.package_id,
       nowMs(),
@@ -201,11 +201,11 @@ export async function findOrderById(env: Env, orderId: string): Promise<TopupOrd
     .first<TopupOrderRow>();
 }
 
-function assertGmbAddress(value: unknown): string {
+function requireTopupAccountId(value: unknown): string {
   try {
-    return assertOwnerAccount(value);
+    return requireCanonicalAccountId(value);
   } catch {
-    throw new HttpError(400, 'topup_gmb_address_invalid', '公民链钱包地址不合法');
+    throw new HttpError(400, 'topup_account_id_invalid', '公民链账户 ID 不合法');
   }
 }
 

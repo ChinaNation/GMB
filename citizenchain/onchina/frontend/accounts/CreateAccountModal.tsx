@@ -1,7 +1,7 @@
 // 新建账户弹窗。
 //
 // 新增机构自定义账户 = 发起本机构「新增账户」内部投票提案:
-//   - 提交后不立即上链,而是由发起管理员钱包冷签一笔普通 extrinsic,
+//   - 提交后不立即上链,而是由发起管理员使用签名钱包冷签一笔普通 extrinsic,
 //     机构内部投票通过后账户才在链上生效
 //   - 授权由 runtime 在 origin 处以 is_institution_admin + 岗位码(proposer_role_code)校验
 //   - 链上派生公式由链端按 account_name 路由,前端不做地址预览(避免与链端公式漂移)
@@ -76,7 +76,7 @@ export const CreateAccountModal: React.FC<Props> = ({
     try {
       const prepared = await createAccount(auth, cidNumber, name, roleCode);
       const signed = await signChain(prepared.request_id, prepared.sign_request);
-      await submitChainSign(auth, prepared.request_id, signed.signer_pubkey, signed.signature);
+      await submitChainSign(auth, prepared.request_id, signed.signer_public_key, signed.signature);
       notice.success('新增账户提案已提交,机构内部投票通过后生效');
       onCreated();
     } catch (err) {

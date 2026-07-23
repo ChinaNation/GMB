@@ -19,7 +19,7 @@ class _FakeSessionProvider extends SquareSessionProvider {
   @override
   Future<SquareSession?> ensureSession() async => SquareSession(
         sessionToken: 'tok',
-        ownerAccount: _owner,
+        accountId: _owner,
         expiresAt: DateTime.now().millisecondsSinceEpoch + 600000,
       );
 }
@@ -61,7 +61,7 @@ class _RecordingSubscriptionService extends SubscriptionService {
 
   @override
   Future<FinalizedSubscriptionSnapshot> fetchFinalizedState(
-      String ownerAccount) async {
+      String accountId) async {
     final source = mirror!;
     final status = source.subscriptionStatus ??
         (source.subscriptionActive ? 'active' : null);
@@ -174,7 +174,7 @@ void main() {
     );
     final session = SquareSession(
       sessionToken: 'tok',
-      ownerAccount: _owner,
+      accountId: _owner,
       expiresAt: 9999999999999,
       signRequest: (_) async {
         deviceSignCount++;

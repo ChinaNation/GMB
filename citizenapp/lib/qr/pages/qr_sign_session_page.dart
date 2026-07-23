@@ -19,7 +19,7 @@ class QrSignSessionPage extends StatefulWidget {
     super.key,
     required this.request,
     required this.requestJson,
-    required this.expectedPubkey,
+    required this.expectedSignerPublicKey,
   });
 
   /// 已构建的签名请求 envelope。
@@ -27,7 +27,7 @@ class QrSignSessionPage extends StatefulWidget {
 
   /// 编码后的 JSON 字符串,直接用于二维码展示。
   final String requestJson;
-  final String expectedPubkey;
+  final String expectedSignerPublicKey;
 
   @override
   State<QrSignSessionPage> createState() => _QrSignSessionPageState();
@@ -73,7 +73,7 @@ class _QrSignSessionPageState extends State<QrSignSessionPage> {
       final response = QrSigner().parseResponse(
         raw,
         expectedRequestId: widget.request.id!,
-        expectedPubkey: widget.expectedPubkey,
+        expectedSignerPublicKey: widget.expectedSignerPublicKey,
         expectedPayloadHash: expectedHash,
         expectedPayloadHex: widget.request.body.payloadHex,
         expectedAction: widget.request.body.action,

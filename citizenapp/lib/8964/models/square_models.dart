@@ -69,7 +69,7 @@ enum SquarePublishStage {
 
 class SquareAuthor {
   const SquareAuthor({
-    required this.ownerAccount,
+    required this.accountId,
     this.cidNumber,
     this.displayName,
     this.avatarObjectKey,
@@ -78,7 +78,7 @@ class SquareAuthor {
     this.membershipActive = false,
   });
 
-  final String ownerAccount;
+  final String accountId;
   final String? cidNumber;
   final String? displayName;
 
@@ -102,7 +102,7 @@ class SquareAuthor {
   }
 
   String get title {
-    return ProfilePresentation.forAccount(ownerAccount).resolveDisplayName(
+    return ProfilePresentation.forAccount(accountId).resolveDisplayName(
       publicName: displayName,
     );
   }

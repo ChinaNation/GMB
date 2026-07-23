@@ -84,8 +84,8 @@ void main() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (MethodCall call) async {
         calls.add(call);
-        final args =
-            (call.arguments as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+        final args = (call.arguments as Map?)?.cast<String, dynamic>() ??
+            <String, dynamic>{};
         switch (call.method) {
           case 'authStatus':
             return <String, dynamic>{

@@ -40,7 +40,7 @@ export interface CreatorTierInput {
 }
 
 interface CreatorPlanRow {
-  creator_account: string;
+  creator_account_id: string;
   tier_id: string;
   name: string;
   tier_order: number;
@@ -55,7 +55,7 @@ interface CreatorConfirmBody {
   block_hash?: unknown;
   signed_extrinsic_hex?: unknown;
   action?: unknown;
-  creator_account?: unknown;
+  creator_account_id?: unknown;
   tier_id?: unknown;
   billing_period?: unknown;
 }
@@ -71,8 +71,8 @@ export interface CreatorSubscriptionConfirmDeps {
   verifyTransaction: typeof verifyFinalizedSubscriptionTransaction;
   readSubscriptionAtBlock: (
     env: Env,
-    subscriberAccount: string,
-    creatorAccount: string,
+    subscriberAccountId: string,
+    creatorAccountId: string,
     blockHash: string,
   ) => Promise<ChainSubscriptionState | null>;
 }
@@ -82,7 +82,7 @@ export interface CreatorPlanSaveDeps {
   readCreatorPlansAtBlock: typeof readCreatorPlansAtBlock;
   readPlatformSubscriptionAtBlock: (
     env: Env,
-    creatorAccount: string,
+    creatorAccountId: string,
     blockHash: string,
   ) => Promise<ChainSubscriptionState | null>;
 }
@@ -90,17 +90,17 @@ export interface CreatorPlanSaveDeps {
 const defaultCreatorPlanSaveDeps: CreatorPlanSaveDeps = {
   verifyTransaction: verifyFinalizedSubscriptionTransaction,
   readCreatorPlansAtBlock,
-  readPlatformSubscriptionAtBlock: (env, creatorAccount, blockHash) =>
-    readSubscriptionAtBlock(env, creatorAccount, { kind: "platform" }, blockHash),
+  readPlatformSubscriptionAtBlock: (env, creatorAccountId, blockHash) =>
+    readSubscriptionAtBlock(env, creatorAccountId, { kind: "platform" }, blockHash),
 };
 
 const defaultSubscriptionConfirmDeps: CreatorSubscriptionConfirmDeps = {
   verifyTransaction: verifyFinalizedSubscriptionTransaction,
-  readSubscriptionAtBlock: (env, subscriberAccount, creatorAccount, blockHash) =>
+  readSubscriptionAtBlock: (env, subscriberAccountId, creatorAccountId, blockHash) =>
     readSubscriptionAtBlock(
       env,
-      subscriberAccount,
-      { kind: "creator", creatorAccount },
+      subscriberAccountId,
+      { kind: "creator", creatorAccountId },
       blockHash,
     ),
 };
@@ -163,19 +163,19 @@ function verifiedDisplayTiers(
   return requested;
 }
 
-async function readPlan(env: Env, creatorAccount: string): Promise<unknown> {
+async function readPlan(env: Env, creatorAccountId: string): Promise<unknown> {
   const rows = await env.DB.prepare(
-    `SELECT creator_account, tier_id, name, tier_order, monthly_price_fen,
+    `SELECT creator_account_id, tier_id, name, tier_order, monthly_price_fen,
         quarterly_price_fen, yearly_price_fen, verified_at
       FROM square_creator_tiers
-      WHERE creator_account = ? ORDER BY tier_order ASC`,
+      WHERE creator_account_id = ? ORDER BY tier_order ASC`,
   )
-    .bind(creatorAccount)
+    .bind(creatorAccountId)
     .all<CreatorPlanRow>();
   const items = rows.results ?? [];
   if (items.length === 0) return null;
   return {
-    creator_account: creatorAccount,
+    creator_account_id: creatorAccountId,
     tiers: items.map(rowToTier),
     updated_at: Math.max(...items.map((row) => row.verified_at)),
   };
@@ -201,8 +201,8 @@ function monthStartMs(): number {
 /** GET /v1/square/creator/plan —— 当前钱包的档位；平台订阅门禁在服务端复核。 */
 export async function creatorPlanRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
-  await requireActiveMembership(env, session.owner_account);
-  return jsonResponse({ plan: await readPlan(env, session.owner_account) });
+  await requireActiveMembership(env, session.account_id);
+  return jsonResponse({ plan: await readPlan(env, session.account_id) });
 }
 
 /** GET /v1/square/creator/plan/:account —— 仅返回当前仍具平台订阅资格的创作者档位。 */
@@ -212,37 +212,37 @@ export async function creatorPlanOfRoute(
   account: string,
 ): Promise<Response> {
   await requireSession(request, env);
-  const creatorAccount = decodeURIComponent(account);
-  const membership = await getMembership(env, creatorAccount);
+  const creatorAccountId = decodeURIComponent(account);
+  const membership = await getMembership(env, creatorAccountId);
   if (!membership || !subscriptionIsActive(membership)) return jsonResponse({ plan: null });
-  return jsonResponse({ plan: await readPlan(env, creatorAccount) });
+  return jsonResponse({ plan: await readPlan(env, creatorAccountId) });
 }
 
 /** GET /v1/square/creator/overview —— 仅统计链时钟下仍有效的订阅关系。 */
 export async function creatorOverviewRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
-  await requireActiveMembership(env, session.owner_account);
-  const owner = session.owner_account;
+  await requireActiveMembership(env, session.account_id);
+  const accountId = session.account_id;
   const observedAt = nowMs();
   const countRow = await env.DB.prepare(
     `SELECT COUNT(*) AS cnt
       FROM square_creator_subscriptions s
       JOIN chain_clock c ON c.clock_id = 1
-      WHERE s.creator_account = ?
+      WHERE s.creator_account_id = ?
         AND s.subscription_status IN ('active', 'cancelled')
         AND c.chain_timestamp < s.paid_until
         AND c.observed_at <= ? AND c.observed_at >= ?`,
   )
-    .bind(owner, observedAt, observedAt - CHAIN_CLOCK_MAX_STALENESS_MS)
+    .bind(accountId, observedAt, observedAt - CHAIN_CLOCK_MAX_STALENESS_MS)
     .first<{ cnt: number }>();
   const incomeRow = await env.DB.prepare(
     `SELECT COALESCE(SUM(last_charged_price_fen), 0) AS total
       FROM square_creator_subscriptions
-      WHERE creator_account = ? AND last_charged_at >= ?`,
+      WHERE creator_account_id = ? AND last_charged_at >= ?`,
   )
-    .bind(owner, monthStartMs())
+    .bind(accountId, monthStartMs())
     .first<{ total: number }>();
-  const plan = await readPlan(env, owner) as { tiers?: unknown[] } | null;
+  const plan = await readPlan(env, accountId) as { tiers?: unknown[] } | null;
   return jsonResponse({
     overview: {
       subscriber_count: Number(countRow?.cnt ?? 0),
@@ -264,13 +264,13 @@ export async function creatorPlanSaveRoute(
   const proof = transactionProof(body);
   const transaction = await deps.verifyTransaction(
     env,
-    session.owner_account,
+    session.account_id,
     { kind: "creator_plans_set", tiers: chainTiersFromInput(requested) },
     proof,
   );
   const [chainTiers, platformState] = await Promise.all([
-    deps.readCreatorPlansAtBlock(env, session.owner_account, transaction.blockHash),
-    deps.readPlatformSubscriptionAtBlock(env, session.owner_account, transaction.blockHash),
+    deps.readCreatorPlansAtBlock(env, session.account_id, transaction.blockHash),
+    deps.readPlatformSubscriptionAtBlock(env, session.account_id, transaction.blockHash),
   ]);
   const tiers = verifiedDisplayTiers(requested, chainTiers);
   if (!subscriptionStateEffective(platformState, transaction.chainTimestamp)) {
@@ -280,7 +280,7 @@ export async function creatorPlanSaveRoute(
   const requestHash = await sha256Hex(JSON.stringify({ action: "set_creator_plans", tiers }));
   await bindFinalizedTransactionConfirmation(
     env,
-    session.owner_account,
+    session.account_id,
     transaction,
     requestHash,
     verifiedAt,
@@ -291,10 +291,10 @@ export async function creatorPlanSaveRoute(
     blockHash: transaction.blockHash,
     observedAt: verifiedAt,
   });
-  await replaceCreatorTiers(env, session.owner_account, tiers, transaction, verifiedAt);
+  await replaceCreatorTiers(env, session.account_id, tiers, transaction, verifiedAt);
   return jsonResponse({
     plan: {
-      creator_account: session.owner_account,
+      creator_account_id: session.account_id,
       tiers,
       updated_at: verifiedAt,
     },
@@ -310,31 +310,31 @@ export async function creatorSubscriptionConfirmRoute(
   const session = await requireSession(request, env);
   const body = await readJson<CreatorConfirmBody>(request);
   const action = creatorAction(body.action);
-  const creatorAccount = requireString(body.creator_account, "创作者钱包账户缺失");
+  const creatorAccountId = requireString(body.creator_account_id, "创作者钱包账户缺失");
   const tierId = action === "cancel" ? null : requireString(body.tier_id, "创作者档位缺失");
   const billingPeriod = action === "cancel" ? null : billingPeriodValue(body.billing_period);
-  const expectedAction = expectedCreatorAction(action, creatorAccount, tierId, billingPeriod);
+  const expectedAction = expectedCreatorAction(action, creatorAccountId, tierId, billingPeriod);
   const proof = transactionProof(body);
   const transaction = await deps.verifyTransaction(
     env,
-    session.owner_account,
+    session.account_id,
     expectedAction,
     proof,
   );
   const state = await deps.readSubscriptionAtBlock(
     env,
-    session.owner_account,
-    creatorAccount,
+    session.account_id,
+    creatorAccountId,
     transaction.blockHash,
   );
   assertCreatorStateMatches(state, action, tierId, billingPeriod);
   const verifiedAt = nowMs();
   const requestHash = await sha256Hex(
-    JSON.stringify({ action, creator_account: creatorAccount, tier_id: tierId, billing_period: billingPeriod }),
+    JSON.stringify({ action, creator_account_id: creatorAccountId, tier_id: tierId, billing_period: billingPeriod }),
   );
   await bindFinalizedTransactionConfirmation(
     env,
-    session.owner_account,
+    session.account_id,
     transaction,
     requestHash,
     verifiedAt,
@@ -347,8 +347,8 @@ export async function creatorSubscriptionConfirmRoute(
   });
   await mirrorCreatorSubscription(
     env,
-    session.owner_account,
-    creatorAccount,
+    session.account_id,
+    creatorAccountId,
     state!,
     transaction,
     verifiedAt,
@@ -363,17 +363,17 @@ export async function creatorSubscriptionConfirmRoute(
 /** 创作者付费内容的统一服务端门禁；未知、陈旧、终止或过期全部拒绝。 */
 export async function requireCreatorSubscription(
   env: Env,
-  subscriberAccount: string,
-  creatorAccount: string,
+  subscriberAccountId: string,
+  creatorAccountId: string,
 ): Promise<void> {
   const row = await env.DB.prepare(
     `SELECT s.subscription_status, s.paid_until, c.chain_timestamp,
         c.observed_at AS chain_observed_at
       FROM square_creator_subscriptions s
       LEFT JOIN chain_clock c ON c.clock_id = 1
-      WHERE s.subscriber_account = ? AND s.creator_account = ?`,
+      WHERE s.subscriber_account_id = ? AND s.creator_account_id = ?`,
   )
-    .bind(subscriberAccount, creatorAccount)
+    .bind(subscriberAccountId, creatorAccountId)
     .first<{
       subscription_status: string;
       paid_until: number;
@@ -387,24 +387,24 @@ export async function requireCreatorSubscription(
 
 async function replaceCreatorTiers(
   env: Env,
-  creatorAccount: string,
+  creatorAccountId: string,
   tiers: CreatorTierInput[],
   transaction: VerifiedFinalizedTransaction,
   verifiedAt: number,
 ): Promise<void> {
   const statements: D1PreparedStatement[] = [
-    env.DB.prepare("DELETE FROM square_creator_tiers WHERE creator_account = ?").bind(creatorAccount),
+    env.DB.prepare("DELETE FROM square_creator_tiers WHERE creator_account_id = ?").bind(creatorAccountId),
   ];
   tiers.forEach((tier, index) => {
     statements.push(
       env.DB.prepare(
         `INSERT INTO square_creator_tiers
-          (creator_account, tier_id, name, tier_order, monthly_price_fen,
+          (creator_account_id, tier_id, name, tier_order, monthly_price_fen,
            quarterly_price_fen, yearly_price_fen, finalized_block_number,
            finalized_block_hash, verified_at, last_tx_hash)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
-        creatorAccount,
+        creatorAccountId,
         tier.tier_id,
         tier.name,
         index,
@@ -423,8 +423,8 @@ async function replaceCreatorTiers(
 
 async function mirrorCreatorSubscription(
   env: Env,
-  subscriberAccount: string,
-  creatorAccount: string,
+  subscriberAccountId: string,
+  creatorAccountId: string,
   state: ChainSubscriptionState,
   transaction: VerifiedFinalizedTransaction,
   verifiedAt: number,
@@ -434,12 +434,12 @@ async function mirrorCreatorSubscription(
   }
   await env.DB.prepare(
     `INSERT INTO square_creator_subscriptions
-      (subscriber_account, creator_account, tier_id, billing_period,
+      (subscriber_account_id, creator_account_id, tier_id, billing_period,
        started_at, last_charged_at,
        last_charged_price_fen, paid_until, subscription_status,
        finalized_block_number, finalized_block_hash, verified_at, last_tx_hash)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(subscriber_account, creator_account) DO UPDATE SET
+      ON CONFLICT(subscriber_account_id, creator_account_id) DO UPDATE SET
         tier_id = excluded.tier_id,
         billing_period = excluded.billing_period,
         started_at = excluded.started_at,
@@ -454,8 +454,8 @@ async function mirrorCreatorSubscription(
       WHERE excluded.finalized_block_number >= square_creator_subscriptions.finalized_block_number`,
   )
     .bind(
-      subscriberAccount,
-      creatorAccount,
+      subscriberAccountId,
+      creatorAccountId,
       state.plan.tierId,
       state.plan.billingPeriod,
       state.startedAt,
@@ -495,15 +495,15 @@ function assertCreatorStateMatches(
 
 function expectedCreatorAction(
   action: CreatorAction,
-  creatorAccount: string,
+  creatorAccountId: string,
   tierId: string | null,
   billingPeriod: BillingPeriod | null,
 ): SubscriptionBusinessAction {
-  if (action === "cancel") return { kind: "creator_cancel", creatorAccount };
+  if (action === "cancel") return { kind: "creator_cancel", creatorAccountId };
   if (!tierId || !billingPeriod) throw new HttpError(400, "invalid_request", "创作者订阅计划缺失");
   return action === "subscribe"
-    ? { kind: "creator_subscribe", creatorAccount, tierId, billingPeriod }
-    : { kind: "creator_change", creatorAccount, tierId, billingPeriod };
+    ? { kind: "creator_subscribe", creatorAccountId, tierId, billingPeriod }
+    : { kind: "creator_change", creatorAccountId, tierId, billingPeriod };
 }
 
 function transactionProof(body: CreatorConfirmBody | CreatorPlanBody): FinalizedTransactionProofInput {

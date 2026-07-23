@@ -17,8 +17,8 @@ pub mod weights;
 mod tests;
 
 use admin_primitives::{
-    is_public_admin_code, AdminAccountKind, InstitutionAdminLifecycle, InstitutionAdminQuery,
-    PublicAdmin,
+    is_public_admin_code, Admin, AdminAccountKind, InstitutionAdminLifecycle,
+    InstitutionAdminQuery,
 };
 use codec::{Decode, Encode};
 use frame_support::{
@@ -82,7 +82,7 @@ pub mod pallet {
         /// 公权机构管理员集合写入口。
         type AdminLifecycle: InstitutionAdminLifecycle<
             Self::AccountId,
-            PublicAdmin<Self::AccountId>,
+            Admin<Self::AccountId>,
         >;
 
         /// 兄弟机构 CID 查询入口，用于禁止同一 CID 在私权模块重复登记。
@@ -133,14 +133,14 @@ pub mod pallet {
         BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxAdmins>;
     /// 机构原子初始化使用的管理员人员集合；姓名只展示，账户是唯一授权字段。
     pub type InstitutionAdminsInputOf<T> =
-        BoundedVec<PublicAdmin<<T as frame_system::Config>::AccountId>, <T as Config>::MaxAdmins>;
+        BoundedVec<Admin<<T as frame_system::Config>::AccountId>, <T as Config>::MaxAdmins>;
     pub type InstitutionGovernanceActionOf<T> = InstitutionGovernanceAction<
         <T as frame_system::Config>::AccountId,
-        PublicAdmin<<T as frame_system::Config>::AccountId>,
+        Admin<<T as frame_system::Config>::AccountId>,
     >;
     pub type InstitutionGovernanceProposalOf<T> = InstitutionGovernanceProposal<
         <T as frame_system::Config>::AccountId,
-        PublicAdmin<<T as frame_system::Config>::AccountId>,
+        Admin<<T as frame_system::Config>::AccountId>,
     >;
 
     pub type CidNumberOf<T> = BoundedVec<u8, <T as Config>::MaxCidNumberLength>;
@@ -1262,6 +1262,13 @@ impl<T: pallet::Config> traits::InstitutionLegalRepresentativeQuery<T::AccountId
         pallet::Institutions::<T>::get(cid_number)?
             .legal_representative
             .map(|representative| representative.account_id)
+    }
+
+    fn legal_representative_cid(cid_number: &[u8]) -> Option<Vec<u8>> {
+        let cid_number = pallet::CidNumberOf::<T>::try_from(cid_number.to_vec()).ok()?;
+        pallet::Institutions::<T>::get(cid_number)?
+            .legal_representative
+            .map(|representative| representative.cid_number.to_vec())
     }
 }
 

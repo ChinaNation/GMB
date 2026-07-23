@@ -4,7 +4,7 @@ import 'package:citizenapp/chat/storage/chat_store.dart';
 
 ChatPendingMedia _pending(String id) => ChatPendingMedia(
       attachmentId: id,
-      recipientAccount: 'bob',
+      recipientAccountId: 'bob',
       conversationId: 'conv',
       fileName: '$id.jpg',
       contentType: 'image/jpeg',

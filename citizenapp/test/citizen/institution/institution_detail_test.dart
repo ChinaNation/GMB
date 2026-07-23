@@ -18,7 +18,7 @@ import 'package:citizenapp/isar/app_isar.dart';
 import '../public/public_nav_harness.dart';
 
 const _cid = 'LN001-CREG0-944805165-2026';
-const _adminAccountHex =
+const _adminAccountId =
     '0xabababababababababababababababababababababababababababababababab';
 
 class _FakeChainState implements InstitutionChainState {
@@ -27,8 +27,8 @@ class _FakeChainState implements InstitutionChainState {
   final List<InstitutionProposalSummary> proposalList;
 
   @override
-  Future<Map<String, double>> balances(List<String> pubkeyHexes) async =>
-      {for (final h in pubkeyHexes) h: 12.5};
+  Future<Map<String, double>> balances(List<String> publicKeyes) async =>
+      {for (final h in publicKeyes) h: 12.5};
 
   @override
   Future<List<InstitutionAdminView>> adminViews(
@@ -36,14 +36,14 @@ class _FakeChainState implements InstitutionChainState {
       adminList
           .map((account) => InstitutionAdminView(
                 admin: AdminPerson(
-                  admin_account: account,
+                  account_id: account,
                   family_name: '管理',
                   given_name: '员',
                 ),
                 assignments: [
                   InstitutionAdminAssignment(
                     cidNumber: institution.cidNumber,
-                    admin_account: account,
+                    account_id: account,
                     roleCode: 'MEMBER',
                     roleName: '委员',
                     termStart: 0,
@@ -78,16 +78,16 @@ PublicInstitutionEntity _entity() => PublicInstitutionDto.fromJson(
 Widget _wrap(Widget child) => MaterialApp(home: child);
 
 void main() {
-  group('institutionAccountRows(公权派生)', () {
+  group('institutionAccountIdRows(公权派生)', () {
     test('主/费/自定义三行,地址与卡0 派生吻合', () {
       final rows =
-          institutionAccountRows(Institution.fromPublicEntity(_entity()));
+          institutionAccountIdRows(Institution.fromPublicEntity(_entity()));
       expect(rows.map((r) => r.label), ['主账户', '费用账户', '业务专户']);
-      expect(rows.first.accountHex,
-          hexFromAccountId(deriveInstitutionMainAccountId(_cid)));
+      expect(rows.first.accountId,
+          accountIdText(deriveInstitutionMainAccountId(_cid)));
       expect(
-        rows.last.accountHex,
-        hexFromAccountId(deriveInstitutionCustomAccountId(_cid, '业务专户')),
+        rows.last.accountId,
+        accountIdText(deriveInstitutionCustomAccountId(_cid, '业务专户')),
       );
     });
   });
@@ -119,7 +119,7 @@ void main() {
       cityNames: const {'GD|001': '中央'},
     );
     final chain = _FakeChainState(
-      adminList: const [_adminAccountHex],
+      adminList: const [_adminAccountId],
       proposalList: const [
         InstitutionProposalSummary(proposalId: 7, idLabel: '提案 #7', status: 1),
       ],
@@ -128,7 +128,7 @@ void main() {
       cidNumber: _cid,
       repository: InstitutionRepository(directory: repo),
       chainState: chain,
-      walletPubkeyProvider: () async => 'aa',
+      accountIdProvider: () async => 'aa',
     )));
     await tester.pumpAndSettle();
 
@@ -173,8 +173,8 @@ void main() {
     await tester.pumpWidget(_wrap(InstitutionDetailPage(
       cidNumber: _cid,
       repository: InstitutionRepository(directory: repo),
-      chainState: _FakeChainState(adminList: const [_adminAccountHex]),
-      walletPubkeyProvider: () async => 'aa',
+      chainState: _FakeChainState(adminList: const [_adminAccountId]),
+      accountIdProvider: () async => 'aa',
     )));
     await tester.pumpAndSettle();
 
@@ -205,7 +205,7 @@ void main() {
       cidNumber: _cid,
       repository: InstitutionRepository(directory: repo),
       chainState: _FakeChainState(),
-      walletPubkeyProvider: () async => 'aa',
+      accountIdProvider: () async => 'aa',
     )));
     await tester.pumpAndSettle();
 

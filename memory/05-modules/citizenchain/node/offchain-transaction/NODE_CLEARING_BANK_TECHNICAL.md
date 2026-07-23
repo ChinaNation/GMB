@@ -79,7 +79,7 @@ DTO 统一见 `transaction/offchain_transaction/types.rs`。
 
 PublicManage/PrivateManage 的旧 call index 5 已永久关闭，Node 不再构造或提交旧机构直接创建载荷，`0x1e05/0x1f05` 也不再是合法 QR 动作。任务卡第 6 步将由独立机构创建业务模块原子覆盖 admins、LR、初始治理岗位、不可变权限、初始任职和投票规则，并按注册局有效 `RoleSubject` 授权；新载荷必须另行登记并同步全部生成端和解码端。
 
-管理员记录按目标机构类型分流：公权为 `account_id + cid_number + family_name + given_name`，私权为 `account_id + family_name + given_name`。账户用于人员识别和签名，但账户本身没有机构业务权限；公权非空公民 CID 只引用 `citizen-identity` 真源。
+所有机构管理员记录统一为 `account_id + cid_number + family_name + given_name`。账户用于人员识别和签名，但账户本身没有机构业务权限；非空公民 CID 只引用 `citizen-identity` 真源。
 
 注册业务字段只允许来自 CID `registration-info` 的 `cid_number / cid_full_name / account_names[]`。
 `subject_property / sub_type / parent_cid_number` 只属于 `eligible-search` 查询筛选和展示,不得进入注册 call_data。

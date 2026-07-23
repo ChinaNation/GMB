@@ -400,6 +400,8 @@ mod tests {
                 .into_iter()
                 .map(|account_id| Admin {
                     account_id,
+                    // Phase 1: 公民 CID 与创世一致留空。
+                    cid_number: Default::default(),
                     family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
                     given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
                 })

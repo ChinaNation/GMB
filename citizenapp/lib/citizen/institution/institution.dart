@@ -32,7 +32,7 @@ class Institution {
     this.familyName,
     this.givenName,
     this.legalRepresentativeCidNumber,
-    this.legalRepresentativeAccount,
+    this.legalRepresentativeAccountId,
     this.accountCount = 0,
     this.customAccountNames = const [],
     this.builtinAccounts,
@@ -64,7 +64,7 @@ class Institution {
   final String? familyName;
   final String? givenName;
   final String? legalRepresentativeCidNumber;
-  final String? legalRepresentativeAccount;
+  final String? legalRepresentativeAccountId;
 
   final int accountCount;
   final List<String> customAccountNames;
@@ -102,16 +102,16 @@ class Institution {
           : cidFullName;
 
   /// 主账户 AccountId:创世治理机构用 china 固定 hex,其余本地派生。
-  Uint8List mainAccountId() {
-    final baked = builtinAccounts?.mainAccount;
+  Uint8List mainAccountIdBytes() {
+    final baked = builtinAccounts?.mainAccountId;
     if (baked != null && baked.isNotEmpty) {
       return _hexToBytes(baked);
     }
     return deriveInstitutionMainAccountId(cidNumber);
   }
 
-  /// 主账户 hex(32 字节,不含 0x)。
-  String get mainAccountHex => hexFromAccountId(mainAccountId());
+  /// 主账户 ID（小写 `0x` + 64 位 hex）。
+  String get mainAccountId => accountIdText(mainAccountIdBytes());
 
   /// 附加创世固定账户集合。
   Institution withBuiltinAccounts(InstitutionAccounts accounts) => Institution(
@@ -127,7 +127,7 @@ class Institution {
         familyName: familyName,
         givenName: givenName,
         legalRepresentativeCidNumber: legalRepresentativeCidNumber,
-        legalRepresentativeAccount: legalRepresentativeAccount,
+        legalRepresentativeAccountId: legalRepresentativeAccountId,
         accountCount: accountCount,
         customAccountNames: customAccountNames,
         builtinAccounts: accounts,
@@ -166,7 +166,7 @@ class Institution {
       familyName: e.familyName,
       givenName: e.givenName,
       legalRepresentativeCidNumber: e.legalRepresentativeCidNumber,
-      legalRepresentativeAccount: e.legalRepresentativeAccount,
+      legalRepresentativeAccountId: e.legalRepresentativeAccountId,
       accountCount: e.accountCount,
       customAccountNames: e.customAccountNames,
     );

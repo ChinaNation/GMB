@@ -1,8 +1,8 @@
 //! 登录链上集合鉴权 + 会话签发(QR 登录与挑战登录共用)。
 //!
 //! (去中心化鉴权):
-//! - 验签证明扫码者持有 `signer_pubkey` 私钥后,membership 真源切到**链上 Active 管理员集合**。
-//! - 平台启动不预设机构;首次登录从 `verified_pubkey` 反查候选机构,二次确认后本节点绑定唯一机构。
+//! - 验签证明扫码者持有 `signer_public_key` 私钥后,membership 真源切到**链上 Active 管理员集合**。
+//! - 平台启动不预设机构;首次登录从 `verified_account_id` 反查候选机构,二次确认后本节点绑定唯一机构。
 //! - 后台 `revoke_stale_admin_sessions_loop` 周期复查,管理员被链上移除后≤TTL 失效。
 
 use chrono::{DateTime, Duration, Utc};
@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::auth::repo;
 use crate::core::chain_runtime;
-use crate::crypto::pubkey::same_admin_account;
+use crate::crypto::pubkey::same_account_id;
 use crate::*;
 
 use super::model::{
@@ -131,9 +131,9 @@ fn binding_matches_candidate(
 }
 
 async fn find_allowed_memberships_for_login(
-    normalized_pubkey: &str,
+    normalized_account_id: &str,
 ) -> Result<Vec<chain_runtime::ActiveAdminMembership>, GateError> {
-    match chain_runtime::find_active_admin_memberships(normalized_pubkey).await {
+    match chain_runtime::find_active_admin_memberships(normalized_account_id).await {
         Ok(memberships) => Ok(memberships),
         Err(err) if err == chain_runtime::DESKTOP_GOVERNANCE_LOGIN_UNSUPPORTED => {
             Err(GateError::DesktopGovernanceUnsupported)
@@ -145,13 +145,26 @@ async fn find_allowed_memberships_for_login(
     }
 }
 
-/// 已验签的 pubkey 经链上集合鉴权后,按节点绑定状态返回会话或待绑定候选。
+/// 用户码确定账户后先查链上 Active 管理员集合，禁止为无登录资格账户签发二维码。
+///
+/// 完成签名后仍会再次执行完整 gate，以最新链上状态为准签发会话。
+pub(super) async fn validate_login_account(account_id: &str) -> Result<String, GateError> {
+    let normalized =
+        chain_runtime::normalize_account_id(account_id).ok_or(GateError::NotOnchainAdmin)?;
+    let memberships = find_allowed_memberships_for_login(&normalized).await?;
+    if memberships.is_empty() {
+        return Err(GateError::NotOnchainAdmin);
+    }
+    Ok(normalized)
+}
+
+/// 已验签账户经链上集合鉴权后，按节点绑定状态返回会话或待绑定候选。
 pub(super) async fn issue_session_after_onchain_gate(
     state: &AppState,
-    verified_pubkey: &str,
+    verified_account_id: &str,
     now: DateTime<Utc>,
 ) -> Result<GateOutcome, GateError> {
-    let normalized = chain_runtime::normalize_account_pubkey(verified_pubkey)
+    let normalized = chain_runtime::normalize_account_id(verified_account_id)
         .ok_or(GateError::NotOnchainAdmin)?;
     let memberships = find_allowed_memberships_for_login(normalized.as_str()).await?;
     if memberships.is_empty() {
@@ -166,7 +179,7 @@ pub(super) async fn issue_session_after_onchain_gate(
         let binding_challenge_id = Uuid::new_v4().to_string();
         let challenge = NodeBindingChallenge {
             binding_challenge_id: binding_challenge_id.clone(),
-            admin_account: normalized,
+            account_id: normalized,
             candidates: candidates.clone(),
             expire_at: now + Duration::minutes(10),
             consumed: false,
@@ -177,7 +190,7 @@ pub(super) async fn issue_session_after_onchain_gate(
             .map_err(GateError::Db)?;
         return Ok(GateOutcome::BindingRequired(NodeBindingRequiredOutput {
             binding_challenge_id,
-            admin_account: verified_pubkey.to_string(),
+            account_id: verified_account_id.to_string(),
             candidates,
         }));
     };
@@ -238,7 +251,7 @@ pub(super) async fn confirm_node_binding_after_onchain_gate(
             "selected institution candidate not found".to_string(),
         ));
     };
-    let normalized = chain_runtime::normalize_account_pubkey(challenge.admin_account.as_str())
+    let normalized = chain_runtime::normalize_account_id(challenge.account_id.as_str())
         .ok_or(GateError::BindingMismatch)?;
     let memberships = find_allowed_memberships_for_login(normalized.as_str()).await?;
     let fresh_candidates = state
@@ -264,7 +277,7 @@ pub(super) async fn confirm_node_binding_after_onchain_gate(
         institution_code: fresh_selected.institution_code.clone(),
         institution_cid_number,
         frg_province_code: fresh_selected.frg_province_code.clone(),
-        bound_admin_pubkey: normalized.clone(),
+        bound_account_id: normalized.clone(),
         bound_at: now,
         status: "ACTIVE".to_string(),
     };
@@ -283,7 +296,7 @@ pub(super) async fn confirm_node_binding_after_onchain_gate(
 
 async fn issue_session_for_candidate(
     state: &AppState,
-    verified_pubkey: &str,
+    verified_account_id: &str,
     candidate: &AdminInstitutionCandidate,
     now: DateTime<Utc>,
 ) -> Result<(String, DateTime<Utc>, AdminIdentifyOutput), GateError> {
@@ -311,17 +324,17 @@ async fn issue_session_for_candidate(
         .and_then(|admins| {
             admins
                 .iter()
-                .find(|admin| same_admin_account(&admin.admin_account, verified_pubkey))
+                .find(|admin| same_account_id(&admin.account_id, verified_account_id))
         })
         .ok_or(GateError::NotOnchainAdmin)?;
     let chain_family_name = chain_admin.family_name.clone();
     let chain_given_name = chain_admin.given_name.clone();
-    let pubkey_for_db = verified_pubkey.to_string();
+    let account_id_for_db = verified_account_id.to_string();
     let mut result = state
         .db
         .with_client(move |conn| {
             // 已有本地行优先(保留既有省映射 / 既有市行 id);否则按节点身份新建元数据行。
-            let existing = repo::get_admin_by_account_conn(conn, pubkey_for_db.as_str())?;
+            let existing = repo::get_admin_by_account_id_conn(conn, account_id_for_db.as_str())?;
             let admin = match existing {
                 Some(mut current) => {
                     // 链上身份与本地登记冲突时,以链上机构码为准(去中心化真源)。
@@ -334,12 +347,12 @@ async fn issue_session_for_candidate(
                 }
                 None => AdminUser {
                     id: repo::next_admin_id_conn(conn)?,
-                    admin_account: pubkey_for_db.clone(),
+                    account_id: account_id_for_db.clone(),
                     family_name: chain_family_name.clone(),
                     given_name: chain_given_name.clone(),
                     institution_code: institution_code.clone(),
                     built_in: false,
-                    created_by: pubkey_for_db.clone(),
+                    creator_account_id: account_id_for_db.clone(),
                     created_at: now,
                     updated_at: Some(now),
                     city_name: scope_city_name.clone().unwrap_or_default(),
@@ -365,7 +378,7 @@ async fn issue_session_for_candidate(
                 conn,
                 &AdminSession {
                     token: access_token.clone(),
-                    admin_account: admin.admin_account.clone(),
+                    account_id: admin.account_id.clone(),
                     institution_code: institution_code.clone(),
                     candidate_id: candidate_id.clone(),
                     expire_at,
@@ -385,7 +398,7 @@ async fn issue_session_for_candidate(
                 access_token,
                 expire_at,
                 AdminIdentifyOutput {
-                    admin_account: admin.admin_account,
+                    account_id: admin.account_id,
                     institution_cid_number,
                     institution_code: institution_code.clone(),
                     admin_level,
@@ -443,16 +456,17 @@ async fn revoke_stale_admin_sessions_once(db: &Db) -> Result<(), String> {
     };
     let institution_code = binding.institution_code.clone();
     db.with_client(move |conn| {
-        let accounts = repo::list_session_admin_accounts_conn(conn, &institution_code)?;
-        for account in accounts {
+        let account_ids = repo::list_session_admin_account_ids_conn(conn, &institution_code)?;
+        for account_id in account_ids {
             let still_admin = onchain_admins
                 .iter()
-                .any(|admin| same_admin_account(&admin.admin_account, account.as_str()));
+                .any(|admin| same_account_id(&admin.account_id, account_id.as_str()));
             if !still_admin {
-                let removed = repo::delete_admin_sessions_for_account_conn(conn, account.as_str())?;
+                let removed =
+                    repo::delete_admin_sessions_for_account_id_conn(conn, account_id.as_str())?;
                 if removed > 0 {
                     tracing::info!(
-                        admin_account = %account,
+                        account_id = %account_id,
                         sessions = removed,
                         "revoked sessions for admin no longer on-chain"
                     );

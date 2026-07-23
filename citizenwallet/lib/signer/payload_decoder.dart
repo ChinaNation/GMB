@@ -32,7 +32,7 @@ class DecodedPayload {
   /// 用户确认页展示字段。
   ///
   /// `fields` 保留独立验真的机器字段，`reviewFields` 只放人能判断的
-  /// 中文业务信息和 SS58 地址，避免把内部 ID、原始公钥 hex 暴露为确认内容。
+  /// 中文业务信息；账户统一展示规范的 `account_id`，SS58 仅用于明确标注的地址。
   final Map<String, String> reviewFields;
 }
 
@@ -42,7 +42,7 @@ class DecodedPayload {
 /// 字段，姓、名只在确认页按中文顺序合并显示。
 typedef _DecodedAdminPerson = ({
   Uint8List accountBytes,
-  String adminAccountHex,
+  String accountId,
   String? citizenCidNumber,
   String familyName,
   String givenName,
@@ -143,7 +143,7 @@ class PayloadDecoder {
           _hasPrefix(raw, _activateAdminPrefix)) {
         return _decodeActivateAdminAccount(raw);
       }
-      // DECRYPT challenge = prefix(4) + cid_number(32) + pubkey(32)
+      // DECRYPT challenge = prefix(4) + cid_number(32) + signer_public_key(32)
       //   + timestamp(8) + nonce(16)，长度由 primitives 单源常量锁定。
       if (raw.length == _decryptAdminPayloadLen &&
           _hasPrefix(raw, _decryptPrefix)) {
@@ -308,7 +308,6 @@ class PayloadDecoder {
         if (callIndex == PalletRegistry.proposeInstitutionGovernanceCall) {
           return _decodeProposeInstitutionGovernance(
             bytes,
-            isPublic: isPublic,
             action: isPublic
                 ? 'propose_public_institution_governance'
                 : 'propose_private_institution_governance',
@@ -318,7 +317,6 @@ class PayloadDecoder {
         if (callIndex == PalletRegistry.registerInstitutionAdminsCall) {
           return _decodeRegisterInstitutionAdmins(
             bytes,
-            isPublic: isPublic,
             action: isPublic
                 ? 'register_public_institution_admins'
                 : 'register_private_institution_admins',
@@ -377,11 +375,11 @@ class PayloadDecoder {
       // ── OffchainTransaction(19) · 清算行 L2 体系 ──
       if (palletIndex == PalletRegistry.offchainTransactionPallet) {
         if (callIndex == PalletRegistry.bindClearingBankCall) {
-          return _decodeAccountIdCall(
+          return _decodeInstitutionCidCall(
             bytes,
             action: 'bind_clearing_bank',
             summaryPrefix: '绑定清算行',
-            fieldKey: 'bank_main',
+            fieldKey: 'bank_cid_number',
           );
         }
         if (callIndex == PalletRegistry.depositCall) {
@@ -399,11 +397,11 @@ class PayloadDecoder {
           );
         }
         if (callIndex == PalletRegistry.switchBankCall) {
-          return _decodeAccountIdCall(
+          return _decodeInstitutionCidCall(
             bytes,
             action: 'switch_clearing_bank',
             summaryPrefix: '切换清算行',
-            fieldKey: 'new_bank',
+            fieldKey: 'new_bank_cid_number',
           );
         }
         if (callIndex == PalletRegistry.registerClearingBankCall) {
@@ -518,7 +516,7 @@ class PayloadDecoder {
       final actionType = value['action_type'];
       final actorCidNumber = value['actor_cid_number'];
       final province = value['actor_province_name'];
-      final actorPubkey = value['actor_pubkey'];
+      final actorPublicKey = value['actor_public_key'];
       final target = value['target'];
       final beforeHash = value['before_hash'];
       final afterHash = value['after_hash'];
@@ -526,14 +524,13 @@ class PayloadDecoder {
           actorCidNumber is! String ||
           !_isStructuredInstitutionCid(actorCidNumber) ||
           province is! String ||
-          actorPubkey is! String ||
+          actorPublicKey is! String ||
+          !_isCanonicalHex32(actorPublicKey) ||
           target is! String ||
           beforeHash is! String ||
           afterHash is! String) {
         return null;
       }
-      final actorAddress = _pubkeyHexToSs58OrRaw(actorPubkey);
-      final targetAddress = _pubkeyHexToSs58OrRaw(target);
       return DecodedPayload(
         action: 'onchina_admin_action',
         summary: '链上中国平台管理员治理',
@@ -541,8 +538,8 @@ class PayloadDecoder {
           'action_type': _onchinaAdminActionLabel(actionType),
           'actor_cid_number': actorCidNumber,
           'actor_province_name': province,
-          'actor_pubkey': actorAddress,
-          'target': targetAddress,
+          'actor_public_key': actorPublicKey,
+          'target': target,
           'before_hash': beforeHash,
           'after_hash': afterHash,
         },
@@ -550,8 +547,8 @@ class PayloadDecoder {
           'action_type': _onchinaAdminActionLabel(actionType),
           'actor_cid_number': actorCidNumber,
           'actor_province_name': province,
-          'actor_pubkey': actorAddress,
-          'target': targetAddress,
+          'actor_public_key': actorPublicKey,
+          'target': target,
         },
       );
     } catch (_) {
@@ -589,7 +586,8 @@ class PayloadDecoder {
   }
 
   // OnchainTransaction(4) / transfer_with_remark(0)
-  // 格式：[0x04][0x00][beneficiary:AccountId32][amount:u128_le][remark:BoundedVec<u8>]
+  // 格式：[0x04][0x00][beneficiary_account_id:AccountId32][amount:u128_le]
+  //      [remark:BoundedVec<u8>]
   static DecodedPayload? _decodeTransferWithRemark(Uint8List bytes) {
     // 2 (pallet+call) + 32 (AccountId) + 16 (u128) + 至少 1 (Vec len)
     if (bytes.length < 51) return null;
@@ -627,7 +625,7 @@ class PayloadDecoder {
       summary:
           '转账 $amountYuan GMB 给 ${_truncateAddress(toAddress)}$remarkSuffix',
       fields: {
-        'to': toAddress,
+        'recipient_account_id': _bytesToLowerHex(toAccountId),
         'amount_yuan': '$amountYuan GMB',
         'remark': remark,
       },
@@ -636,8 +634,8 @@ class PayloadDecoder {
 
   // MultisigTransfer(17) / propose_transfer(0)
   // 格式：[0x11][0x00][actor_cid_number:Option<CidNumber>]
-  //      [proposer_role_code:Option<RoleCode>][funding_account:AccountId32]
-  //      [beneficiary:AccountId32][amount:u128][remark:Vec]。
+  //      [proposer_role_code:Option<RoleCode>][funding_account_id:AccountId32]
+  //      [beneficiary_account_id:AccountId32][amount:u128][remark:Vec]。
   // Some(CID) 是机构账户交易；None 是个人多签交易，禁止用账户反推机构身份。
   static DecodedPayload? _decodeProposeTransfer(Uint8List bytes) {
     if (bytes.length < 2 + 1 + 32 + 32 + 16 + 1) return null;
@@ -654,13 +652,16 @@ class PayloadDecoder {
     if (offset + 32 + 32 + 16 > bytes.length) return null;
     final fundingAccountBytes = bytes.sublist(offset, offset + 32);
     offset += 32;
-    final fundingAccount = _bytesToSs58(fundingAccountBytes);
+    final fundingAccount = _bytesToLowerHex(
+      Uint8List.fromList(fundingAccountBytes),
+    );
 
-    // beneficiary: 32 bytes（无 MultiAddress 前缀）
+    // beneficiary_account_id:32 bytes（无 MultiAddress 前缀）
     final beneficiaryId = bytes.sublist(offset, offset + 32);
     offset += 32;
-    final beneficiary =
-        Keyring().encodeAddress(beneficiaryId.toList(), _ss58Prefix);
+    final beneficiary = _bytesToLowerHex(
+      Uint8List.fromList(beneficiaryId),
+    );
 
     // amount: u128 little-endian（16 字节）
     final amountFen = _readU128Le(bytes, offset);
@@ -686,21 +687,21 @@ class PayloadDecoder {
       fields: <String, String>{
         if (actorCidNumber != null) 'actor_cid_number': actorCidNumber,
         if (proposerRoleCode != null) 'proposer_role_code': proposerRoleCode,
-        if (actorCidNumber != null) 'institution_account': fundingAccount,
-        if (actorCidNumber == null) 'personal_account': fundingAccount,
-        'operation_fee_payer': actorCidNumber == null
+        if (actorCidNumber != null) 'institution_account_id': fundingAccount,
+        if (actorCidNumber == null) 'personal_account_id': fundingAccount,
+        'operation_fee_payer_description': actorCidNumber == null
             ? '签名管理员钱包'
             : _reviewValue(
-                'operation_fee_payer',
+                'operation_fee_payer_description',
                 {'actor_cid_number': actorCidNumber},
               ),
-        'execution_fee_payer': actorCidNumber == null
+        'execution_fee_payer_description': actorCidNumber == null
             ? fundingAccount
             : _reviewValue(
-                'execution_fee_payer',
+                'execution_fee_payer_description',
                 {'actor_cid_number': actorCidNumber},
               ),
-        'beneficiary': beneficiary,
+        'beneficiary_account_id': beneficiary,
         'amount_yuan': '$amountYuan GMB',
         'remark': remark,
       },
@@ -849,7 +850,7 @@ class PayloadDecoder {
   }
 
   // ElectionVote(22) / cast_popular_vote(2)
-  // SCALE:[22][2][proposal_id:u64][candidate_subject(cid_number+wallet_account)]。
+  // SCALE:[22][2][proposal_id:u64][candidate_subject(cid_number+account_id)]。
   static DecodedPayload? _decodeCastPopularVote(Uint8List bytes) {
     if (bytes.length < 43) return null;
     final proposalId = _readU64Le(bytes, 2);
@@ -863,7 +864,7 @@ class PayloadDecoder {
       fields: {
         'proposal_id': proposalId.toString(),
         'cid_number': candidate.$1,
-        'wallet_account': candidate.$2,
+        'account_id': candidate.$2,
       },
     );
   }
@@ -886,12 +887,12 @@ class PayloadDecoder {
         'proposal_id': proposalId.toString(),
         'voter_role_code': role.$1,
         'cid_number': candidate.$1,
-        'wallet_account': candidate.$2,
+        'account_id': candidate.$2,
       },
     );
   }
 
-  /// 严格读取 `CitizenSubject { cid_number, wallet_account }`。
+  /// 严格读取 `CitizenSubject { cid_number, account_id }`。
   static (String, String, int)? _readCitizenSubject(
     Uint8List bytes,
     int offset,
@@ -899,7 +900,7 @@ class PayloadDecoder {
     final cid = _readCidNumber(bytes, offset);
     if (cid == null || cid.$2 + 32 > bytes.length) return null;
     final walletBytes = Uint8List.fromList(bytes.sublist(cid.$2, cid.$2 + 32));
-    return (cid.$1, _bytesToSs58(walletBytes), cid.$2 + 32);
+    return (cid.$1, _bytesToLowerHex(walletBytes), cid.$2 + 32);
   }
 
   // 协议升级 RuntimeUpgrade(12) / propose_runtime_upgrade(0) / developer_direct_upgrade(2)
@@ -916,7 +917,7 @@ class PayloadDecoder {
   //     签的就是这份 WASM 哈希。
   // 管理员激活（非链上交易，二进制前缀域）
   // 格式：prefix(4B = GMB||0x18) + cid_number(32B,右补零)
-  //      + institution_code([u8;4]) + kind(u8) + admin_pubkey(32B)
+  //      + institution_code([u8;4]) + kind(u8) + signer_public_key(32B)
   //      + timestamp(8B, u64 LE) + nonce(16B) = 97B。
   // CID 是机构唯一主键，协议账户不参与本地管理员身份绑定。
   static DecodedPayload? _decodeActivateAdminAccount(Uint8List bytes) {
@@ -937,7 +938,7 @@ class PayloadDecoder {
       return null;
     }
 
-    final pubkey = bytes.sublist(offset, offset + 32);
+    final signerPublicKey = bytes.sublist(offset, offset + 32);
     final institutionLabel = InstitutionCode.codeLabel(code);
 
     return DecodedPayload(
@@ -946,12 +947,14 @@ class PayloadDecoder {
       fields: {
         'cid_number': cidNumber,
         'institution_code': institutionLabel,
-        'admin_pubkey': _bytesToSs58(pubkey),
+        'signer_public_key':
+            _bytesToLowerHex(Uint8List.fromList(signerPublicKey)),
       },
       reviewFields: {
         'cid_number': cidNumber,
         'institution_code': institutionLabel,
-        'admin_pubkey': _bytesToSs58(pubkey),
+        'signer_public_key':
+            _bytesToLowerHex(Uint8List.fromList(signerPublicKey)),
       },
     );
   }
@@ -980,7 +983,8 @@ class PayloadDecoder {
   }
 
   // 清算行管理员解密（非链上交易，二进制前缀域）。
-  // 格式：prefix(4B = GMB||0x19) + cid_number(32B,右补零) + pubkey(32B)
+  // 格式：prefix(4B = GMB||0x19) + cid_number(32B,右补零)
+  //      + signer_public_key(32B)
   //      + timestamp(8B, u64 LE) + nonce(16B)。旧 48B 槽位不兼容并直接拒绝。
   static DecodedPayload? _decodeDecryptAdmin(Uint8List bytes) {
     if (bytes.length != _decryptAdminPayloadLen) return null;
@@ -1103,11 +1107,9 @@ class PayloadDecoder {
 
   // PublicManage(30) / PrivateManage(31) / propose_institution_governance(8)
   // SCALE: cid_number + InstitutionGovernanceAction + actor_cid_number
-  //      + proposer_role_code。公权 action 内管理员为 PublicAdmin 四字段，
-  // 私权 action 内管理员保持 Admin 三字段。
+  //      + proposer_role_code。公权、私权 action 内管理员统一为 Admin 四字段。
   static DecodedPayload? _decodeProposeInstitutionGovernance(
     Uint8List bytes, {
-    required bool isPublic,
     required String action,
     required String entityLabel,
   }) {
@@ -1119,7 +1121,6 @@ class PayloadDecoder {
     final actionRead = _readInstitutionGovernanceAction(
       bytes,
       offset,
-      isPublic: isPublic,
     );
     if (actionRead == null) return null;
     offset = actionRead.$3;
@@ -1139,8 +1140,8 @@ class PayloadDecoder {
         'governance_detail': actionRead.$2,
         'actor_cid_number': actorRead.$1,
         'proposer_role_code': roleRead.$1,
-        'fee_payer': _reviewValue(
-          'fee_payer',
+        'fee_payer_description': _reviewValue(
+          'fee_payer_description',
           {'actor_cid_number': actorRead.$1},
         ),
       },
@@ -1149,10 +1150,9 @@ class PayloadDecoder {
 
   // PublicManage(30) / PrivateManage(31) / register_institution_admins(9)
   // SCALE: cid_number + admins + actor_cid_number + actor_role_code。
-  // 公权管理员为四字段，私权管理员为三字段。
+  // 公权、私权机构管理员统一为四字段。
   static DecodedPayload? _decodeRegisterInstitutionAdmins(
     Uint8List bytes, {
-    required bool isPublic,
     required String action,
     required String entityLabel,
   }) {
@@ -1164,7 +1164,6 @@ class PayloadDecoder {
     final adminsRead = _readAdminPersons(
       bytes,
       offset,
-      isPublic: isPublic,
       minCount: 1,
       maxCount: 1989,
     );
@@ -1187,8 +1186,8 @@ class PayloadDecoder {
         'admins': _adminMachineValue(admins),
         'actor_cid_number': actorRead.$1,
         'actor_role_code': roleRead.$1,
-        'fee_payer': _reviewValue(
-          'fee_payer',
+        'fee_payer_description': _reviewValue(
+          'fee_payer_description',
           {'actor_cid_number': actorRead.$1},
         ),
       },
@@ -1198,8 +1197,8 @@ class PayloadDecoder {
         'admins': _adminReviewValue(admins),
         'actor_cid_number': actorRead.$1,
         'actor_role_code': roleRead.$1,
-        'fee_payer': _reviewValue(
-          'fee_payer',
+        'fee_payer_description': _reviewValue(
+          'fee_payer_description',
           {'actor_cid_number': actorRead.$1},
         ),
       },
@@ -1276,7 +1275,8 @@ class PayloadDecoder {
   }
 
   // OnchainIssuance(23) / propose_issue(0)
-  // SCALE:actor_cid_number + actor_role_code + execution_account + AssetClass + name + symbol
+  // SCALE:actor_cid_number + actor_role_code + execution_account_id
+  //   + AssetClass + name + symbol
   //   + description + decimals:u8 + initial_supply:u128。
   static DecodedPayload? _decodeProposeAssetIssue(Uint8List bytes) {
     var offset = 2;
@@ -1287,7 +1287,7 @@ class PayloadDecoder {
     if (roleRead == null) return null;
     offset = roleRead.$2;
     if (offset + 32 + 1 > bytes.length) return null;
-    final executionAccount = _bytesToSs58(
+    final executionAccount = _bytesToLowerHex(
       Uint8List.fromList(bytes.sublist(offset, offset + 32)),
     );
     offset += 32;
@@ -1322,7 +1322,7 @@ class PayloadDecoder {
       fields: <String, String>{
         'actor_cid_number': actorRead.$1,
         'actor_role_code': roleRead.$1,
-        'execution_account': executionAccount,
+        'execution_account_id': executionAccount,
         'asset_class': assetClass,
         'asset_name': nameRead.$1,
         'asset_symbol': symbolRead.$1,
@@ -1340,7 +1340,7 @@ class PayloadDecoder {
     if (header == null) return null;
     var offset = header.next;
     if (offset + 32 + 16 > bytes.length) return null;
-    final to = _bytesToSs58(
+    final to = _bytesToLowerHex(
       Uint8List.fromList(bytes.sublist(offset, offset + 32)),
     );
     offset += 32;
@@ -1355,7 +1355,7 @@ class PayloadDecoder {
         'actor_cid_number': header.actorCidNumber,
         'actor_role_code': header.actorRoleCode!,
         'asset_id': header.assetId.toString(),
-        'to': to,
+        'recipient_account_id': to,
         'amount_raw': amount.toString(),
       },
     );
@@ -1368,7 +1368,7 @@ class PayloadDecoder {
     if (header == null) return null;
     var offset = header.next;
     if (offset + 32 + 16 > bytes.length) return null;
-    final from = _bytesToSs58(
+    final from = _bytesToLowerHex(
       Uint8List.fromList(bytes.sublist(offset, offset + 32)),
     );
     offset += 32;
@@ -1383,7 +1383,7 @@ class PayloadDecoder {
         'actor_cid_number': header.actorCidNumber,
         'actor_role_code': header.actorRoleCode!,
         'asset_id': header.assetId.toString(),
-        'from': from,
+        'sender_account_id': from,
         'amount_raw': amount.toString(),
       },
     );
@@ -1414,11 +1414,11 @@ class PayloadDecoder {
     if (header == null) return null;
     var offset = header.next;
     if (offset + 32 + 32 + 16 > bytes.length) return null;
-    final from = _bytesToSs58(
+    final from = _bytesToLowerHex(
       Uint8List.fromList(bytes.sublist(offset, offset + 32)),
     );
     offset += 32;
-    final to = _bytesToSs58(
+    final to = _bytesToLowerHex(
       Uint8List.fromList(bytes.sublist(offset, offset + 32)),
     );
     offset += 32;
@@ -1433,8 +1433,8 @@ class PayloadDecoder {
         'actor_cid_number': header.actorCidNumber,
         'actor_role_code': header.actorRoleCode!,
         'asset_id': header.assetId.toString(),
-        'from': from,
-        'to': to,
+        'sender_account_id': from,
+        'recipient_account_id': to,
         'amount_raw': amount.toString(),
       },
     );
@@ -1450,7 +1450,7 @@ class PayloadDecoder {
     if (header == null) return null;
     var offset = header.next;
     if (offset + 32 + 32 > bytes.length) return null;
-    final who = _bytesToSs58(
+    final who = _bytesToLowerHex(
       Uint8List.fromList(bytes.sublist(offset, offset + 32)),
     );
     offset += 32;
@@ -1466,7 +1466,7 @@ class PayloadDecoder {
         'actor_cid_number': header.actorCidNumber,
         'actor_role_code': header.actorRoleCode!,
         'asset_id': header.assetId.toString(),
-        'who': who,
+        'account_id': who,
         'reason_hash': reasonHash,
       },
     );
@@ -1479,7 +1479,7 @@ class PayloadDecoder {
     if (header == null) return null;
     var offset = header.next;
     if (offset + 32 + 16 + 32 > bytes.length) return null;
-    final who = _bytesToSs58(
+    final who = _bytesToLowerHex(
       Uint8List.fromList(bytes.sublist(offset, offset + 32)),
     );
     offset += 32;
@@ -1497,7 +1497,7 @@ class PayloadDecoder {
         'actor_cid_number': header.actorCidNumber,
         'actor_role_code': header.actorRoleCode!,
         'asset_id': header.assetId.toString(),
-        'who': who,
+        'account_id': who,
         'amount_raw': amount.toString(),
         'reason_hash': reasonHash,
       },
@@ -1511,11 +1511,11 @@ class PayloadDecoder {
     if (header == null) return null;
     var offset = header.next;
     if (offset + 32 + 32 + 16 + 32 > bytes.length) return null;
-    final from = _bytesToSs58(
+    final from = _bytesToLowerHex(
       Uint8List.fromList(bytes.sublist(offset, offset + 32)),
     );
     offset += 32;
-    final to = _bytesToSs58(
+    final to = _bytesToLowerHex(
       Uint8List.fromList(bytes.sublist(offset, offset + 32)),
     );
     offset += 32;
@@ -1533,8 +1533,8 @@ class PayloadDecoder {
         'actor_cid_number': header.actorCidNumber,
         'actor_role_code': header.actorRoleCode!,
         'asset_id': header.assetId.toString(),
-        'from': from,
-        'to': to,
+        'sender_account_id': from,
+        'recipient_account_id': to,
         'amount_raw': amount.toString(),
         'reason_hash': reasonHash,
       },
@@ -1670,7 +1670,8 @@ class PayloadDecoder {
 
   // PublicManage(30) / PrivateManage(31) / propose_close_*_institution(1)
   /// 机构自定义账户关闭提案。
-  /// SCALE:actor_cid_number + proposer_role_code + institution_account + beneficiary。
+  /// SCALE:actor_cid_number + proposer_role_code + institution_account_id
+  /// + beneficiary_account_id。
   static DecodedPayload? _decodeProposeCloseInstitution(
     Uint8List bytes, {
     required String action,
@@ -1690,9 +1691,8 @@ class PayloadDecoder {
     final beneficiaryId = bytes.sublist(offset, offset + 32);
     offset += 32;
     if (!_hasValidSigningTail(bytes, offset)) return null;
-    final account = Keyring().encodeAddress(accountId.toList(), _ss58Prefix);
-    final beneficiary =
-        Keyring().encodeAddress(beneficiaryId.toList(), _ss58Prefix);
+    final account = _bytesToLowerHex(Uint8List.fromList(accountId));
+    final beneficiary = _bytesToLowerHex(Uint8List.fromList(beneficiaryId));
     return DecodedPayload(
       action: action,
       summary:
@@ -1700,8 +1700,8 @@ class PayloadDecoder {
       fields: {
         'actor_cid_number': actorCidNumber,
         'proposer_role_code': roleRead.$1,
-        'institution_account': account,
-        'beneficiary': beneficiary,
+        'institution_account_id': account,
+        'beneficiary_account_id': beneficiary,
       },
     );
   }
@@ -1715,22 +1715,22 @@ class PayloadDecoder {
     if (bytes.length < 66 || !_hasValidSigningTail(bytes, 66)) return null;
     final multisigId = bytes.sublist(2, 34);
     final beneficiaryId = bytes.sublist(34, 66);
-    final multisig = Keyring().encodeAddress(multisigId.toList(), _ss58Prefix);
-    final beneficiary =
-        Keyring().encodeAddress(beneficiaryId.toList(), _ss58Prefix);
+    final multisig = _bytesToLowerHex(Uint8List.fromList(multisigId));
+    final beneficiary = _bytesToLowerHex(Uint8List.fromList(beneficiaryId));
     return DecodedPayload(
       action: action,
       summary: '提案关闭$summaryLabel ${_truncateAddress(multisig)}',
       fields: {
-        'account': multisig,
-        'beneficiary': beneficiary,
+        'account_id': multisig,
+        'beneficiary_account_id': beneficiary,
       },
     );
   }
 
   // MultisigTransfer(17) / propose_safety_fund(1)
-  // 格式：[17][1][actor_cid_number:CidNumber][proposer_role_code:RoleCode][institution_account:32]
-  //      [beneficiary:32][amount:u128][BoundedVec remark]
+  // 格式：[17][1][actor_cid_number:CidNumber][proposer_role_code:RoleCode]
+  //      [institution_account_id:32][beneficiary_account_id:32]
+  //      [amount:u128][BoundedVec remark]
   static DecodedPayload? _decodeProposeSafetyFund(Uint8List bytes) {
     var offset = 2;
     final actorRead = _readCidNumber(bytes, offset);
@@ -1744,8 +1744,7 @@ class PayloadDecoder {
     offset += 32;
     final beneficiaryId = bytes.sublist(offset, offset + 32);
     offset += 32;
-    final beneficiary =
-        Keyring().encodeAddress(beneficiaryId.toList(), _ss58Prefix);
+    final beneficiary = _bytesToLowerHex(Uint8List.fromList(beneficiaryId));
     final amountFen = _readU128Le(bytes, offset);
     offset += 16;
     final amountYuan = _fenToYuan(amountFen);
@@ -1765,16 +1764,18 @@ class PayloadDecoder {
       fields: {
         'actor_cid_number': actorRead.$1,
         'proposer_role_code': roleRead.$1,
-        'institution_account': _bytesToSs58(institutionAccount),
-        'operation_fee_payer': _reviewValue(
-          'operation_fee_payer',
+        'institution_account_id': _bytesToLowerHex(
+          Uint8List.fromList(institutionAccount),
+        ),
+        'operation_fee_payer_description': _reviewValue(
+          'operation_fee_payer_description',
           {'actor_cid_number': actorRead.$1},
         ),
-        'execution_fee_payer': _reviewValue(
-          'execution_fee_payer',
+        'execution_fee_payer_description': _reviewValue(
+          'execution_fee_payer_description',
           {'actor_cid_number': actorRead.$1},
         ),
-        'beneficiary': beneficiary,
+        'beneficiary_account_id': beneficiary,
         'amount_yuan': '$amountYuan GMB',
         'remark': remark,
       },
@@ -1783,7 +1784,7 @@ class PayloadDecoder {
 
   // MultisigTransfer(17) / propose_sweep(2)
   // 格式：[17][2][actor_cid_number:CidNumber][proposer_role_code:RoleCode]
-  //      [institution_account:AccountId32][amount:u128]
+  //      [institution_account_id:AccountId32][amount:u128]
   static DecodedPayload? _decodeProposeSweep(Uint8List bytes) {
     var offset = 2;
     final actorRead = _readCidNumber(bytes, offset);
@@ -1795,7 +1796,8 @@ class PayloadDecoder {
     if (offset + 32 + 16 > bytes.length) return null;
     final institutionBytes = bytes.sublist(offset, offset + 32);
     offset += 32;
-    final institutionAccount = _bytesToSs58(institutionBytes);
+    final institutionAccount =
+        _bytesToLowerHex(Uint8List.fromList(institutionBytes));
     final amountFen = _readU128Le(bytes, offset);
     offset += 16;
     if (!_hasValidSigningTail(bytes, offset)) return null;
@@ -1806,13 +1808,13 @@ class PayloadDecoder {
       fields: {
         'actor_cid_number': actorRead.$1,
         'proposer_role_code': roleRead.$1,
-        'institution_account': institutionAccount,
-        'operation_fee_payer': _reviewValue(
-          'operation_fee_payer',
+        'institution_account_id': institutionAccount,
+        'operation_fee_payer_description': _reviewValue(
+          'operation_fee_payer_description',
           {'actor_cid_number': actorRead.$1},
         ),
-        'execution_fee_payer': _reviewValue(
-          'execution_fee_payer',
+        'execution_fee_payer_description': _reviewValue(
+          'execution_fee_payer_description',
           {'actor_cid_number': actorRead.$1},
         ),
         'amount_yuan': '$amountYuan GMB',
@@ -1822,7 +1824,7 @@ class PayloadDecoder {
 
   // ResolutionDestroy(13) / propose_destroy(0)
   // 格式：[13][0][actor_cid_number:CidNumber][proposer_role_code:RoleCode]
-  //      [institution_account:AccountId32][amount:u128]
+  //      [institution_account_id:AccountId32][amount:u128]
   static DecodedPayload? _decodeProposeDestroy(Uint8List bytes) {
     var offset = 2;
     final actorRead = _readCidNumber(bytes, offset);
@@ -1834,7 +1836,8 @@ class PayloadDecoder {
     if (offset + 32 + 16 > bytes.length) return null;
     final institutionBytes = bytes.sublist(offset, offset + 32);
     offset += 32;
-    final institutionAccount = _bytesToSs58(institutionBytes);
+    final institutionAccount =
+        _bytesToLowerHex(Uint8List.fromList(institutionBytes));
     final amountFen = _readU128Le(bytes, offset);
     offset += 16;
     if (!_hasValidSigningTail(bytes, offset)) return null;
@@ -1845,13 +1848,13 @@ class PayloadDecoder {
       fields: {
         'actor_cid_number': actorRead.$1,
         'proposer_role_code': roleRead.$1,
-        'institution_account': institutionAccount,
-        'operation_fee_payer': _reviewValue(
-          'operation_fee_payer',
+        'institution_account_id': institutionAccount,
+        'operation_fee_payer_description': _reviewValue(
+          'operation_fee_payer_description',
           {'actor_cid_number': actorRead.$1},
         ),
-        'execution_fee_payer': _reviewValue(
-          'execution_fee_payer',
+        'execution_fee_payer_description': _reviewValue(
+          'execution_fee_payer_description',
           {'actor_cid_number': actorRead.$1},
         ),
         'amount_yuan': '$amountYuan GMB',
@@ -1862,7 +1865,8 @@ class PayloadDecoder {
   // PersonalAdmins(29.0)。PublicAdmins/PrivateAdmins 只供机构生命周期内部调用，
   // 没有对外管理员变更 extrinsic，禁止把个人账户布局复用于机构 CID。
   // 格式：[pallet][call][institution_code:[u8;4]][account:AccountId32]
-  //       [Compact<N>][admins:N*(admin_account+family_name+given_name)][new_threshold:u32_le]
+  //       [Compact<N>][admins:N*(account_id+cid_number+family_name+given_name)]
+  //       [new_threshold:u32_le]
   static DecodedPayload? _decodeProposeAdminSetChange(Uint8List bytes) {
     if (bytes.length < 75) return null;
     final palletIndex = bytes[0];
@@ -1904,12 +1908,12 @@ class PayloadDecoder {
           '$institutionLabel 管理员集合变更：${_bytesToSs58(accountBytes)} → $adminsLen 人，阈值 $thresholdLabel',
       fields: {
         'institution_code': institutionLabel,
-        'account': accountHex,
+        'account_id': accountHex,
         'admins': _adminMachineValue(admins),
       },
       reviewFields: {
         'institution_code': institutionLabel,
-        'account': _bytesToSs58(accountBytes),
+        'account_id': accountHex,
         'admins': _adminReviewValue(admins),
         'new_threshold': thresholdLabel,
       },
@@ -2381,7 +2385,7 @@ class PayloadDecoder {
 
   // CitizenIdentity 原始身份载荷。
   // SCALE: VotingIdentityPayload {
-  //   cid_number, wallet_account, citizen_age_years, valid_from, valid_until,
+  //   cid_number, account_id, citizen_age_years, valid_from, valid_until,
   //   citizen_status, residence_province_code, residence_city_code,
   //   residence_town_code
   // }
@@ -2691,7 +2695,7 @@ class PayloadDecoder {
 
   static ({
     String cidNumber,
-    String walletAddress,
+    String accountId,
     Map<String, String> fields,
     Map<String, String> reviewFields,
     int next,
@@ -2703,9 +2707,11 @@ class PayloadDecoder {
     offset = afterCid;
     if (offset + 32 + 1 + 4 + 4 + 1 > bytes.length) return null;
 
-    final walletBytes = bytes.sublist(offset, offset + 32);
+    final accountIdBytes = bytes.sublist(offset, offset + 32);
     offset += 32;
-    final walletAddress = _bytesToSs58(walletBytes);
+    final accountId = _bytesToLowerHex(
+      Uint8List.fromList(accountIdBytes),
+    );
 
     final age = bytes[offset];
     offset += 1;
@@ -2752,11 +2758,11 @@ class PayloadDecoder {
     final residence = '$provinceCode / $cityCode / $townCode';
     return (
       cidNumber: cidNumber,
-      walletAddress: walletAddress,
+      accountId: accountId,
       next: offset,
       fields: <String, String>{
         'cid_number': cidNumber,
-        'wallet_account': walletAddress,
+        'account_id': accountId,
         'citizen_age_years': age.toString(),
         'valid_from': validFrom.toString(),
         'valid_until': validUntil.toString(),
@@ -2767,7 +2773,7 @@ class PayloadDecoder {
       },
       reviewFields: <String, String>{
         'cid_number': cidNumber,
-        'wallet_account': walletAddress,
+        'account_id': accountId,
         'citizen_age_years': '$age周岁',
         'valid_range': validRange,
         'citizen_status': statusLabel == 'NORMAL' ? '正常' : '注销',
@@ -2778,7 +2784,7 @@ class PayloadDecoder {
 
   static ({
     String cidNumber,
-    String walletAddress,
+    String accountId,
     Map<String, String> fields,
     Map<String, String> reviewFields,
     int next,
@@ -2837,7 +2843,7 @@ class PayloadDecoder {
     final birthPlace = '$birthProvinceCode / $birthCityCode / $birthTownCode';
     return (
       cidNumber: voting.cidNumber,
-      walletAddress: voting.walletAddress,
+      accountId: voting.accountId,
       next: offset,
       fields: <String, String>{
         ...voting.fields,
@@ -2886,22 +2892,22 @@ class PayloadDecoder {
   }
 
   // OffchainTransaction(19) / bind_clearing_bank(30), switch_bank(33)
-  // 格式：[19][call][AccountId32]
-  static DecodedPayload? _decodeAccountIdCall(
+  // 格式：[19][call][InstitutionCidNumber]。
+  static DecodedPayload? _decodeInstitutionCidCall(
     Uint8List bytes, {
     required String action,
     required String summaryPrefix,
     required String fieldKey,
   }) {
-    // call_data: 2 + 32 = 34
-    if (bytes.length < 34 || !_hasValidSigningTail(bytes, 34)) return null;
-    final accountId = bytes.sublist(2, 34);
-    final address = Keyring().encodeAddress(accountId.toList(), _ss58Prefix);
+    final cidRead = _readCidNumber(bytes, 2);
+    if (cidRead == null || !_hasValidSigningTail(bytes, cidRead.$2)) {
+      return null;
+    }
     return DecodedPayload(
       action: action,
-      summary: '$summaryPrefix ${_truncateAddress(address)}',
+      summary: '$summaryPrefix ${cidRead.$1}',
       fields: {
-        fieldKey: address,
+        fieldKey: cidRead.$1,
       },
     );
   }
@@ -3009,7 +3015,8 @@ class PayloadDecoder {
   }
 
   // OffchainTransaction(19) / propose_l2_fee_rate(40)
-  // SCALE:actor_cid_number + actor_role_code + institution_account + new_rate_bp:u32。
+  // SCALE:actor_cid_number + actor_role_code + institution_account_id
+  // + new_rate_bp:u32。
   static DecodedPayload? _decodeProposeL2FeeRate(Uint8List bytes) {
     final actorRead = _readCidNumber(bytes, 2);
     if (actorRead == null) return null;
@@ -3029,7 +3036,9 @@ class PayloadDecoder {
       fields: {
         'actor_cid_number': actorRead.$1,
         'actor_role_code': roleRead.$1,
-        'institution_account': _bytesToSs58(institutionAccount),
+        'institution_account_id': _bytesToLowerHex(
+          Uint8List.fromList(institutionAccount),
+        ),
         'new_rate_bp': newRateBp.toString(),
       },
     );
@@ -3247,27 +3256,18 @@ class PayloadDecoder {
     return Keyring().encodeAddress(bytes.toList(), _ss58Prefix);
   }
 
-  /// 人机界面统一显示 SS58 地址；无法确认是 32 字节账户时保留原值。
-  static String _pubkeyHexToSs58OrRaw(String value) {
-    final trimmed = value.trim();
-    final clean = trimmed.startsWith('0x') || trimmed.startsWith('0X')
-        ? trimmed.substring(2)
-        : trimmed;
-    if (clean.length != 64 || !RegExp(r'^[0-9a-fA-F]+$').hasMatch(clean)) {
-      return value;
-    }
-    try {
-      return _bytesToSs58(_hexToBytes(clean));
-    } catch (_) {
-      return value;
-    }
+  static bool _isCanonicalHex32(String value) {
+    return RegExp(r'^0x[0-9a-f]{64}$').hasMatch(value);
   }
 
   static Uint8List _hexToBytes(String input) {
-    final text = (input.startsWith('0x') || input.startsWith('0X'))
-        ? input.substring(2)
-        : input;
-    if (text.isEmpty || text.length.isOdd) return Uint8List(0);
+    if (!input.startsWith('0x')) return Uint8List(0);
+    final text = input.substring(2);
+    if (text.isEmpty ||
+        text.length.isOdd ||
+        !RegExp(r'^[0-9a-f]+$').hasMatch(text)) {
+      return Uint8List(0);
+    }
     return Uint8List.fromList(List<int>.generate(
       text.length ~/ 2,
       (i) => int.parse(text.substring(i * 2, i * 2 + 2), radix: 16),
@@ -3418,15 +3418,14 @@ class PayloadDecoder {
     return (role.$1, role.$2);
   }
 
-  /// 严格解码公权 `Vec<PublicAdmin>` 或私权/个人 `Vec<Admin>`。
+  /// 严格解码统一的 `Vec<Admin>`。
   ///
-  /// 公权顺序为 `admin_account + cid_number + family_name + given_name`，身份字段
-  /// 当前允许为空；非空公民 CID 必须具有 CTZN 结构。私权/个人顺序保持
-  /// `admin_account + family_name + given_name`，姓名不得为空。重复账户全部拒签。
+  /// 公权、私权机构和个人多签的 SCALE 顺序都为
+  /// `account_id + cid_number + family_name + given_name`。非空公民 CID 必须具有
+  /// CTZN 结构；字段是否必须非空由所属业务规则决定。重复账户全部拒签。
   static (List<_DecodedAdminPerson>, int)? _readAdminPersons(
     Uint8List bytes,
     int offset, {
-    bool isPublic = false,
     required int minCount,
     required int maxCount,
   }) {
@@ -3442,35 +3441,32 @@ class PayloadDecoder {
       offset += 32;
       final accountHex = _bytesToLowerHex(accountBytes);
       if (!seen.add(accountHex)) return null;
-      String? citizenCidNumber;
-      if (isPublic) {
-        final cidRead = _readUtf8Vec(bytes, offset);
-        if (cidRead.$1 == null) return null;
-        citizenCidNumber = cidRead.$1!;
-        if (utf8.encode(citizenCidNumber).length > 32 ||
-            (citizenCidNumber.isNotEmpty &&
-                !_isStructuredCitizenCid(citizenCidNumber))) {
-          return null;
-        }
-        offset = cidRead.$2;
+      final cidRead = _readUtf8Vec(bytes, offset);
+      if (cidRead.$1 == null) return null;
+      final citizenCidNumber = cidRead.$1!;
+      if (utf8.encode(citizenCidNumber).length > 32 ||
+          (citizenCidNumber.isNotEmpty &&
+              !_isStructuredCitizenCid(citizenCidNumber))) {
+        return null;
       }
+      offset = cidRead.$2;
       final familyNameRead = _readAdminName(
         bytes,
         offset,
-        allowEmpty: isPublic,
+        allowEmpty: true,
       );
       if (familyNameRead == null) return null;
       offset = familyNameRead.$2;
       final givenNameRead = _readAdminName(
         bytes,
         offset,
-        allowEmpty: isPublic,
+        allowEmpty: true,
       );
       if (givenNameRead == null) return null;
       offset = givenNameRead.$2;
       admins.add((
         accountBytes: accountBytes,
-        adminAccountHex: accountHex,
+        accountId: accountHex,
         citizenCidNumber: citizenCidNumber,
         familyName: familyNameRead.$1,
         givenName: givenNameRead.$1,
@@ -3504,7 +3500,7 @@ class PayloadDecoder {
     return jsonEncode([
       for (final admin in admins)
         {
-          'admin_account': admin.adminAccountHex,
+          'account_id': admin.accountId,
           if (admin.citizenCidNumber != null)
             'cid_number': admin.citizenCidNumber,
           'family_name': admin.familyName,
@@ -3530,13 +3526,11 @@ class PayloadDecoder {
   /// 机构治理共用读取器；对外只返回人数、展示文本和新偏移。
   static (int, String, int)? _readInstitutionAdmins(
     Uint8List bytes,
-    int offset, {
-    required bool isPublic,
-  }) {
+    int offset,
+  ) {
     final read = _readAdminPersons(
       bytes,
       offset,
-      isPublic: isPublic,
       minCount: 0,
       maxCount: 1989,
     );
@@ -3546,13 +3540,12 @@ class PayloadDecoder {
 
   static (String, String, int)? _readInstitutionGovernanceAction(
     Uint8List bytes,
-    int offset, {
-    required bool isPublic,
-  }) {
+    int offset,
+  ) {
     if (offset >= bytes.length) return null;
     final variant = bytes[offset++];
     if (variant == 0) {
-      final admins = _readInstitutionAdmins(bytes, offset, isPublic: isPublic);
+      final admins = _readInstitutionAdmins(bytes, offset);
       if (admins == null || admins.$1 < 1) return null;
       return ('替换管理员集合', '${admins.$1} 名管理员：${admins.$2}', admins.$3);
     }
@@ -3562,7 +3555,7 @@ class PayloadDecoder {
       return ('岗位/任职治理', next.$1, next.$2);
     }
     if (variant == 2) {
-      final admins = _readInstitutionAdmins(bytes, offset, isPublic: isPublic);
+      final admins = _readInstitutionAdmins(bytes, offset);
       if (admins == null || admins.$1 < 1) return null;
       final next = _skipRoleGovernance(bytes, admins.$3);
       if (next == null) return null;

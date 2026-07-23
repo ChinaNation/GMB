@@ -26,7 +26,8 @@ SquarePost _post({
   return SquarePost(
     postId: 'p1',
     author: SquareAuthor(
-      ownerAccount: '5GrwvaEF5zXb26Fz9rcQpDWS7u4m6DXb6T6TQvF9j5uQ8g6U',
+      accountId:
+          '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
       displayName: '林正华',
       identityLevel: identityLevel,
     ),

@@ -8,7 +8,7 @@ import 'institution_models.dart';
 /// 机构管理提案解码服务（公权/私权共用）。
 ///
 /// 机构身份只能由 `cid_number` 表示；具体命名账户只是提案的
-/// `institution_account` 参数，不反向作为机构主键。
+/// `institution_account_id` 参数，不反向作为机构主键。
 ///
 /// 管理员投票一律走 `InternalVote::cast`(经 InternalVoteService),不在本服务。
 class InstitutionChainService {
@@ -21,7 +21,7 @@ class InstitutionChainService {
   ///
   /// ProposalData = BoundedVec<u8>(Compact<len> + bytes);机构管理提案以 MODULE_TAG 前缀认领,
   /// 公权=`pub-mgmt`、私权=`pri-mgmt`(取代旧 `org-mgmt`),其后 ACTION_CLOSE(2):
-  /// actor_cid_number + institution_account(32) + beneficiary(32) + proposer(32)。
+  /// actor_cid_number + institution_account_id(32) + beneficiary(32) + proposer(32)。
   /// 个人多签提案解码在 `PersonalManageService`。
   static const _publicManageTag = [
     0x70, 0x75, 0x62, 0x2d, 0x6d, 0x67, 0x6d, 0x74, // "pub-mgmt"
@@ -86,7 +86,7 @@ class InstitutionChainService {
     return CloseProposalInfo(
       proposalId: proposalId,
       actorCidNumber: actorCidNumber,
-      institutionAccount: account,
+      institutionAccountId: account,
       beneficiary: beneficiarySs58,
       proposer: proposerSs58,
     );

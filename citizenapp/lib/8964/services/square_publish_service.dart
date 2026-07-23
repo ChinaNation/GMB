@@ -35,7 +35,7 @@ class SquarePublishResult {
 typedef SquareChainSigner = Future<Uint8List> Function(Uint8List payload);
 
 abstract class SquarePublishBalanceReader {
-  Future<double> fetchFreshFinalizedBalanceYuan(String pubkeyHex);
+  Future<double> fetchFreshFinalizedBalanceYuan(String accountId);
 }
 
 class SquareChainBalanceReader implements SquarePublishBalanceReader {
@@ -45,8 +45,8 @@ class SquareChainBalanceReader implements SquarePublishBalanceReader {
   final ChainRpc _rpc;
 
   @override
-  Future<double> fetchFreshFinalizedBalanceYuan(String pubkeyHex) {
-    return _rpc.fetchFinalizedBalance(pubkeyHex, forceFresh: true);
+  Future<double> fetchFreshFinalizedBalanceYuan(String accountId) {
+    return _rpc.fetchFinalizedBalance(accountId, forceFresh: true);
   }
 }
 
@@ -90,7 +90,7 @@ class SquarePublishService {
     TxPoolWatchCallback? onWatchEvent,
   }) async {
     final trimmedText = text.trim();
-    if (!identity.hasWallet || identity.pubkeyHex == null) {
+    if (!identity.hasWallet || identity.ss58Address == null) {
       throw const SquarePublishException('请先创建或选择钱包');
     }
     // 发帖分类权限按身份档（用户 2026-07-16）：竞选内容只有竞选身份（candidate）可发。
@@ -108,10 +108,10 @@ class SquarePublishService {
     SquareChainPublishedResult? chainResult;
     try {
       onStage?.call(SquarePublishStage.checkingBalance);
-      await _ensurePublishBalance(identity.pubkeyHex!);
+      await _ensurePublishBalance(identity.accountId);
 
       prepared = await _uploadService.preparePostContent(
-        ownerAccount: identity.ownerAccount,
+        accountId: identity.accountId,
         postCategory: postCategory,
         text: trimmedText,
         mediaDrafts: mediaDrafts,
@@ -124,8 +124,8 @@ class SquarePublishService {
 
       onStage?.call(SquarePublishStage.submittingChain);
       chainResult = await _chainService.publishPost(
-        fromAddress: identity.ownerAccount,
-        signerPubkey: SquareChainService.hexDecode(identity.pubkeyHex!),
+        fromSs58Address: identity.ss58Address!,
+        signerPublicKey: SquareChainService.hexDecode(identity.accountId),
         postId: prepared.postId,
         postCategory: postCategory,
         contentHashHex: prepared.contentHash,
@@ -193,9 +193,9 @@ class SquarePublishService {
     }
   }
 
-  Future<void> _ensurePublishBalance(String pubkeyHex) async {
+  Future<void> _ensurePublishBalance(String accountId) async {
     final balance = await _balanceReader.fetchFreshFinalizedBalanceYuan(
-      pubkeyHex,
+      accountId,
     );
     final balanceFen = (balance * 100).round();
     if (balanceFen < minimumPublishBalanceFen) {

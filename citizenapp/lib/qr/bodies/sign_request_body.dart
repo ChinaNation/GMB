@@ -10,7 +10,7 @@ import 'package:citizenapp/qr/envelope.dart';
 class SignRequestBody implements QrBody {
   const SignRequestBody({
     required this.action,
-    required this.signerPubkey,
+    required this.signerPublicKey,
     required this.payload,
     this.alg = 1,
   });
@@ -22,7 +22,7 @@ class SignRequestBody implements QrBody {
   final int alg;
 
   /// 期望签名者公钥 `u`:32 字节公钥的 base64url 无填充编码。
-  final String signerPubkey;
+  final String signerPublicKey;
 
   /// 审阅载荷 `d`:原始 review_payload bytes 的 base64url 无填充编码。
   ///
@@ -32,24 +32,24 @@ class SignRequestBody implements QrBody {
 
   Uint8List get payloadBytes => _b64ToBytes(payload, 'd');
 
-  Uint8List get pubkeyBytes => _b64ToBytes(signerPubkey, 'u');
+  Uint8List get signerPublicKeyBytes => _b64ToBytes(signerPublicKey, 'u');
 
   String get payloadHex => '0x${_toHex(payloadBytes)}';
 
-  String get pubkeyHex => '0x${_toHex(pubkeyBytes)}';
+  String get signerPublicKeyHex => '0x${_toHex(signerPublicKeyBytes)}';
 
   @override
   Map<String, dynamic> toJson() => <String, dynamic>{
         'a': action,
         'g': alg,
-        'u': signerPubkey,
+        'u': signerPublicKey,
         'd': payload,
       };
 
   static SignRequestBody fromJson(Map<String, dynamic> data) {
     final action = data['a'];
     final alg = data['g'];
-    final signerPubkey = data['u'];
+    final signerPublicKey = data['u'];
     final payload = data['d'];
     if (action is! int || action <= 0) {
       throw const FormatException('签名请求 a 必须为正整数');
@@ -57,10 +57,10 @@ class SignRequestBody implements QrBody {
     if (alg != 1) {
       throw const FormatException('签名请求 g 目前只允许 1(sr25519)');
     }
-    if (signerPubkey is! String || signerPubkey.isEmpty) {
+    if (signerPublicKey is! String || signerPublicKey.isEmpty) {
       throw const FormatException('签名请求 u 必填');
     }
-    if (_b64ToBytes(signerPubkey, 'u').length != 32) {
+    if (_b64ToBytes(signerPublicKey, 'u').length != 32) {
       throw const FormatException('签名请求 u 必须解码为 32 字节');
     }
     if (payload is! String || payload.isEmpty) {
@@ -72,19 +72,19 @@ class SignRequestBody implements QrBody {
     return SignRequestBody(
       action: action,
       alg: alg as int,
-      signerPubkey: signerPubkey,
+      signerPublicKey: signerPublicKey,
       payload: payload,
     );
   }
 
   static SignRequestBody fromHex({
     required int action,
-    required String pubkeyHex,
+    required String signerPublicKeyHex,
     required String payloadHex,
   }) {
     return SignRequestBody(
       action: action,
-      signerPubkey: _b64NoPad(_hexToBytes(pubkeyHex)),
+      signerPublicKey: _b64NoPad(_hexToBytes(signerPublicKeyHex)),
       payload: _b64NoPad(_hexToBytes(payloadHex)),
     );
   }

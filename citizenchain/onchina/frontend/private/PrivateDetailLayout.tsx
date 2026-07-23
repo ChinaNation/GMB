@@ -70,7 +70,7 @@ import {
 } from '../admins/api';
 
 // 创建者角色中文映射(与列表页保持一致)。
-const CREATED_BY_ROLE_LABEL: Record<string, string> = {
+const CREATOR_INSTITUTION_LABEL: Record<string, string> = {
   FEDERAL_REGISTRY: '联邦注册局管理员',
   CITY_REGISTRY: '市注册局管理员',
 };
@@ -123,9 +123,9 @@ function parseGovernanceAdmins(text?: string): InstitutionGovernanceAdminInput[]
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const [familyName, givenName, adminAccount] = line.split(/[,，]/).map((part) => part.trim());
-      if (!familyName || !givenName || !adminAccount) throw new Error('管理员集合每行格式必须是：姓,名,账户');
-      return { admin_account: adminAccount, family_name: familyName, given_name: givenName };
+      const [familyName, givenName, account_id] = line.split(/[,，]/).map((part) => part.trim());
+      if (!familyName || !givenName || !account_id) throw new Error('管理员集合每行格式必须是：姓,名,账户');
+      return { account_id, family_name: familyName, given_name: givenName };
     });
 }
 
@@ -148,7 +148,7 @@ function parseInitialAssignments(text?: string) {
     if (!account || !Number.isInteger(termStart) || !Number.isInteger(termEnd) || termStart < 0 || termEnd < 0) {
       throw new Error('初始任职每行格式必须是：管理员账户,任期开始,任期结束');
     }
-    return { admin_account: account, term_start: termStart, term_end: termEnd };
+    return { account_id: account, term_start: termStart, term_end: termEnd };
   });
 }
 
@@ -167,7 +167,7 @@ function parseGovernanceAssignments(text?: string): InstitutionGovernanceAssignm
       throw new Error('任期必须是非负整数日序');
     }
     const row = byRole.get(roleCode) ?? { role_code: roleCode, assignments: [] };
-    row.assignments.push({ admin_account: account, term_start: termStart, term_end: termEnd });
+    row.assignments.push({ account_id: account, term_start: termStart, term_end: termEnd });
     byRole.set(roleCode, row);
   }
   return Array.from(byRole.values());
@@ -518,10 +518,10 @@ export const PrivateDetailLayout: React.FC<Props> = ({
 
   const titleText = inst.cid_full_name || '(未设置全称)';
   const createdByLabel = (() => {
-    const roleLabel = detail.created_by_role
-      ? CREATED_BY_ROLE_LABEL[detail.created_by_role] ?? detail.created_by_role
+    const roleLabel = detail.creator_institution_code
+      ? CREATOR_INSTITUTION_LABEL[detail.creator_institution_code] ?? detail.creator_institution_code
       : '';
-    const creatorName = `${detail.created_by_family_name ?? ''}${detail.created_by_given_name ?? ''}`;
+    const creatorName = `${detail.creator_family_name ?? ''}${detail.creator_given_name ?? ''}`;
     // 三态:姓名+角色 / 仅角色(内置管理员未设姓名)/ 完全未知
     if (creatorName) {
       return (
@@ -905,7 +905,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       const output = await submitChainSign(
         auth,
         prepared.request_id,
-        signed.signer_pubkey,
+        signed.signer_public_key,
         signed.signature,
       );
       notice.success(`链交易已提交：${output.tx_hash}`);
@@ -970,7 +970,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
           <Input.TextArea rows={4} placeholder={'RABCD,w5...,0,0'} />
         </Form.Item>
         <Form.Item label="法定代表人公民 CID" name="legal_representative_cid_number">
-          <Input placeholder="只填公民 CID；姓名和钱包账户由后端读取公民档案" />
+          <Input placeholder="只填公民 CID；姓名和账户 ID由后端读取公民档案" />
         </Form.Item>
         <Form.Item name="clear_legal_representative" valuePropName="checked">
           <Checkbox>解除法定代表人并清空链上完整法定代表人结构</Checkbox>

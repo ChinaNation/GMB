@@ -15,8 +15,8 @@ class InternalVoteQueryService {
   final ChainRpc _rpc;
 
   /// 查询某管理员对某提案的投票记录。null=未投票，true=赞成，false=反对。
-  Future<bool?> fetchAdminVote(int proposalId, String pubkeyHex) async {
-    final data = await _rpc.fetchStorage(_ticketVoteKey(proposalId, pubkeyHex));
+  Future<bool?> fetchAdminVote(int proposalId, String accountId) async {
+    final data = await _rpc.fetchStorage(_ticketVoteKey(proposalId, accountId));
     return _decodeVote(data);
   }
 
@@ -25,11 +25,11 @@ class InternalVoteQueryService {
     int proposalId,
     String cidNumber,
     String voterRoleCode,
-    String pubkeyHex,
+    String accountId,
   ) async {
     final data = await _rpc.fetchStorage(_ticketVoteKey(
       proposalId,
-      pubkeyHex,
+      accountId,
       cidNumber: cidNumber,
       voterRoleCode: voterRoleCode,
     ));
@@ -42,19 +42,19 @@ class InternalVoteQueryService {
   /// `InternalVotesByTicket` 的个人票据 storage key 后分块读取。
   Future<Map<String, bool?>> fetchAdminVotesBatch(
     int proposalId,
-    Iterable<String> pubkeysHex,
+    Iterable<String> accountIds,
   ) async {
-    final keyByPubkey = <String, String>{};
-    for (final pubkey in pubkeysHex) {
-      final clean = _normalizeHex(pubkey);
-      if (clean.isEmpty) continue;
-      keyByPubkey[clean] = _ticketVoteKey(proposalId, clean);
+    final keyByAccountId = <String, String>{};
+    for (final accountId in accountIds) {
+      final normalizedAccountId = _requireAccountId(accountId);
+      keyByAccountId[normalizedAccountId] =
+          _ticketVoteKey(proposalId, normalizedAccountId);
     }
-    if (keyByPubkey.isEmpty) return const {};
+    if (keyByAccountId.isEmpty) return const {};
 
-    final values = await _rpc.fetchStorageBatchChunked(keyByPubkey.values);
+    final values = await _rpc.fetchStorageBatchChunked(keyByAccountId.values);
     return {
-      for (final entry in keyByPubkey.entries)
+      for (final entry in keyByAccountId.entries)
         entry.key: _decodeVote(values[entry.value]),
     };
   }
@@ -68,7 +68,7 @@ class InternalVoteQueryService {
     for (final ticket in tickets) {
       storageByTicket[ticket.ticketKey] = _ticketVoteKey(
         proposalId,
-        ticket.pubkeyHex,
+        ticket.voterAccountId,
         cidNumber: ticket.cidNumber,
         voterRoleCode: ticket.voterRoleCode,
       );
@@ -80,29 +80,28 @@ class InternalVoteQueryService {
     };
   }
 
-  /// 跨提案批量查询内部投票:输入 `{proposalId: [pubkeyHex]}`,一次链查返回
-  /// `{proposalId: {pubkey: vote?}}`。
+  /// 跨提案批量查询内部投票:输入 `{proposalId: [accountId]}`,一次链查返回
+  /// `{proposalId: {accountId: vote?}}`。
   ///
   /// (ADR-018 R2):公民-提案列表原来每个提案各发一次批量 RPC(P 个提案
   /// = P 次往返),这里把所有 (proposalId, admin) 的 storage key 一次拼齐、单次
   /// 分块读取,P 次往返降为 1 次。
   Future<Map<int, Map<String, bool?>>> fetchAdminVotesForProposals(
-    Map<int, List<String>> pubkeysByProposal,
+    Map<int, List<String>> accountIdsByProposal,
   ) async {
-    final keyToCoord = <String, ({int pid, String pk})>{};
-    for (final entry in pubkeysByProposal.entries) {
-      for (final pubkey in entry.value) {
-        final clean = _normalizeHex(pubkey);
-        if (clean.isEmpty) continue;
-        keyToCoord[_ticketVoteKey(entry.key, clean)] =
-            (pid: entry.key, pk: clean);
+    final keyToCoord = <String, ({int pid, String accountId})>{};
+    for (final entry in accountIdsByProposal.entries) {
+      for (final accountId in entry.value) {
+        final normalizedAccountId = _requireAccountId(accountId);
+        keyToCoord[_ticketVoteKey(entry.key, normalizedAccountId)] =
+            (pid: entry.key, accountId: normalizedAccountId);
       }
     }
     if (keyToCoord.isEmpty) return const {};
     final values = await _rpc.fetchStorageBatchChunked(keyToCoord.keys);
     final result = <int, Map<String, bool?>>{};
     keyToCoord.forEach((key, coord) {
-      (result[coord.pid] ??= <String, bool?>{})[coord.pk] =
+      (result[coord.pid] ??= <String, bool?>{})[coord.accountId] =
           _decodeVote(values[key]);
     });
     return result;
@@ -117,7 +116,7 @@ class InternalVoteQueryService {
       for (final ticket in entry.value) {
         final storageKey = _ticketVoteKey(
           entry.key,
-          ticket.pubkeyHex,
+          ticket.voterAccountId,
           cidNumber: ticket.cidNumber,
           voterRoleCode: ticket.voterRoleCode,
         );
@@ -139,12 +138,12 @@ class InternalVoteQueryService {
 
   String _ticketVoteKey(
     int proposalId,
-    String pubkeyHex, {
+    String accountId, {
     String? cidNumber,
     String? voterRoleCode,
   }) {
     final proposalIdBytes = _u64ToLeBytes(proposalId);
-    final accountBytes = _hexDecode(pubkeyHex);
+    final accountBytes = _hexDecode(accountId);
     final ticketBytes = BytesBuilder(copy: false);
     if (cidNumber == null && voterRoleCode == null) {
       ticketBytes.addByte(0); // InternalVoteTicket::Personal
@@ -213,7 +212,7 @@ class InternalVoteQueryService {
   }
 
   Uint8List _hexDecode(String hex) {
-    final h = _normalizeHex(hex);
+    final h = _requireAccountId(hex).substring(2);
     final result = Uint8List(h.length ~/ 2);
     for (var i = 0; i < result.length; i++) {
       result[i] = int.parse(h.substring(i * 2, i * 2 + 2), radix: 16);
@@ -221,9 +220,11 @@ class InternalVoteQueryService {
     return result;
   }
 
-  String _normalizeHex(String hex) {
-    final h = hex.startsWith('0x') ? hex.substring(2) : hex;
-    return h.toLowerCase();
+  String _requireAccountId(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+    }
+    return accountId;
   }
 
   static String _hexEncode(Uint8List bytes) {

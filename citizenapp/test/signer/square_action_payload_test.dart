@@ -6,14 +6,14 @@ import 'package:citizenapp/signer/square_action_payload.dart';
 
 String _payloadHex({
   required String action,
-  required String owner,
+  required String accountId,
   required String challengeId,
   String? level,
   required int expiresAt,
 }) {
   final bytes = <int>[
     ...scaleString(action),
-    ...scaleString(owner),
+    ...scaleString(accountId),
     ...scaleString(challengeId),
     if (level != null) ...scaleString(level),
     ...u64Le(expiresAt),
@@ -24,33 +24,34 @@ String _payloadHex({
 }
 
 void main() {
-  const owner = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
+  const accountId =
+      '0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d';
 
   test('decodes cancel_membership (no context) byte-for-byte', () {
     final hex = _payloadHex(
       action: 'cancel_membership',
-      owner: owner,
+      accountId: accountId,
       challengeId: 'sqa_abc',
       expiresAt: 1700000000000,
     );
     final decoded = decodeSquareActionPayload(hex);
     expect(decoded, isNotNull);
     expect(decoded!.action, 'cancel_membership');
-    expect(decoded.ownerAccount, owner);
+    expect(decoded.accountId, accountId);
     expect(decoded.challengeId, 'sqa_abc');
     expect(decoded.context, isNull);
     expect(decoded.expiresAt, 1700000000000);
     expect(decoded.actionTypeLabel, '取消订阅');
     expect(
       decoded.reviewFields!.map((field) => field.label),
-      containsAll(['操作类型', '用户账户', '挑战编号', '过期时间']),
+      containsAll(['操作类型', '账户', '挑战编号', '过期时间']),
     );
   });
 
   test('decodes subscribe_membership with level context', () {
     final hex = _payloadHex(
       action: 'subscribe_membership',
-      owner: owner,
+      accountId: accountId,
       challengeId: 'sqa_xyz',
       level: 'voting',
       expiresAt: 1700000000000,
@@ -69,7 +70,7 @@ void main() {
   test('rejects unknown action → null (no blind sign)', () {
     final hex = _payloadHex(
       action: 'transfer_all_funds',
-      owner: owner,
+      accountId: accountId,
       challengeId: 'sqa_evil',
       expiresAt: 1,
     );
@@ -79,7 +80,7 @@ void main() {
   test('rejects trailing-byte / truncated payload → null', () {
     final hex = _payloadHex(
       action: 'cancel_membership',
-      owner: owner,
+      accountId: accountId,
       challengeId: 'sqa_abc',
       expiresAt: 1,
     );

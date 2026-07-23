@@ -14,7 +14,7 @@ class TransferProposalInfo {
   const TransferProposalInfo({
     required this.proposalId,
     required this.actorCidNumber,
-    required this.institutionAccount,
+    required this.institutionAccountId,
     required this.beneficiary,
     required this.amountFen,
     required this.remark,
@@ -24,7 +24,7 @@ class TransferProposalInfo {
 
   final int proposalId;
   final String? actorCidNumber;
-  final Uint8List institutionAccount;
+  final Uint8List institutionAccountId;
   final String beneficiary; // SS58
   final BigInt amountFen;
   final String remark;
@@ -39,7 +39,7 @@ class TransferProposalInfo {
     return TransferProposalInfo(
       proposalId: proposalId,
       actorCidNumber: actorCidNumber,
-      institutionAccount: institutionAccount,
+      institutionAccountId: institutionAccountId,
       beneficiary: beneficiary,
       amountFen: amountFen,
       remark: remark,
@@ -54,7 +54,7 @@ class SafetyFundProposalInfo {
   const SafetyFundProposalInfo({
     required this.proposalId,
     required this.actorCidNumber,
-    required this.institutionAccount,
+    required this.institutionAccountId,
     required this.beneficiary,
     required this.amountFen,
     required this.remark,
@@ -64,7 +64,7 @@ class SafetyFundProposalInfo {
 
   final int proposalId;
   final String actorCidNumber;
-  final Uint8List institutionAccount;
+  final Uint8List institutionAccountId;
   final String beneficiary; // SS58
   final BigInt amountFen;
   final String remark;
@@ -79,7 +79,7 @@ class SweepProposalInfo {
   const SweepProposalInfo({
     required this.proposalId,
     required this.actorCidNumber,
-    required this.institutionAccount,
+    required this.institutionAccountId,
     required this.amountFen,
     required this.proposer,
     this.status,
@@ -87,7 +87,7 @@ class SweepProposalInfo {
 
   final int proposalId;
   final String actorCidNumber;
-  final Uint8List institutionAccount;
+  final Uint8List institutionAccountId;
   final BigInt amountFen;
   final String proposer; // SS58
   final int? status;

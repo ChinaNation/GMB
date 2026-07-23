@@ -18,7 +18,7 @@ class _FakeMls implements MlsCrypto {
   @override
   Future<MlsOutboundMessage> encrypt({
     required String conversationId,
-    required String recipientAccount,
+    required String recipientAccountId,
     MlsKeyPackage? recipientKeyPackage,
     required List<int> plaintext,
   }) async {
@@ -79,12 +79,12 @@ void main() {
 
     await flow.sendMedia(
       conversationId: 'dm:a:b',
-      senderAccount: 'a',
-      recipientAccount: 'b',
+      senderAccountId: 'a',
+      recipientAccountId: 'b',
       senderDeviceId: 'devA',
       media: _draft(200 * 1024 * 1024),
       sendDeviceAttachment: ({
-        required recipientAccount,
+        required recipientAccountId,
         required conversationId,
         required attachmentId,
         required fileName,
@@ -126,12 +126,12 @@ void main() {
 
     await flow.sendMedia(
       conversationId: 'dm:a:b',
-      senderAccount: 'a',
-      recipientAccount: 'b',
+      senderAccountId: 'a',
+      recipientAccountId: 'b',
       senderDeviceId: 'devA',
       media: _draft(50 * 1024 * 1024),
       sendDeviceAttachment: ({
-        required recipientAccount,
+        required recipientAccountId,
         required conversationId,
         required attachmentId,
         required fileName,
@@ -160,7 +160,8 @@ void main() {
     expect(uploaderCalls, 0);
     expect(webrtcCalls, 1);
     final messages = await store.readMessages('dm:a:b');
-    expect(ChatPayloadCodec.decode(messages.single.plaintext ?? '').isRelayMedia,
+    expect(
+        ChatPayloadCodec.decode(messages.single.plaintext ?? '').isRelayMedia,
         isFalse);
   });
 
@@ -170,12 +171,12 @@ void main() {
     await expectLater(
       flow.sendMedia(
         conversationId: 'dm:a:b',
-        senderAccount: 'a',
-        recipientAccount: 'b',
+        senderAccountId: 'a',
+        recipientAccountId: 'b',
         senderDeviceId: 'devA',
         media: _draft(200 * 1024 * 1024),
         sendDeviceAttachment: ({
-          required recipientAccount,
+          required recipientAccountId,
           required conversationId,
           required attachmentId,
           required fileName,

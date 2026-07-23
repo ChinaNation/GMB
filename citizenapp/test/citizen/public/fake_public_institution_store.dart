@@ -124,27 +124,27 @@ class FakePublicInstitutionStore implements PublicInstitutionStore {
   }
 
   @override
-  Future<void> subscribe(String walletPubkeyHex, String cidNumber) async {
-    subs.add(subscriptionKeyOf(walletPubkeyHex, cidNumber));
+  Future<void> subscribe(String accountId, String cidNumber) async {
+    subs.add(subscriptionKeyOf(accountId, cidNumber));
   }
 
   @override
-  Future<void> unsubscribe(String walletPubkeyHex, String cidNumber) async {
-    subs.remove(subscriptionKeyOf(walletPubkeyHex, cidNumber));
+  Future<void> unsubscribe(String accountId, String cidNumber) async {
+    subs.remove(subscriptionKeyOf(accountId, cidNumber));
   }
 
   @override
-  Future<bool> isSubscribed(String walletPubkeyHex, String cidNumber) async =>
-      subs.contains(subscriptionKeyOf(walletPubkeyHex, cidNumber));
+  Future<bool> isSubscribed(String accountId, String cidNumber) async =>
+      subs.contains(subscriptionKeyOf(accountId, cidNumber));
 
   @override
   Future<List<PublicInstitutionEntity>> listSubscribed(
-    String walletPubkeyHex,
+    String accountId,
   ) async {
     final out = <PublicInstitutionEntity>[];
     for (final key in subs) {
-      if (!key.startsWith('$walletPubkeyHex|')) continue;
-      final cid = key.substring(walletPubkeyHex.length + 1);
+      if (!key.startsWith('$accountId|')) continue;
+      final cid = key.substring(accountId.length + 1);
       final d = byId[cid];
       if (d != null) out.add(_entity(d));
     }

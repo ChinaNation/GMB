@@ -91,7 +91,7 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
             representativeMeta.currentBody,
             body.cidNumber,
             body.roleCode,
-            _normalize(w.pubkeyHex),
+            _requireAccountId(w.accountId),
           );
           if (voted == null) votable.add(w);
         }
@@ -133,9 +133,8 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
     if (wallet == null || stage == null) return;
     setState(() => _submitting = true);
     try {
-      final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
-      final balance = await ChainRpc()
-          .fetchFinalizedBalance(_normalize0x(wallet.pubkeyHex));
+      final publicKeyBytes = _hexDecode(wallet.accountId);
+      final balance = await ChainRpc().fetchFinalizedBalance(wallet.accountId);
       if (balance <= 0) {
         throw StateError('当前钱包余额不足，无法支付链上手续费');
       }
@@ -151,7 +150,7 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
         final qrSigner = QrSigner();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'leg-'),
-          pubkey: '0x${wallet.pubkeyHex}',
+          signerPublicKey: wallet.accountId,
           payloadHex: '0x${_toHex(payload)}',
           action: _qrAction(stage),
         );
@@ -163,7 +162,7 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
             builder: (_) => QrSignSessionPage(
               request: request,
               requestJson: requestJson,
-              expectedPubkey: '0x${wallet.pubkeyHex}',
+              expectedSignerPublicKey: wallet.accountId,
             ),
           ),
         );
@@ -175,7 +174,7 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
         stage: stage,
         approve: approve,
         wallet: wallet,
-        pubkeyBytes: pubkeyBytes,
+        publicKeyBytes: publicKeyBytes,
         sign: signCallback,
       );
 
@@ -199,14 +198,14 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
     required int stage,
     required bool approve,
     required WalletProfile wallet,
-    required Uint8List pubkeyBytes,
+    required Uint8List publicKeyBytes,
     required Future<Uint8List> Function(Uint8List) sign,
   }) {
     final common = (
       proposalId: widget.proposalId,
       approve: approve,
-      fromAddress: wallet.address,
-      signerPubkey: Uint8List.fromList(pubkeyBytes),
+      fromSs58Address: wallet.ss58Address,
+      signerPublicKey: Uint8List.fromList(publicKeyBytes),
       sign: sign,
     );
     switch (stage) {
@@ -219,32 +218,32 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
           proposalId: common.proposalId,
           voterRoleCode: meta.bodies[meta.currentBody].roleCode,
           approve: common.approve,
-          fromAddress: common.fromAddress,
-          signerPubkey: common.signerPubkey,
+          fromSs58Address: common.fromSs58Address,
+          signerPublicKey: common.signerPublicKey,
           sign: common.sign,
         );
       case LegStage.sign:
         return _vote.executiveSign(
           proposalId: common.proposalId,
           approve: common.approve,
-          fromAddress: common.fromAddress,
-          signerPubkey: common.signerPubkey,
+          fromSs58Address: common.fromSs58Address,
+          signerPublicKey: common.signerPublicKey,
           sign: common.sign,
         );
       case LegStage.override_:
         return _vote.overrideSign(
           proposalId: common.proposalId,
           approve: common.approve,
-          fromAddress: common.fromAddress,
-          signerPubkey: common.signerPubkey,
+          fromSs58Address: common.fromSs58Address,
+          signerPublicKey: common.signerPublicKey,
           sign: common.sign,
         );
       case LegStage.guard:
         return _vote.guardVote(
           proposalId: common.proposalId,
           approve: common.approve,
-          fromAddress: common.fromAddress,
-          signerPubkey: common.signerPubkey,
+          fromSs58Address: common.fromSs58Address,
+          signerPublicKey: common.signerPublicKey,
           sign: common.sign,
         );
       default:
@@ -433,14 +432,15 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
 
   // ──── 工具 ────
 
-  String _normalize(String hex) =>
-      hex.startsWith('0x') ? hex.substring(2).toLowerCase() : hex.toLowerCase();
-
-  String _normalize0x(String hex) =>
-      hex.startsWith('0x') ? hex.toLowerCase() : '0x${hex.toLowerCase()}';
+  String _requireAccountId(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+    }
+    return accountId;
+  }
 
   Uint8List _hexDecode(String hex) {
-    final h = _normalize(hex);
+    final h = hex.startsWith('0x') ? hex.substring(2) : hex;
     final out = Uint8List(h.length ~/ 2);
     for (var i = 0; i < out.length; i++) {
       out[i] = int.parse(h.substring(i * 2, i * 2 + 2), radix: 16);

@@ -10,8 +10,8 @@ class MediaResend {
 
   /// 在途去重键 = (attachmentId, recipient)。群里同一媒体发多成员,按成员去重,
   /// 不能只按 attachmentId(否则发给 B 时会误跳过发给 C)。
-  static String inFlightKey(String attachmentId, String recipientAccount) =>
-      '$attachmentId|$recipientAccount';
+  static String inFlightKey(String attachmentId, String recipientAccountId) =>
+      '$attachmentId|$recipientAccountId';
 
   static Future<void> run({
     required List<ChatPendingMedia> pending,
@@ -23,7 +23,7 @@ class MediaResend {
     required Future<void> Function(ChatPendingMedia media) deletePending,
   }) async {
     for (final media in pending) {
-      final key = inFlightKey(media.attachmentId, media.recipientAccount);
+      final key = inFlightKey(media.attachmentId, media.recipientAccountId);
       if (inFlight.contains(key)) {
         continue; // 在途,别重发(按 (媒体,成员) 去重)
       }

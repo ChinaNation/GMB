@@ -16,6 +16,7 @@ void main() {
   List<int> u32(int value) => [value, 0, 0, 0];
   List<int> admin(String familyName, String givenName, int accountByte) => [
         ...List.filled(32, accountByte),
+        0, // 空公民 CID（统一 Admin 恒带 cid，Compact(0)）
         ...bytes(familyName),
         ...bytes(givenName),
       ];
@@ -34,7 +35,7 @@ void main() {
 
   AdminPerson person(String account, String familyName, String givenName) =>
       AdminPerson(
-        admin_account: account,
+        account_id: account,
         family_name: familyName,
         given_name: givenName,
       );
@@ -52,8 +53,8 @@ void main() {
       institutionKind: 0,
     )!;
     expect(
-      decoded.admins.map((admin) => admin.admin_account),
-      ['01' * 32, '02' * 32],
+      decoded.admins.map((admin) => admin.account_id),
+      ['0x${'01' * 32}', '0x${'02' * 32}'],
     );
     expect(decoded.cidNumber, 'CID-1');
     expect(decoded.isActive, isTrue);
@@ -78,39 +79,39 @@ void main() {
     ]);
     final decoded = AdminAccountCodec.decodePersonal(accountId, value)!;
     expect(
-      decoded.admins.map((admin) => admin.admin_account),
-      ['01' * 32, '02' * 32],
+      decoded.admins.map((admin) => admin.account_id),
+      ['0x${'01' * 32}', '0x${'02' * 32}'],
     );
-    expect(decoded.personalCreatorHex, '03' * 32);
+    expect(decoded.personalCreatorAccountId, '0x${'03' * 32}');
   });
 
   test('个人多签管理员集合校验仍按钱包账户运行', () {
     final account = AdminAccountState(
-      personalAccountHex: '11' * 32,
+      personalAccountId: '0x${'11' * 32}',
       institutionCode: 'PMUL',
       kind: 2,
       admins: [
-        person('aa' * 32, '张', '三'),
-        person('bb' * 32, '李', '四'),
+        person('0x${'aa' * 32}', '张', '三'),
+        person('0x${'bb' * 32}', '李', '四'),
       ],
       threshold: 2,
-      personalCreatorHex: 'aa' * 32,
+      personalCreatorAccountId: '0x${'aa' * 32}',
       personalCreatedAt: 1,
       personalUpdatedAt: 1,
       personalStatus: 1,
     );
     final normalized = AdminSetValidation.validate(
       account: account,
-      proposerPubkeyHex: 'aa' * 32,
+      proposerAccountId: '0x${'aa' * 32}',
       admins: [
-        person('aa' * 32, '张', '三'),
-        person('cc' * 32, '管理', '员'),
+        person('0x${'aa' * 32}', '张', '三'),
+        person('0x${'cc' * 32}', '管理', '员'),
       ],
       newThreshold: 2,
     );
     expect(
-      normalized.admins.map((admin) => admin.admin_account),
-      ['aa' * 32, 'cc' * 32],
+      normalized.admins.map((admin) => admin.account_id),
+      ['0x${'aa' * 32}', '0x${'cc' * 32}'],
     );
   });
 
@@ -121,8 +122,8 @@ void main() {
       adminKind: 2,
       accountId: accountId,
       admins: [
-        person('01' * 32, '张', '三'),
-        person('02' * 32, '管理', '员'),
+        person('0x${'01' * 32}', '张', '三'),
+        person('0x${'02' * 32}', '管理', '员'),
       ],
       newThreshold: 2,
     );

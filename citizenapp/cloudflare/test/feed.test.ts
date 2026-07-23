@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { addBrowseCount, assertBrowseAvailable, getBrowseState } from '../src/feeds/browse';
 import type { Env } from '../src/types';
 
-const OWNER = '5GrwvaEF5zXb26Fz9rcQpDWS7u4m6DXb6T6TQvF9j5uQ8g6U';
+const ACCOUNT_ID = '0x1111111111111111111111111111111111111111111111111111111111111111';
 
 class BrowseDb {
   count = 0;
@@ -39,17 +39,17 @@ describe('wallet browse allowance', () => {
   it('starts unsubscribed wallets at 100 returned items per UTC day', async () => {
     const db = new BrowseDb();
     const env = { DB: db } as unknown as Env;
-    const state = await getBrowseState(env, OWNER);
+    const state = await getBrowseState(env, ACCOUNT_ID);
     expect(state).toMatchObject({ browse_count: 0, browse_limit: 100, browse_left: 100 });
   });
 
   it('counts only server-returned items and blocks after the allowance is exhausted', async () => {
     const db = new BrowseDb();
     const env = { DB: db } as unknown as Env;
-    let state = await getBrowseState(env, OWNER);
-    state = await addBrowseCount(env, OWNER, state, 40);
+    let state = await getBrowseState(env, ACCOUNT_ID);
+    state = await addBrowseCount(env, ACCOUNT_ID, state, 40);
     expect(state.browse_left).toBe(60);
-    state = await addBrowseCount(env, OWNER, state, 60);
+    state = await addBrowseCount(env, ACCOUNT_ID, state, 60);
     expect(state.browse_left).toBe(0);
     expect(() => assertBrowseAvailable(state)).toThrow(
       expect.objectContaining({ code: 'browse_limit_reached', status: 429 }),
@@ -60,9 +60,9 @@ describe('wallet browse allowance', () => {
     const db = new BrowseDb();
     db.count = 90;
     const env = { DB: db } as unknown as Env;
-    const stale = await getBrowseState(env, OWNER);
-    await addBrowseCount(env, OWNER, stale, 10);
-    await expect(addBrowseCount(env, OWNER, stale, 10)).rejects.toMatchObject({
+    const stale = await getBrowseState(env, ACCOUNT_ID);
+    await addBrowseCount(env, ACCOUNT_ID, stale, 10);
+    await expect(addBrowseCount(env, ACCOUNT_ID, stale, 10)).rejects.toMatchObject({
       code: 'browse_limit_reached',
       status: 429,
     });

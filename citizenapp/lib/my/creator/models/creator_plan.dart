@@ -89,7 +89,7 @@ class CreatorTier {
 
 /// 将 Cloudflare 展示名与 finalized 链上档位合并；价格绝不从 Cloudflare 覆盖链上值。
 CreatorPlan mergeCreatorPlanWithChain({
-  required String creatorAccount,
+  required String creatorAccountId,
   required CreatorPlan? displayPlan,
   required List<ChainCreatorTier> chainTiers,
 }) {
@@ -111,7 +111,7 @@ CreatorPlan mergeCreatorPlanWithChain({
     ));
   }
   return CreatorPlan(
-    creatorAccount: creatorAccount,
+    creatorAccountId: creatorAccountId,
     tiers: List.unmodifiable(tiers),
     updatedAt: displayPlan?.updatedAt ?? 0,
   );
@@ -121,13 +121,13 @@ CreatorPlan mergeCreatorPlanWithChain({
 
 class CreatorPlan {
   const CreatorPlan({
-    required this.creatorAccount,
+    required this.creatorAccountId,
     required this.tiers,
     required this.updatedAt,
   });
 
   /// 创作者钱包账户（SS58）。
-  final String creatorAccount;
+  final String creatorAccountId;
 
   /// 有序档位集合，≤ [maxTiers]。
   final List<CreatorTier> tiers;
@@ -140,8 +140,8 @@ class CreatorPlan {
 
   bool get isEmpty => tiers.isEmpty;
 
-  static CreatorPlan empty(String creatorAccount) => CreatorPlan(
-      creatorAccount: creatorAccount, tiers: const [], updatedAt: 0);
+  static CreatorPlan empty(String creatorAccountId) => CreatorPlan(
+      creatorAccountId: creatorAccountId, tiers: const [], updatedAt: 0);
 
   List<Map<String, Object?>> tiersJson() =>
       tiers.map((tier) => tier.toJson()).toList(growable: false);
@@ -157,7 +157,7 @@ class CreatorPlan {
       }
     }
     return CreatorPlan(
-      creatorAccount: json['creator_account']?.toString() ?? '',
+      creatorAccountId: json['creator_account_id']?.toString() ?? '',
       tiers: tiers,
       updatedAt: json['updated_at'] is int ? json['updated_at'] as int : 0,
     );

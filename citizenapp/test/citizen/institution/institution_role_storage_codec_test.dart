@@ -63,7 +63,7 @@ void main() {
       fixtureBytes(fixture, 'authorization_personal_multisig'),
     )!;
     expect(personal.isInstitution, isFalse);
-    expect(personal.personalAccountHex, '07' * 32);
+    expect(personal.personalAccountId, '07' * 32);
 
     final plan = InstitutionRoleStorageCodec.decodeVotePlan(
       fixtureBytes(fixture, 'vote_plan_resolution_issuance_joint'),
@@ -102,28 +102,27 @@ void main() {
     );
   });
 
-  test('机构管理员按账户、姓、名严格解码', () {
+  test('机构管理员按账户、CID、姓、名严格解码', () {
     final value = Uint8List.fromList([
       ...utf8.encode('CGOV'),
       8,
       ...List.filled(32, 1),
+      0, // 空公民 CID（统一 Admin 恒带 cid，Compact(0)）
       ...bytes('张'),
       ...bytes('三'),
       ...List.filled(32, 2),
+      0, // 空公民 CID
       ...bytes('管理'),
       ...bytes('员'),
     ]);
-    final decoded = InstitutionRoleStorageCodec.decodeAdmins(
-      value,
-      isPublic: false,
-    )!;
+    final decoded = InstitutionRoleStorageCodec.decodeAdmins(value)!;
     expect(decoded.institutionCode, 'CGOV');
     expect(decoded.admins, hasLength(2));
     expect(decoded.admins.map((admin) => admin.family_name), ['张', '管理']);
     expect(decoded.admins.map((admin) => admin.given_name), ['三', '员']);
     expect(
-      decoded.admins.map((admin) => admin.admin_account),
-      ['01' * 32, '02' * 32],
+      decoded.admins.map((admin) => admin.account_id),
+      ['0x${'01' * 32}', '0x${'02' * 32}'],
     );
   });
 
@@ -132,7 +131,6 @@ void main() {
     expect(
       InstitutionRoleStorageCodec.decodeAdmins(
         Uint8List.fromList([...utf8.encode('CGOV'), 4, ...account]),
-        isPublic: false,
       ),
       isNull,
     );
@@ -144,7 +142,6 @@ void main() {
           ...bytes('管理员'),
           ...account,
         ]),
-        isPublic: false,
       ),
       isNull,
     );
@@ -160,7 +157,6 @@ void main() {
           ...bytes('管'),
           ...bytes('员'),
         ]),
-        isPublic: false,
       ),
       isNull,
     );
@@ -175,11 +171,8 @@ void main() {
       ...bytes(''),
       ...bytes(''),
     ]);
-    final decoded = InstitutionRoleStorageCodec.decodeAdmins(
-      value,
-      isPublic: true,
-    )!;
-    expect(decoded.admins.single.admin_account, '03' * 32);
+    final decoded = InstitutionRoleStorageCodec.decodeAdmins(value)!;
+    expect(decoded.admins.single.account_id, '0x${'03' * 32}');
     expect(
       decoded.admins.single.cid_number,
       'GZ000-CTZN6-198805200-2026',
@@ -219,13 +212,13 @@ void main() {
     ]))!
             .single;
     expect(assignment.source, InstitutionAssignmentSource.registry);
-    expect(assignment.admin_account, '07' * 32);
+    expect(assignment.account_id, '07' * 32);
   });
 
   test('任期窗口包含起止日且无任期岗位只接受零值', () {
     final base = InstitutionAdminAssignment(
       cidNumber: 'CID-1',
-      admin_account: '07' * 32,
+      account_id: '07' * 32,
       roleCode: 'ROLE-1',
       termStart: 10,
       termEnd: 20,
@@ -239,7 +232,7 @@ void main() {
     expect(base.isEffectiveOnDay(21), isFalse);
     final nonTerm = InstitutionAdminAssignment(
       cidNumber: 'CID-1',
-      admin_account: '07' * 32,
+      account_id: '07' * 32,
       roleCode: 'ROLE-2',
       termStart: 0,
       termEnd: 0,
@@ -288,7 +281,7 @@ void main() {
     expect(decoded, isA<CloseProposalInfo>());
     final close = decoded! as CloseProposalInfo;
     expect(close.actorCidNumber, actorCidNumber);
-    expect(close.institutionAccount, '21' * 32);
+    expect(close.institutionAccountId, '21' * 32);
 
     expect(
       InstitutionChainService().decodeManageProposalData(

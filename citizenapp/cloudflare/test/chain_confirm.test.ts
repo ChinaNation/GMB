@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { encodeAddress } from "@polkadot/util-crypto";
 import {
   confirmPublishedPost,
   deletePostCloudflareData,
@@ -25,10 +24,10 @@ import {
   fetchFinalizedChainStorage,
 } from "../src/chain/rpc";
 
-const ownerAccountBytes = Uint8Array.from(
+const accountIdBytes = Uint8Array.from(
   Array.from({ length: 32 }, (_, index) => index + 1),
 );
-const ownerAccount = encodeAddress(ownerAccountBytes, 2027);
+const accountId = `0x${hex(accountIdBytes)}`;
 const postId = "sqp_test";
 const contentHash = `0x${"11".repeat(32)}`;
 const storageReceiptId = "sqr_test";
@@ -48,7 +47,7 @@ describe("square chain confirmation", () => {
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       post_id: postId,
-      owner_account: ownerAccount,
+      account_id: accountId,
       cid_number: "CN001-CTZN-000000001-2026",
       post_category: "campaign",
       content_hash: contentHash,
@@ -63,14 +62,14 @@ describe("square chain confirmation", () => {
     const upload: PreparedUploadRow = {
       upload_id: "squ_test",
       post_id: postId,
-      owner_account: ownerAccount,
+      account_id: accountId,
       post_category: "normal",
       manifest_hash: contentHash.slice(2),
       content_hash: contentHash.slice(2),
       storage_receipt_id: storageReceiptId,
       estimated_bytes: 1024,
       object_keys_json: JSON.stringify([
-        `square/${ownerAccount}/posts/${postId}/manifest.json`,
+        `square/${accountId.slice(2)}/posts/${postId}/manifest.json`,
       ]),
       status: "completed",
       expires_at: Date.now() + 60_000,
@@ -82,7 +81,7 @@ describe("square chain confirmation", () => {
       {
         upload_id: upload.upload_id,
         post_id: postId,
-        owner_account: ownerAccount,
+        account_id: accountId,
         media_index: 0,
         media_kind: "image",
         provider: "cloudflare_images",
@@ -108,10 +107,10 @@ describe("square chain confirmation", () => {
     const env = {
       DB: db,
       SQUARE_MEDIA: new FakeR2({
-        [`square/${ownerAccount}/posts/${postId}/manifest.json`]:
+        [`square/${accountId.slice(2)}/posts/${postId}/manifest.json`]:
           JSON.stringify({
             schema: "citizenapp.square.post.v1",
-            owner_account: ownerAccount,
+            account_id: accountId,
             post_category: "normal",
             text: "普通动态",
             media_items: [
@@ -250,13 +249,13 @@ describe("square chain confirmation", () => {
 
   it("hard-deletes Cloudflare-side post data", async () => {
     const db = new FakeDb();
-    const manifestKey = `square/${ownerAccount}/posts/${postId}/manifest.json`;
+    const manifestKey = `square/${accountId.slice(2)}/posts/${postId}/manifest.json`;
     const upload = completedUpload(manifestKey);
     db.uploads.set(postId, upload);
     db.mediaAssets.set(upload.upload_id, [imageAsset(upload.upload_id)]);
     db.posts.set(postId, {
       post_id: postId,
-      owner_account: ownerAccount,
+      account_id: accountId,
       cid_number: "CN001-CTZN-000000001-2026",
       post_category: "normal",
       content_format: "normal",
@@ -271,7 +270,7 @@ describe("square chain confirmation", () => {
     const r2 = new FakeR2({
       [manifestKey]: JSON.stringify({
         schema: "citizenapp.square.post.v1",
-        owner_account: ownerAccount,
+        account_id: accountId,
         post_category: "normal",
         text: "旧动态",
         media_items: [],
@@ -324,7 +323,7 @@ function chainRpcEnv(overrides: Partial<Env> = {}): Env {
 
 function session(): SessionState {
   return {
-    owner_account: ownerAccount,
+    account_id: accountId,
     device_key_hash: "a".repeat(64),
     created_at: 1,
     expires_at: Date.now() + 100000,
@@ -335,7 +334,7 @@ function completedUpload(manifestKey: string): PreparedUploadRow {
   return {
     upload_id: "squ_test",
     post_id: postId,
-    owner_account: ownerAccount,
+    account_id: accountId,
     post_category: "normal",
     manifest_hash: contentHash.slice(2),
     content_hash: contentHash.slice(2),
@@ -353,7 +352,7 @@ function imageAsset(uploadId: string): MediaAssetRow {
   return {
     upload_id: uploadId,
     post_id: postId,
-    owner_account: ownerAccount,
+    account_id: accountId,
     media_index: 0,
     media_kind: "image",
     provider: "cloudflare_images",
@@ -386,7 +385,7 @@ function buildEventsHex(input: {
     u32Le(0),
     Uint8Array.of(34, 0),
     compactBytes(postId),
-    ownerAccountBytes,
+    accountIdBytes,
     input.cidNumber === null
       ? Uint8Array.of(0)
       : concat([Uint8Array.of(1), compactBytes(input.cidNumber)]),
@@ -454,7 +453,7 @@ class FakeStmt {
   async first<T>() {
     if (this.sql.includes("FROM square_memberships")) {
       return {
-        owner_account: ownerAccount,
+        account_id: accountId,
         membership_level: "democracy",
         started_at: Date.now() - 60_000,
         last_charged_at: Date.now() - 60_000,
@@ -483,7 +482,7 @@ class FakeStmt {
     if (this.sql.includes("INSERT OR REPLACE INTO square_posts")) {
       this.db.posts.set(this.args[0] as string, {
         post_id: this.args[0],
-        owner_account: this.args[1],
+        account_id: this.args[1],
         cid_number: this.args[2],
         post_category: this.args[3],
         content_format: this.args[4],

@@ -70,9 +70,7 @@ int? defaultUserWalletIndex(List<WalletProfile> wallets) {
   return null;
 }
 
-final RegExp _coldWalletPubkeyPattern = RegExp(r'^(?:0x)?[0-9a-fA-F]{64}$');
-
-/// 导入冷钱包扫码只提取“可作为账户输入”的地址/公钥；
+/// 导入冷钱包扫码只提取 SS58 展示地址；
 /// 不在这里触发导入，避免用户还没确认就写入本地钱包库。
 @visibleForTesting
 String? extractColdWalletImportAddress(String raw) {
@@ -85,18 +83,15 @@ String? extractColdWalletImportAddress(String raw) {
   switch (result.type) {
     case QrRouteType.userContact:
       final body = result.envelope!.body as UserContactBody;
-      return body.address.trim();
+      return body.ss58Address.trim();
     case QrRouteType.userTransfer:
       final body = result.envelope!.body as UserTransferBody;
-      return body.address.trim();
+      return body.ss58Address.trim();
     case QrRouteType.legacyAddress:
       return result.extractedAddress?.trim();
     case QrRouteType.signRequest:
     case QrRouteType.signResponse:
     case QrRouteType.unknown:
-      if (_coldWalletPubkeyPattern.hasMatch(text)) {
-        return text;
-      }
       return null;
   }
 }
@@ -116,7 +111,7 @@ class _WalletTabState extends State<WalletTab> {
   List<WalletProfile>? _wallets;
   bool _walletsLoading = true;
   bool _balanceRefreshing = false;
-  String? _identityWalletAccount;
+  String? _identityAccountId;
   DateTime? _lastWalletStoreSnackAt;
 
   bool get _isSelectionMode => widget.selectForTrade;
@@ -132,7 +127,8 @@ class _WalletTabState extends State<WalletTab> {
       final list = await _walletService.getWallets();
       if (!mounted) return null;
       for (final wallet in list) {
-        ChainTxMonitor.instance.watchWallet(wallet.address, wallet.pubkeyHex);
+        ChainTxMonitor.instance
+            .watchWallet(wallet.ss58Address, wallet.accountId);
       }
       if (list.isNotEmpty) {
         unawaited(ChainTxMonitor.instance.start());
@@ -171,14 +167,14 @@ class _WalletTabState extends State<WalletTab> {
       if (!mounted) return;
       setState(() {
         // 纯默认用户模型:身份钱包 = 默认用户(若为公民),标记该钱包。
-        _identityWalletAccount =
-            identity.isCitizen ? identity.votingAccount?.trim() : null;
+        _identityAccountId =
+            identity.isCitizen ? identity.votingAccountId : null;
       });
     } catch (e) {
       debugPrint('wallet identity marker load failed: $e');
       if (!mounted) return;
       setState(() {
-        _identityWalletAccount = null;
+        _identityAccountId = null;
       });
     }
   }
@@ -229,10 +225,10 @@ class _WalletTabState extends State<WalletTab> {
       } else {
         try {
           // 批量查询所有钱包 finalized 余额（一次网络请求）
-          final pubkeys = targetWallets.map((w) => w.pubkeyHex).toList();
-          final balances = await _chainRpc.fetchFinalizedBalances(pubkeys);
+          final publicKeys = targetWallets.map((w) => w.accountId).toList();
+          final balances = await _chainRpc.fetchFinalizedBalances(publicKeys);
           for (final wallet in targetWallets) {
-            final balance = balances[wallet.pubkeyHex] ?? 0.0;
+            final balance = balances[wallet.accountId] ?? 0.0;
             if (balance != wallet.balance) {
               await _walletService.setWalletBalance(
                   wallet.walletIndex, balance);
@@ -626,7 +622,7 @@ class _WalletTabState extends State<WalletTab> {
                           showActions: !_isSelectionMode,
                           isDefault: wallet.walletIndex == defaultWalletIndex,
                           isIdentityWallet:
-                              wallet.address == _identityWalletAccount,
+                              wallet.accountId == _identityAccountId,
                           onTap: () => _openWalletDetail(wallet),
                           onRename: () => _renameWallet(wallet),
                           onDelete: () => _deleteWallet(wallet),
@@ -891,12 +887,12 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     _loadRecentRecords();
     // 启动链上交易监控（余额变化触发模式）。
     ChainTxMonitor.instance.watchWallet(
-      widget.wallet.address,
-      widget.wallet.pubkeyHex,
+      widget.wallet.ss58Address,
+      widget.wallet.accountId,
     );
     // 注册余额变动回调，刷新交易记录和余额显示。
     ChainTxMonitor.instance.onBalanceChanged = (address, newBalance) {
-      if (mounted && address == widget.wallet.address) {
+      if (mounted && address == widget.wallet.ss58Address) {
         _loadRecentRecords();
         // 交易记录落库和余额刷新是两件事；轻节点余额读取失败时
         // ChainTxMonitor 会传 NaN，只刷新记录，不把余额误写成 0。
@@ -911,8 +907,8 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
 
   Future<void> _loadRecentRecords() async {
     try {
-      final records = await LocalTxStore.queryRecentByWalletPubkey(
-        widget.wallet.pubkeyHex,
+      final records = await LocalTxStore.queryRecentByAccountId(
+        widget.wallet.accountId,
         limit: 5,
       );
       if (!mounted) return;
@@ -1124,8 +1120,8 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => TransactionHistoryPage(
-                walletAddress: widget.wallet.address,
-                walletPubkeyHex: widget.wallet.pubkeyHex,
+                ss58Address: widget.wallet.ss58Address,
+                accountId: widget.wallet.accountId,
               ),
             ),
           );
@@ -1343,11 +1339,11 @@ class _ImportColdWalletPageState extends State<ImportColdWalletPage> {
     });
     try {
       final profile = await WalletManager().importColdWallet(
-        address: _addressController.text,
+        ss58Address: _addressController.text,
       );
       unawaited(ChainTxMonitor.instance.initBaselineBalance(
-        profile.address,
-        profile.pubkeyHex,
+        profile.ss58Address,
+        profile.accountId,
       ));
       if (!mounted) return;
       Navigator.of(context).pop(true);

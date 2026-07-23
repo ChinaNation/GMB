@@ -553,9 +553,13 @@ fn validate_required_accounts<F>(
 where
     F: Fn(&[u8]) -> Option<Vec<u8>>,
 {
+    // 这里校验「必备账户是否都在」：主/费用等恒必备项与父级无关，故传 None。
+    // UNIN 的清算账户是否必备取决于父级（链上不保存），不算必备项；它的合法性
+    // 由「允许集」`allowed_protocol_account_kinds` 兜住。
     let required = primitives::institution_constraints::required_protocol_account_kinds(
         record.institution_code,
         cid,
+        None,
     )
     .ok_or(GuardError::InstitutionIdentityChanged)?;
     for kind in required {
@@ -776,13 +780,15 @@ where
                             decode_exact(&after, "InstitutionAccounts")?;
                         validate_account_record(&cid, &name, &account)?;
                         if let Some(protocol_kind) = institution_protocol_kind_by_name(&name) {
-                            let required =
-                                primitives::institution_constraints::required_protocol_account_kinds(
+                            // 用「允许集」而非「必备集」：链上不保存 UNIN 的父级，守卫
+                            // 无从判定它是不是股份公司分支，故其清算账户必须可有可无。
+                            let allowed =
+                                primitives::institution_constraints::allowed_protocol_account_kinds(
                                     institution.institution_code,
                                     &cid,
                                 )
                                 .ok_or(GuardError::InstitutionIdentityChanged)?;
-                            if !required.contains(&protocol_kind) {
+                            if !allowed.contains(&protocol_kind) {
                                 return Err(GuardError::UnexpectedProtocolAccount);
                             }
                         }
@@ -913,13 +919,14 @@ where
                     .ok_or(GuardError::AccountWithoutInstitution)?;
                 let institution: InstitutionRecord =
                     decode_exact(&institution_raw, "Institutions")?;
-                let required =
-                    primitives::institution_constraints::required_protocol_account_kinds(
+                // 同上：用「允许集」，否则会把带清算账户的合法银行分支行判成非法。
+                let allowed =
+                    primitives::institution_constraints::allowed_protocol_account_kinds(
                         institution.institution_code,
                         &cid,
                     )
                     .ok_or(GuardError::InstitutionIdentityChanged)?;
-                if !required.contains(&protocol_kind) {
+                if !allowed.contains(&protocol_kind) {
                     return Err(GuardError::UnexpectedProtocolAccount);
                 }
             }

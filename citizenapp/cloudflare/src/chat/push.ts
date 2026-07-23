@@ -11,7 +11,7 @@ interface PushDeviceRow {
 
 interface WakePayload {
   kind: 'chat_wake';
-  sender_account: string;
+  sender_account_id: string;
 }
 
 /**
@@ -22,19 +22,19 @@ interface WakePayload {
  */
 export async function sendChatWake(
   env: Env,
-  recipientAccount: string,
-  senderAccount: string,
+  recipientAccountId: string,
+  senderAccountId: string,
 ): Promise<number> {
   const result = await env.DB.prepare(
     `SELECT push_provider, push_token
       FROM chat_devices
-      WHERE owner_account = ? AND expires_at > ?`,
+      WHERE account_id = ? AND expires_at > ?`,
   )
-    .bind(recipientAccount, nowMs())
+    .bind(recipientAccountId, nowMs())
     .all<PushDeviceRow>();
   const payload: WakePayload = {
     kind: 'chat_wake',
-    sender_account: senderAccount,
+    sender_account_id: senderAccountId,
   };
   assertDeliverySize('push_wake', JSON.stringify(payload));
   const outcomes = await Promise.all(

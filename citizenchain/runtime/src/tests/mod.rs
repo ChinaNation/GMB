@@ -124,7 +124,7 @@ fn setup_frg_citizen_identity_admin(
         cid_number.clone(),
         admin_primitives::InstitutionAdmins {
             institution_code: admin_primitives::FRG,
-            admins: vec![admin_primitives::PublicAdmin {
+            admins: vec![admin_primitives::Admin {
                 account_id: registrar.clone(),
                 cid_number: Default::default(),
                 family_name: Default::default(),

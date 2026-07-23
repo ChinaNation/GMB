@@ -21,7 +21,7 @@ void main() {
     test('公民签名确认(citizen_identity)全部 reviewFields key 有中文标签', () {
       const keys = [
         'cid_number',
-        'wallet_account',
+        'account_id',
         'citizen_age_years',
         'valid_range',
         'citizen_status',
@@ -37,7 +37,7 @@ void main() {
         'actor_cid_number',
         'actor_role_code',
         'cid_number',
-        'wallet_account',
+        'account_id',
         'citizen_age_years',
         'valid_range',
         'citizen_status',
@@ -53,7 +53,7 @@ void main() {
         'actor_cid_number',
         'identity_level',
         'cid_number',
-        'wallet_account',
+        'account_id',
         'citizen_age_years',
         'valid_range',
         'citizen_status',
@@ -71,7 +71,7 @@ void main() {
     test('公民身份字段翻译正确', () {
       expect(fieldLabelText('actor_cid_number'), '操作机构CID');
       expect(fieldLabelText('actor_role_code'), '操作岗位码');
-      expect(fieldLabelText('wallet_account'), '公民钱包账户');
+      expect(fieldLabelText('account_id'), '账户');
       expect(fieldLabelText('citizen_age_years'), '周岁年龄');
       expect(fieldLabelText('valid_range'), '护照有效期');
       expect(fieldLabelText('citizen_status'), '身份状态');
@@ -83,9 +83,12 @@ void main() {
     });
 
     test('机构协议新增字段翻译正确', () {
-      expect(fieldLabelText('institution_account'), '机构账户');
+      expect(fieldLabelText('institution_account_id'), '机构账户');
       expect(fieldLabelText('credential_issuer_cid_number'), '凭证签发机构CID');
-      expect(fieldLabelText('credential_signer_pubkey'), '凭证签发管理员');
+      expect(
+        fieldLabelText('credential_signer_public_key'),
+        '凭证签发管理员',
+      );
       expect(fieldLabelText('account_names'), '机构账户名称');
       expect(fieldLabelText('effective_at'), '生效时间戳');
     });
@@ -93,7 +96,7 @@ void main() {
     test('链上资产全部 reviewFields key 有中文标签', () {
       const keys = [
         'actor_cid_number',
-        'execution_account',
+        'execution_account_id',
         'asset_id',
         'asset_class',
         'asset_name',
@@ -102,9 +105,9 @@ void main() {
         'decimals',
         'initial_supply_raw',
         'amount_raw',
-        'from',
-        'to',
-        'who',
+        'sender_account_id',
+        'recipient_account_id',
+        'account_id',
         'reason_hash',
       ];
       for (final key in keys) {

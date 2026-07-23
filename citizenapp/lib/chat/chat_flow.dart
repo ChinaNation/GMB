@@ -18,7 +18,7 @@ typedef ChatEnvelopeDeliverer = Future<ChatDeliveryResult> Function(
 /// 把本机源文件字节经 WebRTC 流式发给对端设备。传路径而非整块字节:大文件
 /// (最大 5GB)绝不整块进内存,由发送端 openRead 分片 + 背压推送。
 typedef ChatAttachmentDeviceSender = Future<void> Function({
-  required String recipientAccount,
+  required String recipientAccountId,
   required String conversationId,
   required String attachmentId,
   required String fileName,
@@ -176,8 +176,8 @@ class ChatFlow {
 
   Future<List<ChatDeliveryResult>> sendText({
     required String conversationId,
-    required String senderAccount,
-    required String recipientAccount,
+    required String senderAccountId,
+    required String recipientAccountId,
     required String senderDeviceId,
     MlsKeyPackage? recipientKeyPackage,
     required String text,
@@ -186,15 +186,15 @@ class ChatFlow {
     final payload = ChatPayloadCodec.encode(ChatContent.text(text));
     final outbound = await _crypto.encrypt(
       conversationId: conversationId,
-      recipientAccount: recipientAccount,
+      recipientAccountId: recipientAccountId,
       recipientKeyPackage: recipientKeyPackage,
       plaintext: utf8.encode(payload),
     );
     return _deliverOutbound(
       outbound: outbound,
       conversationId: conversationId,
-      senderAccount: senderAccount,
-      recipientAccount: recipientAccount,
+      senderAccountId: senderAccountId,
+      recipientAccountId: recipientAccountId,
       senderDeviceId: senderDeviceId,
       nowMillis: now,
       messageKind: ChatMessageKind.text,
@@ -205,8 +205,8 @@ class ChatFlow {
   /// 发送内置贴纸：只走控制信封(几十字节)，不经 WebRTC、不落缓存。
   Future<List<ChatDeliveryResult>> sendSticker({
     required String conversationId,
-    required String senderAccount,
-    required String recipientAccount,
+    required String senderAccountId,
+    required String recipientAccountId,
     required String senderDeviceId,
     MlsKeyPackage? recipientKeyPackage,
     required String packId,
@@ -218,15 +218,15 @@ class ChatFlow {
     );
     final outbound = await _crypto.encrypt(
       conversationId: conversationId,
-      recipientAccount: recipientAccount,
+      recipientAccountId: recipientAccountId,
       recipientKeyPackage: recipientKeyPackage,
       plaintext: utf8.encode(payload),
     );
     return _deliverOutbound(
       outbound: outbound,
       conversationId: conversationId,
-      senderAccount: senderAccount,
-      recipientAccount: recipientAccount,
+      senderAccountId: senderAccountId,
+      recipientAccountId: recipientAccountId,
       senderDeviceId: senderDeviceId,
       nowMillis: now,
       messageKind: ChatMessageKind.sticker,
@@ -242,8 +242,8 @@ class ChatFlow {
   /// 抛错**,留 pending 由对方上线时补发。加密仍在发字节之前,保持零泄漏顺序。
   Future<List<ChatDeliveryResult>> sendMedia({
     required String conversationId,
-    required String senderAccount,
-    required String recipientAccount,
+    required String senderAccountId,
+    required String recipientAccountId,
     required String senderDeviceId,
     MlsKeyPackage? recipientKeyPackage,
     required ChatMediaDraft media,
@@ -298,7 +298,7 @@ class ChatFlow {
     );
     final outbound = await _crypto.encrypt(
       conversationId: conversationId,
-      recipientAccount: recipientAccount,
+      recipientAccountId: recipientAccountId,
       recipientKeyPackage: recipientKeyPackage,
       plaintext: utf8.encode(payload),
     );
@@ -306,8 +306,8 @@ class ChatFlow {
     final results = await _deliverOutbound(
       outbound: outbound,
       conversationId: conversationId,
-      senderAccount: senderAccount,
-      recipientAccount: recipientAccount,
+      senderAccountId: senderAccountId,
+      recipientAccountId: recipientAccountId,
       senderDeviceId: senderDeviceId,
       nowMillis: now,
       messageKind: media.kind,
@@ -331,7 +331,7 @@ class ChatFlow {
     // 媒体字节由 WebRTC DTLS 端到端传输;Cloudflare 只转发 SDP/ICE,不收字节。
     try {
       await sendDeviceAttachment(
-        recipientAccount: recipientAccount,
+        recipientAccountId: recipientAccountId,
         conversationId: conversationId,
         attachmentId: attachmentId,
         fileName: media.fileName,
@@ -351,8 +351,8 @@ class ChatFlow {
   Future<List<ChatDeliveryResult>> _deliverOutbound({
     required MlsOutboundMessage outbound,
     required String conversationId,
-    required String senderAccount,
-    required String recipientAccount,
+    required String senderAccountId,
+    required String recipientAccountId,
     required String senderDeviceId,
     required int nowMillis,
     required ChatMessageKind messageKind,
@@ -363,8 +363,8 @@ class ChatFlow {
     for (final wireMessage in outbound.wireMessages) {
       final envelope = wireMessage.toEnvelope(
         envelopeId: _newEnvelopeId(conversationId, nowMillis, index),
-        senderAccount: senderAccount,
-        recipientAccount: recipientAccount,
+        senderAccountId: senderAccountId,
+        recipientAccountId: recipientAccountId,
         senderDeviceId: senderDeviceId,
         createdAtMillis: nowMillis + index,
         ttlMillis: defaultTtlMillis,

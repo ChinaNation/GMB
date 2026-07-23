@@ -16,6 +16,7 @@ use crate::cid::china::{
 };
 use crate::cid::code::{
     institution_code_from_cid_number, InstitutionCode, NED, NLG, NRC, NRP, NSN, NSP, PRB, PRS, SFGF,
+    UNIN,
 };
 
 /// 所有机构共同强制的协议账户。
@@ -39,22 +40,42 @@ pub const PRB_PROTOCOL_ACCOUNT_KINDS: &[InstitutionProtocolAccountKind] = &[
     InstitutionProtocolAccountKind::Stake,
 ];
 
-/// 私法人股份公司(SFGF)强制协议账户。
+/// 清算行资格机构强制协议账户。
 ///
-/// 股份公司是清算行资格机构:在主账户、费用账户之外多一个「清算账户」,
-/// 承载扫码支付 L2 清算资金。注册局创建 SFGF 时自动派生并登记该账户。
+/// 在主账户、费用账户之外多一个「清算账户」,承载扫码支付 L2 清算资金。
+/// 适用于 `SFGF` 私法人股份公司,以及父级为 `SFGF` 的 `UNIN` 非法人分支机构;
+/// 注册局登记该机构时自动派生并登记清算账户。
 pub const CORPORATION_PROTOCOL_ACCOUNT_KINDS: &[InstitutionProtocolAccountKind] = &[
     InstitutionProtocolAccountKind::Main,
     InstitutionProtocolAccountKind::Fee,
     InstitutionProtocolAccountKind::Clearing,
 ];
 
+/// 清算账户资格的唯一父级判据:父级机构码是否私法人股份公司(`SFGF`)。
+///
+/// 机构码编码在 CID 内,纯字节判定、不读 storage。父级是否**已登记**由注册入口
+/// 在 entity 层用 `Institutions` 另行校验,本模块只定规则。
+fn parent_is_joint_stock(parent_cid_number: Option<&[u8]>) -> bool {
+    parent_cid_number
+        .and_then(|raw| core::str::from_utf8(raw).ok())
+        .and_then(institution_code_from_cid_number)
+        == Some(SFGF)
+}
+
 /// 返回机构必须完整拥有的协议账户集合。
 ///
 /// CID 与机构码必须互相匹配；不匹配时返回 `None`，调用方不得自行回落到普通机构规则。
+///
+/// **清算账户资格(唯二)**:`SFGF` 私法人股份公司本身,以及**父级机构码为 `SFGF` 的
+/// `UNIN` 非法人组织**(股份公司的非法人分支机构,如银行分支行)。其余机构一律没有
+/// 清算账户 —— 含 `SFGT` 个体经营、`SFGP` 无限合伙(两者是独立经营主体、无父级概念)、
+/// 父级不是 `SFGF` 的 `UNIN`,以及全部公权与其他私权机构。
+///
+/// `parent_cid_number` 只对 `UNIN` 有意义,其余机构码一律传 `None`。
 pub fn required_protocol_account_kinds(
     code: InstitutionCode,
     cid_number: &[u8],
+    parent_cid_number: Option<&[u8]>,
 ) -> Option<&'static [InstitutionProtocolAccountKind]> {
     if institution_code_from_cid_number(core::str::from_utf8(cid_number).ok()?) != Some(code) {
         return None;
@@ -62,9 +83,35 @@ pub fn required_protocol_account_kinds(
     Some(match code {
         NRC => NRC_PROTOCOL_ACCOUNT_KINDS,
         PRB => PRB_PROTOCOL_ACCOUNT_KINDS,
+        // 股份公司本身。
         SFGF => CORPORATION_PROTOCOL_ACCOUNT_KINDS,
+        // 股份公司的非法人分支机构:父级码必须是 SFGF 才配清算账户。
+        UNIN if parent_is_joint_stock(parent_cid_number) => CORPORATION_PROTOCOL_ACCOUNT_KINDS,
+        // 其余(含父级非 SFGF 的 UNIN)一律 {主, 费}，没有清算账户。
         _ => COMMON_PROTOCOL_ACCOUNT_KINDS,
     })
+}
+
+/// 机构**允许**出现的协议账户集合（链上校验/节点守卫用）。
+///
+/// 与 `required_protocol_account_kinds` 的区别:后者是登记时**必须完整拥有**的集合
+/// (需要父级才能判定 `UNIN` 是否股份公司分支);本函数是校验既有链上状态时**允许出现**
+/// 的集合。因为**链上不保存 `UNIN` 的父级**,守卫无从判定它是不是股份公司分支,
+/// 故 `UNIN` 的清算账户必须「可有可无」—— 两种账户集都得接受,否则会把合法的
+/// 银行分支行判成非法。其余机构码与 `required_protocol_account_kinds` 完全一致。
+pub fn allowed_protocol_account_kinds(
+    code: InstitutionCode,
+    cid_number: &[u8],
+) -> Option<&'static [InstitutionProtocolAccountKind]> {
+    if institution_code_from_cid_number(core::str::from_utf8(cid_number).ok()?) != Some(code) {
+        return None;
+    }
+    if code == UNIN {
+        // CORPORATION 集是 COMMON 集的超集,故可同时容纳「带清算账户的分支行」
+        // 与「不带清算账户的普通非法人组织」。
+        return Some(CORPORATION_PROTOCOL_ACCOUNT_KINDS);
+    }
+    required_protocol_account_kinds(code, cid_number, None)
 }
 
 /// 国家参议会法定成员岗位代码。
@@ -246,7 +293,7 @@ mod tests {
             .find(|item| institution_code_from_cid_number(item.cid_number) == Some(NRC))
             .expect("NRC genesis institution");
         assert_eq!(
-            required_protocol_account_kinds(NRC, nrc.cid_number.as_bytes()),
+            required_protocol_account_kinds(NRC, nrc.cid_number.as_bytes(), None),
             Some(NRC_PROTOCOL_ACCOUNT_KINDS)
         );
 
@@ -255,13 +302,62 @@ mod tests {
             .find(|item| institution_code_from_cid_number(item.cid_number) == Some(PRB))
             .expect("PRB genesis institution");
         assert_eq!(
-            required_protocol_account_kinds(PRB, prb.cid_number.as_bytes()),
+            required_protocol_account_kinds(PRB, prb.cid_number.as_bytes(), None),
             Some(PRB_PROTOCOL_ACCOUNT_KINDS)
         );
 
         assert_eq!(
-            required_protocol_account_kinds(NRC, prb.cid_number.as_bytes()),
+            required_protocol_account_kinds(NRC, prb.cid_number.as_bytes(), None),
             None
         );
+    }
+
+    /// 清算账户资格唯二：SFGF 本身、以及父级为 SFGF 的 UNIN；其余一律无清算账户。
+    #[test]
+    fn clearing_account_only_for_joint_stock_and_its_unincorporated_branch() {
+        const SFGF_CID: &[u8] = b"GD001-SFGF0-123456789-2026";
+        const UNIN_CID: &[u8] = b"GD001-UNIN0-123456789-2026";
+        const SFLP_CID: &[u8] = b"GD001-SFLP0-123456789-2026";
+        const SFGT_CID: &[u8] = b"GD001-SFGT0-123456789-2026";
+        const SFGP_CID: &[u8] = b"GD001-SFGP0-123456789-2026";
+
+        let has_clearing = |kinds: Option<&'static [InstitutionProtocolAccountKind]>| {
+            kinds
+                .expect("CID 与机构码一致")
+                .contains(&InstitutionProtocolAccountKind::Clearing)
+        };
+
+        // ① 股份公司本身。
+        assert!(has_clearing(required_protocol_account_kinds(
+            SFGF, SFGF_CID, None
+        )));
+        // ② 父级为 SFGF 的非法人分支机构。
+        assert!(has_clearing(required_protocol_account_kinds(
+            UNIN,
+            UNIN_CID,
+            Some(SFGF_CID)
+        )));
+
+        // 父级不是股份公司的 UNIN：无清算账户。
+        assert!(!has_clearing(required_protocol_account_kinds(
+            UNIN,
+            UNIN_CID,
+            Some(SFLP_CID)
+        )));
+        // 无父级的 UNIN：无清算账户。
+        assert!(!has_clearing(required_protocol_account_kinds(
+            UNIN, UNIN_CID, None
+        )));
+        // 个体经营 / 无限合伙是独立经营主体、无父级概念：无清算账户。
+        assert!(!has_clearing(required_protocol_account_kinds(
+            *b"SFGT", SFGT_CID, None
+        )));
+        assert!(!has_clearing(required_protocol_account_kinds(
+            *b"SFGP", SFGP_CID, None
+        )));
+        // 普通私法人：无清算账户。
+        assert!(!has_clearing(required_protocol_account_kinds(
+            *b"SFLP", SFLP_CID, None
+        )));
     }
 }

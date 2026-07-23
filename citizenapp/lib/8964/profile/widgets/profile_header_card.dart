@@ -14,7 +14,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 class ProfileHeaderCard extends StatelessWidget {
   const ProfileHeaderCard({
     super.key,
-    required this.ownerAccount,
+    required this.accountId,
     required this.profile,
     required this.actions,
     this.fallbackName = '',
@@ -26,7 +26,7 @@ class ProfileHeaderCard extends StatelessWidget {
     this.creatorSubscribeButton,
   });
 
-  final String ownerAccount;
+  final String accountId;
   final CitizenProfile? profile;
 
   /// 本人钱包名称是昵称真源；他人资料使用公开镜像。两者缺失时由账户稳定
@@ -59,7 +59,7 @@ class ProfileHeaderCard extends StatelessWidget {
   bool get _membershipActive => profile?.membershipActive ?? false;
 
   String get _name {
-    return ProfilePresentation.forAccount(ownerAccount).resolveDisplayName(
+    return ProfilePresentation.forAccount(accountId).resolveDisplayName(
       walletName: fallbackName,
       publicName: profile?.displayName,
     );
@@ -103,7 +103,7 @@ class ProfileHeaderCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 _AddressRow(
-                  ownerAccount: ownerAccount,
+                  accountId: accountId,
                   cidNumber: profile?.cidNumber,
                 ),
                 if (bio.isNotEmpty) ...[
@@ -158,7 +158,7 @@ class ProfileHeaderCard extends StatelessWidget {
               membershipActive: _membershipActive,
               imageUrl: avatarUrl,
               imageHeaders: avatarHeaders,
-              seed: ownerAccount,
+              seed: accountId,
               borderColor: AppTheme.surfaceCard,
               borderWidth: 4,
               borderRadius: 14,
@@ -171,9 +171,9 @@ class ProfileHeaderCard extends StatelessWidget {
 }
 
 class _AddressRow extends StatelessWidget {
-  const _AddressRow({required this.ownerAccount, required this.cidNumber});
+  const _AddressRow({required this.accountId, required this.cidNumber});
 
-  final String ownerAccount;
+  final String accountId;
   final String? cidNumber;
 
   @override
@@ -183,7 +183,7 @@ class _AddressRow extends StatelessWidget {
       children: [
         Flexible(
           child: Text(
-            _shortenAccount(ownerAccount),
+            _shortenAccount(accountId),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
@@ -192,7 +192,7 @@ class _AddressRow extends StatelessWidget {
         const SizedBox(width: 4),
         InkWell(
           onTap: () {
-            Clipboard.setData(ClipboardData(text: ownerAccount));
+            Clipboard.setData(ClipboardData(text: accountId));
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('地址已复制')),
             );

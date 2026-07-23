@@ -5,11 +5,12 @@ import 'package:citizenapp/8964/profile/services/citizen_profile_cache.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 
-const String kOwner = '5GrwvaEF5zXb26Fz9rcQpDWS7u4m6DXb6T6TQvF9j5uQ8g6U';
+const String kOwner =
+    '0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d';
 
 SquareSession fakeSession() => SquareSession(
       sessionToken: 'tok',
-      ownerAccount: kOwner,
+      accountId: kOwner,
       expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
     );
 
@@ -34,7 +35,7 @@ SquarePost samplePost({
   return SquarePost(
     postId: id,
     author: SquareAuthor(
-      ownerAccount: kOwner,
+      accountId: kOwner,
       cidNumber: 'CN001-CTZN-000000001-2026',
       displayName: displayName,
     ),
@@ -53,7 +54,7 @@ CitizenProfile sampleProfile({
   bool notifying = false,
   String displayName = '轻节点',
   String bio = '链上公民',
-  String owner = kOwner,
+  String accountId = kOwner,
   String? avatarKey,
   String? bannerKey,
   String? identityLevel,
@@ -61,7 +62,7 @@ CitizenProfile sampleProfile({
   bool? membershipActive,
 }) {
   return CitizenProfile(
-    ownerAccount: owner,
+    accountId: accountId,
     displayName: displayName,
     bio: bio,
     avatarObjectKey: avatarKey,
@@ -105,7 +106,7 @@ class FakeProfileApi extends CitizenProfileApi {
 
   @override
   Future<CitizenProfile> fetchProfile(
-    String ownerAccount, {
+    String accountId, {
     SquareSession? session,
   }) async {
     calls++;
@@ -117,7 +118,7 @@ class FakeProfileApi extends CitizenProfileApi {
 
   @override
   Future<({List<SquarePost> posts, int? nextCursor})> fetchAuthorPosts(
-    String ownerAccount, {
+    String accountId, {
     SquarePostCategory? category,
     SquarePostContentFormat? contentFormat,
     int limit = 20,
@@ -135,7 +136,7 @@ class FakeProfileApi extends CitizenProfileApi {
   @override
   Future<void> followUser({
     required SquareSession session,
-    required String followedAccount,
+    required String followedAccountId,
   }) async {
     followCalls++;
     if (throwOnFollow) {
@@ -146,7 +147,7 @@ class FakeProfileApi extends CitizenProfileApi {
   @override
   Future<void> unfollowUser({
     required SquareSession session,
-    required String followedAccount,
+    required String followedAccountId,
   }) async {
     unfollowCalls++;
     if (throwOnFollow) {
@@ -157,7 +158,7 @@ class FakeProfileApi extends CitizenProfileApi {
   @override
   Future<void> setNotify({
     required SquareSession session,
-    required String followedAccount,
+    required String followedAccountId,
     required bool enabled,
   }) async {
     notifyCalls++;
@@ -169,7 +170,7 @@ class FakeProfileApi extends CitizenProfileApi {
 
   @override
   Future<({List<SquareFollowEntry> accounts, int? nextCursor})> fetchFollows(
-    String ownerAccount, {
+    String accountId, {
     required String type,
     int limit = 20,
     int? cursor,
@@ -200,7 +201,7 @@ class FakeProfileCache extends CitizenProfileCache {
   bool wrote = false;
 
   @override
-  Future<CitizenProfile?> read(String ownerAccount) async => seed;
+  Future<CitizenProfile?> read(String accountId) async => seed;
 
   @override
   Future<void> write(CitizenProfile profile) async {
@@ -209,7 +210,7 @@ class FakeProfileCache extends CitizenProfileCache {
   }
 
   @override
-  Future<void> clear(String ownerAccount) async {
+  Future<void> clear(String accountId) async {
     seed = null;
   }
 }

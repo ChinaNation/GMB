@@ -11,27 +11,30 @@ void main() {
 
     await store.upsertRouteRecord(
       const ChatRoute(
-        peerAccount: 'bob-wallet',
+        peerAccountId:
+            '0x2222222222222222222222222222222222222222222222222222222222222222',
         routeDisplayName: 'Bob',
         deviceId: 'bob-phone',
-        devicePublicKeyHex: '0a0b',
+        devicePublicKey: '0a0b',
         safetyNumber: '12 34',
         nearbyPeerHint: 'bob-nearby',
         note: 'first',
       ),
     );
 
-    final created = await store.getRouteRecord('bob-wallet');
+    final created = await store.getRouteRecord(
+        '0x2222222222222222222222222222222222222222222222222222222222222222');
     expect(created, isNotNull);
     expect(created!.routeDisplayName, 'Bob');
     expect(created.nearbyPeerHint, 'bob-nearby');
 
     await store.upsertRouteRecord(
       ChatRoute(
-        peerAccount: 'bob-wallet',
+        peerAccountId:
+            '0x2222222222222222222222222222222222222222222222222222222222222222',
         routeDisplayName: 'Bob New',
         deviceId: created.deviceId,
-        devicePublicKeyHex: created.devicePublicKeyHex,
+        devicePublicKey: created.devicePublicKey,
         safetyNumber: created.safetyNumber,
         nearbyPeerHint: created.nearbyPeerHint,
         createdAtMillis: created.createdAtMillis,

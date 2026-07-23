@@ -24,7 +24,7 @@ void main() {
       gate: gate.future,
     );
     await tester.pumpWidget(_wrap(
-      PublicTab(repository: repo, walletPubkeyProvider: () async => null),
+      PublicTab(repository: repo, accountIdProvider: () async => null),
     ));
     await tester.pumpAndSettle();
 
@@ -48,7 +48,7 @@ void main() {
       cityNames: const {'ZS|001': '中央'},
     );
     await tester.pumpWidget(_wrap(
-      PublicTab(repository: repo, walletPubkeyProvider: () async => null),
+      PublicTab(repository: repo, accountIdProvider: () async => null),
     ));
     await tester.pumpAndSettle();
 
@@ -73,7 +73,7 @@ void main() {
       cityNames: const {'ZS|001': '中央', 'ZS|002': '北区'},
     );
     await tester.pumpWidget(_wrap(
-      PublicTab(repository: repo, walletPubkeyProvider: () async => null),
+      PublicTab(repository: repo, accountIdProvider: () async => null),
     ));
     await tester.pumpAndSettle();
 
@@ -93,7 +93,7 @@ void main() {
       cityNames: const {'ZS|001': '中央'},
     );
     await tester.pumpWidget(_wrap(
-      PublicTab(repository: repo, walletPubkeyProvider: () async => null),
+      PublicTab(repository: repo, accountIdProvider: () async => null),
     ));
     await tester.pumpAndSettle();
 
@@ -116,7 +116,7 @@ void main() {
       subscriptions: const {'aa': 'A'},
     );
     await tester.pumpWidget(_wrap(
-      PublicTab(repository: repo, walletPubkeyProvider: () async => 'aa'),
+      PublicTab(repository: repo, accountIdProvider: () async => 'aa'),
     ));
     await tester.pumpAndSettle();
 

@@ -18,9 +18,9 @@ const WalletProfileEntitySchema = CollectionSchema(
   name: r'WalletProfileEntity',
   id: -5044143814062565046,
   properties: {
-    r'address': PropertySchema(
+    r'accountId': PropertySchema(
       id: 0,
-      name: r'address',
+      name: r'accountId',
       type: IsarType.string,
     ),
     r'alg': PropertySchema(
@@ -38,24 +38,24 @@ const WalletProfileEntitySchema = CollectionSchema(
       name: r'groupNames',
       type: IsarType.string,
     ),
-    r'pubkeyHex': PropertySchema(
-      id: 4,
-      name: r'pubkeyHex',
-      type: IsarType.string,
-    ),
     r'signMode': PropertySchema(
-      id: 5,
+      id: 4,
       name: r'signMode',
       type: IsarType.string,
     ),
     r'sortOrder': PropertySchema(
-      id: 6,
+      id: 5,
       name: r'sortOrder',
       type: IsarType.long,
     ),
     r'source': PropertySchema(
-      id: 7,
+      id: 6,
       name: r'source',
+      type: IsarType.string,
+    ),
+    r'ss58Address': PropertySchema(
+      id: 7,
+      name: r'ss58Address',
       type: IsarType.string,
     ),
     r'ss58Prefix': PropertySchema(
@@ -93,27 +93,27 @@ const WalletProfileEntitySchema = CollectionSchema(
         )
       ],
     ),
-    r'address': IndexSchema(
-      id: -259407546592846288,
-      name: r'address',
+    r'accountId': IndexSchema(
+      id: -1591555361937770434,
+      name: r'accountId',
       unique: true,
       replace: true,
       properties: [
         IndexPropertySchema(
-          name: r'address',
+          name: r'accountId',
           type: IndexType.hash,
           caseSensitive: true,
         )
       ],
     ),
-    r'pubkeyHex': IndexSchema(
-      id: 5838006650964594011,
-      name: r'pubkeyHex',
+    r'ss58Address': IndexSchema(
+      id: 5333651859904869202,
+      name: r'ss58Address',
       unique: true,
       replace: true,
       properties: [
         IndexPropertySchema(
-          name: r'pubkeyHex',
+          name: r'ss58Address',
           type: IndexType.hash,
           caseSensitive: true,
         )
@@ -134,12 +134,12 @@ int _walletProfileEntityEstimateSize(
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
-  bytesCount += 3 + object.address.length * 3;
+  bytesCount += 3 + object.accountId.length * 3;
   bytesCount += 3 + object.alg.length * 3;
   bytesCount += 3 + object.groupNames.length * 3;
-  bytesCount += 3 + object.pubkeyHex.length * 3;
   bytesCount += 3 + object.signMode.length * 3;
   bytesCount += 3 + object.source.length * 3;
+  bytesCount += 3 + object.ss58Address.length * 3;
   bytesCount += 3 + object.walletName.length * 3;
   return bytesCount;
 }
@@ -150,14 +150,14 @@ void _walletProfileEntitySerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeString(offsets[0], object.address);
+  writer.writeString(offsets[0], object.accountId);
   writer.writeString(offsets[1], object.alg);
   writer.writeLong(offsets[2], object.createdAtMillis);
   writer.writeString(offsets[3], object.groupNames);
-  writer.writeString(offsets[4], object.pubkeyHex);
-  writer.writeString(offsets[5], object.signMode);
-  writer.writeLong(offsets[6], object.sortOrder);
-  writer.writeString(offsets[7], object.source);
+  writer.writeString(offsets[4], object.signMode);
+  writer.writeLong(offsets[5], object.sortOrder);
+  writer.writeString(offsets[6], object.source);
+  writer.writeString(offsets[7], object.ss58Address);
   writer.writeLong(offsets[8], object.ss58Prefix);
   writer.writeLong(offsets[9], object.walletIndex);
   writer.writeString(offsets[10], object.walletName);
@@ -170,15 +170,15 @@ WalletProfileEntity _walletProfileEntityDeserialize(
   Map<Type, List<int>> allOffsets,
 ) {
   final object = WalletProfileEntity();
-  object.address = reader.readString(offsets[0]);
+  object.accountId = reader.readString(offsets[0]);
   object.alg = reader.readString(offsets[1]);
   object.createdAtMillis = reader.readLong(offsets[2]);
   object.groupNames = reader.readString(offsets[3]);
   object.id = id;
-  object.pubkeyHex = reader.readString(offsets[4]);
-  object.signMode = reader.readString(offsets[5]);
-  object.sortOrder = reader.readLong(offsets[6]);
-  object.source = reader.readString(offsets[7]);
+  object.signMode = reader.readString(offsets[4]);
+  object.sortOrder = reader.readLong(offsets[5]);
+  object.source = reader.readString(offsets[6]);
+  object.ss58Address = reader.readString(offsets[7]);
   object.ss58Prefix = reader.readLong(offsets[8]);
   object.walletIndex = reader.readLong(offsets[9]);
   object.walletName = reader.readString(offsets[10]);
@@ -203,9 +203,9 @@ P _walletProfileEntityDeserializeProp<P>(
     case 4:
       return (reader.readString(offset)) as P;
     case 5:
-      return (reader.readString(offset)) as P;
-    case 6:
       return (reader.readLong(offset)) as P;
+    case 6:
+      return (reader.readString(offset)) as P;
     case 7:
       return (reader.readString(offset)) as P;
     case 8:
@@ -289,113 +289,114 @@ extension WalletProfileEntityByIndex on IsarCollection<WalletProfileEntity> {
     return putAllByIndexSync(r'walletIndex', objects, saveLinks: saveLinks);
   }
 
-  Future<WalletProfileEntity?> getByAddress(String address) {
-    return getByIndex(r'address', [address]);
+  Future<WalletProfileEntity?> getByAccountId(String accountId) {
+    return getByIndex(r'accountId', [accountId]);
   }
 
-  WalletProfileEntity? getByAddressSync(String address) {
-    return getByIndexSync(r'address', [address]);
+  WalletProfileEntity? getByAccountIdSync(String accountId) {
+    return getByIndexSync(r'accountId', [accountId]);
   }
 
-  Future<bool> deleteByAddress(String address) {
-    return deleteByIndex(r'address', [address]);
+  Future<bool> deleteByAccountId(String accountId) {
+    return deleteByIndex(r'accountId', [accountId]);
   }
 
-  bool deleteByAddressSync(String address) {
-    return deleteByIndexSync(r'address', [address]);
+  bool deleteByAccountIdSync(String accountId) {
+    return deleteByIndexSync(r'accountId', [accountId]);
   }
 
-  Future<List<WalletProfileEntity?>> getAllByAddress(
-      List<String> addressValues) {
-    final values = addressValues.map((e) => [e]).toList();
-    return getAllByIndex(r'address', values);
+  Future<List<WalletProfileEntity?>> getAllByAccountId(
+      List<String> accountIdValues) {
+    final values = accountIdValues.map((e) => [e]).toList();
+    return getAllByIndex(r'accountId', values);
   }
 
-  List<WalletProfileEntity?> getAllByAddressSync(List<String> addressValues) {
-    final values = addressValues.map((e) => [e]).toList();
-    return getAllByIndexSync(r'address', values);
+  List<WalletProfileEntity?> getAllByAccountIdSync(
+      List<String> accountIdValues) {
+    final values = accountIdValues.map((e) => [e]).toList();
+    return getAllByIndexSync(r'accountId', values);
   }
 
-  Future<int> deleteAllByAddress(List<String> addressValues) {
-    final values = addressValues.map((e) => [e]).toList();
-    return deleteAllByIndex(r'address', values);
+  Future<int> deleteAllByAccountId(List<String> accountIdValues) {
+    final values = accountIdValues.map((e) => [e]).toList();
+    return deleteAllByIndex(r'accountId', values);
   }
 
-  int deleteAllByAddressSync(List<String> addressValues) {
-    final values = addressValues.map((e) => [e]).toList();
-    return deleteAllByIndexSync(r'address', values);
+  int deleteAllByAccountIdSync(List<String> accountIdValues) {
+    final values = accountIdValues.map((e) => [e]).toList();
+    return deleteAllByIndexSync(r'accountId', values);
   }
 
-  Future<Id> putByAddress(WalletProfileEntity object) {
-    return putByIndex(r'address', object);
+  Future<Id> putByAccountId(WalletProfileEntity object) {
+    return putByIndex(r'accountId', object);
   }
 
-  Id putByAddressSync(WalletProfileEntity object, {bool saveLinks = true}) {
-    return putByIndexSync(r'address', object, saveLinks: saveLinks);
+  Id putByAccountIdSync(WalletProfileEntity object, {bool saveLinks = true}) {
+    return putByIndexSync(r'accountId', object, saveLinks: saveLinks);
   }
 
-  Future<List<Id>> putAllByAddress(List<WalletProfileEntity> objects) {
-    return putAllByIndex(r'address', objects);
+  Future<List<Id>> putAllByAccountId(List<WalletProfileEntity> objects) {
+    return putAllByIndex(r'accountId', objects);
   }
 
-  List<Id> putAllByAddressSync(List<WalletProfileEntity> objects,
+  List<Id> putAllByAccountIdSync(List<WalletProfileEntity> objects,
       {bool saveLinks = true}) {
-    return putAllByIndexSync(r'address', objects, saveLinks: saveLinks);
+    return putAllByIndexSync(r'accountId', objects, saveLinks: saveLinks);
   }
 
-  Future<WalletProfileEntity?> getByPubkeyHex(String pubkeyHex) {
-    return getByIndex(r'pubkeyHex', [pubkeyHex]);
+  Future<WalletProfileEntity?> getBySs58Address(String ss58Address) {
+    return getByIndex(r'ss58Address', [ss58Address]);
   }
 
-  WalletProfileEntity? getByPubkeyHexSync(String pubkeyHex) {
-    return getByIndexSync(r'pubkeyHex', [pubkeyHex]);
+  WalletProfileEntity? getBySs58AddressSync(String ss58Address) {
+    return getByIndexSync(r'ss58Address', [ss58Address]);
   }
 
-  Future<bool> deleteByPubkeyHex(String pubkeyHex) {
-    return deleteByIndex(r'pubkeyHex', [pubkeyHex]);
+  Future<bool> deleteBySs58Address(String ss58Address) {
+    return deleteByIndex(r'ss58Address', [ss58Address]);
   }
 
-  bool deleteByPubkeyHexSync(String pubkeyHex) {
-    return deleteByIndexSync(r'pubkeyHex', [pubkeyHex]);
+  bool deleteBySs58AddressSync(String ss58Address) {
+    return deleteByIndexSync(r'ss58Address', [ss58Address]);
   }
 
-  Future<List<WalletProfileEntity?>> getAllByPubkeyHex(
-      List<String> pubkeyHexValues) {
-    final values = pubkeyHexValues.map((e) => [e]).toList();
-    return getAllByIndex(r'pubkeyHex', values);
+  Future<List<WalletProfileEntity?>> getAllBySs58Address(
+      List<String> ss58AddressValues) {
+    final values = ss58AddressValues.map((e) => [e]).toList();
+    return getAllByIndex(r'ss58Address', values);
   }
 
-  List<WalletProfileEntity?> getAllByPubkeyHexSync(
-      List<String> pubkeyHexValues) {
-    final values = pubkeyHexValues.map((e) => [e]).toList();
-    return getAllByIndexSync(r'pubkeyHex', values);
+  List<WalletProfileEntity?> getAllBySs58AddressSync(
+      List<String> ss58AddressValues) {
+    final values = ss58AddressValues.map((e) => [e]).toList();
+    return getAllByIndexSync(r'ss58Address', values);
   }
 
-  Future<int> deleteAllByPubkeyHex(List<String> pubkeyHexValues) {
-    final values = pubkeyHexValues.map((e) => [e]).toList();
-    return deleteAllByIndex(r'pubkeyHex', values);
+  Future<int> deleteAllBySs58Address(List<String> ss58AddressValues) {
+    final values = ss58AddressValues.map((e) => [e]).toList();
+    return deleteAllByIndex(r'ss58Address', values);
   }
 
-  int deleteAllByPubkeyHexSync(List<String> pubkeyHexValues) {
-    final values = pubkeyHexValues.map((e) => [e]).toList();
-    return deleteAllByIndexSync(r'pubkeyHex', values);
+  int deleteAllBySs58AddressSync(List<String> ss58AddressValues) {
+    final values = ss58AddressValues.map((e) => [e]).toList();
+    return deleteAllByIndexSync(r'ss58Address', values);
   }
 
-  Future<Id> putByPubkeyHex(WalletProfileEntity object) {
-    return putByIndex(r'pubkeyHex', object);
+  Future<Id> putBySs58Address(WalletProfileEntity object) {
+    return putByIndex(r'ss58Address', object);
   }
 
-  Id putByPubkeyHexSync(WalletProfileEntity object, {bool saveLinks = true}) {
-    return putByIndexSync(r'pubkeyHex', object, saveLinks: saveLinks);
+  Id putBySs58AddressSync(WalletProfileEntity object, {bool saveLinks = true}) {
+    return putByIndexSync(r'ss58Address', object, saveLinks: saveLinks);
   }
 
-  Future<List<Id>> putAllByPubkeyHex(List<WalletProfileEntity> objects) {
-    return putAllByIndex(r'pubkeyHex', objects);
+  Future<List<Id>> putAllBySs58Address(List<WalletProfileEntity> objects) {
+    return putAllByIndex(r'ss58Address', objects);
   }
 
-  List<Id> putAllByPubkeyHexSync(List<WalletProfileEntity> objects,
+  List<Id> putAllBySs58AddressSync(List<WalletProfileEntity> objects,
       {bool saveLinks = true}) {
-    return putAllByIndexSync(r'pubkeyHex', objects, saveLinks: saveLinks);
+    return putAllByIndexSync(r'ss58Address', objects, saveLinks: saveLinks);
   }
 }
 
@@ -581,44 +582,44 @@ extension WalletProfileEntityQueryWhere
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterWhereClause>
-      addressEqualTo(String address) {
+      accountIdEqualTo(String accountId) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'address',
-        value: [address],
+        indexName: r'accountId',
+        value: [accountId],
       ));
     });
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterWhereClause>
-      addressNotEqualTo(String address) {
+      accountIdNotEqualTo(String accountId) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'address',
+              indexName: r'accountId',
               lower: [],
-              upper: [address],
+              upper: [accountId],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'address',
-              lower: [address],
+              indexName: r'accountId',
+              lower: [accountId],
               includeLower: false,
               upper: [],
             ));
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'address',
-              lower: [address],
+              indexName: r'accountId',
+              lower: [accountId],
               includeLower: false,
               upper: [],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'address',
+              indexName: r'accountId',
               lower: [],
-              upper: [address],
+              upper: [accountId],
               includeUpper: false,
             ));
       }
@@ -626,44 +627,44 @@ extension WalletProfileEntityQueryWhere
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterWhereClause>
-      pubkeyHexEqualTo(String pubkeyHex) {
+      ss58AddressEqualTo(String ss58Address) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'pubkeyHex',
-        value: [pubkeyHex],
+        indexName: r'ss58Address',
+        value: [ss58Address],
       ));
     });
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterWhereClause>
-      pubkeyHexNotEqualTo(String pubkeyHex) {
+      ss58AddressNotEqualTo(String ss58Address) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'pubkeyHex',
+              indexName: r'ss58Address',
               lower: [],
-              upper: [pubkeyHex],
+              upper: [ss58Address],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'pubkeyHex',
-              lower: [pubkeyHex],
+              indexName: r'ss58Address',
+              lower: [ss58Address],
               includeLower: false,
               upper: [],
             ));
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'pubkeyHex',
-              lower: [pubkeyHex],
+              indexName: r'ss58Address',
+              lower: [ss58Address],
               includeLower: false,
               upper: [],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'pubkeyHex',
+              indexName: r'ss58Address',
               lower: [],
-              upper: [pubkeyHex],
+              upper: [ss58Address],
               includeUpper: false,
             ));
       }
@@ -674,13 +675,13 @@ extension WalletProfileEntityQueryWhere
 extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
     WalletProfileEntity, QFilterCondition> {
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      addressEqualTo(
+      accountIdEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'address',
+        property: r'accountId',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -688,7 +689,7 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      addressGreaterThan(
+      accountIdGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -696,7 +697,7 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'address',
+        property: r'accountId',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -704,7 +705,7 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      addressLessThan(
+      accountIdLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -712,7 +713,7 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'address',
+        property: r'accountId',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -720,7 +721,7 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      addressBetween(
+      accountIdBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -729,7 +730,7 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'address',
+        property: r'accountId',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -740,13 +741,13 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      addressStartsWith(
+      accountIdStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'address',
+        property: r'accountId',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -754,13 +755,13 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      addressEndsWith(
+      accountIdEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'address',
+        property: r'accountId',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -768,10 +769,10 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      addressContains(String value, {bool caseSensitive = true}) {
+      accountIdContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'address',
+        property: r'accountId',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -779,10 +780,10 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      addressMatches(String pattern, {bool caseSensitive = true}) {
+      accountIdMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'address',
+        property: r'accountId',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -790,20 +791,20 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      addressIsEmpty() {
+      accountIdIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'address',
+        property: r'accountId',
         value: '',
       ));
     });
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      addressIsNotEmpty() {
+      accountIdIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'address',
+        property: r'accountId',
         value: '',
       ));
     });
@@ -1194,142 +1195,6 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      pubkeyHexEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'pubkeyHex',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      pubkeyHexGreaterThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'pubkeyHex',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      pubkeyHexLessThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'pubkeyHex',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      pubkeyHexBetween(
-    String lower,
-    String upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'pubkeyHex',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      pubkeyHexStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'pubkeyHex',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      pubkeyHexEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'pubkeyHex',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      pubkeyHexContains(String value, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'pubkeyHex',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      pubkeyHexMatches(String pattern, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'pubkeyHex',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      pubkeyHexIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'pubkeyHex',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      pubkeyHexIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'pubkeyHex',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
       signModeEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -1658,6 +1523,142 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      ss58AddressEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'ss58Address',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      ss58AddressGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'ss58Address',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      ss58AddressLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'ss58Address',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      ss58AddressBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'ss58Address',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      ss58AddressStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'ss58Address',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      ss58AddressEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'ss58Address',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      ss58AddressContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'ss58Address',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      ss58AddressMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'ss58Address',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      ss58AddressIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'ss58Address',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
+      ss58AddressIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'ss58Address',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
       ss58PrefixEqualTo(int value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -1915,16 +1916,16 @@ extension WalletProfileEntityQueryLinks on QueryBuilder<WalletProfileEntity,
 extension WalletProfileEntityQuerySortBy
     on QueryBuilder<WalletProfileEntity, WalletProfileEntity, QSortBy> {
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      sortByAddress() {
+      sortByAccountId() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'address', Sort.asc);
+      return query.addSortBy(r'accountId', Sort.asc);
     });
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      sortByAddressDesc() {
+      sortByAccountIdDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'address', Sort.desc);
+      return query.addSortBy(r'accountId', Sort.desc);
     });
   }
 
@@ -1971,20 +1972,6 @@ extension WalletProfileEntityQuerySortBy
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      sortByPubkeyHex() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'pubkeyHex', Sort.asc);
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      sortByPubkeyHexDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'pubkeyHex', Sort.desc);
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
       sortBySignMode() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'signMode', Sort.asc);
@@ -2023,6 +2010,20 @@ extension WalletProfileEntityQuerySortBy
       sortBySourceDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'source', Sort.desc);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
+      sortBySs58Address() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ss58Address', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
+      sortBySs58AddressDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ss58Address', Sort.desc);
     });
   }
 
@@ -2072,16 +2073,16 @@ extension WalletProfileEntityQuerySortBy
 extension WalletProfileEntityQuerySortThenBy
     on QueryBuilder<WalletProfileEntity, WalletProfileEntity, QSortThenBy> {
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      thenByAddress() {
+      thenByAccountId() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'address', Sort.asc);
+      return query.addSortBy(r'accountId', Sort.asc);
     });
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      thenByAddressDesc() {
+      thenByAccountIdDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'address', Sort.desc);
+      return query.addSortBy(r'accountId', Sort.desc);
     });
   }
 
@@ -2142,20 +2143,6 @@ extension WalletProfileEntityQuerySortThenBy
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      thenByPubkeyHex() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'pubkeyHex', Sort.asc);
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      thenByPubkeyHexDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'pubkeyHex', Sort.desc);
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
       thenBySignMode() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'signMode', Sort.asc);
@@ -2194,6 +2181,20 @@ extension WalletProfileEntityQuerySortThenBy
       thenBySourceDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'source', Sort.desc);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
+      thenBySs58Address() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ss58Address', Sort.asc);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
+      thenBySs58AddressDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ss58Address', Sort.desc);
     });
   }
 
@@ -2243,9 +2244,9 @@ extension WalletProfileEntityQuerySortThenBy
 extension WalletProfileEntityQueryWhereDistinct
     on QueryBuilder<WalletProfileEntity, WalletProfileEntity, QDistinct> {
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QDistinct>
-      distinctByAddress({bool caseSensitive = true}) {
+      distinctByAccountId({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'address', caseSensitive: caseSensitive);
+      return query.addDistinctBy(r'accountId', caseSensitive: caseSensitive);
     });
   }
 
@@ -2271,13 +2272,6 @@ extension WalletProfileEntityQueryWhereDistinct
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QDistinct>
-      distinctByPubkeyHex({bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'pubkeyHex', caseSensitive: caseSensitive);
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QDistinct>
       distinctBySignMode({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'signMode', caseSensitive: caseSensitive);
@@ -2295,6 +2289,13 @@ extension WalletProfileEntityQueryWhereDistinct
       distinctBySource({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'source', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QDistinct>
+      distinctBySs58Address({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'ss58Address', caseSensitive: caseSensitive);
     });
   }
 
@@ -2329,9 +2330,9 @@ extension WalletProfileEntityQueryProperty
   }
 
   QueryBuilder<WalletProfileEntity, String, QQueryOperations>
-      addressProperty() {
+      accountIdProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'address');
+      return query.addPropertyName(r'accountId');
     });
   }
 
@@ -2356,13 +2357,6 @@ extension WalletProfileEntityQueryProperty
   }
 
   QueryBuilder<WalletProfileEntity, String, QQueryOperations>
-      pubkeyHexProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'pubkeyHex');
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, String, QQueryOperations>
       signModeProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'signMode');
@@ -2378,6 +2372,13 @@ extension WalletProfileEntityQueryProperty
   QueryBuilder<WalletProfileEntity, String, QQueryOperations> sourceProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'source');
+    });
+  }
+
+  QueryBuilder<WalletProfileEntity, String, QQueryOperations>
+      ss58AddressProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'ss58Address');
     });
   }
 

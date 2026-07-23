@@ -5,10 +5,10 @@ import { signatureVerify } from '@polkadot/util-crypto/signature/verify';
 export async function verifyWalletSignature(
   message: Uint8Array,
   signature: string,
-  ownerAccount: string
+  accountId: string
 ): Promise<boolean> {
   try {
-    return signatureVerify(message, signature, ownerAccount).isValid;
+    return signatureVerify(message, signature, accountId).isValid;
   } catch {
     return false;
   }

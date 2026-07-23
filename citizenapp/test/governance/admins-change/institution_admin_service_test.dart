@@ -53,7 +53,6 @@ void main() {
   Uint8List institutionAdminBytes({
     required String institutionCode,
     required List<int> admin,
-    bool isPublic = false,
     String cidNumber = '',
     String familyName = '管理',
     String givenName = '员',
@@ -65,7 +64,9 @@ void main() {
       ...codeBytes(institutionCode),
       4,
       ...admin,
-      if (isPublic) ...[cidBytes.length << 2, ...cidBytes],
+      // 统一 Admin 恒带 cid：私权为空 CID（Compact(0)），公权为真实 CID。
+      cidBytes.length << 2,
+      ...cidBytes,
       familyBytes.length << 2,
       ...familyBytes,
       givenBytes.length << 2,
@@ -82,6 +83,7 @@ void main() {
       2,
       4,
       ...admin,
+      0, // 空公民 CID（Compact(0)）
       familyBytes.length << 2,
       ...familyBytes,
       givenBytes.length << 2,
@@ -134,8 +136,8 @@ void main() {
       kind: 1,
     );
     expect(
-      (await service.fetchAdmins(identity)).map((admin) => admin.admin_account),
-      ['aa' * 32],
+      (await service.fetchAdmins(identity)).map((admin) => admin.account_id),
+      ['0x${'aa' * 32}'],
     );
     expect(await service.fetchThreshold(identity), 2);
     expect(rpc.requestedKeys, [accountKey, thresholdStorageKey]);
@@ -144,14 +146,15 @@ void main() {
   test('个人多签严格按 personal_account 路由', () async {
     final rpc = FakeChainRpc();
     final service = InstitutionAdminService(chainRpc: rpc);
-    final accountHex = '22' * 32;
-    final accountId = AdminAccountIdCodec.fromAccountHex(accountHex);
+    final personalAccountId = '0x${'22' * 32}';
+    final accountIdBytes =
+        AdminAccountIdCodec.fromAccountIdText(personalAccountId);
     final accountKey =
-        '0x${hexOf(AdminAccountIdCodec.personalAdminStorageKey(accountId))}';
+        '0x${hexOf(AdminAccountIdCodec.personalAdminStorageKey(accountIdBytes))}';
     final thresholdStorageKey = thresholdKey(
       palletName: 'InternalVote',
       storageName: 'ActivePersonalThresholds',
-      keyData: accountId,
+      keyData: accountIdBytes,
     );
     rpc.responses[accountKey] = personalAdminBytes(
       admin: List<int>.filled(32, 0xbb),
@@ -159,12 +162,12 @@ void main() {
     rpc.responses[thresholdStorageKey] = Uint8List.fromList(u32Le(2));
 
     final identity = AdminAccountIdentity.personalAccount(
-      personalAccountHex: accountHex,
+      personalAccountId: personalAccountId,
       accountLabel: '个人多签',
     );
     expect(
-      (await service.fetchAdmins(identity)).map((admin) => admin.admin_account),
-      ['bb' * 32],
+      (await service.fetchAdmins(identity)).map((admin) => admin.account_id),
+      ['0x${'bb' * 32}'],
     );
     expect(await service.fetchThreshold(identity), 2);
     expect(rpc.requestedKeys, [accountKey, thresholdStorageKey]);
@@ -189,7 +192,6 @@ void main() {
       rpc.responses[accountKey] = institutionAdminBytes(
         institutionCode: entry.key,
         admin: List<int>.filled(32, 0xee),
-        isPublic: true,
         cidNumber: 'GZ000-CTZN6-198805200-2026',
         familyName: '',
         givenName: '',
@@ -213,18 +215,19 @@ void main() {
   test('管理员缓存按明确 identity key 隔离并可清除', () async {
     final rpc = FakeChainRpc();
     final service = AdminAccountService(chainRpc: rpc);
-    final accountHex = '33' * 32;
-    final accountId = AdminAccountIdCodec.fromAccountHex(accountHex);
+    final personalAccountId = '0x${'33' * 32}';
+    final accountIdBytes =
+        AdminAccountIdCodec.fromAccountIdText(personalAccountId);
     final identity = AdminAccountIdentity.personalAccount(
-      personalAccountHex: accountHex,
+      personalAccountId: personalAccountId,
       accountLabel: '个人多签',
     );
     final accountKey =
-        '0x${hexOf(AdminAccountIdCodec.personalAdminStorageKey(accountId))}';
+        '0x${hexOf(AdminAccountIdCodec.personalAdminStorageKey(accountIdBytes))}';
     final thresholdStorageKey = thresholdKey(
       palletName: 'InternalVote',
       storageName: 'ActivePersonalThresholds',
-      keyData: accountId,
+      keyData: accountIdBytes,
     );
     rpc.responses[accountKey] = personalAdminBytes(
       admin: List<int>.filled(32, 0xdd),
@@ -246,7 +249,7 @@ void main() {
   });
 
   test('InstitutionInfo 解析为 CID 机构或个人多签明确身份', () {
-    final personalAccount = '44' * 32;
+    final personalAccount = '0x${'44' * 32}';
     final personal = AdminAccountIdentity.fromInstitution(InstitutionInfo(
       cidFullName: '个人账户',
       cidShortName: '个人账户',
@@ -254,10 +257,10 @@ void main() {
       cidShortNameEn: 'Personal Account',
       cidNumber: 'personal-account:$personalAccount',
       orgType: OrgType.personalMultisig,
-      personalAccountHex: personalAccount,
+      personalAccountId: personalAccount,
     ));
     expect(personal.type, AdminAccountIdentityType.personalAccount);
-    expect(personal.personalAccountHex, personalAccount);
+    expect(personal.personalAccountId, personalAccount);
 
     const institutionCid = 'GD001-CGOV0-123456789-2026';
     final institution = AdminAccountIdentity.fromInstitution(InstitutionInfo(
@@ -269,8 +272,8 @@ void main() {
       orgType: OrgType.institution,
       adminAccountCode: 'CGOV',
       accounts: InstitutionAccounts(
-        mainAccount: '55' * 32,
-        feeAccount: '56' * 32,
+        mainAccountId: '55' * 32,
+        feeAccountId: '56' * 32,
       ),
     ));
     expect(institution.type, AdminAccountIdentityType.institution);
@@ -293,8 +296,8 @@ void main() {
       cidNumber: 'ZS001-PRB08-233384677-2026',
       orgType: OrgType.prb,
       accounts: InstitutionAccounts(
-        mainAccount: '77' * 32,
-        feeAccount: '78' * 32,
+        mainAccountId: '77' * 32,
+        feeAccountId: '78' * 32,
       ),
     ));
     expect(governance.type, AdminAccountIdentityType.institution);
@@ -316,21 +319,21 @@ void main() {
       kind: 1,
     );
     final active = ActivatedAdmin(
-      pubkeyHex: 'aa' * 32,
+      accountId: '0x${'aa' * 32}',
       cidNumber: cidNumber,
       institutionCode: identity.institutionCode,
       kind: identity.kind,
       activatedAtMs: 1,
     );
     final stale = ActivatedAdmin(
-      pubkeyHex: 'bb' * 32,
+      accountId: '0x${'bb' * 32}',
       cidNumber: cidNumber,
       institutionCode: identity.institutionCode,
       kind: identity.kind,
       activatedAtMs: 2,
     );
     final unrelated = ActivatedAdmin(
-      pubkeyHex: 'cc' * 32,
+      accountId: '0x${'cc' * 32}',
       cidNumber: otherCidNumber,
       institutionCode: otherIdentity.institutionCode,
       kind: otherIdentity.kind,
@@ -338,7 +341,7 @@ void main() {
     );
 
     SharedPreferences.setMockInitialValues({
-      'activated_institution_admins_v1': jsonEncode(
+      'activated_institution_admins': jsonEncode(
         [active, stale, unrelated].map((item) => item.toJson()).toList(),
       ),
     });
@@ -346,7 +349,7 @@ void main() {
       adminService: FakeAdminService(
         admins: [
           AdminPerson(
-            admin_account: 'aa' * 32,
+            account_id: '0x${'aa' * 32}',
             family_name: '管理',
             given_name: '员',
           ),
@@ -355,28 +358,28 @@ void main() {
     );
 
     final records = await service.getActivatedAdmins(identity);
-    expect(records.map((item) => item.pubkeyHex), ['aa' * 32]);
+    expect(records.map((item) => item.accountId), ['0x${'aa' * 32}']);
     expect(records.single.toJson()['cid_number'], cidNumber);
-    expect((await service.loadAll()).map((item) => item.pubkeyHex).toSet(), {
-      'aa' * 32,
-      'cc' * 32,
+    expect((await service.loadAll()).map((item) => item.accountId).toSet(), {
+      '0x${'aa' * 32}',
+      '0x${'cc' * 32}',
     });
   });
 
   test('管理员人员左连接岗位且无岗位人员不丢失', () {
     final first = AdminPerson(
-      admin_account: 'aa' * 32,
+      account_id: 'aa' * 32,
       family_name: '张',
       given_name: '三',
     );
     final second = AdminPerson(
-      admin_account: 'bb' * 32,
+      account_id: 'bb' * 32,
       family_name: '李',
       given_name: '四',
     );
     final assignment = InstitutionAdminAssignment(
       cidNumber: 'CID-1',
-      admin_account: first.admin_account,
+      account_id: first.account_id,
       roleCode: 'DIRECTOR',
       roleName: '负责人',
       termStart: 0,
@@ -393,7 +396,7 @@ void main() {
 
     expect(views, hasLength(2));
     expect(views.first.assignments, [assignment]);
-    expect(views.last.admin.admin_account, second.admin_account);
+    expect(views.last.admin.account_id, second.account_id);
     expect(views.last.assignments, isEmpty);
   });
 }

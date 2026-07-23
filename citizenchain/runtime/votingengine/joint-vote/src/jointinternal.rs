@@ -270,17 +270,21 @@ impl<T: Config> Pallet<T> {
             cid_number: cid_number.clone(),
             role_code: voter_role_code.clone(),
         };
+        let subject = AuthorizationSubject::Institution(role_subject.clone());
         ensure!(
             <votingengine::Pallet<T>>::is_subject_voter_in_snapshot(
                 proposal_id,
-                AuthorizationSubject::Institution(role_subject.clone()),
+                subject.clone(),
                 &who,
             ),
             votingengine::Error::<T>::NoPermission
         );
+        // 票据按【规范账户】防重：换绑前后归并为同一张票，杜绝新旧钱包各投一票。
+        let voter_account_id = <votingengine::Pallet<T>>::resolve_subject_voter(&subject, &who)
+            .unwrap_or_else(|| who.clone());
         let ticket = InstitutionVoteTicket {
             role_subject,
-            voter_account_id: who.clone(),
+            voter_account_id,
         };
         ensure!(
             !JointVotesByTicket::<T>::contains_key(proposal_id, &ticket),

@@ -9,24 +9,24 @@ import 'package:citizenapp/transaction/transaction_tab_page.dart';
 import 'package:citizenapp/ui/widgets/chain_progress_banner.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-const _walletAPubkey =
-    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-const _walletBPubkey =
-    'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const _walletAAccountId =
+    '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const _walletBAccountId =
+    '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
 WalletProfile _wallet({
   required int index,
   required String name,
   required String address,
-  required String pubkeyHex,
+  required String accountId,
 }) {
   return WalletProfile(
     walletIndex: index,
     walletName: name,
     walletIcon: '',
     balance: 100,
-    address: address,
-    pubkeyHex: pubkeyHex,
+    ss58Address: address,
+    accountId: accountId,
     alg: 'sr25519',
     ss58: 2027,
     createdAtMillis: index,
@@ -38,21 +38,21 @@ WalletProfile _wallet({
 
 LocalTxEntity _tx({
   required String recordKey,
-  required String walletAddress,
-  required String walletPubkeyHex,
+  required String ss58Address,
+  required String accountId,
   required String amountDeltaFen,
   required String status,
 }) {
   return LocalTxEntity()
     ..recordKey = recordKey
-    ..walletAddress = walletAddress
-    ..walletPubkeyHex = LocalTxStore.normalizePubkey(walletPubkeyHex)
+    ..ss58Address = ss58Address
+    ..accountId = LocalTxStore.requireAccountId(accountId)
     ..type = 'transfer'
     ..amountDeltaFen = amountDeltaFen
     ..transferAmountFen = amountDeltaFen.replaceFirst('-', '')
-    ..counterpartyAddress = 'counterparty'
-    ..fromAddress = walletAddress
-    ..toAddress = 'counterparty'
+    ..counterpartySs58Address = 'counterparty'
+    ..fromSs58Address = ss58Address
+    ..toSs58Address = 'counterparty'
     ..status = status
     ..source = 'test'
     ..createdAtMillis = recordKey.hashCode;
@@ -97,7 +97,7 @@ void main() {
       find.byType(ContactBookPage),
     );
     // 交易入口只声明“选择收款人”意图，页面不再接收当前付款钱包账户。
-    expect(contacts.selectForTrade, isTrue);
+    expect(contacts.mode, ContactPickMode.pickForTransfer);
     Navigator.of(tester.element(find.byType(ContactBookPage))).pop();
     await tester.pump(const Duration(milliseconds: 300));
   });
@@ -107,41 +107,41 @@ void main() {
       index: 1,
       name: '钱包A',
       address: 'wallet_a',
-      pubkeyHex: _walletAPubkey,
+      accountId: _walletAAccountId,
     );
     final walletB = _wallet(
       index: 2,
       name: '钱包B',
       address: 'wallet_b',
-      pubkeyHex: _walletBPubkey,
+      accountId: _walletBAccountId,
     );
     var currentWallet = walletA;
     final records = [
       _tx(
         recordKey: 'a:pending',
-        walletAddress: 'wallet_a',
-        walletPubkeyHex: _walletAPubkey,
+        ss58Address: 'wallet_a',
+        accountId: _walletAAccountId,
         amountDeltaFen: '-101',
         status: LocalTxStore.statusPending,
       ),
       _tx(
         recordKey: 'a:inBlock',
-        walletAddress: 'wallet_a',
-        walletPubkeyHex: _walletAPubkey,
+        ss58Address: 'wallet_a',
+        accountId: _walletAAccountId,
         amountDeltaFen: '-202',
         status: LocalTxStore.statusInBlock,
       ),
       _tx(
         recordKey: 'a:finalized',
-        walletAddress: 'wallet_a',
-        walletPubkeyHex: _walletAPubkey,
+        ss58Address: 'wallet_a',
+        accountId: _walletAAccountId,
         amountDeltaFen: '-303',
         status: LocalTxStore.statusFinalized,
       ),
       _tx(
         recordKey: 'b:incoming',
-        walletAddress: 'wallet_b',
-        walletPubkeyHex: _walletBPubkey,
+        ss58Address: 'wallet_b',
+        accountId: _walletBAccountId,
         amountDeltaFen: '404',
         status: LocalTxStore.statusFinalized,
       ),
@@ -154,10 +154,11 @@ void main() {
           title: '交易',
           enableDelayedLocalRecordRefresh: false,
           currentWalletLoader: () async => currentWallet,
-          localRecordsLoader: (pubkeyHex, {limit = 100}) async {
-            final pubkey = LocalTxStore.normalizePubkey(pubkeyHex);
+          localRecordsLoader: (accountId, {limit = 100}) async {
+            final normalizedAccountId =
+                LocalTxStore.requireAccountId(accountId);
             return records
-                .where((record) => record.walletPubkeyHex == pubkey)
+                .where((record) => record.accountId == normalizedAccountId)
                 .take(limit)
                 .toList();
           },
@@ -189,7 +190,7 @@ void main() {
       index: 2,
       name: '付款钱包B',
       address: 'wallet_b',
-      pubkeyHex: _walletBPubkey,
+      accountId: _walletBAccountId,
     );
     const recipient = 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT';
 
@@ -224,7 +225,7 @@ void main() {
       index: 1,
       name: '付款钱包',
       address: 'wallet_a',
-      pubkeyHex: _walletAPubkey,
+      accountId: _walletAAccountId,
     );
 
     await tester.pumpWidget(

@@ -10,7 +10,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 ///
 ///
 /// - 清算行(L2)体系唯一绑定页。数据源为 finalized 链上清算行声明;
-///   链上调用 `bind_clearing_bank(bank_main_account)`(call_index 30)。
+///   链上调用 `bind_clearing_bank(bank_main_account_id)`(call_index 30)。
 /// - 绑定即开户,**无预存、无业务开户费**;签名者支付最低链上交易费 0.1 元/次。
 /// - 本步仅支持热钱包;冷钱包必须等绑定 payload 可独立展示和验证后再接入。
 /// - 本页目前无活跃入口,等「设置清算行」真实交互落地时再复用。
@@ -56,7 +56,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
           ),
           ListTile(
             title: const Text('主账户'),
-            subtitle: SelectableText('0x${b.mainAccountHex}'),
+            subtitle: SelectableText('0x${b.mainAccountId}'),
           ),
           const SizedBox(height: 12),
           const Card(
@@ -89,7 +89,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
   }
 
   Future<void> _confirmBind() async {
-    final mainAccountHex = widget.bank.mainAccountHex;
+    final mainAccountId = widget.bank.mainAccountId;
 
     final wallet = widget.wallet;
     if (!wallet.isHotWallet) {
@@ -101,12 +101,12 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
 
     setState(() => _submitting = true);
     try {
-      final mainAccountBytes = _hexToBytes(mainAccountHex);
-      if (mainAccountBytes.length != 32) {
-        throw Exception('主账户必须是 32 字节,实际 ${mainAccountBytes.length}');
+      final mainAccountIdBytes = _hexToBytes(mainAccountId);
+      if (mainAccountIdBytes.length != 32) {
+        throw Exception('主账户必须是 32 字节,实际 ${mainAccountIdBytes.length}');
       }
-      final pubkeyBytes = _hexToBytes(wallet.pubkeyHex);
-      if (pubkeyBytes.length != 32) {
+      final publicKeyBytes = _hexToBytes(wallet.accountId);
+      if (publicKeyBytes.length != 32) {
         throw Exception('钱包公钥必须是 32 字节');
       }
 
@@ -115,16 +115,16 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
       final rpc = OnchainClearingBankRpc();
       final result = widget.switchMode
           ? await rpc.switchBank(
-              fromAddress: wallet.address,
-              signerPubkey: Uint8List.fromList(pubkeyBytes),
-              newBankMainAccount: Uint8List.fromList(mainAccountBytes),
+              fromSs58Address: wallet.ss58Address,
+              signerPublicKey: Uint8List.fromList(publicKeyBytes),
+              newBankMainAccount: Uint8List.fromList(mainAccountIdBytes),
               sign: (payload) =>
                   walletManager.signWithWallet(wallet.walletIndex, payload),
             )
           : await rpc.bindClearingBank(
-              fromAddress: wallet.address,
-              signerPubkey: Uint8List.fromList(pubkeyBytes),
-              bankMainAccount: Uint8List.fromList(mainAccountBytes),
+              fromSs58Address: wallet.ss58Address,
+              signerPublicKey: Uint8List.fromList(publicKeyBytes),
+              bankMainAccountId: Uint8List.fromList(mainAccountIdBytes),
               sign: (payload) =>
                   walletManager.signWithWallet(wallet.walletIndex, payload),
             );
@@ -139,8 +139,8 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
           cidNumber: widget.bank.cidNumber,
           cidFullName: widget.bank.cidFullName,
           cidShortName: widget.bank.cidShortName ?? '',
-          mainAccount: _normalizeHex(widget.bank.mainAccountHex),
-          feeAccount: _normalizeHex(widget.bank.feeAccountHex),
+          mainAccountId: _normalizeHex(widget.bank.mainAccountId),
+          feeAccountId: _normalizeHex(widget.bank.feeAccountId),
           peerId: endpoint.peerId,
           rpcDomain: endpoint.rpcDomain,
           rpcPort: endpoint.rpcPort,

@@ -9,36 +9,36 @@ import 'mls_session.dart';
 
 /// 本机 Chat 设备身份。
 ///
-/// `ownerAccount` 是聊天账户/公民币收款账户，不是 Chat 密钥来源。
+/// `accountId` 是聊天账户/公民币收款账户，不是 Chat 密钥来源。
 /// Chat 设备私钥必须由 OpenMLS/安全存储独立生成并保存在本机。
 class ChatDevice {
   const ChatDevice({
-    required this.ownerAccount,
+    required this.accountId,
     required this.deviceId,
-    required this.devicePublicKeyHex,
+    required this.devicePublicKey,
   });
 
   /// 钱包账户作为聊天账户名和收款账户。
-  final String ownerAccount;
+  final String accountId;
 
   /// Chat 设备 ID，独立于钱包地址。
   final String deviceId;
 
   /// Chat 设备身份公钥 hex，不包含私钥。
-  final String devicePublicKeyHex;
+  final String devicePublicKey;
 
   /// 校验身份边界，避免把空账户或空公钥写入 Chat 路由记录。
   String? validate() {
-    if (ownerAccount.trim().isEmpty) {
+    if (accountId.trim().isEmpty) {
       return 'Chat 钱包聊天账户不能为空';
     }
     if (deviceId.trim().isEmpty) {
       return 'Chat 设备 ID 不能为空';
     }
-    if (devicePublicKeyHex.trim().isEmpty) {
+    if (devicePublicKey.trim().isEmpty) {
       return 'Chat 设备公钥不能为空';
     }
-    final normalized = _stripHexPrefix(devicePublicKeyHex);
+    final normalized = _stripHexPrefix(devicePublicKey);
     if (normalized.length.isOdd || !_isHex(normalized)) {
       return 'Chat 设备公钥必须是合法 hex';
     }
@@ -49,24 +49,24 @@ class ChatDevice {
 /// OpenMLS KeyPackage。
 class MlsKeyPackage {
   const MlsKeyPackage({
-    required this.ownerAccount,
+    required this.accountId,
     required this.deviceId,
     required this.keyPackageId,
     required this.keyPackageBytes,
     required this.cipherSuite,
     required this.createdAtMillis,
     required this.expiresAtMillis,
-    this.devicePublicKeyHex = '',
+    this.devicePublicKey = '',
   });
 
   /// KeyPackage 所属的钱包聊天账户。
-  final String ownerAccount;
+  final String accountId;
 
   /// 发布设备 ID。
   final String deviceId;
 
   /// OpenMLS 设备签名公钥 hex，用于 Chat 路由记录和安全码展示。
-  final String devicePublicKeyHex;
+  final String devicePublicKey;
 
   /// KeyPackage 全局去重 ID。
   final String keyPackageId;
@@ -95,7 +95,7 @@ abstract class MlsCrypto {
 
   Future<MlsOutboundMessage> encrypt({
     required String conversationId,
-    required String recipientAccount,
+    required String recipientAccountId,
     MlsKeyPackage? recipientKeyPackage,
     required List<int> plaintext,
   });
@@ -119,7 +119,7 @@ class UnsupportedMlsCrypto implements MlsCrypto {
   @override
   Future<MlsOutboundMessage> encrypt({
     required String conversationId,
-    required String recipientAccount,
+    required String recipientAccountId,
     MlsKeyPackage? recipientKeyPackage,
     required List<int> plaintext,
   }) async {

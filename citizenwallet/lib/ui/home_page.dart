@@ -290,9 +290,10 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  String _truncateAddress(String address) {
-    if (address.length <= 16) return address;
-    return '${address.substring(0, 8)}...${address.substring(address.length - 6)}';
+  String _truncateSs58Address(String ss58Address) {
+    if (ss58Address.length <= 16) return ss58Address;
+    return '${ss58Address.substring(0, 8)}...'
+        '${ss58Address.substring(ss58Address.length - 6)}';
   }
 
   @override
@@ -620,7 +621,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
                 const SizedBox(width: 14),
-                // 名称 + 地址
+                // 钱包名称 + SS58 展示地址。
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -661,7 +662,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        _truncateAddress(wallet.address),
+                        _truncateSs58Address(wallet.ss58Address),
                         style: const TextStyle(
                           fontSize: 12,
                           color: AppTheme.textSecondary,

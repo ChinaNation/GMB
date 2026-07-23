@@ -364,7 +364,8 @@ fn is_authorized_institution_actor(who: &AccountId, cid_number: &[u8]) -> bool {
     else {
         return false;
     };
-    RuntimeInstitutionAdminQuery::is_institution_admin(institution_code, cid_number, who)
+    // 费用路由是调用者门：换绑管理员的机构 extrinsic 亦须放行，故用 CID 解析而非 account_id。
+    RuntimeInstitutionAdminQuery::resolve_admin_account(institution_code, cid_number, who).is_some()
 }
 
 fn institution_fee_payer(who: &AccountId, cid_number: &[u8]) -> Option<AccountId> {
@@ -1274,6 +1275,7 @@ impl private_manage::Config for Runtime {
     type OnchainFeeCharger =
         onchain::OnchainExecutionFeeCharger<Runtime, Balances, OnchainExecutionFeeDistributor>;
     type RegistryAuthority = RuntimeRegistryAuthority;
+    type ChainPhase = GenesisPallet;
     type MaxAdmins = MaxAdminsPerInstitution;
     type MaxCidNumberLength = ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>;
     type MaxAccountNameLength = ConstU32<128>;
@@ -1526,11 +1528,15 @@ impl public_admins::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
     type CitizenIdentityBinding = RuntimePublicAdminCitizenIdentityBinding;
+    type ChainPhase = GenesisPallet;
 }
 
 impl private_admins::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
+    type ChainPhase = GenesisPallet;
+    type CitizenIdentityBinding = RuntimePublicAdminCitizenIdentityBinding;
+    type LegalRepresentativeQuery = RuntimeInstitutionLegalRepresentativeQuery;
 }
 
 impl resolution_destroy::Config for Runtime {
@@ -1765,6 +1771,34 @@ impl admin_primitives::InstitutionAdminQuery<AccountId> for RuntimeInstitutionAd
     ) -> Option<u32> {
         Self::institution_admins(institution_code, cid_number).map(|admins| admins.len() as u32)
     }
+
+    fn resolve_admin_account(
+        institution_code: primitives::cid::code::InstitutionCode,
+        cid_number: &[u8],
+        caller: &AccountId,
+    ) -> Option<AccountId> {
+        if admin_primitives::is_public_admin_code(&institution_code) {
+            return <public_admins::Pallet<Runtime> as admin_primitives::InstitutionAdminQuery<
+                AccountId,
+            >>::resolve_admin_account(institution_code, cid_number, caller);
+        }
+        if admin_primitives::is_private_admin_code(&institution_code) {
+            return <private_admins::Pallet<Runtime> as admin_primitives::InstitutionAdminQuery<
+                AccountId,
+            >>::resolve_admin_account(institution_code, cid_number, caller);
+        }
+        if admin_primitives::is_unincorporated_admin_code(&institution_code) {
+            return <public_admins::Pallet<Runtime> as admin_primitives::InstitutionAdminQuery<
+                AccountId,
+            >>::resolve_admin_account(institution_code, cid_number, caller)
+            .or_else(|| {
+                <private_admins::Pallet<Runtime> as admin_primitives::InstitutionAdminQuery<
+                    AccountId,
+                >>::resolve_admin_account(institution_code, cid_number, caller)
+            });
+        }
+        None
+    }
 }
 
 pub struct RuntimeAdminAccountQuery;
@@ -1930,6 +1964,31 @@ impl entity_primitives::InstitutionLegalRepresentativeQuery<AccountId>
         }
         None
     }
+
+    fn legal_representative_cid(cid_number: &[u8]) -> Option<Vec<u8>> {
+        let institution_code = cid_institution_code(cid_number)?;
+        if admin_primitives::is_public_admin_code(&institution_code) {
+            return <public_manage::Pallet<Runtime> as entity_primitives::InstitutionLegalRepresentativeQuery<AccountId>>::legal_representative_cid(
+                cid_number,
+            );
+        }
+        if admin_primitives::is_private_admin_code(&institution_code) {
+            return <private_manage::Pallet<Runtime> as entity_primitives::InstitutionLegalRepresentativeQuery<AccountId>>::legal_representative_cid(
+                cid_number,
+            );
+        }
+        if admin_primitives::is_unincorporated_admin_code(&institution_code) {
+            return <public_manage::Pallet<Runtime> as entity_primitives::InstitutionLegalRepresentativeQuery<AccountId>>::legal_representative_cid(
+                cid_number,
+            )
+            .or_else(|| {
+                <private_manage::Pallet<Runtime> as entity_primitives::InstitutionLegalRepresentativeQuery<AccountId>>::legal_representative_cid(
+                    cid_number,
+                )
+            });
+        }
+        None
+    }
 }
 
 // 链下交易清算模块配置
@@ -2035,7 +2094,7 @@ fn seed_benchmark_public_admin_account(
     let first_admin = AccountId::new(raw_admins.first().copied().ok_or(())?);
     let admins: public_admins::AdminsOf<Runtime> = raw_admins
         .iter()
-        .map(|raw_admin| admin_primitives::PublicAdmin {
+        .map(|raw_admin| admin_primitives::Admin {
             account_id: AccountId::new(*raw_admin),
             cid_number: Default::default(),
             family_name: Default::default(),
@@ -2451,7 +2510,15 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
         cid_number: &[u8],
         who: &AccountId,
     ) -> bool {
+        // 名册成员按 account_id（枚举/快照构建语义）。投票人身份解析走下面的 resolver。
         RuntimeInstitutionAdminQuery::is_institution_admin(institution_code, cid_number, who)
+    }
+
+    fn resolve_institution_voter(cid_number: &[u8], caller: &AccountId) -> Option<AccountId> {
+        // 复用 3a 的名册解析器：运行期有 CID 按 citizen-identity 绑定解析（换绑不掉权），
+        // 创世期或无 CID 管理员按 account_id；None = 非该机构当前管理员。
+        let institution_code = cid_institution_code(cid_number)?;
+        RuntimeInstitutionAdminQuery::resolve_admin_account(institution_code, cid_number, caller)
     }
 
     fn institution_threshold(

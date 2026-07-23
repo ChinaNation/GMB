@@ -30,10 +30,10 @@ class OnchainPaymentService {
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
-    final toAddress = draft.toAddress.trim();
+    final toSs58Address = draft.toSs58Address.trim();
     final symbol = draft.symbol.trim().toUpperCase();
     final remarkBytes = utf8.encode(draft.remark).length;
-    if (toAddress.isEmpty || symbol.isEmpty || draft.amount <= 0) {
+    if (toSs58Address.isEmpty || symbol.isEmpty || draft.amount <= 0) {
       throw const OnchainPaymentException(
         OnchainPaymentErrorCode.invalidDraft,
         '交易草稿不合法，请检查收款地址、数量和币种',
@@ -54,14 +54,14 @@ class OnchainPaymentService {
       );
     }
 
-    final pubkeyBytes = _hexToBytes(wallet.pubkeyHex);
+    final publicKeyBytes = _hexToBytes(wallet.accountId);
 
     ({String txHash, int usedNonce}) result;
     try {
       result = await _onchainRpc.transferWithRemark(
-        fromAddress: wallet.address,
-        signerPubkey: Uint8List.fromList(pubkeyBytes),
-        toAddress: toAddress,
+        fromSs58Address: wallet.ss58Address,
+        signerPublicKey: Uint8List.fromList(publicKeyBytes),
+        toSs58Address: toSs58Address,
         amountYuan: draft.amount,
         remark: draft.remark,
         sign: sign,

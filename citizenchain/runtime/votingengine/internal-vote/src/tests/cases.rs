@@ -1883,6 +1883,97 @@ fn internal_vote_counts_same_account_id_once_per_role_ticket() {
 }
 
 #[test]
+fn rebound_wallet_votes_as_canonical_and_old_wallet_loses_power() {
+    new_test_ext().execute_with(|| {
+        reset_internal_callback_state();
+        // 岗位快照 3 席（admin(0..2)），阈值 3：中途不会提前达标终结，便于逐条断言。
+        set_institution_threshold(public_cid(), 3);
+        let data = b"rebind-vote".to_vec();
+        let owner: BoundedVec<u8, ConstU32<32>> = b"test".to_vec().try_into().unwrap();
+        let role: votingengine::types::RoleCode = b"TEST_ROLE".to_vec().try_into().unwrap();
+        let subject = RoleSubject {
+            cid_number: public_cid(),
+            role_code: role.clone(),
+        };
+        let vote_plan = votingengine::types::VotePlanOf::try_new(
+            votingengine::types::BusinessActionId {
+                module_tag: owner.clone(),
+                action_code: 0,
+            },
+            owner,
+            AuthorizationSubject::Institution(subject.clone()),
+            vec![AuthorizationSubject::Institution(subject.clone())],
+            votingengine::types::VotingEngineKind::Internal,
+            sp_io::hashing::blake2_256(&data),
+        )
+        .unwrap();
+        let proposal_id = <InternalVote as InternalVoteEngine<AccountId32>>::
+            create_institution_proposal_with_data(
+                test_institution_admin(0),
+                PUBLIC_CODE,
+                public_cid().to_vec(),
+                None,
+                subject_cids_for(&public_cid()),
+                vote_plan,
+                data,
+            )
+            .unwrap();
+        // 建案自动由 admin(0) 投出第一票。
+        assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 1);
+
+        // admin(1) 的公民 CID 换绑到新钱包（快照仍冻结着规范账户 admin(1)）。
+        let rebound_wallet = AccountId32::new([200u8; 32]);
+        set_rebind(test_institution_admin(1), rebound_wallet.clone());
+
+        // 换绑不掉权：新钱包解析到规范账户 admin(1)，命中快照 → 可投。
+        assert_ok!(InternalVote::cast(
+            RuntimeOrigin::signed(rebound_wallet.clone()),
+            proposal_id,
+            InternalVoteTicketClaim::InstitutionRole(role.clone()),
+            true,
+        ));
+        assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 2);
+        // 票据按【规范账户】记账而非投票钱包——这正是防双投的关键。
+        assert!(InternalVotesByTicket::<Test>::contains_key(
+            proposal_id,
+            InternalVoteTicket::Institution(votingengine::InstitutionVoteTicket {
+                role_subject: subject.clone(),
+                voter_account_id: test_institution_admin(1),
+            })
+        ));
+        assert!(!InternalVotesByTicket::<Test>::contains_key(
+            proposal_id,
+            InternalVoteTicket::Institution(votingengine::InstitutionVoteTicket {
+                role_subject: subject.clone(),
+                voter_account_id: rebound_wallet.clone(),
+            })
+        ));
+
+        // 旧钱包掉权：CID 已不再绑定它，解析为 None。
+        assert_noop!(
+            InternalVote::cast(
+                RuntimeOrigin::signed(test_institution_admin(1)),
+                proposal_id,
+                InternalVoteTicketClaim::InstitutionRole(role.clone()),
+                true,
+            ),
+            votingengine::Error::<Test>::NoPermission
+        );
+
+        // 新钱包再投：票据已存在 → 双投窗口已闭合。
+        assert_noop!(
+            InternalVote::cast(
+                RuntimeOrigin::signed(rebound_wallet),
+                proposal_id,
+                InternalVoteTicketClaim::InstitutionRole(role),
+                true,
+            ),
+            votingengine::Error::<Test>::AlreadyVoted
+        );
+    });
+}
+
+#[test]
 fn internal_vote_rejects_non_admin() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();

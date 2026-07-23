@@ -15,8 +15,8 @@ const _chatServiceUnavailable = 'Cloudflare Chat 瞬时转发尚未配置';
 /// Cloudflare 互联网 Chat 传输，只转发当前请求中的密文和WebRTC信令。
 class ChatCloudTransport implements ChatTransport {
   ChatCloudTransport({
-    required this.ownerAccount,
-    required this.ownerDeviceId,
+    required this.accountId,
+    required this.localDeviceId,
     this.serviceBaseUrl,
     this.sessionToken,
     this.requestSigner,
@@ -24,8 +24,8 @@ class ChatCloudTransport implements ChatTransport {
     this.requestTimeout = const Duration(seconds: 12),
   }) : _httpClient = httpClient ?? http.Client();
 
-  final String ownerAccount;
-  final String ownerDeviceId;
+  final String accountId;
+  final String localDeviceId;
   final Uri? serviceBaseUrl;
   final String? sessionToken;
   final SquareDeviceSigner? requestSigner;
@@ -36,7 +36,7 @@ class ChatCloudTransport implements ChatTransport {
   ChatTransportType get type => ChatTransportType.cloudflare;
 
   Future<void> registerDevice({
-    required String devicePublicKeyHex,
+    required String devicePublicKey,
     required String pushProvider,
     required String pushToken,
     required String bindingSignature,
@@ -44,8 +44,8 @@ class ChatCloudTransport implements ChatTransport {
     required String nonce,
   }) async {
     await _postJson('/v1/chat/devices/register', {
-      'device_id': ownerDeviceId,
-      'device_public_key_hex': devicePublicKeyHex,
+      'device_id': localDeviceId,
+      'device_public_key': devicePublicKey,
       'push_provider': pushProvider,
       'push_token': pushToken,
       'binding_signature': bindingSignature,
@@ -56,9 +56,9 @@ class ChatCloudTransport implements ChatTransport {
 
   Future<void> publishKeyPackage(MlsKeyPackage keyPackage) async {
     await _postJson('/v1/chat/keypackages', {
-      'owner_account': keyPackage.ownerAccount,
+      'account_id': keyPackage.accountId,
       'device_id': keyPackage.deviceId,
-      'device_public_key_hex': keyPackage.devicePublicKeyHex,
+      'device_public_key': keyPackage.devicePublicKey,
       'key_package_id': keyPackage.keyPackageId,
       'key_package': _base64UrlEncode(keyPackage.keyPackageBytes),
       'cipher_suite': keyPackage.cipherSuite,
@@ -68,12 +68,12 @@ class ChatCloudTransport implements ChatTransport {
   }
 
   Future<List<MlsKeyPackage>> fetchKeyPackages({
-    required String ownerAccount,
-    required String requesterAccount,
+    required String accountId,
+    required String requesterAccountId,
     int limit = 1,
   }) async {
     final json = await _getJson(
-      '/v1/chat/keypackages/${Uri.encodeComponent(ownerAccount)}',
+      '/v1/chat/keypackages/${Uri.encodeComponent(accountId)}',
       queryParameters: {'limit': limit.toString()},
     );
     final items = json['key_packages'];
@@ -87,14 +87,14 @@ class ChatCloudTransport implements ChatTransport {
   }
 
   Future<MlsKeyPackage> consumeKeyPackage({
-    required String ownerAccount,
+    required String accountId,
     required String keyPackageId,
-    required String requesterAccount,
+    required String requesterAccountId,
   }) async {
     final json = await _postJson('/v1/chat/keypackages/consume', {
-      'owner_account': ownerAccount,
+      'account_id': accountId,
       'key_package_id': keyPackageId,
-      'requester_account': requesterAccount,
+      'requester_account_id': requesterAccountId,
     });
     final item = json['key_package'];
     if (item is! Map<String, dynamic>) {
@@ -104,13 +104,13 @@ class ChatCloudTransport implements ChatTransport {
   }
 
   Future<bool> sendSignal({
-    required String recipientAccount,
+    required String recipientAccountId,
     String? recipientDeviceId,
     required Map<String, dynamic> signal,
   }) async {
     final json = await _postJson('/v1/chat/signals', {
-      'sender_device_id': ownerDeviceId,
-      'recipient_account': recipientAccount,
+      'sender_device_id': localDeviceId,
+      'recipient_account_id': recipientAccountId,
       'recipient_device_id': recipientDeviceId ?? '',
       'signal': signal,
     });
@@ -185,7 +185,7 @@ class ChatCloudTransport implements ChatTransport {
       final json = await _postJson('/v1/chat/envelopes', {
         'envelope_id': envelope.envelopeId,
         'sender_device_id': envelope.senderDeviceId,
-        'recipient_account': envelope.recipientAccount,
+        'recipient_account_id': envelope.recipientAccountId,
         'recipient_device_id': '',
         'envelope': _base64UrlEncode(envelopeBytes),
       });
@@ -297,7 +297,7 @@ class ChatCloudTransport implements ChatTransport {
 
   Future<Map<String, String>> _wsHeaders(Uri uri) async {
     final headers = await _headers('GET', uri, '');
-    headers['x-chat-device'] = ownerDeviceId;
+    headers['x-chat-device'] = localDeviceId;
     return headers;
   }
 }
@@ -319,9 +319,9 @@ Map<String, dynamic> _decodeResponse(http.Response response, Uri uri) {
 }
 
 MlsKeyPackage _keyPackageFromJson(Map<String, dynamic> json) => MlsKeyPackage(
-      ownerAccount: (json['owner_account'] ?? '').toString(),
+      accountId: (json['account_id'] ?? '').toString(),
       deviceId: (json['device_id'] ?? '').toString(),
-      devicePublicKeyHex: (json['device_public_key_hex'] ?? '').toString(),
+      devicePublicKey: (json['device_public_key'] ?? '').toString(),
       keyPackageId: (json['key_package_id'] ?? '').toString(),
       keyPackageBytes: _base64UrlDecode((json['key_package'] ?? '').toString()),
       cipherSuite: (json['cipher_suite'] ?? '').toString(),

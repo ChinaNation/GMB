@@ -6,20 +6,20 @@ import 'package:citizenapp/qr/generated/qr_action_registry.g.dart';
 /// 广场账户动作签名 payload（两色内容核对用）。
 ///
 /// 布局须与 Worker `account/action_challenge.buildActionScalePayload` 逐字节一致：
-///   scaleString(action) ‖ scaleString(owner) ‖ scaleString(challengeId)
+///   scaleString(action) ‖ scaleString(accountId) ‖ scaleString(challengeId)
 ///   [‖ scaleString(context/level)] ‖ u64_le(expiresAt)
 /// 其中 context 仅在 action == 'subscribe_membership' 时存在（= 会员等级）。
 class SquareActionPayload {
   const SquareActionPayload({
     required this.action,
-    required this.ownerAccount,
+    required this.accountId,
     required this.challengeId,
     required this.expiresAt,
     this.context,
   });
 
   final String action;
-  final String ownerAccount;
+  final String accountId;
   final String challengeId;
   final int expiresAt;
 
@@ -35,7 +35,7 @@ class SquareActionPayload {
     if (actionType == null) return null;
     final fields = <SquareReviewField>[];
     if (!_appendField(fields, 'action_type', actionType)) return null;
-    if (!_appendField(fields, 'owner_account', ownerAccount)) return null;
+    if (!_appendField(fields, 'account_id', accountId)) return null;
     if (!_appendField(fields, 'challenge_id', challengeId)) return null;
     if (context != null &&
         !_appendField(fields, 'membership_level', context!)) {
@@ -77,8 +77,9 @@ SquareActionPayload? decodeSquareActionPayload(String payloadHex) {
     offset = o1;
     if (!_squareActionTypeLabels.containsKey(action)) return null;
 
-    final (owner, o2) = _readString(bytes, offset);
+    final (accountId, o2) = _readString(bytes, offset);
     offset = o2;
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) return null;
     final (challengeId, o3) = _readString(bytes, offset);
     offset = o3;
 
@@ -95,7 +96,7 @@ SquareActionPayload? decodeSquareActionPayload(String payloadHex) {
 
     final decoded = SquareActionPayload(
       action: action,
-      ownerAccount: owner,
+      accountId: accountId,
       challengeId: challengeId,
       expiresAt: expiresAt,
       context: context,

@@ -18,7 +18,7 @@ class TopupResultPage extends StatefulWidget {
     required this.api,
     required this.rail,
     required this.package,
-    required this.gmbAddress,
+    required this.accountId,
     required this.evmTxHash,
     this.payerAddress,
   });
@@ -26,7 +26,7 @@ class TopupResultPage extends StatefulWidget {
   final TopupApi api;
   final TopupRail rail;
   final TopupPackage package;
-  final String gmbAddress;
+  final String accountId;
   final String evmTxHash;
   final String? payerAddress;
 
@@ -63,15 +63,15 @@ class _TopupResultPageState extends State<TopupResultPage> {
           final result = await widget.api.submit(
             token: widget.rail.token,
             packageId: widget.package.packageId,
-            gmbAddress: widget.gmbAddress,
+            accountId: widget.accountId,
             evmTxHash: widget.evmTxHash,
             payerAddress: widget.payerAddress,
           );
           if (_settleFromStatus(result.status)) return;
           if (result.status == TopupOrderStatus.pending) submitted = true;
         } else {
-          final status = await widget.api
-              .status(chainId: widget.rail.chainId, evmTxHash: widget.evmTxHash);
+          final status = await widget.api.status(
+              chainId: widget.rail.chainId, evmTxHash: widget.evmTxHash);
           if (_settleFromStatus(status)) return;
         }
       } on TopupApiException catch (e) {
@@ -151,8 +151,7 @@ class _TopupResultPageState extends State<TopupResultPage> {
                     ),
                     onPressed: () => Navigator.of(context)
                         .popUntil((route) => route.isFirst),
-                    child: Text(
-                        _phase == _Phase.success ? '查看钱包' : '返回',
+                    child: Text(_phase == _Phase.success ? '查看钱包' : '返回',
                         style: const TextStyle(fontSize: 15)),
                   ),
                 ),
@@ -184,7 +183,8 @@ class _TopupResultPageState extends State<TopupResultPage> {
     return Container(
       width: 72,
       height: 72,
-      decoration: BoxDecoration(color: color.withAlpha(31), shape: BoxShape.circle),
+      decoration:
+          BoxDecoration(color: color.withAlpha(31), shape: BoxShape.circle),
       child: Icon(icon, size: 38, color: color),
     );
   }

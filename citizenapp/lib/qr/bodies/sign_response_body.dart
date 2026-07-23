@@ -8,49 +8,52 @@ import 'package:citizenapp/qr/envelope.dart';
 /// 生成方按同一 `i` 找回本地 session,因此响应只需要签名者公钥和签名本身。
 class SignResponseBody implements QrBody {
   const SignResponseBody({
-    required this.signerPubkey,
+    required this.signerPublicKey,
     required this.signature,
   });
 
   /// 签名者公钥 `u`:32 字节 base64url 无填充。
-  final String signerPubkey;
+  final String signerPublicKey;
 
   /// 签名 `s`:64 字节 sr25519 signature base64url 无填充。
   final String signature;
 
-  Uint8List get pubkeyBytes => _b64ToBytes(signerPubkey, 'u');
+  Uint8List get signerPublicKeyBytes => _b64ToBytes(signerPublicKey, 'u');
 
   Uint8List get signatureBytes => _b64ToBytes(signature, 's');
 
-  String get pubkeyHex => '0x${_toHex(pubkeyBytes)}';
+  String get signerPublicKeyHex => '0x${_toHex(signerPublicKeyBytes)}';
 
   String get signatureHex => '0x${_toHex(signatureBytes)}';
 
   @override
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'u': signerPubkey,
+        'u': signerPublicKey,
         's': signature,
       };
 
   static SignResponseBody fromJson(Map<String, dynamic> data) {
-    final signerPubkey = data['u'];
+    final signerPublicKey = data['u'];
     final signature = data['s'];
-    if (signerPubkey is! String ||
-        _b64ToBytes(signerPubkey, 'u').length != 32) {
+    if (signerPublicKey is! String ||
+        _b64ToBytes(signerPublicKey, 'u').length != 32) {
       throw const FormatException('签名响应 u 必须为 32 字节 base64url');
     }
     if (signature is! String || _b64ToBytes(signature, 's').length != 64) {
       throw const FormatException('签名响应 s 必须为 64 字节 base64url');
     }
-    return SignResponseBody(signerPubkey: signerPubkey, signature: signature);
+    return SignResponseBody(
+      signerPublicKey: signerPublicKey,
+      signature: signature,
+    );
   }
 
   static SignResponseBody fromHex({
-    required String pubkeyHex,
+    required String signerPublicKeyHex,
     required String signatureHex,
   }) {
     return SignResponseBody(
-      signerPubkey: _b64NoPad(_hexToBytes(pubkeyHex)),
+      signerPublicKey: _b64NoPad(_hexToBytes(signerPublicKeyHex)),
       signature: _b64NoPad(_hexToBytes(signatureHex)),
     );
   }

@@ -14,7 +14,7 @@ import 'package:citizenapp/signer/signing.dart';
 ///   通过 `offchain_submitPayment(intent_hex, sig_hex)` 提交清算行节点。
 /// - 字段语义与单位:
 ///     - 所有地址(`payer/payerBank/recipient/recipientBank`)是 `AccountId32`
-///       32 字节原始 pubkey。
+///       32 字节原始 publicKey。
 ///     - `amount` / `fee` 以**分**为单位。
 ///     - `nonce` 单调递增,从节点 `offchain_queryNextNonce` 取。
 ///     - `expiresAt` 是链上**块高**(block number),runtime `execute_clearing_bank_batch`
@@ -60,9 +60,11 @@ class NodePaymentIntent {
 
   final Uint8List txId;
   final Uint8List payer;
+
   /// 付款方绑定清算行 CID(机构唯一永久主键);SCALE = Compact(len)||bytes。
   final Uint8List payerBankCid;
   final Uint8List recipient;
+
   /// 收款方绑定清算行 CID。
   final Uint8List recipientBankCid;
   final BigInt amount;

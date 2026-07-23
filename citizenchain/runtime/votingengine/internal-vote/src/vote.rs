@@ -33,10 +33,15 @@ impl<T: Config> Pallet<T> {
                 role_code: role_code.clone(),
             };
             let subject = AuthorizationSubject::Institution(role_subject.clone());
+            // 票据按【规范账户】防重：换绑前后归并为同一张票，杜绝新旧钱包各投一票。
+            // 与下面的资格校验同源，同样只解析原始 `who`（绝不二次解析规范账户）。
+            // 解析为 None 时资格校验必然失败，此处的回退值不会被采用。
+            let voter_account_id = <votingengine::Pallet<T>>::resolve_subject_voter(&subject, &who)
+                .unwrap_or_else(|| who.clone());
             (
                 InternalVoteTicket::Institution(InstitutionVoteTicket {
                     role_subject,
-                    voter_account_id: who.clone(),
+                    voter_account_id,
                 }),
                 Some(role_code),
                 <votingengine::Pallet<T>>::is_subject_voter_in_snapshot(proposal_id, subject, &who),

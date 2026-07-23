@@ -6,8 +6,8 @@
 
 import 'mls_boundary.dart';
 
-/// 群成员标识 = "owner_account:device_id"(MLS BasicCredential 内容)。
-/// 扇出/名册以**账户**为单位(recipient_account),故从标识取账户段。
+/// 群成员标识 = "account_id:device_id"(MLS BasicCredential 内容)。
+/// 扇出/名册以**账户**为单位(recipient_account_id),故从标识取账户段。
 String accountFromMemberIdentity(String identity) {
   final index = identity.indexOf(':');
   return index < 0 ? identity : identity.substring(0, index);
@@ -166,7 +166,7 @@ abstract class MlsGroupCrypto {
   /// 删人:Commit(剩余成员 + 被删者)。按**账户**移除(含其全部设备叶子)。
   Future<GroupCommitBundle> removeMembers(
     String groupId,
-    List<String> memberAccounts,
+    List<String> memberAccountIds,
   );
 
   /// 群 application message(单次加密,Dart 侧扇出)。

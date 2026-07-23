@@ -42,7 +42,7 @@ class ChatConversationPreview {
   const ChatConversationPreview({
     required this.conversationId,
     required this.title,
-    required this.peerAccount,
+    required this.peerAccountId,
     required this.lastMessage,
     required this.lastUpdatedAt,
     required this.unreadCount,
@@ -57,7 +57,7 @@ class ChatConversationPreview {
   final String title;
 
   /// 联系人的钱包账户地址；聊天账户与收付款账户共用该账户。
-  final String peerAccount;
+  final String peerAccountId;
 
   /// 最近一条消息摘要。真实明文只允许存在于手机端本地。
   final String lastMessage;
@@ -80,13 +80,13 @@ class ChatConversationPreview {
 /// 聊天 Tab 顶部状态快照。
 class ChatInboxOverview {
   const ChatInboxOverview({
-    required this.ownerAccount,
+    required this.accountId,
     required this.pendingOutgoing,
     required this.unreadCount,
   });
 
   /// 当前作为聊天账户的钱包地址。
-  final String? ownerAccount;
+  final String? accountId;
 
   /// 等待发送或重试的密文消息数量。
   final int pendingOutgoing;
@@ -96,7 +96,7 @@ class ChatInboxOverview {
 
   /// 当前没有聊天账户时使用的安全空快照。
   static const empty = ChatInboxOverview(
-    ownerAccount: null,
+    accountId: null,
     pendingOutgoing: 0,
     unreadCount: 0,
   );

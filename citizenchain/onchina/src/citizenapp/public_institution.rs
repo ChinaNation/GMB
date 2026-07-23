@@ -68,7 +68,7 @@ fn parse_category(value: &str) -> InstitutionCategory {
 ///
 /// 安全红线：显式不含创建管理员姓、名、角色，也不含 private_type / partnership_kind。
 /// 新增字段前必须确认其可公开。
-/// 已确认可公开:法定代表人的姓、名、CID 和钱包账户属于机构公开信息；无任免时不下发。
+/// 已确认可公开:法定代表人的姓、名、CID 和账户 ID属于机构公开信息；无任免时不下发。
 #[derive(Debug, Serialize)]
 pub(crate) struct PublicInstitutionRow {
     pub cid_number: String,
@@ -108,14 +108,14 @@ impl PublicInstitutionRow {
             row.get::<_, Option<String>>("family_name"),
             row.get::<_, Option<String>>("given_name"),
             row.get::<_, Option<String>>("legal_representative_cid_number"),
-            row.get::<_, Option<String>>("legal_representative_account"),
+            row.get::<_, Option<String>>("legal_representative_account_id"),
         ) {
-            (Some(family_name), Some(given_name), Some(cid_number), Some(account)) => {
+            (Some(family_name), Some(given_name), Some(cid_number), Some(account_id)) => {
                 Some(crate::institution::subjects::model::LegalRepresentative {
                     family_name,
                     given_name,
                     cid_number,
-                    account,
+                    account_id,
                 })
             }
             (None, None, None, None) => None,
@@ -357,7 +357,7 @@ fn query_public_institutions(
                 (SELECT COUNT(*) FROM accounts a
                    WHERE a.province_code = s.province_code AND a.cid_number = s.cid_number) AS account_count,
 	                s.created_at, s.family_name, s.given_name,
-	                s.legal_representative_cid_number, s.legal_representative_account
+	                s.legal_representative_cid_number, s.legal_representative_account_id
 	         {GOV_FROM_WHERE}
 	           AND ($3::text IS NULL OR s.cid_number > $3)
 	         ORDER BY s.cid_number ASC
@@ -468,7 +468,7 @@ mod tests {
                 family_name: "张".to_string(),
                 given_name: "三".to_string(),
                 cid_number: "110000CTZN1000000001".to_string(),
-                account: "11".repeat(32),
+                account_id: "11".repeat(32),
             }),
             parent_cid_number: None,
             account_count: 2,
@@ -480,7 +480,7 @@ mod tests {
     #[test]
     fn public_dto_excludes_sensitive_admin_fields() {
         let json = serde_json::to_string(&sample_row()).expect("serialize public row");
-        for forbidden in ["created_by", "private_type", "partnership_kind"] {
+        for forbidden in ["creator_account_id", "private_type", "partnership_kind"] {
             assert!(
                 !json.contains(forbidden),
                 "公开 DTO 泄露敏感字段: {forbidden}"

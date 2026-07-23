@@ -38,10 +38,7 @@ class AdminAccountStorageCodec {
   }) {
     try {
       if (kind != kindPersonal) {
-        final decoded = InstitutionRoleStorageCodec.decodeAdmins(
-          bytes,
-          isPublic: kind == kindPublicInstitution,
-        );
+        final decoded = InstitutionRoleStorageCodec.decodeAdmins(bytes);
         if (decoded == null) return null;
         return AdminAccountStorageDecoded(
           institutionCode: decoded.institutionCode,
@@ -100,9 +97,9 @@ class AdminAccountStorageCodec {
     return Uint8List.fromList(storageKey.sublist(storageKey.length - 32));
   }
 
-  static String? accountHexFromAccountId(Uint8List accountId) {
+  static String? accountIdText(Uint8List accountId) {
     if (accountId.length != 32) return null;
-    return _hexEncode(accountId);
+    return '0x${_hexEncode(accountId)}';
   }
 
   static (int, int) _decodeCompactU32(Uint8List data, int offset) {

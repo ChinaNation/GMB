@@ -29,13 +29,13 @@ class _FakeSquareChainService extends SquareChainService {
   int fetchIdentityCount = 0;
 
   @override
-  Future<String?> fetchNormalCitizenCidNumber(String ownerAccount) async {
+  Future<String?> fetchNormalCitizenCidNumber(String accountId) async {
     return cidNumber;
   }
 
   @override
   Future<({String? cidNumber, String identityLevel})> fetchIdentity(
-    String ownerAccount,
+    String accountId,
   ) async {
     fetchIdentityCount += 1;
     return (
@@ -104,7 +104,8 @@ SquarePost _seedPost({
   return SquarePost(
     postId: id,
     author: const SquareAuthor(
-      ownerAccount: 'addr_seed_author',
+      accountId:
+          '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
       displayName: '作者',
       identityLevel: 'voting',
     ),
@@ -252,9 +253,9 @@ void main() {
           walletName: '测试钱包',
           walletIcon: '',
           balance: 0,
-          address: 'gmb_test_owner_account',
-          pubkeyHex:
-              'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          ss58Address: 'gmb_test_account_id',
+          accountId:
+              '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           alg: 'sr25519',
           ss58: 2027,
           createdAtMillis: 1,

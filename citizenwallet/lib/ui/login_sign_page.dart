@@ -49,6 +49,10 @@ class _LoginSignPageState extends State<LoginSignPage> {
         setState(() => _error = '登录二维码已过期');
         return;
       }
+      if (!loginRequestTargetsAccountId(request, widget.wallet.accountId)) {
+        setState(() => _error = '登录二维码指定的钱包与当前钱包不一致');
+        return;
+      }
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       setState(() {
         _request = request;
@@ -80,13 +84,18 @@ class _LoginSignPageState extends State<LoginSignPage> {
   Future<void> _confirmAndSign() async {
     final request = _request;
     if (request == null || _signing) return;
+    // 私钥调用前再次校验目标账户，避免页面状态变化后误用其他钱包签名。
+    if (!loginRequestTargetsAccountId(request, widget.wallet.accountId)) {
+      setState(() => _error = '登录二维码指定的钱包与当前钱包不一致');
+      return;
+    }
 
     setState(() => _signing = true);
 
     try {
       final walletManager = WalletManager();
-      // 以当前钱包公钥为 principal 构造签名原文
-      final signMessage = buildSignMessage(request, widget.wallet.pubkeyHex);
+      // 当前 sr25519 的 AccountId32 与 signer public key 字节相同。
+      final signMessage = buildSignMessage(request, widget.wallet.accountId);
       final result = await walletManager.signUtf8WithWallet(
         widget.wallet.walletIndex,
         signMessage,
@@ -94,7 +103,7 @@ class _LoginSignPageState extends State<LoginSignPage> {
 
       final response = buildLoginSignResponse(
         request: request,
-        pubkeyHex: result.pubkeyHex,
+        signerPublicKey: result.signerPublicKey,
         signatureHex: result.signatureHex,
       );
 
@@ -183,7 +192,10 @@ class _LoginSignPageState extends State<LoginSignPage> {
                   ),
                   const SizedBox(height: 16),
                   _infoRow('系统', loginSystemDisplayName(c)),
-                  _infoRow('钱包', _shortenAddress(widget.wallet.address)),
+                  _infoRow(
+                    '钱包',
+                    _shortenSs58Address(widget.wallet.ss58Address),
+                  ),
                   _infoRow(
                     '剩余时间',
                     _remainingSeconds > 0 ? '$_remainingSeconds秒' : '已过期',
@@ -296,8 +308,9 @@ class _LoginSignPageState extends State<LoginSignPage> {
     );
   }
 
-  String _shortenAddress(String address) {
-    if (address.length <= 16) return address;
-    return '${address.substring(0, 8)}...${address.substring(address.length - 8)}';
+  String _shortenSs58Address(String ss58Address) {
+    if (ss58Address.length <= 16) return ss58Address;
+    return '${ss58Address.substring(0, 8)}...'
+        '${ss58Address.substring(ss58Address.length - 8)}';
   }
 }

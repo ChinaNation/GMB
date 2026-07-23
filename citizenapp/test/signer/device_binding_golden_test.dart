@@ -7,14 +7,17 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart';
 
-const _owner = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
-final String _pubkey = '04${'ab' * 64}';
+const _accountId =
+    '0x1111111111111111111111111111111111111111111111111111111111111111';
+final String _publicKey = '04${'ab' * 64}';
 const int _issuedAt = 1700000000000;
-const _goldenHex = 'e9e25da7159f23e174b3c1cfc214ab41c4ea6fa413844e0e89656e8d24166c31';
+const _goldenHex =
+    '0089e293c8ef5c4d7bb5820e18dcb0bdac4eb374eaf6675c1bc2e53e50c3b960';
 
 void main() {
   test('buildDeviceBindingSigningMessage matches Worker golden (0x1C)', () {
-    final message = buildDeviceBindingSigningMessage(_owner, _pubkey, _issuedAt);
+    final message =
+        buildDeviceBindingSigningMessage(_accountId, _publicKey, _issuedAt);
     expect(message.length, 32);
     expect(bytesToHex(message), _goldenHex);
   });

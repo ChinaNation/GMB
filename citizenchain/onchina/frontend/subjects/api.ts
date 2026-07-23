@@ -67,7 +67,7 @@ export interface Institution {
     family_name: string;
     given_name: string;
     cid_number: string;
-    account: string;
+    account_id: string;
   } | null;
   legal_representative_photo_path?: string | null;
   legal_representative_photo_name?: string | null;
@@ -85,16 +85,16 @@ export interface Institution {
   institution_source_type?: string | null;
   /** 关联注册提案ID(溯源)。 */
   register_proposal_id?: string | null;
-  created_by: string;
-  /** 最近更新人 pubkey。 */
-  updated_by?: string | null;
+  creator_account_id?: string | null;
+  /** 最近更新人的账户 ID。 */
+  updater_account_id?: string | null;
   created_at: string;
 }
 
 export interface InstitutionAccount {
   cid_number: string;
   account_name: string;
-  account: string | null;
+  account_id: string | null;
   account_kind: 'main' | 'fee' | 'stake' | 'safety_fund' | 'he' | 'clearing' | 'named';
   can_close: boolean;
   can_delete: boolean;
@@ -103,7 +103,7 @@ export interface InstitutionAccount {
   chain_tx_hash: string | null;
   chain_block_number: number | null;
   // 账户读侧已切链上真源:链上无创建人/创建时间字段,一律为空。
-  created_by: string;
+  creator_account_id?: string | null;
   created_at: string | null;
 }
 
@@ -127,11 +127,11 @@ export interface InstitutionListRow {
   account_count: number;
   created_at: string;
   /** 创建该机构的登录管理员姓；未命中时为空。 */
-  created_by_family_name?: string | null;
+  creator_family_name?: string | null;
   /** 创建该机构的登录管理员名；未命中时为空。 */
-  created_by_given_name?: string | null;
+  creator_given_name?: string | null;
   /** 创建者角色:FEDERAL_REGISTRY / CITY_REGISTRY;未命中 null */
-  created_by_role?: string | null;
+  creator_institution_code?: string | null;
 }
 
 export interface PageResult<T> {
@@ -149,10 +149,10 @@ export interface InstitutionDetail {
   institution: Institution;
   accounts: InstitutionAccount[];
   /** 创建该机构的登录管理员姓、名；页面只在展示时合并。 */
-  created_by_family_name?: string | null;
-  created_by_given_name?: string | null;
+  creator_family_name?: string | null;
+  creator_given_name?: string | null;
   /** 创建者角色:FEDERAL_REGISTRY / CITY_REGISTRY */
-  created_by_role?: string | null;
+  creator_institution_code?: string | null;
 }
 
 /** 机构资料库文档 */
@@ -162,7 +162,7 @@ export interface InstitutionDocument {
   file_name: string;
   doc_type: string;
   file_size: number;
-  uploaded_by: string;
+  uploader_account_id: string;
   uploaded_at: string;
 }
 
@@ -174,8 +174,8 @@ export interface LegalRepresentativePhoto {
 }
 
 export interface CreateInstitutionAdminInput {
-  /** 机构初始管理员钱包账户。 */
-  admin_account: string;
+  /** 机构初始管理员账户 ID。 */
+  account_id: string;
   /** 管理员姓；不填时后端按公民资料解析，仍无法解析则使用“管理”。 */
   family_name?: string | null;
   /** 管理员名；不填时后端按公民资料解析，仍无法解析则使用“员”。 */
@@ -255,7 +255,7 @@ export function buildInstitutionCreatePayload(input: CreateInstitutionInput): In
     private_type: nullableTrim(input.private_type) as PrivateType | null,
     partnership_kind: nullableTrim(input.partnership_kind) as PartnershipKind | null,
     admins: (input.admins ?? []).map((admin) => ({
-      admin_account: admin.admin_account.trim(),
+      account_id: admin.account_id.trim(),
       family_name: nullableTrim(admin.family_name) ?? '管理',
       given_name: nullableTrim(admin.given_name) ?? '员',
     })),
@@ -321,7 +321,7 @@ export interface CreateAccountOutput {
   chain_synced_at: string | null;
   chain_tx_hash: string | null;
   chain_block_number: number | null;
-  account: string | null;
+  account_id: string | null;
 }
 
 export interface ListInstitutionsQuery {

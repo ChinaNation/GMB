@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:polkadart/polkadart.dart' show Hasher;
-import 'package:citizenapp/citizen/proposal/admins-change/codec/admin_account_codec.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
+import 'package:citizenapp/citizen/proposal/admins-change/codec/admin_account_codec.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
@@ -59,7 +59,7 @@ class AdminAccountService {
             );
     } else {
       final personalAccount =
-          AdminAccountIdCodec.fromAccountHex(identity.personalAccountHex!);
+          AdminAccountIdCodec.fromAccountIdText(identity.personalAccountId!);
       final key = AdminAccountIdCodec.personalAdminStorageKey(personalAccount);
       final data = await _rpc.fetchStorage(_keyHex(key));
       decoded = data == null
@@ -80,12 +80,12 @@ class AdminAccountService {
       (await fetchByIdentity(identity))?.threshold;
 
   Future<bool> isAdmin(
-    String pubkeyHex,
+    String accountId,
     AdminAccountIdentity identity,
   ) async {
-    final clean = AdminAccountIdCodec.normalizeHex(pubkeyHex);
+    final normalizedAccountId = AdminAccountIdCodec.requireAccountId(accountId);
     return (await fetchAdmins(identity))
-        .any((admin) => admin.admin_account == clean);
+        .any((admin) => admin.account_id == normalizedAccountId);
   }
 
   void clearCache([AdminAccountIdentity? identity]) {
@@ -98,8 +98,8 @@ class AdminAccountService {
     _inFlight.remove(identity.identityKey);
   }
 
-  void clearPersonalAccountCache(String personalAccountHex) {
-    final normalized = AdminAccountIdCodec.normalizeHex(personalAccountHex);
+  void clearPersonalAccountCache(String personalAccountId) {
+    final normalized = AdminAccountIdCodec.requireAccountId(personalAccountId);
     final key = 'personal-account:$normalized';
     _cache.remove(key);
     _inFlight.remove(key);
@@ -118,7 +118,8 @@ class AdminAccountService {
     return _fetchThresholdStorage(
       palletName: 'InternalVote',
       storageName: 'ActivePersonalThresholds',
-      keyData: AdminAccountIdCodec.fromAccountHex(identity.personalAccountHex!),
+      keyData:
+          AdminAccountIdCodec.fromAccountIdText(identity.personalAccountId!),
     );
   }
 

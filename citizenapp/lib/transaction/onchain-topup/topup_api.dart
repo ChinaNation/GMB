@@ -2,7 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import 'package:citizenapp/8964/services/square_api_client.dart' show SquareApiConfig;
+import 'package:citizenapp/8964/services/square_api_client.dart'
+    show SquareApiConfig;
 import 'topup_models.dart';
 
 /// 稳定币充值 Worker 客户端(/v1/square/topup/*)。
@@ -39,14 +40,14 @@ class TopupApi {
   Future<TopupSubmitResult> submit({
     required String token,
     required String packageId,
-    required String gmbAddress,
+    required String accountId,
     required String evmTxHash,
     String? payerAddress,
   }) async {
     final data = await _postJson('/v1/square/topup/submit', {
       'token': token,
       'package_id': packageId,
-      'gmb_address': gmbAddress,
+      'account_id': accountId,
       'evm_tx_hash': evmTxHash,
       if (payerAddress != null && payerAddress.isNotEmpty)
         'payer_address': payerAddress,
@@ -66,10 +67,10 @@ class TopupApi {
   }
 
   Future<Map<String, dynamic>> _getJson(String path) async {
-    final response = await _http
-        .get(Uri.parse('$baseUrl$path'),
-            headers: const {'content-type': 'application/json; charset=utf-8'})
-        .timeout(const Duration(seconds: 20));
+    final response = await _http.get(Uri.parse('$baseUrl$path'),
+        headers: const {
+          'content-type': 'application/json; charset=utf-8'
+        }).timeout(const Duration(seconds: 20));
     return _decode(response);
   }
 

@@ -12,17 +12,18 @@ void main() {
     final crypto = NativeMlsCrypto();
     final keyPackage = await crypto.createKeyPackage(
       const ChatDevice(
-        ownerAccount: 'alice-wallet',
+        accountId:
+            '0x1111111111111111111111111111111111111111111111111111111111111111',
         deviceId: 'alice-phone',
-        devicePublicKeyHex: 'aabbcc',
+        devicePublicKey: 'aabbcc',
       ),
     );
 
-    expect(keyPackage.ownerAccount, 'alice-wallet');
+    expect(keyPackage.accountId,
+        '0x1111111111111111111111111111111111111111111111111111111111111111');
     expect(keyPackage.deviceId, 'alice-phone');
-    expect(keyPackage.devicePublicKeyHex, isNotEmpty);
-    expect(
-        RegExp(r'^[0-9a-f]+$').hasMatch(keyPackage.devicePublicKeyHex), isTrue);
+    expect(keyPackage.devicePublicKey, isNotEmpty);
+    expect(RegExp(r'^[0-9a-f]+$').hasMatch(keyPackage.devicePublicKey), isTrue);
     expect(keyPackage.keyPackageBytes.length, greaterThan(100));
     expect(keyPackage.cipherSuite, contains('MLS_128'));
   }, skip: skip);

@@ -64,7 +64,7 @@ void main() {
         wrap([
           ...utf8.encode('multisig'),
           0, // actor_cid_number: None（个人多签）
-          ...List.filled(32, 1), // funding_account
+          ...List.filled(32, 1), // funding_account_id
           ...List.filled(32, 2), // beneficiary
           ...List.filled(16, 0), // amount
           0, // empty remark
@@ -92,7 +92,7 @@ void main() {
   test('recordOrUpdate inserts new entity then readAllFromIsar 返回单条', () async {
     final service = _service();
     await service.recordOrUpdate(
-      personalAccountHex: personalAccount,
+      personalAccountId: personalAccount,
       proposalId: 42,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.voting,
@@ -119,7 +119,7 @@ void main() {
       'snapshot 沿用旧值若新调用未传', () async {
     final service = _service();
     await service.recordOrUpdate(
-      personalAccountHex: personalAccount,
+      personalAccountId: personalAccount,
       proposalId: 7,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.voting,
@@ -134,7 +134,7 @@ void main() {
 
     // 二次写入只更新投票计数和状态,不传 snapshot
     await service.recordOrUpdate(
-      personalAccountHex: personalAccount,
+      personalAccountId: personalAccount,
       proposalId: 7,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.executed,
@@ -154,7 +154,7 @@ void main() {
   test('voting → executed 转换会写入 finalStatusAtMillis', () async {
     final service = _service();
     await service.recordOrUpdate(
-      personalAccountHex: personalAccount,
+      personalAccountId: personalAccount,
       proposalId: 1,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.voting,
@@ -166,7 +166,7 @@ void main() {
     expect(list[0].isFinal, isFalse);
 
     await service.recordOrUpdate(
-      personalAccountHex: personalAccount,
+      personalAccountId: personalAccount,
       proposalId: 1,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.rejected,
@@ -181,7 +181,7 @@ void main() {
   test('多个 proposal 按 createdAt desc 排序', () async {
     final service = _service();
     await service.recordOrUpdate(
-      personalAccountHex: personalAccount,
+      personalAccountId: personalAccount,
       proposalId: 100,
       action: PersonalProposalAction.create,
       status: PersonalProposalStatus.voting,
@@ -190,7 +190,7 @@ void main() {
     );
     await Future<void>.delayed(const Duration(milliseconds: 5));
     await service.recordOrUpdate(
-      personalAccountHex: personalAccount,
+      personalAccountId: personalAccount,
       proposalId: 101,
       action: PersonalProposalAction.transfer,
       status: PersonalProposalStatus.voting,
@@ -199,7 +199,7 @@ void main() {
     );
     await Future<void>.delayed(const Duration(milliseconds: 5));
     await service.recordOrUpdate(
-      personalAccountHex: personalAccount,
+      personalAccountId: personalAccount,
       proposalId: 102,
       action: PersonalProposalAction.close,
       status: PersonalProposalStatus.executed,

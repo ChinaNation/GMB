@@ -70,13 +70,13 @@ class _ProfilePageState extends State<MyTab> {
   String? _operationalIdentityAccount;
   bool _localStateLoaded = false;
 
-  /// 用户身份地址 = 默认用户钱包（列表中最靠前的热钱包）地址。
-  String get _communicationAddress => _defaultWallet?.address ?? '';
+  /// 用户身份账户 = 默认用户钱包（列表中最靠前的热钱包）账户 ID。
+  String get _communicationAccountId => _defaultWallet?.accountId ?? '';
 
   /// 用户昵称 = 默认钱包名称；钱包名称异常缺失时使用与统一主页一致的本地昵称，
   /// 绝不把钱包账户放进昵称位置。
   String get _nickname => ProfilePresentation.forAccount(
-        _communicationAddress,
+        _communicationAccountId,
       ).resolveDisplayName(walletName: _defaultWallet?.walletName);
 
   /// 默认钱包徽章信号：颜色只来自账户级链上身份快照，勾来自会员匹配。
@@ -118,7 +118,7 @@ class _ProfilePageState extends State<MyTab> {
     // (如重命名冷钱包、导入新钱包未置顶)不触发链查询,避免无谓刷新。
     final wallet = await _walletManager.getDefaultWallet();
     if (!mounted) return;
-    if (wallet?.address == _defaultWallet?.address &&
+    if (wallet?.accountId == _defaultWallet?.accountId &&
         wallet?.walletName == _defaultWallet?.walletName) {
       return;
     }
@@ -133,10 +133,9 @@ class _ProfilePageState extends State<MyTab> {
     final defaultWallet = await _walletManager.getDefaultWallet();
     String? identityLevel;
     try {
-      final ownerAccount = defaultWallet?.address.trim() ?? '';
-      final snapshot = ownerAccount.isEmpty
-          ? null
-          : await _badgeSnapshotStore.read(ownerAccount);
+      final accountId = defaultWallet?.accountId ?? '';
+      final snapshot =
+          accountId.isEmpty ? null : await _badgeSnapshotStore.read(accountId);
       identityLevel = switch (snapshot?.identityLevel) {
         'voting' || 'candidate' => snapshot!.identityLevel,
         _ => null,
@@ -173,30 +172,30 @@ class _ProfilePageState extends State<MyTab> {
         _smoldotClientManager.healthStatus != ChainHealthStatus.operational) {
       return;
     }
-    final ownerAccount = wallet?.address.trim() ?? '';
-    if (ownerAccount.isEmpty || _operationalIdentityAccount == ownerAccount) {
+    final accountId = wallet?.accountId ?? '';
+    if (accountId.isEmpty || _operationalIdentityAccount == accountId) {
       return;
     }
-    _operationalIdentityAccount = ownerAccount;
+    _operationalIdentityAccount = accountId;
 
     final state = await _myIdService.getState();
-    if (!mounted || _defaultWallet?.address.trim() != ownerAccount) return;
+    if (!mounted || _defaultWallet?.accountId != accountId) return;
 
     String? refreshedLevel;
     if (state.isCitizen &&
-        state.votingAccount?.trim() == ownerAccount &&
+        state.votingAccountId?.trim() == accountId &&
         (state.identityLevel == 'voting' ||
             state.identityLevel == 'candidate')) {
       refreshedLevel = state.identityLevel;
     } else if (state.status == MyIdStatus.queryFailed) {
       // 纯默认用户模型下不再有多身份冲突;仅链读失败时回落徽章快照。
-      final snapshot = await _badgeSnapshotStore.read(ownerAccount);
+      final snapshot = await _badgeSnapshotStore.read(accountId);
       refreshedLevel = switch (snapshot?.identityLevel) {
         'voting' || 'candidate' => snapshot!.identityLevel,
         _ => null,
       };
     }
-    if (!mounted || _defaultWallet?.address.trim() != ownerAccount) return;
+    if (!mounted || _defaultWallet?.accountId != accountId) return;
     setState(() => _defaultWalletIdentityLevel = refreshedLevel);
   }
 
@@ -222,7 +221,7 @@ class _ProfilePageState extends State<MyTab> {
   }
 
   Future<void> _openMyProfile() async {
-    final address = _communicationAddress;
+    final address = _communicationAccountId;
     if (address.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('请先在「我的 → 我的钱包」创建热钱包')),
@@ -232,7 +231,7 @@ class _ProfilePageState extends State<MyTab> {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => UserProfilePage(
-          ownerAccount: address,
+          accountId: address,
           isSelf: true,
         ),
       ),
@@ -264,7 +263,7 @@ class _ProfilePageState extends State<MyTab> {
           LocalIdentityAvatar(
             path: _userProfile.avatarPath,
             size: 84,
-            seed: _communicationAddress,
+            seed: _communicationAccountId,
             identityLevel: _defaultWalletIdentityLevel,
             membershipLevel: _defaultWalletMembershipLevel,
             membershipActive: _defaultWalletMembershipActive,
@@ -384,7 +383,7 @@ class _ProfilePageState extends State<MyTab> {
                     child: _HeaderBackground(
                       path: _userProfile.backgroundPath,
                       height: headerHeight,
-                      seed: _communicationAddress,
+                      seed: _communicationAccountId,
                     ),
                   ),
                   Positioned(

@@ -15,18 +15,13 @@ use crate::auth::login::admin_person_names;
 use crate::auth::repo;
 use crate::*;
 
-fn balance_lookup_key(account: &str) -> String {
-    let trimmed = account.trim();
-    trimmed
-        .strip_prefix("0x")
-        .or_else(|| trimmed.strip_prefix("0X"))
-        .unwrap_or(trimmed)
-        .to_ascii_lowercase()
+fn balance_lookup_key(account_id: &str) -> String {
+    crate::crypto::pubkey::normalize_account_id(account_id).unwrap_or_default()
 }
 
-fn balance_fen(balances: &BTreeMap<String, Option<String>>, account: &str) -> Option<String> {
+fn balance_fen(balances: &BTreeMap<String, Option<String>>, account_id: &str) -> Option<String> {
     balances
-        .get(balance_lookup_key(account).as_str())
+        .get(balance_lookup_key(account_id).as_str())
         .cloned()
         .flatten()
 }
@@ -100,13 +95,13 @@ pub(crate) async fn list_city_registry_admins(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     };
-    let balance_accounts = data
+    let balance_account_ids = data
         .rows
         .iter()
-        .map(|row| row.admin_account.clone())
+        .map(|row| row.account_id.clone())
         .collect::<Vec<_>>();
-    let balance_by_account = match crate::core::chain_runtime::fetch_account_balances_onchain(
-        &balance_accounts,
+    let balance_by_account_id = match crate::core::chain_runtime::fetch_account_balances_onchain(
+        &balance_account_ids,
     )
     .await
     {
@@ -117,7 +112,7 @@ pub(crate) async fn list_city_registry_admins(
         }
     };
     for row in &mut data.rows {
-        row.balance_fen = balance_fen(&balance_by_account, row.admin_account.as_str());
+        row.balance_fen = balance_fen(&balance_by_account_id, row.account_id.as_str());
     }
     Json(ApiResponse {
         code: 0,
@@ -152,19 +147,19 @@ pub(crate) fn city_registry_row_from_user_conn(
     conn: &mut Client,
     city_registry: &AdminUser,
 ) -> Result<CityRegistryAdminRow, String> {
-    let (created_by_family_name, created_by_given_name) =
-        creator_person_names_conn(conn, city_registry.created_by.as_str())?;
+    let (creator_family_name, creator_given_name) =
+        creator_person_names_conn(conn, city_registry.creator_account_id.as_str())?;
     Ok(CityRegistryAdminRow {
         id: city_registry.id,
-        admin_account: city_registry.admin_account.clone(),
+        account_id: city_registry.account_id.clone(),
         family_name: city_registry.family_name.clone(),
         given_name: city_registry.given_name.clone(),
         balance_fen: None,
         institution_code: city_registry.institution_code.clone(),
         built_in: city_registry.built_in,
-        created_by: city_registry.created_by.clone(),
-        created_by_family_name,
-        created_by_given_name,
+        creator_account_id: city_registry.creator_account_id.clone(),
+        creator_family_name,
+        creator_given_name,
         created_at: city_registry.created_at,
         city_name: city_registry.city_name.clone(),
     })
@@ -182,9 +177,9 @@ pub(crate) fn count_city_registry_admins_in_city_conn(
 
 pub(crate) fn creator_person_names_conn(
     conn: &mut Client,
-    creator_account: &str,
+    creator_account_id: &str,
 ) -> Result<(String, String), String> {
-    let Some(creator) = repo::get_admin_by_account_conn(conn, creator_account)? else {
+    let Some(creator) = repo::get_admin_by_account_id_conn(conn, creator_account_id)? else {
         return Ok(("管理".to_string(), "员".to_string()));
     };
     // 创建者姓名只作展示，禁止从本地表反推授权省份。

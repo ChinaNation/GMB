@@ -36,7 +36,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 class UserProfilePage extends StatefulWidget {
   const UserProfilePage({
     super.key,
-    required this.ownerAccount,
+    required this.accountId,
     required this.isSelf,
     this.initialProfile,
     this.api,
@@ -47,7 +47,7 @@ class UserProfilePage extends StatefulWidget {
   });
 
   /// 主页身份 = 默认热钱包地址。
-  final String ownerAccount;
+  final String accountId;
 
   /// 本人主页（可编辑资料）还是他人主页。
   final bool isSelf;
@@ -120,16 +120,16 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
-  /// 判定「他人视角看的其实是自己账户」：浏览者默认钱包地址 == 本页 ownerAccount。
+  /// 判定「他人视角看的其实是自己账户」：浏览者默认钱包地址 == 本页 accountId。
   /// 本人视角（isSelf）按钮本就隐藏，无需判定；判定失败按非本人处理，不阻塞主页。
   Future<void> _resolveOwnAccount() async {
     if (widget.isSelf) return;
     final loadViewer = widget.viewerAccountLoader ??
-        () async => (await WalletManager().getDefaultWallet())?.address;
+        () async => (await WalletManager().getDefaultWallet())?.accountId;
     try {
       final viewer = (await loadViewer())?.trim() ?? '';
       if (!mounted) return;
-      if (viewer.isNotEmpty && viewer == widget.ownerAccount) {
+      if (viewer.isNotEmpty && viewer == widget.accountId) {
         setState(() => _isOwnAccount = true);
       }
     } on Exception {
@@ -140,7 +140,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   Future<void> _load() async {
     // 先渲染缓存（若无注入资料），再后台刷新回刷 + 写回缓存。
     if (_profile == null) {
-      final cached = await _cache.read(widget.ownerAccount);
+      final cached = await _cache.read(widget.accountId);
       if (cached != null && mounted) {
         setState(() => _profile = cached);
       }
@@ -148,8 +148,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     final session = await _ensureSession();
     try {
       // 带 session 拉取 → is_following 反映当前登录者视角。
-      final fresh =
-          await _api.fetchProfile(widget.ownerAccount, session: session);
+      final fresh = await _api.fetchProfile(widget.accountId, session: session);
       if (!mounted) return;
       setState(() => _profile = fresh);
       await _cache.write(fresh);
@@ -195,12 +194,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
       if (wasFollowing) {
         await _api.unfollowUser(
           session: session,
-          followedAccount: widget.ownerAccount,
+          followedAccountId: widget.accountId,
         );
       } else {
         await _api.followUser(
           session: session,
-          followedAccount: widget.ownerAccount,
+          followedAccountId: widget.accountId,
         );
       }
     } on Exception {
@@ -232,7 +231,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     try {
       await _api.setNotify(
         session: session,
-        followedAccount: widget.ownerAccount,
+        followedAccountId: widget.accountId,
         enabled: !wasNotifying,
       );
     } on Exception {
@@ -246,7 +245,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     final updated = await Navigator.of(context).push<CitizenProfile>(
       MaterialPageRoute<CitizenProfile>(
         builder: (_) => CitizenProfileEditPage(
-          ownerAccount: widget.ownerAccount,
+          accountId: widget.accountId,
           initialProfile: _profile,
           api: _api,
           sessionProvider: _sessionProvider,
@@ -293,7 +292,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
     try {
       await SquareAccountDeletionService().deleteAccount(
-        ownerAccount: widget.ownerAccount,
+        accountId: widget.accountId,
         walletIndex: walletIndex,
         // 动钱动权 → sr25519 主钥对 0x1D 摘要签名（读硬件金库，弹一次生物识别）。
         signAction: (message) async =>
@@ -326,7 +325,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       MaterialPageRoute<void>(
         builder: (_) => UserQrPage(
           contactName: _displayName,
-          address: widget.ownerAccount,
+          accountId: widget.accountId,
         ),
       ),
     );
@@ -335,7 +334,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   void _openChatWithUser() {
     _directChat(
       context,
-      peerAddress: widget.ownerAccount,
+      peerAccountId: widget.accountId,
       title: _displayName,
     );
   }
@@ -349,7 +348,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => FollowsListPage(
-          ownerAccount: widget.ownerAccount,
+          accountId: widget.accountId,
           type: type,
           session: session,
           api: _api,
@@ -367,8 +366,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   /// 本人钱包名是昵称真源，后端 display_name 是公开镜像；均缺失时使用
   /// 按账户稳定选择的本地昵称，账户本身永远不会出现在昵称位置。
   String get _displayName {
-    return ProfilePresentation.forAccount(widget.ownerAccount)
-        .resolveDisplayName(
+    return ProfilePresentation.forAccount(widget.accountId).resolveDisplayName(
       walletName: widget.isSelf ? _walletName : null,
       publicName: _profile?.displayName,
     );
@@ -387,7 +385,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   Widget _bannerWidget() {
     final fallback = Image.asset(
-      ProfilePresentation.forAccount(widget.ownerAccount).bannerAsset,
+      ProfilePresentation.forAccount(widget.accountId).bannerAsset,
       fit: BoxFit.cover,
     );
     final url = _mediaUrl(_profile?.bannerObjectKey);
@@ -437,7 +435,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       case ProfileTab.posts:
         return ProfilePostsTab(
           key: ValueKey('posts:$_postsRevision'),
-          ownerAccount: widget.ownerAccount,
+          accountId: widget.accountId,
           api: _api,
           category: SquarePostCategory.normal,
           contentFormat: SquarePostContentFormat.normal,
@@ -448,7 +446,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       case ProfileTab.campaign:
         return ProfilePostsTab(
           key: ValueKey('campaign:$_postsRevision'),
-          ownerAccount: widget.ownerAccount,
+          accountId: widget.accountId,
           api: _api,
           category: SquarePostCategory.campaign,
           emptyLabel: '还没有竞选内容',
@@ -458,7 +456,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       case ProfileTab.photos:
         return ProfilePostsTab(
           key: ValueKey('photos:$_postsRevision'),
-          ownerAccount: widget.ownerAccount,
+          accountId: widget.accountId,
           api: _api,
           mediaKind: SquareMediaKind.image,
           emptyLabel: '还没有照片',
@@ -468,7 +466,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       case ProfileTab.videos:
         return ProfilePostsTab(
           key: ValueKey('videos:$_postsRevision'),
-          ownerAccount: widget.ownerAccount,
+          accountId: widget.accountId,
           api: _api,
           mediaKind: SquareMediaKind.video,
           emptyLabel: '还没有视频',
@@ -478,7 +476,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       case ProfileTab.articles:
         return ProfilePostsTab(
           key: ValueKey('articles:$_postsRevision'),
-          ownerAccount: widget.ownerAccount,
+          accountId: widget.accountId,
           api: _api,
           contentFormat: SquarePostContentFormat.article,
           emptyLabel: '还没有文章',
@@ -527,7 +525,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     collapsedTitle: _title,
                     banner: _bannerWidget(),
                     foreground: ProfileHeaderCard(
-                      ownerAccount: widget.ownerAccount,
+                      accountId: widget.accountId,
                       profile: _profile,
                       fallbackName: _walletName,
                       avatarUrl: _mediaUrl(_profile?.avatarObjectKey),
@@ -549,7 +547,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       creatorSubscribeButton: widget.isSelf
                           ? null
                           : CreatorSubscribeButton(
-                              creatorAccount: widget.ownerAccount,
+                              creatorAccountId: widget.accountId,
                               enabled: !_isOwnAccount,
                             ),
                     ),

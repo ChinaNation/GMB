@@ -12,11 +12,11 @@ use crate::AppState;
 pub(crate) fn append_audit_log(
     state: &AppState,
     action: &'static str,
-    actor_account: &str,
+    actor_account_id: &str,
     target_cid: Option<String>,
     detail: serde_json::Value,
 ) {
-    let actor = actor_account.to_string();
+    let actor_account_id = crate::crypto::pubkey::normalize_account_id(actor_account_id);
     let action = action.to_string();
     let log_action = action.clone();
     let province_code = target_cid
@@ -31,12 +31,14 @@ pub(crate) fn append_audit_log(
         .filter(|v| !v.is_empty() && v != "000");
     if let Err(err) = state.db.with_client(move |conn| {
         conn.execute(
-            "INSERT INTO audit(province_code, city_code, actor, action, target_cid, detail)
+            "INSERT INTO audit(
+                province_code, city_code, actor_account_id, action, target_cid, detail
+             )
              VALUES ($1, $2, $3, $4, $5, $6)",
             &[
                 &province_code,
                 &city_code,
-                &actor,
+                &actor_account_id,
                 &action,
                 &target_cid,
                 &detail,

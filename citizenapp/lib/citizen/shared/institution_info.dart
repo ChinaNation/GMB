@@ -67,27 +67,27 @@ class OrgType {
 /// 所有机构强制具有主账户与费用账户；个人多签不使用本类型。
 class InstitutionAccounts {
   const InstitutionAccounts({
-    required this.mainAccount,
-    required this.feeAccount,
-    this.safetyFundAccount,
-    this.heAccount,
-    this.stakeAccount,
+    required this.mainAccountId,
+    required this.feeAccountId,
+    this.safetyFundAccountId,
+    this.heAccountId,
+    this.stakeAccountId,
   });
 
   /// 主账户 AccountId hex（32 字节，不含 0x）。
-  final String mainAccount;
+  final String mainAccountId;
 
   /// 费用账户 AccountId hex；所有机构强制存在。
-  final String feeAccount;
+  final String feeAccountId;
 
   /// 安全基金账户 AccountId hex；仅国家储委会存在。
-  final String? safetyFundAccount;
+  final String? safetyFundAccountId;
 
   /// 两和基金账户 hex（Reconciliation Fund，链端 NRC_HE_ACCOUNT）；仅国家储委会存在。
-  final String? heAccount;
+  final String? heAccountId;
 
   /// 永久质押账户 AccountId hex；仅省储行存在。
-  final String? stakeAccount;
+  final String? stakeAccountId;
 }
 
 /// 单个机构或多签账户的结构化信息。
@@ -100,11 +100,11 @@ class InstitutionInfo {
     required this.cidNumber,
     required this.orgType,
     this.accounts,
-    String? personalAccountHex,
+    String? personalAccountId,
     this.adminAccountCode,
     this.internalThresholdOverride,
-  })  : assert((accounts == null) != (personalAccountHex == null)),
-        _personalAccountHex = personalAccountHex;
+  })  : assert((accounts == null) != (personalAccountId == null)),
+        _personalAccountId = personalAccountId;
 
   /// 机构全称,与后端/链端 `cid_full_name` 对齐。
   final String cidFullName;
@@ -133,17 +133,17 @@ class InstitutionInfo {
   /// 所有机构使用完整账户集合；个人多签不使用本字段。
   final InstitutionAccounts? accounts;
 
-  final String? _personalAccountHex;
+  final String? _personalAccountId;
 
   /// 资金操作的默认账户：机构为主账户，个人多签为其 AccountId。
   /// 本字段只是账户参数，不得替代机构 `cidNumber`。
-  String get mainAccount => accounts?.mainAccount ?? personalAccountHex;
+  String get mainAccountId => accounts?.mainAccountId ?? personalAccountId;
 
   /// 个人多签 AccountId hex；机构调用本 getter 直接失败。
-  String get personalAccountHex {
-    final value = _personalAccountHex;
+  String get personalAccountId {
+    final value = _personalAccountId;
     if (!isPersonalAccountIdentity(cidNumber) || value == null) {
-      throw StateError('机构没有 personalAccountHex，必须使用 CID + 具体机构账户');
+      throw StateError('机构没有 personalAccountId，必须使用 CID + 具体机构账户');
     }
     return value;
   }
@@ -199,7 +199,7 @@ class InstitutionInfo {
     String? cidNumber,
     int? orgType,
     InstitutionAccounts? accounts,
-    String? personalAccountHex,
+    String? personalAccountId,
     String? adminAccountCode,
     int? internalThresholdOverride,
   }) {
@@ -211,7 +211,7 @@ class InstitutionInfo {
       cidNumber: cidNumber ?? this.cidNumber,
       orgType: orgType ?? this.orgType,
       accounts: accounts ?? this.accounts,
-      personalAccountHex: personalAccountHex ?? _personalAccountHex,
+      personalAccountId: personalAccountId ?? _personalAccountId,
       adminAccountCode: adminAccountCode ?? this.adminAccountCode,
       internalThresholdOverride:
           internalThresholdOverride ?? this.internalThresholdOverride,
@@ -225,17 +225,19 @@ bool isPersonalAccountIdentity(String institutionIdentity) {
   return institutionIdentity.startsWith(_personalAccountIdentityPrefix);
 }
 
-String? personalAccountHexFromIdentity(String institutionIdentity) {
+String? personalAccountIdFromIdentity(String institutionIdentity) {
   if (!isPersonalAccountIdentity(institutionIdentity)) return null;
-  final hex = _normalizeHex(
-    institutionIdentity.substring(_personalAccountIdentityPrefix.length),
-  );
-  if (hex.length != 64) return null;
-  return hex;
+  final accountId =
+      institutionIdentity.substring(_personalAccountIdentityPrefix.length);
+  if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) return null;
+  return accountId;
 }
 
-List<int> institutionAccountId(String accountHex) {
-  final account = _hexDecode(accountHex);
+List<int> accountIdBytes(String accountId) {
+  if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+    throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+  }
+  final account = _hexDecode(accountId);
   if (account.length != 32) {
     throw ArgumentError('account hex 必须为 32 字节');
   }
@@ -252,6 +254,5 @@ List<int> _hexDecode(String hex) {
 }
 
 String _normalizeHex(String hex) {
-  final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
-  return clean.toLowerCase();
+  return hex.substring(2);
 }

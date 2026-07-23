@@ -98,19 +98,19 @@
 
 ### 4.2 通讯录
 
-本机缓存复用 Isar `AppKvEntity`，按默认热钱包 `owner_account` 隔离：
+本机缓存复用 Isar `AppKvEntity`，按默认热钱包 `account_id` 隔离：
 
-- `contacts:<owner_account>`：解密后的本机通讯录缓存
-- `contact_pending_ops:<owner_account>`：用户真实产生、尚未同步成功的添加/改名/删除操作
-- `contact_sync_state:<owner_account>`：最近一次同步阶段、时间和错误状态；分页游标只在单次请求内使用，不持久化
+- `contacts:<account_id>`：解密后的本机通讯录缓存
+- `contact_pending_ops:<account_id>`：用户真实产生、尚未同步成功的添加/改名/删除操作
+- `contact_sync_state:<account_id>`：最近一次同步阶段、时间和错误状态；分页游标只在单次请求内使用，不持久化
 
 Cloudflare D1 `square_contacts` 只保存端侧 AES-256-GCM 密文、HMAC `contact_id`、
 nonce、MAC 和更新时间；Worker 不接收联系人账户或联系人名称明文。通讯录密钥由
 热钱包 seed 经 HKDF-SHA256 域隔离派生并保存在设备安全存储，同一助记词换设备导入
 后可派生相同密钥解密恢复。
 
-历史 `SharedPreferences/user.contacts.items.v2` 只允许执行一次性迁移：写入当前默认
-热钱包的 Isar 缓存并形成待同步操作后立即删除旧键；运行期不保留双轨读取。
+当前尚未正式创世，旧通讯录业务缓存直接删除重建；运行期不读取旧键、不执行迁移，
+也不保留双轨缓存。
 
 ### 4.3 电子护照
 

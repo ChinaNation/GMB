@@ -16,8 +16,8 @@ async function countUnreadSince(
   const row = await env.DB.prepare(
     `SELECT COUNT(*) AS n
        FROM square_posts p
-       INNER JOIN square_follows f ON f.followed_account = p.owner_account
-      WHERE f.owner_account = ?
+       INNER JOIN square_follows f ON f.followed_account_id = p.account_id
+      WHERE f.account_id = ?
         AND f.notify_enabled = 1
         AND p.post_state = 'published'
         AND p.created_at > ?`
@@ -32,17 +32,17 @@ async function countUnreadSince(
 export async function getNotifyUnreadRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   const reads = await env.DB.prepare(
-    'SELECT last_seen_square_at, last_seen_following_at FROM square_notify_reads WHERE owner_account = ?'
+    'SELECT last_seen_square_at, last_seen_following_at FROM square_notify_reads WHERE account_id = ?'
   )
-    .bind(session.owner_account)
+    .bind(session.account_id)
     .first<{ last_seen_square_at: number; last_seen_following_at: number }>();
 
   const squareSince = reads?.last_seen_square_at ?? 0;
   const followingSince = reads?.last_seen_following_at ?? 0;
 
   const [squareUnread, followingUnread] = await Promise.all([
-    countUnreadSince(env, session.owner_account, squareSince),
-    countUnreadSince(env, session.owner_account, followingSince)
+    countUnreadSince(env, session.account_id, squareSince),
+    countUnreadSince(env, session.account_id, followingSince)
   ]);
 
   return jsonResponse({
@@ -65,11 +65,11 @@ export async function markNotifyReadRoute(request: Request, env: Env): Promise<R
   const column =
     body.scope === 'square' ? 'last_seen_square_at' : 'last_seen_following_at';
   await env.DB.prepare(
-    `INSERT INTO square_notify_reads (owner_account, ${column})
+    `INSERT INTO square_notify_reads (account_id, ${column})
        VALUES (?, ?)
-     ON CONFLICT(owner_account) DO UPDATE SET ${column} = excluded.${column}`
+     ON CONFLICT(account_id) DO UPDATE SET ${column} = excluded.${column}`
   )
-    .bind(session.owner_account, now)
+    .bind(session.account_id, now)
     .run();
 
   return jsonResponse({ ok: true, scope: body.scope, last_seen_at: now });

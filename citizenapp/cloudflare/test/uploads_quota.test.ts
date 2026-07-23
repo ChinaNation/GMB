@@ -91,7 +91,7 @@ describe('membership upload quotas', () => {
   it('checks the uploaded R2 manifest against actual media assets', async () => {
     const manifestText = JSON.stringify({
       schema: 'citizenapp.square.post.v1',
-      owner_account: 'owner_1',
+      account_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
       post_category: 'normal',
       content_format: 'article',
       title: '标题标题标题标题标题',
@@ -111,7 +111,7 @@ describe('membership upload quotas', () => {
         membershipLevel: 'freedom',
         plan: membershipPlans.freedom,
         upload: {
-          owner_account: 'owner_1',
+          account_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
           post_category: 'normal'
         },
         manifestText,
@@ -123,7 +123,7 @@ describe('membership upload quotas', () => {
   it('rejects a manifest whose media does not match the signed upload assets', async () => {
     const manifestText = JSON.stringify({
       schema: 'citizenapp.square.post.v1',
-      owner_account: 'owner_1',
+      account_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
       post_category: 'normal',
       text: '正文',
       media_items: [
@@ -141,7 +141,7 @@ describe('membership upload quotas', () => {
         membershipLevel: 'freedom',
         plan: membershipPlans.freedom,
         upload: {
-          owner_account: 'owner_1',
+          account_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
           post_category: 'normal'
         },
         manifestText,
@@ -171,7 +171,7 @@ function mediaAsset(): MediaAssetRow {
   return {
     upload_id: 'squ_test',
     post_id: 'sqp_test',
-    owner_account: 'owner_1',
+    account_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
     media_index: 0,
     media_kind: 'image',
     provider: 'cloudflare_images',

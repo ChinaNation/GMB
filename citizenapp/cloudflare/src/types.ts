@@ -20,11 +20,11 @@ export type MediaArchiveState = 'live' | 'archived' | 'restoring';
 /// 广场发帖通知扇出队列消息：一条 = 一次发帖事件，或一页续跑（cursor 空=首页）。
 /// author_name 入队时读一次作者展示名、续跑复用，避免每页重读；cursor 为 keyset 续跑游标。
 export interface SquareNotifyJob {
-  author_account: string;
+  author_account_id: string;
   author_name: string;
   content_format: 'normal' | 'article';
   post_id: string;
-  cursor?: { created_at: number; owner_account: string };
+  cursor?: { created_at: number; account_id: string };
 }
 
 export interface Env {
@@ -106,7 +106,7 @@ export interface Env {
 }
 
 export interface SessionState {
-  owner_account: string;
+  account_id: string;
   device_key_hash: string;
   created_at: number;
   expires_at: number;
@@ -114,15 +114,15 @@ export interface SessionState {
 
 export interface LoginChallengeRow {
   challenge_id: string;
-  owner_account: string;
+  account_id: string;
   signing_payload: string;
   expires_at: number;
   used_at: number | null;
 }
 
 export interface DeviceSubkeyRow {
-  owner_account: string;
-  p256_pubkey: string;
+  account_id: string;
+  p256_public_key: string;
   issued_at: number;
   created_at: number;
   updated_at: number;
@@ -130,7 +130,7 @@ export interface DeviceSubkeyRow {
 
 /// 端到端加密通讯录行。Worker 只保存不透明密文，绝不接收联系人账户或名称明文。
 export interface ContactCiphertextRow {
-  owner_account: string;
+  account_id: string;
   contact_id: string;
   ciphertext: string;
   nonce: string;
@@ -139,7 +139,7 @@ export interface ContactCiphertextRow {
 }
 
 export interface MembershipRow {
-  owner_account: string;
+  account_id: string;
   membership_level: string;
   started_at: number;
   last_charged_at: number;
@@ -167,7 +167,7 @@ export interface UploadItemInput {
 export interface PreparedUploadRow {
   upload_id: string;
   post_id: string;
-  owner_account: string;
+  account_id: string;
   post_category: PostCategory;
   manifest_hash: string;
   content_hash: string | null;
@@ -183,7 +183,7 @@ export interface PreparedUploadRow {
 export interface MediaAssetRow {
   upload_id: string;
   post_id: string;
-  owner_account: string;
+  account_id: string;
   media_index: number;
   media_kind: 'image' | 'video';
   provider: MediaProvider;
@@ -209,7 +209,7 @@ export interface MediaAssetRow {
 
 export interface SquarePostRow {
   post_id: string;
-  owner_account: string;
+  account_id: string;
   cid_number: string | null;
   post_category: PostCategory;
   content_format: PostContentFormat;
@@ -267,7 +267,7 @@ export type AuthorContentFormat = 'all' | PostContentFormat;
 /// 头像/背景/签名/展示名等公开链下资料的唯一真源。
 export interface CitizenProfileDoc {
   schema: 'citizenapp.square.profile.v1';
-  owner_account: string;
+  account_id: string;
   display_name: string;
   bio: string;
   avatar_object_key: string | null;
@@ -286,7 +286,7 @@ export interface UserProfileCounts {
 
 /// GET /v1/square/users/:account 响应载荷。
 export interface UserProfileResponse {
-  owner_account: string;
+  account_id: string;
   display_name: string;
   bio: string;
   avatar_object_key: string | null;

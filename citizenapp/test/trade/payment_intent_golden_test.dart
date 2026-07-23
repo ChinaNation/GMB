@@ -114,7 +114,8 @@ void main() {
         expiresAt: 0,
       );
       // 32(tx)+32(payer)+(1+26)+32(recipient)+(1+26)+16+16+8+4 = 194。
-      expect(intent.scaleEncode().length, 32 + 32 + (1 + 26) + 32 + (1 + 26) + 16 + 16 + 8 + 4);
+      expect(intent.scaleEncode().length,
+          32 + 32 + (1 + 26) + 32 + (1 + 26) + 16 + 16 + 8 + 4);
     });
   });
 }

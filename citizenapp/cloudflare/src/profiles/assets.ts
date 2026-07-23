@@ -44,7 +44,7 @@ export async function prepareProfileAsset(request: Request, env: Env): Promise<R
 
   const sha = (body.sha256 as string).toLowerCase();
   // 固定对象键让并发上传也只能覆盖同一对象，物理上不可能留下第二个头像或背景。
-  const objectKey = `${profileAssetPrefix(session.owner_account)}${kind}`;
+  const objectKey = `${profileAssetPrefix(session.account_id)}${kind}`;
   const uploadUrl = apiRouteUrl(request, '/v1/square/profile/assets', {
     object_key: objectKey,
     byte_size: String(body.byte_size),
@@ -64,10 +64,10 @@ export async function putProfileAsset(request: Request, env: Env): Promise<Respo
   const session = await requireSession(request, env);
   const url = new URL(request.url);
   const objectKey = url.searchParams.get('object_key');
-  if (!objectKey || !objectKey.startsWith(profileAssetPrefix(session.owner_account))) {
+  if (!objectKey || !objectKey.startsWith(profileAssetPrefix(session.account_id))) {
     throw new HttpError(403, 'asset_object_forbidden', '无权写入该资源对象');
   }
-  const fileName = objectKey.slice(profileAssetPrefix(session.owner_account).length);
+  const fileName = objectKey.slice(profileAssetPrefix(session.account_id).length);
   const match = /^(avatar|banner)$/.exec(fileName);
   if (!match) throw new HttpError(400, 'asset_object_invalid', '资源对象 key 不合法');
   const kind = match[1]!;

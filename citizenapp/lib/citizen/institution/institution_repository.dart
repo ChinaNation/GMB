@@ -75,18 +75,18 @@ class InstitutionRepository {
   }
 
   /// 某钱包关注的机构列表(统一 Institution)。
-  Future<List<Institution>> listSubscribed(String walletPubkeyHex) async {
-    final rows = await directory.listSubscribed(walletPubkeyHex);
+  Future<List<Institution>> listSubscribed(String accountId) async {
+    final rows = await directory.listSubscribed(accountId);
     return rows.map(_toInstitution).toList(growable: false);
   }
 
   // ── 订阅(关注)passthrough ──
-  Future<bool> isSubscribed(String walletPubkeyHex, String cidNumber) =>
-      directory.isSubscribed(walletPubkeyHex, cidNumber);
-  Future<void> subscribe(String walletPubkeyHex, String cidNumber) =>
-      directory.subscribe(walletPubkeyHex, cidNumber);
-  Future<void> unsubscribe(String walletPubkeyHex, String cidNumber) =>
-      directory.unsubscribe(walletPubkeyHex, cidNumber);
+  Future<bool> isSubscribed(String accountId, String cidNumber) =>
+      directory.isSubscribed(accountId, cidNumber);
+  Future<void> subscribe(String accountId, String cidNumber) =>
+      directory.subscribe(accountId, cidNumber);
+  Future<void> unsubscribe(String accountId, String cidNumber) =>
+      directory.unsubscribe(accountId, cidNumber);
 
   /// 机构所属地显示路径(详情页 所属地行;省名带"省"全名 + 字典市/镇名,ADR-021)。
   Future<String> institutionAreaPath(Institution inst) {

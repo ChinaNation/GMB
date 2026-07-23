@@ -11,7 +11,8 @@ use crate::domains::legislation::chain_read_proposal::LegProposalState;
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SeatView {
     /// 议员账户(0x 小写 hex)。
-    pub(crate) admin_account: String,
+    #[serde(rename = "account_id")]
+    pub(crate) account_id: String,
     /// 管理员姓名不在链上保存，保留空值仅供既有席位 DTO 布局使用。
     pub(crate) name: String,
     /// 机构岗位名称(链上 entity 任职关系)。

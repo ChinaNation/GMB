@@ -4,31 +4,31 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 广场身份状态。
 ///
-/// `owner_account` 固定使用当前钱包账户；`cid_number` 只能从链上
-/// 通过 `CidByWalletAccount`、`WalletAccountByCid`、Active `CidRegistry` 和
+/// `account_id` 固定使用当前钱包账户；`cid_number` 只能从链上
+/// 通过 `CidByAccountId`、`AccountIdByCid`、Active `CidRegistry` 和
 /// `VotingIdentityByCid` 闭环读取，App 不允许自行传入链上身份。
 class SquareIdentityState {
   const SquareIdentityState({
-    required this.ownerAccount,
+    required this.accountId,
     this.walletName,
     this.cidNumber,
     this.walletIndex,
-    this.pubkeyHex,
+    this.ss58Address,
     this.isHotWallet = false,
     this.identityLevel,
   });
 
-  final String ownerAccount;
+  final String accountId;
   final String? walletName;
   final String? cidNumber;
   final int? walletIndex;
-  final String? pubkeyHex;
+  final String? ss58Address;
   final bool isHotWallet;
 
   /// 链上身份档（徽章分色）：visitor/voting/candidate。
   final String? identityLevel;
 
-  bool get hasWallet => ownerAccount.isNotEmpty;
+  bool get hasWallet => accountId.isNotEmpty;
   bool get isCertified => cidNumber != null && cidNumber!.isNotEmpty;
 
   /// 竞选身份（candidate）：发布竞选内容的资格（用户 2026-07-16：发帖分类按身份档）。
@@ -36,8 +36,8 @@ class SquareIdentityState {
 
   String get accountLabel {
     if (!hasWallet) return '未选择钱包';
-    if (ownerAccount.length <= 14) return ownerAccount;
-    return '${ownerAccount.substring(0, 7)}...${ownerAccount.substring(ownerAccount.length - 7)}';
+    if (accountId.length <= 14) return accountId;
+    return '${accountId.substring(0, 7)}...${accountId.substring(accountId.length - 7)}';
   }
 }
 
@@ -60,7 +60,7 @@ class SquareIdentityService {
     // 发动态身份统一取默认用户钱包（列表中最靠前的热钱包），与聊天同源。
     final wallet = await (walletManager ?? WalletManager()).getDefaultWallet();
     if (wallet == null) {
-      return const SquareIdentityState(ownerAccount: '');
+      return const SquareIdentityState(accountId: '');
     }
     String? cidNumber;
     String identityLevel = 'visitor';
@@ -68,12 +68,12 @@ class SquareIdentityService {
     if (readLiveChain) {
       try {
         final identity = await (chainService ?? SquareChainService())
-            .fetchIdentity(wallet.address);
+            .fetchIdentity(wallet.accountId);
         cidNumber = identity.cidNumber;
         identityLevel = identity.identityLevel;
         try {
           await snapshotStore.write(
-            walletAccount: wallet.address,
+            accountId: wallet.accountId,
             identityLevel: identityLevel,
           );
         } catch (_) {
@@ -84,16 +84,16 @@ class SquareIdentityService {
         identityLevel = 'visitor';
       }
     } else {
-      final snapshot = await snapshotStore.read(wallet.address);
+      final snapshot = await snapshotStore.read(wallet.accountId);
       identityLevel = snapshot?.identityLevel ?? 'visitor';
     }
 
     return SquareIdentityState(
-      ownerAccount: wallet.address,
+      accountId: wallet.accountId,
       walletName: wallet.walletName,
       cidNumber: cidNumber,
       walletIndex: wallet.walletIndex,
-      pubkeyHex: wallet.pubkeyHex,
+      ss58Address: wallet.ss58Address,
       isHotWallet: wallet.isHotWallet,
       identityLevel: identityLevel,
     );

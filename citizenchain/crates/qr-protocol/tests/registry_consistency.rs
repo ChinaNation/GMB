@@ -4,6 +4,33 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
+const REMOVED_AMBIGUOUS_ACCOUNT_FIELDS: &[&str] = &[
+    "wallet_account",
+    "admin_account",
+    "owner_account",
+    "signer_pubkey",
+    "credential_signer_pubkey",
+    "actor_pubkey",
+    "admin_pubkey",
+    "operator_account",
+    "target_account",
+    "institution_account",
+    "personal_account",
+    "execution_account",
+    "funding_account",
+    "operation_fee_payer",
+    "execution_fee_payer",
+    "fee_payer",
+    "beneficiary",
+    "from",
+    "to",
+    "who",
+    "bank_main",
+    "new_bank",
+    "account",
+    "address",
+];
+
 #[test]
 fn actions_have_unique_keys_codes_and_chinese_labels() {
     let actions = actions().expect("actions.yaml 必须可解析");
@@ -89,6 +116,30 @@ fn field_and_reject_reason_keys_are_unique_and_chinese() {
             !reason.reject_reason_zh.trim().is_empty(),
             "{} 缺少中文拒绝原因",
             reason.reject_reason_key
+        );
+    }
+}
+
+#[test]
+fn removed_ambiguous_account_fields_cannot_return() {
+    let actions = actions().expect("actions.yaml 必须可解析");
+    for action in actions {
+        for field_key in action.required_fields {
+            assert!(
+                !REMOVED_AMBIGUOUS_ACCOUNT_FIELDS.contains(&field_key.as_str()),
+                "{} required_fields 恢复了已删除的含糊账户字段: {}",
+                action.action_key,
+                field_key
+            );
+        }
+    }
+
+    let fields = fields().expect("fields.yaml 必须可解析");
+    for field in fields {
+        assert!(
+            !REMOVED_AMBIGUOUS_ACCOUNT_FIELDS.contains(&field.field_key.as_str()),
+            "fields.yaml 恢复了已删除的含糊账户字段: {}",
+            field.field_key
         );
     }
 }

@@ -9,32 +9,32 @@ enum AdminAccountIdentityType { institution, personalAccount }
 
 /// 全仓统一的管理员人员记录。
 ///
-/// `admin_account` 是人员记录唯一标识与去重字段；姓、名只用于人员姓名展示，
+/// `account_id` 是人员记录唯一标识与去重字段；姓、名只用于人员姓名展示，
 /// 页面需要姓名时现场按中文顺序组合，不保存合并姓名。机构业务授权必须另查
 /// `CID + 岗位码`，个人多签才直接以管理员集合授权。
 class AdminPerson {
   const AdminPerson({
-    required this.admin_account,
+    required this.account_id,
     this.cid_number = '',
     required this.family_name,
     required this.given_name,
   });
 
-  final String admin_account;
+  final String account_id;
 
-  /// 只有公权机构管理员可引用公民 CID；私权/个人多签固定为空。
+  /// 所有机构管理员均保存公民 CID；个人多签不是机构，其管理员固定为空。
   final String cid_number;
   final String family_name;
   final String given_name;
 
   AdminPerson copyWith({
-    String? admin_account,
+    String? account_id,
     String? cid_number,
     String? family_name,
     String? given_name,
   }) =>
       AdminPerson(
-        admin_account: admin_account ?? this.admin_account,
+        account_id: account_id ?? this.account_id,
         cid_number: cid_number ?? this.cid_number,
         family_name: family_name ?? this.family_name,
         given_name: given_name ?? this.given_name,
@@ -50,14 +50,14 @@ class AdminAccountIdentity {
     required this.institutionCode,
     required this.kind,
     this.cidNumber,
-    this.personalAccountHex,
+    this.personalAccountId,
   });
 
   factory AdminAccountIdentity.fromInstitution(InstitutionInfo institution) {
-    final personal = personalAccountHexFromIdentity(institution.cidNumber);
+    final personal = personalAccountIdFromIdentity(institution.cidNumber);
     if (personal != null) {
       return AdminAccountIdentity.personalAccount(
-        personalAccountHex: personal,
+        personalAccountId: personal,
         accountLabel: institution.cidShortName,
       );
     }
@@ -100,18 +100,18 @@ class AdminAccountIdentity {
   }
 
   factory AdminAccountIdentity.personalAccount({
-    required String personalAccountHex,
+    required String personalAccountId,
     required String accountLabel,
   }) {
-    final account = AdminAccountIdCodec.normalizeHex(personalAccountHex);
-    AdminAccountIdCodec.fromAccountHex(account);
+    final account = AdminAccountIdCodec.requireAccountId(personalAccountId);
+    AdminAccountIdCodec.fromAccountIdText(account);
     return AdminAccountIdentity._(
       type: AdminAccountIdentityType.personalAccount,
       identityKey: 'personal-account:$account',
       accountLabel: accountLabel,
       institutionCode: 'PMUL',
       kind: 2,
-      personalAccountHex: account,
+      personalAccountId: account,
     );
   }
 
@@ -128,7 +128,7 @@ class AdminAccountIdentity {
   final String institutionCode;
   final int kind;
   final String? cidNumber;
-  final String? personalAccountHex;
+  final String? personalAccountId;
 
   String get typeLabel => switch (type) {
         AdminAccountIdentityType.institution => '机构',
@@ -141,26 +141,26 @@ class AdminAccountIdentity {
 class AdminAccountState {
   const AdminAccountState({
     this.cidNumber,
-    this.personalAccountHex,
+    this.personalAccountId,
     required this.institutionCode,
     required this.kind,
     required this.admins,
     required this.threshold,
-    this.personalCreatorHex,
+    this.personalCreatorAccountId,
     this.personalCreatedAt,
     this.personalUpdatedAt,
     this.personalStatus,
-  }) : assert((cidNumber == null) != (personalAccountHex == null));
+  }) : assert((cidNumber == null) != (personalAccountId == null));
 
   final String? cidNumber;
-  final String? personalAccountHex;
+  final String? personalAccountId;
   final String institutionCode;
   final int kind;
   final List<AdminPerson> admins;
   final int threshold;
 
   /// 以下字段只属于 PersonalAdmins 的个人多签生命周期。
-  final String? personalCreatorHex;
+  final String? personalCreatorAccountId;
   final int? personalCreatedAt;
   final int? personalUpdatedAt;
   final int? personalStatus;
@@ -169,12 +169,12 @@ class AdminAccountState {
 
   AdminAccountState copyWith({int? threshold}) => AdminAccountState(
         cidNumber: cidNumber,
-        personalAccountHex: personalAccountHex,
+        personalAccountId: personalAccountId,
         institutionCode: institutionCode,
         kind: kind,
         admins: admins,
         threshold: threshold ?? this.threshold,
-        personalCreatorHex: personalCreatorHex,
+        personalCreatorAccountId: personalCreatorAccountId,
         personalCreatedAt: personalCreatedAt,
         personalUpdatedAt: personalUpdatedAt,
         personalStatus: personalStatus,

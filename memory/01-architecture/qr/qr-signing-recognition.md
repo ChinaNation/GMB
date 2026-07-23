@@ -29,7 +29,8 @@
 5. `b.g == 1`
 6. `b.u` 解码为 32 字节公钥
 7. `b.d` 解码为非空 `review_payload`
-8. 当前钱包公钥等于 `b.u`
+8. 当前钱包 `account_id` 等于规范化后的 `b.u`；当前 sr25519
+   `AccountId32` 直接取签名公钥 32 字节
 
 业务识别:
 
@@ -58,7 +59,7 @@
 2. `k == 2`
 3. `i == session.request_id`
 4. `e` 未过期
-5. `b.u == session.expected_pubkey`
+5. `b.u == session.expected_signer_public_key`
 6. `b.s` 解码为 64 字节
 7. 生成方用本地 session 重新计算 `review_payload` hash,必须等于 session.expected_payload_hash
 8. 按 session 的 `a + review_payload` 计算签名字节后 sr25519 验签通过
@@ -71,16 +72,20 @@ citizenchain node 的链交易冷签路径和热钱包路径必须统一调用 `
 
 ## 4. 登录签名
 
-登录不再有独立 QR kind。CID 生成 `k=1,a=1`:
+登录不再有独立 QR kind。OnChina 必须先扫描管理员完整的
+`k=3 user_contact` 用户码，只读取并校验其中的 `b.ss58_address`，由此确定唯一目标
+`account_id` 并完成链上管理员前置校验后，再生成 `k=1,a=1`：
 
 | 字段 | 规则 |
 |---|---|
-| `b.u` | 系统公钥 |
-| `b.d` | UTF-8 `system|system_signature` |
-| 用户签名 | CitizenWallet 对 `b.d` 原文字节签名 |
+| `b.u` | 用户码确定的目标账户 32 字节公钥；禁止为空、禁止由扫码钱包任选 |
+| `b.d` | UTF-8 `onchina` |
+| 用户签名 | CitizenWallet 必须先确认当前钱包 `account_id` 等于规范化后的 `b.u`，再签固定登录签名原文 |
 | 签名响应 | `k=2` 的 `u/s` |
 
-系统签名原文使用 `QR_V1|1|i|system|e|system_pubkey_without_0x`。
+登录签名原文使用
+`QR_V1|2|i|onchina|e|target_signer_public_key_without_0x`。OnChina 完成接口必须同时校验
+响应 `b.u`、请求数据库中的目标 `account_id` 和实际验签公钥完全一致；失败不得消费挑战。
 
 ## 5. OnChina 非链载荷
 
@@ -105,7 +110,7 @@ citizenchain node 的链交易冷签路径和热钱包路径必须统一调用 `
 1. 旧协议名或旧字段名。
 2. 未登记 `k` 或 `a`。
 3. 过期请求。
-4. 当前钱包公钥与 `b.u` 不一致。
+4. 当前钱包 `account_id` 与规范化后的 `b.u` 不一致。
 5. `a` 与 payload 解码出的动作不一致。
 6. payload 无法解码。
 7. action、字段或枚举值缺少中文翻译。
@@ -133,7 +138,11 @@ SignDecisionStatus.reject = 红色,禁止签名
 
 钱包侧不得再恢复 `matched / mismatched / decodeFailed` 等第三状态。任一 action 未登记、动作缺少中文名、payload 无法解码、字段缺少中文名、普通链交易只携带 32B hash/signing bytes,均返回 `reject` 并禁用签名按钮。
 
-管理员人员载荷按目标类型严格分流：公权只接受 `admin_account + cid_number + family_name + given_name`，身份字段当前允许为空、非空 CID 必须为 CTZN 结构；私权机构与个人多签只接受 `admin_account + family_name + given_name` 且姓名非空。旧纯账户、旧合并姓名、非法 UTF-8 和重复账户一律红色拒签。
+机构管理员人员载荷统一接受
+`account_id + cid_number + family_name + given_name`，公权、私权不得再采用不同 SCALE
+布局；非空 CID 必须为 CTZN 结构。个人多签虽复用同一 SCALE 结构，但不属于机构管理员，
+其字段完整性按个人多签规则校验。旧纯账户、旧三字段机构管理员、旧合并姓名、非法
+UTF-8 和重复账户一律红色拒签。
 
 已落地文件:
 

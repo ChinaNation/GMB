@@ -15,7 +15,7 @@ String _request({required int action, required List<int> payload}) {
   final signer = QrSigner();
   return signer.encodeRequest(signer.buildRequest(
     requestId: QrSigner.generateRequestId(prefix: 'citizen-'),
-    pubkey: '0x${'11' * 32}',
+    signerPublicKey: '0x${'11' * 32}',
     payloadHex:
         '0x${payload.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join()}',
     action: action,

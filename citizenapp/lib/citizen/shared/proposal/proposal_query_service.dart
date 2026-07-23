@@ -76,7 +76,7 @@ class ProposalQueryService {
   static ProposalMeta? decodeProposalMeta(int proposalId, Uint8List data) {
     try {
       // Proposal = kind + stage + status + internal_code Option
-      //   + actor_cid_number Option + execution_account Option
+      //   + actor_cid_number Option + execution_account_id Option
       //   + subject CID 集合 + start(u32) + end(u32)。
       // 公民分母属于投票引擎按 proposal_id 保存的独立人口快照，不在 Proposal 重复存储。
       if (data.length < 3 + 3 + 1 + 4 + 4) return null;
@@ -109,15 +109,15 @@ class ProposalQueryService {
         return null;
       }
 
-      Uint8List? executionAccount;
+      Uint8List? executionAccountId;
       if (offset >= data.length) return null;
-      final executionAccountTag = data[offset++];
-      if (executionAccountTag == 1) {
+      final executionAccountIdTag = data[offset++];
+      if (executionAccountIdTag == 1) {
         if (offset + 32 > data.length) return null;
-        executionAccount =
+        executionAccountId =
             Uint8List.fromList(data.sublist(offset, offset + 32));
         offset += 32;
-      } else if (executionAccountTag != 0) {
+      } else if (executionAccountIdTag != 0) {
         return null;
       }
 
@@ -132,7 +132,7 @@ class ProposalQueryService {
         status: status,
         internalCode: internalCode,
         actorCidNumber: actorCidNumber,
-        executionAccount: executionAccount,
+        executionAccountId: executionAccountId,
         subjectCidNumbers: subjectCids.$1,
       );
     } catch (_) {
@@ -239,7 +239,7 @@ class ProposalQueryService {
     if (isPersonalAccountIdentity(institution.cidNumber)) {
       final accounts = await fetchAdminSnapshot(proposalId, institution);
       return accounts
-          .map((account) => EligibleVoterTicket(pubkeyHex: account))
+          .map((account) => EligibleVoterTicket(voterAccountId: account))
           .toList(growable: false);
     }
     final plan = await fetchVotePlan(proposalId);
@@ -257,7 +257,7 @@ class ProposalQueryService {
       );
       for (final account in accounts) {
         tickets.add(EligibleVoterTicket(
-          pubkeyHex: account,
+          voterAccountId: account,
           cidNumber: role.cidNumber,
           voterRoleCode: role.roleCode,
         ));
@@ -288,10 +288,10 @@ class ProposalQueryService {
 
   /// 个人多签历史同步入口；个人多签没有 CID，只能以 AccountId 为主体。
   Future<List<int>> fetchActivePersonalProposalIds(
-    String personalAccountHex,
+    String personalAccountId,
   ) {
     return _fetchActiveProposalIdsBySubjectKey(
-      personalAccountSubjectKey(personalAccountHex),
+      personalAccountSubjectKey(personalAccountId),
     );
   }
 
@@ -315,8 +315,8 @@ class ProposalQueryService {
   }
 
   /// 查询某管理员对某提案的投票记录。
-  Future<bool?> fetchAdminVote(int proposalId, String pubkeyHex) {
-    return _internalVoteQuery.fetchAdminVote(proposalId, pubkeyHex);
+  Future<bool?> fetchAdminVote(int proposalId, String accountId) {
+    return _internalVoteQuery.fetchAdminVote(proposalId, accountId);
   }
 
   /// 批量查询内部投票管理员记录。
@@ -325,9 +325,9 @@ class ProposalQueryService {
   /// 按管理员逐条访问轻节点。
   Future<Map<String, bool?>> fetchAdminVotesBatch(
     int proposalId,
-    Iterable<String> pubkeysHex,
+    Iterable<String> accountIds,
   ) {
-    return _internalVoteQuery.fetchAdminVotesBatch(proposalId, pubkeysHex);
+    return _internalVoteQuery.fetchAdminVotesBatch(proposalId, accountIds);
   }
 
   Future<Map<String, bool?>> fetchTicketVotesBatch(
@@ -406,7 +406,7 @@ class ProposalQueryService {
   /// `PersonalAccount(account_id)`，机构账户绝不能替代机构 CID。
   static Uint8List proposalSubjectKey(InstitutionInfo institution) {
     if (isPersonalAccountIdentity(institution.cidNumber)) {
-      return personalAccountSubjectKey(institution.personalAccountHex);
+      return personalAccountSubjectKey(institution.personalAccountId);
     }
 
     return institutionCidSubjectKey(institution.cidNumber);
@@ -427,10 +427,10 @@ class ProposalQueryService {
   }
 
   /// `ProposalSubject::PersonalAccount` 编码；AccountId 必须恰好 32 字节。
-  static Uint8List personalAccountSubjectKey(String personalAccountHex) {
+  static Uint8List personalAccountSubjectKey(String personalAccountId) {
     return Uint8List.fromList([
       1,
-      ...institutionAccountId(personalAccountHex),
+      ...accountIdBytes(personalAccountId),
     ]);
   }
 
@@ -441,9 +441,9 @@ class ProposalQueryService {
       if (lenSize + count * 32 != data.length) return null;
       return List<String>.unmodifiable([
         for (var offset = lenSize; offset < data.length; offset += 32)
-          _hexEncode(
+          '0x${_hexEncode(
             Uint8List.fromList(data.sublist(offset, offset + 32)),
-          ),
+          )}',
       ]);
     } catch (_) {
       return null;

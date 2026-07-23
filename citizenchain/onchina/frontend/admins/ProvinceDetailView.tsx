@@ -369,7 +369,7 @@ function CityRegistryAdminsView({ canEditCityRegistryAdmins, cityRegistryAdmins,
     >
       <>
         <Table<CityRegistryAdminRow>
-          rowKey={(r) => `${r.id}-${r.admin_account}`}
+          rowKey={(r) => `${r.id}-${r.account_id}`}
           loading={cityRegistryAdminsLoading}
           dataSource={cityRegistryAdmins}
           pagination={{
@@ -408,7 +408,7 @@ function CityRegistryAdminsView({ canEditCityRegistryAdmins, cityRegistryAdmins,
               width: 220,
               align: 'center' as const,
               render: (_v: unknown, row: CityRegistryAdminRow) => {
-                const isSelf = sameHexAccount(row.admin_account, auth?.admin_account);
+                const isSelf = sameHexAccount(row.account_id, auth?.account_id);
                 return (
                   <Space onClick={(event) => event.stopPropagation()}>
                     {canEditCityRegistryAdmins ? <Button size="small" danger onClick={() => onDeleteCityRegistry(row)}>删除</Button> : null}

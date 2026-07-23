@@ -375,7 +375,7 @@ impl Db {
             let rows = conn
                 .query(
                     "SELECT id, cid_number, file_name, document_type, file_size, file_hash,
-                            uploaded_by, uploaded_at
+                            uploader_account_id, uploaded_at
                      FROM citizen_documents
                      WHERE province_code = $1 AND cid_number = $2
                      ORDER BY uploaded_at DESC, id DESC",
@@ -393,7 +393,7 @@ impl Db {
                         document_type: row.get(3),
                         file_size: u64::try_from(file_size).unwrap_or(0),
                         file_hash: row.get(5),
-                        uploaded_by: row.get(6),
+                        uploader_account_id: row.get(6),
                         uploaded_at: row.get(7),
                     })
                 })
@@ -419,7 +419,7 @@ impl Db {
                 .query_one(
                     "INSERT INTO citizen_documents (
                         cid_number, province_code, city_code, file_name, document_type,
-                        file_size, file_path, file_hash, uploaded_by, uploaded_at
+                        file_size, file_path, file_hash, uploader_account_id, uploaded_at
                      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                      RETURNING id",
                     &[
@@ -431,7 +431,7 @@ impl Db {
                         &file_size,
                         &file_path,
                         &doc.file_hash,
-                        &doc.uploaded_by,
+                        &doc.uploader_account_id,
                         &doc.uploaded_at,
                     ],
                 )
@@ -458,7 +458,7 @@ impl Db {
             let row = conn
                 .query_opt(
                     "SELECT id, cid_number, file_name, document_type, file_size, file_path,
-                            file_hash, uploaded_by, uploaded_at
+                            file_hash, uploader_account_id, uploaded_at
                      FROM citizen_documents
                      WHERE province_code = $1 AND cid_number = $2 AND id = $3",
                     &[&province_code, &cid_number, &doc_id],
@@ -475,7 +475,7 @@ impl Db {
                         document_type: row.get(3),
                         file_size: u64::try_from(file_size).unwrap_or(0),
                         file_hash: row.get(6),
-                        uploaded_by: row.get(7),
+                        uploader_account_id: row.get(7),
                         uploaded_at: row.get(8),
                     },
                     file_path: row.get(5),
@@ -684,7 +684,7 @@ pub(crate) async fn upload_citizen_document(
         document_type,
         file_size: file_data.len() as u64,
         file_hash,
-        uploaded_by: ctx.admin_account.clone(),
+        uploader_account_id: ctx.account_id.clone(),
         uploaded_at: Utc::now(),
     };
     let doc = match state.db.insert_citizen_document(
@@ -711,7 +711,7 @@ pub(crate) async fn upload_citizen_document(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "CITIZEN_DOCUMENT_UPLOAD",
-        &ctx.admin_account,
+        &ctx.account_id,
         Some(record.cid_number.clone()),
         serde_json::json!({
             "cid_number": record.cid_number,
@@ -824,7 +824,7 @@ pub(crate) async fn delete_citizen_document(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "CITIZEN_DOCUMENT_DELETE",
-        &ctx.admin_account,
+        &ctx.account_id,
         Some(record.cid_number.clone()),
         serde_json::json!({
             "cid_number": record.cid_number,
@@ -853,12 +853,19 @@ pub(crate) async fn public_identity_search(
     // 全局 rate limiter 已防滥用。
     // 公开查询只返回公民档案已登记后的公开字段。
     let identity_code = query.identity_code.as_deref().map(str::trim).unwrap_or("");
-    let wallet_pubkey = query.wallet_pubkey.as_deref().map(str::trim).unwrap_or("");
-    if identity_code.is_empty() && wallet_pubkey.is_empty() {
+    let account_id = query.account_id.as_deref().map(str::trim).unwrap_or("");
+    if identity_code.is_empty() && account_id.is_empty() {
         return api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "identity_code or wallet_pubkey is required",
+            "identity_code or account_id is required",
+        );
+    }
+    if !account_id.is_empty() && crate::crypto::pubkey::normalize_account_id(account_id).is_none() {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "account_id must be lowercase 0x plus 64 hexadecimal characters",
         );
     }
 
@@ -866,19 +873,19 @@ pub(crate) async fn public_identity_search(
     let request_id = request_id_from_headers(&headers);
     let found = match state.db.with_client({
         let identity_code = identity_code.to_string();
-        let wallet_pubkey = wallet_pubkey.to_string();
+        let account_id = account_id.to_string();
         move |conn| {
             let row = conn
                 .query_opt(
-                    "SELECT cid_number, wallet_pubkey
+                    "SELECT cid_number, account_id
                      FROM citizens
                      WHERE (
                             ($1::text <> '' AND cid_number = $1)
-                            OR ($2::text <> '' AND lower(wallet_pubkey) = lower($2))
+                            OR ($2::text <> '' AND account_id = $2)
                        )
                      ORDER BY created_at DESC
                      LIMIT 1",
-                    &[&identity_code, &wallet_pubkey],
+                    &[&identity_code, &account_id],
                 )
                 .map_err(|e| format!("public citizen lookup failed: {e}"))?;
             Ok(row.map(|row| (row.get::<_, String>(0), row.get::<_, Option<String>>(1))))
@@ -897,13 +904,13 @@ pub(crate) async fn public_identity_search(
     let output = PublicIdentitySearchOutput {
         found: found.is_some(),
         identity_code: found.as_ref().map(|r| r.0.clone()),
-        wallet_pubkey: found.as_ref().and_then(|r| r.1.clone()),
+        account_id: found.as_ref().and_then(|r| r.1.clone()),
     };
     crate::core::runtime_ops::append_audit_log(
         &state,
         "PUBLIC_IDENTITY_SEARCH",
         "public",
-        output.wallet_pubkey.clone(),
+        output.account_id.clone(),
         serde_json::json!({
             "found": output.found,
             "request_id": request_id.clone(),

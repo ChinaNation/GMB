@@ -44,7 +44,9 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
   final List<AdminPerson> _admins = [];
   WalletProfile? _selectedWallet;
   List<WalletProfile> _wallets = [];
-  String? _creatorPubkey; // 创建人公钥（始终占管理员列表第一位，不可移除）
+
+  /// 创建人规范 AccountId（始终占管理员列表第一位，不可移除）。
+  String? _creatorAccountId;
 
   @override
   void initState() {
@@ -76,18 +78,17 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
 
   /// 钱包切换时同步更新创建人在管理员列表中的位置。
   void _syncCreatorAdmin(WalletProfile wallet) {
-    var pubkey = wallet.pubkeyHex.toLowerCase();
-    if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
+    final accountId = wallet.accountId;
     // 移除旧创建人
-    if (_creatorPubkey != null) {
-      _admins.removeWhere((admin) => admin.admin_account == _creatorPubkey);
+    if (_creatorAccountId != null) {
+      _admins.removeWhere((admin) => admin.account_id == _creatorAccountId);
     }
-    _creatorPubkey = pubkey;
-    _admins.removeWhere((admin) => admin.admin_account == pubkey); // 防重复
+    _creatorAccountId = accountId;
+    _admins.removeWhere((admin) => admin.account_id == accountId); // 防重复
     _admins.insert(
       0,
       AdminPerson(
-        admin_account: pubkey,
+        account_id: accountId,
         family_name: '管理',
         given_name: '员',
       ),
@@ -104,7 +105,7 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
     try {
       // 个人多签账户派生统一走 [derivePersonalAccountSs58]，全 app 仅此一处。
       return derivePersonalAccountSs58(
-        creatorPubkey: Uint8List.fromList(_hexDecode(wallet.pubkeyHex)),
+        creatorAccountId: Uint8List.fromList(_hexDecode(wallet.accountId)),
         accountName: name,
         ss58Prefix: _ss58Prefix,
       );
@@ -132,8 +133,8 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
       if (env.kind == QrKind.userContact) {
         final address = (env.body as dynamic).address?.toString() ?? '';
         if (address.isEmpty) throw const FormatException('缺少 address 字段');
-        final pubkey = Keyring().decodeAddress(address);
-        await _promptAdminNamesAndAdd(_toHex(pubkey));
+        final publicKey = Keyring().decodeAddress(address);
+        await _promptAdminNamesAndAdd(_toHex(publicKey));
         return;
       }
     } catch (e) {
@@ -152,12 +153,12 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
     );
   }
 
-  Future<void> _promptAdminNamesAndAdd(String accountHex) async {
+  Future<void> _promptAdminNamesAndAdd(String accountId) async {
     final names = await _editNamesDialog();
     if (names == null || !mounted) return;
     _addAdmin(
       AdminPerson(
-        admin_account: accountHex,
+        account_id: accountId,
         family_name: names.$1,
         given_name: names.$2,
       ),
@@ -166,7 +167,7 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
 
   void _addAdmin(AdminPerson admin) {
     if (_admins.any(
-      (item) => item.admin_account == admin.admin_account,
+      (item) => item.account_id == admin.account_id,
     )) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('该管理员已在列表中')),
@@ -187,7 +188,7 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
 
   void _removeAdmin(int index) {
     // 创建人不可移除
-    if (_admins[index].admin_account == _creatorPubkey) return;
+    if (_admins[index].account_id == _creatorAccountId) return;
     setState(() {
       _admins.removeAt(index);
       _syncThresholdInput();
@@ -320,7 +321,7 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
     required BigInt initialAmountFen,
   }) async {
     final balanceYuan =
-        await ChainRpc().fetchFinalizedBalance(wallet.pubkeyHex);
+        await ChainRpc().fetchFinalizedBalance(wallet.accountId);
     final balanceFen = MultisigCreateAmountRules.yuanToFen(balanceYuan);
     final requiredFen =
         MultisigCreateAmountRules.requiredBalanceFen(initialAmountFen);
@@ -363,7 +364,7 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
         return;
       }
 
-      final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
+      final publicKeyBytes = _hexDecode(wallet.accountId);
 
       // 热钱包：先认证，后续用本地签名；冷钱包：走 QR 签名。
       WalletManager? hotWalletManager;
@@ -380,7 +381,7 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
         final qrSigner = QrSigner();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'personal-dq-'),
-          pubkey: '0x${wallet.pubkeyHex}',
+          signerPublicKey: wallet.accountId,
           payloadHex: '0x${_toHex(payload)}',
           action: QrActions.personalCreate,
         );
@@ -392,7 +393,7 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
             builder: (_) => QrSignSessionPage(
                 request: request,
                 requestJson: requestJson,
-                expectedPubkey: '0x${wallet.pubkeyHex}'),
+                expectedSignerPublicKey: wallet.accountId),
           ),
         );
         if (response == null) throw Exception('签名已取消');
@@ -404,17 +405,17 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
         admins: _admins,
         regularThreshold: regularThreshold,
         amountFen: amountFen,
-        fromAddress: wallet.address,
-        signerPubkey: Uint8List.fromList(pubkeyBytes),
+        fromSs58Address: wallet.ss58Address,
+        signerPublicKey: Uint8List.fromList(publicKeyBytes),
         sign: signCallback,
       );
 
-      final addrHex = result.accountHex;
+      final addrHex = result.accountId;
       await WalletIsar.instance.writeTxn((isar) async {
         final entity = PersonalAccountEntity()
-          ..account = addrHex
+          ..accountId = '0x$addrHex'
           ..accountName = nameText
-          ..creatorAddress = wallet.address
+          ..creatorAccountId = wallet.accountId
           ..addedAtMillis = DateTime.now().millisecondsSinceEpoch;
         await isar.personalAccountEntitys.put(entity);
         await PersonalMultisigLocalState.putStatusInTxn(
@@ -427,7 +428,7 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
       // 只有入块并确认 个人账户创建成功事件 事件后，才写本地
       // 创建提案；proposalId 使用链上事件返回值，不能再预测 NextProposalId。
       await PersonalProposalHistoryService().recordOrUpdate(
-        personalAccountHex: addrHex,
+        personalAccountId: addrHex,
         proposalId: result.proposalId,
         action: PersonalProposalAction.create,
         status: PersonalProposalStatus.voting,
@@ -521,8 +522,8 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
           const SizedBox(height: 8),
           ..._admins.asMap().entries.map((entry) {
             final admin = entry.value;
-            final ss58 = _hexToSs58(admin.admin_account);
-            final isCreator = admin.admin_account == _creatorPubkey;
+            final ss58 = _hexToSs58(admin.account_id);
+            final isCreator = admin.account_id == _creatorAccountId;
             return ListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
@@ -623,7 +624,7 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
                   .map((w) => DropdownMenuItem(
                       value: w,
                       child: Text(
-                          '${w.walletName} (${_truncateAddress(w.address)})',
+                          '${w.walletName} (${_truncateAddress(w.ss58Address)})',
                           style: const TextStyle(fontSize: 13))))
                   .toList(),
               onChanged: (w) {

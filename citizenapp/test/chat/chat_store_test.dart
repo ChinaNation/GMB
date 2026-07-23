@@ -18,8 +18,10 @@ void main() {
       messageKind: MlsMessageKind.application,
     ).toEnvelope(
       envelopeId: 'env-store',
-      senderAccount: 'alice-wallet',
-      recipientAccount: 'bob-wallet',
+      senderAccountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      recipientAccountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       senderDeviceId: 'alice-phone',
       createdAtMillis: 10,
       ttlMillis: 60000,
@@ -73,8 +75,10 @@ void main() {
       messageKind: MlsMessageKind.application,
     ).toEnvelope(
       envelopeId: 'env-delete',
-      senderAccount: 'alice-wallet',
-      recipientAccount: 'bob-wallet',
+      senderAccountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      recipientAccountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       senderDeviceId: 'alice-phone',
       createdAtMillis: 10,
       ttlMillis: 60000,
@@ -86,8 +90,9 @@ void main() {
       messageKind: MlsMessageKind.application,
     ).toEnvelope(
       envelopeId: 'env-keep',
-      senderAccount: 'alice-wallet',
-      recipientAccount: 'carol-wallet',
+      senderAccountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      recipientAccountId: 'carol-wallet',
       senderDeviceId: 'alice-phone',
       createdAtMillis: 20,
       ttlMillis: 60000,
@@ -131,7 +136,8 @@ void main() {
     final store = ChatStore();
     await store.recordOutgoingMedia(
       attachmentId: 'att-1',
-      recipientAccount: 'bob-wallet',
+      recipientAccountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       conversationId: 'conv-a',
       fileName: 'p.jpg',
       contentType: 'image/jpeg',
@@ -139,7 +145,7 @@ void main() {
     );
     await store.recordOutgoingMedia(
       attachmentId: 'att-2',
-      recipientAccount: 'carol-wallet',
+      recipientAccountId: 'carol-wallet',
       conversationId: 'conv-b',
       fileName: 'v.mp4',
       contentType: 'video/mp4',
@@ -148,14 +154,16 @@ void main() {
     expect(await store.outgoingMediaCount(), 2);
 
     final forBob = await store.readPendingOutgoingMedia(
-      recipientAccount: 'bob-wallet',
+      recipientAccountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
     );
     expect(forBob.single.attachmentId, 'att-1');
     expect(forBob.single.fileName, 'p.jpg');
     expect(forBob.single.conversationId, 'conv-a');
     expect(forBob.single.byteSize, 100);
 
-    await store.deleteOutgoingMedia('att-1', 'bob-wallet'); // 收到 ack 后删除
+    await store.deleteOutgoingMedia('att-1',
+        '0x2222222222222222222222222222222222222222222222222222222222222222'); // 收到 ack 后删除
     expect(await store.outgoingMediaCount(), 1);
 
     // 删会话 conv-b 连带清理其待投递媒体,不留孤儿。
@@ -168,7 +176,7 @@ void main() {
     for (final member in ['b-wallet', 'c-wallet', 'd-wallet']) {
       await store.recordOutgoingMedia(
         attachmentId: 'att-grp',
-        recipientAccount: member,
+        recipientAccountId: member,
         conversationId: 'grp:a:n',
         fileName: 'g.jpg',
         contentType: 'image/jpeg',
@@ -179,13 +187,14 @@ void main() {
     // 仅 c 收到 ack → 删 c 的行,b/d 待投递保留。
     await store.deleteOutgoingMedia('att-grp', 'c-wallet');
     expect(await store.outgoingMediaCount(), 2);
-    final forB = await store.readPendingOutgoingMedia(recipientAccount: 'b-wallet');
+    final forB =
+        await store.readPendingOutgoingMedia(recipientAccountId: 'b-wallet');
     expect(forB.single.attachmentId, 'att-grp');
   });
 
-  test('clearAllForOwner 连带清理该 owner 会话的待投递媒体', () async {
+  test('clearAllForAccount 连带清理该 accountId 会话的待投递媒体', () async {
     final store = ChatStore();
-    // 以出站信封建立 owner=alice 的会话行(conversationId=conv-own)。
+    // 以出站信封建立 accountId=alice 的会话行(conversationId=conv-own)。
     final envelope = const MlsWireMessage(
       wireBytes: [1],
       cipherSuite: 'MLS_128',
@@ -193,8 +202,10 @@ void main() {
       messageKind: MlsMessageKind.application,
     ).toEnvelope(
       envelopeId: 'env-own',
-      senderAccount: 'alice-wallet',
-      recipientAccount: 'bob-wallet',
+      senderAccountId:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      recipientAccountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       senderDeviceId: 'alice-phone',
       createdAtMillis: 1,
       ttlMillis: 60000,
@@ -208,7 +219,8 @@ void main() {
     );
     await store.recordOutgoingMedia(
       attachmentId: 'att-own',
-      recipientAccount: 'bob-wallet',
+      recipientAccountId:
+          '0x2222222222222222222222222222222222222222222222222222222222222222',
       conversationId: 'conv-own',
       fileName: 'p.jpg',
       contentType: 'image/jpeg',
@@ -216,7 +228,95 @@ void main() {
     );
     expect(await store.outgoingMediaCount(), 1);
 
-    await store.clearAllForOwner('alice-wallet');
+    await store.clearAllForAccount(
+        '0x1111111111111111111111111111111111111111111111111111111111111111');
     expect(await store.outgoingMediaCount(), 0);
+  });
+
+  test('searchMessages 跨会话按解码摘要检索：大小写不敏感、时间倒序、limit 截断', () async {
+    final store = ChatStore();
+    const sender =
+        '0x1111111111111111111111111111111111111111111111111111111111111111';
+    const peer =
+        '0x2222222222222222222222222222222222222222222222222222222222222222';
+
+    Future<void> save({
+      required String envelopeId,
+      required String conversationId,
+      required int createdAtMillis,
+      required String plaintext,
+    }) async {
+      final envelope = MlsWireMessage(
+        wireBytes: const [0x68, 0x69],
+        cipherSuite: 'MLS_128',
+        conversationId: conversationId,
+        messageKind: MlsMessageKind.application,
+      ).toEnvelope(
+        envelopeId: envelopeId,
+        senderAccountId: sender,
+        recipientAccountId: peer,
+        senderDeviceId: 'alice-phone',
+        createdAtMillis: createdAtMillis,
+        ttlMillis: 60000,
+      );
+      await store.saveOutgoingEnvelope(
+        envelope: envelope,
+        envelopeBytes: envelope.writeToBuffer(),
+        messageKind: ChatMessageKind.text,
+        deliveryState: ChatMessageDeliveryState.sent,
+        plaintext: plaintext,
+      );
+    }
+
+    await save(
+      envelopeId: 'env-search-a',
+      conversationId: 'conv-search-1',
+      createdAtMillis: 10,
+      plaintext: '明天开会的材料',
+    );
+    await save(
+      envelopeId: 'env-search-b',
+      conversationId: 'conv-search-2',
+      createdAtMillis: 30,
+      plaintext: 'Meeting MATERIAL ready',
+    );
+    await save(
+      envelopeId: 'env-search-c',
+      conversationId: 'conv-search-2',
+      createdAtMillis: 20,
+      plaintext: '开会通知',
+    );
+
+    // 跨会话命中并按时间倒序（conv-search-2 的 env-c 比 conv-search-1 的 env-a 新）
+    final ordered =
+        await store.searchMessages(accountId: sender, keyword: '开会');
+    expect(
+      ordered.map((item) => item.envelopeId).toList(),
+      <String>['env-search-c', 'env-search-a'],
+    );
+
+    // limit 截断保留最新的一条
+    final limited =
+        await store.searchMessages(accountId: sender, keyword: '开会', limit: 1);
+    expect(
+      limited.map((item) => item.envelopeId).toList(),
+      <String>['env-search-c'],
+    );
+
+    // 大小写不敏感
+    final caseInsensitive =
+        await store.searchMessages(accountId: sender, keyword: 'material');
+    expect(
+      caseInsensitive.map((item) => item.envelopeId).toList(),
+      <String>['env-search-b'],
+    );
+
+    // 空关键词 / 空账户不检索；他人账户查不到本账户消息
+    expect(
+      await store.searchMessages(accountId: sender, keyword: '   '),
+      isEmpty,
+    );
+    expect(await store.searchMessages(accountId: '', keyword: '开会'), isEmpty);
+    expect(await store.searchMessages(accountId: peer, keyword: '开会'), isEmpty);
   });
 }

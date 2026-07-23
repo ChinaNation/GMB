@@ -2,22 +2,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/transaction/offchain-transaction/services/clearing_bank_prefs.dart';
 
-const _mainAccount =
-    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-const _feeAccount =
-    'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const _mainAccountId =
+    '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const _feeAccountId =
+    '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
 ClearingBankBindingSnapshot _snapshot({
   required String cidNumber,
-  String mainAccount = _mainAccount,
-  String feeAccount = _feeAccount,
+  String mainAccountId = _mainAccountId,
+  String feeAccountId = _feeAccountId,
 }) {
   return ClearingBankBindingSnapshot(
     cidNumber: cidNumber,
     cidFullName: '测试清算行',
     cidShortName: '测试清算行',
-    mainAccount: mainAccount,
-    feeAccount: feeAccount,
+    mainAccountId: mainAccountId,
+    feeAccountId: feeAccountId,
     peerId: '12D3KooWTest',
     rpcDomain: '127.0.0.1',
     rpcPort: 9944,
@@ -81,14 +81,14 @@ void main() {
       expect(snapshot, isNotNull);
       expect(snapshot!.cidNumber, 'GD001-SCB05-000000001-2026');
       expect(snapshot.wssUrl, 'ws://127.0.0.1:9944');
-      expect(snapshot.mainAccount, _mainAccount);
-      expect(snapshot.feeAccount, _feeAccount);
+      expect(snapshot.mainAccountId, _mainAccountId);
+      expect(snapshot.feeAccountId, _feeAccountId);
     });
 
     test('缺少费用账户的旧快照必须拒绝', () async {
       SharedPreferences.setMockInitialValues({
         'clearing_bank_binding_0': '{"cid_number":"GD001-SCB05-000000001-2026",'
-            '"main_account":"$_mainAccount",'
+            '"main_account_id":"$_mainAccountId",'
             '"rpc_domain":"127.0.0.1","rpc_port":9944}',
       });
       expect(await ClearingBankPrefs.loadSnapshot(0), isNull);

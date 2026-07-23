@@ -51,8 +51,7 @@ class InstitutionAdminService {
     }
     final adminState = await _accountService.fetchByIdentity(identity);
     if (adminState == null) return const [];
-    final adminSet =
-        adminState.admins.map((admin) => admin.admin_account).toSet();
+    final adminSet = adminState.admins.map((admin) => admin.account_id).toSet();
     // 非法人机构码本身不能推断公权/私权，必须按链上管理员类型路由。
     final entityPallet = identity.kind == 1 ? 'PrivateManage' : 'PublicManage';
     final roleValues =
@@ -78,7 +77,7 @@ class InstitutionAdminService {
         final role = roles[assignment.roleCode];
         if (assignment.cidNumber == cidNumber &&
             role != null &&
-            adminSet.contains(assignment.admin_account)) {
+            adminSet.contains(assignment.account_id)) {
           final effective = assignment.withRole(role);
           if (effective.isEffectiveOnDay(currentDay)) out.add(effective);
         }
@@ -105,14 +104,14 @@ class InstitutionAdminService {
   ) {
     final byAccount = <String, List<InstitutionAdminAssignment>>{};
     for (final assignment in assignments) {
-      byAccount.putIfAbsent(assignment.admin_account, () => []).add(assignment);
+      byAccount.putIfAbsent(assignment.account_id, () => []).add(assignment);
     }
     return admins
         .map(
           (admin) => InstitutionAdminView(
             admin: admin,
             assignments: List.unmodifiable(
-              byAccount[admin.admin_account] ?? const [],
+              byAccount[admin.account_id] ?? const [],
             ),
           ),
         )
@@ -123,8 +122,8 @@ class InstitutionAdminService {
     return _accountService.fetchThreshold(identity);
   }
 
-  Future<bool> isAdmin(String pubkeyHex, AdminAccountIdentity identity) {
-    return _accountService.isAdmin(pubkeyHex, identity);
+  Future<bool> isAdmin(String accountId, AdminAccountIdentity identity) {
+    return _accountService.isAdmin(accountId, identity);
   }
 
   Future<InstitutionAdminState> fetchState(

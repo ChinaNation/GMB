@@ -220,8 +220,8 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
   }
 
   @override
-  Future<void> subscribe(String walletPubkeyHex, String cidNumber) async {
-    final key = subscriptionKeyOf(walletPubkeyHex, cidNumber);
+  Future<void> subscribe(String accountId, String cidNumber) async {
+    final key = subscriptionKeyOf(accountId, cidNumber);
     await _write((isar) async {
       final existing = await isar.publicInstitutionSubscriptionEntitys
           .filter()
@@ -230,7 +230,7 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
       if (existing != null) return;
       final entity = PublicInstitutionSubscriptionEntity()
         ..subscriptionKey = key
-        ..walletPubkeyHex = walletPubkeyHex
+        ..subscriberAccountId = accountId
         ..cidNumber = cidNumber
         ..subscribedAtMillis = DateTime.now().millisecondsSinceEpoch;
       await isar.publicInstitutionSubscriptionEntitys.put(entity);
@@ -238,8 +238,8 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
   }
 
   @override
-  Future<void> unsubscribe(String walletPubkeyHex, String cidNumber) async {
-    final key = subscriptionKeyOf(walletPubkeyHex, cidNumber);
+  Future<void> unsubscribe(String accountId, String cidNumber) async {
+    final key = subscriptionKeyOf(accountId, cidNumber);
     await _write((isar) async {
       final existing = await isar.publicInstitutionSubscriptionEntitys
           .filter()
@@ -252,23 +252,23 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
   }
 
   @override
-  Future<bool> isSubscribed(String walletPubkeyHex, String cidNumber) async {
+  Future<bool> isSubscribed(String accountId, String cidNumber) async {
     final isar = await _db();
     final hit = await isar.publicInstitutionSubscriptionEntitys
         .filter()
-        .subscriptionKeyEqualTo(subscriptionKeyOf(walletPubkeyHex, cidNumber))
+        .subscriptionKeyEqualTo(subscriptionKeyOf(accountId, cidNumber))
         .findFirst();
     return hit != null;
   }
 
   @override
   Future<List<PublicInstitutionEntity>> listSubscribed(
-    String walletPubkeyHex,
+    String accountId,
   ) async {
     final isar = await _db();
     final subs = await isar.publicInstitutionSubscriptionEntitys
         .filter()
-        .walletPubkeyHexEqualTo(walletPubkeyHex)
+        .subscriberAccountIdEqualTo(accountId)
         .findAll();
     final out = <PublicInstitutionEntity>[];
     for (final sub in subs) {

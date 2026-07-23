@@ -1,6 +1,5 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import '../support/isar_test_env.dart';
@@ -18,7 +17,6 @@ void main() {
   final secureStorage = <String, String>{};
 
   setUp(() async {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
     secureStorage.clear();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(secureStorageChannel, (call) async {
@@ -84,8 +82,8 @@ void main() {
           ..walletName = 'wallet_$i'
           ..walletIcon = 'wallet'
           ..balance = 0
-          ..address = 'addr_$i'
-          ..pubkeyHex = 'pub_$i'
+          ..ss58Address = 'addr_$i'
+          ..accountId = '0x${i.toRadixString(16).padLeft(64, '0')}'
           ..alg = 'sr25519'
           ..ss58 = 2027
           ..createdAtMillis = i
@@ -95,9 +93,6 @@ void main() {
         await isar.walletProfileEntitys.put(entity);
       }
     });
-    // 触发一次性迁移 flag,让后续 getWallets 不会再覆写 sortOrder。
-    final manager = WalletManager();
-    await manager.getWallets();
   }
 
   group('WalletManager.reorderWallets', () {
@@ -143,10 +138,7 @@ void main() {
     });
 
     test('sortOrder 相同(全 0)时按 walletIndex 升序兜底', () async {
-      // 直接写 3 个 sortOrder 全为 0 的 entity,跳过迁移 flag,模拟边界场景。
-      SharedPreferences.setMockInitialValues(<String, Object>{
-        'wallet_sort_order_initialized': true,
-      });
+      // 直接写 3 个 sortOrder 全为 0 的 entity，验证稳定兜底顺序。
       final isar = await WalletIsar.instance.db();
       await isar.writeTxn(() async {
         for (final i in [3, 1, 2]) {
@@ -155,8 +147,8 @@ void main() {
             ..walletName = 'wallet_$i'
             ..walletIcon = 'wallet'
             ..balance = 0
-            ..address = 'addr_$i'
-            ..pubkeyHex = 'pub_$i'
+            ..ss58Address = 'addr_$i'
+            ..accountId = '0x${i.toRadixString(16).padLeft(64, '0')}'
             ..alg = 'sr25519'
             ..ss58 = 2027
             ..createdAtMillis = i
@@ -172,9 +164,7 @@ void main() {
       expect(wallets.map((w) => w.walletIndex).toList(), [1, 2, 3]);
     });
 
-    test('首次进入会按 walletIndex 升序填 sortOrder(无感迁移)', () async {
-      // 模拟旧版本数据:flag 未设置,3 个钱包 sortOrder 全为 0(默认)。
-      SharedPreferences.setMockInitialValues(<String, Object>{});
+    test('读取不会改写持久化 sortOrder', () async {
       final isar = await WalletIsar.instance.db();
       await isar.writeTxn(() async {
         for (final i in [2, 3, 1]) {
@@ -183,8 +173,8 @@ void main() {
             ..walletName = 'wallet_$i'
             ..walletIcon = 'wallet'
             ..balance = 0
-            ..address = 'addr_$i'
-            ..pubkeyHex = 'pub_$i'
+            ..ss58Address = 'addr_$i'
+            ..accountId = '0x${i.toRadixString(16).padLeft(64, '0')}'
             ..alg = 'sr25519'
             ..ss58 = 2027
             ..createdAtMillis = i
@@ -196,11 +186,10 @@ void main() {
       });
       final manager = WalletManager();
       final wallets = await manager.getWallets();
-      // 迁移按原 walletIndex 升序填 sortOrder = 0/1/2,顺序仍是 1/2/3。
       expect(wallets.map((w) => w.walletIndex).toList(), [1, 2, 3]);
       expect(wallets[0].sortOrder, 0);
-      expect(wallets[1].sortOrder, 1);
-      expect(wallets[2].sortOrder, 2);
+      expect(wallets[1].sortOrder, 0);
+      expect(wallets[2].sortOrder, 0);
     });
   });
 }

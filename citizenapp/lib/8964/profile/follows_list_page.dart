@@ -25,13 +25,13 @@ enum FollowsType {
 class FollowsListPage extends StatefulWidget {
   const FollowsListPage({
     super.key,
-    required this.ownerAccount,
+    required this.accountId,
     required this.type,
     required this.session,
     this.api,
   });
 
-  final String ownerAccount;
+  final String accountId;
   final FollowsType type;
   final SquareSession session;
   final CitizenProfileApi? api;
@@ -63,7 +63,7 @@ class _FollowsListPageState extends State<FollowsListPage> {
     });
     try {
       final page = await _api.fetchFollows(
-        widget.ownerAccount,
+        widget.accountId,
         type: widget.type.workerValue,
         limit: 20,
         session: widget.session,
@@ -92,7 +92,7 @@ class _FollowsListPageState extends State<FollowsListPage> {
     setState(() => _loading = true);
     try {
       final page = await _api.fetchFollows(
-        widget.ownerAccount,
+        widget.accountId,
         type: widget.type.workerValue,
         limit: 20,
         cursor: _cursor,
@@ -124,13 +124,13 @@ class _FollowsListPageState extends State<FollowsListPage> {
   /// 稳定本地默认展示，不阻塞列表及其他用户。
   Future<void> _loadProfiles(List<SquareFollowEntry> entries) async {
     await Future.wait(entries.map((entry) async {
-      if (_profiles.containsKey(entry.ownerAccount)) return;
+      if (_profiles.containsKey(entry.accountId)) return;
       try {
         final profile = await _api.fetchProfile(
-          entry.ownerAccount,
+          entry.accountId,
           session: widget.session,
         );
-        _profiles[entry.ownerAccount] = profile;
+        _profiles[entry.accountId] = profile;
       } on Exception {
         // 公开资料不可用时由 ProfilePresentation 稳定兜底。
       }
@@ -142,7 +142,7 @@ class _FollowsListPageState extends State<FollowsListPage> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => UserProfilePage(
-          ownerAccount: account,
+          accountId: account,
           isSelf: false,
           initialProfile: _profiles[account],
         ),
@@ -195,13 +195,12 @@ class _FollowsListPageState extends State<FollowsListPage> {
             );
           }
           final entry = _entries[index];
-          final profile = _profiles[entry.ownerAccount];
-          final presentation =
-              ProfilePresentation.forAccount(entry.ownerAccount);
+          final profile = _profiles[entry.accountId];
+          final presentation = ProfilePresentation.forAccount(entry.accountId);
           final avatarKey = profile?.avatarObjectKey;
           return ListTile(
             leading: ProfileAvatar(
-              seed: entry.ownerAccount,
+              seed: entry.accountId,
               size: 42,
               imageUrl: avatarKey == null ? null : _api.mediaUrl(avatarKey),
               imageHeaders: <String, String>{
@@ -219,12 +218,12 @@ class _FollowsListPageState extends State<FollowsListPage> {
               overflow: TextOverflow.ellipsis,
             ),
             subtitle: Text(
-              _shorten(entry.ownerAccount),
+              _shorten(entry.accountId),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             trailing: const Icon(Icons.chevron_right, size: 20),
-            onTap: () => _openProfile(entry.ownerAccount),
+            onTap: () => _openProfile(entry.accountId),
           );
         },
       ),

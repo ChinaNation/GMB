@@ -64,9 +64,9 @@ function primaryAccount(accounts: InstitutionAccount[]): InstitutionAccount | nu
   );
 }
 
-function accountText(account?: string | null): string {
-  if (!account) return '-';
-  return tryEncodeSs58(account);
+function accountText(account_id?: string | null): string {
+  if (!account_id) return '-';
+  return tryEncodeSs58(account_id);
 }
 
 export function OwnInstitutionInfoPanel({ auth }: JudicialDisplayProps) {
@@ -153,7 +153,7 @@ export function OwnInstitutionInfoPanel({ auth }: JudicialDisplayProps) {
             <Descriptions.Item label="所属法人身份ID">{inst.parent_cid_number}</Descriptions.Item>
           ) : null}
           <Descriptions.Item label="主账户">{displayValue(account?.account_name)}</Descriptions.Item>
-          <Descriptions.Item label="主账户地址">{accountText(account?.account)}</Descriptions.Item>
+          <Descriptions.Item label="主账户地址">{accountText(account?.account_id)}</Descriptions.Item>
           <Descriptions.Item label="主账户状态">{chainStatus}</Descriptions.Item>
           <Descriptions.Item label="账户数量">{detail?.accounts.length ?? '-'}</Descriptions.Item>
           {inst?.legal_representative ? (
@@ -166,13 +166,13 @@ export function OwnInstitutionInfoPanel({ auth }: JudicialDisplayProps) {
               {inst.legal_representative.cid_number}
             </Descriptions.Item>
           ) : null}
-          {detail?.created_by_family_name || detail?.created_by_given_name ? (
+          {detail?.creator_family_name || detail?.creator_given_name ? (
             <Descriptions.Item label="登记管理员">
-              {`${detail.created_by_family_name ?? ''}${detail.created_by_given_name ?? ''}`}
+              {`${detail.creator_family_name ?? ''}${detail.creator_given_name ?? ''}`}
             </Descriptions.Item>
           ) : null}
-          {detail?.created_by_role ? (
-            <Descriptions.Item label="登记机构码">{detail.created_by_role}</Descriptions.Item>
+          {detail?.creator_institution_code ? (
+            <Descriptions.Item label="登记机构码">{detail.creator_institution_code}</Descriptions.Item>
           ) : null}
           <Descriptions.Item label="创建时间">{displayValue(inst?.created_at)}</Descriptions.Item>
         </Descriptions>

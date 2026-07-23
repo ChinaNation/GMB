@@ -47,7 +47,7 @@ class InstitutionAssignmentCard extends StatelessWidget {
                 if (assignment.sourceRef.isNotEmpty)
                   Text('来源引用：${assignment.sourceRef}'),
               ],
-            Text('管理员账户：${ss58FromHex(admin.admin_account)}'),
+            Text('管理员账户：${ss58FromAccountIdText(admin.account_id)}'),
             if (balanceYuan != null)
               Text('余额：${AmountFormat.formatThousands(balanceYuan)} 元'),
           ],

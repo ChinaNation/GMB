@@ -334,7 +334,7 @@ pub(crate) async fn propose_legislation(
         &state,
         &input,
         proposer_code,
-        ctx.admin_account.as_str(),
+        ctx.account_id.as_str(),
         ctx.institution_cid_number.as_str(),
         resolve_cid_number,
     )
@@ -377,7 +377,7 @@ pub(crate) async fn cast_representative_vote(
         input.proposal_id,
         input.voter_role_code.as_str(),
         input.approve,
-        ctx.admin_account.as_str(),
+        ctx.account_id.as_str(),
         ctx.institution_cid_number.as_str(),
     )
     .await

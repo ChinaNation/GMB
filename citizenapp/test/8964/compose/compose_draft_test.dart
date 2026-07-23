@@ -17,7 +17,8 @@ void main() {
     test('文章草稿含图文块和媒体完整往返', () {
       final draft = SquareComposeDraft(
         draftId: 'd1',
-        ownerAccount: 'owner',
+        accountId:
+            '0x8888888888888888888888888888888888888888888888888888888888888888',
         contentFormat: SquarePostContentFormat.article,
         postCategory: SquarePostCategory.campaign,
         title: '论社区自治',
@@ -32,8 +33,7 @@ void main() {
         ],
         updatedAtMillis: 1800000000000,
       );
-      final restored =
-          SquareComposeDraft.fromJsonString(draft.toJsonString())!;
+      final restored = SquareComposeDraft.fromJsonString(draft.toJsonString())!;
       expect(restored.draftId, 'd1');
       expect(restored.isArticle, isTrue);
       expect(restored.isCampaign, isTrue);
@@ -60,7 +60,8 @@ void main() {
       }) =>
           SquareComposeDraft(
             draftId: 'd',
-            ownerAccount: 'o',
+            accountId:
+                '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
             contentFormat: format,
             postCategory: category,
             text: 't',
@@ -96,7 +97,8 @@ void main() {
     test('文章摘要优先标题；空内容 isEmpty', () {
       const article = SquareComposeDraft(
         draftId: 'd',
-        ownerAccount: 'o',
+        accountId:
+            '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
         contentFormat: SquarePostContentFormat.article,
         postCategory: SquarePostCategory.normal,
         title: '标题',
@@ -108,7 +110,8 @@ void main() {
 
       const empty = SquareComposeDraft(
         draftId: 'd',
-        ownerAccount: 'o',
+        accountId:
+            '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
         contentFormat: SquarePostContentFormat.normal,
         postCategory: SquarePostCategory.normal,
         text: '  ',

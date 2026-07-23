@@ -12,6 +12,8 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// Alice 通用 SS58(校验和有效),仅用于让 `decodeAddress` 解出 32 字节账户;
 /// 护照 App 真号是 prefix=2027,这里只需一个可解码地址驱动 storage key。
 const _validAddress = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
+const _validAccountId =
+    '0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d';
 
 void main() {
   MyIdService buildService({
@@ -41,14 +43,14 @@ void main() {
   test('无默认热钱包时为访客并提示创建钱包', () async {
     final state = await buildService(wallet: null).getState();
     expect(state.tier, MyIdTier.visitor);
-    expect(state.votingAccount, isNull);
+    expect(state.votingAccountId, isNull);
     expect(state.errorMessage, '请先创建钱包');
   });
 
   test('默认用户账户链上无投票身份时为访客轻节点', () async {
     final state = await buildService(voting: null).getState();
     expect(state.tier, MyIdTier.visitor);
-    expect(state.votingAccount, isNull);
+    expect(state.votingAccountId, isNull);
     expect(state.status, isNull);
   });
 
@@ -66,7 +68,7 @@ void main() {
 
     expect(state.tier, MyIdTier.voting);
     expect(state.status, MyIdStatus.normal);
-    expect(state.votingAccount, _validAddress);
+    expect(state.votingAccountId, _validAccountId);
     expect(state.cidNumber, 'GD-CTZN1-8F3A2B');
     expect(state.passportValidFrom, '2026-01-01');
     expect(state.passportValidUntil, '2031-01-01');
@@ -238,7 +240,9 @@ Uint8List _encodeCandidate({
 class _AliceWallet implements WalletProfile {
   const _AliceWallet();
   @override
-  String get address => _validAddress;
+  String get accountId => _validAccountId;
+  @override
+  String get ss58Address => _validAddress;
   @override
   bool get isHotWallet => true;
   @override
@@ -320,9 +324,9 @@ class _FakeDivisionStore implements AdminDivisionStore {
 class _FakeBadgeStore extends IdentityBadgeSnapshotStore {
   @override
   Future<void> write({
-    required String walletAccount,
+    required String accountId,
     required String identityLevel,
   }) async {}
   @override
-  Future<IdentityBadgeSnapshot?> read(String walletAccount) async => null;
+  Future<IdentityBadgeSnapshot?> read(String accountId) async => null;
 }

@@ -16,7 +16,7 @@ import { signedMediaUrls } from '../media/signed_urls';
 import { releaseStoredMedia } from '../limits/usage';
 import { HttpError, jsonResponse, readJson, requireSession } from '../shared/http';
 import { nowMs } from '../shared/time';
-import { sanitizeOwnerAccount } from '../storage/r2_keys';
+import { accountIdPathSegment } from '../storage/r2_keys';
 import { loadMediaAssets } from '../uploads/service';
 import { requireActiveMembership } from '../membership/service';
 import { readProfileDoc } from '../profiles/repository';
@@ -47,7 +47,7 @@ interface SquareManifestContentBlock {
 
 interface SquarePostManifest {
   schema?: string;
-  owner_account?: string;
+  account_id?: string;
   post_category?: 'normal' | 'campaign';
   content_format?: 'normal' | 'article';
   title?: string;
@@ -91,8 +91,8 @@ export async function deletePostCloudflareData(
   }
 
   const post = await loadPostForDelete(env, postId);
-  if (post.owner_account !== session.owner_account) {
-    throw new HttpError(403, 'post_owner_mismatch', '登录钱包与动态作者不一致');
+  if (post.account_id !== session.account_id) {
+    throw new HttpError(403, 'post_account_mismatch', '登录钱包与动态作者不一致');
   }
 
   const upload = await loadUploadForPost(env, postId);
@@ -110,8 +110,8 @@ export async function deletePostCloudflareData(
   // 硬删除：彻底删掉帖子行本身，不留软删残行；链上仅存 content_hash 不受影响。
   const statements = [
     env.DB.prepare(
-      `DELETE FROM square_posts WHERE post_id = ? AND owner_account = ?`
-    ).bind(postId, session.owner_account)
+      `DELETE FROM square_posts WHERE post_id = ? AND account_id = ?`
+    ).bind(postId, session.account_id)
   ];
 
   if (upload) {
@@ -137,7 +137,7 @@ export async function confirmPublishedPost(
   body: ConfirmRequest
 ): Promise<SquarePostFeedItem> {
   // 发布确认是最后一道服务端闸门；会员在上传后失效也不得把链上事件投影为广场内容。
-  const membership = await requireActiveMembership(env, session.owner_account);
+  const membership = await requireActiveMembership(env, session.account_id);
   if (typeof body.post_id !== 'string' || body.post_id.trim().length === 0) {
     throw new HttpError(400, 'invalid_post_id', '动态编号不合法');
   }
@@ -146,8 +146,8 @@ export async function confirmPublishedPost(
   }
 
   const upload = await loadCompletedUpload(env, body.post_id.trim());
-  if (upload.owner_account !== session.owner_account) {
-    throw new HttpError(403, 'upload_owner_mismatch', '登录钱包与上传记录不一致');
+  if (upload.account_id !== session.account_id) {
+    throw new HttpError(403, 'upload_account_mismatch', '登录钱包与上传记录不一致');
   }
   if (!upload.content_hash || !upload.storage_receipt_id) {
     throw new HttpError(409, 'upload_not_completed', '上传任务尚未完成');
@@ -171,7 +171,7 @@ export async function confirmPublishedPost(
   // 发布确认再次按身份档校验分类权限（竞选内容须竞选身份，防上传后身份变化绕过）；
   // 只有竞选帖才读链身份。用量额度另按会员档由 assertManifestQuota 校验。
   if (upload.post_category === 'campaign') {
-    const identity = await fetchChainIdentityState(env, session.owner_account);
+    const identity = await fetchChainIdentityState(env, session.account_id);
     assertIdentityCanPublishCategory(identity.identity_level, 'campaign');
   }
   await assertManifestQuota({
@@ -188,13 +188,13 @@ export async function confirmPublishedPost(
 
   await env.DB.prepare(
     `INSERT OR REPLACE INTO square_posts
-      (post_id, owner_account, cid_number, post_category, content_format, title,
+      (post_id, account_id, cid_number, post_category, content_format, title,
         text, content_hash, storage_receipt_id, chain_block, created_at, post_state)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published')`
   )
     .bind(
       upload.post_id,
-      upload.owner_account,
+      upload.account_id,
       event.cid_number,
       upload.post_category,
       contentFormat,
@@ -210,9 +210,9 @@ export async function confirmPublishedPost(
   // 发帖通知扇出：读作者展示名一次并入队；队列消费者分页跨调用推给全部未静音粉丝。
   // 入队失败只 log、绝不回滚已发布的帖子（链上已 finalized、D1 已镜像）。
   try {
-    const authorDoc = await readProfileDoc(env, upload.owner_account);
+    const authorDoc = await readProfileDoc(env, upload.account_id);
     await env.SQUARE_NOTIFY_QUEUE?.send({
-      author_account: upload.owner_account,
+      author_account_id: upload.account_id,
       author_name: authorDoc?.display_name ?? '',
       content_format: contentFormat,
       post_id: upload.post_id,
@@ -225,7 +225,7 @@ export async function confirmPublishedPost(
 
   return {
     post_id: upload.post_id,
-    owner_account: upload.owner_account,
+    account_id: upload.account_id,
     cid_number: event.cid_number,
     post_category: upload.post_category,
     content_format: contentFormat,
@@ -246,7 +246,7 @@ export async function buildFeedPostItem(env: Env, row: SquarePostFeedItem): Prom
   const objectKeys = upload ? parseObjectKeys(upload) : [];
   const manifestObjectKey =
     objectKeys.find((key) => key.endsWith('/manifest.json')) ??
-    `square/${sanitizeOwnerAccount(row.owner_account)}/posts/${row.post_id}/manifest.json`;
+    `square/${accountIdPathSegment(row.account_id)}/posts/${row.post_id}/manifest.json`;
   const manifest = await readManifest(env, manifestObjectKey).catch(() => null);
   return {
     ...row,
@@ -266,7 +266,7 @@ function findMatchingEvent(
     events.find(
       (event) =>
         event.post_id === upload.post_id &&
-        event.owner_account === upload.owner_account &&
+        event.account_id === upload.account_id &&
         event.post_category === upload.post_category &&
         normalizeHash(event.content_hash) === normalizeHash(upload.content_hash ?? '') &&
         event.storage_receipt_id === upload.storage_receipt_id
@@ -276,7 +276,7 @@ function findMatchingEvent(
 
 async function loadCompletedUpload(env: Env, postId: string): Promise<PreparedUploadRow> {
   const upload = await env.DB.prepare(
-    `SELECT upload_id, post_id, owner_account, post_category, manifest_hash, content_hash,
+    `SELECT upload_id, post_id, account_id, post_category, manifest_hash, content_hash,
         storage_receipt_id, estimated_bytes, object_keys_json, status, expires_at, created_at, completed_at
       FROM square_uploads
       WHERE post_id = ?`
@@ -294,7 +294,7 @@ async function loadCompletedUpload(env: Env, postId: string): Promise<PreparedUp
 
 async function loadUploadForPost(env: Env, postId: string): Promise<PreparedUploadRow | null> {
   return env.DB.prepare(
-    `SELECT upload_id, post_id, owner_account, post_category, manifest_hash, content_hash,
+    `SELECT upload_id, post_id, account_id, post_category, manifest_hash, content_hash,
         storage_receipt_id, estimated_bytes, object_keys_json, status, expires_at, created_at, completed_at
       FROM square_uploads
       WHERE post_id = ?`
@@ -305,7 +305,7 @@ async function loadUploadForPost(env: Env, postId: string): Promise<PreparedUplo
 
 async function loadPostForDelete(env: Env, postId: string): Promise<SquarePostFeedItem> {
   const post = await env.DB.prepare(
-    `SELECT post_id, owner_account, cid_number, post_category, content_format, title,
+    `SELECT post_id, account_id, cid_number, post_category, content_format, title,
         text, content_hash, storage_receipt_id, chain_block, created_at, post_state
       FROM square_posts
       WHERE post_id = ?`
@@ -348,8 +348,8 @@ async function readManifest(env: Env, objectKey: string): Promise<SquarePostMani
 }
 
 function validateManifest(manifest: SquarePostManifest, upload: PreparedUploadRow): void {
-  if (manifest.owner_account !== upload.owner_account) {
-    throw new HttpError(409, 'manifest_owner_mismatch', 'manifest 钱包账户不一致');
+  if (manifest.account_id !== upload.account_id) {
+    throw new HttpError(409, 'manifest_account_mismatch', 'manifest 钱包账户不一致');
   }
   if (manifest.post_category !== upload.post_category) {
     throw new HttpError(409, 'manifest_category_mismatch', 'manifest 动态分类不一致');

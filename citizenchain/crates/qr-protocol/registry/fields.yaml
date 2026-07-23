@@ -1,7 +1,7 @@
 # QR_V1 扫码展示字段中文名唯一真源。
 # decoder 输出字段必须在这里登记；未登记时扫码端红色拒绝。
 
-- field_key: account
+- field_key: account_id
   field_label_zh: 账户
 - field_key: account_name
   field_label_zh: 账户名称
@@ -15,8 +15,8 @@
   field_label_zh: 地址名称
 - field_key: address_name_code
   field_label_zh: 地址名称代码
-- field_key: admin_account
-  field_label_zh: 管理员钱包地址
+- field_key: signer_public_key
+  field_label_zh: 签名公钥
 - field_key: admins
   field_label_zh: 管理员
 - field_key: admins_len
@@ -31,7 +31,7 @@
   field_label_zh: 金额
 - field_key: approve
   field_label_zh: 投票意见
-- field_key: beneficiary
+- field_key: beneficiary_account_id
   field_label_zh: 收款账户
 - field_key: catalog_hash
   field_label_zh: 地址库哈希
@@ -53,7 +53,7 @@
   field_label_zh: 身份状态
 - field_key: create_threshold
   field_label_zh: 创建阈值
-- field_key: credential_signer_pubkey
+- field_key: credential_signer_public_key
   field_label_zh: 凭证签发管理员
 - field_key: eligible_total
   field_label_zh: 合格选民数
@@ -85,10 +85,6 @@
   field_label_zh: 新平台价格
 - field_key: new_threshold
   field_label_zh: 新阈值
-- field_key: operator_account
-  field_label_zh: 操作者账户
-- field_key: owner_account
-  field_label_zh: 用户账户
 - field_key: peer_id
   field_label_zh: 节点标识
 - field_key: proposal_id
@@ -123,24 +119,16 @@
   field_label_zh: 省级范围
 - field_key: signature
   field_label_zh: 签名
-- field_key: signer_pubkey
-  field_label_zh: 签名公钥
 - field_key: voter_role_code
   field_label_zh: 投票岗位码
 - field_key: system
   field_label_zh: 系统
-- field_key: system_signature
-  field_label_zh: 系统签名
-- field_key: target_account
-  field_label_zh: 目标账户
-- field_key: to
+- field_key: recipient_account_id
   field_label_zh: 收款方
 - field_key: town_code
   field_label_zh: 镇级代码
 - field_key: valid_range
   field_label_zh: 护照有效期
-- field_key: wallet_account
-  field_label_zh: 公民钱包账户
 - field_key: wasm_hash
   field_label_zh: WASM哈希
 - field_key: account_count
@@ -149,10 +137,8 @@
   field_label_zh: 机构账户名称
 - field_key: actor_province_name
   field_label_zh: 操作省份
-- field_key: actor_pubkey
-  field_label_zh: 操作管理员
-- field_key: admin_pubkey
-  field_label_zh: 管理员账户
+- field_key: actor_public_key
+  field_label_zh: 操作签名公钥
 - field_key: after_hash
   field_label_zh: 变更后哈希
 - field_key: amount_raw
@@ -169,8 +155,8 @@
   field_label_zh: 资产名称
 - field_key: asset_symbol
   field_label_zh: 资产符号
-- field_key: bank_main
-  field_label_zh: 清算行主账户
+- field_key: bank_cid_number
+  field_label_zh: 清算行CID
 - field_key: before_hash
   field_label_zh: 变更前哈希
 - field_key: birth_date
@@ -192,19 +178,19 @@
   field_value_zh: 法定代表人岗位空缺
 - field_key: effective_at
   field_label_zh: 生效时间戳
-- field_key: execution_account
+- field_key: execution_account_id
   field_label_zh: 资产执行账户
-- field_key: execution_fee_payer
-  field_label_zh: 执行费付款账户
+- field_key: execution_fee_payer_description
+  field_label_zh: 执行费付款说明
   field_value_zh: "{actor_cid_number} 的链上费用账户"
 - field_key: executive_cid_number
   field_label_zh: 行政机构CID
-- field_key: fee_payer
-  field_label_zh: 费用付款账户
+- field_key: fee_payer_description
+  field_label_zh: 费用付款说明
   field_value_zh: "{actor_cid_number} 的链上费用账户"
-- field_key: from
+- field_key: sender_account_id
   field_label_zh: 来源账户
-- field_key: funding_account
+- field_key: funding_account_id
   field_label_zh: 出资账户
 - field_key: houses
   field_label_zh: 表决院
@@ -212,20 +198,20 @@
   field_label_zh: 身份类型
 - field_key: initial_supply_raw
   field_label_zh: 初始供应量(raw)
-- field_key: institution_account
+- field_key: institution_account_id
   field_label_zh: 机构账户
 - field_key: law_id
   field_label_zh: 法律编号
 - field_key: legislature_cid_number
   field_label_zh: 立法机构CID
-- field_key: new_bank
-  field_label_zh: 新清算行
+- field_key: new_bank_cid_number
+  field_label_zh: 新清算行CID
 - field_key: new_rate_bp
   field_label_zh: 链下费率
-- field_key: operation_fee_payer
-  field_label_zh: 操作费付款账户
+- field_key: operation_fee_payer_description
+  field_label_zh: 操作费付款说明
   field_value_zh: "{actor_cid_number} 的链上费用账户"
-- field_key: personal_account
+- field_key: personal_account_id
   field_label_zh: 个人多签账户
 - field_key: protocol_accounts
   field_label_zh: 制度账户
@@ -234,10 +220,10 @@
   field_label_zh: 监管文书哈希
 - field_key: scope_code
   field_label_zh: 行政区代码
-- field_key: target
-  field_label_zh: 目标账户
 - field_key: threshold
   field_label_zh: 阈值
+- field_key: target
+  field_label_zh: 操作目标
 - field_key: tier
   field_label_zh: 法律层级
 - field_key: title
@@ -246,5 +232,3 @@
   field_label_zh: 总金额
 - field_key: vote_type
   field_label_zh: 表决类型
-- field_key: who
-  field_label_zh: 目标持仓账户

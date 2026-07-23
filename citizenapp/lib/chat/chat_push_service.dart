@@ -152,7 +152,7 @@ class ChatPushService {
   /// 推送正文只能识别无内容唤醒，不接受消息或附件字段。
   static String? wakeSenderFromData(Map<String, dynamic> data) {
     if (data['kind'] != 'chat_wake' || data.length != 2) return null;
-    final sender = data['sender_account'];
+    final sender = data['sender_account_id'];
     return sender is String && sender.isNotEmpty ? sender : null;
   }
 

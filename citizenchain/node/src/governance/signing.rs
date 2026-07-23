@@ -81,7 +81,7 @@ fn b64_to_prefixed_hex(value: &str, expected_len: usize, field: &str) -> Result<
     Ok(format!("0x{}", hex::encode(bytes)))
 }
 
-fn deserialize_b64_pubkey<'de, D>(deserializer: D) -> Result<String, D::Error>
+fn deserialize_b64_signer_public_key<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -194,7 +194,7 @@ pub struct SignRequestBody {
     pub sig_alg: u8,
     /// u:签名账户 32B 公钥,base64url(no padding)。
     #[serde(rename = "u")]
-    pub pubkey: String,
+    pub signer_public_key: String,
     /// d:完整 review_payload bytes,base64url(no padding)。
     ///
     /// 普通链交易必须可被钱包完整解码和中文展示；32B signing bytes 仅 Runtime 升级
@@ -223,8 +223,8 @@ pub struct QrSignRequest {
 #[serde(deny_unknown_fields)]
 #[allow(dead_code)]
 pub struct SignResponseBody {
-    #[serde(rename = "u", deserialize_with = "deserialize_b64_pubkey")]
-    pub pubkey: String,
+    #[serde(rename = "u", deserialize_with = "deserialize_b64_signer_public_key")]
+    pub signer_public_key: String,
     #[serde(rename = "s", deserialize_with = "deserialize_b64_signature")]
     pub signature: String,
 }
@@ -342,7 +342,7 @@ pub fn build_vote_sign_request(
         body: SignRequestBody {
             action: chain_action_code(&call_data)?,
             sig_alg: 1,
-            pubkey: public_key_b64(&signer_public_key_bytes)?,
+            signer_public_key: public_key_b64(&signer_public_key_bytes)?,
             payload: payload_b64(&payload),
         },
     };
@@ -432,7 +432,7 @@ pub fn build_joint_vote_sign_request(
         body: SignRequestBody {
             action: chain_action_code(&call_data)?,
             sig_alg: 1,
-            pubkey: public_key_b64(&signer_public_key_bytes)?,
+            signer_public_key: public_key_b64(&signer_public_key_bytes)?,
             payload: payload_b64(&payload),
         },
     };
@@ -541,7 +541,7 @@ pub fn verify_and_submit(
     if session.expected_signer_public_key != expected_signer_public_key {
         return Err("提交参数公钥与本地签名 session 不匹配".to_string());
     }
-    if response.body.pubkey != expected_signer_public_key {
+    if response.body.signer_public_key != expected_signer_public_key {
         return Err("公钥不匹配".to_string());
     }
 
@@ -903,7 +903,7 @@ pub fn build_sign_request_from_call_data(
         body: SignRequestBody {
             action: chain_action_code(call_data)?,
             sig_alg: 1,
-            pubkey: public_key_b64(signer_public_key_bytes)?,
+            signer_public_key: public_key_b64(signer_public_key_bytes)?,
             payload: payload_b64(&payload),
         },
     };

@@ -15,11 +15,11 @@ import type { Env, MediaAssetRow } from '../src/types';
 
 const mockVerify = verifyWalletSignature as unknown as ReturnType<typeof vi.fn>;
 
-const OWNER = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
+const ACCOUNT_ID = '0x1111111111111111111111111111111111111111111111111111111111111111';
 
 interface ChallengeRecord {
   challenge_id: string;
-  owner_account: string;
+  account_id: string;
   signing_payload: string;
   expires_at: number;
   used_at: number | null;
@@ -36,7 +36,7 @@ class ChallengeStmt {
     if (this.sql.includes('INSERT INTO square_login_challenges')) {
       this.db.challenges.set(this.binds[0] as string, {
         challenge_id: this.binds[0] as string,
-        owner_account: this.binds[1] as string,
+        account_id: this.binds[1] as string,
         signing_payload: this.binds[2] as string,
         expires_at: this.binds[3] as number,
         used_at: null
@@ -76,11 +76,11 @@ describe('consumeActionSignature', () => {
   it('accepts a valid, unused, action-matching wallet signature and marks it used', async () => {
     const { env, db } = challengeEnv();
     mockVerify.mockResolvedValue(true);
-    const challenge = await issueActionChallenge(env, OWNER, 'delete_account');
+    const challenge = await issueActionChallenge(env, ACCOUNT_ID, 'delete_account');
 
     await expect(
       consumeActionSignature(env, {
-        ownerAccount: OWNER,
+        accountId: ACCOUNT_ID,
         action: 'delete_account',
         challengeId: challenge.challengeId,
         signature: 'sig'
@@ -92,9 +92,9 @@ describe('consumeActionSignature', () => {
   it('rejects reuse of a consumed challenge', async () => {
     const { env } = challengeEnv();
     mockVerify.mockResolvedValue(true);
-    const challenge = await issueActionChallenge(env, OWNER, 'delete_account');
+    const challenge = await issueActionChallenge(env, ACCOUNT_ID, 'delete_account');
     const input = {
-      ownerAccount: OWNER,
+      accountId: ACCOUNT_ID,
       action: 'delete_account' as const,
       challengeId: challenge.challengeId,
       signature: 'sig'
@@ -108,10 +108,10 @@ describe('consumeActionSignature', () => {
   it('rejects a signature issued for a different action context', async () => {
     const { env } = challengeEnv();
     mockVerify.mockResolvedValue(true);
-    const challenge = await issueActionChallenge(env, OWNER, 'delete_account', 'context-a');
+    const challenge = await issueActionChallenge(env, ACCOUNT_ID, 'delete_account', 'context-a');
     await expect(
       consumeActionSignature(env, {
-        ownerAccount: OWNER,
+        accountId: ACCOUNT_ID,
         action: 'delete_account',
         challengeId: challenge.challengeId,
         signature: 'sig',
@@ -121,13 +121,13 @@ describe('consumeActionSignature', () => {
     expect(mockVerify).not.toHaveBeenCalled();
   });
 
-  it('rejects a wrong owner account', async () => {
+  it('rejects a wrong accountId account', async () => {
     const { env } = challengeEnv();
     mockVerify.mockResolvedValue(true);
-    const challenge = await issueActionChallenge(env, OWNER, 'delete_account');
+    const challenge = await issueActionChallenge(env, ACCOUNT_ID, 'delete_account');
     await expect(
       consumeActionSignature(env, {
-        ownerAccount: 'someone_else_account',
+        accountId: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
         action: 'delete_account',
         challengeId: challenge.challengeId,
         signature: 'sig'
@@ -138,11 +138,11 @@ describe('consumeActionSignature', () => {
   it('rejects an expired challenge', async () => {
     const { env, db } = challengeEnv();
     mockVerify.mockResolvedValue(true);
-    const challenge = await issueActionChallenge(env, OWNER, 'delete_account');
+    const challenge = await issueActionChallenge(env, ACCOUNT_ID, 'delete_account');
     db.challenges.get(challenge.challengeId)!.expires_at = 1;
     await expect(
       consumeActionSignature(env, {
-        ownerAccount: OWNER,
+        accountId: ACCOUNT_ID,
         action: 'delete_account',
         challengeId: challenge.challengeId,
         signature: 'sig'
@@ -153,10 +153,10 @@ describe('consumeActionSignature', () => {
   it('rejects an invalid signature', async () => {
     const { env } = challengeEnv();
     mockVerify.mockResolvedValue(false);
-    const challenge = await issueActionChallenge(env, OWNER, 'delete_account');
+    const challenge = await issueActionChallenge(env, ACCOUNT_ID, 'delete_account');
     await expect(
       consumeActionSignature(env, {
-        ownerAccount: OWNER,
+        accountId: ACCOUNT_ID,
         action: 'delete_account',
         challengeId: challenge.challengeId,
         signature: 'bad'
@@ -171,9 +171,9 @@ describe('releaseActionChallenge', () => {
   it('resets used_at to null so a consumed challenge can be retried', async () => {
     const { env, db } = challengeEnv();
     mockVerify.mockResolvedValue(true);
-    const challenge = await issueActionChallenge(env, OWNER, 'delete_account');
+    const challenge = await issueActionChallenge(env, ACCOUNT_ID, 'delete_account');
     const input = {
-      ownerAccount: OWNER,
+      accountId: ACCOUNT_ID,
       action: 'delete_account' as const,
       challengeId: challenge.challengeId,
       signature: 'sig'
@@ -197,7 +197,7 @@ class PurgeStmt {
     return this;
   }
   async first<T>(): Promise<T | null> {
-    if (this.sql.includes('FROM square_memberships') && this.sql.includes('WHERE owner_account')) {
+    if (this.sql.includes('FROM square_memberships') && this.sql.includes('WHERE account_id')) {
       return this.db.membership as T | null;
     }
     return null;
@@ -273,9 +273,9 @@ describe('purgeAccount', () => {
     kv: FakeKv;
   } {
     const db = new PurgeDb();
-    db.membership = { owner_account: OWNER };
+    db.membership = { account_id: ACCOUNT_ID };
     db.mediaRows = [{
-      upload_id: 'squ_1', post_id: 'sqp_1', owner_account: OWNER, media_index: 0,
+      upload_id: 'squ_1', post_id: 'sqp_1', account_id: ACCOUNT_ID, media_index: 0,
       media_kind: 'image', provider: 'cloudflare_images', provider_asset_id: 'img_1',
       upload_method: 'worker', resource_key: 'square_image_sd', content_type: 'image/webp',
       byte_size: 1024, asset_state: 'ready', declared_duration_seconds: null,
@@ -284,13 +284,13 @@ describe('purgeAccount', () => {
       archived_at: null, r2_archive_key: null,
     }];
     const r2 = new FakeR2([
-      `profile/${OWNER}/profile.json`,
-      `profile/${OWNER}/avatar`,
-      `square/${OWNER}/posts/p1/manifest.json`
+      `profile/${ACCOUNT_ID.slice(2)}/profile.json`,
+      `profile/${ACCOUNT_ID.slice(2)}/avatar`,
+      `square/${ACCOUNT_ID.slice(2)}/posts/p1/manifest.json`
     ]);
     const kv = new FakeKv();
-    kv.store.set(`square_identity:${OWNER}`, '{"identity_level":"voting"}');
-    kv.store.set(`square_sessions_by_owner:${OWNER}`, JSON.stringify(['tok1']));
+    kv.store.set(`square_identity:${ACCOUNT_ID}`, '{"identity_level":"voting"}');
+    kv.store.set(`square_sessions_by_account_id:${ACCOUNT_ID}`, JSON.stringify(['tok1']));
     kv.store.set('square_session:tok1', '{}');
     const env = {
       DB: db,
@@ -306,7 +306,7 @@ describe('purgeAccount', () => {
     const { env, db, r2, kv } = buildEnv();
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({ success: true, result: {} })));
 
-    const result = await purgeAccount(env, OWNER);
+    const result = await purgeAccount(env, ACCOUNT_ID);
 
     // PurgeAccountResult 只返回本地硬删除计数，不触发任何外部订阅副作用。
     expect(result.deleted_media_assets).toBe(1);
@@ -315,21 +315,21 @@ describe('purgeAccount', () => {
 
     // A 的 Chat 路由、浏览、关注两端引用和业务表全部进入硬删除清单。
     const joined = db.deletes.join('\n');
-    expect(joined).toContain('DELETE FROM square_memberships WHERE owner_account = ?');
-    expect(joined).toContain('DELETE FROM square_posts WHERE owner_account = ?');
-    expect(joined).toContain('DELETE FROM square_follows WHERE owner_account = ?');
-    expect(joined).toContain('DELETE FROM chat_device_binding_nonces WHERE owner_account = ?');
-    expect(joined).toContain('DELETE FROM chat_devices WHERE owner_account = ?');
-    expect(joined).toContain('DELETE FROM square_contacts WHERE owner_account = ?');
-    expect(joined).toContain('DELETE FROM square_browse_days WHERE owner_account = ?');
+    expect(joined).toContain('DELETE FROM square_memberships WHERE account_id = ?');
+    expect(joined).toContain('DELETE FROM square_posts WHERE account_id = ?');
+    expect(joined).toContain('DELETE FROM square_follows WHERE account_id = ?');
+    expect(joined).toContain('DELETE FROM chat_device_binding_nonces WHERE account_id = ?');
+    expect(joined).toContain('DELETE FROM chat_devices WHERE account_id = ?');
+    expect(joined).toContain('DELETE FROM square_contacts WHERE account_id = ?');
+    expect(joined).toContain('DELETE FROM square_browse_days WHERE account_id = ?');
 
     // R2：只存在并删除 profile / posts 等当前业务对象，Chat 不使用 R2。
-    expect(r2.deleted).toContain(`profile/${OWNER}/profile.json`);
-    expect(r2.deleted).toContain(`square/${OWNER}/posts/p1/manifest.json`);
+    expect(r2.deleted).toContain(`profile/${ACCOUNT_ID.slice(2)}/profile.json`);
+    expect(r2.deleted).toContain(`square/${ACCOUNT_ID.slice(2)}/posts/p1/manifest.json`);
 
     // KV：身份缓存 + 会话都清。
-    expect(kv.store.has(`square_identity:${OWNER}`)).toBe(false);
+    expect(kv.store.has(`square_identity:${ACCOUNT_ID}`)).toBe(false);
     expect(kv.store.has('square_session:tok1')).toBe(false);
-    expect(kv.store.has(`square_sessions_by_owner:${OWNER}`)).toBe(false);
+    expect(kv.store.has(`square_sessions_by_account_id:${ACCOUNT_ID}`)).toBe(false);
   });
 });

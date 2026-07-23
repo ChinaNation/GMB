@@ -1,7 +1,7 @@
 //! 机构账户 HTTP handler。
 //!
 //! 机构自定义账户的新增/删除都不再本地直写:改为构造本机构内部投票提案的裸 call,
-//! 由发起管理员钱包冷签一笔普通 extrinsic 上链,授权由 runtime 在 origin 处以
+//! 由发起管理员使用签名钱包冷签一笔普通 extrinsic 上链,授权由 runtime 在 origin 处以
 //! `is_institution_admin` + 岗位码(proposer_role_code)校验。账户读侧真源在链上
 //! `PublicManage/PrivateManage::InstitutionAccounts`,本地 `accounts` 表不再作为读侧。
 
@@ -131,7 +131,7 @@ pub(crate) async fn create_account(
             Ok(v) => v,
             Err(resp) => return resp,
         };
-    // 新增机构自定义账户 = 发起本机构内部投票提案(runtime call 7);由发起管理员钱包冷签,
+    // 新增机构自定义账户 = 发起本机构内部投票提案(runtime call 7);由发起管理员使用签名钱包冷签,
     // OnChina 不再签发独立凭证,授权由 runtime 在 origin 处以 is_institution_admin + 岗位码校验。
     let chain = encode_propose_add_institution_account(&ProposeAddInstitutionAccountArgs {
         cid_number: cid_number.clone().into_bytes(),
@@ -141,7 +141,7 @@ pub(crate) async fn create_account(
     });
     let output = match build_chain_sign_output(
         &state,
-        ctx.admin_account.as_str(),
+        ctx.account_id.as_str(),
         &cid_number,
         PURPOSE_INSTITUTION_ADD_ACCOUNT,
         chain.call_data,
@@ -160,7 +160,7 @@ pub(crate) async fn create_account(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "INSTITUTION_ACCOUNT_ADD_PREPARE",
-        &ctx.admin_account,
+        &ctx.account_id,
         Some(cid_number.clone()),
         serde_json::json!({
             "cid_number": cid_number,
@@ -267,7 +267,7 @@ pub(crate) async fn delete_account(
     });
     let output = match build_chain_sign_output(
         &state,
-        ctx.admin_account.as_str(),
+        ctx.account_id.as_str(),
         &cid_number,
         PURPOSE_INSTITUTION_CLOSE_ACCOUNT,
         chain.call_data,
@@ -286,7 +286,7 @@ pub(crate) async fn delete_account(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "INSTITUTION_ACCOUNT_CLOSE_PREPARE",
-        &ctx.admin_account,
+        &ctx.account_id,
         Some(cid_number.clone()),
         serde_json::json!({
             "cid_number": cid_number,
@@ -302,39 +302,39 @@ pub(crate) async fn delete_account(
 }
 
 /// 链读账户列表行。链上存在即视为 `ACTIVE_ON_CHAIN`;
-/// `created_by/created_at/tx_hash/block_number` 链上无对应字段,一律置空。
+/// `creator_account_id/created_at/tx_hash/block_number` 链上无对应字段,一律置空。
 #[derive(Serialize)]
 struct ChainAccountRow {
     cid_number: String,
     account_name: String,
-    account: Option<String>,
+    account_id: Option<String>,
     account_kind: &'static str,
     can_close: bool,
     can_delete: bool,
     chain_status: &'static str,
     chain_tx_hash: Option<String>,
     chain_block_number: Option<u32>,
-    created_by: String,
+    creator_account_id: Option<String>,
     created_at: Option<String>,
 }
 
-/// 把一条链上账户投影成前端账户列表行。`account` 填链上地址 hex(不含 0x)。
-fn chain_account_row(account: &OnChainInstitutionAccount) -> ChainAccountRow {
-    let cid_number = String::from_utf8_lossy(&account.cid_number).into_owned();
-    let account_name = String::from_utf8_lossy(&account.account_name).into_owned();
+/// 把链上账户投影成规范 `account_id`。
+fn chain_account_row(account_id: &OnChainInstitutionAccount) -> ChainAccountRow {
+    let cid_number = String::from_utf8_lossy(&account_id.cid_number).into_owned();
+    let account_name = String::from_utf8_lossy(&account_id.account_name).into_owned();
     // 只有自定义命名账户可关闭;协议账户 can_close/can_delete 恒为 false。
     let account_kind =
         institution_account_kind_label(&cid_number, &account_name).unwrap_or("named");
     let closable = account_kind == "named";
     ChainAccountRow {
-        account: Some(hex::encode(account.account)),
+        account_id: Some(format!("0x{}", hex::encode(account_id.account_id))),
         account_kind,
         can_close: closable,
         can_delete: closable,
         chain_status: "ACTIVE_ON_CHAIN",
         chain_tx_hash: None,
         chain_block_number: None,
-        created_by: String::new(),
+        creator_account_id: None,
         created_at: None,
         cid_number,
         account_name,

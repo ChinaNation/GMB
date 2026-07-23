@@ -9,7 +9,7 @@ class CidDirectoryInfo {
     this.familyName,
     this.givenName,
     this.legalRepresentativeCidNumber,
-    this.legalRepresentativeAccount,
+    this.legalRepresentativeAccountId,
   });
 
   final String? provinceName;
@@ -17,7 +17,7 @@ class CidDirectoryInfo {
   final String? familyName;
   final String? givenName;
   final String? legalRepresentativeCidNumber;
-  final String? legalRepresentativeAccount;
+  final String? legalRepresentativeAccountId;
 }
 
 /// 机构目录只读反查:复用 finalized 链快照建立的公权目录本地 Isar 库,按
@@ -48,7 +48,7 @@ class CidDirectoryLookup {
       familyName: entity.familyName,
       givenName: entity.givenName,
       legalRepresentativeCidNumber: entity.legalRepresentativeCidNumber,
-      legalRepresentativeAccount: entity.legalRepresentativeAccount,
+      legalRepresentativeAccountId: entity.legalRepresentativeAccountId,
     );
   }
 }

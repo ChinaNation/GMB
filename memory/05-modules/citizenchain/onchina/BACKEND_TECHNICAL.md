@@ -152,7 +152,7 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 链上机构唯一查询先读取 `PublicManage::Institutions[cid_number]`，未命中再读取 `PrivateManage::Institutions[cid_number]`，不建立本地分流真源；公私权 CID 不重复由 runtime 与 NodeGuard 的链上不变式保证。创世公权目录全量投影仍精确为 49,593 个机构和 99,231 个协议账户；非营利法人“公民链技术发展基金会” `GZ018-SFGYR-201206100-2026` 属私权创世机构，只参加独立私权存在性审计，不冒充公权目录行，也不增加公权投影计数。启动抽样当前覆盖 32 个派生公权机构、1 个公权常量机构和该基金会，共 34 项。
 
-链上管理员解码必须按 pallet 分流：`PublicAdmins` 为 `admin_account + cid_number + family_name + given_name`，`PrivateAdmins` 为 `admin_account + family_name + given_name`。公权的公民 CID/姓/名允许空；非空 CID 的最终绑定由 runtime 向 `citizen-identity` 校验，OnChina 本地公民库只能用于输入补全和展示，不能变成链上授权真源。
+链上机构管理员无论来自 `PublicAdmins` 还是 `PrivateAdmins`，都统一解码为 `account_id + cid_number + family_name + given_name`。非空 CID 的最终绑定由 runtime 向 `citizen-identity` 校验，OnChina 本地公民库只能用于输入补全和展示，不能变成链上授权真源。
 
 机构治理链写入口：
 
@@ -197,7 +197,7 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 2026-07-17 机构治理运行态补验：当前源码 `citizenchain-fresh --tmp` 使用 `WASM_BUILD_FROM_SOURCE=1` 构建后启动成功，OnChina 使用临时内嵌 PostgreSQL 和 `ONCHAIN_WS_URL=ws://127.0.0.1:19944` 连接 fresh 链启动成功；启动期完成公权链投影 `49,593` 个机构与 `99,231` 个账户，首页 HTTP 返回 200，`subjects` 表旧 `legal_rep_*` 列为 0，新 `legal_representative_*` 三字段列齐备。交互式 CitizenWallet 扫码签名需要真实管理员登录会话和扫码设备，本次仅完成链、数据库、服务和页面基础运行态，不伪造扫码签名结果。
 
-2026-07-19 正式创世前管理员三字段验收曾统一采用 `admin_account + family_name + given_name`；该公权部分已于 2026-07-20 被四字段 `PublicAdmin` 取代，私权和个人多签三字段仍有效。OnChina 当前按目标 pallet 分流链上解码与治理/登记编码，不兼容旧公权三字段布局。
+正式创世前曾使用管理员三字段布局；该布局现已全部废弃。OnChina 当前对公权、私权机构统一按四字段 `Admin` 解码与治理/登记编码，不兼容任何旧三字段机构布局；个人多签同样使用统一四字段 SCALE 结构。
 
 2026-07-19 私权创世公民链基金会第 6 步验收：`institution_lookup` 已实现在相同 CID 主键下依次读取 `PublicManage` 和 `PrivateManage`，公权全量目录迭代继续只读取公权 storage；启动抽样固定增加公民链基金会，全量公权审计先独立核验基金会存在，再执行 49,593 个公权机构的双向比对。OnChina 137 项测试通过；没有把基金会复制进本地公权投影、没有读取本地公民数据库生成法定代表人，也没有新增第二套基金会身份常量。
 

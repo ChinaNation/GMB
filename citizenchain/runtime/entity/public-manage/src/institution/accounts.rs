@@ -26,8 +26,11 @@ use crate::BalanceOf;
 
 /// 根据 CID 制度约束自动生成全部强制协议账户，初始余额统一为零。
 /// 首次登记不得从交易载荷接收账户清单或初始入金。
+/// `parent_cid_number` 只对 `UNIN` 非法人组织有意义（父级为 `SFGF` 时才配清算账户），
+/// 其余机构码一律传 `None`；父级是否已登记由注册入口另行校验。
 pub(crate) fn build_required_protocol_accounts<T: Config>(
     cid_number: &CidNumberOf<T>,
+    parent_cid_number: Option<&[u8]>,
 ) -> Result<InstitutionInitialAccountsOf<T>, DispatchError> {
     let code = primitives::cid::code::institution_code_from_cid_number(
         core::str::from_utf8(cid_number.as_slice()).map_err(|_| Error::<T>::InvalidCidNumber)?,
@@ -36,6 +39,7 @@ pub(crate) fn build_required_protocol_accounts<T: Config>(
     let required = primitives::institution_constraints::required_protocol_account_kinds(
         code,
         cid_number.as_slice(),
+        parent_cid_number,
     )
     .ok_or(Error::<T>::InvalidCidNumber)?;
     let items: Vec<crate::InstitutionInitialAccountOf<T>> = required
@@ -61,9 +65,11 @@ pub(crate) fn build_required_protocol_accounts<T: Config>(
 /// - 主账户 AccountId
 /// - 费用账户 AccountId
 /// - 初始余额合计
+/// `parent_cid_number` 语义同 `build_required_protocol_accounts`。
 pub(crate) fn validate_initial_accounts<T: Config>(
     cid_number: &CidNumberOf<T>,
     accounts: &InstitutionInitialAccountsOf<T>,
+    parent_cid_number: Option<&[u8]>,
 ) -> Result<
     (
         CreateInstitutionAccountsOf<T>,
@@ -84,6 +90,7 @@ pub(crate) fn validate_initial_accounts<T: Config>(
             )
             .ok_or(Error::<T>::InvalidCidNumber)?,
             cid_number.as_slice(),
+            parent_cid_number,
         )
         .ok_or(Error::<T>::InvalidCidNumber)?;
     let mut protocol_kinds = BTreeSet::new();

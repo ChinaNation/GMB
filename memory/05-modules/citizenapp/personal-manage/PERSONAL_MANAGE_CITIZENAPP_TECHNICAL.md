@@ -44,7 +44,7 @@
 - `PersonalAdmins::propose_admin_set_change`：pallet `29`，call `0`，字段顺序固定为
   `institution_code / account_id / admins / new_threshold`，`institution_code` 必须为 `PMUL`。
 - 上述两个 call 中 `admins` 每项的 SCALE 顺序统一为
-  `admin_account / family_name / given_name`；账户是唯一授权、去重和钱包匹配字段，姓、名不参与授权。
+  `account_id / family_name / given_name`；账户是唯一授权、去重和钱包匹配字段，姓、名不参与授权。
 - `regular_threshold` 为用户输入的普通提案阈值，App 侧校验范围为
   `floor(admins_len / 2) + 1 ..= admins_len`；注册提案通过阈值固定为全员同意。
 
@@ -115,7 +115,7 @@ PersonalAdmins storage：
   返回时才强制刷新当前个人多签。链上失败保留本机快照，不覆盖为已注销。
 - Active 个人多签 60 分钟内不自动重复查链；Pending / Closed 个人多签
   10 分钟内不自动重复查链；用户下拉刷新才强制忽略 TTL。
-- 自动 discovery 只在首次进入“多签账户”列表或本机钱包 pubkey fingerprint 变化时触发；
+- 自动 discovery 只在首次进入“多签账户”列表或本机钱包 AccountId 集合变化时触发；
   下拉刷新才强制执行全量 discovery。
 - discovery 只扫描 `PersonalAdmins.AdminAccounts`，并按 `kind=Personal`、`institution_code=PMUL`、本机管理员钱包过滤。
 - 个人多签列表状态刷新使用 `PersonalManageService.fetchPersonalAccountsBatch()`：

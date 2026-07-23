@@ -22,8 +22,8 @@ void main() {
     walletName: '测试钱包',
     walletIcon: 'wallet',
     balance: 0.0,
-    address: '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty',
-    pubkeyHex:
+    ss58Address: '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty',
+    accountId:
         '0x9c0c5bc3b65f2b1aeecec2a0e70e6f0ef3f2dc8d59c12a9fa79ca88e3f2c82a3',
     alg: 'sr25519',
     ss58: 2027,

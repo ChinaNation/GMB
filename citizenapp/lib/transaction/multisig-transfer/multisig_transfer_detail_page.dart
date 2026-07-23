@@ -121,7 +121,7 @@ class _MultisigTransferDetailPageState
 
   // 提案创建时冻结的合格选民与投票记录。
   List<String> _admins = const [];
-  // pubkeyHex → true(赞成) / false(反对) / null(未投票)
+  // publicKey → true(赞成) / false(反对) / null(未投票)
   Map<String, bool?> _adminVotes = {};
   List<EligibleVoterTicket> _voterTickets = const [];
 
@@ -192,7 +192,7 @@ class _MultisigTransferDetailPageState
 
       final voterTickets = results[0] as List<EligibleVoterTicket>;
       final admins =
-          voterTickets.map((ticket) => ticket.pubkeyHex).toSet().toList();
+          voterTickets.map((ticket) => ticket.voterAccountId).toSet().toList();
       final thresholdSnapshot = results[1] as int?;
       final status = results[2] as int?;
       final tally = results[3] as ({int yes, int no});
@@ -206,10 +206,10 @@ class _MultisigTransferDetailPageState
       // 筛选出至少仍有一张未投岗位票据的钱包。
       final votable = <WalletProfile>[];
       for (final w in widget.adminWallets) {
-        var pk = w.pubkeyHex.toLowerCase();
-        if (pk.startsWith('0x')) pk = pk.substring(2);
-        final walletTickets = voterTickets
-            .where((ticket) => _normalizePubkey(ticket.pubkeyHex) == pk);
+        final accountId = _requireAccountId(w.accountId);
+        final walletTickets = voterTickets.where(
+          (ticket) => _requireAccountId(ticket.voterAccountId) == accountId,
+        );
         if (walletTickets.any((ticket) => votes[ticket.ticketKey] == null)) {
           votable.add(w);
         }
@@ -277,8 +277,9 @@ class _MultisigTransferDetailPageState
       final admins = snapshot.admins;
       final votable = <WalletProfile>[];
       for (final w in widget.adminWallets) {
-        final pk = _normalizePubkey(w.pubkeyHex);
-        if (admins.contains(pk) && snapshot.adminVotes[pk] == null) {
+        final accountId = _requireAccountId(w.accountId);
+        if (admins.contains(accountId) &&
+            snapshot.adminVotes[accountId] == null) {
           votable.add(w);
         }
       }
@@ -332,11 +333,11 @@ class _MultisigTransferDetailPageState
       yesCount: tally.yes,
       noCount: tally.no,
       threshold: thresholdSnapshot,
-      admins: admins.map(_normalizePubkey).toList(growable: false),
+      admins: admins.map(_requireAccountId).toList(growable: false),
       adminVotes: votes.map(
-        (key, value) => MapEntry(_normalizePubkey(key), value),
+        (key, value) => MapEntry(_requireAccountId(key), value),
       ),
-      pendingPubkeys: const [],
+      pendingPublicKeys: const [],
       detail: _detailToJson(detail),
     );
   }
@@ -346,7 +347,7 @@ class _MultisigTransferDetailPageState
       return {
         'kind': 'transfer',
         'actor_cid_number': detail.actorCidNumber,
-        'institution_account_hex': _toHex(detail.institutionAccount),
+        'institution_account_id': _accountIdText(detail.institutionAccountId),
         'beneficiary': detail.beneficiary,
         'amount_fen': detail.amountFen.toString(),
         'remark': detail.remark,
@@ -358,7 +359,7 @@ class _MultisigTransferDetailPageState
       return {
         'kind': 'safety_fund',
         'actor_cid_number': detail.actorCidNumber,
-        'institution_account_hex': _toHex(detail.institutionAccount),
+        'institution_account_id': _accountIdText(detail.institutionAccountId),
         'beneficiary': detail.beneficiary,
         'amount_fen': detail.amountFen.toString(),
         'remark': detail.remark,
@@ -370,7 +371,7 @@ class _MultisigTransferDetailPageState
       return {
         'kind': 'sweep',
         'actor_cid_number': detail.actorCidNumber,
-        'institution_account_hex': _toHex(detail.institutionAccount),
+        'institution_account_id': _accountIdText(detail.institutionAccountId),
         'amount_fen': detail.amountFen.toString(),
         'proposer': detail.proposer,
         'status': detail.status,
@@ -385,13 +386,12 @@ class _MultisigTransferDetailPageState
     if (kind == 'transfer') {
       final amountFen = BigInt.tryParse(detail['amount_fen']?.toString() ?? '');
       final actorCidNumber = detail['actor_cid_number']?.toString();
-      final institutionAccountHex =
-          detail['institution_account_hex']?.toString();
-      if (amountFen == null || institutionAccountHex == null) return null;
+      final institutionAccountId = detail['institution_account_id']?.toString();
+      if (amountFen == null || institutionAccountId == null) return null;
       return TransferProposalInfo(
         proposalId: snapshot.proposalId,
         actorCidNumber: actorCidNumber,
-        institutionAccount: _hexDecode(institutionAccountHex),
+        institutionAccountId: _accountIdBytes(institutionAccountId),
         beneficiary: detail['beneficiary']?.toString() ?? '',
         amountFen: amountFen,
         remark: detail['remark']?.toString() ?? '',
@@ -402,17 +402,16 @@ class _MultisigTransferDetailPageState
     if (kind == 'safety_fund') {
       final amountFen = BigInt.tryParse(detail['amount_fen']?.toString() ?? '');
       final actorCidNumber = detail['actor_cid_number']?.toString();
-      final institutionAccountHex =
-          detail['institution_account_hex']?.toString();
+      final institutionAccountId = detail['institution_account_id']?.toString();
       if (amountFen == null ||
           actorCidNumber == null ||
-          institutionAccountHex == null) {
+          institutionAccountId == null) {
         return null;
       }
       return SafetyFundProposalInfo(
         proposalId: snapshot.proposalId,
         actorCidNumber: actorCidNumber,
-        institutionAccount: _hexDecode(institutionAccountHex),
+        institutionAccountId: _accountIdBytes(institutionAccountId),
         beneficiary: detail['beneficiary']?.toString() ?? '',
         amountFen: amountFen,
         remark: detail['remark']?.toString() ?? '',
@@ -423,12 +422,11 @@ class _MultisigTransferDetailPageState
     if (kind == 'sweep') {
       final amountFen = BigInt.tryParse(detail['amount_fen']?.toString() ?? '');
       final actorCidNumber = detail['actor_cid_number']?.toString();
-      final institutionAccountHex =
-          detail['institution_account_hex']?.toString();
+      final institutionAccountId = detail['institution_account_id']?.toString();
       final proposer = detail['proposer']?.toString();
       if (amountFen == null ||
           actorCidNumber == null ||
-          institutionAccountHex == null ||
+          institutionAccountId == null ||
           proposer == null ||
           proposer.isEmpty) {
         return null;
@@ -436,7 +434,7 @@ class _MultisigTransferDetailPageState
       return SweepProposalInfo(
         proposalId: snapshot.proposalId,
         actorCidNumber: actorCidNumber,
-        institutionAccount: _hexDecode(institutionAccountHex),
+        institutionAccountId: _accountIdBytes(institutionAccountId),
         amountFen: amountFen,
         proposer: proposer,
         status: snapshot.status,
@@ -458,6 +456,22 @@ class _MultisigTransferDetailPageState
     return buf.toString();
   }
 
+  String _accountIdText(List<int> bytes) {
+    if (bytes.length != 32) {
+      throw const FormatException('institution_account_id 必须为 32 字节');
+    }
+    return '0x${_toHex(bytes)}';
+  }
+
+  Uint8List _accountIdBytes(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw const FormatException(
+        'institution_account_id 必须为小写 0x + 64 位十六进制',
+      );
+    }
+    return _hexDecode(accountId);
+  }
+
   Uint8List _hexDecode(String hex) {
     final h = hex.startsWith('0x') ? hex.substring(2) : hex;
     final result = Uint8List(h.length ~/ 2);
@@ -472,10 +486,11 @@ class _MultisigTransferDetailPageState
     return '${address.substring(0, 6)}...${address.substring(address.length - 6)}';
   }
 
-  String _normalizePubkey(String pubkeyHex) {
-    var pubkey = pubkeyHex.toLowerCase();
-    if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
-    return pubkey;
+  String _requireAccountId(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+    }
+    return accountId;
   }
 
   // ──── 投票提交 ────
@@ -494,10 +509,10 @@ class _MultisigTransferDetailPageState
   bool get _allVoted {
     if (widget.adminWallets.isEmpty) return false;
     for (final w in widget.adminWallets) {
-      var pk = w.pubkeyHex.toLowerCase();
-      if (pk.startsWith('0x')) pk = pk.substring(2);
-      final tickets = _voterTickets
-          .where((ticket) => _normalizePubkey(ticket.pubkeyHex) == pk);
+      final accountId = _requireAccountId(w.accountId);
+      final tickets = _voterTickets.where(
+        (ticket) => _requireAccountId(ticket.voterAccountId) == accountId,
+      );
       if (tickets.any((ticket) => _adminVotes[ticket.ticketKey] == null)) {
         return false;
       }
@@ -547,11 +562,11 @@ class _MultisigTransferDetailPageState
     setState(() => _submitting = true);
 
     try {
-      final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
-      final pubkey = _normalizePubkey(wallet.pubkeyHex);
+      final signerPublicKeyBytes = _hexDecode(wallet.accountId);
+      final accountId = _requireAccountId(wallet.accountId);
       final availableTickets = _voterTickets
           .where((ticket) =>
-              _normalizePubkey(ticket.pubkeyHex) == pubkey &&
+              _requireAccountId(ticket.voterAccountId) == accountId &&
               _adminVotes[ticket.ticketKey] == null)
           .toList(growable: false);
       if (availableTickets.isEmpty) {
@@ -575,7 +590,7 @@ class _MultisigTransferDetailPageState
         final qrSigner = QrSigner();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'vote-'),
-          pubkey: '0x${wallet.pubkeyHex}',
+          signerPublicKey: wallet.accountId,
           payloadHex: '0x${_toHex(payload)}',
           action: QrActions.internalVote,
         );
@@ -587,7 +602,7 @@ class _MultisigTransferDetailPageState
             builder: (_) => QrSignSessionPage(
                 request: request,
                 requestJson: requestJson,
-                expectedPubkey: '0x${wallet.pubkeyHex}'),
+                expectedSignerPublicKey: wallet.accountId),
           ),
         );
         if (response == null) throw Exception('签名已取消');
@@ -601,8 +616,8 @@ class _MultisigTransferDetailPageState
         approve: approve,
         actorCidNumber: ticket.cidNumber,
         voterRoleCode: ticket.voterRoleCode,
-        fromAddress: wallet.address,
-        signerPubkey: Uint8List.fromList(pubkeyBytes),
+        fromSs58Address: wallet.ss58Address,
+        signerPublicKey: Uint8List.fromList(signerPublicKeyBytes),
         sign: signCallback,
         onWatchEvent: (event) {
           if (event.isIncluded) {
@@ -617,9 +632,9 @@ class _MultisigTransferDetailPageState
       setState(() {
         _adminVotes[ticket.ticketKey] = approve;
         _votableWallets = _votableWallets.where((w) {
-          final walletPk = _normalizePubkey(w.pubkeyHex);
+          final accountId = _requireAccountId(w.accountId);
           return _voterTickets.any((candidate) =>
-              _normalizePubkey(candidate.pubkeyHex) == walletPk &&
+              _requireAccountId(candidate.voterAccountId) == accountId &&
               _adminVotes[candidate.ticketKey] == null);
         }).toList(growable: false);
         _selectedVoteWallet =
@@ -768,7 +783,7 @@ class _MultisigTransferDetailPageState
             admins: _admins,
             voterTickets: _voterTickets,
             adminVotes: _adminVotes,
-            pendingPubkeys: const {},
+            pendingPublicKeys: const {},
             proposerSs58: _proposerSs58,
           ),
         ],

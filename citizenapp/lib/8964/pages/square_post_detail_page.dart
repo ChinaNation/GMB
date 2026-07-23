@@ -175,7 +175,7 @@ class _SquarePostDetailPageState extends State<SquarePostDetailPage> {
       if (session == null) {
         throw const SquareApiException('请先选择默认热钱包');
       }
-      if (session.ownerAccount != post.author.ownerAccount) {
+      if (session.accountId != post.author.accountId) {
         throw const SquareApiException('只能删除本人动态');
       }
       await _api.deletePost(session: session, postId: post.postId);

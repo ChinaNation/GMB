@@ -39,7 +39,7 @@ class ProposalSubject {
     required this.institutionCode,
     required this.adminModule,
     this.cidNumber,
-    this.personalAccountHex,
+    this.personalAccountId,
   });
 
   factory ProposalSubject.fromInstitution({
@@ -53,7 +53,7 @@ class ProposalSubject {
         subjectType: ProposalSubjectType.personalMultisig,
         institutionCode: 'PMUL',
         adminModule: 'PersonalAdmins',
-        personalAccountHex: institution.personalAccountHex,
+        personalAccountId: institution.personalAccountId,
       );
     }
     if (InstitutionCodeLabel.isFixedGovernance(code)) {
@@ -105,7 +105,7 @@ class ProposalSubject {
   final String? cidNumber;
 
   /// 个人多签账户；机构主体严格不使用该字段。
-  final String? personalAccountHex;
+  final String? personalAccountId;
 
   bool get isFixedGovernance =>
       subjectType == ProposalSubjectType.fixedGovernanceInstitution;

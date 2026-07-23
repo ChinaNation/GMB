@@ -26,7 +26,7 @@ function fakeEnv(
     SQUARE_MEDIA: new FakeR2(objects) as unknown as R2Bucket,
     SQUARE_CACHE: {
       get: async (key: string) => key === 'square_session:test' ? {
-        owner_account: '5GrwvaEF5zXb26Fz9rcQpDWS7u4m6DXb6T6TQvF9j5uQ8g6U',
+        account_id: '0x1111111111111111111111111111111111111111111111111111111111111111',
         created_at: 0,
         expires_at: Date.now() + 60_000
       } : null

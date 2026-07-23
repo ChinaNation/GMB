@@ -36,13 +36,13 @@ function buildEnv(level: string | null = 'spark') {
   const kv = new FakeKv();
   const r2 = new FakeR2();
   kv.store.set('square_session:tok', {
-    owner_account: 'owner',
+    account_id: '0x9999999999999999999999999999999999999999999999999999999999999999',
     expires_at: Date.now() + 60_000,
   });
   const membership = level === null
     ? null
     : {
-        owner_account: 'owner',
+        account_id: '0x9999999999999999999999999999999999999999999999999999999999999999',
         membership_level: level,
         subscription_status: 'active',
         paid_until: Date.now() + 60_000,

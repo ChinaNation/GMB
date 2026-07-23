@@ -12,32 +12,32 @@ import 'fake_profile.dart';
 class _FakeSubscribeService extends CreatorSubscribeService {
   _FakeSubscribeService({
     required this.tiers,
-    required this.ownerPlatform,
-    this.throwOwnerPlatform = false,
+    required this.creatorPlatform,
+    this.throwCreatorPlatform = false,
   }) : super();
 
   final List<ChainCreatorTier> tiers;
-  final FinalizedSubscriptionSnapshot ownerPlatform;
-  final bool throwOwnerPlatform;
+  final FinalizedSubscriptionSnapshot creatorPlatform;
+  final bool throwCreatorPlatform;
 
   @override
   Future<List<ChainCreatorTier>> fetchCreatorPlans(
-          String creatorAddress) async =>
+          String creatorAccountId) async =>
       tiers;
 
   @override
   Future<FinalizedSubscriptionSnapshot> fetchFinalizedState({
-    required String subscriberAddress,
-    required String creatorAddress,
+    required String subscriberAccountId,
+    required String creatorAccountId,
   }) async =>
       _snapshot(state: null); // 访客尚未订阅该创作者 → 按钮呈「订阅 TA」
 
   @override
   Future<FinalizedSubscriptionSnapshot> fetchPlatformSnapshot(
-      String address) async {
+      String accountId) async {
     // 真实 fetchSubscriptionSnapshot 在链读/解码失败时抛 FormatException（Exception）。
-    if (throwOwnerPlatform) throw const FormatException('chain read failed');
-    return ownerPlatform;
+    if (throwCreatorPlatform) throw const FormatException('chain read failed');
+    return creatorPlatform;
   }
 }
 
@@ -70,19 +70,19 @@ final _tiers = <ChainCreatorTier>[
 void main() {
   Future<void> pump(
     WidgetTester tester, {
-    required bool ownerActive,
+    required bool creatorActive,
     List<ChainCreatorTier>? tiers,
-    bool throwOwner = false,
+    bool throwCreator = false,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: CreatorSubscribeButton(
-            creatorAccount: kOwner,
+            creatorAccountId: kOwner,
             service: _FakeSubscribeService(
               tiers: tiers ?? _tiers,
-              ownerPlatform: _platform(active: ownerActive),
-              throwOwnerPlatform: throwOwner,
+              creatorPlatform: _platform(active: creatorActive),
+              throwCreatorPlatform: throwCreator,
             ),
             api: FakeCreatorApi(),
             sessionProvider: FakeSessionProvider(fakeSession()),
@@ -94,22 +94,22 @@ void main() {
   }
 
   testWidgets('有档 且 创作者平台会员 active → 显示订阅按钮', (tester) async {
-    await pump(tester, ownerActive: true);
+    await pump(tester, creatorActive: true);
     expect(find.text('订阅 TA'), findsOneWidget);
   });
 
   testWidgets('有档 但 创作者平台会员过期 → 隐藏', (tester) async {
-    await pump(tester, ownerActive: false);
+    await pump(tester, creatorActive: false);
     expect(find.text('订阅 TA'), findsNothing);
   });
 
   testWidgets('创作者平台会员快照读失败 → 隐藏（fail-closed）', (tester) async {
-    await pump(tester, ownerActive: true, throwOwner: true);
+    await pump(tester, creatorActive: true, throwCreator: true);
     expect(find.text('订阅 TA'), findsNothing);
   });
 
   testWidgets('无档 → 隐藏（既有行为不回归）', (tester) async {
-    await pump(tester, ownerActive: true, tiers: const <ChainCreatorTier>[]);
+    await pump(tester, creatorActive: true, tiers: const <ChainCreatorTier>[]);
     expect(find.text('订阅 TA'), findsNothing);
   });
 }

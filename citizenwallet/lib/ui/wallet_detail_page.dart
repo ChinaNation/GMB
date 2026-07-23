@@ -11,7 +11,7 @@ import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
 import 'app_theme.dart';
 
-/// 钱包详情页：名称、地址、公钥、私钥（遮挡）、助记词（遮挡）。
+/// 钱包详情页：名称、AccountId、SS58 地址、私钥（遮挡）、助记词（遮挡）。
 class WalletDetailPage extends StatefulWidget {
   const WalletDetailPage({super.key, required this.wallet});
 
@@ -183,7 +183,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
       issuedAt: null,
       expiresAt: null,
       body: UserContactBody(
-        address: wallet.address,
+        ss58Address: wallet.ss58Address,
         contactName: wallet.walletName,
       ),
     ).toRawJson();
@@ -237,7 +237,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
               ),
               const SizedBox(height: 12),
               Text(
-                wallet.address,
+                wallet.ss58Address,
                 style: TextStyle(
                   fontSize: 11,
                   color: Colors.grey[500],
@@ -312,7 +312,8 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${wallet.address.substring(0, 8)}...${wallet.address.substring(wallet.address.length - 6)}',
+                        '${wallet.ss58Address.substring(0, 8)}...'
+                        '${wallet.ss58Address.substring(wallet.ss58Address.length - 6)}',
                         style: TextStyle(
                           fontSize: 13,
                           color: Colors.white.withAlpha(180),
@@ -344,9 +345,9 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
             decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
             child: Column(
               children: [
-                _buildInfoTile('地址', wallet.address),
+                _buildInfoTile('SS58 地址', wallet.ss58Address),
                 const Divider(height: 1, indent: 16, endIndent: 16),
-                _buildInfoTile('公钥', '0x${wallet.pubkeyHex}'),
+                _buildInfoTile('账户 ID', wallet.accountId),
                 if (_groups.where((g) => g.name != allGroup).isNotEmpty) ...[
                   const Divider(height: 1, indent: 16, endIndent: 16),
                   _buildGroupSelector(),

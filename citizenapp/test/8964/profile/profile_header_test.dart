@@ -20,7 +20,7 @@ Widget _wrap({
 }) {
   return MaterialApp(
     home: UserProfilePage(
-      ownerAccount: kOwner,
+      accountId: kOwner,
       isSelf: isSelf,
       api: api,
       cache: cache ?? FakeProfileCache(),
@@ -46,7 +46,8 @@ void main() {
     expect(find.text(kOwner), findsNothing);
   });
 
-  testWidgets('self profile hides owner-directed action icons, edit in kebab',
+  testWidgets(
+      'self profile hides accountId-directed action icons, edit in kebab',
       (tester) async {
     await tester.pumpWidget(
       _wrap(isSelf: true, api: FakeProfileApi(sampleProfile())),
@@ -245,13 +246,14 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: UserProfilePage(
-          ownerAccount: kOwner,
+          accountId: kOwner,
           isSelf: false,
           api: FakeProfileApi(sampleProfile(displayName: '轻节点')),
           cache: FakeProfileCache(),
           sessionProvider: FakeSessionProvider(fakeSession()),
-          onOpenDirectChat: (context, {required peerAddress, required title}) {
-            peer = peerAddress;
+          onOpenDirectChat: (context,
+              {required peerAccountId, required title}) {
+            peer = peerAccountId;
             chatTitle = title;
             return Future<void>.value();
           },
@@ -272,15 +274,16 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: UserProfilePage(
-          ownerAccount: kOwner,
+          accountId: kOwner,
           isSelf: false,
           api: FakeProfileApi(sampleProfile(displayName: '轻节点')),
           cache: FakeProfileCache(),
           sessionProvider: FakeSessionProvider(fakeSession()),
           // 浏览者账户 == 主页账户 = 他人视角看自己 → 按钮应置灰。
           viewerAccountLoader: () async => kOwner,
-          onOpenDirectChat: (context, {required peerAddress, required title}) {
-            peer = peerAddress;
+          onOpenDirectChat: (context,
+              {required peerAccountId, required title}) {
+            peer = peerAccountId;
             return Future<void>.value();
           },
         ),

@@ -5,8 +5,8 @@ import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
 import 'package:cryptography/cryptography.dart' hide KeyPair;
 import 'package:isar_community/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:substrate_bip39/crypto_scheme.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
@@ -17,8 +17,8 @@ class WalletProfile {
     required this.walletName,
     required this.walletIcon,
     required this.balance,
-    required this.address,
-    required this.pubkeyHex,
+    required this.accountId,
+    required this.ss58Address,
     required this.alg,
     required this.ss58,
     required this.createdAtMillis,
@@ -31,8 +31,8 @@ class WalletProfile {
   final String walletName;
   final String walletIcon;
   final double balance;
-  final String address;
-  final String pubkeyHex;
+  final String accountId;
+  final String ss58Address;
   final String alg;
   final int ss58;
   final int createdAtMillis;
@@ -80,12 +80,12 @@ class ContactKeyMaterial {
   final Uint8List indexKey;
 }
 
-/// 钱包创建后注册 P-256 设备子钥的钩子：给定 walletIndex/ownerAccount 与一个对
+/// 钱包创建后注册 P-256 设备子钥的钩子：给定 walletIndex/accountId 与一个对
 /// 绑定消息做 sr25519 主钥签名的闭包（返回 `0x` hex）。由 app 启动注入实现，
 /// 避免 wallet/core 反向依赖 8964 层。
 typedef WalletSubkeyRegistrar = Future<void> Function({
   required int walletIndex,
-  required String ownerAccount,
+  required String accountId,
   required Future<String> Function(Uint8List bindingMessage) signBinding,
 });
 
@@ -129,15 +129,10 @@ class WalletManager {
   static set subkeyRegistrar(WalletSubkeyRegistrar? registrar) =>
       _subkeyRegistrar = registrar;
 
-  /// 拖拽排序首次迁移 flag。设置后不再重复填充 sortOrder。
-  static const String _kSortOrderInitialized = 'wallet_sort_order_initialized';
   // 查询
   /// 钱包列表查询入口。
-  /// - 首次进入会做一次性 sortOrder 迁移（按原 walletIndex 升序填 sortOrder），
-  ///   通过 SharedPreferences flag 保证只做一次。
   /// - 排序规则：sortOrder 升序优先，相同则回退 walletIndex 兜底（保证稳定）。
   Future<List<WalletProfile>> getWallets() async {
-    await _ensureSortOrderInitialized();
     final rows = await WalletIsar.instance.read((isar) {
       return isar.walletProfileEntitys
           .where()
@@ -146,28 +141,6 @@ class WalletManager {
           .findAll();
     });
     return rows.map(_toProfile).toList(growable: false);
-  }
-
-  /// 旧用户首次升级到拖拽排序版的一次性迁移。
-  /// - 通过 SharedPreferences flag 幂等保护，只在首次执行时按 walletIndex
-  ///   升序把 sortOrder 写成 0..N-1，保留旧顺序。
-  /// - 没有钱包也写 flag，避免每次进入都重新检测。
-  Future<void> _ensureSortOrderInitialized() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool(_kSortOrderInitialized) ?? false) {
-      return;
-    }
-    await WalletIsar.instance.writeTxn((isar) async {
-      final wallets =
-          await isar.walletProfileEntitys.where().sortByWalletIndex().findAll();
-      if (wallets.isNotEmpty) {
-        for (var i = 0; i < wallets.length; i++) {
-          wallets[i].sortOrder = i;
-          await isar.walletProfileEntitys.put(wallets[i]);
-        }
-      }
-    });
-    await prefs.setBool(_kSortOrderInitialized, true);
   }
 
   /// 按传入的 walletIndex 顺序写入新的 sortOrder。
@@ -259,6 +232,34 @@ class WalletManager {
     return wallet?.walletIndex;
   }
 
+  /// 「有效热钱包」单源谓词 —— 门控与其他调用方共用同一把尺子。
+  ///
+  /// 四条全过才算有效：
+  /// 1. 是热钱包（冷钱包永不作为身份依据）；
+  /// 2. `accountId` 为规范形式（ADR-040）；
+  /// 3. `ss58Address` 非空且与 `accountId` 派生结果一致；
+  /// 4. 严档种子条目存在（[SecureSeedStore.hasSeed] 静默探测，不弹生物识别）。
+  ///
+  /// 只判 null 是不够的：Isar 属性改名等原因会留下「行还在、身份字段为空」的
+  /// 半残钱包，它能骗过 null 判定进 App，然后下游全部静默降级成「没钱包」。
+  Future<bool> isUsableHotWallet(WalletProfile wallet) async {
+    if (!wallet.isHotWallet) return false;
+    if (!isAccountIdText(wallet.accountId)) return false;
+    if (wallet.ss58Address.isEmpty) return false;
+    if (ss58FromAccountIdText(wallet.accountId) != wallet.ss58Address) {
+      return false;
+    }
+    return _store.hasSeed(wallet.walletIndex);
+  }
+
+  /// 列表中第一个**有效**热钱包；没有则 null。这是账户门禁的唯一依据。
+  Future<WalletProfile?> getValidDefaultWallet() async {
+    for (final wallet in await getWallets()) {
+      if (await isUsableHotWallet(wallet)) return wallet;
+    }
+    return null;
+  }
+
   Future<int?> getActiveWalletIndex() async {
     return WalletIsar.instance.read((isar) async {
       final settings = await isar.walletSettingsEntitys.get(0);
@@ -295,18 +296,18 @@ class WalletManager {
     final derived = _deriveSr25519FromSeed(seed);
 
     final profile = await _appendHotWalletAtomic(
-      address: derived.address,
-      pubkeyHex: derived.pubkeyHex,
+      ss58Address: derived.ss58Address,
+      accountId: derived.accountId,
       seedHex: _toHex(seed),
       source: 'created',
     );
     try {
       await _store.putMnemonic(profile.walletIndex, mnemonic);
-      await _persistContactKeys(profile.address, seed);
+      await _persistContactKeys(profile.accountId, seed);
       await _verifyWalletPersisted(profile);
       // fail-closed：设备子钥注册必须成功，失败连同钱包一起回滚，绝不留"建了没注册"的中间态。
       // 注册成功后才由 runCreateWalletFlow 展示助记词、进入 App。
-      await _registerDeviceSubkey(profile.walletIndex, profile.address, seed);
+      await _registerDeviceSubkey(profile.walletIndex, profile.accountId, seed);
     } catch (_) {
       await _rollbackWalletCreation(profile.walletIndex);
       rethrow;
@@ -327,21 +328,21 @@ class WalletManager {
     final derived = _deriveSr25519FromSeed(seed);
 
     // 检测重复：同一公钥的钱包已存在则拒绝
-    await _checkDuplicatePubkey(derived.pubkeyHex);
+    await _checkDuplicateAccountId(derived.accountId);
 
     final profile = await _appendHotWalletAtomic(
-      address: derived.address,
-      pubkeyHex: derived.pubkeyHex,
+      ss58Address: derived.ss58Address,
+      accountId: derived.accountId,
       seedHex: _toHex(seed),
       source: 'imported',
     );
     try {
       await _store.putMnemonic(profile.walletIndex, trimmed);
-      await _persistContactKeys(profile.address, seed);
+      await _persistContactKeys(profile.accountId, seed);
       await _verifyWalletPersisted(profile);
       // fail-closed：导入一律注册本设备子钥（幂等 upsert），失败连同钱包回滚——导入页保留
       // 助记词供重试。换设备导入必然是本设备新子钥，注册成功即把账户登录迁到本设备。
-      await _registerDeviceSubkey(profile.walletIndex, profile.address, seed);
+      await _registerDeviceSubkey(profile.walletIndex, profile.accountId, seed);
     } catch (_) {
       await _rollbackWalletCreation(profile.walletIndex);
       rethrow;
@@ -351,51 +352,36 @@ class WalletManager {
   }
 
   // 冷钱包导入
-  /// 导入冷钱包：接受 SS58 地址或 0x 开头的 hex 公钥 → 解码公钥 → 只存公钥。
-  Future<WalletProfile> importColdWallet({required String address}) async {
-    final trimmed = address.trim();
+  /// 导入冷钱包：只接受本链 SS58 地址，并只保存公开账户资料。
+  Future<WalletProfile> importColdWallet({required String ss58Address}) async {
+    final trimmed = ss58Address.trim();
     if (trimmed.isEmpty) {
       throw Exception('地址不能为空');
     }
 
-    final List<int> pubkeyBytes;
-    final String ss58Address;
-
-    if (_isHexPubkey(trimmed)) {
-      // 输入的是 hex 公钥（0x 开头或纯 64 位 hex）
-      final hex = trimmed.startsWith('0x') ? trimmed.substring(2) : trimmed;
-      if (hex.length != 64 || !_isValidHex(hex)) {
-        throw Exception('无效的账户地址，公钥应为 64 位十六进制（32 字节）');
-      }
-      pubkeyBytes = List.generate(
-          32, (i) => int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16));
-      ss58Address = Keyring().encodeAddress(pubkeyBytes, _ss58Format);
-    } else {
-      // 输入的是 SS58 地址
-      try {
-        pubkeyBytes = Keyring().decodeAddress(trimmed);
-      } catch (_) {
-        throw Exception('无效的地址格式，请输入 SS58 地址或 0x 开头的账户地址');
-      }
-      // M2: 校验 SS58 前缀 — 用本链前缀重新编码后比较，防止导入其他链的地址
-      final reEncoded = Keyring().encodeAddress(pubkeyBytes, _ss58Format);
-      if (reEncoded != trimmed) {
-        throw Exception(
-          '地址前缀不匹配（本链 SS58 前缀为 $_ss58Format）。'
-          '请确认该地址来自本链，或使用 0x 公钥格式导入',
-        );
-      }
-      ss58Address = trimmed;
+    final List<int> publicKeyBytes;
+    try {
+      publicKeyBytes = Keyring().decodeAddress(trimmed);
+    } catch (_) {
+      throw Exception('无效的 SS58 地址');
+    }
+    // 用本链前缀重新编码并逐字比较，拒绝其他网络和非规范地址。
+    final normalizedSs58Address =
+        Keyring().encodeAddress(publicKeyBytes, _ss58Format);
+    if (normalizedSs58Address != trimmed) {
+      throw Exception(
+        '地址前缀不匹配（本链 SS58 前缀为 $_ss58Format），请确认地址来自本链',
+      );
     }
 
-    final pubkeyHex = _toHex(pubkeyBytes);
+    final accountId = _accountIdFromBytes(publicKeyBytes);
 
     // 检测重复：同一公钥的钱包已存在则拒绝
-    await _checkDuplicatePubkey(pubkeyHex);
+    await _checkDuplicateAccountId(accountId);
 
     final profile = await _appendColdWalletAtomic(
-      address: ss58Address,
-      pubkeyHex: pubkeyHex,
+      ss58Address: normalizedSs58Address,
+      accountId: accountId,
     );
     _bumpWalletsRevision();
     return profile;
@@ -408,7 +394,7 @@ class WalletManager {
     });
     await WalletIsar.instance.writeTxn((isar) async {
       for (final wallet in wallets) {
-        for (final key in _contactCacheKeys(wallet.address)) {
+        for (final key in _contactCacheKeys(wallet.accountId)) {
           await isar.appKvEntitys.deleteByKey(key);
         }
       }
@@ -431,7 +417,7 @@ class WalletManager {
       if (row.signMode == 'local') {
         await _store.deleteSeed(row.walletIndex);
         await _store.deleteMnemonic(row.walletIndex);
-        await _deleteContactKeys(row.address);
+        await _deleteContactKeys(row.accountId);
       }
     }
   }
@@ -457,20 +443,19 @@ class WalletManager {
       }
       // 删除钱包同时终止该钱包在本机的通讯录生命周期；云端密文仍可在用户
       // 重新导入同一助记词后恢复，但本机缓存、待同步操作和状态不得残留。
-      for (final key in _contactCacheKeys(current.address)) {
+      for (final key in _contactCacheKeys(current.accountId)) {
         await isar.appKvEntitys.deleteByKey(key);
       }
       await isar.walletProfileEntitys.delete(current.id);
       // 用户明确删除钱包后，本机交易记录周期结束；再次导入同一地址
       // 会从新的 finalized 区块重新记录，不保留旧本机流水。
-      final pubkey = current.pubkeyHex.toLowerCase().replaceFirst('0x', '');
       await isar.localTxEntitys
           .filter()
-          .walletPubkeyHexEqualTo(pubkey)
+          .accountIdEqualTo(current.accountId)
           .deleteAll();
       await isar.walletTxSyncCursorEntitys
           .filter()
-          .walletPubkeyHexEqualTo(pubkey)
+          .accountIdEqualTo(current.accountId)
           .deleteAll();
 
       final settings = await _getSettingsInTxn(isar);
@@ -492,7 +477,7 @@ class WalletManager {
     if (target.signMode == 'local') {
       await _store.deleteSeed(walletIndex);
       await _store.deleteMnemonic(walletIndex);
-      await _deleteContactKeys(target.address);
+      await _deleteContactKeys(target.accountId);
     }
   }
 
@@ -566,10 +551,10 @@ class WalletManager {
   _DerivedWallet _deriveSr25519FromSeed(List<int> seed) {
     final pair = Keyring.sr25519.fromSeed(Uint8List.fromList(seed));
     pair.ss58Format = _ss58Format;
-    final pubkeyBytes = pair.bytes().toList(growable: false);
-    final pubkeyHex = _toHex(pubkeyBytes);
-    final address = pair.address;
-    return _DerivedWallet(address: address, pubkeyHex: pubkeyHex);
+    final publicKeyBytes = pair.bytes().toList(growable: false);
+    final accountId = _accountIdFromBytes(publicKeyBytes);
+    final ss58Address = pair.address;
+    return _DerivedWallet(ss58Address: ss58Address, accountId: accountId);
   }
   // 签名（seed 绑定硬件，经 SecureSeedStore；seed 不出类）
 
@@ -597,49 +582,49 @@ class WalletManager {
   /// 老钱包第一次进入通讯录时才读取一次硬件金库 seed（触发生物识别）并持久化。
   Future<ContactKeyMaterial> ensureContactKeyMaterial({
     required int walletIndex,
-    required String ownerAccount,
+    required String accountId,
   }) async {
     final profile = await _requireHotWalletProfile(walletIndex);
-    if (profile.address != ownerAccount) {
+    if (profile.accountId != accountId) {
       throw const WalletAuthException('通讯录账户与当前钱包不一致');
     }
-    final stored = await _readContactKeys(ownerAccount);
+    final stored = await _readContactKeys(accountId);
     if (stored != null) return stored;
 
     final seedHex = await _readSeedHexWithSelfHeal(walletIndex, profile);
     final seed = Uint8List.fromList(_hexToBytes(seedHex));
     try {
-      final derived = await _deriveContactKeys(ownerAccount, seed);
-      await _writeContactKeys(ownerAccount, derived);
+      final derived = await _deriveContactKeys(accountId, seed);
+      await _writeContactKeys(accountId, derived);
       return derived;
     } finally {
       seed.fillRange(0, seed.length, 0);
     }
   }
 
-  static String _contactKeyName(String ownerAccount) =>
-      'wallet_contacts_key_v1_$ownerAccount';
+  static String _contactKeyName(String accountId) =>
+      'wallet_contacts_key_v1_$accountId';
 
-  static List<String> _contactCacheKeys(String ownerAccount) => <String>[
-        'contacts:$ownerAccount',
-        'contact_pending_ops:$ownerAccount',
-        'contact_sync_state:$ownerAccount',
+  static List<String> _contactCacheKeys(String accountId) => <String>[
+        'contacts:$accountId',
+        'contact_pending_ops:$accountId',
+        'contact_sync_state:$accountId',
       ];
 
   static Future<void> _persistContactKeys(
-    String ownerAccount,
+    String accountId,
     List<int> seed,
   ) async {
-    final material = await _deriveContactKeys(ownerAccount, seed);
-    await _writeContactKeys(ownerAccount, material);
+    final material = await _deriveContactKeys(accountId, seed);
+    await _writeContactKeys(accountId, material);
   }
 
   static Future<ContactKeyMaterial> _deriveContactKeys(
-    String ownerAccount,
+    String accountId,
     List<int> seed,
   ) async {
-    // 先哈希 owner 形成固定 32 字节 salt，严格对应通讯录密码学契约。
-    final salt = (await Sha256().hash(utf8.encode(ownerAccount))).bytes;
+    // 先哈希 accountId 形成固定 32 字节 salt，严格对应通讯录密码学契约。
+    final salt = (await Sha256().hash(utf8.encode(accountId))).bytes;
     Future<Uint8List> derive(String info) async {
       final key = await Hkdf(
         hmac: Hmac.sha256(),
@@ -659,9 +644,9 @@ class WalletManager {
   }
 
   static Future<ContactKeyMaterial?> _readContactKeys(
-    String ownerAccount,
+    String accountId,
   ) async {
-    final raw = await _contactKeyStore.read(_contactKeyName(ownerAccount));
+    final raw = await _contactKeyStore.read(_contactKeyName(accountId));
     if (raw == null || raw.isEmpty) return null;
     try {
       final bytes = base64Decode(raw);
@@ -676,20 +661,20 @@ class WalletManager {
   }
 
   static Future<void> _writeContactKeys(
-    String ownerAccount,
+    String accountId,
     ContactKeyMaterial material,
   ) {
     final bytes = Uint8List(64)
       ..setAll(0, material.encryptionKey)
       ..setAll(32, material.indexKey);
     return _contactKeyStore.write(
-      _contactKeyName(ownerAccount),
+      _contactKeyName(accountId),
       base64Encode(bytes),
     );
   }
 
-  static Future<void> _deleteContactKeys(String ownerAccount) =>
-      _contactKeyStore.delete(_contactKeyName(ownerAccount));
+  static Future<void> _deleteContactKeys(String accountId) =>
+      _contactKeyStore.delete(_contactKeyName(accountId));
 
   /// 读严档 seed（失效自愈）→ 派生并校验 sr25519 密钥对。
   Future<KeyPair> _loadSigningKey(int walletIndex) async {
@@ -718,7 +703,7 @@ class WalletManager {
     }
   }
 
-  /// 从宽档助记词重派生 seed → 校验 pubkey → 重建严档 key → 返回新 seed hex。
+  /// 从宽档助记词重派生 seed → 校验 publicKey → 重建严档 key → 返回新 seed hex。
   Future<String> _selfHealSeedFromMnemonic(
     int walletIndex,
     WalletProfile profile,
@@ -729,7 +714,7 @@ class WalletManager {
     }
     final seed = await _mnemonicToMiniSecret(mnemonic);
     final derived = _deriveSr25519FromSeed(seed);
-    if (derived.pubkeyHex.toLowerCase() != profile.pubkeyHex.toLowerCase()) {
+    if (derived.accountId != profile.accountId) {
       throw const WalletAuthException('助记词与当前钱包不一致，无法恢复');
     }
     final seedHex = _toHex(seed);
@@ -746,8 +731,9 @@ class WalletManager {
       // 立即把本地 seed 副本清零，缩短明文私钥材料在内存中的存活窗口。
       final pair = Keyring.sr25519.fromSeed(seedBytes);
       pair.ss58Format = profile.ss58;
-      final localPubkeyHex = _toHex(pair.bytes().toList(growable: false));
-      if (localPubkeyHex.toLowerCase() != profile.pubkeyHex.toLowerCase()) {
+      final localAccountId =
+          _accountIdFromBytes(pair.bytes().toList(growable: false));
+      if (localAccountId != profile.accountId) {
         throw const WalletAuthException('本地签名密钥与当前钱包不一致，请重新导入钱包');
       }
       return pair;
@@ -782,7 +768,7 @@ class WalletManager {
   /// 连同钱包一起回滚——绝不留"建了钱包却没注册"的中间态。registrar 未接线（测试）时跳过。
   Future<void> _registerDeviceSubkey(
     int walletIndex,
-    String address,
+    String accountId,
     List<int> seed,
   ) async {
     final registrar = _subkeyRegistrar;
@@ -791,7 +777,7 @@ class WalletManager {
     }
     await registrar(
       walletIndex: walletIndex,
-      ownerAccount: address,
+      accountId: accountId,
       signBinding: (message) async {
         final pair = Keyring.sr25519.fromSeed(Uint8List.fromList(seed));
         pair.ss58Format = _ss58Format;
@@ -813,14 +799,14 @@ class WalletManager {
   }
 
   // 内部工具
-  /// 检查公钥是否已存在，重复则抛出异常。
-  Future<void> _checkDuplicatePubkey(String pubkeyHex) async {
-    final normalized = pubkeyHex.toLowerCase();
+  /// 检查账户 ID 是否已存在，重复则抛出异常。
+  Future<void> _checkDuplicateAccountId(String accountId) async {
+    final normalized = _normalizeAccountId(accountId);
     final rows = await WalletIsar.instance.read((isar) {
       return isar.walletProfileEntitys.where().findAll();
     });
     for (final row in rows) {
-      if (row.pubkeyHex.toLowerCase() == normalized) {
+      if (row.accountId == normalized) {
         throw Exception('该钱包已存在（${row.walletName}），无需重复导入');
       }
     }
@@ -829,8 +815,8 @@ class WalletManager {
   /// 原子化创建热钱包：在同一个事务中分配 walletIndex 并写入数据库，
   /// 事务成功后再写 secure storage，避免并发时 index 冲突或密钥覆盖。
   Future<WalletProfile> _appendHotWalletAtomic({
-    required String address,
-    required String pubkeyHex,
+    required String ss58Address,
+    required String accountId,
     required String seedHex,
     required String source,
   }) async {
@@ -844,6 +830,11 @@ class WalletManager {
       while (used.contains(walletIndex)) {
         walletIndex++;
       }
+      final sortOrder = rows.fold<int>(
+            -1,
+            (maximum, row) => row.sortOrder > maximum ? row.sortOrder : maximum,
+          ) +
+          1;
       createdAtMillis = DateTime.now().millisecondsSinceEpoch;
 
       final entity = WalletProfileEntity()
@@ -851,13 +842,14 @@ class WalletManager {
         ..walletName = _defaultWalletName(walletIndex)
         ..walletIcon = _defaultWalletIcon()
         ..balance = 0
-        ..address = address
-        ..pubkeyHex = pubkeyHex
+        ..ss58Address = ss58Address
+        ..accountId = _normalizeAccountId(accountId)
         ..alg = 'sr25519'
         ..ss58 = _ss58Format
         ..createdAtMillis = createdAtMillis
         ..source = source
-        ..signMode = 'local';
+        ..signMode = 'local'
+        ..sortOrder = sortOrder;
       await isar.walletProfileEntitys.put(entity);
 
       final settings = await _getSettingsInTxn(isar);
@@ -871,8 +863,8 @@ class WalletManager {
       walletName: _defaultWalletName(walletIndex),
       walletIcon: _defaultWalletIcon(),
       balance: 0,
-      address: address,
-      pubkeyHex: pubkeyHex,
+      ss58Address: ss58Address,
+      accountId: _normalizeAccountId(accountId),
       alg: 'sr25519',
       ss58: _ss58Format,
       createdAtMillis: createdAtMillis,
@@ -891,8 +883,8 @@ class WalletManager {
 
   /// 原子化创建冷钱包：在同一个事务中分配 walletIndex 并写入数据库。
   Future<WalletProfile> _appendColdWalletAtomic({
-    required String address,
-    required String pubkeyHex,
+    required String ss58Address,
+    required String accountId,
   }) async {
     late int walletIndex;
     late int createdAtMillis;
@@ -904,6 +896,11 @@ class WalletManager {
       while (used.contains(walletIndex)) {
         walletIndex++;
       }
+      final sortOrder = rows.fold<int>(
+            -1,
+            (maximum, row) => row.sortOrder > maximum ? row.sortOrder : maximum,
+          ) +
+          1;
       createdAtMillis = DateTime.now().millisecondsSinceEpoch;
 
       final entity = WalletProfileEntity()
@@ -911,13 +908,14 @@ class WalletManager {
         ..walletName = _defaultWalletName(walletIndex)
         ..walletIcon = _defaultWalletIcon()
         ..balance = 0
-        ..address = address
-        ..pubkeyHex = pubkeyHex
+        ..ss58Address = ss58Address
+        ..accountId = _normalizeAccountId(accountId)
         ..alg = 'sr25519'
         ..ss58 = _ss58Format
         ..createdAtMillis = createdAtMillis
         ..source = 'imported'
-        ..signMode = 'external';
+        ..signMode = 'external'
+        ..sortOrder = sortOrder;
       await isar.walletProfileEntitys.put(entity);
 
       final settings = await _getSettingsInTxn(isar);
@@ -931,8 +929,8 @@ class WalletManager {
       walletName: _defaultWalletName(walletIndex),
       walletIcon: _defaultWalletIcon(),
       balance: 0,
-      address: address,
-      pubkeyHex: pubkeyHex,
+      ss58Address: ss58Address,
+      accountId: _normalizeAccountId(accountId),
       alg: 'sr25519',
       ss58: _ss58Format,
       createdAtMillis: createdAtMillis,
@@ -977,8 +975,7 @@ class WalletManager {
   /// 钱包索引没有真正落库；失败时上层会回滚并提示用户重试。
   Future<void> _verifyWalletPersisted(WalletProfile profile) async {
     final persisted = await getWalletByIndex(profile.walletIndex);
-    if (persisted == null ||
-        persisted.pubkeyHex.toLowerCase() != profile.pubkeyHex.toLowerCase()) {
+    if (persisted == null || persisted.accountId != profile.accountId) {
       throw Exception('钱包写入后校验失败，请重试');
     }
     // seed / 助记词已由 SecureSeedStore 写入并隐式校验（putSeed/putMnemonic
@@ -986,14 +983,14 @@ class WalletManager {
   }
 
   Future<void> _rollbackWalletCreation(int walletIndex) async {
-    String? ownerAccount;
+    String? accountId;
     await WalletIsar.instance.writeTxn((isar) async {
       final row = await isar.walletProfileEntitys
           .filter()
           .walletIndexEqualTo(walletIndex)
           .findFirst();
       if (row != null) {
-        ownerAccount = row.address;
+        accountId = row.accountId;
         await isar.walletProfileEntitys.delete(row.id);
       }
       final settings = await _getSettingsInTxn(isar);
@@ -1008,8 +1005,8 @@ class WalletManager {
         await isar.walletSettingsEntitys.put(settings);
       }
     });
-    if (ownerAccount != null) {
-      await _deleteContactKeys(ownerAccount!);
+    if (accountId != null) {
+      await _deleteContactKeys(accountId!);
     }
     await _store.deleteSeed(walletIndex);
     await _store.deleteMnemonic(walletIndex);
@@ -1026,17 +1023,23 @@ class WalletManager {
     return buf.toString();
   }
 
-  /// 判断输入是否为 hex 公钥格式（0x 开头或纯 64 位 hex）。
-  bool _isHexPubkey(String input) {
-    if (input.startsWith('0x') || input.startsWith('0X')) return true;
-    // 纯 64 位 hex 也视为公钥
-    if (input.length == 64 && _isValidHex(input)) return true;
-    return false;
+  String _accountIdFromBytes(List<int> bytes) {
+    if (bytes.length != 32) {
+      throw ArgumentError.value(
+          bytes.length, 'bytes.length', '账户 ID 必须是 32 字节');
+    }
+    return '0x${_toHex(bytes)}';
   }
 
-  bool _isValidHex(String hex) {
-    final regex = RegExp(r'^[0-9a-fA-F]+$');
-    return regex.hasMatch(hex);
+  String _normalizeAccountId(String value) {
+    if (!isAccountIdText(value)) {
+      throw ArgumentError.value(
+        value,
+        'accountId',
+        '账户 ID 必须是小写 0x 加 64 位十六进制',
+      );
+    }
+    return value;
   }
 
   String _defaultWalletName(int walletIndex) {
@@ -1053,8 +1056,8 @@ class WalletManager {
       walletName: row.walletName,
       walletIcon: row.walletIcon,
       balance: row.balance,
-      address: row.address,
-      pubkeyHex: row.pubkeyHex,
+      ss58Address: row.ss58Address,
+      accountId: row.accountId,
       alg: row.alg,
       ss58: row.ss58,
       createdAtMillis: row.createdAtMillis,
@@ -1067,10 +1070,10 @@ class WalletManager {
 
 class _DerivedWallet {
   const _DerivedWallet({
-    required this.address,
-    required this.pubkeyHex,
+    required this.ss58Address,
+    required this.accountId,
   });
 
-  final String address;
-  final String pubkeyHex;
+  final String ss58Address;
+  final String accountId;
 }

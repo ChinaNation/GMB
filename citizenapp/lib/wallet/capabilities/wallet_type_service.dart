@@ -1,4 +1,5 @@
 import 'package:isar_community/isar.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/citizen/shared/admin_accounts_scan_service.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 import 'package:citizenapp/isar/app_isar.dart';
@@ -22,8 +23,8 @@ class WalletLabelService {
   Map<String, String>? _memoryAdminGroupMap;
   int? _memoryUpdatedAt;
 
-  Future<String> resolveWalletLabel(String pubkeyHex) async {
-    final normalized = _normalizePubkeyHex(pubkeyHex);
+  Future<String> resolveWalletLabel(String accountId) async {
+    final normalized = _requireAccountId(accountId);
     if (normalized == null) {
       return defaultType;
     }
@@ -55,7 +56,7 @@ class WalletLabelService {
     for (final account in scan.accounts) {
       final label = InstitutionCodeLabel.codeLabel(account.institutionCode);
       for (final admin in account.admins) {
-        final normalized = _normalizePubkeyHex(admin.admin_account);
+        final normalized = _requireAccountId(admin.account_id);
         if (normalized != null) {
           labelsByAdmin.putIfAbsent(normalized, () => <String>{}).add(label);
         }
@@ -73,7 +74,7 @@ class WalletLabelService {
         final rows = next.entries
             .map(
               (entry) => AdminGroupCacheEntity()
-                ..pubkeyHex = entry.key
+                ..accountId = entry.key
                 ..adminGroupName = entry.value
                 ..updatedAt = now,
             )
@@ -118,7 +119,7 @@ class WalletLabelService {
     });
     final out = <String, String>{};
     for (final row in rows) {
-      out[row.pubkeyHex] = row.adminGroupName;
+      out[row.accountId] = row.adminGroupName;
     }
     _memoryAdminGroupMap = out;
     return out;
@@ -137,15 +138,7 @@ class WalletLabelService {
     return _memoryUpdatedAt;
   }
 
-  String? _normalizePubkeyHex(String input) {
-    var v = input.trim().toLowerCase();
-    if (v.startsWith('0x')) {
-      v = v.substring(2);
-    }
-    final ok = RegExp(r'^[0-9a-f]{64}$').hasMatch(v);
-    if (!ok) {
-      return null;
-    }
-    return v;
+  String? _requireAccountId(String accountId) {
+    return isAccountIdText(accountId) ? accountId : null;
   }
 }

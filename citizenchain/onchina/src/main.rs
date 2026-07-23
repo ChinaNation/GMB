@@ -29,7 +29,7 @@ mod workspace;
 pub(crate) use crate::core::db::Db;
 pub(crate) use crate::core::http_security::*;
 pub(crate) use crate::core::response::*;
-pub(crate) use auth::login::{parse_sr25519_pubkey, parse_sr25519_pubkey_bytes, require_admin_any};
+pub(crate) use auth::login::{parse_account_id_bytes, require_admin_any};
 pub(crate) use auth::model::*;
 pub(crate) use cid::model::*;
 pub(crate) use domains::citizens::model::*;
@@ -165,7 +165,11 @@ fn citizen_row_from_record(record: &CitizenRecord) -> CitizenRow {
         given_name: record.given_name.clone(),
         citizen_sex: record.citizen_sex.clone(),
         citizen_birth_date: record.citizen_birth_date.clone(),
-        wallet_address: record.wallet_address.clone(),
+        account_id: record.account_id.clone(),
+        ss58_address: record
+            .account_id
+            .as_deref()
+            .and_then(crate::crypto::pubkey::account_id_to_ss58),
         citizen_status: record.citizen_status.clone(),
         voting_eligible: record.voting_eligible,
         vote_status: record.computed_vote_status(),
@@ -205,9 +209,9 @@ fn stable_institution_cursor_id(cid_number: &str) -> i64 {
 fn institution_row_from_record(
     inst: &crate::institution::subjects::Institution,
     account_count: usize,
-    created_by_family_name: Option<String>,
-    created_by_given_name: Option<String>,
-    created_by_role: Option<String>,
+    creator_family_name: Option<String>,
+    creator_given_name: Option<String>,
+    creator_institution_code: Option<String>,
 ) -> crate::institution::subjects::InstitutionListRow {
     crate::institution::subjects::InstitutionListRow {
         cid_number: inst.cid_number.clone(),
@@ -226,9 +230,9 @@ fn institution_row_from_record(
         parent_cid_number: inst.parent_cid_number.clone(),
         account_count,
         created_at: inst.created_at,
-        created_by_family_name,
-        created_by_given_name,
-        created_by_role,
+        creator_family_name,
+        creator_given_name,
+        creator_institution_code,
     }
 }
 
@@ -239,9 +243,9 @@ fn institution_row_from_pg_row(
     let category = institution_category_from_text(category_text.as_str())
         .ok_or_else(|| format!("invalid institution category: {category_text}"))?;
     let account_count_i64: i64 = row.get(15);
-    let created_by_family_name: Option<String> = row.get(16);
-    let created_by_given_name: Option<String> = row.get(17);
-    let created_by_role: Option<String> = row.get(18);
+    let creator_family_name: Option<String> = row.get(16);
+    let creator_given_name: Option<String> = row.get(17);
+    let creator_institution_code: Option<String> = row.get(18);
     let cid_full_name: Option<String> = row.get(19);
     let cid_short_name: Option<String> = row.get(20);
     let town_code: Option<String> = row.get(22);
@@ -278,15 +282,15 @@ fn institution_row_from_pg_row(
         legal_representative_photo_name: None,
         legal_representative_photo_mime: None,
         legal_representative_photo_size: None,
-        created_by: row.get(13),
+        creator_account_id: row.get(13),
         created_at: row.get(14),
     };
     let item = institution_row_from_record(
         &inst,
         usize::try_from(account_count_i64).unwrap_or(0),
-        created_by_family_name,
-        created_by_given_name,
-        created_by_role,
+        creator_family_name,
+        creator_given_name,
+        creator_institution_code,
     );
     Ok(item)
 }
@@ -337,12 +341,12 @@ fn institution_from_subject_row(
             row.get::<_, Option<String>>(22),
             row.get::<_, Option<String>>(27),
         ) {
-            (Some(family_name), Some(given_name), Some(cid_number), Some(account)) => {
+            (Some(family_name), Some(given_name), Some(cid_number), Some(account_id)) => {
                 Some(crate::institution::subjects::model::LegalRepresentative {
                     family_name,
                     given_name,
                     cid_number,
-                    account,
+                    account_id,
                 })
             }
             (None, None, None, None) => None,
@@ -353,7 +357,7 @@ fn institution_from_subject_row(
         legal_representative_photo_mime: row.get(25),
         legal_representative_photo_size: legal_representative_photo_size_i64
             .and_then(|v| u64::try_from(v).ok()),
-        created_by: row.get(13),
+        creator_account_id: row.get(13),
         created_at: row.get(14),
     })
 }
@@ -478,13 +482,13 @@ impl Db {
                             s.p1, ''::text AS province_name,
                             ''::text AS city_name, s.province_code, s.city_code, s.institution_code,
                             s.private_type, s.partnership_kind, s.has_legal_personality,
-                            s.parent_cid_number, s.created_by, s.created_at,
+                            s.parent_cid_number, s.creator_account_id, s.created_at,
                             s.cid_full_name, s.cid_short_name,
                             ''::text AS town_name, COALESCE(s.town_code, ''),
                             s.education_type, s.family_name, s.given_name, s.legal_representative_cid_number,
 	                            s.legal_representative_photo_path, s.legal_representative_photo_name,
 	                            s.legal_representative_photo_mime, s.legal_representative_photo_size,
-	                            s.legal_representative_account
+	                            s.legal_representative_account_id
 		                     FROM subjects s
 		                     LEFT JOIN gov g ON g.province_code = s.province_code AND g.cid_number = s.cid_number
 	                     WHERE s.kind IN ('PUBLIC', 'PRIVATE') AND s.cid_number = $1
@@ -498,7 +502,7 @@ impl Db {
             let inst = institution_from_subject_row(&row)?;
             let account_rows = conn
                 .query(
-                    "SELECT cid_number, account_name, account, created_at
+                    "SELECT cid_number, account_name, account_id, created_at
                      FROM accounts
                      WHERE cid_number = $1
                      ORDER BY account_name ASC",
@@ -510,8 +514,8 @@ impl Db {
                 accounts.push(crate::institution::subjects::InstitutionAccount {
                     cid_number: row.get(0),
                     account_name: row.get(1),
-                    account: row.get(2),
-                    created_by: String::new(),
+                    account_id: row.get(2),
+                    creator_account_id: None,
                     created_at: row.get(3),
                 });
             }
@@ -587,16 +591,14 @@ impl Db {
             "INSERT INTO citizens (
                 cid_number, passport_no, family_name, given_name,
                 citizen_sex, citizen_birth_date, province_code, city_code, id,
-                wallet_pubkey, wallet_address, wallet_sig_alg,
-                wallet_verified_at, citizen_status, voting_eligible, passport_valid_from,
+                account_id, account_verified_at, citizen_status, voting_eligible, passport_valid_from,
                 passport_valid_until, status_updated_at, town_code, birth_province_code, birth_city_code,
                 birth_town_code, archive_hash, onchain_tx_hash, onchain_block_number, onchain_at,
-                created_by, created_at, updated_by, updated_at
+                creator_account_id, created_at, updater_account_id, updated_at
              ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                 $11, $12, $13, $14, $15, $16, $17, $18, $19,
-                $20, $21, $22, $23, $24, $25, $26, $27, $28,
-                $29, $30
+                $20, $21, $22, $23, $24, $25, $26, $27, $28
              )
              ON CONFLICT (province_code, cid_number) DO UPDATE SET
                 passport_no = EXCLUDED.passport_no,
@@ -606,10 +608,8 @@ impl Db {
                 citizen_birth_date = EXCLUDED.citizen_birth_date,
                 city_code = EXCLUDED.city_code,
                 id = EXCLUDED.id,
-                wallet_pubkey = EXCLUDED.wallet_pubkey,
-                wallet_address = EXCLUDED.wallet_address,
-                wallet_sig_alg = EXCLUDED.wallet_sig_alg,
-                wallet_verified_at = EXCLUDED.wallet_verified_at,
+                account_id = EXCLUDED.account_id,
+                account_verified_at = EXCLUDED.account_verified_at,
                 citizen_status = EXCLUDED.citizen_status,
                 voting_eligible = EXCLUDED.voting_eligible,
                 passport_valid_from = EXCLUDED.passport_valid_from,
@@ -623,7 +623,7 @@ impl Db {
                 onchain_tx_hash = EXCLUDED.onchain_tx_hash,
                 onchain_block_number = EXCLUDED.onchain_block_number,
                 onchain_at = EXCLUDED.onchain_at,
-                updated_by = EXCLUDED.updated_by,
+                updater_account_id = EXCLUDED.updater_account_id,
                 updated_at = EXCLUDED.updated_at",
             &[
                 &cid_number,
@@ -635,10 +635,8 @@ impl Db {
                 &province_code,
                 &city_code,
                 &id,
-                &record.wallet_pubkey,
-                &record.wallet_address,
-                &record.wallet_sig_alg,
-                &record.wallet_verified_at,
+                &record.account_id,
+                &record.account_verified_at,
                 &citizen_status,
                 &record.voting_eligible,
                 &record.passport_valid_from,
@@ -652,9 +650,9 @@ impl Db {
                 &record.onchain_tx_hash,
                 &record.onchain_block_number,
                 &record.onchain_at,
-                &record.created_by,
+                &record.creator_account_id,
                 &record.created_at,
-                &record.updated_by,
+                &record.updater_account_id,
                 &record.updated_at,
             ],
         )
@@ -747,13 +745,13 @@ impl Db {
                 .query(
                     "SELECT COALESCE(c.id, 0), c.cid_number, c.passport_no, c.family_name,
                                     c.given_name, c.citizen_sex, c.citizen_birth_date,
-                                    c.wallet_pubkey, c.wallet_address,
-                                    c.wallet_sig_alg, c.wallet_verified_at, c.citizen_status, c.voting_eligible,
+                                    c.account_id, c.account_verified_at,
+                                    c.citizen_status, c.voting_eligible,
                                     c.passport_valid_from, c.passport_valid_until, c.status_updated_at,
                                     c.province_code, c.city_code, c.town_code,
                                     c.birth_province_code, c.birth_city_code, c.birth_town_code,
                                     c.archive_hash, c.onchain_tx_hash, c.onchain_block_number, c.onchain_at,
-                                    c.created_by, c.created_at, c.updated_by, c.updated_at
+                                    c.creator_account_id, c.created_at, c.updater_account_id, c.updated_at
                              FROM citizens c
                              JOIN subjects s
                                ON s.province_code = c.province_code
@@ -769,8 +767,7 @@ impl Db {
                                     OR c.family_name || c.given_name = $3
                                     OR c.family_name = $3
                                     OR c.given_name = $3
-                                    OR (c.wallet_pubkey IS NOT NULL AND lower(c.wallet_pubkey) = lower($3))
-                                    OR (c.wallet_address IS NOT NULL AND lower(c.wallet_address) = lower($3))
+                                    OR c.account_id = $3
                                )
                                AND (
                                     $4::timestamptz IS NULL
@@ -792,7 +789,7 @@ impl Db {
             let mut output = Vec::with_capacity(rows.len());
             for row in rows {
                 let id_i64: i64 = row.get(0);
-                let created_at: DateTime<Utc> = row.get(29);
+                let created_at: DateTime<Utc> = row.get(25);
                 let record = crate::domains::citizens::admin_entry::citizen_record_from_row(&row);
                 output.push((citizen_row_from_record(&record), created_at, id_i64));
             }
@@ -822,10 +819,10 @@ impl Db {
         self.with_client(move |conn| {
             let row = conn
                 .query_opt(
-                    "SELECT wallet_pubkey FROM citizens
+                    "SELECT account_id FROM citizens
                      WHERE cid_number = $1
                        AND citizen_status = 'NORMAL'
-                       AND NULLIF(BTRIM(wallet_pubkey), '') IS NOT NULL
+                       AND account_id IS NOT NULL
                        AND ($2::text IS NULL OR province_code = $2)
                        AND ($3::text IS NULL OR city_code = $3)
                      LIMIT 1",
@@ -911,9 +908,9 @@ impl Db {
                 province_code, city_code, town_code, institution_code,
                 education_type, private_type, partnership_kind, has_legal_personality,
                 parent_cid_number, family_name, given_name, legal_representative_cid_number,
-                legal_representative_account,
+                legal_representative_account_id,
                 legal_representative_photo_path, legal_representative_photo_name, legal_representative_photo_mime,
-                legal_representative_photo_size, created_by, created_at, updated_at
+                legal_representative_photo_size, creator_account_id, created_at, updated_at
              ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                 $11, $12, $13, $14, $15, $16, $17, $18,
@@ -937,12 +934,12 @@ impl Db {
                 family_name = EXCLUDED.family_name,
                 given_name = EXCLUDED.given_name,
                 legal_representative_cid_number = EXCLUDED.legal_representative_cid_number,
-                legal_representative_account = EXCLUDED.legal_representative_account,
+                legal_representative_account_id = EXCLUDED.legal_representative_account_id,
                 legal_representative_photo_path = EXCLUDED.legal_representative_photo_path,
                 legal_representative_photo_name = EXCLUDED.legal_representative_photo_name,
                 legal_representative_photo_mime = EXCLUDED.legal_representative_photo_mime,
                 legal_representative_photo_size = EXCLUDED.legal_representative_photo_size,
-                created_by = EXCLUDED.created_by,
+                creator_account_id = EXCLUDED.creator_account_id,
                 updated_at = now()",
             &[
                 &inst.cid_number,
@@ -963,12 +960,12 @@ impl Db {
                 &inst.legal_representative.as_ref().map(|value| value.family_name.as_str()),
                 &inst.legal_representative.as_ref().map(|value| value.given_name.as_str()),
                 &inst.legal_representative.as_ref().map(|value| value.cid_number.as_str()),
-                &inst.legal_representative.as_ref().map(|value| value.account.as_str()),
+                &inst.legal_representative.as_ref().map(|value| value.account_id.as_str()),
                 &inst.legal_representative_photo_path,
                 &inst.legal_representative_photo_name,
                 &inst.legal_representative_photo_mime,
                 &legal_representative_photo_size,
-                &inst.created_by,
+                &inst.creator_account_id,
                 &inst.created_at,
             ],
         )
@@ -1402,7 +1399,7 @@ impl Db {
 			                                    s.p1, ''::text AS province_name,
 			                                    ''::text AS city_name, s.province_code, s.city_code, s.institution_code,
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
-				                                    s.parent_cid_number, s.created_by, s.created_at,
+				                                    s.parent_cid_number, s.creator_account_id, s.created_at,
 				                                    COALESCE(ac.account_count, 0),
 				                                    a.family_name, a.given_name, a.institution_code, s.cid_full_name, s.cid_short_name,
 				                                    ''::text AS town_name, COALESCE(s.town_code, ''),
@@ -1417,7 +1414,7 @@ impl Db {
 	                                  AND ($2::text IS NULL OR city_code = $2)
 	                                GROUP BY province_code, cid_number
 	                             ) ac ON ac.province_code = s.province_code AND ac.cid_number = s.cid_number
-	                             LEFT JOIN admins a ON lower(a.admin_account) = lower(s.created_by)
+	                             LEFT JOIN admins a ON a.account_id = s.creator_account_id
 	                             WHERE s.kind IN ('PUBLIC', 'PRIVATE')
 	                               {filter_clause}
 	                               AND ($6::text IS NULL OR s.private_type = $6)
@@ -1482,7 +1479,7 @@ impl Db {
                                     s.p1, ''::text AS province_name,
                                     ''::text AS city_name, s.province_code, s.city_code, s.institution_code,
                                     s.private_type, s.partnership_kind, s.has_legal_personality,
-                                    s.parent_cid_number, s.created_by, s.created_at,
+                                    s.parent_cid_number, s.creator_account_id, s.created_at,
                                     COALESCE(ac.account_count, 0),
                                     a.family_name, a.given_name, a.institution_code, s.cid_full_name, s.cid_short_name,
                                     ''::text AS town_name, COALESCE(s.town_code, ''),
@@ -1494,7 +1491,7 @@ impl Db {
                         FROM accounts
                         GROUP BY cid_number
                      ) ac ON ac.cid_number = s.cid_number
-                     LEFT JOIN admins a ON lower(a.admin_account) = lower(s.created_by)
+                     LEFT JOIN admins a ON a.account_id = s.creator_account_id
                      WHERE s.kind = 'PUBLIC'
 		                       AND g.source = 'CHAIN'
 		                       AND s.institution_code IN ('NED', 'CEDU', 'GUN', 'GSCH')
@@ -1546,7 +1543,7 @@ impl Db {
 			                                    s.p1, ''::text AS province_name,
 			                                    ''::text AS city_name, s.province_code, s.city_code, s.institution_code,
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
-				                                    s.parent_cid_number, s.created_by, s.created_at,
+				                                    s.parent_cid_number, s.creator_account_id, s.created_at,
 			                                    COALESCE(ac.account_count, 0),
 			                                    a.family_name, a.given_name, a.institution_code, s.cid_full_name, s.cid_short_name,
 			                                    ''::text AS town_name, COALESCE(s.town_code, ''),
@@ -1561,7 +1558,7 @@ impl Db {
 	                                  AND ($2::text IS NULL OR city_code = $2)
 	                                GROUP BY province_code, cid_number
 	                             ) ac ON ac.province_code = s.province_code AND ac.cid_number = s.cid_number
-	                             LEFT JOIN admins a ON lower(a.admin_account) = lower(s.created_by)
+	                             LEFT JOIN admins a ON a.account_id = s.creator_account_id
 	                             WHERE s.kind IN ('PUBLIC', 'PRIVATE')
 			                               AND (
 			                                    (s.category = 'GOV_INSTITUTION'
@@ -1953,7 +1950,7 @@ fn main() {
     disable_core_dumps();
     let command = parse_backend_command();
 
-    // OnChina 后端不再持有任何链上签名钥:机构操作全部由发起管理员钱包直接冷签,
+    // OnChina 后端不再持有任何链上签名钥:机构操作全部由发起管理员使用签名钱包直接冷签,
     // 鉴权真源是链上 Active 管理员集合。原平台签名钥 `ONCHINA_SIGNING_SEED_HEX`
     // (仅用于签发注销凭证)已随注销凭证链路整体删除。
     // (Card 05):桌面/小市内嵌私有 PostgreSQL——onchina 自管 initdb/起停,
@@ -2043,18 +2040,6 @@ fn main() {
                 get(auth::login::admin_auth_check),
             )
             .route("/api/v1/admin/auth/logout", post(auth::login::admin_logout))
-            .route(
-                "/api/v1/admin/auth/identify",
-                post(auth::login::admin_auth_identify),
-            )
-            .route(
-                "/api/v1/admin/auth/challenge",
-                post(auth::login::admin_auth_challenge),
-            )
-            .route(
-                "/api/v1/admin/auth/verify",
-                post(auth::login::admin_auth_verify),
-            )
             .route(
                 "/api/v1/admin/auth/qr/sign-request",
                 post(auth::login::admin_auth_qr_sign_request),
@@ -2380,8 +2365,8 @@ fn main() {
             )
             // ── 钱包交易索引(CitizenApp 自有,与链交互无关) ──
             .route(
-                "/api/v1/app/wallet/:address/transactions",
-                get(indexer::api::wallet_transactions),
+                "/api/v1/app/accounts/:account_id/transactions",
+                get(indexer::api::account_transactions),
             )
             // ── 机构信息查询(链端/钱包 pull):机构搜索 / 详情 / 账户列表 ──
             .route(
@@ -2574,30 +2559,19 @@ fn onchina_error_code(status: StatusCode, message: &str) -> &'static str {
         "access token expired" => "ONCHINA_AUTH_ACCESS_TOKEN_EXPIRED",
         "admin disabled" => "ONCHINA_AUTH_ADMIN_DISABLED",
         "permission denied" => "ONCHINA_AUTH_PERMISSION_DENIED",
-        "identity_qr is required" => "ONCHINA_LOGIN_IDENTITY_QR_REQUIRED",
-        "admin_account is required" => "ONCHINA_LOGIN_ADMIN_ACCOUNT_REQUIRED",
         "origin is required" => "ONCHINA_LOGIN_ORIGIN_REQUIRED",
         "session_id is required" => "ONCHINA_LOGIN_SESSION_REQUIRED",
         "domain is required" => "ONCHINA_LOGIN_DOMAIN_REQUIRED",
-        "challenge_id, origin, session_id, nonce, signature are required" => {
+        "challenge_id, signer_public_key, signature are required" => {
             "ONCHINA_LOGIN_REQUEST_INVALID"
         }
-        "challenge_id, admin_account, signature are required" => "ONCHINA_LOGIN_REQUEST_INVALID",
         "challenge_id and session_id are required" => "ONCHINA_LOGIN_RESULT_PARAM_REQUIRED",
-        "admin not found" => "ONCHINA_LOGIN_ADMIN_NOT_FOUND",
-        "admin province scope missing" => "ONCHINA_LOGIN_ADMIN_SCOPE_MISSING",
         "sign request not found" => "ONCHINA_LOGIN_CHALLENGE_NOT_FOUND",
         "sign request already consumed" => "ONCHINA_LOGIN_CHALLENGE_CONSUMED",
         "sign request session mismatch" => "ONCHINA_LOGIN_SESSION_MISMATCH",
         "sign request expired" => "ONCHINA_LOGIN_CHALLENGE_EXPIRED",
-        "signer_pubkey must match admin_account" => "ONCHINA_LOGIN_SIGNER_MISMATCH",
+        "signer_public_key must match targeted account_id" => "ONCHINA_LOGIN_SIGNER_MISMATCH",
         "login signature verify failed" => "ONCHINA_LOGIN_SIGNATURE_VERIFY_FAILED",
-        "challenge not found" | "challenge not found or expired" => {
-            "ONCHINA_LOGIN_CHALLENGE_NOT_FOUND"
-        }
-        "challenge already consumed" => "ONCHINA_LOGIN_CHALLENGE_CONSUMED",
-        "challenge expired" => "ONCHINA_LOGIN_CHALLENGE_EXPIRED",
-        "challenge context mismatch" => "ONCHINA_LOGIN_CONTEXT_MISMATCH",
         "chain unreachable" => "ONCHINA_LOGIN_CHAIN_UNREACHABLE",
         "desktop governance institution is not supported by OnChina" => {
             "ONCHINA_LOGIN_DESKTOP_GOVERNANCE_UNSUPPORTED"
@@ -2625,15 +2599,15 @@ fn onchina_error_code(status: StatusCode, message: &str) -> &'static str {
             "ONCHINA_LOGIN_NODE_BINDING_ADMIN_MISMATCH"
         }
         "login persist failed" => "ONCHINA_LOGIN_PERSIST_FAILED",
-        "challenge wallet mismatch" => "ONCHINA_BIND_WALLET_MISMATCH",
+        "challenge account_id mismatch" => "ONCHINA_BIND_ACCOUNT_ID_MISMATCH",
         "signature verify failed" => "ONCHINA_BIND_SIGNATURE_VERIFY_FAILED",
         "当前注册局缺少机构主账户绑定" => "ONCHINA_REGISTRY_MAIN_ACCOUNT_MISSING",
         "onchina ca certificate unavailable" => "ONCHINA_TLS_CA_UNAVAILABLE",
-        "admin admin_account already exists as federal admin" => {
-            "ONCHINA_ADMIN_ACCOUNT_EXISTS_AS_FEDERAL_REGISTRY"
+        "admin account_id already exists as federal admin" => {
+            "ONCHINA_ACCOUNT_ID_EXISTS_AS_FEDERAL_REGISTRY_ADMIN"
         }
-        "admin admin_account already exists as city admin" => {
-            "ONCHINA_ADMIN_ACCOUNT_EXISTS_AS_CITY_REGISTRY"
+        "admin account_id already exists as city admin" => {
+            "ONCHINA_ACCOUNT_ID_EXISTS_AS_CITY_REGISTRY_ADMIN"
         }
         "city admin city limit reached" => "ONCHINA_ADMIN_CITY_REGISTRY_CITY_LIMIT_REACHED",
         "not an on-chain admin" => "ONCHINA_LOGIN_ADMIN_NOT_ONCHAIN",
@@ -2641,10 +2615,8 @@ fn onchina_error_code(status: StatusCode, message: &str) -> &'static str {
         _ if message.starts_with("insert qr sign request failed") => {
             "ONCHINA_LOGIN_CHALLENGE_CREATE_FAILED"
         }
-        _ if message.starts_with("query admin failed") => "ONCHINA_LOGIN_ADMIN_QUERY_FAILED",
-        _ if message.starts_with("query admin scope failed") => "ONCHINA_LOGIN_ADMIN_QUERY_FAILED",
-        _ if message.starts_with("build login qr signature failed") => {
-            "ONCHINA_LOGIN_SYSTEM_SIGN_FAILED"
+        _ if message.starts_with("identity_qr must be a complete QR_V1 user_contact code") => {
+            "ONCHINA_LOGIN_USER_CONTACT_INVALID"
         }
         _ if message.starts_with("complete qr login failed") => "ONCHINA_LOGIN_COMPLETE_FAILED",
         _ if message.starts_with("persist qr login result failed") => {
@@ -2653,10 +2625,6 @@ fn onchina_error_code(status: StatusCode, message: &str) -> &'static str {
         _ if message.starts_with("query qr login result failed") => {
             "ONCHINA_LOGIN_RESULT_QUERY_FAILED"
         }
-        _ if message.starts_with("insert challenge failed") => {
-            "ONCHINA_LOGIN_CHALLENGE_CREATE_FAILED"
-        }
-        _ if message.starts_with("verify login failed") => "ONCHINA_LOGIN_VERIFY_FAILED",
         _ if status == StatusCode::UNAUTHORIZED => "ONCHINA_AUTH_UNAUTHORIZED",
         _ if status == StatusCode::FORBIDDEN => "ONCHINA_AUTH_FORBIDDEN",
         _ if status == StatusCode::BAD_REQUEST => "ONCHINA_REQUEST_INVALID",

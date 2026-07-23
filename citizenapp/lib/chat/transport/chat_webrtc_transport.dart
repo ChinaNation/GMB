@@ -9,7 +9,7 @@ import '../chat_media_limits.dart';
 import 'chat_cloud_transport.dart';
 
 typedef ChatAttachmentReceiver = Future<void> Function({
-  required String senderAccount,
+  required String senderAccountId,
   required String conversationId,
   required String attachmentId,
   required String fileName,
@@ -243,7 +243,7 @@ class ChatAttachmentReceiveBuffer {
 /// WebRTC DataChannel附件传输。SDP/ICE只经Worker瞬时转发，附件只落两端设备。
 class ChatWebrtcTransport {
   ChatWebrtcTransport({
-    required this.ownerAccount,
+    required this.accountId,
     required this.cloud,
     required this.onAttachment,
     required this.tempDirectory,
@@ -263,7 +263,7 @@ class ChatWebrtcTransport {
     },
   ];
 
-  final String ownerAccount;
+  final String accountId;
   final ChatCloudTransport cloud;
   final ChatAttachmentReceiver onAttachment;
 
@@ -273,7 +273,7 @@ class ChatWebrtcTransport {
   final Map<String, _PeerTransfer> _peers = {};
 
   Future<void> sendAttachment({
-    required String recipientAccount,
+    required String recipientAccountId,
     required String conversationId,
     required String attachmentId,
     required String fileName,
@@ -282,7 +282,7 @@ class ChatWebrtcTransport {
     required int byteSize,
   }) async {
     final transferId = '$attachmentId-${DateTime.now().microsecondsSinceEpoch}';
-    final peer = await _createPeer(transferId, recipientAccount);
+    final peer = await _createPeer(transferId, recipientAccountId);
     // 任一 await(建连/续传偏移/ack 超时,或发送出错)都必须关闭对端连接,否则
     // 泄漏 _peers 表项与原生 RTCPeerConnection。_closePeer 幂等,成功路径也复用。
     try {
@@ -353,12 +353,12 @@ class ChatWebrtcTransport {
   }
 
   Future<void> handleSignal(
-      String senderAccount, Map<String, dynamic> signal) async {
+      String senderAccountId, Map<String, dynamic> signal) async {
     final kind = signal['kind']?.toString();
     final transferId = signal['transfer_id']?.toString() ?? '';
     if (transferId.isEmpty) return;
     if (kind == 'offer') {
-      final peer = await _createPeer(transferId, senderAccount);
+      final peer = await _createPeer(transferId, senderAccountId);
       peer.connection.onDataChannel = (channel) {
         peer.channel = channel;
         _bindChannel(peer, channel);
@@ -370,7 +370,7 @@ class ChatWebrtcTransport {
       final answer = await peer.connection.createAnswer();
       await peer.connection.setLocalDescription(answer);
       await cloud.sendSignal(
-        recipientAccount: senderAccount,
+        recipientAccountId: senderAccountId,
         signal: {
           'kind': 'answer',
           'transfer_id': transferId,
@@ -397,11 +397,11 @@ class ChatWebrtcTransport {
   }
 
   Future<_PeerTransfer> _createPeer(
-      String transferId, String peerAccount) async {
+      String transferId, String peerAccountId) async {
     final existing = _peers[transferId];
     if (existing != null) return existing;
     final connection = await createPeerConnection({'iceServers': _iceServers});
-    final peer = _PeerTransfer(transferId, peerAccount, connection);
+    final peer = _PeerTransfer(transferId, peerAccountId, connection);
     _peers[transferId] = peer;
     connection.onIceCandidate = (candidate) {
       if (candidate.candidate == null) return;
@@ -414,7 +414,7 @@ class ChatWebrtcTransport {
       };
       peer.localCandidates.add(signal);
       unawaited(cloud.sendSignal(
-        recipientAccount: peerAccount,
+        recipientAccountId: peerAccountId,
         signal: signal,
       ));
     };
@@ -429,12 +429,12 @@ class ChatWebrtcTransport {
     final deadline = DateTime.now().add(_timeout);
     while (!peer.open.isCompleted && DateTime.now().isBefore(deadline)) {
       await cloud.sendSignal(
-        recipientAccount: peer.peerAccount,
+        recipientAccountId: peer.peerAccountId,
         signal: offer,
       );
       for (final candidate in peer.localCandidates) {
         await cloud.sendSignal(
-          recipientAccount: peer.peerAccount,
+          recipientAccountId: peer.peerAccountId,
           signal: candidate,
         );
       }
@@ -470,7 +470,7 @@ class ChatWebrtcTransport {
       peer.tail = peer.tail
           .then((_) => handleIncomingFrame(
                 buffer: buffer,
-                peerAccount: peer.peerAccount,
+                peerAccountId: peer.peerAccountId,
                 transferId: peer.id,
                 message: message,
                 sendAck: () => channel.send(
@@ -499,7 +499,7 @@ class ChatWebrtcTransport {
   /// 误以为超限媒体被接受。
   Future<void> handleIncomingFrame({
     required ChatAttachmentReceiveBuffer buffer,
-    required String peerAccount,
+    required String peerAccountId,
     required String transferId,
     required RTCDataChannelMessage message,
     required Future<void> Function() sendAck,
@@ -524,7 +524,7 @@ class ChatWebrtcTransport {
         final received = await buffer.finish();
         if (received == null) return; // 拒收 / 截断:不回调、不 ack。
         await onAttachment(
-          senderAccount: peerAccount,
+          senderAccountId: peerAccountId,
           conversationId: received.conversationId,
           attachmentId: received.attachmentId,
           fileName: received.fileName,
@@ -560,10 +560,10 @@ class ChatWebrtcTransport {
 }
 
 class _PeerTransfer {
-  _PeerTransfer(this.id, this.peerAccount, this.connection);
+  _PeerTransfer(this.id, this.peerAccountId, this.connection);
 
   final String id;
-  final String peerAccount;
+  final String peerAccountId;
   final RTCPeerConnection connection;
   final Completer<void> open = Completer<void>();
   final Completer<void> ack = Completer<void>();

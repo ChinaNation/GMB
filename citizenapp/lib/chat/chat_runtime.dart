@@ -33,19 +33,19 @@ import 'transport/chat_webrtc_transport.dart';
 
 typedef ChatLoginSigner = Future<String> Function({
   required int walletIndex,
-  required String ownerAccount,
+  required String accountId,
   required Uint8List loginMessage,
 });
 
 typedef ChatDeviceBindingSigner = Future<String> Function({
   required int walletIndex,
-  required String ownerAccount,
+  required String accountId,
   required Uint8List bindingMessage,
 });
 
 typedef ChatCloudTransportFactory = ChatCloudTransport Function({
-  required String ownerAccount,
-  required String ownerDeviceId,
+  required String accountId,
+  required String localDeviceId,
   Uri? serviceBaseUrl,
   String? sessionToken,
 });
@@ -53,7 +53,7 @@ typedef ChatCloudTransportFactory = ChatCloudTransport Function({
 typedef ChatPushTokenProvider = Future<ChatPushToken> Function();
 
 typedef MlsStateStoreFactory = Future<MlsStateStore> Function(
-  String ownerAccount,
+  String accountId,
   String deviceId,
 );
 
@@ -74,8 +74,8 @@ Future<void> chatRuntimeBackgroundHandler(RemoteMessage message) async {
       pushService: push,
       pushTokenProvider: () => push.readToken(requestPermission: false),
     );
-    final owner = await runtime.readOwnerAccount();
-    if (owner == null) return;
+    final accountId = await runtime.readAccountId();
+    if (accountId == null) return;
     final stop = await runtime.startRealtimeSync(onNotice: () async {});
     if (stop == null) return;
     await Future<void>.delayed(const Duration(seconds: 20));
@@ -87,20 +87,20 @@ Future<void> chatRuntimeBackgroundHandler(RemoteMessage message) async {
   }
 }
 
-class _ChatOwnerContext {
-  const _ChatOwnerContext({
+class _ChatAccountContext {
+  const _ChatAccountContext({
     required this.account,
     required this.deviceId,
-    required this.devicePublicKeyHex,
+    required this.devicePublicKey,
     required this.crypto,
     required this.transport,
     required this.webrtc,
     required this.sessionExpiresAt,
   });
 
-  final _ChatOwner account;
+  final _ChatAccount account;
   final String deviceId;
-  final String devicePublicKeyHex;
+  final String devicePublicKey;
   final MlsCrypto crypto;
   final ChatCloudTransport transport;
   final ChatWebrtcTransport webrtc;
@@ -111,21 +111,21 @@ class _ChatOwnerContext {
       DateTime.now().millisecondsSinceEpoch;
 
   ChatDevice get identity => ChatDevice(
-        ownerAccount: account.address,
+        accountId: account.accountId,
         deviceId: deviceId,
-        devicePublicKeyHex: devicePublicKeyHex,
+        devicePublicKey: devicePublicKey,
       );
 }
 
-class _ChatOwner {
-  const _ChatOwner({
+class _ChatAccount {
+  const _ChatAccount({
     required this.walletIndex,
-    required this.address,
+    required this.accountId,
     required this.walletName,
   });
 
   final int walletIndex;
-  final String address;
+  final String accountId;
   final String walletName;
 }
 
@@ -197,10 +197,10 @@ class ChatRuntime {
 
   /// 同一账户/设备只允许一条初始化链。成功上下文复用到 session 临近过期；
   /// 失败只释放命中的 future，不得误删后来创建的新初始化。
-  final Map<String, Future<_ChatOwnerContext>> _readyFlights = {};
-  final Map<String, _ChatOwnerContext> _readyContexts = {};
-  final Map<String, String> _ownerContextKeys = {};
-  final Map<String, int> _ownerGenerations = {};
+  final Map<String, Future<_ChatAccountContext>> _readyFlights = {};
+  final Map<String, _ChatAccountContext> _readyContexts = {};
+  final Map<String, String> _accountContextKeys = {};
+  final Map<String, int> _accountGenerations = {};
 
   Future<SharedPreferences> get _prefs async {
     final provided = _preferences;
@@ -211,62 +211,61 @@ class ChatRuntime {
   }
 
   Future<ChatInboxOverview> readOverview({
-    String? ownerAccount,
+    String? accountId,
     required int pendingOutgoing,
     required int unreadCount,
   }) async {
-    final account = ownerAccount ?? await readOwnerAccount();
+    final account = accountId ?? await readAccountId();
     return ChatInboxOverview(
-      ownerAccount: account,
+      accountId: account,
       pendingOutgoing: pendingOutgoing,
       unreadCount: unreadCount,
     );
   }
 
-  Future<String?> readOwnerAccount() async {
+  Future<String?> readAccountId() async {
     final wallet = await _walletManager.getDefaultWallet();
-    return wallet?.address;
+    return wallet?.accountId;
   }
 
   /// 点击「广场发帖」推送时发信号（转发自设备推送服务），供 AppShell 切到广场 tab。
   Stream<void> get squarePostOpens => _pushService.squarePostOpens;
 
   /// 页面、轮询、WebSocket 和发送入口共享的唯一就绪入口。
-  Future<void> ensureReady(String ownerAccount) async {
-    final account = await _readOwner(expectedOwnerAccount: ownerAccount);
+  Future<void> ensureReady(String accountId) async {
+    final account = await _readAccount(expectedAccountId: accountId);
     await _readyContext(account);
   }
 
   /// 默认账户切换或本机 Chat 数据清理时精确失效该账户上下文。
-  void invalidateOwner(String ownerAccount) {
-    _ownerGenerations[ownerAccount] =
-        (_ownerGenerations[ownerAccount] ?? 0) + 1;
-    _readyFlights.remove(ownerAccount);
-    final key = _ownerContextKeys.remove(ownerAccount);
+  void invalidateAccount(String accountId) {
+    _accountGenerations[accountId] = (_accountGenerations[accountId] ?? 0) + 1;
+    _readyFlights.remove(accountId);
+    final key = _accountContextKeys.remove(accountId);
     if (key != null) {
       _readyContexts.remove(key);
     }
   }
 
   static String directConversationId(
-    String senderWalletAddress,
-    String peerAccount,
+    String senderAccountId,
+    String peerAccountId,
   ) {
-    return 'dm:$senderWalletAddress:$peerAccount';
+    return 'dm:$senderAccountId:$peerAccountId';
   }
 
   Future<List<ChatDeliveryResult>> sendText({
-    required String peerAccount,
+    required String peerAccountId,
     required String conversationId,
     required String text,
   }) async {
-    final context = await _readyContext(await _readOwner());
+    final context = await _readyContext(await _readAccount());
     final flow = _messageFlow(context);
     try {
       return await flow.sendText(
         conversationId: conversationId,
-        senderAccount: context.account.address,
-        recipientAccount: peerAccount,
+        senderAccountId: context.account.accountId,
+        recipientAccountId: peerAccountId,
         senderDeviceId: context.deviceId,
         text: text,
       );
@@ -275,21 +274,21 @@ class ChatRuntime {
         rethrow;
       }
       final packages = await context.transport.fetchKeyPackages(
-        ownerAccount: peerAccount,
-        requesterAccount: context.account.address,
+        accountId: peerAccountId,
+        requesterAccountId: context.account.accountId,
       );
       if (packages.isEmpty) {
         throw StateError('对方没有可用 Chat KeyPackage');
       }
       final consumed = await context.transport.consumeKeyPackage(
-        ownerAccount: peerAccount,
+        accountId: peerAccountId,
         keyPackageId: packages.first.keyPackageId,
-        requesterAccount: context.account.address,
+        requesterAccountId: context.account.accountId,
       );
       return flow.sendText(
         conversationId: conversationId,
-        senderAccount: context.account.address,
-        recipientAccount: peerAccount,
+        senderAccountId: context.account.accountId,
+        recipientAccountId: peerAccountId,
         senderDeviceId: context.deviceId,
         recipientKeyPackage: consumed,
         text: text,
@@ -298,30 +297,30 @@ class ChatRuntime {
   }
 
   Future<List<ChatDeliveryResult>> sendMedia({
-    required String peerAccount,
+    required String peerAccountId,
     required String conversationId,
     required ChatMediaDraft media,
   }) async {
-    final context = await _readyContext(await _readOwner());
+    final context = await _readyContext(await _readAccount());
     final flow = _messageFlow(context);
     // 登记/清除"待设备投递":对方离线时字节发不出,留 pending 由上线补发。缓存路径
     // 不持久化(补发时按当前 Documents 重算),只存 conversationId/attachmentId/fileName。
     Future<void> recordPending(String attachmentId) =>
         _store.recordOutgoingMedia(
           attachmentId: attachmentId,
-          recipientAccount: peerAccount,
+          recipientAccountId: peerAccountId,
           conversationId: conversationId,
           fileName: media.fileName,
           contentType: media.contentType,
           byteSize: media.byteSize,
         );
     Future<void> markDelivered(String attachmentId) =>
-        _store.deleteOutgoingMedia(attachmentId, peerAccount);
+        _store.deleteOutgoingMedia(attachmentId, peerAccountId);
     try {
       return await flow.sendMedia(
         conversationId: conversationId,
-        senderAccount: context.account.address,
-        recipientAccount: peerAccount,
+        senderAccountId: context.account.accountId,
+        recipientAccountId: peerAccountId,
         senderDeviceId: context.deviceId,
         media: media,
         sendDeviceAttachment: _guardedDeviceSender(context),
@@ -335,21 +334,21 @@ class ChatRuntime {
         rethrow;
       }
       final packages = await context.transport.fetchKeyPackages(
-        ownerAccount: peerAccount,
-        requesterAccount: context.account.address,
+        accountId: peerAccountId,
+        requesterAccountId: context.account.accountId,
       );
       if (packages.isEmpty) {
         throw StateError('对方没有可用 Chat KeyPackage');
       }
       final consumed = await context.transport.consumeKeyPackage(
-        ownerAccount: peerAccount,
+        accountId: peerAccountId,
         keyPackageId: packages.first.keyPackageId,
-        requesterAccount: context.account.address,
+        requesterAccountId: context.account.accountId,
       );
       return flow.sendMedia(
         conversationId: conversationId,
-        senderAccount: context.account.address,
-        recipientAccount: peerAccount,
+        senderAccountId: context.account.accountId,
+        recipientAccountId: peerAccountId,
         senderDeviceId: context.deviceId,
         recipientKeyPackage: consumed,
         media: media,
@@ -363,9 +362,9 @@ class ChatRuntime {
   }
 
   /// 包住 WebRTC 字节发送,把 attachmentId 计入在途集合(去重防双传),结束即移除。
-  ChatAttachmentDeviceSender _guardedDeviceSender(_ChatOwnerContext context) {
+  ChatAttachmentDeviceSender _guardedDeviceSender(_ChatAccountContext context) {
     return ({
-      required recipientAccount,
+      required recipientAccountId,
       required conversationId,
       required attachmentId,
       required fileName,
@@ -374,11 +373,11 @@ class ChatRuntime {
       required byteSize,
     }) async {
       final inFlightKey =
-          MediaResend.inFlightKey(attachmentId, recipientAccount);
+          MediaResend.inFlightKey(attachmentId, recipientAccountId);
       _mediaBytesInFlight.add(inFlightKey);
       try {
         await context.webrtc.sendAttachment(
-          recipientAccount: recipientAccount,
+          recipientAccountId: recipientAccountId,
           conversationId: conversationId,
           attachmentId: attachmentId,
           fileName: fileName,
@@ -393,7 +392,7 @@ class ChatRuntime {
   }
 
   /// 大媒体(>100MB)中转上传 seam:加密源文件 → 上传密文到 R2 → 返回描述子。
-  ChatRelayUploader _relayUploader(_ChatOwnerContext context) {
+  ChatRelayUploader _relayUploader(_ChatAccountContext context) {
     return ({
       required conversationId,
       required attachmentId,
@@ -414,18 +413,18 @@ class ChatRuntime {
   /// 发送内置贴纸:只走控制信封,不经 WebRTC。首次会话缺 KeyPackage 时同样
   /// 领取后重试。
   Future<List<ChatDeliveryResult>> sendSticker({
-    required String peerAccount,
+    required String peerAccountId,
     required String conversationId,
     required String packId,
     required String stickerId,
   }) async {
-    final context = await _readyContext(await _readOwner());
+    final context = await _readyContext(await _readAccount());
     final flow = _messageFlow(context);
     try {
       return await flow.sendSticker(
         conversationId: conversationId,
-        senderAccount: context.account.address,
-        recipientAccount: peerAccount,
+        senderAccountId: context.account.accountId,
+        recipientAccountId: peerAccountId,
         senderDeviceId: context.deviceId,
         packId: packId,
         stickerId: stickerId,
@@ -435,21 +434,21 @@ class ChatRuntime {
         rethrow;
       }
       final packages = await context.transport.fetchKeyPackages(
-        ownerAccount: peerAccount,
-        requesterAccount: context.account.address,
+        accountId: peerAccountId,
+        requesterAccountId: context.account.accountId,
       );
       if (packages.isEmpty) {
         throw StateError('对方没有可用 Chat KeyPackage');
       }
       final consumed = await context.transport.consumeKeyPackage(
-        ownerAccount: peerAccount,
+        accountId: peerAccountId,
         keyPackageId: packages.first.keyPackageId,
-        requesterAccount: context.account.address,
+        requesterAccountId: context.account.accountId,
       );
       return flow.sendSticker(
         conversationId: conversationId,
-        senderAccount: context.account.address,
-        recipientAccount: peerAccount,
+        senderAccountId: context.account.accountId,
+        recipientAccountId: peerAccountId,
         senderDeviceId: context.deviceId,
         recipientKeyPackage: consumed,
         packId: packId,
@@ -465,14 +464,14 @@ class ChatRuntime {
     required String name,
     List<String> inviteeAccounts = const [],
   }) async {
-    final context = await _readyContext(await _readOwner());
+    final context = await _readyContext(await _readAccount());
     final invitees = await _fetchInviteeKeyPackages(context, inviteeAccounts);
-    final groupId = newGroupId(context.account.address);
+    final groupId = newGroupId(context.account.accountId);
     return _groupFlow(context).createGroup(
       groupId: groupId,
       name: name,
-      ownerAccount: context.account.address,
-      ownerDeviceId: context.deviceId,
+      accountId: context.account.accountId,
+      localDeviceId: context.deviceId,
       invitees: invitees,
     );
   }
@@ -482,11 +481,11 @@ class ChatRuntime {
     required String groupId,
     required List<String> inviteeAccounts,
   }) async {
-    final context = await _readyContext(await _readOwner());
+    final context = await _readyContext(await _readAccount());
     final invitees = await _fetchInviteeKeyPackages(context, inviteeAccounts);
     await _groupFlow(context).addMembers(
       groupId: groupId,
-      actorAccount: context.account.address,
+      actorAccountId: context.account.accountId,
       actorDeviceId: context.deviceId,
       invitees: invitees,
     );
@@ -497,10 +496,10 @@ class ChatRuntime {
     required String groupId,
     required List<String> targetAccounts,
   }) async {
-    final context = await _readyContext(await _readOwner());
+    final context = await _readyContext(await _readAccount());
     await _groupFlow(context).removeMembers(
       groupId: groupId,
-      actorAccount: context.account.address,
+      actorAccountId: context.account.accountId,
       actorDeviceId: context.deviceId,
       targetAccounts: targetAccounts,
     );
@@ -508,7 +507,7 @@ class ChatRuntime {
 
   /// 退群(本机标记已退,并发退群请求让 admin 重钥)。
   Future<void> leaveGroup(String groupId) async {
-    final context = await _readyContext(await _readOwner());
+    final context = await _readyContext(await _readAccount());
     await _groupFlow(context).leaveGroup(groupId);
   }
 
@@ -517,7 +516,7 @@ class ChatRuntime {
     required String groupId,
     required String name,
   }) async {
-    final context = await _readyContext(await _readOwner());
+    final context = await _readyContext(await _readAccount());
     await _groupFlow(context).renameGroup(groupId, name);
   }
 
@@ -526,10 +525,10 @@ class ChatRuntime {
     required String groupId,
     required String text,
   }) async {
-    final context = await _readyContext(await _readOwner());
+    final context = await _readyContext(await _readAccount());
     return _groupFlow(context).sendGroupText(
       groupId: groupId,
-      senderAccount: context.account.address,
+      senderAccountId: context.account.accountId,
       senderDeviceId: context.deviceId,
       text: text,
     );
@@ -541,10 +540,10 @@ class ChatRuntime {
     required String packId,
     required String stickerId,
   }) async {
-    final context = await _readyContext(await _readOwner());
+    final context = await _readyContext(await _readAccount());
     return _groupFlow(context).sendGroupSticker(
       groupId: groupId,
-      senderAccount: context.account.address,
+      senderAccountId: context.account.accountId,
       senderDeviceId: context.deviceId,
       packId: packId,
       stickerId: stickerId,
@@ -557,10 +556,10 @@ class ChatRuntime {
     required String groupId,
     required ChatMediaDraft media,
   }) async {
-    final context = await _readyContext(await _readOwner());
+    final context = await _readyContext(await _readAccount());
     return _groupFlow(context).sendGroupMedia(
       groupId: groupId,
-      senderAccount: context.account.address,
+      senderAccountId: context.account.accountId,
       senderDeviceId: context.deviceId,
       media: media,
       sendMemberAttachment: _guardedDeviceSender(context),
@@ -568,7 +567,7 @@ class ChatRuntime {
       saveLocalAttachment: _copySentAttachmentToCache,
       recordPendingMember: (attachmentId, member) => _store.recordOutgoingMedia(
         attachmentId: attachmentId,
-        recipientAccount: member,
+        recipientAccountId: member,
         conversationId: groupId,
         fileName: media.fileName,
         contentType: media.contentType,
@@ -580,49 +579,49 @@ class ChatRuntime {
   }
 
   /// 逐个被邀请账户领取一枚 KeyPackage(复用 1:1 fetch/consume),
-  /// 兜底补齐 ownerAccount 供群扇出定位新人。
+  /// 兜底补齐 accountId 供群扇出定位新人。
   Future<List<MlsKeyPackage>> _fetchInviteeKeyPackages(
-    _ChatOwnerContext context,
+    _ChatAccountContext context,
     List<String> inviteeAccounts,
   ) async {
     final packages = <MlsKeyPackage>[];
     for (final account in inviteeAccounts) {
       final available = await context.transport.fetchKeyPackages(
-        ownerAccount: account,
-        requesterAccount: context.account.address,
+        accountId: account,
+        requesterAccountId: context.account.accountId,
       );
       if (available.isEmpty) {
         throw StateError('对方 $account 没有可用 Chat KeyPackage');
       }
       final consumed = await context.transport.consumeKeyPackage(
-        ownerAccount: account,
+        accountId: account,
         keyPackageId: available.first.keyPackageId,
-        requesterAccount: context.account.address,
+        requesterAccountId: context.account.accountId,
       );
       packages.add(
-        consumed.ownerAccount.isNotEmpty
+        consumed.accountId.isNotEmpty
             ? consumed
             : MlsKeyPackage(
-                ownerAccount: account,
+                accountId: account,
                 deviceId: consumed.deviceId,
                 keyPackageId: consumed.keyPackageId,
                 keyPackageBytes: consumed.keyPackageBytes,
                 cipherSuite: consumed.cipherSuite,
                 createdAtMillis: consumed.createdAtMillis,
                 expiresAtMillis: consumed.expiresAtMillis,
-                devicePublicKeyHex: consumed.devicePublicKeyHex,
+                devicePublicKey: consumed.devicePublicKey,
               ),
       );
     }
     return packages;
   }
 
-  ChatGroupFlow _groupFlow(_ChatOwnerContext context) {
+  ChatGroupFlow _groupFlow(_ChatAccountContext context) {
     return ChatGroupFlow(
       crypto: context.crypto as MlsGroupCrypto,
       store: _store,
-      ownerAccount: context.account.address,
-      ownerDeviceId: context.deviceId,
+      accountId: context.account.accountId,
+      localDeviceId: context.deviceId,
       deliverer: (envelope, _) {
         return ChatFlow.deliverWithTransport(
           transport: context.transport,
@@ -702,7 +701,7 @@ class ChatRuntime {
     );
     if (cached != null) return cached;
 
-    final context = await _readyContext(await _readOwner());
+    final context = await _readyContext(await _readAccount());
     final destPath = ChatFlow.attachmentCachePath(
       cacheDirectory: cacheDirectory,
       conversationId: conversationId,
@@ -739,10 +738,10 @@ class ChatRuntime {
 
   /// 重试发送设备本机队列中的密文,并补发待设备投递的媒体字节。
   /// 密文成功转交在线接收设备后立即删队列项;媒体字节收到 WebRTC ack 后删待投递行。
-  Future<int> retryOutgoing({String? recipientAccount}) async {
-    final context = await _readyContext(await _readOwner());
+  Future<int> retryOutgoing({String? recipientAccountId}) async {
+    final context = await _readyContext(await _readAccount());
     final queued = await _store.readQueuedEnvelopes(
-      recipientAccount: recipientAccount,
+      recipientAccountId: recipientAccountId,
     );
     var sent = 0;
     for (final item in queued) {
@@ -758,11 +757,11 @@ class ChatRuntime {
       if (result.state == ChatMessageDeliveryState.sent) sent += 1;
     }
     // 媒体字节补发**只在明确对端时(peer_ready 确知在线)**触发,且**不阻塞**:
-    // 绝不在无差别的轮询/实时启动(recipientAccount==null)路径对离线对端反复整块
+    // 绝不在无差别的轮询/实时启动(recipientAccountId==null)路径对离线对端反复整块
     // 重连重发(每条阻塞 45 秒、无退避),那会拖垮轮询与后台唤醒窗口。
-    if (recipientAccount != null) {
+    if (recipientAccountId != null) {
       unawaited(
-          _resendPendingMedia(context, recipientAccount: recipientAccount));
+          _resendPendingMedia(context, recipientAccountId: recipientAccountId));
     }
     return sent;
   }
@@ -771,11 +770,11 @@ class ChatRuntime {
   /// 儿/删行逻辑在可测的 [MediaResend.run];缓存路径按**当前 Documents 目录重算**
   /// (不用持久化的绝对路径,避免容器 UUID 变更后误判丢失)。
   Future<void> _resendPendingMedia(
-    _ChatOwnerContext context, {
-    required String recipientAccount,
+    _ChatAccountContext context, {
+    required String recipientAccountId,
   }) async {
     final pending = await _store.readPendingOutgoingMedia(
-      recipientAccount: recipientAccount,
+      recipientAccountId: recipientAccountId,
     );
     if (pending.isEmpty) return;
     final dir = await getApplicationDocumentsDirectory();
@@ -791,7 +790,7 @@ class ChatRuntime {
       ),
       cacheFileExists: (path) => File(path).exists(),
       sendBytes: (media, path) => context.webrtc.sendAttachment(
-        recipientAccount: media.recipientAccount,
+        recipientAccountId: media.recipientAccountId,
         conversationId: media.conversationId,
         attachmentId: media.attachmentId,
         fileName: media.fileName,
@@ -800,14 +799,14 @@ class ChatRuntime {
         byteSize: media.byteSize,
       ),
       deletePending: (media) => _store.deleteOutgoingMedia(
-          media.attachmentId, media.recipientAccount),
+          media.attachmentId, media.recipientAccountId),
     );
   }
 
   /// 门③:接收端落盘二次门控。委托给可单测的 [ChatFlow.acceptReceivedMediaToCache]
   /// (超限删临时不入缓存;否则移入缓存)。
   Future<void> _saveReceivedAttachmentToCache({
-    required String senderAccount,
+    required String senderAccountId,
     required String conversationId,
     required String attachmentId,
     required String fileName,
@@ -854,7 +853,7 @@ class ChatRuntime {
     required Future<void> Function() onNotice,
     Future<void> Function()? onDisconnected,
   }) async {
-    final context = await _readyContext(await _readOwner());
+    final context = await _readyContext(await _readAccount());
     final stopSocket = await context.transport.connectRealtime(
       onMessage: (message) async {
         final type = message['type'];
@@ -872,11 +871,11 @@ class ChatRuntime {
           return;
         }
         if (type == 'gmb_chat_signal_v1') {
-          final sender = message['sender_account'];
+          final sender = message['sender_account_id'];
           final signal = message['signal'];
           if (sender is! String || signal is! Map<String, dynamic>) return;
           if (signal['kind'] == 'peer_ready') {
-            await retryOutgoing(recipientAccount: sender);
+            await retryOutgoing(recipientAccountId: sender);
           } else {
             await context.webrtc.handleSignal(sender, signal);
           }
@@ -886,10 +885,10 @@ class ChatRuntime {
     );
     if (stopSocket == null) return null;
 
-    Future<void> notifySenderReady(String senderAccount) async {
-      if (senderAccount.isEmpty) return;
+    Future<void> notifySenderReady(String senderAccountId) async {
+      if (senderAccountId.isEmpty) return;
       await context.transport.sendSignal(
-        recipientAccount: senderAccount,
+        recipientAccountId: senderAccountId,
         signal: const {'kind': 'peer_ready'},
       );
     }
@@ -912,7 +911,7 @@ class ChatRuntime {
     };
   }
 
-  Future<void> _refreshPushRegistration(_ChatOwnerContext context) async {
+  Future<void> _refreshPushRegistration(_ChatAccountContext context) async {
     try {
       await _ensureDeviceRegistered(
         account: context.account,
@@ -925,8 +924,8 @@ class ChatRuntime {
     }
   }
 
-  Future<_ChatOwnerContext> _readyContext(_ChatOwner account) {
-    final knownKey = _ownerContextKeys[account.address];
+  Future<_ChatAccountContext> _readyContext(_ChatAccount account) {
+    final knownKey = _accountContextKeys[account.accountId];
     final cached = knownKey == null ? null : _readyContexts[knownKey];
     if (cached != null && cached.isUsable) {
       return Future.value(cached);
@@ -935,24 +934,24 @@ class ChatRuntime {
       _readyContexts.remove(knownKey);
     }
 
-    final flightKey = account.address;
+    final flightKey = account.accountId;
     final existing = _readyFlights[flightKey];
     if (existing != null) {
       return existing;
     }
 
-    final generation = _ownerGenerations[account.address] ?? 0;
-    late final Future<_ChatOwnerContext> created;
-    created = _buildOwnerContext(account).then((context) {
-      if ((_ownerGenerations[account.address] ?? 0) != generation) {
+    final generation = _accountGenerations[account.accountId] ?? 0;
+    late final Future<_ChatAccountContext> created;
+    created = _buildAccountContext(account).then((context) {
+      if ((_accountGenerations[account.accountId] ?? 0) != generation) {
         throw StateError('聊天账户已切换，本次旧初始化结果已丢弃');
       }
       final contextKey = _contextKey(context.identity);
-      final previousKey = _ownerContextKeys[account.address];
+      final previousKey = _accountContextKeys[account.accountId];
       if (previousKey != null && previousKey != contextKey) {
         _readyContexts.remove(previousKey);
       }
-      _ownerContextKeys[account.address] = contextKey;
+      _accountContextKeys[account.accountId] = contextKey;
       _readyContexts[contextKey] = context;
       return context;
     }).whenComplete(() {
@@ -964,7 +963,7 @@ class ChatRuntime {
     return created;
   }
 
-  Future<_ChatOwnerContext> _buildOwnerContext(_ChatOwner account) async {
+  Future<_ChatAccountContext> _buildAccountContext(_ChatAccount account) async {
     final prefs = await _prefs;
     var deviceId = prefs.getString(_kDeviceId);
     if (deviceId == null || deviceId.isEmpty) {
@@ -972,29 +971,28 @@ class ChatRuntime {
       await prefs.setString(_kDeviceId, deviceId);
     }
 
-    var devicePublicKeyHex = prefs.getString(_kDevicePublicKeyHex) ?? '';
-    final stateStore = await _stateStore(account.address, deviceId);
+    var devicePublicKey = prefs.getString(_kDevicePublicKeyHex) ?? '';
+    final stateStore = await _stateStore(account.accountId, deviceId);
     var identity = ChatDevice(
-      ownerAccount: account.address,
+      accountId: account.accountId,
       deviceId: deviceId,
-      devicePublicKeyHex:
-          devicePublicKeyHex.isEmpty ? '00' : devicePublicKeyHex,
+      devicePublicKey: devicePublicKey.isEmpty ? '00' : devicePublicKey,
     );
     final crypto = _cryptoFactory?.call(identity, stateStore) ??
         NativeMlsCrypto(identity: identity, stateStore: stateStore);
     MlsKeyPackage? freshKeyPackage;
-    if (devicePublicKeyHex.isEmpty) {
+    if (devicePublicKey.isEmpty) {
       freshKeyPackage = await crypto.createKeyPackage(identity);
       final keyPackage = freshKeyPackage;
-      if (keyPackage.devicePublicKeyHex.isEmpty) {
+      if (keyPackage.devicePublicKey.isEmpty) {
         throw StateError('OpenMLS native 未返回 Chat 设备公钥，请先重编 native 库');
       }
-      devicePublicKeyHex = keyPackage.devicePublicKeyHex;
-      await prefs.setString(_kDevicePublicKeyHex, devicePublicKeyHex);
+      devicePublicKey = keyPackage.devicePublicKey;
+      await prefs.setString(_kDevicePublicKeyHex, devicePublicKey);
       identity = ChatDevice(
-        ownerAccount: account.address,
+        accountId: account.accountId,
         deviceId: deviceId,
-        devicePublicKeyHex: devicePublicKeyHex,
+        devicePublicKey: devicePublicKey,
       );
     }
     final finalCrypto = _cryptoFactory?.call(identity, stateStore) ??
@@ -1007,14 +1005,14 @@ class ChatRuntime {
       initialKeyPackage: freshKeyPackage,
     );
     final transport = _cloudTransportFactory?.call(
-          ownerAccount: account.address,
-          ownerDeviceId: deviceId,
+          accountId: account.accountId,
+          localDeviceId: deviceId,
           serviceBaseUrl: service.baseUri,
           sessionToken: service.session.sessionToken,
         ) ??
         ChatCloudTransport(
-          ownerAccount: account.address,
-          ownerDeviceId: deviceId,
+          accountId: account.accountId,
+          localDeviceId: deviceId,
           serviceBaseUrl: service.baseUri,
           sessionToken: service.session.sessionToken,
           requestSigner: service.session.signRequest,
@@ -1024,15 +1022,15 @@ class ChatRuntime {
     // 回收被永久放弃的续传残档(对端删会话/待投递后不会再续写的 .part)。
     unawaited(ChatAttachmentReceiveBuffer.sweepStalePartials(tempDirectory));
     final webrtc = ChatWebrtcTransport(
-      ownerAccount: account.address,
+      accountId: account.accountId,
       cloud: transport,
       tempDirectory: tempDirectory,
       onAttachment: _saveReceivedAttachmentToCache,
     );
-    return _ChatOwnerContext(
+    return _ChatAccountContext(
       account: account,
       deviceId: deviceId,
-      devicePublicKeyHex: identity.devicePublicKeyHex,
+      devicePublicKey: identity.devicePublicKey,
       crypto: finalCrypto,
       transport: transport,
       webrtc: webrtc,
@@ -1041,7 +1039,7 @@ class ChatRuntime {
   }
 
   Future<_ChatServiceContext> _ensureServiceReady({
-    required _ChatOwner account,
+    required _ChatAccount account,
     required ChatDevice identity,
     required MlsCrypto crypto,
     required SharedPreferences prefs,
@@ -1050,18 +1048,18 @@ class ChatRuntime {
     // 后台会话握手绝不读 seed / 不弹窗 / 不懒注册：子钥只在钱包创建时静默注册。
     // 未注册设备（旧格式钱包等）在此直接会话失败，按不可用降级处理，绝不在合并主线程弹 Turnstile。
     final session = await _squareApiClient.ensureSession(
-      ownerAccount: account.address,
+      accountId: account.accountId,
       signLoginPayload: (payload) => _signSquareLoginPayload(account, payload),
     );
     final transport = _cloudTransportFactory?.call(
-          ownerAccount: account.address,
-          ownerDeviceId: identity.deviceId,
+          accountId: account.accountId,
+          localDeviceId: identity.deviceId,
           serviceBaseUrl: _squareApiClient.baseUri,
           sessionToken: session.sessionToken,
         ) ??
         ChatCloudTransport(
-          ownerAccount: account.address,
-          ownerDeviceId: identity.deviceId,
+          accountId: account.accountId,
+          localDeviceId: identity.deviceId,
           serviceBaseUrl: _squareApiClient.baseUri,
           sessionToken: session.sessionToken,
           requestSigner: session.signRequest,
@@ -1087,7 +1085,7 @@ class ChatRuntime {
   }
 
   Future<void> _ensureDeviceRegistered({
-    required _ChatOwner account,
+    required _ChatAccount account,
     required ChatDevice identity,
     required SharedPreferences prefs,
     required ChatCloudTransport transport,
@@ -1104,9 +1102,9 @@ class ChatRuntime {
 
     final expiresAt = DateTime.now().toUtc().add(_deviceBindingTtl);
     final binding = ChatDeviceBinding(
-      ownerAccount: account.address,
+      accountId: account.accountId,
       deviceId: identity.deviceId,
-      devicePublicKeyHex: identity.devicePublicKeyHex,
+      devicePublicKey: identity.devicePublicKey,
       expiresAt: expiresAt,
       nonce: _newNonce(),
     );
@@ -1115,7 +1113,7 @@ class ChatRuntime {
       bindingMessage: binding.signingMessage(),
     );
     await transport.registerDevice(
-      devicePublicKeyHex: identity.devicePublicKeyHex,
+      devicePublicKey: identity.devicePublicKey,
       pushProvider: pushToken.provider,
       pushToken: pushToken.token,
       bindingSignature: signatureHex,
@@ -1146,9 +1144,9 @@ class ChatRuntime {
 
     final keyPackage =
         initialKeyPackage ?? await crypto.createKeyPackage(identity);
-    if (keyPackage.devicePublicKeyHex.isNotEmpty &&
-        keyPackage.devicePublicKeyHex.toLowerCase() !=
-            identity.devicePublicKeyHex.toLowerCase()) {
+    if (keyPackage.devicePublicKey.isNotEmpty &&
+        keyPackage.devicePublicKey.toLowerCase() !=
+            identity.devicePublicKey.toLowerCase()) {
       throw StateError('OpenMLS native 返回的 Chat 设备公钥与本机身份不一致');
     }
     await transport.publishKeyPackage(keyPackage);
@@ -1156,14 +1154,14 @@ class ChatRuntime {
   }
 
   Future<String> _signSquareLoginPayload(
-    _ChatOwner account,
+    _ChatAccount account,
     Uint8List loginMessage,
   ) async {
     final signer = _loginSigner;
     if (signer != null) {
       return signer(
         walletIndex: account.walletIndex,
-        ownerAccount: account.address,
+        accountId: account.accountId,
         loginMessage: loginMessage,
       );
     }
@@ -1174,14 +1172,14 @@ class ChatRuntime {
   }
 
   Future<String> _signDeviceBinding({
-    required _ChatOwner account,
+    required _ChatAccount account,
     required Uint8List bindingMessage,
   }) async {
     final signer = _deviceBindingSigner;
     if (signer != null) {
       return signer(
         walletIndex: account.walletIndex,
-        ownerAccount: account.address,
+        accountId: account.accountId,
         bindingMessage: bindingMessage,
       );
     }
@@ -1193,7 +1191,7 @@ class ChatRuntime {
     return '0x$raw';
   }
 
-  Future<_ChatOwner> _readOwner({String? expectedOwnerAccount}) async {
+  Future<_ChatAccount> _readAccount({String? expectedAccountId}) async {
     // 身份统一取默认用户钱包（钱包列表中最靠前的热钱包）。
     final wallet = await _walletManager.getDefaultWallet();
     if (wallet == null) {
@@ -1202,18 +1200,17 @@ class ChatRuntime {
     if (!wallet.isHotWallet) {
       throw StateError('默认用户必须是热钱包');
     }
-    if (expectedOwnerAccount != null &&
-        wallet.address != expectedOwnerAccount) {
+    if (expectedAccountId != null && wallet.accountId != expectedAccountId) {
       throw StateError('默认用户已切换，请重新进入聊天');
     }
-    return _ChatOwner(
+    return _ChatAccount(
       walletIndex: wallet.walletIndex,
-      address: wallet.address,
+      accountId: wallet.accountId,
       walletName: wallet.walletName,
     );
   }
 
-  ChatFlow _messageFlow(_ChatOwnerContext context) {
+  ChatFlow _messageFlow(_ChatAccountContext context) {
     return ChatFlow(
       crypto: context.crypto,
       store: _store,
@@ -1227,15 +1224,15 @@ class ChatRuntime {
   }
 
   Future<MlsStateStore> _stateStore(
-    String ownerAccount,
+    String accountId,
     String deviceId,
   ) async {
     final factory = _stateStoreFactory;
     if (factory != null) {
-      return factory(ownerAccount, deviceId);
+      return factory(accountId, deviceId);
     }
     final dir = await getApplicationDocumentsDirectory();
-    final safeWallet = _safePath(ownerAccount);
+    final safeWallet = _safePath(accountId);
     final safeDevice = _safePath(deviceId);
     return MlsStateStore(
       Directory('${dir.path}/chat/mls/$safeWallet/$safeDevice'),
@@ -1268,25 +1265,25 @@ String _safePath(String value) {
 }
 
 String _contextKey(ChatDevice identity) {
-  return '${identity.ownerAccount}|${identity.deviceId}|'
-      '${identity.devicePublicKeyHex.toLowerCase()}';
+  return '${identity.accountId}|${identity.deviceId}|'
+      '${identity.devicePublicKey.toLowerCase()}';
 }
 
 String _deviceBindingCacheKey(ChatDevice identity) {
   return '${ChatRuntime._kDeviceBindingPrefix}.'
-      '${_safePath(identity.ownerAccount)}.'
-      '${_safePath(identity.deviceId)}.${identity.devicePublicKeyHex}';
+      '${_safePath(identity.accountId)}.'
+      '${_safePath(identity.deviceId)}.${identity.devicePublicKey}';
 }
 
 String _keyPackageCacheKey(ChatDevice identity) {
   return '${ChatRuntime._kKeyPackagePublishedPrefix}.'
-      '${_safePath(identity.ownerAccount)}.'
-      '${_safePath(identity.deviceId)}.${identity.devicePublicKeyHex}';
+      '${_safePath(identity.accountId)}.'
+      '${_safePath(identity.deviceId)}.${identity.devicePublicKey}';
 }
 
 String _pushTokenCacheKey(ChatDevice identity) {
   return '${ChatRuntime._kPushTokenPrefix}.'
-      '${_safePath(identity.ownerAccount)}.${_safePath(identity.deviceId)}';
+      '${_safePath(identity.accountId)}.${_safePath(identity.deviceId)}';
 }
 
 List<int> _base64UrlDecode(String value) {

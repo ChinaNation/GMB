@@ -127,14 +127,12 @@ class _Bip39InputFieldState extends State<Bip39InputField> {
                   borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                   onTap: () => _selectWord(word),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
                       color: AppTheme.primary.withAlpha(20),
-                      borderRadius:
-                          BorderRadius.circular(AppTheme.radiusSm),
-                      border: Border.all(
-                          color: AppTheme.primary.withAlpha(40)),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                      border: Border.all(color: AppTheme.primary.withAlpha(40)),
                     ),
                     child: Text(
                       word,

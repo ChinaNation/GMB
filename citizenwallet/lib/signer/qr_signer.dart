@@ -17,7 +17,7 @@ enum QrSignErrorCode {
   expired,
   mismatchedRequest,
   mismatchedAccount,
-  mismatchedPubkey,
+  mismatchedSignerPublicKey,
   mismatchedPayloadHash,
   invalidSignature,
 }
@@ -112,7 +112,7 @@ class QrSigner {
       issuedAt: request.issuedAt,
       expiresAt: request.expiresAt,
       body: SignResponseBody.fromHex(
-        pubkeyHex: requestBody.pubkeyHex,
+        signerPublicKeyHex: requestBody.signerPublicKeyHex,
         signatureHex: signatureHex,
       ),
     );
@@ -128,14 +128,15 @@ class QrSigner {
   }
 
   static bool verifySr25519Signature({
-    required String pubkeyHex,
+    required String signerPublicKeyHex,
     required String signatureHex,
     required Uint8List message,
   }) {
     try {
-      final pubBytes = Uint8List.fromList(_hexToBytes(pubkeyHex));
+      final signerPublicKeyBytes =
+          Uint8List.fromList(_hexToBytes(signerPublicKeyHex));
       final sigBytes = Uint8List.fromList(_hexToBytes(signatureHex));
-      final publicKey = sr25519.PublicKey.newPublicKey(pubBytes);
+      final publicKey = sr25519.PublicKey.newPublicKey(signerPublicKeyBytes);
       final signature = sr25519.Signature.fromBytes(sigBytes);
       final (verified, _) =
           sr25519.Sr25519.verify(publicKey, signature, message);
@@ -178,16 +179,22 @@ class QrSigner {
   }
 
   void _validateHexField(String value, String field) {
-    // sign_request 机读字段统一使用 0x hex,拒绝裸 hex。
+    // 机读字段统一使用小写 0x hex，拒绝裸 hex、大写和混合大小写。
     if (!value.startsWith('0x')) {
-      throw QrSignException(QrSignErrorCode.invalidField, '$field 必须以 0x 开头');
+      throw QrSignException(
+        QrSignErrorCode.invalidField,
+        '$field 必须以小写 0x 开头',
+      );
     }
     final text = value.substring(2);
     if (text.isEmpty || text.length.isOdd) {
       throw QrSignException(QrSignErrorCode.invalidField, '$field 必须是偶数字节 hex');
     }
-    if (!RegExp(r'^[0-9a-fA-F]+$').hasMatch(text)) {
-      throw QrSignException(QrSignErrorCode.invalidField, '$field 必须是合法 hex');
+    if (!RegExp(r'^[0-9a-f]+$').hasMatch(text)) {
+      throw QrSignException(
+        QrSignErrorCode.invalidField,
+        '$field 必须是小写 hex',
+      );
     }
   }
 
@@ -203,8 +210,15 @@ class QrSigner {
   int _now() => DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
   static List<int> _hexToBytes(String input) {
-    final text = input.startsWith('0x') ? input.substring(2) : input;
-    if (text.isEmpty || text.length.isOdd) return const <int>[];
+    if (!input.startsWith('0x')) {
+      throw const FormatException('hex 必须以小写 0x 开头');
+    }
+    final text = input.substring(2);
+    if (text.isEmpty ||
+        text.length.isOdd ||
+        !RegExp(r'^[0-9a-f]+$').hasMatch(text)) {
+      throw const FormatException('hex 必须是小写偶数字节十六进制');
+    }
     return List<int>.generate(
       text.length ~/ 2,
       (i) => int.parse(text.substring(i * 2, i * 2 + 2), radix: 16),

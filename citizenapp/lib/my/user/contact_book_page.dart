@@ -17,12 +17,24 @@ import 'package:citizenapp/qr/pages/qr_scan_page.dart';
 import 'package:citizenapp/transaction/onchain-transaction/onchain_payment_page.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
+/// 通讯录页使用模式。
+enum ContactPickMode {
+  /// 常规浏览:点联系人进主页,卡片带「转账/私信/改名/删除」操作菜单。
+  browse,
+
+  /// 选收款人(交易页发起):点联系人即返回该联系人,由调用方预填收款地址。
+  pickForTransfer,
+
+  /// 选私信对象(聊天页「发私信」):点联系人直接打开一对一聊天,不带操作菜单与扫码入口。
+  pickForMessage,
+}
+
 /// “我的通讯录”唯一页面。联系人关系本地优先、后台密文同步；公开头像、昵称、
 /// 签名与身份徽章复用统一用户资料，点击后进入现有 [UserProfilePage]。
 class ContactBookPage extends StatefulWidget {
   const ContactBookPage({
     super.key,
-    this.selectForTrade = false,
+    this.mode = ContactPickMode.browse,
     this.service,
     this.profileApi,
     this.profileCache,
@@ -32,8 +44,8 @@ class ContactBookPage extends StatefulWidget {
     this.transferOpener,
   });
 
-  /// 仅控制点击联系人是否返回给收款栏，不得改变通讯录所属默认用户。
-  final bool selectForTrade;
+  /// 页面模式:浏览 / 选收款人 / 选私信对象;不改变通讯录所属默认用户。
+  final ContactPickMode mode;
   final UserContactService? service;
   final CitizenProfileApi? profileApi;
   final CitizenProfileCache? profileCache;
@@ -44,7 +56,7 @@ class ContactBookPage extends StatefulWidget {
   /// 测试可替换页面打开器；正式运行始终进入现有链上支付页面。
   final Future<void> Function(
     BuildContext context, {
-    required String toAddress,
+    required String toSs58Address,
   })? transferOpener;
 
   @override
@@ -69,7 +81,7 @@ class _ContactBookPageState extends State<ContactBookPage> {
       const ContactSyncState(phase: ContactSyncPhase.idle);
   bool _loading = true;
   String _query = '';
-  String _ownerAccount = '';
+  String _accountId = '';
 
   @override
   void initState() {
@@ -92,12 +104,12 @@ class _ContactBookPageState extends State<ContactBookPage> {
 
   Future<void> _load() async {
     try {
-      final ownerAccount = await _service.getOwnerAccount();
+      final accountId = await _service.getAccountId();
       final contacts = await _service.getContacts();
       final syncState = await _service.readSyncState();
       if (!mounted) return;
       setState(() {
-        _ownerAccount = ownerAccount;
+        _accountId = accountId;
         _contacts = contacts;
         _syncState = syncState;
         _loading = false;
@@ -126,9 +138,9 @@ class _ContactBookPageState extends State<ContactBookPage> {
   /// 先读公开资料缓存，再以四个一组有界刷新，避免大通讯录产生瞬时请求尖峰。
   Future<void> _loadProfiles(List<UserContact> contacts) async {
     for (final contact in contacts) {
-      if (_profiles.containsKey(contact.address)) continue;
-      final cached = await _profileCache.read(contact.address);
-      if (cached != null) _profiles[contact.address] = cached;
+      if (_profiles.containsKey(contact.accountId)) continue;
+      final cached = await _profileCache.read(contact.accountId);
+      if (cached != null) _profiles[contact.accountId] = cached;
     }
     if (mounted) setState(() {});
     try {
@@ -142,10 +154,10 @@ class _ContactBookPageState extends State<ContactBookPage> {
       await Future.wait(batch.map((contact) async {
         try {
           final profile = await _profileApi.fetchProfile(
-            contact.address,
+            contact.accountId,
             session: _session,
           );
-          _profiles[contact.address] = profile;
+          _profiles[contact.accountId] = profile;
           await _profileCache.write(profile);
         } on Exception {
           // 保留缓存或稳定默认头像，单个用户资料失败不阻塞通讯录。
@@ -156,14 +168,8 @@ class _ContactBookPageState extends State<ContactBookPage> {
   }
 
   Future<void> _scanContactQr() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => QrScanPage(
-          mode: QrScanMode.contact,
-          selfAddress: _ownerAccount,
-        ),
-      ),
-    );
+    // 复用统一「扫码加好友」收口(写库与提示在扫码页内完成),扫毕本地刷新。
+    await scanAndAddContact(context, selfAccountId: _accountId);
     if (!mounted) return;
     final contacts = await _service.getContacts();
     if (!mounted) return;
@@ -206,37 +212,37 @@ class _ContactBookPageState extends State<ContactBookPage> {
       ),
     );
     if (name == null) return;
-    final contacts = await _service.renameContact(contact.address, name);
+    final contacts = await _service.renameContact(contact.accountId, name);
     if (mounted) setState(() => _contacts = contacts);
   }
 
   Future<void> _transfer(UserContact contact) async {
-    if (widget.selectForTrade) {
+    if (widget.mode == ContactPickMode.pickForTransfer) {
       Navigator.of(context).pop(contact);
       return;
     }
     final opener = widget.transferOpener;
     if (opener != null) {
-      await opener(context, toAddress: contact.address);
+      await opener(context, toSs58Address: contact.ss58Address);
       return;
     }
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => OnchainPaymentPage(
-          initialToAddress: contact.address,
+          initialToAddress: contact.ss58Address,
         ),
       ),
     );
   }
 
   Future<void> _message(UserContact contact) async {
-    final profile = _profiles[contact.address];
-    final title = ProfilePresentation.forAccount(contact.address)
+    final profile = _profiles[contact.accountId];
+    final title = ProfilePresentation.forAccount(contact.accountId)
         .resolveDisplayName(publicName: profile?.displayName);
     final opener = widget.directChatOpener ?? openDirectChat;
     await opener(
       context,
-      peerAddress: contact.address,
+      peerAccountId: contact.accountId,
       title: title,
     );
   }
@@ -261,36 +267,41 @@ class _ContactBookPageState extends State<ContactBookPage> {
       ),
     );
     if (confirmed != true) return;
-    final contacts = await _service.deleteContact(contact.address);
+    final contacts = await _service.deleteContact(contact.accountId);
     if (mounted) setState(() => _contacts = contacts);
   }
 
   void _open(UserContact contact) {
-    if (widget.selectForTrade) {
-      Navigator.of(context).pop(contact);
-      return;
+    switch (widget.mode) {
+      case ContactPickMode.pickForTransfer:
+        // 交易发起:把选中的联系人返回给收款栏。
+        Navigator.of(context).pop(contact);
+      case ContactPickMode.pickForMessage:
+        // 发私信:点联系人直接打开与其的一对一聊天(复用统一私信收口)。
+        unawaited(_message(contact));
+      case ContactPickMode.browse:
+        Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => UserProfilePage(
+              accountId: contact.accountId,
+              isSelf: false,
+              initialProfile: _profiles[contact.accountId],
+            ),
+          ),
+        );
     }
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => UserProfilePage(
-          ownerAccount: contact.address,
-          isSelf: false,
-          initialProfile: _profiles[contact.address],
-        ),
-      ),
-    );
   }
 
   List<UserContact> get _visibleContacts {
     final query = _query.trim().toLowerCase();
     final visible = _contacts.where((contact) {
       if (query.isEmpty) return true;
-      final profile = _profiles[contact.address];
-      final publicName = ProfilePresentation.forAccount(contact.address)
+      final profile = _profiles[contact.accountId];
+      final publicName = ProfilePresentation.forAccount(contact.accountId)
           .resolveDisplayName(publicName: profile?.displayName)
           .toLowerCase();
       return contact.contactName.toLowerCase().contains(query) ||
-          contact.address.toLowerCase().contains(query) ||
+          contact.accountId.toLowerCase().contains(query) ||
           publicName.contains(query);
     }).toList(growable: false)
       ..sort((a, b) =>
@@ -304,18 +315,22 @@ class _ContactBookPageState extends State<ContactBookPage> {
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
-        title: const Text('我的通讯录'),
+        title: Text(
+          widget.mode == ContactPickMode.pickForMessage ? '选择联系人' : '我的通讯录',
+        ),
         centerTitle: true,
         actions: [
-          IconButton(
-            tooltip: '扫码添加联系人',
-            onPressed: _scanContactQr,
-            icon: SvgPicture.asset(
-              'assets/icons/scan-line.svg',
-              width: 20,
-              height: 20,
+          // 纯选人(发私信)模式只保留选择,不提供扫码加联系人入口。
+          if (widget.mode != ContactPickMode.pickForMessage)
+            IconButton(
+              tooltip: '扫码添加联系人',
+              onPressed: _scanContactQr,
+              icon: SvgPicture.asset(
+                'assets/icons/scan-line.svg',
+                width: 20,
+                height: 20,
+              ),
             ),
-          ),
         ],
       ),
       body: _loading
@@ -364,14 +379,17 @@ class _ContactBookPageState extends State<ContactBookPage> {
                     for (final contact in visible) ...[
                       _ContactCard(
                         contact: contact,
-                        profile: _profiles[contact.address],
-                        avatarUrl: _avatarUrl(_profiles[contact.address]),
+                        profile: _profiles[contact.accountId],
+                        avatarUrl: _avatarUrl(_profiles[contact.accountId]),
                         avatarHeaders: _session == null
                             ? null
                             : <String, String>{
                                 'authorization':
                                     'Bearer ${_session!.sessionToken}',
                               },
+                        // 纯选私信模式只允许点选,不显示逐项操作菜单。
+                        showActions:
+                            widget.mode != ContactPickMode.pickForMessage,
                         onTap: () => _open(contact),
                         onTransfer: () => _transfer(contact),
                         onMessage: () => _message(contact),
@@ -398,6 +416,7 @@ class _ContactCard extends StatelessWidget {
     required this.profile,
     required this.avatarUrl,
     required this.avatarHeaders,
+    required this.showActions,
     required this.onTap,
     required this.onTransfer,
     required this.onMessage,
@@ -409,6 +428,9 @@ class _ContactCard extends StatelessWidget {
   final CitizenProfile? profile;
   final String? avatarUrl;
   final Map<String, String>? avatarHeaders;
+
+  /// 是否显示逐项操作菜单(转账/私信/改名/删除);纯选人模式为 false。
+  final bool showActions;
   final VoidCallback onTap;
   final VoidCallback onTransfer;
   final VoidCallback onMessage;
@@ -417,12 +439,12 @@ class _ContactCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final publicName = ProfilePresentation.forAccount(contact.address)
+    final publicName = ProfilePresentation.forAccount(contact.accountId)
         .resolveDisplayName(publicName: profile?.displayName);
     final bio = profile?.bio.trim() ?? '';
-    final secondary = '$publicName · ${_shortAddress(contact.address)}';
+    final secondary = '$publicName · ${_shortAddress(contact.ss58Address)}';
     return Material(
-      key: ValueKey('contact-card-${contact.address}'),
+      key: ValueKey('contact-card-${contact.accountId}'),
       color: AppTheme.surfaceCard,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
@@ -435,7 +457,7 @@ class _ContactCard extends StatelessWidget {
             child: Row(
               children: [
                 ProfileAvatar(
-                  seed: contact.address,
+                  seed: contact.accountId,
                   size: 52,
                   imageUrl: avatarUrl,
                   imageHeaders: avatarHeaders,
@@ -485,36 +507,37 @@ class _ContactCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                PopupMenuButton<_ContactMenuAction>(
-                  tooltip: '联系人操作',
-                  onSelected: (action) => switch (action) {
-                    _ContactMenuAction.transfer => onTransfer(),
-                    _ContactMenuAction.message => onMessage(),
-                    _ContactMenuAction.rename => onRename(),
-                    _ContactMenuAction.delete => onDelete(),
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(
-                      value: _ContactMenuAction.transfer,
-                      child: Text('转账'),
-                    ),
-                    PopupMenuItem(
-                      value: _ContactMenuAction.message,
-                      child: Text('私信'),
-                    ),
-                    PopupMenuItem(
-                      value: _ContactMenuAction.rename,
-                      child: Text('修改名称'),
-                    ),
-                    PopupMenuItem(
-                      value: _ContactMenuAction.delete,
-                      child: Text(
-                        '删除联系人',
-                        style: TextStyle(color: AppTheme.danger),
+                if (showActions)
+                  PopupMenuButton<_ContactMenuAction>(
+                    tooltip: '联系人操作',
+                    onSelected: (action) => switch (action) {
+                      _ContactMenuAction.transfer => onTransfer(),
+                      _ContactMenuAction.message => onMessage(),
+                      _ContactMenuAction.rename => onRename(),
+                      _ContactMenuAction.delete => onDelete(),
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: _ContactMenuAction.transfer,
+                        child: Text('转账'),
                       ),
-                    ),
-                  ],
-                ),
+                      PopupMenuItem(
+                        value: _ContactMenuAction.message,
+                        child: Text('私信'),
+                      ),
+                      PopupMenuItem(
+                        value: _ContactMenuAction.rename,
+                        child: Text('修改名称'),
+                      ),
+                      PopupMenuItem(
+                        value: _ContactMenuAction.delete,
+                        child: Text(
+                          '删除联系人',
+                          style: TextStyle(color: AppTheme.danger),
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -601,4 +624,23 @@ class _EmptyContacts extends StatelessWidget {
 String _shortAddress(String address) {
   if (address.length <= 14) return address;
   return '${address.substring(0, 6)}...${address.substring(address.length - 5)}';
+}
+
+/// 通讯录 / 聊天页共用的「扫码加好友」收口。
+///
+/// 打开 contact 模式扫码页,扫到用户名片码即写入本人密文通讯录
+/// (写库与「已加入/已更新通讯录」提示均在扫码页内完成)。[selfAccountId]
+/// 传本人账户,供扫码页拒绝把自己加为联系人。调用方在返回后自行刷新列表。
+Future<void> scanAndAddContact(
+  BuildContext context, {
+  required String selfAccountId,
+}) async {
+  await Navigator.of(context).push<void>(
+    MaterialPageRoute<void>(
+      builder: (_) => QrScanPage(
+        mode: QrScanMode.contact,
+        selfAddress: selfAccountId,
+      ),
+    ),
+  );
 }

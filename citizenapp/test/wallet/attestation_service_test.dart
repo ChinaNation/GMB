@@ -91,7 +91,8 @@ void main() {
 
       expect(expires?.intValue, state.expiresAtMillis);
       expect(policy?.stringValue, contains('alg=sr25519'));
-      expect(payload?.stringValue, contains('"pubkey":"${wallet.pubkeyHex}"'));
+      expect(
+          payload?.stringValue, contains('"public_key":"${wallet.accountId}"'));
     });
   });
 }
@@ -102,9 +103,9 @@ WalletProfile _walletFixture({required int walletIndex}) {
     walletName: '钱包$walletIndex',
     walletIcon: 'wallet',
     balance: 0,
-    address: 'w5FixtureAddress$walletIndex',
-    pubkeyHex:
-        '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+    ss58Address: 'w5FixtureAddress$walletIndex',
+    accountId:
+        '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
     alg: 'sr25519',
     ss58: 2027,
     createdAtMillis: DateTime.now().millisecondsSinceEpoch,

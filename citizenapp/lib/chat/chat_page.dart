@@ -64,7 +64,7 @@ class ChatPage extends StatefulWidget {
   ChatPage({
     super.key,
     required this.conversationId,
-    required this.ownerAccount,
+    required this.accountId,
     required this.peerUserId,
     required this.title,
     this.isGroup = false,
@@ -81,11 +81,11 @@ class ChatPage extends StatefulWidget {
   }) : store = store ?? ChatStore();
 
   final String conversationId;
-  final String ownerAccount;
+  final String accountId;
   final String peerUserId;
   final String title;
 
-  /// 群聊模式:入站消息按各自 `senderAccount` 归属并在气泡上方显示发送者名。
+  /// 群聊模式:入站消息按各自 `senderAccountId` 归属并在气泡上方显示发送者名。
   final bool isGroup;
   final ChatStore store;
   final ChatSendTextCallback? onSendText;
@@ -192,7 +192,7 @@ class _ChatPageState extends State<ChatPage> {
       await _chatController.setMessages(
         storedMessagesToChatMessages(
           messages,
-          ownerAccount: widget.ownerAccount,
+          accountId: widget.accountId,
           resolveLocalMediaPath: (content) => mediaPaths[content.attachmentId],
         ),
         animated: false,
@@ -631,7 +631,7 @@ class _ChatPageState extends State<ChatPage> {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => UserProfilePage(
-          ownerAccount: widget.peerUserId,
+          accountId: widget.peerUserId,
           isSelf: false,
         ),
       ),
@@ -1152,7 +1152,7 @@ class _ChatPageState extends State<ChatPage> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : Chat(
-                    currentUserId: widget.ownerAccount,
+                    currentUserId: widget.accountId,
                     chatController: _chatController,
                     onMessageSend: _handleSend,
                     onAttachmentTap: _handleMediaTap,
@@ -1167,13 +1167,14 @@ class _ChatPageState extends State<ChatPage> {
                       composerBuilder: _buildComposer,
                     ),
                     resolveUser: (id) async {
-                      final isMe = id == widget.ownerAccount;
+                      final isMe = id == widget.accountId;
                       return User(
                         id: id,
                         name: isMe
                             ? '我'
                             : widget.isGroup
-                                ? ProfilePresentation.forAccount(id).fallbackName
+                                ? ProfilePresentation.forAccount(id)
+                                    .fallbackName
                                 : peerName,
                       );
                     },

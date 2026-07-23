@@ -18,7 +18,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   const session = SquareSession(
     sessionToken: 't',
-    ownerAccount: 'creator-acc',
+    accountId:
+        '0x7777777777777777777777777777777777777777777777777777777777777777',
     expiresAt: 9999999999999,
   );
 
@@ -40,7 +41,8 @@ void main() {
     );
 
     expect(api.lastSaveTxHash, '0x${List.filled(64, 'a').join()}');
-    expect(plan.creatorAccount, 'creator-acc');
+    expect(plan.creatorAccountId,
+        '0x7777777777777777777777777777777777777777777777777777777777777777');
     expect(plan.tiers, hasLength(1));
     expect(await api.fetchMyPlan(session), isNotNull);
   });
@@ -65,7 +67,8 @@ void main() {
         return http.Response.bytes(
           utf8.encode(jsonEncode({
             'plan': {
-              'creator_account': 'creator-acc',
+              'creator_account_id':
+                  '0x7777777777777777777777777777777777777777777777777777777777777777',
               'tiers': [tier.toJson()],
               'updated_at': 1,
             },
@@ -77,7 +80,8 @@ void main() {
     );
     final signedSession = SquareSession(
       sessionToken: 't',
-      ownerAccount: 'creator-acc',
+      accountId:
+          '0x7777777777777777777777777777777777777777777777777777777777777777',
       expiresAt: 9999999999999,
       signRequest: (_) async {
         deviceSignCount++;
@@ -100,7 +104,8 @@ void main() {
   test('FakeCreatorApi 概览默认按档位数', () async {
     final api = FakeCreatorApi(
       initialPlan: const CreatorPlan(
-        creatorAccount: 'creator-acc',
+        creatorAccountId:
+            '0x7777777777777777777777777777777777777777777777777777777777777777',
         tiers: [tier],
         updatedAt: 0,
       ),
@@ -129,7 +134,7 @@ void main() {
     expect(rpc.signCount, 1);
     expect(api.saveCount, 1);
     expect(
-      prefs.getString('creator_plan_mirror_pending:$_ownerAddress'),
+      prefs.getString('creator_plan_mirror_pending:$_accountId'),
       isNotNull,
     );
 
@@ -139,19 +144,21 @@ void main() {
     expect(rpc.setPlansCount, 1, reason: '同一业务不得再次提交链上交易');
     expect(rpc.signCount, 1, reason: '同一业务不得再次账户签名');
     expect(
-      prefs.getString('creator_plan_mirror_pending:$_ownerAddress'),
+      prefs.getString('creator_plan_mirror_pending:$_accountId'),
       isNull,
     );
   });
 }
 
-const _ownerAddress = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
+const _signerSs58Address = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
+const _accountId =
+    '0x0000000000000000000000000000000000000000000000000000000000000000';
 
 class _FakeSessionProvider extends SquareSessionProvider {
   @override
   Future<SquareSession?> ensureSession() async => const SquareSession(
         sessionToken: 'creator-session',
-        ownerAccount: _ownerAddress,
+        accountId: _accountId,
         expiresAt: 9999999999999,
       );
 }
@@ -163,9 +170,8 @@ class _FakeWalletManager extends WalletManager {
         walletName: 'creator',
         walletIcon: '',
         balance: 0,
-        address: _ownerAddress,
-        pubkeyHex:
-            '0000000000000000000000000000000000000000000000000000000000000000',
+        ss58Address: _signerSs58Address,
+        accountId: _accountId,
         alg: 'sr25519',
         ss58: 2027,
         createdAtMillis: 0,
@@ -184,8 +190,8 @@ class _FakeSubscriptionRpc extends SubscriptionRpc {
 
   @override
   Future<FinalizedSubscriptionSnapshot> fetchSubscriptionSnapshot({
-    required String subscriberAddress,
-    String? creatorAddress,
+    required String subscriberAccountId,
+    String? creatorAccountId,
   }) async =>
       FinalizedSubscriptionSnapshot(
         state: ChainSubscriptionState(
@@ -204,8 +210,8 @@ class _FakeSubscriptionRpc extends SubscriptionRpc {
 
   @override
   Future<FinalizedSubscriptionTransaction> setCreatorPlans({
-    required String fromAddress,
-    required Uint8List signerPubkey,
+    required String fromSs58Address,
+    required Uint8List signerPublicKey,
     required List<CreatorTierInput> tiers,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
@@ -223,7 +229,7 @@ class _FakeSubscriptionRpc extends SubscriptionRpc {
 
   @override
   Future<List<ChainCreatorTier>> fetchCreatorPlans(
-          String creatorAddress) async =>
+          String creatorAccountId) async =>
       [
         ChainCreatorTier(
           tierId: 't1',

@@ -5,8 +5,8 @@ import { openChatWebSocket, submitChatEnvelope } from '../src/chat/service';
 import { relayChatPayload } from '../src/chat/realtime';
 import type { Env, SessionState } from '../src/types';
 
-const OWNER = '5GrwvaEF5zXb26Fz9rcQpDWS7u4m6DXb6T6TQvF9j5uQ8g6U';
-const RECIPIENT = '5FHneW46xGXgs5mUiveU4sbTyGBzmstLr6nCMvQNoHGKutQY';
+const ACCOUNT_ID = '0x1111111111111111111111111111111111111111111111111111111111111111';
+const RECIPIENT = '0x2222222222222222222222222222222222222222222222222222222222222222';
 
 class ChatStmt {
   private values: unknown[] = [];
@@ -18,7 +18,7 @@ class ChatStmt {
   async first<T>(): Promise<T | null> {
     if (this.sql.includes('FROM chat_devices')) {
       return {
-        owner_account: this.values[0],
+        account_id: this.values[0],
         device_id: this.values[1],
         device_public_key_hex: 'aabbcc',
         expires_at: Date.now() + 60_000,
@@ -38,7 +38,7 @@ class SessionKv {
   async get<T>(key: string): Promise<T | null> {
     if (key === 'square_session:test-session') {
       return {
-        owner_account: OWNER,
+        account_id: ACCOUNT_ID,
         created_at: Date.now(),
         expires_at: Date.now() + 60_000,
       } as T;
@@ -65,16 +65,17 @@ function fakeEnv(sent = 1): Env {
 }
 
 describe('device-only Chat transport', () => {
-  it('round-trips base64url bytes and normalizes device keys', () => {
+  it('round-trips base64url bytes and requires canonical device keys', () => {
     const encoded = bytesToBase64Url(new Uint8Array([1, 2, 3, 254, 255]));
     expect(encoded).not.toContain('=');
     expect(Array.from(base64UrlToBytes(encoded))).toEqual([1, 2, 3, 254, 255]);
-    expect(assertDevicePublicKeyHex('AABBcc')).toBe('aabbcc');
+    expect(assertDevicePublicKeyHex('aabbcc')).toBe('aabbcc');
+    expect(() => assertDevicePublicKeyHex('AABBcc')).toThrow();
   });
 
   it('builds a deterministic device binding payload', () => {
     const input = {
-      owner_account: OWNER,
+      account_id: ACCOUNT_ID,
       device_id: 'alice-phone',
       device_public_key_hex: 'aabbcc',
       expires_at: 1_800_000,
@@ -94,7 +95,7 @@ describe('device-only Chat transport', () => {
         body: JSON.stringify({
           envelope_id: 'env-123456',
           sender_device_id: 'alice-phone',
-          recipient_account: RECIPIENT,
+          recipient_account_id: RECIPIENT,
           envelope: 'AQID',
         }),
       }),
@@ -113,7 +114,7 @@ describe('device-only Chat transport', () => {
         body: JSON.stringify({
           envelope_id: 'env-queued',
           sender_device_id: 'alice-phone',
-          recipient_account: RECIPIENT,
+          recipient_account_id: RECIPIENT,
           envelope: 'AQID',
         }),
       }),
@@ -148,8 +149,8 @@ describe('device-only Chat transport', () => {
     } as unknown as DurableObjectNamespace;
     const sent = await relayChatPayload(env, {
       type: 'gmb_chat_envelope_v2',
-      sender_account: OWNER,
-      recipient_account: RECIPIENT,
+      sender_account_id: ACCOUNT_ID,
+      recipient_account_id: RECIPIENT,
       recipient_device_id: null,
       envelope_id: 'env-route',
       envelope: 'AQID',

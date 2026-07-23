@@ -181,9 +181,12 @@ pub fn required_protocol_account_names(
 ) -> Result<Vec<&'static str>, ServiceError> {
     let code = code::institution_code_from_str(institution_code)
         .ok_or(ServiceError::BadInput("institution_code is invalid"))?;
+    // UNIN 的父级由运行期机构注册入口提供（该入口尚未落地）；在此之前非法人组织
+    // 一律按无父级处理，即不含清算账户。
     let kinds = primitives::institution_constraints::required_protocol_account_kinds(
         code,
         cid_number.as_bytes(),
+        None,
     )
     .ok_or(ServiceError::BadInput(
         "institution_code and cid_number do not match",
@@ -369,7 +372,7 @@ pub fn build_default_accounts_for_names(
     actor: &str,
     names: &[&str],
 ) -> Vec<InstitutionAccount> {
-    use crate::institution::accounts::derive::derive_account;
+    use crate::institution::accounts::derive::derive_account_id;
     use chrono::Utc;
 
     let now = Utc::now();
@@ -378,8 +381,8 @@ pub fn build_default_accounts_for_names(
         .map(|name| InstitutionAccount {
             cid_number: cid_number.to_string(),
             account_name: (*name).to_string(),
-            account: derive_account(cid_number, name),
-            created_by: actor.to_string(),
+            account_id: derive_account_id(cid_number, name),
+            creator_account_id: Some(actor.to_string()),
             created_at: now,
         })
         .collect()

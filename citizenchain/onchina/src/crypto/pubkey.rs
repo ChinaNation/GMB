@@ -1,55 +1,34 @@
-//! sr25519 pubkey 规范化与等值比较
+//! 链账户 ID 与 sr25519 签名公钥工具。
 //!
-//! 这是跨业务通用的 sr25519 公钥工具,归入 `crypto`。
-//! 内部统一 0x 小写 hex,前端展示 SS58(prefix=2027),禁止混用。
+//! 账户输入只接受小写 `0x` 加 64 位十六进制；SS58 仅用于展示，禁止作为授权、
+//! 存储或接口身份主键。
 
-use crate::auth::login::{parse_sr25519_pubkey, parse_sr25519_pubkey_bytes};
-
-pub(crate) fn normalize_admin_account(input: &str) -> Option<String> {
-    normalize_sr25519_pubkey(input)
-}
-
-pub(crate) fn same_admin_account(left: &str, right: &str) -> bool {
-    same_sr25519_pubkey(left, right)
-}
-
-fn normalize_sr25519_pubkey(input: &str) -> Option<String> {
-    if let Some(hex_pubkey) = parse_sr25519_pubkey(input) {
-        return Some(hex_pubkey);
-    }
-    if parse_sr25519_pubkey_bytes(input).is_some() {
-        return Some(input.trim().to_string());
-    }
-    None
-}
-
-fn same_sr25519_pubkey(left: &str, right: &str) -> bool {
-    match (parse_sr25519_pubkey(left), parse_sr25519_pubkey(right)) {
-        (Some(l), Some(r)) => l.eq_ignore_ascii_case(r.as_str()),
-        _ => left.trim().eq_ignore_ascii_case(right.trim()),
-    }
-}
-
-/// 从 SS58 地址解出 0x 小写 hex 公钥。
-///
-/// SS58↔hex 互转是跨业务通用的钱包地址工具,归入 `crypto::pubkey`。
-pub(crate) fn ss58_to_pubkey_hex(address: &str) -> Option<String> {
-    let decoded = bs58::decode(address.trim()).into_vec().ok()?;
-    let prefix_len = if decoded.first().copied().unwrap_or(0) < 64 {
-        1
-    } else {
-        2
-    };
-    if decoded.len() < prefix_len + 32 + 2 {
+pub(crate) fn normalize_account_id(input: &str) -> Option<String> {
+    let trimmed = input.trim();
+    if trimmed.len() != 66 || !trimmed.starts_with("0x") {
         return None;
     }
-    let pubkey = &decoded[prefix_len..prefix_len + 32];
-    Some(format!("0x{}", hex::encode(pubkey)))
+    let hex = &trimmed[2..];
+    if !hex
+        .bytes()
+        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return None;
+    }
+    Some(trimmed.to_string())
 }
 
-/// 0x hex 公钥转 SS58 地址(prefix=2027)。
-pub(crate) fn pubkey_hex_to_ss58(pubkey_hex: &str) -> Option<String> {
-    let pubkey_bytes = hex::decode(pubkey_hex.trim_start_matches("0x")).ok()?;
+pub(crate) fn same_account_id(left: &str, right: &str) -> bool {
+    matches!(
+        (normalize_account_id(left), normalize_account_id(right)),
+        (Some(left), Some(right)) if left == right
+    )
+}
+
+/// 规范账户 ID 转 SS58 展示地址(prefix=2027)。
+pub(crate) fn account_id_to_ss58(account_id: &str) -> Option<String> {
+    let account_id = normalize_account_id(account_id)?;
+    let pubkey_bytes = hex::decode(&account_id[2..]).ok()?;
     if pubkey_bytes.len() != 32 {
         return None;
     }
@@ -67,4 +46,39 @@ pub(crate) fn pubkey_hex_to_ss58(pubkey_hex: &str) -> Option<String> {
     hasher.finalize_variable(&mut hash).ok()?;
     payload.extend_from_slice(&hash[..2]);
     Some(bs58::encode(payload).into_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ACCOUNT_ID: &str = "0x1111111111111111111111111111111111111111111111111111111111111111";
+
+    #[test]
+    fn account_id_accepts_only_canonical_text() {
+        assert_eq!(
+            normalize_account_id(ACCOUNT_ID).as_deref(),
+            Some(ACCOUNT_ID)
+        );
+        assert!(normalize_account_id(&ACCOUNT_ID[2..]).is_none());
+        assert!(normalize_account_id(&ACCOUNT_ID.to_uppercase()).is_none());
+        assert!(normalize_account_id("5GrwvaEF5zXb26Fz9rcQpDWSQ57Cr4NMh6t7vY6zT").is_none());
+    }
+
+    #[test]
+    fn account_comparison_has_no_case_or_prefix_fallback() {
+        assert!(same_account_id(ACCOUNT_ID, ACCOUNT_ID));
+        assert!(!same_account_id(ACCOUNT_ID, &ACCOUNT_ID.to_uppercase()));
+        assert!(!same_account_id(ACCOUNT_ID, &ACCOUNT_ID[2..]));
+    }
+
+    #[test]
+    fn ss58_is_derived_without_changing_account_id() {
+        let ss58_address = account_id_to_ss58(ACCOUNT_ID).expect("规范账户应能派生展示地址");
+        assert!(!ss58_address.starts_with("0x"));
+        assert_eq!(
+            normalize_account_id(ACCOUNT_ID).as_deref(),
+            Some(ACCOUNT_ID)
+        );
+    }
 }

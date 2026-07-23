@@ -32,7 +32,7 @@ typedef OnchainPaymentExtraEntriesBuilder = List<Widget> Function(
 typedef OnchainWalletPicker = Future<bool?> Function();
 typedef OnchainCurrentWalletLoader = Future<WalletProfile?> Function();
 typedef OnchainLocalRecordsLoader = Future<List<LocalTxEntity>> Function(
-  String walletPubkeyHex, {
+  String accountId, {
   int limit,
 });
 
@@ -173,10 +173,11 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
       }
       return;
     }
-    final targetPubkey = LocalTxStore.normalizePubkey(targetWallet.pubkeyHex);
+    final targetAccountId =
+        LocalTxStore.requireAccountId(targetWallet.accountId);
     try {
       final records = await _queryLocalRecords(
-        targetPubkey,
+        targetAccountId,
         limit: 100,
       );
       // 钱包流水不再保存 direction，支出由 amountDeltaFen 的负号判断。
@@ -185,8 +186,8 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
               r.type == 'transfer' && BigInt.parse(r.amountDeltaFen).isNegative)
           .toList();
       if (mounted) {
-        final currentPubkey = _walletPubkey(_currentWallet);
-        if (currentPubkey != targetPubkey) {
+        final currentAccountId = _accountIdOf(_currentWallet);
+        if (currentAccountId != targetAccountId) {
           return;
         }
         setState(() {
@@ -201,20 +202,20 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
     }
   }
 
-  String? _walletPubkey(WalletProfile? wallet) {
+  String? _accountIdOf(WalletProfile? wallet) {
     if (wallet == null) return null;
-    return LocalTxStore.normalizePubkey(wallet.pubkeyHex);
+    return LocalTxStore.requireAccountId(wallet.accountId);
   }
 
   Future<List<LocalTxEntity>> _queryLocalRecords(
-    String walletPubkeyHex, {
+    String accountId, {
     int limit = 100,
   }) {
     final loader = widget.localRecordsLoader;
     if (loader != null) {
-      return loader(walletPubkeyHex, limit: limit);
+      return loader(accountId, limit: limit);
     }
-    return LocalTxStore.queryByWalletPubkey(walletPubkeyHex, limit: limit);
+    return LocalTxStore.queryByAccountId(accountId, limit: limit);
   }
 
   int _countByStatus(String status) {
@@ -251,12 +252,12 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
     if (!mounted) {
       return;
     }
-    final nextPubkey = _walletPubkey(wallet);
-    final currentPubkey = _walletPubkey(_currentWallet);
+    final nextAccountId = _accountIdOf(wallet);
+    final currentAccountId = _accountIdOf(_currentWallet);
     setState(() {
       _currentWallet = wallet;
       _loadingWallet = false;
-      if (nextPubkey != currentPubkey) {
+      if (nextAccountId != currentAccountId) {
         _localTxRecords = [];
       }
     });
@@ -300,14 +301,14 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
     final contact = await Navigator.of(context).push<UserContact>(
       MaterialPageRoute(
         builder: (_) => const ContactBookPage(
-          selectForTrade: true,
+          mode: ContactPickMode.pickForTransfer,
         ),
       ),
     );
     if (!mounted || contact == null) return;
     setState(() {
       // 通讯录始终属于默认用户；这里只接收联系人 SS58 地址，付款钱包保持不变。
-      _toController.text = contact.address;
+      _toController.text = contact.ss58Address;
     });
   }
 
@@ -332,9 +333,9 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
       return;
     }
 
-    final toAddress = _toController.text.trim();
+    final toSs58Address = _toController.text.trim();
     final amountRaw = _amountController.text.trim();
-    if (toAddress.isEmpty || amountRaw.isEmpty) {
+    if (toSs58Address.isEmpty || amountRaw.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('请先填写完整的收款地址和金额')),
       );
@@ -344,10 +345,10 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
 
     // SS58 地址校验（prefix 2027）
     try {
-      final decoded = Keyring().decodeAddress(toAddress);
+      final decoded = Keyring().decodeAddress(toSs58Address);
       // 验证 prefix：重新编码后比对
       final reEncoded = Keyring().encodeAddress(decoded, _ss58Prefix);
-      if (reEncoded != toAddress) {
+      if (reEncoded != toSs58Address) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('收款地址不是本链地址（SS58 前缀不匹配）')),
         );
@@ -454,7 +455,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
           final requestId = QrSigner.generateRequestId(prefix: 'tx-');
           final request = qrSigner.buildRequest(
             requestId: requestId,
-            pubkey: '0x${wallet.pubkeyHex}',
+            signerPublicKey: wallet.accountId,
             payloadHex: '0x${_toHex(payload)}',
             action: QrActions.transferWithRemark,
           );
@@ -469,7 +470,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
               builder: (_) => QrSignSessionPage(
                 request: request,
                 requestJson: requestJson,
-                expectedPubkey: '0x${wallet.pubkeyHex}',
+                expectedSignerPublicKey: wallet.accountId,
               ),
             ),
           );
@@ -491,7 +492,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
         final wallet = _currentWallet;
         if (txHash == null || wallet == null) return;
         unawaited(LocalTxStore.markLocalSubmitInBlock(
-          walletPubkeyHex: wallet.pubkeyHex,
+          accountId: wallet.accountId,
           txHash: txHash,
           blockHash: event.blockHashHex,
         ).then((_) => _loadLocalRecords()));
@@ -499,7 +500,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
 
       final result = await _paymentService.submitTransfer(
         OnchainPaymentDraft(
-          toAddress: toAddress,
+          toSs58Address: toSs58Address,
           amount: amount,
           symbol: _selectedSymbol,
           remark: remark,
@@ -529,15 +530,15 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
             (-(BigInt.parse(transferAmountFen) + BigInt.parse(feeFen)))
                 .toString();
         await LocalTxStore.upsertLocalSubmitTransfer(
-          walletAddress: _currentWallet!.address,
-          walletPubkeyHex: _currentWallet!.pubkeyHex,
+          ss58Address: _currentWallet!.ss58Address,
+          accountId: _currentWallet!.accountId,
           txHash: txHash,
           amountDeltaFen: amountDeltaFen,
           transferAmountFen: transferAmountFen,
           feeFen: feeFen,
-          counterpartyAddress: toAddress,
-          fromAddress: _currentWallet!.address,
-          toAddress: toAddress,
+          counterpartySs58Address: toSs58Address,
+          fromSs58Address: _currentWallet!.ss58Address,
+          toSs58Address: toSs58Address,
           remark: remark,
           usedNonce: result.usedNonce,
           createdAtMillis: DateTime.now().millisecondsSinceEpoch,
@@ -545,7 +546,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
         );
         if (includedBlockHash != null) {
           await LocalTxStore.markLocalSubmitInBlock(
-            walletPubkeyHex: _currentWallet!.pubkeyHex,
+            accountId: _currentWallet!.accountId,
             txHash: txHash,
             blockHash: includedBlockHash,
           );
@@ -756,8 +757,8 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (_) => TransactionHistoryPage(
-                                walletAddress: _currentWallet!.address,
-                                walletPubkeyHex: _currentWallet!.pubkeyHex,
+                                ss58Address: _currentWallet!.ss58Address,
+                                accountId: _currentWallet!.accountId,
                               ),
                             ),
                           );

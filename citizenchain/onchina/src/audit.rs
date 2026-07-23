@@ -18,8 +18,8 @@ use crate::*;
 pub(crate) struct AuditLogEntry {
     pub(crate) seq: u64,
     pub(crate) action: String,
-    pub(crate) actor_account: String,
-    pub(crate) target_account: Option<String>,
+    pub(crate) actor_account_id: Option<String>,
+    pub(crate) target_cid: Option<String>,
     #[serde(default)]
     pub(crate) request_id: Option<String>,
     #[serde(default)]
@@ -33,7 +33,7 @@ pub(crate) struct AuditLogEntry {
 #[derive(Deserialize)]
 pub(crate) struct AuditLogsQuery {
     pub(crate) action: Option<String>,
-    pub(crate) actor_account: Option<String>,
+    pub(crate) actor_account_id: Option<String>,
     pub(crate) target_cid: Option<String>,
     pub(crate) keyword: Option<String>,
     pub(crate) limit: Option<usize>,
@@ -52,7 +52,18 @@ pub(crate) async fn admin_list_audit_logs(
 
     let limit = query.limit.unwrap_or(50).clamp(1, 200);
     let action = query.action.unwrap_or_default().trim().to_uppercase();
-    let actor = query.actor_account.unwrap_or_default().trim().to_string();
+    let actor = query
+        .actor_account_id
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    if !actor.is_empty() && crate::crypto::pubkey::normalize_account_id(&actor).is_none() {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "actor_account_id must be lowercase 0x plus 64 hexadecimal characters",
+        );
+    }
     let target_cid = query.target_cid.unwrap_or_default().trim().to_string();
     let keyword = query.keyword.unwrap_or_default().trim().to_lowercase();
     let province_code = ctx
@@ -70,18 +81,18 @@ pub(crate) async fn admin_list_audit_logs(
         let limit_i64 = i64::try_from(limit).map_err(|_| "limit too large".to_string())?;
         let rows = conn
             .query(
-                "SELECT id, action, actor, target_cid, detail, created_at
+                "SELECT id, action, actor_account_id, target_cid, detail, created_at
                  FROM audit
                  WHERE ($1::text IS NULL OR province_code = $1)
                    AND ($2::text IS NULL OR city_code = $2)
                    AND ($3::text = '' OR action = $3)
-                   AND ($4::text = '' OR lower(actor) = lower($4))
+                   AND ($4::text = '' OR actor_account_id = $4)
                    AND ($5::text = '' OR target_cid = $5)
                    AND (
                         $6::text = ''
                         OR lower(detail::text) LIKE '%' || $6 || '%'
                         OR lower(action) LIKE '%' || $6 || '%'
-                        OR lower(actor) LIKE '%' || $6 || '%'
+                        OR lower(COALESCE(actor_account_id, '')) LIKE '%' || $6 || '%'
                         OR lower(COALESCE(target_cid, '')) LIKE '%' || $6 || '%'
                    )
                  ORDER BY created_at DESC, id DESC
@@ -103,8 +114,8 @@ pub(crate) async fn admin_list_audit_logs(
             output.push(AuditLogEntry {
                 seq: u64::try_from(seq).unwrap_or(0),
                 action: row.get(1),
-                actor_account: row.get(2),
-                target_account: row.get(3),
+                actor_account_id: row.get(2),
+                target_cid: row.get(3),
                 request_id: None,
                 actor_ip: None,
                 result: "SUCCESS".to_string(),

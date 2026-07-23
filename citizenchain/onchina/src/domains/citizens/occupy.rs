@@ -21,13 +21,14 @@ use uuid::Uuid;
 use crate::auth::actions::require_admin_security_grant;
 use crate::auth::operation_auth::AdminActionType;
 use crate::core::chain_submit;
+use crate::crypto::pubkey::same_account_id;
 use crate::domains::citizens::admin_entry::{
     citizen_cid_seed, create_output_from_record, generate_citizen_cid_candidate,
     persist_citizen_record, validate_citizen_input, AdminCreateCitizenInput,
     AdminCreateCitizenOutput, ValidatedCitizenInput,
 };
 use crate::domains::citizens::chain_identity::{
-    active_registry_cid_number, ensure_registry_admin, same_pubkey_hex, validate_actor_role_code,
+    active_registry_cid_number, ensure_registry_admin, validate_actor_role_code,
 };
 use crate::*;
 
@@ -50,8 +51,8 @@ pub(crate) const PURPOSE_CITIZEN_IDENTITY_PUSH: &str = "CITIZEN_IDENTITY_PUSH";
 pub(crate) struct ChainSignSession {
     pub(crate) request_id: String,
     pub(crate) purpose: String,
-    /// 管理员钱包公钥 hex(签名者必须与之一致)。
-    pub(crate) actor_pubkey: String,
+    /// 发起管理员账户对应的当前签名公钥（签名者必须与之一致）。
+    pub(crate) actor_public_key: String,
     pub(crate) call_data: Vec<u8>,
     pub(crate) nonce: u32,
     /// sha256(签名输入) hex,submit 阶段重建校验防 runtime 漂移。
@@ -66,7 +67,7 @@ impl Db {
         let s = ChainSignSession {
             request_id: s.request_id.clone(),
             purpose: s.purpose.clone(),
-            actor_pubkey: s.actor_pubkey.clone(),
+            actor_public_key: s.actor_public_key.clone(),
             call_data: s.call_data.clone(),
             nonce: s.nonce,
             signing_hash: s.signing_hash.clone(),
@@ -77,13 +78,13 @@ impl Db {
         self.with_client(move |conn| {
             conn.execute(
                 "INSERT INTO chain_sign_sessions
-                    (request_id, purpose, actor_pubkey, call_data, nonce, signing_hash,
+                    (request_id, purpose, actor_public_key, call_data, nonce, signing_hash,
                      context, expires_at)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
                 &[
                     &s.request_id,
                     &s.purpose,
-                    &s.actor_pubkey,
+                    &s.actor_public_key,
                     &hex::encode(&s.call_data),
                     &(s.nonce as i64),
                     &s.signing_hash,
@@ -104,7 +105,7 @@ impl Db {
         self.with_client(move |conn| {
             let row = conn
                 .query_opt(
-                    "SELECT request_id, purpose, actor_pubkey, call_data, nonce, signing_hash,
+                    "SELECT request_id, purpose, actor_public_key, call_data, nonce, signing_hash,
                             context, expires_at, consumed_at
                      FROM chain_sign_sessions WHERE request_id = $1",
                     &[&request_id],
@@ -113,7 +114,7 @@ impl Db {
             Ok(row.map(|r| ChainSignSession {
                 request_id: r.get(0),
                 purpose: r.get(1),
-                actor_pubkey: r.get(2),
+                actor_public_key: r.get(2),
                 call_data: hex::decode(r.get::<_, String>(3)).unwrap_or_default(),
                 nonce: r.get::<_, i64>(4) as u32,
                 signing_hash: r.get(5),
@@ -140,19 +141,19 @@ impl Db {
     pub(crate) fn mark_citizen_revoked(
         &self,
         cid_number: &str,
-        admin_account: &str,
+        account_id: &str,
         onchain_tx_hash: &str,
     ) -> Result<u64, String> {
         let cid_number = cid_number.to_string();
-        let admin_account = admin_account.to_string();
+        let account_id = account_id.to_string();
         let onchain_tx_hash = onchain_tx_hash.to_string();
         self.with_client(move |conn| {
             conn.execute(
                 "UPDATE citizens
                  SET citizen_status = 'REVOKED', status_updated_at = extract(epoch from now())::bigint,
-                     onchain_tx_hash = $2, onchain_at = now(), updated_by = $3, updated_at = now()
+                     onchain_tx_hash = $2, onchain_at = now(), updater_account_id = $3, updated_at = now()
                  WHERE cid_number = $1",
-                &[&cid_number, &onchain_tx_hash, &admin_account],
+                &[&cid_number, &onchain_tx_hash, &account_id],
             )
             .map_err(|e| format!("mark citizen revoked failed: {e}"))
         })
@@ -165,33 +166,29 @@ impl Db {
     pub(crate) fn confirm_citizen_identity_onchain(
         &self,
         cid_number: &str,
-        wallet_pubkey: &str,
-        wallet_address: &str,
-        admin_account: &str,
+        citizen_account_id: &str,
+        registrar_account_id: &str,
         onchain_tx_hash: &str,
         onchain_block_number: Option<u64>,
     ) -> Result<u64, String> {
         let cid_number = cid_number.to_string();
-        let wallet_pubkey = wallet_pubkey.to_string();
-        let wallet_address = wallet_address.to_string();
-        let admin_account = admin_account.to_string();
+        let citizen_account_id = citizen_account_id.to_string();
+        let registrar_account_id = registrar_account_id.to_string();
         let onchain_tx_hash = onchain_tx_hash.to_string();
         let block = onchain_block_number.map(|n| n as i64);
         self.with_client(move |conn| {
             conn.execute(
                 "UPDATE citizens
-                 SET wallet_pubkey = $2, wallet_address = $3, wallet_sig_alg = 'sr25519',
-                     wallet_verified_at = now(), onchain_tx_hash = $4,
-                     onchain_block_number = $5, onchain_at = now(),
-                     updated_by = $6, updated_at = now()
+                 SET account_id = $2, account_verified_at = now(), onchain_tx_hash = $3,
+                     onchain_block_number = $4, onchain_at = now(),
+                     updater_account_id = $5, updated_at = now()
                  WHERE cid_number = $1",
                 &[
                     &cid_number,
-                    &wallet_pubkey,
-                    &wallet_address,
+                    &citizen_account_id,
                     &onchain_tx_hash,
                     &block,
-                    &admin_account,
+                    &registrar_account_id,
                 ],
             )
             .map_err(|e| format!("confirm citizen identity onchain failed: {e}"))
@@ -256,7 +253,7 @@ pub(crate) struct PrepareCitizenOccupyOutput {
 pub(crate) struct ChainSubmitInput {
     pub(crate) request_id: String,
     /// 冷钱包扫码回签(前端已从响应 QR 解析);后端按会话签名字节重新验签。
-    pub(crate) signer_pubkey: String,
+    pub(crate) signer_public_key: String,
     pub(crate) signature: String,
 }
 
@@ -356,7 +353,7 @@ pub(crate) async fn prepare_citizen_occupy(
         validated.province_code.as_str(),
         validated.city_code.as_str(),
     );
-    let prepared = match chain_submit::prepare_signing(&call, ctx.admin_account.as_str()).await {
+    let prepared = match chain_submit::prepare_signing(&call, ctx.account_id.as_str()).await {
         Ok(v) => v,
         Err(err) => {
             tracing::error!(error = %err, "prepare occupy signing failed");
@@ -379,7 +376,7 @@ pub(crate) async fn prepare_citizen_occupy(
         request_id.as_str(),
         issued_at.timestamp(),
         expires_at.timestamp(),
-        ctx.admin_account.as_str(),
+        ctx.account_id.as_str(),
         &prepared.payload,
         action,
     ) {
@@ -389,7 +386,7 @@ pub(crate) async fn prepare_citizen_occupy(
     let session = ChainSignSession {
         request_id: request_id.clone(),
         purpose: PURPOSE_CITIZEN_OCCUPY.to_string(),
-        actor_pubkey: ctx.admin_account.clone(),
+        actor_public_key: ctx.account_id.clone(),
         call_data: call,
         nonce: prepared.nonce,
         signing_hash: prepared.signing_hash_hex.clone(),
@@ -410,7 +407,7 @@ pub(crate) async fn prepare_citizen_occupy(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "CITIZEN_OCCUPY_PREPARE",
-        &ctx.admin_account,
+        &ctx.account_id,
         Some(cid_number.clone()),
         serde_json::json!({
             "cid_number": cid_number,
@@ -482,7 +479,7 @@ pub(crate) async fn prepare_citizen_revoke(
         actor_role_code.as_str(),
         cid_number.as_str(),
     );
-    let prepared = match chain_submit::prepare_signing(&call, ctx.admin_account.as_str()).await {
+    let prepared = match chain_submit::prepare_signing(&call, ctx.account_id.as_str()).await {
         Ok(v) => v,
         Err(err) => {
             tracing::error!(error = %err, "prepare revoke signing failed");
@@ -504,7 +501,7 @@ pub(crate) async fn prepare_citizen_revoke(
         request_id.as_str(),
         issued_at.timestamp(),
         expires_at.timestamp(),
-        ctx.admin_account.as_str(),
+        ctx.account_id.as_str(),
         &prepared.payload,
         action,
     ) {
@@ -514,7 +511,7 @@ pub(crate) async fn prepare_citizen_revoke(
     let session = ChainSignSession {
         request_id: request_id.clone(),
         purpose: PURPOSE_CITIZEN_REVOKE.to_string(),
-        actor_pubkey: ctx.admin_account.clone(),
+        actor_public_key: ctx.account_id.clone(),
         call_data: call,
         nonce: prepared.nonce,
         signing_hash: prepared.signing_hash_hex.clone(),
@@ -532,7 +529,7 @@ pub(crate) async fn prepare_citizen_revoke(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "CITIZEN_REVOKE_PREPARE",
-        &ctx.admin_account,
+        &ctx.account_id,
         Some(cid_number.clone()),
         serde_json::json!({
             "cid_number": cid_number,
@@ -590,11 +587,14 @@ pub(crate) async fn submit_chain_sign(
         delete_session_best_effort(&state, session.request_id.as_str(), "expired");
         return api_error(StatusCode::GONE, 1005, "冷签会话已过期,请重新发起");
     }
-    if !same_pubkey_hex(session.actor_pubkey.as_str(), ctx.admin_account.as_str()) {
+    if !same_account_id(session.actor_public_key.as_str(), ctx.account_id.as_str()) {
         delete_session_best_effort(&state, session.request_id.as_str(), "actor mismatch");
         return api_error(StatusCode::FORBIDDEN, 1003, "只有发起管理员可以提交本会话");
     }
-    if !same_pubkey_hex(input.signer_pubkey.as_str(), session.actor_pubkey.as_str()) {
+    if !same_account_id(
+        input.signer_public_key.as_str(),
+        session.actor_public_key.as_str(),
+    ) {
         delete_session_best_effort(&state, session.request_id.as_str(), "signer mismatch");
         return api_error(StatusCode::FORBIDDEN, 1003, "签名钱包与会话管理员不一致");
     }
@@ -671,7 +671,7 @@ pub(crate) async fn submit_chain_sign(
 
     let tx_hash = match chain_submit::assemble_and_submit(
         &session.call_data,
-        session.actor_pubkey.as_str(),
+        session.actor_public_key.as_str(),
         input.signature.as_str(),
         session.nonce,
         session.signing_hash.as_str(),
@@ -687,7 +687,7 @@ pub(crate) async fn submit_chain_sign(
         }
     };
     if let Err(err) =
-        chain_submit::wait_nonce_consumed(session.actor_pubkey.as_str(), session.nonce).await
+        chain_submit::wait_nonce_consumed(session.actor_public_key.as_str(), session.nonce).await
     {
         tracing::error!(error = %err, tx_hash = %tx_hash, "wait inclusion failed");
         delete_session_best_effort(&state, session.request_id.as_str(), "wait inclusion failed");
@@ -729,7 +729,7 @@ pub(crate) async fn submit_chain_sign(
             let record = match persist_citizen_record(
                 &state,
                 &headers,
-                ctx.admin_account.as_str(),
+                ctx.account_id.as_str(),
                 &validated,
                 cid_number.as_str(),
                 tx_hash.as_str(),
@@ -750,7 +750,7 @@ pub(crate) async fn submit_chain_sign(
         PURPOSE_CITIZEN_REVOKE => {
             if let Err(err) = state.db.mark_citizen_revoked(
                 cid_number.as_str(),
-                ctx.admin_account.as_str(),
+                ctx.account_id.as_str(),
                 tx_hash.as_str(),
             ) {
                 tracing::error!(error = %err, "mark citizen revoked failed");
@@ -763,16 +763,11 @@ pub(crate) async fn submit_chain_sign(
             }
         }
         PURPOSE_CITIZEN_IDENTITY_PUSH => {
-            let wallet_pubkey = session
+            let citizen_account_id = session
                 .context
-                .get("wallet_pubkey")
+                .get("citizen_account_id")
                 .and_then(|v| v.as_str());
-            let wallet_address = session
-                .context
-                .get("wallet_address")
-                .and_then(|v| v.as_str());
-            let (Some(wallet_pubkey), Some(wallet_address)) = (wallet_pubkey, wallet_address)
-            else {
+            let Some(citizen_account_id) = citizen_account_id else {
                 delete_session_best_effort(
                     &state,
                     session.request_id.as_str(),
@@ -784,12 +779,11 @@ pub(crate) async fn submit_chain_sign(
                     "身份上链会话数据损坏",
                 );
             };
-            // 只有链交易最终确认后，才一次性绑定公民钱包并记录上链结果。
+            // 只有链交易最终确认后，才一次性绑定公民账户并记录上链结果。
             if let Err(err) = state.db.confirm_citizen_identity_onchain(
                 cid_number.as_str(),
-                wallet_pubkey,
-                wallet_address,
-                ctx.admin_account.as_str(),
+                citizen_account_id,
+                ctx.account_id.as_str(),
                 tx_hash.as_str(),
                 block_number,
             ) {
@@ -827,7 +821,7 @@ pub(crate) async fn submit_chain_sign(
     crate::core::runtime_ops::append_audit_log(
         &state,
         "CHAIN_SIGN_SUBMIT",
-        &ctx.admin_account,
+        &ctx.account_id,
         Some(cid_number.clone()),
         serde_json::json!({
             "purpose": session.purpose,

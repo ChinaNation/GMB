@@ -14,8 +14,8 @@
 ## 唯一真源
 
 - 机构管理员集合由 `admin-primitives::InstitutionAdmins` 表达；storage key 是 `cid_number`，value 只含 `institution_code + admins`。
-- 公权机构每项统一为 `PublicAdmin { admin_account, cid_number, family_name, given_name }`。当前允许公民 CID、姓、名为空；非空 CID 必须是 CTZN 且与 `citizen-identity` 的 CID↔钱包双向索引完全一致。public-admins 不复制公民身份真源，也不用占位姓名伪造真实资料。
-- 私权机构与个人多签每项继续为 `Admin { admin_account, family_name, given_name }`。姓、名只展示，钱包账户用于人员识别与签名，但账户本身没有机构业务权限；两类结构均不保存岗位、权限、任期或任职来源。
+- 公权、私权机构和个人多签每项统一为 `Admin { account_id, cid_number, family_name, given_name }`。非空 CID 必须是 CTZN 且与 `citizen-identity` 的 CID↔账户双向索引完全一致。admins pallet 不复制公民身份真源，也不用占位姓名伪造真实资料。
+- 姓、名只展示，账户用于人员识别与签名，但账户本身没有机构业务权限；统一结构不保存岗位、权限、任期或任职来源。字段完整性由机构类型、岗位和个人多签规则分别判定。
 - 机构岗位定义和任职关系归 `entity`，与管理员人员集合独立：管理员可以没有岗位，岗位可以空缺；岗位变化不得反向生成、删除或覆盖 admins。
 - 个人多签继续由 `personal-admins` 独立管理业务和 storage，但管理员项与机构使用同一个 `Admin` 三字段结构；不使用机构岗位或机构任职关系。
 - 各类管理员的链上管理员集合分别保存在各自 pallet 的 `AdminAccounts`。
@@ -30,7 +30,7 @@
 |------|------|
 | `cid_number` | 管理员集合所属机构 CID 号；个人多签没有机构 CID 时为空。 |
 | `institution_code` | 管理员集合所属机构码。 |
-| `admins` | 当前管理员人员集合；公权每项字段顺序固定为 `admin_account + cid_number + family_name + given_name`，私权/个人固定为 `admin_account + family_name + given_name`。 |
+| `admins` | 当前管理员人员集合；公权、私权机构和个人多签每项字段顺序统一为 `account_id + cid_number + family_name + given_name`。 |
 
 私权机构和个人多签姓名缺失时，runtime 分别补为 `family_name="管理"`、`given_name="员"`。公权身份字段可保持空值，不填占位值。人员去重读取 `admin_account`；机构业务授权和投票资格必须继续校验完整 `RoleSubject`、岗位权限与有效任职。
 
@@ -63,7 +63,7 @@
 - ADR-039 目标 NodeGuard 保护强制 LR 和创世固定岗位的码、名、固定权限及制度席位；创世机构可以依法增加普通动态岗位，不能再因存在额外岗位而拒绝。固定岗位成员可依法原子轮换。
 - 私权创世的公民链基金会固定为一名程伟管理员、三个固定岗位各一席和机构阈值 2；同一程伟钱包同时任职三岗。固定岗位不能改名、停用、增删或扩席，但不能为了满足阈值而伪造多个钱包或降低阈值。
 - `public-admins`、`private-admins` 没有 `WeightInfo` 和 `weights.rs`；其写入仅由 entity 生命周期内部接口调用。
-- 正式创世只接受当前公权四字段/私权三字段 SCALE 布局；旧纯账户、旧统一三字段公权记录和 runtime storage migration 均已删除，不保留兼容路径。
+- 正式创世只接受统一四字段 `Admin` SCALE 布局；旧纯账户、旧三字段记录和 runtime storage migration 均已删除，不保留兼容路径。
 
 ## MODULE_TAG
 

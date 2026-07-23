@@ -25,13 +25,13 @@ class TopupWebviewPage extends StatefulWidget {
     required this.rail,
     required this.package,
     required this.recvAddress,
-    required this.gmbAddress,
+    required this.accountId,
   });
 
   final TopupRail rail;
   final TopupPackage package;
   final String recvAddress;
-  final String gmbAddress;
+  final String accountId;
 
   /// WalletConnect Project ID(公开标识,非私钥),编译期注入。
   static const projectId = String.fromEnvironment('WALLETCONNECT_PROJECT_ID');
@@ -60,7 +60,10 @@ class _TopupWebviewPageState extends State<TopupWebviewPage> {
   /// 钱包深链(wc: / metamask: 等非 http(s))交给系统唤起对应钱包 App,阻止 WebView 内部导航。
   NavigationDecision _onNavigation(NavigationRequest request) {
     final uri = Uri.tryParse(request.url);
-    if (uri != null && uri.scheme != 'http' && uri.scheme != 'https' && uri.scheme != 'about') {
+    if (uri != null &&
+        uri.scheme != 'http' &&
+        uri.scheme != 'https' &&
+        uri.scheme != 'about') {
       launchUrl(uri, mode: LaunchMode.externalApplication);
       return NavigationDecision.prevent;
     }
@@ -73,7 +76,8 @@ class _TopupWebviewPageState extends State<TopupWebviewPage> {
       return;
     }
     // 收款金额与 ERC-20 calldata 在 Dart 侧构造(复用已验证的编码器),页面只负责签发。
-    final data = encodeErc20Transfer(widget.recvAddress, widget.package.payAmountValue);
+    final data =
+        encodeErc20Transfer(widget.recvAddress, widget.package.payAmountValue);
     final params = jsonEncode({
       'projectId': TopupWebviewPage.projectId,
       'caip2': widget.rail.caip2,

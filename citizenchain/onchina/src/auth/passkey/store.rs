@@ -10,16 +10,16 @@ use webauthn_rs::prelude::Passkey;
 pub(super) fn insert_credential_conn(
     conn: &mut Client,
     credential_id: &str,
-    admin_account: &str,
+    account_id: &str,
     passkey: &Passkey,
 ) -> Result<(), String> {
     let payload =
         serde_json::to_value(passkey).map_err(|e| format!("encode passkey failed: {e}"))?;
     conn.execute(
-        "INSERT INTO admin_passkey_credentials(credential_id, admin_account, passkey, created_at)
+        "INSERT INTO admin_passkey_credentials(credential_id, account_id, passkey, created_at)
          VALUES ($1, $2, $3, now())
          ON CONFLICT (credential_id) DO UPDATE SET passkey = EXCLUDED.passkey",
-        &[&credential_id, &admin_account, &payload],
+        &[&credential_id, &account_id, &payload],
     )
     .map_err(|e| format!("insert passkey credential failed: {e}"))?;
     Ok(())
@@ -27,12 +27,12 @@ pub(super) fn insert_credential_conn(
 
 pub(super) fn list_credentials_for_admin_conn(
     conn: &mut Client,
-    admin_account: &str,
+    account_id: &str,
 ) -> Result<Vec<Passkey>, String> {
     let rows = conn
         .query(
-            "SELECT passkey FROM admin_passkey_credentials WHERE lower(admin_account) = lower($1)",
-            &[&admin_account],
+            "SELECT passkey FROM admin_passkey_credentials WHERE account_id = $1",
+            &[&account_id],
         )
         .map_err(|e| format!("list passkey credentials failed: {e}"))?;
     rows.iter()
@@ -61,15 +61,15 @@ pub(super) fn update_credential_conn(
 pub(super) fn insert_ceremony_conn(
     conn: &mut Client,
     ceremony_id: &str,
-    admin_account: &str,
+    account_id: &str,
     kind: &str,
     state: &serde_json::Value,
     expires_at: DateTime<Utc>,
 ) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO admin_passkey_ceremonies(ceremony_id, admin_account, kind, state, expires_at)
+        "INSERT INTO admin_passkey_ceremonies(ceremony_id, account_id, kind, state, expires_at)
          VALUES ($1, $2, $3, $4, $5)",
-        &[&ceremony_id, &admin_account, &kind, state, &expires_at],
+        &[&ceremony_id, &account_id, &kind, state, &expires_at],
     )
     .map_err(|e| format!("insert passkey ceremony failed: {e}"))?;
     Ok(())
@@ -79,17 +79,17 @@ pub(super) fn insert_ceremony_conn(
 pub(super) fn take_ceremony_conn(
     conn: &mut Client,
     ceremony_id: &str,
-    admin_account: &str,
+    account_id: &str,
     kind: &str,
     now: DateTime<Utc>,
 ) -> Result<Option<serde_json::Value>, String> {
     let row = conn
         .query_opt(
             "DELETE FROM admin_passkey_ceremonies
-             WHERE ceremony_id = $1 AND lower(admin_account) = lower($2)
+             WHERE ceremony_id = $1 AND account_id = $2
                AND kind = $3 AND expires_at > $4
              RETURNING state",
-            &[&ceremony_id, &admin_account, &kind, &now],
+            &[&ceremony_id, &account_id, &kind, &now],
         )
         .map_err(|e| format!("take passkey ceremony failed: {e}"))?;
     Ok(row.map(|r| r.get(0)))
@@ -98,13 +98,13 @@ pub(super) fn take_ceremony_conn(
 pub(super) fn insert_assertion_conn(
     conn: &mut Client,
     assertion_id: &str,
-    admin_account: &str,
+    account_id: &str,
     expires_at: DateTime<Utc>,
 ) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO admin_passkey_assertions(assertion_id, admin_account, expires_at)
+        "INSERT INTO admin_passkey_assertions(assertion_id, account_id, expires_at)
          VALUES ($1, $2, $3)",
-        &[&assertion_id, &admin_account, &expires_at],
+        &[&assertion_id, &account_id, &expires_at],
     )
     .map_err(|e| format!("insert passkey assertion failed: {e}"))?;
     Ok(())
@@ -113,12 +113,12 @@ pub(super) fn insert_assertion_conn(
 /// 当前 admin 是否已注册任一 passkey 凭证(驱动操作列红点)。
 pub(super) fn admin_has_credential_conn(
     conn: &mut Client,
-    admin_account: &str,
+    account_id: &str,
 ) -> Result<bool, String> {
     let row = conn
         .query_one(
-            "SELECT EXISTS(SELECT 1 FROM admin_passkey_credentials WHERE lower(admin_account) = lower($1))",
-            &[&admin_account],
+            "SELECT EXISTS(SELECT 1 FROM admin_passkey_credentials WHERE account_id = $1)",
+            &[&account_id],
         )
         .map_err(|e| format!("query passkey credential existence failed: {e}"))?;
     Ok(row.get(0))
@@ -128,15 +128,15 @@ pub(super) fn admin_has_credential_conn(
 pub(super) fn consume_assertion_conn(
     conn: &mut Client,
     assertion_id: &str,
-    admin_account: &str,
+    account_id: &str,
     now: DateTime<Utc>,
 ) -> Result<bool, String> {
     let row = conn
         .query_opt(
             "DELETE FROM admin_passkey_assertions
-             WHERE assertion_id = $1 AND lower(admin_account) = lower($2) AND expires_at > $3
+             WHERE assertion_id = $1 AND account_id = $2 AND expires_at > $3
              RETURNING assertion_id",
-            &[&assertion_id, &admin_account, &now],
+            &[&assertion_id, &account_id, &now],
         )
         .map_err(|e| format!("consume passkey assertion failed: {e}"))?;
     Ok(row.is_some())

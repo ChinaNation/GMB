@@ -17,7 +17,7 @@
 - 机构阈值与 `admins` 人数独立：一个人可以用同一钱包在同一机构兼任多个岗位，不能因为钱包去重而降低机构阈值。最终票据去重主体必须是“提案 + 机构 CID + 岗位码 + 任职钱包”，不是裸钱包。
 - 动态岗位码格式为 `R_<32 位大写十六进制>`。随机材料统一为 `blake2_256(SCALE(GMB_ROLE_V1, cid_number, institution_role_nonce, proposal_id))` 的前 16 字节；调用方不得提交岗位码，`UsedRoleCodes[(cid_number, role_code)]` 永久保留已用记录。
 - 个人多签使用独立 `AuthorizationSubject::PersonalMultisig`，不混入机构岗位授权模型。
-- 公权机构管理员统一为 `PublicAdmin { admin_account, cid_number, family_name, given_name }`；当前允许公民 CID、姓、名为空，非空 CID 必须是 CTZN 且与 `citizen-identity` 的钱包绑定完全一致。私权机构和个人多签继续使用 `Admin { admin_account, family_name, given_name }`。
+- 后续统一结果：公权、私权机构和个人多签现均使用 `Admin { account_id, cid_number, family_name, given_name }` SCALE 字段顺序；非空 CID 必须是 CTZN 且与 `citizen-identity` 的账户绑定完全一致。
 - 私权创世机构统一为非营利法人“公民链技术发展基金会”（简称“公民链基金会”）；CID `GZ018-SFGYR-201206100-2026`，主账户 `0xe86aa3cd794651257dea9b7cad1abc4f0ce05940c1aecccd2ed8dd2fc9907023`，费用账户 `0xaa23304c7b663ba25a9d3a2fb1efafdd650ecf2504a2caedc228fe81b46b4333`。程伟以同一钱包同时任职 `LR`、`GENESIS_PRODUCT_MANAGER`、`GENESIS_PROGRAMMER`，管理员人员名册只保存一条，机构阈值保持 2。
 
 开发期无正式用户数据：按最终结构重新创世，不保留旧授权、旧载荷、旧 storage、旧命名或双轨兼容。
@@ -47,7 +47,7 @@
 4. **创世固定岗位与 NodeGuard**：第 4A 只读盘点并确认完整矩阵；第 4B 固化全部创世岗位及权限，纳入公民链基金会三个固定岗位，并允许保护机构增加普通动态岗位。
 5. **投票引擎按岗位主体快照（已完成）**：机构投票从全体 admins 快照改为 VotePlan 指定的一个或多个 `RoleSubject` 有效任职账户快照；个人多签保持独立主体。第 5A 完成 joint-vote，第 5B 完成 internal-vote，第 5C 完成 legislation-vote、election-vote 及法律业务入口。
 6. **基础权限路径收口（已完成）**：复核岗位维护、任职、管理员更换、账户关闭、机构转账和个人多签边界；删除投票引擎旧机构管理员快照辅助函数与 provider 接口，确保 `AdminSnapshot` 只服务个人多签。本步不实施机构登记或机构 CRUD。
-6A. **管理员类型、机构阈值与基金会校正（已完成）**：拆分公权四字段和私权/个人三字段管理员；机构阈值迁入 public/private entity；同一程伟钱包任职基金会三个固定岗位，不改阈值。
+6A. **管理员类型、机构阈值与基金会校正（已完成，结构已被后续统一）**：当时曾拆分管理员布局；当前已统一为四字段 `Admin`。机构阈值迁入 public/private entity；同一程伟账户任职基金会三个固定岗位，不改阈值。
 6B. **岗位席位记票（已完成）**：机构票据唯一键已改为岗位任职席位；同一钱包兼任多个岗位时使用同一私钥分别行使各岗位票权，机构阈值未修改。
 7. **剩余治理、发行和公共业务权限收口（已完成）**：已审计现有协议升级、GRANDPA、销毁、决议发行、选举、立法及已经存在的公共业务入口；正式可达入口均按岗位权限和指定投票引擎收口。机构登记、机构 CRUD 与 OnChina 机构管理不属于本任务。
 8. **全端真实验收与残留清理**：完成 UI/QR、真实 fresh runtime、真实服务和页面验收，删除全部旧管理员授权与旧投票主体口径，回写最终文档。
@@ -261,11 +261,11 @@
 
 ## 第 6A 步完成记录（2026-07-20）
 
-- `admin-primitives` 新增公权 `PublicAdmin { admin_account, cid_number, family_name, given_name }`；`Admin { admin_account, family_name, given_name }` 只服务私权机构和个人多签。`public-admins` 允许当前公民 CID/姓/名为空，非空 CID 必须是 CTZN 且由 `citizen-identity` 的 CID↔钱包双索引确认一一绑定。
+- 后续最终结构为 `admin-primitives::Admin { account_id, cid_number, family_name, given_name }`，由公权、私权机构和个人多签统一复用。非空 CID 必须是 CTZN 且由 `citizen-identity` 的 CID↔账户双索引确认一一绑定。
 - public/private admins 不再接收、校验或写入机构阈值。public/private entity 新增 `InstitutionGovernanceThresholds[cid_number]`；机构阈值与管理员钱包数、岗位数分别独立。`internal-vote` 建案时通过 runtime provider 从对应 entity 读取并写入提案阈值快照；个人多签的 `ActivePersonalThresholds` 保持不变。
 - 私权创世机构已重新定义为 SFGY 非营利法人“公民链技术发展基金会”，简称“公民链基金会”，英文全称 `CitizenChain Technology Development Foundation`，英文简称 `CitizenChain Technology Foundation`。CID 为 `GZ018-SFGYR-201206100-2026`，主/费用账户为 `0xe86aa3cd794651257dea9b7cad1abc4f0ce05940c1aecccd2ed8dd2fc9907023` / `0xaa23304c7b663ba25a9d3a2fb1efafdd650ecf2504a2caedc228fe81b46b4333`，平台会员收款继续指向新费用账户。
 - 基金会的 `PrivateAdmins::AdminAccounts` 只保存一条程伟管理员人员记录；同一钱包 `0xd6d73cfd7d6b7c5692749b7c46fd3fe398f16f84283910dbf15f74472e1e3938` 分别任职 `LR`、`GENESIS_PRODUCT_MANAGER`、`GENESIS_PROGRAMMER` 三个固定岗位，每岗一席，机构阈值保持 2。NodeGuard 保持 89 个公权固定治理机构 + 1 个基金会，共 90 个保护对象。
-- Node、OnChina、CitizenApp 与 CitizenWallet 已按目标 pallet 分流解码公权四字段/私权三字段 SCALE；OnChina 构造登记和机构治理载荷时同样严格分流。CitizenWallet 同步使用 runtime 当前治理/登记 call 布局，不再接受已删除的内层凭证尾字段。公权空身份字段不再被展示占位值伪造，非空公民 CID 必须为 CTZN 结构并最终由 runtime 对照 `citizen-identity` 校验。
+- Node、OnChina、CitizenApp 与 CitizenWallet 最终都按统一四字段 `Admin` SCALE 解码；OnChina 构造登记和机构治理载荷时使用同一布局。CitizenWallet 同步使用 runtime 当前治理/登记 call 布局，不再接受旧三字段或已删除的内层凭证尾字段。非空公民 CID 必须为 CTZN 结构并最终由 runtime 对照 `citizen-identity` 校验。
 - 第 6A 当时仍存在同一 CID 内按钱包合并的过渡限制；第 6B 已解除。基金会程伟同一钱包的三个固定岗位现在形成三张独立票据，在机构阈值 2 不变的前提下可依法分别投票。
 - 代码回归已通过：`entity-primitives` 11、`genesis-pallet` 11、`internal-vote` 94、`public-admins` 10、`private-admins` 6、public/private manage 各 14、OnChina 133、runtime 46、Node 285、`square-post` 23、CitizenWallet 载荷解码 98 + 离线签名服务 9、QR registry 6 项；相关 `no_std`、Node/OnChina 生产编译和 CitizenWallet 全量静态分析通过。
 - 当前源码强制重建 WASM/Node 后以隔离 `citizenchain-fresh --tmp` 真实启动，NodeGuard 自检通过；RPC 返回 block#0 `0x9ad703ec20ed91f693e8077075cc27ffbe0d4f1b9b0e0ee32fb917e52009f6fd`、state root `0xdc532c2cfaa75db4ce38530ee2986c138360da8a8ffa5bbeab36b37b66a9c8b1`、`isSyncing=false`、runtime `specVersion=2`。验收节点已停止并由 `--tmp` 清理；未烘焙正式 chainspec、未部署、未推送。

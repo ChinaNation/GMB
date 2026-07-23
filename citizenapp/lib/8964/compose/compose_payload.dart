@@ -48,9 +48,7 @@ class ComposeSnapshot {
   final List<Map<String, Object?>>? contentBlocks;
 
   bool get isEmpty =>
-      text.trim().isEmpty &&
-      media.isEmpty &&
-      (title?.trim().isEmpty ?? true);
+      text.trim().isEmpty && media.isEmpty && (title?.trim().isEmpty ?? true);
 }
 
 /// 子编辑器对外暴露的接口（发布壳按当前类型调用）：发布校验 + 自动保存快照。

@@ -13,7 +13,8 @@ import 'package:citizenapp/8964/services/square_api_client.dart';
 // 测试用固定假签名占位，MockClient 不校验签名头。
 SquareSession _session() => SquareSession(
       sessionToken: 'tok',
-      ownerAccount: 'acct',
+      accountId:
+          '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
       expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
       signRequest: (_) async => 'test-device-signature',
     );

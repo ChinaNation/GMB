@@ -97,12 +97,12 @@ export const PrivateDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, 
       if (signed.challenge_id !== securityModal.actionId) {
         throw new Error('签名响应与当前请求不匹配');
       }
-      if (!signed.signer_pubkey) {
-        throw new Error('签名响应缺少 signer_pubkey');
+      if (!signed.signer_public_key) {
+        throw new Error('签名响应缺少 signer_public_key');
       }
       const grant = await commitAdminAction<AdminSecurityGrantOutput>(auth, {
         action_id: securityModal.actionId,
-        signer_pubkey: signed.signer_pubkey,
+        signer_public_key: signed.signer_public_key,
         signature: signed.signature,
         payload_hash: securityModal.payloadHash,
       });

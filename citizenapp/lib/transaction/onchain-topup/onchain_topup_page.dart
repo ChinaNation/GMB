@@ -11,10 +11,11 @@ import 'topup_webview_page.dart';
 /// 币轨/收款地址/套餐全部来自 Worker config(App 不写死合约);支付通过 WebView 内的
 /// WalletConnect(AppKit JS)连自托管钱包并发 ERC-20 转账,拿 txHash 后回到 App 上报并轮询到账。
 class OnchainTopupPage extends StatefulWidget {
-  const OnchainTopupPage({super.key, required this.gmbAddress, this.api});
+  const OnchainTopupPage({super.key, required this.accountId, this.api});
 
-  /// 收公民币的公民链钱包地址(充值目标)。付款用的自托管钱包由 WalletConnect 另接。
-  final String gmbAddress;
+  /// 收公民币的公民链账户(充值目标 `account_id`,0x+64 hex)。
+  /// 付款用的自托管钱包由 WalletConnect 另接。
+  final String accountId;
 
   /// 注入用于测试;生产用默认 TopupApi(连当前 Worker)。
   final TopupApi? api;
@@ -61,7 +62,8 @@ class _OnchainTopupPageState extends State<OnchainTopupPage> {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(24),
-          child: Text('充值渠道尚未开放', style: TextStyle(color: AppTheme.textTertiary)),
+          child:
+              Text('充值渠道尚未开放', style: TextStyle(color: AppTheme.textTertiary)),
         ),
       );
     }
@@ -70,7 +72,8 @@ class _OnchainTopupPageState extends State<OnchainTopupPage> {
       children: [
         const Text(
           '用稳定币购买公民币，到账后自动转入你的链上钱包。',
-          style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, height: 1.6),
+          style: TextStyle(
+              fontSize: 13, color: AppTheme.textSecondary, height: 1.6),
         ),
         const SizedBox(height: 16),
         ...config.rails.map((rail) => _RailCard(
@@ -122,7 +125,7 @@ class _OnchainTopupPageState extends State<OnchainTopupPage> {
           rail: rail,
           package: package,
           recvAddress: config.recvAddress,
-          gmbAddress: widget.gmbAddress,
+          accountId: widget.accountId,
         ),
       ),
     );
@@ -133,7 +136,7 @@ class _OnchainTopupPageState extends State<OnchainTopupPage> {
           api: _api,
           rail: rail,
           package: package,
-          gmbAddress: widget.gmbAddress,
+          accountId: widget.accountId,
           evmTxHash: web.txHash,
           payerAddress: web.payerAddress,
         ),
@@ -251,7 +254,8 @@ class _PackageSheetState extends State<_PackageSheet> {
           ...List.generate(packages.length, (index) {
             final isLast = index == packages.length - 1;
             return Padding(
-              padding: EdgeInsets.only(bottom: index == packages.length - 1 ? 18 : 10),
+              padding: EdgeInsets.only(
+                  bottom: index == packages.length - 1 ? 18 : 10),
               child: _PackageOption(
                 token: widget.rail.token,
                 package: packages[index],

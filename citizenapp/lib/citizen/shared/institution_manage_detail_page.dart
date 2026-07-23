@@ -136,7 +136,7 @@ class _MultisigProposalDetailPageState
 
       final voterTickets = results[0] as List<EligibleVoterTicket>;
       final admins =
-          voterTickets.map((ticket) => ticket.pubkeyHex).toSet().toList();
+          voterTickets.map((ticket) => ticket.voterAccountId).toSet().toList();
       final status = results[1] as int?;
       final tally = results[2] as ({int yes, int no});
       final thresholdSnapshot = results[3] as int?;
@@ -184,10 +184,10 @@ class _MultisigProposalDetailPageState
       // 筛选可投票钱包
       final votable = <WalletProfile>[];
       for (final w in widget.adminWallets) {
-        var pk = w.pubkeyHex.toLowerCase();
-        if (pk.startsWith('0x')) pk = pk.substring(2);
-        final walletTickets = voterTickets
-            .where((ticket) => _normalizePubkey(ticket.pubkeyHex) == pk);
+        final accountId = _requireAccountId(w.accountId);
+        final walletTickets = voterTickets.where(
+          (ticket) => _requireAccountId(ticket.voterAccountId) == accountId,
+        );
         if (walletTickets.any((ticket) => votes[ticket.ticketKey] == null)) {
           votable.add(w);
         }
@@ -251,8 +251,9 @@ class _MultisigProposalDetailPageState
       final admins = snapshot.admins;
       final votable = <WalletProfile>[];
       for (final w in widget.adminWallets) {
-        final pk = _normalizePubkey(w.pubkeyHex);
-        if (admins.contains(pk) && snapshot.adminVotes[pk] == null) {
+        final accountId = _requireAccountId(w.accountId);
+        if (admins.contains(accountId) &&
+            snapshot.adminVotes[accountId] == null) {
           votable.add(w);
         }
       }
@@ -303,11 +304,11 @@ class _MultisigProposalDetailPageState
       yesCount: tally.yes,
       noCount: tally.no,
       threshold: threshold,
-      admins: admins.map(_normalizePubkey).toList(growable: false),
+      admins: admins.map(_requireAccountId).toList(growable: false),
       adminVotes: votes.map(
-        (key, value) => MapEntry(_normalizePubkey(key), value),
+        (key, value) => MapEntry(_requireAccountId(key), value),
       ),
-      pendingPubkeys: const [],
+      pendingPublicKeys: const [],
       detail: createInfo != null
           ? _createInfoToJson(createInfo)
           : closeInfo != null
@@ -323,8 +324,8 @@ class _MultisigProposalDetailPageState
   ) {
     return {
       'kind': 'create',
-      'account': info.account,
-      'proposer': info.proposer,
+      'account_id': info.accountId,
+      'proposer_ss58_address': info.proposerSs58Address,
       'amount_fen': info.amountFen.toString(),
       'fee_fen': info.feeFen.toString(),
       'status': info.status,
@@ -336,9 +337,9 @@ class _MultisigProposalDetailPageState
   ) {
     return {
       'kind': 'close',
-      'account': info.account,
-      'beneficiary': info.beneficiary,
-      'proposer': info.proposer,
+      'account_id': info.accountId,
+      'beneficiary_ss58_address': info.beneficiarySs58Address,
+      'proposer_ss58_address': info.proposerSs58Address,
       'status': info.status,
     };
   }
@@ -349,7 +350,7 @@ class _MultisigProposalDetailPageState
     return {
       'kind': 'institution_close',
       'actor_cid_number': info.actorCidNumber,
-      'institution_account': info.institutionAccount,
+      'institution_account_id': info.institutionAccountId,
       'beneficiary': info.beneficiary,
       'proposer': info.proposer,
       'status': info.status,
@@ -364,14 +365,14 @@ class _MultisigProposalDetailPageState
     if (detail['kind'] != 'create') return null;
     final amountFen = BigInt.tryParse(detail['amount_fen']?.toString() ?? '');
     final feeFen = BigInt.tryParse(detail['fee_fen']?.toString() ?? '');
-    final account = detail['account']?.toString();
-    if (amountFen == null || feeFen == null || account == null) {
+    final accountId = detail['account_id']?.toString();
+    if (amountFen == null || feeFen == null || accountId == null) {
       return null;
     }
     return personal_models.CreateProposalInfo(
       proposalId: snapshot.proposalId,
-      account: account,
-      proposer: detail['proposer']?.toString() ?? '',
+      accountId: accountId,
+      proposerSs58Address: detail['proposer_ss58_address']?.toString() ?? '',
       amountFen: amountFen,
       feeFen: feeFen,
       status: snapshot.status,
@@ -384,13 +385,14 @@ class _MultisigProposalDetailPageState
     if (!isPersonalAccountIdentity(widget.institution.cidNumber)) return null;
     final detail = snapshot.detail;
     if (detail['kind'] != 'close') return null;
-    final account = detail['account']?.toString();
-    if (account == null) return null;
+    final accountId = detail['account_id']?.toString();
+    if (accountId == null) return null;
     return personal_models.CloseProposalInfo(
       proposalId: snapshot.proposalId,
-      account: account,
-      beneficiary: detail['beneficiary']?.toString() ?? '',
-      proposer: detail['proposer']?.toString() ?? '',
+      accountId: accountId,
+      beneficiarySs58Address:
+          detail['beneficiary_ss58_address']?.toString() ?? '',
+      proposerSs58Address: detail['proposer_ss58_address']?.toString() ?? '',
       status: snapshot.status,
     );
   }
@@ -402,12 +404,12 @@ class _MultisigProposalDetailPageState
     final detail = snapshot.detail;
     if (detail['kind'] != 'institution_close') return null;
     final actorCidNumber = detail['actor_cid_number']?.toString();
-    final institutionAccount = detail['institution_account']?.toString();
+    final institutionAccountId = detail['institution_account_id']?.toString();
     final beneficiary = detail['beneficiary']?.toString();
     final proposer = detail['proposer']?.toString();
     if (actorCidNumber != widget.institution.cidNumber ||
-        institutionAccount == null ||
-        institutionAccount.length != 64 ||
+        institutionAccountId == null ||
+        institutionAccountId.length != 64 ||
         beneficiary == null ||
         beneficiary.isEmpty ||
         proposer == null ||
@@ -417,7 +419,7 @@ class _MultisigProposalDetailPageState
     return institution_models.CloseProposalInfo(
       proposalId: snapshot.proposalId,
       actorCidNumber: actorCidNumber!,
-      institutionAccount: institutionAccount,
+      institutionAccountId: institutionAccountId,
       beneficiary: beneficiary,
       proposer: proposer,
       status: snapshot.status,
@@ -469,10 +471,10 @@ class _MultisigProposalDetailPageState
   bool get _allVoted {
     if (widget.adminWallets.isEmpty) return false;
     for (final w in widget.adminWallets) {
-      var pk = w.pubkeyHex.toLowerCase();
-      if (pk.startsWith('0x')) pk = pk.substring(2);
-      final tickets = _voterTickets
-          .where((ticket) => _normalizePubkey(ticket.pubkeyHex) == pk);
+      final accountId = _requireAccountId(w.accountId);
+      final tickets = _voterTickets.where(
+        (ticket) => _requireAccountId(ticket.voterAccountId) == accountId,
+      );
       if (tickets.any((ticket) => _adminVotes[ticket.ticketKey] == null)) {
         return false;
       }
@@ -507,16 +509,16 @@ class _MultisigProposalDetailPageState
       return;
     }
     debugPrint(
-        '[VoteDetail] 选中钱包 ${wallet.address} pubkey=${wallet.pubkeyHex} isHot=${wallet.isHotWallet}');
+        '[VoteDetail] 选中钱包 ${wallet.ss58Address} accountId=${wallet.accountId} isHot=${wallet.isHotWallet}');
 
     setState(() => _submitting = true);
 
     try {
-      final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
-      final pubkey = _normalizePubkey(wallet.pubkeyHex);
+      final signerPublicKeyBytes = _hexDecode(wallet.accountId);
+      final accountId = _requireAccountId(wallet.accountId);
       final availableTickets = _voterTickets
           .where((ticket) =>
-              _normalizePubkey(ticket.pubkeyHex) == pubkey &&
+              _requireAccountId(ticket.voterAccountId) == accountId &&
               _adminVotes[ticket.ticketKey] == null)
           .toList(growable: false);
       if (availableTickets.isEmpty) {
@@ -524,7 +526,7 @@ class _MultisigProposalDetailPageState
       }
       final ticket = await _selectTicket(availableTickets);
       if (ticket == null) throw StateError('已取消选择投票岗位');
-      final balance = await ChainRpc().fetchFinalizedBalance(pubkey);
+      final balance = await ChainRpc().fetchFinalizedBalance(accountId);
       if (balance <= 0) {
         throw StateError('当前投票钱包余额不足，无法支付链上投票手续费');
       }
@@ -544,7 +546,7 @@ class _MultisigProposalDetailPageState
         final qrSigner = QrSigner();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'vote-'),
-          pubkey: '0x${wallet.pubkeyHex}',
+          signerPublicKey: wallet.accountId,
           payloadHex: '0x${_toHex(payload)}',
           action: QrActions.internalVote,
         );
@@ -556,7 +558,7 @@ class _MultisigProposalDetailPageState
             builder: (_) => QrSignSessionPage(
                 request: request,
                 requestJson: requestJson,
-                expectedPubkey: '0x${wallet.pubkeyHex}'),
+                expectedSignerPublicKey: wallet.accountId),
           ),
         );
         if (response == null) throw Exception('签名已取消');
@@ -571,8 +573,8 @@ class _MultisigProposalDetailPageState
         approve: approve,
         actorCidNumber: ticket.cidNumber,
         voterRoleCode: ticket.voterRoleCode,
-        fromAddress: wallet.address,
-        signerPubkey: Uint8List.fromList(pubkeyBytes),
+        fromSs58Address: wallet.ss58Address,
+        signerPublicKey: Uint8List.fromList(signerPublicKeyBytes),
         sign: signCallback,
         onWatchEvent: (event) {
           if (event.isIncluded) {
@@ -587,9 +589,9 @@ class _MultisigProposalDetailPageState
       setState(() {
         _adminVotes[ticket.ticketKey] = approve;
         _votableWallets = _votableWallets.where((w) {
-          final walletPk = _normalizePubkey(w.pubkeyHex);
+          final accountId = _requireAccountId(w.accountId);
           return _voterTickets.any((candidate) =>
-              _normalizePubkey(candidate.pubkeyHex) == walletPk &&
+              _requireAccountId(candidate.voterAccountId) == accountId &&
               _adminVotes[candidate.ticketKey] == null);
         }).toList(growable: false);
         _selectedVoteWallet =
@@ -624,10 +626,11 @@ class _MultisigProposalDetailPageState
     }
   }
 
-  String _normalizePubkey(String pubkeyHex) {
-    var pubkey = pubkeyHex.toLowerCase();
-    if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
-    return pubkey;
+  String _requireAccountId(String accountId) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
+    }
+    return accountId;
   }
 
   void _confirmVote(bool approve) {
@@ -748,7 +751,7 @@ class _MultisigProposalDetailPageState
             admins: _admins,
             voterTickets: _voterTickets,
             adminVotes: _adminVotes,
-            pendingPubkeys: const {},
+            pendingPublicKeys: const {},
           ),
         ],
       ),
@@ -822,7 +825,8 @@ class _MultisigProposalDetailPageState
 
   List<Widget> _buildCreateInfoRows() {
     final info = _createInfo!;
-    final accountSs58 = Keyring().encodeAddress(_hexDecode(info.account), 2027);
+    final accountSs58 =
+        Keyring().encodeAddress(_hexDecode(info.accountId), 2027);
     return [
       _buildInfoRow('多签账户', _truncateAddress(accountSs58), onCopy: () {
         Clipboard.setData(ClipboardData(text: accountSs58));
@@ -832,7 +836,7 @@ class _MultisigProposalDetailPageState
         );
       }),
       const Divider(height: 20),
-      _buildInfoRow('发起人', _truncateAddress(info.proposer)),
+      _buildInfoRow('发起人', _truncateAddress(info.proposerSs58Address)),
       const Divider(height: 20),
       _buildInfoRow(
         '初始资金',
@@ -848,7 +852,8 @@ class _MultisigProposalDetailPageState
 
   List<Widget> _buildCloseInfoRows() {
     final info = _closeInfo!;
-    final accountSs58 = Keyring().encodeAddress(_hexDecode(info.account), 2027);
+    final accountSs58 =
+        Keyring().encodeAddress(_hexDecode(info.accountId), 2027);
     return [
       _buildInfoRow('多签账户', _truncateAddress(accountSs58), onCopy: () {
         Clipboard.setData(ClipboardData(text: accountSs58));
@@ -858,22 +863,23 @@ class _MultisigProposalDetailPageState
         );
       }),
       const Divider(height: 20),
-      _buildInfoRow('受益人', _truncateAddress(info.beneficiary), onCopy: () {
-        Clipboard.setData(ClipboardData(text: info.beneficiary));
+      _buildInfoRow('受益人', _truncateAddress(info.beneficiarySs58Address),
+          onCopy: () {
+        Clipboard.setData(ClipboardData(text: info.beneficiarySs58Address));
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
               content: Text('地址已复制'), duration: Duration(seconds: 1)),
         );
       }),
       const Divider(height: 20),
-      _buildInfoRow('发起人', _truncateAddress(info.proposer)),
+      _buildInfoRow('发起人', _truncateAddress(info.proposerSs58Address)),
     ];
   }
 
   List<Widget> _buildInstitutionCloseInfoRows() {
     final info = _institutionCloseInfo!;
     final accountSs58 =
-        Keyring().encodeAddress(_hexDecode(info.institutionAccount), 2027);
+        Keyring().encodeAddress(_hexDecode(info.institutionAccountId), 2027);
     return [
       _buildInfoRow('机构 CID', info.actorCidNumber),
       const Divider(height: 20),

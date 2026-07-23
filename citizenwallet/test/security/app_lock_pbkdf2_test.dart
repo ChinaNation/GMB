@@ -10,8 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// 测试向量来源：RFC 6070 / NIST SP 800-132。
 void main() {
   group('PBKDF2-HMAC-SHA256', () {
-    test('RFC 6070 向量: password="password", salt="salt", c=1, dkLen=32',
-        () {
+    test('RFC 6070 向量: password="password", salt="salt", c=1, dkLen=32', () {
       final result = _pbkdf2HmacSha256(
         utf8.encode('password'),
         utf8.encode('salt'),
@@ -24,8 +23,7 @@ void main() {
       );
     });
 
-    test('RFC 6070 向量: password="password", salt="salt", c=2, dkLen=32',
-        () {
+    test('RFC 6070 向量: password="password", salt="salt", c=2, dkLen=32', () {
       final result = _pbkdf2HmacSha256(
         utf8.encode('password'),
         utf8.encode('salt'),
@@ -38,8 +36,7 @@ void main() {
       );
     });
 
-    test('RFC 6070 向量: password="password", salt="salt", c=4096, dkLen=32',
-        () {
+    test('RFC 6070 向量: password="password", salt="salt", c=4096, dkLen=32', () {
       final result = _pbkdf2HmacSha256(
         utf8.encode('password'),
         utf8.encode('salt'),

@@ -47,9 +47,9 @@ class GroupMembership {
   /// 加/删成员权限:仅 admin。
   static void ensureAdmin({
     required Set<String> adminSet,
-    required String actorAccount,
+    required String actorAccountId,
   }) {
-    if (!adminSet.contains(actorAccount)) {
+    if (!adminSet.contains(actorAccountId)) {
       throw const GroupMembershipException('只有群管理员可以添加或移除成员');
     }
   }

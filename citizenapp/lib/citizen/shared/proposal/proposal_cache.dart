@@ -11,10 +11,8 @@ class ProposalCache {
   static final Map<int, ProposalMeta> _metaCache = {};
   static final Map<int, RuntimeUpgradeProposalInfo> _runtimeUpgradeDetailCache =
       {};
-  static final Map<int, CreateProposalInfo> _createMultisigDetailCache =
-      {};
-  static final Map<int, CloseProposalInfo> _closeMultisigDetailCache =
-      {};
+  static final Map<int, CreateProposalInfo> _createMultisigDetailCache = {};
+  static final Map<int, CloseProposalInfo> _closeMultisigDetailCache = {};
 
   // ──── 读取 ────
 

@@ -59,7 +59,7 @@ class ProposalDetailSnapshot {
     this.threshold,
     this.admins = const [],
     this.adminVotes = const {},
-    this.pendingPubkeys = const [],
+    this.pendingPublicKeys = const [],
     this.detail = const {},
     this.extra = const {},
   });
@@ -73,7 +73,7 @@ class ProposalDetailSnapshot {
   final int? threshold;
   final List<String> admins;
   final Map<String, bool?> adminVotes;
-  final List<String> pendingPubkeys;
+  final List<String> pendingPublicKeys;
   final Map<String, Object?> detail;
   final Map<String, Object?> extra;
 
@@ -97,7 +97,7 @@ class ProposalDetailSnapshot {
         'admin_votes': adminVotes.map(
           (key, value) => MapEntry(key, value),
         ),
-        'pending_pubkeys': pendingPubkeys,
+        'pending_signer_public_keys': pendingPublicKeys,
         'detail': detail,
         'extra': extra,
       };
@@ -126,7 +126,7 @@ class ProposalDetailSnapshot {
         threshold: _toInt(decoded['threshold']),
         admins: _stringList(decoded['admins']),
         adminVotes: _voteMap(decoded['admin_votes']),
-        pendingPubkeys: _stringList(decoded['pending_pubkeys']),
+        pendingPublicKeys: _stringList(decoded['pending_signer_public_keys']),
         detail: _objectMap(decoded['detail']),
         extra: _objectMap(decoded['extra']),
       );

@@ -12,16 +12,20 @@ import 'package:citizenapp/my/user/contact_book_page.dart';
 import 'package:citizenapp/my/user/contact_service.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
-const _owner = 'w5BekTimvtfYZvFpkDzy7ypqUntPgTbjRFCt9weR8vMgf7o8E';
+const _accountId =
+    '0x2222222222222222222222222222222222222222222222222222222222222222';
 const _contactAddress = 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT';
+const _contactAccountId =
+    '0x1111111111111111111111111111111111111111111111111111111111111111';
 const _contact = UserContact(
-  address: _contactAddress,
+  accountId: _contactAccountId,
+  ss58Address: _contactAddress,
   contactName: '张三',
   createdAt: 1,
   updatedAt: 2,
 );
 const _profile = CitizenProfile(
-  ownerAccount: _contactAddress,
+  accountId: _contactAccountId,
   displayName: 'Rhett',
   bio: '建设一个可信、自由的社会',
   avatarObjectKey: null,
@@ -45,7 +49,7 @@ class _FakeContacts extends UserContactService {
   List<UserContact> contacts = <UserContact>[_contact];
 
   @override
-  Future<String> getOwnerAccount() async => _owner;
+  Future<String> getAccountId() async => _accountId;
 
   @override
   Future<List<UserContact>> getContacts() async => contacts;
@@ -85,7 +89,7 @@ class _FakeProfileApi extends CitizenProfileApi {
 
   @override
   Future<CitizenProfile> fetchProfile(
-    String ownerAccount, {
+    String accountId, {
     SquareSession? session,
   }) async =>
       profile;
@@ -95,27 +99,27 @@ class _FakeSessionProvider extends SquareSessionProvider {
   @override
   Future<SquareSession?> ensureSession() async => SquareSession(
         sessionToken: 'token',
-        ownerAccount: _owner,
+        accountId: _accountId,
         expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
       );
 }
 
 Widget _page({
-  bool selectForTrade = false,
+  ContactPickMode mode = ContactPickMode.browse,
   CitizenProfile profile = _profile,
   DirectChatOpener? directChatOpener,
   Future<void> Function(
     BuildContext context, {
-    required String toAddress,
+    required String toSs58Address,
   })? transferOpener,
 }) =>
     MaterialApp(
       home: ContactBookPage(
-        selectForTrade: selectForTrade,
+        mode: mode,
         service: _FakeContacts(),
         profileApi: _FakeProfileApi(profile),
         sessionProvider: _FakeSessionProvider(),
-        initialProfiles: {_contactAddress: profile},
+        initialProfiles: {_contactAccountId: profile},
         directChatOpener: directChatOpener,
         transferOpener: transferOpener,
       ),
@@ -130,7 +134,7 @@ void main() {
     expect(find.text('张三'), findsOneWidget);
     expect(find.textContaining('Rhett · w5Bc7m'), findsOneWidget);
     expect(find.text('建设一个可信、自由的社会'), findsOneWidget);
-    expect(find.byKey(const ValueKey('contact-card-$_contactAddress')),
+    expect(find.byKey(const ValueKey('contact-card-$_contactAccountId')),
         findsOneWidget);
   });
 
@@ -159,7 +163,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final fallback =
-        ProfilePresentation.forAccount(_contactAddress).fallbackName;
+        ProfilePresentation.forAccount(_contactAccountId).fallbackName;
     expect(find.textContaining('$fallback · w5Bc7m'), findsOneWidget);
     expect(find.text(_contactAddress), findsNothing);
   });
@@ -219,9 +223,9 @@ void main() {
     String? openedToAddress;
     Future<void> opener(
       BuildContext context, {
-      required String toAddress,
+      required String toSs58Address,
     }) async {
-      openedToAddress = toAddress;
+      openedToAddress = toSs58Address;
     }
 
     await tester.pumpWidget(_page(transferOpener: opener));
@@ -236,15 +240,15 @@ void main() {
   });
 
   testWidgets('私信复用统一聊天入口并使用公开昵称', (tester) async {
-    String? openedPeerAddress;
+    String? openedPeerAccountId;
     String? openedTitle;
     Future<void> opener(
       BuildContext context, {
-      required String peerAddress,
+      required String peerAccountId,
       required String title,
     }) async {
       // 注入只用于断言路由参数，不替代正式 openDirectChat 实现。
-      openedPeerAddress = peerAddress;
+      openedPeerAccountId = peerAccountId;
       openedTitle = title;
     }
 
@@ -255,7 +259,34 @@ void main() {
     await tester.tap(find.text('私信'));
     await tester.pump();
 
-    expect(openedPeerAddress, _contactAddress);
+    expect(openedPeerAccountId, _contactAccountId);
+    expect(openedTitle, 'Rhett');
+  });
+
+  testWidgets('发私信模式点联系人直接开私聊、无操作菜单', (tester) async {
+    String? openedPeerAccountId;
+    String? openedTitle;
+    Future<void> opener(
+      BuildContext context, {
+      required String peerAccountId,
+      required String title,
+    }) async {
+      openedPeerAccountId = peerAccountId;
+      openedTitle = title;
+    }
+
+    await tester.pumpWidget(_page(
+      mode: ContactPickMode.pickForMessage,
+      directChatOpener: opener,
+    ));
+    await tester.pumpAndSettle();
+
+    // 选私信模式:不显示逐项操作菜单,点联系人卡即开私聊。
+    expect(find.byTooltip('联系人操作'), findsNothing);
+    await tester.tap(find.text('张三'));
+    await tester.pump();
+
+    expect(openedPeerAccountId, _contactAccountId);
     expect(openedTitle, 'Rhett');
   });
 }

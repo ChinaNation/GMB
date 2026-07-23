@@ -11,11 +11,11 @@ import 'package:citizenapp/ui/app_theme.dart';
 class DraftsPage extends StatefulWidget {
   const DraftsPage({
     super.key,
-    required this.ownerAccount,
+    required this.accountId,
     this.store,
   });
 
-  final String ownerAccount;
+  final String accountId;
   final SquareComposeDraftRepository? store;
 
   @override
@@ -30,11 +30,11 @@ class _DraftsPageState extends State<DraftsPage> {
   void initState() {
     super.initState();
     _store = widget.store ?? SquareComposeDraftStore.instance;
-    _future = _store.list(widget.ownerAccount);
+    _future = _store.list(widget.accountId);
   }
 
   Future<void> _delete(SquareComposeDraft draft) async {
-    await _store.delete(widget.ownerAccount, draft.draftId);
+    await _store.delete(widget.accountId, draft.draftId);
   }
 
   @override
@@ -50,8 +50,8 @@ class _DraftsPageState extends State<DraftsPage> {
           final drafts = snapshot.data ?? const <SquareComposeDraft>[];
           if (drafts.isEmpty) {
             return const Center(
-              child: Text('还没有草稿',
-                  style: TextStyle(color: AppTheme.textTertiary)),
+              child:
+                  Text('还没有草稿', style: TextStyle(color: AppTheme.textTertiary)),
             );
           }
           return ListView.separated(
@@ -114,7 +114,8 @@ class _DraftCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      _TypeChip(label: draft.typeLabel, campaign: draft.isCampaign),
+                      _TypeChip(
+                          label: draft.typeLabel, campaign: draft.isCampaign),
                       const Spacer(),
                       Text(_relativeTime(draft.updatedAtMillis),
                           style: const TextStyle(
@@ -139,8 +140,8 @@ class _DraftCard extends StatelessWidget {
   }
 
   static String _relativeTime(int millis) {
-    final diff = DateTime.now()
-        .difference(DateTime.fromMillisecondsSinceEpoch(millis));
+    final diff =
+        DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(millis));
     if (diff.inMinutes < 1) return '刚刚';
     if (diff.inHours < 1) return '${diff.inMinutes} 分钟前';
     if (diff.inDays < 1) return '${diff.inHours} 小时前';

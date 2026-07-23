@@ -8,6 +8,7 @@ import 'package:citizenapp/chat/chat_flow.dart';
 import 'package:citizenapp/chat/chat_payload.dart';
 import 'package:citizenapp/chat/chat_runtime.dart';
 import 'package:citizenapp/chat/chat_models.dart';
+import 'package:citizenapp/chat/chat_search_page.dart';
 import 'package:citizenapp/chat/chat_tab.dart';
 import 'package:citizenapp/chat/storage/chat_store.dart';
 import 'package:citizenapp/chat/transport/chat_transport.dart';
@@ -20,7 +21,8 @@ void main() {
       MaterialApp(
         home: ChatPage(
           conversationId: 'dm:alice:$peer',
-          ownerAccount: 'alice',
+          accountId:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
           peerUserId: peer,
           title: peer,
           store: store,
@@ -44,14 +46,17 @@ void main() {
 
   testWidgets('隐藏 Chat Tab 不初始化，进入后 init/resume 只同步一次', (tester) async {
     final selectedTab = ValueNotifier<int>(0);
-    final runtime = _FakeRuntime(address: 'alice-wallet');
+    final runtime = _FakeRuntime(
+        address:
+            '0x1111111111111111111111111111111111111111111111111111111111111111');
 
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: ChatTab(
             store: _FakeChatStore(),
-            ownerAccount: 'alice-wallet',
+            accountId:
+                '0x1111111111111111111111111111111111111111111111111111111111111111',
             runtime: runtime,
             selectedTab: selectedTab,
             tabIndex: 2,
@@ -82,14 +87,15 @@ void main() {
     selectedTab.dispose();
   });
 
-  testWidgets('聊天 Tab renders conversation list for owner account',
+  testWidgets('聊天 Tab renders conversation list for accountId account',
       (tester) async {
     final store = _FakeChatStore(
       conversations: [
         ChatConversationPreview(
           conversationId: 'dm:alice-wallet:bob-wallet',
           title: 'Bob',
-          peerAccount: 'bob-wallet',
+          peerAccountId:
+              '0x2222222222222222222222222222222222222222222222222222222222222222',
           lastMessage: 'hello',
           lastUpdatedAt: DateTime.fromMillisecondsSinceEpoch(1),
           unreadCount: 1,
@@ -103,7 +109,8 @@ void main() {
         home: Scaffold(
           body: ChatTab(
             store: store,
-            ownerAccount: 'alice-wallet',
+            accountId:
+                '0x1111111111111111111111111111111111111111111111111111111111111111',
           ),
         ),
       ),
@@ -112,9 +119,13 @@ void main() {
 
     expect(find.text('聊天'), findsOneWidget);
     expect(find.text('Bob'), findsOneWidget);
-    expect(find.text('bob-wallet'), findsNothing);
+    expect(
+        find.text(
+            '0x2222222222222222222222222222222222222222222222222222222222222222'),
+        findsNothing);
     expect(find.text('hello'), findsOneWidget);
-    expect(store.lastOwnerFilter, 'alice-wallet');
+    expect(store.lastAccountFilter,
+        '0x1111111111111111111111111111111111111111111111111111111111111111');
     expect(find.byIcon(Icons.add_comment_outlined), findsNothing);
     expect(find.byIcon(Icons.qr_code_scanner_rounded), findsNothing);
     expect(find.byIcon(Icons.qr_code_2_rounded), findsNothing);
@@ -122,13 +133,16 @@ void main() {
 
   testWidgets('进会话点贴纸 → 接线到 runtime.sendSticker(peer/conv/pack/sticker 正确)',
       (tester) async {
-    final runtime = _FakeRuntime(address: 'alice-wallet');
+    final runtime = _FakeRuntime(
+        address:
+            '0x1111111111111111111111111111111111111111111111111111111111111111');
     final store = _FakeChatStore(
       conversations: [
         ChatConversationPreview(
           conversationId: 'dm:alice-wallet:bob-wallet',
           title: 'Bob',
-          peerAccount: 'bob-wallet',
+          peerAccountId:
+              '0x2222222222222222222222222222222222222222222222222222222222222222',
           lastMessage: 'hi',
           lastUpdatedAt: DateTime.fromMillisecondsSinceEpoch(2),
           unreadCount: 0,
@@ -142,7 +156,8 @@ void main() {
         home: Scaffold(
           body: ChatTab(
             store: store,
-            ownerAccount: 'alice-wallet',
+            accountId:
+                '0x1111111111111111111111111111111111111111111111111111111111111111',
             runtime: runtime,
           ),
         ),
@@ -164,7 +179,12 @@ void main() {
     // 委托四参逐字正确(named 参数不会换位,守的是漏接/错映射的回归)。
     expect(
       runtime.sentStickers.single,
-      ['bob-wallet', 'dm:alice-wallet:bob-wallet', 'fluent3d', 'grinning_face'],
+      [
+        '0x2222222222222222222222222222222222222222222222222222222222222222',
+        'dm:alice-wallet:bob-wallet',
+        'fluent3d',
+        'grinning_face'
+      ],
     );
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -178,7 +198,8 @@ void main() {
         ChatConversationPreview(
           conversationId: 'dm:alice-wallet:bob-wallet',
           title: 'Bob',
-          peerAccount: 'bob-wallet',
+          peerAccountId:
+              '0x2222222222222222222222222222222222222222222222222222222222222222',
           lastMessage: 'hello',
           lastUpdatedAt: DateTime.fromMillisecondsSinceEpoch(2),
           unreadCount: 0,
@@ -187,7 +208,7 @@ void main() {
         ChatConversationPreview(
           conversationId: 'dm:alice-wallet:carol-wallet',
           title: 'Carol',
-          peerAccount: 'carol-wallet',
+          peerAccountId: 'carol-wallet',
           lastMessage: 'keep',
           lastUpdatedAt: DateTime.fromMillisecondsSinceEpoch(1),
           unreadCount: 0,
@@ -201,7 +222,8 @@ void main() {
         home: Scaffold(
           body: ChatTab(
             store: store,
-            ownerAccount: 'alice-wallet',
+            accountId:
+                '0x1111111111111111111111111111111111111111111111111111111111111111',
           ),
         ),
       ),
@@ -222,13 +244,13 @@ void main() {
     expect(find.text('Carol'), findsOneWidget);
   });
 
-  testWidgets('聊天 Tab requires a configured owner account', (tester) async {
+  testWidgets('聊天 Tab requires a configured accountId account', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: ChatTab(
             store: _FakeChatStore(),
-            ownerAccount: '',
+            accountId: '',
           ),
         ),
       ),
@@ -239,7 +261,9 @@ void main() {
   });
 
   testWidgets('聊天 Tab 打开后自动重试本机发送队列', (tester) async {
-    final runtime = _FakeRuntime(address: 'alice-wallet');
+    final runtime = _FakeRuntime(
+        address:
+            '0x1111111111111111111111111111111111111111111111111111111111111111');
     final store = _FakeChatStore();
 
     await tester.pumpWidget(
@@ -247,7 +271,8 @@ void main() {
         home: Scaffold(
           body: ChatTab(
             store: store,
-            ownerAccount: 'alice-wallet',
+            accountId:
+                '0x1111111111111111111111111111111111111111111111111111111111111111',
             runtime: runtime,
           ),
         ),
@@ -271,7 +296,8 @@ void main() {
   testWidgets('聊天 Tab uses realtime notice before polling fallback',
       (tester) async {
     final runtime = _FakeRuntime(
-      address: 'alice-wallet',
+      address:
+          '0x1111111111111111111111111111111111111111111111111111111111111111',
       enableRealtime: true,
     );
     final store = _FakeChatStore();
@@ -281,7 +307,8 @@ void main() {
         home: Scaffold(
           body: ChatTab(
             store: store,
-            ownerAccount: 'alice-wallet',
+            accountId:
+                '0x1111111111111111111111111111111111111111111111111111111111111111',
             runtime: runtime,
           ),
         ),
@@ -317,8 +344,10 @@ void main() {
       MaterialApp(
         home: ChatPage(
           conversationId: 'dm:alice-wallet:bob-wallet',
-          ownerAccount: 'alice-wallet',
-          peerUserId: 'bob-wallet',
+          accountId:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          peerUserId:
+              '0x2222222222222222222222222222222222222222222222222222222222222222',
           title: 'Bob',
           store: store,
           onSync: () async {
@@ -353,8 +382,10 @@ void main() {
       MaterialApp(
         home: ChatPage(
           conversationId: 'dm:alice-wallet:bob-wallet',
-          ownerAccount: 'alice-wallet',
-          peerUserId: 'bob-wallet',
+          accountId:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          peerUserId:
+              '0x2222222222222222222222222222222222222222222222222222222222222222',
           title: 'Bob',
           store: store,
           onSync: () async {
@@ -403,8 +434,10 @@ void main() {
       MaterialApp(
         home: ChatPage(
           conversationId: 'dm:alice-wallet:bob-wallet',
-          ownerAccount: 'alice-wallet',
-          peerUserId: 'bob-wallet',
+          accountId:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          peerUserId:
+              '0x2222222222222222222222222222222222222222222222222222222222222222',
           title: 'Bob',
           store: store,
           pickMedia: () async => const ChatMediaDraft(
@@ -439,8 +472,10 @@ void main() {
           envelopeId: 'env-attachment',
           conversationId: 'dm:alice-wallet:bob-wallet',
           direction: 'incoming',
-          senderAccount: 'bob-wallet',
-          recipientAccount: 'alice-wallet',
+          senderAccountId:
+              '0x2222222222222222222222222222222222222222222222222222222222222222',
+          recipientAccountId:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
           messageKind: ChatMessageKind.file,
           deliveryState: ChatMessageDeliveryState.receivedByDevice,
           createdAtMillis: 3000,
@@ -462,8 +497,10 @@ void main() {
       MaterialApp(
         home: ChatPage(
           conversationId: 'dm:alice-wallet:bob-wallet',
-          ownerAccount: 'alice-wallet',
-          peerUserId: 'bob-wallet',
+          accountId:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          peerUserId:
+              '0x2222222222222222222222222222222222222222222222222222222222222222',
           title: 'Bob',
           store: store,
           onDownloadAttachment: (conversationId, controlPlaintext) async {
@@ -496,8 +533,10 @@ void main() {
           envelopeId: 'env-delete-ui',
           conversationId: 'dm:alice-wallet:bob-wallet',
           direction: 'incoming',
-          senderAccount: 'bob-wallet',
-          recipientAccount: 'alice-wallet',
+          senderAccountId:
+              '0x2222222222222222222222222222222222222222222222222222222222222222',
+          recipientAccountId:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
           messageKind: ChatMessageKind.text,
           deliveryState: ChatMessageDeliveryState.receivedByDevice,
           createdAtMillis: 1000,
@@ -517,8 +556,10 @@ void main() {
                     MaterialPageRoute(
                       builder: (_) => ChatPage(
                         conversationId: 'dm:alice-wallet:bob-wallet',
-                        ownerAccount: 'alice-wallet',
-                        peerUserId: 'bob-wallet',
+                        accountId:
+                            '0x1111111111111111111111111111111111111111111111111111111111111111',
+                        peerUserId:
+                            '0x2222222222222222222222222222222222222222222222222222222222222222',
                         title: 'Bob',
                         store: store,
                         onDeleteConversation: () => store.deleteConversation(
@@ -567,8 +608,10 @@ void main() {
       MaterialApp(
         home: ChatPage(
           conversationId: 'dm:alice-wallet:bob-wallet',
-          ownerAccount: 'alice-wallet',
-          peerUserId: 'bob-wallet',
+          accountId:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          peerUserId:
+              '0x2222222222222222222222222222222222222222222222222222222222222222',
           title: 'Bob',
           store: store,
         ),
@@ -597,8 +640,10 @@ void main() {
       MaterialApp(
         home: ChatPage(
           conversationId: 'dm:alice-wallet:bob-wallet',
-          ownerAccount: 'alice-wallet',
-          peerUserId: 'bob-wallet',
+          accountId:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          peerUserId:
+              '0x2222222222222222222222222222222222222222222222222222222222222222',
           title: 'Bob',
           store: store,
         ),
@@ -610,6 +655,107 @@ void main() {
     // 视频封面用 metadata['blurhash'];若误读 message.blurhash(VideoMessage 无此字段)
     // 则渲染空 Container,BlurHash 不出现。
     expect(find.byType(BlurHash), findsOneWidget);
+  });
+
+  // ---- 顶栏改造：搜索框 + 加号 5 入口 ----
+
+  const self =
+      '0x1111111111111111111111111111111111111111111111111111111111111111';
+
+  Future<void> pumpTab(
+    WidgetTester tester, {
+    ChatEntryOpeners? openers,
+  }) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChatTab(
+            store: _FakeChatStore(),
+            accountId: self,
+            runtime: _FakeRuntime(address: self),
+            openers: openers,
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+
+  /// 菜单开合有动画，但聊天页有 15s 轮询定时器，用 pumpAndSettle 会被推着走，
+  /// 因此一律用固定步长 pump。
+  Future<void> openMenu(WidgetTester tester) async {
+    await tester.tap(find.byIcon(Icons.add_rounded));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+  }
+
+  testWidgets('顶部为搜索框、右上角为加号，旧「新建群聊」卡片已删', (tester) async {
+    await pumpTab(tester);
+
+    expect(find.text('搜索'), findsOneWidget);
+    expect(find.byIcon(Icons.add_rounded), findsOneWidget);
+    expect(find.text('新建群聊'), findsNothing);
+    expect(find.byIcon(Icons.group_add_outlined), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
+  testWidgets('点加号弹出扫一扫/收付款/发私信/发群聊/加好友五项', (tester) async {
+    await pumpTab(tester);
+    await openMenu(tester);
+
+    for (final label in ['扫一扫', '收付款', '发私信', '发群聊', '加好友']) {
+      expect(find.text(label), findsOneWidget, reason: '缺少菜单项 $label');
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
+  testWidgets('五项分别路由到对应动作', (tester) async {
+    final fired = <String>[];
+    await pumpTab(
+      tester,
+      openers: ChatEntryOpeners(
+        openScan: (_) async => fired.add('scan'),
+        openReceivePay: (_) async => fired.add('receivePay'),
+        openSendMessage: (_) async => fired.add('sendMessage'),
+        openCreateGroup: (_) async => fired.add('createGroup'),
+        openAddFriend: (_) async => fired.add('addFriend'),
+      ),
+    );
+
+    for (final label in ['扫一扫', '收付款', '发私信', '发群聊', '加好友']) {
+      await openMenu(tester);
+      await tester.tap(find.text(label));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    expect(fired, [
+      'scan',
+      'receivePay',
+      'sendMessage',
+      'createGroup',
+      'addFriend',
+    ]);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
+  testWidgets('点搜索框进入聊天搜索页', (tester) async {
+    await pumpTab(tester);
+
+    await tester.tap(find.text('搜索'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.byType(ChatSearchPage), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 }
 
@@ -623,8 +769,10 @@ ChatStoredMessage _mediaStored({
     envelopeId: 'env-$id',
     conversationId: 'dm:alice-wallet:bob-wallet',
     direction: 'incoming',
-    senderAccount: 'bob-wallet',
-    recipientAccount: 'alice-wallet',
+    senderAccountId:
+        '0x2222222222222222222222222222222222222222222222222222222222222222',
+    recipientAccountId:
+        '0x1111111111111111111111111111111111111111111111111111111111111111',
     messageKind: kind,
     deliveryState: ChatMessageDeliveryState.receivedByDevice,
     createdAtMillis: 3000,
@@ -652,17 +800,17 @@ class _FakeChatStore extends ChatStore {
 
   final List<ChatConversationPreview> _conversations;
   final List<ChatStoredMessage> _messages;
-  String? lastOwnerFilter;
+  String? lastAccountFilter;
   int readPreviewCount = 0;
   int readMessagesCount = 0;
   final List<String> deletedConversationIds = <String>[];
 
   @override
   Future<List<ChatConversationPreview>> readConversationPreviews({
-    String? ownerAccount,
+    String? accountId,
   }) async {
     readPreviewCount += 1;
-    lastOwnerFilter = ownerAccount;
+    lastAccountFilter = accountId;
     return List<ChatConversationPreview>.from(_conversations);
   }
 
@@ -707,23 +855,23 @@ class _FakeRuntime extends ChatRuntime {
   final List<List<String>> sentStickers = <List<String>>[];
 
   @override
-  Future<String?> readOwnerAccount() async {
+  Future<String?> readAccountId() async {
     return address;
   }
 
   @override
   Future<List<ChatDeliveryResult>> sendSticker({
-    required String peerAccount,
+    required String peerAccountId,
     required String conversationId,
     required String packId,
     required String stickerId,
   }) async {
-    sentStickers.add([peerAccount, conversationId, packId, stickerId]);
+    sentStickers.add([peerAccountId, conversationId, packId, stickerId]);
     return const [];
   }
 
   @override
-  Future<int> retryOutgoing({String? recipientAccount}) async {
+  Future<int> retryOutgoing({String? recipientAccountId}) async {
     syncCount += 1;
     return 0;
   }

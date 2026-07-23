@@ -11,42 +11,42 @@ import 'package:citizenapp/citizen/institution/institution.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/citizen/shared/reserved_account_names.dart';
 
-/// 单个机构账户行(标签 + hex + SS58 + 可选余额)。
+/// 单个机构账户行（标签 + AccountId + SS58 + 可选余额）。
 class InstitutionAccountRow {
   const InstitutionAccountRow({
     required this.label,
-    required this.accountHex,
-    required this.addressSs58,
+    required this.accountId,
+    required this.ss58Address,
     this.balanceYuan,
   });
 
   final String label;
-  final String accountHex;
-  final String addressSs58;
+  final String accountId;
+  final String ss58Address;
   final double? balanceYuan;
 
   InstitutionAccountRow withBalance(double? yuan) => InstitutionAccountRow(
         label: label,
-        accountHex: accountHex,
-        addressSs58: addressSs58,
+        accountId: accountId,
+        ss58Address: ss58Address,
         balanceYuan: yuan,
       );
 }
 
 /// 由机构构造全部账户行:固定治理档用 china 固定账户,普通机构本地派生。
-List<InstitutionAccountRow> institutionAccountRows(Institution inst) {
+List<InstitutionAccountRow> institutionAccountIdRows(Institution inst) {
   final baked = inst.builtinAccounts;
   if (baked != null) {
     final rows = <InstitutionAccountRow>[
-      _rowFromHex('主账户', baked.mainAccount),
-      _rowFromHex('费用账户', baked.feeAccount),
+      _rowFromAccountId('主账户', baked.mainAccountId),
+      _rowFromAccountId('费用账户', baked.feeAccountId),
     ];
-    final safety = baked.safetyFundAccount;
-    if (safety != null) rows.add(_rowFromHex('安全基金账户', safety));
-    final he = baked.heAccount;
-    if (he != null) rows.add(_rowFromHex('两和基金账户', he));
-    final stake = baked.stakeAccount;
-    if (stake != null) rows.add(_rowFromHex('永久质押', stake));
+    final safety = baked.safetyFundAccountId;
+    if (safety != null) rows.add(_rowFromAccountId('安全基金账户', safety));
+    final he = baked.heAccountId;
+    if (he != null) rows.add(_rowFromAccountId('两和基金账户', he));
+    final stake = baked.stakeAccountId;
+    if (stake != null) rows.add(_rowFromAccountId('永久质押', stake));
     return rows;
   }
 
@@ -55,29 +55,32 @@ List<InstitutionAccountRow> institutionAccountRows(Institution inst) {
   final main = deriveInstitutionMainAccountId(inst.cidNumber);
   rows.add(InstitutionAccountRow(
     label: kReservedNameMain,
-    accountHex: hexFromAccountId(main),
-    addressSs58: ss58FromAccountId(main),
+    accountId: accountIdText(main),
+    ss58Address: ss58FromAccountId(main),
   ));
   final feeId = deriveInstitutionFeeAccountId(inst.cidNumber);
   rows.add(InstitutionAccountRow(
     label: kReservedNameFee,
-    accountHex: hexFromAccountId(feeId),
-    addressSs58: ss58FromAccountId(feeId),
+    accountId: accountIdText(feeId),
+    ss58Address: ss58FromAccountId(feeId),
   ));
   for (final name in inst.customAccountNames) {
     if (!isRegistrableCustomName(name)) continue;
     final id = deriveInstitutionCustomAccountId(inst.cidNumber, name);
     rows.add(InstitutionAccountRow(
       label: name,
-      accountHex: hexFromAccountId(id),
-      addressSs58: ss58FromAccountId(id),
+      accountId: accountIdText(id),
+      ss58Address: ss58FromAccountId(id),
     ));
   }
   return rows;
 }
 
-InstitutionAccountRow _rowFromHex(String label, String hex) {
-  final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
+InstitutionAccountRow _rowFromAccountId(String label, String accountId) {
+  if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+    throw const FormatException('机构 account_id 必须为小写 0x + 64 位十六进制');
+  }
+  final clean = accountId.substring(2);
   final bytes = Uint8List.fromList(
     List<int>.generate(
       clean.length ~/ 2,
@@ -87,7 +90,7 @@ InstitutionAccountRow _rowFromHex(String label, String hex) {
   );
   return InstitutionAccountRow(
     label: label,
-    accountHex: clean.toLowerCase(),
-    addressSs58: ss58FromAccountId(bytes),
+    accountId: accountId,
+    ss58Address: ss58FromAccountId(bytes),
   );
 }

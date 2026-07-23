@@ -12,8 +12,8 @@ class ChatStoredMessage {
     required this.envelopeId,
     required this.conversationId,
     required this.direction,
-    required this.senderAccount,
-    required this.recipientAccount,
+    required this.senderAccountId,
+    required this.recipientAccountId,
     required this.messageKind,
     required this.deliveryState,
     required this.createdAtMillis,
@@ -23,8 +23,8 @@ class ChatStoredMessage {
   final String envelopeId;
   final String conversationId;
   final String direction;
-  final String senderAccount;
-  final String recipientAccount;
+  final String senderAccountId;
+  final String recipientAccountId;
   final ChatMessageKind messageKind;
   final ChatMessageDeliveryState deliveryState;
   final int createdAtMillis;
@@ -35,12 +35,12 @@ class ChatStoredMessage {
 class ChatQueuedEnvelope {
   const ChatQueuedEnvelope({
     required this.envelopeId,
-    required this.recipientAccount,
+    required this.recipientAccountId,
     required this.envelopeBytes,
   });
 
   final String envelopeId;
-  final String recipientAccount;
+  final String recipientAccountId;
   final List<int> envelopeBytes;
 }
 
@@ -49,7 +49,7 @@ class ChatQueuedEnvelope {
 class ChatPendingMedia {
   const ChatPendingMedia({
     required this.attachmentId,
-    required this.recipientAccount,
+    required this.recipientAccountId,
     required this.conversationId,
     required this.fileName,
     required this.contentType,
@@ -57,7 +57,7 @@ class ChatPendingMedia {
   });
 
   final String attachmentId;
-  final String recipientAccount;
+  final String recipientAccountId;
   final String conversationId;
   final String fileName;
   final String contentType;
@@ -67,10 +67,10 @@ class ChatPendingMedia {
 /// Chat 路由缓存记录。
 class ChatRoute {
   const ChatRoute({
-    required this.peerAccount,
+    required this.peerAccountId,
     required this.routeDisplayName,
     required this.deviceId,
-    required this.devicePublicKeyHex,
+    required this.devicePublicKey,
     required this.safetyNumber,
     this.nearbyPeerHint,
     this.note,
@@ -78,17 +78,17 @@ class ChatRoute {
     this.updatedAtMillis,
   });
 
-  final String peerAccount;
+  final String peerAccountId;
   final String routeDisplayName;
   final String deviceId;
-  final String devicePublicKeyHex;
+  final String devicePublicKey;
   final String safetyNumber;
   final String? nearbyPeerHint;
   final String? note;
   final int? createdAtMillis;
   final int? updatedAtMillis;
 
-  String get routeId => peerAccount;
+  String get routeId => peerAccountId;
 }
 
 /// 公民 Chat 的 Isar 持久化仓库。
@@ -103,17 +103,17 @@ class ChatStore {
   final WalletIsar _walletIsar;
 
   Future<List<ChatConversationPreview>> readConversationPreviews({
-    String? ownerAccount,
+    String? accountId,
   }) {
     return _walletIsar.read((isar) async {
       final rows = await isar.chatConversationEntitys
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
-      final filtered = ownerAccount == null || ownerAccount.isEmpty
+      final filtered = accountId == null || accountId.isEmpty
           ? rows
           : rows
-              .where((row) => row.ownerAccount == ownerAccount)
+              .where((row) => row.accountId == accountId)
               .toList(growable: false);
       filtered.sort(
           (a, b) => b.lastUpdatedAtMillis.compareTo(a.lastUpdatedAtMillis));
@@ -134,10 +134,10 @@ class ChatStore {
     });
   }
 
-  Future<ChatRoute?> getRouteRecord(String peerAccount) {
+  Future<ChatRoute?> getRouteRecord(String peerAccountId) {
     return _walletIsar.read((isar) async {
       final row =
-          await isar.chatRouteCacheEntitys.getByPeerAccount(peerAccount);
+          await isar.chatRouteCacheEntitys.getByPeerAccountId(peerAccountId);
       return row == null ? null : _routeFromEntity(row);
     });
   }
@@ -150,10 +150,10 @@ class ChatStore {
       final entity = existing ?? ChatRouteCacheEntity();
       entity
         ..routeId = route.routeId
-        ..peerAccount = route.peerAccount
+        ..peerAccountId = route.peerAccountId
         ..routeDisplayName = route.routeDisplayName
         ..deviceId = route.deviceId
-        ..devicePublicKeyHex = route.devicePublicKeyHex
+        ..devicePublicKey = route.devicePublicKey
         ..safetyNumber = route.safetyNumber
         ..nearbyPeerHint = route.nearbyPeerHint
         ..note = route.note
@@ -175,6 +175,39 @@ class ChatStore {
           .toList(growable: false)
         ..sort((a, b) => a.createdAtMillis.compareTo(b.createdAtMillis));
       return filtered.map(_messageFromEntity).toList(growable: false);
+    });
+  }
+
+  /// 跨会话搜索本机聊天记录（聊天搜索页的「聊天记录」段）。
+  ///
+  /// 消息 `plaintext` 存的是**编码载荷**（文本 / 媒体 / 贴纸），必须先经
+  /// [ChatPayloadCodec] 解成摘要再匹配：直接拿原串匹配会漏掉文本正文，
+  /// 又会错配到媒体元数据。大小写不敏感。
+  ///
+  /// 性能：先用 `accountId` 索引收窄，再在内存里匹配（`plaintext` 无索引，
+  /// 不为搜索改表结构），按时间倒序截断 [limit]，避免大历史一次性铺开。
+  Future<List<ChatStoredMessage>> searchMessages({
+    required String accountId,
+    required String keyword,
+    int limit = 50,
+  }) {
+    final needle = keyword.trim().toLowerCase();
+    if (needle.isEmpty || accountId.isEmpty) {
+      return Future<List<ChatStoredMessage>>.value(const <ChatStoredMessage>[]);
+    }
+    return _walletIsar.read((isar) async {
+      final rows = await isar.chatMessageEntitys
+          .filter()
+          .accountIdEqualTo(accountId)
+          .findAll();
+      final hits = rows
+          .where(
+            (row) =>
+                _messageSummary(row.plaintext).toLowerCase().contains(needle),
+          )
+          .toList(growable: false)
+        ..sort((a, b) => b.createdAtMillis.compareTo(a.createdAtMillis));
+      return hits.take(limit).map(_messageFromEntity).toList(growable: false);
     });
   }
 
@@ -236,19 +269,19 @@ class ChatStore {
     });
   }
 
-  /// 注销用户：清除该 owner 在本机的全部 Chat 历史（会话/消息/出入站队列）。
+  /// 注销用户：清除该 accountId 在本机的全部 Chat 历史（会话/消息/出入站队列）。
   ///
   /// Cloudflare 端 A 的设备登记由 Worker purge 删除；本地 Isar 是 A 私信**明文**
   /// 的唯一残留处，须一并清空以做到零残留。路由缓存（imRouteCacheEntity）是设备级
-  /// 对端路由、非 owner 归属，不在此清除。
-  Future<void> clearAllForOwner(String ownerAccount) {
+  /// 对端路由、非 accountId 归属，不在此清除。
+  Future<void> clearAllForAccount(String accountId) {
     return _walletIsar.writeTxn((isar) async {
       final conversations = await isar.chatConversationEntitys
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
       final owned = conversations
-          .where((c) => c.ownerAccount == ownerAccount)
+          .where((c) => c.accountId == accountId)
           .toList(growable: false);
       final ownedIds = owned.map((c) => c.conversationId).toSet();
       for (final c in owned) {
@@ -260,9 +293,7 @@ class ChatStore {
           .idGreaterThan(0, include: true)
           .findAll();
       for (final m in messages.where(
-        (m) =>
-            m.ownerAccount == ownerAccount ||
-            ownedIds.contains(m.conversationId),
+        (m) => m.accountId == accountId || ownedIds.contains(m.conversationId),
       )) {
         await isar.chatMessageEntitys.delete(m.id);
       }
@@ -310,9 +341,9 @@ class ChatStore {
       await _putConversationInTxn(
         isar: isar,
         conversationId: envelope.conversationId,
-        ownerAccount: envelope.senderAccount,
-        peerAccount: envelope.recipientAccount,
-        title: envelope.recipientAccount,
+        accountId: envelope.senderAccountId,
+        peerAccountId: envelope.recipientAccountId,
+        title: envelope.recipientAccountId,
         lastMessage: _messageSummary(plaintext),
         lastUpdatedAtMillis: envelope.createdAtMillis.toInt(),
         unreadDelta: 0,
@@ -322,7 +353,7 @@ class ChatStore {
         _messageEntity(
           envelope: envelope,
           envelopeBytes: envelopeBytes,
-          ownerAccount: envelope.senderAccount,
+          accountId: envelope.senderAccountId,
           direction: 'outgoing',
           messageKind: messageKind,
           deliveryState: deliveryState,
@@ -333,7 +364,7 @@ class ChatStore {
         ChatOutboundQueueEntity()
           ..envelopeId = envelope.envelopeId
           ..conversationId = envelope.conversationId
-          ..recipientAccount = envelope.recipientAccount
+          ..recipientAccountId = envelope.recipientAccountId
           ..envelopeBytesHex = _bytesToHex(envelopeBytes)
           ..deliveryState = deliveryState.name
           ..attemptCount = 0
@@ -353,7 +384,7 @@ class ChatStore {
         ChatOutboundQueueEntity()
           ..envelopeId = envelope.envelopeId
           ..conversationId = envelope.conversationId
-          ..recipientAccount = envelope.recipientAccount
+          ..recipientAccountId = envelope.recipientAccountId
           ..envelopeBytesHex = _bytesToHex(envelopeBytes)
           ..deliveryState = deliveryState.name
           ..attemptCount = 0
@@ -373,9 +404,9 @@ class ChatStore {
       await _putConversationInTxn(
         isar: isar,
         conversationId: envelope.conversationId,
-        ownerAccount: envelope.recipientAccount,
-        peerAccount: envelope.senderAccount,
-        title: envelope.senderAccount,
+        accountId: envelope.recipientAccountId,
+        peerAccountId: envelope.senderAccountId,
+        title: envelope.senderAccountId,
         lastMessage: _messageSummary(plaintext),
         lastUpdatedAtMillis: envelope.createdAtMillis.toInt(),
         unreadDelta: 1,
@@ -385,7 +416,7 @@ class ChatStore {
         _messageEntity(
           envelope: envelope,
           envelopeBytes: envelopeBytes,
-          ownerAccount: envelope.recipientAccount,
+          accountId: envelope.recipientAccountId,
           direction: 'incoming',
           messageKind: messageKind,
           deliveryState: ChatMessageDeliveryState.receivedByDevice,
@@ -489,24 +520,24 @@ class ChatStore {
 
   /// 读取发送设备上的待重试密文；Cloudflare 不提供远程补拉。
   Future<List<ChatQueuedEnvelope>> readQueuedEnvelopes({
-    String? recipientAccount,
+    String? recipientAccountId,
   }) {
     return _walletIsar.read((isar) async {
       final rows = await isar.chatOutboundQueueEntitys
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
-      final matched = recipientAccount == null
+      final matched = recipientAccountId == null
           ? rows
           : rows
-              .where((row) => row.recipientAccount == recipientAccount)
+              .where((row) => row.recipientAccountId == recipientAccountId)
               .toList(growable: false);
       matched.sort((a, b) => a.updatedAtMillis.compareTo(b.updatedAtMillis));
       return matched
           .map(
             (row) => ChatQueuedEnvelope(
               envelopeId: row.envelopeId,
-              recipientAccount: row.recipientAccount,
+              recipientAccountId: row.recipientAccountId,
               envelopeBytes: _hexToBytes(row.envelopeBytesHex),
             ),
           )
@@ -517,7 +548,7 @@ class ChatStore {
   /// 登记一条待设备投递的媒体(字节未送达对方设备,留待上线补发)。
   Future<void> recordOutgoingMedia({
     required String attachmentId,
-    required String recipientAccount,
+    required String recipientAccountId,
     required String conversationId,
     required String fileName,
     required String contentType,
@@ -526,9 +557,9 @@ class ChatStore {
     return _walletIsar.writeTxn((isar) async {
       await isar.chatOutgoingMediaEntitys.putByPendingKey(
         ChatOutgoingMediaEntity()
-          ..pendingKey = '$attachmentId|$recipientAccount'
+          ..pendingKey = '$attachmentId|$recipientAccountId'
           ..attachmentId = attachmentId
-          ..recipientAccount = recipientAccount
+          ..recipientAccountId = recipientAccountId
           ..conversationId = conversationId
           ..fileName = fileName
           ..contentType = contentType
@@ -539,33 +570,34 @@ class ChatStore {
   }
 
   /// 字节已送达某成员设备(收到 WebRTC ack)后删除该 (媒体, 成员) 待投递行。
-  Future<void> deleteOutgoingMedia(String attachmentId, String recipientAccount) {
+  Future<void> deleteOutgoingMedia(
+      String attachmentId, String recipientAccountId) {
     return _walletIsar.writeTxn((isar) async {
       await isar.chatOutgoingMediaEntitys
-          .deleteByPendingKey('$attachmentId|$recipientAccount');
+          .deleteByPendingKey('$attachmentId|$recipientAccountId');
     });
   }
 
   /// 读取待设备投递的媒体(可按对端过滤),供上线补发。
   Future<List<ChatPendingMedia>> readPendingOutgoingMedia({
-    String? recipientAccount,
+    String? recipientAccountId,
   }) {
     return _walletIsar.read((isar) async {
       final rows = await isar.chatOutgoingMediaEntitys
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
-      final matched = recipientAccount == null
+      final matched = recipientAccountId == null
           ? rows
           : rows
-              .where((row) => row.recipientAccount == recipientAccount)
+              .where((row) => row.recipientAccountId == recipientAccountId)
               .toList(growable: false);
       matched.sort((a, b) => a.createdAtMillis.compareTo(b.createdAtMillis));
       return matched
           .map(
             (row) => ChatPendingMedia(
               attachmentId: row.attachmentId,
-              recipientAccount: row.recipientAccount,
+              recipientAccountId: row.recipientAccountId,
               conversationId: row.conversationId,
               fileName: row.fileName,
               contentType: row.contentType,
@@ -592,20 +624,19 @@ class ChatStore {
   Future<void> upsertGroupShell({
     required String groupId,
     required String groupName,
-    required String creatorAccount,
-    required String ownerAccount,
+    required String creatorAccountId,
+    required String accountId,
     required int epoch,
   }) {
     return _walletIsar.writeTxn((isar) async {
       final now = DateTime.now().millisecondsSinceEpoch;
-      final existing =
-          await isar.chatGroupEntitys.getByGroupId(groupId);
+      final existing = await isar.chatGroupEntitys.getByGroupId(groupId);
       final entity = existing ?? ChatGroupEntity();
       entity
         ..groupId = groupId
         ..groupName = groupName
-        ..creatorAccount = creatorAccount
-        ..ownerAccount = ownerAccount
+        ..creatorAccountId = creatorAccountId
+        ..accountId = accountId
         ..epoch = epoch
         ..memberCount = existing?.memberCount ?? 1
         ..leftLocally = existing?.leftLocally ?? false
@@ -618,8 +649,8 @@ class ChatStore {
       final shell = conversation ?? ChatConversationEntity();
       shell
         ..conversationId = groupId
-        ..ownerAccount = ownerAccount
-        ..peerAccount = creatorAccount
+        ..accountId = accountId
+        ..peerAccountId = creatorAccountId
         ..title = groupName
         ..conversationKind = 'group'
         ..lastMessage = conversation?.lastMessage ?? ''
@@ -644,7 +675,7 @@ class ChatStore {
           .groupIdEqualTo(groupId)
           .findAll();
       final joinedAt = <String, int>{
-        for (final row in existing) row.memberAccount: row.joinedAtMillis,
+        for (final row in existing) row.memberAccountId: row.joinedAtMillis,
       };
       for (final row in existing) {
         await isar.chatGroupMemberEntitys.delete(row.id);
@@ -654,7 +685,7 @@ class ChatStore {
           ChatGroupMemberEntity()
             ..memberKey = '$groupId|${entry.key}'
             ..groupId = groupId
-            ..memberAccount = entry.key
+            ..memberAccountId = entry.key
             ..role = entry.value.wireName
             ..joinedAtMillis = joinedAt[entry.key] ?? now,
         );
@@ -682,16 +713,16 @@ class ChatStore {
     });
   }
 
-  Future<List<ChatGroup>> readGroups({String? ownerAccount}) {
+  Future<List<ChatGroup>> readGroups({String? accountId}) {
     return _walletIsar.read((isar) async {
       final groups = await isar.chatGroupEntitys
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
-      final filtered = ownerAccount == null || ownerAccount.isEmpty
+      final filtered = accountId == null || accountId.isEmpty
           ? groups
           : groups
-              .where((row) => row.ownerAccount == ownerAccount)
+              .where((row) => row.accountId == accountId)
               .toList(growable: false);
       final result = <ChatGroup>[];
       for (final group in filtered) {
@@ -783,7 +814,7 @@ class ChatStore {
   /// 群发出:一条逻辑消息 + N 条按收件人的出站队列(投递/重试复用 1:1 路径)。
   Future<void> saveOutgoingGroupMessage({
     required String groupId,
-    required String senderAccount,
+    required String senderAccountId,
     required String senderDeviceId,
     required String logicalEnvelopeId,
     required ChatMessageKind messageKind,
@@ -795,7 +826,7 @@ class ChatStore {
       await _touchGroupConversationInTxn(
         isar: isar,
         groupId: groupId,
-        ownerAccount: senderAccount,
+        accountId: senderAccountId,
         lastMessage: _messageSummary(payload),
         lastUpdatedAtMillis: createdAtMillis,
         unreadDelta: 0,
@@ -805,13 +836,14 @@ class ChatStore {
         ChatMessageEntity()
           ..envelopeId = logicalEnvelopeId
           ..conversationId = groupId
-          ..ownerAccount = senderAccount
+          ..accountId = senderAccountId
           ..direction = 'outgoing'
-          ..senderAccount = senderAccount
-          ..recipientAccount = groupId
+          ..senderAccountId = senderAccountId
+          ..recipientAccountId = groupId
           ..senderDeviceId = senderDeviceId
           ..messageKind = messageKind.name
-          ..mlsMessageKind = MlsWireMessageKind.MLS_WIRE_MESSAGE_KIND_APPLICATION.name
+          ..mlsMessageKind =
+              MlsWireMessageKind.MLS_WIRE_MESSAGE_KIND_APPLICATION.name
           ..deliveryState = ChatMessageDeliveryState.queued.name
           ..plaintext = payload
           ..envelopeBytesHex = ''
@@ -822,7 +854,7 @@ class ChatStore {
           ChatOutboundQueueEntity()
             ..envelopeId = envelope.envelopeId
             ..conversationId = groupId
-            ..recipientAccount = envelope.recipientAccount
+            ..recipientAccountId = envelope.recipientAccountId
             ..envelopeBytesHex = _bytesToHex(envelope.writeToBuffer())
             ..deliveryState = ChatMessageDeliveryState.queued.name
             ..attemptCount = 0
@@ -844,7 +876,7 @@ class ChatStore {
       await _touchGroupConversationInTxn(
         isar: isar,
         groupId: envelope.conversationId,
-        ownerAccount: envelope.recipientAccount,
+        accountId: envelope.recipientAccountId,
         lastMessage: _messageSummary(plaintext),
         lastUpdatedAtMillis: envelope.createdAtMillis.toInt(),
         unreadDelta: 1,
@@ -854,7 +886,7 @@ class ChatStore {
         _messageEntity(
           envelope: envelope,
           envelopeBytes: envelopeBytes,
-          ownerAccount: envelope.recipientAccount,
+          accountId: envelope.recipientAccountId,
           direction: 'incoming',
           messageKind: messageKind,
           deliveryState: ChatMessageDeliveryState.receivedByDevice,
@@ -868,7 +900,7 @@ class ChatStore {
   Future<void> _touchGroupConversationInTxn({
     required Isar isar,
     required String groupId,
-    required String ownerAccount,
+    required String accountId,
     required String lastMessage,
     required int lastUpdatedAtMillis,
     required int unreadDelta,
@@ -880,9 +912,11 @@ class ChatStore {
     final entity = existing ?? ChatConversationEntity();
     entity
       ..conversationId = groupId
-      ..ownerAccount =
-          existing?.ownerAccount.isNotEmpty == true ? existing!.ownerAccount : ownerAccount
-      ..peerAccount = existing?.peerAccount ?? (group?.creatorAccount ?? '')
+      ..accountId = existing?.accountId.isNotEmpty == true
+          ? existing!.accountId
+          : accountId
+      ..peerAccountId =
+          existing?.peerAccountId ?? (group?.creatorAccountId ?? '')
       ..title = group?.groupName ?? existing?.title ?? groupId
       ..conversationKind = 'group'
       ..lastMessage = lastMessage
@@ -899,12 +933,12 @@ class ChatStore {
     return ChatGroup(
       groupId: group.groupId,
       name: group.groupName,
-      creatorAccount: group.creatorAccount,
+      creatorAccountId: group.creatorAccountId,
       epoch: group.epoch,
       leftLocally: group.leftLocally,
       roster: members
           .map((row) => GroupMember(
-                account: row.memberAccount,
+                accountId: row.memberAccountId,
                 role: GroupMemberRole.fromName(row.role),
               ))
           .toList(growable: false),
@@ -914,8 +948,8 @@ class ChatStore {
   Future<void> _putConversationInTxn({
     required Isar isar,
     required String conversationId,
-    required String ownerAccount,
-    required String peerAccount,
+    required String accountId,
+    required String peerAccountId,
     required String title,
     required String lastMessage,
     required int lastUpdatedAtMillis,
@@ -927,8 +961,8 @@ class ChatStore {
     final entity = existing ?? ChatConversationEntity();
     entity
       ..conversationId = conversationId
-      ..ownerAccount = ownerAccount
-      ..peerAccount = peerAccount
+      ..accountId = accountId
+      ..peerAccountId = peerAccountId
       ..title = title
       ..lastMessage = lastMessage
       ..lastUpdatedAtMillis = lastUpdatedAtMillis
@@ -943,7 +977,7 @@ ChatConversationPreview _conversationPreviewFromEntity(
   return ChatConversationPreview(
     conversationId: row.conversationId,
     title: row.title,
-    peerAccount: row.peerAccount,
+    peerAccountId: row.peerAccountId,
     lastMessage: row.lastMessage,
     lastUpdatedAt: DateTime.fromMillisecondsSinceEpoch(row.lastUpdatedAtMillis),
     unreadCount: row.unreadCount,
@@ -957,8 +991,8 @@ ChatStoredMessage _messageFromEntity(ChatMessageEntity row) {
     envelopeId: row.envelopeId,
     conversationId: row.conversationId,
     direction: row.direction,
-    senderAccount: row.senderAccount,
-    recipientAccount: row.recipientAccount,
+    senderAccountId: row.senderAccountId,
+    recipientAccountId: row.recipientAccountId,
     messageKind: _messageKindFromName(row.messageKind),
     deliveryState: _deliveryStateFromName(row.deliveryState),
     createdAtMillis: row.createdAtMillis,
@@ -968,10 +1002,10 @@ ChatStoredMessage _messageFromEntity(ChatMessageEntity row) {
 
 ChatRoute _routeFromEntity(ChatRouteCacheEntity row) {
   return ChatRoute(
-    peerAccount: row.peerAccount,
+    peerAccountId: row.peerAccountId,
     routeDisplayName: row.routeDisplayName,
     deviceId: row.deviceId,
-    devicePublicKeyHex: row.devicePublicKeyHex,
+    devicePublicKey: row.devicePublicKey,
     safetyNumber: row.safetyNumber,
     nearbyPeerHint: row.nearbyPeerHint,
     note: row.note,
@@ -983,7 +1017,7 @@ ChatRoute _routeFromEntity(ChatRouteCacheEntity row) {
 ChatMessageEntity _messageEntity({
   required ChatEnvelope envelope,
   required List<int> envelopeBytes,
-  required String ownerAccount,
+  required String accountId,
   required String direction,
   required ChatMessageKind messageKind,
   required ChatMessageDeliveryState deliveryState,
@@ -992,10 +1026,10 @@ ChatMessageEntity _messageEntity({
   return ChatMessageEntity()
     ..envelopeId = envelope.envelopeId
     ..conversationId = envelope.conversationId
-    ..ownerAccount = ownerAccount
+    ..accountId = accountId
     ..direction = direction
-    ..senderAccount = envelope.senderAccount
-    ..recipientAccount = envelope.recipientAccount
+    ..senderAccountId = envelope.senderAccountId
+    ..recipientAccountId = envelope.recipientAccountId
     ..senderDeviceId = envelope.senderDeviceId
     ..messageKind = messageKind.name
     ..mlsMessageKind = envelope.mlsMessageKind.name

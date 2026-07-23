@@ -105,7 +105,7 @@ export const EducationListTable: React.FC<Props> = ({
     return loadDirectRows();
   }, [
     auth.access_token,
-    auth.admin_account,
+    auth.account_id,
     auth.institution_code,
     auth.scope_province_name,
     auth.scope_city_name,
@@ -120,7 +120,7 @@ export const EducationListTable: React.FC<Props> = ({
     return loadSearchRows(null);
   }, [
     auth.access_token,
-    auth.admin_account,
+    auth.account_id,
     auth.institution_code,
     auth.scope_province_name,
     auth.scope_city_name,

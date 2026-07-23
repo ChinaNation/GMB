@@ -59,7 +59,7 @@ pub(crate) struct AppInstitutionSearchRow {
 #[derive(Serialize)]
 pub(crate) struct AppAccountEntry {
     pub(crate) account_name: String,
-    pub(crate) account: Option<String>,
+    pub(crate) account_id: Option<String>,
     pub(crate) account_kind: &'static str,
     pub(crate) can_close: bool,
 }
@@ -233,7 +233,7 @@ pub(crate) async fn app_list_accounts(
             let kind =
                 institution_account_kind_label(&cid_number, &account_name).unwrap_or("named");
             AppAccountEntry {
-                account: Some(hex::encode(account.account)),
+                account_id: Some(format!("0x{}", hex::encode(account.account_id))),
                 account_kind: kind,
                 can_close: kind == "named",
                 account_name,
