@@ -14,7 +14,7 @@ export type {
   InstitutionDetail,
 };
 
-export type AdminAccountState = {
+export type InstitutionAdminsState = {
   cidNumber: string;
   institutionCode: number[];
   institutionCodeLabel: string;
@@ -23,7 +23,7 @@ export type AdminAccountState = {
   admins: InstitutionAdminInfo[];
 };
 
-export type AdminAccountRef = {
+export type InstitutionAdminsRef = {
   cidNumber: string;
   institutionCode?: string | null;
 };

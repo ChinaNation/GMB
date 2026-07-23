@@ -3,30 +3,30 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { sanitizeError } from '../tauri';
 import { CitizenSignaturePanel } from '../shared/qr/CitizenSignaturePanel';
 import { governanceApi as api } from './api';
-import type { AdminWalletMatch, VoteSignRequestResult } from './types';
+import type { AdminSignerMatch, VoteSignRequestResult } from './types';
 
 type Props = {
   proposalId: number;
   proposalKind: number;
-  adminWallets: AdminWalletMatch[];
+  adminSigners: AdminSignerMatch[];
   cidNumber?: string;
   onClose: () => void;
-  onSuccess: (txHash: string, pubkeyHex: string, voterRoleCode: string | null) => void;
+  onSuccess: (txHash: string, account_id: string, voterRoleCode: string | null) => void;
 };
 
 type FlowStep = 'select' | 'qr' | 'submit' | 'done' | 'error';
 
 export function VoteSigningFlow({
-  proposalId, proposalKind, adminWallets, cidNumber, onClose, onSuccess,
+  proposalId, proposalKind, adminSigners, cidNumber, onClose, onSuccess,
 }: Props) {
   const [step, setStep] = useState<FlowStep>('select');
-  const [selectedWallet, setSelectedWallet] = useState<AdminWalletMatch | null>(
-    adminWallets.length === 1 ? adminWallets[0] : null
+  const [selectedSigner, setSelectedSigner] = useState<AdminSignerMatch | null>(
+    adminSigners.length === 1 ? adminSigners[0] : null
   );
   const [approve, setApprove] = useState<boolean | null>(null);
   const [selectedRoleCode, setSelectedRoleCode] = useState<string>(
-    adminWallets.length === 1 && adminWallets[0].roleAssignments?.length === 1
-      ? adminWallets[0].roleAssignments![0].roleCode
+    adminSigners.length === 1 && adminSigners[0].roleAssignments?.length === 1
+      ? adminSigners[0].roleAssignments![0].roleCode
       : '',
   );
   const [signRequest, setSignRequest] = useState<VoteSignRequestResult | null>(null);
@@ -37,10 +37,10 @@ export function VoteSigningFlow({
   const [txHash, setTxHash] = useState<string | null>(null);
 
   const signRequestRef = useRef(signRequest);
-  const selectedWalletRef = useRef(selectedWallet);
+  const selectedSignerRef = useRef(selectedSigner);
   const callDataHexRef = useRef(callDataHex);
   signRequestRef.current = signRequest;
-  selectedWalletRef.current = selectedWallet;
+  selectedSignerRef.current = selectedSigner;
   callDataHexRef.current = callDataHex;
 
   useEffect(() => {
@@ -51,7 +51,7 @@ export function VoteSigningFlow({
   }, [step, countdown]);
 
   const generateRequest = useCallback(async () => {
-    if (!selectedWallet || approve === null) return;
+    if (!selectedSigner || approve === null) return;
     const institutionVote = !!cidNumber;
     if (institutionVote && !selectedRoleCode) {
       setError('请选择本次投票使用的岗位');
@@ -65,7 +65,7 @@ export function VoteSigningFlow({
       if (proposalKind === 1 && cidNumber) {
         result = await api.buildJointVoteRequest(
           proposalId,
-          selectedWallet.pubkeyHex,
+          selectedSigner.account_id,
           cidNumber,
           selectedRoleCode,
           approve,
@@ -74,7 +74,7 @@ export function VoteSigningFlow({
       } else {
         result = await api.buildVoteRequest(
           proposalId,
-          selectedWallet.pubkeyHex,
+          selectedSigner.account_id,
           institutionVote ? selectedRoleCode : null,
           approve,
         );
@@ -89,28 +89,28 @@ export function VoteSigningFlow({
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [proposalId, proposalKind, selectedWallet, selectedRoleCode, approve, cidNumber]);
+  }, [proposalId, proposalKind, selectedSigner, selectedRoleCode, approve, cidNumber]);
 
   const handleScanResult = useCallback(async (responseText: string) => {
     const req = signRequestRef.current;
-    const wallet = selectedWalletRef.current;
+    const signer = selectedSignerRef.current;
     const cdHex = callDataHexRef.current;
-    if (!req || !wallet) { setError('签名请求数据丢失，请重试'); setStep('error'); return; }
+    if (!req || !signer) { setError('签名请求数据丢失，请重试'); setStep('error'); return; }
     setStep('submit');
     try {
-      const result = await api.submitVote(req.requestId, wallet.pubkeyHex, req.expectedPayloadHash, cdHex, req.signNonce, req.signBlockNumber, responseText);
+      const result = await api.submitVote(req.requestId, signer.account_id, req.expectedPayloadHash, cdHex, req.signNonce, req.signBlockNumber, responseText);
       setTxHash(result.txHash);
       setStep('done');
       onSuccess(
         result.txHash,
-        selectedWallet?.pubkeyHex ?? '',
+        selectedSigner?.account_id ?? '',
         cidNumber ? selectedRoleCode : null,
       );
     } catch (e) {
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [onSuccess, selectedWallet, selectedRoleCode, cidNumber]);
+  }, [onSuccess, selectedSigner, selectedRoleCode, cidNumber]);
 
   return (
     <div className="vote-signing-overlay">
@@ -122,25 +122,29 @@ export function VoteSigningFlow({
 
         {step === 'select' && (
           <div className="vote-signing-body">
-            {adminWallets.length > 1 && (
+            {adminSigners.length > 1 && (
               <div className="vote-signing-field">
-                <label>选择管理员钱包</label>
-                <select value={selectedWallet?.pubkeyHex || ''} onChange={(e) => {
-                  const wallet = adminWallets.find((w) => w.pubkeyHex === e.target.value) || null;
-                  setSelectedWallet(wallet);
-                  setSelectedRoleCode(wallet?.roleAssignments?.length === 1 ? wallet.roleAssignments[0].roleCode : '');
+                <label>选择管理员账户</label>
+                <select value={selectedSigner?.account_id || ''} onChange={(e) => {
+                  const signer = adminSigners.find((item) => item.account_id === e.target.value) || null;
+                  setSelectedSigner(signer);
+                  setSelectedRoleCode(signer?.roleAssignments?.length === 1 ? signer.roleAssignments[0].roleCode : '');
                 }}>
                   <option value="">请选择…</option>
-                  {adminWallets.map((w) => <option key={w.pubkeyHex} value={w.pubkeyHex}>{w.walletLabel || w.address}</option>)}
+                  {adminSigners.map((signer) => (
+                    <option key={signer.account_id} value={signer.account_id}>
+                      {signer.account_label || signer.ss58_address}
+                    </option>
+                  ))}
                 </select>
               </div>
             )}
-            {cidNumber && selectedWallet && (
+            {cidNumber && selectedSigner && (
               <div className="vote-signing-field">
                 <label>使用岗位</label>
                 <select value={selectedRoleCode} onChange={(e) => setSelectedRoleCode(e.target.value)}>
                   <option value="">请选择…</option>
-                  {(selectedWallet.roleAssignments ?? []).map((assignment) => (
+                  {(selectedSigner.roleAssignments ?? []).map((assignment) => (
                     <option key={assignment.roleCode} value={assignment.roleCode}>
                       {assignment.roleName || assignment.roleCode}（{assignment.roleCode}）
                     </option>
@@ -155,7 +159,7 @@ export function VoteSigningFlow({
                 <button className={`vote-dir-btn ${approve === false ? 'selected-no' : ''}`} onClick={() => setApprove(false)}>反对</button>
               </div>
             </div>
-            <button className="vote-signing-confirm" disabled={!selectedWallet || approve === null || (!!cidNumber && !selectedRoleCode)} onClick={generateRequest}>生成签名请求</button>
+            <button className="vote-signing-confirm" disabled={!selectedSigner || approve === null || (!!cidNumber && !selectedRoleCode)} onClick={generateRequest}>生成签名请求</button>
           </div>
         )}
 

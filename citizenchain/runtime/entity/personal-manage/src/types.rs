@@ -46,7 +46,7 @@ pub enum PersonalStatus {
     Eq,
 )]
 pub struct PersonalAccount<AccountId, AccountName, BlockNumber> {
-    pub creator: AccountId,
+    pub creator_account_id: AccountId,
     pub account_name: AccountName,
     pub created_at: BlockNumber,
     pub status: PersonalStatus,
@@ -58,8 +58,8 @@ pub struct PersonalAccount<AccountId, AccountName, BlockNumber> {
 /// 不能用当前 runtime 的 fee 公式重新计算。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct PersonalCreateAction<AccountId, Balance> {
-    pub account: AccountId,
-    pub proposer: AccountId,
+    pub account_id: AccountId,
+    pub proposer_account_id: AccountId,
     pub amount: Balance,
     pub fee: Balance,
 }
@@ -67,7 +67,7 @@ pub struct PersonalCreateAction<AccountId, Balance> {
 /// 关闭多签账户提案的业务数据
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct PersonalCloseAction<AccountId> {
-    pub account: AccountId,
-    pub beneficiary: AccountId,
-    pub proposer: AccountId,
+    pub account_id: AccountId,
+    pub beneficiary_account_id: AccountId,
+    pub proposer_account_id: AccountId,
 }

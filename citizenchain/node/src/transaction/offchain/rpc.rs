@@ -370,8 +370,7 @@ fn l2_ack_signing_message(
 ) -> [u8; 32] {
     let bank_cid_scale = bank_cid.to_vec().encode();
     let intent_bytes = intent.encode();
-    let mut scale_payload =
-        Vec::with_capacity(bank_cid_scale.len() + intent_bytes.len() + 64 + 8);
+    let mut scale_payload = Vec::with_capacity(bank_cid_scale.len() + intent_bytes.len() + 64 + 8);
     scale_payload.extend_from_slice(&bank_cid_scale);
     scale_payload.extend_from_slice(&intent_bytes);
     scale_payload.extend_from_slice(payer_sig);
@@ -530,7 +529,10 @@ mod tests {
         // CID 一级键变长:偏移按 bank_encoded 长度动态计算。
         let b = 48 + bank_encoded.len();
         assert_eq!(&key.0[48..b], &bank_encoded[..]);
-        assert_eq!(&key.0[b..b + 16], &sp_io::hashing::blake2_128(&user_encoded));
+        assert_eq!(
+            &key.0[b..b + 16],
+            &sp_io::hashing::blake2_128(&user_encoded)
+        );
         assert_eq!(&key.0[b + 16..], &user_encoded[..]);
     }
 

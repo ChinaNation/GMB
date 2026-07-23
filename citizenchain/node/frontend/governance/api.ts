@@ -38,13 +38,24 @@ export const governanceApi = {
     invoke<number[]>('list_proposals_by_cid', { cidNumber }),
   listProposalsByOwner: (moduleTagScaleHex: string) =>
     invoke<number[]>('list_proposals_by_owner', { moduleTagScaleHex }),
-  buildVoteRequest: (proposalId: number, pubkeyHex: string, voterRoleCode: string | null, approve: boolean) =>
-    invoke<VoteSignRequestResult>('build_vote_request', { proposalId, pubkeyHex, voterRoleCode, approve }),
-  buildJointVoteRequest: (proposalId: number, pubkeyHex: string, cidNumber: string, voterRoleCode: string, approve: boolean) =>
-    invoke<VoteSignRequestResult>('build_joint_vote_request', { proposalId, pubkeyHex, cidNumber, voterRoleCode, approve }),
+  buildVoteRequest: (proposalId: number, signer_public_key: string, voterRoleCode: string | null, approve: boolean) =>
+    invoke<VoteSignRequestResult>('build_vote_request', {
+      proposal_id: proposalId,
+      signer_public_key,
+      voter_role_code: voterRoleCode,
+      approve,
+    }),
+  buildJointVoteRequest: (proposalId: number, signer_public_key: string, cidNumber: string, voterRoleCode: string, approve: boolean) =>
+    invoke<VoteSignRequestResult>('build_joint_vote_request', {
+      proposal_id: proposalId,
+      signer_public_key,
+      cid_number: cidNumber,
+      voter_role_code: voterRoleCode,
+      approve,
+    }),
   submitVote: (
     requestId: string,
-    expectedPubkeyHex: string,
+    expected_signer_public_key: string,
     expectedPayloadHash: string,
     callDataHex: string,
     signNonce: number,
@@ -52,19 +63,19 @@ export const governanceApi = {
     responseJson: string,
   ) =>
     invoke<VoteSubmitResult>('submit_vote', {
-      requestId,
-      expectedPubkeyHex,
-      expectedPayloadHash,
-      callDataHex,
-      signNonce,
-      signBlockNumber,
-      responseJson,
+      request_id: requestId,
+      expected_signer_public_key,
+      expected_payload_hash: expectedPayloadHash,
+      call_data_hex: callDataHex,
+      sign_nonce: signNonce,
+      sign_block_number: signBlockNumber,
+      response_json: responseJson,
     }),
-  checkVoteStatus: (proposalId: number, pubkeyHex: string, cidNumber?: string, voterRoleCode?: string) =>
+  checkVoteStatus: (proposalId: number, signer_public_key: string, cidNumber?: string, voterRoleCode?: string) =>
     invoke<UserVoteStatus>('check_vote_status', {
-      proposalId,
-      pubkeyHex,
-      cidNumber: cidNumber ?? null,
-      voterRoleCode: voterRoleCode ?? null,
+      proposal_id: proposalId,
+      signer_public_key,
+      cid_number: cidNumber ?? null,
+      voter_role_code: voterRoleCode ?? null,
     }),
 };

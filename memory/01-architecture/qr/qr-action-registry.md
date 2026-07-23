@@ -13,6 +13,12 @@
 
 `k` 只表达扫码流向;`a` 才表达业务动作。任何平台新增扫码签名场景,必须先进入唯一 action registry,再生成或校验各端常量、中文标签和 decoder 映射。不得在 CitizenApp、CitizenWallet、OnChina、node 或 citizenweb 内手写第二套 action 真源。
 
+## 0.0 账户字段目标命名
+
+ADR-040 已冻结 QR registry 及其生成物的账户字段目标：单一账户使用 `account_id`，多个业务角色账户使用 `<role>_account_id`；签名公钥使用 `signer_public_key`，凭证签名公钥使用 `credential_signer_public_key`，展示地址只使用 `ss58_address`。账户和 32 字节公钥的文本值固定为小写 `0x` 加 64 位十六进制。
+
+当前 registry 和后续登记表中的 `wallet_account`、`admin_account`、`owner_account`、`signer_pubkey` 等旧字段会在任务卡 `20260722-account-id-official-unify.md` 的 QR 实施步骤与代码真源、生成器和冷热钱包生成物同步删除；在此之前只代表当前协议事实，不得复制到新 action，也不构成兼容路径。
+
 ## 0. 唯一 registry schema
 
 `actions.yaml` 每条 action 必须包含:

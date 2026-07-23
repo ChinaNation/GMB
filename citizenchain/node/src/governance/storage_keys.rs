@@ -11,12 +11,14 @@ use crate::shared::storage_keys as skeys;
 pub use crate::shared::storage_keys::{blake2_128, twox_128};
 
 /// 构造查询账户余额的存储 key：`System::Account(account_id)`。
-/// account_id 为 32 字节公钥（hex 不含 0x）。
-pub fn system_account_key(account_hex: &str) -> Result<String, String> {
-    let account_bytes = hex::decode(account_hex).map_err(|e| format!("解析账户地址失败: {e}"))?;
+/// `account_id` 必须是小写 `0x` + 64 位十六进制。
+pub fn system_account_key(account_id: &str) -> Result<String, String> {
+    let account_id = crate::shared::validation::normalize_account_id(account_id)?;
+    let account_bytes = hex::decode(account_id.trim_start_matches("0x"))
+        .map_err(|e| format!("解析账户 ID 失败: {e}"))?;
     if account_bytes.len() != 32 {
         return Err(format!(
-            "账户公钥长度必须为 32 字节，实际: {}",
+            "账户 ID 长度必须为 32 字节，实际: {}",
             account_bytes.len()
         ));
     }
@@ -74,8 +76,8 @@ mod tests {
 
     #[test]
     fn system_account_key_has_correct_length() {
-        let hex32 = "a5423e483bba281da84b99620a670718d5a7eceb5ae720f7d492e8b5c2570d84";
-        let key = system_account_key(hex32).unwrap();
+        let account_id = "0xa5423e483bba281da84b99620a670718d5a7eceb5ae720f7d492e8b5c2570d84";
+        let key = system_account_key(account_id).unwrap();
         // 0x 前缀 + (16+16+16+32)*2 hex 字符 = 2 + 160 = 162
         assert_eq!(key.len(), 162);
     }

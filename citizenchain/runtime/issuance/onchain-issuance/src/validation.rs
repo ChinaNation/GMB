@@ -19,9 +19,9 @@ pub const MAX_DECIMALS: u8 = 18;
 /// 由 pallet 通过 entity/admins 唯一真源完成；本函数只做空值拒绝。
 pub fn ensure_institution_context<AccountId: codec::Encode>(
     actor_cid_number: &[u8],
-    execution_account: &AccountId,
+    execution_account_id: &AccountId,
 ) -> Result<(), &'static str> {
-    if actor_cid_number.is_empty() || execution_account.encode().is_empty() {
+    if actor_cid_number.is_empty() || execution_account_id.encode().is_empty() {
         Err("institution_context_not_allowed")
     } else {
         Ok(())

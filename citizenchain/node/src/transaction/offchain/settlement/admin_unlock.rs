@@ -10,7 +10,7 @@
 // `settlement::keystore::OffchainKeystore` 加载到 `KeystoreBatchSigner` 的
 // `Arc<RwLock<Option<SigningKey>>>` 槽位。本模块的"解密"含义是:
 //   1. citizenwallet 签 challenge → 节点 sr25519 验签 → 证明操作员持有该公钥的冷钱包
-//   2. 把 (pubkey, cid_number) 标记为内存内"授权可用",packer 攒批前 cross-check
+//   2. 把 (signer_public_key, cid_number) 标记为内存内“授权可用”，packer 攒批前 cross-check
 //      该入口存在才会启动签名(防误用启动密码加载的 SigningKey)
 
 use rand::Rng;
@@ -21,8 +21,8 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::governance::signing::{
-    payload_b64, pubkey_b64, sha256_hash_public, QrSignRequest, QrSignResponse, SignRequestBody,
-    PROTOCOL_VERSION, QR_KIND_SIGN_REQUEST, QR_KIND_SIGN_RESPONSE,
+    payload_b64, public_key_b64, sha256_hash_public, QrSignRequest, QrSignResponse,
+    SignRequestBody, PROTOCOL_VERSION, QR_KIND_SIGN_REQUEST, QR_KIND_SIGN_RESPONSE,
 };
 use primitives::sign::{
     binary_domain_prefix, decrypt_admin_payload, BINARY_PREFIX_LEN, DECRYPT_ADMIN_CID_LEN,
@@ -35,7 +35,7 @@ const DEFAULT_TTL_SECS: u64 = 90;
 
 /// 当前正在内存中"已解密"的管理员表(节点重启清空)。
 ///
-/// key = lowercase pubkey hex(不含 0x),value = (cid_number, decrypted_at_ms)。
+/// key = 小写 `0x` + 64 位十六进制签名公钥，value = (cid_number, decrypted_at_ms)。
 static DECRYPTED_ADMINS: OnceLock<Mutex<HashMap<String, MemoryEntry>>> = OnceLock::new();
 
 /// 等待"解密"响应的进行中 challenge 上下文。前端拿到 request_id,扫描签名响应时
@@ -50,7 +50,7 @@ struct MemoryEntry {
 
 #[derive(Clone)]
 struct ChallengeContext {
-    pubkey_hex: String,
+    signer_public_key: String,
     cid_number: String,
     payload: Vec<u8>,
     issued_at_ms: u64,
@@ -80,12 +80,17 @@ fn now_ms() -> u64 {
 
 /// 复用 primitives 唯一原语拼装固定 92B challenge payload。
 fn build_challenge_payload(
-    pubkey_bytes: &[u8; 32],
+    signer_public_key_bytes: &[u8; 32],
     cid_number: &str,
     timestamp: u64,
 ) -> Option<Vec<u8>> {
     let nonce: [u8; 16] = rand::thread_rng().gen();
-    decrypt_admin_payload(cid_number.as_bytes(), pubkey_bytes, timestamp, &nonce)
+    decrypt_admin_payload(
+        cid_number.as_bytes(),
+        signer_public_key_bytes,
+        timestamp,
+        &nonce,
+    )
 }
 
 /// 验签前锁死当前共享协议长度与二进制域，旧 108B 布局直接拒绝。
@@ -109,21 +114,16 @@ fn generate_request_id() -> String {
 
 /// 构造解密请求 QR JSON,把 ChallengeContext 暂存以备验签。
 pub fn build_decrypt_admin_request(
-    pubkey_hex: &str,
+    signer_public_key: &str,
     cid_number: &str,
 ) -> Result<DecryptAdminRequestResult, String> {
-    let clean = pubkey_hex
-        .strip_prefix("0x")
-        .unwrap_or(pubkey_hex)
-        .to_ascii_lowercase();
-    if clean.len() != 64 || !clean.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("公钥格式无效,应为 64 位十六进制".to_string());
-    }
+    let signer_public_key = crate::shared::validation::normalize_public_key(signer_public_key)?;
     if cid_number.is_empty() || cid_number.len() > DECRYPT_ADMIN_CID_LEN {
         return Err("cid_number 超出链上 CID_NUMBER_MAX_BYTES 范围".to_string());
     }
-    let pubkey_bytes = hex::decode(&clean).map_err(|e| format!("公钥解码失败:{e}"))?;
-    let pubkey_arr: [u8; 32] = pubkey_bytes
+    let signer_public_key_bytes = hex::decode(signer_public_key.trim_start_matches("0x"))
+        .map_err(|e| format!("公钥解码失败:{e}"))?;
+    let pubkey_arr: [u8; 32] = signer_public_key_bytes
         .as_slice()
         .try_into()
         .map_err(|_| "公钥长度必须为 32 字节".to_string())?;
@@ -145,7 +145,7 @@ pub fn build_decrypt_admin_request(
         body: SignRequestBody {
             action: primitives::sign::QR_ACTION_DECRYPT_ADMIN,
             sig_alg: 1,
-            pubkey: pubkey_b64(&pubkey_bytes)?,
+            pubkey: public_key_b64(&signer_public_key_bytes)?,
             payload: payload_b64(&payload),
         },
     };
@@ -159,7 +159,7 @@ pub fn build_decrypt_admin_request(
         .insert(
             request_id.clone(),
             ChallengeContext {
-                pubkey_hex: clean,
+                signer_public_key,
                 cid_number: cid_number.to_string(),
                 payload,
                 issued_at_ms: now_ms(),
@@ -178,12 +178,13 @@ pub fn build_decrypt_admin_request(
 #[serde(rename_all = "camelCase")]
 pub struct VerifyDecryptAdminInput {
     pub request_id: String,
-    pub pubkey_hex: String,
+    #[serde(rename = "signer_public_key")]
+    pub signer_public_key: String,
     pub expected_payload_hash: String,
     pub response_json: String,
 }
 
-/// 验证 citizenwallet 签名响应,通过则把 (pubkey, cid_number) 写入内存解密表。
+/// 验证 CitizenWallet 签名响应，通过则把 `(signer_public_key, cid_number)` 写入内存解密表。
 pub fn verify_and_decrypt_admin(
     input: VerifyDecryptAdminInput,
 ) -> Result<DecryptedAdminInfo, String> {
@@ -206,18 +207,9 @@ pub fn verify_and_decrypt_admin(
         return Err("请求 ID 不匹配".to_string());
     }
 
-    let pubkey_clean = input
-        .pubkey_hex
-        .strip_prefix("0x")
-        .unwrap_or(&input.pubkey_hex)
-        .to_ascii_lowercase();
-    let response_pubkey = response
-        .body
-        .pubkey
-        .strip_prefix("0x")
-        .unwrap_or(&response.body.pubkey)
-        .to_ascii_lowercase();
-    if response_pubkey != pubkey_clean {
+    let signer_public_key =
+        crate::shared::validation::normalize_public_key(&input.signer_public_key)?;
+    if response.body.pubkey != signer_public_key {
         return Err("公钥不匹配".to_string());
     }
 
@@ -239,7 +231,7 @@ pub fn verify_and_decrypt_admin(
             .remove(&input.request_id)
             .ok_or_else(|| "未找到对应的 challenge 上下文(已过期或被消费)".to_string())?
     };
-    if context.pubkey_hex != pubkey_clean {
+    if context.signer_public_key != signer_public_key {
         return Err("challenge 上下文公钥与请求不一致".to_string());
     }
     validate_challenge_payload(&context.payload)?;
@@ -267,11 +259,13 @@ pub fn verify_and_decrypt_admin(
         return Err(format!("签名长度无效:期望 128 hex,实际 {}", sig_hex.len()));
     }
     let signature_bytes = hex::decode(sig_hex).map_err(|e| format!("签名解码失败:{e}"))?;
-    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败:{e}"))?;
+    let signer_public_key_bytes = hex::decode(signer_public_key.trim_start_matches("0x"))
+        .map_err(|e| format!("公钥解码失败:{e}"))?;
     use sp_core::crypto::Pair;
     use sp_core::sr25519::{Public, Signature};
     let public = Public::from_raw(
-        <[u8; 32]>::try_from(pubkey_bytes.as_slice()).map_err(|_| "公钥长度必须为 32 字节")?,
+        <[u8; 32]>::try_from(signer_public_key_bytes.as_slice())
+            .map_err(|_| "公钥长度必须为 32 字节")?,
     );
     let signature = Signature::from_raw(
         <[u8; 64]>::try_from(signature_bytes.as_slice()).map_err(|_| "签名长度必须为 64 字节")?,
@@ -285,7 +279,7 @@ pub fn verify_and_decrypt_admin(
         .lock()
         .map_err(|_| "decrypt 内存表锁异常".to_string())?
         .insert(
-            pubkey_clean.clone(),
+            signer_public_key.clone(),
             MemoryEntry {
                 cid_number: context.cid_number.clone(),
                 decrypted_at_ms: now,
@@ -294,13 +288,13 @@ pub fn verify_and_decrypt_admin(
 
     log::info!(
         "[ClearingBank] 管理员 {} 已解密(cid={},耗时 {} ms)",
-        &pubkey_clean[..8],
+        &signer_public_key[..10],
         context.cid_number,
         now.saturating_sub(context.issued_at_ms),
     );
 
     Ok(DecryptedAdminInfo {
-        pubkey_hex: format!("0x{pubkey_clean}"),
+        signer_public_key,
         cid_number: context.cid_number,
         decrypted_at_ms: now,
     })
@@ -316,7 +310,7 @@ pub fn list_decrypted_admins(cid_number: &str) -> Vec<DecryptedAdminInfo> {
         .iter()
         .filter(|(_, v)| v.cid_number == cid_number)
         .map(|(k, v)| DecryptedAdminInfo {
-            pubkey_hex: format!("0x{k}"),
+            signer_public_key: k.clone(),
             cid_number: v.cid_number.clone(),
             decrypted_at_ms: v.decrypted_at_ms,
         })
@@ -324,15 +318,12 @@ pub fn list_decrypted_admins(cid_number: &str) -> Vec<DecryptedAdminInfo> {
 }
 
 /// 将某管理员从内存解密表移除。前端"重新加锁"用。
-pub fn lock_decrypted_admin(pubkey_hex: &str) -> Result<(), String> {
-    let clean = pubkey_hex
-        .strip_prefix("0x")
-        .unwrap_or(pubkey_hex)
-        .to_ascii_lowercase();
+pub fn lock_decrypted_admin(signer_public_key: &str) -> Result<(), String> {
+    let signer_public_key = crate::shared::validation::normalize_public_key(signer_public_key)?;
     let mut guard = decrypted_map()
         .lock()
         .map_err(|_| "decrypt 内存表锁异常".to_string())?;
-    if guard.remove(&clean).is_none() {
+    if guard.remove(&signer_public_key).is_none() {
         return Err("该公钥未在解密状态".to_string());
     }
     Ok(())
@@ -378,14 +369,14 @@ mod tests {
     #[test]
     fn list_decrypted_admins_filters_by_cid() {
         decrypted_map().lock().unwrap().insert(
-            "aa".repeat(32),
+            format!("0x{}", "aa".repeat(32)),
             MemoryEntry {
                 cid_number: "AH001-SCB0V-123456789-2026".to_string(),
                 decrypted_at_ms: 1,
             },
         );
         decrypted_map().lock().unwrap().insert(
-            "bb".repeat(32),
+            format!("0x{}", "bb".repeat(32)),
             MemoryEntry {
                 cid_number: "AH001-SCB0H-202605070-2026".to_string(),
                 decrypted_at_ms: 2,
@@ -393,7 +384,7 @@ mod tests {
         );
         let r = list_decrypted_admins("AH001-SCB0V-123456789-2026");
         assert_eq!(r.len(), 1);
-        assert!(r[0].pubkey_hex.contains("aa"));
+        assert!(r[0].signer_public_key.contains("aa"));
 
         // 清理(避免污染其他 case)
         decrypted_map().lock().unwrap().clear();
@@ -402,7 +393,7 @@ mod tests {
     #[test]
     fn lock_decrypted_admin_removes_entry() {
         decrypted_map().lock().unwrap().insert(
-            "cc".repeat(32),
+            format!("0x{}", "cc".repeat(32)),
             MemoryEntry {
                 cid_number: "AH001-SCB0E-202605180-2026".to_string(),
                 decrypted_at_ms: 10,

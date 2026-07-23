@@ -1,11 +1,11 @@
 # ADR-023：管理员人员集合、岗位任职与 CID 投影真源
 
-状态：Accepted（2026-06-21；2026-07-19 被 ADR-039 部分取代）。
+状态：Accepted（2026-06-21；2026-07-19 被 ADR-039 部分取代；2026-07-22 已按 ADR-040 完成 runtime 账户字段统一）。
 
 ## 保留的决策
 
 - 管理员不是独立身份类型，也不拥有第二套管理员 CID。
-- `public-admins`、`private-admins` 保存机构可任职人员集合。公权项固定为 `PublicAdmin { admin_account, cid_number, family_name, given_name }`，当前公民 CID、姓、名允许为空，非空 CID 必须引用 `citizen-identity` 的 CID↔钱包唯一绑定；私权项保持 `Admin { admin_account, family_name, given_name }`。
+- `public-admins`、`private-admins` 保存机构可任职人员集合。公权项固定为 `PublicAdmin { account_id, cid_number, family_name, given_name }`，当前公民 CID、姓、名允许为空，非空 CID 必须引用 `citizen-identity` 的 CID↔账户唯一绑定；私权项保持 `Admin { account_id, family_name, given_name }`。
 - 机构信息、岗位定义、岗位权限和岗位任职唯一真源在对应 `entity` pallet。任职目标必须是该机构既有管理员；岗位变化不得反向生成、删除或覆盖 `admins`。
 - 个人多签完全独立，由 `personal-admins` 保存账户和管理员集合。
 - OnChina PostgreSQL 只保存登录、节点绑定和公开机构目录投影，不是管理员资格、岗位、权限或投票资格真源。
@@ -16,8 +16,8 @@
 
 以下旧结论不再成立，不得作为新实现依据：
 
-- `机构 CID + admins 中的钱包账户` 构成业务授权主体；
-- `admin_account` 是机构业务的唯一授权字段；
+- `机构 CID + admins 中的账户` 构成业务授权主体；
+- 管理员账户本身是机构业务的唯一授权字段；
 - 机构投票默认快照该 CID 的全部 admins；
 - 岗位不保存权限、只由业务模块临时硬编码岗位职责；
 - 普通机构只创建 admins 和空缺 LR，之后再由管理员取得启动权限；
@@ -29,6 +29,6 @@
 
 - `admins` 是可任职人员名册，不直接授予业务权限。管理员只有对某个 `RoleSubject(cid_number, role_code)` 存在有效任职时，才可使用该岗位拥有的业务动作权限。
 - FRG 仍只有一个机构 admins 记录；43 省 × 5 席的省域岗位和任职归 entity，不建立虚拟省组账户。
-- 钱包移出 admins 后，其全部机构岗位任职必须在同一合法业务结果中清理或失效；仅移除名单不得留下孤儿授权。
+- 账户移出 admins 后，其全部机构岗位任职必须在同一合法业务结果中清理或失效；仅移除名单不得留下孤儿授权。
 - 机构法定代表人是公开信息，并对应强制 `LR` 岗位；岗位可空缺。是否要求法定代表人账户属于 admins 及其原子变更规则由具体机构制度和 ADR-039 后续实现约束。
 - 业务模块不得实现投票流程，投票引擎不得保存岗位权限或执行具体业务。

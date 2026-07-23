@@ -73,7 +73,7 @@ fn test_citizen_subject(who: &AccountId32) -> votingengine::CitizenSubject<Accou
             .to_vec()
             .try_into()
             .expect("account fits CID"),
-        wallet_account: who.clone(),
+        account_id: who.clone(),
     }
 }
 
@@ -87,20 +87,20 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         false
     }
 
-    fn is_personal_admin(personal_account: AccountId32, who: &AccountId32) -> bool {
-        PersonalAdmins::is_active_account_admin(PMUL, personal_account, who)
+    fn is_personal_admin(personal_account_id: AccountId32, who: &AccountId32) -> bool {
+        PersonalAdmins::is_active_account_admin(PMUL, personal_account_id, who)
     }
 
-    fn get_personal_admins(personal_account: AccountId32) -> Option<Vec<AccountId32>> {
-        PersonalAdmins::active_account_admins(PMUL, personal_account)
+    fn get_personal_admins(personal_account_id: AccountId32) -> Option<Vec<AccountId32>> {
+        PersonalAdmins::active_account_admins(PMUL, personal_account_id)
     }
 
-    fn is_pending_personal_admin(personal_account: AccountId32, who: &AccountId32) -> bool {
-        PersonalAdmins::is_pending_account_admin_for_snapshot(PMUL, personal_account, who)
+    fn is_pending_personal_admin(personal_account_id: AccountId32, who: &AccountId32) -> bool {
+        PersonalAdmins::is_pending_account_admin_for_snapshot(PMUL, personal_account_id, who)
     }
 
-    fn get_pending_personal_admins(personal_account: AccountId32) -> Option<Vec<AccountId32>> {
-        PersonalAdmins::pending_account_admins_for_snapshot(PMUL, personal_account)
+    fn get_pending_personal_admins(personal_account_id: AccountId32) -> Option<Vec<AccountId32>> {
+        PersonalAdmins::pending_account_admins_for_snapshot(PMUL, personal_account_id)
     }
 }
 
@@ -164,7 +164,7 @@ fn admin(index: u8) -> AccountId32 {
     AccountId32::new(sr25519::Pair::from_seed(&seed).public().0)
 }
 
-fn personal_account() -> AccountId32 {
+fn personal_account_id() -> AccountId32 {
     AccountId32::new([0x51; 32])
 }
 
@@ -173,8 +173,8 @@ fn admins(items: &[AccountId32]) -> pallet::AdminsOf<Test> {
         items
             .iter()
             .cloned()
-            .map(|admin_account| admin_primitives::Admin {
-                admin_account,
+            .map(|account_id| admin_primitives::Admin {
+                account_id,
                 family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
                 given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
             })
@@ -192,7 +192,7 @@ fn seed_active_admin_account(account: AccountId32, admins: pallet::AdminsOf<Test
             institution_code: PMUL,
             kind: admin_primitives::AdminAccountKind::PersonalMultisig,
             admins,
-            creator: admin(0),
+            creator_account_id: admin(0),
             created_at: 1,
             updated_at: 1,
             status: admin_primitives::AdminAccountStatus::Active,
@@ -212,7 +212,7 @@ fn new_test_ext() -> sp_io::TestExternalities {
 #[test]
 fn propose_admin_set_change_updates_personal_admins_and_threshold() {
     new_test_ext().execute_with(|| {
-        let account = personal_account();
+        let account = personal_account_id();
         let old_admins = admins(&[admin(0), admin(1), admin(2)]);
         seed_active_admin_account(account.clone(), old_admins.clone(), 2);
 
@@ -243,10 +243,10 @@ fn propose_admin_set_change_updates_personal_admins_and_threshold() {
         // 通过判定只入队；管理员集合更新由维护管线异步执行。
         <VotingEngine as Hooks<u64>>::on_initialize(System::block_number());
 
-        let admin_account = pallet::AdminAccounts::<Test>::get(account.clone())
+        let account_id = pallet::AdminAccounts::<Test>::get(account.clone())
             .expect("admin account should exist");
-        assert!(admin_account.cid_number.is_empty());
-        assert_eq!(admin_account.admins, expected_admins);
+        assert!(account_id.cid_number.is_empty());
+        assert_eq!(account_id.admins, expected_admins);
         assert_eq!(
             internal_vote::ActivePersonalThresholds::<Test>::get(account),
             Some(3)

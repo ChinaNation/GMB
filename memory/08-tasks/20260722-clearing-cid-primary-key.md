@@ -6,6 +6,16 @@
 - 清算体系身份 = CID（机构唯一永久主键）：UserBank/DepositBalance/BankTotalDeposits/L2FeeRateBp/L2FeeRateProposed/LastClearingBatchSeq 全按 CID 键；PaymentIntent/OffchainBatchItem 携带 CID（Compact(len)||bytes 与 BoundedVec<u8> 等价）；pallet/node/runtime/onchina/Dart 五端对齐并各自测试通过。
 - 后续独立任务：Step 2（清算账户资金流）、Step 3（手续费收链上费）——基于本 CID 主键落地，见对应设计。
 
+★★ Review 修复补丁（2026-07-22，基于 Step 2/3 清算账户模型重基线后）★★
+最终代码审查发现的问题已修复并各自验证：
+- H1（生产缺陷）node 升级守卫探针 `runtime_policy.rs` CID/主账户字节混用：`storage_key::deposit/bank_total/last_batch` 改收 `&[u8]` CID（`Compact(len)‖bytes`）；探针用 `actor_cid_number` 播种 UserBank 值/deposit/bank_total/rate 键 + 补清算账户正反登记与注资 + item 填真实 CID（非空 Default）+ fee 账户注资覆盖 Step 3 链上费；探针返回 CID、`last_batch` 按 CID 读；新增字节锁单测 `cid_storage_keys_use_compact_len_prefix`（错回定长 32B 即红）。此前休眠（`OffchainTransaction` 被 BaseCallFilter 拦），放开入口即会硬阻断所有链升级——原“剩余仅 #[cfg(test)] 夹具不影响生产”结论订正。
+- H2 跨行结算 e2e（`MockCid` 加 BANK2 独立 CID+主/费/清算账户）、H3 偿付拒绝+`>=` 边界两测试：此前 `cases.rs:99` 自认“跨行需 fixture 扩展”、全套无 `SolvencyProtected`，两条最易写错路径实为裸奔。
+- M1 L2 ACK 变长 `bank_cid` 加 `Compact(len)` 前缀（对齐 `batch_signing_hash` 单一原语）。
+- M3 Dart `scaleEncode` 加 release 安全的 CID 长度 `throw`（assert 被裁）。M4 `cargo fmt`。M5 `app_isar.dart` op_tag 0x06→0x07。
+- 文档漂移全清：batch_item/bank_check/settlement/lib/rpc/ledger/listener/mod 按清算账户模型更正，裸字段名残留清零。
+验证：`cargo test -p offchain`=28 passed；`cargo test -p node`=289 passed（含字节锁单测）；`cargo check -p node` 通过；`dart analyze`（改动文件）=0 issues；`cargo fmt --check -p offchain`=clean。
+待办 M2：`submit_offchain_batch` 等走 benchmark 生成的 `weights.rs`，Step 2/3 新增 `clearing_account_of` 等 `find_account` 读未计入权重，须重跑 benchmark 生成（不臆造数值）；因并发线程正 churn entity/benchmarks/genesis，待 runtime 稳定后执行。
+
 
 
 任务需求：

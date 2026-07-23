@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { formatBalance } from '../shared/format';
-import { hexToSs58 } from '../shared/ss58';
+import { accountIdToSs58 } from '../shared/ss58';
 import type {
   InstitutionAdminInfo,
   InstitutionRoleAssignmentInfo,
@@ -51,7 +51,7 @@ export function InstitutionAssignmentCard({
   status,
 }: Props) {
   const topAction = action ?? status;
-  const accountText = admin.adminAccount ? hexToSs58(admin.adminAccount) : '';
+  const accountText = admin.account_id ? accountIdToSs58(admin.account_id) : '';
   const personName = `${admin.familyName}${admin.givenName}`;
   const balanceText = balanceFen != null ? formatBalance(balanceFen) : '';
 

@@ -40,6 +40,16 @@
 
 OnChina 不是独立产品；它是 `citizenchain/onchina/` 下的公民链内部能力。
 
+### 3.1 跨产品账户标识目标
+
+ADR-040 已冻结全仓统一账户模型，实施进度见 `memory/08-tasks/20260722-account-id-official-unify.md`：
+
+- 链账户类型统一为 `AccountId`，单一账户字段统一为 `account_id`；多账户结构使用准确的 `<role>_account_id`。
+- 公钥统一为 `public_key` / `signer_public_key` / `credential_signer_public_key`；SS58 展示字段统一为 `ss58_address`。
+- `account_id` 和 32 字节公钥的文本形式统一为小写 `0x` 加 64 位十六进制。
+- `account_id` 是跨产品授权、索引和持久化身份；`ss58_address` 是派生展示值；钱包是保存密钥并签名的软件，不是链账户类型。
+- 当前代码仍存在的 wallet/admin/owner/pubkey/address 同义字段必须按任务卡分步删除，不得新增或保留兼容分支。
+
 ## 4. 产品矩阵与职责
 
 ### 4.1 CitizenChain

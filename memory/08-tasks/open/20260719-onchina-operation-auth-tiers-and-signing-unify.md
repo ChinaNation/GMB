@@ -219,3 +219,12 @@ citizenwallet/lib/
 - 岗位码错误的签名被链上拒绝。
 - 登录 QR 携带并展示机构 CID/简称/岗位名;登录签名四端字节一致;篡改机构字段验签失败。
 - `flutter analyze` / `flutter test`(citizenwallet)、`cargo check` / `cargo test`(onchina、runtime 相关 crate)通过。
+
+### 机构自定义账户 增/删 改为链上内部投票提案(完成,已验证)
+- 契约:`onchina/src/core/institution_call.rs` 新增 `encode_propose_add_institution_account`(runtime call 7:`cid_number → account_names:Vec<Vec<u8>> → proposer_role_code`)、`encode_propose_close_institution`(call 1:`actor_cid_number → proposer_role_code → 32B账户 → 32B受益人`);公权码→pallet 30、私权码→pallet 31;逐字节金标 3 例(含 `CFIN`/`SFAS` 分流)。
+- 后端:`accounts/handler.rs` `create_account`/`delete_account` 删本地直写 + `require_admin_security_grant`,改镜像 `prepare_institution_governance`(共用 `authorize_own_institution_proposal`:node 绑定 + 只能操作本机构 + 岗位码 1..64 + scope + `code_bytes`)→ 编码提案 → `build_chain_sign_output`(提为 `pub(crate)`)→ 复用通用消费端 `/api/v1/admin/chain/submit`。`list_accounts` + 公开 `app_list_accounts` 读侧切链上真源 `institution_accounts_lookup`(按 cid 前缀读 `PublicManage/PrivateManage::InstitutionAccounts`)。`occupy.rs submit_chain_sign` 把两个新 PURPOSE 并入"提交后只记审计、读侧从链读"分支。
+- close 受益人固定=本机构主账户(`derive_account_bytes(cid,"主账户")`);待关闭账户地址本端派生;`derive_account` 改基于新增 `derive_account_bytes`。
+- 清残:删 `Db::upsert_institution_account_row`/`upsert_target_account_row`/`delete_institution_account_row`(grep 确认零调用)、`CreateAccountOutput`;`DeleteAccountInput{proposer_role_code}` 新增(DELETE 带 Json body)。
+- 前端:`accounts/api.ts`/`CreateAccountModal.tsx`/`AccountManageSection.tsx` 去 securityGrant,改 `useChainSign` prepare→扫码签→`submitChainSign`;新增"发起岗位码"输入;列表改 `listAccounts` 链读;文案"发起提案,机构内部投票通过后生效";`AccountList.tsx` `created_at` 链上无时间戳→空值显 `-`(不再 1970),类型 `created_at: string|null` + `account_kind` 补 `'clearing'`。
+- 验证:`cargo check` 0 警告;`cargo test --bin onchina institution` 40 passed;前端 `tsc -b` EXIT=0。
+- 边界:工作树同时含另一线程 ADR-040(`20260722-account-id-official-unify.md`)对 `account_id` 命名统一的改动(primitives/admin-primitives/entity-primitives/`ONCHINA_TECHNICAL.md`/`src/cid/generator.rs`/`chain_runtime.rs` 610·626 行 `admin_account→account_id` 等),本会话一律不碰,仅在同一 `chain_runtime.rs` 新增了 `institution_accounts_lookup`。

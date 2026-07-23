@@ -25,7 +25,7 @@ mod benchmarks {
         let who = decode_account::<T>([7u8; 32]);
         let cid_number = primitives::cid::generator::generate_cid_number(
             primitives::cid::generator::GenerateCidNumberInput {
-                account_pubkey: "bench-0001",
+                public_key: "bench-0001",
                 p1: "1",
                 province_code: "GD",
                 province_name: "广东省",

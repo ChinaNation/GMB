@@ -18,15 +18,18 @@ pub struct TransferProposalDetail {
     /// 发起机构唯一 CID；个人多签转账为空。
     pub actor_cid_number: Option<String>,
     /// 实际转出资金的机构账户或个人多签账户。
-    pub funding_account_hex: String,
-    /// 收款人公钥 hex。
-    pub beneficiary_hex: String,
+    #[serde(rename = "funding_account_id")]
+    pub funding_account_id: String,
+    /// 收款账户 ID。
+    #[serde(rename = "beneficiary_account_id")]
+    pub beneficiary_account_id: String,
     /// 金额（分）。
     pub amount_fen: String,
     /// 转账备注。
     pub remark: String,
-    /// 提案人公钥 hex。
-    pub proposer_hex: String,
+    /// 提案人账户 ID。
+    #[serde(rename = "proposer_account_id")]
+    pub proposer_account_id: String,
 }
 
 /// 安全基金转账提案详情。
@@ -38,9 +41,11 @@ pub struct SafetyFundProposalDetail {
     /// 国家储委会唯一 CID。
     pub actor_cid_number: String,
     /// 实际转出的安全基金账户。
-    pub institution_account_hex: String,
-    /// 收款人公钥 hex。
-    pub beneficiary_hex: String,
+    #[serde(rename = "institution_account_id")]
+    pub institution_account_id: String,
+    /// 收款账户 ID。
+    #[serde(rename = "beneficiary_account_id")]
+    pub beneficiary_account_id: String,
     /// 金额（分）。
     pub amount_fen: String,
     /// 转账备注。
@@ -56,7 +61,8 @@ pub struct SweepProposalDetail {
     /// 发起机构唯一 CID。
     pub actor_cid_number: String,
     /// 实际转出的机构费用账户。
-    pub institution_account_hex: String,
+    #[serde(rename = "institution_account_id")]
+    pub institution_account_id: String,
     /// 金额（分）。
     pub amount_fen: String,
 }
@@ -163,10 +169,10 @@ fn decode_transfer_action(proposal_id: u64, data: &[u8]) -> Option<TransferPropo
     if offset + 32 + 32 + 16 > data.len() {
         return None;
     }
-    let funding_account_hex = hex::encode(&data[offset..offset + 32]);
+    let funding_account_id = format!("0x{}", hex::encode(&data[offset..offset + 32]));
     offset += 32;
 
-    let beneficiary_hex = hex::encode(&data[offset..offset + 32]);
+    let beneficiary_account_id = format!("0x{}", hex::encode(&data[offset..offset + 32]));
     offset += 32;
 
     let amount_bytes: [u8; 16] = data[offset..offset + 16].try_into().ok()?;
@@ -184,7 +190,7 @@ fn decode_transfer_action(proposal_id: u64, data: &[u8]) -> Option<TransferPropo
     if offset + 32 > data.len() {
         return None;
     }
-    let proposer_hex = hex::encode(&data[offset..offset + 32]);
+    let proposer_account_id = format!("0x{}", hex::encode(&data[offset..offset + 32]));
     offset += 32;
     if offset != data.len() {
         return None;
@@ -193,11 +199,11 @@ fn decode_transfer_action(proposal_id: u64, data: &[u8]) -> Option<TransferPropo
     Some(TransferProposalDetail {
         proposal_id,
         actor_cid_number,
-        funding_account_hex,
-        beneficiary_hex,
+        funding_account_id,
+        beneficiary_account_id,
         amount_fen: amount_fen.to_string(),
         remark,
-        proposer_hex,
+        proposer_account_id,
     })
 }
 
@@ -214,7 +220,7 @@ fn fetch_safety_fund_proposal_action(
         None => Ok(None),
         Some(hex_data) => {
             let data = decode_hex_storage(&hex_data)?;
-            // SafetyFundAction: actor CID + institution_account + beneficiary + amount + remark + proposer。
+            // SafetyFundAction: actor CID + institution_account_id + beneficiary + amount + remark + proposer。
             let mut offset = 0usize;
             let Some(actor_cid_number) = read_cid_number(&data, &mut offset) else {
                 return Ok(None);
@@ -222,9 +228,9 @@ fn fetch_safety_fund_proposal_action(
             if offset + 32 + 32 + 16 > data.len() {
                 return Ok(None);
             }
-            let institution_account_hex = hex::encode(&data[offset..offset + 32]);
+            let institution_account_id = format!("0x{}", hex::encode(&data[offset..offset + 32]));
             offset += 32;
-            let beneficiary_hex = hex::encode(&data[offset..offset + 32]);
+            let beneficiary_account_id = format!("0x{}", hex::encode(&data[offset..offset + 32]));
             offset += 32;
             let amount_fen = {
                 let mut bytes = [0u8; 16];
@@ -244,8 +250,8 @@ fn fetch_safety_fund_proposal_action(
             Ok(Some(SafetyFundProposalDetail {
                 proposal_id,
                 actor_cid_number,
-                institution_account_hex,
-                beneficiary_hex,
+                institution_account_id,
+                beneficiary_account_id,
                 amount_fen: amount_fen.to_string(),
                 remark,
             }))
@@ -264,7 +270,7 @@ fn fetch_sweep_proposal_action(proposal_id: u64) -> Result<Option<SweepProposalD
         None => Ok(None),
         Some(hex_data) => {
             let data = decode_hex_storage(&hex_data)?;
-            // SweepAction: actor CID + institution_account + amount + proposer。
+            // SweepAction: actor CID + institution_account_id + amount + proposer。
             let mut offset = 0usize;
             let Some(actor_cid_number) = read_cid_number(&data, &mut offset) else {
                 return Ok(None);
@@ -272,7 +278,7 @@ fn fetch_sweep_proposal_action(proposal_id: u64) -> Result<Option<SweepProposalD
             if offset + 32 + 16 + 32 != data.len() {
                 return Ok(None);
             }
-            let institution_account_hex = hex::encode(&data[offset..offset + 32]);
+            let institution_account_id = format!("0x{}", hex::encode(&data[offset..offset + 32]));
             offset += 32;
             let amount_fen = {
                 let mut bytes = [0u8; 16];
@@ -282,7 +288,7 @@ fn fetch_sweep_proposal_action(proposal_id: u64) -> Result<Option<SweepProposalD
             Ok(Some(SweepProposalDetail {
                 proposal_id,
                 actor_cid_number,
-                institution_account_hex,
+                institution_account_id,
                 amount_fen: amount_fen.to_string(),
             }))
         }
@@ -402,11 +408,11 @@ mod tests {
         let detail = TransferProposalDetail {
             proposal_id: 1,
             actor_cid_number: None,
-            funding_account_hex: String::new(),
-            beneficiary_hex: String::new(),
+            funding_account_id: String::new(),
+            beneficiary_account_id: String::new(),
             amount_fen: "12345".to_string(),
             remark: "一二三四五六七八九十".repeat(4),
-            proposer_hex: String::new(),
+            proposer_account_id: String::new(),
         };
         let summary = format_transfer_summary(&detail, |_| None);
         assert!(summary.starts_with("个人多签转账 123.45 元："));
@@ -431,11 +437,14 @@ mod tests {
         let detail = decode_transfer_action(7, &data).expect("应按 runtime 新布局解码");
         assert_eq!(detail.proposal_id, 7);
         assert_eq!(detail.actor_cid_number.as_deref(), Some(actor_cid_number));
-        assert_eq!(detail.funding_account_hex, "11".repeat(32));
-        assert_eq!(detail.beneficiary_hex, "22".repeat(32));
+        assert_eq!(detail.funding_account_id, format!("0x{}", "11".repeat(32)));
+        assert_eq!(
+            detail.beneficiary_account_id,
+            format!("0x{}", "22".repeat(32))
+        );
         assert_eq!(detail.amount_fen, "12345");
         assert_eq!(detail.remark, remark);
-        assert_eq!(detail.proposer_hex, "33".repeat(32));
+        assert_eq!(detail.proposer_account_id, format!("0x{}", "33".repeat(32)));
     }
 
     #[test]
@@ -443,7 +452,7 @@ mod tests {
         let detail = SweepProposalDetail {
             proposal_id: 2,
             actor_cid_number: "CHN-UNKNOWN".to_string(),
-            institution_account_hex: "00".repeat(32),
+            institution_account_id: format!("0x{}", "00".repeat(32)),
             amount_fen: "999900".to_string(),
         };
         assert_eq!(
@@ -457,8 +466,8 @@ mod tests {
         let detail = SafetyFundProposalDetail {
             proposal_id: 3,
             actor_cid_number: "CHN-NRC".to_string(),
-            institution_account_hex: String::new(),
-            beneficiary_hex: String::new(),
+            institution_account_id: String::new(),
+            beneficiary_account_id: String::new(),
             amount_fen: "100".to_string(),
             remark: String::new(),
         };

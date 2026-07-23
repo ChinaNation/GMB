@@ -24,16 +24,11 @@ const CALL_UPDATE_ENDPOINT: u8 = 51;
 const CALL_UNREGISTER: u8 = 52;
 
 /// 校验 0x 前缀小写 hex 公钥(64 hex 字符)。返回 (clean_hex, raw_bytes)。
-fn parse_pubkey(pubkey_hex: &str) -> Result<(String, Vec<u8>), String> {
-    let clean = pubkey_hex
-        .strip_prefix("0x")
-        .unwrap_or(pubkey_hex)
-        .to_ascii_lowercase();
-    if clean.len() != 64 || !clean.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("公钥格式无效,应为 64 位十六进制".to_string());
-    }
-    let bytes = hex::decode(&clean).map_err(|e| format!("公钥解码失败:{e}"))?;
-    Ok((clean, bytes))
+fn parse_signer_public_key(signer_public_key: &str) -> Result<(String, Vec<u8>), String> {
+    let signer_public_key = crate::shared::validation::normalize_public_key(signer_public_key)?;
+    let bytes = hex::decode(signer_public_key.trim_start_matches("0x"))
+        .map_err(|e| format!("公钥解码失败:{e}"))?;
+    Ok((signer_public_key, bytes))
 }
 
 /// 把 cid_number / peer_id / domain 等可变长字段按 SCALE Vec<u8> 编码:
@@ -120,35 +115,35 @@ pub fn build_unregister_call_data(actor_cid_number: &str) -> Result<Vec<u8>, Str
 
 /// register_clearing_bank QR 签名请求。
 pub fn build_register_sign_request(
-    pubkey_hex: &str,
+    signer_public_key: &str,
     actor_cid_number: &str,
     peer_id: &str,
     rpc_domain: &str,
     rpc_port: u16,
 ) -> Result<VoteSignRequestResult, String> {
-    let (clean, bytes) = parse_pubkey(pubkey_hex)?;
+    let (clean, bytes) = parse_signer_public_key(signer_public_key)?;
     let call_data = build_register_call_data(actor_cid_number, peer_id, rpc_domain, rpc_port)?;
     build_sign_request_from_call_data(&clean, &bytes, &call_data)
 }
 
 /// update_clearing_bank_endpoint QR 签名请求。
 pub fn build_update_endpoint_sign_request(
-    pubkey_hex: &str,
+    signer_public_key: &str,
     actor_cid_number: &str,
     new_domain: &str,
     new_port: u16,
 ) -> Result<VoteSignRequestResult, String> {
-    let (clean, bytes) = parse_pubkey(pubkey_hex)?;
+    let (clean, bytes) = parse_signer_public_key(signer_public_key)?;
     let call_data = build_update_endpoint_call_data(actor_cid_number, new_domain, new_port)?;
     build_sign_request_from_call_data(&clean, &bytes, &call_data)
 }
 
 /// unregister_clearing_bank QR 签名请求。
 pub fn build_unregister_sign_request(
-    pubkey_hex: &str,
+    signer_public_key: &str,
     actor_cid_number: &str,
 ) -> Result<VoteSignRequestResult, String> {
-    let (clean, bytes) = parse_pubkey(pubkey_hex)?;
+    let (clean, bytes) = parse_signer_public_key(signer_public_key)?;
     let call_data = build_unregister_call_data(actor_cid_number)?;
     build_sign_request_from_call_data(&clean, &bytes, &call_data)
 }
@@ -209,20 +204,21 @@ mod tests {
     }
 
     #[test]
-    fn parse_pubkey_normalizes_uppercase_and_strips_prefix() {
-        let (clean, bytes) =
-            parse_pubkey("0xAABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899")
-                .unwrap();
-        assert_eq!(clean.len(), 64);
-        assert!(clean
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
+    fn signer_public_key_uses_prefixed_lowercase_hex() {
+        let public_key = "0xaabbccddeeff00112233445566778899aabbccddeeff00112233445566778899";
+        let (clean, bytes) = parse_signer_public_key(public_key).unwrap();
+        assert_eq!(clean.len(), 66);
+        assert_eq!(clean, public_key);
         assert_eq!(bytes.len(), 32);
+        assert!(parse_signer_public_key(
+            "0xAABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899"
+        )
+        .is_err());
     }
 
     #[test]
-    fn parse_pubkey_rejects_bad_length() {
-        assert!(parse_pubkey("0x").is_err());
-        assert!(parse_pubkey("xyz").is_err());
+    fn signer_public_key_rejects_bad_length() {
+        assert!(parse_signer_public_key("0x").is_err());
+        assert!(parse_signer_public_key("xyz").is_err());
     }
 }

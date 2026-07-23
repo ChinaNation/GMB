@@ -91,7 +91,7 @@ pub mod pallet {
         /// 单个固定省储行主账户收到本年度利息。
         ProvincialBankInterestMinted {
             year: u32,
-            account: T::AccountId,
+            account_id: T::AccountId,
             amount: u128,
         },
         /// 43 家省储行本年度全部成功入账，审计状态已原子推进。
@@ -245,7 +245,7 @@ pub mod pallet {
                     .ok_or(SettlementError::TotalInterestOverflow)?;
                 Self::deposit_event(Event::<T>::ProvincialBankInterestMinted {
                     year,
-                    account,
+                    account_id: account,
                     amount: interest,
                 });
             }

@@ -90,7 +90,7 @@ pub enum InternalVoteTicketClaim {
     InstitutionRole(RoleCode),
 }
 
-/// 内部投票防重键。个人多签仍是一钱包一票，机构按完整岗位票据记票。
+/// 内部投票防重键。个人多签仍是一账户一票，机构按完整岗位票据记票。
 #[derive(
     Encode,
     Decode,
@@ -109,7 +109,7 @@ pub enum InternalVoteTicket<AccountId> {
 
 #[derive(Encode, Decode, Clone, Copy, RuntimeDebug, TypeInfo, MaxEncodedLen, PartialEq, Eq)]
 pub struct PendingPersonalAdminChangeThreshold<AccountId> {
-    pub personal_account: AccountId,
+    pub personal_account_id: AccountId,
     pub new_admins_len: u32,
     pub new_threshold: u32,
 }
@@ -136,7 +136,7 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
-    /// 内部投票记录：个人多签按钱包，机构按 CID + 岗位码 + 钱包防重。
+    /// 内部投票记录：个人多签按账户，机构按 CID + 岗位码 + 账户防重。
     #[pallet::storage]
     pub type InternalVotesByTicket<T: Config> = StorageDoubleMap<
         _,
@@ -238,8 +238,8 @@ fn is_valid_institution_context(institution_code: InstitutionCode, cid_number: &
             == Some(institution_code)
 }
 
-fn is_personal_admin<T: Config>(personal_account: T::AccountId, who: &T::AccountId) -> bool {
-    <T as votingengine::Config>::InternalAdminProvider::is_personal_admin(personal_account, who)
+fn is_personal_admin<T: Config>(personal_account_id: T::AccountId, who: &T::AccountId) -> bool {
+    <T as votingengine::Config>::InternalAdminProvider::is_personal_admin(personal_account_id, who)
 }
 
 fn active_institution_threshold<T: Config>(
@@ -258,7 +258,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         who: T::AccountId,
         institution_code: InstitutionCode,
         actor_cid_number: sp_std::vec::Vec<u8>,
-        execution_account: Option<T::AccountId>,
+        execution_account_id: Option<T::AccountId>,
         subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
         vote_plan: votingengine::types::VotePlanOf<T::AccountId>,
         data: sp_std::vec::Vec<u8>,
@@ -273,7 +273,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
                 who.clone(),
                 institution_code,
                 actor_cid_number,
-                execution_account,
+                execution_account_id,
                 subject_cid_numbers,
                 &vote_plan,
             ) {
@@ -299,16 +299,16 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
 
     fn create_personal_proposal_with_data(
         who: T::AccountId,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         with_transaction(|| {
-            let proposal_id = match Self::do_create_personal_proposal(who.clone(), personal_account)
-            {
-                Ok(id) => id,
-                Err(err) => return TransactionOutcome::Rollback(Err(err)),
-            };
+            let proposal_id =
+                match Self::do_create_personal_proposal(who.clone(), personal_account_id) {
+                    Ok(id) => id,
+                    Err(err) => return TransactionOutcome::Rollback(Err(err)),
+                };
             match Self::register_data_and_auto_approve(who, proposal_id, module_tag, data) {
                 Ok(id) => TransactionOutcome::Commit(Ok(id)),
                 Err(err) => TransactionOutcome::Rollback(Err(err)),
@@ -361,13 +361,14 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
 
     fn create_personal_lifecycle_proposal_with_data(
         who: T::AccountId,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         with_transaction(|| {
             let proposal_id =
-                match Self::do_create_personal_lifecycle_proposal(who.clone(), personal_account) {
+                match Self::do_create_personal_lifecycle_proposal(who.clone(), personal_account_id)
+                {
                     Ok(id) => id,
                     Err(err) => return TransactionOutcome::Rollback(Err(err)),
                 };
@@ -380,7 +381,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
 
     fn create_personal_account_create_proposal_with_data(
         who: T::AccountId,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
         admins: sp_std::vec::Vec<T::AccountId>,
         dynamic_threshold: u32,
         module_tag: &[u8],
@@ -389,7 +390,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         with_transaction(|| {
             let proposal_id = match Self::do_create_personal_account_create_proposal(
                 who.clone(),
-                personal_account,
+                personal_account_id,
                 admins,
                 dynamic_threshold,
             ) {
@@ -405,7 +406,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
 
     fn create_personal_admin_change_proposal_with_data(
         who: T::AccountId,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
         new_admins_len: u32,
         new_threshold: u32,
         module_tag: &[u8],
@@ -414,7 +415,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         with_transaction(|| {
             let proposal_id = match Self::do_create_personal_admin_change_proposal(
                 who.clone(),
-                personal_account,
+                personal_account_id,
                 new_admins_len,
                 new_threshold,
             ) {
@@ -436,8 +437,8 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         active_institution_threshold::<T>(institution_code, &cid_number)
     }
 
-    fn active_personal_threshold(personal_account: T::AccountId) -> Option<u32> {
-        ActivePersonalThresholds::<T>::get(personal_account)
+    fn active_personal_threshold(personal_account_id: T::AccountId) -> Option<u32> {
+        ActivePersonalThresholds::<T>::get(personal_account_id)
     }
 
     fn configured_institution_threshold(
@@ -450,10 +451,10 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
 
     fn configured_personal_threshold(
         proposal_id: u64,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
     ) -> Option<u32> {
         PendingPersonalThresholds::<T>::get(proposal_id)
-            .or_else(|| ActivePersonalThresholds::<T>::get(personal_account))
+            .or_else(|| ActivePersonalThresholds::<T>::get(personal_account_id))
     }
 }
 

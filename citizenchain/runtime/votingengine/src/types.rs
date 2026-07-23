@@ -40,20 +40,20 @@ pub type RoleCode =
 
 /// 机构岗位的一张投票票据。
 ///
-/// 票权由机构 CID、岗位码和实际签名钱包共同确定；同一钱包担任多个岗位时，
-/// 每个岗位各形成一张独立票据，同一岗位与同一钱包组合只能使用一次。
+/// 票权由机构 CID、岗位码和实际签名账户共同确定；同一账户担任多个岗位时，
+/// 每个岗位各形成一张独立票据，同一岗位与同一账户组合只能使用一次。
 #[derive(
     Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
 )]
 pub struct InstitutionVoteTicket<AccountId> {
     pub role_subject: RoleSubject<CidNumber, RoleCode>,
-    pub voter_account: AccountId,
+    pub voter_account_id: AccountId,
 }
 
 /// 公民公投的一张完整票据。
 ///
 /// Storage 必须按 `(proposal_id, cid_number)` 去重；票据值保存投票时
-/// 的完整 CID + 签名钱包主体，防止同一永久 CID 更换钱包后重复投票。
+/// 的完整 CID + 签名账户主体，防止同一永久 CID 更换绑定账户后重复投票。
 #[derive(
     Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
 )]
@@ -202,8 +202,8 @@ where
             AuthorizationSubject::PersonalMultisig(account) => {
                 let same_personal_account = matches!(
                     voter_subjects.first(),
-                    Some(AuthorizationSubject::PersonalMultisig(voter_account))
-                        if voter_account == account
+                    Some(AuthorizationSubject::PersonalMultisig(voter_account_id))
+                        if voter_account_id == account
                 );
                 if voter_subjects.len() != 1 || !same_personal_account {
                     return Err(VotePlanValidationError::AuthorizationSubjectMismatch);
@@ -525,7 +525,7 @@ pub struct Proposal<BlockNumber, AccountId> {
     /// 发起机构唯一 CID。个人多签、公民个人或系统提案为空。
     pub actor_cid_number: Option<CidNumber>,
     /// 只有具体资产账户或个人多签确实参与执行时才存在；不得用作机构身份。
-    pub execution_account: Option<AccountId>,
+    pub execution_account_id: Option<AccountId>,
     /// 提案影响的机构 CID 集合，不得替代发起机构 `actor_cid_number`。
     pub subject_cid_numbers: ProposalSubjectCidNumbers,
     /// 本阶段起始区块
@@ -541,7 +541,7 @@ impl<BlockNumber, AccountId: Clone> Proposal<BlockNumber, AccountId> {
             return sp_std::vec![ProposalSubject::InstitutionCid(cid_number)];
         }
         if self.internal_code == Some(PMUL) {
-            if let Some(account) = self.execution_account.clone() {
+            if let Some(account) = self.execution_account_id.clone() {
                 return sp_std::vec![ProposalSubject::PersonalAccount(account)];
             }
         }

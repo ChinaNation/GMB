@@ -15,12 +15,12 @@ fn direct_institution_creation_call_is_permanently_absent() {
 }
 
 fn governance_assignment(
-    account: AccountId32,
+    account_id: AccountId32,
     term_start: u32,
     term_end: u32,
 ) -> entity_primitives::InstitutionAssignmentTarget<AccountId32> {
     entity_primitives::InstitutionAssignmentTarget {
-        admin_account: account,
+        account_id: account_id,
         term_start,
         term_end,
         assignment_source: entity_primitives::InstitutionAssignmentSource::InstitutionGovernance,
@@ -71,21 +71,21 @@ fn create_cgov(tag: &str) -> pallet::CidNumberOf<Test> {
     );
     // 固定岗位权限由机构 CID + 岗位码推导，因此先落机构身份，再创建默认 LR 岗位。
     assert_ok!(PublicManage::store_default_legal_representative_role(&cid));
-    for account in created_accounts {
+    for account_id in created_accounts {
         pallet::InstitutionAccounts::<Test>::insert(
             &cid,
-            &account.account_name,
+            &account_id.account_name,
             crate::InstitutionAccountInfo {
-                address: account.address.clone(),
-                initial_balance: account.amount,
+                account_id: account_id.account_id.clone(),
+                initial_balance: account_id.amount,
                 created_at: System::block_number(),
             },
         );
         pallet::AccountRegisteredCid::<Test>::insert(
-            &account.address,
+            &account_id.account_id,
             crate::RegisteredInstitution {
                 cid_number: cid.clone(),
-                account_name: account.account_name,
+                account_name: account_id.account_name,
             },
         );
     }
@@ -344,8 +344,8 @@ fn assignment_authorization_respects_inclusive_term_window() {
 
 fn account_of(cid: &pallet::CidNumberOf<Test>, name: &[u8]) -> AccountId32 {
     pallet::InstitutionAccounts::<Test>::get(cid, account_name(name))
-        .expect("institution account must exist")
-        .address
+        .expect("institution account_id must exist")
+        .account_id
 }
 
 #[test]
@@ -354,7 +354,7 @@ fn update_info_and_add_account_keep_cid_as_only_entity_key() {
         let cid = create_cgov_with_custom("maintain-cid");
         // 改名仍由注册局直写。
         assert_ok!(PublicManage::update_institution_info(
-            RuntimeOrigin::signed(creator()),
+            RuntimeOrigin::signed(creator_account_id()),
             cid.clone(),
             cid_full_name("更新后的机构全称".as_bytes()),
             cid_short_name("更新简称".as_bytes()),
@@ -458,7 +458,7 @@ fn add_account_requires_institution_admin_and_role() {
     new_test_ext().execute_with(|| {
         let cid = create_cgov("add-auth");
         grant_close_role(&cid);
-        // 非本机构管理员钱包发起 → build_institution_vote_plan 授权失败。
+        // 非本机构管理员账户发起 → build_institution_vote_plan 授权失败。
         assert_noop!(
             propose_add_custom_account(
                 RuntimeOrigin::signed(admin(9)),
@@ -562,7 +562,7 @@ fn close_requires_matching_actor_cid_and_an_institution_admin() {
                 RuntimeOrigin::signed(admin(0)),
                 other_cid,
                 custom.clone(),
-                beneficiary(),
+                beneficiary_account_id(),
             ),
             Error::<Test>::NotInstitutionAccount
         );
@@ -571,7 +571,7 @@ fn close_requires_matching_actor_cid_and_an_institution_admin() {
                 RuntimeOrigin::signed(admin(9)),
                 cid,
                 custom,
-                beneficiary(),
+                beneficiary_account_id(),
             ),
             Error::<Test>::PermissionDenied
         );
@@ -582,7 +582,7 @@ fn close_requires_matching_actor_cid_and_an_institution_admin() {
 fn protocol_accounts_cannot_be_closed() {
     new_test_ext().execute_with(|| {
         let cid = create_cgov_with_custom("close-protocol");
-        for account in [
+        for account_id in [
             account_of(&cid, RESERVED_NAME_MAIN),
             account_of(&cid, RESERVED_NAME_FEE),
         ] {
@@ -590,8 +590,8 @@ fn protocol_accounts_cannot_be_closed() {
                 propose_named_account_close(
                     RuntimeOrigin::signed(admin(0)),
                     cid.clone(),
-                    account,
-                    beneficiary(),
+                    account_id,
+                    beneficiary_account_id(),
                 ),
                 Error::<Test>::CannotCloseProtectedInstitution
             );
@@ -606,7 +606,7 @@ fn approved_close_removes_only_custom_account() {
         let main = account_of(&cid, RESERVED_NAME_MAIN);
         let fee = account_of(&cid, RESERVED_NAME_FEE);
         let custom = account_of(&cid, CUSTOM_ACCOUNT_NAME);
-        let beneficiary_account = beneficiary();
+        let beneficiary_account = beneficiary_account_id();
         let admin_balance_before = Balances::free_balance(admin(0));
 
         assert_ok!(propose_named_account_close(
@@ -643,7 +643,7 @@ fn rejected_close_is_cleaned_only_by_votingengine_callback() {
             RuntimeOrigin::signed(admin(0)),
             cid.clone(),
             custom.clone(),
-            beneficiary(),
+            beneficiary_account_id(),
         ));
         let proposal_id = last_proposal_id();
         assert_eq!(
@@ -678,14 +678,14 @@ fn duplicate_close_proposal_is_rejected_while_pending() {
             RuntimeOrigin::signed(admin(0)),
             cid.clone(),
             custom.clone(),
-            beneficiary(),
+            beneficiary_account_id(),
         ));
         assert_noop!(
             propose_named_account_close(
                 RuntimeOrigin::signed(admin(0)),
                 cid,
                 custom,
-                beneficiary(),
+                beneficiary_account_id(),
             ),
             Error::<Test>::CloseAlreadyPending
         );

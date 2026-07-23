@@ -70,7 +70,7 @@ pub struct ClearingBankNodeInfo<AccountId, BlockNumber> {
     /// 注册时所在区块高度。
     pub registered_at: BlockNumber,
     /// 提交注册的清算行管理员账户(审计用)。
-    pub registered_by: AccountId,
+    pub registrar_account_id: AccountId,
 }
 
 /// 全仓统一的机构 CID 上限；机构身份字段不得复用 PeerId 的 64 字节上限。
@@ -78,7 +78,7 @@ pub type InstitutionCidNumber =
     BoundedVec<u8, sp_core::ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>>;
 /// libp2p PeerId 字段上限。
 pub type ClearingPeerId = BoundedVec<u8, sp_core::ConstU32<64>>;
-/// 机构岗位码上限；岗位码与机构 CID、签名钱包共同构成清算业务权限。
+/// 机构岗位码上限；岗位码与机构 CID、签名账户共同构成清算业务权限。
 pub type ActorRoleCode = BoundedVec<u8, sp_core::ConstU32<64>>;
 
 /// 清算行清算 pallet 的存储版本。全新创世口径:创世即终态布局,恒为 v1。
@@ -296,9 +296,9 @@ pub mod pallet {
         /// 单笔扫码支付已在链上最终清算。
         PaymentSettled {
             tx_id: T::Hash,
-            payer: T::AccountId,
+            payer_account_id: T::AccountId,
             payer_bank_cid: crate::InstitutionCidNumber,
-            recipient: T::AccountId,
+            recipient_account_id: T::AccountId,
             recipient_bank_cid: crate::InstitutionCidNumber,
             transfer_amount: u128,
             fee_amount: u128,
@@ -316,7 +316,7 @@ pub mod pallet {
             peer_id: crate::ClearingPeerId,
             rpc_domain: BoundedVec<u8, sp_core::ConstU32<128>>,
             rpc_port: u16,
-            registered_by: T::AccountId,
+            registrar_account_id: T::AccountId,
         },
         /// 清算行节点 RPC 端点更新(域名 / 端口变更,PeerId 不变)。
         ClearingBankEndpointUpdated {
@@ -345,9 +345,9 @@ pub mod pallet {
         TransferAmountTooLarge,
         /// 批次为空。
         EmptyBatch,
-        /// 批次收款行与 `institution_account` 不一致。
+        /// 批次收款行与 `institution_account_id` 不一致。
         InstitutionMismatch,
-        /// 清算行 CID、岗位码、有效任职钱包或动作权限校验未通过。
+        /// 清算行 CID、岗位码、有效任职账户或动作权限校验未通过。
         UnauthorizedAdmin,
         /// 签名已过期(`expires_at` 小于当前高度)。
         ExpiredIntent,
@@ -487,8 +487,8 @@ pub mod pallet {
         ///
         /// **收款方主导清算**模型。
         /// - `actor_cid_number` = 收款方清算行的唯一机构主键
-        /// - `institution_account` = **收款方清算行主账户**
-        /// - 提交者 = `actor_cid_number + actor_role_code` 的有效岗位任职钱包
+        /// - `institution_account_id` = **收款方清算行主账户**
+        /// - 提交者 = `actor_cid_number + actor_role_code` 的有效岗位任职账户
         /// - 批次内所有 item 的 `recipient_bank_cid` 必须等于 `actor_cid_number`
         ///   (`payer_bank_cid` 可不同,即同一收款方清算行可一次代收来自不同付款方清算行的多笔)
         /// - 本调用属于链下清算费类别，不另收链上 gas；每个 item 的付款公民
@@ -500,7 +500,7 @@ pub mod pallet {
         ///
         /// [`actor_cid_number`] 批次归属的机构 CID
         /// [`actor_role_code`] 提交清算批次的机构岗位码
-        /// [`institution_account`] 批次归属的清算行主账户(= **收款方**清算行)
+        /// [`institution_account_id`] 批次归属的清算行主账户(= **收款方**清算行)
         /// [`batch_seq`] 清算行内单调递增的批次序号(冗余审计字段)
         /// [`batch`] `OffchainBatchItem` 列表(每条带 L3 sr25519 签名 / nonce / 费率)
         /// [`batch_signature`] 清算行多签批次级签名
@@ -510,7 +510,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             actor_cid_number: crate::InstitutionCidNumber,
             actor_role_code: crate::ActorRoleCode,
-            institution_account: T::AccountId,
+            institution_account_id: T::AccountId,
             batch_seq: u64,
             batch: BoundedVec<
                 crate::batch_item::OffchainBatchItem<T::AccountId, BlockNumberFor<T>>,
@@ -522,7 +522,7 @@ pub mod pallet {
             ensure!(!batch.is_empty(), Error::<T>::EmptyBatch);
             crate::bank_check::ensure_institution_account::<T>(
                 actor_cid_number.as_slice(),
-                &institution_account,
+                &institution_account_id,
                 crate::bank_check::ACCOUNT_NAME_MAIN,
             )?;
             ensure!(
@@ -538,7 +538,7 @@ pub mod pallet {
                 &submitter,
                 actor_cid_number.as_slice(),
                 actor_role_code.as_slice(),
-                &institution_account,
+                &institution_account_id,
                 batch_seq,
                 batch.as_slice(),
                 &batch_signature,
@@ -553,7 +553,7 @@ pub mod pallet {
                     &submitter,
                     &actor_cid_number,
                     actor_role_code.as_slice(),
-                    &institution_account,
+                    &institution_account_id,
                     batch.as_slice(),
                 ) {
                     Ok(()) => {
@@ -573,7 +573,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             actor_cid_number: crate::InstitutionCidNumber,
             actor_role_code: crate::ActorRoleCode,
-            institution_account: T::AccountId,
+            institution_account_id: T::AccountId,
             new_rate_bp: u32,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -581,7 +581,7 @@ pub mod pallet {
                 who,
                 &actor_cid_number,
                 actor_role_code.as_slice(),
-                institution_account,
+                institution_account_id,
                 new_rate_bp,
             )
         }
@@ -706,7 +706,7 @@ pub mod pallet {
             submitter: &T::AccountId,
             actor_cid_number: &[u8],
             actor_role_code: &[u8],
-            institution_account: &T::AccountId,
+            institution_account_id: &T::AccountId,
             batch_seq: u64,
             batch: &[crate::batch_item::OffchainBatchItem<T::AccountId, BlockNumberFor<T>>],
             batch_signature: &BatchSignatureOf<T>,
@@ -718,7 +718,7 @@ pub mod pallet {
             let message = crate::batch_item::batch_signing_hash(
                 actor_cid_number,
                 actor_role_code,
-                institution_account,
+                institution_account_id,
                 batch_seq,
                 &batch_bytes,
             );
@@ -821,7 +821,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
             pallet::Error::<T>::ClearingBankAccountNotFound
         );
 
-        // 6. 调用方必须同时匹配该 CID、岗位码、签名钱包和业务动作权限。
+        // 6. 调用方必须同时匹配该 CID、岗位码、签名账户和业务动作权限。
         ensure!(
             T::CidAccountQuery::is_institution_role_authorized(
                 actor_cid_number.as_slice(),
@@ -856,7 +856,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
             rpc_domain: rpc_domain.clone(),
             rpc_port,
             registered_at: now,
-            registered_by: who.clone(),
+            registrar_account_id: who.clone(),
         };
 
         pallet::ClearingBankNodes::<T>::insert(&actor_cid_number, &info);
@@ -867,7 +867,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
             peer_id,
             rpc_domain,
             rpc_port,
-            registered_by: who,
+            registrar_account_id: who,
         });
         Ok(())
     }

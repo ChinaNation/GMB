@@ -4,7 +4,7 @@ use super::*;
 fn nrc_destroy_executes_when_yes_votes_reach_threshold() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        let account = institution_account(&institution);
+        let account = institution_account_id(&institution);
 
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
@@ -31,7 +31,7 @@ fn nrc_destroy_executes_when_yes_votes_reach_threshold() {
 fn destroy_fee_shortage_never_falls_back_to_admin() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        let account = institution_account(&institution);
+        let account = institution_account_id(&institution);
         let fee_account = AccountId32::new(CHINA_CB[0].fee_account);
         let admin = nrc_admin(0);
         assert_ok!(Balances::force_set_balance(
@@ -73,7 +73,7 @@ fn destroy_fee_shortage_never_falls_back_to_admin() {
 fn prc_destroy_executes_when_yes_votes_reach_threshold() {
     new_test_ext().execute_with(|| {
         let institution = prc_pallet_id();
-        let account = institution_account(&institution);
+        let account = institution_account_id(&institution);
 
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(prc_admin(0)),
@@ -96,7 +96,7 @@ fn prc_destroy_executes_when_yes_votes_reach_threshold() {
 fn prb_destroy_executes_when_yes_votes_reach_threshold() {
     new_test_ext().execute_with(|| {
         let institution = prb_pallet_id();
-        let account = institution_account(&institution);
+        let account = institution_account_id(&institution);
 
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(prb_admin(0)),
@@ -217,7 +217,7 @@ fn zero_amount_and_insufficient_balance_are_rejected() {
             STATUS_PASSED
         );
         assert_eq!(
-            Balances::free_balance(institution_account(&institution)),
+            Balances::free_balance(institution_account_id(&institution)),
             1_000
         );
         assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
@@ -244,7 +244,7 @@ fn zero_amount_and_insufficient_balance_are_rejected() {
 fn existential_deposit_is_preserved() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        let account = institution_account(&institution);
+        let account = institution_account_id(&institution);
 
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
@@ -320,7 +320,7 @@ fn rejected_proposal_does_not_block_new_proposal() {
 fn execute_destroy_succeeds_after_failed_auto_execution() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        let account = institution_account(&institution);
+        let account = institution_account_id(&institution);
 
         assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(nrc_admin(0)),
@@ -408,7 +408,7 @@ fn duplicate_vote_is_rejected_by_votingengine() {
 fn execute_destroy_requires_role_voter_snapshot() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        let account = institution_account(&institution);
+        let account = institution_account_id(&institution);
         let outsider = AccountId32::new([99u8; 32]);
 
         assert_ok!(ResolutionDestroy::propose_destroy(

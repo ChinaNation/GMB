@@ -5,9 +5,9 @@
 pub const MODULE_TAG: &[u8] = b"pri-mgmt";
 
 pub use pallet::*;
+pub mod add;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
-pub mod add;
 pub mod close;
 pub mod institution;
 pub mod traits;
@@ -171,7 +171,7 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
-    /// CID 机构登记反向索引：account -> { cid_number, nonce }
+    /// CID 机构登记反向索引：account_id -> { cid_number, nonce }
     #[pallet::storage]
     #[pallet::getter(fn account_registered_cid)]
     pub type AccountRegisteredCid<T: Config> = StorageMap<
@@ -313,9 +313,9 @@ pub mod pallet {
         /// 机构关闭提案已发起。
         InstitutionCloseProposed {
             proposal_id: u64,
-            account: T::AccountId,
-            proposer: T::AccountId,
-            beneficiary: T::AccountId,
+            account_id: T::AccountId,
+            proposer_account_id: T::AccountId,
+            beneficiary_account_id: T::AccountId,
         },
         /// 机构关闭投票已提交。
         InstitutionCloseVoteSubmitted {
@@ -326,16 +326,16 @@ pub mod pallet {
         /// 机构关闭成功(投票通过,余额转出)。
         InstitutionClosed {
             proposal_id: u64,
-            account: T::AccountId,
+            account_id: T::AccountId,
             fee_payer: T::AccountId,
-            beneficiary: T::AccountId,
+            beneficiary_account_id: T::AccountId,
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
         },
         /// 机构关闭执行失败。
         InstitutionCloseExecutionFailed {
             proposal_id: u64,
-            account: T::AccountId,
+            account_id: T::AccountId,
         },
         /// 机构注册创建成功：机构、账户和管理员集合均已激活。
         InstitutionCreated {
@@ -359,7 +359,7 @@ pub mod pallet {
         InstitutionGovernanceProposed {
             proposal_id: u64,
             cid_number: CidNumberOf<T>,
-            proposer: T::AccountId,
+            proposer_account_id: T::AccountId,
         },
         /// 注册局已直接登记目标机构管理员集合。
         InstitutionAdminsRegistered {
@@ -371,7 +371,7 @@ pub mod pallet {
         CidInstitutionRegistered {
             cid_number: CidNumberOf<T>,
             account_name: AccountNameOf<T>,
-            account: T::AccountId,
+            account_id: T::AccountId,
             submitter: T::AccountId,
         },
         /// 机构信息(全称/简称)已更新。
@@ -385,13 +385,13 @@ pub mod pallet {
         InstitutionAccountAddProposed {
             proposal_id: u64,
             cid_number: CidNumberOf<T>,
-            proposer: T::AccountId,
+            proposer_account_id: T::AccountId,
         },
         /// 已给存量机构新增账户(投票通过,finalizer 落库)。
         InstitutionAccountAdded {
             cid_number: CidNumberOf<T>,
             account_name: AccountNameOf<T>,
-            account: T::AccountId,
+            account_id: T::AccountId,
             submitter: T::AccountId,
         },
         /// 机构新增账户执行失败。
@@ -438,7 +438,7 @@ pub mod pallet {
         InvalidInstitutionCode,
         /// 机构账户不存在
         AccountNotFound,
-        /// 注销收款账户非法（不允许等于 account）
+        /// 注销收款账户非法（不允许等于 account_id）
         InvalidBeneficiary,
         /// 资金转出源地址受保护，不允许转出
         ProtectedSource,
@@ -688,16 +688,16 @@ pub mod pallet {
             origin: OriginFor<T>,
             actor_cid_number: CidNumberOf<T>,
             proposer_role_code: RoleCodeOf,
-            institution_account: T::AccountId,
-            beneficiary: T::AccountId,
+            institution_account_id: T::AccountId,
+            beneficiary_account_id: T::AccountId,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             crate::close::do_propose_institution_close::<T>(
                 who,
                 actor_cid_number,
                 proposer_role_code,
-                institution_account,
-                beneficiary,
+                institution_account_id,
+                beneficiary_account_id,
             )
         }
 
@@ -731,9 +731,9 @@ pub mod pallet {
                 primitives::account_derive::institution_kind_by_name(cid_number, account_name)
                     .ok_or(Error::<T>::EmptyAccountName)?;
             let digest = kind.derive(T::SS58Prefix::get());
-            let account = T::AccountId::decode(&mut &digest[..])
+            let account_id = T::AccountId::decode(&mut &digest[..])
                 .map_err(|_| Error::<T>::DerivedAccountDecodeFailed)?;
-            Ok((account, kind))
+            Ok((account_id, kind))
         }
 
         // derive_personal_account 在 personal-manage::Pallet;
@@ -786,7 +786,7 @@ pub mod pallet {
             // 注册局代创建时，发起人属于注册局 CID；这里仅校验目标机构 admins 集合本身。
             let accounts: Vec<T::AccountId> = admins
                 .iter()
-                .map(|admin| admin.admin_account.clone())
+                .map(|admin| admin.account_id.clone())
                 .collect();
             Self::ensure_unique_admins(accounts.as_slice())?;
             Ok(())
@@ -941,7 +941,7 @@ pub mod pallet {
             let info =
                 Institutions::<T>::get(&cid_number).ok_or(Error::<T>::InstitutionNotFound)?;
             Self::ensure_lifecycle_institution_code(&info.institution_code)?;
-            // `build_institution_vote_plan` 一次校验 CID、岗位码、任职钱包和业务权限；
+            // `build_institution_vote_plan` 一次校验 CID、岗位码、任职账户和业务权限；
             // 禁止在业务入口把管理员名册成员身份单独当成授权。
             Self::ensure_governance_action_valid(
                 info.institution_code,
@@ -985,7 +985,7 @@ pub mod pallet {
             Self::deposit_event(Event::<T>::InstitutionGovernanceProposed {
                 proposal_id,
                 cid_number,
-                proposer: who,
+                proposer_account_id: who,
             });
             Ok(())
         }
@@ -1181,9 +1181,9 @@ pub mod pallet {
         ///
         /// 机构账户必须使用公权/私权法人机构码；PMUL 只属于个人多签。
         pub fn resolve_institution_code_for_account(
-            account: &T::AccountId,
+            account_id: &T::AccountId,
         ) -> Option<InstitutionCode> {
-            let registered = AccountRegisteredCid::<T>::get(account)?;
+            let registered = AccountRegisteredCid::<T>::get(account_id)?;
             Institutions::<T>::get(&registered.cid_number).map(|inst| inst.institution_code)
         }
 
@@ -1204,9 +1204,9 @@ impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for palle
         let cid_number = pallet::CidNumberOf::<T>::try_from(cid_number.to_vec()).ok()?;
         let account_name = pallet::AccountNameOf::<T>::try_from(account_name.to_vec()).ok()?;
         let stored = pallet::InstitutionAccounts::<T>::get(&cid_number, &account_name)?;
-        let reverse = pallet::AccountRegisteredCid::<T>::get(&stored.address)?;
+        let reverse = pallet::AccountRegisteredCid::<T>::get(&stored.account_id)?;
         (reverse.cid_number == cid_number && reverse.account_name == account_name)
-            .then_some(stored.address)
+            .then_some(stored.account_id)
     }
 
     fn account_belongs_to(cid_number: &[u8], addr: &T::AccountId) -> bool {
@@ -1218,7 +1218,7 @@ impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for palle
                 &registered.cid_number,
                 &registered.account_name,
             )
-            .is_some_and(|stored| stored.address == *addr)
+            .is_some_and(|stored| stored.account_id == *addr)
     }
 
     fn lookup_cid(addr: &T::AccountId) -> Option<Vec<u8>> {
@@ -1252,7 +1252,7 @@ impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for palle
             return false;
         };
         pallet::InstitutionAccounts::<T>::get(&registered.cid_number, &registered.account_name)
-            .map(|account| account.address == *addr)
+            .map(|account_id| account_id.account_id == *addr)
             .unwrap_or(false)
     }
 }
@@ -1270,7 +1270,7 @@ impl<T: pallet::Config> traits::InstitutionLegalRepresentativeQuery<T::AccountId
         let cid_number = pallet::CidNumberOf::<T>::try_from(cid_number.to_vec()).ok()?;
         pallet::Institutions::<T>::get(cid_number)?
             .legal_representative
-            .map(|representative| representative.account)
+            .map(|representative| representative.account_id)
     }
 }
 
@@ -1348,7 +1348,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                         pallet::Pallet::<T>::deposit_event(
                             pallet::Event::<T>::InstitutionCloseExecutionFailed {
                                 proposal_id,
-                                account: action.institution_account,
+                                account_id: action.institution_account_id,
                             },
                         );
                         return Ok(ProposalExecutionOutcome::RetryableFailed);
@@ -1392,7 +1392,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                 if let Ok(action) = CloseInstitutionAction::<T::AccountId, CidNumberOf<T>>::decode(
                     &mut &raw[tag.len() + 1..],
                 ) {
-                    InstitutionPendingClose::<T>::remove(&action.institution_account);
+                    InstitutionPendingClose::<T>::remove(&action.institution_account_id);
                 }
             }
         }
@@ -1422,7 +1422,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                 &mut &raw[tag.len() + 1..],
             )
             .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
-            InstitutionPendingClose::<T>::remove(&action.institution_account);
+            InstitutionPendingClose::<T>::remove(&action.institution_account_id);
         }
         Ok(())
     }

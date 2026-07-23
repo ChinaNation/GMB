@@ -35,11 +35,11 @@ fn joint_proposers_can_propose_runtime_upgrade() {
 
         assert!(
             votingengine::Pallet::<Test>::get_proposal_data(100).is_some(),
-            "NRC proposer should create proposal data"
+            "NRC proposer_account_id should create proposal data"
         );
         assert!(
             votingengine::Pallet::<Test>::get_proposal_data(101).is_some(),
-            "PRC proposer should create proposal data"
+            "PRC proposer_account_id should create proposal data"
         );
         for proposal_id in [100, 101] {
             let plan = votingengine::ProposalVotePlans::<Test>::get(proposal_id)
@@ -92,7 +92,7 @@ fn proposal_data_stored_in_votingengine() {
             "proposal data should be stored in voting engine"
         );
         let proposal = decode_proposal(100);
-        assert_eq!(proposal.proposer, nrc_admin());
+        assert_eq!(proposal.proposer_account_id, nrc_admin());
         assert!(
             votingengine::Pallet::<Test>::get_proposal_object(100).is_some(),
             "runtime wasm should be stored in proposal object layer"
@@ -191,7 +191,7 @@ fn approved_joint_vote_execution_failure_emits_event() {
 
         assert_ok!(call_joint_callback(100, true));
 
-        assert_eq!(decode_proposal(100).proposer, nrc_admin());
+        assert_eq!(decode_proposal(100).proposer_account_id, nrc_admin());
         let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
         assert!(
             !code_executed,

@@ -3,7 +3,7 @@
 //! 与 ADR-011 v2 第 5.1 / 5.6 节对齐:
 //! - 监管动作走 **JointVote**(NRC admin 多签 + 全民兜底)
 //! - propose origin 校验:`actor_cid_number == NRC` 且
-//!   `ensure!(proposer ∈ AdminAccounts[actor_cid_number].admins)`
+//!   `ensure!(proposer_account_id ∈ AdminAccounts[actor_cid_number].admins)`
 //! - 强制销毁倒计时 30 天:写入 `ForceCloseSchedule[expire_block].push(asset_id)`,
 //!   `on_finalize(n)` 通过 `take(n)` O(1) 处理,不全表扫描 Assets
 //!
@@ -41,7 +41,7 @@ pub fn execute_monitor_confiscate<T: Config>(
     Ok(())
 }
 
-/// NRC 监管:强制划转(追赃,调 pallet_assets::transfer 跳过 from 同意)。
+/// NRC 监管:强制划转(追赃,调 pallet_assets::transfer 跳过 from_account_id 同意)。
 pub fn execute_monitor_force_transfer<T: Config>(
     _proposal: MonitorForceTransferProposal<T::AccountId, BalanceOf<T>>,
 ) -> DispatchResult {
@@ -74,11 +74,11 @@ pub fn process_force_close_schedule_on_finalize<T: Config>(_block: BlockNumberFo
 
 /// 监管 callback 入口:VotingEngine JointVote 通过后路由到对应 execute_monitor_*。
 ///
-/// propose origin 校验(proposer ∈ NRC admins)已在 propose 阶段完成,callback 不再校验。
+/// propose origin 校验(proposer_account_id ∈ NRC admins)已在 propose 阶段完成,callback 不再校验。
 pub fn dispatch_joint_callback<T: Config>(
     _action: [u8; 4],
     _proposal_data: &[u8],
 ) -> DispatchResult {
-    // TODO: route by ACTION constant to execute_monitor_freeze / unfreeze / ...
+    // TODO: route by ACTION constant to_account_id execute_monitor_freeze / unfreeze / ...
     Ok(())
 }

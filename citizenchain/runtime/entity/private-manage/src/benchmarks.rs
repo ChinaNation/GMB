@@ -24,7 +24,7 @@ fn bounded_name<T: Config>(value: &[u8]) -> Result<AccountNameOf<T>, BenchmarkEr
     value
         .to_vec()
         .try_into()
-        .map_err(|_| BenchmarkError::Stop("benchmark account name should fit"))
+        .map_err(|_| BenchmarkError::Stop("benchmark account_id name should fit"))
 }
 
 fn find_safe_cid<T: Config>() -> Result<CidNumberOf<T>, BenchmarkError> {
@@ -32,7 +32,7 @@ fn find_safe_cid<T: Config>() -> Result<CidNumberOf<T>, BenchmarkError> {
         let tag = format!("private-manage-benchmark-{candidate}");
         let number = primitives::cid::generator::generate_cid_number(
             primitives::cid::generator::GenerateCidNumberInput {
-                account_pubkey: tag.as_str(),
+                public_key: tag.as_str(),
                 p1: "0",
                 province_code: "GD",
                 province_name: "广东省",
@@ -50,15 +50,15 @@ fn find_safe_cid<T: Config>() -> Result<CidNumberOf<T>, BenchmarkError> {
 
         let mut all_safe = true;
         for name in [crate::RESERVED_NAME_MAIN, crate::RESERVED_NAME_FEE] {
-            let Ok((account, _)) =
+            let Ok((account_id, _)) =
                 Pallet::<T>::derive_institution_account(cid_number.as_slice(), name)
             else {
                 all_safe = false;
                 break;
             };
-            if T::ReservedAccountChecker::is_reserved(&account)
-                || T::ProtectedSourceChecker::is_protected(&account)
-                || !T::AccountValidator::is_valid(&account)
+            if T::ReservedAccountChecker::is_reserved(&account_id)
+                || T::ProtectedSourceChecker::is_protected(&account_id)
+                || !T::AccountValidator::is_valid(&account_id)
             {
                 all_safe = false;
                 break;
@@ -92,9 +92,9 @@ mod benchmarks {
     fn add_institution_account() -> Result<(), BenchmarkError> {
         let cid_number = find_safe_cid::<T>()?;
         let account_name = bounded_name::<T>("BenchmarkNamedAccount".as_bytes())?;
-        let (account, _) =
+        let (account_id, _) =
             Pallet::<T>::derive_institution_account(cid_number.as_slice(), account_name.as_slice())
-                .map_err(|_| BenchmarkError::Stop("benchmark named account should derive"))?;
+                .map_err(|_| BenchmarkError::Stop("benchmark named account_id should derive"))?;
         let now = frame_system::Pallet::<T>::block_number();
 
         #[block]
@@ -103,20 +103,20 @@ mod benchmarks {
                 &cid_number,
                 &account_name,
                 InstitutionAccountInfo {
-                    address: account.clone(),
+                    account_id: account_id.clone(),
                     initial_balance: T::Currency::minimum_balance(),
                     created_at: now,
                 },
             );
             AccountRegisteredCid::<T>::insert(
-                &account,
+                &account_id,
                 RegisteredInstitution {
                     cid_number: cid_number.clone(),
                     account_name: account_name.clone(),
                 },
             );
         }
-        assert!(AccountRegisteredCid::<T>::contains_key(account));
+        assert!(AccountRegisteredCid::<T>::contains_key(account_id));
         Ok(())
     }
 
@@ -131,7 +131,7 @@ mod benchmarks {
                 cid_number.as_slice(),
                 account_name.as_slice(),
             )
-            .expect("benchmark named account must derive");
+            .expect("benchmark named account_id must derive");
             black_box(kind.is_closable_institution_account());
         }
         Ok(())

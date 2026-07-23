@@ -1,7 +1,7 @@
 //! 国家级成员机构组成与固定内部阈值的节点永久策略。
 //!
 //! NSN、NRP、NED 在 block#0 可以尚未组成；首次组成后，指定成员岗位、人数区间以及
-//! admins 中的账户集合必须等于成员钱包集合，且不得退回未组成状态。NLG、NSP、PRS 只冻结身份，
+//! admins 中的账户集合必须等于成员账户集合，且不得退回未组成状态。NLG、NSP、PRS 只冻结身份，
 //! 不冻结岗位或 admins；六个国家级单例均不冻结账户级动态阈值。五类固定治理机构的
 //! 内部提案阈值快照按固定治理码复核。
 
@@ -94,7 +94,7 @@ pub mod storage_key {
     pub fn composition_keys(spec: &MemberCompositionSpec) -> [Vec<u8>; 3] {
         let institution = spec.institution;
         [
-            governance_skeleton::storage_key::admin_account(institution.cid_number.as_bytes()),
+            governance_skeleton::storage_key::account_id(institution.cid_number.as_bytes()),
             governance_skeleton::storage_key::institution_role(
                 institution.cid_number.as_bytes(),
                 spec.role_code,
@@ -216,14 +216,14 @@ where
         {
             return Err(GuardError::AssignmentChanged(spec.institution.code));
         }
-        if !members.insert(assignment.admin_account) {
+        if !members.insert(assignment.account_id) {
             return Err(GuardError::DuplicateMember(spec.institution.code));
         }
     }
     let admins = account
         .admins
         .into_iter()
-        .map(|admin| admin.admin_account)
+        .map(|admin| admin.account_id)
         .collect::<BTreeSet<_>>();
     if admins.len() != members.len() || admins != members {
         return Err(GuardError::AdminMemberSetMismatch(spec.institution.code));
@@ -383,9 +383,9 @@ mod tests {
         let assignments = admin_accounts
             .iter()
             .copied()
-            .map(|admin_account| DecodedAssignment {
+            .map(|account_id| DecodedAssignment {
                 cid_number: spec.institution.cid_number.as_bytes().to_vec(),
-                admin_account,
+                account_id,
                 role_code: spec.role_code.to_vec(),
                 term_start: 0,
                 term_end: 0,
@@ -398,8 +398,8 @@ mod tests {
             institution_code: spec.institution.code,
             admins: admin_accounts
                 .into_iter()
-                .map(|admin_account| Admin {
-                    admin_account,
+                .map(|account_id| Admin {
+                    account_id,
                     family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
                     given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
                 })
@@ -507,7 +507,7 @@ mod tests {
                     .try_into()
                     .expect("CID fits"),
             ),
-            execution_account: None,
+            execution_account_id: None,
             subject_cid_numbers,
             start: 1u32,
             end: 2u32,
@@ -576,7 +576,7 @@ mod tests {
                     .try_into()
                     .expect("CID fits"),
             ),
-            execution_account: None,
+            execution_account_id: None,
             subject_cid_numbers,
             start: 1u32,
             end: 2u32,
@@ -626,7 +626,7 @@ mod tests {
                 .find(|item| item.code == code)
                 .expect("singleton exists");
             assert!(!storage_key::is_relevant(
-                &governance_skeleton::storage_key::admin_account(singleton.cid_number.as_bytes(),)
+                &governance_skeleton::storage_key::account_id(singleton.cid_number.as_bytes(),)
             ));
             assert!(!storage_key::is_relevant(
                 &governance_skeleton::storage_key::institution_role(
@@ -664,7 +664,7 @@ mod tests {
                         .try_into()
                         .expect("CID fits"),
                 ),
-                execution_account: None,
+                execution_account_id: None,
                 subject_cid_numbers,
                 start: 1u32,
                 end: 2u32,
@@ -709,7 +709,7 @@ mod tests {
                     .try_into()
                     .expect("CID fits"),
             ),
-            execution_account: None,
+            execution_account_id: None,
             subject_cid_numbers,
             start: 1u32,
             end: 2u32,

@@ -203,7 +203,7 @@ impl TestInstitutionCidQuery {
             matches!(code, c if c == *b"CSLF" || c == *b"CLEG" || c == *b"CGOV" || c == *b"CEDU");
         primitives::cid::generator::generate_cid_number(
             primitives::cid::generator::GenerateCidNumberInput {
-                account_pubkey: "0x1234",
+                public_key: "0x1234",
                 p1: "0",
                 province_code: if regional { "GD" } else { "ZS" },
                 province_name: if regional { "广东省" } else { "中枢省" },

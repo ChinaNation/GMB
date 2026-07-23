@@ -7,15 +7,15 @@ import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';
 import { CreateMultisigTransferPage } from '../transaction/multisig/CreateProposalPage';
 import { SweepProposalPage } from '../transaction/multisig/SweepProposalPage';
-import type { AdminWalletMatch } from './types';
+import type { AdminSignerMatch } from './types';
 
 type PrbView =
   | { page: 'list' }
   | { page: 'detail'; cidNumber: string }
   | { page: 'admin-list'; cidNumber: string; orgType: number }
-  | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; cidNumber?: string; originCidNumber: string }
-  | { page: 'create-proposal'; cidNumber: string; orgType: number; cidFullName: string; institutionAccount: string; adminWallets: AdminWalletMatch[] }
-  | { page: 'propose-sweep'; cidNumber: string; institutionAccount: string; cidFullName: string; adminWallets: AdminWalletMatch[] };
+  | { page: 'proposal-detail'; proposalId: number; adminSigners: AdminSignerMatch[]; cidNumber?: string; originCidNumber: string }
+  | { page: 'create-proposal'; cidNumber: string; orgType: number; cidFullName: string; institution_account_id: string; adminSigners: AdminSignerMatch[] }
+  | { page: 'propose-sweep'; cidNumber: string; institution_account_id: string; cidFullName: string; adminSigners: AdminSignerMatch[] };
 
 export function PrbSection() {
   const [view, setView] = useState<PrbView>({ page: 'list' });
@@ -37,7 +37,7 @@ export function PrbSection() {
     return (
       <ProposalDetailPage
         proposalId={view.proposalId}
-        adminWallets={view.adminWallets}
+        adminSigners={view.adminSigners}
         cidNumber={view.cidNumber}
         onBack={() => backToDetail(view.originCidNumber)}
       />
@@ -49,8 +49,8 @@ export function PrbSection() {
       <CreateMultisigTransferPage
         cidNumber={view.cidNumber}
         cidFullName={view.cidFullName}
-        institutionAccount={view.institutionAccount}
-        adminWallets={view.adminWallets}
+        institution_account_id={view.institution_account_id}
+        adminSigners={view.adminSigners}
         onBack={() => backToDetail(view.cidNumber)}
         onSuccess={() => backToDetail(view.cidNumber)}
       />
@@ -61,9 +61,9 @@ export function PrbSection() {
     return (
       <SweepProposalPage
         actorCidNumber={view.cidNumber}
-        institutionAccount={view.institutionAccount}
+        institution_account_id={view.institution_account_id}
         cidFullName={view.cidFullName}
-        adminWallets={view.adminWallets}
+        adminSigners={view.adminSigners}
         onBack={() => backToDetail(view.cidNumber)}
         onSuccess={() => backToDetail(view.cidNumber)}
       />
@@ -77,14 +77,14 @@ export function PrbSection() {
         cidNumber={cidNumber}
         onBack={backToList}
         onOpenAdminList={(sid, orgType) => setView({ page: 'admin-list', cidNumber: sid, orgType })}
-        onSelectProposal={(proposalId, adminWallets, sid) =>
-          setView({ page: 'proposal-detail', proposalId, adminWallets, cidNumber: sid, originCidNumber: cidNumber })
+        onSelectProposal={(proposalId, adminSigners, sid) =>
+          setView({ page: 'proposal-detail', proposalId, adminSigners, cidNumber: sid, originCidNumber: cidNumber })
         }
-        onCreateProposal={(sid, orgType, cidFullName, institutionAccount, aw) =>
-          setView({ page: 'create-proposal', cidNumber: sid, orgType, cidFullName, institutionAccount, adminWallets: aw })
+        onCreateProposal={(sid, orgType, cidFullName, institution_account_id, aw) =>
+          setView({ page: 'create-proposal', cidNumber: sid, orgType, cidFullName, institution_account_id, adminSigners: aw })
         }
-        onCreateSweep={(sid, institutionAccount, cidFullName, aw) =>
-          setView({ page: 'propose-sweep', cidNumber: sid, institutionAccount, cidFullName, adminWallets: aw })
+        onCreateSweep={(sid, institution_account_id, cidFullName, aw) =>
+          setView({ page: 'propose-sweep', cidNumber: sid, institution_account_id, cidFullName, adminSigners: aw })
         }
       />
     );

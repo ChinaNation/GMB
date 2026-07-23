@@ -2,27 +2,27 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { sanitizeError } from '../../tauri';
-import { hexToSs58 } from '../../shared/ss58';
+import { accountIdToSs58 } from '../../shared/ss58';
 import { CitizenSignaturePanel } from '../../shared/qr/CitizenSignaturePanel';
 import { runtimeUpgradeApi as api } from './api';
-import type { AdminWalletMatch } from '../types';
+import type { AdminSignerMatch } from '../types';
 import type { PowDifficultyParams, ProposeUpgradeRequestResult } from './api';
 
 type FlowStep = 'form' | 'qr' | 'submit' | 'done' | 'error';
 
 type Props = {
   actorCidNumber: string;
-  adminWallets: AdminWalletMatch[];
+  adminSigners: AdminSignerMatch[];
   onBack: () => void;
   onSuccess: () => void;
 };
 
-export function ProtocolUpgradeProposalPage({ actorCidNumber, adminWallets, onBack, onSuccess }: Props) {
+export function ProtocolUpgradeProposalPage({ actorCidNumber, adminSigners, onBack, onSuccess }: Props) {
   const [wasmPath, setWasmPath] = useState('');
   const [wasmFileName, setWasmFileName] = useState('');
   const [reason, setReason] = useState('');
-  const [selectedPubkey, setSelectedPubkey] = useState(
-    adminWallets.length === 1 ? adminWallets[0].pubkeyHex : ''
+  const [selectedSignerAccountId, setSelectedSignerAccountId] = useState(
+    adminSigners.length === 1 ? adminSigners[0].account_id : ''
   );
   const [step, setStep] = useState<FlowStep>('form');
   const [signRequest, setSignRequest] = useState<ProposeUpgradeRequestResult | null>(null);
@@ -34,12 +34,12 @@ export function ProtocolUpgradeProposalPage({ actorCidNumber, adminWallets, onBa
   const [powParams, setPowParams] = useState<PowDifficultyParams | null>(null);
 
   const signRequestRef = useRef(signRequest);
-  const selectedPubkeyRef = useRef(selectedPubkey);
+  const selectedSignerAccountIdRef = useRef(selectedSignerAccountId);
   const wasmPathRef = useRef(wasmPath);
   const reasonRef = useRef(reason);
   const powParamsRef = useRef(powParams);
   signRequestRef.current = signRequest;
-  selectedPubkeyRef.current = selectedPubkey;
+  selectedSignerAccountIdRef.current = selectedSignerAccountId;
   wasmPathRef.current = wasmPath;
   reasonRef.current = reason;
   powParamsRef.current = powParams;
@@ -76,12 +76,12 @@ export function ProtocolUpgradeProposalPage({ actorCidNumber, adminWallets, onBa
   }, []);
 
   const handleBuildRequest = useCallback(async () => {
-    if (!wasmPath.trim() || !selectedPubkey || !reason.trim() || !powParams) return;
+    if (!wasmPath.trim() || !selectedSignerAccountId || !reason.trim() || !powParams) return;
     setBuilding(true);
     setError(null);
     try {
       const result = await api.buildProposeUpgradeRequest(
-        selectedPubkey,
+        selectedSignerAccountId,
         actorCidNumber,
         wasmPath.trim(),
         reason.trim(),
@@ -97,19 +97,19 @@ export function ProtocolUpgradeProposalPage({ actorCidNumber, adminWallets, onBa
     } finally {
       setBuilding(false);
     }
-  }, [actorCidNumber, wasmPath, selectedPubkey, reason, powParams]);
+  }, [actorCidNumber, wasmPath, selectedSignerAccountId, reason, powParams]);
 
   const handleScanResult = useCallback(async (responseText: string) => {
     const req = signRequestRef.current;
-    const pubkey = selectedPubkeyRef.current;
+    const signerAccountId = selectedSignerAccountIdRef.current;
     const path = wasmPathRef.current;
     const reasonVal = reasonRef.current;
     const params = powParamsRef.current;
-    if (!req || !pubkey || !params) { setError('签名请求数据丢失，请重试'); setStep('error'); return; }
+    if (!req || !signerAccountId || !params) { setError('签名请求数据丢失，请重试'); setStep('error'); return; }
     setStep('submit');
     try {
       const result = await api.submitProposeUpgrade(
-        req.requestId, pubkey, req.expectedPayloadHash,
+        req.requestId, signerAccountId, req.expectedPayloadHash,
         actorCidNumber,
         path, reasonVal, params,
         req.signNonce, req.signBlockNumber, responseText,
@@ -122,7 +122,7 @@ export function ProtocolUpgradeProposalPage({ actorCidNumber, adminWallets, onBa
     }
   }, [actorCidNumber]);
 
-  const canSubmit = wasmPath.trim() && selectedPubkey && reason.trim() && powParams;
+  const canSubmit = wasmPath.trim() && selectedSignerAccountId && reason.trim() && powParams;
 
   return (
     <div className="governance-section">
@@ -190,21 +190,21 @@ export function ProtocolUpgradeProposalPage({ actorCidNumber, adminWallets, onBa
 
           <div className="wallet-form-field">
             <label>发起管理员</label>
-            {adminWallets.length === 0 ? (
+            {adminSigners.length === 0 ? (
               <p className="upgrade-no-wallet">无已激活管理员</p>
             ) : (
               <select
-                value={selectedPubkey}
-                onChange={(e) => setSelectedPubkey(e.target.value)}
-                disabled={adminWallets.length <= 1}
+                value={selectedSignerAccountId}
+                onChange={(e) => setSelectedSignerAccountId(e.target.value)}
+                disabled={adminSigners.length <= 1}
               >
-                {adminWallets.length === 1 ? (
-                  <option value={adminWallets[0].pubkeyHex}>{hexToSs58(adminWallets[0].pubkeyHex)}</option>
+                {adminSigners.length === 1 ? (
+                  <option value={adminSigners[0].account_id}>{accountIdToSs58(adminSigners[0].account_id)}</option>
                 ) : (
                   <>
                     <option value="">请选择…</option>
-                    {adminWallets.map((w) => (
-                      <option key={w.pubkeyHex} value={w.pubkeyHex}>{hexToSs58(w.pubkeyHex)}</option>
+                    {adminSigners.map((w) => (
+                      <option key={w.account_id} value={w.account_id}>{accountIdToSs58(w.account_id)}</option>
                     ))}
                   </>
                 )}

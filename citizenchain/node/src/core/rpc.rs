@@ -66,7 +66,7 @@ pub struct FullDeps<C, P> {
     pub client: Arc<C>,
     /// Transaction pool instance.
     pub pool: Arc<P>,
-    /// Keystore（用于签名奖励钱包绑定交易和矿工热钱包交易）。
+    /// Keystore（用于签名奖励账户绑定交易和矿工热账户交易）。
     pub keystore: sp_keystore::KeystorePtr,
     /// CPU 哈希率查询函数（hashes/sec）。
     pub cpu_hashrate_fn: fn() -> f64,
@@ -101,7 +101,7 @@ where
         .ok_or_else(|| ErrorObject::owned(-1, "未找到矿工密钥，请先启动节点", None::<()>))?;
 
     // 2. 推导 AccountId
-    let miner_account: AccountId = chain_signing::account_id_from_public(public);
+    let miner_account_id: AccountId = chain_signing::account_id_from_public(public);
 
     // 3. 查询链信息
     let info = (*client).info();
@@ -114,7 +114,7 @@ where
     // 4. 查询 nonce
     let nonce = client
         .runtime_api()
-        .account_nonce(best_hash, miner_account.clone())
+        .account_nonce(best_hash, miner_account_id.clone())
         .map_err(|e| ErrorObject::owned(-1, format!("查询账户 nonce 失败: {e}"), None::<()>))?;
 
     // 4b. 查询链上 WASM 运行时的版本号（不使用 native 编译时常量，
@@ -154,15 +154,40 @@ where
 }
 
 /// 从 SS58 地址解析 AccountId。
-fn parse_ss58_account(address: &str) -> Result<AccountId, jsonrpsee::types::ErrorObjectOwned> {
+fn account_id_from_ss58_address(
+    ss58_address: &str,
+) -> Result<AccountId, jsonrpsee::types::ErrorObjectOwned> {
     use sp_core::crypto::Ss58Codec;
-    sp_runtime::AccountId32::from_ss58check(address).map_err(|e| {
+    sp_runtime::AccountId32::from_ss58check(ss58_address).map_err(|e| {
         jsonrpsee::types::error::ErrorObject::owned(
             -1,
             format!("SS58 地址解析失败: {e:?}"),
             None::<()>,
         )
     })
+}
+
+/// 从唯一文本格式解析 AccountId：小写 `0x` + 64 位十六进制。
+fn parse_account_id(account_id: &str) -> Result<AccountId, jsonrpsee::types::ErrorObjectOwned> {
+    use jsonrpsee::types::error::ErrorObject;
+    if account_id.len() != 66
+        || !account_id.starts_with("0x")
+        || !account_id[2..]
+            .chars()
+            .all(|value| value.is_ascii_hexdigit() && !value.is_ascii_uppercase())
+    {
+        return Err(ErrorObject::owned(
+            -1,
+            "账户 ID 格式无效，应为小写 0x + 64 位十六进制",
+            None::<()>,
+        ));
+    }
+    let bytes = hex::decode(&account_id[2..])
+        .map_err(|e| ErrorObject::owned(-1, format!("账户 ID 解码失败: {e}"), None::<()>))?;
+    let raw: [u8; 32] = bytes
+        .try_into()
+        .map_err(|_| ErrorObject::owned(-1, "账户 ID 必须是 32 字节", None::<()>))?;
+    Ok(AccountId::from(raw))
 }
 
 /// 构造 smoldot 轻节点 checkpoint。
@@ -380,41 +405,43 @@ where
         module.register_method("mining_gpuHashrate", move |_, _, _| get_hashrate() as u64)?;
     }
 
-    // reward_bindWallet(wallet_ss58: String)
-    // 由 node 端签名并提交 bind_reward_wallet 交易。
+    // reward_bindAccount(reward_account_id: String)
+    // 由 node 端签名并提交 bind_reward_account 交易。
     {
         let client = client.clone();
         let pool = pool.clone();
         let keystore = keystore.clone();
-        module.register_method("reward_bindWallet", move |params, _, _| {
-            let wallet_ss58: String = params.one()?;
-            let wallet = parse_ss58_account(&wallet_ss58)?;
+        module.register_method("reward_bindAccount", move |params, _, _| {
+            let reward_account_id: String = params.one()?;
+            let reward_account_id = parse_account_id(&reward_account_id)?;
             let call = runtime::RuntimeCall::FullnodeIssuance(
-                fullnode_issuance::pallet::Call::bind_reward_wallet { wallet },
+                fullnode_issuance::pallet::Call::bind_reward_account { reward_account_id },
             );
             let _tx_hash = submit_powr_signed_tx(&client, &pool, &keystore, call)?;
             Ok::<&str, jsonrpsee::types::ErrorObjectOwned>("ok")
         })?;
     }
 
-    // reward_rebindWallet(new_wallet_ss58: String)
-    // 由 node 端签名并提交 rebind_reward_wallet 交易。
+    // reward_rebindAccount(new_reward_account_id: String)
+    // 由 node 端签名并提交 rebind_reward_account 交易。
     {
         let client = client.clone();
         let pool = pool.clone();
         let keystore = keystore.clone();
-        module.register_method("reward_rebindWallet", move |params, _, _| {
-            let wallet_ss58: String = params.one()?;
-            let new_wallet = parse_ss58_account(&wallet_ss58)?;
+        module.register_method("reward_rebindAccount", move |params, _, _| {
+            let new_reward_account_id: String = params.one()?;
+            let new_reward_account_id = parse_account_id(&new_reward_account_id)?;
             let call = runtime::RuntimeCall::FullnodeIssuance(
-                fullnode_issuance::pallet::Call::rebind_reward_wallet { new_wallet },
+                fullnode_issuance::pallet::Call::rebind_reward_account {
+                    new_reward_account_id,
+                },
             );
             let _tx_hash = submit_powr_signed_tx(&client, &pool, &keystore, call)?;
             Ok::<&str, jsonrpsee::types::ErrorObjectOwned>("ok")
         })?;
     }
 
-    // transaction_submitMinerTransfer(to_ss58: String, amount_fen: String, remark: String, token: String) -> tx_hash
+    // transaction_submitMinerTransfer(to_ss58_address, amount_fen, remark, token) -> tx_hash
     // 由 node 端使用本机 powr 矿工密钥签名并提交 OnchainTransaction::transfer_with_remark。
     {
         let client = client.clone();
@@ -423,7 +450,7 @@ where
         module.register_method("transaction_submitMinerTransfer", move |params, _, _| {
             use jsonrpsee::types::error::ErrorObject;
 
-            let (to_ss58, amount_fen_raw, remark_raw, auth_token): (
+            let (to_ss58_address, amount_fen_raw, remark_raw, auth_token): (
                 String,
                 String,
                 String,
@@ -432,7 +459,7 @@ where
             if !consume_miner_transfer_token(&auth_token) {
                 return Err(ErrorObject::owned(-1, "矿工热钱包提交令牌无效", None::<()>));
             }
-            let dest = parse_ss58_account(&to_ss58)?;
+            let destination_account_id = account_id_from_ss58_address(&to_ss58_address)?;
             let amount_fen: Balance = amount_fen_raw.parse().map_err(|e| {
                 ErrorObject::owned(-1, format!("转账金额解析失败: {e}"), None::<()>)
             })?;
@@ -457,7 +484,7 @@ where
 
             let call = runtime::RuntimeCall::OnchainTransaction(
                 onchain::pallet::Call::transfer_with_remark {
-                    beneficiary: dest,
+                    beneficiary_account_id: destination_account_id,
                     amount: amount_fen,
                     remark,
                 },

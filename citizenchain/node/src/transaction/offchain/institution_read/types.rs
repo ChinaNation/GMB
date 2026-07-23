@@ -21,8 +21,10 @@ pub struct EligibleClearingBankCandidate {
     pub parent_ref_property: Option<String>,
     pub province_name: String,
     pub city_name: String,
-    pub main_account: Option<String>,
-    pub fee_account: Option<String>,
+    #[serde(rename = "main_account_id")]
+    pub main_account_id: Option<String>,
+    #[serde(rename = "fee_account_id")]
+    pub fee_account_id: Option<String>,
 }
 
 /// 单账户的链上展示形态。
@@ -30,8 +32,12 @@ pub struct EligibleClearingBankCandidate {
 #[serde(rename_all = "camelCase")]
 pub struct AccountWithBalance {
     pub account_name: String,
-    /// 32 字节链上地址的 SS58 形式(GMB prefix=2027)。
-    pub address_ss58: String,
+    /// 唯一账户 ID，固定为小写 `0x` + 64 位十六进制。
+    #[serde(rename = "account_id")]
+    pub account_id: String,
+    /// 仅用于展示的 SS58 地址（GMB prefix=2027）。
+    #[serde(rename = "ss58_address")]
+    pub ss58_address: String,
     /// `frame_system::Account[address].data.free`,最小单位"分"。
     pub balance_min_units: String,
     /// 友好元字符串 `xxx.xx`。
@@ -42,7 +48,7 @@ pub struct AccountWithBalance {
     pub can_close: bool,
 }
 
-/// 机构管理员钱包及其全部有效岗位任职，与管理员管理模块共用同一 DTO。
+/// 机构管理员账户及其全部有效岗位任职，与管理员管理模块共用同一 DTO。
 pub type InstitutionAdminDisplay = crate::admins::management::types::InstitutionAdminInfo;
 
 /// 机构详情 = `PublicManage/PrivateManage::Institutions[cid_number]`(机构最小集)
@@ -54,13 +60,15 @@ pub struct InstitutionDetail {
     pub cid_full_name: String,
     /// 机构码（CID institution_code，[u8;4]）。清算行属于私权法人机构码。
     pub institution_code: InstitutionCode,
-    pub main_account: AccountWithBalance,
-    pub fee_account: AccountWithBalance,
+    #[serde(rename = "main_account_info")]
+    pub main_account_info: AccountWithBalance,
+    #[serde(rename = "fee_account_info")]
+    pub fee_account_info: AccountWithBalance,
     /// 主账户/费用账户之外的全部账户(自定义初始账户)。
     pub other_accounts: Vec<AccountWithBalance>,
     pub admins_len: u32,
     pub threshold: u32,
-    /// 管理员钱包及其有效岗位任职。
+    /// 管理员账户及其有效岗位任职。
     pub admins: Vec<InstitutionAdminDisplay>,
     pub created_at: u64,
     pub account_count: u32,
@@ -104,8 +112,8 @@ pub struct InstitutionRegistrationCredentialResp {
     pub register_nonce: String,
     /// 代表签发机构的唯一 CID。
     pub actor_cid_number: String,
-    /// 本次凭证签名所用管理员公钥(32 字节 hex)。
-    pub credential_signer_pubkey: String,
+    /// 本次凭证签名所用管理员公钥（小写 `0x` + 64 位十六进制）。
+    pub credential_signer_public_key: String,
     /// 业务作用域省名,只参与 payload 防串用。
     pub scope_province_name: String,
     /// 业务作用域市名,可为空。

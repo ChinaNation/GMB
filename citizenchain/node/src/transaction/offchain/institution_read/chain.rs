@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use crate::admins::management::storage as admins_storage;
 use crate::governance::chain_query;
-use crate::governance::signing::pubkey_to_ss58;
+use crate::governance::signing::account_id_to_ss58;
 use crate::governance::storage_keys;
 use crate::shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc};
 
@@ -180,7 +180,7 @@ fn fetch_account_free_balance(account: &AccountId32, finalized_hash: &str) -> Re
     }
 }
 
-/// 读取机构管理员钱包集合(岗位/任职需另查 entity)及人数。
+/// 读取机构管理员账户集合（岗位/任职需另查 entity）及人数。
 ///
 /// 真源 = 机构码对应管理员 pallet 的 `AdminAccounts[cid_number]`,值为钱包账户列表;
 /// 机构码不匹配视为数据不一致,降级为空集合。
@@ -189,7 +189,7 @@ fn fetch_admin_set(
     cid_number: &str,
     finalized_hash: &str,
 ) -> Result<(Vec<InstitutionAdminDisplay>, u32), String> {
-    let Some(state) = admins_storage::fetch_admin_account_for_code_at(
+    let Some(state) = admins_storage::fetch_institution_admins_for_code_at(
         cid_number,
         *institution_code,
         finalized_hash,
@@ -282,30 +282,30 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
     // 主/费账户地址由 (cid_number, 保留名) 确定性派生(与 InstitutionAccounts 中存储的一致)。
     let main_account_id = derive_main_account(cid_number);
     let fee_account_id = derive_fee_account(cid_number);
-    let main_account_hex: [u8; 32] = main_account_id.clone().into();
-    let main_addr_ss58 = pubkey_to_ss58(&main_account_hex).unwrap_or_default();
-    let fee_addr_bytes: [u8; 32] = fee_account_id.clone().into();
-    let fee_addr_ss58 = pubkey_to_ss58(&fee_addr_bytes).unwrap_or_default();
+    let main_account_bytes: [u8; 32] = main_account_id.clone().into();
+    let main_ss58_address = account_id_to_ss58(&main_account_bytes).unwrap_or_default();
+    let fee_account_bytes: [u8; 32] = fee_account_id.clone().into();
+    let fee_ss58_address = account_id_to_ss58(&fee_account_bytes).unwrap_or_default();
 
     // 拉机构下所有账户(InstitutionAccounts[cid_number, *] 是 DoubleMap)。
     let accounts = fetch_institution_accounts(cid_number, manage_pallet, &finalized_hash)?;
     let account_count = accounts.len() as u32;
 
     // 主账户 / 费用账户 / 其它账户分类；协议账户缺失属于链状态错误，不做派生回落。
-    let mut main_account: Option<AccountWithBalance> = None;
-    let mut fee_account: Option<AccountWithBalance> = None;
+    let mut main_account_info: Option<AccountWithBalance> = None;
+    let mut fee_account_info: Option<AccountWithBalance> = None;
     let mut other_accounts: Vec<AccountWithBalance> = Vec::new();
     for acc in accounts {
-        if acc.address_ss58 == main_addr_ss58 {
-            main_account = Some(acc);
-        } else if acc.address_ss58 == fee_addr_ss58 {
-            fee_account = Some(acc);
+        if acc.ss58_address == main_ss58_address {
+            main_account_info = Some(acc);
+        } else if acc.ss58_address == fee_ss58_address {
+            fee_account_info = Some(acc);
         } else {
             other_accounts.push(acc);
         }
     }
-    let main_account = main_account.ok_or_else(|| "机构缺少唯一主账户".to_string())?;
-    let fee_account = fee_account.ok_or_else(|| "机构缺少唯一费用账户".to_string())?;
+    let main_account_info = main_account_info.ok_or_else(|| "机构缺少唯一主账户".to_string())?;
+    let fee_account_info = fee_account_info.ok_or_else(|| "机构缺少唯一费用账户".to_string())?;
 
     let (admins, admins_len) =
         fetch_admin_set(&inst.institution_code, cid_number, &finalized_hash)?;
@@ -324,8 +324,8 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
         cid_number: cid_number.to_string(),
         cid_full_name,
         institution_code: inst.institution_code,
-        main_account,
-        fee_account,
+        main_account_info,
+        fee_account_info,
         other_accounts,
         admins_len,
         threshold,
@@ -424,7 +424,7 @@ fn fetch_institution_accounts(
             }
         };
         let acc_name = decode_account_name_from_key(&key, &prefix_hex).unwrap_or_default();
-        let acc_addr_bytes: [u8; 32] = acc.address.clone().into();
+        let account_id_bytes: [u8; 32] = acc.address.clone().into();
         let bal = fetch_account_free_balance(&acc.address, finalized_hash).unwrap_or(0);
         let account_kind = institution_kind_by_name(cid_number.as_bytes(), acc_name.as_bytes())
             .ok_or_else(|| "机构账户名为空".to_string())?;
@@ -440,7 +440,8 @@ fn fetch_institution_accounts(
         let can_close = account_kind.is_closable_institution_account();
         out.push(AccountWithBalance {
             account_name: acc_name,
-            address_ss58: pubkey_to_ss58(&acc_addr_bytes).unwrap_or_default(),
+            account_id: format!("0x{}", hex::encode(account_id_bytes)),
+            ss58_address: account_id_to_ss58(&account_id_bytes).unwrap_or_default(),
             balance_min_units: bal.to_string(),
             balance_text: format_yuan(bal),
             account_kind: account_kind_label.to_string(),

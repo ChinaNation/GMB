@@ -44,7 +44,7 @@ pub enum MembershipLevel {
     Spark = 2,
 }
 
-/// 订阅收款主体。创作者使用钱包账户，不使用链下 CID 或展示资料替代。
+/// 订阅收款主体。创作者使用账户，不使用链下 CID 或展示资料替代。
 #[derive(
     Clone,
     Encode,
@@ -339,17 +339,17 @@ impl<T: Config> Pallet<T> {
                 Ok((price, payee))
             }
             (
-                IssuerKey::Creator(creator),
+                IssuerKey::Creator(creator_account_id),
                 SubscriptionPlan::Creator {
                     tier_id,
                     billing_period,
                 },
             ) => {
                 ensure!(
-                    Self::has_effective_platform_subscription(creator, now),
+                    Self::has_effective_platform_subscription(creator_account_id, now),
                     Error::<T>::CreatorNotPlatformMember
                 );
-                let tiers = CreatorPlans::<T>::get(creator);
+                let tiers = CreatorPlans::<T>::get(creator_account_id);
                 let tier = tiers
                     .iter()
                     .find(|tier| &tier.tier_id == tier_id)
@@ -361,7 +361,7 @@ impl<T: Config> Pallet<T> {
                     .map(|price| price.price_fen)
                     .ok_or(Error::<T>::CreatorPlanNotFound)?;
                 ensure!(price > 0, Error::<T>::ZeroPrice);
-                Ok((price, creator.clone()))
+                Ok((price, creator_account_id.clone()))
             }
             _ => Err(Error::<T>::PlanIssuerMismatch.into()),
         }

@@ -103,13 +103,13 @@ pub fn binary_domain_prefix(op_tag: u8) -> [u8; BINARY_PREFIX_LEN] {
 /// 构造机构管理员本地激活原始签名载荷。
 ///
 /// 布局固定为 `GMB || 0x18 || cid_number(32B,右补零) || institution_code(4B)
-/// || kind(1B) || admin_pubkey(32B) || timestamp_le(8B) || nonce(16B)`。
+/// || kind(1B) || signer_public_key(32B) || timestamp_le(8B) || nonce(16B)`。
 /// CID 是机构唯一主键，协议账户不参与本地管理员身份绑定。
 pub fn activate_admin_payload(
     cid_number: &[u8],
     institution_code: &[u8; 4],
     kind: u8,
-    admin_pubkey: &[u8; 32],
+    signer_public_key: &[u8; 32],
     timestamp: u64,
     nonce: &[u8; 16],
 ) -> Option<Vec<u8>> {
@@ -122,7 +122,7 @@ pub fn activate_admin_payload(
     payload.resize(BINARY_PREFIX_LEN + ACTIVATE_ADMIN_CID_LEN, 0);
     payload.extend_from_slice(institution_code);
     payload.push(kind);
-    payload.extend_from_slice(admin_pubkey);
+    payload.extend_from_slice(signer_public_key);
     payload.extend_from_slice(&timestamp.to_le_bytes());
     payload.extend_from_slice(nonce);
     Some(payload)
@@ -130,12 +130,12 @@ pub fn activate_admin_payload(
 
 /// 构造清算行管理员本地解密原始签名载荷。
 ///
-/// 布局固定为 `GMB || 0x19 || cid_number(32B,右补零) || admin_pubkey(32B)
+/// 布局固定为 `GMB || 0x19 || cid_number(32B,右补零) || signer_public_key(32B)
 /// || timestamp_le(8B) || nonce(16B)`。构造方、解析方和冷钱包必须共同使用
 /// 本函数及同组长度常量，禁止另设 48B CID 槽或手工第二布局。
 pub fn decrypt_admin_payload(
     cid_number: &[u8],
-    admin_pubkey: &[u8; 32],
+    signer_public_key: &[u8; 32],
     timestamp: u64,
     nonce: &[u8; 16],
 ) -> Option<Vec<u8>> {
@@ -146,7 +146,7 @@ pub fn decrypt_admin_payload(
     payload.extend_from_slice(&binary_domain_prefix(OP_SIGN_DECRYPT));
     payload.extend_from_slice(cid_number);
     payload.resize(BINARY_PREFIX_LEN + DECRYPT_ADMIN_CID_LEN, 0);
-    payload.extend_from_slice(admin_pubkey);
+    payload.extend_from_slice(signer_public_key);
     payload.extend_from_slice(&timestamp.to_le_bytes());
     payload.extend_from_slice(nonce);
     Some(payload)
@@ -175,7 +175,7 @@ pub fn signing_message(op_tag: u8, scale_payload: &[u8]) -> [u8; 32] {
     blake2_256(&data)
 }
 
-// 机构登记/创建/治理/账户关闭均已收敛为「发起管理员钱包直接冷签一笔普通 extrinsic」,由 runtime
+// 机构登记/创建/治理/账户关闭均已收敛为「发起管理员账户直接冷签一笔普通 extrinsic」,由 runtime
 // 在 origin 处以 `is_institution_admin` 鉴权,不再有任何独立凭证签名消息。原
 // `institution_account_close_message`(注册局审批凭证)连同 OnChina 平台签名钥已整体删除。
 
@@ -187,13 +187,13 @@ mod tests {
     fn activate_admin_payload_uses_the_shared_32_byte_cid_slot() {
         let cid_number = b"LN001-NRC0G-944805165-2026";
         let institution_code = *b"NRC\0";
-        let admin_pubkey = [0x22; 32];
+        let signer_public_key = [0x22; 32];
         let nonce = [0u8; 16];
         let payload = activate_admin_payload(
             cid_number,
             &institution_code,
             0,
-            &admin_pubkey,
+            &signer_public_key,
             1_700_000_000,
             &nonce,
         )
@@ -214,9 +214,9 @@ mod tests {
     #[test]
     fn decrypt_admin_payload_uses_the_same_cid_limit_and_rejects_invalid_cids() {
         let cid_number = b"AH001-SCB0V-123456789-2026";
-        let admin_pubkey = [0x33; 32];
+        let signer_public_key = [0x33; 32];
         let nonce = [0u8; 16];
-        let payload = decrypt_admin_payload(cid_number, &admin_pubkey, 1_700_000_000, &nonce)
+        let payload = decrypt_admin_payload(cid_number, &signer_public_key, 1_700_000_000, &nonce)
             .expect("valid CID should build a decrypt payload");
 
         assert_eq!(payload.len(), DECRYPT_ADMIN_PAYLOAD_LEN);
@@ -229,10 +229,10 @@ mod tests {
             [BINARY_PREFIX_LEN + cid_number.len()..BINARY_PREFIX_LEN + DECRYPT_ADMIN_CID_LEN]
             .iter()
             .all(|byte| *byte == 0));
-        assert!(decrypt_admin_payload(&[], &admin_pubkey, 0, &nonce).is_none());
+        assert!(decrypt_admin_payload(&[], &signer_public_key, 0, &nonce).is_none());
         assert!(decrypt_admin_payload(
             &[b'X'; DECRYPT_ADMIN_CID_LEN + 1],
-            &admin_pubkey,
+            &signer_public_key,
             0,
             &nonce,
         )

@@ -37,7 +37,7 @@ struct StoredGrandpaMeta {
     #[serde(default)]
     authority_node_label: Option<String>,
     #[serde(default)]
-    pubkey_hex: Option<String>,
+    public_key: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -60,7 +60,8 @@ pub(crate) struct InstitutionCatalogEntry {
     #[serde(default)]
     pub role: String,
     pub peer_id: String,
-    pub grandpa_pubkey_hex: String,
+    #[serde(rename = "grandpa_public_key")]
+    pub grandpa_public_key: String,
     /// 引导节点域名（如 `nrcgch.crcfrcn.com`），用于远程 RPC 查询。
     #[serde(default)]
     pub domain: String,
@@ -117,17 +118,14 @@ fn parse_institution_catalog() -> Result<Vec<InstitutionCatalogEntry>, String> {
             return Err(format!("institution-catalog.json peerId 重复: {peer_id}"));
         }
 
-        let grandpa = entry.grandpa_pubkey_hex.trim();
-        if grandpa.len() != 64 || !grandpa.chars().all(|c| c.is_ascii_hexdigit()) {
-            return Err(format!(
-                "institution-catalog.json 第 {line} 项 grandpaPubkeyHex 无效"
-            ));
-        }
-        let grandpa_lower = grandpa.to_ascii_lowercase();
-        if !seen_grandpa.insert(grandpa_lower) {
+        let grandpa_public_key = crate::shared::validation::normalize_public_key(
+            &entry.grandpa_public_key,
+        )
+        .map_err(|_| format!("institution-catalog.json 第 {line} 项 grandpa_public_key 无效"))?;
+        if !seen_grandpa.insert(grandpa_public_key.clone()) {
             return Err(format!(
                 "institution-catalog.json GRANDPA 公钥重复: {}",
-                entry.grandpa_pubkey_hex
+                entry.grandpa_public_key
             ));
         }
 
@@ -135,7 +133,7 @@ fn parse_institution_catalog() -> Result<Vec<InstitutionCatalogEntry>, String> {
             authority_node_label: authority_node_label.to_string(),
             role: entry.role.clone(),
             peer_id: peer_id.to_string(),
-            grandpa_pubkey_hex: grandpa.to_ascii_lowercase(),
+            grandpa_public_key,
             domain: entry.domain.trim().to_string(),
         });
     }
@@ -162,11 +160,11 @@ fn load_grandpa_meta(app: &AppHandle) -> Result<Option<StoredGrandpaMeta>, Strin
 fn save_grandpa_meta(
     app: &AppHandle,
     authority_node_label: Option<String>,
-    pubkey_hex: Option<String>,
+    public_key: Option<String>,
 ) -> Result<(), String> {
     let raw = serde_json::to_string_pretty(&StoredGrandpaMeta {
         authority_node_label,
-        pubkey_hex,
+        public_key,
     })
     .map_err(|e| format!("encode grandpa meta failed: {e}"))?;
     security::write_text_atomic(&grandpa_meta_path(app)?, &format!("{raw}\n"))
@@ -227,7 +225,7 @@ fn restore_grandpa_persisted_state(
         Some(meta) => save_grandpa_meta(
             app,
             meta.authority_node_label.clone(),
-            meta.pubkey_hex.clone(),
+            meta.public_key.clone(),
         )?,
         None => clear_grandpa_meta(app)?,
     }
@@ -247,7 +245,7 @@ fn restore_grandpa_persisted_state(
 fn write_grandpa_key_to_keystore(
     app: &AppHandle,
     private_hex: &str,
-    pubkey_hex: &str,
+    public_key: &str,
 ) -> Result<(), String> {
     let secret = Zeroizing::new(format!("0x{private_hex}"));
     let encoded = serde_json::to_string(&*secret)
@@ -255,15 +253,20 @@ fn write_grandpa_key_to_keystore(
     let content = Zeroizing::new(format!("{encoded}\n"));
     let dirs = keystore::keystore_dirs(app)?;
     // 始终只保留当前机构对应的一把 gran 密钥，避免旧密钥残留导致节点加载多把 authority key。
-    keystore::write_key_to_keystore(&dirs, GRANDPA_KEY_TYPE_HEX_PREFIX, pubkey_hex, &content)
+    keystore::write_key_to_keystore(
+        &dirs,
+        GRANDPA_KEY_TYPE_HEX_PREFIX,
+        public_key.trim_start_matches("0x"),
+        &content,
+    )
 }
 
-fn has_grandpa_key_in_keystore(app: &AppHandle, pubkey_hex: &str) -> Result<bool, String> {
+fn has_grandpa_key_in_keystore(app: &AppHandle, public_key: &str) -> Result<bool, String> {
     let dirs = keystore::keystore_dirs(app)?;
     Ok(keystore::has_key_in_keystore(
         &dirs,
         GRANDPA_KEY_TYPE_HEX_PREFIX,
-        pubkey_hex,
+        public_key.trim_start_matches("0x"),
     ))
 }
 
@@ -273,7 +276,7 @@ fn grandpa_authority_node_options() -> Result<Vec<(String, String)>, String> {
         .map(|entry| {
             (
                 entry.authority_node_label,
-                entry.grandpa_pubkey_hex.to_ascii_lowercase(),
+                entry.grandpa_public_key.to_ascii_lowercase(),
             )
         })
         .collect::<Vec<(String, String)>>();
@@ -283,19 +286,19 @@ fn grandpa_authority_node_options() -> Result<Vec<(String, String)>, String> {
     Ok(out)
 }
 
-fn authority_node_label_by_grandpa_pubkey(pubkey_hex: &str) -> Result<Option<String>, String> {
+fn authority_node_label_by_grandpa_public_key(public_key: &str) -> Result<Option<String>, String> {
     Ok(grandpa_authority_node_options()?
         .into_iter()
-        .find(|(_, key)| key.eq_ignore_ascii_case(pubkey_hex))
+        .find(|(_, key)| key.eq_ignore_ascii_case(public_key))
         .map(|(authority_node_label, _)| authority_node_label))
 }
 
-fn grandpa_pubkey_from_private_hex(key_hex: &str) -> Result<String, String> {
+fn grandpa_public_key_from_private_hex(key_hex: &str) -> Result<String, String> {
     let secret = decode_hex_32_strict(key_hex)
         .map_err(|_| "GRANDPA 私钥格式无效，应为 64 位十六进制".to_string())?;
     let signing = ed25519_dalek::SigningKey::from_bytes(&secret);
     let verify = signing.verifying_key();
-    Ok(hex::encode(verify.to_bytes()))
+    Ok(format!("0x{}", hex::encode(verify.to_bytes())))
 }
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
@@ -355,20 +358,20 @@ pub(crate) fn prepare_grandpa_for_start(app: &AppHandle) -> Result<bool, String>
     if meta.authority_node_label.is_none() {
         return Ok(false);
     }
-    let Some(pubkey) = meta.pubkey_hex.as_deref() else {
+    let Some(public_key) = meta.public_key.as_deref() else {
         return Ok(false);
     };
 
     // 校验公钥仍在当前权威节点清单中，防止清单更新后误启动 validator。
-    if authority_node_label_by_grandpa_pubkey(pubkey)?.is_none() {
+    if authority_node_label_by_grandpa_public_key(public_key)?.is_none() {
         return Err(format!(
-            "已保存的投票公钥不在当前 GRANDPA 权威列表中（公钥: 0x{pubkey}）"
+            "已保存的投票公钥不在当前 GRANDPA 权威列表中（公钥: {public_key}）"
         ));
     }
 
     // 确认 keystore 文件存在（set_grandpa_key 时已写入）。
     // 若 keystore 缺失（如链数据被清除），自动清除过期的 meta，以普通节点启动。
-    if !has_grandpa_key_in_keystore(app, pubkey)? {
+    if !has_grandpa_key_in_keystore(app, public_key)? {
         eprintln!("[GRANDPA] keystore 缺失，自动清除 grandpa-meta.json，以普通节点启动");
         clear_grandpa_meta(app)?;
         return Ok(false);
@@ -380,14 +383,14 @@ pub(crate) fn verify_grandpa_after_start(app: &AppHandle) -> Result<(), String> 
     let Some(meta) = load_grandpa_meta(app)? else {
         return Ok(());
     };
-    let Some(pubkey) = meta.pubkey_hex.as_deref() else {
+    let Some(public_key) = meta.public_key.as_deref() else {
         return Ok(());
     };
 
     wait_for_authority_role()?;
-    if !has_grandpa_key_in_keystore(app, pubkey)? {
+    if !has_grandpa_key_in_keystore(app, public_key)? {
         return Err(format!(
-            "未在本地 keystore 检测到 GRANDPA 密钥文件（pubkey=0x{pubkey}）"
+            "未在本地 keystore 检测到 GRANDPA 密钥文件（public_key={public_key}）"
         ));
     }
     Ok(())
@@ -405,8 +408,8 @@ pub fn get_grandpa_key(app: AppHandle) -> Result<GrandpaKey, String> {
     }
     // 若 meta 记录了权威节点标签但 keystore 文件已不存在（如链数据被清除），
     // 自动清除过期 meta，返回空状态（等同全新安装）。
-    if let Some(pubkey) = meta.as_ref().and_then(|v| v.pubkey_hex.as_deref()) {
-        if !has_grandpa_key_in_keystore(&app, pubkey)? {
+    if let Some(public_key) = meta.as_ref().and_then(|v| v.public_key.as_deref()) {
+        if !has_grandpa_key_in_keystore(&app, public_key)? {
             eprintln!("[GRANDPA] get_grandpa_key: keystore 缺失，自动清除 grandpa-meta.json");
             clear_grandpa_meta(&app)?;
             return Ok(GrandpaKey {
@@ -436,9 +439,11 @@ pub fn set_grandpa_key(
     let was_running = home::current_status(&app)?.running;
     let backup = snapshot_grandpa_persisted_state(&app)?;
     let normalized = normalize_grandpa_key(&key)?;
-    let pubkey = grandpa_pubkey_from_private_hex(&normalized)?;
-    let authority_node_label = authority_node_label_by_grandpa_pubkey(&pubkey)?
-        .ok_or_else(|| format!("私钥与任何权威节点 GRANDPA 公钥不匹配（推导公钥: 0x{pubkey}）"))?;
+    let public_key = grandpa_public_key_from_private_hex(&normalized)?;
+    let authority_node_label = authority_node_label_by_grandpa_public_key(&public_key)?
+        .ok_or_else(|| {
+            format!("私钥与任何权威节点 GRANDPA 公钥不匹配（推导公钥: {public_key}）")
+        })?;
 
     let normalized = Zeroizing::new(normalized);
     let mut node_stopped_for_restart = false;
@@ -447,9 +452,9 @@ pub fn set_grandpa_key(
         save_grandpa_meta(
             &app,
             Some(authority_node_label.clone()),
-            Some(pubkey.clone()),
+            Some(public_key.clone()),
         )?;
-        write_grandpa_key_to_keystore(&app, &normalized, &pubkey)?;
+        write_grandpa_key_to_keystore(&app, &normalized, &public_key)?;
 
         // 若节点当前在运行，保存后立即重启以 authority 模式加载并参与投票。
         if was_running {

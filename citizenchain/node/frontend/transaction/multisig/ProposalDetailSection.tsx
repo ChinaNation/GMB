@@ -1,5 +1,5 @@
 import { formatBalance } from '../../shared/format';
-import { hexToSs58 } from '../../shared/ss58';
+import { accountIdToSs58 } from '../../shared/ss58';
 import type { MultisigTransferProposalDetails } from './types';
 
 type Props = {
@@ -23,7 +23,7 @@ export function MultisigTransferProposalDetailSection({ info }: Props) {
             <div className="detail-row">
               <span className="detail-label">转出账户</span>
               <code className="detail-value">
-                {hexToSs58(info.transferDetail.fundingAccountHex)}
+                {accountIdToSs58(info.transferDetail.funding_account_id)}
               </code>
             </div>
             <div className="detail-row">
@@ -34,7 +34,7 @@ export function MultisigTransferProposalDetailSection({ info }: Props) {
             </div>
             <div className="detail-row">
               <span className="detail-label">收款人</span>
-              <code className="detail-value">{hexToSs58(info.transferDetail.beneficiaryHex)}</code>
+              <code className="detail-value">{accountIdToSs58(info.transferDetail.beneficiary_account_id)}</code>
             </div>
             <div className="detail-row">
               <span className="detail-label">备注</span>
@@ -42,7 +42,7 @@ export function MultisigTransferProposalDetailSection({ info }: Props) {
             </div>
             <div className="detail-row">
               <span className="detail-label">提案人</span>
-              <code className="detail-value">{hexToSs58(info.transferDetail.proposerHex)}</code>
+              <code className="detail-value">{accountIdToSs58(info.transferDetail.proposer_account_id)}</code>
             </div>
           </div>
         </div>
@@ -59,12 +59,12 @@ export function MultisigTransferProposalDetailSection({ info }: Props) {
             <div className="detail-row">
               <span className="detail-label">转出账户</span>
               <code className="detail-value">
-                {hexToSs58(info.safetyFundDetail.institutionAccountHex)}
+                {accountIdToSs58(info.safetyFundDetail.institution_account_id)}
               </code>
             </div>
             <div className="detail-row">
               <span className="detail-label">收款地址</span>
-              <code className="detail-value">{hexToSs58(info.safetyFundDetail.beneficiaryHex)}</code>
+              <code className="detail-value">{accountIdToSs58(info.safetyFundDetail.beneficiary_account_id)}</code>
             </div>
             <div className="detail-row">
               <span className="detail-label">金额</span>
@@ -91,7 +91,7 @@ export function MultisigTransferProposalDetailSection({ info }: Props) {
             <div className="detail-row">
               <span className="detail-label">转出账户</span>
               <code className="detail-value">
-                {hexToSs58(info.sweepDetail.institutionAccountHex)}
+                {accountIdToSs58(info.sweepDetail.institution_account_id)}
               </code>
             </div>
             <div className="detail-row">

@@ -159,7 +159,7 @@ impl CallFeeRoute<AccountId32, RuntimeCall, Balance> for FeeRouteOnchain {
     ) -> primitives::fee_policy::FeeRoute<AccountId32, Balance> {
         primitives::fee_policy::FeeRoute::Onchain {
             transaction_amount: 50_000,
-            payer: who.clone(),
+            payer_account_id: who.clone(),
         }
     }
 }
@@ -170,7 +170,9 @@ impl CallFeeRoute<AccountId32, RuntimeCall, Balance> for FeeRouteVote {
         who: &AccountId32,
         _call: &RuntimeCall,
     ) -> primitives::fee_policy::FeeRoute<AccountId32, Balance> {
-        primitives::fee_policy::FeeRoute::Vote { payer: who.clone() }
+        primitives::fee_policy::FeeRoute::Vote {
+            payer_account_id: who.clone(),
+        }
     }
 }
 
@@ -182,7 +184,7 @@ impl CallFeeRoute<AccountId32, RuntimeCall, Balance> for FeeRouteOffchain {
     ) -> primitives::fee_policy::FeeRoute<AccountId32, Balance> {
         primitives::fee_policy::FeeRoute::Offchain {
             fee_amount: 88,
-            payer: primitives::fee_policy::OffchainFeePayer::BatchItemPayers,
+            payer_account_id: primitives::fee_policy::OffchainFeePayer::BatchItemPayers,
         }
     }
 }
@@ -215,7 +217,7 @@ impl CallFeeRoute<AccountId32, RuntimeCall, Balance> for FeeRouteTinyOnchain {
     ) -> primitives::fee_policy::FeeRoute<AccountId32, Balance> {
         primitives::fee_policy::FeeRoute::Onchain {
             transaction_amount: 1,
-            payer: who.clone(),
+            payer_account_id: who.clone(),
         }
     }
 }
@@ -228,7 +230,7 @@ impl CallFeeRoute<AccountId32, RuntimeCall, Balance> for FeeRouteTinyAccount2 {
     ) -> primitives::fee_policy::FeeRoute<AccountId32, Balance> {
         primitives::fee_policy::FeeRoute::Onchain {
             transaction_amount: 1,
-            payer: account(2),
+            payer_account_id: account(2),
         }
     }
 }

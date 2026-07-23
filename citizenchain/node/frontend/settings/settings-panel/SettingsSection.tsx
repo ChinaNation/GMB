@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { adminsChangeApi } from '../../admins/api';
 import { homeNodeApi } from '../../home/api';
 import { settingsApi } from '../api';
-import { WalletSection } from '../WalletSection';
+import { RewardAccountSection } from '../RewardAccountSection';
 import { NodeModeSection } from '../NodeModeSection';
 import { NodeKeySection } from '../NodeKeySection';
 import { OnChinaPlatformSection } from '../OnChinaPlatformSection';
@@ -12,7 +12,7 @@ import type {
   DesktopUpdateInfo,
   NodeModeState,
   OnChinaPlatformState,
-  RewardWallet,
+  RewardAccount,
 } from '../types';
 
 type SettingsSectionProps = {
@@ -27,7 +27,10 @@ export function SettingsSection({
   const [nodeMode, setNodeMode] = useState<NodeModeState | null>(null);
   const [onChinaPlatform, setOnChinaPlatform] =
     useState<OnChinaPlatformState | null>(null);
-  const [wallet, setWallet] = useState<RewardWallet>({ address: null });
+  const [rewardAccount, setRewardAccount] = useState<RewardAccount>({
+    account_id: null,
+    ss58_address: null,
+  });
   const [nodeKey, setNodeKey] = useState<BootnodeKey>({
     nodeKey: null,
     peerId: null,
@@ -40,14 +43,14 @@ export function SettingsSection({
     const [m, p, w, k, c, a] = await Promise.allSettled([
       settingsApi.getNodeMode(),
       settingsApi.getOnChinaPlatform(),
-      settingsApi.getRewardWallet(),
+      settingsApi.getRewardAccount(),
       settingsApi.getBootnodeKey(),
       homeNodeApi.getChainStatus(),
       adminsChangeApi.hasAnyActivatedAdmin(),
     ]);
     if (m.status === 'fulfilled') setNodeMode(m.value);
     if (p.status === 'fulfilled') setOnChinaPlatform(p.value);
-    if (w.status === 'fulfilled') setWallet(w.value);
+    if (w.status === 'fulfilled') setRewardAccount(w.value);
     if (k.status === 'fulfilled') setNodeKey(k.value);
     if (c.status === 'fulfilled') setChainStatus(c.value);
     if (a.status === 'fulfilled') setIsAdmin(a.value);
@@ -64,7 +67,10 @@ export function SettingsSection({
         platform={onChinaPlatform}
         onUpdated={setOnChinaPlatform}
       />
-      <WalletSection wallet={wallet} onUpdated={setWallet} />
+      <RewardAccountSection
+        rewardAccount={rewardAccount}
+        onUpdated={setRewardAccount}
+      />
       {isAdmin && (
         <NodeKeySection
           nodeKey={nodeKey}

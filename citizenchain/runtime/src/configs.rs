@@ -333,12 +333,14 @@ fn signer_onchain_route(
 ) -> primitives::fee_policy::FeeRoute<AccountId, Balance> {
     primitives::fee_policy::FeeRoute::Onchain {
         transaction_amount,
-        payer: who.clone(),
+        payer_account_id: who.clone(),
     }
 }
 
 fn signer_vote_route(who: &AccountId) -> primitives::fee_policy::FeeRoute<AccountId, Balance> {
-    primitives::fee_policy::FeeRoute::Vote { payer: who.clone() }
+    primitives::fee_policy::FeeRoute::Vote {
+        payer_account_id: who.clone(),
+    }
 }
 
 /// 严格读取 `(cid_number, 费用账户)`；公权/私权重复、正反索引不一致或账户缺失均失败。
@@ -385,9 +387,9 @@ fn institution_onchain_amount_route(
     transaction_amount: Balance,
 ) -> primitives::fee_policy::FeeRoute<AccountId, Balance> {
     match institution_fee_payer(who, cid_number) {
-        Some(payer) => primitives::fee_policy::FeeRoute::Onchain {
+        Some(payer_account_id) => primitives::fee_policy::FeeRoute::Onchain {
             transaction_amount,
-            payer,
+            payer_account_id,
         },
         None => primitives::fee_policy::FeeRoute::Reject,
     }
@@ -396,9 +398,9 @@ fn institution_onchain_amount_route(
 fn institution_account_onchain_route(
     who: &AccountId,
     cid_number: &[u8],
-    institution_account: &AccountId,
+    institution_account_id: &AccountId,
 ) -> primitives::fee_policy::FeeRoute<AccountId, Balance> {
-    if !exact_institution_account_matches(cid_number, institution_account) {
+    if !exact_institution_account_matches(cid_number, institution_account_id) {
         return primitives::fee_policy::FeeRoute::Reject;
     }
     institution_onchain_route(who, cid_number)
@@ -457,20 +459,18 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
             // 新增账户已改为本机构自身提案：交易费从本机构(cid_number)费用账户扣取,
             // 与 propose_institution_governance 等机构自身发起的操作同口径。
             RuntimeCall::PublicManage(
-                public_manage::pallet::Call::propose_add_institution_account {
-                    cid_number, ..
-                },
+                public_manage::pallet::Call::propose_add_institution_account { cid_number, .. },
             ) => institution_onchain_route(who, cid_number.as_slice()),
             RuntimeCall::PublicManage(
                 public_manage::pallet::Call::propose_close_public_institution {
                     actor_cid_number,
-                    institution_account,
+                    institution_account_id,
                     ..
                 },
             ) => institution_account_onchain_route(
                 who,
                 actor_cid_number.as_slice(),
-                institution_account,
+                institution_account_id,
             ),
             RuntimeCall::PrivateManage(
                 private_manage::pallet::Call::update_institution_info {
@@ -494,13 +494,13 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
             RuntimeCall::PrivateManage(
                 private_manage::pallet::Call::propose_close_private_institution {
                     actor_cid_number,
-                    institution_account,
+                    institution_account_id,
                     ..
                 },
             ) => institution_account_onchain_route(
                 who,
                 actor_cid_number.as_slice(),
-                institution_account,
+                institution_account_id,
             ),
 
             RuntimeCall::AddressRegistry(
@@ -538,12 +538,12 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
             ) => FeeRoute::Free,
             RuntimeCall::ResolutionDestroy(resolution_destroy::pallet::Call::propose_destroy {
                 actor_cid_number,
-                institution_account,
+                institution_account_id,
                 ..
             }) => institution_account_onchain_route(
                 who,
                 actor_cid_number.as_slice(),
-                institution_account,
+                institution_account_id,
             ),
 
             RuntimeCall::VotingEngine(votingengine::pallet::Call::finalize_proposal { .. }) => {
@@ -592,8 +592,8 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                 | square_post::pallet::Call::change_subscription_plan { .. },
             )
             | RuntimeCall::FullnodeIssuance(
-                fullnode_issuance::pallet::Call::bind_reward_wallet { .. }
-                | fullnode_issuance::pallet::Call::rebind_reward_wallet { .. },
+                fullnode_issuance::pallet::Call::bind_reward_account { .. }
+                | fullnode_issuance::pallet::Call::rebind_reward_account { .. },
             ) => signer_onchain_route(who, 0),
             RuntimeCall::SquarePost(square_post::pallet::Call::propose_set_platform_price {
                 actor_cid_number,
@@ -628,29 +628,31 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
 
             RuntimeCall::MultisigTransfer(multisig::pallet::Call::propose_transfer {
                 actor_cid_number,
-                funding_account,
+                funding_account_id,
                 ..
             }) => match actor_cid_number {
-                Some(cid_number) => {
-                    institution_account_onchain_route(who, cid_number.as_slice(), funding_account)
-                }
+                Some(cid_number) => institution_account_onchain_route(
+                    who,
+                    cid_number.as_slice(),
+                    funding_account_id,
+                ),
                 None => signer_onchain_route(who, 0),
             },
             RuntimeCall::MultisigTransfer(
                 multisig::pallet::Call::propose_safety_fund_transfer {
                     actor_cid_number,
-                    institution_account,
+                    institution_account_id,
                     ..
                 }
                 | multisig::pallet::Call::propose_sweep_to_main {
                     actor_cid_number,
-                    institution_account,
+                    institution_account_id,
                     ..
                 },
             ) => institution_account_onchain_route(
                 who,
                 actor_cid_number.as_slice(),
-                institution_account,
+                institution_account_id,
             ),
 
             RuntimeCall::OffchainTransaction(offchain::pallet::Call::bind_clearing_bank {
@@ -665,13 +667,13 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
             }
             RuntimeCall::OffchainTransaction(offchain::pallet::Call::submit_offchain_batch {
                 actor_cid_number,
-                institution_account,
+                institution_account_id,
                 batch,
                 ..
             }) => {
                 if !exact_institution_account_matches(
                     actor_cid_number.as_slice(),
-                    institution_account,
+                    institution_account_id,
                 ) {
                     return FeeRoute::Reject;
                 }
@@ -687,17 +689,17 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                     .fold(0u128, |sum, item| sum.saturating_add(item.fee_amount));
                 FeeRoute::Offchain {
                     fee_amount,
-                    payer: primitives::fee_policy::OffchainFeePayer::BatchItemPayers,
+                    payer_account_id: primitives::fee_policy::OffchainFeePayer::BatchItemPayers,
                 }
             }
             RuntimeCall::OffchainTransaction(offchain::pallet::Call::propose_l2_fee_rate {
                 actor_cid_number,
-                institution_account,
+                institution_account_id,
                 ..
             }) => institution_account_onchain_route(
                 who,
                 actor_cid_number.as_slice(),
-                institution_account,
+                institution_account_id,
             ),
             RuntimeCall::OffchainTransaction(
                 offchain::pallet::Call::register_clearing_bank {
@@ -1175,7 +1177,7 @@ fn sr25519_signature_from_bytes(signature: &[u8]) -> Option<sr25519::Signature> 
     Some(sr25519::Signature::from_raw(sig_raw))
 }
 
-// 机构自定义账户关闭由签名钱包提交明确 CID 与岗位码；业务 pallet 通过统一岗位授权
+// 机构自定义账户关闭由签名账户提交明确 CID 与岗位码；业务 pallet 通过统一岗位授权
 // 查询同时校验管理员名册、有效任职和 BusinessActionId，不保留独立审批凭证。
 
 /// 完整 CID 的顶层业务能力策略：固定创世机构走共享白名单，普通机构仅开放自身治理。
@@ -1374,19 +1376,19 @@ impl
     }
 
     fn verify_citizen_signature(
-        wallet_account: &AccountId,
+        account_id: &AccountId,
         payload: &[u8],
         signature: &citizen_identity::pallet::SignatureOf<Runtime>,
     ) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
-            let _ = (wallet_account, payload);
+            let _ = (account_id, payload);
             return !signature.is_empty();
         }
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
-            let Ok(raw_account) = <[u8; 32]>::try_from(wallet_account.as_ref()) else {
+            let Ok(raw_account) = <[u8; 32]>::try_from(account_id.as_ref()) else {
                 return false;
             };
             let Some(signature) = sr25519_signature_from_bytes(signature.as_slice()) else {
@@ -1447,9 +1449,9 @@ impl citizen_identity::Config for Runtime {
     type WeightInfo = citizen_identity::weights::SubstrateWeight<Runtime>;
 }
 
-/// 公权管理员公民 CID 与钱包绑定校验器。
+/// 公权管理员公民 CID 与账户绑定校验器。
 ///
-/// `citizen-identity` 同时维护 CID→钱包与钱包→CID 两条索引；这里只接受两条索引
+/// `citizen-identity` 同时维护 CID→账户与账户→CID 两条索引；这里只接受两条索引
 /// 完全一致的正常绑定，不在管理员模块复制或修正公民身份数据。
 pub struct RuntimePublicAdminCitizenIdentityBinding;
 
@@ -1471,8 +1473,8 @@ pub struct RuntimeSquarePostCitizenIdentity;
 impl square_post::SquarePostCitizenIdentityProvider<AccountId>
     for RuntimeSquarePostCitizenIdentity
 {
-    fn cid_number(owner_account: &AccountId) -> Option<Vec<u8>> {
-        citizen_identity::Pallet::<Runtime>::citizen_subject(owner_account)
+    fn cid_number(owner_account_id: &AccountId) -> Option<Vec<u8>> {
+        citizen_identity::Pallet::<Runtime>::citizen_subject(owner_account_id)
             .map(|subject| subject.cid_number.to_vec())
     }
 }
@@ -1770,12 +1772,12 @@ pub struct RuntimeAdminAccountQuery;
 impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
     fn active_admin_account_exists(
         institution_code: primitives::cid::code::InstitutionCode,
-        personal_account: AccountId,
+        personal_account_id: AccountId,
     ) -> bool {
         if admin_primitives::is_personal_admin_code(&institution_code) {
             return personal_admins::Pallet::<Runtime>::active_admin_account_exists(
                 institution_code,
-                personal_account,
+                personal_account_id,
             );
         }
         false
@@ -1783,13 +1785,13 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
 
     fn is_active_account_admin(
         institution_code: primitives::cid::code::InstitutionCode,
-        personal_account: AccountId,
+        personal_account_id: AccountId,
         who: &AccountId,
     ) -> bool {
         if admin_primitives::is_personal_admin_code(&institution_code) {
             return personal_admins::Pallet::<Runtime>::is_active_account_admin(
                 institution_code,
-                personal_account,
+                personal_account_id,
                 who,
             );
         }
@@ -1798,12 +1800,12 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
 
     fn active_account_admins(
         institution_code: primitives::cid::code::InstitutionCode,
-        personal_account: AccountId,
+        personal_account_id: AccountId,
     ) -> Option<Vec<AccountId>> {
         if admin_primitives::is_personal_admin_code(&institution_code) {
             return personal_admins::Pallet::<Runtime>::active_account_admins(
                 institution_code,
-                personal_account,
+                personal_account_id,
             );
         }
         None
@@ -1811,12 +1813,12 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
 
     fn active_account_admin_records(
         institution_code: primitives::cid::code::InstitutionCode,
-        personal_account: AccountId,
+        personal_account_id: AccountId,
     ) -> Option<Vec<admin_primitives::Admin<AccountId>>> {
         if admin_primitives::is_personal_admin_code(&institution_code) {
             return personal_admins::Pallet::<Runtime>::active_account_admin_records(
                 institution_code,
-                personal_account,
+                personal_account_id,
             );
         }
         None
@@ -1824,12 +1826,12 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
 
     fn active_account_admins_len(
         institution_code: primitives::cid::code::InstitutionCode,
-        personal_account: AccountId,
+        personal_account_id: AccountId,
     ) -> Option<u32> {
         if admin_primitives::is_personal_admin_code(&institution_code) {
             return personal_admins::Pallet::<Runtime>::active_account_admins_len(
                 institution_code,
-                personal_account,
+                personal_account_id,
             );
         }
         None
@@ -1837,20 +1839,21 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
 
     fn pending_account_exists_for_snapshot(
         institution_code: primitives::cid::code::InstitutionCode,
-        personal_account: AccountId,
+        personal_account_id: AccountId,
     ) -> bool {
-        Self::pending_account_admins_len_for_snapshot(institution_code, personal_account).is_some()
+        Self::pending_account_admins_len_for_snapshot(institution_code, personal_account_id)
+            .is_some()
     }
 
     fn is_pending_account_admin_for_snapshot(
         institution_code: primitives::cid::code::InstitutionCode,
-        personal_account: AccountId,
+        personal_account_id: AccountId,
         who: &AccountId,
     ) -> bool {
         if admin_primitives::is_personal_admin_code(&institution_code) {
             return personal_admins::Pallet::<Runtime>::is_pending_account_admin_for_snapshot(
                 institution_code,
-                personal_account,
+                personal_account_id,
                 who,
             );
         }
@@ -1859,12 +1862,12 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
 
     fn pending_account_admins_for_snapshot(
         institution_code: primitives::cid::code::InstitutionCode,
-        personal_account: AccountId,
+        personal_account_id: AccountId,
     ) -> Option<Vec<AccountId>> {
         if admin_primitives::is_personal_admin_code(&institution_code) {
             return personal_admins::Pallet::<Runtime>::pending_account_admins_for_snapshot(
                 institution_code,
-                personal_account,
+                personal_account_id,
             );
         }
         None
@@ -1872,12 +1875,12 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
 
     fn pending_account_admin_records_for_snapshot(
         institution_code: primitives::cid::code::InstitutionCode,
-        personal_account: AccountId,
+        personal_account_id: AccountId,
     ) -> Option<Vec<admin_primitives::Admin<AccountId>>> {
         if admin_primitives::is_personal_admin_code(&institution_code) {
             return personal_admins::Pallet::<Runtime>::pending_account_admin_records_for_snapshot(
                 institution_code,
-                personal_account,
+                personal_account_id,
             );
         }
         None
@@ -1885,12 +1888,12 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
 
     fn pending_account_admins_len_for_snapshot(
         institution_code: primitives::cid::code::InstitutionCode,
-        personal_account: AccountId,
+        personal_account_id: AccountId,
     ) -> Option<u32> {
         if admin_primitives::is_personal_admin_code(&institution_code) {
             return personal_admins::Pallet::<Runtime>::pending_account_admins_len_for_snapshot(
                 institution_code,
-                personal_account,
+                personal_account_id,
             );
         }
         None
@@ -1932,7 +1935,7 @@ impl entity_primitives::InstitutionLegalRepresentativeQuery<AccountId>
 // 链下交易清算模块配置
 /// CID 机构登记表查询实现。
 ///
-/// 委托给 runtime 的公权/私权机构生命周期聚合查询；管理员钱包校验统一转给
+/// 委托给 runtime 的公权/私权机构生命周期聚合查询；管理员账户校验统一转给
 /// `admins` 集合查询，岗位任职事实仍只读取 entity。
 pub struct MultisigCidAccountQuery;
 
@@ -1953,7 +1956,7 @@ impl offchain::bank_check::CidAccountQuery<AccountId> for MultisigCidAccountQuer
         if let Some(info) =
             public_manage::InstitutionAccounts::<Runtime>::get(&public_id, &public_name)
         {
-            return Some(info.address);
+            return Some(info.account_id);
         }
 
         let private_id: private_manage::CidNumberOf<Runtime> =
@@ -1961,7 +1964,7 @@ impl offchain::bank_check::CidAccountQuery<AccountId> for MultisigCidAccountQuer
         let private_name: private_manage::AccountNameOf<Runtime> =
             account_name.to_vec().try_into().ok()?;
         private_manage::InstitutionAccounts::<Runtime>::get(&private_id, &private_name)
-            .map(|info| info.address)
+            .map(|info| info.account_id)
     }
 
     fn account_exists(addr: &AccountId) -> bool {
@@ -2033,7 +2036,7 @@ fn seed_benchmark_public_admin_account(
     let admins: public_admins::AdminsOf<Runtime> = raw_admins
         .iter()
         .map(|raw_admin| admin_primitives::PublicAdmin {
-            admin_account: AccountId::new(*raw_admin),
+            account_id: AccountId::new(*raw_admin),
             cid_number: Default::default(),
             family_name: Default::default(),
             given_name: Default::default(),
@@ -2081,7 +2084,7 @@ fn seed_benchmark_joint_role(
         .iter()
         .map(|raw_admin| entity_primitives::InstitutionAdminAssignment {
             cid_number: cid.clone(),
-            admin_account: AccountId::new(*raw_admin),
+            account_id: AccountId::new(*raw_admin),
             role_code: role_code.clone(),
             term_start: 0,
             term_end: 0,
@@ -2465,33 +2468,36 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
         None
     }
 
-    fn is_pending_personal_admin(personal_account: AccountId, who: &AccountId) -> bool {
+    fn is_pending_personal_admin(personal_account_id: AccountId, who: &AccountId) -> bool {
         RuntimeAdminAccountQuery::is_pending_account_admin_for_snapshot(
             votingengine::types::PMUL,
-            personal_account,
+            personal_account_id,
             who,
         )
     }
 
     fn get_pending_personal_admins(
-        personal_account: AccountId,
+        personal_account_id: AccountId,
     ) -> Option<alloc::vec::Vec<AccountId>> {
         RuntimeAdminAccountQuery::pending_account_admins_for_snapshot(
             votingengine::types::PMUL,
-            personal_account,
+            personal_account_id,
         )
     }
 
-    fn is_personal_admin(personal_account: AccountId, who: &AccountId) -> bool {
+    fn is_personal_admin(personal_account_id: AccountId, who: &AccountId) -> bool {
         RuntimeAdminAccountQuery::is_active_account_admin(
             votingengine::types::PMUL,
-            personal_account,
+            personal_account_id,
             who,
         )
     }
 
-    fn get_personal_admins(personal_account: AccountId) -> Option<Vec<AccountId>> {
-        RuntimeAdminAccountQuery::active_account_admins(votingengine::types::PMUL, personal_account)
+    fn get_personal_admins(personal_account_id: AccountId) -> Option<Vec<AccountId>> {
+        RuntimeAdminAccountQuery::active_account_admins(
+            votingengine::types::PMUL,
+            personal_account_id,
+        )
     }
 
     fn legal_representative(cid_number: &[u8]) -> Option<AccountId> {
@@ -2671,10 +2677,10 @@ impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityRe
     #[cfg(feature = "runtime-benchmarks")]
     fn benchmark_seed_identity(who: &AccountId, scope: &citizen_identity::PopulationScope) {
         use citizen_identity::{
-            CandidateIdentity, CandidateIdentityByCid, CidByWalletAccount, CidRecord,
+            AccountIdByCid, CandidateIdentity, CandidateIdentityByCid, CidByAccountId, CidRecord,
             CidRecordStatus, CitizenStatus, CountryVotingCount, NextEligibilityRevision,
             PopulationReadyDate, VotingEligibilityVersion, VotingEligibilityVersionCount,
-            VotingEligibilityVersions, VotingIdentity, VotingIdentityByCid, WalletAccountByCid,
+            VotingEligibilityVersions, VotingIdentity, VotingIdentityByCid,
         };
 
         // citizen-identity 按 timestamp 校验护照窗口；benchmark externalities 的
@@ -2724,8 +2730,8 @@ impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityRe
         );
         NextEligibilityRevision::<Runtime>::put(revision);
         VotingIdentityByCid::<Runtime>::insert(&cid_number, identity);
-        WalletAccountByCid::<Runtime>::insert(&cid_number, who);
-        CidByWalletAccount::<Runtime>::insert(who, &cid_number);
+        AccountIdByCid::<Runtime>::insert(&cid_number, who);
+        CidByAccountId::<Runtime>::insert(who, &cid_number);
         citizen_identity::CidRegistry::<Runtime>::insert(
             &cid_number,
             CidRecord {

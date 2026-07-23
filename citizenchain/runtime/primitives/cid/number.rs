@@ -232,7 +232,7 @@ mod tests {
             _ => "001",
         };
         generate_cid_number(GenerateCidNumberInput {
-            account_pubkey: "0xabcd",
+            public_key: "0xabcd",
             p1,
             province_code,
             province_name: province,
@@ -293,7 +293,7 @@ mod tests {
                 continue;
             }
             let number = generate_cid_number(GenerateCidNumberInput {
-                account_pubkey: "0xfeed",
+                public_key: "0xfeed",
                 // 固定策略会忽略 p1。
                 p1: "1",
                 province_code: "GD",

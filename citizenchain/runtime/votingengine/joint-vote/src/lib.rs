@@ -103,7 +103,7 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
-    /// 联合投票内部阶段岗位票据记录：CID + 岗位码 + 钱包 → 赞成/反对。
+    /// 联合投票内部阶段岗位票据记录：CID + 岗位码 + 账户 → 赞成/反对。
     #[pallet::storage]
     pub type JointVotesByTicket<T: Config> = StorageDoubleMap<
         _,
@@ -139,7 +139,7 @@ pub mod pallet {
 
     /// 联合公投票据：`(proposal_id, 永久公民 CID) → 完整公民主体 + 票值`。
     ///
-    /// 按 CID 而不是钱包去重，保证公民更换绑定钱包后仍只能投一票。
+    /// 按 CID 而不是账户去重，保证公民更换绑定账户后仍只能投一票。
     #[pallet::storage]
     pub type ReferendumVotesByCid<T: Config> = StorageDoubleMap<
         _,

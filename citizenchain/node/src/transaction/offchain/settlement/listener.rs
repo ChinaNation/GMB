@@ -225,9 +225,9 @@ pub fn convert_event(ev: runtime::RuntimeEvent) -> Option<OffchainChainEvent> {
             }),
             OffchainEvent::PaymentSettled {
                 tx_id,
-                payer,
+                payer_account_id: payer,
                 payer_bank_cid,
-                recipient,
+                recipient_account_id: recipient,
                 recipient_bank_cid,
                 transfer_amount,
                 fee_amount,
@@ -240,12 +240,10 @@ pub fn convert_event(ev: runtime::RuntimeEvent) -> Option<OffchainChainEvent> {
                 amount: transfer_amount,
                 fee: fee_amount,
             }),
-            OffchainEvent::BankBound { user, bank_cid } => {
-                Some(OffchainChainEvent::BankBound {
-                    user,
-                    bank_cid: bank_cid.into_inner(),
-                })
-            }
+            OffchainEvent::BankBound { user, bank_cid } => Some(OffchainChainEvent::BankBound {
+                user,
+                bank_cid: bank_cid.into_inner(),
+            }),
             OffchainEvent::BankSwitched {
                 user,
                 old_bank_cid,
@@ -360,9 +358,9 @@ mod tests {
         let tx_id = H256::repeat_byte(7);
         let ev = runtime::RuntimeEvent::OffchainTransaction(PalletEvent::PaymentSettled {
             tx_id,
-            payer: payer.clone(),
+            payer_account_id: payer.clone(),
             payer_bank_cid: payer_bank.clone().try_into().unwrap(),
-            recipient: recipient.clone(),
+            recipient_account_id: recipient.clone(),
             recipient_bank_cid: recipient_bank.clone().try_into().unwrap(),
             transfer_amount: 9_800,
             fee_amount: 200,

@@ -5,7 +5,7 @@ use crate::types::InstitutionCode;
 /// 公民身份只读接口。投票引擎只能读链上公民身份模块的资格和人口数，
 /// 不再接收注册局链下签发的人口快照或投票凭证。
 pub trait CitizenIdentityReader<AccountId> {
-    /// 读取 CID↔钱包双向绑定、身份状态和 CID 状态全部有效的完整公民主体。
+    /// 读取 CID↔账户双向绑定、身份状态和 CID 状态全部有效的完整公民主体。
     fn citizen_subject(_who: &AccountId) -> Option<citizen_identity::CitizenSubject<AccountId>> {
         None
     }

@@ -34,7 +34,7 @@ impl<T: Config> Pallet<T> {
         ensure!(
             candidates.iter().all(|candidate| {
                 <T as votingengine::Config>::CitizenIdentityReader::citizen_subject(
-                    &candidate.wallet_account,
+                    &candidate.account_id,
                 )
                 .as_ref()
                     == Some(candidate)

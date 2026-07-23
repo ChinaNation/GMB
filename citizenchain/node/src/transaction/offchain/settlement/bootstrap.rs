@@ -55,7 +55,7 @@ pub(crate) fn start_from_cli(
         log::warn!("[ClearingBank] 缺少有效 --clearing-bank-role-code,清算行组件不启动");
         return None;
     };
-    let institution_account = AccountId32::new(
+    let institution_account_id = AccountId32::new(
         AccountKind::InstitutionMain {
             cid_number: actor_cid_number.as_bytes(),
         }
@@ -93,7 +93,7 @@ pub(crate) fn start_from_cli(
         base_path,
         actor_cid_number.as_bytes().to_vec(),
         actor_role_code.as_bytes().to_vec(),
-        institution_account.clone(),
+        institution_account_id.clone(),
         password,
         signer,
         submitter,
@@ -120,9 +120,9 @@ pub(crate) fn start_from_cli(
     );
 
     log::info!(
-        "[ClearingBank] 清算行组件已启动,actor_cid_number={},institution_account={}",
+        "[ClearingBank] 清算行组件已启动,actor_cid_number={},institution_account_id={}",
         actor_cid_number,
-        institution_account.to_ss58check()
+        institution_account_id.to_ss58check()
     );
     Some(components.rpc_impl.clone())
 }

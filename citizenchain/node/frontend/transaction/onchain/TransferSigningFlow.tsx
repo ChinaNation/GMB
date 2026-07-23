@@ -69,7 +69,7 @@ export function TransferSigningFlow({ wallet, toAddress, amountYuan, remark, onC
         return;
       }
 
-      const result = await api.buildTransferRequest(wallet.pubkeyHex, toAddress, amountYuan, remark);
+      const result = await api.buildTransferRequest(wallet.account_id, toAddress, amountYuan, remark);
       setSignRequest(result);
       setRequestJson(result.requestJson);
       setCountdown(90);
@@ -78,7 +78,7 @@ export function TransferSigningFlow({ wallet, toAddress, amountYuan, remark, onC
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [isMinerHotWallet, wallet.pubkeyHex, toAddress, amountYuan, remark, unlockPassword]);
+  }, [isMinerHotWallet, wallet.account_id, toAddress, amountYuan, remark, unlockPassword]);
 
   const handleScanResult = useCallback(async (responseText: string) => {
     const req = signRequestRef.current;
@@ -91,7 +91,7 @@ export function TransferSigningFlow({ wallet, toAddress, amountYuan, remark, onC
     try {
       const result = await api.submitTransfer(
         req.requestId,
-        wallet.pubkeyHex,
+        wallet.account_id,
         req.expectedPayloadHash,
         req.callDataHex,
         req.signNonce,
@@ -104,7 +104,7 @@ export function TransferSigningFlow({ wallet, toAddress, amountYuan, remark, onC
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [wallet.pubkeyHex]);
+  }, [wallet.account_id]);
 
   return (
     <div className="transfer-signing-overlay">
@@ -120,7 +120,7 @@ export function TransferSigningFlow({ wallet, toAddress, amountYuan, remark, onC
             <div className="transfer-signing-summary">
               <div className="transfer-signing-row">
                 <span className="transfer-signing-label">付款地址</span>
-                <span className="transfer-signing-value">{wallet.address}</span>
+                <span className="transfer-signing-value">{wallet.ss58_address}</span>
               </div>
               <div className="transfer-signing-row">
                 <span className="transfer-signing-label">收款地址</span>

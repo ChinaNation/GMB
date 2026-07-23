@@ -113,11 +113,11 @@ fn account(seed: u8) -> AccountId32 {
     AccountId32::new([seed; 32])
 }
 
-/// admins 保存显示姓名和授权钱包；岗位、任期、来源等由 entity 管理。
+/// admins 保存显示姓名和授权账户；岗位、任期、来源等由 entity 管理。
 fn admins(count: u8) -> Vec<Admin<AccountId32>> {
     (0..count)
         .map(|seed| Admin {
-            admin_account: account(seed),
+            account_id: account(seed),
             family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
             given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
         })

@@ -58,7 +58,7 @@ pub trait InternalVoteEngine<AccountId> {
         who: AccountId,
         institution_code: InstitutionCode,
         actor_cid_number: sp_std::vec::Vec<u8>,
-        execution_account: Option<AccountId>,
+        execution_account_id: Option<AccountId>,
         subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
         vote_plan: VotePlanOf<AccountId>,
         data: sp_std::vec::Vec<u8>,

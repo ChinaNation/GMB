@@ -35,7 +35,7 @@ frame_benchmarking::define_benchmarks!(
     [resolution_issuance, ResolutionIssuance]
     [citizen_identity, CitizenIdentity]
     [pow_difficulty, PowDifficulty]
-    // public/private-admins 已无外部 extrinsic 和 WeightInfo，仅由 entity 内部同步钱包集合。
+    // public/private-admins 已无外部 extrinsic 和 WeightInfo，仅由 entity 内部同步管理员账户集合。
     [resolution_destroy, ResolutionDestroy]
     [grandpakey_change, GrandpaKeyChange]
     [public_manage, PublicManage]

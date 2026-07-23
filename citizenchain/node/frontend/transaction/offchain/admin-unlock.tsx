@@ -22,7 +22,7 @@ export function ClearingBankAdminListPage({
   onBack,
 }: Props) {
   const accounts = useMemo(
-    () => Array.from(new Set(admins.map((profile) => profile.adminAccount.trim().replace(/^0x/i, '').toLowerCase()))),
+    () => Array.from(new Set(admins.map((profile) => profile.account_id))),
     [admins],
   );
   const [balanceByAccount, setBalanceByAccount] = useState<Record<string, string | null>>({});
@@ -34,7 +34,7 @@ export function ClearingBankAdminListPage({
     }
     let cancelled = false;
     // 清算行管理员卡片没有机构详情余额字段,这里统一补 finalized 链上余额。
-    adminsChangeApi.getAdminAccountBalances(accounts)
+    adminsChangeApi.getAccountBalances(accounts)
       .then((balances) => {
         if (!cancelled) setBalanceByAccount(balances);
       })
@@ -60,10 +60,10 @@ export function ClearingBankAdminListPage({
         <div className="admin-grid">
           {admins.map((profile, idx) => (
             <InstitutionAssignmentCard
-              key={profile.adminAccount}
+              key={profile.account_id}
               admin={profile}
               index={idx + 1}
-              balanceFen={balanceByAccount[profile.adminAccount.trim().replace(/^0x/i, '').toLowerCase()] ?? null}
+              balanceFen={balanceByAccount[profile.account_id] ?? null}
             />
           ))}
         </div>

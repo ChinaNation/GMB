@@ -71,8 +71,8 @@ Step 2b-iii-b 完成后,新清算行节点(citizenapp RPC → ledger → packer 
 | `use std::time::{SystemTime, UNIX_EPOCH}` / `sp_core::{sr25519, Pair, H256}` / `sp_keystore::Keystore` | 跟随删除的未用 import |
 
 保留:
-- `parse_ss58_account` — 仍被 `reward_bindWallet` / `reward_rebindWallet` 调用
-- `sync_state_genLightSyncState` / `mining_cpuHashrate` / `mining_gpuHashrate` / `reward_*` / `fee_blockFees` RPC
+- SS58 解析能力——奖励账户设置入口把展示地址转换为严格 `account_id`
+- `sync_state_genLightSyncState` / `mining_cpuHashrate` / `mining_gpuHashrate` / `reward_bindAccount` / `reward_rebindAccount` / `fee_blockFees` RPC
 - 新清算行 `offchain_clearing_rpc` 字段与 `OffchainClearingRpcServer::into_rpc` 合并
 
 ### 2.6 `home/process/mod.rs`

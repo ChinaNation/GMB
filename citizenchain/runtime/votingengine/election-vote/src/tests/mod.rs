@@ -161,7 +161,7 @@ fn test_citizen_subject(who: &AccountId32) -> votingengine::CitizenSubject<Accou
             .to_vec()
             .try_into()
             .expect("account fits CID"),
-        wallet_account: who.clone(),
+        account_id: who.clone(),
     }
 }
 
@@ -445,7 +445,7 @@ fn popular_creation_rejects_invalid_candidate_subject_and_bad_shape() {
     new_test_ext().execute_with(|| {
         let invalid_subject = votingengine::CitizenSubject {
             cid_number: candidate(12).cid_number,
-            wallet_account: account(251),
+            account_id: account(251),
         };
         assert_noop!(
             ElectionVote::do_create_popular_election(
@@ -552,15 +552,15 @@ fn cast_rejects_wrong_voter_candidate_stage_and_duplicate_vote() {
 }
 
 #[test]
-fn same_citizen_cid_cannot_vote_twice_after_wallet_replacement() {
+fn same_citizen_cid_cannot_vote_twice_after_account_id_replacement() {
     new_test_ext().execute_with(|| {
         let proposal_id = create_popular(vec![candidate(11), candidate(12)]);
-        let original_wallet = account(21);
-        let replacement_wallet = account(29);
-        let voter_subject = test_citizen_subject(&original_wallet);
+        let original_account_id = account(21);
+        let replacement_account_id = account(29);
+        let voter_subject = test_citizen_subject(&original_account_id);
 
         assert_ok!(ElectionVote::cast_popular_vote(
-            RuntimeOrigin::signed(original_wallet),
+            RuntimeOrigin::signed(original_account_id),
             proposal_id,
             candidate(11),
         ));
@@ -571,7 +571,7 @@ fn same_citizen_cid_cannot_vote_twice_after_wallet_replacement() {
 
         assert_noop!(
             ElectionVote::cast_popular_vote(
-                RuntimeOrigin::signed(replacement_wallet),
+                RuntimeOrigin::signed(replacement_account_id),
                 proposal_id,
                 candidate(11),
             ),
@@ -585,7 +585,7 @@ fn candidate_snapshot_rejects_duplicate_permanent_cid() {
     new_test_ext().execute_with(|| {
         let duplicate_cid_subject = votingengine::CitizenSubject {
             cid_number: candidate(11).cid_number,
-            wallet_account: account(12),
+            account_id: account(12),
         };
         assert_noop!(
             ElectionVote::do_create_popular_election(

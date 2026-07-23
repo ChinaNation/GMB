@@ -1,5 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-//! 私权机构管理员钱包集合模块。
+//! 私权机构管理员账户集合模块。
 //!
 //! 机构唯一身份是 CID。本模块只保存 `AdminAccounts[cid_number] -> admins`；
 //! 岗位和任职归 entity，投票阈值归 votingengine，机构账户不参与管理员寻址。
@@ -137,7 +137,7 @@ pub mod pallet {
                 ensure!(!admin.family_name.is_empty(), Error::<T>::InvalidFamilyName);
                 ensure!(!admin.given_name.is_empty(), Error::<T>::InvalidGivenName);
                 ensure!(
-                    seen.insert(admin.admin_account.clone()),
+                    seen.insert(admin.account_id.clone()),
                     Error::<T>::DuplicateAdmin
                 );
             }
@@ -243,7 +243,7 @@ impl<T: pallet::Config> InstitutionAdminQuery<T::AccountId> for pallet::Pallet<T
         who: &T::AccountId,
     ) -> bool {
         Self::get_institution_admins(institution_code, cid_number)
-            .map(|value| value.admins.iter().any(|admin| &admin.admin_account == who))
+            .map(|value| value.admins.iter().any(|admin| &admin.account_id == who))
             .unwrap_or(false)
     }
 
@@ -256,7 +256,7 @@ impl<T: pallet::Config> InstitutionAdminQuery<T::AccountId> for pallet::Pallet<T
                 .admins
                 .into_inner()
                 .into_iter()
-                .map(|admin| admin.admin_account)
+                .map(|admin| admin.account_id)
                 .collect()
         })
     }

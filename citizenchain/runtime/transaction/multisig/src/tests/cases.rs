@@ -5,13 +5,13 @@ use super::*;
 #[test]
 fn nrc_transfer_executes_when_internal_vote_reaches_threshold() {
     new_test_ext().execute_with(|| {
-        let funding_account = nrc_main_account();
-        let dest = beneficiary();
+        let funding_account_id = nrc_main_account();
+        let dest = beneficiary_account_id();
 
         assert_ok!(propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             Some(nrc_actor_cid()),
-            funding_account.clone(),
+            funding_account_id.clone(),
             dest.clone(),
             1_000,
             BoundedVec::default(),
@@ -26,7 +26,7 @@ fn nrc_transfer_executes_when_internal_vote_reaches_threshold() {
         ));
 
         // 本金只从主账户支出，链上费只从同一 CID 的费用账户支出。
-        assert_eq!(Balances::free_balance(&funding_account), 9_000);
+        assert_eq!(Balances::free_balance(&funding_account_id), 9_000);
         assert_eq!(Balances::free_balance(nrc_fee_account()), 9_990);
         assert_eq!(Balances::free_balance(&dest), 1_000);
         // 提案数据仍保留（由 votingengine 延迟清理）
@@ -37,13 +37,13 @@ fn nrc_transfer_executes_when_internal_vote_reaches_threshold() {
 #[test]
 fn prc_transfer_executes_when_internal_vote_reaches_threshold() {
     new_test_ext().execute_with(|| {
-        let funding_account = prc_main_account();
-        let dest = beneficiary();
+        let funding_account_id = prc_main_account();
+        let dest = beneficiary_account_id();
 
         assert_ok!(propose_transfer(
             RuntimeOrigin::signed(prc_admin(0)),
             Some(prc_actor_cid()),
-            funding_account.clone(),
+            funding_account_id.clone(),
             dest.clone(),
             2_000,
             BoundedVec::default(),
@@ -57,7 +57,7 @@ fn prc_transfer_executes_when_internal_vote_reaches_threshold() {
             pid,
         ));
 
-        assert_eq!(Balances::free_balance(&funding_account), 8_000);
+        assert_eq!(Balances::free_balance(&funding_account_id), 8_000);
         assert_eq!(Balances::free_balance(prc_fee_account()), 9_990);
         assert_eq!(Balances::free_balance(&dest), 2_000);
         assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
@@ -67,13 +67,13 @@ fn prc_transfer_executes_when_internal_vote_reaches_threshold() {
 #[test]
 fn prb_transfer_executes_when_internal_vote_reaches_threshold() {
     new_test_ext().execute_with(|| {
-        let funding_account = prb_main_account();
-        let dest = beneficiary();
+        let funding_account_id = prb_main_account();
+        let dest = beneficiary_account_id();
 
         assert_ok!(propose_transfer(
             RuntimeOrigin::signed(prb_admin(0)),
             Some(prb_actor_cid()),
-            funding_account.clone(),
+            funding_account_id.clone(),
             dest.clone(),
             3_000,
             BoundedVec::default(),
@@ -87,7 +87,7 @@ fn prb_transfer_executes_when_internal_vote_reaches_threshold() {
             pid,
         ));
 
-        assert_eq!(Balances::free_balance(&funding_account), 7_000);
+        assert_eq!(Balances::free_balance(&funding_account_id), 7_000);
         assert_eq!(Balances::free_balance(prb_fee_account()), 9_990);
         assert_eq!(Balances::free_balance(&dest), 3_000);
         assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
@@ -97,15 +97,15 @@ fn prb_transfer_executes_when_internal_vote_reaches_threshold() {
 #[test]
 fn frg_and_njd_can_create_multisig_transfer_internal_proposals() {
     new_test_ext().execute_with(|| {
-        for (institution_code, actor_cid_number, funding_account, proposer) in [
+        for (institution_code, actor_cid_number, funding_account_id, proposer_account_id) in [
             (FRG, frg_actor_cid(), frg_main_account(), frg_admin(0)),
             (NJD, njd_actor_cid(), njd_main_account(), njd_admin(0)),
         ] {
             assert_ok!(propose_transfer(
-                RuntimeOrigin::signed(proposer),
+                RuntimeOrigin::signed(proposer_account_id),
                 Some(actor_cid_number),
-                funding_account.clone(),
-                beneficiary(),
+                funding_account_id.clone(),
+                beneficiary_account_id(),
                 1_000,
                 BoundedVec::default(),
             ));
@@ -120,8 +120,8 @@ fn frg_and_njd_can_create_multisig_transfer_internal_proposals() {
 #[test]
 fn personal_account_transfer_executes_when_internal_vote_reaches_threshold() {
     new_test_ext().execute_with(|| {
-        let personal_account = personal_account();
-        let dest = beneficiary();
+        let personal_account_id = personal_account_id();
+        let dest = beneficiary_account_id();
         let admins = BoundedVec::try_from(
             [
                 personal_account_admin(0),
@@ -129,8 +129,8 @@ fn personal_account_transfer_executes_when_internal_vote_reaches_threshold() {
                 personal_account_admin(2),
             ]
             .into_iter()
-            .map(|admin_account| admin_primitives::Admin {
-                admin_account,
+            .map(|account_id| admin_primitives::Admin {
+                account_id,
                 family_name: Default::default(),
                 given_name: Default::default(),
             })
@@ -139,9 +139,9 @@ fn personal_account_transfer_executes_when_internal_vote_reaches_threshold() {
         .expect("admins should fit");
 
         personal_manage::PersonalAccounts::<Test>::insert(
-            &personal_account,
+            &personal_account_id,
             personal_manage::PersonalAccount {
-                creator: personal_account_admin(0),
+                creator_account_id: personal_account_admin(0),
                 account_name: b"personal"
                     .to_vec()
                     .try_into()
@@ -151,25 +151,25 @@ fn personal_account_transfer_executes_when_internal_vote_reaches_threshold() {
             },
         );
         personal_admins::AdminAccounts::<Test>::insert(
-            personal_account.clone(),
+            personal_account_id.clone(),
             admin_primitives::AdminAccount {
                 cid_number: Default::default(),
                 institution_code: PERSONAL_CODE,
                 kind: admin_primitives::AdminAccountKind::PersonalMultisig,
                 admins,
-                creator: personal_account_admin(0),
+                creator_account_id: personal_account_admin(0),
                 created_at: 1,
                 updated_at: 1,
                 status: admin_primitives::AdminAccountStatus::Active,
             },
         );
-        internal_vote::ActivePersonalThresholds::<Test>::insert(personal_account.clone(), 2);
-        let _ = Balances::deposit_creating(&personal_account, 10_000);
+        internal_vote::ActivePersonalThresholds::<Test>::insert(personal_account_id.clone(), 2);
+        let _ = Balances::deposit_creating(&personal_account_id, 10_000);
 
         assert_ok!(propose_transfer(
             RuntimeOrigin::signed(personal_account_admin(0)),
             None,
-            personal_account.clone(),
+            personal_account_id.clone(),
             dest.clone(),
             1_500,
             BoundedVec::default(),
@@ -179,7 +179,7 @@ fn personal_account_transfer_executes_when_internal_vote_reaches_threshold() {
         let vote_pairs = personal_account_pairs(2);
         assert_ok!(cast_transfer_votes_n(&vote_pairs[1..], 1, pid,));
 
-        assert_eq!(Balances::free_balance(&personal_account), 8_490);
+        assert_eq!(Balances::free_balance(&personal_account_id), 8_490);
         assert_eq!(Balances::free_balance(&dest), 1_500);
         assert_eq!(
             votingengine::Pallet::<Test>::proposals(pid)
@@ -193,8 +193,8 @@ fn personal_account_transfer_executes_when_internal_vote_reaches_threshold() {
 #[test]
 fn institution_account_transfer_executes_when_internal_vote_reaches_threshold() {
     new_test_ext().execute_with(|| {
-        let funding_account = institution_account();
-        let dest = beneficiary();
+        let funding_account_id = institution_account_id();
+        let dest = beneficiary_account_id();
         let admins = BoundedVec::try_from(vec![
             institution_admin(0),
             institution_admin(1),
@@ -202,13 +202,13 @@ fn institution_account_transfer_executes_when_internal_vote_reaches_threshold() 
         ])
         .expect("admins should fit");
 
-        insert_active_institution_account(&funding_account, admins);
-        let _ = Balances::deposit_creating(&funding_account, 10_000);
+        insert_active_institution_account(&funding_account_id, admins);
+        let _ = Balances::deposit_creating(&funding_account_id, 10_000);
 
         assert_ok!(propose_transfer(
             RuntimeOrigin::signed(institution_admin(0)),
             Some(test_cid_number()),
-            funding_account.clone(),
+            funding_account_id.clone(),
             dest.clone(),
             2_000,
             BoundedVec::default(),
@@ -218,7 +218,7 @@ fn institution_account_transfer_executes_when_internal_vote_reaches_threshold() 
         let vote_pairs = institution_pairs(2);
         assert_ok!(cast_transfer_votes_n(&vote_pairs[1..], 1, pid,));
 
-        assert_eq!(Balances::free_balance(&funding_account), 8_000);
+        assert_eq!(Balances::free_balance(&funding_account_id), 8_000);
         assert_eq!(Balances::free_balance(institution_fee_account()), 9_990);
         assert_eq!(Balances::free_balance(&dest), 2_000);
         assert_eq!(
@@ -233,7 +233,7 @@ fn institution_account_transfer_executes_when_internal_vote_reaches_threshold() 
 #[test]
 fn institution_account_rejects_mismatched_actor_cid() {
     new_test_ext().execute_with(|| {
-        let funding_account = institution_account();
+        let funding_account_id = institution_account_id();
         let admins = BoundedVec::try_from(vec![
             institution_admin(0),
             institution_admin(1),
@@ -241,15 +241,15 @@ fn institution_account_rejects_mismatched_actor_cid() {
         ])
         .expect("admins should fit");
 
-        insert_active_institution_account(&funding_account, admins);
-        let _ = Balances::deposit_creating(&funding_account, 10_000);
+        insert_active_institution_account(&funding_account_id, admins);
+        let _ = Balances::deposit_creating(&funding_account_id, 10_000);
 
         assert_noop!(
             propose_transfer(
                 RuntimeOrigin::signed(institution_admin(0)),
                 Some(nrc_actor_cid()),
-                funding_account.clone(),
-                beneficiary(),
+                funding_account_id.clone(),
+                beneficiary_account_id(),
                 1_000,
                 BoundedVec::default(),
             ),
@@ -261,14 +261,14 @@ fn institution_account_rejects_mismatched_actor_cid() {
 #[test]
 fn unknown_account_cannot_be_used_as_transfer_source() {
     new_test_ext().execute_with(|| {
-        let funding_account = AccountId32::new([0x77; 32]);
+        let funding_account_id = AccountId32::new([0x77; 32]);
 
         assert_noop!(
             propose_transfer(
                 RuntimeOrigin::signed(institution_admin(0)),
                 None,
-                funding_account.clone(),
-                beneficiary(),
+                funding_account_id.clone(),
+                beneficiary_account_id(),
                 1_000,
                 BoundedVec::default(),
             ),
@@ -280,14 +280,14 @@ fn unknown_account_cannot_be_used_as_transfer_source() {
 #[test]
 fn zero_amount_is_rejected() {
     new_test_ext().execute_with(|| {
-        let funding_account = nrc_main_account();
-        let dest = beneficiary();
+        let funding_account_id = nrc_main_account();
+        let dest = beneficiary_account_id();
 
         assert_noop!(
             propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 Some(nrc_actor_cid()),
-                funding_account.clone(),
+                funding_account_id.clone(),
                 dest,
                 0,
                 BoundedVec::default(),
@@ -300,14 +300,14 @@ fn zero_amount_is_rejected() {
 #[test]
 fn self_transfer_is_rejected() {
     new_test_ext().execute_with(|| {
-        let funding_account = nrc_main_account();
+        let funding_account_id = nrc_main_account();
 
         assert_noop!(
             propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 Some(nrc_actor_cid()),
-                funding_account.clone(),
-                funding_account.clone(),
+                funding_account_id.clone(),
+                funding_account_id.clone(),
                 100,
                 BoundedVec::default(),
             ),
@@ -319,8 +319,8 @@ fn self_transfer_is_rejected() {
 #[test]
 fn insufficient_balance_is_rejected_on_propose() {
     new_test_ext().execute_with(|| {
-        let funding_account = nrc_main_account();
-        let dest = beneficiary();
+        let funding_account_id = nrc_main_account();
+        let dest = beneficiary_account_id();
 
         // 本金账户只承担本金并保留 ED；费用账户另行承担手续费并保留自己的 ED。
         // 主账户余额 10_000 时，amount=10_000 会越过主账户 ED，必须拒绝。
@@ -328,7 +328,7 @@ fn insufficient_balance_is_rejected_on_propose() {
             propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 Some(nrc_actor_cid()),
-                funding_account.clone(),
+                funding_account_id.clone(),
                 dest.clone(),
                 10_000,
                 BoundedVec::default(),
@@ -340,7 +340,7 @@ fn insufficient_balance_is_rejected_on_propose() {
         assert_ok!(propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             Some(nrc_actor_cid()),
-            funding_account.clone(),
+            funding_account_id.clone(),
             dest,
             9_999,
             BoundedVec::default(),
@@ -370,7 +370,7 @@ fn institution_fee_account_shortage_never_falls_back_to_admin() {
                 RuntimeOrigin::signed(admin.clone()),
                 Some(nrc_actor_cid()),
                 nrc_main_account(),
-                beneficiary(),
+                beneficiary_account_id(),
                 100,
                 BoundedVec::default(),
             ),
@@ -384,13 +384,13 @@ fn institution_fee_account_shortage_never_falls_back_to_admin() {
 #[test]
 fn multiple_proposals_allowed_within_limit() {
     new_test_ext().execute_with(|| {
-        let funding_account = nrc_main_account();
-        let dest = beneficiary();
+        let funding_account_id = nrc_main_account();
+        let dest = beneficiary_account_id();
 
         assert_ok!(propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             Some(nrc_actor_cid()),
-            funding_account.clone(),
+            funding_account_id.clone(),
             dest.clone(),
             100,
             BoundedVec::default(),
@@ -400,7 +400,7 @@ fn multiple_proposals_allowed_within_limit() {
         assert_ok!(propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             Some(nrc_actor_cid()),
-            funding_account.clone(),
+            funding_account_id.clone(),
             dest,
             200,
             BoundedVec::default(),
@@ -411,13 +411,13 @@ fn multiple_proposals_allowed_within_limit() {
 #[test]
 fn executed_transfer_does_not_block_new_proposal() {
     new_test_ext().execute_with(|| {
-        let funding_account = nrc_main_account();
-        let dest = beneficiary();
+        let funding_account_id = nrc_main_account();
+        let dest = beneficiary_account_id();
 
         assert_ok!(propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             Some(nrc_actor_cid()),
-            funding_account.clone(),
+            funding_account_id.clone(),
             dest.clone(),
             100,
             BoundedVec::default(),
@@ -435,7 +435,7 @@ fn executed_transfer_does_not_block_new_proposal() {
         assert_ok!(propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             Some(nrc_actor_cid()),
-            funding_account.clone(),
+            funding_account_id.clone(),
             dest,
             200,
             BoundedVec::default(),
@@ -446,13 +446,13 @@ fn executed_transfer_does_not_block_new_proposal() {
 #[test]
 fn rejected_proposal_does_not_block_new_proposal() {
     new_test_ext().execute_with(|| {
-        let funding_account = nrc_main_account();
-        let dest = beneficiary();
+        let funding_account_id = nrc_main_account();
+        let dest = beneficiary_account_id();
 
         assert_ok!(propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             Some(nrc_actor_cid()),
-            funding_account.clone(),
+            funding_account_id.clone(),
             dest.clone(),
             100,
             BoundedVec::default(),
@@ -478,7 +478,7 @@ fn rejected_proposal_does_not_block_new_proposal() {
         assert_ok!(propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             Some(nrc_actor_cid()),
-            funding_account.clone(),
+            funding_account_id.clone(),
             dest,
             50,
             BoundedVec::default(),
@@ -489,14 +489,14 @@ fn rejected_proposal_does_not_block_new_proposal() {
 #[test]
 fn existential_deposit_is_preserved() {
     new_test_ext().execute_with(|| {
-        let funding_account = nrc_main_account();
-        let dest = beneficiary();
+        let funding_account_id = nrc_main_account();
+        let dest = beneficiary_account_id();
 
         // 主账户 10_000 支出 9_999 后保留 ED；手续费由独立费用账户支付。
         assert_ok!(propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             Some(nrc_actor_cid()),
-            funding_account.clone(),
+            funding_account_id.clone(),
             dest.clone(),
             9_999,
             BoundedVec::default(),
@@ -510,7 +510,7 @@ fn existential_deposit_is_preserved() {
             pid,
         ));
 
-        assert_eq!(Balances::free_balance(&funding_account), 1);
+        assert_eq!(Balances::free_balance(&funding_account_id), 1);
         assert_eq!(Balances::free_balance(nrc_fee_account()), 9_990);
         assert_eq!(Balances::free_balance(&dest), 9_999);
     });
@@ -519,15 +519,15 @@ fn existential_deposit_is_preserved() {
 #[test]
 fn retry_passed_transfer_succeeds_after_failed_auto_execution() {
     new_test_ext().execute_with(|| {
-        let funding_account = nrc_main_account();
-        let dest = beneficiary();
+        let funding_account_id = nrc_main_account();
+        let dest = beneficiary_account_id();
 
         // 余额 10_000,提案 9_000(预检通过),然后在投票通过前转走 9_000。
         // 使余额仅 1_000,自动执行因余额不足失败,但提案保留,可统一手动重试。
         assert_ok!(propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             Some(nrc_actor_cid()),
-            funding_account.clone(),
+            funding_account_id.clone(),
             dest.clone(),
             9_000,
             BoundedVec::default(),
@@ -538,12 +538,12 @@ fn retry_passed_transfer_succeeds_after_failed_auto_execution() {
         let drain_dest = AccountId32::new([88u8; 32]);
         let _ = Balances::deposit_creating(&drain_dest, 1);
         assert_ok!(<Balances as frame_support::traits::Currency<_>>::transfer(
-            &funding_account,
+            &funding_account_id,
             &drain_dest,
             9_000,
             frame_support::traits::ExistenceRequirement::KeepAlive,
         ));
-        assert_eq!(Balances::free_balance(&funding_account), 1_000);
+        assert_eq!(Balances::free_balance(&funding_account_id), 1_000);
 
         // 投票达阈值后自动执行,但 try_execute_transfer 因余额不足失败。
         // 提案仍为 PASSED,转账未执行。
@@ -563,14 +563,14 @@ fn retry_passed_transfer_succeeds_after_failed_auto_execution() {
         assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
 
         // 补充余额后通过投票引擎统一入口手动重试。
-        let _ = Balances::deposit_creating(&funding_account, 9_000);
-        assert_eq!(Balances::free_balance(&funding_account), 10_000);
+        let _ = Balances::deposit_creating(&funding_account_id, 9_000);
+        assert_eq!(Balances::free_balance(&funding_account_id), 10_000);
         assert_ok!(VotingEngine::retry_passed_proposal(
             RuntimeOrigin::signed(nrc_admin(0)),
             pid
         ));
         // 重试成功：主账户只转出本金，费用账户单独支付手续费。
-        assert_eq!(Balances::free_balance(&funding_account), 1_000);
+        assert_eq!(Balances::free_balance(&funding_account_id), 1_000);
         assert_eq!(Balances::free_balance(nrc_fee_account()), 9_990);
         assert_eq!(Balances::free_balance(&dest), 9_000);
     });
@@ -579,13 +579,13 @@ fn retry_passed_transfer_succeeds_after_failed_auto_execution() {
 #[test]
 fn retry_passed_transfer_rejects_non_passed_proposal() {
     new_test_ext().execute_with(|| {
-        let funding_account = nrc_main_account();
-        let dest = beneficiary();
+        let funding_account_id = nrc_main_account();
+        let dest = beneficiary_account_id();
 
         assert_ok!(propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             Some(nrc_actor_cid()),
-            funding_account.clone(),
+            funding_account_id.clone(),
             dest,
             100,
             BoundedVec::default(),
@@ -603,15 +603,15 @@ fn retry_passed_transfer_rejects_non_passed_proposal() {
 #[test]
 fn retry_passed_transfer_rejects_non_admin() {
     new_test_ext().execute_with(|| {
-        let funding_account = nrc_main_account();
-        let dest = beneficiary();
+        let funding_account_id = nrc_main_account();
+        let dest = beneficiary_account_id();
         let outsider = AccountId32::new([88u8; 32]);
         let _ = Balances::deposit_creating(&outsider, 1);
 
         assert_ok!(propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             Some(nrc_actor_cid()),
-            funding_account.clone(),
+            funding_account_id.clone(),
             dest.clone(),
             100,
             BoundedVec::default(),
@@ -622,7 +622,7 @@ fn retry_passed_transfer_rejects_non_admin() {
         let drain_dest = AccountId32::new([77u8; 32]);
         let _ = Balances::deposit_creating(&drain_dest, 1);
         assert_ok!(<Balances as frame_support::traits::Currency<_>>::transfer(
-            &funding_account,
+            &funding_account_id,
             &drain_dest,
             9_900,
             frame_support::traits::ExistenceRequirement::KeepAlive,
@@ -637,7 +637,7 @@ fn retry_passed_transfer_rejects_non_admin() {
 
         // 自动执行失败，补充余额
         assert_eq!(Balances::free_balance(&dest), 0);
-        let _ = Balances::deposit_creating(&funding_account, 10_000);
+        let _ = Balances::deposit_creating(&funding_account_id, 10_000);
 
         // 统一重试入口只允许快照管理员手动重试。
         assert_noop!(
@@ -651,13 +651,13 @@ fn retry_passed_transfer_rejects_non_admin() {
 #[test]
 fn executed_transfer_cannot_be_executed_again() {
     new_test_ext().execute_with(|| {
-        let funding_account = nrc_main_account();
-        let dest = beneficiary();
+        let funding_account_id = nrc_main_account();
+        let dest = beneficiary_account_id();
 
         assert_ok!(propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             Some(nrc_actor_cid()),
-            funding_account.clone(),
+            funding_account_id.clone(),
             dest.clone(),
             1_000,
             BoundedVec::default(),
@@ -690,7 +690,7 @@ fn executed_transfer_cannot_be_executed_again() {
 #[test]
 fn protected_account_is_rejected() {
     new_test_ext().execute_with(|| {
-        let funding_account = nrc_main_account();
+        let funding_account_id = nrc_main_account();
         let protected = AccountId32::new([77u8; 32]);
 
         // 标记为受保护地址
@@ -700,7 +700,7 @@ fn protected_account_is_rejected() {
             propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 Some(nrc_actor_cid()),
-                funding_account.clone(),
+                funding_account_id.clone(),
                 protected,
                 100,
                 BoundedVec::default(),
@@ -713,15 +713,16 @@ fn protected_account_is_rejected() {
 #[test]
 fn institution_spend_guard_blocks_transfer_proposal() {
     new_test_ext().execute_with(|| {
-        let funding_account = nrc_main_account();
-        let dest = beneficiary();
-        DENIED_SPEND_SOURCE.with(|blocked| *blocked.borrow_mut() = Some(funding_account.clone()));
+        let funding_account_id = nrc_main_account();
+        let dest = beneficiary_account_id();
+        DENIED_SPEND_SOURCE
+            .with(|blocked| *blocked.borrow_mut() = Some(funding_account_id.clone()));
 
         assert_noop!(
             propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 Some(nrc_actor_cid()),
-                funding_account.clone(),
+                funding_account_id.clone(),
                 dest,
                 100,
                 BoundedVec::default(),
@@ -736,14 +737,14 @@ fn institution_spend_guard_blocks_transfer_proposal() {
 #[test]
 fn fee_respects_minimum_on_small_amount() {
     new_test_ext().execute_with(|| {
-        let funding_account = nrc_main_account();
-        let dest = beneficiary();
+        let funding_account_id = nrc_main_account();
+        let dest = beneficiary_account_id();
 
         // amount=1 时链上费命中最低值 10；主账户与费用账户分别保留 ED。
         assert_ok!(propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             Some(nrc_actor_cid()),
-            funding_account.clone(),
+            funding_account_id.clone(),
             dest.clone(),
             1,
             BoundedVec::default(),
@@ -757,7 +758,7 @@ fn fee_respects_minimum_on_small_amount() {
             pid,
         ));
 
-        assert_eq!(Balances::free_balance(&funding_account), 9_999);
+        assert_eq!(Balances::free_balance(&funding_account_id), 9_999);
         assert_eq!(Balances::free_balance(nrc_fee_account()), 9_990);
         assert_eq!(Balances::free_balance(&dest), 1);
     });

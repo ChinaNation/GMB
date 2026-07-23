@@ -19,11 +19,11 @@ pub struct PaymentIntent<AccountId, BlockNumber> {
     /// 全局唯一交易 ID(防重放,与链上 ProcessedOffchainTx 联动)。
     pub tx_id: H256,
     /// 付款方 L3 公钥(L3 的 AccountId,同链上地址)。
-    pub payer: AccountId,
+    pub payer_account_id: AccountId,
     /// 付款方绑定的清算行 **CID**(机构唯一永久主键;账户由 CID 派生查询)。
     pub payer_bank_cid: crate::InstitutionCidNumber,
     /// 收款方 L3 公钥。
-    pub recipient: AccountId,
+    pub recipient_account_id: AccountId,
     /// 收款方绑定的清算行 **CID**。
     pub recipient_bank_cid: crate::InstitutionCidNumber,
     /// 转账金额(分)。
@@ -49,7 +49,7 @@ impl<AccountId: Encode, BlockNumber: Encode> PaymentIntent<AccountId, BlockNumbe
 /// 生成清算行批次签名哈希(唯一原语 `signing_message`)。
 ///
 /// `message = blake2_256(GMB || OP_SIGN_OFFCHAIN_BATCH || SCALE(actor_cid_number)
-/// || SCALE(actor_role_code) || SCALE(institution_account) || batch_seq_le || SCALE(batch))`。
+/// || SCALE(actor_role_code) || SCALE(institution_account_id) || batch_seq_le || SCALE(batch))`。
 /// scale_payload 内字段拼接顺序必须与 node 打包器逐字节一致。
 ///
 /// node 侧 `AccountId32.as_ref()` 与 SCALE 编码同为 32 字节,这里使用 `Encode`
@@ -57,14 +57,14 @@ impl<AccountId: Encode, BlockNumber: Encode> PaymentIntent<AccountId, BlockNumbe
 pub fn batch_signing_hash<AccountId: Encode>(
     actor_cid_number: &[u8],
     actor_role_code: &[u8],
-    institution_account: &AccountId,
+    institution_account_id: &AccountId,
     batch_seq: u64,
     batch_bytes: &[u8],
 ) -> [u8; 32] {
     let mut scale_payload = Vec::new();
     scale_payload.extend_from_slice(&actor_cid_number.encode());
     scale_payload.extend_from_slice(&actor_role_code.encode());
-    scale_payload.extend_from_slice(&institution_account.encode());
+    scale_payload.extend_from_slice(&institution_account_id.encode());
     scale_payload.extend_from_slice(&batch_seq.to_le_bytes());
     scale_payload.extend_from_slice(batch_bytes);
     signing_message(OP_SIGN_OFFCHAIN_BATCH, &scale_payload)
@@ -88,10 +88,10 @@ pub fn batch_signing_hash<AccountId: Encode>(
 )]
 pub struct OffchainBatchItem<AccountId, BlockNumber> {
     pub tx_id: H256,
-    pub payer: AccountId,
+    pub payer_account_id: AccountId,
     /// 付款方绑定的清算行 **CID**(机构唯一永久主键)。
     pub payer_bank_cid: crate::InstitutionCidNumber,
-    pub recipient: AccountId,
+    pub recipient_account_id: AccountId,
     /// 收款方绑定的清算行 **CID**。
     pub recipient_bank_cid: crate::InstitutionCidNumber,
     pub transfer_amount: u128,
@@ -109,9 +109,9 @@ impl<AccountId: Clone + Encode, BlockNumber: Clone + Encode>
     pub fn to_intent(&self) -> PaymentIntent<AccountId, BlockNumber> {
         PaymentIntent {
             tx_id: self.tx_id,
-            payer: self.payer.clone(),
+            payer_account_id: self.payer_account_id.clone(),
             payer_bank_cid: self.payer_bank_cid.clone(),
-            recipient: self.recipient.clone(),
+            recipient_account_id: self.recipient_account_id.clone(),
             recipient_bank_cid: self.recipient_bank_cid.clone(),
             amount: self.transfer_amount,
             fee: self.fee_amount,
@@ -138,9 +138,9 @@ mod tests {
     fn signing_hash_is_deterministic() {
         let intent = PaymentIntent::<AccountId32, u32> {
             tx_id: H256::repeat_byte(9),
-            payer: acc(1),
+            payer_account_id: acc(1),
             payer_bank_cid: cid("BANK-A"),
-            recipient: acc(3),
+            recipient_account_id: acc(3),
             recipient_bank_cid: cid("BANK-A"),
             amount: 10_000,
             fee: 5,
@@ -156,9 +156,9 @@ mod tests {
     fn signing_hash_changes_with_any_field() {
         let base = PaymentIntent::<AccountId32, u32> {
             tx_id: H256::repeat_byte(9),
-            payer: acc(1),
+            payer_account_id: acc(1),
             payer_bank_cid: cid("BANK-A"),
-            recipient: acc(3),
+            recipient_account_id: acc(3),
             recipient_bank_cid: cid("BANK-A"),
             amount: 10_000,
             fee: 5,
@@ -178,7 +178,7 @@ mod tests {
     // **相同的 fixture + 相同的期望 hex**,任一端实现漂移 → 两端 CI 同时红。
     //
     // 布局(变长,payer_bank_cid/recipient_bank_cid = Compact(len)||bytes CID):
-    //   tx_id(32) || payer(32) || payer_bank_cid(变长) || recipient(32) ||
+    //   tx_id(32) || payer_account_id(32) || payer_bank_cid(变长) || recipient_account_id(32) ||
     //   recipient_bank_cid(变长) || amount(u128 LE,16) || fee(u128 LE,16) ||
     //   nonce(u64 LE,8) || expires_at(u32 LE,4)
     //
@@ -206,13 +206,13 @@ mod tests {
     /// / nonce 1 / expires_at 100。
     #[test]
     fn golden_fixture1_simple_same_bank() {
-        // 同行:payer/recipient 绑同一清算行 CID。signing_hash 是跨语言字节锁,
+        // 同行:payer_account_id/recipient_account_id 绑同一清算行 CID。signing_hash 是跨语言字节锁,
         // Dart `payment_intent_golden_test.dart` 用同一 CID fixture + 同一期望 hex。
         let intent = PaymentIntent::<AccountId32, u32> {
             tx_id: H256::zero(),
-            payer: acc(1),
+            payer_account_id: acc(1),
             payer_bank_cid: cid("LN001-NRC0G-944805165-2026"),
-            recipient: acc(3),
+            recipient_account_id: acc(3),
             recipient_bank_cid: cid("LN001-NRC0G-944805165-2026"),
             amount: 10_000,
             fee: 5,
@@ -229,12 +229,12 @@ mod tests {
     /// Fixture 2:跨行 + 大金额 + 大 nonce + 大 expires_at。锁字节序与字段位置。
     #[test]
     fn golden_fixture2_cross_bank_big_values() {
-        // 跨行 + 极值:payer/recipient 绑不同清算行 CID。
+        // 跨行 + 极值:payer_account_id/recipient_account_id 绑不同清算行 CID。
         let intent = PaymentIntent::<AccountId32, u32> {
             tx_id: H256::repeat_byte(0xFF),
-            payer: acc(0x11),
+            payer_account_id: acc(0x11),
             payer_bank_cid: cid("GD001-SFGF0-201206100-2026"),
-            recipient: acc(0x22),
+            recipient_account_id: acc(0x22),
             recipient_bank_cid: cid("AH001-SFGF0-111111111-2026"),
             amount: u128::MAX,
             fee: u128::MAX,
@@ -257,9 +257,9 @@ mod tests {
         }
         let intent = PaymentIntent::<AccountId32, u32> {
             tx_id: H256::from(tx_bytes),
-            payer: acc(0x55),
+            payer_account_id: acc(0x55),
             payer_bank_cid: cid("BJ001-SFGF0-222222222-2026"),
-            recipient: acc(0x66),
+            recipient_account_id: acc(0x66),
             recipient_bank_cid: cid("BJ001-SFGF0-222222222-2026"),
             amount: 0,
             fee: 0,

@@ -80,7 +80,7 @@ GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(0x18)
 ### 存储
 
 - 文件：`{app_data}/activated-admin-accounts.json`
-- 格式：`{"activations":[...]}`，每条记录包含 `pubkey_hex / account_hex / institution_code / kind / activated_at_ms / signature_hex / payload_hash_hex`
+- 格式：`{"activations":[...]}`，每条记录包含 `account_id / cid_number / institution_code / kind / activated_at_ms / signature_hex / payload_hash_hex`
 - 安全：文件权限限制（通过 security::write_text_atomic_restricted）
 - 失效：每次 `get_activated_admins` 调用时与链上管理员主体的 `institution_code/kind/admins/status` 交叉校验
 - 旧 `org` 本地记录不迁移、不读取；检测到旧格式时清空文件，用户按当前 `institution_code` 重新扫码激活。

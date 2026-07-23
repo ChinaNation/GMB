@@ -125,7 +125,7 @@ fn test_citizen_subject(who: &AccountId32) -> votingengine::CitizenSubject<Accou
             .to_vec()
             .try_into()
             .expect("account fits CID"),
-        wallet_account: who.clone(),
+        account_id: who.clone(),
     }
 }
 
@@ -152,18 +152,18 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         })
     }
 
-    fn is_personal_admin(personal_account: AccountId32, who: &AccountId32) -> bool {
+    fn is_personal_admin(personal_account_id: AccountId32, who: &AccountId32) -> bool {
         <personal_admins::Pallet<Test> as admin_primitives::AdminAccountQuery<AccountId32>>::is_active_account_admin(
             PMUL,
-            personal_account,
+            personal_account_id,
             who,
         )
     }
 
-    fn get_personal_admins(personal_account: AccountId32) -> Option<Vec<AccountId32>> {
+    fn get_personal_admins(personal_account_id: AccountId32) -> Option<Vec<AccountId32>> {
         <personal_admins::Pallet<Test> as admin_primitives::AdminAccountQuery<AccountId32>>::active_account_admins(
             PMUL,
-            personal_account,
+            personal_account_id,
         )
     }
 }
@@ -181,8 +181,8 @@ fn test_role_code(institution_code: InstitutionCode) -> &'static [u8] {
 fn propose_transfer(
     origin: RuntimeOrigin,
     actor_cid_number: Option<CidNumber>,
-    funding_account: AccountId32,
-    beneficiary: AccountId32,
+    funding_account_id: AccountId32,
+    beneficiary_account_id: AccountId32,
     amount: Balance,
     remark: BoundedVec<u8, ConstU32<256>>,
 ) -> sp_runtime::DispatchResult {
@@ -199,8 +199,8 @@ fn propose_transfer(
         origin,
         actor_cid_number,
         proposer_role_code,
-        funding_account,
-        beneficiary,
+        funding_account_id,
+        beneficiary_account_id,
         amount,
         remark,
     )
@@ -394,12 +394,12 @@ impl entity_primitives::InstitutionMultisigQuery<AccountId32> for TestInstitutio
 pub struct TestOnchainFeeCharger;
 impl primitives::fee_policy::OnchainFeeCharger<AccountId32, Balance> for TestOnchainFeeCharger {
     fn charge(
-        payer: &AccountId32,
+        payer_account_id: &AccountId32,
         transaction_amount: Balance,
     ) -> Result<Balance, sp_runtime::DispatchError> {
         let fee = primitives::fee_policy::calculate_onchain_fee(transaction_amount);
         let imbalance = Balances::withdraw(
-            payer,
+            payer_account_id,
             fee,
             WithdrawReasons::FEE,
             ExistenceRequirement::KeepAlive,
@@ -632,7 +632,7 @@ fn njd_actor_cid() -> CidNumber {
     protocol_cid_number(njd_node().cid_number.as_bytes())
 }
 
-fn personal_account() -> AccountId32 {
+fn personal_account_id() -> AccountId32 {
     AccountId32::new([0x55; 32])
 }
 
@@ -641,9 +641,9 @@ fn personal_account_admin(index: usize) -> AccountId32 {
 }
 
 /// 注册个人账户(PERSONAL_CODE)的 admin sr25519 keypair helper。
-/// seed 按 (PERSONAL_CODE, personal_account, index) 派生,保证确定性。
+/// seed 按 (PERSONAL_CODE, personal_account_id, index) 派生,保证确定性。
 fn personal_account_pair(index: usize) -> (AccountId32, sr25519::Pair) {
-    derive_admin_pair(PERSONAL_CODE, &personal_account(), index as u8)
+    derive_admin_pair(PERSONAL_CODE, &personal_account_id(), index as u8)
 }
 
 fn personal_account_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
@@ -652,7 +652,7 @@ fn personal_account_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
         .collect()
 }
 
-fn institution_account() -> AccountId32 {
+fn institution_account_id() -> AccountId32 {
     AccountId32::new([0x66; 32])
 }
 
@@ -666,7 +666,7 @@ fn institution_admin(index: usize) -> AccountId32 {
 
 /// 机构账户(PRIVATE_CODE / 0x05)的 admin sr25519 keypair helper。
 fn institution_pair(index: usize) -> (AccountId32, sr25519::Pair) {
-    derive_admin_pair(PRIVATE_CODE, &institution_account(), index as u8)
+    derive_admin_pair(PRIVATE_CODE, &institution_account_id(), index as u8)
 }
 
 fn institution_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
@@ -676,7 +676,7 @@ fn institution_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
 fn test_cid_number() -> CidNumber {
     primitives::cid::generator::generate_cid_number(
         primitives::cid::generator::GenerateCidNumberInput {
-            account_pubkey: "multisig-institution",
+            public_key: "multisig-institution",
             p1: "0",
             province_code: "GD",
             province_name: "广东省",
@@ -748,7 +748,7 @@ fn insert_active_fixed_institution_account(
 }
 
 /// 收款人：使用一个不是管理员也不是机构的普通地址
-fn beneficiary() -> AccountId32 {
+fn beneficiary_account_id() -> AccountId32 {
     AccountId32::new([99u8; 32])
 }
 
@@ -888,7 +888,7 @@ fn new_test_ext() -> sp_io::TestExternalities {
         // 管理员提供器只按 `(institution_code, actor_cid_number)` 读取本测试注入值。
         let frg = frg_main_account();
         let njd = njd_main_account();
-        let dq = personal_account();
+        let dq = personal_account_id();
         let nrc_accts: Vec<AccountId32> = nrc_pass_pairs().into_iter().map(|(a, _)| a).collect();
         let prc_accts: Vec<AccountId32> = prc_pass_pairs().into_iter().map(|(a, _)| a).collect();
         let prb_accts: Vec<AccountId32> = prb_pass_pairs().into_iter().map(|(a, _)| a).collect();

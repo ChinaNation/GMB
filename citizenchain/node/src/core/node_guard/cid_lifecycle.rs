@@ -67,7 +67,7 @@ enum CitizenStatus {
     Revoked,
 }
 
-/// 公民投票身份以永久 CID 为主键；钱包仅通过独立双向索引表达当前签名绑定。
+/// 公民投票身份以永久 CID 为主键；账户仅通过独立双向索引表达当前签名绑定。
 #[derive(Clone, Debug, Decode, Eq, PartialEq)]
 struct CitizenVotingIdentity {
     _passport_valid_from: u32,
@@ -151,8 +151,8 @@ pub enum GuardError {
     CitizenCidRevocationHeightInvalid,
     CitizenIdentityDeleted,
     CitizenIdentityWithoutCid,
-    CitizenWalletBindingMissing,
-    CitizenWalletBindingMismatch,
+    CitizenAccountIdBindingMissing,
+    CitizenAccountIdBindingMismatch,
     GenesisInstitutionDeleted,
     GenesisInstitutionChanged,
     InstitutionIdentityChanged,
@@ -210,20 +210,20 @@ pub mod storage_key {
         map_vec(CITIZEN_IDENTITY_PALLET, b"VotingIdentityByCid", cid)
     }
 
-    pub fn wallet_account_by_cid_prefix() -> Vec<u8> {
-        storage_prefix(CITIZEN_IDENTITY_PALLET, b"WalletAccountByCid")
+    pub fn account_id_by_cid_prefix() -> Vec<u8> {
+        storage_prefix(CITIZEN_IDENTITY_PALLET, b"AccountIdByCid")
     }
 
-    pub fn wallet_account_by_cid(cid: &[u8]) -> Vec<u8> {
-        map_vec(CITIZEN_IDENTITY_PALLET, b"WalletAccountByCid", cid)
+    pub fn account_id_by_cid(cid: &[u8]) -> Vec<u8> {
+        map_vec(CITIZEN_IDENTITY_PALLET, b"AccountIdByCid", cid)
     }
 
-    pub fn cid_by_wallet_account_prefix() -> Vec<u8> {
-        storage_prefix(CITIZEN_IDENTITY_PALLET, b"CidByWalletAccount")
+    pub fn cid_by_account_id_prefix() -> Vec<u8> {
+        storage_prefix(CITIZEN_IDENTITY_PALLET, b"CidByAccountId")
     }
 
-    pub fn cid_by_wallet_account(account: &[u8; 32]) -> Vec<u8> {
-        map_account(CITIZEN_IDENTITY_PALLET, b"CidByWalletAccount", account)
+    pub fn cid_by_account_id(account: &[u8; 32]) -> Vec<u8> {
+        map_account(CITIZEN_IDENTITY_PALLET, b"CidByAccountId", account)
     }
 
     pub fn institution_prefix(namespace: Namespace) -> Vec<u8> {
@@ -238,7 +238,7 @@ pub mod storage_key {
         storage_prefix(namespace.pallet(), b"InstitutionAccounts")
     }
 
-    pub fn institution_account(namespace: Namespace, cid: &[u8], name: &[u8]) -> Vec<u8> {
+    pub fn institution_account_id(namespace: Namespace, cid: &[u8], name: &[u8]) -> Vec<u8> {
         double_map_vec(namespace.pallet(), b"InstitutionAccounts", cid, name)
     }
 
@@ -255,8 +255,8 @@ pub mod storage_key {
         vec![
             citizen_registry_prefix(),
             voting_identity_prefix(),
-            wallet_account_by_cid_prefix(),
-            cid_by_wallet_account_prefix(),
+            account_id_by_cid_prefix(),
+            cid_by_account_id_prefix(),
             institution_prefix(Namespace::Public),
             institution_prefix(Namespace::Private),
             institution_account_prefix(Namespace::Public),
@@ -560,7 +560,7 @@ where
     .ok_or(GuardError::InstitutionIdentityChanged)?;
     for kind in required {
         let name = institution_protocol_account_name(*kind);
-        let raw = read(&storage_key::institution_account(namespace, cid, name))
+        let raw = read(&storage_key::institution_account_id(namespace, cid, name))
             .ok_or(GuardError::RequiredProtocolAccountMissing)?;
         let account: InstitutionAccountRecord = decode_exact(&raw, "InstitutionAccounts")?;
         validate_account_record(cid, name, &account)?;
@@ -619,14 +619,14 @@ where
         read(&storage_key::voting_identity(cid)).ok_or(GuardError::CitizenIdentityDeleted)?;
     let _: CitizenVotingIdentity = decode_exact(&identity_raw, "VotingIdentityByCid")?;
 
-    let account_raw = read(&storage_key::wallet_account_by_cid(cid))
-        .ok_or(GuardError::CitizenWalletBindingMissing)?;
-    let account: [u8; 32] = decode_exact(&account_raw, "WalletAccountByCid")?;
-    let reverse_raw = read(&storage_key::cid_by_wallet_account(&account))
-        .ok_or(GuardError::CitizenWalletBindingMissing)?;
-    let reverse_cid: Vec<u8> = decode_exact(&reverse_raw, "CidByWalletAccount")?;
+    let account_raw = read(&storage_key::account_id_by_cid(cid))
+        .ok_or(GuardError::CitizenAccountIdBindingMissing)?;
+    let account: [u8; 32] = decode_exact(&account_raw, "AccountIdByCid")?;
+    let reverse_raw = read(&storage_key::cid_by_account_id(&account))
+        .ok_or(GuardError::CitizenAccountIdBindingMissing)?;
+    let reverse_cid: Vec<u8> = decode_exact(&reverse_raw, "CidByAccountId")?;
     if reverse_cid != cid {
-        return Err(GuardError::CitizenWalletBindingMismatch);
+        return Err(GuardError::CitizenAccountIdBindingMismatch);
     }
     Ok(())
 }
@@ -650,8 +650,8 @@ where
     }
 
     let identity_prefix = storage_key::voting_identity_prefix();
-    let forward_prefix = storage_key::wallet_account_by_cid_prefix();
-    let reverse_prefix = storage_key::cid_by_wallet_account_prefix();
+    let forward_prefix = storage_key::account_id_by_cid_prefix();
+    let reverse_prefix = storage_key::cid_by_account_id_prefix();
     let mut touched_citizens = BTreeSet::<Vec<u8>>::new();
     for key in delta.keys() {
         if key.starts_with(&identity_prefix) {
@@ -662,26 +662,26 @@ where
             touched_citizens.insert(cid);
         }
         if key.starts_with(&forward_prefix) {
-            let cid = parse_vec_map_key(key, &forward_prefix, "WalletAccountByCid")?;
+            let cid = parse_vec_map_key(key, &forward_prefix, "AccountIdByCid")?;
             touched_citizens.insert(cid);
         }
         if key.starts_with(&reverse_prefix) {
-            let account = parse_account_map_key(key, &reverse_prefix, "CidByWalletAccount")?;
+            let account = parse_account_map_key(key, &reverse_prefix, "CidByAccountId")?;
             if let Some(raw) = post(key) {
-                let cid: Vec<u8> = decode_exact(&raw, "CidByWalletAccount")?;
-                let forward_raw = post(&storage_key::wallet_account_by_cid(&cid))
-                    .ok_or(GuardError::CitizenWalletBindingMissing)?;
-                let forward: [u8; 32] = decode_exact(&forward_raw, "WalletAccountByCid")?;
+                let cid: Vec<u8> = decode_exact(&raw, "CidByAccountId")?;
+                let forward_raw = post(&storage_key::account_id_by_cid(&cid))
+                    .ok_or(GuardError::CitizenAccountIdBindingMissing)?;
+                let forward: [u8; 32] = decode_exact(&forward_raw, "AccountIdByCid")?;
                 if forward != account {
-                    return Err(GuardError::CitizenWalletBindingMismatch);
+                    return Err(GuardError::CitizenAccountIdBindingMismatch);
                 }
                 touched_citizens.insert(cid);
             } else if let Some(raw) = parent(key) {
-                let cid: Vec<u8> = decode_exact(&raw, "CidByWalletAccount")?;
-                if post(&storage_key::wallet_account_by_cid(&cid)).is_some_and(|raw| {
-                    decode_exact::<[u8; 32]>(&raw, "WalletAccountByCid") == Ok(account)
+                let cid: Vec<u8> = decode_exact(&raw, "CidByAccountId")?;
+                if post(&storage_key::account_id_by_cid(&cid)).is_some_and(|raw| {
+                    decode_exact::<[u8; 32]>(&raw, "AccountIdByCid") == Ok(account)
                 }) {
-                    return Err(GuardError::CitizenWalletBindingMismatch);
+                    return Err(GuardError::CitizenAccountIdBindingMismatch);
                 }
                 touched_citizens.insert(cid);
             }
@@ -800,7 +800,7 @@ where
                 if let Some(raw) = post(key) {
                     let registered: RegisteredInstitution =
                         decode_exact(&raw, "AccountRegisteredCid")?;
-                    let forward_raw = post(&storage_key::institution_account(
+                    let forward_raw = post(&storage_key::institution_account_id(
                         namespace,
                         &registered.cid_number,
                         &registered.account_name,
@@ -854,23 +854,23 @@ where
         validate_citizen_identity_binding(&cid, read)?;
     }
 
-    let forward_prefix = storage_key::wallet_account_by_cid_prefix();
+    let forward_prefix = storage_key::account_id_by_cid_prefix();
     for key in keys.iter().filter(|key| key.starts_with(&forward_prefix)) {
         let Some(_) = read(key) else { continue };
-        let cid = parse_vec_map_key(key, &forward_prefix, "WalletAccountByCid")?;
+        let cid = parse_vec_map_key(key, &forward_prefix, "AccountIdByCid")?;
         validate_citizen_identity_binding(&cid, read)?;
     }
 
-    let reverse_prefix = storage_key::cid_by_wallet_account_prefix();
+    let reverse_prefix = storage_key::cid_by_account_id_prefix();
     for key in keys.iter().filter(|key| key.starts_with(&reverse_prefix)) {
         let Some(raw) = read(key) else { continue };
-        let account = parse_account_map_key(key, &reverse_prefix, "CidByWalletAccount")?;
-        let cid: Vec<u8> = decode_exact(&raw, "CidByWalletAccount")?;
-        let forward_raw = read(&storage_key::wallet_account_by_cid(&cid))
-            .ok_or(GuardError::CitizenWalletBindingMissing)?;
-        let forward: [u8; 32] = decode_exact(&forward_raw, "WalletAccountByCid")?;
+        let account = parse_account_map_key(key, &reverse_prefix, "CidByAccountId")?;
+        let cid: Vec<u8> = decode_exact(&raw, "CidByAccountId")?;
+        let forward_raw = read(&storage_key::account_id_by_cid(&cid))
+            .ok_or(GuardError::CitizenAccountIdBindingMissing)?;
+        let forward: [u8; 32] = decode_exact(&forward_raw, "AccountIdByCid")?;
         if forward != account {
-            return Err(GuardError::CitizenWalletBindingMismatch);
+            return Err(GuardError::CitizenAccountIdBindingMismatch);
         }
         validate_citizen_identity_binding(&cid, read)?;
     }
@@ -929,7 +929,7 @@ where
             let Some(raw) = read(key) else { continue };
             let account = parse_account_map_key(key, &reverse_prefix, "AccountRegisteredCid")?;
             let registered: RegisteredInstitution = decode_exact(&raw, "AccountRegisteredCid")?;
-            let forward_raw = read(&storage_key::institution_account(
+            let forward_raw = read(&storage_key::institution_account_id(
                 namespace,
                 &registered.cid_number,
                 &registered.account_name,
@@ -980,7 +980,7 @@ where
         if record.institution_code != singleton.code {
             return Err(GuardError::SingletonInstitutionIdentityMismatch);
         }
-        let main_raw = read(&storage_key::institution_account(
+        let main_raw = read(&storage_key::institution_account_id(
             Namespace::Public,
             cid,
             institution_protocol_account_name(InstitutionProtocolAccountKind::Main),
@@ -1103,7 +1103,7 @@ mod tests {
     fn citizen_cid_number(tag: &str) -> Vec<u8> {
         primitives::cid::generator::generate_cid_number(
             primitives::cid::generator::GenerateCidNumberInput {
-                account_pubkey: tag,
+                public_key: tag,
                 p1: "1",
                 province_code: "GD",
                 province_name: "广东省",
@@ -1145,9 +1145,9 @@ mod tests {
                 )
                     .encode(),
             ),
-            (storage_key::wallet_account_by_cid(cid), account.encode()),
+            (storage_key::account_id_by_cid(cid), account.encode()),
             (
-                storage_key::cid_by_wallet_account(&account),
+                storage_key::cid_by_account_id(&account),
                 cid.to_vec().encode(),
             ),
         ])
@@ -1172,7 +1172,7 @@ mod tests {
     fn ordinary_institution_can_be_deleted_but_genesis_institution_cannot() {
         let cid = primitives::cid::generator::generate_cid_number(
             primitives::cid::generator::GenerateCidNumberInput {
-                account_pubkey: "ordinary",
+                public_key: "ordinary",
                 p1: "1",
                 province_code: "GD",
                 province_name: "广东省",
@@ -1224,7 +1224,7 @@ mod tests {
     }
 
     #[test]
-    fn citizen_identity_uses_permanent_cid_and_current_wallet_binding() {
+    fn citizen_identity_uses_permanent_cid_and_current_account_id_binding() {
         let cid = citizen_cid_number("citizen-guard");
         let account = [7u8; 32];
         let post = citizen_state(&cid, account);
@@ -1258,7 +1258,7 @@ mod tests {
             Err(GuardError::CitizenIdentityDeleted)
         );
 
-        let reverse_key = storage_key::cid_by_wallet_account(&account);
+        let reverse_key = storage_key::cid_by_account_id(&account);
         let mut wrong_reverse = post.clone();
         wrong_reverse.insert(
             reverse_key.clone(),
@@ -1267,7 +1267,7 @@ mod tests {
         let mismatch = BTreeMap::from([(
             reverse_key,
             wrong_reverse
-                .get(&storage_key::cid_by_wallet_account(&account))
+                .get(&storage_key::cid_by_account_id(&account))
                 .cloned(),
         )]);
         assert_eq!(
@@ -1278,7 +1278,7 @@ mod tests {
                 |key| wrong_reverse.get(key).cloned(),
                 &GenesisReference::default(),
             ),
-            Err(GuardError::CitizenWalletBindingMissing)
+            Err(GuardError::CitizenAccountIdBindingMissing)
         );
     }
 }

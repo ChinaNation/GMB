@@ -209,7 +209,7 @@ impl<T: Config> Pallet<T> {
                 status: STATUS_VOTING,
                 internal_code: Some(first_code),
                 actor_cid_number: Some(actor_cid_number),
-                execution_account: None,
+                execution_account_id: None,
                 subject_cid_numbers,
                 start: now,
                 end,
@@ -348,7 +348,7 @@ impl<T: Config> Pallet<T> {
         let representative_subject = AuthorizationSubject::Institution(representative_body.clone());
         let ticket = votingengine::types::InstitutionVoteTicket {
             role_subject: representative_body,
-            voter_account: who.clone(),
+            voter_account_id: who.clone(),
         };
         let vote_key = (meta.current_body, ticket);
         ensure!(

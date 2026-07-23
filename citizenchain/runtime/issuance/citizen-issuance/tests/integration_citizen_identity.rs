@@ -100,7 +100,7 @@ impl CitizenIdentityAuthority<u64, citizen_identity::pallet::SignatureOf<Test>>
     }
 
     fn verify_citizen_signature(
-        _wallet_account: &u64,
+        _account_id: &u64,
         _payload: &[u8],
         signature: &citizen_identity::pallet::SignatureOf<Test>,
     ) -> bool {
@@ -150,7 +150,7 @@ fn new_test_ext() -> sp_io::TestExternalities {
 fn citizen_cid_number(tag: &str) -> Vec<u8> {
     primitives::cid::generator::generate_cid_number(
         primitives::cid::generator::GenerateCidNumberInput {
-            account_pubkey: tag,
+            public_key: tag,
             p1: "1",
             province_code: "GD",
             province_name: "广东省",
@@ -197,13 +197,13 @@ fn occupy_tag(tag: &str) {
     ));
 }
 
-fn payload(wallet_account: u64, cid_number: &[u8]) -> VotingIdentityPayload<u64> {
+fn payload(account_id: u64, cid_number: &[u8]) -> VotingIdentityPayload<u64> {
     VotingIdentityPayload {
         cid_number: cid_number
             .to_vec()
             .try_into()
             .expect("cid number should fit"),
-        wallet_account,
+        account_id,
         citizen_age_years: 18,
         passport_valid_from: 20260630,
         passport_valid_until: 20360630,

@@ -1,6 +1,6 @@
 # ADR-039：机构 CID 与岗位码权限模型
 
-状态：Accepted（2026-07-20；公私权管理员分型、机构阈值解耦、公民链基金会重新创世和岗位席位记票均已实施）。
+状态：Accepted（2026-07-20；公私权管理员分型、机构阈值解耦、公民链基金会重新创世、岗位席位记票和 ADR-040 runtime 账户字段统一均已实施）。
 
 ## 背景
 
@@ -46,7 +46,7 @@ RoleSubject = (cid_number, role_code)
 
 - 所有机构必须永久存在唯一 `LR / 法定代表人` 岗位；岗位允许空缺，但岗位码和岗位名不可修改或删除。
 - `LR` 岗位任职人数只能为 0 或 1；法定代表人姓名、个人 CID、账户三字段必须与 `LR` 任职在同一治理结果中一起设置或一起清空。
-- 所有创世固定岗位的岗位码、岗位名和岗位权限永久固定。非营利法人“公民链技术发展基金会”固定包含 `LR`、`GENESIS_PRODUCT_MANAGER`、`GENESIS_PROGRAMMER`，并允许同一钱包分别任职三岗。
+- 所有创世固定岗位的岗位码、岗位名和岗位权限永久固定。非营利法人“公民链技术发展基金会”固定包含 `LR`、`GENESIS_PRODUCT_MANAGER`、`GENESIS_PROGRAMMER`，并允许同一账户分别任职三岗。
 - 创世机构可以依法增加、改名和删除普通动态岗位；NodeGuard 只保护固定岗位，不禁止额外动态岗位。
 - 动态岗位码由 runtime 生成，机构内唯一、不可修改，删除后永不复用；调用方不得指定岗位码。
 - 动态岗位码格式：`R_<32 位大写十六进制>`。
@@ -55,9 +55,9 @@ RoleSubject = (cid_number, role_code)
 - `role_name` 在机构内唯一；同名多人必须表达为同一岗位码下的多个任职席位，不能复制成多个同名岗位。动态岗位名可以依法修改；岗位码、岗位权限及固定属性不可修改。
 - 同一管理员可以在同一机构担任多个不同岗位；任职去重边界是“同一岗位内同一账户不得重复占席”，不是“一个账户在机构内只能有一个岗位”。
 - 岗位只定义席位与权限，不保存岗位阈值；投票阈值属于机构/具体投票计划。例如 NRC 是一个 `COMMITTEE_MEMBER` 岗位、19 个任职席位、机构阈值 13。
-- 机构阈值由 public/private entity 按 CID 独立保存，不得从 `admins` 钱包数推导。投票引擎只在建案时消费该阈值并冻结提案快照。
-- 机构投票票据唯一键是 `InstitutionVoteTicket { role_subject, voter_account }`。同一钱包兼任多个有效投票岗位时，每个岗位各有一张票；同一岗位和钱包组合只能投一次。个人多签仍使用独立的账户票据。
-- `InstitutionTicketCountSnapshot[(proposal_id, cid_number)]` 冻结该机构在本提案中的岗位席位票据总数，只用于可达票数和阈值判定，不建立岗位阈值，也不按钱包去重。
+- 机构阈值由 public/private entity 按 CID 独立保存，不得从 `admins` 账户数推导。投票引擎只在建案时消费该阈值并冻结提案快照。
+- 机构投票票据唯一键是 `InstitutionVoteTicket { role_subject, voter_account_id }`。同一账户兼任多个有效投票岗位时，每个岗位各有一张票；同一岗位和账户组合只能投一次。个人多签仍使用独立的账户票据。
+- `InstitutionTicketCountSnapshot[(proposal_id, cid_number)]` 冻结该机构在本提案中的岗位席位票据总数，只用于可达票数和阈值判定，不建立岗位阈值，也不按账户去重。
 
 ### 6. 机构创建与个人多签
 
@@ -67,7 +67,7 @@ RoleSubject = (cid_number, role_code)
 
 ## 唯一真源与边界
 
-- admins 人员名册：`runtime/admins`。公权使用 `PublicAdmin { admin_account, cid_number, family_name, given_name }`，非空公民 CID 只能引用 `citizen-identity` 的 CID↔钱包绑定；私权机构与个人多签使用 `Admin { admin_account, family_name, given_name }`。
+- admins 人员名册：`runtime/admins`。公权使用 `PublicAdmin { account_id, cid_number, family_name, given_name }`，非空公民 CID 只能引用 `citizen-identity` 的 `AccountIdByCid` / `CidByAccountId` 双向绑定；私权机构与个人多签使用 `Admin { account_id, family_name, given_name }`。
 - 岗位、岗位权限、岗位码 nonce/占用和任职：`runtime/entity`。
 - CID 顶层能力、创世固定岗位与权限：runtime 共享常量与创世规范。
 - 业务动作权限要求、指定投票引擎、VotePlan 和通过后执行：对应业务模块。
@@ -91,6 +91,6 @@ RoleSubject = (cid_number, role_code)
 
 实施顺序及完整验收以 `memory/08-tasks/20260719-institution-role-permission-unify.md` 为准。2026-07-19 已完成共享授权类型、跨端 SCALE 契约、public/private entity 岗位权限生命周期、创世固定权限、准确 CID 顶层能力和 NodeGuard 固定权限保护。旧机构直接创建 call 5 已永久关闭。
 
-联合、内部、立法和互选 Track 均按每个 `RoleSubject` 建立 `VoterSnapshot`，机构票据按 `RoleSubject + admin_account` 分别保存，已删除旧的按 CID 合并钱包快照。同一钱包仍只需一把私钥，但可依法分别行使其每个有效岗位席位；机构阈值未改变。普选和立法公投继续使用 citizen-identity 人口数据生成的提案人口快照，个人多签继续按管理员账户票据记票。
+联合、内部、立法和互选 Track 均按每个 `RoleSubject` 建立 `VoterSnapshot`，机构票据按 `RoleSubject + voter_account_id` 分别保存，已删除旧的按 CID 合并账户快照。同一账户仍只需一把私钥，但可依法分别行使其每个有效岗位席位；机构阈值未改变。普选和立法公投继续使用 citizen-identity 人口数据生成的提案人口快照，个人多签继续按管理员账户票据记票。
 
-不得恢复 admins 直接授权、机构全体 admins 快照、按钱包合并岗位票权或旧账户票 storage。跨端调用必须显式携带岗位码，并以提案冻结的 VotePlan 和 VoterSnapshot 筛选可投岗位。
+不得恢复 admins 直接授权、机构全体 admins 快照、按账户合并岗位票权或旧账户票 storage。跨端调用必须显式携带岗位码，并以提案冻结的 VotePlan 和 VoterSnapshot 筛选可投岗位。

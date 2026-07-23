@@ -1,6 +1,6 @@
 //! 公权机构岗位目录与管理员任职。
 //!
-//! `admins` 模组独立保存 `admin_account + family_name + given_name` 人员集合；本模块只保存
+//! `admins` 模组独立保存 `account_id + family_name + given_name` 人员集合；本模块只保存
 //! “管理员在本机构担任什么岗位”的事实。运行期首次登记仅建立空缺的法定代表人岗位，
 //! 不根据岗位或任职生成管理员。
 
@@ -164,10 +164,8 @@ impl<T: Config> Pallet<T> {
                 );
             }
             ensure!(
-                assignment_keys.insert((
-                    assignment.admin_account.clone(),
-                    assignment.role_code.clone(),
-                )),
+                assignment_keys
+                    .insert((assignment.account_id.clone(), assignment.role_code.clone(),)),
                 Error::<T>::DuplicateAssignment
             );
         }
@@ -372,7 +370,7 @@ impl<T: Config> InstitutionRoleQuery<T::AccountId> for Pallet<T> {
         InstitutionRoleAssignments::<T>::get(&cid_number, role_code)
             .into_iter()
             .any(|assignment| {
-                &assignment.admin_account == admin
+                &assignment.account_id == admin
                     && Pallet::<T>::is_assignment_effective(&role, &assignment)
             })
     }
@@ -399,10 +397,10 @@ impl<T: Config> InstitutionRoleQuery<T::AccountId> for Pallet<T> {
                 T::InstitutionAdminQuery::is_institution_admin(
                     institution.institution_code,
                     cid_number.as_slice(),
-                    &assignment.admin_account,
+                    &assignment.account_id,
                 ) && Pallet::<T>::is_assignment_effective(&role, assignment)
             })
-            .map(|assignment| assignment.admin_account)
+            .map(|assignment| assignment.account_id)
             .collect()
     }
 
@@ -419,7 +417,7 @@ impl<T: Config> InstitutionRoleQuery<T::AccountId> for Pallet<T> {
                 let active = InstitutionRoleAssignments::<T>::get(&cid_number, &role_code)
                     .into_iter()
                     .any(|assignment| {
-                        &assignment.admin_account == admin
+                        &assignment.account_id == admin
                             && T::InstitutionAdminQuery::is_institution_admin(
                                 institution.institution_code,
                                 cid_number.as_slice(),

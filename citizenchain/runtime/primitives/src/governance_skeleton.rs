@@ -1,8 +1,8 @@
 //! 固定治理骨架冻结规格(档 A 单源)。
 //!
-//! `public-admins::AdminAccounts` 保存固定机构管理员钱包，`public-manage` 保存岗位与任职。
+//! `public-admins::AdminAccounts` 保存固定机构管理员账户，`public-manage` 保存岗位与任职。
 //! 本模块把**永不合法变更的结构骨架**收敛为编译常量清单，供三端共读、防止规格漂移:
-//!   1. 创世播种(`runtime/genesis`):写入固定机构、岗位、任职与管理员钱包;
+//!   1. 创世播种(`runtime/genesis`):写入固定机构、岗位、任职与管理员账户;
 //!   2. runtime 查询(`public-manage`):按稳定岗位代码读取有效任职;
 //!   3. 节点守卫(`node/src/core/node_guard/governance_skeleton.rs`):读取固定账户骨架；
 //!      entity 岗位与席位的逐块 RAW 守卫按后续步骤接入。
@@ -73,7 +73,7 @@ pub fn province_commissioner_role_name(province_name: &str) -> Vec<u8> {
 
 /// NJD 护宪大法官法庭固定席位数 = 公民宪法第 21 条 4/7 终审的「7」。
 ///
-/// 创世 `fixed_roles` 的钱包索引 0..=6 落 7 名护宪，本常量即其规格单源；
+/// 创世 `fixed_roles` 的账户索引 0..=6 落 7 名护宪，本常量即其规格单源；
 /// 创世岗位映射与后续 entity 岗位守卫都使用本值，补上宪法守卫
 /// `guard_review_passed(approve>=4)` 里从未被锚定的「7」(见 ADR-027 §6.3)。
 pub const NJD_CONSTITUTION_GUARD_SEATS: u32 = 7;

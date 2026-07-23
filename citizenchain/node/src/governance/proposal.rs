@@ -61,7 +61,8 @@ pub struct ProposalMeta {
     /// 发起机构唯一 CID；个人多签、公民个人或系统提案为空。
     pub actor_cid_number: Option<String>,
     /// 仅在具体资产账户或个人多签参与执行时存在。
-    pub execution_account_hex: Option<String>,
+    #[serde(rename = "execution_account_id")]
+    pub execution_account_id: Option<String>,
     /// 机构类提案关联的机构 CID 列表；个人多签提案为空。
     pub subject_cid_numbers: Vec<String>,
 }
@@ -71,7 +72,8 @@ pub struct ProposalMeta {
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeUpgradeDetail {
     pub proposal_id: u64,
-    pub proposer_hex: String,
+    #[serde(rename = "proposer_account_id")]
+    pub proposer_account_id: String,
     pub reason: String,
     pub code_hash_hex: String,
     pub expected_pow_params_hash_hex: String,
@@ -138,7 +140,8 @@ pub struct FeeRateProposalDetail {
     /// 发起机构唯一 CID。
     pub actor_cid_number: String,
     /// 承担该费率业务的机构账户。
-    pub institution_account_hex: String,
+    #[serde(rename = "institution_account_id")]
+    pub institution_account_id: String,
     pub new_rate_bp: u32,
 }
 
@@ -149,7 +152,8 @@ pub struct ResolutionIssuanceDetail {
     pub proposal_id: u64,
     pub actor_cid_number: String,
     pub proposer_role_code: String,
-    pub proposer_hex: String,
+    #[serde(rename = "proposer_account_id")]
+    pub proposer_account_id: String,
     pub reason: String,
     pub total_amount_fen: String,
     pub allocations: Vec<IssuanceAllocationItem>,
@@ -159,7 +163,8 @@ pub struct ResolutionIssuanceDetail {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IssuanceAllocationItem {
-    pub recipient_hex: String,
+    #[serde(rename = "recipient_account_id")]
+    pub recipient_account_id: String,
     pub amount_fen: String,
 }
 
@@ -169,7 +174,8 @@ pub struct IssuanceAllocationItem {
 pub struct ResolutionDestroyDetail {
     pub proposal_id: u64,
     pub actor_cid_number: String,
-    pub institution_account_hex: String,
+    #[serde(rename = "institution_account_id")]
+    pub institution_account_id: String,
     pub amount_fen: String,
 }
 
@@ -769,13 +775,13 @@ fn decode_proposal_meta(proposal_id: u64, data: &[u8]) -> Option<ProposalMeta> {
         None
     };
     // execution_account: Option<AccountId32>
-    let execution_account_hex = if offset < data.len() && data[offset] == 1 {
+    let execution_account_id = if offset < data.len() && data[offset] == 1 {
         offset += 1;
         let end = offset.checked_add(32)?;
         if end > data.len() {
             return None;
         }
-        let value = Some(hex::encode(&data[offset..end]));
+        let value = Some(format!("0x{}", hex::encode(&data[offset..end])));
         offset = end;
         value
     } else {
@@ -791,7 +797,7 @@ fn decode_proposal_meta(proposal_id: u64, data: &[u8]) -> Option<ProposalMeta> {
         status,
         internal_code,
         actor_cid_number,
-        execution_account_hex,
+        execution_account_id,
         subject_cid_numbers,
     })
 }
@@ -811,7 +817,7 @@ fn decode_runtime_upgrade_action(proposal_id: u64, data: &[u8]) -> Option<Runtim
     if offset + 32 > data.len() {
         return None;
     }
-    let proposer_hex = hex::encode(&data[offset..offset + 32]);
+    let proposer_account_id = format!("0x{}", hex::encode(&data[offset..offset + 32]));
     offset += 32;
 
     // reason: Vec<u8>
@@ -850,7 +856,7 @@ fn decode_runtime_upgrade_action(proposal_id: u64, data: &[u8]) -> Option<Runtim
 
     Some(RuntimeUpgradeDetail {
         proposal_id,
-        proposer_hex,
+        proposer_account_id,
         reason,
         code_hash_hex,
         expected_pow_params_hash_hex,
@@ -881,7 +887,7 @@ fn decode_resolution_issuance_action(
     if offset + 32 > data.len() {
         return None;
     }
-    let proposer_hex = hex::encode(&data[offset..offset + 32]);
+    let proposer_account_id = format!("0x{}", hex::encode(&data[offset..offset + 32]));
     offset += 32;
 
     // reason: Vec<u8>
@@ -909,12 +915,12 @@ fn decode_resolution_issuance_action(
         if offset + 32 + 16 > data.len() {
             return None;
         }
-        let recipient_hex = hex::encode(&data[offset..offset + 32]);
+        let recipient_account_id = format!("0x{}", hex::encode(&data[offset..offset + 32]));
         offset += 32;
         let amount = u128::from_le_bytes(data[offset..offset + 16].try_into().ok()?);
         offset += 16;
         allocations.push(IssuanceAllocationItem {
-            recipient_hex,
+            recipient_account_id,
             amount_fen: amount.to_string(),
         });
     }
@@ -927,7 +933,7 @@ fn decode_resolution_issuance_action(
         proposal_id,
         actor_cid_number,
         proposer_role_code,
-        proposer_hex,
+        proposer_account_id,
         reason,
         total_amount_fen: total_amount.to_string(),
         allocations,
@@ -938,7 +944,7 @@ fn decode_resolution_destroy_action(
     proposal_id: u64,
     data: &[u8],
 ) -> Option<ResolutionDestroyDetail> {
-    // SCALE 布局：MODULE_TAG + actor_cid_number + institution_account + amount。
+    // SCALE 布局：MODULE_TAG + actor_cid_number + institution_account_id + amount。
     let tag = TAG_RESOLUTION_DESTROY;
     if data.len() < tag.len() + 1 + 32 + 16 || &data[..tag.len()] != tag {
         return None;
@@ -949,7 +955,7 @@ fn decode_resolution_destroy_action(
     if offset + 32 + 16 > data.len() {
         return None;
     }
-    let institution_account_hex = hex::encode(&data[offset..offset + 32]);
+    let institution_account_id = format!("0x{}", hex::encode(&data[offset..offset + 32]));
     offset += 32;
 
     let amount = u128::from_le_bytes(data[offset..offset + 16].try_into().ok()?);
@@ -957,7 +963,7 @@ fn decode_resolution_destroy_action(
     Some(ResolutionDestroyDetail {
         proposal_id,
         actor_cid_number,
-        institution_account_hex,
+        institution_account_id,
         amount_fen: amount.to_string(),
     })
 }
@@ -1335,14 +1341,15 @@ pub struct UserVoteStatus {
 /// 查询指定用户（管理员公钥）对某提案的投票状态。
 pub fn fetch_user_vote_status(
     proposal_id: u64,
-    pubkey_hex: &str,
+    signer_public_key: &str,
     cid_number: Option<&str>,
     voter_role_code: Option<&str>,
 ) -> Result<UserVoteStatus, String> {
     let meta =
         fetch_proposal_meta(proposal_id)?.ok_or_else(|| format!("提案 {proposal_id} 不存在"))?;
 
-    let pubkey_bytes = hex::decode(pubkey_hex).map_err(|e| format!("公钥解码失败: {e}"))?;
+    let signer_public_key_bytes =
+        hex::decode(signer_public_key).map_err(|e| format!("公钥解码失败: {e}"))?;
 
     // 查询内部投票状态（个人账户票或 CID + 岗位码 + 钱包票据）。
     let internal_vote = {
@@ -1352,12 +1359,12 @@ pub fn fetch_user_vote_status(
                 key.extend_from_slice(&cid_number_key(cid)?);
                 key.extend_from_slice(&encode_compact_u32(role_code.len() as u32));
                 key.extend_from_slice(role_code.as_bytes());
-                key.extend_from_slice(&pubkey_bytes);
+                key.extend_from_slice(&signer_public_key_bytes);
                 key
             }
             (None, None) => {
                 let mut key = vec![0u8]; // InternalVoteTicket::Personal
-                key.extend_from_slice(&pubkey_bytes);
+                key.extend_from_slice(&signer_public_key_bytes);
                 key
             }
             _ => return Err("机构投票状态查询必须同时提供 cid_number 和 voter_role_code".into()),
@@ -1378,7 +1385,7 @@ pub fn fetch_user_vote_status(
         let mut composite_key = cid_number_key(cid_number)?;
         composite_key.extend_from_slice(&encode_compact_u32(voter_role_code.len() as u32));
         composite_key.extend_from_slice(voter_role_code.as_bytes());
-        composite_key.extend_from_slice(&pubkey_bytes);
+        composite_key.extend_from_slice(&signer_public_key_bytes);
         let key = storage_keys::double_map_key(
             "JointVote",
             "JointVotesByTicket",
@@ -1454,7 +1461,7 @@ mod format_summary_tests {
         let long = "a".repeat(80);
         let d = RuntimeUpgradeDetail {
             proposal_id: 2,
-            proposer_hex: String::new(),
+            proposer_account_id: String::new(),
             reason: long,
             code_hash_hex: String::new(),
             expected_pow_params_hash_hex: String::new(),
@@ -1494,16 +1501,16 @@ mod format_summary_tests {
             proposal_id: 3,
             actor_cid_number: String::new(),
             proposer_role_code: String::new(),
-            proposer_hex: String::new(),
+            proposer_account_id: String::new(),
             reason: "春节福利".to_string(),
             total_amount_fen: "100000".to_string(), // 1000 元
             allocations: vec![
                 IssuanceAllocationItem {
-                    recipient_hex: "a".repeat(64),
+                    recipient_account_id: "a".repeat(64),
                     amount_fen: "50000".to_string(),
                 },
                 IssuanceAllocationItem {
-                    recipient_hex: "b".repeat(64),
+                    recipient_account_id: "b".repeat(64),
                     amount_fen: "50000".to_string(),
                 },
             ],
@@ -1545,7 +1552,7 @@ mod format_summary_tests {
         let d = ResolutionDestroyDetail {
             proposal_id: 4,
             actor_cid_number: String::new(),
-            institution_account_hex: "00".repeat(32),
+            institution_account_id: format!("0x{}", "00".repeat(32)),
             amount_fen: "50000".to_string(),
         };
         assert_eq!(format_destroy_summary(&d), "决议销毁 500.00 元：未知机构");
@@ -1556,7 +1563,7 @@ mod format_summary_tests {
         let d = FeeRateProposalDetail {
             proposal_id: 5,
             actor_cid_number: String::new(),
-            institution_account_hex: "00".repeat(32),
+            institution_account_id: format!("0x{}", "00".repeat(32)),
             new_rate_bp: 150, // 1.50%
         };
         assert_eq!(format_fee_rate_summary(&d), "费率设置 1.50%：未知机构");
@@ -1566,7 +1573,7 @@ mod format_summary_tests {
     fn split_action_into_details_maps_each_variant() {
         let detail = RuntimeUpgradeDetail {
             proposal_id: 1,
-            proposer_hex: String::new(),
+            proposer_account_id: String::new(),
             reason: "升级".to_string(),
             code_hash_hex: String::new(),
             expected_pow_params_hash_hex: String::new(),

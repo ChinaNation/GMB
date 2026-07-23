@@ -19,7 +19,7 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     )
 }
 
-/// 查询指定机构的管理员钱包及其全部有效岗位任职。
+/// 查询指定机构的管理员账户及其全部有效岗位任职。
 pub fn fetch_institution_admins(
     cid_number: &str,
 ) -> Result<Vec<management::types::InstitutionAdminInfo>, String> {
@@ -27,18 +27,18 @@ pub fn fetch_institution_admins(
 }
 
 /// 查询 finalized 块上的账户余额（返回 free 余额，单位为最小精度）。
-pub fn fetch_balance(account_hex: &str) -> Result<Option<u128>, String> {
+pub fn fetch_balance(account_id: &str) -> Result<Option<u128>, String> {
     // (ADR-017):钉块哈希统一取自 chain_query 收口,业务读取禁止 best。
     let hash = chain_query::fetch_finalized_head()?;
-    fetch_balance_at(account_hex, Some(&hash))
+    fetch_balance_at(account_id, Some(&hash))
 }
 
 /// 查询指定 finalized 块上的账户余额（返回 free 余额，单位为最小精度）。
 pub fn fetch_balance_at(
-    account_hex: &str,
+    account_id: &str,
     block_hash: Option<&str>,
 ) -> Result<Option<u128>, String> {
-    let storage_key = storage_keys::system_account_key(account_hex)?;
+    let storage_key = storage_keys::system_account_key(account_id)?;
     let mut params = vec![Value::String(storage_key)];
     if let Some(hash) = block_hash {
         params.push(Value::String(hash.to_string()));

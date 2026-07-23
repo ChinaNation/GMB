@@ -89,8 +89,8 @@ fn finalize_at(value: u64) {
 
 pub struct TestCitizenIdentity;
 impl SquarePostCitizenIdentityProvider<AccountId32> for TestCitizenIdentity {
-    fn cid_number(owner_account: &AccountId32) -> Option<Vec<u8>> {
-        (*owner_account == verified_account()).then(|| b"GD001-CTZN1-000000001-2026".to_vec())
+    fn cid_number(owner_account_id: &AccountId32) -> Option<Vec<u8>> {
+        (*owner_account_id == verified_account()).then(|| b"GD001-CTZN1-000000001-2026".to_vec())
     }
 }
 

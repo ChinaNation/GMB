@@ -92,7 +92,7 @@ fn pending_reward_scale_and_storage_key_match_node_guard_contract() {
     use sp_runtime::testing::H256;
 
     let pending = PendingCertificationReward {
-        who: 7u64,
+        account_id: 7u64,
         cid_number_hash: H256::repeat_byte(9),
     };
     assert_eq!(pending.encode(), (7u64, H256::repeat_byte(9)).encode());
@@ -117,7 +117,7 @@ fn voting_identity_registered_issues_reward() {
         assert!(AccountRewarded::<Test>::contains_key(1));
         System::assert_last_event(RuntimeEvent::CitizenIssuance(
             Event::<Test>::CertificationRewardIssued {
-                who: 1,
+                account_id: 1,
                 cid_number_hash,
                 reward: CITIZEN_ISSUANCE_HIGH_REWARD,
             },
@@ -135,7 +135,7 @@ fn max_cap_stops_reward() {
         assert_eq!(RewardedCount::<Test>::get(), CITIZEN_ISSUANCE_MAX_COUNT);
         System::assert_last_event(RuntimeEvent::CitizenIssuance(
             Event::<Test>::CertificationRewardSkipped {
-                who: 1,
+                account_id: 1,
                 cid_number_hash,
                 reason: SkipReason::MaxCountReached,
             },
@@ -170,7 +170,7 @@ fn max_count_minus_one_allows_last_reward_then_rejects_next() {
         assert!(!AccountRewarded::<Test>::contains_key(2));
         System::assert_last_event(RuntimeEvent::CitizenIssuance(
             Event::<Test>::CertificationRewardSkipped {
-                who: 2,
+                account_id: 2,
                 cid_number_hash: cid_number_hash_b,
                 reason: SkipReason::MaxCountReached,
             },
@@ -188,7 +188,7 @@ fn same_citizen_identity_only_rewards_once() {
         assert_eq!(RewardedCount::<Test>::get(), 1);
         System::assert_last_event(RuntimeEvent::CitizenIssuance(
             Event::<Test>::CertificationRewardSkipped {
-                who: 1,
+                account_id: 1,
                 cid_number_hash,
                 reason: SkipReason::DuplicateCitizenIdentity,
             },
@@ -235,12 +235,12 @@ fn consecutive_rewards_switch_from_high_to_normal_in_same_block() {
             issuance_events,
             vec![
                 Event::<Test>::CertificationRewardIssued {
-                    who: 1,
+                    account_id: 1,
                     cid_number_hash: cid_number_hash_a,
                     reward: CITIZEN_ISSUANCE_HIGH_REWARD,
                 },
                 Event::<Test>::CertificationRewardIssued {
-                    who: 2,
+                    account_id: 2,
                     cid_number_hash: cid_number_hash_b,
                     reward: CITIZEN_ISSUANCE_NORMAL_REWARD,
                 },
@@ -274,7 +274,7 @@ fn high_reward_count_minus_one_still_gets_high_reward() {
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         System::assert_last_event(RuntimeEvent::CitizenIssuance(
             Event::<Test>::CertificationRewardIssued {
-                who: 1,
+                account_id: 1,
                 cid_number_hash,
                 reward: CITIZEN_ISSUANCE_HIGH_REWARD,
             },
@@ -299,7 +299,7 @@ fn same_account_second_citizen_identity_is_not_marked_reward_claimed() {
         assert!(AccountRewarded::<Test>::contains_key(1));
         System::assert_last_event(RuntimeEvent::CitizenIssuance(
             Event::<Test>::CertificationRewardSkipped {
-                who: 1,
+                account_id: 1,
                 cid_number_hash: cid_number_hash_b,
                 reason: SkipReason::AccountAlreadyRewarded,
             },
@@ -329,7 +329,7 @@ fn same_account_different_citizen_identities_only_rewards_once() {
         assert_eq!(RewardedCount::<Test>::get(), 1);
         System::assert_last_event(RuntimeEvent::CitizenIssuance(
             Event::<Test>::CertificationRewardSkipped {
-                who: 1,
+                account_id: 1,
                 cid_number_hash: cid_number_hash_b,
                 reason: SkipReason::AccountAlreadyRewarded,
             },
@@ -352,7 +352,7 @@ fn same_block_pending_tables_prevent_duplicate_account_reward() {
         ));
         System::assert_last_event(RuntimeEvent::CitizenIssuance(
             Event::<Test>::CertificationRewardSkipped {
-                who: 1,
+                account_id: 1,
                 cid_number_hash: second_hash,
                 reason: SkipReason::AccountAlreadyRewarded,
             },
@@ -373,7 +373,7 @@ fn same_block_pending_tables_prevent_duplicate_account_reward() {
 fn citizen_cid_number(tag: &str) -> Vec<u8> {
     primitives::cid::generator::generate_cid_number(
         primitives::cid::generator::GenerateCidNumberInput {
-            account_pubkey: tag,
+            public_key: tag,
             p1: "1",
             province_code: "GD",
             province_name: "广东省",
@@ -388,21 +388,21 @@ fn citizen_cid_number(tag: &str) -> Vec<u8> {
 }
 
 fn notify_voting_identity_registered(
-    who: u64,
+    account_id: u64,
     cid_number: &[u8],
 ) -> <Test as frame_system::Config>::Hash {
-    let cid_number_hash = queue_voting_identity_registered(who, cid_number);
+    let cid_number_hash = queue_voting_identity_registered(account_id, cid_number);
     CitizenIssuance::on_finalize(System::block_number());
     cid_number_hash
 }
 
 fn queue_voting_identity_registered(
-    who: u64,
+    account_id: u64,
     cid_number: &[u8],
 ) -> <Test as frame_system::Config>::Hash {
     let cid_number_hash = <Test as frame_system::Config>::Hashing::hash(cid_number);
     <CitizenIssuance as citizen_identity::OnVotingIdentityRegistered<u64>>::on_voting_identity_registered(
-        &who,
+        &account_id,
         cid_number,
     );
     cid_number_hash

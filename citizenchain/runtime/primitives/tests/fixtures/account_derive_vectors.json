@@ -63,7 +63,7 @@
       "address_hex": "d6976c3de64e82253ea136b2c39c19e7a664d27f9a54c31cf0ff3c5b399f31cc",
       "creator_hex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
       "kind": "Personal",
-      "source": "self-authored: 个人多签 creator+name(address 由 Rust 回填)"
+      "source": "self-authored: 个人多签 creator_account_id+name(address 由 Rust 回填)"
     }
   ]
 }

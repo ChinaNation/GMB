@@ -162,7 +162,7 @@ pub mod pallet {
     >;
 
     /// 代表表决去重：(proposal_id, (body_index, 岗位票据)) → 赞成/反对。
-    /// `body_index` 隔离顺序表决阶段，岗位票据保留 CID + 岗位码 + 钱包三元权限。
+    /// `body_index` 隔离顺序表决阶段，岗位票据保留 CID + 岗位码 + 账户三元权限。
     #[pallet::storage]
     pub type RepresentativeVotesByTicket<T: Config> = StorageDoubleMap<
         _,
@@ -184,7 +184,7 @@ pub mod pallet {
 
     /// 立法公投票据：`(proposal_id, 永久公民 CID) → 完整公民主体 + 票值`。
     ///
-    /// 按 CID 而不是钱包去重，保证公民更换绑定钱包后仍只能投一票。
+    /// 按 CID 而不是账户去重，保证公民更换绑定账户后仍只能投一票。
     #[pallet::storage]
     pub type LegReferendumVotesByCid<T: Config> = StorageDoubleMap<
         _,

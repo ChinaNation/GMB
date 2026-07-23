@@ -64,9 +64,9 @@ pub mod pallet {
     pub enum BurnReason {
         /// 当前区块作者无法从共识 digest 中识别。
         AuthorMissing,
-        /// 区块作者尚未绑定全节点手续费奖励钱包。
-        WalletUnbound,
-        /// 全节点奖励钱包入账失败，剩余 credit 被销毁。
+        /// 区块作者尚未绑定全节点手续费奖励账户。
+        RewardAccountUnbound,
+        /// 全节点奖励账户入账失败，剩余 credit 被销毁。
         FullnodeResolveFailed,
         /// 国家储委会手续费账户未配置。
         NrcMissing,
@@ -81,13 +81,13 @@ pub mod pallet {
     pub enum Event<T: Config> {
         /// 交易手续费已收取。
         /// `tip` 在协议层永久为零，因此 `fee` 就是本笔完整链上交易费或投票费。
-        FeePaid { who: T::AccountId, fee: u128 },
+        FeePaid { account_id: T::AccountId, fee: u128 },
         /// 手续费分账份额因无法安全入账而被销毁。
         FeeShareBurnt { reason: BurnReason, amount: u128 },
         /// 普通链上转账已执行，备注随交易事件绑定。
         TransferWithRemark {
-            from: T::AccountId,
-            beneficiary: T::AccountId,
+            from_account_id: T::AccountId,
+            beneficiary_account_id: T::AccountId,
             amount: BalanceOf<T>,
             remark: TransferRemarkOf<T>,
         },
@@ -110,20 +110,28 @@ pub mod pallet {
         #[pallet::weight(T::DbWeight::get().reads_writes(1, 1))]
         pub fn transfer_with_remark(
             origin: OriginFor<T>,
-            beneficiary: T::AccountId,
+            beneficiary_account_id: T::AccountId,
             amount: BalanceOf<T>,
             remark: TransferRemarkOf<T>,
         ) -> DispatchResult {
             let from = ensure_signed(origin)?;
             ensure!(!amount.is_zero(), Error::<T>::ZeroAmount);
-            ensure!(from != beneficiary, Error::<T>::SelfTransferNotAllowed);
+            ensure!(
+                from != beneficiary_account_id,
+                Error::<T>::SelfTransferNotAllowed
+            );
 
-            T::Currency::transfer(&from, &beneficiary, amount, ExistenceRequirement::KeepAlive)
-                .map_err(|_| Error::<T>::TransferFailed)?;
+            T::Currency::transfer(
+                &from,
+                &beneficiary_account_id,
+                amount,
+                ExistenceRequirement::KeepAlive,
+            )
+            .map_err(|_| Error::<T>::TransferFailed)?;
 
             Self::deposit_event(Event::TransferWithRemark {
-                from,
-                beneficiary,
+                from_account_id: from,
+                beneficiary_account_id,
                 amount,
                 remark,
             });
@@ -153,7 +161,7 @@ const _: () = {
 };
 
 /// 链上交易手续费分配器（统一入口）：
-/// - 全节点（绑定钱包）分成：`ONCHAIN_FEE_FULLNODE_PERCENT`（80%）
+/// - 全节点（绑定账户）分成：`ONCHAIN_FEE_FULLNODE_PERCENT`（80%）
 /// - 国家储委会手续费账户分成：`ONCHAIN_FEE_NRC_PERCENT`（10%）
 /// - 安全基金账户分成：`ONCHAIN_FEE_SAFETY_FUND_PERCENT`（10%）
 pub struct OnchainFeeRouter<T, Currency, AuthorFinder, NrcProvider, SafetyFundProvider>(
@@ -218,7 +226,7 @@ where
     <C as Currency<T::AccountId>>::Balance: SaturatedConversion + Copy + Zero,
 {
     fn charge(
-        payer: &T::AccountId,
+        payer_account_id: &T::AccountId,
         transaction_amount: <C as Currency<T::AccountId>>::Balance,
     ) -> Result<<C as Currency<T::AccountId>>::Balance, sp_runtime::DispatchError> {
         let fee_u128 = primitives::fee_policy::calculate_onchain_fee(
@@ -226,14 +234,14 @@ where
         );
         let fee = fee_u128.saturated_into();
         let imbalance = C::withdraw(
-            payer,
+            payer_account_id,
             fee,
             frame_support::traits::WithdrawReasons::FEE,
             frame_support::traits::ExistenceRequirement::KeepAlive,
         )?;
         Router::on_unbalanced(imbalance);
         pallet::Pallet::<T>::deposit_event(pallet::Event::FeePaid {
-            who: payer.clone(),
+            account_id: payer_account_id.clone(),
             fee: fee_u128,
         });
         Ok(fee)
@@ -261,7 +269,7 @@ where
         tip: Self::Balance,
     ) -> Result<Self::LiquidityInfo, TransactionValidityError> {
         // 框架金额不参与制度收费，实际金额与付款账户只能来自唯一 FeeRoute。
-        let Some((payer, fee)) =
+        let Some((payer_account_id, fee)) =
             charge_details::<T, Currency, FeeRouteProvider>(who, call, dispatch_info, tip)?
         else {
             return Ok(None);
@@ -269,7 +277,7 @@ where
 
         // Exact + Preserve：要么从明确账户完整扣款并保留 ED，要么整笔交易失败。
         let credit = Currency::withdraw(
-            &payer,
+            &payer_account_id,
             fee,
             Precision::Exact,
             Preservation::Preserve,
@@ -280,7 +288,7 @@ where
         // 发出链上手续费事件，供手机端 / 浏览器 / node 读取真实手续费。
         let paid_fee: u128 = fee.saturated_into();
         pallet::Pallet::<T>::deposit_event(pallet::Event::FeePaid {
-            who: payer.clone(),
+            account_id: payer_account_id.clone(),
             fee: paid_fee,
         });
 
@@ -294,12 +302,12 @@ where
         _fee_with_tip: Self::Balance,
         tip: Self::Balance,
     ) -> Result<(), TransactionValidityError> {
-        let Some((payer, fee)) =
+        let Some((payer_account_id, fee)) =
             charge_details::<T, Currency, FeeRouteProvider>(who, call, dispatch_info, tip)?
         else {
             return Ok(());
         };
-        match Currency::can_withdraw(&payer, fee) {
+        match Currency::can_withdraw(&payer_account_id, fee) {
             frame_support::traits::tokens::WithdrawConsequence::Success => Ok(()),
             _ => Err(InvalidTransaction::Payment.into()),
         }
@@ -386,17 +394,19 @@ where
         );
         let (nrc_credit, safety_fund_credit) = remainder.ration(nrc_percent, safety_fund_percent);
 
-        // 手续费全节点分成只发给"当前区块作者对应绑定钱包"；未绑定则不分配（自动销毁）。
+        // 手续费全节点分成只发给当前区块作者绑定的奖励接收账户；未绑定则不分配（自动销毁）。
         let digest = <frame_system::Pallet<T>>::digest();
         let pre_runtime_digests = digest.logs().iter().filter_map(|d| d.as_pre_runtime());
         match AuthorFinder::find_author(pre_runtime_digests) {
-            Some(miner) => {
-                if let Some(wallet) = fullnode_issuance::RewardWalletByMiner::<T>::get(&miner) {
-                    if let Err(remaining) = Currency::resolve(&wallet, fullnode_credit) {
+            Some(miner_account_id) => {
+                if let Some(reward_account_id) =
+                    fullnode_issuance::RewardAccountIdByMiner::<T>::get(&miner_account_id)
+                {
+                    if let Err(remaining) = Currency::resolve(&reward_account_id, fullnode_credit) {
                         let burnt_amount = remaining.peek().saturated_into::<u128>();
                         log::warn!(
                             target: "runtime::onchain",
-                            "burn fullnode fee share: failed to resolve reward wallet credit: {:?}",
+                            "burn fullnode fee share: failed to resolve reward account credit: {:?}",
                             remaining.peek()
                         );
                         emit_fee_share_burn::<T>(
@@ -408,9 +418,12 @@ where
                     let burnt_amount = fullnode_credit.peek().saturated_into::<u128>();
                     log::warn!(
                         target: "runtime::onchain",
-                        "burn fullnode fee share: author found but reward wallet not bound"
+                        "burn fullnode fee share: author found but reward account not bound"
                     );
-                    emit_fee_share_burn::<T>(pallet::BurnReason::WalletUnbound, burnt_amount);
+                    emit_fee_share_burn::<T>(
+                        pallet::BurnReason::RewardAccountUnbound,
+                        burnt_amount,
+                    );
                     drop(fullnode_credit);
                 }
             }
@@ -493,17 +506,17 @@ where
     match FeeRouteProvider::fee_route(who, call) {
         FeeRoute::Onchain {
             transaction_amount,
-            payer,
+            payer_account_id,
         } => {
             // 只有链上交易费按金额套 0.1% 费率；机构普通操作传零金额，固定落最低费。
             let amount_u128: u128 = transaction_amount.saturated_into();
             let fee_u128 = primitives::fee_policy::calculate_onchain_fee(amount_u128);
             let fee = fee_u128.saturated_into();
-            Ok(Some((payer, fee)))
+            Ok(Some((payer_account_id, fee)))
         }
-        FeeRoute::Vote { payer } => {
+        FeeRoute::Vote { payer_account_id } => {
             let fee = primitives::fee_policy::VOTE_FLAT_FEE.saturated_into();
-            Ok(Some((payer, fee)))
+            Ok(Some((payer_account_id, fee)))
         }
         FeeRoute::Offchain { .. } => {
             // 链下费用由 offchain 执行器按同一个路由结果和批次规则收取，

@@ -1,8 +1,8 @@
-//! 89 个受保护创世机构的岗位、席位与钱包索引映射。
+//! 89 个受保护创世机构的岗位、席位与账户索引映射。
 //!
-//! 本模块不写 storage，也不创建钱包。岗位协议常量来自
-//! `primitives::governance_skeleton`，钱包来自既有 `CHINA_*` 常量；这里仅负责在
-//! 创世阶段把第 `index` 个既有管理员钱包确定性映射到固定岗位。
+//! 本模块不写 storage，也不创建账户。岗位协议常量来自
+//! `primitives::governance_skeleton`，账户来自既有 `CHINA_*` 常量；这里仅负责在
+//! 创世阶段把第 `index` 个既有管理员账户确定性映射到固定岗位。
 
 extern crate alloc;
 
@@ -29,21 +29,21 @@ pub(super) fn expected_admin_count(code: InstitutionCode) -> usize {
     }
 }
 
-/// 断言现有钱包常量数量与固定席位总数完全一致。
+/// 断言现有账户常量数量与固定席位总数完全一致。
 pub(super) fn assert_fixed_admin_count(code: InstitutionCode, actual: usize) {
     let expected = expected_admin_count(code);
     assert_eq!(
         actual, expected,
-        "genesis institution: 固定机构管理员钱包数量与岗位席位不一致"
+        "genesis institution: 固定机构管理员账户数量与岗位席位不一致"
     );
 }
 
-/// 将固定机构第 `index` 个既有管理员钱包映射到创世岗位。
+/// 将固定机构第 `index` 个既有管理员账户映射到创世岗位。
 pub(super) fn role_for_fixed_admin(code: InstitutionCode, index: usize) -> GenesisRole {
     let expected = expected_admin_count(code);
     assert!(
         index < expected,
-        "genesis institution: 管理员钱包索引超出固定岗位席位"
+        "genesis institution: 管理员账户索引超出固定岗位席位"
     );
 
     if code == FRG {
@@ -83,7 +83,7 @@ mod tests {
     }
 
     #[test]
-    fn fixed_wallet_counts_equal_seat_totals() {
+    fn fixed_account_id_counts_equal_seat_totals() {
         assert_eq!(expected_admin_count(NRC), NRC_ADMIN_COUNT as usize);
         assert_eq!(expected_admin_count(PRC), PRC_ADMIN_COUNT as usize);
         assert_eq!(expected_admin_count(PRB), PRB_ADMIN_COUNT as usize);
@@ -95,7 +95,7 @@ mod tests {
     }
 
     #[test]
-    fn committee_and_bank_wallets_map_to_single_role() {
+    fn committee_and_bank_account_ids_map_to_single_role() {
         assert_eq!(role_code(NRC, 0), ROLE_CODE_COMMITTEE_MEMBER);
         assert_eq!(
             role_code(NRC, NRC_ADMIN_COUNT as usize - 1),
@@ -110,7 +110,7 @@ mod tests {
     }
 
     #[test]
-    fn judicial_wallet_order_maps_to_seven_one_two_five() {
+    fn judicial_account_id_order_maps_to_seven_one_two_five() {
         assert_eq!(role_code(NJD, 0), ROLE_CODE_CONSTITUTION_GUARD);
         assert_eq!(role_code(NJD, 6), ROLE_CODE_CONSTITUTION_GUARD);
         assert_eq!(role_code(NJD, 7), ROLE_CODE_CHIEF_JUSTICE);
@@ -121,7 +121,7 @@ mod tests {
     }
 
     #[test]
-    fn federal_registry_maps_five_wallets_per_province_role() {
+    fn federal_registry_maps_five_account_ids_per_province_role() {
         let group_size = FRG_PROVINCE_GROUP_ADMIN_COUNT as usize;
         for (province_index, province) in PROVINCE_CODE_INFOS.iter().enumerate() {
             let first = province_index * group_size;

@@ -284,7 +284,7 @@ fn test_citizen_subject(who: &AccountId32) -> votingengine::CitizenSubject<Accou
             .to_vec()
             .try_into()
             .expect("account fits CID"),
-        wallet_account: who.clone(),
+        account_id: who.clone(),
     }
 }
 
@@ -382,7 +382,7 @@ fn insert_engine_proposal_with_stage_and_status(proposal_id: u64, stage: u8, sta
             status,
             internal_code: None,
             actor_cid_number: Some(actor_cid_number()),
-            execution_account: None,
+            execution_account_id: None,
             subject_cid_numbers: Default::default(),
             start: 0u64,
             end: 100u64,
@@ -477,10 +477,13 @@ fn allocations_ok(total: Balance) -> pallet::AllocationOf<Test> {
     let per = total / count;
     let mut left = total;
     let mut v = Vec::new();
-    for (i, recipient) in recipients.into_iter().enumerate() {
+    for (i, recipient_account_id) in recipients.into_iter().enumerate() {
         let amount = if i + 1 == count as usize { left } else { per };
         left = left.saturating_sub(amount);
-        v.push(crate::proposal::RecipientAmount { recipient, amount });
+        v.push(crate::proposal::RecipientAmount {
+            recipient_account_id,
+            amount,
+        });
     }
     v.try_into().expect("allocations should fit")
 }

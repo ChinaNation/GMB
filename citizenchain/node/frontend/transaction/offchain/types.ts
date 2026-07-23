@@ -19,8 +19,8 @@ export type ClearingBankNodeOnChainInfo = {
   rpcDomain: string;
   rpcPort: number;
   registeredAt: number;
-  registeredByPubkeyHex: string;
-  registeredBySs58: string;
+  registered_by_account_id: string;
+  registered_by_ss58_address: string;
 };
 
 export type ConnectivityCheck = {
@@ -35,7 +35,7 @@ export type ConnectivityTestReport = {
 };
 
 export type DecryptedAdminInfo = {
-  pubkeyHex: string;
+  signer_public_key: string;
   cidNumber: string;
   decryptedAtMs: number;
 };

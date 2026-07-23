@@ -222,7 +222,7 @@ fn pending_personal_admin(index: usize) -> AccountId32 {
     }
 }
 
-fn personal_account() -> AccountId32 {
+fn personal_account_id() -> AccountId32 {
     AccountId32::new([78u8; 32])
 }
 
@@ -247,7 +247,7 @@ fn permanent_singleton_admin(index: usize) -> AccountId32 {
 }
 
 fn set_personal_threshold(threshold: u32) {
-    ActivePersonalThresholds::<Test>::insert(personal_account(), threshold);
+    ActivePersonalThresholds::<Test>::insert(personal_account_id(), threshold);
 }
 
 fn set_institution_threshold(cid_number: CidNumber, threshold: u32) {
@@ -363,15 +363,15 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         TEST_INSTITUTION_THRESHOLDS.with(|thresholds| thresholds.borrow().get(cid_number).copied())
     }
 
-    fn is_personal_admin(personal_account: AccountId32, who: &AccountId32) -> bool {
-        personal_account == self::personal_account()
+    fn is_personal_admin(personal_account_id: AccountId32, who: &AccountId32) -> bool {
+        personal_account_id == self::personal_account_id()
             && [personal_admin(0), personal_admin(1), personal_admin(2)]
                 .iter()
                 .any(|admin| admin == who)
     }
 
-    fn get_personal_admins(personal_account: AccountId32) -> Option<Vec<AccountId32>> {
-        if personal_account == self::personal_account() {
+    fn get_personal_admins(personal_account_id: AccountId32) -> Option<Vec<AccountId32>> {
+        if personal_account_id == self::personal_account_id() {
             Some(sp_std::vec![
                 personal_admin(0),
                 personal_admin(1),
@@ -382,15 +382,15 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         }
     }
 
-    fn is_pending_personal_admin(personal_account: AccountId32, who: &AccountId32) -> bool {
-        personal_account == pending_personal_account()
+    fn is_pending_personal_admin(personal_account_id: AccountId32, who: &AccountId32) -> bool {
+        personal_account_id == pending_personal_account()
             && [pending_personal_admin(0), pending_personal_admin(1)]
                 .iter()
                 .any(|admin| admin == who)
     }
 
-    fn get_pending_personal_admins(personal_account: AccountId32) -> Option<Vec<AccountId32>> {
-        (personal_account == pending_personal_account())
+    fn get_pending_personal_admins(personal_account_id: AccountId32) -> Option<Vec<AccountId32>> {
+        (personal_account_id == pending_personal_account())
             .then(|| sp_std::vec![pending_personal_admin(0), pending_personal_admin(1)])
     }
 }
@@ -475,7 +475,7 @@ fn test_citizen_subject(who: &AccountId32) -> votingengine::CitizenSubject<Accou
             .to_vec()
             .try_into()
             .expect("account fits CID"),
-        wallet_account: who.clone(),
+        account_id: who.clone(),
     }
 }
 
@@ -580,9 +580,9 @@ fn internal_mutex_for(
 }
 
 fn personal_mutex_for(
-    personal_account: AccountId32,
+    personal_account_id: AccountId32,
 ) -> Option<votingengine::InternalProposalMutexState> {
-    VotingEngine::internal_proposal_mutex(ProposalSubject::PersonalAccount(personal_account))
+    VotingEngine::internal_proposal_mutex(ProposalSubject::PersonalAccount(personal_account_id))
 }
 
 fn nrc_admin(index: usize) -> AccountId32 {
@@ -868,11 +868,11 @@ fn internal_vote_plan_with_owner(
 
 fn create_pending_personal_proposal_via_engine(
     who: AccountId32,
-    personal_account: AccountId32,
+    personal_account_id: AccountId32,
 ) -> u64 {
     <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_account_create_proposal_with_data(
         who,
-        personal_account,
+        personal_account_id,
         sp_std::vec![pending_personal_admin(0), pending_personal_admin(1)],
         2,
         b"test",
@@ -881,10 +881,10 @@ fn create_pending_personal_proposal_via_engine(
     .expect("pending personal proposal should be created")
 }
 
-fn create_personal_proposal_via_engine(who: AccountId32, personal_account: AccountId32) -> u64 {
+fn create_personal_proposal_via_engine(who: AccountId32, personal_account_id: AccountId32) -> u64 {
     <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_proposal_with_data(
         who,
-        personal_account,
+        personal_account_id,
         b"test",
         b"payload".to_vec(),
     )
@@ -893,11 +893,11 @@ fn create_personal_proposal_via_engine(who: AccountId32, personal_account: Accou
 
 fn create_admin_set_mutation_proposal_via_engine(
     who: AccountId32,
-    personal_account: AccountId32,
+    personal_account_id: AccountId32,
 ) -> u64 {
     <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_admin_change_proposal_with_data(
         who,
-        personal_account,
+        personal_account_id,
         3,
         2,
         b"test",
@@ -967,7 +967,7 @@ fn insert_joint_referendum_proposal(proposal_id: u64, eligible_total: u64, end: 
                     .try_into()
                     .expect("NRC CID fits runtime bound"),
             ),
-            execution_account: None,
+            execution_account_id: None,
             subject_cid_numbers: Default::default(),
             start: System::block_number(),
             end,

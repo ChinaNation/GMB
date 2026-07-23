@@ -1,4 +1,4 @@
-// 共享的 32 字节密钥 / 地址解析工具，供 bootnodes_address、grandpa_address、fee_account 复用。
+// 共享的 32 字节密钥 / 地址解析工具，供 bootnodes_address、grandpa_address、reward_account 复用。
 pub(crate) fn decode_hex_32_strict(input: &str) -> Result<[u8; 32], String> {
     if input.len() != 64 || !input.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("hex 地址格式无效，应为 64 位十六进制".to_string());

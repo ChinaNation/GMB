@@ -50,8 +50,8 @@ mod benchmarks {
     /// 单笔到期续费处理路径（on_idle 按此估算每块可排空笔数）。
     #[benchmark]
     fn process_one_due() {
-        let subscriber: T::AccountId = whitelisted_caller();
-        let key = (subscriber.clone(), IssuerKey::Platform);
+        let subscriber_account_id: T::AccountId = whitelisted_caller();
+        let key = (subscriber_account_id.clone(), IssuerKey::Platform);
         PlatformPrice::<T>::insert(MembershipLevel::Freedom, 199_900u128);
         Subscriptions::<T>::insert(&key, active_platform_state::<T>());
         RenewalSchedule::<T>::insert(2u64.to_be_bytes(), &key, ());

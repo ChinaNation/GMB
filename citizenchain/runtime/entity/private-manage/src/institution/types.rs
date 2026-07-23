@@ -26,6 +26,6 @@ pub struct AddInstitutionAccountAction<AccountId, CidNumber, AccountName> {
     pub actor_cid_number: CidNumber,
     /// 发起时已派生并逐项校验通过的 (账户名, 账户地址) 列表。
     pub derived: Vec<(AccountName, AccountId)>,
-    /// 提案发起人钱包(与 `CloseInstitutionAction.proposer` 对称,供落库事件署名)。
-    pub proposer: AccountId,
+    /// 提案发起人账户(与 `CloseInstitutionAction.proposer_account_id` 对称,供落库事件署名)。
+    pub proposer_account_id: AccountId,
 }

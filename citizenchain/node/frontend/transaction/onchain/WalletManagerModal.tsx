@@ -38,7 +38,7 @@ export function WalletManagerModal({ wallets, activeId, onClose, onUpdate, onSel
   // 加载所有钱包余额
   useEffect(() => {
     for (const w of wallets) {
-      api.getWalletBalance(w.pubkeyHex)
+      api.getWalletBalance(w.account_id)
         .then((b) => setBalances((prev) => ({ ...prev, [w.id]: b })))
         .catch(() => setBalances((prev) => ({ ...prev, [w.id]: null })));
     }
@@ -158,7 +158,7 @@ export function WalletManagerModal({ wallets, activeId, onClose, onUpdate, onSel
                   className="wallet-radio"
                 />
                 <span className="wallet-row-name">{w.name}</span>
-                <span className="wallet-row-address">{w.address}</span>
+                <span className="wallet-row-address">{w.ss58_address}</span>
                 <span className="wallet-row-balance">
                   {bal != null ? `${fenToYuan(bal)} 元` : '-'}
                 </span>

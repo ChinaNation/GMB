@@ -4,14 +4,14 @@ use crate::{governance, home};
 use tauri::AppHandle;
 
 /// 构建多签转账提案签名请求 QR JSON（需要节点运行）。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn build_multisig_transfer_request(
     app: AppHandle,
-    pubkey_hex: String,
+    signer_public_key: String,
     actor_cid_number: String,
     proposer_role_code: String,
-    institution_account: String,
-    beneficiary_address: String,
+    institution_account_id: String,
+    beneficiary_ss58_address: String,
     amount_yuan: f64,
     remark: String,
 ) -> Result<governance::signing::VoteSignRequestResult, String> {
@@ -21,11 +21,11 @@ pub async fn build_multisig_transfer_request(
     }
     tauri::async_runtime::spawn_blocking(move || {
         super::signing::build_propose_transfer_sign_request(
-            &pubkey_hex,
+            &signer_public_key,
             &actor_cid_number,
             &proposer_role_code,
-            &institution_account,
-            &beneficiary_address,
+            &institution_account_id,
+            &beneficiary_ss58_address,
             amount_yuan,
             &remark,
         )
@@ -35,16 +35,16 @@ pub async fn build_multisig_transfer_request(
 }
 
 /// 验证签名响应并提交多签转账提案。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn submit_multisig_transfer(
     app: AppHandle,
     request_id: String,
-    expected_pubkey_hex: String,
+    expected_signer_public_key: String,
     expected_payload_hash: String,
     actor_cid_number: String,
     proposer_role_code: String,
-    institution_account: String,
-    beneficiary_address: String,
+    institution_account_id: String,
+    beneficiary_ss58_address: String,
     amount_yuan: f64,
     remark: String,
     sign_nonce: u32,
@@ -57,14 +57,15 @@ pub async fn submit_multisig_transfer(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let amount_fen = (amount_yuan * 100.0).round() as u128;
-        let beneficiary_bytes = governance::signing::decode_ss58_to_pubkey(&beneficiary_address)?;
+        let beneficiary_bytes =
+            governance::signing::account_id_from_ss58_address(&beneficiary_ss58_address)?;
         let remark_bytes = remark.as_bytes();
-        let institution_account =
-            super::account_id::institution_account_from_hex(&institution_account)?;
+        let institution_account_id =
+            super::account_id::institution_account_from_id(&institution_account_id)?;
         let call_data = super::signing::build_transfer_call_data(
             &actor_cid_number,
             &proposer_role_code,
-            &institution_account,
+            &institution_account_id,
             &beneficiary_bytes,
             amount_fen,
             remark_bytes,
@@ -72,7 +73,7 @@ pub async fn submit_multisig_transfer(
 
         governance::signing::verify_and_submit(
             &request_id,
-            &expected_pubkey_hex,
+            &expected_signer_public_key,
             &expected_payload_hash,
             &call_data,
             sign_nonce,
@@ -85,14 +86,14 @@ pub async fn submit_multisig_transfer(
 }
 
 /// 构建安全基金转账提案签名请求 QR JSON（需要节点运行）。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn build_multisig_safety_fund_request(
     app: AppHandle,
-    pubkey_hex: String,
+    signer_public_key: String,
     actor_cid_number: String,
     proposer_role_code: String,
-    institution_account: String,
-    beneficiary_address: String,
+    institution_account_id: String,
+    beneficiary_ss58_address: String,
     amount_yuan: f64,
     remark: String,
 ) -> Result<governance::signing::VoteSignRequestResult, String> {
@@ -102,11 +103,11 @@ pub async fn build_multisig_safety_fund_request(
     }
     tauri::async_runtime::spawn_blocking(move || {
         super::signing::build_propose_safety_fund_sign_request(
-            &pubkey_hex,
+            &signer_public_key,
             &actor_cid_number,
             &proposer_role_code,
-            &institution_account,
-            &beneficiary_address,
+            &institution_account_id,
+            &beneficiary_ss58_address,
             amount_yuan,
             &remark,
         )
@@ -116,16 +117,16 @@ pub async fn build_multisig_safety_fund_request(
 }
 
 /// 验证签名响应并提交安全基金转账提案。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn submit_multisig_safety_fund(
     app: AppHandle,
     request_id: String,
-    expected_pubkey_hex: String,
+    expected_signer_public_key: String,
     expected_payload_hash: String,
     actor_cid_number: String,
     proposer_role_code: String,
-    institution_account: String,
-    beneficiary_address: String,
+    institution_account_id: String,
+    beneficiary_ss58_address: String,
     amount_yuan: f64,
     remark: String,
     sign_nonce: u32,
@@ -140,14 +141,14 @@ pub async fn submit_multisig_safety_fund(
         let call_data = super::signing::build_safety_fund_call_data(
             &actor_cid_number,
             &proposer_role_code,
-            &institution_account,
-            &beneficiary_address,
+            &institution_account_id,
+            &beneficiary_ss58_address,
             amount_yuan,
             &remark,
         )?;
         governance::signing::verify_and_submit(
             &request_id,
-            &expected_pubkey_hex,
+            &expected_signer_public_key,
             &expected_payload_hash,
             &call_data,
             sign_nonce,
@@ -160,13 +161,13 @@ pub async fn submit_multisig_safety_fund(
 }
 
 /// 构建手续费划转提案签名请求。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn build_multisig_sweep_request(
     app: AppHandle,
-    pubkey_hex: String,
+    signer_public_key: String,
     actor_cid_number: String,
     proposer_role_code: String,
-    institution_account: String,
+    institution_account_id: String,
     amount_yuan: f64,
 ) -> Result<governance::signing::VoteSignRequestResult, String> {
     let status = home::current_status(&app)?;
@@ -175,10 +176,10 @@ pub async fn build_multisig_sweep_request(
     }
     tauri::async_runtime::spawn_blocking(move || {
         super::signing::build_propose_sweep_sign_request(
-            &pubkey_hex,
+            &signer_public_key,
             &actor_cid_number,
             &proposer_role_code,
-            &institution_account,
+            &institution_account_id,
             amount_yuan,
         )
     })
@@ -187,15 +188,15 @@ pub async fn build_multisig_sweep_request(
 }
 
 /// 验证签名并提交手续费划转提案。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn submit_multisig_sweep(
     app: AppHandle,
     request_id: String,
-    expected_pubkey_hex: String,
+    expected_signer_public_key: String,
     expected_payload_hash: String,
     actor_cid_number: String,
     proposer_role_code: String,
-    institution_account: String,
+    institution_account_id: String,
     amount_yuan: f64,
     sign_nonce: u32,
     sign_block_number: u64,
@@ -209,12 +210,12 @@ pub async fn submit_multisig_sweep(
         let call_data = super::signing::build_sweep_call_data(
             &actor_cid_number,
             &proposer_role_code,
-            &institution_account,
+            &institution_account_id,
             amount_yuan,
         )?;
         governance::signing::verify_and_submit(
             &request_id,
-            &expected_pubkey_hex,
+            &expected_signer_public_key,
             &expected_payload_hash,
             &call_data,
             sign_nonce,

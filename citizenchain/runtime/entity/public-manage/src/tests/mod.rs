@@ -86,15 +86,15 @@ impl pallet_balances::Config for Test {
 
 pub struct TestAccountValidator;
 impl primitives::multisig::AccountValidator<AccountId32> for TestAccountValidator {
-    fn is_valid(address: &AccountId32) -> bool {
-        address != &AccountId32::new([0u8; 32])
+    fn is_valid(account_id: &AccountId32) -> bool {
+        account_id != &AccountId32::new([0u8; 32])
     }
 }
 
 pub struct TestReservedAccountChecker;
 impl primitives::multisig::ReservedAccountGuard<AccountId32> for TestReservedAccountChecker {
-    fn is_reserved(address: &AccountId32) -> bool {
-        *address == AccountId32::new([0xAA; 32])
+    fn is_reserved(account_id: &AccountId32) -> bool {
+        *account_id == AccountId32::new([0xAA; 32])
     }
 }
 
@@ -162,12 +162,12 @@ impl entity_primitives::InstitutionMultisigQuery<AccountId32> for TestInstitutio
 pub struct TestOnchainFeeCharger;
 impl primitives::fee_policy::OnchainFeeCharger<AccountId32, Balance> for TestOnchainFeeCharger {
     fn charge(
-        payer: &AccountId32,
+        payer_account_id: &AccountId32,
         transaction_amount: Balance,
     ) -> Result<Balance, sp_runtime::DispatchError> {
         let fee = primitives::fee_policy::calculate_onchain_fee(transaction_amount);
         let imbalance = Balances::withdraw(
-            payer,
+            payer_account_id,
             fee,
             WithdrawReasons::FEE,
             ExistenceRequirement::KeepAlive,
@@ -188,7 +188,7 @@ impl crate::traits::RegistryAuthority<AccountId32> for TestRegistryAuthority {
         target_cid_number: &[u8],
         _target_institution_code: InstitutionCode,
     ) -> bool {
-        registrar == &creator()
+        registrar == &creator_account_id()
             && actor_cid_number == b"REGISTRY-CID"
             && actor_role_code == b"REGISTRY-ROLE"
             && !target_cid_number.is_empty()
@@ -217,8 +217,8 @@ fn test_citizen_subject(who: &AccountId32) -> votingengine::CitizenSubject<Accou
         cid_number: <AccountId32 as AsRef<[u8]>>::as_ref(who)
             .to_vec()
             .try_into()
-            .expect("account fits CID"),
-        wallet_account: who.clone(),
+            .expect("account_id fits CID"),
+        account_id: who.clone(),
     }
 }
 
@@ -322,7 +322,7 @@ pub fn grant_close_role(cid_number: &pallet::CidNumberOf<Test>) -> crate::RoleCo
         .into_iter()
         .map(|admin| entity_primitives::InstitutionAdminAssignment {
             cid_number: cid_number.clone(),
-            admin_account: admin.admin_account,
+            account_id: admin.account_id,
             role_code: role_code.clone(),
             term_start: 0,
             term_end: 0,
@@ -427,7 +427,7 @@ pub fn admin(index: u8) -> AccountId32 {
     derive_admin_pair(index).0
 }
 
-pub fn creator() -> AccountId32 {
+pub fn creator_account_id() -> AccountId32 {
     admin(0)
 }
 
@@ -436,7 +436,7 @@ pub fn registry_funding_account() -> AccountId32 {
     AccountId32::new([0x31; 32])
 }
 
-pub fn beneficiary() -> AccountId32 {
+pub fn beneficiary_account_id() -> AccountId32 {
     AccountId32::new([99u8; 32])
 }
 
@@ -446,7 +446,7 @@ pub fn beneficiary() -> AccountId32 {
 pub fn generated_cid_bytes(tag: &str, institution: &str) -> alloc::vec::Vec<u8> {
     primitives::cid::generator::generate_cid_number(
         primitives::cid::generator::GenerateCidNumberInput {
-            account_pubkey: tag,
+            public_key: tag,
             // 固定盈利策略机构码忽略 p1;可变/继承策略(如 UNIN)取非盈利。
             p1: "0",
             province_code: "GD",
@@ -481,7 +481,7 @@ pub fn empty_town_code() -> pallet::AccountNameOf<Test> {
 pub fn institution_admins(count: u8) -> crate::InstitutionAdminsInputOf<Test> {
     (0..count)
         .map(|seed| admin_primitives::PublicAdmin {
-            admin_account: admin(seed),
+            account_id: admin(seed),
             cid_number: Default::default(),
             family_name: Default::default(),
             given_name: Default::default(),
@@ -498,7 +498,7 @@ pub fn account_name(s: &[u8]) -> pallet::AccountNameOf<Test> {
 pub fn account_names_bv(names: &[&[u8]]) -> pallet::InstitutionAccountNamesOf<Test> {
     let v: alloc::vec::Vec<pallet::AccountNameOf<Test>> =
         names.iter().map(|n| account_name(n)).collect();
-    BoundedVec::try_from(v).expect("account names fit")
+    BoundedVec::try_from(v).expect("account_id names fit")
 }
 
 pub fn last_proposal_id() -> u64 {
@@ -535,12 +535,12 @@ pub fn cast_yes_votes(admins: &[AccountId32], n: usize, pid: u64) -> sp_runtime:
     Ok(())
 }
 
-/// 测试用:以指定 actor CID + 岗位码 + 任职管理员钱包发起自定义账户关闭提案。
+/// 测试用:以指定 actor CID + 岗位码 + 任职管理员账户发起自定义账户关闭提案。
 pub fn propose_named_account_close(
     origin: RuntimeOrigin,
     actor_cid_number: pallet::CidNumberOf<Test>,
-    admin_account: AccountId32,
-    beneficiary: AccountId32,
+    account_id: AccountId32,
+    beneficiary_account_id: AccountId32,
 ) -> sp_runtime::DispatchResult {
     let proposer_role_code: crate::RoleCodeOf =
         b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits");
@@ -548,12 +548,12 @@ pub fn propose_named_account_close(
         origin,
         actor_cid_number,
         proposer_role_code,
-        admin_account,
-        beneficiary,
+        account_id,
+        beneficiary_account_id,
     )
 }
 
-/// 测试用:以本机构任职管理员钱包 + `TEST_CLOSE_ROLE` 岗位发起新增账户提案。
+/// 测试用:以本机构任职管理员账户 + `TEST_CLOSE_ROLE` 岗位发起新增账户提案。
 /// 新增与关闭复用同一账户生命周期能力(`ACTION_INSTITUTION_CLOSE`),故同岗位即可提案。
 pub fn propose_add_custom_account(
     origin: RuntimeOrigin,
@@ -562,32 +562,37 @@ pub fn propose_add_custom_account(
 ) -> sp_runtime::DispatchResult {
     let proposer_role_code: crate::RoleCodeOf =
         b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits");
-    PublicManage::propose_add_institution_account(origin, cid_number, account_names_bv(names), proposer_role_code)
+    PublicManage::propose_add_institution_account(
+        origin,
+        cid_number,
+        account_names_bv(names),
+        proposer_role_code,
+    )
 }
 
 /// 测试 setup:直接把一个自定义命名账户写入双索引,等价于新增账户投票通过后的落库结果。
 /// 关闭账户等测试无需先跑一整轮新增投票即可获得可关闭的自定义账户。
 pub fn insert_custom_account(cid_number: &pallet::CidNumberOf<Test>, name: &[u8]) -> AccountId32 {
     let stored_name = account_name(name);
-    let (address, _) = PublicManage::derive_institution_account(cid_number.as_slice(), name)
-        .expect("custom account derives");
+    let (account_id, _) = PublicManage::derive_institution_account(cid_number.as_slice(), name)
+        .expect("custom account_id derives");
     pallet::InstitutionAccounts::<Test>::insert(
         cid_number,
         &stored_name,
         crate::InstitutionAccountInfo {
-            address: address.clone(),
+            account_id: account_id.clone(),
             initial_balance: 0,
             created_at: System::block_number(),
         },
     );
     pallet::AccountRegisteredCid::<Test>::insert(
-        &address,
+        &account_id,
         crate::RegisteredInstitution {
             cid_number: cid_number.clone(),
             account_name: stored_name,
         },
     );
-    address
+    account_id
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {

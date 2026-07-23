@@ -4,7 +4,7 @@
 // 1. 后端构建未签名 review_payload + QR 请求 JSON
 // 2. 前端显示 QR 码 → 用户用 citizenwallet 离线设备扫码签名
 // 3. 前端摄像头扫描响应 QR → 传回后端
-// 4. 后端按本地 session 校验 request id/pubkey → 构建 signed extrinsic → 提交到链
+// 4. 后端按本地 session 校验 request id 与签名公钥 → 构建 signed extrinsic → 提交到链
 
 use crate::shared::rpc;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -34,7 +34,7 @@ pub(crate) const QR_KIND_SIGN_RESPONSE: u8 = primitives::sign::QR_KIND_SIGN_RESP
 
 #[derive(Debug, Clone)]
 struct ChainSignSession {
-    expected_pubkey_hex: String,
+    expected_signer_public_key: String,
     call_data_hex: String,
     /// QR `b.d` 携带的完整审阅载荷 SHA-256。
     payload_hash_hex: String,
@@ -57,11 +57,11 @@ pub(crate) fn chain_action_code(call_data: &[u8]) -> Result<u16, String> {
     Ok(((call_data[0] as u16) << 8) | call_data[1] as u16)
 }
 
-pub(crate) fn pubkey_b64(pubkey_bytes: &[u8]) -> Result<String, String> {
-    if pubkey_bytes.len() != 32 {
+pub(crate) fn public_key_b64(signer_public_key_bytes: &[u8]) -> Result<String, String> {
+    if signer_public_key_bytes.len() != 32 {
         return Err("公钥长度必须为 32 字节".to_string());
     }
-    Ok(URL_SAFE_NO_PAD.encode(pubkey_bytes))
+    Ok(URL_SAFE_NO_PAD.encode(signer_public_key_bytes))
 }
 
 pub(crate) fn payload_b64(payload: &[u8]) -> String {
@@ -112,7 +112,7 @@ fn remember_chain_sign_session(
 
 pub(crate) fn remember_chain_sign_request_session(
     request_id: &str,
-    expected_pubkey_hex: &str,
+    expected_signer_public_key: &str,
     call_data: &[u8],
     payload_hash_hex: &str,
     signing_payload_hash_hex: &str,
@@ -122,10 +122,9 @@ pub(crate) fn remember_chain_sign_request_session(
     remember_chain_sign_session(
         request_id.to_string(),
         ChainSignSession {
-            expected_pubkey_hex: expected_pubkey_hex
-                .strip_prefix("0x")
-                .unwrap_or(expected_pubkey_hex)
-                .to_ascii_lowercase(),
+            expected_signer_public_key: crate::shared::validation::normalize_public_key(
+                expected_signer_public_key,
+            )?,
             call_data_hex: hex::encode(call_data),
             payload_hash_hex: normalize_hash_hex(payload_hash_hex, "payload_hash")?,
             signing_payload_hash_hex: normalize_hash_hex(
@@ -285,24 +284,20 @@ pub struct VoteSubmitResult {
 /// 返回 QR 签名请求 JSON + 请求 ID + 预期审阅 payload hash。
 pub fn build_vote_sign_request(
     proposal_id: u64,
-    pubkey_hex: &str,
+    signer_public_key: &str,
     voter_role_code: Option<&str>,
     approve: bool,
 ) -> Result<VoteSignRequestResult, String> {
     // 验证公钥格式
-    let pubkey_clean = pubkey_hex
-        .strip_prefix("0x")
-        .unwrap_or(pubkey_hex)
-        .to_ascii_lowercase();
-    if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("公钥格式无效，应为 64 位十六进制".to_string());
-    }
-    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
+    let signer_public_key = crate::shared::validation::normalize_public_key(signer_public_key)?;
+    let signer_public_key_bytes = hex::decode(signer_public_key.trim_start_matches("0x"))
+        .map_err(|e| format!("公钥解码失败: {e}"))?;
+    let signer_account_id = signer_account_id_from_public_key(&signer_public_key)?;
 
     // 获取链上参数
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
-    let nonce = fetch_nonce(&pubkey_clean)?;
+    let nonce = fetch_nonce(&signer_account_id)?;
 
     // ticket_claim SCALE：Personal=0；InstitutionRole=1 + RoleCode(BoundedVec)。
     let mut call_data = Vec::with_capacity(12 + voter_role_code.map(str::len).unwrap_or_default());
@@ -347,7 +342,7 @@ pub fn build_vote_sign_request(
         body: SignRequestBody {
             action: chain_action_code(&call_data)?,
             sig_alg: 1,
-            pubkey: pubkey_b64(&pubkey_bytes)?,
+            pubkey: public_key_b64(&signer_public_key_bytes)?,
             payload: payload_b64(&payload),
         },
     };
@@ -357,7 +352,7 @@ pub fn build_vote_sign_request(
     remember_chain_sign_session(
         request_id.clone(),
         ChainSignSession {
-            expected_pubkey_hex: pubkey_clean.clone(),
+            expected_signer_public_key: signer_public_key,
             call_data_hex: hex::encode(&call_data),
             payload_hash_hex: payload_hash_hex.clone(),
             signing_payload_hash_hex,
@@ -384,19 +379,15 @@ pub fn build_vote_sign_request(
 /// `actor_cid_number` 是联合投票机构身份的唯一主键，不派生或附带主账户。
 pub fn build_joint_vote_sign_request(
     proposal_id: u64,
-    pubkey_hex: &str,
+    signer_public_key: &str,
     actor_cid_number: &str,
     voter_role_code: &str,
     approve: bool,
 ) -> Result<VoteSignRequestResult, String> {
-    let pubkey_clean = pubkey_hex
-        .strip_prefix("0x")
-        .unwrap_or(pubkey_hex)
-        .to_ascii_lowercase();
-    if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("公钥格式无效，应为 64 位十六进制".to_string());
-    }
-    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
+    let signer_public_key = crate::shared::validation::normalize_public_key(signer_public_key)?;
+    let signer_public_key_bytes = hex::decode(signer_public_key.trim_start_matches("0x"))
+        .map_err(|e| format!("公钥解码失败: {e}"))?;
+    let signer_account_id = signer_account_id_from_public_key(&signer_public_key)?;
 
     if actor_cid_number.is_empty()
         || actor_cid_number.len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
@@ -411,7 +402,7 @@ pub fn build_joint_vote_sign_request(
 
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
-    let nonce = fetch_nonce(&pubkey_clean)?;
+    let nonce = fetch_nonce(&signer_account_id)?;
 
     // call data: [21][0][proposal_id][cid_number][voter_role_code][approve]
     let mut call_data = Vec::with_capacity(14 + actor_cid_number.len() + voter_role_code.len());
@@ -441,7 +432,7 @@ pub fn build_joint_vote_sign_request(
         body: SignRequestBody {
             action: chain_action_code(&call_data)?,
             sig_alg: 1,
-            pubkey: pubkey_b64(&pubkey_bytes)?,
+            pubkey: public_key_b64(&signer_public_key_bytes)?,
             payload: payload_b64(&payload),
         },
     };
@@ -451,7 +442,7 @@ pub fn build_joint_vote_sign_request(
     remember_chain_sign_session(
         request_id.clone(),
         ChainSignSession {
-            expected_pubkey_hex: pubkey_clean.clone(),
+            expected_signer_public_key: signer_public_key,
             call_data_hex: hex::encode(&call_data),
             payload_hash_hex: payload_hash_hex.clone(),
             signing_payload_hash_hex,
@@ -475,9 +466,9 @@ pub fn encode_compact_u32_pub(value: u32) -> Vec<u8> {
     encode_compact_u32(value)
 }
 
-/// 从 SS58 地址解码 32 字节公钥。
-pub fn decode_ss58_to_pubkey(address: &str) -> Result<[u8; 32], String> {
-    let data = bs58::decode(address)
+/// 从 SS58 展示地址解码 32 字节账户 ID。
+pub fn account_id_from_ss58_address(ss58_address: &str) -> Result<[u8; 32], String> {
+    let data = bs58::decode(ss58_address)
         .into_vec()
         .map_err(|_| "SS58 地址解码失败".to_string())?;
     let (prefix, prefix_len) = crate::settings::address_utils::decode_ss58_prefix(&data)?;
@@ -507,7 +498,7 @@ pub fn decode_ss58_to_pubkey(address: &str) -> Result<[u8; 32], String> {
 /// call_data 由调用方根据投票类型构建。
 pub fn verify_and_submit(
     request_id: &str,
-    expected_pubkey_hex: &str,
+    expected_signer_public_key: &str,
     expected_payload_hash: &str,
     call_data: &[u8],
     sign_nonce: u32,
@@ -545,20 +536,12 @@ pub fn verify_and_submit(
     }
 
     // 验证公钥匹配
-    let expected_pubkey = expected_pubkey_hex
-        .strip_prefix("0x")
-        .unwrap_or(expected_pubkey_hex)
-        .to_ascii_lowercase();
-    if session.expected_pubkey_hex != expected_pubkey {
+    let expected_signer_public_key =
+        crate::shared::validation::normalize_public_key(expected_signer_public_key)?;
+    if session.expected_signer_public_key != expected_signer_public_key {
         return Err("提交参数公钥与本地签名 session 不匹配".to_string());
     }
-    let response_pubkey = response
-        .body
-        .pubkey
-        .strip_prefix("0x")
-        .unwrap_or(&response.body.pubkey)
-        .to_ascii_lowercase();
-    if response_pubkey != expected_pubkey {
+    if response.body.pubkey != expected_signer_public_key {
         return Err("公钥不匹配".to_string());
     }
 
@@ -577,10 +560,7 @@ pub fn verify_and_submit(
         return Err("提交参数 call_data 与本地签名 session 不匹配".to_string());
     }
 
-    let pubkey_hex_clean = expected_pubkey
-        .strip_prefix("0x")
-        .unwrap_or(&expected_pubkey);
-    let public = chain_signing::parse_sr25519_public_hex(pubkey_hex_clean)?;
+    let public = chain_signing::parse_sr25519_public_key(&expected_signer_public_key)?;
     let signature = chain_signing::parse_sr25519_signature_hex(&response.body.signature)?;
 
     let (spec_version, tx_version) = fetch_runtime_version()?;
@@ -681,7 +661,8 @@ pub fn verify_and_submit(
 
     // 被交易池接受 ≠ 已上链（nonce 错位时交易进 future 队列，永不
     // 被打包且不广播）。后台延迟核对一次 nonce 是否被消费，只打日志不阻塞。
-    spawn_post_submit_audit(pubkey_hex_clean.to_string(), sign_nonce, tx_hash.clone());
+    let signer_account_id = signer_account_id_from_public_key(&expected_signer_public_key)?;
+    spawn_post_submit_audit(signer_account_id, sign_nonce, tx_hash.clone());
 
     Ok(VoteSubmitResult { tx_hash })
 }
@@ -701,10 +682,10 @@ fn classify_invalid_tx(result_bytes: &[u8]) -> String {
 /// `system_accountNextIndex` 包含就绪队列中的交易——nonce 未前进
 /// 说明当前观察没有确认交易进入就绪队列或已上链，打告警日志供排查；
 /// 该核对纯观测，不影响提交结果，沿用"submit-only + 后台观察"的既定模式。
-fn spawn_post_submit_audit(pubkey_hex: String, sign_nonce: u32, tx_hash: String) {
+fn spawn_post_submit_audit(signer_account_id: String, sign_nonce: u32, tx_hash: String) {
     std::thread::spawn(move || {
         std::thread::sleep(POST_SUBMIT_AUDIT_DELAY);
-        match fetch_nonce(&pubkey_hex) {
+        match fetch_nonce(&signer_account_id) {
             Ok(next) if next > sign_nonce => {
                 eprintln!(
                     "[签名提交][后台核对] {tx_hash} nonce 已消费(next={next})，交易已上链或在就绪队列"
@@ -767,8 +748,21 @@ pub(crate) fn fetch_genesis_hash() -> Result<[u8; 32], String> {
     decode_hash32(hash_str)
 }
 
-pub(crate) fn fetch_nonce(pubkey_hex: &str) -> Result<u32, String> {
-    let ss58 = pubkey_to_ss58(&hex::decode(pubkey_hex).map_err(|e| format!("公钥解码失败: {e}"))?)?;
+/// 从当前 sr25519 签名公钥按 runtime 账户识别规则得到唯一账户 ID 文本。
+pub(crate) fn signer_account_id_from_public_key(signer_public_key: &str) -> Result<String, String> {
+    let signer_public_key = crate::shared::validation::normalize_public_key(signer_public_key)?;
+    let public = chain_signing::parse_sr25519_public_key(&signer_public_key)?;
+    let account_id = chain_signing::account_id_from_public(public);
+    let account_id_bytes: [u8; 32] = account_id.into();
+    Ok(format!("0x{}", hex::encode(account_id_bytes)))
+}
+
+pub(crate) fn fetch_nonce(account_id: &str) -> Result<u32, String> {
+    let account_id = crate::shared::validation::normalize_account_id(account_id)?;
+    let ss58 = account_id_to_ss58(
+        &hex::decode(account_id.trim_start_matches("0x"))
+            .map_err(|e| format!("账户 ID 解码失败: {e}"))?,
+    )?;
     let result = rpc_post(
         "system_accountNextIndex",
         Value::Array(vec![Value::String(ss58)]),
@@ -809,10 +803,10 @@ pub(crate) fn encode_compact_u32(value: u32) -> Vec<u8> {
     }
 }
 
-/// 将 32 字节公钥编码为 SS58 地址（prefix=2027）。
-pub(crate) fn pubkey_to_ss58(pubkey: &[u8]) -> Result<String, String> {
-    if pubkey.len() != 32 {
-        return Err("公钥长度必须为 32 字节".to_string());
+/// 将 32 字节账户 ID 编码为 SS58 展示地址（prefix=2027）。
+pub(crate) fn account_id_to_ss58(account_id: &[u8]) -> Result<String, String> {
+    if account_id.len() != 32 {
+        return Err("账户 ID 长度必须为 32 字节".to_string());
     }
     // SS58 prefix 2027 的双字节编码：
     // byte0 = ((2027 & 0x00fc) >> 2) | 0x40 = ((2027 & 252) >> 2) | 64
@@ -827,7 +821,7 @@ pub(crate) fn pubkey_to_ss58(pubkey: &[u8]) -> Result<String, String> {
     let mut payload = Vec::with_capacity(2 + 32);
     payload.push(first);
     payload.push(second);
-    payload.extend_from_slice(pubkey);
+    payload.extend_from_slice(account_id);
 
     // Blake2b-512 checksum
     let hash = blake2b_simd::Params::new()
@@ -882,13 +876,15 @@ pub(crate) fn generate_request_id_public(prefix: &str) -> String {
 ///
 /// 供 transaction 模块等外部调用方使用，避免重复获取链上参数和构建 review_payload。
 pub fn build_sign_request_from_call_data(
-    pubkey_hex: &str,
-    pubkey_bytes: &[u8],
+    signer_public_key: &str,
+    signer_public_key_bytes: &[u8],
     call_data: &[u8],
 ) -> Result<VoteSignRequestResult, String> {
+    let signer_public_key = crate::shared::validation::normalize_public_key(signer_public_key)?;
+    let signer_account_id = signer_account_id_from_public_key(&signer_public_key)?;
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
-    let nonce = fetch_nonce(pubkey_hex)?;
+    let nonce = fetch_nonce(&signer_account_id)?;
 
     let (payload, signing_bytes) =
         build_signing_payloads(call_data, &genesis_hash, nonce, spec_version, tx_version)?;
@@ -907,7 +903,7 @@ pub fn build_sign_request_from_call_data(
         body: SignRequestBody {
             action: chain_action_code(call_data)?,
             sig_alg: 1,
-            pubkey: pubkey_b64(pubkey_bytes)?,
+            pubkey: public_key_b64(signer_public_key_bytes)?,
             payload: payload_b64(&payload),
         },
     };
@@ -917,10 +913,7 @@ pub fn build_sign_request_from_call_data(
     remember_chain_sign_session(
         request_id.clone(),
         ChainSignSession {
-            expected_pubkey_hex: pubkey_hex
-                .strip_prefix("0x")
-                .unwrap_or(pubkey_hex)
-                .to_ascii_lowercase(),
+            expected_signer_public_key: signer_public_key,
             call_data_hex: hex::encode(call_data),
             payload_hash_hex: payload_hash_hex.clone(),
             signing_payload_hash_hex,
@@ -964,13 +957,13 @@ mod tests {
     }
 
     #[test]
-    fn pubkey_to_ss58_roundtrip() {
-        let pubkey = [0xAAu8; 32];
-        let ss58 = pubkey_to_ss58(&pubkey).unwrap();
+    fn account_id_to_ss58_roundtrip() {
+        let account_id = [0xAAu8; 32];
+        let ss58 = account_id_to_ss58(&account_id).unwrap();
         assert!(!ss58.is_empty());
         // 验证可以用 bs58 解码回来
         let decoded = bs58::decode(&ss58).into_vec().unwrap();
-        assert_eq!(&decoded[2..34], &pubkey);
+        assert_eq!(&decoded[2..34], &account_id);
     }
 
     #[test]

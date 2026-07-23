@@ -79,15 +79,15 @@ impl pallet_balances::Config for Test {
 
 pub struct TestAccountValidator;
 impl primitives::multisig::AccountValidator<AccountId32> for TestAccountValidator {
-    fn is_valid(address: &AccountId32) -> bool {
-        address != &AccountId32::new([0u8; 32])
+    fn is_valid(account_id: &AccountId32) -> bool {
+        account_id != &AccountId32::new([0u8; 32])
     }
 }
 
 pub struct TestReservedAccountChecker;
 impl primitives::multisig::ReservedAccountGuard<AccountId32> for TestReservedAccountChecker {
-    fn is_reserved(address: &AccountId32) -> bool {
-        *address == AccountId32::new([0xAA; 32])
+    fn is_reserved(account_id: &AccountId32) -> bool {
+        *account_id == AccountId32::new([0xAA; 32])
     }
 }
 
@@ -109,7 +109,7 @@ impl primitives::institution_asset::InstitutionAsset<AccountId32> for TestInstit
 }
 
 /// 测试查询仍委托 private-manage 的 CID/账户双索引；只注入创世注册局的
-/// 出资账户归属，避免把管理员钱包误当成生产机构账户真源。
+/// 出资账户归属，避免把管理员账户误当成生产机构账户真源。
 pub struct TestInstitutionQuery;
 impl entity_primitives::InstitutionMultisigQuery<AccountId32> for TestInstitutionQuery {
     fn lookup_institution_account(cid_number: &[u8], account_name: &[u8]) -> Option<AccountId32> {
@@ -157,12 +157,12 @@ impl entity_primitives::InstitutionMultisigQuery<AccountId32> for TestInstitutio
 pub struct TestOnchainFeeCharger;
 impl primitives::fee_policy::OnchainFeeCharger<AccountId32, Balance> for TestOnchainFeeCharger {
     fn charge(
-        payer: &AccountId32,
+        payer_account_id: &AccountId32,
         transaction_amount: Balance,
     ) -> Result<Balance, sp_runtime::DispatchError> {
         let fee = primitives::fee_policy::calculate_onchain_fee(transaction_amount);
         let imbalance = Balances::withdraw(
-            payer,
+            payer_account_id,
             fee,
             WithdrawReasons::FEE,
             ExistenceRequirement::KeepAlive,
@@ -176,13 +176,13 @@ impl primitives::fee_policy::OnchainFeeCharger<AccountId32, Balance> for TestOnc
 pub struct TestRegistryAuthority;
 impl crate::traits::RegistryAuthority<AccountId32> for TestRegistryAuthority {
     fn can_register_institution_origin(
-        registrar_account: &AccountId32,
+        registrar_account_id: &AccountId32,
         actor_cid_number: &[u8],
         actor_role_code: &[u8],
         target_cid_number: &[u8],
         _target_institution_code: InstitutionCode,
     ) -> bool {
-        registrar_account == &registrar()
+        registrar_account_id == &registrar()
             && actor_cid_number == b"GD001-FRG00-000000001-2026"
             && actor_role_code == b"REGISTRY-ROLE"
             && !target_cid_number.is_empty()
@@ -211,8 +211,8 @@ fn test_citizen_subject(who: &AccountId32) -> votingengine::CitizenSubject<Accou
         cid_number: <AccountId32 as AsRef<[u8]>>::as_ref(who)
             .to_vec()
             .try_into()
-            .expect("account fits CID"),
-        wallet_account: who.clone(),
+            .expect("account_id fits CID"),
+        account_id: who.clone(),
     }
 }
 
@@ -313,19 +313,17 @@ pub fn grant_close_role(cid_number: &pallet::CidNumberOf<Test>) -> crate::RoleCo
     );
     let assignments = [admin(1), admin(2)]
         .into_iter()
-        .map(
-            |admin_account| entity_primitives::InstitutionAdminAssignment {
-                cid_number: cid_number.clone(),
-                admin_account,
-                role_code: role_code.clone(),
-                term_start: 0,
-                term_end: 0,
-                assignment_source:
-                    entity_primitives::InstitutionAssignmentSource::InstitutionGovernance,
-                assignment_source_ref: BoundedVec::default(),
-                assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
-            },
-        )
+        .map(|account_id| entity_primitives::InstitutionAdminAssignment {
+            cid_number: cid_number.clone(),
+            account_id,
+            role_code: role_code.clone(),
+            term_start: 0,
+            term_end: 0,
+            assignment_source:
+                entity_primitives::InstitutionAssignmentSource::InstitutionGovernance,
+            assignment_source_ref: BoundedVec::default(),
+            assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
+        })
         .collect::<Vec<_>>();
     pallet::InstitutionRoleAssignments::<Test>::insert(
         cid_number,
@@ -417,14 +415,14 @@ pub fn registry_funding_account() -> AccountId32 {
     AccountId32::new([0x32; 32])
 }
 
-pub fn beneficiary() -> AccountId32 {
+pub fn beneficiary_account_id() -> AccountId32 {
     AccountId32::new([99u8; 32])
 }
 
 pub fn generated_cid(tag: &str, institution: &str) -> pallet::CidNumberOf<Test> {
     let number = primitives::cid::generator::generate_cid_number(
         primitives::cid::generator::GenerateCidNumberInput {
-            account_pubkey: tag,
+            public_key: tag,
             p1: "0",
             province_code: "GD",
             province_name: "广东省",
@@ -446,8 +444,8 @@ pub fn institution_admins(accounts: &[AccountId32]) -> crate::InstitutionAdminsI
     accounts
         .iter()
         .cloned()
-        .map(|admin_account| admin_primitives::Admin {
-            admin_account,
+        .map(|account_id| admin_primitives::Admin {
+            account_id,
             family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
             given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
         })
@@ -491,21 +489,21 @@ pub fn create_institution(
             created_at: System::block_number(),
         },
     );
-    for account in created_accounts {
+    for account_id in created_accounts {
         pallet::InstitutionAccounts::<Test>::insert(
             &cid_number,
-            &account.account_name,
+            &account_id.account_name,
             crate::InstitutionAccountInfo {
-                address: account.address.clone(),
-                initial_balance: account.amount,
+                account_id: account_id.account_id.clone(),
+                initial_balance: account_id.amount,
                 created_at: System::block_number(),
             },
         );
         pallet::AccountRegisteredCid::<Test>::insert(
-            &account.address,
+            &account_id.account_id,
             crate::RegisteredInstitution {
                 cid_number: cid_number.clone(),
-                account_name: account.account_name,
+                account_name: account_id.account_name,
             },
         );
     }
@@ -521,7 +519,7 @@ pub fn create_institution(
         item.account_name.as_slice() != crate::RESERVED_NAME_MAIN
             && item.account_name.as_slice() != crate::RESERVED_NAME_FEE
     }) {
-        let (address, _) = PrivateManage::derive_institution_account(
+        let (account_id, _) = PrivateManage::derive_institution_account(
             cid_number.as_slice(),
             item.account_name.as_slice(),
         )
@@ -530,13 +528,13 @@ pub fn create_institution(
             &cid_number,
             &item.account_name,
             crate::InstitutionAccountInfo {
-                address: address.clone(),
+                account_id: account_id.clone(),
                 initial_balance: 0,
                 created_at: System::block_number(),
             },
         );
         pallet::AccountRegisteredCid::<Test>::insert(
-            &address,
+            &account_id,
             crate::RegisteredInstitution {
                 cid_number: cid_number.clone(),
                 account_name: item.account_name.clone(),
@@ -544,8 +542,8 @@ pub fn create_institution(
         );
     }
     for item in accounts.iter().filter(|item| item.amount > 0) {
-        let address = account_of(&cid_number, item.account_name.as_slice());
-        let _ = Balances::deposit_creating(&address, item.amount);
+        let account_id = account_of(&cid_number, item.account_name.as_slice());
+        let _ = Balances::deposit_creating(&account_id, item.amount);
     }
     Ok(())
 }
@@ -556,7 +554,7 @@ pub fn account_of(cid_number: &pallet::CidNumberOf<Test>, name: &[u8]) -> Accoun
         .0
 }
 
-/// 测试用:以本机构任职管理员钱包 + `TEST_CLOSE_ROLE` 岗位发起新增账户提案。
+/// 测试用:以本机构任职管理员账户 + `TEST_CLOSE_ROLE` 岗位发起新增账户提案。
 /// 新增与关闭复用同一账户生命周期能力(`ACTION_INSTITUTION_CLOSE`),故同岗位即可提案。
 pub fn propose_add_custom_account(
     origin: RuntimeOrigin,
@@ -570,7 +568,7 @@ pub fn propose_add_custom_account(
         .map(|name| account_name(name))
         .collect::<alloc::vec::Vec<_>>()
         .try_into()
-        .expect("account names fit");
+        .expect("account_id names fit");
     PrivateManage::propose_add_institution_account(
         origin,
         cid_number,
@@ -603,7 +601,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     pallet_balances::GenesisConfig::<Test> {
         balances: alloc::vec![
             (registry_funding_account(), 1_000_000),
-            (beneficiary(), 100)
+            (beneficiary_account_id(), 100)
         ],
         dev_accounts: None,
     }

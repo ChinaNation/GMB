@@ -28,7 +28,8 @@ impl InstitutionType {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AdminInfo {
-    pub admin_account: String,
+    #[serde(rename = "account_id")]
+    pub account_id: String,
     pub family_name: String,
     pub given_name: String,
     pub assignments: Vec<crate::admins::management::types::InstitutionRoleAssignmentInfo>,
@@ -53,34 +54,40 @@ pub struct InstitutionDetail {
     pub org_type: u8,
     /// 机构类型显示标签。
     pub org_type_label: String,
-    /// 主账户 AccountId hex，由前端再转成 SS58 显示。
-    pub main_account: String,
+    /// 主账户 ID，固定为小写 `0x` + 64 位十六进制。
+    #[serde(rename = "main_account_id")]
+    pub main_account_id: String,
     /// 主账户链上余额（分），节点未运行时为 null。
     pub balance_fen: Option<String>,
-    /// 管理员钱包列表；每个钱包携带其全部有效岗位任职。
+    /// 管理员账户列表；每个账户携带其全部有效岗位任职。
     pub admins: Vec<AdminInfo>,
     /// 内部投票通过阈值。
     pub internal_threshold: u32,
     /// 联合投票权重。
     pub joint_vote_weight: u32,
     /// 永久质押账户 AccountId hex（仅 PRB）。
-    pub stake_account: Option<String>,
+    #[serde(rename = "stake_account_id")]
+    pub stake_account_id: Option<String>,
     /// 永久质押账户余额（分，仅 PRB）。
     pub staking_balance_fen: Option<String>,
     /// 手续费账户 AccountId hex（仅 PRB）。
-    pub fee_account: Option<String>,
+    #[serde(rename = "fee_account_id")]
+    pub fee_account_id: Option<String>,
     /// 手续费账户余额（分，仅 PRB）。
     pub fee_balance_fen: Option<String>,
     /// 储委会费用账户 AccountId hex（省储委会，仅 PRC）。
-    pub cb_fee_account: Option<String>,
+    #[serde(rename = "cb_fee_account_id")]
+    pub cb_fee_account_id: Option<String>,
     /// 储委会费用账户余额（分，仅 PRC）。
     pub cb_fee_balance_fen: Option<String>,
     /// 国家储委会费用账户 AccountId hex（仅 NRC）。
-    pub nrc_fee_account: Option<String>,
+    #[serde(rename = "nrc_fee_account_id")]
+    pub nrc_fee_account_id: Option<String>,
     /// 国家储委会手续费账户余额（分，仅 NRC）。
     pub nrc_fee_balance_fen: Option<String>,
     /// 国家储委会安全基金账户 AccountId hex（仅 NRC）。
-    pub safety_fund_account: Option<String>,
+    #[serde(rename = "safety_fund_account_id")]
+    pub safety_fund_account_id: Option<String>,
     /// 国家储委会安全基金账户余额（分，仅 NRC）。
     pub safety_fund_balance_fen: Option<String>,
     /// 告警信息。
@@ -124,8 +131,9 @@ pub struct InstitutionListItem {
     pub cid_number: String,
     pub org_type: u8,
     pub org_type_label: String,
-    /// 主账户 AccountId hex，由前端转成 SS58 显示。
-    pub main_account: String,
+    /// 主账户 ID，固定为小写 `0x` + 64 位十六进制。
+    #[serde(rename = "main_account_id")]
+    pub main_account_id: String,
 }
 
 /// 治理首页聚合数据。

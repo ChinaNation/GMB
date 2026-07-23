@@ -3,8 +3,8 @@
 //! `do_propose_create` 由 lib.rs 内 call_index=0 入口 delegate 调用。
 //! 业务流程：
 //! 1. 校验发起人未被保护、账户名非空、管理员集合合法、余额充足
-//! 2. 派生 `derive_personal_account(creator, account_name)` —— 地址只依赖
-//!    creator 与 account_name,与管理员列表无关,所以未来换管理员地址不变
+//! 2. 派生 `derive_personal_account(creator_account_id, account_name)` —— 地址只依赖
+//!    creator_account_id 与 account_name,与管理员列表无关,所以未来换管理员地址不变
 //! 3. 同事务内：
 //!    - 写 Pending PersonalAccounts 占位
 //!    - 调投票引擎 create_personal_account_create_proposal_with_data
@@ -52,29 +52,29 @@ pub(crate) fn do_propose_create<T: Config>(
 
     let (reserve_total, fee) = Pallet::<T>::ensure_proposer_can_afford(&who, amount)?;
 
-    let account = Pallet::<T>::derive_personal_account(&who, account_name.as_slice())?;
+    let account_id = Pallet::<T>::derive_personal_account(&who, account_name.as_slice())?;
     ensure!(
-        !PersonalAccounts::<T>::contains_key(&account),
+        !PersonalAccounts::<T>::contains_key(&account_id),
         Error::<T>::PersonalAlreadyExists
     );
     ensure!(
-        !T::ReservedAccountChecker::is_reserved(&account),
+        !T::ReservedAccountChecker::is_reserved(&account_id),
         Error::<T>::AccountReserved
     );
     ensure!(
-        T::AccountValidator::is_valid(&account),
+        T::AccountValidator::is_valid(&account_id),
         Error::<T>::InvalidAccount
     );
     ensure!(
-        !T::ProtectedSourceChecker::is_protected(&account),
+        !T::ProtectedSourceChecker::is_protected(&account_id),
         Error::<T>::ProtectedSource
     );
 
     let now = <frame_system::Pallet<T>>::block_number();
-    let institution = account.clone();
+    let institution = account_id.clone();
     let action = PersonalCreateAction {
-        account: account.clone(),
-        proposer: who.clone(),
+        account_id: account_id.clone(),
+        proposer_account_id: who.clone(),
         amount,
         fee,
     };
@@ -87,9 +87,9 @@ pub(crate) fn do_propose_create<T: Config>(
             return TransactionOutcome::Rollback(Err(Error::<T>::ReserveFailed.into()));
         }
         PersonalAccounts::<T>::insert(
-            &account,
+            &account_id,
             PersonalAccount {
-                creator: who.clone(),
+                creator_account_id: who.clone(),
                 account_name: account_name.clone(),
                 created_at: now,
                 status: PersonalStatus::Pending,
@@ -102,7 +102,7 @@ pub(crate) fn do_propose_create<T: Config>(
             institution.clone(),
             admins
                 .iter()
-                .map(|admin| admin.admin_account.clone())
+                .map(|admin| admin.account_id.clone())
                 .collect(),
             regular_threshold,
             crate::MODULE_TAG,
@@ -130,8 +130,8 @@ pub(crate) fn do_propose_create<T: Config>(
 
     Pallet::<T>::deposit_event(Event::<T>::PersonalCreateProposed {
         proposal_id,
-        account,
-        proposer: who,
+        account_id,
+        proposer_account_id: who,
         account_name,
         admins: admins,
         admins_len,

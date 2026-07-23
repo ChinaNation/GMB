@@ -69,7 +69,7 @@ impl BatchSubmitter for PoolBatchSubmitter {
         &self,
         actor_cid_number: Vec<u8>,
         actor_role_code: Vec<u8>,
-        institution_account: AccountId32,
+        institution_account_id: AccountId32,
         batch_seq: u64,
         batch_bytes: Vec<u8>,
         batch_signature: [u8; 64],
@@ -94,7 +94,7 @@ impl BatchSubmitter for PoolBatchSubmitter {
             offchain::pallet::Call::submit_offchain_batch {
                 actor_cid_number: actor_cid_number.clone(),
                 actor_role_code,
-                institution_account: institution_account.clone(),
+                institution_account_id: institution_account_id.clone(),
                 batch_seq,
                 batch: batch_bounded,
                 batch_signature: sig_bounded,
@@ -113,8 +113,8 @@ impl BatchSubmitter for PoolBatchSubmitter {
         drop(guard);
 
         // 6. 查链上 nonce(对 sender_pair 对应账户)
-        let sender_account = AccountId32::from(sender_pair.public());
-        let nonce = lookup_nonce(&self.client, &sender_account)?;
+        let sender_account_id = AccountId32::from(sender_pair.public());
+        let nonce = lookup_nonce(&self.client, &sender_account_id)?;
 
         // 7. 构造签名过的 extrinsic
         let extrinsic = build_signed_extrinsic(&self.client, &sender_pair, call, nonce)?;
@@ -132,7 +132,7 @@ impl BatchSubmitter for PoolBatchSubmitter {
             futures::executor::block_on(fut).map_err(|e| format!("pool.submit_one 失败:{e:?}"))?;
 
         log::info!(
-            "[PoolBatchSubmitter] extrinsic submitted, actor_cid_number={}, institution_account={institution_account:?} \
+            "[PoolBatchSubmitter] extrinsic submitted, actor_cid_number={}, institution_account_id={institution_account_id:?} \
              batch_seq={batch_seq} nonce={nonce}"
             , String::from_utf8_lossy(actor_cid_number.as_slice())
         );
@@ -199,12 +199,12 @@ where
         .map(|it| {
             Ok(OffchainBatchItem {
                 tx_id: it.tx_id,
-                payer: it.payer.into(),
+                payer_account_id: it.payer_account_id.into(),
                 payer_bank_cid: it
                     .payer_bank_cid
                     .try_into()
                     .map_err(|_| "payer_bank_cid 超长".to_string())?,
-                recipient: it.recipient.into(),
+                recipient_account_id: it.recipient_account_id.into(),
                 recipient_bank_cid: it
                     .recipient_bank_cid
                     .try_into()
@@ -256,9 +256,9 @@ mod tests {
     fn mk_item(seed: u8) -> OffchainBatchItem<AccountId32, u32> {
         OffchainBatchItem {
             tx_id: H256::repeat_byte(seed),
-            payer: AccountId32::new([seed; 32]),
+            payer_account_id: AccountId32::new([seed; 32]),
             payer_bank_cid: b"GD001-PRB0T-239565809-2026".to_vec().try_into().unwrap(),
-            recipient: AccountId32::new([seed.wrapping_add(1); 32]),
+            recipient_account_id: AccountId32::new([seed.wrapping_add(1); 32]),
             recipient_bank_cid: b"AH001-PRB0X-111111111-2026".to_vec().try_into().unwrap(),
             transfer_amount: 1_000,
             fee_amount: 1,

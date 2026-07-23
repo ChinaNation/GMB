@@ -10,10 +10,10 @@ fn direct_institution_creation_call_is_permanently_absent() {
 }
 
 fn governance_assignment(
-    account: AccountId32,
+    account_id: AccountId32,
 ) -> entity_primitives::InstitutionAssignmentTarget<AccountId32> {
     entity_primitives::InstitutionAssignmentTarget {
-        admin_account: account,
+        account_id: account_id,
         term_start: 0,
         term_end: 0,
         assignment_source: entity_primitives::InstitutionAssignmentSource::InstitutionGovernance,
@@ -150,7 +150,7 @@ fn private_legal_representative_role_is_unique_and_allows_zero_or_one_assignment
                     family_name: "张".as_bytes().to_vec(),
                     given_name: "三".as_bytes().to_vec(),
                     cid_number: b"CITIZEN-LR-PRIVATE".to_vec(),
-                    account: admin(1),
+                    account_id: admin(1),
                 }),
                 result_source_ref: b"proposal-53".to_vec(),
             }
@@ -207,7 +207,7 @@ fn create_uses_cid_as_the_only_institution_identity() {
                 &cid_number,
                 account_name(crate::RESERVED_NAME_MAIN)
             )
-            .map(|item| item.address),
+            .map(|item| item.account_id),
             Some(main_account.clone())
         );
         assert_eq!(
@@ -380,8 +380,7 @@ fn add_account_proposal_then_vote_inserts_account() {
         // 通过后账户落库、反向索引写入、Pending 清除。
         let added = account_of(&cid_number, new_name);
         assert_eq!(
-            pallet::AccountRegisteredCid::<Test>::get(&added)
-                .map(|item| item.cid_number),
+            pallet::AccountRegisteredCid::<Test>::get(&added).map(|item| item.cid_number),
             Some(cid_number.clone())
         );
         assert!(!pallet::InstitutionPendingAdd::<Test>::contains_key(
@@ -402,7 +401,7 @@ fn add_account_requires_institution_admin_and_role() {
                 (crate::RESERVED_NAME_FEE, 0)
             ]),
         ));
-        // 非本机构管理员钱包发起 → build_institution_vote_plan 授权失败。
+        // 非本机构管理员账户发起 → build_institution_vote_plan 授权失败。
         assert_noop!(
             propose_add_custom_account(
                 RuntimeOrigin::signed(admin(9)),
@@ -550,13 +549,13 @@ fn only_named_account_can_be_closed_and_institution_stays_alive() {
             cid_number.clone(),
             b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits"),
             named_account.clone(),
-            beneficiary(),
+            beneficiary_account_id(),
         ));
         let proposal_id = VotingEngine::next_proposal_id().saturating_sub(1);
         assert_ok!(cast_yes_votes(proposal_id));
 
         assert_eq!(Balances::free_balance(&fee_account), 990);
-        assert_eq!(Balances::free_balance(beneficiary()), 1_100);
+        assert_eq!(Balances::free_balance(beneficiary_account_id()), 1_100);
         assert_eq!(Balances::free_balance(admin(1)), admin_balance_before);
         assert!(!pallet::AccountRegisteredCid::<Test>::contains_key(
             &named_account
@@ -597,7 +596,7 @@ fn rejected_close_is_cleaned_only_by_votingengine_callback() {
             cid_number.clone(),
             b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits"),
             named_account.clone(),
-            beneficiary(),
+            beneficiary_account_id(),
         ));
         let proposal_id = VotingEngine::next_proposal_id().saturating_sub(1);
         assert_eq!(
@@ -642,7 +641,7 @@ fn protocol_account_close_is_rejected() {
                 cid_number.clone(),
                 b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits"),
                 main_account,
-                beneficiary(),
+                beneficiary_account_id(),
             ),
             pallet::Error::<Test>::CannotCloseProtectedInstitution
         );
@@ -671,7 +670,7 @@ fn account_operation_rejects_actor_cid_mismatch() {
                 other_cid,
                 crate::RoleCodeOf::default(),
                 named_account,
-                beneficiary(),
+                beneficiary_account_id(),
             ),
             pallet::Error::<Test>::NotInstitutionAccount
         );
@@ -699,7 +698,7 @@ fn non_admin_cannot_start_institution_account_close() {
                 cid_number.clone(),
                 b"TEST_CLOSE_ROLE".to_vec().try_into().expect("role fits"),
                 named_account,
-                beneficiary(),
+                beneficiary_account_id(),
             ),
             pallet::Error::<Test>::PermissionDenied
         );

@@ -31,7 +31,7 @@ fn insert_proposal<T: Config>(stage: u8) -> u64 {
             status: votingengine::STATUS_VOTING,
             internal_code: None,
             actor_cid_number: Some(national_legislature(0)),
-            execution_account: None,
+            execution_account_id: None,
             subject_cid_numbers: Default::default(),
             start: now,
             end: 2u32.saturated_into(),
@@ -120,7 +120,7 @@ mod benchmarks {
                 0,
                 votingengine::InstitutionVoteTicket {
                     role_subject,
-                    voter_account: voter,
+                    voter_account_id: voter,
                 }
             )
         ));

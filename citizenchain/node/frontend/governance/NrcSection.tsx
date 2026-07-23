@@ -8,7 +8,7 @@ import { CreateMultisigTransferPage } from '../transaction/multisig/CreatePropos
 import { SafetyFundProposalPage } from '../transaction/multisig/SafetyFundProposalPage';
 import { SweepProposalPage } from '../transaction/multisig/SweepProposalPage';
 import { DeveloperUpgradePage, ProtocolUpgradeProposalPage } from './runtime-upgrade';
-import type { AdminWalletMatch } from './types';
+import type { AdminSignerMatch } from './types';
 
 // 国家储委会 cidNumber（全链唯一，直接进入详情）。
 const NRC_CID_NUMBER = 'LN001-NRC0G-944805165-2026';
@@ -16,12 +16,12 @@ const NRC_CID_NUMBER = 'LN001-NRC0G-944805165-2026';
 type NrcView =
   | { page: 'detail' }
   | { page: 'admin-list' }
-  | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; cidNumber?: string }
-  | { page: 'create-proposal'; orgType: number; cidFullName: string; institutionAccount: string; adminWallets: AdminWalletMatch[] }
-  | { page: 'protocol-upgrade'; adminWallets: AdminWalletMatch[] }
-  | { page: 'developer-upgrade'; adminWallets: AdminWalletMatch[] }
-  | { page: 'propose-safety-fund'; actorCidNumber: string; institutionAccount: string; adminWallets: AdminWalletMatch[] }
-  | { page: 'propose-sweep'; actorCidNumber: string; institutionAccount: string; cidFullName: string; adminWallets: AdminWalletMatch[] };
+  | { page: 'proposal-detail'; proposalId: number; adminSigners: AdminSignerMatch[]; cidNumber?: string }
+  | { page: 'create-proposal'; orgType: number; cidFullName: string; institution_account_id: string; adminSigners: AdminSignerMatch[] }
+  | { page: 'protocol-upgrade'; adminSigners: AdminSignerMatch[] }
+  | { page: 'developer-upgrade'; adminSigners: AdminSignerMatch[] }
+  | { page: 'propose-safety-fund'; actorCidNumber: string; institution_account_id: string; adminSigners: AdminSignerMatch[] }
+  | { page: 'propose-sweep'; actorCidNumber: string; institution_account_id: string; cidFullName: string; adminSigners: AdminSignerMatch[] };
 
 export function NrcSection() {
   const [view, setView] = useState<NrcView>({ page: 'detail' });
@@ -42,7 +42,7 @@ export function NrcSection() {
     return (
       <ProposalDetailPage
         proposalId={view.proposalId}
-        adminWallets={view.adminWallets}
+        adminSigners={view.adminSigners}
         cidNumber={view.cidNumber}
         onBack={backToDetail}
       />
@@ -54,8 +54,8 @@ export function NrcSection() {
       <CreateMultisigTransferPage
         cidNumber={NRC_CID_NUMBER}
         cidFullName={view.cidFullName}
-        institutionAccount={view.institutionAccount}
-        adminWallets={view.adminWallets}
+        institution_account_id={view.institution_account_id}
+        adminSigners={view.adminSigners}
         onBack={backToDetail}
         onSuccess={backToDetail}
       />
@@ -66,7 +66,7 @@ export function NrcSection() {
     return (
       <ProtocolUpgradeProposalPage
         actorCidNumber={NRC_CID_NUMBER}
-        adminWallets={view.adminWallets}
+        adminSigners={view.adminSigners}
         onBack={backToDetail}
         onSuccess={backToDetail}
       />
@@ -76,7 +76,7 @@ export function NrcSection() {
   if (view.page === 'developer-upgrade') {
     return (
       <DeveloperUpgradePage
-        adminWallets={view.adminWallets}
+        adminSigners={view.adminSigners}
         onBack={backToDetail}
         onSuccess={backToDetail}
       />
@@ -87,8 +87,8 @@ export function NrcSection() {
     return (
       <SafetyFundProposalPage
         actorCidNumber={view.actorCidNumber}
-        institutionAccount={view.institutionAccount}
-        adminWallets={view.adminWallets}
+        institution_account_id={view.institution_account_id}
+        adminSigners={view.adminSigners}
         onBack={backToDetail}
         onSuccess={backToDetail}
       />
@@ -99,9 +99,9 @@ export function NrcSection() {
     return (
       <SweepProposalPage
         actorCidNumber={view.actorCidNumber}
-        institutionAccount={view.institutionAccount}
+        institution_account_id={view.institution_account_id}
         cidFullName={view.cidFullName}
-        adminWallets={view.adminWallets}
+        adminSigners={view.adminSigners}
         onBack={backToDetail}
         onSuccess={backToDetail}
       />
@@ -115,23 +115,23 @@ export function NrcSection() {
       onBack={backToDetail}
       hideBackButton
       onOpenAdminList={() => setView({ page: 'admin-list' })}
-      onSelectProposal={(proposalId, adminWallets, sid) =>
-        setView({ page: 'proposal-detail', proposalId, adminWallets, cidNumber: sid })
+      onSelectProposal={(proposalId, adminSigners, sid) =>
+        setView({ page: 'proposal-detail', proposalId, adminSigners, cidNumber: sid })
       }
-      onCreateProposal={(_sid, orgType, cidFullName, institutionAccount, aw) =>
-        setView({ page: 'create-proposal', orgType, cidFullName, institutionAccount, adminWallets: aw })
+      onCreateProposal={(_sid, orgType, cidFullName, institution_account_id, aw) =>
+        setView({ page: 'create-proposal', orgType, cidFullName, institution_account_id, adminSigners: aw })
       }
       onCreateProtocolUpgrade={(aw) =>
-        setView({ page: 'protocol-upgrade', adminWallets: aw })
+        setView({ page: 'protocol-upgrade', adminSigners: aw })
       }
       onCreateDeveloperUpgrade={(aw) =>
-        setView({ page: 'developer-upgrade', adminWallets: aw })
+        setView({ page: 'developer-upgrade', adminSigners: aw })
       }
-      onCreateSafetyFund={(actorCidNumber, institutionAccount, aw) =>
-        setView({ page: 'propose-safety-fund', actorCidNumber, institutionAccount, adminWallets: aw })
+      onCreateSafetyFund={(actorCidNumber, institution_account_id, aw) =>
+        setView({ page: 'propose-safety-fund', actorCidNumber, institution_account_id, adminSigners: aw })
       }
-      onCreateSweep={(actorCidNumber, institutionAccount, cidFullName, aw) =>
-        setView({ page: 'propose-sweep', actorCidNumber, institutionAccount, cidFullName, adminWallets: aw })
+      onCreateSweep={(actorCidNumber, institution_account_id, cidFullName, aw) =>
+        setView({ page: 'propose-sweep', actorCidNumber, institution_account_id, cidFullName, adminSigners: aw })
       }
     />
   );

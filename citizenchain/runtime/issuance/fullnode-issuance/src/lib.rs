@@ -6,7 +6,7 @@
 //! 1. 本模块 `fullnode-issuance` 是【系统级、制度性】的货币发行模块；
 //! 2. 用于在 Substrate PoW 共识下，对成功铸造新区块的【全节点】发放铸块奖励；
 //! 3. 本模块不属于治理参数范畴，不接受链上治理修改；
-//! 4. 本模块只保留发奖资格、钱包绑定与节点守卫审计所需的最小 Runtime Storage；发行金额与高度规则完全由编译期常量决定。
+//! 4. 本模块只保留发奖资格、奖励账户绑定与节点守卫审计所需的最小 Runtime Storage；发行金额与高度规则完全由编译期常量决定。
 //!
 //! 二、发行规则（写死于 primitives::pow_const）
 //! ---------------------------------------------------------------------------
@@ -71,10 +71,10 @@ pub mod pallet {
     pub type BalanceOf<T> =
         <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
-    /// 矿工身份账户（powr）到奖励钱包账户的绑定表。
+    /// 矿工身份账户（powr）到奖励接收账户的绑定表。
     #[pallet::storage]
-    #[pallet::getter(fn reward_wallet_by_miner)]
-    pub type RewardWalletByMiner<T: Config> =
+    #[pallet::getter(fn reward_account_id_by_miner)]
+    pub type RewardAccountIdByMiner<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, T::AccountId, OptionQuery>;
 
     /// 矿工身份账户（powr）最近一次真实出块的区块高度。
@@ -95,7 +95,7 @@ pub mod pallet {
     #[pallet::getter(fn total_fullnode_issued)]
     pub type TotalFullnodeIssued<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 
-    /// 最近一次全节点奖励审计记录：`(区块高度, 矿工, 收款钱包, 金额)`。
+    /// 最近一次全节点奖励审计记录：`(区块高度, 矿工账户, 奖励接收账户, 金额)`。
     #[pallet::storage]
     #[pallet::getter(fn last_reward_audit)]
     pub type LastRewardAudit<T: Config> =
@@ -104,37 +104,37 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// powr 矿工身份完成一次性钱包绑定。
-        RewardWalletBound {
-            miner: T::AccountId,
-            wallet: T::AccountId,
+        /// powr 矿工身份完成一次性奖励接收账户绑定。
+        RewardAccountBound {
+            miner_account_id: T::AccountId,
+            reward_account_id: T::AccountId,
         },
-        /// 本区块 PoW 奖励已发放到绑定钱包。
+        /// 本区块 PoW 奖励已发放到绑定账户。
         FullnodeIssuanceIssued {
             block: u32,
-            miner: T::AccountId,
-            wallet: T::AccountId,
+            miner_account_id: T::AccountId,
+            reward_account_id: T::AccountId,
             amount: BalanceOf<T>,
         },
         /// 本区块奖励跳过：未能从 digest 识别出作者。
         FullnodeIssuanceSkippedNoAuthor { block: u32 },
-        /// 矿工身份钱包重新绑定。
-        RewardWalletRebound {
-            miner: T::AccountId,
-            new_wallet: T::AccountId,
+        /// 矿工身份奖励接收账户重新绑定。
+        RewardAccountRebound {
+            miner_account_id: T::AccountId,
+            new_reward_account_id: T::AccountId,
         },
     }
 
     #[pallet::error]
     pub enum Error<T> {
-        /// 同一个矿工身份只允许绑定一次奖励钱包。
-        RewardWalletAlreadyBound,
-        /// 矿工身份未绑定奖励钱包。
-        RewardWalletNotBound,
-        /// 奖励钱包不得与矿工身份账户相同。
-        RewardWalletCannotBeMiner,
-        /// 新奖励钱包必须不同于当前已绑定钱包。
-        RewardWalletUnchanged,
+        /// 同一个矿工身份只允许绑定一次奖励接收账户。
+        RewardAccountAlreadyBound,
+        /// 矿工身份未绑定奖励接收账户。
+        RewardAccountNotBound,
+        /// 奖励接收账户不得与矿工身份账户相同。
+        RewardAccountCannotBeMiner,
+        /// 新奖励接收账户必须不同于当前绑定账户。
+        RewardAccountUnchanged,
         /// 矿工身份尚未在链上产生过真实出块记录。
         MinerNeverAuthoredBlock,
     }
@@ -145,43 +145,58 @@ pub mod pallet {
         ///
         /// 注意：绑定资格来自链上真实出块记录，不读取任何节点本地 keystore。
         #[pallet::call_index(0)]
-        #[pallet::weight(T::WeightInfo::bind_reward_wallet())]
-        pub fn bind_reward_wallet(origin: OriginFor<T>, wallet: T::AccountId) -> DispatchResult {
-            let miner = ensure_signed(origin)?;
+        #[pallet::weight(T::WeightInfo::bind_reward_account())]
+        pub fn bind_reward_account(
+            origin: OriginFor<T>,
+            reward_account_id: T::AccountId,
+        ) -> DispatchResult {
+            let miner_account_id = ensure_signed(origin)?;
             ensure!(
-                !RewardWalletByMiner::<T>::contains_key(&miner),
-                Error::<T>::RewardWalletAlreadyBound
+                !RewardAccountIdByMiner::<T>::contains_key(&miner_account_id),
+                Error::<T>::RewardAccountAlreadyBound
             );
-            ensure!(wallet != miner, Error::<T>::RewardWalletCannotBeMiner);
             ensure!(
-                LastAuthoredBlockByMiner::<T>::contains_key(&miner),
+                reward_account_id != miner_account_id,
+                Error::<T>::RewardAccountCannotBeMiner
+            );
+            ensure!(
+                LastAuthoredBlockByMiner::<T>::contains_key(&miner_account_id),
                 Error::<T>::MinerNeverAuthoredBlock
             );
 
-            // 绑定表只决定奖励接收钱包，不改变出块作者身份本身。
-            RewardWalletByMiner::<T>::insert(&miner, &wallet);
-            Self::deposit_event(Event::<T>::RewardWalletBound { miner, wallet });
+            // 绑定表只决定奖励接收账户，不改变出块作者身份本身。
+            RewardAccountIdByMiner::<T>::insert(&miner_account_id, &reward_account_id);
+            Self::deposit_event(Event::<T>::RewardAccountBound {
+                miner_account_id,
+                reward_account_id,
+            });
             Ok(())
         }
 
-        /// 允许矿工身份账户主动重绑奖励钱包（无需治理权限）。
+        /// 允许矿工身份账户主动重绑奖励接收账户（无需治理权限）。
         #[pallet::call_index(1)]
-        #[pallet::weight(T::WeightInfo::rebind_reward_wallet())]
-        pub fn rebind_reward_wallet(
+        #[pallet::weight(T::WeightInfo::rebind_reward_account())]
+        pub fn rebind_reward_account(
             origin: OriginFor<T>,
-            new_wallet: T::AccountId,
+            new_reward_account_id: T::AccountId,
         ) -> DispatchResult {
-            let miner = ensure_signed(origin)?;
-            let current_wallet =
-                RewardWalletByMiner::<T>::get(&miner).ok_or(Error::<T>::RewardWalletNotBound)?;
-            ensure!(new_wallet != miner, Error::<T>::RewardWalletCannotBeMiner);
+            let miner_account_id = ensure_signed(origin)?;
+            let current_reward_account_id = RewardAccountIdByMiner::<T>::get(&miner_account_id)
+                .ok_or(Error::<T>::RewardAccountNotBound)?;
             ensure!(
-                new_wallet != current_wallet,
-                Error::<T>::RewardWalletUnchanged
+                new_reward_account_id != miner_account_id,
+                Error::<T>::RewardAccountCannotBeMiner
+            );
+            ensure!(
+                new_reward_account_id != current_reward_account_id,
+                Error::<T>::RewardAccountUnchanged
             );
             // 重绑后仅影响后续区块奖励，历史已经发放的奖励不会被追溯重定向。
-            RewardWalletByMiner::<T>::insert(&miner, &new_wallet);
-            Self::deposit_event(Event::<T>::RewardWalletRebound { miner, new_wallet });
+            RewardAccountIdByMiner::<T>::insert(&miner_account_id, &new_reward_account_id);
+            Self::deposit_event(Event::<T>::RewardAccountRebound {
+                miner_account_id,
+                new_reward_account_id,
+            });
             Ok(())
         }
     }
@@ -204,7 +219,7 @@ pub mod pallet {
                 && block_number <= u64::from(FULLNODE_REWARD_END_BLOCK)
             {
                 // 预申报 on_finalize 最坏路径预算：
-                // digest + 真实出块记录 + wallet map + balances/issuance + event 相关读写
+                // digest + 真实出块记录 + 奖励账户映射 + balances/issuance + event 相关读写
                 T::DbWeight::get().reads_writes(5, 7)
             } else {
                 Weight::zero()
@@ -238,18 +253,18 @@ pub mod pallet {
                 } // 理论上不应发生，发生则不发奖励
             };
 
-            // 只有共识 digest 证明真实出过块的账户，才允许后续绑定奖励钱包。
+            // 只有共识 digest 证明真实出过块的账户，才允许后续绑定奖励接收账户。
             LastAuthoredBlockByMiner::<T>::insert(&author, block_number);
 
-            // 已绑定钱包则发到钱包，未绑定则默认发到矿工自身账户。
-            let recipient =
-                RewardWalletByMiner::<T>::get(&author).unwrap_or_else(|| author.clone());
+            // 已绑定奖励接收账户则发到该账户，未绑定则默认发到矿工自身账户。
+            let recipient_account_id =
+                RewardAccountIdByMiner::<T>::get(&author).unwrap_or_else(|| author.clone());
 
             // 发放固定的全节点 PoW 铸块奖励
             // 奖励金额完全由制度常量决定，绑定表只决定”发给谁”，不影响”发多少”。
             let reward: BalanceOf<T> = FULLNODE_BLOCK_REWARD.saturated_into();
-            // deposit_creating 会在钱包尚未建户时自动建户，并同步增加总发行量。
-            let imbalance = T::Currency::deposit_creating(&recipient, reward);
+            // deposit_creating 会在奖励账户尚未建户时自动建户，并同步增加总发行量。
+            let imbalance = T::Currency::deposit_creating(&recipient_account_id, reward);
             debug_assert_eq!(
                 imbalance.peek(),
                 reward,
@@ -260,11 +275,16 @@ pub mod pallet {
             // 本模块逻辑，只要产出与固定公式不一致，诚实节点仍会在 BlockImport 层拒绝该块。
             RewardedBlockCount::<T>::mutate(|count| *count = count.saturating_add(1));
             TotalFullnodeIssued::<T>::mutate(|total| *total = total.saturating_add(reward));
-            LastRewardAudit::<T>::put((block_number, author.clone(), recipient.clone(), reward));
+            LastRewardAudit::<T>::put((
+                block_number,
+                author.clone(),
+                recipient_account_id.clone(),
+                reward,
+            ));
             Self::deposit_event(Event::<T>::FullnodeIssuanceIssued {
                 block: block_number,
-                miner: author,
-                wallet: recipient,
+                miner_account_id: author,
+                reward_account_id: recipient_account_id,
                 amount: reward,
             });
         }

@@ -5,7 +5,7 @@
 //! 通过 callback 回调本模块入口函数,内部以 root 调用 `pallet_assets`。
 //!
 //! 规则要点:
-//! - propose origin 校验：proposer ∈ admins(actor_cid_number)（防 spam）
+//! - propose origin 校验：proposer_account_id ∈ admins(actor_cid_number)（防 spam）
 //! - 费用必须进入全链五类协议，并由机构 CID 的费用账户承担
 //! - `asset_id` 只表示资产编号，治理身份只来自 `actor_cid_number`
 //! - OnchainAssetMeta 同时记录机构 CID 与资产执行账户，二者职责分离
@@ -23,7 +23,7 @@ use crate::pallet::BalanceOf;
 /// 框架阶段占位,业务实装时步骤(callback 通过分支):
 /// 1. `validation::ensure_institution_context` / `ensure_decimals_in_range` / `ensure_class_supported`
 /// 2. 字段过黑名单(`validation::contains_blacklisted_word`)
-/// 3. 按全链机构费用协议从 actor CID 费用账户执行收费，不得使用管理员钱包押金
+/// 3. 按全链机构费用协议从 actor CID 费用账户执行收费，不得使用管理员账户押金
 /// 4. 分配 AssetId(NextAssetId)
 /// 5. 调 `T::Assets::create(asset_id, owner, ...)` + `mint_into` 注入 initial_supply
 /// 6. 写 Assets storage,emit AssetIssued 事件
@@ -79,7 +79,7 @@ pub fn dispatch_internal_callback<T: Config>(
     _action: [u8; 4],
     _proposal_data: &[u8],
 ) -> DispatchResult {
-    // TODO: route by ACTION constant to execute_issue / execute_mint / ...
+    // TODO: route by ACTION constant to_account_id execute_issue / execute_mint / ...
     Ok(())
 }
 

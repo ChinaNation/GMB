@@ -7,9 +7,9 @@ use sp_runtime::{Perbill, RuntimeDebug};
 /// 本接口不是第二套费用分类：调用方只能提交已经由业务规则确定的付款账户和
 /// 交易金额；具体实现统一使用本文件费率计算、完整扣款并进入链上分账。
 pub trait OnchainFeeCharger<AccountId, Balance> {
-    /// 从 `payer` 收取 `transaction_amount` 对应的链上交易费并返回实收金额。
+    /// 从 `payer_account_id` 收取 `transaction_amount` 对应的链上交易费并返回实收金额。
     fn charge(
-        payer: &AccountId,
+        payer_account_id: &AccountId,
         transaction_amount: Balance,
     ) -> Result<Balance, sp_runtime::DispatchError>;
 }
@@ -28,7 +28,7 @@ impl<AccountId, Balance> OnchainFeeCharger<AccountId, Balance> for () {
 /// 链下清算费付款来源。
 ///
 /// 一个批次可包含多个付款公民和多个付款方清算行，不能伪装成单一机构账户付款。
-/// 具体每笔 `payer + fee_amount` 直接以批次 item 为真源，由 offchain 执行器校验并扣账。
+/// 具体每笔 `payer_account_id + fee_amount` 直接以批次 item 为真源，由 offchain 执行器校验并扣账。
 #[derive(Clone, Copy, Eq, PartialEq, RuntimeDebug)]
 pub enum OffchainFeePayer {
     BatchItemPayers,
@@ -46,15 +46,15 @@ pub enum FeeRoute<AccountId, Balance> {
     /// 链上交易费：按交易金额计算，零金额自动落最低 0.1 元。
     Onchain {
         transaction_amount: Balance,
-        payer: AccountId,
+        payer_account_id: AccountId,
     },
     /// 链下交易费：费用由链下清算模块按批次业务规则计算并收取。
     Offchain {
         fee_amount: Balance,
-        payer: OffchainFeePayer,
+        payer_account_id: OffchainFeePayer,
     },
     /// 实际投票费：管理员或公民投出一票时由签名者固定支付 1 元。
-    Vote { payer: AccountId },
+    Vote { payer_account_id: AccountId },
     /// 明确拒绝：未开放、未归类、付款关系或授权关系不成立的调用。
     Reject,
 }

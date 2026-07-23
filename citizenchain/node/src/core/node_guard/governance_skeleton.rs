@@ -155,7 +155,7 @@ pub mod storage_key {
         key
     }
 
-    pub fn admin_account(cid_number: &[u8]) -> Vec<u8> {
+    pub fn account_id(cid_number: &[u8]) -> Vec<u8> {
         let mut key = if is_private_protected_cid(cid_number) {
             private_admin_accounts_prefix()
         } else {
@@ -305,7 +305,7 @@ pub enum GuardError {
         found: u32,
     },
     InvalidAdminPersonName([u8; 4]),
-    DuplicateAdminWallet([u8; 4]),
+    DuplicateAdminAccountId([u8; 4]),
     RoleMissing {
         code: [u8; 4],
         role_code: Vec<u8>,
@@ -368,7 +368,7 @@ pub enum GuardError {
         code: [u8; 4],
         role_code: Vec<u8>,
     },
-    DuplicateAssignmentWallet([u8; 4]),
+    DuplicateAssignmentAccountId([u8; 4]),
     AdminAssignmentSetMismatch([u8; 4]),
     LegalRepresentativeInfoMissing([u8; 4]),
     LegalRepresentativeAssignmentMismatch([u8; 4]),
@@ -441,7 +441,7 @@ where
 
 /// 校验全部 90 个受保护创世机构的管理员人员集合、固定岗位和任职席位。
 ///
-/// 固定岗位代码、名称、所属机构和席位数不可改变；管理员钱包可以依法更新。任职来源、
+/// 固定岗位代码、名称、所属机构和席位数不可改变；管理员账户可以依法更新。任职来源、
 /// 来源引用与任期只要求共享 SCALE 能完整解码，具体业务合法性由 runtime 与投票引擎负责。
 pub fn check_skeleton_invariants<F>(read_raw: F) -> Result<(), GuardError>
 where
@@ -485,9 +485,9 @@ where
     } else {
         None
     };
-    let raw = read_raw(&storage_key::admin_account(expected_cid))
+    let raw = read_raw(&storage_key::account_id(expected_cid))
         .ok_or(GuardError::FixedInstitutionMissing(institution.code))?;
-    let (stored_code, admin_wallets, invalid_private_name) =
+    let (stored_code, admin_account_ids, invalid_private_name) =
         if is_private_protected_cid(expected_cid) {
             let account: DecodedPrivateInstitutionAdmins = decode_exact(&raw)
                 .map_err(|_| GuardError::AdminAccountDecodeFailed(institution.code))?;
@@ -502,7 +502,7 @@ where
                 account
                     .admins
                     .into_iter()
-                    .map(|admin| admin.admin_account)
+                    .map(|admin| admin.account_id)
                     .collect::<Vec<_>>(),
                 invalid_name,
             )
@@ -514,7 +514,7 @@ where
                 account
                     .admins
                     .into_iter()
-                    .map(|admin| admin.admin_account)
+                    .map(|admin| admin.account_id)
                     .collect::<Vec<_>>(),
                 false,
             )
@@ -522,7 +522,7 @@ where
     if stored_code != institution.code {
         return Err(GuardError::InstitutionCodeChanged(institution.code));
     }
-    let found = admin_wallets.len() as u32;
+    let found = admin_account_ids.len() as u32;
     if found != institution.expected_len {
         return Err(GuardError::AdminsLenChanged {
             code: institution.code,
@@ -533,9 +533,9 @@ where
     if invalid_private_name {
         return Err(GuardError::InvalidAdminPersonName(institution.code));
     }
-    let admin_set = admin_wallets.iter().copied().collect::<BTreeSet<_>>();
-    if admin_set.len() != admin_wallets.len() {
-        return Err(GuardError::DuplicateAdminWallet(institution.code));
+    let admin_set = admin_account_ids.iter().copied().collect::<BTreeSet<_>>();
+    if admin_set.len() != admin_account_ids.len() {
+        return Err(GuardError::DuplicateAdminAccountId(institution.code));
     }
 
     let mut legal_representative_assignment = None;
@@ -652,7 +652,7 @@ where
                 found,
             });
         }
-        let mut role_assignment_wallets = BTreeSet::new();
+        let mut role_assignment_account_ids = BTreeSet::new();
         for assignment in assignments {
             if assignment.cid_number != expected_cid {
                 return Err(GuardError::AssignmentCidChanged {
@@ -672,14 +672,14 @@ where
                     role_code: expected_role.role_code,
                 });
             }
-            if !admin_set.contains(&assignment.admin_account) {
+            if !admin_set.contains(&assignment.account_id) {
                 return Err(GuardError::AdminAssignmentSetMismatch(institution.code));
             }
-            if !role_assignment_wallets.insert(assignment.admin_account) {
-                return Err(GuardError::DuplicateAssignmentWallet(institution.code));
+            if !role_assignment_account_ids.insert(assignment.account_id) {
+                return Err(GuardError::DuplicateAssignmentAccountId(institution.code));
             }
             if is_legal_representative {
-                legal_representative_assignment = Some(assignment.admin_account);
+                legal_representative_assignment = Some(assignment.account_id);
             }
         }
     }
@@ -687,7 +687,7 @@ where
         if info
             .legal_representative
             .as_ref()
-            .map(|representative| representative.account)
+            .map(|representative| representative.account_id)
             != legal_representative_assignment
         {
             return Err(GuardError::LegalRepresentativeAssignmentMismatch(
@@ -747,8 +747,8 @@ mod tests {
                 institution_code: institution.code,
                 admins: admins
                     .into_iter()
-                    .map(|admin_account| Admin {
-                        admin_account,
+                    .map(|account_id| Admin {
+                        account_id,
                         family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
                         given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
                     })
@@ -760,8 +760,8 @@ mod tests {
             institution_code: institution.code,
             admins: admins
                 .into_iter()
-                .map(|admin_account| PublicAdmin {
-                    admin_account,
+                .map(|account_id| PublicAdmin {
+                    account_id,
                     cid_number: Default::default(),
                     family_name: Default::default(),
                     given_name: Default::default(),
@@ -798,7 +798,7 @@ mod tests {
                     primitives::cid::china::citizenchain::LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER
                         .as_bytes()
                         .to_vec(),
-                account: legal_account,
+                account_id: legal_account,
             }),
             institution_code: institution.code,
             created_at: 0,
@@ -831,11 +831,11 @@ mod tests {
     fn assignment(
         institution: &FixedInstitution,
         role: &ExpectedRole,
-        admin_account: [u8; 32],
+        account_id: [u8; 32],
     ) -> DecodedInstitutionAdminAssignment {
         DecodedInstitutionAdminAssignment {
             cid_number: institution.cid_number.as_bytes().to_vec(),
-            admin_account,
+            account_id,
             role_code: role.role_code.clone(),
             term_start: 0,
             term_end: 0,
@@ -850,7 +850,7 @@ mod tests {
         for institution in protected_institutions() {
             let admins = accounts_for(&institution);
             state.insert(
-                storage_key::admin_account(institution.cid_number.as_bytes()),
+                storage_key::account_id(institution.cid_number.as_bytes()),
                 account_bytes(&institution, admins.clone()),
             );
             if is_private_protected_cid(institution.cid_number.as_bytes()) {
@@ -920,7 +920,7 @@ mod tests {
             .into_iter()
             .find(|institution| is_private_protected_cid(institution.cid_number.as_bytes()))
             .expect("protected private genesis foundation");
-        assert!(storage_key::admin_account(foundation.cid_number.as_bytes())
+        assert!(storage_key::account_id(foundation.cid_number.as_bytes())
             .starts_with(&storage_key::private_admin_accounts_prefix()));
         assert!(storage_key::institution_role(
             foundation.cid_number.as_bytes(),
@@ -1029,7 +1029,7 @@ mod tests {
     #[test]
     fn public_person_identity_fields_can_remain_empty_without_changing_authority() {
         let institution = fixed_institutions()[0];
-        let admin_key = storage_key::admin_account(institution.cid_number.as_bytes());
+        let admin_key = storage_key::account_id(institution.cid_number.as_bytes());
         let mut state = valid_state();
         let mut account: DecodedPublicInstitutionAdmins =
             decode_exact(state.get(&admin_key).expect("admin account exists"))
@@ -1053,9 +1053,7 @@ mod tests {
     fn missing_or_wrong_code_fixed_account_is_rejected() {
         let institution = fixed_institutions()[0];
         let mut state = valid_state();
-        state.remove(&storage_key::admin_account(
-            institution.cid_number.as_bytes(),
-        ));
+        state.remove(&storage_key::account_id(institution.cid_number.as_bytes()));
         assert_eq!(
             check_state(&state),
             Err(GuardError::FixedInstitutionMissing(institution.code))
@@ -1063,13 +1061,13 @@ mod tests {
 
         let mut state = valid_state();
         state.insert(
-            storage_key::admin_account(institution.cid_number.as_bytes()),
+            storage_key::account_id(institution.cid_number.as_bytes()),
             DecodedPublicInstitutionAdmins {
                 institution_code: *b"BAD\0",
                 admins: accounts_for(&institution)
                     .into_iter()
-                    .map(|admin_account| PublicAdmin {
-                        admin_account,
+                    .map(|account_id| PublicAdmin {
+                        account_id,
                         cid_number: Default::default(),
                         family_name: Default::default(),
                         given_name: Default::default(),
@@ -1185,7 +1183,7 @@ mod tests {
         let mut assignments: Vec<DecodedInstitutionAdminAssignment> =
             decode_exact(state.get(&assignments_key).expect("assignments exist"))
                 .expect("assignments decode");
-        assignments[0].admin_account = [250u8; 32];
+        assignments[0].account_id = [250u8; 32];
         state.insert(assignments_key, assignments.encode());
         assert_eq!(
             check_state(&state),
@@ -1203,7 +1201,7 @@ mod tests {
             institution.cid_number.as_bytes(),
             &role.role_code,
         );
-        let admin_key = storage_key::admin_account(institution.cid_number.as_bytes());
+        let admin_key = storage_key::account_id(institution.cid_number.as_bytes());
         let mut state = valid_state();
 
         let mut role_value: DecodedInstitutionRole =
@@ -1220,13 +1218,13 @@ mod tests {
             assignment.assignment_source = InstitutionAssignmentSource::PopularElection;
             assignment.assignment_source_ref = b"VOTE-1".to_vec();
         }
-        assignments[0].admin_account = [250u8; 32];
+        assignments[0].account_id = [250u8; 32];
         state.insert(assignments_key, assignments.encode());
 
         let mut account: DecodedPublicInstitutionAdmins =
             decode_exact(state.get(&admin_key).expect("admin account exists"))
                 .expect("admin account decodes");
-        account.admins[0].admin_account = [250u8; 32];
+        account.admins[0].account_id = [250u8; 32];
         state.insert(admin_key, account.encode());
 
         assert_eq!(check_state(&state), Ok(()));
@@ -1240,7 +1238,7 @@ mod tests {
         let encoded_account = account.to_vec().encode();
         expected_admin.extend_from_slice(&blake2_128(&encoded_account));
         expected_admin.extend_from_slice(&encoded_account);
-        assert_eq!(storage_key::admin_account(account), expected_admin);
+        assert_eq!(storage_key::account_id(account), expected_admin);
 
         let cid = b"CID-1".to_vec().encode();
         let role = b"ROLE-1".to_vec().encode();
@@ -1279,12 +1277,12 @@ mod tests {
         let affected = fixed[0];
         let unrelated = fixed[1];
         let mut state = valid_state();
-        state.remove(&storage_key::admin_account(unrelated.cid_number.as_bytes()));
+        state.remove(&storage_key::account_id(unrelated.cid_number.as_bytes()));
 
         let delta = BTreeMap::from([(
-            storage_key::admin_account(affected.cid_number.as_bytes()),
+            storage_key::account_id(affected.cid_number.as_bytes()),
             state
-                .get(&storage_key::admin_account(affected.cid_number.as_bytes()))
+                .get(&storage_key::account_id(affected.cid_number.as_bytes()))
                 .cloned(),
         )]);
         assert_eq!(

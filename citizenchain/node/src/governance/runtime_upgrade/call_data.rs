@@ -23,7 +23,7 @@ pub(crate) fn read_wasm(wasm_path: &str) -> Result<(Vec<u8>, f64), String> {
 /// 构建开发期直接升级 call_data。
 ///
 /// 开发直升也是国家储委会机构操作，载荷必须显式携带
-/// `actor_cid_number + COMMITTEE_MEMBER`；任职管理员钱包负责签名。
+/// `actor_cid_number + COMMITTEE_MEMBER`；任职管理员账户对应的签名公钥负责签名。
 pub(crate) fn developer_direct_upgrade(
     actor_cid_number: &str,
     wasm_code: &[u8],

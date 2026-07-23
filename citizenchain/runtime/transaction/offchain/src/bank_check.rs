@@ -38,7 +38,7 @@ pub trait CidAccountQuery<AccountId> {
     fn find_account(cid_number: &[u8], account_name: &[u8]) -> Option<AccountId>;
     /// 该地址是否存在于机构账户正反索引中。
     fn account_exists(addr: &AccountId) -> bool;
-    /// CID、岗位码、签名钱包是否同时拥有指定清算业务动作的发起权限。
+    /// CID、岗位码、签名账户是否同时拥有指定清算业务动作的发起权限。
     fn is_institution_role_authorized(
         cid_number: &[u8],
         role_code: &[u8],
@@ -143,18 +143,18 @@ pub fn ensure_can_be_bound<T: Config>(cid_number: &[u8]) -> Result<(), Error<T>>
     Ok(())
 }
 
-/// 严格校验机构账户交易中的 `(actor_cid_number, institution_account)` 绑定关系。
+/// 严格校验机构账户交易中的 `(actor_cid_number, institution_account_id)` 绑定关系。
 ///
 /// 授权主体只能是 CID；账户只是该 CID 下被本次交易操作的具体账户。这里不接受
 /// “由账户反推 CID 后继续执行”的回落路径，调用方传入的 CID、账户正向登记和
 /// 账户反向登记必须完全一致。
 pub fn ensure_institution_account<T: Config>(
     actor_cid_number: &[u8],
-    institution_account: &T::AccountId,
+    institution_account_id: &T::AccountId,
     required_account_name: &[u8],
 ) -> Result<(), Error<T>> {
     let (institution_cid_number, institution_account_name) =
-        T::CidAccountQuery::account_info(institution_account)
+        T::CidAccountQuery::account_info(institution_account_id)
             .ok_or(Error::<T>::NotRegisteredClearingBank)?;
     ensure!(
         institution_cid_number.as_slice() == actor_cid_number,
@@ -165,7 +165,7 @@ pub fn ensure_institution_account<T: Config>(
         Error::<T>::NotMainAccount
     );
     ensure!(
-        T::CidAccountQuery::account_exists(institution_account),
+        T::CidAccountQuery::account_exists(institution_account_id),
         Error::<T>::ClearingBankAccountNotFound
     );
     Ok(())

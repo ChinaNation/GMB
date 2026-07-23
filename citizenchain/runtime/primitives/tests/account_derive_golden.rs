@@ -77,9 +77,9 @@ fn derive_vector(v: &serde_json::Value) -> [u8; 32] {
         }
         .derive(SS58_FORMAT),
         "Personal" => {
-            let creator = hex_decode_32(creator_hex.expect("Personal 缺 creator_hex"));
+            let creator_account_id = hex_decode_32(creator_hex.expect("Personal 缺 creator_hex"));
             AccountKind::Personal {
-                creator: &creator,
+                creator_account_id: &creator_account_id,
                 account_name: name.expect("缺 account_name").as_bytes(),
             }
             .derive(SS58_FORMAT)

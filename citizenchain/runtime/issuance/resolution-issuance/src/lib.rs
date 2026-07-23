@@ -67,7 +67,7 @@ pub mod pallet {
 
         /// 统一投票引擎：本模块只创建联合提案，投票动作由投票引擎公开入口承载。
         type JointVoteEngine: JointVoteEngine<Self::AccountId>;
-        /// 决议发行按“机构 CID + 显式岗位码 + 签名钱包”校验提案权限。
+        /// 决议发行按“机构 CID + 显式岗位码 + 签名账户”校验提案权限。
         type InstitutionRoleAuthorization: InstitutionRoleAuthorizationQuery<Self::AccountId>;
 
         #[pallet::constant]
@@ -183,7 +183,7 @@ pub mod pallet {
             proposal_id: u64,
             actor_cid_number: votingengine::types::CidNumber,
             proposer_role_code: votingengine::types::RoleCode,
-            proposer: T::AccountId,
+            proposer_account_id: T::AccountId,
             total_amount: BalanceOf<T>,
             allocation_count: u32,
         },
@@ -263,9 +263,9 @@ pub mod pallet {
             total_amount: BalanceOf<T>,
             allocations: AllocationOf<T>,
         ) -> DispatchResult {
-            let proposer = T::ProposeOrigin::ensure_origin(origin)?;
+            let proposer_account_id = T::ProposeOrigin::ensure_origin(origin)?;
             Self::create_resolution_issuance_proposal(
-                proposer,
+                proposer_account_id,
                 actor_cid_number,
                 proposer_role_code,
                 reason,

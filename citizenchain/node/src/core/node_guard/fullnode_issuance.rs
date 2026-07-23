@@ -75,8 +75,8 @@ pub mod storage_key {
         storage_value(FULLNODE_PALLET, b"LastRewardAudit")
     }
 
-    pub fn reward_wallet(miner: &[u8; 32]) -> Vec<u8> {
-        blake2_map(FULLNODE_PALLET, b"RewardWalletByMiner", miner)
+    pub fn reward_account_id(miner: &[u8; 32]) -> Vec<u8> {
+        blake2_map(FULLNODE_PALLET, b"RewardAccountIdByMiner", miner)
     }
 
     pub fn last_authored(miner: &[u8; 32]) -> Vec<u8> {
@@ -238,7 +238,7 @@ where
         return Ok(());
     }
 
-    let recipient = match pre_finalize(&storage_key::reward_wallet(&author)) {
+    let recipient_account_id = match pre_finalize(&storage_key::reward_account_id(&author)) {
         Some(bytes) => {
             decode_exact::<[u8; 32]>(&bytes).map_err(|_| GuardError::RewardAccountDecodeFailed)?
         }
@@ -247,7 +247,7 @@ where
     let audit = decode_audit(post(&storage_key::last_reward_audit()))
         .map_err(|_| GuardError::RewardAuditInvalid)?
         .ok_or(GuardError::RewardAuditMissing)?;
-    if audit != (block, author, recipient, FULLNODE_BLOCK_REWARD) {
+    if audit != (block, author, recipient_account_id, FULLNODE_BLOCK_REWARD) {
         return Err(GuardError::RewardAuditInvalid);
     }
     let last_authored: u32 = decode_or_zero(post(&storage_key::last_authored(&author)))
@@ -257,7 +257,7 @@ where
     }
 
     issuance_plan
-        .add(recipient, FULLNODE_BLOCK_REWARD)
+        .add(recipient_account_id, FULLNODE_BLOCK_REWARD)
         .map_err(|_| GuardError::FinalizeIssuanceOverflow)?;
     Ok(())
 }
@@ -318,7 +318,8 @@ where
             Err(GuardError::RewardAuditUnexpected)
         };
     }
-    let (audit_block, miner, wallet, amount) = audit.ok_or(GuardError::RewardAuditMissing)?;
+    let (audit_block, miner, reward_account_id, amount) =
+        audit.ok_or(GuardError::RewardAuditMissing)?;
     let expected_last_block = block.min(FULLNODE_REWARD_END_BLOCK);
     if audit_block != expected_last_block || amount != FULLNODE_BLOCK_REWARD {
         return Err(GuardError::RewardAuditInvalid);
@@ -329,11 +330,12 @@ where
         return Err(GuardError::LastAuthoredBlockInvalid);
     }
     if block <= FULLNODE_REWARD_END_BLOCK {
-        let bound: Option<[u8; 32]> = read(&storage_key::reward_wallet(&miner))
+        let bound: Option<[u8; 32]> = read(&storage_key::reward_account_id(&miner))
             .map(|bytes| decode_exact::<[u8; 32]>(&bytes))
             .transpose()
             .map_err(|_| GuardError::RewardAuditInvalid)?;
-        if bound.unwrap_or(miner) != wallet || free_balance(&read, &wallet)? < FULLNODE_BLOCK_REWARD
+        if bound.unwrap_or(miner) != reward_account_id
+            || free_balance(&read, &reward_account_id)? < FULLNODE_BLOCK_REWARD
         {
             return Err(GuardError::RewardAuditInvalid);
         }
@@ -416,11 +418,14 @@ mod tests {
         use sp_core::hashing::{blake2_128, twox_128};
 
         let account = [5u8; 32];
-        let mut expected_wallet = twox_128(b"FullnodeIssuance").to_vec();
-        expected_wallet.extend_from_slice(&twox_128(b"RewardWalletByMiner"));
-        expected_wallet.extend_from_slice(&blake2_128(&account));
-        expected_wallet.extend_from_slice(&account);
-        assert_eq!(storage_key::reward_wallet(&account), expected_wallet);
+        let mut expected_reward_account_id = twox_128(b"FullnodeIssuance").to_vec();
+        expected_reward_account_id.extend_from_slice(&twox_128(b"RewardAccountIdByMiner"));
+        expected_reward_account_id.extend_from_slice(&blake2_128(&account));
+        expected_reward_account_id.extend_from_slice(&account);
+        assert_eq!(
+            storage_key::reward_account_id(&account),
+            expected_reward_account_id
+        );
 
         let mut expected_total = twox_128(b"Balances").to_vec();
         expected_total.extend_from_slice(&twox_128(b"TotalIssuance"));
@@ -434,7 +439,7 @@ mod tests {
     fn valid_transition(
         block: u32,
         author: [u8; 32],
-        recipient: [u8; 32],
+        recipient_account_id: [u8; 32],
     ) -> (
         BTreeMap<Vec<u8>, Vec<u8>>,
         BTreeMap<Vec<u8>, Vec<u8>>,
@@ -453,9 +458,16 @@ mod tests {
                 expected_total(block - 1),
             );
             put(map, storage_key::total_issuance(), 10_000_000u128);
-            map.insert(storage_key::system_account(&recipient), account(1_000));
-            if recipient != author {
-                put(map, storage_key::reward_wallet(&author), recipient);
+            map.insert(
+                storage_key::system_account(&recipient_account_id),
+                account(1_000),
+            );
+            if recipient_account_id != author {
+                put(
+                    map,
+                    storage_key::reward_account_id(&author),
+                    recipient_account_id,
+                );
             }
         }
         put(&mut post, storage_key::rewarded_block_count(), after_count);
@@ -470,14 +482,14 @@ mod tests {
             10_000_000u128 + FULLNODE_BLOCK_REWARD,
         );
         post.insert(
-            storage_key::system_account(&recipient),
+            storage_key::system_account(&recipient_account_id),
             account(1_000 + FULLNODE_BLOCK_REWARD),
         );
         put(&mut post, storage_key::last_authored(&author), block);
         put(
             &mut post,
             storage_key::last_reward_audit(),
-            (block, author, recipient, FULLNODE_BLOCK_REWARD),
+            (block, author, recipient_account_id, FULLNODE_BLOCK_REWARD),
         );
         (parent, pre, post)
     }
@@ -497,10 +509,10 @@ mod tests {
     }
 
     #[test]
-    fn valid_bound_wallet_reward_passes() {
+    fn valid_bound_reward_account_reward_passes() {
         let author = [1u8; 32];
-        let wallet = [2u8; 32];
-        let (parent, pre, post) = valid_transition(1, author, wallet);
+        let reward_account_id = [2u8; 32];
+        let (parent, pre, post) = valid_transition(1, author, reward_account_id);
         assert_eq!(
             check_transition(
                 1,
@@ -532,12 +544,12 @@ mod tests {
     #[test]
     fn wrong_reward_amount_or_recipient_is_rejected() {
         let author = [3u8; 32];
-        let wallet = [4u8; 32];
-        let (parent, pre, mut post) = valid_transition(1, author, wallet);
+        let reward_account_id = [4u8; 32];
+        let (parent, pre, mut post) = valid_transition(1, author, reward_account_id);
         put(
             &mut post,
             storage_key::last_reward_audit(),
-            (1u32, author, wallet, FULLNODE_BLOCK_REWARD - 1),
+            (1u32, author, reward_account_id, FULLNODE_BLOCK_REWARD - 1),
         );
         assert_eq!(
             check_transition(
@@ -554,13 +566,13 @@ mod tests {
     #[test]
     fn wrong_audit_height_miner_and_last_authored_are_rejected() {
         let author = [21u8; 32];
-        let wallet = [22u8; 32];
+        let reward_account_id = [22u8; 32];
 
         for audit in [
-            (2u32, author, wallet, FULLNODE_BLOCK_REWARD),
-            (1u32, [23u8; 32], wallet, FULLNODE_BLOCK_REWARD),
+            (2u32, author, reward_account_id, FULLNODE_BLOCK_REWARD),
+            (1u32, [23u8; 32], reward_account_id, FULLNODE_BLOCK_REWARD),
         ] {
-            let (parent, pre, mut post) = valid_transition(1, author, wallet);
+            let (parent, pre, mut post) = valid_transition(1, author, reward_account_id);
             put(&mut post, storage_key::last_reward_audit(), audit);
             assert_eq!(
                 check_transition(
@@ -574,7 +586,7 @@ mod tests {
             );
         }
 
-        let (parent, pre, mut post) = valid_transition(1, author, wallet);
+        let (parent, pre, mut post) = valid_transition(1, author, reward_account_id);
         put(&mut post, storage_key::last_authored(&author), 2u32);
         assert_eq!(
             check_transition(
@@ -779,8 +791,8 @@ mod tests {
     #[test]
     fn scale_values_with_trailing_bytes_are_rejected() {
         let author = [12u8; 32];
-        let wallet = [13u8; 32];
-        let (parent, pre, mut post) = valid_transition(1, author, wallet);
+        let reward_account_id = [13u8; 32];
+        let (parent, pre, mut post) = valid_transition(1, author, reward_account_id);
         post.get_mut(&storage_key::rewarded_block_count())
             .expect("rewarded count")
             .push(0xff);
@@ -798,9 +810,9 @@ mod tests {
             })
         );
 
-        let (parent, mut pre, post) = valid_transition(1, author, wallet);
-        pre.get_mut(&storage_key::reward_wallet(&author))
-            .expect("reward wallet")
+        let (parent, mut pre, post) = valid_transition(1, author, reward_account_id);
+        pre.get_mut(&storage_key::reward_account_id(&author))
+            .expect("reward reward_account_id")
             .push(0xff);
         assert_eq!(
             check_transition(

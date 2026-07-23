@@ -78,7 +78,7 @@ fn authorized_admin_cannot_supply_invalid_actor_cid() {
 fn reject_invalid_allocation_count() {
     new_test_ext().execute_with(|| {
         let one = vec![crate::proposal::RecipientAmount {
-            recipient: reserve_council_accounts()[0].clone(),
+            recipient_account_id: reserve_council_accounts()[0].clone(),
             amount: 1000,
         }];
         let alloc: pallet::AllocationOf<Test> = one.try_into().expect("should fit");
@@ -287,7 +287,7 @@ fn callback_rejects_corrupted_reason_with_reason_too_long() {
             crate::proposal::IssuanceProposalData {
                 actor_cid_number: actor_cid_number(),
                 proposer_role_code: committee_role_code(),
-                proposer: AccountId32::new([1u8; 32]),
+                proposer_account_id: AccountId32::new([1u8; 32]),
                 reason: vec![b'x'; 129],
                 total_amount: 4300,
                 allocations: allocations_ok(4300).to_vec(),

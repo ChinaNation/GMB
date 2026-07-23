@@ -160,10 +160,8 @@ impl<T: Config> Pallet<T> {
                 );
             }
             ensure!(
-                assignment_keys.insert((
-                    assignment.admin_account.clone(),
-                    assignment.role_code.clone(),
-                )),
+                assignment_keys
+                    .insert((assignment.account_id.clone(), assignment.role_code.clone(),)),
                 Error::<T>::DuplicateAssignment
             );
         }
@@ -351,7 +349,7 @@ impl<T: Config> InstitutionRoleQuery<T::AccountId> for Pallet<T> {
         InstitutionRoleAssignments::<T>::get(&cid_number, role_code)
             .into_iter()
             .any(|assignment| {
-                &assignment.admin_account == admin
+                &assignment.account_id == admin
                     && Pallet::<T>::is_assignment_effective(&role, &assignment)
             })
     }
@@ -378,10 +376,10 @@ impl<T: Config> InstitutionRoleQuery<T::AccountId> for Pallet<T> {
                 T::InstitutionAdminQuery::is_institution_admin(
                     institution.institution_code,
                     cid_number.as_slice(),
-                    &assignment.admin_account,
+                    &assignment.account_id,
                 ) && Pallet::<T>::is_assignment_effective(&role, assignment)
             })
-            .map(|assignment| assignment.admin_account)
+            .map(|assignment| assignment.account_id)
             .collect()
     }
 
@@ -398,7 +396,7 @@ impl<T: Config> InstitutionRoleQuery<T::AccountId> for Pallet<T> {
                 let active = InstitutionRoleAssignments::<T>::get(&cid_number, &role_code)
                     .into_iter()
                     .any(|assignment| {
-                        &assignment.admin_account == admin
+                        &assignment.account_id == admin
                             && T::InstitutionAdminQuery::is_institution_admin(
                                 institution.institution_code,
                                 cid_number.as_slice(),

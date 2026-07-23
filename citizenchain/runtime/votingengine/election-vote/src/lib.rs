@@ -114,7 +114,7 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// 互选投票记录：proposal_id + (CID + 岗位码 + 钱包) → candidate。
+    /// 互选投票记录：proposal_id + (CID + 岗位码 + 账户) → candidate。
     #[pallet::storage]
     pub type MutualElectionVotesByTicket<T: Config> = StorageDoubleMap<
         _,
@@ -202,7 +202,7 @@ pub mod pallet {
         CandidateNotInSnapshot,
         /// 普选选民不具备 citizen-identity 投票资格。
         VoterNotEligible,
-        /// 候选人 CID 与当前钱包绑定不是 citizen-identity 返回的完整主体。
+        /// 候选人 CID 与当前账户绑定不是 citizen-identity 返回的完整主体。
         CandidateSubjectInvalid,
         /// 选举缺少与模式匹配的资格作用域。
         ElectionScopeMissing,
@@ -345,7 +345,7 @@ pub mod pallet {
                 status: votingengine::STATUS_VOTING,
                 internal_code: Some(actor_code),
                 actor_cid_number: Some(actor_cid_number.clone()),
-                execution_account: None,
+                execution_account_id: None,
                 subject_cid_numbers,
                 start: now,
                 end,
@@ -504,7 +504,7 @@ pub mod pallet {
                 );
                 let ticket = votingengine::types::InstitutionVoteTicket {
                     role_subject,
-                    voter_account: who.clone(),
+                    voter_account_id: who.clone(),
                 };
                 ensure!(
                     !MutualElectionVotesByTicket::<T>::contains_key(proposal_id, &ticket),

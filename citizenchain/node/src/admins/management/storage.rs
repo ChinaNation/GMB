@@ -13,7 +13,7 @@ use primitives::cid::code::{
 
 use super::codec;
 use super::types::{
-    institution_code_label, kind_label, AdminAccountState, AdminDecoded, InstitutionAdminInfo,
+    institution_code_label, kind_label, AdminDecoded, InstitutionAdminInfo, InstitutionAdminsState,
     InstitutionRoleAssignmentInfo, InstitutionRolePermissionInfo,
 };
 use crate::governance::registry;
@@ -83,17 +83,19 @@ pub fn admin_accounts_key_for_pallet(pallet_name: &str, cid_number: &[u8]) -> St
     format!("0x{}", hex::encode(key))
 }
 
-pub fn fetch_admin_account_by_cid_number(
+pub fn fetch_institution_admins_state_by_cid_number(
     cid_number: &str,
-) -> Result<Option<AdminAccountState>, String> {
+) -> Result<Option<InstitutionAdminsState>, String> {
     if let Ok(institution_code) = builtin_governance_code(cid_number) {
-        return fetch_admin_account_for_code(cid_number, institution_code);
+        return fetch_institution_admins_for_code(cid_number, institution_code);
     }
-    fetch_admin_account(cid_number)
+    fetch_institution_admins(cid_number)
 }
 
 /// 按 CID 在公权/私权管理员模块双探测，非法人也以实际命中的 pallet 决定 entity 路由。
-pub fn fetch_admin_account(cid_number: &str) -> Result<Option<AdminAccountState>, String> {
+pub fn fetch_institution_admins(
+    cid_number: &str,
+) -> Result<Option<InstitutionAdminsState>, String> {
     let finalized_hash = chain_query::fetch_finalized_head()?;
     let mut found = None;
     for spec in [PUBLIC_ADMINS, PRIVATE_ADMINS] {
@@ -102,9 +104,9 @@ pub fn fetch_admin_account(cid_number: &str) -> Result<Option<AdminAccountState>
             continue;
         };
         if found.is_some() {
-            return Err("同一账户在多个机构管理员模块中存在，链上状态不一致".to_string());
+            return Err("同一机构 CID 在多个管理员模块中存在，链上状态不一致".to_string());
         }
-        found = Some(decode_admin_account_state(
+        found = Some(decode_institution_admins_state(
             cid_number,
             spec,
             &hex_data,
@@ -114,25 +116,25 @@ pub fn fetch_admin_account(cid_number: &str) -> Result<Option<AdminAccountState>
     Ok(found)
 }
 
-pub fn fetch_admin_account_for_code(
+pub fn fetch_institution_admins_for_code(
     cid_number: &str,
     institution_code: InstitutionCode,
-) -> Result<Option<AdminAccountState>, String> {
+) -> Result<Option<InstitutionAdminsState>, String> {
     let finalized_hash = chain_query::fetch_finalized_head()?;
-    fetch_admin_account_for_code_at(cid_number, institution_code, &finalized_hash)
+    fetch_institution_admins_for_code_at(cid_number, institution_code, &finalized_hash)
 }
 
-pub fn fetch_admin_account_for_code_at(
+pub fn fetch_institution_admins_for_code_at(
     cid_number: &str,
     institution_code: InstitutionCode,
     finalized_hash: &str,
-) -> Result<Option<AdminAccountState>, String> {
+) -> Result<Option<InstitutionAdminsState>, String> {
     let spec = admin_pallet_for_code(&institution_code)?;
     let storage_key = admin_accounts_key_for_pallet(spec.pallet_name, cid_number.as_bytes());
     let Some(hex_data) = chain_query::fetch_storage_at(&storage_key, finalized_hash)? else {
         return Ok(None);
     };
-    let state = decode_admin_account_state(cid_number, spec, &hex_data, finalized_hash)?;
+    let state = decode_institution_admins_state(cid_number, spec, &hex_data, finalized_hash)?;
     if state.institution_code != institution_code {
         return Err(format!(
             "管理员账户机构码不匹配：查询 {}，链上 {}",
@@ -143,21 +145,21 @@ pub fn fetch_admin_account_for_code_at(
     Ok(Some(state))
 }
 
-fn decode_admin_account_state(
+fn decode_institution_admins_state(
     cid_number: &str,
     spec: AdminPalletSpec,
     hex_data: &str,
     finalized_hash: &str,
-) -> Result<AdminAccountState, String> {
+) -> Result<InstitutionAdminsState, String> {
     let data = decode_hex_storage(hex_data)?;
-    let decoded = codec::decode_admin_account(&data, spec == PUBLIC_ADMINS)?;
+    let decoded = codec::decode_institution_admins(&data, spec == PUBLIC_ADMINS)?;
     let admins = fetch_role_assignments(
         spec,
         cid_number.as_bytes(),
         decoded.admins.as_slice(),
         finalized_hash,
     )?;
-    Ok(AdminAccountState {
+    Ok(InstitutionAdminsState {
         cid_number: cid_number.to_string(),
         institution_code: decoded.institution_code,
         institution_code_label: institution_code_label(&decoded.institution_code),
@@ -303,10 +305,7 @@ fn fetch_role_assignments(
         BTreeMap::<String, (&AdminDecoded, Vec<InstitutionRoleAssignmentInfo>)>::new();
     for admin in admin_records {
         if grouped
-            .insert(
-                admin.admin_account.to_ascii_lowercase(),
-                (admin, Vec::new()),
-            )
+            .insert(admin.account_id.to_ascii_lowercase(), (admin, Vec::new()))
             .is_some()
         {
             return Err("机构管理员账户重复".to_string());
@@ -327,8 +326,8 @@ fn fetch_role_assignments(
             if assignment.cid_number != cid_number {
                 continue;
             }
-            let account = hex::encode(assignment.admin_account);
-            let Some((_, account_assignments)) = grouped.get_mut(&account) else {
+            let account_id = format!("0x{}", hex::encode(assignment.account_id));
+            let Some((_, account_assignments)) = grouped.get_mut(&account_id) else {
                 continue;
             };
             let role = roles
@@ -355,11 +354,11 @@ fn fetch_role_assignments(
     }
 
     let mut admins = Vec::with_capacity(grouped.len());
-    for (admin_account, (admin, mut assignments)) in grouped {
+    for (account_id, (admin, mut assignments)) in grouped {
         // 管理员身份和岗位任职是两套独立状态；新任管理员可以尚未取得岗位。
         assignments.sort_by(|left, right| left.role_code.cmp(&right.role_code));
         admins.push(InstitutionAdminInfo {
-            admin_account,
+            account_id,
             cid_number: admin.cid_number.clone(),
             family_name: admin.family_name.clone(),
             given_name: admin.given_name.clone(),
@@ -372,7 +371,7 @@ fn fetch_role_assignments(
 pub fn fetch_institution_admins_by_cid_number(
     cid_number: &str,
 ) -> Result<Vec<InstitutionAdminInfo>, String> {
-    Ok(fetch_admin_account_by_cid_number(cid_number)?
+    Ok(fetch_institution_admins_state_by_cid_number(cid_number)?
         .map(|state| state.admins)
         .unwrap_or_default())
 }
@@ -419,7 +418,7 @@ mod tests {
         };
         let assignment = InstitutionAdminAssignment {
             cid_number: b"CID".to_vec(),
-            admin_account: [1; 32],
+            account_id: [1; 32],
             role_code: b"ROLE".to_vec(),
             term_start: 10,
             term_end: 20,

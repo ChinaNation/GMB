@@ -22,8 +22,8 @@ runtime 的多签转账业务允许所有 active 机构账户，并统一调用 
 三类机构提案都必须由页面独立收集 `proposer_role_code`，Rust 构造器按 runtime 字段顺序严格编码，不得用当前管理员、机构类型或投票引擎推断岗位码：
 
 - 普通机构转账：`Option::Some(actor_cid_number) + Option::Some(proposer_role_code) + funding_account + beneficiary + amount + remark`。
-- NRC 安全基金转账：`actor_cid_number + proposer_role_code + institution_account + beneficiary + amount + remark`。
-- 费用账户划转：`actor_cid_number + proposer_role_code + institution_account + amount`。
+- NRC 安全基金转账：`actor_cid_number + proposer_role_code + institution_account_id + beneficiary_account_id + amount + remark`。
+- 费用账户划转：`actor_cid_number + proposer_role_code + institution_account_id + amount`。
 
 node 端只支持：
 

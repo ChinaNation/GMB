@@ -6,9 +6,9 @@
 //! ## propose origin 校验铁律(ADR-011 v2 第 5.4 / 5.6 节)
 //!
 //! - **业务 5 ACTION**(OAIS/OAMT/OABN/OACL/OATR):propose 入口校验
-//!   `actor_cid_number + actor_role_code + proposer` 的完整岗位权限
+//!   `actor_cid_number + actor_role_code + proposer_account_id` 的完整岗位权限
 //! - **监管 5 ACTION**(OMFZ/OMUF/OMCF/OMFT/OMFC):propose 入口固定校验
-//!   `NRC + COMMITTEE_MEMBER + proposer` 的完整岗位权限
+//!   `NRC + COMMITTEE_MEMBER + proposer_account_id` 的完整岗位权限
 //!
 //! VotingEngine 自身在 cast 阶段校验冻结岗位主体，propose 阶段仍须前置校验完整岗位权限，
 //! 防止任意账户消耗 storage 提案位或占用投票引擎额度。
@@ -44,7 +44,7 @@ pub struct IssueProposal<AccountId, Balance> {
     /// 发行机构唯一身份。
     pub actor_cid_number: Vec<u8>,
     /// 资产执行账户；只承载资产，不作为机构身份或管理员根。
-    pub execution_account: AccountId,
+    pub execution_account_id: AccountId,
     /// 资产种类(第一期 Plain only)。
     pub class: AssetClass,
     /// 名称(过黑名单)。bound 由 runtime 配置 MaxAssetNameLen。
@@ -64,7 +64,7 @@ pub struct IssueProposal<AccountId, Balance> {
 pub struct MintProposal<AccountId, Balance> {
     pub actor_cid_number: Vec<u8>,
     pub asset_id: u32,
-    pub to: AccountId,
+    pub to_account_id: AccountId,
     pub amount: Balance,
 }
 
@@ -73,7 +73,7 @@ pub struct MintProposal<AccountId, Balance> {
 pub struct BurnProposal<AccountId, Balance> {
     pub actor_cid_number: Vec<u8>,
     pub asset_id: u32,
-    pub from: AccountId,
+    pub from_account_id: AccountId,
     pub amount: Balance,
 }
 
@@ -89,8 +89,8 @@ pub struct CloseProposal {
 pub struct TransferProposal<AccountId, Balance> {
     pub actor_cid_number: Vec<u8>,
     pub asset_id: u32,
-    pub from: AccountId,
-    pub to: AccountId,
+    pub from_account_id: AccountId,
+    pub to_account_id: AccountId,
     pub amount: Balance,
 }
 // 监管提案体(NRC 调用,JointVote)
@@ -99,7 +99,7 @@ pub struct TransferProposal<AccountId, Balance> {
 pub struct MonitorFreezeProposal<AccountId> {
     pub actor_cid_number: Vec<u8>,
     pub asset_id: u32,
-    pub who: AccountId,
+    pub account_id: AccountId,
     pub reason_hash: [u8; 32],
 }
 
@@ -108,7 +108,7 @@ pub struct MonitorFreezeProposal<AccountId> {
 pub struct MonitorConfiscateProposal<AccountId, Balance> {
     pub actor_cid_number: Vec<u8>,
     pub asset_id: u32,
-    pub who: AccountId,
+    pub account_id: AccountId,
     pub amount: Balance,
     pub reason_hash: [u8; 32],
 }
@@ -118,8 +118,8 @@ pub struct MonitorConfiscateProposal<AccountId, Balance> {
 pub struct MonitorForceTransferProposal<AccountId, Balance> {
     pub actor_cid_number: Vec<u8>,
     pub asset_id: u32,
-    pub from: AccountId,
-    pub to: AccountId,
+    pub from_account_id: AccountId,
+    pub to_account_id: AccountId,
     pub amount: Balance,
     pub reason_hash: [u8; 32],
 }

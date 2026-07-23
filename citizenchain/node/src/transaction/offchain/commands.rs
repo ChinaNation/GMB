@@ -25,7 +25,7 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
 }
 
 /// 链上查询某机构的清算行节点声明信息。返回 None = 该机构未声明节点。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn query_clearing_bank_node_info(
     app: AppHandle,
     cid_number: String,
@@ -42,7 +42,7 @@ pub async fn query_clearing_bank_node_info(
 }
 
 /// 通过 RPC `system_localPeerId` 拿本机 libp2p PeerId。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn query_local_peer_id(app: AppHandle) -> Result<String, String> {
     let status = home::current_status(&app)?;
     if !status.running {
@@ -59,7 +59,7 @@ pub async fn query_local_peer_id(app: AppHandle) -> Result<String, String> {
 }
 
 /// 用户填的对外 RPC 域名+端口连通性自测,提交注册前强制 all_ok 才允许签名。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn test_clearing_bank_endpoint_connectivity(
     domain: String,
     port: u16,
@@ -76,10 +76,10 @@ pub async fn test_clearing_bank_endpoint_connectivity(
     .map_err(|e| format!("connectivity test task failed:{e}"))?
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn build_register_clearing_bank_request(
     app: AppHandle,
-    pubkey_hex: String,
+    signer_public_key: String,
     actor_cid_number: String,
     peer_id: String,
     rpc_domain: String,
@@ -91,7 +91,7 @@ pub async fn build_register_clearing_bank_request(
     }
     tauri::async_runtime::spawn_blocking(move || {
         super::signing::build_register_sign_request(
-            &pubkey_hex,
+            &signer_public_key,
             &actor_cid_number,
             &peer_id,
             &rpc_domain,
@@ -102,12 +102,12 @@ pub async fn build_register_clearing_bank_request(
     .map_err(|e| format!("build_register_clearing_bank task failed:{e}"))?
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 #[allow(clippy::too_many_arguments)]
 pub async fn submit_register_clearing_bank(
     app: AppHandle,
     request_id: String,
-    expected_pubkey_hex: String,
+    expected_signer_public_key: String,
     expected_payload_hash: String,
     actor_cid_number: String,
     peer_id: String,
@@ -130,7 +130,7 @@ pub async fn submit_register_clearing_bank(
         )?;
         gov_signing::verify_and_submit(
             &request_id,
-            &expected_pubkey_hex,
+            &expected_signer_public_key,
             &expected_payload_hash,
             &call_data,
             sign_nonce,
@@ -142,10 +142,10 @@ pub async fn submit_register_clearing_bank(
     .map_err(|e| format!("submit_register_clearing_bank task failed:{e}"))?
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn build_update_clearing_bank_endpoint_request(
     app: AppHandle,
-    pubkey_hex: String,
+    signer_public_key: String,
     actor_cid_number: String,
     new_domain: String,
     new_port: u16,
@@ -156,7 +156,7 @@ pub async fn build_update_clearing_bank_endpoint_request(
     }
     tauri::async_runtime::spawn_blocking(move || {
         super::signing::build_update_endpoint_sign_request(
-            &pubkey_hex,
+            &signer_public_key,
             &actor_cid_number,
             &new_domain,
             new_port,
@@ -166,12 +166,12 @@ pub async fn build_update_clearing_bank_endpoint_request(
     .map_err(|e| format!("build_update_clearing_bank_endpoint task failed:{e}"))?
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 #[allow(clippy::too_many_arguments)]
 pub async fn submit_update_clearing_bank_endpoint(
     app: AppHandle,
     request_id: String,
-    expected_pubkey_hex: String,
+    expected_signer_public_key: String,
     expected_payload_hash: String,
     actor_cid_number: String,
     new_domain: String,
@@ -192,7 +192,7 @@ pub async fn submit_update_clearing_bank_endpoint(
         )?;
         gov_signing::verify_and_submit(
             &request_id,
-            &expected_pubkey_hex,
+            &expected_signer_public_key,
             &expected_payload_hash,
             &call_data,
             sign_nonce,
@@ -204,10 +204,10 @@ pub async fn submit_update_clearing_bank_endpoint(
     .map_err(|e| format!("submit_update_clearing_bank_endpoint task failed:{e}"))?
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn build_unregister_clearing_bank_request(
     app: AppHandle,
-    pubkey_hex: String,
+    signer_public_key: String,
     actor_cid_number: String,
 ) -> Result<gov_signing::VoteSignRequestResult, String> {
     let status = home::current_status(&app)?;
@@ -215,18 +215,18 @@ pub async fn build_unregister_clearing_bank_request(
         return Err("节点未运行".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        super::signing::build_unregister_sign_request(&pubkey_hex, &actor_cid_number)
+        super::signing::build_unregister_sign_request(&signer_public_key, &actor_cid_number)
     })
     .await
     .map_err(|e| format!("build_unregister_clearing_bank task failed:{e}"))?
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 #[allow(clippy::too_many_arguments)]
 pub async fn submit_unregister_clearing_bank(
     app: AppHandle,
     request_id: String,
-    expected_pubkey_hex: String,
+    expected_signer_public_key: String,
     expected_payload_hash: String,
     actor_cid_number: String,
     sign_nonce: u32,
@@ -241,7 +241,7 @@ pub async fn submit_unregister_clearing_bank(
         let call_data = super::signing::build_unregister_call_data(&actor_cid_number)?;
         gov_signing::verify_and_submit(
             &request_id,
-            &expected_pubkey_hex,
+            &expected_signer_public_key,
             &expected_payload_hash,
             &call_data,
             sign_nonce,

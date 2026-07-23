@@ -9,7 +9,7 @@ use crate::{
 
 use super::{
     account_id, storage,
-    types::{institution_code_label, is_valid_institution_code, AdminAccountState},
+    types::{institution_code_label, is_valid_institution_code, InstitutionAdminsState},
 };
 
 /// 把前端传入的机构码字符串(如 "NRC"/"CGOV")转成链上 [u8;4]。空串/缺省 → None。
@@ -42,9 +42,9 @@ fn validate_cid_lookup(
 }
 
 fn ensure_expected_code(
-    state: AdminAccountState,
+    state: InstitutionAdminsState,
     expected_code: Option<InstitutionCode>,
-) -> Result<AdminAccountState, String> {
+) -> Result<InstitutionAdminsState, String> {
     if let Some(code) = expected_code {
         if state.institution_code != code {
             return Err(format!(
@@ -57,38 +57,38 @@ fn ensure_expected_code(
     Ok(state)
 }
 
-/// 获取管理员账户状态。
-#[tauri::command]
-pub async fn get_admin_account_state(
+/// 获取机构管理员集合状态。
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_institution_admins_state(
     app: AppHandle,
     cid_number: String,
     expected_institution_code: Option<String>,
-) -> Result<Option<AdminAccountState>, String> {
+) -> Result<Option<InstitutionAdminsState>, String> {
     let status = home::current_status(&app)?;
     if !status.running {
-        return Err("节点未运行，无法查询管理员账户".to_string());
+        return Err("节点未运行，无法查询机构管理员".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
         let expected_code = parse_expected_code(expected_institution_code.as_deref());
         validate_cid_lookup(expected_code, Some(&cid_number))?;
-        let state = storage::fetch_admin_account_by_cid_number(&cid_number)?;
+        let state = storage::fetch_institution_admins_state_by_cid_number(&cid_number)?;
         match state {
             Some(state) => ensure_expected_code(state, expected_code).map(Some),
             None => Ok(None),
         }
     })
     .await
-    .map_err(|e| format!("admin account task failed: {e}"))?
+    .map_err(|e| format!("institution admins task failed: {e}"))?
 }
 
 /// 批量读取管理员账户 finalized free 余额。
 ///
 /// 管理员卡片只做展示,余额读取必须钉 finalized 块,并且同一批账户共用
 /// 同一个 finalized hash,避免列表内不同卡片落在不同块高。
-#[tauri::command]
-pub async fn get_admin_account_balances(
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_account_balances(
     app: AppHandle,
-    account_hexes: Vec<String>,
+    account_ids: Vec<String>,
 ) -> Result<BTreeMap<String, Option<String>>, String> {
     let status = home::current_status(&app)?;
     if !status.running {
@@ -97,11 +97,12 @@ pub async fn get_admin_account_balances(
     tauri::async_runtime::spawn_blocking(move || {
         let block_hash = chain_query::fetch_finalized_head()?;
         let mut balances = BTreeMap::new();
-        for raw in account_hexes {
-            let clean = account_id::normalize_pubkey_hex(raw.as_str())?;
-            let value = institution::fetch_balance_at(clean.as_str(), Some(block_hash.as_str()))?
-                .map(|fen| fen.to_string());
-            balances.insert(clean, value);
+        for raw in account_ids {
+            let account_id = account_id::normalize_account_id(raw.as_str())?;
+            let value =
+                institution::fetch_balance_at(account_id.as_str(), Some(block_hash.as_str()))?
+                    .map(|fen| fen.to_string());
+            balances.insert(account_id, value);
         }
         Ok(balances)
     })

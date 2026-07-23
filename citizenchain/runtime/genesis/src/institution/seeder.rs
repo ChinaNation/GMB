@@ -1,4 +1,4 @@
-//! 创世机构、固定岗位任职与管理员钱包集合写入。
+//! 创世机构、固定岗位任职与管理员账户集合写入。
 //!
 //! 本文件只服务创世构建：机构、岗位和任职写入 `public-manage`，真实管理员人员
 //! 记录独立写入 `public-admins`。运行期机构生命周期、管理员更换、
@@ -130,19 +130,19 @@ fn bounded_static_name<T: public_manage::Config>(
 fn insert_public_account<T: public_manage::Config>(
     cid: &PublicCidNumberOf<T>,
     account_name: PublicAccountNameOf<T>,
-    address: T::AccountId,
+    account_id: T::AccountId,
 ) {
     public_manage::InstitutionAccounts::<T>::insert(
         cid,
         &account_name,
         PublicInstitutionAccountInfoOf::<T> {
-            address: address.clone(),
+            account_id: account_id.clone(),
             initial_balance: PublicBalanceOf::<T>::zero(),
             created_at: BlockNumberFor::<T>::default(),
         },
     );
     public_manage::AccountRegisteredCid::<T>::insert(
-        address,
+        account_id,
         PublicRegisteredInstitutionOf::<T> {
             cid_number: cid.clone(),
             account_name,
@@ -181,7 +181,7 @@ fn insert_derived_public_institution<T: public_manage::Config>(
             cid_short_name: bounded_name(cid_short_name),
             town_code: BoundedVec::new(),
             // 法定代表人不是创世必填项：创世字段为空，后续依法任命时原子写入。
-            // 禁止用首位管理员、机构主账户或其它钱包占位。
+            // 禁止用首位管理员、机构主账户或其它账户占位。
             legal_representative: None,
             institution_code: parts.institution,
             created_at: BlockNumberFor::<T>::default(),
@@ -193,7 +193,7 @@ fn insert_derived_public_institution<T: public_manage::Config>(
         value
             .to_vec()
             .try_into()
-            .expect("reserved account name fits")
+            .expect("reserved account_id name fits")
     };
     let cid_bytes = cid_number.as_bytes();
     let main = AccountKind::InstitutionMain {
@@ -214,7 +214,7 @@ fn insert_derived_public_institution<T: public_manage::Config>(
         let name = institution_protocol_account_name(*kind);
         let account_kind =
             institution_kind_by_name(cid_bytes, name).expect("协议账户名必须映射到唯一派生类型");
-        let address = match kind {
+        let account_id = match kind {
             InstitutionProtocolAccountKind::Main => main,
             InstitutionProtocolAccountKind::Fee => fee,
             _ => account_kind.derive(primitives::core_const::SS58_FORMAT),
@@ -222,7 +222,7 @@ fn insert_derived_public_institution<T: public_manage::Config>(
         insert_derived_account::<T>(
             &cid,
             bounded_reserved(name),
-            decode_account::<T>(&address, "派生协议账户"),
+            decode_account::<T>(&account_id, "派生协议账户"),
         );
     }
 }
@@ -231,19 +231,19 @@ fn insert_derived_public_institution<T: public_manage::Config>(
 fn insert_derived_account<T: public_manage::Config>(
     cid: &PublicCidNumberOf<T>,
     account_name: PublicAccountNameOf<T>,
-    address: T::AccountId,
+    account_id: T::AccountId,
 ) {
     public_manage::InstitutionAccounts::<T>::insert(
         cid,
         &account_name,
         PublicInstitutionAccountInfoOf::<T> {
-            address: address.clone(),
+            account_id: account_id.clone(),
             initial_balance: PublicBalanceOf::<T>::zero(),
             created_at: BlockNumberFor::<T>::default(),
         },
     );
     public_manage::AccountRegisteredCid::<T>::insert(
-        address,
+        account_id,
         PublicRegisteredInstitutionOf::<T> {
             cid_number: cid.clone(),
             account_name,
@@ -354,10 +354,10 @@ fn insert_fixed_admins<T>(
                 role_status: InstitutionRoleStatus::Active,
             });
         }
-        let admin_account = decode_account::<T>(raw, "管理员");
+        let account_id = decode_account::<T>(raw, "管理员");
         assignments.push(InstitutionAdminAssignment {
             cid_number: cid.clone(),
-            admin_account: admin_account.clone(),
+            account_id: account_id.clone(),
             role_code,
             term_start: 0,
             term_end: 0,
@@ -367,10 +367,10 @@ fn insert_fixed_admins<T>(
         });
         if !admin_records
             .iter()
-            .any(|admin| admin.admin_account == admin_account)
+            .any(|admin| admin.account_id == account_id)
         {
             admin_records.push(PublicAdmin {
-                admin_account,
+                account_id,
                 cid_number: BoundedVec::new(),
                 family_name: BoundedVec::new(),
                 given_name: BoundedVec::new(),
@@ -405,7 +405,7 @@ fn insert_fixed_admins<T>(
     assert_eq!(
         admin_records.len(),
         raw_admins.len(),
-        "genesis institution: 固定岗位钱包常量不得重复"
+        "genesis institution: 固定岗位账户常量不得重复"
     );
 
     let admins: PublicAdminsOf<T> = admin_records.try_into().unwrap_or_else(|_| {
@@ -478,7 +478,7 @@ where
         })
         .expect("genesis citizenchain: 缺少法定代表人管理员");
     let legal_representative_account =
-        decode_account::<T>(&legal_representative.admin_account, "法定代表人");
+        decode_account::<T>(&legal_representative.account_id, "法定代表人");
     let legal_representative_parts =
         primitives::cid::number::parse_cid_number_parts(LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER)
             .unwrap_or_else(|err| panic!("genesis citizenchain: 法定代表人公民 CID 非法: {err}"));
@@ -508,7 +508,7 @@ where
                     "法定代表人名",
                 ),
                 cid_number: legal_representative_cid,
-                account: legal_representative_account.clone(),
+                account_id: legal_representative_account.clone(),
             }),
             institution_code: parts.institution,
             created_at: BlockNumberFor::<T>::default(),
@@ -520,18 +520,18 @@ where
         (RESERVED_NAME_FEE, foundation.fee_account),
     ] {
         let account_name = bounded_name(account_name, "协议账户名");
-        let address = decode_account::<T>(&raw_account, "基金会协议账户");
+        let account_id = decode_account::<T>(&raw_account, "基金会协议账户");
         private_manage::InstitutionAccounts::<T>::insert(
             &cid,
             &account_name,
             PrivateInstitutionAccountInfoOf::<T> {
-                address: address.clone(),
+                account_id: account_id.clone(),
                 initial_balance: PrivateBalanceOf::<T>::zero(),
                 created_at: BlockNumberFor::<T>::default(),
             },
         );
         private_manage::AccountRegisteredCid::<T>::insert(
-            address,
+            account_id,
             PrivateRegisteredInstitutionOf::<T> {
                 cid_number: cid.clone(),
                 account_name,
@@ -556,11 +556,10 @@ where
             term_required: false,
             role_status: private_manage::InstitutionRoleStatus::Active,
         });
-        let admin_account =
-            decode_account::<T>(&genesis_assignment.admin_account, "创世任职管理员");
+        let account_id = decode_account::<T>(&genesis_assignment.account_id, "创世任职管理员");
         assignments.push(private_manage::InstitutionAdminAssignment {
             cid_number: cid.clone(),
-            admin_account: admin_account.clone(),
+            account_id: account_id.clone(),
             role_code,
             term_start: 0,
             term_end: 0,
@@ -571,7 +570,7 @@ where
     }
     for genesis_admin in CITIZENCHAIN_GENESIS_ADMINS {
         admins.push(Admin {
-            admin_account: decode_account::<T>(&genesis_admin.admin_account, "创世管理员"),
+            account_id: decode_account::<T>(&genesis_admin.account_id, "创世管理员"),
             family_name: genesis_admin
                 .family_name
                 .as_bytes()

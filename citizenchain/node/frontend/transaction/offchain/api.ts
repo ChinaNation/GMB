@@ -10,7 +10,9 @@ import type {
 // 清算行 offchain 网络专用 Tauri API。机构身份只读命令归同目录 institution/api.ts。
 export const offchainApi = {
   queryClearingBankNodeInfo: (cidNumber: string) =>
-    invoke<ClearingBankNodeOnChainInfo | null>('query_clearing_bank_node_info', { cidNumber }),
+    invoke<ClearingBankNodeOnChainInfo | null>('query_clearing_bank_node_info', {
+      cid_number: cidNumber,
+    }),
 
   queryLocalPeerId: () => invoke<string>('query_local_peer_id'),
 
@@ -18,27 +20,27 @@ export const offchainApi = {
     invoke<ConnectivityTestReport>('test_clearing_bank_endpoint_connectivity', {
       domain,
       port,
-      expectedPeerId,
+      expected_peer_id: expectedPeerId,
     }),
 
   buildRegisterClearingBankRequest: (
-    pubkeyHex: string,
+    signer_public_key: string,
     actorCidNumber: string,
     peerId: string,
     rpcDomain: string,
     rpcPort: number,
   ) =>
     invoke<VoteSignRequestResult>('build_register_clearing_bank_request', {
-      pubkeyHex,
-      actorCidNumber,
-      peerId,
-      rpcDomain,
-      rpcPort,
+      signer_public_key,
+      actor_cid_number: actorCidNumber,
+      peer_id: peerId,
+      rpc_domain: rpcDomain,
+      rpc_port: rpcPort,
     }),
 
   submitRegisterClearingBank: (
     requestId: string,
-    expectedPubkeyHex: string,
+    expected_signer_public_key: string,
     expectedPayloadHash: string,
     actorCidNumber: string,
     peerId: string,
@@ -49,34 +51,34 @@ export const offchainApi = {
     responseJson: string,
   ) =>
     invoke<VoteSubmitResult>('submit_register_clearing_bank', {
-      requestId,
-      expectedPubkeyHex,
-      expectedPayloadHash,
-      actorCidNumber,
-      peerId,
-      rpcDomain,
-      rpcPort,
-      signNonce,
-      signBlockNumber,
-      responseJson,
+      request_id: requestId,
+      expected_signer_public_key,
+      expected_payload_hash: expectedPayloadHash,
+      actor_cid_number: actorCidNumber,
+      peer_id: peerId,
+      rpc_domain: rpcDomain,
+      rpc_port: rpcPort,
+      sign_nonce: signNonce,
+      sign_block_number: signBlockNumber,
+      response_json: responseJson,
     }),
 
   buildUpdateClearingBankEndpointRequest: (
-    pubkeyHex: string,
+    signer_public_key: string,
     actorCidNumber: string,
     newDomain: string,
     newPort: number,
   ) =>
     invoke<VoteSignRequestResult>('build_update_clearing_bank_endpoint_request', {
-      pubkeyHex,
-      actorCidNumber,
-      newDomain,
-      newPort,
+      signer_public_key,
+      actor_cid_number: actorCidNumber,
+      new_domain: newDomain,
+      new_port: newPort,
     }),
 
   submitUpdateClearingBankEndpoint: (
     requestId: string,
-    expectedPubkeyHex: string,
+    expected_signer_public_key: string,
     expectedPayloadHash: string,
     actorCidNumber: string,
     newDomain: string,
@@ -86,26 +88,26 @@ export const offchainApi = {
     responseJson: string,
   ) =>
     invoke<VoteSubmitResult>('submit_update_clearing_bank_endpoint', {
-      requestId,
-      expectedPubkeyHex,
-      expectedPayloadHash,
-      actorCidNumber,
-      newDomain,
-      newPort,
-      signNonce,
-      signBlockNumber,
-      responseJson,
+      request_id: requestId,
+      expected_signer_public_key,
+      expected_payload_hash: expectedPayloadHash,
+      actor_cid_number: actorCidNumber,
+      new_domain: newDomain,
+      new_port: newPort,
+      sign_nonce: signNonce,
+      sign_block_number: signBlockNumber,
+      response_json: responseJson,
     }),
 
-  buildUnregisterClearingBankRequest: (pubkeyHex: string, actorCidNumber: string) =>
+  buildUnregisterClearingBankRequest: (signer_public_key: string, actorCidNumber: string) =>
     invoke<VoteSignRequestResult>('build_unregister_clearing_bank_request', {
-      pubkeyHex,
-      actorCidNumber,
+      signer_public_key,
+      actor_cid_number: actorCidNumber,
     }),
 
   submitUnregisterClearingBank: (
     requestId: string,
-    expectedPubkeyHex: string,
+    expected_signer_public_key: string,
     expectedPayloadHash: string,
     actorCidNumber: string,
     signNonce: number,
@@ -113,34 +115,37 @@ export const offchainApi = {
     responseJson: string,
   ) =>
     invoke<VoteSubmitResult>('submit_unregister_clearing_bank', {
-      requestId,
-      expectedPubkeyHex,
-      expectedPayloadHash,
-      actorCidNumber,
-      signNonce,
-      signBlockNumber,
-      responseJson,
+      request_id: requestId,
+      expected_signer_public_key,
+      expected_payload_hash: expectedPayloadHash,
+      actor_cid_number: actorCidNumber,
+      sign_nonce: signNonce,
+      sign_block_number: signBlockNumber,
+      response_json: responseJson,
     }),
 
-  buildDecryptAdminRequest: (pubkeyHex: string, cidNumber: string) =>
-    invoke<DecryptAdminRequestResult>('build_decrypt_admin_request', { pubkeyHex, cidNumber }),
+  buildDecryptAdminRequest: (signer_public_key: string, cidNumber: string) =>
+    invoke<DecryptAdminRequestResult>('build_decrypt_admin_request', {
+      signer_public_key,
+      cid_number: cidNumber,
+    }),
 
   verifyAndDecryptAdmin: (
     requestId: string,
-    pubkeyHex: string,
+    signer_public_key: string,
     expectedPayloadHash: string,
     responseJson: string,
   ) =>
     invoke<DecryptedAdminInfo>('verify_and_decrypt_admin', {
-      requestId,
-      pubkeyHex,
-      expectedPayloadHash,
-      responseJson,
+      request_id: requestId,
+      signer_public_key,
+      expected_payload_hash: expectedPayloadHash,
+      response_json: responseJson,
     }),
 
   listDecryptedAdmins: (cidNumber: string) =>
-    invoke<DecryptedAdminInfo[]>('list_decrypted_admins', { cidNumber }),
+    invoke<DecryptedAdminInfo[]>('list_decrypted_admins', { cid_number: cidNumber }),
 
-  lockDecryptedAdmin: (pubkeyHex: string) =>
-    invoke<void>('lock_decrypted_admin', { pubkeyHex }),
+  lockDecryptedAdmin: (signer_public_key: string) =>
+    invoke<void>('lock_decrypted_admin', { signer_public_key }),
 };

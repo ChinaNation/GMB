@@ -1,6 +1,6 @@
 use crate::{
     home,
-    settings::fee_account,
+    settings::reward_account,
     shared::{constants, rpc, security},
 };
 use serde::{Deserialize, Serialize};
@@ -65,10 +65,11 @@ struct CachedBlockRecord {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
+#[serde(deny_unknown_fields)]
 struct MiningComputationCache {
     cache_version: u32,
     chain_genesis_hash: Option<String>,
-    tracked_miner_account: Option<String>,
+    tracked_miner_account_id: Option<String>,
     last_processed_height: u64,
     last_processed_hash: Option<String>,
     total_fee_fen: u128,
@@ -82,7 +83,7 @@ impl Default for MiningComputationCache {
         Self {
             cache_version: MINING_CACHE_VERSION,
             chain_genesis_hash: None,
-            tracked_miner_account: None,
+            tracked_miner_account_id: None,
             last_processed_height: 0,
             last_processed_hash: None,
             total_fee_fen: 0,
@@ -167,22 +168,14 @@ fn persist_mining_cache(app: &AppHandle, cache: &MiningComputationCache) -> Resu
     })
 }
 
-fn migrate_mining_cache(
-    mut cache: MiningComputationCache,
-) -> Result<(MiningComputationCache, Option<u32>), String> {
-    match cache.cache_version {
-        MINING_CACHE_VERSION => Ok((cache, None)),
-        0 | 1 => {
-            let from = cache.cache_version;
-            cache = MiningComputationCache::default();
-            cache.cache_version = MINING_CACHE_VERSION;
-            Ok((cache, Some(from)))
-        }
-        other => Err(format!(
-            "mining cache version mismatch: expected={}, got={other}",
-            MINING_CACHE_VERSION
-        )),
+fn validate_mining_cache(cache: MiningComputationCache) -> Result<MiningComputationCache, String> {
+    if cache.cache_version != MINING_CACHE_VERSION {
+        return Err(format!(
+            "mining cache version mismatch: expected={}, got={}",
+            MINING_CACHE_VERSION, cache.cache_version
+        ));
     }
+    Ok(cache)
 }
 
 // 先更新进程内缓存，再按时间窗口/追赶进度决定是否落盘，兼顾数据连续性与写盘频率。
@@ -236,11 +229,7 @@ fn maybe_load_mining_cache(app: &AppHandle) -> Result<Option<MiningComputationCa
             security::sanitize_path(&path)
         )
     })?;
-    let (cache, migrated_from) = migrate_mining_cache(cache)?;
-    if migrated_from.is_some() {
-        persist_mining_cache(app, &cache)?;
-    }
-    Ok(Some(cache))
+    validate_mining_cache(cache).map(Some)
 }
 
 fn ensure_mining_cache_loaded(app: &AppHandle) {
@@ -410,21 +399,21 @@ fn timestamp_now_storage_key() -> String {
         .clone()
 }
 
-fn reward_wallet_storage_key(miner_account: &[u8; 32]) -> String {
+fn reward_account_storage_key(miner_account_id: &[u8; 32]) -> String {
     crate::shared::storage_keys::to_hex(&crate::shared::storage_keys::blake2_map(
         b"FullnodeIssuance",
-        b"RewardWalletByMiner",
-        miner_account,
+        b"RewardAccountIdByMiner",
+        miner_account_id,
     ))
 }
 
-fn reward_wallet_bound_at_block(miner_account_hex: &str, block_hash: &str) -> Result<bool, String> {
-    let miner_account = decode_hex_account_id_32(miner_account_hex)
-        .ok_or_else(|| format!("矿工账号格式无效：{miner_account_hex}"))?;
+fn reward_account_bound_at_block(miner_account_id: &str, block_hash: &str) -> Result<bool, String> {
+    let miner_account_id = decode_hex_account_id_32(miner_account_id)
+        .ok_or_else(|| format!("矿工账号格式无效：{miner_account_id}"))?;
     let raw = rpc_post(
         "state_getStorage",
         Value::Array(vec![
-            Value::String(reward_wallet_storage_key(&miner_account)),
+            Value::String(reward_account_storage_key(&miner_account_id)),
             Value::String(block_hash.to_string()),
         ]),
     )?;
@@ -512,7 +501,8 @@ fn hex_author_to_ss58(author_hex: &str) -> String {
     let Ok(bytes) = hex::decode(stripped) else {
         return author_hex.to_string();
     };
-    crate::governance::signing::pubkey_to_ss58(&bytes).unwrap_or_else(|_| author_hex.to_string())
+    crate::governance::signing::account_id_to_ss58(&bytes)
+        .unwrap_or_else(|_| author_hex.to_string())
 }
 
 fn author_from_pow_digest_logs(logs: &[Value]) -> Option<String> {
@@ -603,11 +593,11 @@ fn process_block(height: u64, ts_key: &str) -> Result<ProcessedBlock, String> {
 fn reset_cache_for_chain(
     cache: &mut MiningComputationCache,
     chain_hash: String,
-    local_miner_account: Option<&str>,
+    local_miner_account_id: Option<&str>,
 ) {
     *cache = MiningComputationCache::default();
     cache.chain_genesis_hash = Some(chain_hash);
-    cache.tracked_miner_account = local_miner_account.map(|v| v.to_ascii_lowercase());
+    cache.tracked_miner_account_id = local_miner_account_id.map(|v| v.to_ascii_lowercase());
 }
 
 fn prune_old_income_days(cache: &mut MiningComputationCache, today_utc: u64) {
@@ -619,14 +609,14 @@ fn refresh_cache(
     app: &AppHandle,
     finalized_height: u64,
     today_utc: u64,
-    local_miner_account: Option<&str>,
+    local_miner_account_id: Option<&str>,
 ) -> Result<RefreshStats, String> {
     // 采用“工作副本 -> 整体提交”的方式，避免处理中途失败时把半成品写回全局缓存。
     let mut working = {
         let cache = lock_or_reset(mining_cache(), "MINING_CACHE");
         cache.clone()
     };
-    let normalized_local_miner = local_miner_account.map(|v| v.to_ascii_lowercase());
+    let normalized_local_miner = local_miner_account_id.map(|v| v.to_ascii_lowercase());
     let local_miner = normalized_local_miner.as_deref();
     let mut stats = RefreshStats {
         local_miner_missing: local_miner.is_none(),
@@ -640,7 +630,7 @@ fn refresh_cache(
         cache_changed = true;
     }
 
-    if working.tracked_miner_account.as_deref() != local_miner {
+    if working.tracked_miner_account_id.as_deref() != local_miner {
         reset_cache_for_chain(&mut working, chain_hash.clone(), local_miner);
         cache_changed = true;
     }
@@ -691,11 +681,11 @@ fn refresh_cache(
 
             if is_local_author {
                 // 挖矿页要显示“矿工实际到账收益”，
-                // 未绑定奖励钱包时手续费份额会被销毁，因此这里只在区块当时已绑定时计入 80% 分成。
+                // 未绑定奖励账户时手续费份额会被销毁，因此这里只在区块当时已绑定时计入 80% 分成。
                 let fee_income_fen = if block.fee_fen == 0 {
                     0
                 } else {
-                    match reward_wallet_bound_at_block(&block.author, &block.hash) {
+                    match reward_account_bound_at_block(&block.author, &block.hash) {
                         Ok(true) => fullnode_fee_income_fen(block.fee_fen),
                         Ok(false) => 0,
                         Err(_) => {
@@ -893,7 +883,7 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
         }
     };
 
-    let local_miner_account = match fee_account::local_powr_miner_account_hex(&app) {
+    let local_miner_account_id = match reward_account::local_powr_miner_account_id(&app) {
         Ok(v) => v,
         Err(err) => {
             warnings.push(format!("读取本节点矿工账号失败：{err}"));
@@ -921,7 +911,7 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
         &app,
         finalized_height,
         today_utc,
-        local_miner_account.as_deref(),
+        local_miner_account_id.as_deref(),
     ) {
         Ok(stats) => warning_from_stats(&stats),
         Err(err) => {
@@ -950,66 +940,15 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        migrate_mining_cache, CachedBlockRecord, MiningComputationCache, MINING_CACHE_VERSION,
-    };
-    use std::collections::{HashMap, VecDeque};
+    use super::{validate_mining_cache, MiningComputationCache, MINING_CACHE_VERSION};
 
     #[test]
-    fn migrate_mining_cache_resets_legacy_profit_semantics() {
-        let mut recent_records = VecDeque::new();
-        recent_records.push_back(CachedBlockRecord {
-            block_height: 1,
-            timestamp_ms: Some(1),
-            fee_fen: 2,
-            block_reward_fen: 3,
-            author: "miner".to_string(),
-        });
-        let legacy = MiningComputationCache {
-            cache_version: 0,
-            chain_genesis_hash: Some("0x1234".to_string()),
-            tracked_miner_account: Some("miner".to_string()),
-            last_processed_height: 10,
-            last_processed_hash: Some("0xabcd".to_string()),
-            total_fee_fen: 20,
-            total_reward_fen: 30,
-            income_by_utc_day: HashMap::new(),
-            recent_records,
-        };
-
-        let (migrated, migrated_from) = migrate_mining_cache(legacy).unwrap();
-        assert_eq!(migrated.cache_version, MINING_CACHE_VERSION);
-        assert_eq!(migrated_from, Some(0));
-        assert_eq!(migrated.last_processed_height, 0);
-        assert!(migrated.recent_records.is_empty());
-        assert_eq!(migrated.total_fee_fen, 0);
-        assert_eq!(migrated.total_reward_fen, 0);
-    }
-
-    #[test]
-    fn migrate_mining_cache_resets_v1_cache() {
-        let legacy = MiningComputationCache {
-            cache_version: 1,
-            last_processed_height: 99,
-            total_fee_fen: 123,
-            total_reward_fen: 456,
-            ..MiningComputationCache::default()
-        };
-
-        let (migrated, migrated_from) = migrate_mining_cache(legacy).unwrap();
-        assert_eq!(migrated.cache_version, MINING_CACHE_VERSION);
-        assert_eq!(migrated_from, Some(1));
-        assert_eq!(migrated.last_processed_height, 0);
-        assert_eq!(migrated.total_fee_fen, 0);
-        assert_eq!(migrated.total_reward_fen, 0);
-    }
-
-    #[test]
-    fn migrate_mining_cache_rejects_unknown_future_version() {
-        let future = MiningComputationCache {
+    fn mining_cache_accepts_only_current_schema() {
+        assert!(validate_mining_cache(MiningComputationCache::default()).is_ok());
+        let other = MiningComputationCache {
             cache_version: MINING_CACHE_VERSION + 1,
             ..MiningComputationCache::default()
         };
-        assert!(migrate_mining_cache(future).is_err());
+        assert!(validate_mining_cache(other).is_err());
     }
 }

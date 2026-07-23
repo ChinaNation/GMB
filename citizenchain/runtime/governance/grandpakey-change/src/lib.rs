@@ -365,7 +365,7 @@ pub mod pallet {
                         .as_ref()
                         .map(|value| value.as_slice())
                         == Some(action.actor_cid_number.as_slice())
-                    && proposal.execution_account.is_none(),
+                    && proposal.execution_account_id.is_none(),
                 Error::<T>::ProposalNotPassed
             );
 

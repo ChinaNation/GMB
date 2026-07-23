@@ -3,7 +3,7 @@
 //! 涵盖:
 //! - `execute_create_with_finalizer`: ACTION_CREATE 通过后入金 + 激活 PersonalAccounts
 //! - `execute_close_with_finalizer`: ACTION_CLOSE 通过后转出余额 + 删除 PersonalAccounts
-//!   + 关闭 admin account + 清 PendingCloseProposal
+//!   + 关闭 admin account_id + 清 PendingCloseProposal
 //! - `cleanup_pending_create`: 创建提案被否决/超时/终态失败时清理 reserve
 
 extern crate alloc;
@@ -38,49 +38,49 @@ pub(crate) fn execute_create_with_finalizer<T: Config>(
     Pallet::<T>::ensure_lifecycle_proposal(
         proposal_id,
         crate::MODULE_TAG,
-        action.account.clone(),
+        action.account_id.clone(),
         votingengine::STATUS_PASSED,
         true,
     )?;
     let fee = action.fee;
     let reserve_total = action.amount.saturating_add(fee);
 
-    let leftover = T::Currency::unreserve(&action.proposer, reserve_total);
+    let leftover = T::Currency::unreserve(&action.proposer_account_id, reserve_total);
     ensure!(leftover.is_zero(), Error::<T>::ReserveReleaseFailed);
 
-    let charged_fee = T::OnchainFeeCharger::charge(&action.proposer, action.amount)
+    let charged_fee = T::OnchainFeeCharger::charge(&action.proposer_account_id, action.amount)
         .map_err(|_| Error::<T>::FeeWithdrawFailed)?;
     ensure!(charged_fee == fee, Error::<T>::FeeWithdrawFailed);
 
     T::Currency::transfer(
-        &action.proposer,
-        &action.account,
+        &action.proposer_account_id,
+        &action.account_id,
         action.amount,
         ExistenceRequirement::KeepAlive,
     )
     .map_err(|_| Error::<T>::TransferFailed)?;
 
-    let account = action.account.clone();
-    Pallet::<T>::activate_admin_account(proposal_id, account.clone())?;
-    PersonalAccounts::<T>::mutate(&action.account, |maybe_account| {
-        if let Some(account) = maybe_account {
-            account.status = PersonalStatus::Active;
+    let account_id = action.account_id.clone();
+    Pallet::<T>::activate_admin_account(proposal_id, account_id.clone())?;
+    PersonalAccounts::<T>::mutate(&action.account_id, |maybe_account| {
+        if let Some(account_id) = maybe_account {
+            account_id.status = PersonalStatus::Active;
         }
     });
     let institution_code = votingengine::types::PMUL;
-    let admins_len = Pallet::<T>::active_account_admins_len(institution_code, account.clone())
+    let admins_len = Pallet::<T>::active_account_admins_len(institution_code, account_id.clone())
         .ok_or(Error::<T>::PersonalNotFound)?;
     let threshold = <T as Config>::InternalVoteEngine::configured_personal_threshold(
         proposal_id,
-        account.clone(),
+        account_id.clone(),
     )
     .ok_or(Error::<T>::PersonalNotFound)?;
     PendingPersonalCreate::<T>::remove(proposal_id);
 
     Pallet::<T>::deposit_event(Event::<T>::PersonalCreated {
         proposal_id,
-        account: action.account.clone(),
-        creator: action.proposer.clone(),
+        account_id: action.account_id.clone(),
+        creator_account_id: action.proposer_account_id.clone(),
         admins_len,
         threshold,
         amount: action.amount,
@@ -90,7 +90,7 @@ pub(crate) fn execute_create_with_finalizer<T: Config>(
     Ok(())
 }
 
-/// 执行关闭：转出余额 + 删除 PersonalAccounts + 关闭 admin account。
+/// 执行关闭：转出余额 + 删除 PersonalAccounts + 关闭 admin account_id。
 pub(crate) fn execute_close_with_finalizer<T: Config>(
     proposal_id: u64,
     action: &PersonalCloseAction<T::AccountId>,
@@ -98,31 +98,32 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
     Pallet::<T>::ensure_lifecycle_proposal(
         proposal_id,
         crate::MODULE_TAG,
-        action.account.clone(),
+        action.account_id.clone(),
         votingengine::STATUS_PASSED,
         true,
     )?;
     ensure!(
-        PendingCloseProposal::<T>::get(&action.account) == Some(proposal_id),
+        PendingCloseProposal::<T>::get(&action.account_id) == Some(proposal_id),
         Error::<T>::ProposalActionNotFound
     );
     ensure!(
         T::InstitutionAsset::can_spend(
-            &action.account,
+            &action.account_id,
             InstitutionAssetAction::MultisigCloseExecute,
         ),
         Error::<T>::ProtectedSource
     );
-    let account = action.account.clone();
+    let account_id = action.account_id.clone();
     let institution_code = votingengine::types::PMUL;
-    let admins_len = Pallet::<T>::active_account_admins_len(institution_code, account.clone())
+    let admins_len = Pallet::<T>::active_account_admins_len(institution_code, account_id.clone())
         .ok_or(Error::<T>::PersonalNotFound)?;
-    let threshold = <T as Config>::InternalVoteEngine::active_personal_threshold(account.clone())
-        .ok_or(Error::<T>::PersonalNotFound)?;
-    let all_balance = T::Currency::free_balance(&action.account);
+    let threshold =
+        <T as Config>::InternalVoteEngine::active_personal_threshold(account_id.clone())
+            .ok_or(Error::<T>::PersonalNotFound)?;
+    let all_balance = T::Currency::free_balance(&action.account_id);
     // 注销执行前再次确认没有 reserved 余额，避免提案后新增锁定资金导致销户不彻底。
     ensure!(
-        T::Currency::reserved_balance(&action.account).is_zero(),
+        T::Currency::reserved_balance(&action.account_id).is_zero(),
         Error::<T>::ReservedBalanceRemaining
     );
 
@@ -136,26 +137,26 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
     let ed = T::Currency::minimum_balance();
     ensure!(transfer_amount >= ed, Error::<T>::CloseTransferBelowED);
 
-    let charged_fee = T::OnchainFeeCharger::charge(&action.account, all_balance)
+    let charged_fee = T::OnchainFeeCharger::charge(&action.account_id, all_balance)
         .map_err(|_| Error::<T>::FeeWithdrawFailed)?;
     ensure!(charged_fee == fee, Error::<T>::FeeWithdrawFailed);
 
     T::Currency::transfer(
-        &action.account,
-        &action.beneficiary,
+        &action.account_id,
+        &action.beneficiary_account_id,
         transfer_amount,
         ExistenceRequirement::AllowDeath,
     )
     .map_err(|_| Error::<T>::TransferFailed)?;
 
-    PersonalAccounts::<T>::remove(&action.account);
-    Pallet::<T>::close_admin_account(proposal_id, account)?;
-    PendingCloseProposal::<T>::remove(&action.account);
+    PersonalAccounts::<T>::remove(&action.account_id);
+    Pallet::<T>::close_admin_account(proposal_id, account_id)?;
+    PendingCloseProposal::<T>::remove(&action.account_id);
 
     Pallet::<T>::deposit_event(Event::<T>::PersonalClosed {
         proposal_id,
-        account: action.account.clone(),
-        beneficiary: action.beneficiary.clone(),
+        account_id: action.account_id.clone(),
+        beneficiary_account_id: action.beneficiary_account_id.clone(),
         admins_len,
         threshold,
         amount: transfer_amount,
@@ -167,7 +168,7 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
 
 /// 创建提案被否决/超时/终态失败时清理:
 /// unreserve(amount + fee) + 删 PersonalAccounts/PendingPersonalCreate +
-/// 移除 admin account Pending。
+/// 移除 admin account_id Pending。
 ///
 /// `emit_event = true` 时(否决路径)发 `PersonalCreateRejected`,终态失败路径不发。
 pub(crate) fn cleanup_pending_create<T: Config>(
@@ -179,18 +180,18 @@ pub(crate) fn cleanup_pending_create<T: Config>(
         return Ok(false);
     }
 
-    Pallet::<T>::remove_pending_admin_account(proposal_id, action.account.clone())?;
+    Pallet::<T>::remove_pending_admin_account(proposal_id, action.account_id.clone())?;
 
     let reserve_total = action.amount.saturating_add(action.fee);
-    let _ = T::Currency::unreserve(&action.proposer, reserve_total);
+    let _ = T::Currency::unreserve(&action.proposer_account_id, reserve_total);
 
-    PersonalAccounts::<T>::remove(&action.account);
+    PersonalAccounts::<T>::remove(&action.account_id);
     PendingPersonalCreate::<T>::remove(proposal_id);
 
     if emit_event {
         Pallet::<T>::deposit_event(Event::<T>::PersonalCreateRejected {
             proposal_id,
-            account: action.account.clone(),
+            account_id: action.account_id.clone(),
         });
     }
     Ok(true)

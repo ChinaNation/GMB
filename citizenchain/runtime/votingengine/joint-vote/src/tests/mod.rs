@@ -212,14 +212,14 @@ fn referendum_voters() -> [AccountId32; 3] {
     ]
 }
 
-fn replacement_wallet() -> AccountId32 {
+fn replacement_account_id() -> AccountId32 {
     AccountId32::new([205; 32])
 }
 
-/// 更换钱包只更改签名账户；永久公民 CID 不变。
+/// 更换绑定账户只更改签名账户；永久公民 CID 不变。
 fn referendum_subject(who: &AccountId32) -> Option<votingengine::CitizenSubject<AccountId32>> {
     let voters = referendum_voters();
-    let cid_source = if who == &replacement_wallet() {
+    let cid_source = if who == &replacement_account_id() {
         &voters[0]
     } else {
         voters.iter().find(|voter| *voter == who)?
@@ -229,7 +229,7 @@ fn referendum_subject(who: &AccountId32) -> Option<votingengine::CitizenSubject<
             .to_vec()
             .try_into()
             .expect("account fits CID"),
-        wallet_account: who.clone(),
+        account_id: who.clone(),
     })
 }
 
@@ -347,7 +347,7 @@ fn joint_proposal_binds_role_plan_and_never_writes_admin_snapshot() {
 }
 
 #[test]
-fn institution_ticket_count_preserves_same_wallet_in_multiple_roles() {
+fn institution_ticket_count_preserves_same_account_id_in_multiple_roles() {
     new_test_ext().execute_with(|| {
         let proposal_id = 77;
         let account = AccountId32::new([77; 32]);
@@ -391,7 +391,7 @@ fn institution_ticket_count_preserves_same_wallet_in_multiple_roles() {
         assert_eq!(
             VotingEngine::institution_ticket_count(proposal_id, cid_a),
             Some(3),
-            "同一钱包在同一机构的两个岗位各保留一张票据"
+            "同一账户在同一机构的两个岗位各保留一张票据"
         );
         assert_eq!(
             VotingEngine::institution_ticket_count(proposal_id, cid_b),
@@ -582,28 +582,28 @@ fn newly_added_voter_cannot_enter_existing_snapshot() {
 }
 
 #[test]
-fn same_citizen_cid_cannot_vote_twice_after_wallet_replacement() {
+fn same_citizen_cid_cannot_vote_twice_after_account_id_replacement() {
     new_test_ext().execute_with(|| {
         let proposal_id = create_joint_proposal();
         let cid_number = CHINA_CB[1].cid_number.as_bytes().to_vec();
         finalize_institution(proposal_id, votingengine::PRC, cid_number, false);
 
-        let first_wallet = referendum_voters()[0].clone();
+        let first_account_id = referendum_voters()[0].clone();
         assert_ok!(JointVote::cast_referendum(
-            RuntimeOrigin::signed(first_wallet.clone()),
+            RuntimeOrigin::signed(first_account_id.clone()),
             proposal_id,
             true,
         ));
         assert_noop!(
             JointVote::cast_referendum(
-                RuntimeOrigin::signed(replacement_wallet()),
+                RuntimeOrigin::signed(replacement_account_id()),
                 proposal_id,
                 false,
             ),
             votingengine::Error::<Test>::AlreadyVoted
         );
 
-        let subject = referendum_subject(&first_wallet).expect("first voter is eligible");
+        let subject = referendum_subject(&first_account_id).expect("first voter is eligible");
         let ticket = ReferendumVotesByCid::<Test>::get(proposal_id, &subject.cid_number)
             .expect("complete citizen referendum ticket should exist");
         assert_eq!(ticket.voter_subject, subject);

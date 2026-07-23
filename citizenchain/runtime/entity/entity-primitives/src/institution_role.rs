@@ -259,8 +259,8 @@ pub struct InstitutionRole<CidNumber, RoleCode, RoleName> {
 pub struct InstitutionAdminAssignment<CidNumber, AccountId, RoleCode, SourceRef> {
     /// 任职机构 CID。
     pub cid_number: CidNumber,
-    /// 管理员唯一钱包账户。
-    pub admin_account: AccountId,
+    /// 管理员唯一账户。
+    pub account_id: AccountId,
     /// 所任岗位稳定代码。
     pub role_code: RoleCode,
     /// 任期开始日（自纪元起的天数）；无任期岗位固定为 0。
@@ -487,7 +487,7 @@ mod tests {
     fn institution_assignment_field_order_matches_node_guard() {
         let assignment = InstitutionAdminAssignment {
             cid_number: b"CID-1".to_vec(),
-            admin_account: [7u8; 32],
+            account_id: [7u8; 32],
             role_code: b"ROLE-1".to_vec(),
             term_start: 10,
             term_end: 20,

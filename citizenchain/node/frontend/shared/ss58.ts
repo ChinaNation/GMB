@@ -6,45 +6,37 @@ const BASE58_INDEX = new Map<string, number>(
   [...BASE58_ALPHABET].map((ch, idx) => [ch, idx])
 );
 
-/** 将 32 字节 hex 公钥编码为 CitizenChain SS58 地址（prefix = 2027）。 */
-export function hexToSs58(hex: string): string {
-  const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
-  if (clean.length !== 64) return `0x${clean.slice(0, 8)}...`;
-  const pubkey = new Uint8Array(32);
+/** 将唯一账户 ID 编码为 CitizenChain SS58 展示地址（prefix = 2027）。 */
+export function accountIdToSs58(account_id: string): string {
+  if (!/^0x[0-9a-f]{64}$/.test(account_id)) return '无效账户 ID';
+  const clean = account_id.slice(2);
+  const accountIdBytes = new Uint8Array(32);
   for (let i = 0; i < 32; i++) {
-    pubkey[i] = parseInt(clean.substring(i * 2, i * 2 + 2), 16);
+    accountIdBytes[i] = parseInt(clean.substring(i * 2, i * 2 + 2), 16);
   }
 
   const prefixBytes = encodeSs58Prefix(SS58_PREFIX);
   const ss58Pre = new TextEncoder().encode('SS58PRE');
-  const payload = new Uint8Array(ss58Pre.length + prefixBytes.length + pubkey.length);
+  const payload = new Uint8Array(ss58Pre.length + prefixBytes.length + accountIdBytes.length);
   payload.set(ss58Pre);
   payload.set(prefixBytes, ss58Pre.length);
-  payload.set(pubkey, ss58Pre.length + prefixBytes.length);
+  payload.set(accountIdBytes, ss58Pre.length + prefixBytes.length);
   const hash: Uint8Array = blake2b(payload, { dkLen: 64 });
   const checksum = hash.slice(0, 2);
 
-  const full = new Uint8Array(prefixBytes.length + pubkey.length + checksum.length);
+  const full = new Uint8Array(prefixBytes.length + accountIdBytes.length + checksum.length);
   full.set(prefixBytes);
-  full.set(pubkey, prefixBytes.length);
-  full.set(checksum, prefixBytes.length + pubkey.length);
+  full.set(accountIdBytes, prefixBytes.length);
+  full.set(checksum, prefixBytes.length + accountIdBytes.length);
   return encodeBase58(full);
 }
 
-/** 校验并规范化用户输入的钱包地址：支持 0x 公钥或 prefix=2027 的 SS58 地址。 */
-export function normalizeSs58AccountAddress(input: string, emptyMessage = '请输入钱包地址'): string {
+/** 校验仅用于输入和展示的 CitizenChain SS58 地址。 */
+export function normalizeSs58Address(input: string, emptyMessage = '请输入 SS58 地址'): string {
   const value = input.trim();
   if (!value) {
     throw new Error(emptyMessage);
   }
-  if (value.startsWith('0x')) {
-    const raw = value.slice(2);
-    if (!/^[0-9a-fA-F]{64}$/.test(raw)) {
-      throw new Error('十六进制钱包地址格式无效，应为 0x + 64 位十六进制');
-    }
-    return `0x${raw.toLowerCase()}`;
-  }
-
   const data = decodeBase58(value);
   const { prefix, prefixLen } = decodeSs58Prefix(data);
   if (prefix !== SS58_PREFIX) {

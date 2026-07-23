@@ -33,7 +33,7 @@ fn setup<T: Config>() -> (
         status: votingengine::STATUS_VOTING,
         internal_code: Some(primitives::cid::code::PMUL),
         actor_cid_number: Some(actor_cid_number.clone()),
-        execution_account: Some(institution.clone()),
+        execution_account_id: Some(institution.clone()),
         subject_cid_numbers: Default::default(),
         start: 0u32.saturated_into(),
         end: 2u32.saturated_into(),

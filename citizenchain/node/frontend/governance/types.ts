@@ -29,18 +29,18 @@ export type UserVoteStatus = {
 
 // ── 管理员匹配（提案发起/投票签名流程共用） ──
 
-export type AdminWalletMatch = {
-  address: string;
-  pubkeyHex: string;
-  walletLabel: string;
-  /// 当前机构内可供选择的任职岗位；同一钱包可拥有多个岗位票据。
+export type AdminSignerMatch = {
+  ss58_address: string;
+  account_id: string;
+  account_label: string;
+  /// 当前机构内可供选择的任职岗位；同一账户可拥有多个岗位票据。
   roleAssignments?: InstitutionRoleAssignmentInfo[];
 };
 
 // ── 管理员激活 ──
 
 export type ActivatedAdmin = {
-  pubkeyHex: string;
+  account_id: string;
   cidNumber: string;
   institutionCode: number[];
   kind: number;
@@ -64,7 +64,7 @@ export type InstitutionListItem = {
   cidNumber: string;
   orgType: number;
   orgTypeLabel: string;
-  mainAccount: string;
+  main_account_id: string;
 };
 
 export type GovernanceOverview = {
@@ -86,7 +86,7 @@ export type InstitutionRoleAssignmentInfo = {
 };
 
 export type InstitutionAdminInfo = {
-  adminAccount: string;
+  account_id: string;
   familyName: string;
   givenName: string;
   assignments: InstitutionRoleAssignmentInfo[];
@@ -104,20 +104,20 @@ export type InstitutionDetail = {
   cidNumber: string;
   orgType: number;
   orgTypeLabel: string;
-  mainAccount: string;
+  main_account_id: string;
   balanceFen: string | null;
   admins: AdminInfo[];
   internalThreshold: number;
   jointVoteWeight: number;
-  stakeAccount: string | null;
+  stake_account_id: string | null;
   stakingBalanceFen: string | null;
-  feeAccount: string | null;
+  fee_account_id: string | null;
   feeBalanceFen: string | null;
-  cbFeeAccount: string | null;
+  cb_fee_account_id: string | null;
   cbFeeBalanceFen: string | null;
-  nrcFeeAccount: string | null;
+  nrc_fee_account_id: string | null;
   nrcFeeBalanceFen: string | null;
-  safetyFundAccount: string | null;
+  safety_fund_account_id: string | null;
   safetyFundBalanceFen: string | null;
   warning: string | null;
 };
@@ -172,13 +172,13 @@ export type ProposalMeta = {
   status: number;
   internalCode: string | null;
   actorCidNumber: string | null;
-  executionAccountHex: string | null;
+  execution_account_id: string | null;
   subjectCidNumbers: string[];
 };
 
 export type RuntimeUpgradeDetail = {
   proposalId: number;
-  proposerHex: string;
+  proposer_account_id: string;
   reason: string;
   codeHashHex: string;
 };

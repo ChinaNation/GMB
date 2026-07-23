@@ -58,21 +58,21 @@ mod benchmarks {
 
     #[benchmark]
     fn propose_transfer() {
-        let funding_account = prc_main_account::<T>();
+        let funding_account_id = prc_main_account::<T>();
         let fee_account = prc_fee_account::<T>();
         let actor_cid_number = prc_actor_cid();
-        let proposer = prc_admin::<T>(0);
-        let beneficiary = beneficiary_account::<T>();
+        let proposer_account_id = prc_admin::<T>(0);
+        let beneficiary_account_id = beneficiary_account::<T>();
         let amount: BalanceOf<T> = 111u128.saturated_into();
         let top_up: BalanceOf<T> = 1_000_000u128.saturated_into();
 
-        let _ = T::Currency::deposit_creating(&funding_account, top_up);
+        let _ = T::Currency::deposit_creating(&funding_account_id, top_up);
         // 机构本金账户只承担本金，链上手续费必须由同 CID 的费用账户承担。
         let _ = T::Currency::deposit_creating(&fee_account, top_up);
 
         #[extrinsic_call]
         propose_transfer(
-            RawOrigin::Signed(proposer.clone()),
+            RawOrigin::Signed(proposer_account_id.clone()),
             Some(actor_cid_number),
             Some(
                 primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
@@ -80,8 +80,8 @@ mod benchmarks {
                     .try_into()
                     .expect("benchmark role fits"),
             ),
-            funding_account,
-            beneficiary,
+            funding_account_id,
+            beneficiary_account_id,
             amount,
             BoundedVec::default(),
         );

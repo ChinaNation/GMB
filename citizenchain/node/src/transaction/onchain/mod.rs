@@ -7,7 +7,7 @@ pub(crate) mod wallet_store;
 
 use crate::{
     governance::{institution, signing},
-    settings::{device_password, fee_account},
+    settings::{device_password, reward_account},
     shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc, security},
 };
 use serde::Serialize;
@@ -43,15 +43,12 @@ pub struct TransferSubmitResult {
     pub tx_hash: String,
 }
 
-fn normalize_pubkey_hex(pubkey_hex: &str, field_name: &str) -> Result<String, String> {
-    let clean = pubkey_hex
-        .strip_prefix("0x")
-        .unwrap_or(pubkey_hex)
-        .to_ascii_lowercase();
-    if clean.len() != 64 || !clean.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(format!("{field_name}格式无效"));
-    }
-    Ok(clean)
+fn normalize_signer_public_key(
+    signer_public_key: &str,
+    field_name: &str,
+) -> Result<String, String> {
+    crate::shared::validation::normalize_public_key(signer_public_key)
+        .map_err(|_| format!("{field_name}格式无效，应为 0x + 64 位十六进制"))
 }
 
 fn amount_yuan_to_fen(amount_yuan: f64) -> Result<u128, String> {
@@ -83,14 +80,14 @@ fn validate_transfer_remark(remark: &str) -> Result<(), String> {
 }
 
 fn ensure_spendable_balance(
-    sender_clean: &str,
+    sender_account_id: &str,
     amount_fen: u128,
     fee_fen: u128,
 ) -> Result<(), String> {
     // 桌面端金额显示统一以 finalized 为准；余额不足文案也使用同一口径，
     // 真正能否入块仍由 runtime 在交易执行时最终校验。
     let balance_fen =
-        institution::fetch_balance(sender_clean)?.ok_or("发送方账户不存在或余额为零")?;
+        institution::fetch_balance(sender_account_id)?.ok_or("发送方账户不存在或余额为零")?;
     let total_needed = amount_fen + fee_fen;
     if balance_fen < total_needed + EXISTENTIAL_DEPOSIT_FEN {
         let available = if balance_fen > EXISTENTIAL_DEPOSIT_FEN {
@@ -109,20 +106,23 @@ fn ensure_spendable_balance(
 }
 
 fn local_miner_wallet(app: &tauri::AppHandle) -> Result<Option<ColdWallet>, String> {
-    let Some(miner_hex) = fee_account::local_powr_miner_account_hex(app)? else {
+    let Some(account_id) = reward_account::local_powr_miner_account_id(app)? else {
         return Ok(None);
     };
-    let pubkey_hex = normalize_pubkey_hex(&miner_hex, "矿工公钥")?;
-    let pubkey = hex::decode(&pubkey_hex).map_err(|e| format!("矿工公钥解码失败: {e}"))?;
-    let address = signing::pubkey_to_ss58(&pubkey)?;
+    let account_id = crate::shared::validation::normalize_account_id(&account_id)?;
+    let account_id_bytes: [u8; 32] = hex::decode(account_id.trim_start_matches("0x"))
+        .map_err(|e| format!("矿工账户 ID 解码失败: {e}"))?
+        .try_into()
+        .map_err(|_| "矿工账户 ID 必须为 32 字节".to_string())?;
+    let ss58_address = signing::account_id_to_ss58(&account_id_bytes)?;
 
     Ok(Some(ColdWallet {
         id: LOCAL_MINER_WALLET_ID.to_string(),
         name: "矿工热钱包".to_string(),
         kind: WalletKind::MinerHot,
         deletable: false,
-        address,
-        pubkey_hex,
+        ss58_address,
+        account_id,
         created_at: 0,
     }))
 }
@@ -160,37 +160,41 @@ fn wallet_store_for_frontend(
 
 // ──── 钱包管理命令 ────
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_wallets(app: tauri::AppHandle) -> Result<WalletStore, String> {
     let store = wallet_store::load(&app)?;
     wallet_store_for_frontend(&app, store)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn add_wallet(
     app: tauri::AppHandle,
     name: String,
-    address: String,
+    ss58_address: String,
 ) -> Result<ColdWallet, String> {
     let name = name.trim().to_string();
     if name.is_empty() {
         return Err("钱包名称不能为空".to_string());
     }
-    let address = address.trim().to_string();
-    let pubkey_bytes = signing::decode_ss58_to_pubkey(&address)?;
-    let pubkey_hex = hex::encode(pubkey_bytes);
+    let ss58_address = ss58_address.trim().to_string();
+    let account_id_bytes = signing::account_id_from_ss58_address(&ss58_address)?;
+    let account_id = format!("0x{}", hex::encode(account_id_bytes));
 
     let mut store = wallet_store::load(&app)?;
     normalize_cold_wallets(&mut store);
 
     if let Some(miner_wallet) = local_miner_wallet(&app)? {
-        if miner_wallet.pubkey_hex == pubkey_hex {
+        if miner_wallet.account_id == account_id {
             return Err("矿工热钱包已在列表中，无需重复添加".to_string());
         }
     }
 
-    // 查重：同一公钥不能重复添加
-    if store.wallets.iter().any(|w| w.pubkey_hex == pubkey_hex) {
+    // 查重：同一账户 ID 不能重复添加。
+    if store
+        .wallets
+        .iter()
+        .any(|wallet| wallet.account_id == account_id)
+    {
         return Err("该地址已存在".to_string());
     }
 
@@ -199,8 +203,8 @@ pub fn add_wallet(
         name,
         kind: WalletKind::Cold,
         deletable: true,
-        address,
-        pubkey_hex,
+        ss58_address,
+        account_id,
         created_at: now_secs(),
     };
 
@@ -213,7 +217,7 @@ pub fn add_wallet(
     Ok(wallet)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn remove_wallet(app: tauri::AppHandle, wallet_id: String) -> Result<WalletStore, String> {
     if wallet_id == LOCAL_MINER_WALLET_ID {
         return Err("矿工热钱包不能删除".to_string());
@@ -237,7 +241,7 @@ pub fn remove_wallet(app: tauri::AppHandle, wallet_id: String) -> Result<WalletS
     wallet_store_for_frontend(&app, store)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn set_active_wallet(app: tauri::AppHandle, wallet_id: String) -> Result<WalletStore, String> {
     let mut store = wallet_store::load(&app)?;
     normalize_cold_wallets(&mut store);
@@ -255,10 +259,10 @@ pub fn set_active_wallet(app: tauri::AppHandle, wallet_id: String) -> Result<Wal
     wallet_store_for_frontend(&app, store)
 }
 
-#[tauri::command]
-pub fn get_wallet_balance(pubkey_hex: String) -> Result<Option<String>, String> {
-    let clean = normalize_pubkey_hex(&pubkey_hex, "公钥")?;
-    match institution::fetch_balance(&clean)? {
+#[tauri::command(rename_all = "snake_case")]
+pub fn get_wallet_balance(account_id: String) -> Result<Option<String>, String> {
+    let account_id = crate::shared::validation::normalize_account_id(&account_id)?;
+    match institution::fetch_balance(&account_id)? {
         Some(fen) => Ok(Some(fen.to_string())),
         None => Ok(None),
     }
@@ -269,22 +273,23 @@ pub fn get_wallet_balance(pubkey_hex: String) -> Result<Option<String>, String> 
 /// 构建 OnchainTransaction::transfer_with_remark 签名请求。
 ///
 /// 返回 QR 签名请求 JSON，前端显示 QR 码供离线设备扫码签名。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn build_transfer_request(
-    pubkey_hex: String,
-    to_address: String,
+    signer_public_key: String,
+    to_ss58_address: String,
     amount_yuan: f64,
     remark: String,
 ) -> Result<TransferSignRequestResult, String> {
     // 校验发送方公钥
-    let sender_clean = normalize_pubkey_hex(&pubkey_hex, "发送方公钥")?;
-    let sender_bytes =
-        hex::decode(&sender_clean).map_err(|e| format!("发送方公钥解码失败: {e}"))?;
+    let signer_public_key = normalize_signer_public_key(&signer_public_key, "发送方公钥")?;
+    let signer_account_id = signing::signer_account_id_from_public_key(&signer_public_key)?;
+    let signer_public_key_bytes = hex::decode(signer_public_key.trim_start_matches("0x"))
+        .map_err(|e| format!("发送方公钥解码失败: {e}"))?;
 
     // 校验收款地址
-    let dest_pubkey = signing::decode_ss58_to_pubkey(&to_address)?;
-    let dest_hex = hex::encode(dest_pubkey);
-    if dest_hex == sender_clean {
+    let destination_account_id_bytes = signing::account_id_from_ss58_address(&to_ss58_address)?;
+    let destination_account_id = format!("0x{}", hex::encode(destination_account_id_bytes));
+    if destination_account_id == signer_account_id {
         return Err("收款地址不能与发送方相同".to_string());
     }
 
@@ -296,13 +301,17 @@ pub fn build_transfer_request(
     let fee_yuan = fee_fen as f64 / 100.0;
 
     // 校验余额
-    ensure_spendable_balance(&sender_clean, amount_fen, fee_fen)?;
+    ensure_spendable_balance(&signer_public_key, amount_fen, fee_fen)?;
 
-    let call_data = build_transfer_with_remark_call(&dest_pubkey, amount_fen, &remark)?;
+    let call_data =
+        build_transfer_with_remark_call(&destination_account_id_bytes, amount_fen, &remark)?;
 
     // 获取链上参数并构建签名载荷
-    let result =
-        signing::build_sign_request_from_call_data(&sender_clean, &sender_bytes, &call_data)?;
+    let result = signing::build_sign_request_from_call_data(
+        &signer_public_key,
+        &signer_public_key_bytes,
+        &call_data,
+    )?;
 
     Ok(TransferSignRequestResult {
         request_json: result.request_json,
@@ -316,10 +325,10 @@ pub fn build_transfer_request(
 }
 
 /// 提交已签名的转账交易。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn submit_transfer(
     request_id: String,
-    expected_pubkey_hex: String,
+    expected_signer_public_key: String,
     expected_payload_hash: String,
     call_data_hex: String,
     sign_nonce: u32,
@@ -331,7 +340,7 @@ pub fn submit_transfer(
 
     let result = signing::verify_and_submit(
         &request_id,
-        &expected_pubkey_hex,
+        expected_signer_public_key.trim_start_matches("0x"),
         &expected_payload_hash,
         &call_data,
         sign_nonce,
@@ -345,10 +354,10 @@ pub fn submit_transfer(
 }
 
 /// 使用本机矿工热钱包直接签名并提交转账。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn submit_miner_transfer(
     app: tauri::AppHandle,
-    to_address: String,
+    to_ss58_address: String,
     amount_yuan: f64,
     remark: String,
     unlock_password: String,
@@ -363,7 +372,7 @@ pub async fn submit_miner_transfer(
 
     let app_for_task = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        submit_miner_transfer_inner(&app_for_task, to_address, amount_yuan, remark)
+        submit_miner_transfer_inner(&app_for_task, to_ss58_address, amount_yuan, remark)
     })
     .await
     .map_err(|e| format!("矿工热钱包签名任务失败: {e}"))?;
@@ -387,30 +396,30 @@ pub async fn submit_miner_transfer(
 
 fn submit_miner_transfer_inner(
     app: &tauri::AppHandle,
-    to_address: String,
+    to_ss58_address: String,
     amount_yuan: f64,
     remark: String,
 ) -> Result<TransferSubmitResult, String> {
     let miner_wallet =
         local_miner_wallet(app)?.ok_or("未找到矿工热钱包，请先启动节点生成矿工密钥")?;
-    let to_address = to_address.trim().to_string();
-    let dest_pubkey = signing::decode_ss58_to_pubkey(&to_address)?;
-    let dest_hex = hex::encode(dest_pubkey);
-    if dest_hex == miner_wallet.pubkey_hex {
+    let to_ss58_address = to_ss58_address.trim().to_string();
+    let destination_account_id_bytes = signing::account_id_from_ss58_address(&to_ss58_address)?;
+    let destination_account_id = format!("0x{}", hex::encode(destination_account_id_bytes));
+    if destination_account_id == miner_wallet.account_id {
         return Err("收款地址不能与矿工热钱包相同".to_string());
     }
 
     let amount_fen = amount_yuan_to_fen(amount_yuan)?;
     validate_transfer_remark(&remark)?;
     let fee_fen = calculate_transfer_fee(amount_fen);
-    ensure_spendable_balance(&miner_wallet.pubkey_hex, amount_fen, fee_fen)?;
+    ensure_spendable_balance(&miner_wallet.account_id, amount_fen, fee_fen)?;
 
     // 真正的私钥签名只发生在节点 RPC 内部；一次性令牌避免外部本机 RPC 直接花费矿工余额。
     let auth_token = crate::core::rpc::issue_miner_transfer_token()?;
     let result = rpc::rpc_post(
         "transaction_submitMinerTransfer",
         serde_json::json!([
-            to_address,
+            to_ss58_address,
             amount_fen.to_string(),
             remark,
             auth_token.clone()
@@ -438,11 +447,11 @@ fn submit_miner_transfer_inner(
 ///
 /// 格式：[pallet=4][call=0][beneficiary:AccountId32][amount:u128_le][remark:BoundedVec<u8>]
 fn build_transfer_with_remark_call(
-    dest_pubkey: &[u8],
+    destination_account_id: &[u8],
     amount_fen: u128,
     remark: &str,
 ) -> Result<Vec<u8>, String> {
-    if dest_pubkey.len() != 32 {
+    if destination_account_id.len() != 32 {
         return Err("收款账户公钥长度无效".to_string());
     }
     validate_transfer_remark(remark)?;
@@ -452,7 +461,7 @@ fn build_transfer_with_remark_call(
     let mut call_data = Vec::with_capacity(2 + 32 + 16 + remark_len.len() + remark_bytes.len());
     call_data.push(ONCHAIN_TRANSACTION_PALLET_INDEX);
     call_data.push(TRANSFER_WITH_REMARK_CALL_INDEX);
-    call_data.extend_from_slice(dest_pubkey);
+    call_data.extend_from_slice(destination_account_id);
     call_data.extend_from_slice(&amount_fen.to_le_bytes());
     call_data.extend_from_slice(&remark_len);
     call_data.extend_from_slice(remark_bytes);

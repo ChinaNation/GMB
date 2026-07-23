@@ -301,7 +301,7 @@ impl<T: Config> Pallet<T> {
             }
             for assignment in &assignments {
                 ensure!(
-                    current_admin_set.contains(&assignment.admin_account),
+                    current_admin_set.contains(&assignment.account_id),
                     Error::<T>::InvalidAssignmentResultAdmins
                 );
                 ensure!(
@@ -365,7 +365,7 @@ impl<T: Config> Pallet<T> {
             );
             let required_admins = required_assignments
                 .iter()
-                .map(|assignment| assignment.admin_account.clone())
+                .map(|assignment| assignment.account_id.clone())
                 .collect::<BTreeSet<_>>();
             ensure!(
                 required_admins == current_admin_set,
@@ -381,7 +381,7 @@ impl<T: Config> Pallet<T> {
                         family_name,
                         given_name,
                         cid_number,
-                        account,
+                        account_id,
                     } => {
                         ensure!(
                             !family_name.is_empty() && !given_name.is_empty(),
@@ -404,7 +404,7 @@ impl<T: Config> Pallet<T> {
                             family_name,
                             given_name,
                             citizen_cid,
-                            account,
+                            account_id,
                         ))
                     }
                     // 解除法定代表人只清空 InstitutionInfo 三字段，不影响 LR 岗位本身。
@@ -415,12 +415,12 @@ impl<T: Config> Pallet<T> {
             })
             .transpose()?;
         let legal_representative_account = match &legal_representative_change {
-            Some(LegalRepresentativeTarget::Set(_, _, _, account)) => Some(account.clone()),
+            Some(LegalRepresentativeTarget::Set(_, _, _, account_id)) => Some(account_id.clone()),
             Some(LegalRepresentativeTarget::Clear) => None,
             None => institution
                 .legal_representative
                 .as_ref()
-                .map(|representative| representative.account.clone()),
+                .map(|representative| representative.account_id.clone()),
         };
         let legal_role_code: RoleCodeOf =
             primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE
@@ -433,8 +433,8 @@ impl<T: Config> Pallet<T> {
             .unwrap_or_else(|| InstitutionRoleAssignments::<T>::get(&cid_number, &legal_role_code));
         ensure!(
             match legal_representative_account {
-                Some(account) => {
-                    legal_assignments.len() == 1 && legal_assignments[0].admin_account == account
+                Some(account_id) => {
+                    legal_assignments.len() == 1 && legal_assignments[0].account_id == account_id
                 }
                 None => legal_assignments.is_empty(),
             },
@@ -485,14 +485,14 @@ impl<T: Config> Pallet<T> {
                                 family_name,
                                 given_name,
                                 citizen_cid,
-                                account,
+                                account_id,
                             ) => {
                                 info.legal_representative =
                                     Some(entity_primitives::LegalRepresentative {
                                         family_name,
                                         given_name,
                                         cid_number: citizen_cid,
-                                        account,
+                                        account_id,
                                     });
                             }
                             LegalRepresentativeTarget::Clear => {
@@ -529,7 +529,7 @@ impl<T: Config> Pallet<T> {
         let mut stored_assignments = Vec::with_capacity(targets.len());
         for target in targets {
             ensure!(
-                current_admin_set.contains(&target.admin_account),
+                current_admin_set.contains(&target.account_id),
                 Error::<T>::InvalidAssignmentResultAdmins
             );
             ensure!(
@@ -551,7 +551,7 @@ impl<T: Config> Pallet<T> {
                 Error::<T>::AssignmentSourceRefEmpty
             );
             ensure!(
-                seen_accounts.insert(target.admin_account.clone()),
+                seen_accounts.insert(target.account_id.clone()),
                 Error::<T>::DuplicateAssignment
             );
             Self::ensure_governance_assignment_term(role, target.term_start, target.term_end)?;
@@ -561,7 +561,7 @@ impl<T: Config> Pallet<T> {
                 .map_err(|_| Error::<T>::AssignmentSourceRefEmpty)?;
             stored_assignments.push(InstitutionAdminAssignment {
                 cid_number: cid_number.clone(),
-                admin_account: target.admin_account,
+                account_id: target.account_id,
                 role_code: role_code.clone(),
                 term_start: target.term_start,
                 term_end: target.term_end,

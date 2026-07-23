@@ -2,7 +2,7 @@
 //! 个人多签管理员 pallet。
 //!
 //! 本模块只负责个人多签账户的管理员集合真源:
-//! - 保存 `AdminAccounts[personal_account]`。
+//! - 保存 `AdminAccounts[personal_account_id]`。
 //! - 执行个人多签管理员集合变更。
 //! - 给 `personal-manage` 提供管理员生命周期写入口。
 //! - 给 runtime / multisig-transfer 提供管理员查询入口。
@@ -83,10 +83,10 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
-    /// 个人多签管理员集合。key 为 personal_account。
+    /// 个人多签管理员集合。key 为 personal_account_id。
     ///
     /// 个人多签不依赖 CID 资料，但管理员同样保存账户、姓、名三字段完整记录。
-    /// 授权只比较 `admin_account`；账户名、创建者和生命周期状态属于 personal-manage。
+    /// 授权只比较 `account_id`；账户名、创建者和生命周期状态属于 personal-manage。
     #[pallet::storage]
     #[pallet::getter(fn admin_account_of)]
     pub type AdminAccounts<T: Config> =
@@ -134,7 +134,7 @@ pub mod pallet {
         /// 个人多签管理员账户已写入 Pending。
         AdminAccountPendingCreated {
             account: T::AccountId,
-            creator: T::AccountId,
+            creator_account_id: T::AccountId,
             admins_len: u32,
         },
         /// 个人多签管理员账户已激活。
@@ -190,9 +190,7 @@ pub mod pallet {
             );
             let current_admins = current.admins.clone().into_inner();
             ensure!(
-                current_admins
-                    .iter()
-                    .any(|admin| admin.admin_account == who),
+                current_admins.iter().any(|admin| admin.account_id == who),
                 Error::<T>::PermissionDenied
             );
             Self::validate_admin_set_for_change(&admins, new_threshold)?;
@@ -203,7 +201,7 @@ pub mod pallet {
 
             with_transaction(|| {
                 let action = AdminSetChangeAction {
-                    personal_account: account.clone(),
+                    personal_account_id: account.clone(),
                     admins: admins.clone(),
                     new_threshold,
                 };
@@ -270,7 +268,7 @@ pub mod pallet {
                 ensure!(!admin.family_name.is_empty(), Error::<T>::InvalidFamilyName);
                 ensure!(!admin.given_name.is_empty(), Error::<T>::InvalidGivenName);
                 ensure!(
-                    seen.insert(admin.admin_account.clone()),
+                    seen.insert(admin.account_id.clone()),
                     Error::<T>::DuplicateAdmin
                 );
             }
@@ -283,8 +281,8 @@ pub mod pallet {
             }
             let mut left = left.to_vec();
             let mut right = right.to_vec();
-            left.sort_by(|a, b| a.admin_account.cmp(&b.admin_account));
-            right.sort_by(|a, b| a.admin_account.cmp(&b.admin_account));
+            left.sort_by(|a, b| a.account_id.cmp(&b.account_id));
+            right.sort_by(|a, b| a.account_id.cmp(&b.account_id));
             left == right
         }
 
@@ -310,7 +308,8 @@ pub mod pallet {
                 Error::<T>::InvalidLifecycleScope
             );
             ensure!(
-                proposal.execution_account == Some(account) && proposal.actor_cid_number.is_none(),
+                proposal.execution_account_id == Some(account)
+                    && proposal.actor_cid_number.is_none(),
                 Error::<T>::InvalidLifecycleScope
             );
             ensure!(
@@ -334,7 +333,7 @@ pub mod pallet {
             account: T::AccountId,
             kind: AdminAccountKind,
             admins: Vec<Admin<T::AccountId>>,
-            creator: T::AccountId,
+            creator_account_id: T::AccountId,
         ) -> DispatchResult {
             ensure!(
                 kind == AdminAccountKind::PersonalMultisig,
@@ -360,7 +359,7 @@ pub mod pallet {
                     institution_code: PMUL,
                     kind,
                     admins: bounded,
-                    creator: creator.clone(),
+                    creator_account_id: creator_account_id.clone(),
                     created_at: now,
                     updated_at: now,
                     status: AdminAccountStatus::Pending,
@@ -368,7 +367,7 @@ pub mod pallet {
             );
             Self::deposit_event(Event::<T>::AdminAccountPendingCreated {
                 account,
-                creator,
+                creator_account_id,
                 admins_len,
             });
             Ok(())
@@ -376,13 +375,13 @@ pub mod pallet {
 
         pub(crate) fn do_activate_admin_account(account: T::AccountId) -> DispatchResult {
             AdminAccounts::<T>::try_mutate(account.clone(), |maybe| -> DispatchResult {
-                let admin_account = maybe.as_mut().ok_or(Error::<T>::PersonalNotFound)?;
+                let account_id = maybe.as_mut().ok_or(Error::<T>::PersonalNotFound)?;
                 ensure!(
-                    admin_account.status == AdminAccountStatus::Pending,
+                    account_id.status == AdminAccountStatus::Pending,
                     Error::<T>::PersonalNotActive
                 );
-                admin_account.status = AdminAccountStatus::Active;
-                admin_account.updated_at = frame_system::Pallet::<T>::block_number();
+                account_id.status = AdminAccountStatus::Active;
+                account_id.updated_at = frame_system::Pallet::<T>::block_number();
                 Ok(())
             })?;
             Self::deposit_event(Event::<T>::AdminAccountActivated { account });
@@ -390,10 +389,10 @@ pub mod pallet {
         }
 
         pub(crate) fn do_remove_pending_admin_account(account: T::AccountId) -> DispatchResult {
-            let admin_account =
+            let account_id =
                 AdminAccounts::<T>::get(account.clone()).ok_or(Error::<T>::PersonalNotFound)?;
             ensure!(
-                admin_account.status == AdminAccountStatus::Pending,
+                account_id.status == AdminAccountStatus::Pending,
                 Error::<T>::PersonalNotActive
             );
             AdminAccounts::<T>::remove(account.clone());
@@ -402,10 +401,10 @@ pub mod pallet {
         }
 
         pub(crate) fn do_close_admin_account(account: T::AccountId) -> DispatchResult {
-            let admin_account =
+            let account_id =
                 AdminAccounts::<T>::get(account.clone()).ok_or(Error::<T>::PersonalNotFound)?;
             ensure!(
-                admin_account.status == AdminAccountStatus::Active,
+                account_id.status == AdminAccountStatus::Active,
                 Error::<T>::PersonalNotActive
             );
             AdminAccounts::<T>::remove(account.clone());
@@ -421,12 +420,12 @@ pub mod pallet {
             if institution_code != PMUL {
                 return None;
             }
-            let admin_account = AdminAccounts::<T>::get(account)?;
-            if admin_account.status == status
-                && admin_account.kind == AdminAccountKind::PersonalMultisig
-                && admin_account.institution_code == PMUL
+            let account_id = AdminAccounts::<T>::get(account)?;
+            if account_id.status == status
+                && account_id.kind == AdminAccountKind::PersonalMultisig
+                && account_id.institution_code == PMUL
             {
-                Some(admin_account)
+                Some(account_id)
             } else {
                 None
             }
@@ -445,17 +444,17 @@ pub mod pallet {
             account: T::AccountId,
             who: &T::AccountId,
         ) -> bool {
-            let Some(admin_account) = Self::admin_account_with_status(
+            let Some(account_id) = Self::admin_account_with_status(
                 institution_code,
                 account,
                 AdminAccountStatus::Active,
             ) else {
                 return false;
             };
-            admin_account
+            account_id
                 .admins
                 .iter()
-                .any(|admin| &admin.admin_account == who)
+                .any(|admin| &admin.account_id == who)
         }
 
         pub fn active_account_admins(
@@ -471,7 +470,7 @@ pub mod pallet {
                 .admins
                 .into_inner()
                 .into_iter()
-                .map(|admin| admin.admin_account)
+                .map(|admin| admin.account_id)
                 .collect(),
             )
         }
@@ -519,17 +518,17 @@ pub mod pallet {
             account: T::AccountId,
             who: &T::AccountId,
         ) -> bool {
-            let Some(admin_account) = Self::admin_account_with_status(
+            let Some(account_id) = Self::admin_account_with_status(
                 institution_code,
                 account,
                 AdminAccountStatus::Pending,
             ) else {
                 return false;
             };
-            admin_account
+            account_id
                 .admins
                 .iter()
-                .any(|admin| &admin.admin_account == who)
+                .any(|admin| &admin.account_id == who)
         }
 
         pub fn pending_account_admins_for_snapshot(
@@ -545,7 +544,7 @@ pub mod pallet {
                 .admins
                 .into_inner()
                 .into_iter()
-                .map(|admin| admin.admin_account)
+                .map(|admin| admin.account_id)
                 .collect(),
             )
         }
@@ -595,7 +594,7 @@ pub mod pallet {
                 Error::<T>::ProposalActionNotFound
             );
             ensure!(
-                proposal.execution_account == Some(action.personal_account.clone())
+                proposal.execution_account_id == Some(action.personal_account_id.clone())
                     && proposal.actor_cid_number.is_none(),
                 Error::<T>::ProposalActionNotFound
             );
@@ -604,11 +603,11 @@ pub mod pallet {
                 Error::<T>::ProposalActionNotFound
             );
             votingengine::Pallet::<T>::ensure_admin_set_mutation_lock_owner(
-                ProposalSubject::PersonalAccount(action.personal_account.clone()),
+                ProposalSubject::PersonalAccount(action.personal_account_id.clone()),
                 proposal_id,
             )?;
 
-            let current = AdminAccounts::<T>::get(action.personal_account.clone())
+            let current = AdminAccounts::<T>::get(action.personal_account_id.clone())
                 .ok_or(Error::<T>::PersonalNotFound)?;
             ensure!(
                 current.status == AdminAccountStatus::Active
@@ -623,7 +622,7 @@ pub mod pallet {
                 Error::<T>::AdminSetUnchanged
             );
 
-            AdminAccounts::<T>::mutate(action.personal_account.clone(), |maybe| {
+            AdminAccounts::<T>::mutate(action.personal_account_id.clone(), |maybe| {
                 if let Some(account) = maybe {
                     account.admins = action.admins.clone();
                     account.updated_at = frame_system::Pallet::<T>::block_number();
@@ -631,7 +630,7 @@ pub mod pallet {
             });
             Self::deposit_event(Event::<T>::AdminSetChanged {
                 proposal_id,
-                account: action.personal_account,
+                account: action.personal_account_id,
                 admins_len: action.admins.len() as u32,
                 threshold: action.new_threshold,
             });
@@ -646,12 +645,12 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId, Admin<T::AccountId>>
     fn create_pending_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
         _cid_number: Vec<u8>,
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
         admins: Vec<Admin<T::AccountId>>,
-        creator: T::AccountId,
+        creator_account_id: T::AccountId,
     ) -> DispatchResult {
         ensure!(
             institution_code == PMUL,
@@ -660,32 +659,32 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId, Admin<T::AccountId>>
         Self::ensure_lifecycle_proposal(
             proposal_id,
             module_tag,
-            personal_account.clone(),
+            personal_account_id.clone(),
             STATUS_VOTING,
             false,
         )?;
-        Self::do_create_pending_admin_account(personal_account, kind, admins, creator)
+        Self::do_create_pending_admin_account(personal_account_id, kind, admins, creator_account_id)
     }
 
     fn activate_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
     ) -> DispatchResult {
         Self::ensure_lifecycle_proposal(
             proposal_id,
             module_tag,
-            personal_account.clone(),
+            personal_account_id.clone(),
             STATUS_PASSED,
             true,
         )?;
-        Self::do_activate_admin_account(personal_account)
+        Self::do_activate_admin_account(personal_account_id)
     }
 
     fn remove_pending_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
     ) -> DispatchResult {
         let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
             .ok_or(pallet::Error::<T>::ProposalActionNotFound)?;
@@ -696,100 +695,100 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId, Admin<T::AccountId>>
         Self::ensure_lifecycle_proposal(
             proposal_id,
             module_tag,
-            personal_account.clone(),
+            personal_account_id.clone(),
             proposal.status,
             false,
         )?;
-        Self::do_remove_pending_admin_account(personal_account)
+        Self::do_remove_pending_admin_account(personal_account_id)
     }
 
     fn close_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
     ) -> DispatchResult {
         Self::ensure_lifecycle_proposal(
             proposal_id,
             module_tag,
-            personal_account.clone(),
+            personal_account_id.clone(),
             STATUS_PASSED,
             true,
         )?;
-        Self::do_close_admin_account(personal_account)
+        Self::do_close_admin_account(personal_account_id)
     }
 }
 
 impl<T: pallet::Config> AdminAccountQuery<T::AccountId> for pallet::Pallet<T> {
     fn active_admin_account_exists(
         institution_code: InstitutionCode,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
     ) -> bool {
-        Self::active_admin_account_exists(institution_code, personal_account)
+        Self::active_admin_account_exists(institution_code, personal_account_id)
     }
 
     fn is_active_account_admin(
         institution_code: InstitutionCode,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
         who: &T::AccountId,
     ) -> bool {
-        Self::is_active_account_admin(institution_code, personal_account, who)
+        Self::is_active_account_admin(institution_code, personal_account_id, who)
     }
 
     fn active_account_admins(
         institution_code: InstitutionCode,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
     ) -> Option<Vec<T::AccountId>> {
-        Self::active_account_admins(institution_code, personal_account)
+        Self::active_account_admins(institution_code, personal_account_id)
     }
 
     fn active_account_admin_records(
         institution_code: InstitutionCode,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
     ) -> Option<Vec<Admin<T::AccountId>>> {
-        Self::active_account_admin_records(institution_code, personal_account)
+        Self::active_account_admin_records(institution_code, personal_account_id)
     }
 
     fn active_account_admins_len(
         institution_code: InstitutionCode,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
     ) -> Option<u32> {
-        Self::active_account_admins_len(institution_code, personal_account)
+        Self::active_account_admins_len(institution_code, personal_account_id)
     }
 
     fn pending_account_exists_for_snapshot(
         institution_code: InstitutionCode,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
     ) -> bool {
-        Self::pending_account_exists_for_snapshot(institution_code, personal_account)
+        Self::pending_account_exists_for_snapshot(institution_code, personal_account_id)
     }
 
     fn is_pending_account_admin_for_snapshot(
         institution_code: InstitutionCode,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
         who: &T::AccountId,
     ) -> bool {
-        Self::is_pending_account_admin_for_snapshot(institution_code, personal_account, who)
+        Self::is_pending_account_admin_for_snapshot(institution_code, personal_account_id, who)
     }
 
     fn pending_account_admins_for_snapshot(
         institution_code: InstitutionCode,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
     ) -> Option<Vec<T::AccountId>> {
-        Self::pending_account_admins_for_snapshot(institution_code, personal_account)
+        Self::pending_account_admins_for_snapshot(institution_code, personal_account_id)
     }
 
     fn pending_account_admin_records_for_snapshot(
         institution_code: InstitutionCode,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
     ) -> Option<Vec<Admin<T::AccountId>>> {
-        Self::pending_account_admin_records_for_snapshot(institution_code, personal_account)
+        Self::pending_account_admin_records_for_snapshot(institution_code, personal_account_id)
     }
 
     fn pending_account_admins_len_for_snapshot(
         institution_code: InstitutionCode,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
     ) -> Option<u32> {
-        Self::pending_account_admins_len_for_snapshot(institution_code, personal_account)
+        Self::pending_account_admins_len_for_snapshot(institution_code, personal_account_id)
     }
 }
 

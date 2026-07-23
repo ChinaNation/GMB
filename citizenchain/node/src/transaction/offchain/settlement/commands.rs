@@ -11,10 +11,10 @@ use crate::transaction::offchain::types::{DecryptAdminRequestResult, DecryptedAd
 
 use super::admin_unlock::VerifyDecryptAdminInput;
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn build_decrypt_admin_request(
     app: AppHandle,
-    pubkey_hex: String,
+    signer_public_key: String,
     cid_number: String,
 ) -> Result<DecryptAdminRequestResult, String> {
     let status = home::current_status(&app)?;
@@ -22,23 +22,23 @@ pub async fn build_decrypt_admin_request(
         return Err("节点未运行".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        super::admin_unlock::build_decrypt_admin_request(&pubkey_hex, &cid_number)
+        super::admin_unlock::build_decrypt_admin_request(&signer_public_key, &cid_number)
     })
     .await
     .map_err(|e| format!("build_decrypt_admin_request task failed:{e}"))?
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn verify_and_decrypt_admin(
     request_id: String,
-    pubkey_hex: String,
+    signer_public_key: String,
     expected_payload_hash: String,
     response_json: String,
 ) -> Result<DecryptedAdminInfo, String> {
     tauri::async_runtime::spawn_blocking(move || {
         super::admin_unlock::verify_and_decrypt_admin(VerifyDecryptAdminInput {
             request_id,
-            pubkey_hex,
+            signer_public_key,
             expected_payload_hash,
             response_json,
         })
@@ -47,12 +47,12 @@ pub async fn verify_and_decrypt_admin(
     .map_err(|e| format!("verify_and_decrypt_admin task failed:{e}"))?
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn list_decrypted_admins(cid_number: String) -> Result<Vec<DecryptedAdminInfo>, String> {
     Ok(super::admin_unlock::list_decrypted_admins(&cid_number))
 }
 
-#[tauri::command]
-pub fn lock_decrypted_admin(pubkey_hex: String) -> Result<(), String> {
-    super::admin_unlock::lock_decrypted_admin(&pubkey_hex)
+#[tauri::command(rename_all = "snake_case")]
+pub fn lock_decrypted_admin(signer_public_key: String) -> Result<(), String> {
+    super::admin_unlock::lock_decrypted_admin(&signer_public_key)
 }

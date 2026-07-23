@@ -99,7 +99,7 @@ mod tests {
     fn subject(id: u8) -> votingengine::CitizenSubject<u8> {
         votingengine::CitizenSubject {
             cid_number: vec![id].try_into().expect("test CID fits"),
-            wallet_account: id,
+            account_id: id,
         }
     }
 

@@ -1,16 +1,16 @@
-// 管理员激活模块：为机构 CID 生成管理员钱包级本地激活凭证。
+// 管理员激活模块：为机构 CID 生成管理员账户级本地激活凭证。
 //
 // 激活流程：
 // 1. 用户点击管理员行的"激活"按钮；
-// 2. 后端按 CID 读取对应管理员 pallet 的 AdminAccounts，确认目标 pubkey 是当前管理员；
-// 3. 后端生成 activate_admin_account 签名请求 QR JSON；
+// 2. 后端按 CID 读取对应管理员 pallet 的 AdminAccounts，确认签名公钥对应当前管理员账户；
+// 3. 后端生成管理员激活签名请求 QR JSON；
 // 4. 用户用 citizenwallet 冷钱包扫码确认并签名；
 // 5. 后端验证签名、payload、链上账户仍一致后，写入本地激活记录；
 // 6. 管理员状态变为已激活，提案按钮解锁。
 //
 // 激活 payload 格式（非链上交易，二进制前缀域）：
 //   GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(1B = 0x18)  ← 4B 二进制前缀
-//   + cid_number(32B,右补零) + institution_code(4B) + kind(1B) + pubkey(32B)
+//   + cid_number(32B,右补零) + institution_code(4B) + kind(1B) + signer_public_key(32B)
 //   + timestamp(8B) + nonce(16B) = 4 + 93 = 97 bytes
 // 冷钱包对整段 payload 直接 sr25519 签名，node 按上述偏移解析。
 
@@ -39,7 +39,7 @@ use primitives::sign::{
 };
 
 use super::account_id;
-use super::types::{institution_code_label, AdminAccountState};
+use super::types::{institution_code_label, InstitutionAdminsState};
 
 /// 把前端传入的机构码字符串(如 "NRC"/"CGOV")转成链上 [u8;4]。空串/缺省 → None。
 fn parse_expected_code(expected: Option<&str>) -> Option<InstitutionCode> {
@@ -54,11 +54,12 @@ const ACTIVATED_ADMINS_FILE: &str = "activated-institution-admins.json";
 
 // 管理员本地激活签名 payload 前缀 = GMB || OP_SIGN_ACTIVATE_ADMIN(4B 二进制前缀，
 // 单一真源 primitives::sign)。
-// cid_number(32) + institution_code(4) + kind(1) + pubkey(32) + timestamp(8) + nonce(16)。
+// cid_number(32) + institution_code(4) + kind(1) + signer_public_key(32)
+// + timestamp(8) + nonce(16)。这里只改语义名称，不改变任何 payload 字节。
 
 #[derive(Debug, Clone)]
 struct ActivationSignSession {
-    pubkey_hex: String,
+    signer_public_key: String,
     payload_hash_hex: String,
     payload_hex: String,
     expires_at: u64,
@@ -77,8 +78,9 @@ fn activation_sign_sessions() -> &'static Mutex<HashMap<String, ActivationSignSe
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActivatedAdmin {
-    /// 管理员公钥 hex（不含 0x，小写）。
-    pub pubkey_hex: String,
+    /// 已激活管理员账户 ID，固定为小写 `0x` + 64 位十六进制。
+    #[serde(rename = "account_id")]
+    pub account_id: String,
     /// 机构唯一 CID。
     pub cid_number: String,
     /// 链上机构码（CID institution_code，[u8;4]）。
@@ -93,8 +95,8 @@ pub struct ActivatedAdmin {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StoredActivation {
-    /// 管理员公钥 hex（不含 0x，小写）。
-    pubkey_hex: String,
+    /// 已激活管理员账户 ID，固定为小写 `0x` + 64 位十六进制。
+    account_id: String,
     /// 机构唯一 CID。
     cid_number: String,
     /// 链上机构码（CID institution_code，[u8;4]）。
@@ -114,7 +116,7 @@ struct ActivationPayload {
     cid_number: String,
     institution_code: InstitutionCode,
     kind: u8,
-    pubkey_hex: String,
+    signer_public_key: String,
 }
 
 /// 存储文件根结构。
@@ -220,7 +222,7 @@ fn now_secs() -> u64 {
 }
 
 fn validate_activation_account(
-    state: &AdminAccountState,
+    state: &InstitutionAdminsState,
     expected_code: Option<InstitutionCode>,
 ) -> Result<(), String> {
     if let Some(code) = expected_code {
@@ -251,8 +253,8 @@ fn validate_activation_account(
 fn fetch_chain_account(
     cid_number: &str,
     expected_code: Option<InstitutionCode>,
-) -> Result<AdminAccountState, String> {
-    let state = storage::fetch_admin_account_by_cid_number(cid_number)?
+) -> Result<InstitutionAdminsState, String> {
+    let state = storage::fetch_institution_admins_state_by_cid_number(cid_number)?
         .ok_or_else(|| "链上不存在该 CID 的管理员集合".to_string())?;
     validate_activation_account(&state, expected_code)?;
     Ok(state)
@@ -263,7 +265,7 @@ fn build_activate_payload(
     cid_number: &str,
     institution_code: &InstitutionCode,
     kind: u8,
-    pubkey: &[u8; 32],
+    signer_public_key: &[u8; 32],
     timestamp: u64,
 ) -> Vec<u8> {
     let nonce: [u8; 16] = rand::random();
@@ -271,7 +273,7 @@ fn build_activate_payload(
         cid_number.as_bytes(),
         institution_code,
         kind,
-        pubkey,
+        signer_public_key,
         timestamp,
         &nonce,
     )
@@ -308,18 +310,18 @@ fn decode_activate_payload(payload_bytes: &[u8]) -> Result<ActivationPayload, St
     offset += 4;
     let kind = payload_bytes[offset];
     offset += 1;
-    let pubkey_hex = hex::encode(&payload_bytes[offset..offset + 32]);
+    let signer_public_key = format!("0x{}", hex::encode(&payload_bytes[offset..offset + 32]));
     Ok(ActivationPayload {
         cid_number,
         institution_code,
         kind,
-        pubkey_hex,
+        signer_public_key,
     })
 }
 
 fn activated_admin_from_stored(item: &StoredActivation) -> ActivatedAdmin {
     ActivatedAdmin {
-        pubkey_hex: item.pubkey_hex.clone(),
+        account_id: item.account_id.clone(),
         cid_number: item.cid_number.clone(),
         institution_code: item.institution_code,
         kind: item.kind,
@@ -333,10 +335,10 @@ fn activated_admin_from_stored(item: &StoredActivation) -> ActivatedAdmin {
 ///
 /// 验证公钥确实在该 CID 的链上管理员列表中，
 /// 然后生成 QR_V1/k=1 格式的 CID 级签名请求。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn build_activate_admin_request(
     app: AppHandle,
-    pubkey_hex: String,
+    signer_public_key: String,
     cid_number: String,
     expected_institution_code: Option<String>,
 ) -> Result<ActivateRequestResult, String> {
@@ -345,9 +347,11 @@ pub async fn build_activate_admin_request(
         return Err("节点未运行，无法验证管理员身份".to_string());
     }
 
-    let pubkey_clean = account_id::normalize_pubkey_hex(&pubkey_hex)?;
-    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
-    let pubkey_array: [u8; 32] = pubkey_bytes
+    let signer_public_key = crate::shared::validation::normalize_public_key(&signer_public_key)?;
+    let signer_account_id = signing::signer_account_id_from_public_key(&signer_public_key)?;
+    let public_key_bytes = hex::decode(signer_public_key.trim_start_matches("0x"))
+        .map_err(|e| format!("签名公钥解码失败: {e}"))?;
+    let public_key_array: [u8; 32] = public_key_bytes
         .as_slice()
         .try_into()
         .map_err(|_| "公钥长度必须为 32 字节".to_string())?;
@@ -359,13 +363,17 @@ pub async fn build_activate_admin_request(
             .await
             .map_err(|e| format!("查询管理员账户失败: {e}"))??;
 
-    if !state.admins.iter().any(|a| a.admin_account == pubkey_clean) {
-        return Err("该公钥不在此管理员账户的链上管理员列表中".to_string());
+    if !state
+        .admins
+        .iter()
+        .any(|admin| admin.account_id == signer_account_id)
+    {
+        return Err("该签名公钥对应的账户不在此机构的链上管理员列表中".to_string());
     }
 
     let activations = load_activations(&app)?;
     if activations.iter().any(|a| {
-        a.pubkey_hex == pubkey_clean
+        a.account_id == signer_account_id
             && a.cid_number == state.cid_number
             && a.institution_code == state.institution_code
             && a.kind == state.kind
@@ -378,14 +386,14 @@ pub async fn build_activate_admin_request(
         &state.cid_number,
         &state.institution_code,
         state.kind,
-        &pubkey_array,
+        &public_key_array,
         timestamp,
     );
     let payload_hex = format!("0x{}", hex::encode(&payload));
 
     let payload_hash = signing::sha256_hash_public(&payload);
     let payload_hash_hex = format!("0x{}", hex::encode(payload_hash));
-    let request_id = signing::generate_request_id_public("activate-admin-account");
+    let request_id = signing::generate_request_id_public("activate-institution-admin");
 
     let now = now_secs();
     let expires_at = now + signing::DEFAULT_TTL_SECS;
@@ -397,7 +405,7 @@ pub async fn build_activate_admin_request(
         body: signing::SignRequestBody {
             action: primitives::sign::QR_ACTION_ACTIVATE_ADMIN,
             sig_alg: 1,
-            pubkey: signing::pubkey_b64(&pubkey_bytes)?,
+            pubkey: signing::public_key_b64(&public_key_bytes)?,
             payload: signing::payload_b64(&payload),
         },
     };
@@ -407,7 +415,7 @@ pub async fn build_activate_admin_request(
     remember_activation_session(
         request_id.clone(),
         ActivationSignSession {
-            pubkey_hex: pubkey_clean,
+            signer_public_key,
             payload_hash_hex: normalize_hash_hex(&payload_hash_hex, "payload_hash")?,
             payload_hex: payload_hex
                 .strip_prefix("0x")
@@ -428,20 +436,21 @@ pub async fn build_activate_admin_request(
 /// 验证管理员激活签名并写入本地加密存储。
 ///
 /// 本地验证 sr25519 签名，不提交链上交易；写入前重新确认链上账户仍 Active。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn verify_activate_admin(
     app: AppHandle,
     request_id: String,
-    pubkey_hex: String,
+    signer_public_key: String,
     expected_payload_hash: String,
     payload_hex: String,
     response_json: String,
 ) -> Result<ActivatedAdmin, String> {
-    if let Err(e) = security::append_audit_log(&app, "activate_admin_account", "attempt") {
-        eprintln!("[审计] activate_admin_account attempt 日志写入失败: {e}");
+    if let Err(e) = security::append_audit_log(&app, "activate_institution_admin", "attempt") {
+        eprintln!("[审计] activate_institution_admin attempt 日志写入失败: {e}");
     }
 
-    let pubkey_clean = account_id::normalize_pubkey_hex(&pubkey_hex)?;
+    let signer_public_key = crate::shared::validation::normalize_public_key(&signer_public_key)?;
+    let signer_account_id = signing::signer_account_id_from_public_key(&signer_public_key)?;
 
     let response: signing::QrSignResponse =
         serde_json::from_str(&response_json).map_err(|e| format!("解析签名响应失败: {e}"))?;
@@ -473,17 +482,18 @@ pub async fn verify_activate_admin(
     if response.expires_at != session.expires_at {
         return Err("签名响应过期时间与本地激活 session 不匹配".to_string());
     }
-    if session.pubkey_hex != pubkey_clean {
+    if session.signer_public_key != signer_public_key {
         return Err("提交参数公钥与本地激活 session 不匹配".to_string());
     }
 
-    let response_pubkey = response
+    // 二维码协议字段名 `pubkey` 属于 QR_V1；第 3 步只规范化其值，不改协议键。
+    let response_public_key = response
         .body
         .pubkey
         .strip_prefix("0x")
         .unwrap_or(&response.body.pubkey)
         .to_ascii_lowercase();
-    if response_pubkey != pubkey_clean {
+    if format!("0x{response_public_key}") != signer_public_key {
         return Err("公钥不匹配".to_string());
     }
 
@@ -509,7 +519,7 @@ pub async fn verify_activate_admin(
         ));
     }
     let decoded = decode_activate_payload(&payload_bytes)?;
-    if decoded.pubkey_hex != pubkey_clean {
+    if decoded.signer_public_key != signer_public_key {
         return Err("激活 payload 中的管理员公钥与签名公钥不一致".to_string());
     }
 
@@ -517,7 +527,7 @@ pub async fn verify_activate_admin(
     let state = tauri::async_runtime::spawn_blocking({
         let cid_number = decoded.cid_number.clone();
         move || {
-            storage::fetch_admin_account(&cid_number)?
+            storage::fetch_institution_admins(&cid_number)?
                 .ok_or_else(|| "链上不存在该 CID 的管理员集合".to_string())
         }
     })
@@ -537,8 +547,12 @@ pub async fn verify_activate_admin(
         ));
     }
     validate_activation_account(&state, Some(decoded.institution_code))?;
-    if !state.admins.iter().any(|a| a.admin_account == pubkey_clean) {
-        return Err("该公钥不在此管理员账户的链上管理员列表中".to_string());
+    if !state
+        .admins
+        .iter()
+        .any(|admin| admin.account_id == signer_account_id)
+    {
+        return Err("该签名公钥对应的账户不在此机构的链上管理员列表中".to_string());
     }
 
     let sig_hex = response
@@ -553,12 +567,13 @@ pub async fn verify_activate_admin(
         ));
     }
     let signature_bytes = hex::decode(sig_hex).map_err(|e| format!("签名解码失败: {e}"))?;
-    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
+    let public_key_bytes = hex::decode(signer_public_key.trim_start_matches("0x"))
+        .map_err(|e| format!("签名公钥解码失败: {e}"))?;
 
     use sp_core::crypto::Pair;
     use sp_core::sr25519::{Public, Signature};
     let public = Public::from_raw(
-        <[u8; 32]>::try_from(pubkey_bytes.as_slice()).map_err(|_| "公钥长度必须为 32 字节")?,
+        <[u8; 32]>::try_from(public_key_bytes.as_slice()).map_err(|_| "公钥长度必须为 32 字节")?,
     );
     let signature = Signature::from_raw(
         <[u8; 64]>::try_from(signature_bytes.as_slice()).map_err(|_| "签名长度必须为 64 字节")?,
@@ -568,10 +583,11 @@ pub async fn verify_activate_admin(
     }
 
     let mut activations = load_activations(&app)?;
-    activations.retain(|a| !(a.pubkey_hex == pubkey_clean && a.cid_number == decoded_cid_number));
+    activations
+        .retain(|a| !(a.account_id == signer_account_id && a.cid_number == decoded_cid_number));
     let activated_at = now_ms();
     activations.push(StoredActivation {
-        pubkey_hex: pubkey_clean.clone(),
+        account_id: signer_account_id.clone(),
         cid_number: decoded_cid_number.clone(),
         institution_code: decoded.institution_code,
         kind: decoded.kind,
@@ -583,18 +599,18 @@ pub async fn verify_activate_admin(
 
     if let Err(e) = security::append_audit_log(
         &app,
-        "activate_admin_account",
+        "activate_institution_admin",
         &format!(
-            "success pubkey={} cid_number={}",
-            &pubkey_clean[..8],
+            "success account_id={} cid_number={}",
+            &signer_account_id[..10],
             &decoded_cid_number
         ),
     ) {
-        eprintln!("[审计] activate_admin_account success 日志写入失败: {e}");
+        eprintln!("[审计] activate_institution_admin success 日志写入失败: {e}");
     }
 
     Ok(ActivatedAdmin {
-        pubkey_hex: pubkey_clean,
+        account_id: signer_account_id,
         cid_number: decoded_cid_number,
         institution_code: decoded.institution_code,
         kind: decoded.kind,
@@ -608,7 +624,7 @@ pub async fn verify_activate_admin(
 /// - 链上已移除的管理员 → 自动删除本地激活记录；
 /// - institution_code/kind 已变化或账户已关闭 → 不再返回本地激活记录；
 /// - 返回仍有效的已激活管理员。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn get_activated_admins(
     app: AppHandle,
     cid_number: String,
@@ -646,7 +662,7 @@ pub async fn get_activated_admins(
                         && state
                             .admins
                             .iter()
-                            .any(|admin| admin.admin_account == a.pubkey_hex)
+                            .any(|admin| admin.account_id == a.account_id)
                 });
                 if activations.len() != before_len {
                     let _ = save_activations(&app, &activations);
@@ -670,10 +686,10 @@ pub async fn get_activated_admins(
 }
 
 /// 取消管理员激活（需要设备密码）。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn deactivate_admin(
     app: AppHandle,
-    pubkey_hex: String,
+    account_id: String,
     cid_number: String,
     expected_institution_code: Option<String>,
     unlock_password: String,
@@ -685,17 +701,17 @@ pub fn deactivate_admin(
     let unlock = security::ensure_unlock_password(&unlock_password)?;
     device_password::verify_device_login_password(&app, unlock)?;
 
-    let pubkey_clean = account_id::normalize_pubkey_hex(&pubkey_hex)?;
+    let account_id = account_id::normalize_account_id(&account_id)?;
     let expected_code = parse_expected_code(expected_institution_code.as_deref());
     if let Some(code) = expected_code {
-        let state = storage::fetch_admin_account_by_cid_number(&cid_number)?
+        let state = storage::fetch_institution_admins_state_by_cid_number(&cid_number)?
             .ok_or_else(|| "链上不存在该 CID 的管理员集合".to_string())?;
         validate_activation_account(&state, Some(code))?;
     }
 
     let mut activations = load_activations(&app)?;
     let before_len = activations.len();
-    activations.retain(|a| !(a.pubkey_hex == pubkey_clean && a.cid_number == cid_number));
+    activations.retain(|a| !(a.account_id == account_id && a.cid_number == cid_number));
 
     if activations.len() == before_len {
         return Err("未找到该管理员的激活记录".to_string());
@@ -707,8 +723,8 @@ pub fn deactivate_admin(
         &app,
         "deactivate_admin",
         &format!(
-            "success pubkey={} cid_number={}",
-            &pubkey_clean[..pubkey_clean.len().min(8)],
+            "success account_id={} cid_number={}",
+            &account_id[..account_id.len().min(10)],
             &cid_number
         ),
     ) {

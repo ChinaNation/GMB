@@ -40,7 +40,7 @@ pub struct DestroyAction<AccountId, Balance> {
     /// 发起机构唯一 CID。
     pub actor_cid_number: CidNumber,
     /// 执行销毁的具体机构账户。
-    pub institution_account: AccountId,
+    pub institution_account_id: AccountId,
     /// 销毁数量
     pub amount: Balance,
 }
@@ -137,26 +137,26 @@ pub mod pallet {
             origin: OriginFor<T>,
             actor_cid_number: CidNumber,
             proposer_role_code: RoleCode,
-            institution_account: T::AccountId,
+            institution_account_id: T::AccountId,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
             ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
-            let actual_org = T::InstitutionQuery::lookup_org(&institution_account)
+            let actual_org = T::InstitutionQuery::lookup_org(&institution_account_id)
                 .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 can_propose_destroy(actual_org),
                 Error::<T>::InvalidInstitution
             );
             ensure!(
-                T::InstitutionQuery::lookup_cid(&institution_account).as_deref()
+                T::InstitutionQuery::lookup_cid(&institution_account_id).as_deref()
                     == Some(actor_cid_number.as_slice()),
                 Error::<T>::InstitutionCodeMismatch
             );
             let action = DestroyAction {
                 actor_cid_number: actor_cid_number.clone(),
-                institution_account: institution_account.clone(),
+                institution_account_id: institution_account_id.clone(),
                 amount,
             };
             let mut encoded = Vec::from(crate::MODULE_TAG);
@@ -171,7 +171,7 @@ pub mod pallet {
                 who.clone(),
                 actual_org,
                 actor_cid_number.to_vec(),
-                Some(institution_account.clone()),
+                Some(institution_account_id.clone()),
                 Vec::from([actor_cid_number.to_vec()]),
                 vote_plan,
                 encoded,
@@ -180,7 +180,7 @@ pub mod pallet {
             Self::deposit_event(Event::<T>::DestroyProposed {
                 proposal_id,
                 institution_code: actual_org,
-                institution: institution_account,
+                institution: institution_account_id,
                 proposer: who,
                 amount,
             });
@@ -265,9 +265,9 @@ pub mod pallet {
         ) -> DispatchResult {
             let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
-            let actual_org = T::InstitutionQuery::lookup_org(&action.institution_account)
+            let actual_org = T::InstitutionQuery::lookup_org(&action.institution_account_id)
                 .ok_or(Error::<T>::InvalidInstitution)?;
-            let cid = T::InstitutionQuery::lookup_cid(&action.institution_account)
+            let cid = T::InstitutionQuery::lookup_cid(&action.institution_account_id)
                 .ok_or(Error::<T>::InvalidInstitution)?;
             // PASSED 是可执行/可重试态；每次自动执行和统一重试都重新绑定
             // owner、投票模式、机构码、机构账户和 CID，不能只信任业务载荷。
@@ -283,7 +283,7 @@ pub mod pallet {
                         .as_ref()
                         .map(|value| value.as_slice())
                         == Some(action.actor_cid_number.as_slice())
-                    && proposal.execution_account == Some(action.institution_account.clone())
+                    && proposal.execution_account_id == Some(action.institution_account_id.clone())
                     && cid.as_slice() == action.actor_cid_number.as_slice(),
                 Error::<T>::ProposalNotPassed
             );
@@ -292,7 +292,7 @@ pub mod pallet {
                 Error::<T>::InvalidInstitution
             );
 
-            let free = T::Currency::free_balance(&action.institution_account);
+            let free = T::Currency::free_balance(&action.institution_account_id);
             let ed = T::Currency::minimum_balance();
             // 销毁前必须预留 ED，确保机构账户不会因一次销毁被直接 reap。
             let required = action
@@ -319,7 +319,7 @@ pub mod pallet {
                         }
                     };
                     let (negative_imbalance, remaining) =
-                        T::Currency::slash(&action.institution_account, action.amount);
+                        T::Currency::slash(&action.institution_account_id, action.amount);
                     if !remaining.is_zero() {
                         return frame_support::storage::TransactionOutcome::Rollback(Err(
                             Error::<T>::InsufficientBalance.into(),
@@ -332,7 +332,7 @@ pub mod pallet {
 
             Self::deposit_event(Event::<T>::DestroyExecuted {
                 proposal_id,
-                institution: action.institution_account,
+                institution: action.institution_account_id,
                 fee_payer: fee_account,
                 amount: action.amount,
                 fee,

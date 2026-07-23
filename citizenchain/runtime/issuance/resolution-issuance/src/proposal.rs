@@ -40,7 +40,7 @@ use votingengine::{
 )]
 /// 单条收款分配项，包含收款账户和分配金额。
 pub struct RecipientAmount<AccountId, Balance> {
-    pub recipient: AccountId,
+    pub recipient_account_id: AccountId,
     pub amount: Balance,
 }
 
@@ -49,7 +49,7 @@ pub struct RecipientAmount<AccountId, Balance> {
 pub struct IssuanceProposalData<AccountId, Balance> {
     pub actor_cid_number: votingengine::types::CidNumber,
     pub proposer_role_code: votingengine::types::RoleCode,
-    pub proposer: AccountId,
+    pub proposer_account_id: AccountId,
     pub reason: Vec<u8>,
     pub total_amount: Balance,
     pub allocations: Vec<RecipientAmount<AccountId, Balance>>,
@@ -122,7 +122,7 @@ impl<T: Config> Pallet<T> {
     }
 
     pub(crate) fn create_resolution_issuance_proposal(
-        proposer: T::AccountId,
+        proposer_account_id: T::AccountId,
         actor_cid_number: votingengine::types::CidNumber,
         proposer_role_code: votingengine::types::RoleCode,
         reason: ReasonOf<T>,
@@ -151,7 +151,7 @@ impl<T: Config> Pallet<T> {
         };
         ensure!(
             T::InstitutionRoleAuthorization::is_authorized(
-                &proposer,
+                &proposer_account_id,
                 &proposer_role,
                 &business_action,
                 RolePermissionOperation::Propose,
@@ -166,7 +166,7 @@ impl<T: Config> Pallet<T> {
             let data = IssuanceProposalData {
                 actor_cid_number: actor_cid_number.clone(),
                 proposer_role_code: proposer_role_code.clone(),
-                proposer: proposer.clone(),
+                proposer_account_id: proposer_account_id.clone(),
                 reason: reason.to_vec(),
                 total_amount: total_amount.clone(),
                 allocations: allocations.to_vec(),
@@ -185,7 +185,7 @@ impl<T: Config> Pallet<T> {
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
             let proposal_id = match T::JointVoteEngine::create_joint_proposal_with_data(
-                proposer.clone(),
+                proposer_account_id.clone(),
                 actor_cid_number.to_vec(),
                 vote_plan,
                 encoded,
@@ -206,7 +206,7 @@ impl<T: Config> Pallet<T> {
                 proposal_id,
                 actor_cid_number,
                 proposer_role_code,
-                proposer,
+                proposer_account_id,
                 total_amount,
                 allocation_count: allocations.len() as u32,
             });

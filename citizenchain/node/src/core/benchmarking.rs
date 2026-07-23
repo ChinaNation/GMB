@@ -86,7 +86,7 @@ impl frame_benchmarking_cli::ExtrinsicBuilder for TransferWithRemarkBuilder {
             self.client.as_ref(),
             acc,
             runtime::RuntimeCall::OnchainTransaction(onchain::pallet::Call::transfer_with_remark {
-                beneficiary: self.dest.clone(),
+                beneficiary_account_id: self.dest.clone(),
                 amount: self.value,
                 remark: Default::default(),
             }),

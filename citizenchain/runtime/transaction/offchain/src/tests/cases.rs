@@ -137,9 +137,9 @@ fn sign_intent(
     bytes
 }
 
-/// 用清算行管理员密钥对 `(actor_cid_number, institution_account, batch_seq, batch)` 签名。
+/// 用清算行管理员密钥对 `(actor_cid_number, institution_account_id, batch_seq, batch)` 签名。
 fn sign_batch(
-    institution_account: &AccountId32,
+    institution_account_id: &AccountId32,
     batch_seq: u64,
     batch: &BoundedVec<OffchainBatchItem<AccountId32, u64>, <Test as Config>::MaxBatchSize>,
 ) -> BatchSignatureOf<Test> {
@@ -147,7 +147,7 @@ fn sign_batch(
     let message = crate::batch_item::batch_signing_hash(
         BANK_CID,
         bank_role_code().as_slice(),
-        institution_account,
+        institution_account_id,
         batch_seq,
         &batch.encode(),
     );
@@ -181,9 +181,9 @@ fn submit_batch_rejects_non_admin() {
 
         let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
             tx_id: H256::repeat_byte(7),
-            payer: alice.clone(),
+            payer_account_id: alice.clone(),
             payer_bank_cid: bank_cid(),
-            recipient: bob.clone(),
+            recipient_account_id: bob.clone(),
             recipient_bank_cid: bank_cid(),
             amount: 10_000,
             fee: 5,
@@ -193,9 +193,9 @@ fn submit_batch_rejects_non_admin() {
         let sig = sign_intent(&alice_pair, &intent);
         let item = OffchainBatchItem::<AccountId32, u64> {
             tx_id: intent.tx_id,
-            payer: intent.payer.clone(),
+            payer_account_id: intent.payer_account_id.clone(),
             payer_bank_cid: intent.payer_bank_cid.clone(),
-            recipient: intent.recipient.clone(),
+            recipient_account_id: intent.recipient_account_id.clone(),
             recipient_bank_cid: intent.recipient_bank_cid.clone(),
             transfer_amount: intent.amount,
             fee_amount: intent.fee,
@@ -242,9 +242,9 @@ fn submit_batch_rejects_invalid_batch_signature() {
 
         let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
             tx_id: H256::repeat_byte(0x31),
-            payer: alice.clone(),
+            payer_account_id: alice.clone(),
             payer_bank_cid: bank_cid(),
-            recipient: bob.clone(),
+            recipient_account_id: bob.clone(),
             recipient_bank_cid: bank_cid(),
             amount: 10_000,
             fee: 5,
@@ -253,9 +253,9 @@ fn submit_batch_rejects_invalid_batch_signature() {
         };
         let item = OffchainBatchItem::<AccountId32, u64> {
             tx_id: intent.tx_id,
-            payer: intent.payer.clone(),
+            payer_account_id: intent.payer_account_id.clone(),
             payer_bank_cid: intent.payer_bank_cid.clone(),
-            recipient: intent.recipient.clone(),
+            recipient_account_id: intent.recipient_account_id.clone(),
             recipient_bank_cid: intent.recipient_bank_cid.clone(),
             transfer_amount: intent.amount,
             fee_amount: intent.fee,
@@ -302,9 +302,9 @@ fn submit_batch_rejects_wrong_batch_seq() {
 
         let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
             tx_id: H256::repeat_byte(0x32),
-            payer: alice.clone(),
+            payer_account_id: alice.clone(),
             payer_bank_cid: bank_cid(),
-            recipient: bob.clone(),
+            recipient_account_id: bob.clone(),
             recipient_bank_cid: bank_cid(),
             amount: 10_000,
             fee: 5,
@@ -313,9 +313,9 @@ fn submit_batch_rejects_wrong_batch_seq() {
         };
         let item = OffchainBatchItem::<AccountId32, u64> {
             tx_id: intent.tx_id,
-            payer: intent.payer.clone(),
+            payer_account_id: intent.payer_account_id.clone(),
             payer_bank_cid: intent.payer_bank_cid.clone(),
-            recipient: intent.recipient.clone(),
+            recipient_account_id: intent.recipient_account_id.clone(),
             recipient_bank_cid: intent.recipient_bank_cid.clone(),
             transfer_amount: intent.amount,
             fee_amount: intent.fee,
@@ -367,9 +367,9 @@ fn submit_batch_same_bank_end_to_end() {
 
         let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
             tx_id: H256::repeat_byte(0x42),
-            payer: alice.clone(),
+            payer_account_id: alice.clone(),
             payer_bank_cid: bank_cid(),
-            recipient: bob.clone(),
+            recipient_account_id: bob.clone(),
             recipient_bank_cid: bank_cid(),
             amount: transfer_amount,
             fee: expected_fee,
@@ -379,9 +379,9 @@ fn submit_batch_same_bank_end_to_end() {
         let sig = sign_intent(&alice_pair, &intent);
         let item = OffchainBatchItem::<AccountId32, u64> {
             tx_id: intent.tx_id,
-            payer: intent.payer.clone(),
+            payer_account_id: intent.payer_account_id.clone(),
             payer_bank_cid: intent.payer_bank_cid.clone(),
-            recipient: intent.recipient.clone(),
+            recipient_account_id: intent.recipient_account_id.clone(),
             recipient_bank_cid: intent.recipient_bank_cid.clone(),
             transfer_amount,
             fee_amount: expected_fee,
@@ -470,9 +470,9 @@ fn submit_batch_same_bank_end_to_end() {
         let replay_sig = sign_intent(&alice_pair, &replay_intent);
         let replay_item = OffchainBatchItem::<AccountId32, u64> {
             tx_id: replay_intent.tx_id,
-            payer: replay_intent.payer.clone(),
+            payer_account_id: replay_intent.payer_account_id.clone(),
             payer_bank_cid: replay_intent.payer_bank_cid.clone(),
-            recipient: replay_intent.recipient.clone(),
+            recipient_account_id: replay_intent.recipient_account_id.clone(),
             recipient_bank_cid: replay_intent.recipient_bank_cid.clone(),
             transfer_amount,
             fee_amount: expected_fee,
@@ -522,9 +522,9 @@ fn batch_rejected_when_fee_account_cannot_pay_onchain_fee() {
         let expected_fee = 5u128;
         let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
             tx_id: H256::repeat_byte(0x51),
-            payer: alice.clone(),
+            payer_account_id: alice.clone(),
             payer_bank_cid: bank_cid(),
-            recipient: bob.clone(),
+            recipient_account_id: bob.clone(),
             recipient_bank_cid: bank_cid(),
             amount: transfer_amount,
             fee: expected_fee,
@@ -534,9 +534,9 @@ fn batch_rejected_when_fee_account_cannot_pay_onchain_fee() {
         let sig = sign_intent(&alice_pair, &intent);
         let item = OffchainBatchItem::<AccountId32, u64> {
             tx_id: intent.tx_id,
-            payer: intent.payer.clone(),
+            payer_account_id: intent.payer_account_id.clone(),
             payer_bank_cid: intent.payer_bank_cid.clone(),
-            recipient: intent.recipient.clone(),
+            recipient_account_id: intent.recipient_account_id.clone(),
             recipient_bank_cid: intent.recipient_bank_cid.clone(),
             transfer_amount,
             fee_amount: expected_fee,
@@ -591,9 +591,9 @@ fn submit_batch_rejects_user_bank_mismatch() {
 
         let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
             tx_id: H256::repeat_byte(0x33),
-            payer: alice.clone(),
+            payer_account_id: alice.clone(),
             payer_bank_cid: bank_cid(),
-            recipient: bob.clone(),
+            recipient_account_id: bob.clone(),
             recipient_bank_cid: bank_cid(),
             amount: 10_000,
             fee: 5,
@@ -602,9 +602,9 @@ fn submit_batch_rejects_user_bank_mismatch() {
         };
         let item = OffchainBatchItem::<AccountId32, u64> {
             tx_id: intent.tx_id,
-            payer: intent.payer.clone(),
+            payer_account_id: intent.payer_account_id.clone(),
             payer_bank_cid: intent.payer_bank_cid.clone(),
-            recipient: intent.recipient.clone(),
+            recipient_account_id: intent.recipient_account_id.clone(),
             recipient_bank_cid: intent.recipient_bank_cid.clone(),
             transfer_amount: intent.amount,
             fee_amount: intent.fee,
@@ -653,9 +653,9 @@ fn submit_batch_expired_intent_rejected() {
 
         let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
             tx_id: H256::repeat_byte(9),
-            payer: alice.clone(),
+            payer_account_id: alice.clone(),
             payer_bank_cid: bank_cid(),
-            recipient: bob.clone(),
+            recipient_account_id: bob.clone(),
             recipient_bank_cid: bank_cid(),
             amount: 10_000,
             fee: 5,
@@ -665,9 +665,9 @@ fn submit_batch_expired_intent_rejected() {
         let sig = sign_intent(&alice_pair, &intent);
         let item = OffchainBatchItem::<AccountId32, u64> {
             tx_id: intent.tx_id,
-            payer: intent.payer.clone(),
+            payer_account_id: intent.payer_account_id.clone(),
             payer_bank_cid: intent.payer_bank_cid.clone(),
-            recipient: intent.recipient.clone(),
+            recipient_account_id: intent.recipient_account_id.clone(),
             recipient_bank_cid: intent.recipient_bank_cid.clone(),
             transfer_amount: intent.amount,
             fee_amount: intent.fee,
@@ -722,9 +722,9 @@ fn submit_batch_cross_bank_end_to_end() {
 
         let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
             tx_id: H256::repeat_byte(0x71),
-            payer: alice.clone(),
+            payer_account_id: alice.clone(),
             payer_bank_cid: bank2_cid(),
-            recipient: bob.clone(),
+            recipient_account_id: bob.clone(),
             recipient_bank_cid: bank_cid(),
             amount: transfer_amount,
             fee: expected_fee,
@@ -734,9 +734,9 @@ fn submit_batch_cross_bank_end_to_end() {
         let sig = sign_intent(&alice_pair, &intent);
         let item = OffchainBatchItem::<AccountId32, u64> {
             tx_id: intent.tx_id,
-            payer: intent.payer.clone(),
+            payer_account_id: intent.payer_account_id.clone(),
             payer_bank_cid: intent.payer_bank_cid.clone(),
-            recipient: intent.recipient.clone(),
+            recipient_account_id: intent.recipient_account_id.clone(),
             recipient_bank_cid: intent.recipient_bank_cid.clone(),
             transfer_amount,
             fee_amount: expected_fee,
@@ -842,9 +842,9 @@ fn submit_batch_rejected_when_solvency_breached() {
         let expected_fee = 5u128;
         let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
             tx_id: H256::repeat_byte(0x72),
-            payer: alice.clone(),
+            payer_account_id: alice.clone(),
             payer_bank_cid: bank_cid(),
-            recipient: bob.clone(),
+            recipient_account_id: bob.clone(),
             recipient_bank_cid: bank_cid(),
             amount: transfer_amount,
             fee: expected_fee,
@@ -854,9 +854,9 @@ fn submit_batch_rejected_when_solvency_breached() {
         let sig = sign_intent(&alice_pair, &intent);
         let item = OffchainBatchItem::<AccountId32, u64> {
             tx_id: intent.tx_id,
-            payer: intent.payer.clone(),
+            payer_account_id: intent.payer_account_id.clone(),
             payer_bank_cid: intent.payer_bank_cid.clone(),
-            recipient: intent.recipient.clone(),
+            recipient_account_id: intent.recipient_account_id.clone(),
             recipient_bank_cid: intent.recipient_bank_cid.clone(),
             transfer_amount,
             fee_amount: expected_fee,
@@ -913,9 +913,9 @@ fn submit_batch_solvency_boundary_exact_pass() {
         let expected_fee = 5u128;
         let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
             tx_id: H256::repeat_byte(0x73),
-            payer: alice.clone(),
+            payer_account_id: alice.clone(),
             payer_bank_cid: bank_cid(),
-            recipient: bob.clone(),
+            recipient_account_id: bob.clone(),
             recipient_bank_cid: bank_cid(),
             amount: transfer_amount,
             fee: expected_fee,
@@ -925,9 +925,9 @@ fn submit_batch_solvency_boundary_exact_pass() {
         let sig = sign_intent(&alice_pair, &intent);
         let item = OffchainBatchItem::<AccountId32, u64> {
             tx_id: intent.tx_id,
-            payer: intent.payer.clone(),
+            payer_account_id: intent.payer_account_id.clone(),
             payer_bank_cid: intent.payer_bank_cid.clone(),
-            recipient: intent.recipient.clone(),
+            recipient_account_id: intent.recipient_account_id.clone(),
             recipient_bank_cid: intent.recipient_bank_cid.clone(),
             transfer_amount,
             fee_amount: expected_fee,

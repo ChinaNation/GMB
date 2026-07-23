@@ -63,8 +63,8 @@ pub(crate) fn keystore_dirs(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
 }
 
 /// 根据密钥类型前缀和公钥生成 keystore 文件名。
-pub(crate) fn keystore_filename(key_type_prefix: &str, pubkey_hex: &str) -> String {
-    format!("{key_type_prefix}{pubkey_hex}")
+pub(crate) fn keystore_filename(key_type_prefix: &str, public_key: &str) -> String {
+    format!("{key_type_prefix}{public_key}")
 }
 
 /// 扫描所有 keystore 目录，返回匹配指定前缀的文件路径列表。
@@ -88,10 +88,10 @@ pub(crate) fn scan_keystore_files(
 pub(crate) fn write_key_to_keystore(
     dirs: &[PathBuf],
     key_type_prefix: &str,
-    pubkey_hex: &str,
+    public_key: &str,
     secret_content: &str,
 ) -> Result<(), String> {
-    let filename = keystore_filename(key_type_prefix, pubkey_hex);
+    let filename = keystore_filename(key_type_prefix, public_key);
     for dir in dirs {
         write_secret_text_atomic_secure(dir, &filename, secret_content).map_err(|e| {
             format!(
@@ -148,9 +148,9 @@ pub(crate) fn default_chain_keystore_dir(app: &AppHandle) -> Result<PathBuf, Str
 pub(crate) fn has_key_in_keystore(
     dirs: &[PathBuf],
     key_type_prefix: &str,
-    pubkey_hex: &str,
+    public_key: &str,
 ) -> bool {
-    let filename = keystore_filename(key_type_prefix, pubkey_hex);
+    let filename = keystore_filename(key_type_prefix, public_key);
     dirs.iter()
         .any(|dir| regular_file_exists_secure(dir, &filename).unwrap_or(false))
 }

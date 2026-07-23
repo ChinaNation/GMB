@@ -189,7 +189,7 @@ impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityRea
     }
 }
 
-/// 账户 201 模拟账户 100 更换后的新钱包，两者共用同一永久 CID。
+/// 账户 201 模拟账户 100 更换后的新绑定账户，两者共用同一永久 CID。
 fn test_citizen_subject(who: &AccountId32) -> votingengine::CitizenSubject<AccountId32> {
     let cid_source = if who == &member(201) {
         member(100)
@@ -201,7 +201,7 @@ fn test_citizen_subject(who: &AccountId32) -> votingengine::CitizenSubject<Accou
             .to_vec()
             .try_into()
             .expect("account fits CID"),
-        wallet_account: who.clone(),
+        account_id: who.clone(),
     }
 }
 
@@ -379,41 +379,41 @@ use crate::{RepresentativeBodies, RepresentativeRoute, RepresentativeVoteRule, V
 
 /// 创建立法提案并注册 ProposalData(设置 ProposalOwner,终态回调需要),不自动投票。
 pub fn create(
-    proposer: AccountId32,
+    proposer_account_id: AccountId32,
     bodies: sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumber>,
     rule: RepresentativeVoteRule,
 ) -> u64 {
-    create_inner(proposer, bodies, rule, false)
+    create_inner(proposer_account_id, bodies, rule, false)
 }
 
 /// 修宪提案(needs_guard=true):现有流程通过后进护宪大法官终审。
 pub fn create_guard(
-    proposer: AccountId32,
+    proposer_account_id: AccountId32,
     bodies: sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumber>,
     rule: RepresentativeVoteRule,
 ) -> u64 {
-    try_create_inner(proposer, bodies, rule, true).expect("proposal created")
+    try_create_inner(proposer_account_id, bodies, rule, true).expect("proposal created")
 }
 
 fn create_inner(
-    proposer: AccountId32,
+    proposer_account_id: AccountId32,
     bodies: sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumber>,
     rule: RepresentativeVoteRule,
     needs_guard: bool,
 ) -> u64 {
-    try_create_inner(proposer, bodies, rule, needs_guard).expect("proposal created")
+    try_create_inner(proposer_account_id, bodies, rule, needs_guard).expect("proposal created")
 }
 
 pub fn try_create_guard(
-    proposer: AccountId32,
+    proposer_account_id: AccountId32,
     bodies: sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumber>,
     rule: RepresentativeVoteRule,
 ) -> Result<u64, sp_runtime::DispatchError> {
-    try_create_inner(proposer, bodies, rule, true)
+    try_create_inner(proposer_account_id, bodies, rule, true)
 }
 
 fn try_create_inner(
-    proposer: AccountId32,
+    proposer_account_id: AccountId32,
     bodies: sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumber>,
     rule: RepresentativeVoteRule,
     needs_guard: bool,
@@ -432,7 +432,7 @@ fn try_create_inner(
     let legislation_meta = legislation_meta(&route, rule, needs_guard);
     let vote_plan = test_vote_plan(&route, legislation_meta.as_ref());
     let pid = Lib::do_create_representative_proposal(
-        proposer,
+        proposer_account_id,
         actor_cid_number(),
         vote_plan,
         route,
@@ -529,7 +529,7 @@ pub fn two_houses() -> sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumb
     sp_runtime::sp_std::vec![house1_cid(), house2_cid()]
 }
 
-/// 两个管理员名册重叠的代表机构，用于验证同一钱包按机构席位分别投票。
+/// 两个管理员名册重叠的代表机构，用于验证同一账户按机构席位分别投票。
 pub fn overlapping_bodies() -> sp_runtime::sp_std::vec::Vec<votingengine::types::CidNumber> {
     sp_runtime::sp_std::vec![house1_cid(), house3_cid()]
 }
@@ -574,7 +574,7 @@ pub fn representative_ticket(
 ) -> votingengine::InstitutionVoteTicket<AccountId32> {
     votingengine::InstitutionVoteTicket {
         role_subject: role_subject(cid_number, REPRESENTATIVE_ROLE),
-        voter_account: who,
+        voter_account_id: who,
     }
 }
 

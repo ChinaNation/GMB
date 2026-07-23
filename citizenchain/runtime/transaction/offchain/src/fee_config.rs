@@ -42,18 +42,18 @@ pub fn do_propose_l2_fee_rate<T: Config>(
     who: T::AccountId,
     actor_cid_number: &crate::InstitutionCidNumber,
     actor_role_code: &[u8],
-    institution_account: T::AccountId,
+    institution_account_id: T::AccountId,
     new_rate_bp: u32,
 ) -> DispatchResult {
     // 1. CID 与本次操作的清算行主账户必须严格对应。
     bank_check::ensure_institution_account::<T>(
         actor_cid_number.as_slice(),
-        &institution_account,
+        &institution_account_id,
         bank_check::ACCOUNT_NAME_MAIN,
     )?;
     bank_check::ensure_can_be_bound::<T>(actor_cid_number.as_slice())?;
 
-    // 2. 授权唯一真源是 CID、岗位码、有效任职钱包和业务动作权限。
+    // 2. 授权唯一真源是 CID、岗位码、有效任职账户和业务动作权限。
     ensure!(
         T::CidAccountQuery::is_institution_role_authorized(
             actor_cid_number.as_slice(),

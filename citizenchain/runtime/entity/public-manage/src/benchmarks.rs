@@ -14,7 +14,7 @@ use crate::{AccountKind, CidNumberOf, Config, Pallet, RESERVED_NAME_MAIN};
 fn benchmark_cid<T: Config>() -> Result<CidNumberOf<T>, BenchmarkError> {
     let number = primitives::cid::generator::generate_cid_number(
         primitives::cid::generator::GenerateCidNumberInput {
-            account_pubkey: "public-manage-benchmark",
+            public_key: "public-manage-benchmark",
             p1: "0",
             province_code: "GD",
             province_name: "广东省",
@@ -44,12 +44,12 @@ mod benchmarks {
         {
             derived =
                 Pallet::<T>::derive_institution_account(cid_number.as_slice(), RESERVED_NAME_MAIN)
-                    .map_err(|_| BenchmarkError::Stop("institution account should derive"))?;
+                    .map_err(|_| BenchmarkError::Stop("institution account_id should derive"))?;
         }
 
         let (_, kind) = derived;
         if !matches!(kind, AccountKind::InstitutionMain { .. }) {
-            return Err(BenchmarkError::Stop("unexpected account kind"));
+            return Err(BenchmarkError::Stop("unexpected account_id kind"));
         }
         Ok(())
     }

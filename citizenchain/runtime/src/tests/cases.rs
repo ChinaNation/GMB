@@ -43,7 +43,7 @@ fn protected_genesis_institution_can_add_dynamic_role_without_mutating_fixed_rol
                         operation: RolePermissionOperation::Propose,
                     }],
                     assignments: vec![entity_primitives::InstitutionAssignmentTarget {
-                        admin_account: AccountId::new(nrc.admins[0]),
+                        account_id: AccountId::new(nrc.admins[0]),
                         term_start: 0,
                         term_end: 0,
                         assignment_source:
@@ -103,9 +103,9 @@ fn protected_genesis_institution_can_add_dynamic_role_without_mutating_fixed_rol
                         operation: RolePermissionOperation::Vote,
                     }],
                     assignments: vec![entity_primitives::InstitutionAssignmentTarget {
-                        admin_account: AccountId::new(
+                        account_id: AccountId::new(
                             primitives::cid::china::citizenchain::CITIZENCHAIN_GENESIS_ADMINS[0]
-                                .admin_account,
+                                .account_id,
                         ),
                         term_start: 0,
                         term_end: 0,
@@ -139,7 +139,7 @@ fn institution_transfer_route_uses_exact_fee_account() {
     new_test_ext().execute_with(|| {
         let institution = AccountId::new(CHINA_CB[0].main_account);
         let fee_account = AccountId::new(CHINA_CB[0].fee_account);
-        let beneficiary = AccountId::new([99u8; 32]);
+        let beneficiary_account_id = AccountId::new([99u8; 32]);
         let call = RuntimeCall::MultisigTransfer(multisig::pallet::Call::propose_transfer {
             actor_cid_number: Some(
                 CHINA_CB[0]
@@ -155,8 +155,8 @@ fn institution_transfer_route_uses_exact_fee_account() {
                     .try_into()
                     .expect("committee role fits"),
             ),
-            funding_account: institution,
-            beneficiary,
+            funding_account_id: institution,
+            beneficiary_account_id,
             amount: 10000,
             remark: BoundedVec::default(),
         });
@@ -168,7 +168,7 @@ fn institution_transfer_route_uses_exact_fee_account() {
             route,
             primitives::fee_policy::FeeRoute::Onchain {
                 transaction_amount: 0,
-                payer: fee_account,
+                payer_account_id: fee_account,
             }
         );
     });
@@ -191,7 +191,7 @@ fn institution_operation_debits_only_exact_fee_account_without_signer_fallback()
             .expect("NRC CID fits");
         let signer = AccountId::new(CHINA_CB[0].admins[0]);
         let fee_account = AccountId::new(CHINA_CB[0].fee_account);
-        let funding_account = AccountId::new(CHINA_CB[0].main_account);
+        let funding_account_id = AccountId::new(CHINA_CB[0].main_account);
         let call = RuntimeCall::MultisigTransfer(multisig::pallet::Call::propose_transfer {
             actor_cid_number: Some(actor_cid_number.clone()),
             proposer_role_code: Some(
@@ -200,8 +200,8 @@ fn institution_operation_debits_only_exact_fee_account_without_signer_fallback()
                     .try_into()
                     .expect("committee role fits"),
             ),
-            funding_account,
-            beneficiary: AccountId::new([98u8; 32]),
+            funding_account_id,
+            beneficiary_account_id: AccountId::new([98u8; 32]),
             amount: 50_000,
             remark: Default::default(),
         });
@@ -227,7 +227,7 @@ fn institution_operation_debits_only_exact_fee_account_without_signer_fallback()
             fee_before - primitives::fee_policy::ONCHAIN_MIN_FEE
         );
 
-        // 删除唯一费用账户映射后必须直接拒绝；即使管理员钱包有钱也不允许改扣管理员。
+        // 删除唯一费用账户映射后必须直接拒绝；即使管理员账户有钱也不允许改扣管理员。
         let fee_name: public_manage::AccountNameOf<Runtime> =
             primitives::account_derive::RESERVED_NAME_FEE
                 .to_vec()
@@ -307,16 +307,16 @@ fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
                 .iter()
                 .skip(1)
                 .map(|node| resolution_issuance::proposal::RecipientAmount {
-                    recipient: AccountId::new(node.main_account),
+                    recipient_account_id: AccountId::new(node.main_account),
                     amount: per_recipient_amount,
                 })
                 .collect();
-        let recipient = allocations
+        let recipient_account_id = allocations
             .first()
             .expect("CHINA_CB has province_name recipients")
-            .recipient
+            .recipient_account_id
             .clone();
-        let recipient_before = Balances::free_balance(&recipient);
+        let recipient_before = Balances::free_balance(&recipient_account_id);
         let total_amount = allocations
             .iter()
             .fold(0u128, |sum, item| sum.saturating_add(item.amount));
@@ -333,7 +333,7 @@ fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
                 .to_vec()
                 .try_into()
                 .expect("committee role fits"),
-            proposer: recipient.clone(),
+            proposer_account_id: recipient_account_id.clone(),
             reason: b"runtime-integration".to_vec(),
             total_amount,
             allocations,
@@ -368,7 +368,7 @@ fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
                         .try_into()
                         .expect("NRC CID fits"),
                 ),
-                execution_account: None,
+                execution_account_id: None,
                 subject_cid_numbers: Default::default(),
                 start: 0u32,
                 end: 100u32,
@@ -395,7 +395,7 @@ fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
             total_amount
         );
         assert_eq!(
-            Balances::free_balance(&recipient),
+            Balances::free_balance(&recipient_account_id),
             recipient_before.saturating_add(per_recipient_amount)
         );
     });
@@ -480,7 +480,7 @@ fn runtime_fee_router_covers_free_onchain_vote_institution_and_reject_paths() {
         use onchain::CallFeeRoute;
 
         let who = AccountId::new([1u8; 32]);
-        let recipient = AccountId::new([2u8; 32]);
+        let recipient_account_id = AccountId::new([2u8; 32]);
 
         let system_call = RuntimeCall::System(frame_system::Call::remark {
             remark: b"x".to_vec(),
@@ -492,7 +492,7 @@ fn runtime_fee_router_covers_free_onchain_vote_institution_and_reject_paths() {
         assert_eq!(free, primitives::fee_policy::FeeRoute::Free);
 
         let transfer_call = RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death {
-            dest: sp_runtime::MultiAddress::Id(recipient.clone()),
+            dest: sp_runtime::MultiAddress::Id(recipient_account_id.clone()),
             value: 123,
         });
         let amount = <RuntimeFeeRouter as CallFeeRoute<AccountId, RuntimeCall, Balance>>::fee_route(
@@ -508,7 +508,7 @@ fn runtime_fee_router_covers_free_onchain_vote_institution_and_reject_paths() {
             .expect("remark should fit");
         let transfer_with_remark_call =
             RuntimeCall::OnchainTransaction(onchain::pallet::Call::transfer_with_remark {
-                beneficiary: recipient,
+                beneficiary_account_id: recipient_account_id,
                 amount: 456,
                 remark,
             });
@@ -521,7 +521,7 @@ fn runtime_fee_router_covers_free_onchain_vote_institution_and_reject_paths() {
             amount_with_remark,
             primitives::fee_policy::FeeRoute::Onchain {
                 transaction_amount: 456,
-                payer: who.clone(),
+                payer_account_id: who.clone(),
             }
         );
 
@@ -537,13 +537,15 @@ fn runtime_fee_router_covers_free_onchain_vote_institution_and_reject_paths() {
             );
         assert_eq!(
             vote_kind,
-            primitives::fee_policy::FeeRoute::Vote { payer: who.clone() }
+            primitives::fee_policy::FeeRoute::Vote {
+                payer_account_id: who.clone()
+            }
         );
 
         let miner = AccountId::new([7u8; 32]);
         let fullnode_call =
-            RuntimeCall::FullnodeIssuance(fullnode_issuance::pallet::Call::bind_reward_wallet {
-                wallet: AccountId::new([8u8; 32]),
+            RuntimeCall::FullnodeIssuance(fullnode_issuance::pallet::Call::bind_reward_account {
+                reward_account_id: AccountId::new([8u8; 32]),
             });
         let fullnode_kind =
             <RuntimeFeeRouter as CallFeeRoute<AccountId, RuntimeCall, Balance>>::fee_route(
@@ -554,7 +556,7 @@ fn runtime_fee_router_covers_free_onchain_vote_institution_and_reject_paths() {
             fullnode_kind,
             primitives::fee_policy::FeeRoute::Onchain {
                 transaction_amount: 0,
-                payer: miner,
+                payer_account_id: miner,
             }
         );
 
@@ -572,7 +574,7 @@ fn runtime_fee_router_covers_free_onchain_vote_institution_and_reject_paths() {
                     .to_vec()
                     .try_into()
                     .expect("committee role fits"),
-                institution_account: nrc_institution_account,
+                institution_account_id: nrc_institution_account,
                 amount: 456,
             });
         let resolution_kind =
@@ -584,7 +586,7 @@ fn runtime_fee_router_covers_free_onchain_vote_institution_and_reject_paths() {
             resolution_kind,
             primitives::fee_policy::FeeRoute::Onchain {
                 transaction_amount: 0,
-                payer: AccountId::new(CHINA_CB[0].fee_account),
+                payer_account_id: AccountId::new(CHINA_CB[0].fee_account),
             }
         );
         let unauthorized =
@@ -607,7 +609,7 @@ fn runtime_fee_router_covers_free_onchain_vote_institution_and_reject_paths() {
                     .try_into()
                     .expect("committee role fits"),
                 asset_id: 1,
-                to: AccountId::new([6u8; 32]),
+                to_account_id: AccountId::new([6u8; 32]),
                 amount: 100,
             });
         let issuance_placeholder_kind = <RuntimeFeeRouter as CallFeeRoute<
@@ -634,7 +636,7 @@ fn runtime_fee_router_covers_free_onchain_vote_institution_and_reject_paths() {
                     .to_vec()
                     .try_into()
                     .expect("director role fits"),
-                institution_account: AccountId::new(clearing_bank.main_account),
+                institution_account_id: AccountId::new(clearing_bank.main_account),
                 batch_seq: 1,
                 batch: Default::default(),
                 batch_signature: Default::default(),
@@ -648,7 +650,7 @@ fn runtime_fee_router_covers_free_onchain_vote_institution_and_reject_paths() {
             offchain_kind,
             primitives::fee_policy::FeeRoute::Offchain {
                 fee_amount: 0,
-                payer: primitives::fee_policy::OffchainFeePayer::BatchItemPayers,
+                payer_account_id: primitives::fee_policy::OffchainFeePayer::BatchItemPayers,
             }
         );
 
@@ -676,11 +678,11 @@ fn runtime_fee_router_treats_proposals_as_operations_not_votes() {
         let who: AccountId = signer1.into_account();
         let admin2: AccountId = MultiSigner::from(p2.public()).into_account();
 
-        let beneficiary = AccountId::new([78u8; 32]);
+        let beneficiary_account_id = AccountId::new([78u8; 32]);
         let admins: personal_manage::pallet::AdminsOf<Runtime> = vec![who.clone(), admin2.clone()]
             .into_iter()
-            .map(|admin_account| admin_primitives::Admin {
-                admin_account,
+            .map(|account_id| admin_primitives::Admin {
+                account_id,
                 family_name: admin_primitives::FamilyName::truncate_from(
                     "管理".as_bytes().to_vec(),
                 ),
@@ -712,7 +714,7 @@ fn runtime_fee_router_treats_proposals_as_operations_not_votes() {
             create_kind,
             primitives::fee_policy::FeeRoute::Onchain {
                 transaction_amount: 0,
-                payer: who.clone(),
+                payer_account_id: who.clone(),
             }
         );
 
@@ -729,8 +731,8 @@ fn runtime_fee_router_treats_proposals_as_operations_not_votes() {
                     .to_vec()
                     .try_into()
                     .expect("committee role fits"),
-                institution_account: AccountId::new(CHINA_CB[0].main_account),
-                beneficiary,
+                institution_account_id: AccountId::new(CHINA_CB[0].main_account),
+                beneficiary_account_id,
             },
         );
         let close_kind =
@@ -742,7 +744,7 @@ fn runtime_fee_router_treats_proposals_as_operations_not_votes() {
             close_kind,
             primitives::fee_policy::FeeRoute::Onchain {
                 transaction_amount: 0,
-                payer: AccountId::new(CHINA_CB[0].fee_account),
+                payer_account_id: AccountId::new(CHINA_CB[0].fee_account),
             }
         );
 
@@ -764,8 +766,8 @@ fn runtime_fee_router_treats_proposals_as_operations_not_votes() {
                         .try_into()
                         .expect("committee role fits"),
                 ),
-                funding_account: institution,
-                beneficiary: AccountId::new([79u8; 32]),
+                funding_account_id: institution,
+                beneficiary_account_id: AccountId::new([79u8; 32]),
                 amount: 88_888,
                 remark: frame_support::BoundedVec::default(),
             });
@@ -778,7 +780,7 @@ fn runtime_fee_router_treats_proposals_as_operations_not_votes() {
             transfer_kind,
             primitives::fee_policy::FeeRoute::Onchain {
                 transaction_amount: 0,
-                payer: AccountId::new(CHINA_CB[0].fee_account),
+                payer_account_id: AccountId::new(CHINA_CB[0].fee_account),
             }
         );
     });
@@ -877,7 +879,7 @@ fn runtime_call_filter_blocks_disabled_and_low_level_calls() {
     .expect("remark should fit");
     let allowed_onchain_transfer =
         RuntimeCall::OnchainTransaction(onchain::pallet::Call::transfer_with_remark {
-            beneficiary: AccountId::new([7u8; 32]),
+            beneficiary_account_id: AccountId::new([7u8; 32]),
             amount: 1,
             remark,
         });
@@ -896,7 +898,7 @@ fn runtime_call_filter_blocks_disabled_and_low_level_calls() {
                 .try_into()
                 .expect("committee role fits"),
             asset_id: 1,
-            to: AccountId::new([6u8; 32]),
+            to_account_id: AccountId::new([6u8; 32]),
             amount: 100,
         });
     assert!(!RuntimeCallFilter::contains(&disabled_issuance));
@@ -914,7 +916,7 @@ fn runtime_call_filter_blocks_disabled_and_low_level_calls() {
                 .to_vec()
                 .try_into()
                 .expect("director role fits"),
-            institution_account: AccountId::new(clearing_bank.main_account),
+            institution_account_id: AccountId::new(clearing_bank.main_account),
             batch_seq: 1,
             batch: Default::default(),
             batch_signature: Default::default(),
@@ -962,7 +964,7 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
                 .to_vec()
                 .try_into()
                 .expect("committee role fits"),
-            proposer,
+            proposer_account_id: proposer,
             reason,
             code_hash,
             expected_pow_params_hash: Default::default(),
@@ -1014,7 +1016,7 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
                         .try_into()
                         .expect("NRC CID fits"),
                 ),
-                execution_account: None,
+                execution_account_id: None,
                 subject_cid_numbers: Default::default(),
                 start: 0u32,
                 end: 100u32,
@@ -1052,9 +1054,9 @@ fn runtime_citizen_identity_frg_province_admin_registers_voting_identity() {
     new_test_ext().execute_with(|| {
         let (_, registrar, actor_cid_number, actor_role_code) =
             setup_frg_citizen_identity_admin(b"HU");
-        let wallet_pair =
-            sr25519::Pair::from_string("//citizen-wallet-1", None).expect("wallet pair");
-        let wallet_account = AccountId::new(wallet_pair.public().0);
+        let signer_pair =
+            sr25519::Pair::from_string("//citizen-wallet-1", None).expect("signer pair");
+        let account_id = AccountId::new(signer_pair.public().0);
         let citizen_cid_number: citizen_identity::CidNumberBound =
             real_cid_number("RUNTIME-0001", "CTZN", "1")
                 .try_into()
@@ -1070,13 +1072,13 @@ fn runtime_citizen_identity_frg_province_admin_registers_voting_identity() {
             b"4301".to_vec().try_into().expect("city should fit"),
         ));
         let payload = build_voting_identity_payload(
-            wallet_account.clone(),
+            account_id.clone(),
             &real_cid_number("RUNTIME-0001", "CTZN", "1"),
             b"HU",
             b"4301",
             b"4301001",
         );
-        let signature = sign_citizen_identity_payload(&wallet_pair, &payload);
+        let signature = sign_citizen_identity_payload(&signer_pair, &payload);
 
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(registrar),
@@ -1090,10 +1092,10 @@ fn runtime_citizen_identity_frg_province_admin_registers_voting_identity() {
             citizen_identity::VotingIdentityByCid::<Runtime>::contains_key(&citizen_cid_number)
         );
         assert_eq!(
-            CitizenIdentity::citizen_subject(&wallet_account),
+            CitizenIdentity::citizen_subject(&account_id),
             Some(citizen_identity::CitizenSubject {
                 cid_number: citizen_cid_number,
-                wallet_account,
+                account_id,
             })
         );
         assert_eq!(citizen_identity::CountryVotingCount::<Runtime>::get(), 1);
@@ -1105,17 +1107,17 @@ fn runtime_citizen_identity_frg_admin_cannot_register_other_province() {
     new_test_ext().execute_with(|| {
         let (_, registrar, actor_cid_number, actor_role_code) =
             setup_frg_citizen_identity_admin(b"HU");
-        let wallet_pair =
-            sr25519::Pair::from_string("//citizen-wallet-2", None).expect("wallet pair");
-        let wallet_account = AccountId::new(wallet_pair.public().0);
+        let signer_pair =
+            sr25519::Pair::from_string("//citizen-wallet-2", None).expect("signer pair");
+        let account_id = AccountId::new(signer_pair.public().0);
         let payload = build_voting_identity_payload(
-            wallet_account,
+            account_id,
             &real_cid_number("RUNTIME-0002", "CTZN", "1"),
             b"GD",
             b"4401",
             b"4401001",
         );
-        let signature = sign_citizen_identity_payload(&wallet_pair, &payload);
+        let signature = sign_citizen_identity_payload(&signer_pair, &payload);
 
         assert_noop!(
             CitizenIdentity::register_voting_identity(
@@ -1135,9 +1137,9 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
     new_test_ext().execute_with(|| {
         let (_, registrar, actor_cid_number, actor_role_code) =
             setup_frg_citizen_identity_admin(b"HU");
-        let wallet_pair =
-            sr25519::Pair::from_string("//citizen-wallet-3", None).expect("wallet pair");
-        let wallet_account = AccountId::new(wallet_pair.public().0);
+        let signer_pair =
+            sr25519::Pair::from_string("//citizen-wallet-3", None).expect("signer pair");
+        let account_id = AccountId::new(signer_pair.public().0);
         // 占号先行:身份写入前置。
         assert_ok!(CitizenIdentity::occupy_cid(
             RuntimeOrigin::signed(registrar.clone()),
@@ -1151,7 +1153,7 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
             b"4301".to_vec().try_into().expect("city should fit"),
         ));
         let voting = build_voting_identity_payload(
-            wallet_account.clone(),
+            account_id.clone(),
             &real_cid_number("RUNTIME-0003", "CTZN", "1"),
             b"HU",
             b"4301",
@@ -1167,7 +1169,7 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
             citizen_sex: citizen_identity::CitizenSex::Male,
             birth_date: 20000101,
         };
-        let signature = sign_citizen_identity_payload(&wallet_pair, &candidate);
+        let signature = sign_citizen_identity_payload(&signer_pair, &candidate);
 
         assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(registrar),
@@ -1182,11 +1184,9 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
             test_area_code(b"4301"),
             test_area_code(b"4301001"),
         );
+        assert!(RuntimeCitizenIdentityReader::voting_subject(&account_id, &town_scope).is_some());
         assert!(
-            RuntimeCitizenIdentityReader::voting_subject(&wallet_account, &town_scope).is_some()
-        );
-        assert!(
-            RuntimeCitizenIdentityReader::candidate_subject(&wallet_account, &town_scope).is_some()
+            RuntimeCitizenIdentityReader::candidate_subject(&account_id, &town_scope).is_some()
         );
         assert_eq!(
             RuntimeCitizenIdentityReader::population_data(&town_scope)
@@ -1198,7 +1198,7 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
 }
 
 #[test]
-fn runtime_square_post_normal_publish_allows_visitor_wallet() {
+fn runtime_square_post_normal_publish_allows_visitor_account_id() {
     new_test_ext().execute_with(|| {
         let visitor = AccountId::new([42u8; 32]);
         assert_ok!(SquarePost::publish_post(
@@ -1216,7 +1216,7 @@ fn runtime_square_post_normal_publish_allows_visitor_wallet() {
             .expect("post id fits");
         let stored = square_post::SquarePosts::<Runtime>::get(stored_post_id)
             .expect("square post should be indexed");
-        assert_eq!(stored.owner_account, visitor);
+        assert_eq!(stored.owner_account_id, visitor);
         assert_eq!(stored.cid_number, None);
         assert_eq!(
             stored.post_category,
@@ -1244,13 +1244,13 @@ fn runtime_square_post_campaign_requires_citizen_identity() {
 }
 
 #[test]
-fn runtime_square_post_campaign_records_chain_cid_for_verified_wallet() {
+fn runtime_square_post_campaign_records_chain_cid_for_verified_account_id() {
     new_test_ext().execute_with(|| {
         let (_, registrar, actor_cid_number, actor_role_code) =
             setup_frg_citizen_identity_admin(b"HU");
-        let wallet_pair =
-            sr25519::Pair::from_string("//square-citizen-wallet", None).expect("wallet pair");
-        let wallet_account = AccountId::new(wallet_pair.public().0);
+        let signer_pair =
+            sr25519::Pair::from_string("//square-citizen-wallet", None).expect("signer pair");
+        let account_id = AccountId::new(signer_pair.public().0);
         let cid_number = real_cid_number("SQUARE-0001", "CTZN", "1");
 
         assert_ok!(CitizenIdentity::occupy_cid(
@@ -1266,13 +1266,13 @@ fn runtime_square_post_campaign_records_chain_cid_for_verified_wallet() {
             b"4301".to_vec().try_into().expect("city should fit"),
         ));
         let payload = build_voting_identity_payload(
-            wallet_account.clone(),
+            account_id.clone(),
             &cid_number,
             b"HU",
             b"4301",
             b"4301001",
         );
-        let signature = sign_citizen_identity_payload(&wallet_pair, &payload);
+        let signature = sign_citizen_identity_payload(&signer_pair, &payload);
 
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(registrar),
@@ -1282,7 +1282,7 @@ fn runtime_square_post_campaign_records_chain_cid_for_verified_wallet() {
             signature,
         ));
         assert_ok!(SquarePost::publish_post(
-            RuntimeOrigin::signed(wallet_account.clone()),
+            RuntimeOrigin::signed(account_id.clone()),
             b"sqp_runtime_campaign_ok".to_vec(),
             square_post::SquarePostCategory::Campaign,
             [5u8; 32],
@@ -1296,13 +1296,13 @@ fn runtime_square_post_campaign_records_chain_cid_for_verified_wallet() {
             .expect("post id fits");
         let stored = square_post::SquarePosts::<Runtime>::get(stored_post_id)
             .expect("square post should be indexed");
-        assert_eq!(stored.owner_account, wallet_account);
+        assert_eq!(stored.owner_account_id, account_id);
         assert_eq!(
             stored.cid_number.map(|value| value.to_vec()),
             Some(cid_number)
         );
         assert_eq!(
-            square_post::PublishedPostCountByAccount::<Runtime>::get(wallet_account),
+            square_post::PublishedPostCountByAccount::<Runtime>::get(account_id),
             1
         );
     });
@@ -1329,7 +1329,7 @@ fn runtime_square_post_fee_kind_uses_onchain_minimum_fee() {
             fee_kind,
             primitives::fee_policy::FeeRoute::Onchain {
                 transaction_amount: 0,
-                payer: who,
+                payer_account_id: who,
             }
         );
         assert_eq!(
@@ -1610,7 +1610,9 @@ fn clearing_account_is_reserved_against_squatting() {
         // 清算账户地址被保留,任何自定义账户注册不得占用。
         assert!(RuntimeReservedAccountGuard::is_reserved(&clearing_account()));
         // 未登记的普通地址不被保留。
-        assert!(!RuntimeReservedAccountGuard::is_reserved(&ordinary_account()));
+        assert!(!RuntimeReservedAccountGuard::is_reserved(
+            &ordinary_account()
+        ));
     });
 }
 
@@ -1753,9 +1755,9 @@ fn genesis_citizenchain_foundation_is_complete_and_protected() {
             "GZ000-CTZN6-198805200-2026".as_bytes()
         );
         assert_eq!(
-            legal_representative.account,
+            legal_representative.account_id,
             AccountId::new(
-                primitives::cid::china::citizenchain::CITIZENCHAIN_GENESIS_ADMINS[0].admin_account,
+                primitives::cid::china::citizenchain::CITIZENCHAIN_GENESIS_ADMINS[0].account_id,
             )
         );
 
@@ -1792,10 +1794,10 @@ fn genesis_citizenchain_foundation_is_complete_and_protected() {
                 private_manage::InstitutionRoleAssignments::<Runtime>::get(&cid, &role_code);
             assert_eq!(assignments.len(), 1);
             assert_eq!(
-                assignments[0].admin_account,
+                assignments[0].account_id,
                 AccountId::new(
                     primitives::cid::china::citizenchain::CITIZENCHAIN_GENESIS_ASSIGNMENTS[index]
-                        .admin_account,
+                        .account_id,
                 )
             );
             let permissions =
@@ -1857,7 +1859,7 @@ fn genesis_national_singletons_exist_and_member_bodies_are_unconstituted() {
                     .expect("main name fits");
             assert_eq!(
                 public_manage::InstitutionAccounts::<Runtime>::get(&cid, main_name)
-                    .map(|info| info.address),
+                    .map(|info| info.account_id),
                 Some(AccountId::new(singleton.main_account))
             );
             assert!(public_admins::AdminAccounts::<Runtime>::get(&cid).is_none());
@@ -1919,8 +1921,8 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
                 assignments: accounts
                     .into_iter()
                     .map(
-                        |admin_account| entity_primitives::InstitutionAssignmentTarget {
-                            admin_account,
+                        |account_id| entity_primitives::InstitutionAssignmentTarget {
+                            account_id,
                             term_start: 0,
                             term_end: 0,
                             assignment_source:
@@ -1944,8 +1946,8 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
                 admins: established_admins
                     .iter()
                     .cloned()
-                    .map(|admin_account| admin_primitives::PublicAdmin {
-                        admin_account,
+                    .map(|account_id| admin_primitives::PublicAdmin {
+                        account_id,
                         cid_number: Default::default(),
                         family_name: Default::default(),
                         given_name: Default::default(),
@@ -2064,7 +2066,7 @@ fn institution_governance_can_clear_legal_representative_atomically() {
         let representative_account = public_admins::AdminAccounts::<Runtime>::get(&cid)
             .expect("NRC genesis admins exist")
             .admins[0]
-            .admin_account
+            .account_id
             .clone();
         let result = |legal_representative_change, assignments| {
             entity_primitives::InstitutionGovernanceResult {
@@ -2082,7 +2084,7 @@ fn institution_governance_can_clear_legal_representative_atomically() {
             }
         };
         let representative_assignment = entity_primitives::InstitutionAssignmentTarget {
-            admin_account: representative_account.clone(),
+            account_id: representative_account.clone(),
             term_start: 0,
             term_end: 0,
             assignment_source:
@@ -2098,7 +2100,7 @@ fn institution_governance_can_clear_legal_representative_atomically() {
                         family_name: "法定".as_bytes().to_vec(),
                         given_name: "代表人".as_bytes().to_vec(),
                         cid_number: b"CITIZEN-LR-001".to_vec(),
-                        account: representative_account.clone(),
+                        account_id: representative_account.clone(),
                     },
                 ),
                 vec![representative_assignment],
@@ -2110,7 +2112,7 @@ fn institution_governance_can_clear_legal_representative_atomically() {
             .legal_representative
             .expect("legal representative should be stored");
         assert_eq!(
-            stored_representative.account,
+            stored_representative.account_id,
             representative_account.clone()
         );
 
@@ -2127,10 +2129,10 @@ fn institution_governance_can_clear_legal_representative_atomically() {
         let second_account = public_admins::AdminAccounts::<Runtime>::get(&cid)
             .expect("NRC genesis admins remain")
             .admins[1]
-            .admin_account
+            .account_id
             .clone();
         let second_assignment = entity_primitives::InstitutionAssignmentTarget {
-            admin_account: second_account,
+            account_id: second_account,
             term_start: 0,
             term_end: 0,
             assignment_source:
@@ -2145,15 +2147,15 @@ fn institution_governance_can_clear_legal_representative_atomically() {
                         family_name: "重复法定".as_bytes().to_vec(),
                         given_name: "代表人".as_bytes().to_vec(),
                         cid_number: b"CITIZEN-LR-002".to_vec(),
-                        account: representative_account,
+                        account_id: representative_account,
                     },
                 ),
                 vec![
                     entity_primitives::InstitutionAssignmentTarget {
-                        admin_account: public_admins::AdminAccounts::<Runtime>::get(&cid)
+                        account_id: public_admins::AdminAccounts::<Runtime>::get(&cid)
                             .expect("NRC genesis admins remain")
                             .admins[0]
-                            .admin_account
+                            .account_id
                             .clone(),
                         term_start: 0,
                         term_end: 0,
@@ -2199,8 +2201,8 @@ fn national_singletons_without_member_ranges_can_be_composed_once() {
                     admins: admins
                         .iter()
                         .cloned()
-                        .map(|admin_account| admin_primitives::PublicAdmin {
-                            admin_account,
+                        .map(|account_id| admin_primitives::PublicAdmin {
+                            account_id,
                             cid_number: Default::default(),
                             family_name: Default::default(),
                             given_name: Default::default(),
@@ -2227,8 +2229,8 @@ fn national_singletons_without_member_ranges_can_be_composed_once() {
                     assignments: admins
                         .iter()
                         .cloned()
-                        .map(|admin_account| entity_primitives::InstitutionAssignmentTarget {
-                            admin_account,
+                        .map(|account_id| entity_primitives::InstitutionAssignmentTarget {
+                            account_id,
                             term_start: 0,
                             term_end: 0,
                             assignment_source:
@@ -2253,7 +2255,7 @@ fn national_singletons_without_member_ranges_can_be_composed_once() {
                 account
                     .admins
                     .iter()
-                    .map(|admin| admin.admin_account.clone())
+                    .map(|admin| admin.account_id.clone())
                     .collect::<Vec<_>>(),
                 admins
             );
@@ -2274,7 +2276,7 @@ fn genesis_fixed_institution_roles_and_assignments_are_complete() {
         };
 
         // 法定代表人不是创世必填项。固定机构创世时该字段必须保持为空，
-        // 不得从管理员首位、机构主账户或其它钱包推导占位值。
+        // 不得从管理员首位、机构主账户或其它账户推导占位值。
         for institution in primitives::governance_skeleton::fixed_institutions() {
             let info = public_manage::Institutions::<Runtime>::get(cid(institution.cid_number))
                 .expect("fixed genesis institution exists");
@@ -2300,7 +2302,7 @@ fn genesis_fixed_institution_roles_and_assignments_are_complete() {
             assert_eq!(
                 assignments
                     .iter()
-                    .map(|assignment| assignment.admin_account.clone())
+                    .map(|assignment| assignment.account_id.clone())
                     .collect::<Vec<_>>(),
                 node.admins
                     .iter()
@@ -2320,19 +2322,19 @@ fn genesis_fixed_institution_roles_and_assignments_are_complete() {
                     && assignment.role_code == code
             }));
 
-            let admin_account = public_admins::AdminAccounts::<Runtime>::get(&cid_number)
+            let account_id = public_admins::AdminAccounts::<Runtime>::get(&cid_number)
                 .expect("committee admin account exists");
             assert_eq!(
-                admin_account.institution_code,
+                account_id.institution_code,
                 primitives::cid::code::institution_code_from_cid_number(node.cid_number)
                     .expect("committee code")
             );
             assert_eq!(
-                admin_account
+                account_id
                     .admins
                     .into_inner()
                     .into_iter()
-                    .map(|admin| admin.admin_account)
+                    .map(|admin| admin.account_id)
                     .collect::<Vec<_>>(),
                 node.admins
                     .iter()
@@ -2360,7 +2362,7 @@ fn genesis_fixed_institution_roles_and_assignments_are_complete() {
             assert_eq!(
                 assignments
                     .iter()
-                    .map(|assignment| assignment.admin_account.clone())
+                    .map(|assignment| assignment.account_id.clone())
                     .collect::<Vec<_>>(),
                 node.admins
                     .iter()
@@ -2379,14 +2381,14 @@ fn genesis_fixed_institution_roles_and_assignments_are_complete() {
                     && assignment.cid_number == cid_number
                     && assignment.role_code == code
             }));
-            let admin_account = public_admins::AdminAccounts::<Runtime>::get(&cid_number)
+            let account_id = public_admins::AdminAccounts::<Runtime>::get(&cid_number)
                 .expect("director admin account exists");
             assert_eq!(
-                admin_account
+                account_id
                     .admins
                     .into_inner()
                     .into_iter()
-                    .map(|admin| admin.admin_account)
+                    .map(|admin| admin.account_id)
                     .collect::<Vec<_>>(),
                 node.admins
                     .iter()
@@ -2456,7 +2458,7 @@ fn genesis_fixed_institution_roles_and_assignments_are_complete() {
         .flat_map(|raw_code| {
             public_manage::InstitutionRoleAssignments::<Runtime>::get(&njd_cid, role_code(raw_code))
                 .into_iter()
-                .map(|assignment| assignment.admin_account)
+                .map(|assignment| assignment.account_id)
         })
         .collect::<Vec<_>>();
         assert_eq!(
@@ -2517,7 +2519,7 @@ fn genesis_fixed_institution_roles_and_assignments_are_complete() {
             assert_eq!(
                 assignments
                     .iter()
-                    .map(|assignment| assignment.admin_account.clone())
+                    .map(|assignment| assignment.account_id.clone())
                     .collect::<Vec<_>>(),
                 expected
             );
@@ -2652,13 +2654,13 @@ fn runtime_governance_result_router_enforces_fixed_role_seats() {
             .expect("NJD genesis admins exist")
             .admins
             .into_iter()
-            .map(|admin| admin.admin_account)
+            .map(|admin| admin.account_id)
             .collect::<Vec<_>>();
         let result = |accounts: Vec<AccountId>| {
             let assignments = accounts
                 .into_iter()
-                .map(|admin_account| entity_primitives::InstitutionAssignmentTarget {
-                    admin_account,
+                .map(|account_id| entity_primitives::InstitutionAssignmentTarget {
+                    account_id,
                     term_start: 0,
                     term_end: 0,
                     assignment_source:
@@ -2727,7 +2729,7 @@ fn runtime_governance_result_router_enforces_fixed_role_seats() {
         assert_eq!(
             stored
                 .into_iter()
-                .map(|assignment| assignment.admin_account)
+                .map(|assignment| assignment.account_id)
                 .collect::<Vec<_>>(),
             replacement
         );

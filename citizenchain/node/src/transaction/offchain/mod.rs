@@ -69,7 +69,7 @@ pub struct OffchainComponents {
 /// [`base_path`]  节点数据根目录(下挂 `offchain_step1/ledger.enc`)。
 /// [`actor_cid_number`] 本清算行机构唯一主键。
 /// [`actor_role_code`] 提交批次的机构岗位码。
-/// [`institution_account`] 本清算行**主账户**(身份锚),用于 packer 批次 signing
+/// [`institution_account_id`] 本清算行**主账户 ID**（身份锚），用于 packer 批次 signing
 ///                message 拼接与发 extrinsic;`EventListener` 事件过滤按 CID(actor_cid_number)。
 /// [`password`]   节点启动时用于 AES-256-GCM 风格加密 ledger 的对称密钥字符串
 ///                (目前实现为 blake2b_256(password) XOR 流 + HMAC,见 `ledger.rs`)。
@@ -84,7 +84,7 @@ pub fn start_clearing_bank_components(
     base_path: &Path,
     actor_cid_number: Vec<u8>,
     actor_role_code: Vec<u8>,
-    institution_account: AccountId32,
+    institution_account_id: AccountId32,
     password: &str,
     signer: Arc<dyn BatchSigner>,
     submitter: Arc<dyn BatchSubmitter>,
@@ -101,7 +101,7 @@ pub fn start_clearing_bank_components(
         ledger.clone(),
         actor_cid_number.clone(),
         actor_role_code,
-        institution_account.clone(),
+        institution_account_id.clone(),
         signer.clone(),
         submitter,
         initial_batch_seq,
@@ -109,7 +109,7 @@ pub fn start_clearing_bank_components(
     let event_listener = Arc::new(EventListener::new(ledger.clone(), actor_cid_number.clone()));
     let reserve_monitor = Arc::new(ReserveMonitor::new(
         ledger.clone(),
-        institution_account.clone(),
+        institution_account_id.clone(),
     ));
     // RPC 层需要 client 读取 UserBank / L2FeeRateBp,也复用 signer 生成真实 L2 ACK。
     let rpc_impl = Arc::new(OffchainClearingRpcImpl::new(
@@ -161,10 +161,6 @@ fn read_last_clearing_batch_seq(
 mod tests {
     use super::*;
 
-    fn acc(b: u8) -> AccountId32 {
-        AccountId32::new([b; 32])
-    }
-
     #[test]
     fn last_clearing_batch_seq_key_layout_stable() {
         let bank: Vec<u8> = b"ZS001-PRB08-233384677-2026".to_vec();
@@ -190,7 +186,7 @@ pub fn start_clearing_bank_components_with_noop(
     base_path: &Path,
     actor_cid_number: Vec<u8>,
     actor_role_code: Vec<u8>,
-    institution_account: AccountId32,
+    institution_account_id: AccountId32,
     password: &str,
     client: Arc<crate::core::service::FullClient>,
 ) -> Result<OffchainComponents, String> {
@@ -198,7 +194,7 @@ pub fn start_clearing_bank_components_with_noop(
         base_path,
         actor_cid_number,
         actor_role_code,
-        institution_account,
+        institution_account_id,
         password,
         Arc::new(NoopBatchSigner),
         Arc::new(NoopBatchSubmitter),

@@ -3,6 +3,7 @@
 ## 当前执行
 
 - `memory/08-tasks/20260721-citizen-election-subject-snapshot-unify.md`
+- `memory/08-tasks/20260722-account-id-official-unify.md`
 
 ## open
 

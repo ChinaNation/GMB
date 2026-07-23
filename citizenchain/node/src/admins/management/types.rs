@@ -11,7 +11,7 @@ pub struct InstitutionRolePermissionInfo {
     pub operation_label: String,
 }
 
-/// 管理员钱包在机构岗位上的一条有效任职。
+/// 管理员账户在机构岗位上的一条有效任职。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstitutionRoleAssignmentInfo {
@@ -31,8 +31,9 @@ pub struct InstitutionRoleAssignmentInfo {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstitutionAdminInfo {
-    /// 管理员钱包账户，hex 不含 0x。
-    pub admin_account: String,
+    /// 管理员账户 ID，固定为小写 `0x` + 64 位十六进制。
+    #[serde(rename = "account_id")]
+    pub account_id: String,
     /// 公权管理员公民 CID；私权管理员及尚未补齐的公权记录为空。
     pub cid_number: String,
     /// 管理员姓；公权记录允许暂时为空。
@@ -45,7 +46,7 @@ pub struct InstitutionAdminInfo {
 /// 公权或私权机构 `AdminAccounts[cid_number]` 的桌面端联合展示状态。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AdminAccountState {
+pub struct InstitutionAdminsState {
     /// 机构唯一主键。
     pub cid_number: String,
     /// 链上机构码（CID institution_code，[u8;4]，治理分类唯一真源）。
@@ -54,13 +55,13 @@ pub struct AdminAccountState {
     /// Node 按实际命中的公权/私权管理员 pallet 派生的类型编码。
     pub kind: u8,
     pub kind_label: String,
-    /// 当前管理员钱包及其有效岗位任职；钱包在本集合内唯一。
+    /// 当前管理员账户及其有效岗位任职；账户在本集合内唯一。
     pub admins: Vec<InstitutionAdminInfo>,
 }
 
-/// 解码后的链上管理员账户原始值。
+/// 解码后的链上机构管理员集合原始值。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AdminAccountDecoded {
+pub struct InstitutionAdminsDecoded {
     pub institution_code: InstitutionCode,
     pub admins: Vec<AdminDecoded>,
 }
@@ -68,7 +69,7 @@ pub struct AdminAccountDecoded {
 /// 从共享 SCALE 类型严格解码出的管理员统一展示记录。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AdminDecoded {
-    pub admin_account: String,
+    pub account_id: String,
     pub cid_number: String,
     pub family_name: String,
     pub given_name: String,

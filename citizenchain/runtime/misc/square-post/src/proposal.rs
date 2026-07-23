@@ -179,7 +179,7 @@ where
                     == primitives::cid::china::citizenchain::CITIZENCHAIN_FOUNDATION
                         .cid_number
                         .as_bytes()
-                && proposal.execution_account.is_none(),
+                && proposal.execution_account_id.is_none(),
             Error::<T>::ProposalNotPassed
         );
         ensure!(action.new_price_fen > 0, Error::<T>::InvalidPlatformPrice);

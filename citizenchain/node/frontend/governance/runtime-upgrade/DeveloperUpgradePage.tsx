@@ -2,25 +2,25 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { sanitizeError } from '../../tauri';
-import { hexToSs58 } from '../../shared/ss58';
+import { accountIdToSs58 } from '../../shared/ss58';
 import { CitizenSignaturePanel } from '../../shared/qr/CitizenSignaturePanel';
 import { runtimeUpgradeApi as api } from './api';
 import type { PowDifficultyParams } from './api';
-import type { AdminWalletMatch, VoteSignRequestResult } from '../types';
+import type { AdminSignerMatch, VoteSignRequestResult } from '../types';
 
 type FlowStep = 'form' | 'qr' | 'submit' | 'done' | 'error';
 
 type Props = {
-  adminWallets: AdminWalletMatch[];
+  adminSigners: AdminSignerMatch[];
   onBack: () => void;
   onSuccess: () => void;
 };
 
-export function DeveloperUpgradePage({ adminWallets, onBack, onSuccess }: Props) {
+export function DeveloperUpgradePage({ adminSigners, onBack, onSuccess }: Props) {
   const [wasmPath, setWasmPath] = useState('');
   const [wasmFileName, setWasmFileName] = useState('');
-  const [selectedPubkey, setSelectedPubkey] = useState(
-    adminWallets.length === 1 ? adminWallets[0].pubkeyHex : ''
+  const [selectedSignerAccountId, setSelectedSignerAccountId] = useState(
+    adminSigners.length === 1 ? adminSigners[0].account_id : ''
   );
   const [step, setStep] = useState<FlowStep>('form');
   const [signRequest, setSignRequest] = useState<VoteSignRequestResult | null>(null);
@@ -32,11 +32,11 @@ export function DeveloperUpgradePage({ adminWallets, onBack, onSuccess }: Props)
   const [powParams, setPowParams] = useState<PowDifficultyParams | null>(null);
 
   const signRequestRef = useRef(signRequest);
-  const selectedPubkeyRef = useRef(selectedPubkey);
+  const selectedSignerAccountIdRef = useRef(selectedSignerAccountId);
   const wasmPathRef = useRef(wasmPath);
   const powParamsRef = useRef(powParams);
   signRequestRef.current = signRequest;
-  selectedPubkeyRef.current = selectedPubkey;
+  selectedSignerAccountIdRef.current = selectedSignerAccountId;
   wasmPathRef.current = wasmPath;
   powParamsRef.current = powParams;
 
@@ -72,12 +72,12 @@ export function DeveloperUpgradePage({ adminWallets, onBack, onSuccess }: Props)
   }, []);
 
   const handleBuildRequest = useCallback(async () => {
-    if (!wasmPath.trim() || !selectedPubkey || !powParams) return;
+    if (!wasmPath.trim() || !selectedSignerAccountId || !powParams) return;
     setBuilding(true);
     setError(null);
     try {
       const result = await api.buildDeveloperUpgradeRequest(
-        selectedPubkey,
+        selectedSignerAccountId,
         wasmPath.trim(),
         powParams,
       );
@@ -91,18 +91,18 @@ export function DeveloperUpgradePage({ adminWallets, onBack, onSuccess }: Props)
     } finally {
       setBuilding(false);
     }
-  }, [wasmPath, selectedPubkey, powParams]);
+  }, [wasmPath, selectedSignerAccountId, powParams]);
 
   const handleScanResult = useCallback(async (responseText: string) => {
     const req = signRequestRef.current;
-    const pubkey = selectedPubkeyRef.current;
+    const signerAccountId = selectedSignerAccountIdRef.current;
     const path = wasmPathRef.current;
     const params = powParamsRef.current;
-    if (!req || !pubkey || !params) { setError('签名请求数据丢失，请重试'); setStep('error'); return; }
+    if (!req || !signerAccountId || !params) { setError('签名请求数据丢失，请重试'); setStep('error'); return; }
     setStep('submit');
     try {
       const result = await api.submitDeveloperUpgrade(
-        req.requestId, pubkey, req.expectedPayloadHash,
+        req.requestId, signerAccountId, req.expectedPayloadHash,
         path, params, req.signNonce, req.signBlockNumber, responseText,
       );
       setTxHash(result.txHash);
@@ -166,21 +166,21 @@ export function DeveloperUpgradePage({ adminWallets, onBack, onSuccess }: Props)
 
           <div className="wallet-form-field">
             <label>发起管理员</label>
-            {adminWallets.length === 0 ? (
+            {adminSigners.length === 0 ? (
               <p className="upgrade-no-wallet">无已激活国家储委会管理员</p>
             ) : (
               <select
-                value={selectedPubkey}
-                onChange={(e) => setSelectedPubkey(e.target.value)}
-                disabled={adminWallets.length <= 1}
+                value={selectedSignerAccountId}
+                onChange={(e) => setSelectedSignerAccountId(e.target.value)}
+                disabled={adminSigners.length <= 1}
               >
-                {adminWallets.length === 1 ? (
-                  <option value={adminWallets[0].pubkeyHex}>{hexToSs58(adminWallets[0].pubkeyHex)}</option>
+                {adminSigners.length === 1 ? (
+                  <option value={adminSigners[0].account_id}>{accountIdToSs58(adminSigners[0].account_id)}</option>
                 ) : (
                   <>
                     <option value="">请选择…</option>
-                    {adminWallets.map((w) => (
-                      <option key={w.pubkeyHex} value={w.pubkeyHex}>{hexToSs58(w.pubkeyHex)}</option>
+                    {adminSigners.map((w) => (
+                      <option key={w.account_id} value={w.account_id}>{accountIdToSs58(w.account_id)}</option>
                     ))}
                   </>
                 )}
@@ -190,7 +190,7 @@ export function DeveloperUpgradePage({ adminWallets, onBack, onSuccess }: Props)
 
           <button
             className="vote-signing-confirm"
-            disabled={!wasmPath.trim() || !selectedPubkey || !powParams || building}
+            disabled={!wasmPath.trim() || !selectedSignerAccountId || !powParams || building}
             onClick={handleBuildRequest}
           >
             {building ? '构建中…' : '生成签名请求'}

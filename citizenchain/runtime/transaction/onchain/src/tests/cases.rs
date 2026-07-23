@@ -6,7 +6,7 @@ use super::*;
 fn transfer_with_remark_moves_balance_and_emits_bound_remark() {
     new_test_ext().execute_with(|| {
         let from = account(1);
-        let beneficiary = account(2);
+        let beneficiary_account_id = account(2);
         let remark = crate::pallet::TransferRemarkOf::<Test>::try_from(
             "美西已深夜，美东在庆国庆，中华联邦创世！"
                 .as_bytes()
@@ -16,22 +16,22 @@ fn transfer_with_remark_moves_balance_and_emits_bound_remark() {
 
         assert_ok!(OnchainTransaction::transfer_with_remark(
             RuntimeOrigin::signed(from.clone()),
-            beneficiary.clone(),
+            beneficiary_account_id.clone(),
             123,
             remark.clone(),
         ));
 
         assert_eq!(Balances::free_balance(&from), 877);
-        assert_eq!(Balances::free_balance(&beneficiary), 1_123);
+        assert_eq!(Balances::free_balance(&beneficiary_account_id), 1_123);
         assert!(System::events().iter().any(|record| matches!(
             &record.event,
             RuntimeEvent::OnchainTransaction(pallet::Event::TransferWithRemark {
-                from: event_from,
-                beneficiary: event_beneficiary,
+                from_account_id: event_from,
+                beneficiary_account_id: event_beneficiary,
                 amount,
                 remark: event_remark,
             }) if event_from == &from
-                && event_beneficiary == &beneficiary
+                && event_beneficiary == &beneficiary_account_id
                 && *amount == 123
                 && event_remark == &remark
         )));
@@ -76,10 +76,11 @@ fn charge_details_handles_all_fee_routes() {
         let call = sample_call();
         let info = call.get_dispatch_info();
 
-        let (payer, fee) = charge_details::<Test, Balances, FeeRouteOnchain>(&who, &call, &info, 0)
-            .expect("onchain route")
-            .expect("onchain route must charge");
-        assert_eq!(payer, who);
+        let (payer_account_id, fee) =
+            charge_details::<Test, Balances, FeeRouteOnchain>(&who, &call, &info, 0)
+                .expect("onchain route")
+                .expect("onchain route must charge");
+        assert_eq!(payer_account_id, who);
         assert_eq!(fee, 50);
 
         let (_, vote_fee) =
@@ -139,7 +140,7 @@ fn withdraw_uses_explicit_route_payer() {
 
     new_test_ext().execute_with(|| {
         let who = account(1);
-        let payer = account(2);
+        let payer_account_id = account(2);
         let call = sample_call();
         let info = call.get_dispatch_info();
 
@@ -148,7 +149,7 @@ fn withdraw_uses_explicit_route_payer() {
             .expect("non-zero fee must return liquidity info");
 
         assert_eq!(Balances::free_balance(who), 1_000);
-        assert_eq!(Balances::free_balance(payer), 990);
+        assert_eq!(Balances::free_balance(payer_account_id), 990);
     });
 }
 
@@ -158,19 +159,25 @@ fn execution_charger_uses_same_formula_exact_payer_and_ed_rule() {
     type Charger = OnchainExecutionFeeCharger<Test, Balances, ()>;
 
     new_test_ext().execute_with(|| {
-        let payer = account(1);
+        let payer_account_id = account(1);
         let unrelated_signer = account(2);
-        let payer_before = Balances::free_balance(&payer);
+        let payer_before = Balances::free_balance(&payer_account_id);
         let signer_before = Balances::free_balance(&unrelated_signer);
 
-        let fee = Charger::charge(&payer, 50_000).expect("explicit payer can pay execution fee");
+        let fee = Charger::charge(&payer_account_id, 50_000)
+            .expect("explicit payer_account_id can pay execution fee");
         assert_eq!(fee, 50);
-        assert_eq!(Balances::free_balance(&payer), payer_before - fee);
+        assert_eq!(
+            Balances::free_balance(&payer_account_id),
+            payer_before - fee
+        );
         assert_eq!(Balances::free_balance(&unrelated_signer), signer_before);
         assert!(System::events().iter().any(|record| matches!(
             &record.event,
-            RuntimeEvent::OnchainTransaction(pallet::Event::FeePaid { who, fee: 50 })
-                if who == &payer
+            RuntimeEvent::OnchainTransaction(pallet::Event::FeePaid {
+                account_id,
+                fee: 50
+            }) if account_id == &payer_account_id
         )));
 
         let poor = account(3);
@@ -225,11 +232,11 @@ fn can_withdraw_and_withdraw_fail_when_insufficient_balance() {
 }
 
 #[test]
-fn fee_router_distributes_to_bound_author_wallet_and_nrc_and_safety_fund() {
+fn fee_router_distributes_to_bound_author_reward_account_and_nrc_and_safety_fund() {
     new_test_ext().execute_with(|| {
-        let payer = account(1);
+        let payer_account_id = account(1);
         let miner = account(9);
-        let reward_wallet = account(8);
+        let reward_account_id = account(8);
         let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
         let safety_fund = AccountId32::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT);
         let issuance_before = Balances::total_issuance();
@@ -249,17 +256,17 @@ fn fee_router_distributes_to_bound_author_wallet_and_nrc_and_safety_fund() {
         };
         let expected_safety_fund = remainder.saturating_sub(expected_nrc);
 
-        fullnode_issuance::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
+        fullnode_issuance::RewardAccountIdByMiner::<Test>::insert(&miner, &reward_account_id);
         MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
 
         let credit = <Balances as Balanced<AccountId32>>::withdraw(
-            &payer,
+            &payer_account_id,
             100,
             Precision::Exact,
             Preservation::Preserve,
             Fortitude::Polite,
         )
-        .expect("payer should have enough balance");
+        .expect("payer_account_id should have enough balance");
 
         OnchainFeeRouter::<
             Test,
@@ -269,8 +276,11 @@ fn fee_router_distributes_to_bound_author_wallet_and_nrc_and_safety_fund() {
             MockSafetyFundAccountProvider,
         >::on_nonzero_unbalanced(credit);
 
-        assert_eq!(Balances::free_balance(payer), 900);
-        assert_eq!(Balances::free_balance(&reward_wallet), expected_fullnode);
+        assert_eq!(Balances::free_balance(payer_account_id), 900);
+        assert_eq!(
+            Balances::free_balance(&reward_account_id),
+            expected_fullnode
+        );
         assert_eq!(Balances::free_balance(&nrc), expected_nrc);
         assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
         // 所有手续费都已分配到各账户，无销毁。
@@ -281,9 +291,9 @@ fn fee_router_distributes_to_bound_author_wallet_and_nrc_and_safety_fund() {
 #[test]
 fn fee_router_burns_fullnode_share_when_author_not_bound() {
     new_test_ext().execute_with(|| {
-        let payer = account(1);
+        let payer_account_id = account(1);
         let miner = account(7);
-        let missing_wallet = account(6);
+        let missing_reward_account_id = account(6);
         let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
         let safety_fund = AccountId32::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT);
         let issuance_before = Balances::total_issuance();
@@ -302,23 +312,23 @@ fn fee_router_burns_fullnode_share_when_author_not_bound() {
             remainder.saturating_mul(nrc_percent) / nrc_percent.saturating_add(safety_fund_percent)
         };
         let expected_safety_fund = remainder.saturating_sub(expected_nrc);
-        // 无作者钱包时：全节点分成销毁，NRC 和安全基金正常分配。
+        // 无作者奖励账户时：全节点分成销毁，NRC 和安全基金正常分配。
         let expected_burn = expected_fullnode;
 
         MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
         assert_eq!(
-            fullnode_issuance::RewardWalletByMiner::<Test>::get(&miner),
+            fullnode_issuance::RewardAccountIdByMiner::<Test>::get(&miner),
             None
         );
 
         let credit = <Balances as Balanced<AccountId32>>::withdraw(
-            &payer,
+            &payer_account_id,
             100,
             Precision::Exact,
             Preservation::Preserve,
             Fortitude::Polite,
         )
-        .expect("payer should have enough balance");
+        .expect("payer_account_id should have enough balance");
 
         OnchainFeeRouter::<
             Test,
@@ -328,13 +338,13 @@ fn fee_router_burns_fullnode_share_when_author_not_bound() {
             MockSafetyFundAccountProvider,
         >::on_nonzero_unbalanced(credit);
 
-        assert_eq!(Balances::free_balance(payer), 900);
-        assert_eq!(Balances::free_balance(missing_wallet), 0);
+        assert_eq!(Balances::free_balance(payer_account_id), 900);
+        assert_eq!(Balances::free_balance(missing_reward_account_id), 0);
         assert_eq!(Balances::free_balance(&nrc), expected_nrc);
         assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
         assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
         assert!(has_fee_share_burn_event(
-            pallet::BurnReason::WalletUnbound,
+            pallet::BurnReason::RewardAccountUnbound,
             expected_burn
         ));
     });
@@ -343,7 +353,7 @@ fn fee_router_burns_fullnode_share_when_author_not_bound() {
 #[test]
 fn fee_router_burns_fullnode_share_when_author_not_found() {
     new_test_ext().execute_with(|| {
-        let payer = account(1);
+        let payer_account_id = account(1);
         let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
         let safety_fund = AccountId32::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT);
         let issuance_before = Balances::total_issuance();
@@ -367,13 +377,13 @@ fn fee_router_burns_fullnode_share_when_author_not_found() {
 
         MOCK_AUTHOR.with(|v| *v.borrow_mut() = None);
         let credit = <Balances as Balanced<AccountId32>>::withdraw(
-            &payer,
+            &payer_account_id,
             total_fee,
             Precision::Exact,
             Preservation::Preserve,
             Fortitude::Polite,
         )
-        .expect("payer should have enough balance");
+        .expect("payer_account_id should have enough balance");
 
         OnchainFeeRouter::<
             Test,
@@ -383,7 +393,7 @@ fn fee_router_burns_fullnode_share_when_author_not_found() {
             MockSafetyFundAccountProvider,
         >::on_nonzero_unbalanced(credit);
 
-        assert_eq!(Balances::free_balance(payer), 900);
+        assert_eq!(Balances::free_balance(payer_account_id), 900);
         assert_eq!(Balances::free_balance(&nrc), expected_nrc);
         assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
         assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
@@ -397,9 +407,9 @@ fn fee_router_burns_fullnode_share_when_author_not_found() {
 #[test]
 fn fee_router_burns_nrc_share_when_nrc_account_missing() {
     new_test_ext().execute_with(|| {
-        let payer = account(1);
+        let payer_account_id = account(1);
         let miner = account(9);
-        let reward_wallet = account(8);
+        let reward_account_id = account(8);
         let safety_fund = AccountId32::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT);
         let issuance_before = Balances::total_issuance();
         let total_fee = 100u128;
@@ -420,16 +430,16 @@ fn fee_router_burns_nrc_share_when_nrc_account_missing() {
         let expected_safety_fund = remainder.saturating_sub(expected_nrc_for_split);
         let expected_burn = expected_nrc_for_split;
 
-        fullnode_issuance::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
+        fullnode_issuance::RewardAccountIdByMiner::<Test>::insert(&miner, &reward_account_id);
         MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
         let credit = <Balances as Balanced<AccountId32>>::withdraw(
-            &payer,
+            &payer_account_id,
             total_fee,
             Precision::Exact,
             Preservation::Preserve,
             Fortitude::Polite,
         )
-        .expect("payer should have enough balance");
+        .expect("payer_account_id should have enough balance");
 
         OnchainFeeRouter::<
             Test,
@@ -439,8 +449,11 @@ fn fee_router_burns_nrc_share_when_nrc_account_missing() {
             MockSafetyFundAccountProvider,
         >::on_nonzero_unbalanced(credit);
 
-        assert_eq!(Balances::free_balance(payer), 900);
-        assert_eq!(Balances::free_balance(&reward_wallet), expected_fullnode);
+        assert_eq!(Balances::free_balance(payer_account_id), 900);
+        assert_eq!(
+            Balances::free_balance(&reward_account_id),
+            expected_fullnode
+        );
         assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
         assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
         assert!(has_fee_share_burn_event(
@@ -451,11 +464,11 @@ fn fee_router_burns_nrc_share_when_nrc_account_missing() {
 }
 
 #[test]
-fn fee_router_burns_fullnode_share_when_reward_wallet_resolve_fails() {
+fn fee_router_burns_fullnode_share_when_reward_account_id_resolve_fails() {
     new_test_ext().execute_with(|| {
-        let payer = account(1);
+        let payer_account_id = account(1);
         let miner = account(9);
-        let reward_wallet = account(8);
+        let reward_account_id = account(8);
         let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
         let safety_fund = AccountId32::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT);
         let total_fee = 50u128;
@@ -472,20 +485,20 @@ fn fee_router_burns_fullnode_share_when_reward_wallet_resolve_fails() {
         let expected_safety_fund = remainder.saturating_sub(expected_nrc);
 
         TestExistentialDeposit::set(100);
-        // 只让全节点奖励钱包保持未创建状态，确保本用例命中 fullnode resolve 失败。
+        // 只让全节点奖励账户保持未创建状态，确保本用例命中 fullnode resolve 失败。
         let _ = Balances::deposit_creating(&nrc, 100);
         let _ = Balances::deposit_creating(&safety_fund, 100);
         let issuance_before = Balances::total_issuance();
-        fullnode_issuance::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
+        fullnode_issuance::RewardAccountIdByMiner::<Test>::insert(&miner, &reward_account_id);
         MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
         let credit = <Balances as Balanced<AccountId32>>::withdraw(
-            &payer,
+            &payer_account_id,
             total_fee,
             Precision::Exact,
             Preservation::Preserve,
             Fortitude::Polite,
         )
-        .expect("payer should have enough balance");
+        .expect("payer_account_id should have enough balance");
 
         OnchainFeeRouter::<
             Test,
@@ -495,8 +508,8 @@ fn fee_router_burns_fullnode_share_when_reward_wallet_resolve_fails() {
             MockSafetyFundAccountProvider,
         >::on_nonzero_unbalanced(credit);
 
-        assert_eq!(Balances::free_balance(payer), 950);
-        assert_eq!(Balances::free_balance(&reward_wallet), 0);
+        assert_eq!(Balances::free_balance(payer_account_id), 950);
+        assert_eq!(Balances::free_balance(&reward_account_id), 0);
         assert_eq!(Balances::free_balance(&nrc), 100 + expected_nrc);
         assert_eq!(
             Balances::free_balance(&safety_fund),
@@ -524,9 +537,9 @@ impl NrcAccountProvider<AccountId32> for MockNrcAccountProviderResolveFail {
 #[test]
 fn fee_router_burns_nrc_share_when_resolve_fails() {
     new_test_ext().execute_with(|| {
-        let payer = account(1);
+        let payer_account_id = account(1);
         let miner = account(9);
-        let reward_wallet = account(8);
+        let reward_account_id = account(8);
         let nrc = MockNrcAccountProviderResolveFail::nrc_account()
             .expect("nrc account must exist for resolve failure test");
         let safety_fund = AccountId32::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT);
@@ -551,16 +564,16 @@ fn fee_router_burns_nrc_share_when_resolve_fails() {
         let safety_fund_initial = 100;
         let _ = Balances::deposit_creating(&safety_fund, safety_fund_initial);
         let issuance_before = Balances::total_issuance();
-        fullnode_issuance::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
+        fullnode_issuance::RewardAccountIdByMiner::<Test>::insert(&miner, &reward_account_id);
         MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
         let credit = <Balances as Balanced<AccountId32>>::withdraw(
-            &payer,
+            &payer_account_id,
             total_fee,
             Precision::Exact,
             Preservation::Preserve,
             Fortitude::Polite,
         )
-        .expect("payer should have enough balance");
+        .expect("payer_account_id should have enough balance");
 
         OnchainFeeRouter::<
             Test,
@@ -570,8 +583,11 @@ fn fee_router_burns_nrc_share_when_resolve_fails() {
             MockSafetyFundAccountProvider,
         >::on_nonzero_unbalanced(credit);
 
-        assert_eq!(Balances::free_balance(payer), 500);
-        assert_eq!(Balances::free_balance(&reward_wallet), expected_fullnode);
+        assert_eq!(Balances::free_balance(payer_account_id), 500);
+        assert_eq!(
+            Balances::free_balance(&reward_account_id),
+            expected_fullnode
+        );
         assert_eq!(Balances::free_balance(&nrc), 0);
         assert_eq!(
             Balances::free_balance(&safety_fund),
@@ -590,9 +606,9 @@ fn fee_router_burns_nrc_share_when_resolve_fails() {
 #[test]
 fn fee_router_burns_safety_fund_share_when_resolve_fails() {
     new_test_ext().execute_with(|| {
-        let payer = account(1);
+        let payer_account_id = account(1);
         let miner = account(9);
-        let reward_wallet = account(8);
+        let reward_account_id = account(8);
         let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
         let safety_fund = AccountId32::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT);
         let total_fee = 500u128;
@@ -609,20 +625,20 @@ fn fee_router_burns_safety_fund_share_when_resolve_fails() {
         let expected_safety_fund = remainder.saturating_sub(expected_nrc);
 
         TestExistentialDeposit::set(100);
-        // 全节点钱包与 NRC 账户先置为已存在账户，只让安全基金新账户低于 ED。
-        let _ = Balances::deposit_creating(&reward_wallet, 100);
+        // 全节点奖励账户与 NRC 账户先置为已存在账户，只让安全基金新账户低于 ED。
+        let _ = Balances::deposit_creating(&reward_account_id, 100);
         let _ = Balances::deposit_creating(&nrc, 100);
         let issuance_before = Balances::total_issuance();
-        fullnode_issuance::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
+        fullnode_issuance::RewardAccountIdByMiner::<Test>::insert(&miner, &reward_account_id);
         MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
         let credit = <Balances as Balanced<AccountId32>>::withdraw(
-            &payer,
+            &payer_account_id,
             total_fee,
             Precision::Exact,
             Preservation::Preserve,
             Fortitude::Polite,
         )
-        .expect("payer should have enough balance");
+        .expect("payer_account_id should have enough balance");
 
         OnchainFeeRouter::<
             Test,
@@ -632,9 +648,9 @@ fn fee_router_burns_safety_fund_share_when_resolve_fails() {
             MockSafetyFundAccountProvider,
         >::on_nonzero_unbalanced(credit);
 
-        assert_eq!(Balances::free_balance(payer), 500);
+        assert_eq!(Balances::free_balance(payer_account_id), 500);
         assert_eq!(
-            Balances::free_balance(&reward_wallet),
+            Balances::free_balance(&reward_account_id),
             100 + expected_fullnode
         );
         assert_eq!(Balances::free_balance(&nrc), 100 + expected_nrc);
@@ -806,11 +822,11 @@ fn charge_transaction_amount_path_routes_fee_to_all_accounts() {
         let call = sample_call();
         let info = call.get_dispatch_info();
         let miner = account(9);
-        let reward_wallet = account(8);
+        let reward_account_id = account(8);
         let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
         let safety_fund = AccountId32::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT);
 
-        fullnode_issuance::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
+        fullnode_issuance::RewardAccountIdByMiner::<Test>::insert(&miner, &reward_account_id);
         MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
 
         // FeeRouteOnchain 固定返回 50_000 分,链上资金交易费率 0.1%,应扣 50 分。
@@ -847,7 +863,10 @@ fn charge_transaction_amount_path_routes_fee_to_all_accounts() {
         );
 
         assert_eq!(Balances::free_balance(&who), 950);
-        assert_eq!(Balances::free_balance(&reward_wallet), expected_fullnode);
+        assert_eq!(
+            Balances::free_balance(&reward_account_id),
+            expected_fullnode
+        );
         assert_eq!(Balances::free_balance(&nrc), expected_nrc);
         assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
         assert_eq!(fee_share_burn_event_total(), 0);

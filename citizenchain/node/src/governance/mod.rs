@@ -90,7 +90,7 @@ fn build_chain_query_context(app: &AppHandle) -> Result<ChainQueryContext, Strin
 }
 
 fn load_balance_at_block(
-    account_hex: &str,
+    account_id: &str,
     block_hash: Option<&str>,
     label: &str,
     warnings: &mut Vec<String>,
@@ -99,7 +99,7 @@ fn load_balance_at_block(
         return None;
     };
 
-    match institution::fetch_balance_at(account_hex, Some(hash)) {
+    match institution::fetch_balance_at(account_id, Some(hash)) {
         Ok(balance) => balance.map(|value| value.to_string()),
         Err(e) => {
             warnings.push(format!("查询{label}失败: {e}"));
@@ -125,13 +125,11 @@ fn collect_admins(
         .into_iter()
         .map(|admin| {
             let balance_fen = block_hash
-                .and_then(|hash| {
-                    institution::fetch_balance_at(&admin.admin_account, Some(hash)).ok()
-                })
+                .and_then(|hash| institution::fetch_balance_at(&admin.account_id, Some(hash)).ok())
                 .flatten()
                 .map(|value| value.to_string());
             types::AdminInfo {
-                admin_account: admin.admin_account,
+                account_id: admin.account_id,
                 family_name: admin.family_name,
                 given_name: admin.given_name,
                 assignments: admin.assignments,
@@ -146,41 +144,41 @@ fn collect_institution_balances(
     block_hash: Option<&str>,
     warnings: &mut Vec<String>,
 ) -> InstitutionBalances {
-    let main_account = entry.main_account_hex();
+    let main_account_id = entry.main_account_id();
     let mut balances = InstitutionBalances {
-        balance_fen: load_balance_at_block(&main_account, block_hash, "主账户余额", warnings),
+        balance_fen: load_balance_at_block(&main_account_id, block_hash, "主账户余额", warnings),
         ..InstitutionBalances::default()
     };
 
     match entry {
         InstitutionRef::Nrc(_) => {
-            let fee_account = entry.fee_account_hex();
-            let safety_fund_account = entry
-                .safety_fund_account_hex()
+            let fee_account_id = entry.fee_account_id();
+            let safety_fund_account_id = entry
+                .safety_fund_account_id()
                 .expect("国家储委会安全基金账户 AccountId必须存在");
             balances.nrc_fee_balance_fen =
-                load_balance_at_block(&fee_account, block_hash, "费用账户余额", warnings);
+                load_balance_at_block(&fee_account_id, block_hash, "费用账户余额", warnings);
             balances.safety_fund_balance_fen = load_balance_at_block(
-                &safety_fund_account,
+                &safety_fund_account_id,
                 block_hash,
                 "安全基金账户余额",
                 warnings,
             );
         }
         InstitutionRef::Prc(_) => {
-            let fee_account = entry.fee_account_hex();
+            let fee_account_id = entry.fee_account_id();
             balances.cb_fee_balance_fen =
-                load_balance_at_block(&fee_account, block_hash, "费用账户余额", warnings);
+                load_balance_at_block(&fee_account_id, block_hash, "费用账户余额", warnings);
         }
         InstitutionRef::Prb(_) => {
-            let stake_account = entry
-                .stake_account_hex()
+            let stake_account_id = entry
+                .stake_account_id()
                 .expect("省储行永久质押账户 AccountId必须存在");
-            let fee_account = entry.fee_account_hex();
+            let fee_account_id = entry.fee_account_id();
             balances.staking_balance_fen =
-                load_balance_at_block(&stake_account, block_hash, "永久质押账户余额", warnings);
+                load_balance_at_block(&stake_account_id, block_hash, "永久质押账户余额", warnings);
             balances.fee_balance_fen =
-                load_balance_at_block(&fee_account, block_hash, "费用账户余额", warnings);
+                load_balance_at_block(&fee_account_id, block_hash, "费用账户余额", warnings);
         }
     }
 
@@ -206,24 +204,29 @@ fn build_institution_detail_sync(
     };
     let balances =
         collect_institution_balances(entry, context.block_hash.as_deref(), &mut context.warnings);
-    let (stake_account, fee_account, cb_fee_account, nrc_fee_account, safety_fund_account) =
-        match entry {
-            InstitutionRef::Nrc(_) => (
-                None,
-                None,
-                None,
-                Some(entry.fee_account_hex()),
-                entry.safety_fund_account_hex(),
-            ),
-            InstitutionRef::Prc(_) => (None, None, Some(entry.fee_account_hex()), None, None),
-            InstitutionRef::Prb(_) => (
-                entry.stake_account_hex(),
-                Some(entry.fee_account_hex()),
-                None,
-                None,
-                None,
-            ),
-        };
+    let (
+        stake_account_id,
+        fee_account_id,
+        cb_fee_account_id,
+        nrc_fee_account_id,
+        safety_fund_account_id,
+    ) = match entry {
+        InstitutionRef::Nrc(_) => (
+            None,
+            None,
+            None,
+            Some(entry.fee_account_id()),
+            entry.safety_fund_account_id(),
+        ),
+        InstitutionRef::Prc(_) => (None, None, Some(entry.fee_account_id()), None, None),
+        InstitutionRef::Prb(_) => (
+            entry.stake_account_id(),
+            Some(entry.fee_account_id()),
+            None,
+            None,
+            None,
+        ),
+    };
 
     Ok(InstitutionDetail {
         cid_full_name: entry.cid_full_name().to_string(),
@@ -233,20 +236,20 @@ fn build_institution_detail_sync(
         cid_number: cid_number.to_string(),
         org_type: org_type as u8,
         org_type_label: org_type.label().to_string(),
-        main_account: entry.main_account_hex(),
+        main_account_id: entry.main_account_id(),
         balance_fen: balances.balance_fen,
         admins,
         internal_threshold: internal_threshold(org_type),
         joint_vote_weight: joint_vote_weight(org_type),
-        stake_account,
+        stake_account_id,
         staking_balance_fen: balances.staking_balance_fen,
-        fee_account,
+        fee_account_id,
         fee_balance_fen: balances.fee_balance_fen,
-        cb_fee_account,
+        cb_fee_account_id,
         cb_fee_balance_fen: balances.cb_fee_balance_fen,
-        nrc_fee_account,
+        nrc_fee_account_id,
         nrc_fee_balance_fen: balances.nrc_fee_balance_fen,
-        safety_fund_account,
+        safety_fund_account_id,
         safety_fund_balance_fen: balances.safety_fund_balance_fen,
         warning: join_warnings(context.warnings),
     })
@@ -447,11 +450,11 @@ pub async fn list_proposals_by_owner(
 }
 
 /// 构建投票签名请求 QR JSON（需要节点运行）。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn build_vote_request(
     app: AppHandle,
     proposal_id: u64,
-    pubkey_hex: String,
+    signer_public_key: String,
     voter_role_code: Option<String>,
     approve: bool,
 ) -> Result<signing::VoteSignRequestResult, String> {
@@ -462,7 +465,7 @@ pub async fn build_vote_request(
     tauri::async_runtime::spawn_blocking(move || {
         signing::build_vote_sign_request(
             proposal_id,
-            &pubkey_hex,
+            &signer_public_key,
             voter_role_code.as_deref(),
             approve,
         )
@@ -472,11 +475,11 @@ pub async fn build_vote_request(
 }
 
 /// 构建联合投票签名请求 QR JSON（需要节点运行）。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn build_joint_vote_request(
     app: AppHandle,
     proposal_id: u64,
-    pubkey_hex: String,
+    signer_public_key: String,
     cid_number: String,
     voter_role_code: String,
     approve: bool,
@@ -488,7 +491,7 @@ pub async fn build_joint_vote_request(
     tauri::async_runtime::spawn_blocking(move || {
         signing::build_joint_vote_sign_request(
             proposal_id,
-            &pubkey_hex,
+            &signer_public_key,
             &cid_number,
             &voter_role_code,
             approve,
@@ -501,11 +504,11 @@ pub async fn build_joint_vote_request(
 /// 验证签名响应并提交投票（通用，支持内部和联合投票）。
 ///
 /// call_data_hex 为完整的 SCALE call data hex（不含 0x 前缀）。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn submit_vote(
     app: AppHandle,
     request_id: String,
-    expected_pubkey_hex: String,
+    expected_signer_public_key: String,
     expected_payload_hash: String,
     call_data_hex: String,
     sign_nonce: u32,
@@ -521,7 +524,7 @@ pub async fn submit_vote(
             hex::decode(&call_data_hex).map_err(|e| format!("call_data 解码失败: {e}"))?;
         signing::verify_and_submit(
             &request_id,
-            &expected_pubkey_hex,
+            &expected_signer_public_key,
             &expected_payload_hash,
             &call_data,
             sign_nonce,
@@ -534,11 +537,11 @@ pub async fn submit_vote(
 }
 
 /// 查询用户投票状态（需要节点运行）。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn check_vote_status(
     app: AppHandle,
     proposal_id: u64,
-    pubkey_hex: String,
+    signer_public_key: String,
     cid_number: Option<String>,
     voter_role_code: Option<String>,
 ) -> Result<proposal::UserVoteStatus, String> {
@@ -549,7 +552,7 @@ pub async fn check_vote_status(
     tauri::async_runtime::spawn_blocking(move || {
         proposal::fetch_user_vote_status(
             proposal_id,
-            &pubkey_hex,
+            &signer_public_key,
             cid_number.as_deref(),
             voter_role_code.as_deref(),
         )

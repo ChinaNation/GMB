@@ -119,7 +119,7 @@ impl CitizenIdentityAuthority<u64, pallet::SignatureOf<Test>> for TestCitizenIde
     }
 
     fn verify_citizen_signature(
-        _wallet_account: &u64,
+        _account_id: &u64,
         _payload: &[u8],
         signature: &pallet::SignatureOf<Test>,
     ) -> bool {
@@ -171,7 +171,7 @@ fn registrar_cid_number() -> CidNumberBound {
 fn citizen_cid_number(tag: &str) -> alloc::vec::Vec<u8> {
     primitives::cid::generator::generate_cid_number(
         primitives::cid::generator::GenerateCidNumberInput {
-            account_pubkey: tag,
+            public_key: tag,
             p1: "1",
             province_code: "GD",
             province_name: "广东省",
@@ -193,7 +193,7 @@ fn given_name(bytes: &[u8]) -> GivenName {
     bytes.to_vec().try_into().expect("given name should fit")
 }
 
-/// 测试注册局管理员必须以明确岗位主体发起业务，管理员钱包本身不产生权限。
+/// 测试注册局管理员必须以明确岗位主体发起业务，管理员账户本身不产生权限。
 fn registrar_role_code() -> RoleCodeBound {
     b"PROVINCE_COMMISSIONER_43"
         .to_vec()
@@ -227,7 +227,7 @@ fn occupy_tag(tag: &str) {
 fn public_cid_number(tag: &str) -> alloc::vec::Vec<u8> {
     primitives::cid::generator::generate_cid_number(
         primitives::cid::generator::GenerateCidNumberInput {
-            account_pubkey: tag,
+            public_key: tag,
             p1: "0",
             province_code: "GD",
             province_name: "广东省",
@@ -245,10 +245,10 @@ fn valid_signature() -> pallet::SignatureOf<Test> {
     b"valid".to_vec().try_into().expect("signature should fit")
 }
 
-fn voting_payload(wallet_account: u64, cid_number: &[u8]) -> VotingIdentityPayload<u64> {
+fn voting_payload(account_id: u64, cid_number: &[u8]) -> VotingIdentityPayload<u64> {
     VotingIdentityPayload {
         cid_number: cid(cid_number),
-        wallet_account,
+        account_id,
         citizen_age_years: 18,
         passport_valid_from: 20260630,
         passport_valid_until: 20360630,
@@ -259,9 +259,9 @@ fn voting_payload(wallet_account: u64, cid_number: &[u8]) -> VotingIdentityPaylo
     }
 }
 
-fn candidate_payload(wallet_account: u64, cid_number: &[u8]) -> CandidateIdentityPayload<u64> {
+fn candidate_payload(account_id: u64, cid_number: &[u8]) -> CandidateIdentityPayload<u64> {
     CandidateIdentityPayload {
-        voting: voting_payload(wallet_account, cid_number),
+        voting: voting_payload(account_id, cid_number),
         birth_province_code: code(b"43"),
         birth_city_code: code(b"4301"),
         birth_town_code: code(b"4301001"),
@@ -295,11 +295,11 @@ fn register_voting_identity_stores_identity_and_counts_scope() {
             &citizen_cid_number("0001")
         )));
         assert_eq!(
-            WalletAccountByCid::<Test>::get(cid(&citizen_cid_number("0001"))),
+            AccountIdByCid::<Test>::get(cid(&citizen_cid_number("0001"))),
             Some(1)
         );
         assert_eq!(
-            CidByWalletAccount::<Test>::get(1),
+            CidByAccountId::<Test>::get(1),
             Some(cid(&citizen_cid_number("0001")))
         );
         assert_eq!(CountryVotingCount::<Test>::get(), 1);
@@ -309,7 +309,7 @@ fn register_voting_identity_stores_identity_and_counts_scope() {
 }
 
 #[test]
-fn duplicate_cid_cannot_move_to_another_wallet_account() {
+fn duplicate_cid_cannot_move_to_another_account_id() {
     new_test_ext().execute_with(|| {
         // 占号先行:身份写入前置。
         occupy_tag("0001");
@@ -357,14 +357,14 @@ fn updating_identity_cannot_replace_permanent_cid() {
                 voting_payload(1, &citizen_cid_number("0002")),
                 valid_signature(),
             ),
-            Error::<Test>::CidWalletBindingMismatch
+            Error::<Test>::CidAccountIdBindingMismatch
         );
         assert_eq!(
-            WalletAccountByCid::<Test>::get(cid(&citizen_cid_number("0001"))),
+            AccountIdByCid::<Test>::get(cid(&citizen_cid_number("0001"))),
             Some(1)
         );
         assert_eq!(
-            WalletAccountByCid::<Test>::get(cid(&citizen_cid_number("0002"))),
+            AccountIdByCid::<Test>::get(cid(&citizen_cid_number("0002"))),
             None
         );
         assert_eq!(CountryVotingCount::<Test>::get(), 1);
@@ -398,7 +398,7 @@ fn candidate_identity_requires_full_profile_and_enables_candidate_reader() {
 }
 
 #[test]
-fn citizen_subject_requires_active_bidirectional_cid_wallet_binding() {
+fn citizen_subject_requires_active_bidirectional_cid_account_id_binding() {
     new_test_ext().execute_with(|| {
         occupy_tag("SUBJECT");
         let cid_number = citizen_cid_number("SUBJECT");
@@ -414,12 +414,12 @@ fn citizen_subject_requires_active_bidirectional_cid_wallet_binding() {
             CitizenIdentity::citizen_subject(&1),
             Some(CitizenSubject {
                 cid_number: cid(&cid_number),
-                wallet_account: 1,
+                account_id: 1,
             })
         );
 
-        // 反向绑定与钱包存储键不一致时 fail-closed，不能只凭裸钱包形成主体。
-        WalletAccountByCid::<Test>::insert(cid(&cid_number), 2);
+        // 反向绑定与账户存储键不一致时 fail-closed，不能只凭裸账户形成主体。
+        AccountIdByCid::<Test>::insert(cid(&cid_number), 2);
         assert_eq!(CitizenIdentity::citizen_subject(&1), None);
         assert!(CitizenIdentity::voting_subject(&1, &town_scope()).is_none());
     });
@@ -535,7 +535,7 @@ fn population_data_reads_current_scope_count() {
             CitizenIdentity::voting_subject_at_population_data(&1, &population_data)
                 .expect("snapshot eligibility should return the complete citizen subject");
         assert_eq!(voter_subject.cid_number, citizen_cid_number("0001"));
-        assert_eq!(voter_subject.wallet_account, 1);
+        assert_eq!(voter_subject.account_id, 1);
     });
 }
 
@@ -711,9 +711,9 @@ fn passport_activates_on_valid_from_and_deactivates_after_valid_until() {
 #[test]
 fn population_transition_limit_hides_partial_day_and_blocks_identity_changes() {
     new_test_ext().execute_with(|| {
-        for (wallet, tag) in [(1, "BATCH-1"), (2, "BATCH-2"), (3, "BATCH-3")] {
+        for (account_id, tag) in [(1, "BATCH-1"), (2, "BATCH-2"), (3, "BATCH-3")] {
             occupy_tag(tag);
-            let mut payload = voting_payload(wallet, &citizen_cid_number(tag));
+            let mut payload = voting_payload(account_id, &citizen_cid_number(tag));
             payload.passport_valid_from = 20260703;
             payload.passport_valid_until = 20300101;
             assert_ok!(CitizenIdentity::register_voting_identity(
@@ -960,7 +960,7 @@ fn non_citizen_family_code_is_rejected() {
         // 真实格式的公权机构号(CGOV)打到公民入口必须被家族断言拒绝。
         let institution_number = primitives::cid::generator::generate_cid_number(
             primitives::cid::generator::GenerateCidNumberInput {
-                account_pubkey: "gov",
+                public_key: "gov",
                 p1: "0",
                 province_code: "GD",
                 province_name: "广东省",
@@ -1164,7 +1164,7 @@ fn revoke_cid_tombstones_and_revokes_bound_identity() {
             ),
             Error::<Test>::CidAlreadyOccupied
         );
-        // 墓碑号也不能再注册身份：永久 CID 身份与钱包绑定均保留，
+        // 墓碑号也不能再注册身份：永久 CID 身份与账户绑定均保留，
         // 归属检查先于墓碑检查拦截(双保险,谁先触发都拒绝)。
         assert_noop!(
             CitizenIdentity::register_voting_identity(

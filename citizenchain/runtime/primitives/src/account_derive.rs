@@ -89,7 +89,7 @@ pub enum AccountKind<'a> {
         account_name: &'a [u8],
     },
     Personal {
-        creator: &'a [u8; 32],
+        creator_account_id: &'a [u8; 32],
         account_name: &'a [u8],
     },
 }
@@ -150,11 +150,11 @@ impl<'a> AccountKind<'a> {
                 payload
             }
             AccountKind::Personal {
-                creator,
+                creator_account_id,
                 account_name,
             } => {
-                let mut payload = Vec::with_capacity(creator.len() + account_name.len());
-                payload.extend_from_slice(*creator);
+                let mut payload = Vec::with_capacity(creator_account_id.len() + account_name.len());
+                payload.extend_from_slice(*creator_account_id);
                 payload.extend_from_slice(account_name);
                 payload
             }

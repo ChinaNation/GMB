@@ -35,7 +35,7 @@ pub fn generate_cid_number(input: GenerateCidInput<'_>) -> Result<String, &'stat
 
     primitives::cid::generator::generate_cid_number(
         primitives::cid::generator::GenerateCidNumberInput {
-            account_pubkey: input.account_pubkey,
+            public_key: input.account_pubkey,
             p1: input.p1,
             province_code,
             province_name: input.province_name,

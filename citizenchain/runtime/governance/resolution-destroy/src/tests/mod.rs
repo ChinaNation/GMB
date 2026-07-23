@@ -95,7 +95,7 @@ fn test_citizen_subject(who: &AccountId32) -> votingengine::CitizenSubject<Accou
             .to_vec()
             .try_into()
             .expect("account fits CID"),
-        wallet_account: who.clone(),
+        account_id: who.clone(),
     }
 }
 
@@ -295,12 +295,12 @@ impl pallet::Config for Test {
 pub struct TestOnchainFeeCharger;
 impl primitives::fee_policy::OnchainFeeCharger<AccountId32, Balance> for TestOnchainFeeCharger {
     fn charge(
-        payer: &AccountId32,
+        payer_account_id: &AccountId32,
         transaction_amount: Balance,
     ) -> Result<Balance, sp_runtime::DispatchError> {
         let fee = primitives::fee_policy::calculate_onchain_fee(transaction_amount);
         let imbalance = Balances::withdraw(
-            payer,
+            payer_account_id,
             fee,
             WithdrawReasons::FEE,
             ExistenceRequirement::KeepAlive,
@@ -472,7 +472,7 @@ fn prb_pallet_id() -> AccountId32 {
     AccountId32::new(CHINA_CH[0].main_account)
 }
 
-fn institution_account(institution: &AccountId32) -> AccountId32 {
+fn institution_account_id(institution: &AccountId32) -> AccountId32 {
     institution.clone()
 }
 
@@ -524,9 +524,9 @@ fn new_test_ext() -> sp_io::TestExternalities {
         .expect("test storage should build");
 
     let balances = vec![
-        (institution_account(&nrc_pallet_id()), 1_000),
-        (institution_account(&prc_pallet_id()), 1_000),
-        (institution_account(&prb_pallet_id()), 1_000),
+        (institution_account_id(&nrc_pallet_id()), 1_000),
+        (institution_account_id(&prc_pallet_id()), 1_000),
+        (institution_account_id(&prb_pallet_id()), 1_000),
         (AccountId32::new(CHINA_CB[0].fee_account), 1_000),
         (AccountId32::new(CHINA_CB[1].fee_account), 1_000),
         (AccountId32::new(CHINA_CH[0].fee_account), 1_000),

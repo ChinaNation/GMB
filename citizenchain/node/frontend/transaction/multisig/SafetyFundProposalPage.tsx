@@ -1,27 +1,27 @@
 // 安全基金转账提案页面：表单 + QR 签名流程。
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { sanitizeError } from '../../tauri';
-import { hexToSs58 } from '../../shared/ss58';
+import { accountIdToSs58 } from '../../shared/ss58';
 import { CitizenSignaturePanel } from '../../shared/qr/CitizenSignaturePanel';
 import { AddressScanModal } from '../../shared/qr/AddressScanModal';
 import { multisigTransferApi as api } from './api';
-import type { AdminWalletMatch, VoteSignRequestResult } from './types';
+import type { AdminSignerMatch, VoteSignRequestResult } from './types';
 
 type Props = {
   actorCidNumber: string;
-  institutionAccount: string;
-  adminWallets: AdminWalletMatch[];
+  institution_account_id: string;
+  adminSigners: AdminSignerMatch[];
   onBack: () => void;
   onSuccess: () => void;
 };
 
 type Step = 'form' | 'qr' | 'submit' | 'done' | 'error';
 
-export function SafetyFundProposalPage({ actorCidNumber, institutionAccount, adminWallets, onBack, onSuccess }: Props) {
+export function SafetyFundProposalPage({ actorCidNumber, institution_account_id, adminSigners, onBack, onSuccess }: Props) {
   const [step, setStep] = useState<Step>('form');
 
-  const [selectedWallet, setSelectedWallet] = useState<AdminWalletMatch | null>(
-    adminWallets.length === 1 ? adminWallets[0] : null
+  const [selectedSigner, setSelectedSigner] = useState<AdminSignerMatch | null>(
+    adminSigners.length === 1 ? adminSigners[0] : null
   );
   const [beneficiary, setBeneficiary] = useState('');
   const [proposerRoleCode, setProposerRoleCode] = useState('COMMITTEE_MEMBER');
@@ -39,9 +39,9 @@ export function SafetyFundProposalPage({ actorCidNumber, institutionAccount, adm
 
   const formValuesRef = useRef({ beneficiary: '', amountYuan: 0, remark: '' });
   const signRequestRef = useRef(signRequest);
-  const selectedWalletRef = useRef(selectedWallet);
+  const selectedSignerRef = useRef(selectedSigner);
   signRequestRef.current = signRequest;
-  selectedWalletRef.current = selectedWallet;
+  selectedSignerRef.current = selectedSigner;
 
   useEffect(() => {
     if (step !== 'qr') return;
@@ -55,7 +55,7 @@ export function SafetyFundProposalPage({ actorCidNumber, institutionAccount, adm
   }, [step, countdown]);
 
   const validateForm = (): string | null => {
-    if (!selectedWallet) return '请选择管理员钱包';
+    if (!selectedSigner) return '请选择管理员账户';
     if (!proposerRoleCode.trim()) return '请输入提案发起岗位码';
     if (!beneficiary.trim()) return '请输入收款地址';
     const amount = parseFloat(amountYuan.replace(/,/g, ''));
@@ -76,7 +76,7 @@ export function SafetyFundProposalPage({ actorCidNumber, institutionAccount, adm
       formValuesRef.current = { beneficiary: beneficiary.trim(), amountYuan: amount, remark };
 
       const result = await api.buildProposeSafetyFundRequest(
-        selectedWallet!.pubkeyHex, actorCidNumber, proposerRoleCode.trim(), institutionAccount,
+        selectedSigner!.account_id, actorCidNumber, proposerRoleCode.trim(), institution_account_id,
         beneficiary.trim(), amount, remark,
       );
 
@@ -93,7 +93,7 @@ export function SafetyFundProposalPage({ actorCidNumber, institutionAccount, adm
 
   const handleScanResult = useCallback(async (responseText: string) => {
     const req = signRequestRef.current;
-    const wallet = selectedWalletRef.current;
+    const wallet = selectedSignerRef.current;
     if (!req || !wallet) {
       setError('签名请求数据丢失，请重试');
       setStep('error');
@@ -103,8 +103,8 @@ export function SafetyFundProposalPage({ actorCidNumber, institutionAccount, adm
     try {
       const { beneficiary: ben, amountYuan: amt, remark: rmk } = formValuesRef.current;
       const result = await api.submitProposeSafetyFund(
-        req.requestId, wallet.pubkeyHex, req.expectedPayloadHash,
-        actorCidNumber, proposerRoleCode.trim(), institutionAccount,
+        req.requestId, wallet.account_id, req.expectedPayloadHash,
+        actorCidNumber, proposerRoleCode.trim(), institution_account_id,
         ben, amt, rmk,
         req.signNonce, req.signBlockNumber, responseText,
       );
@@ -114,7 +114,7 @@ export function SafetyFundProposalPage({ actorCidNumber, institutionAccount, adm
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [actorCidNumber, proposerRoleCode, institutionAccount]);
+  }, [actorCidNumber, proposerRoleCode, institution_account_id]);
 
   return (
     <div className="governance-section">
@@ -129,21 +129,21 @@ export function SafetyFundProposalPage({ actorCidNumber, institutionAccount, adm
           <div className="wallet-form-field">
             <label>发起管理员</label>
             <select
-              value={selectedWallet?.pubkeyHex || ''}
+              value={selectedSigner?.account_id || ''}
               onChange={(e) => {
-                const w = adminWallets.find((w) => w.pubkeyHex === e.target.value);
-                setSelectedWallet(w || null);
+                const w = adminSigners.find((w) => w.account_id === e.target.value);
+                setSelectedSigner(w || null);
               }}
-              disabled={adminWallets.length <= 1}
+              disabled={adminSigners.length <= 1}
             >
-              {adminWallets.length === 0 && <option value="">无已激活管理员</option>}
-              {adminWallets.length === 1 ? (
-                <option value={adminWallets[0].pubkeyHex}>{hexToSs58(adminWallets[0].pubkeyHex)}</option>
+              {adminSigners.length === 0 && <option value="">无已激活管理员</option>}
+              {adminSigners.length === 1 ? (
+                <option value={adminSigners[0].account_id}>{accountIdToSs58(adminSigners[0].account_id)}</option>
               ) : (
                 <>
                   <option value="">请选择…</option>
-                  {adminWallets.map((w) => (
-                    <option key={w.pubkeyHex} value={w.pubkeyHex}>{hexToSs58(w.pubkeyHex)}</option>
+                  {adminSigners.map((w) => (
+                    <option key={w.account_id} value={w.account_id}>{accountIdToSs58(w.account_id)}</option>
                   ))}
                 </>
               )}
@@ -161,7 +161,7 @@ export function SafetyFundProposalPage({ actorCidNumber, institutionAccount, adm
 
           <div className="wallet-form-field">
             <label>转出地址（安全基金账户）</label>
-            <input type="text" value={hexToSs58(institutionAccount)} disabled />
+            <input type="text" value={accountIdToSs58(institution_account_id)} disabled />
           </div>
 
           <div className="wallet-form-field">
@@ -211,7 +211,7 @@ export function SafetyFundProposalPage({ actorCidNumber, institutionAccount, adm
           <button
             className="vote-signing-confirm"
             onClick={handleSubmit}
-            disabled={submitting || !selectedWallet || !beneficiary.trim() || !amountYuan}
+            disabled={submitting || !selectedSigner || !beneficiary.trim() || !amountYuan}
           >
             {submitting ? '生成中…' : '生成签名请求'}
           </button>

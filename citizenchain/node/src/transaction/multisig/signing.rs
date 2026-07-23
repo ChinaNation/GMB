@@ -7,22 +7,17 @@ use crate::governance;
 
 /// 构建 propose_transfer 签名请求（创建转账提案：pallet=17, call=0）。
 pub fn build_propose_transfer_sign_request(
-    pubkey_hex: &str,
+    signer_public_key: &str,
     actor_cid_number: &str,
     proposer_role_code: &str,
-    institution_account_hex: &str,
-    beneficiary_address: &str,
+    institution_account_id: &str,
+    beneficiary_ss58_address: &str,
     amount_yuan: f64,
     remark: &str,
 ) -> Result<governance::signing::VoteSignRequestResult, String> {
-    let pubkey_clean = pubkey_hex
-        .strip_prefix("0x")
-        .unwrap_or(pubkey_hex)
-        .to_ascii_lowercase();
-    if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("公钥格式无效，应为 64 位十六进制".to_string());
-    }
-    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
+    let signer_public_key = crate::shared::validation::normalize_public_key(signer_public_key)?;
+    let signer_public_key_bytes = hex::decode(signer_public_key.trim_start_matches("0x"))
+        .map_err(|e| format!("公钥解码失败: {e}"))?;
 
     if amount_yuan < 1.11 {
         return Err("转账金额不能低于 1.11 元".to_string());
@@ -37,76 +32,91 @@ pub fn build_propose_transfer_sign_request(
         ));
     }
 
-    let beneficiary_bytes = governance::signing::decode_ss58_to_pubkey(beneficiary_address)?;
+    let beneficiary_bytes =
+        governance::signing::account_id_from_ss58_address(beneficiary_ss58_address)?;
 
-    let institution_account =
-        super::account_id::institution_account_from_hex(institution_account_hex)?;
-    if beneficiary_bytes == institution_account {
+    let institution_account_id =
+        super::account_id::institution_account_from_id(institution_account_id)?;
+    if beneficiary_bytes == institution_account_id {
         return Err("收款地址不能等于转出机构账户".to_string());
     }
 
     let call_data = build_transfer_call_data(
         actor_cid_number,
         proposer_role_code,
-        &institution_account,
+        &institution_account_id,
         &beneficiary_bytes,
         amount_fen,
         remark_bytes,
     )?;
 
-    governance::signing::build_sign_request_from_call_data(&pubkey_clean, &pubkey_bytes, &call_data)
+    governance::signing::build_sign_request_from_call_data(
+        &signer_public_key,
+        &signer_public_key_bytes,
+        &call_data,
+    )
 }
 
 /// 构建安全基金转账提案签名请求（pallet=17, call=1）。
 pub fn build_propose_safety_fund_sign_request(
-    pubkey_hex: &str,
+    signer_public_key: &str,
     actor_cid_number: &str,
     proposer_role_code: &str,
-    institution_account_hex: &str,
-    beneficiary_address: &str,
+    institution_account_id: &str,
+    beneficiary_ss58_address: &str,
     amount_yuan: f64,
     remark: &str,
 ) -> Result<governance::signing::VoteSignRequestResult, String> {
-    let pubkey_clean = normalize_pubkey(pubkey_hex)?;
-    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
+    let signer_public_key_clean = normalize_signer_public_key(signer_public_key)?;
+    let signer_public_key_bytes = hex::decode(signer_public_key_clean.trim_start_matches("0x"))
+        .map_err(|e| format!("公钥解码失败: {e}"))?;
     let call_data = build_safety_fund_call_data(
         actor_cid_number,
         proposer_role_code,
-        institution_account_hex,
-        beneficiary_address,
+        institution_account_id,
+        beneficiary_ss58_address,
         amount_yuan,
         remark,
     )?;
 
-    governance::signing::build_sign_request_from_call_data(&pubkey_clean, &pubkey_bytes, &call_data)
+    governance::signing::build_sign_request_from_call_data(
+        &signer_public_key_clean,
+        &signer_public_key_bytes,
+        &call_data,
+    )
 }
 
 /// 构建手续费划转提案签名请求（pallet=17, call=2）。
 pub fn build_propose_sweep_sign_request(
-    pubkey_hex: &str,
+    signer_public_key: &str,
     actor_cid_number: &str,
     proposer_role_code: &str,
-    institution_account_hex: &str,
+    institution_account_id: &str,
     amount_yuan: f64,
 ) -> Result<governance::signing::VoteSignRequestResult, String> {
-    let pubkey_clean = normalize_pubkey(pubkey_hex)?;
-    let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
+    let signer_public_key_clean = normalize_signer_public_key(signer_public_key)?;
+    let signer_public_key_bytes = hex::decode(signer_public_key_clean.trim_start_matches("0x"))
+        .map_err(|e| format!("公钥解码失败: {e}"))?;
     let call_data = build_sweep_call_data(
         actor_cid_number,
         proposer_role_code,
-        institution_account_hex,
+        institution_account_id,
         amount_yuan,
     )?;
 
-    governance::signing::build_sign_request_from_call_data(&pubkey_clean, &pubkey_bytes, &call_data)
+    governance::signing::build_sign_request_from_call_data(
+        &signer_public_key_clean,
+        &signer_public_key_bytes,
+        &call_data,
+    )
 }
 
 /// 安全基金转账 call_data，供签名构造和签名响应提交复用。
 pub(crate) fn build_safety_fund_call_data(
     actor_cid_number: &str,
     proposer_role_code: &str,
-    institution_account_hex: &str,
-    beneficiary_address: &str,
+    institution_account_id: &str,
+    beneficiary_ss58_address: &str,
     amount_yuan: f64,
     remark: &str,
 ) -> Result<Vec<u8>, String> {
@@ -121,9 +131,10 @@ pub(crate) fn build_safety_fund_call_data(
             remark_bytes.len()
         ));
     }
-    let beneficiary_bytes = governance::signing::decode_ss58_to_pubkey(beneficiary_address)?;
-    let institution_account =
-        super::account_id::institution_account_from_hex(institution_account_hex)?;
+    let beneficiary_bytes =
+        governance::signing::account_id_from_ss58_address(beneficiary_ss58_address)?;
+    let institution_account_id =
+        super::account_id::institution_account_from_id(institution_account_id)?;
     let actor_cid = encode_actor_cid(actor_cid_number)?;
     let proposer_role = encode_proposer_role_code(proposer_role_code)?;
     let remark_compact = governance::signing::encode_compact_u32_pub(remark_bytes.len() as u32);
@@ -141,7 +152,7 @@ pub(crate) fn build_safety_fund_call_data(
     call_data.push(1u8);
     call_data.extend_from_slice(&actor_cid);
     call_data.extend_from_slice(&proposer_role);
-    call_data.extend_from_slice(&institution_account);
+    call_data.extend_from_slice(&institution_account_id);
     call_data.extend_from_slice(&beneficiary_bytes);
     call_data.extend_from_slice(&amount_fen.to_le_bytes());
     call_data.extend_from_slice(&remark_compact);
@@ -153,7 +164,7 @@ pub(crate) fn build_safety_fund_call_data(
 pub(crate) fn build_transfer_call_data(
     actor_cid_number: &str,
     proposer_role_code: &str,
-    institution_account: &[u8; 32],
+    institution_account_id: &[u8; 32],
     beneficiary_bytes: &[u8; 32],
     amount_fen: u128,
     remark_bytes: &[u8],
@@ -186,7 +197,7 @@ pub(crate) fn build_transfer_call_data(
     // 机构转账必须同时携带 Option<RoleCode>::Some。
     call_data.push(1u8);
     call_data.extend_from_slice(&proposer_role);
-    call_data.extend_from_slice(institution_account);
+    call_data.extend_from_slice(institution_account_id);
     call_data.extend_from_slice(beneficiary_bytes);
     call_data.extend_from_slice(&amount_fen.to_le_bytes());
     call_data.extend_from_slice(&remark_compact);
@@ -198,15 +209,15 @@ pub(crate) fn build_transfer_call_data(
 pub(crate) fn build_sweep_call_data(
     actor_cid_number: &str,
     proposer_role_code: &str,
-    institution_account_hex: &str,
+    institution_account_id: &str,
     amount_yuan: f64,
 ) -> Result<Vec<u8>, String> {
     if amount_yuan <= 0.0 {
         return Err("划转金额必须大于 0".to_string());
     }
     let amount_fen = (amount_yuan * 100.0).round() as u128;
-    let institution_account =
-        super::account_id::institution_account_from_hex(institution_account_hex)?;
+    let institution_account_id =
+        super::account_id::institution_account_from_id(institution_account_id)?;
     let actor_cid = encode_actor_cid(actor_cid_number)?;
     let proposer_role = encode_proposer_role_code(proposer_role_code)?;
 
@@ -215,7 +226,7 @@ pub(crate) fn build_sweep_call_data(
     call_data.push(2u8);
     call_data.extend_from_slice(&actor_cid);
     call_data.extend_from_slice(&proposer_role);
-    call_data.extend_from_slice(&institution_account);
+    call_data.extend_from_slice(&institution_account_id);
     call_data.extend_from_slice(&amount_fen.to_le_bytes());
     Ok(call_data)
 }
@@ -244,13 +255,6 @@ fn encode_proposer_role_code(proposer_role_code: &str) -> Result<Vec<u8>, String
     Ok(encoded)
 }
 
-fn normalize_pubkey(pubkey_hex: &str) -> Result<String, String> {
-    let pubkey_clean = pubkey_hex
-        .strip_prefix("0x")
-        .unwrap_or(pubkey_hex)
-        .to_ascii_lowercase();
-    if pubkey_clean.len() != 64 || !pubkey_clean.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("公钥格式无效，应为 64 位十六进制".to_string());
-    }
-    Ok(pubkey_clean)
+fn normalize_signer_public_key(signer_public_key: &str) -> Result<String, String> {
+    crate::shared::validation::normalize_public_key(signer_public_key)
 }

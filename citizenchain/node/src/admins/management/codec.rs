@@ -1,21 +1,24 @@
 use admin_primitives::{Admin, InstitutionAdmins, PublicAdmin};
 use codec::Decode;
 
-use super::types::{AdminAccountDecoded, AdminDecoded};
+use super::types::{AdminDecoded, InstitutionAdminsDecoded};
 
 /// 解码机构管理员模块的 `InstitutionAdmins`。
 ///
-/// 公权布局为 `admin_account + cid_number + family_name + given_name`，私权布局保持
-/// `admin_account + family_name + given_name`。机构 CID 只存在于 storage key；公权记录内
+/// 公权布局为 `account_id + cid_number + family_name + given_name`，私权布局保持
+/// `account_id + family_name + given_name`。机构 CID 只存在于 storage key；公权记录内
 /// 的 `cid_number` 是管理员公民 CID 引用。岗位、任期和来源另查 entity。
-pub fn decode_admin_account(data: &[u8], is_public: bool) -> Result<AdminAccountDecoded, String> {
+pub fn decode_institution_admins(
+    data: &[u8],
+    is_public: bool,
+) -> Result<InstitutionAdminsDecoded, String> {
     if is_public {
-        return decode_public_admin_account(data);
+        return decode_public_institution_admins(data);
     }
-    decode_private_admin_account(data)
+    decode_private_institution_admins(data)
 }
 
-fn decode_private_admin_account(data: &[u8]) -> Result<AdminAccountDecoded, String> {
+fn decode_private_institution_admins(data: &[u8]) -> Result<InstitutionAdminsDecoded, String> {
     type RawInstitutionAdmins = InstitutionAdmins<Vec<Admin<[u8; 32]>>>;
     let mut input = data;
     let decoded = RawInstitutionAdmins::decode(&mut input)
@@ -35,20 +38,20 @@ fn decode_private_admin_account(data: &[u8]) -> Result<AdminAccountDecoded, Stri
                 return Err("管理员 family_name/given_name 不得为空".to_string());
             }
             Ok(AdminDecoded {
-                admin_account: hex::encode(admin.admin_account),
+                account_id: format!("0x{}", hex::encode(admin.account_id)),
                 cid_number: String::new(),
                 family_name,
                 given_name,
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
-    Ok(AdminAccountDecoded {
+    Ok(InstitutionAdminsDecoded {
         institution_code: decoded.institution_code,
         admins,
     })
 }
 
-fn decode_public_admin_account(data: &[u8]) -> Result<AdminAccountDecoded, String> {
+fn decode_public_institution_admins(data: &[u8]) -> Result<InstitutionAdminsDecoded, String> {
     type RawInstitutionAdmins = InstitutionAdmins<Vec<PublicAdmin<[u8; 32]>>>;
     let mut input = data;
     let decoded = RawInstitutionAdmins::decode(&mut input)
@@ -61,7 +64,7 @@ fn decode_public_admin_account(data: &[u8]) -> Result<AdminAccountDecoded, Strin
         .into_iter()
         .map(|admin| {
             Ok(AdminDecoded {
-                admin_account: hex::encode(admin.admin_account),
+                account_id: format!("0x{}", hex::encode(admin.account_id)),
                 cid_number: String::from_utf8(admin.cid_number.into_inner())
                     .map_err(|_| "公权管理员 cid_number 不是 UTF-8".to_string())?,
                 family_name: String::from_utf8(admin.family_name.into_inner())
@@ -71,7 +74,7 @@ fn decode_public_admin_account(data: &[u8]) -> Result<AdminAccountDecoded, Strin
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
-    Ok(AdminAccountDecoded {
+    Ok(InstitutionAdminsDecoded {
         institution_code: decoded.institution_code,
         admins,
     })
@@ -113,7 +116,7 @@ mod tests {
             institution_code: *b"NRC\0",
             admins: vec![
                 PublicAdmin {
-                    admin_account: [0xaau8; 32],
+                    account_id: [0xaau8; 32],
                     cid_number: admin_primitives::AdminCidNumber::truncate_from(
                         b"GZ000-CTZN6-198805200-2026".to_vec(),
                     ),
@@ -125,7 +128,7 @@ mod tests {
                     ),
                 },
                 PublicAdmin {
-                    admin_account: [0xbbu8; 32],
+                    account_id: [0xbbu8; 32],
                     cid_number: Default::default(),
                     family_name: Default::default(),
                     given_name: Default::default(),
@@ -133,9 +136,12 @@ mod tests {
             ],
         }
         .encode();
-        let decoded = decode_admin_account(&bytes, true).unwrap();
+        let decoded = decode_institution_admins(&bytes, true).unwrap();
         assert_eq!(decoded.institution_code, *b"NRC\0");
-        assert_eq!(decoded.admins[0].admin_account, "aa".repeat(32));
+        assert_eq!(
+            decoded.admins[0].account_id,
+            format!("0x{}", "aa".repeat(32))
+        );
         assert_eq!(decoded.admins[0].cid_number, "GZ000-CTZN6-198805200-2026");
         assert_eq!(decoded.admins[0].family_name, "张");
         assert_eq!(decoded.admins[0].given_name, "三");
@@ -149,18 +155,18 @@ mod tests {
         use codec::Encode;
 
         let old_layout = (*b"NRC\0", vec![[0xaau8; 32]]).encode();
-        assert!(decode_admin_account(&old_layout, true).is_err());
+        assert!(decode_institution_admins(&old_layout, true).is_err());
 
         let empty_name = InstitutionAdmins {
             institution_code: *b"NRC\0",
             admins: vec![Admin {
-                admin_account: [0xaau8; 32],
+                account_id: [0xaau8; 32],
                 family_name: admin_primitives::FamilyName::truncate_from(Vec::new()),
                 given_name: admin_primitives::GivenName::truncate_from("员".as_bytes().to_vec()),
             }],
         }
         .encode();
-        assert!(decode_admin_account(&empty_name, false).is_err());
+        assert!(decode_institution_admins(&empty_name, false).is_err());
     }
 
     #[test]

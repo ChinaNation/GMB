@@ -12,14 +12,16 @@ export type EligibleClearingBankCandidate = {
   parentRefProperty?: string | null;
   provinceName: string;
   cityName: string;
-  mainAccount?: string | null;
-  feeAccount?: string | null;
+  main_account_id?: string | null;
+  fee_account_id?: string | null;
 };
 
 export type AccountWithBalance = {
   accountName: string;
-  /** 32 字节链上地址的 SS58 形式(GMB prefix=2027)。 */
-  addressSs58: string;
+  /** 唯一账户 ID（小写 0x + 64 位十六进制）。 */
+  account_id: string;
+  /** 仅用于展示的 SS58 地址（GMB prefix=2027）。 */
+  ss58_address: string;
   /** `frame_system::Account[address].data.free`,最小单位"分"。 */
   balanceMinUnits: string;
   /** 友好元字符串 `xxx.xx`。 */
@@ -34,14 +36,14 @@ export type InstitutionDetail = {
   /** 机构码（CID institution_code，[u8;4] 序列化为数字数组）。 */
   institutionCode: number[];
 
-  mainAccount: AccountWithBalance;
-  feeAccount: AccountWithBalance;
+  main_account_info: AccountWithBalance;
+  fee_account_info: AccountWithBalance;
   /** 主账户/费用账户之外的其它账户(自定义初始账户)。 */
   otherAccounts: AccountWithBalance[];
 
   adminsLen: number;
   threshold: number;
-  /** 管理员钱包及其全部有效岗位任职。 */
+  /** 管理员账户及其全部有效岗位任职。 */
   admins: InstitutionAdminInfo[];
 
   createdAt: number;
@@ -75,8 +77,8 @@ export type InstitutionRegistrationCredentialResp = {
   register_nonce: string;
   /** 代表签发机构的唯一 CID。 */
   actor_cid_number: string;
-  /** 本次凭证签名所用管理员公钥(32 字节 hex)。 */
-  credential_signer_pubkey: string;
+  /** 本次凭证签名所用管理员公钥（小写 0x + 64 位十六进制）。 */
+  credential_signer_public_key: string;
   /** 业务作用域省名。 */
   scope_province_name: string;
   /** 业务作用域市名。 */

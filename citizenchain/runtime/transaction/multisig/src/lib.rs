@@ -52,15 +52,15 @@ pub struct TransferAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
     /// 机构转账必须存在 CID；个人多签没有 CID，严格使用 None。
     pub actor_cid_number: Option<CidNumber>,
     /// 实际转出资金的机构账户或个人多签账户。
-    pub funding_account: AccountId,
+    pub funding_account_id: AccountId,
     /// 收款地址
-    pub beneficiary: AccountId,
+    pub beneficiary_account_id: AccountId,
     /// 转账金额
     pub amount: Balance,
     /// 备注
     pub remark: BoundedVec<u8, MaxRemarkLen>,
     /// 发起管理员
-    pub proposer: AccountId,
+    pub proposer_account_id: AccountId,
 }
 
 /// 安全基金转账动作：从国家储委会安全基金账户向指定收款地址转账。
@@ -70,31 +70,31 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
     /// 国家储委会唯一 CID。
     pub actor_cid_number: CidNumber,
     /// 国家储委会安全基金账户。
-    pub institution_account: AccountId,
+    pub institution_account_id: AccountId,
     /// 收款地址
-    pub beneficiary: AccountId,
+    pub beneficiary_account_id: AccountId,
     /// 转账金额
     pub amount: Balance,
     /// 备注
     pub remark: BoundedVec<u8, MaxRemarkLen>,
     /// 发起管理员
-    pub proposer: AccountId,
+    pub proposer_account_id: AccountId,
 }
 
 /// 手续费划转动作：从机构手续费账户向机构主账户划转。
 ///
-/// `proposer` 字段与 transfer / safety_fund 两类动作对齐,便于 Executor 在
+/// `proposer_account_id` 字段与 transfer / safety_fund 两类动作对齐,便于 Executor 在
 /// 投票通过 / 否决回调时统一识别提案发起人。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct SweepAction<AccountId, Balance> {
     /// 发起机构唯一 CID。
     pub actor_cid_number: CidNumber,
     /// 实际转出的机构费用账户。
-    pub institution_account: AccountId,
+    pub institution_account_id: AccountId,
     /// 划转金额
     pub amount: Balance,
     /// 发起管理员(Tx 1 中锁定)
-    pub proposer: AccountId,
+    pub proposer_account_id: AccountId,
 }
 
 /// 单次划转上限：可用余额的 80%。
@@ -194,9 +194,9 @@ pub mod pallet {
             proposal_id: u64,
             institution_code: InstitutionCode,
             actor_cid_number: Option<CidNumber>,
-            proposer: T::AccountId,
-            funding_account: T::AccountId,
-            beneficiary: T::AccountId,
+            proposer_account_id: T::AccountId,
+            funding_account_id: T::AccountId,
+            beneficiary_account_id: T::AccountId,
             amount: BalanceOf<T>,
             /// 原文 remark,供管理员投票前核对。
             remark: BoundedVec<u8, T::MaxRemarkLen>,
@@ -206,14 +206,14 @@ pub mod pallet {
         /// 投票通过但执行失败（投票已记录，提案数据保留，可通过 VotingEngine 统一入口手动重试）
         TransferExecutionFailed {
             proposal_id: u64,
-            funding_account: T::AccountId,
+            funding_account_id: T::AccountId,
         },
         /// 转账已执行（投票通过后自动触发，含手续费分账）
         TransferExecuted {
             proposal_id: u64,
-            funding_account: T::AccountId,
+            funding_account_id: T::AccountId,
             fee_payer: T::AccountId,
-            beneficiary: T::AccountId,
+            beneficiary_account_id: T::AccountId,
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
         },
@@ -221,9 +221,9 @@ pub mod pallet {
         SafetyFundTransferProposed {
             proposal_id: u64,
             actor_cid_number: CidNumber,
-            proposer: T::AccountId,
-            institution_account: T::AccountId,
-            beneficiary: T::AccountId,
+            proposer_account_id: T::AccountId,
+            institution_account_id: T::AccountId,
+            beneficiary_account_id: T::AccountId,
             amount: BalanceOf<T>,
             /// 原文 remark,供管理员投票前核对。
             remark: BoundedVec<u8, T::MaxRemarkLen>,
@@ -233,7 +233,7 @@ pub mod pallet {
         SafetyFundTransferExecuted {
             proposal_id: u64,
             fee_payer: T::AccountId,
-            beneficiary: T::AccountId,
+            beneficiary_account_id: T::AccountId,
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
         },
@@ -243,8 +243,8 @@ pub mod pallet {
         SweepToMainProposed {
             proposal_id: u64,
             actor_cid_number: CidNumber,
-            proposer: T::AccountId,
-            institution_account: T::AccountId,
+            proposer_account_id: T::AccountId,
+            institution_account_id: T::AccountId,
             main_account: T::AccountId,
             amount: BalanceOf<T>,
             expires_at: BlockNumberFor<T>,
@@ -253,7 +253,7 @@ pub mod pallet {
         SweepToMainExecuted {
             proposal_id: u64,
             actor_cid_number: CidNumber,
-            institution_account: T::AccountId,
+            institution_account_id: T::AccountId,
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
             reserve_left: BalanceOf<T>,
@@ -321,8 +321,8 @@ pub mod pallet {
             origin: OriginFor<T>,
             actor_cid_number: Option<CidNumber>,
             proposer_role_code: Option<RoleCode>,
-            funding_account: T::AccountId,
-            beneficiary: T::AccountId,
+            funding_account_id: T::AccountId,
+            beneficiary_account_id: T::AccountId,
             amount: BalanceOf<T>,
             remark: BoundedVec<u8, T::MaxRemarkLen>,
         ) -> DispatchResult {
@@ -330,12 +330,12 @@ pub mod pallet {
 
             ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
             let (institution_code, subject_cid_numbers) =
-                Self::resolve_funding_authority(actor_cid_number.as_ref(), &funding_account)?;
+                Self::resolve_funding_authority(actor_cid_number.as_ref(), &funding_account_id)?;
             if actor_cid_number.is_none() {
                 ensure!(proposer_role_code.is_none(), Error::<T>::UnauthorizedAdmin);
                 ensure!(
                     <T as votingengine::Config>::InternalAdminProvider::is_personal_admin(
-                        funding_account.clone(),
+                        funding_account_id.clone(),
                         &who,
                     ),
                     Error::<T>::UnauthorizedAdmin
@@ -343,7 +343,7 @@ pub mod pallet {
             }
             ensure!(
                 <T as Config>::InstitutionAsset::can_spend(
-                    &funding_account,
+                    &funding_account_id,
                     InstitutionAssetAction::MultisigTransferExecute,
                 ),
                 Error::<T>::InstitutionSpendNotAllowed
@@ -355,13 +355,13 @@ pub mod pallet {
 
             // 不允许自转账
             ensure!(
-                beneficiary != funding_account,
+                beneficiary_account_id != funding_account_id,
                 Error::<T>::SelfTransferNotAllowed
             );
 
             // 不允许转到受保护地址（质押地址）
             ensure!(
-                !<T as Config>::ProtectedSourceChecker::is_protected(&beneficiary,),
+                !<T as Config>::ProtectedSourceChecker::is_protected(&beneficiary_account_id,),
                 Error::<T>::BeneficiaryIsProtectedAddress
             );
 
@@ -372,7 +372,7 @@ pub mod pallet {
             let amount_u128: u128 = amount.saturated_into();
             let fee_u128 = primitives::fee_policy::calculate_onchain_fee(amount_u128);
             let fee: BalanceOf<T> = fee_u128.saturated_into();
-            let free = <T as Config>::Currency::free_balance(&funding_account);
+            let free = <T as Config>::Currency::free_balance(&funding_account_id);
             let principal_required = amount
                 .checked_add(&ed)
                 .ok_or(Error::<T>::InsufficientBalance)?;
@@ -395,11 +395,11 @@ pub mod pallet {
 
             let action = TransferAction {
                 actor_cid_number: actor_cid_number.clone(),
-                funding_account: funding_account.clone(),
-                beneficiary: beneficiary.clone(),
+                funding_account_id: funding_account_id.clone(),
+                beneficiary_account_id: beneficiary_account_id.clone(),
                 amount,
                 remark: remark.clone(),
-                proposer: who.clone(),
+                proposer_account_id: who.clone(),
             };
             let mut encoded = sp_runtime::Vec::from(crate::MODULE_TAG);
             encoded.extend_from_slice(&action.encode());
@@ -419,7 +419,7 @@ pub mod pallet {
                     who.clone(),
                     institution_code,
                     cid_number.to_vec(),
-                    Some(funding_account.clone()),
+                    Some(funding_account_id.clone()),
                     subject_cid_numbers,
                     vote_plan,
                     encoded,
@@ -427,7 +427,7 @@ pub mod pallet {
             } else {
                 <T as Config>::InternalVoteEngine::create_personal_proposal_with_data(
                     who.clone(),
-                    funding_account.clone(),
+                    funding_account_id.clone(),
                     crate::MODULE_TAG,
                     encoded,
                 )?
@@ -442,9 +442,9 @@ pub mod pallet {
                 proposal_id,
                 institution_code,
                 actor_cid_number,
-                proposer: who,
-                funding_account,
-                beneficiary,
+                proposer_account_id: who,
+                funding_account_id,
+                beneficiary_account_id,
                 amount,
                 remark,
                 expires_at,
@@ -462,8 +462,8 @@ pub mod pallet {
             origin: OriginFor<T>,
             actor_cid_number: CidNumber,
             proposer_role_code: RoleCode,
-            institution_account: T::AccountId,
-            beneficiary: T::AccountId,
+            institution_account_id: T::AccountId,
+            beneficiary_account_id: T::AccountId,
             amount: BalanceOf<T>,
             remark: BoundedVec<u8, T::MaxRemarkLen>,
         ) -> DispatchResult {
@@ -477,13 +477,13 @@ pub mod pallet {
             );
             let expected_safety_fund = Self::decode_institution_account(&SAFETY_FUND_ACCOUNT)?;
             ensure!(
-                institution_account == expected_safety_fund,
+                institution_account_id == expected_safety_fund,
                 Error::<T>::InvalidInstitution
             );
             // 验证安全基金账户余额
             ensure!(
                 <T as Config>::InstitutionAsset::can_spend(
-                    &institution_account,
+                    &institution_account_id,
                     InstitutionAssetAction::NrcSafetyFundTransfer,
                 ),
                 Error::<T>::InstitutionSpendNotAllowed
@@ -494,7 +494,7 @@ pub mod pallet {
             let fee_u128 = primitives::fee_policy::calculate_onchain_fee(amount_u128);
             let fee: BalanceOf<T> = fee_u128.saturated_into();
             let ed: BalanceOf<T> = <T as Config>::Currency::minimum_balance();
-            let free = <T as Config>::Currency::free_balance(&institution_account);
+            let free = <T as Config>::Currency::free_balance(&institution_account_id);
             let required = amount
                 .checked_add(&ed)
                 .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
@@ -521,7 +521,7 @@ pub mod pallet {
                     who.clone(),
                     NRC,
                     actor_cid_number.to_vec(),
-                    Some(institution_account.clone()),
+                    Some(institution_account_id.clone()),
                     vec![actor_cid_number.to_vec()],
                     vote_plan,
                     proposal_data,
@@ -531,11 +531,11 @@ pub mod pallet {
                 proposal_id,
                 SafetyFundAction {
                     actor_cid_number: actor_cid_number.clone(),
-                    institution_account: institution_account.clone(),
-                    beneficiary: beneficiary.clone(),
+                    institution_account_id: institution_account_id.clone(),
+                    beneficiary_account_id: beneficiary_account_id.clone(),
                     amount,
                     remark: remark.clone(),
-                    proposer: who.clone(),
+                    proposer_account_id: who.clone(),
                 },
             );
 
@@ -547,9 +547,9 @@ pub mod pallet {
             Self::deposit_event(Event::SafetyFundTransferProposed {
                 proposal_id,
                 actor_cid_number,
-                proposer: who,
-                institution_account,
-                beneficiary,
+                proposer_account_id: who,
+                institution_account_id,
+                beneficiary_account_id,
                 amount,
                 remark,
                 expires_at,
@@ -563,7 +563,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             actor_cid_number: CidNumber,
             proposer_role_code: RoleCode,
-            institution_account: T::AccountId,
+            institution_account_id: T::AccountId,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -574,7 +574,7 @@ pub mod pallet {
             let institution_code = Self::resolve_sweep_org(&actor_cid_number)?;
             let fee_account = Self::resolve_fee_account(&actor_cid_number)?;
             ensure!(
-                institution_account == fee_account,
+                institution_account_id == fee_account,
                 Error::<T>::InvalidInstitution
             );
             let proposal_data = sp_runtime::Vec::from(SWEEP_OWNER_DATA);
@@ -590,7 +590,7 @@ pub mod pallet {
                     who.clone(),
                     institution_code,
                     actor_cid_number.to_vec(),
-                    Some(institution_account.clone()),
+                    Some(institution_account_id.clone()),
                     vec![actor_cid_number.to_vec()],
                     vote_plan,
                     proposal_data,
@@ -600,9 +600,9 @@ pub mod pallet {
                 proposal_id,
                 SweepAction {
                     actor_cid_number: actor_cid_number.clone(),
-                    institution_account: institution_account.clone(),
+                    institution_account_id: institution_account_id.clone(),
                     amount,
-                    proposer: who.clone(),
+                    proposer_account_id: who.clone(),
                 },
             );
 
@@ -614,8 +614,8 @@ pub mod pallet {
             Self::deposit_event(Event::SweepToMainProposed {
                 proposal_id,
                 actor_cid_number,
-                proposer: who,
-                institution_account,
+                proposer_account_id: who,
+                institution_account_id,
                 main_account,
                 amount,
                 expires_at,
@@ -633,24 +633,24 @@ pub mod pallet {
 
         fn resolve_funding_authority(
             actor_cid_number: Option<&CidNumber>,
-            funding_account: &T::AccountId,
+            funding_account_id: &T::AccountId,
         ) -> Result<(InstitutionCode, Vec<Vec<u8>>), Error<T>> {
             use entity_primitives::InstitutionMultisigQuery;
             use personal_manage::traits::PersonalMultisigQuery;
 
             let Some(cid_number) = actor_cid_number else {
                 ensure!(
-                    <T as Config>::PersonalQuery::is_active(funding_account),
+                    <T as Config>::PersonalQuery::is_active(funding_account_id),
                     Error::<T>::InvalidInstitution
                 );
                 return Ok((PMUL, Vec::new()));
             };
 
             ensure!(
-                <T as Config>::InstitutionQuery::account_exists(funding_account),
+                <T as Config>::InstitutionQuery::account_exists(funding_account_id),
                 Error::<T>::InvalidInstitution
             );
-            let stored_cid = <T as Config>::InstitutionQuery::lookup_cid(funding_account)
+            let stored_cid = <T as Config>::InstitutionQuery::lookup_cid(funding_account_id)
                 .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 stored_cid.as_slice() == cid_number.as_slice(),
@@ -660,7 +660,7 @@ pub mod pallet {
                 .map_err(|_| Error::<T>::InvalidInstitution)?;
             let institution_code =
                 institution_code_from_cid_number(cid_text).ok_or(Error::<T>::InvalidInstitution)?;
-            let stored_code = <T as Config>::InstitutionQuery::lookup_org(funding_account)
+            let stored_code = <T as Config>::InstitutionQuery::lookup_org(funding_account_id)
                 .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 stored_code == institution_code,
@@ -682,14 +682,14 @@ pub mod pallet {
                 module_tag: crate::MODULE_TAG.to_vec(),
                 action_code,
             };
-            let proposer = entity_primitives::RoleSubject {
+            let proposer_account_id = entity_primitives::RoleSubject {
                 cid_number: cid_number.to_vec(),
                 role_code: proposer_role_code.to_vec(),
             };
             ensure!(
                 T::InstitutionRoleAuthorization::is_authorized(
                     who,
-                    &proposer,
+                    &proposer_account_id,
                     &action_id,
                     RolePermissionOperation::Propose,
                 ),
@@ -746,7 +746,7 @@ pub mod pallet {
             proposal_id: u64,
             institution_code: InstitutionCode,
             actor_cid_number: Option<&CidNumber>,
-            funding_account: &T::AccountId,
+            funding_account_id: &T::AccountId,
             subject_cid_numbers: &[Vec<u8>],
         ) -> DispatchResult {
             let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
@@ -759,7 +759,7 @@ pub mod pallet {
                     && proposal.status == STATUS_PASSED
                     && proposal.internal_code == Some(institution_code)
                     && proposal.actor_cid_number.as_ref() == actor_cid_number
-                    && proposal.execution_account.as_ref() == Some(funding_account)
+                    && proposal.execution_account_id.as_ref() == Some(funding_account_id)
                     && proposal.subject_cid_numbers.len() == subject_cid_numbers.len()
                     && subject_cid_numbers.iter().all(|expected| {
                         proposal
@@ -813,14 +813,14 @@ pub mod pallet {
                 proposal_id,
                 institution_code,
                 Some(&action.actor_cid_number),
-                &action.institution_account,
+                &action.institution_account_id,
                 &[action.actor_cid_number.to_vec()],
             )
             .map_err(|_| Error::<T>::SweepProposalNotPassed)?;
 
             let fee_account = Self::resolve_fee_account(&action.actor_cid_number)?;
             ensure!(
-                fee_account == action.institution_account,
+                fee_account == action.institution_account_id,
                 Error::<T>::InvalidInstitution
             );
             let main_account = Self::resolve_main_account(&action.actor_cid_number)?;
@@ -886,7 +886,7 @@ pub mod pallet {
             Self::deposit_event(Event::SweepToMainExecuted {
                 proposal_id,
                 actor_cid_number: action.actor_cid_number,
-                institution_account: action.institution_account,
+                institution_account_id: action.institution_account_id,
                 amount: action.amount,
                 fee: tx_fee,
                 reserve_left,
@@ -902,7 +902,7 @@ pub mod pallet {
                 proposal_id,
                 NRC,
                 Some(&action.actor_cid_number),
-                &action.institution_account,
+                &action.institution_account_id,
                 &[action.actor_cid_number.to_vec()],
             )
             .map_err(|_| Error::<T>::SafetyFundProposalNotPassed)?;
@@ -911,7 +911,7 @@ pub mod pallet {
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
             ensure!(
                 action.actor_cid_number == nrc_cid()
-                    && action.institution_account == safety_fund_account,
+                    && action.institution_account_id == safety_fund_account,
                 Error::<T>::InvalidInstitution
             );
 
@@ -955,7 +955,7 @@ pub mod pallet {
                     }
                     match <T as Config>::Currency::transfer(
                         &safety_fund_account,
-                        &action.beneficiary,
+                        &action.beneficiary_account_id,
                         action.amount,
                         frame_support::traits::ExistenceRequirement::KeepAlive,
                     ) {
@@ -970,7 +970,7 @@ pub mod pallet {
             Self::deposit_event(Event::SafetyFundTransferExecuted {
                 proposal_id,
                 fee_payer: fee_account,
-                beneficiary: action.beneficiary,
+                beneficiary_account_id: action.beneficiary_account_id,
                 amount: action.amount,
                 fee,
             });
@@ -992,18 +992,18 @@ pub mod pallet {
             .map_err(|_| Error::<T>::ProposalActionNotFound)?;
             let (institution_code, subject_cid_numbers) = Self::resolve_funding_authority(
                 action.actor_cid_number.as_ref(),
-                &action.funding_account,
+                &action.funding_account_id,
             )?;
             Self::ensure_internal_business_proposal(
                 proposal_id,
                 institution_code,
                 action.actor_cid_number.as_ref(),
-                &action.funding_account,
+                &action.funding_account_id,
                 &subject_cid_numbers,
             )?;
             ensure!(
                 <T as Config>::InstitutionAsset::can_spend(
-                    &action.funding_account,
+                    &action.funding_account_id,
                     InstitutionAssetAction::MultisigTransferExecute,
                 ),
                 Error::<T>::InstitutionSpendNotAllowed
@@ -1015,11 +1015,13 @@ pub mod pallet {
                 Error::<T>::AmountBelowExistentialDeposit
             );
             ensure!(
-                action.beneficiary != action.funding_account,
+                action.beneficiary_account_id != action.funding_account_id,
                 Error::<T>::SelfTransferNotAllowed
             );
             ensure!(
-                !<T as Config>::ProtectedSourceChecker::is_protected(&action.beneficiary),
+                !<T as Config>::ProtectedSourceChecker::is_protected(
+                    &action.beneficiary_account_id
+                ),
                 Error::<T>::BeneficiaryIsProtectedAddress
             );
 
@@ -1027,7 +1029,7 @@ pub mod pallet {
             let amount_u128: u128 = action.amount.saturated_into();
             let fee_u128 = primitives::fee_policy::calculate_onchain_fee(amount_u128);
             let fee: BalanceOf<T> = fee_u128.saturated_into();
-            let free = <T as Config>::Currency::free_balance(&action.funding_account);
+            let free = <T as Config>::Currency::free_balance(&action.funding_account_id);
             let principal_required = action
                 .amount
                 .checked_add(&ed)
@@ -1048,10 +1050,10 @@ pub mod pallet {
                     .checked_add(&fee)
                     .ok_or(Error::<T>::InsufficientBalance)?;
                 ensure!(free >= required, Error::<T>::InsufficientBalance);
-                action.funding_account.clone()
+                action.funding_account_id.clone()
             };
 
-            // 机构路径从费用账户扣费、从 funding_account 转本金；个人路径两者相同。
+            // 机构路径从费用账户扣费、从 funding_account_id 转本金；个人路径两者相同。
             // 任一失败时手续费事件、分账和本金转账全部回滚。
             let exec_result = frame_support::storage::with_transaction(|| {
                 if <T as Config>::OnchainFeeCharger::charge(&fee_payer, action.amount).is_err() {
@@ -1060,8 +1062,8 @@ pub mod pallet {
                     ));
                 }
                 match <T as Config>::Currency::transfer(
-                    &action.funding_account,
-                    &action.beneficiary,
+                    &action.funding_account_id,
+                    &action.beneficiary_account_id,
                     action.amount,
                     ExistenceRequirement::KeepAlive,
                 ) {
@@ -1073,9 +1075,9 @@ pub mod pallet {
 
             Self::deposit_event(Event::<T>::TransferExecuted {
                 proposal_id,
-                funding_account: action.funding_account,
+                funding_account_id: action.funding_account_id,
                 fee_payer,
-                beneficiary: action.beneficiary,
+                beneficiary_account_id: action.beneficiary_account_id,
                 amount: action.amount,
                 fee,
             });
@@ -1139,7 +1141,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                                 pallet::Pallet::<T>::deposit_event(
                                     pallet::Event::<T>::TransferExecutionFailed {
                                         proposal_id,
-                                        funding_account: action.funding_account,
+                                        funding_account_id: action.funding_account_id,
                                     },
                                 );
                             }

@@ -36,7 +36,7 @@ impl<T: Config> Pallet<T> {
             (
                 InternalVoteTicket::Institution(InstitutionVoteTicket {
                     role_subject,
-                    voter_account: who.clone(),
+                    voter_account_id: who.clone(),
                 }),
                 Some(role_code),
                 <votingengine::Pallet<T>>::is_subject_voter_in_snapshot(proposal_id, subject, &who),
@@ -48,10 +48,10 @@ impl<T: Config> Pallet<T> {
                 matches!(ticket_claim, InternalVoteTicketClaim::Personal),
                 votingengine::Error::<T>::NoPermission
             );
-            let personal_account = proposal
-                .execution_account
+            let personal_account_id = proposal
+                .execution_account_id
                 .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
-            let subject = ProposalSubject::PersonalAccount(personal_account);
+            let subject = ProposalSubject::PersonalAccount(personal_account_id);
             (
                 InternalVoteTicket::Personal(who.clone()),
                 None,

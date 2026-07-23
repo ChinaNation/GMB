@@ -2,7 +2,7 @@
 
 //! 个人多签账户生命周期 pallet（MODULE_TAG = `b"per-mgmt"`）。
 //!
-//! 业务边界:用户自定义的多签账户(无 CID 归属),由 `creator + account_name`
+//! 业务边界:用户自定义的多签账户(无 CID 归属),由 `creator_account_id + account_name`
 //! 派生地址 `derive_personal_account`。本模块只承载创建、关闭及投票引擎终态回调。
 //!
 //! 与机构多签 (`public-manage/private-manage`) 完全独立的 storage / event / error / extrinsic 命名空间;
@@ -130,9 +130,9 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
-    /// 个人多签账户配置。key 为 personal_account。
+    /// 个人多签账户配置。key 为 personal_account_id。
     ///
-    /// 本表统一保存 creator/account_name/created_at/status。
+    /// 本表统一保存 creator_account_id/account_name/created_at/status。
     /// 管理员集合、管理员数量只允许从 personal-admins 读取；
     /// 普通动态阈值只允许从投票引擎 internal-vote 读取。
     #[pallet::storage]
@@ -181,8 +181,8 @@ pub mod pallet {
         /// citizenapp 扫描此事件后引导其他管理员到投票引擎统一入口 `internal_vote` 投票。
         PersonalCreateProposed {
             proposal_id: u64,
-            account: T::AccountId,
-            proposer: T::AccountId,
+            account_id: T::AccountId,
+            proposer_account_id: T::AccountId,
             account_name: AccountNameOf<T>,
             admins: AdminsOf<T>,
             admins_len: u32,
@@ -194,8 +194,8 @@ pub mod pallet {
         /// 个人多签账户创建成功(投票通过,入金完成,状态变为 Active)。
         PersonalCreated {
             proposal_id: u64,
-            account: T::AccountId,
-            creator: T::AccountId,
+            account_id: T::AccountId,
+            creator_account_id: T::AccountId,
             admins_len: u32,
             threshold: u32,
             amount: BalanceOf<T>,
@@ -204,25 +204,25 @@ pub mod pallet {
         /// 创建提案投票通过但执行失败。
         CreateExecutionFailed {
             proposal_id: u64,
-            account: T::AccountId,
+            account_id: T::AccountId,
         },
         /// 创建提案最终被拒绝(投票引擎返回 STATUS_REJECTED 后清理 Pending)。
         PersonalCreateRejected {
             proposal_id: u64,
-            account: T::AccountId,
+            account_id: T::AccountId,
         },
         /// 关闭个人多签账户提案已发起。
         PersonalCloseProposed {
             proposal_id: u64,
-            account: T::AccountId,
-            proposer: T::AccountId,
-            beneficiary: T::AccountId,
+            account_id: T::AccountId,
+            proposer_account_id: T::AccountId,
+            beneficiary_account_id: T::AccountId,
         },
         /// 个人多签账户注销成功(投票通过,余额转出,PersonalAccounts 删除)。
         PersonalClosed {
             proposal_id: u64,
-            account: T::AccountId,
-            beneficiary: T::AccountId,
+            account_id: T::AccountId,
+            beneficiary_account_id: T::AccountId,
             admins_len: u32,
             threshold: u32,
             amount: BalanceOf<T>,
@@ -231,7 +231,7 @@ pub mod pallet {
         /// 关闭提案投票通过但执行失败。
         CloseExecutionFailed {
             proposal_id: u64,
-            account: T::AccountId,
+            account_id: T::AccountId,
         },
     }
 
@@ -274,8 +274,8 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// 发起"创建个人多签账户"提案(无需 CID 注册)。
         ///
-        /// 地址由 `creator + account_name` 派生，统一调用
-        /// `primitives::account_derive::AccountKind::Personal { creator, account_name }.derive(ss58)`。
+        /// 地址由 `creator_account_id + account_name` 派生，统一调用
+        /// `primitives::account_derive::AccountKind::Personal { creator_account_id, account_name }.derive(ss58)`。
         ///
         /// 投票通过后由 `InternalVoteExecutor` 自动执行入金 + 激活。
         #[pallet::call_index(0)]
@@ -304,11 +304,11 @@ pub mod pallet {
         #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_close())]
         pub fn propose_close(
             origin: OriginFor<T>,
-            account: T::AccountId,
-            beneficiary: T::AccountId,
+            account_id: T::AccountId,
+            beneficiary_account_id: T::AccountId,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            crate::close::do_propose_close::<T>(who, account, beneficiary)
+            crate::close::do_propose_close::<T>(who, account_id, beneficiary_account_id)
         }
 
         // call_index(2) 已永久废弃：拒绝和执行失败清理由 votingengine 终态回调完成。
@@ -317,20 +317,20 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// 派生个人多签账户。
         ///
-        /// 地址只依赖 creator 与 account_name,与管理员列表无关,
+        /// 地址只依赖 creator_account_id 与 account_name,与管理员列表无关,
         /// 所以未来换管理员地址不变。
         pub fn derive_personal_account(
-            creator: &T::AccountId,
+            creator_account_id: &T::AccountId,
             account_name: &[u8],
         ) -> Result<T::AccountId, DispatchError> {
-            // creator (AccountId32) 编码即 32 字节原始 pubkey;account_derive 的
-            // Personal payload = creator(32B) || account_name,与历史拼装逐字节一致。
-            let encoded = creator.encode();
+            // creator_account_id (AccountId32) 编码即 32 字节原始 pubkey;account_derive 的
+            // Personal payload = creator_account_id(32B) || account_name,与历史拼装逐字节一致。
+            let encoded = creator_account_id.encode();
             ensure!(encoded.len() >= 32, Error::<T>::DerivedAccountDecodeFailed);
             let mut creator_32 = [0u8; 32];
             creator_32.copy_from_slice(&encoded[..32]);
             let digest = primitives::account_derive::AccountKind::Personal {
-                creator: &creator_32,
+                creator_account_id: &creator_32,
                 account_name,
             }
             .derive(<T as frame_system::Config>::SS58Prefix::get());
@@ -358,7 +358,7 @@ pub mod pallet {
             );
             Self::ensure_unique_admins(admins)?;
             ensure!(
-                admins.iter().any(|admin| &admin.admin_account == who),
+                admins.iter().any(|admin| &admin.account_id == who),
                 Error::<T>::PermissionDenied
             );
             Ok(regular_threshold)
@@ -382,7 +382,7 @@ pub mod pallet {
                 ensure!(!admin.family_name.is_empty(), Error::<T>::InvalidFamilyName);
                 ensure!(!admin.given_name.is_empty(), Error::<T>::InvalidGivenName);
                 ensure!(
-                    seen.insert(admin.admin_account.clone()),
+                    seen.insert(admin.account_id.clone()),
                     Error::<T>::DuplicateAdmin
                 );
             }
@@ -415,7 +415,7 @@ pub mod pallet {
         pub(crate) fn ensure_lifecycle_proposal(
             proposal_id: u64,
             module_tag: &[u8],
-            account: T::AccountId,
+            account_id: T::AccountId,
             expected_status: u8,
             require_callback_scope: bool,
         ) -> DispatchResult {
@@ -434,7 +434,8 @@ pub mod pallet {
                 Error::<T>::ProposalActionNotFound
             );
             ensure!(
-                proposal.execution_account == Some(account) && proposal.actor_cid_number.is_none(),
+                proposal.execution_account_id == Some(account_id)
+                    && proposal.actor_cid_number.is_none(),
                 Error::<T>::ProposalActionNotFound
             );
             ensure!(
@@ -456,116 +457,116 @@ pub mod pallet {
 
         pub fn active_admin_account_exists(
             institution_code: votingengine::types::InstitutionCode,
-            account: T::AccountId,
+            account_id: T::AccountId,
         ) -> bool {
-            T::PersonalAdminQuery::active_admin_account_exists(institution_code, account)
+            T::PersonalAdminQuery::active_admin_account_exists(institution_code, account_id)
         }
 
         pub fn is_active_account_admin(
             institution_code: votingengine::types::InstitutionCode,
-            account: T::AccountId,
+            account_id: T::AccountId,
             who: &T::AccountId,
         ) -> bool {
-            T::PersonalAdminQuery::is_active_account_admin(institution_code, account, who)
+            T::PersonalAdminQuery::is_active_account_admin(institution_code, account_id, who)
         }
 
         pub fn active_account_admins(
             institution_code: votingengine::types::InstitutionCode,
-            account: T::AccountId,
+            account_id: T::AccountId,
         ) -> Option<Vec<T::AccountId>> {
-            T::PersonalAdminQuery::active_account_admins(institution_code, account)
+            T::PersonalAdminQuery::active_account_admins(institution_code, account_id)
         }
 
         pub fn active_account_admins_len(
             institution_code: votingengine::types::InstitutionCode,
-            account: T::AccountId,
+            account_id: T::AccountId,
         ) -> Option<u32> {
-            T::PersonalAdminQuery::active_account_admins_len(institution_code, account)
+            T::PersonalAdminQuery::active_account_admins_len(institution_code, account_id)
         }
 
         pub fn pending_account_exists_for_snapshot(
             institution_code: votingengine::types::InstitutionCode,
-            account: T::AccountId,
+            account_id: T::AccountId,
         ) -> bool {
-            T::PersonalAdminQuery::pending_account_exists_for_snapshot(institution_code, account)
+            T::PersonalAdminQuery::pending_account_exists_for_snapshot(institution_code, account_id)
         }
 
         pub fn is_pending_account_admin_for_snapshot(
             institution_code: votingengine::types::InstitutionCode,
-            account: T::AccountId,
+            account_id: T::AccountId,
             who: &T::AccountId,
         ) -> bool {
             T::PersonalAdminQuery::is_pending_account_admin_for_snapshot(
                 institution_code,
-                account,
+                account_id,
                 who,
             )
         }
 
         pub fn pending_account_admins_for_snapshot(
             institution_code: votingengine::types::InstitutionCode,
-            account: T::AccountId,
+            account_id: T::AccountId,
         ) -> Option<Vec<T::AccountId>> {
-            T::PersonalAdminQuery::pending_account_admins_for_snapshot(institution_code, account)
+            T::PersonalAdminQuery::pending_account_admins_for_snapshot(institution_code, account_id)
         }
 
         pub fn pending_account_admins_len_for_snapshot(
             institution_code: votingengine::types::InstitutionCode,
-            account: T::AccountId,
+            account_id: T::AccountId,
         ) -> Option<u32> {
             T::PersonalAdminQuery::pending_account_admins_len_for_snapshot(
                 institution_code,
-                account,
+                account_id,
             )
         }
 
         pub(crate) fn create_pending_admin_account_for_proposal(
             proposal_id: u64,
-            account: T::AccountId,
+            account_id: T::AccountId,
             kind: AdminAccountKind,
             admins: &AdminsOf<T>,
-            creator: &T::AccountId,
+            creator_account_id: &T::AccountId,
         ) -> DispatchResult {
             Self::ensure_lifecycle_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
-                account.clone(),
+                account_id.clone(),
                 STATUS_VOTING,
                 false,
             )?;
             T::PersonalAdminLifecycle::create_pending_admin_account_for_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
-                account,
+                account_id,
                 Vec::new(),
                 votingengine::types::PMUL,
                 kind,
                 admins.iter().cloned().collect(),
-                creator.clone(),
+                creator_account_id.clone(),
             )
         }
 
         pub(crate) fn activate_admin_account(
             proposal_id: u64,
-            account: T::AccountId,
+            account_id: T::AccountId,
         ) -> DispatchResult {
             Self::ensure_lifecycle_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
-                account.clone(),
+                account_id.clone(),
                 STATUS_PASSED,
                 true,
             )?;
             T::PersonalAdminLifecycle::activate_admin_account_for_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
-                account,
+                account_id,
             )
         }
 
         pub(crate) fn remove_pending_admin_account(
             proposal_id: u64,
-            account: T::AccountId,
+            account_id: T::AccountId,
         ) -> DispatchResult {
             let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
@@ -576,32 +577,32 @@ pub mod pallet {
             Self::ensure_lifecycle_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
-                account.clone(),
+                account_id.clone(),
                 proposal.status,
                 false,
             )?;
             T::PersonalAdminLifecycle::remove_pending_admin_account_for_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
-                account,
+                account_id,
             )
         }
 
         pub(crate) fn close_admin_account(
             proposal_id: u64,
-            account: T::AccountId,
+            account_id: T::AccountId,
         ) -> DispatchResult {
             Self::ensure_lifecycle_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
-                account.clone(),
+                account_id.clone(),
                 STATUS_PASSED,
                 true,
             )?;
             T::PersonalAdminLifecycle::close_admin_account_for_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
-                account,
+                account_id,
             )
         }
 
@@ -629,17 +630,18 @@ impl<T: pallet::Config> traits::PersonalMultisigQuery<T::AccountId> for pallet::
     fn lookup_admin_config(
         addr: &T::AccountId,
     ) -> Option<primitives::multisig::MultisigConfigSnapshot<T::AccountId>> {
-        let account = pallet::PersonalAccounts::<T>::get(addr)?;
-        if account.status != types::PersonalStatus::Active {
+        let account_id = pallet::PersonalAccounts::<T>::get(addr)?;
+        if account_id.status != types::PersonalStatus::Active {
             return None;
         }
-        let account = addr.clone();
+        let account_id = addr.clone();
         let institution_code = votingengine::types::PMUL;
-        let admins = pallet::Pallet::<T>::active_account_admins(institution_code, account.clone())?;
+        let admins =
+            pallet::Pallet::<T>::active_account_admins(institution_code, account_id.clone())?;
         let admins_len =
-            pallet::Pallet::<T>::active_account_admins_len(institution_code, account.clone())?;
+            pallet::Pallet::<T>::active_account_admins_len(institution_code, account_id.clone())?;
         let threshold =
-            <T as Config>::InternalVoteEngine::active_personal_threshold(account.clone())?;
+            <T as Config>::InternalVoteEngine::active_personal_threshold(account_id.clone())?;
         Some(primitives::multisig::MultisigConfigSnapshot {
             admins,
             admins_len,
@@ -727,7 +729,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                 ACTION_CLOSE => {
                     let action = pallet::PersonalCloseActionOf::<T>::decode(&mut &payload[..])
                         .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
-                    pallet::PendingCloseProposal::<T>::remove(&action.account);
+                    pallet::PendingCloseProposal::<T>::remove(&action.account_id);
                     Ok(ProposalExecutionOutcome::Executed)
                 }
                 _ => Ok(ProposalExecutionOutcome::Ignored),
@@ -748,17 +750,17 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                 if crate::execute::cleanup_pending_create::<T>(proposal_id, &action, false)? {
                     pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::CreateExecutionFailed {
                         proposal_id,
-                        account: action.account,
+                        account_id: action.account_id,
                     });
                 }
             }
             ACTION_CLOSE => {
                 let action = pallet::PersonalCloseActionOf::<T>::decode(&mut &payload[..])
                     .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
-                if pallet::PendingCloseProposal::<T>::take(&action.account).is_some() {
+                if pallet::PendingCloseProposal::<T>::take(&action.account_id).is_some() {
                     pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::CloseExecutionFailed {
                         proposal_id,
-                        account: action.account,
+                        account_id: action.account_id,
                     });
                 }
             }

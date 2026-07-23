@@ -100,10 +100,10 @@ pub mod pallet {
     #[scale_info(skip_type_params(T))]
     pub struct Proposal<T: Config> {
         pub actor_cid_number: votingengine::types::CidNumber,
-        /// 提案发起岗位码；与机构 CID、签名钱包共同形成完整授权主体。
+        /// 提案发起岗位码；与机构 CID、签名账户共同形成完整授权主体。
         pub actor_role_code: votingengine::types::RoleCode,
         /// 提案发起人（国家储委会或省储委会对应岗位的任职管理员）
-        pub proposer: T::AccountId,
+        pub proposer_account_id: T::AccountId,
         /// 升级理由
         pub reason: ReasonOf<T>,
         /// 代码哈希，便于事件与链下审计对齐
@@ -159,7 +159,7 @@ pub mod pallet {
             proposal_id: u64,
             actor_cid_number: votingengine::types::CidNumber,
             actor_role_code: votingengine::types::RoleCode,
-            proposer: T::AccountId,
+            proposer_account_id: T::AccountId,
             code_hash: T::Hash,
             pow_params_hash: T::Hash,
         },
@@ -213,7 +213,7 @@ pub mod pallet {
             code: CodeOf<T>,
             new_pow_params: pow_difficulty::PowDifficultyParams,
         ) -> DispatchResult {
-            let proposer = T::ProposeOrigin::ensure_origin(origin)?;
+            let proposer_account_id = T::ProposeOrigin::ensure_origin(origin)?;
 
             let actor_text = core::str::from_utf8(actor_cid_number.as_slice())
                 .map_err(|_| Error::<T>::InvalidActorCid)?;
@@ -236,7 +236,7 @@ pub mod pallet {
             };
             ensure!(
                 T::InstitutionRoleAuthorization::is_authorized(
-                    &proposer,
+                    &proposer_account_id,
                     &proposer_role,
                     &business_action,
                     RolePermissionOperation::Propose,
@@ -260,7 +260,7 @@ pub mod pallet {
             let proposal = Proposal::<T> {
                 actor_cid_number: actor_cid_number.clone(),
                 actor_role_code: actor_role_code.clone(),
-                proposer: proposer.clone(),
+                proposer_account_id: proposer_account_id.clone(),
                 reason,
                 code_hash,
                 expected_pow_params_hash,
@@ -270,7 +270,7 @@ pub mod pallet {
             encoded.extend_from_slice(&proposal.encode());
             let vote_plan = Self::build_vote_plan(&actor_cid_number, business_object_hash)?;
             let proposal_id = T::JointVoteEngine::create_joint_proposal_with_data_and_object(
-                proposer.clone(),
+                proposer_account_id.clone(),
                 actor_cid_number.to_vec(),
                 vote_plan,
                 encoded,
@@ -283,7 +283,7 @@ pub mod pallet {
                 proposal_id,
                 actor_cid_number,
                 actor_role_code,
-                proposer,
+                proposer_account_id,
                 code_hash,
                 pow_params_hash,
             });

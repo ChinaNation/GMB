@@ -71,7 +71,7 @@ pub struct OnchainAssetMeta<AccountId> {
     /// 发行机构唯一 CID。
     pub actor_cid_number: votingengine::types::CidNumber,
     /// 资产执行账户；不得作为机构身份或管理员寻址 key。
-    pub execution_account: AccountId,
+    pub execution_account_id: AccountId,
     /// 资产种类(第一期只 Plain)。
     pub class: AssetClass,
     /// 小数位(0..=18,链端校验)。

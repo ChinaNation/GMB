@@ -9,7 +9,7 @@ impl<T: Config> Pallet<T> {
         who: T::AccountId,
         institution_code: InstitutionCode,
         actor_cid_number: sp_std::vec::Vec<u8>,
-        execution_account: Option<T::AccountId>,
+        execution_account_id: Option<T::AccountId>,
         subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
         vote_plan: &VotePlanOf<T::AccountId>,
     ) -> Result<u64, DispatchError> {
@@ -17,7 +17,7 @@ impl<T: Config> Pallet<T> {
             who,
             institution_code,
             actor_cid_number,
-            execution_account,
+            execution_account_id,
             subject_cid_numbers,
             InternalProposalMutexKind::Regular,
             InternalProposalRole::General,
@@ -29,7 +29,7 @@ impl<T: Config> Pallet<T> {
         who: T::AccountId,
         institution_code: InstitutionCode,
         actor_cid_number: sp_std::vec::Vec<u8>,
-        execution_account: Option<T::AccountId>,
+        execution_account_id: Option<T::AccountId>,
         subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
         mutex_kind: InternalProposalMutexKind,
         role: InternalProposalRole,
@@ -57,7 +57,7 @@ impl<T: Config> Pallet<T> {
             status: votingengine::STATUS_VOTING,
             internal_code: Some(institution_code),
             actor_cid_number: Some(actor_cid_number.clone()),
-            execution_account,
+            execution_account_id,
             subject_cid_numbers,
             start: now,
             end,
@@ -158,15 +158,15 @@ impl<T: Config> Pallet<T> {
     /// 创建个人多签普通内部提案。
     pub fn do_create_personal_proposal(
         who: T::AccountId,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
     ) -> Result<u64, DispatchError> {
         ensure!(
-            is_personal_admin::<T>(personal_account.clone(), &who),
+            is_personal_admin::<T>(personal_account_id.clone(), &who),
             votingengine::Error::<T>::NoPermission
         );
         Self::do_create_active_personal_proposal(
             who,
-            personal_account,
+            personal_account_id,
             InternalProposalMutexKind::Regular,
             InternalProposalRole::General,
             false,
@@ -176,15 +176,15 @@ impl<T: Config> Pallet<T> {
     /// 创建个人多签注销提案，要求当前管理员全员通过。
     pub fn do_create_personal_lifecycle_proposal(
         who: T::AccountId,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
     ) -> Result<u64, DispatchError> {
         ensure!(
-            is_personal_admin::<T>(personal_account.clone(), &who),
+            is_personal_admin::<T>(personal_account_id.clone(), &who),
             votingengine::Error::<T>::NoPermission
         );
         Self::do_create_active_personal_proposal(
             who,
-            personal_account,
+            personal_account_id,
             InternalProposalMutexKind::Regular,
             InternalProposalRole::PersonalClose,
             true,
@@ -194,18 +194,18 @@ impl<T: Config> Pallet<T> {
     /// 创建个人多签管理员变更提案；新阈值只在提案执行成功后激活。
     pub fn do_create_personal_admin_change_proposal(
         who: T::AccountId,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
         new_admins_len: u32,
         new_threshold: u32,
     ) -> Result<u64, DispatchError> {
         Self::ensure_dynamic_threshold(new_admins_len, new_threshold)?;
         ensure!(
-            is_personal_admin::<T>(personal_account.clone(), &who),
+            is_personal_admin::<T>(personal_account_id.clone(), &who),
             votingengine::Error::<T>::NoPermission
         );
         let proposal_id = Self::do_create_active_personal_proposal(
             who,
-            personal_account.clone(),
+            personal_account_id.clone(),
             InternalProposalMutexKind::AdminSetMutationExclusive,
             InternalProposalRole::PersonalAdminChange,
             false,
@@ -213,7 +213,7 @@ impl<T: Config> Pallet<T> {
         PendingPersonalAdminChangeThresholds::<T>::insert(
             proposal_id,
             PendingPersonalAdminChangeThreshold {
-                personal_account,
+                personal_account_id,
                 new_admins_len,
                 new_threshold,
             },
@@ -224,7 +224,7 @@ impl<T: Config> Pallet<T> {
     /// 创建待注册个人多签提案。待注册管理员由调用方在同一事务中提供并锁定。
     pub fn do_create_personal_account_create_proposal(
         who: T::AccountId,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
         admins: sp_std::vec::Vec<T::AccountId>,
         dynamic_threshold: u32,
     ) -> Result<u64, DispatchError> {
@@ -261,7 +261,7 @@ impl<T: Config> Pallet<T> {
             status: votingengine::STATUS_VOTING,
             internal_code: Some(votingengine::types::PMUL),
             actor_cid_number: None,
-            execution_account: Some(personal_account.clone()),
+            execution_account_id: Some(personal_account_id.clone()),
             subject_cid_numbers: ProposalSubjectCidNumbers::default(),
             start: now,
             end,
@@ -274,7 +274,7 @@ impl<T: Config> Pallet<T> {
             };
             AdminSnapshot::<T>::insert(
                 id,
-                ProposalSubject::PersonalAccount(personal_account),
+                ProposalSubject::PersonalAccount(personal_account_id),
                 bounded_admins,
             );
             PendingPersonalThresholds::<T>::insert(id, dynamic_threshold);
@@ -290,7 +290,7 @@ impl<T: Config> Pallet<T> {
 
     fn do_create_active_personal_proposal(
         who: T::AccountId,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
         mutex_kind: InternalProposalMutexKind,
         role: InternalProposalRole,
         force_all_admin_threshold: bool,
@@ -303,7 +303,7 @@ impl<T: Config> Pallet<T> {
             status: votingengine::STATUS_VOTING,
             internal_code: Some(votingengine::types::PMUL),
             actor_cid_number: None,
-            execution_account: Some(personal_account.clone()),
+            execution_account_id: Some(personal_account_id.clone()),
             subject_cid_numbers: ProposalSubjectCidNumbers::default(),
             start: now,
             end,
@@ -316,12 +316,12 @@ impl<T: Config> Pallet<T> {
             };
             if let Err(err) = <votingengine::Pallet<T>>::snapshot_personal_admins(
                 id,
-                personal_account.clone(),
+                personal_account_id.clone(),
                 false,
             ) {
                 return TransactionOutcome::Rollback(Err(err));
             }
-            let subject = ProposalSubject::PersonalAccount(personal_account.clone());
+            let subject = ProposalSubject::PersonalAccount(personal_account_id.clone());
             if !<votingengine::Pallet<T>>::is_admin_in_snapshot(id, subject.clone(), &who) {
                 return TransactionOutcome::Rollback(Err(
                     votingengine::Error::<T>::NoPermission.into()
@@ -334,7 +334,7 @@ impl<T: Config> Pallet<T> {
             let threshold = if force_all_admin_threshold {
                 snapshot_size
             } else {
-                match ActivePersonalThresholds::<T>::get(personal_account) {
+                match ActivePersonalThresholds::<T>::get(personal_account_id) {
                     Some(threshold) => threshold,
                     None => {
                         return TransactionOutcome::Rollback(Err(
@@ -413,10 +413,10 @@ impl<T: Config> Pallet<T> {
                 .then_some(InternalVoteTicketClaim::InstitutionRole(
                     proposer_role.role_code,
                 ))
-        } else if let Some(personal_account) = proposal.execution_account {
+        } else if let Some(personal_account_id) = proposal.execution_account_id {
             <votingengine::Pallet<T>>::is_admin_in_snapshot(
                 proposal_id,
-                ProposalSubject::PersonalAccount(personal_account),
+                ProposalSubject::PersonalAccount(personal_account_id),
                 &who,
             )
             .then_some(InternalVoteTicketClaim::Personal)

@@ -1,17 +1,17 @@
 // 创建转账提案页面：表单 + QR 签名流程。
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { sanitizeError } from '../../tauri';
-import { hexToSs58 } from '../../shared/ss58';
+import { accountIdToSs58 } from '../../shared/ss58';
 import { CitizenSignaturePanel } from '../../shared/qr/CitizenSignaturePanel';
 import { AddressScanModal } from '../../shared/qr/AddressScanModal';
 import { multisigTransferApi as api } from './api';
-import type { AdminWalletMatch, VoteSignRequestResult } from './types';
+import type { AdminSignerMatch, VoteSignRequestResult } from './types';
 
 type Props = {
   cidNumber: string;
   cidFullName: string;
-  institutionAccount: string;
-  adminWallets: AdminWalletMatch[];
+  institution_account_id: string;
+  adminSigners: AdminSignerMatch[];
   onBack: () => void;
   onSuccess: () => void;
 };
@@ -19,13 +19,13 @@ type Props = {
 type Step = 'form' | 'qr' | 'submit' | 'done' | 'error';
 
 export function CreateMultisigTransferPage({
-  cidNumber, cidFullName, institutionAccount, adminWallets, onBack, onSuccess,
+  cidNumber, cidFullName, institution_account_id, adminSigners, onBack, onSuccess,
 }: Props) {
   const [step, setStep] = useState<Step>('form');
 
   // 表单
-  const [selectedWallet, setSelectedWallet] = useState<AdminWalletMatch | null>(
-    adminWallets.length === 1 ? adminWallets[0] : null
+  const [selectedSigner, setSelectedSigner] = useState<AdminSignerMatch | null>(
+    adminSigners.length === 1 ? adminSigners[0] : null
   );
   const [beneficiary, setBeneficiary] = useState('');
   const [proposerRoleCode, setProposerRoleCode] = useState('');
@@ -45,9 +45,9 @@ export function CreateMultisigTransferPage({
   // 用 ref 持有最新值，避免摄像头回调中的闭包过期
   const formValuesRef = useRef({ beneficiary: '', amountYuan: 0, remark: '' });
   const signRequestRef = useRef(signRequest);
-  const selectedWalletRef = useRef(selectedWallet);
+  const selectedSignerRef = useRef(selectedSigner);
   signRequestRef.current = signRequest;
-  selectedWalletRef.current = selectedWallet;
+  selectedSignerRef.current = selectedSigner;
 
 
   useEffect(() => {
@@ -62,7 +62,7 @@ export function CreateMultisigTransferPage({
   }, [step, countdown]);
 
   const validateForm = (): string | null => {
-    if (!selectedWallet) return '请选择管理员钱包';
+    if (!selectedSigner) return '请选择管理员账户';
     if (!proposerRoleCode.trim()) return '请输入提案发起岗位码';
     if (!beneficiary.trim()) return '请输入收款地址';
     const amount = parseFloat(amountYuan.replace(/,/g, ''));
@@ -83,7 +83,7 @@ export function CreateMultisigTransferPage({
       formValuesRef.current = { beneficiary: beneficiary.trim(), amountYuan: amount, remark };
 
       const result = await api.buildMultisigTransferRequest(
-        selectedWallet!.pubkeyHex, cidNumber, proposerRoleCode.trim(), institutionAccount,
+        selectedSigner!.account_id, cidNumber, proposerRoleCode.trim(), institution_account_id,
         beneficiary.trim(), amount, remark,
       );
 
@@ -101,7 +101,7 @@ export function CreateMultisigTransferPage({
   // 扫描结果处理（通过 ref 读取最新值）
   const handleScanResult = useCallback(async (responseText: string) => {
     const req = signRequestRef.current;
-    const wallet = selectedWalletRef.current;
+    const wallet = selectedSignerRef.current;
     if (!req || !wallet) {
       setError('签名请求数据丢失，请重试');
       setStep('error');
@@ -111,8 +111,8 @@ export function CreateMultisigTransferPage({
     try {
       const { beneficiary: ben, amountYuan: amt, remark: rmk } = formValuesRef.current;
       const result = await api.submitMultisigTransfer(
-        req.requestId, wallet.pubkeyHex, req.expectedPayloadHash,
-        cidNumber, proposerRoleCode.trim(), institutionAccount, ben, amt, rmk,
+        req.requestId, wallet.account_id, req.expectedPayloadHash,
+        cidNumber, proposerRoleCode.trim(), institution_account_id, ben, amt, rmk,
         req.signNonce, req.signBlockNumber, responseText,
       );
       setTxHash(result.txHash);
@@ -121,7 +121,7 @@ export function CreateMultisigTransferPage({
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [cidNumber, proposerRoleCode, institutionAccount]);
+  }, [cidNumber, proposerRoleCode, institution_account_id]);
 
   return (
     <div className="governance-section">
@@ -136,21 +136,21 @@ export function CreateMultisigTransferPage({
           <div className="wallet-form-field">
             <label>发起管理员</label>
             <select
-              value={selectedWallet?.pubkeyHex || ''}
+              value={selectedSigner?.account_id || ''}
               onChange={(e) => {
-                const w = adminWallets.find((w) => w.pubkeyHex === e.target.value);
-                setSelectedWallet(w || null);
+                const w = adminSigners.find((w) => w.account_id === e.target.value);
+                setSelectedSigner(w || null);
               }}
-              disabled={adminWallets.length <= 1}
+              disabled={adminSigners.length <= 1}
             >
-              {adminWallets.length === 0 && <option value="">无已激活管理员</option>}
-              {adminWallets.length === 1 ? (
-                <option value={adminWallets[0].pubkeyHex}>{hexToSs58(adminWallets[0].pubkeyHex)}</option>
+              {adminSigners.length === 0 && <option value="">无已激活管理员</option>}
+              {adminSigners.length === 1 ? (
+                <option value={adminSigners[0].account_id}>{accountIdToSs58(adminSigners[0].account_id)}</option>
               ) : (
                 <>
                   <option value="">请选择…</option>
-                  {adminWallets.map((w) => (
-                    <option key={w.pubkeyHex} value={w.pubkeyHex}>{hexToSs58(w.pubkeyHex)}</option>
+                  {adminSigners.map((w) => (
+                    <option key={w.account_id} value={w.account_id}>{accountIdToSs58(w.account_id)}</option>
                   ))}
                 </>
               )}
@@ -159,7 +159,7 @@ export function CreateMultisigTransferPage({
 
           <div className="wallet-form-field">
             <label>转出地址（机构多签）</label>
-            <input type="text" value={hexToSs58(institutionAccount)} disabled />
+            <input type="text" value={accountIdToSs58(institution_account_id)} disabled />
           </div>
 
           <div className="wallet-form-field">
@@ -219,7 +219,7 @@ export function CreateMultisigTransferPage({
           <button
             className="vote-signing-confirm"
             onClick={handleSubmit}
-            disabled={submitting || !selectedWallet || !beneficiary.trim() || !amountYuan}
+            disabled={submitting || !selectedSigner || !beneficiary.trim() || !amountYuan}
           >
             {submitting ? '生成中…' : '生成签名请求'}
           </button>

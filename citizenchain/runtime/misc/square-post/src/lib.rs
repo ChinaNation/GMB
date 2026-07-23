@@ -47,9 +47,9 @@ pub const MODULE_TAG: &[u8] = b"sqr-sub";
 )]
 #[repr(u8)]
 pub enum SquarePostCategory {
-    /// 普通动态，所有钱包账户都可以发布。
+    /// 普通动态，所有账户都可以发布。
     Normal = 0,
-    /// 竞选动态，必须是已绑定 CID 的认证公民钱包账户。
+    /// 竞选动态，必须是已绑定 CID 的认证公民账户。
     Campaign = 1,
 }
 
@@ -67,7 +67,7 @@ pub enum SquarePostCategory {
 )]
 pub struct SquarePost<AccountId, BlockNumber, PostId, CidNumber, StorageReceiptId> {
     pub post_id: PostId,
-    pub owner_account: AccountId,
+    pub owner_account_id: AccountId,
     pub cid_number: Option<CidNumber>,
     pub post_category: SquarePostCategory,
     pub content_hash: [u8; 32],
@@ -80,7 +80,7 @@ pub struct SquarePost<AccountId, BlockNumber, PostId, CidNumber, StorageReceiptI
 ///
 /// runtime 负责把它接到 citizen-identity；本 pallet 不直接依赖具体身份 pallet。
 pub trait SquarePostCitizenIdentityProvider<AccountId> {
-    fn cid_number(owner_account: &AccountId) -> Option<Vec<u8>>;
+    fn cid_number(owner_account_id: &AccountId) -> Option<Vec<u8>>;
 }
 
 impl<AccountId> SquarePostCitizenIdentityProvider<AccountId> for () {
@@ -172,7 +172,7 @@ pub mod pallet {
     pub type SquarePosts<T: Config> =
         StorageMap<_, Blake2_128Concat, PostIdOf<T>, SquarePostOf<T>, OptionQuery>;
 
-    /// 每个钱包账户累计成功发布数量，供轻量统计和测试校验。
+    /// 每个账户累计成功发布数量，供轻量统计和测试校验。
     #[pallet::storage]
     pub type PublishedPostCountByAccount<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, u64, ValueQuery>;
@@ -231,7 +231,7 @@ pub mod pallet {
         /// 广场动态发布交易已入块。
         SquarePostPublished {
             post_id: PostIdOf<T>,
-            owner_account: T::AccountId,
+            owner_account_id: T::AccountId,
             cid_number: Option<CidNumberOf<T>>,
             post_category: SquarePostCategory,
             content_hash: [u8; 32],
@@ -241,7 +241,7 @@ pub mod pallet {
         },
         /// 首扣或 runtime 自动续费已经完成，并登记下一次真实公历扣款时间。
         SubscriptionCharged {
-            subscriber: T::AccountId,
+            subscriber_account_id: T::AccountId,
             issuer: IssuerKey<T::AccountId>,
             plan: SubscriptionPlan,
             price_fen: u128,
@@ -250,44 +250,44 @@ pub mod pallet {
         },
         /// 已取消但尚未到期的相同计划恢复，当前已付周期不重复扣款。
         SubscriptionResumed {
-            subscriber: T::AccountId,
+            subscriber_account_id: T::AccountId,
             issuer: IssuerKey<T::AccountId>,
             paid_until: u64,
         },
         /// 续费被挂起（创作者改价待再签名 / 余额不足待充值再签），保留粉丝关系、退出续费调度。
         SubscriptionSuspended {
-            subscriber: T::AccountId,
+            subscriber_account_id: T::AccountId,
             issuer: IssuerKey<T::AccountId>,
             reason: SuspendReason,
             suspended_at: u64,
         },
         /// 创作者改价后订阅者到期前再签名，已授权价更新为当前价、当前周期不重复扣款。
         SubscriptionReconsented {
-            subscriber: T::AccountId,
+            subscriber_account_id: T::AccountId,
             issuer: IssuerKey<T::AccountId>,
             authorized_price_fen: u128,
         },
         /// 创作者掉平台会员，其粉丝订阅暂停扣费但保留、仍留调度，创作者恢复即自动续。
         SubscriptionCreatorPaused {
-            subscriber: T::AccountId,
+            subscriber_account_id: T::AccountId,
             issuer: IssuerKey<T::AccountId>,
             paused_at: u64,
         },
         /// 公历换算失效等真实失败，自动扣款已经终止。
         SubscriptionRenewalStopped {
-            subscriber: T::AccountId,
+            subscriber_account_id: T::AccountId,
             issuer: IssuerKey<T::AccountId>,
             stopped_at: u64,
         },
         /// 取消后 `paid_until` 之前的已付权益仍有效。
         SubscriptionCancelled {
-            subscriber: T::AccountId,
+            subscriber_account_id: T::AccountId,
             issuer: IssuerKey<T::AccountId>,
             paid_until: u64,
         },
         /// 换挡立即生效：`charged_now` 为本次折算实际扣款额，`paid_until` 为新到期时间。
         SubscriptionPlanChanged {
-            subscriber: T::AccountId,
+            subscriber_account_id: T::AccountId,
             issuer: IssuerKey<T::AccountId>,
             new_plan: SubscriptionPlan,
             charged_now: u128,
@@ -295,7 +295,7 @@ pub mod pallet {
         },
         /// 创作者已经覆盖式更新自己的链上付款套餐。
         CreatorPlansSet {
-            creator: T::AccountId,
+            creator_account_id: T::AccountId,
             tier_count: u32,
         },
         /// 平台价格调整提案已交给统一投票引擎。
@@ -422,7 +422,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// 发布广场动态链上索引。
         ///
-        /// `owner_account` 由 signed origin 派生；`cid_number` 由链上公民身份派生。
+        /// `owner_account_id` 由 signed origin 派生；`cid_number` 由链上公民身份派生。
         /// 本调用不接收正文、图片或视频内容。
         #[pallet::call_index(0)]
         #[pallet::weight(T::WeightInfo::publish_post())]
@@ -434,7 +434,7 @@ pub mod pallet {
             storage_receipt_id: Vec<u8>,
             storage_until: u64,
         ) -> DispatchResult {
-            let owner_account = ensure_signed(origin)?;
+            let owner_account_id = ensure_signed(origin)?;
             ensure!(!post_id.is_empty(), Error::<T>::EmptyPostId);
             ensure!(
                 content_hash.iter().any(|byte| *byte != 0),
@@ -454,7 +454,7 @@ pub mod pallet {
                 Error::<T>::DuplicatePostId
             );
 
-            let cid_number = Self::cid_number_for_owner(&owner_account)?;
+            let cid_number = Self::cid_number_for_owner(&owner_account_id)?;
             if post_category == SquarePostCategory::Campaign {
                 ensure!(cid_number.is_some(), Error::<T>::CampaignRequiresCitizen);
             }
@@ -462,7 +462,7 @@ pub mod pallet {
             let created_block = frame_system::Pallet::<T>::block_number();
             let square_post = SquarePost {
                 post_id: post_id.clone(),
-                owner_account: owner_account.clone(),
+                owner_account_id: owner_account_id.clone(),
                 cid_number: cid_number.clone(),
                 post_category,
                 content_hash,
@@ -472,13 +472,13 @@ pub mod pallet {
             };
 
             SquarePosts::<T>::insert(&post_id, square_post);
-            PublishedPostCountByAccount::<T>::mutate(&owner_account, |count| {
+            PublishedPostCountByAccount::<T>::mutate(&owner_account_id, |count| {
                 *count = count.saturating_add(1);
             });
 
             Self::deposit_event(Event::SquarePostPublished {
                 post_id,
-                owner_account,
+                owner_account_id,
                 cid_number,
                 post_category,
                 content_hash,
@@ -555,9 +555,9 @@ pub mod pallet {
 
     impl<T: Config> Pallet<T> {
         fn cid_number_for_owner(
-            owner_account: &T::AccountId,
+            owner_account_id: &T::AccountId,
         ) -> Result<Option<CidNumberOf<T>>, Error<T>> {
-            T::CitizenIdentity::cid_number(owner_account)
+            T::CitizenIdentity::cid_number(owner_account_id)
                 .map(CidNumberOf::<T>::try_from)
                 .transpose()
                 .map_err(|_| Error::<T>::FieldTooLong)

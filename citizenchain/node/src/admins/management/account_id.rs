@@ -1,15 +1,4 @@
-pub fn normalize_pubkey_hex(pubkey_hex: &str) -> Result<String, String> {
-    let clean = normalize_hex(pubkey_hex);
-    if clean.len() != 64 || !clean.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("管理员公钥必须为 64 位十六进制".to_string());
-    }
-    Ok(clean)
-}
-
-pub fn normalize_hex(hex: &str) -> String {
-    let trimmed = hex.trim();
-    trimmed
-        .strip_prefix("0x")
-        .unwrap_or(trimmed)
-        .to_ascii_lowercase()
+/// 管理员账户文本只允许使用全仓统一的账户 ID 格式。
+pub fn normalize_account_id(account_id: &str) -> Result<String, String> {
+    crate::shared::validation::normalize_account_id(account_id)
 }

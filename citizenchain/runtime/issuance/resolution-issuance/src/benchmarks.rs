@@ -45,12 +45,15 @@ fn full_allocations<T: pallet::Config>() -> (pallet::AllocationOf<T>, pallet::Ba
     let mut allocations: Vec<crate::proposal::RecipientAmount<T::AccountId, pallet::BalanceOf<T>>> =
         Vec::with_capacity(recipients.len());
     let mut total = pallet::BalanceOf::<T>::zero();
-    for recipient in recipients {
+    for recipient_account_id in recipients {
         let amount: pallet::BalanceOf<T> = 1_000_000u128.saturated_into();
         total = total
             .checked_add(&amount)
             .expect("benchmark total should fit");
-        allocations.push(crate::proposal::RecipientAmount { recipient, amount });
+        allocations.push(crate::proposal::RecipientAmount {
+            recipient_account_id,
+            amount,
+        });
     }
     (
         allocations
@@ -87,7 +90,7 @@ mod benchmarks {
     #[benchmark]
     fn propose_issuance() {
         let origin = T::ProposeOrigin::try_successful_origin()
-            .expect("benchmark proposer origin must be available");
+            .expect("benchmark proposer_account_id origin must be available");
         let recipients = prc_recipients::<T>();
         AllowedRecipients::<T>::put(recipients);
         VotingProposalCount::<T>::put(0u32);

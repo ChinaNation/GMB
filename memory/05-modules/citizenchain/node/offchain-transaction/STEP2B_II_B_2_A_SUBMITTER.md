@@ -132,7 +132,7 @@ $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node
    use frame_system_rpc_runtime_api::AccountNonceApi;
    let api = client.runtime_api();
    let best_hash = client.info().best_hash;
-   let nonce = api.account_nonce(best_hash, sender_account.clone()).unwrap_or(0);
+   let nonce = api.account_nonce(best_hash, sender_account_id.clone()).unwrap_or(0);
    ```
 
 3. **CLI flag**(`cli.rs`):

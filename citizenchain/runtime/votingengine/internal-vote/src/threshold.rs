@@ -49,28 +49,28 @@ impl<T: Config> Pallet<T> {
             votingengine::Error::<T>::InvalidInstitution
         );
         proposal
-            .execution_account
+            .execution_account_id
             .ok_or(votingengine::Error::<T>::InvalidInstitution.into())
     }
 
     pub(crate) fn apply_executed_threshold_side_effect(proposal_id: u64) -> DispatchResult {
         match InternalProposalRoles::<T>::get(proposal_id) {
             Some(InternalProposalRole::PersonalCreate) => {
-                let personal_account = Self::proposal_personal_account(proposal_id)?;
+                let personal_account_id = Self::proposal_personal_account(proposal_id)?;
                 let threshold = PendingPersonalThresholds::<T>::take(proposal_id)
                     .ok_or(Error::<T>::MissingDynamicThreshold)?;
-                ActivePersonalThresholds::<T>::insert(personal_account, threshold);
+                ActivePersonalThresholds::<T>::insert(personal_account_id, threshold);
             }
             Some(InternalProposalRole::PersonalClose) => {
-                let personal_account = Self::proposal_personal_account(proposal_id)?;
-                ActivePersonalThresholds::<T>::remove(personal_account);
+                let personal_account_id = Self::proposal_personal_account(proposal_id)?;
+                ActivePersonalThresholds::<T>::remove(personal_account_id);
             }
             Some(InternalProposalRole::PersonalAdminChange) => {
                 if let Some(pending) = PendingPersonalAdminChangeThresholds::<T>::take(proposal_id)
                 {
                     Self::ensure_dynamic_threshold(pending.new_admins_len, pending.new_threshold)?;
                     ActivePersonalThresholds::<T>::insert(
-                        pending.personal_account,
+                        pending.personal_account_id,
                         pending.new_threshold,
                     );
                 }

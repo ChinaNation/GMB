@@ -13,7 +13,7 @@
 │   ├── citizenchain/               # 默认链 ID
 │   │   ├── db/full/                # Substrate RocksDB 区块库
 │   │   └── keystore/
-│   │       └── 6772616e<pubkey>     # GRANDPA 密钥文件（key_type_prefix + pubkey_hex）
+│   │       └── 6772616e<public_key>  # GRANDPA 密钥文件（key type 前缀 + 公钥 hex）
 │   └── <other-chain-id>/
 │       └── keystore/
 └── node-key/
@@ -32,11 +32,11 @@
 |------|------|
 | `node_data_dir(app)` | 返回节点数据根目录，自动创建 |
 | `keystore_dirs(app)` | 扫描所有链的 keystore 目录列表 |
-| `keystore_filename(prefix, pubkey)` | 生成 keystore 文件名 |
+| `keystore_filename(prefix, public_key)` | 生成 keystore 文件名 |
 | `scan_keystore_files(dirs, prefix)` | 扫描匹配前缀的密钥文件 |
-| `write_key_to_keystore(dirs, prefix, pubkey, content)` | 写入密钥并清理旧密钥 |
+| `write_key_to_keystore(dirs, prefix, public_key, content)` | 写入密钥并清理旧密钥 |
 | `remove_other_keys(dirs, prefix, keep)` | 移除同类型旧密钥 |
-| `has_key_in_keystore(dirs, prefix, pubkey)` | 检查密钥是否存在 |
+| `has_key_in_keystore(dirs, prefix, public_key)` | 检查密钥是否存在 |
 
 ## 安全特性
 
@@ -48,8 +48,8 @@
 
 ## 调用方
 
-- `settings/grandpa_address/mod.rs`：GRANDPA 投票密钥管理
-- `home/process/mod.rs`：节点启动时获取数据目录路径
-- `home/transaction/mod.rs`：从默认链 `powr` keystore 派生矿工热钱包展示地址，并经设备密码确认后走节点端签名转账
-- `mining/dashboard/mod.rs`：挖矿面板获取数据目录
-- `settings/fee_account/mod.rs`：手续费地址 keystore 操作
+- `settings/grandpa_address.rs`：GRANDPA 投票密钥管理
+- `home/process.rs`：节点启动时获取数据目录路径
+- `transaction/onchain/`：从默认链 `powr` keystore 派生矿工账户与展示地址，并经设备密码确认后走节点端签名转账
+- `mining/dashboard.rs`：挖矿面板获取数据目录
+- `settings/reward_account.rs`：奖励账户绑定和矿工账户读取

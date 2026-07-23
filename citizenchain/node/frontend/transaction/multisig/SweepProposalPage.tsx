@@ -1,16 +1,16 @@
 // 手续费划转提案页面：金额输入 + QR 签名流程。
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { sanitizeError } from '../../tauri';
-import { hexToSs58 } from '../../shared/ss58';
+import { accountIdToSs58 } from '../../shared/ss58';
 import { CitizenSignaturePanel } from '../../shared/qr/CitizenSignaturePanel';
 import { multisigTransferApi as api } from './api';
-import type { AdminWalletMatch, VoteSignRequestResult } from './types';
+import type { AdminSignerMatch, VoteSignRequestResult } from './types';
 
 type Props = {
   actorCidNumber: string;
-  institutionAccount: string;
+  institution_account_id: string;
   cidFullName: string;
-  adminWallets: AdminWalletMatch[];
+  adminSigners: AdminSignerMatch[];
   onBack: () => void;
   onSuccess: () => void;
 };
@@ -18,11 +18,11 @@ type Props = {
 type Step = 'form' | 'qr' | 'submit' | 'done' | 'error';
 
 export function SweepProposalPage({
-  actorCidNumber, institutionAccount, cidFullName, adminWallets, onBack, onSuccess,
+  actorCidNumber, institution_account_id, cidFullName, adminSigners, onBack, onSuccess,
 }: Props) {
   const [step, setStep] = useState<Step>('form');
-  const [selectedWallet, setSelectedWallet] = useState<AdminWalletMatch | null>(
-    adminWallets.length === 1 ? adminWallets[0] : null
+  const [selectedSigner, setSelectedSigner] = useState<AdminSignerMatch | null>(
+    adminSigners.length === 1 ? adminSigners[0] : null
   );
   const [amountYuan, setAmountYuan] = useState('');
   const [proposerRoleCode, setProposerRoleCode] = useState('');
@@ -37,9 +37,9 @@ export function SweepProposalPage({
 
   const formValuesRef = useRef({ amountYuan: 0 });
   const signRequestRef = useRef(signRequest);
-  const selectedWalletRef = useRef(selectedWallet);
+  const selectedSignerRef = useRef(selectedSigner);
   signRequestRef.current = signRequest;
-  selectedWalletRef.current = selectedWallet;
+  selectedSignerRef.current = selectedSigner;
 
   useEffect(() => {
     if (step !== 'qr') return;
@@ -49,7 +49,7 @@ export function SweepProposalPage({
   }, [step, countdown]);
 
   const handleSubmit = async () => {
-    if (!selectedWallet) { setFormError('请选择管理员钱包'); return; }
+    if (!selectedSigner) { setFormError('请选择管理员账户'); return; }
     if (!proposerRoleCode.trim()) { setFormError('请输入提案发起岗位码'); return; }
     const amount = parseFloat(amountYuan.replace(/,/g, ''));
     if (isNaN(amount) || amount <= 0) { setFormError('金额必须大于 0'); return; }
@@ -59,7 +59,7 @@ export function SweepProposalPage({
     try {
       formValuesRef.current = { amountYuan: amount };
       const result = await api.buildProposeSweepRequest(
-        selectedWallet.pubkeyHex, actorCidNumber, proposerRoleCode.trim(), institutionAccount, amount,
+        selectedSigner.account_id, actorCidNumber, proposerRoleCode.trim(), institution_account_id, amount,
       );
       setSignRequest(result);
       setRequestJson(result.requestJson);
@@ -74,13 +74,13 @@ export function SweepProposalPage({
 
   const handleScanResult = useCallback(async (responseText: string) => {
     const req = signRequestRef.current;
-    const wallet = selectedWalletRef.current;
+    const wallet = selectedSignerRef.current;
     if (!req || !wallet) { setError('数据丢失，请重试'); setStep('error'); return; }
     setStep('submit');
     try {
       const result = await api.submitProposeSweep(
-        req.requestId, wallet.pubkeyHex, req.expectedPayloadHash,
-        actorCidNumber, proposerRoleCode.trim(), institutionAccount, formValuesRef.current.amountYuan,
+        req.requestId, wallet.account_id, req.expectedPayloadHash,
+        actorCidNumber, proposerRoleCode.trim(), institution_account_id, formValuesRef.current.amountYuan,
         req.signNonce, req.signBlockNumber, responseText,
       );
       setTxHash(result.txHash);
@@ -89,7 +89,7 @@ export function SweepProposalPage({
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [actorCidNumber, proposerRoleCode, institutionAccount]);
+  }, [actorCidNumber, proposerRoleCode, institution_account_id]);
 
   return (
     <div className="governance-section">
@@ -103,18 +103,18 @@ export function SweepProposalPage({
           <div className="wallet-form-field">
             <label>发起管理员</label>
             <select
-              value={selectedWallet?.pubkeyHex || ''}
-              onChange={(e) => setSelectedWallet(adminWallets.find((w) => w.pubkeyHex === e.target.value) || null)}
-              disabled={adminWallets.length <= 1}
+              value={selectedSigner?.account_id || ''}
+              onChange={(e) => setSelectedSigner(adminSigners.find((w) => w.account_id === e.target.value) || null)}
+              disabled={adminSigners.length <= 1}
             >
-              {adminWallets.length === 0 && <option value="">无已激活管理员</option>}
-              {adminWallets.length === 1 ? (
-                <option value={adminWallets[0].pubkeyHex}>{hexToSs58(adminWallets[0].pubkeyHex)}</option>
+              {adminSigners.length === 0 && <option value="">无已激活管理员</option>}
+              {adminSigners.length === 1 ? (
+                <option value={adminSigners[0].account_id}>{accountIdToSs58(adminSigners[0].account_id)}</option>
               ) : (
                 <>
                   <option value="">请选择…</option>
-                  {adminWallets.map((w) => (
-                    <option key={w.pubkeyHex} value={w.pubkeyHex}>{hexToSs58(w.pubkeyHex)}</option>
+                  {adminSigners.map((w) => (
+                    <option key={w.account_id} value={w.account_id}>{accountIdToSs58(w.account_id)}</option>
                   ))}
                 </>
               )}
@@ -122,7 +122,7 @@ export function SweepProposalPage({
           </div>
           <div className="wallet-form-field">
             <label>转出地址（费用账户）</label>
-            <input type="text" value={hexToSs58(institutionAccount)} disabled />
+            <input type="text" value={accountIdToSs58(institution_account_id)} disabled />
           </div>
           <div className="wallet-form-field">
             <label>提案发起岗位码</label>
@@ -155,7 +155,7 @@ export function SweepProposalPage({
           <button
             className="vote-signing-confirm"
             onClick={handleSubmit}
-            disabled={submitting || !selectedWallet || !amountYuan}
+            disabled={submitting || !selectedSigner || !amountYuan}
           >
             {submitting ? '生成中…' : '生成签名请求'}
           </button>

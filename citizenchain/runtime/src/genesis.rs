@@ -349,7 +349,7 @@ mod tests {
             let parsed: Result<AccountId, _> = serde_json::from_value(account.clone());
             assert!(
                 parsed.is_ok(),
-                "allowed recipient should deserialize: value={account:?} err={:?}",
+                "allowed recipient_account_id should deserialize: value={account:?} err={:?}",
                 parsed.err()
             );
         }

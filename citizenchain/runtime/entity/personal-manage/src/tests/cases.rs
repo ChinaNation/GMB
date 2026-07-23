@@ -17,13 +17,14 @@ fn process_pending_execution() {
 }
 
 fn setup_creator_balance() -> AccountId32 {
-    let c = creator();
+    let c = creator_account_id();
     let _ = Balances::deposit_creating(&c, SEED_BALANCE);
     c
 }
 
-fn proposed_account(creator: &AccountId32, name: &[u8]) -> AccountId32 {
-    PersonalManage::derive_personal_account(creator, name).expect("derive should succeed")
+fn proposed_account(creator_account_id: &AccountId32, name: &[u8]) -> AccountId32 {
+    PersonalManage::derive_personal_account(creator_account_id, name)
+        .expect("derive should succeed")
 }
 
 fn create_rejected_event_count(pid: u64) -> usize {
@@ -117,7 +118,7 @@ fn propose_create_writes_pending_and_reserves_fee() {
             internal_vote::InternalThresholdSnapshot::<Test>::get(pid),
             Some(3)
         );
-        // creator 已被 reserve(amount + fee)
+        // creator_account_id 已被 reserve(amount + fee)
         assert_eq!(Balances::reserved_balance(&c), CREATE_AMOUNT + CREATE_FEE);
         assert_eq!(
             Balances::free_balance(&c),
@@ -161,12 +162,12 @@ fn create_executes_when_internal_vote_reaches_threshold() {
         // 多签账户激活,资金到位,Pending 已清
         let dq_state = pallet::PersonalAccounts::<Test>::get(&dq).expect("active multisig");
         assert_eq!(dq_state.status, types::PersonalStatus::Active);
-        let admin_account = personal_admins::AdminAccounts::<Test>::get(dq.clone())
+        let account_id = personal_admins::AdminAccounts::<Test>::get(dq.clone())
             .expect("personal admins should be active");
-        assert!(admin_account.cid_number.is_empty());
-        let account = dq.clone();
+        assert!(account_id.cid_number.is_empty());
+        let account_id = dq.clone();
         assert_eq!(
-            internal_vote::ActivePersonalThresholds::<Test>::get(account),
+            internal_vote::ActivePersonalThresholds::<Test>::get(account_id),
             Some(2)
         );
         assert_eq!(Balances::free_balance(&dq), CREATE_AMOUNT);
@@ -375,7 +376,7 @@ fn propose_create_rejects_reserved_and_protected_accounts() {
         assert_noop!(
             PersonalManage::propose_create(
                 RuntimeOrigin::signed(c),
-                account_name(b"protected-creator"),
+                account_name(b"protected-creator_account_id"),
                 admins_vec(3),
                 2,
                 CREATE_AMOUNT,
@@ -395,7 +396,7 @@ fn propose_close_writes_pending_and_blocks_concurrent() {
         let admins_acc = vec![admin(0), admin(1), admin(2)];
         seed_active_multisig(&dq, &c, &admins_acc, 1_000);
 
-        let beneficiary_acc = beneficiary();
+        let beneficiary_acc = beneficiary_account_id();
 
         assert_ok!(PersonalManage::propose_close(
             RuntimeOrigin::signed(admin(0)),
@@ -423,7 +424,7 @@ fn close_executes_when_internal_vote_reaches_threshold() {
         let dq = proposed_account(&c, b"close-active");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
         seed_active_multisig(&dq, &c, &admins_acc, 1_000);
-        let beneficiary_acc = beneficiary();
+        let beneficiary_acc = beneficiary_account_id();
 
         assert_ok!(PersonalManage::propose_close(
             RuntimeOrigin::signed(admin(0)),
@@ -439,14 +440,14 @@ fn close_executes_when_internal_vote_reaches_threshold() {
         let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal exists");
         assert_eq!(proposal.status, STATUS_EXECUTED);
 
-        // amount 1000 → fee = max(1, 10) = 10,beneficiary 收 990
+        // amount 1000 → fee = max(1, 10) = 10,beneficiary_account_id 收 990
         assert_eq!(Balances::free_balance(&beneficiary_acc), 990);
         assert_eq!(Balances::free_balance(&dq), 0);
-        let account = dq.clone();
+        let account_id = dq.clone();
         assert!(!pallet::PersonalAccounts::<Test>::contains_key(&dq));
         assert!(!pallet::PendingCloseProposal::<Test>::contains_key(&dq));
-        assert!(personal_admins::AdminAccounts::<Test>::get(account.clone()).is_none());
-        assert!(internal_vote::ActivePersonalThresholds::<Test>::get(account).is_none());
+        assert!(personal_admins::AdminAccounts::<Test>::get(account_id.clone()).is_none());
+        assert!(internal_vote::ActivePersonalThresholds::<Test>::get(account_id).is_none());
 
         assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c),
@@ -470,7 +471,11 @@ fn propose_close_rejects_when_balance_below_minimum() {
         seed_active_multisig(&dq, &c, &admins_acc, 10);
 
         assert_noop!(
-            PersonalManage::propose_close(RuntimeOrigin::signed(admin(0)), dq, beneficiary(),),
+            PersonalManage::propose_close(
+                RuntimeOrigin::signed(admin(0)),
+                dq,
+                beneficiary_account_id(),
+            ),
             pallet::Error::<Test>::CloseBalanceBelowMinimum
         );
     });
@@ -493,7 +498,7 @@ fn propose_close_rejects_reserved_and_protected_beneficiary() {
             pallet::Error::<Test>::InvalidBeneficiary
         );
 
-        let protected = beneficiary();
+        let protected = beneficiary_account_id();
         set_protected_account(Some(protected.clone()));
         assert_noop!(
             PersonalManage::propose_close(RuntimeOrigin::signed(admin(0)), dq, protected,),
@@ -551,7 +556,7 @@ fn close_execution_failed_terminal_keeps_account_and_clears_pending() {
         assert_ok!(PersonalManage::propose_close(
             RuntimeOrigin::signed(admin(0)),
             dq.clone(),
-            beneficiary(),
+            beneficiary_account_id(),
         ));
         let pid = last_proposal_id();
         set_institution_can_spend(false);
@@ -579,7 +584,7 @@ fn propose_close_rejects_when_not_personal_account() {
             PersonalManage::propose_close(
                 RuntimeOrigin::signed(admin(0)),
                 stranger,
-                beneficiary(),
+                beneficiary_account_id(),
             ),
             pallet::Error::<Test>::NotPersonalAccount
         );
@@ -593,7 +598,7 @@ fn non_admin_cannot_propose_or_vote() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
 
-        // 非 admin 提案 propose_create 时,creator 不在 admins 列表 → PermissionDenied
+        // 非 admin 提案 propose_create 时,creator_account_id 不在 admins 列表 → PermissionDenied
         assert_noop!(
             PersonalManage::propose_create(
                 RuntimeOrigin::signed(c),
@@ -639,7 +644,7 @@ fn existential_deposit_is_preserved_after_close() {
         let dq = proposed_account(&c, b"ed-check");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
         seed_active_multisig(&dq, &c, &admins_acc, 500);
-        let beneficiary_acc = beneficiary();
+        let beneficiary_acc = beneficiary_account_id();
 
         assert_ok!(PersonalManage::propose_close(
             RuntimeOrigin::signed(admin(0)),
@@ -650,7 +655,7 @@ fn existential_deposit_is_preserved_after_close() {
         assert_ok!(cast_yes_votes(&admins_acc[1..], 2, pid));
         process_pending_execution();
 
-        // 多签账户应已被销户(转出后余额 < ED 直接 reap),beneficiary 拿到剩余金额
+        // 多签账户应已被销户(转出后余额 < ED 直接 reap),beneficiary_account_id 拿到剩余金额
         assert_eq!(Balances::free_balance(&dq), 0);
         // 500 - fee(10) = 490
         assert_eq!(Balances::free_balance(&beneficiary_acc), 490);

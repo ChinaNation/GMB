@@ -3,12 +3,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { sanitizeError } from '../tauri';
 import { formatBalance } from '../shared/format';
-import { hexToSs58 } from '../shared/ss58';
+import { accountIdToSs58 } from '../shared/ss58';
 import { adminsChangeApi } from '../admins/api';
 import { governanceApi as api } from './api';
 import type {
   ActivatedAdmin,
-  AdminWalletMatch,
+  AdminSignerMatch,
   InstitutionBalanceUpdate,
   InstitutionDetail,
   ProposalListItem,
@@ -18,12 +18,12 @@ type Props = {
   cidNumber: string;
   onBack: () => void;
   onOpenAdminList?: (cidNumber: string, orgType: number) => void;
-  onSelectProposal?: (proposalId: number, adminWallets: AdminWalletMatch[], cidNumber: string) => void;
-  onCreateProposal?: (cidNumber: string, orgType: number, cidFullName: string, institutionAccount: string, adminWallets: AdminWalletMatch[]) => void;
-  onCreateProtocolUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
-  onCreateDeveloperUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
-  onCreateSafetyFund?: (cidNumber: string, institutionAccount: string, adminWallets: AdminWalletMatch[]) => void;
-  onCreateSweep?: (cidNumber: string, institutionAccount: string, cidFullName: string, adminWallets: AdminWalletMatch[]) => void;
+  onSelectProposal?: (proposalId: number, adminSigners: AdminSignerMatch[], cidNumber: string) => void;
+  onCreateProposal?: (cidNumber: string, orgType: number, cidFullName: string, institution_account_id: string, adminSigners: AdminSignerMatch[]) => void;
+  onCreateProtocolUpgrade?: (adminSigners: AdminSignerMatch[]) => void;
+  onCreateDeveloperUpgrade?: (adminSigners: AdminSignerMatch[]) => void;
+  onCreateSafetyFund?: (cidNumber: string, institution_account_id: string, adminSigners: AdminSignerMatch[]) => void;
+  onCreateSweep?: (cidNumber: string, institution_account_id: string, cidFullName: string, adminSigners: AdminSignerMatch[]) => void;
   /** 隐藏返回按钮（用于直接作为 Tab 内容显示时）。 */
   hideBackButton?: boolean;
 };
@@ -41,11 +41,11 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
   const PROPOSAL_PAGE_SIZE = 10;
   const isAdmin = activatedAdmins.length > 0;
 
-  // 将已激活管理员转换为 AdminWalletMatch 格式,账户标签不复用机构名称字段。
-  const adminWallets: AdminWalletMatch[] = activatedAdmins.map(a => ({
-    address: hexToSs58(a.pubkeyHex),
-    pubkeyHex: a.pubkeyHex,
-    walletLabel: '',
+  // 将已激活管理员转换为 AdminSignerMatch 格式,账户标签不复用机构名称字段。
+  const adminSigners: AdminSignerMatch[] = activatedAdmins.map(a => ({
+    ss58_address: accountIdToSs58(a.account_id),
+    account_id: a.account_id,
+    account_label: '',
   }));
 
   useEffect(() => {
@@ -143,7 +143,7 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
   if (!detail) return null;
 
   const activatedCount = activatedAdmins.length;
-  const feeAccount = detail.feeAccount ?? detail.cbFeeAccount ?? detail.nrcFeeAccount;
+  const fee_account_id = detail.fee_account_id ?? detail.cb_fee_account_id ?? detail.nrc_fee_account_id;
 
   return (
     <div className="governance-section">
@@ -167,7 +167,7 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
           <div className="metric-value">{detail.orgTypeLabel}</div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">主账户 <code className="metric-label-id">{hexToSs58(detail.mainAccount)}</code></div>
+          <div className="metric-label">主账户 <code className="metric-label-id">{accountIdToSs58(detail.main_account_id)}</code></div>
           <div className="metric-value">
             {detail.balanceFen != null
               ? formatBalance(detail.balanceFen)
@@ -182,9 +182,9 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
           <div className="metric-label">联合投票权重</div>
           <div className="metric-value">{detail.jointVoteWeight} 票</div>
         </div>
-        {detail.orgType === 2 && detail.stakeAccount && (
+        {detail.orgType === 2 && detail.stake_account_id && (
           <div className="metric-card">
-            <div className="metric-label">永久质押账户 <code className="metric-label-id">{hexToSs58(detail.stakeAccount)}</code></div>
+            <div className="metric-label">永久质押账户 <code className="metric-label-id">{accountIdToSs58(detail.stake_account_id)}</code></div>
             <div className="metric-value">
               {detail.stakingBalanceFen != null
                 ? formatBalance(detail.stakingBalanceFen)
@@ -192,9 +192,9 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
             </div>
           </div>
         )}
-        {detail.orgType === 2 && detail.feeAccount && (
+        {detail.orgType === 2 && detail.fee_account_id && (
           <div className="metric-card">
-            <div className="metric-label">费用账户 <code className="metric-label-id">{hexToSs58(detail.feeAccount)}</code></div>
+            <div className="metric-label">费用账户 <code className="metric-label-id">{accountIdToSs58(detail.fee_account_id)}</code></div>
             <div className="metric-value">
               {detail.feeBalanceFen != null
                 ? formatBalance(detail.feeBalanceFen)
@@ -202,9 +202,9 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
             </div>
           </div>
         )}
-        {detail.orgType === 1 && detail.cbFeeAccount && (
+        {detail.orgType === 1 && detail.cb_fee_account_id && (
           <div className="metric-card">
-            <div className="metric-label">费用账户 <code className="metric-label-id">{hexToSs58(detail.cbFeeAccount)}</code></div>
+            <div className="metric-label">费用账户 <code className="metric-label-id">{accountIdToSs58(detail.cb_fee_account_id)}</code></div>
             <div className="metric-value">
               {detail.cbFeeBalanceFen != null
                 ? formatBalance(detail.cbFeeBalanceFen)
@@ -212,9 +212,9 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
             </div>
           </div>
         )}
-        {detail.nrcFeeAccount && (
+        {detail.nrc_fee_account_id && (
           <div className="metric-card">
-            <div className="metric-label">费用账户 <code className="metric-label-id">{hexToSs58(detail.nrcFeeAccount)}</code></div>
+            <div className="metric-label">费用账户 <code className="metric-label-id">{accountIdToSs58(detail.nrc_fee_account_id)}</code></div>
             <div className="metric-value">
               {detail.nrcFeeBalanceFen != null
                 ? formatBalance(detail.nrcFeeBalanceFen)
@@ -222,9 +222,9 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
             </div>
           </div>
         )}
-        {detail.safetyFundAccount && (
+        {detail.safety_fund_account_id && (
           <div className="metric-card">
-            <div className="metric-label">安全基金账户 <code className="metric-label-id">{hexToSs58(detail.safetyFundAccount)}</code></div>
+            <div className="metric-label">安全基金账户 <code className="metric-label-id">{accountIdToSs58(detail.safety_fund_account_id)}</code></div>
             <div className="metric-value">
               {detail.safetyFundBalanceFen != null
                 ? formatBalance(detail.safetyFundBalanceFen)
@@ -261,22 +261,22 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
             className="proposal-type-button"
             disabled={!isAdmin}
             onClick={() => isAdmin && onCreateProposal?.(
-              cidNumber, detail.orgType, detail.cidFullName, detail.mainAccount, adminWallets
+              cidNumber, detail.orgType, detail.cidFullName, detail.main_account_id, adminSigners
             )}
           >转账</button>
           <button className="proposal-type-button" disabled title="即将上线">决议销毁</button>
           {(detail.orgType === 0 || detail.orgType === 2) && (
             <button
               className="proposal-type-button"
-              disabled={!isAdmin || !feeAccount}
-              onClick={() => isAdmin && feeAccount && onCreateSweep?.(cidNumber, feeAccount, detail.cidFullName, adminWallets)}
+              disabled={!isAdmin || !fee_account_id}
+              onClick={() => isAdmin && fee_account_id && onCreateSweep?.(cidNumber, fee_account_id, detail.cidFullName, adminSigners)}
             >手续费划转</button>
           )}
           {detail.orgType === 0 && (
             <button
               className="proposal-type-button"
-              disabled={!isAdmin || !detail.safetyFundAccount}
-              onClick={() => isAdmin && detail.safetyFundAccount && onCreateSafetyFund?.(cidNumber, detail.safetyFundAccount, adminWallets)}
+              disabled={!isAdmin || !detail.safety_fund_account_id}
+              onClick={() => isAdmin && detail.safety_fund_account_id && onCreateSafetyFund?.(cidNumber, detail.safety_fund_account_id, adminSigners)}
             >安全基金转账</button>
           )}
           {(detail.orgType === 0 || detail.orgType === 1) && (
@@ -286,13 +286,13 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
               <button
                 className="proposal-type-button"
                 disabled={!isAdmin || !onCreateProtocolUpgrade}
-                onClick={() => isAdmin && onCreateProtocolUpgrade?.(adminWallets)}
+                onClick={() => isAdmin && onCreateProtocolUpgrade?.(adminSigners)}
               >协议升级</button>
               {detail.orgType === 0 && (
                 <button
                   className="proposal-type-button"
                   disabled={!isAdmin || !onCreateDeveloperUpgrade}
-                  onClick={() => isAdmin && onCreateDeveloperUpgrade?.(adminWallets)}
+                  onClick={() => isAdmin && onCreateDeveloperUpgrade?.(adminSigners)}
                 >开发升级</button>
               )}
             </>
@@ -315,7 +315,7 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
                 key={item.proposalId}
                 className="proposal-card clickable"
                 onClick={() => {
-                  onSelectProposal?.(item.proposalId, adminWallets, cidNumber);
+                  onSelectProposal?.(item.proposalId, adminSigners, cidNumber);
                 }}
               >
                 <div className="proposal-card-header">

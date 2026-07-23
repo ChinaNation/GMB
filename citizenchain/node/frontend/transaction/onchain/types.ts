@@ -7,10 +7,10 @@ export type ColdWallet = {
   kind: 'minerHot' | 'cold';
   /** 矿工热钱包不可从钱包管理中删除。 */
   deletable: boolean;
-  /** SS58 地址（prefix 2027）。 */
-  address: string;
-  /** 32 字节公钥（64 位 hex，无 0x 前缀）。 */
-  pubkeyHex: string;
+  /** 仅用于钱包界面展示的 SS58 地址（prefix 2027）。 */
+  ss58_address: string;
+  /** 账户 ID（小写 0x + 64 位十六进制）。 */
+  account_id: string;
   createdAt: number;
 };
 

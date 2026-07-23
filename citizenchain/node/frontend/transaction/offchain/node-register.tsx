@@ -12,9 +12,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { sanitizeError } from '../../tauri';
 import { adminsChangeApi } from '../../admins/api';
-import { hexToSs58 } from '../../shared/ss58';
+import { accountIdToSs58 } from '../../shared/ss58';
 import { CitizenSignatureModal } from '../../shared/qr/CitizenSignatureModal';
-import type { ActivatedAdmin, AdminWalletMatch, VoteSignRequestResult } from '../../governance/types';
+import type { ActivatedAdmin, AdminSignerMatch, VoteSignRequestResult } from '../../governance/types';
 import { offchainApi } from './api';
 import type { ConnectivityTestReport } from './types';
 
@@ -38,8 +38,8 @@ export function ClearingBankDeclareNodePage({ cidNumber, cidFullName, onBack, on
   const [report, setReport] = useState<ConnectivityTestReport | null>(null);
 
   // 管理员 = 已激活的清算行管理员中第一个;Step 3 完工后改为下拉选(支持多管理员)
-  const [admins, setAdmins] = useState<AdminWalletMatch[]>([]);
-  const [selectedAdmin, setSelectedAdmin] = useState<AdminWalletMatch | null>(null);
+  const [admins, setAdmins] = useState<AdminSignerMatch[]>([]);
+  const [selectedAdmin, setSelectedAdmin] = useState<AdminSignerMatch | null>(null);
 
   // QR 流程
   const [signRequest, setSignRequest] = useState<VoteSignRequestResult | null>(null);
@@ -59,10 +59,10 @@ export function ClearingBankDeclareNodePage({ cidNumber, cidFullName, onBack, on
     ]).then(([pid, aa]) => {
       if (cancelled) return;
       setPeerId(pid);
-      const matches: AdminWalletMatch[] = aa.map(a => ({
-        address: hexToSs58(a.pubkeyHex),
-        pubkeyHex: a.pubkeyHex,
-        walletLabel: '',
+      const matches: AdminSignerMatch[] = aa.map(a => ({
+        ss58_address: accountIdToSs58(a.account_id),
+        account_id: a.account_id,
+        account_label: '',
       }));
       setAdmins(matches);
       if (matches.length === 1) setSelectedAdmin(matches[0]);
@@ -122,7 +122,7 @@ export function ClearingBankDeclareNodePage({ cidNumber, cidFullName, onBack, on
     setCountdown(90);
     try {
       const r = await offchainApi.buildRegisterClearingBankRequest(
-        selectedAdmin.pubkeyHex,
+        selectedAdmin.account_id,
         cidNumber,
         peerId,
         rpcDomain.trim(),
@@ -142,7 +142,7 @@ export function ClearingBankDeclareNodePage({ cidNumber, cidFullName, onBack, on
     try {
       const r = await offchainApi.submitRegisterClearingBank(
         sr.requestId,
-        selectedAdmin.pubkeyHex,
+        selectedAdmin.account_id,
         sr.expectedPayloadHash,
         cidNumber,
         peerId,
@@ -199,19 +199,19 @@ export function ClearingBankDeclareNodePage({ cidNumber, cidFullName, onBack, on
             {admins.length === 0 ? (
               <p className="muted">本机构尚无已激活管理员。请先回到治理 tab 激活至少 1 名清算行管理员后再来声明节点。</p>
             ) : admins.length === 1 ? (
-              <code className="admin-card-address">{admins[0].address}</code>
+              <code className="admin-card-address">{admins[0].ss58_address}</code>
             ) : (
               <select
-                value={selectedAdmin?.pubkeyHex ?? ''}
+                value={selectedAdmin?.account_id ?? ''}
                 onChange={(e) => {
-                  const found = admins.find(a => a.pubkeyHex === e.target.value);
+                  const found = admins.find(a => a.account_id === e.target.value);
                   setSelectedAdmin(found ?? null);
                 }}
               >
                 <option value="">— 选择管理员 —</option>
                 {admins.map((a) => (
-                  <option key={a.pubkeyHex} value={a.pubkeyHex}>
-                    {a.address}
+                  <option key={a.account_id} value={a.account_id}>
+                    {a.ss58_address}
                   </option>
                 ))}
               </select>

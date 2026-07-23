@@ -56,30 +56,34 @@ impl InstitutionRef {
         }
     }
 
-    pub(crate) fn main_account_hex(self) -> String {
+    pub(crate) fn main_account_id(self) -> String {
         match self {
-            InstitutionRef::Nrc(item) | InstitutionRef::Prc(item) => hex::encode(item.main_account),
-            InstitutionRef::Prb(item) => hex::encode(item.main_account),
+            InstitutionRef::Nrc(item) | InstitutionRef::Prc(item) => {
+                format!("0x{}", hex::encode(item.main_account))
+            }
+            InstitutionRef::Prb(item) => format!("0x{}", hex::encode(item.main_account)),
         }
     }
 
-    pub(crate) fn fee_account_hex(self) -> String {
+    pub(crate) fn fee_account_id(self) -> String {
         match self {
-            InstitutionRef::Nrc(item) | InstitutionRef::Prc(item) => hex::encode(item.fee_account),
-            InstitutionRef::Prb(item) => hex::encode(item.fee_account),
+            InstitutionRef::Nrc(item) | InstitutionRef::Prc(item) => {
+                format!("0x{}", hex::encode(item.fee_account))
+            }
+            InstitutionRef::Prb(item) => format!("0x{}", hex::encode(item.fee_account)),
         }
     }
 
-    pub(crate) fn stake_account_hex(self) -> Option<String> {
+    pub(crate) fn stake_account_id(self) -> Option<String> {
         match self {
-            InstitutionRef::Prb(item) => Some(hex::encode(item.stake_account)),
+            InstitutionRef::Prb(item) => Some(format!("0x{}", hex::encode(item.stake_account))),
             InstitutionRef::Nrc(_) | InstitutionRef::Prc(_) => None,
         }
     }
 
-    pub(crate) fn safety_fund_account_hex(self) -> Option<String> {
+    pub(crate) fn safety_fund_account_id(self) -> Option<String> {
         match self {
-            InstitutionRef::Nrc(_) => Some(hex::encode(SAFETY_FUND_ACCOUNT)),
+            InstitutionRef::Nrc(_) => Some(format!("0x{}", hex::encode(SAFETY_FUND_ACCOUNT))),
             InstitutionRef::Prc(_) | InstitutionRef::Prb(_) => None,
         }
     }
@@ -94,7 +98,7 @@ impl InstitutionRef {
             cid_number: self.cid_number().to_string(),
             org_type: org_type as u8,
             org_type_label: org_type.label().to_string(),
-            main_account: self.main_account_hex(),
+            main_account_id: self.main_account_id(),
         }
     }
 }

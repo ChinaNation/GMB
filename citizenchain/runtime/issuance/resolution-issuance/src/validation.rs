@@ -32,9 +32,12 @@ impl<T: Config> Pallet<T> {
         let mut sum = BalanceOf::<T>::zero();
         for item in allocations {
             Self::ensure_nonzero_total(&item.amount)?;
-            ensure!(seen.insert(&item.recipient), Error::<T>::DuplicateRecipient);
             ensure!(
-                expected_set.contains(&item.recipient),
+                seen.insert(&item.recipient_account_id),
+                Error::<T>::DuplicateRecipient
+            );
+            ensure!(
+                expected_set.contains(&item.recipient_account_id),
                 Error::<T>::InvalidRecipientSet
             );
             sum = sum
@@ -49,9 +52,9 @@ impl<T: Config> Pallet<T> {
 
     pub(crate) fn ensure_unique_recipients(recipients: &[T::AccountId]) -> DispatchResult {
         let mut seen: BTreeSet<&T::AccountId> = BTreeSet::new();
-        for recipient in recipients {
+        for recipient_account_id in recipients {
             ensure!(
-                seen.insert(recipient),
+                seen.insert(recipient_account_id),
                 Error::<T>::DuplicateAllowedRecipient
             );
         }
@@ -79,9 +82,9 @@ impl<T: Config> Pallet<T> {
             .skip(1)
             .filter_map(|node| T::AccountId::decode(&mut &node.main_account[..]).ok())
             .collect();
-        for recipient in recipients.iter() {
+        for recipient_account_id in recipients.iter() {
             ensure!(
-                valid_set.contains(recipient),
+                valid_set.contains(recipient_account_id),
                 Error::<T>::RecipientNotInChinaCb
             );
         }

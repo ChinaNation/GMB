@@ -40,7 +40,7 @@ pub struct ChinaCitizenChain {
 /// 创世管理员人员记录；岗位任职由独立常量表达。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct CitizenChainGenesisAdmin {
-    pub admin_account: [u8; 32],
+    pub account_id: [u8; 32],
     pub family_name: &'static str,
     pub given_name: &'static str,
 }
@@ -48,7 +48,7 @@ pub struct CitizenChainGenesisAdmin {
 /// 创世管理员固定岗位任职。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct CitizenChainGenesisAssignment {
-    pub admin_account: [u8; 32],
+    pub account_id: [u8; 32],
     pub role_code: &'static [u8],
     pub role_name: &'static [u8],
 }
@@ -74,7 +74,7 @@ pub const CITIZENCHAIN_FOUNDATION: ChinaCitizenChain = ChinaCitizenChain {
 
 /// 一名创世管理员程伟；账户是授权字段，姓、名仅用于人员展示。
 pub const CITIZENCHAIN_GENESIS_ADMINS: &[CitizenChainGenesisAdmin] = &[CitizenChainGenesisAdmin {
-    admin_account: hex!("d6d73cfd7d6b7c5692749b7c46fd3fe398f16f84283910dbf15f74472e1e3938"),
+    account_id: hex!("d6d73cfd7d6b7c5692749b7c46fd3fe398f16f84283910dbf15f74472e1e3938"),
     family_name: "程",
     given_name: "伟",
 }];
@@ -82,17 +82,17 @@ pub const CITIZENCHAIN_GENESIS_ADMINS: &[CitizenChainGenesisAdmin] = &[CitizenCh
 /// 程伟对三个固定岗位的三条独立创世任职。
 pub const CITIZENCHAIN_GENESIS_ASSIGNMENTS: &[CitizenChainGenesisAssignment] = &[
     CitizenChainGenesisAssignment {
-        admin_account: hex!("d6d73cfd7d6b7c5692749b7c46fd3fe398f16f84283910dbf15f74472e1e3938"),
+        account_id: hex!("d6d73cfd7d6b7c5692749b7c46fd3fe398f16f84283910dbf15f74472e1e3938"),
         role_code: ROLE_CODE_LEGAL_REPRESENTATIVE,
         role_name: ROLE_NAME_LEGAL_REPRESENTATIVE,
     },
     CitizenChainGenesisAssignment {
-        admin_account: hex!("d6d73cfd7d6b7c5692749b7c46fd3fe398f16f84283910dbf15f74472e1e3938"),
+        account_id: hex!("d6d73cfd7d6b7c5692749b7c46fd3fe398f16f84283910dbf15f74472e1e3938"),
         role_code: ROLE_CODE_GENESIS_PRODUCT_MANAGER,
         role_name: ROLE_NAME_GENESIS_PRODUCT_MANAGER,
     },
     CitizenChainGenesisAssignment {
-        admin_account: hex!("d6d73cfd7d6b7c5692749b7c46fd3fe398f16f84283910dbf15f74472e1e3938"),
+        account_id: hex!("d6d73cfd7d6b7c5692749b7c46fd3fe398f16f84283910dbf15f74472e1e3938"),
         role_code: ROLE_CODE_GENESIS_PROGRAMMER,
         role_name: ROLE_NAME_GENESIS_PROGRAMMER,
     },

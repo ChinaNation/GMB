@@ -11,7 +11,7 @@
 
 ## 1. 模块位置
 
-- 路径：`node/src/settings/grandpa_address/mod.rs`
+- 路径：`node/src/settings/grandpa_address.rs`
 - 对外命令：
   - `get_grandpa_key`
   - `set_grandpa_key`
@@ -27,12 +27,12 @@
 
 ## 3. 存储设计
 
-- 节点 keystore 文件：`<app_data>/chains/*/keystore/6772616e<grandpa_pubkey_hex>`
+- 节点 keystore 文件：`<app_data>/chains/*/keystore/6772616e<grandpa_public_key>`
   - 文件内容：`"0x<private_hex>"`
   - 通过原子写入落盘，避免异常中断时文件损坏。
 - 本地元数据文件：`<app_data_dir>/grandpa-meta.json`
   - `cid_full_name`
-  - `pubkey_hex`
+  - `grandpa_public_key`
 
 ## 4. 关键流程
 
@@ -42,7 +42,7 @@
 2. 校验 GRANDPA 私钥格式（64 位 hex）。
 3. 推导 ed25519 公钥。
 4. 公钥必须匹配 GRANDPA authority 清单中的机构。
-5. 保存机构元数据（含 pubkey_hex）。
+5. 保存机构元数据（含 `grandpa_public_key`）。
 6. 同步写入节点 keystore 的 `gran` 密钥文件。
    - 清理旧的 `gran` 密钥文件，只保留当前公钥对应的密钥。
 7. 若节点运行中，执行 `stop_node -> start_node`，并进行生效校验。
@@ -51,7 +51,7 @@
 ### 4.2 节点启动协同
 
 - `home::home_node::start_node` 启动流程中调用 `prepare_grandpa_for_start`：
-  - 检查 meta 中的 pubkey_hex 是否在当前 authority 清单中；
+  - 检查 meta 中的 `grandpa_public_key` 是否在当前 authority 清单中；
   - 确认 keystore 文件存在；
   - 返回 `enable_grandpa_validator=true`。
 - `home::home_node::start_node` 在 `enable_grandpa_validator=true` 时追加 `--validator`。

@@ -104,7 +104,7 @@ pub(crate) fn validate_initial_accounts<T: Config>(
             Error::<T>::DuplicateAccountName
         );
 
-        let (address, kind) = Pallet::<T>::derive_institution_account(
+        let (account_id, kind) = Pallet::<T>::derive_institution_account(
             cid_number.as_slice(),
             item.account_name.as_slice(),
         )?;
@@ -113,19 +113,19 @@ pub(crate) fn validate_initial_accounts<T: Config>(
             Error::<T>::CidAlreadyRegistered
         );
         ensure!(
-            !AccountRegisteredCid::<T>::contains_key(&address),
+            !AccountRegisteredCid::<T>::contains_key(&account_id),
             Error::<T>::AccountAlreadyExists
         );
         ensure!(
-            !T::ReservedAccountChecker::is_reserved(&address),
+            !T::ReservedAccountChecker::is_reserved(&account_id),
             Error::<T>::AccountReserved
         );
         ensure!(
-            T::AccountValidator::is_valid(&address),
+            T::AccountValidator::is_valid(&account_id),
             Error::<T>::InvalidAccount
         );
         ensure!(
-            !T::ProtectedSourceChecker::is_protected(&address),
+            !T::ProtectedSourceChecker::is_protected(&account_id),
             Error::<T>::ProtectedSource
         );
 
@@ -136,10 +136,10 @@ pub(crate) fn validate_initial_accounts<T: Config>(
             );
             protocol_kinds.insert(protocol_kind);
             if protocol_kind == primitives::account_derive::InstitutionProtocolAccountKind::Main {
-                main_account = Some(address.clone());
+                main_account = Some(account_id.clone());
             }
             if protocol_kind == primitives::account_derive::InstitutionProtocolAccountKind::Fee {
-                fee_account = Some(address.clone());
+                fee_account = Some(account_id.clone());
             }
         }
 
@@ -148,7 +148,7 @@ pub(crate) fn validate_initial_accounts<T: Config>(
             .ok_or(Error::<T>::InitialAmountOverflow)?;
         built.push(CreateInstitutionAccount {
             account_name: item.account_name.clone(),
-            address,
+            account_id,
             amount: item.amount,
         });
     }

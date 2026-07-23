@@ -6,7 +6,7 @@ import type {
   NodeMode,
   NodeModeState,
   OnChinaPlatformState,
-  RewardWallet,
+  RewardAccount,
 } from './types';
 
 // 设置页专用 Tauri API。
@@ -16,10 +16,14 @@ export const settingsApi = {
   getOnChinaPlatform: () => invoke<OnChinaPlatformState>('get_onchina_platform'),
   startOnChinaPlatform: () => invoke<OnChinaPlatformState>('start_onchina_platform'),
   stopOnChinaPlatform: () => invoke<OnChinaPlatformState>('stop_onchina_platform'),
-  getRewardWallet: () => invoke<RewardWallet>('get_reward_wallet'),
-  setRewardWallet: (address: string, unlockPassword: string) =>
-    invoke<RewardWallet>('set_reward_wallet', { address, unlockPassword }),
-  getLocalMinerAddress: () => invoke<string | null>('get_local_miner_address'),
+  getRewardAccount: () => invoke<RewardAccount>('get_reward_account'),
+  setRewardAccount: (ss58_address: string, unlockPassword: string) =>
+    invoke<RewardAccount>('set_reward_account', {
+      ss58_address,
+      unlock_password: unlockPassword,
+    }),
+  getLocalMinerSs58Address: () =>
+    invoke<string | null>('get_local_miner_ss58_address'),
   getBootnodeKey: () => invoke<BootnodeKey>('get_bootnode_key'),
   getGrandpaKey: () => invoke<GrandpaKey>('get_grandpa_key'),
   setBootnodeKey: (nodeKey: string, unlockPassword: string) =>

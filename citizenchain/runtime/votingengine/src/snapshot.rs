@@ -127,19 +127,19 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     /// 将个人多签当前或待注册管理员列表写入快照。
     pub fn snapshot_personal_admins(
         proposal_id: u64,
-        personal_account: T::AccountId,
+        personal_account_id: T::AccountId,
         pending_account: bool,
     ) -> DispatchResult {
         let admins = if pending_account {
-            T::InternalAdminProvider::get_pending_personal_admins(personal_account.clone())
+            T::InternalAdminProvider::get_pending_personal_admins(personal_account_id.clone())
         } else {
-            T::InternalAdminProvider::get_personal_admins(personal_account.clone())
+            T::InternalAdminProvider::get_personal_admins(personal_account_id.clone())
         }
         .ok_or(Error::<T>::InvalidInstitution)?;
 
         Self::write_admin_snapshot(
             proposal_id,
-            ProposalSubject::PersonalAccount(personal_account),
+            ProposalSubject::PersonalAccount(personal_account_id),
             admins,
         )
     }

@@ -67,7 +67,7 @@ mod benchmarks {
     #[benchmark]
     fn propose_runtime_upgrade() {
         let origin = T::ProposeOrigin::try_successful_origin()
-            .expect("benchmark proposer origin must be available");
+            .expect("benchmark proposer_account_id origin must be available");
         let reason = reason_max::<T>();
         let code = code_max::<T>();
         seed_population::<T>();

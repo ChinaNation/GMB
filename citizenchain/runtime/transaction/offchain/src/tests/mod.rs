@@ -198,14 +198,14 @@ impl crate::bank_check::CidAccountQuery<AccountId32> for MockCid {
 pub struct MockOnchainFeeCharger;
 impl primitives::fee_policy::OnchainFeeCharger<AccountId32, u128> for MockOnchainFeeCharger {
     fn charge(
-        payer: &AccountId32,
+        payer_account_id: &AccountId32,
         transaction_amount: u128,
     ) -> Result<u128, sp_runtime::DispatchError> {
         let fee = primitives::fee_policy::calculate_onchain_fee(transaction_amount);
         // 扣下的 NegativeImbalance 直接丢弃(等额销毁);真实分账由 runtime 的
         // OnchainExecutionFeeCharger 走 80/10/10,测试桩只验证费用账户被扣。
         let _imbalance = <Balances as Currency<AccountId32>>::withdraw(
-            payer,
+            payer_account_id,
             fee,
             frame_support::traits::WithdrawReasons::FEE,
             frame_support::traits::ExistenceRequirement::KeepAlive,

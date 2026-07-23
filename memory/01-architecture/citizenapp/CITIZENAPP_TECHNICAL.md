@@ -11,6 +11,14 @@
 - `citizenapp` 负责端上钱包、登录签名、纯链上支付入口、绑定签名与状态展示
 - Cloudflare Session 只证明已登记 P-256 设备子钥控制当前钱包，不证明链上账户存在、余额充足或具备链上业务资格；各业务动作必须独立读取其资格真源
 
+### 1.1 账户标识目标契约
+
+- CitizenApp 保存助记词/seed 并执行签名，但钱包软件不等于链账户；业务模型中的链账户统一命名为 `account_id` 或准确的 `<role>_account_id`。
+- `account_id` 的文本形式统一为小写 `0x` 加 64 位十六进制；界面需要人类可读地址时，从账户字节派生 `ss58_address`，不得把 SS58 作为授权或 Isar 关系主键。
+- 公钥统一为 `public_key` 或准确的签名角色名；不得再新增 `wallet_pubkey`、`admin_pubkey`、`wallet_address` 等同义字段。
+- Isar 旧业务数据将在对应实施步骤删除重建；secure storage 中的助记词、seed 和私钥必须保留，并按未改变的派生规则得到同一账户。
+- 完整目标与进度见 ADR-040 和任务卡 `20260722-account-id-official-unify.md`；本文件后续旧名称在对应步骤完成前只记录当前实现。
+
 ## 2. 当前技术栈
 
 - App：Flutter + Dart

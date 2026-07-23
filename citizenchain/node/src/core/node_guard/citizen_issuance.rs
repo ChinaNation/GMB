@@ -24,7 +24,7 @@ const CITIZEN_IDENTITY_PALLET: &[u8] = b"CitizenIdentity";
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 struct PendingCertificationReward {
-    who: [u8; 32],
+    account_id: [u8; 32],
     cid_number_hash: [u8; 32],
 }
 
@@ -142,16 +142,12 @@ pub mod storage_key {
         )
     }
 
-    pub fn wallet_account_by_cid(cid: &[u8]) -> Vec<u8> {
-        blake2_map_raw(
-            CITIZEN_IDENTITY_PALLET,
-            b"WalletAccountByCid",
-            &cid.encode(),
-        )
+    pub fn account_id_by_cid(cid: &[u8]) -> Vec<u8> {
+        blake2_map_raw(CITIZEN_IDENTITY_PALLET, b"AccountIdByCid", &cid.encode())
     }
 
-    pub fn cid_by_wallet_account(account: &[u8; 32]) -> Vec<u8> {
-        blake2_map_raw(CITIZEN_IDENTITY_PALLET, b"CidByWalletAccount", account)
+    pub fn cid_by_account_id(account: &[u8; 32]) -> Vec<u8> {
+        blake2_map_raw(CITIZEN_IDENTITY_PALLET, b"CidByAccountId", account)
     }
 }
 
@@ -264,12 +260,12 @@ where
         let pending: PendingCertificationReward = pre(&pending_key)
             .ok_or(GuardError::PendingQueueGap)
             .and_then(|raw| decode_exact(&raw, "PendingRewards"))?;
-        if !accounts.insert(pending.who) || !identities.insert(pending.cid_number_hash) {
+        if !accounts.insert(pending.account_id) || !identities.insert(pending.cid_number_hash) {
             return Err(GuardError::PendingDuplicate);
         }
 
         let pending_identity_key = storage_key::pending_identity(&pending.cid_number_hash);
-        let pending_account_key = storage_key::pending_account(&pending.who);
+        let pending_account_key = storage_key::pending_account(&pending.account_id);
         if !unit_present(pre, &pending_identity_key, "PendingIdentityRewardClaimed")?
             || !unit_present(pre, &pending_account_key, "PendingAccountRewarded")?
         {
@@ -282,9 +278,9 @@ where
             return Err(GuardError::PendingQueueNotCleared);
         }
 
-        let cid_number: Vec<u8> = pre(&storage_key::cid_by_wallet_account(&pending.who))
+        let cid_number: Vec<u8> = pre(&storage_key::cid_by_account_id(&pending.account_id))
             .ok_or(GuardError::IdentityReverseIndexMismatch)
-            .and_then(|raw| decode_exact(&raw, "CidByWalletAccount"))?;
+            .and_then(|raw| decode_exact(&raw, "CidByAccountId"))?;
         if blake2_256(&cid_number) != pending.cid_number_hash {
             return Err(GuardError::IdentityHashMismatch);
         }
@@ -295,15 +291,15 @@ where
         let _identity: VotingIdentity = pre(&voting_key)
             .ok_or(GuardError::FirstIdentityMissing)
             .and_then(|raw| decode_exact(&raw, "VotingIdentityByCid"))?;
-        let reverse: [u8; 32] = pre(&storage_key::wallet_account_by_cid(&cid_number))
+        let reverse: [u8; 32] = pre(&storage_key::account_id_by_cid(&cid_number))
             .ok_or(GuardError::IdentityReverseIndexMismatch)
-            .and_then(|raw| decode_exact(&raw, "WalletAccountByCid"))?;
-        if reverse != pending.who {
+            .and_then(|raw| decode_exact(&raw, "AccountIdByCid"))?;
+        if reverse != pending.account_id {
             return Err(GuardError::IdentityReverseIndexMismatch);
         }
 
         let claimed_key = storage_key::identity_claimed(&pending.cid_number_hash);
-        let rewarded_key = storage_key::account_rewarded(&pending.who);
+        let rewarded_key = storage_key::account_rewarded(&pending.account_id);
         if unit_present(parent, &claimed_key, "IdentityRewardClaimed")?
             || unit_present(parent, &rewarded_key, "AccountRewarded")?
         {
@@ -331,7 +327,7 @@ where
 
         let reward = reward_amount_at(parent_count + u64::from(index));
         issuance_plan
-            .add(pending.who, reward)
+            .add(pending.account_id, reward)
             .map_err(|_| GuardError::FinalizeIssuanceOverflow)?;
     }
 
@@ -406,7 +402,7 @@ mod tests {
         assert_eq!(storage_key::pending_reward(index), expected);
 
         let pending = PendingCertificationReward {
-            who: [7u8; 32],
+            account_id: [7u8; 32],
             cid_number_hash: [8u8; 32],
         };
         assert_eq!(pending.encode(), ([7u8; 32], [8u8; 32]).encode());
@@ -444,25 +440,25 @@ mod tests {
             &mut pre,
             storage_key::pending_reward(0),
             PendingCertificationReward {
-                who: account,
+                account_id: account,
                 cid_number_hash: hash,
             },
         );
         put(&mut pre, storage_key::pending_identity(&hash), ());
         put(&mut pre, storage_key::pending_account(&account), ());
         pre.insert(storage_key::voting_identity(&cid), voting_identity());
-        put(&mut pre, storage_key::wallet_account_by_cid(&cid), account);
+        put(&mut pre, storage_key::account_id_by_cid(&cid), account);
         put(
             &mut pre,
-            storage_key::cid_by_wallet_account(&account),
+            storage_key::cid_by_account_id(&account),
             cid.clone(),
         );
         put(&mut post, storage_key::rewarded_count(), 1u64);
         put(&mut post, storage_key::identity_claimed(&hash), ());
         put(&mut post, storage_key::account_rewarded(&account), ());
         post.insert(storage_key::voting_identity(&cid), voting_identity());
-        put(&mut post, storage_key::wallet_account_by_cid(&cid), account);
-        put(&mut post, storage_key::cid_by_wallet_account(&account), cid);
+        put(&mut post, storage_key::account_id_by_cid(&cid), account);
+        put(&mut post, storage_key::cid_by_account_id(&account), cid);
         let pre_delta = pre
             .iter()
             .map(|(key, value)| (key.clone(), Some(value.clone())))
@@ -554,7 +550,7 @@ mod tests {
         let mut bad_reverse = pre.clone();
         put(
             &mut bad_reverse,
-            storage_key::wallet_account_by_cid(&cid),
+            storage_key::account_id_by_cid(&cid),
             [9u8; 32],
         );
         assert_eq!(
@@ -639,7 +635,7 @@ mod tests {
         let (parent, mut pre, post, pre_delta, post_delta, account) = valid_transition();
         put(
             &mut pre,
-            storage_key::cid_by_wallet_account(&account),
+            storage_key::cid_by_account_id(&account),
             b"GD001-CTZN1-TAMPERED".to_vec(),
         );
         assert_eq!(

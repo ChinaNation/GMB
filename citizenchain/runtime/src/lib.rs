@@ -327,7 +327,7 @@ mod runtime {
     #[runtime::pallet_index(15)]
     pub type GrandpaKeyChange = grandpakey_change;
 
-    // 个人多签账户生命周期模块:创建/关闭用户自定义多签账户(无 CID 归属,creator+account_name 派生)。
+    // 个人多签账户生命周期模块:创建/关闭用户自定义多签账户(无 CID 归属,creator_account_id+account_name 派生)。
     #[runtime::pallet_index(7)]
     pub type PersonalManage = personal_manage;
 
@@ -339,7 +339,7 @@ mod runtime {
     #[runtime::pallet_index(16)]
     pub type PowDifficulty = pow_difficulty;
 
-    // 机构/个人多签账户转账模块：机构交易以 CID 为主体并显式携带 institution_account；个人交易以 personal_account 为主体。
+    // 机构/个人多签账户转账模块：机构交易以 CID 为主体并显式携带 institution_account_id；个人交易以 personal_account_id 为主体。
     #[runtime::pallet_index(17)]
     pub type MultisigTransfer = multisig;
 

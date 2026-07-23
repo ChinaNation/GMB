@@ -1,5 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-//! 公权机构管理员钱包集合模块。
+//! 公权机构管理员账户集合模块。
 //!
 //! 机构唯一身份是 CID。本模块只保存 `AdminAccounts[cid_number] -> admins`；
 //! 岗位、任职和机构治理阈值归 entity；投票引擎只读取阈值，机构账户不参与管理员寻址。
@@ -116,7 +116,7 @@ pub mod pallet {
             let mut seen_cids = BTreeSet::new();
             for admin in admins {
                 ensure!(
-                    seen.insert(admin.admin_account.clone()),
+                    seen.insert(admin.account_id.clone()),
                     Error::<T>::DuplicateAdmin
                 );
                 if !admin.cid_number.is_empty() {
@@ -128,7 +128,7 @@ pub mod pallet {
                     ensure!(
                         T::CitizenIdentityBinding::matches_citizen_account(
                             admin.cid_number.as_slice(),
-                            &admin.admin_account,
+                            &admin.account_id,
                         ),
                         Error::<T>::CitizenIdentityMismatch
                     );
@@ -285,7 +285,7 @@ impl<T: pallet::Config> InstitutionAdminQuery<T::AccountId> for pallet::Pallet<T
         who: &T::AccountId,
     ) -> bool {
         Self::get_institution_admins(institution_code, cid_number)
-            .map(|value| value.admins.iter().any(|admin| &admin.admin_account == who))
+            .map(|value| value.admins.iter().any(|admin| &admin.account_id == who))
             .unwrap_or(false)
     }
 
@@ -298,7 +298,7 @@ impl<T: pallet::Config> InstitutionAdminQuery<T::AccountId> for pallet::Pallet<T
                 .admins
                 .into_inner()
                 .into_iter()
-                .map(|admin| admin.admin_account)
+                .map(|admin| admin.account_id)
                 .collect()
         })
     }

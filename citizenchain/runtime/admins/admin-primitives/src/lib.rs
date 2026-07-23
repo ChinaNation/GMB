@@ -37,7 +37,7 @@ pub type GivenName = BoundedVec<u8, ConstU32<ADMIN_PERSON_NAME_MAX_BYTES>>;
 
 /// 私权机构与个人多签管理员人员记录。
 ///
-/// `admin_account` 是唯一授权字段；`family_name`、`given_name` 与链上中国公民姓名
+/// `account_id` 是唯一授权字段；`family_name`、`given_name` 与链上中国公民姓名
 /// 字段逐字对齐，只承载人员姓名。机构岗位和任职由 entity 独立保存，个人多签也复用
 /// 本结构，不再保存纯账户管理员数组。
 #[derive(
@@ -52,7 +52,7 @@ pub type GivenName = BoundedVec<u8, ConstU32<ADMIN_PERSON_NAME_MAX_BYTES>>;
     Eq,
 )]
 pub struct Admin<AccountId> {
-    pub admin_account: AccountId,
+    pub account_id: AccountId,
     pub family_name: FamilyName,
     pub given_name: GivenName,
 }
@@ -61,7 +61,7 @@ pub struct Admin<AccountId> {
 ///
 /// `cid_number` 是对 `citizen-identity` 公民身份真源的引用；当前创世资料不完整时允许
 /// 为空。姓名同样允许为空，且不得用展示占位值冒充真实公民资料。授权仍只使用
-/// `admin_account`，公民 CID 与姓名都不能直接产生岗位权限。
+/// `account_id`，公民 CID 与姓名都不能直接产生岗位权限。
 #[derive(
     Encode,
     Decode,
@@ -74,7 +74,7 @@ pub struct Admin<AccountId> {
     Eq,
 )]
 pub struct PublicAdmin<AccountId> {
-    pub admin_account: AccountId,
+    pub account_id: AccountId,
     pub cid_number: AdminCidNumber,
     pub family_name: FamilyName,
     pub given_name: GivenName,
@@ -159,7 +159,7 @@ pub enum AdminAccountStatus {
 pub struct InstitutionAdmins<AdminList> {
     /// 机构码，用于把查询路由到对应公权或私权业务。
     pub institution_code: InstitutionCode,
-    /// 按钱包账户去重的管理员人员集合。
+    /// 按账户去重的管理员人员集合。
     pub admins: AdminList,
 }
 
@@ -182,7 +182,7 @@ pub struct AdminAccount<AdminList, AccountId, BlockNumber> {
     pub institution_code: InstitutionCode,
     pub kind: AdminAccountKind,
     pub admins: AdminList,
-    pub creator: AccountId,
+    pub creator_account_id: AccountId,
     pub created_at: BlockNumber,
     pub updated_at: BlockNumber,
     pub status: AdminAccountStatus,
@@ -195,7 +195,7 @@ pub struct AdminAccount<AdminList, AccountId, BlockNumber> {
 #[scale_info(skip_type_params(AccountId, AdminList))]
 pub struct AdminSetChangeAction<AccountId, AdminList> {
     /// 个人多签账户。机构管理员变更统一按 CID，不使用本类型。
-    pub personal_account: AccountId,
+    pub personal_account_id: AccountId,
     /// 提案通过后写入的完整管理员集合。
     pub admins: AdminList,
     /// 提案通过后写入投票引擎的动态阈值；固定治理机构必须等于制度固定阈值。
@@ -210,36 +210,36 @@ pub trait AdminAccountLifecycle<AccountId, AdminItem = AccountId> {
     fn create_pending_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        personal_account: AccountId,
+        personal_account_id: AccountId,
         cid_number: Vec<u8>,
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
         admins: Vec<AdminItem>,
-        creator: AccountId,
+        creator_account_id: AccountId,
     ) -> DispatchResult;
 
     fn activate_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        personal_account: AccountId,
+        personal_account_id: AccountId,
     ) -> DispatchResult;
 
     fn remove_pending_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        personal_account: AccountId,
+        personal_account_id: AccountId,
     ) -> DispatchResult;
 
     fn close_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
-        personal_account: AccountId,
+        personal_account_id: AccountId,
     ) -> DispatchResult;
 }
 
 /// 机构管理员集合写入口。
 ///
-/// 机构的来源、岗位和任职全部由 entity 表达，因此该接口不接收 `creator`，也不承担
+/// 机构的来源、岗位和任职全部由 entity 表达，因此该接口不接收 `creator_account_id`，也不承担
 /// 个人多签的创建语义。公权与私权 entity 只通过本接口原子写入管理员人员集合。
 pub trait InstitutionAdminLifecycle<AccountId, AdminItem = Admin<AccountId>> {
     /// 注册局或机构治理写入有效管理员人员集合；机构阈值由 entity 独立保存。
@@ -300,7 +300,7 @@ impl<AccountId> InstitutionAdminQuery<AccountId> for () {
     }
 }
 
-/// 公权管理员非空公民 CID 与钱包绑定查询。
+/// 公权管理员非空公民 CID 与账户绑定查询。
 ///
 /// 实现只能读取 `citizen-identity` 真源；public-admins 不得自行生成或修正公民 CID。
 pub trait CitizenIdentityBindingQuery<AccountId> {
@@ -319,29 +319,29 @@ impl<AccountId> CitizenIdentityBindingQuery<AccountId> for () {
 pub trait AdminAccountQuery<AccountId> {
     fn active_admin_account_exists(
         institution_code: InstitutionCode,
-        personal_account: AccountId,
+        personal_account_id: AccountId,
     ) -> bool;
 
     fn is_active_account_admin(
         institution_code: InstitutionCode,
-        personal_account: AccountId,
+        personal_account_id: AccountId,
         who: &AccountId,
     ) -> bool;
 
     fn active_account_admins(
         institution_code: InstitutionCode,
-        personal_account: AccountId,
+        personal_account_id: AccountId,
     ) -> Option<Vec<AccountId>>;
 
     /// 返回个人多签完整管理员人员记录；授权调用方仍只能比较账户。
     fn active_account_admin_records(
         institution_code: InstitutionCode,
-        personal_account: AccountId,
+        personal_account_id: AccountId,
     ) -> Option<Vec<Admin<AccountId>>>;
 
     fn active_account_admins_len(
         institution_code: InstitutionCode,
-        personal_account: AccountId,
+        personal_account_id: AccountId,
     ) -> Option<u32>;
 
     fn pending_account_exists_for_snapshot(
@@ -505,11 +505,11 @@ mod tests {
 
     /// 私权管理员声明序固定为账户、姓、名，机构值只在前面增加机构码。
     #[test]
-    fn institution_admin_account_field_order_matches_node_guard() {
+    fn institution_assignment_account_id_field_order_matches_node_guard() {
         use codec::Encode;
 
         let admin = Admin {
-            admin_account: 7u8,
+            account_id: 7u8,
             family_name: FamilyName::truncate_from("张".as_bytes().to_vec()),
             given_name: GivenName::truncate_from("三".as_bytes().to_vec()),
         };
@@ -529,7 +529,7 @@ mod tests {
 
         let cid_number = AdminCidNumber::truncate_from(b"GZ000-CTZN6-198805200-2026".to_vec());
         let admin = PublicAdmin {
-            admin_account: 7u8,
+            account_id: 7u8,
             cid_number: cid_number.clone(),
             family_name: FamilyName::truncate_from("程".as_bytes().to_vec()),
             given_name: GivenName::truncate_from("伟".as_bytes().to_vec()),
@@ -549,7 +549,7 @@ mod tests {
     #[test]
     fn missing_person_name_uses_management_default() {
         let admin = Admin {
-            admin_account: 1u8,
+            account_id: 1u8,
             family_name: FamilyName::default(),
             given_name: GivenName::default(),
         }

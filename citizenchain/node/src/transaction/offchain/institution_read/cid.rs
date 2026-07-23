@@ -68,9 +68,9 @@ struct CidEligibleRow {
     province_name: String,
     city_name: String,
     #[serde(default)]
-    main_account: Option<String>,
+    main_account_id: Option<String>,
     #[serde(default)]
-    fee_account: Option<String>,
+    fee_account_id: Option<String>,
 }
 
 fn into_candidate(row: CidEligibleRow) -> EligibleClearingBankCandidate {
@@ -84,8 +84,8 @@ fn into_candidate(row: CidEligibleRow) -> EligibleClearingBankCandidate {
         parent_ref_property: row.parent_ref_property,
         province_name: row.province_name,
         city_name: row.city_name,
-        main_account: row.main_account,
-        fee_account: row.fee_account,
+        main_account_id: row.main_account_id,
+        fee_account_id: row.fee_account_id,
     }
 }
 
@@ -194,7 +194,7 @@ pub fn fetch_institution_registration_info(
     if data.credential.register_nonce.is_empty()
         || data.credential.signature.is_empty()
         || data.credential.actor_cid_number.is_empty()
-        || data.credential.credential_signer_pubkey.is_empty()
+        || data.credential.credential_signer_public_key.is_empty()
         || data.credential.scope_province_name.is_empty()
     {
         return Err("OnChina 未返回完整机构注册凭证,请确认签发机构管理员已激活".to_string());

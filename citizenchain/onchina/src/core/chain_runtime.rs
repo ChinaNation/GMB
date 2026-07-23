@@ -607,7 +607,7 @@ fn decode_onchain_admin_account(
                 .admins
                 .into_iter()
                 .map(|admin| OnChainAdminRecord {
-                    admin_account: admin.admin_account,
+                    admin_account: admin.account_id,
                     cid_number: admin.cid_number.into_inner(),
                     family_name: admin.family_name.into_inner(),
                     given_name: admin.given_name.into_inner(),
@@ -623,7 +623,7 @@ fn decode_onchain_admin_account(
                 .admins
                 .into_iter()
                 .map(|admin| OnChainAdminRecord {
-                    admin_account: admin.admin_account,
+                    admin_account: admin.account_id,
                     cid_number: Vec::new(),
                     family_name: admin.family_name.into_inner(),
                     given_name: admin.given_name.into_inner(),
@@ -1382,7 +1382,7 @@ mod tests {
         let bytes = admin_primitives::InstitutionAdmins {
             institution_code: *b"CREG",
             admins: vec![admin_primitives::PublicAdmin {
-                admin_account: [0x42u8; 32],
+                account_id: [0x42u8; 32],
                 cid_number: "GZ000-CTZN6-198805200-2026"
                     .as_bytes()
                     .to_vec()
@@ -1413,7 +1413,7 @@ mod tests {
         let bytes = admin_primitives::InstitutionAdmins {
             institution_code: *b"SFGY",
             admins: vec![admin_primitives::Admin {
-                admin_account: [0x24u8; 32],
+                account_id: [0x24u8; 32],
                 family_name: "程"
                     .as_bytes()
                     .to_vec()

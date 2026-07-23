@@ -63,33 +63,33 @@ pub(crate) fn do_propose_add_institution_account<T: Config>(
             !InstitutionAccounts::<T>::contains_key(&cid_number, account_name),
             Error::<T>::CidAlreadyRegistered
         );
-        let (account, _kind) = Pallet::<T>::derive_institution_account(
+        let (account_id, _kind) = Pallet::<T>::derive_institution_account(
             cid_number.as_slice(),
             account_name.as_slice(),
         )?;
         ensure!(
-            !AccountRegisteredCid::<T>::contains_key(&account),
+            !AccountRegisteredCid::<T>::contains_key(&account_id),
             Error::<T>::AccountAlreadyExists
         );
         ensure!(
-            !T::ReservedAccountChecker::is_reserved(&account),
+            !T::ReservedAccountChecker::is_reserved(&account_id),
             Error::<T>::AccountReserved
         );
         ensure!(
-            T::AccountValidator::is_valid(&account),
+            T::AccountValidator::is_valid(&account_id),
             Error::<T>::InvalidAccount
         );
         ensure!(
-            !T::ProtectedSourceChecker::is_protected(&account),
+            !T::ProtectedSourceChecker::is_protected(&account_id),
             Error::<T>::ProtectedSource
         );
-        derived.push((account_name.clone(), account));
+        derived.push((account_name.clone(), account_id));
     }
 
     let action = AddInstitutionAccountAction {
         actor_cid_number: cid_number.clone(),
         derived,
-        proposer: who.clone(),
+        proposer_account_id: who.clone(),
     };
     let mut data = Vec::from(crate::MODULE_TAG);
     data.push(ACTION_ADD_ACCOUNT);
@@ -117,7 +117,7 @@ pub(crate) fn do_propose_add_institution_account<T: Config>(
     Pallet::<T>::deposit_event(Event::<T>::InstitutionAccountAddProposed {
         proposal_id,
         cid_number,
-        proposer: who,
+        proposer_account_id: who,
     });
     Ok(())
 }
@@ -147,7 +147,7 @@ pub(crate) fn execute_institution_add_account_with_finalizer<T: Config>(
     );
 
     // 逐项重校验状态相关约束(发起与执行之间不得被占用),全部通过后再一次性落库。
-    for (account_name, account) in action.derived.iter() {
+    for (account_name, account_id) in action.derived.iter() {
         ensure!(!account_name.is_empty(), Error::<T>::EmptyAccountName);
         ensure!(
             primitives::account_derive::is_registrable_custom_name(account_name.as_slice()),
@@ -158,42 +158,45 @@ pub(crate) fn execute_institution_add_account_with_finalizer<T: Config>(
             action.actor_cid_number.as_slice(),
             account_name.as_slice(),
         )?;
-        ensure!(&derived_account == account, Error::<T>::ProposalActionNotFound);
+        ensure!(
+            &derived_account == account_id,
+            Error::<T>::ProposalActionNotFound
+        );
         ensure!(
             !InstitutionAccounts::<T>::contains_key(&action.actor_cid_number, account_name),
             Error::<T>::CidAlreadyRegistered
         );
         ensure!(
-            !AccountRegisteredCid::<T>::contains_key(account),
+            !AccountRegisteredCid::<T>::contains_key(account_id),
             Error::<T>::AccountAlreadyExists
         );
         ensure!(
-            !T::ReservedAccountChecker::is_reserved(account),
+            !T::ReservedAccountChecker::is_reserved(account_id),
             Error::<T>::AccountReserved
         );
         ensure!(
-            T::AccountValidator::is_valid(account),
+            T::AccountValidator::is_valid(account_id),
             Error::<T>::InvalidAccount
         );
         ensure!(
-            !T::ProtectedSourceChecker::is_protected(account),
+            !T::ProtectedSourceChecker::is_protected(account_id),
             Error::<T>::ProtectedSource
         );
     }
 
     let now = <frame_system::Pallet<T>>::block_number();
-    for (account_name, account) in action.derived.iter() {
+    for (account_name, account_id) in action.derived.iter() {
         InstitutionAccounts::<T>::insert(
             &action.actor_cid_number,
             account_name,
             InstitutionAccountInfo {
-                address: account.clone(),
+                account_id: account_id.clone(),
                 initial_balance: BalanceOf::<T>::zero(),
                 created_at: now,
             },
         );
         AccountRegisteredCid::<T>::insert(
-            account,
+            account_id,
             RegisteredInstitution {
                 cid_number: action.actor_cid_number.clone(),
                 account_name: account_name.clone(),
@@ -202,8 +205,8 @@ pub(crate) fn execute_institution_add_account_with_finalizer<T: Config>(
         Pallet::<T>::deposit_event(Event::<T>::InstitutionAccountAdded {
             cid_number: action.actor_cid_number.clone(),
             account_name: account_name.clone(),
-            account: account.clone(),
-            submitter: action.proposer.clone(),
+            account_id: account_id.clone(),
+            submitter: action.proposer_account_id.clone(),
         });
     }
 

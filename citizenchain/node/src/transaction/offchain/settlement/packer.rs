@@ -82,12 +82,12 @@ impl From<PendingPayment> for NodeBatchItem {
 /// `KeystoreBatchSigner` 用 `settlement::keystore` 里存的清算行管理员私钥;
 /// 未接入时用 `NoopBatchSigner` 占位。
 pub trait BatchSigner: Send + Sync {
-    /// 对 `message = signing_message(OP_SIGN_OFFCHAIN_BATCH, actor_cid_number || institution_account || batch_seq || batch.encode())`
+    /// 对 `message = signing_message(OP_SIGN_OFFCHAIN_BATCH, actor_cid_number || institution_account_id || batch_seq || batch.encode())`
     /// 做 sr25519 签名,返回 64 字节签名(见 `batch_signing_message`)。
     fn sign_batch(&self, message: &[u8]) -> Result<[u8; 64], String>;
 }
 
-/// Extrinsic 提交器。负责把 `(actor_cid_number, actor_role_code, institution_account, batch_seq, batch_bytes, sig)` 转成
+/// Extrinsic 提交器。负责把 `(actor_cid_number, actor_role_code, institution_account_id, batch_seq, batch_bytes, sig)` 转成
 /// `offchain::Call::submit_offchain_batch` extrinsic 并提
 /// 交到节点的 `TransactionPool`。
 ///
@@ -98,7 +98,7 @@ pub trait BatchSubmitter: Send + Sync {
         &self,
         actor_cid_number: Vec<u8>,
         actor_role_code: Vec<u8>,
-        institution_account: AccountId32,
+        institution_account_id: AccountId32,
         batch_seq: u64,
         batch_bytes: Vec<u8>,
         batch_signature: [u8; 64],
@@ -123,7 +123,7 @@ impl BatchSubmitter for NoopBatchSubmitter {
         &self,
         _actor_cid_number: Vec<u8>,
         _actor_role_code: Vec<u8>,
-        _institution_account: AccountId32,
+        _institution_account_id: AccountId32,
         _batch_seq: u64,
         _batch_bytes: Vec<u8>,
         _batch_signature: [u8; 64],
@@ -139,7 +139,7 @@ pub struct OffchainPacker {
     ledger: Arc<OffchainLedger>,
     actor_cid_number: Vec<u8>,
     actor_role_code: Vec<u8>,
-    institution_account: AccountId32,
+    institution_account_id: AccountId32,
     signer: Arc<dyn BatchSigner>,
     submitter: Arc<dyn BatchSubmitter>,
     /// 距上次打包的区块号(链上当前高度)。
@@ -154,7 +154,7 @@ impl OffchainPacker {
         ledger: Arc<OffchainLedger>,
         actor_cid_number: Vec<u8>,
         actor_role_code: Vec<u8>,
-        institution_account: AccountId32,
+        institution_account_id: AccountId32,
         signer: Arc<dyn BatchSigner>,
         submitter: Arc<dyn BatchSubmitter>,
     ) -> Self {
@@ -162,7 +162,7 @@ impl OffchainPacker {
             ledger,
             actor_cid_number,
             actor_role_code,
-            institution_account,
+            institution_account_id,
             signer,
             submitter,
             0,
@@ -174,7 +174,7 @@ impl OffchainPacker {
         ledger: Arc<OffchainLedger>,
         actor_cid_number: Vec<u8>,
         actor_role_code: Vec<u8>,
-        institution_account: AccountId32,
+        institution_account_id: AccountId32,
         signer: Arc<dyn BatchSigner>,
         submitter: Arc<dyn BatchSubmitter>,
         initial_batch_seq: u64,
@@ -183,7 +183,7 @@ impl OffchainPacker {
             ledger,
             actor_cid_number,
             actor_role_code,
-            institution_account,
+            institution_account_id,
             signer,
             submitter,
             last_pack_block: Arc::new(RwLock::new(0)),
@@ -229,7 +229,7 @@ impl OffchainPacker {
         let message = batch_signing_message(
             &self.actor_cid_number,
             &self.actor_role_code,
-            &self.institution_account,
+            &self.institution_account_id,
             batch_seq,
             &batch_bytes,
         );
@@ -244,7 +244,7 @@ impl OffchainPacker {
         match self.submitter.submit(
             self.actor_cid_number.clone(),
             self.actor_role_code.clone(),
-            self.institution_account.clone(),
+            self.institution_account_id.clone(),
             batch_seq,
             batch_bytes,
             sig,
@@ -283,7 +283,7 @@ impl OffchainPacker {
 
 /// 构造清算行批次签名消息(唯一原语):
 /// `signing_message(OP_SIGN_OFFCHAIN_BATCH, SCALE(actor_cid_number) || SCALE(actor_role_code)
-/// || institution_account || batch_seq_le || batch_bytes)`。
+/// || institution_account_id || batch_seq_le || batch_bytes)`。
 ///
 /// 链上 `submit_offchain_batch` 会校验 batch_signature,必须与本函数产生的消息
 /// **逐字节一致**(runtime `batch_signing_hash` 用同一原语 + 同序 scale_payload)。
@@ -291,7 +291,7 @@ impl OffchainPacker {
 pub fn batch_signing_message(
     actor_cid_number: &[u8],
     actor_role_code: &[u8],
-    institution_account: &AccountId32,
+    institution_account_id: &AccountId32,
     batch_seq: u64,
     batch_bytes: &[u8],
 ) -> [u8; 32] {
@@ -300,7 +300,7 @@ pub fn batch_signing_message(
     );
     scale_payload.extend_from_slice(&actor_cid_number.encode());
     scale_payload.extend_from_slice(&actor_role_code.encode());
-    scale_payload.extend_from_slice(institution_account.as_ref());
+    scale_payload.extend_from_slice(institution_account_id.as_ref());
     scale_payload.extend_from_slice(&batch_seq.to_le_bytes());
     scale_payload.extend_from_slice(batch_bytes);
     primitives::sign::signing_message(primitives::sign::OP_SIGN_OFFCHAIN_BATCH, &scale_payload)
@@ -366,7 +366,7 @@ mod tests {
             &self,
             actor_cid_number: Vec<u8>,
             actor_role_code: Vec<u8>,
-            institution_account: AccountId32,
+            institution_account_id: AccountId32,
             batch_seq: u64,
             batch_bytes: Vec<u8>,
             batch_signature: [u8; 64],
@@ -374,7 +374,7 @@ mod tests {
             self.calls.lock().unwrap().push((
                 actor_cid_number,
                 actor_role_code,
-                institution_account,
+                institution_account_id,
                 batch_seq,
                 batch_bytes,
                 batch_signature,
@@ -560,7 +560,10 @@ mod tests {
         let bytes = item.encode();
         // 变长布局:bank 字段为 CID = Compact(len)||bytes(两个 CID 各 26 字节 → 各 27)。
         // 32(tx)+32(payer)+(1+26)+32(recipient)+(1+26)+16+16+64+8+4 = 258。
-        assert_eq!(bytes.len(), 32 + 32 + (1 + 26) + 32 + (1 + 26) + 16 + 16 + 64 + 8 + 4);
+        assert_eq!(
+            bytes.len(),
+            32 + 32 + (1 + 26) + 32 + (1 + 26) + 16 + 16 + 64 + 8 + 4
+        );
 
         let decoded: NodeBatchItem = NodeBatchItem::decode(&mut &bytes[..]).unwrap();
         assert_eq!(decoded, item);

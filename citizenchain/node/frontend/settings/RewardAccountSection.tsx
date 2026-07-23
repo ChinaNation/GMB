@@ -1,19 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { sanitizeError } from '../tauri';
 import { AddressScanModal } from '../shared/qr/AddressScanModal';
-import { normalizeSs58AccountAddress } from '../shared/ss58';
+import { normalizeSs58Address } from '../shared/ss58';
 import { settingsApi as api } from './api';
-import type { RewardWallet } from './types';
+import type { RewardAccount } from './types';
 
 type Props = {
-  wallet: RewardWallet;
-  onUpdated: (next: RewardWallet) => void;
+  rewardAccount: RewardAccount;
+  onUpdated: (next: RewardAccount) => void;
 };
 
 type BindStatus = null | 'binding' | 'success' | 'failed' | 'timeout';
 
-export function WalletSection({ wallet, onUpdated }: Props) {
-  const [input, setInput] = useState(wallet.address ?? '');
+/** 管理奖励账户；账户 ID 是唯一标识，SS58 地址仅用于输入与展示。 */
+export function RewardAccountSection({ rewardAccount, onUpdated }: Props) {
+  const [input, setInput] = useState(rewardAccount.ss58_address ?? '');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [unlockPassword, setUnlockPassword] = useState('');
   const [pendingAddress, setPendingAddress] = useState<string | null>(null);
@@ -25,7 +26,7 @@ export function WalletSection({ wallet, onUpdated }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    api.getLocalMinerAddress()
+    api.getLocalMinerSs58Address()
       .then((addr) => {
         if (!cancelled) setMinerAddress(addr);
       })
@@ -36,7 +37,7 @@ export function WalletSection({ wallet, onUpdated }: Props) {
       cancelled = true;
     };
   }, []);
-  const hasBoundAddress = Boolean(wallet.address);
+  const hasBoundAddress = Boolean(rewardAccount.account_id);
   const actionText = hasBoundAddress ? '变更地址' : '绑定地址';
 
   // 监听后台链上绑定结果事件（仅在用户主动发起绑定后才响应）
@@ -47,7 +48,7 @@ export function WalletSection({ wallet, onUpdated }: Props) {
       try {
         const { listen } = await import('@tauri-apps/api/event');
         unlisten = await listen<{ status: string; detail: string }>(
-          'reward-wallet-bind-result',
+          'reward-account-bind-result',
           (event) => {
             if (cancelled) return;
             setBindStatus((prev) => {
@@ -87,9 +88,9 @@ export function WalletSection({ wallet, onUpdated }: Props) {
     }
     setSaving(true);
     try {
-      const next = await api.setRewardWallet(pendingAddress, password);
+      const next = await api.setRewardAccount(pendingAddress, password);
       onUpdated(next);
-      setInput(next.address ?? '');
+      setInput(next.ss58_address ?? '');
       setShowPasswordModal(false);
       setPendingAddress(null);
       setError(null);
@@ -109,22 +110,22 @@ export function WalletSection({ wallet, onUpdated }: Props) {
       : null;
 
   return (
-    <section className="section settings-wallet-section">
-      <div className="wallet-inline wallet-inline-readonly">
-        <span className="wallet-current">
+    <section className="section settings-reward-account-section">
+      <div className="reward-account-inline reward-account-inline-readonly">
+        <span className="reward-account-current">
           本机矿工账户
-          <span className="wallet-bind-state">{minerAddress ?? '未生成（节点启动中…）'}</span>
+          <span className="reward-account-bind-state">{minerAddress ?? '未生成（节点启动中…）'}</span>
         </span>
       </div>
-      <div className="wallet-inline">
-        <span className="wallet-current">
+      <div className="reward-account-inline">
+        <span className="reward-account-current">
           手续费收款地址
-          <span className="wallet-bind-state">{wallet.address ?? '未绑定'}</span>
+          <span className="reward-account-bind-state">{rewardAccount.ss58_address ?? '未绑定'}</span>
         </span>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="请输入手续费收款钱包地址"
+          placeholder="请输入手续费收款账户的 SS58 地址"
           disabled={saving}
         />
         <button type="button" className="scan-icon-btn" onClick={() => setShowAddressScan(true)} disabled={saving} title="扫码填入">
@@ -138,7 +139,7 @@ export function WalletSection({ wallet, onUpdated }: Props) {
           onClick={() => {
             let nextAddress = '';
             try {
-              nextAddress = normalizeSs58AccountAddress(input, '请输入手续费收款钱包地址');
+              nextAddress = normalizeSs58Address(input, '请输入手续费收款账户的 SS58 地址');
             } catch (e) {
               setError(sanitizeError(e));
               return;

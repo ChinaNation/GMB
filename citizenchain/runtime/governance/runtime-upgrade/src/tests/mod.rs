@@ -489,7 +489,7 @@ fn insert_engine_proposal_with_stage_and_status(proposal_id: u64, stage: u8, sta
                     .try_into()
                     .expect("NRC CID fits runtime bound"),
             ),
-            execution_account: None,
+            execution_account_id: None,
             subject_cid_numbers: Default::default(),
             start: 0u64,
             end: 100u64,

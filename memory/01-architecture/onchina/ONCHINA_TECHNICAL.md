@@ -13,7 +13,15 @@ OnChina 不是第五个产品。仓库产品只保留：
 - 公民钱包 `citizenwallet`
 - 官方网站 `citizenweb`
 
-### 1.1 与 CitizenApp 边缘架构的边界
+### 1.1 账户标识目标契约
+
+- PostgreSQL、Rust、TypeScript、JSON、缓存和链上调用中的单一账户字段统一为 `account_id`；多账户结构使用准确的 `<role>_account_id`。
+- 账户与 32 字节公钥的文本形式统一为小写 `0x` 加 64 位十六进制；`ss58_address` 仅作派生展示值，不作为登录、权限或数据库关系真源。
+- 登录验签必须从 `signer_public_key` 得到 `signer_account_id`，再读取链上 admins、有效岗位任职和岗位权限；节点绑定或本地投影不得产生第二套授权。
+- PostgreSQL 旧业务数据和旧 schema 在对应实施步骤删除重建，不写迁移、双读或兼容列；密钥和 Secret 不在删除范围。
+- 完整目标与进度见 ADR-040 和任务卡 `20260722-account-id-official-unify.md`；后续章节的旧字段仅记录当前代码，不能用于新增实现。
+
+### 1.2 与 CitizenApp 边缘架构的边界
 
 OnChina 可以向 CitizenApp 或 Cloudflare 边缘层提供公开目录、链上投影、机构资料查询和受控服务端聚合能力，但不得成为 CitizenApp 的链上状态真源。
 

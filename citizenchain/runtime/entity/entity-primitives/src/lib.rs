@@ -48,7 +48,7 @@ pub use institution_role::{
 // `pub use entity_primitives::{...}` 出口,保持既有对外 API(`public_manage::InstitutionInfo` 等)不变。
 // 均为 SCALE 存储值类型:字段顺序、derive 集合、枚举判别值必须与既有链上编码一致。
 
-/// CID 机构登记反向索引项：account → (cid_number, account_name)。
+/// CID 机构登记反向索引项：account_id → (cid_number, account_name)。
 ///
 /// 由机构创建或机构新增账户流程与正向账户记录原子写入，用作反向校验。
 #[derive(
@@ -86,7 +86,7 @@ pub struct LegalRepresentative<AccountName, CidNumber, AccountId> {
     pub family_name: AccountName,
     pub given_name: AccountName,
     pub cid_number: CidNumber,
-    pub account: AccountId,
+    pub account_id: AccountId,
 }
 
 /// 机构信息(链上最小集)。
@@ -136,7 +136,7 @@ pub struct InstitutionInfo<BlockNumber, AccountName, CidNumber, AccountId> {
     Eq,
 )]
 pub struct InstitutionAccountInfo<AccountId, Balance, BlockNumber> {
-    pub address: AccountId,
+    pub account_id: AccountId,
     /// 创建该逻辑账户时指定的初始余额，只是历史事实，不是当前余额真源。
     pub initial_balance: Balance,
     pub created_at: BlockNumber,
@@ -146,9 +146,9 @@ pub struct InstitutionAccountInfo<AccountId, Balance, BlockNumber> {
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct CloseInstitutionAction<AccountId, CidNumber> {
     pub actor_cid_number: CidNumber,
-    pub institution_account: AccountId,
-    pub beneficiary: AccountId,
-    pub proposer: AccountId,
+    pub institution_account_id: AccountId,
+    pub beneficiary_account_id: AccountId,
+    pub proposer_account_id: AccountId,
 }
 
 /// 创建机构时用户填写的账户初始余额项。
@@ -182,7 +182,7 @@ pub struct InstitutionInitialAccount<AccountName, Balance> {
 )]
 pub struct CreateInstitutionAccount<AccountName, AccountId, Balance> {
     pub account_name: AccountName,
-    pub address: AccountId,
+    pub account_id: AccountId,
     pub amount: Balance,
 }
 
@@ -242,7 +242,7 @@ pub trait InstitutionCidQuery<CidNumber> {
 /// 法定代表人是机构公开信息，唯一真源位于 entity 的 `InstitutionInfo`；
 /// admins 模块不得保存副本，也不得以首位管理员作为回退值。
 pub trait InstitutionLegalRepresentativeQuery<AccountId> {
-    /// 按机构唯一 CID 读取当前已任命的法定代表人钱包账户。
+    /// 按机构唯一 CID 读取当前已任命的法定代表人账户。
     fn legal_representative(cid_number: &[u8]) -> Option<AccountId>;
 }
 
@@ -278,8 +278,8 @@ impl<AccountId> InstitutionMultisigQuery<AccountId> for () {
     }
 }
 
-// 机构登记/创建/治理/自定义账户关闭已全部收敛为「任职管理员钱包直接冷签一笔普通 extrinsic」,
-// 由 runtime 在 origin 处按机构 CID + 岗位码 + 管理员钱包鉴权，不再有任何独立凭证。原
+// 机构登记/创建/治理/自定义账户关闭已全部收敛为「任职管理员账户直接冷签一笔普通 extrinsic」,
+// 由 runtime 在 origin 处按机构 CID + 岗位码 + 管理员账户鉴权，不再有任何独立凭证。原
 // `CidInstitutionVerifier`(账户关闭注册局审批凭证验签)连同 OnChina 平台签名钥已整体删除。
 
 /// 注册局登记/维护权限抽象。
@@ -325,7 +325,7 @@ mod scale_contract_tests {
                 family_name: b"family".to_vec(),
                 given_name: b"given".to_vec(),
                 cid_number: b"citizen-cid".to_vec(),
-                account: [9u8; 32],
+                account_id: [9u8; 32],
             }),
             institution_code: *b"NRCG",
             created_at: 7u32,

@@ -120,12 +120,12 @@ impl primitives::institution_asset::InstitutionAsset<AccountId32> for TestInstit
 pub struct TestOnchainFeeCharger;
 impl primitives::fee_policy::OnchainFeeCharger<AccountId32, Balance> for TestOnchainFeeCharger {
     fn charge(
-        payer: &AccountId32,
+        payer_account_id: &AccountId32,
         transaction_amount: Balance,
     ) -> Result<Balance, sp_runtime::DispatchError> {
         let fee = primitives::fee_policy::calculate_onchain_fee(transaction_amount);
         let imbalance = Balances::withdraw(
-            payer,
+            payer_account_id,
             fee,
             WithdrawReasons::FEE,
             ExistenceRequirement::KeepAlive,
@@ -157,8 +157,8 @@ fn test_citizen_subject(who: &AccountId32) -> votingengine::CitizenSubject<Accou
         cid_number: <AccountId32 as AsRef<[u8]>>::as_ref(who)
             .to_vec()
             .try_into()
-            .expect("account fits CID"),
-        wallet_account: who.clone(),
+            .expect("account_id fits CID"),
+        account_id: who.clone(),
     }
 }
 
@@ -172,26 +172,31 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         false
     }
 
-    fn is_personal_admin(personal_account: AccountId32, who: &AccountId32) -> bool {
-        personal_admins::Pallet::<Test>::is_active_account_admin(PMUL, personal_account, who)
+    fn is_personal_admin(personal_account_id: AccountId32, who: &AccountId32) -> bool {
+        personal_admins::Pallet::<Test>::is_active_account_admin(PMUL, personal_account_id, who)
     }
 
-    fn get_personal_admins(personal_account: AccountId32) -> Option<alloc::vec::Vec<AccountId32>> {
-        personal_admins::Pallet::<Test>::active_account_admins(PMUL, personal_account)
+    fn get_personal_admins(
+        personal_account_id: AccountId32,
+    ) -> Option<alloc::vec::Vec<AccountId32>> {
+        personal_admins::Pallet::<Test>::active_account_admins(PMUL, personal_account_id)
     }
 
-    fn is_pending_personal_admin(personal_account: AccountId32, who: &AccountId32) -> bool {
+    fn is_pending_personal_admin(personal_account_id: AccountId32, who: &AccountId32) -> bool {
         personal_admins::Pallet::<Test>::is_pending_account_admin_for_snapshot(
             PMUL,
-            personal_account,
+            personal_account_id,
             who,
         )
     }
 
     fn get_pending_personal_admins(
-        personal_account: AccountId32,
+        personal_account_id: AccountId32,
     ) -> Option<alloc::vec::Vec<AccountId32>> {
-        personal_admins::Pallet::<Test>::pending_account_admins_for_snapshot(PMUL, personal_account)
+        personal_admins::Pallet::<Test>::pending_account_admins_for_snapshot(
+            PMUL,
+            personal_account_id,
+        )
     }
 }
 
@@ -282,24 +287,24 @@ pub fn derive_admin_pair(creator_seed: u8, index: u8) -> (AccountId32, sr25519::
     seed_bytes[1] = index;
     seed_bytes[2] = 0xAB; // 区分本测试套和 multisig-transfer 的 seed 命名空间
     let pair = sr25519::Pair::from_seed(&seed_bytes);
-    let account = AccountId32::new(pair.public().0);
-    (account, pair)
+    let account_id = AccountId32::new(pair.public().0);
+    (account_id, pair)
 }
 
 pub fn admin(index: u8) -> AccountId32 {
     derive_admin_pair(1, index).0
 }
 
-pub fn creator() -> AccountId32 {
+pub fn creator_account_id() -> AccountId32 {
     admin(0)
 }
 
-pub fn beneficiary() -> AccountId32 {
+pub fn beneficiary_account_id() -> AccountId32 {
     AccountId32::new([99u8; 32])
 }
 
 pub fn account_name(s: &[u8]) -> pallet::AccountNameOf<Test> {
-    BoundedVec::try_from(s.to_vec()).expect("account name fits")
+    BoundedVec::try_from(s.to_vec()).expect("account_id name fits")
 }
 
 pub fn set_protected_account(address: Option<AccountId32>) {
@@ -318,9 +323,9 @@ pub fn admins_vec(count: u8) -> pallet::AdminsOf<Test> {
     admin_records((0..count).map(admin).collect())
 }
 
-pub fn admin_record(admin_account: AccountId32) -> admin_primitives::Admin<AccountId32> {
+pub fn admin_record(account_id: AccountId32) -> admin_primitives::Admin<AccountId32> {
     admin_primitives::Admin {
-        admin_account,
+        account_id,
         family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
         given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
     }
@@ -395,15 +400,15 @@ pub fn cast_no_votes(admins: &[AccountId32], n: usize, pid: u64) -> sp_runtime::
 /// 直接灌已激活的个人多签账户 + personal-admins 管理员账户,跳过 propose/vote 链路。
 /// 用于关闭/资金边界测试,避免每个用例都重复一遍创建流程。
 pub fn seed_active_multisig(
-    account: &AccountId32,
-    creator: &AccountId32,
+    account_id: &AccountId32,
+    creator_account_id: &AccountId32,
     admins: &[AccountId32],
     initial_balance: Balance,
 ) {
     pallet::PersonalAccounts::<Test>::insert(
-        account,
+        account_id,
         types::PersonalAccount {
-            creator: creator.clone(),
+            creator_account_id: creator_account_id.clone(),
             account_name: account_name(b"seeded"),
             created_at: 1,
             status: types::PersonalStatus::Active,
@@ -411,25 +416,25 @@ pub fn seed_active_multisig(
     );
     // personal-admins 写 Active 管理员账户,让 propose_close 的 is_active_account_admin 通过。
     // 普通业务阈值归 internal-vote 管，不再写入管理员主体。
-    let account = account.clone();
+    let account_id = account_id.clone();
     let admins_ac: personal_admins::AdminsOf<Test> = admin_records(admins.to_vec());
     let threshold = (admins.len() as u32 / 2).saturating_add(1);
-    internal_vote::ActivePersonalThresholds::<Test>::insert(account.clone(), threshold);
+    internal_vote::ActivePersonalThresholds::<Test>::insert(account_id.clone(), threshold);
     personal_admins::AdminAccounts::<Test>::insert(
-        account.clone(),
+        account_id.clone(),
         admin_primitives::AdminAccount {
             cid_number: Default::default(),
             institution_code: PMUL,
             kind: admin_primitives::AdminAccountKind::PersonalMultisig,
             admins: admins_ac,
-            creator: creator.clone(),
+            creator_account_id: creator_account_id.clone(),
             created_at: 1,
             updated_at: 1,
             status: admin_primitives::AdminAccountStatus::Active,
         },
     );
     use frame_support::traits::Currency;
-    let _ = Balances::deposit_creating(&account, initial_balance);
+    let _ = Balances::deposit_creating(&account_id, initial_balance);
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {

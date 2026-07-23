@@ -36,7 +36,7 @@ fn derive_template_cid(
         template.institution_code,
     );
     generate_cid_number(GenerateCidNumberInput {
-        account_pubkey: seed.as_str(),
+        public_key: seed.as_str(),
         p1: "0",
         province_code,
         province_name,

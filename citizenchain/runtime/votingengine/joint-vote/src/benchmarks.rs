@@ -40,7 +40,7 @@ fn setup_proposal<T: Config>(
                 .try_into()
                 .expect("NRC CID fits"),
         ),
-        execution_account: None,
+        execution_account_id: None,
         subject_cid_numbers: Default::default(),
         start: 0u32.saturated_into(),
         end: 2u32.saturated_into(),

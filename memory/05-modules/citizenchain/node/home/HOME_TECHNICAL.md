@@ -75,7 +75,7 @@ Linux 端备注：UI 模式只用于桌面打包（.deb），服务器场景走 
 - `stop_node` 只停止进程内节点，App 继续运行；同步守护在节点停止状态只等待，不会主动拉起手动关闭的节点。
 
 仍保持删除的旧链路：
-- `verify_start_unlock_password` / `unlock_password` 形参链路（启停不校验设备密码；密码校验只保留在 `set_grandpa_key` / `set_bootnode_key` / `set_reward_wallet` 等显式高权操作内）
+- `verify_start_unlock_password` / `unlock_password` 形参链路（启停不校验设备密码；密码校验只保留在 `set_grandpa_key` / `set_bootnode_key` / `set_reward_account` 等显式高权操作内）
 - 首页密码输入框和旧的禁用 prop 链路；当前只保留状态文字右侧的单个“启动/关闭”按钮，点击后先弹二次确认。
 
 核心职责：

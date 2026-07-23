@@ -1,7 +1,7 @@
-export type AdminWalletMatch = {
-  address: string;
-  pubkeyHex: string;
-  walletLabel: string;
+export type AdminSignerMatch = {
+  ss58_address: string;
+  account_id: string;
+  account_label: string;
 };
 
 export type VoteSignRequestResult = {
@@ -19,25 +19,25 @@ export type VoteSubmitResult = {
 export type TransferProposalDetail = {
   proposalId: number;
   actorCidNumber: string | null;
-  fundingAccountHex: string;
-  beneficiaryHex: string;
+  funding_account_id: string;
+  beneficiary_account_id: string;
   amountFen: string;
   remark: string;
-  proposerHex: string;
+  proposer_account_id: string;
 };
 
 export type SweepProposalDetail = {
   proposalId: number;
   actorCidNumber: string;
-  institutionAccountHex: string;
+  institution_account_id: string;
   amountFen: string;
 };
 
 export type SafetyFundProposalDetail = {
   proposalId: number;
   actorCidNumber: string;
-  institutionAccountHex: string;
-  beneficiaryHex: string;
+  institution_account_id: string;
+  beneficiary_account_id: string;
   amountFen: string;
   remark: string;
 };

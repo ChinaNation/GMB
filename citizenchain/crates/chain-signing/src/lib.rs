@@ -128,10 +128,17 @@ pub fn sha256_hex(data: &[u8]) -> String {
     hex::encode(Sha256::digest(data))
 }
 
-/// 解析 32 字节 sr25519 公钥 hex。
-pub fn parse_sr25519_public_hex(pubkey_hex: &str) -> Result<sr25519::Public, String> {
-    let raw = hex::decode(pubkey_hex.trim_start_matches("0x"))
-        .map_err(|e| format!("公钥解码失败: {e}"))?;
+/// 解析跨端唯一格式的 32 字节 sr25519 公钥：小写 `0x` + 64 位十六进制。
+pub fn parse_sr25519_public_key(public_key: &str) -> Result<sr25519::Public, String> {
+    if public_key.len() != 66
+        || !public_key.starts_with("0x")
+        || !public_key[2..]
+            .chars()
+            .all(|ch| ch.is_ascii_digit() || ('a'..='f').contains(&ch))
+    {
+        return Err("公钥格式无效，应为小写 0x + 64 位十六进制".to_string());
+    }
+    let raw = hex::decode(&public_key[2..]).map_err(|e| format!("公钥解码失败: {e}"))?;
     let bytes = <[u8; 32]>::try_from(raw.as_slice()).map_err(|_| "公钥必须 32 字节")?;
     Ok(sr25519::Public::from_raw(bytes))
 }
@@ -300,6 +307,14 @@ mod tests {
         let mut data = call.encode();
         data.push(0xff);
         assert!(decode_runtime_call(&data).is_err());
+    }
+
+    #[test]
+    fn public_key_requires_prefixed_lowercase_hex() {
+        let valid = format!("0x{}", "ab".repeat(32));
+        assert!(parse_sr25519_public_key(&valid).is_ok());
+        assert!(parse_sr25519_public_key(&"ab".repeat(32)).is_err());
+        assert!(parse_sr25519_public_key(&format!("0x{}", "AB".repeat(32))).is_err());
     }
 
     #[test]

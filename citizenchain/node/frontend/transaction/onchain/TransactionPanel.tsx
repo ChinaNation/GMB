@@ -32,14 +32,14 @@ export function TransactionPanel() {
     if (!activeWallet) { setBalance(null); return; }
     let cancelled = false;
     const fetch = () => {
-      api.getWalletBalance(activeWallet.pubkeyHex)
+      api.getWalletBalance(activeWallet.account_id)
         .then((b) => { if (!cancelled) setBalance(b); })
         .catch(() => { if (!cancelled) setBalance(null); });
     };
     fetch();
     const interval = setInterval(fetch, 5000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [activeWallet?.pubkeyHex]);
+  }, [activeWallet?.account_id]);
 
   const handleWalletUpdate = useCallback((store: WalletStore) => {
     setWallets(store.wallets);

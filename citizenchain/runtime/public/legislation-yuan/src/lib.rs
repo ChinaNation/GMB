@@ -533,7 +533,7 @@ pub mod pallet {
             proposal_id: u64,
             action: LawAction,
             law_id: Option<u64>,
-            proposer: T::AccountId,
+            proposer_account_id: T::AccountId,
         },
         /// 提案被否决。
         LawProposalRejected { proposal_id: u64 },
@@ -699,7 +699,7 @@ pub mod pallet {
                 proposal_id,
                 action: LawAction::Enact,
                 law_id: None,
-                proposer: who,
+                proposer_account_id: who,
             });
             Ok(())
         }
@@ -785,7 +785,7 @@ pub mod pallet {
                 proposal_id,
                 action: LawAction::Amend,
                 law_id: Some(law_id),
-                proposer: who,
+                proposer_account_id: who,
             });
             Ok(())
         }
@@ -852,7 +852,7 @@ pub mod pallet {
                 proposal_id,
                 action: LawAction::Repeal,
                 law_id: Some(law_id),
-                proposer: who,
+                proposer_account_id: who,
             });
             Ok(())
         }

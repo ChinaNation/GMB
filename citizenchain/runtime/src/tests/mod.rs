@@ -45,7 +45,7 @@ fn test_cid_number(bytes: &[u8]) -> citizen_identity::CidNumberBound {
 fn real_cid_number(tag: &str, institution: &str, p1: &str) -> Vec<u8> {
     primitives::cid::generator::generate_cid_number(
         primitives::cid::generator::GenerateCidNumberInput {
-            account_pubkey: tag,
+            public_key: tag,
             p1,
             province_code: "GD",
             province_name: "广东省",
@@ -60,7 +60,7 @@ fn real_cid_number(tag: &str, institution: &str, p1: &str) -> Vec<u8> {
 }
 
 fn build_voting_identity_payload(
-    wallet_account: AccountId,
+    account_id: AccountId,
     cid_number: &[u8],
     province_code: &[u8],
     city_code: &[u8],
@@ -68,7 +68,7 @@ fn build_voting_identity_payload(
 ) -> citizen_identity::VotingIdentityPayload<AccountId> {
     citizen_identity::VotingIdentityPayload {
         cid_number: test_cid_number(cid_number),
-        wallet_account,
+        account_id,
         citizen_age_years: 18,
         passport_valid_from: 20260630,
         passport_valid_until: 20360630,
@@ -80,14 +80,14 @@ fn build_voting_identity_payload(
 }
 
 fn sign_citizen_identity_payload(
-    wallet_pair: &sr25519::Pair,
+    signer_pair: &sr25519::Pair,
     payload: &impl codec::Encode,
 ) -> citizen_identity::pallet::SignatureOf<Runtime> {
     let msg = primitives::sign::signing_message(
         primitives::sign::OP_SIGN_CITIZEN_IDENTITY,
         &payload.encode(),
     );
-    wallet_pair
+    signer_pair
         .sign(&msg)
         .0
         .to_vec()
@@ -125,7 +125,7 @@ fn setup_frg_citizen_identity_admin(
         admin_primitives::InstitutionAdmins {
             institution_code: admin_primitives::FRG,
             admins: vec![admin_primitives::PublicAdmin {
-                admin_account: registrar.clone(),
+                account_id: registrar.clone(),
                 cid_number: Default::default(),
                 family_name: Default::default(),
                 given_name: Default::default(),
@@ -145,7 +145,7 @@ fn setup_frg_citizen_identity_admin(
         &cid_number,
         account_name,
         entity_primitives::InstitutionAccountInfo {
-            address: main_account,
+            account_id: main_account,
             initial_balance: 0,
             created_at: 0,
         },
@@ -193,7 +193,7 @@ fn setup_frg_citizen_identity_admin(
     let assignments: public_manage::institution::role::RoleAssignmentsOf<Runtime> =
         vec![entity_primitives::InstitutionAdminAssignment {
             cid_number: cid_number.clone(),
-            admin_account: registrar.clone(),
+            account_id: registrar.clone(),
             role_code: role_code.clone(),
             // 测试链时间已设置为 2026-07-02；固定任职从第 1 天起永久有效。
             term_start: 1,

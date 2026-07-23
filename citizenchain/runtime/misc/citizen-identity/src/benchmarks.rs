@@ -13,8 +13,8 @@ use frame_system::RawOrigin;
 
 use crate::{
     pallet::{
-        CidRegistry, Config, PopulationMaintenanceFault, PopulationReadyDate, VotingIdentityByCid,
-        WalletAccountByCid,
+        AccountIdByCid, CidRegistry, Config, PopulationMaintenanceFault, PopulationReadyDate,
+        VotingIdentityByCid,
     },
     AreaCodeBound, Call, CandidateIdentityPayload, CidNumberBound, CidOccupyItem,
     CidOccupyItemsBound, CidRecord, CidRecordStatus, CitizenIdentityAuthority, CitizenSex,
@@ -51,7 +51,7 @@ fn set_time<T: Config>(timestamp_millis: u64) -> u32 {
 fn citizen_cid(tag: u32) -> CidNumberBound {
     primitives::cid::generator::generate_cid_number(
         primitives::cid::generator::GenerateCidNumberInput {
-            account_pubkey: &format!("benchmark-{tag}"),
+            public_key: &format!("benchmark-{tag}"),
             p1: "1",
             province_code: "ZS",
             province_name: "中枢省",
@@ -74,7 +74,7 @@ fn signature<T: Config>() -> crate::pallet::SignatureOf<T> {
 }
 
 fn voting_payload<T: Config>(
-    wallet_account: T::AccountId,
+    account_id: T::AccountId,
     cid_number: CidNumberBound,
     province: AreaCodeBound,
     city: AreaCodeBound,
@@ -84,7 +84,7 @@ fn voting_payload<T: Config>(
 ) -> VotingIdentityPayload<T::AccountId> {
     VotingIdentityPayload {
         cid_number,
-        wallet_account,
+        account_id,
         citizen_age_years: 18,
         passport_valid_from: valid_from,
         passport_valid_until: valid_until,
@@ -423,6 +423,6 @@ mod benchmarks {
         }
 
         assert_eq!(PopulationReadyDate::<T>::get(), today);
-        assert!(WalletAccountByCid::<T>::contains_key(cid_number));
+        assert!(AccountIdByCid::<T>::contains_key(cid_number));
     }
 }

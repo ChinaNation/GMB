@@ -123,11 +123,11 @@ fn account(seed: u8) -> AccountId32 {
     AccountId32::new([seed; 32])
 }
 
-/// admins 保存显示姓名和授权钱包；岗位、任期、来源等由 entity 管理。
+/// admins 保存显示姓名和授权账户；岗位、任期、来源等由 entity 管理。
 fn admins(count: u8) -> Vec<PublicAdmin<AccountId32>> {
     (0..count)
         .map(|seed| PublicAdmin {
-            admin_account: account(seed),
+            account_id: account(seed),
             cid_number: Default::default(),
             family_name: Default::default(),
             given_name: Default::default(),
@@ -141,7 +141,7 @@ fn indexed_admins(count: u32) -> Vec<PublicAdmin<AccountId32>> {
             let mut raw = [0u8; 32];
             raw[..4].copy_from_slice(&index.to_le_bytes());
             PublicAdmin {
-                admin_account: AccountId32::new(raw),
+                account_id: AccountId32::new(raw),
                 cid_number: Default::default(),
                 family_name: Default::default(),
                 given_name: Default::default(),
@@ -175,7 +175,7 @@ fn public_admins_allow_temporarily_empty_identity_and_name_fields() {
 fn public_admin_nonempty_citizen_cid_must_match_citizen_identity_binding() {
     new_test_ext().execute_with(|| {
         let mut valid = admins(1);
-        valid[0].admin_account = account(9);
+        valid[0].account_id = account(9);
         valid[0].cid_number = b"GZ000-CTZN6-198805200-2026"
             .to_vec()
             .try_into()
@@ -187,7 +187,7 @@ fn public_admin_nonempty_citizen_cid_must_match_citizen_identity_binding() {
             valid.clone(),
         ));
 
-        valid[0].admin_account = account(8);
+        valid[0].account_id = account(8);
         assert_noop!(
             PublicAdmins::do_set_institution_admins(
                 b"GD001-CGOV0-723456789-2026".to_vec(),
@@ -367,7 +367,7 @@ fn fixed_governance_admin_update_only_replaces_people_records() {
 
         let replacement = (40..40 + NRC_ADMIN_COUNT as u8)
             .map(|seed| PublicAdmin {
-                admin_account: account(seed),
+                account_id: account(seed),
                 cid_number: Default::default(),
                 family_name: Default::default(),
                 given_name: Default::default(),

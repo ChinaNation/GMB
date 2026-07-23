@@ -163,7 +163,7 @@ impl<T: Config> Pallet<T> {
                 status: votingengine::STATUS_VOTING,
                 internal_code: None,
                 actor_cid_number: Some(actor_cid_number.clone()),
-                execution_account: None,
+                execution_account_id: None,
                 subject_cid_numbers,
                 start: now,
                 end,
@@ -190,7 +190,7 @@ impl<T: Config> Pallet<T> {
                 }
             }
 
-            // 按完整岗位主体冻结当前有效任职；同一钱包担任多个岗位时各形成一张票据。
+            // 按完整岗位主体冻结当前有效任职；同一账户担任多个岗位时各形成一张票据。
             for subject in vote_plan.voter_subjects.iter() {
                 let role_subject = match subject {
                     AuthorizationSubject::Institution(role_subject) => role_subject,
@@ -280,7 +280,7 @@ impl<T: Config> Pallet<T> {
         );
         let ticket = InstitutionVoteTicket {
             role_subject,
-            voter_account: who.clone(),
+            voter_account_id: who.clone(),
         };
         ensure!(
             !JointVotesByTicket::<T>::contains_key(proposal_id, &ticket),

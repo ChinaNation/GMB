@@ -34,45 +34,49 @@ use votingengine::InternalVoteEngine;
 
 pub(crate) fn do_propose_close<T: Config>(
     who: T::AccountId,
-    account: T::AccountId,
-    beneficiary: T::AccountId,
+    account_id: T::AccountId,
+    beneficiary_account_id: T::AccountId,
 ) -> DispatchResult {
     // 仅个人多签可走本入口
     ensure!(
-        PersonalAccounts::<T>::contains_key(&account),
+        PersonalAccounts::<T>::contains_key(&account_id),
         Error::<T>::NotPersonalAccount
     );
 
     ensure!(
-        !T::ProtectedSourceChecker::is_protected(&account),
+        !T::ProtectedSourceChecker::is_protected(&account_id),
         Error::<T>::ProtectedSource
     );
     ensure!(
-        T::InstitutionAsset::can_spend(&account, InstitutionAssetAction::MultisigCloseExecute,),
+        T::InstitutionAsset::can_spend(&account_id, InstitutionAssetAction::MultisigCloseExecute,),
         Error::<T>::ProtectedSource
     );
-    ensure!(beneficiary != account, Error::<T>::InvalidBeneficiary);
     ensure!(
-        !T::ReservedAccountChecker::is_reserved(&beneficiary),
+        beneficiary_account_id != account_id,
         Error::<T>::InvalidBeneficiary
     );
     ensure!(
-        T::AccountValidator::is_valid(&beneficiary),
+        !T::ReservedAccountChecker::is_reserved(&beneficiary_account_id),
+        Error::<T>::InvalidBeneficiary
+    );
+    ensure!(
+        T::AccountValidator::is_valid(&beneficiary_account_id),
         Error::<T>::InvalidAccount
     );
     ensure!(
-        !T::ProtectedSourceChecker::is_protected(&beneficiary),
+        !T::ProtectedSourceChecker::is_protected(&beneficiary_account_id),
         Error::<T>::InvalidBeneficiary
     );
 
-    let account_info = PersonalAccounts::<T>::get(&account).ok_or(Error::<T>::PersonalNotFound)?;
+    let account_info =
+        PersonalAccounts::<T>::get(&account_id).ok_or(Error::<T>::PersonalNotFound)?;
     ensure!(
         account_info.status == PersonalStatus::Active,
         Error::<T>::PersonalNotActive
     );
 
     // 个人多签治理账户直接使用个人多签账户地址。
-    let institution = account.clone();
+    let institution = account_id.clone();
     let institution_code = votingengine::types::PMUL;
     ensure!(
         Pallet::<T>::is_active_account_admin(institution_code, institution.clone(), &who),
@@ -80,11 +84,11 @@ pub(crate) fn do_propose_close<T: Config>(
     );
 
     ensure!(
-        !PendingCloseProposal::<T>::contains_key(&account),
+        !PendingCloseProposal::<T>::contains_key(&account_id),
         Error::<T>::CloseAlreadyPending
     );
 
-    let all_balance = T::Currency::free_balance(&account);
+    let all_balance = T::Currency::free_balance(&account_id);
     {
         let balance_u128: u128 = all_balance.saturated_into();
         let fee_u128 = primitives::fee_policy::calculate_onchain_fee(balance_u128);
@@ -96,14 +100,14 @@ pub(crate) fn do_propose_close<T: Config>(
         ensure!(transfer_amount >= ed, Error::<T>::CloseBalanceBelowMinimum);
     }
     ensure!(
-        T::Currency::reserved_balance(&account).is_zero(),
+        T::Currency::reserved_balance(&account_id).is_zero(),
         Error::<T>::ReservedBalanceRemaining
     );
 
     let action = PersonalCloseAction {
-        account: account.clone(),
-        beneficiary: beneficiary.clone(),
-        proposer: who.clone(),
+        account_id: account_id.clone(),
+        beneficiary_account_id: beneficiary_account_id.clone(),
+        proposer_account_id: who.clone(),
     };
     let mut data = alloc::vec::Vec::from(crate::MODULE_TAG);
     data.push(ACTION_CLOSE);
@@ -115,13 +119,13 @@ pub(crate) fn do_propose_close<T: Config>(
             crate::MODULE_TAG,
             data,
         )?;
-    PendingCloseProposal::<T>::insert(&account, proposal_id);
+    PendingCloseProposal::<T>::insert(&account_id, proposal_id);
 
     Pallet::<T>::deposit_event(Event::<T>::PersonalCloseProposed {
         proposal_id,
-        account,
-        proposer: who,
-        beneficiary,
+        account_id,
+        proposer_account_id: who,
+        beneficiary_account_id,
     });
 
     Ok(())

@@ -98,7 +98,7 @@ pub mod pallet {
         MaxEncodedLen,
     )]
     pub struct PendingCertificationReward<AccountId, Hash> {
-        pub who: AccountId,
+        pub account_id: AccountId,
         pub cid_number_hash: Hash,
     }
 
@@ -155,13 +155,13 @@ pub mod pallet {
     pub enum Event<T: Config> {
         /// 公民投票身份首次登记后，认证发行模块执行一次奖励发放。
         CertificationRewardIssued {
-            who: T::AccountId,
+            account_id: T::AccountId,
             cid_number_hash: T::Hash,
             reward: BalanceOf<T>,
         },
         /// 奖励因重复、超限等原因被跳过时触发，reason 字段说明具体原因。
         CertificationRewardSkipped {
-            who: T::AccountId,
+            account_id: T::AccountId,
             cid_number_hash: T::Hash,
             reason: SkipReason,
         },
@@ -191,7 +191,7 @@ pub mod pallet {
                 let reward: BalanceOf<T> = reward_amount.saturated_into();
                 debug_assert!(!reward.is_zero(), "citizen reward must remain non-zero");
 
-                let imbalance = T::Currency::deposit_creating(&pending.who, reward);
+                let imbalance = T::Currency::deposit_creating(&pending.account_id, reward);
                 debug_assert_eq!(
                     imbalance.peek(),
                     reward,
@@ -202,12 +202,12 @@ pub mod pallet {
 
                 RewardedCount::<T>::put(rewarded_count.saturating_add(1));
                 IdentityRewardClaimed::<T>::insert(pending.cid_number_hash, ());
-                AccountRewarded::<T>::insert(&pending.who, ());
+                AccountRewarded::<T>::insert(&pending.account_id, ());
                 PendingIdentityRewardClaimed::<T>::remove(pending.cid_number_hash);
-                PendingAccountRewarded::<T>::remove(&pending.who);
+                PendingAccountRewarded::<T>::remove(&pending.account_id);
 
                 Self::deposit_event(Event::<T>::CertificationRewardIssued {
-                    who: pending.who,
+                    account_id: pending.account_id,
                     cid_number_hash: pending.cid_number_hash,
                     reward,
                 });
@@ -231,7 +231,7 @@ pub mod pallet {
         }
 
         fn try_queue_certification_reward(
-            who: &T::AccountId,
+            account_id: &T::AccountId,
             cid_number_hash: T::Hash,
         ) -> Result<BalanceOf<T>, SkipReason> {
             // 先查公民身份，再查账户，优先返回更贴近业务语义的跳过原因。
@@ -241,8 +241,8 @@ pub mod pallet {
                 return Err(SkipReason::DuplicateCitizenIdentity);
             }
 
-            if AccountRewarded::<T>::contains_key(who)
-                || PendingAccountRewarded::<T>::contains_key(who)
+            if AccountRewarded::<T>::contains_key(account_id)
+                || PendingAccountRewarded::<T>::contains_key(account_id)
             {
                 return Err(SkipReason::AccountAlreadyRewarded);
             }
@@ -274,12 +274,12 @@ pub mod pallet {
             PendingRewards::<T>::insert(
                 pending_count,
                 PendingCertificationReward {
-                    who: who.clone(),
+                    account_id: account_id.clone(),
                     cid_number_hash,
                 },
             );
             PendingIdentityRewardClaimed::<T>::insert(cid_number_hash, ());
-            PendingAccountRewarded::<T>::insert(who, ());
+            PendingAccountRewarded::<T>::insert(account_id, ());
             PendingRewardCount::<T>::put(next_pending_count);
 
             Ok(reward)
@@ -288,13 +288,13 @@ pub mod pallet {
 
     /// 实现 citizen-identity 的登记回调，在公民投票身份首次登记后自动尝试发放认证奖励。
     impl<T: Config> OnVotingIdentityRegistered<T::AccountId> for Pallet<T> {
-        fn on_voting_identity_registered(who: &T::AccountId, cid_number: &[u8]) {
+        fn on_voting_identity_registered(account_id: &T::AccountId, cid_number: &[u8]) {
             let cid_number_hash = T::Hashing::hash(cid_number);
-            match Self::try_queue_certification_reward(who, cid_number_hash) {
+            match Self::try_queue_certification_reward(account_id, cid_number_hash) {
                 Ok(_reward) => {}
                 Err(reason) => {
                     Self::deposit_event(Event::<T>::CertificationRewardSkipped {
-                        who: who.clone(),
+                        account_id: account_id.clone(),
                         cid_number_hash,
                         reason,
                     });

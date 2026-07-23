@@ -1,33 +1,33 @@
 // 提案详情页：提案元数据 + 业务详情模块挂载 + 投票进度 + 管理员投票状态列表。
-// 从提案列表和机构页面进入时行为一致：自动检测管理员钱包权限。
+// 从提案列表和机构页面进入时行为一致：自动检测管理员账户权限。
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { sanitizeError } from '../tauri';
-import { hexToSs58 } from '../shared/ss58';
+import { accountIdToSs58 } from '../shared/ss58';
 import { MultisigTransferProposalDetailSection } from '../transaction/multisig/ProposalDetailSection';
 import { adminsChangeApi } from '../admins/api';
 import { InstitutionAssignmentCard } from '../admins/InstitutionAssignmentCard';
 import { governanceApi as api } from './api';
-import type { ProposalFullInfo, AdminWalletMatch, UserVoteStatus, InstitutionDetail } from './types';
+import type { ProposalFullInfo, AdminSignerMatch, UserVoteStatus, InstitutionDetail } from './types';
 import { VoteSigningFlow } from './VoteSigningFlow';
 import '../admins/styles.css';
 
 type Props = {
   proposalId: number;
-  adminWallets: AdminWalletMatch[];
+  adminSigners: AdminSignerMatch[];
   cidNumber?: string;
   onBack: () => void;
 };
 
-export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWallets, cidNumber: externalCidNumber, onBack }: Props) {
+export function ProposalDetailPage({ proposalId, adminSigners: externalAdminSigners, cidNumber: externalCidNumber, onBack }: Props) {
   const [info, setInfo] = useState<ProposalFullInfo | null>(null);
   const [institution, setInstitution] = useState<InstitutionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [votingWallet, setVotingWallet] = useState<AdminWalletMatch | null>(null);
+  const [votingSigner, setVotingSigner] = useState<AdminSignerMatch | null>(null);
   const [voteStatuses, setVoteStatuses] = useState<Record<string, UserVoteStatus>>({});
-  const [detectedAdminWallets, setDetectedAdminWallets] = useState<AdminWalletMatch[]>([]);
+  const [detectedAdminSigners, setDetectedAdminSigners] = useState<AdminSignerMatch[]>([]);
   const [resolvedCidNumber, setResolvedCidNumber] = useState<string | undefined>(externalCidNumber);
-  // 投票中（已提交但未确认上链）的钱包 pubkey → 提交时间
+  // 投票中（已提交但未确认上链）的签名账户 ID → 提交时间
   const [pendingVotes, setPendingVotes] = useState<Map<string, number>>(new Map());
   // 双层 ID v1:展示号反查值,链上 ProposalDisplayId[id] 拉取
   const [displayMeta, setDisplayMeta] = useState<import('./types').ProposalDisplayMeta | null>(
@@ -37,7 +37,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
   // 超过 5 分钟未确认的投票视为丢失
   const PENDING_TIMEOUT_MS = 5 * 60 * 1000;
 
-  const adminWallets = externalAdminWallets.length > 0 ? externalAdminWallets : detectedAdminWallets;
+  const adminSigners = externalAdminSigners.length > 0 ? externalAdminSigners : detectedAdminSigners;
   const cidNumber = resolvedCidNumber;
 
   const fetchVoteStatuses = useCallback(async (
@@ -57,8 +57,8 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
         return assignments.map(async (assignment) => {
           try {
             const roleCode = assignment?.roleCode;
-            const vs = await api.checkVoteStatus(pid, admin.adminAccount, sid, roleCode);
-            results[`${admin.adminAccount.toLowerCase()}:${roleCode ?? ''}`] = vs;
+            const vs = await api.checkVoteStatus(pid, admin.account_id, sid, roleCode);
+            results[`${admin.account_id}:${roleCode ?? ''}`] = vs;
           } catch (_) {}
         });
       }),
@@ -112,17 +112,21 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
         sid = d.meta.subjectCidNumbers[0];
         setResolvedCidNumber(sid);
       }
-      let wallets = externalAdminWallets;
+      let signers = externalAdminSigners;
       if (sid) {
         try {
           const inst = await api.getInstitutionDetail(sid);
           setInstitution(inst);
-          if (externalAdminWallets.length === 0) {
+          if (externalAdminSigners.length === 0) {
             const activated = await adminsChangeApi.getActivatedAdmins(sid, {
               cidNumber: sid,
             });
-            wallets = activated.map(a => ({ address: hexToSs58(a.pubkeyHex), pubkeyHex: a.pubkeyHex, walletLabel: '' }));
-            setDetectedAdminWallets(wallets);
+            signers = activated.map((admin) => ({
+              ss58_address: accountIdToSs58(admin.account_id),
+              account_id: admin.account_id,
+              account_label: '',
+            }));
+            setDetectedAdminSigners(signers);
           }
           await fetchVoteStatuses(proposalId, inst.admins, sid, d.voterRoleSubjects);
         } catch (_) {}
@@ -144,12 +148,12 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
   }, [pendingVotes.size, refreshData]);
 
   // 投票提交成功回调：标记为 pending，关闭弹窗
-  const handleVoteSuccess = useCallback((txHash: string, pubkeyHex: string, voterRoleCode: string | null) => {
-    if (pubkeyHex) {
-      const ticketKey = `${pubkeyHex.toLowerCase()}:${voterRoleCode ?? ''}`;
+  const handleVoteSuccess = useCallback((txHash: string, account_id: string, voterRoleCode: string | null) => {
+    if (account_id) {
+      const ticketKey = `${account_id}:${voterRoleCode ?? ''}`;
       setPendingVotes((prev) => new Map(prev).set(ticketKey, Date.now()));
     }
-    setVotingWallet(null);
+    setVotingSigner(null);
     // 立即刷新一次
     refreshData();
   }, [refreshData]);
@@ -179,13 +183,13 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
         <p className="proposal-institution-name">{info.cidFullName}</p>
       )}
 
-      {votingWallet && (
+      {votingSigner && (
         <VoteSigningFlow
           proposalId={meta.proposalId}
           proposalKind={meta.kind}
-          adminWallets={[votingWallet]}
+          adminSigners={[votingSigner]}
           cidNumber={cidNumber}
-          onClose={() => setVotingWallet(null)}
+          onClose={() => setVotingSigner(null)}
           onSuccess={handleVoteSuccess}
         />
       )}
@@ -233,7 +237,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
             </div>
             <div className="detail-row">
               <span className="detail-label">提案人</span>
-              <code className="detail-value">{hexToSs58(info.runtimeUpgradeDetail.proposerHex)}</code>
+              <code className="detail-value">{accountIdToSs58(info.runtimeUpgradeDetail.proposer_account_id)}</code>
             </div>
           </div>
         </div>
@@ -262,41 +266,42 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
           <h3>管理员投票状态（{institution.admins.length} 人）</h3>
           <div className="admin-grid">
             {institution.admins.map((admin, i) => {
-              const pubkey = admin.adminAccount;
-              const pk = pubkey.toLowerCase();
-              const myWallet = adminWallets.find(w => w.pubkeyHex.toLowerCase() === pk);
+              const accountId = admin.account_id;
+              const localSigner = adminSigners.find(
+                (signer) => signer.account_id === accountId,
+              );
               const eligibleAssignments = admin.assignments.filter((assignment) =>
                 info.voterRoleSubjects.some((subject) =>
                   subject.cidNumber === cidNumber && subject.roleCode === assignment.roleCode));
               const assignmentVotes = eligibleAssignments.map((assignment) => {
-                const vs = voteStatuses[`${pk}:${assignment.roleCode}`];
+                const vs = voteStatuses[`${accountId}:${assignment.roleCode}`];
                 return meta.kind === 1 ? vs?.jointVote : vs?.internalVote;
               });
               const votedCount = assignmentVotes.filter((vote) => vote != null).length;
               const hasVoted = eligibleAssignments.length > 0 && votedCount === eligibleAssignments.length;
               const voted = hasVoted && assignmentVotes.every((vote) => vote === true);
               const hasPendingTicket = eligibleAssignments.some((assignment) =>
-                pendingVotes.has(`${pk}:${assignment.roleCode}`));
+                pendingVotes.has(`${accountId}:${assignment.roleCode}`));
               const hasAvailableTicket = eligibleAssignments.some((assignment) => {
-                const ticketKey = `${pk}:${assignment.roleCode}`;
+                const ticketKey = `${accountId}:${assignment.roleCode}`;
                 return voteStatuses[ticketKey]?.internalVote == null &&
                   voteStatuses[ticketKey]?.jointVote == null && !pendingVotes.has(ticketKey);
               });
-              const canVote = myWallet && meta.status === 0 && hasAvailableTicket;
+              const canVote = localSigner && meta.status === 0 && hasAvailableTicket;
 
               return (
                 <InstitutionAssignmentCard
-                  key={pubkey}
+                  key={accountId}
                   admin={admin}
                   index={i + 1}
                   balanceFen={admin.balanceFen}
                   className={hasVoted ? (voted ? 'admin-card-voted-yes' : 'admin-card-voted-no') : ''}
                   action={
                     canVote ? (
-                      <button className="vote-button-inline" onClick={() => setVotingWallet({
-                        ...myWallet,
+                      <button className="vote-button-inline" onClick={() => setVotingSigner({
+                        ...localSigner,
                         roleAssignments: eligibleAssignments.filter((assignment) => {
-                          const ticketKey = `${pk}:${assignment.roleCode}`;
+                          const ticketKey = `${accountId}:${assignment.roleCode}`;
                           return voteStatuses[ticketKey]?.internalVote == null &&
                             voteStatuses[ticketKey]?.jointVote == null && !pendingVotes.has(ticketKey);
                         }),

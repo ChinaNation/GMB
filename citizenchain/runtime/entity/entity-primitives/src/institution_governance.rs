@@ -35,7 +35,7 @@ pub struct RolePermissionSpec {
 /// 每个管理员独立携带任期和来源，避免整体换届接口把存量成员错误改成同一任期。
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo, PartialEq, Eq)]
 pub struct InstitutionAssignmentTarget<AccountId> {
-    pub admin_account: AccountId,
+    pub account_id: AccountId,
     pub term_start: u32,
     pub term_end: u32,
     pub assignment_source: InstitutionAssignmentSource,
@@ -85,7 +85,7 @@ pub enum InstitutionLegalRepresentativeChange<AccountId> {
         family_name: Vec<u8>,
         given_name: Vec<u8>,
         cid_number: Vec<u8>,
-        account: AccountId,
+        account_id: AccountId,
     },
     /// 解除当前法定代表人，完整公开人员字段必须同时清空。
     Clear,
@@ -105,7 +105,7 @@ pub struct InstitutionGovernanceResult<AccountId> {
     pub role_mutations: Vec<InstitutionRoleMutation<AccountId>>,
     pub assignment_changes: Vec<InstitutionRoleAssignmentChange<AccountId>>,
     pub legal_representative_change: Option<InstitutionLegalRepresentativeChange<AccountId>>,
-    /// 指向产生本结果的登记、选举、投票或其他业务记录；不存在 `creator` 字段。
+    /// 指向产生本结果的登记、选举、投票或其他业务记录；不存在 `creator_account_id` 字段。
     pub result_source_ref: Vec<u8>,
 }
 

@@ -25,7 +25,7 @@ export function OtherAccountsListPage({ cidNumber, otherAccounts, onBack }: Prop
       ) : (
         <div className="admin-grid">
           {otherAccounts.map((acc) => (
-            <div key={acc.addressSs58} className="metric-card admin-card">
+            <div key={acc.ss58_address} className="metric-card admin-card">
               <div>
                 <strong>{acc.accountName}</strong>
                 {acc.accountKind !== 'named' && (
@@ -34,7 +34,7 @@ export function OtherAccountsListPage({ cidNumber, otherAccounts, onBack }: Prop
                   </span>
                 )}
               </div>
-              <code className="admin-card-address">{acc.addressSs58}</code>
+              <code className="admin-card-address">{acc.ss58_address}</code>
               <span className="muted">余额:{acc.balanceText} 元</span>
             </div>
           ))}

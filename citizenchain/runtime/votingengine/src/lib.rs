@@ -299,7 +299,7 @@ pub mod pallet {
 
     /// 提案创建时冻结的机构岗位票据总数。
     ///
-    /// 数量等于该机构全部投票岗位快照中的有效任职席位之和，不按钱包去重；
+    /// 数量等于该机构全部投票岗位快照中的有效任职席位之和，不按账户去重；
     /// 具体资格始终由 `VoterSnapshot` 中的完整 CID + 岗位码校验。
     #[pallet::storage]
     pub type InstitutionTicketCountSnapshot<T: Config> = StorageDoubleMap<

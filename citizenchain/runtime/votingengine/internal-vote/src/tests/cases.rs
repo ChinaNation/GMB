@@ -208,12 +208,12 @@ fn institution_proposal_keeps_cid_identity_and_execution_account_separate() {
         for (institution_code, actor_cid_number) in
             [(PUBLIC_CODE, public_cid()), (PRIVATE_CODE, private_cid())]
         {
-            let execution_account = test_institution_execution_account();
+            let execution_account_id = test_institution_execution_account();
             let proposal_id = <InternalVote as InternalVoteEngine<AccountId32>>::create_institution_proposal_with_data(
                 test_institution_admin(0),
                 institution_code,
                 actor_cid_number.to_vec(),
-                Some(execution_account.clone()),
+                Some(execution_account_id.clone()),
                 subject_cids_for(&actor_cid_number),
                 internal_vote_plan(&actor_cid_number, b"payload"),
                 b"payload".to_vec(),
@@ -235,7 +235,7 @@ fn institution_proposal_keeps_cid_identity_and_execution_account_separate() {
             ));
             let proposal = VotingEngine::proposals(proposal_id).expect("proposal should exist");
             assert_eq!(proposal.actor_cid_number, Some(actor_cid_number));
-            assert_eq!(proposal.execution_account, Some(execution_account));
+            assert_eq!(proposal.execution_account_id, Some(execution_account_id));
         }
     });
 }
@@ -279,7 +279,7 @@ fn personal_close_proposal_requires_all_snapshot_admins() {
     new_test_ext().execute_with(|| {
         let proposal_id = <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_lifecycle_proposal_with_data(
             personal_admin(0),
-            personal_account(),
+            personal_account_id(),
             b"close",
             b"payload".to_vec(),
         )
@@ -295,7 +295,7 @@ fn personal_threshold_must_not_exceed_snapshot_size() {
         assert_noop!(
             <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_proposal_with_data(
                 personal_admin(0),
-                personal_account(),
+                personal_account_id(),
                 b"test",
                 b"payload".to_vec(),
             ),
@@ -311,7 +311,7 @@ fn personal_admin_set_mutation_uses_valid_current_snapshot_threshold() {
         assert_noop!(
             <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_admin_change_proposal_with_data(
                 personal_admin(0),
-                personal_account(),
+                personal_account_id(),
                 3,
                 2,
                 b"test",
@@ -327,7 +327,7 @@ fn personal_proposal_snapshots_dynamic_threshold() {
     new_test_ext().execute_with(|| {
         set_personal_threshold(3);
         let proposal_id =
-            create_personal_proposal_via_engine(personal_admin(0), personal_account());
+            create_personal_proposal_via_engine(personal_admin(0), personal_account_id());
 
         assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(3));
         set_personal_threshold(2);
@@ -390,14 +390,14 @@ fn institution_orgs_snapshot_dynamic_active_threshold_by_cid() {
 fn admin_set_mutation_mutex_blocks_same_subject_regular_proposal() {
     new_test_ext().execute_with(|| {
         let proposal_id =
-            create_admin_set_mutation_proposal_via_engine(personal_admin(0), personal_account());
-        let state = personal_mutex_for(personal_account()).expect("mutex should exist");
+            create_admin_set_mutation_proposal_via_engine(personal_admin(0), personal_account_id());
+        let state = personal_mutex_for(personal_account_id()).expect("mutex should exist");
         assert_eq!(state.admin_set_mutation_proposal, Some(proposal_id));
 
         assert_noop!(
             <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_proposal_with_data(
                 personal_admin(1),
-                personal_account(),
+                personal_account_id(),
                 b"test",
                 b"payload".to_vec(),
             ),
@@ -410,15 +410,15 @@ fn admin_set_mutation_mutex_blocks_same_subject_regular_proposal() {
 fn regular_mutex_blocks_same_subject_admin_set_mutation() {
     new_test_ext().execute_with(|| {
         let proposal_id =
-            create_personal_proposal_via_engine(personal_admin(0), personal_account());
-        let state = personal_mutex_for(personal_account()).expect("mutex should exist");
+            create_personal_proposal_via_engine(personal_admin(0), personal_account_id());
+        let state = personal_mutex_for(personal_account_id()).expect("mutex should exist");
         assert_eq!(state.regular_active_count, 1);
         assert_eq!(state.admin_set_mutation_proposal, None);
 
         assert_noop!(
             <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_admin_change_proposal_with_data(
                 personal_admin(1),
-                personal_account(),
+                personal_account_id(),
                 3,
                 2,
                 b"test",
@@ -453,7 +453,7 @@ fn regular_internal_proposals_can_coexist_under_same_subject() {
 fn admin_set_mutation_passed_status_keeps_mutex_until_terminal_status() {
     new_test_ext().execute_with(|| {
         let proposal_id =
-            create_admin_set_mutation_proposal_via_engine(personal_admin(0), personal_account());
+            create_admin_set_mutation_proposal_via_engine(personal_admin(0), personal_account_id());
 
         assert_ok!(VotingEngine::set_status_and_emit(
             proposal_id,
@@ -465,11 +465,11 @@ fn admin_set_mutation_passed_status_keeps_mutex_until_terminal_status() {
                 .status,
             STATUS_PASSED
         );
-        assert!(personal_mutex_for(personal_account()).is_some());
+        assert!(personal_mutex_for(personal_account_id()).is_some());
         assert_noop!(
             <InternalVote as InternalVoteEngine<AccountId32>>::create_personal_proposal_with_data(
                 personal_admin(1),
-                personal_account(),
+                personal_account_id(),
                 b"test",
                 b"payload".to_vec(),
             ),
@@ -480,7 +480,7 @@ fn admin_set_mutation_passed_status_keeps_mutex_until_terminal_status() {
             proposal_id,
             STATUS_EXECUTION_FAILED
         ));
-        assert!(personal_mutex_for(personal_account()).is_none());
+        assert!(personal_mutex_for(personal_account_id()).is_none());
     });
 }
 
@@ -1795,7 +1795,7 @@ fn internal_vote_public_call_casts_vote() {
                     .try_into()
                     .expect("测试岗位码合法"),
             },
-            voter_account: nrc_admin(0),
+            voter_account_id: nrc_admin(0),
         });
         assert!(InternalVotesByTicket::<Test>::contains_key(
             proposal_id,
@@ -1807,7 +1807,7 @@ fn internal_vote_public_call_casts_vote() {
 }
 
 #[test]
-fn internal_vote_counts_same_wallet_once_per_role_ticket() {
+fn internal_vote_counts_same_account_id_once_per_role_ticket() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();
         // 两个岗位各 3 席，共 6 张票；动态机构阈值必须为严格多数 4。
@@ -1852,7 +1852,7 @@ fn internal_vote_counts_same_wallet_once_per_role_ticket() {
             )
             .unwrap();
 
-        // 建案自动使用主岗位投出第一张票；同一钱包再以第二岗位投第二张票。
+        // 建案自动使用主岗位投出第一张票；同一账户再以第二岗位投第二张票。
         assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 1);
         assert_ok!(InternalVote::cast(
             RuntimeOrigin::signed(test_institution_admin(0)),
@@ -1866,7 +1866,7 @@ fn internal_vote_counts_same_wallet_once_per_role_ticket() {
                 proposal_id,
                 InternalVoteTicket::Institution(votingengine::InstitutionVoteTicket {
                     role_subject: subject,
-                    voter_account: test_institution_admin(0),
+                    voter_account_id: test_institution_admin(0),
                 })
             ));
         }
@@ -2029,7 +2029,7 @@ fn internal_vote_callback_err_defers_execution_without_reverting_vote() {
                     .try_into()
                     .expect("测试岗位码合法"),
             },
-            voter_account: nrc_admin(12),
+            voter_account_id: nrc_admin(12),
         });
         assert!(InternalVotesByTicket::<Test>::contains_key(
             proposal_id,
@@ -2403,7 +2403,7 @@ fn internal_vote_rejects_wrong_stage_joint_proposal() {
                         .try_into()
                         .expect("NRC CID fits runtime bound"),
                 ),
-                execution_account: None,
+                execution_account_id: None,
                 subject_cid_numbers: Default::default(),
                 start: now,
                 end: now + 100,

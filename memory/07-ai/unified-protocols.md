@@ -1,5 +1,19 @@
 # GMB 统一协议文件
 
+## 0.0 账户标识目标契约（ADR-040，2026-07-22）
+
+本节冻结全仓账户标识的最终命名和文本编码。任务卡 `memory/08-tasks/20260722-account-id-official-unify.md` 尚在分步实施；本文后续仍出现的 `wallet_account`、`admin_account`、`owner_account`、`wallet_pubkey`、`admin_pubkey`、`wallet_address` 等字段只是在对应代码步骤完成前记录当前契约，不能用于新增实现，也不构成旧字段兼容许可。每完成一个实施步骤，必须同步删除对应旧协议表述。
+
+- runtime 账户类型统一为 `AccountId`；单一账户字段统一为 `account_id`。
+- 同一结构存在多个业务角色账户时统一为 `<role>_account_id`，例如 `actor_account_id`、`voter_account_id`、`sender_account_id`、`recipient_account_id`、`beneficiary_account_id`。
+- 签名公钥统一为 `public_key`；当前签名者公钥为 `signer_public_key`；凭证签名者公钥为 `credential_signer_public_key`。
+- SS58 字段统一为 `ss58_address`，只用于展示和边界输入输出；授权、索引、存储主键和缓存 key 必须使用账户字节对应的 `account_id`。
+- `account_id` 和 32 字节公钥的跨端文本编码唯一为小写 `0x` 加 64 位十六进制，校验式为 `^0x[0-9a-f]{64}$`。
+- 验签先由 `signer_public_key` 得到 `signer_account_id`，再与业务要求的 `account_id` 或 `<role>_account_id` 比较；不得直接按 SS58 文本授权。
+- 机构岗位权限仍为 `cid_number + role_code + account_id`，公民身份仍为 `cid_number + account_id`；账户命名统一不得改变 CID、岗位和签名职责边界。
+- 纯命名重构不得改变账户字节、SCALE 顺序、签名 payload、哈希材料、CID 生成结果或助记词派生。若实现发现必须改变任一协议字节，必须停止并单独确认。
+- 当前没有正式创世，链上和链下业务数据直接按目标结构重建，不写 migration、双读、双写或旧格式兼容；助记词、seed、私钥、Keychain/Keystore 和 Secret 不属于待删除业务数据。
+
 ## 0.1 机构、岗位、权限与管理员目标契约（ADR-039，2026-07-19）
 
 本节冻结 ADR-039 目标协议。共享类型、entity 岗位/权限/任职/动态岗位生命周期、创世固定权限，以及内部、联合、选举、立法四类投票引擎的岗位快照和席位票据均已落地。现有正式治理、发行、转账和立法入口已按岗位授权执法；旧“admins 即授权、机构投票快照全体 admins”实现不构成兼容路径。

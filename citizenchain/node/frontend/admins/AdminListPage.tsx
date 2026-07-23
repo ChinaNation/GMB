@@ -8,14 +8,14 @@ import { InstitutionAssignmentCard } from './InstitutionAssignmentCard';
 import type {
   ActivateRequestResult,
   ActivatedAdmin,
-  AdminAccountRef,
+  InstitutionAdminsRef,
   InstitutionDetail,
 } from './types';
 import './styles.css';
 
 type Props = {
   cidNumber: string;
-  accountRef: AdminAccountRef;
+  accountRef: InstitutionAdminsRef;
   onBack: () => void;
 };
 
@@ -61,11 +61,11 @@ export function AdminListPage({ cidNumber, accountRef, onBack }: Props) {
     return () => clearTimeout(timer);
   }, [activateStep, activateCountdown]);
 
-  const startActivation = useCallback(async (pubkeyHex: string) => {
-    setActivatePubkey(pubkeyHex);
+  const startActivation = useCallback(async (account_id: string) => {
+    setActivatePubkey(account_id);
     setActivateError(null);
     try {
-      const result = await api.buildActivateAdminRequest(pubkeyHex, cidNumber, accountRef);
+      const result = await api.buildActivateAdminRequest(account_id, cidNumber, accountRef);
       setActivateRequest(result);
       setActivateCountdown(90);
       setActivateStep('qr');
@@ -86,7 +86,7 @@ export function AdminListPage({ cidNumber, accountRef, onBack }: Props) {
         activateRequest.payloadHex,
         responseJson,
       );
-      setActivatedAdmins(prev => [...prev.filter(a => a.pubkeyHex !== result.pubkeyHex), result]);
+      setActivatedAdmins(prev => [...prev.filter(a => a.account_id !== result.account_id), result]);
       setActivateStep('done');
       setTimeout(() => setActivateStep('idle'), 2000);
     } catch (e) {
@@ -131,13 +131,13 @@ export function AdminListPage({ cidNumber, accountRef, onBack }: Props) {
       ) : (
         <div className="admin-grid">
           {detail.admins.map((admin, i) => {
-            const pubkey = admin.adminAccount;
+            const accountId = admin.account_id;
             const isActivated = activatedAdmins.some(
-              a => a.pubkeyHex.toLowerCase() === pubkey.toLowerCase()
+              a => a.account_id === accountId
             );
             return (
               <InstitutionAssignmentCard
-                key={pubkey}
+                key={accountId}
                 admin={admin}
                 index={i + 1}
                 balanceFen={admin.balanceFen}
@@ -148,7 +148,7 @@ export function AdminListPage({ cidNumber, accountRef, onBack }: Props) {
                   ) : (
                     <button
                       className="activate-button"
-                      onClick={() => startActivation(pubkey)}
+                      onClick={() => startActivation(accountId)}
                     >激活</button>
                   )
                 }

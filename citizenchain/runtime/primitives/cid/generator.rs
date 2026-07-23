@@ -14,7 +14,7 @@ use crate::cid::{
 pub const RESERVED_PROVINCE_CITY_CODE: &str = "000";
 
 pub struct GenerateCidNumberInput<'a> {
-    pub account_pubkey: &'a str,
+    pub public_key: &'a str,
     /// 可变/继承盈利策略读取的 0/1 输入。
     pub p1: &'a str,
     /// 两位省行政区代码。
@@ -54,7 +54,7 @@ fn valid_ascii_code(value: &str, len: usize) -> bool {
 }
 
 pub fn generate_cid_number(input: GenerateCidNumberInput<'_>) -> Result<String, &'static str> {
-    if input.account_pubkey.trim().is_empty()
+    if input.public_key.trim().is_empty()
         || input.province_code.trim().is_empty()
         || input.province_name.trim().is_empty()
         || input.city_name.trim().is_empty()
@@ -62,7 +62,7 @@ pub fn generate_cid_number(input: GenerateCidNumberInput<'_>) -> Result<String, 
         || input.institution.trim().is_empty()
     {
         return Err(
-            "account_pubkey, province_code, province_name, city_name, year, institution are required",
+            "public_key, province_code, province_name, city_name, year, institution are required",
         );
     }
     if !valid_ascii_code(input.province_code, 2) {
@@ -109,11 +109,7 @@ pub fn generate_cid_number(input: GenerateCidNumberInput<'_>) -> Result<String, 
         "{:09}",
         (hash_text(&format!(
             "{}|{}|{}|{}|{}",
-            input.account_pubkey,
-            code_str,
-            input.province_name,
-            normalized_city_for_hash,
-            input.year
+            input.public_key, code_str, input.province_name, normalized_city_for_hash, input.year
         )) as usize)
             % 1_000_000_000
     );
@@ -139,7 +135,7 @@ mod tests {
 
     fn gen(institution: &str, p1: &str) -> String {
         generate_cid_number(GenerateCidNumberInput {
-            account_pubkey: "0xabcd",
+            public_key: "0xabcd",
             p1,
             province_code: "GD",
             province_name: "广东省",
@@ -175,7 +171,7 @@ mod tests {
     #[test]
     fn pmul_has_no_number() {
         let r = generate_cid_number(GenerateCidNumberInput {
-            account_pubkey: "0x1",
+            public_key: "0x1",
             p1: "0",
             province_code: "GD",
             province_name: "广东省",

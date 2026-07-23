@@ -15,7 +15,7 @@
 //! - 手续费**全部归收款方清算行的费用账户**,无省储行分成。
 //!
 //! **收款方主导清算**模型。
-//! - `submit_offchain_batch` 的 `institution_account` = 收款方清算行主账户(身份锚)
+//! - `submit_offchain_batch` 的 `institution_account_id` = 收款方清算行主账户(身份锚)
 //! - 同一批次所有 item 的 `recipient_bank_cid` 必须 == `actor_cid_number`(收款方 CID)
 //! - 提交者 = 收款方清算行的某个激活管理员
 //! - 每个 item 的付款公民从其 L2 清算账户存款支付链下清算费;批尾对累计手续费收一次链上费(Step 3)
@@ -69,7 +69,7 @@ fn calc_fee(transfer_amount: u128, rate_bp: u32) -> Result<u128, &'static str> {
 ///
 /// [`submitter`] 提交该批次的清算行管理员
 /// [`actor_cid_number`] 本次交易的机构唯一主键
-/// [`institution_account`] 批次归属的清算行主账户(= **收款方**清算行)
+/// [`institution_account_id`] 批次归属的清算行主账户(= **收款方**清算行)
 /// [`batch`] SCALE 编码过的 V2 批次数据(已在 extrinsic 入口完成 BoundedVec 长度校验)
 ///
 /// 偿付预检按 **付款方清算行** 做(每个 payer_bank_cid 各自统计扣减总额),因为
@@ -78,13 +78,13 @@ pub fn execute_clearing_bank_batch<T: Config>(
     submitter: &T::AccountId,
     actor_cid_number: &crate::InstitutionCidNumber,
     actor_role_code: &[u8],
-    institution_account: &T::AccountId,
+    institution_account_id: &T::AccountId,
     batch: &[OffchainBatchItem<T::AccountId, BlockNumberFor<T>>],
 ) -> DispatchResult {
-    // 批次级校验：CID、岗位码、签名钱包和具体账户必须同时匹配。
+    // 批次级校验：CID、岗位码、签名账户和具体账户必须同时匹配。
     bank_check::ensure_institution_account::<T>(
         actor_cid_number.as_slice(),
-        institution_account,
+        institution_account_id,
         bank_check::ACCOUNT_NAME_MAIN,
     )?;
     ensure!(
@@ -117,16 +117,17 @@ pub fn execute_clearing_bank_batch<T: Config>(
         );
         ensure!(item.transfer_amount > 0, Error::<T>::InvalidTransferAmount);
         ensure!(
-            item.payer != item.recipient,
+            item.payer_account_id != item.recipient_account_id,
             Error::<T>::SelfTransferNotAllowed
         );
         ensure!(now <= item.expires_at, Error::<T>::ExpiredIntent);
         ensure!(
-            UserBank::<T>::get(&item.payer).as_ref() == Some(&item.payer_bank_cid),
+            UserBank::<T>::get(&item.payer_account_id).as_ref() == Some(&item.payer_bank_cid),
             Error::<T>::UserBankMismatch
         );
         ensure!(
-            UserBank::<T>::get(&item.recipient).as_ref() == Some(&item.recipient_bank_cid),
+            UserBank::<T>::get(&item.recipient_account_id).as_ref()
+                == Some(&item.recipient_bank_cid),
             Error::<T>::UserBankMismatch
         );
 
@@ -198,7 +199,7 @@ fn execute_single_item<T: Config>(
     // 1. 验 L3 签名
     let intent = item.to_intent();
     let msg = intent.signing_hash();
-    let payer_pk = pubkey_from_accountid::<T>(&item.payer)?;
+    let payer_pk = pubkey_from_accountid::<T>(&item.payer_account_id)?;
     let sig = Sr25519Signature::try_from(&item.payer_sig[..])
         .map_err(|_| Error::<T>::InvalidL3Signature)?;
     ensure!(
@@ -207,7 +208,7 @@ fn execute_single_item<T: Config>(
     );
 
     // 2. 消费 nonce
-    nonce::consume_nonce::<T>(&item.payer, item.payer_nonce)?;
+    nonce::consume_nonce::<T>(&item.payer_account_id, item.payer_nonce)?;
 
     // 3. 防重放(shard key 从付款方清算行 cid_number 的 R5 前 2 字节取省码)。
     //
@@ -235,7 +236,7 @@ fn execute_single_item<T: Config>(
     );
 
     // 付款方 L3 存款校验(账本按 CID 键)
-    let payer_balance = DepositBalance::<T>::get(payer_cid, &item.payer);
+    let payer_balance = DepositBalance::<T>::get(payer_cid, &item.payer_account_id);
     let total_debit = item.transfer_amount.saturating_add(item.fee_amount);
     ensure!(
         payer_balance >= total_debit,
@@ -244,10 +245,10 @@ fn execute_single_item<T: Config>(
 
     if payer_cid == recipient_cid {
         // 同行:本金在 L2 内部轧差,只 fee 从清算账户流出到费用账户
-        DepositBalance::<T>::mutate(payer_cid, &item.payer, |b| {
+        DepositBalance::<T>::mutate(payer_cid, &item.payer_account_id, |b| {
             *b = b.saturating_sub(total_debit);
         });
-        DepositBalance::<T>::mutate(payer_cid, &item.recipient, |b| {
+        DepositBalance::<T>::mutate(payer_cid, &item.recipient_account_id, |b| {
             *b = b.saturating_add(item.transfer_amount);
         });
         // 同行时 BankTotalDeposits 下降 fee 部分(手续费流出 L2)
@@ -269,10 +270,10 @@ fn execute_single_item<T: Config>(
         )?;
         T::Currency::transfer(&payer_clearing, &fee_account, fee_bal, KeepAlive)?;
 
-        DepositBalance::<T>::mutate(payer_cid, &item.payer, |b| {
+        DepositBalance::<T>::mutate(payer_cid, &item.payer_account_id, |b| {
             *b = b.saturating_sub(total_debit);
         });
-        DepositBalance::<T>::mutate(recipient_cid, &item.recipient, |b| {
+        DepositBalance::<T>::mutate(recipient_cid, &item.recipient_account_id, |b| {
             *b = b.saturating_add(item.transfer_amount);
         });
         BankTotalDeposits::<T>::mutate(payer_cid, |t| {
@@ -289,9 +290,9 @@ fn execute_single_item<T: Config>(
 
     Pallet::<T>::deposit_event(Event::<T>::PaymentSettled {
         tx_id: tx_hash,
-        payer: item.payer.clone(),
+        payer_account_id: item.payer_account_id.clone(),
         payer_bank_cid: item.payer_bank_cid.clone(),
-        recipient: item.recipient.clone(),
+        recipient_account_id: item.recipient_account_id.clone(),
         recipient_bank_cid: item.recipient_bank_cid.clone(),
         transfer_amount: item.transfer_amount,
         fee_amount: item.fee_amount,

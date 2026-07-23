@@ -1,6 +1,6 @@
 // 钱包 JSON 持久化。
 //
-// 冷钱包仅保存 SS58 地址和公钥，不存储任何私钥或助记词。
+// 冷钱包仅保存 SS58 展示地址和账户 ID，不存储任何私钥或助记词。
 // 签名通过 QR 码协议由外部离线设备完成。
 
 use crate::shared::security;
@@ -12,9 +12,9 @@ use tauri::AppHandle;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum WalletKind {
-    /// 本机 powr 矿工密钥派生的热钱包，不写入 cold-wallets.json。
+    /// 本机 powr 矿工密钥派生的热钱包，不写入 `cold-wallets.json`。
     MinerHot,
-    /// 用户手动添加的冷钱包，只保存地址和公钥。
+    /// 用户手动添加的冷钱包，只保存 SS58 展示地址和账户 ID。
     Cold,
 }
 
@@ -31,6 +31,7 @@ fn default_deletable() -> bool {
 /// 单个钱包条目。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
 pub struct ColdWallet {
     pub id: String,
     pub name: String,
@@ -40,10 +41,12 @@ pub struct ColdWallet {
     /// 是否允许从钱包管理列表删除。
     #[serde(default = "default_deletable")]
     pub deletable: bool,
-    /// SS58 地址（prefix 2027）。
-    pub address: String,
-    /// 从 SS58 解出的 32 字节公钥（64 位 hex，无 0x 前缀）。
-    pub pubkey_hex: String,
+    /// 仅用于钱包界面展示的 SS58 地址（prefix 2027）。
+    #[serde(rename = "ss58_address")]
+    pub ss58_address: String,
+    /// 钱包账户 ID，固定为小写 `0x` + 64 位十六进制。
+    #[serde(rename = "account_id")]
+    pub account_id: String,
     pub created_at: u64,
 }
 

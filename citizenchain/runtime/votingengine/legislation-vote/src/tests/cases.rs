@@ -92,7 +92,7 @@ fn referendum_threshold() {
 fn regional_actor_cid(institution: &str) -> votingengine::CidNumber {
     primitives::cid::generator::generate_cid_number(
         primitives::cid::generator::GenerateCidNumberInput {
-            account_pubkey: "legislation-scope-test",
+            public_key: "legislation-scope-test",
             p1: "0",
             province_code: "GD",
             province_name: "广东省",
@@ -362,7 +362,7 @@ fn two_houses_pass_then_governor_signs() {
 }
 
 #[test]
-fn same_wallet_can_vote_once_in_each_representative_body() {
+fn same_account_id_can_vote_once_in_each_representative_body() {
     new_test_ext().execute_with(|| {
         let pid = create(
             member(1),
@@ -378,7 +378,7 @@ fn same_wallet_can_vote_once_in_each_representative_body() {
                 .current_body,
             1
         );
-        // 同一钱包在第二个机构具有独立席位，不受第一机构去重记录影响。
+        // 同一账户在第二个机构具有独立席位，不受第一机构去重记录影响。
         assert_ok!(cast(member(1), pid, true));
         assert!(
             crate::pallet::RepresentativeVotesByTicket::<Test>::contains_key(
@@ -523,7 +523,7 @@ fn legislation_referendum_rejects_votes_beyond_population_snapshot_denominator()
 }
 
 #[test]
-fn legislation_referendum_deduplicates_permanent_cid_after_wallet_replacement() {
+fn legislation_referendum_deduplicates_permanent_cid_after_account_id_replacement() {
     new_test_ext().execute_with(|| {
         let pid = create(member(1), single_house(), RepresentativeVoteRule::Special);
         for i in 1u8..=8 {

@@ -11,7 +11,7 @@ use sp_core::ConstU32;
 use sp_runtime::{AccountId32, BoundedVec};
 
 use crate::governance::chain_query;
-use crate::governance::signing::pubkey_to_ss58;
+use crate::governance::signing::account_id_to_ss58;
 use crate::governance::storage_keys;
 use crate::transaction::offchain::types::ClearingBankNodeOnChainInfo;
 
@@ -77,8 +77,8 @@ pub fn fetch_clearing_bank_node(
                 .map_err(|_| "RPC 域名编码非 UTF-8".to_string())?;
 
             let registered_by_bytes: [u8; 32] = info.registered_by.into();
-            let pubkey_hex = format!("0x{}", hex::encode(registered_by_bytes));
-            let ss58 = pubkey_to_ss58(&registered_by_bytes)?;
+            let registered_by_account_id = format!("0x{}", hex::encode(registered_by_bytes));
+            let registered_by_ss58_address = account_id_to_ss58(&registered_by_bytes)?;
 
             Ok(Some(ClearingBankNodeOnChainInfo {
                 cid_number: cid_number.to_string(),
@@ -86,8 +86,8 @@ pub fn fetch_clearing_bank_node(
                 rpc_domain,
                 rpc_port: info.rpc_port,
                 registered_at: info.registered_at as u64,
-                registered_by_pubkey_hex: pubkey_hex,
-                registered_by_ss58: ss58,
+                registered_by_account_id,
+                registered_by_ss58_address,
             }))
         }
     }

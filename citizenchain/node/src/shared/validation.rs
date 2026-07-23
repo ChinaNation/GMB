@@ -17,10 +17,14 @@ pub enum ValidationError {
     Ss58InvalidChecksum,
     #[error("{0}")]
     Ss58PrefixDecode(String),
-    #[error("钱包地址不能为空")]
-    WalletEmpty,
-    #[error("十六进制钱包地址格式无效，应为 0x + 64 位十六进制")]
-    WalletInvalidHex,
+    #[error("账户 ID 不能为空")]
+    AccountIdEmpty,
+    #[error("账户 ID 格式无效，应为小写 0x + 64 位十六进制")]
+    AccountIdInvalidHex,
+    #[error("公钥不能为空")]
+    PublicKeyEmpty,
+    #[error("公钥格式无效，应为小写 0x + 64 位十六进制")]
+    PublicKeyInvalidHex,
     #[error("node-key 不能为空")]
     NodeKeyEmpty,
     #[error("node-key 必须是 64 位十六进制字符串")]
@@ -70,23 +74,52 @@ fn validate_ss58_address(input: &str) -> Result<(), ValidationError> {
     Ok(())
 }
 
-pub fn normalize_wallet_address(input: &str) -> Result<String, String> {
+/// 将跨进程账户文本规范化为唯一格式：小写 `0x` + 64 位十六进制。
+pub fn normalize_account_id(input: &str) -> Result<String, String> {
     let value = input.trim();
     if value.is_empty() {
-        return Err(ValidationError::WalletEmpty.into());
+        return Err(ValidationError::AccountIdEmpty.into());
     }
 
-    // 允许 0x + 64 的十六进制地址。
-    if let Some(raw) = value.strip_prefix("0x") {
-        if raw.len() != 64 || !raw.chars().all(|c| c.is_ascii_hexdigit()) {
-            return Err(ValidationError::WalletInvalidHex.into());
-        }
-        return Ok(format!("0x{}", raw.to_ascii_lowercase()));
+    let Some(raw) = value.strip_prefix("0x") else {
+        return Err(ValidationError::AccountIdInvalidHex.into());
+    };
+    if raw.len() != 64
+        || !raw
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(ValidationError::AccountIdInvalidHex.into());
     }
+    Ok(value.to_string())
+}
 
-    // 允许 SS58 地址，且强制链前缀 2027。
+/// 将 32 字节公钥文本规范化为小写 `0x` + 64 位十六进制。
+pub fn normalize_public_key(input: &str) -> Result<String, String> {
+    let value = input.trim();
+    if value.is_empty() {
+        return Err(ValidationError::PublicKeyEmpty.into());
+    }
+    let Some(raw) = value.strip_prefix("0x") else {
+        return Err(ValidationError::PublicKeyInvalidHex.into());
+    };
+    if raw.len() != 64
+        || !raw
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(ValidationError::PublicKeyInvalidHex.into());
+    }
+    Ok(value.to_string())
+}
+
+/// 校验仅用于展示或输入的 SS58 地址，并保留原始 Base58 文本。
+pub fn normalize_ss58_address(input: &str) -> Result<String, String> {
+    let value = input.trim();
+    if value.is_empty() {
+        return Err(ValidationError::Ss58DecodeFailed.into());
+    }
     validate_ss58_address(value)?;
-
     Ok(value.to_string())
 }
 
@@ -122,39 +155,51 @@ pub fn normalize_grandpa_key(input: &str) -> Result<String, String> {
 mod tests {
     use super::*;
 
-    // --- normalize_wallet_address ---
+    // --- normalize_account_id ---
 
     #[test]
-    fn wallet_empty_rejected() {
-        assert!(normalize_wallet_address("").is_err());
-        assert!(normalize_wallet_address("   ").is_err());
+    fn account_id_empty_rejected() {
+        assert!(normalize_account_id("").is_err());
+        assert!(normalize_account_id("   ").is_err());
     }
 
     #[test]
-    fn wallet_valid_hex() {
+    fn account_id_valid_hex() {
         let hex = format!("0x{}", "a1b2c3d4".repeat(8));
-        let result = normalize_wallet_address(&hex).unwrap();
+        let result = normalize_account_id(&hex).unwrap();
         assert!(result.starts_with("0x"));
         assert_eq!(result.len(), 66);
         assert_eq!(result, result.to_ascii_lowercase());
     }
 
     #[test]
-    fn wallet_hex_wrong_length() {
-        assert!(normalize_wallet_address("0xabcd").is_err());
+    fn account_id_hex_wrong_length() {
+        assert!(normalize_account_id("0xabcd").is_err());
     }
 
     #[test]
-    fn wallet_hex_non_hex_chars() {
+    fn account_id_hex_non_hex_chars() {
         let bad = format!("0x{}zz", "a1".repeat(31));
-        assert!(normalize_wallet_address(&bad).is_err());
+        assert!(normalize_account_id(&bad).is_err());
     }
 
     #[test]
-    fn wallet_hex_uppercase_normalized() {
+    fn account_id_hex_uppercase_rejected() {
         let hex = format!("0x{}", "A1B2C3D4".repeat(8));
-        let result = normalize_wallet_address(&hex).unwrap();
-        assert_eq!(result, format!("0x{}", "a1b2c3d4".repeat(8)));
+        assert!(normalize_account_id(&hex).is_err());
+    }
+
+    #[test]
+    fn account_id_requires_0x_prefix() {
+        assert!(normalize_account_id(&"a1".repeat(32)).is_err());
+    }
+
+    #[test]
+    fn public_key_uses_prefixed_lowercase_hex() {
+        let input = format!("0x{}", "a1b2".repeat(16));
+        assert_eq!(normalize_public_key(&input).unwrap(), input);
+        assert!(normalize_public_key(&format!("0x{}", "A1B2".repeat(16))).is_err());
+        assert!(normalize_public_key(&"a1".repeat(32)).is_err());
     }
 
     // --- normalize_node_key ---

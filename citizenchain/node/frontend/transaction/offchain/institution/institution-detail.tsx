@@ -123,7 +123,7 @@ export function ClearingBankInstitutionDetailPage({
             <dt>注册区块</dt>
             <dd>#{nodeInfo.registeredAt}</dd>
             <dt>声明账户</dt>
-            <dd><code>{nodeInfo.registeredBySs58}</code></dd>
+            <dd><code>{nodeInfo.registered_by_ss58_address}</code></dd>
           </dl>
         </div>
       )}
@@ -139,9 +139,9 @@ export function ClearingBankInstitutionDetailPage({
 
         <div className="metric-card">
           <div className="metric-label">
-            主账户 <code className="metric-label-id">{detail.mainAccount.addressSs58}</code>
+            主账户 <code className="metric-label-id">{detail.main_account_info.ss58_address}</code>
           </div>
-          <div className="metric-value">{detail.mainAccount.balanceText} 元</div>
+          <div className="metric-value">{detail.main_account_info.balanceText} 元</div>
         </div>
 
         <div className="metric-card">
@@ -153,9 +153,9 @@ export function ClearingBankInstitutionDetailPage({
 
         <div className="metric-card">
           <div className="metric-label">
-            费用账户 <code className="metric-label-id">{detail.feeAccount.addressSs58}</code>
+            费用账户 <code className="metric-label-id">{detail.fee_account_info.ss58_address}</code>
           </div>
-          <div className="metric-value">{detail.feeAccount.balanceText} 元</div>
+          <div className="metric-value">{detail.fee_account_info.balanceText} 元</div>
         </div>
       </div>
 

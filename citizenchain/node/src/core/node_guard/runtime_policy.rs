@@ -36,8 +36,13 @@ const BALANCES_NEW_ACCOUNT_FLAGS: u128 = 0x80000000_00000000_00000000_00000000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ProtectedFee {
-    Onchain { payer: [u8; 32], amount: u128 },
-    Vote { payer: [u8; 32] },
+    Onchain {
+        payer_account_id: [u8; 32],
+        amount: u128,
+    },
+    Vote {
+        payer_account_id: [u8; 32],
+    },
 }
 
 pub mod storage_key {
@@ -162,13 +167,13 @@ fn signed_account(xt: &UncheckedExtrinsic) -> Option<[u8; 32]> {
 }
 
 fn protected_fee(xt: &UncheckedExtrinsic) -> Option<ProtectedFee> {
-    let payer = signed_account(xt)?;
+    let payer_account_id = signed_account(xt)?;
     match &xt.function {
         RuntimeCall::OnchainTransaction(onchain::pallet::Call::transfer_with_remark {
             amount,
             ..
         }) => Some(ProtectedFee::Onchain {
-            payer,
+            payer_account_id,
             amount: *amount,
         }),
         RuntimeCall::InternalVote(internal_vote::pallet::Call::cast { .. })
@@ -184,17 +189,23 @@ fn protected_fee(xt: &UncheckedExtrinsic) -> Option<ProtectedFee> {
         | RuntimeCall::ElectionVote(
             election_vote::pallet::Call::cast_popular_vote { .. }
             | election_vote::pallet::Call::cast_mutual_vote { .. },
-        ) => Some(ProtectedFee::Vote { payer }),
+        ) => Some(ProtectedFee::Vote { payer_account_id }),
         _ => None,
     }
 }
 
 fn expected_fee(rule: ProtectedFee) -> ([u8; 32], u128) {
     match rule {
-        ProtectedFee::Onchain { payer, amount } => {
-            (payer, primitives::fee_policy::calculate_onchain_fee(amount))
+        ProtectedFee::Onchain {
+            payer_account_id,
+            amount,
+        } => (
+            payer_account_id,
+            primitives::fee_policy::calculate_onchain_fee(amount),
+        ),
+        ProtectedFee::Vote { payer_account_id } => {
+            (payer_account_id, primitives::fee_policy::VOTE_FLAT_FEE)
         }
-        ProtectedFee::Vote { payer } => (payer, primitives::fee_policy::VOTE_FLAT_FEE),
     }
 }
 
@@ -264,8 +275,12 @@ where
             record.phase == Phase::ApplyExtrinsic(index as u32)
                 && matches!(
                     &record.event,
-                    RuntimeEvent::OnchainTransaction(onchain::pallet::Event::FeePaid { who, fee })
-                        if <AccountId32 as Clone>::clone(who) == AccountId32::new(expected_payer)
+                    RuntimeEvent::OnchainTransaction(onchain::pallet::Event::FeePaid {
+                        account_id,
+                        fee
+                    })
+                        if <AccountId32 as Clone>::clone(account_id)
+                            == AccountId32::new(expected_payer)
                             && *fee == expected_amount
                 )
         });
@@ -400,7 +415,7 @@ fn seed_offchain_minimum_fee_probe(
 ) -> Result<(RuntimeCall, AccountId32, Vec<u8>), String> {
     let actor_cid_number = primitives::cid::generator::generate_cid_number(
         primitives::cid::generator::GenerateCidNumberInput {
-            account_pubkey: "node-guard-offchain-bank",
+            public_key: "node-guard-offchain-bank",
             p1: "1",
             province_code: "GD",
             province_name: "广东省",
@@ -421,8 +436,8 @@ fn seed_offchain_minimum_fee_probe(
     // 清算账户:Step 2 起 L2 资金落点(充值/提现/结算/偿付);主账户仅身份锚。
     let clearing_account = AccountId32::new([0xC2; 32]);
     let payer_pair = sr25519::Pair::from_seed(&[0xB2; 32]);
-    let payer = chain_signing::account_id_from_public(payer_pair.public());
-    let recipient = AccountId32::new([0xC1; 32]);
+    let payer_account_id = chain_signing::account_id_from_public(payer_pair.public());
+    let recipient_account_id = AccountId32::new([0xC1; 32]);
     let main_name = primitives::account_derive::RESERVED_NAME_MAIN;
     let fee_name = primitives::account_derive::RESERVED_NAME_FEE;
     let clearing_name = primitives::account_derive::RESERVED_NAME_CLEARING;
@@ -431,18 +446,19 @@ fn seed_offchain_minimum_fee_probe(
         cid_number: actor_cid_number.clone(),
         account_name: name.to_vec(),
     };
-    let institution_account = |address: AccountId32| entity_primitives::InstitutionAccountInfo {
-        address,
-        initial_balance: 0u128,
-        created_at: 0u32,
-    };
+    let institution_account_id =
+        |account_id: AccountId32| entity_primitives::InstitutionAccountInfo {
+            account_id,
+            initial_balance: 0u128,
+            created_at: 0u32,
+        };
     overlay.set_storage(
         storage_key::private_account(&actor_cid_number, main_name),
-        Some(institution_account(bank.clone()).encode()),
+        Some(institution_account_id(bank.clone()).encode()),
     );
     overlay.set_storage(
         storage_key::private_account(&actor_cid_number, fee_name),
-        Some(institution_account(fee_account.clone()).encode()),
+        Some(institution_account_id(fee_account.clone()).encode()),
     );
     overlay.set_storage(
         storage_key::private_reverse(&bank),
@@ -456,7 +472,7 @@ fn seed_offchain_minimum_fee_probe(
     // → `find_account(cid, "清算账户")` 解析资金落点,未登记会 ClearingAccountNotFound。
     overlay.set_storage(
         storage_key::private_account(&actor_cid_number, clearing_name),
-        Some(institution_account(clearing_account.clone()).encode()),
+        Some(institution_account_id(clearing_account.clone()).encode()),
     );
     overlay.set_storage(
         storage_key::private_reverse(&clearing_account),
@@ -468,7 +484,7 @@ fn seed_offchain_minimum_fee_probe(
             admin_primitives::InstitutionAdmins {
                 institution_code: *b"SFGQ",
                 admins: vec![admin_primitives::Admin {
-                    admin_account: submitter,
+                    account_id: submitter,
                     family_name: admin_primitives::FamilyName::truncate_from(
                         admin_primitives::DEFAULT_ADMIN_FAMILY_NAME.to_vec(),
                     ),
@@ -483,25 +499,22 @@ fn seed_offchain_minimum_fee_probe(
     // 身份主键=CID:UserBank 的值是清算行 CID;DepositBalance/BankTotalDeposits/
     // L2FeeRateBp 的键是 CID(Compact(len)||bytes,与 runtime BoundedVec<u8> 键逐字节等价)。
     overlay.set_storage(
-        storage_key::user_bank(&payer),
+        storage_key::user_bank(&payer_account_id),
         Some(actor_cid_number.encode()),
     );
     overlay.set_storage(
-        storage_key::user_bank(&recipient),
+        storage_key::user_bank(&recipient_account_id),
         Some(actor_cid_number.encode()),
     );
     overlay.set_storage(
-        storage_key::deposit(&actor_cid_number, &payer),
+        storage_key::deposit(&actor_cid_number, &payer_account_id),
         Some(2u128.encode()),
     );
     overlay.set_storage(
         storage_key::bank_total(&actor_cid_number),
         Some(2u128.encode()),
     );
-    overlay.set_storage(
-        storage_key::rate(&actor_cid_number),
-        Some(10u32.encode()),
-    );
+    overlay.set_storage(storage_key::rate(&actor_cid_number), Some(10u32.encode()));
     overlay.set_storage(
         fullnode_issuance::storage_key::system_account(&bank_raw),
         Some(
@@ -566,12 +579,12 @@ fn seed_offchain_minimum_fee_probe(
     // Default —— 否则与 UserBank/DepositBalance/rate 的 CID 键对不上,settlement 早拒。
     let mut item = offchain::batch_item::OffchainBatchItem::<AccountId32, u32> {
         tx_id: sp_core::H256::repeat_byte(0xD1),
-        payer,
+        payer_account_id,
         payer_bank_cid: actor_cid_number
             .clone()
             .try_into()
             .map_err(|_| "候选 runtime 清算行 CID 超长")?,
-        recipient,
+        recipient_account_id,
         recipient_bank_cid: actor_cid_number
             .clone()
             .try_into()
@@ -600,7 +613,7 @@ fn seed_offchain_minimum_fee_probe(
         actor_role_code: actor_role_code
             .try_into()
             .map_err(|_| "候选 runtime 清算行岗位码超长")?,
-        institution_account: bank.clone(),
+        institution_account_id: bank.clone(),
         batch_seq: 1,
         batch: batch.try_into().map_err(|_| "候选 runtime 清算批次超长")?,
         batch_signature: batch_signature
@@ -634,9 +647,9 @@ where
     }
 
     let payer_pair = sr25519::Pair::from_seed(&[0xA5; 32]);
-    let payer: [u8; 32] = payer_pair.public().into();
-    let recipient = AccountId32::new([0x5A; 32]);
-    let payer_key = fullnode_issuance::storage_key::system_account(&payer);
+    let payer_account_id: [u8; 32] = payer_pair.public().into();
+    let recipient_account_id = AccountId32::new([0x5A; 32]);
+    let payer_key = fullnode_issuance::storage_key::system_account(&payer_account_id);
     let payer_info = MAccountInfo {
         nonce: 0,
         consumers: 0,
@@ -690,7 +703,7 @@ where
     let probes = [
         (
             RuntimeCall::OnchainTransaction(onchain::pallet::Call::transfer_with_remark {
-                beneficiary: recipient.clone(),
+                beneficiary_account_id: recipient_account_id.clone(),
                 amount: 50_000,
                 remark: b"node-guard-rate"
                     .to_vec()
@@ -701,7 +714,7 @@ where
         ),
         (
             RuntimeCall::OnchainTransaction(onchain::pallet::Call::transfer_with_remark {
-                beneficiary: recipient,
+                beneficiary_account_id: recipient_account_id,
                 amount: 1,
                 remark: b"node-guard-min"
                     .to_vec()
@@ -742,7 +755,7 @@ where
         expected_free = expected_free
             .checked_sub(expected_debit)
             .ok_or("候选 runtime 费用探针余额下溢")?;
-        let actual = overlay_account(&mut overlay, &payer)?.data.free;
+        let actual = overlay_account(&mut overlay, &payer_account_id)?.data.free;
         if actual != expected_free {
             return Err(format!(
                 "候选 runtime 费用行为非法:第 {nonce} 个探针期望余额 {expected_free},实际 {actual}"
@@ -804,9 +817,9 @@ mod tests {
 
     fn signed_transfer(amount: u128) -> (Vec<sp_runtime::OpaqueExtrinsic>, AccountId32) {
         let pair = sr25519::Pair::from_seed(&[7u8; 32]);
-        let payer = chain_signing::account_id_from_public(pair.public());
+        let payer_account_id = chain_signing::account_id_from_public(pair.public());
         let call = RuntimeCall::OnchainTransaction(onchain::pallet::Call::transfer_with_remark {
-            beneficiary: AccountId32::new([8u8; 32]),
+            beneficiary_account_id: AccountId32::new([8u8; 32]),
             amount,
             remark: b"fee-test".to_vec().try_into().expect("remark fits"),
         });
@@ -816,7 +829,7 @@ mod tests {
             0,
             &pair,
         );
-        (vec![xt.into()], payer)
+        (vec![xt.into()], payer_account_id)
     }
 
     #[test]
@@ -838,11 +851,11 @@ mod tests {
 
     #[test]
     fn actual_onchain_fee_event_must_match_fixed_formula() {
-        let (body, payer) = signed_transfer(50_000);
+        let (body, payer_account_id) = signed_transfer(50_000);
         let good_events: Vec<EventRecord<RuntimeEvent, sp_core::H256>> = vec![EventRecord {
             phase: Phase::ApplyExtrinsic(0),
             event: RuntimeEvent::OnchainTransaction(onchain::pallet::Event::FeePaid {
-                who: payer.clone(),
+                account_id: payer_account_id.clone(),
                 fee: 50,
             }),
             topics: Vec::new(),
@@ -856,7 +869,7 @@ mod tests {
         let bad_events: Vec<EventRecord<RuntimeEvent, sp_core::H256>> = vec![EventRecord {
             phase: Phase::ApplyExtrinsic(0),
             event: RuntimeEvent::OnchainTransaction(onchain::pallet::Event::FeePaid {
-                who: payer,
+                account_id: payer_account_id,
                 fee: 49,
             }),
             topics: Vec::new(),
@@ -874,12 +887,9 @@ mod tests {
             phase: Phase::ApplyExtrinsic(0),
             event: RuntimeEvent::OffchainTransaction(offchain::pallet::Event::PaymentSettled {
                 tx_id: sp_core::H256::repeat_byte(4),
-                payer: AccountId32::new([5u8; 32]),
-                payer_bank_cid: b"GD001-PRB0T-239565809-2026"
-                    .to_vec()
-                    .try_into()
-                    .unwrap(),
-                recipient: AccountId32::new([7u8; 32]),
+                payer_account_id: AccountId32::new([5u8; 32]),
+                payer_bank_cid: b"GD001-PRB0T-239565809-2026".to_vec().try_into().unwrap(),
+                recipient_account_id: AccountId32::new([7u8; 32]),
                 recipient_bank_cid: bank.clone().try_into().unwrap(),
                 transfer_amount: 1,
                 fee_amount: 1,
@@ -903,12 +913,9 @@ mod tests {
             phase: Phase::ApplyExtrinsic(0),
             event: RuntimeEvent::OffchainTransaction(offchain::pallet::Event::PaymentSettled {
                 tx_id: sp_core::H256::repeat_byte(4),
-                payer: AccountId32::new([5u8; 32]),
-                payer_bank_cid: b"GD001-PRB0T-239565809-2026"
-                    .to_vec()
-                    .try_into()
-                    .unwrap(),
-                recipient: AccountId32::new([7u8; 32]),
+                payer_account_id: AccountId32::new([5u8; 32]),
+                payer_bank_cid: b"GD001-PRB0T-239565809-2026".to_vec().try_into().unwrap(),
+                recipient_account_id: AccountId32::new([7u8; 32]),
                 recipient_bank_cid: bank.try_into().unwrap(),
                 transfer_amount: 1,
                 fee_amount: 2,

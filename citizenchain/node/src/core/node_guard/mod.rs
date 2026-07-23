@@ -1474,9 +1474,9 @@ mod finalize_issuance_tests {
 
     #[test]
     fn combined_rewards_for_same_account_are_checked_once() {
-        let recipient = [9u8; 32];
+        let recipient_account_id = [9u8; 32];
         let total_key = fullnode_issuance::storage_key::total_issuance();
-        let account_key = fullnode_issuance::storage_key::system_account(&recipient);
+        let account_key = fullnode_issuance::storage_key::system_account(&recipient_account_id);
         let mut pre = BTreeMap::new();
         let mut post = BTreeMap::new();
         pre.insert(total_key.clone(), 1_000_000u128.encode());
@@ -1492,8 +1492,10 @@ mod finalize_issuance_tests {
             (account_key, Some(account(1_999_900, 1, NEW_BALANCES_FLAGS))),
         ]);
         let mut plan = FinalizeIssuancePlan::default();
-        plan.add(recipient, 999_900).expect("first reward");
-        plan.add(recipient, 999_900).expect("second reward");
+        plan.add(recipient_account_id, 999_900)
+            .expect("first reward");
+        plan.add(recipient_account_id, 999_900)
+            .expect("second reward");
         assert_eq!(
             verify_finalize_issuance(
                 &pre_delta,
@@ -1508,10 +1510,10 @@ mod finalize_issuance_tests {
 
     #[test]
     fn unexpected_finalize_account_change_is_rejected() {
-        let recipient = [1u8; 32];
+        let recipient_account_id = [1u8; 32];
         let attacker = [2u8; 32];
         let total_key = fullnode_issuance::storage_key::total_issuance();
-        let recipient_key = fullnode_issuance::storage_key::system_account(&recipient);
+        let recipient_key = fullnode_issuance::storage_key::system_account(&recipient_account_id);
         let attacker_key = fullnode_issuance::storage_key::system_account(&attacker);
         let mut pre = BTreeMap::new();
         let mut post = BTreeMap::new();
@@ -1527,7 +1529,7 @@ mod finalize_issuance_tests {
             (attacker_key, Some(account(51, 1, NEW_BALANCES_FLAGS))),
         ]);
         let mut plan = FinalizeIssuancePlan::default();
-        plan.add(recipient, 100).expect("reward");
+        plan.add(recipient_account_id, 100).expect("reward");
         let error = verify_finalize_issuance(
             &BTreeMap::new(),
             &post_delta,
@@ -1541,9 +1543,9 @@ mod finalize_issuance_tests {
 
     #[test]
     fn new_reward_account_must_match_balances_default_shape() {
-        let recipient = [3u8; 32];
+        let recipient_account_id = [3u8; 32];
         let total_key = fullnode_issuance::storage_key::total_issuance();
-        let account_key = fullnode_issuance::storage_key::system_account(&recipient);
+        let account_key = fullnode_issuance::storage_key::system_account(&recipient_account_id);
         let pre = BTreeMap::from([(total_key.clone(), 1_000u128.encode())]);
         let mut post = BTreeMap::from([(total_key.clone(), 1_100u128.encode())]);
         post.insert(account_key.clone(), account(100, 1, NEW_BALANCES_FLAGS));
@@ -1552,7 +1554,7 @@ mod finalize_issuance_tests {
             (account_key, Some(account(100, 1, NEW_BALANCES_FLAGS))),
         ]);
         let mut plan = FinalizeIssuancePlan::default();
-        plan.add(recipient, 100).expect("reward");
+        plan.add(recipient_account_id, 100).expect("reward");
         assert_eq!(
             verify_finalize_issuance(
                 &BTreeMap::new(),
@@ -1772,9 +1774,9 @@ mod finalize_issuance_tests {
         overflow.add([1u8; 32], u128::MAX).expect("first amount");
         assert_eq!(overflow.add([2u8; 32], 1), Err(()));
 
-        let recipient = [4u8; 32];
+        let recipient_account_id = [4u8; 32];
         let total_key = fullnode_issuance::storage_key::total_issuance();
-        let account_key = fullnode_issuance::storage_key::system_account(&recipient);
+        let account_key = fullnode_issuance::storage_key::system_account(&recipient_account_id);
         let pre = BTreeMap::from([
             (total_key.clone(), 1_000u128.encode()),
             (account_key.clone(), account(10, 1, NEW_BALANCES_FLAGS)),
@@ -1788,7 +1790,7 @@ mod finalize_issuance_tests {
             .map(|(key, value)| (key.clone(), Some(value.clone())))
             .collect::<BTreeMap<_, _>>();
         let mut plan = FinalizeIssuancePlan::default();
-        plan.add(recipient, 100).expect("reward");
+        plan.add(recipient_account_id, 100).expect("reward");
         let wrong_total = verify_finalize_issuance(
             &BTreeMap::new(),
             &post_delta,
@@ -1826,8 +1828,8 @@ mod finalize_issuance_tests {
     fn imported_state_is_partitioned_in_one_shared_pass() {
         let protected = primitives::governance_skeleton::fixed_institutions()[0];
         let governance =
-            governance_skeleton::storage_key::admin_account(protected.cid_number.as_bytes());
-        let ordinary_governance = governance_skeleton::storage_key::admin_account(b"ORDINARY-CID");
+            governance_skeleton::storage_key::account_id(protected.cid_number.as_bytes());
+        let ordinary_governance = governance_skeleton::storage_key::account_id(b"ORDINARY-CID");
         let composition = national_body_composition::storage_key::composition_keys(
             &primitives::institution_constraints::member_composition_specs()[0],
         )[0]
@@ -1990,7 +1992,7 @@ mod finalize_issuance_tests {
         match case {
             blockchain_test_harness::ImportedStateBadCaseKind::MissingGovernanceAdmin => {
                 let fixed = primitives::governance_skeleton::fixed_institutions()[0];
-                bad_state.remove(&governance_skeleton::storage_key::admin_account(
+                bad_state.remove(&governance_skeleton::storage_key::account_id(
                     fixed.cid_number.as_bytes(),
                 ));
             }
