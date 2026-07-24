@@ -122,8 +122,15 @@
 - **面板本身必须是 `Material`**：弹窗不在 Scaffold 之下，`InkWell` 缺 Material 祖先会直接抛异常。**此坑由既有 widget 测试当场拦下**，未流到真机。
 - 菜单项加了图标（扫码 / 收付款 / 私信 / 群组 / 加好友），与深色面板配套。
 
-**验收**：`flutter analyze` 0 问题；`chat_tab_test` 19/19；全量 `flutter test` **792 通过 / 5 跳过 / 0 失败**。
-**待办**：三角与加号的像素级对齐、深色浓淡观感**必须真机确认**，当前设备 USB 断开未验。
+**用户返工（同日，已按其反馈修正并真机确认）**：
+
+- **图标用错（重复犯错）**：扫一扫误用 Material `Icons.qr_code_scanner_rounded`（**二维码图标**），应为与「交易 → 扫一扫」同一份 `assets/icons/scan-line.svg`（**扫码取景框图标**）——交易页早有现成正确写法。已改正，并在 `chat_tab_test.dart` 加**防回归断言**（扫一扫必须是 scan-line.svg，且不得出现 `Icons.qr_code_scanner_rounded` / `Icons.qr_code_rounded`）。同时落长期记忆 `feedback_scan_icon_must_be_scan_line_svg`。
+- **发私信图标**改为 `Icons.textsms_outlined`，与底部导航「聊天」tab 同款。
+- **底色减淡**：`0xF01F2A30` → `0xE83D4A52`。
+- **面板收窄**：168 → 148 →（真机看仍空荡）**126**。内容实际占宽 ≈109（16+20+12+约45+16），126 留少量余量。
+- **三角缩小 + 顶角圆弧**：18×9 → 14×7；`_CaretPainter` 用 `quadraticBezierTo`（控制点落在真顶点）画出圆弧顶角，不再是尖角。
+
+**验收**：`flutter analyze` 0 问题；`chat_tab_test` **20/20**（含新增防回归断言）；`test/chat/` 全目录 161 通过 / 4 跳过。**真机已确认**：扫码图标为取景框、发私信与聊天 tab 同款、三角小且顶角圆润、顶点对准加号、面板不再空荡。
 
 ## 总体收尾
 
