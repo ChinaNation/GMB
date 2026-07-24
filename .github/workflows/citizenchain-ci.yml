@@ -1,5 +1,4 @@
 name: CitizenChain
-run-name: 创世
 
 on:
   push:

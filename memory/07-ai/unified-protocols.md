@@ -845,22 +845,21 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `citizenwallet/lib/signer/payload_decoder.dart`
   - `citizenwallet/lib/signer/qr_signer.dart`
   - `citizenchain/runtime/misc/citizen-identity`
-- 字段：
+- 字段（投票身份不含年龄）：
   1. `cid_number`
   2. `account_id`
-  3. `citizen_age_years`
-  4. `passport_valid_from`
-  5. `passport_valid_until`
-  6. `citizen_status`
-  7. `residence_province_code`
-  8. `residence_city_code`
-  9. `residence_town_code`
+  3. `passport_valid_from`
+  4. `passport_valid_until`
+  5. `citizen_status`
+  6. `residence_province_code`
+  7. `residence_city_code`
+  8. `residence_town_code`
 - 编码：SCALE `VotingIdentityPayload<AccountId>`;字符串字段为 bounded `Vec<u8>`,账户字段为 `AccountId32`。
 - 签名/验签规则：
   - action registry 的统一中文动作名为“公民签名确认”；投票/参选只作为载荷详情展示，不得拆成第二套动作标题。
   - `QR_V1` 非链动作 `a=2 citizen_identity` 的签名字节为 `blake2_256(GMB || 0x10 || payload_bytes)`。
   - runtime 通过 `primitives::sign::OP_SIGN_CITIZEN_IDENTITY` 验证目标公民钱包签名。
-  - `citizen_age_years` 必须大于等于 16;OnChina 和 runtime 都必须校验。
+  - 年龄不入投票载荷:能否投票由 `citizen_status=Normal` + 护照有效期窗口判定;≥16 门只在竞选身份按 `birth_date` 由 runtime 复核,OnChina 侧另按 `citizen_birth_date` 做 ≥16 BFF 防误推(不入链)。
   - 同一上链 operation 固定只允许管理员 Passkey 一次、目标公民钱包签名一次、管理员最终链交易签名一次。`prepare` 创建短期操作，`complete` 只能原子消费对应公民回执，不得再次生成安全 grant 或消费 Passkey。
   - 公民钱包绑定和上链投影必须等最终链交易确认后写入。
 - 禁止兼容：不兼容旧 `citizen-identity-v1|...` 文本载荷,不保留旧签原文规则。
@@ -901,8 +900,8 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 - 签名/验签规则：
   - 外层链交易由当前注册局管理员的 CitizenWallet 只签名一次并显示响应二维码；OnChina 回扫后经统一提交入口上链。
   - 内层 `citizen_signature` 必须来自目标公民钱包对 P-CRED-003 的签名。
-  - runtime 校验注册局管理范围、CID 唯一性、公民签名和 16 周岁年龄门槛。
-- 禁止兼容：不兼容旧无年龄字段的 `VotingIdentityPayload`，也不兼容姓名合并字段或带主体前缀的姓、名字段；不保留旧字段顺序、别名或双读。
+  - runtime 校验注册局管理范围、CID 唯一性、公民签名;16 周岁年龄门槛只对竞选身份按 `birth_date` 校验,投票身份不校验年龄。
+- 禁止兼容：不兼容旧带 `citizen_age_years` 年龄字段的 `VotingIdentityPayload`，也不兼容姓名合并字段或带主体前缀的姓、名字段；不保留旧字段顺序、别名或双读。
 - 禁止事项：
   - 禁止绕过 `citizen-identity` 在业务模块内自建投票身份。
   - 禁止前端或 OnChina 伪造已上链状态。

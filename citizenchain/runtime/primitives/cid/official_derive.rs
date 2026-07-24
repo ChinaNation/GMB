@@ -202,4 +202,44 @@ mod tests {
         });
         assert_eq!(count, expected, "枚举数量与推导一致");
     }
+
+    #[test]
+    fn genesis_institution_numbers_are_globally_unique() {
+        // 全量创世机构号必须全局唯一:常量直铸(296 公权)+ 私权基金会 + 模板派生(49,297)
+        // 三者跨集合、集合内都不得重号。派生号一旦与某常量机构撞号,会在 public_manage
+        // 存储里静默覆盖;故在此显式断言,不依赖「机构码族不相交」的隐式推理。
+        use crate::cid::china::china_cb::CHINA_CB;
+        use crate::cid::china::china_ch::CHINA_CH;
+        use crate::cid::china::china_jc::CHINA_JC;
+        use crate::cid::china::china_jy::CHINA_JY;
+        use crate::cid::china::china_lf::CHINA_LF;
+        use crate::cid::china::china_sf::CHINA_SF;
+        use crate::cid::china::china_zf::CHINA_ZF;
+        use crate::cid::china::citizenchain::CITIZENCHAIN_FOUNDATION;
+
+        let mut seen = BTreeSet::<String>::new();
+
+        // 先放入常量机构号(7 张公权表 + 私权基金会),逐条断言常量之间不重复。
+        for cid in CHINA_CB
+            .iter()
+            .map(|n| n.cid_number)
+            .chain(CHINA_CH.iter().map(|n| n.cid_number))
+            .chain(CHINA_ZF.iter().map(|n| n.cid_number))
+            .chain(CHINA_JC.iter().map(|n| n.cid_number))
+            .chain(CHINA_SF.iter().map(|n| n.cid_number))
+            .chain(CHINA_LF.iter().map(|n| n.cid_number))
+            .chain(CHINA_JY.iter().map(|n| n.cid_number))
+            .chain(core::iter::once(CITIZENCHAIN_FOUNDATION.cid_number))
+        {
+            assert!(seen.insert(cid.to_string()), "常量创世机构号 {cid} 重复");
+        }
+
+        // 再枚举全部派生机构号,断言与常量及彼此都不重号。
+        for_each_public_institution(|cid, _full, _short| {
+            assert!(
+                seen.insert(cid.to_string()),
+                "派生创世机构号 {cid} 与常量或其它派生机构重号"
+            );
+        });
+    }
 }

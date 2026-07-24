@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
@@ -154,7 +154,7 @@ class AppUpdateService {
         apkAsset?['browser_download_url'] as String? ?? '',
       );
       if (apkUrl == null) {
-        debugPrint('[AppUpdate] Release 缺少 APK asset: ${manifest.apkAsset}');
+        AppLog.d('[AppUpdate] Release 缺少 APK asset: ${manifest.apkAsset}');
         continue;
       }
 

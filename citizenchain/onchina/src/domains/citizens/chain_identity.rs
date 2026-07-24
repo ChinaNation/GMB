@@ -63,7 +63,6 @@ pub(crate) struct PrepareCitizenOnchainOutput {
     pub(crate) identity_level: CitizenOnchainIdentityLevel,
     pub(crate) account_id: String,
     pub(crate) ss58_address: String,
-    pub(crate) citizen_age_years: u8,
     pub(crate) payload_hex: String,
     pub(crate) sign_request: String,
     pub(crate) action_label_zh: String,
@@ -181,7 +180,6 @@ pub(crate) async fn prepare_citizen_onchain_signature(
             identity_level: payload.identity_level,
             account_id: citizen_account.account_id,
             ss58_address: citizen_account.ss58_address,
-            citizen_age_years: payload.citizen_age_years,
             payload_hex: format!("0x{}", hex::encode(payload.payload_bytes)),
             sign_request,
             action_label_zh: crate::core::qr::action_label_zh("citizen_identity"),
@@ -516,7 +514,6 @@ impl Db {
 
 struct CitizenIdentityPayloadBytes {
     payload_bytes: Vec<u8>,
-    citizen_age_years: u8,
     identity_level: CitizenOnchainIdentityLevel,
 }
 
@@ -620,6 +617,8 @@ fn build_voting_identity_payload(
     }
     let birth_date = NaiveDate::parse_from_str(record.citizen_birth_date.as_str(), "%Y-%m-%d")
         .map_err(|_| api_error(StatusCode::BAD_REQUEST, 1001, "公民出生日期格式错误"))?;
+    // BFF 侧防误推门:未满 16 周岁不推送链上身份。年龄不入链载荷,链上不存/不算年龄;
+    // 竞选身份的最小年龄由链端按 birth_date 复核,投票身份靠状态+护照有效期窗口判定能否投票。
     let age = citizen_age_years(Utc::now().date_naive(), birth_date);
     if age < MIN_ONCHAIN_CITIZEN_AGE_YEARS {
         return Err(api_error(
@@ -637,7 +636,6 @@ fn build_voting_identity_payload(
     let mut out = Vec::new();
     append_bounded_bytes(&mut out, record.cid_number.as_bytes(), 32, "cid_number")?;
     out.extend_from_slice(&account_id);
-    out.push(age);
     out.extend(valid_from.to_le_bytes());
     out.extend(valid_until.to_le_bytes());
     out.push(0); // CitizenStatus::Normal
@@ -651,7 +649,6 @@ fn build_voting_identity_payload(
     append_bounded_bytes(&mut out, record.town_code.as_bytes(), 16, "town_code")?;
     Ok(CitizenIdentityPayloadBytes {
         payload_bytes: out,
-        citizen_age_years: age,
         identity_level: CitizenOnchainIdentityLevel::Voting,
     })
 }

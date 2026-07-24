@@ -101,6 +101,10 @@ mod delay_tests {
 ///
 /// 本步采用简单全表扫描(小规模清算行可接受,可优化为 cursor/batched)。
 /// 返回消耗的权重,供上层 on_initialize 累加。
+/// 单块最多激活的到期费率提案数。参照 votingengine 的 per-block 预算模式:
+/// 不做无界全表扫描,收集到上限即停,剩余到期项顺延下一块继续排空(移除即缩表,最终收敛)。
+const MAX_L2_FEE_ACTIVATIONS_PER_BLOCK: usize = 32;
+
 pub fn activate_pending_rates<T: Config>(now: BlockNumberFor<T>) -> Weight {
     let db = T::DbWeight::get();
     let mut consumed = Weight::zero();
@@ -110,6 +114,10 @@ pub fn activate_pending_rates<T: Config>(now: BlockNumberFor<T>) -> Weight {
         consumed = consumed.saturating_add(db.reads(1));
         if now >= effective_at {
             to_activate.push((bank, rate));
+            // 收满本块预算即停止扫描,其余到期项下一块继续(每块工作量有上界)。
+            if to_activate.len() >= MAX_L2_FEE_ACTIVATIONS_PER_BLOCK {
+                break;
+            }
         }
     }
 

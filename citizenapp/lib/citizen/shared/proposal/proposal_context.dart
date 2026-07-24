@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/services/admin_activation_service.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/services/institution_admin_service.dart';
@@ -289,7 +289,7 @@ class ProposalContextResolver {
     } catch (e, st) {
       // 治理页的链上内容不能因为本地钱包库短暂繁忙而整体加载失败。
       if (!WalletIsar.instance.isBusyError(e)) {
-        debugPrint('[ProposalContext] local wallet load failed: $e\n$st');
+        AppLog.d('[ProposalContext] local wallet load failed: $e\n$st');
       }
       _wallets = const [];
     }

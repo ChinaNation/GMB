@@ -77,15 +77,22 @@ export async function guardRequest(request: Request, env: Env, path: string): Pr
   assertRequestBodyLimit(request, path);
 
   const ipKey = await requestIpKey(request, env);
-  if (path === '/v1/square/auth/challenge' || path === '/v1/square/auth/session') {
+  // 鉴权建立/自证路由(挑战、会话、设备子钥注册):各由 Turnstile + 钱包签名门控,不依赖广场会话。
+  if (
+    path === '/v1/square/auth/challenge' ||
+    path === '/v1/square/auth/session' ||
+    path === '/v1/square/auth/device/register'
+  ) {
     await enforceRateLimit(env, `auth:${ipKey}`, 10, 60);
     return;
   }
+  // 公开只读/自证路由白名单(免会话)。/v1/security/* 在登录前渲染,必须免会话。
   if (
     isWebhook(path) ||
     path === '/health' ||
     path === '/v1/chain/bootstrap' ||
-    path === '/v1/constitution'
+    path === '/v1/constitution' ||
+    path.startsWith('/v1/security/')
   ) {
     // 宪法公开只读，无会话门禁；重复访问由 KV 短缓存 + 边缘缓存兜住，不做逐请求限流。
     return;
@@ -101,20 +108,20 @@ export async function guardRequest(request: Request, env: Env, path: string): Pr
     await enforceRateLimit(env, `topup:${ipKey}`, 60, 60);
     return;
   }
+  // 注销(account/delete 挑战+确认)现走默认拒:客户端已携带广场会话 Bearer(移动端同轮改)。
+  // 强制会话后,只能对"自己已登录的账户"发起注销挑战,从源头杜绝对任意账户的匿名挑战枚举;
+  // 确认阶段仍由钱包签名(op_tag 0x1D)自证,会话与签名双门。device proof 仍豁免(见 requiresDeviceProof)。
 
-  const session = await sessionOrNull(request, env);
-  const rateKey = session ? `account_id:${session.account_id}` : `ip:${ipKey}`;
+  // 默认拒绝:走到这里都是非公开路由,一律强制有效会话(缺 Bearer / 校验失败 → 401)。
+  // 不再"无会话即放行、把鉴权全交给各 handler 自觉"——新增受保护路由默认即受保护,
+  // 某 handler 漏调 requireSession 也不会退化成公开接口。
+  const session = await requireSession(request, env);
   const rate = routeRate(path, request.method);
-  await enforceRateLimit(env, `${rate.key}:${rateKey}`, rate.limit, rate.seconds);
+  await enforceRateLimit(env, `${rate.key}:account_id:${session.account_id}`, rate.limit, rate.seconds);
 
-  if (session && requiresDeviceProof(path, request.method)) {
+  if (requiresDeviceProof(path, request.method)) {
     await requireDeviceProof(request, env, path, session);
   }
-}
-
-async function sessionOrNull(request: Request, env: Env): Promise<SessionState | null> {
-  if (!request.headers.get('authorization')?.startsWith('Bearer ')) return null;
-  return requireSession(request, env);
 }
 
 function isWebhook(path: string): boolean {

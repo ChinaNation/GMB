@@ -132,9 +132,20 @@ describe('端到端加密通讯录 API', () => {
       code: 'request_too_large'
     });
 
-    context.db.forcedRateCount = 61;
+    // 默认拒绝:无会话访问受保护路由,先于限流被 401 拦下(不再退化成按 IP 限流)。
     await expect(
       routeRequest(new Request('https://worker.test/v1/square/contacts'), context.env)
+    ).rejects.toMatchObject({ code: 'missing_session' });
+
+    // 携带有效会话方能触达限流层;超过通讯录独立读限流仍抛 request_rate_exceeded。
+    context.db.forcedRateCount = 61;
+    await expect(
+      routeRequest(
+        new Request('https://worker.test/v1/square/contacts', {
+          headers: { authorization: `Bearer ${context.accountA.token}` }
+        }),
+        context.env
+      )
     ).rejects.toMatchObject({ code: 'request_rate_exceeded' });
   });
 });

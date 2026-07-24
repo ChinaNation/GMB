@@ -370,25 +370,6 @@ impl<T: Config> Pallet<T> {
         })
     }
 
-    pub(crate) fn set_allowed_recipients_inner(
-        recipients: BoundedVec<T::AccountId, T::MaxAllocations>,
-    ) -> DispatchResult {
-        ensure!(!recipients.is_empty(), Error::<T>::RecipientsNotConfigured);
-        // 存在 Voting 中提案时禁止切换收款集合，避免同一提案投票前后口径漂移。
-        ensure!(
-            VotingProposalCount::<T>::get() == 0,
-            Error::<T>::ActiveVotingProposalsExist
-        );
-        Self::ensure_unique_recipients(recipients.as_slice())?;
-        Self::ensure_recipients_only_added(&recipients)?;
-        Self::ensure_recipients_in_china_cb(&recipients)?;
-        crate::pallet::AllowedRecipients::<T>::put(recipients.clone());
-        Self::deposit_event(Event::<T>::AllowedRecipientsUpdated {
-            count: recipients.len() as u32,
-        });
-        Ok(())
-    }
-
     pub(crate) fn ensure_nonzero_total(total_amount: &BalanceOf<T>) -> DispatchResult {
         ensure!(!total_amount.is_zero(), Error::<T>::ZeroAmount);
         Ok(())

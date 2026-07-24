@@ -5,6 +5,7 @@ import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'chain_rpc.dart';
+import 'pallet_registry.dart';
 import 'signed_extrinsic_builder.dart';
 
 /// onchain 模块所有 RPC 功能：extrinsic 构造与普通转账提交。
@@ -17,10 +18,10 @@ class TransferRpc {
   static const int maxTransferRemarkBytes = 99;
 
   /// OnchainTransaction pallet index（citizenchain runtime 定义）。
-  static const _onchainTransactionPalletIndex = 4;
+  static const _onchainTransactionPalletIndex = PalletRegistry.onchainTransactionPallet;
 
   /// transfer_with_remark call index。
-  static const _transferWithRemarkCallIndex = 0;
+  static const _transferWithRemarkCallIndex = PalletRegistry.transferWithRemarkCall;
 
   // ──── 公开方法 ────
 

@@ -13,9 +13,6 @@ import 'dart:typed_data';
 
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
-/// 链端 register_voting_identity 的最低年龄门槛(周岁)。
-const int kMinOnchainCitizenAgeYears = 16;
-
 /// CitizenChain SS58 前缀。
 const int _ss58Prefix = 2027;
 
@@ -27,7 +24,6 @@ class VotingIdentityConsentPayload {
     required this.cidNumber,
     required this.accountId,
     required this.ss58Address,
-    required this.ageYears,
     required this.validFrom,
     required this.validUntil,
     required this.statusNormal,
@@ -51,8 +47,6 @@ class VotingIdentityConsentPayload {
 
   /// SS58(prefix=2027)展示地址。
   final String ss58Address;
-
-  final int ageYears;
 
   /// YYYYMMDD 整数。
   final int validFrom;
@@ -79,7 +73,7 @@ class VotingIdentityConsentPayload {
 
   /// 解码 SCALE 公民身份载荷,必须恰好消费完全部字节。
   ///
-  /// 任何字段越界、长度非法、年龄不足、日期非法、状态未知都返回 null,
+  /// 任何字段越界、长度非法、日期非法、状态未知都返回 null,
   /// 由调用方按"无法独立验证"拒签。
   static VotingIdentityConsentPayload? decode(Uint8List bytes) {
     return _decodeCandidate(bytes) ?? _decodeVotingRoot(bytes);
@@ -90,7 +84,6 @@ class VotingIdentityConsentPayload {
         ('身份类型', isCandidate ? '参选身份' : '投票身份'),
         ('CID编号', cidNumber),
         ('公民钱包账户', ss58Address),
-        ('周岁年龄', '$ageYears周岁'),
         (
           '护照有效期',
           '${_formatDateInt(validFrom)} 至 ${_formatDateInt(validUntil)}'
@@ -161,7 +154,6 @@ class VotingIdentityConsentPayload {
       cidNumber: base.cidNumber,
       accountId: base.accountId,
       ss58Address: base.ss58Address,
-      ageYears: base.ageYears,
       validFrom: base.validFrom,
       validUntil: base.validUntil,
       statusNormal: base.statusNormal,
@@ -185,14 +177,11 @@ class VotingIdentityConsentPayload {
     final (cidNumber, afterCid) = _readUtf8Vec(bytes, offset, maxLen: 32);
     if (cidNumber == null) return null;
     offset = afterCid;
-    if (offset + 32 + 1 + 4 + 4 + 1 > bytes.length) return null;
+    // 投票载荷不含年龄:account_id(32) + valid_from(4) + valid_until(4) + status(1)。
+    if (offset + 32 + 4 + 4 + 1 > bytes.length) return null;
 
     final walletBytes = bytes.sublist(offset, offset + 32);
     offset += 32;
-
-    final age = bytes[offset];
-    offset += 1;
-    if (age < kMinOnchainCitizenAgeYears) return null;
 
     final validFrom = _readU32Le(bytes, offset);
     offset += 4;
@@ -224,7 +213,6 @@ class VotingIdentityConsentPayload {
         cidNumber: cidNumber,
         accountId: _bytesToLowerHex(walletBytes),
         ss58Address: Keyring().encodeAddress(walletBytes.toList(), _ss58Prefix),
-        ageYears: age,
         validFrom: validFrom,
         validUntil: validUntil,
         statusNormal: status == 0,

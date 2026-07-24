@@ -1,8 +1,8 @@
 //! 集成测试：验证 citizen-identity 登记公民投票身份后触发 citizen-issuance 一次性奖励。
 
 use citizen_identity::{
-    CidNumberBound, CitizenIdentityAuthority, CitizenIdentityLevel, CitizenStatus,
-    VotingIdentityPayload,
+    CandidateIdentityPayload, CidNumberBound, CitizenIdentityAuthority, CitizenIdentityLevel,
+    CitizenSex, CitizenStatus, VotingIdentityPayload,
 };
 use frame_support::{
     assert_ok, derive_impl, parameter_types,
@@ -96,7 +96,7 @@ impl CitizenIdentityAuthority<u64, citizen_identity::pallet::SignatureOf<Test>>
             && actor_role_code == registrar_role_code().as_slice()
             && residence_province_code == b"43"
             && residence_city_code == b"4301"
-            && matches!(action_code, 0 | 2 | 6)
+            && matches!(action_code, 0 | 1 | 2 | 6)
     }
 
     fn verify_citizen_signature(
@@ -204,13 +204,27 @@ fn payload(account_id: u64, cid_number: &[u8]) -> VotingIdentityPayload<u64> {
             .try_into()
             .expect("cid number should fit"),
         account_id,
-        citizen_age_years: 18,
         passport_valid_from: 20260630,
         passport_valid_until: 20360630,
         citizen_status: CitizenStatus::Normal,
         residence_province_code: b"43".to_vec().try_into().expect("province should fit"),
         residence_city_code: b"4301".to_vec().try_into().expect("city should fit"),
         residence_town_code: b"4301001".to_vec().try_into().expect("town should fit"),
+    }
+}
+
+/// 竞选身份载荷:投票载荷 + 竞选专属字段(出生地/姓名/性别/出生日期)。
+/// 出生日期落在夹具当前日期(2026-07-02)之前且年龄 ≥ 16。
+fn candidate_payload(account_id: u64, cid_number: &[u8]) -> CandidateIdentityPayload<u64> {
+    CandidateIdentityPayload {
+        voting: payload(account_id, cid_number),
+        birth_province_code: b"43".to_vec().try_into().expect("birth province should fit"),
+        birth_city_code: b"4301".to_vec().try_into().expect("birth city should fit"),
+        birth_town_code: b"4301001".to_vec().try_into().expect("birth town should fit"),
+        family_name: "李".as_bytes().to_vec().try_into().expect("family name should fit"),
+        given_name: "四".as_bytes().to_vec().try_into().expect("given name should fit"),
+        citizen_sex: CitizenSex::Male,
+        birth_date: 20000101,
     }
 }
 
@@ -243,6 +257,69 @@ fn register_voting_identity_triggers_reward_issuance() {
         assert_eq!(citizen_issuance::RewardedCount::<Test>::get(), 1);
         assert!(citizen_issuance::IdentityRewardClaimed::<Test>::contains_key(cid_number_hash));
         assert!(citizen_issuance::AccountRewarded::<Test>::contains_key(1));
+    });
+}
+
+#[test]
+fn candidate_first_onchain_triggers_reward_issuance() {
+    new_test_ext().execute_with(|| {
+        // 占号先行:身份写入前置。
+        occupy_tag("0001");
+
+        let cid_number = &citizen_cid_number("0001");
+        let cid_number_hash = <Test as frame_system::Config>::Hashing::hash(cid_number);
+
+        // 该公民从未登记投票身份,直接以竞选身份完成首次上链(第 3 条:不强制先投票)。
+        assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            candidate_payload(1, cid_number),
+            valid_signature(),
+        ));
+
+        assert_eq!(Balances::free_balance(1), 0);
+        assert_eq!(citizen_issuance::PendingRewardCount::<Test>::get(), 1);
+        CitizenIssuance::on_finalize(System::block_number());
+
+        // 竞选身份首次上链与投票身份首次登记同权,发放一次性高额认证奖励。
+        assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
+        assert_eq!(citizen_issuance::RewardedCount::<Test>::get(), 1);
+        assert!(citizen_issuance::IdentityRewardClaimed::<Test>::contains_key(cid_number_hash));
+        assert!(citizen_issuance::AccountRewarded::<Test>::contains_key(1));
+    });
+}
+
+#[test]
+fn voting_first_then_candidate_upgrade_does_not_double_issue() {
+    new_test_ext().execute_with(|| {
+        // 占号先行:身份写入前置。
+        occupy_tag("0001");
+
+        // 先以投票身份首次上链,领取一次性公民币。
+        assert_ok!(CitizenIdentity::register_voting_identity(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            payload(1, &citizen_cid_number("0001")),
+            valid_signature(),
+        ));
+        CitizenIssuance::on_finalize(System::block_number());
+        assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
+
+        // 再升级为竞选身份:已有投票身份(old.is_some()),不再触发回调,不二次发币。
+        assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            candidate_payload(1, &citizen_cid_number("0001")),
+            valid_signature(),
+        ));
+        assert_eq!(citizen_issuance::PendingRewardCount::<Test>::get(), 0);
+        CitizenIssuance::on_finalize(System::block_number());
+
+        assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
+        assert_eq!(citizen_issuance::RewardedCount::<Test>::get(), 1);
     });
 }
 

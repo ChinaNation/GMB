@@ -105,7 +105,6 @@ export type PrepareCitizenOnchainResult = {
   identity_level: CitizenOnchainIdentityLevel;
   account_id: string;
   ss58_address: string;
-  citizen_age_years: number;
   payload_hex: string;
   sign_request: string;
   action_label_zh: string;

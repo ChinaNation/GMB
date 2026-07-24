@@ -25,8 +25,13 @@ use crate::AccountId;
 use codec::Decode;
 #[cfg(feature = "std")]
 use primitives::{
-    cid::china::china_cb::{CHINA_CB, NRC_HE_ACCOUNT},
+    account_derive::AccountKind,
+    cid::china::china_cb::{CHINA_CB, NRC_HE_ACCOUNT, SAFETY_FUND_ACCOUNT},
     cid::china::china_ch::CHINA_CH,
+    cid::china::china_sf::CHINA_SF,
+    cid::china::china_zf::CHINA_ZF,
+    cid::china::citizenchain::{CITIZENCHAIN_FOUNDATION, CITIZENCHAIN_GENESIS_ADMINS},
+    cid::code::{institution_code_from_cid_number, FRG, FSC},
     core_const::SS58_FORMAT,
     genesis::{CITIZENS, COUNTRY, GENESIS_CITIZEN_MAX, GENESIS_ISSUANCE, HE_FUND_ISSUANCE},
 };
@@ -77,9 +82,48 @@ fn build_genesis() -> Value {
         .admins;
     let admin_total: u128 = admin_each * nrc_admins.len() as u128;
 
-    // 国家储委会多签账户 = 创世发行总量 - 管理员预置总额，总量不变。
-    let mut genesis_balances: Vec<(AccountId, u128)> =
-        vec![(nrc_account.clone(), GENESIS_ISSUANCE - admin_total)];
+    // ── 创世分账:从创世发行中切出 700 亿元预置给 6 个指定账户 ──
+    // 单位:分(1 元 = 100 分)。这 700 亿元从国家储委会主账户份额中切出,
+    // 创世发行总量 GENESIS_ISSUANCE 保持不变。金额集中定义于此,便于审计。
+    const ALLOC_FCSF: u128 = 1_000_000_000_000; // 联邦公民安全基金 100 亿元
+    const ALLOC_CHENGWEI: u128 = 2_000_000_000_000; // 公民程伟钱包 200 亿元
+    const ALLOC_FOUNDATION: u128 = 1_000_000_000_000; // 技术发展基金会主账户 100 亿元
+    const ALLOC_FRG: u128 = 1_000_000_000_000; // 联邦注册局主账户 100 亿元
+    const ALLOC_NJD: u128 = 1_000_000_000_000; // 国家司法院主账户 100 亿元
+    const ALLOC_NRC_SAFETY: u128 = 1_000_000_000_000; // 国储会安全基金 100 亿元
+    let allocated_total: u128 =
+        ALLOC_FCSF + ALLOC_CHENGWEI + ALLOC_FOUNDATION + ALLOC_FRG + ALLOC_NJD + ALLOC_NRC_SAFETY;
+
+    // 联邦公民安全基金地址必须与创世 seeder(FSC 特判)登记的派生地址完全一致,
+    // 走账户派生唯一真源:OP_FCSF + 联邦安全局(FSC)的 CID,禁止硬抄地址。
+    let fsc_cid_number = CHINA_ZF
+        .iter()
+        .find(|inst| institution_code_from_cid_number(inst.cid_number) == Some(FSC))
+        .expect("CHINA_ZF must contain the Federal Security Bureau (FSC)")
+        .cid_number;
+    let fcsf_account = AccountId::new(
+        AccountKind::InstitutionFederalCitizenSecurityFund {
+            cid_number: fsc_cid_number.as_bytes(),
+        }
+        .derive(SS58_FORMAT),
+    );
+
+    // 联邦注册局(FRG)主账户与国家司法院(CHINA_SF 首个 = 国家司法院)主账户。
+    let frg_main_account = CHINA_ZF
+        .iter()
+        .find(|inst| institution_code_from_cid_number(inst.cid_number) == Some(FRG))
+        .expect("CHINA_ZF must contain the Federal Registry Bureau (FRG)")
+        .main_account;
+    let njd_main_account = CHINA_SF
+        .first()
+        .expect("CHINA_SF must contain the National Judicial Yuan")
+        .main_account;
+
+    // 国家储委会多签账户 = 创世发行总量 - 管理员预置总额 - 分账总额，创世发行总量不变。
+    let mut genesis_balances: Vec<(AccountId, u128)> = vec![(
+        nrc_account.clone(),
+        GENESIS_ISSUANCE - admin_total - allocated_total,
+    )];
 
     // 19 位管理员各自获得创世余额。
     genesis_balances.extend(nrc_admins.iter().map(|key| {
@@ -97,6 +141,26 @@ fn build_genesis() -> Value {
     // 两和基金创世一次性发行到国家储委会两和基金账户（无私钥派生地址 NRC_HE_ACCOUNT），
     // 作为独立增发计入总供应量，国家储委会通过内部投票管理该基金。
     genesis_balances.push((AccountId::new(NRC_HE_ACCOUNT), HE_FUND_ISSUANCE));
+
+    // ── 6 笔创世分账预置(总额 700 亿元已从上面 NRC 主账户份额中扣除) ──
+    // 联邦公民安全基金(联邦安全局 FSC 专属,派生地址与 seeder 登记一致)。
+    genesis_balances.push((fcsf_account, ALLOC_FCSF));
+    // 公民程伟钱包(基金会创世管理员账户)。
+    genesis_balances.push((
+        AccountId::new(CITIZENCHAIN_GENESIS_ADMINS[0].account_id),
+        ALLOC_CHENGWEI,
+    ));
+    // 公民链技术发展基金会主账户。
+    genesis_balances.push((
+        AccountId::new(CITIZENCHAIN_FOUNDATION.main_account),
+        ALLOC_FOUNDATION,
+    ));
+    // 联邦注册局主账户。
+    genesis_balances.push((AccountId::new(frg_main_account), ALLOC_FRG));
+    // 国家司法院主账户。
+    genesis_balances.push((AccountId::new(njd_main_account), ALLOC_NJD));
+    // 国家储委会安全基金账户。
+    genesis_balances.push((AccountId::new(SAFETY_FUND_ACCOUNT), ALLOC_NRC_SAFETY));
 
     // 创世账户统一输出为链 SS58 地址（前缀 2027）。
     let balances_json: Vec<Value> = genesis_balances
@@ -217,9 +281,9 @@ mod tests {
             .expect("balances.balances should be an array");
 
         // 创世包含 1 个国家储委会多签账户 + 19 个 NRC 管理员 + 43 个省储行 stake 质押地址
-        // + 1 个国家储委会两和基金账户。
+        // + 1 个国家储委会两和基金账户 + 6 笔创世分账账户。
         let nrc_admins_len = CHINA_CB.first().map(|n| n.admins.len()).unwrap_or(0);
-        assert_eq!(balances.len(), 1 + nrc_admins_len + CHINA_CH.len() + 1);
+        assert_eq!(balances.len(), 1 + nrc_admins_len + CHINA_CH.len() + 1 + 6);
 
         // 每家省储行的创立发行必须逐户精确进入无私钥 stake_account，不能改发主账户或汇总账户。
         for bank in CHINA_CH {
@@ -238,7 +302,7 @@ mod tests {
     }
 
     #[test]
-    fn genesis_issuance_goes_entirely_to_nrc() {
+    fn genesis_issuance_splits_nrc_main_and_six_allocations() {
         let patch = genesis_config();
         let balances = patch["balances"]["balances"]
             .as_array()
@@ -263,13 +327,14 @@ mod tests {
             })
             .expect("NRC balance entry should exist");
 
-        // 创世发行分配到国家储委会多签账户 = 总发行量 - NRC 管理员预置总额。
+        // 创世发行分配到国家储委会多签账户 = 总发行量 - NRC 管理员预置总额 - 六账户分账总额(700 亿元)。
         let admin_each: u128 = 1_000_000_000;
         let nrc_admins_len = CHINA_CB
             .first()
             .map(|n| n.admins.len() as u128)
             .unwrap_or(0);
-        let expected_nrc = GENESIS_ISSUANCE - admin_each * nrc_admins_len;
+        let allocated_total: u128 = 7_000_000_000_000; // 700 亿元 = 6 笔创世分账合计
+        let expected_nrc = GENESIS_ISSUANCE - admin_each * nrc_admins_len - allocated_total;
         assert_eq!(nrc_amount, expected_nrc);
 
         let total_in_patch: u128 = balances
@@ -285,10 +350,82 @@ mod tests {
         let total_provincialbank_stake: u128 = CHINA_CH.iter().map(|n| n.stake_amount).sum();
 
         // 创世总注入 = 创世发行 + 省储行创立发行 + 两和基金发行。
+        // 六账户分账从 NRC 主账户份额切出,创世发行总量不变,故此等式保持成立。
         assert_eq!(
             total_in_patch,
             GENESIS_ISSUANCE + total_provincialbank_stake + HE_FUND_ISSUANCE
         );
+    }
+
+    #[test]
+    fn genesis_six_allocations_have_exact_amounts() {
+        use primitives::account_derive::AccountKind;
+        use primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT;
+        use primitives::cid::china::china_sf::CHINA_SF;
+        use primitives::cid::china::china_zf::CHINA_ZF;
+        use primitives::cid::china::citizenchain::{
+            CITIZENCHAIN_FOUNDATION, CITIZENCHAIN_GENESIS_ADMINS,
+        };
+        use primitives::cid::code::{institution_code_from_cid_number, FRG, FSC};
+        use primitives::core_const::SS58_FORMAT;
+
+        let patch = genesis_config();
+        let balances = patch["balances"]["balances"]
+            .as_array()
+            .expect("balances.balances should be an array");
+
+        // 按 SS58 地址在创世 balances 中查该账户金额;不存在即断言失败。
+        let amount_of = |account: &AccountId| -> u128 {
+            let ss58 = account_to_genesis_ss58(account);
+            balances
+                .iter()
+                .find_map(|entry| {
+                    let arr = entry.as_array()?;
+                    (arr.first()?.as_str()? == ss58)
+                        .then(|| arr.get(1).and_then(json_amount_to_u128))
+                        .flatten()
+                })
+                .unwrap_or_else(|| panic!("创世 balances 缺少账户 {ss58}"))
+        };
+
+        // 联邦公民安全基金:派生地址必须与 build_genesis / seeder 完全一致。
+        let fsc_cid = CHINA_ZF
+            .iter()
+            .find(|i| institution_code_from_cid_number(i.cid_number) == Some(FSC))
+            .expect("CHINA_ZF must contain FSC")
+            .cid_number;
+        let fcsf = AccountId::new(
+            AccountKind::InstitutionFederalCitizenSecurityFund {
+                cid_number: fsc_cid.as_bytes(),
+            }
+            .derive(SS58_FORMAT),
+        );
+        let frg_main = CHINA_ZF
+            .iter()
+            .find(|i| institution_code_from_cid_number(i.cid_number) == Some(FRG))
+            .expect("CHINA_ZF must contain FRG")
+            .main_account;
+        let njd_main = CHINA_SF
+            .first()
+            .expect("CHINA_SF must contain National Judicial Yuan")
+            .main_account;
+
+        // 六账户金额逐一精确核对(单位:分)。
+        assert_eq!(amount_of(&fcsf), 1_000_000_000_000); // 联邦公民安全基金 100 亿元
+        assert_eq!(
+            amount_of(&AccountId::new(CITIZENCHAIN_GENESIS_ADMINS[0].account_id)),
+            2_000_000_000_000
+        ); // 公民程伟钱包 200 亿元
+        assert_eq!(
+            amount_of(&AccountId::new(CITIZENCHAIN_FOUNDATION.main_account)),
+            1_000_000_000_000
+        ); // 技术发展基金会主账户 100 亿元
+        assert_eq!(amount_of(&AccountId::new(frg_main)), 1_000_000_000_000); // 联邦注册局主账户 100 亿元
+        assert_eq!(amount_of(&AccountId::new(njd_main)), 1_000_000_000_000); // 国家司法院主账户 100 亿元
+        assert_eq!(
+            amount_of(&AccountId::new(SAFETY_FUND_ACCOUNT)),
+            1_000_000_000_000
+        ); // 国储会安全基金 100 亿元
     }
 
     #[test]
@@ -312,6 +449,83 @@ mod tests {
             );
         }
         assert_eq!(uniq.len(), 44, "must contain exactly 44 grandpa keys");
+    }
+
+    #[test]
+    fn governance_admin_keys_unique_and_counts_match_seats() {
+        // 治理机构管理员公钥不变量:各机构数量必须匹配岗位席位,且全部公钥全局唯一。
+        // 每把 32 字节的长度合法性已由 `hex!` 宏 + `[u8; 32]` 类型在编译期强制,
+        // 编译器抓不到的是「数量不符」和「公钥重复」,故在此显式断言(替代脆弱的正则脚本)。
+        use primitives::cid::china::china_ch::CHINA_CH;
+        use primitives::cid::china::china_sf::NATIONAL_JUDICIAL_YUAN_ADMINS;
+        use primitives::cid::china::china_zf::FEDERAL_REGISTRY_ADMINS;
+        use primitives::cid::china::citizenchain::CITIZENCHAIN_GENESIS_ADMINS;
+        use primitives::cid::code::PROVINCE_CODE_INFOS;
+        use primitives::count_const::{
+            FRG_PROVINCE_GROUP_ADMIN_COUNT, NJD_ADMIN_COUNT, NRC_ADMIN_COUNT, PRB_ADMIN_COUNT,
+            PRC_ADMIN_COUNT,
+        };
+
+        let mut all: Vec<[u8; 32]> = Vec::new();
+
+        // 国家储委会(NRC=第 1 个)19 席 + 43 个省储委会(PRC)各 9 席。
+        for (i, cb) in CHINA_CB.iter().enumerate() {
+            let expected = if i == 0 {
+                NRC_ADMIN_COUNT as usize
+            } else {
+                PRC_ADMIN_COUNT as usize
+            };
+            assert_eq!(
+                cb.admins.len(),
+                expected,
+                "储委会 {} 管理员数量与岗位席位不符",
+                cb.cid_number
+            );
+            all.extend_from_slice(cb.admins);
+        }
+
+        // 43 个省储行(PRB)各 9 席。
+        for ch in CHINA_CH {
+            assert_eq!(
+                ch.admins.len(),
+                PRB_ADMIN_COUNT as usize,
+                "省储行 {} 管理员数量与岗位席位不符",
+                ch.cid_number
+            );
+            all.extend_from_slice(ch.admins);
+        }
+
+        // 国家司法院(NJD)15 席。
+        assert_eq!(
+            NATIONAL_JUDICIAL_YUAN_ADMINS.len(),
+            NJD_ADMIN_COUNT as usize,
+            "国家司法院管理员数量与岗位席位不符"
+        );
+        all.extend_from_slice(NATIONAL_JUDICIAL_YUAN_ADMINS);
+
+        // 联邦注册局(FRG)= 省数 × 每省组人数。
+        assert_eq!(
+            FEDERAL_REGISTRY_ADMINS.len(),
+            PROVINCE_CODE_INFOS.len() * FRG_PROVINCE_GROUP_ADMIN_COUNT as usize,
+            "联邦注册局管理员数量与岗位席位不符"
+        );
+        all.extend_from_slice(FEDERAL_REGISTRY_ADMINS);
+
+        // 公民链技术发展基金会创世管理员(程伟,1 名)。
+        assert_eq!(
+            CITIZENCHAIN_GENESIS_ADMINS.len(),
+            1,
+            "基金会创世管理员数量应为 1"
+        );
+        all.extend(
+            CITIZENCHAIN_GENESIS_ADMINS
+                .iter()
+                .map(|admin| admin.account_id),
+        );
+
+        // 全局唯一:去重后数量必须与原始数量相等。
+        let unique: BTreeSet<[u8; 32]> = all.iter().copied().collect();
+        assert_eq!(unique.len(), all.len(), "存在重复的治理机构管理员公钥");
     }
 
     #[test]

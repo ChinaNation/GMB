@@ -69,7 +69,6 @@ fn build_voting_identity_payload(
     citizen_identity::VotingIdentityPayload {
         cid_number: test_cid_number(cid_number),
         account_id,
-        citizen_age_years: 18,
         passport_valid_from: 20260630,
         passport_valid_until: 20360630,
         citizen_status: citizen_identity::CitizenStatus::Normal,

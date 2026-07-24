@@ -182,6 +182,11 @@ export default function Constitution() {
         if (!response.ok) {
           throw new Error(typeof data.message === 'string' ? data.message : '宪法加载失败')
         }
+        // 最小形状校验：Worker 字段改名/结构异常时给出可辨识错误，
+        // 而非后面 `document.chapters` 处抛不透明的运行时异常。
+        if (!Array.isArray(data.chapters)) {
+          throw new Error('宪法响应结构异常')
+        }
         const document = data as unknown as ConstitutionDocument
         setDoc(document)
         // 首屏默认展开第一章目录，避免目录空荡。

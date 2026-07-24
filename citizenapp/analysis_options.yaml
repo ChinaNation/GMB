@@ -9,3 +9,5 @@ analyzer:
 linter:
   rules:
     prefer_const_constructors: true
+    # 显式打开:await 后跨异步用 BuildContext 必须先判 mounted，防已卸载 widget 的空引用/错误导航。
+    use_build_context_synchronously: true

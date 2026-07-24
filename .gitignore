@@ -33,8 +33,6 @@ citizenchain/node/frontend/dist/
 
 # Local/generated backup files
 *.spec*-backup
-citizenpassport/.citizenpassport_key
-docs/citizenpassport/.citizenpassport_key
 
 # OS / Editor junk
 .DS_Store

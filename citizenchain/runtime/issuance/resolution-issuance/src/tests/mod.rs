@@ -338,8 +338,6 @@ impl pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type ProposeOrigin = EnsureNrcAdminForTest;
-    type RecipientSetOrigin = frame_system::EnsureRoot<AccountId32>;
-    type MaintenanceOrigin = frame_system::EnsureRoot<AccountId32>;
     type JointVoteEngine = TestJointVoteEngine;
     type InstitutionRoleAuthorization = TestInstitutionRoleAuthorization;
     type MaxReasonLen = ConstU32<128>;

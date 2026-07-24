@@ -14,7 +14,7 @@ use primitives::{
             is_citizenchain_foundation_identity, ROLE_CODE_GENESIS_PRODUCT_MANAGER,
             ROLE_CODE_GENESIS_PROGRAMMER,
         },
-        code::{InstitutionCode, FRG, NJD, NRC, PRB, PRC, PROVINCE_CODE_INFOS},
+        code::{InstitutionCode, FRG, FSC, NJD, NRC, PRB, PRC, PROVINCE_CODE_INFOS},
     },
     governance_skeleton::{
         fixed_institution_by_identity, fixed_role_seats_by_identity,
@@ -139,6 +139,17 @@ pub fn fixed_role_permission_specs(
     cid_number: &[u8],
     role_code: &[u8],
 ) -> Vec<FixedRolePermissionSpec> {
+    // 联邦安全局(FSC):唯一持有「联邦公民安全基金」的机构。给该局的法定代表人与
+    // 局长两岗授「多签转账」Propose+Vote,使其经内部投票从该基金转出(选民=两岗、
+    // 票据 2,严格过半阈值 2)。机构码严格限定为 FSC,不外溢到其它机构的同名岗位。
+    if institution_code == FSC
+        && (role_code == ROLE_CODE_LEGAL_REPRESENTATIVE || role_code == ROLE_CODE_DIRECTOR)
+    {
+        let mut out = Vec::new();
+        push_both(&mut out, MODULE_MULTISIG, ACTION_MULTISIG_TRANSFER);
+        return out;
+    }
+
     // 法律行政签署和三人会签都属于原法律动作的 Vote 权限。LR 是所有机构
     // 唯一固定岗位；这里只给承担法定签署职责的机构码配置权限，不把权限扩大到
     // 其它机构的 LR，也不预建尚未依法组成的议员、参议员或委员岗位。
@@ -461,6 +472,11 @@ pub fn fixed_institution_capability_allows(
             ROLE_CODE_GENESIS_PRODUCT_MANAGER.to_vec(),
             ROLE_CODE_GENESIS_PROGRAMMER.to_vec(),
         ],
+        // 联邦安全局:LR + 局长两岗持有多签转账能力,用于经内部投票从联邦公民安全基金转出。
+        FSC => vec![
+            ROLE_CODE_LEGAL_REPRESENTATIVE.to_vec(),
+            ROLE_CODE_DIRECTOR.to_vec(),
+        ],
         _ => Vec::new(),
     };
     role_codes.into_iter().any(|role_code| {
@@ -514,6 +530,55 @@ mod tests {
                 RolePermissionOperation::Vote,
             ));
         }
+    }
+
+    #[test]
+    fn fsc_lr_and_director_get_multisig_transfer_others_do_not() {
+        use primitives::cid::china::china_zf::CHINA_ZF;
+        use primitives::cid::code::institution_code_from_cid_number;
+
+        let fsc_cid = CHINA_ZF
+            .iter()
+            .find(|n| institution_code_from_cid_number(n.cid_number) == Some(FSC))
+            .expect("CHINA_ZF must include FSC")
+            .cid_number;
+
+        // FSC 的法定代表人与局长两岗都拿到多签转账 Propose+Vote。
+        for role_code in [ROLE_CODE_LEGAL_REPRESENTATIVE, ROLE_CODE_DIRECTOR] {
+            let perms = fixed_role_permission_specs(FSC, fsc_cid.as_bytes(), role_code);
+            assert!(has(
+                &perms,
+                MODULE_MULTISIG,
+                ACTION_MULTISIG_TRANSFER,
+                RolePermissionOperation::Propose,
+            ));
+            assert!(has(
+                &perms,
+                MODULE_MULTISIG,
+                ACTION_MULTISIG_TRANSFER,
+                RolePermissionOperation::Vote,
+            ));
+        }
+
+        // 不外溢:其它机构(国家储委会)的法定代表人不得拿到多签转账权限。
+        let nrc = &CHINA_CB[0];
+        let nrc_lr = fixed_role_permission_specs(
+            institution_code_from_cid_number(nrc.cid_number).expect("NRC code"),
+            nrc.cid_number.as_bytes(),
+            ROLE_CODE_LEGAL_REPRESENTATIVE,
+        );
+        assert!(!has(
+            &nrc_lr,
+            MODULE_MULTISIG,
+            ACTION_MULTISIG_TRANSFER,
+            RolePermissionOperation::Propose,
+        ));
+        assert!(!has(
+            &nrc_lr,
+            MODULE_MULTISIG,
+            ACTION_MULTISIG_TRANSFER,
+            RolePermissionOperation::Vote,
+        ));
     }
 
     #[test]

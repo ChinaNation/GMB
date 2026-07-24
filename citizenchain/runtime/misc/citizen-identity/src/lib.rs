@@ -233,7 +233,6 @@ pub struct CitizenSubject<AccountId> {
 pub struct VotingIdentityPayload<AccountId> {
     pub cid_number: CidNumberBound,
     pub account_id: AccountId,
-    pub citizen_age_years: u8,
     pub passport_valid_from: u32,
     pub passport_valid_until: u32,
     pub citizen_status: CitizenStatus,
@@ -875,7 +874,10 @@ pub mod pallet {
         }
 
         #[pallet::call_index(1)]
-        #[pallet::weight(<T as Config>::WeightInfo::upgrade_to_candidate_identity())]
+        #[pallet::weight(
+            <T as Config>::WeightInfo::upgrade_to_candidate_identity()
+                .saturating_add(T::OnVotingIdentityRegistered::on_voting_identity_registered_weight())
+        )]
         pub fn upgrade_to_candidate_identity(
             origin: OriginFor<T>,
             actor_cid_number: CidNumberBound,
@@ -907,9 +909,18 @@ pub mod pallet {
             Self::ensure_birth_date_immutable(&payload.voting.cid_number, payload.birth_date)?;
 
             let old = VotingIdentityByCid::<T>::get(&payload.voting.cid_number);
+            // 竞选身份可作为公民首次上链(第 3 条:不强制先投票)。首次即建投票身份时,
+            // 与投票身份首次登记同权,触发一次性公民认证发行;已有投票身份的升级不再触发。
+            let is_first_onchain_identity = old.is_none();
             let identity = Self::identity_from_payload(&payload.voting);
             Self::replace_voting_identity(payload.voting.cid_number.clone(), identity, old)?;
             Self::bind_account_id(&payload.voting.cid_number, &payload.voting.account_id);
+            if is_first_onchain_identity {
+                T::OnVotingIdentityRegistered::on_voting_identity_registered(
+                    &payload.voting.account_id,
+                    payload.voting.cid_number.as_slice(),
+                );
+            }
             CandidateIdentityByCid::<T>::insert(
                 &payload.voting.cid_number,
                 CandidateIdentity {
@@ -1044,7 +1055,6 @@ pub mod pallet {
                 &VotingIdentityPayload {
                     cid_number: cid_number.clone(),
                     account_id: account.clone(),
-                    citizen_age_years: MIN_ONCHAIN_CITIZEN_AGE_YEARS,
                     passport_valid_from: old.passport_valid_from,
                     passport_valid_until: old.passport_valid_until,
                     citizen_status: old.citizen_status,
@@ -1297,10 +1307,8 @@ pub mod pallet {
                     && payload.passport_valid_from <= payload.passport_valid_until,
                 Error::<T>::InvalidDateRange
             );
-            ensure!(
-                payload.citizen_age_years >= MIN_ONCHAIN_CITIZEN_AGE_YEARS,
-                Error::<T>::UnderVotingAge
-            );
+            // 投票身份不在链上计算或存储年龄:能否投票由 citizen_status=Normal + 护照有效期窗口
+            // 判定,最小年龄门只在竞选身份按 birth_date 实时校验(见 ensure_valid_candidate_payload)。
             Ok(())
         }
 

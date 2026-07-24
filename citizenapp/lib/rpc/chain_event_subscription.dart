@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart';
+import 'package:citizenapp/log/app_log.dart';
 
 import 'smoldot_client.dart';
 
@@ -41,7 +41,7 @@ class ChainEventSubscription {
     try {
       await _smoldotClientManager.ensureSynced();
     } catch (e) {
-      debugPrint('[ChainSub] 轻节点尚未就绪，订阅连接失败: $e');
+      AppLog.d('[ChainSub] 轻节点尚未就绪，订阅连接失败: $e');
       return false;
     }
     if (generation != _lifecycleGeneration) return false;
@@ -70,7 +70,7 @@ class ChainEventSubscription {
       return true;
     }
 
-    debugPrint('[ChainSub] 使用 smoldot 轻节点订阅 $logLabel');
+    AppLog.d('[ChainSub] 使用 smoldot 轻节点订阅 $logLabel');
     try {
       final stream = _smoldotClientManager.subscribe(method, []);
       final sub = stream.listen(
@@ -92,10 +92,10 @@ class ChainEventSubscription {
           ));
         },
         onError: (Object e) {
-          debugPrint('[ChainSub] $logLabel 订阅错误: $e');
+          AppLog.d('[ChainSub] $logLabel 订阅错误: $e');
         },
         onDone: () {
-          debugPrint('[ChainSub] $logLabel 订阅结束');
+          AppLog.d('[ChainSub] $logLabel 订阅结束');
           if (type == ChainEventType.newBlock) {
             _newHeadsSub = null;
           } else {
@@ -110,7 +110,7 @@ class ChainEventSubscription {
       }
       return true;
     } catch (e) {
-      debugPrint('[ChainSub] $logLabel 订阅启动失败: $e');
+      AppLog.d('[ChainSub] $logLabel 订阅启动失败: $e');
       return false;
     }
   }

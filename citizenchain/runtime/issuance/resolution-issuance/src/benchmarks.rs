@@ -8,13 +8,12 @@ use frame_support::{
     traits::{EnsureOrigin, Get},
     BoundedVec,
 };
-use frame_system::RawOrigin;
 use primitives::cid::china::china_cb::CHINA_CB;
 use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
 use sp_std::{vec, vec::Vec};
 use votingengine::CitizenIdentityReader;
 
-use crate::{pallet, AllowedRecipients, Call, Config, Pallet, VotingProposalCount};
+use crate::{pallet, AllowedRecipients, Config, Pallet, VotingProposalCount};
 
 fn decode_account<T: pallet::Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
@@ -29,10 +28,6 @@ fn prc_recipients<T: pallet::Config>() -> BoundedVec<T::AccountId, T::MaxAllocat
     recipients
         .try_into()
         .expect("benchmark recipients should fit MaxAllocations")
-}
-
-fn reason_ok<T: pallet::Config>() -> pallet::ReasonOf<T> {
-    b"bench-reason".to_vec().try_into().expect("reason fits")
 }
 
 fn reason_max<T: pallet::Config>() -> pallet::ReasonOf<T> {
@@ -77,17 +72,6 @@ mod benchmarks {
     use super::*;
 
     #[benchmark]
-    fn set_allowed_recipients() {
-        VotingProposalCount::<T>::put(0u32);
-        let recipients = prc_recipients::<T>();
-
-        #[extrinsic_call]
-        set_allowed_recipients(RawOrigin::Root, recipients.clone());
-
-        assert_eq!(AllowedRecipients::<T>::get(), recipients);
-    }
-
-    #[benchmark]
     fn propose_issuance() {
         let origin = T::ProposeOrigin::try_successful_origin()
             .expect("benchmark proposer_account_id origin must be available");
@@ -123,29 +107,5 @@ mod benchmarks {
         }
 
         assert_eq!(VotingProposalCount::<T>::get(), 1u32);
-    }
-
-    #[benchmark]
-    fn clear_executed() {
-        let proposal_id = 21u64;
-        let reason = reason_ok::<T>();
-        let (allocations, total_amount) = full_allocations::<T>();
-        Pallet::<T>::execute_approved_issuance(proposal_id, &reason, total_amount, &allocations)
-            .expect("benchmark execution should succeed");
-
-        #[extrinsic_call]
-        clear_executed(RawOrigin::Root, proposal_id);
-
-        assert!(!crate::Executed::<T>::contains_key(proposal_id));
-    }
-
-    #[benchmark]
-    fn set_paused() {
-        assert!(!crate::Paused::<T>::get());
-
-        #[extrinsic_call]
-        set_paused(RawOrigin::Root, true);
-
-        assert!(crate::Paused::<T>::get());
     }
 }

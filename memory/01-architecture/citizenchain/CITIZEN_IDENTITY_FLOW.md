@@ -25,9 +25,9 @@ prepare 与 complete 前各需一次 WebAuthn passkey 断言 + 管理员冷钱�
 换取绑定 `{cid_number, account_id}` 的一次性安全 grant,无 grant 一律 403。
 
 1. **prepare**:操作员录入/扫描公民账户 → 后端组
-   `VotingIdentityPayload` SCALE 字节(9 字段:cid_number、account_id、
-   citizen_age_years、passport_valid_from/until、citizen_status、
-   居住地省/市/镇码)→ 打包 QR_V1 `k=1 a=2` 签名请求(180 秒有效)。
+   `VotingIdentityPayload` SCALE 字节(8 字段:cid_number、account_id、
+   passport_valid_from/until、citizen_status、居住地省/市/镇码;不含年龄,
+   投票身份不在链上算/存年龄)→ 打包 QR_V1 `k=1 a=2` 签名请求(180 秒有效)。
 2. **公民签名(第一重签名)**:公民用 CitizenWallet 离线签名页或
    CitizenApp 电子护照扫码签名页扫码 → 两色识别独立解码载荷并展示中文字段,
    解不开一律拒签 → 本人确认后对

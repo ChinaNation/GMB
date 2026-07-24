@@ -1,4 +1,6 @@
 import 'dart:convert';
+
+import 'package:citizenapp/rpc/pallet_registry.dart';
 import 'dart:typed_data';
 
 import 'package:polkadart/scale_codec.dart' show ByteOutput;
@@ -26,12 +28,13 @@ class LegislationVoteService {
   final LegislationVoteQueryService _query;
 
   /// LegislationVote runtime pallet_index。
-  static const int legislationVotePallet = 26;
+  static const int legislationVotePallet = PalletRegistry.legislationVotePallet;
 
-  static const int callCastRepresentativeVote = 1;
-  static const int callExecutiveSign = 3;
-  static const int callOverrideSign = 4;
-  static const int callGuardVote = 5;
+  static const int callCastRepresentativeVote =
+      PalletRegistry.castRepresentativeVoteCall;
+  static const int callExecutiveSign = PalletRegistry.executiveSignCall;
+  static const int callOverrideSign = PalletRegistry.overrideSignCall;
+  static const int callGuardVote = PalletRegistry.guardVoteCall;
 
   // ──── 公开 API ────
 

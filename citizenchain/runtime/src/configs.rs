@@ -539,11 +539,6 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                     actor_cid_number, ..
                 },
             ) => institution_onchain_route(who, actor_cid_number.as_slice()),
-            RuntimeCall::ResolutionIssuance(
-                resolution_issuance::pallet::Call::set_allowed_recipients { .. }
-                | resolution_issuance::pallet::Call::clear_executed { .. }
-                | resolution_issuance::pallet::Call::set_paused { .. },
-            ) => FeeRoute::Free,
             RuntimeCall::ResolutionDestroy(resolution_destroy::pallet::Call::propose_destroy {
                 actor_cid_number,
                 institution_account_id,
@@ -949,11 +944,14 @@ impl primitives::institution_asset::InstitutionAsset<AccountId> for RuntimeInsti
             );
         }
 
-        // 8. 联邦公民安全基金（FSC 专属）：**fail-closed 全拒**。
-        //    该基金只能由联邦安全局经投票引擎支出，属业务模块内容；在那条支出路径
-        //    落地并显式放行之前，任何资金动作一律拒绝，杜绝被旁路挪用。
+        // 8. 联邦公民安全基金（FSC 专属）：只允许经 FSC 内部投票的多签转账支出。
+        //    该基金由联邦安全局的 LR + 局长两岗经内部投票（2/2 严格过半）复用通用多签
+        //    转账动作从中转出；其余资金动作（注资/关闭/费用归集等）一律拒绝，杜绝旁路挪用。
         if is_federal_citizen_security_fund_account(source) {
-            return false;
+            return matches!(
+                action,
+                primitives::institution_asset::InstitutionAssetAction::MultisigTransferExecute
+            );
         }
 
         // 9. 普通账户：全放行
@@ -2288,9 +2286,6 @@ impl resolution_issuance::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type ProposeOrigin = EnsureJointProposer;
-    type RecipientSetOrigin = frame_system::EnsureRoot<AccountId>;
-    // 维护入口只允许 root 操作暂停与短期执行记录清理。
-    type MaintenanceOrigin = frame_system::EnsureRoot<AccountId>;
     type WeightInfo = resolution_issuance::weights::SubstrateWeight<Runtime>;
     type JointVoteEngine = JointVote;
     type InstitutionRoleAuthorization = public_manage::Pallet<Runtime>;

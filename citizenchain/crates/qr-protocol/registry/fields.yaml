@@ -47,8 +47,6 @@
   field_label_zh: 机构简称
 - field_key: city_code
   field_label_zh: 市级代码
-- field_key: citizen_age_years
-  field_label_zh: 周岁年龄
 - field_key: citizen_status
   field_label_zh: 身份状态
 - field_key: create_threshold

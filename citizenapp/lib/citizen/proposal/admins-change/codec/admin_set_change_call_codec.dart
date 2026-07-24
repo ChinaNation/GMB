@@ -1,4 +1,6 @@
 import 'dart:convert';
+
+import 'package:citizenapp/rpc/pallet_registry.dart';
 import 'dart:typed_data';
 
 import 'package:polkadart/scale_codec.dart' show ByteOutput, CompactBigIntCodec;
@@ -9,8 +11,9 @@ import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 class PersonalAdminsChangeCallCodec {
   PersonalAdminsChangeCallCodec._();
 
-  static const int personalAdminsPalletIndex = 29;
-  static const int proposePersonalAdminsChangeCallIndex = 0;
+  static const int personalAdminsPalletIndex = PalletRegistry.personalAdminsPallet;
+  static const int proposePersonalAdminsChangeCallIndex =
+      PalletRegistry.proposePersonalAdminSetChangeCall;
 
   static Uint8List build({
     required String institutionCode,

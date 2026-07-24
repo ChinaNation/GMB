@@ -160,7 +160,11 @@ pub mod pallet {
 // ─── DeveloperUpgradeCheck 实现 ────────────────────────────────────────────
 impl<T: pallet::Config> DeveloperUpgradeCheck for pallet::Pallet<T> {
     fn is_enabled() -> bool {
+        // 开发者直升是创世/开发期专属能力。硬连线到链阶段:一旦进入 Operation
+        // (由正式上线那次 runtime 升级的迁移把 Phase 翻到 Operation)即自动拒绝,
+        // 不依赖任何人记得同步翻 DeveloperUpgradeEnabled 开关(fail-safe)。
         pallet::DeveloperUpgradeEnabled::<T>::get()
+            && pallet::Phase::<T>::get() != pallet::ChainPhase::Operation
     }
 }
 

@@ -481,9 +481,18 @@ class SquareApiClient
     required String confirmPath,
     required SquareActionSigner signAction,
   }) async {
-    final challenge = await _postJson(challengePath, {
-      'account_id': accountId,
-    });
+    // 注销是登录态下的敏感动作:Worker 已对 account/delete 走默认拒(需有效会话),
+    // 挑战与确认都必须携带当前账户的广场会话 Bearer。用户在个人页触发注销时会话
+    // 已建立并缓存;未登录则明确报错,不再匿名发起(从源头杜绝对任意账户的挑战枚举)。
+    final session = _sessions[accountId];
+    if (session == null || !session.isUsable) {
+      throw const SquareApiException('请先登录广场再注销账户');
+    }
+    final challenge = await _postJson(
+      challengePath,
+      {'account_id': accountId},
+      session: session,
+    );
     final signingPayloadHex = challenge['signing_payload_hex'];
     final challengeId = challenge['challenge_id'];
     if (signingPayloadHex is! String || challengeId is! String) {
@@ -494,11 +503,15 @@ class SquareApiClient
       scalePayload: hexToBytes(signingPayloadHex),
     );
     final signature = await signAction(message);
-    await _postJson(confirmPath, {
-      'account_id': accountId,
-      'challenge_id': challengeId,
-      'signature': signature,
-    });
+    await _postJson(
+      confirmPath,
+      {
+        'account_id': accountId,
+        'challenge_id': challengeId,
+        'signature': signature,
+      },
+      session: session,
+    );
   }
 
   /// 注册 P-256 设备子钥：绑定证明由 sr25519 主钥对

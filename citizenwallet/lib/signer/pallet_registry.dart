@@ -155,6 +155,12 @@ class PalletRegistry {
   static const int grandpaKeyChangePallet = 15;
   static const int proposeReplaceGrandpaKeyCall = 0;
 
+  // ---- FullnodeIssuance (6) · 有意不登记 ----
+  // 链端 pallet_index=6 承载 bind_reward_account(0) / rebind_reward_account(1),
+  // 由矿工(citizenchain 桌面全节点)用其 PoW 热钥自签绑定奖励账户,不经冷钱包扫码冷签。
+  // 故此处刻意不登记该 pallet/call——冷钱包扫到它会按两色严格模式判为无法识别而红拒(拒签),
+  // 属预期行为(冷钱包不签矿工绑定交易),不是遗漏。
+
   // ---- ResolutionIssuance (8) ----
   static const int resolutionIssuancePallet = 8;
   static const int proposeIssuanceCall = 0;

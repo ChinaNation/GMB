@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:flutter/services.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/ui/app_theme.dart';
@@ -228,7 +229,7 @@ class _MultisigTransferDetailPageState
         ));
       } catch (e) {
         // 详情快照写入失败不能影响链上最新结果展示；仅留痕便于排查。
-        debugPrint('[MultisigDetail] 详情快照写入失败: $e');
+        AppLog.d('[MultisigDetail] 详情快照写入失败: $e');
       }
       if (!mounted) return;
       setState(() {
@@ -313,7 +314,7 @@ class _MultisigTransferDetailPageState
       });
       return snapshot;
     } catch (e) {
-      debugPrint('[MultisigDetail] 加载多签详情快照失败: $e');
+      AppLog.d('[MultisigDetail] 加载多签详情快照失败: $e');
       return null;
     }
   }
@@ -626,7 +627,7 @@ class _MultisigTransferDetailPageState
           }
         },
       );
-      debugPrint(
+      AppLog.d(
           '[MultisigTransferVote] submit 已入块 txHash=${result.txHash} nonce=${result.usedNonce} block=${result.blockHashHex}');
 
       if (!mounted) return;

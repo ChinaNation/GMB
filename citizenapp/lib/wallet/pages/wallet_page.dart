@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:citizenapp/8964/profile/services/nickname_publisher.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
@@ -136,14 +137,14 @@ class _WalletTabState extends State<WalletTab> {
         // 那个空态文案还会诱导用户去新建，把数据搞得更乱。
         // 现在坏行只是跳过链上监听，仍进列表，由 UI 标注异常并提供删除入口。
         if (!isAccountIdText(wallet.accountId)) {
-          debugPrint('[Wallet] 身份异常，跳过链上监听: index=${wallet.walletIndex}');
+          AppLog.d('[Wallet] 身份异常，跳过链上监听: index=${wallet.walletIndex}');
           continue;
         }
         try {
           ChainTxMonitor.instance
               .watchWallet(wallet.ss58Address, wallet.accountId);
         } catch (e) {
-          debugPrint('[Wallet] 链上监听登记失败 index=${wallet.walletIndex}: $e');
+          AppLog.d('[Wallet] 链上监听登记失败 index=${wallet.walletIndex}: $e');
         }
       }
       if (list.isNotEmpty) {
@@ -156,7 +157,7 @@ class _WalletTabState extends State<WalletTab> {
       return list;
     } catch (e, st) {
       if (!WalletIsar.instance.isBusyError(e)) {
-        debugPrint('wallet local load failed: $e\n$st');
+        AppLog.d('wallet local load failed: $e\n$st');
       }
       if (!mounted) return null;
       setState(() {
@@ -182,7 +183,7 @@ class _WalletTabState extends State<WalletTab> {
       try {
         await publisher.syncWalletName(wallet);
       } catch (e) {
-        debugPrint('[Wallet] 钱包名同步失败 index=${wallet.walletIndex}: $e');
+        AppLog.d('[Wallet] 钱包名同步失败 index=${wallet.walletIndex}: $e');
       }
     }
     // 同步可能改写了本机名，重读一次让列表反映最新值。
@@ -209,7 +210,7 @@ class _WalletTabState extends State<WalletTab> {
             identity.isCitizen ? identity.votingAccountId : null;
       });
     } catch (e) {
-      debugPrint('wallet identity marker load failed: $e');
+      AppLog.d('wallet identity marker load failed: $e');
       if (!mounted) return;
       setState(() {
         _identityAccountId = null;
@@ -249,7 +250,7 @@ class _WalletTabState extends State<WalletTab> {
           targetWallets = await _walletService.getWallets();
         } catch (e, st) {
           if (!WalletIsar.instance.isBusyError(e)) {
-            debugPrint(
+            AppLog.d(
               'wallet local read before balance refresh failed: $e\n$st',
             );
           }
@@ -274,7 +275,7 @@ class _WalletTabState extends State<WalletTab> {
             }
           }
         } catch (e) {
-          debugPrint('wallet batch balance refresh failed: $e');
+          AppLog.d('wallet batch balance refresh failed: $e');
           hasError = true;
           refreshError = e;
         }
@@ -1305,7 +1306,7 @@ class _CreateWalletPageState extends State<AddWalletPage> {
       }
       Navigator.of(context).pop(true);
     } catch (e, st) {
-      debugPrint('wallet create failed: $e\n$st');
+      AppLog.d('wallet create failed: $e\n$st');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(walletOperationErrorMessage(e))),

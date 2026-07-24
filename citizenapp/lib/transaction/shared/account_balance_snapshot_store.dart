@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 
@@ -128,7 +128,7 @@ class AccountBalanceSnapshot {
       );
     } catch (e) {
       // 缓存解析失败按"无快照"降级，但要留痕以区分"缓存损坏"与"缓存不存在"。
-      debugPrint('[BalanceSnapshot] 快照 JSON 解析失败: $e');
+      AppLog.d('[BalanceSnapshot] 快照 JSON 解析失败: $e');
       return null;
     }
   }

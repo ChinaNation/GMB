@@ -15,30 +15,32 @@
 // 链端 pallet(index 23)、qr-protocol action(0x1700-0x1704)、citizenwallet decoder 均已实装。
 // 框架阶段的 pages/ 与 widgets/ 占位壳已于 2026-07-23 删除,子任务 C 按真实设计重写。
 
+import 'package:citizenapp/rpc/pallet_registry.dart';
+
 class OnchainAssetActions {
   OnchainAssetActions._();
 
   // ---------- pallet_index / call_index(与链端 + citizenwallet PalletRegistry 同步) ----------
 
-  /// OnchainIssuance pallet_index(与 citizenchain runtime/src/lib.rs::construct_runtime 一致)。
-  static const int onchainIssuancePalletIndex = 23;
+  /// OnchainIssuance pallet_index(单源 PalletRegistry,对齐 construct_runtime)。
+  static const int onchainIssuancePalletIndex = PalletRegistry.onchainIssuancePallet;
 
   /// pallet_assets 内核 pallet_index(原生 extrinsic 全部被 RuntimeCallFilter reject)。
-  static const int assetsPalletIndex = 24;
+  static const int assetsPalletIndex = PalletRegistry.assetsPallet;
 
   // 业务 propose_X(call_index 0..=4)
-  static const int callProposeIssue = 0;
-  static const int callProposeMint = 1;
-  static const int callProposeBurn = 2;
-  static const int callProposeClose = 3;
-  static const int callProposeTransfer = 4;
+  static const int callProposeIssue = PalletRegistry.proposeIssueCall;
+  static const int callProposeMint = PalletRegistry.proposeMintCall;
+  static const int callProposeBurn = PalletRegistry.proposeBurnCall;
+  static const int callProposeClose = PalletRegistry.proposeCloseAssetCall;
+  static const int callProposeTransfer = PalletRegistry.proposeAssetTransferCall;
 
   // 监管 propose_monitor_X(call_index 10..=14)
-  static const int callProposeMonitorFreeze = 10;
-  static const int callProposeMonitorUnfreeze = 11;
-  static const int callProposeMonitorConfiscate = 12;
-  static const int callProposeMonitorForceTransfer = 13;
-  static const int callProposeMonitorForceClose = 14;
+  static const int callProposeMonitorFreeze = PalletRegistry.proposeMonitorFreezeCall;
+  static const int callProposeMonitorUnfreeze = PalletRegistry.proposeMonitorUnfreezeCall;
+  static const int callProposeMonitorConfiscate = PalletRegistry.proposeMonitorConfiscateCall;
+  static const int callProposeMonitorForceTransfer = PalletRegistry.proposeMonitorForceTransferCall;
+  static const int callProposeMonitorForceClose = PalletRegistry.proposeMonitorForceCloseCall;
 
   // ---------- ACTION 字符串常量(VotingEngine ProposalData 业务标签) ----------
 

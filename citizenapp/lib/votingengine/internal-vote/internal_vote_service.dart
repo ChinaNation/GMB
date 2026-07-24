@@ -1,4 +1,6 @@
 import 'dart:convert';
+
+import 'package:citizenapp/rpc/pallet_registry.dart';
 import 'dart:typed_data';
 
 import 'package:polkadart/scale_codec.dart' show ByteOutput;
@@ -28,10 +30,10 @@ class InternalVoteService {
   // ──── 常量 ────
 
   /// InternalVote sub-pallet。runtime pallet_index=20。
-  static const int internalVotePallet = 20;
+  static const int internalVotePallet = PalletRegistry.internalVotePallet;
 
   /// InternalVote::cast call_index=0。
-  static const int internalVoteCallIndex = 0;
+  static const int internalVoteCallIndex = PalletRegistry.internalVoteCastCall;
 
   // ──── 公开 API ────
 

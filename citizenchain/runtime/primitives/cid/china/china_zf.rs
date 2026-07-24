@@ -2,6 +2,11 @@
 
 use hex_literal::hex;
 
+use crate::institution_constraints::{
+    ROLE_CODE_DIRECTOR, ROLE_CODE_LEGAL_REPRESENTATIVE, ROLE_NAME_DIRECTOR,
+    ROLE_NAME_LEGAL_REPRESENTATIVE,
+};
+
 /// 联邦政府机构常量。
 pub struct ChinaZf {
     pub cid_full_name: &'static str,
@@ -13,14 +18,53 @@ pub struct ChinaZf {
     pub fee_account: [u8; 32],
 }
 
+// ─── 联邦安全局(FSC)创世治理 ───────────────────────────────────────────────
+// FSC 是唯一持有「联邦公民安全基金(FCSF)」的机构。创世由公民程伟同时任
+// 法定代表人(LR)与局长(DIRECTOR)两岗,经 FSC 内部投票(2 席严格过半 = 两岗均须同意)
+// 从该基金转出。任职人身份复用程伟公民账户,禁止在别处另造第二身份。
+
+/// FSC 创世任职人程伟的公民账户(与基金会创世管理员同一账户)。
+pub const FSC_GENESIS_ADMIN_ACCOUNT: [u8; 32] =
+    hex!("9c3e18f575c59236832054469ef0e69f16a1fe6c50b2b580fc7c71853ab71068");
+/// 程伟公民 CID;FSC 法定代表人与管理员记录统一引用该公民 CID。
+pub const FSC_GENESIS_ADMIN_CID_NUMBER: &str = "GZ000-CTZN6-198805200-2026";
+/// 程伟的姓;全仓人员姓名只使用 `family_name` 与 `given_name` 两个字段。
+pub const FSC_GENESIS_ADMIN_FAMILY_NAME: &str = "程";
+/// 程伟的名。
+pub const FSC_GENESIS_ADMIN_GIVEN_NAME: &str = "伟";
+/// FSC 内部治理阈值:2 席严格过半 = 2(LR 与局长两岗均须同意)。
+pub const FSC_GOVERNANCE_THRESHOLD: u32 = 2;
+
+/// FSC 创世固定岗位任职;账户是授权字段,姓、名仅用于人员展示。
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct FscGenesisAssignment {
+    pub account_id: [u8; 32],
+    pub role_code: &'static [u8],
+    pub role_name: &'static [u8],
+}
+
+/// 程伟对 FSC 两个固定岗位(法定代表人 + 局长)的创世任职。
+pub const FSC_GENESIS_ASSIGNMENTS: &[FscGenesisAssignment] = &[
+    FscGenesisAssignment {
+        account_id: FSC_GENESIS_ADMIN_ACCOUNT,
+        role_code: ROLE_CODE_LEGAL_REPRESENTATIVE,
+        role_name: ROLE_NAME_LEGAL_REPRESENTATIVE,
+    },
+    FscGenesisAssignment {
+        account_id: FSC_GENESIS_ADMIN_ACCOUNT,
+        role_code: ROLE_CODE_DIRECTOR,
+        role_name: ROLE_NAME_DIRECTOR,
+    },
+];
+
 /// 联邦注册局创世管理员账户。
 pub const FEDERAL_REGISTRY_ADMINS: &[[u8; 32]] = &[
     // 中枢省
-    hex!("d641dbfe17fa3fb2427b974212a0fe821b12576e0eade088309d4f05f2cc9930"),
-    hex!("2802ba6ae58964e653fee45c00164168f5e3f9c62e5d9401bafd825231b3834f"),
-    hex!("8008da85648f24760e02344c2b5c020e4de7f2e15990d37ce3b1f5dac1e89433"),
-    hex!("5c87dd7513435b92c7e1a1334584f62b9904507feedf1236443da0041d32cf4e"),
-    hex!("9861d7e0866ef1dc81ed3cc90f1c072ccc4a2b5ec813cf411a5dbe09a9f3f924"),
+    hex!("0c6b4b86d8efbc8f15c62a26f1b063414cdab6aa831dcdede307dac00872462d"),
+    hex!("700f70581bf67776df95240a5e24078a2966f0a0505f66e0c28978a9ccea3b49"),
+    hex!("94bc684636aa0ca9b2696d6c22acb2b8b7d32b8136ee34fe120ed631f64f500c"),
+    hex!("d6d73cfd7d6b7c5692749b7c46fd3fe398f16f84283910dbf15f74472e1e3938"),
+    hex!("064ec05fc384f3c5b9f59d1e1af9a3e038a1d82f6e44f124e6c42a20abcc1b5e"),
     // 岭南省
     hex!("e28a39b8f9f9bdc7d0d5c2f6bf290f892a25aeeb34c57002cdb978d13c4efa26"),
     hex!("4875986ea8558622c1baa66609383dca849408cb3d75b11f301462efa7d66c5e"),
@@ -58,11 +102,11 @@ pub const FEDERAL_REGISTRY_ADMINS: &[[u8; 32]] = &[
     hex!("50557ed2f05fac306eddd7bcc77a94ff51166d0ef98894614d3aaa30ade97f2f"),
     hex!("9839b74c90965802d9138b450e95d9f77c3e181cb66a54f406b973220e934462"),
     // 贵州省
-    hex!("fe7176d115b207356914f92e2da1391db92bc5a463be7f89f2b37d65e367895e"),
-    hex!("e60af1f0b78e7958d816326ffc47e318406f78129a7c830672f64dbc405e3a51"),
-    hex!("7c3e729a8315dafc3b2866d0f2d085d53545d80f2630c6c923434c50b83aaf25"),
-    hex!("76f364a117b944c4d4072b42c780841e72e89faf1a6f7c517ba4bff255fe4417"),
-    hex!("6c9460e609eb8ab95c40a57e50deb6b54206d133f46c6063489ee52e09de1e77"),
+    hex!("e0381d81db075b108bac8c5b9c15038c2e2b39e9aaa08aa273c8878ee597d070"),
+    hex!("4e1718c363811096387da0be64a42f8d26f8bb28f2d92d1bdcac54717521ee14"),
+    hex!("42aca92b5237c61d08f67f565dcf66d4337a247db91d073a1cc6e86825ff3e5e"),
+    hex!("ec4c327f91bdff23aca02dfecc1996f97e8d3e9ea06480a2c5e8bf665e41e109"),
+    hex!("1840500e282b16c75d0fcf19bcf3d4225e8f7fa494f46221bccce42700b5675d"),
     // 湖南省
     hex!("8aaa255eb6fc0ae304b89a55e93809092f897641917f78d0d1e360c198599105"),
     hex!("000e36e9c42b0220365dec4b3d58601a8dd5c1a5c0d8287240beb550835a6833"),

@@ -74,7 +74,7 @@ pub const CITIZENCHAIN_FOUNDATION: ChinaCitizenChain = ChinaCitizenChain {
 
 /// 一名创世管理员程伟；账户是授权字段，姓、名仅用于人员展示。
 pub const CITIZENCHAIN_GENESIS_ADMINS: &[CitizenChainGenesisAdmin] = &[CitizenChainGenesisAdmin {
-    account_id: hex!("d6d73cfd7d6b7c5692749b7c46fd3fe398f16f84283910dbf15f74472e1e3938"),
+    account_id: hex!("9c3e18f575c59236832054469ef0e69f16a1fe6c50b2b580fc7c71853ab71068"),
     family_name: "程",
     given_name: "伟",
 }];
@@ -82,17 +82,17 @@ pub const CITIZENCHAIN_GENESIS_ADMINS: &[CitizenChainGenesisAdmin] = &[CitizenCh
 /// 程伟对三个固定岗位的三条独立创世任职。
 pub const CITIZENCHAIN_GENESIS_ASSIGNMENTS: &[CitizenChainGenesisAssignment] = &[
     CitizenChainGenesisAssignment {
-        account_id: hex!("d6d73cfd7d6b7c5692749b7c46fd3fe398f16f84283910dbf15f74472e1e3938"),
+        account_id: hex!("9c3e18f575c59236832054469ef0e69f16a1fe6c50b2b580fc7c71853ab71068"),
         role_code: ROLE_CODE_LEGAL_REPRESENTATIVE,
         role_name: ROLE_NAME_LEGAL_REPRESENTATIVE,
     },
     CitizenChainGenesisAssignment {
-        account_id: hex!("d6d73cfd7d6b7c5692749b7c46fd3fe398f16f84283910dbf15f74472e1e3938"),
+        account_id: hex!("9c3e18f575c59236832054469ef0e69f16a1fe6c50b2b580fc7c71853ab71068"),
         role_code: ROLE_CODE_GENESIS_PRODUCT_MANAGER,
         role_name: ROLE_NAME_GENESIS_PRODUCT_MANAGER,
     },
     CitizenChainGenesisAssignment {
-        account_id: hex!("d6d73cfd7d6b7c5692749b7c46fd3fe398f16f84283910dbf15f74472e1e3938"),
+        account_id: hex!("9c3e18f575c59236832054469ef0e69f16a1fe6c50b2b580fc7c71853ab71068"),
         role_code: ROLE_CODE_GENESIS_PROGRAMMER,
         role_name: ROLE_NAME_GENESIS_PROGRAMMER,
     },

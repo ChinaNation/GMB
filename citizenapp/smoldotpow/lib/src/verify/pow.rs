@@ -45,11 +45,13 @@ pub fn verify_header(config: VerifyConfig<'_>) -> Result<VerifySuccess, VerifyEr
         .pow_seal()
         .ok_or(VerifyError::MissingSeal)?;
 
-    // 2. 解码 nonce
-    // citizenchain seal 格式：SCALE 编码的 (u64, sr25519::Signature)
-    // = 8 字节 nonce（compact 或 fixed LE）+ 64 字节签名 = 72 字节。
-    // 兼容纯 u64 nonce（8 字节）和带签名的 seal（≥ 8 字节）。
-    if seal_data.len() < 8 {
+    // 2. 严格解码 seal
+    // citizenchain seal 唯一格式：SCALE 编码的 `(u64, sr25519::Signature)`
+    // = 8 字节 nonce(u64 定长 LE) + 64 字节 sr25519 签名 = 恰好 72 字节
+    // (定长数组无长度前缀)。节点 (core/service.rs) 与 GPU 矿工 (mining/gpu_miner.rs)
+    // 都只发这一种,故此处按精确长度断言,任何偏离一律拒绝,不做「≥8 字节」宽容。
+    const POW_SEAL_LEN: usize = 8 + 64;
+    if seal_data.len() != POW_SEAL_LEN {
         return Err(VerifyError::InvalidSealFormat);
     }
     let nonce = u64::from_le_bytes(

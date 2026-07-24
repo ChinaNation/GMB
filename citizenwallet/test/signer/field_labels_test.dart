@@ -22,7 +22,6 @@ void main() {
       const keys = [
         'cid_number',
         'account_id',
-        'citizen_age_years',
         'valid_range',
         'citizen_status',
         'residence',
@@ -38,7 +37,6 @@ void main() {
         'actor_role_code',
         'cid_number',
         'account_id',
-        'citizen_age_years',
         'valid_range',
         'citizen_status',
         'residence',
@@ -54,7 +52,6 @@ void main() {
         'identity_level',
         'cid_number',
         'account_id',
-        'citizen_age_years',
         'valid_range',
         'citizen_status',
         'residence',
@@ -72,7 +69,6 @@ void main() {
       expect(fieldLabelText('actor_cid_number'), '操作机构CID');
       expect(fieldLabelText('actor_role_code'), '操作岗位码');
       expect(fieldLabelText('account_id'), '账户');
-      expect(fieldLabelText('citizen_age_years'), '周岁年龄');
       expect(fieldLabelText('valid_range'), '护照有效期');
       expect(fieldLabelText('citizen_status'), '身份状态');
       expect(fieldLabelText('residence'), '居住地');
@@ -132,7 +128,7 @@ void main() {
     });
 
     test('其他 key 原样返回', () {
-      expect(fieldValueText('citizen_age_years', '22周岁'), '22周岁');
+      expect(fieldValueText('residence', '11 / 01 / 001'), '11 / 01 / 001');
     });
   });
 }

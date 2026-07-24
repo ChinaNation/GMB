@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:citizenapp/citizen/institution/institution.dart';
 import 'package:citizenapp/citizen/institution/institution_accounts.dart';
 import 'package:citizenapp/citizen/institution/institution_repository.dart';
@@ -142,7 +143,7 @@ class _ProposalViewState extends State<ProposalTab> {
       return;
     }
     if (!connected) {
-      debugPrint('[ProposalTab] 链事件订阅连接失败');
+      AppLog.d('[ProposalTab] 链事件订阅连接失败');
     }
   }
 

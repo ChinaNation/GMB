@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:flutter/services.dart';
 import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import 'package:flutter_svg/flutter_svg.dart';
@@ -198,7 +198,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
       if (WalletIsar.instance.isBusyError(e)) {
         return;
       }
-      debugPrint('[链上交易] 加载本地记录失败: $e');
+      AppLog.d('[链上交易] 加载本地记录失败: $e');
     }
   }
 
@@ -246,7 +246,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
           : await _paymentService.getCurrentWallet();
     } catch (e, st) {
       if (!WalletIsar.instance.isBusyError(e)) {
-        debugPrint('[链上交易] 当前钱包加载失败: $e\n$st');
+        AppLog.d('[链上交易] 当前钱包加载失败: $e\n$st');
       }
     }
     if (!mounted) {
@@ -355,7 +355,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
         return;
       }
     } catch (e) {
-      debugPrint('[OnchainPay] 收款地址 SS58 校验失败: $e');
+      AppLog.d('[OnchainPay] 收款地址 SS58 校验失败: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('收款地址格式错误，请输入有效的 SS58 地址')),
       );
@@ -557,7 +557,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
         // finalized 区块事件再升级为已确认。这里仅兜底延迟刷新本地列表。
         unawaited(_reloadAfterChainEventWindow());
       } catch (e) {
-        debugPrint('[交易记录] 写入本地失败: $e');
+        AppLog.d('[交易记录] 写入本地失败: $e');
       }
     } on WalletAuthException catch (e) {
       if (!mounted) {
@@ -580,7 +580,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
       if (!mounted) {
         return;
       }
-      debugPrint('[链上交易] 未知异常: $e');
+      AppLog.d('[链上交易] 未知异常: $e');
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('交易异常：$e')));

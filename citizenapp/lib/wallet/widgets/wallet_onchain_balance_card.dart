@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:citizenapp/log/app_log.dart';
 
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/ui/app_theme.dart';
@@ -63,7 +64,7 @@ class WalletOnchainBalanceCardState extends State<WalletOnchainBalanceCard> {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint(
+      AppLog.d(
           '[WalletOnchainBalanceCard] fetchFinalizedTotalBalance failed: $e');
       if (!mounted) return;
       setState(() {

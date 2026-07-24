@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:flutter/services.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
@@ -97,7 +98,7 @@ class _MultisigProposalDetailPageState
   }
 
   Future<void> _load({bool showSpinner = true}) async {
-    debugPrint('[VoteDetail._load] 开始 proposalId=${widget.proposalId}');
+    AppLog.d('[VoteDetail._load] 开始 proposalId=${widget.proposalId}');
     ProposalDetailSnapshot? localSnapshot;
     if (showSpinner) {
       localSnapshot = await _applyLocalSnapshot();
@@ -120,7 +121,7 @@ class _MultisigProposalDetailPageState
       // step1:并行加载合格选民快照、提案状态、投票计数、阈值快照。
       // 机构资格只来自岗位有效选民快照，个人资格来自管理员快照；缺失或损坏
       // 必须失败，禁止回落到当前 admins。
-      debugPrint(
+      AppLog.d(
           '[VoteDetail._load] step1: 并行 fetchSnapshot/Status/Tally/Threshold...');
       final thresholdFuture = _proposalService
           .fetchInternalThresholdSnapshot(widget.proposalId)
@@ -143,14 +144,14 @@ class _MultisigProposalDetailPageState
       final thresholdSnapshot = results[3] as int?;
       final threshold =
           _resolveVoteThreshold(thresholdSnapshot, voterTickets.length);
-      debugPrint(
+      AppLog.d(
           '[VoteDetail._load] step1 完成 admins.len=${admins.length} status=$status yes=${tally.yes} no=${tally.no} threshold=$threshold');
 
       // step2:加载提案业务数据（从 ProposalData 解码）
-      debugPrint('[VoteDetail._load] step2: fetchProposalData');
+      AppLog.d('[VoteDetail._load] step2: fetchProposalData');
       final key = _buildProposalDataStorageKey(widget.proposalId);
       final raw = await rpc.fetchStorage('0x${_hexEncode(key)}');
-      debugPrint('[VoteDetail._load] step2 完成 raw.len=${raw?.length ?? 0}');
+      AppLog.d('[VoteDetail._load] step2 完成 raw.len=${raw?.length ?? 0}');
       personal_models.CreateProposalInfo? createInfo;
       personal_models.CloseProposalInfo? closeInfo;
       institution_models.CloseProposalInfo? institutionCloseInfo;
@@ -174,13 +175,13 @@ class _MultisigProposalDetailPageState
       }
 
       // step3:批量查询每张快照票据的投票记录，避免逐条 RPC。
-      debugPrint(
+      AppLog.d(
           '[VoteDetail._load] step3: 批量查岗位票据 (${voterTickets.length} 张)');
       final votes = await _proposalService.fetchTicketVotesBatch(
         widget.proposalId,
         voterTickets,
       );
-      debugPrint('[VoteDetail._load] step3 完成');
+      AppLog.d('[VoteDetail._load] step3 完成');
 
       // 筛选可投票钱包
       final votable = <WalletProfile>[];
@@ -195,7 +196,7 @@ class _MultisigProposalDetailPageState
       }
 
       if (!mounted) {
-        debugPrint('[VoteDetail._load] !mounted 提前返回');
+        AppLog.d('[VoteDetail._load] !mounted 提前返回');
         return;
       }
       try {
@@ -213,7 +214,7 @@ class _MultisigProposalDetailPageState
         // 详情快照只是首屏加速，写入失败不能影响链上结果展示。
       }
       if (!mounted) return;
-      debugPrint('[VoteDetail._load] step5: setState');
+      AppLog.d('[VoteDetail._load] step5: setState');
       setState(() {
         _admins = admins;
         _status = status;
@@ -229,9 +230,9 @@ class _MultisigProposalDetailPageState
         _institutionCloseInfo = institutionCloseInfo;
         _loading = false;
       });
-      debugPrint('[VoteDetail._load] 结束');
+      AppLog.d('[VoteDetail._load] 结束');
     } catch (e, st) {
-      debugPrint('[VoteDetail._load] catch 异常: $e\n$st');
+      AppLog.d('[VoteDetail._load] catch 异常: $e\n$st');
       if (!mounted) return;
       if (localSnapshot != null) {
         setState(() => _loading = false);
@@ -502,14 +503,14 @@ class _MultisigProposalDetailPageState
   }
 
   Future<void> _submitVote(bool approve) async {
-    debugPrint(
+    AppLog.d(
         '[VoteDetail] _submitVote 开始 approve=$approve proposalId=${widget.proposalId}');
     final wallet = _selectedVoteWallet;
     if (wallet == null) {
-      debugPrint('[VoteDetail] _submitVote 无可投钱包,直接 return');
+      AppLog.d('[VoteDetail] _submitVote 无可投钱包,直接 return');
       return;
     }
-    debugPrint(
+    AppLog.d(
         '[VoteDetail] 选中钱包 ${wallet.ss58Address} accountId=${wallet.accountId} isHot=${wallet.isHotWallet}');
 
     setState(() => _submitting = true);
@@ -568,7 +569,7 @@ class _MultisigProposalDetailPageState
 
       // 创建/关闭多签的投票都走 InternalVote::cast(20.0),
       // 由 runtime 的 InternalVoteExecutor 按 MODULE_TAG+ACTION 分派。
-      debugPrint('[VoteDetail] 调 InternalVoteService.submit');
+      AppLog.d('[VoteDetail] 调 InternalVoteService.submit');
       final result = await InternalVoteService().submit(
         proposalId: widget.proposalId,
         approve: approve,
@@ -583,7 +584,7 @@ class _MultisigProposalDetailPageState
           }
         },
       );
-      debugPrint(
+      AppLog.d(
           '[VoteDetail] submit 已入块 txHash=${result.txHash} nonce=${result.usedNonce} block=${result.blockHashHex}');
 
       if (!mounted) return;
@@ -610,10 +611,10 @@ class _MultisigProposalDetailPageState
       _adminService.clearCache(_accountIdentity);
       // 服务层已经等待入块并回读 InternalVote storage；这里
       // 只后台刷新展示状态，不能再把 txHash 当作投票成功依据。
-      debugPrint('[VoteDetail] fire-and-forget 调 _load 后台刷新');
+      AppLog.d('[VoteDetail] fire-and-forget 调 _load 后台刷新');
       unawaited(_load());
     } catch (e, st) {
-      debugPrint('[VoteDetail] _submitVote catch 异常: $e\n$st');
+      AppLog.d('[VoteDetail] _submitVote catch 异常: $e\n$st');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -622,7 +623,7 @@ class _MultisigProposalDetailPageState
         ),
       );
     } finally {
-      debugPrint('[VoteDetail] finally setState(_submitting=false)');
+      AppLog.d('[VoteDetail] finally setState(_submitting=false)');
       if (mounted) setState(() => _submitting = false);
     }
   }

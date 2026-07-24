@@ -249,7 +249,6 @@ fn voting_payload(account_id: u64, cid_number: &[u8]) -> VotingIdentityPayload<u
     VotingIdentityPayload {
         cid_number: cid(cid_number),
         account_id,
-        citizen_age_years: 18,
         passport_valid_from: 20260630,
         passport_valid_until: 20360630,
         citizen_status: CitizenStatus::Normal,
@@ -933,16 +932,18 @@ fn candidate_future_birth_date_rejected() {
 }
 
 #[test]
-fn under_sixteen_cannot_register_onchain_identity() {
+fn candidate_under_sixteen_cannot_register_onchain_identity() {
     new_test_ext().execute_with(|| {
         // 占号先行:身份写入前置。
         occupy_tag("UNDERAGE");
 
-        let mut payload = voting_payload(1, &citizen_cid_number("UNDERAGE"));
-        payload.citizen_age_years = 15;
+        // 投票身份不再链上校验年龄;最小年龄门只在竞选身份按 birth_date 实时判定。
+        // 固定时间 20260702 下出生 20150301 → 11 周岁,未满 16。
+        let mut payload = candidate_payload(1, &citizen_cid_number("UNDERAGE"));
+        payload.birth_date = 20150301;
 
         assert_noop!(
-            CitizenIdentity::register_voting_identity(
+            CitizenIdentity::upgrade_to_candidate_identity(
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),

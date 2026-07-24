@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/widgets/chain_progress_banner.dart';
@@ -112,7 +113,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
         );
       } catch (e) {
         // 余额快照写入失败不影响当前链上余额展示，但要留痕便于排查缓存问题。
-        debugPrint('[MultisigTransfer] 余额快照写入失败: $e');
+        AppLog.d('[MultisigTransfer] 余额快照写入失败: $e');
       }
       if (!mounted) return;
       setState(() {
@@ -122,7 +123,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
       });
     } catch (e) {
       // 链上余额查询失败必须留痕；有缓存时继续展示旧值但要标记过期。
-      debugPrint('[MultisigTransfer] 链上余额查询失败: $e');
+      AppLog.d('[MultisigTransfer] 链上余额查询失败: $e');
       if (!mounted) return;
       if (local == null) {
         setState(() {
@@ -389,7 +390,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
     } catch (e) {
       // 写入失败不阻断主流程(链端已成功)，但本地提案历史会缺该记录，
       // 必须留痕，否则用户会误以为提案没创建而重复提交。
-      debugPrint('[MultisigTransfer] 本地提案历史写入失败: $e');
+      AppLog.d('[MultisigTransfer] 本地提案历史写入失败: $e');
     }
   }
 

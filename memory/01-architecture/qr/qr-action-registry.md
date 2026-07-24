@@ -84,7 +84,7 @@ a = (pallet_index << 8) | call_index
 | `0x0903` | `VotingEngine.finalize_proposal` | `finalize_proposal` | `proposal_id` | citizenchain node / CitizenApp |
 | `0x0904` | `VotingEngine.retry_passed_proposal` | `retry_passed_proposal` | `proposal_id` | citizenchain node / CitizenApp |
 | `0x0905` | `VotingEngine.cancel_passed_proposal` | `cancel_passed_proposal` | `proposal_id`, `reason` | citizenchain node / CitizenApp |
-| `0x0a00` | `CitizenIdentity.register_voting_identity` | `register_voting_identity` | `actor_cid_number`, `actor_role_code`, `cid_number`, `account_id`, `citizen_age_years`, `valid_range`, `citizen_status`, `residence` | OnChina |
+| `0x0a00` | `CitizenIdentity.register_voting_identity` | `register_voting_identity` | `actor_cid_number`, `actor_role_code`, `cid_number`, `account_id`, `valid_range`, `citizen_status`, `residence` | OnChina |
 | `0x0c00` | `RuntimeUpgrade.propose_runtime_upgrade` | `propose_runtime_upgrade` | `wasm_hash` | citizenchain node / CitizenApp |
 | `0x0c02` | `RuntimeUpgrade.developer_direct_upgrade` | `developer_direct_upgrade` | `wasm_hash` | citizenchain node / CitizenApp |
 | `0x0d00` | `ResolutionDestro.propose_destroy` | `propose_destroy` | `actor_cid_number`, `actor_role_code`, `proposer_role_code`, `institution_account_id`, `operation_fee_payer_description`, `execution_fee_payer_description`, `amount_yuan` | CitizenApp |

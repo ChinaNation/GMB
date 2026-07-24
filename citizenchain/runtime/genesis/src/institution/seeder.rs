@@ -23,7 +23,11 @@ use primitives::{
             china_jy::CHINA_JY,
             china_lf::CHINA_LF,
             china_sf::{CHINA_SF, NATIONAL_JUDICIAL_YUAN_ADMINS},
-            china_zf::{CHINA_ZF, FEDERAL_REGISTRY_ADMINS},
+            china_zf::{
+                CHINA_ZF, FEDERAL_REGISTRY_ADMINS, FSC_GENESIS_ADMIN_CID_NUMBER,
+                FSC_GENESIS_ADMIN_FAMILY_NAME, FSC_GENESIS_ADMIN_GIVEN_NAME,
+                FSC_GENESIS_ASSIGNMENTS, FSC_GOVERNANCE_THRESHOLD,
+            },
             citizenchain::{
                 CITIZENCHAIN_FOUNDATION, CITIZENCHAIN_GENESIS_ADMINS,
                 CITIZENCHAIN_GENESIS_ASSIGNMENTS, CITIZENCHAIN_GOVERNANCE_THRESHOLD,
@@ -31,7 +35,7 @@ use primitives::{
                 LEGAL_REPRESENTATIVE_GIVEN_NAME,
             },
         },
-        code::{institution_code_from_cid_number, InstitutionCode, FRG, NJD},
+        code::{institution_code_from_cid_number, InstitutionCode, FRG, FSC, NJD},
     },
 };
 use sp_runtime::traits::Zero;
@@ -288,7 +292,9 @@ fn insert_public_institution<T: public_manage::Config>(
         },
     );
     // 联邦安全局创世岗位 = 自带的 LR + 局长(创世期不设任期,任期由运行期业务模块规范)。
-    if institution_code == primitives::cid::code::FSC {
+    // 两岗在此建为空缺,其多签转账 Propose+Vote 权限由固定权限目录随建岗写入;
+    // 程伟的实际任职由 insert_fsc_genesis_governance 补齐。
+    if institution_code == FSC {
         public_manage::Pallet::<T>::store_genesis_director_role(&cid)
             .unwrap_or_else(|_| panic!("genesis institution: {} 局长岗位写入失败", cid_number));
     }
@@ -436,6 +442,129 @@ fn insert_fixed_admins<T>(
     let threshold = primitives::cid::code::fixed_governance_pass_threshold(&institution_code)
         .unwrap_or_else(|| panic!("genesis institution: {cid_number} 缺少固定机构阈值"));
     public_manage::InstitutionGovernanceThresholds::<T>::insert(&cid, threshold);
+}
+
+/// 写入联邦安全局(FSC)创世治理。
+///
+/// 机构身份和账户(含联邦公民安全基金)已由 `insert_public_institution` 写入;这里补齐:
+/// 法定代表人 + 局长两岗均由程伟创世任职、程伟登记为公权管理员、法定代表人公开事实、
+/// 以及 2/2 严格过半内部治理阈值。两岗的多签转账 Propose+Vote 权限由固定权限目录经
+/// `store_genesis_fixed_role_permissions` 写入,使 FSC 可经内部投票从该基金转出。
+fn insert_fsc_genesis_governance<T>(cid_number: &'static str)
+where
+    T: public_manage::Config + public_admins::Config,
+{
+    let cid = bounded_cid::<T>(cid_number);
+    let institution_code = institution_code_from_cid_number(cid_number)
+        .expect("genesis institution: FSC cid_number 机构码解析失败");
+    assert_eq!(
+        institution_code, FSC,
+        "genesis institution: insert_fsc_genesis_governance 只服务联邦安全局"
+    );
+    assert_eq!(
+        FSC_GENESIS_ASSIGNMENTS.len(),
+        2,
+        "genesis institution: FSC 必须恰好两条创世任职(LR + 局长)"
+    );
+    assert_eq!(
+        FSC_GOVERNANCE_THRESHOLD, 2,
+        "genesis institution: FSC 两席严格过半阈值必须为 2"
+    );
+
+    // 法定代表人任命的公开事实:原子写入 legal_representative(程伟)。
+    let lr_cid: PublicCidNumberOf<T> = FSC_GENESIS_ADMIN_CID_NUMBER
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("genesis institution: FSC 法定代表人公民 CID 超过协议上限");
+    let admin_account =
+        decode_account::<T>(&FSC_GENESIS_ASSIGNMENTS[0].account_id, "FSC 创世任职管理员");
+    public_manage::Institutions::<T>::mutate(&cid, |maybe| {
+        let info = maybe
+            .as_mut()
+            .expect("genesis institution: FSC 机构信息必须已由 insert_public_institution 写入");
+        info.legal_representative = Some(LegalRepresentative {
+            family_name: bounded_account_name::<T>(
+                FSC_GENESIS_ADMIN_FAMILY_NAME.as_bytes(),
+                "FSC 法定代表人姓",
+                cid_number,
+            ),
+            given_name: bounded_account_name::<T>(
+                FSC_GENESIS_ADMIN_GIVEN_NAME.as_bytes(),
+                "FSC 法定代表人名",
+                cid_number,
+            ),
+            cid_number: lr_cid,
+            account_id: admin_account.clone(),
+        });
+    });
+
+    // 填两岗任职:LR + 局长均由程伟担任。两岗本身与其多签转账 Propose+Vote 权限已由
+    // insert_public_institution 的 store_vacant_genesis_role 写入(空缺 + 固定权限目录);
+    // 这里只把空缺任职直接填成程伟(仿任免结果写入路径,单席一人,创世期无任期)。
+    for genesis_assignment in FSC_GENESIS_ASSIGNMENTS {
+        let role_code: public_manage::institution::role::RoleCodeOf = genesis_assignment
+            .role_code
+            .to_vec()
+            .try_into()
+            .expect("genesis institution: FSC 岗位代码超过协议上限");
+        let mut list: Vec<public_manage::institution::role::InstitutionAdminAssignmentOf<T>> =
+            Vec::new();
+        list.push(InstitutionAdminAssignment {
+            cid_number: cid.clone(),
+            account_id: decode_account::<T>(&genesis_assignment.account_id, "FSC 创世任职管理员"),
+            role_code: role_code.clone(),
+            term_start: 0,
+            term_end: 0,
+            assignment_source: InstitutionAssignmentSource::Genesis,
+            assignment_source_ref: Default::default(),
+            assignment_status: InstitutionAssignmentStatus::Active,
+        });
+        let bounded: public_manage::institution::role::RoleAssignmentsOf<T> = list
+            .try_into()
+            .expect("genesis institution: FSC 单岗任职数量超限");
+        public_manage::InstitutionRoleAssignments::<T>::insert(&cid, &role_code, bounded);
+    }
+
+    // 程伟作为 FSC 公权管理员(四字段:公民 CID + 姓 + 名 + account)。
+    let admin = Admin {
+        account_id: admin_account,
+        cid_number: FSC_GENESIS_ADMIN_CID_NUMBER
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("genesis institution: FSC 管理员公民 CID 超过协议上限"),
+        family_name: FSC_GENESIS_ADMIN_FAMILY_NAME
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("genesis institution: FSC 管理员姓超过协议上限"),
+        given_name: FSC_GENESIS_ADMIN_GIVEN_NAME
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("genesis institution: FSC 管理员名超过协议上限"),
+    };
+    let mut admin_records: Vec<Admin<T::AccountId>> = Vec::new();
+    admin_records.push(admin);
+    let admins: PublicAdminsOf<T> = admin_records
+        .try_into()
+        .expect("genesis institution: FSC 管理员数量超过 MaxAdminsPerInstitution");
+    let admin_cid: AdminCidNumber = cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("genesis institution: FSC 管理员 CID 过长");
+    public_admins::AdminAccounts::<T>::insert(
+        admin_cid,
+        PublicInstitutionAdminsOf::<T> {
+            institution_code,
+            admins,
+        },
+    );
+
+    // FSC 内部治理阈值(2/2 严格过半)。
+    public_manage::InstitutionGovernanceThresholds::<T>::insert(&cid, FSC_GOVERNANCE_THRESHOLD);
 }
 
 /// 写入公民链技术发展基金会正式创世状态。
@@ -749,6 +878,14 @@ where
         FRG,
         FEDERAL_REGISTRY_ADMINS,
     );
+
+    // 联邦安全局(FSC)创世治理:程伟任 LR + 局长两岗、配 2/2 严格过半阈值,
+    // 使联邦公民安全基金可经 FSC 内部投票转出。
+    let fsc_node = CHINA_ZF
+        .iter()
+        .find(|node| institution_code_from_cid_number(node.cid_number) == Some(FSC))
+        .expect("china_zf must include FSC");
+    insert_fsc_genesis_governance::<T>(fsc_node.cid_number);
 
     // 创世直铸当前国家/省/市公权机构(ADR-031 v3):常量 296 + 派生 49,297。
     build_template_institutions::<T>();

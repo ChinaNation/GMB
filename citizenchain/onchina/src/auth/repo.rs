@@ -4,6 +4,7 @@
 
 use chrono::{DateTime, Duration, Utc};
 use postgres::Client;
+use sha2::{Digest, Sha256};
 
 use crate::auth::login::{
     AdminInstitutionCandidate, AdminSession, LoginSignRequest, NodeBindingChallenge,
@@ -893,12 +894,23 @@ pub(crate) fn update_login_sign_request_conn(
     Ok(())
 }
 
+/// 会话令牌落库前统一取 SHA-256 十六进制:token 列与 payload 都只存哈希,
+/// DB 被 dump 也拿不到可直接冒用的明文令牌(明文只在客户端 Cookie/请求头里)。
+/// 令牌本身是高熵随机 UUID,无需加盐即可抵御彩虹表。
+pub(crate) fn admin_session_token_hash(raw_token: &str) -> String {
+    hex::encode(Sha256::digest(raw_token.as_bytes()))
+}
+
 pub(crate) fn insert_admin_session_conn(
     conn: &mut Client,
     session: &AdminSession,
 ) -> Result<(), String> {
+    // 入参 session.token 是明文令牌;列存哈希,payload 里的 token 清空(不落明文)。
+    let token_hash = admin_session_token_hash(&session.token);
+    let mut stored = session.clone();
+    stored.token.clear();
     let payload =
-        serde_json::to_value(session).map_err(|e| format!("encode admin session failed: {e}"))?;
+        serde_json::to_value(&stored).map_err(|e| format!("encode admin session failed: {e}"))?;
     conn.execute(
         "INSERT INTO admin_sessions(token, account_id, institution_code, candidate_id, expires_at, last_active_at, payload)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -910,7 +922,7 @@ pub(crate) fn insert_admin_session_conn(
             last_active_at = EXCLUDED.last_active_at,
             payload = EXCLUDED.payload",
         &[
-            &session.token,
+            &token_hash,
             &session.account_id,
             &session.institution_code,
             &session.candidate_id,
@@ -924,9 +936,9 @@ pub(crate) fn insert_admin_session_conn(
 }
 
 pub(crate) fn delete_admin_session(db: &Db, token: &str) -> Result<(), String> {
-    let token = token.trim().to_string();
+    let token_hash = admin_session_token_hash(token.trim());
     db.with_client(move |conn| {
-        conn.execute("DELETE FROM admin_sessions WHERE token = $1", &[&token])
+        conn.execute("DELETE FROM admin_sessions WHERE token = $1", &[&token_hash])
             .map_err(|e| format!("delete admin session failed: {e}"))?;
         Ok(())
     })
@@ -936,15 +948,24 @@ pub(crate) fn get_admin_session_conn(
     conn: &mut Client,
     token: &str,
 ) -> Result<Option<AdminSession>, String> {
+    let token_hash = admin_session_token_hash(token);
     let row = conn
         .query_opt(
             "SELECT payload FROM admin_sessions WHERE token = $1",
-            &[&token],
+            &[&token_hash],
         )
         .map_err(|e| format!("query admin session failed: {e}"))?;
     row.map(|r| serde_json::from_value::<AdminSession>(r.get(0)))
         .transpose()
         .map_err(|e| format!("decode admin session failed: {e}"))
+        // payload 里 token 已清空;回填调用方持有的明文令牌,后续 touch(再 insert)
+        // 才能按同一明文重新取哈希,不会因空串算错 PK。
+        .map(|opt| {
+            opt.map(|mut session| {
+                session.token = token.to_string();
+                session
+            })
+        })
 }
 
 pub(crate) fn touch_admin_session_conn(

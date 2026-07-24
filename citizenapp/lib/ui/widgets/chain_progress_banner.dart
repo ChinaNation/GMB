@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:smoldot/smoldot.dart'
     show LightClientStatusSnapshot, LightClientSyncPhase;
 import 'package:citizenapp/rpc/chain_rpc.dart';
@@ -125,7 +126,7 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
         '${progress.finalizedBlockNumber}';
     if (_lastLoggedProgress == signature) return;
     _lastLoggedProgress = signature;
-    debugPrint(
+    AppLog.d(
       '[SmoldotStatus] phase=${progress.syncPhase.wireValue}, '
       'syncing=${progress.isSyncing}, '
       'usable=${progress.isUsable}, '

@@ -85,7 +85,6 @@ fn voting_payload<T: Config>(
     VotingIdentityPayload {
         cid_number,
         account_id,
-        citizen_age_years: 18,
         passport_valid_from: valid_from,
         passport_valid_until: valid_until,
         citizen_status: CitizenStatus::Normal,

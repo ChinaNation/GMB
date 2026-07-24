@@ -9,6 +9,7 @@ import 'dart:async' show unawaited;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:isar_community/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
@@ -255,7 +256,7 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
       anyChanged = stats.newlyAdded > 0 || stats.orphansRemoved > 0;
       completed = !stats.partialFailure;
     } catch (e) {
-      debugPrint('[PersonalAccountListPage] discovery 失败: $e');
+      AppLog.d('[PersonalAccountListPage] discovery 失败: $e');
     } finally {
       if (anyChanged) {
         await _readFromIsar();

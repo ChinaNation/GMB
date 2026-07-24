@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -141,7 +142,7 @@ class _ProfilePageState extends State<MyTab> {
         _ => null,
       };
     } catch (e) {
-      debugPrint('profile badge snapshot load failed: $e');
+      AppLog.d('profile badge snapshot load failed: $e');
     }
     if (!mounted || generation != _loadGeneration) {
       return;
@@ -207,7 +208,7 @@ class _ProfilePageState extends State<MyTab> {
       if (!mounted || generation != _loadGeneration) return;
       setState(() => _membership = membership);
     } on Exception catch (e) {
-      debugPrint('profile membership load failed: $e');
+      AppLog.d('profile membership load failed: $e');
     }
   }
 

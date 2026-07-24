@@ -35,7 +35,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
         fee_account: hex!("fabe3c11d600221ab4156ebaae3c00c8efae939442f4cd1a764cfdf62461a387"),
         grandpa_key: hex!("3719c39cf92462da2e22a7dfa760f463c801dd86a27a4151d24935e42692e5b5"),
         admins: &[
-            hex!("6832b6f09d231e1ddf34be1a81f68eb958da88be370f999e2d98f3407cb72d05"),
+            hex!("4e6f054c103786e6aaaadb5df2e8fd59552faf79dbc03e60d9376f5e88fb2425"),
             hex!("1e425ee2b68dc715e64f88d5a604b697a29a0bcd593086a501f0d1f9d07b9e6e"),
             hex!("18c6c0bd35409e920beada1e0c5f6c38187f70092e50d110a97da1620559c36c"),
             hex!("ae383adaf198e0514448fdf2231513840c5671e3ac2d2e66591f248d3d383672"),

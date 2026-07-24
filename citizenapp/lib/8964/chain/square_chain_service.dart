@@ -1,4 +1,6 @@
 import 'dart:convert';
+
+import 'package:citizenapp/rpc/pallet_registry.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
@@ -48,8 +50,8 @@ class SquareChainService implements SquarePostChainPublisher {
   final ChainRpc _rpc;
   final CitizenIdentityChainReader _identityChainReader;
 
-  static const int palletIndex = 34;
-  static const int publishPostCallIndex = 0;
+  static const int palletIndex = PalletRegistry.squarePostPallet;
+  static const int publishPostCallIndex = PalletRegistry.publishPostCall;
   static const int maxPostIdBytes = 64;
   static const int maxStorageReceiptIdBytes = 96;
 

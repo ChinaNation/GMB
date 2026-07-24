@@ -9,6 +9,7 @@
 // 无嵌长 K1)。
 
 import 'package:flutter/foundation.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/shared/admin_account_storage_codec.dart';
@@ -117,7 +118,7 @@ class AdminAccountsScanService {
             startKey: startKey,
           );
         } catch (e) {
-          debugPrint('[AdminAccountsScan] getKeysPaged 失败: $e');
+          AppLog.d('[AdminAccountsScan] getKeysPaged 失败: $e');
           partialFailure = true;
           break;
         }
@@ -141,7 +142,7 @@ class AdminAccountsScanService {
       try {
         values = await _rpc.fetchStorageBatch(batchKeys);
       } catch (e) {
-        debugPrint('[AdminAccountsScan] fetchStorageBatch 失败: $e');
+        AppLog.d('[AdminAccountsScan] fetchStorageBatch 失败: $e');
         partialFailure = true;
         continue;
       }

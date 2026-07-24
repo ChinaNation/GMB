@@ -27,8 +27,8 @@ fi
 bash scripts/check-startup-acceptance.sh --ci
 
 doc_regex='^(memory/|docs/|README\.md$|GMB_TECHNICAL\.md$|CLAUDE\.md$|\.github/pull_request_template\.md$|.*_TECHNICAL\.md$)'
-code_regex='^(\.github/workflows/|scripts/|citizenchain/|citizencode/|citizenpassport/|citizenapp/|primitives/|Cargo\.toml$|Cargo\.lock$|.*\.(rs|dart|ts|tsx|js|jsx|sh|py|sql|toml|ya?ml|json|swift|kt|kts))'
-scan_regex='^(scripts/|citizenchain/|citizencode/|citizenpassport/|citizenapp/|primitives/|.*\.(rs|dart|ts|tsx|js|jsx|sh|py|sql|toml))'
+code_regex='^(\.github/workflows/|scripts/|citizenchain/|citizenapp/|primitives/|Cargo\.toml$|Cargo\.lock$|.*\.(rs|dart|ts|tsx|js|jsx|sh|py|sql|toml|ya?ml|json|swift|kt|kts))'
+scan_regex='^(scripts/|citizenchain/|citizenapp/|primitives/|.*\.(rs|dart|ts|tsx|js|jsx|sh|py|sql|toml))'
 task_card_regex='^memory/08-tasks/(open|done)/[^/]+\.md$'
 todo_word="TO""DO"
 fixme_word="FIX""ME"
@@ -82,12 +82,6 @@ module_doc_requirement_for_file() {
     citizenchain/*|primitives/*|Cargo.toml|Cargo.lock)
       printf '%s' "memory/05-modules/citizenchain/"
       ;;
-    citizencode/*)
-      printf '%s' "memory/05-modules/citizencode/"
-      ;;
-    citizenpassport/*)
-      printf '%s' "memory/05-modules/citizenpassport/"
-      ;;
     citizenapp/*)
       printf '%s' "memory/05-modules/citizenapp/"
       ;;
@@ -120,7 +114,7 @@ has_matching_module_doc_update() {
       has_changed_doc_file "memory/01-architecture/repo-map.md" && return 0
       has_changed_doc_file "memory/03-security/security-rules.md" && return 0
       ;;
-    citizencode/*|citizenpassport/*|citizenapp/*)
+    citizenapp/*)
       has_changed_doc_file "memory/01-architecture/repo-map.md" && return 0
       has_changed_doc_file "memory/03-security/security-rules.md" && return 0
       ;;

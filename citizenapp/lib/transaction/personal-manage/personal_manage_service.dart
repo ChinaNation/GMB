@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:citizenapp/rpc/pallet_registry.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
@@ -23,7 +25,7 @@ class PersonalManageService {
   final ChainRpc _rpc;
 
   /// PersonalManage pallet index(runtime pallet_index=7)。
-  static const _palletIndex = 7;
+  static const _palletIndex = PalletRegistry.personalManagePallet;
 
   /// PersonalManage::propose_create call_index=0。
   static const _proposeCreateCallIndex = 0;

@@ -33,8 +33,16 @@ class TopupWebviewPage extends StatefulWidget {
   final String recvAddress;
   final String accountId;
 
-  /// WalletConnect Project ID(公开标识,非私钥),编译期注入。
-  static const projectId = String.fromEnvironment('WALLETCONNECT_PROJECT_ID');
+  /// WalletConnect(Reown)Project ID —— 公开标识(非私钥,内嵌客户端本就可见)。
+  /// 默认即用已注册的正式 Project ID,充值发币开箱可付款;要换项目时显式传
+  /// --dart-define=WALLETCONNECT_PROJECT_ID=<id> 覆盖(与 SQUARE_API_URL 同一约定,
+  /// 生产常量烘焙进源码、dart-define 仅作开发覆盖,不依赖任何构建脚本注入)。
+  static const _prodProjectId = '8830074307d80484b839db4eb10b1f2c';
+  static const _configuredProjectId =
+      String.fromEnvironment('WALLETCONNECT_PROJECT_ID');
+  static String get projectId => _configuredProjectId.trim().isNotEmpty
+      ? _configuredProjectId.trim()
+      : _prodProjectId;
 
   @override
   State<TopupWebviewPage> createState() => _TopupWebviewPageState();

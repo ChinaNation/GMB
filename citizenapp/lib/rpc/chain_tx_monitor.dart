@@ -1,7 +1,10 @@
 import 'dart:async';
+
+import 'package:citizenapp/rpc/pallet_registry.dart';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:polkadart/polkadart.dart' show Events, Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
@@ -61,9 +64,9 @@ class ChainTxMonitor {
   // ──── 已知事件的 pallet_index + event_index ────
 
   /// Balances::Transfer (pallet=2, event=2)，仅作为底层余额事件兜底。
-  static const int _balancesPallet = 2;
+  static const int _balancesPallet = PalletRegistry.balancesPallet;
   static const int _transferEvent = 2;
-  static const int _onchainTransactionPallet = 4;
+  static const int _onchainTransactionPallet = PalletRegistry.onchainTransactionPallet;
   static const int _transferWithRemarkEvent = 2;
 
   /// System.Events storage key（twox128("System") + twox128("Events")）。
@@ -102,7 +105,7 @@ class ChainTxMonitor {
 
     _listener = _subscription.events.listen(_onEvent);
     _ensureSubscription();
-    debugPrint('[TxMonitor] 交易监控已启动，监控 ${_ss58AddressByAccountId.length} 个钱包');
+    AppLog.d('[TxMonitor] 交易监控已启动，监控 ${_ss58AddressByAccountId.length} 个钱包');
 
     // 启动后只补 lastSyncedBlock 之后的缺口；没有游标的钱包
     // 以当前 finalized 区块为起点，不回扫导入前历史。
@@ -120,7 +123,7 @@ class ChainTxMonitor {
     _listener?.cancel();
     _listener = null;
     _subscription.disconnect();
-    debugPrint('[TxMonitor] 交易监控已停止');
+    AppLog.d('[TxMonitor] 交易监控已停止');
   }
 
   /// 初始化钱包基准游标（导入钱包时可调用）。
@@ -134,9 +137,9 @@ class ChainTxMonitor {
         trackingStartBlock: finalized.blockNumber,
         lastSyncedBlock: finalized.blockNumber,
       );
-      debugPrint('[TxMonitor] 初始化交易记录游标: $address @${finalized.blockNumber}');
+      AppLog.d('[TxMonitor] 初始化交易记录游标: $address @${finalized.blockNumber}');
     } catch (e) {
-      debugPrint('[TxMonitor] 初始化交易记录游标失败，稍后从轻节点就绪块开始: $e');
+      AppLog.d('[TxMonitor] 初始化交易记录游标失败，稍后从轻节点就绪块开始: $e');
     }
   }
 
@@ -212,7 +215,7 @@ class ChainTxMonitor {
         missingCursorStartsAt: finalized.blockNumber,
       );
     } catch (e) {
-      debugPrint('[TxMonitor] 启动补同步失败: $e');
+      AppLog.d('[TxMonitor] 启动补同步失败: $e');
       _scheduleSyncRetry();
     }
   }
@@ -311,7 +314,7 @@ class ChainTxMonitor {
       await _decodeTransferEvents(eventsBytes, blockNumber, blockHashHex);
       return true;
     } catch (e) {
-      debugPrint('[TxMonitor] 同步区块 $blockNumber 失败: $e');
+      AppLog.d('[TxMonitor] 同步区块 $blockNumber 失败: $e');
       return false;
     }
   }
@@ -366,7 +369,7 @@ class ChainTxMonitor {
       }
       return;
     } catch (e) {
-      debugPrint('[TxMonitor] metadata 事件解码失败，使用兜底解析: $e');
+      AppLog.d('[TxMonitor] metadata 事件解码失败，使用兜底解析: $e');
     }
 
     await _decodeTransferEventsFallback(data, blockNumber, blockHash);

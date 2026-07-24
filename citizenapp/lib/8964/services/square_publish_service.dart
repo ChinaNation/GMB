@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:citizenapp/log/app_log.dart';
 
 import 'package:citizenapp/8964/chain/square_chain_service.dart';
 import 'package:citizenapp/8964/models/square_models.dart';
@@ -188,7 +189,7 @@ class SquarePublishService {
       return null;
     } catch (error) {
       final message = '新内容已发布，但旧内容清理失败：${_messageOf(error)}';
-      debugPrint('[SquarePublishService] $message');
+      AppLog.d('[SquarePublishService] $message');
       return message;
     }
   }

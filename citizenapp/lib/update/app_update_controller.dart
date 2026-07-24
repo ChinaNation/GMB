@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:citizenapp/log/app_log.dart';
 
 import 'app_update_manifest.dart';
 import 'app_update_service.dart';
@@ -86,7 +87,7 @@ class AppUpdateController extends ChangeNotifier {
         update: result.update,
       ));
     } catch (e) {
-      debugPrint('[AppUpdate] 检查更新失败: $e');
+      AppLog.d('[AppUpdate] 检查更新失败: $e');
       _setState(AppUpdateState(
         status: AppUpdateStatus.error,
         currentVersion: _state.currentVersion,
@@ -143,7 +144,7 @@ class AppUpdateController extends ChangeNotifier {
       ));
       return started;
     } catch (e) {
-      debugPrint('[AppUpdate] 下载或安装更新失败: $e');
+      AppLog.d('[AppUpdate] 下载或安装更新失败: $e');
       _setState(AppUpdateState(
         status: AppUpdateStatus.error,
         currentVersion: _state.currentVersion,

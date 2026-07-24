@@ -6,13 +6,12 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/my/myid/voting_identity_payload.dart';
 
 /// 按 onchina `build_voting_identity_payload` 的字节布局构造夹具:
-/// compact(len)+cid || publicKey(32) || age(1) || valid_from(u32le) ||
+/// compact(len)+cid || publicKey(32) || valid_from(u32le) ||
 /// valid_until(u32le) || status(1) || compact+province || compact+city ||
 /// compact+town。长度均 < 64,compact 恒为单字节 len<<2。
 Uint8List buildPayload({
   String cidNumber = 'BJ110198512345678',
   int? publicKeyByte,
-  int age = 22,
   int validFrom = 20260101,
   int validUntil = 20360101,
   int status = 0,
@@ -38,7 +37,6 @@ Uint8List buildPayload({
 
   pushVec(cidNumber);
   out.addAll(List.filled(32, publicKeyByte ?? 0xaa));
-  out.add(age);
   pushU32Le(validFrom);
   pushU32Le(validUntil);
   out.add(status);
@@ -86,7 +84,6 @@ void main() {
         decoded.ss58Address,
         Keyring().encodeAddress(List.filled(32, 0xaa), 2027),
       );
-      expect(decoded.ageYears, 22);
       expect(decoded.statusNormal, isTrue);
       expect(decoded.provinceCode, '11');
       expect(decoded.cityCode, '01');
@@ -95,7 +92,6 @@ void main() {
       final entries = Map.fromEntries(
         decoded.reviewEntries.map((e) => MapEntry(e.$1, e.$2)),
       );
-      expect(entries['周岁年龄'], '22周岁');
       expect(entries['护照有效期'], '2026-01-01 至 2036-01-01');
       expect(entries['身份状态'], '正常');
       expect(entries['居住地'], '11 / 01 / 001');
@@ -135,13 +131,6 @@ void main() {
       );
       expect(decoded, isNotNull);
       expect(decoded!.statusNormal, isFalse);
-    });
-
-    test('拒绝未满16周岁', () {
-      expect(
-        VotingIdentityConsentPayload.decode(buildPayload(age: 15)),
-        isNull,
-      );
     });
 
     test('拒绝未知状态值', () {

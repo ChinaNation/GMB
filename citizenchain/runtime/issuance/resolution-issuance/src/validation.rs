@@ -61,18 +61,6 @@ impl<T: Config> Pallet<T> {
         Ok(())
     }
 
-    /// 新名单必须是旧名单的超集（只允许新增，不允许删除）。
-    pub(crate) fn ensure_recipients_only_added(
-        new_recipients: &BoundedVec<T::AccountId, T::MaxAllocations>,
-    ) -> DispatchResult {
-        let current = crate::pallet::AllowedRecipients::<T>::get();
-        let new_set: BTreeSet<&T::AccountId> = new_recipients.iter().collect();
-        for existing in current.iter() {
-            ensure!(new_set.contains(existing), Error::<T>::RecipientRemoved);
-        }
-        Ok(())
-    }
-
     /// 所有收款账户必须是 CHINA_CB 省储委会地址（跳过索引 0 的 NRC）。
     pub(crate) fn ensure_recipients_in_china_cb(
         recipients: &BoundedVec<T::AccountId, T::MaxAllocations>,

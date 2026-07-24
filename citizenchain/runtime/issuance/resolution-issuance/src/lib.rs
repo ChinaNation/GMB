@@ -60,10 +60,6 @@ pub mod pallet {
 
         /// 允许国家储委会或省储委会管理员发起决议发行提案。
         type ProposeOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
-        /// 更新合法收款账户集合。
-        type RecipientSetOrigin: EnsureOrigin<Self::RuntimeOrigin>;
-        /// 维护入口：仅用于清理短期执行记录和暂停开关。
-        type MaintenanceOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 
         /// 统一投票引擎：本模块只创建联合提案，投票动作由投票引擎公开入口承载。
         type JointVoteEngine: JointVoteEngine<Self::AccountId>;
@@ -111,10 +107,6 @@ pub mod pallet {
     /// 决议发行累计执行量。
     #[pallet::storage]
     pub type TotalIssued<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
-
-    /// 紧急暂停开关。开启后拒绝新的发行执行，但不影响只读查询和记录清理。
-    #[pallet::storage]
-    pub type Paused<T: Config> = StorageValue<_, bool, ValueQuery>;
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
@@ -196,8 +188,6 @@ pub mod pallet {
         },
         /// 投票通过但发行执行失败，投票引擎状态会写为 STATUS_EXECUTION_FAILED。
         IssuanceExecutionFailed { proposal_id: u64 },
-        /// 合法收款账户集合已更新。
-        AllowedRecipientsUpdated { count: u32 },
         /// 决议发行已经执行。
         ResolutionIssuanceExecuted {
             proposal_id: u64,
@@ -206,10 +196,6 @@ pub mod pallet {
             reason_hash: T::Hash,
             allocations_hash: T::Hash,
         },
-        /// 短期执行记录已清理。
-        ExecutedCleared { proposal_id: u64 },
-        /// 暂停状态已变更。
-        PausedSet { paused: bool },
     }
 
     #[pallet::error]
@@ -226,22 +212,17 @@ pub mod pallet {
         JointVoteCreateFailed,
         RecipientsNotConfigured,
         DuplicateAllowedRecipient,
-        ActiveVotingProposalsExist,
         VotingProposalCountOverflow,
         VotingProposalCountUnderflow,
         ProposalDataStoreFailed,
-        RecipientRemoved,
         RecipientNotInChinaCb,
         AlreadyExecuted,
-        AlreadyInState,
         TotalIssuedOverflow,
         ReasonTooLong,
         BelowExistentialDeposit,
         DepositFailed,
         ExceedsTotalIssuanceCap,
         ExceedsSingleIssuanceCap,
-        NotExecuted,
-        PalletPaused,
         ProposalNotFinalizable,
         InvalidActorCid,
         /// 发起人没有目标机构委员岗位的决议发行提案权限。
@@ -274,32 +255,10 @@ pub mod pallet {
             )
         }
 
-        /// 更新链上合法收款账户集合（只允许新增，不允许删除）。
-        #[pallet::call_index(2)]
-        #[pallet::weight(<T as Config>::WeightInfo::set_allowed_recipients())]
-        pub fn set_allowed_recipients(
-            origin: OriginFor<T>,
-            recipients: BoundedVec<T::AccountId, T::MaxAllocations>,
-        ) -> DispatchResult {
-            T::RecipientSetOrigin::ensure_origin(origin)?;
-            Self::set_allowed_recipients_inner(recipients)
-        }
-
-        /// 清理短期执行记录。永久防重放标记 `EverExecuted` 不允许清理。
-        #[pallet::call_index(3)]
-        #[pallet::weight(<T as Config>::WeightInfo::clear_executed())]
-        pub fn clear_executed(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
-            T::MaintenanceOrigin::ensure_origin(origin)?;
-            Self::clear_executed_marker(proposal_id)
-        }
-
-        /// 设置发行暂停开关。
-        #[pallet::call_index(4)]
-        #[pallet::weight(<T as Config>::WeightInfo::set_paused())]
-        pub fn set_paused(origin: OriginFor<T>, paused: bool) -> DispatchResult {
-            T::MaintenanceOrigin::ensure_origin(origin)?;
-            Self::set_pause_state(paused)
-        }
+        // call_index 2/3/4(set_allowed_recipients / clear_executed / set_paused)已删除:
+        // 三者均以 EnsureRoot 门控,而本 runtime 无 Sudo/治理派发 Root,永久不可达=死入口。
+        // 收款集合按创世固定,应急运维走开发期直升 runtime(dev-direct upgrade);
+        // 不保留假的"暂停/清理/改收款"开关以免误导。留洞不复用。
     }
 }
 

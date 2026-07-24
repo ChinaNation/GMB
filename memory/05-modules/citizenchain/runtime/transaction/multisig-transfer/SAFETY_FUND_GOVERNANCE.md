@@ -8,7 +8,7 @@
 
 ```rust
 pub const SAFETY_FUND_ACCOUNT: [u8; 32] =
-    hex!("045bdb35046c60c1346ba48e1e79049519edf4c009e40c7ecead1bebd1884a37");
+    hex!("4ac779852c175087c445c35efecfef3ce6e0232702152ea2283f0b5ec3952e53");
 ```
 
 账户派生方式：`BLAKE2-256(GMB + OP_SAFETY + SS58_PREFIX_LE + 国家储委会 cid_number)`，详见 BLAKE2_ADDRESS_DERIVATION.md。

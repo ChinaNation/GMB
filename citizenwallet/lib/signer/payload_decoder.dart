@@ -2385,7 +2385,7 @@ class PayloadDecoder {
 
   // CitizenIdentity 原始身份载荷。
   // SCALE: VotingIdentityPayload {
-  //   cid_number, account_id, citizen_age_years, valid_from, valid_until,
+  //   cid_number, account_id, valid_from, valid_until,
   //   citizen_status, residence_province_code, residence_city_code,
   //   residence_town_code
   // }
@@ -2705,17 +2705,14 @@ class PayloadDecoder {
       return null;
     }
     offset = afterCid;
-    if (offset + 32 + 1 + 4 + 4 + 1 > bytes.length) return null;
+    // 投票载荷不含年龄:account_id(32) + valid_from(4) + valid_until(4) + status(1)。
+    if (offset + 32 + 4 + 4 + 1 > bytes.length) return null;
 
     final accountIdBytes = bytes.sublist(offset, offset + 32);
     offset += 32;
     final accountId = _bytesToLowerHex(
       Uint8List.fromList(accountIdBytes),
     );
-
-    final age = bytes[offset];
-    offset += 1;
-    if (age < 16) return null;
 
     final validFrom = _readU32Le(bytes, offset);
     offset += 4;
@@ -2763,7 +2760,6 @@ class PayloadDecoder {
       fields: <String, String>{
         'cid_number': cidNumber,
         'account_id': accountId,
-        'citizen_age_years': age.toString(),
         'valid_from': validFrom.toString(),
         'valid_until': validUntil.toString(),
         'citizen_status': statusLabel,
@@ -2774,7 +2770,6 @@ class PayloadDecoder {
       reviewFields: <String, String>{
         'cid_number': cidNumber,
         'account_id': accountId,
-        'citizen_age_years': '$age周岁',
         'valid_range': validRange,
         'citizen_status': statusLabel == 'NORMAL' ? '正常' : '注销',
         'residence': residence,

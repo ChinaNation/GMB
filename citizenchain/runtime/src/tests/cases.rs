@@ -12,6 +12,100 @@ fn time_and_currency_constants_are_consistent() {
 }
 
 #[test]
+fn fsc_genesis_governance_enables_fcsf_multisig_transfer() {
+    use entity_primitives::{
+        BusinessActionId, InstitutionRoleAuthorizationQuery, RolePermissionOperation, RoleSubject,
+    };
+    use primitives::account_derive::AccountKind;
+    use primitives::cid::china::china_zf::{CHINA_ZF, FSC_GENESIS_ADMIN_ACCOUNT};
+    use primitives::cid::code::{institution_code_from_cid_number, FSC};
+    use primitives::institution_asset::{InstitutionAsset, InstitutionAssetAction};
+    use primitives::institution_constraints::{ROLE_CODE_DIRECTOR, ROLE_CODE_LEGAL_REPRESENTATIVE};
+
+    new_test_ext().execute_with(|| {
+        let fsc = CHINA_ZF
+            .iter()
+            .find(|n| institution_code_from_cid_number(n.cid_number) == Some(FSC))
+            .expect("FSC in CHINA_ZF");
+        let cid: public_manage::pallet::CidNumberOf<Runtime> = fsc
+            .cid_number
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("FSC CID fits");
+        let chengwei = AccountId::new(FSC_GENESIS_ADMIN_ACCOUNT);
+
+        // 1) 两岗任职:LR + 局长均由程伟创世任职(Active)。
+        for role in [ROLE_CODE_LEGAL_REPRESENTATIVE, ROLE_CODE_DIRECTOR] {
+            let role_code: public_manage::RoleCodeOf =
+                role.to_vec().try_into().expect("role code fits");
+            let assignments =
+                public_manage::InstitutionRoleAssignments::<Runtime>::get(&cid, &role_code);
+            assert!(
+                assignments.iter().any(|a| a.account_id == chengwei
+                    && a.assignment_status == public_manage::InstitutionAssignmentStatus::Active),
+                "FSC 岗位应由程伟创世任职"
+            );
+        }
+
+        // 2) 阈值 = 2(2 席严格过半)。
+        assert_eq!(
+            public_manage::InstitutionGovernanceThresholds::<Runtime>::get(&cid),
+            Some(2)
+        );
+
+        // 3) 法定代表人 = 程伟。
+        let info = public_manage::Institutions::<Runtime>::get(&cid).expect("FSC institution");
+        assert_eq!(
+            info.legal_representative
+                .expect("FSC 法定代表人已任命")
+                .account_id,
+            chengwei
+        );
+
+        // 4) 守卫:FCSF 只放行多签转账,拒其余动作。
+        let fcsf = AccountId::new(
+            AccountKind::InstitutionFederalCitizenSecurityFund {
+                cid_number: fsc.cid_number.as_bytes(),
+            }
+            .derive(primitives::core_const::SS58_FORMAT),
+        );
+        assert!(RuntimeInstitutionAsset::can_spend(
+            &fcsf,
+            InstitutionAssetAction::MultisigTransferExecute
+        ));
+        assert!(!RuntimeInstitutionAsset::can_spend(
+            &fcsf,
+            InstitutionAssetAction::MultisigCloseExecute
+        ));
+
+        // 5) 授权:程伟以 LR/局长可 Propose 多签转账;两岗均为 Vote 主体。
+        let action = BusinessActionId {
+            module_tag: multisig::MODULE_TAG.to_vec(),
+            action_code: entity_primitives::business_action::ACTION_MULTISIG_TRANSFER,
+        };
+        for role in [ROLE_CODE_LEGAL_REPRESENTATIVE, ROLE_CODE_DIRECTOR] {
+            let subject = RoleSubject {
+                cid_number: fsc.cid_number.as_bytes().to_vec(),
+                role_code: role.to_vec(),
+            };
+            assert!(PublicManage::is_authorized(
+                &chengwei,
+                &subject,
+                &action,
+                RolePermissionOperation::Propose
+            ));
+            assert!(PublicManage::is_authorized(
+                &chengwei,
+                &subject,
+                &action,
+                RolePermissionOperation::Vote
+            ));
+        }
+    });
+}
+
+#[test]
 fn protected_genesis_institution_can_add_dynamic_role_without_mutating_fixed_roles() {
     use entity_primitives::{InstitutionRoleMutation, RolePermissionOperation};
     use frame_support::assert_ok;

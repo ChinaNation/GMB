@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:flutter/services.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -141,7 +142,7 @@ class SmoldotClientManager {
         if (_healthStatus == ChainHealthStatus.degraded) {
           _setHealthStatus(ChainHealthStatus.operational);
           _lastError = null;
-          debugPrint('[Smoldot] 链操作恢复正常');
+          AppLog.d('[Smoldot] 链操作恢复正常');
         }
         return result;
       } catch (e) {
@@ -167,11 +168,11 @@ class SmoldotClientManager {
           _synced = false;
           _syncFuture = null;
           _lastError = '$debugLabel 失败: $e';
-          debugPrint(
+          AppLog.d(
               '[Smoldot] $_lastError (attempt $attempt/$_readMaxRetries)');
           rethrow;
         }
-        debugPrint(
+        AppLog.d(
           '[Smoldot] $debugLabel 瞬断，${_readRetryDelay.inSeconds}s 后重试 '
           '($attempt/$_readMaxRetries): $e',
         );
@@ -188,35 +189,35 @@ class SmoldotClientManager {
   /// 打印当前轻节点诊断信息到 debugPrint，用于排查连接/同步/读取问题。
   Future<void> printDiagnostics() async {
     await ensureStarted();
-    debugPrint('╔══════ Smoldot 诊断 ══════');
-    debugPrint('║ initialized: $_initialized');
-    debugPrint('║ chain: ${_chain != null ? "已加入" : "null"}');
-    debugPrint('║ synced: $_synced');
-    debugPrint('║ healthStatus: $_healthStatus');
-    debugPrint('║ lastError: $_lastError');
+    AppLog.d('╔══════ Smoldot 诊断 ══════');
+    AppLog.d('║ initialized: $_initialized');
+    AppLog.d('║ chain: ${_chain != null ? "已加入" : "null"}');
+    AppLog.d('║ synced: $_synced');
+    AppLog.d('║ healthStatus: $_healthStatus');
+    AppLog.d('║ lastError: $_lastError');
     if (_chain != null) {
       try {
         final snapshot = await getStatusSnapshotRaw();
-        debugPrint('║ peerCount: ${snapshot.peerCount}');
-        debugPrint('║ isSyncing: ${snapshot.isSyncing}');
-        debugPrint(
+        AppLog.d('║ peerCount: ${snapshot.peerCount}');
+        AppLog.d('║ isSyncing: ${snapshot.isSyncing}');
+        AppLog.d(
             '║ bestBlock: #${snapshot.bestBlockNumber} ${snapshot.bestBlockHash}');
-        debugPrint(
+        AppLog.d(
             '║ surfaceFinalized: #${snapshot.finalizedBlockNumber} ${snapshot.finalizedBlockHash}');
-        debugPrint(
+        AppLog.d(
             '║ verifiedFinalized: #${snapshot.currentVerifiedFinalizedBlockNumber} ${snapshot.currentVerifiedFinalizedBlockHash}');
       } catch (e) {
-        debugPrint('║ getStatusSnapshot 失败: $e');
+        AppLog.d('║ getStatusSnapshot 失败: $e');
       }
       try {
         final nonce = await _chain!.getAccountNextIndex(
             '0x0000000000000000000000000000000000000000000000000000000000000000');
-        debugPrint('║ accountNextIndex(zero): $nonce');
+        AppLog.d('║ accountNextIndex(zero): $nonce');
       } catch (e) {
-        debugPrint('║ accountNextIndex 失败: $e');
+        AppLog.d('║ accountNextIndex 失败: $e');
       }
     }
-    debugPrint('╚══════════════════════════');
+    AppLog.d('╚══════════════════════════');
   }
 
   static const _dbCacheKey = 'smoldot_db_cache';
@@ -380,7 +381,7 @@ class SmoldotClientManager {
             generation,
           );
           _ensureLifecycleCurrent(generation);
-          debugPrint(
+          AppLog.d(
             '[Smoldot] 已从同步缓存恢复轻节点 '
             '(${cachedEnvelope.databaseContent.length} bytes)',
           );
@@ -388,13 +389,13 @@ class SmoldotClientManager {
           _ensureLifecycleCurrent(generation);
           // 缓存与当前链状态不兼容时，清掉缓存并回退到无缓存重连，
           // 避免一次坏缓存把后续所有启动都卡死。
-          debugPrint('[Smoldot] 同步缓存失效，清理后重试: $e');
+          AppLog.d('[Smoldot] 同步缓存失效，清理后重试: $e');
           final rejectedChain = _chain;
           _chain = null;
           try {
             await rejectedChain?.dispose();
           } catch (disposeError) {
-            debugPrint('[Smoldot] 释放失效缓存链实例失败: $disposeError');
+            AppLog.d('[Smoldot] 释放失效缓存链实例失败: $disposeError');
           }
           await _clearCachedDatabase();
           _ensureLifecycleCurrent(generation);
@@ -418,12 +419,12 @@ class SmoldotClientManager {
       _synced = false;
       _syncFuture = null;
       _setHealthStatus(ChainHealthStatus.syncing);
-      debugPrint('[Smoldot] 轻节点已启动，正在验证或同步链状态...');
+      AppLog.d('[Smoldot] 轻节点已启动，正在验证或同步链状态...');
 
       // 主动链入口加入网络后立刻预热同步，后续读链复用同一个 Future。
       unawaited(
         ensureSynced(timeout: _defaultSyncTimeout).catchError((Object e) {
-          debugPrint('[Smoldot] 后台同步失败: $e');
+          AppLog.d('[Smoldot] 后台同步失败: $e');
         }),
       );
     } catch (e) {
@@ -435,7 +436,7 @@ class SmoldotClientManager {
               : ChainHealthStatus.degraded,
         );
         _lastError = '轻节点初始化失败: $e';
-        debugPrint('[Smoldot] $_lastError');
+        AppLog.d('[Smoldot] $_lastError');
       }
       await _releaseNativeResources();
       _initialized = false;
@@ -508,14 +509,14 @@ class SmoldotClientManager {
       final manifest = await api.fetchManifest();
       _lastBootstrapManifest = manifest;
       _lastBootstrapError = null;
-      debugPrint(
+      AppLog.d(
         '[Smoldot] 已读取链启动清单: bootnodes=${manifest.p2p.bootnodes.length}',
       );
       return manifest;
     } catch (e) {
       _lastBootstrapManifest = null;
       _lastBootstrapError = '链启动清单不可用，继续使用本地链规格: $e';
-      debugPrint('[Smoldot] $_lastBootstrapError');
+      AppLog.d('[Smoldot] $_lastBootstrapError');
       return null;
     } finally {
       api.close();
@@ -561,7 +562,7 @@ class SmoldotClientManager {
       try {
         await chain.dispose();
       } catch (disposeError) {
-        debugPrint('[Smoldot] 释放错误启动锚点链实例失败: $disposeError');
+        AppLog.d('[Smoldot] 释放错误启动锚点链实例失败: $disposeError');
       }
       rethrow;
     }
@@ -611,10 +612,10 @@ class SmoldotClientManager {
       bootNodes.removeWhere((e) => e == localBoot);
       bootNodes.insert(0, localBoot);
       spec['bootNodes'] = bootNodes;
-      debugPrint('[Smoldot] 注入开发期本地 bootnode: $localBoot');
+      AppLog.d('[Smoldot] 注入开发期本地 bootnode: $localBoot');
       return jsonEncode(spec);
     } catch (e) {
-      debugPrint('[Smoldot] 注入本地 bootnode 失败，回退原始 chainspec: $e');
+      AppLog.d('[Smoldot] 注入本地 bootnode 失败，回退原始 chainspec: $e');
       return chainSpecJson;
     }
   }
@@ -636,7 +637,7 @@ class SmoldotClientManager {
     try {
       final spec = jsonDecode(chainSpecJson) as Map<String, dynamic>;
       if (!_bootstrapMatchesLocalSpec(spec, manifest)) {
-        debugPrint('[Smoldot] 链启动清单与本地 chainspec 不一致，跳过远端 bootnodes');
+        AppLog.d('[Smoldot] 链启动清单与本地 chainspec 不一致，跳过远端 bootnodes');
         return chainSpecJson;
       }
       final List<dynamic> bootNodes =
@@ -646,11 +647,11 @@ class SmoldotClientManager {
         bootNodes.insert(0, bootnode);
       }
       spec['bootNodes'] = bootNodes;
-      debugPrint(
+      AppLog.d(
           '[Smoldot] 已注入 Cloudflare 推荐 bootnodes: ${manifest.p2p.bootnodes.length}');
       return jsonEncode(spec);
     } catch (e) {
-      debugPrint('[Smoldot] 注入链启动清单 bootnodes 失败，回退本地 chainspec: $e');
+      AppLog.d('[Smoldot] 注入链启动清单 bootnodes 失败，回退本地 chainspec: $e');
       return chainSpecJson;
     }
   }
@@ -696,7 +697,7 @@ class SmoldotClientManager {
     );
     final spec = jsonDecode(chainSpecJson) as Map<String, dynamic>;
     spec['lightSyncState'] = lss;
-    debugPrint('[Smoldot] 已注入 lightSyncState checkpoint');
+    AppLog.d('[Smoldot] 已注入 lightSyncState checkpoint');
     return (chainSpec: jsonEncode(spec), genesisHash: genesisHash);
   }
 
@@ -756,7 +757,7 @@ class SmoldotClientManager {
           expectedGenesisHash: expectedGenesisHash,
           maxDatabaseBytes: _dbExportMaxSize,
         );
-        debugPrint(
+        AppLog.d(
           '[Smoldot] 已验证同步缓存信封 '
           '(finalized #${envelope.finalizedBlockNumber})',
         );
@@ -765,11 +766,11 @@ class SmoldotClientManager {
       } catch (e) {
         await prefs.remove(_dbCacheKey);
         _lastPersistedFinalizedBlockNumber = null;
-        debugPrint('[Smoldot] 同步缓存信封无效，已清理: $e');
+        AppLog.d('[Smoldot] 同步缓存信封无效，已清理: $e');
         return null;
       }
     } catch (e) {
-      debugPrint('[Smoldot] 加载同步缓存失败: $e');
+      AppLog.d('[Smoldot] 加载同步缓存失败: $e');
       return null;
     }
   }
@@ -813,9 +814,9 @@ class SmoldotClientManager {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_dbCacheKey);
       _lastPersistedFinalizedBlockNumber = null;
-      debugPrint('[Smoldot] 已清除失效同步缓存');
+      AppLog.d('[Smoldot] 已清除失效同步缓存');
     } catch (e) {
-      debugPrint('[Smoldot] 清除同步缓存失败: $e');
+      AppLog.d('[Smoldot] 清除同步缓存失败: $e');
     }
   }
 
@@ -830,7 +831,7 @@ class SmoldotClientManager {
       try {
         await _saveDatabaseCacheSerial(lifecycleGeneration);
       } catch (e) {
-        debugPrint('[Smoldot] 保存同步缓存失败: $e');
+        AppLog.d('[Smoldot] 保存同步缓存失败: $e');
       }
     });
     _databaseCacheWriteTail = task;
@@ -847,7 +848,7 @@ class SmoldotClientManager {
     final expectedGenesisHash =
         _expectedGenesisHashOverride ?? _expectedGenesisHash;
     if (expectedGenesisHash == null) {
-      debugPrint('[Smoldot] 缺少本地 genesis hash，跳过同步缓存导出');
+      AppLog.d('[Smoldot] 缺少本地 genesis hash，跳过同步缓存导出');
       return;
     }
 
@@ -877,7 +878,7 @@ class SmoldotClientManager {
       final before = await _readDatabaseCacheStatus(chain);
       if (!_isCacheSourceCurrent(lifecycleGeneration, chain)) return null;
       if (!before.isUsable) {
-        debugPrint(
+        AppLog.d(
           '[Smoldot] 链状态尚未 regular/可用，跳过同步缓存导出 '
           '(phase=${before.syncPhase.wireValue}, syncing=${before.isSyncing})',
         );
@@ -891,7 +892,7 @@ class SmoldotClientManager {
       final after = await _readDatabaseCacheStatus(chain);
       if (!_isCacheSourceCurrent(lifecycleGeneration, chain)) return null;
       if (!after.isUsable) {
-        debugPrint('[Smoldot] 导出后链状态不再可用，本轮同步缓存不落盘');
+        AppLog.d('[Smoldot] 导出后链状态不再可用，本轮同步缓存不落盘');
         return null;
       }
 
@@ -907,12 +908,12 @@ class SmoldotClientManager {
           databaseContent: databaseContent,
         )..validate(maxDatabaseBytes: _dbExportMaxSize);
       }
-      debugPrint(
+      AppLog.d(
         '[Smoldot] 导出期间 finalized 已推进 '
         '(#$beforeNumber → #$afterNumber)，重试 $attempt/$_dbExportStableAttempts',
       );
     }
-    debugPrint('[Smoldot] finalized 持续推进，本轮同步缓存不落盘');
+    AppLog.d('[Smoldot] finalized 持续推进，本轮同步缓存不落盘');
     return null;
   }
 
@@ -968,7 +969,7 @@ class SmoldotClientManager {
       } catch (e) {
         // 定时刷新只维护下次冷启动进度；瞬时读链失败不得污染业务链状态，
         // 下一周期继续复用同一门禁重试即可。
-        debugPrint('[Smoldot] 刷新同步缓存失败，等待下次重试: $e');
+        AppLog.d('[Smoldot] 刷新同步缓存失败，等待下次重试: $e');
       }
     }()
         .whenComplete(() {
@@ -1016,7 +1017,7 @@ class SmoldotClientManager {
         );
         _lastPersistedFinalizedBlockNumber = persisted.finalizedBlockNumber;
         if (candidate.finalizedBlockNumber < persisted.finalizedBlockNumber) {
-          debugPrint(
+          AppLog.d(
             '[Smoldot] 丢弃倒退同步缓存 '
             '(#${candidate.finalizedBlockNumber} < #${persisted.finalizedBlockNumber})',
           );
@@ -1029,18 +1030,18 @@ class SmoldotClientManager {
           // 同 genesis、同 finalized 高度不应出现不同哈希。旧值已无法信任，
           // 先删除，再写入当前轻节点刚验证并稳定导出的候选。
           await prefs.remove(_dbCacheKey);
-          debugPrint('[Smoldot] 同步缓存 finalized hash 冲突，已清除旧值');
+          AppLog.d('[Smoldot] 同步缓存 finalized hash 冲突，已清除旧值');
         }
       } catch (e) {
         await prefs.remove(_dbCacheKey);
         _lastPersistedFinalizedBlockNumber = null;
-        debugPrint('[Smoldot] 已清除无法验证的旧同步缓存: $e');
+        AppLog.d('[Smoldot] 已清除无法验证的旧同步缓存: $e');
       }
     }
 
     await prefs.setString(_dbCacheKey, candidate.encode());
     _lastPersistedFinalizedBlockNumber = candidate.finalizedBlockNumber;
-    debugPrint(
+    AppLog.d(
       '[Smoldot] 同步缓存已保存 '
       '(finalized #${candidate.finalizedBlockNumber}, '
       '${utf8.encode(candidate.databaseContent).length} bytes)',
@@ -1112,7 +1113,7 @@ class SmoldotClientManager {
       final peers = await getPeerCount();
       if (peers > 0) return;
       if (i == 0) {
-        debugPrint('[Smoldot] peers=0，等待 P2P 重连...');
+        AppLog.d('[Smoldot] peers=0，等待 P2P 重连...');
       }
       await Future<void>.delayed(_peerWaitInterval);
     }
@@ -1161,7 +1162,7 @@ class SmoldotClientManager {
       _databaseCacheRefreshTimer = null;
       _setHealthStatus(ChainHealthStatus.syncing);
       _lastError = null;
-      debugPrint(
+      AppLog.d(
         '[Smoldot] peer finalized 已推进，重新等待完整验证: '
         'phase=${snapshot.syncPhase.wireValue}, '
         'H=#${snapshot.currentVerifiedFinalizedBlockNumber}, '
@@ -1198,7 +1199,7 @@ class SmoldotClientManager {
   }
 
   Future<void> _waitForSync(Duration timeout, int generation) async {
-    debugPrint('[Smoldot] 等待轻节点同步完成...');
+    AppLog.d('[Smoldot] 等待轻节点同步完成...');
     try {
       await _chain!.waitUntilSynced(timeout: timeout);
       _ensureLifecycleCurrent(generation);
@@ -1218,7 +1219,7 @@ class SmoldotClientManager {
       _synced = false;
       _syncFuture = null;
       _lastError = '轻节点同步中，尚未追上最新区块: $e';
-      debugPrint('[Smoldot] $_lastError');
+      AppLog.d('[Smoldot] $_lastError');
       // 后台定时重试同步检查，追上后自动恢复 operational
       unawaited(_scheduleRetrySync(generation));
       rethrow;
@@ -1255,19 +1256,19 @@ class SmoldotClientManager {
         _ensureLifecycleCurrent(generation);
         _acceptSynchronizedSnapshot(snapshot, generation: generation);
         _syncFuture = null;
-        debugPrint('[Smoldot] 后台重试同步成功 (第 ${i + 1} 次)');
+        AppLog.d('[Smoldot] 后台重试同步成功 (第 ${i + 1} 次)');
         unawaited(_saveDatabaseCache(lifecycleGeneration: generation));
         return;
       } catch (e) {
         if (generation != _lifecycleGeneration) return;
-        debugPrint('[Smoldot] 后台重试同步未完成 (第 ${i + 1}/5 次): $e');
+        AppLog.d('[Smoldot] 后台重试同步未完成 (第 ${i + 1}/5 次): $e');
       }
     }
     // 5 次都没成功（共等 5 分钟），标记 degraded
     if (!_synced && generation == _lifecycleGeneration) {
       _setHealthStatus(ChainHealthStatus.degraded);
       _lastError = '轻节点长时间未能同步到最新区块';
-      debugPrint('[Smoldot] $_lastError');
+      AppLog.d('[Smoldot] $_lastError');
     }
   }
 
@@ -1287,7 +1288,7 @@ class SmoldotClientManager {
     _setHealthStatus(ChainHealthStatus.operational);
     _lastError = null;
     _startDatabaseCacheRefresh(generation);
-    debugPrint(
+    AppLog.d(
       '[Smoldot] 链状态同步完成: '
       'phase=${snapshot.syncPhase.wireValue}, '
       'source=${snapshot.startupFinalizedSource?.wireValue}, '
@@ -1538,12 +1539,12 @@ class SmoldotClientManager {
     try {
       await chain?.dispose();
     } catch (e) {
-      debugPrint('[Smoldot] 释放 chain 失败: $e');
+      AppLog.d('[Smoldot] 释放 chain 失败: $e');
     }
     try {
       await client?.dispose();
     } catch (e) {
-      debugPrint('[Smoldot] 释放 client 失败: $e');
+      AppLog.d('[Smoldot] 释放 client 失败: $e');
     }
   }
 
@@ -1561,7 +1562,7 @@ class SmoldotClientManager {
     _lastBootstrapManifest = null;
     _lastBootstrapError = null;
     _expectedGenesisHash = null;
-    debugPrint('[Smoldot] 轻节点已关闭');
+    AppLog.d('[Smoldot] 轻节点已关闭');
   }
 
   void _ensureReady() {

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -46,12 +47,12 @@ Future<void> main() async {
   // 默认 ErrorWidget 在某些场景下表现为空白方块（白屏），这里换成显眼的红框 + 文字。
   FlutterError.onError = (details) {
     FlutterError.dumpErrorToConsole(details);
-    debugPrint(
+    AppLog.d(
         '[FlutterError-Diag] library=${details.library} ctx=${details.context} '
         'exception=${details.exception}');
   };
   ErrorWidget.builder = (FlutterErrorDetails details) {
-    debugPrint(
+    AppLog.d(
         '[ErrorWidget-Diag] exception=${details.exception}\nstack=${details.stack}');
     return Material(
       color: const Color(0xFFFFEEEE),
@@ -368,7 +369,7 @@ class _AppShellState extends State<AppShell> {
       await _chatRuntime.ensureReady(accountId);
     } on Object catch (error) {
       // 设备/网络/native 任何失败都容忍：预热注册是尽力而为的后台任务。
-      debugPrint('push device prewarm skipped: $error');
+      AppLog.d('push device prewarm skipped: $error');
     }
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/pages/create_wallet_flow.dart';
@@ -82,7 +83,7 @@ class _CreateWalletOnboardingPageState extends State<CreateWalletOnboardingPage>
       if (!mounted) return;
       widget.onCreated();
     } catch (e, st) {
-      debugPrint('onboarding wallet create failed: $e\n$st');
+      AppLog.d('onboarding wallet create failed: $e\n$st');
       if (!mounted) return;
       setState(() => _error = walletOperationErrorMessage(e));
       // 创建失败常见原因是锁屏状态变化，顺手复检刷新警示卡。

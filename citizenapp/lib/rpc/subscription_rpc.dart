@@ -6,6 +6,7 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart/scale_codec.dart' show ByteOutput;
 
 import 'chain_rpc.dart';
+import 'pallet_registry.dart';
 import 'signed_extrinsic_builder.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
@@ -115,11 +116,11 @@ class SubscriptionRpc {
 
   final ChainRpc _rpc;
 
-  static const int _squarePostPalletIndex = 34;
-  static const int _subscribeCallIndex = 1;
-  static const int _cancelCallIndex = 2;
-  static const int _setCreatorPlansCallIndex = 3;
-  static const int _changePlanCallIndex = 4;
+  static const int _squarePostPalletIndex = PalletRegistry.squarePostPallet;
+  static const int _subscribeCallIndex = PalletRegistry.subscribeCall;
+  static const int _cancelCallIndex = PalletRegistry.cancelSubscriptionCall;
+  static const int _setCreatorPlansCallIndex = PalletRegistry.setCreatorPlansCall;
+  static const int _changePlanCallIndex = PalletRegistry.changeSubscriptionPlanCall;
 
   static const int _issuerPlatformTag = 0;
   static const int _issuerCreatorTag = 1;

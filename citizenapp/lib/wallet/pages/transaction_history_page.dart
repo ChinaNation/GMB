@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:flutter/services.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
@@ -91,7 +92,7 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
         _loadingMore = false;
       });
     } catch (e) {
-      debugPrint('[TxHistory] 分页加载失败: $e');
+      AppLog.d('[TxHistory] 分页加载失败: $e');
       if (!mounted) return;
       setState(() => _loadingMore = false);
     }

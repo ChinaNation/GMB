@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:citizenapp/8964/models/square_models.dart';
@@ -218,7 +219,7 @@ class _SquareHomePageState extends State<SquareHomePage> {
     try {
       await future;
     } catch (e) {
-      debugPrint('square identity refresh after chain sync failed: $e');
+      AppLog.d('square identity refresh after chain sync failed: $e');
     }
   }
 

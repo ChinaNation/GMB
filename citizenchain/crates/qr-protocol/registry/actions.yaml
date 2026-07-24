@@ -27,7 +27,6 @@
   required_fields:
     - cid_number
     - account_id
-    - citizen_age_years
     - valid_range
     - citizen_status
     - residence
@@ -261,7 +260,6 @@
     - actor_role_code
     - cid_number
     - account_id
-    - citizen_age_years
     - valid_range
     - citizen_status
     - residence
@@ -788,7 +786,6 @@
     - identity_level
     - cid_number
     - account_id
-    - citizen_age_years
     - valid_range
     - citizen_status
     - residence
@@ -812,7 +809,6 @@
     - actor_role_code
     - cid_number
     - account_id
-    - citizen_age_years
     - valid_range
     - citizen_status
     - residence
@@ -833,7 +829,6 @@
     - identity_level
     - cid_number
     - account_id
-    - citizen_age_years
     - valid_range
     - citizen_status
     - residence

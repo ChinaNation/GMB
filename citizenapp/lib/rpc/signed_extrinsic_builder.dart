@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
+import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:citizenapp/log/app_log.dart';
 import 'package:polkadart/polkadart.dart'
     show ExtrinsicPayload, SignatureType, SigningPayload;
 
@@ -64,22 +65,22 @@ class SignedExtrinsicBuilder {
     void Function(SignedExtrinsicTrace trace)? onTrace,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
-    debugPrint('[$_logLabel] 步骤1: 获取 metadata...');
+    AppLog.d('[$_logLabel] 步骤1: 获取 metadata...');
     final metadata = await _rpc.fetchMetadata();
-    debugPrint('[$_logLabel] 步骤2: 获取 genesisHash...');
+    AppLog.d('[$_logLabel] 步骤2: 获取 genesisHash...');
     final genesisHash = await _rpc.fetchGenesisHash();
     final registry = metadata.chainInfo.scaleCodec.registry;
 
-    debugPrint('[$_logLabel] 步骤3: 并行获取 runtimeVersion/runtime nonce...');
+    AppLog.d('[$_logLabel] 步骤3: 并行获取 runtimeVersion/runtime nonce...');
     final results = await Future.wait([
       _rpc.fetchRuntimeVersion(),
       _rpc.fetchNonce(fromSs58Address),
     ]);
     final runtimeVersion = results[0] as dynamic;
     final nonce = results[1] as int;
-    debugPrint('[$_logLabel] runtime nonce=$nonce, era=immortal');
+    AppLog.d('[$_logLabel] runtime nonce=$nonce, era=immortal');
 
-    debugPrint('[$_logLabel] 步骤4: 构造 immortal 签名载荷...');
+    AppLog.d('[$_logLabel] 步骤4: 构造 immortal 签名载荷...');
     final signingPayload = buildImmortalSigningPayload(
       callData: callData,
       specVersion: runtimeVersion.specVersion as int,
@@ -89,11 +90,11 @@ class SignedExtrinsicBuilder {
     );
     final payloadBytes = signingPayload.encode(registry);
 
-    debugPrint('[$_logLabel] 步骤5: 签名 (${payloadBytes.length} bytes)...');
+    AppLog.d('[$_logLabel] 步骤5: 签名 (${payloadBytes.length} bytes)...');
     final signature = await sign(payloadBytes);
-    debugPrint('[$_logLabel] 签名完成 (${signature.length} bytes)');
+    AppLog.d('[$_logLabel] 签名完成 (${signature.length} bytes)');
 
-    debugPrint('[$_logLabel] 步骤6: 编码 immortal extrinsic...');
+    AppLog.d('[$_logLabel] 步骤6: 编码 immortal extrinsic...');
     final extrinsicPayload = buildImmortalExtrinsicPayload(
       callData: callData,
       signerPublicKey: signerPublicKey,
@@ -101,7 +102,7 @@ class SignedExtrinsicBuilder {
       nonce: nonce,
     );
     final encoded = extrinsicPayload.encode(registry, SignatureType.sr25519);
-    debugPrint('[$_logLabel] extrinsic 编码完成 (${encoded.length} bytes)');
+    AppLog.d('[$_logLabel] extrinsic 编码完成 (${encoded.length} bytes)');
 
     onTrace?.call(
       SignedExtrinsicTrace(
@@ -119,17 +120,17 @@ class SignedExtrinsicBuilder {
       ),
     );
 
-    debugPrint('[$_logLabel] 步骤7: 提交到链...');
-    debugPrint('[$_logLabel] call data hex: ${hexEncode(callData)}');
+    AppLog.d('[$_logLabel] 步骤7: 提交到链...');
+    AppLog.d('[$_logLabel] call data hex: ${hexEncode(callData)}');
     try {
       final txHash = await _rpc.submitExtrinsic(
         encoded,
         onWatchEvent: onWatchEvent,
       );
-      debugPrint('[$_logLabel] 提交成功: 0x${hexEncode(txHash)}');
+      AppLog.d('[$_logLabel] 提交成功: 0x${hexEncode(txHash)}');
       return (txHash: '0x${hexEncode(txHash)}', usedNonce: nonce);
     } catch (e) {
-      debugPrint('[$_logLabel] 提交失败，未修改 nonce，原始错误: $e');
+      AppLog.d('[$_logLabel] 提交失败，未修改 nonce，原始错误: $e');
       rethrow;
     }
   }
@@ -148,22 +149,22 @@ class SignedExtrinsicBuilder {
     TxPoolWatchCallback? onWatchEvent,
     bool waitForFinalized = false,
   }) async {
-    debugPrint('[$_logLabel] 步骤1: 获取 metadata...');
+    AppLog.d('[$_logLabel] 步骤1: 获取 metadata...');
     final metadata = await _rpc.fetchMetadata();
-    debugPrint('[$_logLabel] 步骤2: 获取 genesisHash...');
+    AppLog.d('[$_logLabel] 步骤2: 获取 genesisHash...');
     final genesisHash = await _rpc.fetchGenesisHash();
     final registry = metadata.chainInfo.scaleCodec.registry;
 
-    debugPrint('[$_logLabel] 步骤3: 并行获取 runtimeVersion/runtime nonce...');
+    AppLog.d('[$_logLabel] 步骤3: 并行获取 runtimeVersion/runtime nonce...');
     final results = await Future.wait([
       _rpc.fetchRuntimeVersion(),
       _rpc.fetchNonce(fromSs58Address),
     ]);
     final runtimeVersion = results[0] as dynamic;
     final nonce = results[1] as int;
-    debugPrint('[$_logLabel] runtime nonce=$nonce, era=immortal');
+    AppLog.d('[$_logLabel] runtime nonce=$nonce, era=immortal');
 
-    debugPrint('[$_logLabel] 步骤4: 构造 immortal 签名载荷...');
+    AppLog.d('[$_logLabel] 步骤4: 构造 immortal 签名载荷...');
     final signingPayload = buildImmortalSigningPayload(
       callData: callData,
       specVersion: runtimeVersion.specVersion as int,
@@ -173,11 +174,11 @@ class SignedExtrinsicBuilder {
     );
     final payloadBytes = signingPayload.encode(registry);
 
-    debugPrint('[$_logLabel] 步骤5: 签名 (${payloadBytes.length} bytes)...');
+    AppLog.d('[$_logLabel] 步骤5: 签名 (${payloadBytes.length} bytes)...');
     final signature = await sign(payloadBytes);
-    debugPrint('[$_logLabel] 签名完成 (${signature.length} bytes)');
+    AppLog.d('[$_logLabel] 签名完成 (${signature.length} bytes)');
 
-    debugPrint('[$_logLabel] 步骤6: 编码 immortal extrinsic...');
+    AppLog.d('[$_logLabel] 步骤6: 编码 immortal extrinsic...');
     final extrinsicPayload = buildImmortalExtrinsicPayload(
       callData: callData,
       signerPublicKey: signerPublicKey,
@@ -185,7 +186,7 @@ class SignedExtrinsicBuilder {
       nonce: nonce,
     );
     final encoded = extrinsicPayload.encode(registry, SignatureType.sr25519);
-    debugPrint('[$_logLabel] extrinsic 编码完成 (${encoded.length} bytes)');
+    AppLog.d('[$_logLabel] extrinsic 编码完成 (${encoded.length} bytes)');
 
     onTrace?.call(
       SignedExtrinsicTrace(
@@ -203,8 +204,8 @@ class SignedExtrinsicBuilder {
       ),
     );
 
-    debugPrint('[$_logLabel] 步骤7: 提交到链并等待入块...');
-    debugPrint('[$_logLabel] call data hex: ${hexEncode(callData)}');
+    AppLog.d('[$_logLabel] 步骤7: 提交到链并等待入块...');
+    AppLog.d('[$_logLabel] call data hex: ${hexEncode(callData)}');
     try {
       final result = await _rpc.submitExtrinsicAndWaitForInBlock(
         encoded,
@@ -216,10 +217,10 @@ class SignedExtrinsicBuilder {
         throw StateError('交易已入块，但未返回区块哈希');
       }
       final txHashHex = '0x${hexEncode(result.txHash)}';
-      debugPrint('[$_logLabel] 已入块: tx=$txHashHex block=$blockHashHex');
+      AppLog.d('[$_logLabel] 已入块: tx=$txHashHex block=$blockHashHex');
       return (txHash: txHashHex, usedNonce: nonce, blockHashHex: blockHashHex);
     } catch (e) {
-      debugPrint('[$_logLabel] 提交或入块失败，未修改 nonce，原始错误: $e');
+      AppLog.d('[$_logLabel] 提交或入块失败，未修改 nonce，原始错误: $e');
       rethrow;
     }
   }

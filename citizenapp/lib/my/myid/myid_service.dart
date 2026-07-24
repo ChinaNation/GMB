@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:citizenapp/citizen/public/data/admin_division_store.dart';
 import 'package:citizenapp/citizen/public/data/area_path_formatter.dart';
 import 'package:citizenapp/citizen/public/data/isar_admin_division_store.dart';
@@ -124,7 +125,7 @@ class MyIdService {
     try {
       wallet = await _walletManager.getDefaultWallet();
     } catch (e) {
-      debugPrint('myid default wallet load failed: $e');
+      AppLog.d('myid default wallet load failed: $e');
       return const MyIdState(
         tier: MyIdTier.visitor,
         status: MyIdStatus.queryFailed,
@@ -141,7 +142,7 @@ class MyIdService {
       chainIdentity =
           await _identityChainReader.readByAccountId(wallet.accountId);
     } catch (e) {
-      debugPrint('myid chain identity query failed: $e');
+      AppLog.d('myid chain identity query failed: $e');
       // 链读失败不静默降级访客、不覆盖徽章快照,交由 UI 提示重试。
       return const MyIdState(
         tier: MyIdTier.visitor,
@@ -226,7 +227,7 @@ class MyIdService {
         townCode: town,
       );
     } catch (e) {
-      debugPrint('myid area path resolve failed: $e');
+      AppLog.d('myid area path resolve failed: $e');
       return [provinceDisplayNameByCode(province), city, town]
           .where((s) => s.isNotEmpty)
           .join(' · ');
@@ -242,7 +243,7 @@ class MyIdService {
       );
     } catch (e) {
       // 快照只服务展示,写失败不改变本次真实链查询结果。
-      debugPrint('myid badge snapshot save failed: $e');
+      AppLog.d('myid badge snapshot save failed: $e');
     }
   }
 

@@ -284,7 +284,6 @@ class GeneratedQrActionRegistry {
     'cid_full_name': '机构全称',
     'cid_number': 'CID号',
     'cid_short_name': '机构简称',
-    'citizen_age_years': '周岁年龄',
     'citizen_sex': '公民性别',
     'citizen_status': '身份状态',
     'city_code': '市级代码',

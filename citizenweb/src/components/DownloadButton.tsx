@@ -28,8 +28,18 @@ export default function DownloadButton({ productLabel, options }: DownloadButton
         className="flex items-center gap-1 text-xl font-bold text-gold-400 transition-colors hover:text-gold-300"
       >
         下载
-        <span className={`text-sm transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true">
-          ▾
+        {/* 折线 chevron(非实心三角):收起指向下,展开旋转 180° 指向上。死规则禁 ▶▼ 实心三角。 */}
+        <span className={`transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true">
+          <svg viewBox="0 0 12 12" width="12" height="12" className="block">
+            <polyline
+              points="2,4 6,8 10,4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </span>
       </button>
 

@@ -1,6 +1,9 @@
 import 'dart:convert';
 
+import 'package:citizenapp/rpc/pallet_registry.dart';
+
 import 'package:flutter/foundation.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
@@ -55,7 +58,7 @@ class MultisigTransferService {
   ///
   /// 本 pallet 只保留 propose_X(0/1/2)；机构岗位选民/个人多签管理员投票一律走
   /// InternalVote(20).cast(0)，手动重试走 VotingEngine(9).retry_passed_proposal(4)。
-  static const _palletIndex = 17;
+  static const _palletIndex = PalletRegistry.multisigTransferPallet;
 
   /// propose_transfer call_index=0。
   static const _proposeCallIndex = 0;
@@ -417,7 +420,7 @@ class MultisigTransferService {
       displayMeta = await fetchProposalDisplayId(proposalId);
     } catch (e) {
       // 展示号缺失不阻断主流程，但必须留痕，否则 RPC 故障会伪装成"无展示号"。
-      debugPrint(
+      AppLog.d(
           '[MultisigTransfer] fetchProposalDisplayId($proposalId) 失败: $e');
     }
 
@@ -639,13 +642,13 @@ class MultisigTransferService {
           safetyFundDetail = await fetchSafetyFundAction(id);
         } catch (e) {
           // 查询失败必须留痕，否则与"确实不是安全基金提案"无法区分。
-          debugPrint('[MultisigTransfer] fetchSafetyFundAction($id) 失败: $e');
+          AppLog.d('[MultisigTransfer] fetchSafetyFundAction($id) 失败: $e');
         }
         if (safetyFundDetail == null) {
           try {
             sweepDetail = await fetchSweepAction(id);
           } catch (e) {
-            debugPrint('[MultisigTransfer] fetchSweepAction($id) 失败: $e');
+            AppLog.d('[MultisigTransfer] fetchSweepAction($id) 失败: $e');
           }
         }
       }
@@ -664,7 +667,7 @@ class MultisigTransferService {
             }
           }
         } catch (e) {
-          debugPrint('[MultisigTransfer] 联合提案类型检测($id) 失败: $e');
+          AppLog.d('[MultisigTransfer] 联合提案类型检测($id) 失败: $e');
         }
       }
       results.add(ProposalWithDetail(
@@ -890,7 +893,7 @@ class MultisigTransferService {
     } catch (e) {
       // SCALE 解码失败必须留痕：runtime 升级布局变更时提案会"凭空消失"，
       // 没有日志就无从排查。
-      debugPrint('[MultisigTransfer] 提案 $proposalId ProposalData 解码失败: $e');
+      AppLog.d('[MultisigTransfer] 提案 $proposalId ProposalData 解码失败: $e');
       return null;
     }
   }
@@ -1006,7 +1009,7 @@ class MultisigTransferService {
       );
     } catch (e) {
       // 字段级解码失败同样要留痕，与上层"提案不存在"区分开。
-      debugPrint('[MultisigTransfer] 提案 $proposalId TransferAction 解码失败: $e');
+      AppLog.d('[MultisigTransfer] 提案 $proposalId TransferAction 解码失败: $e');
       return null;
     }
   }
@@ -1235,7 +1238,7 @@ class MultisigTransferService {
       );
     } catch (e) {
       // SCALE 解码失败必须留痕，与"确实不是安全基金提案"区分开。
-      debugPrint('[MultisigTransfer] 提案 $proposalId SafetyFundAction 解码失败: $e');
+      AppLog.d('[MultisigTransfer] 提案 $proposalId SafetyFundAction 解码失败: $e');
       return null;
     }
   }
@@ -1275,7 +1278,7 @@ class MultisigTransferService {
       );
     } catch (e) {
       // SCALE 解码失败必须留痕，与"确实不是手续费划转提案"区分开。
-      debugPrint('[MultisigTransfer] 提案 $proposalId SweepAction 解码失败: $e');
+      AppLog.d('[MultisigTransfer] 提案 $proposalId SweepAction 解码失败: $e');
       return null;
     }
   }
@@ -1566,45 +1569,45 @@ class MultisigTransferService {
   }
 
   void _logSignedExtrinsicTrace(SignedExtrinsicTrace trace) {
-    debugPrint('[TransferProposal] ════════ EXTRINSIC 诊断 ════════');
-    debugPrint(
+    AppLog.d('[TransferProposal] ════════ EXTRINSIC 诊断 ════════');
+    AppLog.d(
         '[TransferProposal] signing payload hex (${trace.payloadBytes.length} bytes): ${_hexEncode(trace.payloadBytes)}');
-    debugPrint(
+    AppLog.d(
         '[TransferProposal] signature hex (${trace.signature.length} bytes): ${_hexEncode(trace.signature)}');
-    debugPrint(
+    AppLog.d(
         '[TransferProposal] signer publicKey hex: ${_hexEncode(trace.signerPublicKey)}');
-    debugPrint(
+    AppLog.d(
         '[TransferProposal] call data hex (${trace.callData.length} bytes): ${_hexEncode(trace.callData)}');
-    debugPrint(
+    AppLog.d(
         '[TransferProposal] nonce=${trace.nonce}, eraPeriod=${trace.eraPeriod}, blockNumber=${trace.blockNumber}');
-    debugPrint(
+    AppLog.d(
         '[TransferProposal] specVersion=${trace.runtimeVersion.specVersion}, txVersion=${trace.runtimeVersion.transactionVersion}');
-    debugPrint(
+    AppLog.d(
         '[TransferProposal] genesisHash=0x${_hexEncode(trace.genesisHash)}');
-    debugPrint(
+    AppLog.d(
         '[TransferProposal] CheckEra blockHash=0x${_hexEncode(trace.genesisHash)}');
-    debugPrint(
+    AppLog.d(
         '[TransferProposal] registry.extrinsicVersion=${trace.registry.extrinsicVersion}');
     try {
       final extKeys =
           (trace.registry.getSignedExtensionTypes() as Map<String, dynamic>)
               .keys
               .toList();
-      debugPrint(
+      AppLog.d(
           '[TransferProposal] signedExtension keys (${extKeys.length}): $extKeys');
       final addExtKeys = (trace.registry.getAdditionalSignedExtensionTypes()
               as Map<String, dynamic>)
           .keys
           .toList();
-      debugPrint(
+      AppLog.d(
           '[TransferProposal] additionalSignedExtension keys (${addExtKeys.length}): $addExtKeys');
     } catch (e) {
-      debugPrint('[TransferProposal] 获取 extension keys 失败: $e');
+      AppLog.d('[TransferProposal] 获取 extension keys 失败: $e');
     }
-    debugPrint(
+    AppLog.d(
         '[TransferProposal] encoded extrinsic hex (${trace.encoded.length} bytes): ${_hexEncode(trace.encoded)}');
     _logExtrinsicBody(trace.encoded);
-    debugPrint('[TransferProposal] ════════ 诊断结束 ════════');
+    AppLog.d('[TransferProposal] ════════ 诊断结束 ════════');
   }
 
   void _logExtrinsicBody(Uint8List encoded) {
@@ -1628,13 +1631,13 @@ class MultisigTransferService {
       compactLen = -1;
       pos = 0;
     }
-    debugPrint(
+    AppLog.d(
         '[TransferProposal] compact length prefix: $compactLen, body starts at byte $pos');
     if (pos < encoded.length) {
-      debugPrint(
+      AppLog.d(
           '[TransferProposal] version byte: 0x${encoded[pos].toRadixString(16).padLeft(2, '0')}');
       final bodyHex = _hexEncode(encoded.sublist(pos));
-      debugPrint(
+      AppLog.d(
           '[TransferProposal] extrinsic body hex ($compactLen bytes): $bodyHex');
     }
   }

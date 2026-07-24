@@ -1,6 +1,9 @@
 import 'dart:convert';
 
+import 'package:citizenapp/rpc/pallet_registry.dart';
+
 import 'package:flutter/foundation.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart/scale_codec.dart' show ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
@@ -25,10 +28,10 @@ class RuntimeUpgradeService {
   // ──── 常量 ────
 
   /// JointVote sub-pallet pallet_index=21。
-  static const _jointVotePalletIndex = 21;
+  static const _jointVotePalletIndex = PalletRegistry.jointVotePallet;
 
   /// JointVote::cast_admin call_index=0。
-  static const _jointVoteCallIndex = 0;
+  static const _jointVoteCallIndex = PalletRegistry.jointVoteCastAdminCall;
 
   /// runtime-upgrade 写入 VotingEngine::ProposalData 的业务前缀。
   static const _moduleTag = [0x72, 0x74, 0x2d, 0x75, 0x70, 0x67]; // rt-upg
@@ -431,7 +434,7 @@ class RuntimeUpgradeService {
       signerPublicKey: signerPublicKey,
       sign: sign,
       onTrace: (trace) {
-        debugPrint(
+        AppLog.d(
             '[ProtocolUpgrade] encoded extrinsic hex: ${_hexEncode(trace.encoded)}');
       },
     );

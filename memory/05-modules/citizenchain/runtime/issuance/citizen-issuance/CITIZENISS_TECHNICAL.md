@@ -2,8 +2,14 @@
 
 ## 1. 定位
 
-`citizen-issuance` 是公民投票身份首次认证奖励模块。模块不提供外部交易，只接收
+`citizen-issuance` 是公民**首次上链**认证奖励模块。模块不提供外部交易，只接收
 `citizen-identity` 的 `OnVotingIdentityRegistered` 回调。
+
+首次上链发币不区分身份类型：投票身份登记(`register_voting_identity`)与竞选身份首建
+(`upgrade_to_candidate_identity` 且该 CID 尚无投票身份)同权,二者都触发一次性奖励;竞选
+身份不要求先有投票身份(有人只投票、有人一开始就竞选)。已有投票身份再升竞选不重复触发,
+发行侧按 CID 与账户永久去重亦会拦截。节点守卫按状态(本块新建投票身份 + 双向绑定 + 去重)
+复核,不区分触发的具体 extrinsic,竞选首次上链与投票首次上链状态同构。
 
 奖励金额、档位人数、总人数上限和一次性规则来自 `primitives::citizen_const`。这些规则
 已同步实现于节点原生 `NodeGuard`，runtime 升级可以改变代码，但不能让遵守当前节点

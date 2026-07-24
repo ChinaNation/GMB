@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:citizenapp/rpc/pallet_registry.dart';
+
 import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 
 import 'package:citizenapp/rpc/chain_rpc.dart';
@@ -21,13 +23,13 @@ class OnchainClearingBankRpc {
   final ChainRpc _rpc;
 
   /// `OffchainTransaction` pallet index(citizenchain runtime 定义)。
-  static const int _palletIndex = 19;
+  static const int _palletIndex = PalletRegistry.offchainTransactionPallet;
 
-  /// 4 个新 call_index(对应 lib.rs:586+ 中 call_index 30~33)。
-  static const int _bindClearingBankCallIndex = 30;
-  static const int _depositCallIndex = 31;
-  static const int _withdrawCallIndex = 32;
-  static const int _switchBankCallIndex = 33;
+  /// 4 个 call_index(对应 lib.rs call_index 30~33)。
+  static const int _bindClearingBankCallIndex = PalletRegistry.bindClearingBankCall;
+  static const int _depositCallIndex = PalletRegistry.depositCall;
+  static const int _withdrawCallIndex = PalletRegistry.withdrawCall;
+  static const int _switchBankCallIndex = PalletRegistry.switchBankCall;
 
   // ──────────── 公开接口:4 个新 extrinsic ────────────
 

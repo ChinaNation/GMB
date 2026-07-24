@@ -11,6 +11,7 @@ import {
   releaseActionChallenge
 } from '../src/account/action_challenge';
 import { purgeAccount } from '../src/account/purge';
+import { routeRequest } from '../src/routes';
 import type { Env, MediaAssetRow } from '../src/types';
 
 const mockVerify = verifyWalletSignature as unknown as ReturnType<typeof vi.fn>;
@@ -331,5 +332,25 @@ describe('purgeAccount', () => {
     expect(kv.store.has(`square_identity:${ACCOUNT_ID}`)).toBe(false);
     expect(kv.store.has('square_session:tok1')).toBe(false);
     expect(kv.store.has(`square_sessions_by_account_id:${ACCOUNT_ID}`)).toBe(false);
+  });
+});
+
+describe('注销入口默认拒（不再匿名对任意账户发起挑战）', () => {
+  it('account/delete/challenge 无会话 → guard 默认拒 missing_session', async () => {
+    const { env } = challengeEnv();
+    const body = JSON.stringify({ account_id: ACCOUNT_ID });
+    await expect(
+      routeRequest(
+        new Request('https://worker.test/v1/square/account/delete/challenge', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'content-length': String(new TextEncoder().encode(body).length)
+          },
+          body
+        }),
+        env
+      )
+    ).rejects.toMatchObject({ code: 'missing_session' });
   });
 });

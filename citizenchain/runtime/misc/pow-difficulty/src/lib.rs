@@ -252,6 +252,12 @@ pub mod pallet {
             actual_window_ms: u64,
             target_window_ms: u64,
         },
+        /// 脏状态防御:on_finalize 检测到链上 PoW 参数非法/算法版本不符/目标窗口缺失,
+        /// 本块跳过难度调整(难度维持现值),等治理升级修复。绝不 panic 拖垮全链。
+        PowParamsUnhealthy { block: BlockNumberFor<T> },
+        /// 脏状态防御:难度调整窗口被跳过(elapsed 超过 adjustment_interval),
+        /// 以当前块重置窗口起点自愈,本块不调整难度。绝不 panic 拖垮全链。
+        PowWindowReset { block: BlockNumberFor<T> },
     }
 
     // ─── Hooks ────────────────────────────────────────────────────────────────
@@ -291,8 +297,10 @@ pub mod pallet {
             }
 
             if let Some(pending) = PendingParams::<T>::get() {
-                assert!(pending.activate_at >= block_num, "PoW 待生效参数已过期");
-                if pending.activate_at == block_num {
+                // 脏状态防御:正常情况 activate_at 是未来块,on_initialize 逐块推进到相等时激活。
+                // 若因异常已错过(activate_at < block_num),不再 panic 拖垮全链,改用 `<=`
+                // 在首个到达/越过的块补激活——治理批准的参数不丢,也不永久卡死。
+                if pending.activate_at <= block_num {
                     ActiveParams::<T>::put(pending.params);
                     PendingParams::<T>::kill();
                     WindowStartBlock::<T>::kill();
@@ -338,22 +346,29 @@ pub mod pallet {
                 "空块不允许上链：区块必须包含 timestamp 之外的交易"
             );
 
+            // 脏状态防御:链上参数非法 / 算法版本不符 / 目标窗口缺失时,难度调整无法安全进行。
+            // 与空块闸门不同,这类脏状态不是共识裁决,绝不 panic(否则每块必崩=全链永久停摆)。
+            // 改为发告警事件 + 跳过本块调整,难度维持现值,等治理升级修复。
             let params = ActiveParams::<T>::get();
-            assert!(params.validate().is_ok(), "链上 PoW 参数无效");
-            assert_eq!(
-                params.algorithm_version,
-                primitives::pow_const::POW_ALGORITHM_VERSION,
-                "链上 PoW 算法版本不受当前 runtime 支持"
-            );
-            let target_window_ms = params.target_window_ms().expect("PoW 目标窗口已校验");
+            let params_healthy = params.validate().is_ok()
+                && params.algorithm_version == primitives::pow_const::POW_ALGORITHM_VERSION;
+            let Some(target_window_ms) = params.target_window_ms().filter(|_| params_healthy) else {
+                Self::deposit_event(Event::PowParamsUnhealthy { block: n });
+                return;
+            };
             let window_start_block = WindowStartBlock::<T>::get();
             let elapsed_blocks = window_start_block.map(|start| block_num.saturating_sub(start));
-            assert!(
-                elapsed_blocks
-                    .map(|elapsed| elapsed <= params.adjustment_interval)
-                    .unwrap_or(true),
-                "PoW 难度调整窗口被跳过"
-            );
+            // 脏状态防御:窗口被跳过(elapsed 超过 adjustment_interval)时不再 panic,
+            // 以当前块重置窗口起点自愈,本块不调整难度。
+            if elapsed_blocks
+                .map(|elapsed| elapsed > params.adjustment_interval)
+                .unwrap_or(false)
+            {
+                Self::deposit_event(Event::PowWindowReset { block: n });
+                WindowStartMs::<T>::put(now_ms);
+                WindowStartBlock::<T>::put(block_num);
+                return;
+            }
             let is_adjustment_block = elapsed_blocks == Some(params.adjustment_interval);
 
             if is_adjustment_block {

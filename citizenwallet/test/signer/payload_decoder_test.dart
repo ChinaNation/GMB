@@ -164,7 +164,6 @@ void main() {
   List<int> citizenIdentityPayloadForTest(List<int> walletBytes) => [
         ...compactVec('CTZN-430100-0001'),
         ...walletBytes,
-        18,
         ...u32Le(20260630),
         ...u32Le(20360630),
         0,
@@ -673,7 +672,6 @@ void main() {
       expect(decoded!.action, 'citizen_identity');
       expect(decoded.fields['cid_number'], 'CTZN-430100-0001');
       expect(decoded.fields['account_id'], '0x${hexLower(wallet)}');
-      expect(decoded.fields['citizen_age_years'], '18');
       expect(decoded.reviewFields['residence'], '43 / 0100 / 001');
     });
 

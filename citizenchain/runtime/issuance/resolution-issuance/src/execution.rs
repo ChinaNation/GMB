@@ -1,8 +1,8 @@
-//! 决议发行执行、审计记录与暂停维护逻辑。
+//! 决议发行执行与审计记录逻辑。
 
 use crate::pallet::{
-    AllocationOf, BalanceOf, Config, Error, Event, EverExecuted, Executed, Pallet, Paused,
-    ReasonOf, TotalIssued,
+    AllocationOf, BalanceOf, Config, Error, Event, EverExecuted, Executed, Pallet, ReasonOf,
+    TotalIssued,
 };
 use frame_support::{
     dispatch::DispatchResult,
@@ -31,8 +31,7 @@ impl<T: Config> Pallet<T> {
         total_amount: BalanceOf<T>,
         allocations: &AllocationOf<T>,
     ) -> DispatchResult {
-        ensure!(!Paused::<T>::get(), Error::<T>::PalletPaused);
-        // 重放判断只认永久标记 EverExecuted；短期 Executed 可清理但不能释放重放窗口。
+        // 重放判断只认永久标记 EverExecuted。
         ensure!(
             !EverExecuted::<T>::contains_key(proposal_id),
             Error::<T>::AlreadyExecuted
@@ -94,21 +93,4 @@ impl<T: Config> Pallet<T> {
         Ok(())
     }
 
-    pub(crate) fn clear_executed_marker(proposal_id: u64) -> DispatchResult {
-        // 这里只清理短期展示/排障记录，不允许触碰永久防重放标记 EverExecuted。
-        ensure!(
-            Executed::<T>::contains_key(proposal_id),
-            Error::<T>::NotExecuted
-        );
-        Executed::<T>::remove(proposal_id);
-        Self::deposit_event(Event::<T>::ExecutedCleared { proposal_id });
-        Ok(())
-    }
-
-    pub(crate) fn set_pause_state(paused: bool) -> DispatchResult {
-        ensure!(Paused::<T>::get() != paused, Error::<T>::AlreadyInState);
-        Paused::<T>::put(paused);
-        Self::deposit_event(Event::<T>::PausedSet { paused });
-        Ok(())
-    }
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:polkadart/polkadart.dart'
     show Hasher, RuntimeMetadata, RuntimeVersion;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
@@ -86,7 +87,7 @@ typedef TxPoolWatchCallback = void Function(TxPoolWatchEvent event);
 /// 只使用 smoldot 轻节点（P2P 网络，无需远程 RPC 服务器）。
 class ChainRpc {
   ChainRpc() {
-    debugPrint('[ChainRpc] 使用 smoldot 轻节点模式');
+    AppLog.d('[ChainRpc] 使用 smoldot 轻节点模式');
   }
 
   static final _keyring = Keyring();
@@ -282,9 +283,9 @@ class ChainRpc {
     // 完整 extrinsic hex 用 debugPrint 输出,便于直接复制到 polkadot.js apps
     // "Tools → Decode" 验证编码(call/signer/nonce/era 等);旧版仅前 80 字符,
     // 排查"提交看似成功但链上没出块"时不够用。
-    debugPrint(
+    AppLog.d(
         '[ChainRpc.submitExtrinsic] 提交 extrinsic (${encoded.length} bytes)');
-    debugPrint('[ChainRpc.submitExtrinsic] full hex: $hex');
+    AppLog.d('[ChainRpc.submitExtrinsic] full hex: $hex');
 
     try {
       final txHashHex =
@@ -292,7 +293,7 @@ class ChainRpc {
       if (txHashHex == null || txHashHex.isEmpty) {
         throw StateError('smoldot 未返回交易哈希');
       }
-      debugPrint('[ChainRpc.submitExtrinsic] smoldot 返回 txHash: $txHashHex');
+      AppLog.d('[ChainRpc.submitExtrinsic] smoldot 返回 txHash: $txHashHex');
 
       unawaited(_watchTxRejectInBackground(hex, txHashHex, onWatchEvent));
       return _hexDecode(_stripHexPrefix(txHashHex));
@@ -320,7 +321,7 @@ class ChainRpc {
       throw smoldotError;
     }
 
-    debugPrint(
+    AppLog.d(
       '[ChainRpc.submitExtrinsic] 轻节点提交失败，尝试已签名交易受控广播兜底: $smoldotError',
     );
     final api = SignedExtrinsicRelayApi();
@@ -333,7 +334,7 @@ class ChainRpc {
         description: '已通过受控 API 广播，最终成功以 finalized 链状态或事件为准',
         raw: 'signed_extrinsic_relay:${result.relayId}',
       ));
-      debugPrint(
+      AppLog.d(
         '[ChainRpc.submitExtrinsic] 受控广播返回 txHash=${result.txHash}, relay=${result.relayId}',
       );
       return _hexDecode(_stripHexPrefix(result.txHash));
@@ -391,9 +392,9 @@ class ChainRpc {
     final hex = '0x${_hexEncode(encoded)}';
     final txHash = Hasher.blake2b256.hash(encoded);
     final txHashHex = '0x${_hexEncode(txHash)}';
-    debugPrint(
+    AppLog.d(
         '[ChainRpc.submitExtrinsicAndWaitForInBlock] 提交 extrinsic (${encoded.length} bytes), txHash=$txHashHex');
-    debugPrint('[ChainRpc.submitExtrinsicAndWaitForInBlock] full hex: $hex');
+    AppLog.d('[ChainRpc.submitExtrinsicAndWaitForInBlock] full hex: $hex');
 
     StreamSubscription? sub;
     Timer? bailTimer;
@@ -415,7 +416,7 @@ class ChainRpc {
             final dynamic raw = (event as dynamic).result;
             final watchEvent = _toWatchEvent(raw);
             onWatchEvent?.call(watchEvent);
-            debugPrint(
+            AppLog.d(
                 '[ChainRpc.submitExtrinsicAndWaitForInBlock] $txHashHex status=$raw');
             if (watchEvent.isFailure && !done.isCompleted) {
               done.completeError(StateError(watchEvent.description));
@@ -483,10 +484,10 @@ class ChainRpc {
               description: '20 分钟内未收到交易池状态，可能转发失败或交易被静默丢弃',
               raw: 'timeout',
             ));
-            debugPrint(
+            AppLog.d(
                 '[ChainRpc.bgWatch] $txHashHex 20m timeout 未收到任何状态,可能 smoldot 转发失败或全节点静默 drop');
           } else {
-            debugPrint('[ChainRpc.bgWatch] $txHashHex 20m 后结束后台监听,后续交由业务真源确认');
+            AppLog.d('[ChainRpc.bgWatch] $txHashHex 20m 后结束后台监听,后续交由业务真源确认');
           }
           done.complete();
         }
@@ -499,18 +500,18 @@ class ChainRpc {
             final cls = _classifyTxStatus(raw);
             final watchEvent = _toWatchEvent(raw);
             onWatchEvent?.call(watchEvent);
-            debugPrint(
+            AppLog.d(
                 '[ChainRpc.bgWatch] $txHashHex status=$raw classify=$cls');
             if (cls == _TxResult.failure) {
-              debugPrint(
+              AppLog.d(
                   '[ChainRpc.bgWatch] $txHashHex 被拒绝: ${_describeTxStatus(raw)}');
               if (!done.isCompleted) done.complete();
             } else if (watchEvent.isIncluded) {
-              debugPrint('[ChainRpc.bgWatch] $txHashHex 已入块，结束后台监听');
+              AppLog.d('[ChainRpc.bgWatch] $txHashHex 已入块，结束后台监听');
               if (!done.isCompleted) done.complete();
             }
           } catch (e) {
-            debugPrint('[ChainRpc.bgWatch] event 解析异常: $e');
+            AppLog.d('[ChainRpc.bgWatch] event 解析异常: $e');
           }
         },
         onError: (Object e) {
@@ -519,13 +520,13 @@ class ChainRpc {
             description: '交易池订阅异常：$e',
             raw: '$e',
           ));
-          debugPrint('[ChainRpc.bgWatch] $txHashHex stream error: $e');
+          AppLog.d('[ChainRpc.bgWatch] $txHashHex stream error: $e');
           if (!done.isCompleted) done.complete();
         },
       );
       await done.future;
     } catch (e) {
-      debugPrint('[ChainRpc.bgWatch] 整体异常: $e');
+      AppLog.d('[ChainRpc.bgWatch] 整体异常: $e');
     } finally {
       bailTimer?.cancel();
       // sub.cancel() 不能 await(smoldot native binding 在持续推送 events 期间
