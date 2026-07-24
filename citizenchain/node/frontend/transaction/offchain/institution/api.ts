@@ -3,7 +3,6 @@ import type {
   EligibleClearingBankCandidate,
   InstitutionDetail,
   InstitutionProposalPage,
-  InstitutionRegistrationInfoResp,
 } from './types';
 
 // 清算行机构身份只读 Tauri API。机构创建归 onchina 控制台,节点不承接。
@@ -20,10 +19,4 @@ export const institutionReadApi = {
       startId,
       pageSize,
     }),
-
-  fetchInstitutionRegistrationInfo: (cidNumber: string) =>
-    invoke<InstitutionRegistrationInfoResp>(
-      'fetch_clearing_bank_institution_registration_info',
-      { cidNumber },
-    ),
 };

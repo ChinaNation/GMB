@@ -55,8 +55,6 @@ use sp_core::sr25519;
 use sp_core::Void;
 #[cfg(not(feature = "runtime-benchmarks"))]
 use sp_io::crypto::sr25519_verify;
-#[allow(unused_imports)]
-use sp_runtime::traits::Hash as _;
 use sp_runtime::{traits::One, Perbill};
 use sp_version::RuntimeVersion;
 
@@ -96,7 +94,6 @@ parameter_types! {
 /// This can be a tuple of types, each implementing `OnRuntimeUpgrade`.
 ///
 /// 开发期零用户、重新创世模型：各 pallet 不设迁移；这里仅保留 runtime 级独立迁移集合，当前为空。
-#[allow(unused_parens)]
 type SingleBlockMigrations = ();
 
 pub fn is_stake_account(address: &AccountId) -> bool {

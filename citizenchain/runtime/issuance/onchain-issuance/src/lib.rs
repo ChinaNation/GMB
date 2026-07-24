@@ -53,9 +53,6 @@ pub use pallet::*;
 pub const MODULE_TAG: &[u8] = b"onc-iss";
 
 #[frame_support::pallet]
-// 框架阶段 deposit_event 自动生成的 fn 暂未被业务调用,
-// 后续任务卡 A/B 实装时会消费;先抑制 dead_code 以便整体 cargo check 干净。
-#[allow(dead_code)]
 pub mod pallet {
     use crate::{types::OnchainAssetMeta, weights::WeightInfo};
     use entity_primitives::{
@@ -211,6 +208,9 @@ pub mod pallet {
     }
 
     #[pallet::event]
+    // deposit_event 由 FRAME 宏生成;事件枚举已定稿但尚无 emit 调用点,
+    // 待开放任务卡 20260507-onchain-issuance-plain-ft 子任务 C 实装时消费。
+    #[allow(dead_code)]
     #[pallet::generate_deposit(pub(crate) fn deposit_event)]
     pub enum Event<T: Config> {
         /// 用户代币创建成功。

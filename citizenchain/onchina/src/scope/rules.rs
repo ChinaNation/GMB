@@ -26,10 +26,14 @@ pub struct VisibleScope {
     /// 是否可以增删改。各档在自己范围内都能写,保留字段供将来扩展只读角色。
     pub can_write: bool,
     /// 进入 tab 时是否跳过省份列表直接进入详情(省级及以下锁定本省)。
+    /// 前端 tab 跳级预留:VisibleScope 暂不序列化,当前后端不读,留待 UI 接线。
+    #[allow(dead_code)]
     pub skip_province_list: bool,
     /// 进入 tab 时是否跳过市列表(市级及以下锁定本市)。
+    #[allow(dead_code)]
     pub skip_city_list: bool,
     /// 进入 tab 时是否跳过镇列表(镇级锁定本镇)。
+    #[allow(dead_code)]
     pub skip_town_list: bool,
     /// 锁定的省名称(省级及以下进入时自动填)。
     pub locked_province_name: Option<String>,

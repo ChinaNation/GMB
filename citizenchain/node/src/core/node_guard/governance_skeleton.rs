@@ -981,7 +981,6 @@ mod tests {
         assert_eq!(check_state(&valid_state()), Ok(()));
     }
 
-    #[test]
     /// 基金会三个创世岗位永久由同一位公民担任：钱包账户可换，
     /// 公民 CID / 姓 / 名永久冻结；换钱包必须同步换绑 citizen-identity。
     #[test]

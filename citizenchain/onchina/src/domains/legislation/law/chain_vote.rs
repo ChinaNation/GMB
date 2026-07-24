@@ -8,6 +8,8 @@
 //!
 //! `cast_representative_vote` 已接入 handler；`cast_referendum_vote`/`executive_sign`/`override_sign`/
 //! `guard_vote` 及其 call index 为公投/行政签署/护宪终审流预留(本轮读展示 + 另线程),暂无生产消费方。
+
+// 公投/行政签署/护宪终审流的 call index 与 encode 函数为预留(本轮读展示 + 另线程),尚无生产消费方。
 #![allow(dead_code)]
 
 use crate::core::institution_call::{chain_action_code, ChainCall};

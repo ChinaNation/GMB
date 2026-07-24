@@ -61,29 +61,3 @@ export type InstitutionProposalPage = {
   items: InstitutionProposalItem[];
   hasMore: boolean;
 };
-
-/** CID `/registration-info` 响应形态(snake_case 直传)。 */
-export type InstitutionRegistrationInfoResp = {
-  cid_number: string;
-  cid_full_name: string;
-  account_names: string[];
-  credential: InstitutionRegistrationCredentialResp;
-};
-
-/** CID 对链上注册 payload 签发的凭证。 */
-export type InstitutionRegistrationCredentialResp = {
-  genesis_hash: string;
-  /** 防重放 nonce(本次响应生成的随机字符串)。 */
-  register_nonce: string;
-  /** 代表签发机构的唯一 CID。 */
-  actor_cid_number: string;
-  /** 本次凭证签名所用管理员公钥（小写 0x + 64 位十六进制）。 */
-  credential_signer_public_key: string;
-  /** 业务作用域省名。 */
-  scope_province_name: string;
-  /** 业务作用域市名。 */
-  scope_city_name: string;
-  /** 签发管理员对凭证 payload 的 sr25519 签名(64 字节 hex)。 */
-  signature: string;
-  meta?: unknown;
-};

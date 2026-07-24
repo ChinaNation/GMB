@@ -50,7 +50,7 @@ RoleSubject = (cid_number, role_code)
 - 创世机构可以依法增加、改名和删除普通动态岗位；NodeGuard 只保护固定岗位，不禁止额外动态岗位。
 - 动态岗位码由 runtime 生成，机构内唯一、不可修改，删除后永不复用；调用方不得指定岗位码。
 - 动态岗位码格式：`R_<32 位大写十六进制>`。
-- 生成材料：`blake2_256(SCALE(GMB_ROLE_V1, cid_number, institution_role_nonce, proposal_id))`，取前 16 字节并转为大写十六进制。
+- 生成材料：`blake2_256(SCALE(MODULE_TAG, cid_number, institution_role_nonce, proposal_id))`，取前 16 字节并转为大写十六进制。
 - `InstitutionRoleNonce[cid_number]` 单调递增；`UsedRoleCodes[(cid_number, role_code)] = true` 永久保留，删除岗位不删除占用记录。
 - `role_name` 在机构内唯一；同名多人必须表达为同一岗位码下的多个任职席位，不能复制成多个同名岗位。动态岗位名可以依法修改；岗位码、岗位权限及固定属性不可修改。
 - 同一管理员可以在同一机构担任多个不同岗位；任职去重边界是“同一岗位内同一账户不得重复占席”，不是“一个账户在机构内只能有一个岗位”。

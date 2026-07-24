@@ -58,6 +58,7 @@ impl<T: Config> Pallet<T> {
         let mut nonce = current_nonce;
         for _ in 0..MAX_ROLE_CODE_GENERATION_ATTEMPTS {
             let raw = entity_primitives::generate_dynamic_role_code(
+                crate::MODULE_TAG,
                 cid_number.as_slice(),
                 nonce,
                 proposal_id,

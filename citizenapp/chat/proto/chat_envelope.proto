@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package gmb.chat.v1;
 
-// GMB_CHAT_V1 的跨端 Chat 信封真源。
+// 跨端 Chat 信封真源（proto 包 gmb.chat.v1，版本由 protocol_version 字段表达）。
 //
 // OpenMLS 标准 wire bytes 放在内层；本文件只定义外层瞬时投递、Chat 路由记录、
 // KeyPackage 发布结构。钱包账户只作为聊天账户和转账收款标识，

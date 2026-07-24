@@ -17,8 +17,6 @@
 //! - 成功提交上链后**不立即 settle**;`ledger.on_payment_settled` 由
 //!   `settlement::listener` 收到链上 `PaymentSettled` 事件时调用。
 
-#![allow(dead_code)]
-
 use codec::{Decode, Encode};
 use sp_core::H256;
 use sp_runtime::AccountId32;
@@ -149,7 +147,11 @@ pub struct OffchainPacker {
 }
 
 impl OffchainPacker {
-    /// 构造 packer,注入 signer / submitter(未接入时传 Noop,生产传真实 impl)。
+    /// 测试专用便捷构造:batch_seq 从 0 起。
+    ///
+    /// 生产路径必须走 [`Self::new_with_initial_seq`],用链上 `LastClearingBatchSeq` 续跑;
+    /// 从 0 起会打断 batch_seq 连续性,故这里用 `cfg(test)` 挡住生产误用。
+    #[cfg(test)]
     pub fn new(
         ledger: Arc<OffchainLedger>,
         actor_cid_number: Vec<u8>,

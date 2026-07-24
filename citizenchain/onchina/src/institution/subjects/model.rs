@@ -11,36 +11,14 @@
 //!
 //! 详见 `feedback_institutions_two_layer.md`。
 
-#![allow(dead_code)]
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::cid::InstitutionCategory;
-use crate::scope::HasProvinceCity;
 
 pub const EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE: &str = "NATIONAL_CITIZEN_EDU_COMMITTEE";
 pub const EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE: &str = "CITY_CITIZEN_EDU_COMMITTEE";
-pub const EDUCATION_TYPE_EARLY_SCHOOL: &str = "EARLY_SCHOOL";
-pub const EDUCATION_TYPE_PRIMARY_SCHOOL: &str = "PRIMARY_SCHOOL";
-pub const EDUCATION_TYPE_SECONDARY_SCHOOL: &str = "SECONDARY_SCHOOL";
-pub const EDUCATION_TYPE_UNIVERSITY: &str = "UNIVERSITY";
-
-// 基础教育级别(初学/小学/中学)。大学是独立机构码(GUN/SUN),不属 education_type 级别。
-pub const EDUCATION_SCHOOL_TYPES: &[&str] = &[
-    EDUCATION_TYPE_EARLY_SCHOOL,
-    EDUCATION_TYPE_PRIMARY_SCHOOL,
-    EDUCATION_TYPE_SECONDARY_SCHOOL,
-];
-
-pub const EDUCATION_COMMITTEE_TYPES: &[&str] = &[
-    EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE,
-    EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE,
-];
-
-pub fn is_education_school_type(value: &str) -> bool {
-    EDUCATION_SCHOOL_TYPES.contains(&value)
-}
 
 // ── 账户链上状态 ───────────────────────────────────────
 
@@ -130,15 +108,6 @@ pub struct LegalRepresentative {
     pub account_id: String,
 }
 
-impl HasProvinceCity for Institution {
-    fn province(&self) -> &str {
-        &self.province_name
-    }
-    fn city(&self) -> &str {
-        &self.city_name
-    }
-}
-
 /// 机构下的多签账户(复合 key = (cid_number, account_name))。
 #[derive(Debug, Clone, Deserialize)]
 pub struct InstitutionAccount {
@@ -194,22 +163,6 @@ impl Serialize for InstitutionAccount {
     }
 }
 
-/// 复合 key:`(cid_number, account_name)`。
-pub type AccountKey = (String, String);
-
-/// 把复合 key 序列化为 "cid_number|account_name" 字符串(用作 HashMap 的 String key)。
-pub fn account_key_to_string(cid_number: &str, account_name: &str) -> String {
-    format!("{cid_number}|{account_name}")
-}
-
-/// 从 "cid_number|account_name" 字符串解析回元组。
-pub fn account_key_from_string(s: &str) -> Option<AccountKey> {
-    let mut parts = s.splitn(2, '|');
-    let cid_number = parts.next()?.to_string();
-    let account_name = parts.next()?.to_string();
-    Some((cid_number, account_name))
-}
-
 /// 机构资料库文档(注册文件/许可证/章程等)。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstitutionDocument {
@@ -249,6 +202,9 @@ pub struct CreateInstitutionAdminInput {
 }
 
 #[derive(Debug, Deserialize)]
+// serde 创建 DTO:字段是前端 JSON API 契约,7 个私权创建 handler 反序列化后按分支消费;
+// subject_property 为第 6 步原子创建业务预留(当前接口固定关闭),非死代码。
+#[allow(dead_code)]
 pub struct CreateInstitutionInput {
     /// 主体属性(G/F/S)。仅保留给第 6 步新原子创建业务的资料录入，当前接口固定关闭。
     pub subject_property: String,
@@ -286,7 +242,9 @@ pub struct CreateInstitutionInput {
 pub struct UpdateInstitutionInput {
     #[serde(default)]
     pub cid_full_name: Option<String>,
+    // serde 编辑 DTO 契约字段:前端可提交简称,当前后端更新流程未消费,保留契约形。
     #[serde(default)]
+    #[allow(dead_code)]
     pub cid_short_name: Option<String>,
     /// 所属法人 cid_number(仅 F 可设置;S/G 传值会被拒)
     #[serde(default)]

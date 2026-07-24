@@ -7,7 +7,6 @@
 //!
 //! - GET    /api/v1/institutions/gov                  → list_official_institutions
 
-#![allow(dead_code)]
 
 use axum::{
     extract::State,

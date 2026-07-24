@@ -14,8 +14,6 @@
 //! - 与 `packer` 组合形成闭环:packer 提交 extrinsic 上链 → runtime 执行后发
 //!   `PaymentSettled` 事件 → 本监听器收到 → `ledger.on_payment_settled` 清理 pending。
 
-#![allow(dead_code)]
-
 use codec::Decode;
 use futures::StreamExt;
 use sc_client_api::{BlockchainEvents, StorageProvider};

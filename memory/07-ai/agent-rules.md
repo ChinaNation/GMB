@@ -86,8 +86,9 @@
 - 每次输出技术方案都必须包含“预计修改目录”清单；清单中每个目录必须附中文注释，说明该目录的修改用途、边界和是否涉及代码、文档或残留清理
 - 代码必须补中文注释
 - 产品命名硬规则：公民（在线/热钱包）= 英文名 `CitizenApp`、模块 id/目录 `citizenapp`、中文名“公民”；公民钱包（离线/冷钱包）= 英文名 `CitizenWallet`、模块 id/目录 `citizenwallet`、中文名“公民钱包”。任何历史旧名及非目标中英文产品名一律废弃，不得在代码、文档、命名、注释中生成；改名进度见任务卡 `20260620-product-rename-citizenapp-citizenwallet`
-- 管理员命名硬规则：所有机构和个人多签的管理员唯一字段统一为 `admins`；OnChina 登录态只允许用 `registry_org_code=FEDERAL_REGISTRY/CITY_REGISTRY` 表达当前账户所属注册局机构，不得恢复独立管理员身份表、授权真源或授权分支。
+- 管理员命名硬规则：所有机构和个人多签的管理员唯一字段统一为 `admins`；OnChina 登录态只允许用 `institution_code + workspace` 表达当前账户所属机构工作台，授权真源是链上在册管理员与岗位码。注册局与其它机构同走这一条路径，不得恢复 `registry_org_code` 这类注册局专用分支，也不得恢复独立管理员身份表、第二授权真源或授权分支。
 - 账户标识命名硬规则：全仓由助记词派生、用于签名和授权的链账户类型统一为 `AccountId`；单一账户字段统一为 `account_id`，同一结构存在多个业务角色账户时统一为 `<role>_account_id`；签名公钥统一为 `public_key`，当前签名者公钥统一为 `signer_public_key`，凭证签名者公钥统一为 `credential_signer_public_key`；SS58 只允许命名为 `ss58_address` 并且只用于展示或边界输入输出，不得作为授权、关系索引或持久化主键；`account_id` 和 32 字节公钥的文本形式唯一允许小写 `0x` 加 64 位十六进制（`^0x[0-9a-f]{64}$`）。不得新增或恢复 `wallet_account`、`admin_account`、`owner_account`、`wallet_pubkey`、`admin_pubkey`、`wallet_address` 等同义字段。完整契约见 ADR-040；对应旧实现仅可在实施完成前作为现状描述，不构成兼容许可。
+- 协议版本标识硬规则：全仓唯一允许的版本化协议标识是 `QR_V1`（扫码协议）。签名域唯一走 `primitives::sign::signing_message(op_tag)` = `blake2_256(GMB ‖ op_tag ‖ SCALE)`；非签名哈希域（岗位码派生、提案数据打包等）一律用所属 pallet 的 `MODULE_TAG`。禁止新增任何 `*_V1` 常量、字符串域或别名，`GMB_ROLE_V1`、`GMB_CHAT_V1` 已于 2026-07-23 彻底删除，不得恢复。
 - 全仓字段同名硬规则：同一个业务语义字段在全仓库必须使用同一个命名；不得在 Rust、Dart、TypeScript、SQL、JSON、文档或生成物中为同一含义另造 `name`、`label`、`display_name`、`type`、`status` 等泛化别名。字段名必须尽量精简但直接表达业务语义；例如行政区名称必须按层级使用 `country_name`、`province_name`、`city_name`、`town_name`，泛行政区才允许使用 `division_name`；国家名称使用 `country_full_name` / `country_short_name`；机构实体名称和机构码对应中文名统一使用 `cid_full_name` / `cid_short_name`。不确定是否同义时必须先全仓搜索并向用户确认，不得自行命名。
 - runtime 二次确认硬规则：任何涉及 `citizenchain/runtime/` 的修改，无论是业务逻辑、常量、权重、runtime primitives、注释、格式化、生成物还是仅由格式化工具造成的无逻辑 diff，都必须在执行前单独向用户说明完整路径、预计改动内容和原因，并得到用户明确的第二次确认；没有二次确认时，禁止读写工具、格式化命令或批量命令产生 runtime diff。
 - 代码更新后必须更新文档

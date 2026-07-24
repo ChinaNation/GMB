@@ -55,7 +55,7 @@ class MlsWireMessage {
     return bytes == null ? null : _bytesToHex(bytes);
   }
 
-  /// 转为 GMB_CHAT_V1 外层 envelope。
+  /// 转为 ChatEnvelope 外层信封。
   ///
   /// OpenMLS wire bytes 和 ratchet tree 都是密文/协议字节，
   /// Cloudflare 只在当前请求中转发，不解析也不保存其中内容。
@@ -129,7 +129,7 @@ String _bytesToHex(List<int> bytes) {
   return bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
 }
 
-/// 从 GMB_CHAT_V1 外层 envelope 还原 OpenMLS wire message。
+/// 从 ChatEnvelope 外层信封还原 OpenMLS wire message。
 MlsWireMessage imMlsWireMessageFromEnvelope(ChatEnvelope envelope) {
   return MlsWireMessage(
     wireBytes: List<int>.from(envelope.mlsWireMessage),

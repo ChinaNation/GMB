@@ -4,6 +4,18 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
+/// decoder 按条件发射、但不进任何 action `required_fields` 的字段。
+///
+/// 这些 key 由 `citizenwallet/lib/signer/payload_decoder.dart` 在 Option 字段命中时才发射,
+/// Rust 侧无法从 registry 推出,只能在此显式登记。新增前必须先确认 decoder 真的发射该 key,
+/// 不得拿本表豁免死标签。
+const DECODER_ONLY_FIELDS: &[&str] = &[
+    "birth_date",
+    "executive_cid_number",
+    "legislature_cid_number",
+    "personal_account_id",
+];
+
 const REMOVED_AMBIGUOUS_ACCOUNT_FIELDS: &[&str] = &[
     "wallet_account",
     "admin_account",
@@ -162,6 +174,32 @@ fn hash_only_is_limited_to_runtime_upgrade() {
                 action.action_key
             );
         }
+    }
+}
+
+/// 反向校验:fields.yaml 不得积累无人引用的孤儿中文名。
+///
+/// `required_fields_all_have_chinese_labels` 只做 actions → fields 单向校验,
+/// 缺这条反向校验正是 14 条孤儿标签堆积到 v1 的成因。
+#[test]
+fn fields_yaml_has_no_orphan_entries() {
+    let actions = actions().expect("actions.yaml 必须可解析");
+    let mut referenced = HashSet::new();
+    for action in actions {
+        for field_key in action.required_fields {
+            referenced.insert(field_key);
+        }
+    }
+
+    let fields = fields().expect("fields.yaml 必须可解析");
+    for field in fields {
+        assert!(
+            referenced.contains(&field.field_key)
+                || DECODER_ONLY_FIELDS.contains(&field.field_key.as_str()),
+            "fields.yaml 存在孤儿字段中文名: {} — 没有任何 action 的 required_fields 引用它,\
+             也不在 DECODER_ONLY_FIELDS 登记表内。删掉它,或先确认 decoder 确实发射后再登记。",
+            field.field_key
+        );
     }
 }
 

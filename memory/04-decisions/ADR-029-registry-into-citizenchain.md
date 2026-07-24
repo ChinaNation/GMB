@@ -20,7 +20,7 @@
 5. 省级维度保留：行政区 省/市/镇 = china.sqlite 单源（ADR-021）；联邦管理员按省 scope 管各市注册局；记录保留 `province_code/city_code/town_code`；ShardedStore 省/市维度逻辑保留（单市节点物理只持本市一片）。
 6. 去中心化鉴权：市注册局管理员公钥集合上链，仅联邦（按省）origin 可写；扫码登录比对链上集合放行；删除 passkey/设备口令登录。
 7. 裁撤旧授信、旧二维码导入和旧状态导入；公民改为注册局直接录入并直接发护照。Redis 删→节点内本地限流；中心 PostgreSQL 删→每节点内嵌 PostgreSQL。
-8. 归档与删除：`citizencode` 整目录删除；旧公民护照备份保留在 `docs/citizenpassport/` 存档备查。
+8. 归档与删除：`citizencode` 整目录删除；旧公民护照备份原保留在 `docs/citizenpassport/` 存档备查——**2026-07-23 用户判定该副本已无用途，整目录删除**（迁移已完成，存档使命结束；如需追溯走 Git 历史）。
 9. 链改按链开发期口径重新创世（feedback_chain_dev_never_ask_migration），零残留（feedback_no_compatibility）。
 10. 延后：公民上链粒度细化（逐人最小身份 vs 仅承诺/资格）在迁移整合完成后单独细化。
 
@@ -28,7 +28,7 @@
 
 - node 形态：从单机桌面端升级为"节点运维台 + 内网注册局服务"；大市（如香港 800万公民/500万公司/100管理员）按机房服务器 + 内嵌 PG + NAS + PG 备份/PITR + 温备部署。
 - runtime：扩展 `admins`（联邦/市注册局管理员集合、联邦按省可写）与 `otherpallet/cid-system`（身份注册表 + 承诺哈希），需重新创世。
-- 仓库：收敛为 3 系统；`citizencode` 删除、`citizenpassport` 归档 `docs/`。
+- 仓库：收敛为 3 系统；`citizencode` 删除、`citizenpassport` 先归档 `docs/` 后于 2026-07-23 一并删除。
 
 ## 备选方案
 

@@ -5,7 +5,8 @@ import { blake2AsU8a } from '@polkadot/util-crypto/blake2';
 // `tests/fixtures/signing_domain_vectors.json`。
 //
 // 死规则：任何签名的被签消息一律 = signing_message(op_tag) =
-// blake2_256( GMB(3B) || op_tag(1B) || SCALE(payload) )。禁止再写 GMB_*_V1 字符串域。
+// blake2_256( GMB(3B) || op_tag(1B) || SCALE(payload) )。禁止另造版本化字符串域；
+// 全仓唯一允许的版本化协议标识是 QR_V1。
 
 /// 签名域分隔符 GMB(3 字节 ASCII)，单源对齐 core_const::GMB。
 export const GMB_SIGN_DOMAIN = [0x47, 0x4d, 0x42];

@@ -1950,9 +1950,8 @@ fn main() {
     disable_core_dumps();
     let command = parse_backend_command();
 
-    // OnChina 后端不再持有任何链上签名钥:机构操作全部由发起管理员使用签名钱包直接冷签,
-    // 鉴权真源是链上 Active 管理员集合。原平台签名钥 `ONCHINA_SIGNING_SEED_HEX`
-    // (仅用于签发注销凭证)已随注销凭证链路整体删除。
+    // OnChina 后端不持有任何链上签名钥:机构操作全部由发起管理员使用签名钱包直接冷签,
+    // 鉴权真源是链上 Active 管理员集合。
     // (Card 05):桌面/小市内嵌私有 PostgreSQL——onchina 自管 initdb/起停,
     // 自拼本机 DATABASE_URL;大市外部托管 PG 时关 ONCHINA_EMBEDDED_PG,直接给 DATABASE_URL。
     let database_url = if core::embedded_pg::is_enabled() {

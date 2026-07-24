@@ -949,10 +949,3 @@ fn submit_batch_solvency_boundary_exact_pass() {
         assert_eq!(LastClearingBatchSeq::<Test>::get(bank_cid()), 1);
     });
 }
-
-// 用 `Encode` 保留 future 扩展余地(如 emit 断言里使用)。
-#[allow(dead_code)]
-fn _touch_encode() {
-    let x: u32 = 0;
-    let _ = x.encode();
-}

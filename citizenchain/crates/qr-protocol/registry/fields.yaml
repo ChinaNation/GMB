@@ -53,20 +53,14 @@
   field_label_zh: 身份状态
 - field_key: create_threshold
   field_label_zh: 创建阈值
-- field_key: credential_signer_public_key
-  field_label_zh: 凭证签发管理员
 - field_key: eligible_total
   field_label_zh: 合格选民数
 - field_key: expires_at
   field_label_zh: 过期时间
 - field_key: family_name
   field_label_zh: 姓
-- field_key: institution
-  field_label_zh: 机构
 - field_key: institution_code
   field_label_zh: 机构码
-- field_key: institution_governance_action
-  field_label_zh: 机构治理动作
 - field_key: governance_action
   field_label_zh: 治理动作
 - field_key: governance_detail
@@ -99,10 +93,6 @@
   field_label_zh: 省名称
 - field_key: reason
   field_label_zh: 原因
-- field_key: register_nonce
-  field_label_zh: 登记随机数
-- field_key: registry_org_code
-  field_label_zh: 注册局机构码
 - field_key: regular_threshold
   field_label_zh: 普通阈值
 - field_key: remark
@@ -113,12 +103,6 @@
   field_label_zh: 节点域名
 - field_key: rpc_port
   field_label_zh: 节点端口
-- field_key: scope_city_name
-  field_label_zh: 市级范围
-- field_key: scope_province_name
-  field_label_zh: 省级范围
-- field_key: signature
-  field_label_zh: 签名
 - field_key: voter_role_code
   field_label_zh: 投票岗位码
 - field_key: system
@@ -169,13 +153,8 @@
   field_label_zh: CID数量
 - field_key: citizen_sex
   field_label_zh: 公民性别
-- field_key: credential_issuer_cid_number
-  field_label_zh: 凭证签发机构CID
 - field_key: decimals
   field_label_zh: 资产精度
-- field_key: default_role
-  field_label_zh: 默认岗位
-  field_value_zh: 法定代表人岗位空缺
 - field_key: effective_at
   field_label_zh: 生效时间戳
 - field_key: execution_account_id
@@ -190,8 +169,6 @@
   field_value_zh: "{actor_cid_number} 的链上费用账户"
 - field_key: sender_account_id
   field_label_zh: 来源账户
-- field_key: funding_account_id
-  field_label_zh: 出资账户
 - field_key: houses
   field_label_zh: 表决院
 - field_key: identity_level
@@ -213,22 +190,15 @@
   field_value_zh: "{actor_cid_number} 的链上费用账户"
 - field_key: personal_account_id
   field_label_zh: 个人多签账户
-- field_key: protocol_accounts
-  field_label_zh: 制度账户
-  field_value_zh: 链上按机构号自动建立
 - field_key: reason_hash
   field_label_zh: 监管文书哈希
 - field_key: scope_code
   field_label_zh: 行政区代码
-- field_key: threshold
-  field_label_zh: 阈值
 - field_key: target
   field_label_zh: 操作目标
 - field_key: tier
   field_label_zh: 法律层级
 - field_key: title
   field_label_zh: 法律标题
-- field_key: total_amount_yuan
-  field_label_zh: 总金额
 - field_key: vote_type
   field_label_zh: 表决类型

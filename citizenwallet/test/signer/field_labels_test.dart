@@ -84,11 +84,6 @@ void main() {
 
     test('机构协议新增字段翻译正确', () {
       expect(fieldLabelText('institution_account_id'), '机构账户');
-      expect(fieldLabelText('credential_issuer_cid_number'), '凭证签发机构CID');
-      expect(
-        fieldLabelText('credential_signer_public_key'),
-        '凭证签发管理员',
-      );
       expect(fieldLabelText('account_names'), '机构账户名称');
       expect(fieldLabelText('effective_at'), '生效时间戳');
     });

@@ -53,7 +53,7 @@ citizenchain/registry（→ onchina），自动分工：CID Agent（后端身份
 
 ### Phase 2 · institution 主线
 - **07** `accounts/` + `subjects/` → `institution/` 纯位移。依赖：02。风险：中。
-- **08** scope 多档化：`VisibleScope` 按 `admin_level` 层级派生（删 Federal/City 硬编码），所有 list API 必过 `filter_by_scope`。依赖：07。风险：中。
+- **08** scope 多档化：`VisibleScope` 按 `admin_level` 层级派生（删 Federal/City 硬编码），所有 list API 作用域过滤下沉 SQL 层（`*_in_scope` 查询按 `VisibleScope` 约束 WHERE；2026-07-23 删 Rust `filter_by_scope`/`HasProvinceCity`）。依赖：07。风险：中。
 - **09** admin model/catalog/city 泛化：`FederalRegistry/CityRegistry` → `Tier1/Tier2 + institution_id`；guards `require_admin_federal/city` → `require_admin_tier`。依赖：02/03/08。风险：高。
 - **10** seed 泛化：联邦创世引导 → Tier1 seed。依赖：09。风险：中。
 

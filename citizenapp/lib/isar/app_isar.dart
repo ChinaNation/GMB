@@ -50,19 +50,6 @@ class WalletSettingsEntity {
 }
 
 @collection
-class AdminGroupCacheEntity {
-  Id id = Isar.autoIncrement;
-
-  @Index(unique: true, replace: true)
-  late String accountId;
-
-  late String adminGroupName;
-
-  @Index()
-  late int updatedAt;
-}
-
-@collection
 class LoginReplayEntity {
   Id id = Isar.autoIncrement;
 
@@ -572,7 +559,7 @@ class ChatConversationEntity {
 
 /// Chat 消息本地记录。
 ///
-/// `envelopeBytesHex` 保存完整 GMB_CHAT_V1 Protobuf bytes，便于重试
+/// `envelopeBytesHex` 保存完整 ChatEnvelope Protobuf bytes，便于重试
 /// 和排查；`plaintext` 只写手机本地库，绝不上传 Cloudflare 或近场 transport。
 @collection
 class ChatMessageEntity {
@@ -1009,7 +996,6 @@ class WalletIsar {
     final schemas = [
       WalletProfileEntitySchema,
       WalletSettingsEntitySchema,
-      AdminGroupCacheEntitySchema,
       LoginReplayEntitySchema,
       AppKvEntitySchema,
       InstitutionEntitySchema,

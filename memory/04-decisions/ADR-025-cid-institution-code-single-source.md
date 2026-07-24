@@ -56,5 +56,6 @@
 - **阈值 DoubleMap 删 org 腿（AccountId 已全局唯一）**：用户选"阈值存储键保持"，故只改腿类型 u8→[u8;4]，降低风险。
 
 ## 后续动作
+- [x] **2026-07-23 变更**：Phase 2 保留的 `registry_org_code` 已随登录态收敛为 `institution_code + workspace` 而彻底删除（live code 零命中）。当前规则见 `memory/AGENTS.md` / `memory/07-ai/agent-rules.md` 管理员命名硬规则；清理见任务卡 `20260723-citizenchain-deadcode-cleanup-section2`。本 ADR 正文保持当时决策原貌，不回改。
 - [ ] 用户部署：重生 plain SSOT + `genesis-state/` + CitizenApp 轻形态 chainspec,出安装包并重启 6 节点；重跑公权机构快照包（china 重派生后必须）。
 - [ ] 提交（用户授权后）。

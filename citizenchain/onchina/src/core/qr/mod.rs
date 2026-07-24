@@ -20,6 +20,9 @@ pub enum QrKind {
     SignRequest = 1,
     SignResponse = 2,
     UserContact = 3,
+    /// k=4 转账扫码流向:Rust 侧暂不构造,但前端 citizenQr.ts 有完整解析,
+    /// 是跨端协议码契约(一张码 contact=加好友 / transfer=转账),删除会破坏契约与码值。
+    #[allow(dead_code)]
     UserTransfer = 4,
 }
 

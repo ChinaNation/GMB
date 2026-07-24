@@ -158,7 +158,7 @@ class ChatIncomingProcessResult {
 /// 公民 Chat 消息收发状态机。
 ///
 /// 本类是聊天收发编排层。它不实现密码学，只负责把 OpenMLS native、
-/// GMB_CHAT_V1 envelope、本地 Isar 和正式 transport 串起来。
+/// ChatEnvelope、本地 Isar 和正式 transport 串起来。
 class ChatFlow {
   const ChatFlow({
     required MlsCrypto crypto,

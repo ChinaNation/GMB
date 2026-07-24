@@ -14,7 +14,7 @@
 - `PrivateAdmins::AdminAccounts[cid_number].admins` 是机构可任职人员名册，不是执行授权真源；主账户、费用账户和管理员账户均不能单独授权。
 - ADR-039 目标授权主体是 `RoleSubject(cid_number, role_code)`。岗位、岗位权限、任职、`InstitutionRoleNonce` 和永久 `UsedRoleCodes` 归本模块；任职只能引用既有管理员。
 - CID 顶层能力封顶岗位可授予的 `RoleBusinessPermission`；权限至少区分 `Propose` 与 `Vote`。岗位权限不可修改，变更权限必须删除旧动态岗位并生成新岗位码。
-- 动态岗位码固定为 `R_<32 位大写十六进制>`，由 runtime 使用 `GMB_ROLE_V1` 域分隔符生成；调用方不得提供，删除后永不复用。动态岗位只允许依法改 `role_name`。
+- 动态岗位码固定为 `R_<32 位大写十六进制>`，由 runtime 使用本 pallet `MODULE_TAG`(`b"pri-mgmt"`) 作哈希域生成；调用方不得提供，删除后永不复用。动态岗位只允许依法改 `role_name`。
 - 全部机构永久存在唯一可空缺 `LR`，任职只能为 0 或 1；法定代表人原子结构必须与 LR 任职一致。机构内岗位码和岗位名分别唯一，同名多人属于同一岗位的多个席位；管理员可兼任不同岗位。创世固定岗位码、名和权限不可修改或删除，但创世机构仍可增加普通动态岗位。
 - `InstitutionGovernanceThresholds[cid_number]` 是私权机构治理阈值真源，与 admins 钱包数、岗位数分别独立。投票引擎只在建案时读取并冻结提案阈值快照。
 - ADR-039 目标本机构治理、管理员更换、岗位维护和法定代表人任免分别由业务模块登记岗位权限并静态指定投票引擎；不能因为 `actor_cid_number == cid_number` 或属于 admins 就自动取得发起权。

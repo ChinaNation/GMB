@@ -5,7 +5,7 @@
 // - 机构创建(propose_create_institution)已迁出节点,归 onchina 控制台,故本文件不含任何创建输入类型。
 
 use primitives::cid::code::InstitutionCode;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 /// 节点桌面"添加清算行"页用的候选机构记录(序列化给 Tauri 前端)。
 #[derive(Debug, Clone, Serialize)]
@@ -90,36 +90,4 @@ pub struct InstitutionProposalItem {
     pub kind_label: String,
     pub status_label: String,
     pub summary: String,
-}
-
-/// CID `/api/v1/app/institutions/:cid_number/registration-info` 的响应形态。
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub struct InstitutionRegistrationInfoResp {
-    pub cid_number: String,
-    pub cid_full_name: String,
-    pub account_names: Vec<String>,
-    pub credential: InstitutionRegistrationCredentialResp,
-}
-
-/// CID 对机构注册 payload 签发的凭证。
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub struct InstitutionRegistrationCredentialResp {
-    /// 链 genesis hash,节点验签时对应 runtime 的 block_hash(0)。
-    pub genesis_hash: String,
-    /// 防重放 nonce(本次响应生成的随机字符串)。
-    pub register_nonce: String,
-    /// 代表签发机构的唯一 CID。
-    pub actor_cid_number: String,
-    /// 本次凭证签名所用管理员公钥（小写 `0x` + 64 位十六进制）。
-    pub credential_signer_public_key: String,
-    /// 业务作用域省名,只参与 payload 防串用。
-    pub scope_province_name: String,
-    /// 业务作用域市名,可为空。
-    pub scope_city_name: String,
-    /// 签发管理员对凭证 payload 的 sr25519 签名(64 字节 hex)。
-    pub signature: String,
-    /// 身份注册局端附带的审计元信息,节点只透传展示/排查,不参与链上注册编码。
-    pub meta: serde_json::Value,
 }

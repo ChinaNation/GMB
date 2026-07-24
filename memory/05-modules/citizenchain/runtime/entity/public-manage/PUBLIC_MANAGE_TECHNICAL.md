@@ -15,7 +15,7 @@
 - `PublicAdmins::AdminAccounts[cid_number].admins` 是机构可任职人员名册，每项为统一的 `Admin { account_id, cid_number, family_name, given_name }`。非空 CID 必须引用 `citizen-identity` 的 CTZN CID↔账户绑定。该名册不是机构业务授权真源，主账户、费用账户和管理员账户均不能单独授权。
 - ADR-039 目标授权主体是 `RoleSubject(cid_number, role_code)`。`InstitutionRoles`、岗位权限、`InstitutionRoleAssignments`、`InstitutionRoleNonce` 与永久 `UsedRoleCodes` 归本模块；任职只能引用既有管理员。
 - CID 顶层能力封顶岗位可授予的 `RoleBusinessPermission`；业务动作权限至少区分 `Propose` 与 `Vote`。岗位权限不可原地修改，变更权限必须删除旧动态岗位并生成新岗位码。
-- 动态岗位码固定为 `R_<32 位大写十六进制>`，由 runtime 使用 `GMB_ROLE_V1` 域分隔符生成；调用方不得提供，删除后永不复用。动态岗位只允许依法改 `role_name`。
+- 动态岗位码固定为 `R_<32 位大写十六进制>`，由 runtime 使用本 pallet `MODULE_TAG`(`b"pub-mgmt"`) 作哈希域生成；调用方不得提供，删除后永不复用。动态岗位只允许依法改 `role_name`。
 - 全部机构永久存在唯一可空缺 `LR`，任职只能为 0 或 1；法定代表人原子结构必须与 LR 任职一致。机构内岗位码和岗位名分别唯一，同名多人属于同一岗位的多个席位；管理员可兼任不同岗位。创世固定岗位码、名和权限不可修改或删除，但创世机构仍可增加普通动态岗位。
 - `InstitutionGovernanceThresholds[cid_number]` 是公权机构治理阈值真源，与 admins 钱包数、岗位数分别独立。投票引擎只在建案时读取并冻结提案阈值快照。
 - ADR-039 目标外层标准 extrinsic 必须同时满足 origin 属于 admins、对指定 `RoleSubject` 有有效任职且岗位拥有目标业务权限。注册局凭证只表达业务背书，不得成为第二授权真源。

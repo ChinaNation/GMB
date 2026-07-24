@@ -25,8 +25,12 @@ fn protected_genesis_institution_can_add_dynamic_role_without_mutating_fixed_rol
             .try_into()
             .expect("NRC CID fits");
         let proposal_id = 9001;
-        let dynamic_code =
-            entity_primitives::generate_dynamic_role_code(cid_number.as_slice(), 0, proposal_id);
+        let dynamic_code = entity_primitives::generate_dynamic_role_code(
+            public_manage::MODULE_TAG,
+            cid_number.as_slice(),
+            0,
+            proposal_id,
+        );
         assert_ok!(PublicManage::apply_institution_governance_result(
             entity_primitives::InstitutionGovernanceResult {
                 institution_code: primitives::cid::code::NRC,
@@ -83,6 +87,7 @@ fn protected_genesis_institution_can_add_dynamic_role_without_mutating_fixed_rol
             .expect("foundation CID fits");
         let foundation_proposal_id = 9002;
         let foundation_dynamic_code = entity_primitives::generate_dynamic_role_code(
+            private_manage::MODULE_TAG,
             foundation_cid.as_slice(),
             0,
             foundation_proposal_id,

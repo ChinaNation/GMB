@@ -39,7 +39,7 @@ runtime/genesis/src/institution/
 
 - 创世 seeder 必须为全部创世固定岗位写入固定 `RoleBusinessPermission`，不能只写岗位码、名称和席位。
 - 创世 admins 只作为可任职人员集合，不直接取得业务权限；业务权限必须来自固定岗位的有效创世任职。
-- 全部创世固定岗位使用既定固定码；动态岗位码生成使用 `GMB_ROLE_V1`，但 genesis 不用动态算法替代固定码。
+- 全部创世固定岗位使用既定固定码；动态岗位码生成使用所属 pallet 的 `MODULE_TAG` 作哈希域，但 genesis 不用动态算法替代固定码。
 - 普通机构不由 genesis seeder 创建；其运行期创建必须原子建立 LR、至少一个初始治理岗位及权限、任职和投票规则。
 - 本节是 ADR-039 目标，runtime/genesis 与 NodeGuard 代码迁移分别在任务卡第 3、4 步执行。
 

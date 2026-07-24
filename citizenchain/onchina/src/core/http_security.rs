@@ -200,53 +200,6 @@ pub(crate) async fn health(State(state): State<AppState>) -> impl IntoResponse {
     })
 }
 
-pub(crate) fn constant_time_eq(left: &str, right: &str) -> bool {
-    let l = left.as_bytes();
-    let r = right.as_bytes();
-    let max_len = l.len().max(r.len());
-    let mut diff = l.len() ^ r.len();
-    for i in 0..max_len {
-        let lb = l.get(i).copied().unwrap_or(0);
-        let rb = r.get(i).copied().unwrap_or(0);
-        diff |= usize::from(lb ^ rb);
-    }
-    diff == 0
-}
-
-#[allow(dead_code)]
-pub(crate) fn require_public_search_auth(
-    headers: &HeaderMap,
-) -> Result<(), axum::response::Response> {
-    let incoming = headers
-        .get("x-public-search-token")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .trim()
-        .to_string();
-    if incoming.is_empty() {
-        return Err(api_error(
-            StatusCode::UNAUTHORIZED,
-            1002,
-            "public search auth required",
-        ));
-    }
-    let Some(expected) = optional_env("ONCHINA_PUBLIC_SEARCH_TOKEN") else {
-        return Err(api_error(
-            StatusCode::SERVICE_UNAVAILABLE,
-            1004,
-            "public search auth not configured",
-        ));
-    };
-    if !constant_time_eq(incoming.as_str(), expected.as_str()) {
-        return Err(api_error(
-            StatusCode::FORBIDDEN,
-            1008,
-            "public search auth invalid",
-        ));
-    }
-    Ok(())
-}
-
 // chain pull 端点(multisig_info / joint_vote / vote_eligibility)的安全模型是
 // "返回签名凭证只对请求者 account_id 有效",不需要请求侧 HMAC。
 

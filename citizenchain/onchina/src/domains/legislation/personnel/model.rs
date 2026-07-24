@@ -4,8 +4,8 @@
 //! 字段化(`reject_count`/`escalated`,第53/55/57/64条)为**显式待定项**,随任免案链路上线时定,
 //! 本轮以机构码 + 自由文本职务名承载,不引入投机字段。camelCase 出线对齐既有 DTO 契约。
 
-// Phase 4 预留：未来任免业务模块可消费；当前仅保存 schema 与序列化测试。
-#![allow(dead_code)]
+// Phase 4 预留:未接线的任免案 schema,待立法控制台任免线(legislation-console-framework)上线时消费。
+#![allow(dead_code)] // Phase 4 预留:整模块为任免案数据形占位,尚无生产消费方。
 
 use serde::{Deserialize, Serialize};
 

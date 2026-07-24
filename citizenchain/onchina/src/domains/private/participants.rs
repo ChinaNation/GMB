@@ -36,15 +36,6 @@ impl ParticipantRole {
     }
 }
 
-/// 参与人关系草稿。当前用于模块边界和前后端类型约束,后续参与人表落库时直接复用。
-#[allow(dead_code)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct ParticipantDraft {
-    pub(crate) participant_role: ParticipantRole,
-    pub(crate) participant_name: String,
-    pub(crate) cid_number: Option<String>,
-}
-
 pub(crate) const SOLE_ROLES: &[ParticipantRole] = &[ParticipantRole::ResponsiblePerson];
 
 pub(crate) const PARTNERSHIP_ROLES: &[ParticipantRole] = &[

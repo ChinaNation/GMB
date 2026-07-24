@@ -113,8 +113,7 @@ pub fn run_desktop() {
             crate::transaction::offchain::settlement::commands::list_decrypted_admins,
             crate::transaction::offchain::settlement::commands::lock_decrypted_admin,
             crate::transaction::offchain::institution_read::commands::fetch_clearing_bank_institution_detail,
-            crate::transaction::offchain::institution_read::commands::fetch_clearing_bank_institution_proposals,
-            crate::transaction::offchain::institution_read::commands::fetch_clearing_bank_institution_registration_info
+            crate::transaction::offchain::institution_read::commands::fetch_clearing_bank_institution_proposals
         ])
         .setup(|app| {
             cleanup_on_startup(app.handle());

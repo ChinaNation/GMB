@@ -12,8 +12,8 @@
 //   citizenchain/runtime/primitives/tests/fixtures/signing_domain_vectors.json
 // 的副本逐字节断言(见 test/signer/signing_golden_test.dart),防跨语言漂移。
 //
-// 单源纪律:任何模块禁止再本地拼 `GMB || op_tag || payload` 或写 `GMB_*_V1`
-// 字符串域,一律调用本文件的 signingMessage。
+// 单源纪律:任何模块禁止本地拼 `GMB || op_tag || payload` 或另造版本化字符串域,
+// 一律调用本文件的 signingMessage。全仓唯一允许的版本化协议标识是 `QR_V1`。
 
 import 'dart:convert';
 import 'dart:typed_data';

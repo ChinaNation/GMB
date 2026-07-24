@@ -10,10 +10,8 @@ use serde::Serialize;
 use subxt::{dynamic, OnlineClient, PolkadotConfig};
 
 /// votingengine `Proposal<BlockNumber, AccountId>` 解码镜像(BlockNumber=u32 / AccountId=[u8;32])。
-// 部分字段(internal_code/actor_cid_number/execution_account/subject_cid_numbers)仅为 SCALE 布局对齐,
-// LegProposalState 投影暂不读,保留以锁死解码字段序。
-#[allow(dead_code)]
 #[derive(Debug, Decode)]
+#[allow(dead_code)] // SCALE 解码镜像:未读字段只保序,删字段会破坏 Decode 对齐。
 pub struct OnChainProposal {
     /// 提案种类(2 = 立法,PROPOSAL_KIND_LEGISLATION)。
     pub kind: u8,
@@ -89,8 +87,8 @@ pub struct OnChainRepresentativeMeta {
 }
 
 /// legislation-vote `LegislationMeta<T>` 前缀镜像；公投作用域为尾字段且本投影不读取。
-#[allow(dead_code)]
 #[derive(Debug, Decode)]
+#[allow(dead_code)] // SCALE 解码镜像:未读字段只保序,删字段会破坏 Decode 对齐。
 pub struct OnChainLegislationMeta {
     pub executive: RepresentativeBody,
     pub legislature: Option<RepresentativeBody>,

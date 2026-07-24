@@ -23,8 +23,6 @@
 //! 所以节点侧只读 `BankTotalDeposits[my_bank]`(O(1) 单点 map 读)与本地
 //! `confirmed_sum_snapshot()` 比较,即可发现 listener 层面的漂移。
 
-#![allow(dead_code)] // 暂对节点外部不暴露 API
-
 use codec::{Decode, Encode};
 use sc_client_api::StorageProvider;
 use sp_blockchain::HeaderBackend;

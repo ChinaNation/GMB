@@ -141,7 +141,7 @@ pub mod pallet {
 
     pub type CidNumberOf<T> = BoundedVec<u8, <T as Config>::MaxCidNumberLength>;
     pub type AccountNameOf<T> = BoundedVec<u8, <T as Config>::MaxAccountNameLength>;
-    /// 注册凭证里的账户名列表,顺序必须与 CID `registration-info` 返回一致。
+    /// 「新增机构自定义命名账户」提案(call 7 `propose_add_institution_account`)的待新增账户名列表。
     pub type InstitutionAccountNamesOf<T> =
         BoundedVec<AccountNameOf<T>, <T as Config>::MaxInstitutionAccounts>;
     /// 机构创建时用户输入的账户初始余额列表项。

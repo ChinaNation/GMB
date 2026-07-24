@@ -7,9 +7,8 @@ use twox_hash::XxHash64;
 use crate::auth::login::parse_account_id_bytes;
 
 // 机构操作(登记/创建/治理/自定义账户关闭)统一为「任职管理员使用签名钱包直接冷签一笔普通 extrinsic」,
-// 由链端在 origin 处按机构 CID、岗位码和管理员账户 ID 三者鉴权，OnChina 后端不签发链上凭证。
-// 原注销凭证签发链路(`build_institution_deregistration_credential` 等)连同平台签名钥
-// `ONCHINA_SIGNING_SEED_HEX` / `ONCHAIN_CREDENTIAL_SIGNER_PUBKEY` 已整体删除。
+// 由链端在 origin 处按机构 CID、岗位码和管理员账户 ID 三者鉴权，OnChina 后端不签发链上凭证,
+// 也不持有任何平台签名钥。
 static CHAIN_GENESIS_HASH: OnceLock<[u8; 32]> = OnceLock::new();
 const TRUSTED_PRODUCTION_CHAINS: &[TrustedProductionChain] = &[
     // 正式链创世哈希在这里做源码级白名单绑定；新增正式链时只允许在此处追加。

@@ -7,8 +7,6 @@
 //! - 本文件定义 **JSON-RPC trait 与纯 Rust 实现**,`citizenchain/node/src/core/rpc.rs`
 //!   委托到这里。
 
-#![allow(dead_code)]
-
 use codec::{Decode, Encode};
 use jsonrpsee::{
     core::RpcResult,

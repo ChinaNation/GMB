@@ -1,15 +1,12 @@
 //! 清算行机构身份只读查询 Tauri 命令。
 //!
 //!
-//! - 本文件只面向清算行流程需要的机构身份只读:候选搜索、机构详情、提案分页、CID 注册凭证。
+//! - 本文件只面向清算行流程需要的机构身份只读:候选搜索、机构详情、提案分页。
 //! - 机构创建归 onchina 控制台,节点不再承接 propose_create_institution 构建/提交。
 
 use tauri::AppHandle;
 
-use super::types::{
-    EligibleClearingBankCandidate, InstitutionDetail, InstitutionProposalPage,
-    InstitutionRegistrationInfoResp,
-};
+use super::types::{EligibleClearingBankCandidate, InstitutionDetail, InstitutionProposalPage};
 use crate::home;
 
 /// 搜索资格白名单内的清算行候选机构(包含未激活,供"添加清算行"页选择)。
@@ -60,16 +57,4 @@ pub async fn fetch_clearing_bank_institution_proposals(
     })
     .await
     .map_err(|e| format!("fetch_clearing_bank_institution_proposals task failed:{e}"))?
-}
-
-/// 调 CID 拉链上注册专用机构信息 + 签发凭证。
-#[tauri::command]
-pub async fn fetch_clearing_bank_institution_registration_info(
-    cid_number: String,
-) -> Result<InstitutionRegistrationInfoResp, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        super::cid::fetch_institution_registration_info(&cid_number)
-    })
-    .await
-    .map_err(|e| format!("fetch_clearing_bank_institution_registration_info task failed:{e}"))?
 }

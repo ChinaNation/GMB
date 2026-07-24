@@ -16,6 +16,3 @@ pub(crate) mod model;
 pub(crate) mod occupy;
 /// OnChina 自持的护照号与护照有效期生成逻辑。
 pub(crate) mod passport_no;
-
-#[allow(unused_imports)]
-pub(crate) use model::*;

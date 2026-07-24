@@ -26,15 +26,20 @@ pub const BUSINESS_MODULE_TAG_MAX_BYTES: u32 = 32;
 /// 单个岗位最多绑定的业务权限数量。
 pub const MAX_ROLE_PERMISSIONS_PER_ROLE: u32 = 256;
 
-/// 动态岗位码唯一域分隔符；SCALE 中按固定 `[u8; 11]` 编码，不带长度前缀。
-pub const GMB_ROLE_V1: [u8; 11] = *b"GMB_ROLE_V1";
-
 /// 根据已通过提案生成动态岗位码。
 ///
 /// 输出固定为 `R_` 加 32 位大写十六进制。nonce 由所属 entity pallet 单调递增，
 /// 调用方没有任何提交或覆盖岗位码的入口。
-pub fn generate_dynamic_role_code(cid_number: &[u8], nonce: u64, proposal_id: u64) -> Vec<u8> {
-    let hash = BlakeTwo256::hash_of(&(GMB_ROLE_V1, cid_number, nonce, proposal_id));
+///
+/// `module_tag` 是所属 entity pallet 的 `MODULE_TAG`（`b"pub-mgmt"` / `b"pri-mgmt"`），
+/// 承担哈希域分隔职责：全仓非签名哈希域一律用 `MODULE_TAG`，不另造版本化域常量。
+pub fn generate_dynamic_role_code(
+    module_tag: &[u8],
+    cid_number: &[u8],
+    nonce: u64,
+    proposal_id: u64,
+) -> Vec<u8> {
+    let hash = BlakeTwo256::hash_of(&(module_tag, cid_number, nonce, proposal_id));
     const HEX: &[u8; 16] = b"0123456789ABCDEF";
     let mut role_code = Vec::with_capacity(34);
     role_code.extend_from_slice(b"R_");
@@ -416,7 +421,7 @@ mod tests {
 
     #[test]
     fn dynamic_role_code_uses_exact_domain_and_never_accepts_lowercase() {
-        let code = generate_dynamic_role_code(b"CID-1", 0, 42);
+        let code = generate_dynamic_role_code(b"pub-mgmt", b"CID-1", 0, 42);
         assert_eq!(code.len(), 34);
         assert!(code.starts_with(b"R_"));
         assert!(code[2..]
@@ -424,13 +429,18 @@ mod tests {
             .all(|byte| byte.is_ascii_digit() || (b'A'..=b'F').contains(byte)));
         assert_ne!(
             code,
-            generate_dynamic_role_code(b"CID-1", 1, 42),
+            generate_dynamic_role_code(b"pub-mgmt", b"CID-1", 1, 42),
             "nonce 变化必须生成不同岗位码"
         );
         assert_ne!(
             code,
-            generate_dynamic_role_code(b"CID-1", 0, 43),
+            generate_dynamic_role_code(b"pub-mgmt", b"CID-1", 0, 43),
             "proposal_id 变化必须生成不同岗位码"
+        );
+        assert_ne!(
+            code,
+            generate_dynamic_role_code(b"pri-mgmt", b"CID-1", 0, 42),
+            "MODULE_TAG 变化必须生成不同岗位码(哈希域分隔)"
         );
     }
 

@@ -22,6 +22,7 @@
 1. `citizenapp/lib/citizen/shared/account_derivation.dart` 的 Dart op_tag 镜像仍是旧编号 → 已同步新编号 + 补 `kOpFcsf`。修复后**派生金标 11/11 全过**。
 2. `citizenchain/runtime/primitives/tests/account_derive_golden.rs` 仍写 `address_hex`/`creator_hex`，Dart 侧已按 ADR-040 用 `account_id`/`creator_account_id` → 已改生成器 + canonical fixture 键名并重生。
 3. `scripts/generate_citizenapp_governance_registry.mjs` 仍发 `mainAccount` 等旧字段名，模型已改 `mainAccountId` 等 → 已改生成器并重生（CitizenApp + CitizenWallet 各 89 机构）。
+   - **2026-07-23 后续订正**：该生成器随后已**摘除 CitizenWallet 端生成逻辑**（-126 行），生成物 `citizenwallet/lib/chain/institutions.dart` 一并删除。冷钱包不再持有静态机构表，机构信息改由 CID 还原（见 `institution-bundle-code-from-cid`）。已核验：`Institution` / `InstitutionType` 在 `citizenwallet/lib` 零引用、`flutter analyze lib` 零问题。故本行「CitizenWallet 89 机构」自该次变更起只描述历史状态，现生成器只发 CitizenApp 一端。
 4. `citizenapp/test/governance/shared/account_derivation_test.dart` 硬编码 `0x07` → 已改 `0x00`。
 5. **同一生成器发 `OrgType.account`，模型 `64a95ec7` 已把该常量改名 `OrgType.institution`** → 生成物编译失败，**18 个测试文件全部 load 失败**（约 130 个用例根本没跑起来，故基线看起来只有 663 过）。18 项失败**同一根因、同一行**。已改生成器 line 149 并重生。
 6. **同一生成器把 AccountId 发成裸 hex（无 `0x`）**，ADR-040 规范形式是 `^0x[0-9a-f]{64}$`（单源 `isAccountIdText()`）→ 已加 `dartAccountId()` 统一补 `0x` 并做格式断言，防止再漂。

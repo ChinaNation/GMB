@@ -10,16 +10,12 @@ pub const PUBLIC_MANAGE_PALLET_INDEX: u8 = 30;
 /// PrivateManage pallet 索引。
 pub const PRIVATE_MANAGE_PALLET_INDEX: u8 = 31;
 /// 机构内部治理提案 call index。
-#[allow(dead_code)]
 pub const PROPOSE_INSTITUTION_GOVERNANCE_CALL_INDEX: u8 = 8;
 /// 注册局登记机构管理员集合 call index。
-#[allow(dead_code)]
 pub const REGISTER_INSTITUTION_ADMINS_CALL_INDEX: u8 = 9;
 /// 发起「新增机构自定义账户」提案 call index(公私权同为 7)。
-#[allow(dead_code)]
 pub const PROPOSE_ADD_INSTITUTION_ACCOUNT_CALL_INDEX: u8 = 7;
 /// 发起「关闭机构自定义账户」提案 call index(公私权同为 1)。
-#[allow(dead_code)]
 pub const PROPOSE_CLOSE_INSTITUTION_CALL_INDEX: u8 = 1;
 
 /// 按机构码派生机构管理目标 pallet。
@@ -40,10 +36,9 @@ pub enum InstitutionAdminsPayload {
 
 /// `propose_institution_governance` 完整参数。
 ///
-/// 机构操作已收敛为「发起管理员使用签名钱包直接冷签一笔普通 extrinsic」:call 不再嵌独立凭证
+/// 机构操作 = 发起管理员使用签名钱包直接冷签一笔普通 extrinsic;call 不嵌独立凭证
 /// 签名/公钥/nonce/作用域,授权由 runtime 在 origin 处以 `is_institution_admin` + 岗位码校验。
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct ProposeInstitutionGovernanceArgs {
     pub cid_number: Vec<u8>,
     /// `entity_primitives::InstitutionGovernanceAction` 的 SCALE 字节。
@@ -57,9 +52,8 @@ pub struct ProposeInstitutionGovernanceArgs {
 /// `register_institution_admins` 完整参数。
 ///
 /// 授权由 runtime 在 origin 处以 `can_register_institution_origin` 校验(签名者是注册局
-/// 在册管理员 + 对目标机构有登记权),call 不再嵌独立凭证签名/公钥/nonce/作用域。
+/// 在册管理员 + 对目标机构有登记权),call 不嵌独立凭证签名/公钥/nonce/作用域。
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct RegisterInstitutionAdminsArgs {
     pub cid_number: Vec<u8>,
     pub admins: InstitutionAdminsPayload,
@@ -73,7 +67,6 @@ pub struct RegisterInstitutionAdminsArgs {
 /// `is_institution_admin`(本机构管理员)+ `proposer_role_code` 岗位码校验;call 不嵌独立
 /// 凭证/签名/公钥/nonce。`institution_code` 只用于本端选 pallet(公 30 / 私 31),不进 call。
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct ProposeAddInstitutionAccountArgs {
     pub cid_number: Vec<u8>,
     /// 待新增账户名列表;字节与链端 `BoundedVec<AccountNameOf, MaxInstitutionAccounts>` 对齐。
@@ -88,7 +81,6 @@ pub struct ProposeAddInstitutionAccountArgs {
 /// `beneficiary_account_id`(本端固定填本机构主账户),费用从费用账户扣。授权同上由 runtime
 /// 在 origin 处以 `is_institution_admin` + `proposer_role_code` 岗位码校验。
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct ProposeCloseInstitutionArgs {
     pub actor_cid_number: Vec<u8>,
     pub proposer_role_code: Vec<u8>,
@@ -125,7 +117,6 @@ pub struct ChainCall {
 }
 
 /// 编码机构内部治理提案调用。字段顺序与 runtime call index 8 完全一致。
-#[allow(dead_code)]
 pub fn encode_propose_institution_governance(args: &ProposeInstitutionGovernanceArgs) -> ChainCall {
     let pallet_index = institution_manage_pallet_index(&args.institution_code);
     let mut out = vec![pallet_index, PROPOSE_INSTITUTION_GOVERNANCE_CALL_INDEX];
@@ -142,7 +133,6 @@ pub fn encode_propose_institution_governance(args: &ProposeInstitutionGovernance
 }
 
 /// 编码注册局登记机构管理员集合调用。字段顺序与 runtime call index 9 完全一致。
-#[allow(dead_code)]
 pub fn encode_register_institution_admins(args: &RegisterInstitutionAdminsArgs) -> ChainCall {
     let pallet_index = institution_manage_pallet_index(&args.institution_code);
     let mut out = vec![pallet_index, REGISTER_INSTITUTION_ADMINS_CALL_INDEX];
@@ -159,7 +149,6 @@ pub fn encode_register_institution_admins(args: &RegisterInstitutionAdminsArgs) 
 
 /// 编码「新增机构自定义账户」提案调用。字段顺序与 runtime call index 7 完全一致:
 /// `cid_number` → `account_names: Vec<Vec<u8>>` → `proposer_role_code`。
-#[allow(dead_code)]
 pub fn encode_propose_add_institution_account(
     args: &ProposeAddInstitutionAccountArgs,
 ) -> ChainCall {
@@ -183,7 +172,6 @@ pub fn encode_propose_add_institution_account(
 /// 编码「关闭机构自定义账户」提案调用。字段顺序与 runtime call index 1 完全一致:
 /// `actor_cid_number` → `proposer_role_code` → `institution_account_id` → `beneficiary_account_id`。
 /// 两个 AccountId 均为 32 字节定长数组(SCALE 无长度前缀)。
-#[allow(dead_code)]
 pub fn encode_propose_close_institution(args: &ProposeCloseInstitutionArgs) -> ChainCall {
     let pallet_index = institution_manage_pallet_index(&args.institution_code);
     let mut out = vec![pallet_index, PROPOSE_CLOSE_INSTITUTION_CALL_INDEX];

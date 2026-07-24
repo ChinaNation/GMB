@@ -141,6 +141,7 @@ pub(crate) fn query_tx_records(
         .collect())
 }
 
+// DB SELECT 列序投影:字段按 row.get(索引) 位置读入,保留以对齐查询列顺序。
 #[allow(dead_code)]
 pub(crate) struct TxRecordRow {
     pub id: i64,

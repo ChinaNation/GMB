@@ -82,13 +82,15 @@
 - `citizenchain/Cargo.toml` workspace.members 加 `runtime/issuance/onchain-issuance`
 - `citizenchain/Cargo.toml` workspace.dependencies 加 `pallet-assets`
 - `citizenchain/runtime/Cargo.toml` 加 `onchain-issuance` + `pallet-assets` 依赖与 features 传播
-- `citizenchain/runtime/src/lib.rs` `construct_runtime` 加 `Assets`(pallet_index=26)+ `OnchainIssuance`(pallet_index=25)
+- `citizenchain/runtime/src/lib.rs` `construct_runtime` 加 `Assets`(pallet_index=24)+ `OnchainIssuance`(pallet_index=23)
 - `citizenchain/runtime/src/configs.rs` 配 `pallet_assets::Config` + `onchain_issuance::Config`；公开占位 call 在真正创建投票和执行资产业务前由 `RuntimeFeeRouter` 显式 `Reject`，`RuntimeCallFilter` 屏蔽 `pallet-assets` 原生 extrinsic。
 - `citizenchain/runtime/src/genesis_config_presets.rs` 注入 OnchainIssuance GenesisConfig(黑名单初始词表 + decimals 边界 + NRC subject)
 
 ### 客户端
 
-- `citizenapp/lib/asset/` 新建模块(shared / entity / pages / widgets 骨架文件)
+- `citizenapp/lib/asset/` 新建模块(shared / entity 跨端契约常量层)
+  - 2026-07-23:框架阶段的 `pages/` `widgets/` 占位壳(10 文件 221 行,全部 `Text('占位')` + TODO)已删除,
+    子任务 C 按真实设计重写,不必照着找骨架文件;`shared/` 与 `entity/` 保留且常量已核对与链端一致。
 - `citizenwallet/lib/qr/bodies/onchain_asset_*_body.dart` 10 个文件骨架
 
 ### 文档
@@ -171,15 +173,15 @@
 
 **根本错误**:v2 把 unified_voting_entry phase 4 铁律("业务 pallet wrapper extrinsic 全删")扩展过头,误把 propose_X 也归入"不暴露",与 GMB 现有架构(duoqian-transfer / personal-manage / organization-manage 等业务 pallet **都暴露 propose_X extrinsic**)严重背离。phase 4 实际删除的只是 execute/cancel wrapper(由 VotingEngine 9.4/9.5 统一承载),不是 propose_X。
 
-**连锁错误**:citizenwallet 把 10 个 ACTION 实现为 `lib/qr/bodies/onchain_asset_*_body.dart` QR envelope 顶层 body,与 citizenwallet "sign_request envelope 中 payload_hex 走 SCALE RuntimeCall 解码" 机制完全脱节(应该在 `payload_decoder.dart` 加 OnchainIssuance(25) 路由分支)。
+**连锁错误**:citizenwallet 把 10 个 ACTION 实现为 `lib/qr/bodies/onchain_asset_*_body.dart` QR envelope 顶层 body,与 citizenwallet "sign_request envelope 中 payload_hex 走 SCALE RuntimeCall 解码" 机制完全脱节(应该在 `payload_decoder.dart` 加 OnchainIssuance(23) 路由分支)。
 
 | # | v3 修订 | 文件 |
 |---|---|---|
 | 1 | onchain-issuance lib.rs `#[pallet::call]` 实装 10 个 propose_X extrinsic 框架(call_index 0..=4 业务 / 10..=14 监管),不再为空 | [lib.rs](citizenchain/runtime/issuance/onchain-issuance/src/lib.rs) |
 | 2 | `configs.rs` 保持 `OnchainIssuance` 占位 call 为 `Reject`；实装后必须按 actor CID 费用账户支付链上操作费，实际 `cast` 才由投票签名者支付投票费 | [configs.rs](citizenchain/runtime/src/configs.rs) |
 | 3 | RuntimeCallFilter:OnchainIssuance 走默认 true(propose_X 是合法入口),Assets 仍全 reject | [configs/mod.rs](citizenchain/runtime/src/configs/mod.rs) |
-| 4 | citizenwallet `pallet_registry.dart` 加 `onchainIssuancePallet = 25` + 10 个 call_index 常量 | [citizenwallet/lib/signer/pallet_registry.dart](citizenwallet/lib/signer/pallet_registry.dart) |
-| 5 | citizenwallet `payload_decoder.dart` 加 OnchainIssuance(25) 路由分支 + 10 个 `_decodeOnchainAssetPlaceholder` 占位(框架阶段返回 action/summary,业务字段解码任务卡 D 实装) | [citizenwallet/lib/signer/payload_decoder.dart](citizenwallet/lib/signer/payload_decoder.dart) |
+| 4 | citizenwallet `pallet_registry.dart` 加 `onchainIssuancePallet = 23` + 10 个 call_index 常量 | [citizenwallet/lib/signer/pallet_registry.dart](citizenwallet/lib/signer/pallet_registry.dart) |
+| 5 | citizenwallet `payload_decoder.dart` 加 OnchainIssuance(23) 路由分支 + 10 个解码器(**子任务 D 已实装完整 SCALE 解码**,非占位) | [citizenwallet/lib/signer/payload_decoder.dart](citizenwallet/lib/signer/payload_decoder.dart) |
 | 6 | **删除** `citizenwallet/lib/qr/bodies/onchain_asset_*_body.dart` 10 个错位文件 | citizenwallet/lib/qr/bodies/ |
 | 7 | citizenapp `onchain_asset_constants.dart` 加 pallet_index / 10 个 call_index 常量 | [citizenapp/lib/asset/shared/onchain_asset_constants.dart](citizenapp/lib/asset/shared/onchain_asset_constants.dart) |
 | 8 | ADR-011 v3:第 5.4 节订正 propose_X 暴露铁律 + 第 6 节计费表订正 + 第 9 节加 call_index 分配表 + 第 10 节加 citizenwallet 路由要求 | [ADR-011](memory/04-decisions/ADR-011-onchain-issuance-plain-ft.md) |
@@ -191,17 +193,19 @@
 - `cargo test -p primitives --lib derive` **11/11** ok
 - `flutter analyze lib/asset/`(citizenapp)0 issue
 - `flutter analyze lib/signer/ lib/qr/`(citizenwallet)0 issue
-- `flutter test`(citizenwallet 完整套件)**96/96 全过**(含 PalletRegistry 索引唯一性测试,确认 onchainIssuancePallet=25 不冲突)
+- `flutter test`(citizenwallet 完整套件)**96/96 全过**(含 PalletRegistry 索引唯一性测试,确认 onchainIssuancePallet=23 不冲突)
 
 ### 模块编号 / call 同步矩阵
 
 | 角色 | 同步项 | 状态 |
 |---|---|---|
-| 链端 construct_runtime | OnchainIssuance idx=25 / Assets idx=26 | ✅ |
+| 链端 construct_runtime | OnchainIssuance idx=23 / Assets idx=24 | ✅ |
 | 链端 RuntimeCall | OnchainIssuance 10 个 propose_X(0..=4 / 10..=14)| ✅ |
 | 链端费用路由 | `OnchainIssuance(_)` 占位 call → `Reject`，禁止扣费后无业务结果 | ✅ |
 | 链端 RuntimeCallFilter | Assets 全 reject / OnchainIssuance 默认通过 | ✅ |
-| citizenwallet PalletRegistry | onchainIssuancePallet=25 + 10 call_index | ✅ |
-| citizenwallet payload_decoder | OnchainIssuance(25) 路由 + 10 占位解码器 | ✅ |
-| citizenapp constants | onchainIssuancePalletIndex=25 + 10 call 常量 | ✅ |
+| citizenwallet PalletRegistry | onchainIssuancePallet=23 + 10 call_index | ✅ |
+| citizenwallet payload_decoder | OnchainIssuance(23) 路由 + 10 个完整 SCALE 解码器 | ✅ |
+| citizenapp constants | onchainIssuancePalletIndex=23 + 10 call 常量 | ✅ |
 | ADR-011 v3 | 9 / 10 节完整 call_index 分配表 + 客户端硬编码同步要求 | ✅ |
+
+**2026-07-23 订正**:本 v3 章节原记 `OnchainIssuance=25 / Assets=26`,后经链端重编号为 **23 / 24**(链端 `construct_runtime` 与 citizenapp / citizenwallet 三端实际均为 23/24,文档错、代码对),本次已全章订正。同时子任务 D(citizenwallet QR decoder)**已实装完整 SCALE 解码**,不再是框架阶段占位——原「10 个 `_decodeOnchainAssetPlaceholder` 占位」描述已过时并订正。仍未实装的只剩**子任务 C(citizenapp 资产视图)**。

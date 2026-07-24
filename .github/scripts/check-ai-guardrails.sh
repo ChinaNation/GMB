@@ -43,6 +43,8 @@ declare -a protected_ai_hits=()
 declare -a missing_task_card_hits=()
 declare -a missing_module_doc_hits=()
 declare -a chinese_comment_hits=()
+declare -a version_tag_hits=()
+declare -a lint_suppression_hits=()
 
 has_changed_doc_prefix() {
   local prefix="$1"
@@ -174,6 +176,82 @@ check_chinese_comment_gate() {
   chinese_comment_hits+=("${file}: 新增 ${added_count} 行实现，但未检测到新增中文注释")
 }
 
+# 中文注释：协议版本标识门禁。全仓唯一允许的版本化协议标识是 QR_V1；
+# 先把 QR_V1 从新增行里剔除，再看是否还剩别的 *_V1 标识符，剩下即拦截。
+check_version_tag_gate() {
+  local file="$1"
+  local added_lines
+  local offending
+
+  # 中文注释：只查代码文件。规则文档必须能点名被禁标识符（例如「禁止 GMB_ROLE_V1」），
+  # 把 Markdown 一并纳入会让规则正文自己触发门禁。
+  case "$file" in
+    *.rs|*.dart|*.ts|*.tsx|*.js|*.jsx|*.swift|*.kt|*.kts|*.proto|*.sql|*.ya?ml|*.json|*.toml|*.sh|*.py) ;;
+    *) return 0 ;;
+  esac
+
+  # 中文注释：`\+` 在 BRE 下是重复算子，必须用 -E（ERE）才是字面加号，否则严格 grep 直接报错。
+  added_lines="$(git diff --unified=0 "${merge_base}...HEAD" -- "$file" | grep -E '^\+' | grep -vE '^\+\+\+' || true)"
+
+  if [[ -z "$added_lines" ]]; then
+    return 0
+  fi
+
+  offending="$(printf '%s\n' "$added_lines" | sed 's/QR_V1//g' | grep -E '[A-Za-z0-9]_V1\b' || true)"
+
+  if [[ -n "$offending" ]]; then
+    version_tag_hits+=("${file}: 新增行出现非 QR_V1 的版本化标识（签名域走 signing_message(op_tag)，非签名哈希域用 MODULE_TAG）")
+  fi
+}
+
+# 中文注释：编译器抑制门禁。新增 allow(dead_code)/allow(unused...) 必须写明中文理由，
+# 否则等于又把编译器静音一处，扫描下一轮无从判断该保留还是该删。
+# 理由写在同一行或紧邻上方（仓库既有惯例两种都用），故连取 allow 行前两行一起判定。
+check_lint_suppression_gate() {
+  local file="$1"
+  local blocks
+  local block=""
+  local line
+  local has_missing=0
+
+  case "$file" in
+    *.rs) ;;
+    *) return 0 ;;
+  esac
+
+  blocks="$(git diff --unified=2 "${merge_base}...HEAD" -- "$file" \
+    | grep -B2 -E '^\+.*#!?\[allow\((dead_code|unused)' || true)"
+
+  if [[ -z "$blocks" ]]; then
+    return 0
+  fi
+
+  # 中文注释：grep -B2 用 `--` 分隔各命中块；逐块要求块内出现中文注释。
+  check_one_block() {
+    if [[ -z "$1" ]]; then
+      return 0
+    fi
+    if printf '%s\n' "$1" | grep -qE '(//|/\*|\*|#).*[一-龥]'; then
+      return 0
+    fi
+    has_missing=1
+  }
+
+  while IFS= read -r line; do
+    if [[ "$line" == "--" ]]; then
+      check_one_block "$block"
+      block=""
+    else
+      block+="${line}"$'\n'
+    fi
+  done <<< "$blocks"
+  check_one_block "$block"
+
+  if [[ "$has_missing" -eq 1 ]]; then
+    lint_suppression_hits+=("${file}: 新增 allow(dead_code)/allow(unused) 缺中文理由注释（同行或紧邻上方均可）")
+  fi
+}
+
 is_protected_ai_path() {
   local file="$1"
 
@@ -211,7 +289,7 @@ should_skip_residual_scan() {
 
   case "$file" in
     # 中文注释：门禁脚本自身包含残留关键字匹配规则，不能把规则文本再视为命中结果。
-    scripts/check-ai-guardrails.sh)
+    .github/scripts/check-ai-guardrails.sh|scripts/check-ai-guardrails.sh)
       return 0
       ;;
     # 中文注释：Flutter 生成目录里的 CMake 文件带默认模板注释，属于框架产物，不应拦截 PR。
@@ -386,6 +464,9 @@ for file in "${changed_code_files[@]}"; do
   if should_check_chinese_comment_gate "$file"; then
     check_chinese_comment_gate "$file"
   fi
+
+  check_version_tag_gate "$file"
+  check_lint_suppression_gate "$file"
 done
 
 rm -f /tmp/gmb_guardrail_hit.txt
@@ -401,6 +482,20 @@ if [[ "${#chinese_comment_hits[@]}" -gt 0 ]]; then
   echo "检测到较大代码改动，但没有同步新增中文注释："
   printf '  - %s\n' "${chinese_comment_hits[@]}"
   echo "请至少为关键逻辑补充轻量中文注释后重新提交。"
+  exit 1
+fi
+
+if [[ "${#version_tag_hits[@]}" -gt 0 ]]; then
+  echo "检测到新增的版本化协议标识："
+  printf '  - %s\n' "${version_tag_hits[@]}"
+  echo "全仓唯一允许的版本化协议标识是 QR_V1，请改用 op_tag 或 MODULE_TAG 后重新提交。"
+  exit 1
+fi
+
+if [[ "${#lint_suppression_hits[@]}" -gt 0 ]]; then
+  echo "检测到新增的编译器抑制且缺中文理由："
+  printf '  - %s\n' "${lint_suppression_hits[@]}"
+  echo "请在 allow 同一行写明中文理由（例如 SCALE 字段序占位），或直接删除死代码后重新提交。"
   exit 1
 fi
 

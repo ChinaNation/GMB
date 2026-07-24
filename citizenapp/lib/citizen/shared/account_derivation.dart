@@ -164,9 +164,9 @@ Uint8List deriveInstitutionCustomAccountId(
   );
 }
 
-/// 按 account_name 路由派生机构账户 id —— 镜像 CID `accounts/derive.rs` 单一源:
+/// 按 account_name 路由派生机构账户 id —— 镜像 onchina `accounts/derive.rs` 单一源:
 /// 主/费/质押/安全基金/两和基金 → 各自 op_tag(payload 不含名字);其他非空名
-/// → OP_INSTITUTION(payload 追加名字)。空名抛错。
+/// → OP_NAME(payload 追加名字)。空名抛错。
 Uint8List deriveInstitutionAccountIdByName(
   String cidNumber,
   String accountName, {

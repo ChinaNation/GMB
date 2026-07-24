@@ -34,11 +34,6 @@ use crate::{
 };
 
 pub(crate) mod chain_roles;
-pub(crate) mod model;
-pub(crate) mod repo;
-
-#[allow(unused_imports)]
-pub(crate) use model::InstitutionAdmin;
 
 pub(crate) const PURPOSE_INSTITUTION_GOVERNANCE: &str = "INSTITUTION_GOVERNANCE";
 pub(crate) const PURPOSE_INSTITUTION_REGISTER_ADMINS: &str = "INSTITUTION_REGISTER_ADMINS";
@@ -747,7 +742,7 @@ pub(crate) async fn prepare_institution_governance(
             legal,
         ),
     };
-    // 机构治理已收敛为「发起管理员使用签名钱包直接冷签这笔 extrinsic」:不再由平台钥签发独立凭证,
+    // 机构治理 = 发起管理员使用签名钱包直接冷签这笔 extrinsic,
     // 授权由 runtime 在 origin 处以 `is_institution_admin`(本机构管理员)+ 岗位码校验。
     let chain = encode_propose_institution_governance(&ProposeInstitutionGovernanceArgs {
         cid_number: cid_number.as_bytes().to_vec(),
@@ -831,7 +826,7 @@ pub(crate) async fn prepare_register_institution_admins(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    // 管理员登记已收敛为「注册局管理员使用签名钱包直接冷签这笔 extrinsic」:不再由平台钥签发独立凭证,
+    // 管理员登记 = 注册局管理员使用签名钱包直接冷签这笔 extrinsic,
     // 授权由 runtime 在 origin 处以 `can_register_institution_origin`(注册局在册管理员 +
     // 对目标机构有登记权)校验。
     let chain = encode_register_institution_admins(&RegisterInstitutionAdminsArgs {

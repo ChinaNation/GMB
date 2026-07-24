@@ -15,8 +15,6 @@
 //!   + `Arc<RwLock<Option<SigningKey>>>`,构造 `PoolBatchSubmitter` 后作为
 //!   `Arc<dyn BatchSubmitter>` 注入 `start_clearing_bank_components`。
 
-#![allow(dead_code)]
-
 use codec::{Decode, Encode};
 use frame_system_rpc_runtime_api::AccountNonceApi;
 use sc_client_api::BlockBackend;

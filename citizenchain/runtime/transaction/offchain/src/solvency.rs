@@ -60,10 +60,3 @@ pub fn solvency_ratio_bp<T: Config>(bank_cid: &crate::InstitutionCidNumber) -> u
     let ratio = onchain.saturating_mul(10_000) / total;
     ratio.min(u32::MAX as u128) as u32
 }
-
-/// `_forward_compat`:仅占位,后续扩展为"偿付不足告警事件 + 冻结流量"。
-#[allow(dead_code)]
-pub fn emit_warning_if_low<T: Config>(_bank_main: &T::AccountId) {
-    // ratio < 10000 触发 SolvencyWarning 事件
-    // ratio < 5000 时主动冻结(本步不做)
-}

@@ -3,19 +3,14 @@
 //! 凡是要在 handler 里做的业务级校验(不是简单的格式校验),都放这里。
 //! handler 只负责调用 service + 转 HTTP 响应。
 
-#![allow(dead_code)]
 
 use crate::cid::code;
-use crate::cid::{classify, validate_cid_number_format, AdminLevel, InstitutionCategory};
-use crate::institution::subjects::model::{Institution, InstitutionAccount};
+use crate::cid::{validate_cid_number_format, AdminLevel};
+use crate::institution::subjects::model::Institution;
 use primitives::account_derive::is_forbidden_account_name;
 
 // 保留名字面单源 = primitives::account_derive::RESERVED_NAME_*_STR。
 pub const ACCOUNT_NAME_MAIN: &str = primitives::account_derive::RESERVED_NAME_MAIN_STR;
-pub const ACCOUNT_NAME_FEE: &str = primitives::account_derive::RESERVED_NAME_FEE_STR;
-pub const ACCOUNT_NAME_STAKE: &str = primitives::account_derive::RESERVED_NAME_STAKE_STR;
-pub const ACCOUNT_NAME_SAFETYFUND: &str = primitives::account_derive::RESERVED_NAME_SAFETYFUND_STR;
-pub const ACCOUNT_NAME_HE: &str = primitives::account_derive::RESERVED_NAME_HE_STR;
 
 pub const MAX_ACCOUNT_NAME_CHARS: usize = 30;
 pub const MAX_ACCOUNT_NAME_BYTES: usize = 128;
@@ -174,48 +169,15 @@ pub fn institution_account_kind_label(
     })
 }
 
-pub fn can_delete_account(account: &InstitutionAccount) -> bool {
-    !is_protocol_account_name(&account.account_name)
-}
-
-pub fn required_protocol_account_names(
-    institution_code: &str,
-    cid_number: &str,
-) -> Result<Vec<&'static str>, ServiceError> {
-    let code = code::institution_code_from_str(institution_code)
-        .ok_or(ServiceError::BadInput("institution_code is invalid"))?;
-    // UNIN 的父级由运行期机构注册入口提供（该入口尚未落地）；在此之前非法人组织
-    // 一律按无父级处理，即不含清算账户。
-    let kinds = primitives::institution_constraints::required_protocol_account_kinds(
-        code,
-        cid_number.as_bytes(),
-        None,
-    )
-    .ok_or(ServiceError::BadInput(
-        "institution_code and cid_number do not match",
-    ))?;
-    Ok(kinds
-        .iter()
-        .map(|kind| {
-            core::str::from_utf8(
-                primitives::account_derive::institution_protocol_account_name(*kind),
-            )
-            .expect("protocol account name constants are UTF-8")
-        })
-        .collect())
-}
-
-pub fn required_protocol_account_names_for_institution(
-    inst: &Institution,
-) -> Result<Vec<&'static str>, ServiceError> {
-    required_protocol_account_names(inst.institution_code.as_str(), inst.cid_number.as_str())
-}
-
 /// 机构 / 账户 service 层错误。
 #[derive(Debug, Clone)]
 pub enum ServiceError {
     BadInput(&'static str),
+    // NotFound/Conflict 是 service_error_to_response 的 HTTP 映射完备性槽位(404/409);
+    // 当前 service 函数只产 BadInput,但映射函数按语义列举全部变体,删变体会破坏映射。
+    #[allow(dead_code)]
     NotFound(&'static str),
+    #[allow(dead_code)]
     Conflict(&'static str),
 }
 
@@ -241,25 +203,6 @@ pub fn validate_cid_full_name(cid_full_name: &str) -> Result<String, ServiceErro
     if trimmed.len() > MAX_INSTITUTION_NAME_BYTES {
         return Err(ServiceError::BadInput(
             "cid_full_name too long (max 128 bytes)",
-        ));
-    }
-    Ok(trimmed.to_string())
-}
-
-/// 校验机构简称格式。
-pub fn validate_cid_short_name(cid_short_name: &str) -> Result<String, ServiceError> {
-    let trimmed = cid_short_name.trim();
-    if trimmed.is_empty() {
-        return Err(ServiceError::BadInput("cid_short_name is required"));
-    }
-    if trimmed.chars().count() > MAX_INSTITUTION_NAME_CHARS {
-        return Err(ServiceError::BadInput(
-            "cid_short_name too long (max 30 chars)",
-        ));
-    }
-    if trimmed.len() > MAX_INSTITUTION_NAME_BYTES {
-        return Err(ServiceError::BadInput(
-            "cid_short_name too long (max 128 bytes)",
         ));
     }
     Ok(trimmed.to_string())
@@ -358,51 +301,6 @@ pub fn validate_account_name(name: &str) -> Result<String, ServiceError> {
     Ok(trimmed.to_string())
 }
 
-/// 判定机构分类。机构码 + cid_full_name → InstitutionCategory。
-///
-/// 主体属性由机构码派生(K1 已从号码删除)。机构码不识别或不属于任何机构分类(个人/个人多签)
-/// 返回 None,调用方应当直接拒绝请求。
-pub fn derive_category(institution_code: &str, cid_full_name: &str) -> Option<InstitutionCategory> {
-    let institution_code = code::institution_code_from_str(institution_code)?;
-    classify(institution_code, cid_full_name)
-}
-
-/// 按机构类型构造默认未上链账户。
-///
-/// 默认账户是机构主体的公共能力,由调用方写入结构化 `accounts` 表。
-pub fn build_default_accounts_for_names(
-    cid_number: &str,
-    actor: &str,
-    names: &[&str],
-) -> Vec<InstitutionAccount> {
-    use crate::institution::accounts::derive::derive_account_id;
-    use chrono::Utc;
-
-    let now = Utc::now();
-    names
-        .iter()
-        .map(|name| InstitutionAccount {
-            cid_number: cid_number.to_string(),
-            account_name: (*name).to_string(),
-            account_id: derive_account_id(cid_number, name),
-            creator_account_id: Some(actor.to_string()),
-            created_at: now,
-        })
-        .collect()
-}
-
-pub fn build_required_protocol_accounts_for_institution(
-    inst: &Institution,
-    actor: &str,
-) -> Result<Vec<InstitutionAccount>, ServiceError> {
-    let names = required_protocol_account_names_for_institution(inst)?;
-    Ok(build_default_accounts_for_names(
-        inst.cid_number.as_str(),
-        actor,
-        names.as_slice(),
-    ))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -416,24 +314,4 @@ mod tests {
         assert!(validate_account_name(&too_long).is_err());
     }
 
-    #[test]
-    fn derive_category_rules() {
-        // 主体属性由机构码派生;CPOL 与其它市级公权机构同口径。
-        assert_eq!(
-            derive_category("CPOL", "广州市公民安全局"),
-            Some(InstitutionCategory::GovInstitution)
-        );
-        assert_eq!(
-            derive_category("CGOV", "别的机构"),
-            Some(InstitutionCategory::GovInstitution)
-        );
-        assert_eq!(
-            derive_category("SFGQ", "某公司"),
-            Some(InstitutionCategory::PrivateInstitution)
-        );
-        // 个人主体(公民人)不是注册型机构 → None。
-        assert_eq!(derive_category("CTZN", "xxx"), None);
-        // 无效机构码 → None。
-        assert_eq!(derive_category("XYZ", "xxx"), None);
-    }
 }

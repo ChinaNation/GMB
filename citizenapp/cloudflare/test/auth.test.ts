@@ -129,7 +129,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     );
     expect(challenge.op_tag).toBe(0x1b);
     expect(typeof challenge.signing_payload_hex).toBe('string');
-    // 不再下发任何 GMB_*_V1 字符串域。
+    // 只下发 32 字节摘要，不下发任何字符串域。
     expect(challenge.signing_payload_hex).not.toContain('GMB');
 
     const signature = await signChallenge(

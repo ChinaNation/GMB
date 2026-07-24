@@ -52,7 +52,7 @@ OnChina 以 PostgreSQL 结构化表作为唯一持久化真源。进程内缓存
 
 ## 权限边界
 
-管理员唯一真源为机构或个人多签的 `admins`。OnChina 管理端通过 `institution_code + workspace` 表达当前机构工作台；注册局机构归属仍只允许用 `registry_org_code=FEDERAL_REGISTRY/CITY_REGISTRY` 表达，不得恢复独立管理员身份表或第二授权真源。
+管理员唯一真源为机构或个人多签的 `admins`。OnChina 管理端通过 `institution_code + workspace` 表达当前机构工作台，注册局与其它机构同走这一条路径，不得恢复 `registry_org_code` 专用分支、独立管理员身份表或第二授权真源。
 
 - 联邦注册局机构 `admins`：联合读取全量管理员钱包和省专员岗位任职，本省 5 席置顶；目录完全只读，换届由治理业务写入 entity，业务数据仍按所属省限制。
 - 市注册局机构 `admins`：只能读取和写入所属市数据。

@@ -34,7 +34,7 @@ use std::time::Duration;
 
 use crate::shared::cid_config;
 
-use super::types::{EligibleClearingBankCandidate, InstitutionRegistrationInfoResp};
+use super::types::EligibleClearingBankCandidate;
 
 const ONCHINA_REQUEST_TIMEOUT: Duration = Duration::from_secs(8);
 
@@ -130,76 +130,6 @@ pub fn search_eligible_clearing_banks(
     }
 
     Ok(body.data.into_iter().map(into_candidate).collect())
-}
-
-// ─── 拉机构注册信息(清算行流程展示用) ───────
-
-/// OnChina `registration-info` 响应反序列化封装。
-#[derive(Deserialize)]
-struct InstitutionRegistrationInfoEnvelope {
-    code: Option<u32>,
-    #[serde(default)]
-    data: Option<InstitutionRegistrationInfoResp>,
-    #[serde(default)]
-    message: Option<String>,
-}
-
-/// 调 OnChina `GET /api/v1/app/institutions/:cid_number/registration-info` 拉链上注册专用信息。
-///
-/// 这里刻意不调用普通机构详情接口。普通详情可用于展示,但不能证明
-/// "机构名称 + 账户名称列表"确实由身份注册局签发给链上注册流程。
-pub fn fetch_institution_registration_info(
-    cid_number: &str,
-) -> Result<InstitutionRegistrationInfoResp, String> {
-    // cid_number 字符集仅 ASCII 字母 + 数字 + `-`(CID 生成器锁定),无需 URL 编码。
-    let base_url = cid_config::onchina_base_url();
-    let url = format!(
-        "{}/api/v1/app/institutions/{}/registration-info",
-        base_url, cid_number
-    );
-    let client = onchina_client(base_url.as_str())
-        .connect_timeout(ONCHINA_REQUEST_TIMEOUT)
-        .timeout(ONCHINA_REQUEST_TIMEOUT)
-        .build()
-        .map_err(|e| format!("创建 OnChina HTTP 客户端失败:{e}"))?;
-    let response = client
-        .get(&url)
-        .send()
-        .map_err(|e| format!("OnChina 机构注册信息请求失败:{e}"))?;
-    if response.status() != reqwest::StatusCode::OK {
-        return Err(format!("OnChina 返回 HTTP {}", response.status()));
-    }
-    let body: InstitutionRegistrationInfoEnvelope = response
-        .json()
-        .map_err(|e| format!("OnChina 响应解析失败:{e}"))?;
-    if body.code != Some(0) {
-        let msg = body.message.unwrap_or_default();
-        return Err(format!(
-            "OnChina 返回错误:code={:?}, message={msg}",
-            body.code
-        ));
-    }
-    let data = body
-        .data
-        .ok_or_else(|| "OnChina 响应缺少 data 字段".to_string())?;
-    if data.cid_full_name.trim().is_empty() {
-        return Err("OnChina 未返回机构名称,请先在链上中国平台完善机构信息".to_string());
-    }
-    if data.account_names.is_empty() || data.account_names.iter().any(|name| name.trim().is_empty())
-    {
-        return Err(
-            "OnChina 未返回有效账户名称列表,请先在链上中国平台完善机构账户信息".to_string(),
-        );
-    }
-    if data.credential.register_nonce.is_empty()
-        || data.credential.signature.is_empty()
-        || data.credential.actor_cid_number.is_empty()
-        || data.credential.credential_signer_public_key.is_empty()
-        || data.credential.scope_province_name.is_empty()
-    {
-        return Err("OnChina 未返回完整机构注册凭证,请确认签发机构管理员已激活".to_string());
-    }
-    Ok(data)
 }
 
 fn onchina_client(base_url: &str) -> reqwest::blocking::ClientBuilder {

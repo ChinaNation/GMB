@@ -70,37 +70,31 @@ fn encode_cid_key_data(cid_number: &str) -> Result<Vec<u8>, String> {
 /// - `CidNumber = BoundedVec<u8, ConstU32<32>>`
 /// - `AccountId = AccountId32`
 #[derive(Decode)]
+#[allow(dead_code)] // SCALE 解码镜像:未读字段只保序,删字段会破坏 Decode 对齐。
 struct OnChainInstitution {
     cid_full_name: BoundedVec<u8, ConstU32<128>>,
-    #[allow(dead_code)]
     cid_short_name: BoundedVec<u8, ConstU32<128>>,
-    #[allow(dead_code)]
     town_code: BoundedVec<u8, ConstU32<128>>,
-    #[allow(dead_code)]
     legal_representative: Option<OnChainLegalRepresentative>,
     institution_code: InstitutionCode,
     created_at: u32,
 }
 
 #[derive(Decode)]
+#[allow(dead_code)] // SCALE 解码镜像:未读字段只保序,删字段会破坏 Decode 对齐。
 struct OnChainLegalRepresentative {
-    #[allow(dead_code)]
     family_name: BoundedVec<u8, ConstU32<128>>,
-    #[allow(dead_code)]
     given_name: BoundedVec<u8, ConstU32<128>>,
-    #[allow(dead_code)]
     cid_number: BoundedVec<u8, ConstU32<32>>,
-    #[allow(dead_code)]
     account: AccountId32,
 }
 
 /// 链端 `InstitutionAccountInfo<AccountId, Balance, BlockNumber>` 镜像。
 #[derive(Decode)]
+#[allow(dead_code)] // SCALE 解码镜像:未读字段只保序,删字段会破坏 Decode 对齐。
 struct OnChainInstitutionAccount {
     address: AccountId32,
-    #[allow(dead_code)]
     initial_balance: u128,
-    #[allow(dead_code)]
     created_at: u32,
 }
 

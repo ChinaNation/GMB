@@ -15,7 +15,7 @@
 - 除固定岗位外，动态 `role_code` 由 runtime 生成，在机构内唯一、不可修改、删除后永不复用；`role_name` 可依法新增、修改和删除。岗位权限随岗位码固定，改变权限必须删除旧岗位并生成新岗位码。
 - `role_name` 同样在机构内唯一；同名多人属于同一个岗位的多个席位。一个管理员可以担任多个不同岗位，同一岗位内不得重复占席。岗位没有独立阈值，阈值属于机构或业务投票计划。
 - 机构阈值与 `admins` 人数独立：一个人可以用同一钱包在同一机构兼任多个岗位，不能因为钱包去重而降低机构阈值。最终票据去重主体必须是“提案 + 机构 CID + 岗位码 + 任职钱包”，不是裸钱包。
-- 动态岗位码格式为 `R_<32 位大写十六进制>`。随机材料统一为 `blake2_256(SCALE(GMB_ROLE_V1, cid_number, institution_role_nonce, proposal_id))` 的前 16 字节；调用方不得提交岗位码，`UsedRoleCodes[(cid_number, role_code)]` 永久保留已用记录。
+- 动态岗位码格式为 `R_<32 位大写十六进制>`。随机材料统一为 `blake2_256(SCALE(MODULE_TAG, cid_number, institution_role_nonce, proposal_id))` 的前 16 字节；调用方不得提交岗位码，`UsedRoleCodes[(cid_number, role_code)]` 永久保留已用记录。
 - 个人多签使用独立 `AuthorizationSubject::PersonalMultisig`，不混入机构岗位授权模型。
 - 后续统一结果：公权、私权机构和个人多签现均使用 `Admin { account_id, cid_number, family_name, given_name }` SCALE 字段顺序；非空 CID 必须是 CTZN 且与 `citizen-identity` 的账户绑定完全一致。
 - 私权创世机构统一为非营利法人“公民链技术发展基金会”（简称“公民链基金会”）；CID `GZ018-SFGYR-201206100-2026`，主账户 `0xe86aa3cd794651257dea9b7cad1abc4f0ce05940c1aecccd2ed8dd2fc9907023`，费用账户 `0xaa23304c7b663ba25a9d3a2fb1efafdd650ecf2504a2caedc228fe81b46b4333`。程伟以同一钱包同时任职 `LR`、`GENESIS_PRODUCT_MANAGER`、`GENESIS_PROGRAMMER`，管理员人员名册只保存一条，机构阈值保持 2。
@@ -74,7 +74,7 @@
 - 同一管理员可在多个机构、多个岗位任职，各权限互不串用；同机构不同岗位不能继承彼此权限。
 - 每个业务动作只使用其代码静态指定的投票引擎，调用方无法改选；投票引擎不包含业务执行逻辑。
 - 联合投票按 VotePlan 中的岗位主体分别快照和计票，不把参与机构全部 admins 自动纳入。
-- `LR` 永久存在并允许空缺；创世固定岗位不可变；普通动态岗位码在机构内唯一、删除后永不复用，域分隔符精确为 `GMB_ROLE_V1`。
+- `LR` 永久存在并允许空缺；创世固定岗位不可变；普通动态岗位码在机构内唯一、删除后永不复用，哈希域分隔符精确为所属 pallet 的 `MODULE_TAG`。
 - runtime、Node、OnChina、CitizenApp、CitizenWallet 的 SCALE/QR/字段命名逐字节一致。
 - 完成相关编译、单测、no_std、clippy、fresh 链、NodeGuard、真实 HTTP/页面/签名和投票执行验收；最终无旧模型残留。
 
@@ -108,7 +108,7 @@
 ## 第 3 步完成记录（2026-07-19）
 
 - public/private entity 新增 `InstitutionRolePermissions`、`InstitutionRoleNonce`、`UsedRoleCodes`，storage version 直接提升为 2；当前链无创世、无数据，因此不保留 migration 或旧 storage 兼容。
-- 动态岗位创建不接收岗位码，由 runtime 使用精确域分隔符 `GMB_ROLE_V1`、CID、单调 nonce 和真实 `proposal_id` 生成 `R_<32 位大写十六进制>`；删除后只清理当前岗位、权限和任职，永久占用记录不删除。
+- 动态岗位创建不接收岗位码，由 runtime 使用所属 pallet 的 `MODULE_TAG`、CID、单调 nonce 和真实 `proposal_id` 生成 `R_<32 位大写十六进制>`；删除后只清理当前岗位、权限和任职，永久占用记录不删除。
 - `InstitutionRoleMutation::{Create,Rename,Delete}` 已替代旧岗位变更布局。Create 原子写入不可变权限和初始任职；Rename 只改动态岗位名；Delete 禁止删除 LR 和创世固定岗位。保护创世机构仍可增加普通动态岗位。
 - 任职有效性统一为 UTC 日：有任期岗位使用闭区间 `[term_start, term_end]`，允许同日起止；无任期岗位必须精确为 `0/0`。授权查询同时校验 CID 存在、origin 属于 admins、有效任职、完整权限主体、业务动作、操作类型和 CID 顶层能力。
 - PublicManage/PrivateManage 的旧 call index 5 已从 runtime metadata、权重、费用路由、OnChina 构造器、QR registry 和 CitizenWallet decoder 全部删除并永久留洞。OnChina 创建 API 在第 6 步新业务模块落地前固定返回 501，禁止恢复旧直接创建路径。

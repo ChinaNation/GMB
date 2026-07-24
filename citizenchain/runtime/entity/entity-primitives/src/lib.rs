@@ -39,7 +39,7 @@ pub use institution_role::{
     InstitutionAssignmentSource, InstitutionAssignmentStatus, InstitutionCapabilityPolicy,
     InstitutionRole, InstitutionRoleAuthorizationQuery, InstitutionRoleQuery,
     InstitutionRoleStatus, RoleBusinessPermission, RolePermissionOperation, RoleSubject,
-    ASSIGNMENT_SOURCE_REF_MAX_BYTES, BUSINESS_MODULE_TAG_MAX_BYTES, GMB_ROLE_V1,
+    ASSIGNMENT_SOURCE_REF_MAX_BYTES, BUSINESS_MODULE_TAG_MAX_BYTES,
     INSTITUTION_ROLE_CODE_MAX_BYTES, MAX_ROLE_PERMISSIONS_PER_ROLE,
 };
 

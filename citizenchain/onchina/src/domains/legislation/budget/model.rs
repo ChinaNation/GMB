@@ -5,8 +5,8 @@
 //! (国家级预算约 10^16 分,超 JS `Number` 安全整数 2^53,必须以 string 承载防精度丢失)。
 //! `code` 编码规则(国标 vs 自定义)待定,当前自由文本。camelCase 出线对齐既有 DTO 契约。
 
-// Phase 4 预留：未来预算业务模块可消费；当前仅保存 schema 与序列化测试。
-#![allow(dead_code)]
+// Phase 4 预留:未接线的预算案 schema,待立法控制台预算线(legislation-console-framework)上线时消费。
+#![allow(dead_code)] // Phase 4 预留:整模块为预算案数据形占位,尚无生产消费方。
 
 use serde::{Deserialize, Serialize};
 

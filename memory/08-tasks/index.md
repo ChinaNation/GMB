@@ -4,6 +4,8 @@
 
 - `memory/08-tasks/20260721-citizen-election-subject-snapshot-unify.md`
 - `memory/08-tasks/20260722-account-id-official-unify.md`
+- `memory/08-tasks/20260723-citizenapp-deadcode-cleanup-section3.md`
+- `memory/08-tasks/20260723-citizenapp-legislation-vote-wiring.md`
 
 ## open
 

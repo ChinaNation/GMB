@@ -1,10 +1,9 @@
 //! 机构按行政层级的可见范围过滤
 //!
-//! 此模块是所有 list/CRUD API 进行范围过滤的**唯一入口**。
-//! 业务 handler 只需:
+//! 此模块提供范围规则派生;作用域过滤已下沉到 SQL 层(`*_in_scope` 查询按 `VisibleScope`
+//! 直接约束 WHERE),不再"取全量再 Rust 过滤"。业务 handler 只需:
 //! 1. `let ctx = require_admin_any(...)?;`
-//! 2. `let scope = scope::get_visible_scope(&ctx);`
-//! 3. `let filtered = scope::filter_by_scope(&rows, &scope);`
+//! 2. `let scope = scope::get_visible_scope(&ctx);` 传给 SQL 层收窄查询。
 //!
 //! 五档范围(按机构 admin_level 派生):
 //! - 全国(NATIONAL,部委等)        → 不限省/市/镇
@@ -17,10 +16,7 @@
 //!
 //! 本目录只保留范围规则；HTTP handler、账户与公钥工具归属对应业务模块。
 
-#![allow(dead_code, unused_imports)]
 
-pub mod filter;
 pub mod rules;
 
-pub use filter::{filter_by_scope, HasProvinceCity};
 pub use rules::get_visible_scope;

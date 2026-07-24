@@ -14,8 +14,6 @@
 //!   `Arc::new(RwLock::new(Some(key)))` 包好传给 `KeystoreBatchSigner::new`,
 //!   再作为 `BatchSigner` 注入 `start_clearing_bank_components`。
 
-#![allow(dead_code)]
-
 use sp_core::{sr25519, Pair};
 use std::sync::{Arc, RwLock};
 

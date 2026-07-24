@@ -216,6 +216,8 @@ async fn read_chain_projection(
     if let Some(err) = institution_error {
         return Err(err);
     }
+    // 链上公权机构 CID 必须唯一;重复即投影数据被污染,拒绝写库。
+    assert_no_duplicate_chain_cids(&institutions)?;
 
     let scope_by_cid = institutions
         .iter()
@@ -938,7 +940,6 @@ fn trim_institution_code(raw: &[u8]) -> Result<String, String> {
     Ok(code)
 }
 
-#[allow(dead_code)]
 fn assert_no_duplicate_chain_cids(
     institutions: &[ChainInstitutionProjection],
 ) -> Result<(), String> {

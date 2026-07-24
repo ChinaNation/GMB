@@ -8,6 +8,12 @@
 //
 // 链端权威定义见 citizenchain/runtime/issuance/onchain-issuance/src/lib.rs。
 // 冷钱包 citizenwallet/lib/signer/pallet_registry.dart 同步 pallet_index/call_index 常量。
+//
+// ⚠ 本目录(lib/asset/shared + lib/asset/entity)不是死代码,是跨端契约常量层。
+// 归属开放任务卡 memory/08-tasks/open/20260507-onchain-issuance-plain-ft.md,
+// 子任务 C(citizenapp 资产视图业务实装)未完成,因此暂无页面引用这些常量。
+// 链端 pallet(index 23)、qr-protocol action(0x1700-0x1704)、citizenwallet decoder 均已实装。
+// 框架阶段的 pages/ 与 widgets/ 占位壳已于 2026-07-23 删除,子任务 C 按真实设计重写。
 
 class OnchainAssetActions {
   OnchainAssetActions._();

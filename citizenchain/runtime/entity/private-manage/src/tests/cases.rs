@@ -64,7 +64,12 @@ fn private_dynamic_role_is_authorized_only_for_assigned_admin() {
             }
         ));
 
-        let role_code = entity_primitives::generate_dynamic_role_code(cid_number.as_slice(), 0, 51);
+        let role_code = entity_primitives::generate_dynamic_role_code(
+            crate::MODULE_TAG,
+            cid_number.as_slice(),
+            0,
+            51,
+        );
         let subject = RoleSubject {
             cid_number: cid_number.to_vec(),
             role_code,
@@ -158,7 +163,12 @@ fn operation_phase_lr_without_roster_cid_falls_back_to_identity_record() {
                 result_source_ref: b"proposal-81".to_vec(),
             }
         ));
-        let role_code = entity_primitives::generate_dynamic_role_code(cid_number.as_slice(), 0, 81);
+        let role_code = entity_primitives::generate_dynamic_role_code(
+            crate::MODULE_TAG,
+            cid_number.as_slice(),
+            0,
+            81,
+        );
         let subject = RoleSubject {
             cid_number: cid_number.to_vec(),
             role_code,
@@ -253,7 +263,12 @@ fn operation_phase_authorizes_by_cid_and_survives_wallet_rebind() {
                 result_source_ref: b"proposal-70".to_vec(),
             }
         ));
-        let role_code = entity_primitives::generate_dynamic_role_code(cid_number.as_slice(), 0, 70);
+        let role_code = entity_primitives::generate_dynamic_role_code(
+            crate::MODULE_TAG,
+            cid_number.as_slice(),
+            0,
+            70,
+        );
         let subject = RoleSubject {
             cid_number: cid_number.to_vec(),
             role_code,

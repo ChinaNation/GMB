@@ -138,7 +138,8 @@ fn dynamic_role_lifecycle_persists_permissions_and_never_reuses_code() {
         };
 
         let cid = create_cgov("dynamic-role-lifecycle");
-        let first_code = entity_primitives::generate_dynamic_role_code(cid.as_slice(), 0, 42);
+        let first_code =
+            entity_primitives::generate_dynamic_role_code(crate::MODULE_TAG, cid.as_slice(), 0, 42);
         let action = entity_primitives::BusinessActionId {
             module_tag: b"pub-mgmt".to_vec(),
             action_code: 3,
@@ -255,7 +256,8 @@ fn dynamic_role_lifecycle_persists_permissions_and_never_reuses_code() {
                 result_source_ref: b"proposal-42-second".to_vec(),
             }
         ));
-        let second_code = entity_primitives::generate_dynamic_role_code(cid.as_slice(), 1, 42);
+        let second_code =
+            entity_primitives::generate_dynamic_role_code(crate::MODULE_TAG, cid.as_slice(), 1, 42);
         assert_ne!(first_code, second_code);
         assert!(pallet::UsedRoleCodes::<Test>::get(
             &cid,
@@ -319,7 +321,8 @@ fn operation_phase_authorizes_by_cid_and_survives_wallet_rebind() {
         ));
 
         // 建动态岗位，给 admin(0)（有 CID）与 admin(1)（无 CID）任职。
-        let role_code = entity_primitives::generate_dynamic_role_code(cid.as_slice(), 0, 42);
+        let role_code =
+            entity_primitives::generate_dynamic_role_code(crate::MODULE_TAG, cid.as_slice(), 0, 42);
         assert_ok!(PublicManage::apply_institution_governance_result(
             entity_primitives::InstitutionGovernanceResult {
                 institution_code,
@@ -403,7 +406,8 @@ fn assignment_authorization_respects_inclusive_term_window() {
         };
 
         let cid = create_cgov("dynamic-role-term");
-        let role_code = entity_primitives::generate_dynamic_role_code(cid.as_slice(), 0, 77);
+        let role_code =
+            entity_primitives::generate_dynamic_role_code(crate::MODULE_TAG, cid.as_slice(), 0, 77);
         assert_ok!(PublicManage::apply_institution_governance_result(
             entity_primitives::InstitutionGovernanceResult {
                 institution_code: code_bytes("CGOV"),

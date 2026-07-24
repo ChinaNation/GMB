@@ -227,7 +227,6 @@ pub fn town_code_by_name(
 }
 
 /// 镇目录详情和后续导入工具需要按代码还原行政区名称,当前查询链路暂未直接调用。
-#[allow(dead_code)]
 pub fn area_name_by_codes(
     province_code: &str,
     city_code: Option<&str>,
