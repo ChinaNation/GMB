@@ -20,30 +20,36 @@ import 'reserved_account_names.dart';
 /// GMB 链 SS58 地址前缀(对齐 core_const::SS58_FORMAT)。
 const int kGmbSs58Prefix = 2027;
 
-// ── 账户派生 op_tag(0x00-0x0F),对齐 core_const.rs,不得复用 ──
+// ── 账户派生 op_tag,逐字节对齐链端唯一真源 account_derive.rs ──
+// 字节空间分区:0x00-0x0F 地址派生;0x10-0x1D 签名域(sign.rs,禁用);
+// 0x1E-0xFF 未分配保留。新增协议账户只取"当前最大 + 1",不改动既有 tag
+// (改 tag 会重派生全部地址)。
+/// CID 机构自定义命名账户(**永久冻结 0x00**)· payload = cid_number || account_name。
+const int kOpName = 0x00;
+
 /// 所有机构主账户 · payload = cid_number。
-const int kOpMain = 0x00;
+const int kOpMain = 0x01;
 
 /// 所有机构费用账户 · payload = cid_number。
-const int kOpFee = 0x01;
+const int kOpFee = 0x02;
 
 /// 永久质押(制度专属)· payload = cid_number。
-const int kOpStake = 0x02;
+const int kOpStake = 0x03;
 
 /// 安全基金(制度专属)· payload = cid_number。
-const int kOpSafetyFund = 0x03;
+const int kOpSafetyFund = 0x04;
 
 /// 两和基金(制度专属)· payload = cid_number。
-const int kOpHe = 0x04;
+const int kOpHe = 0x05;
 
 /// 个人多签账户 · payload = creator(32B) || account_name。
-const int kOpPersonal = 0x05;
+const int kOpPersonal = 0x06;
 
 /// 清算账户(私法人股份公司专属)· payload = cid_number。
-const int kOpClearing = 0x06;
+const int kOpClearing = 0x07;
 
-/// CID 机构自定义命名账户 · payload = cid_number || account_name。
-const int kOpName = 0x07;
+/// 联邦公民安全基金(联邦安全局 FSC 专属)· payload = cid_number。
+const int kOpFcsf = 0x08;
 
 const String _domain = 'GMB';
 

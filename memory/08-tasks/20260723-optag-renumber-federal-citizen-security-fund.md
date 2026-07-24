@@ -6,9 +6,48 @@
 - Step 2 决策（用户确认）：创世期岗位**不设任期**（`term_required = false`），任期规则由运行期业务模块逐个规范。
 - Step 2 实现：`public-manage/institution/role.rs` 抽出通用 `store_vacant_genesis_role`，LR 与新增 `store_genesis_director_role` 共用（避免重复代码）；`seeder.rs::insert_public_institution` 内按 `institution_code == FSC` 追加局长岗位。FSC 的联邦公民安全基金账户由约束表**自动派生播种**，未改 seeder 账户逻辑。
 
+## 五端验证进度（2026-07-23）★ 全部完成，五端全绿 ★
+
+| 端 | 结果 |
+|---|---|
+| citizenchain | `cargo test --workspace` **81 套件 / 1222 用例通过 / 0 失败 / 0 panic**（cargo 自身退出码 0）；`cargo test -p primitives` 派生金标 + 签名金标绿；`cargo build -p citizenchain --release`（WASM）通过 |
+| CitizenApp | `flutter test --concurrency=1` **793 过 / 5 skip / 0 失败**；`flutter analyze lib` 零问题；`dart format` 0 changed |
+| CitizenWallet | `flutter test` **190/190**；`flutter analyze lib` 零问题；`dart format` 0 changed |
+
+> 验证方法提醒：`cargo test --workspace \| tail -40` 拿到的退出码是 `tail` 的、日志也只剩尾部，**不能作为链端全绿证据**（本轮踩过一次）。必须 `> log 2>&1` 后直接取 cargo 退出码。
+
+`sync-derive-vectors.sh` check 模式相对**已提交版**仍报 diff，属预期（本次是有意的地址变更 + ADR-040 键名改造，随创世一并提交后消失）。
+
+**已定位并修复的六个真实缺口（全部是「改了模型没改生成器」，被本次重派生暴露）：**
+1. `citizenapp/lib/citizen/shared/account_derivation.dart` 的 Dart op_tag 镜像仍是旧编号 → 已同步新编号 + 补 `kOpFcsf`。修复后**派生金标 11/11 全过**。
+2. `citizenchain/runtime/primitives/tests/account_derive_golden.rs` 仍写 `address_hex`/`creator_hex`，Dart 侧已按 ADR-040 用 `account_id`/`creator_account_id` → 已改生成器 + canonical fixture 键名并重生。
+3. `scripts/generate_citizenapp_governance_registry.mjs` 仍发 `mainAccount` 等旧字段名，模型已改 `mainAccountId` 等 → 已改生成器并重生（CitizenApp + CitizenWallet 各 89 机构）。
+4. `citizenapp/test/governance/shared/account_derivation_test.dart` 硬编码 `0x07` → 已改 `0x00`。
+5. **同一生成器发 `OrgType.account`，模型 `64a95ec7` 已把该常量改名 `OrgType.institution`** → 生成物编译失败，**18 个测试文件全部 load 失败**（约 130 个用例根本没跑起来，故基线看起来只有 663 过）。18 项失败**同一根因、同一行**。已改生成器 line 149 并重生。
+6. **同一生成器把 AccountId 发成裸 hex（无 `0x`）**，ADR-040 规范形式是 `^0x[0-9a-f]{64}$`（单源 `isAccountIdText()`）→ 已加 `dartAccountId()` 统一补 `0x` 并做格式断言，防止再漂。
+
+**顺带补的两处根因防护：**
+- 生成器末尾接 `dart format`，生成物直接落在格式稳定态（此前提交版是手工 format 过的，重生就会格式打架，掩盖真实 diff）。
+- `institution_info.dart` 里 `mainAccountId` 的文档注释仍写「不含 0x」，与 ADR-040 相反 → 已改正（错误注释正是缺口 6 的助推器）。
+
+**结构性原因（值得单独记一笔）：** `/scripts/` 整目录在 `.gitignore` 里，生成器**不受版本管理**。所以每次模型改名，diff/review 都看不见生成器，漂移只能等下一次重生时以编译失败的形式爆出来。这就是同一个生成器一次性攒出 3 处（缺口 3/5/6）陈旧引用的原因。
+
 ## 遗留（非本卡缺口）
-- 提交时需一并提交刷新后的两份金标 fixture。
-- 建议补跑 CitizenApp/CitizenWallet 的 Dart 定向测试做五端最终确认。
+- 提交时需一并提交刷新后的两份金标 fixture + 两份机构注册表生成物。
+
+## 生成器纳入版本管理（2026-07-23，用户确认后执行）
+
+根因治理：`/scripts/` 原为「本机私密脚本区」整目录忽略，生成器不受版本管理 → 模型改名时 review 看不见它。用户确认**只纳入 A 类 4 个生成器**，B 类 9 个 AI 工作流脚本保持本机私密。
+
+`.gitignore` 改法（**关键陷阱**：父目录被排除时 `!` 反选无效，必须排除目录内容再反选）：
+```
+/scripts/*
+!/scripts/generate_citizenapp_governance_registry.mjs
+!/scripts/rederive_accounts.py
+!/scripts/rebake_china_codes.py
+!/scripts/sync-derive-vectors.sh
+```
+纳入前已做安全扫描：4 个脚本无密钥/token/本机绝对路径/个人信息。已核验 B 类 9 个 + `__pycache__` 仍全部被忽略。
 
 ## 落地进度
 **Step 1 全部完成，验证全绿：**

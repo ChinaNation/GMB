@@ -29,8 +29,15 @@ fn hex_decode(s: &str) -> Vec<u8> {
         .collect()
 }
 
+/// 解析 ADR-040 规范形式的 account_id 文本:小写 `0x` + 64 位十六进制。
+///
+/// 这里**强制**要求 `0x` 前缀而非宽容接受:金标 fixture 里的账户字段一律走规范
+/// 形式,写成裸 hex 应当当场失败,而不是被静默接受后与 Dart 侧产生格式分叉。
 fn hex_decode_32(s: &str) -> [u8; 32] {
-    let v = hex_decode(s);
+    let body = s
+        .strip_prefix("0x")
+        .unwrap_or_else(|| panic!("account_id 必须为小写 0x + 64 位十六进制,得到: {s}"));
+    let v = hex_decode(body);
     assert_eq!(v.len(), 32, "期望 32 字节 hex,得到 {} 字节: {s}", v.len());
     let mut out = [0u8; 32];
     out.copy_from_slice(&v);
@@ -44,7 +51,7 @@ fn derive_vector(v: &serde_json::Value) -> [u8; 32] {
     let kind = v["kind"].as_str().expect("向量缺少 kind");
     let cid = v.get("cid_number").and_then(|x| x.as_str());
     let name = v.get("account_name").and_then(|x| x.as_str());
-    let creator_hex = v.get("creator_hex").and_then(|x| x.as_str());
+    let creator_account_id_text = v.get("creator_account_id").and_then(|x| x.as_str());
 
     match kind {
         "InstitutionMain" => AccountKind::InstitutionMain {
@@ -77,7 +84,8 @@ fn derive_vector(v: &serde_json::Value) -> [u8; 32] {
         }
         .derive(SS58_FORMAT),
         "Personal" => {
-            let creator_account_id = hex_decode_32(creator_hex.expect("Personal 缺 creator_hex"));
+            let creator_account_id =
+                hex_decode_32(creator_account_id_text.expect("Personal 缺 creator_account_id"));
             AccountKind::Personal {
                 creator_account_id: &creator_account_id,
                 account_name: name.expect("缺 account_name").as_bytes(),
@@ -177,19 +185,24 @@ fn account_derive_golden_vectors() {
             );
         }
 
+        // ADR-040:account_id 的规范文本形式 = 小写 `0x` + 64 位十六进制。
+        // 金标 fixture 直接以规范形式落盘，Dart 侧 `accountIdText()` 可逐字节对比，
+        // 两端不再各自处理前缀（少一处能悄悄分叉的地方）。
+        let computed_text = format!("0x{computed_hex}");
+
         if update {
             let mut nv = v.clone();
-            nv["address_hex"] = serde_json::Value::String(computed_hex);
+            nv["account_id"] = serde_json::Value::String(computed_text);
             updated.push(nv);
         } else {
-            let expected = v["address_hex"].as_str().unwrap_or("");
+            let expected = v["account_id"].as_str().unwrap_or("");
             assert!(
                 !expected.is_empty(),
-                "kind={kind} cid={cid}: fixture address_hex 为空,请先跑 {UPDATE_ENV}=1 回填"
+                "kind={kind} cid={cid}: fixture account_id 为空,请先跑 {UPDATE_ENV}=1 回填"
             );
             assert_eq!(
-                computed_hex, expected,
-                "kind={kind} cid={cid}: account_derive 派生地址与金标 fixture 不一致(地址漂移!)"
+                computed_text, expected,
+                "kind={kind} cid={cid}: account_derive 派生账户与金标 fixture 不一致(账户漂移!)"
             );
         }
     }

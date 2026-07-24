@@ -75,7 +75,7 @@ class InstitutionAccounts {
     this.stakeAccountId,
   });
 
-  /// 主账户 AccountId hex（32 字节，不含 0x）。
+  /// 主账户 AccountId（ADR-040 规范形式：小写 `0x` + 64 位十六进制）。
   final String mainAccountId;
 
   /// 费用账户 AccountId hex；所有机构强制存在。

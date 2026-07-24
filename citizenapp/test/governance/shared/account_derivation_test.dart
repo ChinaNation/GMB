@@ -1,12 +1,15 @@
 // account_derivation 统一派生原语单测(ADR-018 §九,公权机构卡0)。
 //
-// golden 向量取自 governance_institution_registry.generated.dart 的国家储委会/中枢省
-// 制度账户 hex —— 这些地址即链上派生结果,可交叉验证本端派生与
-// citizenchain primitives::core_const::derive_account 字节对齐:
+// golden 向量取自链端权威源(勿手算、勿照抄本端计算结果):
+//   - 主/费账户:citizenchain/runtime/primitives/cid/china/china_cb.rs 的
+//     main_account / fee_account 字面常量
+//   - 安全基金/两和基金:金标 fixture tests/fixtures/account_derive_vectors.json
+//     (由 Rust ACCOUNT_DERIVE_UPDATE=1 回填,重生走 scripts/sync-derive-vectors.sh)
+// 用以交叉验证本端派生与 citizenchain primitives 字节对齐:
 //   preimage = b"GMB" || op_tag || ss58.to_le_bytes() || payload
-//   OP_MAIN(0x00)/OP_FEE(0x01)/OP_SAFETY(0x03)/OP_HE(0x04): payload = cid_number
-//   OP_CLEARING(0x06): payload = cid_number
-//   OP_NAME(0x07): payload = cid_number || account_name
+//   OP_MAIN(0x01)/OP_FEE(0x02)/OP_SAFETY(0x04)/OP_HE(0x05): payload = cid_number
+//   OP_CLEARING(0x07): payload = cid_number
+//   OP_NAME(0x00,永久冻结): payload = cid_number || account_name
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -20,19 +23,19 @@ void main() {
   // 国家储委会 LN001-NRC0G-944805165-2026（T3/T4 新机构码 + GMB 域，单源 china_cb.rs）
   const nrcCid = 'LN001-NRC0G-944805165-2026';
   const nrcMain =
-      '0xb38e86de933984b3a6b4190fc9d4b020ff44b38471a8a65bbf95b440e05c5153';
-  const nrcFee =
       '0x7c0c099ee4df10c5bd3f618ddf132b6d15390fa27d2c1369f70aeb6b5f3907e5';
+  const nrcFee =
+      '0xfabe3c11d600221ab4156ebaae3c00c8efae939442f4cd1a764cfdf62461a387';
   const nrcSafety =
-      '0xd78abac2e0a7772e72ba663313718e97288377d9ca2ca1467c710058f8b5effa';
-  const nrcHe =
       '0x4ac779852c175087c445c35efecfef3ce6e0232702152ea2283f0b5ec3952e53';
+  const nrcHe =
+      '0xda5544a52e806f6e5daeba3e2f0be134b218a9c348f2804b7e933deb9ed84e86';
   // 中枢省 ZS001-PRC0E-016974075-2026（T3/T4 新机构码 + GMB 域，单源 china_cb.rs）
   const prcCid = 'ZS001-PRC0E-016974075-2026';
   const prcMain =
-      '0x65c057a38041753f31f1d891f4d1ce79326291cb4d340a125dd7dc33710783dd';
-  const prcFee =
       '0x54bad80b12cedbf7a1569fb96d18d90c4793949a356eb16c6304841af81001dd';
+  const prcFee =
+      '0x1f88202bf56fad5c7acfb08bc95322bb0149f8561cdb1f10a9331d46067b353a';
 
   group('机构账户派生 golden 向量(链上注册表交叉验证)', () {
     test('国家储委会主账户 OP_MAIN', () {
@@ -79,13 +82,13 @@ void main() {
     });
   });
 
-  group('自定义账户 OP_NAME(0x07)', () {
+  group('自定义账户 OP_NAME(0x00)', () {
     test('payload 追加 account_name,与手工构造一致', () {
       const name = '业务专户A';
       final expected = Hasher.blake2b256.hash(
         Uint8List.fromList(<int>[
           ...utf8.encode('GMB'),
-          0x07,
+          0x00,
           2027 & 0xFF,
           (2027 >> 8) & 0xFF,
           ...utf8.encode(nrcCid),
@@ -120,7 +123,7 @@ void main() {
     });
   });
 
-  group('个人多签派生(0x05)归位后行为不变', () {
+  group('个人多签派生(OP_PERSONAL 0x06)归位后行为不变', () {
     test('SS58 输出与 core 派生一致', () {
       final creator = Uint8List.fromList(List<int>.generate(32, (i) => i));
       final viaCore = ss58FromAccountId(
