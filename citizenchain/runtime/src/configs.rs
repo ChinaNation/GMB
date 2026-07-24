@@ -159,6 +159,16 @@ fn is_clearing_account(address: &AccountId) -> bool {
         .unwrap_or(false)
 }
 
+/// 是否为联邦安全局（FSC）的【联邦公民安全基金】账户。
+///
+/// FSC 是总统府下属公权机构，故查 `public_manage::AccountRegisteredCid` 反查索引，
+/// 按 `account_name == "联邦公民安全基金"` 判定。该基金为 FSC 专属，其他机构没有。
+fn is_federal_citizen_security_fund_account(address: &AccountId) -> bool {
+    public_manage::AccountRegisteredCid::<Runtime>::get(address)
+        .map(|info| info.account_name.as_slice() == primitives::account_derive::RESERVED_NAME_FCSF)
+        .unwrap_or(false)
+}
+
 pub struct RuntimeCallFilter;
 
 impl Contains<RuntimeCall> for RuntimeCallFilter {
@@ -942,7 +952,14 @@ impl primitives::institution_asset::InstitutionAsset<AccountId> for RuntimeInsti
             );
         }
 
-        // 8. 普通账户：全放行
+        // 8. 联邦公民安全基金（FSC 专属）：**fail-closed 全拒**。
+        //    该基金只能由联邦安全局经投票引擎支出，属业务模块内容；在那条支出路径
+        //    落地并显式放行之前，任何资金动作一律拒绝，杜绝被旁路挪用。
+        if is_federal_citizen_security_fund_account(source) {
+            return false;
+        }
+
+        // 9. 普通账户：全放行
         true
     }
 }
@@ -983,6 +1000,11 @@ impl primitives::multisig::ReservedAccountGuard<AccountId> for RuntimeReservedAc
         // 禁止占用任一 SFGF 清算账户地址（承载 L2 用户存款准备金）。
         // 按名注册已由 account_derive::is_forbidden_account_name 挡下，此处补地址级保护。
         if is_clearing_account(account) {
+            return true;
+        }
+
+        // 禁止占用联邦安全局的联邦公民安全基金账户地址。
+        if is_federal_citizen_security_fund_account(account) {
             return true;
         }
 

@@ -601,12 +601,7 @@ mod tests {
             value.encode(),
             (
                 *b"NRCG",
-                vec![(
-                    7u8,
-                    admin.cid_number,
-                    admin.family_name,
-                    admin.given_name
-                )]
+                vec![(7u8, admin.cid_number, admin.family_name, admin.given_name)]
             )
                 .encode()
         );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_blurhash/flutter_blurhash.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
@@ -708,6 +709,31 @@ void main() {
     for (final label in ['扫一扫', '收付款', '发私信', '发群聊', '加好友']) {
       expect(find.text(label), findsOneWidget, reason: '缺少菜单项 $label');
     }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
+  testWidgets('扫一扫用扫码 svg（不是二维码图标）、发私信用聊天 tab 同款图标', (tester) async {
+    await pumpTab(tester);
+    await openMenu(tester);
+
+    // 扫一扫必须与「交易 → 扫一扫」同一份 scan-line.svg。
+    final svg = tester.widgetList<SvgPicture>(find.byType(SvgPicture));
+    expect(
+      svg.any((item) {
+        final loader = item.bytesLoader;
+        return loader is SvgAssetLoader &&
+            loader.assetName == 'assets/icons/scan-line.svg';
+      }),
+      isTrue,
+      reason: '扫一扫应使用 assets/icons/scan-line.svg 扫码图标',
+    );
+    // 防回归：不得再用 Material 的二维码图标顶替扫码图标。
+    expect(find.byIcon(Icons.qr_code_scanner_rounded), findsNothing);
+    expect(find.byIcon(Icons.qr_code_rounded), findsNothing);
+    // 发私信与底部导航「聊天」tab 同一个图标。
+    expect(find.byIcon(Icons.textsms_outlined), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();

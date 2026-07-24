@@ -9,6 +9,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
@@ -57,7 +58,7 @@ class UserContact {
     final accountId = json['account_id']?.toString() ?? '';
     final ss58Address = json['ss58_address']?.toString().trim() ?? '';
     final contactName = json['contact_name']?.toString().trim() ?? '';
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId) ||
+    if (!isAccountIdText(accountId) ||
         ss58Address.isEmpty ||
         contactName.isEmpty) {
       throw const FormatException('通讯录地址或联系人名称为空');
@@ -594,7 +595,7 @@ class UserContactService {
   }
 
   static String requireAccountId(String accountId) {
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+    if (!isAccountIdText(accountId)) {
       throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
     }
     return accountId;

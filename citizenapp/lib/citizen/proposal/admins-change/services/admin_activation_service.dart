@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/services/institution_admin_service.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
@@ -253,7 +254,7 @@ class ActivationService {
   }
 
   static String _normalize(String accountId) {
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+    if (!isAccountIdText(accountId)) {
       throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
     }
     return accountId;

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
 /// 单个钱包账户的公开链上身份徽章快照。
 ///
@@ -40,7 +41,7 @@ class IdentityBadgeSnapshotStore {
   }
 
   Future<IdentityBadgeSnapshot?> read(String accountId) async {
-    if (!_accountIdPattern.hasMatch(accountId)) return null;
+    if (!isAccountIdText(accountId)) return null;
 
     final preferences = await _prefs;
     final key = _key(accountId);
@@ -73,7 +74,7 @@ class IdentityBadgeSnapshotStore {
     required String accountId,
     required String identityLevel,
   }) async {
-    if (!_accountIdPattern.hasMatch(accountId)) {
+    if (!isAccountIdText(accountId)) {
       throw ArgumentError.value(
         accountId,
         'accountId',
@@ -99,12 +100,10 @@ class IdentityBadgeSnapshotStore {
   }
 
   Future<void> remove(String accountId) async {
-    if (!_accountIdPattern.hasMatch(accountId)) return;
+    if (!isAccountIdText(accountId)) return;
     final preferences = await _prefs;
     await preferences.remove(_key(accountId));
   }
 
   String _key(String accountId) => '$_keyPrefix$accountId';
-
-  static final RegExp _accountIdPattern = RegExp(r'^0x[0-9a-f]{64}$');
 }

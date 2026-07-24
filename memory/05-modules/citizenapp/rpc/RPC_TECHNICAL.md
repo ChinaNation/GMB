@@ -67,6 +67,7 @@ lib/rpc/
 3. 旧裸 database、损坏信封、未知字段、跨 genesis 数据或 smoldot 拒绝的缓存都会被清除，并回退到安装包固定 `#0`；回退后的第一份原生快照还必须证明 `source=bundledCheckpoint / startup=#0 / startupHash=genesisHash`，不保留未知 H、旧格式兼容或双轨读取
 4. 主动链入口触发轻节点加入 `chainspec.json` 指定的 citizenchain 网络后，立即在后台预热同步
 5. peer/best/finalized 进度展示只等待初始化；余额、nonce、finalized storage、extrinsic 和链事件订阅必须等待原生 `isUsable=true`。Dart 的历史 `_synced` 每次业务入口都会重新向原生确认，peer F 推进后不得继续沿用旧 ready
+   - **界面用语与协议名词分开（2026-07-23）**：`ChainProgressBanner` 面向用户的文案已中文化 —— `peer N` → 「已连接节点 N」、`best #N` → 「最新区块 #N」、`finalized #N` → 「已验证区块 #N」、warp 分支 `peer finalized` → 「节点已验证区块」。**本文档及代码内部仍使用 peer / best / finalized 作为协议名词**，二者不得互相替换：UI 文案是给用户读的，协议名词对应 smoldot 的实际概念，混同会让技术描述失真。
 6. 当轻节点未初始化、同步失败或链路降级时，typed capability 必须抛出真实错误，不能返回 `null` / `[]` / `{}` 伪装成“链上没有数据”
 7. `SmoldotClientManager.ensureStarted()` 是唯一启动闸口：成功幂等、进行中复用同一 Future、失败后允许重试；`initialize()` 只保留为该闸口的对外别名
 8. `dispose()` 必须异步等待 chain/client 释放；生命周期代际切换后，旧初始化、同步和后台重试不得再写回健康状态或清掉新 Future

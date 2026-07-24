@@ -6,6 +6,7 @@ import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.d
 import 'package:citizenapp/citizen/proposal/admins-change/services/admin_activation_service.dart';
 import 'package:citizenapp/citizen/institution/institution_assignment_card.dart';
 import 'package:citizenapp/citizen/institution/institution_role_models.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
@@ -68,7 +69,7 @@ class _AdminListPageState extends State<AdminListPage> {
   }
 
   static String _balanceKey(String account) {
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(account)) {
+    if (!isAccountIdText(account)) {
       throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
     }
     return account;

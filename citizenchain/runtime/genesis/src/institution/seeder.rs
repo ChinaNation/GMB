@@ -287,6 +287,11 @@ fn insert_public_institution<T: public_manage::Config>(
             )
         },
     );
+    // 联邦安全局创世岗位 = 自带的 LR + 局长(创世期不设任期,任期由运行期业务模块规范)。
+    if institution_code == primitives::cid::code::FSC {
+        public_manage::Pallet::<T>::store_genesis_director_role(&cid)
+            .unwrap_or_else(|_| panic!("genesis institution: {} 局长岗位写入失败", cid_number));
+    }
     insert_public_account::<T>(
         &cid,
         bounded_account_name::<T>(RESERVED_NAME_MAIN, "主账户名", cid_number),

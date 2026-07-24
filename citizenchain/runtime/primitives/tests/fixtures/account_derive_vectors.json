@@ -4,63 +4,63 @@
   "ss58_format": 2027,
   "vectors": [
     {
-      "address_hex": "b38e86de933984b3a6b4190fc9d4b020ff44b38471a8a65bbf95b440e05c5153",
+      "address_hex": "7c0c099ee4df10c5bd3f618ddf132b6d15390fa27d2c1369f70aeb6b5f3907e5",
       "cid_number": "LN001-NRC0G-944805165-2026",
       "kind": "InstitutionMain",
       "source": "china_cb NRC 中华民族联邦共和国公民储备委员会"
     },
     {
-      "address_hex": "7c0c099ee4df10c5bd3f618ddf132b6d15390fa27d2c1369f70aeb6b5f3907e5",
+      "address_hex": "fabe3c11d600221ab4156ebaae3c00c8efae939442f4cd1a764cfdf62461a387",
       "cid_number": "LN001-NRC0G-944805165-2026",
       "kind": "InstitutionFee",
       "source": "china_cb NRC 中华民族联邦共和国公民储备委员会"
     },
     {
-      "address_hex": "e86aa3cd794651257dea9b7cad1abc4f0ce05940c1aecccd2ed8dd2fc9907023",
+      "address_hex": "aa23304c7b663ba25a9d3a2fb1efafdd650ecf2504a2caedc228fe81b46b4333",
       "cid_number": "GZ018-SFGYR-201206100-2026",
       "kind": "InstitutionMain",
       "source": "citizenchain 公民链技术发展基金会主账户"
     },
     {
-      "address_hex": "aa23304c7b663ba25a9d3a2fb1efafdd650ecf2504a2caedc228fe81b46b4333",
+      "address_hex": "e4837d50cd5ef677c9b10ea49baf8c7d60cf11b422d748377e9e5f750640e927",
       "cid_number": "GZ018-SFGYR-201206100-2026",
       "kind": "InstitutionFee",
       "source": "citizenchain 公民链技术发展基金会费用账户"
     },
     {
-      "address_hex": "d78abac2e0a7772e72ba663313718e97288377d9ca2ca1467c710058f8b5effa",
+      "address_hex": "4ac779852c175087c445c35efecfef3ce6e0232702152ea2283f0b5ec3952e53",
       "cid_number": "LN001-NRC0G-944805165-2026",
       "kind": "InstitutionSafetyFund",
       "source": "china_cb SAFETY_FUND_ACCOUNT 安全基金"
     },
     {
-      "address_hex": "4ac779852c175087c445c35efecfef3ce6e0232702152ea2283f0b5ec3952e53",
+      "address_hex": "da5544a52e806f6e5daeba3e2f0be134b218a9c348f2804b7e933deb9ed84e86",
       "cid_number": "LN001-NRC0G-944805165-2026",
       "kind": "InstitutionHe",
       "source": "china_cb NRC_HE_ACCOUNT 两和基金"
     },
     {
-      "address_hex": "6a0c89dfe0fbd9d475226c9163e936f400f960bf63743f46463e75a6c159bcdb",
+      "address_hex": "9ef37de03eaf9108bd90479843c749be3a14da20fbc23cd3916da1897f83fc59",
       "cid_number": "ZS001-PRB08-233384677-2026",
       "kind": "InstitutionStake",
       "source": "china_ch[0] stake_account 中枢省公民储备银行 永久质押"
     },
     {
-      "address_hex": "4b4a69b727df3569edbbac593b69b4f9ef38a7538b651f9e696e868e043134b5",
+      "address_hex": "14899e9a7e03c90abf3092cafc637aebb0c960722dab088c9b6c6e8060150c90",
       "cid_number": "GD018-SFGF0-201206100-2026",
       "kind": "InstitutionClearing",
       "source": "self-authored: SFGF 股份公司 清算账户(address 由 Rust ACCOUNT_DERIVE_UPDATE 回填)"
     },
     {
       "account_name": "工资账户",
-      "address_hex": "2577fee2462d89f8d904e2f4b8c646894e10cbc122d91d3cef22a4f695937bfc",
+      "address_hex": "eb6f659c95a9c1b2172374174b00e9c6bb701f60d845b6b16c509b3c2e343ae8",
       "cid_number": "LN001-NRC0G-944805165-2026",
       "kind": "InstitutionNamed",
       "source": "self-authored: NRC cid + 自定义命名账户(address 由 Rust 回填, op_tag 0x07)"
     },
     {
       "account_name": "我的多签",
-      "address_hex": "d6976c3de64e82253ea136b2c39c19e7a664d27f9a54c31cf0ff3c5b399f31cc",
+      "address_hex": "3bf667dd1e30b82ebf7e4f13ea914648f3dd13520f2627b1571988b3125e9ed3",
       "creator_hex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
       "kind": "Personal",
       "source": "self-authored: 个人多签 creator_account_id+name(address 由 Rust 回填)"

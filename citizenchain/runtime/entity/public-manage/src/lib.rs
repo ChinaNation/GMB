@@ -17,8 +17,7 @@ pub mod weights;
 mod tests;
 
 use admin_primitives::{
-    is_public_admin_code, Admin, AdminAccountKind, InstitutionAdminLifecycle,
-    InstitutionAdminQuery,
+    is_public_admin_code, Admin, AdminAccountKind, InstitutionAdminLifecycle, InstitutionAdminQuery,
 };
 use codec::{Decode, Encode};
 use frame_support::{
@@ -80,10 +79,7 @@ pub mod pallet {
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
         /// 公权机构管理员集合写入口。
-        type AdminLifecycle: InstitutionAdminLifecycle<
-            Self::AccountId,
-            Admin<Self::AccountId>,
-        >;
+        type AdminLifecycle: InstitutionAdminLifecycle<Self::AccountId, Admin<Self::AccountId>>;
 
         /// 兄弟机构 CID 查询入口，用于禁止同一 CID 在私权模块重复登记。
         type SiblingInstitutionQuery: InstitutionCidQuery<CidNumberOf<Self>>;

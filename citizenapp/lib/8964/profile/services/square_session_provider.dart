@@ -31,9 +31,24 @@ class SquareSessionProvider {
     if (wallet == null) {
       return null;
     }
-    // 后台会话流程绝不懒注册、绝不弹 Turnstile、绝不读 seed：未注册设备会话直接失败按不可用
-    // 处理，注册只在 WalletManager 创建/导入钱包时静默完成（subkeyRegistrar）。
-    // 冷启动广场并发拉 feed/membership/identity 都走这里，越界懒注册会把合并主线程顶死成 ANR。
+    return ensureSessionFor(wallet);
+  }
+
+  /// 返回**指定钱包**账户的可用 session。
+  ///
+  /// 钱包名同步需要把每个钱包的名字推到**它自己 accountId** 的 display_name
+  /// （只推默认钱包会让云端存不全），故需按钱包换会话，而非固定默认钱包。
+  ///
+  /// 冷钱包没有设备子钥、云端也无其资料，直接返回 null。
+  ///
+  /// 与 [ensureSession] 同一条死契约：**绝不懒注册、绝不弹 Turnstile、绝不读 seed**。
+  /// 未注册设备子钥的钱包在此直接失败按不可用处理，注册只在 WalletManager
+  /// 创建 / 导入钱包时静默完成（`subkeyRegistrar`）。冷启动广场并发拉
+  /// feed/membership/identity 都走这里，越界懒注册会把主线程顶死成 ANR。
+  Future<SquareSession?> ensureSessionFor(WalletProfile wallet) async {
+    if (!wallet.isHotWallet) {
+      return null;
+    }
     return _client.ensureSession(
       accountId: wallet.accountId,
       signLoginPayload: (loginMessage) async {

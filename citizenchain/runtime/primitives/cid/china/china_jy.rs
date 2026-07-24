@@ -19,6 +19,6 @@ pub const CHINA_JY: &[ChinaJy] = &[ChinaJy {
     cid_full_name_en: "Citizen Education Committee of the Federal Republic of the China Nation",
     cid_short_name_en: "National Education Committee",
     cid_number: "BP001-NED0H-689724263-2026",
-    main_account: hex!("3161c992b304566b3f912a0a7d298a84447982ab96ee6fc06f85ae90204d4e84"),
-    fee_account: hex!("506ac991dcbcaa7e09bece1696b425e0c4e73e0e0610b270a4343f8a99dd1bc1"),
+    main_account: hex!("506ac991dcbcaa7e09bece1696b425e0c4e73e0e0610b270a4343f8a99dd1bc1"),
+    fee_account: hex!("3c4fb289ce5e146b9a33bf1fe74d5e9d2b28e782460aaaa870e6f510c5af1a5d"),
 }];

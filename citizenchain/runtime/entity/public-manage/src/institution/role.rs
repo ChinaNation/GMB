@@ -200,16 +200,39 @@ impl<T: Config> Pallet<T> {
 
     /// 为新机构写入唯一默认法定代表人岗位；首次登记允许岗位空缺。
     pub fn store_default_legal_representative_role(cid_number: &CidNumberOf<T>) -> DispatchResult {
-        let role_code: RoleCodeOf =
-            primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE
-                .to_vec()
-                .try_into()
-                .map_err(|_| Error::<T>::InvalidRoleCode)?;
-        let role_name: AccountNameOf<T> =
-            primitives::institution_constraints::ROLE_NAME_LEGAL_REPRESENTATIVE
-                .to_vec()
-                .try_into()
-                .map_err(|_| Error::<T>::InvalidRoleName)?;
+        Self::store_vacant_genesis_role(
+            cid_number,
+            primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE,
+            primitives::institution_constraints::ROLE_NAME_LEGAL_REPRESENTATIVE,
+        )
+    }
+
+    /// 为联邦安全局写入创世「局长」岗位；与该机构自带的 LR 并存。
+    pub fn store_genesis_director_role(cid_number: &CidNumberOf<T>) -> DispatchResult {
+        Self::store_vacant_genesis_role(
+            cid_number,
+            primitives::institution_constraints::ROLE_CODE_DIRECTOR,
+            primitives::institution_constraints::ROLE_NAME_DIRECTOR,
+        )
+    }
+
+    /// 写入一个**空缺**的创世固定岗位。
+    ///
+    /// `term_required = false`：创世期一律不设任期，任期规则由运行期业务模块逐个规范。
+    /// 幂等：岗位已存在且形状一致时只补权限，不改写。
+    fn store_vacant_genesis_role(
+        cid_number: &CidNumberOf<T>,
+        role_code_bytes: &[u8],
+        role_name_bytes: &[u8],
+    ) -> DispatchResult {
+        let role_code: RoleCodeOf = role_code_bytes
+            .to_vec()
+            .try_into()
+            .map_err(|_| Error::<T>::InvalidRoleCode)?;
+        let role_name: AccountNameOf<T> = role_name_bytes
+            .to_vec()
+            .try_into()
+            .map_err(|_| Error::<T>::InvalidRoleName)?;
         ensure!(
             !InstitutionRoles::<T>::iter_prefix(cid_number).any(|(existing_code, existing)| {
                 existing_code != role_code && existing.role_name == role_name
@@ -245,8 +268,8 @@ impl<T: Config> Pallet<T> {
             &role_code,
             RoleAssignmentsOf::<T>::default(),
         );
-        // LR 是所有机构唯一固定岗位。权限仍以准确 CID + LR 入库；承担法律签署
-        // 职责的机构写入 leg-yuan Vote，其它机构保持空权限。
+        // 权限以准确 CID + 岗位码入库：承担法律签署职责的机构（LR）写入 leg-yuan Vote，
+        // 固定目录中无该岗位规格的一律保持空权限。
         Self::store_role_permissions_from_fixed_directory(cid_number, &role_code)?;
         Ok(())
     }

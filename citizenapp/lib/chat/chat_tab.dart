@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../8964/profile/user_qr_page.dart';
 import '../my/user/contact_book_page.dart';
@@ -752,10 +753,83 @@ class _ChatTabLifecycleObserver extends WidgetsBindingObserver {
 /// 加号菜单的 5 个动作。
 enum _ChatEntryAction { scan, receivePay, sendMessage, createGroup, addFriend }
 
+/// 加号菜单的一项：图标 + 文案。
+///
+/// [asset] 与 [icon] 二选一：扫一扫必须用与「交易 → 扫一扫」同一份
+/// `assets/icons/scan-line.svg`（扫码图标），不能拿 Material 的二维码图标顶替。
+class _ChatEntryItem {
+  const _ChatEntryItem(this.action, this.label, {this.icon, this.asset});
+
+  final _ChatEntryAction action;
+  final String label;
+  final IconData? icon;
+  final String? asset;
+}
+
+const List<_ChatEntryItem> _chatEntryItems = [
+  _ChatEntryItem(
+    _ChatEntryAction.scan,
+    '扫一扫',
+    asset: 'assets/icons/scan-line.svg',
+  ),
+  _ChatEntryItem(
+    _ChatEntryAction.receivePay,
+    '收付款',
+    icon: Icons.payments_outlined,
+  ),
+  // 与底部导航「聊天」tab 同一个图标，保持同一语义同一形。
+  _ChatEntryItem(
+    _ChatEntryAction.sendMessage,
+    '发私信',
+    icon: Icons.textsms_outlined,
+  ),
+  _ChatEntryItem(
+    _ChatEntryAction.createGroup,
+    '发群聊',
+    icon: Icons.group_outlined,
+  ),
+  _ChatEntryItem(
+    _ChatEntryAction.addFriend,
+    '加好友',
+    icon: Icons.person_add_alt_1_outlined,
+  ),
+];
+
+/// 弹窗底色：淡淡的深色（带透明度，能透出一点背景）。
+const Color _entryMenuColor = Color(0xE83D4A52);
+
 class _ChatHeader extends StatelessWidget {
   const _ChatHeader({required this.onAction});
 
   final ValueChanged<_ChatEntryAction> onAction;
+
+  /// 以加号按钮的**实际屏幕坐标**定位弹窗，使三角顶点精确对齐加号中心。
+  ///
+  /// 不用 `PopupMenuButton`：它的水平位置由框架按可用空间决定，拿不到确定的
+  /// 锚点，三角只能靠猜偏移量对齐。
+  Future<void> _open(BuildContext buttonContext) async {
+    final box = buttonContext.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final origin = box.localToGlobal(Offset.zero);
+    final anchorCenterX = origin.dx + box.size.width / 2;
+    final top = origin.dy + box.size.height + 2;
+
+    final selected = await showGeneralDialog<_ChatEntryAction>(
+      context: buttonContext,
+      barrierDismissible: true,
+      barrierLabel: '关闭新建菜单',
+      // 不压黑整屏：只靠弹窗自身的深色区分层次。
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 120),
+      pageBuilder: (_, __, ___) =>
+          _ChatEntryMenu(anchorCenterX: anchorCenterX, top: top),
+      transitionBuilder: (_, animation, __, child) => FadeTransition(
+        opacity: animation,
+        child: child,
+      ),
+    );
+    if (selected != null) onAction(selected);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -773,38 +847,151 @@ class _ChatHeader extends StatelessWidget {
               ),
             ),
           ),
-          // 用 PopupMenuButton 自带的锚定弹出，避免手算右上角坐标。
-          PopupMenuButton<_ChatEntryAction>(
-            tooltip: '新建',
-            icon: const Icon(Icons.add_rounded, color: AppTheme.textSecondary),
-            onSelected: onAction,
-            itemBuilder: (_) => const [
-              PopupMenuItem(
-                value: _ChatEntryAction.scan,
-                child: Text('扫一扫'),
-              ),
-              PopupMenuItem(
-                value: _ChatEntryAction.receivePay,
-                child: Text('收付款'),
-              ),
-              PopupMenuItem(
-                value: _ChatEntryAction.sendMessage,
-                child: Text('发私信'),
-              ),
-              PopupMenuItem(
-                value: _ChatEntryAction.createGroup,
-                child: Text('发群聊'),
-              ),
-              PopupMenuItem(
-                value: _ChatEntryAction.addFriend,
-                child: Text('加好友'),
-              ),
-            ],
+          // Builder 提供按钮自身的 context，用于取其屏幕坐标做三角对齐。
+          Builder(
+            builder: (buttonContext) => IconButton(
+              tooltip: '新建',
+              icon:
+                  const Icon(Icons.add_rounded, color: AppTheme.textSecondary),
+              onPressed: () => unawaited(_open(buttonContext)),
+            ),
           ),
         ],
       ),
     );
   }
+}
+
+/// 加号弹窗本体：上方凸出三角 + 淡深色圆角面板。
+class _ChatEntryMenu extends StatelessWidget {
+  const _ChatEntryMenu({required this.anchorCenterX, required this.top});
+
+  /// 加号按钮中心的屏幕横坐标 —— 三角顶点要对齐它。
+  final double anchorCenterX;
+  final double top;
+
+  // 内容实际占宽 = 16(左) + 20(图标) + 12(间距) + 约45(三字) + 16(右) ≈ 109，
+  // 取 126 留少量余量即可，再宽就是空荡的留白。
+  static const double _width = 126;
+  static const double _caretWidth = 14;
+  static const double _caretHeight = 7;
+  static const double _edgeGap = 8;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final screenWidth = media.size.width;
+    // 让三角顶点落在加号中心：先按"三角距菜单右边 20"反推菜单左边界，
+    // 再夹到屏幕内；夹取后用实际左边界回算三角位置，保证仍对准加号。
+    final rawLeft = anchorCenterX - _width + 20;
+    final left = rawLeft.clamp(_edgeGap, screenWidth - _width - _edgeGap);
+    final caretCenter = (anchorCenterX - left).clamp(
+      _caretWidth,
+      _width - _caretWidth,
+    );
+
+    return Stack(
+      children: [
+        Positioned(
+          left: left,
+          top: top,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: EdgeInsets.only(left: caretCenter - _caretWidth / 2),
+                child: CustomPaint(
+                  size: const Size(_caretWidth, _caretHeight),
+                  painter: _CaretPainter(),
+                ),
+              ),
+              // 面板本身用 Material：弹窗不在 Scaffold 之下，InkWell 需要它做祖先。
+              Material(
+                color: _entryMenuColor,
+                borderRadius: BorderRadius.circular(12),
+                clipBehavior: Clip.antiAlias,
+                child: SizedBox(
+                  width: _width,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(height: 6),
+                      for (final item in _chatEntryItems)
+                        InkWell(
+                          onTap: () => Navigator.of(context).pop(item.action),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: Center(
+                                    child: item.asset != null
+                                        ? SvgPicture.asset(
+                                            item.asset!,
+                                            width: 18,
+                                            height: 18,
+                                            colorFilter: const ColorFilter.mode(
+                                              Colors.white,
+                                              BlendMode.srcIn,
+                                            ),
+                                          )
+                                        : Icon(
+                                            item.icon,
+                                            size: 20,
+                                            color: Colors.white,
+                                          ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  item.label,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 6),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 弹窗顶部凸出的三角，与面板同色；**顶角带圆弧**，不做尖锐尖角。
+class _CaretPainter extends CustomPainter {
+  /// 顶角圆弧的横向收进量：越大顶角越圆。
+  static const double _tipInset = 2.2;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final half = size.width / 2;
+    final path = Path()
+      ..moveTo(0, size.height)
+      ..lineTo(half - _tipInset, _tipInset)
+      // 控制点落在真正的顶点上，画出一段圆弧过渡。
+      ..quadraticBezierTo(half, 0, half + _tipInset, _tipInset)
+      ..lineTo(size.width, size.height)
+      ..close();
+    canvas.drawPath(path, Paint()..color = _entryMenuColor);
+  }
+
+  @override
+  bool shouldRepaint(_CaretPainter oldDelegate) => false;
 }
 
 class _ConversationTile extends StatelessWidget {

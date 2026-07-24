@@ -311,6 +311,8 @@ pub const FRG: InstitutionCode = *b"FRG\0";
 pub const NJD: InstitutionCode = *b"NJD\0";
 /// 总统府。
 pub const PRS: InstitutionCode = *b"PRS\0";
+/// 联邦安全局(总统府下属;唯一持有「联邦公民安全基金」协议账户)。
+pub const FSC: InstitutionCode = *b"FSC\0";
 /// 国家立法院。
 pub const NLG: InstitutionCode = *b"NLG\0";
 /// 国家参议会。

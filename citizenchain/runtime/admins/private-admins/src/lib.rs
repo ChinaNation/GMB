@@ -19,7 +19,8 @@ use sp_std::collections::btree_set::BTreeSet;
 
 use admin_primitives::{
     can_store_private_admin_code, Admin, AdminAccountKind, AdminCidNumber, ChainPhaseCheck,
-    CitizenIdentityBindingQuery, InstitutionAdminLifecycle, InstitutionAdminQuery, InstitutionAdmins,
+    CitizenIdentityBindingQuery, InstitutionAdminLifecycle, InstitutionAdminQuery,
+    InstitutionAdmins,
 };
 use entity_primitives::InstitutionLegalRepresentativeQuery as _;
 use votingengine::types::InstitutionCode;

@@ -7,6 +7,7 @@
 /// - 机构治理主体统一为 `cid_number`；具体账户只用于账户操作。
 library;
 
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
@@ -229,12 +230,12 @@ String? personalAccountIdFromIdentity(String institutionIdentity) {
   if (!isPersonalAccountIdentity(institutionIdentity)) return null;
   final accountId =
       institutionIdentity.substring(_personalAccountIdentityPrefix.length);
-  if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) return null;
+  if (!isAccountIdText(accountId)) return null;
   return accountId;
 }
 
 List<int> accountIdBytes(String accountId) {
-  if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+  if (!isAccountIdText(accountId)) {
     throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
   }
   final account = _hexDecode(accountId);

@@ -7,6 +7,7 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/services/institution_admin_service.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/votingengine/internal-vote/internal_vote_service.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_context.dart';
@@ -627,7 +628,7 @@ class _MultisigProposalDetailPageState
   }
 
   String _requireAccountId(String accountId) {
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+    if (!isAccountIdText(accountId)) {
       throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
     }
     return accountId;

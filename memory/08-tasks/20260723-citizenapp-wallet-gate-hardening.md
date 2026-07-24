@@ -76,3 +76,49 @@
 - **测试**：`wallet_gate_test.dart` 新增 6 例 —— 运行期删光钱包即时踢回；谓词五例（四条全过有效 / 冷钱包不算 / accountId 空的半残不算 / ss58 与 accountId 对不上不算 / 有壳无钥不算）。
 - **验收**：`flutter analyze`(lib+test) 0 问题；**全量 `flutter test` 785 通过 / 5 跳过 / 0 失败**（较改前 +6）。真机：门控加固后携修复好的热钱包3 正常放行，无误锁。
 - **未在真机验证**：运行期踢出需删光该机全部钱包（破坏性，会再次丢失钱包3），故不在用户设备上执行，由 widget 测试覆盖。
+
+### Step 2b（2026-07-23，完成）
+
+- **批量收敛**：28 文件 / 37 处 `RegExp(r'^0x[0-9a-f]{64}$').hasMatch(x)` → `isAccountIdText(x)`，逐处核对变量与上下文确属账户语义后再切，**未做正则批量 sed**。`identity_badge_snapshot_store.dart` 的具名字段 `_accountIdPattern` 一并删除并改调单源。
+- **补切一处**：`citizen/shared/proposal/proposal_local_store.dart` 的 `_hexToBytes` 原按「通用 hex」保留待判，核对后其**唯一调用方是 `executionAccountId`**（:217），确属账户语义，已切并补注释说明。
+- **最终残留核查**：全仓 `[0-9a-f]{64}` 只剩 5 处 —— `account_derivation.dart:83` 的**单源定义本身**，加 4 处**明确异语义**：`app_update_manifest.dart`（文件 sha256，无 `0x`）、`chain_bootstrap_api.dart`（通用 hex32/stateRoot）、`signed_extrinsic_relay_api.dart`（交易哈希）、`smoldot_client.dart`（区块哈希）。**accountId 语义的重复归零。**
+- **验收**：`flutter analyze`(lib+test) 0 问题；全量 `flutter test` **785 通过 / 5 跳过 / 0 失败**（与 2a 持平，纯机械替换无行为变化）；真机安装运行正常、logcat 无 `FlutterError-Diag` / `ErrorWidget-Diag` / `FormatException`。
+
+### Step 2c：单行坏数据毒化整表（同根因的第三个暴露面，2026-07-23，完成）
+
+**现象**：真机上「我的」页身份显示钱包3，但「我的钱包」列表却空白并提示「还没有钱包，请选择一种方式开始」+ SnackBar `本地钱包读取失败：FormatException`。
+
+**根因**（两条不同代码路径造成的表里不一）：
+
+- `wallet_page.dart _loadWallets`：`getWallets()` 两个钱包都读到了，但紧接的 `for` 循环对每个钱包调 `ChainTxMonitor.watchWallet(ss58, accountId)`，其首行 `LocalTxStore.requireAccountId(accountId)` 对**冷钱包2 的空 accountId** 抛 `FormatException` → 异常掀翻整个 `_loadWallets` → `setState(_wallets = list)` 永不执行 → 列表整体空白。
+- 而「我的」页身份走 `getDefaultWallet()`，它只遍历取第一个热钱包、**不碰 ss58/accountId 派生**，所以钱包3 照常显示。
+
+**性质**：与门控 fail-open 同源的另一种失败姿势 —— **一行坏数据让整份列表谎称「还没有钱包」**，空态文案还会诱导用户新建，把数据搞得更乱。非 Step 2a/2b 引入（2b 只把内联正则换成单源，判定与抛错逐字等价）；自 Isar 属性改名起即存在。
+
+**修法（用户选 A）**：
+
+- `_loadWallets`：`watchWallet` 调用**按钱包隔离** —— 先用 `isAccountIdText` 拦坏行并 `debugPrint` 记录（非静默），再对正常行 try/catch 兜底；坏行跳过链上监听但**仍进列表**。外层 catch 回归本职，只处理整份读库失败。
+- `WalletListTile` 新增 `isBroken`：坏行不显余额（读不到身份就对不上链，展示余额是误导），改显橙色警示「身份数据异常，请删除后重新导入」。
+- 列表 `onTap` 拦截：坏行不进详情（详情页同样会在空 accountId 上抛错，不拦等于把炸点从列表挪到详情），改弹提示。
+- `isIdentityWallet` 判定加 `!isBroken` 前置：坏行 accountId 为空，与同为空的身份账户比对会误挂「身份钱包」徽标。
+- 删除路径已现成且对坏行安全：`deleteWallet` 的 `_contactCacheKeys('')` 只拼字符串不校验，冷钱包跳过 `signMode=='local'` 的种子清理分支。
+
+**验收**：`flutter analyze` 0 问题；全量 `flutter test` **788 通过 / 5 跳过 / 0 失败**（+3）；真机列表同时显示钱包3（正常 + 默认用户徽标）与钱包2（橙色警示 + 可删），FormatException 提示消失，logcat 输出 `[Wallet] 身份异常，跳过链上监听: index=2`。
+
+### 附：丢失钱包「旅行者」恢复（2026-07-23，完成）
+
+**现象**：用户指出真机上原有的自定义命名钱包「旅行者」不见了。清点时只有 index=2（冷）与 index=3（热），index=1 缺失。
+
+**证据链**：
+
+- secure storage 中 `wallet_seed_env_v1_1` 与 `wallet_recovery_env_v1_1` **都还在**（index=2 两者皆无，符合冷钱包无种子；index=3 两者皆在）。
+- `deleteWallet` 对热钱包会连 seed 与助记词一起删 → 两者俱在即可断定「旅行者」**不是走 App 删除路径消失的**，其 Isar 行是异常丢失。
+- 另有残留 `wallet_contacts_key_v1_w5GPoqEs…`（旧代码用 SS58 作通讯录密钥名），非钱包3 的地址，推测为旅行者 —— **恢复后地址实测正是 `w5GPoqEsUkBtqzPMakf2njBAmgbsG8YPYzyJfeWFYLcZnoBoc`，推测得证**。
+
+**结论订正**：先前依据「只看到 2 行仍并存」判断「唯一索引在空值上折叠没有发生」，该结论**证伪** —— 当时并不知道原本有 3 行。`accountId` / `ss58Address` 两个 `@Index(unique: true, replace: true)` 在改名迁移后全变空值，**行在迁移中丢失是首要嫌疑**（未验证 Isar 确切行为，不下定论）。这说明未收尾的「钱包字段统一」重构危险性高于先前评估：它不只让钱包读不出，**还可能吃掉整行**。
+
+**恢复方式（用户选 A）**：一次性动作读 index=1 的宽档助记词 → 直接调既有 `importWallet(mnemonic)` 重建（沿用已测试的 fail-closed 路径，失败自动回滚）。**助记词全程不打印、不出设备。** 结果：`index=1 accountId=0xd4cad887… ss58=w5GPoqEs…` 重建成功，列表恢复为 3 个钱包。自定义名「旅行者」随 Isar 行一起丢失，重建后为默认名「钱包1」，需用户改回。一次性代码已整段删除，`analyze` 0 问题、全量 788 通过、全仓零残留。
+
+## 总体收尾
+
+Step 2a + 2b 全部完成。门控自此**只认有效热钱包**（四条判定），半残钱包与冷钱包一律拦到初始化页；运行期删光钱包即时踢回且先清页面栈。accountId 格式判定收敛为 `isAccountIdText` 单源，异语义（区块/交易哈希、文件摘要）刻意不并入。

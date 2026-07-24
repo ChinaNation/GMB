@@ -167,6 +167,9 @@ pub fn institution_account_kind_label(
         }
         Some(primitives::account_derive::InstitutionProtocolAccountKind::He) => "he",
         Some(primitives::account_derive::InstitutionProtocolAccountKind::Clearing) => "clearing",
+        Some(
+            primitives::account_derive::InstitutionProtocolAccountKind::FederalCitizenSecurityFund,
+        ) => "federal_citizen_security_fund",
         None => "named",
     })
 }

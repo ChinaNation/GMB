@@ -5,6 +5,7 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart/scale_codec.dart' show ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/signed_extrinsic_builder.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
@@ -620,7 +621,7 @@ class RuntimeUpgradeService {
   }
 
   static String _requireAccountId(String accountId) {
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+    if (!isAccountIdText(accountId)) {
       throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
     }
     return accountId;

@@ -163,12 +163,12 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
       color = AppTheme.info;
       icon = Icons.sync_disabled;
       title = '测试环境已跳过轻节点状态读取';
-      subtitle = '真机运行时会正常读取 peer、best、finalized 等链路信息';
+      subtitle = '真机运行时会正常读取已连接节点、最新区块、已验证区块等链路信息';
     } else if (progress == null && error == null) {
       color = AppTheme.info;
       icon = Icons.sync;
       title = '正在读取轻节点状态';
-      subtitle = '正在获取 peer、best、finalized 等链路信息';
+      subtitle = '正在获取已连接节点、最新区块、已验证区块等链路信息';
     } else if (error != null && progress == null) {
       color = AppTheme.danger;
       icon = Icons.error_outline;
@@ -229,16 +229,16 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
             : '-';
         final failure = progress.warpLastFailure?.wireValue;
         final verified = '#${progress.currentVerifiedFinalizedBlockNumber}';
-        subtitle =
-            'peer ${progress.peerCount}  启动 $startup  已验证 $verified  目标 $warp  '
-            'peer finalized $peerFinalized\n'
+        subtitle = '已连接节点 ${progress.peerCount}  启动 $startup  '
+            '已验证 $verified  目标 $warp  '
+            '节点已验证区块 $peerFinalized\n'
             'proof 收到 ${progress.warpReceivedFragmentCount} / '
             '验证 ${progress.warpVerifiedFragmentCount} / '
             '拒绝 ${progress.warpRejectedFragmentCount}'
             '${failure == null ? '' : '  失败 $failure'}';
       } else {
-        subtitle =
-            'peer ${progress.peerCount}  best $best  finalized $finalized';
+        subtitle = '已连接节点 ${progress.peerCount}  最新区块 $best  '
+            '已验证区块 $finalized';
       }
     } else {
       return const SizedBox.shrink();

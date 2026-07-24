@@ -19,6 +19,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_query_service.dart';
@@ -369,7 +370,7 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
   /// 编码失败(理论上不会发生,数据来自链上 storage)兜底返回原 AccountId。
   String _accountIdToSs58(String accountId) {
     try {
-      if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      if (!isAccountIdText(accountId)) {
         throw const FormatException('account_id 格式错误');
       }
       final hex = accountId.substring(2);

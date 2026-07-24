@@ -63,6 +63,7 @@ void main() {
     required WalletProfile wallet,
     bool showActions = true,
     bool isDefault = false,
+    bool isBroken = false,
     VoidCallback? onTap,
     VoidCallback? onRename,
     VoidCallback? onDelete,
@@ -74,6 +75,7 @@ void main() {
             wallet: wallet,
             showActions: showActions,
             isDefault: isDefault,
+            isBroken: isBroken,
             onTap: onTap ?? () {},
             onRename: onRename ?? () {},
             onDelete: onDelete ?? () {},
@@ -230,5 +232,36 @@ void main() {
     await pumpTile(tester,
         wallet: makeWallet(signMode: 'local'), isDefault: false);
     expect(find.text('默认用户'), findsNothing);
+  });
+
+  testWidgets('身份损坏的钱包改显警示、不显余额', (tester) async {
+    await pumpTile(tester,
+        wallet: makeWallet(signMode: 'external'), isBroken: true);
+
+    expect(find.text('身份数据异常，请删除后重新导入'), findsOneWidget);
+    // 读不到身份就对不上链，余额没有意义，不得展示误导。
+    expect(find.text('1,234,567.89'), findsNothing);
+  });
+
+  testWidgets('正常钱包不显警示', (tester) async {
+    await pumpTile(tester, wallet: makeWallet(signMode: 'local'));
+
+    expect(find.text('身份数据异常，请删除后重新导入'), findsNothing);
+    expect(find.text('1,234,567.89'), findsOneWidget);
+  });
+
+  testWidgets('损坏钱包仍可通过三点菜单删除（唯一出路不能被堵死）', (tester) async {
+    var deleted = false;
+    await pumpTile(tester,
+        wallet: makeWallet(signMode: 'external'),
+        isBroken: true,
+        onDelete: () => deleted = true);
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除钱包'));
+    await tester.pumpAndSettle();
+
+    expect(deleted, isTrue);
   });
 }

@@ -7,6 +7,7 @@ import 'package:polkadart/scale_codec.dart' show ByteOutput;
 
 import 'chain_rpc.dart';
 import 'signed_extrinsic_builder.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
 /// 创作者链上付款档位中的周期价格。
 class CreatorPeriodPriceInput {
@@ -444,7 +445,7 @@ class SubscriptionRpc {
   /// 链账户只接受 ADR-040 的规范文本，不在授权或 storage key 路径兼容 SS58。
   @visibleForTesting
   static Uint8List accountIdBytes(String accountId) {
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+    if (!isAccountIdText(accountId)) {
       throw ArgumentError('account_id 必须为小写 0x + 64 位十六进制');
     }
     return Uint8List.fromList([

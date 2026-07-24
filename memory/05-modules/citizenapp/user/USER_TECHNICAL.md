@@ -49,13 +49,29 @@
 
 展示规则：
 
-- 用户昵称 = 当前默认钱包的 `walletName`；Cloudflare `display_name` 只是供他人读取的公开镜像。
+- 用户昵称 = 该钱包的 `walletName`；**Cloudflare `display_name` 是真源，本机 `walletName` 是缓存**（2026-07-23 模型翻转，见下）。
 - 钱包名称和公开镜像都缺失时，由 `ProfilePresentation` 按钱包账户稳定选择本地默认昵称；禁止回退为完整或截断账户。
 
 设计说明：
 
 - 不再有独立的昵称业务字段，用户设置的昵称完全由钱包名称决定；本地默认昵称只是无设置值时的展示兜底
 - 用户修改昵称 = 修改通信钱包名称（`WalletManager.renameWallet`）
+
+### 钱包名同步模型（2026-07-23 翻转：云端为真源）
+
+**背景**：旧实现 `publishDefault()` 是**只写不读**的单向镜像，且**只推默认钱包**那一个名字。后果有二：① 换设备 / 重装导入后，昵称停在默认名「钱包N」，云端那份正确的名字取不回来；② 本机被declared为真源，默认名会**反向覆盖**云端正确值。Isar 属性改名事故中钱包行丢失、重建后正是踩到这条。
+
+**新模型**：本机 `walletName` 降级为**缓存**，云端 `display_name` 为真源。同一助记词多设备并存时，冲突交云端裁决，不再「本机永远赢」。
+
+- `NicknamePublisher.onLocalRename(wallet, name)` —— 本机改名后：入待同步队列 → 推送到**该钱包自己 accountId** 的 `display_name`（不再只推默认钱包）。
+- `NicknamePublisher.syncWalletName(wallet)` —— 进钱包页 / 导入后：先重放待同步项，再拉云端；`updated_at` 比已同步值新才回写本机。**复用通讯录已验证的「拉快照 + 重放待同步」范式。**
+- **防回环**：从云端回写本机直接走 `WalletManager.renameWallet`，不触发推送；推送只由 UI 改名入口发起。
+- **待推送期间不拉取覆盖**：队列非空说明本机改动尚未上云，此时绝不能被云端旧值盖掉。
+- **零 Isar schema 变更**：同步元数据（`wallet_name_synced_at:<accountId>`、`wallet_name_pending:<accountId>`）存已有的 `AppKvEntity`。
+- **会话**：`SquareSessionProvider.ensureSessionFor(wallet)` 按指定钱包换会话，仍守「绝不懒注册 / 绝不弹 Turnstile / 绝不读 seed」死契约；未注册子钥即按不可用跳过。
+- **冷钱包边界**：无设备子钥、云端无其资料，名字保持纯本机，同步器直接跳过。
+
+**已知限制**：仅 App 侧时语义是「**最后到达者赢**」。离线久的设备上线后仍可能用旧编辑覆盖新编辑。要成为「最新编辑者赢」，需 Worker 侧增加 `edited_at` 并取 `max(现存, min(edited_at, now))` 丢弃更旧写入（`min(..., now)` 夹取必须有，否则系统时间被设到未来的设备会把该值永久钉死）。该 Step B 已规划、用户明确推迟，见任务卡 `20260723-citizenapp-profile-multidevice-lww`。
 - 用户在钱包页改通信钱包名称 = 自动同步到用户资料
 - 用户设置的公开头像和背景上传 Cloudflare R2；`avatarPath/backgroundPath` 只承接旧本机图片迁移和“我的”页即时显示，迁移成功后清空
 - 用户未设置或真实图片读取失败时，从 `assets/profile_defaults/` 11 张本地照片中按账户稳定选择头像和背景，两个位置避免使用同一张图

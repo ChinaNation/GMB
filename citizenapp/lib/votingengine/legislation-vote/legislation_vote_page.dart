@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
@@ -433,7 +434,7 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
   // ──── 工具 ────
 
   String _requireAccountId(String accountId) {
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+    if (!isAccountIdText(accountId)) {
       throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
     }
     return accountId;

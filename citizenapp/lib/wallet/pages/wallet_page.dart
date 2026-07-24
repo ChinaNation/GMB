@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:citizenapp/8964/profile/services/nickname_publisher.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/qr/bodies/user_contact_body.dart';
 import 'package:citizenapp/qr/bodies/user_transfer_body.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
@@ -127,8 +128,23 @@ class _WalletTabState extends State<WalletTab> {
       final list = await _walletService.getWallets();
       if (!mounted) return null;
       for (final wallet in list) {
-        ChainTxMonitor.instance
-            .watchWallet(wallet.ss58Address, wallet.accountId);
+        // 单行坏数据不得毒化整份列表。
+        //
+        // 身份字段损坏的钱包（如 accountId 为空）会让 watchWallet 抛
+        // FormatException；早前这里没有隔离，异常直接掀翻整个 _loadWallets，
+        // setState 永不执行，列表于是谎称「还没有钱包」——明明有钱包，
+        // 那个空态文案还会诱导用户去新建，把数据搞得更乱。
+        // 现在坏行只是跳过链上监听，仍进列表，由 UI 标注异常并提供删除入口。
+        if (!isAccountIdText(wallet.accountId)) {
+          debugPrint('[Wallet] 身份异常，跳过链上监听: index=${wallet.walletIndex}');
+          continue;
+        }
+        try {
+          ChainTxMonitor.instance
+              .watchWallet(wallet.ss58Address, wallet.accountId);
+        } catch (e) {
+          debugPrint('[Wallet] 链上监听登记失败 index=${wallet.walletIndex}: $e');
+        }
       }
       if (list.isNotEmpty) {
         unawaited(ChainTxMonitor.instance.start());
@@ -152,11 +168,33 @@ class _WalletTabState extends State<WalletTab> {
     }
   }
 
+  /// 钱包名云端同步（云端为真源）：重放待推送项 + 按云端版本回写本机。
+  ///
+  /// best-effort 且**逐钱包隔离**：单个失败只跳过它，不影响其余、也不阻塞列表。
+  Future<void> _syncWalletNames(List<WalletProfile>? wallets) async {
+    final list = wallets;
+    if (list == null || list.isEmpty) return;
+    final publisher = NicknamePublisher();
+    var touched = false;
+    for (final wallet in list) {
+      if (!wallet.isHotWallet) continue;
+      touched = true;
+      try {
+        await publisher.syncWalletName(wallet);
+      } catch (e) {
+        debugPrint('[Wallet] 钱包名同步失败 index=${wallet.walletIndex}: $e');
+      }
+    }
+    // 同步可能改写了本机名，重读一次让列表反映最新值。
+    if (touched && mounted) await _loadWallets(showSnack: false);
+  }
+
   Future<void> _reload() async {
     final wallets = await _loadWallets();
     if (!_isSelectionMode) {
       await _loadIdentityWallet();
       await _refreshBalancesFromChain(wallets: wallets);
+      await _syncWalletNames(wallets);
     }
   }
 
@@ -267,6 +305,13 @@ class _WalletTabState extends State<WalletTab> {
     }
   }
 
+  /// 身份数据损坏的钱包唯一出路是删除后重新导入，点击不进详情。
+  void _showBrokenWalletHint() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('该钱包身份数据异常，请删除后重新导入')),
+    );
+  }
+
   /// 删除钱包：二次确认 + 调用 WalletManager.deleteWallet + 重新加载列表。
   Future<void> _deleteWallet(WalletProfile wallet) async {
     final confirmed = await showDialog<bool>(
@@ -337,8 +382,9 @@ class _WalletTabState extends State<WalletTab> {
     }
     try {
       await _walletService.renameWallet(wallet.walletIndex, newName);
-      // 钱包名 = 昵称：改默认钱包后把新名发布到后端 display_name 供他人可见。
-      await NicknamePublisher().publishDefault();
+      // 钱包名 = 昵称：推到**该钱包自己账户**的 display_name（云端为真源、
+      // 本机为缓存）。推送失败会留在待同步队列，下次进本页重放。
+      await NicknamePublisher().onLocalRename(wallet, newName);
       if (!mounted) return;
       await _loadWallets();
     } catch (e) {
@@ -614,6 +660,9 @@ class _WalletTabState extends State<WalletTab> {
                     buildDefaultDragHandles: !_isSelectionMode,
                     itemBuilder: (ctx, idx) {
                       final wallet = wallets[idx];
+                      // 身份字段损坏的钱包只能删除后重新导入：点进详情会在
+                      // 空 accountId 上再次抛错，等于把炸点从列表挪到详情。
+                      final isBroken = !isAccountIdText(wallet.accountId);
                       return Padding(
                         key: ValueKey('wallet_${wallet.walletIndex}'),
                         padding: const EdgeInsets.only(bottom: 8),
@@ -621,9 +670,13 @@ class _WalletTabState extends State<WalletTab> {
                           wallet: wallet,
                           showActions: !_isSelectionMode,
                           isDefault: wallet.walletIndex == defaultWalletIndex,
-                          isIdentityWallet:
+                          // 坏行 accountId 为空，不能靠它与身份账户比对（都空会误判）。
+                          isIdentityWallet: !isBroken &&
                               wallet.accountId == _identityAccountId,
-                          onTap: () => _openWalletDetail(wallet),
+                          isBroken: isBroken,
+                          onTap: () => isBroken
+                              ? _showBrokenWalletHint()
+                              : _openWalletDetail(wallet),
                           onRename: () => _renameWallet(wallet),
                           onDelete: () => _deleteWallet(wallet),
                         ),
@@ -660,6 +713,7 @@ class WalletListTile extends StatelessWidget {
     required this.onDelete,
     this.isDefault = false,
     this.isIdentityWallet = false,
+    this.isBroken = false,
   });
 
   final WalletProfile wallet;
@@ -676,6 +730,9 @@ class WalletListTile extends StatelessWidget {
 
   /// 是否为链上唯一公民身份绑定的钱包。
   final bool isIdentityWallet;
+
+  /// 身份字段（accountId）损坏：不显示余额，改显警示，点击只提示删除重导。
+  final bool isBroken;
 
   @override
   Widget build(BuildContext context) {
@@ -726,13 +783,24 @@ class WalletListTile extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      AmountFormat.formatThousands(wallet.balance),
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppTheme.textSecondary,
+                    // 坏行的余额没有意义（读不到身份就对不上链），改显警示。
+                    if (isBroken)
+                      const Text(
+                        '身份数据异常，请删除后重新导入',
+                        maxLines: 2,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppTheme.warning,
+                        ),
+                      )
+                    else
+                      Text(
+                        AmountFormat.formatThousands(wallet.balance),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppTheme.textSecondary,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -1032,8 +1100,9 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
         walletName: newName,
         walletIcon: widget.wallet.walletIcon,
       );
-      // 钱包名 = 昵称：改默认钱包后把新名发布到后端 display_name 供他人可见。
-      await NicknamePublisher().publishDefault();
+      // 钱包名 = 昵称：推到**该钱包自己账户**的 display_name（云端为真源、
+      // 本机为缓存）。推送失败会留在待同步队列，下次进钱包页重放。
+      await NicknamePublisher().onLocalRename(widget.wallet, newName);
       if (!mounted) return;
       setState(() {
         _hasChanged = true;

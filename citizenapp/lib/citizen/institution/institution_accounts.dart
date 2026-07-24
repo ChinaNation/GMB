@@ -77,7 +77,7 @@ List<InstitutionAccountRow> institutionAccountIdRows(Institution inst) {
 }
 
 InstitutionAccountRow _rowFromAccountId(String label, String accountId) {
-  if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+  if (!isAccountIdText(accountId)) {
     throw const FormatException('机构 account_id 必须为小写 0x + 64 位十六进制');
   }
   final clean = accountId.substring(2);

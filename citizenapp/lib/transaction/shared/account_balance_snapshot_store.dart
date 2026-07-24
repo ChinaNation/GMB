@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 
 /// 账户余额展示快照。
@@ -72,7 +73,7 @@ class AccountBalanceSnapshotStore {
       '$_prefix${_requireAccountId(accountId)}';
 
   static String _requireAccountId(String accountId) {
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+    if (!isAccountIdText(accountId)) {
       throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
     }
     return accountId;
@@ -114,7 +115,7 @@ class AccountBalanceSnapshot {
       final updatedAtMillis = _toInt(decoded['updated_at_millis']);
       final source = decoded['source']?.toString() ?? 'chain';
       if (accountId == null ||
-          !RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId) ||
+          !isAccountIdText(accountId) ||
           balance == null ||
           updatedAtMillis == null) {
         return null;

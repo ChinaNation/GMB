@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:isar_community/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
 part 'app_isar.g.dart';
 
@@ -161,7 +162,7 @@ class MultisigLocalDetailSnapshot {
             account.isEmpty ||
             familyName.isEmpty ||
             givenName.isEmpty ||
-            !RegExp(r'^0x[0-9a-f]{64}$').hasMatch(account) ||
+            !isAccountIdText(account) ||
             !accounts.add(account)) {
           return null;
         }
@@ -314,7 +315,7 @@ class PersonalMultisigLocalState {
   }
 
   static String _requireAccountId(String accountId) {
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+    if (!isAccountIdText(accountId)) {
       throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
     }
     return accountId;

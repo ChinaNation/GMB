@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/qr/generated/qr_action_registry.g.dart';
 
 /// 广场账户动作签名 payload（两色内容核对用）。
@@ -79,7 +80,7 @@ SquareActionPayload? decodeSquareActionPayload(String payloadHex) {
 
     final (accountId, o2) = _readString(bytes, offset);
     offset = o2;
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) return null;
+    if (!isAccountIdText(accountId)) return null;
     final (challengeId, o3) = _readString(bytes, offset);
     offset = o3;
 

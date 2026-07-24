@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:isar_community/isar.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_models.dart';
@@ -425,9 +426,10 @@ String? _bytesToHex(Uint8List? bytes) {
   return '0x$buffer';
 }
 
+/// 唯一调用方传的是 `executionAccountId`，故按账户语义校验（走单源校验器）。
 Uint8List? _hexToBytes(String? hex) {
   if (hex == null || hex.isEmpty) return null;
-  if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(hex)) return null;
+  if (!isAccountIdText(hex)) return null;
   final clean = hex.substring(2);
   final result = Uint8List(clean.length ~/ 2);
   for (var i = 0; i < result.length; i++) {

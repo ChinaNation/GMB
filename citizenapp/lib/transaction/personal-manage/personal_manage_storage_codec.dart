@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:citizenapp/citizen/institution/institution_role_storage_codec.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
 /// 个人多签账户生命周期快照。
@@ -50,7 +51,7 @@ class PersonalManageStorageCodec {
   }
 
   static Uint8List accountIdBytes(String accountId) {
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+    if (!isAccountIdText(accountId)) {
       throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
     }
     return hexDecode(accountId);

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:isar_community/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_entry.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
@@ -341,7 +342,7 @@ class _PersonalManageAccountInfoPageState
       .toList(growable: false);
 
   String _requireAccountId(String accountId) {
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+    if (!isAccountIdText(accountId)) {
       throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
     }
     return accountId;

@@ -1,4 +1,5 @@
 import 'package:isar_community/isar.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 
 /// 本机钱包交易流水存储服务。
@@ -11,7 +12,7 @@ class LocalTxStore {
   static const String statusFinalized = 'finalized';
 
   static String requireAccountId(String accountId) {
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+    if (!isAccountIdText(accountId)) {
       throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
     }
     return accountId;

@@ -920,12 +920,11 @@ where
                 let institution: InstitutionRecord =
                     decode_exact(&institution_raw, "Institutions")?;
                 // 同上：用「允许集」，否则会把带清算账户的合法银行分支行判成非法。
-                let allowed =
-                    primitives::institution_constraints::allowed_protocol_account_kinds(
-                        institution.institution_code,
-                        &cid,
-                    )
-                    .ok_or(GuardError::InstitutionIdentityChanged)?;
+                let allowed = primitives::institution_constraints::allowed_protocol_account_kinds(
+                    institution.institution_code,
+                    &cid,
+                )
+                .ok_or(GuardError::InstitutionIdentityChanged)?;
                 if !allowed.contains(&protocol_kind) {
                     return Err(GuardError::UnexpectedProtocolAccount);
                 }

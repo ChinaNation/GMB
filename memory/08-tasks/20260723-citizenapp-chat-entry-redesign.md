@@ -86,7 +86,7 @@
 ### Step 4（2026-07-23，代码完成；模拟器验收受环境阻塞）
 
 - **顶栏改到目标态**（`chat_tab.dart`，本步唯一改的业务文件）：
-  - `_ChatHeader` 由 `const` 无回调改为接收 `onAction`；原**无点击的装饰** `Icon(Icons.search_rounded)` 换成 `PopupMenuButton`(icon `Icons.add_rounded`，tooltip「新建」)，用其自带锚定弹出，免手算右上角坐标。
+  - `_ChatHeader` 由 `const` 无回调改为接收 `onAction`；原**无点击的装饰** `Icon(Icons.search_rounded)` 换成加号按钮(`Icons.add_rounded`，tooltip「新建」)。**弹窗样式于 2026-07-23 二次改造**：初版用 `PopupMenuButton`，但用户要求「淡深色背景 + 顶部凸出三角、三角顶点对齐加号」，而 `PopupMenuButton` 的水平位置由框架决定、拿不到确定锚点，三角只能靠猜；改为 `showGeneralDialog` 自绘弹窗，按加号按钮 `RenderBox` 的真实屏幕坐标定位（见「加号弹窗样式改造」小节）。
   - **删除** `_NewGroupEntry` 整个 widget 及其挂载点，原位换成 `_SearchEntry`(搜索框，点击进 `ChatSearchPage`，透传 `store` 与 `_accountId` 收窄依赖)。
   - 新增 `_ChatEntryAction` 枚举 + `_onEntryAction` 分派 + 5 个处理方法：扫一扫 `openScanDispatchFlow(paymentWallet: 默认钱包)`；收付款 push `UserQrPage(accountId: wallet.accountId, contactName: wallet.walletName)`；发私信 push `ContactBookPage(mode: pickForMessage)` 后回刷；发群聊复用既有 `_openCreateGroup`(原卡片处理函数，职能迁入菜单)；加好友 `scanAndAddContact`。
   - 新增 `_requireAccount()` 统一无热钱包拦截提示。
@@ -103,6 +103,27 @@
 - `memory/05-modules/citizenapp/chat/CHAT_GROUP_TECHNICAL.md`：建群页补「最少 2 人」门槛；并订正已过时的“`chat_tab.dart` 新建群入口 sliver”描述为“已迁入加号菜单「发群聊」，原卡片整块删除”。上限 1989 该文档本就正确，未动。
 - 个人记忆：订正记忆卡 frontmatter 里“私密小群 ≤1000”为 ≤1989（正文本就是 1989，错的只有 description）；新增长期不变量记忆「用户二维码全 App 唯一 + 扫码模式分流」。
 - **本步零代码改动**，未新建仓库文件。
+
+### 加号弹窗样式改造 + 轻节点状态栏文案中文化（2026-07-23，完成）
+
+用户两项需求，一并落地：
+
+**1. 交易页轻节点状态栏文案中文化**（`lib/ui/widgets/chain_progress_banner.dart`）
+
+- `peer N` → 「已连接节点 N」；`best #N` → 「最新区块 #N」；`finalized #N` → 「已验证区块 #N」。
+- 连带：warp 分支同一行的 `peer finalized` → 「节点已验证区块」（不改会中英混杂在同一行）；两处用户可见句子「…读取 peer、best、finalized 等链路信息」同步中文化。
+- **刻意不改**：`RPC_TECHNICAL.md` 与代码内部的 peer / best / finalized 是 **smoldot 协议名词**，不是 UI 文案，跟着扫会让技术描述失真（与 accountId 收敛时排除区块/交易哈希是同一条原则）。已在 RPC 文档写明这条界线。
+
+**2. 加号弹窗改为淡深色 + 顶部凸出三角，三角顶点对齐加号**（`lib/chat/chat_tab.dart`）
+
+- **放弃 `PopupMenuButton`**：其水平位置由框架按可用空间决定，拿不到确定锚点，三角只能靠猜偏移量对齐 —— 与「顶点对齐加号」的要求直接冲突。
+- 改为 `showGeneralDialog` 自绘：经 `Builder` 取加号按钮自身 `RenderBox` 的屏幕坐标算中心 X → 反推面板左边界 → 夹到屏内 → **用夹取后的实际左边界回算三角横向位置**，保证靠边时仍对准加号。
+- 面板 `Color(0xF01F2A30)`（淡深色带透明度）、白色图标与文案、圆角 12；`barrierColor` 透明，不压黑整屏。
+- **面板本身必须是 `Material`**：弹窗不在 Scaffold 之下，`InkWell` 缺 Material 祖先会直接抛异常。**此坑由既有 widget 测试当场拦下**，未流到真机。
+- 菜单项加了图标（扫码 / 收付款 / 私信 / 群组 / 加好友），与深色面板配套。
+
+**验收**：`flutter analyze` 0 问题；`chat_tab_test` 19/19；全量 `flutter test` **792 通过 / 5 跳过 / 0 失败**。
+**待办**：三角与加号的像素级对齐、深色浓淡观感**必须真机确认**，当前设备 USB 断开未验。
 
 ## 总体收尾
 

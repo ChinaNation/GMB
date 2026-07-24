@@ -6,6 +6,7 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:isar_community/isar.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/citizen/shared/admin_account_storage_codec.dart';
 import 'package:citizenapp/citizen/shared/admin_accounts_scan_service.dart';
 import 'package:citizenapp/isar/app_isar.dart';
@@ -182,7 +183,7 @@ class PersonalManageDiscoveryService {
   }
 
   String _requireAccountId(String accountId) {
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+    if (!isAccountIdText(accountId)) {
       throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
     }
     return accountId;

@@ -5,15 +5,23 @@ use crate::core_const::GMB; // 域共享(签名也用)
 use sp_core::hashing::blake2_256;
 use sp_std::vec::Vec;
 
-// 地址派生 op_tag(0x00-0x0F)。
-pub const OP_MAIN: u8 = 0x00; // 所有机构主账户 · input: cid_number
-pub const OP_FEE: u8 = 0x01; // 所有机构费用账户 · input: cid_number
-pub const OP_STAKE: u8 = 0x02; // 永久质押 · input: cid_number
-pub const OP_SAFETY: u8 = 0x03; // 安全基金 · input: cid_number
-pub const OP_HE: u8 = 0x04; // 两和基金 · input: cid_number
-pub const OP_PERSONAL: u8 = 0x05; // 个人多签账户 · input: creator_32 || account_name
-pub const OP_CLEARING: u8 = 0x06; // 清算账户(私法人股份公司专属) · input: cid_number
-pub const OP_NAME: u8 = 0x07; // CID 机构自定义命名账户 · input: cid_number || account_name
+// op_tag 字节空间分区(全仓唯一权威)。派生与签名共用 `GMB || op_tag || …` 做域分离,
+// 两侧取值绝不得相撞:
+//   0x00-0x0F  地址派生块 A(本文件)
+//   0x10-0x1D  签名域(`crate::sign`,本文件禁止使用)
+//   0x1E-0xFF  未分配保留;块 A 用尽后从 0x20 起开派生块 B
+//
+// 新增协议账户只取"当前最大 + 1"的空号。新增 tag 只占用从未用过的号,不改变任何既有
+// 地址,因此**今后不需要也不允许再次重编号**;`OP_NAME` 永久钉死 0x00 绝不移动。
+pub const OP_NAME: u8 = 0x00; // CID 机构自定义命名账户(永久冻结) · input: cid_number || account_name
+pub const OP_MAIN: u8 = 0x01; // 所有机构主账户 · input: cid_number
+pub const OP_FEE: u8 = 0x02; // 所有机构费用账户 · input: cid_number
+pub const OP_STAKE: u8 = 0x03; // 永久质押 · input: cid_number
+pub const OP_SAFETY: u8 = 0x04; // 安全基金 · input: cid_number
+pub const OP_HE: u8 = 0x05; // 两和基金 · input: cid_number
+pub const OP_PERSONAL: u8 = 0x06; // 个人多签账户 · input: creator_32 || account_name
+pub const OP_CLEARING: u8 = 0x07; // 清算账户(私法人股份公司专属) · input: cid_number
+pub const OP_FCSF: u8 = 0x08; // 联邦公民安全基金(联邦安全局 FSC 专属) · input: cid_number
 
 /// 机构账户受限保留名唯一字面源。
 pub const RESERVED_NAME_MAIN_STR: &str = "主账户";
@@ -22,6 +30,7 @@ pub const RESERVED_NAME_STAKE_STR: &str = "永久质押";
 pub const RESERVED_NAME_SAFETYFUND_STR: &str = "安全基金";
 pub const RESERVED_NAME_HE_STR: &str = "两和基金";
 pub const RESERVED_NAME_CLEARING_STR: &str = "清算账户";
+pub const RESERVED_NAME_FCSF_STR: &str = "联邦公民安全基金";
 
 pub const RESERVED_NAME_MAIN: &[u8] = RESERVED_NAME_MAIN_STR.as_bytes();
 pub const RESERVED_NAME_FEE: &[u8] = RESERVED_NAME_FEE_STR.as_bytes();
@@ -29,15 +38,17 @@ pub const RESERVED_NAME_STAKE: &[u8] = RESERVED_NAME_STAKE_STR.as_bytes();
 pub const RESERVED_NAME_SAFETYFUND: &[u8] = RESERVED_NAME_SAFETYFUND_STR.as_bytes();
 pub const RESERVED_NAME_HE: &[u8] = RESERVED_NAME_HE_STR.as_bytes();
 pub const RESERVED_NAME_CLEARING: &[u8] = RESERVED_NAME_CLEARING_STR.as_bytes();
+pub const RESERVED_NAME_FCSF: &[u8] = RESERVED_NAME_FCSF_STR.as_bytes();
 
 /// 全部受限保留名。
-pub const RESERVED_ACCOUNT_NAMES: [&[u8]; 6] = [
+pub const RESERVED_ACCOUNT_NAMES: [&[u8]; 7] = [
     RESERVED_NAME_MAIN,
     RESERVED_NAME_FEE,
     RESERVED_NAME_STAKE,
     RESERVED_NAME_SAFETYFUND,
     RESERVED_NAME_HE,
     RESERVED_NAME_CLEARING,
+    RESERVED_NAME_FCSF,
 ];
 
 /// 机构协议账户类别。
@@ -55,6 +66,9 @@ pub enum InstitutionProtocolAccountKind {
     /// 资格唯二 = `SFGF` 私法人股份公司,以及父级机构码为 `SFGF` 的 `UNIN`
     /// 非法人分支机构;单源 `institution_constraints::required_protocol_account_kinds`。
     Clearing,
+    /// 联邦公民安全基金:仅联邦安全局(`FSC`)专属,由该局经投票引擎支出。
+    /// 单源 `institution_constraints::required_protocol_account_kinds`。
+    FederalCitizenSecurityFund,
 }
 
 /// 是否为禁止注册的制度专属保留名。
@@ -63,6 +77,7 @@ pub fn is_forbidden_account_name(name: &[u8]) -> bool {
         || name == RESERVED_NAME_SAFETYFUND
         || name == RESERVED_NAME_HE
         || name == RESERVED_NAME_CLEARING
+        || name == RESERVED_NAME_FCSF
 }
 
 /// op_tag 与 payload schema 的唯一映射。
@@ -86,6 +101,9 @@ pub enum AccountKind<'a> {
     InstitutionClearing {
         cid_number: &'a [u8],
     },
+    InstitutionFederalCitizenSecurityFund {
+        cid_number: &'a [u8],
+    },
     InstitutionNamed {
         cid_number: &'a [u8],
         account_name: &'a [u8],
@@ -106,6 +124,7 @@ impl<'a> AccountKind<'a> {
             AccountKind::InstitutionSafetyFund { .. } => OP_SAFETY,
             AccountKind::InstitutionHe { .. } => OP_HE,
             AccountKind::InstitutionClearing { .. } => OP_CLEARING,
+            AccountKind::InstitutionFederalCitizenSecurityFund { .. } => OP_FCSF,
             AccountKind::InstitutionNamed { .. } => OP_NAME,
             AccountKind::Personal { .. } => OP_PERSONAL,
         }
@@ -124,6 +143,9 @@ impl<'a> AccountKind<'a> {
             AccountKind::InstitutionClearing { .. } => {
                 Some(InstitutionProtocolAccountKind::Clearing)
             }
+            AccountKind::InstitutionFederalCitizenSecurityFund { .. } => {
+                Some(InstitutionProtocolAccountKind::FederalCitizenSecurityFund)
+            }
             AccountKind::InstitutionNamed { .. } | AccountKind::Personal { .. } => None,
         }
     }
@@ -141,7 +163,10 @@ impl<'a> AccountKind<'a> {
             | AccountKind::InstitutionStake { cid_number }
             | AccountKind::InstitutionSafetyFund { cid_number }
             | AccountKind::InstitutionHe { cid_number }
-            | AccountKind::InstitutionClearing { cid_number } => cid_number.to_vec(),
+            | AccountKind::InstitutionClearing { cid_number }
+            | AccountKind::InstitutionFederalCitizenSecurityFund { cid_number } => {
+                cid_number.to_vec()
+            }
             AccountKind::InstitutionNamed {
                 cid_number,
                 account_name,
@@ -187,6 +212,7 @@ pub const fn institution_protocol_account_name(
         InstitutionProtocolAccountKind::SafetyFund => RESERVED_NAME_SAFETYFUND,
         InstitutionProtocolAccountKind::He => RESERVED_NAME_HE,
         InstitutionProtocolAccountKind::Clearing => RESERVED_NAME_CLEARING,
+        InstitutionProtocolAccountKind::FederalCitizenSecurityFund => RESERVED_NAME_FCSF,
     }
 }
 
@@ -209,6 +235,9 @@ pub fn institution_protocol_kind_by_name(name: &[u8]) -> Option<InstitutionProto
     }
     if name == RESERVED_NAME_CLEARING {
         return Some(InstitutionProtocolAccountKind::Clearing);
+    }
+    if name == RESERVED_NAME_FCSF {
+        return Some(InstitutionProtocolAccountKind::FederalCitizenSecurityFund);
     }
     None
 }
@@ -238,6 +267,9 @@ pub fn institution_kind_by_name<'a>(
     }
     if name == RESERVED_NAME_CLEARING {
         return Some(AccountKind::InstitutionClearing { cid_number });
+    }
+    if name == RESERVED_NAME_FCSF {
+        return Some(AccountKind::InstitutionFederalCitizenSecurityFund { cid_number });
     }
     Some(AccountKind::InstitutionNamed {
         cid_number,

@@ -15,8 +15,8 @@ use crate::cid::china::{
     china_jc::CHINA_JC, china_jy::CHINA_JY, china_lf::CHINA_LF, china_zf::CHINA_ZF,
 };
 use crate::cid::code::{
-    institution_code_from_cid_number, InstitutionCode, NED, NLG, NRC, NRP, NSN, NSP, PRB, PRS, SFGF,
-    UNIN,
+    institution_code_from_cid_number, InstitutionCode, FSC, NED, NLG, NRC, NRP, NSN, NSP, PRB, PRS,
+    SFGF, UNIN,
 };
 
 /// 所有机构共同强制的协议账户。
@@ -51,6 +51,16 @@ pub const CORPORATION_PROTOCOL_ACCOUNT_KINDS: &[InstitutionProtocolAccountKind] 
     InstitutionProtocolAccountKind::Clearing,
 ];
 
+/// 联邦安全局(FSC)强制协议账户。
+///
+/// 联邦安全局在主账户、费用账户之外多一个「联邦公民安全基金」,由该局经投票引擎支出;
+/// 该基金为 FSC 专属,其他机构一律没有。
+pub const FSC_PROTOCOL_ACCOUNT_KINDS: &[InstitutionProtocolAccountKind] = &[
+    InstitutionProtocolAccountKind::Main,
+    InstitutionProtocolAccountKind::Fee,
+    InstitutionProtocolAccountKind::FederalCitizenSecurityFund,
+];
+
 /// 清算账户资格的唯一父级判据:父级机构码是否私法人股份公司(`SFGF`)。
 ///
 /// 机构码编码在 CID 内,纯字节判定、不读 storage。父级是否**已登记**由注册入口
@@ -83,6 +93,8 @@ pub fn required_protocol_account_kinds(
     Some(match code {
         NRC => NRC_PROTOCOL_ACCOUNT_KINDS,
         PRB => PRB_PROTOCOL_ACCOUNT_KINDS,
+        // 联邦安全局:唯一持有「联邦公民安全基金」的机构。
+        FSC => FSC_PROTOCOL_ACCOUNT_KINDS,
         // 股份公司本身。
         SFGF => CORPORATION_PROTOCOL_ACCOUNT_KINDS,
         // 股份公司的非法人分支机构:父级码必须是 SFGF 才配清算账户。
@@ -122,6 +134,8 @@ pub const ROLE_CODE_REPRESENTATIVE: &[u8] = b"REPRESENTATIVE";
 pub const ROLE_CODE_COMMITTEE_MEMBER: &[u8] = b"COMMITTEE_MEMBER";
 /// 每个机构自动拥有且只能拥有一个的法定代表人岗位代码。
 pub const ROLE_CODE_LEGAL_REPRESENTATIVE: &[u8] = b"LR";
+/// 联邦安全局局长岗位代码（该局创世岗位之一，与自带的 LR 并存）。
+pub const ROLE_CODE_DIRECTOR: &[u8] = b"DIRECTOR";
 
 /// 法定成员岗位公开名称。
 pub const ROLE_NAME_SENATOR: &[u8] = "参议员".as_bytes();
@@ -129,6 +143,8 @@ pub const ROLE_NAME_REPRESENTATIVE: &[u8] = "众议员".as_bytes();
 pub const ROLE_NAME_COMMITTEE_MEMBER: &[u8] = "委员".as_bytes();
 /// 默认法定代表人岗位公开名称。
 pub const ROLE_NAME_LEGAL_REPRESENTATIVE: &[u8] = "法定代表人".as_bytes();
+/// 联邦安全局局长岗位公开名称。
+pub const ROLE_NAME_DIRECTOR: &[u8] = "局长".as_bytes();
 
 /// 岗位码是否为不可删除、停用、改码或改名的默认法定代表人岗位。
 pub fn is_legal_representative_role(role_code: &[u8]) -> bool {

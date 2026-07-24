@@ -56,10 +56,13 @@ fn create_cgov(tag: &str) -> pallet::CidNumberOf<Test> {
     let protocol_accounts =
         crate::institution::accounts::build_required_protocol_accounts::<Test>(&cid, None)
             .expect("测试协议账户必须可构造");
-    let (created_accounts, _, _, _) = crate::institution::accounts::validate_initial_accounts::<
-        Test,
-    >(&cid, &protocol_accounts, None)
-    .expect("测试协议账户必须合法");
+    let (created_accounts, _, _, _) =
+        crate::institution::accounts::validate_initial_accounts::<Test>(
+            &cid,
+            &protocol_accounts,
+            None,
+        )
+        .expect("测试协议账户必须合法");
     pallet::Institutions::<Test>::insert(
         &cid,
         crate::InstitutionInfo {

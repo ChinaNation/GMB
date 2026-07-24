@@ -221,7 +221,11 @@ fn operation_phase_authorizes_by_cid_and_survives_wallet_rebind() {
         ]
         .try_into()
         .expect("admins fit");
-        assert_ok!(PrivateManage::set_institution_admins(&cid_number, code, &admins));
+        assert_ok!(PrivateManage::set_institution_admins(
+            &cid_number,
+            code,
+            &admins
+        ));
 
         let action = entity_primitives::BusinessActionId {
             module_tag: b"pri-mgmt".to_vec(),

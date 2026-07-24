@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:polkadart/polkadart.dart' show Hasher;
 
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
 /// 由永久 CID 定位的链上公民身份快照。
@@ -38,7 +39,7 @@ class CitizenIdentityChainReader {
   Future<CitizenIdentityChainSnapshot?> readByAccountId(
     String accountIdText,
   ) async {
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountIdText)) {
+    if (!isAccountIdText(accountIdText)) {
       throw const FormatException('account_id 必须是小写 0x 加 64 位十六进制');
     }
     final accountId = Uint8List.fromList([

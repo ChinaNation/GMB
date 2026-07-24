@@ -435,6 +435,9 @@ fn fetch_institution_accounts(
             Some(InstitutionProtocolAccountKind::SafetyFund) => "safety_fund",
             Some(InstitutionProtocolAccountKind::He) => "he",
             Some(InstitutionProtocolAccountKind::Clearing) => "clearing",
+            Some(InstitutionProtocolAccountKind::FederalCitizenSecurityFund) => {
+                "federal_citizen_security_fund"
+            }
             None => "named",
         };
         let can_close = account_kind.is_closable_institution_account();

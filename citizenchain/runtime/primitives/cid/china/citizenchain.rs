@@ -68,8 +68,8 @@ pub const CITIZENCHAIN_FOUNDATION: ChinaCitizenChain = ChinaCitizenChain {
     cid_full_name_en: "CitizenChain Technology Development Foundation",
     cid_short_name_en: "CitizenChain Technology Foundation",
     cid_number: "GZ018-SFGYR-201206100-2026",
-    main_account: hex!("e86aa3cd794651257dea9b7cad1abc4f0ce05940c1aecccd2ed8dd2fc9907023"),
-    fee_account: hex!("aa23304c7b663ba25a9d3a2fb1efafdd650ecf2504a2caedc228fe81b46b4333"),
+    main_account: hex!("aa23304c7b663ba25a9d3a2fb1efafdd650ecf2504a2caedc228fe81b46b4333"),
+    fee_account: hex!("e4837d50cd5ef677c9b10ea49baf8c7d60cf11b422d748377e9e5f750640e927"),
 };
 
 /// 一名创世管理员程伟；账户是授权字段，姓、名仅用于人员展示。

@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
 /// PersonalAdmins 创建个人多签提案详情（从链上 ProposalData 解码）。
 ///
@@ -127,7 +128,7 @@ class AccountInfo {
 }
 
 Uint8List _accountIdBytes(String accountId) {
-  if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+  if (!isAccountIdText(accountId)) {
     throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
   }
   final h = accountId.substring(2);

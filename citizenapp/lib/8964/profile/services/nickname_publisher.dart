@@ -1,14 +1,30 @@
+import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
 import 'package:citizenapp/8964/profile/services/citizen_profile_api.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
+import 'package:citizenapp/8964/services/square_api_client.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-/// 昵称发布器：把「默认钱包名称（= 用户昵称，单一真源）」发布到后端
-/// `display_name`，让**他人**在你的主页也看到同一个昵称。
+/// 钱包名（= 用户昵称）与云端 `display_name` 的同步器。
 ///
-/// 钱包账户即用户、钱包名称即昵称，是同一个字段：本机钱包名是真源，后端
-/// `display_name` 只是它的公开镜像。任一改名入口（编辑资料 / 我的钱包重命名）
-/// 落盘后调此方法把默认钱包名推到后端，两侧永不分叉。best-effort：无会话或
-/// 网络失败不阻塞本机改名，下次编辑 / 加载会再同步。
+/// **模型（2026-07-23 翻转）：云端为真源，本机为缓存。**
+/// 同一助记词可能同时在多台设备上使用；若本机永远赢，A 设备改的名字会被
+/// B 设备的旧值反复覆盖。因此本机 `walletName` 降级为缓存，冲突交云端裁决。
+///
+/// 三条路径：
+/// - [onLocalRename]：本机改名后调用 —— 先入待同步队列，再尝试推送到**该钱包
+///   自己 accountId** 的 `display_name`（旧实现只推默认钱包，云端根本存不全）。
+/// - [syncWalletName]：进钱包页 / 导入后调用 —— 先重放待同步项，再拉云端，
+///   云端更新则回写本机。复用通讯录已验证的「拉快照 + 重放待同步」范式。
+/// - [resolveRemote]：按 accountId 读云端昵称。
+///
+/// **不形成回环**：从云端回写本机走 [WalletManager.renameWallet]，不触发推送；
+/// 推送只由 UI 的改名入口经 [onLocalRename] 发起。
+///
+/// 边界：冷钱包没有设备子钥、云端也无其资料，名字保持纯本机，本类对其直接跳过。
+///
+/// 已知限制：仅 App 侧时语义是「最后到达者赢」。离线久的设备上线后仍可能用旧
+/// 编辑覆盖新编辑，须待 Worker 支持 `edited_at` 比较后才成为「最新编辑者赢」。
 class NicknamePublisher {
   NicknamePublisher({
     WalletManager? walletManager,
@@ -22,21 +38,132 @@ class NicknamePublisher {
   final CitizenProfileApi _api;
   final SquareSessionProvider _session;
 
-  /// 读当前默认钱包名并发布到后端 `display_name`。
+  /// 已同步到的云端 `updated_at`；用于判断云端是否比本机缓存新。
+  static String _syncedAtKey(String accountId) =>
+      'wallet_name_synced_at:$accountId';
+
+  /// 待推送的本机改名（推送失败时留存，下次同步重放）。
+  static String _pendingKey(String accountId) =>
+      'wallet_name_pending:$accountId';
+
+  /// 本机改名后调用：入队 → 尝试推送 → 成功则清队并记录云端版本。
   ///
-  /// 总是发布**默认钱包**的名字（= 当前身份昵称），因此在「我的钱包」里改任一
-  /// 钱包后调用都安全：改的是默认钱包就推新名，改的是非默认钱包就重发默认名
-  /// （幂等无副作用）。会话由默认热钱包静默签名换取，不弹生物识别。
-  Future<void> publishDefault() async {
+  /// 推送失败（无网 / 未注册子钥）不抛错、不阻塞本机改名，待同步项留在队列里，
+  /// 下次 [syncWalletName] 重放。
+  Future<void> onLocalRename(WalletProfile wallet, String newName) async {
+    final name = newName.trim();
+    if (name.isEmpty || !wallet.isHotWallet) return;
+    await _writePending(wallet.accountId, name);
+    await _flushPending(wallet);
+  }
+
+  /// 同步指定钱包的名字：先重放待同步项，再按云端版本回写本机。
+  Future<void> syncWalletName(WalletProfile wallet) async {
+    if (!wallet.isHotWallet) return;
+    await _flushPending(wallet);
+    // 仍有待推送项说明本机改动尚未上云，此时绝不能用云端旧值覆盖本机。
+    if (await _readPending(wallet.accountId) != null) return;
+
+    final SquareSession? session;
     try {
-      final wallet = await _wallet.getDefaultWallet();
-      final name = wallet?.walletName.trim() ?? '';
-      if (name.isEmpty) return;
-      final session = await _session.ensureSession();
-      if (session == null) return;
-      await _api.updateProfile(session: session, displayName: name);
+      session = await _session.ensureSessionFor(wallet);
     } on Exception {
-      // 后端发布失败不阻塞本机改名；下次编辑资料 / 加载主页会再同步。
+      return;
     }
+    final CitizenProfile profile;
+    try {
+      profile = await _api.fetchProfile(wallet.accountId, session: session);
+    } on Exception {
+      return;
+    }
+
+    final remoteName = profile.displayName.trim();
+    if (remoteName.isEmpty) return;
+    final syncedAt = await _readInt(_syncedAtKey(wallet.accountId));
+    // 只有云端确实更新过才回写，否则本机缓存已是最新，避免无谓写库与列表抖动。
+    if (syncedAt != null && profile.updatedAt <= syncedAt) return;
+    if (remoteName != wallet.walletName) {
+      // 直接改本机，**不经 onLocalRename** —— 否则会把刚拉下来的值再推回去，形成回环。
+      await _wallet.renameWallet(wallet.walletIndex, remoteName);
+    }
+    await _writeInt(_syncedAtKey(wallet.accountId), profile.updatedAt);
+  }
+
+  /// 读云端昵称；无资料 / 无网返回 null。
+  Future<String?> resolveRemote(
+    String accountId, {
+    SquareSession? session,
+  }) async {
+    try {
+      final profile = await _api.fetchProfile(accountId, session: session);
+      final name = profile.displayName.trim();
+      return name.isEmpty ? null : name;
+    } on Exception {
+      return null;
+    }
+  }
+
+  /// 尝试把待同步项推上云端；成功则清队并记录云端版本。
+  Future<void> _flushPending(WalletProfile wallet) async {
+    final pending = await _readPending(wallet.accountId);
+    if (pending == null) return;
+    try {
+      final session = await _session.ensureSessionFor(wallet);
+      if (session == null) return;
+      final updated = await _api.updateProfile(
+        session: session,
+        displayName: pending,
+      );
+      await _clearPending(wallet.accountId);
+      await _writeInt(_syncedAtKey(wallet.accountId), updated.updatedAt);
+    } on Exception {
+      // 保留待同步项，下次进钱包页重放。
+    }
+  }
+
+  Future<String?> _readPending(String accountId) {
+    return WalletIsar.instance.read((isar) async {
+      final row = await isar.appKvEntitys.getByKey(_pendingKey(accountId));
+      final value = row?.stringValue?.trim();
+      return (value == null || value.isEmpty) ? null : value;
+    });
+  }
+
+  Future<void> _writePending(String accountId, String name) async {
+    await WalletIsar.instance.writeTxn((isar) async {
+      final key = _pendingKey(accountId);
+      final row = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();
+      row
+        ..key = key
+        ..stringValue = name
+        ..intValue = DateTime.now().millisecondsSinceEpoch
+        ..boolValue = null;
+      await isar.appKvEntitys.putByKey(row);
+    });
+  }
+
+  Future<void> _clearPending(String accountId) async {
+    await WalletIsar.instance.writeTxn((isar) async {
+      await isar.appKvEntitys.deleteByKey(_pendingKey(accountId));
+    });
+  }
+
+  Future<int?> _readInt(String key) {
+    return WalletIsar.instance.read((isar) async {
+      final row = await isar.appKvEntitys.getByKey(key);
+      return row?.intValue;
+    });
+  }
+
+  Future<void> _writeInt(String key, int value) async {
+    await WalletIsar.instance.writeTxn((isar) async {
+      final row = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();
+      row
+        ..key = key
+        ..stringValue = null
+        ..intValue = value
+        ..boolValue = null;
+      await isar.appKvEntitys.putByKey(row);
+    });
   }
 }

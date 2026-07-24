@@ -129,7 +129,7 @@ mod tests {
         assert_ne!(stake, named_stake);
         assert_ne!(stake, safety_fund);
         assert_ne!(safety_fund, he);
-        // 显式确认自定义命名走 OP_NAME=0x07
+        // 显式确认自定义命名走 OP_NAME=0x00(永久冻结,不随新增协议账户移动)
         assert_eq!(
             AccountKind::InstitutionNamed {
                 cid_number: cid.as_bytes(),

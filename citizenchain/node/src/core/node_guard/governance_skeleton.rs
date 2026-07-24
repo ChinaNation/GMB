@@ -22,7 +22,10 @@ use entity_primitives::{
 };
 
 use primitives::{
-    cid::china::citizenchain::{CITIZENCHAIN_FIXED_ROLES, CITIZENCHAIN_FOUNDATION},
+    cid::china::citizenchain::{
+        CITIZENCHAIN_FIXED_ROLES, CITIZENCHAIN_FOUNDATION, CITIZENCHAIN_GENESIS_ADMINS,
+        LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER,
+    },
     cid::code::{FRG, PROVINCE_CODE_INFOS},
     count_const::FRG_PROVINCE_GROUP_ADMIN_COUNT,
     governance_skeleton::{
@@ -35,6 +38,7 @@ const PUBLIC_ADMINS_PALLET: &[u8] = b"PublicAdmins";
 const PUBLIC_MANAGE_PALLET: &[u8] = b"PublicManage";
 const PRIVATE_ADMINS_PALLET: &[u8] = b"PrivateAdmins";
 const PRIVATE_MANAGE_PALLET: &[u8] = b"PrivateManage";
+const CITIZEN_IDENTITY_PALLET: &[u8] = b"CitizenIdentity";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ExpectedRole {
@@ -56,6 +60,24 @@ fn protected_institutions() -> Vec<FixedInstitution> {
 
 fn is_private_protected_cid(cid_number: &[u8]) -> bool {
     cid_number == CITIZENCHAIN_FOUNDATION.cid_number.as_bytes()
+}
+
+/// 基金会创世管理员的**永久冻结身份**:公民 CID + 姓 + 名。
+///
+/// 三个创世岗位(`LR` / `GENESIS_PRODUCT_MANAGER` / `GENESIS_PROGRAMMER`)永久由
+/// **同一位公民**担任,钱包账户可依法更换,身份三要素永不可变——「换钱包不换人」。
+/// 「只能一个人」由既有的 `expected_len = 1` + 每岗 `seats = 1` + 任职账户必须来自
+/// 名册集合共同锁死,本函数只补上「这个人是谁」。
+///
+/// 单源沿用创世 seeder 同一组常量:CID 复用法定代表人真源,姓名取创世管理员表,
+/// 不在守卫里另造第二份身份数据。
+fn expected_foundation_identity() -> (&'static [u8], &'static [u8], &'static [u8]) {
+    let admin = &CITIZENCHAIN_GENESIS_ADMINS[0];
+    (
+        LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER.as_bytes(),
+        admin.family_name.as_bytes(),
+        admin.given_name.as_bytes(),
+    )
 }
 
 fn expected_roles(institution: &FixedInstitution) -> Vec<ExpectedRole> {
@@ -99,8 +121,9 @@ fn expected_roles(institution: &FixedInstitution) -> Vec<ExpectedRole> {
 /// 三张受保护 storage 的完整 RAW key 和精确前缀。
 pub mod storage_key {
     use super::{
-        is_private_protected_cid, protected_institutions, FixedInstitution, PRIVATE_ADMINS_PALLET,
-        PRIVATE_MANAGE_PALLET, PUBLIC_ADMINS_PALLET, PUBLIC_MANAGE_PALLET,
+        is_private_protected_cid, protected_institutions, FixedInstitution,
+        CITIZEN_IDENTITY_PALLET, PRIVATE_ADMINS_PALLET, PRIVATE_MANAGE_PALLET,
+        PUBLIC_ADMINS_PALLET, PUBLIC_MANAGE_PALLET,
     };
     use codec::{Decode, Encode};
     use sp_core::hashing::blake2_128;
@@ -152,6 +175,15 @@ pub mod storage_key {
     pub fn private_institution(cid_number: &[u8]) -> Vec<u8> {
         let mut key = private_institutions_prefix();
         key.extend_from_slice(&blake2_128_concat(&cid_number.to_vec().encode()));
+        key
+    }
+
+    /// `CitizenIdentity::AccountIdByCid[公民CID]`：该公民 CID 当前绑定的唯一签名账户。
+    /// key 与 runtime 的 `Blake2_128Concat` + `BoundedVec` 编码逐字节一致
+    /// （`blake2_128(Compact(len)||bytes) || Compact(len)||bytes`）。
+    pub fn citizen_account_id_by_cid(citizen_cid_number: &[u8]) -> Vec<u8> {
+        let mut key = storage_prefix(CITIZEN_IDENTITY_PALLET, b"AccountIdByCid");
+        key.extend_from_slice(&blake2_128_concat(&citizen_cid_number.to_vec().encode()));
         key
     }
 
@@ -305,6 +337,12 @@ pub enum GuardError {
         found: u32,
     },
     InvalidAdminPersonName([u8; 4]),
+    /// 基金会创世管理员的身份三要素(公民 CID / 姓 / 名)被篡改。
+    /// 三个创世岗位永久由同一位公民担任,只允许更换钱包账户。
+    FoundationGenesisIdentityChanged([u8; 4]),
+    /// 基金会名册账户与该公民 CID 在 citizen-identity 中当前绑定的钱包不一致。
+    /// 换钱包必须同步换绑,不允许只换其一。
+    FoundationWalletBindingMismatch([u8; 4]),
     DuplicateAdminAccountId([u8; 4]),
     RoleMissing {
         code: [u8; 4],
@@ -497,6 +535,31 @@ where
                     || core::str::from_utf8(admin.family_name.as_slice()).is_err()
                     || core::str::from_utf8(admin.given_name.as_slice()).is_err()
             });
+            // 冻结「人」：无论钱包账户怎么换，公民 CID、姓、名必须逐字节等于创世常量。
+            // 岗位码/岗位名/席位已由 CITIZENCHAIN_FIXED_ROLES 冻结，此处补上身份三要素。
+            let (expected_cid, expected_family, expected_given) = expected_foundation_identity();
+            if account.admins.iter().any(|admin| {
+                admin.cid_number.as_slice() != expected_cid
+                    || admin.family_name.as_slice() != expected_family
+                    || admin.given_name.as_slice() != expected_given
+            }) {
+                return Err(GuardError::FoundationGenesisIdentityChanged(
+                    institution.code,
+                ));
+            }
+            // 换钱包必须同步换绑：名册账户须等于该公民 CID 当前绑定的签名账户。
+            // 该绑定由 citizen-identity 在运行期登记；创世不播种，故「无绑定」放行，
+            // 只有已登记却指向别的账户时才判定篡改（无条件校验会否掉创世状态本身）。
+            if let Some(bound_raw) = read_raw(&storage_key::citizen_account_id_by_cid(expected_cid))
+            {
+                let bound: [u8; 32] = decode_exact(&bound_raw)
+                    .map_err(|_| GuardError::AdminAccountDecodeFailed(institution.code))?;
+                if account.admins.iter().any(|admin| admin.account_id != bound) {
+                    return Err(GuardError::FoundationWalletBindingMismatch(
+                        institution.code,
+                    ));
+                }
+            }
             (
                 account.institution_code,
                 account
@@ -743,16 +806,18 @@ mod tests {
 
     fn account_bytes(institution: &FixedInstitution, admins: Vec<[u8; 32]>) -> Vec<u8> {
         if is_private_protected_cid(institution.cid_number.as_bytes()) {
+            // 基金会名册必须与创世 seeder 写入的身份逐字节一致：公民 CID 复用法定
+            // 代表人真源，姓名取创世管理员表。守卫冻结这三要素，只放行钱包账户更换。
+            let (cid_number, family_name, given_name) = expected_foundation_identity();
             return DecodedPrivateInstitutionAdmins {
                 institution_code: institution.code,
                 admins: admins
                     .into_iter()
                     .map(|account_id| Admin {
                         account_id,
-                        // Phase 1: 公民 CID 与创世一致留空。
-                        cid_number: Default::default(),
-                        family_name: "管理".as_bytes().to_vec().try_into().expect("name fits"),
-                        given_name: "员".as_bytes().to_vec().try_into().expect("name fits"),
+                        cid_number: cid_number.to_vec().try_into().expect("cid fits"),
+                        family_name: family_name.to_vec().try_into().expect("name fits"),
+                        given_name: given_name.to_vec().try_into().expect("name fits"),
                     })
                     .collect(),
             }
@@ -914,6 +979,100 @@ mod tests {
     #[test]
     fn valid_fixed_admin_role_and_assignment_state_passes() {
         assert_eq!(check_state(&valid_state()), Ok(()));
+    }
+
+    #[test]
+    /// 基金会三个创世岗位永久由同一位公民担任：钱包账户可换，
+    /// 公民 CID / 姓 / 名永久冻结；换钱包必须同步换绑 citizen-identity。
+    #[test]
+    fn foundation_genesis_identity_is_frozen_and_only_wallet_may_change() {
+        let foundation = protected_institutions()
+            .into_iter()
+            .find(|institution| is_private_protected_cid(institution.cid_number.as_bytes()))
+            .expect("protected private genesis foundation");
+        let admin_key = storage_key::account_id(foundation.cid_number.as_bytes());
+        let (expected_cid, _, _) = expected_foundation_identity();
+
+        let decode_admins =
+            |state: &BTreeMap<Vec<u8>, Vec<u8>>| -> DecodedPrivateInstitutionAdmins {
+                decode_exact(state.get(&admin_key).expect("foundation admins exist"))
+                    .expect("foundation admins decode")
+            };
+
+        // 基线：创世状态必须放行（此时 citizen-identity 尚无绑定）。
+        assert_eq!(check_state(&valid_state()), Ok(()));
+
+        // 身份三要素逐项冻结：改任一项即判 KnownBad。
+        for mutate in [0u8, 1, 2] {
+            let mut state = valid_state();
+            let mut account = decode_admins(&state);
+            match mutate {
+                0 => {
+                    account.admins[0].cid_number = "GZ000-CTZN6-190001010-2026"
+                        .as_bytes()
+                        .to_vec()
+                        .try_into()
+                        .expect("cid fits")
+                }
+                1 => {
+                    account.admins[0].family_name =
+                        "李".as_bytes().to_vec().try_into().expect("name fits")
+                }
+                _ => {
+                    account.admins[0].given_name =
+                        "四".as_bytes().to_vec().try_into().expect("name fits")
+                }
+            }
+            state.insert(admin_key.clone(), account.encode());
+            assert_eq!(
+                check_state(&state),
+                Err(GuardError::FoundationGenesisIdentityChanged(
+                    foundation.code
+                )),
+                "身份三要素第 {mutate} 项被改动必须判 KnownBad"
+            );
+        }
+
+        // 只换钱包账户（名册与三条任职同步换）：必须放行 —— 换钱包不换人。
+        let rotated_wallet = [77u8; 32];
+        let mut rotated = valid_state();
+        let mut account = decode_admins(&rotated);
+        account.admins[0].account_id = rotated_wallet;
+        rotated.insert(admin_key.clone(), account.encode());
+        for role in expected_roles(&foundation) {
+            rotated.insert(
+                storage_key::institution_role_assignments(
+                    foundation.cid_number.as_bytes(),
+                    &role.role_code,
+                ),
+                vec![assignment(&foundation, &role, rotated_wallet)].encode(),
+            );
+        }
+        // 机构信息里的法定代表人账户须一并跟换（既有守卫本就要求 LR 任职与其一致）。
+        rotated.insert(
+            storage_key::private_institution(foundation.cid_number.as_bytes()),
+            private_info_bytes(&foundation, rotated_wallet),
+        );
+        assert_eq!(check_state(&rotated), Ok(()));
+
+        // citizen-identity 已登记绑定但指向别的钱包：判 KnownBad（换钱包没同步换绑）。
+        let mut mismatched = rotated.clone();
+        mismatched.insert(
+            storage_key::citizen_account_id_by_cid(expected_cid),
+            [9u8; 32].encode(),
+        );
+        assert_eq!(
+            check_state(&mismatched),
+            Err(GuardError::FoundationWalletBindingMismatch(foundation.code))
+        );
+
+        // 绑定与名册一致：放行。
+        let mut aligned = rotated;
+        aligned.insert(
+            storage_key::citizen_account_id_by_cid(expected_cid),
+            rotated_wallet.encode(),
+        );
+        assert_eq!(check_state(&aligned), Ok(()));
     }
 
     #[test]

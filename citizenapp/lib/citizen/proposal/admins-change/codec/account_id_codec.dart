@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 
@@ -78,7 +79,7 @@ class AdminAccountIdCodec {
       bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
   static Uint8List _decodeAccountId(String accountId) {
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+    if (!isAccountIdText(accountId)) {
       throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
     }
     final clean = accountId.substring(2);
@@ -90,7 +91,7 @@ class AdminAccountIdCodec {
   }
 
   static String requireAccountId(String hex) {
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(hex)) {
+    if (!isAccountIdText(hex)) {
       throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
     }
     return hex;
