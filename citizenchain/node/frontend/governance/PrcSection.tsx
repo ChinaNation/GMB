@@ -7,6 +7,7 @@ import { ProposalDetailPage } from './ProposalDetailPage';
 import { CreateMultisigTransferPage } from '../transaction/multisig/CreateProposalPage';
 import { SweepProposalPage } from '../transaction/multisig/SweepProposalPage';
 import { ProtocolUpgradeProposalPage } from './runtime-upgrade';
+import { GrandpaKeyChangePage } from './grandpa-key/GrandpaKeyChangePage';
 import type { AdminSignerMatch } from './types';
 
 type PrcView =
@@ -16,6 +17,7 @@ type PrcView =
   | { page: 'proposal-detail'; proposalId: number; adminSigners: AdminSignerMatch[]; cidNumber?: string; originCidNumber: string }
   | { page: 'create-proposal'; cidNumber: string; orgType: number; cidFullName: string; institution_account_id: string; adminSigners: AdminSignerMatch[] }
   | { page: 'protocol-upgrade'; cidNumber: string; adminSigners: AdminSignerMatch[] }
+  | { page: 'grandpa-key'; cidNumber: string; adminSigners: AdminSignerMatch[] }
   | { page: 'propose-sweep'; cidNumber: string; institution_account_id: string; cidFullName: string; adminSigners: AdminSignerMatch[] };
 
 export function PrcSection() {
@@ -69,6 +71,17 @@ export function PrcSection() {
     );
   }
 
+  if (view.page === 'grandpa-key') {
+    return (
+      <GrandpaKeyChangePage
+        actorCidNumber={view.cidNumber}
+        adminSigners={view.adminSigners}
+        onBack={() => backToDetail(view.cidNumber)}
+        onSuccess={() => backToDetail(view.cidNumber)}
+      />
+    );
+  }
+
   if (view.page === 'propose-sweep') {
     return (
       <SweepProposalPage
@@ -97,6 +110,9 @@ export function PrcSection() {
         }
         onCreateProtocolUpgrade={(aw) =>
           setView({ page: 'protocol-upgrade', cidNumber, adminSigners: aw })
+        }
+        onChangeGrandpaKey={(aw) =>
+          setView({ page: 'grandpa-key', cidNumber, adminSigners: aw })
         }
         onCreateSweep={(sid, institution_account_id, cidFullName, aw) =>
           setView({ page: 'propose-sweep', cidNumber: sid, institution_account_id, cidFullName, adminSigners: aw })

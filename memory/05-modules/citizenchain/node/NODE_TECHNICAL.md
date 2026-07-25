@@ -18,6 +18,10 @@
 - 权威节点（本地有 GRANDPA ed25519 密钥）：运行 `grandpa-voter`
 - 普通节点：运行 `grandpa-observer`（只接收最终性结果不投票）
 - 所有节点统一注册 GRANDPA 网络协议，保证协议栈一致
+- 正常更换由目标 NRC/PRC 的单个委员岗位授权，旧、新私钥双签后延迟生效，不投票。
+- 旧私钥不可用时只由目标 NRC/PRC 自己的委员内部投票紧急恢复，不走联合投票。
+- 更换期间节点同时保留旧、新 `gran` 私钥；后台以 finalized authority set 为唯一
+  删除依据，确认新 authority 生效且旧 authority 移除后才删除旧私钥并重启。
 - Justification 周期：64 块
 - vendor 目录：`sc-consensus-grandpa` v0.40.0（独立 GPL-3.0 许可）
 

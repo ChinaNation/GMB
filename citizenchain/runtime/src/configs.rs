@@ -612,7 +612,11 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                 },
             ) => institution_onchain_route(who, actor_cid_number.as_slice()),
             RuntimeCall::GrandpaKeyChange(
-                grandpakey_change::pallet::Call::propose_replace_grandpa_key {
+                grandpakey_change::pallet::Call::propose_emergency_grandpa_key_recovery {
+                    actor_cid_number,
+                    ..
+                }
+                | grandpakey_change::pallet::Call::schedule_grandpa_key_rotation {
                     actor_cid_number,
                     ..
                 },

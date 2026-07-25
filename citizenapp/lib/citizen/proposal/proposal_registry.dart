@@ -212,8 +212,9 @@ class ProposalCapabilityRegistry {
       kind: ProposalKind.grandpaKey,
       enabled: true,
       pallet: 'GrandpaKeyChange',
-      call: 'propose_replace_grandpa_key',
-      voteEngine: 'InternalVote',
+      call:
+          'schedule_grandpa_key_rotation/propose_emergency_grandpa_key_recovery',
+      voteEngine: 'Normal=None;Emergency=InternalVote',
       allows: (subject) =>
           _jointGovernanceCodes.contains(subject.institutionCode),
     ),

@@ -61,6 +61,12 @@
       "name": "OP_SIGN_SQUARE_ACTION",
       "op_tag": "0x1d",
       "scale_payload_hex": "73712d616374696f6e"
+    },
+    {
+      "message_hex": "b8f4a33924ded16f83713cdf1ac5e107eee6fa2b935b966fa960f24f497b78cc",
+      "name": "OP_SIGN_GRANDPA_KEY_CHANGE",
+      "op_tag": "0x1e",
+      "scale_payload_hex": "6772616e6470612d6b65792d6368616e6765"
     }
   ]
 }

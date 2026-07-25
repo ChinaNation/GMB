@@ -151,9 +151,9 @@ class PalletRegistry {
   }
 
   // ---- GrandpaKeyChange (15) ----
-  // call_index 1, 2 留洞不复用。
   static const int grandpaKeyChangePallet = 15;
-  static const int proposeReplaceGrandpaKeyCall = 0;
+  static const int proposeEmergencyGrandpaKeyRecoveryCall = 0;
+  static const int scheduleGrandpaKeyRotationCall = 1;
 
   // ---- FullnodeIssuance (6) · 有意不登记 ----
   // 链端 pallet_index=6 承载 bind_reward_account(0) / rebind_reward_account(1),

@@ -158,6 +158,11 @@ CitizenApp P2P 暂时不可用时，聊天和广场不依赖链节点 RPC，继�
 ### 8.2 最终性
 - 最终性使用 GRANDPA。
 - GRANDPA 最终性密钥治理能力由治理模块承接，而不是硬编码在 UI 或脚本层。
+- GRANDPA 正常更换由目标 NRC/PRC 的单个委员按 `CID + 委员岗位码 + account_id`
+  授权，并由旧、新 GRANDPA 私钥共同签名，不进入投票；旧私钥丢失时才由目标机构
+  自己的委员内部投票紧急恢复，NRC 为 `13/19`、每个 PRC 为 `6/9`，不是联合投票。
+- 两条更换路径都延迟生效。节点在提交前同时保存旧、新私钥；只有 finalized 状态
+  确认新 authority 已生效且旧 authority 已移除后，才自动删除旧私钥。
 - 最终性是否推进取决于 GRANDPA authority 是否按当前链配置正确上线并参与投票。
 - 节点刚安装完成时默认是普通同步节点；只有在本地导入 GRANDPA 私钥且该公钥匹配当前 authority set 后，节点才会切换为 GRANDPA 节点。
 - 所有节点统一注册 GRANDPA 网络协议并挂载 warp proof provider；只有本地持有且匹配当前 authority set 私钥的节点启动 `grandpa-voter` 参与最终性投票。
@@ -279,7 +284,13 @@ CitizenApp P2P 暂时不可用时，聊天和广场不依赖链节点 RPC，继�
 - `citizenchain-ci.yml` 的 push 与 `mode=ci` 只做桌面端打包检查和本次 run artifact 上传，不读取 Tauri updater 签名私钥、不发布 GitHub Release、不部署服务器。
 - 根 `citizenconsole/` 控制台选择“正式 Release”时以 `mode=release` 自动触发 updater 签名、`citizenchain-latest.json` 和 GitHub Release。“部署服务器”是与本地工作区、当前 HEAD 和 Release 解耦的独立生产入口：从 `institution-catalog.json` 选择节点后，只消费 GitHub `main` 最新成功 CitizenChain CI 的 Linux amd artifact；目标服务器使用 GitHub 短期签名地址直接下载，本机只传服务配置和节点密钥，不下载或转传安装包。
 - 每个权威节点的服务器 IP、节点身份 Ed25519 私钥和 GRANDPA 验证私钥按 `node-01` 至 `node-44` 隔离保存在 macOS Keychain。由部署控制台管理的服务器统一使用 `deploy` SSH 身份，私钥复制到对应节点 Keychain 项但不得保留 `.ssh` 明文文件，本机只保留 `deploy.pub`；网页只返回 IP、公开 PeerId、公开 GRANDPA 公钥和“已配置/缺失”状态，且 SSH 项只有完整私钥才算已配置。保存、更换与部署均逐次要求 Touch ID。
-- 节点私钥保存前必须从私钥推导公开身份，并分别与 `institution-catalog.json` 的 PeerId 和 GRANDPA 公钥精确匹配；不匹配时禁止写入。部署时只把选中节点的密钥写入权限为 `0600` 的节点身份文件和 `gran` keystore，清理远端临时文件，并真实检查 systemd、冻结块 0 哈希、RPC health、Authority/Validator 角色和本节点 PeerId。
+- 初始部署的节点私钥保存前必须从私钥推导公开身份，并分别与
+  `institution-catalog.json` 的 PeerId 和创世 GRANDPA 公钥精确匹配；不匹配时禁止写入。
+  链运行后的 GRANDPA 更换公钥不写回不可变的创世清单，而是按目标机构 CID 和
+  finalized authority set 校验。更换期间 `gran` keystore 同时保留旧、新私钥，
+  finalized 确认切换后才删除旧私钥。部署时只把选中节点的密钥写入权限为 `0600`
+  的节点身份文件和 `gran` keystore，清理远端临时文件，并真实检查 systemd、冻结块
+  0 哈希、RPC health、Authority/Validator 角色和本节点 PeerId。
 - CitizenChain workflow 不得恢复系统专属 SSH secret 或复用移动端签名 secret。
 
 ### 11.4 特殊情况

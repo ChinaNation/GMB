@@ -8,6 +8,7 @@ import { CreateMultisigTransferPage } from '../transaction/multisig/CreatePropos
 import { SafetyFundProposalPage } from '../transaction/multisig/SafetyFundProposalPage';
 import { SweepProposalPage } from '../transaction/multisig/SweepProposalPage';
 import { DeveloperUpgradePage, ProtocolUpgradeProposalPage } from './runtime-upgrade';
+import { GrandpaKeyChangePage } from './grandpa-key/GrandpaKeyChangePage';
 import type { AdminSignerMatch } from './types';
 
 // 国家储委会 cidNumber（全链唯一，直接进入详情）。
@@ -19,6 +20,7 @@ type NrcView =
   | { page: 'proposal-detail'; proposalId: number; adminSigners: AdminSignerMatch[]; cidNumber?: string }
   | { page: 'create-proposal'; orgType: number; cidFullName: string; institution_account_id: string; adminSigners: AdminSignerMatch[] }
   | { page: 'protocol-upgrade'; adminSigners: AdminSignerMatch[] }
+  | { page: 'grandpa-key'; adminSigners: AdminSignerMatch[] }
   | { page: 'developer-upgrade'; adminSigners: AdminSignerMatch[] }
   | { page: 'propose-safety-fund'; actorCidNumber: string; institution_account_id: string; adminSigners: AdminSignerMatch[] }
   | { page: 'propose-sweep'; actorCidNumber: string; institution_account_id: string; cidFullName: string; adminSigners: AdminSignerMatch[] };
@@ -65,6 +67,17 @@ export function NrcSection() {
   if (view.page === 'protocol-upgrade') {
     return (
       <ProtocolUpgradeProposalPage
+        actorCidNumber={NRC_CID_NUMBER}
+        adminSigners={view.adminSigners}
+        onBack={backToDetail}
+        onSuccess={backToDetail}
+      />
+    );
+  }
+
+  if (view.page === 'grandpa-key') {
+    return (
+      <GrandpaKeyChangePage
         actorCidNumber={NRC_CID_NUMBER}
         adminSigners={view.adminSigners}
         onBack={backToDetail}
@@ -123,6 +136,9 @@ export function NrcSection() {
       }
       onCreateProtocolUpgrade={(aw) =>
         setView({ page: 'protocol-upgrade', adminSigners: aw })
+      }
+      onChangeGrandpaKey={(aw) =>
+        setView({ page: 'grandpa-key', adminSigners: aw })
       }
       onCreateDeveloperUpgrade={(aw) =>
         setView({ page: 'developer-upgrade', adminSigners: aw })

@@ -309,20 +309,39 @@
     - execution_fee_payer_description
     - amount_yuan
 
-- action_key: propose_replace_grandpa_key
+- action_key: propose_emergency_grandpa_key_recovery
   action_code: 0x0f00
-  action_label_zh: 发起 GRANDPA 密钥更换
+  action_label_zh: 发起 GRANDPA 密钥紧急恢复
   kind: chain_call
   qr_kind: sign_request
   pallet: GrandpaKeyChange
-  call: propose_replace_grandpa_key
-  decoder: propose_replace_grandpa_key
+  call: propose_emergency_grandpa_key_recovery
+  decoder: propose_emergency_grandpa_key_recovery
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
-    - proposer_role_code
-    - new_key
+    - actor_role_code
+    - new_public_key
+    - proof_nonce
+    - proof_expires_at
+
+- action_key: schedule_grandpa_key_rotation
+  action_code: 0x0f01
+  action_label_zh: 正常更换 GRANDPA 密钥
+  kind: chain_call
+  qr_kind: sign_request
+  pallet: GrandpaKeyChange
+  call: schedule_grandpa_key_rotation
+  decoder: schedule_grandpa_key_rotation
+  hash_only_allowed: false
+  signing_category: chain_tx
+  required_fields:
+    - actor_cid_number
+    - actor_role_code
+    - new_public_key
+    - proof_nonce
+    - proof_expires_at
 
 - action_key: propose_close_public_institution
   action_code: 0x1e01

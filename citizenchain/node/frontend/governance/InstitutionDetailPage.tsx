@@ -21,6 +21,7 @@ type Props = {
   onSelectProposal?: (proposalId: number, adminSigners: AdminSignerMatch[], cidNumber: string) => void;
   onCreateProposal?: (cidNumber: string, orgType: number, cidFullName: string, institution_account_id: string, adminSigners: AdminSignerMatch[]) => void;
   onCreateProtocolUpgrade?: (adminSigners: AdminSignerMatch[]) => void;
+  onChangeGrandpaKey?: (adminSigners: AdminSignerMatch[]) => void;
   onCreateDeveloperUpgrade?: (adminSigners: AdminSignerMatch[]) => void;
   onCreateSafetyFund?: (cidNumber: string, institution_account_id: string, adminSigners: AdminSignerMatch[]) => void;
   onCreateSweep?: (cidNumber: string, institution_account_id: string, cidFullName: string, adminSigners: AdminSignerMatch[]) => void;
@@ -28,7 +29,7 @@ type Props = {
   hideBackButton?: boolean;
 };
 
-export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateProtocolUpgrade, onCreateDeveloperUpgrade, onCreateSafetyFund, onCreateSweep, hideBackButton }: Props) {
+export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateProtocolUpgrade, onChangeGrandpaKey, onCreateDeveloperUpgrade, onCreateSafetyFund, onCreateSweep, hideBackButton }: Props) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [proposals, setProposals] = useState<ProposalListItem[]>([]);
   const [proposalHasMore, setProposalHasMore] = useState(false);
@@ -47,6 +48,14 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
     account_id: a.account_id,
     account_label: '',
   }));
+  // GRANDPA 换钥必须同时满足本机构 CID、委员岗位码和管理员账户；前端只展示
+  // 当前机构委员任职账户，Runtime 仍执行同一授权的最终校验。
+  const committeeAccountIds = new Set(
+    (detail?.admins ?? [])
+      .filter((admin) => admin.assignments.some((assignment) => assignment.roleCode === 'COMMITTEE_MEMBER'))
+      .map((admin) => admin.account_id),
+  );
+  const grandpaAdminSigners = adminSigners.filter((admin) => committeeAccountIds.has(admin.account_id));
 
   useEffect(() => {
     setLoading(true);
@@ -282,7 +291,11 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
           {(detail.orgType === 0 || detail.orgType === 1) && (
             <>
               <button className="proposal-type-button" disabled title="即将上线">决议发行</button>
-              <button className="proposal-type-button" disabled title="即将上线">验证密钥</button>
+              <button
+                className="proposal-type-button"
+                disabled={grandpaAdminSigners.length === 0 || !onChangeGrandpaKey}
+                onClick={() => grandpaAdminSigners.length > 0 && onChangeGrandpaKey?.(grandpaAdminSigners)}
+              >验证密钥</button>
               <button
                 className="proposal-type-button"
                 disabled={!isAdmin || !onCreateProtocolUpgrade}

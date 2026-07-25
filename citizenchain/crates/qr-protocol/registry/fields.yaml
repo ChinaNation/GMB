@@ -69,8 +69,8 @@
   field_label_zh: 会员等级
 - field_key: new_domain
   field_label_zh: 新域名
-- field_key: new_key
-  field_label_zh: 新密钥
+- field_key: new_public_key
+  field_label_zh: 新公钥
 - field_key: new_port
   field_label_zh: 新端口
 - field_key: new_price_fen
@@ -81,6 +81,10 @@
   field_label_zh: 节点标识
 - field_key: proposal_id
   field_label_zh: 提案编号
+- field_key: proof_nonce
+  field_label_zh: 持钥证明序号
+- field_key: proof_expires_at
+  field_label_zh: 持钥证明过期区块
 - field_key: proposer_role_code
   field_label_zh: 提案发起岗位码
 - field_key: ticket_claim

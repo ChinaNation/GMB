@@ -35,6 +35,9 @@
 | `keystore_filename(prefix, public_key)` | 生成 keystore 文件名 |
 | `scan_keystore_files(dirs, prefix)` | 扫描匹配前缀的密钥文件 |
 | `write_key_to_keystore(dirs, prefix, public_key, content)` | 写入密钥并清理旧密钥 |
+| `write_key_to_keystore_preserving_others(dirs, prefix, public_key, content)` | 写入候选密钥并保留同类型旧密钥 |
+| `read_key_from_keystore(dirs, prefix, public_key)` | 读取指定公钥对应的密钥内容 |
+| `remove_key_from_keystore(dirs, prefix, public_key)` | 精确删除指定公钥对应的密钥 |
 | `remove_other_keys(dirs, prefix, keep)` | 移除同类型旧密钥 |
 | `has_key_in_keystore(dirs, prefix, public_key)` | 检查密钥是否存在 |
 
@@ -44,7 +47,9 @@
 - `app_data`、`chains`、`<chain-id>`、`keystore` 目录都会显式收口到 Unix `0700` 权限，不依赖进程 `umask`
 - 密钥文件在已打开的 keystore 目录句柄内以“临时文件 -> fsync -> renameat”原子写入，并显式收口到 Unix `0600` 权限
 - 扫描、存在性检查、删除旧 key 都基于已打开目录句柄和 `fstatat/unlinkat` 完成，符号链接与非常规文件会被跳过
-- 写入后自动清理同类型旧密钥，避免节点加载多把 authority key
+- 初始导入使用单密钥写入并清理同类型旧密钥
+- GRANDPA 更换使用保留式写入，确保延迟生效和 finalized 前旧、新私钥同时可用
+- finalized 确认切换后只精确删除旧公钥对应文件，不误删新密钥或其他 key type
 
 ## 调用方
 

@@ -87,6 +87,9 @@ pub fn run_desktop() {
             governance::runtime_upgrade::commands::submit_developer_upgrade,
             governance::runtime_upgrade::commands::build_propose_upgrade_request,
             governance::runtime_upgrade::commands::submit_propose_upgrade,
+            crate::core::grandpa_rotation::build_grandpa_key_change_request,
+            crate::core::grandpa_rotation::submit_grandpa_key_change,
+            crate::core::grandpa_rotation::get_grandpa_key_change_status,
             governance::submit_vote,
             governance::check_vote_status,
             crate::transaction::onchain::get_wallets,
@@ -119,6 +122,7 @@ pub fn run_desktop() {
             cleanup_on_startup(app.handle());
             // 同步守护只读本机 RPC，等待节点启动后再按本机状态自检。
             home::sync_guard::start_sync_guard(app.handle().clone());
+            crate::core::grandpa_rotation::start_monitor(app.handle().clone());
 
             // 自动启动节点。在后台线程跑，避免阻塞 setup 让窗口慢出现。
             // start_node_blocking 内部带 5s + 2s 等待，前端通过 get_node_status 轮询自然刷新。

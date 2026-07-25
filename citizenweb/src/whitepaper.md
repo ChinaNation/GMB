@@ -491,7 +491,7 @@ VOTING → PASSED → EXECUTED
 ### 5.3.3.GRANDPA 密钥更换<br><span class="whitepaper-heading-en">5.3.3. grandpakey-change</span>
 
 * 国家储委会、各省储委会通过内部投票更换各自的 GRANDPA 投票公钥。<br><span class="whitepaper-en">The National Reserve Committee and each Provincial Reserve Committee replace their respective GRANDPA voting public keys through internal voting.</span>
-* GRANDPA 密钥更换不提供独立投票入口；投票统一走内部投票模块，通过后由 grandpakey-change 调度 GRANDPA authority set 变更。<br><span class="whitepaper-en">GRANDPA key replacement provides no independent voting entry point. Voting uniformly goes through the internal-vote module, and after approval grandpakey-change schedules the GRANDPA authority-set change.</span>
+* GRANDPA 验证密钥正常更换由目标国家储委会或省储委会的单个委员岗位授权，旧、新私钥共同签名后延迟生效，不需要投票；旧私钥丢失时才由目标机构自己的委员内部投票紧急恢复，不是联合投票。节点在 finalized 状态确认新 authority 生效且旧 authority 移除后，才自动删除旧私钥。<br><span class="whitepaper-en">A routine GRANDPA authority-key rotation is authorized by one committee member of the target National or Provincial Reserve Committee, is co-signed by the old and new private keys, and activates after a delay without a vote. Only loss of the old key triggers emergency recovery by the target institution's own internal committee vote, never a joint vote. The node deletes the old private key only after finalized state confirms that the new authority is active and the old authority has been removed.</span>
 * 如果执行时存在 pending change 或新密钥冲突，模块向投票引擎返回可重试失败或确定失败，由投票引擎统一维护 retry、取消和终态。<br><span class="whitepaper-en">If execution encounters a pending change or new-key conflict, the module returns retryable failure or fatal failure to the voting engine, which uniformly maintains retry, cancellation, and terminal state.</span>
 
 ## 5.4.管理员模组<br><span class="whitepaper-heading-en">5.4. admins</span>

@@ -7,6 +7,7 @@ pub(crate) mod chain_spec;
 pub(crate) mod cli;
 pub(crate) mod command;
 pub(crate) mod constitution;
+pub(crate) mod grandpa_rotation;
 pub(crate) mod node_guard;
 pub(crate) mod rpc;
 pub(crate) mod service;

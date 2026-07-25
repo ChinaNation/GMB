@@ -4801,6 +4801,7 @@ name = "grandpakey-change"
 version = "0.0.0"
 dependencies = [
  "curve25519-dalek",
+ "ed25519-dalek",
  "entity-primitives",
  "frame-benchmarking",
  "frame-support",
@@ -7812,6 +7813,7 @@ dependencies = [
  "frame-system-rpc-runtime-api",
  "fullnode-issuance",
  "futures 0.3.32",
+ "grandpakey-change",
  "hex",
  "hex-literal",
  "internal-vote",

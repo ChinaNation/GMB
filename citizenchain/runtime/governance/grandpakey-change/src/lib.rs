@@ -1,39 +1,40 @@
-//! # GRANDPA 密钥治理模块 (grandpakey-change)
+//! # GRANDPA 验证密钥治理模块
 //!
-//! 本模块将"机构 GRANDPA 公钥替换"包装成受治理约束的链上流程：
-//! - 仅国家储委会（NRC）与省储委会（PRC）可发起密钥替换提案。
-//! - 仅目标机构委员岗位有效任职人可发起和投票，恢复资格来自岗位选民快照。
-//! - 借助 `votingengine` 内部投票达成通过后，调用 `pallet-grandpa::schedule_change` 变更 authority set。
-//! - 新公钥必须通过 ed25519 有效性校验和 small-order 弱公钥拒绝。
+//! 本模块只管理 NRC/PRC 自有 GRANDPA authority 密钥，提供两条互斥路径：
+//! - 正常更换：目标机构单个委员按 `CID + 委员岗位码 + account_id` 授权，旧、新
+//!   GRANDPA 私钥对同一证明摘要签名后延迟生效，不进入投票。
+//! - 紧急恢复：旧私钥丢失或无法签名时，由目标机构自己的委员岗位发起并在本机构
+//!   内部投票；NRC、各 PRC 彼此独立，不组成联合投票，PRB 不拥有 GRANDPA authority。
 //!
-//! 投票通过后自动尝试执行；若因 GRANDPA pending change 暂时失败，可手动重试或取消。
+//! `pallet-grandpa` 真正切换 authority set 后，本模块才更新机构当前公钥映射并发出
+//! 生效事件。节点据此在 finalized 确认后删除旧私钥；生效前旧、新私钥必须同时保留。
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
+
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
-use curve25519_dalek::edwards::CompressedEdwardsY;
 use frame_support::{ensure, pallet_prelude::*, traits::StorageVersion, Blake2_128Concat};
 use frame_system::pallet_prelude::*;
 use primitives::cid::china::china_cb::CHINA_CB;
 use scale_info::TypeInfo;
-use sp_consensus_grandpa::AuthorityId as GrandpaAuthorityId;
-use sp_core::ed25519;
 use votingengine::{
-    types::{
-        AuthorizationSubject, BusinessActionId, CidNumber, InstitutionCode, RoleCode, RoleSubject,
-        VotePlanOf, VotingEngineKind, NRC, PRC,
-    },
+    types::{CidNumber, InstitutionCode, RoleCode, NRC, PRC},
     InternalVoteResultCallback, ProposalCancelDecision, ProposalExecutionOutcome,
     PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_PASSED,
 };
 
-/// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
 pub const MODULE_TAG: &[u8] = b"gra-key";
 
 pub use pallet::*;
+pub use proof::signing_digest as proof_signing_digest;
+pub use proof::{GrandpaKeyChangeKind, GrandpaKeyProofPayload};
+
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
+mod proof;
+mod recovery;
+mod rotation;
 pub mod weights;
 
 const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
@@ -41,15 +42,35 @@ const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 #[derive(
     Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
 )]
-/// 密钥替换提案动作，封装机构 CID、旧公钥和新公钥。
-pub struct GrandpaKeyReplacementAction {
+/// 紧急恢复内部投票绑定的业务动作；不保存私钥或重复保存签名。
+pub struct EmergencyGrandpaKeyRecoveryAction<AccountId, BlockNumber> {
     pub actor_cid_number: CidNumber,
-    pub old_key: [u8; 32],
-    pub new_key: [u8; 32],
+    pub actor_role_code: RoleCode,
+    pub initiator_account_id: AccountId,
+    pub old_public_key: [u8; 32],
+    pub new_public_key: [u8; 32],
+    pub proof_nonce: u64,
+    pub proof_expires_at: BlockNumber,
 }
 
-/// 判断机构属于 NRC 还是 PRC，不属于任何一类则返回 None。
-/// PRB（省储行）不参与 GRANDPA 共识出块，故不纳入密钥治理范围。
+#[derive(
+    Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
+)]
+/// 已由 `pallet-grandpa` 接受调度、等待 authority set 实际生效的变更。
+pub struct PendingGrandpaKeyChangeState<AccountId, BlockNumber> {
+    pub actor_cid_number: CidNumber,
+    pub initiator_account_id: AccountId,
+    pub old_public_key: [u8; 32],
+    pub new_public_key: [u8; 32],
+    pub proof_nonce: u64,
+    pub change_kind: GrandpaKeyChangeKind,
+    pub proposal_id: Option<u64>,
+    pub expected_set_id: u64,
+    pub scheduled_at: BlockNumber,
+    pub activate_at: BlockNumber,
+}
+
+/// 只允许 NRC 与 PRC 使用本模块；PRB 没有 GRANDPA authority。
 fn cid_org(actor_cid_number: &[u8]) -> Option<InstitutionCode> {
     let actor_text = core::str::from_utf8(actor_cid_number).ok()?;
     match votingengine::types::institution_code_from_cid_number(actor_text)? {
@@ -59,10 +80,12 @@ fn cid_org(actor_cid_number: &[u8]) -> Option<InstitutionCode> {
     }
 }
 
+// 两条外部调用的参数数量由固定 SCALE 协议决定；不得把签名或证明字段藏入不透明字节。
+#[allow(clippy::too_many_arguments)]
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
-    use crate::weights::WeightInfo;
+    use crate::{proof, weights::WeightInfo};
     use sp_std::vec::Vec;
     use votingengine::InternalVoteEngine;
 
@@ -74,10 +97,10 @@ pub mod pallet {
         #[pallet::constant]
         type GrandpaChangeDelay: Get<BlockNumberFor<Self>>;
 
-        /// 内部投票引擎（返回真实 proposal_id，避免猜测 next_proposal_id）。
+        /// 紧急恢复只调用现有内部投票引擎创建提案，不在业务模块复制投票流程。
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
-        /// 机构岗位业务授权真源。
+        /// `CID + 岗位码 + account_id` 机构岗位授权唯一真源。
         type InstitutionRoleAuthorization: entity_primitives::InstitutionRoleAuthorizationQuery<
             Self::AccountId,
         >;
@@ -89,17 +112,41 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
-    /// 机构当前 GRANDPA 公钥，治理认可的目标 key（真正生效由 pallet-grandpa delay 控制）。
+    /// 各机构最后一次已经实际生效的 GRANDPA 公钥。
     #[pallet::storage]
     #[pallet::getter(fn current_grandpa_key)]
     pub type CurrentGrandpaKeys<T: Config> =
         StorageMap<_, Blake2_128Concat, CidNumber, [u8; 32], OptionQuery>;
 
-    /// 公钥到机构的反向索引，O(1) 判断 new_key 是否已被其他机构占用。
+    /// 已生效公钥到机构 CID 的唯一反向索引。
     #[pallet::storage]
     #[pallet::getter(fn key_owner)]
     pub type GrandpaKeyOwnerByKey<T: Config> =
         StorageMap<_, Blake2_128Concat, [u8; 32], CidNumber, OptionQuery>;
+
+    /// 正在投票或等待生效的新公钥占用，防止并发提案复用同一公钥。
+    #[pallet::storage]
+    #[pallet::getter(fn reserved_key_owner)]
+    pub type ReservedGrandpaKeys<T: Config> =
+        StorageMap<_, Blake2_128Concat, [u8; 32], CidNumber, OptionQuery>;
+
+    /// 每个机构下一份持钥证明必须使用的 nonce。
+    #[pallet::storage]
+    #[pallet::getter(fn next_proof_nonce)]
+    pub type NextGrandpaKeyProofNonce<T: Config> =
+        StorageMap<_, Blake2_128Concat, CidNumber, u64, ValueQuery>;
+
+    /// 每个机构尚未终态的紧急恢复提案；正常更换不能越过它。
+    #[pallet::storage]
+    #[pallet::getter(fn active_emergency_recovery)]
+    pub type ActiveEmergencyRecoveryByInstitution<T: Config> =
+        StorageMap<_, Blake2_128Concat, CidNumber, u64, OptionQuery>;
+
+    /// 全链唯一的已调度 GRANDPA 变更，与 `pallet-grandpa` 单 pending 限制一致。
+    #[pallet::storage]
+    #[pallet::getter(fn pending_grandpa_key_change)]
+    pub type PendingGrandpaKeyChange<T: Config> =
+        StorageValue<_, PendingGrandpaKeyChangeState<T::AccountId, BlockNumberFor<T>>, OptionQuery>;
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
@@ -117,7 +164,6 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
-            // 初始 GRANDPA 公钥与 CHINA_CB 的机构 CID 一一对应（1 国家储委会 + 43 省储委会）。
             for node in CHINA_CB.iter() {
                 let actor_cid_number: CidNumber = node
                     .cid_number
@@ -135,35 +181,61 @@ pub mod pallet {
         }
     }
 
+    #[pallet::hooks]
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn on_initialize(_now: BlockNumberFor<T>) -> Weight {
+            if Self::reconcile_pending_change() {
+                T::DbWeight::get().reads_writes(7, 5)
+            } else {
+                T::DbWeight::get().reads(4)
+            }
+        }
+    }
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// 已发起 GRANDPA 密钥替换提案（并已在投票引擎创建内部提案）
-        GrandpaKeyReplacementProposed {
+        /// 已创建目标机构自己的委员内部投票紧急恢复提案。
+        EmergencyRecoveryProposed {
             proposal_id: u64,
             institution_code: InstitutionCode,
             actor_cid_number: CidNumber,
-            proposer: T::AccountId,
-            old_key: [u8; 32],
-            new_key: [u8; 32],
+            initiator_account_id: T::AccountId,
+            old_public_key: [u8; 32],
+            new_public_key: [u8; 32],
+            proof_nonce: u64,
         },
-        /// GRANDPA 密钥替换提案已提交一票
-        GrandpaKeyVoteSubmitted {
-            proposal_id: u64,
-            who: T::AccountId,
-            approve: bool,
+        /// 正常更换已通过双密钥证明并调度延迟生效。
+        RoutineRotationScheduled {
+            actor_cid_number: CidNumber,
+            initiator_account_id: T::AccountId,
+            old_public_key: [u8; 32],
+            new_public_key: [u8; 32],
+            proof_nonce: u64,
+            expected_set_id: u64,
+            activate_at: BlockNumberFor<T>,
         },
-        /// 提案达到通过状态但自动执行失败（投票不回滚）
-        GrandpaKeyExecutionFailed { proposal_id: u64 },
-        /// GRANDPA 密钥替换已完成并已调度 GRANDPA authority set 变更
-        GrandpaKeyReplaced {
+        /// 紧急恢复内部投票通过，authority set 变更已调度。
+        EmergencyRecoveryScheduled {
             proposal_id: u64,
             actor_cid_number: CidNumber,
-            old_key: [u8; 32],
-            new_key: [u8; 32],
+            old_public_key: [u8; 32],
+            new_public_key: [u8; 32],
+            expected_set_id: u64,
+            activate_at: BlockNumberFor<T>,
         },
-        /// 已通过但不可执行的提案被取消
-        FailedProposalCancelled {
+        /// 新 authority 已在链上实际生效；节点可在该事件 finalized 后删除旧私钥。
+        GrandpaKeyActivated {
+            actor_cid_number: CidNumber,
+            old_public_key: [u8; 32],
+            new_public_key: [u8; 32],
+            change_kind: GrandpaKeyChangeKind,
+            expected_set_id: u64,
+        },
+        /// 紧急恢复提案已通过，但调度暂时失败，可由投票引擎重试。
+        EmergencyRecoveryExecutionFailed { proposal_id: u64 },
+        /// 被否决或确定不可执行的紧急恢复已释放公钥占用。
+        EmergencyRecoveryClosed {
             proposal_id: u64,
             actor_cid_number: CidNumber,
         },
@@ -171,187 +243,284 @@ pub mod pallet {
 
     #[pallet::error]
     pub enum Error<T> {
-        /// 机构不属于 NRC 或 PRC。
         InvalidInstitution,
-        /// 调用者没有目标委员岗位有效任职或对应业务权限。
         UnauthorizedAdmin,
-        /// 提案动作数据未找到或解码失败。
         ProposalActionNotFound,
-        /// 提案未达到通过状态，不可执行。
         ProposalNotPassed,
-        /// 机构当前 GRANDPA 公钥未找到（创世未初始化）。
         CurrentGrandpaKeyNotFound,
-        /// 新公钥不能为全零值。
         NewKeyIsZero,
-        /// 新公钥不是有效的 ed25519 曲线点，或为 small-order 弱公钥。
         InvalidEd25519Key,
-        /// 新公钥与当前公钥相同，无需替换。
         NewKeyUnchanged,
-        /// 新公钥已被其他机构占用或替换后 authority set 中出现重复。
         NewKeyAlreadyUsed,
-        /// 提案绑定的旧公钥已不在当前 GRANDPA authority set 中。
+        NewKeyAlreadyReserved,
         OldAuthorityNotFound,
-        /// 当前已有待生效的 GRANDPA authority set 变更，需等待其完成。
         GrandpaChangePending,
-        /// 提案仍可执行，不允许误取消。
+        EmergencyRecoveryAlreadyActive,
+        EmergencyRecoveryNotActive,
+        InvalidProofNonce,
+        ProofExpired,
+        InvalidOldKeySignature,
+        InvalidNewKeySignature,
+        ProofNonceOverflow,
+        SetIdOverflow,
         ProposalStillExecutable,
     }
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// 发起“GRANDPA 密钥替换”内部投票提案（仅支持国家储委会/省储委会）。
+        /// 旧私钥不可用时，由目标机构委员发起本机构内部投票恢复。
         #[pallet::call_index(0)]
-        #[pallet::weight(<T as Config>::WeightInfo::propose_replace_grandpa_key())]
-        pub fn propose_replace_grandpa_key(
+        #[pallet::weight(<T as Config>::WeightInfo::propose_emergency_grandpa_key_recovery())]
+        pub fn propose_emergency_grandpa_key_recovery(
             origin: OriginFor<T>,
             actor_cid_number: CidNumber,
-            proposer_role_code: RoleCode,
-            new_key: [u8; 32],
+            actor_role_code: RoleCode,
+            new_public_key: [u8; 32],
+            proof_nonce: u64,
+            proof_expires_at: BlockNumberFor<T>,
+            new_public_key_signature: [u8; 64],
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-
-            ensure!(new_key != [0u8; 32], Error::<T>::NewKeyIsZero);
-            let point = CompressedEdwardsY(new_key)
-                .decompress()
-                .ok_or(Error::<T>::InvalidEd25519Key)?;
-            // 仅”能解压”为曲线点还不够，small-order 弱公钥可能导致 GRANDPA 签名安全性失真。
-            ensure!(!point.is_small_order(), Error::<T>::InvalidEd25519Key);
-
-            let actual_org =
+            let institution_code =
                 cid_org(actor_cid_number.as_slice()).ok_or(Error::<T>::InvalidInstitution)?;
-            let old_key = CurrentGrandpaKeys::<T>::get(actor_cid_number.clone())
-                .ok_or(Error::<T>::CurrentGrandpaKeyNotFound)?;
-            ensure!(new_key != old_key, Error::<T>::NewKeyUnchanged);
             ensure!(
-                !Self::is_key_used_by_other_institution(&actor_cid_number, &new_key),
-                Error::<T>::NewKeyAlreadyUsed
+                ActiveEmergencyRecoveryByInstitution::<T>::get(actor_cid_number.clone()).is_none(),
+                Error::<T>::EmergencyRecoveryAlreadyActive
+            );
+            Self::ensure_proof_window(&actor_cid_number, proof_nonce, proof_expires_at)?;
+            let (old_public_key, _) =
+                Self::current_key_and_next_authorities(&actor_cid_number, new_public_key, false)?;
+
+            let proof_payload = proof::payload::<T>(
+                actor_cid_number.clone(),
+                actor_role_code.clone(),
+                who.clone(),
+                old_public_key,
+                new_public_key,
+                proof_nonce,
+                proof_expires_at,
+                GrandpaKeyChangeKind::EmergencyRecovery,
+            );
+            ensure!(
+                proof::verify_signature(new_public_key, new_public_key_signature, &proof_payload),
+                Error::<T>::InvalidNewKeySignature
             );
 
-            let action = GrandpaKeyReplacementAction {
+            let action = EmergencyGrandpaKeyRecoveryAction {
                 actor_cid_number: actor_cid_number.clone(),
-                old_key,
-                new_key,
+                actor_role_code: actor_role_code.clone(),
+                initiator_account_id: who.clone(),
+                old_public_key,
+                new_public_key,
+                proof_nonce,
+                proof_expires_at,
             };
-
-            let mut encoded = sp_std::vec::Vec::from(crate::MODULE_TAG);
-            encoded.extend_from_slice(&action.encode());
-            let vote_plan = Self::build_vote_plan(
+            let mut encoded_action = Vec::from(crate::MODULE_TAG);
+            encoded_action.extend_from_slice(&action.encode());
+            let vote_plan = Self::build_emergency_vote_plan(
                 &who,
                 actor_cid_number.as_slice(),
-                proposer_role_code.as_slice(),
-                &encoded,
+                actor_role_code.as_slice(),
+                &encoded_action,
             )?;
             let proposal_id = T::InternalVoteEngine::create_institution_proposal_with_data(
                 who.clone(),
-                actual_org,
+                institution_code,
                 actor_cid_number.to_vec(),
                 None,
                 Vec::from([actor_cid_number.to_vec()]),
                 vote_plan,
-                encoded,
+                encoded_action,
             )?;
 
-            Self::deposit_event(Event::<T>::GrandpaKeyReplacementProposed {
+            ActiveEmergencyRecoveryByInstitution::<T>::insert(
+                actor_cid_number.clone(),
                 proposal_id,
-                institution_code: actual_org,
+            );
+            ReservedGrandpaKeys::<T>::insert(new_public_key, actor_cid_number.clone());
+            Self::consume_proof_nonce(&actor_cid_number, proof_nonce)?;
+            Self::deposit_event(Event::<T>::EmergencyRecoveryProposed {
+                proposal_id,
+                institution_code,
                 actor_cid_number,
-                proposer: who,
-                old_key,
-                new_key,
+                initiator_account_id: who,
+                old_public_key,
+                new_public_key,
+                proof_nonce,
             });
             Ok(())
         }
 
-        // call_index = 1, 2 永久留空:重试/取消已通过提案统一到
-        // VotingEngine::retry_passed_proposal / VotingEngine::cancel_passed_proposal,
-        // 前端必须直接调用投票引擎入口,业务 pallet 不再保留 wrapper extrinsic。
+        /// 旧、新 GRANDPA 私钥都可用时，由目标机构单个委员直接调度正常更换。
+        #[pallet::call_index(1)]
+        #[pallet::weight(<T as Config>::WeightInfo::schedule_grandpa_key_rotation())]
+        pub fn schedule_grandpa_key_rotation(
+            origin: OriginFor<T>,
+            actor_cid_number: CidNumber,
+            actor_role_code: RoleCode,
+            new_public_key: [u8; 32],
+            proof_nonce: u64,
+            proof_expires_at: BlockNumberFor<T>,
+            old_public_key_signature: [u8; 64],
+            new_public_key_signature: [u8; 64],
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            cid_org(actor_cid_number.as_slice()).ok_or(Error::<T>::InvalidInstitution)?;
+            ensure!(
+                ActiveEmergencyRecoveryByInstitution::<T>::get(actor_cid_number.clone()).is_none(),
+                Error::<T>::EmergencyRecoveryAlreadyActive
+            );
+            Self::authorize_routine_rotation(
+                &who,
+                actor_cid_number.as_slice(),
+                actor_role_code.as_slice(),
+            )?;
+            Self::ensure_proof_window(&actor_cid_number, proof_nonce, proof_expires_at)?;
+            let (old_public_key, next_authorities) =
+                Self::current_key_and_next_authorities(&actor_cid_number, new_public_key, false)?;
+            let proof_payload = proof::payload::<T>(
+                actor_cid_number.clone(),
+                actor_role_code,
+                who.clone(),
+                old_public_key,
+                new_public_key,
+                proof_nonce,
+                proof_expires_at,
+                GrandpaKeyChangeKind::RoutineRotation,
+            );
+            ensure!(
+                proof::verify_signature(old_public_key, old_public_key_signature, &proof_payload),
+                Error::<T>::InvalidOldKeySignature
+            );
+            ensure!(
+                proof::verify_signature(new_public_key, new_public_key_signature, &proof_payload),
+                Error::<T>::InvalidNewKeySignature
+            );
+
+            let pending = Self::schedule_replacement(
+                actor_cid_number.clone(),
+                who.clone(),
+                old_public_key,
+                new_public_key,
+                proof_nonce,
+                GrandpaKeyChangeKind::RoutineRotation,
+                None,
+                next_authorities,
+            )?;
+            Self::consume_proof_nonce(&actor_cid_number, proof_nonce)?;
+            Self::deposit_event(Event::<T>::RoutineRotationScheduled {
+                actor_cid_number,
+                initiator_account_id: who,
+                old_public_key,
+                new_public_key,
+                proof_nonce,
+                expected_set_id: pending.expected_set_id,
+                activate_at: pending.activate_at,
+            });
+            Ok(())
+        }
     }
 
     impl<T: Config> Pallet<T> {
-        fn build_vote_plan(
-            who: &T::AccountId,
-            cid_number: &[u8],
-            proposer_role_code: &[u8],
-            encoded: &[u8],
-        ) -> Result<VotePlanOf<T::AccountId>, sp_runtime::DispatchError> {
-            use entity_primitives::{InstitutionRoleAuthorizationQuery, RolePermissionOperation};
+        fn ensure_proof_window(
+            actor_cid_number: &CidNumber,
+            proof_nonce: u64,
+            proof_expires_at: BlockNumberFor<T>,
+        ) -> Result<(), Error<T>> {
+            ensure!(
+                NextGrandpaKeyProofNonce::<T>::get(actor_cid_number.clone()) == proof_nonce,
+                Error::<T>::InvalidProofNonce
+            );
+            ensure!(
+                frame_system::Pallet::<T>::block_number() <= proof_expires_at,
+                Error::<T>::ProofExpired
+            );
+            ensure!(
+                proof_nonce.checked_add(1).is_some(),
+                Error::<T>::ProofNonceOverflow
+            );
+            Ok(())
+        }
 
-            let action_code = entity_primitives::business_action::ACTION_GRANDPA_KEY_CHANGE;
-            let action_id = BusinessActionId {
-                module_tag: crate::MODULE_TAG.to_vec(),
-                action_code,
+        fn consume_proof_nonce(
+            actor_cid_number: &CidNumber,
+            proof_nonce: u64,
+        ) -> Result<(), Error<T>> {
+            let next = proof_nonce
+                .checked_add(1)
+                .ok_or(Error::<T>::ProofNonceOverflow)?;
+            NextGrandpaKeyProofNonce::<T>::insert(actor_cid_number.clone(), next);
+            Ok(())
+        }
+
+        pub(crate) fn cleanup_recovery(
+            proposal_id: u64,
+            action: &EmergencyGrandpaKeyRecoveryAction<T::AccountId, BlockNumberFor<T>>,
+        ) {
+            if ActiveEmergencyRecoveryByInstitution::<T>::get(action.actor_cid_number.clone())
+                == Some(proposal_id)
+            {
+                ActiveEmergencyRecoveryByInstitution::<T>::remove(action.actor_cid_number.clone());
+            }
+            if ReservedGrandpaKeys::<T>::get(action.new_public_key)
+                == Some(action.actor_cid_number.clone())
+            {
+                ReservedGrandpaKeys::<T>::remove(action.new_public_key);
+            }
+        }
+
+        pub(crate) fn validate_emergency_action(
+            proposal_id: u64,
+            action: &EmergencyGrandpaKeyRecoveryAction<T::AccountId, BlockNumberFor<T>>,
+        ) -> Result<Vec<(sp_consensus_grandpa::AuthorityId, u64)>, Error<T>> {
+            ensure!(
+                ActiveEmergencyRecoveryByInstitution::<T>::get(action.actor_cid_number.clone())
+                    == Some(proposal_id),
+                Error::<T>::EmergencyRecoveryNotActive
+            );
+            ensure!(
+                ReservedGrandpaKeys::<T>::get(action.new_public_key)
+                    == Some(action.actor_cid_number.clone()),
+                Error::<T>::EmergencyRecoveryNotActive
+            );
+            let (current_public_key, next_authorities) = Self::current_key_and_next_authorities(
+                &action.actor_cid_number,
+                action.new_public_key,
+                true,
+            )?;
+            ensure!(
+                current_public_key == action.old_public_key,
+                Error::<T>::OldAuthorityNotFound
+            );
+            use entity_primitives::{InstitutionRoleAuthorizationQuery, RolePermissionOperation};
+            let subject = entity_primitives::RoleSubject {
+                cid_number: action.actor_cid_number.to_vec(),
+                role_code: action.actor_role_code.to_vec(),
             };
-            let proposer = entity_primitives::RoleSubject {
-                cid_number: cid_number.to_vec(),
-                role_code: proposer_role_code.to_vec(),
+            let action_id = entity_primitives::BusinessActionId {
+                module_tag: crate::MODULE_TAG.to_vec(),
+                action_code:
+                    entity_primitives::business_action::ACTION_GRANDPA_KEY_EMERGENCY_RECOVERY,
             };
             ensure!(
                 T::InstitutionRoleAuthorization::is_authorized(
-                    who,
-                    &proposer,
+                    &action.initiator_account_id,
+                    &subject,
                     &action_id,
                     RolePermissionOperation::Propose,
                 ),
                 Error::<T>::UnauthorizedAdmin
             );
-            let voter_subjects = T::InstitutionRoleAuthorization::role_subjects_with_permission(
-                cid_number,
-                &action_id,
-                RolePermissionOperation::Vote,
-            )
-            .into_iter()
-            .map(|role| {
-                Ok(AuthorizationSubject::Institution(RoleSubject {
-                    cid_number: CidNumber::try_from(role.cid_number)
-                        .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?,
-                    role_code: RoleCode::try_from(role.role_code)
-                        .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?,
-                }))
-            })
-            .collect::<Result<Vec<_>, sp_runtime::DispatchError>>()?;
-            let owner: frame_support::BoundedVec<
-                u8,
-                frame_support::traits::ConstU32<
-                    { entity_primitives::BUSINESS_MODULE_TAG_MAX_BYTES },
-                >,
-            > = crate::MODULE_TAG
-                .to_vec()
-                .try_into()
-                .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?;
-            VotePlanOf::<T::AccountId>::try_new(
-                BusinessActionId {
-                    module_tag: owner.clone(),
-                    action_code,
-                },
-                owner,
-                AuthorizationSubject::Institution(RoleSubject {
-                    cid_number: CidNumber::try_from(cid_number.to_vec())
-                        .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?,
-                    role_code: RoleCode::try_from(proposer_role_code.to_vec())
-                        .map_err(|_| votingengine::Error::<T>::InvalidVotePlan)?,
-                }),
-                voter_subjects,
-                VotingEngineKind::Internal,
-                sp_core::hashing::blake2_256(encoded),
-            )
-            .map_err(|_| votingengine::Error::<T>::InvalidVotePlan.into())
+            Ok(next_authorities)
         }
 
-        /// 检查 new_key 是否已被其他机构占用（通过反向索引 O(1) 判断）。
-        fn is_key_used_by_other_institution(actor_cid_number: &CidNumber, key: &[u8; 32]) -> bool {
-            GrandpaKeyOwnerByKey::<T>::get(*key)
-                .map(|owner| owner != *actor_cid_number)
-                .unwrap_or(false)
-        }
-
-        /// 尝试执行已通过的密钥替换提案，成功后调度 GRANDPA authority set 变更。
-        pub(crate) fn try_execute_from_action(
+        pub(crate) fn try_execute_emergency_action(
             proposal_id: u64,
-            action: GrandpaKeyReplacementAction,
+            action: EmergencyGrandpaKeyRecoveryAction<T::AccountId, BlockNumberFor<T>>,
         ) -> DispatchResult {
             let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
-            let actual_org = cid_org(action.actor_cid_number.as_slice())
+            let institution_code = cid_org(action.actor_cid_number.as_slice())
                 .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 votingengine::Pallet::<T>::is_callback_execution_scope(proposal_id)
@@ -359,7 +528,7 @@ pub mod pallet {
                     && proposal.kind == PROPOSAL_KIND_INTERNAL
                     && proposal.stage == STAGE_INTERNAL
                     && proposal.status == STATUS_PASSED
-                    && proposal.internal_code == Some(actual_org)
+                    && proposal.internal_code == Some(institution_code)
                     && proposal
                         .actor_cid_number
                         .as_ref()
@@ -369,80 +538,32 @@ pub mod pallet {
                 Error::<T>::ProposalNotPassed
             );
 
-            let next_authorities = Self::validate_action(&action)?;
-
-            pallet_grandpa::Pallet::<T>::schedule_change(
+            let next_authorities = Self::validate_emergency_action(proposal_id, &action)?;
+            let pending = Self::schedule_replacement(
+                action.actor_cid_number.clone(),
+                action.initiator_account_id,
+                action.old_public_key,
+                action.new_public_key,
+                action.proof_nonce,
+                GrandpaKeyChangeKind::EmergencyRecovery,
+                Some(proposal_id),
                 next_authorities,
-                T::GrandpaChangeDelay::get(),
-                None,
             )?;
-
-            // GRANDPA 接受调度后，链上“当前治理认可的目标 key”立即切到新值；
-            // 真正 authority set 生效仍由 pallet-grandpa 在 delay 结束时完成。
-            CurrentGrandpaKeys::<T>::insert(action.actor_cid_number.clone(), action.new_key);
-            GrandpaKeyOwnerByKey::<T>::remove(action.old_key);
-            GrandpaKeyOwnerByKey::<T>::insert(action.new_key, action.actor_cid_number.clone());
-
-            Self::deposit_event(Event::<T>::GrandpaKeyReplaced {
+            ActiveEmergencyRecoveryByInstitution::<T>::remove(action.actor_cid_number.clone());
+            Self::deposit_event(Event::<T>::EmergencyRecoveryScheduled {
                 proposal_id,
                 actor_cid_number: action.actor_cid_number,
-                old_key: action.old_key,
-                new_key: action.new_key,
+                old_public_key: action.old_public_key,
+                new_public_key: action.new_public_key,
+                expected_set_id: pending.expected_set_id,
+                activate_at: pending.activate_at,
             });
             Ok(())
-        }
-
-        /// 校验提案可执行性——无 pending change、旧 key 存在、替换后无重复。
-        pub(crate) fn validate_action(
-            action: &GrandpaKeyReplacementAction,
-        ) -> Result<Vec<(GrandpaAuthorityId, u64)>, Error<T>> {
-            ensure!(
-                pallet_grandpa::Pallet::<T>::pending_change().is_none(),
-                Error::<T>::GrandpaChangePending
-            );
-
-            let old_authority = GrandpaAuthorityId::from(ed25519::Public::from_raw(action.old_key));
-            let new_authority = GrandpaAuthorityId::from(ed25519::Public::from_raw(action.new_key));
-
-            let mut found = false;
-            // 仅替换目标机构对应的一把 key，其余 authority 与权重原样保留。
-            let next_authorities: Vec<(GrandpaAuthorityId, u64)> =
-                pallet_grandpa::Pallet::<T>::grandpa_authorities()
-                    .into_iter()
-                    .map(|(authority, weight)| {
-                        if authority == old_authority {
-                            found = true;
-                            (new_authority.clone(), weight)
-                        } else {
-                            (authority, weight)
-                        }
-                    })
-                    .collect();
-
-            ensure!(found, Error::<T>::OldAuthorityNotFound);
-            let mut uniq = sp_std::collections::btree_set::BTreeSet::new();
-            ensure!(
-                next_authorities
-                    .iter()
-                    .all(|(authority, _)| uniq.insert(authority.encode())),
-                Error::<T>::NewKeyAlreadyUsed
-            );
-
-            Ok(next_authorities)
         }
     }
 }
 
-// ──── 投票终态回调:把已通过的 GRANDPA 密钥替换提案落地到链上 ────
-//
-// 投票统一由投票引擎承担,提案通过(或否决)经
-// [`votingengine::InternalVoteResultCallback`] 广播回来。
-// 本 Executor 按 `MODULE_TAG` 前缀认领本模块的提案。
-//
-// 失败语义:自动执行失败(如 GRANDPA pending change 未清理)时发
-// `GrandpaKeyExecutionFailed` 事件,提案状态保留 PASSED,创建时岗位选民快照成员可以通过
-// `VotingEngine::retry_passed_proposal` 手动重试,或用
-// `VotingEngine::cancel_passed_proposal` 清理确定无法执行的提案。
+/// 紧急恢复内部投票终态回调；投票本身全部由 votingengine/internal-vote 负责。
 pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
 
 impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
@@ -459,35 +580,34 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
             }
             _ => return Ok(ProposalExecutionOutcome::Ignored),
         };
+        let action = EmergencyGrandpaKeyRecoveryAction::<T::AccountId, BlockNumberFor<T>>::decode(
+            &mut &raw[crate::MODULE_TAG.len()..],
+        )
+        .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+
         if !approved {
+            pallet::Pallet::<T>::cleanup_recovery(proposal_id, &action);
+            pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::EmergencyRecoveryClosed {
+                proposal_id,
+                actor_cid_number: action.actor_cid_number,
+            });
             return Ok(ProposalExecutionOutcome::Executed);
         }
-        let action = GrandpaKeyReplacementAction::decode(&mut &raw[crate::MODULE_TAG.len()..])
-            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
 
-        match pallet::Pallet::<T>::validate_action(&action) {
-            Err(pallet::Error::<T>::GrandpaChangePending) => {
-                pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::GrandpaKeyExecutionFailed {
-                    proposal_id,
-                });
-                return Ok(ProposalExecutionOutcome::RetryableFailed);
-            }
-            Err(_) => {
-                pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::GrandpaKeyExecutionFailed {
-                    proposal_id,
-                });
-                return Ok(ProposalExecutionOutcome::FatalFailed);
-            }
-            Ok(_) => {}
-        }
-
-        match pallet::Pallet::<T>::try_execute_from_action(proposal_id, action) {
+        match pallet::Pallet::<T>::try_execute_emergency_action(proposal_id, action.clone()) {
             Ok(()) => Ok(ProposalExecutionOutcome::Executed),
-            Err(_) => {
-                pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::GrandpaKeyExecutionFailed {
-                    proposal_id,
-                });
+            Err(error) if error == pallet::Error::<T>::GrandpaChangePending.into() => {
+                pallet::Pallet::<T>::deposit_event(
+                    pallet::Event::<T>::EmergencyRecoveryExecutionFailed { proposal_id },
+                );
                 Ok(ProposalExecutionOutcome::RetryableFailed)
+            }
+            Err(_) => {
+                pallet::Pallet::<T>::cleanup_recovery(proposal_id, &action);
+                pallet::Pallet::<T>::deposit_event(
+                    pallet::Event::<T>::EmergencyRecoveryExecutionFailed { proposal_id },
+                );
+                Ok(ProposalExecutionOutcome::FatalFailed)
             }
         }
     }
@@ -496,19 +616,26 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         proposal_id: u64,
     ) -> Result<ProposalCancelDecision, sp_runtime::DispatchError> {
         let raw = match votingengine::Pallet::<T>::get_proposal_data(proposal_id) {
-            Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
+            Some(raw)
+                if votingengine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG)
+                    && raw.starts_with(crate::MODULE_TAG) =>
+            {
+                raw
+            }
             _ => return Ok(ProposalCancelDecision::Ignored),
         };
-        let action = GrandpaKeyReplacementAction::decode(&mut &raw[crate::MODULE_TAG.len()..])
-            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
-        // 只允许取消确定不可执行的 GRANDPA 替换；pending change 属于可恢复失败。
-        match pallet::Pallet::<T>::validate_action(&action) {
+        let action = EmergencyGrandpaKeyRecoveryAction::<T::AccountId, BlockNumberFor<T>>::decode(
+            &mut &raw[crate::MODULE_TAG.len()..],
+        )
+        .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+        match pallet::Pallet::<T>::validate_emergency_action(proposal_id, &action) {
             Ok(_) => Err(pallet::Error::<T>::ProposalStillExecutable.into()),
             Err(pallet::Error::<T>::GrandpaChangePending) => {
                 Err(pallet::Error::<T>::GrandpaChangePending.into())
             }
             Err(_) => {
-                pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::FailedProposalCancelled {
+                pallet::Pallet::<T>::cleanup_recovery(proposal_id, &action);
+                pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::EmergencyRecoveryClosed {
                     proposal_id,
                     actor_cid_number: action.actor_cid_number,
                 });

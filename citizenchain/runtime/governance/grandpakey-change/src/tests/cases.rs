@@ -2,15 +2,96 @@
 
 use super::*;
 
+const PROOF_EXPIRES_AT: u64 = 20;
+
+fn proof_payload(
+    node_index: usize,
+    who: AccountId32,
+    new_public_key: [u8; 32],
+    proof_nonce: u64,
+    change_kind: GrandpaKeyChangeKind,
+) -> GrandpaKeyProofPayload<AccountId32, u64, sp_core::H256> {
+    crate::proof::payload::<Test>(
+        cb_cid(node_index),
+        committee_role(),
+        who,
+        CurrentGrandpaKeys::<Test>::get(cb_cid(node_index)).expect("test key exists"),
+        new_public_key,
+        proof_nonce,
+        PROOF_EXPIRES_AT,
+        change_kind,
+    )
+}
+
+fn sign_proof(
+    pair: &ed25519::Pair,
+    payload: &GrandpaKeyProofPayload<AccountId32, u64, sp_core::H256>,
+) -> [u8; 64] {
+    pair.sign(&crate::proof::signing_digest(payload)).0
+}
+
+fn propose_emergency(
+    node_index: usize,
+    proposer_index: usize,
+    new_pair: &ed25519::Pair,
+) -> DispatchResult {
+    let who = cb_admin(node_index, proposer_index);
+    let payload = proof_payload(
+        node_index,
+        who.clone(),
+        new_pair.public().0,
+        0,
+        GrandpaKeyChangeKind::EmergencyRecovery,
+    );
+    GrandpaKeyChange::propose_emergency_grandpa_key_recovery(
+        RuntimeOrigin::signed(who),
+        cb_cid(node_index),
+        committee_role(),
+        new_pair.public().0,
+        0,
+        PROOF_EXPIRES_AT,
+        sign_proof(new_pair, &payload),
+    )
+}
+
+fn schedule_routine(
+    node_index: usize,
+    proposer_index: usize,
+    new_pair: &ed25519::Pair,
+    proof_nonce: u64,
+) -> DispatchResult {
+    let who = cb_admin(node_index, proposer_index);
+    let payload = proof_payload(
+        node_index,
+        who.clone(),
+        new_pair.public().0,
+        proof_nonce,
+        GrandpaKeyChangeKind::RoutineRotation,
+    );
+    GrandpaKeyChange::schedule_grandpa_key_rotation(
+        RuntimeOrigin::signed(who),
+        cb_cid(node_index),
+        committee_role(),
+        new_pair.public().0,
+        proof_nonce,
+        PROOF_EXPIRES_AT,
+        sign_proof(&grandpa_pair(node_index), &payload),
+        sign_proof(new_pair, &payload),
+    )
+}
+
 #[test]
-fn weak_small_order_new_key_is_rejected() {
+fn weak_small_order_new_key_is_rejected_before_signature_check() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            GrandpaKeyChange::propose_replace_grandpa_key(
+            GrandpaKeyChange::propose_emergency_grandpa_key_recovery(
                 RuntimeOrigin::signed(prc_admin(0)),
                 prc_cid(),
                 committee_role(),
-                identity_public_key()
+                identity_public_key(),
+                0,
+                PROOF_EXPIRES_AT,
+                [0u8; 64],
             ),
             Error::<Test>::InvalidEd25519Key
         );
@@ -18,435 +99,238 @@ fn weak_small_order_new_key_is_rejected() {
 }
 
 #[test]
-fn passed_proposal_executes_and_cleans_up_state() {
+fn emergency_recovery_is_only_the_target_institutions_internal_vote() {
     new_test_ext().execute_with(|| {
-        let actor_cid_number = prc_cid();
-        let old_key = CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone())
-            .expect("actor_cid_number should have an initial key");
-        let new_key = valid_public_key(31);
+        let new_pair = key_pair(31);
+        assert_ok!(propose_emergency(1, 0, &new_pair));
+        let proposal_id = last_proposal_id();
+        let proposal = VotingEngine::proposals(proposal_id).expect("proposal exists");
+        let plan = VotingEngine::proposal_vote_plan(proposal_id).expect("vote plan exists");
 
-        assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
-            RuntimeOrigin::signed(prc_admin(0)),
-            actor_cid_number.clone(),
-            committee_role(),
-            new_key,
+        assert_eq!(proposal.kind, PROPOSAL_KIND_INTERNAL);
+        assert_eq!(proposal.internal_code, Some(PRC));
+        assert_eq!(proposal.actor_cid_number, Some(prc_cid()));
+        assert_eq!(plan.voting_engine, VotingEngineKind::Internal);
+        assert_eq!(plan.voter_subjects.len(), 1);
+        assert!(matches!(
+            &plan.voter_subjects[0],
+            AuthorizationSubject::Institution(subject)
+                if subject.cid_number == prc_cid() && subject.role_code == committee_role()
         ));
-        let pid = last_proposal_id();
-
-        pass_prc_proposal(1, pid);
-
-        let pending_change = Grandpa::pending_change().expect("change should be scheduled");
-        assert_eq!(pending_change.scheduled_at, 1);
-        assert_eq!(pending_change.delay, GrandpaChangeDelay::get());
-        assert!(pending_change
-            .next_authorities
-            .iter()
-            .any(|(authority, _)| *authority == authority_id_from_key(new_key)));
-
-        assert_eq!(
-            CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone()),
-            Some(new_key)
-        );
-        assert!(GrandpaKeyOwnerByKey::<Test>::get(old_key).is_none());
-        assert_eq!(
-            GrandpaKeyOwnerByKey::<Test>::get(new_key),
-            Some(actor_cid_number.clone())
-        );
-        assert!(System::events().iter().any(|record| {
-            matches!(
-                &record.event,
-                RuntimeEvent::GrandpaKeyChange(Event::<Test>::GrandpaKeyReplaced {
-                    proposal_id,
-                    actor_cid_number: inst,
-                    old_key: replaced_old_key,
-                    new_key: replaced_new_key,
-                }) if *proposal_id == pid
-                    && *inst == actor_cid_number
-                    && *replaced_old_key == old_key
-                    && *replaced_new_key == new_key
-            )
-        }));
+        assert!(Grandpa::pending_change().is_none());
     });
 }
 
 #[test]
-fn passed_proposal_can_be_manually_executed_after_pending_change_clears() {
+fn emergency_recovery_schedules_after_internal_threshold_and_updates_only_after_activation() {
     new_test_ext().execute_with(|| {
         let actor_cid_number = prc_cid();
-        let old_key = CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone())
-            .expect("actor_cid_number should have an initial key");
-        let new_key = valid_public_key(41);
+        let old_public_key =
+            CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone()).expect("old key exists");
+        let new_pair = key_pair(32);
+        let new_public_key = new_pair.public().0;
 
-        assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
-            RuntimeOrigin::signed(prc_admin(0)),
-            actor_cid_number.clone(),
-            committee_role(),
-            new_key,
-        ));
-        let pid = last_proposal_id();
-        assert_ok!(Grandpa::schedule_change(
-            grandpa_authorities(),
-            GrandpaChangeDelay::get(),
-            None,
-        ));
+        assert_ok!(propose_emergency(1, 0, &new_pair));
+        let proposal_id = last_proposal_id();
+        pass_prc_proposal(1, proposal_id);
 
-        pass_prc_proposal(1, pid);
-
-        assert_eq!(
-            votingengine::Pallet::<Test>::proposals(pid)
-                .expect("passed proposal should remain for retries")
-                .status,
-            STATUS_PASSED
-        );
-        assert_eq!(
-            CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone()),
-            Some(old_key)
-        );
-        assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
-        assert!(System::events().iter().any(|record| {
-            matches!(
-                &record.event,
-                RuntimeEvent::GrandpaKeyChange(Event::<Test>::GrandpaKeyExecutionFailed {
-                    proposal_id
-                }) if *proposal_id == pid
-            )
-        }));
-
-        finalize_grandpa_at(1 + GrandpaChangeDelay::get());
-        assert!(Grandpa::pending_change().is_none());
-
-        assert_ok!(VotingEngine::retry_passed_proposal(
-            RuntimeOrigin::signed(prc_admin(0)),
-            pid,
-        ));
-
-        assert_eq!(
-            CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone()),
-            Some(new_key)
-        );
-        assert!(GrandpaKeyOwnerByKey::<Test>::get(old_key).is_none());
-        assert_eq!(
-            GrandpaKeyOwnerByKey::<Test>::get(new_key),
-            Some(actor_cid_number.clone())
-        );
         assert!(Grandpa::pending_change().is_some());
-    });
-}
-
-#[test]
-fn votingengine_cancel_passed_proposal_cleans_up_passed_but_invalid_proposal() {
-    new_test_ext().execute_with(|| {
-        let actor_cid_number = prc_cid();
-        let old_key = CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone())
-            .expect("actor_cid_number should have an initial key");
-        let new_key = valid_public_key(51);
-        let replacement_authority = valid_public_key(52);
-
-        assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
-            RuntimeOrigin::signed(prc_admin(0)),
-            actor_cid_number.clone(),
-            committee_role(),
-            new_key,
-        ));
-        let pid = last_proposal_id();
-        assert_ok!(Grandpa::schedule_change(
-            vec![
-                (authority_id_from_key(CHINA_CB[0].grandpa_key), 1),
-                (authority_id_from_key(replacement_authority), 1),
-            ],
-            GrandpaChangeDelay::get(),
-            None,
-        ));
-
-        pass_prc_proposal(1, pid);
-
         assert_eq!(
-            votingengine::Pallet::<Test>::proposals(pid)
-                .expect("passed proposal should remain for cleanup")
-                .status,
-            STATUS_PASSED
+            CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone()),
+            Some(old_public_key)
         );
+        assert_eq!(
+            ReservedGrandpaKeys::<Test>::get(new_public_key),
+            Some(actor_cid_number.clone())
+        );
+
         finalize_grandpa_at(1 + GrandpaChangeDelay::get());
 
         assert_eq!(
             CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone()),
-            Some(old_key)
+            Some(new_public_key)
         );
+        assert!(GrandpaKeyOwnerByKey::<Test>::get(old_public_key).is_none());
         assert_eq!(
-            Grandpa::grandpa_authorities(),
-            vec![
-                (authority_id_from_key(CHINA_CB[0].grandpa_key), 1),
-                (authority_id_from_key(replacement_authority), 1),
-            ]
+            GrandpaKeyOwnerByKey::<Test>::get(new_public_key),
+            Some(actor_cid_number)
         );
-
-        assert_ok!(VotingEngine::cancel_passed_proposal(
-            RuntimeOrigin::signed(prc_admin(0)),
-            pid,
-            Default::default(),
-        ));
-        assert_eq!(
-            votingengine::Pallet::<Test>::proposals(pid)
-                .expect("cancelled proposal should remain until cleanup")
-                .status,
-            STATUS_EXECUTION_FAILED
-        );
-
-        assert!(System::events().iter().any(|record| {
-            matches!(
-                &record.event,
-                RuntimeEvent::GrandpaKeyChange(Event::<Test>::FailedProposalCancelled {
-                    proposal_id,
-                    actor_cid_number: inst,
-                }) if *proposal_id == pid && *inst == actor_cid_number
-            )
-        }));
+        assert!(PendingGrandpaKeyChange::<Test>::get().is_none());
+        assert!(ReservedGrandpaKeys::<Test>::get(new_public_key).is_none());
+        assert!(System::events().iter().any(|record| matches!(
+            &record.event,
+            RuntimeEvent::GrandpaKeyChange(Event::<Test>::GrandpaKeyActivated {
+                change_kind: GrandpaKeyChangeKind::EmergencyRecovery,
+                ..
+            })
+        )));
     });
 }
 
 #[test]
-fn votingengine_cancel_passed_proposal_rejects_temporarily_blocked_proposal() {
+fn rejected_emergency_recovery_releases_active_state_and_reserved_key() {
     new_test_ext().execute_with(|| {
-        let actor_cid_number = prc_cid();
-        let old_key = CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone())
-            .expect("actor_cid_number should have an initial key");
-        let new_key = valid_public_key(71);
+        let new_pair = key_pair(33);
+        assert_ok!(propose_emergency(1, 0, &new_pair));
+        let proposal_id = last_proposal_id();
 
-        assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
-            RuntimeOrigin::signed(prc_admin(0)),
-            actor_cid_number.clone(),
-            committee_role(),
-            new_key,
-        ));
-        let pid = last_proposal_id();
-        assert_ok!(Grandpa::schedule_change(
-            grandpa_authorities(),
-            GrandpaChangeDelay::get(),
-            None,
-        ));
+        // 发起人自动计入反对票之外，再补足足够反对票使提案终态否决。
+        for admin_index in 1..5 {
+            assert_ok!(cast_vote(cb_admin(1, admin_index), proposal_id, false));
+        }
+        <VotingEngine as Hooks<u64>>::on_initialize(System::block_number());
 
-        pass_prc_proposal(1, pid);
+        assert!(ActiveEmergencyRecoveryByInstitution::<Test>::get(prc_cid()).is_none());
+        assert!(ReservedGrandpaKeys::<Test>::get(new_pair.public().0).is_none());
+        assert!(Grandpa::pending_change().is_none());
+    });
+}
+
+#[test]
+fn routine_rotation_uses_call_one_without_creating_a_vote() {
+    new_test_ext().execute_with(|| {
+        let old_public_key = CurrentGrandpaKeys::<Test>::get(prc_cid()).expect("old key exists");
+        let new_pair = key_pair(34);
+        assert_ok!(schedule_routine(1, 0, &new_pair, 0));
+
+        assert_eq!(VotingEngine::next_proposal_id(), 0);
+        assert!(Grandpa::pending_change().is_some());
+        assert_eq!(
+            CurrentGrandpaKeys::<Test>::get(prc_cid()),
+            Some(old_public_key)
+        );
+        assert_eq!(NextGrandpaKeyProofNonce::<Test>::get(prc_cid()), 1);
+
+        finalize_grandpa_at(1 + GrandpaChangeDelay::get());
+        assert_eq!(
+            CurrentGrandpaKeys::<Test>::get(prc_cid()),
+            Some(new_pair.public().0)
+        );
+        assert!(System::events().iter().any(|record| matches!(
+            &record.event,
+            RuntimeEvent::GrandpaKeyChange(Event::<Test>::GrandpaKeyActivated {
+                change_kind: GrandpaKeyChangeKind::RoutineRotation,
+                ..
+            })
+        )));
+    });
+}
+
+#[test]
+fn routine_rotation_requires_both_old_and_new_private_key_signatures() {
+    new_test_ext().execute_with(|| {
+        let who = prc_admin(0);
+        let new_pair = key_pair(35);
+        let payload = proof_payload(
+            1,
+            who.clone(),
+            new_pair.public().0,
+            0,
+            GrandpaKeyChangeKind::RoutineRotation,
+        );
 
         assert_noop!(
-            VotingEngine::cancel_passed_proposal(
-                RuntimeOrigin::signed(prc_admin(0)),
-                pid,
-                Default::default(),
-            ),
-            Error::<Test>::GrandpaChangePending
-        );
-
-        assert_eq!(
-            CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone()),
-            Some(old_key)
-        );
-        assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
-        assert_eq!(
-            votingengine::Pallet::<Test>::proposals(pid)
-                .expect("passed proposal should remain active")
-                .status,
-            STATUS_PASSED
-        );
-    });
-}
-
-#[test]
-fn finalized_vote_fatal_fails_when_old_authority_disappeared() {
-    new_test_ext().execute_with(|| {
-        let actor_cid_number = prc_cid();
-        let old_key = CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone())
-            .expect("actor_cid_number should have an initial key");
-        let new_key = valid_public_key(72);
-        let replacement_authority = valid_public_key(73);
-
-        assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
-            RuntimeOrigin::signed(prc_admin(0)),
-            actor_cid_number.clone(),
-            committee_role(),
-            new_key,
-        ));
-        let pid = last_proposal_id();
-
-        // 模拟其他治理动作已经把提案绑定的旧 authority 替换掉。
-        assert_ok!(Grandpa::schedule_change(
-            vec![
-                (authority_id_from_key(CHINA_CB[0].grandpa_key), 1),
-                (authority_id_from_key(replacement_authority), 1),
-                (authority_id_from_key(CHINA_CB[2].grandpa_key), 1),
-            ],
-            GrandpaChangeDelay::get(),
-            None,
-        ));
-        finalize_grandpa_at(1 + GrandpaChangeDelay::get());
-        assert!(Grandpa::pending_change().is_none());
-
-        pass_prc_proposal(1, pid);
-
-        assert_eq!(
-            votingengine::Pallet::<Test>::proposals(pid)
-                .expect("fatal failed proposal should remain until cleanup")
-                .status,
-            STATUS_EXECUTION_FAILED
-        );
-        assert_eq!(
-            CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone()),
-            Some(old_key)
-        );
-        assert!(GrandpaKeyOwnerByKey::<Test>::get(new_key).is_none());
-        assert!(System::events().iter().any(|record| {
-            matches!(
-                &record.event,
-                RuntimeEvent::GrandpaKeyChange(Event::<Test>::GrandpaKeyExecutionFailed {
-                    proposal_id
-                }) if *proposal_id == pid
-            )
-        }));
-    });
-}
-
-#[test]
-fn finalized_vote_fatal_fails_when_new_key_collides_after_first_execution() {
-    new_test_ext().execute_with(|| {
-        let first_actor_cid_number = cb_cid(1);
-        let second_actor_cid_number = cb_cid(2);
-        let first_old_key = CurrentGrandpaKeys::<Test>::get(first_actor_cid_number.clone())
-            .expect("first actor_cid_number should have an initial key");
-        let second_old_key = CurrentGrandpaKeys::<Test>::get(second_actor_cid_number.clone())
-            .expect("second actor_cid_number should have an initial key");
-        let shared_new_key = valid_public_key(74);
-
-        assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
-            RuntimeOrigin::signed(cb_admin(1, 0)),
-            first_actor_cid_number.clone(),
-            committee_role(),
-            shared_new_key,
-        ));
-        let first_pid = last_proposal_id();
-        assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
-            RuntimeOrigin::signed(cb_admin(2, 0)),
-            second_actor_cid_number.clone(),
-            committee_role(),
-            shared_new_key,
-        ));
-        let second_pid = last_proposal_id();
-
-        pass_prc_proposal(1, first_pid);
-        assert_eq!(
-            CurrentGrandpaKeys::<Test>::get(first_actor_cid_number.clone()),
-            Some(shared_new_key)
-        );
-        assert_eq!(
-            GrandpaKeyOwnerByKey::<Test>::get(shared_new_key),
-            Some(first_actor_cid_number.clone())
-        );
-        finalize_grandpa_at(1 + GrandpaChangeDelay::get());
-        assert!(Grandpa::pending_change().is_none());
-
-        pass_prc_proposal(2, second_pid);
-
-        assert_eq!(
-            votingengine::Pallet::<Test>::proposals(second_pid)
-                .expect("colliding proposal should remain until cleanup")
-                .status,
-            STATUS_EXECUTION_FAILED
-        );
-        assert_eq!(
-            CurrentGrandpaKeys::<Test>::get(second_actor_cid_number.clone()),
-            Some(second_old_key)
-        );
-        assert_eq!(
-            GrandpaKeyOwnerByKey::<Test>::get(shared_new_key),
-            Some(first_actor_cid_number.clone())
-        );
-        assert!(GrandpaKeyOwnerByKey::<Test>::get(first_old_key).is_none());
-        assert!(System::events().iter().any(|record| {
-            matches!(
-                &record.event,
-                RuntimeEvent::GrandpaKeyChange(Event::<Test>::GrandpaKeyExecutionFailed {
-                    proposal_id
-                }) if *proposal_id == second_pid
-            )
-        }));
-    });
-}
-// 补充的错误路径和边界测试
-#[test]
-fn propose_rejects_zero_key() {
-    new_test_ext().execute_with(|| {
-        assert_noop!(
-            GrandpaKeyChange::propose_replace_grandpa_key(
-                RuntimeOrigin::signed(prc_admin(0)),
+            GrandpaKeyChange::schedule_grandpa_key_rotation(
+                RuntimeOrigin::signed(who.clone()),
                 prc_cid(),
                 committee_role(),
-                [0u8; 32],
+                new_pair.public().0,
+                0,
+                PROOF_EXPIRES_AT,
+                [0u8; 64],
+                sign_proof(&new_pair, &payload),
             ),
-            Error::<Test>::NewKeyIsZero
+            Error::<Test>::InvalidOldKeySignature
         );
-    });
-}
-
-#[test]
-fn propose_rejects_unchanged_key() {
-    new_test_ext().execute_with(|| {
-        let actor_cid_number = prc_cid();
-        let current_key = CurrentGrandpaKeys::<Test>::get(actor_cid_number.clone())
-            .expect("actor_cid_number should have key");
         assert_noop!(
-            GrandpaKeyChange::propose_replace_grandpa_key(
-                RuntimeOrigin::signed(prc_admin(0)),
-                actor_cid_number.clone(),
-                committee_role(),
-                current_key,
-            ),
-            Error::<Test>::NewKeyUnchanged
-        );
-    });
-}
-
-#[test]
-fn propose_rejects_key_owned_by_other_institution() {
-    new_test_ext().execute_with(|| {
-        // CHINA_CB[0] 是国家储委会的 key，用它作为省储委会的 new_key 应失败
-        let nrc_key = CHINA_CB[0].grandpa_key;
-        assert_noop!(
-            GrandpaKeyChange::propose_replace_grandpa_key(
-                RuntimeOrigin::signed(prc_admin(0)),
+            GrandpaKeyChange::schedule_grandpa_key_rotation(
+                RuntimeOrigin::signed(who),
                 prc_cid(),
                 committee_role(),
-                nrc_key,
+                new_pair.public().0,
+                0,
+                PROOF_EXPIRES_AT,
+                sign_proof(&grandpa_pair(1), &payload),
+                [0u8; 64],
             ),
-            Error::<Test>::NewKeyAlreadyUsed
+            Error::<Test>::InvalidNewKeySignature
         );
     });
 }
 
 #[test]
-fn propose_rejects_unauthorized_admin() {
+fn proof_nonce_and_expiry_prevent_replay() {
     new_test_ext().execute_with(|| {
-        // 使用一个不在 admins 中的随机账户
+        let new_pair = key_pair(36);
+        assert_ok!(schedule_routine(1, 0, &new_pair, 0));
+        finalize_grandpa_at(1 + GrandpaChangeDelay::get());
+
+        let second_pair = key_pair(37);
+        assert_noop!(
+            schedule_routine(1, 0, &second_pair, 0),
+            Error::<Test>::InvalidProofNonce
+        );
+
+        System::set_block_number(PROOF_EXPIRES_AT + 1);
+        let who = prc_admin(0);
+        let payload = proof_payload(
+            1,
+            who.clone(),
+            second_pair.public().0,
+            1,
+            GrandpaKeyChangeKind::EmergencyRecovery,
+        );
+        assert_noop!(
+            GrandpaKeyChange::propose_emergency_grandpa_key_recovery(
+                RuntimeOrigin::signed(who),
+                prc_cid(),
+                committee_role(),
+                second_pair.public().0,
+                1,
+                PROOF_EXPIRES_AT,
+                sign_proof(&second_pair, &payload),
+            ),
+            Error::<Test>::ProofExpired
+        );
+    });
+}
+
+#[test]
+fn routine_rotation_rejects_non_member_and_wrong_institution() {
+    new_test_ext().execute_with(|| {
+        let new_pair = key_pair(38);
         let outsider = AccountId32::new([99u8; 32]);
+        let payload = proof_payload(
+            1,
+            outsider.clone(),
+            new_pair.public().0,
+            0,
+            GrandpaKeyChangeKind::RoutineRotation,
+        );
         assert_noop!(
-            GrandpaKeyChange::propose_replace_grandpa_key(
+            GrandpaKeyChange::schedule_grandpa_key_rotation(
                 RuntimeOrigin::signed(outsider),
                 prc_cid(),
                 committee_role(),
-                valid_public_key(80),
+                new_pair.public().0,
+                0,
+                PROOF_EXPIRES_AT,
+                sign_proof(&grandpa_pair(1), &payload),
+                sign_proof(&new_pair, &payload),
             ),
             Error::<Test>::UnauthorizedAdmin
         );
-    });
-}
 
-#[test]
-fn propose_rejects_invalid_institution() {
-    new_test_ext().execute_with(|| {
-        let invalid_actor_cid_number: CidNumber = b"invalid-cid".to_vec().try_into().unwrap();
+        let invalid_cid: CidNumber = b"invalid-cid".to_vec().try_into().unwrap();
         assert_noop!(
-            GrandpaKeyChange::propose_replace_grandpa_key(
+            GrandpaKeyChange::propose_emergency_grandpa_key_recovery(
                 RuntimeOrigin::signed(prc_admin(0)),
-                invalid_actor_cid_number,
+                invalid_cid,
                 committee_role(),
-                valid_public_key(81),
+                new_pair.public().0,
+                0,
+                PROOF_EXPIRES_AT,
+                [0u8; 64],
             ),
             Error::<Test>::InvalidInstitution
         );
@@ -454,85 +338,114 @@ fn propose_rejects_invalid_institution() {
 }
 
 #[test]
-fn execute_rejects_non_passed_proposal() {
+fn emergency_recovery_blocks_routine_rotation_for_same_institution() {
     new_test_ext().execute_with(|| {
-        let actor_cid_number = prc_cid();
-        let new_key = valid_public_key(82);
-        assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
-            RuntimeOrigin::signed(prc_admin(0)),
-            actor_cid_number.clone(),
-            committee_role(),
-            new_key,
-        ));
-        let pid = last_proposal_id();
-        // 不投票，直接尝试执行
+        let recovery_pair = key_pair(39);
+        assert_ok!(propose_emergency(1, 0, &recovery_pair));
+
+        let routine_pair = key_pair(40);
         assert_noop!(
-            VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(prc_admin(0)), pid,),
-            votingengine::pallet::Error::<Test>::ProposalNotRetryable
+            schedule_routine(1, 0, &routine_pair, 1),
+            Error::<Test>::EmergencyRecoveryAlreadyActive
         );
     });
 }
 
 #[test]
-fn cancel_rejects_still_executable_proposal() {
+fn second_change_waits_until_the_first_authority_change_activates() {
     new_test_ext().execute_with(|| {
-        let actor_cid_number = prc_cid();
-        let new_key = valid_public_key(83);
+        let first_pair = key_pair(41);
+        assert_ok!(schedule_routine(1, 0, &first_pair, 0));
 
-        // 先制造 pending change 阻塞
+        let second_pair = key_pair(42);
+        assert_noop!(
+            schedule_routine(2, 0, &second_pair, 0),
+            Error::<Test>::GrandpaChangePending
+        );
+    });
+}
+
+#[test]
+fn key_owned_by_another_institution_cannot_be_reused() {
+    new_test_ext().execute_with(|| {
+        let who = prc_admin(0);
+        let other_key = grandpa_public_key(0);
+        assert_noop!(
+            GrandpaKeyChange::propose_emergency_grandpa_key_recovery(
+                RuntimeOrigin::signed(who),
+                prc_cid(),
+                committee_role(),
+                other_key,
+                0,
+                PROOF_EXPIRES_AT,
+                [0u8; 64],
+            ),
+            Error::<Test>::NewKeyAlreadyUsed
+        );
+    });
+}
+
+#[test]
+fn emergency_execution_remains_retryable_while_another_grandpa_change_is_pending() {
+    new_test_ext().execute_with(|| {
+        let new_pair = key_pair(43);
+        assert_ok!(propose_emergency(1, 0, &new_pair));
+        let proposal_id = last_proposal_id();
         assert_ok!(Grandpa::schedule_change(
             grandpa_authorities(),
             GrandpaChangeDelay::get(),
             None,
         ));
 
-        assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
-            RuntimeOrigin::signed(prc_admin(0)),
-            actor_cid_number.clone(),
-            committee_role(),
-            new_key,
-        ));
-        let pid = last_proposal_id();
-
-        // 投票通过，自动执行因 pending change 失败
-        pass_prc_proposal(1, pid);
-        assert!(System::events().iter().any(|r| matches!(
-            &r.event,
-            RuntimeEvent::GrandpaKeyChange(Event::<Test>::GrandpaKeyExecutionFailed { .. })
-        )));
-
-        // 清除 pending change
-        finalize_grandpa_at(1 + GrandpaChangeDelay::get());
-        assert!(Grandpa::pending_change().is_none());
-
-        // 提案仍可执行，不允许取消
-        assert_noop!(
-            VotingEngine::cancel_passed_proposal(
-                RuntimeOrigin::signed(prc_admin(0)),
-                pid,
-                Default::default(),
-            ),
-            Error::<Test>::ProposalStillExecutable
+        pass_prc_proposal(1, proposal_id);
+        assert_eq!(
+            VotingEngine::proposals(proposal_id)
+                .expect("proposal remains retryable")
+                .status,
+            STATUS_PASSED
         );
+        assert_eq!(
+            ReservedGrandpaKeys::<Test>::get(new_pair.public().0),
+            Some(prc_cid())
+        );
+
+        finalize_grandpa_at(1 + GrandpaChangeDelay::get());
+        assert_ok!(VotingEngine::retry_passed_proposal(
+            RuntimeOrigin::signed(prc_admin(0)),
+            proposal_id,
+        ));
+        assert!(Grandpa::pending_change().is_some());
     });
 }
 
 #[test]
-fn vote_rejects_unauthorized_admin() {
+fn non_active_catalog_key_cannot_be_rotated_or_recovered() {
     new_test_ext().execute_with(|| {
-        let actor_cid_number = prc_cid();
-        let new_key = valid_public_key(85);
-        assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
-            RuntimeOrigin::signed(prc_admin(0)),
-            actor_cid_number.clone(),
+        // 测试 authority set 只启用前三把；目录中其余 PRC 公钥不能假装成活跃 authority。
+        let node_index = 3;
+        let new_pair = key_pair(44);
+        let who = cb_admin(node_index, 0);
+        let payload = crate::proof::payload::<Test>(
+            cb_cid(node_index),
             committee_role(),
-            new_key,
-        ));
-        let pid = last_proposal_id();
-        let outsider = AccountId32::new([98u8; 32]);
+            who.clone(),
+            CurrentGrandpaKeys::<Test>::get(cb_cid(node_index)).expect("catalog key exists"),
+            new_pair.public().0,
+            0,
+            PROOF_EXPIRES_AT,
+            GrandpaKeyChangeKind::EmergencyRecovery,
+        );
         assert_noop!(
-            cast_vote(outsider, pid, true),
-            votingengine::pallet::Error::<Test>::NoPermission
+            GrandpaKeyChange::propose_emergency_grandpa_key_recovery(
+                RuntimeOrigin::signed(who),
+                cb_cid(node_index),
+                committee_role(),
+                new_pair.public().0,
+                0,
+                PROOF_EXPIRES_AT,
+                sign_proof(&new_pair, &payload),
+            ),
+            Error::<Test>::OldAuthorityNotFound
         );
     });
 }

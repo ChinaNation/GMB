@@ -1442,6 +1442,42 @@ void main() {
       expect(decoded.fields['reason'], '密钥不可执行');
     });
 
+    test('decodes both GRANDPA key change paths', () {
+      final newPublicKey = List<int>.generate(32, (index) => index + 1);
+      final common = <int>[
+        ...compactVec(nrcActorCid),
+        ...compactVec('COMMITTEE_MEMBER'),
+        ...newPublicKey,
+        ...u64Le(7),
+        ...u32Le(1234),
+      ];
+      final emergency = PayloadDecoder.decode(hexOf(withSigningTail([
+        0x0f,
+        0x00,
+        ...common,
+        ...List<int>.filled(64, 0x11),
+      ])));
+      expect(emergency, isNotNull);
+      expect(
+        emergency!.action,
+        'propose_emergency_grandpa_key_recovery',
+      );
+      expect(emergency.fields['actor_role_code'], 'COMMITTEE_MEMBER');
+      expect(emergency.fields['proof_nonce'], '7');
+      expect(emergency.fields['proof_expires_at'], '1234');
+
+      final routine = PayloadDecoder.decode(hexOf(withSigningTail([
+        0x0f,
+        0x01,
+        ...common,
+        ...List<int>.filled(64, 0x22),
+        ...List<int>.filled(64, 0x33),
+      ])));
+      expect(routine, isNotNull);
+      expect(routine!.action, 'schedule_grandpa_key_rotation');
+      expect(routine.fields['new_public_key'], hexOf(newPublicKey));
+    });
+
     test('rejects deleted business wrappers (pallet=17/13/12/15)', () {
       // Phase 4 物理删除的 call_index 不应再被解码识别。
       final cases = <List<int>>[
@@ -1450,7 +1486,6 @@ void main() {
         [0x11, 0x05], // execute_sweep_to_main
         [0x0d, 0x01], // ResolutionDestroy(13) execute_destroy
         [0x0c, 0x01], // RuntimeUpgrade(12) call_index=1 留洞;冷钱包不解码协议升级
-        [0x0f, 0x01], // GrandpaKeyChange(15) execute_replace_grandpa_key
         [0x0f, 0x02], // cancel_failed_replace_grandpa_key
       ];
       for (final c in cases) {

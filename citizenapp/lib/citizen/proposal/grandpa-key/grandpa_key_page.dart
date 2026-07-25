@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:citizenapp/citizen/proposal/proposal_placeholder.dart';
 
-/// 验证密钥(更换 GRANDPA 共识密钥)提案(占位,链端 grandpakey-change 客户端待接)。
+/// 验证密钥入口占位；真实密钥保管与换钥只在对应权威节点桌面端执行。
 class GrandpaKeyPage extends StatelessWidget {
   const GrandpaKeyPage({super.key});
 

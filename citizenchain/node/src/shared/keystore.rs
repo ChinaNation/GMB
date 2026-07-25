@@ -105,6 +105,72 @@ pub(crate) fn write_key_to_keystore(
     Ok(())
 }
 
+/// 将密钥写入所有 keystore 目录，同时保留同类型其它密钥。
+///
+/// GRANDPA 正常更换必须在 authority set 生效前同时保留旧、新私钥，因此不能调用
+/// 会清理同类型旧文件的 [`write_key_to_keystore`]。
+pub(crate) fn write_key_to_keystore_preserving_others(
+    dirs: &[PathBuf],
+    key_type_prefix: &str,
+    public_key: &str,
+    secret_content: &str,
+) -> Result<(), String> {
+    let filename = keystore_filename(key_type_prefix, public_key);
+    for dir in dirs {
+        write_secret_text_atomic_secure(dir, &filename, secret_content).map_err(|e| {
+            format!(
+                "write keystore file failed ({}/{}): {e}",
+                dir.display(),
+                filename
+            )
+        })?;
+    }
+    Ok(())
+}
+
+/// 从所有 keystore 目录删除一把准确的公钥文件，不影响其它同类型密钥。
+pub(crate) fn remove_key_from_keystore(
+    dirs: &[PathBuf],
+    key_type_prefix: &str,
+    public_key: &str,
+) -> Result<(), String> {
+    let filename = keystore_filename(key_type_prefix, public_key);
+    for dir in dirs {
+        remove_file_secure(dir, &filename).map_err(|e| {
+            format!(
+                "remove keystore file failed ({}/{}): {e}",
+                dir.display(),
+                filename
+            )
+        })?;
+    }
+    Ok(())
+}
+
+/// 读取准确公钥对应的 keystore 文本；多目录内容必须完全一致。
+pub(crate) fn read_key_from_keystore(
+    dirs: &[PathBuf],
+    key_type_prefix: &str,
+    public_key: &str,
+) -> Result<Option<String>, String> {
+    let filename = keystore_filename(key_type_prefix, public_key);
+    let mut found: Option<String> = None;
+    for dir in dirs {
+        if !regular_file_exists_secure(dir, &filename)? {
+            continue;
+        }
+        let value = fs::read_to_string(dir.join(&filename))
+            .map_err(|e| format!("read keystore file failed ({filename}): {e}"))?;
+        if found.as_ref().is_some_and(|current| current != &value) {
+            return Err(format!(
+                "同一 GRANDPA 公钥在多个 keystore 目录中的私钥内容不一致: {public_key}"
+            ));
+        }
+        found = Some(value);
+    }
+    Ok(found)
+}
+
 /// 移除 keystore 中同类型但不匹配 keep_filename 的旧密钥文件。
 pub(crate) fn remove_other_keys(
     dirs: &[PathBuf],
@@ -566,7 +632,10 @@ fn cstring_from_str(value: &str) -> Result<CString, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::ensure_directory_secure;
+    use super::{
+        ensure_directory_secure, has_key_in_keystore, read_key_from_keystore,
+        remove_key_from_keystore, write_key_to_keystore, write_key_to_keystore_preserving_others,
+    };
     use std::{
         fs,
         path::PathBuf,
@@ -609,5 +678,30 @@ mod tests {
         let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o700);
         let _ = fs::remove_dir_all(path.ancestors().nth(3).unwrap());
+    }
+
+    #[test]
+    fn grandpa_rotation_preserves_both_keys_then_removes_only_old_key() {
+        let root = unique_temp_dir("grandpa-rotation");
+        let keystore = root.join("chains").join("citizenchain").join("keystore");
+        ensure_directory_secure(&keystore).unwrap();
+        let dirs = vec![keystore];
+        let old_public_key = "11".repeat(32);
+        let new_public_key = "22".repeat(32);
+
+        write_key_to_keystore(&dirs, "6772616e", &old_public_key, "\"0xold\"\n").unwrap();
+        write_key_to_keystore_preserving_others(&dirs, "6772616e", &new_public_key, "\"0xnew\"\n")
+            .unwrap();
+        assert!(has_key_in_keystore(&dirs, "6772616e", &old_public_key));
+        assert!(has_key_in_keystore(&dirs, "6772616e", &new_public_key));
+        assert_eq!(
+            read_key_from_keystore(&dirs, "6772616e", &new_public_key).unwrap(),
+            Some("\"0xnew\"\n".to_string())
+        );
+
+        remove_key_from_keystore(&dirs, "6772616e", &old_public_key).unwrap();
+        assert!(!has_key_in_keystore(&dirs, "6772616e", &old_public_key));
+        assert!(has_key_in_keystore(&dirs, "6772616e", &new_public_key));
+        let _ = fs::remove_dir_all(root);
     }
 }

@@ -252,13 +252,131 @@ fn write_grandpa_key_to_keystore(
         .map_err(|e| format!("encode grandpa keystore secret failed: {e}"))?;
     let content = Zeroizing::new(format!("{encoded}\n"));
     let dirs = keystore::keystore_dirs(app)?;
-    // 始终只保留当前机构对应的一把 gran 密钥，避免旧密钥残留导致节点加载多把 authority key。
+    // 初次配置只保留一把 gran 密钥；治理换钥必须改走 rotation 专用的双钥保留函数。
     keystore::write_key_to_keystore(
         &dirs,
         GRANDPA_KEY_TYPE_HEX_PREFIX,
         public_key.trim_start_matches("0x"),
         &content,
     )
+}
+
+/// 导入治理换钥候选私钥，同时保留旧 GRANDPA 私钥。
+pub(crate) fn import_rotation_candidate(
+    app: &AppHandle,
+    private_key: &[u8; 32],
+    public_key: &[u8; 32],
+) -> Result<(), String> {
+    let secret = Zeroizing::new(format!("0x{}", hex::encode(private_key)));
+    let encoded = serde_json::to_string(&*secret)
+        .map_err(|e| format!("encode grandpa rotation secret failed: {e}"))?;
+    let content = Zeroizing::new(format!("{encoded}\n"));
+    let dirs = keystore::keystore_dirs(app)?;
+    keystore::write_key_to_keystore_preserving_others(
+        &dirs,
+        GRANDPA_KEY_TYPE_HEX_PREFIX,
+        &hex::encode(public_key),
+        &content,
+    )
+}
+
+/// 使用本机准确公钥对应的 GRANDPA 私钥签名证明摘要。
+pub(crate) fn sign_rotation_proof(
+    app: &AppHandle,
+    public_key: &[u8; 32],
+    digest: &[u8; 32],
+) -> Result<[u8; 64], String> {
+    use ed25519_dalek::Signer;
+
+    let dirs = keystore::keystore_dirs(app)?;
+    let raw = keystore::read_key_from_keystore(
+        &dirs,
+        GRANDPA_KEY_TYPE_HEX_PREFIX,
+        &hex::encode(public_key),
+    )?
+    .ok_or_else(|| {
+        format!(
+            "本机缺少当前 GRANDPA 私钥（public_key=0x{}）",
+            hex::encode(public_key)
+        )
+    })?;
+    let private_text: Zeroizing<String> = Zeroizing::new(
+        serde_json::from_str(raw.trim())
+            .map_err(|e| format!("decode grandpa keystore secret failed: {e}"))?,
+    );
+    let private_key = decode_hex_32_strict(private_text.trim_start_matches("0x"))
+        .map_err(|_| "GRANDPA keystore 私钥不是 32 字节十六进制".to_string())?;
+    let signing_key = ed25519_dalek::SigningKey::from_bytes(&private_key);
+    ensure_public_key_matches(&signing_key, public_key)?;
+    Ok(signing_key.sign(digest).to_bytes())
+}
+
+fn ensure_public_key_matches(
+    signing_key: &ed25519_dalek::SigningKey,
+    expected_public_key: &[u8; 32],
+) -> Result<(), String> {
+    if signing_key.verifying_key().to_bytes() != *expected_public_key {
+        return Err("GRANDPA keystore 私钥与文件名公钥不匹配".to_string());
+    }
+    Ok(())
+}
+
+/// 在新 authority 已 finalized 后删除旧私钥，并把节点元数据切到新公钥。
+pub(crate) fn finalize_rotation_key(
+    app: &AppHandle,
+    authority_node_label: &str,
+    old_public_key: &[u8; 32],
+    new_public_key: &[u8; 32],
+) -> Result<(), String> {
+    let dirs = keystore::keystore_dirs(app)?;
+    let new_public_key_hex = hex::encode(new_public_key);
+    if !keystore::has_key_in_keystore(&dirs, GRANDPA_KEY_TYPE_HEX_PREFIX, &new_public_key_hex) {
+        return Err(format!(
+            "新 GRANDPA authority 已生效，但本机缺少新私钥（public_key=0x{new_public_key_hex}）"
+        ));
+    }
+    keystore::remove_key_from_keystore(
+        &dirs,
+        GRANDPA_KEY_TYPE_HEX_PREFIX,
+        &hex::encode(old_public_key),
+    )?;
+    save_grandpa_meta(
+        app,
+        Some(authority_node_label.to_string()),
+        Some(format!("0x{new_public_key_hex}")),
+    )
+}
+
+/// 放弃尚未提交的候选新私钥，不触碰当前旧私钥和节点元数据。
+pub(crate) fn discard_rotation_candidate(
+    app: &AppHandle,
+    new_public_key: &[u8; 32],
+) -> Result<(), String> {
+    let dirs = keystore::keystore_dirs(app)?;
+    keystore::remove_key_from_keystore(
+        &dirs,
+        GRANDPA_KEY_TYPE_HEX_PREFIX,
+        &hex::encode(new_public_key),
+    )
+}
+
+/// 由机构 CID 定位固定权威节点标签，不依赖会被治理更换的 GRANDPA 公钥。
+pub(crate) fn authority_node_label_for_cid(actor_cid_number: &str) -> Result<String, String> {
+    let initial_public_key = primitives::cid::china::china_cb::CHINA_CB
+        .iter()
+        .find(|entry| entry.cid_number == actor_cid_number)
+        .map(|entry| format!("0x{}", hex::encode(entry.grandpa_key)))
+        .ok_or_else(|| "目标 CID 不是 NRC/PRC GRANDPA 权威机构".to_string())?;
+    load_institution_catalog()?
+        .into_iter()
+        .find(|entry| {
+            matches!(entry.role.as_str(), "nrc" | "prc")
+                && entry
+                    .grandpa_public_key
+                    .eq_ignore_ascii_case(&initial_public_key)
+        })
+        .map(|entry| entry.authority_node_label)
+        .ok_or_else(|| "institution-catalog 缺少该 CID 对应的 NRC/PRC 权威节点".to_string())
 }
 
 fn has_grandpa_key_in_keystore(app: &AppHandle, public_key: &str) -> Result<bool, String> {
@@ -362,14 +480,9 @@ pub(crate) fn prepare_grandpa_for_start(app: &AppHandle) -> Result<bool, String>
         return Ok(false);
     };
 
-    // 校验公钥仍在当前权威节点清单中，防止清单更新后误启动 validator。
-    if authority_node_label_by_grandpa_public_key(public_key)?.is_none() {
-        return Err(format!(
-            "已保存的投票公钥不在当前 GRANDPA 权威列表中（公钥: {public_key}）"
-        ));
-    }
-
-    // 确认 keystore 文件存在（set_grandpa_key 时已写入）。
+    // 治理换钥后的公钥不会继续出现在静态创世清单中；启动资格以本机元数据、keystore
+    // 和 service 对当前链上 authority set 的真实匹配为准，不能退回静态公钥白名单。
+    // 确认 keystore 文件存在（初次配置或治理换钥时已写入）。
     // 若 keystore 缺失（如链数据被清除），自动清除过期的 meta，以普通节点启动。
     if !has_grandpa_key_in_keystore(app, public_key)? {
         eprintln!("[GRANDPA] keystore 缺失，自动清除 grandpa-meta.json，以普通节点启动");
@@ -512,4 +625,23 @@ pub fn set_grandpa_key(
         key: None,
         authority_node_label: Some(authority_node_label),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::authority_node_label_for_cid;
+    use primitives::cid::china::china_cb::CHINA_CB;
+    use std::collections::HashSet;
+
+    #[test]
+    fn every_grandpa_cid_maps_to_one_catalog_node_without_order_dependency() {
+        let labels = CHINA_CB
+            .iter()
+            .map(|entry| {
+                authority_node_label_for_cid(entry.cid_number)
+                    .expect("每个 NRC/PRC CID 都必须匹配一个权威节点")
+            })
+            .collect::<HashSet<_>>();
+        assert_eq!(labels.len(), CHINA_CB.len());
+    }
 }

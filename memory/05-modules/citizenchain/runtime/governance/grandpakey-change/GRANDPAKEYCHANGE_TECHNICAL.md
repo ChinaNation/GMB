@@ -1,201 +1,207 @@
-# GRANDPA_KEY_GOV Technical Notes
+# GRANDPA 验证密钥更换模块技术文档
 
-## 2026-07-14 投票与执行绑定
+## 1. 模块职责
 
-GRANDPA 密钥变更只允许 NRC、PRC 的内部投票业务。执行回调必须同时匹配 callback scope、`ProposalOwner`、内部投票 kind/stage、当前机构码、机构账户、CID 和密钥变更 action；手动重试不得绕过这些复校验。
+`grandpakey-change` 只负责国家储委会（NRC）和 43 个省储委会（PRC）各自节点的
+GRANDPA authority 更换。省储行（PRB）没有 GRANDPA authority，不能使用本模块。
 
-## 0. 功能需求
-### 0.1 模块职责
-`grandpakey-change` 负责把“机构 GRANDPA 公钥替换”包装成受治理约束的链上流程，要求：
-- 仅支持国家储委会（NRC）与省储委会（PRC）发起 GRANDPA 密钥替换。
-- 仅允许目标 NRC/PRC 的 `COMMITTEE_MEMBER` 岗位有效任职人按固定岗位权限发起和投票；属于 admins 但未任职委员岗位没有业务权限。
-- 治理投票由 `votingengine` 的内部投票统一承载。
-- 投票通过后由模块自动调度 `pallet-grandpa::schedule_change`。
+本模块提供两条互斥路径：
 
-### 0.2 提案创建需求
-- `institution` 必须真实属于 NRC 或 PRC。
-- 发起调用必须携带 `actor_cid_number + proposer_role_code`；发起人必须对完整委员岗位主体存在有效任职，且岗位拥有 `gra-key/0 + Propose`。
-- `new_key` 不能为零值，必须是有效且非 weak/small-order 的 ed25519 公钥。
-- `new_key` 不能等于该机构当前 GRANDPA 公钥，也不能被其他机构当前占用。
-- 并发控制由 `votingengine` 的 `ActiveProposalsBySubject` 统一管控（每机构上限 10 个活跃提案），本模块不另设单机构单提案限制。
-- 同一把 `new_key` 若被多个活跃提案占用,第一个执行成功后后续执行会因 `NewKeyAlreadyUsed` 失败,可通过 `VotingEngine::cancel_passed_proposal`(pallet 9.5)清理。
+| 路径 | 适用情形 | 授权与证明 | 投票 |
+| --- | --- | --- | --- |
+| 正常更换 | 旧私钥仍可签名 | 目标机构 `CID + 委员岗位码 + 委员 account_id` 授权；旧、新 GRANDPA 私钥共同签署同一证明 | 不投票 |
+| 紧急恢复 | 旧私钥丢失或无法签名 | 目标机构委员岗位发起；新 GRANDPA 私钥签署持钥证明 | 仅目标机构自己的委员内部投票 |
 
-### 0.3 执行与失败恢复需求
-- 提案达到通过阈值后，应自动尝试执行 GRANDPA 密钥替换。
-- 自动执行失败不能回滚已通过的投票结果。
-- 若失败原因是暂时性的（如 `GrandpaChangePending`），应允许创建时有效岗位选民快照中的账户后续手动重试执行。
-- 若提案已通过但已确定不可执行，应允许创建时有效岗位选民快照中的账户手动取消失败提案，解除机构阻塞。
+紧急恢复不是联合投票。NRC 只由 NRC 的 19 个委员岗位投票，机构阈值为 13；每个
+PRC 只由本 PRC 的 9 个委员岗位投票，机构阈值为 6。投票资格、快照、阈值、计票和
+终态全部由现有投票引擎提供，本业务模块不实现投票流程。
 
-### 0.4 生命周期与清理需求
-- 被拒绝的提案由 `votingengine` 的过期/清理机制处理。
-- 已通过但确定不可执行的提案,通过 `VotingEngine::cancel_passed_proposal`(pallet 9.5)手动清理。
-- stale 清理由投票引擎统一承载。
+代码目录：
 
-## 1. 模块定位
-`grandpakey-change` 是“GRANDPA 密钥治理模块”，职责是：
-- 仅允许国家储委会（NRC）与省储委会（PRC）发起 GRANDPA 密钥替换提案。
-- 仅允许目标 NRC/PRC 委员岗位主体参与提案与投票；执行由业务回调完成，重试/取消资格来自创建时对应 `VoterSnapshot`。
-- 借助 `votingengine` 内部投票达成通过后，调用 `pallet-grandpa::schedule_change` 变更 authority set。
+- `citizenchain/runtime/governance/grandpakey-change/src/`
 
-代码位置：
-- `/Users/rhett/GMB/citizenchain/runtime/governance/grandpakey-change/src/lib.rs`
+## 2. Runtime 接线
 
-## 2. 运行时接线
-Runtime 配置位置：
-- `/Users/rhett/GMB/citizenchain/runtime/src/configs/mod.rs`
+配置位置：
 
-关键接线：
-- `impl grandpakey_change::Config for Runtime`
-  - `InternalVoteEngine = VotingEngine`
-  - `GrandpaChangeDelay = GrandpaAuthoritySetChangeDelay`
-- `GrandpaAuthoritySetChangeDelay = 30`（预留运维注入新 gran 私钥窗口）
-- `MaxSetIdSessionEntries = 128`（为后续等值投票追溯能力预留）
-- 注意：旧版的 `StaleProposalLifetime` 配置项已移除。
+- `citizenchain/runtime/src/configs.rs`
 
-## 3. 存储模型
-本模块仅维护 2 个存储项，提案数据由 `votingengine` 统一管理。
+关键配置：
 
-1. `CurrentGrandpaKeys: Map<AccountId, [u8; 32]>`
-- 机构当前治理认可的 GRANDPA 公钥
+- `InternalVoteEngine = VotingEngine`：仅紧急恢复创建内部投票。
+- `InstitutionRoleAuthorization`：统一读取机构岗位任职和岗位业务权限真源。
+- `GrandpaChangeDelay`：两条路径都调用 `pallet-grandpa::schedule_change` 延迟生效。
+- `WeightInfo`：两项外部调用使用各自 benchmark 权重。
 
-2. `GrandpaKeyOwnerByKey: Map<[u8; 32], AccountId>`
-- 公钥到机构的反向索引，O(1) 判断 new_key 是否已被占用
+当前没有创世数据迁移，`STORAGE_VERSION = 0`，不得增加开发期 migration。
 
-提案数据存储在 `votingengine` 中：
-- 提案动作（`GrandpaKeyReplacementAction`）通过 `create_internal_proposal_with_data` 在创建提案时原子写入，并同步绑定 `ProposalOwner`
-- 机构活跃提案列表由 `ActiveProposalsBySubject`（上限 10 个）管控
+## 3. 外部调用
 
-历史存储项（已移除）：
-- 单机构活跃提案本地索引：已由投票引擎 `ActiveProposalsBySubject` 统一管控
-- `PendingProposalByNewKey`：已移除，冲突在执行时检测
-- `ProposalActions`：已迁移到投票引擎
-- `ProposalCreatedAt`：已迁移到投票引擎
+### 3.1 `call_index(0) propose_emergency_grandpa_key_recovery`
 
-## 4. 创世初始化
-`GenesisBuild` 会从 `CHINA_CB` 初始化：
-- `CurrentGrandpaKeys[institution] = node.grandpa_key`
-- `GrandpaKeyOwnerByKey[node.grandpa_key] = institution`
+字段顺序：
 
-并在构建时断言初始 key 不重复。
+1. `actor_cid_number`
+2. `actor_role_code`
+3. `new_public_key`
+4. `proof_nonce`
+5. `proof_expires_at`
+6. `new_public_key_signature`
 
-## 5. 外部接口（Calls）
-### 5.1 `propose_replace_grandpa_key`（index = 0）
 约束：
-- 仅机构码 `NRC | PRC`（`is_fixed_governance_code`）
-- 调用字段顺序固定为 `actor_cid_number, proposer_role_code, new_key`
-- `proposer_role_code` 必须是目标机构 `COMMITTEE_MEMBER`，发起人必须有有效任职和 `gra-key/0 + Propose`
-- `new_key` 不能为零值
-- `new_key` 必须是有效且非 weak/small-order 的 ed25519 公钥（`CompressedEdwardsY` + `is_small_order`）
-- `new_key != old_key`
-- `new_key` 不能被其他机构当前占用（反向索引 O(1)）
-- 机构活跃提案数由 `votingengine` 的 `ActiveProposalsBySubject`（上限 10 个）管控
 
-### 5.2 投票入口(由 InternalVote sub-pallet 承载)
-本模块不提供独立投票 call。投票统一走 `InternalVote::cast(proposal_id, approve)`(pallet 20.0):
-- 投票人必须是 `VotePlan` 指定委员岗位在创建时写入的目标 CID 有效选民快照成员。
-- 达到固定治理阈值后，投票引擎将提案推进到 `STATUS_PASSED` 并回调本模块自动执行。
-- 自动执行遇到 `GrandpaChangePending` 时发出 `GrandpaKeyExecutionFailed`，返回 `RetryableFailed`，提案保留在 `STATUS_PASSED` 供后续重试。
-- 自动执行遇到 `OldAuthorityNotFound`、`NewKeyAlreadyUsed` 等确定不可执行错误时发出 `GrandpaKeyExecutionFailed`，返回 `FatalFailed`，由投票引擎推进到 `STATUS_EXECUTION_FAILED`。
+- 调用者必须是目标 NRC/PRC 委员岗位的有效任职人，并同时满足
+  `CID + 岗位码 + account_id`。
+- 岗位必须拥有紧急恢复的 `Propose` 权限。
+- 新私钥必须对本次完整证明载荷签名，证明节点已经持有新私钥。
+- 每个机构同时最多存在一项未终结的紧急恢复。
+- 创建的 `VotePlan` 只包含目标机构，不得加入其他 NRC、PRC、PRB 或公民。
+- 投票通过后由投票引擎回调本模块调度 authority set；全链已有 GRANDPA pending
+  change 时返回可重试结果。
+- 被否决或确定不可执行时释放新公钥占用。
 
-### 5.3 手动重试入口
-本模块不提供独立 wrapper extrinsic。手动重试统一走:
+### 3.2 `call_index(1) schedule_grandpa_key_rotation`
 
-- `VotingEngine::retry_passed_proposal(proposal_id)`(pallet 9.4)
+字段顺序：
 
-仅提案创建时的有效岗位选民快照成员可触发；重试次数、deadline 与状态推进由投票引擎统一校验。用于“已通过但自动执行暂时失败”的重试。
+1. `actor_cid_number`
+2. `actor_role_code`
+3. `new_public_key`
+4. `proof_nonce`
+5. `proof_expires_at`
+6. `old_public_key_signature`
+7. `new_public_key_signature`
 
-### 5.4 失败提案取消入口
-本模块不提供独立 wrapper extrinsic。失败提案清理统一走:
+约束：
 
-- `VotingEngine::cancel_passed_proposal(proposal_id, reason)`(pallet 9.5)
+- 调用者必须是目标 NRC/PRC 委员岗位的有效任职人，并同时满足
+  `CID + 岗位码 + account_id`。
+- 岗位必须拥有正常更换的 `Propose` 权限。
+- 旧、新 GRANDPA 私钥必须分别签署同一份完整证明载荷。
+- 不创建提案、不进入投票引擎，校验通过后直接调度延迟生效。
+- 目标机构存在未终结紧急恢复时，不允许正常更换越过紧急恢复。
 
-仅提案创建时的有效岗位选民快照成员可清理；仅可清理“已通过但当前确定不可执行”的提案；清理时由投票引擎将状态从 `STATUS_PASSED` 推进到 `STATUS_EXECUTION_FAILED`。
+两个 call index 连续使用 `0`、`1`，不保留空洞或旧 wrapper。
 
-## 6. 执行路径与 GRANDPA 交互
-`try_execute_from_action` 关键步骤：
-1. 读取当前 GRANDPA authorities
-2. 用 `old_key -> new_key` 替换目标条目
-3. 校验旧 key 存在（否则 `OldAuthorityNotFound`）
-4. 校验替换后无重复 key（否则 `NewKeyAlreadyUsed`）
-5. 若已有 pending change，直接报 `GrandpaChangePending`
-6. 调用 `pallet_grandpa::schedule_change(next_authorities, delay, None)`
-7. 同步更新 `CurrentGrandpaKeys` 与 `GrandpaKeyOwnerByKey`
-8. 返回 `ProposalExecutionOutcome::Executed`，由投票引擎统一标记 `STATUS_EXECUTED`
+## 4. 持钥证明
 
-提案状态流转：`VOTING → PASSED → EXECUTED`（执行成功）/ `VOTING → REJECTED`（否决）/ `VOTING → PASSED → EXECUTION_FAILED`（已通过但确认不可执行）。
-注：`VotingEngine::cancel_passed_proposal` 会将已通过但不可执行的提案设置为 `STATUS_EXECUTION_FAILED` 后清理。
+`GrandpaKeyProofPayload` 固定绑定：
 
-## 7. 关键错误与语义
-- `GrandpaChangePending`：当前已有待生效 authority set 变更
-- `OldAuthorityNotFound`：提案绑定的旧 key 已不在当前 authority set
-- `ProposalStillExecutable`：不允许误清理仍可执行的通过提案
-- `UnauthorizedAdmin`：发起账户没有目标委员岗位有效任职或岗位业务权限
+- 当前链 `genesis_hash`
+- `actor_cid_number`
+- `actor_role_code`
+- 当前发起 `account_id`
+- 当前旧 GRANDPA 公钥
+- 新 GRANDPA 公钥
+- 当前 GRANDPA `set_id`
+- 机构级递增 `proof_nonce`
+- `proof_expires_at`
+- `change_kind`（正常更换或紧急恢复）
 
-## 8. 风险控制与并发策略
-- 并发冲突：两个提案若同时执行，后者会因 `GrandpaChangePending` 返回 `RetryableFailed`，等待下次重试；若重试时已经确定不可执行，则进入 `STATUS_EXECUTION_FAILED` 或由人工取消失败提案。
-- 立即切换风险：通过 `GrandpaAuthoritySetChangeDelay=30` 降低。
-- 长期卡死风险：通过 `VotingEngine::cancel_passed_proposal` 消除。
-- 已修复风险：过去只校验 `new_key` “能解压为曲线点”，未拒绝 small-order 弱公钥；现在已显式拒绝 weak key。
-- 并发 new_key 冲突：当前设计不在提案创建时拦截（旧版 `PendingProposalByNewKey` 已移除），而是在执行时通过 `validate_action` 的 `BTreeSet` 唯一性检查拒绝。冲突的提案可通过 `VotingEngine::cancel_passed_proposal` 清理。
+签名消息唯一使用：
 
-## 9. 创世公钥严格校验（按“严格要求”）
-位置：
-- `/Users/rhett/GMB/citizenchain/runtime/src/genesis_config_presets.rs`
+`primitives::sign::signing_message(OP_SIGN_GRANDPA_KEY_CHANGE, SCALE(payload))`
 
-已实现测试：
-1. `grandpa_authority_keys_are_unique_valid_hex_and_32_bytes`
-- 校验长度、hex、唯一性，并用 `ed25519-dalek::VerifyingKey::from_bytes` 强制校验 ed25519 曲线点有效性。
+因此，签名不能跨链、跨机构、跨岗位、跨账户、跨密钥、跨 set、跨路径或重复使用。
+`proof_nonce` 只在完整调用成功后递增。
 
-2. `grandpa_keys_match_china_cb_grandpa_keys`
-- 强制校验 `GRANDPA_AUTHORITY_KEYS_HEX` 与 `CHINA_CB.grandpa_key` 一一一致。
+## 5. 公钥校验
 
-3. `china_cb_grandpa_keys_are_valid_ed25519_pubkeys`
-- 强制校验 `CHINA_CB.grandpa_key` 全量都是有效 ed25519 公钥。
+两条路径共同执行以下校验：
 
-说明：
-- 当前若数据不是合法 ed25519 点，测试会失败。这是设计要求，不做兼容放宽。
+- 新公钥必须是 32 字节 ed25519 公钥，不能为全零。
+- 拒绝无效曲线点和 small-order 弱公钥。
+- 新公钥不能等于目标机构当前公钥。
+- 新公钥不能被其他机构当前使用，也不能被另一项待处理流程占用。
+- 目标机构当前旧公钥必须仍在实际 GRANDPA authority set 中。
+- 替换后的 authority set 不得出现重复公钥。
+- `pallet-grandpa` 或本模块已有全链 pending change 时不能再调度。
 
-## 10. 运维要点
-1. 新 key 上线顺序：先注入本机 keystore，再等待治理通过并生效。
-2. 换钥提案通过后若执行失败：
-- 先查是否 `GrandpaChangePending`，等待 pending change 落地后重试执行。
-- 若已确定不可执行，可用 `VotingEngine::cancel_passed_proposal` 清理。
-3. 生产节点应监控：
-- `GrandpaKeyExecutionFailed`
-- `GrandpaKeyReplaced`
-- GRANDPA pending change 状态
+## 6. 存储
 
-## 11. 与当前版本边界
-- 本模块负责“换钥治理编排 + authority set 调度”，不负责私钥托管。
-- 等值投票惩罚链路（offences/session historical）仍未启用；当前仅为后续接入保留历史 set 映射能力。
+| 存储 | 用途 |
+| --- | --- |
+| `CurrentGrandpaKeys` | 机构最后一次已经实际生效的 GRANDPA 公钥 |
+| `GrandpaKeyOwnerByKey` | 已生效公钥到机构 CID 的唯一反向索引 |
+| `ReservedGrandpaKeys` | 投票中或等待生效的新公钥占用 |
+| `NextGrandpaKeyProofNonce` | 每个机构下一份证明必须使用的 nonce |
+| `ActiveEmergencyRecoveryByInstitution` | 每个机构唯一的未终结紧急恢复提案 |
+| `PendingGrandpaKeyChange` | 全链唯一、已调度并等待实际生效的变更 |
 
-## 12. 迁移与 try-runtime
-`STORAGE_VERSION = 2` 的迁移负责从 `CurrentGrandpaKeys` 重建 `GrandpaKeyOwnerByKey` 反向索引。
+创世时从 `CHINA_CB` 初始化 44 个 NRC/PRC 当前公钥及反向索引，并拒绝重复初始公钥。
 
-迁移策略：
-- 先清空 `GrandpaKeyOwnerByKey`，再按 `CurrentGrandpaKeys` 全量重建，保证重跑迁移时不会静默保留脏反向索引。
-- `pre_upgrade` 记录 `CurrentGrandpaKeys` 数量，并检查当前 key 无重复。
-- `post_upgrade` 校验 storage version、正反向索引数量一致、每条 `CurrentGrandpaKeys[institution] = key` 都有 `GrandpaKeyOwnerByKey[key] = institution`。
+## 7. 生效与节点私钥生命周期
 
-Cargo `try-runtime` feature 会向 `frame-support`、`frame-system`、`pallet-grandpa`、`sp-runtime`、`votingengine` 传播。
+1. 节点生成新 ed25519 私钥，并在提交前把新私钥加入 `gran` keystore，旧私钥继续保留。
+2. 正常更换完成旧、新私钥双签名；紧急恢复只完成新私钥证明并等待本机构内部投票。
+3. Runtime 调用 `pallet-grandpa::schedule_change`，旧、新私钥在延迟期内同时保存在节点。
+4. `on_initialize` 读取实际 GRANDPA authorities；只有新公钥已出现且旧公钥已消失，
+   才更新正反向索引、清理 pending，并发出 `GrandpaKeyActivated`。
+5. 节点后台只读取 finalized 状态。确认新公钥已是该 CID 当前公钥、位于 authority
+   set 且旧公钥已移除后，才删除旧私钥、更新本地元数据并重启节点。
 
-## 13. 测试覆盖
-`cargo test -p grandpakey-change` 覆盖（17 个用例，含 runtime integrity/genesis 基础用例）：
+链上事件尚未 finalized、仅达到预计区块、仅看到交易成功或仅看到
+`GrandpaKeyActivated` 的非 finalized 分叉，都不能触发旧私钥删除。
 
-正向路径：
-- 投票通过后自动执行密钥替换并更新 authority set
-- 自动执行失败后手动重试成功
-- 已通过但不可执行的提案可被取消
+## 8. 紧急恢复回调边界
 
-错误路径：
-- small-order 弱 ed25519 公钥拒绝
-- 零值 new_key 拒绝（`NewKeyIsZero`）
-- new_key == old_key 拒绝（`NewKeyUnchanged`）
-- new_key 被他机构占用拒绝（`NewKeyAlreadyUsed`）
-- 非委员岗位有效任职人、无 GRANDPA 业务权限的岗位或非岗位快照选民均拒绝（稳定错误码仍为 `UnauthorizedAdmin`）
-- 无效机构拒绝（`InvalidInstitution`）
-- 执行非通过提案拒绝（`ProposalNotPassed`）
-- 取消仍可执行提案拒绝（`ProposalStillExecutable`）
-- 取消暂时阻塞提案拒绝（`GrandpaChangePending`）
-- 投票通过后旧 authority 已消失，自动执行进入 `STATUS_EXECUTION_FAILED`
-- 两个机构抢同一把 `new_key`，后通过者自动执行进入 `STATUS_EXECUTION_FAILED`
+紧急恢复业务动作与投票提案原子绑定。回调执行前必须重新核对：
+
+- callback owner 和 scope；
+- 内部投票 kind、stage、status；
+- 目标机构代码、CID 和 action；
+- 当前机构岗位授权；
+- 提案是否仍是该机构登记的唯一活动紧急恢复；
+- 新公钥占用是否仍属于该机构。
+
+暂时性的 `GrandpaChangePending` 返回 `RetryableFailed`，由投票引擎现有重试机制处理。
+确定不可执行或被否决时关闭本业务状态并释放公钥占用。投票引擎代码不因本模块改动。
+
+## 9. 事件
+
+- `EmergencyRecoveryProposed`
+- `RoutineRotationScheduled`
+- `EmergencyRecoveryScheduled`
+- `GrandpaKeyActivated`
+- `EmergencyRecoveryExecutionFailed`
+- `EmergencyRecoveryClosed`
+
+事件分别表达提案创建、调度、实际生效和紧急恢复关闭，不能把“已调度”解释为“已生效”。
+
+## 10. 节点接口与界面
+
+节点后端 `node/src/core/grandpa_rotation.rs` 提供：
+
+- `build_grandpa_key_change_request`
+- `submit_grandpa_key_change`
+- `get_grandpa_key_change_status`
+
+节点页面位于 `node/frontend/governance/grandpa-key/`。管理员选择目标机构委员任职，
+输入本机解锁密码，完成管理员交易签名后提交。页面明确区分：
+
+- 正常更换：无投票、旧新私钥双签、延迟生效；
+- 紧急恢复：旧私钥不可用、目标机构委员内部投票。
+
+非秘密的待处理状态保存为 `<app_data>/grandpa-key-change.json`；GRANDPA 私钥只保存
+在节点 `gran` keystore，不写入该状态文件、日志或前端。
+
+## 11. 测试与验收
+
+Runtime 测试至少覆盖：
+
+- call index `0/1` 连续且 SCALE 布局固定；
+- 正常更换岗位授权、双签、nonce、过期和延迟生效；
+- 紧急恢复只生成目标机构内部投票；
+- NRC `13/19`、PRC `6/9` 的机构阈值来自现有机构配置；
+- PRB、跨机构委员、无任职管理员和无权限岗位被拒绝；
+- 无效、弱、相同、已使用和已预留公钥被拒绝；
+- pending 冲突、回调重试、否决和确定失败清理；
+- 只有实际 authority set 已切换后才更新当前公钥索引。
+
+节点验收至少覆盖：
+
+- 新私钥写入时保留旧私钥；
+- finalized 前不删除旧私钥；
+- finalized 状态确认新 authority 生效后删除旧私钥；
+- 未提交且证明过期的新候选私钥可安全清理；
+- 两条 call 均能被节点和离线钱包按同一二维码注册表解析。

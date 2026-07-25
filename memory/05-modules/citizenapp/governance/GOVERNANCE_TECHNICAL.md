@@ -120,7 +120,8 @@ lib/votingengine/
 | 协议升级 | `propose_runtime_upgrade` | `actor_cid_number, actor_role_code, reason, code, new_pow_params` | NRC/43 PRC `COMMITTEE_MEMBER` 岗位有效任职人 | 联合+公民 |
 | 个人多签管理员集合变更 | `propose_admin_set_change` | `institution_code=PMUL, personal_account, admins[], new_threshold` | 个人多签当前管理员 | 内部 |
 | 决议销毁 | `propose_destroy` | `actor_cid_number, proposer_role_code, institution_account, amount` | 目标 CID 中拥有 `res-dst/0 Propose` 的岗位有效任职人 | 内部 |
-| GRANDPA 密钥更换 | `propose_replace_grandpa_key` | `actor_cid_number, proposer_role_code, institution_account, new_key(32B)` | 目标 CID 中拥有 `gra-key/0 Propose` 的委员岗位有效任职人 | 内部 |
+| GRANDPA 紧急恢复 | `propose_emergency_grandpa_key_recovery` | `actor_cid_number, actor_role_code, new_public_key, proof_nonce, proof_expires_at, new_public_key_signature` | 目标 NRC/PRC 委员岗位有效任职人 | 仅目标机构内部 |
+| GRANDPA 正常更换 | `schedule_grandpa_key_rotation` | `actor_cid_number, actor_role_code, new_public_key, proof_nonce, proof_expires_at, old_public_key_signature, new_public_key_signature` | 目标 NRC/PRC 委员岗位有效任职人 | 不投票 |
 | 省储行业务治理(已下线) | ~~`propose_institution_rate / propose_verify_key / propose_sweep_to_main / propose_relay_submitters`~~ | Step 2b-iv-b 随老省储行清算 pallet 一起从 runtime 删除 | — | — |
 | 清算行费率治理(新) | `propose_l2_fee_rate(call_index 40)` / `set_max_l2_fee_rate(call_index 41, Root)` | `bank, new_rate_bp` | 清算行管理员 / Root | — |
 
@@ -140,10 +141,14 @@ lib/votingengine/
 
 ### 4.3 GRANDPA 密钥更换约束
 
-- `new_key` 不能全 0。
-- `new_key` 必须是合法 Ed25519 压缩公钥（32 字节）。
-- `new_key` 不得与当前 key 相同，不得与其他机构正在使用 key 冲突。
-- 同一 `new_key` 不得被并发提案占用。
+- 正常更换只允许目标机构单个委员按 `CID + 岗位码 + account_id` 发起，不投票；
+  旧、新 GRANDPA 私钥必须签署同一份链、机构、岗位、账户、set、nonce 和有效期证明。
+- 旧私钥丢失或不可签名时走紧急恢复，只允许目标机构自己的委员内部投票；
+  NRC 为本机构 `13/19`，每个 PRC 为本机构 `6/9`，不是联合投票。
+- `new_public_key` 不能全 0，必须是合法且非 small-order 的 32 字节 Ed25519 公钥。
+- `new_public_key` 不得与当前公钥相同，不得与已使用或待处理公钥冲突。
+- 两条路径都延迟生效；节点必须在 finalized 状态确认新 authority 已生效且旧 authority
+  已移除后，才能自动删除旧私钥。
 
 ### 4.4 清算行(L2)费率治理(当前,替代原省储行治理)
 

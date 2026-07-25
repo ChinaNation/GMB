@@ -51,7 +51,10 @@ pub const ACTION_INSTITUTION_GOVERNANCE: u32 = 3;
 pub const ACTION_RUNTIME_UPGRADE: u32 = 0;
 pub const ACTION_RESOLUTION_ISSUANCE: u32 = 0;
 pub const ACTION_RESOLUTION_DESTROY: u32 = 0;
-pub const ACTION_GRANDPA_KEY_CHANGE: u32 = 0;
+/// GRANDPA 验证密钥丢失后的机构内部投票恢复。
+pub const ACTION_GRANDPA_KEY_EMERGENCY_RECOVERY: u32 = 0;
+/// GRANDPA 验证密钥仍可用时，由本机构单个委员直接发起的双密钥签名更换。
+pub const ACTION_GRANDPA_KEY_ROTATION: u32 = 1;
 pub const ACTION_MULTISIG_TRANSFER: u32 = 0;
 pub const ACTION_SAFETY_FUND_TRANSFER: u32 = 1;
 pub const ACTION_FEE_SWEEP_TO_MAIN: u32 = 2;
@@ -201,7 +204,13 @@ pub fn fixed_role_permission_specs(
             push_both(
                 &mut out,
                 MODULE_GRANDPA_KEY_CHANGE,
-                ACTION_GRANDPA_KEY_CHANGE,
+                ACTION_GRANDPA_KEY_EMERGENCY_RECOVERY,
+            );
+            push_permission(
+                &mut out,
+                MODULE_GRANDPA_KEY_CHANGE,
+                ACTION_GRANDPA_KEY_ROTATION,
+                RolePermissionOperation::Propose,
             );
             push_actions_both(
                 &mut out,
@@ -245,7 +254,13 @@ pub fn fixed_role_permission_specs(
             push_both(
                 &mut out,
                 MODULE_GRANDPA_KEY_CHANGE,
-                ACTION_GRANDPA_KEY_CHANGE,
+                ACTION_GRANDPA_KEY_EMERGENCY_RECOVERY,
+            );
+            push_permission(
+                &mut out,
+                MODULE_GRANDPA_KEY_CHANGE,
+                ACTION_GRANDPA_KEY_ROTATION,
+                RolePermissionOperation::Propose,
             );
             push_both(&mut out, MODULE_MULTISIG, ACTION_MULTISIG_TRANSFER);
         }
@@ -527,6 +542,42 @@ mod tests {
                 &permissions,
                 MODULE_RUNTIME_UPGRADE,
                 ACTION_RUNTIME_UPGRADE,
+                RolePermissionOperation::Vote,
+            ));
+        }
+    }
+
+    #[test]
+    fn grandpa_rotation_is_direct_but_emergency_recovery_is_internal_vote() {
+        for entry in CHINA_CB {
+            let permissions = fixed_role_permission_specs(
+                primitives::cid::code::institution_code_from_cid_number(entry.cid_number)
+                    .expect("CHINA_CB CID encodes institution code"),
+                entry.cid_number.as_bytes(),
+                ROLE_CODE_COMMITTEE_MEMBER,
+            );
+            assert!(has(
+                &permissions,
+                MODULE_GRANDPA_KEY_CHANGE,
+                ACTION_GRANDPA_KEY_EMERGENCY_RECOVERY,
+                RolePermissionOperation::Propose,
+            ));
+            assert!(has(
+                &permissions,
+                MODULE_GRANDPA_KEY_CHANGE,
+                ACTION_GRANDPA_KEY_EMERGENCY_RECOVERY,
+                RolePermissionOperation::Vote,
+            ));
+            assert!(has(
+                &permissions,
+                MODULE_GRANDPA_KEY_CHANGE,
+                ACTION_GRANDPA_KEY_ROTATION,
+                RolePermissionOperation::Propose,
+            ));
+            assert!(!has(
+                &permissions,
+                MODULE_GRANDPA_KEY_CHANGE,
+                ACTION_GRANDPA_KEY_ROTATION,
                 RolePermissionOperation::Vote,
             ));
         }

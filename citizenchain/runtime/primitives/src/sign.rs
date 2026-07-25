@@ -46,6 +46,7 @@ pub const fn qr_chain_action(pallet_index: u8, call_index: u8) -> u16 {
 // - 0x1B-0x1D:广场 BFF 登录/设备绑定/账户动作哈希域,走 `signing_message`,进入
 //   `SIGN_OP_TAGS`。仅链下(Cloudflare Worker + App)验签,链上 pallet 不引用,
 //   故新增它们不触发 runtime 变更/创世,只维护本单源与金标。
+// - 0x1E:GRANDPA 验证密钥更换证明哈希域，由旧、新 ed25519 私钥签同一摘要。
 
 /// 公民档案上链确认。
 pub const OP_SIGN_CITIZEN_IDENTITY: u8 = 0x10;
@@ -78,6 +79,8 @@ pub const OP_SIGN_SQUARE_LOGIN: u8 = 0x1B;
 pub const OP_SIGN_SQUARE_DEVICE_BIND: u8 = 0x1C;
 /// 广场 BFF 账户敏感动作:注销/退订(链下 Worker 验签,sr25519 主钥签)。
 pub const OP_SIGN_SQUARE_ACTION: u8 = 0x1D;
+/// GRANDPA 验证密钥正常更换与紧急恢复的持钥证明。
+pub const OP_SIGN_GRANDPA_KEY_CHANGE: u8 = 0x1E;
 
 /// 二进制前缀域(0x18/0x19)统一前缀长度:`GMB`(3B) + op_tag(1B) = 4 字节。
 pub const BINARY_PREFIX_LEN: usize = 4;
@@ -153,7 +156,7 @@ pub fn decrypt_admin_payload(
 }
 
 /// 全部哈希域签名 op_tag。新增哈希域 op_tag 必须同步追加并刷新金标。
-pub const SIGN_OP_TAGS: [u8; 10] = [
+pub const SIGN_OP_TAGS: [u8; 11] = [
     OP_SIGN_CITIZEN_IDENTITY,
     OP_SIGN_INST,
     OP_SIGN_DEREGISTER,
@@ -164,6 +167,7 @@ pub const SIGN_OP_TAGS: [u8; 10] = [
     OP_SIGN_SQUARE_LOGIN,
     OP_SIGN_SQUARE_DEVICE_BIND,
     OP_SIGN_SQUARE_ACTION,
+    OP_SIGN_GRANDPA_KEY_CHANGE,
 ];
 
 /// 构造哈希域签名消息:`BLAKE2-256(GMB || op_tag || scale_payload)`。

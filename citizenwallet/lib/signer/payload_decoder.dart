@@ -366,11 +366,15 @@ class PayloadDecoder {
       }
 
       // ── GrandpaKeyChange(15) ──
-      // execute_replace_grandpa_key / cancel_failed_replace_grandpa_key
-      // 分别走 VotingEngine::retry_passed_proposal / cancel_passed_proposal。
+      // call 0 = 旧私钥不可用后的本机构内部投票恢复；
+      // call 1 = 单个委员发起、旧/新 GRANDPA 私钥共同签名的正常更换。
       if (palletIndex == PalletRegistry.grandpaKeyChangePallet) {
-        if (callIndex == PalletRegistry.proposeReplaceGrandpaKeyCall) {
-          return _decodeProposeKeyChange(bytes);
+        if (callIndex ==
+            PalletRegistry.proposeEmergencyGrandpaKeyRecoveryCall) {
+          return _decodeGrandpaKeyChange(bytes, emergencyRecovery: true);
+        }
+        if (callIndex == PalletRegistry.scheduleGrandpaKeyRotationCall) {
+          return _decodeGrandpaKeyChange(bytes, emergencyRecovery: false);
         }
       }
 
@@ -624,8 +628,7 @@ class PayloadDecoder {
 
     return DecodedPayload(
       action: 'transfer',
-      summary:
-          '转账 $amountYuan 元 给 ${_truncateAddress(toAddress)}$remarkSuffix',
+      summary: '转账 $amountYuan 元 给 ${_truncateAddress(toAddress)}$remarkSuffix',
       fields: {
         'recipient_account_id': _bytesToLowerHex(toAccountId),
         'amount_yuan': '$amountYuan 元',
@@ -1922,9 +1925,13 @@ class PayloadDecoder {
     );
   }
 
-  // GrandpaKeyChange(15) / propose_key_change(0)
-  // 格式：[15][0][actor_cid_number:CidNumber][proposer_role_code:RoleCode][new_key:32]
-  static DecodedPayload? _decodeProposeKeyChange(Uint8List bytes) {
+  // GrandpaKeyChange(15):
+  // call 0 = cid + role + new_public_key + nonce:u64 + expires:u32 + new_sig:64
+  // call 1 = cid + role + new_public_key + nonce:u64 + expires:u32 + old_sig:64 + new_sig:64
+  static DecodedPayload? _decodeGrandpaKeyChange(
+    Uint8List bytes, {
+    required bool emergencyRecovery,
+  }) {
     var offset = 2;
     final actorRead = _readCidNumber(bytes, offset);
     if (actorRead == null) return null;
@@ -1935,16 +1942,30 @@ class PayloadDecoder {
     if (offset + 32 > bytes.length) return null;
     final keyBytes = bytes.sublist(offset, offset + 32);
     offset += 32;
+    if (offset + 12 > bytes.length) return null;
+    final proofNonce = _readU64Le(bytes, offset);
+    offset += 8;
+    final proofExpiresAt = _readU32Le(bytes, offset);
+    offset += 4;
+    final proofSignatureBytes = emergencyRecovery ? 64 : 128;
+    if (offset + proofSignatureBytes > bytes.length) return null;
+    offset += proofSignatureBytes;
     if (!_hasValidSigningTail(bytes, offset)) return null;
     final keyHex =
         keyBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     return DecodedPayload(
-      action: 'propose_replace_grandpa_key',
-      summary: '机构 ${actorRead.$1} GRANDPA 密钥替换提案',
+      action: emergencyRecovery
+          ? 'propose_emergency_grandpa_key_recovery'
+          : 'schedule_grandpa_key_rotation',
+      summary: emergencyRecovery
+          ? '机构 ${actorRead.$1} GRANDPA 密钥紧急恢复（本机构内部投票）'
+          : '机构 ${actorRead.$1} GRANDPA 密钥正常更换',
       fields: {
         'actor_cid_number': actorRead.$1,
-        'proposer_role_code': roleRead.$1,
-        'new_key': '0x$keyHex',
+        'actor_role_code': roleRead.$1,
+        'new_public_key': '0x$keyHex',
+        'proof_nonce': proofNonce.toString(),
+        'proof_expires_at': proofExpiresAt.toString(),
       },
     );
   }

@@ -88,7 +88,8 @@ a = (pallet_index << 8) | call_index
 | `0x0c00` | `RuntimeUpgrade.propose_runtime_upgrade` | `propose_runtime_upgrade` | `wasm_hash` | citizenchain node / CitizenApp |
 | `0x0c02` | `RuntimeUpgrade.developer_direct_upgrade` | `developer_direct_upgrade` | `wasm_hash` | citizenchain node / CitizenApp |
 | `0x0d00` | `ResolutionDestro.propose_destroy` | `propose_destroy` | `actor_cid_number`, `actor_role_code`, `proposer_role_code`, `institution_account_id`, `operation_fee_payer_description`, `execution_fee_payer_description`, `amount_yuan` | CitizenApp |
-| `0x0f00` | `GrandpaKeyChange.propose_replace_grandpa_key` | `propose_replace_grandpa_key` | `actor_cid_number`, `proposer_role_code`, `new_key` | citizenchain node |
+| `0x0f00` | `GrandpaKeyChange.propose_emergency_grandpa_key_recovery` | `propose_emergency_grandpa_key_recovery` | `actor_cid_number`, `actor_role_code`, `new_public_key`, `proof_nonce`, `proof_expires_at`, `new_public_key_signature` | citizenchain node |
+| `0x0f01` | `GrandpaKeyChange.schedule_grandpa_key_rotation` | `schedule_grandpa_key_rotation` | `actor_cid_number`, `actor_role_code`, `new_public_key`, `proof_nonce`, `proof_expires_at`, `old_public_key_signature`, `new_public_key_signature` | citizenchain node |
 | `0x1602` | `ElectionVote.cast_popular_vote` | `cast_popular_vote` | `proposal_id`, `cid_number`, `account_id` | 未来具体公权选举业务模块 / CitizenApp |
 | `0x1603` | `ElectionVote.cast_mutual_vote` | `cast_mutual_vote` | `proposal_id`, `voter_role_code`, `cid_number`, `account_id` | 未来具体公权选举业务模块 / CitizenApp |
 | `0x1e01` | `PublicManage.propose_close_public_institution` | `propose_close_public_institution` | `actor_cid_number`, `proposer_role_code`, `institution_account_id`, `beneficiary_account_id` | CitizenApp |

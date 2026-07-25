@@ -7,10 +7,11 @@ use frame_support::{
 };
 use frame_system as system;
 use primitives::cid::china::china_cb::CHINA_CB;
-use sp_core::{Pair, Void};
+use sp_consensus_grandpa::AuthorityId as GrandpaAuthorityId;
+use sp_core::{ed25519, Pair, Void};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
+use votingengine::types::{AuthorizationSubject, VotingEngineKind};
 use votingengine::InstitutionRoleProvider as _;
-use votingengine::STATUS_EXECUTION_FAILED;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 
@@ -168,13 +169,18 @@ impl entity_primitives::InstitutionRoleAuthorizationQuery<AccountId32>
     fn role_has_permission(
         role_subject: &entity_primitives::RoleSubject<Vec<u8>, Vec<u8>>,
         business_action_id: &entity_primitives::BusinessActionId<Vec<u8>>,
-        _operation: entity_primitives::RolePermissionOperation,
+        operation: entity_primitives::RolePermissionOperation,
     ) -> bool {
         role_subject.role_code.as_slice()
             == primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER
             && business_action_id.module_tag.as_slice() == crate::MODULE_TAG
-            && business_action_id.action_code
-                == entity_primitives::business_action::ACTION_GRANDPA_KEY_CHANGE
+            && match business_action_id.action_code {
+                entity_primitives::business_action::ACTION_GRANDPA_KEY_EMERGENCY_RECOVERY => true,
+                entity_primitives::business_action::ACTION_GRANDPA_KEY_ROTATION => {
+                    operation == entity_primitives::RolePermissionOperation::Propose
+                }
+                _ => false,
+            }
     }
 
     fn is_authorized(
@@ -262,21 +268,20 @@ impl Config for Test {
     type WeightInfo = ();
 }
 
+fn grandpa_pair(node_index: usize) -> ed25519::Pair {
+    let mut seed = [0u8; 32];
+    seed[0] = (node_index + 1) as u8;
+    ed25519::Pair::from_seed(&seed)
+}
+
+fn grandpa_public_key(node_index: usize) -> [u8; 32] {
+    grandpa_pair(node_index).public().0
+}
+
 fn grandpa_authorities() -> sp_consensus_grandpa::AuthorityList {
-    vec![
-        (
-            GrandpaAuthorityId::from(ed25519::Public::from_raw(CHINA_CB[0].grandpa_key)),
-            1,
-        ),
-        (
-            GrandpaAuthorityId::from(ed25519::Public::from_raw(CHINA_CB[1].grandpa_key)),
-            1,
-        ),
-        (
-            GrandpaAuthorityId::from(ed25519::Public::from_raw(CHINA_CB[2].grandpa_key)),
-            1,
-        ),
-    ]
+    (0..3)
+        .map(|index| (authority_id_from_key(grandpa_public_key(index)), 1))
+        .collect()
 }
 
 fn new_test_ext() -> sp_io::TestExternalities {
@@ -296,6 +301,16 @@ fn new_test_ext() -> sp_io::TestExternalities {
     let mut ext = sp_io::TestExternalities::new(storage);
     ext.execute_with(|| {
         System::set_block_number(1);
+        // 测试使用可签名的确定性 authority 私钥；创世目录只提供公开生产 key。
+        for node_index in 0..3 {
+            let actor_cid_number = cb_cid(node_index);
+            GrandpaKeyOwnerByKey::<Test>::remove(CHINA_CB[node_index].grandpa_key);
+            CurrentGrandpaKeys::<Test>::insert(
+                actor_cid_number.clone(),
+                grandpa_public_key(node_index),
+            );
+            GrandpaKeyOwnerByKey::<Test>::insert(grandpa_public_key(node_index), actor_cid_number);
+        }
     });
     ext
 }
@@ -321,10 +336,10 @@ fn prc_cid() -> CidNumber {
     cb_cid(1)
 }
 
-fn valid_public_key(seed: u8) -> [u8; 32] {
+fn key_pair(seed: u8) -> ed25519::Pair {
     let mut seed_bytes = [0u8; 32];
     seed_bytes[0] = seed;
-    ed25519::Pair::from_seed(&seed_bytes).public().0
+    ed25519::Pair::from_seed(&seed_bytes)
 }
 
 fn identity_public_key() -> [u8; 32] {
@@ -353,6 +368,8 @@ fn pass_prc_proposal(node_index: usize, proposal_id: u64) {
 fn finalize_grandpa_at(block: u64) {
     System::set_block_number(block);
     <Grandpa as Hooks<u64>>::on_finalize(block);
+    System::set_block_number(block + 1);
+    <GrandpaKeyChange as Hooks<u64>>::on_initialize(block + 1);
 }
 
 /// 获取最近一次 create_internal_proposal 分配的 proposal_id。
