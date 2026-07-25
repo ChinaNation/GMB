@@ -70,7 +70,7 @@ fn calculate_transfer_fee(amount_fen: u128) -> u128 {
 }
 
 fn validate_transfer_remark(remark: &str) -> Result<(), String> {
-    let len = remark.as_bytes().len();
+    let len = remark.len();
     if len > MAX_TRANSFER_REMARK_BYTES {
         return Err(format!(
             "转账备注不能超过 {MAX_TRANSFER_REMARK_BYTES} 字节，当前 {len} 字节"

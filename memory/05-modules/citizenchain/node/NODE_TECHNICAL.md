@@ -387,3 +387,21 @@ proposal。三层规则互不替代。
 2. 节点层已有 `home::sync_guard` 判定单元测试；Substrate 服务级功能验证仍主要依赖集成测试。
 3. `BuildSpec` 子命令已标注废弃（2026-04-01 后移除），使用 `ExportChainSpec` 替代。
 4. `fee_blockFees` RPC 只累计 `FeePaid.fee`；tip 的唯一协议值是 0，不读取 FRAME `TransactionFeePaid.tip` 拼接第二套口径。
+
+## 14. Node 严格 Clippy 基线
+
+2026-07-25 起，Node 的源码、测试和构建脚本以以下命令作为零警告基线：
+
+```bash
+cargo clippy -p node --no-deps --all-targets -- -D warnings
+```
+
+生产代码不得依赖 `unwrap` / `expect` 处理可恢复错误。测试断言允许在仅测试编译态保留
+带上下文的 `unwrap` / `expect`，使失败位置和原因保持清晰；该豁免不进入生产构建。
+Tauri IPC、Substrate CLI/service 等由外部框架固定的函数签名，只允许在最小文件范围添加
+定向 lint 说明，不允许关闭 `clippy::all`。
+
+`--all-features` 当前不是有效的 Node 验收组合：它会同时启用上游 `pallet-staking`
+的不兼容特性，并在 polkadot-sdk 依赖内部因 `SessionInterface::peek_disabled` 未实现而停止编译。
+该错误发生在 Node lint 之前，不属于 Node 源码告警；在上游特性组合修复前，不得用它替代
+上述可构建基线。

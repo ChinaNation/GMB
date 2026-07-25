@@ -10,6 +10,9 @@
 //! - 空交易池时不挖矿（避免空块），离线或 major sync 时禁止出块（防分叉）。
 //! - PoW 有效解找到后立即提交；六分钟只是难度调整追踪的长期平均目标。
 
+// Substrate service API 固定返回 sc_service::Error，Node 必须保持框架函数签名。
+#![allow(clippy::result_large_err)]
+
 use citizenchain::{self, apis::RuntimeApi, opaque::Block};
 use codec::{Decode, Encode};
 use futures::FutureExt;
@@ -208,7 +211,6 @@ fn start_cpu_miner<Proof: Send + 'static>(
         let worker = worker.clone();
         let pool_ready = pool_ready.clone();
         let keystore = keystore.clone();
-        let author_public = author_public;
         thread::spawn(move || {
             // 哈希率采样：仅 thread 0 每 SAMPLE_INTERVAL 次哈希统计一次，乘以线程数得到总哈希率。
             const SAMPLE_INTERVAL: u64 = 100_000;
@@ -405,7 +407,7 @@ pub fn new_full(
 ) -> Result<TaskManager, ServiceError> {
     // 生成或加载 TLS 自签证书，注入到网络配置中。
     let tls_cert = crate::core::tls_cert::load_or_generate_tls_cert(config.base_path.path())
-        .map_err(|e| ServiceError::Other(e.into()))?;
+        .map_err(ServiceError::Other)?;
     config.network.tls_private_key_der = Some(tls_cert.private_key_der);
     config.network.tls_certificate_chain_der = Some(tls_cert.certificate_chain_der);
 
@@ -440,14 +442,12 @@ pub fn new_full(
     >::new(&config.network, config.prometheus_registry().cloned());
     let metrics = NetworkBackend::register_notification_metrics(config.prometheus_registry());
     let peer_store_handle = net_config.peer_store_handle();
-    let grandpa_protocol_name = sc_consensus_grandpa::protocol_standard_name(
-        &client
-            .block_hash(0)
-            .ok()
-            .flatten()
-            .expect("Genesis block exists; qed"),
-        &config.chain_spec,
-    );
+    let genesis_hash = client
+        .block_hash(0)
+        .map_err(|err| ServiceError::Other(format!("读取创世区块哈希失败: {err}")))?
+        .ok_or_else(|| ServiceError::Other("创世区块不存在".to_string()))?;
+    let grandpa_protocol_name =
+        sc_consensus_grandpa::protocol_standard_name(&genesis_hash, &config.chain_spec);
     // 所有节点统一注册 GRANDPA 网络协议，保证协议栈一致，避免协议协商不对称导致连接断开。
     // 权威节点启动 grandpa-voter 消费 notification_service；普通节点启动 grandpa-observer 消费。
     let (grandpa_protocol_config, grandpa_notification_service) =

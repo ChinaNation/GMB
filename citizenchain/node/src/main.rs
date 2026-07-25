@@ -9,6 +9,8 @@
 // 也不会因为关闭控制台触发 CTRL_CLOSE_EVENT 把进程杀掉;
 // dev 构建保留 console subsystem,便于看 eprintln!/log 输出。
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// 测试断言失败必须立即终止；保留带上下文的 unwrap/expect，生产构建不受此豁免影响。
+#![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
 #![warn(missing_docs)]
 
 mod admins;

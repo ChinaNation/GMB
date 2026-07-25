@@ -267,7 +267,7 @@ fn build_activate_payload(
     kind: u8,
     signer_public_key: &[u8; 32],
     timestamp: u64,
-) -> Vec<u8> {
+) -> Result<Vec<u8>, String> {
     let nonce: [u8; 16] = rand::random();
     activate_admin_payload(
         cid_number.as_bytes(),
@@ -277,7 +277,7 @@ fn build_activate_payload(
         timestamp,
         &nonce,
     )
-    .expect("已通过链上 CID 校验的 cid_number 必须适配签名协议")
+    .ok_or_else(|| "cid_number 超出管理员激活签名协议上限".to_string())
 }
 
 fn decode_activate_payload(payload_bytes: &[u8]) -> Result<ActivationPayload, String> {
@@ -388,7 +388,7 @@ pub async fn build_activate_admin_request(
         state.kind,
         &public_key_array,
         timestamp,
-    );
+    )?;
     let payload_hex = format!("0x{}", hex::encode(&payload));
 
     let payload_hash = signing::sha256_hash_public(&payload);

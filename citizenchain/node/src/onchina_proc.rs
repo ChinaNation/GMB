@@ -297,7 +297,7 @@ pub fn is_onchina_running() -> bool {
             return false;
         }
     };
-    reap_finished_child(&mut *guard);
+    reap_finished_child(&mut guard);
     guard.is_some()
 }
 
@@ -310,7 +310,7 @@ pub fn start_onchina(app: &AppHandle) -> Result<(), String> {
         Ok(guard) => guard,
         Err(err) => return Err(format!("获取链上中国平台子进程锁失败:{err}")),
     };
-    reap_finished_child(&mut *guard);
+    reap_finished_child(&mut guard);
     if guard.is_some() {
         return Ok(());
     }
@@ -340,7 +340,7 @@ pub fn stop_onchina_checked() -> Result<(), String> {
         Ok(guard) => guard,
         Err(err) => return Err(format!("获取链上中国平台子进程锁失败:{err}")),
     };
-    reap_finished_child(&mut *guard);
+    reap_finished_child(&mut guard);
     if let Some(mut child) = guard.take() {
         child
             .kill()

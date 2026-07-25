@@ -1,19 +1,20 @@
 //! 接 substrate `TransactionPool` 的批次提交器。
 //!
-//!
-//! - 本文件实现 `packer::BatchSubmitter` trait,把组好的 batch 包进
+//! 本文件实现 `packer::BatchSubmitter` trait,把组好的 batch 包进
 //!   `RuntimeCall::OffchainTransaction(submit_offchain_batch { .. })`
 //!   → `UncheckedExtrinsic` → 扔到节点本地 `TransactionPool`。
-//! - extrinsic 构造流程与 `benchmarking.rs::create_benchmark_extrinsic` 严格对齐
+//! extrinsic 构造流程与 `benchmarking.rs::create_benchmark_extrinsic` 严格对齐
 //!   (`TxExtension` 各 Check 顺序必须与 runtime `type TxExtension = (..)` 完全一致)。
-//! - 签名密钥复用 β-1 的 `KeystoreBatchSigner::signing_key` 容器:同一把清算行
+//! 签名密钥复用 β-1 的 `KeystoreBatchSigner::signing_key` 容器:同一把清算行
 //!   管理员 sr25519 私钥既签 batch 内部的 `batch_signature`,也签 extrinsic 外
 //!   层的 `SignedPayload`。
 //!
 //! 本文件与 service 的衔接:
-//! - service.rs 负责传入具体 `Arc<FullClient>` + `Arc<TransactionPoolHandle>`
-//!   + `Arc<RwLock<Option<SigningKey>>>`,构造 `PoolBatchSubmitter` 后作为
-//!   `Arc<dyn BatchSubmitter>` 注入 `start_clearing_bank_components`。
+//!
+//! service.rs 负责传入具体 `Arc<FullClient>` + `Arc<TransactionPoolHandle>`
+//! 以及 `Arc<RwLock<Option<SigningKey>>>`,构造 `PoolBatchSubmitter` 后作为
+//! `Arc<dyn BatchSubmitter>` 注入 `start_clearing_bank_components`。
+//!
 
 use codec::{Decode, Encode};
 use frame_system_rpc_runtime_api::AccountNonceApi;
@@ -176,18 +177,17 @@ pub fn encode_bounded_sig<T: offchain::pallet::Config>(
 }
 
 /// 把 Vec<OffchainBatchItem> 包装为 `BoundedVec<_, MaxBatchSize>`。
+type RuntimeBatch<T> = frame_support::BoundedVec<
+    OffchainBatchItem<
+        <T as frame_system::Config>::AccountId,
+        frame_system::pallet_prelude::BlockNumberFor<T>,
+    >,
+    <T as offchain::pallet::Config>::MaxBatchSize,
+>;
+
 pub fn encode_bounded_batch<T: offchain::pallet::Config>(
     items: Vec<OffchainBatchItem<AccountId32, u32>>,
-) -> Result<
-    frame_support::BoundedVec<
-        OffchainBatchItem<
-            <T as frame_system::Config>::AccountId,
-            frame_system::pallet_prelude::BlockNumberFor<T>,
-        >,
-        <T as offchain::pallet::Config>::MaxBatchSize,
-    >,
-    String,
->
+) -> Result<RuntimeBatch<T>, String>
 where
     <T as frame_system::Config>::AccountId: From<AccountId32>,
     frame_system::pallet_prelude::BlockNumberFor<T>: From<u32>,
@@ -198,15 +198,9 @@ where
             Ok(OffchainBatchItem {
                 tx_id: it.tx_id,
                 payer_account_id: it.payer_account_id.into(),
-                payer_bank_cid: it
-                    .payer_bank_cid
-                    .try_into()
-                    .map_err(|_| "payer_bank_cid 超长".to_string())?,
+                payer_bank_cid: it.payer_bank_cid,
                 recipient_account_id: it.recipient_account_id.into(),
-                recipient_bank_cid: it
-                    .recipient_bank_cid
-                    .try_into()
-                    .map_err(|_| "recipient_bank_cid 超长".to_string())?,
+                recipient_bank_cid: it.recipient_bank_cid,
                 transfer_amount: it.transfer_amount,
                 fee_amount: it.fee_amount,
                 payer_sig: it.payer_sig,

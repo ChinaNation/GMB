@@ -1379,9 +1379,9 @@ pub fn fetch_user_vote_status(
     };
 
     // 查询联合岗位票据状态（CID + 岗位码 + 钱包）。
-    let joint_vote = if meta.kind == 1 && cid_number.is_some() && voter_role_code.is_some() {
-        let cid_number = cid_number.expect("guarded by is_some()");
-        let voter_role_code = voter_role_code.expect("guarded by is_some()");
+    let joint_vote = if let (1, Some(cid_number), Some(voter_role_code)) =
+        (meta.kind, cid_number, voter_role_code)
+    {
         let mut composite_key = cid_number_key(cid_number)?;
         composite_key.extend_from_slice(&encode_compact_u32(voter_role_code.len() as u32));
         composite_key.extend_from_slice(voter_role_code.as_bytes());

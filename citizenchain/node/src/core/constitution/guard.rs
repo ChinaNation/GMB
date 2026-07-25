@@ -28,11 +28,11 @@ impl<I> ConstitutionGuard<I> {
                 .flatten()
                 .map(|data| data.0)
         };
-        let reference = ImmutableReference::from_raw_reader(&read_genesis)
+        let reference = ImmutableReference::from_raw_reader(read_genesis)
             .map_err(|e| format!("护宪守卫:创世不可修改条款基准派生失败:{e:?}"))?;
         verify_manifest_from_reader(&read_genesis, &reference)
             .map_err(|e| format!("护宪守卫:启动 manifest 交叉校验失败:{e}"))?;
-        check_immutable_articles(&read_genesis, &reference)
+        check_immutable_articles(read_genesis, &reference)
             .map_err(|e| format!("护宪守卫:创世完整不变式校验失败:{e:?}"))?;
         let law_bytes = read_genesis(&storage_key::law(CONSTITUTION_LAW_ID))
             .ok_or_else(|| "护宪守卫:创世缺宪法 Law(0)".to_string())?;
@@ -122,7 +122,7 @@ impl<I> ConstitutionGuard<I> {
                 parent_law.latest_version, law.latest_version
             ));
         }
-        check_immutable_articles(&read_post, &self.reference)
+        check_immutable_articles(read_post, &self.reference)
             .map_err(|reason| format!("宪法不变式被破坏:{reason:?}"))?;
         // 任一历史版本 RAW key 被新增、修改或删除时，都按目标后置状态单独复核该版本。
         for key in delta.keys() {

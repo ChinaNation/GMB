@@ -1,5 +1,7 @@
 //! 清算行 offchain 组件启动接线。
 //!
+// 启动装配函数逐项接收 Substrate 服务句柄和清算行配置，保持现有生命周期边界。
+#![allow(clippy::too_many_arguments)]
 //!
 //! - `service.rs` 负责节点通用启动,本文件负责清算行专属启动。
 //! - 这里统一处理 CLI 参数、密钥解锁、packer/listener/reserve worker spawn。
@@ -36,9 +38,7 @@ pub(crate) fn start_from_cli(
     transaction_pool: Arc<TxPool>,
     task_manager: &TaskManager,
 ) -> Option<Arc<OffchainClearingRpcImpl>> {
-    let Some(raw_cid_number) = clearing_bank_cid_number else {
-        return None;
-    };
+    let raw_cid_number = clearing_bank_cid_number?;
 
     let actor_cid_number = match primitives::cid::number::validate_cid_number_format(raw_cid_number)
     {
@@ -69,7 +69,10 @@ pub(crate) fn start_from_cli(
     if keystore.has_signing_key() && !password.is_empty() {
         match keystore.load_signing_key(password) {
             Ok(key) => {
-                *signing_key_slot.write().expect("lock") = Some(key);
+                match signing_key_slot.write() {
+                    Ok(mut slot) => *slot = Some(key),
+                    Err(err) => *err.into_inner() = Some(key),
+                }
                 log::info!("[ClearingBank] 签名密钥已解锁");
             }
             Err(e) => {

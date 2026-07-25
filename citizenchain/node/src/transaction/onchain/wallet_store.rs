@@ -9,19 +9,14 @@ use std::{fs, io::ErrorKind, path::PathBuf};
 use tauri::AppHandle;
 
 /// 钱包类型。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum WalletKind {
     /// 本机 powr 矿工密钥派生的热钱包，不写入 `cold-wallets.json`。
     MinerHot,
     /// 用户手动添加的冷钱包，只保存 SS58 展示地址和账户 ID。
+    #[default]
     Cold,
-}
-
-impl Default for WalletKind {
-    fn default() -> Self {
-        Self::Cold
-    }
 }
 
 fn default_deletable() -> bool {
@@ -51,20 +46,11 @@ pub struct ColdWallet {
 }
 
 /// 钱包列表 + 当前激活钱包 ID。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WalletStore {
     pub wallets: Vec<ColdWallet>,
     pub active_id: Option<String>,
-}
-
-impl Default for WalletStore {
-    fn default() -> Self {
-        Self {
-            wallets: Vec::new(),
-            active_id: None,
-        }
-    }
 }
 
 fn store_path(app: &AppHandle) -> Result<PathBuf, String> {

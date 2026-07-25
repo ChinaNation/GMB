@@ -132,7 +132,28 @@
 - 清理残留
 - 跑对应测试或说明未跑原因
 
-### 5.5 文档重排 / AI 系统改造任务
+### 5.5 CitizenApp UI 设计 / 实现任务
+
+必须读取：
+
+- `memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md` §4.1.1
+- `memory/07-ai/module-checklists/citizenapp.md`
+- 目标页面当前代码与对应模块技术文档
+- `citizenapp/lib/ui/app_theme.dart`
+- 目标页面实际引用的 `citizenapp/assets/icons/` 与图片资产
+
+适用范围：
+
+- CitizenApp 新页面设计
+- CitizenApp 现有页面重构
+- ImageGen UI 效果图
+- Flutter 页面实现或视觉评审
+- 底部导航、头像、身份徽章、卡片、列表、页面状态和全局主题调整
+
+底部“广场 / 公民 / 聊天 / 交易 / 我的”的顺序、标签和既有图标默认锁定；只有用户在
+当前任务中明确要求修改底部导航时才允许变更。
+
+### 5.6 文档重排 / AI 系统改造任务
 
 必须读取：
 

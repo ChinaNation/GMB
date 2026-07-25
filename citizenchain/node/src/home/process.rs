@@ -373,10 +373,8 @@ fn start_node_with_policy(app: AppHandle, restart_existing: bool) -> Result<Node
                     .as_ref()
                     .map(NodeHandle::is_alive)
                     .unwrap_or(false);
-                if running {
-                    if state.node_state == NodeLifecycleState::Running {
-                        state.last_error = None;
-                    }
+                if running && state.node_state == NodeLifecycleState::Running {
+                    state.last_error = None;
                 }
                 running
             };

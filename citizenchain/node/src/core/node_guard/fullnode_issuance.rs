@@ -436,6 +436,7 @@ mod tests {
         (0u32, 0u32, 1u32, 0u32, (free, 0u128, 0u128, 0u128)).encode()
     }
 
+    #[allow(clippy::type_complexity)]
     fn valid_transition(
         block: u32,
         author: [u8; 32],

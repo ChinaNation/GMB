@@ -421,6 +421,7 @@ mod tests {
             .encode()
     }
 
+    #[allow(clippy::type_complexity)]
     fn valid_transition() -> (
         BTreeMap<Vec<u8>, Vec<u8>>,
         BTreeMap<Vec<u8>, Vec<u8>>,

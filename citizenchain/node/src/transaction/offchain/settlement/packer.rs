@@ -358,6 +358,7 @@ mod tests {
         state.cached_nonce = 1;
     }
 
+    #[allow(clippy::type_complexity)]
     struct MockSubmitter {
         calls: Mutex<Vec<(Vec<u8>, Vec<u8>, AccountId32, u64, Vec<u8>, [u8; 64])>>,
         reply: Mutex<Result<H256, String>>,

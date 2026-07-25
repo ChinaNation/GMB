@@ -76,7 +76,10 @@ pub(crate) fn load_institution_catalog() -> Result<Vec<InstitutionCatalogEntry>,
     }
     let catalog = parse_institution_catalog()?;
     let _ = INSTITUTION_CATALOG.set(catalog);
-    Ok(INSTITUTION_CATALOG.get().unwrap().clone())
+    INSTITUTION_CATALOG
+        .get()
+        .cloned()
+        .ok_or_else(|| "初始化权威节点清单失败".to_string())
 }
 
 // 权威节点清单既被 bootnode 模块用于 PeerId 映射，也被 GRANDPA 模块用于公钥匹配，

@@ -1,5 +1,8 @@
 //! 多签转账 Tauri 命令。
 
+// Tauri IPC 参数对应扫码多签协议字段，必须保持既有逐字段调用契约。
+#![allow(clippy::too_many_arguments)]
+
 use crate::{governance, home};
 use tauri::AppHandle;
 

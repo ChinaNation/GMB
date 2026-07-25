@@ -192,7 +192,7 @@ fn total_issuance_storage_key() -> String {
 
 fn hex_to_bytes(hex: &str) -> Option<Vec<u8>> {
     let trimmed = hex.strip_prefix("0x").unwrap_or(hex);
-    if trimmed.len() % 2 != 0 {
+    if !trimmed.len().is_multiple_of(2) {
         return None;
     }
     let mut out = Vec::with_capacity(trimmed.len() / 2);

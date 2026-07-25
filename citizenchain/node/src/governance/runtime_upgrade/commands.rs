@@ -1,3 +1,6 @@
+// Tauri IPC 参数由既有前端签名协议逐字段传入，合并参数会改变命令契约。
+#![allow(clippy::too_many_arguments)]
+
 use super::{call_data, signing as runtime_signing, types::ProposeUpgradeRequestResult};
 use crate::{
     admins::management::activation,

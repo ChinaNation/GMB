@@ -129,7 +129,7 @@ pub fn start_node_in_process(
                 use sc_cli::CliConfiguration;
 
                 // 设置 SS58 地址前缀。
-                let _ = sp_core::crypto::set_default_ss58_version(
+                sp_core::crypto::set_default_ss58_version(
                     sp_core::crypto::Ss58AddressFormat::custom(primitives::core_const::SS58_FORMAT),
                 );
 

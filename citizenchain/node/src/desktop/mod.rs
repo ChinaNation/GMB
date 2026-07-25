@@ -2,9 +2,12 @@
 //!
 //! 将 Substrate 区块链节点和 Tauri 桌面界面合并为单一程序。
 //! 节点生命周期与 App 进程绑定：
+//!
 //! - App 启动 → setup 后台线程自动 `start_node_blocking`
-//! - 用户关窗（红 X / Cmd+Q / 菜单 Quit / 系统关闭）→ App 退出 → `RunEvent::Exit` 触发 `cleanup_on_exit`
+//! - 用户关窗（红 X / Cmd+Q / 菜单 Quit / 系统关闭）→ App 退出 →
+//!   `RunEvent::Exit` 触发 `cleanup_on_exit`
 //! - macOS 黄色横线为系统原生 minimize，不影响节点和进程，无需拦截
+//!
 //! 三平台（macOS / Windows / Linux）行为统一：关窗即退出软件即停节点。
 //! 桌面端各功能模块已扁平化到 crate 根层，例如 `crate::governance` 与 `crate::settings`。
 
@@ -21,7 +24,7 @@ use std::sync::Mutex;
 ///
 /// Substrate 节点在 setup 阶段后台线程自动启动；首页仍提供手动启停按钮。
 pub fn run_desktop() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -127,24 +130,32 @@ pub fn run_desktop() {
             // 自动启动节点。在后台线程跑，避免阻塞 setup 让窗口慢出现。
             // start_node_blocking 内部带 5s + 2s 等待，前端通过 get_node_status 轮询自然刷新。
             let app_handle = app.handle().clone();
-            std::thread::Builder::new()
+            if let Err(err) = std::thread::Builder::new()
                 .name("auto-start-node".into())
                 .spawn(move || {
                     if let Err(e) = home::start_node_blocking(app_handle) {
                         eprintln!("[节点] 自动启动失败: {e}");
                     }
                 })
-                .expect("spawn auto-start-node thread failed");
+            {
+                eprintln!("[节点] 自动启动线程创建失败: {err}");
+            }
 
             Ok(())
         })
-        .build(tauri::generate_context!("tauri.conf.json"))
-        .expect("启动公民链失败")
-        .run(|app, event| {
-            if let tauri::RunEvent::Exit = event {
-                cleanup_on_exit(app);
-                // 如果用户手动启动过链上中国平台,节点退出时一并停掉子进程。
-                crate::onchina_proc::stop_onchina();
-            }
-        });
+        .build(tauri::generate_context!("tauri.conf.json"));
+    let app = match app {
+        Ok(app) => app,
+        Err(err) => {
+            eprintln!("启动公民链失败: {err}");
+            return;
+        }
+    };
+    app.run(|app, event| {
+        if let tauri::RunEvent::Exit = event {
+            cleanup_on_exit(app);
+            // 如果用户手动启动过链上中国平台,节点退出时一并停掉子进程。
+            crate::onchina_proc::stop_onchina();
+        }
+    });
 }

@@ -466,7 +466,7 @@ where
             if amount_fen == 0 {
                 return Err(ErrorObject::owned(-1, "转账金额不能为零", None::<()>));
             }
-            let remark_len = remark_raw.as_bytes().len();
+            let remark_len = remark_raw.len();
             if remark_len > MAX_TRANSFER_REMARK_BYTES {
                 return Err(ErrorObject::owned(
                     -1,
@@ -531,14 +531,12 @@ where
 
             let mut total_fee: u128 = 0;
             for record in &events {
-                match &record.event {
+                if let runtime::RuntimeEvent::OnchainTransaction(
+                    onchain::pallet::Event::FeePaid { fee, .. },
+                ) = &record.event
+                {
                     // FeePaid.fee 就是完整链上交易费或投票费。
-                    runtime::RuntimeEvent::OnchainTransaction(
-                        onchain::pallet::Event::FeePaid { fee, .. },
-                    ) => {
-                        total_fee = total_fee.saturating_add(*fee);
-                    }
-                    _ => {}
+                    total_fee = total_fee.saturating_add(*fee);
                 }
             }
 

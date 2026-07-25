@@ -1079,6 +1079,10 @@ pub fn is_relevant_key(key: &[u8]) -> bool {
     matches_relevant_prefixes(key, &storage_key::relevant_prefixes())
 }
 
+pub fn matches_relevant_prefixes(key: &[u8], prefixes: &[Vec<u8>]) -> bool {
+    prefixes.iter().any(|prefix| key.starts_with(prefix))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1287,8 +1291,4 @@ mod tests {
             Err(GuardError::CitizenAccountIdBindingMissing)
         );
     }
-}
-
-pub fn matches_relevant_prefixes(key: &[u8], prefixes: &[Vec<u8>]) -> bool {
-    prefixes.iter().any(|prefix| key.starts_with(prefix))
 }

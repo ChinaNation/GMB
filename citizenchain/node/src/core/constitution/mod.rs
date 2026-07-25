@@ -132,7 +132,7 @@ fn decode_law_head(law_scale: &[u8]) -> Result<MLawHead, GuardError> {
 }
 
 /// 在 章>节>条 嵌套结构里按条号查找条文。
-fn find_article<'a>(chapters: &'a [MChapter], number: u32) -> Option<&'a MArticle> {
+fn find_article(chapters: &[MChapter], number: u32) -> Option<&MArticle> {
     chapters
         .iter()
         .flat_map(|c| c.sections.iter())
@@ -827,7 +827,7 @@ where
         }
     }
     let read = |key: &[u8]| map.get(key).cloned();
-    check_immutable_articles(&read, reference).map_err(|e| format!("{e:?}"))?;
+    check_immutable_articles(read, reference).map_err(|e| format!("{e:?}"))?;
     let law_bytes = read(&storage_key::law(CONSTITUTION_LAW_ID))
         .ok_or_else(|| format!("{:?}", GuardError::ConstitutionLawMissing))?;
     let law = decode_law_head(&law_bytes).map_err(|e| format!("{e:?}"))?;
@@ -1705,8 +1705,8 @@ mod tests {
             .expect("应能构建当前 runtime 创世状态");
         let top = storage.top;
         let read = |key: &[u8]| top.get(key).cloned();
-        let reference = ImmutableReference::from_raw_reader(&read).expect("应能派生真实创世基准");
-        assert_eq!(check_immutable_articles(&read, &reference), Ok(()));
+        let reference = ImmutableReference::from_raw_reader(read).expect("应能派生真实创世基准");
+        assert_eq!(check_immutable_articles(read, &reference), Ok(()));
         let law = decode_law_head(
             top.get(&storage_key::law(CONSTITUTION_LAW_ID))
                 .expect("真实创世应含 Law(0)"),
@@ -1749,8 +1749,8 @@ mod tests {
             )
         });
         let reference =
-            ImmutableReference::from_raw_reader(&read).expect("fresh chainspec 应能派生护宪基准");
-        assert_eq!(check_immutable_articles(&read, &reference), Ok(()));
+            ImmutableReference::from_raw_reader(read).expect("fresh chainspec 应能派生护宪基准");
+        assert_eq!(check_immutable_articles(read, &reference), Ok(()));
     }
 
     #[test]

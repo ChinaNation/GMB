@@ -734,7 +734,7 @@ impl<I> NodeGuard<I> {
             }
         };
 
-        if let Err(reason) = runtime_policy::check_transition(&post_delta, &read_post) {
+        if let Err(reason) = runtime_policy::check_transition(&post_delta, read_post) {
             log::error!(
                 target: "node-guard",
                 "拒绝区块 #{} ({:?}):手续费制度状态非法 —— {reason}",
@@ -743,7 +743,7 @@ impl<I> NodeGuard<I> {
             );
             return Ok(true);
         }
-        if let Err(reason) = runtime_policy::check_block(&body, &read_post) {
+        if let Err(reason) = runtime_policy::check_block(&body, read_post) {
             log::error!(
                 target: "node-guard",
                 "拒绝区块 #{} ({:?}):实际手续费结果非法 —— {reason}",
@@ -769,9 +769,9 @@ impl<I> NodeGuard<I> {
         if let Err(reason) = fullnode_issuance::check_transition(
             *params.header.number(),
             fullnode_issuance::author_from_header(&params.header),
-            &read_parent,
-            &read_pre,
-            &read_post,
+            read_parent,
+            read_pre,
+            read_post,
             &mut issuance_plan,
         ) {
             log::error!(
@@ -842,8 +842,8 @@ impl<I> NodeGuard<I> {
             if let Err(reason) = cid_lifecycle::check_transition(
                 *params.header.number(),
                 &post_delta,
-                &read_parent,
-                &read_post,
+                read_parent,
+                read_post,
                 cid_lifecycle,
             ) {
                 log::error!(
@@ -890,7 +890,7 @@ impl<I> NodeGuard<I> {
                 keys.insert(key.clone(), ());
             }
             let keys: Vec<Vec<u8>> = keys.into_keys().collect();
-            if let Err(reason) = cid_lifecycle::check_full_state(&keys, &read_post, cid_lifecycle) {
+            if let Err(reason) = cid_lifecycle::check_full_state(&keys, read_post, cid_lifecycle) {
                 log::error!(
                     target: "node-guard",
                     "拒绝区块 #{} ({:?}):runtime 升级后的 CID 规范表全检失败 —— {:?}",
@@ -952,7 +952,7 @@ impl<I> NodeGuard<I> {
                 );
                 return Ok(true);
             }
-            if let Err(reason) = genesis_pallet::check_full_state(&read_post) {
+            if let Err(reason) = genesis_pallet::check_full_state(read_post) {
                 log::error!(
                     target: "node-guard",
                     "拒绝区块 #{} ({:?}):runtime 升级后的创世模块全检失败 —— {:?}",
@@ -1029,8 +1029,8 @@ impl<I> NodeGuard<I> {
         };
         if let Err(reason) = national_body_composition::check_transition(
             &post_delta,
-            &read_parent,
-            &read_post,
+            read_parent,
+            read_post,
             runtime_upgrade_vote_keys.as_deref(),
         ) {
             log::error!(

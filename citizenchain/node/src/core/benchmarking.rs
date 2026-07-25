@@ -2,6 +2,9 @@
 //!
 //! Should only be used for benchmarking as it may break in other contexts.
 
+// Substrate benchmark CLI 固定返回 sc_cli::Error；此处不能改变上游命令接口的错误类型。
+#![allow(clippy::result_large_err)]
+
 use crate::core::service::FullClient;
 
 use citizenchain as runtime;
@@ -107,11 +110,7 @@ pub fn create_benchmark_extrinsic(
     call: runtime::RuntimeCall,
     nonce: u32,
 ) -> runtime::UncheckedExtrinsic {
-    let genesis_hash = client
-        .block_hash(0)
-        .ok()
-        .flatten()
-        .expect("Genesis block exists; qed");
+    let genesis_hash = client.block_hash(0).ok().flatten().unwrap_or_default();
     chain_signing::build_signed_extrinsic_local(call, genesis_hash, nonce, &sender)
 }
 

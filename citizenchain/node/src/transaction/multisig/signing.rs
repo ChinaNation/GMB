@@ -246,11 +246,10 @@ fn encode_actor_cid(actor_cid_number: &str) -> Result<Vec<u8>, String> {
 /// 按链上 `RoleCode` 上限编码岗位码；管理员账户本身不代表业务权限。
 fn encode_proposer_role_code(proposer_role_code: &str) -> Result<Vec<u8>, String> {
     let proposer_role_code = proposer_role_code.trim();
-    if proposer_role_code.is_empty() || proposer_role_code.as_bytes().len() > 64 {
+    if proposer_role_code.is_empty() || proposer_role_code.len() > 64 {
         return Err("proposer_role_code 长度必须为 1 到 64 字节".to_string());
     }
-    let mut encoded =
-        governance::signing::encode_compact_u32_pub(proposer_role_code.as_bytes().len() as u32);
+    let mut encoded = governance::signing::encode_compact_u32_pub(proposer_role_code.len() as u32);
     encoded.extend_from_slice(proposer_role_code.as_bytes());
     Ok(encoded)
 }

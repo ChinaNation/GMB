@@ -437,7 +437,7 @@ fn decode_hex(input: &str) -> Result<Vec<u8>, String> {
     if text.is_empty() {
         return Ok(Vec::new());
     }
-    if text.len() % 2 != 0 {
+    if !text.len().is_multiple_of(2) {
         return Err("hex 长度必须偶数".to_string());
     }
     let mut out = Vec::with_capacity(text.len() / 2);

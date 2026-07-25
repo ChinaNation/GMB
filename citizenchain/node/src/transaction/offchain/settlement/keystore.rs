@@ -27,7 +27,6 @@ const SALT_LEN: usize = 16;
 
 /// 加密存储文件格式：[salt:16][nonce:12][cid_number_len:1][cid_number:N][ciphertext+tag:48+16]
 /// cid_number 最长 48 字节，私钥固定 32 字节。
-
 /// 清算行管理员密钥（内存中的解密状态）。
 pub struct SigningKey {
     /// sr25519 密钥对（含私钥）。

@@ -1,5 +1,8 @@
 // 治理模块入口：注册 Tauri 命令，聚合机构数据。
 
+// Tauri IPC 命令参数对应既有扫码签名载荷，不能在 Node 内改成新的封装对象。
+#![allow(clippy::too_many_arguments)]
+
 pub(crate) mod balance_watch;
 pub(crate) mod chain_query;
 pub(crate) mod institution;
@@ -95,9 +98,7 @@ fn load_balance_at_block(
     label: &str,
     warnings: &mut Vec<String>,
 ) -> Option<String> {
-    let Some(hash) = block_hash else {
-        return None;
-    };
+    let hash = block_hash?;
 
     match institution::fetch_balance_at(account_id, Some(hash)) {
         Ok(balance) => balance.map(|value| value.to_string()),
@@ -153,9 +154,10 @@ fn collect_institution_balances(
     match entry {
         InstitutionRef::Nrc(_) => {
             let fee_account_id = entry.fee_account_id();
-            let safety_fund_account_id = entry
-                .safety_fund_account_id()
-                .expect("国家储委会安全基金账户 AccountId必须存在");
+            let Some(safety_fund_account_id) = entry.safety_fund_account_id() else {
+                warnings.push("国家储委会安全基金账户 AccountId 缺失".to_string());
+                return balances;
+            };
             balances.nrc_fee_balance_fen =
                 load_balance_at_block(&fee_account_id, block_hash, "费用账户余额", warnings);
             balances.safety_fund_balance_fen = load_balance_at_block(
@@ -171,9 +173,10 @@ fn collect_institution_balances(
                 load_balance_at_block(&fee_account_id, block_hash, "费用账户余额", warnings);
         }
         InstitutionRef::Prb(_) => {
-            let stake_account_id = entry
-                .stake_account_id()
-                .expect("省储行永久质押账户 AccountId必须存在");
+            let Some(stake_account_id) = entry.stake_account_id() else {
+                warnings.push("省储行永久质押账户 AccountId 缺失".to_string());
+                return balances;
+            };
             let fee_account_id = entry.fee_account_id();
             balances.staking_balance_fen =
                 load_balance_at_block(&stake_account_id, block_hash, "永久质押账户余额", warnings);
@@ -351,9 +354,8 @@ pub async fn get_institution_proposals(
         let ids = proposal::fetch_active_proposal_ids(&cid_number)?;
         let mut items = Vec::new();
         for id in ids.iter().rev() {
-            match proposal::fetch_proposal_page(*id, 1) {
-                Ok(page) => items.extend(page.items),
-                Err(_) => {}
+            if let Ok(page) = proposal::fetch_proposal_page(*id, 1) {
+                items.extend(page.items);
             }
         }
         Ok(items)

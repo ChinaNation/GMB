@@ -311,10 +311,21 @@ pub(crate) fn start_sync_guard(app: AppHandle) {
     }
 
     let (stop_tx, stop_rx) = mpsc::channel();
-    let thread = thread::Builder::new()
+    let thread = match thread::Builder::new()
         .name("sync-guard".to_string())
         .spawn(move || guard_loop(app, stop_rx))
-        .expect("spawn sync guard thread failed");
+    {
+        Ok(thread) => thread,
+        Err(err) => {
+            update_status(|status| {
+                status.running = false;
+                status.state = "start_failed".to_string();
+                status.last_reason = Some(format!("同步守护线程启动失败: {err}"));
+                status.last_updated_unix_secs = None;
+            });
+            return;
+        }
+    };
 
     *runtime = Some(SyncGuardRuntime { stop_tx, thread });
     update_status(|status| {

@@ -1,5 +1,7 @@
 //! 清算行本地 L3 存款缓存账本。
 //!
+// 账本入口显式接收付款、收款和链状态字段，参数拆组会扩大本次清理的业务改动。
+#![allow(clippy::too_many_arguments)]
 //!
 //! - 权威账本在链上 `offchain::DepositBalance` /
 //!   `BankTotalDeposits`。本模块只是**缓存**,用于:
@@ -246,8 +248,10 @@ impl OffchainLedger {
                 state.pending_credit = state.pending_credit.saturating_sub(amount);
                 state.confirmed = state.confirmed.saturating_add(amount);
             } else {
-                let mut s = L3AccountState::default();
-                s.confirmed = amount;
+                let s = L3AccountState {
+                    confirmed: amount,
+                    ..L3AccountState::default()
+                };
                 ledger.accounts.insert(recipient.clone(), s);
             }
         }
@@ -324,13 +328,20 @@ impl OffchainLedger {
         if plaintext.len() < 4 {
             return Err("账本数据不完整".to_string());
         }
-        let a_len = u32::from_le_bytes(plaintext[..4].try_into().unwrap()) as usize;
+        let a_len = u32::from_le_bytes(
+            plaintext[..4]
+                .try_into()
+                .map_err(|_| "账本账户区长度字段损坏".to_string())?,
+        ) as usize;
         if plaintext.len() < 4 + a_len + 4 {
             return Err("账本数据不完整".to_string());
         }
         let a_data = &plaintext[4..4 + a_len];
-        let p_len =
-            u32::from_le_bytes(plaintext[4 + a_len..4 + a_len + 4].try_into().unwrap()) as usize;
+        let p_len = u32::from_le_bytes(
+            plaintext[4 + a_len..4 + a_len + 4]
+                .try_into()
+                .map_err(|_| "账本待处理区长度字段损坏".to_string())?,
+        ) as usize;
         let p_data = &plaintext[4 + a_len + 4..4 + a_len + 4 + p_len];
 
         let accounts_vec: Vec<(AccountId32, L3AccountState)> =
@@ -535,7 +546,7 @@ impl OffchainLedger {
     /// 按 `accepted_at` 升序,保证上链顺序可预测。
     pub fn take_pending_for_batch(&self, max_items: usize) -> Vec<PendingPayment> {
         let ledger = self.inner.read().unwrap_or_else(|e| e.into_inner());
-        let mut items: Vec<PendingPayment> = ledger.pending.iter().cloned().collect();
+        let mut items = ledger.pending.to_vec();
         items.sort_by_key(|p| p.accepted_at);
         items.into_iter().take(max_items).collect()
     }

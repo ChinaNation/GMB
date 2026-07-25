@@ -1,3 +1,6 @@
+// Substrate CLI runner 的闭包签名固定返回 sc_cli::Error，无法在 Node 侧装箱该错误类型。
+#![allow(clippy::result_large_err)]
+
 use super::{
     benchmarking::{inherent_benchmark_data, RemarkBuilder, TransferWithRemarkBuilder},
     chain_spec,
