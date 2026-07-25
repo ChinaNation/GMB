@@ -85,7 +85,10 @@ fn failed_state(running: bool, detail: String) -> OnChinaPlatformState {
 
 fn wait_until_healthy_after_start() -> OnChinaPlatformState {
     let mut last_error = "链上中国平台健康检查未通过".to_string();
-    for _ in 0..20 {
+    // 上限 120 次 × 500ms = 60 秒;健康一通过即提前返回。首次内嵌 PostgreSQL 要
+    // initdb 建集群 + 建库 + 迁移,明显超过原来的 10 秒预算,过短会把还在初始化的
+    // 正常启动误判成"启动失败"。子进程退出才是真失败,超时只表示还没就绪。
+    for _ in 0..120 {
         let process_running = crate::onchina_proc::is_onchina_running();
         if !process_running {
             return failed_state(false, "链上中国平台启动失败:子进程已退出".to_string());

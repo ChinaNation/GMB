@@ -214,7 +214,7 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'transfer');
-      expect(decoded.fields['amount_yuan'], '234.00 GMB');
+      expect(decoded.fields['amount_yuan'], '234.00 元');
       expect(
         decoded.fields['recipient_account_id'],
         '0x${hexLower(destBytes)}',
@@ -1069,9 +1069,9 @@ void main() {
       );
 
       expect(deposit?.action, 'deposit_clearing_bank');
-      expect(deposit?.fields, {'amount_yuan': '123.45 GMB'});
+      expect(deposit?.fields, {'amount_yuan': '123.45 元'});
       expect(withdrawal?.action, 'withdraw_clearing_bank');
-      expect(withdrawal?.fields, {'amount_yuan': '5.00 GMB'});
+      expect(withdrawal?.fields, {'amount_yuan': '5.00 元'});
     });
 
     test('decodes clearing bank register node call', () {
@@ -1275,7 +1275,7 @@ void main() {
         decoded.fields['execution_fee_payer_description'],
         '$nrcActorCid 的链上费用账户',
       );
-      expect(decoded.fields['amount_yuan'], '100.00 GMB');
+      expect(decoded.fields['amount_yuan'], '100.00 元');
     });
 
     test('rejects legacy 48-byte sweep account payload', () {
@@ -1329,7 +1329,7 @@ void main() {
         decoded.fields['execution_fee_payer_description'],
         '$nrcActorCid 的链上费用账户',
       );
-      expect(decoded.fields['amount_yuan'], '123.45 GMB');
+      expect(decoded.fields['amount_yuan'], '123.45 元');
       expect(decoded.fields['remark'], 'test');
     });
 
@@ -1368,7 +1368,7 @@ void main() {
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
       expect(decoded, isNotNull);
-      expect(decoded!.fields['amount_yuan'], '2.34 GMB');
+      expect(decoded!.fields['amount_yuan'], '2.34 元');
       expect(decoded.fields['remark'], remark);
     });
     // Phase 3(2026-04-22)新增:8 个 execute / cleanup / cancel 类 call。
@@ -2191,7 +2191,7 @@ void main() {
       expect(decoded.fields['admins_len'], '3');
       expect(decoded.fields['regular_threshold'], '3/3');
       expect(decoded.fields['create_threshold'], '3/3');
-      expect(decoded.fields['amount_yuan'], '123.45 GMB');
+      expect(decoded.fields['amount_yuan'], '123.45 元');
       expect(decoded.fields.containsKey('threshold'), isFalse);
     });
 
@@ -2388,7 +2388,7 @@ void main() {
         decoded.fields['institution_account_id'],
         '0x${hexLower(List<int>.filled(32, 0x66))}',
       );
-      expect(decoded.fields['amount_yuan'], '123.45 GMB');
+      expect(decoded.fields['amount_yuan'], '123.45 元');
       expect(decoded.fields['remark'], '');
     });
 

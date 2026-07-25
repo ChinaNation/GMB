@@ -919,13 +919,6 @@ export const PrivateDetailLayout: React.FC<Props> = ({
 
   const governanceSection = (
     <Card title="机构治理">
-      <Alert
-        type="info"
-        showIcon
-        style={{ marginBottom: 16 }}
-        message="管理员是人，岗位是职位；本页面只构造链上治理交易，不本地改管理员真源。"
-        description="管理员集合每行填“姓,名,账户”。创建岗位时岗位码由 runtime 生成；岗位权限与初始任职随创建原子提交。法定代表人任命/更换只填公民 CID；解除则清空链上完整法定代表人结构。"
-      />
       <Form form={governanceForm} layout="vertical" disabled={!canWrite || governanceSubmitting}>
         <Form.Item
           label="提案发起岗位码"

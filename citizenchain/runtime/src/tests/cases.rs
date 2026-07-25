@@ -2167,7 +2167,7 @@ fn institution_governance_can_clear_legal_representative_atomically() {
                 .expect("CHINA_CB CID must contain institution code");
         let cid: public_manage::CidNumberOf<Runtime> =
             cid_number.clone().try_into().expect("CID fits");
-        let representative_account = public_admins::AdminAccounts::<Runtime>::get(&cid)
+        let representative_account_id = public_admins::AdminAccounts::<Runtime>::get(&cid)
             .expect("NRC genesis admins exist")
             .admins[0]
             .account_id
@@ -2188,7 +2188,7 @@ fn institution_governance_can_clear_legal_representative_atomically() {
             }
         };
         let representative_assignment = entity_primitives::InstitutionAssignmentTarget {
-            account_id: representative_account.clone(),
+            account_id: representative_account_id.clone(),
             term_start: 0,
             term_end: 0,
             assignment_source:
@@ -2204,7 +2204,7 @@ fn institution_governance_can_clear_legal_representative_atomically() {
                         family_name: "法定".as_bytes().to_vec(),
                         given_name: "代表人".as_bytes().to_vec(),
                         cid_number: b"CITIZEN-LR-001".to_vec(),
-                        account_id: representative_account.clone(),
+                        account_id: representative_account_id.clone(),
                     },
                 ),
                 vec![representative_assignment],
@@ -2217,7 +2217,7 @@ fn institution_governance_can_clear_legal_representative_atomically() {
             .expect("legal representative should be stored");
         assert_eq!(
             stored_representative.account_id,
-            representative_account.clone()
+            representative_account_id.clone()
         );
 
         assert_ok!(
@@ -2251,7 +2251,7 @@ fn institution_governance_can_clear_legal_representative_atomically() {
                         family_name: "重复法定".as_bytes().to_vec(),
                         given_name: "代表人".as_bytes().to_vec(),
                         cid_number: b"CITIZEN-LR-002".to_vec(),
-                        account_id: representative_account,
+                        account_id: representative_account_id,
                     },
                 ),
                 vec![

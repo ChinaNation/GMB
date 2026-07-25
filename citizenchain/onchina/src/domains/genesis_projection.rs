@@ -1,0 +1,210 @@
+//! 创世实体落地:把创世时直接上链、未走注册局本地创建流程的实体,播种/回填进对应注册局本地库。
+//!
+//! 设计见 memory/01-architecture/citizenchain/onchina-citizen-private-projection-design.md §2.5。
+//! 现阶段两个创世实体:
+//! - 创世公民程伟(`GZ000-CTZN6`,基金会法定代表人,无 citizen-identity)→ **直接播种进联邦注册局本地库**,
+//!   置于 贵州省(GZ)/绥阳市(与基金会同市)。联邦贵州组管理员进绥阳市即可见/可按 CID 搜到;
+//!   不加省级特殊视图,不用 PENDING/待补档。
+//! - 创世私权机构公民链技术发展基金会(`GZ018-SFGYR`)→ 绥阳市注册局回填(私权,后续 Step 实现)。
+//!
+//! 铁律:幂等——本地已有则跳过,绝不覆盖任何链下正本,不动现有写入器与推链门。
+
+use chrono::Utc;
+
+use crate::auth::repo::active_node_binding;
+use crate::cid::InstitutionCategory;
+use crate::core::chain_runtime::{institution_lookup, is_tier1_registry};
+use crate::core::db::Db;
+use crate::domains::citizens::model::{CitizenRecord, CitizenStatus};
+use crate::institution::subjects::model::LegalRepresentative;
+use crate::institution::subjects::Institution;
+
+use primitives::cid::china::citizenchain::{
+    CITIZENCHAIN_FOUNDATION, CITIZENCHAIN_GENESIS_ADMINS, LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER,
+    LEGAL_REPRESENTATIVE_FAMILY_NAME, LEGAL_REPRESENTATIVE_GIVEN_NAME,
+};
+use primitives::cid::number::parse_cid_number_parts;
+
+/// 取 CID 号 r5 段(省2位 + 市3位),返回 (province_code, city_code)。
+fn split_province_city(cid_number: &str) -> Result<(String, String), String> {
+    let r5 = cid_number
+        .split('-')
+        .next()
+        .ok_or_else(|| format!("genesis cid_number {cid_number} missing r5 segment"))?;
+    if r5.len() < 5 {
+        return Err(format!("genesis cid_number {cid_number} r5 segment too short"));
+    }
+    Ok((r5[..2].to_string(), r5[2..5].to_string()))
+}
+
+/// 由 CID 号派生一个稳定正整数作为本地 `id`(仅用于列表游标,非业务主键)。
+fn stable_citizen_id(cid_number: &str) -> u64 {
+    cid_number
+        .bytes()
+        .fold(0u64, |acc, byte| {
+            acc.wrapping_mul(131).wrapping_add(u64::from(byte))
+        })
+        .max(1)
+}
+
+/// 创世法定代表人(程伟)账户 0x 小写 hex。
+fn genesis_legal_representative_account_hex() -> String {
+    let account = CITIZENCHAIN_GENESIS_ADMINS
+        .first()
+        .map(|admin| admin.account_id)
+        .unwrap_or([0u8; 32]);
+    format!("0x{}", hex::encode(account))
+}
+
+fn citizen_exists(db: &Db, province_code: &str, cid_number: &str) -> Result<bool, String> {
+    let province_code = province_code.to_string();
+    let cid_number = cid_number.to_string();
+    db.with_client(move |conn| {
+        let row = conn
+            .query_opt(
+                "SELECT 1 FROM citizens WHERE province_code = $1 AND cid_number = $2",
+                &[&province_code, &cid_number],
+            )
+            .map_err(|e| format!("query genesis citizen existence failed: {e}"))?;
+        Ok(row.is_some())
+    })
+}
+
+/// 联邦注册局启动时播种创世公民程伟;非联邦节点或已存在则跳过(幂等)。
+///
+/// 返回 `true` 表示本次真正写入了一条;`false` 表示按规则跳过。
+pub(crate) fn seed_genesis_citizen_blocking(db: &Db) -> Result<bool, String> {
+    let Some(binding) = active_node_binding(db)? else {
+        return Ok(false); // 节点未绑定机构,不播种
+    };
+    if !is_tier1_registry(binding.institution_code.as_str()) {
+        return Ok(false); // 仅联邦注册局(Tier1)持有创世公民
+    }
+
+    let cid_number = LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER.to_string();
+    // 省码取程伟 CID(GZ);市码取基金会 CID 的市码(绥阳 018),让程伟落在联邦库的"贵州/绥阳市"下。
+    let (province_code, _self_city) = split_province_city(cid_number.as_str())?;
+    let (_foundation_province, city_code) = split_province_city(CITIZENCHAIN_FOUNDATION.cid_number)?;
+
+    if citizen_exists(db, province_code.as_str(), cid_number.as_str())? {
+        return Ok(false);
+    }
+
+    let account_hex = genesis_legal_representative_account_hex();
+    let now = Utc::now();
+    let record = CitizenRecord {
+        id: stable_citizen_id(cid_number.as_str()),
+        cid_number: cid_number.clone(),
+        // 链下正本(护照号/证件/居住地/护照有效期)留空,注册局后续补充,投影/播种不伪造。
+        passport_no: String::new(),
+        family_name: LEGAL_REPRESENTATIVE_FAMILY_NAME.to_string(),
+        given_name: LEGAL_REPRESENTATIVE_GIVEN_NAME.to_string(),
+        citizen_sex: String::new(),
+        citizen_birth_date: String::new(),
+        account_id: Some(account_hex.clone()),
+        account_verified_at: None,
+        citizen_status: CitizenStatus::Normal,
+        // 无 citizen-identity(无护照窗口/居住地)→ 暂不具投票资格,补齐并上链后由正常流程更新。
+        voting_eligible: false,
+        passport_valid_from: String::new(),
+        passport_valid_until: String::new(),
+        status_updated_at: Some(now.timestamp()),
+        province_code,
+        city_code,
+        town_code: String::new(),
+        birth_province_code: String::new(),
+        birth_city_code: String::new(),
+        birth_town_code: String::new(),
+        archive_hash: None,
+        onchain_tx_hash: None,
+        onchain_block_number: None,
+        onchain_at: None,
+        creator_account_id: account_hex, // 以程伟自身账户作可验证来源锚点
+        created_at: now,
+        updater_account_id: None,
+        updated_at: now,
+    };
+    db.upsert_citizen_row(&record)?;
+    Ok(true)
+}
+
+fn institution_exists(db: &Db, cid_number: &str) -> Result<bool, String> {
+    let cid_number = cid_number.to_string();
+    db.with_client(move |conn| {
+        let row = conn
+            .query_opt("SELECT 1 FROM ids WHERE cid_number = $1", &[&cid_number])
+            .map_err(|e| format!("query genesis institution existence failed: {e}"))?;
+        Ok(row.is_some())
+    })
+}
+
+/// 市/省注册局启动时回填其作用域内的创世私权机构(基金会)。
+///
+/// 仅当本节点作用域(其自身机构 CID 的省市)== 基金会所在省市(绥阳)时回填;联邦节点不做
+/// (它按 M3 drill-in 投影);本地已存在则跳过(幂等)。需读链(`institution_lookup` 已查
+/// PrivateManage);链不可达则返回 Err,由调用方告警跳过,不阻断启动。
+///
+/// 返回 `true` 表示本次真正写入;`false` 表示按规则跳过。
+pub(crate) fn backfill_genesis_private_blocking(db: &Db) -> Result<bool, String> {
+    let Some(binding) = active_node_binding(db)? else {
+        return Ok(false);
+    };
+    if is_tier1_registry(binding.institution_code.as_str()) {
+        return Ok(false); // 联邦节点走 M3,不做市级私权回填
+    }
+    let foundation_cid = CITIZENCHAIN_FOUNDATION.cid_number.to_string();
+    let (found_province, found_city) = split_province_city(foundation_cid.as_str())?;
+    let (node_province, node_city) = split_province_city(binding.institution_cid_number.as_str())?;
+    if node_province != found_province || node_city != found_city {
+        return Ok(false); // 基金会不在本注册局作用域
+    }
+    if institution_exists(db, foundation_cid.as_str())? {
+        return Ok(false);
+    }
+
+    // 读链权威:基金会私权机构信息(institution_lookup 依次查公权/私权,私权命中)。
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| format!("build genesis private backfill runtime failed: {e}"))?;
+    let chain_inst = rt
+        .block_on(institution_lookup(foundation_cid.as_str()))?
+        .ok_or_else(|| format!("genesis foundation {foundation_cid} not found on chain"))?;
+
+    let parts = parse_cid_number_parts(foundation_cid.as_str())
+        .map_err(|e| format!("genesis foundation cid invalid: {e}"))?;
+    let legal_representative = chain_inst.legal_representative.map(|lr| LegalRepresentative {
+        family_name: String::from_utf8_lossy(&lr.family_name).into_owned(),
+        given_name: String::from_utf8_lossy(&lr.given_name).into_owned(),
+        cid_number: String::from_utf8_lossy(&lr.cid_number).into_owned(),
+        account_id: format!("0x{}", hex::encode(lr.account_id)),
+    });
+    let now = Utc::now();
+    let inst = Institution {
+        cid_number: foundation_cid.clone(),
+        cid_full_name: Some(String::from_utf8_lossy(&chain_inst.cid_full_name).into_owned()),
+        cid_short_name: Some(String::from_utf8_lossy(&chain_inst.cid_short_name).into_owned()),
+        category: InstitutionCategory::PrivateInstitution,
+        p1: if parts.profit { "1" } else { "0" }.to_string(),
+        // 行政区名字不入库(china.sqlite 单源,读时派生),只存代码。
+        province_name: String::new(),
+        city_name: String::new(),
+        town_name: String::new(),
+        province_code: found_province,
+        city_code: found_city,
+        town_code: String::from_utf8_lossy(&chain_inst.town_code).into_owned(),
+        institution_code: parts.institution_code_text,
+        education_type: None,
+        private_type: None,
+        partnership_kind: None,
+        has_legal_personality: Some(true), // 私权法人
+        parent_cid_number: None,
+        legal_representative,
+        legal_representative_photo_path: None,
+        legal_representative_photo_name: None,
+        legal_representative_photo_mime: None,
+        legal_representative_photo_size: None,
+        creator_account_id: None, // 链上创世投影无独立创建人
+        created_at: now,
+    };
+    db.upsert_institution_row(&inst)?;
+    Ok(true)
+}

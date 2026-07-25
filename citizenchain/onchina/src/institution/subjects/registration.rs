@@ -157,6 +157,23 @@ async fn list_institutions_inner(
         },
         None => None,
     };
+    // 联邦(Tier1)省组管理员按市查看私权机构:先把该市链上私权机构 drill-in 投影进联邦本地库,
+    // 再列。链读投影失败(如链不可达)只告警不阻断,列表仍返回本地已有(fail-open 展示)。
+    if matches!(filter, InstitutionListFilter::Private)
+        && crate::core::chain_runtime::is_tier1_registry(ctx.institution_code.as_str())
+    {
+        if let Some(city) = city_code {
+            let scope = crate::domains::projection::NodeScope {
+                province_code: province_code.to_string(),
+                city_code: city.to_string(),
+            };
+            if let Err(err) =
+                crate::domains::projection::drill_in_project_private_scope(&state.db, &scope).await
+            {
+                tracing::warn!(error = %err, "federal drill-in private projection failed");
+            }
+        }
+    }
     let page = match state.db.list_institutions_exact(
         filter,
         query.private_type.as_deref(),

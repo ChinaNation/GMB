@@ -31,22 +31,22 @@ export function isFixedKind(kind: QrKind): boolean {
 export interface SignRequestBody {
   action: number;
   sig_alg: 1;
-  pubkey: string;
+  signer_public_key: string;
   payload_hex: string;
 }
 
 export interface SignResponseBody {
-  pubkey: string;
+  signer_public_key: string;
   signature: string;
 }
 
 export interface UserContactBody {
-  address: string;
+  ss58_address: string;
   contactName: string;
 }
 
 export interface UserTransferBody {
-  address: string;
+  ss58_address: string;
   recipientName: string;
   amount: string;
   symbol: string;
@@ -127,7 +127,7 @@ function parseSignRequestBody(b: Record<string, unknown>): SignRequestBody {
   return {
     action,
     sig_alg: 1,
-    pubkey: b64ToHex(u, 'u', 32),
+    signer_public_key: b64ToHex(u, 'u', 32),
     payload_hex: b64ToHex(d, 'd'),
   };
 }
@@ -136,20 +136,20 @@ function parseSignResponseBody(b: Record<string, unknown>): SignResponseBody {
   const u = requireString(b, 'u');
   const s = requireString(b, 's');
   return {
-    pubkey: b64ToHex(u, 'u', 32),
+    signer_public_key: b64ToHex(u, 'u', 32),
     signature: b64ToHex(s, 's', 64),
   };
 }
 
 function parseUserContactBody(b: Record<string, unknown>): UserContactBody {
   return {
-    address: requireString(b, 'address'),
+    ss58_address: requireString(b, 'ss58_address'),
     contactName: requireString(b, 'contact_name'),
   };
 }
 
 function parseUserTransferBody(b: Record<string, unknown>): UserTransferBody {
-  const address = requireString(b, 'address');
+  const ss58_address = requireString(b, 'ss58_address');
   const recipientName = b['recipient_name'];
   const amount = b['amount'];
   const symbol = b['symbol'];
@@ -166,7 +166,7 @@ function parseUserTransferBody(b: Record<string, unknown>): UserTransferBody {
       'user_transfer 的 recipient_name/amount/symbol/memo/bank 必须为字符串',
     );
   }
-  return { address, recipientName, amount, symbol, memo, bank };
+  return { ss58_address, recipientName, amount, symbol, memo, bank };
 }
 
 export function parseQrEnvelope(raw: string | Record<string, unknown>): QrEnvelope {

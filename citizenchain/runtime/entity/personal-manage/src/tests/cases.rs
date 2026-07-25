@@ -22,7 +22,7 @@ fn setup_creator_balance() -> AccountId32 {
     c
 }
 
-fn proposed_account(creator_account_id: &AccountId32, name: &[u8]) -> AccountId32 {
+fn proposed_account_id(creator_account_id: &AccountId32, name: &[u8]) -> AccountId32 {
     PersonalManage::derive_personal_account(creator_account_id, name)
         .expect("derive should succeed")
 }
@@ -104,7 +104,7 @@ fn propose_create_does_not_mandate_personal_multisig_cid() {
             .try_into()
             .expect("admins fit");
         let name = account_name(b"no-cid-personal");
-        let dq = proposed_account(&c, b"no-cid-personal");
+        let dq = proposed_account_id(&c, b"no-cid-personal");
 
         // 空 cid + 空姓名不应被拒。
         assert_ok!(PersonalManage::propose_create(
@@ -124,7 +124,7 @@ fn propose_create_writes_pending_and_reserves_fee() {
         let c = setup_creator_balance();
         let admins = admins_vec(3); // admin(0)..admin(2)
         let name = account_name(b"alice-personal");
-        let dq = proposed_account(&c, b"alice-personal");
+        let dq = proposed_account_id(&c, b"alice-personal");
 
         assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c.clone()),
@@ -173,7 +173,7 @@ fn create_executes_when_internal_vote_reaches_threshold() {
         let admins = admins_vec(3);
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
         let name = account_name(b"alice-personal");
-        let dq = proposed_account(&c, b"alice-personal");
+        let dq = proposed_account_id(&c, b"alice-personal");
 
         assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c.clone()),
@@ -218,7 +218,7 @@ fn create_rejected_cleanup_releases_reserve_and_emits_event() {
         let admins = admins_vec(3);
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
         let name = account_name(b"alice-personal");
-        let dq = proposed_account(&c, b"alice-personal");
+        let dq = proposed_account_id(&c, b"alice-personal");
 
         assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c.clone()),
@@ -249,7 +249,7 @@ fn create_rejected_cleanup_releases_reserve_and_emits_event() {
 fn propose_create_rejects_duplicate_personal_account() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
-        let dq = proposed_account(&c, b"alice-personal");
+        let dq = proposed_account_id(&c, b"alice-personal");
         // 直接把目标地址灌成 Active,模拟"地址已存在"
         seed_active_multisig(&dq, &c, &[admin(0), admin(1), admin(2)], 500);
 
@@ -391,7 +391,7 @@ fn propose_create_rejects_below_minimum_amount() {
 fn propose_create_rejects_reserved_and_protected_accounts() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
-        let protected = proposed_account(&c, b"protected-target");
+        let protected = proposed_account_id(&c, b"protected-target");
         set_protected_account(Some(protected));
 
         assert_noop!(
@@ -425,7 +425,7 @@ fn propose_create_rejects_reserved_and_protected_accounts() {
 fn propose_close_writes_pending_and_blocks_concurrent() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
-        let dq = proposed_account(&c, b"close-pending");
+        let dq = proposed_account_id(&c, b"close-pending");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
         seed_active_multisig(&dq, &c, &admins_acc, 1_000);
 
@@ -454,7 +454,7 @@ fn propose_close_writes_pending_and_blocks_concurrent() {
 fn close_executes_when_internal_vote_reaches_threshold() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
-        let dq = proposed_account(&c, b"close-active");
+        let dq = proposed_account_id(&c, b"close-active");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
         seed_active_multisig(&dq, &c, &admins_acc, 1_000);
         let beneficiary_acc = beneficiary_account_id();
@@ -498,7 +498,7 @@ fn close_executes_when_internal_vote_reaches_threshold() {
 fn propose_close_rejects_when_balance_below_minimum() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
-        let dq = proposed_account(&c, b"low-balance");
+        let dq = proposed_account_id(&c, b"low-balance");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
         // 余额 10 分只够最低执行费，扣费后无法向受益人转出 ED，应拒绝。
         seed_active_multisig(&dq, &c, &admins_acc, 10);
@@ -518,7 +518,7 @@ fn propose_close_rejects_when_balance_below_minimum() {
 fn propose_close_rejects_reserved_and_protected_beneficiary() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
-        let dq = proposed_account(&c, b"close-protected");
+        let dq = proposed_account_id(&c, b"close-protected");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
         seed_active_multisig(&dq, &c, &admins_acc, 1_000);
 
@@ -548,7 +548,7 @@ fn create_execution_failed_terminal_cleans_pending_and_emits_once() {
         let c = setup_creator_balance();
         let admins = admins_vec(3);
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(admin).collect();
-        let dq = proposed_account(&c, b"exec-fail-create");
+        let dq = proposed_account_id(&c, b"exec-fail-create");
 
         assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c.clone()),
@@ -582,7 +582,7 @@ fn create_execution_failed_terminal_cleans_pending_and_emits_once() {
 fn close_execution_failed_terminal_keeps_account_and_clears_pending() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
-        let dq = proposed_account(&c, b"exec-fail-close");
+        let dq = proposed_account_id(&c, b"exec-fail-close");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
         seed_active_multisig(&dq, &c, &admins_acc, 1_000);
 
@@ -674,7 +674,7 @@ fn non_admin_cannot_propose_or_vote() {
 fn existential_deposit_is_preserved_after_close() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
-        let dq = proposed_account(&c, b"ed-check");
+        let dq = proposed_account_id(&c, b"ed-check");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
         seed_active_multisig(&dq, &c, &admins_acc, 500);
         let beneficiary_acc = beneficiary_account_id();

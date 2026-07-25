@@ -340,7 +340,7 @@ pub fn submit_transfer(
 
     let result = signing::verify_and_submit(
         &request_id,
-        expected_signer_public_key.trim_start_matches("0x"),
+        &expected_signer_public_key,
         &expected_payload_hash,
         &call_data,
         sign_nonce,

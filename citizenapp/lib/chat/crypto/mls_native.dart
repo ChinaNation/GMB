@@ -257,7 +257,7 @@ class NativeMlsCrypto implements MlsCrypto, MlsGroupCrypto {
       'group_id': groupId,
       'member_account_ids': memberAccountIds,
     });
-    final removed = (response['removed_accounts'] as List?)
+    final removed = (response['removed_account_ids'] as List?)
             ?.map((item) => item.toString())
             .toList() ??
         const <String>[];

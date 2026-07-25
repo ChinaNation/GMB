@@ -169,6 +169,42 @@ export async function listCitizens(
   });
 }
 
+/**
+ * 编辑公民资料输入。
+ *
+ * 可变:姓、名、居住市、居住镇、选举资格。不可变(现实不可变,初始化后锁定):
+ * 性别/出生日期/出生地;护照号与有效期由服务端在出生日期就绪时确定性签发,不在此提交。
+ * 居住省(= CID 省)与身份 CID 不变;跨省居住迁移属"跨地区",后续单独处理。
+ */
+export type EditCitizenInput = {
+  family_name: string;
+  given_name: string;
+  citizen_sex: CitizenSex | '';
+  citizen_birth_date: string;
+  birth_province_code: string;
+  birth_city_code: string;
+  birth_town_code: string;
+  city_code: string;
+  town_code: string;
+  voting_eligible: boolean;
+};
+
+/** 编辑/补齐公民本地档案(不可变字段锁定),返回最新档案行。 */
+export async function editCitizen(
+  auth: AdminAuth,
+  cidNumber: string,
+  payload: EditCitizenInput,
+): Promise<CitizenRow> {
+  return request<CitizenRow>(
+    `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/edit`,
+    {
+      method: 'POST',
+      headers: jsonAdminHeaders(auth),
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
 export async function searchLegalRepresentativeCitizens(
   auth: AdminAuth,
   q: string,

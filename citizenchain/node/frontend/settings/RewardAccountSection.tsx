@@ -158,7 +158,7 @@ export function RewardAccountSection({ rewardAccount, onUpdated }: Props) {
 
       {showAddressScan && (
         <AddressScanModal
-          onResult={({ address }) => { setInput(address); setShowAddressScan(false); }}
+          onResult={({ ss58_address }) => { setInput(ss58_address); setShowAddressScan(false); }}
           onClose={() => setShowAddressScan(false)}
         />
       )}

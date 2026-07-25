@@ -9,6 +9,9 @@ use crate::institution::subjects::http::resolve_created_by;
 use crate::institution::subjects::model::InstitutionDetailOutput;
 use crate::*;
 
+/// 联邦注册局管理员列表链读结果缓存有效期。管理员任免变更后至多延迟该窗口可见。
+const FEDERAL_ADMINS_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(30);
+
 fn balance_lookup_key(account_id: &str) -> String {
     crate::crypto::pubkey::normalize_account_id(account_id).unwrap_or_default()
 }
@@ -44,6 +47,21 @@ pub(crate) async fn list_federal_registry_admins(
     if chain_runtime::chain_province_code_by_name(&province).is_none() {
         let message = format!("province '{province}' is not a valid chain province");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+    }
+    // 命中短 TTL 缓存直接返回,跳过后续全量链读(全省任职扫描 + 批量余额),
+    // 避免每次进 tab 都阻塞在链读上。锁不跨 await。
+    {
+        let cache = state.federal_admins_cache.lock().unwrap();
+        if let Some((cached_at, rows)) = cache.get(&province) {
+            if cached_at.elapsed() < FEDERAL_ADMINS_CACHE_TTL {
+                return Json(ApiResponse {
+                    code: 0,
+                    message: "ok".to_string(),
+                    data: rows.clone(),
+                })
+                .into_response();
+            }
+        }
     }
     let binding = match repo::active_node_binding(&state.db) {
         Ok(Some(binding)) => binding,
@@ -162,6 +180,11 @@ pub(crate) async fn list_federal_registry_admins(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     };
+    // 回填短 TTL 缓存,窗口内重复打开直接命中,不再全量链读。锁不跨 await。
+    {
+        let mut cache = state.federal_admins_cache.lock().unwrap();
+        cache.insert(province.clone(), (std::time::Instant::now(), rows.clone()));
+    }
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),

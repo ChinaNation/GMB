@@ -31,8 +31,10 @@ class DecodedPayload {
 
   /// 用户确认页展示字段。
   ///
-  /// `fields` 保留独立验真的机器字段，`reviewFields` 只放人能判断的
-  /// 中文业务信息；账户统一展示规范的 `account_id`，SS58 仅用于明确标注的地址。
+  /// `fields` 保留独立验真的机器字段(账户为 0x hex 公钥,供跨端逐字节验真);
+  /// `reviewFields` 只放人能判断的中文业务信息。到 UI 层由 field_labels 统一
+  /// 把账户字段(`account_id`/`*_account_id`)的 hex 渲染成 SS58 地址 —— 人看的
+  /// 地方一律 SS58,hex 公钥只给系统用;`*_public_key`/`*_hash` 按明确标注保持 hex。
   final Map<String, String> reviewFields;
 }
 
@@ -623,10 +625,10 @@ class PayloadDecoder {
     return DecodedPayload(
       action: 'transfer',
       summary:
-          '转账 $amountYuan GMB 给 ${_truncateAddress(toAddress)}$remarkSuffix',
+          '转账 $amountYuan 元 给 ${_truncateAddress(toAddress)}$remarkSuffix',
       fields: {
         'recipient_account_id': _bytesToLowerHex(toAccountId),
-        'amount_yuan': '$amountYuan GMB',
+        'amount_yuan': '$amountYuan 元',
         'remark': remark,
       },
     );
@@ -683,7 +685,7 @@ class PayloadDecoder {
     return DecodedPayload(
       action: 'propose_transfer',
       summary:
-          '${actorCidNumber == null ? '个人多签' : '机构 $actorCidNumber'}提案转账 $amountYuan GMB 给 ${_truncateAddress(beneficiary)}',
+          '${actorCidNumber == null ? '个人多签' : '机构 $actorCidNumber'}提案转账 $amountYuan 元 给 ${_truncateAddress(beneficiary)}',
       fields: <String, String>{
         if (actorCidNumber != null) 'actor_cid_number': actorCidNumber,
         if (proposerRoleCode != null) 'proposer_role_code': proposerRoleCode,
@@ -702,7 +704,7 @@ class PayloadDecoder {
                 {'actor_cid_number': actorCidNumber},
               ),
         'beneficiary_account_id': beneficiary,
-        'amount_yuan': '$amountYuan GMB',
+        'amount_yuan': '$amountYuan 元',
         'remark': remark,
       },
     );
@@ -1263,12 +1265,12 @@ class PayloadDecoder {
 
     return DecodedPayload(
       action: 'propose_issuance',
-      summary: '决议发行 $amountYuan GMB（$allocLen 项分配）',
+      summary: '决议发行 $amountYuan 元（$allocLen 项分配）',
       fields: {
         'actor_cid_number': actorCidNumber,
         'proposer_role_code': roleRead.$1,
         'reason': reason,
-        'amount_yuan': '$amountYuan GMB',
+        'amount_yuan': '$amountYuan 元',
         'allocation_count': allocLen.toString(),
       },
     );
@@ -1655,7 +1657,7 @@ class PayloadDecoder {
         'admins_len': adminsLen.toString(),
         'regular_threshold': '$regularThreshold/$adminsLen',
         'create_threshold': '$adminsLen/$adminsLen',
-        'amount_yuan': '$amountYuan GMB',
+        'amount_yuan': '$amountYuan 元',
       },
       reviewFields: {
         'account_name': accountName,
@@ -1663,7 +1665,7 @@ class PayloadDecoder {
         'admins_len': adminsLen.toString(),
         'regular_threshold': '$regularThreshold/$adminsLen',
         'create_threshold': '$adminsLen/$adminsLen',
-        'amount_yuan': '$amountYuan GMB',
+        'amount_yuan': '$amountYuan 元',
       },
     );
   }
@@ -1760,7 +1762,7 @@ class PayloadDecoder {
     }
     return DecodedPayload(
       action: 'propose_safety_fund_transfer',
-      summary: '安全基金转账 $amountYuan GMB 给 ${_truncateAddress(beneficiary)}',
+      summary: '安全基金转账 $amountYuan 元 给 ${_truncateAddress(beneficiary)}',
       fields: {
         'actor_cid_number': actorRead.$1,
         'proposer_role_code': roleRead.$1,
@@ -1776,7 +1778,7 @@ class PayloadDecoder {
           {'actor_cid_number': actorRead.$1},
         ),
         'beneficiary_account_id': beneficiary,
-        'amount_yuan': '$amountYuan GMB',
+        'amount_yuan': '$amountYuan 元',
         'remark': remark,
       },
     );
@@ -1804,7 +1806,7 @@ class PayloadDecoder {
     final amountYuan = _fenToYuan(amountFen);
     return DecodedPayload(
       action: 'propose_sweep_to_main',
-      summary: '机构 ${actorRead.$1} 费用账户划转 $amountYuan GMB',
+      summary: '机构 ${actorRead.$1} 费用账户划转 $amountYuan 元',
       fields: {
         'actor_cid_number': actorRead.$1,
         'proposer_role_code': roleRead.$1,
@@ -1817,7 +1819,7 @@ class PayloadDecoder {
           'execution_fee_payer_description',
           {'actor_cid_number': actorRead.$1},
         ),
-        'amount_yuan': '$amountYuan GMB',
+        'amount_yuan': '$amountYuan 元',
       },
     );
   }
@@ -1844,7 +1846,7 @@ class PayloadDecoder {
     final amountYuan = _fenToYuan(amountFen);
     return DecodedPayload(
       action: 'propose_destroy',
-      summary: '机构 ${actorRead.$1} 决议销毁 $amountYuan GMB',
+      summary: '机构 ${actorRead.$1} 决议销毁 $amountYuan 元',
       fields: {
         'actor_cid_number': actorRead.$1,
         'proposer_role_code': roleRead.$1,
@@ -1857,7 +1859,7 @@ class PayloadDecoder {
           'execution_fee_payer_description',
           {'actor_cid_number': actorRead.$1},
         ),
-        'amount_yuan': '$amountYuan GMB',
+        'amount_yuan': '$amountYuan 元',
       },
     );
   }
@@ -2921,9 +2923,9 @@ class PayloadDecoder {
     final amountYuan = _fenToYuan(amountFen);
     return DecodedPayload(
       action: action,
-      summary: '$summaryPrefix $amountYuan GMB',
+      summary: '$summaryPrefix $amountYuan 元',
       fields: {
-        'amount_yuan': '$amountYuan GMB',
+        'amount_yuan': '$amountYuan 元',
       },
     );
   }

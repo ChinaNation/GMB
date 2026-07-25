@@ -13,7 +13,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// - 不再展示卡内刷新按钮,刷新由外层 [WalletDetailPage] 的 RefreshIndicator
 ///   下拉触发,通过 [GlobalKey<WalletOnchainBalanceCardState>] 调 [refresh()]。
 /// - 卡片高度进一步收紧:padding 顶 8 / 底 12;标题与金额行间距 8。
-/// - 加载态:金额位显示「— 元」占位,GMB 由外层右下角固定展示。
+/// - 加载态:金额位显示「— 元」占位,单位「元」由外层右下角固定展示。
 /// - 错误态:金额位显示「查询失败,点击刷新」,点击触发 [refresh()]。
 class WalletOnchainBalanceCard extends StatefulWidget {
   const WalletOnchainBalanceCard({super.key, required this.wallet});
@@ -99,7 +99,7 @@ class WalletOnchainBalanceCardState extends State<WalletOnchainBalanceCard> {
               const Padding(
                 padding: EdgeInsets.only(bottom: 4),
                 child: Text(
-                  'GMB',
+                  '元',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
@@ -130,7 +130,7 @@ class WalletOnchainBalanceCardState extends State<WalletOnchainBalanceCard> {
         ),
       );
     }
-    // 加载态 / 初始态:占位「— 元」,GMB 由外层右下角 Row 固定展示。
+    // 加载态 / 初始态:占位「— 元」,单位「元」由外层右下角 Row 固定展示。
     if (_balance == null) {
       return const Text(
         '— 元',

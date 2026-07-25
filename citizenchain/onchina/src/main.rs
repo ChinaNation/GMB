@@ -34,10 +34,18 @@ pub(crate) use auth::model::*;
 pub(crate) use cid::model::*;
 pub(crate) use domains::citizens::model::*;
 
+/// 联邦注册局管理员列表链读结果的进程内短 TTL 缓存(按省名)。
+/// 每次进 tab 全量链读(全省任职扫描 + 批量余额)代价高;短窗内重复打开直接命中缓存,
+/// 避免每次开 tab 都阻塞全量链读。管理员变更后至多缓存窗口延迟可见。
+pub(crate) type FederalAdminsCache = Arc<
+    std::sync::Mutex<std::collections::HashMap<String, (std::time::Instant, Vec<FederalRegistryAdminRow>)>>,
+>;
+
 #[derive(Clone)]
 struct AppState {
     db: Db,
     rate_limiter: Arc<LocalRateLimiter>,
+    federal_admins_cache: FederalAdminsCache,
 }
 
 #[derive(Serialize)]
@@ -1977,6 +1985,7 @@ fn main() {
     let state = AppState {
         db,
         rate_limiter: Arc::new(LocalRateLimiter::new()),
+        federal_admins_cache: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
     };
     info!("initialized database state with defaults");
     if run_gov_chain_projection_command(&state, command.clone()) {
@@ -2009,6 +2018,21 @@ fn main() {
             .unwrap_or_else(|e| panic!("创世机构目录链上对账失败(fail-closed): {e}"));
     } else {
         warn!("ONCHINA_GOV_CHAIN_AUDIT=0,已跳过创世机构目录链上对账(仅限开发)");
+    }
+
+    // 创世公民播种:联邦注册局把程伟(基金会法定代表人,无 citizen-identity)直接落本地库
+    // (贵州/绥阳市)。幂等——已有则跳过;非联邦节点内部跳过;失败仅告警不阻断启动(纯新增)。
+    match crate::domains::genesis_projection::seed_genesis_citizen_blocking(&state.db) {
+        Ok(true) => info!("创世公民(法定代表人)已播种进联邦注册局本地库"),
+        Ok(false) => {}
+        Err(err) => warn!("创世公民播种跳过: {err}"),
+    }
+    // 创世私权机构回填:属主市注册局(绥阳)把基金会从链上投影进本地库。幂等——已有则跳过;
+    // 非属主/联邦节点内部跳过;需读链,链不可达仅告警不阻断启动(纯新增,不动现有写入器)。
+    match crate::domains::genesis_projection::backfill_genesis_private_blocking(&state.db) {
+        Ok(true) => info!("创世私权机构(基金会)已回填进属主市注册局本地库"),
+        Ok(false) => {}
+        Err(err) => warn!("创世私权机构回填跳过: {err}"),
     }
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -2092,6 +2116,11 @@ fn main() {
             .route(
                 "/api/v1/admin/federal-registry-admins",
                 get(auth::list_federal_registry_admins),
+            )
+            // M3:联邦省组管理员进入本省某市 → 把该市链上公民+私权机构投影进联邦本地库。
+            .route(
+                "/api/v1/admin/registry/drill-in-project",
+                post(domains::projection::drill_in_project_city),
             )
             .route(
                 "/api/v1/admin/own-institution-admins",
@@ -2261,6 +2290,10 @@ fn main() {
             .route(
                 "/api/v1/admin/chain/submit",
                 post(domains::citizens::occupy::submit_chain_sign),
+            )
+            .route(
+                "/api/v1/admin/citizens/:cid_number/edit",
+                post(domains::citizens::admin_entry::admin_update_citizen),
             )
             .route(
                 "/api/v1/admin/citizens/:cid_number/onchain/revoke/prepare",

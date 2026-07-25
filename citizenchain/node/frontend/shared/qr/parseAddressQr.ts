@@ -8,7 +8,7 @@
 import { parseQrEnvelope, QrParseError, type UserContactBody, type UserTransferBody } from './citizenQr';
 
 export type AddressScanResult = {
-  address: string;
+  ss58_address: string;
   amount?: number;
   memo?: string;
 };
@@ -40,17 +40,17 @@ export function parseAddressQr(raw: string): AddressScanResult {
       switch (env.kind) {
         case 'user_contact': {
           const body = env.body as UserContactBody;
-          if (!SS58_RE.test(body.address)) {
+          if (!SS58_RE.test(body.ss58_address)) {
             throw new Error('用户码中地址格式无效');
           }
-          return { address: body.address };
+          return { ss58_address: body.ss58_address };
         }
         case 'user_transfer': {
           const body = env.body as UserTransferBody;
-          if (!SS58_RE.test(body.address)) {
+          if (!SS58_RE.test(body.ss58_address)) {
             throw new Error('收款码中地址格式无效');
           }
-          const result: AddressScanResult = { address: body.address };
+          const result: AddressScanResult = { ss58_address: body.ss58_address };
           if (body.amount) {
             const amt = Number(body.amount);
             if (!isNaN(amt) && amt > 0) result.amount = amt;
@@ -69,12 +69,12 @@ export function parseAddressQr(raw: string): AddressScanResult {
   // 2. gmb://account/<address>
   const gmbMatch = GMB_ACCOUNT_RE.exec(trimmed);
   if (gmbMatch) {
-    return { address: gmbMatch[1] };
+    return { ss58_address: gmbMatch[1] };
   }
 
   // 3. 裸 SS58 地址
   if (SS58_RE.test(trimmed)) {
-    return { address: trimmed };
+    return { ss58_address: trimmed };
   }
 
   throw new Error('无法识别的二维码');

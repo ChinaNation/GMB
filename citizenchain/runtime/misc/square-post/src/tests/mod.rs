@@ -148,13 +148,13 @@ fn verified_account() -> AccountId32 {
 fn visitor_account() -> AccountId32 {
     account(2)
 }
-fn subscriber_account() -> AccountId32 {
+fn subscriber_account_id() -> AccountId32 {
     account(3)
 }
 fn poor_account() -> AccountId32 {
     account(5)
 }
-fn creator_account() -> AccountId32 {
+fn creator_account_id() -> AccountId32 {
     account(6)
 }
 fn platform_fee_account() -> AccountId32 {
@@ -215,9 +215,9 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
         .expect("test storage should build");
     pallet_balances::GenesisConfig::<Test> {
         balances: vec![
-            (subscriber_account(), 1_000_000_000),
+            (subscriber_account_id(), 1_000_000_000),
             (poor_account(), 100),
-            (creator_account(), 1_000_000_000),
+            (creator_account_id(), 1_000_000_000),
         ],
         ..Default::default()
     }
@@ -282,20 +282,20 @@ fn post_regression_keeps_existing_content_boundary() {
 fn subscribe_charges_immediately_and_schedules_real_calendar_due_time() {
     new_test_ext().execute_with(|| {
         setup_platform();
-        let before = Balances::free_balance(subscriber_account());
+        let before = Balances::free_balance(subscriber_account_id());
         assert_ok!(SquarePost::subscribe(
-            RuntimeOrigin::signed(subscriber_account()),
+            RuntimeOrigin::signed(subscriber_account_id()),
             IssuerKey::Platform,
             platform_plan(),
             PLATFORM_PRICE,
         ));
-        let state = Subscriptions::<Test>::get((subscriber_account(), IssuerKey::Platform))
+        let state = Subscriptions::<Test>::get((subscriber_account_id(), IssuerKey::Platform))
             .expect("state exists");
         let expected_due =
             crate::subscription::add_calendar_period(1_700_000_000_000, BillingPeriod::Monthly)
                 .expect("calendar fits");
         assert_eq!(
-            Balances::free_balance(subscriber_account()),
+            Balances::free_balance(subscriber_account_id()),
             before - PLATFORM_PRICE
         );
         assert_eq!(state.paid_until, expected_due);
@@ -304,7 +304,7 @@ fn subscribe_charges_immediately_and_schedules_real_calendar_due_time() {
         assert_eq!(state.authorized_price_fen, PLATFORM_PRICE);
         assert_eq!(state.suspend_reason, None);
         assert_eq!(
-            RenewalIndex::<Test>::get((subscriber_account(), IssuerKey::Platform)),
+            RenewalIndex::<Test>::get((subscriber_account_id(), IssuerKey::Platform)),
             Some(expected_due)
         );
     });
@@ -315,24 +315,24 @@ fn runtime_renews_at_due_time_without_external_call_and_uses_latest_price() {
     new_test_ext().execute_with(|| {
         setup_platform();
         assert_ok!(SquarePost::subscribe(
-            RuntimeOrigin::signed(subscriber_account()),
+            RuntimeOrigin::signed(subscriber_account_id()),
             IssuerKey::Platform,
             platform_plan(),
             PLATFORM_PRICE,
         ));
-        let due = RenewalIndex::<Test>::get((subscriber_account(), IssuerKey::Platform))
+        let due = RenewalIndex::<Test>::get((subscriber_account_id(), IssuerKey::Platform))
             .expect("scheduled");
         let next_price = PLATFORM_PRICE + 10;
         PlatformPrice::<Test>::insert(MembershipLevel::Spark, next_price);
-        let before = Balances::free_balance(subscriber_account());
+        let before = Balances::free_balance(subscriber_account_id());
         finalize_at(due - 1);
-        assert_eq!(Balances::free_balance(subscriber_account()), before);
+        assert_eq!(Balances::free_balance(subscriber_account_id()), before);
         finalize_at(due);
         assert_eq!(
-            Balances::free_balance(subscriber_account()),
+            Balances::free_balance(subscriber_account_id()),
             before - next_price
         );
-        let state = Subscriptions::<Test>::get((subscriber_account(), IssuerKey::Platform))
+        let state = Subscriptions::<Test>::get((subscriber_account_id(), IssuerKey::Platform))
             .expect("state exists");
         assert_eq!(state.last_charged_at, due);
         assert_eq!(state.last_charged_price_fen, next_price);
@@ -346,18 +346,18 @@ fn runtime_catches_up_every_due_period_after_blocks_resume() {
         setup_platform();
         set_now(1_608_467_696_789);
         assert_ok!(SquarePost::subscribe(
-            RuntimeOrigin::signed(subscriber_account()),
+            RuntimeOrigin::signed(subscriber_account_id()),
             IssuerKey::Platform,
             platform_plan(),
             PLATFORM_PRICE,
         ));
-        let before = Balances::free_balance(subscriber_account());
+        let before = Balances::free_balance(subscriber_account_id());
         finalize_at(1_616_243_696_789);
         assert_eq!(
-            Balances::free_balance(subscriber_account()),
+            Balances::free_balance(subscriber_account_id()),
             before - PLATFORM_PRICE * 3
         );
-        let state = Subscriptions::<Test>::get((subscriber_account(), IssuerKey::Platform))
+        let state = Subscriptions::<Test>::get((subscriber_account_id(), IssuerKey::Platform))
             .expect("state exists");
         assert!(state.paid_until > 1_616_243_696_789);
     });
@@ -399,26 +399,26 @@ fn cancellation_preserves_paid_rights_and_revokes_future_charges() {
     new_test_ext().execute_with(|| {
         setup_platform();
         assert_ok!(SquarePost::subscribe(
-            RuntimeOrigin::signed(subscriber_account()),
+            RuntimeOrigin::signed(subscriber_account_id()),
             IssuerKey::Platform,
             platform_plan(),
             PLATFORM_PRICE,
         ));
-        let key = (subscriber_account(), IssuerKey::Platform);
+        let key = (subscriber_account_id(), IssuerKey::Platform);
         let paid_until = Subscriptions::<Test>::get(&key)
             .expect("state exists")
             .paid_until;
         assert_ok!(SquarePost::cancel(
-            RuntimeOrigin::signed(subscriber_account()),
+            RuntimeOrigin::signed(subscriber_account_id()),
             IssuerKey::Platform,
         ));
         let state = Subscriptions::<Test>::get(&key).expect("state exists");
         assert_eq!(state.paid_until, paid_until);
         assert_eq!(state.subscription_status, SubscriptionStatus::Cancelled);
         assert!(!RenewalIndex::<Test>::contains_key(&key));
-        let before = Balances::free_balance(subscriber_account());
+        let before = Balances::free_balance(subscriber_account_id());
         finalize_at(paid_until);
-        assert_eq!(Balances::free_balance(subscriber_account()), before);
+        assert_eq!(Balances::free_balance(subscriber_account_id()), before);
     });
 }
 
@@ -429,27 +429,27 @@ fn change_plan_upgrade_charges_difference_immediately() {
         let now = 1_700_000_000_000u64;
         // 先订自由档（199_900）。
         assert_ok!(SquarePost::subscribe(
-            RuntimeOrigin::signed(subscriber_account()),
+            RuntimeOrigin::signed(subscriber_account_id()),
             IssuerKey::Platform,
             platform_plan_for(MembershipLevel::Freedom),
             199_900,
         ));
-        let balance_after_subscribe = Balances::free_balance(subscriber_account());
+        let balance_after_subscribe = Balances::free_balance(subscriber_account_id());
         let base_end = crate::subscription::add_calendar_period(now, BillingPeriod::Monthly)
             .expect("calendar fits");
         // 立即升档到薪火（5_999_900）；刚扣款故剩余权益=全额 199_900。
         assert_ok!(SquarePost::change_subscription_plan(
-            RuntimeOrigin::signed(subscriber_account()),
+            RuntimeOrigin::signed(subscriber_account_id()),
             IssuerKey::Platform,
             platform_plan(),
             PLATFORM_PRICE,
         ));
         // 升档补扣「新价 − 剩余权益」= 5_999_900 − 199_900。
         assert_eq!(
-            Balances::free_balance(subscriber_account()),
+            Balances::free_balance(subscriber_account_id()),
             balance_after_subscribe - (PLATFORM_PRICE - 199_900)
         );
-        let state = Subscriptions::<Test>::get((subscriber_account(), IssuerKey::Platform))
+        let state = Subscriptions::<Test>::get((subscriber_account_id(), IssuerKey::Platform))
             .expect("state exists");
         assert_eq!(state.plan, platform_plan());
         assert_eq!(state.authorized_price_fen, PLATFORM_PRICE);
@@ -466,28 +466,28 @@ fn change_plan_downgrade_extends_duration() {
         let now = 1_700_000_000_000u64;
         // 先订薪火（5_999_900）。
         assert_ok!(SquarePost::subscribe(
-            RuntimeOrigin::signed(subscriber_account()),
+            RuntimeOrigin::signed(subscriber_account_id()),
             IssuerKey::Platform,
             platform_plan(),
             PLATFORM_PRICE,
         ));
-        let balance_after_subscribe = Balances::free_balance(subscriber_account());
+        let balance_after_subscribe = Balances::free_balance(subscriber_account_id());
         let base_end = crate::subscription::add_calendar_period(now, BillingPeriod::Monthly)
             .expect("calendar fits");
         let new_price = PlatformPrice::<Test>::get(MembershipLevel::Freedom).expect("price");
         // 立即降档到自由档；剩余权益=全额 5_999_900 ＞ 新价 199_900。
         assert_ok!(SquarePost::change_subscription_plan(
-            RuntimeOrigin::signed(subscriber_account()),
+            RuntimeOrigin::signed(subscriber_account_id()),
             IssuerKey::Platform,
             platform_plan_for(MembershipLevel::Freedom),
             new_price,
         ));
         // 降档不扣款。
         assert_eq!(
-            Balances::free_balance(subscriber_account()),
+            Balances::free_balance(subscriber_account_id()),
             balance_after_subscribe
         );
-        let state = Subscriptions::<Test>::get((subscriber_account(), IssuerKey::Platform))
+        let state = Subscriptions::<Test>::get((subscriber_account_id(), IssuerKey::Platform))
             .expect("state exists");
         assert_eq!(state.plan, platform_plan_for(MembershipLevel::Freedom));
         assert_eq!(state.authorized_price_fen, new_price);
@@ -504,7 +504,7 @@ fn change_plan_prorates_partial_remaining_credit() {
         setup_platform();
         let now = 1_700_000_000_000u64;
         assert_ok!(SquarePost::subscribe(
-            RuntimeOrigin::signed(subscriber_account()),
+            RuntimeOrigin::signed(subscriber_account_id()),
             IssuerKey::Platform,
             platform_plan_for(MembershipLevel::Freedom),
             199_900,
@@ -514,21 +514,21 @@ fn change_plan_prorates_partial_remaining_credit() {
         // 推进到本期中段，剩余权益按时间比例折算。
         let mid = now + (te - now) / 3;
         set_now(mid);
-        let balance_before_change = Balances::free_balance(subscriber_account());
+        let balance_before_change = Balances::free_balance(subscriber_account_id());
         let credit = 199_900u128 * u128::from(te - mid) / u128::from(te - now);
         assert_ok!(SquarePost::change_subscription_plan(
-            RuntimeOrigin::signed(subscriber_account()),
+            RuntimeOrigin::signed(subscriber_account_id()),
             IssuerKey::Platform,
             platform_plan(),
             PLATFORM_PRICE,
         ));
         assert_eq!(
-            Balances::free_balance(subscriber_account()),
+            Balances::free_balance(subscriber_account_id()),
             balance_before_change - (PLATFORM_PRICE - credit)
         );
         let base_end = crate::subscription::add_calendar_period(mid, BillingPeriod::Monthly)
             .expect("calendar");
-        let state = Subscriptions::<Test>::get((subscriber_account(), IssuerKey::Platform))
+        let state = Subscriptions::<Test>::get((subscriber_account_id(), IssuerKey::Platform))
             .expect("state exists");
         assert_eq!(state.paid_until, base_end);
     });
@@ -537,27 +537,27 @@ fn change_plan_prorates_partial_remaining_credit() {
 #[test]
 fn creator_subscription_renews_at_authorized_price_when_unchanged() {
     new_test_ext().execute_with(|| {
-        set_active_platform_member(creator_account());
+        set_active_platform_member(creator_account_id());
         CreatorPlans::<Test>::insert(
-            creator_account(),
+            creator_account_id(),
             CreatorTiers::try_from(vec![creator_tier(50)]).expect("tiers fit"),
         );
         assert_ok!(SquarePost::subscribe(
-            RuntimeOrigin::signed(subscriber_account()),
-            IssuerKey::Creator(creator_account()),
+            RuntimeOrigin::signed(subscriber_account_id()),
+            IssuerKey::Creator(creator_account_id()),
             creator_plan(),
             50,
         ));
         let due = RenewalIndex::<Test>::get((
-            subscriber_account(),
-            IssuerKey::Creator(creator_account()),
+            subscriber_account_id(),
+            IssuerKey::Creator(creator_account_id()),
         ))
         .expect("scheduled");
-        let creator_before = Balances::free_balance(creator_account());
+        let creator_before = Balances::free_balance(creator_account_id());
         // 价格未变 → 自动续扣当前授权价。
         finalize_at(due);
         assert_eq!(
-            Balances::free_balance(creator_account()),
+            Balances::free_balance(creator_account_id()),
             creator_before + 50
         );
     });
@@ -566,25 +566,25 @@ fn creator_subscription_renews_at_authorized_price_when_unchanged() {
 #[test]
 fn creator_price_change_suspends_renewal_until_reconsent() {
     new_test_ext().execute_with(|| {
-        set_active_platform_member(creator_account());
-        let ck = (subscriber_account(), IssuerKey::Creator(creator_account()));
+        set_active_platform_member(creator_account_id());
+        let ck = (subscriber_account_id(), IssuerKey::Creator(creator_account_id()));
         CreatorPlans::<Test>::insert(
-            creator_account(),
+            creator_account_id(),
             CreatorTiers::try_from(vec![creator_tier(50)]).expect("tiers fit"),
         );
         assert_ok!(SquarePost::subscribe(
-            RuntimeOrigin::signed(subscriber_account()),
-            IssuerKey::Creator(creator_account()),
+            RuntimeOrigin::signed(subscriber_account_id()),
+            IssuerKey::Creator(creator_account_id()),
             creator_plan(),
             50,
         ));
         // 创作者升价 50 → 75。
         CreatorPlans::<Test>::insert(
-            creator_account(),
+            creator_account_id(),
             CreatorTiers::try_from(vec![creator_tier(75)]).expect("tiers fit"),
         );
         let due = RenewalIndex::<Test>::get(&ck).expect("scheduled");
-        let creator_before = Balances::free_balance(creator_account());
+        let creator_before = Balances::free_balance(creator_account_id());
         finalize_at(due);
         // 续费挂起、创作者未收款、离调度。
         let state = Subscriptions::<Test>::get(&ck).expect("state exists");
@@ -593,12 +593,12 @@ fn creator_price_change_suspends_renewal_until_reconsent() {
             state.suspend_reason,
             Some(crate::SuspendReason::NeedReconsent)
         );
-        assert_eq!(Balances::free_balance(creator_account()), creator_before);
+        assert_eq!(Balances::free_balance(creator_account_id()), creator_before);
         assert!(!RenewalIndex::<Test>::contains_key(&ck));
         // 订阅者按新价再签名 → 恢复 Active 并扣新价。
         assert_ok!(SquarePost::subscribe(
-            RuntimeOrigin::signed(subscriber_account()),
-            IssuerKey::Creator(creator_account()),
+            RuntimeOrigin::signed(subscriber_account_id()),
+            IssuerKey::Creator(creator_account_id()),
             creator_plan(),
             75,
         ));
@@ -606,7 +606,7 @@ fn creator_price_change_suspends_renewal_until_reconsent() {
         assert_eq!(resumed.subscription_status, SubscriptionStatus::Active);
         assert_eq!(resumed.authorized_price_fen, 75);
         assert_eq!(
-            Balances::free_balance(creator_account()),
+            Balances::free_balance(creator_account_id()),
             creator_before + 75
         );
         assert!(RenewalIndex::<Test>::contains_key(&ck));
@@ -616,28 +616,28 @@ fn creator_price_change_suspends_renewal_until_reconsent() {
 #[test]
 fn creator_price_change_reconsent_before_lapse_keeps_active_without_charge() {
     new_test_ext().execute_with(|| {
-        set_active_platform_member(creator_account());
-        let ck = (subscriber_account(), IssuerKey::Creator(creator_account()));
+        set_active_platform_member(creator_account_id());
+        let ck = (subscriber_account_id(), IssuerKey::Creator(creator_account_id()));
         CreatorPlans::<Test>::insert(
-            creator_account(),
+            creator_account_id(),
             CreatorTiers::try_from(vec![creator_tier(50)]).expect("tiers fit"),
         );
         assert_ok!(SquarePost::subscribe(
-            RuntimeOrigin::signed(subscriber_account()),
-            IssuerKey::Creator(creator_account()),
+            RuntimeOrigin::signed(subscriber_account_id()),
+            IssuerKey::Creator(creator_account_id()),
             creator_plan(),
             50,
         ));
         let due = RenewalIndex::<Test>::get(&ck).expect("scheduled");
         // 创作者升价 50 → 75；订阅者到期前再签名。
         CreatorPlans::<Test>::insert(
-            creator_account(),
+            creator_account_id(),
             CreatorTiers::try_from(vec![creator_tier(75)]).expect("tiers fit"),
         );
-        let creator_before = Balances::free_balance(creator_account());
+        let creator_before = Balances::free_balance(creator_account_id());
         assert_ok!(SquarePost::subscribe(
-            RuntimeOrigin::signed(subscriber_account()),
-            IssuerKey::Creator(creator_account()),
+            RuntimeOrigin::signed(subscriber_account_id()),
+            IssuerKey::Creator(creator_account_id()),
             creator_plan(),
             75,
         ));
@@ -645,11 +645,11 @@ fn creator_price_change_reconsent_before_lapse_keeps_active_without_charge() {
         let state = Subscriptions::<Test>::get(&ck).expect("state exists");
         assert_eq!(state.subscription_status, SubscriptionStatus::Active);
         assert_eq!(state.authorized_price_fen, 75);
-        assert_eq!(Balances::free_balance(creator_account()), creator_before);
+        assert_eq!(Balances::free_balance(creator_account_id()), creator_before);
         // 下期按新价自动扣。
         finalize_at(due);
         assert_eq!(
-            Balances::free_balance(creator_account()),
+            Balances::free_balance(creator_account_id()),
             creator_before + 75
         );
     });
@@ -658,36 +658,36 @@ fn creator_price_change_reconsent_before_lapse_keeps_active_without_charge() {
 #[test]
 fn creator_loses_membership_pauses_fans_and_resumes() {
     new_test_ext().execute_with(|| {
-        set_active_platform_member(creator_account());
-        let ck = (subscriber_account(), IssuerKey::Creator(creator_account()));
+        set_active_platform_member(creator_account_id());
+        let ck = (subscriber_account_id(), IssuerKey::Creator(creator_account_id()));
         CreatorPlans::<Test>::insert(
-            creator_account(),
+            creator_account_id(),
             CreatorTiers::try_from(vec![creator_tier(50)]).expect("tiers fit"),
         );
         assert_ok!(SquarePost::subscribe(
-            RuntimeOrigin::signed(subscriber_account()),
-            IssuerKey::Creator(creator_account()),
+            RuntimeOrigin::signed(subscriber_account_id()),
+            IssuerKey::Creator(creator_account_id()),
             creator_plan(),
             50,
         ));
         let due = RenewalIndex::<Test>::get(&ck).expect("scheduled");
         // 创作者掉平台会员。
-        Subscriptions::<Test>::remove((creator_account(), IssuerKey::Platform));
-        let creator_before = Balances::free_balance(creator_account());
+        Subscriptions::<Test>::remove((creator_account_id(), IssuerKey::Platform));
+        let creator_before = Balances::free_balance(creator_account_id());
         finalize_at(due);
         // 粉丝暂停：CreatorPaused、未扣、未终止、仍在调度、下周期重试。
         let state = Subscriptions::<Test>::get(&ck).expect("state exists");
         assert_eq!(state.subscription_status, SubscriptionStatus::CreatorPaused);
-        assert_eq!(Balances::free_balance(creator_account()), creator_before);
+        assert_eq!(Balances::free_balance(creator_account_id()), creator_before);
         let retry = RenewalIndex::<Test>::get(&ck).expect("still scheduled");
         assert!(retry > due);
         // 创作者恢复平台会员 → 下个重试自动续扣、回 Active。
-        set_active_platform_member(creator_account());
+        set_active_platform_member(creator_account_id());
         finalize_at(retry);
         let resumed = Subscriptions::<Test>::get(&ck).expect("state exists");
         assert_eq!(resumed.subscription_status, SubscriptionStatus::Active);
         assert_eq!(
-            Balances::free_balance(creator_account()),
+            Balances::free_balance(creator_account_id()),
             creator_before + 50
         );
     });
@@ -696,26 +696,26 @@ fn creator_loses_membership_pauses_fans_and_resumes() {
 #[test]
 fn creator_paused_and_repriced_suspends_for_reconsent_on_return() {
     new_test_ext().execute_with(|| {
-        set_active_platform_member(creator_account());
-        let ck = (subscriber_account(), IssuerKey::Creator(creator_account()));
+        set_active_platform_member(creator_account_id());
+        let ck = (subscriber_account_id(), IssuerKey::Creator(creator_account_id()));
         CreatorPlans::<Test>::insert(
-            creator_account(),
+            creator_account_id(),
             CreatorTiers::try_from(vec![creator_tier(50)]).expect("tiers fit"),
         );
         assert_ok!(SquarePost::subscribe(
-            RuntimeOrigin::signed(subscriber_account()),
-            IssuerKey::Creator(creator_account()),
+            RuntimeOrigin::signed(subscriber_account_id()),
+            IssuerKey::Creator(creator_account_id()),
             creator_plan(),
             50,
         ));
         let due = RenewalIndex::<Test>::get(&ck).expect("scheduled");
-        Subscriptions::<Test>::remove((creator_account(), IssuerKey::Platform));
+        Subscriptions::<Test>::remove((creator_account_id(), IssuerKey::Platform));
         finalize_at(due);
         let retry = RenewalIndex::<Test>::get(&ck).expect("still scheduled");
         // 创作者恢复会员但同时改了价 → 恢复时先挂起待再签名。
-        set_active_platform_member(creator_account());
+        set_active_platform_member(creator_account_id());
         CreatorPlans::<Test>::insert(
-            creator_account(),
+            creator_account_id(),
             CreatorTiers::try_from(vec![creator_tier(75)]).expect("tiers fit"),
         );
         finalize_at(retry);
@@ -734,17 +734,17 @@ fn only_effective_platform_member_can_publish_creator_plans() {
     new_test_ext().execute_with(|| {
         assert_noop!(
             SquarePost::set_creator_plans(
-                RuntimeOrigin::signed(creator_account()),
+                RuntimeOrigin::signed(creator_account_id()),
                 vec![creator_tier(50)],
             ),
             Error::<Test>::CreatorNotPlatformMember
         );
-        set_active_platform_member(creator_account());
+        set_active_platform_member(creator_account_id());
         assert_ok!(SquarePost::set_creator_plans(
-            RuntimeOrigin::signed(creator_account()),
+            RuntimeOrigin::signed(creator_account_id()),
             vec![creator_tier(50)],
         ));
-        assert_eq!(CreatorPlans::<Test>::get(creator_account()).len(), 1);
+        assert_eq!(CreatorPlans::<Test>::get(creator_account_id()).len(), 1);
     });
 }
 

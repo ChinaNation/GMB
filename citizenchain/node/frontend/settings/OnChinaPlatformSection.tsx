@@ -21,7 +21,9 @@ export function OnChinaPlatformSection({ platform, onUpdated }: Props) {
   const actionText = running ? '关闭' : '启动';
 
   useEffect(() => {
-    if (status !== 'starting') return;
+    // 启动中和启动失败都持续轮询:后端 current_state 永远不会返回 error,只要平台随后
+    // 就绪就会刷新成"已开启",避免首次启动因内嵌 PG 初始化慢被误报后永久卡在"启动失败"。
+    if (status !== 'starting' && status !== 'error') return;
     const timer = window.setInterval(async () => {
       try {
         onUpdated(await api.getOnChinaPlatform());

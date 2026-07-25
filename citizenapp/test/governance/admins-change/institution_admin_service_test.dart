@@ -143,7 +143,7 @@ void main() {
     expect(rpc.requestedKeys, [accountKey, thresholdStorageKey]);
   });
 
-  test('个人多签严格按 personal_account 路由', () async {
+  test('个人多签严格按 personal_account_id 路由', () async {
     final rpc = FakeChainRpc();
     final service = InstitutionAdminService(chainRpc: rpc);
     final personalAccountId = '0x${'22' * 32}';

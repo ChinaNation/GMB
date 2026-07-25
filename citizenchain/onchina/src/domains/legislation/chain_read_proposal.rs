@@ -24,7 +24,7 @@ pub struct OnChainProposal {
     /// 发起机构唯一身份；个人多签、公民个人或系统提案为空。
     pub actor_cid_number: Option<Vec<u8>>,
     /// 具体资产账户或个人多签执行账户，不得作为机构身份。
-    pub execution_account: Option<[u8; 32]>,
+    pub execution_account_id: Option<[u8; 32]>,
     /// 受影响机构 CID 列表，不得替代发起机构 CID。
     pub subject_cid_numbers: Vec<Vec<u8>>,
     pub start: u32,
@@ -277,7 +277,7 @@ mod tests {
         golden.extend(0u8.encode()); // status = 投票中
         golden.extend(Some(*b"NRP\0").encode()); // internal_code
         golden.extend(Some(b"LN001-NRP0G-000000001-2026".to_vec()).encode()); // actor_cid_number
-        golden.extend(Option::<[u8; 32]>::None.encode()); // execution_account
+        golden.extend(Option::<[u8; 32]>::None.encode()); // execution_account_id
         golden.extend(vec![b"LN001-NRP0G-000000001-2026".to_vec()].encode()); // subject_cid_numbers
         golden.extend(100u32.encode()); // start
         golden.extend(200u32.encode()); // end
@@ -337,7 +337,7 @@ mod tests {
             status: 0,
             internal_code: None,
             actor_cid_number: None,
-            execution_account: None,
+            execution_account_id: None,
             subject_cid_numbers: Vec::new(),
             start: 100,
             end: 200,

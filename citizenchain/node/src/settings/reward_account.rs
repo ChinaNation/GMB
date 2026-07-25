@@ -217,19 +217,19 @@ fn decode_storage_account_id(raw: &[u8]) -> Result<[u8; 32], String> {
 pub(crate) async fn sync_saved_reward_account_inner(app: &AppHandle) -> Result<(), String> {
     let app_clone = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        let Some(target_account_id) = load_reward_account_id(&app_clone)? else {
+        let Some(target_account_id_hex) = load_reward_account_id(&app_clone)? else {
             return Ok(None);
         };
         ensure_expected_reward_account_rpc_node()?;
-        let target_account =
-            decode_hex_32_with_optional_0x(target_account_id.trim_start_matches("0x"))?;
+        let target_account_id =
+            decode_hex_32_with_optional_0x(target_account_id_hex.trim_start_matches("0x"))?;
 
         // 从 keystore 文件名读取矿工公钥（不读取私钥）
         let miner_account_id =
             local_powr_miner_account_id(&app_clone)?.ok_or("未找到矿工账户，请先启动节点")?;
         let miner_bytes = decode_hex_32_with_optional_0x(&miner_account_id)?;
 
-        if target_account == miner_bytes {
+        if target_account_id == miner_bytes {
             return Err("奖励账户不能与矿工账户相同，请使用独立收款账户".to_string());
         }
 
@@ -252,7 +252,7 @@ pub(crate) async fn sync_saved_reward_account_inner(app: &AppHandle) -> Result<(
         };
 
         // 已是目标地址，无需操作
-        if current_account == Some(target_account) {
+        if current_account == Some(target_account_id) {
             return Ok(None);
         }
 
@@ -265,7 +265,7 @@ pub(crate) async fn sync_saved_reward_account_inner(app: &AppHandle) -> Result<(
         let bind_timeout = std::time::Duration::from_secs(REWARD_BIND_TIMEOUT_SECS);
         rpc::rpc_post(
             rpc_method,
-            serde_json::json!([target_account_id]),
+            serde_json::json!([target_account_id_hex]),
             bind_timeout,
             RPC_RESPONSE_LIMIT_LARGE,
         )?;
@@ -323,19 +323,19 @@ pub async fn set_reward_account(
     let ss58_address = normalize_ss58_address(&ss58_address)?;
 
     // SS58 只用于输入；进入授权和存储前立即转成唯一账户 ID。
-    let target_account = account_id_from_ss58_address(&ss58_address)?;
-    let target_account_id = format!("0x{}", hex::encode(target_account));
+    let target_account_id = account_id_from_ss58_address(&ss58_address)?;
+    let target_account_id_hex = format!("0x{}", hex::encode(target_account_id));
 
     // 同步路径提前拒绝：奖励账户不能与矿工账户相同。
     // 避免先存后验导致本地保存了一个链上必然被拒绝的无效地址。
     if let Some(miner_account_id) = local_powr_miner_account_id(&app)? {
         let miner_bytes = decode_hex_32_with_optional_0x(&miner_account_id)?;
-        if target_account == miner_bytes {
+        if target_account_id == miner_bytes {
             return Err("奖励账户不能与矿工账户相同，请使用独立收款账户".to_string());
         }
     }
 
-    save_reward_account_id(&app, &target_account_id)?;
+    save_reward_account_id(&app, &target_account_id_hex)?;
 
     // 链上绑定在后台异步执行，通过事件通知前端结果
     let app2 = app.clone();
@@ -362,7 +362,7 @@ pub async fn set_reward_account(
     });
 
     Ok(RewardAccount {
-        account_id: Some(target_account_id),
+        account_id: Some(target_account_id_hex),
         ss58_address: Some(ss58_address),
     })
 }

@@ -477,7 +477,7 @@ where
         .to_vec()
         .try_into()
         .expect("genesis institution: FSC 法定代表人公民 CID 超过协议上限");
-    let admin_account =
+    let admin_account_id =
         decode_account::<T>(&FSC_GENESIS_ASSIGNMENTS[0].account_id, "FSC 创世任职管理员");
     public_manage::Institutions::<T>::mutate(&cid, |maybe| {
         let info = maybe
@@ -495,7 +495,7 @@ where
                 cid_number,
             ),
             cid_number: lr_cid,
-            account_id: admin_account.clone(),
+            account_id: admin_account_id.clone(),
         });
     });
 
@@ -528,7 +528,7 @@ where
 
     // 程伟作为 FSC 公权管理员(四字段:公民 CID + 姓 + 名 + account)。
     let admin = Admin {
-        account_id: admin_account,
+        account_id: admin_account_id,
         cid_number: FSC_GENESIS_ADMIN_CID_NUMBER
             .as_bytes()
             .to_vec()

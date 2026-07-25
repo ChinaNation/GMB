@@ -44,7 +44,7 @@ fn prc_admin<T: Config>(index: usize) -> T::AccountId {
     decode_account::<T>(CHINA_CB[1].admins[index])
 }
 
-fn beneficiary_account<T: Config>() -> T::AccountId {
+fn beneficiary_account_id<T: Config>() -> T::AccountId {
     decode_account::<T>([99u8; 32])
 }
 
@@ -62,7 +62,7 @@ mod benchmarks {
         let fee_account = prc_fee_account::<T>();
         let actor_cid_number = prc_actor_cid();
         let proposer_account_id = prc_admin::<T>(0);
-        let beneficiary_account_id = beneficiary_account::<T>();
+        let beneficiary_account_id = beneficiary_account_id::<T>();
         let amount: BalanceOf<T> = 111u128.saturated_into();
         let top_up: BalanceOf<T> = 1_000_000u128.saturated_into();
 

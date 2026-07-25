@@ -2,7 +2,7 @@
 //
 // 覆盖链上三类管理员 pallet `AdminAccounts` 的目标布局：
 // - 机构 value 只保存 institution_code + admins，CID 来自 storage key；
-// - 个人多签 value 保持独立账户布局，personal_account 来自 storage key。
+// - 个人多签 value 保持独立账户布局，personal_account_id 来自 storage key。
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -191,7 +191,7 @@ void main() {
       expect(AdminAccountStorageCodec.extractCidNumberFromKey(key), cid);
     });
 
-    test('个人多签 storage key 末 32 字节 = personal_account', () {
+    test('个人多签 storage key 末 32 字节 = personal_account_id', () {
       final key = Uint8List(32 + 16 + 32);
       for (var i = 48; i < key.length; i++) {
         key[i] = i - 48;

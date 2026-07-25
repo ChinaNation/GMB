@@ -68,9 +68,9 @@ void main() {
       ),
     );
     await tester.pump();
-    // 标题固定在第 1 行,GMB 固定在第 2 行右下角,均需可见。
+    // 标题固定在第 1 行,金额单位「元」固定在第 2 行右下角,均需可见。
     expect(find.text('链上余额'), findsOneWidget);
-    expect(find.text('GMB'), findsOneWidget);
+    expect(find.text('元'), findsOneWidget);
   });
 
   testWidgets('GlobalKey<WalletOnchainBalanceCardState> can call refresh',

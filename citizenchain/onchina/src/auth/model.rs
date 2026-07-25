@@ -52,7 +52,7 @@ pub(crate) struct CityRegistryAdminListOutput {
 
 // 联邦注册局管理员对外行(API 序列化)。
 // 管理员只有存在/删除,不存在停用状态。
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub(crate) struct FederalRegistryAdminRow {
     pub(crate) id: u64,
     pub(crate) province_name: String,

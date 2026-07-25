@@ -1,4 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
+import 'package:citizenwallet/chain/chain_constants.dart';
 import 'package:citizenwallet/signer/action_labels.dart';
 import 'package:citizenwallet/signer/field_labels.dart';
 
@@ -106,9 +110,13 @@ void main() {
       }
     });
 
-    test('amount_ 前缀按账户名展开', () {
-      expect(fieldLabelText('amount_'), '账户金额');
-      expect(fieldLabelText('amount_主账户'), '主账户金额');
+    test('amount_ 金额字段标签走注册表,无英文兜底', () {
+      // 历史上 `amount_` 前缀规则把 `amount_yuan` 误拆成「yuan金额」；
+      // 现全部走生成表,未登记的 amount_* 一律拒绝,不再泄漏英文 key。
+      expect(fieldLabelText('amount_yuan'), '金额');
+      expect(fieldLabelText('amount_raw'), '资产数量(raw)');
+      expect(fieldLabelTextOrNull('amount_'), isNull);
+      expect(fieldLabelTextOrNull('amount_主账户'), isNull);
     });
 
     test('未登记 key 不允许生成展示兜底', () {
@@ -129,6 +137,29 @@ void main() {
 
     test('其他 key 原样返回', () {
       expect(fieldValueText('residence', '11 / 01 / 001'), '11 / 01 / 001');
+    });
+
+    test('账户字段 hex 统一转 SS58 展示,公钥/哈希保持 0x hex', () {
+      const hex =
+          '0x9c0c5bc3b65f2b1aeecec2a0e70e6f0ef3f2dc8d59c12a9fa79ca88e3f2c82a3';
+      final bytes = Uint8List(32);
+      for (var i = 0; i < 32; i++) {
+        bytes[i] = int.parse(hex.substring(2 + i * 2, 4 + i * 2), radix: 16);
+      }
+      final expectedSs58 =
+          Keyring().encodeAddress(bytes, ChainConstants.ss58Prefix);
+
+      // ADR-040:`account_id` / `*_account_id` 账户字段一律 SS58 展示。
+      expect(fieldValueText('account_id', hex), expectedSs58);
+      expect(fieldValueText('recipient_account_id', hex), expectedSs58);
+      expect(fieldValueText('beneficiary_account_id', hex), expectedSs58);
+      expect(fieldValueText('institution_account_id', hex), expectedSs58);
+      expect(expectedSs58, isNot(startsWith('0x')));
+
+      // 明确标注的公钥、哈希保持 0x hex,不转 SS58。
+      expect(fieldValueText('signer_public_key', hex), hex);
+      expect(fieldValueText('actor_public_key', hex), hex);
+      expect(fieldValueText('reason_hash', hex), hex);
     });
   });
 }

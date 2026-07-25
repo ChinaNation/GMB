@@ -209,8 +209,8 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 电子护照生效日期 | `passport_valid_from` | CID citizens / citizenapp myid | 电子护照有效期开始日期，格式 `YYYY-MM-DD` |
 | 电子护照截止日期 | `passport_valid_until` | CID citizens / citizenapp myid | 电子护照有效期截止日期，格式 `YYYY-MM-DD` |
 | 公民状态更新时间 | `status_updated_at` | CID citizens | CID 内部用于拒绝旧状态覆盖新状态的秒级时间戳 |
-| 电子护照钱包地址 | `wallet_address` | CID citizens / citizenapp myid | 用户选择用于电子护照的钱包 SS58 地址 |
-| 电子护照钱包公钥 | `wallet_pubkey` | CID citizens / 后端内部 | `wallet_address` 对应的 32 字节 `0x` hex 公钥,不得在普通前端展示 |
+| 电子护照钱包地址 | `ss58_address` | CID citizens / citizenapp myid | 用户选择用于电子护照的钱包 SS58 地址(ADR-040 展示专用) |
+| 电子护照钱包公钥 | `public_key` | CID citizens / 后端内部 | `ss58_address` 对应的 32 字节 `0x` hex 公钥,不得在普通前端展示 |
 | 电子护照钱包签名算法 | `wallet_sig_alg` | CID citizens / citizenapp myid | 固定 `sr25519` |
 | 电子护照身份CID | `cid_number` | CID citizens / citizenapp myid | CID 自动生成并返回给用户展示的身份 CID 号码 |
 | 镇下地址名称编号 | `address_name_code` | OnChina china / AddressRegistry | 同一镇下的地址名称 3 位编号，范围 `001..999` |
@@ -619,7 +619,7 @@ Cloudflare 账户只允许使用一个 `CF_ACCOUNT_ID`，R2、Images、Stream �
 | 中文名称 | English name | 使用位置 | 简介 |
 |---|---|---|---|
 | CID 号码 | `cid_number` | API / call data / storage key | 机构或公民 CID 编号 |
-| 公民授权主体 | `CitizenSubject` | runtime 身份读取、投票资格、候选快照与票据 | 固定由 `cid_number + wallet_account` 组成；CID 与钱包必须由 citizen-identity 验证为有效双向绑定，不得退化为裸钱包 |
+| 公民授权主体 | `CitizenSubject` | runtime 身份读取、投票资格、候选快照与票据 | 固定由 `cid_number + account_id` 组成；CID 与钱包必须由 citizen-identity 验证为有效双向绑定，不得退化为裸钱包 |
 | 公民护照号 | `passport_no` | OnChina citizens API / SQL | 公民终身唯一护照号,不同于 `cid_number` |
 | 姓 | `family_name` | 公民身份、管理员、OnChina API / SQL、call data | 人员真实姓；结构上下文已经表明主体类型，不得增加公民或管理员前缀另造同义字段 |
 | 名 | `given_name` | 公民身份、管理员、OnChina API / SQL、call data | 人员真实名；结构上下文已经表明主体类型，不得增加公民或管理员前缀另造同义字段 |
@@ -627,8 +627,8 @@ Cloudflare 账户只允许使用一个 `CF_ACCOUNT_ID`，R2、Images、Stream �
 | 公民出生日期 | `citizen_birth_date` | OnChina citizens API / SQL | 公民档案出生日期,格式 `YYYY-MM-DD` |
 | 护照有效期起 | `passport_valid_from` | OnChina citizens API / SQL | 当前电子护照有效期开始日期 |
 | 护照有效期止 | `passport_valid_until` | OnChina citizens API / SQL | 当前电子护照有效期截止日期 |
-| 投票账户地址 | `wallet_address` | OnChina citizens API / SQL / frontend | 面向用户展示的 SS58 地址 |
-| 投票账户公钥 | `wallet_pubkey` | OnChina citizens SQL / backend internal | 系统验签和查询使用的内部公钥字段,不得在普通前端展示 |
+| 投票账户地址 | `ss58_address` | OnChina citizens API / SQL / frontend | 面向用户展示的 SS58 地址(ADR-040 展示专用) |
+| 投票账户公钥 | `public_key` | OnChina citizens SQL / backend internal | 系统验签和查询使用的内部公钥字段,不得在普通前端展示 |
 | 机构全称 | `cid_full_name` | API / call data / 扫码端解码展示 | 机构全称,可随机构法定名称变更 |
 | 机构简称 | `cid_short_name` | API / call data / 扫码端解码展示 | 机构简称,用于列表和紧凑展示 |
 | 机构英文全称 | `cid_full_name_en` | API / call data / 扫码端解码展示 | 机构英文全称 |

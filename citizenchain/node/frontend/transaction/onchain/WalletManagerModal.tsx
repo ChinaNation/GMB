@@ -122,7 +122,7 @@ export function WalletManagerModal({ wallets, activeId, onClose, onUpdate, onSel
           </div>
           {showScan && (
             <AddressScanModal
-              onResult={(result) => { setAddress(result.address); setShowScan(false); }}
+              onResult={(result) => { setAddress(result.ss58_address); setShowScan(false); }}
               onClose={() => setShowScan(false)}
             />
           )}

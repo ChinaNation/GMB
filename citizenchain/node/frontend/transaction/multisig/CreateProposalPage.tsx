@@ -226,8 +226,8 @@ export function CreateMultisigTransferPage({
 
           {showAddressScan && (
             <AddressScanModal
-              onResult={({ address, amount, memo }) => {
-                setBeneficiary(address);
+              onResult={({ ss58_address, amount, memo }) => {
+                setBeneficiary(ss58_address);
                 if (amount !== undefined) setAmountYuan(String(amount));
                 if (memo !== undefined) setRemark(memo);
                 setShowAddressScan(false);

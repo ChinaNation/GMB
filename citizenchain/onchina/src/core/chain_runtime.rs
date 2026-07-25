@@ -1182,6 +1182,277 @@ pub(crate) async fn cid_registry_lookup(
     }))
 }
 
+/// 链上公民竞选身份专属公开档案(投票身份为 None)。
+pub(crate) struct OnChainCandidate {
+    pub(crate) family_name: Vec<u8>,
+    pub(crate) given_name: Vec<u8>,
+    pub(crate) citizen_sex: u8,
+    pub(crate) birth_date: u32,
+    pub(crate) birth_province_code: String,
+    pub(crate) birth_city_code: String,
+    pub(crate) birth_town_code: String,
+}
+
+/// 链上单个公民的完整投影数据(供 domains::projection 映射为 ChainCitizen)。
+pub(crate) struct OnChainCitizenDetail {
+    pub(crate) cid_number: String,
+    /// 居住省/市/镇码(= 归属地);优先取 VotingIdentity,回落 CidRegistry(镇为空)。
+    pub(crate) residence_province_code: String,
+    pub(crate) residence_city_code: String,
+    pub(crate) residence_town_code: String,
+    /// 绑定钱包账户 raw 32 字节(未绑定为 None)。
+    pub(crate) account_id: Option<[u8; 32]>,
+    /// citizen_status == Normal / CidRecord.status == Active。
+    pub(crate) status_normal: bool,
+    pub(crate) passport_valid_from: Option<u32>,
+    pub(crate) passport_valid_until: Option<u32>,
+    pub(crate) candidate: Option<OnChainCandidate>,
+}
+
+fn on_chain_bytes_to_string(bytes: Vec<u8>) -> String {
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+/// 读链上单个公民完整身份:`CitizenIdentity` 的 CidRegistry + VotingIdentityByCid +
+/// AccountIdByCid + CandidateIdentityByCid 四读。`None` = 该 CID 未占号(链上无此公民)。
+/// residence/status 优先取 VotingIdentity,回落 CidRegistry(镇码为空)。
+pub(crate) async fn read_chain_citizen_detail(
+    cid_number: &str,
+) -> Result<Option<OnChainCitizenDetail>, String> {
+    // 与 pallet 结构体字段序一致的最小解码结构(BoundedVec<u8> 按 Vec<u8> 解码)。
+    #[derive(Decode)]
+    struct RawCidRecord {
+        _registrar_cid_number: Vec<u8>,
+        _commitment: [u8; 32],
+        province: Vec<u8>,
+        city: Vec<u8>,
+        status: u8,
+        _registered_at: u32,
+        _revoked_at: Option<u32>,
+    }
+    #[derive(Decode)]
+    struct RawVotingIdentity {
+        passport_valid_from: u32,
+        passport_valid_until: u32,
+        citizen_status: u8,
+        province: Vec<u8>,
+        city: Vec<u8>,
+        town: Vec<u8>,
+        _updated_at: u32,
+    }
+    #[derive(Decode)]
+    struct RawCandidateIdentity {
+        birth_province: Vec<u8>,
+        birth_city: Vec<u8>,
+        birth_town: Vec<u8>,
+        family_name: Vec<u8>,
+        given_name: Vec<u8>,
+        citizen_sex: u8,
+        birth_date: u32,
+        _updated_at: u32,
+    }
+
+    let ws_url = super::chain_url::chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("connect chain ws for citizen detail failed: {e}"))?;
+    let storage = client
+        .storage()
+        .at_latest()
+        .await
+        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
+    let cid_key = || vec![dynamic::Value::from_bytes(cid_number.as_bytes())];
+
+    // 1) CidRegistry:未占号则链上无此公民。
+    let Some(reg_value) = storage
+        .fetch(&dynamic::storage("CitizenIdentity", "CidRegistry", cid_key()))
+        .await
+        .map_err(|e| format!("fetch CidRegistry {cid_number} failed: {e}"))?
+    else {
+        return Ok(None);
+    };
+    let mut reg_raw = reg_value.encoded();
+    let cid_record = RawCidRecord::decode(&mut reg_raw)
+        .map_err(|e| format!("decode CidRegistry {cid_number} failed: {e}"))?;
+
+    // 2) AccountIdByCid
+    let account_id = match storage
+        .fetch(&dynamic::storage("CitizenIdentity", "AccountIdByCid", cid_key()))
+        .await
+        .map_err(|e| format!("fetch AccountIdByCid {cid_number} failed: {e}"))?
+    {
+        Some(v) => {
+            let mut raw = v.encoded();
+            Some(
+                <[u8; 32]>::decode(&mut raw)
+                    .map_err(|e| format!("decode AccountIdByCid {cid_number} failed: {e}"))?,
+            )
+        }
+        None => None,
+    };
+
+    // 3) VotingIdentityByCid
+    let voting = match storage
+        .fetch(&dynamic::storage("CitizenIdentity", "VotingIdentityByCid", cid_key()))
+        .await
+        .map_err(|e| format!("fetch VotingIdentityByCid {cid_number} failed: {e}"))?
+    {
+        Some(v) => {
+            let mut raw = v.encoded();
+            Some(
+                RawVotingIdentity::decode(&mut raw)
+                    .map_err(|e| format!("decode VotingIdentityByCid {cid_number} failed: {e}"))?,
+            )
+        }
+        None => None,
+    };
+
+    // 4) CandidateIdentityByCid
+    let candidate = match storage
+        .fetch(&dynamic::storage(
+            "CitizenIdentity",
+            "CandidateIdentityByCid",
+            cid_key(),
+        ))
+        .await
+        .map_err(|e| format!("fetch CandidateIdentityByCid {cid_number} failed: {e}"))?
+    {
+        Some(v) => {
+            let mut raw = v.encoded();
+            let c = RawCandidateIdentity::decode(&mut raw)
+                .map_err(|e| format!("decode CandidateIdentityByCid {cid_number} failed: {e}"))?;
+            Some(OnChainCandidate {
+                family_name: c.family_name,
+                given_name: c.given_name,
+                citizen_sex: c.citizen_sex,
+                birth_date: c.birth_date,
+                birth_province_code: on_chain_bytes_to_string(c.birth_province),
+                birth_city_code: on_chain_bytes_to_string(c.birth_city),
+                birth_town_code: on_chain_bytes_to_string(c.birth_town),
+            })
+        }
+        None => None,
+    };
+
+    // residence + status:优先 VotingIdentity,回落 CidRegistry(status: 0=Normal/Active)。
+    let (province, city, town, status_normal, valid_from, valid_until) = match &voting {
+        Some(v) => (
+            v.province.clone(),
+            v.city.clone(),
+            v.town.clone(),
+            v.citizen_status == 0,
+            Some(v.passport_valid_from),
+            Some(v.passport_valid_until),
+        ),
+        None => (
+            cid_record.province.clone(),
+            cid_record.city.clone(),
+            Vec::new(),
+            cid_record.status == 0,
+            None,
+            None,
+        ),
+    };
+
+    Ok(Some(OnChainCitizenDetail {
+        cid_number: cid_number.to_string(),
+        residence_province_code: on_chain_bytes_to_string(province),
+        residence_city_code: on_chain_bytes_to_string(city),
+        residence_town_code: on_chain_bytes_to_string(town),
+        account_id,
+        status_normal,
+        passport_valid_from: valid_from,
+        passport_valid_until: valid_until,
+        candidate,
+    }))
+}
+
+/// 前缀扫描链上 `CitizenIdentity::CidRegistry`,回调 residence 落在指定 (省,市) 的公民 CID。
+/// 供联邦 drill-in 按市枚举本市公民(链上无按市索引,故过滤全表 residence)。
+pub(crate) async fn for_each_chain_citizen_cid_in_scope(
+    province_code: &str,
+    city_code: &str,
+    mut f: impl FnMut(String),
+) -> Result<usize, String> {
+    #[derive(Decode)]
+    struct RawCidRecord {
+        _registrar_cid_number: Vec<u8>,
+        _commitment: [u8; 32],
+        province: Vec<u8>,
+        city: Vec<u8>,
+        _status: u8,
+        _registered_at: u32,
+        _revoked_at: Option<u32>,
+    }
+    let ws_url = super::chain_url::chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("connect chain ws for citizen scan failed: {e}"))?;
+    let storage = client
+        .storage()
+        .at_latest()
+        .await
+        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
+    let query = dynamic::storage("CitizenIdentity", "CidRegistry", Vec::<dynamic::Value>::new());
+    let mut iter = storage
+        .iter(query)
+        .await
+        .map_err(|e| format!("iterate CidRegistry failed: {e}"))?;
+    let mut count = 0usize;
+    while let Some(item) = iter.next().await {
+        let kv = item.map_err(|e| format!("read CidRegistry entry failed: {e}"))?;
+        // 键 = 32 前缀 + 16 blake2_128 + SCALE(cid);取尾段解出号字节。
+        let mut cursor = &kv.key_bytes[48..];
+        let cid: Vec<u8> = codec::Decode::decode(&mut cursor)
+            .map_err(|e| format!("decode CidRegistry key failed: {e}"))?;
+        let mut raw = kv.value.encoded();
+        let record = RawCidRecord::decode(&mut raw)
+            .map_err(|e| format!("decode CidRegistry record failed: {e}"))?;
+        if on_chain_bytes_to_string(record.province) == province_code
+            && on_chain_bytes_to_string(record.city) == city_code
+        {
+            if let Ok(cid_str) = String::from_utf8(cid) {
+                f(cid_str);
+                count += 1;
+            }
+        }
+    }
+    Ok(count)
+}
+
+/// 前缀扫描链上 `PrivateManage::Institutions`,回调每个私权机构 CID 字符串。
+/// 归属市由 CID 市码决定,过滤在调用方(或投影层按作用域再判)。
+pub(crate) async fn for_each_chain_private_institution_cid(
+    mut f: impl FnMut(String),
+) -> Result<usize, String> {
+    let ws_url = super::chain_url::chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("connect chain ws for private institutions failed: {e}"))?;
+    let storage = client
+        .storage()
+        .at_latest()
+        .await
+        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
+    let query = dynamic::storage("PrivateManage", "Institutions", Vec::<dynamic::Value>::new());
+    let mut iter = storage
+        .iter(query)
+        .await
+        .map_err(|e| format!("iterate private institutions failed: {e}"))?;
+    let mut count = 0usize;
+    while let Some(item) = iter.next().await {
+        let kv = item.map_err(|e| format!("read private institution entry failed: {e}"))?;
+        let mut cursor = &kv.key_bytes[48..];
+        let cid: Vec<u8> = codec::Decode::decode(&mut cursor)
+            .map_err(|e| format!("decode private institution key failed: {e}"))?;
+        if let Ok(cid_str) = String::from_utf8(cid) {
+            f(cid_str);
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
 pub(crate) async fn find_active_admin_memberships(
     verified_account_id: &str,
 ) -> Result<Vec<ActiveAdminMembership>, String> {

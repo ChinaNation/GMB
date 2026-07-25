@@ -21,7 +21,7 @@ struct RoleSubjectMirror {
 #[derive(Decode, Encode)]
 struct InstitutionVoteTicketMirror {
     role_subject: RoleSubjectMirror,
-    voter_account: [u8; 32],
+    voter_account_id: [u8; 32],
 }
 
 fn decode_representative_ticket_storage_key(
@@ -125,7 +125,7 @@ pub(crate) async fn fetch_representative_ballots(
             ticket.role_subject.cid_number,
             ticket.role_subject.role_code,
         );
-        ballots.insert(format!("0x{}", hex::encode(ticket.voter_account)), approve);
+        ballots.insert(format!("0x{}", hex::encode(ticket.voter_account_id)), approve);
     }
     Ok(ballots)
 }
@@ -178,7 +178,7 @@ mod tests {
                     cid_number: b"LN001-NRP0G-000000001-2026".to_vec(),
                     role_code: b"HOUSE_MEMBER".to_vec(),
                 },
-                voter_account: [7_u8; 32],
+                voter_account_id: [7_u8; 32],
             },
         )
             .encode();
@@ -188,7 +188,7 @@ mod tests {
             decode_representative_ticket_storage_key(&storage_key).expect("decode ticket key");
         assert_eq!(body_index, 2);
         assert_eq!(ticket.role_subject.role_code, b"HOUSE_MEMBER");
-        assert_eq!(ticket.voter_account, [7_u8; 32]);
+        assert_eq!(ticket.voter_account_id, [7_u8; 32]);
 
         storage_key.push(0);
         assert!(decode_representative_ticket_storage_key(&storage_key).is_err());

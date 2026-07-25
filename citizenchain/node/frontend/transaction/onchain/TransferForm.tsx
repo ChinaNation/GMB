@@ -123,7 +123,7 @@ export function TransferForm({ activeWallet, balance, onSubmit, disabled }: Prop
       {showScan && (
         <AddressScanModal
           onResult={(result) => {
-            setToAddress(result.address);
+            setToAddress(result.ss58_address);
             if (result.amount && result.amount > 0) {
               setAmountText(addThousandSep(result.amount.toString()));
             }

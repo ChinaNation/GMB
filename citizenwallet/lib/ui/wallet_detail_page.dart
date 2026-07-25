@@ -260,6 +260,13 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     );
   }
 
+  /// 头部卡片地址缩略:地址为空或过短时原样返回,避免 substring 越界导致整页红屏。
+  String _shortAddress(String address) {
+    if (address.length <= 16) return address;
+    return '${address.substring(0, 8)}...'
+        '${address.substring(address.length - 6)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final wallet = widget.wallet;
@@ -312,8 +319,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${wallet.ss58Address.substring(0, 8)}...'
-                        '${wallet.ss58Address.substring(wallet.ss58Address.length - 6)}',
+                        _shortAddress(wallet.ss58Address),
                         style: TextStyle(
                           fontSize: 13,
                           color: Colors.white.withAlpha(180),

@@ -143,7 +143,7 @@ where
 }
 
 fn decode_transfer_action(proposal_id: u64, data: &[u8]) -> Option<TransferProposalDetail> {
-    // MODULE_TAG("multisig") + actor_cid_number: Option<CidNumber> + funding_account
+    // MODULE_TAG("multisig") + actor_cid_number: Option<CidNumber> + funding_account_id
     // + beneficiary + amount: u128(16) + remark: Vec<u8> + proposer: [u8;32]
     let tag = TAG_TRANSFER;
     if data.len() < tag.len() + 1 + 32 + 32 + 16 + 1 + 32 {
@@ -420,7 +420,7 @@ mod tests {
     }
 
     #[test]
-    fn transfer_action_decodes_actor_cid_and_funding_account() {
+    fn transfer_action_decodes_actor_cid_and_funding_account_id() {
         let actor_cid_number = "CHN-ORG-001";
         let remark = "机构账户转账";
         let mut data = TAG_TRANSFER.to_vec();

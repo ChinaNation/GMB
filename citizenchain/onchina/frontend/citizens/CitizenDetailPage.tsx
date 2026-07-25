@@ -23,6 +23,7 @@ import {
   CloudUploadOutlined,
   DeleteOutlined,
   DownloadOutlined,
+  EditOutlined,
   QrcodeOutlined,
   ScanOutlined,
   UploadOutlined,
@@ -33,6 +34,7 @@ import type { UploadFile } from 'antd/es/upload/interface';
 import type { AdminAuth } from '../auth/types';
 import { glassCardHeadStyle, glassCardStyle } from '../core/cardStyles';
 import { CitizenSignatureModal } from '../core/CitizenSignatureModal';
+import { EditCitizenModal } from './EditCitizenModal';
 import { ScanAccountModal } from '../core/ScanAccountModal';
 import { submitChainSign, useChainSign } from '../core/useChainSign';
 import { notice } from '../utils/notice';
@@ -144,6 +146,7 @@ export function CitizenDetailPage({
 }: Props) {
   const [form] = Form.useForm<OnchainForm>();
   const [current, setCurrent] = useState(citizen);
+  const [editOpen, setEditOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [prepareLoading, setPrepareLoading] = useState(false);
   const [completeLoading, setCompleteLoading] = useState(false);
@@ -337,6 +340,16 @@ export function CitizenDetailPage({
             <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
               {titleText}
             </span>
+            {canWrite && (
+              <Button
+                type="link"
+                icon={<EditOutlined />}
+                style={{ position: 'absolute', right: 0, paddingRight: 0 }}
+                onClick={() => setEditOpen(true)}
+              >
+                编辑资料
+              </Button>
+            )}
           </div>
         }
         bordered={false}
@@ -555,6 +568,17 @@ export function CitizenDetailPage({
           ]}
         />
       </Card>
+
+      <EditCitizenModal
+        auth={auth}
+        open={editOpen}
+        citizen={current}
+        onClose={() => setEditOpen(false)}
+        onSaved={(next) => {
+          setCurrent(next);
+          onUpdated(next);
+        }}
+      />
 
       <ScanAccountModal
         open={scanOpen}

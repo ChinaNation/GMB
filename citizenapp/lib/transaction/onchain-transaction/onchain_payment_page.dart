@@ -99,7 +99,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
   final TextEditingController _toController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _remarkController = TextEditingController();
-  final String _selectedSymbol = 'GMB';
+  final String _selectedSymbol = '元';
 
   WalletProfile? _currentWallet;
   bool _loadingWallet = true;

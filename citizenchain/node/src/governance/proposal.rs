@@ -774,7 +774,7 @@ fn decode_proposal_meta(proposal_id: u64, data: &[u8]) -> Option<ProposalMeta> {
         offset += 1; // skip 0x00 (None)
         None
     };
-    // execution_account: Option<AccountId32>
+    // execution_account_id: Option<AccountId32>
     let execution_account_id = if offset < data.len() && data[offset] == 1 {
         offset += 1;
         let end = offset.checked_add(32)?;

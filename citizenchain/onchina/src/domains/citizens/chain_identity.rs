@@ -533,7 +533,7 @@ pub(crate) fn ensure_registry_admin(
     }
 }
 
-fn ensure_record_in_admin_scope(
+pub(crate) fn ensure_record_in_admin_scope(
     ctx: &crate::auth::login::AdminAuthContext,
     record: &CitizenRecord,
 ) -> Result<(), axum::response::Response> {

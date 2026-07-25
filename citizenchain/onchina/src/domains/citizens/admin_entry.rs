@@ -657,3 +657,433 @@ pub(crate) fn citizen_record_from_row(row: &postgres::Row) -> CitizenRecord {
         updated_at: row.get(27),
     }
 }
+
+// ───────────────── 公民资料编辑 ─────────────────
+//
+// 字段可变性按"现实是否可变"定死:
+//   可变:姓、名、居住市、居住镇(人会改名、会搬家)、选举资格。
+//   不可变:性别、出生日期、出生省/市/镇、护照号——出生时空/身份唯一号现实不可变;
+//           一经初始化保存即永久锁定(创世/待补公民现存为空时才允许初始化)。
+//   固定不动:居住省(= CID 省 = 分区键)、公民 CID(主键)。跨省居住迁移属"跨地区",
+//           涉及分区迁移与注册局交接,本入口暂不做,后续单独处理。
+
+/// 编辑公民资料输入。
+///
+/// 护照号与护照有效期由服务端确定性签发(与建档同源:`allocate_passport_no` +
+/// 出生日期派生年限),绝不接受前端直填,避免破坏护照号唯一性与有效期口径。
+/// 居住省与身份 CID 不在本入口变更。
+#[derive(Deserialize)]
+pub(crate) struct AdminEditCitizenInput {
+    // ── 可变:姓名与居住市镇 ──
+    #[serde(default)]
+    pub(crate) family_name: String,
+    #[serde(default)]
+    pub(crate) given_name: String,
+    /// 居住市(限本省内改;跨省不在本入口)。
+    #[serde(default)]
+    pub(crate) city_code: String,
+    /// 居住镇。
+    #[serde(default)]
+    pub(crate) town_code: String,
+    #[serde(default)]
+    pub(crate) voting_eligible: bool,
+    // ── 不可变:现存为空可初始化,一经保存即锁定 ──
+    #[serde(default)]
+    pub(crate) citizen_sex: String,
+    #[serde(default)]
+    pub(crate) citizen_birth_date: String,
+    #[serde(default)]
+    pub(crate) birth_province_code: String,
+    #[serde(default)]
+    pub(crate) birth_city_code: String,
+    #[serde(default)]
+    pub(crate) birth_town_code: String,
+}
+
+/// 不可变字段规则:现存非空即锁定——入参为空或与现存一致则保持,试图改成不同值则 Err。
+/// 现存为空则用入参初始化(初始化保存成功后即受锁定)。
+fn lock_immutable(field: &str, existing: &str, incoming: &str) -> Result<String, String> {
+    let existing = existing.trim();
+    let incoming = incoming.trim();
+    if existing.is_empty() {
+        Ok(incoming.to_string())
+    } else if incoming.is_empty() || incoming == existing {
+        Ok(existing.to_string())
+    } else {
+        Err(format!("{field}一经确认不可修改"))
+    }
+}
+
+/// 锁定后的不可变身份字段(现存优先,空则用入参初始化)。姓名不在此列(可变)。
+#[derive(Debug)]
+pub(crate) struct LockedIdentity {
+    pub(crate) citizen_sex: String,
+    pub(crate) citizen_birth_date: String,
+    pub(crate) birth_province_code: String,
+    pub(crate) birth_city_code: String,
+    pub(crate) birth_town_code: String,
+}
+
+/// 逐字段套用不可变锁,产出最终不可变身份字段;任一字段试图改动已确认值即整体拒绝。
+pub(crate) fn resolve_locked_identity(
+    existing: &CitizenRecord,
+    input: &AdminEditCitizenInput,
+) -> Result<LockedIdentity, String> {
+    Ok(LockedIdentity {
+        citizen_sex: lock_immutable("性别", &existing.citizen_sex, &input.citizen_sex)?,
+        citizen_birth_date: lock_immutable(
+            "出生日期",
+            &existing.citizen_birth_date,
+            &input.citizen_birth_date,
+        )?,
+        birth_province_code: lock_immutable(
+            "出生省",
+            &existing.birth_province_code,
+            &input.birth_province_code,
+        )?,
+        birth_city_code: lock_immutable(
+            "出生市",
+            &existing.birth_city_code,
+            &input.birth_city_code,
+        )?,
+        birth_town_code: lock_immutable(
+            "出生镇",
+            &existing.birth_town_code,
+            &input.birth_town_code,
+        )?,
+    })
+}
+
+/// 校验最终字段:不可变字段只校验已填部分的格式(允许分批补全);居住市镇按固定
+/// 居住省(existing.province_code)校验行政区归属;选举资格开启必须年满投票年龄。
+fn validate_locked_identity(
+    existing: &CitizenRecord,
+    locked: &LockedIdentity,
+    voting_eligible: bool,
+    residence_city_code: &str,
+    residence_town_code: &str,
+) -> Result<(), String> {
+    if !locked.citizen_sex.is_empty()
+        && locked.citizen_sex != "MALE"
+        && locked.citizen_sex != "FEMALE"
+    {
+        return Err("性别取值非法".to_string());
+    }
+    let today = Utc::now().date_naive();
+    let birth_date = if locked.citizen_birth_date.is_empty() {
+        None
+    } else {
+        let parsed = NaiveDate::parse_from_str(locked.citizen_birth_date.as_str(), "%Y-%m-%d")
+            .map_err(|_| "出生日期格式非法".to_string())?;
+        if parsed > today {
+            return Err("出生日期不能晚于今天".to_string());
+        }
+        Some(parsed)
+    };
+    // 出生地三段:要么全空,要么三段齐全且是合法行政区三元组。
+    let birth_filled = [
+        &locked.birth_province_code,
+        &locked.birth_city_code,
+        &locked.birth_town_code,
+    ]
+    .iter()
+    .filter(|v| !v.is_empty())
+    .count();
+    if birth_filled != 0 {
+        if birth_filled != 3 {
+            return Err("出生地必须省市镇一并填写".to_string());
+        }
+        let ok = crate::cid::china::area_name_by_codes(
+            locked.birth_province_code.as_str(),
+            Some(locked.birth_city_code.as_str()),
+            Some(locked.birth_town_code.as_str()),
+        )
+        .map(|(p, c, t)| !p.is_empty() && c.is_some() && t.is_some())
+        .unwrap_or(false);
+        if !ok {
+            return Err("未知的出生省市镇代码".to_string());
+        }
+    }
+    // 居住地:省固定(existing.province_code),市/镇可变但须归属该省。填了镇必先有市。
+    let residence_city = residence_city_code.trim();
+    let residence_town = residence_town_code.trim();
+    if !residence_town.is_empty() && residence_city.is_empty() {
+        return Err("填写居住镇前必须先选居住市".to_string());
+    }
+    if !residence_city.is_empty() {
+        let town_arg = (!residence_town.is_empty()).then_some(residence_town);
+        let (city_ok, town_ok) = crate::cid::china::area_name_by_codes(
+            existing.province_code.as_str(),
+            Some(residence_city),
+            town_arg,
+        )
+        .map(|(_, c, t)| (c.is_some(), t.is_some()))
+        .unwrap_or((false, false));
+        if !city_ok {
+            return Err("未知的居住市代码".to_string());
+        }
+        if town_arg.is_some() && !town_ok {
+            return Err("未知的居住镇代码".to_string());
+        }
+    }
+    if voting_eligible {
+        match birth_date {
+            Some(birth) if is_voting_age_at(today, birth) => {}
+            Some(_) => return Err("未满16周岁不能设置选举资格".to_string()),
+            None => return Err("设置选举资格前必须先填写出生日期".to_string()),
+        }
+    }
+    Ok(())
+}
+
+/// 编辑公民资料端点:注册局补齐/更新本地公民档案。
+///
+/// 可变:姓、名、居住市、居住镇、选举资格。不可变(初始化后锁定):性别、出生日期、
+/// 出生地;护照号与有效期由服务端在出生日期就绪时确定性签发一次。居住省(CID 省/分区键)
+/// 与 CID 不变;链下正本(创建人、created_at)、链上承诺(onchain_*)、账户与状态一律保留。
+pub(crate) async fn admin_update_citizen(
+    axum::extract::State(state): axum::extract::State<crate::AppState>,
+    headers: HeaderMap,
+    axum::extract::Path(cid_number): axum::extract::Path<String>,
+    axum::Json(input): axum::Json<AdminEditCitizenInput>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let existing = match state.db.find_citizen_by_cid(cid_number.as_str()) {
+        Ok(Some(record)) => record,
+        Ok(None) => return crate::api_error(StatusCode::NOT_FOUND, 1004, "公民档案不存在"),
+        Err(err) => {
+            tracing::error!(error = %err, "query citizen for edit failed");
+            return crate::api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "公民档案查询失败");
+        }
+    };
+    if let Err(resp) =
+        crate::domains::citizens::chain_identity::ensure_record_in_admin_scope(&ctx, &existing)
+    {
+        return resp;
+    }
+
+    // 可变姓名:必填非空(允许改名,但不允许清空)。
+    let family_name = input.family_name.trim().to_string();
+    let given_name = input.given_name.trim().to_string();
+    if family_name.is_empty() || given_name.is_empty() {
+        return crate::api_error(StatusCode::BAD_REQUEST, 1001, "姓名不能为空");
+    }
+    // 可变居住市镇:入参为空则保持现存(允许只改其一)。
+    let residence_city = {
+        let v = input.city_code.trim();
+        if v.is_empty() { existing.city_code.clone() } else { v.to_string() }
+    };
+    let residence_town = {
+        let v = input.town_code.trim();
+        if v.is_empty() { existing.town_code.clone() } else { v.to_string() }
+    };
+
+    let locked = match resolve_locked_identity(&existing, &input) {
+        Ok(v) => v,
+        Err(msg) => return crate::api_error(StatusCode::BAD_REQUEST, 1001, msg.as_str()),
+    };
+    if let Err(msg) = validate_locked_identity(
+        &existing,
+        &locked,
+        input.voting_eligible,
+        residence_city.as_str(),
+        residence_town.as_str(),
+    ) {
+        return crate::api_error(StatusCode::BAD_REQUEST, 1001, msg.as_str());
+    }
+
+    // 护照签发:现存已签发则原样保留(锁定);现存为空且出生日期就绪时确定性签发一次。
+    // 号段以最终居住省市为命名空间(与建档一致)。
+    let now = Utc::now();
+    let (passport_no, passport_valid_from_val, passport_valid_until_val) =
+        if !existing.passport_no.trim().is_empty() {
+            (
+                existing.passport_no.clone(),
+                existing.passport_valid_from.clone(),
+                existing.passport_valid_until.clone(),
+            )
+        } else if locked.citizen_birth_date.is_empty() {
+            (String::new(), String::new(), String::new())
+        } else {
+            let birth =
+                NaiveDate::parse_from_str(locked.citizen_birth_date.as_str(), "%Y-%m-%d")
+                    .expect("birth date validated above");
+            let passport_no = match state.db.allocate_passport_no(
+                existing.province_code.as_str(),
+                residence_city.as_str(),
+                existing.cid_number.as_str(),
+            ) {
+                Ok(v) => v,
+                Err(err) => {
+                    tracing::error!(error = %err, "allocate passport no on edit failed");
+                    return crate::api_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        1004,
+                        "护照号签发失败",
+                    );
+                }
+            };
+            (
+                passport_no,
+                passport_valid_from(now),
+                passport_valid_until(now, passport_validity_years(now, birth)),
+            )
+        };
+
+    // ── 组装:可变字段 + 锁定身份字段 + 服务端护照;正本/链上承诺/账户/状态保留 ──
+    let mut updated = existing.clone();
+    updated.family_name = family_name;
+    updated.given_name = given_name;
+    updated.city_code = residence_city;
+    updated.town_code = residence_town;
+    updated.voting_eligible = input.voting_eligible;
+    updated.citizen_sex = locked.citizen_sex;
+    updated.citizen_birth_date = locked.citizen_birth_date;
+    updated.birth_province_code = locked.birth_province_code;
+    updated.birth_city_code = locked.birth_city_code;
+    updated.birth_town_code = locked.birth_town_code;
+    updated.passport_no = passport_no;
+    updated.passport_valid_from = passport_valid_from_val;
+    updated.passport_valid_until = passport_valid_until_val;
+    updated.status_updated_at = Some(now.timestamp());
+    updated.updated_at = now;
+    updated.archive_hash = Some(citizen_archive_hash(&updated));
+
+    if let Err(err) = state.db.upsert_citizen_row(&updated) {
+        tracing::error!(error = %err, "citizen edit upsert failed");
+        return crate::api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "公民档案更新失败");
+    }
+    axum::Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: crate::citizen_row_from_record(&updated),
+    })
+    .into_response()
+}
+
+#[cfg(test)]
+mod edit_tests {
+    use super::*;
+
+    fn base_record() -> CitizenRecord {
+        CitizenRecord {
+            id: 1,
+            cid_number: "GZ000-CTZN6-198805200-2026".to_string(),
+            passport_no: String::new(),
+            family_name: String::new(),
+            given_name: String::new(),
+            citizen_sex: String::new(),
+            citizen_birth_date: String::new(),
+            account_id: None,
+            account_verified_at: None,
+            citizen_status: CitizenStatus::Normal,
+            voting_eligible: false,
+            passport_valid_from: String::new(),
+            passport_valid_until: String::new(),
+            status_updated_at: None,
+            province_code: "GZ".to_string(),
+            city_code: "018".to_string(),
+            town_code: String::new(),
+            birth_province_code: String::new(),
+            birth_city_code: String::new(),
+            birth_town_code: String::new(),
+            archive_hash: None,
+            onchain_tx_hash: None,
+            onchain_block_number: None,
+            onchain_at: None,
+            creator_account_id: "0x".to_string() + &"9c".repeat(32),
+            created_at: Utc::now(),
+            updater_account_id: None,
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn input() -> AdminEditCitizenInput {
+        AdminEditCitizenInput {
+            family_name: "程".to_string(),
+            given_name: "伟".to_string(),
+            city_code: "018".to_string(),
+            town_code: "018001".to_string(),
+            voting_eligible: true,
+            citizen_sex: "MALE".to_string(),
+            citizen_birth_date: "1988-05-20".to_string(),
+            birth_province_code: "GZ".to_string(),
+            birth_city_code: "018".to_string(),
+            birth_town_code: "018001".to_string(),
+        }
+    }
+
+    #[test]
+    fn empty_immutable_fields_are_initialized() {
+        let locked = resolve_locked_identity(&base_record(), &input()).expect("ok");
+        assert_eq!(locked.citizen_sex, "MALE");
+        assert_eq!(locked.citizen_birth_date, "1988-05-20");
+        assert_eq!(locked.birth_town_code, "018001");
+    }
+
+    #[test]
+    fn immutable_birth_date_cannot_change() {
+        let mut existing = base_record();
+        existing.citizen_birth_date = "1988-05-20".to_string(); // 已初始化
+        let mut edit = input();
+        edit.citizen_birth_date = "1990-01-01".to_string(); // 试图改出生日期
+        let err = resolve_locked_identity(&existing, &edit).unwrap_err();
+        assert!(err.contains("出生日期"));
+    }
+
+    #[test]
+    fn name_is_mutable_not_locked() {
+        // 姓名可变:即便现存已有姓名,改名也不应触发锁定拒绝(姓名不进 LockedIdentity)。
+        let mut existing = base_record();
+        existing.citizen_sex = "MALE".to_string();
+        let mut edit = input();
+        edit.family_name = "王".to_string(); // 改姓
+        edit.given_name = "五".to_string(); // 改名
+        edit.citizen_sex = "MALE".to_string(); // 不可变一致 → 保持
+        let locked = resolve_locked_identity(&existing, &edit).expect("ok");
+        assert_eq!(locked.citizen_sex, "MALE"); // 不可变字段仍锁定
+        // 姓名的实际采用在 handler 直接取 input,不受 lock 影响。
+    }
+
+    #[test]
+    fn immutable_field_kept_when_input_matches_or_empty() {
+        let mut existing = base_record();
+        existing.citizen_birth_date = "1988-05-20".to_string();
+        existing.citizen_sex = "MALE".to_string();
+        let mut edit = input();
+        edit.citizen_birth_date = String::new(); // 入参空 → 保持
+        edit.citizen_sex = "MALE".to_string(); // 一致 → 保持
+        let locked = resolve_locked_identity(&existing, &edit).expect("ok");
+        assert_eq!(locked.citizen_birth_date, "1988-05-20");
+        assert_eq!(locked.citizen_sex, "MALE");
+    }
+
+    #[test]
+    fn voting_eligible_requires_birth_date() {
+        let existing = base_record(); // 出生日期空
+        let mut edit = input();
+        edit.citizen_birth_date = String::new();
+        // 隔离出生日期校验:清空出生地三段与居住市镇,避免行政区校验先行拦截。
+        edit.birth_province_code = String::new();
+        edit.birth_city_code = String::new();
+        edit.birth_town_code = String::new();
+        edit.voting_eligible = true;
+        let locked = resolve_locked_identity(&existing, &edit).expect("lock ok");
+        let err = validate_locked_identity(&existing, &locked, true, "", "").unwrap_err();
+        assert!(err.contains("出生日期"));
+    }
+
+    #[test]
+    fn illegal_sex_is_rejected() {
+        let existing = base_record();
+        let mut edit = input();
+        edit.citizen_sex = "X".to_string();
+        let locked = resolve_locked_identity(&existing, &edit).expect("lock ok");
+        let err = validate_locked_identity(&existing, &locked, false, "", "").unwrap_err();
+        assert!(err.contains("性别"));
+    }
+}

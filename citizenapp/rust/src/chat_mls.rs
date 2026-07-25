@@ -31,7 +31,7 @@ const DEFAULT_KEYPACKAGE_TTL_MILLIS: u64 = 30 * 24 * 60 * 60 * 1000;
 
 #[derive(Deserialize)]
 struct CreateKeyPackageRequest {
-    owner_account: String,
+    account_id: String,
     device_id: String,
     state_store_dir: Option<String>,
 }
@@ -44,10 +44,10 @@ struct TwoPartySmokeRequest {
 #[derive(Deserialize)]
 struct EncryptRequest {
     state_store_dir: String,
-    owner_account: String,
+    account_id: String,
     device_id: String,
     conversation_id: String,
-    recipient_account: String,
+    recipient_account_id: String,
     plaintext_hex: String,
     recipient_key_package_hex: Option<String>,
 }
@@ -55,7 +55,7 @@ struct EncryptRequest {
 #[derive(Deserialize)]
 struct DecryptRequest {
     state_store_dir: String,
-    owner_account: String,
+    account_id: String,
     device_id: String,
     conversation_id: String,
     wire_message_hex: String,
@@ -64,7 +64,7 @@ struct DecryptRequest {
 
 #[derive(Serialize, Deserialize)]
 struct DeviceRecord {
-    owner_account: String,
+    account_id: String,
     device_id: String,
     signature_public_key_hex: String,
     signature_scheme: String,
@@ -171,7 +171,7 @@ pub unsafe extern "C" fn gmb_chat_mls_decrypt_json(
 
 fn create_key_package_json(request_json: *const c_char) -> Result<String, String> {
     let request: CreateKeyPackageRequest = parse_request(request_json)?;
-    require_non_empty("owner_account", &request.owner_account)?;
+    require_non_empty("account_id", &request.account_id)?;
     require_non_empty("device_id", &request.device_id)?;
 
     let (key_package_hex, cipher_suite, device_public_key_hex) =
@@ -181,7 +181,7 @@ fn create_key_package_json(request_json: *const c_char) -> Result<String, String
             let (credential, signer) = ensure_device_signer(
                 &provider,
                 state_dir,
-                &request.owner_account,
+                &request.account_id,
                 &request.device_id,
             )?;
             let bundle = generate_key_package(&provider, &signer, credential)?;
@@ -201,7 +201,7 @@ fn create_key_package_json(request_json: *const c_char) -> Result<String, String
         } else {
             let provider = OpenMlsRustCrypto::default();
             let (credential, signer) = generate_credential(
-                format!("{}:{}", request.owner_account, request.device_id).into_bytes(),
+                format!("{}:{}", request.account_id, request.device_id).into_bytes(),
                 GMB_MLS_CIPHERSUITE.signature_algorithm(),
                 &provider,
             )?;
@@ -221,7 +221,7 @@ fn create_key_package_json(request_json: *const c_char) -> Result<String, String
     let now = now_millis();
     let response = json!({
         "protocol_version": 1,
-        "owner_account": request.owner_account,
+        "account_id": request.account_id,
         "device_id": request.device_id,
         "device_public_key_hex": device_public_key_hex,
         "key_package_id": format!("kp-{}", key_package_hex.chars().take(24).collect::<String>()),
@@ -335,10 +335,10 @@ fn two_party_smoke_json(request_json: *const c_char) -> Result<String, String> {
 fn encrypt_json(request_json: *const c_char) -> Result<String, String> {
     let request: EncryptRequest = parse_request(request_json)?;
     require_non_empty("state_store_dir", &request.state_store_dir)?;
-    require_non_empty("owner_account", &request.owner_account)?;
+    require_non_empty("account_id", &request.account_id)?;
     require_non_empty("device_id", &request.device_id)?;
     require_non_empty("conversation_id", &request.conversation_id)?;
-    require_non_empty("recipient_account", &request.recipient_account)?;
+    require_non_empty("recipient_account_id", &request.recipient_account_id)?;
     require_non_empty("plaintext_hex", &request.plaintext_hex)?;
 
     let state_dir = Path::new(&request.state_store_dir);
@@ -346,7 +346,7 @@ fn encrypt_json(request_json: *const c_char) -> Result<String, String> {
     let (credential, signer) = ensure_device_signer(
         &provider,
         state_dir,
-        &request.owner_account,
+        &request.account_id,
         &request.device_id,
     )?;
     let group_id = group_id_from_conversation(&request.conversation_id)?;
@@ -411,7 +411,7 @@ fn encrypt_json(request_json: *const c_char) -> Result<String, String> {
 
     let response = json!({
         "conversation_id": request.conversation_id,
-        "recipient_account": request.recipient_account,
+        "recipient_account_id": request.recipient_account_id,
         "cipher_suite": format!("{:?}", GMB_MLS_CIPHERSUITE),
         "created_new_session": created_new_session,
         "welcome_wire_message_hex": welcome_hex,
@@ -424,7 +424,7 @@ fn encrypt_json(request_json: *const c_char) -> Result<String, String> {
 fn decrypt_json(request_json: *const c_char) -> Result<String, String> {
     let request: DecryptRequest = parse_request(request_json)?;
     require_non_empty("state_store_dir", &request.state_store_dir)?;
-    require_non_empty("owner_account", &request.owner_account)?;
+    require_non_empty("account_id", &request.account_id)?;
     require_non_empty("device_id", &request.device_id)?;
     require_non_empty("conversation_id", &request.conversation_id)?;
     require_non_empty("wire_message_hex", &request.wire_message_hex)?;
@@ -434,7 +434,7 @@ fn decrypt_json(request_json: *const c_char) -> Result<String, String> {
     let _ = ensure_device_signer(
         &provider,
         state_dir,
-        &request.owner_account,
+        &request.account_id,
         &request.device_id,
     )?;
     let group_id = group_id_from_conversation(&request.conversation_id)?;
@@ -593,7 +593,7 @@ fn save_provider(state_dir: &Path, provider: &MlsProvider) -> Result<(), String>
 fn ensure_device_signer(
     provider: &MlsProvider,
     state_dir: &Path,
-    owner_account: &str,
+    account_id: &str,
     device_id: &str,
 ) -> Result<(CredentialWithKey, SignatureKeyPair), String> {
     let record_path = device_record_path(state_dir);
@@ -603,24 +603,24 @@ fn ensure_device_signer(
             .map_err(|error| format!("读取 MLS 设备记录失败: {error}"))?;
         let record: DeviceRecord = serde_json::from_str(&raw)
             .map_err(|error| format!("解析 MLS 设备记录失败: {error}"))?;
-        if record.owner_account != owner_account || record.device_id != device_id {
+        if record.account_id != account_id || record.device_id != device_id {
             return Err("MLS 状态目录已绑定到其他钱包聊天账户或设备".to_string());
         }
         let public_key =
             decode_hex_field("signature_public_key_hex", &record.signature_public_key_hex)?;
         let signer = SignatureKeyPair::read(provider.storage(), &public_key, signature_algorithm)
             .ok_or_else(|| "MLS 设备签名密钥不在 OpenMLS storage 中".to_string())?;
-        let credential = credential_with_public_key(owner_account, device_id, public_key);
+        let credential = credential_with_public_key(account_id, device_id, public_key);
         return Ok((credential, signer));
     }
 
     let (credential, signer) = generate_credential(
-        format!("{owner_account}:{device_id}").into_bytes(),
+        format!("{account_id}:{device_id}").into_bytes(),
         signature_algorithm,
         provider,
     )?;
     let record = DeviceRecord {
-        owner_account: owner_account.to_string(),
+        account_id: account_id.to_string(),
         device_id: device_id.to_string(),
         signature_public_key_hex: hex::encode(signer.to_public_vec()),
         signature_scheme: format!("{:?}", signature_algorithm),
@@ -634,12 +634,12 @@ fn ensure_device_signer(
 }
 
 fn credential_with_public_key(
-    owner_account: &str,
+    account_id: &str,
     device_id: &str,
     public_key: Vec<u8>,
 ) -> CredentialWithKey {
     CredentialWithKey {
-        credential: BasicCredential::new(format!("{owner_account}:{device_id}").into_bytes())
+        credential: BasicCredential::new(format!("{account_id}:{device_id}").into_bytes())
             .into(),
         signature_key: public_key.into(),
     }
@@ -702,7 +702,7 @@ const MAX_GROUP_MEMBERS: usize = 1989;
 #[derive(Deserialize)]
 struct GroupCreateRequest {
     state_store_dir: String,
-    owner_account: String,
+    account_id: String,
     device_id: String,
     group_id: String,
 }
@@ -710,7 +710,7 @@ struct GroupCreateRequest {
 #[derive(Deserialize)]
 struct GroupAddMembersRequest {
     state_store_dir: String,
-    owner_account: String,
+    account_id: String,
     device_id: String,
     group_id: String,
     key_packages_hex: Vec<String>,
@@ -719,17 +719,17 @@ struct GroupAddMembersRequest {
 #[derive(Deserialize)]
 struct GroupRemoveMembersRequest {
     state_store_dir: String,
-    owner_account: String,
+    account_id: String,
     device_id: String,
     group_id: String,
     /// 按**账户**移除(移除该账户在群内的全部设备叶子)。
-    member_accounts: Vec<String>,
+    member_account_ids: Vec<String>,
 }
 
 #[derive(Deserialize)]
 struct GroupCreateMessageRequest {
     state_store_dir: String,
-    owner_account: String,
+    account_id: String,
     device_id: String,
     group_id: String,
     plaintext_hex: String,
@@ -738,7 +738,7 @@ struct GroupCreateMessageRequest {
 #[derive(Deserialize)]
 struct GroupProcessRequest {
     state_store_dir: String,
-    owner_account: String,
+    account_id: String,
     device_id: String,
     group_id: String,
     wire_message_hex: String,
@@ -748,7 +748,7 @@ struct GroupProcessRequest {
 #[derive(Deserialize)]
 struct GroupStateRequest {
     state_store_dir: String,
-    owner_account: String,
+    account_id: String,
     device_id: String,
     group_id: String,
 }
@@ -862,12 +862,12 @@ pub unsafe extern "C" fn gmb_chat_mls_group_state_json(
     }
 }
 
-/// 从 BasicCredential 还原成员标识("owner_account:device_id")。
+/// 从 BasicCredential 还原成员标识("account_id:device_id")。
 fn identity_of(credential: &Credential) -> String {
     String::from_utf8_lossy(credential.serialized_content()).into_owned()
 }
 
-/// 从成员标识取账户段("owner_account:device_id" → "owner_account")。
+/// 从成员标识取账户段("account_id:device_id" → "account_id")。
 fn account_of(credential: &Credential) -> String {
     let identity = identity_of(credential);
     match identity.split_once(':') {
@@ -879,7 +879,7 @@ fn account_of(credential: &Credential) -> String {
 fn group_create_json(request_json: *const c_char) -> Result<String, String> {
     let request: GroupCreateRequest = parse_request(request_json)?;
     require_non_empty("state_store_dir", &request.state_store_dir)?;
-    require_non_empty("owner_account", &request.owner_account)?;
+    require_non_empty("account_id", &request.account_id)?;
     require_non_empty("device_id", &request.device_id)?;
     require_non_empty("group_id", &request.group_id)?;
 
@@ -888,7 +888,7 @@ fn group_create_json(request_json: *const c_char) -> Result<String, String> {
     let (credential, signer) = ensure_device_signer(
         &provider,
         state_dir,
-        &request.owner_account,
+        &request.account_id,
         &request.device_id,
     )?;
     let group_id = group_id_from_conversation(&request.group_id)?;
@@ -920,7 +920,7 @@ fn group_create_json(request_json: *const c_char) -> Result<String, String> {
 fn group_add_members_json(request_json: *const c_char) -> Result<String, String> {
     let request: GroupAddMembersRequest = parse_request(request_json)?;
     require_non_empty("state_store_dir", &request.state_store_dir)?;
-    require_non_empty("owner_account", &request.owner_account)?;
+    require_non_empty("account_id", &request.account_id)?;
     require_non_empty("device_id", &request.device_id)?;
     require_non_empty("group_id", &request.group_id)?;
     if request.key_packages_hex.is_empty() {
@@ -932,7 +932,7 @@ fn group_add_members_json(request_json: *const c_char) -> Result<String, String>
     let (_credential, signer) = ensure_device_signer(
         &provider,
         state_dir,
-        &request.owner_account,
+        &request.account_id,
         &request.device_id,
     )?;
     let group_id = group_id_from_conversation(&request.group_id)?;
@@ -999,10 +999,10 @@ fn group_add_members_json(request_json: *const c_char) -> Result<String, String>
 fn group_remove_members_json(request_json: *const c_char) -> Result<String, String> {
     let request: GroupRemoveMembersRequest = parse_request(request_json)?;
     require_non_empty("state_store_dir", &request.state_store_dir)?;
-    require_non_empty("owner_account", &request.owner_account)?;
+    require_non_empty("account_id", &request.account_id)?;
     require_non_empty("device_id", &request.device_id)?;
     require_non_empty("group_id", &request.group_id)?;
-    if request.member_accounts.is_empty() {
+    if request.member_account_ids.is_empty() {
         return Err("group_remove_members 至少需要一个成员账户".to_string());
     }
 
@@ -1011,7 +1011,7 @@ fn group_remove_members_json(request_json: *const c_char) -> Result<String, Stri
     let (_credential, signer) = ensure_device_signer(
         &provider,
         state_dir,
-        &request.owner_account,
+        &request.account_id,
         &request.device_id,
     )?;
     let group_id = group_id_from_conversation(&request.group_id)?;
@@ -1021,23 +1021,23 @@ fn group_remove_members_json(request_json: *const c_char) -> Result<String, Stri
 
     // 按账户移除:该账户在群内的**全部设备叶子**都进移除集。
     let targets: HashSet<&str> = request
-        .member_accounts
+        .member_account_ids
         .iter()
         .map(|value| value.as_str())
         .collect();
     let mut indices = Vec::new();
-    let mut removed_accounts = HashSet::new();
+    let mut removed_account_ids = HashSet::new();
     for member in group.members() {
         let account = account_of(&member.credential);
         if targets.contains(account.as_str()) {
             indices.push(member.index);
-            removed_accounts.insert(account);
+            removed_account_ids.insert(account);
         }
     }
     if indices.is_empty() {
         return Err("未在群名册中找到要移除的成员".to_string());
     }
-    let removed_accounts: Vec<String> = removed_accounts.into_iter().collect();
+    let removed_account_ids: Vec<String> = removed_account_ids.into_iter().collect();
 
     let (commit, _welcome, _group_info) = group
         .remove_members(&provider, &signer, &indices)
@@ -1058,7 +1058,7 @@ fn group_remove_members_json(request_json: *const c_char) -> Result<String, Stri
         "group_id": request.group_id,
         "epoch": epoch,
         "commit_wire_hex": commit_wire_hex,
-        "removed_accounts": removed_accounts,
+        "removed_account_ids": removed_account_ids,
     });
     serde_json::to_string(&response).map_err(|error| error.to_string())
 }
@@ -1066,7 +1066,7 @@ fn group_remove_members_json(request_json: *const c_char) -> Result<String, Stri
 fn group_create_message_json(request_json: *const c_char) -> Result<String, String> {
     let request: GroupCreateMessageRequest = parse_request(request_json)?;
     require_non_empty("state_store_dir", &request.state_store_dir)?;
-    require_non_empty("owner_account", &request.owner_account)?;
+    require_non_empty("account_id", &request.account_id)?;
     require_non_empty("device_id", &request.device_id)?;
     require_non_empty("group_id", &request.group_id)?;
     require_non_empty("plaintext_hex", &request.plaintext_hex)?;
@@ -1076,7 +1076,7 @@ fn group_create_message_json(request_json: *const c_char) -> Result<String, Stri
     let (_credential, signer) = ensure_device_signer(
         &provider,
         state_dir,
-        &request.owner_account,
+        &request.account_id,
         &request.device_id,
     )?;
     let group_id = group_id_from_conversation(&request.group_id)?;
@@ -1107,7 +1107,7 @@ fn group_create_message_json(request_json: *const c_char) -> Result<String, Stri
 fn group_process_json(request_json: *const c_char) -> Result<String, String> {
     let request: GroupProcessRequest = parse_request(request_json)?;
     require_non_empty("state_store_dir", &request.state_store_dir)?;
-    require_non_empty("owner_account", &request.owner_account)?;
+    require_non_empty("account_id", &request.account_id)?;
     require_non_empty("device_id", &request.device_id)?;
     require_non_empty("group_id", &request.group_id)?;
     require_non_empty("wire_message_hex", &request.wire_message_hex)?;
@@ -1117,7 +1117,7 @@ fn group_process_json(request_json: *const c_char) -> Result<String, String> {
     let _ = ensure_device_signer(
         &provider,
         state_dir,
-        &request.owner_account,
+        &request.account_id,
         &request.device_id,
     )?;
     let group_id = group_id_from_conversation(&request.group_id)?;
@@ -1274,7 +1274,7 @@ fn process_group_protocol(
 fn group_state_json(request_json: *const c_char) -> Result<String, String> {
     let request: GroupStateRequest = parse_request(request_json)?;
     require_non_empty("state_store_dir", &request.state_store_dir)?;
-    require_non_empty("owner_account", &request.owner_account)?;
+    require_non_empty("account_id", &request.account_id)?;
     require_non_empty("device_id", &request.device_id)?;
     require_non_empty("group_id", &request.group_id)?;
 
@@ -1283,7 +1283,7 @@ fn group_state_json(request_json: *const c_char) -> Result<String, String> {
     let _ = ensure_device_signer(
         &provider,
         state_dir,
-        &request.owner_account,
+        &request.account_id,
         &request.device_id,
     )?;
     let group_id = group_id_from_conversation(&request.group_id)?;
@@ -1313,13 +1313,13 @@ mod tests {
 
     #[test]
     fn creates_real_openmls_key_package() {
-        let request = CString::new(r#"{"owner_account":"alice-wallet","device_id":"alice-phone"}"#)
+        let request = CString::new(r#"{"account_id":"alice-wallet","device_id":"alice-phone"}"#)
             .expect("request should be valid");
         let response =
             create_key_package_json(request.as_ptr()).expect("key package should be created");
         let json: serde_json::Value =
             serde_json::from_str(&response).expect("response should be json");
-        assert_eq!(json["owner_account"], "alice-wallet");
+        assert_eq!(json["account_id"], "alice-wallet");
         assert!(json["key_package_hex"].as_str().unwrap().len() > 100);
     }
 
@@ -1362,21 +1362,21 @@ mod tests {
         // A 建群(创建者=唯一成员,epoch 0)。
         let created = invoke(
             group_create_json,
-            json!({"state_store_dir": path(&dir_a), "owner_account": "acctA", "device_id": "devA", "group_id": group_id}),
+            json!({"state_store_dir": path(&dir_a), "account_id": "acctA", "device_id": "devA", "group_id": group_id}),
         );
         assert_eq!(created["epoch"].as_u64(), Some(0));
 
         // B / C 生成 KeyPackage。
         let b_kp = invoke(
             create_key_package_json,
-            json!({"owner_account": "acctB", "device_id": "devB", "state_store_dir": path(&dir_b)}),
+            json!({"account_id": "acctB", "device_id": "devB", "state_store_dir": path(&dir_b)}),
         )["key_package_hex"]
             .as_str()
             .unwrap()
             .to_string();
         let c_kp = invoke(
             create_key_package_json,
-            json!({"owner_account": "acctC", "device_id": "devC", "state_store_dir": path(&dir_c)}),
+            json!({"account_id": "acctC", "device_id": "devC", "state_store_dir": path(&dir_c)}),
         )["key_package_hex"]
             .as_str()
             .unwrap()
@@ -1385,7 +1385,7 @@ mod tests {
         // A 批量加 B、C(1 Commit + 1 Welcome)。
         let added = invoke(
             group_add_members_json,
-            json!({"state_store_dir": path(&dir_a), "owner_account": "acctA", "device_id": "devA", "group_id": group_id, "key_packages_hex": [b_kp, c_kp]}),
+            json!({"state_store_dir": path(&dir_a), "account_id": "acctA", "device_id": "devA", "group_id": group_id, "key_packages_hex": [b_kp, c_kp]}),
         );
         let welcome_hex = added["welcome_wire_hex"].as_str().unwrap().to_string();
         let tree_hex = added["ratchet_tree_hex"].as_str().unwrap().to_string();
@@ -1395,7 +1395,7 @@ mod tests {
         for (dir, owner, dev) in [(&dir_b, "acctB", "devB"), (&dir_c, "acctC", "devC")] {
             let joined = invoke(
                 group_process_json,
-                json!({"state_store_dir": path(dir.as_path()), "owner_account": owner, "device_id": dev, "group_id": group_id, "wire_message_hex": welcome_hex, "ratchet_tree_hex": tree_hex}),
+                json!({"state_store_dir": path(dir.as_path()), "account_id": owner, "device_id": dev, "group_id": group_id, "wire_message_hex": welcome_hex, "ratchet_tree_hex": tree_hex}),
             );
             assert_eq!(joined["message_kind"].as_str(), Some("welcome"));
             assert_eq!(joined["member_identities"].as_array().unwrap().len(), 3);
@@ -1405,13 +1405,13 @@ mod tests {
         let plaintext_hex = hex::encode("你好，群聊".as_bytes());
         let msg = invoke(
             group_create_message_json,
-            json!({"state_store_dir": path(&dir_a), "owner_account": "acctA", "device_id": "devA", "group_id": group_id, "plaintext_hex": plaintext_hex}),
+            json!({"state_store_dir": path(&dir_a), "account_id": "acctA", "device_id": "devA", "group_id": group_id, "plaintext_hex": plaintext_hex}),
         );
         let app_hex = msg["application_wire_hex"].as_str().unwrap().to_string();
         for (dir, owner, dev) in [(&dir_b, "acctB", "devB"), (&dir_c, "acctC", "devC")] {
             let got = invoke(
                 group_process_json,
-                json!({"state_store_dir": path(dir.as_path()), "owner_account": owner, "device_id": dev, "group_id": group_id, "wire_message_hex": app_hex}),
+                json!({"state_store_dir": path(dir.as_path()), "account_id": owner, "device_id": dev, "group_id": group_id, "wire_message_hex": app_hex}),
             );
             assert_eq!(got["message_kind"].as_str(), Some("application"));
             assert_eq!(got["status"].as_str(), Some("applied"));
@@ -1421,7 +1421,7 @@ mod tests {
         // A 移除 C。
         let removed = invoke(
             group_remove_members_json,
-            json!({"state_store_dir": path(&dir_a), "owner_account": "acctA", "device_id": "devA", "group_id": group_id, "member_accounts": ["acctC"]}),
+            json!({"state_store_dir": path(&dir_a), "account_id": "acctA", "device_id": "devA", "group_id": group_id, "member_account_ids": ["acctC"]}),
         );
         let remove_commit_hex = removed["commit_wire_hex"].as_str().unwrap().to_string();
         assert_eq!(removed["epoch"].as_u64(), Some(2));
@@ -1429,7 +1429,7 @@ mod tests {
         // B 应用 Commit → 名册剩 A、B,未自我移除。
         let b_after = invoke(
             group_process_json,
-            json!({"state_store_dir": path(&dir_b), "owner_account": "acctB", "device_id": "devB", "group_id": group_id, "wire_message_hex": remove_commit_hex}),
+            json!({"state_store_dir": path(&dir_b), "account_id": "acctB", "device_id": "devB", "group_id": group_id, "wire_message_hex": remove_commit_hex}),
         );
         assert_eq!(b_after["message_kind"].as_str(), Some("commit"));
         assert_eq!(b_after["self_removed"].as_bool(), Some(false));
@@ -1438,14 +1438,14 @@ mod tests {
         // C 应用 Commit → 自身被移除(后向保密)。
         let c_after = invoke(
             group_process_json,
-            json!({"state_store_dir": path(&dir_c), "owner_account": "acctC", "device_id": "devC", "group_id": group_id, "wire_message_hex": remove_commit_hex}),
+            json!({"state_store_dir": path(&dir_c), "account_id": "acctC", "device_id": "devC", "group_id": group_id, "wire_message_hex": remove_commit_hex}),
         );
         assert_eq!(c_after["self_removed"].as_bool(), Some(true));
 
         // group_state 名册对账 = A、B。
         let state = invoke(
             group_state_json,
-            json!({"state_store_dir": path(&dir_a), "owner_account": "acctA", "device_id": "devA", "group_id": group_id}),
+            json!({"state_store_dir": path(&dir_a), "account_id": "acctA", "device_id": "devA", "group_id": group_id}),
         );
         assert_eq!(state["member_count"].as_u64(), Some(2));
 

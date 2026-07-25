@@ -66,6 +66,24 @@ async fn run_indexer_loop(ws_url: &str, db_pool: &Db) -> Result<(), String> {
 
     info!("indexer connected to chain");
 
+    // 本节点投影作用域:仅城市/省注册局(非联邦)在 indexer 里按 residence/CID 市码增量投影本市
+    // 公民/私权机构;联邦节点走 M3 drill-in,不在此投影。未绑定/解析失败则关闭投影(不影响索引)。
+    let projection_scope = match crate::domains::projection::resolve_node_scope(db_pool) {
+        Ok(Some((false, scope))) => {
+            info!(
+                province = %scope.province_code,
+                city = %scope.city_code,
+                "indexer entity projection enabled for city registry scope"
+            );
+            Some(scope)
+        }
+        Ok(Some((true, _))) | Ok(None) => None,
+        Err(err) => {
+            warn!(error = %err, "indexer entity projection disabled: cannot resolve node scope");
+            None
+        }
+    };
+
     // 读取当前索引进度
     let last_indexed = db_pool.with_client(|conn| db::read_last_indexed_block(conn))?;
     info!(last_indexed_block = last_indexed, "indexer resuming");
@@ -98,7 +116,7 @@ async fn run_indexer_loop(ws_url: &str, db_pool: &Db) -> Result<(), String> {
             .await
             .map_err(|e| format!("fetch block hash #{next_block}: {e}"))?
             .ok_or_else(|| format!("block #{next_block} not found"))?;
-        process_block_at_hash(&client, db_pool, next_block, hash).await?;
+        process_block_at_hash(&client, db_pool, next_block, hash, projection_scope.as_ref()).await?;
         if next_block % 1000 == 0 {
             info!(block = next_block, "indexer catch-up progress");
         }
@@ -136,7 +154,7 @@ async fn run_indexer_loop(ws_url: &str, db_pool: &Db) -> Result<(), String> {
                 .await
                 .map_err(|e| format!("fetch block hash #{n}: {e}"))?
                 .ok_or_else(|| format!("block #{n} not found"))?;
-            process_block_at_hash(&client, db_pool, n, hash).await?;
+            process_block_at_hash(&client, db_pool, n, hash, projection_scope.as_ref()).await?;
             n += 1;
         }
 
@@ -148,6 +166,9 @@ async fn run_indexer_loop(ws_url: &str, db_pool: &Db) -> Result<(), String> {
         let block_ts = extract_block_timestamp_from_block(&block).await;
         let records = event_parser::parse_block_events(&events, block_num, block_ts);
         db_pool.with_client(|conn| db::insert_block_records(conn, block_num, &records))?;
+        if let Some(scope) = projection_scope.as_ref() {
+            project_block_entities(db_pool, &events, scope).await;
+        }
     }
 }
 
@@ -157,6 +178,7 @@ async fn process_block_at_hash(
     db_pool: &Db,
     block_number: i64,
     block_hash: subxt::utils::H256,
+    projection_scope: Option<&crate::domains::projection::NodeScope>,
 ) -> Result<(), String> {
     let block = client
         .blocks()
@@ -173,7 +195,36 @@ async fn process_block_at_hash(
     let records = event_parser::parse_block_events(&events, block_number, block_ts);
     db_pool.with_client(|conn| db::insert_block_records(conn, block_number, &records))?;
 
+    if let Some(scope) = projection_scope {
+        project_block_entities(db_pool, &events, scope).await;
+    }
+
     Ok(())
+}
+
+/// 对一个区块内涉及的公民/私权机构 CID 做增量投影(城市/省注册局)。
+/// 单条失败仅告警,不中断索引;投影层内部再按作用域过滤(不在本市则跳过)。
+async fn project_block_entities(
+    db_pool: &Db,
+    events: &subxt::events::Events<PolkadotConfig>,
+    scope: &crate::domains::projection::NodeScope,
+) {
+    let (citizen_cids, institution_cids) = event_parser::collect_entity_projection_cids(events);
+    for cid in citizen_cids {
+        if let Err(err) =
+            crate::domains::projection::project_citizen_by_cid(db_pool, &cid, scope).await
+        {
+            warn!(cid = %cid, error = %err, "indexer citizen projection failed");
+        }
+    }
+    for cid in institution_cids {
+        if let Err(err) =
+            crate::domains::projection::project_private_institution_by_cid(db_pool, &cid, scope)
+                .await
+        {
+            warn!(cid = %cid, error = %err, "indexer private institution projection failed");
+        }
+    }
 }
 
 /// 从区块的 extrinsics 中提取 Timestamp::set 的值。

@@ -709,14 +709,14 @@ fn approved_close_removes_only_custom_account() {
         let main = account_of(&cid, RESERVED_NAME_MAIN);
         let fee = account_of(&cid, RESERVED_NAME_FEE);
         let custom = account_of(&cid, CUSTOM_ACCOUNT_NAME);
-        let beneficiary_account = beneficiary_account_id();
+        let beneficiary_account_id = beneficiary_account_id();
         let admin_balance_before = Balances::free_balance(admin(0));
 
         assert_ok!(propose_named_account_close(
             RuntimeOrigin::signed(admin(0)),
             cid.clone(),
             custom.clone(),
-            beneficiary_account.clone(),
+            beneficiary_account_id.clone(),
         ));
         let proposal_id = last_proposal_id();
         assert_ok!(cast_yes_votes(&[admin(1), admin(2)], 2, proposal_id));
@@ -731,7 +731,7 @@ fn approved_close_removes_only_custom_account() {
         assert!(pallet::Institutions::<Test>::contains_key(&cid));
         assert!(public_admins::AdminAccounts::<Test>::contains_key(&cid));
         assert_eq!(Balances::free_balance(&fee), 990);
-        assert_eq!(Balances::free_balance(beneficiary_account), ACCOUNT_AMOUNT);
+        assert_eq!(Balances::free_balance(beneficiary_account_id), ACCOUNT_AMOUNT);
         assert_eq!(Balances::free_balance(admin(0)), admin_balance_before);
     });
 }

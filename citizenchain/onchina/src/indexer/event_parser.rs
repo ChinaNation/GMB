@@ -47,6 +47,51 @@ fn extract_balance<T>(val: &Value<T>) -> Option<u128> {
     val.as_u128()
 }
 
+/// 从事件字段(BoundedVec<u8> = u8 序列 Composite)提取 CID 号字符串。
+fn extract_cid_number<T>(val: &Value<T>) -> Option<String> {
+    match &val.value {
+        subxt::ext::scale_value::ValueDef::Composite(composite) => {
+            let bytes: Option<Vec<u8>> = composite
+                .values()
+                .map(|v| v.as_u128().map(|n| n as u8))
+                .collect();
+            String::from_utf8(bytes?).ok()
+        }
+        _ => None,
+    }
+}
+
+/// 扫描一个区块的事件,收集需要投影的公民/私权机构 CID(供 indexer 增量投影)。
+///
+/// `CitizenIdentity` 事件的 `cid_number` = 目标公民;`PrivateManage` 事件的 `cid_number` =
+/// 目标机构。返回去重后的 (公民 CID, 私权机构 CID)。作用域过滤由投影层按 residence/CID 市码判定。
+pub(crate) fn collect_entity_projection_cids(
+    events: &subxt::events::Events<PolkadotConfig>,
+) -> (Vec<String>, Vec<String>) {
+    let mut citizen_cids = Vec::new();
+    let mut institution_cids = Vec::new();
+    for event_result in events.iter() {
+        let Ok(event) = event_result else {
+            continue;
+        };
+        let target = match event.pallet_name() {
+            "CitizenIdentity" => &mut citizen_cids,
+            "PrivateManage" => &mut institution_cids,
+            _ => continue,
+        };
+        if let Ok(fields) = event.field_values() {
+            if let Some(cid) = fields.at("cid_number").and_then(extract_cid_number) {
+                target.push(cid);
+            }
+        }
+    }
+    citizen_cids.sort();
+    citizen_cids.dedup();
+    institution_cids.sort();
+    institution_cids.dedup();
+    (citizen_cids, institution_cids)
+}
+
 /// 将 u128 余额（分）转为 i64。超过 i64::MAX 截断（实际不会发生）。
 fn balance_to_i64(amount: u128) -> i64 {
     amount.min(i64::MAX as u128) as i64

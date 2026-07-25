@@ -152,34 +152,17 @@ class _AppLockGateState extends State<_AppLockGate>
   @override
   Widget build(BuildContext context) {
     if (_checking) {
-      return Scaffold(
+      // 启动锁检查(读 PIN/设备锁)期间只显示中性加载,不再闪现品牌盾牌图标,
+      // 无锁时快速进入钱包列表,避免"蓝盾牌一闪"的突兀过渡。
+      return const Scaffold(
         body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  gradient: AppTheme.primaryGradient,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(
-                  Icons.shield_outlined,
-                  color: Colors.white,
-                  size: 32,
-                ),
-              ),
-              const SizedBox(height: 24),
-              const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: AppTheme.primary,
-                ),
-              ),
-            ],
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: AppTheme.primary,
+            ),
           ),
         ),
       );

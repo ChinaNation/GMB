@@ -247,7 +247,7 @@ String _shortAddress(String? address) {
   return '${address.substring(0, 6)}...${address.substring(address.length - 6)}';
 }
 
-String _formatFen(String fen, {String symbol = 'GMB'}) {
+String _formatFen(String fen, {String symbol = '元'}) {
   return AmountFormat.format(LocalTxStore.fenToYuan(fen).abs(), symbol: symbol);
 }
 
@@ -431,7 +431,7 @@ class LocalTxRecordDetailPage extends StatelessWidget {
         children: [
           Center(
             child: Text(
-              '${_isExpense ? "-" : "+"}${AmountFormat.format(_amountDeltaYuan.abs(), symbol: 'GMB')}',
+              '${_isExpense ? "-" : "+"}${AmountFormat.format(_amountDeltaYuan.abs(), symbol: '元')}',
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w700,
@@ -464,7 +464,7 @@ class LocalTxRecordDetailPage extends StatelessWidget {
             context,
             label: '余额变化',
             value:
-                '${_isExpense ? "-" : "+"}${AmountFormat.format(_amountDeltaYuan.abs(), symbol: 'GMB')}',
+                '${_isExpense ? "-" : "+"}${AmountFormat.format(_amountDeltaYuan.abs(), symbol: '元')}',
           ),
           if (record.transferAmountFen != null)
             _buildRow(
