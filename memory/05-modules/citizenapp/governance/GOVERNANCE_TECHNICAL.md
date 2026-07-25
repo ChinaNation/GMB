@@ -238,7 +238,7 @@ propose_sweep_to_main / propose_relay_submitters` 四项治理 Call。新清算�
 投票确认规则：
 
 - 提交投票时，服务层先等待交易 `inBlock / finalized`，再按本次 `CID + 岗位码 + 钱包` 完整票据回读 runtime 投票 storage；个人多签按个人账户票据回读。
-- 只有 runtime 已记录完全相同的票据，页面才把该票据显示为已投票；不得以钱包账户级状态覆盖同一钱包的其他岗位票据。
+- 只有 runtime 已记录完全相同的票据，页面才把该票据显示为已投票；不得以账户级状态覆盖同一 `account_id` 的其他岗位票据。
 - 如果交易池 watch 返回 `timeout / finalityTimeout / retracted / future / error`，本次提交直接返回失败；不得写入本地账户级 pending，也不得借此伪造链上投票结果。
 - 服务层完成入块和 runtime 投票记录确认后，底部按钮停止 `submitting` 转圈；详情页立即更新该票据，`_load()` 只后台刷新展示状态，不得把 txHash 当作投票成功。
 - 联合投票读取 `JointVote` storage 时，机构参数必须使用统一 `AccountId` 编码；citizenapp 只能调用 `institutionIdentityToPalletId()`，不得在页面内手写 cid `[u8;48]` 编码。

@@ -389,6 +389,8 @@ class SquareApiClient
   final http.Client _http;
   SquareBrowseState? lastBrowseState;
   final Map<String, SquareSession> _sessions = {};
+  // 进行中的握手：同账户并发调用共享同一 Future，杜绝冷启动握手风暴。
+  final Map<String, Future<SquareSession>> _inflightSessions = {};
 
   /// Worker API 根地址。Chat 瞬时转发复用同一个 Worker 登录态。
   Uri get baseUri => Uri.parse(baseUrl);
@@ -401,6 +403,29 @@ class SquareApiClient
     final cached = _sessions[accountId];
     if (cached != null && cached.isUsable) return cached;
 
+    // in-flight 去重：同账户并发调用共享一次握手（challenge+session=2 请求），
+    // 避免广场/聊天等多入口冷启动各跑一套、迅速打满 `auth:{ip}` 限流桶（429）。
+    final pending = _inflightSessions[accountId];
+    if (pending != null) return pending;
+
+    final future = _establishSessionWithRetry(
+      accountId,
+      signLoginPayload,
+      onDeviceNotRegistered,
+    );
+    _inflightSessions[accountId] = future;
+    try {
+      return await future;
+    } finally {
+      _inflightSessions.remove(accountId);
+    }
+  }
+
+  Future<SquareSession> _establishSessionWithRetry(
+    String accountId,
+    SquareLoginSigner signLoginPayload,
+    Future<void> Function()? onDeviceNotRegistered,
+  ) async {
     try {
       return await _establishSession(accountId, signLoginPayload);
     } on SquareApiException catch (e) {

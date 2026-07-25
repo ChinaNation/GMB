@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertP256PublicKeyHex,
   buildDeviceBindingSigningMessage,
+  normalizeP256SignatureHex,
   verifyP256Signature
 } from '../src/auth/device_subkey';
 import {
@@ -53,17 +54,29 @@ describe('buildDeviceBindingSigningMessage', () => {
 });
 
 describe('assertP256PublicKeyHex', () => {
-  it('accepts only the canonical lowercase unprefixed 65-byte point', () => {
-    const hex = '04' + 'a'.repeat(128);
-    expect(assertP256PublicKeyHex(hex)).toBe(hex);
-    expect(() => assertP256PublicKeyHex('0x' + hex)).toThrow();
-    expect(() => assertP256PublicKeyHex(hex.toUpperCase())).toThrow();
+  it('accepts only the canonical lowercase 0x-prefixed 65-byte point and returns bare (ADR-041)', () => {
+    const bare = '04' + 'a'.repeat(128);
+    // 跨端文本须带 0x；返回值 strip 为裸供内部 SCALE/存储/hash 使用。
+    expect(assertP256PublicKeyHex('0x' + bare)).toBe(bare);
+    expect(() => assertP256PublicKeyHex(bare)).toThrow(); // 裸 → 拒
+    expect(() => assertP256PublicKeyHex('0x' + bare.toUpperCase())).toThrow(); // 大写 → 拒
   });
 
   it('rejects wrong length or prefix', () => {
-    expect(() => assertP256PublicKeyHex('05' + 'a'.repeat(128))).toThrow();
-    expect(() => assertP256PublicKeyHex('04' + 'a'.repeat(120))).toThrow();
+    expect(() => assertP256PublicKeyHex('0x05' + 'a'.repeat(128))).toThrow();
+    expect(() => assertP256PublicKeyHex('0x04' + 'a'.repeat(120))).toThrow();
     expect(() => assertP256PublicKeyHex(123)).toThrow();
+  });
+});
+
+describe('normalizeP256SignatureHex', () => {
+  it('accepts only the canonical 0x-prefixed 64-byte signature and returns bare (ADR-041)', () => {
+    const bare = 'a'.repeat(128);
+    expect(normalizeP256SignatureHex('0x' + bare)).toBe(bare);
+    expect(normalizeP256SignatureHex(bare)).toBeNull(); // 裸 → null
+    expect(normalizeP256SignatureHex('0x' + bare.toUpperCase())).toBeNull(); // 大写 → null
+    expect(normalizeP256SignatureHex('0x' + 'a'.repeat(120))).toBeNull(); // 错长 → null
+    expect(normalizeP256SignatureHex(123)).toBeNull();
   });
 });
 
@@ -85,7 +98,8 @@ describe('verifyP256Signature', () => {
     );
 
     expect(await verifyP256Signature(message, sigHex, pubHex)).toBe(true);
-    // 带 0x 前缀不是设备子钥协议的规范格式，必须拒绝。
+    // verifyP256Signature 是内部裸函数：0x 前缀须由边界（normalizeP256SignatureHex /
+    // assertP256PublicKeyHex）先 strip；函数本身拒绝任何带 0x 的输入（ADR-041）。
     expect(await verifyP256Signature(message, '0x' + sigHex, '0x' + pubHex)).toBe(false);
     // 篡改 message → 拒
     const tampered = signingMessage(0x1b, scaleString('login-challenge-x'));

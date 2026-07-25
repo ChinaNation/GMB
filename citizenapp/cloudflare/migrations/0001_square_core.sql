@@ -64,7 +64,7 @@ CREATE TABLE chain_clock (
   observed_at INTEGER NOT NULL
 );
 
--- 平台订阅 finalized 镜像。钱包账户是唯一业务主键；价格、状态和时间只来自链上。
+-- 平台订阅 finalized 镜像。链账户 account_id 是唯一业务主键；价格、状态和时间只来自链上。
 CREATE TABLE square_memberships (
   account_id TEXT PRIMARY KEY CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   membership_level TEXT NOT NULL,
@@ -87,7 +87,7 @@ CREATE INDEX idx_square_memberships_lapsed
 CREATE INDEX idx_square_memberships_reconcile
   ON square_memberships(subscription_status, paid_until, verified_at);
 
--- 创作者档位展示镜像。每档以创作者钱包账户 + tier_id 为关系主键；价格仍以链上为真源。
+-- 创作者档位展示镜像。每档以 creator_account_id + tier_id 为关系主键；价格仍以链上为真源。
 CREATE TABLE square_creator_tiers (
   creator_account_id TEXT NOT NULL CHECK(length(creator_account_id) = 66 AND substr(creator_account_id, 1, 2) = '0x' AND substr(creator_account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   tier_id TEXT NOT NULL,

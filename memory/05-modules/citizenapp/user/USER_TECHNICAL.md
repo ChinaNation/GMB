@@ -6,7 +6,7 @@
 
 - 用户背景图上传与更换
 - 用户头像上传与更换
-- 聊天账户选择（钱包名称即用户昵称，双向同步）
+- 当前默认热账户的公开昵称读取与同步
 - 用户二维码生成与展示
 - 通讯录扫码导入、私人联系人名称、端到端加密云同步和跨设备恢复
 - 电子护照入口展示
@@ -28,8 +28,8 @@
 相关协作模块：
 
 - `lib/wallet/pages/wallet_page.dart`
-  - 在选择聊天账户时提供钱包选择
-  - 钱包改名时同步更新用户资料中的通信钱包名称
+  - 管理热钱包档案和当前默认账户
+  - 钱包改名后同步该账户自己的公开昵称
 - `lib/my/myid/`
   - 电子护照页面和链上唯一身份状态服务
   - `identity_badge_snapshot_store.dart` 只保存按钱包账户隔离的公开身份徽章展示信号
@@ -43,19 +43,20 @@
 
 - `avatarPath` — 本地头像路径
 - `backgroundPath` — 本地背景图路径
-- `communicationWalletIndex` — 聊天账户钱包 index
-- `communicationAddress` — 聊天账户钱包地址（SS58）
-- `communicationWalletName` — 聊天账户钱包名称
 
 展示规则：
 
-- 用户昵称 = 该钱包的 `walletName`；**Cloudflare `display_name` 是真源，本机 `walletName` 是缓存**（2026-07-23 模型翻转，见下）。
-- 钱包名称和公开镜像都缺失时，由 `ProfilePresentation` 按钱包账户稳定选择本地默认昵称；禁止回退为完整或截断账户。
+- 当前用户账户唯一取自 `WalletManager.getDefaultWallet()`；`account_id` 是账户真源，
+  `ss58_address` 只作展示。
+- 用户昵称 = 当前默认钱包档案的 `walletName`；Cloudflare `display_name` 是公开资料
+  真源，本机 `walletName` 是缓存。
+- 钱包名称和公开资料都缺失时，由 `ProfilePresentation` 按 `account_id` 稳定选择本地
+  默认昵称；禁止回退为完整或截断账户。
 
 设计说明：
 
 - 不再有独立的昵称业务字段，用户设置的昵称完全由钱包名称决定；本地默认昵称只是无设置值时的展示兜底
-- 用户修改昵称 = 修改通信钱包名称（`WalletManager.renameWallet`）
+- 用户修改昵称 = 修改当前默认钱包名称（`WalletManager.renameWallet`）
 
 ### 钱包名同步模型（2026-07-23 翻转：云端为真源）
 
@@ -72,7 +73,7 @@
 - **冷钱包边界**：无设备子钥、云端无其资料，名字保持纯本机，同步器直接跳过。
 
 **已知限制**：仅 App 侧时语义是「**最后到达者赢**」。离线久的设备上线后仍可能用旧编辑覆盖新编辑。要成为「最新编辑者赢」，需 Worker 侧增加 `edited_at` 并取 `max(现存, min(edited_at, now))` 丢弃更旧写入（`min(..., now)` 夹取必须有，否则系统时间被设到未来的设备会把该值永久钉死）。该 Step B 已规划、用户明确推迟，见任务卡 `20260723-citizenapp-profile-multidevice-lww`。
-- 用户在钱包页改通信钱包名称 = 自动同步到用户资料
+- 用户在钱包页改名 = 自动同步该账户的公开昵称
 - 用户设置的公开头像和背景上传 Cloudflare R2；`avatarPath/backgroundPath` 只承接旧本机图片迁移和“我的”页即时显示，迁移成功后清空
 - 用户未设置或真实图片读取失败时，从 `assets/profile_defaults/` 11 张本地照片中按账户稳定选择头像和背景，两个位置避免使用同一张图
 
@@ -84,21 +85,22 @@
 
 字段：
 
-- `proto` — 协议标识（固定 `QR_V1`）
-- `kind` — 固定 `user_contact`
-- `body.address` — 聊天账户 SS58 地址
-- `body.name` — 用户昵称（= 通信钱包名称）
+- `p` — 协议标识，固定 `QR_V1`
+- `k` — 二维码类型，固定 `3`
+- `b.ss58_address` — 当前账户的 SS58 展示地址
+- `b.contact_name` — 用户提供给联系人的名称
 
 ### 3.3 通讯录 `UserContact`
 
 字段：
 
-- `address` — 对方 SS58 地址（当前链 `ss58 = 2027`）
+- `accountId` — 对方规范 `account_id`，严格为小写 `0x` 加 64 位十六进制
+- `ss58Address` — 由同一账户派生的 SS58 展示地址（当前链 `ss58 = 2027`）
 - `contactName` — 当前用户为该联系人保存的私人联系人名称，对应协议字段 `contact_name`
 - `createdAt` / `updatedAt` — 毫秒时间戳
 
 公开昵称、头像、背景、个性签名、链上身份和会员徽章不复制进联系人记录，统一按
-`address` 读取 `CitizenProfile`。因此通讯录、广场、聊天和关注列表始终进入同一个
+`account_id` 读取 `CitizenProfile`。因此通讯录、广场、聊天和关注列表始终进入同一个
 `UserProfilePage`，不存在第二套联系人公开资料。
 
 公开资料缺失时，各入口统一使用 `ProfilePresentation` / `ProfileAvatar` 的本地稳定
@@ -110,7 +112,8 @@
 
 存储：`SharedPreferences`，键 `user.profile.state.v2`
 
-内容：JSON 对象，保存头像路径、背景图路径、通信钱包 index/地址/名称
+内容：JSON 对象，只保存 `avatar_path`、`background_path`。账户、SS58 和昵称不在
+`UserProfileState` 重复持久化，统一从钱包档案与公开资料读取。
 
 ### 4.2 通讯录
 
@@ -142,28 +145,22 @@ nonce、MAC 和更新时间；Worker 不接收联系人账户或联系人名称�
 
 ### 5.1 用户主页
 
-页面元素：背景图、头像、昵称（通信钱包名称）、二维码图标、右箭头、钱包/通讯录/电子护照/设置入口
+页面元素：背景图、头像、当前默认账户昵称、二维码图标、右箭头、钱包/通讯录/电子护照/设置入口
 
 ### 5.2 用户资料页 `ProfileEditPage`
 
 自上而下：
-1. 用户二维码（聊天账户未设置时显示占位提示）
+1. 用户二维码（当前默认账户不存在时显示占位提示）
 2. 用户头像行（左侧头像 + 右箭头，点击换头像）
-3. 用户昵称行（左侧显示通信钱包名称 + 右箭头，点击弹窗修改，同步改钱包名）
-4. 聊天账户行（选择钱包后即时保存）
+3. 用户昵称行（左侧显示当前默认账户昵称 + 右箭头，点击弹窗修改并同步）
 
-### 5.3 昵称双向同步
+### 5.3 昵称同步
 
-- 用户资料页改昵称 → `WalletManager.renameWallet()` + `UserProfileService.updateCommunicationWalletName()`
-- 钱包详情页改钱包名 → 检查该钱包是否为聊天账户 → 是则 `UserProfileService.updateCommunicationWalletName()`
+- 用户资料页改昵称 → `WalletManager.renameWallet()` → `NicknamePublisher.onLocalRename()`
+- 钱包详情页改名 → 同步该钱包自身的 `account_id` 与公开昵称
+- 切换默认账户后，页面与二维码直接消费新的默认钱包档案，不复制聊天账户字段
 
-### 5.4 聊天账户流程
-
-1. 用户资料页点击聊天账户行 → 跳转钱包选择
-2. 选中钱包后保存 `walletIndex + address + walletName`
-3. 二维码实时更新
-
-### 5.5 电子护照入口
+### 5.4 电子护照入口
 
 1. “我的”页面点击电子护照入口
 2. 跳转 `lib/my/myid/MyIdPage`
@@ -174,7 +171,7 @@ nonce、MAC 和更新时间；Worker 不接收联系人账户或联系人名称�
 
 电子护照详情页属于主动链流程，会启动并等待轻节点同步；这与“我的”首页头像徽章只读快照的边界不同。
 
-### 5.6 通讯录
+### 5.5 通讯录
 
 - 通讯录所属用户唯一来源是 `WalletManager.getDefaultWallet()`；页面和服务均不接受交易付款钱包或调用方账户覆盖。`UserContactService.getContacts()/sync()`只读写默认热钱包对应的 Isar 缓存与 Cloudflare 密文。
 - 支持扫码添加（`QrScanMode.contact`）

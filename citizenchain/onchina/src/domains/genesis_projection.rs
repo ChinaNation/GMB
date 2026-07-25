@@ -178,6 +178,12 @@ pub(crate) fn backfill_genesis_private_blocking(db: &Db) -> Result<bool, String>
         account_id: format!("0x{}", hex::encode(lr.account_id)),
     });
     let now = Utc::now();
+    // 私权列表 SQL 要求 private_type 非空;链上无此字段,按机构码确定性派生(基金会 SFGY → WELFARE)。
+    let derived_private_type =
+        crate::domains::private::common::private_type_code_from_institution_code(
+            &parts.institution_code_text,
+        )
+        .map(str::to_string);
     let inst = Institution {
         cid_number: foundation_cid.clone(),
         cid_full_name: Some(String::from_utf8_lossy(&chain_inst.cid_full_name).into_owned()),
@@ -193,7 +199,7 @@ pub(crate) fn backfill_genesis_private_blocking(db: &Db) -> Result<bool, String>
         town_code: String::from_utf8_lossy(&chain_inst.town_code).into_owned(),
         institution_code: parts.institution_code_text,
         education_type: None,
-        private_type: None,
+        private_type: derived_private_type,
         partnership_kind: None,
         has_legal_personality: Some(true), // 私权法人
         parent_cid_number: None,

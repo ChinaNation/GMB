@@ -2,7 +2,7 @@
 
 ## 定位
 - 「我的 → 点头像」进本人主页；广场帖子点作者进他人主页。
-- 身份 = **默认热钱包地址**（[`getDefaultWallet`](../../../../citizenapp/lib/wallet/core/wallet_manager.dart) 只返回最靠前热钱包）；换默认钱包 = 换身份 = 换主页。冷钱包不可能成为默认用户。
+- 身份 = **默认热钱包的链账户 `account_id`**（[`getDefaultWallet`](../../../../citizenapp/lib/wallet/core/wallet_manager.dart) 只返回最靠前热钱包）；`ss58_address` 只用于展示。换默认钱包 = 换身份 = 换主页，冷钱包不可能成为默认用户。
 - 头像/背景/签名/昵称公开镜像等资料是**链下数据**，用户设置值进 Cloudflare R2；链上只有发帖、交易。公开资料缺失或图片读取失败时，App 按账户稳定选择本地内置默认昵称、头像和背景，该展示兜底不上传、不持久化，也不参与身份判断。
 
 ## 数据分层
@@ -63,7 +63,7 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
     失败内容由草稿箱持续自动保存兜底；发布失败仅上抛错误消息。
 - `follows_list_page.dart`：关注/粉丝列表；按分页并行补公开资料，单个资料失败时显示稳定本地昵称和头像，账户只放副标题。
 - `profile_edit_page.dart`：`CitizenProfileEditPage` 展示名/签名/头像/背景编辑；保存上传 R2 + `PUT /profile`；本地旧图迁移后清空。
-- `models/profile_presentation.dart`：唯一展示解析器；以钱包账户做 FNV-1a 稳定分桶，从内置词库与 `assets/profile_defaults/` 11 张照片中选择默认昵称、头像和背景。头像与背景使用不同盐值且避免同图；任何完整或截断账户都不能成为昵称。
+- `models/profile_presentation.dart`：唯一展示解析器；以 `account_id` 做 FNV-1a 稳定分桶，从内置词库与 `assets/profile_defaults/` 11 张照片中选择默认昵称、头像和背景。头像与背景使用不同盐值且避免同图；任何完整或截断账户都不能成为昵称。
 - `models/citizen_profile.dart`、`services/citizen_profile_api.dart`、`citizen_profile_cache.dart`、`profile_asset_service.dart`、`square_session_provider.dart`。
 - 私聊入口共享 [`lib/chat/open_direct_chat.dart`](../../../../citizenapp/lib/chat/open_direct_chat.dart)。通讯录、聊天、广场作者、关注/粉丝列表全部进入同一个 `UserProfilePage`；联系人只保存私人名称和账户，不再维护联系人详情或公开资料副本。
 - `profile_avatar.dart` 是用户主页、通讯录、广场、聊天和关注列表共用的圆角方形头像、稳定默认照片和身份徽章唯一 UI 实现，禁止各入口复制一套头像规则。

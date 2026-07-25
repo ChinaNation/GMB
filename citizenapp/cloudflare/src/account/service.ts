@@ -22,7 +22,7 @@ function parseAccountId(value: unknown): string {
   try {
     return assertAccountId(value);
   } catch {
-    throw new HttpError(400, 'invalid_account_id', '钱包账户格式不合法');
+    throw new HttpError(400, 'invalid_account_id', '账户标识格式不合法');
   }
 }
 

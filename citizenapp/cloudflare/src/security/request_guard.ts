@@ -1,5 +1,5 @@
 import type { Env, SessionState } from '../types';
-import { verifyP256Signature } from '../auth/device_subkey';
+import { normalizeP256SignatureHex, verifyP256Signature } from '../auth/device_subkey';
 import { HttpError, requireSession } from '../shared/http';
 import { sha256Hex } from '../shared/hash';
 import {
@@ -77,13 +77,18 @@ export async function guardRequest(request: Request, env: Env, path: string): Pr
   assertRequestBodyLimit(request, path);
 
   const ipKey = await requestIpKey(request, env);
-  // 鉴权建立/自证路由(挑战、会话、设备子钥注册):各由 Turnstile + 钱包签名门控,不依赖广场会话。
+  // 鉴权建立/自证路由(挑战、会话):由 Turnstile + 设备子钥签名门控,不依赖广场会话。
+  // 一次冷启动握手 = challenge + session 两请求;客户端已 in-flight 去重,同账户并发只跑一套。
   if (
     path === '/v1/square/auth/challenge' ||
-    path === '/v1/square/auth/session' ||
-    path === '/v1/square/auth/device/register'
+    path === '/v1/square/auth/session'
   ) {
     await enforceRateLimit(env, `auth:${ipKey}`, 10, 60);
+    return;
+  }
+  // 设备子钥注册是每钱包一次的稀有操作,独立限流桶,避免与频繁的握手互相挤占配额。
+  if (path === '/v1/square/auth/device/register') {
+    await enforceRateLimit(env, `authreg:${ipKey}`, 10, 60);
     return;
   }
   // 公开只读/自证路由白名单(免会话)。/v1/security/* 在登录前渲染,必须免会话。
@@ -203,7 +208,12 @@ async function requireDeviceProof(
     tokenHash
   ].join('\n');
   const message = signingMessage(OP_SIGN_SQUARE_LOGIN, scaleString(canonical));
-  if (!(await verifyP256Signature(message, signature, subkey.p256_public_key))) {
+  // 跨端签名文本须为 `0x`+128hex（ADR-041）；裸/大写/错长与验签失败一律 401。
+  const signatureBare = normalizeP256SignatureHex(signature);
+  if (
+    signatureBare === null ||
+    !(await verifyP256Signature(message, signatureBare, subkey.p256_public_key))
+  ) {
     throw new HttpError(401, 'device_signature_invalid', '设备请求签名校验失败');
   }
 

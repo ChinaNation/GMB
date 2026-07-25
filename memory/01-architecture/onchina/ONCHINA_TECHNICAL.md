@@ -186,6 +186,16 @@ OnChina 属于 `citizenchain`。不再保留独立 旧独立身份系统 CI、�
 证明签名身份不会绕过链上授权。验收后业务数据库再次清空重建，OnChina、节点和
 PostgreSQL 均已停止，端口 `8964`、`9944`、`5433` 关闭。
 
+账户标识统一第 10 步于 2026-07-24 使用 Pixel 8a、仓库外 fresh 链和独立
+PostgreSQL 完成总验收。当前 fresh genesis hash 为
+`0xafac9d55a77a10780b5c5cb29da6118ecf4a7b9652960e52502ebacf5d403535`，
+OnChina 投影为 49,593 个机构和 99,232 个账户；新增的一个计数来自联邦公民安全
+基金账户，不是机构重复行。CitizenApp 与 CitizenWallet 使用同一公开测试助记词恢复
+出相同规范 `account_id`，旧字段、非法大小写和 SS58 主键入口均失败关闭。
+Cloudflare staging 的 D1/KV/R2 可清理真写通过，production 只读。仓库没有 fresh
+创世管理员公开账户对应的私钥或助记词，因此本次没有伪造管理员成功登录或线上业务
+签名；链内正例由全 workspace runtime externalities 测试覆盖。
+
 最低检查：
 
 ```text

@@ -1,6 +1,7 @@
 # 任务卡：全仓账户标识按 Substrate 官方模型统一
 
-状态：执行中（2026-07-23 已完成第 1、2、3、4、5、6、7、8 步；第 9 步完整技术方案待确认）。
+状态：实现完成（2026-07-24 已完成第 1—10 步；真机、fresh 链、隔离数据库、
+Cloudflare staging 和全量测试证据见第 10 步执行结果）。
 
 ## 任务需求
 
@@ -855,97 +856,330 @@ PostgreSQL、助记词派生、签名算法或任何 Secret，也不新增文件
 
 ### 第 9 步：CitizenConsole、脚本、CI、文档和全仓残留清理
 
-状态：待确认。
+状态：已完成（2026-07-24）。
 
-完整技术方案：
+仓库更新复核结论：
 
-1. 先按 ADR-040 对全仓当前代码、配置、工作流、生成器、fixture、注释和现行文档做
-   最终分类审计。只清理确实表示 CitizenChain AccountId、签名公钥或 SS58 展示地址
-   的旧名；钱包产品、助记词/私钥容器、Keychain `account` 参数、EVM 地址、R2/URL、
-   普通现实地址和冻结 QR action id 不机械改名。
-2. 收口 CitizenConsole 协议升级链路。`pubkeyHex`、`adminPubkey`、会话 `pubkey`
-   和内部宽松 `replace(/^0x/i).toLowerCase()` 全部删除，统一为严格
-   `signerPublicKey` / `signer_public_key`，入口只接受
-   `^0x[0-9a-f]{64}$`。由签名公钥派生、仅用于 Polkadot API nonce 与
-   `addSignature` 的 SS58 值明确命名为 `ss58Address`，不得成为会话主键或授权依据。
-3. CitizenConsole Runtime 升级 QR 的 `p/k/i/e/b`、`b.a/g/u/d/s`、action code、
-   SCALE call、签名 payload、nonce、WASM hash 和 sr25519 算法逐字节不变；只统一
-   内部字段和页面文案。二维码回执必须严格比较实际 32 字节签名公钥，不允许大小写、
-   无 `0x` 或 SS58 兼容输入。
-4. 将本机协议升级配置键从旧 `NRC_ADMIN_PUBKEY` 收口为准确的
-   `NRC_SIGNER_PUBLIC_KEY`，前后端状态、页面字段、错误文案和 Keychain target 同步。
-   不读取或输出旧 Keychain 值，不在代码中保留双键 fallback；执行时若旧键实际存在，
-   必须先列出精确 Keychain 目标并再次确认删除，新的公开签名公钥由用户按目标键重新
-   配置。
-5. 复核 CitizenConsole 的 WASM CI 唯一版本入口：只有用户点击“运行 WASM CI”时，
-   控制台读取已配置正式链 genesis/spec_version，校验源码版本等于目标链版本，再把
-   `citizenchain/runtime/src/lib.rs` 的 `spec_version` 精确提高 1；GitHub workflow、
-   普通 CI、dry-run、手工编译和其它脚本不得查询链、临时提高或二次提高版本。工作流
-   只核对控制台传入版本与源码并原样编译、上传 WASM。
-6. 统一 `citizenconsole/actions/`、根 `scripts/` 和 `.github/workflows/` 的账户、
-   公钥、SS58 变量、环境输入、日志与注释；同步既有测试。`DISBURSE_KEY`、EVM
-   `RECV_ADDRESS`、钱包私钥和产品名中的 wallet 属于不同语义，保持原名。禁止恢复旧
-   部署入口、明文 Secret、自动生产部署或 GitHub 远端操作。
-7. 清理现行架构、模块、AI 规则和协议文档中的旧账户字段。已只读确认当前仍有
-   `Admin { admin_account... }`、`CitizenSubject.wallet_account`、
-   `credential_signer_pubkey`、旧管理员三字段、旧文件路径和旧协议表述；全部按已
-   完成代码的真实最终结构更新。历史任务卡只保留必要的历史事实，但不得被统一协议、
-   当前技术文档或注释引用为现行契约。
-8. 删除可安全再生的仓库残留，例如被 Git 跟踪或误留的 `__pycache__`、旧生成物、
-   过期 fixture、已删除 migration 的引用和旧字段扫描白名单；不删除
-   `citizenconsole/.runtime/`、日志、Keychain、Secret、WASM 下载缓存或用户安全
-   材料。若发现需删除任何私密或不可恢复本机状态，先停止并列出精确目标确认。
-9. 本步默认不修改 `citizenchain/runtime/`。若全仓扫描发现 Runtime 代码、注释、
-   格式化或生成物仍需修改，必须先列出每个完整 Runtime 路径、目标 diff 和原因，
-   按仓库硬规则取得单独二次确认；CitizenConsole 脚本中对未来
-   `runtime/src/lib.rs` 的受控版本提高逻辑不等于本步直接产生 Runtime diff。
-10. 静态验收包括 CitizenConsole Node tests、相关脚本语法与 shellcheck、前端真实
-    加载、GitHub workflow YAML/表达式检查、现有生成器一致性测试，以及所有受影响
-    Rust/Dart/TypeScript 文档链接检查。全仓现行范围旧账户/公钥字段、旧 D1
-    migration 引用、兼容解析、旧注释和旧文案必须为 0；冻结 action id 和历史记录
-    需通过精确白名单说明原因，不能用宽目录排除掩盖残留。
-11. 真实运行态验收启动 CitizenConsole 本地服务和真实页面，验证模块列表、Cloudflare
-    staging/production 动作、WASM CI 目标链预检和协议升级 QR 表单。使用隔离开发公钥
-    生成并回扫一次真实 QR，证明严格 signer public key、request id、payload hash、
-    本地验签和 dry-run 门禁；不得提交 Runtime 升级交易、不得提高 Runtime 版本、
-    不得读取用户私钥或生产 Secret。Cloudflare 部署动作只检查配置和命令边界，不再次
-    写远端。
-12. 完成后更新任务卡、ADR-040、现行架构/模块/协议文档，清理本步产生的临时服务、
-    测试状态和缓存，再输出第 10 步“真实运行态总验收”的完整技术方案；未经确认不执行
+1. 当前 `main` 工作树干净，HEAD 为 `8d3d9b75`，相对 `origin/main` 多出
+   `0ba5b7f5`、`8d3d9b75` 两个本地提交。本次重大更新涉及创世发行拆分、OnChina
+   链投影、公民编辑、CitizenApp/Node/CitizenWallet 消费者及全仓命名，但没有推翻
+   本任务第 1—8 步的数据模型和执行结果。
+2. 已直接核对当前 Runtime 真源：管理员仍为
+   `Admin { account_id, cid_number, family_name, given_name }`，公民主体仍为
+   `CitizenSubject { cid_number, account_id }`，机构岗位任职仍使用
+   `InstitutionAdminAssignment.account_id`。因此第 9 步不再重复修改这些 Runtime
+   结构，也不重做 OnChina 新增的链投影或公民编辑业务。
+3. 新增的审计整改第 3 轮已经完成 CitizenConsole Touch ID、Keychain stdin、
+   子进程输出脱敏、状态批量缓存和会话比较；第 4 轮已经完成官网、pallet registry
+   CI 门禁和 smoldotpow 上游追踪。本任务只复用其结果，不重复实现、不覆盖其安全
+   边界。
+4. 用户已于 2026-07-24 明确确认 Git 边界：`citizenconsole/` 必须继续整目录由
+   Git 忽略，不得纳入 Git 或推送 GitHub。当前 `.gitignore` 的 `/citizenconsole/`
+   是目标状态；`memory/AGENTS.md`、agent rules、repo map 和 GMB 架构中要求其
+   非密钥源码由 Git 追踪的表述与用户最终决定冲突，必须改为“本机私有、整目录忽略”。
+5. 当前真正未收口的第二项是 CitizenConsole 协议升级命名：
+   `NRC_ADMIN_PUBKEY`、`pubkeyHex`、`adminPubkey`、会话 `pubkey` 和宽松的
+   去前缀/转小写解析仍存在；它们不符合 `signer_public_key` 及严格
+   `0x + 64 位小写 hex` 契约。
+6. 当前 WASM 路径总体符合已确认规则：只有
+   `citizenconsole/actions/citizenchainwasm.sh` 调用版本自增函数，
+   `.github/workflows/citizenchain-wasm.yml` 只校验提交源码并原样编译。第 9 步只
+   补测试、注释和门禁，不重新设计版本流程。`citizenchain-ci.yml` 当前存在一条重复
+   残留注释，需要清理。
+7. 当前代码真源已基本使用目标字段，但现行模块文档和统一协议仍保存
+   `CitizenSubject.wallet_account`、管理员三字段、`credential_signer_pubkey`、
+   `InstitutionAdminAssignment.admin_account` 及已废弃 Chat 版本标签；ADR-040
+   还并列保留了一条无 `cid_number` 的旧 `Admin` 结构。这些是本步主要文档残留。
+
+更新后的完整技术方案：
+
+1. 先冻结本步基线并保存精确扫描结果。账户字段只按真实语义分类：
+   CitizenChain `AccountId`、签名公钥、SS58 展示地址分别处理；钱包产品、助记词/
+   私钥容器、macOS Keychain 命令自身的 `account` 参数、EVM 地址、现实地址和
+   `AdminAccount` 个人多签业务类型不做机械替换。
+2. 保持 `.gitignore` 对 `/citizenconsole/` 的整目录忽略，不删除、不反选、不强制
+   添加其中任何文件。当前 34 个源码/配置/测试文件、`.runtime`、`node_modules`、
+   日志、二进制、WASM、本机状态和私密材料全部继续留在本机，不进入 Git 索引、
+   commit、GitHub 或任何远端。第 9 步对 CitizenConsole 的修改只在当前本机生效。
+3. 收口 CitizenConsole 协议升级链路：JavaScript 内部统一使用
+   `signerPublicKey`，HTTP/JSON 和配置语义统一为 `signer_public_key`，
+   Keychain target 统一为 `NRC_SIGNER_PUBLIC_KEY`；仅由该公钥派生、供
+   Polkadot API 查询 nonce 和 `addSignature` 使用的展示地址命名为
+   `ss58Address`。会话、函数参数、返回值、前端状态、中文文案和注释同步修改。
+4. 所有公钥入口必须直接满足 `^0x[0-9a-f]{64}$`；删除
+   `replace(/^0x/i, '')`、`toLowerCase()` 和回执公钥大小写兼容。内部转成 32 字节
+   后再编码 QR 的 `b.u`；扫码回执必须逐字节等于预期签名公钥。禁止接受无 `0x`、
+   大写、混合大小写或 SS58 作为替代输入。
+5. Runtime 升级 QR 的 `p/k/i/e/b`、`b.a/g/u/d/s`、action code、SCALE call、
+   nonce、WASM hash、签名 payload、sr25519 算法和交易组装字节保持不变；本步只改
+   内部命名和边界校验。`QR_V1` 继续是唯一扫码协议版本标识，不新增第二协议或兼容
+   envelope。
+6. 旧 Keychain target 不做双读、迁移或 fallback，也不读取/输出其值。执行时只允许
+   检查 `rtupg:NRC_ADMIN_PUBKEY` 是否存在；若存在，先报告精确 target 并停下取得
+   删除确认。目标公钥由用户通过控制台按
+   `rtupg:NRC_SIGNER_PUBLIC_KEY` 重新配置，用户安全材料和其它 Keychain 项保持
+   原样。
+7. 保持 WASM 版本职责不变并补足可验证门禁：只有控制台“运行 WASM CI”读取已配置
+   目标链 genesis/spec_version，在源码版本与链上版本严格相等时把
+   `citizenchain/runtime/src/lib.rs` 和现有版本测试断言精确提高 1；普通 workflow、
+   手工编译和协议升级 QR 不提高版本。隔离测试只对临时副本运行自增函数，证明
+   `+1`、版本漂移拒绝、上限拒绝和测试断言漂移拒绝，不在本步产生 Runtime diff。
+8. 清理 `.github/workflows/citizenchain-ci.yml` 的重复注释，并复核
+   `.github/workflows/citizenchain-wasm.yml` 只校验源码版本/目标链指纹后原样编译。
+   不执行 `git push`、`gh workflow run`、Release、部署或任何会触发 GitHub
+   Actions 的操作。
+9. 清理当前架构、模块、ADR、统一命名和统一协议文档：全部按当前代码真源更新为
+   `Admin { account_id, cid_number, family_name, given_name }`、
+   `CitizenSubject { cid_number, account_id }`、
+   `InstitutionAdminAssignment.account_id` 和
+   `credential_signer_public_key`。删除已废弃的 `GMB_CHAT_V1` 现行协议标签，
+   Chat 只引用真实 `ChatEnvelope`/Protobuf schema，不另造新的版本化字符串。
+   旧任务卡和 ADR 只有在明确说明“已拒绝/已删除旧称”时才可引用历史字符串，不得再
+   被当前契约当作有效字段。
+10. 清理安全可再生残留和错误白名单。QR registry 中用于防止旧字段回归的精确负面
+    测试保留，因为它是门禁而不是兼容字段；`activate_admin_account` 等真实业务动作
+    名和 `AdminAccount` 个人多签业务类型保留，因为它们不表示链账户字段。不得用宽
+    目录排除掩盖当前代码、配置、注释、生成物或文档残留。
+11. 静态验收执行 CitizenConsole `npm run check`、`npm test`、全部 Shell
+    `shellcheck`、JavaScript 语法检查、`actionlint`、WASM 版本函数隔离测试、
+    QR registry 一致性测试和精确全仓残留扫描。验证整个 `citizenconsole/` 继续由
+    Git 忽略，目录内不存在被跟踪、暂存或准备提交的文件。
+12. 真实运行态验收启动 CitizenConsole 本地服务和真实页面，验证模块清单、密钥
+    状态、严格公钥失败路径、WASM CI 目标链预检、协议升级表单和 QR 生成/回扫前置
+    门禁。可使用隔离生成的测试公钥验证编码和本地验签，但不得提交 Runtime 升级
+    交易、不得实际提高 Runtime 版本、不得读取用户私钥或生产 Secret、不得再次写
+    Cloudflare 远端。需要真实 NRC 公钥或运行节点才能继续的动作必须停下沟通。
+13. 完成后更新本任务卡、ADR-040、当前架构/模块/协议文档，清理临时服务和测试状态，
+    再输出第 10 步“全链真实运行态总验收”的更新后完整技术方案；未经确认不执行
     第 10 步。
 
 预计修改目录：
 
-- `citizenconsole/rtupg/`：JavaScript 代码、中文注释与测试消费边界；统一协议升级
-  signer public key、AccountId/SS58 边界和严格解析，不改变 QR/SCALE/签名字节。
-- `citizenconsole/server.mjs`、`citizenconsole/web/`、`citizenconsole/test/`：
-  后端、页面、测试与残留清理；同步配置键、会话字段、API JSON、错误文案和真实页面
-  验收，不显示 Keychain 值。
-- `citizenconsole/actions/`：Shell 代码与注释；复核 Cloudflare 部署和 WASM CI
-  唯一版本提高入口，不修改产品业务逻辑、不恢复旧部署入口。
-- `.github/workflows/`：CI 配置与注释；固定 WASM workflow 只验证并原样编译源码，
-  其它 CI 不提高 Runtime 版本、不触发生产部署。本步不执行或推送 workflow。
-- `scripts/`：仓库工具、生成器和残留清理；统一账户/公钥/SS58 命名，删除可再生缓存，
-  不放置部署脚本或 Secret。
-- `memory/01-architecture/`、`memory/05-modules/`、`memory/07-ai/`：现行文档、协议和
-  命名表残留清理；按真实最终代码更新管理员、公民主体、凭证签名公钥、投票票据、
-  OnChina、QR、Cloudflare 和控制台契约。
+- `.gitignore`：配置只读核对；保留 `/citizenconsole/` 整目录忽略规则，不增加
+  反选或跟踪例外，不改变其它模块忽略规则。
+- `citizenconsole/`：本机私有代码、配置和测试；统一协议升级签名公钥/SS58 命名和
+  严格校验，复核 Touch ID、Keychain、部署动作与 WASM CI。全部修改只在本机生效，
+  整个目录继续不被 Git 跟踪、不提交、不推送 GitHub。
+- `.github/workflows/`：CI 配置与注释；清理桌面 CI 重复注释，确认 WASM workflow
+  只校验并原样编译源码，不提高版本、不触发发布或部署。本步不运行 workflow。
+- `.github/scripts/`、`scripts/`：现有门禁和生成器的只读复核，只有发现当前账户/
+  协议负面门禁与真实代码不一致时才修改；不恢复部署脚本，不写 Secret。
+- `citizenchain/crates/qr-protocol/`：现有测试与文档消费边界；保留并校验旧字段禁止
+  回归的负面测试，不改变 action code、字段 registry、QR 字节或生成物。
+- `memory/01-architecture/`、`memory/05-modules/`、`memory/07-ai/`：现行文档、协议
+  和命名表残留清理；按当前代码更新管理员、公民主体、任职、公钥、SS58、
+  CitizenConsole 本机私有边界、WASM CI 和 Chat schema 表述。
+- `memory/AGENTS.md`：仓库规则文档；把 CitizenConsole “非密钥源码必须由 Git
+  追踪”的旧规则改为用户最终确认的“本机私有、整目录由 Git 忽略、不得推送
+  GitHub”，继续保留 Keychain、Touch ID 和禁止明文 Secret 的安全要求。
+- `memory/04-decisions/ADR-020-citizenapp-p2p-chat.md`：文档与残留清理；删除已废弃的
+  Chat 版本标签，改为引用真实 `ChatEnvelope`/Protobuf schema，不改变 Chat 代码或
+  线上消息。
 - `memory/04-decisions/ADR-040-account-id-official-standard.md`：文档；记录全仓统一
-  完成状态、例外分类和最终验收口径。
+  当前状态，删除旧管理员三字段结构，补充 CitizenConsole 本机私有边界和最终验收
+  口径。
 - `memory/08-tasks/20260722-account-id-official-unify.md`：文档；回写第 9 步执行与
   真实验收结果，并输出第 10 步完整技术方案。
 
 本步预计不修改 `citizenchain/runtime/`、Runtime 版本、D1/R2/KV 远端数据、
-PostgreSQL、Isar、助记词派生、签名算法或任何 Secret，也不新增文件或目录。执行前
-仍需用户确认第 9 步；若涉及 Runtime 或删除旧 Keychain 项，分别再次取得对应确认。
+PostgreSQL、Isar、OnChina/CitizenApp/CitizenWallet 业务逻辑、助记词派生、签名算法
+或任何 Secret，也不新增仓库文件或目录。现有 34 个 CitizenConsole 非密钥文件会
+继续与整个 `citizenconsole/` 一起被 Git 忽略，不会暂存、提交或推送。执行前仍需
+用户确认更新后的第 9 步；若发现必须产生任何 Runtime diff，或需要删除旧 Keychain
+target，必须分别再次列出精确目标并取得对应确认。
+
+执行结果：
+
+- 用户确认后精确删除 Keychain target
+  `GMB Deploy / rtupg:NRC_ADMIN_PUBKEY`；没有读取或输出其值。最终复核旧 target
+  与新 `GMB Deploy / rtupg:NRC_SIGNER_PUBLIC_KEY` 均不存在，新公钥必须由用户
+  今后通过控制台重新配置。
+- CitizenConsole 本机代码已把协议升级链路统一为
+  `signerPublicKey / signer_public_key / NRC_SIGNER_PUBLIC_KEY`，派生展示地址统一
+  为 `ss58Address / ss58_address`。所有入口严格执行
+  `^0x[0-9a-f]{64}$`，不接受无前缀、大写、混合大小写、首尾空白或 SS58，也没有
+  旧 target 双读、自动迁移、大小写兼容或 fallback。
+- Runtime 升级 QR 的 action code、SCALE call、签名 payload、WASM hash、nonce 和
+  sr25519 字节没有改变；`QR_V1` 仍是唯一版本化协议标识。隔离临时副本证明控制台
+  WASM 按钮只在目标链与源码 `spec_version` 相等时执行 `0 → 1`，源码漂移、测试
+  断言漂移和 `u32` 上限均失败关闭；真实 `citizenchain/runtime/` 没有 diff。
+- `.github/workflows/citizenchain-ci.yml` 的重复注释已删除；
+  `.github/workflows/citizenapp-ci.yml` 两个 `gh api` 路径已加引号，消除
+  Actionlint/ShellCheck 的 SC2086。没有运行 workflow、推送、Release 或部署。
+- 当前架构、模块、统一命名、统一协议和相关 ADR 已按代码真源更新为四字段
+  `Admin`、`CitizenSubject.account_id`、`InstitutionAdminAssignment.account_id`、
+  `credential_signer_public_key` 与 `ChatEnvelope` schema。ADR-019 已明确标记为
+ 被 ADR-039/040 取代，不再把旧聚合管理员账户索引写成待实施方案。
+- `citizenconsole/` 继续由 `.gitignore:16` 的 `/citizenconsole/` 整目录规则忽略，
+  `git ls-files citizenconsole` 为空；本机修改没有进入 Git 索引、暂存区或 GitHub。
+  仓库规则、repo map 和架构文档均已同步这一最终边界。
+- 静态验收通过：CitizenConsole `npm run check`、26 项 Node 测试、全部控制台 Shell
+  的 ShellCheck、全仓 Workflow Actionlint、严格签名公钥六类拒绝测试、QR registry
+  7 项一致性测试及 `git diff --check` 全部通过。
+- 真实本地服务和页面验收通过：WASM 模块只显示
+  `NRC_SIGNER_PUBLIC_KEY` 且为“未配置”；输入控件固定 66 字符和严格 pattern；
+  大写测试公钥被后端明确拒绝；缺少新公钥时协议升级立即失败关闭，没有触发
+  Touch ID、链交易或远端 CI。验收期间没有修改 Runtime、Cloudflare、PostgreSQL、
+  Isar、Secret 或钱包安全材料；现有独立 CitizenApp 本地运行进程仍保持运行。
 
 ### 第 10 步：真实运行态总验收
 
-状态：待确认。
+状态：已确认并执行完成。
 
-- 重新创世并重建 PostgreSQL、Isar、D1/R2 业务数据。
-- 真实验证账户恢复、登录、机构岗位授权、公民身份、扫码签名、投票、转账、Cloudflare 会话和页面展示。
-- 编译、静态检查、单元测试和 build 只是前置，不代替真实运行态验收。
+更新后的完整技术方案：
+
+1. 冻结验收基线。记录当前 HEAD、工作树和运行服务，只把本任务已确认范围作为验收
+   对象；`citizenapp/android/app/src/main/jniLibs/arm64-v8a/libsmoldot.so` 等现有
+   用户/其它线程改动只保护、不覆盖。先执行账户字段、协议标识、生成物和数据库
+   schema 门禁，发现代码漂移时停止，不在总验收中顺手改业务。
+2. 使用当前源码构建 release Node 和原样 Runtime WASM，核对 Runtime 六项项目版本
+   仍为 `0`、StorageVersion 仍为 `0`、metadata 与 QR registry 可解析。不得点击
+   CitizenConsole“运行 WASM CI”，不得提高 `spec_version`，不得修改
+   `citizenchain/runtime/`；如构建或真实交易暴露 Runtime 缺陷，单独列出完整路径并
+   重新取得二次确认后再修复。
+3. 在仓库外临时 base path 启动隔离 fresh CitizenChain，不替换当前开发节点数据。
+   记录 block #0、state root、genesis hash、metadata 大小和节点健康；验收完成后停止
+   隔离节点。创世必须直接使用最终四字段 Admin、最终账户文本边界和当前固定机构/
+   岗位规则，不运行 migration。
+4. 为验收创建独立本地 PostgreSQL 数据库并启动真实 HTTPS OnChina，绑定隔离 fresh
+   链；不删除当前正在使用的业务库。真实检查 49,593 个公权机构、99,232 个
+   账户、创世治理机构和公民链技术发展基金会投影，以及
+   `account_id / signer_public_key / ss58_address` JSON 边界。完成后删除验收专用
+   数据库，不保留测试公民、机构、签名会话或审计残留。
+5. 使用隔离测试助记词在 CitizenApp 与 CitizenWallet 真实运行态分别恢复同一账户，
+   验证二者得到完全相同的小写 `0x + 64 hex account_id`，SS58 只用于展示，Isar 最终
+   schema 无旧列、旧 collection 或兼容读。不得读取、导出或覆盖用户现有助记词和
+   Keychain/Keystore；没有可用隔离设备时停下，由用户提供验收设备。
+6. 真实验证 OnChina 登录链路：管理员先出示严格用户二维码，OnChina 只读取其中
+   `account_id`/可派生 SS58 身份；随后生成绑定该账户的登录挑战，CitizenWallet
+   签名，OnChina 验签并建立 `institution_code + workspace` 登录态。继续验证
+   `Admin { account_id, cid_number, family_name, given_name }` 链读、过期/错账户/
+   SS58 主键/旧字段全部失败关闭。
+7. 真实验证机构权限：使用创世测试账户证明同一人可在同一或不同机构担任多个岗位；
+   每次业务操作必须同时满足机构 CID、岗位码和签名账户。验证只有 admins、只有岗位、
+   错机构、错岗位、旧绑定账户均不能发起或投票，管理员姓名和本地登录态不能形成第二
+   授权真源。
+8. 真实验证公民身份：由注册局有效岗位管理员与目标公民账户完成现有双签上链，
+   `citizen-identity` 保存永久公民 CID 与当前 `account_id` 双向绑定、分开姓名、
+   居住地、状态和护照有效期；投票/竞选身份只使用各自最终字段。过期、状态异常、
+   CID↔账户错配或身份字段不完整均不能进入人口分母、投票或竞选资格。
+9. 真实验证投票引擎边界：业务模块创建提案并静态选择内部、联合、选举或立法引擎，
+   引擎只消费 entity 岗位任职和 citizen-identity 人口真源。至少覆盖同人多岗位独立
+   票据、机构阈值不随钱包数变化、公民按永久 CID 去重、护照过期不计人口、业务模块
+   通过后才执行具体动作。协议升级与决议发行要验证 NRC + 43 PRC 委员可发起/投票、
+   43 PRB 董事只投票的联合计划；若完整 87 机构签名夹具当前无法安全获得，只执行
+   既有真实创世测试账户可覆盖的阶段并明确列出缺口，不伪造结果。
+10. 真实验证扫码与转账：OnChina/Node/CitizenApp 生成请求，CitizenWallet 严格解码、
+    核对 `b.u` 与当前签名公钥、签一次并回扫；错账户、旧字段、非法大小写、截断和
+    尾随载荷全部拒绝。机构转账必须从机构费用账户扣费并由有效岗位发起；个人多签走
+    独立主体。协议升级只验证请求、回执和 dry-run，不提交 `set_code`，不改变版本。
+11. Cloudflare 只在 staging 做可清理的真实写验收：验证账户登录、设备子钥、Chat
+    瞬时转发、联系人、广场、会员、通知队列和 R2 生命周期均以 `account_id` 为键，
+    旧字段请求失败。只删除本次验收创建且可精确识别的 staging 行、KV key、R2 对象
+    和队列消息；production 只做健康、schema/binding 和空残留只读核对，不重新删除
+    或部署。任何 production 写、队列重建或 Worker 部署都必须另行取得明确确认。
+12. 汇总证据并清理：停止隔离 Node/OnChina，清除仓库外临时 base path、验收数据库、
+    测试 App 数据和 staging 验收对象；不碰用户现有服务和安全材料。再次运行全仓
+    残留门禁、编译/测试和 `git diff --check`，记录真实区块、交易、HTTP、页面和
+    Cloudflare 证据。若任何业务失败，先报告真实原因并输出针对该缺陷的新方案，
+    不把“部分通过”写成任务完成。
+
+完成标准：
+
+- 同一助记词在 CitizenApp/CitizenWallet 恢复同一 `account_id`，全端文本格式唯一。
+- 机构 `CID + 岗位码 + account_id` 和公民 `CID + account_id` 权限模型均有真实正反
+  例；管理员、业务模块和投票引擎职责没有串位。
+- PostgreSQL、Isar、链 storage、QR、HTTP/JSON 与 Cloudflare staging 不存在旧字段、
+  旧格式、SS58 主键或兼容入口。
+- fresh Node、真实 OnChina、真实页面、真实扫码和至少一条合法链业务交易均通过；
+  纯编译、单元测试或 mock 不能代替。
+- Runtime 版本、生产 Cloudflare、用户数据库、用户助记词/私钥和 GitHub 远端保持
+  未修改；所有验收临时状态完成清理。
+
+预计修改目录：
+
+- `citizenchain/runtime/`：只读构建、metadata/版本/storage 校验和真实交易消费；
+  预计无源码 diff。任何改动都必须停止并重新取得完整路径二次确认。
+- `citizenchain/node/`：release 构建和仓库外隔离 fresh 节点运行；预计不改代码，
+  不覆盖当前节点 base path。
+- `citizenchain/onchina/`：真实 HTTPS 服务、隔离 PostgreSQL、链投影、登录、权限和
+  公民双签验收；预计不改代码，验收库完成后删除。
+- `citizenapp/`：真实 App/Isar、账户恢复、页面、扫码和 Cloudflare staging 消费
+  验收；预计不改代码，不覆盖用户现有 App 数据。
+- `citizenwallet/`：真实冷签、账户恢复、请求严格解码和回执验收；预计不改代码，
+  不读取或迁移用户现有安全材料。
+- `citizenapp/cloudflare/`：现有 staging Worker/D1/KV/R2/Queues 的真实读写和精确
+  清理；预计不改代码、不部署，production 只读。
+- `citizenweb/`：会员/账户边界页面只读联调；预计不改代码、不部署。
+- `citizenconsole/`：本机私有控制台只用于查看状态和协议升级 dry-run，继续整目录
+  Git 忽略；不得运行 WASM CI、提交升级或推送 GitHub。
+- `memory/04-decisions/ADR-040-account-id-official-standard.md`、
+  `memory/05-modules/`、`memory/08-tasks/20260722-account-id-official-unify.md`：
+  仅在全部验收完成后回写证据、最终状态和残留清理结果。
+
+本步预计不新增仓库文件或目录、不修改 Runtime、不删除当前本地业务库、不写
+production Cloudflare、不提交协议升级、不触发 GitHub Actions、不提交或推送。
+执行前需要用户确认第 10 步；若用户要求改为重建当前本地数据库、写 production 或
+真实提交 `set_code`，必须把精确目标和影响另行列出并再次确认。
+
+第 10 步执行结果（2026-07-24）：
+
+- 当前源码 release Node 与原样 Runtime WASM 构建成功。release Node SHA-256 为
+  `0e9f62f718dfca36d50d990e1da223f226fa2340449925692d6188427d9b81c7`，
+  compact WASM SHA-256 为
+  `4aaa078fbd5919364d30821d4dd2f0f82b60358837a81849bf64a989b9aac12c`，
+  compressed compact WASM SHA-256 为
+  `ea028f8de66474870329ebc3cf4a5429ccfe3b03b095f8f4096a6bf14cefbdbd`。
+  Runtime 六项版本与全部 StorageVersion 仍为 `0`，没有运行 CitizenConsole WASM
+  CI，也没有产生 `citizenchain/runtime/` 源码 diff。
+- 仓库外 fresh 链真实启动成功：genesis hash
+  `0xafac9d55a77a10780b5c5cb29da6118ecf4a7b9652960e52502ebacf5d403535`，
+  state root
+  `0x48d835d720885fc999133cb62c56f8c6b7981f3a7ecbd0d70f0f87cf7bf81a5b`，
+  metadata 为 `223,128` 字节。没有运行 migration。
+- 独立 PostgreSQL 与真实 OnChina 页面完成 fresh 链投影：49,593 个机构、99,232 个
+  账户；99,232 = 49,593 个主账户 + 49,593 个费用账户 + 43 个省储行质押账户 +
+  两和基金、安全基金、联邦公民安全基金。规范账户格式错误、重复账户、缺主体、
+  `wallet_account/admin_account/owner_account/citizen_full_name/legal_rep_*` 旧列
+  均为 0。验收数据库与服务在收口阶段精确删除和停止，不触碰用户原有业务数据库。
+- Pixel 8a（Android 16/API 36）真实清空并安装当前 CitizenApp/CitizenWallet，
+  两端使用仓库公开测试助记词恢复得到相同
+  `account_id=0x625e25364c7b68e0a83065ccb40afed43f8fe933e669b24f3d69a57eddb3b715`
+  和相同展示 SS58
+  `w5Don5m6XHNfHH7Xkzwf9LZATjCh8vD1utuFJy7f92F8nUCK2`。CitizenApp 的真实
+  Turnstile 通过；两端 Isar 最终钱包档案均为 `accountId + ss58Address`，未保存
+  助记词。验收结束清除两包应用数据。
+- OnChina 登录严格边界真实通过：完整 `QR_V1/k=3` 用户码进入链上管理员门禁并以
+  `ONCHINA_LOGIN_ADMIN_NOT_ONCHAIN` 拒绝非管理员测试账户；裸 SS58、旧
+  `wallet_account`、空 `contact_name` 均返回 400。登录挑战、结果和会话表保持 0，
+  证明失败路径没有遗留状态。当前 fresh 创世管理员源码只包含公开
+  `account_id=0x9c3e18f575c59236832054469ef0e69f16a1fe6c50b2b580fc7c71853ab71068`，
+  仓库没有对应私钥或助记词；因此没有读取外部 Secret、没有伪造成功管理员登录，
+  也没有伪造一条线上管理员业务交易。
+- Rust 全 workspace 所有 target 测试通过。真实 runtime externalities 正例覆盖：
+  公民永久 CID 与当前账户双向绑定、过期护照不计人口、同一账户按多个岗位取得独立
+  票据、旧绑定账户失权、NRC/PRC/PRB 联合投票、机构阈值转账、决议发行与协议升级
+  回调执行。它证明链内业务和权限执行路径，不冒充缺少创世管理员私钥时无法完成的
+  live RPC 签名交易。
+- CitizenWallet 账户/QR/payload 专项 124 项通过；全量 191 项通过。全量首轮发现
+  3 个金额默认单位断言仍写旧 `GMB`，实现与注释已统一为“元”，本步同步修正现有
+  测试断言后全绿。CitizenApp 全量 792 项通过、5 项按测试声明跳过；Cloudflare
+  typecheck 与 174 项测试均通过。
+- Cloudflare production 仅执行健康、D1 schema、binding 和生命周期只读检查。
+  staging 真实验证 D1 严格小写账户 CHECK、KV 与 R2 账户键写入/读取/精确删除；
+  大写账户被约束拒绝，所有测试行、KV key 与 R2 object 均清零。staging/production
+  Chat Relay R2 均保持“1 天后删除”的现有规则，未部署 Worker、未写 production、
+  未重建队列。
+- 两个不属于账户命名逻辑的运行环境事实已记录：CitizenWallet 当前 arm64
+  `libisar.so` ELF LOAD 对齐仍为 `0x1000`，Android 16 会显示兼容提示，但 APK
+  `zipalign -P 16` 通过；OnChina 隔离启动在当前环境提供 HTTP 页面，临时 CA 未被
+  浏览器信任。两项都没有通过放宽账户权限、协议或伪造验收来掩盖。
+- 清理后再次确认：隔离 Node、OnChina、PostgreSQL、真机测试数据、staging 测试
+  对象和仓库外临时目录均无残留；用户原有 `9944` 节点、OnChina 与 Vite 进程保持
+  不变。未修改 Runtime、未写 production、未触发 GitHub Actions、未提交或推送。
+- `git diff --check` 通过。只读 `cargo fmt --all --check` 发现工作树中其它既有/
+  并发改动含未格式化 Rust，范围同时跨越 OnChina 与 Runtime；本步没有运行会制造
+  Runtime diff 的格式化命令，也没有覆盖这些非本任务改动。
 
 ## 每步共同完成条件
 

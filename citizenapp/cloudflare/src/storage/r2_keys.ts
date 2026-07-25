@@ -10,7 +10,7 @@ export function accountIdPathSegment(accountId: string): string {
   return assertAccountId(accountId).slice(2);
 }
 
-/// 公开资料包 R2 object key：一个钱包账户一份 profile.json。
+/// 公开资料包 R2 object key：一个链账户 `account_id` 一份 profile.json。
 export function profileObjectKey(accountId: string): string {
   return `profile/${accountIdPathSegment(accountId)}/profile.json`;
 }

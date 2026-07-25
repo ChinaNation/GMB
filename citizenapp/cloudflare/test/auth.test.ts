@@ -114,7 +114,8 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
       keyPair.privateKey,
       message
     );
-    return toHex(sig);
+    // 跨端签名文本统一带 `0x`（ADR-041）；后端入口 normalize 为裸后验签。
+    return `0x${toHex(sig)}`;
   }
 
   it('只验证设备子钥并签发 Session，全程不访问链账户、余额或 RPC', async () => {

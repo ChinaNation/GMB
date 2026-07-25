@@ -233,7 +233,7 @@ async function call(
     authorization: `Bearer ${account.token}`,
     'x-device-time': String(requestTime),
     'x-device-nonce': nonce,
-    'x-device-signature': toHex(signature)
+    'x-device-signature': `0x${toHex(signature)}`
   });
   if (method === 'PUT') {
     headers.set('content-type', 'application/json');

@@ -7,7 +7,7 @@
 
 ## 决议
 
-CitizenApp Chat 使用钱包地址作为聊天账户、OpenMLS 作为端到端加密、Protobuf `GMB_CHAT_V1` 作为消息外层。
+CitizenApp Chat 使用 `account_id` 作为聊天账户、OpenMLS 作为端到端加密、Protobuf `ChatEnvelope` 作为消息外层。
 
 消息、会话、联系人关系、发送队列和附件只保存在用户设备。Cloudflare 只承担：
 

@@ -149,10 +149,9 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 机构命名规范 | `institution-naming.md` | `memory/07-ai/` | 管理机构具体中英文全称/简称；字段命名仍以本文件为总入口 |
 | 统一协议文件 | `unified-protocols.md` | `memory/07-ai/` | 管理协议、载荷格式和接口契约 |
 | 统一必读文件 | `unified-required-reading.md` | `memory/07-ai/` | 管理每次设计和编程前必须读取的文档 |
-| GMB Chat 协议 | `GMB_CHAT_V1` | `memory/07-ai/unified-protocols.md` / `citizenapp/chat/proto/chat_envelope.proto` / `citizenapp/lib/chat/` / `citizenapp/cloudflare/src/chat/` | 公民私密聊天的 Protobuf 外层协议，统一承载 Cloudflare 互联网聊天和未来近场聊天的 OpenMLS 密文 |
-| Chat Envelope | `ChatEnvelope` | `GMB_CHAT_V1` / `citizenapp/lib/chat/` | Chat 外层瞬时信封，只承载 OpenMLS wire bytes、MLS 消息类型和 ratchet tree；不含云端附件引用或确认状态 |
-| Chat 路由记录 | `ChatRoute` | `GMB_CHAT_V1` / `citizenapp/lib/chat/storage/chat_store.dart` / `citizenapp/lib/isar/app_isar.dart` | Chat 设备本地路由缓存，保存对方钱包聊天账户、设备公钥、安全码和近场提示，不替代“我的通讯录” |
-| Chat KeyPackage | `ChatKeyPackage` / `MlsKeyPackage` | `GMB_CHAT_V1` / `citizenapp/lib/chat/crypto/` / `citizenapp/cloudflare/src/chat/` | OpenMLS 设备预密钥包，发布到对应钱包账户的一次性池并在消费时硬删除 |
+| Chat Envelope | `ChatEnvelope` | `citizenapp/chat/proto/chat_envelope.proto` / `citizenapp/lib/chat/` / `citizenapp/cloudflare/src/chat/` | Chat 的 Protobuf 外层瞬时信封，统一承载互联网和近场传输中的 OpenMLS wire bytes、MLS 消息类型和 ratchet tree；不含云端附件引用或确认状态 |
+| Chat 路由记录 | `ChatRoute` | `citizenapp/lib/chat/storage/chat_store.dart` / `citizenapp/lib/isar/app_isar.dart` | Chat 设备本地路由缓存，保存对方 `account_id`、设备公钥、安全码和近场提示，不替代“我的通讯录” |
+| Chat KeyPackage | `ChatKeyPackage` / `MlsKeyPackage` | `citizenapp/lib/chat/crypto/` / `citizenapp/cloudflare/src/chat/` | OpenMLS 设备预密钥包，发布到对应 `account_id` 的一次性池并在消费时硬删除 |
 | Chat OpenMLS native 实现 | `NativeMlsCrypto` / `MlsNativeBindings` | `citizenapp/lib/chat/crypto/mls_native.dart` | Dart 侧调用现有 `libsmoldot` native 库中的 OpenMLS C ABI，生成真实 KeyPackage、执行 OpenMLS smoke、创建/恢复持久化 MLS 会话 |
 | Chat OpenMLS 会话模型 | `MlsWireMessage` / `MlsOutboundMessage` / `MlsInboundMessage` / `MlsMessageKind` | `citizenapp/lib/chat/crypto/mls_session.dart` | Dart 侧描述 Welcome/application wire message、首次会话输出顺序和入站处理结果，不实现密码学 |
 | Chat OpenMLS 状态目录 | `MlsStateStore` | `citizenapp/lib/chat/crypto/mls_state_store.dart` | App 私有 MLS 状态目录和 pending inbound 队列边界，OpenMLS provider storage 仍由 Rust native 写入 |

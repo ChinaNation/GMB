@@ -62,12 +62,12 @@ citizenchain/onchina/frontend/
 - 所有 `PASSKEY_COLD_SIGN` 正式业务提交必须同时携带冷签 grant 和 Passkey assertion。创建机构、创建/删除账户、公民身份上链等可直接使用 `admins/securityApi.ts::createColdSignSubmitHeaders`；已由组件先取得 grant 的资料上传/删除、机构详情更新等必须使用 `securityGrantSubmitHeaders`。业务模块禁止手写 `x-cid-security-grant` 或只提交 grant 不提交 Passkey assertion。
 - 机构资料上传、资料删除、机构详情更新的扫码授权 payload 必须与后端 `grant_payload` 逐字段同形；资料上传使用 `target/file_name/doc_type/file_size`，资料删除使用 `target/doc_id/file_name`，机构详情更新使用 `target/cid_number/cid_full_name/parent_cid_number/family_name/given_name/legal_representative_cid_number/legal_representative_photo_path`。
 - 每个机构必须存在唯一 `LR / 法定代表人` 岗位且允许空缺；前端不得要求用户手填 LR 岗位码，也不得把“管理员”当成统一岗位名。
-- 股份公司等私权机构只有所有最小必填字段及至少两个不重复管理员钱包均合法时才启用生成按钮。协会 `SFAS` 必须显式选择盈利或非盈利，前端不得固定为非盈利。
-- 公民详情页负责链上身份上链:未满 16 周岁、无选举资格或档案非正常时禁用推送;推送时必须先选择“投票身份”或“参选身份”,再录入钱包账户、生成目标公民钱包签名二维码,验签后展示注册局管理员链上交易二维码。
+- 股份公司等私权机构只有所有最小必填字段及至少两个不重复管理员 `account_id` 均合法时才启用生成按钮。协会 `SFAS` 必须显式选择盈利或非盈利，前端不得固定为非盈利。
+- 公民详情页负责链上身份上链:未满 16 周岁、无选举资格或档案非正常时禁用推送;推送时必须先选择“投票身份”或“参选身份”,再录入公民 `account_id`、生成目标公民签名二维码,验签后展示注册局管理员链上交易二维码。
 - “投票身份”提交 `identity_level=voting`,链交易为 `CitizenIdentity.register_voting_identity(10.0)`;“参选身份”提交 `identity_level=candidate`,链交易为 `CitizenIdentity.upgrade_to_candidate_identity(10.1)`。
 - 公民详情页底部必须显示公民独立资料库,资料类型固定为“护照相片 / 出生证明 / 监护人护照 / 其他材料”。该区域只调用 `citizens/api.ts` 的公民资料接口,不得复用机构资料库 `docs/DocumentLibrary.tsx`。
 - 投票账户只有一个输入框,用于填写 SS58 地址或点击扫码图标回填账户;提交后列表和详情只显示 SS58 地址。
-- 机构管理员列表使用 `admins/InstitutionAssignmentCard.tsx` 展示由 `family_name + given_name` 合并的姓名、管理员钱包、岗位、任期、任职来源和余额；没有岗位的管理员仍显示，岗位栏为空。同一钱包在同一机构有多个岗位时按任职分别展示。岗位权限不作为卡片字段，由对应业务模块按硬规则决定。
+- 机构管理员列表使用 `admins/InstitutionAssignmentCard.tsx` 展示由 `family_name + given_name` 合并的姓名、管理员账户、岗位、任期、任职来源和余额；没有岗位的管理员仍显示，岗位栏为空。同一账户在同一机构有多个岗位时按任职分别展示。岗位权限不作为卡片字段，由对应业务模块按硬规则决定。
 - 注册局管理员列表保持既有表格布局。非注册局机构的本机构管理员列表必须使用卡片墙，桌面端一行两张管理员卡片，小屏一行一张；不得再显示“管理员信息 / 操作”两列表头。
 - 非注册局本机构管理员卡片中，当前登录管理员自己的 passkey 按钮文案固定为“密钥”，按钮放在“余额”行右侧靠右；未设置 passkey 时继续用红点提示。
 - 管理员列表不得提供本地合并姓名编辑入口；登录态、注册局目录、机构创建和治理输入统一传递 `family_name / given_name`，只在 UI 渲染时合并。联邦注册局管理员岗位目录完全只读，换届由治理业务写入 entity 后自动反映。市注册局本地登记目录仍可新增/删除，但不得成为链上管理员资格或岗位真源。
@@ -142,4 +142,4 @@ rg "NotAllowedError.*摄像头" citizenchain/onchina/frontend --glob '!node_modu
 
 涉及登录、权限、扫码或页面展示的变更，必须启动真实本地服务并检查真实页面；只通过 `npm run build` 不算完成。
 
-2026-07-19 管理员三字段验收已统一登录态、Header、机构治理批量输入、市注册局管理员新增、联邦/本机构管理员列表的 `admin_account + family_name + given_name`。ADR-039 第 3 步随后关闭了当时仍存在的机构首次登记提交路径；当前创建按钮固定禁用，不能把该历史验收解读为旧创建流程仍有效。当前 TypeScript 与 Vite 生产构建通过。
+管理员模型现统一为 `account_id + cid_number + family_name + given_name`，登录态、Header、机构治理批量输入、市注册局管理员新增以及联邦/本机构管理员列表必须使用同一字段布局。ADR-039 第 3 步已关闭旧机构首次登记提交路径；当前创建按钮固定禁用，不能把历史验收解读为旧创建流程仍有效。当前 TypeScript 与 Vite 生产构建通过。

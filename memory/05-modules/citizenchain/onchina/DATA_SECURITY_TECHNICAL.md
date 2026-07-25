@@ -41,9 +41,9 @@ CID 号生成和校验唯一源码目录为 `citizenchain/onchina/src/cid/`。�
 - 公民 CID 的机构代码固定为 `CTZN`;个人码不携带办理市码,R5 市段固定为 `000`。
 - 公民护照号由 `citizenchain/onchina/src/domains/citizens/passport_no.rs` 生成,格式为省码 2 位 + Crockford Base32 主体 8 位 + 校验位 1 位。
 - 护照号终身唯一;`passport_numbers` 负责全局查重。
-- 护照号资源回收只允许通过 `passport_number_recycle_pool` 回收号码本身,不得保存旧公民姓名、出生地、钱包、公民 CID 或其它个人资料。
-- 公民档案本地创建阶段允许没有 `wallet_address` 和内部 `wallet_pubkey`;儿童或暂未开户公民不得被强制生成钱包。
-- `wallet_address / wallet_pubkey / wallet_sig_alg` 只在链上公民身份推送准备阶段写入,且必须先验证目标公民钱包对 `VotingIdentityPayload` 的签名;前端、审计展示和普通 DTO 只展示 SS58 地址。
+- 护照号资源回收只允许通过 `passport_number_recycle_pool` 回收号码本身,不得保存旧公民姓名、出生地、账户、公民 CID 或其它个人资料。
+- 公民档案本地创建阶段允许没有 `account_id`;儿童或暂未开户公民不得被强制生成账户。
+- 链上公民身份推送准备阶段才接收并严格校验 `account_id`;目标公民必须以对应 `signer_public_key` 对 `VotingIdentityPayload` 签名。签名公钥只用于当次验签，不建立第二账户真源；前端、审计展示和普通 DTO 如需人类可读地址，只展示从 `account_id` 派生的 `ss58_address`。
 - 公民选举/被选举范围由出生地、居住地和投票规则共同决定,不在公民档案中保存独立范围字段。
 
 ## 4. 权限范围
@@ -105,7 +105,6 @@ OnChina 管理员登录必须使用登录专用错误码，禁止继续把登录
 | `ONCHINA_LOGIN_CAMERA_INSECURE_CONTEXT` | 当前页面不是 HTTPS 安全环境，无法使用摄像头 |
 | `ONCHINA_LOGIN_CAMERA_PERMISSION_DENIED` | 摄像头权限被拒绝，请在浏览器中允许摄像头权限 |
 | `ONCHINA_LOGIN_CAMERA_OPEN_FAILED` | 无法打开摄像头，请检查摄像头权限或设备占用 |
-| `ONCHINA_LOGIN_QR_EMPTY` | 请先生成登录二维码 |
 | `ONCHINA_LOGIN_QR_PARSE_FAILED` | 签名二维码解析失败，请重新扫码 |
 | `ONCHINA_LOGIN_QR_NOT_RESPONSE` | 扫到的不是登录签名响应二维码 |
 | `ONCHINA_LOGIN_QR_MISSING_FIELD` | 签名二维码缺少必要字段，请重新扫码 |
@@ -113,15 +112,10 @@ OnChina 管理员登录必须使用登录专用错误码，禁止继续把登录
 | `ONCHINA_LOGIN_QR_BAD_KIND` | 二维码类型不正确，请扫描公民钱包生成的签名响应 |
 | `ONCHINA_LOGIN_QR_BAD_PUBKEY` | 签名账户格式无效 |
 | `ONCHINA_LOGIN_QR_BAD_SIGNATURE` | 签名格式无效 |
-| `ONCHINA_LOGIN_IDENTITY_QR_REQUIRED` | 请先扫描管理员身份二维码 |
-| `ONCHINA_LOGIN_ADMIN_ACCOUNT_REQUIRED` | 管理员账户缺失，请重新扫码登录 |
+| `ONCHINA_LOGIN_USER_CONTACT_INVALID` | 用户二维码无效，请出示完整的 `QR_V1/k=3` 用户码 |
 | `ONCHINA_LOGIN_ORIGIN_REQUIRED` | 登录来源缺失，请刷新页面后重试 |
 | `ONCHINA_LOGIN_SESSION_REQUIRED` | 登录会话缺失，请刷新页面后重试 |
 | `ONCHINA_LOGIN_DOMAIN_REQUIRED` | 登录域名缺失，请使用 `https://onchina.local:8964` 访问 |
-| `ONCHINA_LOGIN_ADMIN_NOT_FOUND` | 非管理员禁止登录本系统 |
-| `ONCHINA_LOGIN_ADMIN_SCOPE_MISSING` | 管理员省级权限范围缺失，无法登录 |
-| `ONCHINA_LOGIN_ADMIN_QUERY_FAILED` | 管理员信息查询失败，请稍后重试 |
-| `ONCHINA_LOGIN_SYSTEM_SIGN_FAILED` | 登录二维码签发失败，请检查节点平台配置 |
 | `ONCHINA_LOGIN_CHALLENGE_CREATE_FAILED` | 登录请求保存失败，请稍后重试 |
 | `ONCHINA_LOGIN_REQUEST_INVALID` | 登录请求内容不完整，请重新扫码 |
 | `ONCHINA_LOGIN_RESULT_PARAM_REQUIRED` | 登录轮询参数缺失，请刷新页面后重试 |
@@ -130,12 +124,10 @@ OnChina 管理员登录必须使用登录专用错误码，禁止继续把登录
 | `ONCHINA_LOGIN_SESSION_MISMATCH` | 登录会话不匹配，请关闭多余页面后重新生成二维码 |
 | `ONCHINA_LOGIN_CHALLENGE_EXPIRED` | 登录二维码已过期，请重新生成 |
 | `ONCHINA_LOGIN_SIGNER_MISMATCH` | 签名账户和登录账户不一致 |
-| `ONCHINA_LOGIN_CONTEXT_MISMATCH` | 登录上下文不匹配，请重新生成二维码 |
 | `ONCHINA_LOGIN_SIGNATURE_VERIFY_FAILED` | 签名验签失败，请重新扫码签名 |
 | `ONCHINA_LOGIN_COMPLETE_FAILED` | 登录签名响应处理失败，请查看服务日志 |
 | `ONCHINA_LOGIN_RESULT_SAVE_FAILED` | 登录结果保存失败，请稍后重试 |
 | `ONCHINA_LOGIN_RESULT_QUERY_FAILED` | 查询登录结果失败，请稍后重试 |
-| `ONCHINA_LOGIN_VERIFY_FAILED` | 登录签名校验失败，请重新生成二维码 |
 | `ONCHINA_LOGIN_ADMIN_NOT_ONCHAIN` | 当前钱包不是本机构链上有效管理员 |
 | `ONCHINA_LOGIN_DESKTOP_GOVERNANCE_UNSUPPORTED` | 国家储委会、省储委会、省储行使用节点桌面端管理，不支持登录链上中国平台 |
 | `ONCHINA_LOGIN_PERSONAL_MULTISIG_UNSUPPORTED` | 个人多签账户不支持登录链上中国平台 |

@@ -66,7 +66,7 @@ PersonalAdmins storage：
 
 个人多签创建提交规则：
 
-- 扫码只取得管理员钱包账户；姓、名在 CitizenApp 分开输入，留空时分别落为“管理”、“员”，不拆分联系人备注或其它合并姓名。
+- 扫码只从用户码取得管理员的 `ss58_address` 并派生 `account_id`；姓、名在 CitizenApp 分开输入，留空时分别落为“管理”、“员”，不拆分联系人备注或其它合并姓名。
 - 创建和管理员更换都只调用一次最终交易签名；姓、名编辑、周期确认或设备变更不引入额外签名。
 - 创建前必须校验发起钱包 free 余额覆盖 `amount + fee + ED`。
 - `fee` 使用链上 `onchain_transaction::calculate_onchain_fee` 同口径：
@@ -92,7 +92,7 @@ PersonalAdmins storage：
 - 已注销详情页右上角三点菜单显示按钮“删除”；确认后删除
   `PersonalAccountEntity`、该账户全部 `PersonalAccountProposalEntity` 和本地状态键。
 - 链路异常不把网络失败写成已注销；详情页首屏不得因链上异常显示全屏加载失败。
-- 链上注销成功后 runtime 会清空多签账户余额并删除个人多签当前状态；同一钱包地址 +
+- 链上注销成功后 runtime 会清空多签账户余额并删除个人多签当前状态；同一 `account_id` +
   同一账户名再次创建仍派生同一地址，但会作为全新的当前账户注册。
 - 链上 votingengine 90 天终态提案清理保持不变，citizenapp 不修改链上清理周期。
 - 发起创建/注销提案后，runtime 投票引擎会在同一事务自动给发起人记一票赞成；citizenapp 本地提案记录初始 `yesVotes = 1`，不再显示发起人还需要第二次投票。

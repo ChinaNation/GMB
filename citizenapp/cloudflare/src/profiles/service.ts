@@ -195,7 +195,7 @@ function parseAccountId(accountRaw: string): string {
   try {
     return assertAccountId(decodeURIComponent(accountRaw));
   } catch {
-    throw new HttpError(400, 'invalid_account_id', '钱包账户格式不合法');
+    throw new HttpError(400, 'invalid_account_id', '账户标识格式不合法');
   }
 }
 

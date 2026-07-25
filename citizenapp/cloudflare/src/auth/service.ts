@@ -10,6 +10,7 @@ import { indexSessionToken } from './session_index';
 import {
   assertP256PublicKeyHex,
   buildDeviceBindingSigningMessage,
+  normalizeP256SignatureHex,
   verifyP256Signature
 } from './device_subkey';
 import {
@@ -61,7 +62,7 @@ export async function createLoginChallenge(request: Request, env: Env): Promise<
   try {
     accountId = assertAccountId(body.account_id);
   } catch {
-    throw new HttpError(400, 'invalid_account_id', '钱包账户格式不合法');
+    throw new HttpError(400, 'invalid_account_id', '账户标识格式不合法');
   }
 
   const challengeId = createId('sqc');
@@ -98,7 +99,7 @@ export async function createSession(request: Request, env: Env): Promise<Respons
   try {
     accountId = assertAccountId(body.account_id);
   } catch {
-    throw new HttpError(400, 'invalid_account_id', '钱包账户格式不合法');
+    throw new HttpError(400, 'invalid_account_id', '账户标识格式不合法');
   }
 
   const challenge = await env.DB.prepare(
@@ -132,11 +133,12 @@ export async function createSession(request: Request, env: Env): Promise<Respons
     OP_SIGN_SQUARE_LOGIN,
     hexToBytes(challenge.signing_payload)
   );
-  const isValid = await verifyP256Signature(
-    loginMessage,
-    body.signature,
-    subkey.p256_public_key
-  );
+  // 跨端签名文本须为 `0x`+128hex（ADR-041）；规范化为裸后交内部裸函数验签，
+  // 裸/大写/错长与验签失败一律按既有 401 语义处理（不泄漏格式细节）。
+  const signatureBare = normalizeP256SignatureHex(body.signature);
+  const isValid =
+    signatureBare !== null &&
+    (await verifyP256Signature(loginMessage, signatureBare, subkey.p256_public_key));
   if (!isValid) {
     throw new HttpError(401, 'invalid_signature', '设备子钥签名校验失败');
   }
@@ -180,7 +182,7 @@ export async function registerDeviceSubkey(request: Request, env: Env): Promise<
   try {
     accountId = assertAccountId(body.account_id);
   } catch {
-    throw new HttpError(400, 'invalid_account_id', '钱包账户格式不合法');
+    throw new HttpError(400, 'invalid_account_id', '账户标识格式不合法');
   }
   const p256PublicKey = assertP256PublicKeyHex(body.p256_public_key);
   if (typeof body.issued_at !== 'number' || !Number.isFinite(body.issued_at)) {

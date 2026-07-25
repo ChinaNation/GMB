@@ -25,7 +25,7 @@
 - 手机机密存储：`flutter_secure_storage`（Keychain/Keystore）
 - 手机业务存储：Isar
 - 链上通信：smoldot PoW 轻节点 + Rust 原生 typed capability（异步 FFI，不阻塞主线程）（`lib/rpc/` + `smoldotdart/` + `smoldotpow/`）
-- P2P Chat 路线：聊天 Tab + 钱包账户聊天身份 + Cloudflare 瞬时密文/信令转发 + WebRTC 设备附件 + 近场无网点对点通信；消息、会话和附件只保存在设备，区块链节点不参与聊天
+- P2P Chat 路线：聊天 Tab + 链账户 `account_id` 聊天身份 + Cloudflare 瞬时密文/信令转发 + WebRTC 设备附件 + 近场无网点对点通信；消息、会话和附件只保存在设备，区块链节点不参与聊天
 - 外部接口：Cloudflare Worker 承接聊天控制面、广场、会员、支付、媒体资源和端到端加密通讯录密文。通讯录账户与私人名称明文只在设备；公民、机构、管理员与清算行身份统一由 smoldot 读取 finalized runtime storage。
 - 行政区字典：安装包内置 `assets/admin_divisions/`，由 `citizenchain/onchina/src/cid/china/china.sqlite` 直接生成；运行中只读本地包，不向 OnChina 联网更新行政区。
 - 公权机构包：安装包内置 `assets/public_institutions/`。生成器在同一个 finalized 块分页读取 `PublicManage::Institutions` 与 `PublicManage::InstitutionAccounts`，生成 43 省、49,593 条机构的本地查询索引。manifest 保存块号、块哈希、创世哈希、状态根、分片哈希和机构根，Isar 只缓存该链快照。绑定、付款和权限判断必须精确读取当前 finalized 链状态。
@@ -137,16 +137,16 @@ citizenapp 不采用“首启强制弹出全部权限”的模式，按平台权
 - 内部投票成功真源是 runtime `InternalVote::InternalVotesByTicket(proposal_id, ticket)`；机构票据为 CID + 岗位码 + 钱包，个人多签票据为钱包。
 - 联合投票成功真源是 runtime `JointVote::JointVotesByTicket(proposal_id, institution_ticket)`。
 - 投票服务必须等待交易入块，并按本次提交的完整票据回读对应 runtime storage；只有读到相同票据的 true/false 后才向页面返回成功。
-- 页面不保存或读取账户级 pending 投票。同一钱包兼任多个岗位时，每个 `CID + 岗位码 + 钱包` 的提交、回读和可投状态必须互相独立。
-- 交易池 watch 的 `timeout / finalityTimeout / retracted / future / error` 只能作为本次提交失败信息，不能伪造链上票或阻塞该钱包的其他岗位票据。
+- 页面不保存或读取账户级 pending 投票。同一链账户的管理员兼任多个岗位时，每个 `CID + 岗位码 + account_id` 的提交、回读和可投状态必须互相独立。
+- 交易池 watch 的 `timeout / finalityTimeout / retracted / future / error` 只能作为本次提交失败信息，不能伪造链上票或阻塞该账户的其他岗位票据。
 
 ### 2.6 P2P Chat 技术架构
 
-citizenapp 的 P2P Chat 技术路线已确定为“聊天 Tab 统一入口 + 钱包账户聊天身份 + Cloudflare 瞬时转发 + WebRTC 设备附件 + 近场无网点对点通信”架构：
+citizenapp 的 P2P Chat 技术路线已确定为“聊天 Tab 统一入口 + 链账户 `account_id` 聊天身份 + Cloudflare 瞬时转发 + WebRTC 设备附件 + 近场无网点对点通信”架构：
 
 - 用户入口：公民端在“多签”Tab 与“交易”Tab 之间提供“聊天”Tab；互联网聊天和近场聊天的消息都在“聊天”Tab 集中显示，用户不选择底层通信模式。聊天页顶栏为“搜索框 + 右上角加号”：搜索框进独立搜索页（会话 / 联系人 / 聊天记录三段）；加号弹出五个入口——扫一扫、收付款、发私信、发群聊、加好友。五者全部复用既有链路（交易扫码统一分派、全 App 唯一用户二维码、通讯录选人、建群、扫码加好友），聊天页不自建重复实现。
-- 聊天账户：CitizenApp 钱包账户就是用户可见聊天账户，也是聊天窗口内发起既有转账功能时的收付款账户；创建钱包时由钱包主私钥一次性绑定 P-256 设备子钥，此后聊天设备绑定和会话登录只使用 P-256 设备子钥，钱包 seed 不进入聊天运行态。
-- 互联网聊天：Worker 校验钱包 session 和登记设备，Durable Object 只在当前请求中转发 OpenMLS `ChatEnvelope`；未送达密文只留发送设备本机队列，无内容推送在系统允许的后台窗口自动连接两端并触发本机重试。
+- 聊天账户：CitizenApp 当前链账户 `account_id` 是用户可见聊天身份，也是聊天窗口内发起既有转账功能时的收付款账户；创建钱包时由钱包主私钥一次性绑定 P-256 设备子钥，此后聊天设备绑定和会话登录只使用 P-256 设备子钥，钱包 seed 不进入聊天运行态。
+- 互联网聊天：Worker 校验 `account_id` session 和登记设备，Durable Object 只在当前请求中转发 OpenMLS `ChatEnvelope`；未送达密文只留发送设备本机队列，无内容推送在系统允许的后台窗口自动连接两端并触发本机重试。
 - 用户主页：广场作者、关注/粉丝、聊天对方与通讯录联系人统一进入 `UserProfilePage`。公开资料继续使用 R2 profile JSON + 资料媒体 + D1/链派生信号；通讯录不复制公开资料。
 - 通讯录：联系人明文按默认热钱包隔离保存在 Isar；Cloudflare D1 只保存由热钱包 seed 域隔离密钥生成的 AES-256-GCM 单联系人密文和 HMAC `contact_id`，用于同一钱包换设备恢复。Worker 不持有密钥，也不能读取联系人账户或私人联系人名称。
 - 附件：Worker 只转发 SDP/ICE，附件经 WebRTC DTLS DataChannel 设备间传输；Chat 禁止使用 R2。
@@ -168,7 +168,7 @@ citizenapp 的链连接目标不是 API-only，而是“端上轻节点 + Cloudf
 - 离线状态：设备网络不可用；只展示本地缓存和可离线准备的签名内容，不承诺链上最新状态。
 - 启动清单：Cloudflare Worker 已提供 `GET /v1/chain/bootstrap`，返回链身份、推荐 bootnodes、聊天/广场入口和受控广播状态，不返回远端 checkpoint、轻同步资产或 RPC URL；启动清单不是链上状态真源。App 初始化轻节点时会先尝试读取该清单，校验 `chain_id/protocol_id/stateRoot/SS58` 与本地 `chainspec.json` 一致后，才把推荐 bootnodes 注入内存版 chainspec；清单不可用或不匹配时继续使用本地 assets。
 - 生命周期：`SmoldotClientManager.ensureStarted()` 是轻节点唯一启动闸口，合并并发初始化并允许失败重试；`dispose()` 异步等待原生 chain/client 释放，生命周期代际切换后旧初始化、旧同步和旧重试不得覆盖新状态。`main.dart` 不再全局预热轻节点；状态进度读取只等待初始化，finalized 读取、交易提交和链事件订阅统一等待同步完成。
-- 非链页面边界：广场浏览和“我的”头像身份徽章只读取按钱包账户隔离的 `visitor/voting/candidate` 本地展示快照，不得因此启动 smoldot；快照不是授权、发布或身份真源。广场发布、电子护照详情、交易和治理等主动链流程仍读取 finalized 链状态。轻节点已由其他主动流程进入 operational 后，常驻页面只监听状态变化刷新一次快照，不轮询。
+- 非链页面边界：广场浏览和“我的”头像身份徽章只读取按 `account_id` 隔离的 `visitor/voting/candidate` 本地展示快照，不得因此启动 smoldot；快照不是授权、发布或身份真源。广场发布、电子护照详情、交易和治理等主动链流程仍读取 finalized 链状态。轻节点已由其他主动流程进入 operational 后，常驻页面只监听状态变化刷新一次快照，不轮询。
 - 交易提交：App 本地完成签名。P2P 可用时优先通过轻节点提交；P2P 不可用但网络可用时，可把已签名 extrinsic 交给受控 API 广播到 RPC service node。API 只转发完整签名交易，不接触私钥、不改载荷、不保存原始 extrinsic body、不把广播成功显示成链上成功；最终成功仍必须来自 finalized runtime storage 或区块事件。
 - 广场与聊天：广场媒体/feed 走 Worker/D1/R2/KV；Chat 只使用 Worker/DO 瞬时转发和 D1 最小设备数据，区块链节点不承担聊天中继或媒体存储。
 
@@ -291,7 +291,7 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - 广场入口仍为 `lib/8964/square_tab_page.dart`，该入口直接挂载 `lib/8964/pages/square_home_page.dart`。
 - `lib/8964/` 是广场功能的唯一代码目录；公民 Tab 内旧“广场”子 tab 已改为“提案”，代码迁移到 `lib/citizen/all/`。
 - 当前代码已提供推荐、关注、竞选三分类前端壳、发布页和详情页；目标状态为用户图文/视频动态广场，不承载个人多签、机构账户或提案列表逻辑。
-- 广场用户身份统一使用钱包账户 `account_id`；会员身份、关注关系、推荐信号、发布草稿和上传任务都绑定 `account_id`。
+- 广场用户身份统一使用链账户 `account_id`；会员身份、关注关系、推荐信号、发布草稿和上传任务都绑定 `account_id`。
 - 会员体系为三档（ADR-036，**会员与身份彻底解耦**）：自由会员 `freedom`、民主会员 `democracy`、薪火会员 `spark`。`membership_level` 是纯付费订阅轴，任意身份可订阅任意会员档；发帖分类权限按链上身份，Cloudflare 用量额度按平台会员档，两个权限轴互不替代。平台价格唯一真源为 finalized `SquarePost::PlatformPrice`，付款统一使用链上公民币；CitizenApp 保留三张会员卡，在 App 内完成订阅、取消和换档的一次热钱包签名，不打开外部支付页面。权益口径为未陈旧 finalized 链时钟下仍未到 `paid_until` 的 `Active` 或 `Cancelled`；`Terminated`、过期、缺失或陈旧镜像全部拒绝。
 - 认证用户必须同时满足钱包反查永久 CID、CID Active、CID↔钱包双向绑定一致和 `VotingIdentityByCid` 完整有效；任一条件缺失都是未认证。身份认证与会员档位彼此独立（ADR-036）。普通动态 / 普通文章三档会员都可发布但额度不同；竞选动态 / 竞选文章按完整 `CandidateIdentityByCid` 派生的竞选身份（`candidate`）校验，与会员档无关。当前 runtime 的 `campaign` 链上发布仍按有效投票身份拦截（voting+）；App 业务侧（compose / SquarePublishService / Worker `prepareUpload`·`confirm`）按更严的竞选身份 `candidate` 校验；若未来要求链上也强制 Candidate 身份，必须按 runtime 二次确认规则单独修改。
 - 广场默认分类为推荐；用户可切换关注、竞选，后续可按产品需要增加最新分类。推荐流初期只做可解释规则，不做黑盒模型。
@@ -318,14 +318,14 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - Cloudflare DNS 严格保留 8 条：`www`、`chain`、`nrcgch`、`prchbs`、`prches`、`prcsds`、`prcsxs`、`prczss`。production 与 staging API 都复用 `www` 的路径路由，不创建额外 API DNS。
 - production 每日 UTC 03:00 扫描退订满 90 天的视频，`ARCHIVE_ENABLED=1` 时按“Stream 导出到 R2 Infrequent Access、确认落成后删除 Stream”的顺序冷归档；重新订阅后从 R2 回灌 Stream。staging 与本地保持关闭。2026-07-11 已用 production 远端绑定触发空扫描，返回 200 且无错误。
 - App 端广场/聊天 API 默认即线上 production `SquareApiConfig.prodBaseUrl = https://www.crcfrcn.com/api`（Chat 瞬时转发与广场共用同一 Worker）；`SQUARE_API_URL` 编译期 define 仅作显式本地联调覆盖。官网同源使用 `/api`，原生 App 无 Origin 时使用 P-256 设备请求证明。
-- Cloudflare WAF 与 Worker 双层限流继续保护 `/api/*` 与 `/api-staging/*`；Stream webhook 按独立签名入口处理，Worker 再按认证接口、上传、Chat、读取、写入分别使用 IP 哈希或钱包账户做精确限流。具体远端规则在部署步骤只读复核后才能作为当前事实记录。
+- Cloudflare WAF 与 Worker 双层限流继续保护 `/api/*` 与 `/api-staging/*`；Stream webhook 按独立签名入口处理，Worker 再按认证接口、上传、Chat、读取、写入分别使用 IP 哈希或 `account_id` 做精确限流。具体远端规则在部署步骤只读复核后才能作为当前事实记录。
 - Chat 的 staging/production 使用独立 Google FCM 服务账号密钥；附件 WebRTC 只配置公开 Cloudflare STUN 发现直连候选，不配置中继服务、接口、密钥或 D1 表。两套 Worker 的旧中继 Secret 和 Cloudflare 控制台中两个 Realtime 应用均已永久删除。APNs 凭证暂不配置，仅影响 iOS 后台推送，不阻塞 Android FCM、前台 Chat、广场或会员。
 - 广场媒体盈利保护由 Worker 强制执行（三档，ADR-036）：自由会员每月 300 图/30 分钟视频/1 个活动上传，民主会员每月 1500 图/180 分钟/2 个活动上传，薪火会员每月 5000 图/1800 分钟/3 个活动上传。媒体估算成本达到有效订阅毛收入预算的 85% 时暂停新视频，达到 100% 时暂停全部新媒体；文字浏览、账户和 Chat 不受媒体熔断影响。
 - 广场链上确认本地 E2E 不使用冻结 `--dev` chainspec；冻结 dev spec 可能仍带旧 WASM，metadata 中没有 `SquarePost`。需要先用当前源码 WASM 构建节点，再基于 `citizenchain-fresh` 生成临时 chainspec 并给测试钱包补余额。
 - 广场本地 E2E 链节点必须至少两个节点通过 WSS peer 互连。当前节点挖矿逻辑在 `sync_service.is_offline()` 时不会出块，单节点即使有 pending extrinsic 也不会打包；第二节点 bootnode 地址必须使用 `/wss/p2p/{peer_id}`，两端 `system_health.peers > 0` 后才能验证 `publish_square_post` 入块。
 - 本地真实 E2E 必须使用与生产相同的 Worker 上传接口和 D1 目标基线；禁止恢复仅本地存在的上传代理。Images/Stream provider 调用使用测试 Token 或 mock，HTTP 路由、签名、有界读取、R2 与 D1 必须真实运行。
 - `citizenapp/cloudflare/.gitignore` 必须忽略 `.dev.vars`、`.wrangler/`、`node_modules/`、`coverage/` 和 `dist/`；Cloudflare token、R2 access key、R2 secret key 不得写入仓库。
-- CitizenApp 聊天、广场、会员和媒体共用同一套 Worker 源码，但 Cloudflare 远端严格分为 staging 与 production 两套 Worker、D1、KV、R2、路由和 Secret。唯一人工发布与运行态测试入口是根 `citizenconsole/` 本地控制台，其不含密钥的源码由 Git 追踪；生产部署逐次通过 Touch ID，Secret 只保存在 macOS Keychain 或 GitHub Secrets。会员部署验收必须使用真实 signed extrinsic、finalized 链状态、真实 Worker/D1/HTTP 和门禁结果，不再包含外部支付 Sandbox、支付 webhook 或链下订阅授权。
+- CitizenApp 聊天、广场、会员和媒体共用同一套 Worker 源码，但 Cloudflare 远端严格分为 staging 与 production 两套 Worker、D1、KV、R2、路由和 Secret。唯一人工发布与运行态测试入口是根 `citizenconsole/` 本地控制台；该目录属于本机私有运维工具，整目录由 Git 忽略，不得提交或推送 GitHub。生产部署逐次通过 Touch ID，Secret 只保存在 macOS Keychain 或 GitHub Secrets。会员部署验收必须使用真实 signed extrinsic、finalized 链状态、真实 Worker/D1/HTTP 和门禁结果，不再包含外部支付 Sandbox、支付 webhook 或链下订阅授权。
 - `citizenapp/cloudflare/migrations/0001_square_core.sql` 是清空数据库后的唯一重建基线，不是可重复执行的增量迁移；通讯录与充值结构已合并进 0001，当前不存在后续 migration 文件。旧 Stripe、订阅、创作者、通讯录和充值增量迁移均不允许恢复。双环境部署脚本禁止自动重放基线或未审核迁移；检测到未来新增 migration 文件时必须停止发布并单独审查。
 - staging 与 production 的 `citizenapp-chat-relay*` 桶都启用全前缀 `delete-relay-ciphertext-after-1-day` lifecycle，未领取的聊天中转密文最迟按 Cloudflare 生命周期规则过期；默认 7 天终止未完成 multipart upload 规则继续保留。
 - App 本地 Isar 只缓存草稿、上传任务、feed 快照、浏览状态和推荐信号同步状态；本地缓存不得作为发布权限、认证状态或链上发布成功的最终真相。
@@ -404,7 +404,7 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   - 私钥/助记词仅保存在手机 secure storage
   - 交易和登录均由 `WalletManager` 调起本机 sr25519 签名
 - 模式 B：扫码签名
-  - 手机不保存私钥，仅保存钱包地址/公钥
+  - 手机不保存私钥，仅保存 `account_id`、签名公钥和派生的 `ss58_address`
   - 手机生成待签名请求二维码，外部设备签名后返回签名响应二维码
   - 协议由 `QrSigner` 统一编解码与校验（`QR_V1`）
   - 在线手机使用 `QrSignSessionPage`，离线设备使用 `QrOfflineSignPage`

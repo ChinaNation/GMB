@@ -289,11 +289,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api repos/${{ github.repository }}/actions/artifacts \
+          gh api "repos/${{ github.repository }}/actions/artifacts" \
             --jq '.artifacts[] | select(.name == "公民.apk") | .id' \
           | while read -r id; do
               echo "删除旧 artifact: $id"
-              gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$id || true
+              gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id" || true
             done
 
       - name: 上传公民.apk

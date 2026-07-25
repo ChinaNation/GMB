@@ -24,7 +24,7 @@ import {
 } from "./service";
 
 /**
- * 创作者会员 BFF：钱包账户是唯一身份；档位展示、订阅关系和统计只保存 finalized 镜像。
+ * 创作者会员 BFF：链账户 `account_id` 是唯一身份；档位展示、订阅关系和统计只保存 finalized 镜像。
  * 付款字段与订阅有效性来自链上，Cloudflare 不扣款、不续费、不计算订阅公历。
  */
 
@@ -310,7 +310,7 @@ export async function creatorSubscriptionConfirmRoute(
   const session = await requireSession(request, env);
   const body = await readJson<CreatorConfirmBody>(request);
   const action = creatorAction(body.action);
-  const creatorAccountId = requireString(body.creator_account_id, "创作者钱包账户缺失");
+  const creatorAccountId = requireString(body.creator_account_id, "创作者账户标识缺失");
   const tierId = action === "cancel" ? null : requireString(body.tier_id, "创作者档位缺失");
   const billingPeriod = action === "cancel" ? null : billingPeriodValue(body.billing_period);
   const expectedAction = expectedCreatorAction(action, creatorAccountId, tierId, billingPeriod);

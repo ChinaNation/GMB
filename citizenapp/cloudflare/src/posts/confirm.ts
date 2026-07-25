@@ -349,7 +349,7 @@ async function readManifest(env: Env, objectKey: string): Promise<SquarePostMani
 
 function validateManifest(manifest: SquarePostManifest, upload: PreparedUploadRow): void {
   if (manifest.account_id !== upload.account_id) {
-    throw new HttpError(409, 'manifest_account_mismatch', 'manifest 钱包账户不一致');
+    throw new HttpError(409, 'manifest_account_mismatch', 'manifest 账户标识不一致');
   }
   if (manifest.post_category !== upload.post_category) {
     throw new HttpError(409, 'manifest_category_mismatch', 'manifest 动态分类不一致');

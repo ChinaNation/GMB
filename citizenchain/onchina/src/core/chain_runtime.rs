@@ -1200,7 +1200,7 @@ pub(crate) struct OnChainCitizenDetail {
     pub(crate) residence_province_code: String,
     pub(crate) residence_city_code: String,
     pub(crate) residence_town_code: String,
-    /// 绑定钱包账户 raw 32 字节(未绑定为 None)。
+    /// 绑定链账户的 raw 32 字节(未绑定为 None)。
     pub(crate) account_id: Option<[u8; 32]>,
     /// citizen_status == Normal / CidRecord.status == Active。
     pub(crate) status_normal: bool,

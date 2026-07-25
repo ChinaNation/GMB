@@ -4,8 +4,8 @@ on:
   push:
     branches: [main]
     # 中文注释:按 ci-path-routing 文档,node 桌面端/deb 构建只在 node 目录(含
-    # chainspecs/)变更时触发。runtime/** 改动只走 citizenchain-wasm.yml;待 wasm CI
-    # runtime/** 改动只走 citizenchain-wasm.yml；桌面端 CI 只负责构建四个平台软件。
+    # chainspecs/)变更时触发。runtime/** 改动只走 citizenchain-wasm.yml；
+    # 桌面端 CI 只负责构建四个平台软件。
     paths:
       - ".github/workflows/citizenchain-ci.yml"
       - "citizenchain/node/**"

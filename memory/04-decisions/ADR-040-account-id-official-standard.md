@@ -1,6 +1,6 @@
 # ADR-040：全仓账户标识采用 Substrate 官方模型
 
-状态：Accepted（2026-07-22；目标契约已冻结，代码按任务卡分步实施）。
+状态：Accepted（2026-07-22；目标契约已冻结，代码按任务卡分步实施至本地工具和文档收口）。
 
 ## 背景
 
@@ -36,7 +36,6 @@ Polkadot SDK 的运行时身份模型以 `AccountId` 表示账户，以公钥完
 ### 4. 目标结构与存储
 
 ```text
-Admin { account_id, family_name, given_name }
 Admin { account_id, cid_number, family_name, given_name }
 CitizenSubject { cid_number, account_id }
 VotingIdentityPayload { cid_number, account_id, ... }
@@ -70,7 +69,10 @@ CidByAccountId[account_id] -> cid_number
 - 第 2 步已完成 runtime 结构、存储、事件、权限入口及其直接 SCALE 消费者统一；正式创世前版本与 StorageVersion 保持 `0`。
 - 第 3 步已完成 Node、桌面直接消费者和 `chain-signing` 共享 crate 统一：账户、公钥和 SS58 已分层，跨进程账户与公钥严格使用小写 `0x` 加 64 位十六进制，签名流程先验公钥再比较账户，奖励账户 RPC 与本地非密钥缓存已按最终命名重建且没有兼容入口。
 - 第 4 步已完成 OnChina 后端、前端、PostgreSQL 最终 schema、HTTP/JSON、登录与授权上下文统一，并删除重建本地 PostgreSQL 业务数据库。经单独二次确认，已使用当前 Runtime WASM 启动隔离 fresh chain，真实完成 PostgreSQL、HTTPS OnChina、链投影、账户格式、登录验签和管理员链上门禁验收；验收后数据库再次清空重建且全部服务已停止。
-- 第 5 步 QR 协议与生成物完整技术方案已写入任务卡，待确认后实施。CitizenApp、CitizenWallet、Cloudflare、控制台和其余全仓文档按任务卡后续步骤继续实施；对应步骤完成前的旧名称只用于定位待删除实现，不构成允许新增旧字段的例外。
+- 第 5—7 步已完成 QR registry 与生成物、CitizenApp/Isar、CitizenWallet/Isar 的账户、公钥、SS58 分层和严格边界统一；旧数据库按最终 schema 重建，不保留兼容读取。
+- 第 8 步已完成 Cloudflare Worker、D1、KV、R2、Queues 和边缘协议统一，staging/production 旧业务数据按用户确认删除重建，并以真实 HTTP 和运行状态验收。
+- 第 9 步已完成本机 CitizenConsole 协议升级公钥命名、严格校验、WASM 版本职责隔离、CI/文档残留清理和真实页面验收。CitizenConsole 按用户最终决定整目录由 Git 忽略，本机修改不得进入 GitHub；旧 Keychain target 已经单独确认后删除，新 `NRC_SIGNER_PUBLIC_KEY` 由用户另行配置。
+- 第 10 步为全链真实运行态总验收，完整方案已写入任务卡，尚未执行。
 
 ## 备选方案
 

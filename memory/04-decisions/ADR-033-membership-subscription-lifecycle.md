@@ -14,7 +14,7 @@
 
 现状（截至 2026-07-13）订阅链路只会「新建 Stripe Checkout」，存在缺口：
 
-- 订阅路径不查已有订阅（`subscribe.ts` 只做身份资格校验），同一钱包在官网再次订阅/换档会创建**第二个 Stripe 订阅**，两个都扣费；webhook 按 `owner_account` 单行覆盖，旧订阅变孤儿、用户无法在 App 停掉 → **潜在双重扣费**。
+- 订阅路径不查已有订阅（`subscribe.ts` 只做身份资格校验），同一账户在官网再次订阅/换档会创建**第二个 Stripe 订阅**，两个都扣费；webhook 按 `account_id` 单行覆盖，旧订阅变孤儿、用户无法在 App 停掉 → **潜在双重扣费**。
 - 无换档能力：升档/降档只能重新下单，等于新订阅。
 - 会员权益与链上身份「≥ 满足」即可用（`resolveMembershipEntitlement` 只对非访客档、且非精确匹配），身份变化后旧权益不会被真正拦停。
 
@@ -41,7 +41,7 @@
 
 - 影响产品：Cloudflare Worker（订阅路径重构、Stripe 换档/resume 助手、webhook 兼容）、官网 citizenweb（发起时取当前订阅态、展示升/降/续订与预览金额）、CitizenApp（会员卡态展示、冻结提示）。
 - D1：`square_memberships` 第 2 期加冻结/暂停列；开发期零用户，直接改基线 `migrations/0001_square_core.sql` 重建，不建迁移链。
-- 契约不破：op_tag 0x1D / QR_V1 / owner_account 单行存储不变。
+- 契约不破：op_tag 0x1D / QR_V1 / `account_id` 单行存储不变。
 - 精确匹配「禁降档越级」规则升级为**双向冻结**：档位必须恰等身份档，升级（会员低于身份）同样冻结待换档。
 
 ## 备选方案

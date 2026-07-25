@@ -2,7 +2,7 @@
 
 ## 1. 目标边界
 
-CitizenApp Chat 对所有拥有钱包账户的用户开放，不依赖会员。聊天账户使用钱包地址，OpenMLS 设备密钥与钱包私钥严格分离。
+CitizenApp Chat 对所有拥有链账户 `account_id` 的用户开放，不依赖会员。`ss58_address` 只用于展示和边界输入，OpenMLS 设备密钥与钱包私钥严格分离。
 
 数据归属固定为：
 
@@ -17,7 +17,7 @@ CitizenApp Chat 对所有拥有钱包账户的用户开放，不依赖会员。�
 发送设备
   -> OpenMLS 生成 ChatEnvelope
   -> 本机 Isar 写入待发送队列
-  -> Worker 校验钱包 session 与登记设备
+  -> Worker 校验 `account_id` session 与登记设备
   -> Durable Object WebSocket 在当前请求内转发密文
   -> 接收设备立即 OpenMLS 解密并写入本机
 ```
@@ -58,7 +58,7 @@ WebRTC 只使用公共 STUN 发现候选地址，不配置中继服务。NAT 环
 
 聊天页的用户展示复用统一 `ProfilePresentation` / `ProfileAvatar`：调用方已有公开昵称时优先使用；名称缺失或错误传入完整/截断账户时，按对方账户稳定选择本地默认昵称。真实头像缺失时使用同一账户对应的本地默认照片；账户只显示在标题下方的账户行，不得充当昵称。
 
-通讯录联系人三点菜单的“私信”直接复用 `openDirectChat()`：`peerAccountId` 使用联系人钱包账户，标题使用统一公开昵称或稳定本地昵称。联系人私人名称只属于通讯录，不进入 Chat 路由真源；该入口不得复制聊天页面、会话创建或传输逻辑。
+通讯录联系人三点菜单的“私信”直接复用 `openDirectChat()`：`peerAccountId` 使用联系人的链账户 `account_id`，标题使用统一公开昵称或稳定本地昵称。联系人私人名称只属于通讯录，不进入 Chat 路由真源；该入口不得复制聊天页面、会话创建或传输逻辑。
 
 钱包主私钥只在创建热钱包时证明 P-256 设备子钥归属。Chat 运行态禁止读取 seed、调用用户认证签名或使用 CitizenWallet。
 
@@ -117,7 +117,7 @@ ratchet_tree
 - `POST /v1/chat/keypackages/consume`：原子读取后硬删除 KeyPackage。
 - `POST /v1/chat/envelopes`：当前请求内转发 OpenMLS 密文。
 - `POST /v1/chat/signals`：当前请求内转发 SDP、ICE 和 `peer_ready`。
-- `GET /v1/chat/ws`：按钱包账户和设备建立实时连接。
+- `GET /v1/chat/ws`：按 `account_id` 和设备建立实时连接。
 
 Durable Object 使用 hibernatable WebSocket，不写 Storage。接收设备不存在时返回 `queued`，不会创建消息记录。
 

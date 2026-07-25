@@ -16,7 +16,7 @@ ADR-039 已于 2026-07-19 冻结机构岗位主体目标。任务卡第 5A、5B�
 - 机构内部投票和联合投票创建时都必须携带完整 `VotePlan`；核心引擎一次性写入 `ProposalVotePlans`，要求 `ProposalOwner` 与 plan 相同，拒绝重复绑定。个人多签使用独立 personal 创建接口和 `AdminSnapshot`，不得伪造机构岗位主体。
 - 目标机构提案由业务模块先校验 `RoleSubject(cid_number, role_code)` 的 `Propose` 权限，并静态选择唯一投票引擎、绑定 `VotePlan`。引擎不得接受调用方选择引擎，也不得把“属于 admins”当业务准入。
 - 机构投票资格按 VotePlan 中一个或多个 voter `RoleSubject` 的有效任职账户建立不可变快照；不得自动快照该 CID 的全体 admins。个人多签仍按 personal_account 的管理员集合快照。
-- `VoterSnapshot[(proposal_id, RoleSubject)]` 保存每个岗位主体的有效任职账户；`InstitutionTicketCountSnapshot[(proposal_id, cid_number)]` 冻结该机构岗位席位票据总数。同一钱包兼任多岗时按 `RoleSubject + admin_account` 分别行使各岗位票权，不按钱包合并，也不改变机构阈值。
+- `VoterSnapshot[(proposal_id, RoleSubject)]` 保存每个岗位主体的有效任职账户；`InstitutionTicketCountSnapshot[(proposal_id, cid_number)]` 冻结该机构岗位席位票据总数。同一账户兼任多岗时按 `RoleSubject + account_id` 分别行使各岗位票权，不按账户合并，也不改变机构阈值。
 - 投票引擎只负责快照、资格、票据、阈值、计票、终态、重试和清理；业务合法性、业务对象绑定及通过后的具体执行归对应业务 pallet。
 - `multisig` 转账允许已登记机构账户和个人多签账户；机构调用显式携带 `actor_cid_number + proposer_role_code + institution_account`，反向索引只校验账户归属，业务模块再校验完整岗位主体权限。个人多签必须同时携带 `actor_cid_number=None`、`proposer_role_code=None`。
 - `resolution-destroy` 只允许 NRC、PRC、PRB 对应固定岗位；`grandpakey-change` 只允许 NRC、PRC 委员岗位。业务限制和业务动作权限不得下沉到 `internal-vote`。
@@ -50,7 +50,7 @@ proposal_id 快照进行。
 
 OnChina 本地数据库只能用于注册局录入和界面提示，不能作为链上投票资格真源。
 
-2026-07-22 资格读取已统一返回 `CitizenSubject { cid_number, wallet_account }`。联合公投、立法公投和 Popular 选举均以 `(proposal_id, cid_number)` 唯一去重，票据值保存完整主体；同一永久 CID 更换钱包后不能再投一票。候选快照、候选计票和当选结果也已统一为完整主体。人口快照仍只保存作用域、有效总数、资格 revision、判定日期和创建区块，不枚举公民名单。
+2026-07-22 资格读取已统一返回 `CitizenSubject { cid_number, account_id }`。联合公投、立法公投和 Popular 选举均以 `(proposal_id, cid_number)` 唯一去重，票据值保存完整主体；同一永久 CID 更换绑定账户后不能再投一票。候选快照、候选计票和当选结果也已统一为完整主体。人口快照仍只保存作用域、有效总数、资格 revision、判定日期和创建区块，不枚举公民名单。
 
 ## 人口作用域
 

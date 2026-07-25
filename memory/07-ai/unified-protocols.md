@@ -2,7 +2,7 @@
 
 ## 0.0 账户标识目标契约（ADR-040，2026-07-22）
 
-本节冻结全仓账户标识的最终命名和文本编码。任务卡 `memory/08-tasks/20260722-account-id-official-unify.md` 尚在分步实施；本文后续仍出现的 `wallet_account`、`admin_account`、`wallet_pubkey`、`admin_pubkey`、`wallet_address` 等字段只是在对应代码步骤完成前记录当前契约，不能用于新增实现，也不构成旧字段兼容许可。每完成一个实施步骤，必须同步删除对应旧协议表述。
+本节冻结全仓账户标识的最终命名和文本编码。任务卡 `memory/08-tasks/20260722-account-id-official-unify.md` 按步骤完成代码、协议和文档收口；现行契约只允许本节定义的 `AccountId`、`account_id`、角色化账户字段、`public_key` 与 `ss58_address`，不得把历史同义字段重新用于实现、接口、注释或文档。
 
 - runtime 账户类型统一为 `AccountId`；单一账户字段统一为 `account_id`。
 - 同一结构存在多个业务角色账户时统一为 `<role>_account_id`，例如 `actor_account_id`、`voter_account_id`、`sender_account_id`、`recipient_account_id`、`beneficiary_account_id`。
@@ -50,6 +50,18 @@
 - 第三方依赖版本不属于项目版本归零范围，不得修改。
 - Substrate runtime API trait 的协议版本用于框架 API 协商，不属于项目升级计数，不得为了本规则修改。
 - 正式创世以后，runtime、Node 或 storage 发生真实升级时，才按对应升级规则递增版本并提供必要迁移。
+
+## 0.3 密钥/签名文本编码统一带 0x 契约（ADR-041，2026-07-24）
+
+凡「账户标识 / 公钥 / 签名」的**跨端文本编码**，全仓统一为小写 `0x` 加十六进制、单一形态、拒裸。这是 ADR-040 文本编码原则对所有密码学体系（sr25519 账户、P-256 设备子钥，及未来任何密钥/签名文本）的推广，不因子系统不同而分叉。
+
+- 账户 / sr25519 公钥：`^0x[0-9a-f]{64}$`（ADR-040，不变）。
+- P-256 设备子钥公钥：`^0x04[0-9a-f]{128}$`；签名：`^0x[0-9a-f]{128}$`。
+- 进入系统边界一次 `require 0x + strip → 内部裸`；内部只保留裸形态，拒绝裸/大写/错长的跨端输入。
+- **不纳入本契约（保持现状，绝不因此加 0x）**：sha256 内容哈希 / content_hash（内容寻址摘要）、R2 路径段 `account_id_hex`（去 0x 的 64 位）、SCALE 内部字节 / 签名消息 SCALE preimage / `device_key_hash` 的 sha256 preimage（内部二进制）、助记词·seed·私钥·Keychain/Keystore/Secret（安全材料）、Chat MLS 设备公钥 `device_public_key_hex`（OpenMLS 外部协议密钥，按 MLS 层自身编码治理，理由见 ADR-041）。
+- 禁止「两端都收 0x」的归一化兼容层：wire 必须 require 0x（拒裸），内部只有裸一种形态，二者确定映射。
+- 唯一真源：`memory/04-decisions/ADR-041-hex-text-encoding-0x-unify.md`；实施与验收：`memory/08-tasks/20260724-hex-text-encoding-0x-unify-p256-device-subkey.md`。
+- 必跑测试：`cd citizenapp/cloudflare && npx vitest run`（device_subkey / auth / contacts / chat 及全套）；CitizenApp 设备绑定 golden、device_subkey、square account action 定向测试。
 
 ## 1. 定位
 
@@ -409,6 +421,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 - 会员支付只允许在 CitizenApp 内完成；CitizenWeb 不承载会员订阅或钱包签名入口。
 - 签名/验签规则：
   - Worker session 必须由已登记的 P-256 设备子钥对 `signing_payload` 签名获得；设备子钥归属仍由钱包主钥绑定证明建立。会话不得读取链上账户、余额或存在性存款。
+  - P-256 设备子钥的跨端文本编码统一带 `0x`（ADR-041，§0.3）：`p256_public_key` = `^0x04[0-9a-f]{128}$`，`signature` / `binding_signature` / `x-device-signature` = `^0x[0-9a-f]{128}$`；Worker 边界一次 require 0x + strip，内部 SCALE 签名消息 / D1 存储 / `device_key_hash` preimage 继续裸字节（逐字节不变）。禁止裸或「两端都收」。
   - Worker 只能把钱包签名证明用于登录和上传授权，不得托管钱包私钥。
   - 通讯录密文的 AES/HMAC 密钥只在 CitizenApp 端由热钱包 seed 域隔离派生；Worker 不得接收、生成、托管或恢复通讯录密钥，也不得记录联系人明文。
   - manifest 与图片必须经同域 Worker 有界读取并验证 P-256 设备签名；视频 TUS 地址必须绑定 `account_id`、`upload_id`、精确字节和最长时长。
@@ -466,7 +479,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 - R2：Chat 禁止使用 R2；消息、会话和附件没有云端对象键。
 - 编码：
   - HTTP JSON 字段统一 snake_case。
-  - `envelope` 载荷承载 `GMB_CHAT_V1 / ChatEnvelope` Protobuf bytes 的 base64url 表示。
+  - `envelope` 载荷承载 `ChatEnvelope` Protobuf bytes 的 base64url 表示。
   - `key_package` 承载 OpenMLS KeyPackage bytes 的 base64url 表示。
   - 附件经 WebRTC DTLS DataChannel 在设备间传输并只落两端设备。
   - WebRTC 只配置公开 `stun:stun.cloudflare.com:3478` 发现直连候选，不配置中继 URL 或中继凭证；直连失败时附件继续留在发送设备等待重试。
@@ -608,11 +621,11 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `envelope_id`
   - `envelope`
 - 编码：
-  - `envelope` 承载 `GMB_CHAT_V1 / ChatEnvelope` Protobuf bytes。
+  - `envelope` 承载 `ChatEnvelope` Protobuf bytes。
   - 近场 transport 不改变 OpenMLS 会话、不改变 `ChatEnvelope`。
 - 签名/验签规则：
   - 近场初次通信必须显示安全码或二维码校验入口。
-  - 钱包地址只作为聊天身份；OpenMLS 设备密钥负责端到端加密。
+  - `account_id` 只作为聊天身份；OpenMLS 设备密钥负责端到端加密。
 - 禁止事项：
   - 禁止近场依赖 Cloudflare、链 RPC 或区块链节点通信节点。
   - 禁止近场传输明文私聊/群聊内容。
@@ -968,7 +981,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `cargo test -p election-vote --manifest-path citizenchain/Cargo.toml`
   - `cargo test -p citizenchain --manifest-path citizenchain/Cargo.toml runtime_call_filter`
 
-### P-CHAT-001：GMB_CHAT_V1
+### P-CHAT-001：ChatEnvelope
 
 - 状态：当前（统一消息/加密格式；互联网只做瞬时转发，附件只走设备间通道）
 - 类型：接口契约 / 编码协议 / 端到端加密消息外层
@@ -1107,7 +1120,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - 外层 `origin` 是持私钥且存在有效岗位任职的管理员；机构本体和机构账户无私钥，不参与签名。
   - 统一授权查询同时校验 CID 存在、origin 属于 admins、任职在 UTC 日闭区间内有效、岗位具备目标权限、权限主体与 storage key 一致且 CID 顶层能力允许；现有正式机构治理业务入口均已使用该查询。
   - 注册局登记业务也必须按注册局 `RoleSubject` 授权；仅属于注册局机构 admins 不构成登记权限。
-  - 管理员集合变更完整替换 `admins`，普通机构至少两名管理员；姓名只展示，`admin_account` 只证明人员与签名者，不直接授予业务权限。
+  - 管理员集合变更完整替换 `admins`，普通机构至少两名管理员；姓名只展示，`account_id` 只证明人员与签名者，不直接授予业务权限。
   - `InstitutionGovernanceAction` 内的岗位任职来源只能是 `InstitutionGovernance`；普选、互选、任命结果必须由对应业务/投票引擎结果入口写入。
   - 交易费属于机构操作链上费 0.1 元，只从 `actor_cid_number` 的费用账户扣除；管理员钱包只签名，不允许回落扣管理员钱包。
 - 禁止兼容：
@@ -1466,7 +1479,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 - 字段：
   1. `institution_code`
   2. `account_id`
-  3. `admins`（`Vec<Admin>`；每项固定为 `admin_account + family_name + given_name`）
+  3. `admins`（`Vec<Admin>`；每项固定为 `account_id + cid_number + family_name + given_name`）
   4. `new_threshold`
 - 编码：
   - SCALE call data
@@ -1547,7 +1560,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 - 联合投票 storage：`ProposalVotePlans[proposal_id]`、`VoterSnapshot[(proposal_id, RoleSubject)]`、`InstitutionTicketCountSnapshot[(proposal_id, cid_number)]`、`JointVotesByTicket[(proposal_id, InstitutionVoteTicket)]`；同 CID 多岗位按岗位票据分别记票，不按钱包合并
 - 禁止兼容：不保留 admins 即授权、按 CID 全体 admins 投票、客户端自报 role_code 或自选投票引擎的旧路径
 - 禁止事项：
-  - 禁止用裸 `admin_account`、裸 `cid_number` 或裸 `role_code` 代替完整 RoleSubject
+  - 禁止用裸 `account_id`、裸 `cid_number` 或裸 `role_code` 代替完整 RoleSubject
   - 禁止修改岗位权限；变更权限必须删除旧动态岗位并生成新岗位码
   - 禁止删除 `UsedRoleCodes` 占用记录
   - 禁止把个人多签包装成机构 RoleSubject
@@ -1614,7 +1627,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `InstitutionRoleNonce[cid_number] → u64`；动态岗位生成时单调递增
   - `UsedRoleCodes[cid_number][role_code] → bool`；一经使用永久保留，删除岗位不释放
   - `InstitutionRole` 字段顺序：`cid_number`、`role_code`、`role_name`、`term_required`、`role_status`
-  - `InstitutionAdminAssignment` 字段顺序：`cid_number`、`admin_account`、`role_code`、`term_start:u32`、`term_end:u32`、`assignment_source`、`assignment_source_ref`、`assignment_status`
+  - `InstitutionAdminAssignment` 字段顺序：`cid_number`、`account_id`、`role_code`、`term_start:u32`、`term_end:u32`、`assignment_source`、`assignment_source_ref`、`assignment_status`
   - `term_required=true` 时任职有效窗口为 UTC 日闭区间 `[term_start, term_end]`，允许同日起止；`term_required=false` 时必须精确为 `0/0`。
   - 普选/互选结果整体替换目标岗位的有效任职；任职账户必须属于同机构既有 admins，结果不得修改 admins storage。
 - 编码：
@@ -1691,8 +1704,8 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - 公权、私权机构管理员项统一为 `Admin { account_id, cid_number, family_name, given_name }`；非空公民 CID 必须由 `citizen-identity` 确认 CTZN CID↔账户绑定。个人多签复用同一 SCALE 结构，但不属于机构管理员，其可空字段按个人多签规则处理。
   - 机构 `admins` 是独立可任职人员集合，不从岗位任职派生，也不直接授权；个人多签管理员集合继续由 `PersonalAdmins.propose_admin_set_change` 治理。
 - 签名/验签规则：
-  - 机构实行一个岗位任职席位一票，票据主体为 `RoleSubject + admin_account`；同一钱包兼任多岗时可用同一私钥分别行使各岗票权。机构投票资格由业务模块 VotePlan 指定的 `RoleSubject` 有效任职快照决定，不能锁定 CID 的全体 admins；个人多签仍按 `personal_account` 管理员账户一人一票。
-  - 公权/私权机构读取对应 entity 的 `InstitutionGovernanceThresholds[cid_number]`，个人多签读取 `ActivePersonalThresholds[personal_account]`；机构阈值与 admins 钱包数解耦。
+  - 机构实行一个岗位任职席位一票，票据主体为 `RoleSubject + account_id`；同一账户兼任多岗时可用同一私钥分别行使各岗票权。机构投票资格由业务模块 VotePlan 指定的 `RoleSubject` 有效任职快照决定，不能锁定 CID 的全体 admins；个人多签仍按 `personal_account_id` 的管理员账户一人一票。
+  - 公权/私权机构读取对应 entity 的 `InstitutionGovernanceThresholds[cid_number]`，个人多签读取 `ActivePersonalThresholds[personal_account_id]`；机构阈值与 admins 账户数解耦。
   - 机构任职结果只允许沿用既有阈值，不能创建或修改阈值制度。
 - 禁止兼容：不保留机构 `AdminProfile`、机构 Pending 管理员变更或旧管理员集合 call
 - 禁止事项：

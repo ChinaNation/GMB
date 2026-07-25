@@ -54,7 +54,7 @@ USDC 走一条**预付固定时长**路线,与卡路线并存,一钱包同时只
 
 - 影响产品:Cloudflare Worker(预付购买路由、webhook checkout 授时长分支、换挡重算、切换支付、subscriptionIsActive 对 usdc 分支)、官网(USDC 选时长 + 预付发起 + 换挡预览)、CitizenApp(会员卡起止时间 + USDC 入口)。
 - D1:`square_memberships` 记预付凭证列(或复用现有列);开发期零用户,直接改基线 `0001_square_core.sql` 重建。
-- 契约不破:op_tag 0x1D / QR_V1 / owner_account 单行 / 一钱包一订阅 均不变。
+- 契约不破:op_tag 0x1D / QR_V1 / `account_id` 单行 / 一账户一订阅 均不变。
 - 链:零改动。
 
 ## 备选方案

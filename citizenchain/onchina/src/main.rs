@@ -1378,6 +1378,21 @@ impl Db {
             ) {
                 return self.list_education_committees_direct(province_code, city_code, page_size);
             }
+            // 选定城市后,私权机构空关键字 = 浏览该市全部私权机构(城市级有界)。
+            // 省级(无城市)仍返回空,坚持精确搜索以防跨省全量扫描。
+            if matches!(
+                filter,
+                crate::institution::subjects::InstitutionListFilter::Private
+            ) {
+                if let Some(city) = city_code {
+                    return self.list_private_institutions_by_city_direct(
+                        province_code,
+                        city,
+                        private_type,
+                        page_size,
+                    );
+                }
+            }
             return Ok(PageResult {
                 items: Vec::new(),
                 page_size,
@@ -1514,6 +1529,65 @@ impl Db {
                     &[&province_code, &city_code, &city_type, &limit],
                 )
                 .map_err(|e| format!("query direct education committees failed: {e}"))?;
+            let mut items = Vec::with_capacity(rows.len());
+            for row in rows {
+                items.push(institution_row_from_pg_row(&row)?);
+            }
+            Ok(offset_page_from_window(items, 0, page_size))
+        })
+    }
+
+    /// 选定城市后浏览该市全部私权机构(联邦 drill-in 已把该市链上私权机构投影进本地库)。
+    ///
+    /// 城市级作用域有界,不触发跨省全量扫描;省级(无城市)仍坚持精确搜索(见 `list_institutions_exact`)。
+    /// `private_type` 存在时按业务类型再筛(如公益组织页只列 WELFARE)。
+    fn list_private_institutions_by_city_direct(
+        &self,
+        province_code: &str,
+        city_code: &str,
+        private_type: Option<&str>,
+        page_size: usize,
+    ) -> Result<PageResult<crate::institution::subjects::InstitutionListRow>, String> {
+        let province_code = province_code.to_string();
+        let city_code = city_code.to_string();
+        let private_type = private_type
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_string);
+        self.with_client(move |conn| {
+            let limit = i64::try_from(page_size.saturating_add(1))
+                .map_err(|_| "page_size too large".to_string())?;
+            let rows = conn
+                .query(
+                    "SELECT s.cid_number, s.cid_full_name, s.category,
+                                    s.p1, ''::text AS province_name,
+                                    ''::text AS city_name, s.province_code, s.city_code, s.institution_code,
+                                    s.private_type, s.partnership_kind, s.has_legal_personality,
+                                    s.parent_cid_number, s.creator_account_id, s.created_at,
+                                    COALESCE(ac.account_count, 0),
+                                    a.family_name, a.given_name, a.institution_code, s.cid_full_name, s.cid_short_name,
+                                    ''::text AS town_name, COALESCE(s.town_code, ''),
+                                    s.education_type
+	                     FROM subjects s
+	                     LEFT JOIN (
+                        SELECT cid_number, COUNT(*)::BIGINT AS account_count
+                        FROM accounts
+                        GROUP BY cid_number
+                     ) ac ON ac.cid_number = s.cid_number
+                     LEFT JOIN admins a ON a.account_id = s.creator_account_id
+                     WHERE s.kind = 'PRIVATE'
+	                       AND s.category = 'PRIVATE_INSTITUTION'
+	                       AND s.private_type IS NOT NULL
+	                       AND ($3::text IS NULL OR s.private_type = $3)
+	                       AND s.province_code = $1
+	                       AND s.city_code = $2
+	                     ORDER BY
+	                        s.city_code ASC NULLS FIRST,
+	                        s.cid_number ASC
+	                     LIMIT $4",
+                    &[&province_code, &city_code, &private_type, &limit],
+                )
+                .map_err(|e| format!("query private institutions by city failed: {e}"))?;
             let mut items = Vec::with_capacity(rows.len());
             for row in rows {
                 items.push(institution_row_from_pg_row(&row)?);

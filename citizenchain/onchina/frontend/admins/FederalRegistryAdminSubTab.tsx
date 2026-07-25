@@ -18,7 +18,8 @@ import {
 } from './InstitutionAssignmentCard';
 
 interface FederalRegistryAdminSubTabProps {
-  selectedFederalRegistry: FederalRegistryAdminRow;
+  /** 可为 null：tab 外壳先渲染，链上定位/读链完成前列表内部显示加载态，不阻塞 tab 出现。 */
+  selectedFederalRegistry: FederalRegistryAdminRow | null;
   federalRegistryAdmins: FederalRegistryAdminRow[];
   federalRegistryAdminsLoading: boolean;
   /** 该机构 cid_short_name 单一字段，如“联邦注册局”。 */
@@ -39,7 +40,7 @@ export function FederalRegistryAdminSubTab({
   const [detailTarget, setDetailTarget] = useState<FederalRegistryAdminRow | null>(null);
   const [federalListPage, setFederalListPage] = useState(1);
   const currentProvinceName =
-    normalizeScopeProvinceName(auth?.scope_province_name) || selectedFederalRegistry.province_name;
+    normalizeScopeProvinceName(auth?.scope_province_name) || selectedFederalRegistry?.province_name || '';
 
   const displayedFederalRegistryAdmins = useMemo(
     () => federalRegistryAdmins

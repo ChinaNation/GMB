@@ -221,7 +221,14 @@ pub(crate) fn merge_institution_record(
         institution_code: chain.institution_code.clone(),
         // ── 链下正本 / 市补录业务分类:保留 existing ──
         education_type: existing.and_then(|e| e.education_type.clone()),
-        private_type: existing.and_then(|e| e.private_type.clone()),
+        // private_type 优先保留本地既有(市补录可能更细),纯链上投影(existing=None)按机构码
+        // 确定性派生,否则私权列表 SQL 的 `private_type IS NOT NULL` 会漏掉纯投影的私权机构。
+        private_type: existing.and_then(|e| e.private_type.clone()).or_else(|| {
+            crate::domains::private::common::private_type_code_from_institution_code(
+                &chain.institution_code,
+            )
+            .map(str::to_string)
+        }),
         partnership_kind: existing.and_then(|e| e.partnership_kind.clone()),
         has_legal_personality: if chain.is_private {
             Some(true) // 私权法人
@@ -662,9 +669,11 @@ mod tests {
             out.legal_representative.as_ref().map(|l| l.given_name.as_str()),
             Some("伟")
         );
-        // 链下证件照 / 市补录分类:新建为空。
+        // 链下证件照:新建为空。
         assert!(out.legal_representative_photo_path.is_none());
-        assert!(out.private_type.is_none());
+        // private_type 无既有行时按机构码确定性派生(SFGY → WELFARE),否则私权列表 SQL
+        // 的 `private_type IS NOT NULL` 会漏掉纯链上投影的私权机构。
+        assert_eq!(out.private_type.as_deref(), Some("WELFARE"));
     }
 
     #[test]

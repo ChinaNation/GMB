@@ -10,7 +10,7 @@
 
 - 投票身份：用于公民参与投票，以永久 `cid_number` 为 storage key，身份值保存护照有效期、状态、居住省市镇；当前签名钱包由独立双向绑定保存。
 - 参选身份：用于公民参选公职，在投票身份基础上增加出生省市镇、`family_name`、`given_name`、性别和**出生日期**（`birth_date`，YYYYMMDD 整数）。出生日期是注册局新增公民时必填、写入后不可修改的字段，链上凭此实时计算竞选公民年龄（见 `candidate_age`）。投票身份不含出生日期，姓名不得拼接成第三个字段。
-- 公民逻辑主体统一为 `CitizenSubject { cid_number, wallet_account }`。该结构不新增 storage；读取时由钱包反向绑定取得永久 CID，再校验 CID 主键身份、CID 到钱包正向绑定、身份状态和 CID Active 状态。任一缺失、吊销或错配均 fail-closed。投票票据、候选快照、计票和当选结果必须恢复成完整公民主体。
+- 公民逻辑主体统一为 `CitizenSubject { cid_number, account_id }`。该结构不新增 storage；读取时由账户反向绑定取得永久 CID，再校验 CID 主键身份、CID 到账户正向绑定、身份状态和 CID Active 状态。任一缺失、吊销或错配均 fail-closed。投票票据、候选快照、计票和当选结果必须恢复成完整公民主体。
 - 竞选身份的 `family_name`、`given_name` 分开保存，各自最多 128 字节且必须非空；不保存合并姓名，也不保留带公民前缀的姓名别名。
 
 ## 授权边界

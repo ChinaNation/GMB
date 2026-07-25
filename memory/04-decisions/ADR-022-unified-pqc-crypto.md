@@ -153,8 +153,8 @@ L3 批量支付的 payer/batch 授权**必须与链上账户签名同源**,否�
 - **(H18)QR body 四处(冷热 request/response)放开** `sig_alg(sr25519|ml-dsa-65)`+`auth_mode`+`key_version`+`chunk_*`,Phase A 仍只收 sr25519;进签名的 hash 一律 gmb-pqc blake2_256,**禁复用 qr_signer 的 sha256**。
 
 
-- 不托管助记词/seed/私钥;`wallet_sig_alg` 放开枚举但不生成新地址。
-- 🔴 **(决策8/B5/B7/H7)ML-DSA 钱包签名归属验证 = 统一查链 `AccountPqcKey[wallet_address]`**:
+- 不托管助记词/seed/私钥;`signature_algorithm` 放开枚举但不生成新账户。
+- 🔴 **(决策8/B5/B7/H7)ML-DSA 签名归属验证 = 统一查链 `AccountPqcKey[account_id]`**:
   - **(B5)CID `citizens/binding.rs`(:79/340/878)是唯一真实落点**:ML-DSA 时 QR 单独带公钥(不再 ss58 反推)、查链验归属、verify_by_algo 验签;脱离 `[u8;32]`。card4 增列。
 - 🔴 **(B6)CID MAIN signer 迁 ML-DSA 必须与 card2 链端验签器原子同批上线**——允许序仅两种:**(A)链端先切 `verify_by_algo` 路由(支持双算法、仍默认 sr25519),再 CID 切 ML-DSA 发证**;**(B)链端验签器与 CID signer 同批发布**。**禁止 CID 先切 ML-DSA 而链端仍 sr25519_verify**,否则机构注册/投票/人口快照全红。
 - 🔴 **(v5 真实代码行号)CID/CitizenPassport 三处硬编 sr25519 需 verify_by_algo / sig_alg 化(card4)**:

@@ -17,7 +17,7 @@
 - 公权、私权机构和个人多签每项统一为 `Admin { account_id, cid_number, family_name, given_name }`。非空 CID 必须是 CTZN 且与 `citizen-identity` 的 CID↔账户双向索引完全一致。admins pallet 不复制公民身份真源，也不用占位姓名伪造真实资料。
 - 姓、名只展示，账户用于人员识别与签名，但账户本身没有机构业务权限；统一结构不保存岗位、权限、任期或任职来源。字段完整性由机构类型、岗位和个人多签规则分别判定。
 - 机构岗位定义和任职关系归 `entity`，与管理员人员集合独立：管理员可以没有岗位，岗位可以空缺；岗位变化不得反向生成、删除或覆盖 admins。
-- 个人多签继续由 `personal-admins` 独立管理业务和 storage，但管理员项与机构使用同一个 `Admin` 三字段结构；不使用机构岗位或机构任职关系。
+- 个人多签继续由 `personal-admins` 独立管理业务和 storage，但管理员项与机构使用同一个 `Admin` 四字段结构；不使用机构岗位或机构任职关系。
 - 各类管理员的链上管理员集合分别保存在各自 pallet 的 `AdminAccounts`。
 - runtime 当前通过 `RuntimeAdminAccountQuery` 聚合读取各管理员模块；ADR-039 落地后它只能证明人员属于 admins，业务 pallet 还必须通过 entity 解析完整 `RoleSubject` 的权限和有效任职。
 - 机构治理阈值由 public/private entity 的 `InstitutionGovernanceThresholds[cid_number]` 独立保存，与 admins 人数、岗位数解耦；admins pallet 不接收阈值。个人多签继续使用 `internal-vote::ActivePersonalThresholds[personal_account]`。任何路径都不建立岗位阈值。
@@ -32,7 +32,7 @@
 | `institution_code` | 管理员集合所属机构码。 |
 | `admins` | 当前管理员人员集合；公权、私权机构和个人多签每项字段顺序统一为 `account_id + cid_number + family_name + given_name`。 |
 
-私权机构和个人多签姓名缺失时，runtime 分别补为 `family_name="管理"`、`given_name="员"`。公权身份字段可保持空值，不填占位值。人员去重读取 `admin_account`；机构业务授权和投票资格必须继续校验完整 `RoleSubject`、岗位权限与有效任职。
+私权机构和个人多签姓名缺失时，runtime 分别补为 `family_name="管理"`、`given_name="员"`。公权身份字段可保持空值，不填占位值。人员去重读取 `account_id`；机构业务授权和投票资格必须继续校验完整 `RoleSubject`、岗位权限与有效任职。
 
 机构岗位、任期、权限和任职来源不属于本表，统一读取 entity 的 `InstitutionRole` 与 `InstitutionAdminAssignment`。
 

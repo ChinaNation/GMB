@@ -33,6 +33,8 @@ class DeviceSubkeyRegistrar {
     required DeviceBindingSigner signBinding,
     int? issuedAtMillis,
   }) async {
+    // publicKeyHex 返回裸未压缩点：签名消息 SCALE preimage 用裸（保持逐字节与后端一致），
+    // 跨端 wire 文本统一带 `0x`（ADR-041），后端入口一次 require 0x + strip。
     final publicKey = await _subkey.publicKeyHex(walletIndex);
     final issuedAt = issuedAtMillis ?? DateTime.now().millisecondsSinceEpoch;
     final message =
@@ -41,7 +43,7 @@ class DeviceSubkeyRegistrar {
     final turnstileToken = await _turnstileToken?.call();
     await _api.registerDeviceSubkey(
       accountId: accountId,
-      p256PublicKeyHex: publicKey,
+      p256PublicKeyHex: '0x$publicKey',
       issuedAt: issuedAt,
       bindingSignatureHex: signatureHex,
       turnstileToken: turnstileToken,

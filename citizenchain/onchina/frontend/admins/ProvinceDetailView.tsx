@@ -85,14 +85,16 @@ export function FederalRegistryView({ state }: RegistryViewProps) {
       canWrite={scope.canWrite && isTier1Registry(auth.institution_code)}
       loadDetail={loadFederalRegistry}
       initialActiveKey="admins"
-      adminListSection={selectedFederalRegistry ? (
+      adminListSection={(
+        // tab 外壳恒渲染,不再随 selectedFederalRegistry(依赖读链定位)出现/消失;
+        // 未定位/读链中时由 SubTab 内部显示加载态,tab 本身立即可见。
         <FederalRegistryAdminSubTab
           selectedFederalRegistry={selectedFederalRegistry}
           federalRegistryAdmins={federalRegistryAdmins}
           federalRegistryAdminsLoading={federalRegistryAdminsLoading}
           federalRegistryCidShortName={federalRegistryDetail.institution.cid_short_name}
         />
-      ) : null}
+      )}
     />
   );
 }

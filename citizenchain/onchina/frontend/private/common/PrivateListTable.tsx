@@ -43,7 +43,9 @@ export const PrivateListTable: React.FC<Props> = ({
 
   const loadRows = (cursor?: string | null) => {
     const exactQuery = searchQuery?.trim() ?? '';
-    if (!exactQuery) {
+    // 已选定城市 → 空搜索=浏览该市全部私权机构(城市级有界,后端 drill-in 已投影本市链上私权机构)。
+    // 未选城市(仅省)→ 空搜索仍不发请求,坚持精确搜索避免跨省全量扫描。
+    if (!exactQuery && !city_name) {
       setRows([]);
       setNextCursor(null);
       return () => {};

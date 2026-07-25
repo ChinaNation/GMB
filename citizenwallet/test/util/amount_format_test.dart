@@ -4,20 +4,20 @@ import 'package:citizenwallet/util/amount_format.dart';
 void main() {
   group('AmountFormat.format', () {
     test('基本金额格式化', () {
-      expect(AmountFormat.format(100), '100.00 GMB');
-      expect(AmountFormat.format(0), '0.00 GMB');
-      expect(AmountFormat.format(99.99), '99.99 GMB');
+      expect(AmountFormat.format(100), '100.00 元');
+      expect(AmountFormat.format(0), '0.00 元');
+      expect(AmountFormat.format(99.99), '99.99 元');
     });
 
     test('千分位分隔', () {
-      expect(AmountFormat.format(1234567.89), '1,234,567.89 GMB');
-      expect(AmountFormat.format(1000), '1,000.00 GMB');
-      expect(AmountFormat.format(1000000), '1,000,000.00 GMB');
+      expect(AmountFormat.format(1234567.89), '1,234,567.89 元');
+      expect(AmountFormat.format(1000), '1,000.00 元');
+      expect(AmountFormat.format(1000000), '1,000,000.00 元');
     });
 
     test('自定义小数位', () {
-      expect(AmountFormat.format(100, decimals: 0), '100 GMB');
-      expect(AmountFormat.format(100, decimals: 4), '100.0000 GMB');
+      expect(AmountFormat.format(100, decimals: 0), '100 元');
+      expect(AmountFormat.format(100, decimals: 4), '100.0000 元');
     });
 
     test('无币种后缀', () {

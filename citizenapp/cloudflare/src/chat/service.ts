@@ -15,6 +15,7 @@ import {
   assertPositiveMillis,
 } from './codec';
 import { buildChatDeviceBindingMessageBase64Url, verifyChatDeviceBinding } from './binding';
+import { normalizeP256SignatureHex } from '../auth/device_subkey';
 import { relayChatPayload, requireChatRealtimeNamespace } from './realtime';
 import { sendChatWake } from './push';
 import { resourceLimit } from '../limits/catalog';
@@ -107,7 +108,12 @@ export async function registerChatDevice(request: Request, env: Env): Promise<Re
     .bind(accountId)
     .first<{ p256_public_key: string }>();
   if (!subkey) throw new HttpError(401, 'missing_device_subkey', '当前账户尚未登记硬件设备子钥');
-  if (!(await verifyChatDeviceBinding(input, body.binding_signature, subkey.p256_public_key))) {
+  // 跨端签名文本须为 `0x`+128hex（ADR-041）；裸/大写/错长与验签失败一律 401。
+  const bindingSignatureBare = normalizeP256SignatureHex(body.binding_signature);
+  if (
+    bindingSignatureBare === null ||
+    !(await verifyChatDeviceBinding(input, bindingSignatureBare, subkey.p256_public_key))
+  ) {
     throw new HttpError(401, 'invalid_device_binding_signature', 'Chat 设备绑定签名校验失败');
   }
 
@@ -156,7 +162,7 @@ export async function publishChatKeyPackage(request: Request, env: Env): Promise
   const session = await requireSession(request, env);
   const body = await readJson<PublishKeyPackageRequest>(request);
   const accountId = assertChatAccountId(body.account_id);
-  if (accountId !== session.account_id) throw new HttpError(403, 'chat_account_mismatch', '只能发布当前钱包账户的 KeyPackage');
+  if (accountId !== session.account_id) throw new HttpError(403, 'chat_account_mismatch', '只能发布当前链账户的 KeyPackage');
   const deviceId = assertDeviceId(body.device_id);
   const publicKey = assertDevicePublicKeyHex(body.device_public_key_hex);
   await requireActiveDevice(env, accountId, deviceId, publicKey);
@@ -217,7 +223,7 @@ export async function consumeChatKeyPackage(request: Request, env: Env): Promise
   const body = await readJson<ConsumeKeyPackageRequest>(request);
   const accountId = assertChatAccountId(body.account_id);
   const requester = assertChatAccountId(body.requester_account_id, 'invalid_requester_account_id');
-  if (requester !== session.account_id) throw new HttpError(403, 'requester_mismatch', '只能以当前钱包账户消费 KeyPackage');
+  if (requester !== session.account_id) throw new HttpError(403, 'requester_mismatch', '只能以当前链账户消费 KeyPackage');
   const keyPackageId = assertKeyPackageId(body.key_package_id);
   const row = await env.DB.prepare(
     `SELECT kp.account_id, kp.device_id, d.device_public_key_hex, kp.key_package_id,
