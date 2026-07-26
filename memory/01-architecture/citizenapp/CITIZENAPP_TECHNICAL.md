@@ -29,6 +29,12 @@
 - 外部接口：Cloudflare Worker 承接聊天控制面、广场、会员、支付、媒体资源和端到端加密通讯录密文。通讯录账户与私人名称明文只在设备；公民、机构、管理员与清算行身份统一由 smoldot 读取 finalized runtime storage。
 - 行政区字典：安装包内置 `assets/admin_divisions/`，由 `citizenchain/onchina/src/cid/china/china.sqlite` 直接生成；运行中只读本地包，不向 OnChina 联网更新行政区。
 - 公权机构包：安装包内置 `assets/public_institutions/`。生成器在同一个 finalized 块分页读取 `PublicManage::Institutions` 与 `PublicManage::InstitutionAccounts`，生成 43 省、49,593 条机构的本地查询索引。manifest 保存块号、块哈希、创世哈希、状态根、分片哈希和机构根，Isar 只缓存该链快照。绑定、付款和权限判断必须精确读取当前 finalized 链状态。
+- 2026-07-25 正式创世资产已同源冻结：App
+  `genesis_hash=0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`、
+  `state_root=0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`、
+  `light_sync_state_hash=95beb873cce95ca1744193c0aa0c7023a4b4070346b8ba68758d7a140d8a61c0`、
+  `public_institution_root=c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f`。
+  Cloudflare 三环境仅同步这份创世哈希和状态根，不成为链状态真源。
 
 ### 2.1 Android 打包和正式签名
 
@@ -496,9 +502,9 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - `GET /v1/chain/bootstrap` 属于 Cloudflare 边缘启动清单接口，返回 `citizenapp.chain.bootstrap.v2`：`chain`、`light_client`、`p2p`、`services`、`security`、`degradation`。该接口只治理链身份、公开 bootnodes 和服务发现，不返回 checkpoint、轻同步资产 URL/摘要或 RPC URL，不代理 JSON-RPC，不接触私钥；`signed_extrinsic_relay.enabled` 仅在 Worker 显式配置 `RELAY_ENABLED=1` 且服务节点 RPC 已配置时为 `true`，path 固定 `/v1/chain/extrinsics/relay`。
 - `POST /v1/chain/extrinsics/relay` 是已签名交易受控广播兜底接口，只接受 `signed_extrinsic_hex`，只调用服务节点 `author_submitExtrinsic`，拒绝私钥/助记词/seed/keystore 等密钥字段，并用 D1 表 `chain_extrinsic_relays` 记录 `extrinsic_sha256`、`tx_hash`、`request_ip_hash`、状态和错误码用于审计、限流和去重；该表不保存原始 extrinsic body 或 RPC URL。
 - App 端接入文件为 `citizenapp/lib/rpc/chain_bootstrap_api.dart`、`citizenapp/lib/rpc/smoldot_client.dart`、`citizenapp/lib/rpc/signed_extrinsic_relay_api.dart` 和 `citizenapp/lib/rpc/chain_rpc.dart`。`ChainBootstrapApi` 只接受 HTTPS 或本地调试 HTTP，拒绝 `api_is_truth=true`、`rpc_proxy=true`、任何 RPC URL 字段，并且只接受固定 signed extrinsic relay path；`SmoldotClientManager` 只把清单中的 bootnodes 当作 P2P 启动加速信息；`ChainRpc.submitExtrinsic` 仅在轻节点提交失败且错误像链路故障时走 relay 兜底，交易本身已显示 invalid/bad proof/stale/future/payment 类错误时不兜底。
-- Cloudflare staging API 唯一入口为 `https://www.crcfrcn.com/api-staging`，由 `CitizenApp API Staging` Access 应用保护。2026-07-23 已获单独授权删除旧业务数据并按唯一 0001 基线重建：D1 为 25 张最终业务表、KV 为空、两个 R2 桶为空；通知队列 `square-notify-fanout-staging` 的生产者和消费者均绑定 staging Worker。当前活动 Worker 版本为 `757abe73-a54f-4353-a002-b14aca9a88ab`，匿名健康请求继续由 Access 以 302 拦截。
+- Cloudflare staging API 唯一入口为 `https://www.crcfrcn.com/api-staging`，由 `CitizenApp API Staging` Access 应用保护。2026-07-25 第8.3A步只读盘点：D1 为 25 张最终业务表，只有 `chain_clock` 一行且仍指向旧链 block #9；KV 和两个 R2 桶为空，通知队列 `square-notify-fanout-staging` 的生产者和消费者均绑定 staging Worker。当前活动 Worker 版本为 `3fc28e6e-6d5b-43d2-84ad-0ea4d87ee400`，匿名健康请求继续由 Access 以 302 拦截。本次盘点没有清表、部署或改 Secret。
 - Cloudflare 链上游统一为 `chain.crcfrcn.com` 的 Access 保护路径，经健康的 `nrcgch-rpc` Tunnel 到达国储会服务器 `127.0.0.1:18080` 网关，再由网关按固定 JSON-RPC 方法转发本机节点。staging/production Worker 使用同一个 `CitizenChain` Service Auth 凭据组，Secret 值只保存在 Cloudflare。Cloudflare Access 只保留 `CitizenApp API Staging` 与 `chain` 两个应用，只保留对应两个可重用策略和一个链服务令牌。
-- Cloudflare production API 唯一入口为 `https://www.crcfrcn.com/api`。2026-07-23 已获单独授权删除旧业务数据并按唯一 0001 基线重建：D1 为 25 张最终业务表，KV 与两个 R2 桶为空；通知队列 `square-notify-fanout-production` 的生产者和消费者均绑定 production Worker。当前活动 Worker 版本为 `141b52bf-9387-4d1c-8d5a-5afac3b3b861`，真实 `/health` 返回 200。会员没有外部支付 webhook；Stream 账户 webhook 固定为 `/api/v1/square/uploads/stream/webhook`。Images/Stream 只签发短期私有交付地址，Feed 不保存长期播放 URL。
+- Cloudflare production API 唯一入口为 `https://www.crcfrcn.com/api`。2026-07-25 第8.3A步只读盘点：D1 为 25 张最终业务表，会员、创作者订阅、充值、帖子、媒体、通讯录和聊天业务表均为空；现存数据仅为旧链 `chain_clock`、7 项设备子钥、1,001 项登录 challenge、5 项通知已读、1 项限流窗口及 625 项请求 nonce。KV 有 15 项会话/账户索引残留，两个 R2 桶为空。通知队列 `square-notify-fanout-production` 的生产者和消费者均已绑定，当前活动 Worker 版本为 `4032e9ef-55ad-4fc5-a598-96853b5ee32d`，真实 `/health` 返回 200；`/v1/chain/bootstrap` 仍返回旧创世，尚未部署本次冻结资产。会员没有外部支付 webhook；Stream 账户 webhook 固定为 `/api/v1/square/uploads/stream/webhook`。Images/Stream 只签发短期私有交付地址，Feed 不保存长期播放 URL。
 - Cloudflare DNS 严格保留 8 条：`www`、`chain`、`nrcgch`、`prchbs`、`prches`、`prcsds`、`prcsxs`、`prczss`。production 与 staging API 都复用 `www` 的路径路由，不创建额外 API DNS。
 - production 每日 UTC 03:00 扫描退订满 90 天的视频，`ARCHIVE_ENABLED=1` 时按“Stream 导出到 R2 Infrequent Access、确认落成后删除 Stream”的顺序冷归档；重新订阅后从 R2 回灌 Stream。staging 与本地保持关闭。2026-07-11 已用 production 远端绑定触发空扫描，返回 200 且无错误。
 - App 端广场/聊天 API 默认即线上 production `SquareApiConfig.prodBaseUrl = https://www.crcfrcn.com/api`（Chat 瞬时转发与广场共用同一 Worker）；`SQUARE_API_URL` 编译期 define 仅作显式本地联调覆盖。官网同源使用 `/api`，原生 App 无 Origin 时使用 P-256 设备请求证明。
@@ -602,6 +608,12 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   `0x36d00d0a9701b6e860c51476ce2d7ac5f3b35b6ff067b81d958afa1b0551c303`。
   这是公开验签身份，不是 Secret；账户余额仍由正式创世后的资金步骤单独控制，写入配置
   不得被解释为充值业务已经开放。
+- 2026-07-26 已查明此前只为 staging 保存 `TOPUP_INTENT_SECRET`；CitizenConsole
+  现已提供 CSPRNG“生成并保存”入口，production 专用 48 字节随机密钥已经一次 Touch ID
+  写入 macOS Keychain，值不回显。该密钥须等冻结资产对应的 CitizenApp/CitizenChain
+  软件 CI 成功后随 production Worker 部署同步；同步前生产充值继续失败关闭。两套 Worker
+  远端废弃的 `STRIPE_API_KEY` 与 `STRIPE_HOOK_SECRET` 已经一次 Touch ID 删除并复核
+  不存在，不得恢复任何 Stripe 接口、表或兼容分支。
 - Worker TypeScript 绑定由 `wrangler types --env-interface CloudflareBindings` 从
   `wrangler.toml` 生成到 `worker-configuration.d.ts`。修改绑定或 vars 后必须重新生成并运行
   `npm run types:check`；不得恢复 `@cloudflare/workers-types` 手写全局绑定。Secret 不会由

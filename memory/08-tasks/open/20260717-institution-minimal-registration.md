@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 状态：进行中
-- 当前步骤：第8.1步完成；源码、最小 no_std 修复和文档均已推送，CitizenApp CI、CitizenChain CI 与 CitizenChain WASM CI 通过，待确认第8.2步正式冻结资产烘焙
+- 当前步骤：第8.3A步只读盘点完成；正式资产未切换，待确认第8.3B步创世切换阻塞修复方案
 - 用户确认：2026-07-17
 - 执行规则：每一步先确认方案；执行完成后立即更新文档、完善中文注释、清理残留，再输出下一步技术方案
 
@@ -253,9 +253,8 @@
   被改动。链上资产发行骨架中的旧开发标记已改为明确的“当前授权入口/后续任务卡执行边界”，
   没有伪装成业务已完成，也没有补写或改变资产发行逻辑。
 - 2026-07-25：用户确认正式创世时基金会费用账户与 CitizenConsole 发币账户保持零余额；
-  正式创世后先部署国储会 GRANDPA 权威节点并验证 finalized 持续推进，再分别转入合法资金。
-  两账户到账且节点最终性通过前，机构付费操作和稳定币充值业务保持关闭。本轮没有烘焙正式
-  chainspec、没有删除正式数据、没有触发 GitHub CI，也没有转入资金或部署权威节点。
+  两账户到账且正式链最终性通过前，机构付费操作和稳定币充值业务保持关闭。2026-07-26
+  用户进一步明确国储会节点不由本任务部署；本任务不得读取其 SSH 配置、连接或改动服务器。
 - 2026-07-25：第8.1步把提交 `29e316e2b810fca40f4a7f7a7ebed49fd9626da1`
   推送到 `origin/main`；CitizenApp CI run `30189033908` 与 CitizenChain CI run
   `30189033913` 全部成功。因推送同时包含本地此前领先远端的提交，GitHub 额外自动触发了
@@ -279,3 +278,84 @@
   SHA-256 `2469753a161e4757fc770a70198a7d79ef01601e13ed7f7eed262e4cd28629f1`；
   `citizenchain.compact.compressed.wasm` `1,180,651` 字节、
   SHA-256 `a838dd763c1c7003aca1edf177738d85b64936bbc1ba98dda7da348cc57d0d1a`。
+- 2026-07-25：第8.2步严格使用 WASM run `30190068925`、HEAD
+  `ac6de21b2432f52f45f1767f88f4e6833a2c79d0` 的
+  `citizenchain.compact.compressed.wasm` 执行正式 `--finalize`。第一次候选在覆盖任何正式
+  资产前因公权机构生成器仍按三个旧独立 `Option` 解码法定代表人而失败；已把生成器收口为
+  当前 runtime 的单个原子
+  `Option<{ family_name, given_name, cid_number, account_id }>`，并补齐 `None/Some`
+  两类 SCALE 自测。没有增加旧布局兼容分支。
+- 2026-07-25：第二次从头烘焙成功，正式
+  `genesis_hash=0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`、
+  `state_root=0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`、
+  `chainspec_hash=3e79942fabad332fee5e8692b503c393005730bc5b2d85b9d38694833fada652`、
+  `light_sync_state_hash=95beb873cce95ca1744193c0aa0c7023a4b4070346b8ba68758d7a140d8a61c0`、
+  `public_institution_root=c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f`。
+  release 状态包 manifest 只包含 `chains/citizenchain/db`，公权机构包为 43 省、49,593
+  个机构；节点、App、checkpoint、公权缓存和 Cloudflare 三环境链锚点交叉校验通过。
+- 2026-07-25：独立验收确认链规范内嵌 WASM 为 `1,180,651` 字节、SHA-256
+  `a838dd763c1c7003aca1edf177738d85b64936bbc1ba98dda7da348cc57d0d1a`；
+  完整真实创世状态 NodeGuard 全量扫描与 ConstitutionGuard 创世测试均通过。基金会费用
+  账户和 CitizenConsole 发币账户均不在 70 项创世余额表中，余额保持 0。Cloudflare
+  三环境只改创世哈希和状态根，订阅实现无差异；本步未切换正式数据、未部署、未转入资金、
+  未提交或推送。
+- 2026-07-25：第8.3A步完成正式切换前只读盘点，没有删除本机、手机、Cloudflare 或
+  服务器数据。CitizenConsole 当前“清空链数据”只停止开发节点并删除
+  `~/Library/Application Support/gmb.dev/chains/citizenchain/db`，“清空 OnChina
+  数据”只删除 `gmb.dev/onchina-pgdata`；两个动作都不覆盖生产 `gmb` 数据根和历史
+  `org.chinanation.citizenchain.desktop` 数据根。当前本机同时存在约 88 MB 开发链、
+  79 MB 生产链及 7 MB 历史链数据库，但三个数据根都没有创世 manifest，禁止在只读阶段
+  猜测其链身份。开发/生产 OnChina PostgreSQL 目录当前都不存在。
+- 2026-07-25：Pixel 8a 的 `org.citizenapp` 在主用户和私密空间均已安装，主用户应用
+  正在运行且 Isar 业务库约 36.7 MB；FlutterSecureStorage 中存在热钱包 seed、恢复材料
+  和通讯录密钥。2026-07-26 用户明确授权主用户和私密空间都执行 CitizenApp 全量清除，
+  包括上述钱包材料与 Android Keystore 条目；清除后必须重新创建或恢复钱包。
+- 2026-07-25：Cloudflare 双环境只读盘点确认两个 R2 媒体桶和两个聊天桶均为 0 对象，
+  Durable Object 没有持久化存储；staging KV 为空，production KV 有 15 项会话/索引
+  残留。staging D1 只有指向旧链 block #9 的 `chain_clock`，production D1 除同一旧链
+  时钟外还有设备子钥、登录 challenge、通知已读、限流窗口和请求 nonce 残留；平台会员、
+  创作者档位/订阅、充值订单、帖子、媒体、通讯录和聊天业务表均为 0。production
+  bootstrap 仍返回旧创世
+  `0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`；
+  本步没有部署新 Worker 或改远端绑定。
+- 2026-07-26：已查明此前只为 staging 生成并保存 `TOPUP_INTENT_SECRET`，production
+  从未落入 Keychain。CitizenConsole 已增加 CSPRNG“生成并保存”入口；production 专用
+  48 字节随机密钥已经一次 Touch ID 写入 macOS Keychain，值未回显、未写日志或仓库，
+  等冻结资产软件 CI 成功后再同步到 production Worker。两个远端 Worker 的
+  `STRIPE_API_KEY` 与 `STRIPE_HOOK_SECRET` 已经一次 Touch ID 精确删除并复核不存在，
+  禁止恢复 Stripe 业务。
+- 2026-07-25：当前六个 bootnode 中，`nrcgch`、`prczss`、`prcsds` 的公网 30333
+  可连接，`prchbs`、`prches`、`prcsxs` 不可连接。该记录只作为冻结前网络盘点；
+  2026-07-26 用户明确国储会节点及服务器部署全部移出本任务，本任务不再把 SSH 配置或
+  服务器切换列为阻塞，也不得连接或改动这些服务器。
+- 2026-07-26：节点发布合同统一为轻量安装包：WASM CI 成功后先用该产物冻结 plain
+  chainspec、release 状态审计包和 CitizenApp/Cloudflare 锚点，再运行 CitizenApp CI 与
+  CitizenChain 软件 CI。四平台安装包只携带节点软件和内嵌冻结 plain chainspec，首启本地
+  物化同一块 0；258 MB release RocksDB 只作为创世审计制品保留，不重复进入安装包。
+  `prepack.sh`、`prepack.ps1`、GitHub CI 和节点文档已统一，不保留双轨打包口径。
+- 第8.3A步形成的待执行删除范围如下，当前仅登记、尚未执行：
+  - 本机链数据库：精确删除 `~/Library/Application Support/gmb.dev/chains/citizenchain/db`、
+    `~/Library/Application Support/gmb/chains/citizenchain/db` 和
+    `~/Library/Application Support/org.chinanation.citizenchain.desktop/node-data/chains/citizenchain/db`；
+    不递归删除三个上级数据根。
+  - OnChina：切换瞬间再次检查并只删除存在的
+    `~/Library/Application Support/gmb.dev/onchina-pgdata` 与
+    `~/Library/Application Support/gmb/pgdata`；盘点时两者均不存在。
+  - CitizenApp：主用户和私密空间均对 `org.citizenapp` 执行全量 package data 清除，
+    同时清除私密空间历史 `org.chinanation.citizen`；包括 Isar、SharedPreferences、
+    FlutterSecureStorage、Android Keystore 条目、钱包 seed、恢复材料、轻节点与 WebView
+    缓存。CitizenWallet 不在本任务删除范围。
+  - Cloudflare D1：staging/production 清空 25 张业务表中的全部行，保留表结构、
+    `_cf_KV` 内部对象和 staging 的 `d1_migrations`；重建后只允许写入新正式链
+    `chain_clock`。
+  - Cloudflare KV/Queue：删除 production 的 15 项会话和账户索引，staging 当前无键；
+    精确 purge 两套通知队列。R2 四桶当前为空，Durable Object 无持久数据，不执行无目标
+    删除。
+  - Cloudflare Secret：两环境废弃的 `STRIPE_API_KEY`、`STRIPE_HOOK_SECRET` 已删除；
+    production `TOPUP_INTENT_SECRET` 已在 CitizenConsole Keychain 重新生成，待软件 CI
+    成功后同步远端。
+- 2026-07-26 用户取代第8.3A保留建议，明确授权删除本机、Cloudflare 和 Pixel 8a
+  CitizenApp 全部旧业务数据。本机将整目录删除 `gmb.dev`、`gmb`、历史/当前桌面产品运行
+  目录，包括旧 keystore、network secret、TLS 与审计数据；手机删除 CitizenApp 钱包材料。
+  唯一保留项为仓库正式冻结资产、CitizenConsole macOS Keychain、发币钱包/部署凭据以及
+  CitizenWallet 数据。

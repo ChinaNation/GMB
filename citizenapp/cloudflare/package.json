@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "wrangler dev --local",
     "dev:local": "wrangler dev --local",
-    "generate:types": "wrangler types --env-interface CloudflareBindings",
-    "types:check": "wrangler types --env-interface CloudflareBindings --check",
+    "generate:types": "wrangler types --env-interface CloudflareBindings && node -e \"const fs=require('node:fs');const p='worker-configuration.d.ts';fs.writeFileSync(p,fs.readFileSync(p,'utf8').replace(/[ \\\\t]+$/gm,''));\"",
+    "types:check": "sh -c 'before=$(shasum -a 256 worker-configuration.d.ts | cut -d \" \" -f 1); npm run generate:types >/dev/null; after=$(shasum -a 256 worker-configuration.d.ts | cut -d \" \" -f 1); if [ \"$before\" != \"$after\" ]; then echo \"worker-configuration.d.ts 已过期，请运行 npm run generate:types\" >&2; exit 1; fi'",
     "typecheck": "npm run generate:types && tsc --noEmit",
     "test": "vitest run",
     "db:local": "wrangler d1 execute citizenapp-square-db --local --file migrations/0001_square_core.sql",

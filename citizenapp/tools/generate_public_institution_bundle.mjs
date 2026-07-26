@@ -99,12 +99,23 @@ function readVec(data, offset) {
 }
 
 // SCALE Option:None=1 字节(0x00);Some=0x01 + 值。readInner(data, o) 返回值结束后的
-// offset。仅用于跳过字段推进 offset(生成包不需要这些法定代表人字段的值)。
+// offset。仅用于跳过字段推进 offset（生成包不需要法定代表人字段值）。
 function skipOption(data, offset, readInner) {
   const tag = data[offset];
   if (tag === 0) return offset + 1;
   if (tag === 1) return readInner(data, offset + 1);
   throw new Error(`非法 SCALE Option tag=${tag}`);
+}
+
+// 当前链上法定代表人是一个原子 Option；Some 内严格依次编码姓、名、公民 CID 和账户。
+function skipLegalRepresentative(data, offset) {
+  return skipOption(data, offset, (value, innerOffset) => {
+    let next = readVec(value, innerOffset)[1];
+    next = readVec(value, next)[1];
+    next = readVec(value, next)[1];
+    if (next + 32 > value.length) throw new Error('法定代表人账户 SCALE 越界');
+    return next + 32;
+  });
 }
 
 // 机构码真源:从 cid_number 核心段还原,与链上 parse_cid_number_parts 逐字一致,
@@ -139,12 +150,9 @@ function decodeInstitution(cidNumber, valueHex) {
   offset = afterShortName;
   const [townCode, afterTownCode] = readVec(value, offset);
   offset = afterTownCode;
-  // 链上 InstitutionInfo 在 town_code 与 institution_code 之间还有三个法定代表人 Option
-  // 字段,必须逐个跳过,否则后续 created_at/status 偏移全错(字段顺序真源见链端
-  // entity-primitives InstitutionInfo)。
-  offset = skipOption(value, offset, (d, o) => readVec(d, o)[1]); // Option<AccountName 姓名>
-  offset = skipOption(value, offset, (d, o) => readVec(d, o)[1]); // Option<CidNumber>
-  offset = skipOption(value, offset, (d, o) => o + 32); // Option<AccountId 32 字节>
+  // town_code 与 institution_code 之间只有一个原子 legal_representative Option。
+  // 必须按 entity-primitives 的字段顺序整体跳过，不能拆成多个独立 Option。
+  offset = skipLegalRepresentative(value, offset);
   if (offset + 8 > value.length) throw new Error(`机构 ${cidNumber} 链值长度不足`);
   // 机构码不从 value blob 切(易随结构漂移),直接从 cid_number 核心段还原(方案B)。
   const institutionCode = institutionCodeFromCid(cidNumber);
@@ -275,23 +283,43 @@ async function main() {
       const data = Buffer.from(value, 'utf8');
       return Buffer.concat([compactSmall(data.length), data]);
     };
-    const raw = Buffer.concat([
+    const rawNone = Buffer.concat([
       vec('测试公权机构'),
       vec('测试机构'),
       vec(''),
-      Buffer.from([0, 0, 0]), // 三个法定代表人 Option=None
+      Buffer.from([0]), // 原子 legal_representative=None
       Buffer.from('CAGR', 'ascii'),
       Buffer.from([7, 0, 0, 0]),
     ]);
-    const decoded = decodeInstitution(
+    const decodedNone = decodeInstitution(
       'HE036-CAGRA-251174662-2026',
-      `0x${raw.toString('hex')}`,
+      `0x${rawNone.toString('hex')}`,
     );
-    if (decoded.status !== 'ACTIVE' || decoded.created_at_block !== 7
-        || decoded.institution_code !== 'CAGR') {
-      throw new Error(`InstitutionInfo SCALE self-test 失败:${JSON.stringify(decoded)}`);
+    const rawSome = Buffer.concat([
+      vec('测试公权机构'),
+      vec('测试机构'),
+      vec(''),
+      Buffer.from([1]),
+      vec('管'),
+      vec('理员'),
+      vec('HE000-CTZN0-198805200-2026'),
+      Buffer.alloc(32, 9),
+      Buffer.from('CAGR', 'ascii'),
+      Buffer.from([8, 0, 0, 0]),
+    ]);
+    const decodedSome = decodeInstitution(
+      'HE036-CAGRA-251174662-2026',
+      `0x${rawSome.toString('hex')}`,
+    );
+    if (decodedNone.status !== 'ACTIVE' || decodedNone.created_at_block !== 7
+        || decodedNone.institution_code !== 'CAGR'
+        || decodedSome.created_at_block !== 8
+        || decodedSome.institution_code !== 'CAGR') {
+      throw new Error(
+        `InstitutionInfo SCALE self-test 失败:${JSON.stringify({ decodedNone, decodedSome })}`,
+      );
     }
-    console.log('public institution SCALE self-test ok');
+    process.stdout.write('public institution SCALE self-test ok\n');
     return;
   }
   if (!existsSync(CHAIN_SPEC)) {
@@ -373,7 +401,7 @@ async function main() {
       provinceVersions.push(item);
       rootParts.push(item);
       total += rows.length;
-      console.log(`  ${provinceName}: ${rows.length} 机构`);
+      process.stdout.write(`  ${provinceName}: ${rows.length} 机构\n`);
     }
 
     const publicInstitutionRoot = sha256Text(JSON.stringify(rootParts));
@@ -393,9 +421,9 @@ async function main() {
         provinces: provinceVersions,
       }, null, 2)}\n`,
     );
-    console.log(
+    process.stdout.write(
       `snapshot #${snapshotBlockNumber}: ${provinces.length} 省，共 ${total} 机构；`
-      + `public_institution_root=${publicInstitutionRoot}`,
+      + `public_institution_root=${publicInstitutionRoot}\n`,
     );
   } finally {
     rpc.close();

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Card 05 打包前置(macOS / Linux):把 onchina 二进制 + 前端产物 + china.sqlite + PostgreSQL
-# 官方二进制 + 创世链状态包组装到 node/{binaries,resources}。之后在 node/ 跑
-# `npm run tauri build` 产安装包。
+# Card 05 打包前置(macOS / Linux):把 onchina 二进制 + 前端产物 + china.sqlite +
+# PostgreSQL 官方二进制组装到 node/{binaries,resources}。冻结 plain chainspec 已由
+# node 二进制 include_bytes! 内嵌；安装包不复制 258 MB 创世 RocksDB，首启按同一
+# chainspec 本地物化并由节点守卫校验块 0。之后在 node/ 跑 `npm run tauri build`。
 #
 # 用法:
 #   export CITIZENCHAIN_PG_DIST=<postgresql.org 官方二进制解压目录(含 bin/lib/share)>
-#   export CITIZENCHAIN_GENESIS_STATE_DIR=<bake-chainspec.sh 生成的 genesis-state 目录>
 #   citizenchain/scripts/prepack.sh
 set -euo pipefail
 
@@ -18,49 +18,6 @@ case "$(uname -s)" in
   *) OS=linux ;;
 esac
 
-validate_genesis_state_package() {
-  local package_root="$1" path relative
-  [[ -f "$package_root/manifest.json" && -d "$package_root/chains/citizenchain/db" ]] || return 1
-  while IFS= read -r -d '' path; do
-    relative="${path#"$package_root"/}"
-    [[ ! -L "$path" ]] || { echo "[prepack][error] 创世状态包禁止符号链接:$relative" >&2; return 1; }
-    case "$relative" in
-      manifest.json|chains|chains/citizenchain|chains/citizenchain/db|chains/citizenchain/db/*) ;;
-      *) echo "[prepack][error] 创世状态包包含白名单外残留:$relative" >&2; return 1 ;;
-    esac
-  done < <(find "$package_root" -mindepth 1 -print0)
-  python3 - "$package_root/manifest.json" "$ROOT/node/chainspecs/citizenchain.plain.json" <<'PY'
-import hashlib
-import json
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as f:
-    manifest = json.load(f)
-required = ("artifact_stage", "genesis_hash", "state_root", "chainspec_hash", "runtime_wasm_hash", "runtime_wasm_ci_run_id", "runtime_wasm_ci_head_sha", "light_sync_state_hash", "public_institution_root")
-missing = [key for key in required if not manifest.get(key)]
-if manifest.get("package_format") != "citizenchain-genesis-state-v1" or manifest.get("chain_id") != "citizenchain":
-    raise SystemExit("创世状态包 manifest 身份无效")
-if manifest.get("artifact_stage") != "release":
-    raise SystemExit("安装包禁止使用 preview 创世状态包")
-if manifest.get("included_paths") != ["chains/citizenchain/db"]:
-    raise SystemExit("创世状态包 manifest.included_paths 无效")
-if missing:
-    raise SystemExit(f"创世状态包 manifest 缺少字段:{','.join(missing)}")
-with open(sys.argv[2], "rb") as f:
-    chainspec_hash = hashlib.sha256(f.read()).hexdigest()
-if manifest.get("chainspec_hash") != chainspec_hash:
-    raise SystemExit("创世状态包与当前冻结 node plain chainspec 不一致")
-PY
-}
-
-# 先失败关闭，再开始耗时构建；preview 包和不匹配的 node spec 都不得进入安装资源。
-GENESIS_STATE_SOURCE="${CITIZENCHAIN_GENESIS_STATE_DIR:-$ROOT/target/chainspec/genesis-state}"
-if ! validate_genesis_state_package "$GENESIS_STATE_SOURCE"; then
-  echo "[prepack][error] 创世状态包缺失、不是 release、与冻结 spec 不一致或包含白名单外残留:$GENESIS_STATE_SOURCE" >&2
-  echo "                 正式安装包必须先执行 bake-chainspec.sh --finalize --wasm <CI_WASM> --wasm-ci-run-id <RUN_ID> --wasm-ci-head-sha <HEAD_SHA>。" >&2
-  exit 1
-fi
-
 echo "[prepack] build onchina (release)"
 ( cd "$ROOT" && cargo build -p onchina --release )
 
@@ -68,7 +25,7 @@ echo "[prepack] build onchina frontend"
 ( cd "$ROOT/onchina/frontend" && npm ci && npm run build )
 
 echo "[prepack] assemble node/resources"
-mkdir -p "$HERE/resources/onchina-bin" "$HERE/resources/onchina-frontend" "$HERE/resources/postgres" "$HERE/resources/genesis-state"
+mkdir -p "$HERE/resources/onchina-bin" "$HERE/resources/onchina-frontend" "$HERE/resources/postgres"
 # onchina 二进制随包(Tauri resources/onchina-bin),onchina_proc 从资源目录解析(见 node/src/onchina_proc)。
 cp "$ROOT/target/release/onchina" "$HERE/resources/onchina-bin/onchina"
 chmod +x "$HERE/resources/onchina-bin/onchina"
@@ -88,11 +45,9 @@ else
   echo "                解压后 export CITIZENCHAIN_PG_DIST=<解压目录> 再重跑;否则安装包不含内嵌 PG。"
 fi
 
-# 创世状态包已在构建前完成 release/SSOT/白名单校验，这里只做受控复制。
+# 中文注释：release 状态包只作为正式创世审计制品保留在 target/chainspec，不进入任一
+# 平台安装包；清掉旧预打包残留，保证本机 prepack 与 GitHub CI 使用同一轻量合同。
 rm -rf "$HERE/resources/genesis-state"
-mkdir -p "$HERE/resources/genesis-state/chains/citizenchain"
-install -m 0644 "$GENESIS_STATE_SOURCE/manifest.json" "$HERE/resources/genesis-state/manifest.json"
-cp -a "$GENESIS_STATE_SOURCE/chains/citizenchain/db" "$HERE/resources/genesis-state/chains/citizenchain/db"
-echo "[prepack] 创世状态包已组装:$GENESIS_STATE_SOURCE"
+echo "[prepack] 已确认安装包不携带 genesis-state；首启按冻结 plain chainspec 本地物化"
 
 echo "[prepack] done. 接着在 node/ 执行: npm run tauri build"

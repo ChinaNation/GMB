@@ -370,3 +370,9 @@ CitizenApp P2P 暂时不可用时，聊天和广场不依赖链节点 RPC，继�
   `citizenchain.compact.compressed.wasm`，其 SHA-256 为
   `a838dd763c1c7003aca1edf177738d85b64936bbc1ba98dda7da348cc57d0d1a`。
   任何 HEAD SHA、run id 或 WASM 哈希不一致都必须阻止第8.2步。
+- 第8.2步已使用上述唯一 CI 产物完成正式 `--finalize`：
+  `genesis_hash=0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`、
+  `state_root=0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`、
+  `chainspec_hash=3e79942fabad332fee5e8692b503c393005730bc5b2d85b9d38694833fada652`。
+  创世状态包、CitizenApp 链资产、公权机构包和 Cloudflare 链身份锚点均由同一候选生成并
+  交叉校验；本步没有切换正式数据、部署节点或转入资金。

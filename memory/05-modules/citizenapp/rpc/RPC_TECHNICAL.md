@@ -56,9 +56,19 @@ lib/rpc/
 - `bootNodes` 的来源应以 `citizenchain/node/src/chain_spec.rs` 为准
 - 正式创世后,CitizenApp 的 `assets/chainspec.json` 使用轻节点形态,只承载链身份、bootNodes 和 `stateRootHash`;不得内置全节点链数据库或 GB 级 raw state。
 - `assets/public_institutions/` 从同一个 finalized 块直接读取 `PublicManage::Institutions` 与 `InstitutionAccounts` 后生成，manifest 必须包含 `snapshot_block_number / snapshot_block_hash / genesis_hash / state_root / public_institution_root / shard_hashes`。
+- 公权机构生成器必须按当前 runtime 原子解码
+  `legal_representative: Option<{ family_name, given_name, cid_number, account_id }>`：
+  `None` 只消费一个 Option tag，`Some` 在 tag 后顺序消费三个 SCALE 字符串和 32 字节
+  AccountId。禁止恢复三个独立 Option 的旧布局或兼容分支；生成器自测必须同时覆盖
+  `None/Some`。
 - 公权机构唯一真源是链上 `PublicManage`；CitizenApp 内置快照和 Isar 只服务目录首屏，不是授权真源。身份、绑定、付款和权限操作必须精确读取 finalized storage。
 - `assets/light_sync_state.json` 是安装包签名保护的 finalized 信任锚；当前锚点是创世块 `#0`，不是会随 Worker 响应静默变化的运行时配置。
 - 安装包 checkpoint 永久固定 `#0`，不随链高更新。新用户只要 peer finalized 高于 `#0` 就 GRANDPA warp；已安装用户先从原生验证采用的本机 finalized database 高度 `H` 启动，peer finalized 高于 `H` 时再 warp。
+- 2026-07-25 正式 `#0` 安装包锚点为
+  `genesis_hash=0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`、
+  `state_root=0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`；
+  `light_sync_state` SHA-256 为
+  `95beb873cce95ca1744193c0aa0c7023a4b4070346b8ba68758d7a140d8a61c0`。
 
 ## 5. 连接与同步策略
 

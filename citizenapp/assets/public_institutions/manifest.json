@@ -2,14 +2,14 @@
   "schema_version": 2,
   "chain_id": "citizenchain",
   "snapshot_block_number": 0,
-  "snapshot_block_hash": "0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9",
-  "genesis_hash": "0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9",
-  "state_root": "0x99b4cb3031baa5e87536a22190dc81bf6bf49d3678c0abae86a312268506fe09",
-  "chainspec_hash": "973beeae264a7d2510c27957f6b2abd6b68e01860b6d976029817da4043d58b9",
-  "public_institution_root": "ecff487ce7d2bac6cb89d064a456187b453acd27f4bee2b140f474a48d072682",
-  "version": "0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9:ecff487ce7d2bac6cb89d064a456187b453acd27f4bee2b140f474a48d072682",
+  "snapshot_block_hash": "0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45",
+  "genesis_hash": "0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45",
+  "state_root": "0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9",
+  "chainspec_hash": "6d5fce5d349d99c8521a5a8aa690cdb038d6594003cebf55ce01cc7825861310",
+  "public_institution_root": "c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f",
+  "version": "0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45:c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f",
   "shard_hashes": {
-    "中枢省": "c4a25d7ddf54dcbf87e908f29c4f925a7cc6f2264d61e014bcccd75a3f4e08fc",
+    "中枢省": "41e2e078ca44fb1bcbbf668a5b13745678dc7ccda2eada066432cb6e0c54eb2c",
     "岭南省": "7967feabfc99075d154450b678581342290cc4fba5fa4449e66e79770ed4537a",
     "广东省": "8b5ae9c23035355af821c7136bd20a85261d5993dfd23af34b38ddeb8ea81c23",
     "广西省": "18297edbb05af1be6206ce60eb682f10528d29d226fae260da4930f2b6043943",
@@ -56,8 +56,8 @@
   "provinces": [
     {
       "province_name": "中枢省",
-      "manifest_version": "72aa7dd24f5827214c28c5a2956659a5a474ed8cf9736b980582f224739e2cb4",
-      "shard_hash": "c4a25d7ddf54dcbf87e908f29c4f925a7cc6f2264d61e014bcccd75a3f4e08fc",
+      "manifest_version": "2d2302e9e34b5b05a358298adda153b354fb67780d28c330da50d0c2afd8ebd6",
+      "shard_hash": "41e2e078ca44fb1bcbbf668a5b13745678dc7ccda2eada066432cb6e0c54eb2c",
       "count": 648
     },
     {
