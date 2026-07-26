@@ -6,7 +6,7 @@
 
 extern crate alloc;
 
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
 use codec::Decode;
 use frame_support::{pallet_prelude::BoundedVec, traits::Currency};
 use frame_system::pallet_prelude::BlockNumberFor;

@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 状态：进行中
-- 当前步骤：第7步正式创世前一致性验收完成；全仓库全部 target 的严格 Clippy、全量测试、AI 守卫和残留检查已通过，订阅逻辑保持不变；待确认第8步 GitHub CI WASM 与正式创世冻结方案
+- 当前步骤：第8.1步执行中；源码已推送，CitizenApp CI 与 CitizenChain CI 通过，首次 WASM CI 暴露并已修复 genesis no_std `vec!` 宏导入，待最小修复提交后的 WASM CI 复验
 - 用户确认：2026-07-17
 - 执行规则：每一步先确认方案；执行完成后立即更新文档、完善中文注释、清理残留，再输出下一步技术方案
 
@@ -256,3 +256,15 @@
   正式创世后先部署国储会 GRANDPA 权威节点并验证 finalized 持续推进，再分别转入合法资金。
   两账户到账且节点最终性通过前，机构付费操作和稳定币充值业务保持关闭。本轮没有烘焙正式
   chainspec、没有删除正式数据、没有触发 GitHub CI，也没有转入资金或部署权威节点。
+- 2026-07-25：第8.1步把提交 `29e316e2b810fca40f4a7f7a7ebed49fd9626da1`
+  推送到 `origin/main`；CitizenApp CI run `30189033908` 与 CitizenChain CI run
+  `30189033913` 全部成功。因推送同时包含本地此前领先远端的提交，GitHub 额外自动触发了
+  不在本步授权清单内的 CitizenWallet CI run `30189033915`，发现后立即取消，最终结论为
+  `cancelled`。
+- 2026-07-25：首次 CitizenChain WASM run `30189706702` 在 no_std 编译
+  `genesis-pallet` 时失败：Clippy 清理把两处单元素 `Vec` 构造收口为 `vec![]`，但
+  `institution/seeder.rs` 只导入 `alloc::vec::Vec`，没有导入 `alloc::vec` 宏。修复仅补充
+  no_std 宏导入，不改变创世数据、账户、岗位、管理员、余额或订阅逻辑。本地
+  `cargo check -p genesis-pallet --no-default-features`、
+  `cargo clippy -p genesis-pallet --all-targets -- -D warnings` 与
+  `WASM_BUILD_FROM_SOURCE=1 cargo build --release -p citizenchain` 均通过。

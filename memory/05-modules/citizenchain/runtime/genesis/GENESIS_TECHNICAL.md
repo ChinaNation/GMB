@@ -120,6 +120,12 @@ pub trait DeveloperUpgradeCheck {
 - NodeGuard 真实 runtime 创世完整状态测试确认五字段策略参与共享扫描和拒绝链路；
 - 最终结果以任务卡中的本轮编译、WASM 和 fresh 节点真实验收记录为准。
 
+2026-07-25 第8.1步 WASM 复验：首次 CI no_std 编译发现
+`institution/seeder.rs` 使用 `vec![]` 后只导入了 `alloc::vec::Vec`。修复仅补充
+`alloc::vec` 宏导入；创世集合内容、顺序、账户、岗位、管理员和余额完全不变。修复后
+`genesis-pallet --no-default-features`、模块严格 Clippy 和当前源码 release WASM
+构建均通过。
+
 ## 8. 文件索引
 
 - `citizenchain/runtime/genesis/src/lib.rs`：类型、存储、创世构建和开发者升级查询；
