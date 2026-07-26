@@ -435,14 +435,16 @@ if [[ "${#changed_code_files[@]}" -gt 0 && "${#changed_task_cards[@]}" -eq 0 ]];
   exit 1
 fi
 
-for file in "${changed_code_files[@]}"; do
-  if ! has_matching_module_doc_update "$file"; then
-    required_prefix="$(module_doc_requirement_for_file "$file")"
-    if [[ -n "$required_prefix" ]]; then
-      missing_module_doc_hits+=("${file}: 缺少对应模块文档更新（期望更新 ${required_prefix}）")
+if [[ "${#changed_code_files[@]}" -gt 0 ]]; then
+  for file in "${changed_code_files[@]}"; do
+    if ! has_matching_module_doc_update "$file"; then
+      required_prefix="$(module_doc_requirement_for_file "$file")"
+      if [[ -n "$required_prefix" ]]; then
+        missing_module_doc_hits+=("${file}: 缺少对应模块文档更新（期望更新 ${required_prefix}）")
+      fi
     fi
-  fi
-done
+  done
+fi
 
 if [[ "${#missing_module_doc_hits[@]}" -gt 0 ]]; then
   echo "检测到更细粒度的文档回写缺失。"
@@ -451,32 +453,34 @@ if [[ "${#missing_module_doc_hits[@]}" -gt 0 ]]; then
   exit 1
 fi
 
-for file in "${changed_code_files[@]}"; do
-  if [[ ! -f "${file}" ]]; then
-    continue
-  fi
+if [[ "${#changed_code_files[@]}" -gt 0 ]]; then
+  for file in "${changed_code_files[@]}"; do
+    if [[ ! -f "${file}" ]]; then
+      continue
+    fi
 
-  if [[ ! "${file}" =~ ${scan_regex} ]]; then
-    continue
-  fi
+    if [[ ! "${file}" =~ ${scan_regex} ]]; then
+      continue
+    fi
 
-  if should_skip_residual_scan "${file}"; then
-    continue
-  fi
+    if should_skip_residual_scan "${file}"; then
+      continue
+    fi
 
-  if grep -nE "${residual_regex}" "${file}" >/tmp/gmb_guardrail_hit.txt; then
-    while IFS= read -r line; do
-      residual_hits+=("${file}:${line}")
-    done < /tmp/gmb_guardrail_hit.txt
-  fi
+    if grep -nE "${residual_regex}" "${file}" >/tmp/gmb_guardrail_hit.txt; then
+      while IFS= read -r line; do
+        residual_hits+=("${file}:${line}")
+      done < /tmp/gmb_guardrail_hit.txt
+    fi
 
-  if should_check_chinese_comment_gate "$file"; then
-    check_chinese_comment_gate "$file"
-  fi
+    if should_check_chinese_comment_gate "$file"; then
+      check_chinese_comment_gate "$file"
+    fi
 
-  check_version_tag_gate "$file"
-  check_lint_suppression_gate "$file"
-done
+    check_version_tag_gate "$file"
+    check_lint_suppression_gate "$file"
+  done
+fi
 
 rm -f /tmp/gmb_guardrail_hit.txt
 

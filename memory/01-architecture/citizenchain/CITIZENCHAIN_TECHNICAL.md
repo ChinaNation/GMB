@@ -364,3 +364,9 @@ CitizenApp P2P 暂时不可用时，聊天和广场不依赖链节点 RPC，继�
   带中文原因的 lint 范围；不得以此扩展为 production 全局静音。
 - 本轮只完成正式创世前代码质量验收；没有烘焙 chainspec、切换节点数据、触发 GitHub CI、
   部署节点或转入资金。
+- 第8.1步最终冻结源码提交为
+  `ac6de21b2432f52f45f1767f88f4e6833a2c79d0`。CitizenChain WASM run
+  `30190068925` 已成功并上传 artifact `8628330093`；正式烘焙必须使用该 run 的
+  `citizenchain.compact.compressed.wasm`，其 SHA-256 为
+  `a838dd763c1c7003aca1edf177738d85b64936bbc1ba98dda7da348cc57d0d1a`。
+  任何 HEAD SHA、run id 或 WASM 哈希不一致都必须阻止第8.2步。

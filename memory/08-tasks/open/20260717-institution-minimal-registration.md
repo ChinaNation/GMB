@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 状态：进行中
-- 当前步骤：第8.1步执行中；源码已推送，CitizenApp CI 与 CitizenChain CI 通过，首次 WASM CI 暴露并已修复 genesis no_std `vec!` 宏导入，待最小修复提交后的 WASM CI 复验
+- 当前步骤：第8.1步完成；源码、最小 no_std 修复和文档均已推送，CitizenApp CI、CitizenChain CI 与 CitizenChain WASM CI 通过，待确认第8.2步正式冻结资产烘焙
 - 用户确认：2026-07-17
 - 执行规则：每一步先确认方案；执行完成后立即更新文档、完善中文注释、清理残留，再输出下一步技术方案
 
@@ -268,3 +268,14 @@
   `cargo check -p genesis-pallet --no-default-features`、
   `cargo clippy -p genesis-pallet --all-targets -- -D warnings` 与
   `WASM_BUILD_FROM_SOURCE=1 cargo build --release -p citizenchain` 均通过。
+- 2026-07-25：最小修复提交
+  `ac6de21b2432f52f45f1767f88f4e6833a2c79d0` 已推送到 `origin/main`，未触发
+  CitizenApp、CitizenChain 桌面端或 CitizenWallet 自动 CI。第二次 CitizenChain WASM
+  run `30190068925` 成功，artifact id `8628330093`、名称 `citizenchain-wasm`、
+  GitHub 压缩包大小 `5,023,255` 字节，绑定 HEAD SHA 与修复提交完全一致。
+  三份解包产物分别为：`citizenchain.wasm` `6,359,876` 字节、
+  SHA-256 `7ef98cc86672fc5d64498f67a82b803144c8023a3fc5c57ef5e8b8f5ad300443`；
+  `citizenchain.compact.wasm` `6,082,526` 字节、
+  SHA-256 `2469753a161e4757fc770a70198a7d79ef01601e13ed7f7eed262e4cd28629f1`；
+  `citizenchain.compact.compressed.wasm` `1,180,651` 字节、
+  SHA-256 `a838dd763c1c7003aca1edf177738d85b64936bbc1ba98dda7da348cc57d0d1a`。
